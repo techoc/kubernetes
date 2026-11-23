@@ -15,4 +15,5 @@ limitations under the License.
 */
 
 // Package remotecommand contains functions related to executing commands in and attaching to pods.
+// Package remotecommand 提供与在 Pod 中执行命令以及附着（attach）到 Pod 相关的功能。
 package remotecommand

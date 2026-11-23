@@ -17,6 +17,7 @@ limitations under the License.
 package remotecommand
 
 // TerminalSize represents the width and height of a terminal.
+// TerminalSize 表示终端的尺寸：Width 为宽度（列数），Height 为高度（行数），均以字符为单位。
 type TerminalSize struct {
 	Width  uint16
 	Height uint16

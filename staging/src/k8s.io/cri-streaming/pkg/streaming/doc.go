@@ -15,4 +15,12 @@ limitations under the License.
 */
 
 // Package streaming contains CRI server-side streaming interfaces and implementations.
+//
+// Package streaming 提供 CRI 流式服务的服务端接口与实现。
+// 工作流程大致如下：
+//  1. kubelet 调用容器运行时的 GetExec/GetAttach/GetPortForward RPC，拿到一个流式 URL 和 token；
+//  2. kubelet 用该 URL 向本服务的 HTTP 端点发起请求；
+//  3. server.go 解析 token 并从 requestCache 中取出缓存的原始请求；
+//  4. 请求被路由到 remotecommand（exec/attach）或 portforward 子包的具体处理器；
+//  5. 处理器与客户端协商 HTTP Upgrade 或 WebSocket 协议后，开始双向数据流转发。
 package streaming

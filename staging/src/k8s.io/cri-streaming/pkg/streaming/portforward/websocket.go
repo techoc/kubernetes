@@ -35,10 +35,14 @@ import (
 )
 
 const (
+	// dataChannel 表示数据通道在通道序列中的下标。
 	dataChannel = iota
+	// errorChannel 表示错误通道在通道序列中的下标。
 	errorChannel
 
+	// v4BinaryWebsocketProtocol 是 v4 版本的二进制通道 WebSocket 子协议名。
 	v4BinaryWebsocketProtocol = "v4." + wsstream.ChannelWebSocketProtocol
+	// v4Base64WebsocketProtocol 是 v4 版本的 Base64 编码通道 WebSocket 子协议名。
 	v4Base64WebsocketProtocol = "v4." + wsstream.Base64ChannelWebSocketProtocol
 )
 
@@ -46,16 +50,21 @@ const (
 // forwarding.
 // All fields included in V4Options need to be expressed explicitly in the
 // CRI (k8s.io/cri-api/pkg/apis/{version}/api.proto) PortForwardRequest.
+// V4Options 保存端口转发所需的端口信息；所有字段都必须在 CRI 的 PortForwardRequest 中显式声明。
 type V4Options struct {
+	// Ports 是需要转发的目标端口列表，每个端口对应一对数据/错误流。
 	Ports []int32
 }
 
 // NewV4Options creates a new options from the Request.
+// NewV4Options 从 HTTP 请求中解析端口列表；非 WebSocket 请求返回空选项。
 func NewV4Options(req *http.Request) (*V4Options, error) {
 	if !wsstream.IsWebSocketRequest(req) {
+		// HTTP Upgrade（SPDY）路径的端口随每条流传递，不需要从 URL 解析。
 		return &V4Options{}, nil
 	}
 
+	// WebSocket 路径通过 port 查询参数指定端口，参数可重复出现或用逗号分隔。
 	portStrings := req.URL.Query()[PortHeader]
 	if len(portStrings) == 0 {
 		return nil, fmt.Errorf("query parameter %q is required", PortHeader)
@@ -66,7 +75,9 @@ func NewV4Options(req *http.Request) (*V4Options, error) {
 		if len(portString) == 0 {
 			return nil, fmt.Errorf("query parameter %q cannot be empty", PortHeader)
 		}
+		// 逗号分隔的写法允许一次传入多个端口。
 		for _, p := range strings.Split(portString, ",") {
+			// 端口必须是 1 到 65535 之间的十进制整数。
 			port, err := strconv.ParseUint(p, 10, 16)
 			if err != nil {
 				return nil, fmt.Errorf("unable to parse %q as a port: %v", portString, err)
@@ -84,6 +95,7 @@ func NewV4Options(req *http.Request) (*V4Options, error) {
 }
 
 // BuildV4Options returns a V4Options based on the given information.
+// BuildV4Options 根据给定的端口列表直接构造 V4Options。
 func BuildV4Options(ports []int32) (*V4Options, error) {
 	return &V4Options{Ports: ports}, nil
 }
@@ -92,11 +104,15 @@ func BuildV4Options(ports []int32) (*V4Options, error) {
 // a PortForwarder. A pair of streams are created per port (DATA n,
 // ERROR n+1). The associated port is written to each stream as a unsigned 16
 // bit integer in little endian format.
+// handleWebSocketStreams 通过 PortForwarder 处理 WebSocket 端口转发请求。
+// 每个端口分配一对通道（数据通道 n、错误通道 n+1），并在每个流的开头以小端无符号 16 位整数写入对应端口。
 func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwarder PortForwarder, podName string, uid string, opts *V4Options, supportedPortForwardProtocols []string, idleTimeout, streamCreationTimeout time.Duration) error {
+	// 每个端口申请两个通道：一个可读可写的数据通道和一个只写的错误通道。
 	channels := make([]wsstream.ChannelType, 0, len(opts.Ports)*2)
 	for i := 0; i < len(opts.Ports); i++ {
 		channels = append(channels, wsstream.ReadWriteChannel, wsstream.WriteChannel)
 	}
+	// 同时接受空子协议、二进制子协议与 Base64 子协议；通道布局一致，只是编码方式不同。
 	conn := wsstream.NewConn(map[string]wsstream.ChannelProtocolConfig{
 		"": {
 			Binary:   true,
@@ -111,7 +127,9 @@ func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwar
 			Channels: channels,
 		},
 	})
+	// 空闲超时防止连接长期无数据却不释放。
 	conn.SetIdleTimeout(idleTimeout)
+	// 打开连接并完成协议升级；返回流的顺序与上面声明的通道顺序一致。
 	_, streams, err := conn.Open(httpresponse.GetOriginal(w), req)
 	if err != nil {
 		err = fmt.Errorf("unable to upgrade websocket connection: %v", err)
@@ -120,6 +138,7 @@ func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwar
 	defer conn.Close()
 	streamPairs := make([]*websocketStreamPair, len(opts.Ports))
 	for i := range streamPairs {
+		// 按端口顺序把相邻的两个通道组装成流对。
 		streamPair := websocketStreamPair{
 			port:        opts.Ports[i],
 			dataStream:  streams[i*2+dataChannel],
@@ -129,10 +148,12 @@ func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwar
 
 		portBytes := make([]byte, 2)
 		// port is always positive so conversion is allowable
+		// 每个流的前两个字节携带小端编码的端口号，供客户端识别流对应的端口。
 		binary.LittleEndian.PutUint16(portBytes, uint16(streamPair.port))
 		streamPair.dataStream.Write(portBytes)
 		streamPair.errorStream.Write(portBytes)
 	}
+	// 构造处理器，启动所有端口的转发并等待其结束。
 	h := &websocketStreamHandler{
 		conn:        conn,
 		streamPairs: streamPairs,
@@ -147,6 +168,8 @@ func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwar
 
 // websocketStreamPair represents the error and data streams for a port
 // forwarding request.
+// websocketStreamPair 表示一个端口对应的数据/错误通道对。
+// 字段含义：port 是目标端口；dataStream 是可读写的数据通道；errorStream 是只写的错误通道。
 type websocketStreamPair struct {
 	port        int32
 	dataStream  io.ReadWriteCloser
@@ -155,6 +178,9 @@ type websocketStreamPair struct {
 
 // websocketStreamHandler is capable of processing a single port forward
 // request over a websocket connection
+// websocketStreamHandler 在一条 WebSocket 连接上处理一次端口转发请求中的所有流对。
+// 字段含义：conn 是 WebSocket 连接；streamPairs 是各端口的流对；pod 与 uid 标识目标 Pod；
+// forwarder 是真正执行端口转发的组件。
 type websocketStreamHandler struct {
 	conn        *wsstream.Conn
 	streamPairs []*websocketStreamPair
@@ -165,11 +191,14 @@ type websocketStreamHandler struct {
 
 // run invokes the websocketStreamHandler's forwarder.PortForward
 // function for the given stream pair.
+// run 为每个流对启动一个转发协程，并等待它们全部结束。
 func (h *websocketStreamHandler) run() {
+	// 用 WaitGroup 等待所有端口的转发协程完成。
 	wg := sync.WaitGroup{}
 	wg.Add(len(h.streamPairs))
 
 	for _, pair := range h.streamPairs {
+		// 各端口互不依赖，可以并发转发；复制 pair 避免闭包捕获循环变量。
 		p := pair
 		go func() {
 			defer wg.Done()
@@ -177,21 +206,26 @@ func (h *websocketStreamHandler) run() {
 		}()
 	}
 
+	// 阻塞直到所有转发结束，通常意味着客户端断开或连接超时。
 	wg.Wait()
 }
 
+// portForward 为给定流对调用 forwarder.PortForward，并在出错时把错误写入错误通道。
 func (h *websocketStreamHandler) portForward(p *websocketStreamPair) {
 	ctx := context.Background()
+	// 转发结束后关闭两条通道，通知对端不会再有数据。
 	defer p.dataStream.Close()
 	defer p.errorStream.Close()
 
 	klog.V(5).InfoS("Connection invoking forwarder.PortForward for port", "connection", h.conn, "port", p.port)
+	// 阻塞执行端口转发，数据直接从 WebSocket 数据通道读写。
 	err := h.forwarder.PortForward(ctx, h.pod, h.uid, p.port, p.dataStream)
 	klog.V(5).InfoS("Connection done invoking forwarder.PortForward for port", "connection", h.conn, "port", p.port)
 
 	if err != nil {
 		msg := fmt.Errorf("error forwarding port %d to pod %s, uid %v: %v", p.port, h.pod, h.uid, err)
 		runtime.HandleError(msg)
+		// 把错误文本写入错误通道，让客户端感知转发失败。
 		fmt.Fprint(p.errorStream, msg.Error())
 	}
 }
