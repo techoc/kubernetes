@@ -36,6 +36,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 )
 
+// TestCreate 验证 MutatingAdmissionPolicy 的 CEL 变更规则和 ParamKind 校验在持久化前执行。
 func TestCreate(t *testing.T) {
 	storage, server := newInsecureStorage(t)
 	defer server.Terminate(t)

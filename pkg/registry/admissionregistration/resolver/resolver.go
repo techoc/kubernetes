@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/discovery"
 )
 
+// ResourceResolver 将 ParamKind 的 GroupVersionKind 转换为实际 API GroupVersionResource，供参数资源授权与解析使用。
 type ResourceResolver interface {
 	Resolve(gvk schema.GroupVersionKind) (schema.GroupVersionResource, error)
 }
@@ -32,6 +33,7 @@ type discoveryResourceResolver struct {
 	client discovery.DiscoveryInterface
 }
 
+// Resolve 查询对应 GroupVersion 的 Discovery 文档，按 Kind 查找资源并跳过子资源；找不到时返回 NoKindMatch。
 func (d *discoveryResourceResolver) Resolve(gvk schema.GroupVersionKind) (schema.GroupVersionResource, error) {
 	gv := gvk.GroupVersion()
 	// TODO: refactor this into an efficient gvk --> gvr resolver that remembers hits and re-resolves group/version info on misses
@@ -61,6 +63,7 @@ func (d *discoveryResourceResolver) Resolve(gvk schema.GroupVersionKind) (schema
 	return schema.GroupVersionResource{}, &meta.NoKindMatchError{GroupKind: gvk.GroupKind(), SearchedVersions: []string{gvk.Version}}
 }
 
+// NewDiscoveryResourceResolver 将 Discovery Client 包装成 GVK→GVR 解析器。
 func NewDiscoveryResourceResolver(client discovery.DiscoveryInterface) (ResourceResolver, error) {
 	return &discoveryResourceResolver{client: client}, nil
 }

@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/resolver"
 )
 
+// TestValidatingAdmissionPolicyStrategy 验证策略创建/更新中的 Generation、Status 重置、CEL 校验和 ParamKind 授权。
 func TestValidatingAdmissionPolicyStrategy(t *testing.T) {
 	strategy := NewStrategy(nil, replicaLimitsResolver)
 	ctx := genericapirequest.NewDefaultContext()

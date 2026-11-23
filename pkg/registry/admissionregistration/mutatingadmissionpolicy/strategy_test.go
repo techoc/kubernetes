@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/resolver"
 )
 
+// TestMutatingAdmissionPolicyStrategy 覆盖变更表达式、ReinvocationPolicy、ParamKind 授权和 Generation 更新行为。
 func TestMutatingAdmissionPolicyStrategy(t *testing.T) {
 	strategy := NewStrategy(nil, replicaLimitsResolver)
 	ctx := genericapirequest.NewDefaultContext()

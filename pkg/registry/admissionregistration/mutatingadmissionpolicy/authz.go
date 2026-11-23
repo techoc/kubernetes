@@ -54,6 +54,7 @@ func (v *mutatingAdmissionPolicyStrategy) authorizeUpdate(ctx context.Context, o
 	return v.authorize(ctx, policy)
 }
 
+// authorize 确保策略创建者/修改者有权读取所有 ParamKind 对象，避免通过准入规则间接读取未授权资源。
 func (v *mutatingAdmissionPolicyStrategy) authorize(ctx context.Context, policy *admissionregistration.MutatingAdmissionPolicy) error {
 	if v.authorizer == nil || policy.Spec.ParamKind == nil {
 		return nil
@@ -70,6 +71,7 @@ func (v *mutatingAdmissionPolicyStrategy) authorize(ctx context.Context, policy 
 	}
 
 	paramKind := policy.Spec.ParamKind
+	// ParamKind 无法解析或 Discovery 失败时，按所有 Group/Version/Resource 需要 get 权限处理，采取失败关闭策略。
 	// default to requiring permissions on all group/version/resources
 	resource, apiGroup, apiVersion := "*", "*", "*"
 	if gv, err := schema.ParseGroupVersion(paramKind.APIVersion); err == nil {

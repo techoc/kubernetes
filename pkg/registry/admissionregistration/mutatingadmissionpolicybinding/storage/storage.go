@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包创建 MutatingAdmissionPolicyBinding 的 REST Store；策略校验依赖关联 Policy 和参数读取授权。
 package storage
 
 import (

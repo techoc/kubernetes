@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包创建 ValidatingAdmissionPolicyBinding 的 REST Store；Binding 写入前会校验 Policy 关联和 ParamRef。
 package storage
 
 import (

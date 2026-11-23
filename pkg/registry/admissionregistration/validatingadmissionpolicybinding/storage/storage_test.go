@@ -37,6 +37,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 )
 
+// TestCreate 验证 PolicyBinding 创建会检查被引用 Policy 和 ParamRef。
 func TestCreate(t *testing.T) {
 	for _, configuration := range validPolicyBindings() {
 		t.Run(configuration.Name, func(t *testing.T) {

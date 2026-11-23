@@ -34,6 +34,7 @@ import (
 )
 
 // MutatingAdmissionPolicyBindingStrategy implements verification logic for MutatingAdmissionPolicyBinding.
+// mutatingAdmissionPolicyBindingStrategy 定义 Mutating Policy Binding 的写入策略，校验 Policy 引用、匹配资源和参数引用。
 type mutatingAdmissionPolicyBindingStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -65,6 +66,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears the status of an MutatingAdmissionPolicyBinding before creation.
+// 创建时初始化 Generation；Binding 本身不维护控制器 Status。
 func (v *mutatingAdmissionPolicyBindingStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.MutatingAdmissionPolicyBinding)
 	ic.Generation = 1
@@ -84,6 +86,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) PrepareForUpdate(ctx context.Co
 }
 
 // Validate validates a new MutatingAdmissionPolicyBinding.
+// Validate 校验 PolicyName/ParamRef 结构；字段合法后通过 authorizeCreate 确认关联策略与参数访问权限。
 func (v *mutatingAdmissionPolicyBindingStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.MutatingAdmissionPolicyBinding)
 	errs := validation.ValidateMutatingAdmissionPolicyBinding(ic)
@@ -118,6 +121,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) AllowCreateOnUpdate(ctx context
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新时校验 Policy/ParamRef 变更；仅当引用与旧对象完全一致时才复用之前的授权结果。
 func (v *mutatingAdmissionPolicyBindingStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newIC := obj.(*admissionregistration.MutatingAdmissionPolicyBinding)
 	oldIC := old.(*admissionregistration.MutatingAdmissionPolicyBinding)

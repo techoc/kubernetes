@@ -58,6 +58,7 @@ func validMutatingWebhookConfiguration() *admissionregistration.MutatingWebhookC
 	}
 }
 
+// TestStaticSuffixWarningsAndValidation 验证静态配置命名校验/告警及被排除虚拟资源规则的提示行为。
 func TestStaticSuffixWarningsAndValidation(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	staticName := "my-webhook.static.k8s.io"

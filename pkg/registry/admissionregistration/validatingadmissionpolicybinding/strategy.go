@@ -35,6 +35,7 @@ import (
 )
 
 // validatingAdmissionPolicyBindingStrategy implements verification logic for ValidatingAdmissionPolicyBinding.
+// validatingAdmissionPolicyBindingStrategy 定义集群级 PolicyBinding 写入策略，负责 Policy 关联、匹配资源和参数引用授权。
 type validatingAdmissionPolicyBindingStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -70,6 +71,7 @@ func (v *validatingAdmissionPolicyBindingStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears the status of an ValidatingAdmissionPolicyBinding before creation.
+// 创建时初始化 Generation；Binding 本身不维护由控制器回写的状态字段。
 func (v *validatingAdmissionPolicyBindingStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.ValidatingAdmissionPolicyBinding)
 	ic.Generation = 1
@@ -89,6 +91,7 @@ func (v *validatingAdmissionPolicyBindingStrategy) PrepareForUpdate(ctx context.
 }
 
 // Validate validates a new ValidatingAdmissionPolicyBinding.
+// Validate 校验 PolicyName、MatchResources 和 ParamRef，再确保策略存在且调用者能读取参数对象。
 func (v *validatingAdmissionPolicyBindingStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.ValidatingAdmissionPolicyBinding)
 	errs := validation.ValidateValidatingAdmissionPolicyBinding(ic)
@@ -123,6 +126,7 @@ func (v *validatingAdmissionPolicyBindingStrategy) AllowCreateOnUpdate(ctx conte
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新时重新校验 ParamRef；若参数目标或关联 Policy 改变，必须重新执行授权检查。
 func (v *validatingAdmissionPolicyBindingStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newIC := obj.(*admissionregistration.ValidatingAdmissionPolicyBinding)
 	oldIC := old.(*admissionregistration.ValidatingAdmissionPolicyBinding)

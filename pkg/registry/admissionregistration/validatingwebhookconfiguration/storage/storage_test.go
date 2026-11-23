@@ -33,6 +33,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 )
 
+// TestCreate 验证 ValidatingWebhookConfiguration 创建会执行 Webhook 规则与客户端配置校验。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

@@ -33,6 +33,7 @@ import (
 )
 
 // mutatingWebhookConfigurationStrategy implements verification logic for mutatingWebhookConfiguration.
+// mutatingWebhookConfigurationStrategy 定义 MutatingWebhookConfiguration 集群级写入策略，管理 Webhook 规则、Generation 和兼容告警。
 type mutatingWebhookConfigurationStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -47,12 +48,14 @@ func (mutatingWebhookConfigurationStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears the status of an mutatingWebhookConfiguration before creation.
+// 创建时初始化 Generation；Webhook Configuration 不由 Admission Controller 回写 Status。
 func (mutatingWebhookConfigurationStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.MutatingWebhookConfiguration)
 	ic.Generation = 1
 }
 
 // WarningsOnCreate returns warnings for the creation of the given object.
+// 创建时检查静态 Admission 配置名称规则，以及启用特性后被排除的虚拟资源规则。
 func (mutatingWebhookConfigurationStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	ic := obj.(*admissionregistration.MutatingWebhookConfiguration)
 	var warnings []string
@@ -66,6 +69,7 @@ func (mutatingWebhookConfigurationStrategy) WarningsOnCreate(ctx context.Context
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 仅 Webhooks 列表发生变化时递增 Generation，避免无关 metadata 更新触发 Webhook 配置重新加载。
 func (mutatingWebhookConfigurationStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIC := obj.(*admissionregistration.MutatingWebhookConfiguration)
 	oldIC := old.(*admissionregistration.MutatingWebhookConfiguration)
@@ -79,6 +83,7 @@ func (mutatingWebhookConfigurationStrategy) PrepareForUpdate(ctx context.Context
 }
 
 // Validate validates a new mutatingWebhookConfiguration.
+// Validate 校验 MutatingWebhook 的规则、客户端配置和 Feature Gate 约束。
 func (mutatingWebhookConfigurationStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.MutatingWebhookConfiguration)
 	errs := validation.ValidateMutatingWebhookConfiguration(ic)

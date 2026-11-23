@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包创建 ValidatingAdmissionPolicy 的 REST Store；CEL、ParamKind 与读取授权由上层 Strategy 负责校验。
 package storage
 
 import (

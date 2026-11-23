@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包创建 MutatingWebhookConfiguration 的 REST Store，并将 Webhook 规则/客户端配置校验接入通用存储流程。
 package storage
 
 import (

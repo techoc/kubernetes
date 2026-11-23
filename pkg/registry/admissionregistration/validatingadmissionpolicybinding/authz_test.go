@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/resolver"
 )
 
+// TestAuthorization 验证 PolicyBinding 对参数资源的 get 授权、资源解析和超级用户特殊路径。
 func TestAuthorization(t *testing.T) {
 	for _, tc := range []struct {
 		name              string

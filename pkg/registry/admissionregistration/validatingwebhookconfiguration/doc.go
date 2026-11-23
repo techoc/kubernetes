@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package validatingwebhookconfiguration 提供 ValidatingWebhookConfiguration 的 REST 策略和准入规则兼容校验。
 package validatingwebhookconfiguration

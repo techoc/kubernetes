@@ -33,6 +33,7 @@ import (
 )
 
 // validatingWebhookConfigurationStrategy implements verification logic for validatingWebhookConfiguration.
+// validatingWebhookConfigurationStrategy 定义 ValidatingWebhookConfiguration 集群级写入策略，负责 Webhook 静态配置校验。
 type validatingWebhookConfigurationStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -47,6 +48,7 @@ func (validatingWebhookConfigurationStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears the status of an validatingWebhookConfiguration before creation.
+// 创建时初始化 Generation；Webhook Configuration 无控制器 Status 子资源。
 func (validatingWebhookConfigurationStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.ValidatingWebhookConfiguration)
 	ic.Generation = 1
@@ -66,6 +68,7 @@ func (validatingWebhookConfigurationStrategy) PrepareForUpdate(ctx context.Conte
 }
 
 // Validate validates a new validatingWebhookConfiguration.
+// Validate 检查 Webhook 名称、ClientConfig、Rules、FailurePolicy、MatchPolicy、SideEffects 和 Timeout 等约束。
 func (validatingWebhookConfigurationStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.ValidatingWebhookConfiguration)
 	errs := validation.ValidateValidatingWebhookConfiguration(ic)
@@ -98,6 +101,7 @@ func (validatingWebhookConfigurationStrategy) AllowCreateOnUpdate(ctx context.Co
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新时用新旧配置校验规则变化，并保持静态配置名称约束与对象不可变规则一致。
 func (validatingWebhookConfigurationStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newIC := obj.(*admissionregistration.ValidatingWebhookConfiguration)
 	oldIC := old.(*admissionregistration.ValidatingWebhookConfiguration)

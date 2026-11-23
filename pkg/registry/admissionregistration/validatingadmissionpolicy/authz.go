@@ -54,6 +54,7 @@ func (v *validatingAdmissionPolicyStrategy) authorizeUpdate(ctx context.Context,
 	return v.authorize(ctx, policy)
 }
 
+// authorize 要求创建/变更 ParamKind 的用户能读取被引用的参数对象；system:masters 超级用户可跳过该检查。
 func (v *validatingAdmissionPolicyStrategy) authorize(ctx context.Context, policy *admissionregistration.ValidatingAdmissionPolicy) error {
 	if v.authorizer == nil || policy.Spec.ParamKind == nil {
 		return nil
@@ -70,6 +71,7 @@ func (v *validatingAdmissionPolicyStrategy) authorize(ctx context.Context, polic
 	}
 
 	paramKind := policy.Spec.ParamKind
+	// GVK 无法解析或 Discovery 找不到 GVR 时，保守地要求对所有 Group/Version/Resource 具备 get 权限，避免解析失败放宽授权。
 	// default to requiring permissions on all group/version/resources
 	resource, apiGroup, apiVersion := "*", "*", "*"
 	if gv, err := schema.ParseGroupVersion(paramKind.APIVersion); err == nil {
@@ -82,6 +84,7 @@ func (v *validatingAdmissionPolicyStrategy) authorize(ctx context.Context, polic
 		}
 	}
 
+	// 对解析后的参数资源使用 get 授权；Name/Namespace 使用通配符，表示策略可能读取该类型下任意对象。
 	// require that the user can read (verb "get") the referred kind.
 	attrs := authorizer.AttributesRecord{
 		User:            user,

@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/resolver"
 )
 
+// TestAuthorization 验证 Mutating Policy Binding 对参数资源的 get/list 授权规则。
 func TestAuthorization(t *testing.T) {
 	for _, tc := range []struct {
 		name              string

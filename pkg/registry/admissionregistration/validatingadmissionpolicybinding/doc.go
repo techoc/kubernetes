@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package validatingadmissionpolicybinding 提供 ValidatingAdmissionPolicyBinding 的 REST 策略、Policy/ParamRef 解析与授权校验。
 package validatingadmissionpolicybinding

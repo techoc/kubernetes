@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package validatingadmissionpolicy 提供 ValidatingAdmissionPolicy 的 REST 策略、参数类型解析、读取授权和 Status 子资源。
 package validatingadmissionpolicy

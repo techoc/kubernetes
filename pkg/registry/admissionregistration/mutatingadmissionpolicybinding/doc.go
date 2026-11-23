@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package mutatingadmissionpolicybinding 提供 MutatingAdmissionPolicyBinding 的 REST 策略、关联 Policy/ParamRef 检查和参数读取授权。
 package mutatingadmissionpolicybinding

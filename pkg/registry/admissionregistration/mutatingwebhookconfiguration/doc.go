@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package mutatingwebhookconfiguration 提供 MutatingWebhookConfiguration 的 REST 策略与变更 Webhook 规则校验。
 package mutatingwebhookconfiguration

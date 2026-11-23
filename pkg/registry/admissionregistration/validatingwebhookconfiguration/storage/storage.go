@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包创建 ValidatingWebhookConfiguration 的 REST Store，并统一执行 Webhook 规则及 ClientConfig 的写入校验。
 package storage
 
 import (

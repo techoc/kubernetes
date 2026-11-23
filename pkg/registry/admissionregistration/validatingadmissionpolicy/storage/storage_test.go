@@ -36,6 +36,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 )
 
+// TestCreate 验证 ValidatingAdmissionPolicy 创建时执行 CEL/ParamKind 校验并写入后端。
 func TestCreate(t *testing.T) {
 	storage, server := newInsecureStorage(t)
 	defer server.Terminate(t)

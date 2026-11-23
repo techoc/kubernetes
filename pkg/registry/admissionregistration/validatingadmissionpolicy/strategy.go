@@ -37,6 +37,7 @@ import (
 )
 
 // validatingAdmissionPolicyStrategy implements verification logic for ValidatingAdmissionPolicy.
+// validatingAdmissionPolicyStrategy 定义集群级策略写入边界，负责 CEL/匹配规则校验以及 ParamKind 的读取授权。
 type validatingAdmissionPolicyStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -60,6 +61,7 @@ func (v *validatingAdmissionPolicyStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears the status of an validatingAdmissionPolicy before creation.
+// 创建时清空控制器维护的 Status，并将 Generation 初始化为 1。
 func (v *validatingAdmissionPolicyStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.ValidatingAdmissionPolicy)
 	ic.Status = admissionregistration.ValidatingAdmissionPolicyStatus{}
@@ -67,6 +69,7 @@ func (v *validatingAdmissionPolicyStrategy) PrepareForCreate(ctx context.Context
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 主资源更新不允许客户端改写 Status；只有 Spec 语义变化才递增 Generation。
 func (v *validatingAdmissionPolicyStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIC := obj.(*admissionregistration.ValidatingAdmissionPolicy)
 	oldIC := old.(*admissionregistration.ValidatingAdmissionPolicy)
@@ -83,6 +86,7 @@ func (v *validatingAdmissionPolicyStrategy) PrepareForUpdate(ctx context.Context
 }
 
 // Validate validates a new validatingAdmissionPolicy.
+// Validate 检查 CEL 表达式、MatchConstraints、Variables 与 ParamKind；结构合法后才检查参数资源 get 权限。
 func (v *validatingAdmissionPolicyStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.ValidatingAdmissionPolicy)
 	errs := validation.ValidateValidatingAdmissionPolicy(ic)
@@ -117,6 +121,7 @@ func (v *validatingAdmissionPolicyStrategy) AllowCreateOnUpdate(ctx context.Cont
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新时重新校验策略表达式，仅在 ParamKind 变化时重新执行参数资源读取授权。
 func (v *validatingAdmissionPolicyStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newIC := obj.(*admissionregistration.ValidatingAdmissionPolicy)
 	oldIC := old.(*admissionregistration.ValidatingAdmissionPolicy)
@@ -171,6 +176,7 @@ func (s *validatingAdmissionPolicyStatusStrategy) ValidateUpdate(ctx context.Con
 
 // PrepareForUpdate differs from the main strategy where setting the spec is not
 // allowed, but setting status is OK.
+// /status 只允许策略控制器更新状态与条件；Spec 和相关元数据必须从旧对象恢复。
 func (s *validatingAdmissionPolicyStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIC := obj.(*admissionregistration.ValidatingAdmissionPolicy)
 	oldIC := old.(*admissionregistration.ValidatingAdmissionPolicy)

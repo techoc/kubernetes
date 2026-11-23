@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/admissionregistration"
 )
 
+// TestValidatingWebhookConfigurationStrategy 验证 ValidatingWebhook 规则、客户端配置、失败策略和 Generation 行为。
 func TestValidatingWebhookConfigurationStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if Strategy.NamespaceScoped() {

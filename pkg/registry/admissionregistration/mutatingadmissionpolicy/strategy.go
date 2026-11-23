@@ -34,6 +34,7 @@ import (
 )
 
 // mutatingAdmissionPolicyStrategy implements verification logic for MutatingAdmissionPolicy.
+// mutatingAdmissionPolicyStrategy 定义 MutatingAdmissionPolicy 写入策略，负责 CEL 变更表达式、参数类型和读取授权。
 type mutatingAdmissionPolicyStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -57,6 +58,7 @@ func (v *mutatingAdmissionPolicyStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears the status of an MutatingAdmissionPolicy before creation.
+// 创建时清空 Status 并初始化 Generation，状态由 Admission Policy Controller 管理。
 func (v *mutatingAdmissionPolicyStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.MutatingAdmissionPolicy)
 	ic.Generation = 1
@@ -76,6 +78,7 @@ func (v *mutatingAdmissionPolicyStrategy) PrepareForUpdate(ctx context.Context, 
 }
 
 // Validate validates a new MutatingAdmissionPolicy.
+// Validate 校验匹配约束、变量、Mutation、ReinvocationPolicy 和 ParamKind，结构合法后再检查参数资源 get 权限。
 func (v *mutatingAdmissionPolicyStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.MutatingAdmissionPolicy)
 	errs := validation.ValidateMutatingAdmissionPolicy(ic)
@@ -110,6 +113,7 @@ func (v *mutatingAdmissionPolicyStrategy) AllowCreateOnUpdate(ctx context.Contex
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新时重新校验 CEL 变更逻辑，并在 ParamKind 发生变化时重做参数读取授权。
 func (v *mutatingAdmissionPolicyStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newIC := obj.(*admissionregistration.MutatingAdmissionPolicy)
 	oldIC := old.(*admissionregistration.MutatingAdmissionPolicy)

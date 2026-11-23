@@ -28,6 +28,7 @@ import (
 	rbacregistry "k8s.io/kubernetes/pkg/registry/rbac"
 )
 
+// authorizeCreate 在写入 Binding 前解析关联 Policy 与 ParamRef，并检查参数资源读取权限。
 func (v *validatingAdmissionPolicyBindingStrategy) authorizeCreate(ctx context.Context, obj runtime.Object) error {
 	binding := obj.(*admissionregistration.ValidatingAdmissionPolicyBinding)
 	if binding.Spec.ParamRef == nil {
@@ -54,6 +55,7 @@ func (v *validatingAdmissionPolicyBindingStrategy) authorizeUpdate(ctx context.C
 	return v.authorize(ctx, binding)
 }
 
+// authorize 根据 Policy.ParamKind 将参数类型 GVK 解析为 GVR，再检查当前用户是否具有读取匹配对象的权限。
 func (v *validatingAdmissionPolicyBindingStrategy) authorize(ctx context.Context, binding *admissionregistration.ValidatingAdmissionPolicyBinding) error {
 	if v.resourceResolver == nil {
 		return fmt.Errorf(`unexpected internal error: resourceResolver is nil`)

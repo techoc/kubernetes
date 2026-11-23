@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package mutatingadmissionpolicy 提供 MutatingAdmissionPolicy 的 REST 策略、CEL 变更规则校验和参数资源授权。
 package mutatingadmissionpolicy

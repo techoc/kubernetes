@@ -37,11 +37,13 @@ import (
 	validatingwebhookconfigurationstorage "k8s.io/kubernetes/pkg/registry/admissionregistration/validatingwebhookconfiguration/storage"
 )
 
+// RESTStorageProvider 持有授权器与 Discovery Client，负责装配 AdmissionRegistration 的 Webhook、Policy 和 Binding 存储。
 type RESTStorageProvider struct {
 	Authorizer      authorizer.UnconditionalAuthorizer
 	DiscoveryClient discovery.DiscoveryInterface
 }
 
+// NewRESTStorage 依次注册 v1、v1beta1、v1alpha1 的资源映射；版本变更需与 aggregator 的优先级配置保持一致。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(admissionregistration.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
@@ -67,6 +69,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 先创建 Discovery Resolver，再按顺序创建 Policy 与 Binding；Binding 的 PolicyGetter 依赖先创建的 Policy Store。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -138,6 +141,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// v1alpha1Storage 只装配此早期版本仍公开的 MutatingAdmissionPolicy 及其 Binding。
 func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -171,6 +175,7 @@ func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstora
 	return storage, nil
 }
 
+// v1beta1Storage 只装配该版本公开的 Webhook/Policy/Binding 资源；可用资源集合可能与 v1 不同。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 

@@ -31,6 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/admissionregistration"
 )
 
+// TestPolicyBindingStrategy 验证 MutatingAdmissionPolicyBinding 的关联策略与参数引用校验。
 func TestPolicyBindingStrategy(t *testing.T) {
 	strategy := NewStrategy(nil, nil, replicaLimitsResolver)
 	ctx := genericapirequest.NewDefaultContext()

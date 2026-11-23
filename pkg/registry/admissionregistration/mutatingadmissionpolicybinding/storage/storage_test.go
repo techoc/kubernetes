@@ -37,6 +37,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 )
 
+// TestCreate 验证 Mutating Policy Binding 创建时会解析 Policy 并检查参数引用。
 func TestCreate(t *testing.T) {
 	for _, configuration := range validPolicyBindings() {
 		t.Run(configuration.Name, func(t *testing.T) {

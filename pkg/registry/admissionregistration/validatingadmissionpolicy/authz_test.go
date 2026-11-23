@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/resolver"
 )
 
+// TestAuthorization 验证 ParamKind GVK/GVR 解析、超级用户绕过和 get 权限不足时的拒绝行为。
 func TestAuthorization(t *testing.T) {
 	for _, tc := range []struct {
 		name             string

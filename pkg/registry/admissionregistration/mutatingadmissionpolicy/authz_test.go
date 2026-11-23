@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/resolver"
 )
 
+// TestAuthorization 验证 MutatingAdmissionPolicy 的 ParamKind 资源读取权限及解析失败时的保守授权行为。
 func TestAuthorization(t *testing.T) {
 	for _, tc := range []struct {
 		name             string

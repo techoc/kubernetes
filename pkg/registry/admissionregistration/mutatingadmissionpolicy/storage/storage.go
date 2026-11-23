@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本包创建 MutatingAdmissionPolicy 的通用 REST Store，并注入对应的主资源写入策略与字段校验。
 package storage
 
 import (
