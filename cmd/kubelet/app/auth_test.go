@@ -31,6 +31,7 @@ import (
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
+// TestAuthzWebhookRequestEncoding 验证 Webhook 授权客户端在 JSON、默认 Content-Type 和 Protobuf 三种配置下发送正确的请求头与编码。
 func TestAuthzWebhookRequestEncoding(t *testing.T) {
 	testCases := []struct {
 		name                    string
@@ -114,6 +115,7 @@ func TestAuthzWebhookRequestEncoding(t *testing.T) {
 	}
 }
 
+// TestAuthnWebhookRequestEncoding 验证 Webhook 认证的 TokenReview 请求采用预期 Content-Type，并正确编码请求体。
 func TestAuthnWebhookRequestEncoding(t *testing.T) {
 	testCases := []struct {
 		name                    string

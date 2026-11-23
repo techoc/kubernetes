@@ -18,6 +18,7 @@ package app
 
 import "testing"
 
+// TestIsValidPriorityClass 覆盖 Windows 优先级名称映射，确认合法名称得到系统常量、非法名称返回 0。
 func TestIsValidPriorityClass(t *testing.T) {
 	testCases := []struct {
 		description           string

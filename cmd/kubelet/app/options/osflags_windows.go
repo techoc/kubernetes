@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// addOSFlags 注册仅 Windows 构建支持的参数：SCM 服务模式和进程优先级类别。
 func (f *KubeletFlags) addOSFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&f.WindowsService, "windows-service", f.WindowsService, "Enable Windows Service Control Manager API integration")
 	// The default priority class associated with any process in Windows is NORMAL_PRIORITY_CLASS. Keeping it as is

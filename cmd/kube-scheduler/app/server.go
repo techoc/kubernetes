@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 // Package app implements a Server object for running the scheduler.
+// 本包连接命令行配置与 pkg/scheduler：负责配置校验、插件注册、Scheduler 实例化和服务运行。
 package app
 
 import (
@@ -88,9 +89,10 @@ func init() {
 }
 
 // Option configures a framework.Registry.
+// Option 是插件注册表扩展函数，调用方可以在启动前注入树外插件工厂。
 type Option func(runtime.Registry) error
 
-// NewSchedulerCommand creates a *cobra.Command object with default parameters and registryOptions
+// NewSchedulerCommand 创建 kube-scheduler 命令；这里只准备 Options 和 Flag，实际启动发生在 RunE。
 func NewSchedulerCommand(registryOptions ...Option) *cobra.Command {
 	opts := options.NewOptions()
 
@@ -104,13 +106,16 @@ suitable Node. Multiple different schedulers may be used within a cluster;
 kube-scheduler is the reference implementation.
 See [scheduling](https://kubernetes.io/docs/concepts/scheduling-eviction/)
 for more information about scheduling and the kube-scheduler component.`,
+		// 在 RunE 之前应用组件版本和 Feature Gate，后续默认值和配置校验依赖这份全局状态。
 		PersistentPreRunE: func(*cobra.Command, []string) error {
 			// makes sure feature gates are set before RunE.
 			return opts.ComponentGlobalsRegistry.Set()
 		},
+		// 参数解析成功后进入真正的服务启动流程。
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCommand(cmd, opts, registryOptions...)
 		},
+		// Scheduler 是常驻服务，不接收位置参数；拒绝非空参数可避免拼写错误被静默忽略。
 		Args: func(cmd *cobra.Command, args []string) error {
 			for _, arg := range args {
 				if len(arg) > 0 {
@@ -141,6 +146,7 @@ for more information about scheduling and the kube-scheduler component.`,
 
 // runCommand runs the scheduler.
 func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Option) error {
+	// 版本查询属于 CLI 快捷路径；请求版本信息时直接输出并退出，不进入服务启动。
 	verflag.PrintAndExitIfRequested()
 	fg := opts.ComponentGlobalsRegistry.FeatureGateFor(basecompatibility.DefaultKubeComponent)
 	// Activate logging as soon as possible, after that
@@ -149,6 +155,7 @@ func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Op
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	// 记录最终解析的参数值，便于排查默认值、配置文件和命令行覆盖关系。
 	cliflag.PrintFlags(cmd.Flags())
 
 	if opts.InformerName == nil {
@@ -159,6 +166,7 @@ func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Op
 		opts.InformerName = informerName
 	}
 
+	// 使用统一 Context 管理进程生命周期；收到 SIGTERM/SIGINT 后取消它，通知后台组件有序停止。
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -167,6 +175,7 @@ func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Op
 		cancel()
 	}()
 
+	// Setup 完成配置校验、依赖创建、树外插件注册和 Scheduler 实例化。
 	cc, sched, err := Setup(ctx, opts, registryOptions...)
 	if err != nil {
 		return err
@@ -179,7 +188,7 @@ func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Op
 	return Run(ctx, cc, sched)
 }
 
-// Run executes the scheduler based on the given configuration. It only returns on error or when context is done.
+// Run 根据已完成的配置启动 Scheduler 和 HTTP 服务，直到 Context 结束或发生致命错误。
 func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *scheduler.Scheduler) error {
 	logger := klog.FromContext(ctx)
 
@@ -188,6 +197,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 
 	logger.Info("Golang settings", "GOGC", os.Getenv("GOGC"), "GOMAXPROCS", os.Getenv("GOMAXPROCS"), "GOTRACEBACK", os.Getenv("GOTRACEBACK"))
 
+	// configz 对外展示版本化 API 对象，而内部运行时使用内部类型；先转换为 v1 再注册调试端点。
 	externalConfig := &configv1.KubeSchedulerConfiguration{}
 	if err := conversionv1.Convert_config_KubeSchedulerConfiguration_To_v1_KubeSchedulerConfiguration(&cc.ComponentConfig, externalConfig, nil); err != nil {
 		return fmt.Errorf("unable to convert configz: %w", err)
@@ -201,7 +211,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 		return fmt.Errorf("unable to set configz: %w", err)
 	}
 
-	// Start events processing pipeline.
+	// 启动事件写回管道；Context 结束时停止记录，并由 defer 关闭广播器。
 	cc.EventBroadcaster.StartRecordingToSink(ctx.Done())
 	defer cc.EventBroadcaster.Shutdown()
 
@@ -213,6 +223,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 	}
 	readyzChecks = append(readyzChecks, healthz.NewShutdownHealthz(ctx.Done()))
 
+	// 通道关闭表示本实例已经获得领导权；未关闭时表示仍在等待 Leader。
 	waitingForLeader := make(chan struct{})
 	isLeader := func() bool {
 		select {
@@ -225,6 +236,8 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 		}
 	}
 
+	// 初始 LIST 对象不仅要进入缓存，还必须全部分发给事件处理器后才算真正就绪。
+	// 通道关闭前 /readyz 持续失败，避免缓存未完整时接收调度工作。
 	handlerSyncReadyCh := make(chan struct{})
 	handlerSyncCheck := healthz.NamedCheck("sched-handler-sync", func(_ *http.Request) error {
 		select {
@@ -236,6 +249,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 	})
 	readyzChecks = append(readyzChecks, handlerSyncCheck)
 
+	// 协同选主需要 LeaseCandidate 携带版本信息；只有启用选主且打开 Feature Gate 时才启动候选者控制器。
 	if cc.LeaderElection != nil && utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CoordinatedLeaderElection) {
 		binaryVersion, err := semver.ParseTolerant(cc.ComponentGlobalsRegistry.EffectiveVersionFor(basecompatibility.DefaultKubeComponent).BinaryVersion().String())
 		if err != nil {
@@ -264,6 +278,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 	}
 
 	// Start up the server for endpoints.
+	// 未启用 HTTPS 时关闭回调为空函数；启用后替换为停止监听并等待在途请求结束的清理过程。
 	gracefulShutdownSecureServer := func() {}
 	if cc.SecureServing != nil {
 		handler := buildHandlerChain(newEndpointsHandler(&cc.ComponentConfig, cc.InformerFactory, isLeader, checks, readyzChecks, cc.Flagz), cc.Authentication.Authenticator, cc.Authorization.Authorizer)
@@ -284,6 +299,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 		}
 	}
 
+	// 将启动 Informer、同步缓存和等待事件处理器封装为一个过程，防止调度循环过早启动。
 	startInformersAndWaitForSync := func(ctx context.Context) {
 		// Start all informers.
 		cc.InformerFactory.Start(ctx.Done())
@@ -292,14 +308,14 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 			cc.DynInformerFactory.Start(ctx.Done())
 		}
 
-		// Wait for all caches to sync before scheduling.
+		// WaitForCacheSync 确保 LIST/WATCH 已建立且本地 Store 完成首次填充，否则插件读取到的资源视图可能不完整。
 		cc.InformerFactory.WaitForCacheSync(ctx.Done())
 		// DynInformerFactory can be nil in tests.
 		if cc.DynInformerFactory != nil {
 			cc.DynInformerFactory.WaitForCacheSync(ctx.Done())
 		}
 
-		// Wait for all handlers to sync (all items in the initial list delivered) before scheduling.
+		// 缓存同步不等于事件处理完成：还要等待初始对象全部送达 Scheduler Handler，否则 Pod 可能尚未进入调度队列。
 		if err := sched.WaitForHandlersSync(ctx); err != nil {
 			logger.Error(err, "handlers are not fully synchronized")
 		}
@@ -307,6 +323,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 		close(handlerSyncReadyCh)
 		logger.V(3).Info("Handlers synced")
 	}
+	// 未启用延迟缓存时启动阶段立即同步；启用延迟缓存且配置选主时，把同步推迟到成为 Leader 之后。
 	if !cc.ComponentConfig.DelayCacheUntilActive || cc.LeaderElection == nil {
 		startInformersAndWaitForSync(ctx)
 	}
@@ -316,6 +333,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 			cc.LeaderElection.Coordinated = true
 		}
 		cc.LeaderElection.Callbacks = leaderelection.LeaderCallbacks{
+			// 获得 Lease 后标记为 Leader；必要时先启动并同步缓存，随后进入调度主循环。
 			OnStartedLeading: func(ctx context.Context) {
 				close(waitingForLeader)
 				if cc.ComponentConfig.DelayCacheUntilActive {
@@ -325,6 +343,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 				}
 				sched.Run(ctx)
 			},
+			// 停止领导后先关闭 HTTPS 服务；正常收到退出信号则成功退出，否则按 Lease 丢失处理。
 			OnStoppedLeading: func() {
 				gracefulShutdownSecureServer()
 				select {
@@ -344,6 +363,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 			return fmt.Errorf("couldn't create leader elector: %v", err)
 		}
 
+		// Run 阻塞到 Context 结束或选主回调导致退出；控制返回通常表示当前实例已失去租约。
 		leaderElector.Run(ctx)
 
 		return fmt.Errorf("lost lease")
@@ -356,7 +376,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 	return fmt.Errorf("finished without leader elect")
 }
 
-// buildHandlerChain wraps the given handler with the standard filters.
+// buildHandlerChain 使用标准 HTTP 过滤器包装端点处理器，包含 Panic Recovery、日志、请求信息、认证和授权。
 func buildHandlerChain(handler http.Handler, authn authenticator.Request, authz authorizer.UnconditionalAuthorizer) http.Handler {
 	requestInfoResolver := &apirequest.RequestInfoFactory{}
 	failedHandler := genericapifilters.Unauthorized(scheme.Codecs)
@@ -371,6 +391,7 @@ func buildHandlerChain(handler http.Handler, authn authenticator.Request, authz 
 	return handler
 }
 
+// installMetricHandler 安装组件配置和指标端点；资源指标依赖主实例缓存，因此仅在 Leader 上响应。
 func installMetricHandler(pathRecorderMux *mux.PathRecorderMux, informers informers.SharedInformerFactory, isLeader func() bool) {
 	configz.InstallHandler(pathRecorderMux)
 	pathRecorderMux.Handle("/metrics", legacyregistry.HandlerWithReset())
@@ -416,6 +437,7 @@ func newEndpointsHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration,
 	return pathRecorderMux
 }
 
+// getRecorderFactory 为每个 Scheduler Profile 创建对应名称的事件记录器。
 func getRecorderFactory(cc *schedulerserverconfig.CompletedConfig) profile.RecorderFactory {
 	return func(name string) events.EventRecorderLogger {
 		return cc.EventBroadcaster.NewRecorder(name)
@@ -430,14 +452,16 @@ func WithPlugin(name string, factory runtime.PluginFactory) Option {
 	}
 }
 
-// Setup creates a completed config and a scheduler based on the command args and options
+// Setup 依次加载默认配置、校验 Options、创建运行时依赖、注册树外插件并实例化 Scheduler。
 func Setup(ctx context.Context, opts *options.Options, outOfTreeRegistryOptions ...Option) (*schedulerserverconfig.CompletedConfig, *scheduler.Scheduler, error) {
+	// 先装入当前 API 版本的默认配置；后续 Options.Config 可按用户的 --config 替换它。
 	if cfg, err := latest.Default(); err != nil {
 		return nil, nil, err
 	} else {
 		opts.ComponentConfig = cfg
 	}
 
+	// 配置无效时不创建客户端、Informer 等后台资源，并聚合返回全部错误。
 	if errs := opts.Validate(); len(errs) > 0 {
 		return nil, nil, utilerrors.NewAggregate(errs)
 	}
@@ -450,6 +474,7 @@ func Setup(ctx context.Context, opts *options.Options, outOfTreeRegistryOptions 
 	// Get the completed config
 	cc := c.Complete()
 
+	// 树外插件使用独立 Registry，在 Framework 构建前集中注册，避免修改内置插件注册表。
 	outOfTreeRegistry := make(runtime.Registry)
 	for _, option := range outOfTreeRegistryOptions {
 		if err := option(outOfTreeRegistry); err != nil {
@@ -459,7 +484,7 @@ func Setup(ctx context.Context, opts *options.Options, outOfTreeRegistryOptions 
 
 	recorderFactory := getRecorderFactory(&cc)
 	completedProfiles := make([]kubeschedulerconfig.KubeSchedulerProfile, 0)
-	// Create the scheduler.
+	// scheduler.New 按 Profile 构建 Framework、实例化插件，并连接调度队列和 Informer 事件。
 	sched, err := scheduler.New(ctx,
 		cc.Client,
 		cc.InformerFactory,

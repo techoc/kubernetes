@@ -20,6 +20,7 @@ package app
 
 import "context"
 
+// 非 Windows 平台无需执行 Windows Service 或进程优先级初始化，因此该实现保持为空操作。
 func initForOS(ctx context.Context, service bool, priorityClass string) error {
 	return nil
 }

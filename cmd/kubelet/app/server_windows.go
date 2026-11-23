@@ -27,6 +27,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// checkPermissions 在 Windows 上检查当前登录身份并要求进程令牌具备提升权限（管理员权限）。
 func checkPermissions(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	u, err := user.Current()
@@ -39,6 +40,7 @@ func checkPermissions(ctx context.Context) error {
 	// the user's display name - https://pkg.go.dev/os/user#User
 	logger.Info("Kubelet is running as", "login name", u.Username, "display name", u.Name)
 
+	// Windows 的令牌提升状态比用户名字符串更可靠；非提升令牌不能满足 Kubelet 的节点管理要求。
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return errors.New("kubelet needs to run with elevated permissions!")
 	}

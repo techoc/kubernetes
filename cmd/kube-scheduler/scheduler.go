@@ -26,8 +26,12 @@ import (
 	"k8s.io/kubernetes/cmd/kube-scheduler/app"
 )
 
+// main 是 kube-scheduler 进程入口：将命令构造、参数解析和执行委托给 component-base CLI。
 func main() {
+	// 构造 Scheduler 的 Cobra 命令，集中注册参数、帮助信息和执行逻辑。
 	command := app.NewSchedulerCommand()
+	// 由统一 CLI 执行器处理命令，并返回符合操作系统约定的退出码。
 	code := cli.Run(command)
+	// 把退出码交给操作系统，便于脚本和进程管理器判断启动结果。
 	os.Exit(code)
 }

@@ -32,8 +32,12 @@ import (
 	"k8s.io/kubernetes/cmd/kubelet/app"
 )
 
+// main 是 Kubelet 进程入口：构造命令、解析参数，并把实际启动交给 app 包。
 func main() {
+	// 把进程上下文传入命令构造过程，供启动日志和初始化步骤使用。
 	command := app.NewKubeletCommand(context.Background())
+	// 统一由 component-base CLI 执行命令并返回标准退出码。
 	code := cli.Run(command)
+	// 将启动结果交给操作系统，供服务管理器或 shell 判断执行状态。
 	os.Exit(code)
 }

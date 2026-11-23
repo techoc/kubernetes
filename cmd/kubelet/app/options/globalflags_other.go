@@ -22,5 +22,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// 非 Linux 平台不注册 cAdvisor Linux 专用参数，保留空实现以满足跨平台统一调用。
 func addCadvisorFlags(fs *pflag.FlagSet) {
 }

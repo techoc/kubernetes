@@ -22,5 +22,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// 非 Windows 平台没有额外的 Kubelet OS 专属命令行参数，因此该实现为空操作。
 func (f *KubeletFlags) addOSFlags(fs *pflag.FlagSet) {
 }

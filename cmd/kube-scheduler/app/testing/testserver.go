@@ -58,7 +58,9 @@ type TestServer struct {
 	TmpDir     string       // Temp Dir used, by the apiserver
 }
 
-// StartTestServer starts a kube-scheduler. A rest client config and a tear-down func,
+// StartTestServer 在测试中启动真实的 kube-scheduler 实例，并返回运行配置、临时目录和显式清理函数。
+// 启动成功以 /healthz 返回 200 为准，而不是仅以 Run goroutine 已创建为准。
+//
 // and location of the tmpdir are returned.
 //
 // Note: we return a tear-down func instead of a stop channel because the later will leak temporary
@@ -67,10 +69,12 @@ type TestServer struct {
 //	enough time to remove temporary files.
 func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (result TestServer, err error) {
 	logger := klog.FromContext(ctx)
+	// 使用独立子 Context 管理测试实例；TearDown 取消它以通知服务和后台协程退出。
 	ctx, cancel := context.WithCancel(ctx)
 
 	var errCh chan error
 	tearDown := func() {
+		// 先取消运行上下文，再等待 Run goroutine 退出，避免测试结束后遗留后台任务或占用端口。
 		cancel()
 
 		// If the scheduler was started, let's wait for it to
@@ -81,6 +85,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 				logger.Error(err, "Failed to shutdown test server clearly")
 			}
 		}
+		// configz 使用进程级注册表；删除本测试注册项，防止后续测试遇到重复名称。
 		configz.Delete("componentconfig")
 	}
 	defer func() {
@@ -94,7 +99,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 	fs := pflag.NewFlagSet("test", pflag.PanicOnError)
 
 	opts := options.NewOptions()
-	// set up new instance of ComponentGlobalsRegistry instead of using the DefaultComponentGlobalsRegistry to avoid contention in parallel tests.
+	// 每个测试使用独立注册表和 FeatureGate 副本，避免并行测试修改共享版本/开关时互相污染。
 	featureGate := utilfeature.DefaultMutableFeatureGate.DeepCopy()
 	effectiveVersion := utilcompatibility.DefaultKubeEffectiveVersionForTest()
 	effectiveVersion.SetEmulationVersion(featureGate.EmulationVersion())
@@ -128,6 +133,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 		featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featureOverrides)
 	}
 
+	// 让内核分配空闲端口，避免测试依赖固定端口或与本机服务冲突；证书写入本测试临时目录。
 	if opts.SecureServing.BindPort != 0 {
 		opts.SecureServing.Listener, opts.SecureServing.BindPort, err = createListenerOnFreePort()
 		if err != nil {
@@ -138,7 +144,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 		logger.Info("kube-scheduler will listen securely", "port", opts.SecureServing.BindPort)
 	}
 
-	// Always exempt /healthz from authorization because we use it to verify startup below.
+	// 测试通过匿名 /healthz 轮询确认服务启动，因此将该路径加入授权白名单。
 	opts.Authorization.AlwaysAllowPaths = append(opts.Authorization.AlwaysAllowPaths, "/healthz")
 
 	cc, sched, err := app.Setup(ctx, opts)
@@ -146,6 +152,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 		return result, fmt.Errorf("failed to create config from options: %v", err)
 	}
 
+	// app.Run 是阻塞调用；单独放入 goroutine，errCh 用于把提前退出或运行错误通知给启动轮询与清理逻辑。
 	errCh = make(chan error)
 	go func(ctx context.Context) {
 		defer close(errCh)
@@ -156,6 +163,8 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 
 	logger.Info("Waiting for /healthz to be ok...")
 
+	// cc.KubeConfig 用于访问 Kubernetes API Server，并不是当前测试 Scheduler 的监听地址。
+	// 因此使用 Scheduler 自己的服务端证书创建本地 HTTPS 客户端。
 	// Cannot use cc.Kubeconfig since it is overwritten to point to kube-apiserver,
 	// build our own client instead.
 	serverCert, _ := cc.SecureServing.Cert.CurrentCertKeyContent()
@@ -171,6 +180,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 		return result, fmt.Errorf("creating client: %w", err)
 	}
 
+	// 每 100ms 检查一次 /healthz，最多等待 30 秒；轮询期间也检查 Run goroutine 是否提前退出。
 	err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		select {
 		case err := <-errCh:
@@ -190,7 +200,7 @@ func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (r
 		return result, fmt.Errorf("failed to wait for /healthz to return ok: %v", err)
 	}
 
-	// from here the caller must call tearDown
+	// /healthz 已返回成功，从这里开始清理责任交给调用方，必须调用 TearDownFn。
 	result.Options = opts
 	result.Config = cc.Config
 	result.TearDownFn = tearDown
@@ -207,6 +217,7 @@ func StartTestServerOrDie(t *testing.T, ctx context.Context, flags []string) *Te
 	return &result
 }
 
+// createListenerOnFreePort 让内核选择可用 TCP 端口，并返回仍保持打开的 Listener，避免端口探测与绑定之间的抢占竞态。
 func createListenerOnFreePort() (net.Listener, int, error) {
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {

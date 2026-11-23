@@ -31,27 +31,31 @@ import (
 	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
 )
 
-// Config has all the context to run a Scheduler
+// Config 汇总 Scheduler 运行期间需要的配置和外部依赖；Options 负责创建它们，Run 负责消费它们。
 type Config struct {
-	// Flagz is the Reader interface to get flags for flagz page.
+	// Flagz 为 /flagz 调试端点提供已解析命令行参数的只读视图。
 	Flagz flagz.Reader
 
-	// ComponentConfig is the scheduler server's configuration object.
+	// ComponentConfig 是经过默认值填充和校验后的 Scheduler 内部组件配置。
 	ComponentConfig kubeschedulerconfig.KubeSchedulerConfiguration
 
+	// Authentication / Authorization 分别负责请求身份认证和访问授权；SecureServing 保存 HTTPS 服务端配置。
 	Authentication apiserver.AuthenticationInfo
 	Authorization  apiserver.AuthorizationInfo
 	SecureServing  *apiserver.SecureServingInfo
 
+	// Client 访问 Kubernetes API，KubeConfig 保存 REST 配置。
+	// 两类 InformerFactory 分别服务内置资源和动态资源，后者不受编译期资源类型集合限制。
 	Client             clientset.Interface
 	KubeConfig         *restclient.Config
 	InformerFactory    informers.SharedInformerFactory
 	DynInformerFactory dynamicinformer.DynamicSharedInformerFactory
 
 	//nolint:staticcheck // SA1019 this deprecated field still needs to be used for now. It will be removed once the migration is done.
+	// EventBroadcaster 将 Scheduler 产生的事件异步写回 API Server。
 	EventBroadcaster events.EventBroadcasterAdapter
 
-	// LeaderElection is optional.
+	// LeaderElection 为空表示不启用选主；非空时保存 Lease 锁和选主回调所需参数。
 	LeaderElection *leaderelection.LeaderElectionConfig
 
 	// PodMaxInUnschedulablePodsDuration is the maximum time a pod can stay in
@@ -68,13 +72,13 @@ type completedConfig struct {
 	*Config
 }
 
-// CompletedConfig same as Config, just to swap private object.
+// CompletedConfig 表示可以交给运行阶段使用的配置；非导出嵌入类型阻止包外伪造完成态对象。
 type CompletedConfig struct {
 	// Embed a private pointer that cannot be instantiated outside of this package.
 	*completedConfig
 }
 
-// Complete fills in any fields not set that are required to have valid data. It's mutating the receiver.
+// Complete 将 Config 包装为 CompletedConfig，以类型区分配置组装阶段和运行阶段。
 func (c *Config) Complete() CompletedConfig {
 	cc := completedConfig{c}
 

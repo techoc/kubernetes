@@ -35,6 +35,7 @@ const (
 
 // getPriorityValue returns the value associated with a Windows process priorityClass
 // Ref: https://docs.microsoft.com/en-us/windows/win32/cimwin32prov/setpriority-method-in-class-win32-process
+// getPriorityValue 将 Windows 文本优先级名称映射为系统调用要求的 PriorityClass 常量；未知名称返回 0。
 func getPriorityValue(priorityClassName string) uint32 {
 	var priorityClassMap = map[string]uint32{
 		"IDLE_PRIORITY_CLASS":         uint32(windows.IDLE_PRIORITY_CLASS),
@@ -54,6 +55,8 @@ func getPriorityValue(priorityClassName string) uint32 {
 // wmic are created at the specified thread priority class.
 // Running kubelet with above normal / high priority  can help improve
 // responsiveness on machines with high CPU utilization.
+// createWindowsJobObject 创建 Windows Job Object，并把进程优先级写入 Job 限制信息。
+// 子进程会继承该 Job 的约束，因此 kubelet 启动的 PowerShell、wmic 等工具也能使用相同优先级。
 func createWindowsJobObject(pc uint32) (windows.Handle, error) {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
@@ -73,6 +76,7 @@ func createWindowsJobObject(pc uint32) (windows.Handle, error) {
 	return job, nil
 }
 
+// initForOS 设置 Windows 进程 Job Object 和优先级；若以 Windows Service 方式启动，再向 SCM 注册服务生命周期回调。
 func initForOS(ctx context.Context, windowsService bool, windowsPriorityClass string) error {
 	logger := klog.FromContext(ctx)
 	priority := getPriorityValue(windowsPriorityClass)

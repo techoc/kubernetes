@@ -30,9 +30,9 @@ import (
 	_ "github.com/google/cadvisor/lib/manager"
 )
 
-// addCadvisorFlags adds flags from cadvisor
+// addCadvisorFlags 只在 Linux 上注册 cAdvisor 的 housekeeping_interval 参数，供 Kubelet 兼容历史节点参数。
 func addCadvisorFlags(fs *pflag.FlagSet) {
-	// lookup flags in global flag set and re-register the values with our flagset
+	// cAdvisor 把参数注册在 Go 全局 FlagSet；这里将同一 Value 重新绑定到 Kubelet 自己的 FlagSet。
 	global := flag.CommandLine
 	local := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
 

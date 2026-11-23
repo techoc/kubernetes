@@ -58,7 +58,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// Options has all the params needed to run a Scheduler
+// Options 聚合 Scheduler 的默认值和用户输入；ApplyTo/Config 再将它转换为运行时 Config。
 type Options struct {
 	// The default values.
 	ComponentConfig *kubeschedulerconfig.KubeSchedulerConfiguration
@@ -91,8 +91,9 @@ type Options struct {
 
 // NewOptions returns default scheduler app options.
 func NewOptions() *Options {
+	// 正常进程共享默认注册表；它集中管理组件有效版本与 Feature Gate。
 	componentGlobalsRegistry := compatibility.DefaultComponentGlobalsRegistry
-	// make sure DefaultKubeComponent is registered in the DefaultComponentGlobalsRegistry.
+	// 确保默认 Kubernetes 组件已登记，避免配置解析时缺少版本和特性开关上下文。
 	if componentGlobalsRegistry.EffectiveVersionFor(basecompatibility.DefaultKubeComponent) == nil {
 		featureGate := utilfeature.DefaultMutableFeatureGate
 		effectiveVersion := compatibility.DefaultBuildEffectiveVersion()
@@ -101,6 +102,7 @@ func NewOptions() *Options {
 	return NewOptionsWithComponentGlobalsRegistry(componentGlobalsRegistry)
 }
 
+// NewOptionsWithComponentGlobalsRegistry 允许注入独立注册表；测试可借此隔离全局 Feature Gate 状态。
 func NewOptionsWithComponentGlobalsRegistry(componentGlobalsRegistry basecompatibility.ComponentGlobalsRegistry) *Options {
 	o := &Options{
 		SecureServing:  apiserveroptions.NewSecureServingOptions(),
@@ -127,7 +129,7 @@ func NewOptionsWithComponentGlobalsRegistry(componentGlobalsRegistry basecompati
 	o.Authentication.RemoteKubeConfigFileOptional = true
 	o.Authorization.RemoteKubeConfigFileOptional = true
 
-	// Set the PairName but leave certificate directory blank to generate in-memory by default
+	// 默认留空证书目录，使 SecureServing 按需生成内存自签名证书，避免在磁盘上留下默认证书。
 	o.SecureServing.ServerCert.CertDirectory = ""
 	o.SecureServing.ServerCert.PairName = "kube-scheduler"
 	o.SecureServing.BindPort = kubeschedulerconfig.DefaultKubeSchedulerPort
@@ -138,6 +140,7 @@ func NewOptionsWithComponentGlobalsRegistry(componentGlobalsRegistry basecompati
 }
 
 // ApplyDeprecated obtains the deprecated CLI args and set them to `o.ComponentConfig` if specified.
+// ApplyDeprecated 只迁移用户显式指定的旧命令行参数，不能把旧参数默认值覆盖到新配置。
 func (o *Options) ApplyDeprecated() {
 	if o.Flags == nil {
 		return
@@ -166,6 +169,7 @@ func (o *Options) ApplyDeprecated() {
 
 // ApplyLeaderElectionTo obtains the CLI args related with leaderelection, and override the values in `cfg`.
 // Then the `cfg` object is injected into the `options` object.
+// ApplyLeaderElectionTo 将用户显式指定的选主参数覆盖到目标组件配置中。
 func (o *Options) ApplyLeaderElectionTo(cfg *kubeschedulerconfig.KubeSchedulerConfiguration) {
 	if o.Flags == nil {
 		return
@@ -198,6 +202,7 @@ func (o *Options) ApplyLeaderElectionTo(cfg *kubeschedulerconfig.KubeSchedulerCo
 }
 
 // initFlags initializes flags by section name.
+// initFlags 按用途分组注册命令行参数；重复调用时直接返回，避免同名 Flag 冲突。
 func (o *Options) initFlags() {
 	if o.Flags != nil {
 		return
@@ -222,16 +227,19 @@ func (o *Options) initFlags() {
 }
 
 // ApplyTo applies the scheduler options to the given scheduler app configuration.
+// ApplyTo 按配置优先级把 Options 应用到运行时 Config，并初始化服务端认证、授权和指标设置。
 func (o *Options) ApplyTo(logger klog.Logger, c *schedulerappconfig.Config) error {
 	if err := o.ComponentGlobalsRegistry.SetFallback(); err != nil {
 		return err
 	}
+	// 未提供 --config 时以默认组件配置为基础，再迁移用户显式指定的旧参数和选主参数。
 	if len(o.ConfigFile) == 0 {
 		// If the --config arg is not specified, honor the deprecated as well as leader election CLI args.
 		o.ApplyDeprecated()
 		o.ApplyLeaderElectionTo(o.ComponentConfig)
 		c.ComponentConfig = *o.ComponentConfig
 	} else {
+		// 提供 --config 时，文件是主要配置来源；为兼容性仅允许 Leader Election 命令行参数继续覆盖。
 		cfg, err := LoadConfigFromFile(logger, o.ConfigFile)
 		if err != nil {
 			return err
@@ -246,6 +254,7 @@ func (o *Options) ApplyTo(logger klog.Logger, c *schedulerappconfig.Config) erro
 		c.ComponentConfig = *cfg
 	}
 
+	// 先构建 kubeconfig，再初始化 SecureServing，避免后续 kubeconfig 失败时遗留服务初始化阶段启动的 goroutine。
 	// Build kubeconfig first to so that if it fails, it doesn't cause leaking
 	// goroutines (started from initializing secure serving - which underneath
 	// creates a queue which in its constructor starts a goroutine).
@@ -283,6 +292,7 @@ func (o *Options) ApplyTo(logger klog.Logger, c *schedulerappconfig.Config) erro
 }
 
 // Validate validates all the required options.
+// Validate 汇总各子系统的校验错误，方便用户一次修正多项配置。
 func (o *Options) Validate() []error {
 	var errs []error
 	if err := o.ComponentGlobalsRegistry.SetFallback(); err != nil {
@@ -302,6 +312,7 @@ func (o *Options) Validate() []error {
 }
 
 // Config return a scheduler config object
+// Config 将 Options 转换为运行时 Config，并在这里创建 API 客户端、事件广播器和 Informer。
 func (o *Options) Config(ctx context.Context) (*schedulerappconfig.Config, error) {
 	logger := klog.FromContext(ctx)
 	if o.SecureServing != nil {
@@ -315,7 +326,7 @@ func (o *Options) Config(ctx context.Context) (*schedulerappconfig.Config, error
 		return nil, err
 	}
 
-	// Prepare kube clients.
+	// 普通资源访问和事件写入使用独立 Client；事件广播器只持有专用的 eventClient。
 	client, eventClient, err := createClients(c.KubeConfig)
 	if err != nil {
 		return nil, err
@@ -323,7 +334,7 @@ func (o *Options) Config(ctx context.Context) (*schedulerappconfig.Config, error
 
 	c.EventBroadcaster = events.NewEventBroadcasterAdapterWithContext(ctx, eventClient)
 
-	// Set up leader election if enabled.
+	// 只有开启 LeaderElect 才创建 Lease 锁配置；关闭选主时保持 nil，Run 会走单实例分支。
 	var leaderElectionConfig *leaderelection.LeaderElectionConfig
 	if c.ComponentConfig.LeaderElection.LeaderElect {
 		// Use the scheduler name in the first profile to record leader election.
@@ -331,6 +342,7 @@ func (o *Options) Config(ctx context.Context) (*schedulerappconfig.Config, error
 		if len(c.ComponentConfig.Profiles) != 0 {
 			schedulerName = c.ComponentConfig.Profiles[0].SchedulerName
 		}
+		// 选主事件使用首个 Profile 的 SchedulerName，使事件来源与该调度器实例配置保持一致。
 		coreRecorder := c.EventBroadcaster.DeprecatedNewLegacyRecorder(schedulerName)
 		leaderElectionConfig, err = makeLeaderElectionConfig(c.ComponentConfig.LeaderElection, c.KubeConfig, coreRecorder)
 		if err != nil {
@@ -338,6 +350,7 @@ func (o *Options) Config(ctx context.Context) (*schedulerappconfig.Config, error
 		}
 	}
 
+	// 内置资源工厂提供静态类型的共享缓存；动态工厂用于访问编译期未知的资源类型。
 	c.Client = client
 	c.InformerFactory = scheduler.NewInformerFactory(client, 0, o.InformerName)
 	dynClient := dynamic.NewForConfigOrDie(c.KubeConfig)
@@ -356,6 +369,7 @@ func makeLeaderElectionConfig(config componentbaseconfig.LeaderElectionConfigura
 		return nil, fmt.Errorf("unable to get hostname: %v", err)
 	}
 	// add a uniquifier so that two processes on the same host don't accidentally both become active
+	// hostname 便于定位实例，UUID 避免同一台机器上多个 Scheduler 进程使用相同锁身份。
 	id := hostname + "_" + string(uuid.NewUUID())
 
 	rl, err := resourcelock.NewFromKubeconfig(config.ResourceLock,
@@ -371,6 +385,8 @@ func makeLeaderElectionConfig(config componentbaseconfig.LeaderElectionConfigura
 		return nil, fmt.Errorf("couldn't create resource lock: %v", err)
 	}
 
+	// LeaseDuration、RenewDeadline、RetryPeriod 控制租约有效期、续约容忍窗口和竞争重试频率。
+	// ReleaseOnCancel 允许正常退出时主动释放锁，减少下一个实例接管的等待时间。
 	return &leaderelection.LeaderElectionConfig{
 		Lock:            rl,
 		LeaseDuration:   config.LeaseDuration.Duration,
@@ -390,6 +406,7 @@ func createKubeConfig(config componentbaseconfig.ClientConnectionConfiguration, 
 		return nil, err
 	}
 
+	// 沿用组件配置中的序列化类型、QPS 和 Burst；Scheduler 客户端按既定行为禁用 HTTP 压缩。
 	kubeConfig.DisableCompression = true
 	kubeConfig.AcceptContentTypes = config.AcceptContentTypes
 	kubeConfig.ContentType = config.ContentType
@@ -400,12 +417,15 @@ func createKubeConfig(config componentbaseconfig.ClientConnectionConfiguration, 
 }
 
 // createClients creates a kube client and an event client from the given kubeConfig
+// createClients 分离普通资源访问和事件写入客户端，避免事件流与主 API 请求混为一组配置。
 func createClients(kubeConfig *restclient.Config) (clientset.Interface, clientset.Interface, error) {
+	// 业务 Client 添加 scheduler User-Agent，便于 API Server 识别请求来源。
 	client, err := clientset.NewForConfig(restclient.AddUserAgent(kubeConfig, "scheduler"))
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// Event Client 单独创建，专门交给 EventBroadcaster 写事件。
 	eventClient, err := clientset.NewForConfig(kubeConfig)
 	if err != nil {
 		return nil, nil, err

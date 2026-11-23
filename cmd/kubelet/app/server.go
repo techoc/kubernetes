@@ -131,6 +131,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// 包初始化时登记日志 Feature Gate，并关闭本组件不使用的 OTel MeterProvider，避免无意义的指标资源。
 func init() {
 	utilruntime.Must(logsapi.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 	// Prevent memory leak from OTel metrics, which we don't use:
@@ -138,13 +139,15 @@ func init() {
 	otel.SetMeterProvider(noop.NewMeterProvider())
 }
 
-// NewKubeletCommand creates a *cobra.Command object with default parameters
+// NewKubeletCommand 创建 Kubelet 命令。由于 Flag 优先级和配置文件合并顺序特殊，参数解析由 RunE 手动完成。
 func NewKubeletCommand(ctx context.Context) *cobra.Command {
 	logger := klog.FromContext(ctx)
+	// 使用独立 FlagSet，避免 Cobra 默认把全局参数混入其中；规范化函数兼容下划线形式。
 	cleanFlagSet := pflag.NewFlagSet(server.ComponentKubelet, pflag.ContinueOnError)
 	cleanFlagSet.SetNormalizeFunc(cliflag.WordSepNormalizeFunc)
 	kubeletFlags := options.NewKubeletFlags()
 
+	// 先创建默认组件配置，第一轮解析命令行参数时即可把 Flag 值写入它。
 	kubeletConfig, err := options.NewKubeletConfiguration()
 	// programmer error
 	if err != nil {
@@ -177,10 +180,11 @@ is checked every 20 seconds (also configurable with a flag).`,
 		// so we do all our parsing manually in Run, below.
 		// DisableFlagParsing=true provides the full set of flags passed to the kubelet in the
 		// `args` arg to Run, without Cobra's interference.
+		// Kubelet 需要加载配置文件后再次解析 Flag，以维持“命令行覆盖配置文件”的历史优先级。
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// initial flag parse, since we disable cobra's flag parsing
+			// 手动完成第一轮解析，先取得配置文件路径和加载配置前需要校验的参数。
 			if err := cleanFlagSet.Parse(args); err != nil {
 				return fmt.Errorf("failed to parse kubelet flag: %w", err)
 			}
@@ -213,14 +217,14 @@ is checked every 20 seconds (also configurable with a flag).`,
 				return fmt.Errorf("failed to validate kubelet flags: %w", err)
 			}
 
-			// load kubelet config file, if provided
+			// 组件配置文件作为基础配置；后续再把命令行中显式出现的值覆盖到新对象。
 			if len(kubeletFlags.KubeletConfigFile) > 0 {
 				kubeletConfig, err = loadConfigFile(ctx, kubeletFlags.KubeletConfigFile)
 				if err != nil {
 					return fmt.Errorf("failed to load kubelet config file, path: %s, error: %w", kubeletFlags.KubeletConfigFile, err)
 				}
 			}
-			// Merge the kubelet configurations if --config-dir is set
+			// Drop-in 文件按名字字典序合并，后加载的配置可以覆盖前面文件及基础配置的字段。
 			var skippedDropinFiles []string
 			if len(kubeletFlags.KubeletDropinConfigDirectory) > 0 {
 				skippedDropinFiles, err = mergeKubeletConfigurations(kubeletConfig, kubeletFlags.KubeletDropinConfigDirectory)
@@ -230,7 +234,7 @@ is checked every 20 seconds (also configurable with a flag).`,
 			}
 
 			if len(kubeletFlags.KubeletConfigFile) > 0 || len(kubeletFlags.KubeletDropinConfigDirectory) > 0 {
-				// We must enforce flag precedence by re-parsing the command line into the new object.
+				// 文件加载后必须把原始命令行重新解析到新配置对象，保证 Flag 优先级高于配置文件。
 				// This is necessary to preserve backwards-compatibility across binary upgrades.
 				// See issue #56171 for more details.
 				if err := kubeletConfigFlagPrecedence(kubeletConfig, args); err != nil {
@@ -242,7 +246,7 @@ is checked every 20 seconds (also configurable with a flag).`,
 				}
 			}
 
-			// Config and flags parsed, now we can initialize logging.
+			// 配置来源和覆盖关系确定后再初始化日志，确保日志行为采用最终配置。
 			logs.InitLogs()
 			// Retrieve the logger again to reflect the updated log settings
 			logger = klog.FromContext(ctx)
@@ -261,7 +265,7 @@ is checked every 20 seconds (also configurable with a flag).`,
 			// command line and remain accurate, so they stay available for debugging.
 			cliflag.PrintFlags(cleanFlagSet)
 
-			// We always validate the local configuration (command line + config file).
+			// 对最终合并配置做完整语义校验，而不只校验最初的命令行参数。
 			if err := kubeletconfigvalidation.ValidateKubeletConfiguration(kubeletConfig, utilfeature.DefaultFeatureGate); err != nil {
 				return fmt.Errorf("failed to validate kubelet configuration, error: %w, path: %s", err, kubeletConfig)
 			}
@@ -270,13 +274,13 @@ is checked every 20 seconds (also configurable with a flag).`,
 				logger.Info("unsupported configuration:KubeletCgroups is not within KubeReservedCgroup")
 			}
 
-			// construct a KubeletServer from kubeletFlags and kubeletConfig
+			// 合并后将节点本地 Flag 与组件配置聚合为 KubeletServer，供依赖构造和运行阶段统一消费。
 			kubeletServer := &options.KubeletServer{
 				KubeletFlags:         *kubeletFlags,
 				KubeletConfiguration: *kubeletConfig,
 			}
 
-			// use kubeletServer to construct the default KubeletDeps
+			// 提前构造基础依赖；需要 API 客户端的依赖在 Run 阶段补齐。
 			kubeletDeps, err := UnsecuredDependencies(ctx, kubeletServer, utilfeature.DefaultFeatureGate)
 			if err != nil {
 				return fmt.Errorf("failed to construct kubelet dependencies: %w", err)
@@ -300,7 +304,7 @@ is checked every 20 seconds (also configurable with a flag).`,
 				}
 			}
 
-			// set up signal context for kubelet shutdown
+			// 从此处开始监听系统退出信号，所有长期运行组件共用这个取消上下文。
 			ctx := genericapiserver.SetupSignalContext()
 
 			utilfeature.DefaultMutableFeatureGate.AddMetrics()
@@ -335,12 +339,14 @@ is checked every 20 seconds (also configurable with a flag).`,
 // the configurations in "10-config.conf" will be applied first, and then the configurations in "20-config.conf" will be applied,
 // potentially overriding the previous values. Files in subdirectories are also processed in lexical order.
 // Returns a list of skipped files and an error.
+// mergeKubeletConfigurations 按文件名字典序合并目录及子目录下的 .conf 文件；后加载文件覆盖先前值。
 func mergeKubeletConfigurations(kubeletConfig *kubeletconfiginternal.KubeletConfiguration, kubeletDropInConfigDir string) ([]string, error) {
 	const dropinFileExtension = ".conf"
 	var skippedFiles []string
 
 	// TODO: move the "internal --> versioned --> merge --> default --> internal" operation inside the loop,
 	// and use the version of each drop-in file as the versioned target once config files can be in versions other than just v1beta1
+	// JSON Merge Patch 面向外部版本结构；先把内部配置转为 v1beta1，再逐个应用 Drop-in 补丁。
 	versionedConfig := &kubeletconfigv1beta1.KubeletConfiguration{}
 	if err := kubeletconfigv1beta1conversion.Convert_config_KubeletConfiguration_To_v1beta1_KubeletConfiguration(kubeletConfig, versionedConfig, nil); err != nil {
 		return nil, err
@@ -350,7 +356,7 @@ func mergeKubeletConfigurations(kubeletConfig *kubeletconfiginternal.KubeletConf
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal base config: %w", err)
 	}
-	// Walk through the drop-in directory and update the configuration for each file
+	// WalkDir 递归遍历子目录；只有 .conf 文件参与合并，其余文件记录到 skippedFiles 供日志提示。
 	if err := filepath.WalkDir(kubeletDropInConfigDir, func(path string, info fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -373,6 +379,7 @@ func mergeKubeletConfigurations(kubeletConfig *kubeletconfiginternal.KubeletConf
 		if *gvk != kubeletconfigv1beta1.SchemeGroupVersion.WithKind("KubeletConfiguration") {
 			return fmt.Errorf("failed to load kubelet dropin file, path: %s, unknown apiVersion/kind: %v", path, gvk.String())
 		}
+		// MergePatch 只覆盖补丁中出现的字段，未出现字段保留原值；因此加载顺序决定覆盖优先级。
 		mergedConfigJSON, err := jsonpatch.MergePatch(baseKubeletConfigJSON, dropinConfigJSON)
 		if err != nil {
 			return fmt.Errorf("failed to merge drop-in and current config: %w", err)
@@ -388,10 +395,10 @@ func mergeKubeletConfigurations(kubeletConfig *kubeletconfiginternal.KubeletConf
 	if err := json.Unmarshal(baseKubeletConfigJSON, versionedConfig); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal merged JSON into kubelet configuration: %w", err)
 	}
-	// apply defaulting after decoding
+	// 所有补丁合并后再填充默认值，避免中间文件的默认值影响后续覆盖。
 	kubeletconfigv1beta1conversion.SetDefaults_KubeletConfiguration(versionedConfig)
 
-	// convert back to internal config
+	// 最后转回内部类型，后续 Kubelet 运行逻辑只需处理一套内部结构。
 	if err := kubeletconfigv1beta1conversion.Convert_v1beta1_KubeletConfiguration_To_config_KubeletConfiguration(versionedConfig, kubeletConfig, nil); err != nil {
 		return nil, fmt.Errorf("failed to convert merged config to internal kubelet configuration: %w", err)
 	}
@@ -401,6 +408,7 @@ func mergeKubeletConfigurations(kubeletConfig *kubeletconfiginternal.KubeletConf
 
 // newFlagSetWithGlobals constructs a new pflag.FlagSet with global flags registered
 // on it.
+// newFlagSetWithGlobals 创建独立参数集合，并显式加入依赖库注册在 Go 全局 FlagSet 上的参数。
 func newFlagSetWithGlobals() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("", pflag.ExitOnError)
 	// set the normalize func, similar to k8s.io/component-base/cli//flags.go:InitFlags
@@ -412,6 +420,7 @@ func newFlagSetWithGlobals() *pflag.FlagSet {
 
 // newFakeFlagSet constructs a pflag.FlagSet with the same flags as fs, but where
 // all values have noop Set implementations
+// newFakeFlagSet 复制参数名称和帮助信息，但把每个 Value 替换成 NoOp，供二次解析时避免副作用。
 func newFakeFlagSet(fs *pflag.FlagSet) *pflag.FlagSet {
 	ret := pflag.NewFlagSet("", pflag.ExitOnError)
 	ret.SetNormalizeFunc(fs.GetNormalizeFunc())
@@ -425,15 +434,16 @@ func newFakeFlagSet(fs *pflag.FlagSet) *pflag.FlagSet {
 // We must enforce flag precedence by re-parsing the command line into the new object.
 // This is necessary to preserve backwards-compatibility across binary upgrades.
 // See issue #56171 for more details.
+// kubeletConfigFlagPrecedence 把原始命令行重新解析到配置文件对象，以维持“命令行优先于配置文件”的兼容约定。
 func kubeletConfigFlagPrecedence(kc *kubeletconfiginternal.KubeletConfiguration, args []string) error {
-	// We use a throwaway kubeletFlags and a fake global flagset to avoid double-parses,
+	// 使用临时 FlagSet 和 NoOp 全局参数，避免重复解析那些 Set 会累加值的 Flag 实现。
 	// as some Set implementations accumulate values from multiple flag invocations.
 	fs := newFakeFlagSet(newFlagSetWithGlobals())
 	// register throwaway KubeletFlags
 	options.NewKubeletFlags().AddFlags(fs)
 	// register new KubeletConfiguration
 	options.AddKubeletConfigFlags(fs, kc)
-	// Remember original feature gates, so we can merge with flag gates later
+	// 保存文件中原有的 Feature Gate；重新解析命令行后再补回没有被 Flag 指定的项。
 	original := kc.FeatureGates
 	// avoid duplicate printing the flag deprecation warnings during re-parsing
 	fs.SetOutput(io.Discard)
@@ -441,7 +451,7 @@ func kubeletConfigFlagPrecedence(kc *kubeletconfiginternal.KubeletConfiguration,
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	// Add back feature gates that were set in the original kc, but not in flags
+	// 只补回 Flag 没有显式覆盖的 Feature Gate，命令行中出现的值保留为最终值。
 	for k, v := range original {
 		if _, ok := kc.FeatureGates[k]; !ok {
 			kc.FeatureGates[k] = v
@@ -450,6 +460,7 @@ func kubeletConfigFlagPrecedence(kc *kubeletconfiginternal.KubeletConfiguration,
 	return nil
 }
 
+// loadConfigFile 将相对路径解析为绝对路径，再通过 Loader 解码为内部 KubeletConfiguration。
 func loadConfigFile(ctx context.Context, name string) (*kubeletconfiginternal.KubeletConfiguration, error) {
 	const errFmt = "failed to load Kubelet config file %s, error %v"
 	// compute absolute path based on current working dir
@@ -466,7 +477,7 @@ func loadConfigFile(ctx context.Context, name string) (*kubeletconfiginternal.Ku
 		return nil, fmt.Errorf(errFmt, name, err)
 	}
 
-	// EvictionHard may be nil if it was not set in kubelet's config file.
+	// EvictionHard 可按操作系统保留不同默认项；缺省时采用当前平台值，开启合并时只补缺失键。
 	// EvictionHard can have OS-specific fields, which is why there's no default value for it.
 	// See: https://github.com/kubernetes/kubernetes/pull/110263
 	if kc.EvictionHard == nil {
@@ -481,6 +492,7 @@ func loadConfigFile(ctx context.Context, name string) (*kubeletconfiginternal.Ku
 	return kc, err
 }
 
+// loadDropinConfigFileIntoJSON 读取单个 Drop-in 文件，返回 JSON 补丁及其 GVK，合并函数据此校验版本。
 func loadDropinConfigFileIntoJSON(name string) ([]byte, *schema.GroupVersionKind, error) {
 	const errFmt = "failed to load drop-in kubelet config file %s, error %v"
 	// compute absolute path based on current working dir
@@ -497,6 +509,7 @@ func loadDropinConfigFileIntoJSON(name string) ([]byte, *schema.GroupVersionKind
 
 // UnsecuredDependencies returns a Dependencies suitable for being run, or an error if the server setup
 // is not valid.  It will not start any background processes, and does not include authentication/authorization
+// UnsecuredDependencies 构造不启动后台进程、也不包含认证/授权控制器的基础依赖集合。
 func UnsecuredDependencies(ctx context.Context, s *options.KubeletServer, featureGate featuregate.FeatureGate) (*kubelet.Dependencies, error) {
 	// Initialize the TLS Options
 	tlsOptions, err := InitializeTLS(ctx, &s.KubeletFlags, &s.KubeletConfiguration)
@@ -509,6 +522,7 @@ func UnsecuredDependencies(ctx context.Context, s *options.KubeletServer, featur
 	hu := hostutil.NewHostUtil()
 	pluginRunner := exec.New()
 
+	// 卷插件在依赖构造阶段完成发现；后续 NewMainKubelet 会将它们交给卷管理子系统初始化。
 	plugins, err := ProbeVolumePlugins(ctx, featureGate)
 	if err != nil {
 		return nil, err
@@ -535,7 +549,7 @@ func UnsecuredDependencies(ctx context.Context, s *options.KubeletServer, featur
 		TLSOptions:          tlsOptions}, nil
 }
 
-// Run runs the specified KubeletServer with the given Dependencies. This should never exit.
+// Run 启动指定配置的 Kubelet；通常只会在初始化失败或 Context 被取消时返回。
 // The kubeDeps argument may be nil - if so, it is initialized from the settings on KubeletServer.
 // Otherwise, the caller is assumed to have set up the Dependencies object and a default one will
 // not be generated.
@@ -546,6 +560,7 @@ func Run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 
 	logger.Info("Golang settings", "GOGC", os.Getenv("GOGC"), "GOMAXPROCS", os.Getenv("GOMAXPROCS"), "GOTRACEBACK", os.Getenv("GOTRACEBACK"))
 
+	// 平台初始化必须早于通用运行流程，Windows 服务模式和优先级设置在对应构建文件中实现。
 	if err := initForOS(ctx, s.WindowsService, s.WindowsPriorityClass); err != nil {
 		return fmt.Errorf("failed OS init: %w", err)
 	}
@@ -559,6 +574,7 @@ func Run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 // external kubelet.config.k8s.io/v1beta1 representation and stamps the GroupVersionKind.
 // This is the same conversion that /configz performs, so callers that want to surface the
 // effective configuration in the exact form served by /configz can share this single path.
+// convertToVersionedKubeletConfig 将内部配置转为对外公开的 v1beta1 对象，供 /configz 和日志共享同一转换路径。
 func convertToVersionedKubeletConfig(kc *kubeletconfiginternal.KubeletConfiguration) (*kubeletconfigv1beta1.KubeletConfiguration, error) {
 	scheme, _, err := kubeletscheme.NewSchemeAndCodecs()
 	if err != nil {
@@ -572,6 +588,7 @@ func convertToVersionedKubeletConfig(kc *kubeletconfiginternal.KubeletConfigurat
 	return versioned, nil
 }
 
+// setConfigz 先执行内部类型到 API 版本类型的转换，再将最终生效配置注册到 configz。
 func setConfigz(cz *configz.Config, kc *kubeletconfiginternal.KubeletConfiguration) error {
 	versioned, err := convertToVersionedKubeletConfig(kc)
 	if err != nil {
@@ -600,6 +617,7 @@ func marshalKubeletConfigForLog(kc *kubeletconfiginternal.KubeletConfiguration) 
 	return string(data), nil
 }
 
+// initConfigz 注册 kubeletconfig 配置快照，方便通过组件调试端点检查运行时实际使用的参数。
 func initConfigz(ctx context.Context, kc *kubeletconfiginternal.KubeletConfiguration) error {
 	logger := klog.FromContext(ctx)
 	cz, err := configz.New("kubeletconfig")
@@ -614,7 +632,7 @@ func initConfigz(ctx context.Context, kc *kubeletconfiginternal.KubeletConfigura
 	return nil
 }
 
-// makeEventRecorder sets up kubeDeps.Recorder if it's nil. It's a no-op otherwise.
+// makeEventRecorder 仅在 Dependencies 尚未注入 Recorder 时创建事件广播器；已有 Recorder 时保持调用方配置。
 func makeEventRecorder(ctx context.Context, kubeDeps *kubelet.Dependencies, nodeName types.NodeName) {
 	if kubeDeps.Recorder != nil {
 		return
@@ -631,6 +649,7 @@ func makeEventRecorder(ctx context.Context, kubeDeps *kubelet.Dependencies, node
 	}
 }
 
+// getReservedCPUs 将 reserved-cpus 字符串解析为 CPUSet，并校验每个 CPU 都属于当前节点在线 CPU 拓扑。
 func getReservedCPUs(logger klog.Logger, machineInfo *cadvisorapi.MachineInfo, cpus string) (cpuset.CPUSet, error) {
 	emptyCPUSet := cpuset.New()
 
@@ -653,6 +672,7 @@ func getReservedCPUs(logger klog.Logger, machineInfo *cadvisorapi.MachineInfo, c
 	return reservedCPUSet, nil
 }
 
+// run 是 Kubelet 初始化主流程：Feature Gate/校验 → 文件锁 → 客户端与认证 → CRI/cAdvisor → ContainerManager → RunKubelet。
 func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Dependencies, featureGate featuregate.FeatureGate) (err error) {
 	logger := klog.FromContext(ctx)
 	// NewHealthChecker returns an error indicating that the watchdog is configured but the configuration is incorrect,
@@ -663,7 +683,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 	}
 	kubeDeps.HealthChecker = healthChecker
 	healthChecker.Start(ctx)
-	// Set global feature gates based on the value on the initial KubeletServer
+	// 先应用组件配置中的 Feature Gate，因为后续配置校验和依赖创建会根据开关选择行为。
 	err = utilfeature.DefaultMutableFeatureGate.SetFromMap(s.KubeletConfiguration.FeatureGates)
 	if err != nil {
 		return err
@@ -691,7 +711,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 			}
 		}
 	}
-	// Obtain Kubelet Lock File
+	// 文件锁用于保证同一节点不会并发运行多个 Kubelet；配置锁竞争退出时还会监视锁文件事件。
 	if s.ExitOnLockContention && s.LockFilePath == "" {
 		return errors.New("cannot exit on lock file contention: no lock file specified")
 	}
@@ -713,7 +733,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 		metrics.SetShowHidden()
 	}
 
-	// About to get clients and such, detect standaloneMode
+	// 没有 kubeconfig 表示独立模式；此时不会创建 API、事件和心跳客户端。
 	standaloneMode := true
 	if len(s.KubeConfig) > 0 {
 		standaloneMode = false
@@ -732,7 +752,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 	}
 	nodeName := types.NodeName(hostName)
 
-	// if in standalone mode, indicate as much by setting all clients to nil
+	// 独立模式显式清空所有 API 客户端，避免后续误把零值依赖当成集群模式使用。
 	switch {
 	case standaloneMode:
 		kubeDeps.KubeClient = nil
@@ -755,7 +775,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 			return fmt.Errorf("failed to initialize kubelet client: %w", err)
 		}
 
-		// make a separate client for events
+		// 事件客户端使用独立 QPS/Burst，防止事件突发影响 Pod、Node 等关键 API 请求。
 		eventClientConfig := *clientConfig
 		eventClientConfig.QPS = float32(s.EventRecordQPS)
 
@@ -770,7 +790,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 			return fmt.Errorf("failed to initialize kubelet event client: %w", err)
 		}
 
-		// make a separate client for heartbeat with throttling disabled and a timeout attached
+		// 心跳客户端关闭客户端侧限流，并把超时限制在 Node 状态更新周期与 Lease 时长之内。
 		heartbeatClientConfig := *clientConfig
 		heartbeatClientConfig.Timeout = s.KubeletConfiguration.NodeStatusUpdateFrequency.Duration
 		// The timeout is the minimum of the lease duration and status update frequency
@@ -786,6 +806,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 		}
 	}
 
+	// 调用方未注入认证依赖时，根据配置创建认证/授权器，并启动客户端 CA 热加载。
 	if kubeDeps.Auth == nil {
 		auth, runAuthenticatorCAReload, err := BuildAuth(nodeName, kubeDeps.KubeClient, s.KubeletConfiguration)
 		if err != nil {
@@ -810,12 +831,12 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 		}
 	}
 
-	// Get cgroup driver setting from CRI
+	// 读取 CRI 的 cgroup driver，确保 Kubelet 与容器运行时操作同一套 cgroup 层级。
 	if err := getCgroupDriverFromCRI(ctx, s, kubeDeps); err != nil {
 		return err
 	}
 
-	// Register current configuration with /configz endpoint
+	// 注册最终生效配置供 /configz 调试；注册失败记录错误，但不阻止节点代理启动。
 	err = initConfigz(ctx, &s.KubeletConfiguration)
 	if err != nil {
 		logger.Error(err, "Failed to register kubelet configuration with configz")
@@ -841,6 +862,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 		cgroupRoots = append(cgroupRoots, s.SystemCgroups)
 	}
 
+	// 仅在调用方没有注入 cAdvisor 时创建，并依据 CRI 统计能力决定是否关闭容器发现。
 	if kubeDeps.CAdvisorInterface == nil {
 		imageFsInfoProvider := cadvisor.NewImageFsInfoProvider(s.ContainerRuntimeEndpoint)
 		disableContainerDiscovery := utilfeature.DefaultFeatureGate.Enabled(features.PodAndContainerStatsFromCRI) && !kubeDeps.PodSandboxStatsUnimplemented
@@ -853,6 +875,7 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 	// Setup event recorder if required.
 	makeEventRecorder(ctx, kubeDeps, nodeName)
 
+	// ContainerManager 负责 QoS/cgroup、CPU/内存拓扑和 Node Allocatable 等节点资源管理。
 	if kubeDeps.ContainerManager == nil {
 		if s.CgroupsPerQOS && s.CgroupRoot == "" {
 			logger.Info("--cgroups-per-qos enabled, but --cgroup-root was not specified.  Defaulting to /")
@@ -1013,8 +1036,10 @@ func run(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Depend
 
 // buildKubeletClientConfig constructs the appropriate client config for the kubelet depending on whether
 // bootstrapping is enabled or client certificate rotation is enabled.
+// buildKubeletClientConfig 处理 kubeconfig、BootstrapKubeconfig 和客户端证书轮换，返回 API 客户端配置及心跳失败后的连接清理回调。
 func buildKubeletClientConfig(ctx context.Context, s *options.KubeletServer, tp oteltrace.TracerProvider, nodeName types.NodeName) (*restclient.Config, func(), error) {
 	logger := klog.FromContext(ctx)
+	// 开启客户端证书轮换后，先准备证书申请凭据和由证书管理器维护的客户端配置。
 	if s.RotateCertificates {
 		// Rules for client rotation and the handling of kube config files:
 		//
@@ -1034,6 +1059,7 @@ func buildKubeletClientConfig(ctx context.Context, s *options.KubeletServer, tp 
 		// bootstrap the cert manager with the contents of the initial client config.
 
 		logger.Info("Client rotation is on, will bootstrap in background")
+		// certConfig 用于申请/轮换证书，clientConfig 最终指向证书存储；二者可能使用不同凭据。
 		certConfig, clientConfig, err := bootstrap.LoadClientConfig(logger, s.KubeConfig, s.BootstrapKubeconfig, s.CertDirectory)
 		if err != nil {
 			return nil, nil, err
@@ -1044,6 +1070,7 @@ func buildKubeletClientConfig(ctx context.Context, s *options.KubeletServer, tp 
 
 		kubeClientConfigOverrides(s, clientConfig)
 
+		// 证书管理器负责检查当前客户端证书、提交 CSR 并把签发证书写入证书目录。
 		clientCertificateManager, err := buildClientCertificateManager(certConfig, clientConfig, s.CertDirectory, nodeName)
 		if err != nil {
 			return nil, nil, err
@@ -1066,12 +1093,13 @@ func buildKubeletClientConfig(ctx context.Context, s *options.KubeletServer, tp 
 			},
 		))
 
-		// the rotating transport will use the cert from the cert manager instead of these files
+		// 轮换 Transport 从证书管理器实时获取证书，因此底层匿名配置不直接携带静态证书文件。
 		transportConfig := restclient.AnonymousClientConfig(clientConfig)
 
 		// we set exitAfter to five minutes because we use this client configuration to request new certs - if we are unable
 		// to request new certs, we will be unable to continue normal operation. Exiting the process allows a wrapper
 		// or the bootstrapping credentials to potentially lay down new initial config.
+		// UpdateTransport 安装动态证书 Transport；连续五分钟无法申请新证书时退出，让外部引导机制有机会修复凭据。
 		closeAllConns, err := kubeletcertificate.UpdateTransport(logger, wait.NeverStop, transportConfig, clientCertificateManager, 5*time.Minute)
 		if err != nil {
 			return nil, nil, err
@@ -1096,12 +1124,14 @@ func buildKubeletClientConfig(ctx context.Context, s *options.KubeletServer, tp 
 		return transportConfig, onHeartbeatFailure, nil
 	}
 
+	// 未启用持续轮换但提供了 BootstrapKubeconfig 时，先用引导凭据获取正式客户端证书。
 	if len(s.BootstrapKubeconfig) > 0 {
 		if err := bootstrap.LoadClientCert(ctx, s.KubeConfig, s.BootstrapKubeconfig, s.CertDirectory, nodeName); err != nil {
 			return nil, nil, err
 		}
 	}
 
+	// 读取最终 kubeconfig；NonInteractive 模式不会尝试打开交互式凭据输入。
 	clientConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: s.KubeConfig},
 		&clientcmd.ConfigOverrides{},
@@ -1129,11 +1159,13 @@ func buildKubeletClientConfig(ctx context.Context, s *options.KubeletServer, tp 
 			utilnet.CloseIdleConnectionsFor(clientConfig.Transport)
 		}
 	}
+	// 为后续 REST 请求注入 OpenTelemetry Transport 包装器，记录 API 调用链路。
 	clientConfig.Wrap(tracing.WrapperFor(tp))
 	return clientConfig, onHeartbeatFailure, nil
 }
 
 // updateDialer instruments a restconfig with a dial. the returned function allows forcefully closing all active connections.
+// updateDialer 为 REST Client 安装可轮换连接的 Dialer；返回的回调可在心跳失败时强制关闭旧连接。
 func updateDialer(clientConfig *restclient.Config) (func(), error) {
 	if clientConfig.Transport != nil || clientConfig.Dial != nil {
 		return nil, fmt.Errorf("there is already a transport or dialer configured")
@@ -1146,7 +1178,9 @@ func updateDialer(clientConfig *restclient.Config) (func(), error) {
 // buildClientCertificateManager creates a certificate manager that will use certConfig to request a client certificate
 // if no certificate is available, or the most recent clientConfig (which is assumed to point to the cert that the manager will
 // write out).
+// buildClientCertificateManager 创建客户端证书生命周期管理器：首次申请使用引导凭据，已有证书时使用正式客户端配置。
 func buildClientCertificateManager(certConfig, clientConfig *restclient.Config, certDir string, nodeName types.NodeName) (certificate.Manager, error) {
+	// 申请首张证书时使用 bootstrap 凭据；证书签发后切换为正式 kubeconfig 中的身份。
 	newClientsetFn := func(current *tls.Certificate) (clientset.Interface, error) {
 		// If we have a valid certificate, use that to fetch CSRs. Otherwise use the bootstrap
 		// credentials. In the future it would be desirable to change the behavior of bootstrap
@@ -1175,6 +1209,7 @@ func buildClientCertificateManager(certConfig, clientConfig *restclient.Config, 
 	)
 }
 
+// kubeClientConfigOverrides 将 Kubelet 的 API Content-Type、QPS 和 Burst 参数覆盖到 kubeconfig 生成的 REST 配置上。
 func kubeClientConfigOverrides(s *options.KubeletServer, clientConfig *restclient.Config) {
 	setContentTypeForClient(clientConfig, s.ContentType)
 	// Override kubeconfig qps/burst settings from flags
@@ -1182,10 +1217,11 @@ func kubeClientConfigOverrides(s *options.KubeletServer, clientConfig *restclien
 	clientConfig.Burst = int(s.KubeAPIBurst)
 }
 
-// InitializeTLS checks for a configured TLSCertFile and TLSPrivateKeyFile: if unspecified a new self-signed
+// InitializeTLS 检查 HTTPS 服务端证书配置；未指定且未启用证书引导时生成并保存自签名证书。
 // certificate and key file are generated. Returns a configured server.TLSOptions object.
 func InitializeTLS(ctx context.Context, kf *options.KubeletFlags, kc *kubeletconfiginternal.KubeletConfiguration) (*server.TLSOptions, error) {
 	logger := klog.FromContext(ctx)
+	// 未启用 API Server 证书引导且用户未提供证书时，使用节点证书目录中的默认文件路径。
 	if !kc.ServerTLSBootstrap && kc.TLSCertFile == "" && kc.TLSPrivateKeyFile == "" {
 		kc.TLSCertFile = filepath.Join(kf.CertDirectory, "kubelet.crt")
 		kc.TLSPrivateKeyFile = filepath.Join(kf.CertDirectory, "kubelet.key")
@@ -1194,6 +1230,7 @@ func InitializeTLS(ctx context.Context, kf *options.KubeletFlags, kc *kubeletcon
 		if err != nil {
 			return nil, err
 		}
+		// 证书或私钥缺失时生成一对自签名证书；已有文件则复用，避免每次重启改变服务端身份。
 		if !canReadCertAndKey {
 			hostName, err := nodeutil.GetHostname(kf.HostnameOverride)
 			if err != nil {
@@ -1232,6 +1269,7 @@ func InitializeTLS(ctx context.Context, kf *options.KubeletFlags, kc *kubeletcon
 		}
 	}
 
+	// TLS 最低版本、套件和曲线偏好统一解析为 crypto/tls 使用的数值常量。
 	minTLSVersion, err := cliflag.TLSVersion(kc.TLSMinVersion)
 	if err != nil {
 		return nil, err
@@ -1262,6 +1300,7 @@ func InitializeTLS(ctx context.Context, kf *options.KubeletFlags, kc *kubeletcon
 
 // setContentTypeForClient sets the appropriate content type into the rest config
 // and handles defaulting AcceptContentTypes based on that input.
+// setContentTypeForClient 设置请求 Content-Type；若使用 Protobuf，同时允许 JSON 响应以兼容 API Server。
 func setContentTypeForClient(cfg *restclient.Config, contentType string) {
 	if len(contentType) == 0 {
 		return
@@ -1282,6 +1321,7 @@ func setContentTypeForClient(cfg *restclient.Config, contentType string) {
 //	3 Standalone 'kubernetes' binary
 //
 // Eventually, #2 will be replaced with instances of #3
+// RunKubelet 根据节点身份和本地配置创建 MainKubelet，检查 Pod 配置源后启动工作循环与端点。
 func RunKubelet(ctx context.Context, kubeServer *options.KubeletServer, kubeDeps *kubelet.Dependencies) error {
 	logger := klog.FromContext(ctx)
 	hostname, err := nodeutil.GetHostname(kubeServer.HostnameOverride)
@@ -1311,6 +1351,7 @@ func RunKubelet(ctx context.Context, kubeServer *options.KubeletServer, kubeDeps
 		kubeDeps.OSInterface = kubecontainer.RealOS{}
 	}
 
+	// MainKubelet 装配 Pod 管理、运行时、卷、探针和状态管理等核心子系统。
 	k, err := createAndInitKubelet(ctx,
 		kubeServer,
 		kubeDeps,
@@ -1321,7 +1362,7 @@ func RunKubelet(ctx context.Context, kubeServer *options.KubeletServer, kubeDeps
 		return fmt.Errorf("failed to create kubelet: %w", err)
 	}
 
-	// NewMainKubelet should have set up a pod source config if one didn't exist
+	// NewMainKubelet 应保证 PodConfig 已创建；此处再次检查，避免启动 worker 时缺少更新源。
 	// when the builder was run. This is just a precaution.
 	if kubeDeps.PodConfig == nil {
 		return fmt.Errorf("failed to create kubelet, pod source config was nil")
@@ -1338,8 +1379,9 @@ func RunKubelet(ctx context.Context, kubeServer *options.KubeletServer, kubeDeps
 	return nil
 }
 
+// startKubelet 并发启动 Pod 同步主循环、可选 HTTPS/只读服务以及 PodResources 和 Pods 辅助端点。
 func startKubelet(ctx context.Context, k kubelet.Bootstrap, podCfg *config.PodConfig, kubeCfg *kubeletconfiginternal.KubeletConfiguration, kubeDeps *kubelet.Dependencies, enableServer bool) {
-	// start the kubelet
+	// 主循环消费 API Server、静态文件和 HTTP 等来源汇总后的 Pod 更新。
 	go k.Run(ctx, podCfg.Updates())
 
 	// start the kubelet server
@@ -1354,6 +1396,7 @@ func startKubelet(ctx context.Context, k kubelet.Bootstrap, podCfg *config.PodCo
 	go k.ListenAndServePods(ctx)
 }
 
+// createAndInitKubelet 创建 MainKubelet 并启动启动事件和垃圾回收；具体模块依赖由 Dependencies 注入。
 func createAndInitKubelet(
 	ctx context.Context,
 	kubeServer *options.KubeletServer,
@@ -1404,6 +1447,7 @@ func createAndInitKubelet(
 
 // parseResourceList parses the given configuration map into an API
 // ResourceList or returns an error.
+// parseResourceList 将资源字符串转换为 API ResourceList，并拒绝未知资源和负数。
 func parseResourceList(m map[string]string) (v1.ResourceList, error) {
 	if len(m) == 0 {
 		return nil, nil
@@ -1431,6 +1475,7 @@ func parseResourceList(m map[string]string) (v1.ResourceList, error) {
 	return rl, nil
 }
 
+// newTracerProvider 按 tracing 配置创建 OTLP TracerProvider；未配置时返回 No-op 实现，避免调用方判断 nil。
 func newTracerProvider(s *options.KubeletServer) (oteltrace.TracerProvider, error) {
 	if s.KubeletConfiguration.Tracing == nil {
 		return noopoteltrace.NewTracerProvider(), nil
@@ -1452,6 +1497,7 @@ func newTracerProvider(s *options.KubeletServer) (oteltrace.TracerProvider, erro
 	return tp, nil
 }
 
+// getCgroupDriverFromCRI 通过 CRI RuntimeConfig 获取容器运行时的 cgroup driver，并据此完成 Kubelet 配置一致性检查。
 func getCgroupDriverFromCRI(ctx context.Context, s *options.KubeletServer, kubeDeps *kubelet.Dependencies) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Getting CRI runtime configuration information")

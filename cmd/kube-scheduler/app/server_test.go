@@ -46,6 +46,8 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/apis/config/testing/defaults"
 )
 
+// TestSetup 验证 Setup 能否把配置文件、默认 Profile 和树外插件注册选项组装成可用 Scheduler。
+// 测试通过临时 HTTPS API 端点和 kubeconfig 隔离真实集群。
 func TestSetup(t *testing.T) {
 	// temp dir
 	tmpDir, err := os.MkdirTemp("", "scheduler-options")

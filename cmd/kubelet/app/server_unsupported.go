@@ -23,10 +23,12 @@ import (
 	"errors"
 )
 
+// 非 Linux 平台没有此处使用的 inotify 实现，显式返回不支持错误，避免误认为锁竞争监视已经启用。
 func watchForLockfileContention(ctx context.Context, path string, done chan struct{}) error {
 	return errors.New("kubelet unsupported in this build")
 }
 
+// 当前构建目标不提供 Linux cgroup v2 检测；返回 false 让调用方按非统一层级模式处理。
 func isCgroup2UnifiedMode() bool {
 	return false
 }

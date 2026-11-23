@@ -23,6 +23,7 @@ import (
 	"k8s.io/utils/inotify"
 )
 
+// watchForLockfileContention 在 Linux 上用 inotify 监听锁文件被打开或删除事件，通知主流程处理锁竞争。
 func watchForLockfileContention(ctx context.Context, path string, done chan struct{}) error {
 	logger := klog.FromContext(ctx)
 	watcher, err := inotify.NewWatcher()
@@ -30,6 +31,7 @@ func watchForLockfileContention(ctx context.Context, path string, done chan stru
 		logger.Error(err, "Unable to create watcher for lockfile")
 		return err
 	}
+	// 监听锁文件的打开和自身删除事件；任一事件都表示可能有另一个实例介入锁文件。
 	if err = watcher.AddWatch(path, inotify.InOpen|inotify.InDeleteSelf); err != nil {
 		logger.Error(err, "Unable to watch lockfile")
 		watcher.Close()

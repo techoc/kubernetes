@@ -32,6 +32,7 @@ import (
 	kubeletconfiginternal "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
+// TestValueOfAllocatableResources 验证 kube-reserved/system-reserved 资源值的合法性，包括负数、非法单位和有效数量。
 func TestValueOfAllocatableResources(t *testing.T) {
 	testCases := []struct {
 		kubeReserved   map[string]string
@@ -74,6 +75,7 @@ func TestValueOfAllocatableResources(t *testing.T) {
 	}
 }
 
+// TestParseResourceList 检查 CPU millicore 数量转换及小数舍入规则，确保解析结果符合整数 millicore 精度。
 func TestParseResourceList(t *testing.T) {
 	testCases := []struct {
 		input    map[string]string
@@ -105,6 +107,7 @@ func TestParseResourceList(t *testing.T) {
 	}
 }
 
+// TestMergeKubeletConfigurations 覆盖基础配置、多个 Drop-in、命令行覆盖、无效 GVK、跳过非 .conf 文件和合并错误。
 func TestMergeKubeletConfigurations(t *testing.T) {
 	testCases := []struct {
 		kubeletConfig           *kubeletconfiginternal.KubeletConfiguration
@@ -449,6 +452,7 @@ port: [this is not valid
 	}
 }
 
+// TestMergeKubeletConfigsWithSubdirs 验证目录递归遍历和相同文件名在不同子目录中的字典序覆盖行为。
 func TestMergeKubeletConfigsWithSubdirs(t *testing.T) {
 	testCases := []struct {
 		name                    string
@@ -554,6 +558,7 @@ readOnlyPort: 9999
 	}
 }
 
+// TestMarshalKubeletConfigForLog 验证日志输出使用外部 API GVK、保留有效配置值，并对静态 Pod Header 敏感信息脱敏且不修改原对象。
 func TestMarshalKubeletConfigForLog(t *testing.T) {
 	kc := &kubeletconfiginternal.KubeletConfiguration{
 		TypeMeta: metav1.TypeMeta{

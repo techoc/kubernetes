@@ -45,6 +45,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestSchedulerOptions 验证默认值、配置文件与命令行参数的覆盖规则，以及客户端连接参数的传递。
+// 测试通过 TLS/非 TLS 端点记录认证用户名，确认 kubeconfig 与旧参数的生效路径。
 func TestSchedulerOptions(t *testing.T) {
 	// temp dir
 	tmpDir, err := os.MkdirTemp("", "scheduler-options")

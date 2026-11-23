@@ -51,6 +51,7 @@ import (
 // Test_buildClientCertificateManager validates that we can build a local client cert
 // manager that will use the bootstrap client until we get a valid cert, then use our
 // provided identity on subsequent requests.
+// Test_buildClientCertificateManager 验证证书管理器在无证书、证书文件存在等场景下选择正确的 CSR 客户端身份。
 func Test_buildClientCertificateManager(t *testing.T) {
 	testDir, err := os.MkdirTemp("", "kubeletcert")
 	if err != nil {
@@ -139,6 +140,7 @@ func Test_buildClientCertificateManager(t *testing.T) {
 	}
 }
 
+// Test_buildClientCertificateManager_populateCertDir 验证现有 kubeconfig 中的证书/私钥会按预期迁移或写入证书目录。
 func Test_buildClientCertificateManager_populateCertDir(t *testing.T) {
 	testDir, err := os.MkdirTemp("", "kubeletcert")
 	if err != nil {

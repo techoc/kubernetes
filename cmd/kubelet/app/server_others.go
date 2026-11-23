@@ -24,7 +24,9 @@ import (
 	"os"
 )
 
+// checkPermissions 在 Linux/macOS 等非 Windows 平台要求 Kubelet 以 root 身份运行。
 func checkPermissions(ctx context.Context) error {
+	// 通过有效 UID 判断当前进程是否为 root；节点设备、挂载和 cgroup 管理通常需要该权限。
 	if uid := os.Getuid(); uid != 0 {
 		return fmt.Errorf("kubelet needs to run as uid `0`. It is being run as %d", uid)
 	}

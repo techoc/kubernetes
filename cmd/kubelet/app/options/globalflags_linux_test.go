@@ -33,6 +33,7 @@ import (
 // a name is missing. This test turns that potential kubelet STARTUP PANIC into a
 // build-time test failure: if libcadvisor removes or renames a flag without
 // updating cadvisorflags, this fails here instead.
+// TestPinnedCadvisorFlagsResolve 检查 Kubelet 依赖的 cAdvisor 参数仍注册在库的全局 FlagSet，避免节点启动时 panic。
 func TestPinnedCadvisorFlagsResolve(t *testing.T) {
 	names := cadvisorflags.Kept()
 	if len(names) == 0 {
@@ -48,12 +49,14 @@ func TestPinnedCadvisorFlagsResolve(t *testing.T) {
 // TestAddCadvisorFlagsDoesNotPanic exercises the real startup path end-to-end:
 // register() panics if the pinned flag is missing, so a clean run proves
 // addCadvisorFlags will not panic the kubelet at startup.
+// TestAddCadvisorFlagsDoesNotPanic 直接执行真实参数注册流程，确保 cAdvisor 参数迁移不会在启动时触发 panic。
 func TestAddCadvisorFlagsDoesNotPanic(t *testing.T) {
 	addCadvisorFlags(pflag.NewFlagSet("test", pflag.ContinueOnError))
 }
 
 // TestKeptIncludesHousekeepingInterval ensures the flag addCadvisorFlags binds
 // explicitly is still listed by the library's Kept().
+// TestKeptIncludesHousekeepingInterval 保证显式绑定的 housekeeping_interval 仍被 cAdvisor 列为兼容保留参数。
 func TestKeptIncludesHousekeepingInterval(t *testing.T) {
 	if !slices.Contains(cadvisorflags.Kept(), cadvisorflags.HousekeepingInterval) {
 		t.Errorf("cadvisorflags.Kept() must include HousekeepingInterval (%q); addCadvisorFlags binds it as a normal kubelet flag", cadvisorflags.HousekeepingInterval)

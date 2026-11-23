@@ -55,6 +55,7 @@ kind: KubeSchedulerConfiguration
 `
 )
 
+// TestLoadConfigFromFile 覆盖文件不存在、合法 v1 配置、缺少 apiVersion 和不再支持的旧版本。
 func TestLoadConfigFromFile(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "scheduler-configs")
 	if err != nil {

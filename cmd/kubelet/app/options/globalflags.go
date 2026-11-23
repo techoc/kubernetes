@@ -29,9 +29,10 @@ import (
 	"k8s.io/component-base/version/verflag"
 )
 
-// AddGlobalFlags explicitly registers flags that libraries (glog, verflag, etc.) register
+// AddGlobalFlags 显式把第三方库注册到 Go 全局 FlagSet 的参数复制到 Kubelet 专属 FlagSet。
 // against the global flagsets from "flag" and "github.com/spf13/pflag".
 // We do this in order to prevent unwanted flags from leaking into the Kubelet's flagset.
+// AddGlobalFlags 避免库的全局参数意外泄漏到 Kubelet 参数集合，并统一管理版本和日志参数。
 func AddGlobalFlags(fs *pflag.FlagSet) {
 	addCadvisorFlags(fs)
 	addCredentialProviderFlags(fs)
@@ -41,11 +42,13 @@ func AddGlobalFlags(fs *pflag.FlagSet) {
 
 // normalize replaces underscores with hyphens
 // we should always use hyphens instead of underscores when registering kubelet flags
+// normalize 把下划线转成连字符；Kubelet 对外统一使用 kebab-case 参数名。
 func normalize(s string) string {
 	return strings.Replace(s, "_", "-", -1)
 }
 
 // register adds a flag to local that targets the Value associated with the Flag named globalName in global
+// register 从 Go flag.FlagSet 查找已有参数，并把同一个 Value 绑定到本地 pflag FlagSet。
 func register(global *flag.FlagSet, local *pflag.FlagSet, globalName string) {
 	if f := global.Lookup(globalName); f != nil {
 		pflagFlag := pflag.PFlagFromGoFlag(f)
@@ -57,6 +60,7 @@ func register(global *flag.FlagSet, local *pflag.FlagSet, globalName string) {
 }
 
 // addCredentialProviderFlags adds flags from k8s.io/kubernetes/pkg/credentialprovider
+// addCredentialProviderFlags 为凭据提供程序预留独立参数集合，避免全局注册状态污染 Kubelet 参数。
 func addCredentialProviderFlags(fs *pflag.FlagSet) {
 	// lookup flags in global flag set and re-register the values with our flagset
 	local := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)

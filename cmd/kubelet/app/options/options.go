@@ -43,7 +43,7 @@ import (
 
 const defaultRootDir = "/var/lib/kubelet"
 
-// KubeletFlags contains configuration flags for the Kubelet.
+// KubeletFlags 保存节点级启动参数；与可共享的 KubeletConfiguration 区分，主要容纳不适合在节点间共享的本地信息。
 // A configuration field should go in KubeletFlags instead of KubeletConfiguration if any of these are true:
 //   - its value will never, or cannot safely be changed during the lifetime of a node, or
 //   - its value cannot be safely shared between nodes at the same time (e.g. a hostname);
@@ -134,6 +134,7 @@ type KubeletFlags struct {
 }
 
 // NewKubeletFlags will create a new KubeletFlags with default values
+// NewKubeletFlags 创建 Kubelet 命令行参数的本地默认值。
 func NewKubeletFlags() *KubeletFlags {
 	return &KubeletFlags{
 		ContainerRuntimeOptions: kubeletconfig.ContainerRuntimeOptions{},
@@ -147,6 +148,7 @@ func NewKubeletFlags() *KubeletFlags {
 }
 
 // ValidateKubeletFlags validates Kubelet's configuration flags and returns an error if they are invalid.
+// ValidateKubeletFlags 校验节点级参数，当前重点检查 --node-labels 的命名空间和键值格式。
 func ValidateKubeletFlags(f *KubeletFlags) error {
 	unknownLabels := sets.NewString()
 	invalidLabelErrs := make(map[string][]string)
@@ -194,11 +196,13 @@ func getLabelNamespace(key string) string {
 }
 
 // NewKubeletConfiguration will create a new KubeletConfiguration with default values
+// NewKubeletConfiguration 通过版本化 v1beta1 Scheme 生成默认值，再转换为内部配置类型。
 func NewKubeletConfiguration() (*kubeletconfigapi.KubeletConfiguration, error) {
 	scheme, _, err := kubeletscheme.NewSchemeAndCodecs()
 	if err != nil {
 		return nil, err
 	}
+	// 先对外部版本执行默认值策略，再通过 Scheme 转为内部类型，保持 API 默认值规则集中管理。
 	versioned := &v1beta1.KubeletConfiguration{}
 	scheme.Default(versioned)
 	config := &kubeletconfigapi.KubeletConfiguration{}
@@ -212,6 +216,7 @@ func NewKubeletConfiguration() (*kubeletconfigapi.KubeletConfiguration, error) {
 // applyLegacyDefaults applies legacy default values to the KubeletConfiguration in order to
 // preserve the command line API. This is used to construct the baseline default KubeletConfiguration
 // before the first round of flag parsing.
+// applyLegacyDefaults 补齐历史命令行 API 的默认语义，确保新配置体系升级时保持兼容。
 func applyLegacyDefaults(kc *kubeletconfigapi.KubeletConfiguration) {
 	// --anonymous-auth
 	kc.Authentication.Anonymous.Enabled = true
@@ -223,7 +228,7 @@ func applyLegacyDefaults(kc *kubeletconfigapi.KubeletConfiguration) {
 	kc.ReadOnlyPort = ports.KubeletReadOnlyPort
 }
 
-// KubeletServer encapsulates all of the parameters necessary for starting up
+// KubeletServer 将节点本地启动参数与可版本化的组件配置合并为最终服务配置。
 // a kubelet. These can either be set via command line or directly.
 type KubeletServer struct {
 	KubeletFlags
@@ -231,6 +236,7 @@ type KubeletServer struct {
 }
 
 // NewKubeletServer will create a new KubeletServer with default values.
+// NewKubeletServer 创建带默认值的 KubeletServer，是程序化启动 Kubelet 的默认配置入口。
 func NewKubeletServer() (*KubeletServer, error) {
 	config, err := NewKubeletConfiguration()
 	if err != nil {
@@ -243,6 +249,7 @@ func NewKubeletServer() (*KubeletServer, error) {
 }
 
 // ValidateKubeletServer validates configuration of KubeletServer and returns an error if the input configuration is invalid.
+// ValidateKubeletServer 依次校验组件配置与节点级 Flag；组件字段规则集中在专用 validation 包中。
 func ValidateKubeletServer(s *KubeletServer) error {
 	// please add any KubeletConfiguration validation to the kubeletconfigvalidation.ValidateKubeletConfiguration function
 	if err := kubeletconfigvalidation.ValidateKubeletConfiguration(&s.KubeletConfiguration, utilfeature.DefaultFeatureGate); err != nil {
@@ -261,6 +268,7 @@ func (s *KubeletServer) AddFlags(fs *pflag.FlagSet) {
 }
 
 // AddFlags adds flags for a specific KubeletFlags to the specified FlagSet
+// AddFlags 注册节点本地参数，并在最后统一合并到调用方传入的 FlagSet。
 func (f *KubeletFlags) AddFlags(mainfs *pflag.FlagSet) {
 	fs := pflag.NewFlagSet("", pflag.ExitOnError)
 	defer func() {

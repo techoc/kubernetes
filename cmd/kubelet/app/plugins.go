@@ -16,7 +16,7 @@ limitations under the License.
 
 package app
 
-// This file exists to force the desired plugin implementations to be linked.
+// 本文件通过显式 import 把内置卷插件链接进 Kubelet 二进制；插件不是运行时自动扫描出来的。
 import (
 	"context"
 
@@ -43,7 +43,9 @@ import (
 )
 
 // ProbeVolumePlugins collects all volume plugins into an easy to use list.
+// ProbeVolumePlugins 汇总当前 Kubelet 二进制支持的内置卷插件；这里只发现插件对象，实际初始化由卷管理器完成。
 func ProbeVolumePlugins(ctx context.Context, featureGate featuregate.FeatureGate) ([]volume.VolumePlugin, error) {
+	// 显式维护插件列表使编译进二进制的能力可审查，避免依赖动态链接或隐式注册。
 	allPlugins := []volume.VolumePlugin{}
 
 	// The list of plugins to probe is decided by the kubelet binary, not
@@ -64,6 +66,7 @@ func ProbeVolumePlugins(ctx context.Context, featureGate featuregate.FeatureGate
 	allPlugins = append(allPlugins, projected.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, local.ProbeVolumePlugins()...)
 	allPlugins = append(allPlugins, csi.ProbeVolumePlugins()...)
+	// Image Volume 受 Feature Gate 控制，未启用时不把插件暴露给 Kubelet。
 	if featureGate.Enabled(features.ImageVolume) {
 		allPlugins = append(allPlugins, image.ProbeVolumePlugins()...)
 	}
@@ -73,6 +76,7 @@ func ProbeVolumePlugins(ctx context.Context, featureGate featuregate.FeatureGate
 // GetDynamicPluginProber gets the probers of dynamically discoverable plugins
 // for kubelet.
 // Currently only Flexvolume plugins are dynamically discoverable.
+// GetDynamicPluginProber 返回动态卷插件发现器；当前动态发现机制主要用于 FlexVolume。
 func GetDynamicPluginProber(ctx context.Context, pluginDir string, runner exec.Interface) volume.DynamicPluginProber {
 	return flexvolume.GetDynamicPluginProber(ctx, pluginDir, runner)
 }

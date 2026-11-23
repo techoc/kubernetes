@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/kubeletconfig"
 )
 
+// newKubeletServerOrDie 为测试构造带默认配置的 KubeletServer；无法创建时直接 panic，使测试辅助函数保持简单。
 func newKubeletServerOrDie() *KubeletServer {
 	s, err := NewKubeletServer()
 	if err != nil {
@@ -40,6 +41,7 @@ func newKubeletServerOrDie() *KubeletServer {
 // to arguments and then read back and have the same value. Also catches cases
 // where the default value reported by the flag is not actually allowed to be
 // specified.
+// TestRoundTrip 验证 Flag 值可以序列化为命令行参数并重新解析，往返后节点级配置保持一致。
 func TestRoundTrip(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -107,6 +109,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// asArgs 比较当前参数值与默认值，只生成需要显式传递的参数；切片参数按每个元素单独生成 Flag。
 func asArgs(fn, defaultFn func(*pflag.FlagSet)) []string {
 	fs := pflag.NewFlagSet("extended", pflag.ContinueOnError)
 	fn(fs)
@@ -142,6 +145,7 @@ func asArgs(fn, defaultFn func(*pflag.FlagSet)) []string {
 	return args
 }
 
+// TestValidateKubeletFlags 覆盖 Kubernetes 保留域标签、合法第三方标签、空标签集和非法标签值。
 func TestValidateKubeletFlags(t *testing.T) {
 	tests := []struct {
 		name   string
