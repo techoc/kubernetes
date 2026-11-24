@@ -35,20 +35,20 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// REST implements a RESTStorage for validatingAdmissionPolicy against etcd
+// REST 提供 ValidatingAdmissionPolicy 主资源的 REST 存储接口。
 type REST struct {
 	*genericregistry.Store
 }
 
-// StatusREST implements a RESTStorage for ValidatingAdmissionPolicyStatus
+// StatusREST 仅暴露 ValidatingAdmissionPolicy 的 Status 子资源操作。
 type StatusREST struct {
-	// DO NOT embed Store, manually select function to export.
+	// 不要直接嵌入 Store；这里只显式暴露 Status 子资源允许使用的方法。
 	store *genericregistry.Store
 }
 
 var groupResource = admissionregistration.Resource("validatingadmissionpolicies")
 
-// NewREST returns two RESTStorage objects that will work against validatingAdmissionPolicy and its status.
+// NewREST 创建主资源 Store 和独立的 /status Store；二者共享底层存储配置。
 func NewREST(optsGetter generic.RESTOptionsGetter, authorizer authorizer.UnconditionalAuthorizer, resourceResolver resolver.ResourceResolver) (*REST, *StatusREST, error) {
 	r := &REST{}
 	strategy := validatingadmissionpolicy.NewStrategy(authorizer, resourceResolver)
@@ -81,41 +81,41 @@ func NewREST(optsGetter generic.RESTOptionsGetter, authorizer authorizer.Uncondi
 	return r, sr, nil
 }
 
-// Implement CategoriesProvider
+// 确保 REST 实现资源类别提供者接口。
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 返回该资源所属的 API 资源类别。
 func (r *REST) Categories() []string {
 	return []string{"api-extensions"}
 }
 
-// New generates a new ValidatingAdmissionPolicy object
+// New 创建用于 Status 子资源请求解码的 ValidatingAdmissionPolicy 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &admissionregistration.ValidatingAdmissionPolicy{}
 }
 
-// Destroy disposes the store object. For the StatusREST, this is a no-op.
+// Destroy 释放 REST 资源；StatusREST 与主 REST 共享 Store，因此此处不单独销毁。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，
+	// 因此这里不显式销毁它。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取对象，供 Status 子资源的 Patch 等操作使用。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// GetResetFields returns the fields that got reset by the REST endpoint
+// GetResetFields 返回 /status 接口会重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
 
-// ConvertToTable delegates to the store, implements TableConverter
+// ConvertToTable 委托底层 Store 将对象转换为表格响应。
 func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }
 
-// Update alters the status subset of an object. Delegates to the store
+// Update 委托底层 Store 更新对象的 Status 子集。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, forceAllowCreate, options)
 }

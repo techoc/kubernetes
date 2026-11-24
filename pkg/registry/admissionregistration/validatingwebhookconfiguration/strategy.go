@@ -32,42 +32,41 @@ import (
 	"k8s.io/kubernetes/pkg/kubeapiserver/admission/exclusion"
 )
 
-// validatingWebhookConfigurationStrategy implements verification logic for validatingWebhookConfiguration.
+// validatingWebhookConfigurationStrategy 实现 ValidatingWebhookConfiguration 的集群级写入校验策略。
 // validatingWebhookConfigurationStrategy 定义 ValidatingWebhookConfiguration 集群级写入策略，负责 Webhook 静态配置校验。
 type validatingWebhookConfigurationStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating validatingWebhookConfiguration objects.
+// Strategy 是创建和更新 ValidatingWebhookConfiguration 时使用的默认写入策略。
 var Strategy = validatingWebhookConfigurationStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped returns false because ValidatingWebhookConfiguration is cluster-scoped resource.
+// NamespaceScoped 返回 false，表示 ValidatingWebhookConfiguration 是集群级资源，不属于任何命名空间。
 func (validatingWebhookConfigurationStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// PrepareForCreate clears the status of an validatingWebhookConfiguration before creation.
+// PrepareForCreate 在创建对象时设置初始 Generation；该资源没有由控制器维护的 Status 子资源。
 // 创建时初始化 Generation；Webhook Configuration 无控制器 Status 子资源。
 func (validatingWebhookConfigurationStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.ValidatingWebhookConfiguration)
 	ic.Generation = 1
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 仅在 Webhooks 配置发生变化时递增 Generation。
 func (validatingWebhookConfigurationStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIC := obj.(*admissionregistration.ValidatingWebhookConfiguration)
 	oldIC := old.(*admissionregistration.ValidatingWebhookConfiguration)
 
-	// Any changes to the spec increment the generation number, any changes to the
-	// status should reflect the generation number of the corresponding object.
-	// See metav1.ObjectMeta description for more information on Generation.
+	// Webhooks 配置发生变化时递增 Generation，避免无关 metadata 更新触发配置重新加载。
+	// Generation 字段的语义详见 metav1.ObjectMeta 文档。
 	if !reflect.DeepEqual(oldIC.Webhooks, newIC.Webhooks) {
 		newIC.Generation = oldIC.Generation + 1
 	}
 }
 
-// Validate validates a new validatingWebhookConfiguration.
+// Validate 校验 ValidatingWebhookConfiguration 中各个 Webhook 的规则、客户端配置和执行约束。
 // Validate 检查 Webhook 名称、ClientConfig、Rules、FailurePolicy、MatchPolicy、SideEffects 和 Timeout 等约束。
 func (validatingWebhookConfigurationStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.ValidatingWebhookConfiguration)
@@ -78,7 +77,7 @@ func (validatingWebhookConfigurationStrategy) Validate(ctx context.Context, obj 
 	return errs
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 ValidatingWebhookConfiguration 时需要提示的静态配置告警。
 func (validatingWebhookConfigurationStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	ic := obj.(*admissionregistration.ValidatingWebhookConfiguration)
 	var warnings []string
@@ -91,16 +90,16 @@ func (validatingWebhookConfigurationStrategy) WarningsOnCreate(ctx context.Conte
 	return warnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (validatingWebhookConfigurationStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for validatingWebhookConfiguration; this means you may not create one with a PUT request.
+// AllowCreateOnUpdate 返回 false，禁止通过 PUT 更新请求隐式创建 ValidatingWebhookConfiguration。
 func (validatingWebhookConfigurationStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 校验 ValidatingWebhookConfiguration 更新时的新旧 Webhook 配置约束。
 // 更新时用新旧配置校验规则变化，并保持静态配置名称约束与对象不可变规则一致。
 func (validatingWebhookConfigurationStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newIC := obj.(*admissionregistration.ValidatingWebhookConfiguration)
@@ -109,7 +108,7 @@ func (validatingWebhookConfigurationStrategy) ValidateUpdate(ctx context.Context
 	return errs
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次 ValidatingWebhookConfiguration 更新涉及的配置告警。
 func (validatingWebhookConfigurationStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	newIC := obj.(*admissionregistration.ValidatingWebhookConfiguration)
 	var warnings []string
@@ -120,8 +119,8 @@ func (validatingWebhookConfigurationStrategy) WarningsOnUpdate(ctx context.Conte
 	return warnings
 }
 
-// AllowUnconditionalUpdate is the default update policy for validatingWebhookConfiguration objects. Status update should
-// only be allowed if version match.
+// AllowUnconditionalUpdate 返回 false，要求更新携带匹配的资源版本，避免无条件覆盖并发修改。
+// 更新必须基于匹配的资源版本执行。
 func (validatingWebhookConfigurationStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }

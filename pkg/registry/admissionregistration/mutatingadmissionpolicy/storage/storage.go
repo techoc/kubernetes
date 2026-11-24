@@ -31,14 +31,14 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/resolver"
 )
 
-// REST implements a RESTStorage for MutatingAdmissionPolicy against etcd
+// REST 提供 MutatingAdmissionPolicy 主资源的 REST 存储接口。
 type REST struct {
 	*genericregistry.Store
 }
 
 var groupResource = admissionregistration.Resource("mutatingadmissionpolicies")
 
-// NewREST returns the RESTStorage objects that will work against MutatingAdmissionPolicy.
+// NewREST 创建并配置 MutatingAdmissionPolicy 的 REST Store。
 func NewREST(optsGetter generic.RESTOptionsGetter, authorizer authorizer.UnconditionalAuthorizer, resourceResolver resolver.ResourceResolver) (*REST, error) {
 	r := &REST{}
 	strategy := mutatingadmissionpolicy.NewStrategy(authorizer, resourceResolver)
@@ -65,10 +65,10 @@ func NewREST(optsGetter generic.RESTOptionsGetter, authorizer authorizer.Uncondi
 	return r, nil
 }
 
-// Implement CategoriesProvider
+// 确保 REST 实现资源类别提供者接口。
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 返回该资源所属的 API 资源类别。
 func (r *REST) Categories() []string {
 	return []string{"api-extensions"}
 }

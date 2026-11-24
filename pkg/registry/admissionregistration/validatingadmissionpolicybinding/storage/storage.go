@@ -34,14 +34,14 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/validatingadmissionpolicybinding"
 )
 
-// REST implements a RESTStorage for policyBinding against etcd
+// REST 将 ValidatingAdmissionPolicyBinding 的通用 Store 封装为 REST 存储接口。
 type REST struct {
 	*genericregistry.Store
 }
 
 var groupResource = admissionregistration.Resource("validatingadmissionpolicybindings")
 
-// NewREST returns a RESTStorage object that will work against policyBinding.
+// NewREST 创建并配置 ValidatingAdmissionPolicyBinding 的 REST Store。
 func NewREST(optsGetter generic.RESTOptionsGetter, authorizer authorizer.UnconditionalAuthorizer, policyGetter PolicyGetter, resourceResolver resolver.ResourceResolver) (*REST, error) {
 	r := &REST{}
 	strategy := validatingadmissionpolicybinding.NewStrategy(authorizer, policyGetter, resourceResolver)
@@ -68,17 +68,17 @@ func NewREST(optsGetter generic.RESTOptionsGetter, authorizer authorizer.Uncondi
 	return r, nil
 }
 
-// Implement CategoriesProvider
+// 确保 REST 实现资源类别提供者接口。
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 返回该资源所属的 API 资源类别。
 func (r *REST) Categories() []string {
 	return []string{"api-extensions"}
 }
 
 type PolicyGetter interface {
-	// GetValidatingAdmissionPolicy returns a GetValidatingAdmissionPolicy
-	// by its name. There is no namespace because it is cluster-scoped.
+	// GetValidatingAdmissionPolicy 根据名称读取集群级 ValidatingAdmissionPolicy。
+	// 该资源是集群级资源，因此查询不需要 Namespace 参数。
 	GetValidatingAdmissionPolicy(ctx context.Context, name string) (*admissionregistration.ValidatingAdmissionPolicy, error)
 }
 

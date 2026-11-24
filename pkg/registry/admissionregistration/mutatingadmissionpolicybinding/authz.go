@@ -32,23 +32,24 @@ import (
 func (v *mutatingAdmissionPolicyBindingStrategy) authorizeCreate(ctx context.Context, obj runtime.Object) error {
 	binding := obj.(*admissionregistration.MutatingAdmissionPolicyBinding)
 	if binding.Spec.ParamRef == nil {
-		// no paramRef in new object
+		// 新对象未配置 ParamRef（或 ParamKind），无需执行参数资源授权。
 		return nil
 	}
 
 	return v.authorize(ctx, binding)
 }
 
+// authorizeUpdate 在更新 Binding 时检查 ParamRef 和 Policy 是否变化，必要时重新执行参数资源授权。
 func (v *mutatingAdmissionPolicyBindingStrategy) authorizeUpdate(ctx context.Context, obj, old runtime.Object) error {
 	binding := obj.(*admissionregistration.MutatingAdmissionPolicyBinding)
 	if binding.Spec.ParamRef == nil {
-		// no paramRef in new object
+		// 新对象未配置 ParamRef（或 ParamKind），无需执行参数资源授权。
 		return nil
 	}
 
 	oldBinding := old.(*admissionregistration.MutatingAdmissionPolicyBinding)
 	if oldBinding.Spec.ParamRef != nil && *oldBinding.Spec.ParamRef == *binding.Spec.ParamRef && oldBinding.Spec.PolicyName == binding.Spec.PolicyName {
-		// identical paramRef and policy to old object
+		// ParamRef 和关联 Policy 均未变化，沿用此前已完成的授权结果。
 		return nil
 	}
 
@@ -64,7 +65,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) authorize(ctx context.Context, 
 		return nil
 	}
 
-	// for superuser, skip all checks
+	// 对具有提权豁免资格的超级用户跳过后续授权检查。
 	if rbacregistry.EscalationAllowed(ctx) {
 		return nil
 	}
@@ -74,7 +75,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) authorize(ctx context.Context, 
 		return fmt.Errorf("cannot identify user to authorize read access to paramRef object")
 	}
 
-	// default to requiring permissions on all group/version/resources
+	// 默认要求用户对所有 API Group、Version 和 Resource 都具备相应权限；解析成功后再逐步收窄范围。
 	resource, apiGroup, apiVersion := "*", "*", "*"
 
 	var policyErr, gvParseErr, gvrResolveErr error
@@ -86,13 +87,13 @@ func (v *mutatingAdmissionPolicyBindingStrategy) authorize(ctx context.Context, 
 		var gv schema.GroupVersion
 		gv, gvParseErr = schema.ParseGroupVersion(paramKind.APIVersion)
 		if gvParseErr == nil {
-			// we only need to authorize the parsed group/version
+			// API Version 解析成功后，只需针对解析出的 Group 和 Version 检查权限。
 			apiGroup = gv.Group
 			apiVersion = gv.Version
 			var gvr schema.GroupVersionResource
 			gvr, gvrResolveErr = v.resourceResolver.Resolve(gv.WithKind(paramKind.Kind))
 			if gvrResolveErr == nil {
-				// we only need to authorize the resolved resource
+				// Kind 成功解析为 GVR 后，只需针对解析出的 Resource 检查权限。
 				resource = gvr.Resource
 			}
 		}
@@ -112,7 +113,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) authorize(ctx context.Context, 
 		Verb:            verb,
 		ResourceRequest: true,
 		Name:            paramRef.Name,
-		Namespace:       paramRef.Namespace, // if empty, no namespace indicates get across all namespaces
+		Namespace:       paramRef.Namespace, // Namespace 为空时，表示授权范围不限定命名空间。
 		APIGroup:        apiGroup,
 		APIVersion:      apiVersion,
 		Resource:        resource,
