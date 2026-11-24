@@ -27,10 +27,10 @@ import (
 	runtimeclassstorage "k8s.io/kubernetes/pkg/registry/node/runtimeclass/storage"
 )
 
-// RESTStorageProvider is a REST storage provider for node.k8s.io
+// RESTStorageProvider 负责装配 node.k8s.io API Group 的 REST 存储。
 type RESTStorageProvider struct{}
 
-// NewRESTStorage returns a RESTStorageProvider
+// NewRESTStorage 初始化 Node API Group，并注册当前已启用版本的 RuntimeClass 存储。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(nodeinternal.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 
@@ -57,7 +57,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
-// GroupName is the group name for the storage provider
+// GroupName 返回 Node API Group 的名称。
 func (p RESTStorageProvider) GroupName() string {
 	return nodeinternal.GroupName
 }

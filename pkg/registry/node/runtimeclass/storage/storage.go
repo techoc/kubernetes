@@ -27,12 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/node/runtimeclass"
 )
 
-// REST implements a RESTStorage for RuntimeClass against etcd
+// REST 将 RuntimeClass 的 REST 请求映射到底层通用 Store，并通过 etcd 持久化。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against runtime classes.
+// NewREST 创建 RuntimeClass 的 REST 存储，配置对象名称提取函数、资源策略和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:     func() runtime.Object { return &node.RuntimeClass{} },
