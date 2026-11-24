@@ -36,32 +36,30 @@ var _ interface {
 	rest.Storage
 } = &REST{}
 
-// REST implements a RESTStorage for selfsubjectreviews.
+// REST 实现 SelfSubjectReview 的无状态 REST 接口，用于返回当前请求主体的身份信息。
 type REST struct {
 }
 
-// NewREST returns a RESTStorage object that will work against selfsubjectreviews.
+// NewREST 创建 SelfSubjectReview REST 处理器；该接口不需要外部认证器或持久化 Store。
 func NewREST() *REST {
 	return &REST{}
 }
 
-// NamespaceScoped fulfill rest.Scoper
+// NamespaceScoped 实现 rest.Scoper；SelfSubjectReview 是集群级资源。
 func (r *REST) NamespaceScoped() bool {
 	return false
 }
 
-// New creates a new selfsubjectreview object.
+// New 返回用于解码请求的空 SelfSubjectReview 对象。
 func (r *REST) New() runtime.Object {
 	return &authenticationapi.SelfSubjectReview{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 实现 REST 销毁接口；处理器不持有底层 Store，无需显式释放资源。
 func (r *REST) Destroy() {
-	// Given no underlying store, we don't destroy anything
-	// here explicitly.
 }
 
-// Create returns attributes of the subject making the request.
+// Create 从请求上下文读取当前用户身份，并将用户名、UID、组和 Extra 信息写入 SelfSubjectReview.Status。
 func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	if createValidation != nil {
 		if err := createValidation(ctx, obj.DeepCopyObject()); err != nil {
@@ -103,6 +101,7 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 
 var _ rest.SingularNameProvider = &REST{}
 
+// GetSingularName 返回 SelfSubjectReview 的单数资源名称。
 func (r *REST) GetSingularName() string {
 	return "selfsubjectreview"
 }

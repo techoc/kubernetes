@@ -34,11 +34,13 @@ import (
 
 var badAuthenticatorAuds = apierrors.NewInternalError(errors.New("error validating audiences"))
 
+// REST 实现 TokenReview 的无状态 REST 接口，通过请求认证器验证提交的 Token。
 type REST struct {
 	tokenAuthenticator authenticator.Request
 	apiAudiences       []string
 }
 
+// NewREST 创建 TokenReview 处理器，并保存 Token 认证器及 API 默认受众集合。
 func NewREST(tokenAuthenticator authenticator.Request, apiAudiences []string) *REST {
 	return &REST{
 		tokenAuthenticator: tokenAuthenticator,
@@ -46,26 +48,28 @@ func NewREST(tokenAuthenticator authenticator.Request, apiAudiences []string) *R
 	}
 }
 
+// NamespaceScoped 返回 false，表示 TokenReview 是集群级资源。
 func (r *REST) NamespaceScoped() bool {
 	return false
 }
 
+// New 返回用于解码请求的空 TokenReview 对象。
 func (r *REST) New() runtime.Object {
 	return &authentication.TokenReview{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 实现 REST 销毁接口；处理器不持有底层 Store，无需显式释放资源。
 func (r *REST) Destroy() {
-	// Given no underlying store, we don't destroy anything
-	// here explicitly.
 }
 
 var _ rest.SingularNameProvider = &REST{}
 
+// GetSingularName 返回 TokenReview 的单数资源名称。
 func (r *REST) GetSingularName() string {
 	return "tokenreview"
 }
 
+// Create 校验 TokenReview 请求，使用 Bearer Token 构造认证请求，并将认证结果、用户身份和受众写入 Status。
 func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	tokenReview, ok := obj.(*authentication.TokenReview)
 	if !ok {
@@ -90,7 +94,7 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 		return tokenReview, nil
 	}
 
-	// create a header that contains nothing but the token
+	// 构造仅包含待验证 Bearer Token 的 HTTP Authorization 请求头，避免携带原始请求中的其他头信息。
 	fakeReq := &http.Request{Header: http.Header{}}
 	fakeReq.Header.Add("Authorization", "Bearer "+tokenReview.Spec.Token)
 

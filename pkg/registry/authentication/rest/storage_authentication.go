@@ -30,20 +30,22 @@ import (
 	"k8s.io/kubernetes/pkg/registry/authentication/tokenreview"
 )
 
+// RESTStorageProvider 持有 TokenAuthenticator 和 API Audiences，负责装配 Authentication API 组的 REST 存储。
 type RESTStorageProvider struct {
 	Authenticator authenticator.Request
 	APIAudiences  authenticator.Audiences
 }
 
+// NewRESTStorage 创建 Authentication API 组的存储映射，并注册当前支持的 v1beta1 与 v1 资源。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
-	// TODO figure out how to make the swagger generation stable, while allowing this endpoint to be disabled.
+	// TODO：研究如何在允许禁用该端点的同时，保证 Swagger 文档生成结果稳定。
 	// if p.Authenticator == nil {
 	// 	return genericapiserver.APIGroupInfo{}, false
 	// }
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(authentication.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果新增 API 版本，必须同时在 `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go` 中配置对应的聚合优先级。
+	// TODO：重构装配流程，将版本优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap := p.v1beta1Storage(apiResourceConfigSource, restOptionsGetter); len(storageMap) > 0 {
 		apiGroupInfo.VersionedResourcesStorageMap[authenticationv1beta1.SchemeGroupVersion.Version] = storageMap
@@ -56,10 +58,11 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 按资源启用配置注册 TokenReview 和 SelfSubjectReview 的 v1 REST 处理器。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) map[string]rest.Storage {
 	storage := map[string]rest.Storage{}
 
-	// tokenreviews
+	// TokenReview 使用注入的请求认证器验证客户端提交的 Bearer Token。
 	if resource := "tokenreviews"; apiResourceConfigSource.ResourceEnabled(authenticationv1.SchemeGroupVersion.WithResource(resource)) {
 		tokenReviewStorage := tokenreview.NewREST(p.Authenticator, p.APIAudiences)
 		storage[resource] = tokenReviewStorage
@@ -72,10 +75,11 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage
 }
 
+// v1beta1Storage 注册 v1beta1 版本仍提供的 SelfSubjectReview 资源。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) map[string]rest.Storage {
 	storage := map[string]rest.Storage{}
 
-	// selfsubjectreviews
+	// SelfSubjectReview 返回当前请求用户的身份信息，不执行额外的凭据认证。
 	if resource := "selfsubjectreviews"; apiResourceConfigSource.ResourceEnabled(authenticationv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		selfSRStorage := selfsubjectreview.NewREST()
 		storage[resource] = selfSRStorage
@@ -83,6 +87,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 	return storage
 }
 
+// GroupName 返回 Authentication API 组名，供 kube-apiserver 注册 APIGroup。
 func (p RESTStorageProvider) GroupName() string {
 	return authentication.GroupName
 }
