@@ -121,30 +121,28 @@ type ApprovalREST struct {
 	store *genericregistry.Store
 }
 
-// New creates a new CertificateSigningRequest object.
+// New 返回一个空的 CertificateSigningRequest 对象。
 func (r *ApprovalREST) New() runtime.Object {
 	return &certificates.CertificateSigningRequest{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理 Approval 子资源拥有的资源。
 func (r *ApprovalREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此这里不能重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取 CSR；REST 子资源需要实现该方法以支持 Patch。
 func (r *ApprovalREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
 // Update 只更新 CSR 的批准条件，不允许通过该入口修改 Spec 或证书内容。
 func (r *ApprovalREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 调用底层 Store 时显式将 forceAllowCreate 设为 false，子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回 Approval 子资源需要重置的字段集合。
 func (r *ApprovalREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }

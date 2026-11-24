@@ -112,7 +112,7 @@ func TestCreate(t *testing.T) {
 			Name: "ctb1",
 		},
 		Spec: certificates.ClusterTrustBundleSpec{
-			// Empty TrustBundle is invalid.
+			// TrustBundle 为空时应判定为无效。
 		},
 	}
 
@@ -139,13 +139,13 @@ func TestUpdate(t *testing.T) {
 				TrustBundle: validCert1,
 			},
 		},
-		// Valid update
+		// 合法的更新：在原有信任包后追加另一个有效证书。
 		func(object runtime.Object) runtime.Object {
 			bundle := object.(*certificates.ClusterTrustBundle)
 			bundle.Spec.TrustBundle = strings.Join([]string{validCert1, validCert2}, "\n")
 			return bundle
 		},
-		// Invalid update
+		// 非法的更新：将 TrustBundle 清空。
 		func(object runtime.Object) runtime.Object {
 			bundle := object.(*certificates.ClusterTrustBundle)
 			bundle.Spec.TrustBundle = ""
@@ -232,17 +232,17 @@ func TestWatch(t *testing.T) {
 				TrustBundle: validCert1,
 			},
 		},
-		// matching labels
+		// 匹配的标签选择器。
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配的标签选择器。
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配的字段选择器。
 		[]fields.Set{
 			{"metadata.name": "ctb1"},
 		},
-		// not matching fields
+		// 不匹配的字段选择器。
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

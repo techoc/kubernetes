@@ -186,7 +186,7 @@ func TestStatusUpdate(t *testing.T) {
 				},
 			},
 			expectedObj: &certapi.CertificateSigningRequest{
-				// preserve existing Approved/Denied conditions
+				// 保留已有的 Approved/Denied 条件实例。
 				Status: certapi.CertificateSigningRequestStatus{
 					Conditions: []certapi.CertificateSigningRequestCondition{
 						{Type: certapi.CertificateFailed, LastUpdateTime: now, LastTransitionTime: now},
@@ -209,7 +209,7 @@ func TestStatusUpdate(t *testing.T) {
 			},
 			oldObj: &certapi.CertificateSigningRequest{},
 			expectedObj: &certapi.CertificateSigningRequest{
-				// preserved submitted conditions if existing Approved/Denied conditions could not be copied over (will fail validation)
+				// 若旧对象不存在对应的 Approved/Denied 条件实例，则保留请求提交的条件；后续校验会拒绝不合法的变更。
 				Status: certapi.CertificateSigningRequestStatus{
 					Conditions: []certapi.CertificateSigningRequestCondition{
 						{Type: certapi.CertificateApproved, LastUpdateTime: now, LastTransitionTime: now},

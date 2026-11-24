@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package certificates provides Registry interface and its RESTStorage
-// implementation for storing CertificateSigningRequest objects.
+// Package certificates 提供 CertificateSigningRequest（CSR）的 Registry 接口及 RESTStorage 实现。
 package certificates

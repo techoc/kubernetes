@@ -249,8 +249,7 @@ type csrApprovalStrategy struct {
 
 var ApprovalStrategy = csrApprovalStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Approval 子资源更新时由服务端重置、不能由请求修改的 Spec 和证书字段集合。
 func (csrApprovalStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"certificates.k8s.io/v1": fieldpath.NewSet(
