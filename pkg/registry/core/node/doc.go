@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package node provides Registry interface and implementation for storing Nodes.
+// Package node 提供 Node 资源的 Registry 策略、字段选择器、节点代理地址解析及 RESTStorage 实现。
 package node

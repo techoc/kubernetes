@@ -150,7 +150,7 @@ func Convert_bool_To_Pointer_bool(in *bool, out **bool, s conversion.Scope) erro
 // Convert_v1_TypeMeta_To_v1_TypeMeta 故意不复制 TypeMeta：在内部转换中
 // APIVersion/Kind 由序列化层决定，保留它们会让对象携带错误的类型信息。
 func Convert_v1_TypeMeta_To_v1_TypeMeta(in, out *TypeMeta, s conversion.Scope) error {
-	// These values are explicitly not copied
+	// 明确不复制这两个字段：内部对象的类型信息由 scheme/serializer 决定。
 	//out.APIVersion = in.APIVersion
 	//out.Kind = in.Kind
 	return nil
@@ -203,7 +203,7 @@ func Convert_intstr_IntOrString_To_Pointer_intstr_IntOrString(in *intstr.IntOrSt
 //
 // Convert_v1_Time_To_v1_Time 只能浅拷贝：time.Time 含未导出字段，无法逐字段深拷贝。
 func Convert_v1_Time_To_v1_Time(in *Time, out *Time, s conversion.Scope) error {
-	// Cannot deep copy these, because time.Time has unexported fields.
+	// time.Time 包含未导出字段，无法在这里逐字段深拷贝，因此采用结构体浅拷贝。
 	*out = *in
 	return nil
 }
@@ -212,7 +212,7 @@ func Convert_v1_Time_To_v1_Time(in *Time, out *Time, s conversion.Scope) error {
 //
 // Convert_v1_MicroTime_To_v1_MicroTime 同样因为 time.Time 的未导出字段只能浅拷贝。
 func Convert_v1_MicroTime_To_v1_MicroTime(in *MicroTime, out *MicroTime, s conversion.Scope) error {
-	// Cannot deep copy these, because time.Time has unexported fields.
+	// time.Time 包含未导出字段，无法在这里逐字段深拷贝，因此采用结构体浅拷贝。
 	*out = *in
 	return nil
 }
@@ -234,7 +234,7 @@ func Convert_v1_Duration_To_Pointer_v1_Duration(in *Duration, out **Duration, s 
 	return nil
 }
 
-// Convert_Slice_string_To_v1_Time allows converting a URL query parameter value
+// Convert_Slice_string_To_v1_Time 将 URL 查询参数中的字符串转换为 metav1.Time。
 //
 // 查询参数以 []string 承载，这里只取第一个值；空切片按空串解析。
 func Convert_Slice_string_To_v1_Time(in *[]string, out *Time, s conversion.Scope) error {
@@ -332,7 +332,7 @@ func Convert_v1_LabelSelector_To_Map_string_To_string(in *LabelSelector, out *ma
 
 // Convert_Slice_string_To_Slice_int32 converts multiple query parameters or
 // a single query parameter with a comma delimited value to multiple int32.
-// This is used for port forwarding which needs the ports as int32.
+// 该转换用于端口转发场景，目标端口类型为 int32。
 //
 // 端口号上限为 16 位（0-65535），因此用 ParseUint(..., 16) 而非 32；
 // 负数或越界都会返回错误，而不是截断。

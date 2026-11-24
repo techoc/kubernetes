@@ -71,9 +71,8 @@ func NewAggregate(errlist []error) Aggregate {
 	return aggregate(errs)
 }
 
-// This helper implements the error and Errors interfaces.  Keeping it private
-// prevents people from making an aggregate of 0 errors, which is not
-// an error, but does satisfy the error interface.
+// aggregate 实现 error 和 Errors 接口。将其保持为非导出类型，可以避免调用方构造
+// 空聚合：空聚合本身不代表错误，却仍然满足 error 接口。
 //
 // 该辅助类型实现 error 与 Errors 接口。保持私有可防止构造 0 个错误的 aggregate
 // （它不算错误，却满足 error 接口）。
@@ -160,8 +159,8 @@ type Matcher func(error) bool
 // input implements the Aggregate interface, the list of errors will be
 // processed recursively.
 //
-// This can be used, for example, to remove known-OK errors (such as io.EOF or
-// os.PathNotFound) from a list of errors.
+// 例如，可从错误列表中移除已知可接受的错误（如 io.EOF 或 os.PathNotFound），
+// 避免这些预期情况影响最终错误结果。
 //
 // FilterOut 从输入错误中移除所有被任一 matcher 匹配的错误。
 // 输入是单个错误时只测试它；实现 Aggregate 接口时递归处理其中的错误列表。
@@ -209,8 +208,7 @@ func filterErrors(list []error, fns ...Matcher) []error {
 	return result
 }
 
-// Flatten takes an Aggregate, which may hold other Aggregates in arbitrary
-// nesting, and flattens them all into a single Aggregate, recursively.
+// Flatten 接收可能包含任意层级嵌套 Aggregate 的聚合对象，并递归展开为单层 Aggregate。
 //
 // Flatten 递归地把任意嵌套的 Aggregate 展平为单个 Aggregate。
 func Flatten(agg Aggregate) Aggregate {
@@ -254,8 +252,8 @@ func CreateAggregateFromMessageCountMap(m MessageCountMap) Aggregate {
 	return NewAggregate(result)
 }
 
-// Reduce will return err or nil, if err is an Aggregate and only has one item,
-// the first item in the aggregate.
+// Reduce 默认返回原始 err；如果 err 是 Aggregate 且只包含一个错误，则返回该错误；
+// 如果聚合为空，则返回 nil。
 //
 // Reduce 返回 err；若 err 是只含一项的 Aggregate，则返回该项；
 // 若是空 Aggregate，则返回 nil。
@@ -271,9 +269,8 @@ func Reduce(err error) error {
 	return err
 }
 
-// AggregateGoroutines runs the provided functions in parallel, stuffing all
-// non-nil errors into the returned Aggregate.
-// Returns nil if all the functions complete successfully.
+// AggregateGoroutines 并行执行传入函数，并将所有非 nil 错误收集到返回的 Aggregate。
+// 所有函数都成功时返回 nil。
 //
 // AggregateGoroutines 并行运行给定函数，把所有非 nil 错误收集到返回的 Aggregate 中；
 // 所有函数都成功时返回 nil。
@@ -292,7 +289,7 @@ func AggregateGoroutines(funcs ...func() error) Aggregate {
 	return NewAggregate(errs)
 }
 
-// ErrPreconditionViolated is returned when the precondition is violated
+// ErrPreconditionViolated 表示调用操作所要求的前置条件未满足。
 //
 // ErrPreconditionViolated 在前置条件被违反时返回。
 var ErrPreconditionViolated = errors.New("precondition is violated")

@@ -42,6 +42,7 @@ func TestSelectableFieldLabelConversions(t *testing.T) {
 	)
 }
 
+// TestDropConditions 验证 PVC 更新时旧条件的保留/清理逻辑，避免客户端误删服务端维护的状态条件。
 func TestDropConditions(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	pvcWithConditions := func() *api.PersistentVolumeClaim {
@@ -135,6 +136,7 @@ func makeDataSourceRef(apiGroup, kind, name string, namespace *string) *api.Type
 	}
 }
 
+// TestPrepareForCreate 覆盖 dataSource/dataSourceRef 单边填写、历史无效来源值清理及规范化结果。
 func TestPrepareForCreate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 

@@ -39,6 +39,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/core/service/portallocator"
 )
 
+// Repair 周期性扫描所有 Service 的 NodePort/HealthCheckNodePort，并与旧 RangeAllocation 对照以重建准确端口位图。
 // See ipallocator/controller/repair.go; this is a copy for ports.
 type Repair struct {
 	interval      time.Duration
@@ -101,6 +102,7 @@ func (c *Repair) runOnce() error {
 }
 
 // doRunOnce verifies the state of the port allocations and returns an error if an unrecoverable problem occurs.
+// doRunOnce 从所有 Service 收集实际使用的 NodePort，再与快照比较，修复未登记端口并延迟释放疑似泄漏端口。
 func (c *Repair) doRunOnce() error {
 	// TODO: (per smarterclayton) if Get() or ListServices() is a weak consistency read,
 	// or if they are executed against different leaders,
@@ -233,6 +235,8 @@ func (c *Repair) doRunOnce() error {
 // Please note that:
 //  1. same nodePort with *same* protocol will be duplicated as it is
 //  2. same nodePort with *different* protocol will be deduplicated
+//
+// collectServiceNodePorts 汇总 ServicePorts.NodePort 与 HealthCheckNodePort，供端口池修复控制器重建占用集合。
 func collectServiceNodePorts(service *corev1.Service) []int {
 	var servicePorts []int
 	// map from nodePort to set of protocols

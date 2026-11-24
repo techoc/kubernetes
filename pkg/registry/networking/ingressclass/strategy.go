@@ -30,7 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/networking/validation"
 )
 
-// ingressClassStrategy implements verification logic for IngressClass
+// ingressClassStrategy 定义集群级 IngressClass 策略，校验 Controller 字段和参数引用，并维护 Spec Generation。
 // resources.
 type ingressClassStrategy struct {
 	rest.DeclarativeValidation
@@ -48,6 +48,7 @@ func (ingressClassStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate prepares an IngressClass for creation.
+// 创建时初始化 Generation；IngressClass 本身不含由控制器回写的 Status。
 func (ingressClassStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ingressClass := obj.(*networking.IngressClass)
 	ingressClass.Generation = 1
@@ -55,6 +56,7 @@ func (ingressClassStrategy) PrepareForCreate(ctx context.Context, obj runtime.Ob
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on
 // update.
+// Spec 语义变化时递增 Generation，供 Ingress Controller 判断类配置是否更新。
 func (ingressClassStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIngressClass := obj.(*networking.IngressClass)
 	oldIngressClass := old.(*networking.IngressClass)
@@ -67,6 +69,7 @@ func (ingressClassStrategy) PrepareForUpdate(ctx context.Context, obj, old runti
 }
 
 // Validate validates a new IngressClass.
+// Validate 检查 IngressClass 的 Controller 名称及 Parameters 引用结构。
 func (ingressClassStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ingressClass := obj.(*networking.IngressClass)
 	return validation.ValidateIngressClass(ingressClass)

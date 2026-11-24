@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd 并构造 Endpoints RESTStorage。
 func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -58,6 +59,7 @@ func validNewEndpoints() *api.Endpoints {
 	}
 }
 
+// TestCreate 验证 Endpoints 创建时的对象字段校验和持久化。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -75,6 +77,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证 Endpoints 更新经过新旧对象校验后写回存储。
 func TestUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -119,6 +122,7 @@ func TestList(t *testing.T) {
 	test.TestList(validNewEndpoints())
 }
 
+// TestWatch 验证 Endpoints 创建/更新会产生可被 Watch 客户端接收的事件。
 func TestWatch(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

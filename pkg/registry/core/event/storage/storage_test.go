@@ -70,6 +70,7 @@ func validNewEvent(namespace string) *api.Event {
 	}
 }
 
+// TestCreate 验证 Event 创建时使用配置的 TTL，并将事件持久化到后端。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -85,6 +86,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证重复事件更新路径能通过相同 REST Store 正确写回事件对象。
 func TestUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

@@ -19,13 +19,14 @@ package persistentvolume
 import (
 	"context"
 
+	"reflect"
+	"testing"
+	"time"
+
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apitesting "k8s.io/kubernetes/pkg/api/testing"
 	api "k8s.io/kubernetes/pkg/apis/core"
-	"reflect"
-	"testing"
-	"time"
 
 	// ensure types are installed
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
@@ -40,6 +41,7 @@ func TestSelectableFieldLabelConversions(t *testing.T) {
 	)
 }
 
+// TestStatusUpdate 验证 PV 状态变更会维护 LastPhaseTransitionTime，且 /status 不允许修改 Spec。
 func TestStatusUpdate(t *testing.T) {
 	now := metav1.Now()
 	origin := metav1.NewTime(now.Add(time.Hour))
@@ -244,6 +246,7 @@ func TestStatusUpdate(t *testing.T) {
 	}
 }
 
+// TestStatusCreate 验证创建时请求中的 Status 被清空，Phase 初始化为 Pending 并记录初始转换时间。
 func TestStatusCreate(t *testing.T) {
 	now := metav1.Now()
 	NowFunc = func() metav1.Time { return now }

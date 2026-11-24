@@ -30,16 +30,14 @@ import (
 
 // Decoder 让 StreamWatcher 能监听任何可写出 Decoder 的流。
 type Decoder interface {
-	// Decode should return the type of event, the decoded object, or an error.
-	// An error will cause StreamWatcher to call Close(). Decode should block until
-	// it has data or an error occurs.
+	// Decode 返回事件类型、解码后的对象或错误。发生错误时 StreamWatcher 会调用 Close()。
+	// Decode 应阻塞等待，直到读取到数据或发生错误。
 	//
 	// Decode 必须阻塞直到有数据或出错；返回错误会终止监听。
 	Decode() (action EventType, object runtime.Object, err error)
 
-	// Close should close the underlying io.Reader, signalling to the source of
-	// the stream that it is no longer being watched. Close() must cause any
-	// outstanding call to Decode() to return with an error of some sort.
+	// Close 关闭底层 io.Reader，通知流的提供方当前不再被 watch。
+	// Close() 必须确保所有正在阻塞的 Decode() 调用都能返回某种错误。
 	//
 	// Close 必须让阻塞中的 Decode 尽快返回错误，否则 Stop 无法真正结束监听。
 	Close()
@@ -48,7 +46,7 @@ type Decoder interface {
 // Reporter 隐藏把错误转换为 runtime.Object 的细节，
 // 因为本包不能依赖更高层的错误报告类型（避免循环依赖）。
 type Reporter interface {
-	// AsObject must convert err into a valid runtime.Object for the watch stream.
+	// AsObject 必须将 err 转换为可在 watch 流中传输的有效 runtime.Object。
 	AsObject(err error) runtime.Object
 }
 
@@ -64,9 +62,8 @@ type StreamWatcher struct {
 	done     chan struct{}
 }
 
-// NewStreamWatcher creates a StreamWatcher from the given decoder.
-//
-// Contextual logging: NewStreamWatcherWithLogger should be used instead of NewStreamWatcher in code which supports contextual logging.
+// NewStreamWatcher 使用给定的 decoder 创建 StreamWatcher。
+// 支持上下文日志的代码应优先使用 NewStreamWatcherWithLogger，以便传入关联的 logger。
 func NewStreamWatcher(d Decoder, r Reporter) *StreamWatcher {
 	return NewStreamWatcherWithLogger(klog.Background(), d, r)
 }
@@ -77,14 +74,11 @@ func NewStreamWatcherWithLogger(logger klog.Logger, d Decoder, r Reporter) *Stre
 		logger:   logger,
 		source:   d,
 		reporter: r,
-		// It's easy for a consumer to add buffering via an extra
-		// goroutine/channel, but impossible for them to remove it,
-		// so nonbuffered is better.
+		// 消费者可以很容易地通过额外的 goroutine/channel 增加缓冲，但无法移除生产者预先添加的缓冲，
+		// 因此这里使用无缓冲通道，将缓冲策略交给消费者决定。
 		result: make(chan Event),
-		// If the watcher is externally stopped there is no receiver anymore
-		// and the send operations on the result channel, especially the
-		// error reporting might block forever.
-		// Therefore a dedicated stop channel is used to resolve this blocking.
+		// 如果 watcher 被外部停止，可能已没有消费者继续接收 result；此时向 result 发送事件（尤其是错误事件）
+		// 可能永久阻塞。因此使用独立的 done 通道，让发送操作能够通过 select 响应停止信号。
 		// done 与 result 的发送操作在 select 中二选一，从而避免消费者退出后永久阻塞。
 		done: make(chan struct{}),
 	}
@@ -99,10 +93,10 @@ func (sw *StreamWatcher) ResultChan() <-chan Event {
 
 // Stop 实现 watch.Interface，幂等地停止监听。
 func (sw *StreamWatcher) Stop() {
-	// Call Close() exactly once by locking and setting a flag.
+	// 通过互斥锁和 done 状态确保 Close() 只调用一次。
 	sw.Lock()
 	defer sw.Unlock()
-	// closing a closed channel always panics, therefore check before closing
+	// 重复关闭 channel 会触发 panic，因此关闭前必须先检查状态。
 	select {
 	case <-sw.done:
 	default:
@@ -121,7 +115,7 @@ func (sw *StreamWatcher) receive() {
 		if err != nil {
 			switch err {
 			case io.EOF:
-				// watch closed normally
+				// watch 流正常结束。
 			case io.ErrUnexpectedEOF:
 				// 截断属于异常但可恢复，降级为低级别日志，不向消费者报错事件。
 				sw.logger.V(1).Info("Unexpected EOF during watch stream event decoding", "err", err)

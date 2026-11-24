@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 volumeattributesclass 的 REST Strategy，定义作用域、写入前字段处理、校验、告警以及更新规则。
 package volumeattributesclass
 
 import (
@@ -38,6 +39,7 @@ type volumeAttributesClassStrategy struct {
 // VolumeAttributesClass objects via the REST API.
 var Strategy = volumeAttributesClassStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
+// NamespaceScoped 声明该资源是否属于命名空间级别；返回 false 表示对象通过集群级 URL 管理，返回 true 表示 URL 中必须包含 namespace。
 func (volumeAttributesClassStrategy) NamespaceScoped() bool {
 	return false
 }
@@ -46,6 +48,7 @@ func (volumeAttributesClassStrategy) NamespaceScoped() bool {
 func (volumeAttributesClassStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
+// Validate 执行创建请求的业务合法性校验，将字段路径和错误原因整理为 field.ErrorList；返回非空错误时 API 请求会被拒绝。
 func (volumeAttributesClassStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	volumeAttributesClass := obj.(*storage.VolumeAttributesClass)
 	return validation.ValidateVolumeAttributesClass(volumeAttributesClass)
@@ -60,6 +63,7 @@ func (volumeAttributesClassStrategy) WarningsOnCreate(ctx context.Context, obj r
 func (volumeAttributesClassStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 决定 Update 请求在对象不存在时是否允许退化为创建；false 表示必须先显式 Create。
 func (volumeAttributesClassStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -68,6 +72,7 @@ func (volumeAttributesClassStrategy) AllowCreateOnUpdate(ctx context.Context) bo
 func (volumeAttributesClassStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
+// ValidateUpdate 对更新后的对象及其旧版本进行联合校验，检查字段合法性、不可变字段和跨版本兼容约束。
 func (volumeAttributesClassStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateVolumeAttributesClassUpdate(obj.(*storage.VolumeAttributesClass), old.(*storage.VolumeAttributesClass))
 }
@@ -77,6 +82,7 @@ func (volumeAttributesClassStrategy) WarningsOnUpdate(ctx context.Context, obj, 
 	return nil
 }
 
+// AllowUnconditionalUpdate 声明是否允许不携带 ResourceVersion 前置条件的更新；true 表示允许无条件更新，false 要求并发版本检查。
 func (volumeAttributesClassStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }

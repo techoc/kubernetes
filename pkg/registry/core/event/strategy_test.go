@@ -31,6 +31,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
+// TestGetAttrs 验证 Event 对象的 Label/Field 属性提取及类型错误处理。
 func TestGetAttrs(t *testing.T) {
 	eventA := &api.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -119,6 +120,7 @@ func TestSelectableFieldLabelConversions(t *testing.T) {
 	)
 }
 
+// TestValidateUpdate 验证事件更新时的计数、时间戳和 involvedObject 等字段规则。
 func TestValidateUpdate(t *testing.T) {
 	makeEvent := func(name string) *api.Event {
 		return &api.Event{

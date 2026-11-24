@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/rbac/validation"
 )
 
-// strategy implements behavior for Roles
+// strategy 定义 Role 的 REST 创建/更新策略；Role 是命名空间级授权规则集合，本身不直接绑定用户。
 type strategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -69,6 +69,7 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
 // Validate validates a new Role. Validation must check for a correct signature.
+// Validate 检查 PolicyRule 的 APIGroup、Resource、ResourceName、Verb 和 NonResourceURL 组合是否合法。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	role := obj.(*rbac.Role)
 	return validation.ValidateRole(role)
@@ -83,6 +84,7 @@ func (strategy) Canonicalize(obj runtime.Object) {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新校验沿用相同的规则语法，并结合旧对象执行更新语义检查。
 func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newObj := obj.(*rbac.Role)
 	oldObj := old.(*rbac.Role)

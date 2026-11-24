@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件负责装配 APF API Group 的 REST Storage，并在 API Server 启动后协调默认配置。
 package rest
 
 import (
@@ -65,6 +66,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// storage 按指定 GroupVersion 构建资源映射；只注册当前版本存在且由 APIResourceConfig 启用的资源。
 func (p RESTStorageProvider) storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter, groupVersion schema.GroupVersion) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -115,6 +117,7 @@ type bootstrapConfigurationEnsurer struct {
 	plcLister       flowcontrollisters.PriorityLevelConfigurationLister
 }
 
+// ensureAPFBootstrapConfiguration 启动后协调默认 FlowSchema 和 PriorityLevelConfiguration；通过 informer/lister 读取当前对象，再创建或修复必需配置。
 func (bce *bootstrapConfigurationEnsurer) ensureAPFBootstrapConfiguration(hookContext genericapiserver.PostStartHookContext) error {
 	clientset, err := flowcontrolclient.NewForConfig(hookContext.LoopbackClientConfig)
 	if err != nil {
@@ -168,6 +171,7 @@ func (bce *bootstrapConfigurationEnsurer) ensureAPFBootstrapConfiguration(hookCo
 	return nil
 }
 
+// ensure 按顺序执行建议配置、强制配置的确保逻辑，并清理不再需要的引导对象。
 func ensure(ctx context.Context, clientset flowcontrolclient.FlowcontrolV1Interface, fsLister flowcontrollisters.FlowSchemaLister, plcLister flowcontrollisters.PriorityLevelConfigurationLister) error {
 
 	if err := ensureSuggestedConfiguration(ctx, clientset, fsLister, plcLister); err != nil {
@@ -188,6 +192,7 @@ func ensure(ctx context.Context, clientset flowcontrolclient.FlowcontrolV1Interf
 	return nil
 }
 
+// ensureSuggestedConfiguration 确保建议级别的默认 FlowSchema/PriorityLevelConfiguration 存在；这些配置可由管理员按集群需求调整。
 func ensureSuggestedConfiguration(ctx context.Context, clientset flowcontrolclient.FlowcontrolV1Interface, fsLister flowcontrollisters.FlowSchemaLister, plcLister flowcontrollisters.PriorityLevelConfigurationLister) error {
 	plcOps := ensurer.NewPriorityLevelConfigurationOps(clientset.PriorityLevelConfigurations(), plcLister)
 	if err := ensurer.EnsureConfigurations(ctx, plcOps, flowcontrolbootstrap.SuggestedPriorityLevelConfigurations, ensurer.NewSuggestedEnsureStrategy[*flowcontrolv1.PriorityLevelConfiguration]()); err != nil {
@@ -198,6 +203,7 @@ func ensureSuggestedConfiguration(ctx context.Context, clientset flowcontrolclie
 	return ensurer.EnsureConfigurations(ctx, fsOps, flowcontrolbootstrap.SuggestedFlowSchemas, ensurer.NewSuggestedEnsureStrategy[*flowcontrolv1.FlowSchema]())
 }
 
+// ensureMandatoryConfiguration 确保系统正常运行所必需的 APF 配置存在，避免关键 API 请求缺少匹配或优先级处理规则。
 func ensureMandatoryConfiguration(ctx context.Context, clientset flowcontrolclient.FlowcontrolV1Interface, fsLister flowcontrollisters.FlowSchemaLister, plcLister flowcontrollisters.PriorityLevelConfigurationLister) error {
 	plcOps := ensurer.NewPriorityLevelConfigurationOps(clientset.PriorityLevelConfigurations(), plcLister)
 	if err := ensurer.EnsureConfigurations(ctx, plcOps, flowcontrolbootstrap.MandatoryPriorityLevelConfigurations, ensurer.NewMandatoryEnsureStrategy[*flowcontrolv1.PriorityLevelConfiguration]()); err != nil {
@@ -208,6 +214,7 @@ func ensureMandatoryConfiguration(ctx context.Context, clientset flowcontrolclie
 	return ensurer.EnsureConfigurations(ctx, fsOps, flowcontrolbootstrap.MandatoryFlowSchemas, ensurer.NewMandatoryEnsureStrategy[*flowcontrolv1.FlowSchema]())
 }
 
+// removeDanglingBootstrapConfiguration 清理不再被当前引导配置引用的旧对象，避免遗留 FlowSchema 或 PriorityLevelConfiguration 持续参与请求分类。
 func removeDanglingBootstrapConfiguration(ctx context.Context, clientset flowcontrolclient.FlowcontrolV1Interface, fsLister flowcontrollisters.FlowSchemaLister, plcLister flowcontrollisters.PriorityLevelConfigurationLister) error {
 	if err := removeDanglingBootstrapFlowSchema(ctx, clientset, fsLister); err != nil {
 		return err
@@ -216,12 +223,14 @@ func removeDanglingBootstrapConfiguration(ctx context.Context, clientset flowcon
 	return removeDanglingBootstrapPriorityLevel(ctx, clientset, plcLister)
 }
 
+// removeDanglingBootstrapFlowSchema 删除不再属于当前引导集合的 FlowSchema，同时避免误删用户自定义配置。
 func removeDanglingBootstrapFlowSchema(ctx context.Context, clientset flowcontrolclient.FlowcontrolV1Interface, fsLister flowcontrollisters.FlowSchemaLister) error {
 	bootstrap := append(flowcontrolbootstrap.MandatoryFlowSchemas, flowcontrolbootstrap.SuggestedFlowSchemas...)
 	fsOps := ensurer.NewFlowSchemaOps(clientset.FlowSchemas(), fsLister)
 	return ensurer.RemoveUnwantedObjects(ctx, fsOps, bootstrap)
 }
 
+// removeDanglingBootstrapPriorityLevel 删除不再被引导 FlowSchema 引用的 PriorityLevelConfiguration，保持配置引用关系一致。
 func removeDanglingBootstrapPriorityLevel(ctx context.Context, clientset flowcontrolclient.FlowcontrolV1Interface, plcLister flowcontrollisters.PriorityLevelConfigurationLister) error {
 	bootstrap := append(flowcontrolbootstrap.MandatoryPriorityLevelConfigurations, flowcontrolbootstrap.SuggestedPriorityLevelConfigurations...)
 	plcOps := ensurer.NewPriorityLevelConfigurationOps(clientset.PriorityLevelConfigurations(), plcLister)

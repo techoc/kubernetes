@@ -109,13 +109,13 @@ type FakeWatcher struct {
 
 var _ Interface = &FakeWatcher{}
 
-// Contextual logging: NewFakeWithOptions and a logger in the FakeOptions should be used instead in code which supports contextual logging.
+// 支持上下文日志的代码应改用 NewFakeWithOptions，并通过 FakeOptions.Logger 传入 logger。
 // NewFake 创建使用默认选项的 FakeWatcher。
 func NewFake() *FakeWatcher {
 	return NewFakeWithOptions(FakeOptions{})
 }
 
-// Contextual logging: NewFakeWithOptions and a logger in the FakeOptions should be used instead in code which supports contextual logging.
+// 支持上下文日志的代码应改用 NewFakeWithOptions，并通过 FakeOptions.Logger 传入 logger。
 // NewFakeWithChanSize 创建指定通道缓冲大小的 FakeWatcher。
 // blocking 参数当前未使用（保留以兼容旧签名）。
 func NewFakeWithChanSize(size int, blocking bool) *FakeWatcher {
@@ -203,7 +203,7 @@ type RaceFreeFakeWatcher struct {
 
 var _ Interface = &RaceFreeFakeWatcher{}
 
-// Contextual logging: RaceFreeFakeWatcherWithLogger should be used instead of NewRaceFreeFake in code which supports contextual logging.
+// 支持上下文日志的代码应改用 NewRaceFreeFakeWithLogger，以便传入关联的 logger。
 // NewRaceFreeFake 创建使用后台 logger 的 RaceFreeFakeWatcher。
 func NewRaceFreeFake() *RaceFreeFakeWatcher {
 	return NewRaceFreeFakeWithLogger(klog.Background())

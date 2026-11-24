@@ -22,7 +22,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// GroupName is the group name for this API.
+// GroupName 是本 API 使用的组名。
 //
 // meta.k8s.io 不是真实资源组，只承载所有资源共用的元数据类型
 // （Status、APIGroup 等）。
@@ -37,25 +37,25 @@ var (
 	localSchemeBuilder = &schemeBuilder
 )
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册本包 API 对象时使用的组和版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Unversioned is group version for unversioned API objects
-// TODO: this should be v1 probably
+// Unversioned 是无版本 API 对象使用的组版本。
+// TODO：未来是否应统一迁移到 v1 仍需评估；当前保留空 group 的历史约定。
 //
 // 空 group 是无版本对象（Status 等）的历史约定，不能改成 meta.k8s.io，
 // 否则会破坏已发布的 API 路径。
 var Unversioned = schema.GroupVersion{Group: "", Version: "v1"}
 
-// WatchEventKind is name reserved for serializing watch events.
+// WatchEventKind 是 watch 事件序列化时保留使用的 Kind 名称。
 const WatchEventKind = "WatchEvent"
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 将未限定 group 的 Kind 名称补充为当前 API 组对应的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// scheme is the registry for the common types that adhere to the meta v1 API spec.
+// scheme 是注册并管理符合 meta v1 API 规范的通用类型的 Scheme。
 var scheme = runtime.NewScheme()
 
 // ParameterCodec knows about query parameters used with the meta v1 API spec.
@@ -75,7 +75,7 @@ var optionsTypes = []runtime.Object{
 	&PatchOptions{},
 }
 
-// AddToGroupVersion registers common meta types into schemas.
+// AddToGroupVersion 将 meta 包的通用类型注册到指定的 Scheme 和 GroupVersion。
 //
 // 每个 API 服务器的 scheme 都需要调用一次，用来注册该 group/version 下
 // 通用的 watch 事件与选项类型。watch 事件同时注册外部与 Internal 版本，
@@ -86,9 +86,9 @@ func AddToGroupVersion(scheme *runtime.Scheme, groupVersion schema.GroupVersion)
 		schema.GroupVersion{Group: groupVersion.Group, Version: runtime.APIVersionInternal}.WithKind(WatchEventKind),
 		&InternalEvent{},
 	)
-	// Supports legacy code paths, most callers should use metav1.ParameterCodec for now
+	// 兼容旧调用路径；新代码通常应直接使用 metav1.ParameterCodec。
 	scheme.AddKnownTypes(groupVersion, optionsTypes...)
-	// Register Unversioned types under their own special group
+	// 将无版本类型注册到专用的 Unversioned 组版本下。
 	scheme.AddUnversionedTypes(Unversioned,
 		&Status{},
 		&APIVersions{},
@@ -97,14 +97,14 @@ func AddToGroupVersion(scheme *runtime.Scheme, groupVersion schema.GroupVersion)
 		&APIResourceList{},
 	)
 
-	// register manually. This usually goes through the SchemeBuilder, which we cannot use here.
+	// 手动注册转换与默认值函数。通常这些注册由 SchemeBuilder 完成，但当前初始化路径无法使用它。
 	// 转换与默认值函数由生成代码提供，但这里没有 SchemeBuilder，故显式注册；
 	// 失败会 panic，属于初始化期不可恢复的编程错误。
 	utilruntime.Must(RegisterConversions(scheme))
 	utilruntime.Must(RegisterDefaults(scheme))
 }
 
-// AddMetaToScheme registers base meta types into schemas.
+// AddMetaToScheme 将基础 meta 类型注册到指定 Scheme。
 //
 // 只注册 Table/PartialObjectMetadata 这类“元数据视图”对象，通常由
 // 需要支持服务器端表输出的组件调用；不会注册无版本类型。
@@ -125,7 +125,7 @@ func init() {
 
 	utilruntime.Must(AddMetaToScheme(scheme))
 
-	// register manually. This usually goes through the SchemeBuilder, which we cannot use here.
+	// 手动注册转换与默认值函数。通常这些注册由 SchemeBuilder 完成，但当前初始化路径无法使用它。
 	// 默认值同样由生成代码提供，这里显式注册。
 	utilruntime.Must(RegisterDefaults(scheme))
 }

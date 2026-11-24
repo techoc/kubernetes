@@ -102,6 +102,7 @@ func makeValidServiceCustom(tweaks ...func(svc *api.Service)) *api.Service {
 	return svc
 }
 
+// TestServiceStatusStrategy 验证 /status 只更新 Service.Status，不能借状态子资源改动 Spec。
 func TestServiceStatusStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !StatusStrategy.NamespaceScoped() {
@@ -249,6 +250,7 @@ func TestDropDisabledField(t *testing.T) {
 
 }
 
+// TestDropTypeDependentFields 覆盖 Service Type 切换时 ClusterIP、NodePort、LoadBalancer 等依赖字段的保留与清理规则。
 func TestDropTypeDependentFields(t *testing.T) {
 	// Tweaks used below.
 	setTypeExternalName := func(svc *api.Service) {
@@ -554,6 +556,7 @@ func TestDropTypeDependentFields(t *testing.T) {
 	}
 }
 
+// TestMatchService 验证 Service 标签与字段选择器（clusterIP/type）被转换为存储层筛选谓词。
 func TestMatchService(t *testing.T) {
 	noHeadlessServiceRequirement, err := labels.NewRequirement(v1.IsHeadlessService, selection.DoesNotExist, nil)
 	if err != nil {

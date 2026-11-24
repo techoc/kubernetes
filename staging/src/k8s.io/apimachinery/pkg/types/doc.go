@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package types implements various generic types used throughout kubernetes.
+// Package types 定义 Kubernetes 各组件通用的基础类型。
 //
 // 该包集中定义跨组件共享的基础类型（UID、NodeName、NamespaceName 等），
 // 统一放在这里可避免各组件重复定义导致类型不兼容。

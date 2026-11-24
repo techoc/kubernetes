@@ -25,36 +25,31 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 )
 
-// Selector represents a field selector.
+// Selector 表示一个字段选择器。
 //
 // 字段选择器在服务端用于缩小列表结果（如 metadata.name=x），由若干
 // 原子条件以 AND 组合；不支持 OR。所有实现都必须可安全并发使用。
 type Selector interface {
-	// Matches returns true if this selector matches the given set of fields.
+	// Matches 判断当前选择器是否匹配给定字段集合。
 	Matches(Fields) bool
 
-	// Empty returns true if this selector does not restrict the selection space.
+	// Empty 判断当前选择器是否未对可选对象范围施加限制。
 	Empty() bool
 
-	// RequiresExactMatch allows a caller to introspect whether a given selector
-	// requires a single specific field to be set, and if so returns the value it
-	// requires.
+	// RequiresExactMatch 检查选择器是否要求某个字段精确等于指定值；若是则返回该值。
 	RequiresExactMatch(field string) (value string, found bool)
 
-	// Transform returns a new copy of the selector after TransformFunc has been
-	// applied to the entire selector, or an error if fn returns an error.
-	// If for a given requirement both field and value are transformed to empty
-	// string, the requirement is skipped.
+	// Transform 对选择器中的每个条件应用转换函数并返回新副本；转换函数报错时返回错误。
+	// 如果某个条件的字段名和值都被转换为空字符串，则跳过该条件。
 	Transform(fn TransformFunc) (Selector, error)
 
-	// Requirements converts this interface to Requirements to expose
-	// more detailed selection information.
+	// Requirements 将选择器展开为 Requirements，向调用方暴露更详细的条件信息。
 	Requirements() Requirements
 
-	// String returns a human readable string that represents this selector.
+	// String 返回表示当前选择器的可读字符串。
 	String() string
 
-	// Make a deep copy of the selector.
+	// DeepCopySelector 返回当前选择器的深拷贝。
 	DeepCopySelector() Selector
 }
 
@@ -72,12 +67,12 @@ func (n nothingSelector) RequiresExactMatch(field string) (value string, found b
 }
 func (n nothingSelector) Transform(fn TransformFunc) (Selector, error) { return n, nil }
 
-// Nothing returns a selector that matches no fields
+// Nothing 返回一个永远无法匹配任何字段集合的选择器。
 func Nothing() Selector {
 	return nothingSelector{}
 }
 
-// Everything returns a selector that matches all fields.
+// Everything 返回一个匹配所有字段集合的选择器。
 //
 // 空 andTerm 恒真，因此直接复用它表示“无条件”，无需额外类型。
 func Everything() Selector {
@@ -278,8 +273,7 @@ func (t andTerm) DeepCopySelector() Selector {
 	return andTerm(out)
 }
 
-// SelectorFromSet returns a Selector which will match exactly the given Set. A
-// nil Set is considered equivalent to Everything().
+// SelectorFromSet 创建一个精确匹配给定 Set 的选择器；nil Set 与 Everything() 等价。
 //
 // 单个条件返回原子类型而不是 andTerm，避免不必要的间接层；注意 map 迭代
 // 顺序随机，但 String() 输出顺序因此不保证稳定。
@@ -297,21 +291,21 @@ func SelectorFromSet(ls Set) Selector {
 	return andTerm(items)
 }
 
-// valueEscaper prefixes \,= characters with a backslash
+// valueEscaper 在反斜杠、逗号和等号前添加反斜杠进行转义。
 var valueEscaper = strings.NewReplacer(
-	// escape \ characters
+	// 先转义反斜杠字符。
 	`\`, `\\`,
-	// then escape , and = characters to allow unambiguous parsing of the value in a fieldSelector
+	// 再转义逗号和等号，确保字段选择器中的值能够被无歧义地解析。
 	`,`, `\,`,
 	`=`, `\=`,
 )
 
-// EscapeValue escapes an arbitrary literal string for use as a fieldSelector value
+// EscapeValue 将任意字面字符串转义为可安全用作字段选择器值的形式。
 func EscapeValue(s string) string {
 	return valueEscaper.Replace(s)
 }
 
-// InvalidEscapeSequence indicates an error occurred unescaping a field selector
+// InvalidEscapeSequence 表示反解字段选择器时遇到了非法转义序列。
 //
 // sequence 保存原始的两字符转义（如 `\x`），便于错误信息定位。
 type InvalidEscapeSequence struct {
@@ -322,7 +316,7 @@ func (i InvalidEscapeSequence) Error() string {
 	return fmt.Sprintf("invalid field selector: invalid escape sequence: %s", i.sequence)
 }
 
-// UnescapedRune indicates an error occurred unescaping a field selector
+// UnescapedRune 表示反解字段选择器时遇到了未转义的特殊字符。
 //
 // 出现在值的字面量中的 `,` 或 `=` 未转义时触发。
 type UnescapedRune struct {
@@ -333,13 +327,13 @@ func (i UnescapedRune) Error() string {
 	return fmt.Sprintf("invalid field selector: unescaped character in value: %v", i.r)
 }
 
-// UnescapeValue unescapes a fieldSelector value and returns the original literal value.
-// May return the original string if it contains no escaped or special characters.
+// UnescapeValue 反解字段选择器中的值并返回原始字面字符串。
+// 如果字符串不包含转义或特殊字符，可能直接返回原字符串而不分配新内存。
 //
 // 只反解 `\\`、`\,`、`\=` 三种转义；其余转义序列报错而不是原样保留，
 // 避免同一输入存在多种解释。快速路径避免无特殊字符时的内存分配。
 func UnescapeValue(s string) (string, error) {
-	// if there's no escaping or special characters, just return to avoid allocation
+	// 没有转义或特殊字符时直接返回，避免不必要的内存分配。
 	if !strings.ContainsAny(s, `\,=`) {
 		return s, nil
 	}
@@ -350,10 +344,10 @@ func UnescapeValue(s string) (string, error) {
 		if inSlash {
 			switch c {
 			case '\\', ',', '=':
-				// omit the \ for recognized escape sequences
+				// 对于合法转义序列，去掉转义用的反斜杠。
 				v.WriteRune(c)
 			default:
-				// error on unrecognized escape sequences
+				// 遇到不支持的转义序列时返回错误。
 				return "", InvalidEscapeSequence{sequence: string([]rune{'\\', c})}
 			}
 			inSlash = false
@@ -364,14 +358,14 @@ func UnescapeValue(s string) (string, error) {
 		case '\\':
 			inSlash = true
 		case ',', '=':
-			// unescaped , and = characters are not allowed in field selector values
+			// 字段选择器的值中不允许出现未转义的逗号或等号。
 			return "", UnescapedRune{r: c}
 		default:
 			v.WriteRune(c)
 		}
 	}
 
-	// Ending with a single backslash is an invalid sequence
+	// 以单个反斜杠结尾表示转义不完整，属于非法序列。
 	if inSlash {
 		return "", InvalidEscapeSequence{sequence: "\\"}
 	}
@@ -379,8 +373,7 @@ func UnescapeValue(s string) (string, error) {
 	return v.String(), nil
 }
 
-// ParseSelectorOrDie takes a string representing a selector and returns an
-// object suitable for matching, or panic when an error occur.
+// ParseSelectorOrDie 将选择器字符串解析为可用于匹配的对象；解析失败时直接 panic。
 func ParseSelectorOrDie(s string) Selector {
 	selector, err := ParseSelector(s)
 	if err != nil {
@@ -389,8 +382,7 @@ func ParseSelectorOrDie(s string) Selector {
 	return selector
 }
 
-// ParseSelector takes a string representing a selector and returns an
-// object suitable for matching, or an error.
+// ParseSelector 将选择器字符串解析为可用于匹配的对象；解析失败时返回错误。
 //
 // 使用恒等变换解析，语法为 `field<op>value`，多个条件以逗号分隔且默认
 // 按 AND 组合。
@@ -401,19 +393,19 @@ func ParseSelector(selector string) (Selector, error) {
 		})
 }
 
-// ParseAndTransformSelector parses the selector and runs them through the given TransformFunc.
+// ParseAndTransformSelector 解析选择器，并对解析出的每个条件应用指定的 TransformFunc。
 func ParseAndTransformSelector(selector string, fn TransformFunc) (Selector, error) {
 	return parseSelector(selector, fn)
 }
 
-// TransformFunc transforms selectors.
+// TransformFunc 定义字段选择器条件的转换函数。
 //
 // 允许把字段名/值映射为内部表示（例如把标签键做别名转换），返回空串表示
 // 该条件应被删除。
 type TransformFunc func(field, value string) (newField, newValue string, err error)
 
-// splitTerms returns the comma-separated terms contained in the given fieldSelector.
-// Backslash-escaped commas are treated as data instead of delimiters, and are included in the returned terms, with the leading backslash preserved.
+// splitTerms 将字段选择器按逗号拆分为多个条件。
+// 由反斜杠转义的逗号属于值本身，不作为分隔符；返回的片段会保留该反斜杠。
 //
 // 注意：函数只识别 `\,`，不校验其他转义；非法转义留给后续 UnescapeValue
 // 报错，以便错误信息更精确。
@@ -448,14 +440,13 @@ const (
 	equalOperator       = "="
 )
 
-// termOperators holds the recognized operators supported in fieldSelectors.
-// doubleEqualOperator and equal are equivalent, but doubleEqualOperator is checked first
-// to avoid leaving a leading = character on the rhs value.
+// termOperators 保存字段选择器支持的比较操作符。
+// == 与 = 语义相同，但必须先检查 ==，否则右侧值会残留一个前导等号。
 var termOperators = []string{notEqualOperator, doubleEqualOperator, equalOperator}
 
-// splitTerm returns the lhs, operator, and rhs parsed from the given term, along with an indicator of whether the parse was successful.
-// no escaping of special characters is supported in the lhs value, so the first occurrence of a recognized operator is used as the split point.
-// the literal rhs is returned, and the caller is responsible for applying any desired unescaping.
+// splitTerm 从单个条件中解析左操作数、操作符和右操作数，并返回解析是否成功。
+// 左操作数不支持特殊字符转义，因此以遇到的第一个合法操作符作为切分位置；
+// 右操作数按原样返回，由调用方决定是否执行反转义。
 //
 // 逐字符扫描以正确处理 `x!=y` 与 `x==y`：`=` 必须在 `!=`/`==` 之后
 // 检查，否则会在 rhs 上留下前导 `=`。
@@ -507,19 +498,17 @@ func parseSelector(selector string, fn TransformFunc) (Selector, error) {
 	return andTerm(items).Transform(fn)
 }
 
-// OneTermEqualSelector returns an object that matches objects where one field/field equals one value.
-// Cannot return an error.
+// OneTermEqualSelector 创建一个选择器，用于匹配指定字段等于给定值的对象。该构造过程不会返回错误。
 func OneTermEqualSelector(k, v string) Selector {
 	return &hasTerm{field: k, value: v}
 }
 
-// OneTermNotEqualSelector returns an object that matches objects where one field/field does not equal one value.
-// Cannot return an error.
+// OneTermNotEqualSelector 创建一个选择器，用于匹配指定字段不等于给定值的对象。该构造过程不会返回错误。
 func OneTermNotEqualSelector(k, v string) Selector {
 	return &notHasTerm{field: k, value: v}
 }
 
-// AndSelectors creates a selector that is the logical AND of all the given selectors
+// AndSelectors 创建一个选择器，其匹配结果是所有输入选择器的逻辑与。
 //
 // 不做任何归一化：传入空列表会得到恒真的 Everything()。
 func AndSelectors(selectors ...Selector) Selector {

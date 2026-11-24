@@ -26,6 +26,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
+// TestSelectableFieldLabelConversions 验证 Secret 的 API 字段标签到内部 FieldSelector 路径的转换，尤其是 type 字段。
 func TestSelectableFieldLabelConversions(t *testing.T) {
 	apitesting.TestSelectableFieldLabelConversionsOfKind(t,
 		"v1",

@@ -58,12 +58,14 @@ import (
 
 const PostStartHookName = "rbac/bootstrap-roles"
 
+// RESTStorageProvider 装配 RBAC API Group，并持有用于 Role/Binding 防提权检查的 authorizer。
 type RESTStorageProvider struct {
 	Authorizer authorizer.UnconditionalAuthorizer
 }
 
 var _ genericapiserver.PostStartHookProvider = RESTStorageProvider{}
 
+// NewRESTStorage 创建 rbac.authorization.k8s.io APIGroupInfo，并按资源启用配置装配 v1 存储和启动后 Bootstrap RBAC Hook。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(rbac.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
@@ -78,6 +80,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// storage 创建四种基础 Store 和统一 RuleResolver，再用 policybased Storage 包装，确保所有 RBAC 写入都经过防提权检查。
 func (p RESTStorageProvider) storage(version schema.GroupVersion, apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -128,6 +131,7 @@ func (p RESTStorageProvider) storage(version schema.GroupVersion, apiResourceCon
 	return storage, nil
 }
 
+// PostStartHook 安排 API Server 启动后对账内置 RBAC 策略，确保默认控制器权限和管理员绑定可用。
 func (p RESTStorageProvider) PostStartHook() (string, genericapiserver.PostStartHookFunc, error) {
 	policy := &PolicyData{
 		ClusterRoles:               append(bootstrappolicy.ClusterRoles(), bootstrappolicy.ControllerRoles()...),
@@ -159,6 +163,7 @@ func retryOnConflictOrServiceUnavailable(backoff wait.Backoff, fn func() error) 
 	return retry.OnError(backoff, isConflictOrServiceUnavailable, fn)
 }
 
+// EnsureRBACPolicy 周期性等待 loopback 客户端和 etcd 可用，再执行引导角色/绑定对账；初始化超时会阻止 API Server 正常启动。
 func (p *PolicyData) EnsureRBACPolicy() genericapiserver.PostStartHookFunc {
 	return func(hookContext genericapiserver.PostStartHookContext) error {
 		// initializing roles is really important.  On some e2e runs, we've seen cases where etcd is down when the server
@@ -180,6 +185,7 @@ func (p *PolicyData) EnsureRBACPolicy() genericapiserver.PostStartHookFunc {
 	}
 }
 
+// ensureRBACPolicy 先确认 RBAC API 可读，再迁移旧聚合角色/绑定，最后逐项对账 ClusterRole、ClusterRoleBinding、Role 和 RoleBinding。
 func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err error) {
 	failedReconciliation := false
 	// Make sure etcd is responding before we start reconciling
@@ -345,6 +351,7 @@ func (p RESTStorageProvider) GroupName() string {
 
 // primeAggregatedClusterRoles copies roles that have transitioned to aggregated roles and may need to pick up changes
 // that were done to the legacy roles.
+// primeAggregatedClusterRoles 在新聚合 ClusterRole 不存在时把旧角色复制到新名称，避免升级时丢失用户自定义规则。
 func primeAggregatedClusterRoles(clusterRolesToAggregate map[string]string, clusterRoleClient rbacv1client.ClusterRolesGetter) error {
 	for oldName, newName := range clusterRolesToAggregate {
 		_, err := clusterRoleClient.ClusterRoles().Get(context.TODO(), newName, metav1.GetOptions{})
@@ -380,6 +387,7 @@ func primeAggregatedClusterRoles(clusterRolesToAggregate map[string]string, clus
 // primeSplitClusterRoleBindings ensures the existence of target ClusterRoleBindings
 // by copying Subjects, Annotations, and Labels from the specified source
 // ClusterRoleBinding, if present.
+// primeSplitClusterRoleBindings 为拆分后的目标绑定复制旧对象的 Subjects、Labels 和 Annotations，保留升级前自定义主体。
 func primeSplitClusterRoleBindings(clusterRoleBindingToSplit map[string]rbacapiv1.ClusterRoleBinding, clusterRoleBindingClient rbacv1client.ClusterRoleBindingsGetter) error {
 	for existingBindingName, clusterRoleBindingToCreate := range clusterRoleBindingToSplit {
 		// If source ClusterRoleBinding does not exist, do nothing.

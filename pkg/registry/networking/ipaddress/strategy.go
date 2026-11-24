@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/networking/validation"
 )
 
-// ipAddressStrategy implements verification logic for Replication.
+// ipAddressStrategy 定义 IPAddress 的集群级 REST 策略；对象名就是 IP 字符串，因此 NameGenerator 必须原样返回 base。
 type ipAddressStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -37,6 +37,7 @@ type ipAddressStrategy struct {
 // noopNameGenerator does not generate names, it just returns the base.
 type noopNameGenerator struct{}
 
+// IPAddress 不能追加随机后缀，否则会改变其所代表的真实 IP；生成名接口必须直接返回原地址。
 func (noopNameGenerator) GenerateName(base string) string {
 	return base
 }
@@ -56,6 +57,7 @@ func (ipAddressStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears the status of an IPAddress before creation.
+// 创建阶段不补默认值或改名；IPAddress 的地址和 ParentRef 由分配控制器按服务地址池规则写入。
 func (ipAddressStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	_ = obj.(*networking.IPAddress)
 
@@ -70,6 +72,7 @@ func (ipAddressStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 }
 
 // Validate validates a new IPAddress.
+// Validate 检查对象名称是否为合法 IP 地址，以及 ParentRef/地址族等字段是否符合 API 约束。
 func (ipAddressStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ipAddress := obj.(*networking.IPAddress)
 	return validation.ValidateIPAddress(ipAddress)
@@ -85,6 +88,7 @@ func (ipAddressStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// IPAddress 的地址身份不可随意更换；更新时既执行完整对象校验，也执行旧新对象之间的不可变字段校验。
 func (ipAddressStrategy) ValidateUpdate(ctx context.Context, new, old runtime.Object) field.ErrorList {
 	newIPAddress := new.(*networking.IPAddress)
 	oldIPAddress := old.(*networking.IPAddress)

@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd 并构造 Namespace RESTStorage，供主资源删除及子资源测试复用。
 func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{StorageConfig: etcdStorage, Decorator: generic.UndecoratedStorage, DeleteCollectionWorkers: 1, ResourcePrefix: "namespaces"}
@@ -95,6 +96,7 @@ func TestCreateSetsFields(t *testing.T) {
 	}
 }
 
+// TestDelete 验证 Namespace 删除首先进入 Terminating 状态，并受 UID 前置条件及 Finalizer 阻止。
 func TestDelete(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -146,6 +148,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestDeleteNamespaceWithIncompleteFinalizers 验证 Finalizer 尚未清空时重复 DELETE 不会绕过命名空间内容清理流程。
 func TestDeleteNamespaceWithIncompleteFinalizers(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -288,6 +291,7 @@ func TestUpdateDeletingNamespaceWithCompleteFinalizers(t *testing.T) {
 	}
 }
 
+// TestFinalizeDeletingNamespaceWithCompleteFinalizers 验证最后一个 Finalizer 移除后，Namespace 能完成最终删除。
 func TestFinalizeDeletingNamespaceWithCompleteFinalizers(t *testing.T) {
 	// get finalize storage
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")

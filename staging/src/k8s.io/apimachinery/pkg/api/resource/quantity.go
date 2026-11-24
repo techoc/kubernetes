@@ -285,7 +285,7 @@ Suffix:
 	return
 }
 
-// ParseQuantity turns str into a Quantity, or returns an error.
+// ParseQuantity 将字符串解析为 Quantity。它先拆分数值与单位后缀，再选择 int64 快速路径或 inf.Dec 任意精度路径；格式不合法时返回错误。
 func ParseQuantity(str string) (Quantity, error) {
 	if len(str) == 0 {
 		return Quantity{}, ErrFormatWrong
@@ -448,7 +448,7 @@ func (_ Quantity) OpenAPISchemaFormat() string { return "" }
 // the OpenAPI v3 spec of this type.
 func (Quantity) OpenAPIV3OneOfTypes() []string { return []string{"string", "number"} }
 
-// CanonicalizeBytes returns the canonical form of q and its suffix (see comment on Quantity).
+// CanonicalizeBytes 将 Quantity 转换为规范化的尾数字节和单位后缀，尽可能复用调用方传入的缓冲区。
 //
 // Note about BinarySI:
 //   - If q.Format is set to BinarySI and q.Amount represents a non-zero value between
@@ -497,7 +497,7 @@ func (q *Quantity) CanonicalizeBytes(out []byte) (result, suffix []byte) {
 	}
 }
 
-// AsApproximateFloat64 returns a float64 representation of the quantity which
+// AsApproximateFloat64 将 Quantity 转换为 float64，优先保证速度，因此可能损失精度。
 // may lose precision. If precision matter more than performance, see
 // AsFloat64Slow. If the value of the quantity is outside the range of a
 // float64 +Inf/-Inf will be returned.
@@ -522,7 +522,7 @@ func (q *Quantity) AsApproximateFloat64() float64 {
 	return base * math.Pow10(exponent)
 }
 
-// AsFloat64Slow returns a float64 representation of the quantity.  This is
+// AsFloat64Slow 使用任意精度中间计算后再转换为 float64，比 AsApproximateFloat64 更准确，但速度更慢。
 // more precise than AsApproximateFloat64 but significantly slower.  If the
 // value of the quantity is outside the range of a float64 +Inf/-Inf will be
 // returned.
@@ -554,7 +554,7 @@ func (q *Quantity) AsFloat64Slow() float64 {
 	return result
 }
 
-// AsInt64 returns a representation of the current value as an int64 if a fast conversion
+// AsInt64 尝试将当前 Quantity 无损转换为 int64；无法快速、精确表示时返回 false，调用方应改用 AsDec。
 // is possible. If false is returned, callers must use the inf.Dec form of this quantity.
 func (q *Quantity) AsInt64() (int64, bool) {
 	if q.d.Dec != nil {
@@ -563,7 +563,7 @@ func (q *Quantity) AsInt64() (int64, bool) {
 	return q.i.AsInt64()
 }
 
-// ToDec promotes the quantity in place to use an inf.Dec representation and returns itself.
+// ToDec 将 Quantity 原地提升为 inf.Dec 任意精度表示并返回自身。提升是单向的，避免 int64 与十进制两份数据不一致。
 func (q *Quantity) ToDec() *Quantity {
 	// Promotion is one-way: once inf.Dec is populated the int64 form is cleared
 	// so the two representations can never disagree.
@@ -574,7 +574,7 @@ func (q *Quantity) ToDec() *Quantity {
 	return q
 }
 
-// AsDec returns the quantity as represented by a scaled inf.Dec.
+// AsDec 返回当前 Quantity 的 inf.Dec 表示；如果当前仍是 int64 快速表示，会先原地提升为任意精度表示。
 // The receiver is promoted in place, which mutates q; this is safe because
 // Quantity is normally used through a pointer.
 func (q *Quantity) AsDec() *inf.Dec {
@@ -622,7 +622,7 @@ func (q *Quantity) AsScale(scale Scale) (CanonicalValue, bool) {
 	return q.i.AsScale(scale)
 }
 
-// RoundUp updates the quantity to the provided scale, ensuring that the value is at
+// RoundUp 将 Quantity 调整到指定 Scale，按远离零的方向取整，并更新内部数值与字符串缓存。
 // least 1. False is returned if the rounding operation resulted in a loss of precision.
 // Negative numbers are rounded away from zero (-9 scale 1 rounds to -10).
 func (q *Quantity) RoundUp(scale Scale) bool {
@@ -643,7 +643,7 @@ func (q *Quantity) RoundUp(scale Scale) bool {
 	return exact
 }
 
-// Add adds the provide y quantity to the current value. If the current value is zero,
+// Add 将 y 加到当前 Quantity 上。优先尝试 int64 快速路径；若任一操作数需要任意精度或发生溢出，则回退到 inf.Dec。
 // the format of the quantity will be updated to the format of y.
 func (q *Quantity) Add(y Quantity) {
 	// Any arithmetic invalidates the cached string.
@@ -663,7 +663,7 @@ func (q *Quantity) Add(y Quantity) {
 	q.ToDec().d.Dec.Add(q.d.Dec, y.AsDec())
 }
 
-// Sub subtracts the provided quantity from the current value in place. If the current
+// Sub 在原地从当前 Quantity 中减去 y；优先使用 int64 精确运算，无法完成时回退到 inf.Dec。
 // value is zero, the format of the quantity will be updated to the format of y.
 func (q *Quantity) Sub(y Quantity) {
 	q.s = ""
@@ -677,7 +677,7 @@ func (q *Quantity) Sub(y Quantity) {
 	q.ToDec().d.Dec.Sub(q.d.Dec, y.AsDec())
 }
 
-// Mul multiplies the provided y to the current value.
+// Mul 将当前 Quantity 乘以 y；返回值表示结果是否精确。优先使用 int64 快速路径，必要时提升为 inf.Dec。
 // It will return false if the result is inexact. Otherwise, it will return true.
 func (q *Quantity) Mul(y int64) bool {
 	q.s = ""
@@ -690,7 +690,7 @@ func (q *Quantity) Mul(y int64) bool {
 	return q.ToDec().d.Dec.Mul(q.d.Dec, inf.NewDec(y, inf.Scale(0))).UnscaledBig().IsInt64()
 }
 
-// Cmp returns 0 if the quantity is equal to y, -1 if the quantity is less than y, or 1 if the
+// Cmp 比较两个 Quantity：相等返回 0，小于返回 -1，大于返回 1。双方均为 int64 表示时走快速路径，否则使用任意精度比较。
 // quantity is greater than y.
 func (q *Quantity) Cmp(y Quantity) int {
 	// Compare in int64 space only when neither side has been promoted.
@@ -729,7 +729,7 @@ func (q Quantity) Equal(v Quantity) bool {
 // of most Quantity values.
 const int64QuantityExpectedBytes = 18
 
-// String formats the Quantity as a string, caching the result if not calculated.
+// String 返回 Quantity 的规范化字符串，并缓存计算结果；任何修改数值的操作都必须清除此缓存。
 // String is an expensive operation and caching this result significantly reduces the cost of
 // normal parse / marshal operations on Quantity.
 func (q *Quantity) String() string {
@@ -788,7 +788,7 @@ func (q Quantity) ToUnstructured() interface{} {
 	return q.String()
 }
 
-// UnmarshalJSON implements the json.Unmarshaller interface.
+// UnmarshalJSON 从 JSON 字符串或兼容的未加引号数值中解析 Quantity；null 会将接收者重置为零值。
 // TODO: Remove support for leading/trailing whitespace
 func (q *Quantity) UnmarshalJSON(value []byte) error {
 	l := len(value)
@@ -885,7 +885,7 @@ func (q *Quantity) MilliValue() int64 {
 	return q.ScaledValue(Milli)
 }
 
-// ScaledValue returns the value of ceil(q / 10^scale).
+// ScaledValue 返回向上取整后的 q / 10^scale。该结果可能超出 int64 范围，调用方需要结合业务范围判断。
 // For example, NewQuantity(1, DecimalSI).ScaledValue(Milli) returns 1000.
 // This could overflow an int64.
 // To detect overflow, call Value() first and verify the expected magnitude.

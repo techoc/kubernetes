@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package limitrange provides Registry interface and it's REST
 // implementation for storing LimitRange api objects.
+// Package limitrange 提供 LimitRange 的 REST 策略、资源默认/上下限校验和持久化入口。
 package limitrange

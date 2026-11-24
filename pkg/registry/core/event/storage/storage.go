@@ -28,12 +28,13 @@ import (
 	"k8s.io/kubernetes/pkg/registry/core/event"
 )
 
-// REST implements a RESTStorage for events.
+// REST 将 Event 通用 CRUD Store 暴露为 API Server RESTStorage，并为记录设置统一 TTL。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against events.
+// NewREST 创建 Event Store，使用 Matcher 做筛选，并通过 TTLFunc 让后端按配置时长自动清理旧事件。
 func NewREST(optsGetter generic.RESTOptionsGetter, ttl uint64) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:       func() runtime.Object { return &api.Event{} },

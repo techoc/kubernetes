@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本测试文件验证 poddisruptionbudget 的 REST 策略或存储行为，包括字段校验、状态隔离和更新约束。
 package poddisruptionbudget
 
 import (

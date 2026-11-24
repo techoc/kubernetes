@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 csistoragecapacity 的 REST Strategy，定义作用域、写入前字段处理、校验、告警以及更新规则。
 package csistoragecapacity
 
 import (
@@ -40,6 +41,7 @@ type csiStorageCapacityStrategy struct {
 // CSIStorageCapacity objects via the REST API.
 var Strategy = csiStorageCapacityStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
+// NamespaceScoped 声明该资源是否属于命名空间级别；返回 false 表示对象通过集群级 URL 管理，返回 true 表示 URL 中必须包含 namespace。
 func (csiStorageCapacityStrategy) NamespaceScoped() bool {
 	return true
 }
@@ -48,6 +50,7 @@ func (csiStorageCapacityStrategy) NamespaceScoped() bool {
 func (csiStorageCapacityStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
+// Validate 执行创建请求的业务合法性校验，将字段路径和错误原因整理为 field.ErrorList；返回非空错误时 API 请求会被拒绝。
 func (csiStorageCapacityStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	csiStorageCapacity := obj.(*storage.CSIStorageCapacity)
 	opts := validation.CSIStorageCapacityValidateOptions{
@@ -66,6 +69,7 @@ func (csiStorageCapacityStrategy) WarningsOnCreate(ctx context.Context, obj runt
 func (csiStorageCapacityStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 决定 Update 请求在对象不存在时是否允许退化为创建；false 表示必须先显式 Create。
 func (csiStorageCapacityStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -74,6 +78,7 @@ func (csiStorageCapacityStrategy) AllowCreateOnUpdate(ctx context.Context) bool 
 func (csiStorageCapacityStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
+// ValidateUpdate 对更新后的对象及其旧版本进行联合校验，检查字段合法性、不可变字段和跨版本兼容约束。
 func (csiStorageCapacityStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newCSIStorageCapacityObj := obj.(*storage.CSIStorageCapacity)
 	oldCSIStorageCapacityObj := old.(*storage.CSIStorageCapacity)
@@ -89,10 +94,12 @@ func (csiStorageCapacityStrategy) WarningsOnUpdate(ctx context.Context, obj, old
 	return storageutil.GetWarningsForCSIStorageCapacity(obj.(*storage.CSIStorageCapacity))
 }
 
+// AllowUnconditionalUpdate 声明是否允许不携带 ResourceVersion 前置条件的更新；true 表示允许无条件更新，false 要求并发版本检查。
 func (csiStorageCapacityStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
+// hasInvalidLabelValueInLabelSelector 检查旧 CSIStorageCapacity 的 NodeTopology 是否包含当前规则下无效的 Label 值，用于判断更新时是否需要兼容历史数据。
 func hasInvalidLabelValueInLabelSelector(capacity *storage.CSIStorageCapacity) bool {
 	labelSelectorValidationOptions := metav1validation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: false}
 	return len(metav1validation.ValidateLabelSelector(capacity.NodeTopology, labelSelectorValidationOptions, nil)) > 0

@@ -24,6 +24,7 @@ import (
 	rbacv1helpers "k8s.io/kubernetes/pkg/apis/rbac/v1"
 )
 
+// ConfirmNoEscalationInternal 将内部 PolicyRule 转成公开 v1 类型，再复用通用权限覆盖算法检查是否超出当前用户权限。
 func ConfirmNoEscalationInternal(ctx context.Context, ruleResolver AuthorizationRuleResolver, inRules []rbac.PolicyRule) error {
 	rules := []rbacv1.PolicyRule{}
 	for i := range inRules {

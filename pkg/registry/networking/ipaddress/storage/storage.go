@@ -34,6 +34,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against endpoint slices.
+// NewREST 创建集群级 IPAddress Store；它为 Service IP 分配器提供受 API 管理的地址所有权记录。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &networking.IPAddress{} },

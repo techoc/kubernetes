@@ -16,6 +16,7 @@ limitations under the License.
 
 package allocator
 
+// Interface 定义线程安全的整数资源池：支持指定值/自动分配、释放、遍历、查询和剩余容量。
 // Interface manages the allocation of items out of a range. Interface
 // should be threadsafe.
 type Interface interface {
@@ -32,6 +33,7 @@ type Interface interface {
 	Destroy()
 }
 
+// Snapshottable 在普通分配接口上增加快照导出与恢复能力，使内存位图可持久化并在重启后重建。
 // Snapshottable is an Interface that can be snapshotted and restored. Snapshottable
 // should be threadsafe.
 type Snapshottable interface {

@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestAllocate 验证指定偏移量的首次分配成功、重复分配返回 false，以及资源释放后可以再次申请。
 func TestAllocate(t *testing.T) {
 	testCases := []struct {
 		name      string

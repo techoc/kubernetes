@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac/bootstrappolicy"
 )
 
+// BenchmarkEnsureRBACPolicy 测量启动阶段对账内置 Role/RoleBinding 集合的性能成本。
 func BenchmarkEnsureRBACPolicy(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		var policy = &PolicyData{

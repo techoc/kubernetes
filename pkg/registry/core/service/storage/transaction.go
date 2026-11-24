@@ -31,12 +31,14 @@ type transaction interface {
 // metaTransaction is a collection of transactions.
 type metaTransaction []transaction
 
+// Commit 将组合事务逐个提交；具体子事务决定何时真正释放延迟回收的资源。
 func (mt metaTransaction) Commit() {
 	for _, t := range mt {
 		t.Commit()
 	}
 }
 
+// Revert 将组合事务逐个撤销，通常释放在持久化失败前新预留的资源。
 func (mt metaTransaction) Revert() {
 	for _, t := range mt {
 		t.Revert()
@@ -49,6 +51,7 @@ type callbackTransaction struct {
 	revert func()
 }
 
+// Commit 执行提交回调；nil 回调表示该事务在该阶段没有额外工作。
 func (cb callbackTransaction) Commit() {
 	if cb.commit != nil {
 		cb.commit()

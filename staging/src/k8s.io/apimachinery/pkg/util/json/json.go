@@ -24,33 +24,32 @@ import (
 	kjson "sigs.k8s.io/json"
 )
 
-// NewEncoder delegates to json.NewEncoder
-// It is only here so this package can be a drop-in for common encoding/json uses
+// NewEncoder 转发到标准库 json.NewEncoder。保留该包装函数是为了让本包可直接替代
+// 常见的 encoding/json 用法，调用方无需修改编码器创建逻辑。
 // 仅做转发，使调用方可以整体切换到本包而无需改动编码代码。
 func NewEncoder(w io.Writer) *json.Encoder {
 	return json.NewEncoder(w)
 }
 
-// Marshal delegates to json.Marshal
-// It is only here so this package can be a drop-in for common encoding/json uses
+// Marshal 转发到标准库 json.Marshal。保留该包装函数是为了让本包可直接替代
+// 常见的 encoding/json 用法。
 func Marshal(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-// limit recursive depth to prevent stack overflow errors
+// 限制递归深度，防止深度异常的嵌套 JSON 导致栈溢出。
 // maxDepth 限制递归遍历深度，防止恶意嵌套 JSON 导致栈溢出。
 const maxDepth = 10000
 
-// Unmarshal unmarshals the given data.
-// Object keys are case-sensitive.
-// Numbers decoded into interface{} fields are converted to int64 or float64.
+// Unmarshal 将给定 JSON 数据解码到 v。对象键区分大小写；解码到 interface{} 的数字
+// 会转换为 int64 或 float64，而不是默认统一转换为 float64。
 // 与标准库不同，这里键名大小写敏感且尽量保留整数精度，这是 API 兼容性要求。
 func Unmarshal(data []byte, v interface{}) error {
 	return kjson.UnmarshalCaseSensitivePreserveInts(data, v)
 }
 
-// ConvertInterfaceNumbers converts any json.Number values to int64 or float64.
-// Values which are map[string]interface{} or []interface{} are recursively visited
+// ConvertInterfaceNumbers 将 v 中的 json.Number 转换为 int64 或 float64。
+// 对 map[string]interface{} 和 []interface{} 会递归遍历其内容。
 // 对传入值的顶层做一次转换；depth 由调用方传入，用于限制递归深度。
 func ConvertInterfaceNumbers(v *interface{}, depth int) error {
 	var err error
@@ -65,8 +64,8 @@ func ConvertInterfaceNumbers(v *interface{}, depth int) error {
 	return err
 }
 
-// ConvertMapNumbers traverses the map, converting any json.Number values to int64 or float64.
-// values which are map[string]interface{} or []interface{} are recursively visited
+// ConvertMapNumbers 遍历 map，将其中的 json.Number 转换为 int64 或 float64。
+// 嵌套 map 和 slice 会递归处理；转换结果直接写回原 map。
 // 遍历 map 并就地替换 json.Number；遇到嵌套容器时递归，深度超限即报错。
 func ConvertMapNumbers(m map[string]interface{}, depth int) error {
 	if depth > maxDepth {
@@ -90,8 +89,8 @@ func ConvertMapNumbers(m map[string]interface{}, depth int) error {
 	return nil
 }
 
-// ConvertSliceNumbers traverses the slice, converting any json.Number values to int64 or float64.
-// values which are map[string]interface{} or []interface{} are recursively visited
+// ConvertSliceNumbers 遍历 slice，将其中的 json.Number 转换为 int64 或 float64。
+// 嵌套 map 和 slice 会递归处理；转换结果直接写回原 slice。
 // 遍历切片并就地替换 json.Number；深度限制与 ConvertMapNumbers 一致。
 func ConvertSliceNumbers(s []interface{}, depth int) error {
 	if depth > maxDepth {
@@ -115,14 +114,14 @@ func ConvertSliceNumbers(s []interface{}, depth int) error {
 	return nil
 }
 
-// convertNumber converts a json.Number to an int64 or float64, or returns an error
+// convertNumber 优先将 json.Number 转换为 int64，以保留整数精度；若不适合 int64，
+// 则尝试转换为 float64，转换失败时返回错误。
 // 优先转 int64 以保留整数精度，失败（含溢出）时退回 float64。
 func convertNumber(n json.Number) (interface{}, error) {
-	// Attempt to convert to an int64 first
+	// 优先尝试 int64，避免整数被转成 float64 后丢失精度。
 	if i, err := n.Int64(); err == nil {
 		return i, nil
 	}
-	// Return a float64 (default json.Decode() behavior)
-	// An overflow will return an error
+	// 回退为 float64，与标准 JSON 解码器的默认数字行为一致；超出 float64 范围时返回错误。
 	return n.Float64()
 }

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// If you make changes to this file, you should also make the corresponding change in ReplicaSet.
+// ReplicationController 与 ReplicaSet 的 Storage/Scale 适配器有共通逻辑；修改时应同步检查 ReplicaSet 对应实现。
 
 package storage
 
@@ -46,7 +46,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// ControllerStorage includes dummy storage for Replication Controllers and for Scale subresource.
+// ControllerStorage 聚合 ReplicationController 主资源、Status 和 Scale 三个 REST 入口。
 type ControllerStorage struct {
 	Controller *REST
 	Status     *StatusREST
@@ -54,6 +54,7 @@ type ControllerStorage struct {
 }
 
 // ReplicasPathMappings returns the mappings between each group version and a replicas path
+// ReplicasPathMappings 告诉 ManagedFields：core/v1 Scale 子资源的 replicas 字段映射回父对象 spec.replicas。
 func ReplicasPathMappings() managedfields.ResourcePathMappings {
 	return replicasPathInReplicationController
 }
@@ -63,6 +64,7 @@ var replicasPathInReplicationController = managedfields.ResourcePathMappings{
 	schema.GroupVersion{Group: "", Version: "v1"}.String(): fieldpath.MakePathOrDie("spec", "replicas"),
 }
 
+// NewStorage 创建主资源与 Status Store，并让 ScaleREST 复用同一底层 Store，保证三个入口访问同一对象。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (ControllerStorage, error) {
 	controllerREST, statusREST, err := NewREST(optsGetter)
 	if err != nil {
@@ -81,6 +83,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against replication controllers.
+// NewREST 配置 ReplicationController 的对象类型、字段筛选器和主资源策略，再复制 Store 并替换 StatusStrategy。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.ReplicationController{} },
@@ -145,6 +148,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Status 子资源禁止 update-on-create；其更新由独立 StatusStrategy 限制只能回写控制器状态。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.
@@ -168,6 +172,7 @@ type ScaleREST struct {
 var _ = rest.Patcher(&ScaleREST{})
 var _ = rest.GroupVersionKindProvider(&ScaleREST{})
 
+// Scale 的 GVK 随父资源请求版本变化：旧 extensions/v1beta1 请求沿用对应版本，其余走 autoscaling/v1。
 func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.GroupVersionKind {
 	switch containingGV {
 	case extensionsv1beta1.SchemeGroupVersion:
@@ -188,6 +193,7 @@ func (r *ScaleREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
+// Get 先读取父 ReplicationController，再把 Spec.Replicas、Status.Replicas 和 Selector 投影成标准 autoscaling.Scale。
 func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	obj, err := r.store.Get(ctx, name, options)
 	if err != nil {
@@ -197,6 +203,7 @@ func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOpt
 	return scaleFromRC(rc), nil
 }
 
+// Update 将 Scale 请求包装成父资源更新，先完成 Scale 专属校验，最终只把副本数和字段所有权写回 ReplicationController。
 func (r *ScaleREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	obj, _, err := r.store.Update(
 		ctx,
@@ -235,6 +242,7 @@ func toScaleUpdateValidation(f rest.ValidateObjectUpdateFunc) rest.ValidateObjec
 }
 
 // scaleFromRC returns a scale subresource for a replication controller.
+// scaleFromRC 将父对象元数据、副本期望值/当前值和 Selector 映射为 autoscaling.Scale。
 func scaleFromRC(rc *api.ReplicationController) *autoscaling.Scale {
 	return &autoscaling.Scale{
 		ObjectMeta: metav1.ObjectMeta{
@@ -254,7 +262,7 @@ func scaleFromRC(rc *api.ReplicationController) *autoscaling.Scale {
 	}
 }
 
-// scaleUpdatedObjectInfo transforms existing replication controller -> existing scale -> new scale -> new replication controller
+// scaleUpdatedObjectInfo 负责 ReplicationController → Scale → 更新后的 Scale → ReplicationController 双向适配，并同步 ManagedFields。
 type scaleUpdatedObjectInfo struct {
 	name           string
 	reqObjInfo     rest.UpdatedObjectInfo
@@ -265,6 +273,7 @@ func (i *scaleUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
 	return i.reqObjInfo.Preconditions()
 }
 
+// UpdatedObject 在副本数更新前先构造 Scale 视图、转换子资源 ManagedFields、执行 Scale 校验，再把变更合并回父对象。
 func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runtime.Object) (runtime.Object, error) {
 	replicationcontroller, ok := oldObj.DeepCopyObject().(*api.ReplicationController)
 	if !ok {

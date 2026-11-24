@@ -90,6 +90,7 @@ func TestEmpty(t *testing.T) {
 }
 
 // TestAllocate fails to allocate ports out of the valid port range
+// TestAllocate 验证 NodePort 分配器的指定端口/自动端口分配会持久化到共享 RangeAllocation 快照。
 func TestAllocate(t *testing.T) {
 	_, storage, _, si, destroyFunc := newStorage(t)
 	defer destroyFunc()
@@ -143,6 +144,7 @@ func TestAllocate(t *testing.T) {
 }
 
 // TestReallocate test that we can not allocate a port already allocated until it is released
+// TestReallocate 验证本地端口池与 etcd 快照版本不一致时，会先恢复快照再执行下一次分配。
 func TestReallocate(t *testing.T) {
 	_, storage, backing, si, destroyFunc := newStorage(t)
 	defer destroyFunc()

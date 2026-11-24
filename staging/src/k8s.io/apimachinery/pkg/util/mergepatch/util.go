@@ -38,7 +38,7 @@ func RequireKeyUnchanged(key string) PreconditionFunc {
 			return true
 		}
 
-		// The presence of key means that its value has been changed, so the test fails.
+		// patch 中出现该 key 就表示其值发生了变化，因此前置条件不满足。
 		// key 存在即意味着其值被改动，因此判定失败。
 		_, ok = patchMap[key]
 		return !ok

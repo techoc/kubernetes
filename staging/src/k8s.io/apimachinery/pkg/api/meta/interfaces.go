@@ -30,13 +30,13 @@ type ListMetaAccessor interface {
 	GetListMeta() List
 }
 
-// List 让你可以从任意 versioned 或 internal API 对象上操作列表元数据。
+// List 让调用方可以统一读写任意外部版本或内部 API 对象的列表元数据。
 // 对不支持某字段的对象执行读取或写入是 no-op，并返回默认值。
 //
 // 这里用类型别名的方式复用 metav1.ListInterface，避免两处接口定义漂移。
 type List metav1.ListInterface
 
-// Type 暴露 versioned 或 internal API 对象的 type 与 apiVersion。
+// Type 暴露外部版本或内部 API 对象的 Kind 与 APIVersion。
 type Type metav1.Type
 
 // MetadataAccessor 让你可以从任意 versioned 或 internal API 对象上操作对象
@@ -114,12 +114,12 @@ type RESTMapping struct {
 // 操作对象的接口。它主要面向 kubernetes 兼容 REST API 的使用者，规范见
 // docs/devel/api-conventions.md。
 //
-// Kubernetes API 提供按 API group 划分的 versioned 资源与对象 kind；换言之
-// 不应假设 kind 和 resource 在 group 之间唯一。
+// Kubernetes API 按 API group 组织不同版本的资源与对象 Kind；同名 Kind 或资源可能存在于不同 group 中，
+// 因此不能假设 Kind 和 Resource 在整个集群范围内唯一。
 //
 // RESTMapperWithContext 是更好的替代方案，因为它支持上下文日志与取消。
 //
-// Contextual logging: Use RESTMapperWithContext instead.
+// 为支持上下文日志和取消，新代码应优先使用 RESTMapperWithContext。
 type RESTMapper interface {
 	// KindFor 接收一个部分限定的资源并返回唯一匹配；若存在多个匹配则报错。
 	KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error)
@@ -146,8 +146,8 @@ type RESTMapper interface {
 // RESTMapperWithContext 是 RESTMapper 的上下文感知版本，语义与 RESTMapper
 // 完全一致，但每个方法都接受 context 以支持上下文日志、取消与超时。
 //
-// Kubernetes API 提供按 API group 划分的 versioned 资源与对象 kind；换言之
-// 不应假设 kind 和 resource 在 group 之间唯一。
+// Kubernetes API 按 API group 组织不同版本的资源与对象 Kind；同名 Kind 或资源可能存在于不同 group 中，
+// 因此不能假设 Kind 和 Resource 在整个集群范围内唯一。
 type RESTMapperWithContext interface {
 	// KindForWithContext 接收一个部分限定的资源并返回唯一匹配；若存在多个匹配则报错。
 	KindForWithContext(ctx context.Context, resource schema.GroupVersionResource) (schema.GroupVersionKind, error)
@@ -220,7 +220,7 @@ func (m *restMapperWrapper) ResourceSingularizerWithContext(ctx context.Context,
 //
 // ResettableRESTMapperWithContext 是更好的替代方案，因为它支持上下文日志与取消。
 //
-// Contextual logging: Use ResettableRESTMapperWithContext instead.
+// 为支持上下文日志和取消，新代码应优先使用 ResettableRESTMapperWithContext。
 type ResettableRESTMapper interface {
 	RESTMapper
 	Reset()

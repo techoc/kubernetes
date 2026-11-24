@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// Test_metaTransaction 验证组合事务的 Commit/Revert 会按顺序调用每个子事务对应的回调。
 func Test_metaTransaction(t *testing.T) {
 	const initial = 10
 	var temp int

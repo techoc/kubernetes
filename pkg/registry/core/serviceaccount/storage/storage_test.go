@@ -93,6 +93,7 @@ func validNewServiceAccount(name string) *api.ServiceAccount {
 	}
 }
 
+// TestCreate 验证 ServiceAccount 主资源创建、引用字段清理和默认存储行为。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -111,6 +112,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestCreate_Token_SetsCredentialIDAuditAnnotation 验证启用 JTI 后，签发 Token 的凭据 ID 会写入 Audit Annotation。
 func TestCreate_Token_SetsCredentialIDAuditAnnotation(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

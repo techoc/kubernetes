@@ -26,6 +26,7 @@ import (
 	rbacv1helpers "k8s.io/kubernetes/pkg/apis/rbac/v1"
 )
 
+// TestCompactRules 验证相同 APIGroup/Resource/ResourceName 的简单权限规则会合并 verbs，而复杂规则保持原样。
 func TestCompactRules(t *testing.T) {
 	testcases := map[string]struct {
 		Rules    []rbacv1.PolicyRule
@@ -145,6 +146,7 @@ func TestCompactRules(t *testing.T) {
 	}
 }
 
+// TestIsSimpleResourceRule 验证只有简单资源规则可以压缩，其余含多个资源/组或非资源 URL 的规则不参与合并。
 func TestIsSimpleResourceRule(t *testing.T) {
 	testcases := map[string]struct {
 		Rule     rbacv1.PolicyRule

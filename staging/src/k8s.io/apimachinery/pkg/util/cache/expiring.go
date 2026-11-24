@@ -24,13 +24,12 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// NewExpiring returns an initialized expiring cache.
+// NewExpiring 创建并返回一个使用系统时钟的过期缓存。
 func NewExpiring() *Expiring {
 	return NewExpiringWithClock(clock.RealClock{})
 }
 
-// NewExpiringWithClock is like NewExpiring but allows passing in a custom
-// clock for testing.
+// NewExpiringWithClock 与 NewExpiring 相同，但允许注入自定义时钟，便于测试时控制时间推进。
 func NewExpiringWithClock(clock clock.Clock) *Expiring {
 	return &Expiring{
 		clock: clock,
@@ -38,29 +37,23 @@ func NewExpiringWithClock(clock clock.Clock) *Expiring {
 	}
 }
 
-// Expiring is a map whose entries expire after a per-entry timeout.
+// Expiring 是一个带逐条 TTL 的缓存映射，每个条目按照自己的过期时间失效。
 type Expiring struct {
-	// AllowExpiredGet causes the expiration check to be skipped on Get.
-	// It should only be used when a key always corresponds to the exact same value.
-	// Thus when this field is true, expired keys are considered valid
-	// until the next call to Set (which causes the GC to run).
-	// It may not be changed concurrently with calls to Get.
+	// AllowExpiredGet 为 true 时，Get 不检查条目是否过期。
+	// 仅当同一个 key 始终对应完全相同的 value 时才可启用；此时过期条目会继续被视为有效，
+	// 直到下一次 Set 触发垃圾回收。不能在 Get 并发执行期间修改该字段。
 	AllowExpiredGet bool
 
 	clock clock.Clock
 
-	// mu protects the below fields
+	// mu 保护下面的缓存状态及过期堆。
 	mu sync.RWMutex
-	// cache is the internal map that backs the cache.
+	// cache 是缓存实际使用的键值映射。
 	cache map[interface{}]entry
-	// generation is used as a cheap resource version for cache entries. Cleanups
-	// are scheduled with a key and generation. When the cleanup runs, it first
-	// compares its generation with the current generation of the entry. It
-	// deletes the entry iff the generation matches. This prevents cleanups
-	// scheduled for earlier versions of an entry from deleting later versions of
-	// an entry when Set() is called multiple times with the same key.
-	//
-	// The integer value of the generation of an entry is meaningless.
+	// generation 是缓存条目的轻量版本号。每个清理任务同时记录 key 和 generation；
+	// 执行时只有 generation 与当前条目一致才允许删除。这样同一个 key 多次 Set 后，
+	// 旧版本的清理任务不会误删后来写入的新值。
+	// generation 的具体数值没有业务含义，只用于判断条目是否已被替换。
 	generation uint64
 
 	heap expiringHeap
@@ -72,7 +65,7 @@ type entry struct {
 	generation uint64
 }
 
-// Get looks up an entry in the cache.
+// Get 根据 key 查询缓存；不存在或已过期时返回 (nil, false)。
 func (c *Expiring) Get(key interface{}) (val interface{}, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -80,20 +73,16 @@ func (c *Expiring) Get(key interface{}) (val interface{}, ok bool) {
 	if !ok {
 		return nil, false
 	}
-	// Expiry is checked on read, not only during GC, so an entry can never be
-	// returned after its deadline even if GC has not run yet.
+	// 读取时也会检查过期时间，而不只依赖 GC；因此即使清理尚未运行，也不会返回已过期条目。
 	if !c.AllowExpiredGet && !c.clock.Now().Before(e.expiry) {
 		return nil, false
 	}
 	return e.val, true
 }
 
-// Set sets a key/value/expiry entry in the map, overwriting any previous entry
-// with the same key. The entry expires at the given expiry time, but its TTL
-// may be lengthened or shortened by additional calls to Set(). Garbage
-// collection of expired entries occurs during calls to Set(), however calls to
-// Get() will not return expired entries that have not yet been garbage
-// collected.
+// Set 写入或覆盖指定 key 的 value，并从本次调用时刻开始计算 ttl。
+// 对同一个 key 再次调用 Set 可以延长或缩短其有效期。过期条目的物理清理由 Set 触发，
+// 但 Get 会独立判断过期状态，因此尚未被 GC 删除的条目也不会被读取到。
 func (c *Expiring) Set(key interface{}, val interface{}, ttl time.Duration) {
 	now := c.clock.Now()
 	expiry := now.Add(ttl)
@@ -101,8 +90,7 @@ func (c *Expiring) Set(key interface{}, val interface{}, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Bump the generation so any cleanup already scheduled for the previous
-	// value of this key becomes a no-op.
+	// 递增 generation，使针对该 key 旧值安排的清理任务失效。
 	c.generation++
 
 	c.cache[key] = entry{
@@ -111,7 +99,7 @@ func (c *Expiring) Set(key interface{}, val interface{}, ttl time.Duration) {
 		generation: c.generation,
 	}
 
-	// Run GC inline before pushing the new entry.
+	// 在把新过期记录压入堆之前，先同步清理已经过期的记录。
 	c.gc(now)
 
 	heap.Push(&c.heap, &expiringHeapEntry{
@@ -121,34 +109,31 @@ func (c *Expiring) Set(key interface{}, val interface{}, ttl time.Duration) {
 	})
 }
 
-// Delete deletes an entry in the map.
+// Delete 从缓存中删除指定 key，不要求条目已经过期。
 func (c *Expiring) Delete(key interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.del(key, 0)
 }
 
-// del deletes the entry for the given key. The generation argument is the
-// generation of the entry that should be deleted. If the generation has been
-// changed (e.g. if a set has occurred on an existing element but the old
-// cleanup still runs), this is a noop. If the generation argument is 0, the
-// entry's generation is ignored and the entry is deleted.
+// del 删除指定 key 对应的条目。generation 指定预期删除的条目版本；如果当前版本已变化
+// （例如旧清理任务执行前，该 key 已被重新 Set），则本次删除不执行。generation 为 0 时
+// 忽略版本检查并直接删除。
 //
-// del must be called under the write lock.
+// 调用 del 前必须持有写锁。
 func (c *Expiring) del(key interface{}, generation uint64) {
 	e, ok := c.cache[key]
 	if !ok {
 		return
 	}
-	// A stale cleanup (generation mismatch) must not remove a newer value for
-	// the same key.
+	// 清理任务版本过期时，不得删除同一 key 后来写入的新值。
 	if generation != 0 && generation != e.generation {
 		return
 	}
 	delete(c.cache, key)
 }
 
-// Len returns the number of items in the cache.
+// Len 返回缓存中当前保存的条目数，包括尚未被 GC 物理删除的过期条目。
 func (c *Expiring) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -157,19 +142,14 @@ func (c *Expiring) Len() int {
 
 func (c *Expiring) gc(now time.Time) {
 	for {
-		// Return from gc if the heap is empty or the next element is not yet
-		// expired.
-		//
-		// heap[0] is a peek at the next element in the heap, which is not obvious
-		// from looking at the (*expiringHeap).Pop() implementation below.
-		// heap.Pop() swaps the first entry with the last entry of the heap, then
-		// calls (*expiringHeap).Pop() which returns the last element.
+		// 堆为空，或堆顶条目尚未过期时，后续条目也不可能过期，可以结束本轮 GC。
+		// heap[0] 是堆顶元素（下一条最早过期的记录）。需要注意，heap.Pop() 会先将
+		// 堆顶与末尾元素交换，再调用 expiringHeap.Pop() 取出末尾元素。
 		if len(c.heap) == 0 || now.Before(c.heap[0].expiry) {
 			return
 		}
 		cleanup := heap.Pop(&c.heap).(*expiringHeapEntry)
-		// del ignores the entry if it has since been overwritten; the newer
-		// entry has its own heap record with a later expiry.
+		// 如果条目已被覆盖，del 会通过 generation 检查忽略旧记录；新条目有独立的过期堆记录。
 		c.del(cleanup.key, cleanup.generation)
 	}
 }
@@ -180,9 +160,8 @@ type expiringHeapEntry struct {
 	generation uint64
 }
 
-// expiringHeap is a min-heap ordered by expiration time of its entries. The
-// expiring cache uses this as a priority queue to efficiently organize entries
-// which will be garbage collected once they expire.
+// expiringHeap 是按过期时间升序排列的最小堆。Expiring 将其作为优先队列，
+// 每次只需检查堆顶即可找到下一条需要清理的记录。
 type expiringHeap []*expiringHeapEntry
 
 var _ heap.Interface = &expiringHeap{}

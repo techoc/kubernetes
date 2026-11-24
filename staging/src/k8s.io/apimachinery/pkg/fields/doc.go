@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fields implements a simple field system, parsing and matching
-// selectors with sets of fields.
+// Package fields 实现简单的字段系统，支持解析字段选择器，并将选择器与字段集合进行匹配。
 //
 // fields 包实现了一套简单的字段系统：解析字段选择器（如 metadata.name=foo）
 // 并将其与字段集合进行匹配。它不涉及类型信息，字段以点分路径字符串表示，

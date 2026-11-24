@@ -33,31 +33,26 @@ type NameFunc func(t reflect.Type) string
 // DefaultNameFunc 返回类型的 Go 名称，是 NameFunc 的默认实现。
 var DefaultNameFunc = func(t reflect.Type) string { return t.Name() }
 
-// ConversionFunc converts the object a into the object b, reusing arrays or objects
-// or pointers if necessary. It should return an error if the object cannot be converted
-// or if some data is invalid. If you do not wish a and b to share fields or nested
-// objects, you must copy a before calling this function.
-//
-// 约定：a、b 均为指针；函数应尽量复用 b 中已有的容器以减少分配，
-// 因此若调用方不希望共享底层数据，需自行先深拷贝 a。
+// ConversionFunc 定义将对象 a 转换并写入对象 b 的函数签名。实现可以按需复用目标对象中的
+// 数组、切片、映射或指针，以减少内存分配；无法转换或发现数据非法时必须返回错误。
+// 如果调用方不希望源对象与目标对象共享字段或嵌套对象，调用前必须先复制源对象。
+// a、b 应传入与注册类型匹配的指针，scope 用于继续当前转换流程。
 type ConversionFunc func(a, b interface{}, scope Scope) error
 
-// Converter knows how to convert one type to another.
-//
-// Converter 维护类型对到转换函数的映射。查找优先级：
+// Converter 负责在不同 Go 类型之间查找并执行转换。
+// 它维护类型对到转换函数的映射。查找优先级：
 // ignored（无操作） > 手动注册 > 生成代码注册；都不命中则报"unknown conversion"。
 type Converter struct {
-	// Map from the conversion pair to a function which can
-	// do the conversion.
+	// 手动注册的转换函数表。相同类型对再次注册时，新函数会覆盖旧函数。
 	conversionFuncs          ConversionFuncs
 	generatedConversionFuncs ConversionFuncs
 
-	// Set of conversions that should be treated as a no-op
+	// 应被视为无操作的类型对集合；命中后 Convert 直接返回，不检查或修改目标对象。
 	ignoredUntypedConversions map[typePair]struct{}
 }
 
-// NewConverter creates a new Converter object.
-// Arg NameFunc is just for backward compatibility.
+// NewConverter 创建一个空的转换器，并初始化手动注册、生成代码注册和忽略转换三张表。
+// NameFunc 参数仅为兼容旧 API 而保留，当前实现不使用它。
 func NewConverter(NameFunc) *Converter {
 	c := &Converter{
 		conversionFuncs:           NewConversionFuncs(),
@@ -74,23 +69,21 @@ func NewConverter(NameFunc) *Converter {
 	return c
 }
 
-// WithConversions returns a Converter that is a copy of c but with the additional
-// fns merged on top.
-//
-// 返回浅拷贝：映射表通过 Merge 生成新表，因此原 Converter 不会被修改，
-// 可安全地作为模板派生出多个变体。
+// WithConversions 返回基于当前转换器派生的新转换器，并将 fns 合并到手动转换表中。
+// 新的手动转换表由 Merge 创建，因此添加或覆盖其中的条目不会修改原转换器的该表；
+// 但这是浅拷贝，生成代码转换表和忽略转换表仍与原对象共享，不能据此认为所有状态都隔离。
 func (c *Converter) WithConversions(fns ConversionFuncs) *Converter {
 	copied := *c
 	copied.conversionFuncs = c.conversionFuncs.Merge(fns)
 	return &copied
 }
 
-// DefaultMeta returns meta for a given type.
+// DefaultMeta 为指定类型创建默认元数据。当前实现不根据 t 填充字段，返回空 Meta。
 func (c *Converter) DefaultMeta(t reflect.Type) *Meta {
 	return &Meta{}
 }
 
-// Convert_Slice_byte_To_Slice_byte prevents recursing into every byte
+// Convert_Slice_byte_To_Slice_byte 直接复制字节切片，避免反射转换逐个递归处理每个字节。
 func Convert_Slice_byte_To_Slice_byte(in *[]byte, out *[]byte, s Scope) error {
 	if *in == nil {
 		// 保持 nil 与空切片的区别。
@@ -102,17 +95,17 @@ func Convert_Slice_byte_To_Slice_byte(in *[]byte, out *[]byte, s Scope) error {
 	return nil
 }
 
-// Scope is passed to conversion funcs to allow them to continue an ongoing conversion.
-// If multiple converters exist in the system, Scope will allow you to use the correct one
-// from a conversion function--that is, the one your conversion function was called by.
+// Scope 会传给每个转换函数，使自定义转换逻辑能够继续当前转换流程。
+// 当系统中存在多个 Converter 时，Scope 会保留发起当前转换的那个实例，
+// 子对象转换应通过 Scope.Convert 完成，避免误用其他转换器。
 type Scope interface {
-	// Call Convert to convert sub-objects. Note that if you call it with your own exact
-	// parameters, you'll run out of stack space before anything useful happens.
+	// Convert 用于递归转换子对象。必须传入不同的源/目标子对象；若再次传入当前转换的原始参数，
+	// 会重复进入同一转换函数并导致无限递归，最终耗尽调用栈。
 	//
 	// 用相同参数递归调用会无限递归，最终栈溢出。
 	Convert(src, dest interface{}) error
 
-	// Meta returns any information originally passed to Convert.
+	// Meta 返回最初调用 Converter.Convert 时传入的元数据，供嵌套转换函数读取。
 	Meta() *Meta
 }
 
@@ -128,9 +121,9 @@ type ConversionFuncs struct {
 	untyped map[typePair]ConversionFunc
 }
 
-// AddUntyped adds the provided conversion function to the lookup table for the types that are
-// supplied as a and b. a and b must be pointers or an error is returned. This method overwrites
-// previously defined functions.
+// AddUntyped 将 fn 注册为 a、b 对应类型之间的转换函数。a 和 b 必须传入指针，
+// 注册时只根据指针的反射类型建立查找键，不会验证 fn 的参数签名；
+// 相同类型对重复注册时会覆盖已有函数。
 func (c ConversionFuncs) AddUntyped(a, b interface{}, fn ConversionFunc) error {
 	tA, tB := reflect.TypeOf(a), reflect.TypeOf(b)
 	if tA.Kind() != reflect.Pointer {
@@ -143,8 +136,8 @@ func (c ConversionFuncs) AddUntyped(a, b interface{}, fn ConversionFunc) error {
 	return nil
 }
 
-// Merge returns a new ConversionFuncs that contains all conversions from
-// both other and c, with other conversions taking precedence.
+// Merge 创建新的转换函数表，先复制当前表，再复制 other；因此 other 中相同类型对的函数优先级更高。
+// 原表不会被修改，两个输入表也不会与结果共享底层 map。
 func (c ConversionFuncs) Merge(other ConversionFuncs) ConversionFuncs {
 	merged := NewConversionFuncs()
 	for k, v := range c.untyped {
@@ -157,46 +150,45 @@ func (c ConversionFuncs) Merge(other ConversionFuncs) ConversionFuncs {
 	return merged
 }
 
-// Meta is supplied by Scheme, when it calls Convert.
+// Meta 由 Scheme 调用 Convert 时传入，用于向转换函数传递调用方上下文。
 type Meta struct {
-	// Context is an optional field that callers may use to pass info to conversion functions.
+	// Context 是可选的调用方上下文，可携带转换函数所需的附加信息；Converter 本身不会解释该值。
 	Context interface{}
 }
 
-// scope contains information about an ongoing conversion.
+// scope 保存一次转换过程的上下文，使嵌套转换沿用同一个 Converter 和 Meta。
 type scope struct {
 	converter *Converter
 	meta      *Meta
 }
 
-// Convert continues a conversion.
+// Convert 使用当前 scope 中的 Converter 和 Meta 继续转换子对象。
 func (s *scope) Convert(src, dest interface{}) error {
 	return s.converter.Convert(src, dest, s.meta)
 }
 
-// Meta returns the meta object that was originally passed to Convert.
+// Meta 返回创建当前转换 scope 时传入的 Meta；嵌套转换共享同一份元数据。
 func (s *scope) Meta() *Meta {
 	return s.meta
 }
 
-// RegisterUntypedConversionFunc registers a function that converts between a and b by passing objects of those
-// types to the provided function. The function *must* accept objects of a and b - this machinery will not enforce
-// any other guarantee.
+// RegisterUntypedConversionFunc 注册 a、b 两种指针类型之间的手动转换函数。
+// 调用时会把实际对象直接传给 fn；注册机制只校验 a、b 是指针，不会校验 fn 的签名或转换结果，
+// 因此函数实现必须自行保证类型断言正确，并按约定写入目标对象。
 func (c *Converter) RegisterUntypedConversionFunc(a, b interface{}, fn ConversionFunc) error {
 	return c.conversionFuncs.AddUntyped(a, b, fn)
 }
 
-// RegisterGeneratedUntypedConversionFunc registers a function that converts between a and b by passing objects of those
-// types to the provided function. The function *must* accept objects of a and b - this machinery will not enforce
-// any other guarantee.
-//
-// 生成代码单独存放，避免手动注册覆盖生成函数时难以排查；查找时手动注册优先。
+// RegisterGeneratedUntypedConversionFunc 注册由代码生成器提供的类型转换函数。
+// 调用时会把对应类型的对象直接传给 fn；注册机制只校验 a、b 是指针，不会校验 fn 的签名或转换结果。
+// 生成函数与手动函数分开存储，查找时手动注册优先，便于业务代码覆盖生成的默认转换逻辑。
 func (c *Converter) RegisterGeneratedUntypedConversionFunc(a, b interface{}, fn ConversionFunc) error {
 	return c.generatedConversionFuncs.AddUntyped(a, b, fn)
 }
 
-// RegisterIgnoredConversion registers a "no-op" for conversion, where any requested
-// conversion between from and to is ignored.
+// RegisterIgnoredConversion 将 from 到 to 的类型对登记为忽略转换。
+// 后续 Convert 命中该类型对时会直接返回 nil，不调用转换函数，也不会修改目标对象。
+// from 和 to 必须是指针；该规则优先于手动注册和生成代码注册的转换函数。
 func (c *Converter) RegisterIgnoredConversion(from, to interface{}) error {
 	typeFrom := reflect.TypeOf(from)
 	typeTo := reflect.TypeOf(to)
@@ -210,12 +202,11 @@ func (c *Converter) RegisterIgnoredConversion(from, to interface{}) error {
 	return nil
 }
 
-// Convert will translate src to dest if it knows how. Both must be pointers.
-// If no conversion func is registered and the default copying mechanism
-// doesn't work on this type pair, an error will be returned.
-// 'meta' is given to allow you to pass information to conversion functions,
-// it is not used by Convert() other than storing it in the scope.
-// Not safe for objects with cyclic references!
+// Convert 根据 src、dest 的具体指针类型查找并执行转换函数；两者通常都应是非 nil 指针。
+// 查找顺序为：忽略转换、手动注册函数、生成代码注册函数。当前实现没有通用反射复制兜底，
+// 未找到匹配函数时会校验指针并返回 unknown conversion 错误。
+// meta 不参与函数选择或转换逻辑，只会存入 Scope，供转换函数读取。
+// 转换逻辑不支持对象图中的循环引用；自定义转换函数必须避免递归遍历循环结构。
 func (c *Converter) Convert(src, dest interface{}, meta *Meta) error {
 	pair := typePair{reflect.TypeOf(src), reflect.TypeOf(dest)}
 	scope := &scope{
@@ -223,7 +214,7 @@ func (c *Converter) Convert(src, dest interface{}, meta *Meta) error {
 		meta:      meta,
 	}
 
-	// ignore conversions of this type
+	// 忽略规则优先级最高：命中后直接返回，不执行任何转换。
 	if _, ok := c.ignoredUntypedConversions[pair]; ok {
 		return nil
 	}
@@ -235,8 +226,8 @@ func (c *Converter) Convert(src, dest interface{}, meta *Meta) error {
 		return fn(src, dest, scope)
 	}
 
-	// 没有注册函数时只做参数校验，然后返回明确错误；不做反射拷贝，
-	// 因为任意结构的反射拷贝容易产生错误语义。
+	// 没有注册函数时只校验 src、dest 是否为有效指针，然后返回明确错误；
+	// 不尝试通用反射拷贝，避免对不同结构的字段语义、别名和所有权作出错误假设。
 	dv, err := EnforcePtr(dest)
 	if err != nil {
 		return err

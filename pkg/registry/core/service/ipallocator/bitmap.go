@@ -42,6 +42,8 @@ import (
 //	r.base                     r.base + r.max
 //	  |                              |
 //	offset #0 of r.allocated   last offset of r.allocated
+//
+// Range 将 IP CIDR 映射成偏移位图，负责排除不可分配地址、持久化快照并提供并发安全的分配操作。
 type Range struct {
 	net *net.IPNet
 	// base is a cached version of the start IP in the CIDR range as a *big.Int
@@ -59,6 +61,7 @@ type Range struct {
 var _ Interface = (*Range)(nil)
 
 // New creates a Range over a net.IPNet, calling allocatorFactory to construct the backing store.
+// New 根据 CIDR 计算可分配主机数量及动态/保留区边界，并创建底层位图分配器。
 func New(cidr *net.IPNet, allocatorFactory allocator.AllocatorWithOffsetFactory) (*Range, error) {
 	max := netutils.RangeSize(cidr)
 	base := netutils.BigForIP(cidr.IP)
@@ -345,6 +348,7 @@ func (r *Range) EnableMetrics() {
 
 // calculateIPOffset calculates the integer offset of ip from base such that
 // base + offset = ip. It requires ip >= base.
+// calculateIPOffset 将 IP 地址映射成相对于 CIDR 起始地址的位图偏移量。
 func calculateIPOffset(base *big.Int, ip net.IP) int {
 	return int(big.NewInt(0).Sub(netutils.BigForIP(ip), base).Int64())
 }
@@ -353,6 +357,7 @@ func calculateIPOffset(base *big.Int, ip net.IP) int {
 // the following formula `min(max($min, cidrSize/$step), $max)`, described as ~never less than
 // $min or more than $max, with a graduated step function between them~. The function returns 0
 // if any of the parameters is invalid.
+// calculateRangeOffset 根据 CIDR 地址总量计算静态预留区大小，自动分配优先使用动态区。
 func calculateRangeOffset(cidr *net.IPNet) int {
 	// default values for min(max($min, cidrSize/$step), $max)
 	const (

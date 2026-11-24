@@ -30,7 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/capabilities"
 )
 
-// ProxyREST implements the proxy subresource for a Service
+// ProxyREST 实现 services/{name}/proxy：通过 Service Redirector 解析 EndpointSlice 后，将请求代理到实际后端 Pod。
 type ProxyREST struct {
 	Redirector     rest.Redirector
 	ProxyTransport http.RoundTripper
@@ -63,6 +63,7 @@ func (r *ProxyREST) NewConnectOptions() (runtime.Object, bool, string) {
 }
 
 // Connect returns a handler for the service proxy
+// Connect 校验代理选项，解析 Service 对应的可用后端地址并拼接路径，最终返回支持 HTTP Upgrade 的限速代理 Handler。
 func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	proxyOpts, ok := opts.(*api.ServiceProxyOptions)
 	if !ok {
@@ -77,6 +78,7 @@ func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object,
 	return newThrottledUpgradeAwareProxyHandler(location, transport, true, false, responder), nil
 }
 
+// newThrottledUpgradeAwareProxyHandler 统一设置错误响应器和单连接带宽限制，避免 Service/Pod 代理各自实现限速逻辑。
 func newThrottledUpgradeAwareProxyHandler(location *url.URL, transport http.RoundTripper, wrapTransport, upgradeRequired bool, responder rest.Responder) *proxy.UpgradeAwareHandler {
 	handler := proxy.NewUpgradeAwareHandler(location, transport, wrapTransport, upgradeRequired, proxy.NewErrorResponder(responder))
 	handler.MaxBytesPerSec = capabilities.Get().PerConnectionBandwidthLimitBytesPerSec

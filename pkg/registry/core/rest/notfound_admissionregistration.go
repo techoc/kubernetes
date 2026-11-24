@@ -24,12 +24,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// notFoundValidatingWebhookConfigurations 是未启用完整 API 资源时的占位 Getter，所有读取都返回标准 NotFound。
 type notFoundValidatingWebhookConfigurations struct{}
 
+// Get 明确返回资源不存在，避免在未装配 Admission Webhook 存储时意外允许 TokenRequest 读取配置。
 func (notFoundValidatingWebhookConfigurations) Get(_ context.Context, name string, _ metav1.GetOptions) (*admissionregistrationv1.ValidatingWebhookConfiguration, error) {
 	return nil, errors.NewNotFound(admissionregistrationv1.Resource("validatingwebhookconfigurations"), name)
 }
 
+// notFoundMutatingWebhookConfigurations 为 MutatingWebhookConfiguration 提供同样的 NotFound 占位实现。
 type notFoundMutatingWebhookConfigurations struct{}
 
 func (notFoundMutatingWebhookConfigurations) Get(_ context.Context, name string, _ metav1.GetOptions) (*admissionregistrationv1.MutatingWebhookConfiguration, error) {

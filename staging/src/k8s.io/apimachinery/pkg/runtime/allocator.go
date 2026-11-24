@@ -20,63 +20,41 @@ import (
 	"sync"
 )
 
-// AllocatorPool simply stores Allocator objects to avoid additional memory allocations
-// by caching created but unused items for later reuse, relieving pressure on the garbage collector.
-//
-// Usage:
-//
-//	memoryAllocator := runtime.AllocatorPool.Get().(*runtime.Allocator)
-//	defer runtime.AllocatorPool.Put(memoryAllocator)
-//
-// A note for future:
-//
-//	consider introducing multiple pools for storing buffers of different sizes
-//	perhaps this could allow us to be more efficient.
+// AllocatorPool 使用 sync.Pool 缓存暂时闲置的 Allocator，减少重复分配及垃圾回收压力。Get 获取可复用实例，使用完毕后必须 Put 归还。池可能随时丢弃缓存对象，因此不能依赖对象一定被复用。
 var AllocatorPool = sync.Pool{
 	New: func() interface{} {
 		return &Allocator{}
 	},
 }
 
-// Allocator knows how to allocate memory
-// It exists to make the cost of object serialization cheaper.
-// In some cases, it allows for allocating memory only once and then reusing it.
-// This approach puts less load on GC and leads to less fragmented memory in general.
+// Allocator 为对象序列化提供可复用的字节缓冲区。容量足够时复用原底层数组，容量不足时扩容；这样可减少频繁分配和 GC 扫描压力。
 type Allocator struct {
 	buf []byte
 }
 
 var _ MemoryAllocator = &Allocator{}
 
-// Allocate reserves memory for n bytes only if the underlying array doesn't have enough capacity
-// otherwise it returns previously allocated block of memory.
-//
-// Note that the returned array is not zeroed, it is the caller's
-// responsibility to clean the memory if needed.
+// 申请至少 n 字节的缓冲区。若现有底层数组容量足够，则直接扩展切片长度并复用；否则按“原容量的两倍加本次需求”分配新数组。返回的字节不会清零，调用方必须覆盖将要读取的区域。
 func (a *Allocator) Allocate(n uint64) []byte {
-	// Reuse the cached backing array when it is large enough. The buffer is
-	// deliberately not zeroed: serializers overwrite every byte they use.
+	// 如果缓存数组容量足够，直接复用。这里不会清零，因为序列化器会覆盖实际使用的每个字节。
 	if uint64(cap(a.buf)) >= n {
 		a.buf = a.buf[:n]
 		return a.buf
 	}
-	// grow the buffer
-	// Grow geometrically (2x current capacity) plus the requested size so that
-	// repeated allocations amortize to O(n) copying.
+	// 扩大缓冲区。
+	// 按“当前容量的两倍 + 本次请求长度”扩容，使连续增长时的总复制成本保持摊销线性。
 	size := uint64(2*cap(a.buf)) + n
 	a.buf = make([]byte, size)
 	a.buf = a.buf[:n]
 	return a.buf
 }
 
-// SimpleAllocator a wrapper around make([]byte)
-// conforms to the MemoryAllocator interface
+// SimpleAllocator 是 MemoryAllocator 的简单实现，每次请求都直接 make 新切片，不缓存内存。实现简单且无共享状态，适合不需要复用缓冲区的场景。
 type SimpleAllocator struct{}
 
 var _ MemoryAllocator = &SimpleAllocator{}
 
-// Allocate returns a fresh zeroed buffer of exactly n bytes; unlike Allocator
-// it keeps no state and is safe for concurrent use.
+// Allocate 每次都创建长度为 n 且内容清零的新缓冲区。与 Allocator 不同，SimpleAllocator 不保存状态，因此可并发使用。
 func (sa *SimpleAllocator) Allocate(n uint64) []byte {
 	return make([]byte, n)
 }

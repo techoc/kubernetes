@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package ingress 提供 Ingress 主资源与 status 子资源的 REST 策略、路由规则校验和持久化实现。
 package ingress

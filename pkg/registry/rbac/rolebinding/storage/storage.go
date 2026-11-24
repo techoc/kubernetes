@@ -33,6 +33,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against RoleBinding objects.
+// NewREST 创建命名空间级 RoleBinding Store；RoleRef 不可变的规则由 RoleBindingStrategy 校验。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &rbac.RoleBinding{} },

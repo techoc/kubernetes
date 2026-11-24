@@ -32,6 +32,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
+// TestControllerStrategy 验证创建/更新策略对 Status、Generation、PodTemplate 和删除兼容行为的处理。
 func TestControllerStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !Strategy.NamespaceScoped() {
@@ -89,6 +90,7 @@ func TestControllerStrategy(t *testing.T) {
 	}
 }
 
+// TestControllerStatusStrategy 验证 /status 只能修改 ReplicationController.Status，不能覆盖 Spec。
 func TestControllerStatusStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !StatusStrategy.NamespaceScoped() {
@@ -156,6 +158,7 @@ func TestSelectableFieldLabelConversions(t *testing.T) {
 	)
 }
 
+// TestValidateUpdate 验证更新时对 Selector、PodTemplate 和历史不可转换字段的保护规则。
 func TestValidateUpdate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	validSelector := map[string]string{"a": "b"}

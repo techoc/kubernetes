@@ -74,6 +74,7 @@ func newTestAllocator(cidr *net.IPNet) (*Allocator, error) {
 	return c, nil
 }
 
+// TestAllocateIPAllocator 覆盖指定 IP、自动分配、重复占用、释放和范围外地址等基础行为。
 func TestAllocateIPAllocator(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -804,6 +805,7 @@ func Test_hostsPerNetwork(t *testing.T) {
 	}
 }
 
+// Test_ipIterator 验证地址迭代器从给定偏移开始遍历、到达末尾后回绕且不越过 CIDR 边界。
 func Test_ipIterator(t *testing.T) {
 	tests := []struct {
 		name   string

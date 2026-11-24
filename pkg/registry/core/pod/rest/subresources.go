@@ -40,7 +40,7 @@ import (
 	"k8s.io/streaming/pkg/httpstream/wsstream"
 )
 
-// ProxyREST implements the proxy subresource for a Pod
+// ProxyREST 实现 pods/{name}/proxy：解析 Pod IP/端口和相对路径，再构造限速的升级感知反向代理。
 type ProxyREST struct {
 	Store          *genericregistry.Store
 	ProxyTransport http.RoundTripper
@@ -73,6 +73,7 @@ func (r *ProxyREST) NewConnectOptions() (runtime.Object, bool, string) {
 }
 
 // Connect returns a handler for the pod proxy
+// Connect 校验代理参数、解析 Pod 网络位置、拼接请求路径，并返回支持 WebSocket/HTTP Upgrade 的代理 Handler。
 func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	proxyOpts, ok := opts.(*api.PodProxyOptions)
 	if !ok {
@@ -90,7 +91,7 @@ func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object,
 // Support both GET and POST methods. We must support GET for browsers that want to use WebSockets.
 var upgradeableMethods = []string{"GET", "POST"}
 
-// AttachREST implements the attach subresource for a Pod
+// AttachREST 实现 pods/{name}/attach，将标准输入/输出连接到指定容器已有进程的流式会话。
 type AttachREST struct {
 	Store       pod.ResourceGetter
 	KubeletConn client.ConnectionInfoGetter
@@ -112,6 +113,7 @@ func (r *AttachREST) Destroy() {
 }
 
 // Connect returns a handler for the pod exec proxy
+// Connect 先按 Feature Gate 检查兼容的 create 权限，再定位节点并根据 Kubelet WebSocket 能力决定是否在 API Server 转换协议。
 func (r *AttachREST) Connect(ctx context.Context, name string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	// Forces a authz check for "create", if feature gate enabled.
 	// See: https://github.com/kubernetes/kubernetes/issues/133515
@@ -165,7 +167,7 @@ func (r *AttachREST) ConnectMethods() []string {
 	return upgradeableMethods
 }
 
-// ExecREST implements the exec subresource for a Pod
+// ExecREST 实现 pods/{name}/exec：创建到容器内新进程的交互式流，并转发 stdin/stdout/stderr/TTY 参数。
 type ExecREST struct {
 	Store       pod.ResourceGetter
 	KubeletConn client.ConnectionInfoGetter
@@ -187,6 +189,7 @@ func (r *ExecREST) Destroy() {
 }
 
 // Connect returns a handler for the pod exec proxy
+// Connect 校验 ExecOptions、授权和节点连接信息；必要时将 WebSocket stream-close 协议转换为 Kubelet 支持的内部流。
 func (r *ExecREST) Connect(ctx context.Context, name string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	// Forces a authz check for "create", if feature gate enabled.
 	// See: https://github.com/kubernetes/kubernetes/issues/133515
@@ -240,7 +243,7 @@ func (r *ExecREST) ConnectMethods() []string {
 	return upgradeableMethods
 }
 
-// PortForwardREST implements the portforward subresource for a Pod
+// PortForwardREST 实现 pods/{name}/portforward，将客户端指定的 TCP 端口流转发到 Pod 所在节点。
 type PortForwardREST struct {
 	Store       pod.ResourceGetter
 	KubeletConn client.ConnectionInfoGetter
@@ -273,6 +276,7 @@ func (r *PortForwardREST) ConnectMethods() []string {
 }
 
 // Connect returns a handler for the pod portforward proxy
+// Connect 根据 Node 能力选择旧式 Kubelet 代理或 API Server WebSocket 隧道转换，并记录对应请求指标。
 func (r *PortForwardREST) Connect(ctx context.Context, name string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	// Forces a authz check for "create", if feature gate enabled.
 	// See: https://github.com/kubernetes/kubernetes/issues/133515
@@ -306,13 +310,14 @@ func (r *PortForwardREST) Connect(ctx context.Context, name string, opts runtime
 	return handler, nil
 }
 
+// newThrottledUpgradeAwareProxyHandler 统一创建带错误响应器和单连接带宽上限的升级感知代理。
 func newThrottledUpgradeAwareProxyHandler(location *url.URL, transport http.RoundTripper, wrapTransport, upgradeRequired bool, responder rest.Responder) http.Handler {
 	handler := proxy.NewUpgradeAwareHandler(location, transport, wrapTransport, upgradeRequired, proxy.NewErrorResponder(responder))
 	handler.MaxBytesPerSec = capabilities.Get().PerConnectionBandwidthLimitBytesPerSec
 	return handler
 }
 
-// Given features node supports, return true if kubelet supports websocket
+// 根据 NodeFeatures 判断目标 Kubelet 是否声明支持 WebSocket 扩展；这决定流式请求由 Kubelet 还是 API Server 做协议转换。
 // translation/tunneling, false otherwise.
 func checkNodeSupportsWebsockets(nodeFeatures []string) bool {
 	nodeSupportsWebsockets := slices.Contains(nodeFeatures, string(features.ExtendWebSocketsToKubelet))

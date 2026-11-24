@@ -25,12 +25,13 @@ import (
 	"k8s.io/kubernetes/pkg/registry/core/limitrange"
 )
 
-// REST implements a RESTStorage for limit ranges.
+// REST 将 LimitRange 的通用 CRUD Store 暴露为 API Server RESTStorage。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against limit ranges.
+// NewREST 注册 LimitRange 对象构造器、资源名、Strategy 和默认表格转换器，并完成后端存储初始化。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.LimitRange{} },

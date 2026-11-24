@@ -95,6 +95,7 @@ func TestErrors(t *testing.T) {
 	}
 }
 
+// TestStore 验证 IP 分配器包装的 RangeAllocation 注册表能够持久化、恢复地址占用状态并处理并发更新。
 func TestStore(t *testing.T) {
 	_, storage, backing, si, destroyFunc := newStorage(t)
 	defer destroyFunc()

@@ -38,6 +38,7 @@ func (a *mockAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attribu
 	return a.decision, a.reason, a.err
 }
 
+// TestEnsureAuthorizedForVerb 验证请求动词已经匹配时跳过重复授权、缺少 RequestInfo/Authorizer 的错误，以及额外 verb 被允许或拒绝的结果。
 func TestEnsureAuthorizedForVerb(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package service provides the Registry interface and its RESTStorage
+// Package service 提供 Service 资源的 REST 策略、存储实现、代理入口以及 ClusterIP/NodePort 分配管理。
 // implementation for storing Service api objects.
 package service

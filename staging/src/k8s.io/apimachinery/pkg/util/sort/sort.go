@@ -59,7 +59,7 @@ func MergePreservingRelativeOrder(inputLists [][]string) []string {
 		for i, item := range list {
 			node := getOrCreateNode(graph, item)
 
-			// Add edge from current item to next item in list
+			// 在当前条目与列表中的下一个条目之间添加有向边，表示前者必须排在后者之前。
 			if i < len(list)-1 {
 				nextItem := list[i+1]
 				nextNode := getOrCreateNode(graph, nextItem)
@@ -172,7 +172,7 @@ type graphNode struct {
 	inDegree int
 }
 
-// stringMinHeap 为字符串实现 heap.Interface（按字典序的最小堆）。
+// stringMinHeap 为字符串实现 heap.Interface，堆顶始终是字典序最小的字符串。
 type stringMinHeap []string
 
 func (h stringMinHeap) Len() int           { return len(h) }

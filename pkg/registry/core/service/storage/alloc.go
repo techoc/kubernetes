@@ -35,6 +35,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// Allocators 聚合 Service 使用的各 IP Family ClusterIP 池与统一 NodePort 池，并负责把它们组织成可提交/回滚的事务。
 // Allocators encapsulates the various allocators (IPs, ports) used in
 // Services.
 type Allocators struct {
@@ -62,6 +63,7 @@ func makeAlloc(defaultFamily api.IPFamily, ipAllocs map[api.IPFamily]ipallocator
 	}
 }
 
+// allocateCreate 先推导 IPFamily，再依次预留 ClusterIP 和 NodePort；任一步失败都会撤销此前成功的预留。
 func (al *Allocators) allocateCreate(service *api.Service, dryRun bool) (transaction, error) {
 	result := metaTransaction{}
 	success := false
@@ -101,6 +103,7 @@ func (al *Allocators) allocateCreate(service *api.Service, dryRun bool) (transac
 
 // attempts to default service ip families according to cluster configuration
 // while ensuring that provided families are configured on cluster.
+// initIPFamilyFields 根据旧对象、IPFamilyPolicy 和集群双栈配置补全 IPFamilies/ClusterIPs，并在触及地址池前完成相关字段预校验。
 func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 	oldService, service := before.Service, after.Service
 
@@ -302,6 +305,7 @@ func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 	return nil
 }
 
+// txnAllocClusterIPs 记录本次新分配的 ClusterIP：提交时保留并记录日志，回滚时释放刚分配的地址。
 func (al *Allocators) txnAllocClusterIPs(service *api.Service, dryRun bool) (transaction, error) {
 	// clusterIPs that were allocated may need to be released in case of
 	// failure at a higher level.
@@ -337,6 +341,7 @@ func (al *Allocators) txnAllocClusterIPs(service *api.Service, dryRun bool) (tra
 }
 
 // allocates ClusterIPs for a service
+// allocClusterIPs 按 IPFamilies 逐个申请或保留 ClusterIP，并同时维护兼容字段 ClusterIP 与新字段 ClusterIPs。
 func (al *Allocators) allocClusterIPs(service *api.Service, dryRun bool) (map[api.IPFamily]string, error) {
 	// external name don't get ClusterIPs
 	if service.Spec.Type == api.ServiceTypeExternalName {
@@ -392,6 +397,7 @@ func (al *Allocators) allocClusterIPs(service *api.Service, dryRun bool) (map[ap
 	return allocated, err
 }
 
+// allocIPs 按地址族选择对应分配器：空值执行 AllocateNext，显式 IP 则做静态预留；DryRun 时使用影子分配器。
 func (al *Allocators) allocIPs(service *api.Service, toAlloc map[api.IPFamily]string, dryRun bool) (map[api.IPFamily]string, error) {
 	allocated := make(map[api.IPFamily]string)
 
@@ -450,6 +456,7 @@ func (al *Allocators) allocIPs(service *api.Service, toAlloc map[api.IPFamily]st
 }
 
 // releases clusterIPs per family
+// releaseIPs 按地址族释放 ClusterIP；若原地址族已从集群配置移除，则记录跳过而不是调用不存在的分配器。
 func (al *Allocators) releaseIPs(toRelease map[api.IPFamily]string) (map[api.IPFamily]string, error) {
 	if toRelease == nil {
 		return nil, nil
@@ -478,6 +485,7 @@ func (al *Allocators) releaseIPs(toRelease map[api.IPFamily]string) (map[api.IPF
 	return released, nil
 }
 
+// txnAllocNodePorts 用 PortAllocationOperation 立即预留新端口、延迟释放旧端口：Service 写入成功才提交释放，失败则撤销新预留。
 func (al *Allocators) txnAllocNodePorts(service *api.Service, dryRun bool) (transaction, error) {
 	// The allocator tracks dry-run-ness internally.
 	nodePortOp := portallocator.StartOperation(al.serviceNodePorts, dryRun)
@@ -588,6 +596,7 @@ func (al *Allocators) allocHealthCheckNodePort(service *api.Service, nodePortOp 
 	return nil
 }
 
+// allocateUpdate 将 ClusterIP、NodePort、HealthCheckNodePort 等更新拆成多个子事务，最后统一提交或回滚。
 func (al *Allocators) allocateUpdate(after After, before Before, dryRun bool) (transaction, error) {
 	result := metaTransaction{}
 	success := false

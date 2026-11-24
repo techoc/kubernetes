@@ -46,6 +46,7 @@ const (
 	name      = "foo"
 )
 
+// newStorage 启动隔离 etcd，并同时构造 ReplicationController 主资源、Status 和 Scale 存储接口。
 func newStorage(t *testing.T) (ControllerStorage, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -150,6 +151,7 @@ func TestDelete(t *testing.T) {
 	test.TestDelete(validNewController())
 }
 
+// TestGenerationNumber 确认 Spec 变化递增 Generation，而 Status 单独变化不会递增期望状态版本。
 func TestGenerationNumber(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -251,6 +253,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestUpdateStatus 验证控制器可以通过 status 子资源写回副本状态，同时无法修改期望 Spec。
 func TestUpdateStatus(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -279,6 +282,7 @@ func TestUpdateStatus(t *testing.T) {
 	}
 }
 
+// TestScaleGet 验证 Scale GET 能正确返回父 ReplicationController 的副本数、Selector 和元数据。
 func TestScaleGet(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -316,6 +320,7 @@ func TestScaleGet(t *testing.T) {
 	}
 }
 
+// TestScaleUpdate 验证 Scale 更新最终写回 spec.replicas，并保留父对象其他字段。
 func TestScaleUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

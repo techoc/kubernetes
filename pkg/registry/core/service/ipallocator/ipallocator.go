@@ -46,6 +46,7 @@ const ControllerName = "ipallocator.k8s.io"
 
 // Allocator implements current ipallocator interface using IPAddress API object
 // and an informer as backend.
+// Allocator 管理单个 CIDR 内的 IP 地址；底层位图记录占用状态，IPAddress API 对象保存地址所有权与 Service 引用。
 type Allocator struct {
 	cidr          *net.IPNet
 	prefix        netip.Prefix
@@ -76,6 +77,7 @@ var _ Interface = &Allocator{}
 // NewIPAllocator returns an IP allocator associated to a network range
 // that use the IPAddress object to track the assigned IP addresses,
 // using an informer cache as storage.
+// NewIPAllocator 创建单一 CIDR 的 ClusterIP 分配器，并可通过 IPAddress Informer 缓存查询已占用地址。
 func NewIPAllocator(
 	cidr *net.IPNet,
 	client networkingv1client.NetworkingV1Interface,
@@ -186,6 +188,7 @@ func (a *Allocator) AllocateService(svc *api.Service, ip net.IP) error {
 	return a.allocateService(svc, ip, dryRunFalse)
 }
 
+// allocateService 预留指定 IP；启用 IPAddress API 时同时创建引用 Service 的对象，并在失败时避免位图与对象状态不一致。
 func (a *Allocator) allocateService(svc *api.Service, ip net.IP, dryRun bool) error {
 	if !a.ready.Load() || !a.ipAddressSynced() {
 		return ErrNotReady
@@ -234,6 +237,7 @@ func (a *Allocator) AllocateNextService(svc *api.Service) (net.IP, error) {
 // It tries to allocate a free IP address from the upper subnet first and
 // falls back to the lower subnet.
 // It starts allocating from a random IP within each range.
+// allocateNextService 从 CIDR 中选择下一个可用地址，跳过网络/广播/保留地址，并按需要创建 IPAddress 对象。
 func (a *Allocator) allocateNextService(svc *api.Service, dryRun bool) (net.IP, error) {
 	if !a.ready.Load() || !a.ipAddressSynced() {
 		return nil, ErrNotReady
@@ -293,6 +297,7 @@ func (a *Allocator) allocateNextService(svc *api.Service, dryRun bool) (net.IP, 
 // in a range defined by the start and last address.
 // It starts iterating at the address position defined by the offset.
 // It returns an invalid address to indicate it hasfinished.
+// ipIterator 按指定 offset 在首尾地址之间迭代，支持随机起点并在遍历到末尾时回绕。
 func ipIterator(first netip.Addr, last netip.Addr, offset uint64) func() netip.Addr {
 	// There are no modulo operations for IP addresses
 	modulo := func(addr netip.Addr) netip.Addr {
@@ -330,6 +335,7 @@ func ipIterator(first netip.Addr, last netip.Addr, offset uint64) func() netip.A
 // IPs between the first and last address (both included), starting
 // from the start address.
 // TODO: this is a linear search, it can be optimized.
+// allocateFromRange 遍历候选地址，遇到已占用地址继续尝试；仅在分配成功或遇到不可恢复错误时停止。
 func (a *Allocator) allocateFromRange(iterator func() netip.Addr, svc *api.Service) (net.IP, error) {
 	for {
 		ip := iterator()
@@ -372,6 +378,7 @@ func (a *Allocator) Release(ip net.IP) error {
 	return a.release(ip, dryRunFalse)
 }
 
+// release 释放位图占用并删除对应 IPAddress 记录；DryRun 只模拟结果而不修改实际状态。
 func (a *Allocator) release(ip net.IP, dryRun bool) error {
 	if dryRun {
 		return nil
@@ -491,6 +498,7 @@ func (a *Allocator) EnableMetrics() {
 }
 
 // dryRunRange is a shim to satisfy Interface without persisting state.
+// dryRunAllocator 包装真实分配器但不持久化修改，供 Service dry-run 流程验证地址是否可用。
 type dryRunAllocator struct {
 	real *Allocator
 }
@@ -537,6 +545,7 @@ func (dry dryRunAllocator) EnableMetrics() {
 // addOffsetAddress returns the address at the provided offset within the subnet
 // TODO: move it to k8s.io/utils/net, this is the same as current AddIPOffset()
 // but using netip.Addr instead of net.IP
+// addOffsetAddress 在 IPv4/IPv6 地址的整数表示上加偏移，并检测地址位宽溢出。
 func addOffsetAddress(address netip.Addr, offset uint64) (netip.Addr, error) {
 	addressBytes := address.AsSlice()
 	addressBig := big.NewInt(0).SetBytes(addressBytes)

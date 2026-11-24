@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package poddisruptionbudget：PodDisruptionBudget（PDB）限制自愿驱逐可同时影响的 Pod 数量，保护应用在节点维护和排空期间的可用性。
 package poddisruptionbudget

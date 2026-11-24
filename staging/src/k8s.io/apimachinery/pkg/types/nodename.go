@@ -16,30 +16,24 @@ limitations under the License.
 
 package types
 
-// NodeName is a type that holds a api.Node's Name identifier.
-// Being a type captures intent and helps make sure that the node name
-// is not confused with similar concepts (the hostname, the cloud provider id,
-// the cloud provider name etc)
+// NodeName 用于保存 API 中 api.Node 的 Name 标识。定义为独立类型可以明确表达语义，
+// 避免把节点名与主机名、云厂商实例 ID 或云厂商实例名称等概念混淆。
 //
-// To clarify the various types:
+// 几种容易混淆的名称需要区分：
 //
-//   - Node.Name is the Name field of the Node in the API.  This should be stored in a NodeName.
-//     Unfortunately, because Name is part of ObjectMeta, we can't store it as a NodeName at the API level.
+//   - Node.Name：Node API 对象的 Name 字段，业务代码中应使用 NodeName 表示。
+//     由于 Name 属于 ObjectMeta，API 类型本身无法直接将其声明为 NodeName。
 //
-//   - Hostname is the hostname of the local machine (from uname -n).
-//     However, some components allow the user to pass in a --hostname-override flag,
-//     which will override this in most places. In the absence of anything more meaningful,
-//     kubelet will use Hostname as the Node.Name when it creates the Node.
+//   - Hostname：本机主机名（通常来自 uname -n）。部分组件支持 --hostname-override，
+//     可覆盖默认主机名；在没有其他更合适标识时，kubelet 创建 Node 会使用 Hostname 作为 Node.Name。
 //
-// * The cloudproviders have the own names: GCE has InstanceName, AWS has InstanceId.
+// - 云厂商实例名称：例如 GCE 使用 InstanceName，AWS 使用 InstanceId。
 //
-//	For GCE, InstanceName is the Name of an Instance object in the GCE API.  On GCE, Instance.Name becomes the
-//	Hostname, and thus it makes sense also to use it as the Node.Name.  But that is GCE specific, and it is up
-//	to the cloudprovider how to do this mapping.
+//	在 GCE 中，Instance.Name 通常也会成为主机名，因此可以被映射为 Node.Name；
+//	但这是 GCE 特有的行为，具体映射规则由云提供商实现决定。
 //
-//	For AWS, the InstanceID is not yet suitable for use as a Node.Name, so we actually use the
-//	PrivateDnsName for the Node.Name.  And this is _not_ always the same as the hostname: if
-//	we are using a custom DHCP domain it won't be.
+//	在 AWS 中，InstanceID 不适合直接作为 Node.Name，因此 Kubernetes 使用 PrivateDnsName。
+//	PrivateDnsName 不一定等于主机名，例如使用自定义 DHCP 域时两者可能不同。
 //
 // 译注：NodeName 是独立的命名类型，用类型系统区分节点名与主机名、云厂商实例名等
 // 相似概念，避免在函数签名之间误传。

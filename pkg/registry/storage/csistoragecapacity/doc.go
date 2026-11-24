@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package csistoragecapacity provides Registry interface and its REST
 // implementation for storing csistoragecapacity api objects.
+// Package csistoragecapacity：CSIStorageCapacity 发布某个存储类在特定拓扑范围内的可用容量，辅助调度器判断卷能否在目标节点拓扑中创建。
 package csistoragecapacity

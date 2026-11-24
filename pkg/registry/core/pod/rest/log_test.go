@@ -33,6 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestPodLogValidates 覆盖日志查询参数的合法与非法组合，确保错误在代理到 Kubelet 前由 API Server 拦截。
 func TestPodLogValidates(t *testing.T) {
 	config, server := registrytest.NewEtcdStorage(t, "")
 	defer server.Terminate(t)

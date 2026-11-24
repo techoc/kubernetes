@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 prioritylevelconfiguration 的 REST Strategy，定义 APF 配置对象的字段隔离、校验和更新规则。
 package prioritylevelconfiguration
 
 import (
@@ -109,6 +110,7 @@ func (priorityLevelConfigurationStrategy) WarningsOnCreate(ctx context.Context, 
 func (priorityLevelConfigurationStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowUnconditionalUpdate 决定是否允许不携带 ResourceVersion 的无条件更新，以控制并发写入语义。
 func (priorityLevelConfigurationStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -170,6 +172,7 @@ func (priorityLevelConfigurationStatusStrategy) GetResetFields() map[fieldpath.A
 	return fields
 }
 
+// PrepareForUpdate Status 更新入口恢复旧 Spec，并重置受保护的 metadata，确保 status 子资源只改变状态字段。
 func (priorityLevelConfigurationStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPriorityLevelConfiguration := obj.(*flowcontrol.PriorityLevelConfiguration)
 	oldPriorityLevelConfiguration := old.(*flowcontrol.PriorityLevelConfiguration)
@@ -182,6 +185,7 @@ func (priorityLevelConfigurationStatusStrategy) PrepareForUpdate(ctx context.Con
 	newPriorityLevelConfiguration.Spec = oldPriorityLevelConfiguration.Spec
 }
 
+// ValidateUpdate 结合新旧对象校验更新合法性，保护不可变字段并检查引用关系及配置变更约束。
 func (priorityLevelConfigurationStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidatePriorityLevelConfigurationStatusUpdate(old.(*flowcontrol.PriorityLevelConfiguration), obj.(*flowcontrol.PriorityLevelConfiguration))
 }
@@ -191,6 +195,7 @@ func (priorityLevelConfigurationStatusStrategy) WarningsOnUpdate(ctx context.Con
 	return nil
 }
 
+// getRequestGroupVersion 从请求上下文中解析客户端使用的 API GroupVersion，供版本相关校验和行为选择。
 func getRequestGroupVersion(ctx context.Context) schema.GroupVersion {
 	if requestInfo, exists := genericapirequest.RequestInfoFrom(ctx); exists {
 		return schema.GroupVersion{Group: requestInfo.APIGroup, Version: requestInfo.APIVersion}

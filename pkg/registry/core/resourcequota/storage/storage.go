@@ -32,12 +32,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// REST implements a RESTStorage for resource quotas.
+// REST 实现 ResourceQuota 主资源 CRUD；StatusREST 使用独立策略限制配额状态写入。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against resource quotas.
+// NewREST 构造主资源 Store，并复制配置创建 StatusStrategy Store，两个端点共享后端但具有不同字段写权限。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.ResourceQuota{} },
@@ -95,6 +96,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Update 委托给 StatusStrategy 更新 Used/Conditions 等状态，并禁止通过 status 子资源隐式创建新配额。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.

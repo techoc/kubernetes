@@ -16,9 +16,8 @@ limitations under the License.
 
 package types
 
-// UID is a type that holds unique ID values, including UUIDs.  Because we
-// don't ONLY use UUIDs, this is an alias to string.  Being a type captures
-// intent and helps make sure that UIDs and names do not get conflated.
+// UID 用于保存唯一标识符，包括 UUID。由于 Kubernetes 使用的唯一标识并不只有 UUID，
+// 因此底层使用 string；定义为独立类型可以明确表达语义，避免 UID 与普通名称混用。
 //
 // UID 不限于 UUID，因此用 string 承载；定义成独立类型可以防止与 name 等
 // 字符串字段混用。

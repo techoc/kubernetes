@@ -21,34 +21,29 @@ import (
 	"errors"
 )
 
-// ErrWaitTimeout is returned when the condition was not satisfied in time.
-//
-// Deprecated: This type will be made private in favor of Interrupted()
-// for checking errors or ErrorInterrupted(err) for returning a wrapped error.
-// 中文补充：该变量只是 errInterrupted 的包装实例，直接比较会漏掉 context 取消等中断情形。
+// ErrWaitTimeout 表示等待条件在允许的时间或尝试次数内始终没有满足。
+// 已弃用：请使用 Interrupted 判断等待是否被中断，或使用 ErrorInterrupted 包装具体原因。
+// 直接比较该错误可能漏掉 context 取消、截止时间到达等其他中断原因。
 var ErrWaitTimeout = ErrorInterrupted(errors.New("timed out waiting for the condition"))
 
-// Interrupted returns true if the error indicates a Poll, ExponentialBackoff, or
-// Until loop exited for any reason besides the condition returning true or an
-// error. A loop is considered interrupted if the calling context is cancelled,
-// the context reaches its deadline, or a backoff reaches its maximum allowed
-// steps.
+// Interrupted 判断等待循环是否因条件未成功且未返回自身错误而提前结束。
+// context 被取消、达到截止时间，或退避次数达到上限，都属于中断。
 //
-// Callers should use this method instead of comparing the error value directly to
-// ErrWaitTimeout, as methods that cancel a context may not return that error.
+// 调用方应使用该方法，而不是直接将错误与 ErrWaitTimeout 比较；
+// 使用 context 的接口可能返回 context.Canceled 或 context.DeadlineExceeded。
 //
-// Instead of:
+// 不推荐：
 //
 //	err := wait.Poll(...)
 //	if err == wait.ErrWaitTimeout {
-//	    log.Infof("Wait for operation exceeded")
+//	    log.Infof("等待操作超时")
 //	} else ...
 //
-// Use:
+// 推荐：
 //
 //	err := wait.Poll(...)
 //	if wait.Interrupted(err) {
-//	    log.Infof("Wait for operation exceeded")
+//	    log.Infof("等待操作超时或被中断")
 //	} else ...
 //
 // 中文补充：同时识别 errInterrupted、context.Canceled 与 context.DeadlineExceeded，
@@ -70,25 +65,20 @@ type errInterrupted struct {
 	cause error
 }
 
-// ErrorInterrupted returns an error that indicates the wait was ended
-// early for a given reason. If no cause is provided a generic error
-// will be used but callers are encouraged to provide a real cause for
-// clarity in debugging.
+// ErrorInterrupted 创建一个表示等待提前结束的错误，并保留导致结束的具体原因。
+// cause 为 nil 时使用通用错误；建议尽量传入真实原因，以便排查问题。
 func ErrorInterrupted(cause error) error {
 	switch cause.(type) {
 	case errInterrupted:
-		// no need to wrap twice since errInterrupted is only needed
-		// once in a chain
-		// 中文补充：避免重复包装导致错误链冗长。
+		// errInterrupted 在错误链中只需要出现一次，已经包装过就直接返回，避免重复嵌套。
 		return cause
 	default:
 		return errInterrupted{cause}
 	}
 }
 
-// errWaitTimeout is the private version of the previous ErrWaitTimeout
-// and is private to prevent direct comparison. Use ErrorInterrupted(err)
-// to get an error that will return true for Interrupted(err).
+// errWaitTimeout 是 ErrWaitTimeout 的内部哨兵版本。将其设为私有可避免调用方直接比较；
+// 调用方应使用 ErrorInterrupted 包装错误，并通过 Interrupted 判断。
 var errWaitTimeout = errInterrupted{}
 
 // Unwrap 返回底层原因，使 errors.Is/As 能穿透到真正的错误。
@@ -100,7 +90,7 @@ func (e errInterrupted) Is(target error) bool { return target == errWaitTimeout 
 // Error 在没有原因时沿用历史文案，保持与旧版本错误消息兼容。
 func (e errInterrupted) Error() string {
 	if e.cause == nil {
-		// returns the same error message as historical behavior
+		// 原因为空时保持历史错误文本，避免改变依赖该文本的既有行为。
 		return "timed out waiting for the condition"
 	}
 	return e.cause.Error()

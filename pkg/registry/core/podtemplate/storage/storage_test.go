@@ -31,6 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd 测试后端，并构造 PodTemplate RESTStorage。
 func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -61,6 +62,7 @@ func validNewPodTemplate(name string) *api.PodTemplate {
 	}
 }
 
+// TestCreate 验证 PodTemplate 创建经过 Strategy 默认值/Generation 初始化和 Pod 模板校验。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -78,6 +80,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证更新仅在内嵌 PodTemplate 改变时递增 Generation。
 func TestUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -119,6 +122,7 @@ func TestList(t *testing.T) {
 	test.TestList(validNewPodTemplate("foo"))
 }
 
+// TestWatch 验证 PodTemplate 创建和更新可通过通用存储 Watch 订阅。
 func TestWatch(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

@@ -57,6 +57,7 @@ var (
 
 var registerMetricsOnce sync.Once
 
+// registerMetrics 注册 NodePort 修复控制器的协调与错误统计指标。
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(nodePortRepairPortErrors)

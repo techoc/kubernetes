@@ -27,12 +27,13 @@ import (
 	"k8s.io/kubernetes/pkg/registry/core/secret"
 )
 
-// REST defines the RESTStorage object that will work against secrets.
+// REST 将 Secret 的通用 CRUD 存储封装为 API Server RESTStorage。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against secrets.
+// NewREST 注册 Secret 对象构造器、字段筛选器、读写策略和表格转换器，再初始化底层持久化 Store。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.Secret{} },

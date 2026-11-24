@@ -81,6 +81,7 @@ func createTestStatus(name string, status api.ConditionStatus, msg string, err s
 	return retVal
 }
 
+// TestList_NoError 验证 List 会返回所有组件的探测状态，并正确处理并发检查结果。
 func TestList_NoError(t *testing.T) {
 	r := NewTestREST(testResponse{result: probe.Success, data: "ok"})
 	got, err := r.List(genericapirequest.NewContext(), nil)
@@ -95,6 +96,7 @@ func TestList_NoError(t *testing.T) {
 	}
 }
 
+// TestList_WithLabelSelectors 验证当前资源不支持标签字段时，带 LabelSelector 的请求按空结果处理。
 func TestList_WithLabelSelectors(t *testing.T) {
 	r := NewTestREST(testResponse{result: probe.Success, data: "ok"})
 	opts := metainternalversion.ListOptions{
@@ -114,6 +116,7 @@ func TestList_WithLabelSelectors(t *testing.T) {
 	}
 }
 
+// TestList_WithFieldSelectors 验证 ComponentStatus 只支持通用元数据字段选择器。
 func TestList_WithFieldSelectors(t *testing.T) {
 	r := NewTestREST(testResponse{result: probe.Success, data: "ok"})
 	opts := metainternalversion.ListOptions{
@@ -133,6 +136,7 @@ func TestList_WithFieldSelectors(t *testing.T) {
 	}
 }
 
+// TestList_FailedCheck 验证探测失败会体现在 ComponentHealthy=False，而不是让整个 List 请求失败。
 func TestList_FailedCheck(t *testing.T) {
 	r := NewTestREST(testResponse{result: probe.Failure, data: ""})
 	got, err := r.List(genericapirequest.NewContext(), nil)
@@ -163,6 +167,7 @@ func TestList_UnknownError(t *testing.T) {
 	}
 }
 
+// TestGet_NoError 验证按组件名称读取时会即时执行对应探测并返回健康状态。
 func TestGet_NoError(t *testing.T) {
 	r := NewTestREST(testResponse{result: probe.Success, data: "ok"})
 	got, err := r.Get(genericapirequest.NewContext(), "test1", &metav1.GetOptions{})

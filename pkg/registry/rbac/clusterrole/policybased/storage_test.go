@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/rbac/validation"
 )
 
+// TestEscalation 验证 ClusterRole 防提权检查和 aggregationRule 需要完整集群权限的特殊规则。
 func TestEscalation(t *testing.T) {
 	createContext := request.WithRequestInfo(request.WithNamespace(context.TODO(), ""), &request.RequestInfo{
 		IsResourceRequest: true,

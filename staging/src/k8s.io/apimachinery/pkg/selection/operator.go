@@ -16,8 +16,8 @@ limitations under the License.
 
 package selection
 
-// Operator represents a key/field's relationship to value(s).
-// See labels.Requirement and fields.Requirement for more details.
+// Operator 表示键或字段与一个或多个值之间的关系。
+// 具体匹配语义参见 labels.Requirement 和 fields.Requirement。
 //
 // 中文说明：Operator 的字符串值直接出现在 label selector 语法中（如
 // "env in (prod,staging)"），必须与用户的查询表达式保持一致，不能随意改动。

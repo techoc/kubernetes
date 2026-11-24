@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/rbac/validation"
 )
 
-// strategy implements behavior for RoleBindings
+// strategy 定义 RoleBinding 的命名空间级写入策略；RoleRef 创建后不可更改，Subjects 可以按规则增删。
 type strategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -69,6 +69,7 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
 // Validate validates a new RoleBinding. Validation must check for a correct signature.
+// Validate 检查 RoleRef 的 kind/apiGroup/name、Subject 类型及 ServiceAccount namespace 等字段。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	roleBinding := obj.(*rbac.RoleBinding)
 	return validation.ValidateRoleBinding(roleBinding)
@@ -83,6 +84,7 @@ func (strategy) Canonicalize(obj runtime.Object) {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// RoleRef 不可变；更新时不能把现有 Binding 转而指向另一个 Role/ClusterRole。
 func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 
 	newRoleBinding := obj.(*rbac.RoleBinding)
@@ -91,6 +93,7 @@ func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) fie
 	return validation.ValidateRoleBindingUpdate(newRoleBinding, oldRoleBinding)
 }
 
+// Declarative 与手写校验不一致时短路返回手写子字段错误，确保 RoleRef 不可变错误路径一致。
 func (strategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	// Match declarative validation short-circuit errors with handwritten child field errors.
 	// This is required because RoleBinding.RoleRef is immutable.

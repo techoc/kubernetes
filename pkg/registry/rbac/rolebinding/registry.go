@@ -39,6 +39,7 @@ type storage struct {
 
 // NewRegistry returns a new Registry interface for the given Storage. Any mismatched
 // types will panic.
+// NewRegistry 将 RoleBinding RESTStorage 适配为按 namespace 查询 Binding 的接口。
 func NewRegistry(s rest.StandardStorage) Registry {
 	return &storage{s}
 }
@@ -61,6 +62,7 @@ type AuthorizerAdapter struct {
 	Registry Registry
 }
 
+// ListRoleBindings 列出指定 namespace 内的 RoleBinding，并转换成公开 v1 类型供 Subject 匹配。
 func (a AuthorizerAdapter) ListRoleBindings(ctx context.Context, namespace string) ([]*rbacv1.RoleBinding, error) {
 	list, err := a.Registry.ListRoleBindings(genericapirequest.WithNamespace(ctx, namespace), &metainternalversion.ListOptions{})
 	if err != nil {

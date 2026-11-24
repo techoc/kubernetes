@@ -24,28 +24,25 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// DelayFunc returns the next time interval to wait.
-// 中文说明：每次调用可返回不同的间隔，因此可以实现退避、抖动等策略；
-// 调用方不应假设其无副作用。
+// DelayFunc 每次调用都会返回下一次需要等待的时间间隔。
+// 返回值可以动态变化，因此可用于实现固定轮询、指数退避和随机抖动等策略。
 type DelayFunc func() time.Duration
 
-// Timer takes an arbitrary delay function and returns a timer that can handle arbitrary interval changes.
-// Use Backoff{...}.Timer() for simple delays and more efficient timers.
+// Timer 将任意延迟函数包装为 Timer，使计时器能够适应每次调用产生的不同间隔。
+// 如果只需要简单退避，优先使用 Backoff{...}.Timer()，其实现更加高效。
 func (fn DelayFunc) Timer(c clock.Clock) Timer {
 	return &variableTimer{fn: fn, new: c.NewTimer}
 }
 
-// Until takes an arbitrary delay function and runs until cancelled or the condition indicates exit. This
-// offers all of the functionality of the methods in this package.
+// Until 按延迟函数提供的间隔反复执行条件函数，直到 context 被取消、条件满足或条件返回错误。
+// immediate 控制是否先立即执行一次；sliding 控制等待间隔是否从条件执行结束后开始计算。
 func (fn DelayFunc) Until(ctx context.Context, immediate, sliding bool, condition ConditionWithContextFunc) error {
 	return loopConditionUntilContext(ctx, &variableTimer{fn: fn, new: internalClock.NewTimer}, immediate, sliding, condition)
 }
 
-// Concurrent returns a version of this DelayFunc that is safe for use by multiple goroutines that
-// wish to share a single delay timer.
-//
-// 中文说明：通过在调用处串行化来实现，代价是共享同一函数的所有 goroutine
-// 会互相阻塞——这只适合 DelayFunc 本身很轻的场景。
+// Concurrent 返回一个可由多个 goroutine 并发调用的延迟函数包装。
+// 内部通过互斥锁串行化对原函数的调用，因此共享该函数的 goroutine 会互相等待；
+// 仅当原延迟函数执行很快、且确实需要共享状态时才适合使用。
 func (fn DelayFunc) Concurrent() DelayFunc {
 	var lock sync.Mutex
 	return func() time.Duration {

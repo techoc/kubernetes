@@ -36,7 +36,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
-// persistentvolumeclaimStrategy implements behavior for PersistentVolumeClaim objects
+// persistentvolumeclaimStrategy 定义 PVC 主资源写入策略，维护状态隔离、卷请求约束以及 dataSource 版本兼容。
 type persistentvolumeclaimStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -63,6 +63,7 @@ func (persistentvolumeclaimStrategy) GetResetFields() map[fieldpath.APIVersion]*
 }
 
 // PrepareForCreate clears the Status field which is not allowed to be set by end users on creation.
+// 创建时清空服务端维护的 Status，清理禁用字段，并兼容旧 dataSource 与新 dataSourceRef 两种来源表示。
 func (persistentvolumeclaimStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	pvc := obj.(*api.PersistentVolumeClaim)
 	pvc.Status = api.PersistentVolumeClaimStatus{}
@@ -70,15 +71,18 @@ func (persistentvolumeclaimStrategy) PrepareForCreate(ctx context.Context, obj r
 
 	// For data sources, we need to do 2 things to implement KEP 1495
 
+	// 先处理历史客户端可能写入的非 PVC/VolumeSnapshot dataSource 值，避免它们绕过新字段校验。
 	// First drop invalid values from spec.dataSource (anything other than PVC or
 	// VolumeSnapshot) if certain conditions are met.
 	pvcutil.EnforceDataSourceBackwardsCompatibility(&pvc.Spec, nil)
 
+	// 再将单边填写的数据源字段同步到另一字段，使新旧客户端读取到一致的来源信息。
 	// Second copy dataSource -> dataSourceRef or dataSourceRef -> dataSource if one of them
 	// is nil and the other is non-nil
 	pvcutil.NormalizeDataSources(&pvc.Spec)
 }
 
+// Validate 根据当前与旧版兼容特性计算校验选项，检查 PVC 容量、访问模式、StorageClass 和数据源引用。
 func (persistentvolumeclaimStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	pvc := obj.(*api.PersistentVolumeClaim)
 	opts := validation.ValidationOptionsForPersistentVolumeClaim(pvc, nil)
@@ -99,6 +103,7 @@ func (persistentvolumeclaimStrategy) AllowCreateOnUpdate(ctx context.Context) bo
 }
 
 // PrepareForUpdate sets the Status field which is not allowed to be set by end users on update
+// 普通更新保留旧 Status；规范化新旧 dataSource 后再校验，兼容旧客户端省略服务端补全字段的请求。
 func (persistentvolumeclaimStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPvc := obj.(*api.PersistentVolumeClaim)
 	oldPvc := old.(*api.PersistentVolumeClaim)
@@ -114,6 +119,7 @@ func (persistentvolumeclaimStrategy) PrepareForUpdate(ctx context.Context, obj, 
 	pvcutil.EnforceDataSourceBackwardsCompatibility(&newPvc.Spec, &oldPvc.Spec)
 	pvcutil.NormalizeDataSources(&newPvc.Spec)
 
+	// 旧对象也要规范化后再比较，避免历史版本未回填 dataSourceRef 的持久化对象在无关更新时被误判非法。
 	// We also normalize the data source fields of the old PVC, so that objects saved
 	// from an earlier version will pass validation.
 	pvcutil.NormalizeDataSources(&oldPvc.Spec)
@@ -154,6 +160,7 @@ func (persistentvolumeclaimStatusStrategy) GetResetFields() map[fieldpath.APIVer
 }
 
 // PrepareForUpdate sets the Spec field which is not allowed to be changed when updating a PV's Status
+// /status 子资源不能修改 PVC.Spec；恢复旧 Spec 后再剔除当前 Feature Gate 不允许写入的 Status 字段。
 func (persistentvolumeclaimStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPVC := obj.(*api.PersistentVolumeClaim)
 	oldPVC := old.(*api.PersistentVolumeClaim)
@@ -174,6 +181,7 @@ func (persistentvolumeclaimStatusStrategy) WarningsOnUpdate(ctx context.Context,
 }
 
 // GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 PVC 标签和字段选择器属性，供 namespace 内 LIST/WATCH 过滤。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	persistentvolumeclaimObj, ok := obj.(*api.PersistentVolumeClaim)
 	if !ok {
@@ -183,6 +191,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 }
 
 // MatchPersistentVolumeClaim returns a generic matcher for a given label and field selector.
+// MatchPersistentVolumeClaim 将 LabelSelector/FieldSelector 绑定到 PVC 属性提取函数。
 func MatchPersistentVolumeClaim(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:    label,

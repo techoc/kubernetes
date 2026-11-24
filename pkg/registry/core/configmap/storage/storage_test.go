@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd 测试后端并构造真实 ConfigMap RESTStorage。
 func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -61,6 +62,7 @@ func validNewConfigMap() *api.ConfigMap {
 	}
 }
 
+// TestCreate 验证 ConfigMap 创建路径会执行名称、命名空间和数据字段校验并持久化对象。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -89,6 +91,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证 ConfigMap 更新经过 Strategy 的字段处理与 ValidateConfigMapUpdate 校验。
 func TestUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -136,6 +139,7 @@ func TestList(t *testing.T) {
 	test.TestList(validNewConfigMap())
 }
 
+// TestWatch 验证 ConfigMap 创建/更新后产生的存储事件能够通过 Watch 接口正确返回。
 func TestWatch(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

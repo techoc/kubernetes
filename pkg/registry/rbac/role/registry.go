@@ -39,6 +39,7 @@ type storage struct {
 
 // NewRegistry returns a new Registry interface for the given Storage. Any mismatched
 // types will panic.
+// NewRegistry 将 Role 的通用 RESTStorage 适配成授权规则查询接口。
 func NewRegistry(s rest.StandardStorage) Registry {
 	return &storage{s}
 }
@@ -62,6 +63,7 @@ type AuthorizerAdapter struct {
 }
 
 // GetRole returns the corresponding Role by name in specified namespace
+// GetRole 通过 StandardStorage 读取内部 Role，再转换为 authorizer/RuleResolver 使用的公开 RBAC v1 类型。
 func (a AuthorizerAdapter) GetRole(ctx context.Context, namespace, name string) (*rbacv1.Role, error) {
 	return a.Registry.GetRole(genericapirequest.WithNamespace(ctx, namespace), name, &metav1.GetOptions{})
 }

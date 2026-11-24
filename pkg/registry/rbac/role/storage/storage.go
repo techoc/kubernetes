@@ -31,6 +31,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against Role objects.
+// NewREST 创建命名空间级 Role Store，注入 RoleStrategy、字段筛选器及标准表格转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &rbac.Role{} },

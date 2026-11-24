@@ -80,6 +80,7 @@ func (f *fakeResponder) Error(err error) {}
 
 func (f *fakeResponder) Object(statusCode int, obj runtime.Object) {}
 
+// TestCheckNodeSupportsWebsockets 验证 API Server 仅在 NodeFeatures 明确包含 WebSocket 扩展能力时返回 true。
 func TestCheckNodeSupportsWebsockets(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -122,6 +123,7 @@ func TestCheckNodeSupportsWebsockets(t *testing.T) {
 	}
 }
 
+// TestExecRESTConnect 验证 exec 端点的参数传递、节点连接和不同 WebSocket 翻译策略。
 func TestExecRESTConnect(t *testing.T) {
 	testPod := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
@@ -271,6 +273,7 @@ apiserver_websocket_streaming_requests_total{proxy_type=%q,subresource="exec"} 1
 	}
 }
 
+// TestAttachRESTConnect 验证 attach 端点在协议转换启用/关闭、节点支持与不支持 WebSocket 时的处理分支。
 func TestAttachRESTConnect(t *testing.T) {
 	testPod := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
@@ -420,6 +423,7 @@ apiserver_websocket_streaming_requests_total{proxy_type=%q,subresource="attach"}
 	}
 }
 
+// TestPortForwardRESTConnect 验证端口转发端点在 WebSocket 隧道能力下选择正确的代理链路。
 func TestPortForwardRESTConnect(t *testing.T) {
 	testPod := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},

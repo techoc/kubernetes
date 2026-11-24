@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/rbac/validation"
 )
 
-// strategy implements behavior for ClusterRoleBindings
+// strategy 定义 ClusterRoleBinding 的集群级写入策略；RoleRef 创建后不可更换，Subject 决定获得集群范围权限的身份。
 type strategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -69,6 +69,7 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
 // Validate validates a new ClusterRoleBinding. Validation must check for a correct signature.
+// Validate 校验集群绑定的 RoleRef 与 Subjects；ServiceAccount Subject 必须显式指定 namespace。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	clusterRoleBinding := obj.(*rbac.ClusterRoleBinding)
 	return validation.ValidateClusterRoleBinding(clusterRoleBinding)
@@ -83,6 +84,7 @@ func (strategy) Canonicalize(obj runtime.Object) {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// RoleRef 在创建后不可变；更新校验允许按规则调整 Subjects，但不能将绑定转向其他角色。
 func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newObj := obj.(*rbac.ClusterRoleBinding)
 	oldObj := old.(*rbac.ClusterRoleBinding)
@@ -94,6 +96,7 @@ func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) [
 	return nil
 }
 
+// 短路返回手写 RoleRef 不可变错误，使 declarative 与传统校验对该字段给出一致结果。
 func (strategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	// Match declarative validation short-circuit errors with handwritten child field errors.
 	// This is required because ClusterRoleBinding.RoleRef is immutable.

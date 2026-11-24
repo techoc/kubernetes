@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本测试文件验证 APF 资源策略、默认配置协调或 REST 存储行为。
 package prioritylevelconfiguration
 
 import (

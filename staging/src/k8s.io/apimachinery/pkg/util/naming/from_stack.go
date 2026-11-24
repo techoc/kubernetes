@@ -29,8 +29,8 @@ import (
 	"strings"
 )
 
-// GetNameFromCallsite walks back through the call stack until we find a caller from outside of the ignoredPackages
-// it returns back a shortpath/filename:line to aid in identification of this reflector when it starts logging
+// GetNameFromCallsite 沿调用栈向上查找第一个不属于 ignoredPackages 的调用方。
+// 返回简化后的文件路径和行号，便于 reflector 开始记录日志时识别其创建位置。
 func GetNameFromCallsite(ignoredPackages ...string) string {
 	name := "????"
 	const maxStack = 10
@@ -57,7 +57,7 @@ func GetNameFromCallsite(ignoredPackages ...string) string {
 	return name
 }
 
-// hasPackage returns true if the file is in one of the ignored packages.
+// hasPackage 判断文件路径是否包含任意一个需要忽略的包路径片段。
 func hasPackage(file string, ignoredPackages []string) bool {
 	for _, ignoredPackage := range ignoredPackages {
 		if strings.Contains(file, ignoredPackage) {
@@ -67,7 +67,7 @@ func hasPackage(file string, ignoredPackages []string) bool {
 	return false
 }
 
-// trimPackagePrefix reduces duplicate values off the front of a package name.
+// trimPackagePrefix 移除文件路径中重复且不稳定的前缀，保留更有辨识度的包内路径。
 //
 // 依次尝试 vendor/src/pkg 三种路径前缀，取最靠后的一种，使不同构建布局下
 // 得到的名称尽量一致。
@@ -87,9 +87,9 @@ func trimPackagePrefix(file string) string {
 // stackCreator 匹配 debug.Stack() 末尾的 "created by func\n file:line +0x..."。
 var stackCreator = regexp.MustCompile(`(?m)^created by (.*)\n\s+(.*):(\d+) \+0x[[:xdigit:]]+$`)
 
-// extractStackCreator retrieves the goroutine file and line that launched this stack. Returns false
-// if the creator cannot be located.
-// TODO: Go does not expose this via runtime https://github.com/golang/go/issues/11440
+// extractStackCreator 从 debug.Stack() 中提取创建当前 goroutine 的文件路径和行号。
+// 如果无法定位创建位置，则返回 false。
+// TODO：Go runtime 尚未通过公开 API 暴露该信息，参见 https://github.com/golang/go/issues/11440。
 func extractStackCreator() (string, int, bool) {
 	stack := debug.Stack()
 	matches := stackCreator.FindStringSubmatch(string(stack))

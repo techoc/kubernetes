@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 ensurer 的 REST Strategy，定义 APF 配置对象的字段隔离、校验和更新规则。
 package ensurer
 
 import (

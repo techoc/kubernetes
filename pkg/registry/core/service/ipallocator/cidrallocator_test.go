@@ -104,6 +104,7 @@ func newTestMetaAllocatorWithFamily(isIPv6 bool) (*MetaAllocator, error) {
 	return c, nil
 }
 
+// TestCIDRAllocateMultiple 验证多个 ServiceCIDR 对相同/重叠前缀的引用合并，以及同一 IP 不会被重复分配。
 func TestCIDRAllocateMultiple(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DisableAllocatorDualWrite, true)
 	r, err := newTestMetaAllocator()
@@ -481,6 +482,7 @@ func TestCIDRAllocateShrink(t *testing.T) {
 
 }
 
+// TestCIDRAllocateDualWrite 验证迁移期间新旧 ClusterIP 分配器双写，保证升级过程中的地址占用状态一致。
 func TestCIDRAllocateDualWrite(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DisableAllocatorDualWrite, false)

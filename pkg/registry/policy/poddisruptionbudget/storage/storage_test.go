@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件负责装配 poddisruptionbudget API Group 的版本资源映射，并按资源启用配置注册 REST Storage。
 package storage
 
 import (

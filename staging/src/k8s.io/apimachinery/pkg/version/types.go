@@ -16,9 +16,8 @@ limitations under the License.
 
 package version
 
-// Info contains versioning information.
-// TODO: Add []string of api versions supported? It's still unclear
-// how we'll want to distribute that information.
+// Info 保存组件的构建版本、模拟版本和兼容性版本信息。
+// TODO：是否增加 []string 表示支持的 API 版本仍未确定，需先明确该信息的分发方式。
 //
 // Info 包含版本信息。
 type Info struct {
@@ -62,7 +61,7 @@ type Info struct {
 	Platform string `json:"platform"`
 }
 
-// String returns info as a human-friendly version string.
+// String 返回便于人阅读的版本字符串，当前使用 GitVersion。
 //
 // String 以人类友好的形式返回版本信息（即 GitVersion）。
 func (info Info) String() string {

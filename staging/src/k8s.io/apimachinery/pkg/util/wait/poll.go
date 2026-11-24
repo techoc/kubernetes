@@ -21,227 +21,108 @@ import (
 	"time"
 )
 
-// PollUntilContextCancel tries a condition func until it returns true, an error, or the context
-// is cancelled or hits a deadline. condition will be invoked after the first interval if the
-// context is not cancelled first. The returned error will be from ctx.Err(), the condition's
-// err return value, or nil. If invoking condition takes longer than interval the next condition
-// will be invoked immediately. When using very short intervals, condition may be invoked multiple
-// times before a context cancellation is detected. If immediate is true, condition will be
-// invoked before waiting and guarantees that condition is invoked at least once, regardless of
-// whether the context has been cancelled.
+// PollUntilContextCancel 按固定间隔执行条件函数，直到条件成功、返回错误或 context 被取消/超时。
+// 默认先等待一个 interval 再执行；immediate=true 时先立即执行一次。
+// 若条件执行时间超过 interval，下一轮会立即开始；极短间隔下，取消被观察到前可能多执行几次。
 func PollUntilContextCancel(ctx context.Context, interval time.Duration, immediate bool, condition ConditionWithContextFunc) error {
 	return loopConditionUntilContext(ctx, Backoff{Duration: interval}.Timer(), immediate, false, condition)
 }
 
-// PollUntilContextTimeout will terminate polling after timeout duration by setting a context
-// timeout. This is provided as a convenience function for callers not currently executing under
-// a deadline and is equivalent to:
-//
-//	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, timeout)
-//	err := PollUntilContextCancel(deadlineCtx, interval, immediate, condition)
-//
-// The deadline context will be cancelled if the Poll succeeds before the timeout, simplifying
-// inline usage. All other behavior is identical to PollUntilContextCancel.
+// PollUntilContextTimeout 为轮询额外创建带超时的 context，超过 timeout 后自动终止。
+// 条件成功或提前返回时会通过 cancel 释放定时器资源；其他执行语义与 PollUntilContextCancel 相同。
 func PollUntilContextTimeout(ctx context.Context, interval, timeout time.Duration, immediate bool, condition ConditionWithContextFunc) error {
 	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, timeout)
 	defer deadlineCancel()
 	return loopConditionUntilContext(deadlineCtx, Backoff{Duration: interval}.Timer(), immediate, false, condition)
 }
 
-// Poll tries a condition func until it returns true, an error, or the timeout
-// is reached.
-//
-// Poll always waits the interval before the run of 'condition'.
-// 'condition' will always be invoked at least once.
-//
-// Some intervals may be missed if the condition takes too long or the time
-// window is too short.
-//
-// If you want to Poll something forever, see PollInfinite.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextTimeout.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// Poll 按固定间隔检查条件，直到条件成功、返回错误或达到 timeout。
+// 首次检查前一定先等待 interval，且至少执行一次。
+// 已弃用：该接口不能返回 context 的真实取消原因，请改用 PollUntilContextTimeout。
 func Poll(interval, timeout time.Duration, condition ConditionFunc) error {
 	return PollWithContext(context.Background(), interval, timeout, condition.WithContext())
 }
 
-// PollWithContext tries a condition func until it returns true, an error,
-// or when the context expires or the timeout is reached, whichever
-// happens first.
-//
-// PollWithContext always waits the interval before the run of 'condition'.
-// 'condition' will always be invoked at least once.
-//
-// Some intervals may be missed if the condition takes too long or the time
-// window is too short.
-//
-// If you want to Poll something forever, see PollInfinite.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextTimeout.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollWithContext 在指定 context 和 timeout 的共同约束下按固定间隔检查条件。
+// 首次检查前先等待 interval，至少执行一次；context 取消与 timeout 谁先发生就由谁终止。
+// 已弃用：请使用 PollUntilContextTimeout，以获得明确的 context 错误语义。
 func PollWithContext(ctx context.Context, interval, timeout time.Duration, condition ConditionWithContextFunc) error {
 	return poll(ctx, false, poller(interval, timeout), condition)
 }
 
-// PollUntil tries a condition func until it returns true, an error or stopCh is
-// closed.
-//
-// PollUntil always waits interval before the first run of 'condition'.
-// 'condition' will always be invoked at least once.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextCancel.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollUntil 按固定间隔检查条件，直到条件成功、返回错误或 stopCh 被关闭。
+// 首次检查前先等待 interval，且至少执行一次。
+// 已弃用：请使用 PollUntilContextCancel，并将停止信号转换为 context。
 func PollUntil(interval time.Duration, condition ConditionFunc, stopCh <-chan struct{}) error {
 	return PollUntilWithContext(ContextForChannel(stopCh), interval, condition.WithContext())
 }
 
-// PollUntilWithContext tries a condition func until it returns true,
-// an error or the specified context is cancelled or expired.
-//
-// PollUntilWithContext always waits interval before the first run of 'condition'.
-// 'condition' will always be invoked at least once.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextCancel.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollUntilWithContext 按固定间隔检查条件，直到条件成功、返回错误或 context 结束。
+// 首次检查前先等待 interval，且至少执行一次。
+// 已弃用：请使用 PollUntilContextCancel。
 func PollUntilWithContext(ctx context.Context, interval time.Duration, condition ConditionWithContextFunc) error {
 	return poll(ctx, false, poller(interval, 0), condition)
 }
 
-// PollInfinite tries a condition func until it returns true or an error
-//
-// PollInfinite always waits the interval before the run of 'condition'.
-//
-// Some intervals may be missed if the condition takes too long or the time
-// window is too short.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextCancel.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollInfinite 按固定间隔无限检查条件，直到条件成功或返回错误。
+// 首次检查前先等待 interval；条件执行过久时可能跳过部分预定间隔。
+// 已弃用：请使用 PollUntilContextCancel 并传入不会自动取消的 context。
 func PollInfinite(interval time.Duration, condition ConditionFunc) error {
 	return PollInfiniteWithContext(context.Background(), interval, condition.WithContext())
 }
 
-// PollInfiniteWithContext tries a condition func until it returns true or an error
-//
-// PollInfiniteWithContext always waits the interval before the run of 'condition'.
-//
-// Some intervals may be missed if the condition takes too long or the time
-// window is too short.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextCancel.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollInfiniteWithContext 按固定间隔持续检查条件，直到条件成功、返回错误或 context 结束。
+// 首次检查前先等待 interval；条件执行过久时可能跳过部分预定间隔。
+// 已弃用：请使用 PollUntilContextCancel。
 func PollInfiniteWithContext(ctx context.Context, interval time.Duration, condition ConditionWithContextFunc) error {
 	return poll(ctx, false, poller(interval, 0), condition)
 }
 
-// PollImmediate tries a condition func until it returns true, an error, or the timeout
-// is reached.
-//
-// PollImmediate always checks 'condition' before waiting for the interval. 'condition'
-// will always be invoked at least once.
-//
-// Some intervals may be missed if the condition takes too long or the time
-// window is too short.
-//
-// If you want to immediately Poll something forever, see PollImmediateInfinite.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextTimeout.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollImmediate 先立即检查条件，再按 interval 重试，直到成功、出错或达到 timeout。
+// 即使 timeout 很短，也保证至少执行一次条件检查。
+// 已弃用：请使用 PollUntilContextTimeout，并设置 immediate=true。
 func PollImmediate(interval, timeout time.Duration, condition ConditionFunc) error {
 	return PollImmediateWithContext(context.Background(), interval, timeout, condition.WithContext())
 }
 
-// PollImmediateWithContext tries a condition func until it returns true, an error,
-// or the timeout is reached or the specified context expires, whichever happens first.
-//
-// PollImmediateWithContext always checks 'condition' before waiting for the interval.
-// 'condition' will always be invoked at least once.
-//
-// Some intervals may be missed if the condition takes too long or the time
-// window is too short.
-//
-// If you want to immediately Poll something forever, see PollImmediateInfinite.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextTimeout.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollImmediateWithContext 先立即检查条件，再按 interval 重试，直到成功、出错或 context/timeout 结束。
+// 保证至少执行一次条件检查；context 与 timeout 谁先结束就返回对应结果。
+// 已弃用：请使用 PollUntilContextTimeout，并设置 immediate=true。
 func PollImmediateWithContext(ctx context.Context, interval, timeout time.Duration, condition ConditionWithContextFunc) error {
 	return poll(ctx, true, poller(interval, timeout), condition)
 }
 
-// PollImmediateUntil tries a condition func until it returns true, an error or stopCh is closed.
-//
-// PollImmediateUntil runs the 'condition' before waiting for the interval.
-// 'condition' will always be invoked at least once.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextCancel.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollImmediateUntil 先立即检查条件，再按 interval 重试，直到成功、出错或 stopCh 关闭。
+// 保证至少执行一次条件检查。
+// 已弃用：请使用 PollUntilContextCancel，并设置 immediate=true。
 func PollImmediateUntil(interval time.Duration, condition ConditionFunc, stopCh <-chan struct{}) error {
 	return PollImmediateUntilWithContext(ContextForChannel(stopCh), interval, condition.WithContext())
 }
 
-// PollImmediateUntilWithContext tries a condition func until it returns true,
-// an error or the specified context is cancelled or expired.
-//
-// PollImmediateUntilWithContext runs the 'condition' before waiting for the interval.
-// 'condition' will always be invoked at least once.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextCancel.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollImmediateUntilWithContext 先立即检查条件，再按 interval 重试，直到成功、出错或 context 结束。
+// 保证至少执行一次条件检查。
+// 已弃用：请使用 PollUntilContextCancel，并设置 immediate=true。
 func PollImmediateUntilWithContext(ctx context.Context, interval time.Duration, condition ConditionWithContextFunc) error {
 	return poll(ctx, true, poller(interval, 0), condition)
 }
 
-// PollImmediateInfinite tries a condition func until it returns true or an error
-//
-// PollImmediateInfinite runs the 'condition' before waiting for the interval.
-//
-// Some intervals may be missed if the condition takes too long or the time
-// window is too short.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextCancel.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollImmediateInfinite 立即执行首次条件检查，之后按 interval 无限重试，直到成功或出错。
+// 已弃用：请使用 PollUntilContextCancel，并设置 immediate=true。
 func PollImmediateInfinite(interval time.Duration, condition ConditionFunc) error {
 	return PollImmediateInfiniteWithContext(context.Background(), interval, condition.WithContext())
 }
 
-// PollImmediateInfiniteWithContext tries a condition func until it returns true
-// or an error or the specified context gets cancelled or expired.
-//
-// PollImmediateInfiniteWithContext runs the 'condition' before waiting for the interval.
-//
-// Some intervals may be missed if the condition takes too long or the time
-// window is too short.
-//
-// Deprecated: This method does not return errors from context, use PollUntilContextCancel.
-// Note that the new method will no longer return ErrWaitTimeout and instead return errors
-// defined by the context package. Will be removed in a future release.
+// PollImmediateInfiniteWithContext 立即执行首次条件检查，之后按 interval 重试，直到成功、出错或 context 结束。
+// 已弃用：请使用 PollUntilContextCancel，并设置 immediate=true。
 func PollImmediateInfiniteWithContext(ctx context.Context, interval time.Duration, condition ConditionWithContextFunc) error {
 	return poll(ctx, true, poller(interval, 0), condition)
 }
 
-// Internally used, each of the public 'Poll*' function defined in this
-// package should invoke this internal function with appropriate parameters.
-// ctx: the context specified by the caller, for infinite polling pass
-// a context that never gets cancelled or expired.
-// immediate: if true, the 'condition' will be invoked before waiting for the interval,
-// in this case 'condition' will always be invoked at least once.
-// wait: user specified WaitFunc function that controls at what interval the condition
-// function should be invoked periodically and whether it is bound by a timeout.
-// condition: user specified ConditionWithContextFunc function.
-//
-// Deprecated: will be removed in favor of loopConditionUntilContext.
+// poll 是旧版 Poll 系列接口共用的内部循环。
+// immediate 决定是否先执行条件；wait 决定每次触发时机及总等待时长；condition 执行实际检查。
+// 该函数保留旧接口的超时错误行为，新代码应使用 loopConditionUntilContext。
 func poll(ctx context.Context, immediate bool, wait waitWithContextFunc, condition ConditionWithContextFunc) error {
-	// Immediate mode guarantees at least one invocation before any waiting.
+	// 立即模式保证先至少调用一次条件函数，再进入等待。
 	if immediate {
 		done, err := runConditionWithCrashProtectionWithContext(ctx, condition)
 		if err != nil {
@@ -254,34 +135,23 @@ func poll(ctx context.Context, immediate bool, wait waitWithContextFunc, conditi
 
 	select {
 	case <-ctx.Done():
-		// returning ctx.Err() will break backward compatibility, use new PollUntilContext*
-		// methods instead
-		// The deprecated Poll* family reports ErrWaitTimeout on both deadline and
-		// cancellation; only the context-aware variants expose the real cause.
+		// 直接返回 ctx.Err() 会破坏旧接口的向后兼容性；需要真实 context 错误的调用方应改用新的 PollUntilContext* 方法。
+		// 已弃用的 Poll* 系列在截止时间到达和 context 取消时都返回 ErrWaitTimeout；
+		// 只有新的 context 感知接口会暴露真实的中断原因。
 		return ErrWaitTimeout
 	default:
 		return waitForWithContext(ctx, wait, condition)
 	}
 }
 
-// poller returns a WaitFunc that will send to the channel every interval until
-// timeout has elapsed and then closes the channel.
-//
-// Over very short intervals you may receive no ticks before the channel is
-// closed. A timeout of 0 is interpreted as an infinity, and in such a case
-// it would be the caller's responsibility to close the done channel.
-// Failure to do so would result in a leaked goroutine.
-//
-// Output ticks are not buffered. If the channel is not ready to receive an
-// item, the tick is skipped.
-//
-// Deprecated: Will be removed in a future release.
+// poller 创建周期性发送通知的 waitFunc，并在 timeout 到达后关闭通知通道。
+// interval 极短时可能来不及发送任何 tick；timeout=0 表示无限运行，此时调用方必须负责关闭 done，
+// 否则内部 goroutine 会一直存活。通道不缓冲，接收方未及时读取时本次 tick 会被丢弃。
 func poller(interval, timeout time.Duration) waitWithContextFunc {
 	return waitWithContextFunc(func(ctx context.Context) <-chan struct{} {
 		ch := make(chan struct{})
 
-		// The ticker goroutine is the reason a non-zero timeout (or a cancelled
-		// context) must always be able to terminate it; otherwise it leaks.
+		// ticker 在独立 goroutine 中运行，因此必须确保非零 timeout 或 context 取消时能够终止该 goroutine，避免泄漏。
 		go func() {
 			defer close(ch)
 
@@ -290,9 +160,7 @@ func poller(interval, timeout time.Duration) waitWithContextFunc {
 
 			var after <-chan time.Time
 			if timeout != 0 {
-				// time.After is more convenient, but it
-				// potentially leaves timers around much longer
-				// than necessary if we exit early.
+				// time.After 虽然使用方便，但如果提前退出，底层计时器可能仍会存活较长时间。
 				timer := time.NewTimer(timeout)
 				after = timer.C
 				defer timer.Stop()
@@ -301,8 +169,7 @@ func poller(interval, timeout time.Duration) waitWithContextFunc {
 			for {
 				select {
 				case <-tick.C:
-					// If the consumer isn't ready for this signal drop it and
-					// check the other channels.
+					// 如果消费者尚未准备好接收本次信号，则丢弃该 tick，继续检查其他通道。
 					select {
 					case ch <- struct{}{}:
 					default:

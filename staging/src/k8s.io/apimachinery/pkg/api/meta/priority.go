@@ -23,8 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// Wildcard values used in priority patterns; a pattern component equal to the
-// wildcard matches any value in the candidate.
+// 优先级匹配规则使用的通配符常量；模式中的对应字段为通配符时，可匹配候选项的任意值。
 const (
 	AnyGroup    = "*"
 	AnyVersion  = "*"
@@ -32,34 +31,28 @@ const (
 	AnyKind     = "*"
 )
 
-// Compile-time assertions that the priority mappers implement the full
-// RESTMapper surface, including reset and string formatting.
+// 编译期接口断言：确保优先级映射器完整实现 RESTMapper、重置接口和字符串格式化接口。
 var (
 	_ ResettableRESTMapper            = PriorityRESTMapper{}
 	_ ResettableRESTMapperWithContext = PriorityRESTMapperWithContext{}
 	_ fmt.Stringer                    = PriorityRESTMapperWithContext{}
 )
 
-// PriorityRESTMapper is a wrapper for automatically choosing a particular Resource or Kind
-// when multiple matches are possible
-//
-// PriorityRESTMapperWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext instead.
+// PriorityRESTMapper 是 RESTMapper 的包装器；当资源或 Kind 存在多个匹配项时，
+// 它按配置的优先级模式逐步筛选，尝试选出唯一结果。
+// 新代码优先使用 PriorityRESTMapperWithContext，以支持上下文日志和取消。
 type PriorityRESTMapper struct {
-	// Delegate is the RESTMapper to use to locate all the Kind and Resource matches
+	// Delegate 负责查找初始的 Kind 和 Resource 候选项。
 	Delegate RESTMapper
 
-	// ResourcePriority is a list of priority patterns to apply to matching resources.
-	// The list of all matching resources is narrowed based on the patterns until only one remains.
-	// A pattern with no matches is skipped.  A pattern with more than one match uses its
-	// matches as the list to continue matching against.
+	// ResourcePriority 是依次应用于资源候选项的优先级模式列表。
+	// 每个模式都会缩小候选范围，直到只剩一个结果；没有匹配项时跳过该模式，
+	// 匹配多个时则以这些匹配项作为下一模式的输入。
 	ResourcePriority []schema.GroupVersionResource
 
-	// KindPriority is a list of priority patterns to apply to matching kinds.
-	// The list of all matching kinds is narrowed based on the patterns until only one remains.
-	// A pattern with no matches is skipped.  A pattern with more than one match uses its
-	// matches as the list to continue matching against.
+	// KindPriority 是依次应用于 Kind 候选项的优先级模式列表。
+	// 每个模式都会缩小候选范围，直到只剩一个结果；没有匹配项时跳过该模式，
+	// 匹配多个时则以这些匹配项作为下一模式的输入。
 	KindPriority []schema.GroupVersionKind
 }
 
@@ -67,22 +60,20 @@ func (m PriorityRESTMapper) String() string {
 	return fmt.Sprintf("PriorityRESTMapper{\n\t%v\n\t%v\n\t%v\n}", m.ResourcePriority, m.KindPriority, m.Delegate)
 }
 
-// PriorityRESTMapperWithContext is a wrapper for automatically choosing a particular Resource or Kind
-// when multiple matches are possible
+// PriorityRESTMapperWithContext 是支持 context 的 RESTMapper 包装器；存在多个资源或 Kind 候选项时，
+// 它按配置的优先级模式逐步筛选，尝试选出唯一结果。
 type PriorityRESTMapperWithContext struct {
-	// Delegate is the RESTMapperWithContext to use to locate all the Kind and Resource matches
+	// Delegate 负责查找初始的 Kind 和 Resource 候选项，并接收调用方的 context。
 	Delegate RESTMapperWithContext
 
-	// ResourcePriority is a list of priority patterns to apply to matching resources.
-	// The list of all matching resources is narrowed based on the patterns until only one remains.
-	// A pattern with no matches is skipped.  A pattern with more than one match uses its
-	// matches as the list to continue matching against.
+	// ResourcePriority 是依次应用于资源候选项的优先级模式列表。
+	// 每个模式都会缩小候选范围，直到只剩一个结果；没有匹配项时跳过该模式，
+	// 匹配多个时则以这些匹配项作为下一模式的输入。
 	ResourcePriority []schema.GroupVersionResource
 
-	// KindPriority is a list of priority patterns to apply to matching kinds.
-	// The list of all matching kinds is narrowed based on the patterns until only one remains.
-	// A pattern with no matches is skipped.  A pattern with more than one match uses its
-	// matches as the list to continue matching against.
+	// KindPriority 是依次应用于 Kind 候选项的优先级模式列表。
+	// 每个模式都会缩小候选范围，直到只剩一个结果；没有匹配项时跳过该模式，
+	// 匹配多个时则以这些匹配项作为下一模式的输入。
 	KindPriority []schema.GroupVersionKind
 }
 
@@ -91,7 +82,7 @@ func (m PriorityRESTMapperWithContext) String() string {
 }
 
 func ToPriorityRESTMapperWithContext(m PriorityRESTMapper) PriorityRESTMapperWithContext {
-	// The context-aware variant is preferred; this bridges the legacy mapper.
+	// 优先使用支持 context 的实现；此函数用于将旧版 RESTMapper 适配到新接口。
 	return PriorityRESTMapperWithContext{
 		Delegate:         ToRESTMapperWithContext(m.Delegate),
 		ResourcePriority: m.ResourcePriority,
@@ -99,80 +90,63 @@ func ToPriorityRESTMapperWithContext(m PriorityRESTMapper) PriorityRESTMapperWit
 	}
 }
 
-// ResourceFor finds all resources, then passes them through the ResourcePriority patterns to find a single matching hit.
+// ResourceFor 先查找所有匹配资源，再按 ResourcePriority 模式逐步筛选，直到得到唯一结果。
 //
-// PriorityRESTMapperWithContext.ResourceForWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext.ResourceForWithContext instead.
+// 新代码优先使用 PriorityRESTMapperWithContext.ResourceForWithContext，以支持上下文日志和取消。
 func (m PriorityRESTMapper) ResourceFor(partiallySpecifiedResource schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	return ToPriorityRESTMapperWithContext(m).ResourceForWithContext(context.Background(), partiallySpecifiedResource)
 }
 
-// KindFor finds all kinds, then passes them through the KindPriority patterns to find a single matching hit.
+// KindFor 先查找所有匹配的 Kind，再按 KindPriority 模式逐步筛选，直到得到唯一结果。
 //
-// PriorityRESTMapperWithContext.KindForWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext.KindForWithContext instead.
+// 新代码优先使用 PriorityRESTMapperWithContext.KindForWithContext，以支持上下文日志和取消。
 func (m PriorityRESTMapper) KindFor(partiallySpecifiedResource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	return ToPriorityRESTMapperWithContext(m).KindForWithContext(context.Background(), partiallySpecifiedResource)
 }
 
-// PriorityRESTMapperWithContext.RESTMappingWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext.RESTMappingWithContext instead.
+// 新代码优先使用 PriorityRESTMapperWithContext.RESTMappingWithContext，以支持上下文日志和取消。
 func (m PriorityRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (mapping *RESTMapping, err error) {
 	return ToPriorityRESTMapperWithContext(m).RESTMappingWithContext(context.Background(), gk, versions...)
 }
 
-// PriorityRESTMapperWithContext.RESTMappingsWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext.RESTMappingsWithContext instead.
+// 新代码优先使用 PriorityRESTMapperWithContext.RESTMappingsWithContext，以支持上下文日志和取消。
 func (m PriorityRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string) ([]*RESTMapping, error) {
 	return m.Delegate.RESTMappings(gk, versions...)
 }
 
-// PriorityRESTMapperWithContext.ResourceSingularizerWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext.ResourceSingularizerWithContext instead.
+// 新代码优先使用 PriorityRESTMapperWithContext.ResourceSingularizerWithContext，以支持上下文日志和取消。
 func (m PriorityRESTMapper) ResourceSingularizer(resource string) (singular string, err error) {
 	return m.Delegate.ResourceSingularizer(resource)
 }
 
-// PriorityRESTMapperWithContext.ResourcesForWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext.ResourcesForWithContext instead.
+// 新代码优先使用 PriorityRESTMapperWithContext.ResourcesForWithContext，以支持上下文日志和取消。
 func (m PriorityRESTMapper) ResourcesFor(partiallySpecifiedResource schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
 	return m.Delegate.ResourcesFor(partiallySpecifiedResource)
 }
 
-// PriorityRESTMapperWithContext.KindsForWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext.KindsForWithContext instead.
+// 新代码优先使用 PriorityRESTMapperWithContext.KindsForWithContext，以支持上下文日志和取消。
 func (m PriorityRESTMapper) KindsFor(partiallySpecifiedResource schema.GroupVersionResource) (gvk []schema.GroupVersionKind, err error) {
 	return m.Delegate.KindsFor(partiallySpecifiedResource)
 }
 
-// PriorityRESTMapperWithContext.ResetWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use PriorityRESTMapperWithContext.ResetWithContext instead.
+// 新代码优先使用 PriorityRESTMapperWithContext.ResetWithContext，以支持上下文日志和取消。
 func (m PriorityRESTMapper) Reset() {
 	MaybeResetRESTMapper(m.Delegate)
 }
 
-// ResourceFor finds all resources, then passes them through the ResourcePriority patterns to find a single matching hit.
+// ResourceFor 先查找所有匹配资源，再按 ResourcePriority 模式逐步筛选，直到得到唯一结果。
 func (m PriorityRESTMapperWithContext) ResourceForWithContext(ctx context.Context, partiallySpecifiedResource schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	originalGVRs, originalErr := m.Delegate.ResourcesForWithContext(ctx, partiallySpecifiedResource)
-	// If the delegate found nothing usable, surface its error verbatim rather
-	// than masking it with an ambiguity error.
+	// Delegate 没有返回可用候选项时，原样返回其错误，避免用歧义错误掩盖真正原因。
 	if originalErr != nil && len(originalGVRs) == 0 {
 		return schema.GroupVersionResource{}, originalErr
 	}
-	// A single match needs no disambiguation; keep any non-fatal error.
+	// 只有一个候选项时无需消歧，保留 Delegate 返回的非致命错误。
 	if len(originalGVRs) == 1 {
 		return originalGVRs[0], originalErr
 	}
 
-	// Copy so the delegate's slice is never mutated while narrowing.
+	// 复制候选切片，避免筛选过程修改 Delegate 持有的底层数组。
 	remainingGVRs := append([]schema.GroupVersionResource{}, originalGVRs...)
 	for _, pattern := range m.ResourcePriority {
 		matchedGVRs := []schema.GroupVersionResource{}
@@ -184,14 +158,13 @@ func (m PriorityRESTMapperWithContext) ResourceForWithContext(ctx context.Contex
 
 		switch len(matchedGVRs) {
 		case 0:
-			// if you have no matches, then nothing matched this pattern just move to the next
+			// 当前模式没有匹配项，不缩小候选范围，继续尝试下一个模式。
 			continue
 		case 1:
-			// one match, return
+			// 只剩一个匹配项，立即返回。
 			return matchedGVRs[0], originalErr
 		default:
-			// more than one match, use the matched hits as the list moving to the next pattern.
-			// this way you can have a series of selection criteria
+			// 匹配项多于一个时，将其作为下一模式的候选集合，从而串联多个筛选条件。
 			remainingGVRs = matchedGVRs
 		}
 	}
@@ -199,10 +172,10 @@ func (m PriorityRESTMapperWithContext) ResourceForWithContext(ctx context.Contex
 	return schema.GroupVersionResource{}, &AmbiguousResourceError{PartialResource: partiallySpecifiedResource, MatchingResources: originalGVRs}
 }
 
-// KindFor finds all kinds, then passes them through the KindPriority patterns to find a single matching hit.
+// KindFor 先查找所有匹配的 Kind，再按 KindPriority 模式逐步筛选，直到得到唯一结果。
 func (m PriorityRESTMapperWithContext) KindForWithContext(ctx context.Context, partiallySpecifiedResource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	originalGVKs, originalErr := m.Delegate.KindsForWithContext(ctx, partiallySpecifiedResource)
-	// Same narrowing strategy as ResourceForWithContext, applied to kinds.
+	// 与 ResourceForWithContext 相同的候选缩小策略，此处应用于 Kind。
 	if originalErr != nil && len(originalGVKs) == 0 {
 		return schema.GroupVersionKind{}, originalErr
 	}
@@ -210,7 +183,7 @@ func (m PriorityRESTMapperWithContext) KindForWithContext(ctx context.Context, p
 		return originalGVKs[0], originalErr
 	}
 
-	// Copy to avoid mutating the delegate's slice.
+	// 复制候选切片，避免修改 Delegate 返回的底层数组。
 	remainingGVKs := append([]schema.GroupVersionKind{}, originalGVKs...)
 	for _, pattern := range m.KindPriority {
 		matchedGVKs := []schema.GroupVersionKind{}
@@ -222,14 +195,13 @@ func (m PriorityRESTMapperWithContext) KindForWithContext(ctx context.Context, p
 
 		switch len(matchedGVKs) {
 		case 0:
-			// if you have no matches, then nothing matched this pattern just move to the next
+			// 当前模式没有匹配项，不缩小候选范围，继续尝试下一个模式。
 			continue
 		case 1:
-			// one match, return
+			// 只剩一个匹配项，立即返回。
 			return matchedGVKs[0], originalErr
 		default:
-			// more than one match, use the matched hits as the list moving to the next pattern.
-			// this way you can have a series of selection criteria
+			// 匹配项多于一个时，将其作为下一模式的候选集合，从而串联多个筛选条件。
 			remainingGVKs = matchedGVKs
 		}
 	}
@@ -237,8 +209,7 @@ func (m PriorityRESTMapperWithContext) KindForWithContext(ctx context.Context, p
 	return schema.GroupVersionKind{}, &AmbiguousResourceError{PartialResource: partiallySpecifiedResource, MatchingKinds: originalGVKs}
 }
 
-// resourceMatches reports whether a resource satisfies a priority pattern.
-// Each wildcard component of the pattern matches anything.
+// resourceMatches 判断资源是否符合优先级模式；模式中值为通配符的字段可匹配任意候选值。
 func resourceMatches(pattern schema.GroupVersionResource, resource schema.GroupVersionResource) bool {
 	if pattern.Group != AnyGroup && pattern.Group != resource.Group {
 		return false
@@ -253,8 +224,7 @@ func resourceMatches(pattern schema.GroupVersionResource, resource schema.GroupV
 	return true
 }
 
-// kindMatches reports whether a kind satisfies a priority pattern.
-// Each wildcard component of the pattern matches anything.
+// kindMatches 判断 Kind 是否符合优先级模式；模式中值为通配符的字段可匹配任意候选值。
 func kindMatches(pattern schema.GroupVersionKind, kind schema.GroupVersionKind) bool {
 	if pattern.Group != AnyGroup && pattern.Group != kind.Group {
 		return false
@@ -271,16 +241,15 @@ func kindMatches(pattern schema.GroupVersionKind, kind schema.GroupVersionKind) 
 
 func (m PriorityRESTMapperWithContext) RESTMappingWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) (mapping *RESTMapping, err error) {
 	mappings, originalErr := m.Delegate.RESTMappingsWithContext(ctx, gk, versions...)
-	// No candidates: return the delegate error unchanged.
+	// 没有候选映射时，原样返回 Delegate 的错误。
 	if originalErr != nil && len(mappings) == 0 {
 		return nil, originalErr
 	}
 
-	// any versions the user provides take priority
+	// 调用方显式指定的版本优先于映射器中配置的 KindPriority。
 	priorities := m.KindPriority
 	if len(versions) > 0 {
-		// Explicit versions outrank the configured priorities: build wildcard-kind
-		// patterns for each requested version and prepend them.
+		// 显式版本优先级最高：为每个指定版本构造 Kind 使用通配符的模式，并放在原优先级列表之前。
 		priorities = make([]schema.GroupVersionKind, 0, len(m.KindPriority)+len(versions))
 		for _, version := range versions {
 			gv := schema.GroupVersion{
@@ -303,14 +272,13 @@ func (m PriorityRESTMapperWithContext) RESTMappingWithContext(ctx context.Contex
 
 		switch len(matching) {
 		case 0:
-			// if you have no matches, then nothing matched this pattern just move to the next
+			// 当前模式没有匹配项，不缩小候选范围，继续尝试下一个模式。
 			continue
 		case 1:
-			// one match, return
+			// 只剩一个匹配项，立即返回。
 			return matching[0], originalErr
 		default:
-			// more than one match, use the matched hits as the list moving to the next pattern.
-			// this way you can have a series of selection criteria
+			// 匹配项多于一个时，将其作为下一模式的候选集合，从而串联多个筛选条件。
 			remaining = matching
 		}
 	}
@@ -318,7 +286,7 @@ func (m PriorityRESTMapperWithContext) RESTMappingWithContext(ctx context.Contex
 		return remaining[0], originalErr
 	}
 
-	// No pattern narrowed the result to a single mapping; report all candidates.
+	// 所有优先级模式执行完后仍有多个候选映射，返回包含全部候选 Kind 的歧义错误。
 	var kinds []schema.GroupVersionKind
 	for _, m := range mappings {
 		kinds = append(kinds, m.GroupVersionKind)

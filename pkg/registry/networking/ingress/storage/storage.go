@@ -38,6 +38,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against replication controllers.
+// NewREST 创建 Ingress 主资源 Store，并复制 Store 配置为 StatusREST 安装 StatusStrategy，隔离规则和状态写入权限。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &networking.Ingress{} },
@@ -93,6 +94,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Update 将 Ingress Status 更新委托给专用 Store，明确禁止 status 子资源在对象不存在时隐式创建。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.

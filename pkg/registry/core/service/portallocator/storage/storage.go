@@ -16,4 +16,6 @@ limitations under the License.
 
 package storage
 
+// 本目录当前只保留 NodePort 存储适配器的测试入口；实际 RangeAllocation etcd 实现复用 allocator/storage。
+
 // Keep CI happy; it is unhappy if a directory only contains tests

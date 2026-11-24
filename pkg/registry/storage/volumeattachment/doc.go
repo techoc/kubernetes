@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package volumeattachment provides Registry interface and its REST
 // implementation for storing volumeattachment api objects.
+// Package volumeattachment：VolumeAttachment 表示将一个卷附加到一个节点的请求及其控制器执行结果，Spec 描述目标，Status 记录附加状态。
 package volumeattachment

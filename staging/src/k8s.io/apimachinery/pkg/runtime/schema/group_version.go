@@ -25,11 +25,11 @@ import (
 	"strings"
 )
 
-// ParseResourceArg takes the common style of string which may be either `resource.group.com` or `resource.version.group.com`
-// and parses it out into both possibilities.  This code takes no responsibility for knowing which representation was intended
-// but with a knowledge of all GroupVersions, calling code can take a very good guess.  If there are only two segments, then
-// `*GroupVersionResource` is nil.
-// `resource.group.com` -> `group=com, version=group, resource=resource` and `group=group.com, resource=resource`
+// ParseResourceArg 解析常见的 resource.group.com 或 resource.version.group.com 格式，
+// 同时返回带版本和不带版本的两种解释。该函数不判断调用方原本想表达哪一种，
+// 调用方可结合已知 GroupVersion 集合进行判断；只有两段时，GroupVersionResource 返回 nil。
+// 例如 resource.group.com 可解释为 group=com、version=group、resource=resource，
+// 也可解释为 group=group.com、resource=resource。
 //
 // 返回两种可能解释，由调用方结合已知 GroupVersion 选择；少于三段时无法
 // 区分 version，GVR 为 nil。
@@ -44,10 +44,9 @@ func ParseResourceArg(arg string) (*GroupVersionResource, GroupResource) {
 	return gvr, ParseGroupResource(arg)
 }
 
-// ParseKindArg takes the common style of string which may be either `Kind.group.com` or `Kind.version.group.com`
-// and parses it out into both possibilities. This code takes no responsibility for knowing which representation was intended
-// but with a knowledge of all GroupKinds, calling code can take a very good guess. If there are only two segments, then
-// `*GroupVersionKind` is nil.
+// ParseKindArg 解析 Kind.group.com 或 Kind.version.group.com 格式，并返回带版本和不带版本的两种解释。
+// 函数本身不判断哪种解释才是调用方的真实意图，调用方可结合已知 GroupKind 集合进行判断；
+// 只有两段时，GroupVersionKind 返回 nil。
 // `Kind.group.com` -> `group=com, version=group, kind=Kind` and `group=group.com, kind=Kind`
 func ParseKindArg(arg string) (*GroupVersionKind, GroupKind) {
 	var gvk *GroupVersionKind
@@ -59,8 +58,8 @@ func ParseKindArg(arg string) (*GroupVersionKind, GroupKind) {
 	return gvk, ParseGroupKind(arg)
 }
 
-// GroupResource specifies a Group and a Resource, but does not force a version.  This is useful for identifying
-// concepts during lookup stages without having partially valid types
+// GroupResource 标识 API 组和资源，但不绑定具体版本。查找阶段可先使用它标识资源，
+// 避免构造一个版本信息尚不完整的 GroupVersionResource。
 type GroupResource struct {
 	Group    string
 	Resource string
@@ -94,8 +93,7 @@ func ParseGroupKind(gk string) GroupKind {
 	return GroupKind{Group: gk[i+1:], Kind: gk[:i]}
 }
 
-// ParseGroupResource turns "resource.group" string into a GroupResource struct.  Empty strings are allowed
-// for each field.
+// ParseGroupResource 将 resource.group 字符串解析为 GroupResource；组名和资源名都允许为空。
 func ParseGroupResource(gr string) GroupResource {
 	if i := strings.Index(gr, "."); i >= 0 {
 		return GroupResource{Group: gr[i+1:], Resource: gr[:i]}
@@ -103,8 +101,8 @@ func ParseGroupResource(gr string) GroupResource {
 	return GroupResource{Resource: gr}
 }
 
-// GroupVersionResource unambiguously identifies a resource.  It doesn't anonymously include GroupVersion
-// to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+// GroupVersionResource 使用 group、version、resource 唯一标识一个资源。它不匿名嵌入 GroupVersion，
+// 以避免 Go 自动类型转换；同时直接保存字段，避免引入额外的自定义编组行为。
 type GroupVersionResource struct {
 	Group    string
 	Version  string
@@ -131,8 +129,7 @@ func (gvr GroupVersionResource) String() string {
 	return strings.Join([]string{gvr.Group, "/", gvr.Version, ", Resource=", gvr.Resource}, "")
 }
 
-// GroupKind specifies a Group and a Kind, but does not force a version.  This is useful for identifying
-// concepts during lookup stages without having partially valid types
+// GroupKind 标识 API 组和 Kind，但不绑定具体版本。查找阶段可先用它表示尚未确定版本的类型。
 type GroupKind struct {
 	Group string
 	Kind  string
@@ -156,15 +153,15 @@ func (gk GroupKind) String() string {
 	return gk.Kind + "." + gk.Group
 }
 
-// GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
-// to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+// GroupVersionKind 使用 group、version、kind 唯一标识一种 API 类型。它不匿名嵌入 GroupVersion，
+// 以避免 Go 自动类型转换；同时直接保存字段，避免引入额外的自定义编组行为。
 type GroupVersionKind struct {
 	Group   string
 	Version string
 	Kind    string
 }
 
-// Empty returns true if group, version, and kind are empty
+// Empty 判断 group、version 和 kind 是否都为空。
 func (gvk GroupVersionKind) Empty() bool {
 	return len(gvk.Group) == 0 && len(gvk.Version) == 0 && len(gvk.Kind) == 0
 }
@@ -184,19 +181,18 @@ func (gvk GroupVersionKind) String() string {
 	return gvk.Group + "/" + gvk.Version + ", Kind=" + gvk.Kind
 }
 
-// GroupVersion contains the "group" and the "version", which uniquely identifies the API.
+// GroupVersion 保存 API 组和版本，两者共同确定一个 API 版本。
 type GroupVersion struct {
 	Group   string
 	Version string
 }
 
-// Empty returns true if group and version are empty
+// Empty 判断 group 和 version 是否都为空。
 func (gv GroupVersion) Empty() bool {
 	return len(gv.Group) == 0 && len(gv.Version) == 0
 }
 
-// String puts "group" and "version" into a single "group/version" string. For the legacy v1
-// it returns "v1".
+// String 将 group 和 version 合并为 group/version 字符串；对于历史遗留的 core v1，结果仅为 v1。
 func (gv GroupVersion) String() string {
 	if len(gv.Group) > 0 {
 		return gv.Group + "/" + gv.Version
@@ -204,16 +200,15 @@ func (gv GroupVersion) String() string {
 	return gv.Version
 }
 
-// Identifier implements runtime.GroupVersioner interface.
+// Identifier 实现 runtime.GroupVersioner 接口，返回该 GroupVersion 的稳定标识。
 func (gv GroupVersion) Identifier() string {
 	return gv.String()
 }
 
-// KindForGroupVersionKinds identifies the preferred GroupVersionKind out of a list. It returns ok false
-// if none of the options match the group. It prefers a match to group and version over just group.
-// TODO: Move GroupVersion to a package under pkg/runtime, since it's used by scheme.
-// TODO: Introduce an adapter type between GroupVersion and runtime.GroupVersioner, and use LegacyCodec(GroupVersion)
-// in fewer places.
+// KindForGroupVersionKinds 从候选列表中选择最合适的 GroupVersionKind。没有候选项匹配当前 group 时返回 false；
+// 同时匹配 group 和 version 的候选项优先级高于仅匹配 group 的候选项。
+// TODO：由于 Scheme 也使用 GroupVersion，后续可考虑将其移动到 pkg/runtime 下的独立包。
+// TODO：可在 GroupVersion 与 runtime.GroupVersioner 之间引入适配类型，减少直接使用 LegacyCodec(GroupVersion) 的位置。
 func (gv GroupVersion) KindForGroupVersionKinds(kinds []GroupVersionKind) (target GroupVersionKind, ok bool) {
 	// 第一轮要求 group 与 version 都匹配，精确优先。
 	for _, gvk := range kinds {
@@ -230,11 +225,10 @@ func (gv GroupVersion) KindForGroupVersionKinds(kinds []GroupVersionKind) (targe
 	return GroupVersionKind{}, false
 }
 
-// ParseGroupVersion turns "group/version" string into a GroupVersion struct. It reports error
-// if it cannot parse the string.
+// ParseGroupVersion 将 group/version 字符串解析为 GroupVersion；格式不合法时返回错误。
 func ParseGroupVersion(gv string) (GroupVersion, error) {
-	// this can be the internal version for the legacy kube types
-	// TODO once we've cleared the last uses as strings, this special case should be removed.
+	// 这里可能表示历史 Kubernetes 类型使用的内部版本。
+	// TODO：清理完所有以字符串形式使用该值的旧代码后，应移除此特殊分支。
 	// 空串与 "/" 都表示“无版本”，是历史遗留的表示法。
 	if (len(gv) == 0) || (gv == "/") {
 		return GroupVersion{}, nil
@@ -253,23 +247,22 @@ func ParseGroupVersion(gv string) (GroupVersion, error) {
 	}
 }
 
-// WithKind creates a GroupVersionKind based on the method receiver's GroupVersion and the passed Kind.
+// WithKind 使用接收者中的 group/version 和传入的 kind 构造 GroupVersionKind。
 func (gv GroupVersion) WithKind(kind string) GroupVersionKind {
 	return GroupVersionKind{Group: gv.Group, Version: gv.Version, Kind: kind}
 }
 
-// WithResource creates a GroupVersionResource based on the method receiver's GroupVersion and the passed Resource.
+// WithResource 使用接收者中的 group/version 和传入的 resource 构造 GroupVersionResource。
 func (gv GroupVersion) WithResource(resource string) GroupVersionResource {
 	return GroupVersionResource{Group: gv.Group, Version: gv.Version, Resource: resource}
 }
 
-// GroupVersions can be used to represent a set of desired group versions.
-// TODO: Move GroupVersions to a package under pkg/runtime, since it's used by scheme.
-// TODO: Introduce an adapter type between GroupVersions and runtime.GroupVersioner, and use LegacyCodec(GroupVersion)
-// in fewer places.
+// GroupVersions 表示一组期望匹配的 API 组版本。
+// TODO：由于 Scheme 也使用 GroupVersions，后续可考虑将其移动到 pkg/runtime 下的独立包。
+// TODO：可在 GroupVersions 与 runtime.GroupVersioner 之间引入适配类型，减少直接使用 LegacyCodec(GroupVersion) 的位置。
 type GroupVersions []GroupVersion
 
-// Identifier implements runtime.GroupVersioner interface.
+// Identifier 实现 runtime.GroupVersioner 接口，返回该 GroupVersion 的稳定标识。
 func (gvs GroupVersions) Identifier() string {
 	groupVersions := make([]string, 0, len(gvs))
 	for i := range gvs {
@@ -278,8 +271,8 @@ func (gvs GroupVersions) Identifier() string {
 	return fmt.Sprintf("[%s]", strings.Join(groupVersions, ","))
 }
 
-// KindForGroupVersionKinds identifies the preferred GroupVersionKind out of a list. It returns ok false
-// if none of the options match the group.
+// KindForGroupVersionKinds 从候选列表中选择与这组期望版本最匹配的 GroupVersionKind；
+// 没有任何候选项匹配时返回 false。
 func (gvs GroupVersions) KindForGroupVersionKinds(kinds []GroupVersionKind) (GroupVersionKind, bool) {
 	var targets []GroupVersionKind
 	for _, gv := range gvs {
@@ -299,8 +292,8 @@ func (gvs GroupVersions) KindForGroupVersionKinds(kinds []GroupVersionKind) (Gro
 	return GroupVersionKind{}, false
 }
 
-// bestMatch tries to pick best matching GroupVersionKind and falls back to the first
-// found if no exact match exists.
+// bestMatch 尝试从候选项中找出与输入列表完全一致的 GroupVersionKind；
+// 如果不存在完全匹配项，则退回到 targets 中的第一个候选项。
 func bestMatch(kinds []GroupVersionKind, targets []GroupVersionKind) GroupVersionKind {
 	for _, gvk := range targets {
 		for _, k := range kinds {
@@ -312,8 +305,7 @@ func bestMatch(kinds []GroupVersionKind, targets []GroupVersionKind) GroupVersio
 	return targets[0]
 }
 
-// ToAPIVersionAndKind is a convenience method for satisfying runtime.Object on types that
-// do not use TypeMeta.
+// ToAPIVersionAndKind 为未内嵌 TypeMeta 的类型提供便捷方法，以满足 runtime.Object 所需的类型元信息读取。
 func (gvk GroupVersionKind) ToAPIVersionAndKind() (string, string) {
 	if gvk.Empty() {
 		return "", ""
@@ -321,10 +313,9 @@ func (gvk GroupVersionKind) ToAPIVersionAndKind() (string, string) {
 	return gvk.GroupVersion().String(), gvk.Kind
 }
 
-// FromAPIVersionAndKind returns a GVK representing the provided fields for types that
-// do not use TypeMeta. This method exists to support test types and legacy serializations
-// that have a distinct group and kind.
-// TODO: further reduce usage of this method.
+// FromAPIVersionAndKind 为未使用 TypeMeta 的类型，根据传入字段构造 GVK。
+// 该方法主要兼容测试类型，以及 group 与 kind 分开存储的历史序列化格式。
+// TODO：继续减少该方法的调用点。
 func FromAPIVersionAndKind(apiVersion, kind string) GroupVersionKind {
 	// 解析失败时退化为只有 kind，保持宽松以兼容历史数据。
 	if gv, err := ParseGroupVersion(apiVersion); err == nil {

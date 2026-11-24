@@ -23,25 +23,25 @@ import (
 	"time"
 )
 
-// Clock defines an interface for obtaining the current time.
+// Clock 定义获取当前时间的接口，便于测试注入可控时钟。
 // 中文说明：抽出时钟是为了测试能确定性地控制过期时间，而不必真实 sleep。
 type Clock interface {
 	Now() time.Time
 }
 
-// realClock implements the Clock interface by calling time.Now()
+// realClock 通过 time.Now() 实现 Clock 接口。
 type realClock struct{}
 
 func (realClock) Now() time.Time { return time.Now() }
 
-// LRUExpireCache is a cache that ensures the mostly recently accessed keys are returned with
-// a ttl beyond which keys are forcibly expired.
+// LRUExpireCache 是带 TTL 和容量上限的 LRU 缓存：访问过的条目会提升到队首，
+// 超过 TTL 的条目视为失效，容量不足时淘汰最久未使用的条目。
 //
 // 中文说明：evictionList 以“最近使用在前”的顺序维护元素，entries 提供
 // O(1) 查找；两个结构必须在锁内同步更新。容量满时淘汰最久未使用的条目，
 // 过期条目则在 Get 时惰性删除。
 type LRUExpireCache struct {
-	// clock is used to obtain the current time
+	// clock 用于获取当前时间并计算条目的过期时刻。
 	clock Clock
 
 	lock sync.Mutex
@@ -51,12 +51,12 @@ type LRUExpireCache struct {
 	entries      map[interface{}]*list.Element
 }
 
-// NewLRUExpireCache creates an expiring cache with the given size
+// NewLRUExpireCache 创建指定最大容量的过期 LRU 缓存，使用系统时钟。
 func NewLRUExpireCache(maxSize int) *LRUExpireCache {
 	return NewLRUExpireCacheWithClock(maxSize, realClock{})
 }
 
-// NewLRUExpireCacheWithClock creates an expiring cache with the given size, using the specified clock to obtain the current time.
+// NewLRUExpireCacheWithClock 创建指定最大容量的过期 LRU 缓存，并使用调用方提供的时钟。
 func NewLRUExpireCacheWithClock(maxSize int, clock Clock) *LRUExpireCache {
 	// maxSize 为 0 会让 evictionList.Len() >= maxSize 恒成立却无元素可淘汰，
 	// 因此直接拒绝。
@@ -79,12 +79,12 @@ type cacheEntry struct {
 	expireTime time.Time
 }
 
-// Add adds the value to the cache at key with the specified maximum duration.
+// Add 将 key/value 写入缓存，并设置 ttl。若 key 已存在则更新值和过期时间，同时将条目提升为最近使用。
 func (c *LRUExpireCache) Add(key interface{}, value interface{}, ttl time.Duration) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	// Key already exists
+	// key 已存在：更新现有节点，不创建重复条目。
 	// 中文说明：已存在的 key 只更新值、TTL 并提升优先级，不新建节点，
 	// 从而保证 entries 与链表始终一一对应。
 	oldElement, ok := c.entries[key]
@@ -95,14 +95,14 @@ func (c *LRUExpireCache) Add(key interface{}, value interface{}, ttl time.Durati
 		return
 	}
 
-	// Make space if necessary
+	// 达到容量上限时，先淘汰链表尾部（最久未使用）的条目。
 	if c.evictionList.Len() >= c.maxSize {
 		toEvict := c.evictionList.Back()
 		c.evictionList.Remove(toEvict)
 		delete(c.entries, toEvict.Value.(*cacheEntry).key)
 	}
 
-	// Add new entry
+	// 创建新条目并插入链表队首。
 	entry := &cacheEntry{
 		key:        key,
 		value:      value,
@@ -112,8 +112,7 @@ func (c *LRUExpireCache) Add(key interface{}, value interface{}, ttl time.Durati
 	c.entries[key] = element
 }
 
-// Get returns the value at the specified key from the cache if it exists and is not
-// expired, or returns false.
+// Get 查询指定 key。条目存在且未过期时返回 value 和 true；不存在或已过期时返回 nil 和 false。
 func (c *LRUExpireCache) Get(key interface{}) (interface{}, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -135,7 +134,7 @@ func (c *LRUExpireCache) Get(key interface{}) (interface{}, bool) {
 	return element.Value.(*cacheEntry).value, true
 }
 
-// Remove removes the specified key from the cache if it exists
+// Remove 如果指定 key 存在，则从链表和索引映射中同时删除。
 func (c *LRUExpireCache) Remove(key interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -149,7 +148,7 @@ func (c *LRUExpireCache) Remove(key interface{}) {
 	delete(c.entries, key)
 }
 
-// RemoveAll removes all keys that match predicate.
+// RemoveAll 删除所有满足 predicate 的 key，并同步维护链表与索引映射。
 func (c *LRUExpireCache) RemoveAll(predicate func(key any) bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -163,12 +162,10 @@ func (c *LRUExpireCache) RemoveAll(predicate func(key any) bool) {
 	}
 }
 
-// Keys returns all unexpired keys in the cache.
+// Keys 返回缓存中所有尚未过期的 key。
 //
-// Keep in mind that subsequent calls to Get() for any of the returned keys
-// might return "not found".
-//
-// Keys are returned ordered from least recently used to most recently used.
+// 返回 key 后，条目仍可能在下一次 Get 前过期，因此后续 Get 可能返回未命中。
+// 返回顺序为从最久未使用到最近使用。
 //
 // 中文说明：只读遍历，不删除已过期条目（Get 会负责清理）；返回值顺序
 // 依赖链表，故从 Back 向前遍历得到“最久未用优先”的顺序。
@@ -180,7 +177,7 @@ func (c *LRUExpireCache) Keys() []interface{} {
 
 	val := make([]interface{}, 0, c.evictionList.Len())
 	for element := c.evictionList.Back(); element != nil; element = element.Prev() {
-		// Only return unexpired keys
+		// 只返回尚未过期的条目；Keys 不负责删除过期条目。
 		if !now.After(element.Value.(*cacheEntry).expireTime) {
 			val = append(val, element.Value.(*cacheEntry).key)
 		}

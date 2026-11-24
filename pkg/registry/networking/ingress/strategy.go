@@ -36,7 +36,7 @@ const (
 	annotationIngressClass = "kubernetes.io/ingress.class"
 )
 
-// ingressStrategy implements verification logic for Replication Ingress.
+// ingressStrategy 定义 Ingress 主资源策略，处理 Status 隔离、Generation、IngressClass 旧注解兼容和规则校验。
 type ingressStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -69,6 +69,7 @@ func (ingressStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set 
 }
 
 // PrepareForCreate clears the status of an Ingress before creation.
+// 创建时不接受客户端提供的 Status；Generation 从 1 开始，后续仅由 Spec 变化递增。
 func (ingressStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ingress := obj.(*networking.Ingress)
 	// create cannot set status
@@ -78,6 +79,7 @@ func (ingressStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object)
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 普通更新恢复旧 Status，防止用户通过主资源 PUT/PATCH 冒充 Ingress Controller 回写 LoadBalancer 地址。
 func (ingressStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIngress := obj.(*networking.Ingress)
 	oldIngress := old.(*networking.Ingress)
@@ -94,12 +96,14 @@ func (ingressStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Ob
 }
 
 // Validate validates ingresses on create.
+// Validate 检查 IngressClassName、Host、TLS、HTTP 路径和后端 Service 端口等规则。
 func (ingressStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ingress := obj.(*networking.Ingress)
 	return validation.ValidateIngressCreate(ingress)
 }
 
 // WarningsOnCreate returns warnings for the creation of the given object.
+// 若仍使用旧 ingress.class Annotation 且没有新 spec.ingressClassName，则提醒迁移到结构化字段。
 func (ingressStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	var warnings []string
 	ingress := obj.(*networking.Ingress)
@@ -160,6 +164,7 @@ func (ingressStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpat
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
+// /status 只允许更新 LoadBalancer 等状态信息，Spec 必须从旧对象恢复。
 func (ingressStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIngress := obj.(*networking.Ingress)
 	oldIngress := old.(*networking.Ingress)
@@ -173,6 +178,7 @@ func (ingressStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtim
 }
 
 // WarningsOnUpdate returns warnings for the given update.
+// LoadBalancer Ingress 中的 IP 地址在状态更新时仍会触发格式告警，便于控制器发现异常地址。
 func (ingressStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	newIngress := obj.(*networking.Ingress)
 	var warnings []string

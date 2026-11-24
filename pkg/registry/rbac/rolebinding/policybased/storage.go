@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package policybased implements a standard storage for RoleBinding that prevents privilege escalation.
+// 本包为 RoleBinding 主存储增加防提权校验：允许显式 bind 权限，或要求调用者已拥有目标 Role 的全部规则。
 package policybased
 
 import (
@@ -67,6 +67,7 @@ func (r *Storage) StorageVersion() runtime.GroupVersioner {
 
 var _ rest.StorageVersionProvider = &Storage{}
 
+// Create 优先检查 bind 动词；无显式 bind 权限时解析 RoleRef 规则，并确认调用者自身已拥有这些权限。
 func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	if rbacregistry.EscalationAllowed(ctx) {
 		return s.StandardStorage.Create(ctx, obj, createValidation, options)
@@ -99,6 +100,7 @@ func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidati
 	return s.StandardStorage.Create(ctx, obj, createValidation, options)
 }
 
+// Update 在最终对象上执行与 Create 相同的 bind/权限覆盖校验；纯 GC 元数据变更可以直接通过。
 func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	if rbacregistry.EscalationAllowed(ctx) {
 		return s.StandardStorage.Update(ctx, name, obj, createValidation, updateValidation, forceAllowCreate, options)

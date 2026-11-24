@@ -32,8 +32,10 @@ import (
 	servicecidrstore "k8s.io/kubernetes/pkg/registry/networking/servicecidr/storage"
 )
 
+// RESTStorageProvider 负责装配 networking.k8s.io API Group 的 v1 与 v1beta1 资源存储。
 type RESTStorageProvider struct{}
 
+// NewRESTStorage 注册 API Group 与版本 StorageMap；版本优先级还需在 kube-apiserver aggregator 配置中同步维护。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(networking.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
@@ -54,6 +56,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 按资源开关逐项装配 NetworkPolicy、Ingress、IngressClass、IPAddress 与 ServiceCIDR，并为支持状态的资源注册 /status。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -107,6 +110,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// v1beta1Storage 只注册该版本仍对外提供的 IPAddress 和 ServiceCIDR，避免将仅 v1 资源错误暴露到旧版本。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 

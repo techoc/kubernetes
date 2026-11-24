@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// namespaceStrategy implements behavior for Namespaces
+// namespaceStrategy 定义集群级 Namespace 主资源策略，负责初始 Phase、系统 Finalizer、名称标签及用户可写字段边界。
 type namespaceStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -61,6 +61,7 @@ func (namespaceStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Se
 }
 
 // PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// 创建时强制 Phase=Active，并确保 kubernetes Finalizer 存在；它负责触发命名空间内容清理完成前的保护。
 func (namespaceStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	// on create, status is active
 	namespace := obj.(*api.Namespace)
@@ -86,6 +87,7 @@ func (namespaceStrategy) PrepareForCreate(ctx context.Context, obj runtime.Objec
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 普通 Namespace 更新不允许客户端直接修改 Spec.Finalizers 或 Status，这两类字段分别由 finalize/status 子资源管理。
 func (namespaceStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newNamespace := obj.(*api.Namespace)
 	oldNamespace := old.(*api.Namespace)
@@ -105,6 +107,7 @@ func (namespaceStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Objec
 }
 
 // Canonicalize normalizes the object after validation.
+// Canonicalize 保证 kubernetes.io/metadata.name 标签始终与最终 Namespace 名称一致，尤其用于 GenerateName 创建路径。
 func (namespaceStrategy) Canonicalize(obj runtime.Object) {
 	// Ensure the label matches the name for namespaces just created using GenerateName,
 	// where the final name wasn't available for defaulting to make this change.
@@ -166,6 +169,7 @@ func (namespaceStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldp
 	}
 }
 
+// /status 只能更新 Namespace.Status；Spec 从旧对象恢复，防止通过状态子资源移除保护性 Finalizer。
 func (namespaceStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newNamespace := obj.(*api.Namespace)
 	oldNamespace := old.(*api.Namespace)
@@ -187,6 +191,7 @@ type namespaceFinalizeStrategy struct {
 
 var FinalizeStrategy = namespaceFinalizeStrategy{Strategy}
 
+// /finalize 使用专门校验器检查 Finalizer 的增删规则，允许调用方在命名空间内容清理完毕后移除剩余 Finalizer。
 func (namespaceFinalizeStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateNamespaceFinalizeUpdate(obj.(*api.Namespace), old.(*api.Namespace))
 }
@@ -207,6 +212,7 @@ func (namespaceFinalizeStrategy) GetResetFields() map[fieldpath.APIVersion]*fiel
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// /finalize 只允许改变 Spec.Finalizers；Status 必须沿用旧值，避免终结流程绕过 Namespace 生命周期状态机。
 func (namespaceFinalizeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newNamespace := obj.(*api.Namespace)
 	oldNamespace := old.(*api.Namespace)
@@ -232,6 +238,7 @@ func MatchNamespace(label labels.Selector, field fields.Selector) apistorage.Sel
 }
 
 // NamespaceToSelectableFields returns a field set that represents the object
+// NamespaceToSelectableFields 除标准 metadata 外，提供 status.phase 和历史兼容字段 name 供 FieldSelector 使用。
 func NamespaceToSelectableFields(namespace *api.Namespace) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&namespace.ObjectMeta, false)
 	specificFieldsSet := fields.Set{

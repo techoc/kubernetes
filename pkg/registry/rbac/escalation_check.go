@@ -29,6 +29,7 @@ import (
 )
 
 // EscalationAllowed checks if the user associated with the context is a superuser
+// EscalationAllowed 识别 system:masters 超级用户组；API Server 特权 loopback 身份属于此组，可绕过常规防提权限制。
 func EscalationAllowed(ctx context.Context) bool {
 	u, ok := genericapirequest.UserFrom(ctx)
 	if !ok {
@@ -52,6 +53,7 @@ var roleResources = map[schema.GroupResource]bool{
 }
 
 // RoleEscalationAuthorized checks if the user associated with the context is explicitly authorized to escalate the role resource associated with the context
+// RoleEscalationAuthorized 检查当前用户是否被明确授予 escalate 动词；该授权允许授予自身尚未拥有的 Role 规则。
 func RoleEscalationAuthorized(ctx context.Context, a authorizer.UnconditionalAuthorizer) bool {
 	if a == nil {
 		return false
@@ -98,6 +100,7 @@ func RoleEscalationAuthorized(ctx context.Context, a authorizer.UnconditionalAut
 }
 
 // BindingAuthorized returns true if the user associated with the context is explicitly authorized to bind the specified roleRef
+// BindingAuthorized 检查用户是否被明确授予对目标 Role/ClusterRole 的 bind 动词，授权范围按 Binding namespace 决定。
 func BindingAuthorized(ctx context.Context, roleRef rbac.RoleRef, bindingNamespace string, a authorizer.UnconditionalAuthorizer) bool {
 	if a == nil {
 		return false
@@ -114,6 +117,7 @@ func BindingAuthorized(ctx context.Context, roleRef rbac.RoleRef, bindingNamespa
 		// check against the namespace where the binding is being created (or the empty namespace for clusterrolebindings).
 		// this allows delegation to bind particular clusterroles in rolebindings within particular namespaces,
 		// and to authorize binding a clusterrole across all namespaces in a clusterrolebinding.
+		// RoleBinding 使用其 namespace 做 bind 授权；ClusterRoleBinding 传空 namespace，表示可绑定集群级角色。
 		Namespace:       bindingNamespace,
 		ResourceRequest: true,
 	}

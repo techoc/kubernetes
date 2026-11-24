@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package role provides Registry interface and its RESTStorage
 // implementation for storing Role objects.
+// Package role 提供命名空间级 Role 的 REST 策略、读取适配器和防权限提升存储包装。
 package role

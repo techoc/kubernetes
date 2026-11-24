@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件构造 volumeattachment 的 REST Store，将资源 Strategy、对象类型和通用存储后端连接起来。
 package storage
 
 import (
@@ -109,6 +110,7 @@ func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
 
+// ConvertToTable 将资源对象转换为 metav1.Table，供 kubectl 等客户端以表格形式展示。
 func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }

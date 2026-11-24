@@ -27,7 +27,7 @@ import (
 // 固定 6 位小数保证编码结果稳定、可逐字节比较。
 const RFC3339Micro = "2006-01-02T15:04:05.000000Z07:00"
 
-// MicroTime is version of Time with microsecond level precision.
+// MicroTime 是 Time 的微秒精度版本，适用于需要比秒更细、但不需要纳秒精度的 API 时间字段。
 //
 // +protobuf.options.marshal=false
 // +protobuf.as=Timestamp
@@ -39,27 +39,25 @@ type MicroTime struct {
 	time.Time `protobuf:"-"`
 }
 
-// DeepCopy returns a deep-copy of the MicroTime value.  The underlying time.Time
-// type is effectively immutable in the time API, so it is safe to
-// copy-by-assign, despite the presence of (unexported) Pointer fields.
+// DeepCopyInto 将 MicroTime 复制到 out。time.Time 在 time API 中实际上不可变，
+// 因此即使内部包含未导出的指针字段，直接按值赋值也是安全的。
 //
 // time.Time 在 API 语义上不可变，按值复制即可，无需深拷贝其内部字段。
 func (t *MicroTime) DeepCopyInto(out *MicroTime) {
 	*out = *t
 }
 
-// NewMicroTime returns a wrapped instance of the provided time
+// NewMicroTime 将给定 time.Time 包装为 MicroTime。
 func NewMicroTime(time time.Time) MicroTime {
 	return MicroTime{time}
 }
 
-// DateMicro returns the MicroTime corresponding to the supplied parameters
-// by wrapping time.Date.
+// DateMicro 包装 time.Date，根据给定年月日、时分秒、纳秒和时区构造 MicroTime。
 func DateMicro(year int, month time.Month, day, hour, min, sec, nsec int, loc *time.Location) MicroTime {
 	return MicroTime{time.Date(year, month, day, hour, min, sec, nsec, loc)}
 }
 
-// NowMicro returns the current local time.
+// NowMicro 返回当前本地时间，并包装为 MicroTime。
 func NowMicro() MicroTime {
 	return MicroTime{time.Now()}
 }
@@ -74,7 +72,7 @@ func (t *MicroTime) IsZero() bool {
 	return t.Time.IsZero()
 }
 
-// Before reports whether the time instant t is before u.
+// Before 判断时间点 t 是否早于 u。
 //
 // 任一侧为 nil 都返回 false：nil 代表“未设置”，不参与时间比较。
 func (t *MicroTime) Before(u *MicroTime) bool {
@@ -84,7 +82,7 @@ func (t *MicroTime) Before(u *MicroTime) bool {
 	return false
 }
 
-// Equal reports whether the time instant t is equal to u.
+// Equal 判断时间点 t 与 u 是否相等。
 //
 // 两个 nil 视为相等；一 nil 一非 nil 视为不等。
 func (t *MicroTime) Equal(u *MicroTime) bool {
@@ -97,7 +95,7 @@ func (t *MicroTime) Equal(u *MicroTime) bool {
 	return false
 }
 
-// BeforeTime reports whether the time instant t is before second-lever precision u.
+// BeforeTime 判断微秒精度的 t 是否早于秒精度的 u。
 func (t *MicroTime) BeforeTime(u *Time) bool {
 	if t != nil && u != nil {
 		return t.Time.Before(u.Time)
@@ -105,7 +103,7 @@ func (t *MicroTime) BeforeTime(u *Time) bool {
 	return false
 }
 
-// EqualTime reports whether the time instant t is equal to second-lever precision u.
+// EqualTime 判断微秒精度的 t 是否与秒精度的 u 表示同一时刻。
 func (t *MicroTime) EqualTime(u *Time) bool {
 	if t == nil && u == nil {
 		return true
@@ -116,8 +114,7 @@ func (t *MicroTime) EqualTime(u *Time) bool {
 	return false
 }
 
-// UnixMicro returns the local time corresponding to the given Unix time
-// by wrapping time.Unix.
+// UnixMicro 包装 time.Unix，根据 Unix 秒数和纳秒偏移构造 MicroTime。
 func UnixMicro(sec int64, nsec int64) MicroTime {
 	return MicroTime{time.Unix(sec, nsec)}
 }
@@ -168,7 +165,7 @@ func (t *MicroTime) UnmarshalCBOR(b []byte) error {
 	return nil
 }
 
-// UnmarshalQueryParameter converts from a URL query parameter value to an object
+// UnmarshalQueryParameter 将 URL 查询参数字符串解析为 MicroTime。
 //
 // 空字符串与字面量 "null" 都视为未设置，兼容旧客户端用 JSON 拼 query 的行为。
 func (t *MicroTime) UnmarshalQueryParameter(str string) error {
@@ -176,7 +173,7 @@ func (t *MicroTime) UnmarshalQueryParameter(str string) error {
 		t.Time = time.Time{}
 		return nil
 	}
-	// Tolerate requests from older clients that used JSON serialization to build query params
+	// 兼容旧客户端：它们曾使用 JSON 序列化结果构造 URL 查询参数。
 	if len(str) == 4 && str == "null" {
 		t.Time = time.Time{}
 		return nil
@@ -196,7 +193,7 @@ func (t *MicroTime) UnmarshalQueryParameter(str string) error {
 // 零值输出 JSON null；非零值统一转为 UTC 后按固定微秒格式输出。
 func (t MicroTime) MarshalJSON() ([]byte, error) {
 	if t.IsZero() {
-		// Encode unset/nil objects as JSON's "null".
+		// 未设置或零值时间统一编码为 JSON null。
 		return []byte("null"), nil
 	}
 
@@ -211,14 +208,12 @@ func (t MicroTime) MarshalCBOR() ([]byte, error) {
 	return cbor.Marshal(t.UTC().Format(RFC3339Micro))
 }
 
-// OpenAPISchemaType is used by the kube-openapi generator when constructing
-// the OpenAPI spec of this type.
+// OpenAPISchemaType 供 kube-openapi 生成器构建该类型的 OpenAPI Schema 时调用。
 //
 // See: https://github.com/kubernetes/kube-openapi/tree/master/pkg/generators
 func (_ MicroTime) OpenAPISchemaType() []string { return []string{"string"} }
 
-// OpenAPISchemaFormat is used by the kube-openapi generator when constructing
-// the OpenAPI spec of this type.
+// OpenAPISchemaFormat 供 kube-openapi 生成器构建该类型的 OpenAPI Schema 时调用。
 func (_ MicroTime) OpenAPISchemaFormat() string { return "date-time" }
 
 // MarshalQueryParameter converts to a URL query parameter value
@@ -226,7 +221,7 @@ func (_ MicroTime) OpenAPISchemaFormat() string { return "date-time" }
 // 零值编码为空串（而不是 "null"），与 UnmarshalQueryParameter 的空串约定对称。
 func (t MicroTime) MarshalQueryParameter() (string, error) {
 	if t.IsZero() {
-		// Encode unset/nil objects as an empty string
+		// 未设置或零值时间编码为空字符串，与查询参数解码规则保持一致。
 		return "", nil
 	}
 

@@ -16,13 +16,10 @@ limitations under the License.
 
 package types
 
-// NamespacedName comprises a resource name, with a mandatory namespace,
-// rendered as "<namespace>/<name>".  Being a type captures intent and
-// helps make sure that UIDs, namespaced names and non-namespaced names
-// do not get conflated in code.  For most use cases, namespace and name
-// will already have been format validated at the API entry point, so we
-// don't do that here.  Where that's not the case (e.g. in testing),
-// consider using NamespacedNameOrDie() in testing.go in this package.
+// NamespacedName 表示带命名空间的资源名称，字符串形式为 "<namespace>/<name>"。
+// 使用独立类型可以避免 UID、带命名空间的名称和集群级名称在代码中混用。
+// 通常 namespace 和 name 已在 API 入口处完成格式校验，因此本类型不重复校验；
+// 如果调用场景没有经过入口校验（例如测试代码），可使用本包 testing.go 中的 NamespacedNameOrDie()。
 
 type NamespacedName struct {
 	// Namespace 是对象所在的命名空间。
@@ -35,12 +32,12 @@ const (
 	Separator = '/'
 )
 
-// String returns the general purpose string representation
+// String 返回通用字符串表示，格式为 namespace/name。
 func (n NamespacedName) String() string {
 	return n.Namespace + string(Separator) + n.Name
 }
 
-// MarshalLog emits a struct containing required key/value pair
+// MarshalLog 返回包含 name 和 namespace 键值对的结构体，供结构化日志记录使用。
 //
 // 实现 logr.Marshaler，使日志中输出结构化的 name/namespace，
 // 而不是退化为对整个结构体的 %+v。

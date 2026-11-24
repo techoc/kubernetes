@@ -93,6 +93,7 @@ func validChangedPod() *api.Pod {
 	return pod
 }
 
+// TestCreate 验证 Pod 主资源创建经过 RESTStorage 后能正确持久化。
 func TestCreate(t *testing.T) {
 	storage, _, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -120,6 +121,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证 Pod 普通更新的字段策略和持久化行为。
 func TestUpdate(t *testing.T) {
 	storage, _, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -137,6 +139,7 @@ func TestUpdate(t *testing.T) {
 	)
 }
 
+// TestDelete 验证 Pod 删除路径及删除策略。
 func TestDelete(t *testing.T) {
 	storage, _, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -245,6 +248,7 @@ func TestCreateSetsFields(t *testing.T) {
 	}
 }
 
+// TestResourceLocation 验证 Pod proxy 地址根据 Pod IP、scheme 和端口解析，且非法目标地址被拒绝。
 func TestResourceLocation(t *testing.T) {
 	expectedIP := "1.2.3.4"
 	expectedIP6 := "fd00:10:244:0:2::6b"
@@ -1004,6 +1008,7 @@ func TestEtcdCreateWithExistingContainers(t *testing.T) {
 	}
 }
 
+// TestEtcdCreateBinding 验证 Binding 子资源会把未调度 Pod 原子绑定到目标 Node。
 func TestEtcdCreateBinding(t *testing.T) {
 	testCases := map[string]struct {
 		binding      api.Binding
@@ -1176,6 +1181,7 @@ func TestEtcdUpdateScheduled(t *testing.T) {
 
 }
 
+// TestEtcdUpdateStatus 验证 /status 更新只能改变 Pod 状态字段，不能通过子资源修改 Spec。
 func TestEtcdUpdateStatus(t *testing.T) {
 	storage, _, statusStorage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -1413,6 +1419,7 @@ func TestEtcdCreateBindingScrubsLegacyAnnotations(t *testing.T) {
 	}
 }
 
+// TestBindingValidation 覆盖 Binding 请求的名称、目标节点和相关字段校验。
 func TestBindingValidation(t *testing.T) {
 	testcases := []struct {
 		name         string

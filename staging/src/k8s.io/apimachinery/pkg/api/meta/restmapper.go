@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO: move everything in this file to pkg/api/rest
+// TODO：后续将本文件中的实现整体迁移到 pkg/api/rest。
 package meta
 
 import (
@@ -30,7 +30,7 @@ import (
 // restScope 是 RESTScope 接口的默认实现，只保存作用域名称，供 RESTMapping 表明
 // 资源位于命名空间内还是集群根级。
 //
-// Implements RESTScope interface
+// restScope 实现 RESTScope 接口。
 type restScope struct {
 	name RESTScopeName
 }
@@ -50,17 +50,11 @@ var RESTScopeRoot = &restScope{
 	name: RESTScopeNameRoot,
 }
 
-// DefaultRESTMapper exposes mappings between the types defined in a
-// runtime.Scheme. It assumes that all types defined the provided scheme
-// can be mapped with the provided MetadataAccessor and Codec interfaces.
+// DefaultRESTMapper 根据 runtime.Scheme 中注册的类型维护 Kind 与 REST 资源之间的映射。
+// 它假设 Scheme 中的类型都能通过相应的 MetadataAccessor 和 Codec 接口完成元数据访问与编解码。
 //
-// The resource name of a Kind is defined as the lowercase,
-// English-plural version of the Kind string.
-// When converting from resource to Kind, the singular version of the
-// resource name is also accepted for convenience.
-//
-// TODO: Only accept plural for some operations for increased control?
-// (`get pod bar` vs `get pods bar`)
+// 默认约定资源名是 Kind 的小写复数形式；从资源反查 Kind 时，也接受资源名的单数形式。
+// TODO：部分操作是否应只接受复数资源名，以增强命令语义的明确性？例如 get pod bar 与 get pods bar。
 type DefaultRESTMapper struct {
 	// defaultGroupVersions 是在未显式指定版本时，解析 RESTMapping 所用的版本优先顺序。
 	defaultGroupVersions []schema.GroupVersion
@@ -112,7 +106,7 @@ func NewDefaultRESTMapper(defaultGroupVersions []schema.GroupVersion) *DefaultRE
 	}
 }
 
-// Add 用启发式的复数/单数猜测注册一个 Kind，适合按 Kubernetes 命名约定自动推导资源名。
+// Add 用启发式规则推导 Kind 对应的单数和复数资源名，并将映射注册到当前 mapper。
 func (m *DefaultRESTMapper) Add(kind schema.GroupVersionKind, scope RESTScope) {
 	plural, singular := UnsafeGuessKindToResource(kind)
 	m.AddSpecific(kind, plural, singular, scope)
@@ -134,7 +128,7 @@ func (m *DefaultRESTMapper) AddSpecific(kind schema.GroupVersionKind, plural, si
 }
 
 // unpluralizedSuffixes is a list of resource suffixes that are the same plural and singular
-// This is only is only necessary because some bits of code are lazy and don't actually use the RESTMapper like they should.
+// 该辅助逻辑仅用于兼容部分尚未正确使用 RESTMapper 的延迟初始化调用方。
 // TODO eliminate this so that different callers can correctly map to resources.  This probably means updating all
 // callers to use the RESTMapper they mean.
 // 中文补充：这些后缀的单复数同形，额外加 "s" 会得到错误资源名，因此需要特判。
@@ -174,9 +168,8 @@ func UnsafeGuessKindToResource(kind schema.GroupVersionKind) ( /*plural*/ schema
 	return kind.GroupVersion().WithResource(singularName + "s"), singular
 }
 
-// ResourceSingularizer implements RESTMapper
-// It converts a resource name from plural to singular (e.g., from pods to pod)
-// 中文补充：输入可以是单数或复数；若存在多个匹配，可能因无法唯一确定单数名而报错。
+// ResourceSingularizer 实现 RESTMapper 接口，将资源名转换为单数形式（例如 pods 转为 pod）。
+// 输入可以是单数或复数；若多个候选资源推导出的单数名不一致，则返回歧义错误。
 func (m *DefaultRESTMapper) ResourceSingularizer(resourceType string) (string, error) {
 	partialResource := schema.GroupVersionResource{Resource: resourceType}
 	resources, err := m.ResourcesFor(partialResource)
@@ -214,8 +207,8 @@ func (m *DefaultRESTMapper) ResourceSingularizerWithContext(_ context.Context, r
 	return m.ResourceSingularizer(resourceType)
 }
 
-// coerceResourceForMatching makes the resource lower case and converts internal versions to unspecified (legacy behavior)
-// 中文补充：为保证 "--api-version=__internal" 这类历史写法也能匹配到公开版本，先做归一化。
+// coerceResourceForMatching 将资源名转为小写，并把内部版本归一化为空版本（历史兼容行为），
+// 使 "--api-version=__internal" 这类旧写法也能匹配公开版本。
 func coerceResourceForMatching(resource schema.GroupVersionResource) schema.GroupVersionResource {
 	resource.Resource = strings.ToLower(resource.Resource)
 	if resource.Version == runtime.APIVersionInternal {
@@ -242,7 +235,7 @@ func (m *DefaultRESTMapper) ResourcesFor(input schema.GroupVersionResource) ([]s
 	ret := []schema.GroupVersionResource{}
 	switch {
 	case hasGroup && hasVersion:
-		// fully qualified.  Find the exact match
+		// group、version、resource 均已指定：只查找完全匹配项。
 		// 三个维度都齐全时只接受完全相等（单数或复数均可）的条目，找到即停。
 		for plural, singular := range m.pluralToSingular {
 			if singular == resource {
@@ -256,7 +249,7 @@ func (m *DefaultRESTMapper) ResourcesFor(input schema.GroupVersionResource) ([]s
 		}
 
 	case hasGroup:
-		// given a group, prefer an exact match.  If you don't find one, resort to a prefix match on group
+		// 指定了 group：先精确匹配；没有精确结果时，再尝试 group 前缀匹配。
 		// 先按 GroupResource 精确匹配；记录是否命中，以决定是否需要退回到前缀匹配。
 		foundExactMatch := false
 		requestedGroupResource := resource.GroupResource()
@@ -271,8 +264,7 @@ func (m *DefaultRESTMapper) ResourcesFor(input schema.GroupVersionResource) ([]s
 			}
 		}
 
-		// if you didn't find an exact match, match on group prefixing. This allows storageclass.storage to match
-		// storageclass.storage.k8s.io
+		// 没有精确匹配时允许 group 前缀匹配，例如 storageclass.storage 可以匹配 storageclass.storage.k8s.io。
 		if !foundExactMatch {
 			for plural, singular := range m.pluralToSingular {
 				if !strings.HasPrefix(plural.Group, requestedGroupResource.Group) {
@@ -360,7 +352,7 @@ func (m *DefaultRESTMapper) KindsFor(input schema.GroupVersionResource) ([]schem
 
 	ret := []schema.GroupVersionKind{}
 	switch {
-	// fully qualified.  Find the exact match
+	// group、version、resource 均已指定：只查找完全匹配项。
 	case hasGroup && hasVersion:
 		// resourceToKind 同时登记了单数和复数，精确查表即可。
 		kind, exists := m.resourceToKind[resource]
@@ -379,8 +371,7 @@ func (m *DefaultRESTMapper) KindsFor(input schema.GroupVersionResource) ([]schem
 			}
 		}
 
-		// if you didn't find an exact match, match on group prefixing. This allows storageclass.storage to match
-		// storageclass.storage.k8s.io
+		// 没有精确匹配时允许 group 前缀匹配，例如 storageclass.storage 可以匹配 storageclass.storage.k8s.io。
 		if !foundExactMatch {
 			for currResource, currKind := range m.resourceToKind {
 				if !strings.HasPrefix(currResource.Group, requestedGroupResource.Group) {
@@ -467,7 +458,7 @@ func (o kindByPreferredGroupVersion) Less(i, j int) bool {
 		return lhs.Kind < rhs.Kind
 	}
 
-	// otherwise, the difference is in the GroupVersion, so we need to sort with respect to the preferred order
+	// group/version 不同时，按照配置的版本优先级排序。
 	lhsIndex := -1
 	rhsIndex := -1
 
@@ -512,7 +503,7 @@ func (o resourceByPreferredGroupVersion) Less(i, j int) bool {
 		return lhs.Resource < rhs.Resource
 	}
 
-	// otherwise, the difference is in the GroupVersion, so we need to sort with respect to the preferred order
+	// group/version 不同时，按照配置的版本优先级排序。
 	lhsIndex := -1
 	rhsIndex := -1
 
@@ -532,11 +523,9 @@ func (o resourceByPreferredGroupVersion) Less(i, j int) bool {
 	return lhsIndex < rhsIndex
 }
 
-// RESTMapping returns a struct representing the resource path and conversion interfaces a
-// RESTClient should use to operate on the provided group/kind in order of versions. If a version search
-// order is not provided, the search order provided to DefaultRESTMapper will be used to resolve which
-// version should be used to access the named group/kind.
-// 中文补充：只返回第一个匹配项，是对已有多义结果的兼容处理；需要全部候选时用 RESTMappings。
+// RESTMapping 根据 group/kind 和版本优先级返回 REST 资源路径、GVK 与作用域信息，供 RESTClient 访问资源。
+// 未显式指定版本搜索顺序时，使用 DefaultRESTMapper 初始化时配置的默认优先级。
+// 该方法只返回第一个匹配项以保持历史行为；需要全部候选时应使用 RESTMappings。
 func (m *DefaultRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*RESTMapping, error) {
 	mappings, err := m.RESTMappings(gk, versions...)
 	if err != nil {
@@ -545,9 +534,7 @@ func (m *DefaultRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string)
 	if len(mappings) == 0 {
 		return nil, &NoKindMatchError{GroupKind: gk, SearchedVersions: versions}
 	}
-	// since we rely on RESTMappings method
-	// take the first match and return to the caller
-	// as this was the existing behavior.
+	// 为保持历史兼容行为，直接返回 RESTMappings 结果中的第一个匹配项。
 	return mappings[0], nil
 }
 
@@ -556,16 +543,15 @@ func (m *DefaultRESTMapper) RESTMappingWithContext(_ context.Context, gk schema.
 	return m.RESTMapping(gk, versions...)
 }
 
-// RESTMappings returns the RESTMappings for the provided group kind. If a version search order
-// is not provided, the search order provided to DefaultRESTMapper will be used.
-// 中文补充：每个返回项都包含资源名、GVK 与作用域；若某 GVK 缺少作用域信息则整体报错，
-// 因为无法生成合法的 REST 路径。
+// RESTMappings 返回指定 group/kind 对应的 RESTMapping 列表。若未提供版本搜索顺序，
+// 则使用 DefaultRESTMapper 初始化时配置的默认优先级。每项包含资源名、GVK 和作用域；
+// 如果某个 GVK 缺少作用域信息，整个调用会报错，因为无法构造完整的 REST 资源映射。
 func (m *DefaultRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string) ([]*RESTMapping, error) {
 	mappings := make([]*RESTMapping, 0)
 	potentialGVK := make([]schema.GroupVersionKind, 0)
 	hadVersion := false
 
-	// Pick an appropriate version
+	// 选择合适的 API 版本。
 	// 调用方显式给出的版本顺序即优先级；遇到第一个已注册的版本就停止，避免返回多义结果。
 	for _, version := range versions {
 		// 空版本和内部版本没有可用的 REST 路径，跳过。
@@ -579,7 +565,7 @@ func (m *DefaultRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string
 			break
 		}
 	}
-	// Use the default preferred versions
+	// 使用映射器配置的默认版本优先级。
 	// 调用方未指定版本（或指定的都无效）时，回落到映射器注册时配置的偏好版本。
 	if !hadVersion && len(potentialGVK) == 0 {
 		for _, gv := range m.defaultGroupVersions {
@@ -595,13 +581,13 @@ func (m *DefaultRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string
 	}
 
 	for _, gvk := range potentialGVK {
-		//Ensure we have a REST mapping
+		// 确认该 GVK 已注册对应的 REST 资源映射。
 		res, ok := m.kindToPluralResource[gvk]
 		if !ok {
 			continue
 		}
 
-		// Ensure we have a REST scope
+		// 确认该 GVK 已注册 REST 作用域。
 		scope, ok := m.kindToScope[gvk]
 		if !ok {
 			return nil, fmt.Errorf("the provided version %q and kind %q cannot be mapped to a supported scope", gvk.GroupVersion(), gvk.Kind)
@@ -626,20 +612,15 @@ func (m *DefaultRESTMapper) RESTMappingsWithContext(_ context.Context, gk schema
 	return m.RESTMappings(gk, versions...)
 }
 
-// MaybeResetRESTMapper calls Reset() on the mapper if it is a ResettableRESTMapper or
-// ResetWithContext() if it is a ResettableRESTMapperWithContext.
-//
-// MaybeResetRESTMapperWithContext is a better alternative because it supports contextual logging and cancellation.
-//
-// Contextual logging: Use MaybeResetRESTMapperWithContext instead.
-// 中文补充：对不支持重置的映射器静默忽略，调用方无需先做类型断言。
+// MaybeResetRESTMapper 在 mapper 实现 ResettableRESTMapper 或 ResettableRESTMapperWithContext 时调用相应重置方法。
+// 新代码优先使用 MaybeResetRESTMapperWithContext，以支持上下文日志和取消。
+// 如果 mapper 不支持重置，则静默忽略，无需调用方预先执行类型断言。
 func MaybeResetRESTMapper(mapper RESTMapper) {
 	maybeReset(context.Background(), mapper)
 }
 
-// MaybeResetRESTMapperWithContext calls Reset() on the mapper if it is a ResettableRESTMapper or
-// ResetWithContext() if it is a ResettableRESTMapperWithContext.
-// 中文补充：优先使用支持 context 的重置方法，以便日志与取消信号能够传递。
+// MaybeResetRESTMapperWithContext 根据 mapper 实现的接口调用 ResetWithContext 或兼容的 Reset。
+// 优先使用支持 context 的重置方法，使上下文日志和取消信号能够传递到底层 mapper。
 func MaybeResetRESTMapperWithContext(ctx context.Context, mapper RESTMapperWithContext) {
 	maybeReset(ctx, mapper)
 }

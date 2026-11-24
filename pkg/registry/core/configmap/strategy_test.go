@@ -25,6 +25,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestConfigMapStrategy 验证 ConfigMap 创建/更新策略，包括禁用字段处理、内容校验与大小限制。
 func TestConfigMapStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !Strategy.NamespaceScoped() {

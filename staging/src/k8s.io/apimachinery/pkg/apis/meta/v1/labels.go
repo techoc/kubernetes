@@ -16,17 +16,17 @@ limitations under the License.
 
 package v1
 
-// Clones the given selector and returns a new selector with the given key and value added.
-// Returns the given selector, if labelKey is empty.
+// CloneSelectorAndAddLabel 深拷贝 selector，并在副本的 MatchLabels 中添加指定键值对。
+// labelKey 为空时无需添加标签，直接返回原 selector。
 // 中文补充：先深拷贝再修改，避免修改调用方传入的对象；labelKey 为空表示不需要加标签，
 // 此时直接返回原对象而不拷贝。
 func CloneSelectorAndAddLabel(selector *LabelSelector, labelKey, labelValue string) *LabelSelector {
 	if labelKey == "" {
-		// Don't need to add a label.
+		// labelKey 为空，无需修改 selector。
 		return selector
 	}
 
-	// Clone.
+	// 深拷贝，避免修改调用方持有的对象。
 	newSelector := selector.DeepCopy()
 
 	if newSelector.MatchLabels == nil {
@@ -38,12 +38,12 @@ func CloneSelectorAndAddLabel(selector *LabelSelector, labelKey, labelValue stri
 	return newSelector
 }
 
-// AddLabelToSelector returns a selector with the given key and value added to the given selector's MatchLabels.
+// AddLabelToSelector 在传入 selector 的 MatchLabels 中添加指定键值对，并返回同一个 selector。
 // 中文补充：就地修改传入的 selector（与 CloneSelectorAndAddLabel 不同），
 // 调用方需自行确认可以修改原对象。
 func AddLabelToSelector(selector *LabelSelector, labelKey, labelValue string) *LabelSelector {
 	if labelKey == "" {
-		// Don't need to add a label.
+		// labelKey 为空，无需修改 selector。
 		return selector
 	}
 	if selector.MatchLabels == nil {
@@ -53,7 +53,7 @@ func AddLabelToSelector(selector *LabelSelector, labelKey, labelValue string) *L
 	return selector
 }
 
-// SelectorHasLabel checks if the given selector contains the given label key in its MatchLabels
+// SelectorHasLabel 判断 selector 的 MatchLabels 中指定 key 对应的值是否非空。
 // 中文补充：只判断取值非空，因此 key 存在但值为空字符串时返回 false。
 func SelectorHasLabel(selector *LabelSelector, labelKey string) bool {
 	return len(selector.MatchLabels[labelKey]) > 0

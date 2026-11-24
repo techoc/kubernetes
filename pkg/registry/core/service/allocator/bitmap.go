@@ -25,6 +25,7 @@ import (
 	"time"
 )
 
+// AllocationBitmap 使用 big.Int 的每一位表示一个资源偏移量；锁保护位图与 count，使并发分配和释放保持原子性。
 // AllocationBitmap is a contiguous block of resources that can be allocated atomically.
 //
 // Each resource has an offset.  The internal structure is a bitmap, with a bit for each offset.
@@ -69,6 +70,7 @@ func NewAllocationMap(max int, rangeSpec string) *AllocationBitmap {
 // The first block of values will not be used for random value assigned by the AllocateNext()
 // method until the second block of values has been exhausted.
 // The offset value must be always smaller than the bitmap size.
+// NewAllocationMapWithOffset 创建带分段优先级的资源池：自动分配优先从 offset 之后的动态区选择，耗尽后才使用前面的保留区。
 func NewAllocationMapWithOffset(max int, rangeSpec string, offset int) *AllocationBitmap {
 	a := AllocationBitmap{
 		strategy: randomScanStrategyWithOffset{
@@ -86,6 +88,7 @@ func NewAllocationMapWithOffset(max int, rangeSpec string, offset int) *Allocati
 
 // Allocate attempts to reserve the provided item.
 // Returns true if it was allocated, false if it was already in use
+// Allocate 预留调用方指定的偏移量；所有越界检查、位图写入和计数更新都在同一把锁内完成。
 func (r *AllocationBitmap) Allocate(offset int) (bool, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -104,6 +107,7 @@ func (r *AllocationBitmap) Allocate(offset int) (bool, error) {
 
 // AllocateNext reserves one of the items from the pool.
 // (0, false, nil) may be returned if there are no items left.
+// AllocateNext 委托 bitAllocator 选择空闲位，再在锁保护下置位并递增已分配计数。
 func (r *AllocationBitmap) AllocateNext() (int, bool, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -177,6 +181,7 @@ func (r *AllocationBitmap) Free() int {
 }
 
 // Snapshot saves the current state of the pool.
+// Snapshot 导出资源范围描述和位图字节；count 可在恢复时通过 countBits 重新计算。
 func (r *AllocationBitmap) Snapshot() (string, []byte) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -185,6 +190,7 @@ func (r *AllocationBitmap) Snapshot() (string, []byte) {
 }
 
 // Restore restores the pool to the previously captured state.
+// Restore 仅允许恢复到同一 rangeSpec，避免把其他容量/范围的位图错误加载到当前资源池。
 func (r *AllocationBitmap) Restore(rangeSpec string, data []byte) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -235,6 +241,7 @@ type randomScanStrategyWithOffset struct {
 	offset int
 }
 
+// 先随机扫描动态区 [offset,max)，优先避免占用静态预留区；动态区耗尽后才回退到 [0,offset)。
 func (rss randomScanStrategyWithOffset) AllocateBit(allocated *big.Int, max, count int) (int, bool) {
 	if count >= max {
 		return 0, false

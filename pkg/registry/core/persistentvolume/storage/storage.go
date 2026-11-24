@@ -32,12 +32,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// REST implements a RESTStorage for persistent volumes.
+// REST 将 PersistentVolume 通用 CRUD Store 暴露为 API Server RESTStorage；StatusREST 使用专门策略隔离状态写入。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against persistent volumes.
+// NewREST 创建集群级 PV Store，配置字段筛选器和主资源策略，再复制 Store 为 status 子资源安装 StatusStrategy。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.PersistentVolume{} },
@@ -96,6 +97,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Update 通过 StatusStrategy 修改 PV 状态，并禁止 status 子资源在对象不存在时创建新 PV。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.

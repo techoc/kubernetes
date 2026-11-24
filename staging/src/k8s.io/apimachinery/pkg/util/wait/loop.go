@@ -43,10 +43,8 @@ func loopConditionUntilContext(ctx context.Context, t Timer, immediate, sliding 
 		timeCh = t.C()
 	}
 
-	// if immediate is true the condition is
-	// guaranteed to be executed at least once,
-	// if we haven't requested immediate execution, delay once
-	// immediate 为 true 时条件保证至少执行一次；否则先等待一个周期。
+	// immediate 为 true 时先立即执行条件，保证至少调用一次；
+	// immediate 为 false 时，首次调用前先等待一个完整周期。
 	if immediate {
 		// 用闭包加 defer 包住条件调用，使条件内的 panic 经由 HandleCrashWithContext
 		// 记录后不会直接击穿整个轮询循环。
@@ -65,7 +63,7 @@ func loopConditionUntilContext(ctx context.Context, t Timer, immediate, sliding 
 
 	for {
 
-		// Wait for either the context to be cancelled or the next invocation be called
+		// 等待 context 被取消，或等待下一次条件调用的计时信号到达。
 		// 等待 context 取消或下一次调用到期，两者任一先到即继续。
 		select {
 		case <-doneCh:
@@ -73,16 +71,9 @@ func loopConditionUntilContext(ctx context.Context, t Timer, immediate, sliding 
 		case <-timeCh:
 		}
 
-		// IMPORTANT: Because there is no channel priority selection in golang
-		// it is possible for very short timers to "win" the race in the previous select
-		// repeatedly even when the context has been canceled.  We therefore must
-		// explicitly check for context cancellation on every loop and exit if true to
-		// guarantee that we don't invoke condition more than once after context has
-		// been cancelled.
-		//
-		// 重要：Go 的 select 没有通道优先级，极短的 timer 可能在 context 已取消的情况下
-		// 反复"赢得"上面的 select。因此必须在每次循环显式检查取消状态并退出，
-		// 保证 context 取消后条件不会再被多调用一次。
+		// 重要：Go 的 select 不保证通道选择优先级。当计时器与 context.Done() 同时就绪时，
+		// 可能连续选中计时器分支，即使 context 已经取消。
+		// 因此每轮等待结束后都必须再次检查 ctx.Err()，确保取消后不会继续调用条件函数。
 		if err := ctx.Err(); err != nil {
 			return err
 		}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package policybased implements a standard storage for ClusterRole that prevents privilege escalation.
+// 本包为 ClusterRole 主存储增加防提权逻辑，并额外保护可聚合 ClusterRole 的 aggregationRule。
 package policybased
 
 import (
@@ -65,11 +65,13 @@ func (r *Storage) StorageVersion() runtime.GroupVersioner {
 
 var _ rest.StorageVersionProvider = &Storage{}
 
+// 修改 aggregationRule 可能间接汇入任意 ClusterRole 权限，因此需要对 * APIGroup/* Resource 拥有完整授权。
 var fullAuthority = []rbac.PolicyRule{
 	rbac.NewRule("*").Groups("*").Resources("*").RuleOrDie(),
 	rbac.NewRule("*").URLs("*").RuleOrDie(),
 }
 
+// Create 检查用户已拥有待授予规则；若启用聚合规则，还必须拥有全量集群权限。
 func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidatingAdmission rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	if rbacregistry.EscalationAllowed(ctx) || rbacregistry.RoleEscalationAuthorized(ctx, s.authorizer) {
 		return s.StandardStorage.Create(ctx, obj, createValidatingAdmission, options)
@@ -90,6 +92,7 @@ func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidati
 	return s.StandardStorage.Create(ctx, obj, createValidatingAdmission, options)
 }
 
+// Update 校验更新后的规则；新旧任一对象存在 aggregationRule 时都要求完整权限，以防通过调整聚合选择器绕过收紧保护。
 func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	if rbacregistry.EscalationAllowed(ctx) || rbacregistry.RoleEscalationAuthorized(ctx, s.authorizer) {
 		return s.StandardStorage.Update(ctx, name, obj, createValidation, updateValidation, forceAllowCreate, options)

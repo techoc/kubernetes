@@ -57,6 +57,7 @@ var (
 
 var registerMetricsOnce sync.Once
 
+// registerMetrics 注册 IPAddress/ServiceCIDR 修复控制器的协调与错误计数指标。
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(clusterIPRepairIPErrors)

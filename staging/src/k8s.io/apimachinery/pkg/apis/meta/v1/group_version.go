@@ -24,8 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupResource specifies a Group and a Resource, but does not force a version.  This is useful for identifying
-// concepts during lookup stages without having partially valid types
+// GroupResource 表示 API 组和资源，不包含版本信息。查找阶段只需确定组与资源时使用它，
+// 可避免为了暂时不需要的版本字段构造不完整的 GroupVersionResource。
 //
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type GroupResource struct {
@@ -37,16 +37,17 @@ func (gr *GroupResource) String() string {
 	if gr == nil {
 		return "<nil>"
 	}
-	// The core group is implicit, so only resource is printed for it. The
-	// "resource.group" shape matches how kubectl displays resources.
+	// 核心组为空字符串且属于隐式组，因此只输出资源名。
+	// 非核心组采用 "resource.group" 格式，与 kubectl 的资源展示方式一致。
 	if len(gr.Group) == 0 {
 		return gr.Resource
 	}
 	return gr.Resource + "." + gr.Group
 }
 
-// GroupVersionResource unambiguously identifies a resource.  It doesn't anonymously include GroupVersion
-// to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+// GroupVersionResource 通过 group、version 和 resource 唯一标识一个资源。
+// 它不匿名嵌入 GroupVersion，避免 Go 的隐式类型转换，也不直接复用 GroupVersion，
+// 以便独立控制该类型的序列化行为。
 //
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type GroupVersionResource struct {
@@ -59,12 +60,12 @@ func (gvr *GroupVersionResource) String() string {
 	if gvr == nil {
 		return "<nil>"
 	}
-	// Layout used in log messages and errors: "group/version, Resource=name".
+	// 日志和错误消息使用的格式："group/version, Resource=name"。
 	return strings.Join([]string{gvr.Group, "/", gvr.Version, ", Resource=", gvr.Resource}, "")
 }
 
-// GroupKind specifies a Group and a Kind, but does not force a version.  This is useful for identifying
-// concepts during lookup stages without having partially valid types
+// GroupKind 表示 API 组和 Kind，不包含版本信息。查找阶段只需识别组与 Kind 时使用，
+// 避免构造只有部分字段有效的 GroupVersionKind。
 //
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type GroupKind struct {
@@ -76,15 +77,15 @@ func (gk *GroupKind) String() string {
 	if gk == nil {
 		return "<nil>"
 	}
-	// The core group is omitted from the human-readable form.
+	// 可读字符串中省略隐式的核心组。
 	if len(gk.Group) == 0 {
 		return gk.Kind
 	}
 	return gk.Kind + "." + gk.Group
 }
 
-// GroupVersionKind unambiguously identifies a kind.  It doesn't anonymously include GroupVersion
-// to avoid automatic coercion.  It doesn't use a GroupVersion to avoid custom marshalling
+// GroupVersionKind 通过 group、version 和 kind 唯一标识一种 API 类型。
+// 它不匿名嵌入 GroupVersion，以避免隐式类型转换，并保留独立的序列化行为。
 //
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type GroupVersionKind struct {
@@ -93,13 +94,13 @@ type GroupVersionKind struct {
 	Kind    string `json:"kind" protobuf:"bytes,3,opt,name=kind"`
 }
 
-// String renders the kind in "group/version, Kind=name" form, the layout used
-// in errors and logs. It is intentionally pointer-free so it works on values.
+// String 按 "group/version, Kind=name" 格式输出 Kind，供错误信息和日志使用。
+// 接收者使用值类型，因此普通值和指针指向的值都可以直接调用。
 func (gvk GroupVersionKind) String() string {
 	return gvk.Group + "/" + gvk.Version + ", Kind=" + gvk.Kind
 }
 
-// GroupVersion contains the "group" and the "version", which uniquely identifies the API.
+// GroupVersion 包含 group 和 version，用于唯一标识一个 API 版本。
 //
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type GroupVersion struct {
@@ -107,21 +108,20 @@ type GroupVersion struct {
 	Version string `json:"version" protobuf:"bytes,2,opt,name=version"`
 }
 
-// Empty returns true if group and version are empty
+// Empty 判断 group 和 version 是否都为空。
 func (gv GroupVersion) Empty() bool {
 	return len(gv.Group) == 0 && len(gv.Version) == 0
 }
 
-// String puts "group" and "version" into a single "group/version" string. For the legacy v1
-// it returns "v1".
+// String 将 group 和 version 合并为 "group/version"。对于核心组的历史 v1 版本，
+// 为保持兼容只返回 "v1"，而不是 "/v1"。
 func (gv GroupVersion) String() string {
-	// special case the internal apiVersion for the legacy kube types
+	// 内部 API 版本使用空字符串表示，保持其历史编码形式。
 	if gv.Empty() {
 		return ""
 	}
 
-	// special case of "v1" for backward compatibility
-	// Core-group v1 is written as just "v1" rather than "/v1".
+	// 为向后兼容，核心组 v1 只写作 "v1"，而不是 "/v1"。
 	if len(gv.Group) == 0 && gv.Version == "v1" {
 		return gv.Version
 	}
@@ -134,16 +134,16 @@ func (gv GroupVersion) String() string {
 // MarshalJSON implements the json.Marshaller interface.
 func (gv GroupVersion) MarshalJSON() ([]byte, error) {
 	s := gv.String()
-	// A GroupVersion is "group/version", so more than one slash is malformed;
-	// reject it early rather than emitting an unparseable apiVersion.
+	// GroupVersion 的格式最多包含一个斜杠；出现多个斜杠说明格式非法，
+	// 应提前拒绝，避免生成无法解析的 apiVersion。
 	if strings.Count(s, "/") > 1 {
 		return []byte{}, fmt.Errorf("illegal GroupVersion %v: contains more than one /", s)
 	}
 	return json.Marshal(s)
 }
 
-// unmarshal is shared by UnmarshalJSON and UnmarshalText so both accept the
-// same "group/version" syntax, including the bare "v1" core-group form.
+// unmarshal 供 UnmarshalJSON 和 UnmarshalText 共用，确保两种入口接受相同的
+// "group/version" 格式，也兼容核心组简写 "v1"。
 func (gv *GroupVersion) unmarshal(value []byte) error {
 	var s string
 	if err := json.Unmarshal(value, &s); err != nil {

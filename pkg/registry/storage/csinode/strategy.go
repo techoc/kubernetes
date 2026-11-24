@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 csinode 的 REST Strategy，定义作用域、写入前字段处理、校验、告警以及更新规则。
 package csinode
 
 import (
@@ -42,6 +43,7 @@ type csiNodeStrategy struct {
 // CSINode objects via the REST API.
 var Strategy = csiNodeStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
+// NamespaceScoped 声明该资源是否属于命名空间级别；返回 false 表示对象通过集群级 URL 管理，返回 true 表示 URL 中必须包含 namespace。
 func (csiNodeStrategy) NamespaceScoped() bool {
 	return false
 }
@@ -64,6 +66,7 @@ func (csiNodeStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object)
 	dropDisabledCSINodeFields(csiNode, nil)
 }
 
+// Validate 执行创建请求的业务合法性校验，将字段路径和错误原因整理为 field.ErrorList；返回非空错误时 API 请求会被拒绝。
 func (csiNodeStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	csiNode := obj.(*storage.CSINode)
 	return validation.ValidateCSINode(csiNode)
@@ -76,6 +79,7 @@ func (csiNodeStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object)
 func (csiNodeStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 决定 Update 请求在对象不存在时是否允许退化为创建；false 表示必须先显式 Create。
 func (csiNodeStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -88,6 +92,7 @@ func (csiNodeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Ob
 	dropDisabledCSINodeFields(newCSINode, oldCSINode)
 }
 
+// ValidateUpdate 对更新后的对象及其旧版本进行联合校验，检查字段合法性、不可变字段和跨版本兼容约束。
 func (csiNodeStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newCSINodeObj := obj.(*storage.CSINode)
 	oldCSINodeObj := old.(*storage.CSINode)
@@ -99,6 +104,7 @@ func (csiNodeStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Ob
 	return nil
 }
 
+// AllowUnconditionalUpdate 声明是否允许不携带 ResourceVersion 前置条件的更新；true 表示允许无条件更新，false 要求并发版本检查。
 func (csiNodeStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
@@ -133,12 +139,14 @@ func (csiNodeStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runt
 	dropDisabledCSINodeFields(newCSINode, oldCSINode)
 }
 
+// ValidateUpdate 对更新后的对象及其旧版本进行联合校验，检查字段合法性、不可变字段和跨版本兼容约束。
 func (csiNodeStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newCSINode := obj.(*storage.CSINode)
 	oldCSINode := old.(*storage.CSINode)
 	return validation.ValidateCSINodeStatusUpdate(newCSINode, oldCSINode)
 }
 
+// dropDisabledCSINodeFields 根据 Feature Gate 和旧对象内容清理当前版本不允许新写入的 CSINode 字段；若旧对象已有字段值，则保留以支持降级兼容。
 func dropDisabledCSINodeFields(newObj, oldObj *storage.CSINode) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.CSIVolumeHealth) {
 		if oldObj == nil || len(oldObj.Status.StorageHealth) == 0 {

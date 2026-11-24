@@ -28,12 +28,13 @@ import (
 	"k8s.io/kubernetes/pkg/registry/core/endpoint"
 )
 
-// REST implements a RESTStorage for endpoints.
+// REST 将 Endpoints 通用 CRUD Store 暴露为 API Server RESTStorage。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against endpoints.
+// NewREST 注册 Endpoints 的对象类型、REST Strategy 和表格转换器，并初始化底层持久化 Store。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.Endpoints{} },

@@ -38,6 +38,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against service CIDRs.
+// NewREST 创建 ServiceCIDR 主资源 Store，并派生 StatusStrategy Store，确保地址池配置和控制器状态由不同端点维护。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &networking.ServiceCIDR{} },
@@ -85,6 +86,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Update 通过 StatusStrategy 回写地址池状态，并禁止 status 请求在资源不存在时创建新的 ServiceCIDR。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.

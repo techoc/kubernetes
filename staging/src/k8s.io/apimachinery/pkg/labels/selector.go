@@ -269,14 +269,14 @@ func (r *Requirement) Matches(ls Labels) bool {
 		}
 		lsValue, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
-			//nolint:logcheck // Extending the API is not worth it for contextual, structured logging of this.
+			//nolint:logcheck // 为此扩展 API 以支持带上下文的结构化日志，收益不足以抵消复杂度。
 			klog.V(10).InfoS("ParseInt failed", "value", val, "label", ls, "err", err)
 			return false
 		}
 
 		// r.strValues 应只有一个值，且可转换为整数。
 		if len(r.strValues) != 1 {
-			//nolint:logcheck // Extending the API is not worth it for contextual, structured logging of this.
+			//nolint:logcheck // 为此扩展 API 以支持带上下文的结构化日志，收益不足以抵消复杂度。
 			klog.V(10).InfoS("Invalid values count: for 'Gt', 'Lt' operators, exactly one value is required", "count", len(r.strValues), "requirement", r)
 			return false
 		}
@@ -285,7 +285,7 @@ func (r *Requirement) Matches(ls Labels) bool {
 		for i := range r.strValues {
 			rValue, err = strconv.ParseInt(r.strValues[i], 10, 64)
 			if err != nil {
-				//nolint:logcheck // Extending the API is not worth it for contextual, structured logging of this.
+				//nolint:logcheck // 为此扩展 API 以支持带上下文的结构化日志，收益不足以抵消复杂度。
 				klog.V(10).InfoS("ParseInt failed: for 'Gt', 'Lt' operators, the value must be an integer", "value", r.strValues[i], "requirement", r, "err", err)
 				return false
 			}
@@ -457,33 +457,33 @@ func (s internalSelector) RequiresExactMatch(label string) (value string, found 
 type Token int
 
 const (
-	// ErrorToken represents scan error
+	// ErrorToken 表示词法扫描过程中发生错误。
 	ErrorToken Token = iota
-	// EndOfStringToken represents end of string
+	// EndOfStringToken 表示输入字符串结束。
 	EndOfStringToken
-	// ClosedParToken represents close parenthesis
+	// ClosedParToken 表示右括号。
 	ClosedParToken
-	// CommaToken represents the comma
+	// CommaToken 表示逗号。
 	CommaToken
-	// DoesNotExistToken represents logic not
+	// DoesNotExistToken 表示逻辑非（!）。
 	DoesNotExistToken
-	// DoubleEqualsToken represents double equals
+	// DoubleEqualsToken 表示双等号（==）。
 	DoubleEqualsToken
-	// EqualsToken represents equal
+	// EqualsToken 表示等号（=）。
 	EqualsToken
-	// GreaterThanToken represents greater than
+	// GreaterThanToken 表示大于号（>）。
 	GreaterThanToken
-	// IdentifierToken represents identifier, e.g. keys and values
+	// IdentifierToken 表示标识符，例如标签键和值。
 	IdentifierToken
-	// InToken represents in
+	// InToken 表示 in 操作符。
 	InToken
-	// LessThanToken represents less than
+	// LessThanToken 表示小于号（<）。
 	LessThanToken
-	// NotEqualsToken represents not equal
+	// NotEqualsToken 表示不等号（!=）。
 	NotEqualsToken
-	// NotInToken represents not in
+	// NotInToken 表示 notin 操作符。
 	NotInToken
-	// OpenParToken represents open parenthesis
+	// OpenParToken 表示左括号。
 	OpenParToken
 )
 
@@ -983,7 +983,7 @@ func SelectorFromValidatedSet(ls Set) Selector {
 // ParseToRequirements 接收选择器字符串并返回 requirement 列表。
 // 适合需要对选择器条件做额外处理的调用方。
 // 详见 Parse() 的文档。
-// TODO: Consider exporting the internalSelector type instead.
+// TODO：评估是否应直接导出 internalSelector 类型。
 func ParseToRequirements(selector string, opts ...field.PathOption) ([]Requirement, error) {
 	return parse(selector, field.ToPath(opts...))
 }

@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package persistentvolumeclaim 提供 PersistentVolumeClaim 的命名空间级 REST 策略、数据源兼容和状态存储实现。
 package persistentvolumeclaim

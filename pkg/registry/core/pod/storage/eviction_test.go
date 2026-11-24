@@ -46,6 +46,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestEvictionWithETCD 使用真实存储层验证 Eviction API 与 Pod/PDB 持久化更新之间的交互。
 func TestEvictionWithETCD(t *testing.T) {
 	testcases := []struct {
 		name     string
@@ -249,6 +250,7 @@ func TestEvictionWithETCD(t *testing.T) {
 	}
 }
 
+// TestEviction 覆盖 PDB 匹配、健康预算、冲突重试、终态 Pod 和拒绝驱逐等主要分支。
 func TestEviction(t *testing.T) {
 	testcases := []struct {
 		name     string
@@ -686,6 +688,7 @@ func TestEviction(t *testing.T) {
 	}
 }
 
+// TestEvictionWithDeleteOptions 验证 DryRun、UID/ResourceVersion Preconditions 和删除宽限期的传递规则。
 func TestEvictionWithDeleteOptions(t *testing.T) {
 	testcases := []struct {
 		name            string
@@ -757,6 +760,7 @@ func TestEvictionWithDeleteOptions(t *testing.T) {
 	}
 }
 
+// TestEvictionPDBStatus 验证驱逐前后 PDB 的 DisruptionsAllowed、DisruptedPods 和 DisruptionAllowed 条件。
 func TestEvictionPDBStatus(t *testing.T) {
 	testcases := []struct {
 		name                       string
@@ -854,6 +858,7 @@ func TestEvictionPDBStatus(t *testing.T) {
 	}
 }
 
+// TestAddConditionAndDelete 验证删除前写入 DisruptionTarget 条件，以及并发修改下的前置条件保护。
 func TestAddConditionAndDelete(t *testing.T) {
 	cases := []struct {
 		name              string

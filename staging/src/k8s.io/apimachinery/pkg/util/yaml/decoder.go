@@ -151,10 +151,10 @@ type YAMLDecoder struct {
 // 若整块内容无法一次读入，会返回 io.ErrShortBuffer，帮助调用方调整分帧方式。
 func NewDocumentDecoder(r io.ReadCloser) io.ReadCloser {
 	scanner := bufio.NewScanner(r)
-	// the size of initial allocation for buffer 4k
+	// 扫描器缓冲区的初始分配大小为 4 KiB。
 	// 缓冲区初始大小 4K。
 	buf := make([]byte, 4*1024)
-	// the maximum size used to buffer a token 5M
+	// 单个 token 的最大缓冲容量为 5 MiB。
 	// 单个 token 的最大缓冲上限 5M。
 	scanner.Buffer(buf, 5*1024*1024)
 	scanner.Split(splitYAMLDocument)
@@ -169,7 +169,7 @@ func NewDocumentDecoder(r io.ReadCloser) io.ReadCloser {
 func (d *YAMLDecoder) Read(data []byte) (n int, err error) {
 	left := len(d.remaining)
 	if left == 0 {
-		// return the next chunk from the stream
+		// 没有剩余数据时，从流中扫描下一块。
 		// 没有剩余数据时，从流中扫描下一块。
 		if !d.scanner.Scan() {
 			err := d.scanner.Err()
@@ -183,7 +183,7 @@ func (d *YAMLDecoder) Read(data []byte) (n int, err error) {
 		left = len(out)
 	}
 
-	// fits within data
+	// 当前块能够完整放入调用方缓冲区。
 	// 调用方缓冲足够，直接整块拷出。
 	if left <= len(data) {
 		copy(data, d.remaining)
@@ -191,7 +191,7 @@ func (d *YAMLDecoder) Read(data []byte) (n int, err error) {
 		return left, nil
 	}
 
-	// caller will need to reread
+	// 调用方缓冲区不足，需要通过后续 Read 继续读取当前块。
 	// 缓冲不够，只拷出部分并保留剩余，返回 ErrShortBuffer 提示调用方重新读取。
 	copy(data, d.remaining[:len(data)])
 	d.remaining = d.remaining[len(data):]
@@ -213,12 +213,12 @@ func splitYAMLDocument(data []byte, atEOF bool) (advance int, token []byte, err 
 	}
 	sep := len([]byte(yamlSeparator))
 	if i := bytes.Index(data, []byte(yamlSeparator)); i >= 0 {
-		// We have a potential document terminator
+		// 找到潜在的文档终止符，仍需检查其后是否有完整分隔内容。
 		// 找到潜在的分隔位置，需确认其后确实有换行才算完整文档。
 		i += sep
 		after := data[i:]
 		if len(after) == 0 {
-			// we can't read any more characters
+			// 分隔符后暂时没有更多字符可读。
 			// 分隔符后暂无内容：EOF 时取出完整文档，否则等待更多数据。
 			if atEOF {
 				return len(data), data[:len(data)-sep], nil
@@ -231,12 +231,12 @@ func splitYAMLDocument(data []byte, atEOF bool) (advance int, token []byte, err 
 		}
 		return 0, nil, nil
 	}
-	// If we're at EOF, we have a final, non-terminated line. Return it.
+	// 已到 EOF，最后一段没有终止分隔符，直接作为文档返回。
 	// 已到 EOF 时，最后一段没有终止分隔符，直接作为文档返回。
 	if atEOF {
 		return len(data), data, nil
 	}
-	// Request more data.
+	// 当前数据不足以判断文档边界，需要继续读取。
 	// 需要更多数据才能确定边界。
 	return 0, nil, nil
 }
@@ -294,11 +294,9 @@ func NewYAMLOrJSONDecoder(r io.Reader, bufferSize int) *YAMLOrJSONDecoder {
 
 // Decode 从底层流解码下一个对象到 into，或返回错误。
 func (d *YAMLOrJSONDecoder) Decode(into interface{}) error {
-	// Because we don't know if this is a JSON or YAML stream, a failure from
-	// both decoders is ambiguous. When in doubt, it will return the error from
-	// the JSON decoder.  Unfortunately, this means that if the first document
-	// is invalid YAML, the error won't be awesome.
-	// TODO: the errors from YAML are not great, we could improve them a lot.
+	// 在确认流格式前，JSON 与 YAML 解码失败具有歧义；无法判断时优先返回 JSON 解码错误。
+	// 因此，如果第一个文档本身是非法 YAML，返回的错误信息可能不够准确。
+	// TODO：改进 YAML 解码错误信息，使其更容易定位语法问题。
 	// 因为无法预知流的真实格式，两个解码器都失败时错误是歧义的；
 	// 此时优先返回 JSON 解码器的错误。
 	var firstErr error
@@ -325,9 +323,8 @@ func (d *YAMLOrJSONDecoder) Decode(into interface{}) error {
 			firstErr = err
 		}
 		if d.count > 1 {
-			// If we found 0 or 1 JSON object(s), this stream is still
-			// ambiguous.  But if we found more than 1 JSON object, then this
-			// is an unambiguous JSON stream, and we should not switch to YAML.
+			// 只解析出 0 或 1 个 JSON 对象时，流格式仍有歧义；如果已经解析出多个 JSON 对象，
+			// 则可以确定这是 JSON 流，不应再切换到 YAML 解码器。
 			// 已成功解析多于 1 个 JSON 对象，流格式已确定为 JSON，不再切换。
 			return err
 		}
@@ -428,11 +425,11 @@ func (r *YAMLReader) Read() ([]byte, error) {
 
 		sep := len([]byte(separator))
 		if i := bytes.Index(line, []byte(separator)); i == 0 {
-			// We have a potential document terminator
+			// 找到潜在的文档终止符，仍需检查其后是否有完整分隔内容。
 			// 行首出现分隔符：其后只允许空白与注释，否则视为非法分隔符。
 			i += sep
 			trimmed := strings.TrimSpace(string(line[i:]))
-			// We only allow comments and spaces following the yaml doc separator, otherwise we'll return an error
+			// YAML 文档分隔符后只允许空格和注释；出现其他内容时返回语法错误。
 			if len(trimmed) > 0 && string(trimmed[0]) != "#" {
 				return nil, YAMLSyntaxError{
 					err: fmt.Errorf("invalid Yaml document separator: %s", trimmed),
@@ -447,7 +444,7 @@ func (r *YAMLReader) Read() ([]byte, error) {
 		}
 		if err == io.EOF { //nolint:errorlint
 			if buffer.Len() != 0 {
-				// If we're at EOF, we have a final, non-terminated line. Return it.
+				// 已到 EOF，最后一段没有终止分隔符，直接作为文档返回。
 				// EOF 时若还有内容，它就是最后一段未以分隔符结尾的文档。
 				return buffer.Bytes(), nil
 			}

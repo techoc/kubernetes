@@ -786,7 +786,7 @@ func SuggestsClientDelay(err error) (int, bool) {
 		case metav1.StatusReasonServerTimeout:
 			return int(t.Status().Details.RetryAfterSeconds), true
 		}
-		// If the client requests that we retry after a certain number of seconds
+		// 如果状态详情明确给出了重试等待秒数，则将该值返回给调用方。
 		if t.Status().Details.RetryAfterSeconds > 0 {
 			return int(t.Status().Details.RetryAfterSeconds), true
 		}

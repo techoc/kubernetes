@@ -18,14 +18,12 @@ package runtime
 
 import "k8s.io/apimachinery/pkg/runtime/schema"
 
-// SetGroupVersionKind satisfies the ObjectKind interface for all objects that embed TypeMeta
-// 把 GVK 拆成 apiVersion 与 kind 写入；这两个字段是 GVK 在序列化格式中的表示。
+// 实现 ObjectKind 接口：把 GVK 写入 TypeMeta。GroupVersion 被编码到 apiVersion 字段，Kind 写入 kind 字段。
 func (obj *TypeMeta) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind satisfies the ObjectKind interface for all objects that embed TypeMeta
-// 从 apiVersion 与 kind 重建 GVK；字段为空时得到零值 GVK。
+// 实现 ObjectKind 接口：从 TypeMeta 的 apiVersion 与 kind 字段还原 GVK。apiVersion 解析失败或字段缺失时，返回值会体现相应的零值信息。
 func (obj *TypeMeta) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }

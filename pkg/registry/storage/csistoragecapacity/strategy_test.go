@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本测试文件验证 csistoragecapacity 的 REST Strategy 约束，包括字段重置、合法性校验和更新规则。
 package csistoragecapacity
 
 import (

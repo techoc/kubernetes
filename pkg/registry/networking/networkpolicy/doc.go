@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package networkpolicy 提供 NetworkPolicy 的 REST 策略、Ingress/Egress 规则校验和持久化接口。
 package networkpolicy

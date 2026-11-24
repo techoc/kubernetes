@@ -26,10 +26,9 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// Diff returns a string representation of the difference between two objects.
-// When built without the usegocmp tag, it uses go-difflib/difflib to generate a
-// unified diff of the objects. It attempts to use JSON serialization first,
-// falling back to an object dump via the dump package if JSON marshaling fails.
+// Diff 返回两个对象差异的字符串表示。未启用 usegocmp 构建标签时，使用
+// go-difflib/difflib 生成统一 diff。优先尝试 JSON 序列化；任一对象序列化失败时，
+// 两侧都会回退为 dump 包生成的对象转储，以保证比较输入格式一致。
 //
 // Diff 返回两个对象差异的字符串表示。优先使用 JSON 序列化，
 // JSON 序列化失败时回退到 dump 包的对象转储；

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// If you make changes to this file, you should also make the corresponding change in ReplicaSet.
+// ReplicationController 与 ReplicaSet 的策略长期保持相近；调整共有的 PodTemplate、Generation 或校验规则时，需要同步核对 ReplicaSet。
 
 package replicationcontroller
 
@@ -46,7 +46,7 @@ import (
 	corevalidation "k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
-// rcStrategy implements verification logic for Replication Controllers.
+// rcStrategy 定义 ReplicationController 主资源的 REST 策略，处理依赖删除兼容、Pod 模板字段清理、Generation 和状态隔离。
 type rcStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -57,6 +57,7 @@ var Strategy = rcStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme
 
 // DefaultGarbageCollectionPolicy returns OrphanDependents for v1 for backwards compatibility,
 // and DeleteDependents for all other versions.
+// core/v1 为兼容旧客户端默认孤儿化删除；其他 API 版本默认级联删除受该 Controller 管理的 Pod。
 func (rcStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	var groupVersion schema.GroupVersion
 	if requestInfo, found := genericapirequest.RequestInfoFrom(ctx); found {
@@ -89,6 +90,7 @@ func (rcStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 }
 
 // PrepareForCreate clears the status of a replication controller before creation.
+// 创建时由 API Server 清空控制器 Status、初始化 Generation，并按 Feature Gate 清理 PodTemplate 中不可用的字段。
 func (rcStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	controller := obj.(*api.ReplicationController)
 	controller.Status = api.ReplicationControllerStatus{}
@@ -99,6 +101,7 @@ func (rcStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 普通更新不能改写控制器 Status；同时清理禁用的模板字段，并仅在 Spec 发生语义变化时递增 Generation。
 func (rcStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newController := obj.(*api.ReplicationController)
 	oldController := old.(*api.ReplicationController)
@@ -151,6 +154,7 @@ func (rcStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新校验结合新旧 PodTemplate 判断兼容特性；历史转换失败注解中标记的不可转换 Selector 不允许被意外改写。
 func (rcStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	oldRc := old.(*api.ReplicationController)
 	newRc := obj.(*api.ReplicationController)
@@ -194,6 +198,7 @@ func (rcStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 }
 
 // ControllerToSelectableFields returns a field set that represents the object.
+// ControllerToSelectableFields 暴露标准 ObjectMeta 字段和 status.replicas，供 FieldSelector 按副本状态过滤。
 func ControllerToSelectableFields(controller *api.ReplicationController) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&controller.ObjectMeta, true)
 	controllerSpecificFieldsSet := fields.Set{
@@ -214,6 +219,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 // MatchController is the filter used by the generic etcd backend to route
 // watch events from etcd to clients of the apiserver only interested in specific
 // labels/fields.
+// MatchController 将 LabelSelector/FieldSelector 与属性提取函数组合成 etcd LIST/WATCH 的筛选谓词。
 func MatchController(label labels.Selector, field fields.Selector) apistorage.SelectionPredicate {
 	return apistorage.SelectionPredicate{
 		Label:    label,
@@ -239,6 +245,7 @@ func (rcStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set
 	}
 }
 
+// /status 只允许控制器回写 Status；Spec 从旧对象恢复，避免状态更新夹带副本数或 PodTemplate 修改。
 func (rcStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newRc := obj.(*api.ReplicationController)
 	oldRc := old.(*api.ReplicationController)

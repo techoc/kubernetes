@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package runtime defines conversions between generic types and structs to map query strings
-// to struct objects.
+// 本文件定义通用类型与 Go 结构体之间的转换规则，主要用于把 URL 查询参数映射到 API 请求结构体。
 package runtime
 
 import (
@@ -26,9 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/conversion"
 )
 
-// DefaultMetaV1FieldSelectorConversion auto-accepts metav1 values for name and namespace.
-// A cluster scoped resource specifying namespace empty works fine and specifying a particular
-// namespace will return no results, as expected.
+// 注册 metav1 通用字段选择器转换规则。metadata.name 与 metadata.namespace 可以转换为内部字段表示；集群级资源使用 namespace 空值是合法的，指定具体 namespace 则不会匹配集群级对象。
 func DefaultMetaV1FieldSelectorConversion(label, value string) (string, string, error) {
 	switch label {
 	case "metadata.name":
@@ -40,8 +37,7 @@ func DefaultMetaV1FieldSelectorConversion(label, value string) (string, string, 
 	}
 }
 
-// Convert_Slice_string_To_string converts the first element of a query-style
-// string slice to a plain string; an absent parameter yields "".
+// 把查询参数切片的第一个元素转换为 string。参数不存在时写入空字符串；存在多个值时只使用第一个。
 func Convert_Slice_string_To_string(in *[]string, out *string, s conversion.Scope) error {
 	if len(*in) == 0 {
 		*out = ""
@@ -51,8 +47,7 @@ func Convert_Slice_string_To_string(in *[]string, out *string, s conversion.Scop
 	return nil
 }
 
-// Convert_Slice_string_To_int converts the first element of a query-style
-// string slice to an int; an absent parameter yields 0.
+// 把查询参数切片的第一个元素按十进制转换为 int。参数不存在时写入 0；格式不合法或超出平台 int 范围时返回解析错误。
 func Convert_Slice_string_To_int(in *[]string, out *int, s conversion.Scope) error {
 	if len(*in) == 0 {
 		*out = 0
@@ -67,17 +62,13 @@ func Convert_Slice_string_To_int(in *[]string, out *int, s conversion.Scope) err
 	return nil
 }
 
-// Convert_Slice_string_To_bool will convert a string parameter to boolean.
-// Only the absence of a value (i.e. zero-length slice), a value of "false", or a
-// value of "0" resolve to false.
-// Any other value (including empty string) resolves to true.
+// 把查询参数的第一个值转换为 bool。参数缺失、值为 false（忽略大小写）或 0 时为 false；其他任何值（包括显式空字符串）均为 true，以保持 Kubernetes 历史查询参数语义。
 func Convert_Slice_string_To_bool(in *[]string, out *bool, s conversion.Scope) error {
 	if len(*in) == 0 {
 		*out = false
 		return nil
 	}
-	// An explicitly empty string ("?flag=") is treated as true, matching the
-	// historical behavior of Kubernetes query parameters.
+	// 显式空字符串（例如 ?flag=）按 true 处理，以保持 Kubernetes 查询参数的历史行为。
 	switch {
 	case (*in)[0] == "0", strings.EqualFold((*in)[0], "false"):
 		*out = false
@@ -87,9 +78,7 @@ func Convert_Slice_string_To_bool(in *[]string, out *bool, s conversion.Scope) e
 	return nil
 }
 
-// Convert_Slice_string_To_Pointer_bool is the pointer-returning form of
-// Convert_Slice_string_To_bool. An absent parameter produces a pointer to
-// false rather than nil, because API bool fields are not optional.
+// 将查询参数转换为 *bool。参数缺失时返回指向 false 的非 nil 指针，使调用方能够获得确定的布尔值；显式 false/0 返回 false 指针，其余值返回 true 指针。
 func Convert_Slice_string_To_Pointer_bool(in *[]string, out **bool, s conversion.Scope) error {
 	if len(*in) == 0 {
 		boolVar := false
@@ -107,13 +96,12 @@ func Convert_Slice_string_To_Pointer_bool(in *[]string, out **bool, s conversion
 	return nil
 }
 
-// string_to_int64 parses a base-10 int64; the shared helper keeps all the
-// integer conversions consistent about rejecting non-decimal input.
+// string_to_int64 按十进制解析 int64。统一使用该辅助函数，确保所有整数转换都拒绝非十进制输入。
 func string_to_int64(in string) (int64, error) {
 	return strconv.ParseInt(in, 10, 64)
 }
 
-// Convert_string_To_int64 converts a plain string to int64; nil input yields 0.
+// 将字符串转换为 int64。输入指针为 nil 时写入 0；非 nil 时按十进制解析，非法格式或溢出会返回错误。
 func Convert_string_To_int64(in *string, out *int64, s conversion.Scope) error {
 	if in == nil {
 		*out = 0
@@ -127,8 +115,7 @@ func Convert_string_To_int64(in *string, out *int64, s conversion.Scope) error {
 	return nil
 }
 
-// Convert_Slice_string_To_int64 converts the first element of a query-style
-// string slice to int64; an absent parameter yields 0.
+// 将查询参数切片的第一个值按十进制转换为 int64。切片为空时写入 0，解析失败时返回错误。
 func Convert_Slice_string_To_int64(in *[]string, out *int64, s conversion.Scope) error {
 	if len(*in) == 0 {
 		*out = 0
@@ -142,9 +129,7 @@ func Convert_Slice_string_To_int64(in *[]string, out *int64, s conversion.Scope)
 	return nil
 }
 
-// Convert_string_To_Pointer_int64 converts a string to *int64. A nil input
-// means the API field was absent, which is represented as a nil pointer so
-// callers can distinguish "unset" from an explicit zero.
+// 将字符串转换为 *int64。输入指针为 nil 时输出 nil，以区分字段未设置与显式设置为 0；否则解析后返回新值的指针。
 func Convert_string_To_Pointer_int64(in *string, out **int64, s conversion.Scope) error {
 	if in == nil {
 		*out = nil
@@ -158,8 +143,7 @@ func Convert_string_To_Pointer_int64(in *string, out **int64, s conversion.Scope
 	return nil
 }
 
-// Convert_Slice_string_To_Pointer_int64 converts the first element of a
-// query-style string slice to *int64; an absent parameter yields nil.
+// 将查询参数切片的第一个值转换为 *int64。参数不存在时输出 nil，存在时解析并返回指向结果的指针。
 func Convert_Slice_string_To_Pointer_int64(in *[]string, out **int64, s conversion.Scope) error {
 	if len(*in) == 0 {
 		*out = nil
@@ -173,9 +157,7 @@ func Convert_Slice_string_To_Pointer_int64(in *[]string, out **int64, s conversi
 	return nil
 }
 
-// RegisterStringConversions registers the string-slice helpers with the scheme
-// so generic reflection-based conversion can find them. Pointer-typed variants
-// are registered on demand because they are not universally applicable.
+// 向 Scheme 注册查询参数切片到 string、int、bool 和 int64 的转换函数，使反射式对象转换可以复用这些规则。指针类型转换按需单独注册，因为并非所有 API 字段都适用。
 func RegisterStringConversions(s *Scheme) error {
 	if err := s.AddConversionFunc((*[]string)(nil), (*string)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_Slice_string_To_string(a.(*[]string), b.(*string), scope)

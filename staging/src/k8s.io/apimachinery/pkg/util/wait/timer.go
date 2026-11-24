@@ -22,24 +22,18 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// Timer abstracts how wait functions interact with time runtime efficiently. Test
-// code may implement this interface directly but package consumers are encouraged
-// to use the Backoff type as the primary mechanism for acquiring a Timer. The
-// interface is a simplification of clock.Timer to prevent misuse. Timers are not
-// expected to be safe for calls from multiple goroutines.
-//
-// 接口刻意只暴露三个方法：C/Next/Stop，防止调用方使用 Reset 等易错 API。
+// Timer 抽象等待函数与运行时计时器之间的交互。测试代码可以自行实现该接口；
+// 普通调用方建议通过 Backoff 创建 Timer，避免直接操作底层计时器。
+// 该接口刻意只暴露 C、Next、Stop 三个方法，隐藏容易误用的 Reset 等操作。
+// 同一个 Timer 实例不保证支持多个 goroutine 并发调用。
 type Timer interface {
-	// C returns a channel that will receive a struct{} each time the timer fires.
-	// The channel should not be waited on after Stop() is invoked. It is allowed
-	// to cache the returned value of C() for the lifetime of the Timer.
+	// C 返回计时器触发时可读的时间通道。调用 Stop 后不得继续等待该通道；
+	// 调用方可以在 Timer 生命周期内缓存 C() 的返回值。
 	C() <-chan time.Time
-	// Next is invoked by wait functions to signal timers that the next interval
-	// should begin. You may only use Next() if you have drained the channel C().
-	// You should not call Next() after Stop() is invoked.
+	// Next 通知计时器开始计算下一个等待间隔。调用前必须先排空 C() 通道；
+	// 调用 Stop 后不得再调用 Next。
 	Next()
-	// Stop releases the timer. It is safe to invoke if no other methods have been
-	// called.
+	// Stop 释放计时器持有的运行时资源；即使此前没有调用其他方法，也可以安全调用。
 	Stop()
 }
 
@@ -48,8 +42,8 @@ type noopTimer struct {
 	closedCh <-chan time.Time
 }
 
-// newNoopTimer creates a timer with a unique channel to avoid contention
-// for the channel's lock across multiple unrelated timers.
+// newNoopTimer 创建一个立即就绪的计时器，并为其分配独立通道，
+// 避免多个互不相关的计时器争用同一个通道锁。
 func newNoopTimer() noopTimer {
 	ch := make(chan time.Time)
 	close(ch)
@@ -107,7 +101,7 @@ func (t *fixedTimer) C() <-chan time.Time {
 	return t.t.C()
 }
 func (t *fixedTimer) Next() {
-	// no-op for fixed timers
+	// 固定间隔计时器不需要在每轮调用时重置 Ticker，因此这里不执行任何操作。
 }
 func (t *fixedTimer) Stop() {
 	if t.t == nil {
@@ -118,11 +112,11 @@ func (t *fixedTimer) Stop() {
 }
 
 var (
-	// RealTimer can be passed to methods that need a clock.Timer.
+	// RealTimer 暴露真实时钟的 Timer 构造函数，供需要 clock.Timer 的调用方使用。
 	RealTimer = clock.RealClock{}.NewTimer
 )
 
 var (
-	// internalClock is used for test injection of clocks
+	// internalClock 是包内部使用的时钟；测试可以替换它来控制时间推进。
 	internalClock = clock.RealClock{}
 )

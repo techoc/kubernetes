@@ -33,6 +33,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against ClusterRoleBinding objects.
+// NewREST 创建集群级 ClusterRoleBinding Store，并注入 RoleRef/Subject 绑定策略。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &rbac.ClusterRoleBinding{} },

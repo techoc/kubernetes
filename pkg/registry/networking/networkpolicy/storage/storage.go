@@ -34,6 +34,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against NetworkPolicies.
+// NewREST 创建命名空间级 NetworkPolicy Store，注入策略与 Label/Field Selector 过滤器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &networkingapi.NetworkPolicy{} },

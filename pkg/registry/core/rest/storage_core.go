@@ -69,6 +69,7 @@ import (
 )
 
 // Config provides information needed to build RESTStorage for core.
+// Config 汇总 legacy core API Group 的存储后端、Service 网络范围、事件 TTL 和启动后修复控制器所需依赖。
 type Config struct {
 	GenericConfig
 
@@ -110,6 +111,7 @@ type legacyProvider struct {
 	startServiceNodePortsRepair, startServiceClusterIPRepair func(onFirstSuccess func(), stopCh chan struct{})
 }
 
+// New 初始化旧 Core API 的资源 Store 与 IP/NodePort 分配器，并把存储资源组装成 legacyProvider。
 func New(c Config, authorizer authorizer.UnconditionalAuthorizer) (*legacyProvider, error) {
 	rangeRegistries, serviceClusterIPAllocator, serviceIPAllocators, serviceNodePortAllocator, err := c.newServiceIPAllocators()
 	if err != nil {
@@ -156,6 +158,7 @@ func New(c Config, authorizer authorizer.UnconditionalAuthorizer) (*legacyProvid
 	return p, nil
 }
 
+// NewRESTStorage 按资源启用开关注册 Core v1 REST Handler；部分资源还注册 status 子资源，并把分配器/修复控制器注入 Service Storage。
 func (p *legacyProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo, err := p.GenericConfig.NewRESTStorage(apiResourceConfigSource, restOptionsGetter)
 	if err != nil {
@@ -338,6 +341,7 @@ func (p *legacyProvider) NewRESTStorage(apiResourceConfigSource serverstorage.AP
 	return apiGroupInfo, nil
 }
 
+// newServiceIPAllocators 根据 ServiceCIDR、双栈配置和 Feature Gate 创建 ClusterIP/NodePort 池，并准备旧位图与新 IPAddress 分配器的迁移组合。
 func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryClusterIPAllocator ipallocator.Interface, clusterIPAllocators map[api.IPFamily]ipallocator.Interface, nodePortAllocator *portallocator.PortAllocator, err error) {
 	clusterIPAllocators = map[api.IPFamily]ipallocator.Interface{}
 
@@ -513,6 +517,7 @@ func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryCl
 
 var _ genericapiserver.PostStartHookProvider = &legacyProvider{}
 
+// PostStartHook 在 API Server 启动后运行 ClusterIP 与 NodePort Repair Controller；首次修复完成前阻止 Ready，超过 1 分钟则启动失败。
 func (p *legacyProvider) PostStartHook() (string, genericapiserver.PostStartHookFunc, error) {
 	return "start-service-ip-repair-controllers", func(context genericapiserver.PostStartHookContext) error {
 		// We start both repairClusterIPs and repairNodePorts to ensure repair
@@ -566,6 +571,7 @@ type componentStatusStorage struct {
 	storageFactory serverstorage.StorageFactory
 }
 
+// serversToValidate 构建 ComponentStatus 的探测目标：本机 controller-manager、scheduler 以及每个 etcd 后端实例。
 func (s componentStatusStorage) serversToValidate() map[string]componentstatus.Server {
 	// this is fragile, which assumes that the default port is being used
 	// TODO: switch to secure port until these components remove the ability to serve insecurely.

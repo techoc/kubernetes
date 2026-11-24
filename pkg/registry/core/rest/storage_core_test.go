@@ -25,6 +25,7 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 )
 
+// TestGetServersToValidate 验证 Core API 组件健康检查会包含本机控制面组件及配置的各个 etcd 后端。
 func TestGetServersToValidate(t *testing.T) {
 	servers := componentStatusStorage{fakeStorageFactory{}}.serversToValidate()
 

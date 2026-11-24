@@ -20,7 +20,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// RangeRegistry is a registry that can retrieve or persist a RangeAllocation object.
+// RangeRegistry 定义 RangeAllocation 快照存储契约；ClusterIP、NodePort 等分配器通过它读取最新位图并以资源版本冲突保护写入。
 type RangeRegistry interface {
 	// Get returns the latest allocation, an empty object if no allocation has been made,
 	// or an error if the allocation could not be retrieved.

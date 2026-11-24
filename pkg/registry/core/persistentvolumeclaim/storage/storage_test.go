@@ -35,6 +35,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd，并构造 PVC 主资源与 Status Handler。
 func newStorage(t *testing.T) (*REST, *StatusREST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -154,6 +155,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestUpdateStatus 验证 PVC 状态子资源只能更新 Status，不能更改 Spec 请求容量或数据源。
 func TestUpdateStatus(t *testing.T) {
 	storage, statusStorage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -209,6 +211,7 @@ func TestShortNames(t *testing.T) {
 	registrytest.AssertShortNames(t, storage, expected)
 }
 
+// TestDefaultOnReadPvc 验证 GET 时为历史 PVC 补齐 dataSourceRef，但不把只读默认值写回持久化对象。
 func TestDefaultOnReadPvc(t *testing.T) {
 	storage, _, server := newStorage(t)
 	defer server.Terminate(t)

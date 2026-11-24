@@ -35,6 +35,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
+// eventStrategy 定义 Event 写入策略；Event 是短生命周期的观测记录，存储层使用 TTL 回收而不是 Owner 级联删除。
 type eventStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -44,6 +45,7 @@ type eventStrategy struct {
 // Event objects via the REST API.
 var Strategy = eventStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
+// Event 不支持普通 OwnerReference 级联垃圾回收，生命周期由 Store 配置的 TTL 控制。
 func (eventStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	return rest.Unsupported
 }
@@ -58,6 +60,7 @@ func (eventStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 func (eventStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
+// Validate 根据请求 API Group/Version 执行对应版本的 Event 校验，兼容不同 Event API 版本字段语义。
 func (eventStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	groupVersion := requestGroupVersion(ctx)
 	event := obj.(*api.Event)
@@ -75,6 +78,7 @@ func (eventStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
 
+// ValidateUpdate 使用请求版本校验更新后的 Event，并结合旧对象检查不可变字段和时间/计数变化规则。
 func (eventStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	groupVersion := requestGroupVersion(ctx)
 	event := obj.(*api.Event)
@@ -110,6 +114,7 @@ func Matcher(label labels.Selector, field fields.Selector) storage.SelectionPred
 }
 
 // ToSelectableFields returns a field set that represents the object.
+// ToSelectableFields 暴露 involvedObject、reason、type、reportingComponent 和旧 source 等事件查询字段。
 func ToSelectableFields(event *api.Event) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&event.ObjectMeta, true)
 	source := event.Source.Component
@@ -133,6 +138,7 @@ func ToSelectableFields(event *api.Event) fields.Set {
 }
 
 // requestGroupVersion returns the group/version associated with the given context, or a zero-value group/version.
+// requestGroupVersion 从 RequestInfo 取出客户端请求版本，供事件版本感知的校验函数使用。
 func requestGroupVersion(ctx context.Context) schema.GroupVersion {
 	if requestInfo, found := genericapirequest.RequestInfoFrom(ctx); found {
 		return schema.GroupVersion{Group: requestInfo.APIGroup, Version: requestInfo.APIVersion}

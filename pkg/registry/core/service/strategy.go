@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// svcStrategy implements behavior for Services
+// svcStrategy 定义 Service 主资源的 REST 写入策略，重点维护 Status 隔离及 Service 类型相关字段之间的约束。
 type svcStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -67,6 +67,7 @@ func (svcStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 }
 
 // PrepareForCreate sets contextual defaults and clears fields that are not allowed to be set by end users on creation.
+// 创建时清空 Status 和当前 Feature Gate 不允许写入的字段；ClusterIP/NodePort 分配由 Store 的 BeginCreate 钩子完成。
 func (svcStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	service := obj.(*api.Service)
 	service.Status = api.ServiceStatus{}
@@ -75,6 +76,7 @@ func (svcStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
 // PrepareForUpdate sets contextual defaults and clears fields that are not allowed to be set by end users on update.
+// 更新时恢复服务端维护的 Status，并根据 Service 新旧 Type 清理不再适用、且未被用户显式修改的分配字段。
 func (svcStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newService := obj.(*api.Service)
 	oldService := old.(*api.Service)
@@ -85,6 +87,7 @@ func (svcStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object
 }
 
 // Validate validates a new service.
+// Validate 负责 Service 创建时的字段语义校验；地址池是否有空闲资源由分配事务在后续阶段处理。
 func (svcStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	service := obj.(*api.Service)
 	allErrs := validation.ValidateServiceCreate(service)
@@ -100,6 +103,7 @@ func (svcStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []s
 func (svcStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// Service 保留 PUT 创建语义：对象不存在时允许更新请求走创建路径，分配钩子仍会为其预留网络资源。
 func (svcStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
@@ -146,6 +150,7 @@ func (serviceStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpat
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
+// status 子资源只允许更新服务端状态；Spec 从旧对象恢复，避免经 /status 修改 ClusterIP、端口或 Service Type。
 func (serviceStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newService := obj.(*api.Service)
 	oldService := old.(*api.Service)
@@ -178,6 +183,7 @@ func (serviceStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runt
 }
 
 // GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 Service 标签和可选择字段，供 LIST/WATCH 的 LabelSelector 与 FieldSelector 过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	service, ok := obj.(*api.Service)
 	if !ok {
@@ -196,6 +202,7 @@ func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionP
 }
 
 // SelectableFields returns a field set that can be used for filter selection
+// SelectableFields 暴露 metadata 字段及 spec.clusterIP/spec.type 两个 Service 专属字段选择器。
 func SelectableFields(service *api.Service) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&service.ObjectMeta, true)
 	serviceSpecificFieldsSet := fields.Set{
@@ -225,6 +232,7 @@ func sameStringSlice(a []string, b []string) bool {
 	return true
 }
 
+// Service 是由 Type 决定字段适用范围的联合结构；切换类型时要谨慎清理自动分配字段，避免释放用户刚提交的值。
 // This is an unusual case.  Service has a number of inter-related fields and
 // in order to avoid breaking clients we try really hard to infer what users
 // mean when they change them.
@@ -238,6 +246,7 @@ func sameStringSlice(a []string, b []string) bool {
 // fields that are allocated from a pool and need to be released.  Anyone who
 // is contemplating copying this pattern should think REALLY hard about almost
 // any other option.
+// dropTypeDependentFields 只在字段不再适用于新 Type、原值看起来由系统分配且用户未同时改动它时才清空，以便后续分配器释放资源。
 func dropTypeDependentFields(newSvc *api.Service, oldSvc *api.Service) {
 	// For now we are only wiping on updates.  This minimizes potential
 	// confusion since many of the cases we are handling here are pretty niche.
@@ -317,6 +326,7 @@ func dropTypeDependentFields(newSvc *api.Service, oldSvc *api.Service) {
 	}
 }
 
+// ExternalName 不参与 ClusterIP 池分配；Headless Service 虽然使用 None，也仍走 Service 的相关 IP family 语义。
 func needsClusterIP(svc *api.Service) bool {
 	if svc.Spec.Type == api.ServiceTypeExternalName {
 		return false
@@ -345,6 +355,7 @@ func sameIPFamilyPolicy(oldSvc, newSvc *api.Service) bool {
 	return getIPFamilyPolicy(oldSvc) == getIPFamilyPolicy(newSvc)
 }
 
+// 只有 NodePort 和 LoadBalancer 类型通常需要占用集群 NodePort 端口池。
 func needsNodePort(svc *api.Service) bool {
 	if svc.Spec.Type == api.ServiceTypeNodePort || svc.Spec.Type == api.ServiceTypeLoadBalancer {
 		return true
@@ -372,6 +383,7 @@ func sameNodePorts(oldSvc, newSvc *api.Service) bool {
 	return oldPorts.IsSuperset(newPorts)
 }
 
+// HealthCheckNodePort 只用于 ExternalTrafficPolicy=Local 的 LoadBalancer Service。
 func needsHCNodePort(svc *api.Service) bool {
 	if svc.Spec.Type != api.ServiceTypeLoadBalancer {
 		return false

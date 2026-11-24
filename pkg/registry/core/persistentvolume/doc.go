@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package persistentvolume 提供 PersistentVolume 的集群级 REST 策略、状态更新和通用存储实现。
 package persistentvolume

@@ -30,7 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/networking/validation"
 )
 
-// networkPolicyStrategy implements verification logic for NetworkPolicies
+// networkPolicyStrategy 定义 NetworkPolicy 主资源写入策略，维护命名空间作用域、Generation、选择器和网络规则校验。
 type networkPolicyStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -45,12 +45,14 @@ func (networkPolicyStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears the status of a NetworkPolicy before creation.
+// 创建时初始化 Generation；NetworkPolicy 没有独立 Status 子资源，规则本身完全由 Spec 描述。
 func (networkPolicyStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	networkPolicy := obj.(*networking.NetworkPolicy)
 	networkPolicy.Generation = 1
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 仅 Spec 变化递增 Generation，供网络插件识别新一版 Ingress/Egress 策略。
 func (networkPolicyStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newNetworkPolicy := obj.(*networking.NetworkPolicy)
 	oldNetworkPolicy := old.(*networking.NetworkPolicy)
@@ -64,6 +66,7 @@ func (networkPolicyStrategy) PrepareForUpdate(ctx context.Context, obj, old runt
 }
 
 // Validate validates a new NetworkPolicy.
+// Validate 根据新 NetworkPolicy 计算兼容选项，再校验 PodSelector、PolicyTypes、Ports 和 Peer 规则组合。
 func (networkPolicyStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	networkPolicy := obj.(*networking.NetworkPolicy)
 	ops := validation.ValidationOptionsForNetworking(networkPolicy, nil)
@@ -99,6 +102,7 @@ func (networkPolicyStrategy) AllowUnconditionalUpdate(ctx context.Context) bool 
 	return true
 }
 
+// networkPolicyWarnings 遍历 Ingress.From/Egress.To 的 IPBlock，分别校验 CIDR 与 Except 网段并生成 Warning。
 func networkPolicyWarnings(networkPolicy *networking.NetworkPolicy) []string {
 	var warnings []string
 	for i := range networkPolicy.Spec.Ingress {

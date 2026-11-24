@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package framer implements simple frame decoding techniques for an io.ReadCloser
-//
-// 中文说明：提供两种分帧协议——4 字节大端长度前缀，以及依赖 JSON 对象
-// 边界的流式分帧，用于 watch 等连续对象流。
+// Package framer 为 io.ReadCloser 提供简单的流式分帧与解帧能力。
+// 支持 4 字节大端长度前缀协议，以及以连续 JSON 对象边界作为帧边界的协议。
 package framer
 
 import (
@@ -36,8 +34,7 @@ func NewLengthDelimitedFrameWriter(w io.Writer) io.Writer {
 	return &lengthDelimitedFrameWriter{w: w}
 }
 
-// Write writes a single frame to the nested writer, prepending it with the length
-// in bytes of data (as a 4 byte, bigendian uint32).
+// Write 将单帧写入底层 writer。写入正文前先写入 4 字节大端 uint32，表示正文的字节长度。
 func (w *lengthDelimitedFrameWriter) Write(data []byte) (int, error) {
 	binary.BigEndian.PutUint32(w.h[:], uint32(len(data)))
 	n, err := w.w.Write(w.h[:])
@@ -58,25 +55,23 @@ type lengthDelimitedFrameReader struct {
 	remaining int
 }
 
-// NewLengthDelimitedFrameReader returns an io.Reader that will decode length-prefixed
-// frames off of a stream.
+// NewLengthDelimitedFrameReader 返回一个 io.ReadCloser，从字节流中读取带长度前缀的帧。
 //
-// The protocol is:
+// 协议结构如下：
 //
 //	stream: message ...
 //	message: prefix body
-//	prefix: 4 byte uint32 in BigEndian order, denotes length of body
-//	body: bytes (0..prefix)
+//	prefix: 4 字节大端 uint32，表示 body 的长度
+//	body: 长度为 prefix 的原始字节
 //
-// If the buffer passed to Read is not long enough to contain an entire frame, io.ErrShortRead
-// will be returned along with the number of bytes read.
+// 如果传给 Read 的缓冲区不足以容纳完整帧，会返回已读取字节数以及 io.ErrShortBuffer；
+// 调用方可以继续读取同一帧的剩余部分。
 func NewLengthDelimitedFrameReader(r io.ReadCloser) io.ReadCloser {
 	return &lengthDelimitedFrameReader{r: r}
 }
 
-// Read attempts to read an entire frame into data. If that is not possible, io.ErrShortBuffer
-// is returned and subsequent calls will attempt to read the last frame. A frame is complete when
-// err is nil.
+// Read 尝试将一整帧读入 data。缓冲区不足时返回 io.ErrShortBuffer，后续调用会继续读取
+// 当前帧剩余内容；只有完整帧读取成功时才返回 nil 错误。
 func (r *lengthDelimitedFrameReader) Read(data []byte) (int, error) {
 	if r.remaining <= 0 {
 		header := [4]byte{}
@@ -125,11 +120,8 @@ type jsonFrameReader struct {
 	remaining []byte
 }
 
-// NewJSONFramedReader returns an io.Reader that will decode individual JSON objects off
-// of a wire.
-//
-// The boundaries between each frame are valid JSON objects. A JSON parsing error will terminate
-// the read.
+// NewJSONFramedReader 返回一个 io.ReadCloser，从连续数据流中逐个读取 JSON 对象。
+// 每一帧的边界由完整 JSON 对象决定；遇到 JSON 解析错误时，本次读取终止并返回错误。
 func NewJSONFramedReader(r io.ReadCloser) io.ReadCloser {
 	return &jsonFrameReader{
 		r:       r,
@@ -137,10 +129,10 @@ func NewJSONFramedReader(r io.ReadCloser) io.ReadCloser {
 	}
 }
 
-// ReadFrame decodes the next JSON object in the stream, or returns an error. The returned
-// byte slice will be modified the next time ReadFrame is invoked and should not be altered.
+// Read 读取流中的下一个 JSON 对象。返回的字节切片可能在下一次 Read 调用时被复用或修改，
+// 调用方不应在后续读取期间继续依赖其内容，也不应修改该切片。
 func (r *jsonFrameReader) Read(data []byte) (int, error) {
-	// Return whatever remaining data exists from an in progress frame
+	// 优先返回上一帧因缓冲区不足而暂存的剩余字节。
 	if n := len(r.remaining); n > 0 {
 		if n <= len(data) {
 			//nolint:staticcheck // SA4006,SA4010 underlying array of data is modified here.
@@ -156,16 +148,15 @@ func (r *jsonFrameReader) Read(data []byte) (int, error) {
 		return n, io.ErrShortBuffer
 	}
 
-	// RawMessage#Unmarshal appends to data - we reset the slice down to 0 and will either see
-	// data written to data, or be larger than data and a different array.
+	// json.RawMessage 的解码会向切片追加数据。先将长度重置为 0；解码结果要么写入 data 的
+	// 底层数组，要么因容量不足而分配新的数组。
 	m := json.RawMessage(data[:0])
 	if err := r.decoder.Decode(&m); err != nil {
 		return 0, err
 	}
 
-	// If capacity of data is less than length of the message, decoder will allocate a new slice
-	// and set m to it, which means we need to copy the partial result back into data and preserve
-	// the remaining result for subsequent reads.
+	// 如果 data 的容量小于完整消息长度，解码器会分配新切片并让 m 指向新数组。
+	// 此时需要把当前缓冲区能容纳的部分复制回 data，并暂存剩余部分供后续 Read 返回。
 	if len(m) > cap(data) {
 		copy(data, m)
 		r.remaining = m[len(data):]
@@ -173,8 +164,8 @@ func (r *jsonFrameReader) Read(data []byte) (int, error) {
 	}
 
 	if len(m) > len(data) {
-		// The bytes beyond len(data) were stored in data's underlying array, which we do
-		// not own after this function returns.
+		// 超出 len(data) 的字节写入了 data 的底层数组；函数返回后该数组归调用方所有，
+		// 因此必须复制剩余数据，避免后续被调用方复用时覆盖。
 		// 中文说明：这里必须复制，否则底层数组可能被调用方复用或改写。
 		r.remaining = append([]byte(nil), m[len(data):]...)
 		return len(data), io.ErrShortBuffer

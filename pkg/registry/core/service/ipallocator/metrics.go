@@ -89,6 +89,7 @@ var (
 
 var registerMetricsOnce sync.Once
 
+// registerMetrics 通过 sync.Once 注册 ClusterIP 分配器的使用量、剩余量与失败指标。
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(clusterIPAllocated)

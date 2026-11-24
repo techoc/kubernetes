@@ -30,7 +30,7 @@ import (
 	sa "k8s.io/kubernetes/plugin/pkg/admission/serviceaccount"
 )
 
-// strategy implements behavior for ServiceAccount objects
+// strategy 定义 ServiceAccount 的 REST 写入策略，清理 Secret 引用中的客户端可控元数据并提示弃用注解。
 type strategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -44,6 +44,7 @@ func (strategy) NamespaceScoped() bool {
 	return true
 }
 
+// 创建前统一清理 Secrets 引用，只保留 Secret 名称，避免客户端伪造引用中的 UID/namespace 等系统字段。
 func (strategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	cleanSecretReferences(obj.(*api.ServiceAccount))
 }
@@ -69,6 +70,7 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	cleanSecretReferences(obj.(*api.ServiceAccount))
 }
 
+// ServiceAccount.Secrets 是对象引用列表，但服务端只保存 Name；其余 ObjectReference 字段不属于客户端可设置数据。
 func cleanSecretReferences(serviceAccount *api.ServiceAccount) {
 	for i, secret := range serviceAccount.Secrets {
 		serviceAccount.Secrets[i] = api.ObjectReference{Name: secret.Name}
@@ -88,6 +90,7 @@ func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
+// 仅在新设置 enforce-mountable-secrets 注解时告警，避免旧对象每次无关更新都重复提示该注解已弃用。
 func warnIfHasEnforceMountableSecretsAnnotation(serviceAccount, oldServiceAccount *api.ServiceAccount) []string {
 	if oldServiceAccount != nil {
 		_, ok := oldServiceAccount.Annotations[sa.EnforceMountableSecretsAnnotation]

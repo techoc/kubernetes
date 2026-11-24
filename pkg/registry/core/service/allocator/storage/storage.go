@@ -39,6 +39,7 @@ var (
 	errorUnableToAllocate = errors.New("unable to allocate")
 )
 
+// Etcd 为内存 Snapshottable 分配器提供 etcd 持久化外壳，每次修改都通过 GuaranteedUpdate 保存快照并处理资源版本冲突。
 // Etcd exposes a service.Allocator
 // TODO: allow multiple allocations to be tried at once
 // TODO: subdivide the keyspace to reduce conflicts
@@ -151,6 +152,7 @@ func (e *Etcd) ForEach(fn func(int)) {
 }
 
 // tryUpdate performs a read-update to persist the latest snapshot state of allocation.
+// tryUpdate 在 etcd 的 GuaranteedUpdate 回调内先检查快照 ResourceVersion；本地版本过期时先 Restore，再执行分配并写回新快照。
 func (e *Etcd) tryUpdate(fn func() error) error {
 	err := e.storage.GuaranteedUpdate(context.TODO(), e.baseKey, &api.RangeAllocation{}, true, nil,
 		storage.SimpleUpdate(func(input runtime.Object) (output runtime.Object, err error) {
@@ -189,6 +191,7 @@ func (e *Etcd) Get() (*api.RangeAllocation, error) {
 
 // CreateOrUpdate attempts to update the current etcd state with the provided
 // allocation.
+// CreateOrUpdate 用资源版本前置条件初始化/替换 RangeAllocation，并在持久化成功后同步恢复本地分配器。
 func (e *Etcd) CreateOrUpdate(snapshot *api.RangeAllocation) error {
 	e.lock.Lock()
 	defer e.lock.Unlock()

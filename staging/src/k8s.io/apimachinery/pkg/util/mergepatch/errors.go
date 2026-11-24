@@ -68,8 +68,7 @@ func ErrBadPatchType(t interface{}, m map[string]interface{}) error {
 	return fmt.Errorf("unknown patch type: %s in map: %v", t, m)
 }
 
-// IsPreconditionFailed returns true if the provided error indicates
-// a precondition failed.
+// IsPreconditionFailed 判断 err 是否为前置条件失败错误。
 func IsPreconditionFailed(err error) bool {
 	_, ok := err.(ErrPreconditionFailed)
 	return ok
@@ -106,8 +105,7 @@ func (err ErrConflict) Error() string {
 	return err.message
 }
 
-// IsConflict returns true if the provided error indicates
-// a conflict between the patch and the current configuration.
+// IsConflict 判断 err 是否表示补丁与当前配置之间存在冲突。
 func IsConflict(err error) bool {
 	_, ok := err.(ErrConflict)
 	return ok

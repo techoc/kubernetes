@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本测试文件验证 storageclass REST Store 的创建、读取、更新、删除及子资源行为。
 package storage
 
 import (

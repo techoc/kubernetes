@@ -27,12 +27,13 @@ import (
 	"k8s.io/kubernetes/pkg/registry/core/podtemplate"
 )
 
-// REST implements a RESTStorage for pod templates.
+// REST 将 PodTemplate 通用 CRUD Store 封装为 API Server RESTStorage。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against pod templates.
+// NewREST 注册 PodTemplate 对象构造器、资源名、Strategy 与表格输出器，并初始化底层持久化 Store。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.PodTemplate{} },

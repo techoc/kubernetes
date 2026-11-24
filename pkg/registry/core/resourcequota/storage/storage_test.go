@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 构造 ResourceQuota 主资源与 Status 子资源，并使用独立 etcd 测试后端。
 func newStorage(t *testing.T) (*REST, *StatusREST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -156,6 +157,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestUpdateStatus 验证配额控制器可更新 Used/Conditions，同时 Status 请求不能修改 Spec.Hard。
 func TestUpdateStatus(t *testing.T) {
 	storage, status, server := newStorage(t)
 	defer server.Terminate(t)

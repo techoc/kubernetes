@@ -34,6 +34,7 @@ import (
 	rbacv1helpers "k8s.io/kubernetes/pkg/apis/rbac/v1"
 )
 
+// AuthorizationRuleResolver 抽象 Role/Binding 查询与用户有效规则解析，供防提权存储层判断用户当前已拥有的权限。
 type AuthorizationRuleResolver interface {
 	// GetRoleReferenceRules attempts to resolve the role reference of a RoleBinding or ClusterRoleBinding.  The passed namespace should be the namespace
 	// of the role binding, the empty string if a cluster role binding.
@@ -50,6 +51,7 @@ type AuthorizationRuleResolver interface {
 }
 
 // ConfirmNoEscalation determines if the roles for a given user in a given namespace encompass the provided role.
+// ConfirmNoEscalation 解析当前用户在当前 namespace 已拥有的规则，并确认它们覆盖待授予规则；不允许仅凭绑定关系授予更高权限。
 func ConfirmNoEscalation(ctx context.Context, ruleResolver AuthorizationRuleResolver, rules []rbacv1.PolicyRule) error {
 	ruleResolutionErrors := []error{}
 
@@ -115,6 +117,7 @@ type ClusterRoleBindingLister interface {
 	ListClusterRoleBindings(ctx context.Context) ([]*rbacv1.ClusterRoleBinding, error)
 }
 
+// RulesFor 汇总 VisitRulesFor 找到的规则与解析错误；部分查询失败时仍返回已成功解析的规则。
 func (r *DefaultRuleResolver) RulesFor(ctx context.Context, user user.Info, namespace string) ([]rbacv1.PolicyRule, error) {
 	visitor := &ruleAccumulator{}
 	r.VisitRulesFor(ctx, user, namespace, visitor.visit)
@@ -176,6 +179,7 @@ func (d *roleBindingDescriber) String() string {
 	)
 }
 
+// VisitRulesFor 先遍历集群级 ClusterRoleBinding，再遍历当前 namespace 的 RoleBinding，按 Subject 匹配并展开 RoleRef 对应规则。
 func (r *DefaultRuleResolver) VisitRulesFor(ctx context.Context, user user.Info, namespace string, visitor func(source fmt.Stringer, rule *rbacv1.PolicyRule, err error) bool) {
 	if clusterRoleBindings, err := r.clusterRoleBindingLister.ListClusterRoleBindings(ctx); err != nil {
 		if !visitor(nil, nil, err) {
@@ -237,6 +241,7 @@ func (r *DefaultRuleResolver) VisitRulesFor(ctx context.Context, user user.Info,
 }
 
 // GetRoleReferenceRules attempts to resolve the RoleBinding or ClusterRoleBinding.
+// GetRoleReferenceRules 按 RoleRef.Kind 读取同命名空间 Role 或集群级 ClusterRole，返回其 PolicyRules。
 func (r *DefaultRuleResolver) GetRoleReferenceRules(ctx context.Context, roleRef rbacv1.RoleRef, bindingNamespace string) ([]rbacv1.PolicyRule, error) {
 	switch roleRef.Kind {
 	case "Role":
@@ -260,6 +265,7 @@ func (r *DefaultRuleResolver) GetRoleReferenceRules(ctx context.Context, roleRef
 
 // appliesTo returns whether any of the bindingSubjects applies to the specified subject,
 // and if true, the index of the first subject that applies
+// appliesTo 在 Binding.Subjects 中寻找第一个匹配用户的条目，并返回索引供授权错误描述使用。
 func appliesTo(user user.Info, bindingSubjects []rbacv1.Subject, namespace string) (int, bool) {
 	for i, bindingSubject := range bindingSubjects {
 		if appliesToUser(user, bindingSubject, namespace) {
@@ -278,6 +284,7 @@ func has(set []string, ele string) bool {
 	return false
 }
 
+// appliesToUser 分别匹配 User、Group 和 ServiceAccount；ServiceAccount 未显式指定 namespace 时采用 RoleBinding 所在 namespace。
 func appliesToUser(user user.Info, subject rbacv1.Subject, namespace string) bool {
 	switch subject.Kind {
 	case rbacv1.UserKind:

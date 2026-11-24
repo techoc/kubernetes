@@ -37,6 +37,7 @@ import (
 	token "k8s.io/kubernetes/pkg/serviceaccount"
 )
 
+// REST 聚合 ServiceAccount 主资源 Store 与可选的 serviceaccounts/token 子资源处理器。
 type REST struct {
 	*genericregistry.Store
 	Token *TokenREST
@@ -52,6 +53,7 @@ type webhookGetter[T webhook] interface {
 }
 
 // NewREST returns a RESTStorage object that will work against service accounts.
+// NewREST 创建 ServiceAccount Store；只有签发器及 Pod/Secret 查询依赖齐备时才启用 TokenREST。
 func NewREST(optsGetter generic.RESTOptionsGetter, issuer token.TokenGenerator, auds authenticator.Audiences, authorizer authorizer.Authorizer, max time.Duration, podStorage, secretStorage, nodeStorage rest.Getter,
 	validatingWebhooks webhookGetter[*admissionregistrationv1.ValidatingWebhookConfiguration], mutatingWebhooks webhookGetter[*admissionregistrationv1.MutatingWebhookConfiguration], extendExpiration bool, maxExtendedExpiration time.Duration) (*REST, error) {
 	store := &genericregistry.Store{

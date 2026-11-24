@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package servicecidr 提供 ServiceCIDR 的集群级 REST 策略、状态子资源和地址池配置存储。
 package servicecidr

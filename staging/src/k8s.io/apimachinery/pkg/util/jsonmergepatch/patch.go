@@ -25,9 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/mergepatch"
 )
 
-// Create a 3-way merge patch based-on JSON merge patch.
-// Calculate addition-and-change patch between current and modified.
-// Calculate deletion patch between original and modified.
+// CreateThreeWayJSONMergePatch 基于 JSON Merge Patch 语义创建三方合并补丁。
+// 第一步计算 current 到 modified 的新增和修改；第二步计算 original 到 modified 的删除；
+// 最后检查两类改动是否冲突并合并结果。
 //
 // 中文补充：三方补丁把“新增/修改”和“删除”分开计算，是为了让客户端只提交自己的意图，
 // 从而在并发更新时不会误删其他写入者新增的字段。任一方存在冲突或前置条件不满足则返回错误。
@@ -47,7 +47,7 @@ func CreateThreeWayJSONMergePatch(original, modified, current []byte, fns ...mer
 	if err != nil {
 		return nil, err
 	}
-	// Only keep addition and changes
+	// 仅保留新增和修改项，过滤删除标记（null）。
 	// keepNull=false：剔除值为 null 的项，只保留新增与修改。
 	addAndChangePatch, addAndChangePatchObj, err := keepOrDeleteNullInJsonPatch(addAndChangePatch, false)
 	if err != nil {
@@ -58,7 +58,7 @@ func CreateThreeWayJSONMergePatch(original, modified, current []byte, fns ...mer
 	if err != nil {
 		return nil, err
 	}
-	// Only keep deletion
+	// 仅保留删除项，即值为 null 的字段。
 	// keepNull=true：只保留 null 项，即相对于 original 被删除的字段。
 	deletePatch, deletePatchObj, err := keepOrDeleteNullInJsonPatch(deletePatch, true)
 	if err != nil {
@@ -94,9 +94,8 @@ func CreateThreeWayJSONMergePatch(original, modified, current []byte, fns ...mer
 	return patch, nil
 }
 
-// keepOrDeleteNullInJsonPatch takes a json-encoded byte array and a boolean.
-// It returns a filtered object and its corresponding json-encoded byte array.
-// It is a wrapper of func keepOrDeleteNullInObj
+// keepOrDeleteNullInJsonPatch 接收 JSON 补丁字节和过滤模式，返回过滤后的对象及其 JSON 编码。
+// 该函数负责字节与 map 之间的反序列化、过滤和重新序列化。
 // 中文补充：同时返回字节与 map 两种形式，调用方按需取用，避免重复反序列化。
 func keepOrDeleteNullInJsonPatch(patch []byte, keepNull bool) ([]byte, map[string]interface{}, error) {
 	var patchMap map[string]interface{}
@@ -112,8 +111,8 @@ func keepOrDeleteNullInJsonPatch(patch []byte, keepNull bool) ([]byte, map[strin
 	return o, filteredMap, err
 }
 
-// keepOrDeleteNullInObj will keep only the null value and delete all the others,
-// if keepNull is true. Otherwise, it will delete all the null value and keep the others.
+// keepOrDeleteNullInObj 根据 keepNull 递归过滤对象：true 时只保留值为 null 的字段（删除操作）；
+// false 时删除 null 字段，保留新增和修改内容。
 // 中文补充：递归处理嵌套对象，保证 null 过滤在各层级一致生效。
 func keepOrDeleteNullInObj(m map[string]interface{}, keepNull bool) (map[string]interface{}, error) {
 	filteredMap := make(map[string]interface{})
@@ -141,14 +140,13 @@ func keepOrDeleteNullInObj(m map[string]interface{}, keepNull bool) (map[string]
 					return nil, err
 				}
 
-				// If the returned filtered submap was empty, this is an empty patch for the entire subdict, so the key
-				// should not be set
+				// 子对象过滤后为空，说明该子对象没有当前模式需要保留的操作，因此不应输出该 key。
 				if len(filteredSubMap) != 0 {
 					filteredMap[key] = filteredSubMap
 				}
 
 			case []interface{}, string, float64, bool, int64, nil:
-				// Lists are always replaced in Json, no need to check each entry in the list.
+				// JSON Merge Patch 会整体替换数组，无需逐个检查数组元素。
 				if !keepNull {
 					filteredMap[key] = val
 				}
@@ -164,7 +162,7 @@ func keepOrDeleteNullInObj(m map[string]interface{}, keepNull bool) (map[string]
 // 中文补充：返回 (false, nil) 与返回 error 的区别在于：前者是可预期的拒绝，
 // 由调用方转换为 PreconditionFailed 错误。
 func meetPreconditions(patchObj map[string]interface{}, fns ...mergepatch.PreconditionFunc) (bool, error) {
-	// Apply the preconditions to the patch, and return an error if any of them fail.
+	// 依次执行补丁前置条件；任一条件失败时返回错误。
 	for _, fn := range fns {
 		if !fn(patchObj) {
 			return false, fmt.Errorf("precondition failed for: %v", patchObj)

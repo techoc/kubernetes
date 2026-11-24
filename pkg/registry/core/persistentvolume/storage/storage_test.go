@@ -37,6 +37,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd，构造 PersistentVolume 主资源与 Status REST Handler。
 func newStorage(t *testing.T) (*REST, *StatusREST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -84,6 +85,7 @@ func validNewPersistentVolume(name string) *api.PersistentVolume {
 	return pv
 }
 
+// TestCreate 验证 PersistentVolume 创建路径中的名称、卷类型参数校验和初始化状态。
 func TestCreate(t *testing.T) {
 	storage, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -169,6 +171,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestUpdateStatus 验证 PV 状态子资源能更新 Phase/ClaimRef 等受允许状态字段而不能覆盖 Spec。
 func TestUpdateStatus(t *testing.T) {
 	storage, statusStorage, server := newStorage(t)
 	defer server.Terminate(t)

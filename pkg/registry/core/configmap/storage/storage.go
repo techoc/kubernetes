@@ -28,12 +28,13 @@ import (
 	"k8s.io/kubernetes/pkg/registry/core/configmap"
 )
 
-// REST implements a RESTStorage for ConfigMap
+// REST 将 ConfigMap 的通用 CRUD 存储封装为 API Server RESTStorage。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work with ConfigMap objects.
+// NewREST 注册 ConfigMap 对象构造器、Label/Field 筛选器、读写策略和表格转换器，再由 RESTOptions 完成后端初始化。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.ConfigMap{} },

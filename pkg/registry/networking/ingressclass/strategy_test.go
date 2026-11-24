@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/networking"
 )
 
+// TestIngressClassStrategy 验证 IngressClass 的集群级作用域、Generation 更新和 Controller/Parameters 字段校验。
 func TestIngressClassStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if Strategy.NamespaceScoped() {

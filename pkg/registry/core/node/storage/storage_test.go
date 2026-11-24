@@ -34,6 +34,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离的 etcd 测试后端，并创建使用 InternalIP 与默认 Kubelet 端口的 Node RESTStorage。
 func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -54,6 +55,7 @@ func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 
 type tweak func(*api.Node)
 
+// newNode 构造测试用 Node 基础对象，再应用可选 tweak 配置地址、DaemonEndpoint 等连接信息。
 func newNode(name string, tweaks ...tweak) *api.Node {
 	node := &api.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -95,6 +97,7 @@ func setNodeDaemonEndpoint(port int32) tweak {
 	}
 }
 
+// TestCreate 通过通用 ClusterScope 测试验证 Node 创建成功路径和非法对象名称校验。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -108,6 +111,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证 Node 主资源可更新 spec.unschedulable，并由 RESTStorage 持久化。
 func TestUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -125,6 +129,7 @@ func TestUpdate(t *testing.T) {
 	)
 }
 
+// TestDelete 验证集群级 Node 对象的删除路径。
 func TestDelete(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -133,6 +138,7 @@ func TestDelete(t *testing.T) {
 	test.TestDelete(newNode("foo"))
 }
 
+// TestGet 验证 Node RESTStorage 的单对象读取接口。
 func TestGet(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -141,6 +147,7 @@ func TestGet(t *testing.T) {
 	test.TestGet(newNode("foo"))
 }
 
+// TestList 验证 Node RESTStorage 的列表读取接口。
 func TestList(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -149,6 +156,7 @@ func TestList(t *testing.T) {
 	test.TestList(newNode("foo"))
 }
 
+// TestWatch 验证 Node Watch 同时支持标签和字段选择器，并能正确筛选匹配/不匹配对象。
 func TestWatch(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -176,6 +184,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestShortNames 确认 Node 资源在 kubectl 中的短名称为 no。
 func TestShortNames(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -184,6 +193,7 @@ func TestShortNames(t *testing.T) {
 	registrytest.AssertShortNames(t, storage, expected)
 }
 
+// TestResourceLocation 覆盖默认 Kubelet 端口、请求指定端口、Node Status 端口和非全局单播地址拒绝逻辑。
 func TestResourceLocation(t *testing.T) {
 	type testCase struct {
 		name  string

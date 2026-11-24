@@ -21,6 +21,7 @@ import (
 	"testing"
 )
 
+// TestCountBits 覆盖不同长度大整数的置位统计，确保快照恢复后的 allocated count 与位图一致。
 func TestCountBits(t *testing.T) {
 	// bigN is an integer that occupies more than one big.Word.
 	bigN, ok := big.NewInt(0).SetString("10000000000000000000000000000000000000000000000000000000000000000", 16)

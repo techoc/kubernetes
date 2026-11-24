@@ -75,6 +75,7 @@ var (
 
 var registerMetricsOnce sync.Once
 
+// registerMetrics 通过 sync.Once 注册 NodePort 分配/释放/容量指标，避免多个分配器重复注册。
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(nodePortAllocated)

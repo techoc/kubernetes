@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 poddisruptionbudget 的 REST Strategy，控制创建/更新字段处理、业务校验、告警和 Status 子资源边界。
 package poddisruptionbudget
 
 import (
@@ -90,6 +91,7 @@ func (podDisruptionBudgetStrategy) PrepareForUpdate(ctx context.Context, obj, ol
 	dropDisabledFields(newPodDisruptionBudget, oldPodDisruptionBudget)
 }
 
+// dropDisabledFields 依据 Feature Gate 清理当前请求不允许新设置的字段，同时保留旧对象已有值以兼容集群降级。
 func dropDisabledFields(pdb, oldPDB *policy.PodDisruptionBudget) {
 	if oldPDB != nil && apiequality.Semantic.DeepEqual(oldPDB.Spec.Selector, pdb.Spec.Selector) {
 		return
@@ -196,6 +198,7 @@ func (podDisruptionBudgetStatusStrategy) WarningsOnUpdate(ctx context.Context, o
 	return nil
 }
 
+// hasInvalidLabelValueInLabelSelector 检查旧 PDB 的 LabelSelector 是否包含历史无效 Label 值，以便更新时兼容已有对象。
 func hasInvalidLabelValueInLabelSelector(pdb *policy.PodDisruptionBudget) bool {
 	if pdb.Spec.Selector != nil {
 		labelSelectorValidationOptions := metav1validation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: false}

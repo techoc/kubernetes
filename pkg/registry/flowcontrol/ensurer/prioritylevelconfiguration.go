@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 API Priority and Fairness 的辅助注册或配置协调逻辑。
 package ensurer
 
 import (

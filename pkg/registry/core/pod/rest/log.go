@@ -39,7 +39,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
-// LogREST implements the log endpoint for a Pod
+// LogREST 实现 pods/{name}/log 子资源：将请求参数转换为 Kubelet 日志 URL，并通过流式响应返回日志内容。
 type LogREST struct {
 	KubeletConn client.ConnectionInfoGetter
 	Store       *genericregistry.Store
@@ -78,10 +78,12 @@ func (r *LogREST) ProducesObject(verb string) interface{} {
 }
 
 // Get retrieves a runtime.Object that will stream the contents of the pod log
+// Get 校验 PodLogOptions、记录 TLS 参数用法指标，最后构造 LocationStreamer 代理 Kubelet 日志响应。
 func (r *LogREST) Get(ctx context.Context, name string, opts runtime.Object) (runtime.Object, error) {
 	// register the metrics if the context is used.  This assumes sync.Once is fast.  If it's not, it could be an init block.
 	registerMetrics()
 
+	// API Handler 应传入 PodLogOptions；类型不匹配表示端点参数装配错误。
 	logOpts, ok := opts.(*api.PodLogOptions)
 	if !ok {
 		return nil, fmt.Errorf("invalid options object: %#v", opts)
@@ -89,6 +91,7 @@ func (r *LogREST) Get(ctx context.Context, name string, opts runtime.Object) (ru
 
 	countSkipTLSMetric(logOpts.InsecureSkipTLSVerifyBackend)
 
+	// 新分流能力启用时，即使旧客户端未传 stream，也默认读取 All，保持历史接口语义。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLogsQuerySplitStreams) {
 		// Even with defaulters, logOpts.Stream can be nil if no arguments are provided at all.
 		if logOpts.Stream == nil {
@@ -96,13 +99,16 @@ func (r *LogREST) Get(ctx context.Context, name string, opts runtime.Object) (ru
 			logOpts.Stream = ptr.To(api.LogStreamAll)
 		}
 	}
+	// 先校验 since/tail/follow/stream 等组合，避免把不合法查询转发到节点后才失败。
 	if errs := validation.ValidatePodLogOptions(logOpts, utilfeature.DefaultFeatureGate.Enabled(features.PodLogsQuerySplitStreams)); len(errs) > 0 {
 		return nil, errors.NewInvalid(api.Kind("PodLogOptions"), name, errs)
 	}
+	// 根据 Pod 的 NodeName、容器名和查询参数生成 Kubelet URL，并选择是否跳过后端 TLS 校验的 Transport。
 	location, transport, err := pod.LogLocation(ctx, r.Store, r.KubeletConn, name, logOpts)
 	if err != nil {
 		return nil, err
 	}
+	// LocationStreamer 负责转发响应体；Follow 场景启用 Flush，使日志增量尽快到达客户端。
 	return &genericrest.LocationStreamer{
 		Location:                    location,
 		Transport:                   transport,
@@ -114,6 +120,7 @@ func (r *LogREST) Get(ctx context.Context, name string, opts runtime.Object) (ru
 	}, nil
 }
 
+// countSkipTLSMetric 按强制 TLS 或允许跳过 TLS 两类统计后端安全配置的使用量。
 func countSkipTLSMetric(insecureSkipTLSVerifyBackend bool) {
 	usageType := usageEnforce
 	if insecureSkipTLSVerifyBackend {

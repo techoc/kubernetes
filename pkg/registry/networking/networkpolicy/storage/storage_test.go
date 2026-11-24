@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd 并构造 NetworkPolicy RESTStorage。
 func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, networking.GroupName)
 	restOptions := generic.RESTOptions{
@@ -73,6 +74,7 @@ func validNetworkPolicy() *networking.NetworkPolicy {
 	}
 }
 
+// TestCreate 验证 NetworkPolicy 创建时 PodSelector、方向类型和端口规则经过校验并写入后端。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -158,6 +160,7 @@ func TestList(t *testing.T) {
 	test.TestList(validNetworkPolicy())
 }
 
+// TestWatch 验证 NetworkPolicy 的创建/更新事件能够被 etcd Watch 正确返回。
 func TestWatch(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

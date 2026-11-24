@@ -33,6 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/rbac/validation"
 )
 
+// TestEscalation 验证 Role 写入者不能授予自身尚未拥有的权限，除非属于超级用户或被明确授予 escalate 动词。
 func TestEscalation(t *testing.T) {
 	createContext := request.WithRequestInfo(request.WithNamespace(context.TODO(), "myns"), &request.RequestInfo{
 		IsResourceRequest: true,

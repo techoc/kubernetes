@@ -18,7 +18,7 @@ limitations under the License.
 // +k8s:openapi-model-package=io.k8s.apimachinery.pkg.version
 //
 
-// Package version supplies the type for version information.
+// Package version 定义用于承载组件版本信息的数据类型。
 //
 // 该包定义组件的版本信息结构，用于 /version 等端点向客户端报告构建版本。
 package version

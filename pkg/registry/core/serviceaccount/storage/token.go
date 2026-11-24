@@ -65,6 +65,7 @@ func (r *TokenREST) Destroy() {
 	// here explicitly.
 }
 
+// TokenREST 实现 serviceaccounts/{name}/token：验证请求者与绑定对象，构造 JWT Claims 并通过 TokenGenerator 签发短期凭据。
 type TokenREST struct {
 	svcaccts                     rest.Getter
 	pods                         rest.Getter
@@ -91,6 +92,7 @@ var gvk = schema.GroupVersionKind{
 	Kind:    "TokenRequest",
 }
 
+// Create 是 TokenRequest 主流程：校验 URL/ServiceAccount → 规范化 Audience/UID → 检查 BoundObjectRef → 校验并签发 Token。
 func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	req := obj.(*authenticationapi.TokenRequest)
 
@@ -110,6 +112,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 		return nil, errors.NewInvalid(gvk.GroupKind(), name, errs)
 	}
 
+	// 先读取目标 ServiceAccount；后续 token subject、UID 和绑定对象校验都以这份服务端对象为准。
 	// Lookup service account
 	svcacctObj, err := r.svcaccts.Get(ctx, name, &metav1.GetOptions{})
 	if err != nil {
@@ -119,6 +122,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 
 	attestations := req.Spec.Attestations
 
+	// ServiceAccount UID 不匹配意味着同名账号可能已被删除重建；启用校验特性时直接拒绝旧请求。
 	if len(req.UID) > 0 && req.UID != svcacct.UID {
 		if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.TokenRequestServiceAccountUIDValidation) {
 			return nil, errors.NewConflict(schema.GroupResource{Group: gvk.Group, Resource: gvk.Kind}, name, fmt.Errorf("the UID in the token request (%s) does not match the UID of the service account (%s)", req.UID, svcacct.UID))
@@ -127,6 +131,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 		}
 	}
 
+	// 未指定 Audience 时采用 API Server 配置；显式指定时后续会与服务器受众及绑定 Webhook 配置共同校验。
 	// Default unset spec audiences to API server audiences based on server config
 	if len(req.Spec.Audiences) == 0 {
 		req.Spec.Audiences = r.auds
@@ -144,6 +149,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 		warning.AddWarning(ctx, "", fmt.Sprintf("the UID in the token request (%s) does not match the UID of the service account (%s) but TokenRequestServiceAccountUIDValidation is not enabled. In the future, this will return a conflict error", req.UID, svcacct.UID))
 	}
 
+	// 在生成 Claims 前固定当前时间，保证 Token 中 exp 与响应里的 ExpirationTimestamp 使用同一个时间基准。
 	// Save current time before building the token, to make sure the expiration
 	// returned in TokenRequestStatus would be <= the exp field in token.
 	nowTime := time.Now()
@@ -152,6 +158,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 	// Clear status
 	req.Status = authenticationapi.TokenRequestStatus{}
 
+	// 先执行 TokenRequest 静态字段校验，再运行 API Server 的 Admission 校验链。
 	// call static validation, then validating admission
 	if errs := authenticationvalidation.ValidateTokenRequest(req); len(errs) != 0 {
 		return nil, errors.NewInvalid(gvk.GroupKind(), "", errs)
@@ -170,9 +177,11 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 		mutating   *admissionregistrationv1.MutatingWebhookConfiguration
 	)
 
+	// BoundObjectRef 将 Token 绑定到具体对象：验证对象存在、类型受支持、ServiceAccount 关系及 UID 前置条件。
 	if ref := req.Spec.BoundObjectRef; ref != nil {
 		var uid types.UID
 
+		// 根据 GVK 分派 Pod、Node、Secret 或受 Feature Gate 控制的 Webhook 绑定校验。
 		gvk := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
 		switch {
 		case gvk.Group == "" && gvk.Kind == "Pod":
@@ -271,6 +280,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 		}
 	}
 
+	// 把请求时长限制在服务器最大值内；后续还会处理 Pod 绑定 Token 的安全过渡期延长策略。
 	if r.maxExpirationSeconds > 0 && req.Spec.ExpirationSeconds > r.maxExpirationSeconds {
 		// only positive value is valid
 		warning.AddWarning(ctx, "", fmt.Sprintf("requested expiration of %d seconds shortened to %d seconds", req.Spec.ExpirationSeconds, r.maxExpirationSeconds))
@@ -288,6 +298,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 		exp = r.maxExtendedExpirationSeconds
 	}
 
+	// 汇总 ServiceAccount 与绑定对象信息生成标准/私有 Claims，再交给配置的签发器生成实际 JWT。
 	sc, pc, err := token.Claims(*svcacct, pod, secret, node, validating, mutating, exp, warnAfter, req.Spec.Audiences, attestations)
 	if err != nil {
 		return nil, err
@@ -309,6 +320,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 	return out, nil
 }
 
+// authorizeAdmissionWebhookAuthnTokenRequest 要求 ServiceAccount 对目标 AdmissionReview API Group 具有 attest 权限。
 func (r *TokenREST) authorizeAdmissionWebhookAuthnTokenRequest(ctx context.Context, sa *api.ServiceAccount, admissionReviewAPIGroup string) error {
 	attributes := authorizer.AttributesRecord{
 		User: (&serviceaccount.ServiceAccountInfo{
@@ -443,6 +455,7 @@ func (m *mwhGetter) get(ctx context.Context, name string, now time.Time) (*admis
 	}, nil
 }
 
+// getAndValidateWebhookConfig 确认 Webhook 配置尚未进入删除时间，并至少有一个 Webhook 同时匹配 Audience 和被证明的 API Group。
 func getAndValidateWebhookConfig[T webhook](ctx context.Context, name, audience, admissionReviewAPIGroup string, getter whFieldGetter[T], now time.Time) (T, types.UID, error) {
 	obj, whs, err := getter.get(ctx, name, now)
 	if err != nil {
@@ -471,6 +484,7 @@ func getAndValidateWebhookConfig[T webhook](ctx context.Context, name, audience,
 // audience must be https://$name.$namespace.svc:$port[/$path] . Note that the
 // trailing slash must match between the webhook's expected audience and the
 // service's configuration.
+// URL Webhook 的 Audience 必须与 URL 完全相同；Service Webhook 则按 https://name.namespace.svc:port/path 精确匹配。
 func validateWebhookAudience(hook *webhookFields, audience string) bool {
 	cc := hook.config
 	if cc.URL != nil && audience == *cc.URL {
@@ -503,6 +517,7 @@ func validateWebhookAudience(hook *webhookFields, audience string) bool {
 // in a Rule's APIGroups matches any attested value. It is assumed that the cel
 // expressions in the matchConditions properly match the AdmissionReview request
 // for which the TokenRequest is being made.
+// validateAttestationAPIGroup 检查 webhook Rule.APIGroups 是否包含请求声明的 API Group；Rule 中的 * 可匹配任意 Group。
 func validateAttestationAPIGroup(hook *webhookFields, attestedGroup string) bool {
 	for _, rule := range hook.rules {
 		for _, group := range rule.APIGroups {

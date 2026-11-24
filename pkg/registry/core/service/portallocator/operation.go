@@ -16,6 +16,7 @@ limitations under the License.
 
 package portallocator
 
+// PortAllocationOperation 封装 NodePort 分配事务：新端口立即预留以防双重分配，旧端口延迟到提交时释放；失败时撤销新预留。
 // Encapsulates the semantics of a port allocation 'transaction':
 // It is better to leak ports than to double-allocate them,
 // so we allocate immediately, but defer release.
@@ -40,6 +41,7 @@ type PortAllocationOperation struct {
 
 // Creates a portAllocationOperation, tracking a set of allocations & releases
 // If dryRun is specified, never actually allocate or release anything
+// StartOperation 创建事务跟踪器；DryRun 只在本地记录候选端口，不触碰真实端口池。
 func StartOperation(pa Interface, dryRun bool) *PortAllocationOperation {
 	op := &PortAllocationOperation{}
 	op.pa = pa
@@ -58,6 +60,7 @@ func (op *PortAllocationOperation) Finish() {
 }
 
 // (Try to) undo any operations we did
+// Rollback 释放本事务新申请的端口；延迟释放列表不会执行，因此原有 Service 端口保持占用。
 func (op *PortAllocationOperation) Rollback() []error {
 	if op.dryRun {
 		return nil
@@ -81,6 +84,7 @@ func (op *PortAllocationOperation) Rollback() []error {
 // (Try to) perform any deferred operations.
 // Note that even if this fails, we don't rollback; we always want to err on the side of over-allocation,
 // and Commit should be called _after_ the owner is written
+// Commit 执行之前登记的延迟释放。即使释放失败也不回滚新分配，后续 Repair Controller 会修复多占用状态。
 func (op *PortAllocationOperation) Commit() []error {
 	if op.dryRun {
 		return nil
@@ -165,6 +169,7 @@ func (op *PortAllocationOperation) AllocateNext() (int, error) {
 }
 
 // Marks a port so that it will be released if this operation Commits
+// ReleaseDeferred 只登记待释放端口；真正释放延后到 Service 对象成功持久化之后。
 func (op *PortAllocationOperation) ReleaseDeferred(port int) {
 	op.releaseDeferred = append(op.releaseDeferred, port)
 }

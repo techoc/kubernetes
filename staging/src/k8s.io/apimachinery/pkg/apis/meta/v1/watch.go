@@ -32,11 +32,10 @@ import (
 type WatchEvent struct {
 	Type string `json:"type" protobuf:"bytes,1,opt,name=type"`
 
-	// Object is:
-	//  * If Type is Added or Modified: the new state of the object.
-	//  * If Type is Deleted: the state of the object immediately before deletion.
-	//  * If Type is Error: *Status is recommended; other types may make sense
-	//    depending on context.
+	// Object 的内容取决于事件类型：
+	// - Added 或 Modified：对象的新状态。
+	// - Deleted：对象被删除前的最后状态。
+	// - Error：推荐使用 *Status；具体错误场景也可以使用其他对象类型。
 	Object runtime.RawExtension `json:"object" protobuf:"bytes,2,opt,name=object"`
 }
 
@@ -47,7 +46,7 @@ func Convert_watch_Event_To_v1_WatchEvent(in *watch.Event, out *WatchEvent, s co
 	out.Type = string(in.Type)
 	switch t := in.Object.(type) {
 	case *runtime.Unknown:
-		// TODO: handle other fields on Unknown and detect type
+		// TODO：补充 Unknown 的其他字段处理，并识别原始内容的实际类型。
 		out.Object.Raw = t.Raw
 	case nil:
 	default:
@@ -70,7 +69,7 @@ func Convert_v1_WatchEvent_To_watch_Event(in *WatchEvent, out *watch.Event, s co
 	if in.Object.Object != nil {
 		out.Object = in.Object.Object
 	} else if in.Object.Raw != nil {
-		// TODO: handle other fields on Unknown and detect type
+		// TODO：补充 Unknown 的其他字段处理，并识别原始内容的实际类型。
 		out.Object = &runtime.Unknown{
 			Raw:         in.Object.Raw,
 			ContentType: runtime.ContentTypeJSON,

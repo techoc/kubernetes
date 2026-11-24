@@ -29,7 +29,7 @@ type Set[T comparable] map[T]Empty
 func cast[T comparable](s map[T]Empty) Set[T] { return s }
 
 // New 从一组值构造 Set。
-// NOTE: type param must be explicitly instantiated if given items are empty.
+// 注意：items 为空时无法从参数推断类型参数 T，调用方必须显式指定，例如 New[string]()。
 // 空参数时 Go 无法推断 T，必须写成 New[string]()。
 func New[T comparable](items ...T) Set[T] {
 	ss := make(Set[T], len(items))

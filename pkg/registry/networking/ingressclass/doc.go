@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package ingressclass 提供集群级 IngressClass 的 REST 写入策略和持久化接口。
 package ingressclass

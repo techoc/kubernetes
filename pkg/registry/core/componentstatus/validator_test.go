@@ -31,6 +31,7 @@ func matchError(data []byte) error {
 	return nil
 }
 
+// TestValidate 覆盖 HTTP/HTTPS 和 etcd Prober 的成功、失败、超时以及响应校验器错误路径。
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		probeResult probe.Result

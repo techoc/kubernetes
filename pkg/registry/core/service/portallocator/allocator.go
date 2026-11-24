@@ -61,10 +61,11 @@ type PortAllocator struct {
 	metrics metricsRecorderInterface
 }
 
-// PortAllocator implements Interface and Snapshottable
+// PortAllocator 将实际 TCP/UDP 端口映射到从 0 开始的偏移位图，并维护静态指定与自动分配的统计指标。
 var _ Interface = &PortAllocator{}
 
 // New creates a PortAllocator over a net.PortRange, calling allocatorFactory to construct the backing store.
+// New 根据端口范围创建底层整数分配器，并计算动态分配优先区的 offset。
 func New(pr net.PortRange, allocatorFactory allocator.AllocatorWithOffsetFactory) (*PortAllocator, error) {
 	max := pr.Size
 	rangeSpec := pr.String()
@@ -120,6 +121,7 @@ func (r *PortAllocator) Used() int {
 // ErrAllocated will be returned if the port is not valid for this range
 // or has already been reserved.  ErrFull will be returned if there
 // are no ports left.
+// Allocate 先确认真实端口落在配置范围内，再将端口换算成 offset 并执行静态预留。
 func (r *PortAllocator) Allocate(port int) error {
 	ok, offset := r.contains(port)
 	if !ok {
@@ -153,6 +155,7 @@ func (r *PortAllocator) Allocate(port int) error {
 
 // AllocateNext reserves one of the ports from the pool. ErrFull may
 // be returned if there are no ports left.
+// AllocateNext 从底层位图申请一个偏移量，再加上 PortRange.Base 转回真实 NodePort。
 func (r *PortAllocator) AllocateNext() (int, error) {
 	offset, ok, err := r.alloc.AllocateNext()
 	if err != nil {
@@ -210,6 +213,7 @@ func (r *PortAllocator) Has(port int) bool {
 }
 
 // Snapshot saves the current state of the pool.
+// Snapshot 将当前端口范围和位图数据写入 RangeAllocation，供 etcd 分配注册表持久化。
 func (r *PortAllocator) Snapshot(dst *api.RangeAllocation) error {
 	snapshottable, ok := r.alloc.(allocator.Snapshottable)
 	if !ok {
@@ -223,6 +227,7 @@ func (r *PortAllocator) Snapshot(dst *api.RangeAllocation) error {
 
 // Restore restores the pool to the previously captured state. ErrMismatchedNetwork
 // is returned if the provided port range doesn't exactly match the previous range.
+// Restore 要求端口范围与当前配置完全一致，防止将旧范围的 offset 位图误用于新 NodePort 范围。
 func (r *PortAllocator) Restore(pr net.PortRange, data []byte) error {
 	if pr.String() != r.portRange.String() {
 		return ErrMismatchedNetwork

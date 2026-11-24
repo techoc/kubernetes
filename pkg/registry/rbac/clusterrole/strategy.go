@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/rbac/validation"
 )
 
-// strategy implements behavior for ClusterRoles
+// strategy 定义 ClusterRole 的集群级 REST 策略，除 PolicyRule 校验外，还校验聚合规则中的 LabelSelector。
 type strategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -70,6 +70,7 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
 // Validate validates a new ClusterRole. Validation must check for a correct signature.
+// 创建时不允许聚合选择器包含非法 Label 值，避免聚合控制器选中不符合预期的角色。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	clusterRole := obj.(*rbac.ClusterRole)
 	opts := validation.ClusterRoleValidationOptions{
@@ -87,6 +88,7 @@ func (strategy) Canonicalize(obj runtime.Object) {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// 更新时允许保留旧对象中历史存在的非法 Selector Label 值，但不允许新引入同类非法值。
 func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newObj := obj.(*rbac.ClusterRole)
 	oldObj := old.(*rbac.ClusterRole)
@@ -110,6 +112,7 @@ func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
+// 检查旧 ClusterRole 聚合选择器是否包含历史非法值，用于决定更新兼容选项。
 func hasInvalidLabelValueInLabelSelector(role *rbac.ClusterRole) bool {
 	if role.AggregationRule != nil {
 		labelSelectorValidationOptions := metav1validation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: false}

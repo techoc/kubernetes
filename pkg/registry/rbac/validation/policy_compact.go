@@ -29,8 +29,10 @@ type simpleResource struct {
 	ResourceName      string
 }
 
+// CompactRules 将 APIGroup/Resource/ResourceName 完全相同、仅 Verbs 不同的简单规则合并，便于展示精简的缺失权限列表。
 // CompactRules combines rules that contain a single APIGroup/Resource, differ only by verb, and contain no other attributes.
 // this is a fast check, and works well with the decomposed "missing rules" list from a Covers check.
+// 复杂规则原样保留；简单规则按资源键聚合 verbs，避免在授权错误中重复列出几乎相同的规则。
 func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 	compacted := make([]rbacv1.PolicyRule, 0, len(rules))
 
@@ -61,6 +63,7 @@ func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 }
 
 // isSimpleResourceRule returns true if the given rule contains verbs, a single resource, a single API group, at most one Resource Name, and no other values
+// 只有单一 APIGroup、单一 Resource、Verbs 和至多一个 ResourceName、且无其他属性的规则才可安全合并。
 func isSimpleResourceRule(rule *rbacv1.PolicyRule) (simpleResource, bool) {
 	resource := simpleResource{}
 

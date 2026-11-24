@@ -18,6 +18,7 @@ package storage
 
 import (
 	"context"
+
 	pvcutil "k8s.io/kubernetes/pkg/api/persistentvolumeclaim"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,12 +34,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// REST implements a RESTStorage for persistent volume claims.
+// REST 将 PVC 通用 CRUD Store 封装为 API Server RESTStorage，并在读取路径为旧对象补齐数据源关联字段。
 type REST struct {
 	*genericregistry.Store
 }
 
 // NewREST returns a RESTStorage object that will work against persistent volume claims.
+// NewREST 创建 PVC 主资源 Store 与独立 Status Store，并注册 Decorator 让 GET/LIST 返回时应用只读兼容默认值。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.PersistentVolumeClaim{} },
@@ -83,6 +85,7 @@ func (r *REST) ShortNames() []string {
 // applies on Get, Create, and Update, but we need to distinguish between them.
 //
 // This will be called on both PersistentVolumeClaim and PersistentVolumeClaimList types.
+// defaultOnRead 只在读取时做兼容性补全，不将默认值写回 etcd，避免 GET/LIST 改变持久化对象。
 func (r *REST) defaultOnRead(obj runtime.Object) {
 	switch s := obj.(type) {
 	case *api.PersistentVolumeClaim:
@@ -96,6 +99,7 @@ func (r *REST) defaultOnRead(obj runtime.Object) {
 }
 
 // defaultOnReadPvcList defaults a PersistentVolumeClaimList.
+// 对 LIST 返回的每个 PVC 应用相同的数据源字段补全逻辑。
 func (r *REST) defaultOnReadPvcList(pvcList *api.PersistentVolumeClaimList) {
 	if pvcList == nil {
 		return
@@ -107,6 +111,7 @@ func (r *REST) defaultOnReadPvcList(pvcList *api.PersistentVolumeClaimList) {
 }
 
 // defaultOnReadPvc defaults a single PersistentVolumeClaim.
+// 老 PVC 可能只保存 dataSource；读取时补齐 dataSourceRef，让新客户端看到统一的数据源表示。
 func (r *REST) defaultOnReadPvc(pvc *api.PersistentVolumeClaim) {
 	if pvc == nil {
 		return
@@ -140,6 +145,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Update 将状态变更交给 StatusStrategy，明确禁止通过 status 子资源创建 PVC。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.

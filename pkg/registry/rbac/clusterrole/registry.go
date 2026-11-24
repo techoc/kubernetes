@@ -39,6 +39,7 @@ type storage struct {
 
 // NewRegistry returns a new Registry interface for the given Storage. Any mismatched
 // types will panic.
+// NewRegistry 将 ClusterRole RESTStorage 适配为跨命名空间授权规则查询接口。
 func NewRegistry(s rest.StandardStorage) Registry {
 	return &storage{s}
 }
@@ -62,6 +63,7 @@ type AuthorizerAdapter struct {
 }
 
 // GetClusterRole returns the corresponding ClusterRole by name
+// GetClusterRole 读取 ClusterRole 并转换为 v1 对象，供 RuleResolver 展开其 PolicyRules。
 func (a AuthorizerAdapter) GetClusterRole(ctx context.Context, name string) (*rbacv1.ClusterRole, error) {
 	return a.Registry.GetClusterRole(genericapirequest.WithNamespace(ctx, ""), name, &metav1.GetOptions{})
 }

@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package componentstatus provides interfaces and implementation for retrieving cluster
 // component status.
+// Package componentstatus 提供 ComponentStatus 动态 REST 视图，通过探测本地控制面组件和 etcd 返回健康状态。
 package componentstatus

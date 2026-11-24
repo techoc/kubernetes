@@ -16,4 +16,6 @@ limitations under the License.
 
 package storage
 
+// 本目录当前仅承载 IP 分配器存储行为的测试；实际 RangeAllocation 的 etcd 持久化适配器位于同级 allocator/storage。
+
 // Keep CI happy; it is unhappy if a directory only contains tests

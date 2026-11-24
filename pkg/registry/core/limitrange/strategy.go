@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
+// limitrangeStrategy 定义 LimitRange 的 REST 写入策略；规则内容由 ValidateLimitRange 校验，资源默认值由准入阶段应用。
 type limitrangeStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -42,6 +43,7 @@ func (limitrangeStrategy) NamespaceScoped() bool {
 	return true
 }
 
+// 创建时若未提供名称则生成 UUID，避免 LimitRange 规则对象因缺少 metadata.name 无法持久化。
 func (limitrangeStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	limitRange := obj.(*api.LimitRange)
 	if len(limitRange.Name) == 0 {
@@ -52,6 +54,7 @@ func (limitrangeStrategy) PrepareForCreate(ctx context.Context, obj runtime.Obje
 func (limitrangeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
+// Validate 检查每种资源的 Min/Max/Default/DefaultRequest/MaxLimitRequestRatio 是否构成合法约束。
 func (limitrangeStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	limitRange := obj.(*api.LimitRange)
 	return validation.ValidateLimitRange(limitRange)
@@ -66,6 +69,7 @@ func (limitrangeStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Obje
 func (limitrangeStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// LimitRange 保留 update-on-create 行为；对象不存在时的更新请求可以作为创建请求处理。
 func (limitrangeStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 storageclass 的 REST Strategy，定义作用域、写入前字段处理、校验、告警以及更新规则。
 package storageclass
 
 import (
@@ -40,6 +41,7 @@ type storageClassStrategy struct {
 // StorageClass objects via the REST API.
 var Strategy = storageClassStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
+// NamespaceScoped 声明该资源是否属于命名空间级别；返回 false 表示对象通过集群级 URL 管理，返回 true 表示 URL 中必须包含 namespace。
 func (storageClassStrategy) NamespaceScoped() bool {
 	return false
 }
@@ -48,6 +50,7 @@ func (storageClassStrategy) NamespaceScoped() bool {
 func (storageClassStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
+// Validate 执行创建请求的业务合法性校验，将字段路径和错误原因整理为 field.ErrorList；返回非空错误时 API 请求会被拒绝。
 func (storageClassStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	storageClass := obj.(*storage.StorageClass)
 	return validation.ValidateStorageClass(storageClass)
@@ -62,6 +65,7 @@ func (storageClassStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Ob
 func (storageClassStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 决定 Update 请求在对象不存在时是否允许退化为创建；false 表示必须先显式 Create。
 func (storageClassStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -70,6 +74,7 @@ func (storageClassStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 func (storageClassStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
+// ValidateUpdate 对更新后的对象及其旧版本进行联合校验，检查字段合法性、不可变字段和跨版本兼容约束。
 func (storageClassStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	allErrs := validation.ValidateStorageClass(obj.(*storage.StorageClass))
 	allErrs = append(allErrs, validation.ValidateStorageClassUpdate(obj.(*storage.StorageClass), old.(*storage.StorageClass))...)
@@ -81,6 +86,7 @@ func (storageClassStrategy) WarningsOnUpdate(ctx context.Context, obj, old runti
 	return storageutil.GetWarningsForStorageClass(obj.(*storage.StorageClass))
 }
 
+// AllowUnconditionalUpdate 声明是否允许不携带 ResourceVersion 前置条件的更新；true 表示允许无条件更新，false 要求并发版本检查。
 func (storageClassStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }

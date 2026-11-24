@@ -38,6 +38,7 @@ func newServiceCIDR() *networking.ServiceCIDR {
 	}
 }
 
+// TestServiceCIDRStrategy 验证 CIDR 规范、Feature Gate 对 Status 字段清理的影响及地址范围更新约束。
 func TestServiceCIDRStrategy(t *testing.T) {
 	if Strategy.NamespaceScoped() {
 		t.Errorf("Expected ServiceCIDR to be cluster-scoped")
@@ -59,6 +60,7 @@ func TestServiceCIDRStrategy(t *testing.T) {
 	}
 }
 
+// TestServiceCIDRStatusStrategy 验证 /status 允许回写控制器状态，但不允许修改 ServiceCIDR.Spec。
 func TestServiceCIDRStatusStrategy(t *testing.T) {
 	oldObj := &networking.ServiceCIDR{Spec: networking.ServiceCIDRSpec{}}
 	newObj := &networking.ServiceCIDR{

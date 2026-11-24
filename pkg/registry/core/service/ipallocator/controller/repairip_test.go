@@ -90,6 +90,7 @@ func newFakeRepair(testTime time.Time) (*fake.Clientset, *fakeRepair) {
 	return fakeClient, &fakeRepair{r, serviceIndexer, ipIndexer, serviceCIDRIndexer}
 }
 
+// TestRepairServiceIP 验证 Service 与 IPAddress 双向引用不一致、缺失或重复时的修复行为。
 func TestRepairServiceIP(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -775,6 +776,7 @@ func expectEvents(t *testing.T, actual <-chan string, expected []string) {
 	}
 }
 
+// TestRepairIPAddress_runOnce 验证一次全量协调会同时检查 Service 所需地址和由分配控制器创建的 IPAddress 孤儿对象。
 func TestRepairIPAddress_runOnce(t *testing.T) {
 	tests := []struct {
 		name          string

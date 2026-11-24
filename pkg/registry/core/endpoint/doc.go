@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package endpoint provides Registry interface and it's RESTStorage
 // implementation for storing Endpoint api objects.
+// Package endpoint 提供旧版 Endpoints 资源的 REST 策略、字段校验和通用存储实现。
 package endpoint

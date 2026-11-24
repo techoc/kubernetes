@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件实现 flowschema 的 REST Strategy，定义 APF 配置对象的字段隔离、校验和更新规则。
 package flowschema
 
 import (
@@ -98,6 +99,7 @@ func (flowSchemaStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Obje
 func (flowSchemaStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowUnconditionalUpdate 决定是否允许不携带 ResourceVersion 的无条件更新，以控制并发写入语义。
 func (flowSchemaStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -149,6 +151,7 @@ func (flowSchemaStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 	return fields
 }
 
+// PrepareForUpdate Status 更新入口恢复旧 Spec，并重置受保护的 metadata，确保 status 子资源只改变状态字段。
 func (flowSchemaStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newFlowSchema := obj.(*flowcontrol.FlowSchema)
 	oldFlowSchema := old.(*flowcontrol.FlowSchema)
@@ -161,6 +164,7 @@ func (flowSchemaStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old r
 	newFlowSchema.Spec = oldFlowSchema.Spec
 }
 
+// ValidateUpdate 结合新旧对象校验更新合法性，保护不可变字段并检查引用关系及配置变更约束。
 func (flowSchemaStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateFlowSchemaStatusUpdate(old.(*flowcontrol.FlowSchema), obj.(*flowcontrol.FlowSchema))
 }

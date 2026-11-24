@@ -14,21 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1 contains API types that are common to all versions.
-//
-// The package contains two categories of types:
-//   - external (serialized) types that lack their own version (e.g TypeMeta)
-//   - internal (never-serialized) types that are needed by several different
-//     api groups, and so live here, to avoid duplication and/or import loops
-//     (e.g. LabelSelector).
-//
-// In the future, we will probably move these categories of objects into
-// separate packages.
-//
 // Package v1 包含所有版本通用的 API 类型，分为两类：
 //   - 没有独立版本的外部（可序列化）类型，例如 TypeMeta；
 //   - 多个 API 组都需要、但从不序列化的内部类型，例如 LabelSelector，
 //     放在这里以避免重复定义或产生循环导入。
+//
+// 未来可能会将这两类对象拆分到不同的包中。
 package v1
 
 import (
@@ -154,14 +145,13 @@ type ShardInfo struct {
 	Selector string `json:"selector" protobuf:"bytes,1,opt,name=selector"`
 }
 
-// Field path constants that are specific to the internal API
-// representation.
+// 以下常量定义内部 API 表示专用的字段路径。
 const (
 	// ObjectNameField 是内部 API 表示中对象名称的字段路径。
 	ObjectNameField = "metadata.name"
 )
 
-// These are internal finalizer values for Kubernetes-like APIs, must be qualified name unless defined here
+// 以下是 Kubernetes 风格 API 使用的内部 finalizer 值；除在此处定义的值外，finalizer 必须是限定名称。
 const (
 	// FinalizerOrphanDependents 表示删除时孤立依赖对象。
 	FinalizerOrphanDependents = "orphan"

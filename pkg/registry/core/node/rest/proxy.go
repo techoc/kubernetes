@@ -33,7 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/core/node"
 )
 
-// ProxyREST implements the proxy subresource for a Node
+// ProxyREST 实现 nodes/{name}/proxy：把 API 请求转发到指定 Node 的 Kubelet HTTP 端点。
 type ProxyREST struct {
 	Store          *genericregistry.Store
 	Connection     client.ConnectionInfoGetter
@@ -67,20 +67,24 @@ func (r *ProxyREST) NewConnectOptions() (runtime.Object, bool, string) {
 }
 
 // Connect returns a handler for the node proxy
+// Connect 校验代理选项，解析 Node 的 Kubelet 地址并拼接相对路径，最后返回带带宽限制的升级感知代理。
 func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	proxyOpts, ok := opts.(*api.NodeProxyOptions)
 	if !ok {
 		return nil, fmt.Errorf("Invalid options object: %#v", opts)
 	}
+	// ResourceLocation 同时决定目标地址和 Transport：默认 Kubelet 端口使用节点专用 TLS 配置。
 	location, transport, err := node.ResourceLocation(r.Store, r.Connection, r.ProxyTransport, ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	// 保留末尾斜杠语义拼接用户指定路径，避免代理到 Kubelet 时改变相对路径解析结果。
 	location.Path = net.JoinPreservingTrailingSlash(location.Path, proxyOpts.Path)
 	// Return a proxy handler that uses the desired transport, wrapped with additional proxy handling (to get URL rewriting, X-Forwarded-* headers, etc)
 	return newThrottledUpgradeAwareProxyHandler(location, transport, true, false, responder), nil
 }
 
+// newThrottledUpgradeAwareProxyHandler 统一创建支持 HTTP Upgrade 的代理，并施加每连接带宽上限。
 func newThrottledUpgradeAwareProxyHandler(location *url.URL, transport http.RoundTripper, wrapTransport, upgradeRequired bool, responder rest.Responder) *proxy.UpgradeAwareHandler {
 	handler := proxy.NewUpgradeAwareHandler(location, transport, wrapTransport, upgradeRequired, proxy.NewErrorResponder(responder))
 	handler.MaxBytesPerSec = capabilities.Get().PerConnectionBandwidthLimitBytesPerSec

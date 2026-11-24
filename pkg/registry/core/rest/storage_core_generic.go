@@ -49,6 +49,7 @@ import (
 	"k8s.io/kubernetes/pkg/serviceaccount"
 )
 
+// GenericConfig 负责装配不依赖额外控制器的 Core v1 资源 Store，例如 Namespace、Secret、ConfigMap、Event 和 ServiceAccount。
 // GenericConfig provides information needed to build RESTStorage
 // for generic resources in core. It implements the "normal" RESTStorageProvider interface.
 type GenericConfig struct {
@@ -66,6 +67,7 @@ type GenericConfig struct {
 	Informers            informers.SharedInformerFactory
 }
 
+// NewRESTStorage 先创建各资源 Store，再根据 APIResourceConfigSource 注册主资源和 status/finalize/token 子资源。
 func (c *GenericConfig) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.APIGroupInfo{
 		PrioritizedVersions:          legacyscheme.Scheme.PrioritizedVersionsForGroup(""),
@@ -167,10 +169,12 @@ func newNotFoundGetter(gr schema.GroupResource) rest.Getter {
 	return notFoundGetter{gr: gr}
 }
 
+// notFoundGetter 为缺少可选依赖的场景提供统一占位 Getter，避免 TokenREST 误读未装配的 Pod/Node/Secret API。
 type notFoundGetter struct {
 	gr schema.GroupResource
 }
 
+// Get 无条件返回指定资源的 NotFound，令调用方按标准 API 错误路径处理缺失依赖。
 func (g notFoundGetter) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return nil, errors.NewNotFound(g.gr, name)
 }

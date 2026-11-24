@@ -42,9 +42,7 @@ func (e encodable) DeepCopyObject() Object {
 	return out
 }
 
-// NewEncodable creates an object that will be encoded with the provided codec on demand.
-// Provided as a convenience for test cases dealing with internal objects.
-// 中文说明：Unknown 原样返回，因为它本身已经是 encoded 形式，不应再被编码。
+// 创建一个延迟编码对象：只有调用 MarshalJSON 时才使用给定 Codec 对内部对象进行编码。主要用于测试中把内部版本对象包装成可序列化值。
 func NewEncodable(e Encoder, obj Object, versions ...schema.GroupVersion) Object {
 	if _, ok := obj.(*Unknown); ok {
 		return obj
@@ -56,15 +54,12 @@ func (e encodable) UnmarshalJSON(in []byte) error {
 	return errors.New("runtime.encodable cannot be unmarshalled from JSON")
 }
 
-// Marshal may get called on pointers or values, so implement MarshalJSON on value.
-// http://stackoverflow.com/questions/21390979/custom-marshaljson-never-gets-called-in-go
+// 在 JSON 序列化时调用 Codec 编码内部对象。该方法定义在值接收者上，因为编码器可能通过值或指针调用它。
 func (e encodable) MarshalJSON() ([]byte, error) {
 	return Encode(e.E, e.obj)
 }
 
-// NewEncodableList creates an object that will be encoded with the provided codec on demand.
-// Provided as a convenience for test cases dealing with internal objects.
-// 中文说明：与 NewEncodable 一致，Unknown 元素保持原样。
+// 创建一个延迟编码的对象列表。列表中的对象会在 MarshalJSON 时逐个通过给定 Codec 编码，主要用于测试内部版本对象列表。
 func NewEncodableList(e Encoder, objects []Object, versions ...schema.GroupVersion) []Object {
 	out := make([]Object, len(objects))
 	for i := range objects {
@@ -90,11 +85,11 @@ func (e *Unknown) UnmarshalJSON(in []byte) error {
 	return nil
 }
 
-// Marshal may get called on pointers or values, so implement MarshalJSON on value.
+// MarshalJSON 使用值接收者实现，因为调用方可能通过结构体值或指针触发 JSON 序列化。
 // http://stackoverflow.com/questions/21390979/custom-marshaljson-never-gets-called-in-go
 func (e Unknown) MarshalJSON() ([]byte, error) {
 	// 未设置 ContentType 时按 JSON 处理；非 JSON 内容无法直接作为 JSON 输出。
-	// If ContentType is unset, we assume this is JSON.
+	// 未设置 ContentType 时，默认按 JSON 内容处理。
 	if e.ContentType != "" && e.ContentType != ContentTypeJSON {
 		return nil, errors.New("runtime.Unknown: MarshalJSON on non-json data")
 	}
@@ -143,8 +138,8 @@ func Convert_runtime_RawExtension_To_runtime_Object(in *RawExtension, out *Objec
 	}
 	*out = &Unknown{
 		Raw: data,
-		// TODO: Set ContentEncoding and ContentType appropriately.
-		// Currently we set ContentTypeJSON to make tests passing.
+		// TODO：根据实际编码结果正确设置 ContentEncoding 和 ContentType。
+		// 当前暂时固定为 ContentTypeJSON，以满足现有测试预期。
 		ContentType: ContentTypeJSON,
 	}
 	return nil

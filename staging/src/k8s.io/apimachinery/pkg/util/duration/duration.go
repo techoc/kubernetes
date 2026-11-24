@@ -24,8 +24,8 @@ import (
 // ShortHumanDuration 返回时长的简洁人类可读表示，精度有限，适合事件时间等场景。
 // 例如 90s 显示为 "1m"，25h 显示为 "1d"，400d 显示为 "1y"。
 func ShortHumanDuration(d time.Duration) string {
-	// Allow deviation no more than 2 seconds(excluded) to tolerate machine time
-	// inconsistence, it can be considered as almost now.
+	// 允许最多 2 秒（不含边界）的时间偏差，以容忍机器时钟不一致；
+	// 在该范围内可将时间视为当前时刻。
 	// 小于 -1 秒视为时钟偏差导致的“未来”时间，直接标记为无效。
 	if seconds := int(d.Seconds()); seconds < -1 {
 		return "<invalid>"
@@ -46,8 +46,8 @@ func ShortHumanDuration(d time.Duration) string {
 // HumanDuration 返回时长的简洁人类可读表示，约 2-3 位有效数字，
 // 在相邻量级之间保留更细的组合（如 "1m30s"、"2h10m"、"3d4h"）。
 func HumanDuration(d time.Duration) string {
-	// Allow deviation no more than 2 seconds(excluded) to tolerate machine time
-	// inconsistence, it can be considered as almost now.
+	// 允许最多 2 秒（不含边界）的时间偏差，以容忍机器时钟不一致；
+	// 在该范围内可将时间视为当前时刻。
 	if seconds := int(d.Seconds()); seconds < -1 {
 		return "<invalid>"
 	} else if seconds < 0 {

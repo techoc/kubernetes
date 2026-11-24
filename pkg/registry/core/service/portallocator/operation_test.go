@@ -23,6 +23,7 @@ import (
 )
 
 // TestDryRunAllocate tests the Allocate function in dry run mode
+// TestDryRunAllocate 确认 DryRun 操作只在事务本地记录指定端口，不修改真实 allocator 的占用状态。
 func TestDryRunAllocate(t *testing.T) {
 	pr, err := net.ParsePortRange("10000-10200")
 	if err != nil {
@@ -69,6 +70,7 @@ func TestDryRunAllocate(t *testing.T) {
 }
 
 // TestDryRunAllocateNext tests the AllocateNext function in dry run mode
+// TestDryRunAllocateNext 验证自动分配 DryRun 会生成可用于校验的候选端口，但不会消耗真实端口池。
 func TestDryRunAllocateNext(t *testing.T) {
 	pr, err := net.ParsePortRange("10000-10200")
 	if err != nil {

@@ -57,6 +57,7 @@ func TestEmpty(t *testing.T) {
 	}
 }
 
+// TestStore 验证本地分配器修改会持久化为 RangeAllocation 快照，并在新分配器实例中恢复。
 func TestStore(t *testing.T) {
 	storage, server, backing, config := newStorage(t)
 	defer server.Terminate(t)

@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd 测试后端并构造 Secret RESTStorage。
 func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -57,6 +58,7 @@ func validNewSecret(name string) *api.Secret {
 	}
 }
 
+// TestCreate 验证 Secret 创建时的 Type/Data 校验及 etcd 持久化。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -80,6 +82,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证 Secret 更新时保留旧 Type 的兼容行为，并执行类型相关的数据校验。
 func TestUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -121,6 +124,7 @@ func TestList(t *testing.T) {
 	test.TestList(validNewSecret("foo"))
 }
 
+// TestWatch 验证 Secret 创建/更新产生的存储事件可经 Watch 接口订阅。
 func TestWatch(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

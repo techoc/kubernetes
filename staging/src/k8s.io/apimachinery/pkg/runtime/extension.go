@@ -25,9 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
-// RawExtension intentionally avoids implementing value.UnstructuredConverter for now because the
-// signature of ToUnstructured does not allow returning an error value in cases where the conversion
-// is not possible (content type is unrecognized or bytes don't match content type).
+// RawExtension 暂不实现 value.UnstructuredConverter，因为 ToUnstructured 的接口签名无法返回转换错误。
+// 当内容类型无法识别，或原始字节与声明的内容类型不匹配时，转换可能失败；若忽略错误会丢失重要信息。
 // rawToUnstructured 根据内容类型把 RawExtension 的原始字节解码成通用结构。
 // 内容类型未知时报错而不是猜测，避免把 JSON 当 CBOR 解析产生误导性错误。
 func rawToUnstructured(raw []byte, contentType string) (interface{}, error) {
@@ -58,16 +57,14 @@ func (re RawExtension) guessContentType() string {
 	case len(re.Raw) > 0:
 		switch re.Raw[0] {
 		case '\t', '\r', '\n', ' ', '{', '[', 'n', 't', 'f', '"', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			// Prefixes for the four whitespace characters, objects, arrays, strings, numbers, true, false, and null.
+			// JSON/CBOR 识别器使用的前缀：四种空白字符，以及对象、数组、字符串、数字、true、false 和 null。
 			return ContentTypeJSON
 		}
 	}
 	return ""
 }
 
-// UnmarshalJSON 保存原始 JSON 字节而不解析，保留原样是为了让 RawExtension
-// 可以承载任意对象并将解析推迟到知道目标类型时。null 表示没有值，Raw 保持
-// 不变。append(re.Raw[0:0], ...) 复用底层数组，避免重复分配。
+// 把 JSON 原始字节保存到 Raw 字段，并清除已有 Object，确保后续访问不会混用旧对象与新内容。
 func (re *RawExtension) UnmarshalJSON(in []byte) error {
 	if re == nil {
 		return errors.New("runtime.RawExtension: UnmarshalJSON on nil pointer")
@@ -84,17 +81,15 @@ var (
 	cborSelfDescribed = []byte{0xd9, 0xd9, 0xf7}
 )
 
-// UnmarshalCBOR 与 UnmarshalJSON 类似，但会先补上自描述 CBOR 标签，使后续
-// 编码/识别逻辑无需区分来源。CBOR null（0xf6）同样表示空值。
+// 把 CBOR 数据保存在 Raw 中并清除已缓存的 Object，延迟到具体使用方再决定如何解码。
 func (re *RawExtension) UnmarshalCBOR(in []byte) error {
 	if re == nil {
 		return errors.New("runtime.RawExtension: UnmarshalCBOR on nil pointer")
 	}
 	if !bytes.Equal(in, cborNull) {
 		if !bytes.HasPrefix(in, cborSelfDescribed) {
-			// The self-described CBOR tag doesn't change the interpretation of the data
-			// item it encloses, but it is useful as a magic number. Its encoding is
-			// also what is used to implement the CBOR RecognizingDecoder.
+			// 自描述 CBOR 标签不会改变其包裹的数据项含义，但可作为识别 CBOR 数据的魔数。
+			// CBOR RecognizingDecoder 利用该标签的编码形式判断输入格式。
 			re.Raw = append(re.Raw[:0], cborSelfDescribed...)
 		}
 		re.Raw = append(re.Raw, in...)
@@ -102,18 +97,12 @@ func (re *RawExtension) UnmarshalCBOR(in []byte) error {
 	return nil
 }
 
-// MarshalJSON may get called on pointers or values, so implement MarshalJSON on value.
-// http://stackoverflow.com/questions/21390979/custom-marshaljson-never-gets-called-in-go
-//
-// 若 Raw 已经是 JSON，直接原样输出以保证字节稳定性；若为 CBOR，则先转成
-// 通用结构再编码为 JSON，实现跨格式兼容。
+// 若 Object 非空则先将对象编码为 JSON；否则返回 Raw 中保留的原始 JSON。没有可用内容时输出 JSON null。
 func (re RawExtension) MarshalJSON() ([]byte, error) {
 	if re.Raw == nil {
-		// TODO: this is to support legacy behavior of JSONPrinter and YAMLPrinter, which
-		// expect to call json.Marshal on arbitrary versioned objects (even those not in
-		// the scheme). pkg/kubectl/resource#AsVersionedObjects and its interaction with
-		// kubectl get on objects not in the scheme needs to be updated to ensure that the
-		// objects that are not part of the scheme are correctly put into the right form.
+		// TODO：此逻辑用于兼容 JSONPrinter 和 YAMLPrinter 的历史行为：它们可能对任意版本化对象调用 json.Marshal，
+		// 即使对象尚未注册到 Scheme。后续应调整 pkg/kubectl/resource#AsVersionedObjects 与 kubectl get，
+		// 确保未注册对象也能被正确转换为预期输出形式。
 		if re.Object != nil {
 			return json.Marshal(re.Object)
 		}
@@ -132,8 +121,7 @@ func (re RawExtension) MarshalJSON() ([]byte, error) {
 	return json.Marshal(u)
 }
 
-// MarshalCBOR 与 MarshalJSON 对称：优先原样输出 CBOR，否则把 Raw 转为
-// 通用结构后用 CBOR 编码。Raw 为 nil 时退回到 Object 字段或 null。
+// 优先把 Object 编码为 CBOR；若只有 Raw，则返回原始 CBOR 字节，避免不必要的解码再编码。
 func (re RawExtension) MarshalCBOR() ([]byte, error) {
 	if re.Raw == nil {
 		if re.Object != nil {

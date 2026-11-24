@@ -27,6 +27,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestResourceQuotaStrategy 验证创建/更新策略会重置或保留 Status，并对 Hard 配额字段执行校验。
 func TestResourceQuotaStrategy(t *testing.T) {
 	if !Strategy.NamespaceScoped() {
 		t.Errorf("ResourceQuota should be namespace scoped")
@@ -61,6 +62,7 @@ func TestResourceQuotaStrategy(t *testing.T) {
 	}
 }
 
+// Test_WarningsOnCreate 验证 requests.cpu/memory 高于对应 limits 时产生 Warning，兼容 CPU/Memory 简写形式。
 func Test_WarningsOnCreate(t *testing.T) {
 	tests := []struct {
 		name         string

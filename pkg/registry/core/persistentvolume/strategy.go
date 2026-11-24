@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// persistentvolumeStrategy implements behavior for PersistentVolume objects
+// persistentvolumeStrategy 定义 PV 主资源的 REST 策略，管理集群级作用域、状态隔离、卷规格兼容和存储参数校验。
 type persistentvolumeStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -64,6 +64,7 @@ func (persistentvolumeStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 }
 
 // ResetBeforeCreate clears the Status field which is not allowed to be set by end users on creation.
+// 创建时重置客户端提交的 Status，清理关闭特性对应的 Spec 字段，并初始化 Pending Phase 与转换时间。
 func (persistentvolumeStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	pv := obj.(*api.PersistentVolume)
 	pv.Status = api.PersistentVolumeStatus{}
@@ -74,6 +75,7 @@ func (persistentvolumeStrategy) PrepareForCreate(ctx context.Context, obj runtim
 	pv.Status.LastPhaseTransitionTime = &now
 }
 
+// Validate 同时执行 Kubernetes PV 字段规则和 volume 层的存储源校验，后者覆盖具体卷插件的参数约束。
 func (persistentvolumeStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	persistentvolume := obj.(*api.PersistentVolume)
 	opts := validation.ValidationOptionsForPersistentVolume(persistentvolume, nil)
@@ -95,6 +97,7 @@ func (persistentvolumeStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // PrepareForUpdate sets the Status fields which is not allowed to be set by an end user updating a PV
+// 普通 PV 更新保留旧 Status，只允许修改 Spec 中符合不可变性和 Feature Gate 规则的字段。
 func (persistentvolumeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPv := obj.(*api.PersistentVolume)
 	oldPv := old.(*api.PersistentVolume)
@@ -102,6 +105,7 @@ func (persistentvolumeStrategy) PrepareForUpdate(ctx context.Context, obj, old r
 	pvutil.DropDisabledSpecFields(&newPv.Spec, &oldPv.Spec)
 }
 
+// 更新校验依次执行 PV 通用字段校验、卷插件参数校验和新旧对象不可变字段校验。
 func (persistentvolumeStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newPv := obj.(*api.PersistentVolume)
 	oldPv := old.(*api.PersistentVolume)
@@ -141,6 +145,7 @@ func (persistentvolumeStatusStrategy) GetResetFields() map[fieldpath.APIVersion]
 var NowFunc = metav1.Now
 
 // PrepareForUpdate sets the Spec field which is not allowed to be changed when updating a PV's Status
+// /status 不允许更改持久卷 Spec；Phase 改变时自动设置 LastPhaseTransitionTime，同一 Phase 则保留旧转换时间。
 func (persistentvolumeStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPv := obj.(*api.PersistentVolume)
 	oldPv := old.(*api.PersistentVolume)
@@ -169,6 +174,7 @@ func (persistentvolumeStatusStrategy) WarningsOnUpdate(ctx context.Context, obj,
 }
 
 // GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 PV 的标签和可选择字段，供集群级 LIST/WATCH 过滤。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	persistentvolumeObj, ok := obj.(*api.PersistentVolume)
 	if !ok {
@@ -178,6 +184,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 }
 
 // MatchPersistentVolume returns a generic matcher for a given label and field selector.
+// MatchPersistentVolumes 将标签/字段选择器封装为存储层 SelectionPredicate。
 func MatchPersistentVolumes(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:    label,

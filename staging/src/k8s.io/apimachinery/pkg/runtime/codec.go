@@ -40,12 +40,12 @@ type codec struct {
 	Decoder
 }
 
-// NewCodec creates a Codec from an Encoder and Decoder.
+// 使用给定 Encoder 和 Decoder 创建 Codec。Codec 将编码与解码组合为一个接口，通常由调用方选择具体的版本转换包装器。
 func NewCodec(e Encoder, d Decoder) Codec {
 	return codec{e, d}
 }
 
-// Encode is a convenience wrapper for encoding to a []byte from an Encoder
+// 便捷编码函数：调用 Encoder 将对象写入缓冲区，并返回序列化后的字节。编码失败时返回错误。
 func Encode(e Encoder, obj Object) ([]byte, error) {
 	buf := &bytes.Buffer{}
 	if err := e.Encode(obj, buf); err != nil {
@@ -54,18 +54,13 @@ func Encode(e Encoder, obj Object) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Decode is a convenience wrapper for decoding data into an Object.
-//
-// 不传默认 GVK 与目标对象，具体类型完全由数据自身携带的 TypeMeta 决定。
+// 便捷解码函数：调用 Decoder 从字节数据中恢复 API 对象。此入口不提供默认 GVK，也不复用目标对象，类型信息通常由序列化数据自身提供。
 func Decode(d Decoder, data []byte) (Object, error) {
 	obj, _, err := d.Decode(data, nil, nil)
 	return obj, err
 }
 
-// DecodeInto performs a Decode into the provided object.
-//
-// 解码结果必须是调用方提供的那个对象；若解码器因类型不匹配新建了对象，
-// 返回错误，避免调用方拿到一个未被填充的 into。
+// 将数据解码到调用方提供的对象中。解码器必须实际填充该对象；如果解码器因类型不匹配而另行创建对象，本函数会返回错误，防止调用方误以为 into 已被更新。
 func DecodeInto(d Decoder, data []byte, into Object) error {
 	out, gvk, err := d.Decode(data, nil, into)
 	if err != nil {
@@ -77,7 +72,7 @@ func DecodeInto(d Decoder, data []byte, into Object) error {
 	return nil
 }
 
-// EncodeOrDie is a version of Encode which will panic instead of returning an error. For tests.
+// 调用 Encode 并返回字符串形式的结果。该辅助函数遇到编码错误时直接 panic，主要用于测试和已确认不会失败的场景。
 func EncodeOrDie(e Encoder, obj Object) string {
 	bytes, err := Encode(e, obj)
 	if err != nil {
@@ -86,11 +81,7 @@ func EncodeOrDie(e Encoder, obj Object) string {
 	return string(bytes)
 }
 
-// UseOrCreateObject returns obj if the canonical ObjectKind returned by the provided typer matches gvk, or
-// invokes the ObjectCreator to instantiate a new gvk. Returns an error if the typer cannot find the object.
-//
-// 复用已有对象可以保留其内部状态（如 list 的 items 容量）；只有 GVK 不匹配时
-// 才创建新对象，避免把数据解码进错误类型。
+// 比较对象当前的规范 GVK 与期望 GVK：匹配时复用原对象，以保留已有状态和底层容量；不匹配时通过 ObjectCreater 创建正确类型的新对象。无法识别对象类型时返回错误。
 func UseOrCreateObject(t ObjectTyper, c ObjectCreater, gvk schema.GroupVersionKind, obj Object) (Object, error) {
 	if obj != nil {
 		kinds, _, err := t.ObjectKinds(obj)
@@ -143,7 +134,7 @@ func (n NoopDecoder) Decode(data []byte, gvk *schema.GroupVersionKind, into Obje
 	return nil, nil, fmt.Errorf("decoding is not allowed for this codec: %v", reflect.TypeOf(n.Encoder))
 }
 
-// NewParameterCodec creates a ParameterCodec capable of transforming url values into versioned objects and back.
+// 创建参数编解码器，用于在 URL 查询参数与指定版本的 API 对象之间转换。查询参数本身不携带 GVK，因此必须由调用方明确提供版本。
 func NewParameterCodec(scheme *Scheme) ParameterCodec {
 	return &parameterCodec{
 		typer:     scheme,
@@ -163,11 +154,7 @@ type parameterCodec struct {
 
 var _ ParameterCodec = &parameterCodec{}
 
-// DecodeParameters converts the provided url.Values into an object of type From with the kind of into, and then
-// converts that object to into (if necessary). Returns an error if the operation cannot be completed.
-//
-// 若 into 本身支持 from 版本，直接解码并补默认值；否则先构造 from 版本对象，
-// 解码、默认化后再转换到目标版本。
+// 把 URL 查询参数解码为 from 版本的对象，再按需要转换到 into 对象的版本。若 into 类型本身支持 from 版本，则可直接解码；否则先创建中间版本对象，解码并应用默认值后再转换。
 func (c *parameterCodec) DecodeParameters(parameters url.Values, from schema.GroupVersion, into Object) error {
 	if len(parameters) == 0 {
 		// 没有参数时保持 into 不变；默认值由调用方决定是否应用。
@@ -206,8 +193,7 @@ func (c *parameterCodec) DecodeParameters(parameters url.Values, from schema.Gro
 	return c.convertor.Convert(input, into, nil)
 }
 
-// EncodeParameters converts the provided object into the to version, then converts that object to url.Values.
-// Returns an error if conversion is not possible.
+// 先将输入对象转换到指定目标版本，再把该版本对象编码为 URL 查询参数。任一版本转换或参数编码失败都会返回错误。
 func (c *parameterCodec) EncodeParameters(obj Object, to schema.GroupVersion) (url.Values, error) {
 	gvks, _, err := c.typer.ObjectKinds(obj)
 	if err != nil {
@@ -291,10 +277,7 @@ func (s base64Serializer) Decode(data []byte, defaults *schema.GroupVersionKind,
 	return s.Decoder.Decode(out[:n], defaults, into)
 }
 
-// SerializerInfoForMediaType returns the first info in types that has a matching media type (which cannot
-// include media-type parameters), or the first info with an empty media type, or false if no type matches.
-//
-// 精确匹配优先；其次接受“无 media type”的兜底项，与 Content-Type 协商的宽松语义一致。
+// 在支持的序列化器列表中查找媒体类型。优先返回精确匹配项；若没有精确匹配，则可使用 MediaType 为空的默认项；都不存在时返回 false。媒体类型参数不参与匹配。
 func SerializerInfoForMediaType(types []SerializerInfo, mediaType string) (SerializerInfo, bool) {
 	for _, info := range types {
 		if info.MediaType == mediaType {
@@ -369,11 +352,7 @@ type multiGroupVersioner struct {
 	coerce             bool
 }
 
-// NewMultiGroupVersioner returns the provided group version for any kind that matches one of the provided group kinds.
-// Kind may be empty in the provided group kind, in which case any kind will match.
-//
-// 当目标与接受集合退化为同一 group 时直接返回 schema.GroupVersion，
-// 减少一层间接调用。
+// 创建一个 GroupVersioner：当输入 Kind 匹配任一指定 GroupKind 时，返回给定目标 GroupVersion。若某个 GroupKind 的 Kind 为空，则该项匹配该 Group 下任意 Kind。
 func NewMultiGroupVersioner(gv schema.GroupVersion, groupKinds ...schema.GroupKind) GroupVersioner {
 	if len(groupKinds) == 0 || (len(groupKinds) == 1 && groupKinds[0].Group == gv.Group) {
 		return gv
@@ -381,19 +360,7 @@ func NewMultiGroupVersioner(gv schema.GroupVersion, groupKinds ...schema.GroupKi
 	return multiGroupVersioner{target: gv, acceptedGroupKinds: groupKinds}
 }
 
-// NewCoercingMultiGroupVersioner returns the provided group version for any incoming kind.
-// Incoming kinds that match the provided groupKinds are preferred.
-// Kind may be empty in the provided group kind, in which case any kind will match.
-// Examples:
-//
-//	gv=mygroup/__internal, groupKinds=mygroup/Foo, anothergroup/Bar
-//	KindForGroupVersionKinds(yetanother/v1/Baz, anothergroup/v1/Bar) -> mygroup/__internal/Bar (matched preferred group/kind)
-//
-//	gv=mygroup/__internal, groupKinds=mygroup, anothergroup
-//	KindForGroupVersionKinds(yetanother/v1/Baz, anothergroup/v1/Bar) -> mygroup/__internal/Bar (matched preferred group)
-//
-//	gv=mygroup/__internal, groupKinds=mygroup, anothergroup
-//	KindForGroupVersionKinds(yetanother/v1/Baz, yetanother/v1/Bar) -> mygroup/__internal/Baz (no preferred group/kind match, uses first kind in list)
+// 创建一个可强制转换的 GroupVersioner。优先选择与给定 GroupKind 匹配的输入 Kind；若没有匹配项，也会把任意输入 Kind 转换到指定目标 GroupVersion。Kind 为空的 GroupKind 表示匹配该 Group 下所有 Kind。
 func NewCoercingMultiGroupVersioner(gv schema.GroupVersion, groupKinds ...schema.GroupKind) GroupVersioner {
 	return multiGroupVersioner{target: gv, acceptedGroupKinds: groupKinds, coerce: true}
 }

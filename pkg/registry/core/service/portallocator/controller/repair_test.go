@@ -53,6 +53,7 @@ func (r *mockRangeRegistry) CreateOrUpdate(alloc *api.RangeAllocation) error {
 	return r.updateErr
 }
 
+// TestRepair 验证 Repair Controller 能从 Service.NodePort/HealthCheckNodePort 重建端口占用状态。
 func TestRepair(t *testing.T) {
 	clearMetrics()
 	fakeClient := fake.NewSimpleClientset()
@@ -93,6 +94,7 @@ func TestRepair(t *testing.T) {
 	}
 }
 
+// TestRepairLeak 验证 Service 已不再引用的端口经过延迟确认后才从分配快照中释放。
 func TestRepairLeak(t *testing.T) {
 	clearMetrics()
 

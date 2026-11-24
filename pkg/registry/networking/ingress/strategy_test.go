@@ -71,6 +71,7 @@ func newIngress() networking.Ingress {
 	}
 }
 
+// TestIngressStrategy 验证主资源创建/更新时 Status 重置、Generation 变化和规则字段校验。
 func TestIngressStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	apiRequest := genericapirequest.RequestInfo{APIGroup: "networking.k8s.io",
@@ -107,6 +108,7 @@ func TestIngressStrategy(t *testing.T) {
 	}
 }
 
+// TestIngressStatusStrategy 验证 /status 只能修改 Ingress.Status，不能夹带修改路由规则 Spec。
 func TestIngressStatusStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !StatusStrategy.NamespaceScoped() {

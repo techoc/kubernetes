@@ -27,6 +27,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestAllocate 验证 CIDR 位图能拒绝网络/广播等不可分配地址，并保持指定 IP 与自动分配互斥。
 func TestAllocate(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -326,6 +327,7 @@ func TestForEach(t *testing.T) {
 	}
 }
 
+// TestSnapshot 验证 IP 地址池快照可恢复相同的 CIDR 和占用集合。
 func TestSnapshot(t *testing.T) {
 	_, cidr, err := netutils.ParseCIDRSloppy("192.168.1.0/24")
 	if err != nil {

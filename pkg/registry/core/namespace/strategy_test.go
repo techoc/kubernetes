@@ -30,6 +30,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
+// TestNamespaceStrategy 验证创建时 Active Phase 与 kubernetes Finalizer 默认值，以及普通更新对 Finalizer/Status 的保护。
 func TestNamespaceStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if Strategy.NamespaceScoped() {
@@ -81,6 +82,7 @@ func TestNamespaceDefaultLabelCanonicalize(t *testing.T) {
 	}
 }
 
+// TestNamespaceStatusStrategy 验证 status 子资源只能更改状态，不能修改 Namespace Spec。
 func TestNamespaceStatusStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if StatusStrategy.NamespaceScoped() {
@@ -117,6 +119,7 @@ func TestNamespaceStatusStrategy(t *testing.T) {
 	}
 }
 
+// TestNamespaceFinalizeStrategy 验证 finalize 子资源允许按规则更新 Finalizer，但不能借此修改 Status。
 func TestNamespaceFinalizeStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if FinalizeStrategy.NamespaceScoped() {

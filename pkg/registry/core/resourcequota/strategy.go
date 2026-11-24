@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// resourcequotaStrategy implements behavior for ResourceQuota objects
+// resourcequotaStrategy 定义 ResourceQuota 主资源策略，隔离由配额控制器维护的 Status，并校验 Hard 配额声明。
 type resourcequotaStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -58,12 +58,14 @@ func (resourcequotaStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpat
 }
 
 // PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// 创建时重置 Status；Used/Hard 的实际使用量由 ResourceQuota Controller 计算，不能由用户在创建请求中伪造。
 func (resourcequotaStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	resourcequota := obj.(*api.ResourceQuota)
 	resourcequota.Status = api.ResourceQuotaStatus{}
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 普通配额更新保留旧 Status，只允许修改 Spec.Hard、ScopeSelector 等期望配置。
 func (resourcequotaStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newResourcequota := obj.(*api.ResourceQuota)
 	oldResourcequota := old.(*api.ResourceQuota)
@@ -77,6 +79,7 @@ func (resourcequotaStrategy) Validate(ctx context.Context, obj runtime.Object) f
 }
 
 // all known resource names that we want to check for request <= limit
+// 这些常见资源同时检查 requests.* 与 limits.*，在请求配额高于限制配额时给出可操作的 Warning。
 var knownResourceNames = []api.ResourceName{
 	api.ResourceCPU,
 	api.ResourceMemory,
@@ -85,6 +88,7 @@ var knownResourceNames = []api.ResourceName{
 }
 
 // WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 提醒 requests 额度大于 limits 额度的可疑配置；它是警告，不替代 ResourceQuota 语义校验。
 func (resourcequotaStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	resourcequota := obj.(*api.ResourceQuota)
 	var allWarnings []string
@@ -151,6 +155,7 @@ func (resourcequotaStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fi
 	return fields
 }
 
+// /status 只接受 ResourceQuota.Status 变化，Spec 始终从旧对象恢复。
 func (resourcequotaStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newResourcequota := obj.(*api.ResourceQuota)
 	oldResourcequota := old.(*api.ResourceQuota)

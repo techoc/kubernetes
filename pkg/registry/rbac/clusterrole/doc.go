@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package clusterrole provides Registry interface and its RESTStorage
 // implementation for storing ClusterRole objects.
+// Package clusterrole 提供集群级 ClusterRole 的 REST 策略、聚合选择器兼容和防权限提升存储包装。
 package clusterrole

@@ -31,6 +31,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against ClusterRole objects.
+// NewREST 创建集群级 ClusterRole Store，使用专门的 Selector 兼容校验策略。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &rbac.ClusterRole{} },

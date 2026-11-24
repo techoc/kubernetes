@@ -86,6 +86,7 @@ const (
 // cases are covered by the Services loop
 // 1.                          <------>  IPAddress_Z [Ref:Service_C]   !ok, orphan IPAddress
 
+// RepairIPAddress 使用 Service/IPAddress Informer 双向核对 ClusterIP 所有权，修复缺失对象并清理孤立或错误引用对象。
 type RepairIPAddress struct {
 	client   kubernetes.Interface
 	interval time.Duration
@@ -110,6 +111,7 @@ type RepairIPAddress struct {
 
 // NewRepairIPAddress creates a controller that periodically ensures that all clusterIPs are uniquely allocated across the cluster
 // and generates informational warnings for a cluster that is not in sync.
+// NewRepairIPAddress 创建 IPAddress 修复控制器，监听 Service、ServiceCIDR 和 IPAddress 变化并构建带限速重试的队列。
 func NewRepairIPAddress(interval time.Duration,
 	client kubernetes.Interface,
 	serviceInformer coreinformers.ServiceInformer,
@@ -201,6 +203,7 @@ func newRepairIPAddress(interval time.Duration,
 }
 
 // RunUntil starts the controller until the provided ch is closed.
+// RunUntil 等待相关缓存与默认 ServiceCIDR 就绪，先完成一次全量核对，再启动 Service/IPAddress 两组增量 worker。
 func (r *RepairIPAddress) RunUntil(onFirstSuccess func(), stopCh chan struct{}) {
 	defer r.ipQueue.ShutDown()
 	defer r.svcQueue.ShutDown()
@@ -262,6 +265,7 @@ func (r *RepairIPAddress) runOnce() error {
 }
 
 // doRunOnce verifies the state of the ClusterIP allocations and returns an error if an unrecoverable problem occurs.
+// doRunOnce 先遍历 Service 确保每个 ClusterIP 有正确 IPAddress，再反向检查控制器管理的 IPAddress 是否仍有有效 Service 所有者。
 func (r *RepairIPAddress) doRunOnce() error {
 	services, err := r.serviceLister.List(labels.Everything())
 	if err != nil {
@@ -341,6 +345,7 @@ func (r *RepairIPAddress) handleSvcErr(err error, key string) {
 }
 
 // syncServices reconcile the Service ClusterIPs to verify that each one has the corresponding IPAddress object associated
+// syncService 逐个校验 Service.ClusterIPs：缺少 IPAddress 时创建，引用/标签错误时重建，并拒绝越界或重复地址。
 func (r *RepairIPAddress) syncService(key string) error {
 	var syncError error
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
@@ -487,6 +492,7 @@ func (r *RepairIPAddress) handleIPErr(err error, key string) {
 // syncIPAddress verify that the IPAddress that are owned by the ipallocator controller reference an existing Service
 // to avoid leaking IPAddresses. IPAddresses that are owned by other controllers are not processed to avoid hotloops.
 // IPAddress that reference Services and are part of the ClusterIP are validated in the syncService loop.
+// syncIPAddress 反向核验 IPAddress 的 Service ParentRef；对创建事务中的短暂孤儿对象使用宽限期，超时后才清理。
 func (r *RepairIPAddress) syncIPAddress(key string) error {
 	ipAddress, err := r.ipAddressLister.Get(key)
 	if err != nil {
@@ -592,6 +598,7 @@ func (r *RepairIPAddress) isIPOutOfRange(ip net.IP) bool {
 	return len(servicecidr.ContainsIP(r.serviceCIDRLister, ip)) == 0
 }
 
+// newIPAddress 构建由 Service IP allocator 管理的 IPAddress，并写入地址族、管理者标签和父 Service 引用。
 func newIPAddress(name string, svc *v1.Service) *networkingv1.IPAddress {
 	family := string(v1.IPv4Protocol)
 	if netutils.IsIPv6String(name) {

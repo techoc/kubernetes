@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件构造 csistoragecapacity 的 REST Store，将资源 Strategy、对象类型和通用存储后端连接起来。
 package storage
 
 import (

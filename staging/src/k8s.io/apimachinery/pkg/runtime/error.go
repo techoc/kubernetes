@@ -131,14 +131,13 @@ func IsMissingVersion(err error) bool {
 	return ok
 }
 
-// strictDecodingError is a base error type that is returned by a strict Decoder such
-// as UniversalStrictDecoder.
-// 严格解码会收集所有未知字段、重复字段等违规项，统一包装为此类型返回。
+// strictDecodingError 是严格解码器（例如 UniversalStrictDecoder）返回的基础错误类型。
+// 严格解码会收集未知字段、重复字段等违规项，再统一包装为此类型返回。
 type strictDecodingError struct {
 	errors []error
 }
 
-// NewStrictDecodingError creates a new strictDecodingError object.
+// 创建严格解码错误，将解码过程中发现的未知字段、重复字段等违规项集中保存，供调用方统一报告。
 func NewStrictDecodingError(errors []error) error {
 	return &strictDecodingError{
 		errors: errors,

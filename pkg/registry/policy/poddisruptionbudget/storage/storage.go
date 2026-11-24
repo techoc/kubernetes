@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件构建 poddisruptionbudget 的 REST Store，将 API 对象、Strategy 与通用存储后端连接起来。
 package storage
 
 import (
@@ -101,6 +102,7 @@ func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
 
+// ConvertToTable 将对象转换为 metav1.Table，支持 kubectl 表格输出。
 func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }

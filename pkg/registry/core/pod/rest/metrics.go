@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	// podLogsUsage counts and categorizes how the insecure backend skip TLS option is used and allowed.
+	// podLogsUsage 统计 Pod 日志后端 TLS 校验策略的使用情况，帮助识别跳过验证配置的实际使用量。
 	podLogsUsage = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -44,7 +44,7 @@ var (
 		[]string{"usage"},
 	)
 
-	// podLogsTLSFailure counts how many attempts to get pod logs fail on tls verification
+	// podLogsTLSFailure 统计 API Server 连接 Kubelet 日志端点时因 TLS 证书验证失败的次数。
 	podLogsTLSFailure = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -58,6 +58,7 @@ var (
 
 var registerMetricsOnce sync.Once
 
+// registerMetrics 使用 sync.Once 注册全局指标，避免多个 LogREST 实例重复注册相同指标名。
 func registerMetrics() {
 	registerMetricsOnce.Do(func() {
 		legacyregistry.MustRegister(podLogsUsage)

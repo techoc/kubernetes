@@ -21,14 +21,7 @@ import (
 	"io"
 )
 
-// Splice is the interface that wraps the Splice method.
-//
-// Splice moves data from given slice without copying the underlying data for
-// efficiency purpose. Therefore, the caller should make sure the underlying
-// data is not changed later.
-//
-// Splice 与 io.Writer 的写入结果会合并到同一输出：Bytes 优先返回 Write 写入的内容，
-// 没有时才返回 Splice 的数据。这正是编码器"先写头部、再拼接预编码 body"的用法。
+// Splice 表示把已有字节切片直接拼接到输出缓冲区，而不复制底层数据。调用方必须保证被拼接的字节在缓冲区使用期间不会被修改或释放。
 type Splice interface {
 	Splice([]byte)
 	io.Writer
@@ -36,7 +29,7 @@ type Splice interface {
 	Bytes() []byte
 }
 
-// A spliceBuffer implements Splice and io.Writer interfaces.
+// spliceBuffer 同时实现 Splice 与 io.Writer 接口。
 type spliceBuffer struct {
 	// raw 是不拷贝直接引用的数据；buf 是常规写入累积的数据。
 	raw []byte
@@ -48,14 +41,12 @@ func NewSpliceBuffer() Splice {
 	return &spliceBuffer{}
 }
 
-// Splice implements the Splice interface.
+// Splice 将 raw 保存为待拼接数据，不复制底层字节数组。
 func (sb *spliceBuffer) Splice(raw []byte) {
 	sb.raw = raw
 }
 
-// Write implements the io.Writer interface.
-//
-// buf 惰性初始化：只用 Splice 的调用方不会产生 bytes.Buffer 分配。
+// 把普通数据写入内部 bytes.Buffer。缓冲区采用延迟初始化：如果只调用 Splice 而不调用 Write，就不需要分配 bytes.Buffer。
 func (sb *spliceBuffer) Write(p []byte) (n int, err error) {
 	if sb.buf == nil {
 		sb.buf = &bytes.Buffer{}
@@ -63,9 +54,7 @@ func (sb *spliceBuffer) Write(p []byte) (n int, err error) {
 	return sb.buf.Write(p)
 }
 
-// Reset resets the buffer to be empty.
-//
-// 保留 buf 的底层容量以便复用，但丢弃对 raw 的引用，避免意外延长其生命周期。
+// 清空缓冲区并释放对 raw 切片的引用。bytes.Buffer.Reset 会保留其底层容量以供下次复用，raw 置 nil 则避免意外延长外部数据生命周期。
 func (sb *spliceBuffer) Reset() {
 	if sb.buf != nil {
 		sb.buf.Reset()
@@ -73,10 +62,7 @@ func (sb *spliceBuffer) Reset() {
 	sb.raw = nil
 }
 
-// Bytes returns the data held by the buffer.
-//
-// 若同时存在写入数据与 splice 数据，只返回写入数据——约定上 Splice 仅在
-// 尚未 Write 时使用。
+// 返回当前缓冲区内容。若存在普通 Write 写入的数据，优先返回 buf；否则返回 Splice 保存的原始切片；两者都没有时返回空切片。
 func (sb *spliceBuffer) Bytes() []byte {
 	if sb.buf != nil && len(sb.buf.Bytes()) > 0 {
 		return sb.buf.Bytes()

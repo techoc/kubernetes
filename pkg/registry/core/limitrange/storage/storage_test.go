@@ -32,6 +32,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd 并构造 LimitRange RESTStorage。
 func newStorage(t *testing.T) (*REST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{
@@ -71,6 +72,7 @@ func validNewLimitRange() *api.LimitRange {
 	}
 }
 
+// TestCreate 验证 LimitRange 创建时的名称生成、资源约束校验和持久化。
 func TestCreate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -88,6 +90,7 @@ func TestCreate(t *testing.T) {
 	)
 }
 
+// TestUpdate 验证 LimitRange 更新路径对 Max/Min/Default 等约束的重新校验。
 func TestUpdate(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -141,6 +144,7 @@ func TestList(t *testing.T) {
 	test.TestList(validNewLimitRange())
 }
 
+// TestWatch 验证 LimitRange 对象变更能够通过通用存储层 Watch 正确通知订阅者。
 func TestWatch(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)

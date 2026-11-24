@@ -35,19 +35,16 @@ func (i InvalidResourceVersion) Error() string {
 	return fmt.Sprintf("resource version is not well formed: %s", i.rv)
 }
 
-// CompareResourceVersion runs a comparison between two ResourceVersions. This
-// only has semantic meaning when the comparison is done on two objects of the
-// same resource. The return values are:
+// CompareResourceVersion 比较两个 ResourceVersion 的大小。只有两个版本号属于同一种资源时，
+// 比较结果才具有语义意义。返回值含义如下：
 //
-//	-1: If RV a < RV b
-//	 0: If RV a == RV b
-//	+1: If RV a > RV b
+//	-1：a 小于 b
+//	 0：a 等于 b
+//	+1：a 大于 b
 //
-// The function will return an error if the resource version is not a properly
-// formatted positive integer, but has no restriction on length. A properly
-// formatted integer will not contain leading zeros or non integer characters.
-// Zero is also considered an invalid value as it is used as a special value in
-// list/watch events and will never be a live resource version.
+// resourceVersion 必须是格式正确的正十进制整数，否则返回错误；长度不设上限。
+// 合法值不能包含前导零或非数字字符。0 也视为非法，因为它在 list/watch 事件中
+// 用作特殊值，不会作为真实资源版本号出现。
 //
 // 关键不变量：格式良好的十进制串没有前导零，因此"位数更多 = 数值更大"，
 // 位数相同则字典序与数值序一致；这样无需 strconv 就能支持任意长度。
@@ -58,18 +55,18 @@ func CompareResourceVersion(a, b string) (int, error) {
 	if !isWellFormed(b) {
 		return 0, InvalidResourceVersion{rv: b}
 	}
-	// both are well-formed integer strings with no leading zeros
+	// 此时 a 和 b 都是格式正确且不带前导零的十进制数字串。
 	aLen := len(a)
 	bLen := len(b)
 	switch {
 	case aLen < bLen:
-		// shorter is less
+		// 位数较少的数字串表示的数值更小。
 		return -1, nil
 	case aLen > bLen:
-		// longer is greater
+		// 位数较多的数字串表示的数值更大。
 		return 1, nil
 	default:
-		// equal-length compares lexically
+		// 位数相同时，字典序与十进制数值顺序一致。
 		return strings.Compare(a, b), nil
 	}
 }

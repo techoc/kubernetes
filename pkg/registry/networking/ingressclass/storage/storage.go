@@ -33,6 +33,7 @@ type REST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against replication controllers.
+// NewREST 创建集群级 IngressClass Store，注册字段筛选、策略和标准表格转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &networking.IngressClass{} },

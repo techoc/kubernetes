@@ -49,6 +49,7 @@ import (
 	token "k8s.io/kubernetes/pkg/serviceaccount"
 )
 
+// TestCreate_Token_WithExpiryCap 验证 TokenRequest 的请求过期时间会被服务器配置的最大有效期截断。
 func TestCreate_Token_WithExpiryCap(t *testing.T) {
 
 	testcases := []struct {
@@ -192,6 +193,7 @@ func TestCreate_Token_WithExpiryCap(t *testing.T) {
 	}
 }
 
+// TestTokenRequest_ServiceAccountUIDValidation 验证绑定请求中 ServiceAccount UID 与当前对象不一致时的 Feature Gate 兼容行为。
 func TestTokenRequest_ServiceAccountUIDValidation(t *testing.T) {
 	testCases := []struct {
 		name                    string
@@ -347,6 +349,7 @@ func (r *dummyRecorder) getWarning() string {
 
 var _ warning.Recorder = &dummyRecorder{}
 
+// TestValidateWebhookAudience 验证 URL 与 Service 两类 Webhook 的 Audience 精确匹配规则。
 func TestValidateWebhookAudience(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -570,6 +573,7 @@ func (f *fakeObjectGetter) Get(ctx context.Context, name string, options *metav1
 	return f.obj, nil
 }
 
+// TestTokenRESTCreateWebhookAuthenticationFlow 覆盖 Webhook TokenRequest 的 attest 授权、Webhook 配置匹配和 Token 签发完整链路。
 func TestTokenRESTCreateWebhookAuthenticationFlow(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.APIServerWebhookAuthenticationToken, true)
 

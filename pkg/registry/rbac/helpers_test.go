@@ -40,6 +40,7 @@ func newPod() *kapi.Pod {
 
 }
 
+// TestIsOnlyMutatingGCFields 验证仅 OwnerReferences/Finalizers/ManagedFields 等垃圾回收元数据变化时可以安全跳过权限规则重校验。
 func TestIsOnlyMutatingGCFields(t *testing.T) {
 	tests := []struct {
 		name     string

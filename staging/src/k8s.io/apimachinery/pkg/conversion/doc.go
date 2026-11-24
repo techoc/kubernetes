@@ -14,15 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package conversion provides go object versioning.
+// Package conversion 提供 Go 对象的版本化转换能力。
 //
-// Specifically, conversion provides a way for you to define multiple versions
-// of the same object. You may write functions which implement conversion logic,
-// but for the fields which did not change, copying is automated. This makes it
-// easy to modify the structures you use in memory without affecting the format
-// you store on disk or respond to in your external API calls.
-//
-// Package conversion 提供 Go 对象的版本化支持：同一对象可以定义多个版本，
-// 开发者只需编写有差异字段的转换函数，其余字段由自动复制完成。这样可以在
-// 内存中自由演进结构，而不影响磁盘格式或对外 API 响应。
+// 同一个逻辑对象可以定义多个 Go 结构版本。开发者为字段布局或语义发生变化的部分
+// 编写转换函数；未变化字段可由生成的转换逻辑自动复制。借助该机制，内存中的对象
+// 结构可以持续演进，同时保持磁盘存储格式和对外 API 版本之间的兼容。
 package conversion

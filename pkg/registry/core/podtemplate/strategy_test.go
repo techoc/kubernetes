@@ -26,6 +26,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestStrategy 覆盖 PodTemplate 创建/更新时的 Generation、字段清理、模板校验和告警行为。
 func TestStrategy(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	if !Strategy.NamespaceScoped() {

@@ -34,7 +34,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
-// strategy implements behavior for Secret objects
+// strategy 定义 Secret 的 REST 写入策略，处理 Secret.Type 兼容、数据校验、字段选择器和 TLS 证书告警。
 type strategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -52,11 +52,13 @@ func (strategy) NamespaceScoped() bool {
 	return true
 }
 
+// 创建前清理当前 Feature Gate 不允许设置的字段；Data/Type 的语义校验交给 Validate。
 func (strategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	secret := obj.(*api.Secret)
 	dropDisabledFields(secret, nil)
 }
 
+// Validate 根据 Secret.Type 检查必需键、数据格式和类型相关约束。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	newSecret := obj.(*api.Secret)
 	return validation.ValidateSecret(newSecret)
@@ -74,6 +76,7 @@ func (strategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// 兼容旧客户端：更新请求把 Type 留空时沿用旧 Type，避免无意将 Secret 类型重置为空字符串。
 func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newSecret := obj.(*api.Secret)
 	oldSecret := old.(*api.Secret)
@@ -86,6 +89,7 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	dropDisabledFields(newSecret, oldSecret)
 }
 
+// ValidateUpdate 根据新旧 Secret 比较更新约束；不同 Secret.Type 对 Data 中键和值有不同要求。
 func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newSecret := obj.(*api.Secret)
 	oldSecret := old.(*api.Secret)
@@ -123,6 +127,7 @@ func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionP
 }
 
 // SelectableFields returns a field set that can be used for filter selection
+// Secret 除标准 ObjectMeta 字段外，还暴露 type 字段选择器，允许按 Opaque/TLS 等类型筛选。
 func SelectableFields(obj *api.Secret) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&obj.ObjectMeta, true)
 	secretSpecificFieldsSet := fields.Set{
@@ -131,6 +136,7 @@ func SelectableFields(obj *api.Secret) fields.Set {
 	return generic.MergeFieldsSets(objectMetaFieldsSet, secretSpecificFieldsSet)
 }
 
+// 对 TLS 类型 Secret 额外解析证书与私钥，发现证书/私钥不匹配时返回 Warning；告警不替代字段级校验。
 func warningsForSecret(secret *api.Secret) []string {
 	var warnings []string
 	if secret.Type == api.SecretTypeTLS {

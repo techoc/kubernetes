@@ -16,11 +16,9 @@ limitations under the License.
 
 package runtime
 
-// Note that the types provided in this file are not versioned and are intended to be
-// safe to use from within all versions of every API object.
+// 本文件中的类型不属于任何具体 API 版本，可安全地用于所有版本的 API 对象。
 
-// TypeMeta is shared by all top level objects. The proper way to use it is to inline it in your type,
-// like this:
+// TypeMeta 是所有顶层 API 对象共用的类型元信息，通常应匿名内嵌到自定义类型中，例如：
 //
 //	type MyAwesomeAPIObject struct {
 //	     runtime.TypeMeta    `json:""`
@@ -29,8 +27,7 @@ package runtime
 //
 // func (obj *MyAwesomeAPIObject) SetGroupVersionKind(gvk *metav1.GroupVersionKind) { metav1.UpdateTypeMeta(obj,gvk) }; GroupVersionKind() *GroupVersionKind
 //
-// TypeMeta is provided here for convenience. You may use it directly from this package or define
-// your own with the same fields.
+// 这里提供 TypeMeta 只是为了复用方便；也可以在自己的包中定义包含相同字段的类型。
 //
 // 该类型不参与深拷贝生成（见下方指令），因为它只含两个字符串。
 //
@@ -55,13 +52,12 @@ const (
 	ContentTypeCBORSequence string = "application/cbor-seq" // RFC 8742
 )
 
-// RawExtension is used to hold extensions in external versions.
+// RawExtension 用于在外部（版本化）API 类型中暂存尚未解析的扩展对象。
 //
-// To use this, make a field which has RawExtension as its type in your external, versioned
-// struct, and Object in your internal struct. You also need to register your
-// various plugin types.
+// 使用时，外部版本结构体中的对应字段声明为 RawExtension，内部结构体中的字段声明为 Object；
+// 同时还必须把可能出现的插件类型注册到 Scheme 中。
 //
-// // Internal package:
+// 内部版本结构体示例：
 //
 //	type MyAPIObject struct {
 //		runtime.TypeMeta `json:""`
@@ -72,7 +68,7 @@ const (
 //		AOption string `json:"aOption"`
 //	}
 //
-// // External package:
+// 外部版本结构体示例：
 //
 //	type MyAPIObject struct {
 //		runtime.TypeMeta `json:""`
@@ -83,7 +79,7 @@ const (
 //		AOption string `json:"aOption"`
 //	}
 //
-// // On the wire, the JSON will look something like this:
+// 在线路上传输时，JSON 数据大致如下：
 //
 //	{
 //		"kind":"MyAPIObject",
@@ -94,13 +90,10 @@ const (
 //		},
 //	}
 //
-// So what happens? Decode first uses json or yaml to unmarshal the serialized data into
-// your external MyAPIObject. That causes the raw JSON to be stored, but not unpacked.
-// The next step is to copy (using pkg/conversion) into the internal struct. The runtime
-// package's DefaultScheme has conversion functions installed which will unpack the
-// JSON stored in RawExtension, turning it into the correct object type, and storing it
-// in the Object. (TODO: In the case where the object is of an unknown type, a
-// runtime.Unknown object will be created and stored.)
+// 解码时，JSON/YAML 解码器先把数据写入外部版本结构体，扩展字段的原始 JSON 暂存在 Raw 中，尚未解析。
+// 随后通过 pkg/conversion 转换为内部结构体；runtime 包的默认 Scheme 注册了相应转换函数，
+// 会解析 Raw 中的数据、根据 TypeMeta 找到具体插件类型，并将对象写入 Object。
+// 若扩展类型尚未注册，应结合 Unknown 的透传语义处理。
 //
 // Raw 与 Object 互斥地承载数据：解码后填 Raw，转换到内部版本后填 Object。
 // 两者都标了 json:"-"，因此不会被直接序列化，实际输出由自定义 MarshalJSON 决定。
@@ -109,20 +102,15 @@ const (
 // +protobuf=true
 // +k8s:openapi-gen=true
 type RawExtension struct {
-	// Raw is the underlying serialization of this object.
-	//
-	// TODO: Determine how to detect ContentType and ContentEncoding of 'Raw' data.
+	// Raw 保存扩展对象的原始序列化字节；该字段本身不负责推断媒体类型或内容编码。
 	Raw []byte `json:"-" protobuf:"bytes,1,opt,name=raw"`
-	// Object can hold a representation of this extension - useful for working with versioned
-	// structs.
+	// Object 保存已经解析出的运行时对象，便于内部版本结构体直接使用类型化对象。
 	Object Object `json:"-"`
 }
 
-// Unknown allows api objects with unknown types to be passed-through. This can be used
-// to deal with the API objects from a plug-in. Unknown objects still have functioning
-// TypeMeta features-- kind, version, etc.
-// TODO: Make this object have easy access to field based accessors and settors for
-// metadata and field mutatation.
+// Unknown 用于透传当前进程无法识别类型的 API 对象，例如来自尚未安装插件的对象。
+// 它仍保留 TypeMeta 中的 Kind 和 APIVersion，使接收方能够判断对象声明的类型与版本。
+// 对于未知对象，通常不应尝试修改其内部字段，而应尽可能原样传递。
 //
 // 这是"透传"语义的载体：apiserver 不认识该类型时仍能保留原始字节，
 // 在后续版本或插件侧再解析，避免数据丢失。
@@ -133,14 +121,10 @@ type RawExtension struct {
 // +k8s:openapi-gen=true
 type Unknown struct {
 	TypeMeta `json:"" protobuf:"bytes,1,opt,name=typeMeta"`
-	// Raw will hold the complete serialized object which couldn't be matched
-	// with a registered type. Most likely, nothing should be done with this
-	// except for passing it through the system.
+	// Raw 保存完整的序列化对象；无法匹配已注册类型时，应优先原样透传，而不是丢弃或擅自改写。
 	Raw []byte `json:"-" protobuf:"bytes,2,opt,name=raw"`
-	// ContentEncoding is encoding used to encode 'Raw' data.
-	// Unspecified means no encoding.
+	// ContentEncoding 描述 Raw 使用的内容编码；为空表示未指定额外编码。
 	ContentEncoding string `protobuf:"bytes,3,opt,name=contentEncoding"`
-	// ContentType  is serialization method used to serialize 'Raw'.
-	// Unspecified means ContentTypeJSON.
+	// ContentType 描述 Raw 使用的序列化媒体类型；为空时按 ContentTypeJSON 处理。
 	ContentType string `protobuf:"bytes,4,opt,name=contentType"`
 }

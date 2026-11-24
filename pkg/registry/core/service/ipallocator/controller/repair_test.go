@@ -52,6 +52,7 @@ func (r *mockRangeRegistry) CreateOrUpdate(alloc *api.RangeAllocation) error {
 	return r.updateErr
 }
 
+// TestRepair 验证修复控制器会从 Service 列表重建 IP 位图，并清理快照中不再被对象使用的分配。
 func TestRepair(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
 	ipregistry := &mockRangeRegistry{
@@ -77,6 +78,7 @@ func TestRepair(t *testing.T) {
 	}
 }
 
+// TestRepairLeak 验证疑似泄漏 IP 需要连续多轮未被引用后才释放，防止与并发 Service 创建竞争。
 func TestRepairLeak(t *testing.T) {
 	clearMetrics()
 

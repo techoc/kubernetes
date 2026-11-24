@@ -71,6 +71,7 @@ var (
 )
 
 // NewREST returns a REST object that will work against services.
+// NewREST 构建 Service 通用 Store，并安装 Decorator、BeginCreate、BeginUpdate、AfterDelete 钩子，把 API 持久化与网络资源分配连接起来。
 func NewREST(
 	optsGetter generic.RESTOptionsGetter,
 	serviceIPFamily api.IPFamily,
@@ -224,6 +225,7 @@ type After struct {
 // applies on Get, Create, and Update, but we need to distinguish between them.
 //
 // This will be called on both Service and ServiceList types.
+// defaultOnRead 仅在读取时补齐历史 Service 的关联字段，不把这类兼容默认值写回 etcd。
 func (r *REST) defaultOnRead(obj runtime.Object) {
 	switch s := obj.(type) {
 	case *api.Service:
@@ -272,6 +274,7 @@ func defaultOnReadInternalTrafficPolicy(service *api.Service) {
 	}
 }
 
+// defaultOnReadIPFamilies 为旧对象推导 IPFamilies/IPFamilyPolicy；Headless + selectorless 与普通 Headless Service 使用不同默认规则。
 func (r *REST) defaultOnReadIPFamilies(service *api.Service) {
 	// ExternalName does not need this.
 	if !needsClusterIP(service) {
@@ -325,6 +328,7 @@ func (r *REST) defaultOnReadIPFamilies(service *api.Service) {
 	}
 }
 
+// afterDelete 在非 DryRun 删除成功后释放该 Service 占用的 ClusterIP、NodePort 和健康检查端口。
 func (r *REST) afterDelete(obj runtime.Object, options *metav1.DeleteOptions) {
 	svc := obj.(*api.Service)
 
@@ -339,6 +343,7 @@ func (r *REST) afterDelete(obj runtime.Object, options *metav1.DeleteOptions) {
 	}
 }
 
+// beginCreate 在写入 Service 前规范化 ClusterIP 字段并预留 IP/端口；Finish 根据存储成功与否提交或回滚副作用。
 func (r *REST) beginCreate(ctx context.Context, obj runtime.Object, options *metav1.CreateOptions) (genericregistry.FinishFunc, error) {
 	svc := obj.(*api.Service)
 
@@ -368,6 +373,7 @@ func (r *REST) beginCreate(ctx context.Context, obj runtime.Object, options *met
 	return finish, nil
 }
 
+// beginUpdate 先给旧对象补齐历史默认值，再把客户端省略的分配字段补回并规范化，最后为本次差异建立资源分配事务。
 func (r *REST) beginUpdate(ctx context.Context, obj, oldObj runtime.Object, options *metav1.UpdateOptions) (genericregistry.FinishFunc, error) {
 	newSvc := obj.(*api.Service)
 	oldSvc := oldObj.(*api.Service)
@@ -404,6 +410,7 @@ func (r *REST) beginUpdate(ctx context.Context, obj, oldObj runtime.Object, opti
 }
 
 // ResourceLocation returns a URL to which one can send traffic for the specified service.
+// ResourceLocation 将 Service 名称/端口解析为 EndpointSlice 后端地址，并只选择能验证为 Pod IP 的 Endpoint。
 func (r *REST) ResourceLocation(ctx context.Context, id string) (*url.URL, http.RoundTripper, error) {
 	// Allow ID as "svcname", "svcname:port", or "scheme:svcname:port".
 	svcScheme, svcName, portStr, valid := utilnet.SplitSchemeNamePort(id)
@@ -461,6 +468,7 @@ func (r *REST) ResourceLocation(ctx context.Context, id string) (*url.URL, http.
 	return &url.URL{Scheme: svcScheme, Host: hostPort}, r.proxyTransport, nil
 }
 
+// isValidAddress 校验 Endpoint 有 Pod TargetRef、namespace 与请求一致，且 endpoint 地址确实属于目标 Pod。
 func isValidAddress(ctx context.Context, ep *discovery.Endpoint, pods rest.Getter) error {
 	if ep.TargetRef == nil {
 		return fmt.Errorf("endpoint has no target ref, skipping: %v", ep)
@@ -490,6 +498,7 @@ func isValidAddress(ctx context.Context, ep *discovery.Endpoint, pods rest.Gette
 
 // normalizeClusterIPs adjust clusterIPs based on ClusterIP.  This must not
 // consider any other fields.
+// normalizeClusterIPs 在校验前保持旧 ClusterIP 与新 ClusterIPs 字段一致，兼容只填写单数旧字段的客户端。
 func normalizeClusterIPs(after After, before Before) {
 	oldSvc, newSvc := before.Service, after.Service
 
@@ -557,6 +566,7 @@ func normalizeClusterIPs(after After, before Before) {
 // preserving values that we allocated on their behalf.  For example, they
 // might create a Service without specifying the ClusterIP, in which case we
 // allocate one.  If they resubmit that same YAML, we want it to succeed.
+// patchAllocatedValues 为 PUT/PATCH 中被客户端省略的系统分配字段补回旧值，避免无关更新意外释放或重新申请地址/端口。
 func patchAllocatedValues(after After, before Before) {
 	oldSvc, newSvc := before.Service, after.Service
 

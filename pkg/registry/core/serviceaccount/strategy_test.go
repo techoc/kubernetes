@@ -25,6 +25,7 @@ import (
 	sa "k8s.io/kubernetes/plugin/pkg/admission/serviceaccount"
 )
 
+// TestWarningsOnCreate 验证新设置 enforce-mountable-secrets 弃用注解时会返回警告。
 func TestWarningsOnCreate(t *testing.T) {
 	ctx := context.TODO()
 	serviceAccount := &api.ServiceAccount{}
@@ -40,6 +41,7 @@ func TestWarningsOnCreate(t *testing.T) {
 	}
 }
 
+// TestWarningsOnUpdate 验证只有首次添加弃用注解时产生 Warning，旧对象已存在时不重复提示。
 func TestWarningsOnUpdate(t *testing.T) {
 	ctx := context.TODO()
 	serviceAccount := &api.ServiceAccount{}

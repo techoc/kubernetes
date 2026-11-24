@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package ipaddress 提供集群级 IPAddress 的 REST 写入策略和地址所有权存储接口。
 package ipaddress

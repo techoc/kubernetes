@@ -42,6 +42,7 @@ func newIPAddress() networking.IPAddress {
 	}
 }
 
+// TestIPAddressStrategy 验证 IPAddress 不自动生成名称、地址格式检查及更新时地址身份不可变规则。
 func TestIPAddressStrategy(t *testing.T) {
 	ctx := genericapirequest.WithRequestInfo(
 		genericapirequest.NewDefaultContext(),

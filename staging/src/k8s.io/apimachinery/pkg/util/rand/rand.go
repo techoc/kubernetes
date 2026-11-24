@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package rand provides utilities related to randomization.
+// Package rand 提供随机数、随机排列和随机字符串生成工具。
 package rand
 
 import (
@@ -32,15 +32,15 @@ var rng = struct {
 	rand: rand.New(rand.NewSource(time.Now().UnixNano())),
 }
 
-// Int returns a non-negative pseudo-random int.
+// Int 返回一个非负伪随机整数。
 func Int() int {
 	rng.Lock()
 	defer rng.Unlock()
 	return rng.rand.Int()
 }
 
-// Intn generates an integer in range [0,max).
-// By design this should panic if input is invalid, <= 0.
+// Intn 返回区间 [0, max) 内的伪随机整数。max 小于或等于 0 时按设计触发 panic，
+// 与标准库 math/rand.Intn 保持一致。
 //
 // 与 math/rand.Intn 一致：max <= 0 时 panic 而不是返回错误。
 func Intn(max int) int {
@@ -49,23 +49,23 @@ func Intn(max int) int {
 	return rng.rand.Intn(max)
 }
 
-// IntnRange generates an integer in range [min,max).
-// By design this should panic if input is invalid, <= 0.
+// IntnRange 返回区间 [min, max) 内的伪随机整数。要求 max 大于 min；
+// 参数不合法时由底层 Intn 按设计触发 panic。
 func IntnRange(min, max int) int {
 	rng.Lock()
 	defer rng.Unlock()
 	return rng.rand.Intn(max-min) + min
 }
 
-// IntnRange generates an int64 integer in range [min,max).
-// By design this should panic if input is invalid, <= 0.
+// Int63nRange 返回区间 [min, max) 内的伪随机 int64。要求 max 大于 min；
+// 参数不合法时由底层 Int63n 按设计触发 panic。
 func Int63nRange(min, max int64) int64 {
 	rng.Lock()
 	defer rng.Unlock()
 	return rng.rand.Int63n(max-min) + min
 }
 
-// Seed seeds the rng with the provided seed.
+// Seed 使用给定种子重建全局随机源；调用期间会持锁，避免并发读写随机源状态。
 //
 // 替换整个 Rand 实例而不是调用 Seed，保证并发下状态切换是原子的。
 func Seed(seed int64) {
@@ -75,8 +75,7 @@ func Seed(seed int64) {
 	rng.rand = rand.New(rand.NewSource(seed))
 }
 
-// Perm returns, as a slice of n ints, a pseudo-random permutation of the integers [0,n)
-// from the default Source.
+// Perm 返回 [0, n) 的伪随机排列，结果以整数切片表示。
 func Perm(n int) []int {
 	rng.Lock()
 	defer rng.Unlock()
@@ -84,23 +83,19 @@ func Perm(n int) []int {
 }
 
 const (
-	// We omit vowels from the set of available characters to reduce the chances
-	// of "bad words" being formed.
+	// 字符表中去掉元音，以降低随机字符串意外组成不雅词语的概率。
 	alphanums = "bcdfghjklmnpqrstvwxz2456789"
-	// No. of bits required to index into alphanums string.
+	// 索引 alphanums 字符表所需的位数。
 	alphanumsIdxBits = 5
-	// Mask used to extract last alphanumsIdxBits of an int.
+	// 用于提取随机整数最低 alphanumsIdxBits 位的掩码。
 	alphanumsIdxMask = 1<<alphanumsIdxBits - 1
-	// No. of random letters we can extract from a single int63.
+	// 单个 int63 最多可提取的字符数量。
 	maxAlphanumsPerInt = 63 / alphanumsIdxBits
 )
 
-// String generates a random alphanumeric string, without vowels, which is n
-// characters long.  This will panic if n is less than zero.
-// How the random string is created:
-// - we generate random int63's
-// - from each int63, we are extracting multiple random letters by bit-shifting and masking
-// - if some index is out of range of alphanums we neglect it (unlikely to happen multiple times in a row)
+// String 生成长度为 n 的随机字母数字字符串，字符表不包含元音。n 为负数时会 panic。
+// 生成过程：先生成随机 int63，再通过移位和掩码从每个随机数中提取多个字符索引；
+// 如果索引超出字符表范围，则丢弃该位段并继续提取。
 //
 // 位切片（bit slicing）复用每个 int63 的低位，减少对随机源的调用次数。
 func String(n int) string {
@@ -126,8 +121,8 @@ func String(n int) string {
 	return string(b)
 }
 
-// SafeEncodeString encodes s using the same characters as rand.String. This reduces the chances of bad words and
-// ensures that strings generated from hash functions appear consistent throughout the API.
+// SafeEncodeString 使用与 rand.String 相同的字符表对 s 编码，降低生成不雅词语的概率，
+// 并确保 API 中由哈希值派生的字符串具有一致的字符集合。
 func SafeEncodeString(s string) string {
 	r := make([]byte, len(s))
 	for i, b := range []rune(s) {

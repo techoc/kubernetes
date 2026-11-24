@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package policybased implements a standard storage for Role that prevents privilege escalation.
+// 本包在通用 Role Storage 外包装防提权检查：普通用户只能创建/更新自己当前已经拥有的权限规则。
 package policybased
 
 import (
@@ -64,6 +64,7 @@ func (r *Storage) StorageVersion() runtime.GroupVersioner {
 
 var _ rest.StorageVersionProvider = &Storage{}
 
+// Create 对超级用户或拥有 escalate 动词的用户放行；否则确认新 Role 的规则都被当前用户权限覆盖。
 func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	if rbacregistry.EscalationAllowed(ctx) || rbacregistry.RoleEscalationAuthorized(ctx, s.authorizer) {
 		return s.StandardStorage.Create(ctx, obj, createValidation, options)
@@ -77,6 +78,7 @@ func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidati
 	return s.StandardStorage.Create(ctx, obj, createValidation, options)
 }
 
+// Update 用 UpdatedObjectInfo 包装器检查最终对象，确保修改后的规则不产生权限升级；纯 GC 元数据变更可跳过检查。
 func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	if rbacregistry.EscalationAllowed(ctx) || rbacregistry.RoleEscalationAuthorized(ctx, s.authorizer) {
 		return s.StandardStorage.Update(ctx, name, obj, createValidation, updateValidation, forceAllowCreate, options)

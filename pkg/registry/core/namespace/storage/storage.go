@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// rest implements a RESTStorage for namespaces
+// REST 将 Namespace 主资源及共享通用 Store 封装为 API Server 接口；status 和 finalize 使用独立写入策略。
 type REST struct {
 	store  *genericregistry.Store
 	status *genericregistry.Store
@@ -57,6 +57,7 @@ type FinalizeREST struct {
 }
 
 // NewREST returns a RESTStorage object that will work against namespaces.
+// NewREST 创建主资源 Store，并复制出 StatusStrategy/FinalizeStrategy 两份 Store，使三个端点对字段的写入权限互相隔离。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, *FinalizeREST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.Namespace{} },
@@ -135,6 +136,7 @@ func (r *REST) Watch(ctx context.Context, options *metainternalversion.ListOptio
 }
 
 // Delete enforces life-cycle rules for namespace termination
+// Delete 是 Namespace 终止状态机入口：先校验 UID/ResourceVersion，再把 Phase 置为 Terminating 并设置 DeletionTimestamp/删除传播 Finalizer。
 func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	nsObj, err := r.Get(ctx, name, &metav1.GetOptions{})
 	if err != nil {
@@ -255,6 +257,7 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 }
 
 // ShouldDeleteNamespaceDuringUpdate adds namespace-specific spec.finalizer checks on top of the default generic ShouldDeleteDuringUpdate behavior
+// ShouldDeleteNamespaceDuringUpdate 让更新请求在 Namespace 已进入删除流程且 Finalizer 已清空时完成真正删除。
 func ShouldDeleteNamespaceDuringUpdate(ctx context.Context, key string, obj, existing runtime.Object) bool {
 	ns, ok := obj.(*api.Namespace)
 	if !ok {
@@ -324,6 +327,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 }
 
 // Update alters the status subset of an object.
+// Update 通过 StatusStrategy 更新 Namespace.Status，并明确禁止 update-on-create。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.
@@ -350,6 +354,7 @@ func (r *FinalizeREST) Destroy() {
 }
 
 // Update alters the status finalizers subset of an object.
+// Update 通过 FinalizeStrategy 修改 Namespace.Spec.Finalizers；Namespace Controller 依赖此接口在清理完成后解除删除阻塞。
 func (r *FinalizeREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
 	// subresources should never allow create on update.

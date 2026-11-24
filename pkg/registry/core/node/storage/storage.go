@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// NodeStorage includes storage for nodes and all sub resources.
+// NodeStorage 聚合 Node 主资源、Status 子资源和 Proxy 子资源，并向其他组件暴露 Kubelet 连接信息。
 type NodeStorage struct {
 	Node   *REST
 	Status *StatusREST
@@ -92,8 +92,10 @@ func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, 
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }
 
+// NewStorage 创建集群级 Node REST 存储，并构造从 Node 地址/端口推导 Kubelet 连接信息的 Getter。
 // NewStorage returns a NodeStorage object that will work against nodes.
 func NewStorage(optsGetter generic.RESTOptionsGetter, kubeletClientConfig client.KubeletClientConfig, proxyTransport http.RoundTripper) (*NodeStorage, error) {
+	// genericregistry.Store 提供通用 CRUD；Node 特有的对象类型、字段选择器和写入策略在这里注入。
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.Node{} },
 		NewListFunc:               func() runtime.Object { return &api.NodeList{} },
@@ -108,6 +110,7 @@ func NewStorage(optsGetter generic.RESTOptionsGetter, kubeletClientConfig client
 
 		TableConvertor: printerstorage.TableConvertor{TableGenerator: printers.NewTableGenerator().With(printersinternal.AddHandlers)},
 	}
+	// StoreOptions 指定 etcd/后端配置和属性提取函数，供 CompleteWithOptions 完成存储初始化。
 	options := &generic.StoreOptions{
 		RESTOptions: optsGetter,
 		AttrFunc:    node.GetAttrs,
@@ -116,16 +119,17 @@ func NewStorage(optsGetter generic.RESTOptionsGetter, kubeletClientConfig client
 		return nil, err
 	}
 
+	// Status 子资源复用相同持久化后端，但复制 Store 并换成 StatusStrategy，隔离可写字段范围。
 	statusStore := *store
 	statusStore.UpdateStrategy = node.StatusStrategy
 	statusStore.ResetFieldsStrategy = node.StatusStrategy
 
-	// Set up REST handlers
+	// 为 Node 主资源、Status 和 Proxy 分别创建 REST Handler；它们共享底层 Store，但职责不同。
 	nodeREST := &REST{Store: store, proxyTransport: proxyTransport}
 	statusREST := &StatusREST{store: &statusStore}
 	proxyREST := &noderest.ProxyREST{Store: store, ProxyTransport: proxyTransport}
 
-	// Build a NodeGetter that looks up nodes using the REST handler
+	// NodeConnectionInfoGetter 需要读取 API Node，因此用已装配的 REST handler 作为 NodeGetter，避免另建不一致的数据源。
 	nodeGetter := client.NodeGetterFunc(func(ctx context.Context, nodeName string, options metav1.GetOptions) (*v1.Node, error) {
 		obj, err := nodeREST.Get(ctx, nodeName, &options)
 		if err != nil {
@@ -135,7 +139,7 @@ func NewStorage(optsGetter generic.RESTOptionsGetter, kubeletClientConfig client
 		if !ok {
 			return nil, fmt.Errorf("unexpected type %T", obj)
 		}
-		// TODO: Remove the conversion. Consider only return the NodeAddresses
+		// 目前连接信息计算依赖外部 v1.Node，故将内部 Node 转成 v1；未来可只提取 NodeAddresses 和 DaemonEndpoints。
 		externalNode := &v1.Node{}
 		err = k8s_api_v1.Convert_core_Node_To_v1_Node(node, externalNode, nil)
 		if err != nil {
@@ -143,10 +147,12 @@ func NewStorage(optsGetter generic.RESTOptionsGetter, kubeletClientConfig client
 		}
 		return externalNode, nil
 	})
+	// 根据节点地址优先级、Kubelet 端口、TLS 证书和客户端配置创建统一连接信息提供者。
 	connectionInfoGetter, err := client.NewNodeConnectionInfoGetter(nodeGetter, kubeletClientConfig)
 	if err != nil {
 		return nil, err
 	}
+	// 将同一个连接信息 Getter 注入 Node 主资源重定向和 Proxy 子资源，确保两条代理路径使用一致配置。
 	nodeREST.connection = connectionInfoGetter
 	proxyREST.Connection = connectionInfoGetter
 
@@ -162,6 +168,7 @@ func NewStorage(optsGetter generic.RESTOptionsGetter, kubeletClientConfig client
 var _ = rest.Redirector(&REST{})
 
 // ResourceLocation returns a URL to which one can send traffic for the specified node.
+// ResourceLocation 将 Node proxy 请求委托给 node 包的地址解析逻辑，返回目标 URL 与对应 HTTP Transport。
 func (r *REST) ResourceLocation(ctx context.Context, id string) (*url.URL, http.RoundTripper, error) {
 	return node.ResourceLocation(r, r.connection, r.proxyTransport, ctx, id)
 }

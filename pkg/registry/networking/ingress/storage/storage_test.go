@@ -36,6 +36,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
+// newStorage 启动隔离 etcd 并构造 Ingress 主资源与 Status 子资源存储。
 func newStorage(t *testing.T) (*REST, *StatusREST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorageForResource(t, networking.Resource("ingresses"))
 	restOptions := generic.RESTOptions{
@@ -245,6 +246,7 @@ func TestWatch(t *testing.T) {
 	)
 }
 
+// TestUpdateStatus 验证控制器可写 Ingress.Status，同时 /status 请求无法修改 Spec。
 func TestUpdateStatus(t *testing.T) {
 	storage, statusStorage, server := newStorage(t)
 	defer server.Terminate(t)

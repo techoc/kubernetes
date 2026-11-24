@@ -118,18 +118,12 @@ type unstructuredConverter struct {
 	comparison conversion.Equalities
 }
 
-// NewTestUnstructuredConverter creates an UnstructuredConverter that accepts JSON typed maps and translates them
-// to Go types via reflection. It performs mismatch detection automatically and is intended for use by external
-// test tools. Use DefaultUnstructuredConverter if you do not explicitly need mismatch detection.
+// 创建用于测试的 UnstructuredConverter。它通过反射把 JSON 风格的 map 转换为 Go 类型，并自动检测反射转换与 JSON 转换之间的不一致；普通业务代码优先使用 DefaultUnstructuredConverter。
 func NewTestUnstructuredConverter(comparison conversion.Equalities) UnstructuredConverter {
 	return NewTestUnstructuredConverterWithValidation(comparison)
 }
 
-// NewTestUnstrucutredConverterWithValidation allows for access to
-// FromUnstructuredWithValidation from within tests.
-//
-// 函数名中的拼写错误是历史遗留，为保持兼容不修改；返回具体类型以便调用
-// FromUnstructuredWithValidation。
+// 创建可访问 FromUnstructuredWithValidation 的测试转换器。返回具体实现类型，是为了让测试代码能够调用额外的未知字段校验能力。
 func NewTestUnstructuredConverterWithValidation(comparison conversion.Equalities) *unstructuredConverter {
 	return &unstructuredConverter{
 		mismatchDetection: true,
@@ -254,9 +248,7 @@ func (c *fromUnstructuredContext) pushKey(key string) {
 
 }
 
-// FromUnstructuredWithValidation converts an object from map[string]interface{} representation into a concrete type.
-// It uses encoding/json/Unmarshaler if object implements it or reflection if not.
-// It takes a validationDirective that indicates how to behave when it encounters unknown fields.
+// 将 map[string]interface{} 形式的非结构化对象转换为具体 Go 类型。若目标类型实现 json.Unmarshaler，则优先使用其自定义反序列化逻辑；否则使用反射转换。参数用于决定遇到未知字段时是报错还是忽略。
 func (c *unstructuredConverter) FromUnstructuredWithValidation(u map[string]interface{}, obj interface{}, returnUnknownFields bool) error {
 	t := reflect.TypeOf(obj)
 	value := reflect.ValueOf(obj)
@@ -295,8 +287,7 @@ func (c *unstructuredConverter) FromUnstructuredWithValidation(u map[string]inte
 	return nil
 }
 
-// FromUnstructured converts an object from map[string]interface{} representation into a concrete type.
-// It uses encoding/json/Unmarshaler if object implements it or reflection if not.
+// 将非结构化 map 转换为具体 Go 对象。目标类型实现 json.Unmarshaler 时走自定义反序列化，否则通过反射逐字段赋值。
 func (c *unstructuredConverter) FromUnstructured(u map[string]interface{}, obj interface{}) error {
 	return c.FromUnstructuredWithValidation(u, obj, false)
 }
@@ -631,10 +622,7 @@ func interfaceFromUnstructured(sv, dv reflect.Value) error {
 	return nil
 }
 
-// ToUnstructured converts an object into map[string]interface{} representation.
-// It uses encoding/json/Marshaler if object implements it or reflection if not.
-//
-// 已是 Unstructured 的对象直接复用其内容（不做拷贝）；其余对象走反射转换。
+// 将 Go 对象转换为 map[string]interface{}。若对象实现 json.Marshaler，则使用其自定义序列化结果；否则通过反射遍历字段。输入已经是 Unstructured 时直接返回其内容，不额外复制。
 func (c *unstructuredConverter) ToUnstructured(obj interface{}) (map[string]interface{}, error) {
 	var u map[string]interface{}
 	var err error
@@ -668,19 +656,12 @@ func (c *unstructuredConverter) ToUnstructured(obj interface{}) (map[string]inte
 	return u, nil
 }
 
-// DeepCopyJSON deep copies the passed value, assuming it is a valid JSON representation i.e. only contains
-// types produced by json.Unmarshal() and also int64.
-// bool, int64, float64, string, []interface{}, map[string]interface{}, json.Number and nil
+// 深拷贝符合 JSON 数据模型的 map。支持 JSON 基本类型、[]interface{}、map[string]interface{}、json.Number、nil，以及 Kubernetes 额外允许的 int64。
 func DeepCopyJSON(x map[string]interface{}) map[string]interface{} {
 	return DeepCopyJSONValue(x).(map[string]interface{})
 }
 
-// DeepCopyJSONValue deep copies the passed value, assuming it is a valid JSON representation i.e. only contains
-// types produced by json.Unmarshal() and also int64.
-// bool, int64, float64, string, []interface{}, map[string]interface{}, json.Number and nil
-//
-// 只复制 JSON 可表达的类型；遇到其他类型直接 panic，因为那说明调用方
-// 传入了非法的 unstructured 内容。
+// 递归深拷贝符合 JSON 数据模型的值。遇到不属于支持集合的类型会 panic，因为这意味着传入内容不符合 Unstructured 的数据约束。
 func DeepCopyJSONValue(x interface{}) interface{} {
 	switch x := x.(type) {
 	case map[string]interface{}:

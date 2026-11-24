@@ -20,39 +20,32 @@ import (
 	"time"
 )
 
-// Timestamp is a struct that is equivalent to Time, but intended for
-// protobuf marshalling/unmarshalling. It is generated into a serialization
-// that matches Time. Do not use in Go structs.
+// Timestamp 是与 Time 对应的 protobuf 中间结构，仅用于 protobuf 编解码。
+// 生成后的序列化格式与 Time 保持一致；不要在普通 Go 业务结构体中直接使用。
 type Timestamp struct {
-	// Represents seconds of UTC time since Unix epoch
-	// 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
-	// 9999-12-31T23:59:59Z inclusive.
+	// 表示自 Unix epoch（1970-01-01T00:00:00Z）起累计的 UTC 秒数。
+	// 有效范围为 0001-01-01T00:00:00Z 至 9999-12-31T23:59:59Z，包含边界。
 	Seconds int64 `json:"seconds" protobuf:"varint,1,opt,name=seconds"`
-	// Non-negative fractions of a second at nanosecond resolution. Negative
-	// second values with fractions must still have non-negative nanos values
-	// that count forward in time. Must be from 0 to 999,999,999
-	// inclusive. This field may be limited in precision depending on context.
+	// 秒以下的非负纳秒部分。即使 Seconds 为负数，Nanos 仍必须非负，并表示向前推进的时间。
+	// 有效范围为 0 至 999,999,999，包含边界；实际精度可能受使用场景限制。
 	Nanos int32 `json:"nanos" protobuf:"varint,2,opt,name=nanos"`
 }
 
-// ProtoTime returns the Time as a new Timestamp value.
-// Nanoseconds are deliberately dropped: the JSON encoding of Time uses RFC3339
-// with second precision, and emitting nanos here would make protobuf clients
-// observe fields that JSON clients do not, breaking round-trip equality.
+// ProtoTime 将 Time 转换为新的 Timestamp。这里有意丢弃纳秒：Time 的 JSON 格式使用秒精度 RFC3339，
+// 如果 protobuf 额外输出纳秒，protobuf 客户端看到的状态就会与 JSON 客户端不同，破坏往返一致性。
 func (m *Time) ProtoTime() *Timestamp {
 	if m == nil {
 		return &Timestamp{}
 	}
 	return &Timestamp{
 		Seconds: m.Time.Unix(),
-		// leaving this here for the record.  our JSON only handled seconds, so this results in writes by
-		// protobuf clients storing values that aren't read by json clients, which results in unexpected
-		// field mutation, which fails various validation and equality code.
+		// 保留这段注释说明原因：JSON 只处理秒精度；如果 protobuf 客户端写入纳秒，JSON 客户端读取不到，
+		// 就会出现意外的字段变更，并导致校验和相等性判断失败。
 		// Nanos:   int32(m.Time.Nanosecond()),
 	}
 }
 
-// Size implements the protobuf marshalling interface.
+// Size 实现 protobuf 编码接口，返回编码所需的字节数。
 func (m *Time) Size() (n int) {
 	if m == nil || m.Time.IsZero() {
 		return 0
@@ -60,9 +53,9 @@ func (m *Time) Size() (n int) {
 	return m.ProtoTime().Size()
 }
 
-// Reset implements the protobuf marshalling interface.
+// Unmarshal 实现 protobuf 解码接口，将字节数据写入 Time。
 func (m *Time) Unmarshal(data []byte) error {
-	// An empty payload represents the zero time, not an error.
+	// 空 payload 表示零时间，不视为解码错误。
 	if len(data) == 0 {
 		m.Time = time.Time{}
 		return nil
@@ -71,9 +64,8 @@ func (m *Time) Unmarshal(data []byte) error {
 	if err := p.Unmarshal(data); err != nil {
 		return err
 	}
-	// Nanos are ignored for the same compatibility reason as in ProtoTime:
-	// JSON only carries seconds, so protobuf input with nanos must not change
-	// observable state that JSON clients cannot see.
+	// 出于与 ProtoTime 相同的兼容性原因，忽略 Nanos：JSON 只携带秒精度，
+	// protobuf 输入中的纳秒不能改变 JSON 客户端无法观察到的状态。
 	// leaving this here for the record.  our JSON only handled seconds, so this results in writes by
 	// protobuf clients storing values that aren't read by json clients, which results in unexpected
 	// field mutation, which fails various validation and equality code.
@@ -82,7 +74,7 @@ func (m *Time) Unmarshal(data []byte) error {
 	return nil
 }
 
-// Marshal implements the protobuf marshaling interface.
+// Marshal 实现 protobuf 编码接口。
 func (m *Time) Marshal() (data []byte, err error) {
 	if m == nil || m.Time.IsZero() {
 		return nil, nil
@@ -90,7 +82,7 @@ func (m *Time) Marshal() (data []byte, err error) {
 	return m.ProtoTime().Marshal()
 }
 
-// MarshalTo implements the protobuf marshaling interface.
+// MarshalTo 将 protobuf 编码结果写入调用方提供的缓冲区。
 func (m *Time) MarshalTo(data []byte) (int, error) {
 	if m == nil || m.Time.IsZero() {
 		return 0, nil
@@ -98,7 +90,7 @@ func (m *Time) MarshalTo(data []byte) (int, error) {
 	return m.ProtoTime().MarshalTo(data)
 }
 
-// MarshalToSizedBuffer implements the protobuf reverse marshaling interface.
+// MarshalToSizedBuffer 实现 protobuf 反向缓冲区编码接口。
 func (m *Time) MarshalToSizedBuffer(data []byte) (int, error) {
 	if m == nil || m.Time.IsZero() {
 		return 0, nil

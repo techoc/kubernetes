@@ -24,6 +24,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// Test_endpointsWarning 验证手工创建对象会对非法 IP 发出警告，而带有 Endpoints Controller 管理标签的对象跳过该扫描。
 func Test_endpointsWarning(t *testing.T) {
 	tests := []struct {
 		name      string

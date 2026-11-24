@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件构建 flowschema 的 REST Store，将 APF API 对象与通用存储层连接。
 package storage
 
 import (
@@ -105,6 +106,7 @@ func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
 
+// ConvertToTable 将资源对象转换为 metav1.Table，支持 kubectl 表格展示。
 func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }

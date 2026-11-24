@@ -26,6 +26,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestAllocate 验证指定 NodePort 的范围检查、重复占用检测、释放和重新分配。
 func TestAllocate(t *testing.T) {
 	pr, err := net.ParsePortRange("10000-10200")
 	if err != nil {
@@ -209,6 +210,7 @@ func TestForEach(t *testing.T) {
 	}
 }
 
+// TestSnapshot 验证端口池快照保留原始范围和偏移位图，恢复时拒绝不匹配的端口范围。
 func TestSnapshot(t *testing.T) {
 	pr, err := net.ParsePortRange("10000-10200")
 	if err != nil {

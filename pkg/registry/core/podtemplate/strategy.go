@@ -30,7 +30,7 @@ import (
 	corevalidation "k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
-// podTemplateStrategy implements behavior for PodTemplates
+// podTemplateStrategy 定义 PodTemplate 主资源的 REST 策略，负责模板字段清理、模板校验和 Generation 维护。
 type podTemplateStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -46,6 +46,7 @@ func (podTemplateStrategy) NamespaceScoped() bool {
 }
 
 // PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// 创建时将 Generation 初始化为 1，并根据 Feature Gate 清理当前集群不支持的 PodSpec 字段。
 func (podTemplateStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	template := obj.(*api.PodTemplate)
 	template.Generation = 1
@@ -53,6 +54,7 @@ func (podTemplateStrategy) PrepareForCreate(ctx context.Context, obj runtime.Obj
 }
 
 // Validate validates a new pod template.
+// Validate 以 PodTemplate.Template 为校验主体，复用 Pod 模板专用的默认值和特性兼容选项。
 func (podTemplateStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	template := obj.(*api.PodTemplate)
 	opts := pod.GetValidationOptionsFromPodTemplate(&template.Template, nil)
@@ -75,6 +77,7 @@ func (podTemplateStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// 更新时先清理不可用模板字段；只有内嵌 PodTemplate 语义变化时才增加对象 Generation。
 func (podTemplateStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newTemplate := obj.(*api.PodTemplate)
 	oldTemplate := old.(*api.PodTemplate)
@@ -90,6 +93,7 @@ func (podTemplateStrategy) PrepareForUpdate(ctx context.Context, obj, old runtim
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 将新旧 PodTemplate 一起交给验证器，以支持依赖旧字段值的向后兼容更新规则。
 func (podTemplateStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	template := obj.(*api.PodTemplate)
 	oldTemplate := old.(*api.PodTemplate)
@@ -100,6 +104,7 @@ func (podTemplateStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.
 }
 
 // WarningsOnUpdate returns warnings for the given update.
+// 只有模板发生变化时才计算 Pod 模板告警，避免单纯修改 metadata 时重复评估容器配置。
 func (podTemplateStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	newTemplate := obj.(*api.PodTemplate)

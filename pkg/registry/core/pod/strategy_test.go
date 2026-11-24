@@ -56,6 +56,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
+// TestMatchPod 验证 Pod Label/Field Selector 的匹配行为和 NodeName 索引字段。
 func TestMatchPod(t *testing.T) {
 	testCases := []struct {
 		in            *api.Pod
@@ -1109,6 +1110,7 @@ func TestSchedulingGatedCondition(t *testing.T) {
 	}
 }
 
+// TestCheckGracefulDelete 覆盖显式宽限期、默认宽限期、未调度 Pod 和终态 Pod 的删除时间计算。
 func TestCheckGracefulDelete(t *testing.T) {
 	defaultGracePeriod := int64(30)
 	tcs := []struct {
@@ -1199,6 +1201,7 @@ func (g mockPodGetter) Get(context.Context, string, *metav1.GetOptions) (runtime
 	return g.pod, nil
 }
 
+// TestCheckLogLocation 验证日志 URL、容器选择、查询参数及目标 Kubelet 连接配置。
 func TestCheckLogLocation(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	fakePodName := "test"
@@ -1384,6 +1387,7 @@ func (g mockConnectionInfoGetter) GetConnectionInfo(ctx context.Context, nodeNam
 	return g.info, nil
 }
 
+// TestPortForwardLocation 验证端口转发地址根据 Pod NodeName 和请求端口正确生成。
 func TestPortForwardLocation(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	tcs := []struct {
@@ -1474,6 +1478,7 @@ func TestPortForwardLocation(t *testing.T) {
 	}
 }
 
+// TestExecLocation 验证 exec 地址、容器选择和 stdin/stdout/command 等查询参数。
 func TestExecLocation(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	tcs := []struct {
@@ -1551,6 +1556,7 @@ func TestExecLocation(t *testing.T) {
 	}
 }
 
+// TestAttachLocation 验证 attach 地址与容器流选项编码。
 func TestAttachLocation(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 	tcs := []struct {
@@ -1718,6 +1724,7 @@ var (
 	fakeInsecureRoundTripper = fakeTransport{val: "insecure"}
 )
 
+// TestPodIndexFunc 验证 spec.nodeName 索引函数能从 Pod 对象提取节点名并正确处理错误类型。
 func TestPodIndexFunc(t *testing.T) {
 	tcs := []struct {
 		name          string
@@ -1862,6 +1869,7 @@ func TestPodStrategyValidate(t *testing.T) {
 	}
 }
 
+// TestEphemeralContainerStrategyValidateUpdate 确认临时容器子资源允许的变更范围，并拒绝普通容器字段被夹带修改。
 func TestEphemeralContainerStrategyValidateUpdate(t *testing.T) {
 
 	test := []struct {
@@ -2002,6 +2010,7 @@ func TestPodStrategyValidateUpdate(t *testing.T) {
 	}
 }
 
+// TestDropNonEphemeralContainerUpdates 确认 helper 只保留 EphemeralContainers 及允许的元数据变更。
 func TestDropNonEphemeralContainerUpdates(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -2368,6 +2377,7 @@ func TestNodeInclusionPolicyEnablementInUpdating(t *testing.T) {
 	}
 }
 
+// Test_mutatePodAffinity 验证 MatchLabelKeys/MismatchLabelKeys 在 Feature Gate 启用后展开为亲和性选择器表达式。
 func Test_mutatePodAffinity(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -2730,6 +2740,7 @@ func Test_mutatePodAffinity(t *testing.T) {
 	}
 }
 
+// Test_mutateTopologySpreadConstraints 验证拓扑分布约束的 MatchLabelKeys 展开及 Feature Gate 行为。
 func Test_mutateTopologySpreadConstraints(t *testing.T) {
 	tests := []struct {
 		name                               string
@@ -3147,6 +3158,7 @@ func TestUpdateLabelOnPodWithTopologySpreadConstraintsEnabled(t *testing.T) {
 	}
 }
 
+// TestApplyAppArmorVersionSkew 验证旧 AppArmor Annotation 与结构化字段之间的迁移及弃用警告。
 func TestApplyAppArmorVersionSkew(t *testing.T) {
 	testProfile := "test"
 
@@ -3675,6 +3687,7 @@ func (w *warningRecorder) AddWarning(_, text string) {
 	w.warnings = append(w.warnings, text)
 }
 
+// TestPodResizePrepareForUpdate 验证 Resize 子资源只保留允许的容器/Pod 资源字段并正确处理默认值。
 func TestPodResizePrepareForUpdate(t *testing.T) {
 	containerRestartPolicyAlways := api.ContainerRestartPolicyAlways
 	tests := []struct {
@@ -4640,6 +4653,7 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 	}
 }
 
+// TestPodGenerationPrepareForCreate 验证 Pod 创建时 Generation 初始化为 1。
 func TestPodGenerationPrepareForCreate(t *testing.T) {
 	testCases := []struct {
 		pod                *api.Pod
@@ -4675,6 +4689,7 @@ func TestPodGenerationPrepareForCreate(t *testing.T) {
 	}
 }
 
+// TestPodGenerationPrepareForUpdate 验证只有期望状态 Spec 变化才会递增 Generation。
 func TestPodGenerationPrepareForUpdate(t *testing.T) {
 	testCases := []struct {
 		description        string
@@ -4802,6 +4817,7 @@ func TestPodGenerationPrepareForUpdate(t *testing.T) {
 	}
 }
 
+// TestEphemeralContainersPrepareForUpdate 验证更新临时容器不会意外覆盖 Pod 的其他 Spec/Status 字段。
 func TestEphemeralContainersPrepareForUpdate(t *testing.T) {
 	testCases := []struct {
 		description        string
@@ -4928,6 +4944,7 @@ func TestSchedulingGroupEnablement(t *testing.T) {
 	}
 }
 
+// TestStatusPrepareForUpdate 验证 status 子资源保护不可写字段，并保留客户端可能丢失的兼容状态信息。
 func TestStatusPrepareForUpdate(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -5573,6 +5590,7 @@ func TestStatusPrepareForUpdate(t *testing.T) {
 	}
 }
 
+// TestWarningsOnUpdate 验证 Status 更新中的 PodIP/HostIP 告警生成规则。
 func TestWarningsOnUpdate(t *testing.T) {
 	tests := []struct {
 		name     string

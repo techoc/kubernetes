@@ -16,9 +16,8 @@ limitations under the License.
 
 package types
 
-// Similarly to above, these are constants to support HTTP PATCH utilized by
-// both the client and server that didn't make sense for a whole package to be
-// dedicated to.
+// 与上面的基础类型类似，这些常量供客户端和服务端共同使用，用于标识 HTTP PATCH 请求的媒体类型；
+// 它们数量较少，没有必要为此单独建立一个包。
 //
 // PatchType 是 PATCH 请求的 Content-Type，取值必须与 API server 识别的内容
 // 类型字符串完全一致；客户端与服务端共用这些常量以避免拼写漂移。

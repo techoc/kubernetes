@@ -24,8 +24,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// IsOnlyMutatingGCFields 判断更新是否只涉及 Garbage Collector 管理的 OwnerReferences/Finalizers 等元数据，避免清理操作被误判为权限提升。
 // IsOnlyMutatingGCFields checks finalizers and ownerrefs which GC manipulates
 // and indicates that only those fields are changing
+// 比较前复制新对象并把 GC 管理字段重置为旧值；剩余内容与旧对象相等才表示纯 GC 元数据变更。
 func IsOnlyMutatingGCFields(obj, old runtime.Object, equalities conversion.Equalities) bool {
 	if old == nil || reflect.ValueOf(old).IsNil() {
 		return false

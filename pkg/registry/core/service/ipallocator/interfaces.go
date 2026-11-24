@@ -24,6 +24,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// Interface 定义 IP 地址池契约，包含指定 IP/自动分配、释放、遍历、网络族查询及 DryRun 影子操作。
 // Interface manages the allocation of IP addresses out of a range. Interface
 // should be threadsafe.
 type Interface interface {

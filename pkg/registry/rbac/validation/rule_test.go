@@ -51,6 +51,7 @@ func (b byHash) Len() int           { return len(b) }
 func (b byHash) Less(i, j int) bool { return hashOf(b[i]) < hashOf(b[j]) }
 func (b byHash) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
 
+// TestDefaultRuleResolver 验证 ClusterRoleBinding 与 RoleBinding 的主体匹配、RoleRef 解析和用户有效规则汇总。
 func TestDefaultRuleResolver(t *testing.T) {
 	ruleReadPods := rbacv1.PolicyRule{
 		Verbs:     []string{"GET", "WATCH"},
@@ -163,6 +164,7 @@ func TestDefaultRuleResolver(t *testing.T) {
 	}
 }
 
+// TestAppliesTo 覆盖 User、Group 和 ServiceAccount 三种 Subject 的匹配规则及 namespace 默认值。
 func TestAppliesTo(t *testing.T) {
 	tests := []struct {
 		subjects  []rbacv1.Subject

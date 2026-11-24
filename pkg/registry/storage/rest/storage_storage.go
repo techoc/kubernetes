@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件负责装配 storage.k8s.io API Group 的各版本 REST Storage，并按资源启用配置注册对应资源与子资源。
 package rest
 
 import (
@@ -36,6 +37,7 @@ import (
 type RESTStorageProvider struct {
 }
 
+// NewRESTStorage 创建 storage.k8s.io API Group 元信息，按版本构建资源存储映射，并只注册 ResourceConfig 明确启用的资源。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(storageapi.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
@@ -55,6 +57,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1beta1Storage 构建 storage.k8s.io/v1beta1 的资源映射；该版本只公开当前 API 定义支持的资源集合。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -70,6 +73,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 	return storage, nil
 }
 
+// v1Storage 构建 storage.k8s.io/v1 的资源到 REST Storage 映射；每个资源启用后才创建对应 Store，子资源需单独注册路径。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storageClassStorage, err := storageclassstore.NewREST(restOptionsGetter)
 	if err != nil {
@@ -133,6 +137,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// GroupName 返回 storage.k8s.io API Group 名称，用于 APIGroupInfo 注册和版本路由。
 func (p RESTStorageProvider) GroupName() string {
 	return storageapi.GroupName
 }

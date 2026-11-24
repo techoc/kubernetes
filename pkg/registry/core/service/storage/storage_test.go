@@ -210,6 +210,7 @@ func validService() *api.Service {
 		svctest.SetIPFamilies(api.IPv4Protocol))
 }
 
+// TestGenericCreate 验证 Service 创建经过通用 REST Store 时会自动分配 ClusterIP、NodePort 并在写入失败时回滚。
 func TestGenericCreate(t *testing.T) {
 	storage, _, cleanup := newStorage(t, []api.IPFamily{api.IPv4Protocol})
 	defer cleanup()
@@ -226,6 +227,7 @@ func TestGenericCreate(t *testing.T) {
 	)
 }
 
+// TestGenericUpdate 验证 Service 类型、IPFamily 和端口变化会正确分配新资源并释放不再使用的旧资源。
 func TestGenericUpdate(t *testing.T) {
 	clusterInternalTrafficPolicy := api.ServiceInternalTrafficPolicyCluster
 
@@ -318,6 +320,7 @@ func TestGenericCategories(t *testing.T) {
 // Tests of internal functions
 //
 
+// TestNormalizeClusterIPs 覆盖旧 ClusterIP 与新 ClusterIPs 字段在创建/更新时的同步和兼容逻辑。
 func TestNormalizeClusterIPs(t *testing.T) {
 	makeServiceWithClusterIp := func(clusterIP string, clusterIPs []string) *api.Service {
 		return &api.Service{
@@ -458,6 +461,7 @@ func TestNormalizeClusterIPs(t *testing.T) {
 	}
 }
 
+// TestPatchAllocatedValues 验证客户端未提交系统分配字段时沿用旧值，避免无关更新意外触发重新分配。
 func TestPatchAllocatedValues(t *testing.T) {
 	testCases := []struct {
 		name                    string

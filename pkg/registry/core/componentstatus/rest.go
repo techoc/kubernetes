@@ -37,12 +37,14 @@ import (
 	"k8s.io/kubernetes/pkg/probe"
 )
 
+// REST 不使用 etcd Store；每次 Get/List 都从服务器回调实时探测组件，并将探测结果组装成 ComponentStatus。
 type REST struct {
 	GetServersToValidate func() map[string]Server
 	rest.TableConvertor
 }
 
 // NewStorage returns a new REST.
+// NewStorage 接收组件探测器提供函数，延迟获取实际需要检查的服务列表。
 func NewStorage(serverRetriever func() map[string]Server) *REST {
 	return &REST{
 		GetServersToValidate: serverRetriever,
@@ -76,12 +78,14 @@ func (rs *REST) NewList() runtime.Object {
 
 // Returns the list of component status. Note that the label and field are both ignored.
 // Note that this call doesn't support labels or selectors.
+// List 并发探测所有组件，等待全部结果后再根据请求中的 Label/Field Selector 过滤并返回列表。
 func (rs *REST) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	servers := rs.GetServersToValidate()
 
 	wait := sync.WaitGroup{}
 	wait.Add(len(servers))
 	statuses := make(chan api.ComponentStatus, len(servers))
+	// 每个组件独立 goroutine 执行检查，避免一个慢探测串行阻塞其他组件的结果返回。
 	for k, v := range servers {
 		go func(name string, server Server) {
 			defer wait.Done()
@@ -106,6 +110,7 @@ func (rs *REST) List(ctx context.Context, options *metainternalversion.ListOptio
 	return &api.ComponentStatusList{Items: reply}, nil
 }
 
+// componentStatusPredicate 读取请求选择器；ComponentStatus 不支持标签/字段写入，但仍按通用过滤规则处理请求。
 func componentStatusPredicate(options *metainternalversion.ListOptions) storage.SelectionPredicate {
 	pred := storage.SelectionPredicate{
 		Label:    labels.Everything(),
@@ -123,6 +128,7 @@ func componentStatusPredicate(options *metainternalversion.ListOptions) storage.
 	return pred
 }
 
+// matchesPredicate 目前只提供通用 ObjectMeta 字段，组件自身的 Conditions 尚不能作为选择器字段。
 func matchesPredicate(status api.ComponentStatus, pred *storage.SelectionPredicate) bool {
 	// currently no fields except the generic meta fields are supported for predicate matching
 	fieldsSet := generic.AddObjectMetaFieldsSet(make(fields.Set, 2), &status.ObjectMeta, true)
@@ -142,6 +148,7 @@ func (rs *REST) Get(ctx context.Context, name string, options *metav1.GetOptions
 	}
 }
 
+// ToConditionStatus 将探针 Success/Failure/Unknown 映射为 Kubernetes Condition 的 True/False/Unknown。
 func ToConditionStatus(s probe.Result) api.ConditionStatus {
 	switch s {
 	case probe.Success:
@@ -153,6 +160,7 @@ func ToConditionStatus(s probe.Result) api.ConditionStatus {
 	}
 }
 
+// getComponentStatus 执行单个组件探测，并把探针结果、消息和错误转换成 Healthy Condition。
 func (rs *REST) getComponentStatus(name string, server Server) *api.ComponentStatus {
 	status, msg, err := server.DoServerCheck()
 	errorMsg := ""

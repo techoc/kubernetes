@@ -121,8 +121,7 @@ func (l fastLookup) interpret(s suffix) (base, exponent int32, format Format, ok
 func newSuffixer() suffixer {
 	sh := &suffixHandler{}
 
-	// IMPORTANT: if you change this section you must change fastLookup
-
+	// 重要：修改本节后必须同步修改 fastLookup 中的高频后缀快查逻辑。
 	// 二进制单位固定以 2 为基数，指数即 1024 的幂次。
 	sh.binSuffixes.addSuffix("Ki", bePair{2, 10})
 	sh.binSuffixes.addSuffix("Mi", bePair{2, 20})
@@ -130,8 +129,8 @@ func newSuffixer() suffixer {
 	sh.binSuffixes.addSuffix("Ti", bePair{2, 40})
 	sh.binSuffixes.addSuffix("Pi", bePair{2, 50})
 	sh.binSuffixes.addSuffix("Ei", bePair{2, 60})
-	// Don't emit an error when trying to produce
-	// a suffix for 2^0.
+	// 生成 2 的 0 次幂对应的后缀时不要报错。
+
 	// 空后缀对应 2^0，使值为 1 的二进制量也能正常序列化。
 	sh.decSuffixes.addSuffix("", bePair{2, 0})
 
@@ -201,7 +200,7 @@ func (sh *suffixHandler) constructBytes(base, exponent int32, format Format) (s 
 // interpret 把后缀还原为（基数, 指数, 格式）。
 // 先查十进制、二进制表，再识别 "e"/"E" 前缀的指数记法。
 func (sh *suffixHandler) interpret(suffix suffix) (base, exponent int32, fmt Format, ok bool) {
-	// Try lookup tables first
+	// 优先查询十进制和二进制后缀映射表。
 	if b, e, ok := sh.decSuffixes.lookup(suffix); ok {
 		return b, e, DecimalSI, true
 	}

@@ -56,23 +56,26 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/client"
 )
 
-// podStrategy implements behavior for Pods
+// podStrategy 定义 Pod 主资源在 REST 创建、更新、删除时的默认策略：字段重置、校验、告警和优雅删除。
 type podStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
+// Strategy 是 Pod 主资源的默认写入策略，所有普通创建/更新请求都会经过它的 Prepare、Validate 和 Generation 处理。
 // Strategy is the default logic that applies when creating and updating Pod
 // objects via the REST API.
 var Strategy = podStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 // NamespaceScoped is true for pods.
+// Pod 属于命名空间级资源，所有对象 key 都需要带 namespace。
 func (podStrategy) NamespaceScoped() bool {
 	return true
 }
 
 // GetResetFields returns the set of fields that get reset by the strategy
 // and should not be modified by the user.
+// 主资源写入时由用户提交的 status 必须被重置，避免普通 Pod 更新绕过 pods/status 子资源修改状态。
 func (podStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -84,31 +87,40 @@ func (podStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 }
 
 // PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// PrepareForCreate 在持久化前清除用户无权指定的字段，并补齐依赖创建时机的派生状态。
 func (podStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	pod := obj.(*api.Pod)
+	// 新对象的 Generation 从 1 开始，后续仅当期望状态发生变化时递增。
 	pod.Generation = 1
 
+	// 初始状态由 API Server 控制；刚创建的 Pod 只能进入 Pending，调度/运行状态由控制器和 Kubelet 回写。
 	pod.Status = api.PodStatus{
 		Phase: api.PodPending,
 	}
 
+	// 根据当前 Feature Gate 删除尚不可使用的字段，防止新版本客户端在旧能力关闭时写入隐藏字段。
 	podutil.DropDisabledPodFields(pod, nil)
 
+	// 依次规范调度门控条件、亲和性和拓扑分布选择器，并处理 AppArmor 版本兼容与 Pod 级资源默认值。
 	applySchedulingGatedCondition(pod)
 	mutatePodAffinity(pod)
 	mutateTopologySpreadConstraints(pod)
 	applyAppArmorVersionSkew(ctx, pod)
 	podutil.DefaultPodLevelResources(pod)
 
+	// QoS 类别由最终资源 requests/limits 推导，不接受客户端自行设置。
 	pod.Status.QOSClass = qos.GetPodQOS(pod)
 }
 
 // PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 保留服务端管理的状态字段，并只允许本次 REST 操作修改 Pod 主资源允许修改的部分。
 func (podStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPod := obj.(*api.Pod)
 	oldPod := old.(*api.Pod)
+	// 普通 pods 更新不能修改 status；以旧对象状态覆盖请求内容，状态变更必须走子资源。
 	newPod.Status = oldPod.Status
 
+	// 兼容不认识 Pod 级资源字段的旧客户端：它们可能在整体更新时把字段丢掉，服务端需保留旧值。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourcesFixDefaulting) {
 		if newPod.Spec.Resources == nil && oldPod.Spec.Resources != nil {
 			// preserve existing PLR for requests from potentially PLR-unaware clients that completely dropped the field
@@ -116,11 +128,13 @@ func (podStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object
 		}
 	}
 
+	// 最后按 Feature Gate 清理不可写字段，并根据 Spec 是否变化维护 Generation。
 	podutil.DropDisabledPodFields(newPod, oldPod)
 	updatePodGeneration(newPod, oldPod)
 }
 
 // Validate validates a new pod.
+// Validate 在创建策略准备字段之后执行 Pod 创建规则校验，返回可聚合的字段级错误。
 func (podStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	pod := obj.(*api.Pod)
 	opts := podutil.GetValidationOptionsFromPodSpecAndMeta(&pod.Spec, nil, &pod.ObjectMeta, nil)
@@ -149,6 +163,7 @@ func (podStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 }
 
 // ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 同时传入新旧 Spec/Meta，使校验器能区分不可变字段、已启用特性和历史兼容字段。
 func (podStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	// Allow downward api usage of hugepages on pod update if feature is enabled or if the old pod already had used them.
 	pod := obj.(*api.Pod)
@@ -172,7 +187,9 @@ func (podStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 
 // CheckGracefulDelete allows a pod to be gracefully deleted. It updates the DeleteOptions to
 // reflect the desired grace value.
+// CheckGracefulDelete 计算最终删除宽限期；是否立即删除取决于请求、Pod 配置、是否已调度和当前终态。
 func (podStrategy) CheckGracefulDelete(ctx context.Context, obj runtime.Object, options *metav1.DeleteOptions) bool {
+	// 没有 DeleteOptions 时无法向调用方回写宽限期，交由通用删除逻辑处理。
 	if options == nil {
 		return false
 	}
@@ -187,11 +204,11 @@ func (podStrategy) CheckGracefulDelete(ctx context.Context, obj runtime.Object, 
 			period = *pod.Spec.TerminationGracePeriodSeconds
 		}
 	}
-	// if the pod is not scheduled, delete immediately
+	// 尚未绑定 Node 的 Pod 没有需要通知 Kubelet 的本地容器，直接删除即可。
 	if len(pod.Spec.NodeName) == 0 {
 		period = 0
 	}
-	// if the pod is already terminated, delete immediately
+	// 已经成功或失败的终态 Pod 不再有容器清理工作，避免重复等待终止宽限期。
 	if pod.Status.Phase == api.PodFailed || pod.Status.Phase == api.PodSucceeded {
 		period = 0
 	}
@@ -200,7 +217,7 @@ func (podStrategy) CheckGracefulDelete(ctx context.Context, obj runtime.Object, 
 		period = 1
 	}
 
-	// ensure the options and the pod are in sync
+	// 把最终决定写回 DeleteOptions，让后续存储层执行与策略计算一致的删除行为。
 	options.GracePeriodSeconds = &period
 	return true
 }
@@ -224,9 +241,11 @@ func (podStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Se
 	}
 }
 
+// Status 子资源只开放状态更新：Spec、删除时间和 OwnerReferences 均从旧对象恢复，避免借此绕过主资源权限。
 func (podStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPod := obj.(*api.Pod)
 	oldPod := old.(*api.Pod)
+	// /status 不应更改期望状态；保留旧 Spec 和元数据系统字段。
 	newPod.Spec = oldPod.Spec
 	newPod.DeletionTimestamp = nil
 
@@ -239,7 +258,7 @@ func (podStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 		newPod.Status.QOSClass = oldPod.Status.QOSClass
 	}
 
-	// Preserve DRA-related status fields when an old or misbehaving client
+	// 旧客户端可能会丢弃自己不认识的 DRA 状态字段；nil 表示未提交该字段，必须保留旧值。
 	// strips fields that it does not know about during a pods/status update.
 	// For the slice fields, a non-nil empty slice can still clear the field.
 	if newPod.Status.ResourceClaimStatuses == nil && oldPod.Status.ResourceClaimStatuses != nil {
@@ -258,12 +277,13 @@ func (podStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 
 // If a client request tries to clear `observedGeneration`, in the pod status or
 // conditions, we preserve the original value.
+// preserveOldObservedGeneration 防止状态客户端通过省略字段把 observedGeneration 回退为 0。
 func preserveOldObservedGeneration(newPod, oldPod *api.Pod) {
 	if newPod.Status.ObservedGeneration == 0 {
 		newPod.Status.ObservedGeneration = oldPod.Status.ObservedGeneration
 	}
 
-	// Remember observedGeneration values from old status conditions.
+	// 同一 Condition Type 可能重复出现，因此按类型保存一个队列，并在新条件中按顺序匹配旧值。
 	// This is a list per type because validation permits multiple conditions with the same type.
 	oldConditionGenerations := map[api.PodConditionType][]int64{}
 	for _, oldCondition := range oldPod.Status.Conditions {
@@ -284,6 +304,7 @@ func preserveOldObservedGeneration(newPod, oldPod *api.Pod) {
 	}
 }
 
+// Status 更新使用专用校验器：它只验证允许变更的状态字段，并检查状态转换规则。
 func (podStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	pod := obj.(*api.Pod)
 	oldPod := old.(*api.Pod)
@@ -323,7 +344,9 @@ var EphemeralContainersStrategy = podEphemeralContainersStrategy{
 }
 
 // dropNonEphemeralContainerUpdates discards all changes except for pod.Spec.EphemeralContainers and certain metadata
+// dropNonEphemeralContainerUpdates 把请求中除 EphemeralContainers 和允许的元数据之外的变更全部恢复为旧值。
 func dropNonEphemeralContainerUpdates(newPod, oldPod *api.Pod) *api.Pod {
+	// 先暂存唯一允许新增/修改的字段，再整体恢复旧 Spec、Status 和状态元数据，最后放回临时容器列表。
 	newEphemeralContainerSpec := newPod.Spec.EphemeralContainers
 	newPod.Spec = oldPod.Spec
 	newPod.Status = oldPod.Status
@@ -332,6 +355,7 @@ func dropNonEphemeralContainerUpdates(newPod, oldPod *api.Pod) *api.Pod {
 	return newPod
 }
 
+// 临时容器子资源先剥离非目标字段，再执行禁用字段清理和 Generation 更新。
 func (podEphemeralContainersStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPod := obj.(*api.Pod)
 	oldPod := old.(*api.Pod)
@@ -383,6 +407,7 @@ var ResizeStrategy = podResizeStrategy{
 // pod.Spec.Containers[*].Resources, pod.Spec.InitContainers[*].Resources,
 // ResizePolicy and certain metadata. If InPlacePodLevelResourcesVerticalScaling
 // feature is enabled, pod-level resources are also preserved.
+// dropNonResizeUpdates 只保留容器资源/ResizePolicy，以及 Feature Gate 允许的 Pod 级资源和特定卷更新。
 func dropNonResizeUpdates(newPod, oldPod *api.Pod) *api.Pod {
 	// Containers are not allowed to be added, removed, re-ordered, or renamed.
 	// If we detect any of these changes, we will return new podspec as-is and
@@ -394,6 +419,7 @@ func dropNonResizeUpdates(newPod, oldPod *api.Pod) *api.Pod {
 	// Preserve the incoming pod-level resource from the new pod object.
 	newPodResources := newPod.Spec.Resources
 
+	// 先分别提取允许变更的 Volume、普通容器和 InitContainer 字段，再把其余 PodSpec 恢复为旧值。
 	newVolumes := dropNonResizeUpdatesForVolumes(newPod.Spec.Volumes, oldPod.Spec.Volumes)
 
 	containers := dropNonResizeUpdatesForContainers(newPod.Spec.Containers, oldPod.Spec.Containers)
@@ -416,6 +442,7 @@ func dropNonResizeUpdates(newPod, oldPod *api.Pod) *api.Pod {
 	return newPod
 }
 
+// 对照新旧容器列表，只有名称和顺序保持不变时才合并 Resources 与 ResizePolicy；重排/重命名交给校验器拒绝。
 func dropNonResizeUpdatesForContainers(new, old []api.Container) []api.Container {
 	if len(new) == 0 {
 		return new
@@ -437,6 +464,7 @@ func dropNonResizeUpdatesForContainers(new, old []api.Container) []api.Container
 	return oldCopyWithMergedResources
 }
 
+// 仅启用内存后备卷原地垂直扩缩容时，才允许 resize 请求携带新 Volume 列表。
 func dropNonResizeUpdatesForVolumes(new, old []api.Volume) []api.Volume {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScalingMemoryBackedVolumes) {
 		return old
@@ -444,6 +472,7 @@ func dropNonResizeUpdatesForVolumes(new, old []api.Volume) []api.Volume {
 	return new
 }
 
+// Resize 子资源仅保留允许的资源字段；随后补齐新资源默认值并更新 Generation。
 func (podResizeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPod := obj.(*api.Pod)
 	oldPod := old.(*api.Pod)
@@ -498,6 +527,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 }
 
 // MatchPod returns a generic matcher for a given label and field selector.
+// MatchPod 把 Label/Field Selector 转成存储层 SelectionPredicate，并声明可通过 spec.nodeName 索引加速过滤。
 func MatchPod(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:       label,
@@ -522,6 +552,7 @@ func NodeNameIndexFunc(obj interface{}) ([]string, error) {
 }
 
 // Indexers returns the indexers for pod storage.
+// Indexers 注册 Pod 按 spec.nodeName 的缓存索引，支持按节点快速列出 Pod。
 func Indexers() *cache.Indexers {
 	return &cache.Indexers{
 		storage.FieldIndex("spec.nodeName"): NodeNameIndexFunc,
@@ -530,6 +561,7 @@ func Indexers() *cache.Indexers {
 
 // ToSelectableFields returns a field set that represents the object
 // TODO: fields are not labels, and the validation rules for them do not apply.
+// ToSelectableFields 暴露 API Server 支持的 Pod 字段选择器字段，并补充标准 ObjectMeta 字段。
 func ToSelectableFields(pod *api.Pod) fields.Set {
 	// The purpose of allocation with a given number of elements is to reduce
 	// amount of allocations needed to create the fields.Set. If you add any
@@ -582,8 +614,9 @@ func getPodIP(pod *api.Pod) string {
 }
 
 // ResourceLocation returns a URL to which one can send traffic for the specified pod.
+// ResourceLocation 将 Pod 名称/端口解析为 Pod IP URL；用于 /proxy 子资源把请求转发到 Pod 网络地址。
 func ResourceLocation(ctx context.Context, getter ResourceGetter, rt http.RoundTripper, id string) (*url.URL, http.RoundTripper, error) {
-	// Allow ID as "podname" or "podname:port" or "scheme:podname:port".
+	// 先解析 scheme、Pod 名称和可选端口；缺省端口时从 Pod 容器声明中选择第一个端口。
 	// If port is not specified, try to use the first defined port on the pod.
 	scheme, name, port, valid := utilnet.SplitSchemeNamePort(id)
 	if !valid {
@@ -605,6 +638,7 @@ func ResourceLocation(ctx context.Context, getter ResourceGetter, rt http.RoundT
 		}
 	}
 	podIP := getPodIP(pod)
+	// 只允许全局单播 Pod IP，拒绝空地址、组播和非全局地址，避免代理到无效目标。
 	if ip := netutils.ParseIPSloppy(podIP); ip == nil || !ip.IsGlobalUnicast() {
 		return nil, nil, errors.NewBadRequest("address not allowed")
 	}
@@ -628,6 +662,7 @@ func ResourceLocation(ctx context.Context, getter ResourceGetter, rt http.RoundT
 
 // LogLocation returns the log URL for a pod container. If opts.Container is blank
 // and only one container is present in the pod, that container is used.
+// LogLocation 根据 Pod 所在 Node、容器名称和日志查询参数构建 Kubelet /containerLogs URL，并选择 TLS Transport。
 func LogLocation(
 	ctx context.Context, getter ResourceGetter,
 	connInfo client.ConnectionInfoGetter,
@@ -706,6 +741,7 @@ func podHasContainerWithName(pod *api.Pod, containerName string) bool {
 	return hasContainer
 }
 
+// streamParams 把 exec/attach/port-forward 的类型化选项编码成 Kubelet 流式接口使用的 URL 查询参数。
 func streamParams(params url.Values, opts runtime.Object) error {
 	switch opts := opts.(type) {
 	case *api.PodExecOptions:
@@ -775,6 +811,7 @@ func ExecLocation(
 	return streamLocation(ctx, getter, connInfo, name, opts, opts.Container, "exec")
 }
 
+// streamLocation 统一处理 exec 和 attach：读取 Pod、确认容器与 Node、获取节点连接信息并构造流式请求 URL。
 func streamLocation(
 	ctx context.Context,
 	getter ResourceGetter,
@@ -819,6 +856,7 @@ func streamLocation(
 }
 
 // PortForwardLocation returns the port-forward URL for a pod.
+// PortForwardLocation 获取 Pod 对应节点的连接信息，并构造 /portForward/{namespace}/{pod} 请求地址。
 func PortForwardLocation(
 	ctx context.Context,
 	getter ResourceGetter,
@@ -854,6 +892,7 @@ func PortForwardLocation(
 }
 
 // validateContainer validate container is valid for pod, return valid container
+// validateContainer 为空容器名选择唯一容器；多容器时要求显式指定，并拒绝不属于该 Pod 的容器。
 func validateContainer(container string, pod *api.Pod) (string, error) {
 	if len(container) == 0 {
 		switch len(pod.Spec.Containers) {
@@ -907,6 +946,7 @@ func applyMatchLabelKeysAndMismatchLabelKeys(term *api.PodAffinityTerm, label ma
 	applyLabelKeysToLabelSelector(term.LabelSelector, term.MismatchLabelKeys, metav1.LabelSelectorOpNotIn, label)
 }
 
+// mutatePodAffinity 在创建/更新时将 MatchLabelKeys、MismatchLabelKeys 根据 Pod 当前标签展开为实际 LabelSelector。
 func mutatePodAffinity(pod *api.Pod) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.MatchLabelKeysInPodAffinity) || pod.Spec.Affinity == nil {
 		return
@@ -938,6 +978,7 @@ func applyMatchLabelKeys(constraint *api.TopologySpreadConstraint, labels map[st
 	applyLabelKeysToLabelSelector(constraint.LabelSelector, constraint.MatchLabelKeys, metav1.LabelSelectorOpIn, labels)
 }
 
+// mutateTopologySpreadConstraints 按 Feature Gate 将 MatchLabelKeys 展开到拓扑分布约束的 LabelSelector。
 func mutateTopologySpreadConstraints(pod *api.Pod) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.MatchLabelKeysInPodTopologySpread) || !utilfeature.DefaultFeatureGate.Enabled(features.MatchLabelKeysInPodTopologySpreadSelectorMerge) || pod.Spec.TopologySpreadConstraints == nil {
 		return
@@ -950,6 +991,7 @@ func mutateTopologySpreadConstraints(pod *api.Pod) {
 
 // applySchedulingGatedCondition adds a {type:PodScheduled, reason:SchedulingGated} condition
 // to a new-created Pod if necessary.
+// applySchedulingGatedCondition 为带 schedulingGates 的新 Pod 设置 PodScheduled=False，明确说明暂不可调度。
 func applySchedulingGatedCondition(pod *api.Pod) {
 	if len(pod.Spec.SchedulingGates) == 0 {
 		return
@@ -972,7 +1014,9 @@ func applySchedulingGatedCondition(pod *api.Pod) {
 
 // applyAppArmorVersionSkew implements the version skew behavior described in:
 // https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/24-apparmor#version-skew-strategy
+// applyAppArmorVersionSkew 在升级兼容期把旧 AppArmor Annotation 同步到结构化字段，并对需要迁移的用法发出弃用警告。
 func applyAppArmorVersionSkew(ctx context.Context, pod *api.Pod) {
+	// Windows 容器不使用 Linux AppArmor 配置，直接跳过这段字段迁移逻辑。
 	if pod.Spec.OS != nil && pod.Spec.OS.Name == api.Windows {
 		return
 	}
@@ -1030,6 +1074,7 @@ func applyAppArmorVersionSkew(ctx context.Context, pod *api.Pod) {
 
 // updatePodGeneration bumps metadata.generation if needed for any updates
 // to the podspec.
+// updatePodGeneration 仅在 Pod 期望状态 Spec 改变时递增 Generation，元数据或 Status 更新不会增加版本。
 func updatePodGeneration(newPod, oldPod *api.Pod) {
 	if !apiequality.Semantic.DeepEqual(newPod.Spec, oldPod.Spec) {
 		newPod.Generation++

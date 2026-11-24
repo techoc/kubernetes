@@ -39,6 +39,7 @@ type storage struct {
 
 // NewRegistry returns a new Registry interface for the given Storage. Any mismatched
 // types will panic.
+// NewRegistry 将 ClusterRoleBinding RESTStorage 适配为集群级 Binding 列表查询接口。
 func NewRegistry(s rest.StandardStorage) Registry {
 	return &storage{s}
 }
@@ -61,6 +62,7 @@ type AuthorizerAdapter struct {
 	Registry Registry
 }
 
+// ListClusterRoleBindings 列出所有 ClusterRoleBinding，并转为公开 v1 对象供 RuleResolver 计算用户权限。
 func (a AuthorizerAdapter) ListClusterRoleBindings(ctx context.Context) ([]*rbacv1.ClusterRoleBinding, error) {
 	list, err := a.Registry.ListClusterRoleBindings(genericapirequest.WithNamespace(ctx, ""), &metainternalversion.ListOptions{})
 	if err != nil {

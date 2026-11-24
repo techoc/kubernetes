@@ -38,6 +38,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
+// TestMatchNode 验证 Node 字段选择器可识别 metadata.name，并拒绝未知字段选择器。
 func TestMatchNode(t *testing.T) {
 	testFieldMap := map[bool][]fields.Set{
 		true: {
@@ -59,6 +60,7 @@ func TestMatchNode(t *testing.T) {
 	}
 }
 
+// TestSelectableFieldLabelConversions 验证 v1 Node 字段选择器的 API 版本转换规则。
 func TestSelectableFieldLabelConversions(t *testing.T) {
 	apitesting.TestSelectableFieldLabelConversionsOfKind(t,
 		"v1",
@@ -87,6 +89,7 @@ func makeNode(podCIDRs []string, addSpecDynamicConfig bool, addStatusDynamicConf
 	return node
 }
 
+// TestDropFields 覆盖 Node 创建/更新时动态配置字段的清理策略，以及 IPv4/IPv6/双栈 PodCIDR 不被误修改。
 func TestDropFields(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -180,6 +183,8 @@ func TestDropFields(t *testing.T) {
 		}()
 	}
 }
+
+// TestValidateUpdate 验证 Node 更新校验允许容量中 HugePage 资源从 0 调整为正值等合法更新。
 func TestValidateUpdate(t *testing.T) {
 	tests := []struct {
 		oldNode api.Node
@@ -241,6 +246,8 @@ func TestValidateUpdate(t *testing.T) {
 		}
 	}
 }
+
+// TestValidate 检查 Node 初始资源容量中不同 HugePage 页面尺寸的合法组合。
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		node  api.Node
@@ -285,6 +292,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// TestWarningOnUpdateAndCreate 验证 ConfigSource/externalID 弃用告警和 PodCIDR 非规范格式告警。
 func TestWarningOnUpdateAndCreate(t *testing.T) {
 	tests := []struct {
 		oldNode     api.Node
@@ -370,6 +378,7 @@ func TestWarningOnUpdateAndCreate(t *testing.T) {
 	}
 }
 
+// TestDropNodeDeclaredFeaturesFieldDuringCreate 验证 Feature Gate 关闭时创建请求不能写入 DeclaredFeatures，开启时则保留。
 func TestDropNodeDeclaredFeaturesFieldDuringCreate(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -433,6 +442,7 @@ func TestDropNodeDeclaredFeaturesFieldDuringCreate(t *testing.T) {
 	}
 }
 
+// TestDropNodeDeclaredFeaturesFieldDuringUpdate 验证 Feature Gate 关闭时保留旧对象已使用的 DeclaredFeatures，但丢弃新引入的值。
 func TestDropNodeDeclaredFeaturesFieldDuringUpdate(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -535,6 +545,7 @@ func TestDropNodeDeclaredFeaturesFieldDuringUpdate(t *testing.T) {
 	}
 }
 
+// TestDropPodPreemptionPolicy 验证节点 PodPreemptionPolicy 在 Feature Gate 开关和旧值是否已存在时的兼容保留规则。
 func TestDropPodPreemptionPolicy(t *testing.T) {
 	nodeWithPolicy := func() *api.Node {
 		return &api.Node{

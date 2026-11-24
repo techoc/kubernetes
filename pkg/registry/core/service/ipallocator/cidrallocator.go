@@ -44,6 +44,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// MetaAllocator 为每个 ServiceCIDR 管理独立 IP 分配器；重叠 CIDR 共用地址引用，只有 Ready 的分配器才可分配新 IP。
 // MetaAllocator maintains a structure with IP alloctors for the corresponding ServiceCIDRs.
 // CIDR overlapping is allowed and the MetaAllocator should take this into consideration.
 // Each allocator doesn't stored the IPAddresses, instead it reads them from the informer
@@ -87,6 +88,7 @@ var _ Interface = &MetaAllocator{}
 // NewMetaAllocator returns an IP allocator that use the IPAddress
 // and ServiceCIDR objects to track the assigned IP addresses,
 // using an informer cache as storage.
+// NewMetaAllocator 以 ServiceCIDR/IPAddress Informer 构建多 CIDR 分配器，并启动负责同步各 CIDR 地址池的后台控制循环。
 func NewMetaAllocator(
 	client networkingv1client.NetworkingV1Interface,
 	serviceCIDRInformer networkingv1informers.ServiceCIDRInformer,
@@ -192,6 +194,7 @@ func (c *MetaAllocator) deleteServiceCIDR(obj interface{}) {
 	}
 }
 
+// run 等待 ServiceCIDR 与 IPAddress 缓存同步后启动单 worker，按队列顺序重建/更新 CIDR 分配器。
 func (c *MetaAllocator) run() {
 	defer runtime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -237,6 +240,7 @@ func (c *MetaAllocator) processNextItem() bool {
 
 // syncAllocators adds new allocators and syncs the ready state of the allocators
 // deletion of allocators is handled directly on the event handler.
+// syncAllocators 根据 ServiceCIDR 列表建立或更新按 CIDR 索引的分配器；同一前缀可由多个 ServiceCIDR 引用。
 func (c *MetaAllocator) syncAllocators() error {
 	start := time.Now()
 	klog.V(2).Info("syncing ServiceCIDR allocators")
@@ -310,6 +314,7 @@ func (c *MetaAllocator) syncAllocators() error {
 // Allocate operations can work with ANY allocator that is ready, the allocators
 // contain references to the IP addresses hence does not matter what allocators have
 // the IP. Release operations need to work with ANY allocator independent of its state.
+// getAllocator 查找包含目标 IP 的 CIDR 分配器；分配时要求 Ready，释放时允许使用非 Ready 分配器。
 func (c *MetaAllocator) getAllocator(ip net.IP, ready bool) (*Allocator, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -361,6 +366,7 @@ func (c *MetaAllocator) Allocate(ip net.IP) error {
 
 }
 
+// AllocateNextService 在双写迁移期先尝试旧位图池，再回退到新 ServiceCIDR/IPAddress 分配器，以保持升级兼容。
 func (c *MetaAllocator) AllocateNextService(service *api.Service) (net.IP, error) {
 	// If the cluster is still using the old allocators use them first to try to
 	// get an IP address to keep backwards compatibility.

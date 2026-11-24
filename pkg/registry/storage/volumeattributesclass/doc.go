@@ -16,4 +16,5 @@ limitations under the License.
 
 // Package volumeattributesclass provides Registry interface and its REST
 // implementation for storing volumeattributesclass api objects.
+// Package volumeattributesclass：VolumeAttributesClass 定义可由 CSI 驱动应用到卷上的可变属性参数，供 PVC/卷属性更新流程引用。
 package volumeattributesclass

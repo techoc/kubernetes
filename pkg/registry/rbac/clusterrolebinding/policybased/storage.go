@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package policybased implements a standard storage for ClusterRoleBinding that prevents privilege escalation.
+// 本包为 ClusterRoleBinding 主存储增加防提权校验：调用者必须有 bind 权限，或已经拥有目标 ClusterRole 的全部规则。
 package policybased
 
 import (
@@ -66,6 +66,7 @@ func (r *Storage) StorageVersion() runtime.GroupVersioner {
 
 var _ rest.StorageVersionProvider = &Storage{}
 
+// Create 先尝试授权 bind 动词；未获显式授权时解析 ClusterRole 规则，并确认调用者已有完整规则集合。
 func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	if rbacregistry.EscalationAllowed(ctx) {
 		return s.StandardStorage.Create(ctx, obj, createValidation, options)
@@ -91,6 +92,7 @@ func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidati
 	return s.StandardStorage.Create(ctx, obj, createValidation, options)
 }
 
+// Update 校验更新后的 ClusterRoleRef 和 Subjects，防止通过变更绑定对象授予调用者尚未拥有的集群权限。
 func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	if rbacregistry.EscalationAllowed(ctx) {
 		return s.StandardStorage.Update(ctx, name, obj, createValidation, updateValidation, forceAllowCreate, options)

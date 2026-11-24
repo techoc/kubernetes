@@ -22,10 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// NegotiateError is returned when a ClientNegotiator is unable to locate
-// a serializer for the requested operation.
-// 中文说明：Stream 区分流式解码（如 watch）与一次性解码，便于调用方给出
-// 更精确的错误信息。
+// ClientNegotiator 无法为请求操作找到合适序列化器时返回 NegotiateError。
+// Stream 用于区分流式解码（例如 watch）与普通一次性解码，帮助调用方定位格式不受支持的原因。
 type NegotiateError struct {
 	ContentType string
 	Stream      bool
@@ -46,8 +44,7 @@ type clientNegotiator struct {
 }
 
 func (n *clientNegotiator) Encoder(contentType string, params map[string]string) (Encoder, error) {
-	// TODO: `pretty=1` is handled in NegotiateOutputMediaType, consider moving it to this method
-	// if client negotiators truly need to use it
+	// TODO：pretty=1 当前由 NegotiateOutputMediaType 处理；如果客户端协商器也需要该参数，可考虑将逻辑迁移到此处。
 	mediaTypes := n.serializer.SupportedMediaTypes()
 	info, ok := SerializerInfoForMediaType(mediaTypes, contentType)
 	if !ok {
@@ -61,7 +58,7 @@ func (n *clientNegotiator) Encoder(contentType string, params map[string]string)
 	return n.serializer.EncoderForVersion(info.Serializer, n.encode), nil
 }
 
-// Decoder 与 Encoder 的选择逻辑一致，只是把对象转换到 decode 指定的版本。
+// 根据 Content-Type 选择解码器，并将解码结果转换到协商器配置的目标版本。格式选择规则与 Encoder 一致。
 func (n *clientNegotiator) Decoder(contentType string, params map[string]string) (Decoder, error) {
 	mediaTypes := n.serializer.SupportedMediaTypes()
 	info, ok := SerializerInfoForMediaType(mediaTypes, contentType)
@@ -74,8 +71,7 @@ func (n *clientNegotiator) Decoder(contentType string, params map[string]string)
 	return n.serializer.DecoderToVersion(info.Serializer, n.decode), nil
 }
 
-// StreamDecoder 额外要求所选类型支持流式解码；否则报 Stream=true 的错误，
-// 因为这是调用方请求了流式读取（例如 watch）而该格式无法满足。
+// 选择支持流式解码的序列化器，并同时返回解码器、流式 Serializer 和 Framer。若格式不存在或未提供 StreamSerializer，则返回 Stream 标记的协商错误。
 func (n *clientNegotiator) StreamDecoder(contentType string, params map[string]string) (Decoder, Serializer, Framer, error) {
 	mediaTypes := n.serializer.SupportedMediaTypes()
 	info, ok := SerializerInfoForMediaType(mediaTypes, contentType)
@@ -91,12 +87,7 @@ func (n *clientNegotiator) StreamDecoder(contentType string, params map[string]s
 	return n.serializer.DecoderToVersion(info.Serializer, n.decode), info.StreamSerializer.Serializer, info.StreamSerializer.Framer, nil
 }
 
-// NewClientNegotiator will attempt to retrieve the appropriate encoder, decoder, or
-// stream decoder for a given content type. Does not perform any conversion, but will
-// encode the object to the desired group, version, and kind. Use when creating a client.
-//
-// 中文说明：encode 被设为 gv 而 decode 留空——客户端发出的对象总是目标版本，
-// 而收到的对象由服务端的 TypeMeta 决定如何解释。
+// 创建客户端序列化协商器。它根据请求的 Content-Type 选择编码器、解码器或流式解码器，并将客户端发出的对象编码到指定 GroupVersion；该构造函数不负责业务对象转换本身。
 func NewClientNegotiator(serializer NegotiatedSerializer, gv schema.GroupVersion) ClientNegotiator {
 	return &clientNegotiator{
 		serializer: serializer,

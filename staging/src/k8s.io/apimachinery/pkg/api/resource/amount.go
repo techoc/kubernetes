@@ -23,15 +23,15 @@ import (
 	inf "gopkg.in/inf.v0"
 )
 
-// Scale is used for getting and setting the base-10 scaled value.
-// Base-2 scales are omitted for mathematical simplicity.
-// See Quantity.ScaledValue for more details.
+// Scale 用于读取和设置十进制缩放值。
+// 为简化数学运算，这里不使用以 2 为底的 Scale。
+// 更多细节请参阅 Quantity.ScaledValue。
 //
 // Scale 是十进制指数：值 = 尾数 * 10^Scale。故意不支持二进制缩放以简化实现；
 // 只有规范序列化时才把 1024 的幂用于 BinarySI 后缀。
 type Scale int32
 
-// infScale adapts a Scale value to an inf.Scale value.
+// infScale 将本包的 Scale 转换为 inf.Scale。
 //
 // inf.Dec 的 Scale 语义与本包相反（其 scale 表示小数点后的位数），故取负号。
 func (s Scale) infScale() inf.Scale {
@@ -55,12 +55,12 @@ var (
 	// Zero 是可复用的零值，避免为常见零值分配。
 	Zero = int64Amount{}
 
-	// Used by quantity strings - treat as read only
+	// 供 Quantity 字符串处理使用，只读，不应修改。
 	zeroBytes = []byte("0")
 )
 
-// int64Amount represents a fixed precision numerator and arbitrary scale exponent. It is faster
-// than operations on inf.Dec for values that can be represented as int64.
+// int64Amount 使用定点 int64 尾数和可变十进制指数表示数值。
+// 对于能够由 int64 表示的数值，该实现比 inf.Dec 运算更快。
 // +k8s:openapi-gen=true
 //
 // int64Amount 用 int64 尾数加十进制指数表示数值，是 Quantity 的快速路径。
@@ -70,7 +70,7 @@ type int64Amount struct {
 	scale Scale
 }
 
-// Sign returns 0 if the value is zero, -1 if it is less than 0, or 1 if it is greater than 0.
+// Sign 返回数值的符号：零返回 0，负数返回 -1，正数返回 1。
 func (a int64Amount) Sign() int {
 	switch {
 	case a.value == 0:
@@ -82,9 +82,9 @@ func (a int64Amount) Sign() int {
 	}
 }
 
-// AsInt64 returns the current amount as an int64 at scale 0, or false if the value cannot be
-// represented in an int64 OR would result in a loss of precision. This method is intended as
-// an optimization to avoid calling AsDec.
+// AsInt64 将当前数值转换为 Scale 为 0 的 int64；如果无法表示或转换会损失精度，则返回 false。
+// 该方法用于快速判断是否可以直接使用 int64，避免创建 AsDec 所需的任意精度对象。
+
 func (a int64Amount) AsInt64() (int64, bool) {
 	if a.scale == 0 {
 		return a.value, true
@@ -98,11 +98,10 @@ func (a int64Amount) AsInt64() (int64, bool) {
 	return positiveScaleInt64(a.value, a.scale)
 }
 
-// AsScaledInt64 returns an int64 representing the value of this amount at the specified scale,
-// rounding up, or false if that would result in overflow. (1e20).AsScaledInt64(1) would result
-// in overflow because 1e19 is not representable as an int64. Note that setting a scale larger
-// than the current value may result in loss of precision - i.e. (1e-6).AsScaledInt64(0) would
-// return 1, because 0.000001 is rounded up to 1.
+// AsScaledInt64 将当前数值转换为指定 Scale 下的 int64，并在需要时向上取整。
+// 如果转换导致溢出则返回 false。例如 1e20 转换到 Scale=1 需要得到 1e19，超出 int64 范围。
+// 目标 Scale 比当前值更大时可能损失精度；例如 1e-6 转为 Scale=0 会向上取整为 1。
+
 func (a int64Amount) AsScaledInt64(scale Scale) (result int64, ok bool) {
 	if a.scale < scale {
 		// 目标 scale 更小，等价于除以 10 的幂；这里按向上取整处理。
@@ -112,7 +111,7 @@ func (a int64Amount) AsScaledInt64(scale Scale) (result int64, ok bool) {
 	return positiveScaleInt64(a.value, a.scale-scale)
 }
 
-// AsDec returns an inf.Dec representation of this value.
+// AsDec 将当前数值转换为 inf.Dec 任意精度十进制表示。
 func (a int64Amount) AsDec() *inf.Dec {
 	var base inf.Dec
 	base.SetUnscaled(a.value)
@@ -120,11 +119,11 @@ func (a int64Amount) AsDec() *inf.Dec {
 	return &base
 }
 
-// Cmp returns 0 if a and b are equal, 1 if a is greater than b, or -1 if a is less than b.
+// Cmp 比较两个数值：相等返回 0，a 大于 b 返回 1，a 小于 b 返回 -1。
 func (a int64Amount) Cmp(b int64Amount) int {
 	switch {
 	case a.scale == b.scale:
-		// compare only the unscaled portion
+		// Scale 相同，只需比较未缩放的尾数。
 		// scale 相同，直接比较尾数即可。
 	case a.scale > b.scale:
 		// 把 b 对齐到 a 的 scale；无法精确对齐时回退到任意精度比较。
@@ -173,8 +172,8 @@ func (a int64Amount) Cmp(b int64Amount) int {
 	}
 }
 
-// Add adds two int64Amounts together, matching scales. It will return false and not mutate
-// a if overflow or underflow would result.
+// Add 将两个 int64Amount 对齐到相同 Scale 后相加；若发生溢出或下溢，返回 false 且不修改接收者。
+
 func (a *int64Amount) Add(b int64Amount) bool {
 	switch {
 	case b.value == 0:
@@ -217,14 +216,14 @@ func (a *int64Amount) Add(b int64Amount) bool {
 	return true
 }
 
-// Sub removes the value of b from the current amount, or returns false if underflow would result.
+// Sub 从当前数值中减去 b；若运算无法由 int64 精确表示，则返回 false。
 func (a *int64Amount) Sub(b int64Amount) bool {
 	// 复用 Add，通过对 b 取负实现减法。
 	return a.Add(int64Amount{value: -b.value, scale: b.scale})
 }
 
-// Mul multiplies the provided b to the current amount, or
-// returns false if overflow or underflow would result.
+// Mul 将当前数值乘以 b；若发生溢出或下溢则返回 false。
+
 func (a *int64Amount) Mul(b int64) bool {
 	switch {
 	case a.value == 0:
@@ -263,8 +262,8 @@ func (a *int64Amount) Mul(b int64) bool {
 	return true
 }
 
-// AsScale adjusts this amount to set a minimum scale, rounding up, and returns true iff no precision
-// was lost. (1.1e5).AsScale(5) would return 1.1e5, but (1.1e5).AsScale(6) would return 1e6.
+// AsScale 将当前数值调整到至少指定的 Scale，并向上取整；返回值表示调整是否完全没有损失精度。
+// 例如 1.1e5 转换到 Scale=5 保持为 1.1e5，转换到 Scale=6 则向上取整为 1e6。
 func (a int64Amount) AsScale(scale Scale) (int64Amount, bool) {
 	if a.scale >= scale {
 		// 已经是至少需要的精度，无需调整。
@@ -274,8 +273,8 @@ func (a int64Amount) AsScale(scale Scale) (int64Amount, bool) {
 	return int64Amount{value: result, scale: scale}, exact
 }
 
-// AsCanonicalBytes accepts a buffer to write the base-10 string value of this field to, and returns
-// either that buffer or a larger buffer and the current exponent of the value. The value is adjusted
+// AsCanonicalBytes 将数值编码为十进制规范形式，并返回结果字节及对应指数。
+// 函数会复用传入缓冲区；空间不足时分配更大的缓冲区。编码时会调整尾数与指数，
 // until the exponent is a multiple of 3 - i.e. 1.1e5 would return "110", 3.
 func (a int64Amount) AsCanonicalBytes(out []byte) (result []byte, exponent int32) {
 	mantissa := a.value
@@ -285,7 +284,7 @@ func (a int64Amount) AsCanonicalBytes(out []byte) (result []byte, exponent int32
 	amount, times := removeInt64Factors(mantissa, 10)
 	exponent += int32(times)
 
-	// make sure exponent is a multiple of 3
+	// 确保指数是 3 的倍数。
 	// 规范形式要求指数为 3 的倍数；通过把 10 或 100 乘回尾数来对齐。
 	var ok bool
 	switch exponent % 3 {
@@ -306,9 +305,9 @@ func (a int64Amount) AsCanonicalBytes(out []byte) (result []byte, exponent int32
 	return strconv.AppendInt(out, amount, 10), exponent
 }
 
-// AsCanonicalBase1024Bytes accepts a buffer to write the base-1024 string value of this field to, and returns
-// either that buffer or a larger buffer and the current exponent of the value. 2048 is 2 * 1024 ^ 1 and would
-// return []byte("2048"), 1.
+// AsCanonicalBase1024Bytes 将数值编码为以 1024 为基数的规范形式，并返回结果字节及指数。
+// 例如 2048 等于 2 乘以 1024 的 1 次方，返回尾数 2048、指数 1。
+
 func (a int64Amount) AsCanonicalBase1024Bytes(out []byte) (result []byte, exponent int32) {
 	// BinarySI 语法要求先转成 scale=0 的整数；无法无损转换时退回任意精度。
 	value, ok := a.AsScaledInt64(0)
@@ -319,9 +318,8 @@ func (a int64Amount) AsCanonicalBase1024Bytes(out []byte) (result []byte, expone
 	return strconv.AppendInt(out, amount, 10), exponent
 }
 
-// infDecAmount implements common operations over an inf.Dec that are specific to the quantity
-// representation.
-//
+// infDecAmount 基于 inf.Dec 实现 Quantity 所需的任意精度数值运算。
+
 // infDecAmount 是任意精度的回退实现，用于 int64Amount 溢出的场景。
 type infDecAmount struct {
 	*inf.Dec
@@ -343,7 +341,7 @@ func (a infDecAmount) AsCanonicalBytes(out []byte) (result []byte, exponent int3
 	mantissa := a.Dec.UnscaledBig()
 	exponent = int32(-a.Dec.Scale())
 	amount := big.NewInt(0).Set(mantissa)
-	// move all factors of 10 into the exponent for easy reasoning
+	// 将尾数中所有 10 的因子移入指数，便于后续规范化计算。
 	amount, times := removeBigIntFactors(amount, bigTen)
 	exponent += times
 

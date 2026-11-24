@@ -40,6 +40,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// Repair 是旧式 RangeAllocation 的周期性 ClusterIP 修复控制器：根据当前 Service 列表重建快照，发现重复、越界和泄漏地址。
 // Repair is a controller loop that periodically examines all service ClusterIP allocations
 // and logs any errors, and then sets the compacted and accurate list of all allocated IPs.
 //
@@ -143,6 +144,7 @@ func (c *Repair) runOnce() error {
 }
 
 // doRunOnce verifies the state of the cluster IP allocations and returns an error if an unrecoverable problem occurs.
+// doRunOnce 分别读取旧快照和当前 Service 列表，重建每个地址族的真实占用集合，再处理泄漏并持久化快照。
 func (c *Repair) doRunOnce() error {
 	// TODO: (per smarterclayton) if Get() or ListServices() is a weak consistency read,
 	// or if they are executed against different leaders,
@@ -302,6 +304,7 @@ func (c *Repair) doRunOnce() error {
 	return nil
 }
 
+// saveSnapShot 将重建后的位图写回 RangeAllocation；ResourceVersion 冲突交给外层 RetryOnConflict 重新执行整轮修复。
 func (c *Repair) saveSnapShot(rebuilt *ipallocator.Range, alloc rangeallocation.RangeRegistry, snapshot *api.RangeAllocation) error {
 	if err := rebuilt.Snapshot(snapshot); err != nil {
 		return fmt.Errorf("unable to snapshot the updated service IP allocations: %v", err)
@@ -316,6 +319,7 @@ func (c *Repair) saveSnapShot(rebuilt *ipallocator.Range, alloc rangeallocation.
 	return nil
 }
 
+// checkLeaked 对连续多轮未被 Service 使用的旧分配做延迟回收，给并发创建/写入留下竞态缓冲。
 func (c *Repair) checkLeaked(leaks map[string]int, stored ipallocator.Interface, rebuilt *ipallocator.Range) {
 	// Check for IPs that are left in the old set.  They appear to have been leaked.
 	stored.ForEach(func(ip net.IP) {

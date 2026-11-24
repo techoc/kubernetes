@@ -47,10 +47,9 @@ type GroupVersioner interface {
 // 它被用作序列化结果缓存的键，因此等价性必须非常严格。
 type Identifier string
 
-// Encoder 把对象写入序列化形式。
+// Encoder 将 API 对象写入 io.Writer。实现可在版本不兼容、类型未注册或没有可用转换路径时返回错误。
 type Encoder interface {
-	// Encode writes an object to a stream. Implementations may return errors if the versions are
-	// incompatible, or if no conversion is defined.
+	// Encode 将对象写入输出流。若对象版本不兼容，或没有定义所需的版本转换路径，实现可以返回错误。
 	Encode(obj Object, w io.Writer) error
 	// Identifier 返回该 encoder 的标识符。
 	// 两个不同 encoder 的 Identifier 相等，当且仅当对任意输入对象二者都会编码出相同表示。
@@ -94,7 +93,7 @@ type EncoderWithAllocator interface {
 	EncodeWithAllocator(obj Object, w io.Writer, memAlloc MemoryAllocator) error
 }
 
-// Decoder 尝试从数据中加载对象。
+// Decoder 从字节切片解码 API 对象。defaults 用于输入未携带完整类型信息时提供默认 GVK；into 非 nil 时尝试复用调用方提供的对象。返回对象、实际识别出的 GVK 和错误。
 type Decoder interface {
 	// Decode 使用 scheme 自带的类型信息，或传入的默认 kind/group/version 来反序列化数据。
 	// 它返回解码后的对象、序列化数据中携带的 kind/group/version，或错误。
@@ -104,29 +103,24 @@ type Decoder interface {
 	Decode(data []byte, defaults *schema.GroupVersionKind, into Object) (Object, *schema.GroupVersionKind, error)
 }
 
-// Serializer 是把对象转换为序列化格式并还原的核心接口。
-// 实现可以选择对对象做版本转换，但调用方不应对此做任何假设。
+// Serializer 同时提供编码与解码能力，是常规序列化格式的组合接口。
 type Serializer interface {
 	Encoder
 	Decoder
 }
 
-// Codec 是处理对象版本化细节的 Serializer。
-// 它与 Serializer 接口完全相同，因此更多是一种标记，告知使用方该实现会关心收到对象的版本。
+// Codec 是 Encoder 与 Decoder 的组合接口，表示一套可双向处理 API 对象的编解码实现。
 type Codec Serializer
 
-// ParameterCodec 定义在 API 对象与 url.Values 之间序列化/反序列化并进行必要转换的方法。
-// 与普通 Codec 不同，查询参数不携带类型自描述信息，因此必须显式指定期望的版本。
+// ParameterCodec 在 URL 查询参数与版本化 API 对象之间转换，常用于 list/watch 等请求参数的编码和解码。
 type ParameterCodec interface {
-	// DecodeParameters takes the given url.Values in the specified group version and decodes them
-	// into the provided object, or returns an error.
+	// DecodeParameters 将指定 GroupVersion 下的 URL 查询参数解码到目标对象；参数格式错误或转换失败时返回错误。
 	DecodeParameters(parameters url.Values, from schema.GroupVersion, into Object) error
-	// EncodeParameters encodes the provided object as query parameters or returns an error.
+	// EncodeParameters 将对象转换为指定 GroupVersion 对应的 URL 查询参数；转换或编码失败时返回错误。
 	EncodeParameters(obj Object, to schema.GroupVersion) (url.Values, error)
 }
 
-// Framer 是创建遵循特定分帧（framing）模式读写器的工厂。
-// 分帧用于在单一流上分隔多个对象，例如 watch 流中的逐条事件。
+// Framer 为连续字节流提供消息边界处理。流式协议需要通过它区分相邻对象，非分帧格式可以直接透传底层读写器。
 type Framer interface {
 	NewFrameReader(r io.ReadCloser) io.ReadCloser
 	NewFrameWriter(w io.Writer) io.Writer
@@ -235,7 +229,7 @@ type ObjectVersioner interface {
 	PrioritizedVersionsForGroup(group string) []schema.GroupVersion
 }
 
-// ObjectConvertor 把对象转换到另一个版本。
+// ObjectConvertor 负责对象版本转换及字段选择器转换。转换可能创建新对象，也可能由不安全实现返回与输入共享内存的对象。
 type ObjectConvertor interface {
 	// Convert 尝试把一个对象转换为另一个，或返回错误。
 	// 该方法不修改 in 对象，但 in 与 out 可能共享底层数据结构，
@@ -248,7 +242,7 @@ type ObjectConvertor interface {
 	ConvertFieldLabel(gvk schema.GroupVersionKind, label, value string) (string, string, error)
 }
 
-// ObjectTyper 提供提取对象 APIVersion 与 Kind 的方法。
+// ObjectTyper 查询 Go 对象对应的 GVK，并判断某个 GVK 是否已知。通常由 Scheme 实现。
 type ObjectTyper interface {
 	// ObjectKinds 返回对象所有可能的 group/version/kind；若对象是 unversioned 的，
 	// 第二个返回值 true；若对象未被识别则返回错误（IsNotRegisteredError 会返回 true）。
@@ -258,7 +252,7 @@ type ObjectTyper interface {
 	Recognizes(gvk schema.GroupVersionKind) bool
 }
 
-// ObjectCreater 提供按 kind 与版本实例化对象的方法。
+// ObjectCreater 根据 GVK 创建对应 Go 对象。通常由 Scheme 实现，解码器通过它在反序列化前确定目标对象类型。
 type ObjectCreater interface {
 	New(kind schema.GroupVersionKind) (out Object, err error)
 }
@@ -295,9 +289,7 @@ type Namer interface {
 	Namespace(obj Object) (string, error)
 }
 
-// Object 接口必须由所有注册到 Scheme 的 API 类型实现。由于 scheme 中的对象预期会被序列化到线路上，
-// Object 提供给 Scheme 的接口允许序列化器设置该对象所代表的 kind、version 与 group。
-// 若对象不预期被序列化，也可以返回一个空操作的 ObjectKindAccessor。
+// Object 是 Kubernetes API 对象的基础接口。对象必须能够暴露并设置自己的 GVK；通常由嵌入 TypeMeta 的 API 结构体实现。
 type Object interface {
 	GetObjectKind() schema.ObjectKind
 	DeepCopyObject() Object
