@@ -125,7 +125,6 @@ func TestGetStreamPair(t *testing.T) {
 		conn:        conn,
 	}
 
-	// test adding a new entry
 	// 首次创建流对：应返回新对象且数据/错误流都尚未设置。
 	p, created := h.getStreamPair("1")
 	if p == nil {
@@ -141,7 +140,6 @@ func TestGetStreamPair(t *testing.T) {
 		t.Errorf("unexpected non-nil error stream")
 	}
 
-	// start the monitor for this pair
 	// 启动监控协程，稍后由 complete 或 timeout 触发清理。
 	monitorDone := make(chan struct{})
 	go func() {
@@ -153,7 +151,6 @@ func TestGetStreamPair(t *testing.T) {
 		t.Fatal("This should still be true")
 	}
 
-	// make sure we can retrieve an existing entry
 	// 同一 requestID 再次查询应返回同一个流对，且 created 为 false。
 	p2, created := h.getStreamPair("1")
 	if created {
@@ -163,7 +160,6 @@ func TestGetStreamPair(t *testing.T) {
 		t.Fatalf("retrieving an existing pair: expected %#v, got %#v", p, p2)
 	}
 
-	// removed via complete
 	// 清理路径一：先加入数据流（此时还不完整），再加入错误流（此时收齐）。
 	dataStream := newFakeHTTPStream()
 	dataStream.headers.Set(StreamType, StreamTypeData)
@@ -185,7 +181,6 @@ func TestGetStreamPair(t *testing.T) {
 		t.Fatal("unexpected incomplete")
 	}
 
-	// make sure monitorStreamPair completed
 	// 等待监控协程结束，确保清理动作已经完成。
 	<-monitorDone
 
@@ -194,13 +189,11 @@ func TestGetStreamPair(t *testing.T) {
 	}
 	conn.removeStreamsCalled = false
 
-	// make sure the pair was removed
 	// 断言流对已从表中删除。
 	if h.hasStreamPair("1") {
 		t.Fatal("expected removal of pair after both data and error streams received")
 	}
 
-	// removed via timeout
 	// 清理路径二：新建流对后不放入任何流，直接让监控协程因超时而退出。
 	p, created = h.getStreamPair("2")
 	if !created {
@@ -215,10 +208,8 @@ func TestGetStreamPair(t *testing.T) {
 		h.monitorStreamPair(p, timeout)
 		close(monitorDone)
 	}()
-	// cause the timeout
 	// 关闭 timeout 通道模拟超时发生。
 	close(timeout)
-	// make sure monitorStreamPair completed
 	// 等待监控协程结束，再断言超时路径同样完成了清理。
 	<-monitorDone
 	if h.hasStreamPair("2") {

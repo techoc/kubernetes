@@ -27,24 +27,17 @@ import (
 	utilexec "k8s.io/utils/exec"
 )
 
-// Executor knows how to execute a command in a container in a pod.
 // Executor 知道如何在 Pod 的容器中执行命令。
 type Executor interface {
-	// ExecInContainer executes a command in a container in the pod, copying data
-	// between in/out/err and the container's stdin/stdout/stderr.
 	// ExecInContainer 在 Pod 的容器中执行 cmd，在 in/out/err 与容器的 stdin/stdout/stderr 之间搬运数据。
 	ExecInContainer(ctx context.Context, name string, uid string, container string, cmd []string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan TerminalSize, timeout time.Duration) error
 }
 
-// ServeExec handles requests to execute a command in a container. After
-// creating/receiving the required streams, it delegates the actual execution
-// to the executor.
 // ServeExec 处理在容器中执行命令的请求。创建或接收所需的流之后，把真正的执行工作委托给 executor。
 func ServeExec(w http.ResponseWriter, req *http.Request, executor Executor, podName string, uid string, container string, cmd []string, streamOpts *Options, idleTimeout, streamCreationTimeout time.Duration, supportedProtocols []string) {
 	// 先完成协议协商并建立底层连接与各条流；失败时 createStreams 已经写过错误响应。
 	ctx, ok := createStreams(req, w, streamOpts, supportedProtocols, idleTimeout, streamCreationTimeout)
 	if !ok {
-		// error is handled by createStreams
 		// 错误已由 createStreams 处理，这里直接返回。
 		return
 	}

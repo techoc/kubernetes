@@ -46,17 +46,12 @@ const (
 	v4Base64WebsocketProtocol = "v4." + wsstream.Base64ChannelWebSocketProtocol
 )
 
-// V4Options contains details about which streams are required for port
-// forwarding.
-// All fields included in V4Options need to be expressed explicitly in the
-// CRI (k8s.io/cri-api/pkg/apis/{version}/api.proto) PortForwardRequest.
 // V4Options 保存端口转发所需的端口信息；所有字段都必须在 CRI 的 PortForwardRequest 中显式声明。
 type V4Options struct {
 	// Ports 是需要转发的目标端口列表，每个端口对应一对数据/错误流。
 	Ports []int32
 }
 
-// NewV4Options creates a new options from the Request.
 // NewV4Options 从 HTTP 请求中解析端口列表；非 WebSocket 请求返回空选项。
 func NewV4Options(req *http.Request) (*V4Options, error) {
 	if !wsstream.IsWebSocketRequest(req) {
@@ -94,16 +89,11 @@ func NewV4Options(req *http.Request) (*V4Options, error) {
 	}, nil
 }
 
-// BuildV4Options returns a V4Options based on the given information.
 // BuildV4Options 根据给定的端口列表直接构造 V4Options。
 func BuildV4Options(ports []int32) (*V4Options, error) {
 	return &V4Options{Ports: ports}, nil
 }
 
-// handleWebSocketStreams handles requests to forward ports to a pod via
-// a PortForwarder. A pair of streams are created per port (DATA n,
-// ERROR n+1). The associated port is written to each stream as a unsigned 16
-// bit integer in little endian format.
 // handleWebSocketStreams 通过 PortForwarder 处理 WebSocket 端口转发请求。
 // 每个端口分配一对通道（数据通道 n、错误通道 n+1），并在每个流的开头以小端无符号 16 位整数写入对应端口。
 func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwarder PortForwarder, podName string, uid string, opts *V4Options, supportedPortForwardProtocols []string, idleTimeout, streamCreationTimeout time.Duration) error {
@@ -147,8 +137,8 @@ func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwar
 		streamPairs[i] = &streamPair
 
 		portBytes := make([]byte, 2)
-		// port is always positive so conversion is allowable
 		// 每个流的前两个字节携带小端编码的端口号，供客户端识别流对应的端口。
+		// 端口恒为正数，可安全转换为 16 位无符号整数。
 		binary.LittleEndian.PutUint16(portBytes, uint16(streamPair.port))
 		streamPair.dataStream.Write(portBytes)
 		streamPair.errorStream.Write(portBytes)
@@ -166,8 +156,6 @@ func handleWebSocketStreams(req *http.Request, w http.ResponseWriter, portForwar
 	return nil
 }
 
-// websocketStreamPair represents the error and data streams for a port
-// forwarding request.
 // websocketStreamPair 表示一个端口对应的数据/错误通道对。
 // 字段含义：port 是目标端口；dataStream 是可读写的数据通道；errorStream 是只写的错误通道。
 type websocketStreamPair struct {
@@ -176,8 +164,6 @@ type websocketStreamPair struct {
 	errorStream io.WriteCloser
 }
 
-// websocketStreamHandler is capable of processing a single port forward
-// request over a websocket connection
 // websocketStreamHandler 在一条 WebSocket 连接上处理一次端口转发请求中的所有流对。
 // 字段含义：conn 是 WebSocket 连接；streamPairs 是各端口的流对；pod 与 uid 标识目标 Pod；
 // forwarder 是真正执行端口转发的组件。
@@ -189,8 +175,6 @@ type websocketStreamHandler struct {
 	forwarder   PortForwarder
 }
 
-// run invokes the websocketStreamHandler's forwarder.PortForward
-// function for the given stream pair.
 // run 为每个流对启动一个转发协程，并等待它们全部结束。
 func (h *websocketStreamHandler) run() {
 	// 用 WaitGroup 等待所有端口的转发协程完成。

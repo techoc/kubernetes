@@ -26,23 +26,17 @@ import (
 	"k8s.io/streaming/pkg/runtime"
 )
 
-// Attacher knows how to attach to a running container in a pod.
 // Attacher 知道如何附着到 Pod 中正在运行的容器。
 type Attacher interface {
-	// AttachContainer attaches to the running container in the pod, copying data between in/out/err
-	// and the container's stdin/stdout/stderr.
 	// AttachContainer 附着到 Pod 中正在运行的容器，在 in/out/err 与容器的 stdin/stdout/stderr 之间搬运数据。
 	AttachContainer(ctx context.Context, name string, uid string, container string, in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan TerminalSize) error
 }
 
-// ServeAttach handles requests to attach to a container. After creating/receiving the required
-// streams, it delegates the actual attaching to attacher.
 // ServeAttach 处理附着容器的请求。创建或接收所需的流之后，把真正的附着工作委托给 attacher。
 func ServeAttach(w http.ResponseWriter, req *http.Request, attacher Attacher, podName string, uid string, container string, streamOpts *Options, idleTimeout, streamCreationTimeout time.Duration, supportedProtocols []string) {
 	// 先完成协议协商并建立底层连接及各条流；失败时 createStreams 已经写过错误响应。
 	ctx, ok := createStreams(req, w, streamOpts, supportedProtocols, idleTimeout, streamCreationTimeout)
 	if !ok {
-		// error is handled by createStreams
 		// 错误已由 createStreams 处理，这里直接返回。
 		return
 	}

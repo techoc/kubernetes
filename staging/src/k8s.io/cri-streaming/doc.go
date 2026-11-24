@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cristreaming contains the staged module root for Kubernetes CRI streaming.
-//
 // Package cristreaming 是 Kubernetes CRI 流式服务模块的根目录包。
 // CRI 流式服务负责为 exec（执行命令）、attach（附着容器）和 portforward（端口转发）
 // 这类需要长连接和数据流的功能提供 HTTP/WebSocket 服务端实现。

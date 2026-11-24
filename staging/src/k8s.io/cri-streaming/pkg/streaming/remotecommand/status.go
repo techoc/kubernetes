@@ -30,7 +30,6 @@ const (
 	statusReasonInternalError = "InternalError"
 )
 
-// streamStatusError carries status details written to the error stream.
 // streamStatusError 携带写入 error 流的状态信息；ErrStatus 是其中的状态对象。
 type streamStatusError struct {
 	ErrStatus streamStatus
@@ -74,7 +73,6 @@ type streamStatusDetails struct {
 	Causes []streamStatusCause `json:"causes,omitempty"`
 }
 
-// streamStatusCause uses "reason" on the wire to match metav1.StatusCause.
 // streamStatusCause 描述一条具体原因：Type 在线上序列化为 "reason" 以兼容 metav1.StatusCause，
 // Message 是该原因的说明；命令退出码就是通过 Type 为 ExitCode 的 cause 传递的。
 type streamStatusCause struct {

@@ -33,8 +33,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Options contains details about which streams are required for
-// remote command execution.
 // Options 描述一次远端命令执行需要哪些流：Stdin/Stdout/Stderr 分别对应三条标准流，
 // TTY 表示是否分配伪终端；当 TTY 为真时服务端不再单独使用 stderr 流。
 type Options struct {
@@ -44,7 +42,6 @@ type Options struct {
 	TTY    bool
 }
 
-// NewOptions creates a new Options from the Request.
 // NewOptions 从 HTTP 请求参数解析出 Options，并校验至少请求了一条标准流。
 func NewOptions(req *http.Request) (*Options, error) {
 	// 参数值为 "1" 表示开启对应能力。
@@ -54,7 +51,7 @@ func NewOptions(req *http.Request) (*Options, error) {
 	stderr := req.FormValue(ExecStderrParam) == "1"
 	if tty && stderr {
 		// TTY 模式下终端本身合并了 stdout 与 stderr，无法再单独提供 stderr 流，故忽略该请求。
-		// TODO: make this an error before we reach this method
+		// TODO：在进入本方法前就将 tty 与 stderr 同时开启视为错误。
 		klog.V(4).InfoS("Access to exec with tty and stderr is not supported, bypassing stderr")
 		stderr = false
 	}
@@ -72,8 +69,6 @@ func NewOptions(req *http.Request) (*Options, error) {
 	}, nil
 }
 
-// connectionContext contains the connection and streams used when
-// forwarding an attach or execute session into a container.
 // connectionContext 持有转发一次 attach 或 exec 会话所需的连接与流：
 // conn 是底层连接，stdinStream/stdoutStream/stderrStream 是三条标准流，
 // writeStatus 负责在 error 流写状态，resizeStream/resizeChan 传递终端尺寸，tty 表示是否使用伪终端。
@@ -88,19 +83,13 @@ type connectionContext struct {
 	tty          bool
 }
 
-// streamAndReply holds both a Stream and a channel that is closed when the stream's reply frame is
-// enqueued. Consumers can wait for replySent to be closed prior to proceeding, to ensure that the
-// replyFrame is enqueued before the connection's goaway frame is sent (e.g. if a stream was
-// received and right after, the connection gets closed).
 // streamAndReply 把一条 Stream 与其 replySent 通道绑定：replySent 关闭表示该流的应答帧已入队。
-// httpstream.Stream 是嵌入字段，replySent 用于等待应答发送完毕，避免连接在应答前就被关闭。
+// httpstream.Stream 是嵌入字段；消费者可等待 replySent，确保应答帧先于连接的 goaway 帧入队。
 type streamAndReply struct {
 	httpstream.Stream
 	replySent <-chan struct{}
 }
 
-// waitStreamReply waits until either replySent or stop is closed. If replySent is closed, it sends
-// an empty struct to the notify channel.
 // waitStreamReply 等待 replySent 或 stop 关闭；收到应答时向 notify 发一个信号，
 // stop 关闭时静默退出，从而在主流程结束或超时后回收该 goroutine。
 func waitStreamReply(replySent <-chan struct{}, notify chan<- struct{}, stop <-chan struct{}) {
@@ -140,7 +129,6 @@ func createHTTPStreamStreams(req *http.Request, w http.ResponseWriter, opts *Opt
 	// Handshake 从 Sec-WebSocket-Protocol 之类的头部挑出双方都支持的子协议，失败时已写了错误响应。
 	protocol, err := httpstream.Handshake(req, w, supportedStreamProtocols)
 	if err != nil {
-		// Handshake writes the error to the client
 		// 握手失败：错误响应已由 Handshake 写出。
 		return nil, false
 	}
@@ -153,12 +141,8 @@ func createHTTPStreamStreams(req *http.Request, w http.ResponseWriter, opts *Opt
 		streamCh <- streamAndReply{Stream: stream, replySent: replySent}
 		return nil
 	})
-	// from this point on, we can no longer call methods on response
 	// 升级之后响应写入器已被接管，不能再对其调用任何方法。
 	if conn == nil {
-		// The upgrader is responsible for notifying the client of any errors that
-		// occurred during upgrading. All we can do is return here at this point
-		// if we weren't successful in upgrading.
 		// 升级器已负责通知客户端错误，这里只能返回失败。
 		return nil, false
 	}
@@ -183,7 +167,6 @@ func createHTTPStreamStreams(req *http.Request, w http.ResponseWriter, opts *Opt
 		handler = &v1ProtocolHandler{}
 	}
 
-	// count the streams client asked for, starting with 1
 	// error 流始终需要，因此从 1 开始，再按请求累加 stdin/stdout/stderr 与 resize。
 	expectedStreams := 1
 	if opts.Stdin {
@@ -219,18 +202,12 @@ func createHTTPStreamStreams(req *http.Request, w http.ResponseWriter, opts *Opt
 
 // protocolHandler 抽象不同协议版本建流方式的差异：各版本对 error 流格式与 resize 支持不同。
 type protocolHandler interface {
-	// waitForStreams waits for the expected streams or a timeout, returning a
-	// remoteCommandContext if all the streams were received, or an error if not.
 	// waitForStreams 等待收齐期望数量的流或超时，成功返回连接上下文，失败返回错误。
 	waitForStreams(streams <-chan streamAndReply, expectedStreams int, expired <-chan time.Time) (*connectionContext, error)
-	// supportsTerminalResizing returns true if the protocol handler supports terminal resizing
 	// supportsTerminalResizing 报告该协议是否支持终端尺寸调整，决定是否需要等待 resize 流。
 	supportsTerminalResizing() bool
 }
 
-// v4ProtocolHandler implements the V4 protocol version for streaming command execution. It only differs
-// in from v3 in the error stream format using a json-marshaled status object which carries
-// the process' exit code.
 // v4ProtocolHandler 实现 v4 协议；与 v3 的唯一区别是 error 流改用携带退出码的 JSON 状态对象。
 type v4ProtocolHandler struct{}
 
@@ -251,7 +228,7 @@ WaitForStreams:
 			switch streamType {
 			case StreamTypeError:
 				// v4 的 error 流写入 JSON 状态对象，其中携带进程退出码。
-				ctx.writeStatus = v4WriteStatusFunc(stream) // write json errors
+				ctx.writeStatus = v4WriteStatusFunc(stream) // 写入 JSON 状态
 				go waitStreamReply(stream.replySent, replyChan, stop)
 			case StreamTypeStdin:
 				ctx.stdinStream = stream
@@ -277,8 +254,7 @@ WaitForStreams:
 			}
 		case <-expired:
 			// 客户端未在限定时间内建好所有流，放弃本次会话。
-			// TODO find a way to return the error to the user. Maybe use a separate
-			// stream to report errors?
+			// TODO：寻找把错误返回给客户端的方法，例如使用独立的流上报错误。
 			return nil, errors.New("timed out waiting for client to create streams")
 		}
 	}
@@ -286,11 +262,9 @@ WaitForStreams:
 	return ctx, nil
 }
 
-// supportsTerminalResizing returns true because v4ProtocolHandler supports it
 // supportsTerminalResizing 对 v4 返回 true，因为该协议支持终端尺寸调整。
 func (*v4ProtocolHandler) supportsTerminalResizing() bool { return true }
 
-// v3ProtocolHandler implements the V3 protocol version for streaming command execution.
 // v3ProtocolHandler 实现 v3 协议，相比 v2 增加了对 resize 流的支持。
 type v3ProtocolHandler struct{}
 
@@ -336,8 +310,7 @@ WaitForStreams:
 			}
 		case <-expired:
 			// 建流超时则放弃，避免连接被无限占用。
-			// TODO find a way to return the error to the user. Maybe use a separate
-			// stream to report errors?
+			// TODO：寻找把错误返回给客户端的方法，例如使用独立的流上报错误。
 			return nil, errors.New("timed out waiting for client to create streams")
 		}
 	}
@@ -345,11 +318,9 @@ WaitForStreams:
 	return ctx, nil
 }
 
-// supportsTerminalResizing returns true because v3ProtocolHandler supports it
 // supportsTerminalResizing 对 v3 返回 true，因为该协议支持终端尺寸调整。
 func (*v3ProtocolHandler) supportsTerminalResizing() bool { return true }
 
-// v2ProtocolHandler implements the V2 protocol version for streaming command execution.
 // v2ProtocolHandler 实现 v2 协议，主要修复 v1 的缺陷，但仍不支持 resize。
 type v2ProtocolHandler struct{}
 
@@ -392,8 +363,7 @@ WaitForStreams:
 			}
 		case <-expired:
 			// 建流超时，返回错误终止会话。
-			// TODO find a way to return the error to the user. Maybe use a separate
-			// stream to report errors?
+			// TODO：寻找把错误返回给客户端的方法，例如使用独立的流上报错误。
 			return nil, errors.New("timed out waiting for client to create streams")
 		}
 	}
@@ -401,11 +371,9 @@ WaitForStreams:
 	return ctx, nil
 }
 
-// supportsTerminalResizing returns false because v2ProtocolHandler doesn't support it.
 // supportsTerminalResizing 对 v2 返回 false，因为该协议不支持终端尺寸调整。
 func (*v2ProtocolHandler) supportsTerminalResizing() bool { return false }
 
-// v1ProtocolHandler implements the V1 protocol version for streaming command execution.
 // v1ProtocolHandler 实现最初的 v1 协议；保留了一些历史兼容行为，见下方 waitForStreams 中的说明。
 type v1ProtocolHandler struct{}
 
@@ -427,10 +395,7 @@ WaitForStreams:
 			case StreamTypeError:
 				ctx.writeStatus = v1WriteStatusFunc(stream)
 
-				// This defer statement shouldn't be here, but due to previous refactoring, it ended up in
-				// here. This is what 1.0.x kubelets do, so we're retaining that behavior. This is fixed in
-				// the v2ProtocolHandler.
-				// 该 defer 属于历史遗留：1.0.x kubelet 的客户端依赖此行为，故保留以兼容旧版本。
+				// 该 defer 属于历史遗留：1.0.x kubelet 的客户端依赖此行为，故保留以兼容旧版本；v2 已修复。
 				defer stream.Reset()
 
 				go waitStreamReply(stream.replySent, replyChan, stop)
@@ -454,8 +419,7 @@ WaitForStreams:
 			}
 		case <-expired:
 			// 建流超时则放弃会话。
-			// TODO find a way to return the error to the user. Maybe use a separate
-			// stream to report errors?
+			// TODO：寻找把错误返回给客户端的方法，例如使用独立的流上报错误。
 			return nil, errors.New("timed out waiting for client to create streams")
 		}
 	}
@@ -468,7 +432,6 @@ WaitForStreams:
 	return ctx, nil
 }
 
-// supportsTerminalResizing returns false because v1ProtocolHandler doesn't support it.
 // supportsTerminalResizing 对 v1 返回 false，因为该协议不支持终端尺寸调整。
 func (*v1ProtocolHandler) supportsTerminalResizing() bool { return false }
 
@@ -490,7 +453,6 @@ func handleResizeEvents(reqctx context.Context, stream io.Reader, channel chan<-
 		case channel <- size:
 		case <-reqctx.Done():
 			// 请求已结束而消费者不再接收，及时退出以避免 goroutine 泄漏。
-			// To prevent go routine leak.
 			return
 		}
 	}
@@ -501,15 +463,14 @@ func v1WriteStatusFunc(stream io.Writer) func(status *streamStatusError) error {
 	return func(status *streamStatusError) error {
 		// 成功状态不占用 error 流，直接跳过。
 		if status.status().Status == statusSuccess {
-			return nil // send error messages
+			return nil // 发送错误消息
 		}
 		_, err := stream.Write([]byte(status.Error()))
 		return err
 	}
 }
 
-// v4WriteStatusFunc returns a WriteStatusFunc that marshals a status object
-// as json in the error channel.
+// v4WriteStatusFunc 返回一个状态写入函数，将状态对象编码为 JSON 后写入 error 流。
 func v4WriteStatusFunc(stream io.Writer) func(status *streamStatusError) error {
 	return func(status *streamStatusError) error {
 		bs, err := json.Marshal(status.status())

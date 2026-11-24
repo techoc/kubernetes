@@ -24,12 +24,9 @@ type wrapper interface {
 	Unwrap() http.ResponseWriter
 }
 
-// GetOriginal walks any response writer wrapper chain and returns the first writer.
 // GetOriginal 沿着 ResponseWriter 的包装链一路向下，返回最内层的原始 writer。
-//
 // 这是必要的：某些中间件（如压缩、日志中间件）会包装 ResponseWriter，
 // 而升级协议（HTTP Upgrade / WebSocket）需要拿到最原始的 writer 才能接管底层连接。
-//
 // 实现要点：
 //   - 逐层判断当前 writer 是否实现了 wrapper 接口；
 //   - 不是则返回当前 writer；

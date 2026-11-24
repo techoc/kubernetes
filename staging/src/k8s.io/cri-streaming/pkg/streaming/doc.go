@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package streaming contains CRI server-side streaming interfaces and implementations.
-//
 // Package streaming 提供 CRI 流式服务的服务端接口与实现。
 // 工作流程大致如下：
 //  1. kubelet 调用容器运行时的 GetExec/GetAttach/GetPortForward RPC，拿到一个流式 URL 和 token；

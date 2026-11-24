@@ -42,12 +42,9 @@ const (
 	v4Base64WebsocketProtocol    = "v4." + wsstream.Base64ChannelWebSocketProtocol
 )
 
-// createChannels returns the standard channel types for a shell connection (STDIN 0, STDOUT 1, STDERR 2)
-// along with the approximate duplex value. It also creates the error (3) and resize (4) channels.
-// createChannels 返回 shell 连接所需的五个通道类型：按请求打开 stdin/stdout/stderr，
-// error 通道始终可写，resize 通道则始终可读（是否真正使用由上层决定）。
+// createChannels 返回 shell 连接所需的五个通道类型及大致的双工模式：
+// 按请求打开 stdin/stdout/stderr，error 通道始终可写，resize 通道始终可读（是否真正使用由上层决定）。
 func createChannels(opts *Options) []wsstream.ChannelType {
-	// open the requested channels, and always open the error channel
 	// 只打开请求的通道，但 error 通道无条件打开，用于回传状态。
 	channels := make([]wsstream.ChannelType, 5)
 	channels[stdinChannel] = readChannel(opts.Stdin)
@@ -58,7 +55,6 @@ func createChannels(opts *Options) []wsstream.ChannelType {
 	return channels
 }
 
-// readChannel returns wsstream.ReadChannel if real is true, or wsstream.IgnoreChannel.
 // readChannel 在需要该通道时返回 ReadChannel，否则返回 IgnoreChannel 让底层忽略它。
 func readChannel(real bool) wsstream.ChannelType {
 	if real {
@@ -67,7 +63,6 @@ func readChannel(real bool) wsstream.ChannelType {
 	return wsstream.IgnoreChannel
 }
 
-// writeChannel returns wsstream.WriteChannel if real is true, or wsstream.IgnoreChannel.
 // writeChannel 在需要该通道时返回 WriteChannel，否则返回 IgnoreChannel 让底层忽略它。
 func writeChannel(real bool) wsstream.ChannelType {
 	if real {
@@ -76,8 +71,6 @@ func writeChannel(real bool) wsstream.ChannelType {
 	return wsstream.IgnoreChannel
 }
 
-// createWebSocketStreams returns a connectionContext containing the websocket connection and
-// streams needed to perform an exec or an attach.
 // createWebSocketStreams 完成 WebSocket 升级并构建 connectionContext，其中包含 exec 或 attach 所需的各条流。
 func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *Options, idleTimeout time.Duration) (*connectionContext, bool) {
 	// 根据请求参数决定打开哪些通道。
@@ -114,8 +107,7 @@ func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *Opti
 		return nil, false
 	}
 
-	// Send an empty message to the lowest writable channel to notify the client the connection is established
-	// TODO: make generic to SPDY and WebSockets and do it outside of this method?
+	// TODO：将该逻辑泛化到 SPDY 与 WebSocket，并移到本方法之外。
 	// 向编号最小的可写通道发一条空消息，通知客户端连接已建立；优先 stdout，其次 stderr，最后 error。
 	switch {
 	case opts.Stdout:

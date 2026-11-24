@@ -83,7 +83,7 @@ func TestGetExec(t *testing.T) {
 		Tty:         true,
 		Stdin:       true,
 	}
-	{ // Non-TLS
+	{ // 非 TLS 场景
 		// 断言普通服务返回的 URL 以 http://<addr>/exec/ 开头，且尾部 token 可消费出原请求。
 		resp, err := serv.GetExec(request)
 		assert.NoError(t, err)
@@ -93,7 +93,7 @@ func TestGetExec(t *testing.T) {
 		assertRequestToken(request, serv.(*server).cache, token)
 	}
 
-	{ // TLS
+	{ // TLS 场景
 		// 断言 TLS 服务生成的 URL 以 https:// 开头，token 同样有效。
 		resp, err := tlsServer.GetExec(request)
 		assert.NoError(t, err)
@@ -103,7 +103,7 @@ func TestGetExec(t *testing.T) {
 		assertRequestToken(request, tlsServer.(*server).cache, token)
 	}
 
-	{ // Path prefix
+	{ // 路径前缀
 		// 断言带前缀的服务生成的 URL 包含 /cri/shim/exec/，token 可被正确消费。
 		resp, err := prefixServer.GetExec(request)
 		assert.NoError(t, err)
@@ -169,7 +169,6 @@ func TestValidateExecAttachRequest(t *testing.T) {
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			for _, c := range tc.configs {
-				// validate the exec request.
 				// 按当前组合构造 ExecRequest（带上合法容器 ID 和命令），断言校验结果符合预期。
 				execReq := &runtimeapi.ExecRequest{
 					ContainerId: testContainerID,
@@ -182,7 +181,6 @@ func TestValidateExecAttachRequest(t *testing.T) {
 				err := validateExecRequest(execReq)
 				assert.Equal(t, tc.expectErr, err != nil, "config: %v,  err: %v", c, err)
 
-				// validate the attach request.
 				// 用同样的组合构造 AttachRequest，断言其校验结果与 exec 完全一致。
 				attachReq := &runtimeapi.AttachRequest{
 					ContainerId: testContainerID,
@@ -226,7 +224,7 @@ func TestGetAttach(t *testing.T) {
 		Stdin:       true,
 		Tty:         true,
 	}
-	{ // Non-TLS
+	{ // 非 TLS 场景
 		// 断言 URL 前缀为 http://<addr>/attach/，且尾随 token 能取回原请求。
 		resp, err := serv.GetAttach(request)
 		assert.NoError(t, err)
@@ -236,7 +234,7 @@ func TestGetAttach(t *testing.T) {
 		assertRequestToken(request, serv.(*server).cache, token)
 	}
 
-	{ // TLS
+	{ // TLS 场景
 		// 断言 URL 前缀为 https://<addr>/attach/，token 同样有效。
 		resp, err := tlsServer.GetAttach(request)
 		assert.NoError(t, err)
@@ -257,7 +255,7 @@ func TestGetPortForward(t *testing.T) {
 		Port:         []int32{1, 2, 3, 4},
 	}
 
-	{ // Non-TLS
+	{ // 非 TLS 场景
 		// 创建普通服务，断言返回的 URL 以 http://<addr>/portforward/ 开头。
 		serv, err := NewServer(Config{
 			Addr: testAddr,
@@ -274,7 +272,7 @@ func TestGetPortForward(t *testing.T) {
 		assert.Equal(t, testPodSandboxID, req.(*runtimeapi.PortForwardRequest).PodSandboxId)
 	}
 
-	{ // TLS
+	{ // TLS 场景
 		// 创建 TLS 服务，断言 URL 使用 https，并通过 token 取回相同的 pod sandbox ID。
 		tlsServer, err := NewServer(Config{
 			Addr:      testAddr,
@@ -332,8 +330,6 @@ func TestServePortForward(t *testing.T) {
 	requireWebSocketPayload(t, wsConn, 0, []byte("portforward"+testOutput), false)
 }
 
-// Run the remote command test.
-// commandType is either "exec" or "attach".
 // runRemoteCommandTest 对 exec 或 attach 执行端到端测试：创建请求、拨 WebSocket、校验三个通道的收发，并验证 token 的一次性语义。
 func runRemoteCommandTest(t *testing.T, commandType string) {
 	s, testServer := startTestServer(t)
@@ -377,7 +373,6 @@ func runRemoteCommandTest(t *testing.T, commandType string) {
 	writeWebSocketPayload(t, wsConn, 0, []byte(commandType+testInput))
 	requireWebSocketPayload(t, wsConn, 1, []byte(commandType+testOutput), true)
 
-	// Repeat request with the same URL should be a 404.
 	// token 只能消费一次，重复请求同一 URL 应返回 404。
 	resp, err := http.Get(reqURL.String())
 	require.NoError(t, err)
@@ -410,7 +405,7 @@ func startTestServer(t *testing.T) (Server, *httptest.Server) {
 	s, err = NewServer(config, rt)
 	require.NoError(t, err)
 
-	cleanup = false // Caller must close the test server.
+	cleanup = false // 调用方必须关闭测试服务器。
 	return s, testServer
 }
 
@@ -458,8 +453,6 @@ func (f *fakeRuntime) PortForward(_ context.Context, podSandboxID string, port i
 	return nil
 }
 
-// Send & receive expected input/output. Must be the inverse of doClientStreams.
-// Function will block until the expected i/o is finished.
 // doServerStreams 模拟服务端：若提供 stderr 则先写错误信息，再读取客户端输入，最后写回输出；函数会阻塞直到收发完成。
 func doServerStreams(t *testing.T, prefix string, stdin io.Reader, stdout, stderr io.Writer) {
 	if stderr != nil {
@@ -469,7 +462,6 @@ func doServerStreams(t *testing.T, prefix string, stdin io.Reader, stdout, stder
 	writeExpected(t, "server stdout", stdout, prefix+testOutput)
 }
 
-// Read and verify the expected string from the stream.
 // readExpected 从流中读取恰好 len(expected) 个字节，断言读取成功且内容与预期字符串一致。
 func readExpected(t *testing.T, streamName string, r io.Reader, expected string) {
 	result := make([]byte, len(expected))
@@ -478,7 +470,6 @@ func readExpected(t *testing.T, streamName string, r io.Reader, expected string)
 	assert.Equal(t, expected, string(result), "stream %s", streamName)
 }
 
-// Write and verify success of the data over the stream.
 // writeExpected 向流写入给定字符串，断言写入无错误且字节数等于字符串长度。
 func writeExpected(t *testing.T, streamName string, w io.Writer, data string) {
 	n, err := io.WriteString(w, data)

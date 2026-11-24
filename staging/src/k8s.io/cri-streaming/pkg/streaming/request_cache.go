@@ -29,21 +29,14 @@ import (
 )
 
 var (
-	// cacheTTL is the timeout after which tokens become invalid.
 	// cacheTTL 是 token 的有效期（1 分钟）。超过该时间后，token 失效，对应请求无法再被取出。
 	cacheTTL = 1 * time.Minute
-	// maxInFlight is the maximum number of in-flight requests to allow.
 	// maxInFlight 是缓存允许同时存在的最大请求数，用于防止恶意请求耗尽内存（DoS 防护）。
 	maxInFlight = 1000
-	// tokenLen is the length of the random base64 encoded token identifying the request.
 	// tokenLen 是用于标识请求的随机 URL 安全 base64 token 的长度（字符数）。
 	tokenLen = 8
 )
 
-// requestCache caches streaming (exec/attach/port-forward) requests and generates a single-use
-// random token for their retrieval. The requestCache is used for building streaming URLs without
-// the need to encode every request parameter in the URL.
-//
 // requestCache 缓存 exec/attach/port-forward 的流式请求，并为每个请求生成一个一次性随机 token。
 // 这样 kubectl 等客户端只需携带简短的 token 即可取回完整请求，无需把所有参数编码进 URL
 // （这些参数可能包含敏感信息或过大的结构体）。
@@ -52,14 +45,11 @@ var (
 //   - ll：按插入时间排序的双向链表，表头最新、表尾最旧，便于按时间顺序清理过期请求；
 //   - lock：保护两个数据结构的并发访问。
 type requestCache struct {
-	// clock is used to obtain the current time
 	// clock 用于获取当前时间，测试时可替换为 FakeClock 来模拟时间流逝。
 	clock clock.Clock
 
-	// tokens maps the generate token to the request for fast retrieval.
 	// tokens 把 token 映射到链表元素，实现快速定位。
 	tokens map[string]*list.Element
-	// ll maintains an age-ordered request list for faster garbage collection of expired requests.
 	// ll 维护按时间排序的请求链表，最旧的在尾部，便于高效回收过期项。
 	ll *list.List
 
@@ -67,7 +57,6 @@ type requestCache struct {
 	lock sync.Mutex
 }
 
-// Type representing an *ExecRequest, *AttachRequest, or *PortForwardRequest.
 // request 表示可以缓存的请求类型，实际为 *ExecRequest、*AttachRequest 或 *PortForwardRequest 之一。
 type request interface{}
 
@@ -89,9 +78,7 @@ func newRequestCache() *requestCache {
 	}
 }
 
-// Insert the given request into the cache and returns the token used for fetching it out.
 // Insert 把请求存入缓存，并返回可用于取回它的 token。
-//
 // 处理流程：
 //  1. 加锁；
 //  2. 先执行 gc 清理过期条目，腾出空间；
@@ -102,10 +89,8 @@ func (c *requestCache) Insert(req request) (token string, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	// Remove expired entries.
 	// 先回收过期条目，避免误判缓存已满。
 	c.gc()
-	// If the cache is full, reject the request.
 	// 缓存已满，拒绝新请求以防御 DoS。
 	if c.ll.Len() == maxInFlight {
 		return "", NewErrorTooManyInFlight()
@@ -122,9 +107,7 @@ func (c *requestCache) Insert(req request) (token string, err error) {
 	return token, nil
 }
 
-// Consume the token (remove it from the cache) and return the cached request, if found.
 // Consume 根据 token 取出并删除对应请求——token 是一次性的，消费后即失效。
-//
 // 处理流程：
 //  1. 加锁并在 tokens 中查找 token，不存在直接返回 false；
 //  2. 从链表和映射中同时删除该条目；
@@ -144,16 +127,13 @@ func (c *requestCache) Consume(token string) (req request, found bool) {
 
 	entry := ele.Value.(*cacheEntry)
 	if c.clock.Now().After(entry.expireTime) {
-		// Entry already expired.
 		// 条目已过期，视为不存在。
 		return nil, false
 	}
 	return entry.req, true
 }
 
-// uniqueToken generates a random URL-safe token and ensures uniqueness.
 // uniqueToken 生成一个 URL 安全的随机 token，并确保它在当前缓存中唯一。
-//
 // 实现细节：
 //   - 先根据目标字符数 tokenLen 反推需要的随机字节数（base64 每 6 位编码 1 个字符，故乘 6/8 并向上取整）；
 //   - 用 crypto/rand 填充随机字节，再做 RawURLEncoding（无填充、URL 安全）编码，截取前 tokenLen 个字符；
@@ -163,7 +143,6 @@ func (c *requestCache) Consume(token string) (req request, found bool) {
 // 这是代码现状（截取后未再单独校验截断结果的唯一性）。
 func (c *requestCache) uniqueToken() (string, error) {
 	const maxTries = 10
-	// Number of bytes to be tokenLen when base64 encoded.
 	// 算出编码后能达到 tokenLen 个字符所需的随机字节数。
 	tokenSize := math.Ceil(float64(tokenLen) * 6 / 8)
 	rawToken := make([]byte, int(tokenSize))
@@ -175,7 +154,6 @@ func (c *requestCache) uniqueToken() (string, error) {
 		// 使用 URL 安全的 base64 编码（无 = 填充），并截取指定长度。
 		encoded := base64.RawURLEncoding.EncodeToString(rawToken)
 		token := encoded[:tokenLen]
-		// If it's unique, return it. Otherwise retry.
 		// 与已有 token 不冲突则返回，否则重试。
 		if _, exists := c.tokens[encoded]; !exists {
 			return token, nil
@@ -184,10 +162,8 @@ func (c *requestCache) uniqueToken() (string, error) {
 	return "", fmt.Errorf("failed to generate unique token")
 }
 
-// Must be write-locked prior to calling.
 // gc 回收所有过期条目。
 // 调用前提：调用方必须已持有写锁（Insert 会在锁内调用它）。
-//
 // 由于链表按时间排序，最旧条目在尾部，因此只需从尾部开始逐个检查：
 // 遇到未过期的条目即可停止（后面的更新鲜，必然也未过期）。
 func (c *requestCache) gc() {
@@ -200,7 +176,6 @@ func (c *requestCache) gc() {
 			return
 		}
 
-		// Oldest value is expired; remove it.
 		// 最旧条目已过期：同时从链表和 token 映射中删除。
 		c.ll.Remove(oldest)
 		delete(c.tokens, entry.token)

@@ -37,9 +37,7 @@ import (
 func handleHTTPStreams(req *http.Request, w http.ResponseWriter, portForwarder PortForwarder, podName string, uid string, supportedPortForwardProtocols []string, idleTimeout, streamCreationTimeout time.Duration) error {
 	// 先做协议协商：只有客户端与服务端支持同一种端口转发子协议才能继续。
 	_, err := httpstream.Handshake(req, w, supportedPortForwardProtocols)
-	// negotiated protocol isn't currently used server side, but could be in the future
 	if err != nil {
-		// Handshake writes the error to the client
 		// 握手失败时错误响应已由 Handshake 写给客户端，这里只需把错误上抛。
 		return err
 	}
@@ -76,15 +74,10 @@ func handleHTTPStreams(req *http.Request, w http.ResponseWriter, portForwarder P
 	return nil
 }
 
-// httpStreamReceived is the httpstream.NewStreamHandler for port
-// forward streams. It checks each stream's port and stream type headers,
-// rejecting any streams that with missing or invalid values. Each valid
-// stream is sent to the streams channel.
 // httpStreamReceived 返回端口转发流使用的 httpstream.NewStreamHandler 回调。
 // 它逐条校验流携带的端口和流类型头，拒绝缺失或取值非法的流；合法的流会被送入 streams 通道。
 func httpStreamReceived(streams chan httpstream.Stream) func(httpstream.Stream, <-chan struct{}) error {
 	return func(stream httpstream.Stream, replySent <-chan struct{}) error {
-		// make sure it has a valid port header
 		// 端口头必须存在且能解析为 1 到 65535 之间的十进制整数。
 		portString := stream.Headers().Get(PortHeader)
 		if len(portString) == 0 {
@@ -98,7 +91,6 @@ func httpStreamReceived(streams chan httpstream.Stream) func(httpstream.Stream, 
 			return fmt.Errorf("port %q must be > 0", portString)
 		}
 
-		// make sure it has a valid stream type header
 		// 流类型头决定该流承担数据通道还是错误通道的角色，取值只能是 data 或 error。
 		streamType := stream.Headers().Get(StreamType)
 		if len(streamType) == 0 {
@@ -114,8 +106,6 @@ func httpStreamReceived(streams chan httpstream.Stream) func(httpstream.Stream, 
 	}
 }
 
-// httpStreamHandler is capable of processing multiple port forward
-// requests over a single httpstream.Connection.
 // httpStreamHandler 负责在单条 httpstream.Connection 上处理多个端口转发请求。
 // 字段含义：conn 是已升级的连接；streamChan 接收新建的流；streamPairsLock 保护并发访问的流对表；
 // streamPairs 按 requestID 索引每个请求的数据/错误流对；streamCreationTimeout 是等待一对流建立的最长时间；
@@ -131,9 +121,6 @@ type httpStreamHandler struct {
 	forwarder             PortForwarder
 }
 
-// getStreamPair returns a httpStreamPair for requestID. This creates a
-// new pair if one does not yet exist for the requestID. The returned bool is
-// true if the pair was created.
 // getStreamPair 返回 requestID 对应的流对；不存在时新建一个。返回的布尔值表示流对是否为本次新建。
 func (h *httpStreamHandler) getStreamPair(requestID string) (*httpStreamPair, bool) {
 	// 流对表会被主循环和监控协程并发访问，必须加锁保护。
@@ -155,9 +142,6 @@ func (h *httpStreamHandler) getStreamPair(requestID string) (*httpStreamPair, bo
 	return p, true
 }
 
-// monitorStreamPair waits for the pair to receive both its error and data
-// streams, or for the timeout to expire (whichever happens first), and then
-// removes the pair.
 // monitorStreamPair 等待流对收齐错误流和数据流，或等待超时（以先到者为准），随后移除该流对。
 func (h *httpStreamHandler) monitorStreamPair(p *httpStreamPair, timeout <-chan time.Time) {
 	// 收不齐两条流就说明客户端已放弃或出错，需要把超时错误回写到错误流。
@@ -173,8 +157,6 @@ func (h *httpStreamHandler) monitorStreamPair(p *httpStreamPair, timeout <-chan 
 	h.removeStreamPair(p.requestID)
 }
 
-// hasStreamPair returns a bool indicating if a stream pair for requestID
-// exists.
 // hasStreamPair 报告 requestID 对应的流对是否仍存在于表中。
 func (h *httpStreamHandler) hasStreamPair(requestID string) bool {
 	h.streamPairsLock.RLock()
@@ -184,7 +166,6 @@ func (h *httpStreamHandler) hasStreamPair(requestID string) bool {
 	return ok
 }
 
-// removeStreamPair removes the stream pair identified by requestID from streamPairs.
 // removeStreamPair 从流对表中删除 requestID 对应的流对，并注销其底层流。
 func (h *httpStreamHandler) removeStreamPair(requestID string) {
 	h.streamPairsLock.Lock()
@@ -198,31 +179,17 @@ func (h *httpStreamHandler) removeStreamPair(requestID string) {
 	delete(h.streamPairs, requestID)
 }
 
-// requestID returns the request id for stream.
 // requestID 返回流所属的端口转发请求 ID。
 func (h *httpStreamHandler) requestID(stream httpstream.Stream) string {
 	requestID := stream.Headers().Get(PortForwardRequestIDHeader)
 	if len(requestID) == 0 {
 		klog.V(5).InfoS("Connection stream received without requestID header", "connection", h.conn)
-		// If we get here, it's because the connection came from an older client
-		// that isn't generating the request id header
-		// (https://github.com/kubernetes/kubernetes/blob/843134885e7e0b360eb5441e85b1410a8b1a7a0c/pkg/client/unversioned/portforward/portforward.go#L258-L287)
-		//
-		// This is a best-effort attempt at supporting older clients.
-		//
-		// When there aren't concurrent new forwarded connections, each connection
-		// will have a pair of streams (data, error), and the stream IDs will be
-		// consecutive odd numbers, e.g. 1 and 3 for the first connection. Convert
-		// the stream ID into a pseudo-request id by taking the stream type and
-		// using id = stream.Identifier() when the stream type is error,
-		// and id = stream.Identifier() - 2 when it's data.
-		//
-		// NOTE: this only works when there are not concurrent new streams from
-		// multiple forwarded connections; it's a best-effort attempt at supporting
-		// old clients that don't generate request ids.  If there are concurrent
-		// new connections, it's possible that 1 connection gets streams whose IDs
-		// are not consecutive (e.g. 5 and 9 instead of 5 and 7).
-		// 兼容旧客户端：从流类型和流 ID 推导伪 requestID，让同一请求的两条流得到相同的值。
+		// 兼容未生成 requestID 头的旧客户端：此时每个连接只有一对 data/error 流，
+		// 且两条流的 ID 是连续的奇数（如 1 和 3）。错误流使用自身 ID，数据流使用 ID 减 2，
+		// 从而为同一请求推导出相同的伪 requestID。
+		// 这只是尽力兼容：多个转发连接并发建流时，同一请求的流 ID 可能不再连续
+		// （例如 5 和 9），此时无法可靠配对。
+		// 旧客户端实现：https://github.com/kubernetes/kubernetes/blob/843134885e7e0b360eb5441e85b1410a8b1a7a0c/pkg/client/unversioned/portforward/portforward.go#L258-L287
 		streamType := stream.Headers().Get(StreamType)
 		switch streamType {
 		case StreamTypeError:
@@ -238,9 +205,6 @@ func (h *httpStreamHandler) requestID(stream httpstream.Stream) string {
 	return requestID
 }
 
-// run is the main loop for the httpStreamHandler. It processes new
-// streams, invoking portForward for each complete stream pair. The loop exits
-// when the httpstream.Connection is closed.
 // run 是主循环：处理新到达的流，并在流对收齐后调用 portForward；连接关闭时循环退出。
 func (h *httpStreamHandler) run() {
 	klog.V(5).InfoS("Connection waiting for port forward streams", "connection", h.conn)
@@ -274,8 +238,6 @@ Loop:
 	}
 }
 
-// portForward invokes the httpStreamHandler's forwarder.PortForward
-// function for the given stream pair.
 // portForward 为给定流对调用 forwarder.PortForward，把实际的数据转发委派给 forwarder。
 func (h *httpStreamHandler) portForward(p *httpStreamPair) {
 	ctx := context.Background()
@@ -297,18 +259,12 @@ func (h *httpStreamHandler) portForward(p *httpStreamPair) {
 		utilruntime.HandleError(msg)
 		// 把错误文本写入错误流，让客户端知道转发失败。
 		fmt.Fprint(p.errorStream, msg.Error())
-		// receiving an error from a port-forward operation indicates a problem
-		// with data stream most probably, thus we want to reset the streams
-		// indicating there was a problem and allow a new set of streams be
-		// created to mitigate the problem
-		// 同时重置两条流，通知客户端需要重新建立流对才能继续转发。
+		// 转发错误通常说明数据流已异常；同时重置两条流，通知客户端重新建立流对以恢复转发。
 		p.dataStream.Reset()  // nolint:errcheck
 		p.errorStream.Reset() // nolint:errcheck
 	}
 }
 
-// httpStreamPair represents the error and data streams for a port
-// forwarding request.
 // httpStreamPair 表示一个端口转发请求对应的数据/错误流对。
 // 字段含义：lock 保护并发读写；requestID 标识所属请求；dataStream 承载转发数据；
 // errorStream 回传错误信息；complete 在两条流都到齐时关闭，用于通知监控协程。
@@ -320,7 +276,6 @@ type httpStreamPair struct {
 	complete    chan struct{}
 }
 
-// newPortForwardPair creates a new httpStreamPair.
 // newPortForwardPair 为指定请求创建一个新的流对，并初始化完成通知通道。
 func newPortForwardPair(requestID string) *httpStreamPair {
 	return &httpStreamPair{
@@ -329,10 +284,6 @@ func newPortForwardPair(requestID string) *httpStreamPair {
 	}
 }
 
-// add adds the stream to the httpStreamPair. If the pair already
-// contains a stream for the new stream's type, an error is returned. add
-// returns true if both the data and error streams for this pair have been
-// received.
 // add 把一条流登记到流对中；同类型的流重复到达时返回错误。返回值表示数据/错误流是否都已收齐。
 func (p *httpStreamPair) add(stream httpstream.Stream) (bool, error) {
 	// 流对由主循环写入、监控协程读取，需要加锁。
@@ -361,7 +312,6 @@ func (p *httpStreamPair) add(stream httpstream.Stream) (bool, error) {
 	return complete, nil
 }
 
-// printError writes s to p.errorStream if p.errorStream has been set.
 // printError 在错误流已经就位时把错误文本 s 写入该流，否则静默丢弃。
 func (p *httpStreamPair) printError(s string) {
 	p.lock.RLock()

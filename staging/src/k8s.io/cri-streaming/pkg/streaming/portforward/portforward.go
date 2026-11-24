@@ -26,22 +26,14 @@ import (
 	"k8s.io/streaming/pkg/runtime"
 )
 
-// PortForwarder knows how to forward content from a data stream to/from a port
-// in a pod.
 // PortForwarder 知道如何在数据流与 Pod 端口之间转发内容。
 type PortForwarder interface {
-	// PortForwarder copies data between a data stream and a port in a pod.
 	// PortForward 在数据流与指定 Pod 的端口之间双向拷贝数据。
 	PortForward(ctx context.Context, name string, uid string, port int32, stream io.ReadWriteCloser) error
 }
 
-// ServePortForward handles a port forwarding request.  A single request is
-// kept alive as long as the client is still alive and the connection has not
-// been timed out due to idleness. This function handles multiple forwarded
-// connections; i.e., multiple `curl http://localhost:8888/` requests will be
-// handled by a single invocation of ServePortForward.
 // ServePortForward 处理端口转发请求。只要客户端存活且连接未因空闲而超时，该请求就会一直保持；
-// 单次调用可服务多个转发连接，例如多个 curl 请求由同一次 ServePortForward 调用处理。
+// 单次调用可服务多个转发连接，例如多个 curl http://localhost:8888/ 请求由同一次 ServePortForward 调用处理。
 func ServePortForward(w http.ResponseWriter, req *http.Request, portForwarder PortForwarder, podName string, uid string, portForwardOptions *V4Options, idleTimeout time.Duration, streamCreationTimeout time.Duration, supportedProtocols []string) {
 	var err error
 	// 按请求头区分协议：WebSocket 请求走 wsstream 路径，其余走 HTTP Upgrade（SPDY）路径。

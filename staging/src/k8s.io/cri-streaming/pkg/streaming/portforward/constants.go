@@ -14,15 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package portforward contains server-side logic for handling port forwarding requests.
 // Package portforward 提供服务端处理端口转发请求的逻辑。
 package portforward
 
-// ProtocolV1Name is the name of the subprotocol used for port forwarding.
 // ProtocolV1Name 是端口转发所使用的子协议名称。
 const ProtocolV1Name = "portforward.k8s.io"
 
-// SupportedProtocols are the supported port forwarding protocols.
 // SupportedProtocols 列出服务端支持的端口转发协议。
 var SupportedProtocols = []string{ProtocolV1Name}
 
