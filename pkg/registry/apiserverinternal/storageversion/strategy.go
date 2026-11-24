@@ -30,22 +30,21 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// storageVersionStrategy implements verification logic for StorageVersion.
+// storageVersionStrategy 定义 StorageVersion 的创建、更新和校验策略。
 type storageVersionStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating StorageVersion objects.
+// Strategy 是创建、更新和删除 StorageVersion 对象时使用的默认 REST 策略。
 var Strategy = storageVersionStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped returns false because all StorageVersion's need to be cluster scoped
+// NamespaceScoped 返回 false，因为 StorageVersion 是集群级资源。
 func (storageVersionStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 声明主资源写入时需要重置的 Status 字段，防止客户端绕过 StorageVersion 控制器直接修改状态。
 func (storageVersionStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"internal.apiserver.k8s.io/v1alpha1": fieldpath.NewSet(
@@ -56,39 +55,39 @@ func (storageVersionStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpa
 	return fields
 }
 
-// PrepareForCreate clears the status of an StorageVersion before creation.
+// PrepareForCreate 在创建 StorageVersion 时清空客户端提交的 Status。
 func (storageVersionStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	sv := obj.(*apiserverinternal.StorageVersion)
 	sv.Status = apiserverinternal.StorageVersionStatus{}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 恢复旧 Status，防止普通更新接口修改控制器维护的存储版本状态。
 func (storageVersionStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	sv := obj.(*apiserverinternal.StorageVersion)
 	sv.Status = old.(*apiserverinternal.StorageVersion).Status
 }
 
-// Validate validates a new storageVersion.
+// Validate 校验 StorageVersion 的名称、存储版本报告及状态字段约束。
 func (storageVersionStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	sv := obj.(*apiserverinternal.StorageVersion)
 	return validation.ValidateStorageVersion(sv)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 StorageVersion 时的非阻断性警告；当前不产生额外警告。
 func (storageVersionStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 StorageVersion；当前不执行额外转换。
 func (storageVersionStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// Does not allow creating a StorageVersion object with a PUT request.
+// AllowCreateOnUpdate 返回 false，StorageVersion 必须通过 POST 创建。
 func (storageVersionStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 根据新旧对象校验 StorageVersion 更新是否合法。
 func (storageVersionStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newStorageVersion := obj.(*apiserverinternal.StorageVersion)
 	oldStorageVersion := old.(*apiserverinternal.StorageVersion)
@@ -96,13 +95,12 @@ func (storageVersionStrategy) ValidateUpdate(ctx context.Context, obj, old runti
 	return validationErrorList
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 StorageVersion 主资源更新时的非阻断性警告；当前不产生额外警告。
 func (storageVersionStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// AllowUnconditionalUpdate is the default update policy for storageVersion objects. Status update should
-// only be allowed if version match.
+// AllowUnconditionalUpdate 返回 false，更新必须携带 ResourceVersion 并与存储版本匹配。
 func (storageVersionStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
@@ -111,11 +109,10 @@ type storageVersionStatusStrategy struct {
 	storageVersionStrategy
 }
 
-// StatusStrategy is the default logic invoked when updating object status.
+// StatusStrategy 是 StorageVersion /status 子资源使用的策略，继承主资源策略并单独定义字段重置边界。
 var StatusStrategy = storageVersionStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 声明 Status 子资源写入时需要重置的 Spec 和 metadata，确保该入口只能修改 Status。
 func (storageVersionStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"internal.apiserver.k8s.io/v1alpha1": fieldpath.NewSet(
@@ -127,6 +124,7 @@ func (storageVersionStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*f
 	return fields
 }
 
+// PrepareForUpdate 恢复旧 Spec，并重置受保护的元数据字段，只允许更新 Status。
 func (storageVersionStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newSV := obj.(*apiserverinternal.StorageVersion)
 	oldSV := old.(*apiserverinternal.StorageVersion)
@@ -135,11 +133,12 @@ func (storageVersionStatusStrategy) PrepareForUpdate(ctx context.Context, obj, o
 	metav1.ResetObjectMetaForStatus(&newSV.ObjectMeta, &oldSV.ObjectMeta)
 }
 
+// ValidateUpdate 校验 StorageVersion Status 更新是否合法。
 func (storageVersionStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateStorageVersionStatusUpdate(obj.(*apiserverinternal.StorageVersion), old.(*apiserverinternal.StorageVersion))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 StorageVersion Status 更新时的非阻断性警告；当前不产生额外警告。
 func (storageVersionStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

@@ -27,10 +27,10 @@ import (
 	storageversionstorage "k8s.io/kubernetes/pkg/registry/apiserverinternal/storageversion/storage"
 )
 
-// StorageProvider is a REST storage provider for internal.apiserver.k8s.io
+// StorageProvider 负责装配 internal.apiserver.k8s.io API Group 的 REST 存储。
 type StorageProvider struct{}
 
-// NewRESTStorage returns a StorageProvider
+// NewRESTStorage 初始化 API Group，并按资源启用配置注册 v1alpha1 版本的 StorageVersion 存储。
 func (p StorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(apiserverinternal.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 
@@ -43,6 +43,7 @@ func (p StorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.AP
 	return apiGroupInfo, nil
 }
 
+// v1alpha1Storage 按资源启用配置装配 StorageVersion 主资源和 /status 子资源。
 func (p StorageProvider) v1alpha1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -58,7 +59,7 @@ func (p StorageProvider) v1alpha1Storage(apiResourceConfigSource serverstorage.A
 	return storage, nil
 }
 
-// GroupName is the group name for the storage provider
+// GroupName 返回 API Group 的名称。
 func (p StorageProvider) GroupName() string {
 	return apiserverinternal.GroupName
 }

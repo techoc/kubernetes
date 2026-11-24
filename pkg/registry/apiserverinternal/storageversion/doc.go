@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package storageversion provides Registry interface and it's RESTStorage
-// implementation for storing StorageVersion api objects.
+// Package storageversion 提供 StorageVersion 的 REST 策略和存储实现，用于持久化 API Server 上报的存储版本信息。
 package storageversion

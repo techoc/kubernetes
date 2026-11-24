@@ -61,7 +61,7 @@ func validStorageVersion() *apiserverinternal.StorageVersion {
 		EncodingVersion:   "v1",
 		DecodableVersions: []string{"v1", "v2"},
 	}
-	// ssv3 has a different encoding version
+	// ssv3 使用不同的存储编码版本，用于验证多个 API Server 的编码版本汇总结果。
 	ssv3 := apiserverinternal.ServerStorageVersion{
 		APIServerID:       "3",
 		EncodingVersion:   "v2",

@@ -30,7 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/apiserverinternal"
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 
-	// Ensure that admissionregistration package is initialized.
+	// 副作用导入会将 apiserverinternal API 类型注册到全局 Scheme，供 REST 测试使用。
 	_ "k8s.io/kubernetes/pkg/apis/apiserverinternal/install"
 )
 
@@ -41,9 +41,9 @@ func TestCreate(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope().Namer(name).GeneratesName()
 	storageVersion := validStorageVersion()
 	test.TestCreate(
-		// valid
+		// 合法输入
 		storageVersion,
-		// invalid
+		// 非法输入
 		newStorageVersion(""),
 	)
 }
@@ -55,9 +55,9 @@ func TestUpdate(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope().Namer(name).GeneratesName()
 
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validStorageVersion(),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*apiserverinternal.StorageVersion)
 			update := &apiserverinternal.StorageVersion{
@@ -65,7 +65,7 @@ func TestUpdate(t *testing.T) {
 			}
 			return update
 		},
-		// invalid updateFunc
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*apiserverinternal.StorageVersion)
 			object.Name = ""
@@ -133,7 +133,7 @@ func validStorageVersion() *apiserverinternal.StorageVersion {
 		EncodingVersion:   "v1",
 		DecodableVersions: []string{"v1", "v2"},
 	}
-	// ssv3 has a different encoding version
+	// ssv3 使用不同的存储编码版本，用于验证多个 API Server 的编码版本汇总结果。
 	ssv3 := apiserverinternal.ServerStorageVersion{
 		APIServerID:       "3",
 		EncodingVersion:   "v2",
