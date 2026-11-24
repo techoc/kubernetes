@@ -83,9 +83,9 @@ func TestCreate(t *testing.T) {
 	np := validNetworkPolicy()
 	np.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo-"}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		np,
-		// invalid
+		// 非法输入
 		&networking.NetworkPolicy{
 			ObjectMeta: metav1.ObjectMeta{Name: "name with spaces"},
 		},
@@ -99,9 +99,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNetworkPolicy(),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*networking.NetworkPolicy)
 			object.Spec.Ingress = []networking.NetworkPolicyIngressRule{
@@ -118,7 +118,7 @@ func TestUpdate(t *testing.T) {
 			}
 			return object
 		},
-		// invalid updateFunc
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*networking.NetworkPolicy)
 			object.Spec.Ingress = []networking.NetworkPolicyIngressRule{
@@ -168,17 +168,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNetworkPolicy(),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": "foo"},

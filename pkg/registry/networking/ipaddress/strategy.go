@@ -34,7 +34,7 @@ type ipAddressStrategy struct {
 	names.NameGenerator
 }
 
-// noopNameGenerator does not generate names, it just returns the base.
+// noopNameGenerator 不生成随机名称后缀，直接返回调用方提供的 base。
 type noopNameGenerator struct{}
 
 // IPAddress 不能追加随机后缀，否则会改变其所代表的真实 IP；生成名接口必须直接返回原地址。
@@ -42,28 +42,27 @@ func (noopNameGenerator) GenerateName(base string) string {
 	return base
 }
 
-// Strategy is the default logic that applies when creating and updating Replication IPAddress objects.
+// Strategy 是创建、更新和删除 IPAddress 对象时使用的默认策略。
 var Strategy = ipAddressStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, noopNameGenerator{}}
 
-// Strategy should implement rest.RESTCreateStrategy
+// 确保 Strategy 实现 rest.RESTCreateStrategy 接口。
 var _ rest.RESTCreateStrategy = Strategy
 
-// Strategy should implement rest.RESTUpdateStrategy
+// 确保 Strategy 实现 rest.RESTUpdateStrategy 接口。
 var _ rest.RESTUpdateStrategy = Strategy
 
-// NamespaceScoped returns false because all IPAddresses is cluster scoped.
+// NamespaceScoped 返回 false，因为 IPAddress 是集群级资源。
 func (ipAddressStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// PrepareForCreate clears the status of an IPAddress before creation.
-// 创建阶段不补默认值或改名；IPAddress 的地址和 ParentRef 由分配控制器按服务地址池规则写入。
+// PrepareForCreate 在创建前执行 IPAddress 字段预处理；当前不修改对象内容。
 func (ipAddressStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	_ = obj.(*networking.IPAddress)
 
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 预留更新前的字段处理入口；当前不重置或改写字段。
 func (ipAddressStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIPAddress := obj.(*networking.IPAddress)
 	oldIPAddress := old.(*networking.IPAddress)
@@ -71,23 +70,22 @@ func (ipAddressStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 	_, _ = newIPAddress, oldIPAddress
 }
 
-// Validate validates a new IPAddress.
-// Validate 检查对象名称是否为合法 IP 地址，以及 ParentRef/地址族等字段是否符合 API 约束。
+// Validate 校验新 IPAddress 的名称、地址和 ParentRef 等字段。
 func (ipAddressStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ipAddress := obj.(*networking.IPAddress)
 	return validation.ValidateIPAddress(ipAddress)
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 IPAddress；当前无需额外处理。
 func (ipAddressStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for IPAddress; this means POST is needed to create one.
+// AllowCreateOnUpdate 返回 false，IPAddress 必须通过 POST 创建，不能由 PUT 更新请求隐式创建。
 func (ipAddressStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 对照旧对象校验 IPAddress 更新是否合法，并保护地址身份等不可变字段。
 // IPAddress 的地址身份不可随意更换；更新时既执行完整对象校验，也执行旧新对象之间的不可变字段校验。
 func (ipAddressStrategy) ValidateUpdate(ctx context.Context, new, old runtime.Object) field.ErrorList {
 	newIPAddress := new.(*networking.IPAddress)
@@ -97,17 +95,17 @@ func (ipAddressStrategy) ValidateUpdate(ctx context.Context, new, old runtime.Ob
 	return errList
 }
 
-// AllowUnconditionalUpdate is the default update policy for IPAddress objects.
+// AllowUnconditionalUpdate 返回 true，允许 IPAddress 更新请求不携带 ResourceVersion。
 func (ipAddressStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 IPAddress 时的非阻断性警告；当前不产生额外警告。
 func (ipAddressStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 IPAddress 时的非阻断性警告；当前不产生额外警告。
 func (ipAddressStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

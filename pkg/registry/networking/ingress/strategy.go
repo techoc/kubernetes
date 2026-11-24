@@ -42,16 +42,15 @@ type ingressStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating Replication Ingress objects.
+// Strategy 是创建、更新和删除 Ingress 对象时使用的默认策略。
 var Strategy = ingressStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped returns true because all Ingress' need to be within a namespace.
+// NamespaceScoped 返回 true，因为 Ingress 必须归属于某个命名空间。
 func (ingressStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回主资源策略重置的 Status 字段集合，防止客户端通过普通写入接口修改控制器维护的状态。
 func (ingressStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"extensions/v1beta1": fieldpath.NewSet(
@@ -68,42 +67,37 @@ func (ingressStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set 
 	return fields
 }
 
-// PrepareForCreate clears the status of an Ingress before creation.
 // 创建时不接受客户端提供的 Status；Generation 从 1 开始，后续仅由 Spec 变化递增。
 func (ingressStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ingress := obj.(*networking.Ingress)
-	// create cannot set status
+	// 创建请求不能设置 Status；状态由 Ingress Controller 后续维护。
 	ingress.Status = networking.IngressStatus{}
 
 	ingress.Generation = 1
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
-// 普通更新恢复旧 Status，防止用户通过主资源 PUT/PATCH 冒充 Ingress Controller 回写 LoadBalancer 地址。
+// PrepareForUpdate 在普通更新时恢复旧 Status，并根据 Spec 是否变化维护 Generation。
 func (ingressStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIngress := obj.(*networking.Ingress)
 	oldIngress := old.(*networking.Ingress)
-	// Update is not allowed to set status
+	// 普通更新请求不能修改 Status，避免绕过 Ingress Controller 的状态管理。
 	newIngress.Status = oldIngress.Status
 
-	// Any changes to the spec increment the generation number, any changes to the
-	// status should reflect the generation number of the corresponding object.
-	// See metav1.ObjectMeta description for more information on Generation.
+	// Spec 发生变化时递增 Generation；Status 的变化不应改变 Generation。
+	// 控制器可通过 Generation 判断当前状态对应的是哪一版 Spec。
 	if !apiequality.Semantic.DeepEqual(oldIngress.Spec, newIngress.Spec) {
 		newIngress.Generation = oldIngress.Generation + 1
 	}
 
 }
 
-// Validate validates ingresses on create.
-// Validate 检查 IngressClassName、Host、TLS、HTTP 路径和后端 Service 端口等规则。
+// Validate 在创建时校验 Ingress 的规则、TLS 和后端引用等字段。
 func (ingressStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ingress := obj.(*networking.Ingress)
 	return validation.ValidateIngressCreate(ingress)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
-// 若仍使用旧 ingress.class Annotation 且没有新 spec.ingressClassName，则提醒迁移到结构化字段。
+// WarningsOnCreate 返回创建 Ingress 时的非阻断性警告，包括旧 IngressClass 注解的弃用提示。
 func (ingressStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	var warnings []string
 	ingress := obj.(*networking.Ingress)
@@ -114,26 +108,26 @@ func (ingressStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object)
 	return warnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 Ingress；当前无需额外处理。
 func (ingressStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for Ingress; this means POST is needed to create one.
+// AllowCreateOnUpdate 返回 false，Ingress 必须通过 POST 创建，不能由 PUT 更新请求隐式创建。
 func (ingressStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate validates ingresses on update.
+// ValidateUpdate 对照旧对象校验 Ingress 更新是否合法。
 func (ingressStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateIngressUpdate(obj.(*networking.Ingress), old.(*networking.Ingress))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回普通 Ingress 更新时的非阻断性警告；当前不产生额外警告。
 func (ingressStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// AllowUnconditionalUpdate is the default update policy for Ingress objects.
+// AllowUnconditionalUpdate 返回 true，允许 Ingress 更新请求不携带 ResourceVersion。
 func (ingressStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -142,11 +136,10 @@ type ingressStatusStrategy struct {
 	ingressStrategy
 }
 
-// StatusStrategy implements logic used to validate and prepare for updates of the status subresource
+// StatusStrategy 定义通过 /status 子资源更新 Ingress 状态时使用的策略。
 var StatusStrategy = ingressStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源策略重置的 Spec 字段集合，确保该入口不能修改路由规则。
 func (ingressStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"extensions/v1beta1": fieldpath.NewSet(
@@ -163,22 +156,20 @@ func (ingressStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpat
 	return fields
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
-// /status 只允许更新 LoadBalancer 等状态信息，Spec 必须从旧对象恢复。
+// PrepareForUpdate 在 Status 更新时恢复旧 Spec，防止通过 /status 修改路由规则。
 func (ingressStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIngress := obj.(*networking.Ingress)
 	oldIngress := old.(*networking.Ingress)
-	// status changes are not allowed to update spec
+	// Status 更新请求不能修改 Spec，必须沿用旧对象中的路由规则。
 	newIngress.Spec = oldIngress.Spec
 }
 
-// ValidateUpdate is the default update validation for an end user updating status
+// ValidateUpdate 对照旧对象校验 Ingress Status 更新是否合法。
 func (ingressStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateIngressStatusUpdate(obj.(*networking.Ingress), old.(*networking.Ingress))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
-// LoadBalancer Ingress 中的 IP 地址在状态更新时仍会触发格式告警，便于控制器发现异常地址。
+// WarningsOnUpdate 返回 Ingress Status 更新时的非阻断性警告；会检查 LoadBalancer 地址中的 IP 格式。
 func (ingressStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	newIngress := obj.(*networking.Ingress)
 	var warnings []string

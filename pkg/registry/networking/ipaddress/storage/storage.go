@@ -28,13 +28,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/networking/ipaddress"
 )
 
-// REST implements a RESTStorage for IPAddress against etcd
+// REST 将 IPAddress 的 REST 请求映射到底层通用 Store，并通过 etcd 持久化。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against endpoint slices.
-// NewREST 创建集群级 IPAddress Store；它为 Service IP 分配器提供受 API 管理的地址所有权记录。
+// NewREST 创建集群级 IPAddress Store，为 Service IP 分配器持久化地址所有权记录。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &networking.IPAddress{} },
@@ -55,10 +54,10 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	return &REST{store}, nil
 }
 
-// Implement ShortNamesProvider.
+// 声明 REST 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 返回 IPAddress 资源的 kubectl 简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"ip"}
 }

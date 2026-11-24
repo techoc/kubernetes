@@ -27,13 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/networking/ingressclass"
 )
 
-// REST implements a RESTStorage for replication controllers
+// REST 将 IngressClass 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against replication controllers.
-// NewREST 创建集群级 IngressClass Store，注册字段筛选、策略和标准表格转换器。
+// NewREST 创建集群级 IngressClass Store，并配置资源策略和标准表格转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &networking.IngressClass{} },

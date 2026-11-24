@@ -39,23 +39,21 @@ type serviceCIDRStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating Replication ServiceCIDR objects.
+// Strategy 是创建、更新和删除 ServiceCIDR 对象时使用的默认策略。
 var Strategy = serviceCIDRStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Strategy should implement rest.RESTCreateStrategy
+// 确保 Strategy 实现 rest.RESTCreateStrategy 接口。
 var _ rest.RESTCreateStrategy = Strategy
 
-// Strategy should implement rest.RESTUpdateStrategy
+// 确保 Strategy 实现 rest.RESTUpdateStrategy 接口。
 var _ rest.RESTUpdateStrategy = Strategy
 
-// NamespaceScoped returns false because all ServiceCIDRes is cluster scoped.
+// NamespaceScoped 返回 false，因为 ServiceCIDR 是集群级资源。
 func (serviceCIDRStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
-// ServiceCIDRStatusFieldWiping 开启时，普通创建/更新接口不允许客户端直接写 Status；关闭时保留历史 API 行为。
+// GetResetFields 根据 ServiceCIDRStatusFieldWiping 特性门控决定是否保护 Status 字段。
 func (serviceCIDRStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"networking.k8s.io/v1":      fieldpath.NewSet(),
@@ -68,8 +66,7 @@ func (serviceCIDRStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.
 	return fields
 }
 
-// PrepareForCreate clears the status of an ServiceCIDR before creation.
-// 创建时仅在 StatusFieldWiping 特性开启后清空 Status，避免新客户端绕过 ServiceCIDR Controller 的状态管理。
+// PrepareForCreate 在创建时根据 ServiceCIDRStatusFieldWiping 特性门控决定是否清空 Status。
 func (serviceCIDRStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	cidr := obj.(*networking.ServiceCIDR)
 	if utilfeature.DefaultFeatureGate.Enabled(features.ServiceCIDRStatusFieldWiping) {
@@ -77,8 +74,7 @@ func (serviceCIDRStrategy) PrepareForCreate(ctx context.Context, obj runtime.Obj
 	}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
-// Feature Gate 开启时沿用旧 Status；否则不额外改写字段，保持集群升级期间原有行为。
+// PrepareForUpdate 在特性门控开启时恢复旧 Status，防止普通更新绕过控制器写入状态。
 func (serviceCIDRStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newServiceCIDR := obj.(*networking.ServiceCIDR)
 	oldServiceCIDR := old.(*networking.ServiceCIDR)
@@ -88,30 +84,28 @@ func (serviceCIDRStrategy) PrepareForUpdate(ctx context.Context, obj, old runtim
 	}
 }
 
-// Validate validates a new ServiceCIDR.
-// Validate 检查 CIDR 格式、地址族及与现有 ServiceCIDR 的重叠规则。
+// Validate 校验新 ServiceCIDR 的 CIDR 格式、地址族及地址范围约束。
 func (serviceCIDRStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	cidrConfig := obj.(*networking.ServiceCIDR)
 	err := validation.ValidateServiceCIDR(cidrConfig)
 	return err
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 ServiceCIDR；当前无需额外处理。
 func (serviceCIDRStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for ServiceCIDR; this means POST is needed to create one.
+// AllowCreateOnUpdate 返回 false，ServiceCIDR 必须通过 POST 创建，不能由 PUT 更新请求隐式创建。
 func (serviceCIDRStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 ServiceCIDR 时的非阻断性警告；当前不产生额外警告。
 func (serviceCIDRStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// ValidateUpdate is the default update validation for an end user.
-// ValidateUpdate 检查更新后的 CIDR 是否仍合法，并对 ServiceCIDR 地址范围等不可变约束进行比较。
+// ValidateUpdate 对照旧对象校验 ServiceCIDR 更新是否合法，并检查地址范围等约束。
 func (serviceCIDRStrategy) ValidateUpdate(ctx context.Context, new, old runtime.Object) field.ErrorList {
 	newServiceCIDR := new.(*networking.ServiceCIDR)
 	oldServiceCIDR := old.(*networking.ServiceCIDR)
@@ -119,12 +113,12 @@ func (serviceCIDRStrategy) ValidateUpdate(ctx context.Context, new, old runtime.
 	return errList
 }
 
-// AllowUnconditionalUpdate is the default update policy for ServiceCIDR objects.
+// AllowUnconditionalUpdate 返回 true，允许 ServiceCIDR 更新请求不携带 ResourceVersion。
 func (serviceCIDRStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 ServiceCIDR 时的非阻断性警告；当前不产生额外警告。
 func (serviceCIDRStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -133,11 +127,10 @@ type serviceCIDRStatusStrategy struct {
 	serviceCIDRStrategy
 }
 
-// StatusStrategy implements logic used to validate and prepare for updates of the status subresource
+// StatusStrategy 定义通过 /status 子资源更新 ServiceCIDR 状态时使用的策略。
 var StatusStrategy = serviceCIDRStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源策略重置的 Metadata 和 Spec 字段集合，确保该入口只管理状态。
 func (serviceCIDRStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"networking.k8s.io/v1": fieldpath.NewSet(
@@ -152,22 +145,21 @@ func (serviceCIDRStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fiel
 	return fields
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
-// /status 只允许修改 ServiceCIDR.Status；Spec 和元数据从旧对象恢复，避免绕过分配器改变地址池范围。
+// PrepareForUpdate 在 Status 更新时恢复旧 Spec 和受保护的 Metadata，防止绕过分配器改变地址池范围。
 func (serviceCIDRStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newServiceCIDR := obj.(*networking.ServiceCIDR)
 	oldServiceCIDR := old.(*networking.ServiceCIDR)
-	// status changes are not allowed to update spec
+	// Status 更新请求不能修改 Spec，必须沿用旧对象中的 CIDR 地址范围。
 	newServiceCIDR.Spec = oldServiceCIDR.Spec
 	metav1.ResetObjectMetaForStatus(&newServiceCIDR.ObjectMeta, &oldServiceCIDR.ObjectMeta)
 }
 
-// ValidateUpdate is the default update validation for an end user updating status
+// ValidateUpdate 对照旧对象校验 ServiceCIDR Status 更新是否合法。
 func (serviceCIDRStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateServiceCIDRStatusUpdate(obj.(*networking.ServiceCIDR), old.(*networking.ServiceCIDR))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 ServiceCIDR Status 更新时的非阻断性警告；当前不产生额外警告。
 func (serviceCIDRStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

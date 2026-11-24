@@ -38,8 +38,8 @@ type RESTStorageProvider struct{}
 // NewRESTStorage 注册 API Group 与版本 StorageMap；版本优先级还需在 kube-apiserver aggregator 配置中同步维护。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(networking.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果在此处增加 API 版本，务必同时在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1beta1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -60,7 +60,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// networkpolicies
+	// 注册 NetworkPolicy 资源。
 	if resource := "networkpolicies"; apiResourceConfigSource.ResourceEnabled(networkingapiv1.SchemeGroupVersion.WithResource(resource)) {
 		networkPolicyStorage, err := networkpolicystore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -69,7 +69,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = networkPolicyStorage
 	}
 
-	// ingresses
+	// 注册 Ingress 主资源及其 /status 子资源。
 	if resource := "ingresses"; apiResourceConfigSource.ResourceEnabled(networkingapiv1.SchemeGroupVersion.WithResource(resource)) {
 		ingressStorage, ingressStatusStorage, err := ingressstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -79,7 +79,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource+"/status"] = ingressStatusStorage
 	}
 
-	// ingressclasses
+	// 注册 IngressClass 资源。
 	if resource := "ingressclasses"; apiResourceConfigSource.ResourceEnabled(networkingapiv1.SchemeGroupVersion.WithResource(resource)) {
 		ingressClassStorage, err := ingressclassstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -88,7 +88,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = ingressClassStorage
 	}
 
-	// ipaddress
+	// 注册 IPAddress 资源。
 	if resource := "ipaddresses"; apiResourceConfigSource.ResourceEnabled(networkingapiv1.SchemeGroupVersion.WithResource(resource)) {
 		ipAddressStorage, err := ipaddressstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -97,7 +97,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = ipAddressStorage
 	}
 
-	// servicecidrs
+	// 注册 ServiceCIDR 主资源及其 /status 子资源。
 	if resource := "servicecidrs"; apiResourceConfigSource.ResourceEnabled(networkingapiv1.SchemeGroupVersion.WithResource(resource)) {
 		serviceCIDRStorage, serviceCIDRStatusStorage, err := servicecidrstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -114,7 +114,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// ipaddress
+	// 注册 IPAddress 资源。
 	if resource := "ipaddresses"; apiResourceConfigSource.ResourceEnabled(networkingapiv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		ipAddressStorage, err := ipaddressstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -123,7 +123,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 		storage[resource] = ipAddressStorage
 	}
 
-	// servicecidrs
+	// 注册 ServiceCIDR 主资源及其 /status 子资源。
 	if resource := "servicecidrs"; apiResourceConfigSource.ResourceEnabled(networkingapiv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		serviceCIDRStorage, serviceCIDRStatusStorage, err := servicecidrstore.NewREST(restOptionsGetter)
 		if err != nil {

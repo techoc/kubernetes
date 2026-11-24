@@ -153,7 +153,7 @@ func TestCreate(t *testing.T) {
 	badPath.Spec.Rules = toIngressRules(map[string]IngressRuleValues{
 		"foo.bar.com": {"invalid-no-leading-slash": "svc"}})
 	test.TestCreate(
-		// valid
+		// 合法输入
 		ingress,
 		noDefaultBackendAndRules,
 		badPath,
@@ -166,9 +166,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validIngress(),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*networking.Ingress)
 			object.Spec.Rules = toIngressRules(map[string]IngressRuleValues{
@@ -180,7 +180,7 @@ func TestUpdate(t *testing.T) {
 			})
 			return object
 		},
-		// invalid updateFunc: ObjectMeta is not to be tampered with.
+		// 非法更新函数：不允许篡改 ObjectMeta。
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*networking.Ingress)
 			object.Name = ""
@@ -227,18 +227,18 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validIngress(),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"a": "c"},
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": name},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": name},
@@ -276,7 +276,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	ingOut := obj.(*networking.Ingress)
-	// only compare relevant changes b/c of difference in metadata
+	// 元数据存在差异，因此只比较与本测试相关的字段变化。
 	if !apiequality.Semantic.DeepEqual(ing.Status, ingOut.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(ing.Status, ingOut.Status))
 	}
