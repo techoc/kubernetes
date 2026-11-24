@@ -117,7 +117,7 @@ func TestUpdate(t *testing.T) {
 			object.ObjectMeta.Annotations = map[string]string{"foo": "bar"}
 			return object
 		},
-		// invalid updateFunc
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*lifecycle.EvictionRequest)
 			object.Spec.Target.Pod.Name = "bar"
@@ -157,15 +157,15 @@ func TestWatch(t *testing.T) {
 	test := tester(t, storage)
 	test.TestWatch(
 		newValidEvictionRequest(),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"x": "y"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "xyz"},
 			{"name": "foo"},
@@ -231,12 +231,12 @@ func TestGenerationNumber(t *testing.T) {
 	}
 	result, _ := resultObj.(*lifecycle.EvictionRequest)
 
-	// Generation initialization
+	// 验证 Generation 初始化为 1。
 	if result.Generation != 1 || result.Status.ObservedGeneration != nil {
 		t.Fatalf("Unexpected generation number %v, status generation %v", result.Generation, result.Status.ObservedGeneration)
 	}
 
-	// Updates to status should not increment either spec or status generation numbers
+	// 更新 Status 不应递增 Spec 或 Status 对应的 Generation。
 	result.Status.Conditions = append(result.Status.Conditions, metav1.Condition{Type: "Test", Status: "True", LastTransitionTime: metav1.Now(), Reason: "Reason"})
 	if _, _, err := statusStorage.Update(ctx, result.Name, rest.DefaultUpdatedObjectInfo(result), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Errorf("unexpected error: %v", err)

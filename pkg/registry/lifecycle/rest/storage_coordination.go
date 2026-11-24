@@ -32,13 +32,15 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// RESTStorageProvider 负责装配 lifecycle.k8s.io API Group 的 REST 存储。
 type RESTStorageProvider struct {
 }
 
+// NewRESTStorage 初始化 Lifecycle API Group，并注册 v1alpha1 版本的 Eviction 和 EvictionRequest 存储。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(lifecycle.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果在此处增加 API 版本，务必同时在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1alpha1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -49,6 +51,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1alpha1Storage 按资源启用配置和 EvictionRequestAPI 特性门控装配 Eviction、EvictionRequest 及其 /status 子资源。
 func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -80,6 +83,7 @@ func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstora
 	return storage, nil
 }
 
+// GroupName 返回 Lifecycle API Group 的名称。
 func (p RESTStorageProvider) GroupName() string {
 	return lifecycle.GroupName
 }

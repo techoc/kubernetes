@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package evictionrequest 提供 EvictionRequest 的 REST 策略、Status 子资源和状态校验。
 package evictionrequest

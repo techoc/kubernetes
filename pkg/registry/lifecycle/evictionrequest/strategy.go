@@ -38,6 +38,7 @@ type evictionRequestStrategy struct {
 	names.NameGenerator
 }
 
+// NewStrategy 创建 EvictionRequest 主资源策略，并绑定声明式校验 Scheme。
 func NewStrategy() *evictionRequestStrategy {
 	return &evictionRequestStrategy{
 		rest.DeclarativeValidation{Scheme: legacyscheme.Scheme},
@@ -47,12 +48,12 @@ func NewStrategy() *evictionRequestStrategy {
 
 var _ = rest.ResetFieldsStrategy(&evictionRequestStrategy{})
 
+// NamespaceScoped 返回 true，因为 EvictionRequest 属于目标对象所在的命名空间。
 func (*evictionRequestStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 声明主资源写入时需要重置的 Status 字段，防止客户端直接修改控制器维护的驱逐请求状态。
 func (*evictionRequestStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"lifecycle.k8s.io/v1alpha1": fieldpath.NewSet(
@@ -62,26 +63,26 @@ func (*evictionRequestStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 	return fields
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// PrepareForCreate 在创建时清空客户端提交的 Status，并将 Generation 初始化为 1。
 func (*evictionRequestStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	evictionRequest := obj.(*lifecycle.EvictionRequest)
 	evictionRequest.Status = lifecycle.EvictionRequestStatus{}
 	evictionRequest.Generation = 1
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 恢复旧 Status；Spec 发生变化时递增 Generation。
 func (*evictionRequestStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	oldEvictionRequest := old.(*lifecycle.EvictionRequest)
 	newEvictionRequest := obj.(*lifecycle.EvictionRequest)
 	newEvictionRequest.Status = oldEvictionRequest.Status
 
-	// Spec updates bump the generation.
+	// Spec 变化时递增 Generation，Status 变化不应改变 Generation。
 	if !apiequality.Semantic.DeepEqual(oldEvictionRequest.Spec, newEvictionRequest.Spec) {
 		newEvictionRequest.Generation = oldEvictionRequest.Generation + 1
 	}
 }
 
-// Validate validates a new EvictionRequest.
+// Validate 校验 EvictionRequest 的目标 Pod、驱逐请求参数及字段约束。
 func (s *evictionRequestStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	evictionRequest := obj.(*lifecycle.EvictionRequest)
 
@@ -89,6 +90,7 @@ func (s *evictionRequestStrategy) Validate(ctx context.Context, obj runtime.Obje
 	return allErrs
 }
 
+// DeclarativeValidationConfig 返回 EvictionRequest 当前使用的声明式校验选项；此处没有额外门控配置。
 func (*evictionRequestStrategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	return rest.DeclarativeValidationConfig{}
 }
@@ -100,11 +102,12 @@ func (*evictionRequestStrategy) WarningsOnCreate(ctx context.Context, obj runtim
 func (*evictionRequestStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 返回 false，EvictionRequest 必须通过 POST 创建。
 func (*evictionRequestStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 根据新旧对象校验 EvictionRequest 更新是否合法。
 func (s *evictionRequestStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	var allErrs field.ErrorList
 	evictionRequest := obj.(*lifecycle.EvictionRequest)
@@ -118,25 +121,27 @@ func (*evictionRequestStrategy) WarningsOnUpdate(ctx context.Context, obj, old r
 	return nil
 }
 
+// AllowUnconditionalUpdate 返回 false，更新必须携带 ResourceVersion 以避免覆盖并发状态。
 func (*evictionRequestStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
-// evictionRequestStatusStrategy is the default logic invoked when updating object status.
+// evictionRequestStatusStrategy 定义通过 /status 子资源更新 EvictionRequest 状态时使用的策略。
 type evictionRequestStatusStrategy struct {
 	*evictionRequestStrategy
 }
 
 var _ = rest.ResetFieldsStrategy(&evictionRequestStatusStrategy{})
 
+// NewStatusStrategy 基于主资源策略创建独立的 /status 子资源策略。
 func NewStatusStrategy(strategy *evictionRequestStrategy) *evictionRequestStatusStrategy {
 	return &evictionRequestStatusStrategy{
 		strategy,
 	}
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 声明 Status 子资源写入时需要重置的 Spec 和 metadata，确保该入口只能修改 Status。
+// GetResetFields 声明 Status 子资源写入时需要重置的 Spec 和 metadata，确保该入口只能修改 Status。
 func (*evictionRequestStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"lifecycle.k8s.io/v1alpha1": fieldpath.NewSet(
@@ -146,32 +151,33 @@ func (*evictionRequestStatusStrategy) GetResetFields() map[fieldpath.APIVersion]
 	}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
+// PrepareForUpdate 重置受保护的元数据字段并恢复旧 Spec，只允许更新 Status。
 func (*evictionRequestStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newEvictionRequest := obj.(*lifecycle.EvictionRequest)
 	oldEvictionRequest := old.(*lifecycle.EvictionRequest)
-	// Status updates should not include metadata update privileges, also,
-	// the evictionrequest-controller should be responsible for the labels
-	// and not the responders - let's not promote label updates.
+	// Status 更新不应同时授予修改元数据的权限；标签应由 evictionrequest-controller 负责维护，
+	// 而不是由响应驱逐请求的一方修改，以免扩大标签写入权限。
 	metav1.ResetObjectMetaForStatus(&newEvictionRequest.ObjectMeta, &oldEvictionRequest.ObjectMeta)
 	newEvictionRequest.Spec = oldEvictionRequest.Spec
 }
 
+// AllowCreateOnUpdate 返回 false，Status 子资源不能通过更新请求创建对象。
 func (*evictionRequestStatusStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user updating status
+// ValidateUpdate 校验 EvictionRequest Status 更新是否合法。
 func (s *evictionRequestStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	allErrs := validation.ValidateEvictionRequestStatusUpdate(obj.(*lifecycle.EvictionRequest), old.(*lifecycle.EvictionRequest))
 	return allErrs
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 EvictionRequest Status 更新时的非阻断性警告；当前不产生额外警告。
 func (*evictionRequestStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
+// AllowUnconditionalUpdate 返回 false，Status 更新必须携带 ResourceVersion。
 func (*evictionRequestStatusStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
