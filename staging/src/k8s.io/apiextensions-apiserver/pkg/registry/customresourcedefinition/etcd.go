@@ -67,18 +67,18 @@ func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) (*RES
 	return &REST{store}, nil
 }
 
-// Implement ShortNamesProvider
+// 声明 REST 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider 接口，返回 CRD 资源的 kubectl 简称。
 func (r *REST) ShortNames() []string {
 	return []string{"crd", "crds"}
 }
 
-// Implement CategoriesProvider
+// 声明 REST 实现 CategoriesProvider 接口。
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider 接口，返回 CRD 所属的资源分类。
 func (r *REST) Categories() []string {
 	return []string{"api-extensions"}
 }
@@ -95,7 +95,7 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 
 	crd := obj.(*apiextensions.CustomResourceDefinition)
 
-	// Ensure we have a UID precondition
+	// 确保删除请求包含 UID 前置条件，避免误删名称相同但 UID 已变化的 CRD。
 	if options == nil {
 		options = metav1.NewDeleteOptions(0)
 	}
@@ -121,7 +121,7 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 		return nil, false, err
 	}
 
-	// upon first request to delete, add our finalizer and then delegate
+	// 首次收到删除请求时，先添加清理 finalizer 并标记 Terminating，再由后续请求执行真正删除。
 	if crd.DeletionTimestamp.IsZero() {
 		key, err := r.Store.KeyFunc(ctx, name)
 		if err != nil {
@@ -136,14 +136,14 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 			storage.SimpleUpdate(func(existing runtime.Object) (runtime.Object, error) {
 				existingCRD, ok := existing.(*apiextensions.CustomResourceDefinition)
 				if !ok {
-					// wrong type
+					// 底层存储返回了非预期的对象类型。
 					return nil, fmt.Errorf("expected *apiextensions.CustomResourceDefinition, got %v", existing)
 				}
 				if err := deleteValidation(ctx, existingCRD); err != nil {
 					return nil, err
 				}
 
-				// Set the deletion timestamp if needed
+				// 尚未进入删除流程时，记录当前删除时间。
 				if existingCRD.DeletionTimestamp.IsZero() {
 					now := metav1.Now()
 					existingCRD.DeletionTimestamp = &now
@@ -152,7 +152,7 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 				if !apiextensions.CRDHasFinalizer(existingCRD, apiextensions.CustomResourceCleanupFinalizer) {
 					existingCRD.Finalizers = append(existingCRD.Finalizers, apiextensions.CustomResourceCleanupFinalizer)
 				}
-				// update the status condition too
+				// 同步更新 Status 条件，告知客户端 CRD 已进入终止阶段。
 				apiextensions.SetCRDCondition(existingCRD, apiextensions.CustomResourceDefinitionCondition{
 					Type:    apiextensions.Terminating,
 					Status:  apiextensions.ConditionTrue,
@@ -180,8 +180,8 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 	return r.Store.Delete(ctx, name, deleteValidation, options)
 }
 
-// NewStatusREST makes a RESTStorage for status that has more limited options.
-// It is based on the original REST so that we can share the same underlying store
+// NewStatusREST 创建权限范围更窄的 CRD /status 子资源存储。
+// 它复用主资源的底层 Store，但禁用创建和删除策略，并使用专用 StatusStrategy。
 func NewStatusREST(scheme *runtime.Scheme, rest *REST) *StatusREST {
 	statusStore := *rest.Store
 	statusStore.CreateStrategy = nil
@@ -192,35 +192,35 @@ func NewStatusREST(scheme *runtime.Scheme, rest *REST) *StatusREST {
 	return &StatusREST{store: &statusStore}
 }
 
+// StatusREST 实现 CRD Status 子资源的读取和更新端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
 var _ = rest.Patcher(&StatusREST{})
 
+// New 返回一个空的 CustomResourceDefinition 对象，供 Status 子资源请求使用。
 func (r *StatusREST) New() runtime.Object {
 	return &apiextensions.CustomResourceDefinition{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理 Status 子资源拥有的资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此这里不能重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取 CRD；REST 子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 只更新 CRD 的 Status 子集，不允许通过该入口修改 Spec。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 调用底层 Store 时显式将 forceAllowCreate 设为 false，Status 子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回 Status 子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
