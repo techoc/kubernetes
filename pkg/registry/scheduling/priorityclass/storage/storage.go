@@ -34,12 +34,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/scheduling/priorityclass"
 )
 
-// REST implements a RESTStorage for priority classes against etcd
+// REST 将 PriorityClass 的 REST 请求映射到底层通用 Store，并通过 etcd 持久化。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against priority classes.
+// NewREST 创建集群级 PriorityClass Store，并配置资源策略和标准表格转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &scheduling.PriorityClass{} },
@@ -61,15 +61,15 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	return &REST{store}, nil
 }
 
-// Implement ShortNamesProvider
+// 声明 REST 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 返回 PriorityClass 资源的 kubectl 简称 pc。
 func (r *REST) ShortNames() []string {
 	return []string{"pc"}
 }
 
-// Delete ensures that system priority classes are not deleted.
+// Delete 阻止删除 Kubernetes 内置系统 PriorityClass，其他优先级类交由底层 Store 正常删除。
 func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	for _, spcName := range schedulingapiv1.SystemPriorityClassNames() {
 		if name == spcName {

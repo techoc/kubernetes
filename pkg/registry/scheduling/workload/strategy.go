@@ -30,30 +30,33 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// workloadStrategy implements behavior for Workload objects.
+// workloadStrategy 定义 Workload 的创建、更新和校验策略。
 type workloadStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating Workload objects.
+// Strategy 是创建、更新和删除 Workload 对象时使用的默认策略。
 var Strategy = workloadStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
+// NamespaceScoped 返回 true，因为 Workload 是命名空间级资源。
 func (workloadStrategy) NamespaceScoped() bool {
 	return true
 }
 
+// PrepareForCreate 在创建前清理当前 Feature Gate 未启用且旧对象不存在的嵌套模板字段。
 func (workloadStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	dropDisabledWorkloadFields(obj.(*scheduling.Workload), nil)
 }
 
+// Validate 校验 Workload 的 PodGroupTemplate、CompositePodGroupTemplate 及引用关系。
 func (workloadStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	workloadScheduling := obj.(*scheduling.Workload)
 	return validation.ValidateWorkload(workloadScheduling)
 }
 
-// DeclarativeValidationConfig declares the options referenced by this type's tags,
-// mapped to whether each is enabled.
+// DeclarativeValidationConfig 将结构体标签引用的特性门控映射为声明式校验选项，
+// 使 Workload 模板中的字段校验与集群实际启用的能力保持一致。
 func (workloadStrategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	return rest.DeclarativeValidationConfig{Options: map[string]bool{
 		string(features.TopologyAwareWorkloadScheduling): utilfeature.DefaultFeatureGate.Enabled(features.TopologyAwareWorkloadScheduling),
@@ -63,33 +66,40 @@ func (workloadStrategy) DeclarativeValidationConfig(ctx context.Context, obj, ol
 	}}
 }
 
+// WarningsOnCreate 返回创建 Workload 时的非阻断性警告；当前不产生额外警告。
 func (workloadStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
+// Canonicalize 在校验后规范化 Workload；当前不执行额外转换。
 func (workloadStrategy) Canonicalize(obj runtime.Object) {}
 
+// AllowCreateOnUpdate 返回 false，Workload 必须通过 POST 创建。
 func (workloadStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// PrepareForUpdate 根据旧对象和当前 Feature Gate 清理新对象中不允许新设置的嵌套模板字段。
 func (workloadStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	dropDisabledWorkloadFields(obj.(*scheduling.Workload), old.(*scheduling.Workload))
 }
 
+// ValidateUpdate 根据新旧 Workload 校验更新规则及不可变字段。
 func (workloadStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateWorkloadUpdate(obj.(*scheduling.Workload), old.(*scheduling.Workload))
 }
 
+// WarningsOnUpdate 返回更新 Workload 时的非阻断性警告；当前不产生额外警告。
 func (workloadStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
+// AllowUnconditionalUpdate 返回 false，更新请求必须携带 ResourceVersion 以执行乐观并发控制。
 func (workloadStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
-// dropDisabledWorkloadFields removes fields which are covered by a feature gate.
+// dropDisabledWorkloadFields 清理当前 Feature Gate 未启用且旧 Workload 未使用的字段，保留历史字段以兼容集群降级。
 func dropDisabledWorkloadFields(workload, oldWorkload *scheduling.Workload) {
 	var workloadSpec, oldWorkloadSpec *scheduling.WorkloadSpec
 	if workload != nil {
@@ -174,8 +184,8 @@ func dropDisabledCompositePodGroupTemplatesFields(templates, oldTemplates []sche
 	}
 }
 
-// dropDisabledSchedulingConstraintsFields drops the SchedulingConstraints field
-// from the PodGroupTemplate if the TopologyAwareWorkloadScheduling feature gate is disabled.
+// dropDisabledSchedulingConstraintsFields 在 TopologyAwareWorkloadScheduling 未启用且旧模板未使用时，
+// 清空 PodGroupTemplate 的 SchedulingConstraints。
 func dropDisabledSchedulingConstraintsFields(template, oldTemplate *scheduling.PodGroupTemplate) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.TopologyAwareWorkloadScheduling) || schedulingConstraintsInUse(oldTemplate) {
 		return
@@ -183,8 +193,8 @@ func dropDisabledSchedulingConstraintsFields(template, oldTemplate *scheduling.P
 	template.SchedulingConstraints = nil
 }
 
-// dropDisabledDRAWorkloadResourceClaimsFields removes resource claim references from
-// podGroupTemplates unless they are already used by the old Workload spec.
+// dropDisabledDRAWorkloadResourceClaimsFields 在 DRAWorkloadResourceClaims 未启用且旧模板未使用时，
+// 清空 PodGroupTemplate 的 ResourceClaims。
 func dropDisabledDRAWorkloadResourceClaimsFields(template, oldTemplate *scheduling.PodGroupTemplate) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAWorkloadResourceClaims) || draWorkloadResourceClaimsInUse(oldTemplate) {
 		return
@@ -192,9 +202,8 @@ func dropDisabledDRAWorkloadResourceClaimsFields(template, oldTemplate *scheduli
 	template.ResourceClaims = nil
 }
 
-// dropDisabledPGPreemptionPolicyFields removes the PreemptionPolicy field
-// from the PodGroupTemplate if the PodGroupPreemptionPolicy feature gate is disabled,
-// unless the field already used in the old PodGroupTemplate.
+// dropDisabledPGPreemptionPolicyFields 在 PodGroupPreemptionPolicy 未启用且旧模板未使用时，
+// 清空 PodGroupTemplate 的 PreemptionPolicy。
 func dropDisabledPGPreemptionPolicyFields(template, oldTemplate *scheduling.PodGroupTemplate) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodGroupPreemptionPolicy) || preemptionPolicyInUse(oldTemplate) {
 		return
@@ -214,9 +223,8 @@ func preemptionPolicyInUse(pgt *scheduling.PodGroupTemplate) bool {
 	return pgt != nil && pgt.PreemptionPolicy != nil
 }
 
-// dropDisabledCPGPreemptionPolicyFields removes the PreemptionPolicy field
-// from the CompositePodGroupTemplate if the PodGroupPreemptionPolicy feature gate is disabled,
-// unless the field already used in the old CompositePodGroupTemplate.
+// dropDisabledCPGPreemptionPolicyFields 在 PodGroupPreemptionPolicy 未启用且旧模板未使用时，
+// 清空 CompositePodGroupTemplate 的 PreemptionPolicy。
 func dropDisabledCPGPreemptionPolicyFields(template, oldTemplate *scheduling.CompositePodGroupTemplate) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodGroupPreemptionPolicy) || cpgPreemptionPolicyInUse(oldTemplate) {
 		return

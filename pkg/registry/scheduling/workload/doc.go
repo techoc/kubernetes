@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package workload 提供 Workload 的 REST 策略及嵌套 PodGroup 模板的特性门控兼容处理。
 package workload

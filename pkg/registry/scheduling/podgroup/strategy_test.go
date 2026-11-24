@@ -29,8 +29,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 
-	// Side-effect import: registers PodGroup with legacyscheme.Scheme so
-	// the ConvertToVersion calls below resolve the type.
+	// 副作用导入会将 PodGroup 注册到 legacyscheme.Scheme，
+	// 使下方 ConvertToVersion 调用能够解析该类型。
 	_ "k8s.io/kubernetes/pkg/apis/scheduling/install"
 	"k8s.io/kubernetes/pkg/features"
 )
@@ -524,7 +524,7 @@ func TestStatusStrategyUpdate(t *testing.T) {
 			}(),
 			expectValidationError: fieldImmutableError,
 		},
-		// Cannot add finalizers, annotations and labels during status update.
+		// Status 更新不能新增 Finalizers、Annotations 或 Labels。
 		"drop meta changes": {
 			oldObj: podGroup,
 			newObj: func() *scheduling.PodGroup {
@@ -695,7 +695,7 @@ func TestDropPodGroupTemplateResourceClaims(t *testing.T) {
 				wantPodGroup := tc.wantPodGroup
 				dropDisabledPodGroupFields(newPodGroup, oldPodGroup)
 
-				// old PodGroup should never be changed
+				// 旧 PodGroup 对象不应被修改。
 				if diff := cmp.Diff(oldPodGroup, tc.oldPodGroup); diff != "" {
 					t.Errorf("old PodGroup changed: %s", diff)
 				}
@@ -827,7 +827,7 @@ func TestDropPodGroupTemplateResourceClaims(t *testing.T) {
 				wantPodGroup := tc.wantPodGroup
 				dropDisabledPodGroupStatusFields(newPodGroup, oldPodGroup)
 
-				// old PodGroup should never be changed
+				// 旧 PodGroup 对象不应被修改。
 				if diff := cmp.Diff(oldPodGroup, tc.oldPodGroup); diff != "" {
 					t.Errorf("old PodGroup changed: %s", diff)
 				}

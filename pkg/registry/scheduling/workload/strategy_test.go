@@ -29,8 +29,8 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 
-	// Side-effect import: registers Workload with legacyscheme.Scheme so
-	// the ConvertToVersion calls below resolve the type.
+	// 副作用导入会将 Workload 注册到 legacyscheme.Scheme，
+	// 使下方 ConvertToVersion 调用能够解析该类型。
 	_ "k8s.io/kubernetes/pkg/apis/scheduling/install"
 	"k8s.io/kubernetes/pkg/features"
 )
@@ -1216,7 +1216,7 @@ func TestDropPodGroupTemplateResourceClaims(t *testing.T) {
 			wantWorkload := tc.wantWorkload
 			dropDisabledWorkloadFields(newWorkload, oldWorkload)
 
-			// old Workload should never be changed
+			// 旧 Workload 对象不应被修改。
 			if diff := cmp.Diff(oldWorkload, tc.oldWorkload); diff != "" {
 				t.Errorf("old Workload changed: %s", diff)
 			}

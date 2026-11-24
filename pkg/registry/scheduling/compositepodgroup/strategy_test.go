@@ -30,7 +30,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 	"k8s.io/kubernetes/pkg/features"
 
-	// Ensure all API groups are registered with the scheme
+	// 确保所有 API Group 都已注册到 Scheme。
 	_ "k8s.io/kubernetes/pkg/apis/scheduling/install"
 )
 

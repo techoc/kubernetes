@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package podgroup 提供 PodGroup 的 REST 策略、Status 子资源和 Feature Gate 兼容处理。
 package podgroup

@@ -33,11 +33,13 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// compositePodGroupStrategy 定义 CompositePodGroup 的创建、更新、校验及 Status 子资源策略。
 type compositePodGroupStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
+// NewStrategy 创建 CompositePodGroup 主资源策略，并绑定声明式校验 Scheme。
 func NewStrategy() *compositePodGroupStrategy {
 	return &compositePodGroupStrategy{
 		rest.DeclarativeValidation{Scheme: legacyscheme.Scheme},
@@ -45,10 +47,12 @@ func NewStrategy() *compositePodGroupStrategy {
 	}
 }
 
+// NamespaceScoped 返回 true，因为 CompositePodGroup 是命名空间级资源。
 func (*compositePodGroupStrategy) NamespaceScoped() bool {
 	return true
 }
 
+// GetResetFields 声明主资源写入时需要重置的 Status 字段，防止客户端直接写入控制器状态。
 func (*compositePodGroupStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"scheduling.k8s.io/v1alpha3": fieldpath.NewSet(
@@ -58,20 +62,22 @@ func (*compositePodGroupStrategy) GetResetFields() map[fieldpath.APIVersion]*fie
 	return fields
 }
 
+// PrepareForCreate 清空客户端提交的 Status，并清理当前 Feature Gate 未启用且旧对象未使用的字段。
 func (*compositePodGroupStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	cpg := obj.(*scheduling.CompositePodGroup)
-	// Status must not be set by user on create.
+	// 创建请求不能设置 Status；该字段由调度控制器维护。
 	cpg.Status = scheduling.CompositePodGroupStatus{}
 	dropDisabledCompositePodGroupFields(cpg, nil)
 }
 
+// Validate 校验 CompositePodGroup 的调度策略、工作负载引用、拓扑约束和优先级等字段。
 func (*compositePodGroupStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	cpg := obj.(*scheduling.CompositePodGroup)
 	return validation.ValidateCompositePodGroup(cpg)
 }
 
-// DeclarativeValidationConfig declares the options referenced by this type's tags,
-// mapped to whether each is enabled.
+// DeclarativeValidationConfig 将结构体标签引用的特性门控映射为声明式校验选项，
+// 使校验规则只在对应 Feature Gate 启用时生效。
 func (*compositePodGroupStrategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	return rest.DeclarativeValidationConfig{Options: map[string]bool{
 		string(features.CompositePodGroup):        utilfeature.DefaultFeatureGate.Enabled(features.CompositePodGroup),
@@ -79,16 +85,20 @@ func (*compositePodGroupStrategy) DeclarativeValidationConfig(ctx context.Contex
 	}}
 }
 
+// WarningsOnCreate 返回创建 CompositePodGroup 时的非阻断性警告；当前不产生额外警告。
 func (*compositePodGroupStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
+// Canonicalize 在校验后规范化 CompositePodGroup；当前不执行额外转换。
 func (*compositePodGroupStrategy) Canonicalize(obj runtime.Object) {}
 
+// AllowCreateOnUpdate 返回 false，CompositePodGroup 必须通过 POST 创建。
 func (*compositePodGroupStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// PrepareForUpdate 恢复旧 Status，并清理当前 Feature Gate 未启用且旧对象未使用的字段。
 func (*compositePodGroupStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newCPG := obj.(*scheduling.CompositePodGroup)
 	oldCPG := old.(*scheduling.CompositePodGroup)
@@ -96,16 +106,19 @@ func (*compositePodGroupStrategy) PrepareForUpdate(ctx context.Context, obj, old
 	dropDisabledCompositePodGroupFields(newCPG, oldCPG)
 }
 
+// ValidateUpdate 根据新旧对象校验 CompositePodGroup 更新规则和不可变字段。
 func (*compositePodGroupStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newCPG := obj.(*scheduling.CompositePodGroup)
 	oldCPG := old.(*scheduling.CompositePodGroup)
 	return validation.ValidateCompositePodGroupUpdate(newCPG, oldCPG)
 }
 
+// WarningsOnUpdate 返回 CompositePodGroup 更新时的非阻断性警告；当前不产生额外警告。
 func (*compositePodGroupStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
+// AllowUnconditionalUpdate 返回 false，更新请求必须携带 ResourceVersion 以执行乐观并发控制。
 func (*compositePodGroupStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
@@ -114,10 +127,12 @@ type compositePodGroupStatusStrategy struct {
 	*compositePodGroupStrategy
 }
 
+// NewStatusStrategy 基于主资源策略创建独立的 /status 子资源策略。
 func NewStatusStrategy(strategy *compositePodGroupStrategy) *compositePodGroupStatusStrategy {
 	return &compositePodGroupStatusStrategy{strategy}
 }
 
+// GetResetFields 声明 Status 子资源写入时需要重置的 metadata 和 Spec，确保该入口只能修改 Status。
 func (*compositePodGroupStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"scheduling.k8s.io/v1alpha3": fieldpath.NewSet(
@@ -128,6 +143,7 @@ func (*compositePodGroupStatusStrategy) GetResetFields() map[fieldpath.APIVersio
 	return fields
 }
 
+// PrepareForUpdate 恢复旧 Spec，并重置受保护的元数据字段，只允许更新 Status。
 func (*compositePodGroupStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newCPG := obj.(*scheduling.CompositePodGroup)
 	oldCPG := old.(*scheduling.CompositePodGroup)
@@ -135,17 +151,19 @@ func (*compositePodGroupStatusStrategy) PrepareForUpdate(ctx context.Context, ob
 	metav1.ResetObjectMetaForStatus(&newCPG.ObjectMeta, &oldCPG.ObjectMeta)
 }
 
+// ValidateUpdate 校验 CompositePodGroup Status 的状态转换是否合法。
 func (r *compositePodGroupStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newCPG := obj.(*scheduling.CompositePodGroup)
 	oldCPG := old.(*scheduling.CompositePodGroup)
 	return validation.ValidateCompositePodGroupStatusUpdate(newCPG, oldCPG)
 }
 
+// WarningsOnUpdate 返回 CompositePodGroup Status 更新时的非阻断性警告；当前不产生额外警告。
 func (*compositePodGroupStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// dropDisabledCompositePodGroupFields removes fields which are covered by a feature gate.
+// dropDisabledCompositePodGroupFields 清理当前 Feature Gate 未启用且旧对象也未使用的 CompositePodGroup 字段，兼容集群降级。
 func dropDisabledCompositePodGroupFields(newCPG, oldCPG *scheduling.CompositePodGroup) {
 	var newCPGSpec, oldCPGSpec *scheduling.CompositePodGroupSpec
 	if newCPG != nil {
@@ -161,11 +179,11 @@ func dropDisabledCompositePodGroupSpecFields(newCPGSpec, oldCPGSpec *scheduling.
 	dropDisabledPreemptionPolicyField(newCPGSpec, oldCPGSpec)
 }
 
-// dropDisabledPreemptionPolicyField removes the PreemptionPolicy field unless it is
-// already used in the old CompositePodGroup spec.
+// dropDisabledPreemptionPolicyField 在 PodGroupPreemptionPolicy 未启用且旧 Spec 未使用时清空 PreemptionPolicy，
+// 保留旧对象已有值以兼容降级。
 func dropDisabledPreemptionPolicyField(newCPGSpec, oldCPGSpec *scheduling.CompositePodGroupSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodGroupPreemptionPolicy) || preemptionPolicyInUse(oldCPGSpec) {
-		// No need to drop anything.
+		// 特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 	newCPGSpec.PreemptionPolicy = nil

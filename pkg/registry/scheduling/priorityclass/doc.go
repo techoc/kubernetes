@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package priorityclass 提供 PriorityClass 的 REST 策略、存储实现及系统优先级类保护逻辑。
 package priorityclass

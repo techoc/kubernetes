@@ -65,7 +65,7 @@ func TestCreate(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestCreate(
 		validNewPriorityClass(),
-		// invalid cases
+		// 非法创建用例
 		&scheduling.PriorityClass{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "*badName",
@@ -83,17 +83,17 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestUpdate(
-		// valid
+		// 合法更新用例
 		validNewPriorityClass(),
-		// There is no valid update function
+		// PriorityClass 的 Value 创建后不可修改，因此不存在合法的 Value 更新函数。
 		func(obj runtime.Object) runtime.Object {
 			pc := obj.(*scheduling.PriorityClass)
 			pc.Value = 100
 			pc.GlobalDefault = false
 			return pc
 		},
-		// invalid updates
-		// Change Value
+		// 非法更新用例
+		// 修改 Value，更新应当被拒绝。
 		func(obj runtime.Object) runtime.Object {
 			pc := obj.(*scheduling.PriorityClass)
 			pc.Value = 200
@@ -111,7 +111,7 @@ func TestDelete(t *testing.T) {
 	test.TestDelete(validNewPriorityClass())
 }
 
-// TestDeleteSystemPriorityClass checks that system priority classes cannot be deleted.
+// TestDeleteSystemPriorityClass 验证内置系统 PriorityClass 不能被删除。
 func TestDeleteSystemPriorityClass(t *testing.T) {
 	storage, server := newStorage(t)
 	defer server.Terminate(t)
@@ -154,17 +154,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		validNewPriorityClass(),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

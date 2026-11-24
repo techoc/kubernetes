@@ -28,59 +28,59 @@ import (
 	"k8s.io/kubernetes/pkg/apis/scheduling/validation"
 )
 
-// priorityClassStrategy implements verification logic for PriorityClass.
+// priorityClassStrategy 定义 PriorityClass 创建、更新和校验时使用的 REST 策略。
 type priorityClassStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating PriorityClass objects.
+// Strategy 是创建、更新和删除 PriorityClass 对象时使用的默认策略。
 var Strategy = priorityClassStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped returns false because all PriorityClasses are global.
+// NamespaceScoped 返回 false，因为 PriorityClass 是集群级资源。
 func (priorityClassStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// PrepareForCreate clears the status of a PriorityClass before creation.
+// PrepareForCreate 在创建 PriorityClass 时将 Generation 初始化为 1。
 func (priorityClassStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	pc := obj.(*scheduling.PriorityClass)
 	pc.Generation = 1
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 是 PriorityClass 更新前的字段预处理入口；当前无需重置字段。
 func (priorityClassStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {}
 
-// Validate validates a new PriorityClass.
+// Validate 调用 PriorityClass 专用校验逻辑，检查优先级值和全局默认类约束。
 func (priorityClassStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	pc := obj.(*scheduling.PriorityClass)
 	return validation.ValidatePriorityClass(pc)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 PriorityClass 时的非阻断性警告；当前不产生额外警告。
 func (priorityClassStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 PriorityClass；当前不执行额外转换。
 func (priorityClassStrategy) Canonicalize(obj runtime.Object) {}
 
-// AllowCreateOnUpdate is false for PriorityClass; this means POST is needed to create one.
+// AllowCreateOnUpdate 返回 false，PriorityClass 必须通过 POST 创建，不能由 PUT 更新请求隐式创建。
 func (priorityClassStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 根据新旧对象校验 PriorityClass 更新是否合法。
 func (priorityClassStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidatePriorityClassUpdate(obj.(*scheduling.PriorityClass), old.(*scheduling.PriorityClass))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 PriorityClass 时的非阻断性警告；当前不产生额外警告。
 func (priorityClassStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// AllowUnconditionalUpdate is the default update policy for PriorityClass objects.
+// AllowUnconditionalUpdate 返回 true，允许更新请求不携带 ResourceVersion，并由通用更新流程填入最新版本。
 func (priorityClassStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }

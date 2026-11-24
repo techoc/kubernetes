@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package compositepodgroup...
+// Package compositepodgroup 提供 CompositePodGroup 的 REST 策略、Status 子资源和特性门控兼容处理。
 package compositepodgroup

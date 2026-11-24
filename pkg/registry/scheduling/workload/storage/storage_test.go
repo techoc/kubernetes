@@ -83,7 +83,7 @@ func TestCreate(t *testing.T) {
 	test := newTester(t, storage.Store)
 	test.TestCreate(
 		validNewWorkload(),
-		// invalid cases
+		// 非法创建用例
 		&scheduling.Workload{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "*badName",
@@ -98,15 +98,15 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := newTester(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewWorkload(),
-		// valid update
-		// noop change
+		// 合法更新用例
+		// 不修改对象，更新应当通过。
 		func(obj runtime.Object) runtime.Object {
 			return obj
 		},
-		// invalid update
-		// Set ControllerRef
+		// 非法更新用例
+		// 设置 ControllerRef，更新应当被拒绝。
 		func(obj runtime.Object) runtime.Object {
 			w := obj.(*scheduling.Workload)
 			w.Spec.ControllerRef = &scheduling.TypedLocalObjectReference{
@@ -115,8 +115,8 @@ func TestUpdate(t *testing.T) {
 			}
 			return w
 		},
-		// invalid update
-		// Switch scheduling policy
+		// 非法更新用例
+		// 切换调度策略，更新应当被拒绝。
 		func(obj runtime.Object) runtime.Object {
 			w := obj.(*scheduling.Workload)
 			w.Spec.PodGroupTemplates[0].SchedulingPolicy = scheduling.PodGroupSchedulingPolicy{
@@ -158,17 +158,17 @@ func TestWatch(t *testing.T) {
 	test := newTester(t, storage.Store)
 	test.TestWatch(
 		validNewWorkload(),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

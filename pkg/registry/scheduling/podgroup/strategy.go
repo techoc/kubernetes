@@ -33,13 +33,13 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// podGroupStrategy implements behavior for PodGroup objects.
+// podGroupStrategy 定义 PodGroup 的创建、更新、校验及 Status 子资源策略。
 type podGroupStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// NewStrategy is the default logic that applies when creating and updating PodGroup objects.
+// NewStrategy 创建 PodGroup 主资源策略，并绑定用于声明式校验的 Scheme。
 func NewStrategy() *podGroupStrategy {
 	return &podGroupStrategy{
 		rest.DeclarativeValidation{Scheme: legacyscheme.Scheme},
@@ -47,12 +47,12 @@ func NewStrategy() *podGroupStrategy {
 	}
 }
 
+// NamespaceScoped 返回 true，因为 PodGroup 必须归属于某个命名空间。
 func (*podGroupStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy and
-// should not be modified by the user. For a new PodGroup that is the status.
+// GetResetFields 声明主资源写入时需要重置的 Status 字段，避免用户通过普通创建或更新接口写入控制器状态。
 func (*podGroupStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"scheduling.k8s.io/v1beta1": fieldpath.NewSet(
@@ -66,20 +66,22 @@ func (*podGroupStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Se
 	return fields
 }
 
+// PrepareForCreate 清空客户端提交的 Status，并按 Feature Gate 清理不允许新设置的字段。
 func (*podGroupStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	podGroup := obj.(*scheduling.PodGroup)
-	// Status must not be set by user on create.
+	// 创建请求不能设置 Status；该字段由调度控制器维护。
 	podGroup.Status = scheduling.PodGroupStatus{}
 	dropDisabledPodGroupFields(podGroup, nil)
 }
 
+// Validate 校验 PodGroup 的工作负载引用、调度策略、拓扑约束和资源声明等字段。
 func (*podGroupStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	podGroup := obj.(*scheduling.PodGroup)
 	return validation.ValidatePodGroup(podGroup)
 }
 
-// DeclarativeValidationConfig declares the options referenced by this type's tags,
-// mapped to whether each is enabled.
+// DeclarativeValidationConfig 将结构体标签引用的特性门控映射为声明式校验选项，
+// 使校验规则只在对应 Feature Gate 启用时生效。
 func (*podGroupStrategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	return rest.DeclarativeValidationConfig{Options: map[string]bool{
 		string(features.TopologyAwareWorkloadScheduling): utilfeature.DefaultFeatureGate.Enabled(features.TopologyAwareWorkloadScheduling),
@@ -89,16 +91,20 @@ func (*podGroupStrategy) DeclarativeValidationConfig(ctx context.Context, obj, o
 	}}
 }
 
+// WarningsOnCreate 返回创建 PodGroup 时的非阻断性警告；当前不产生额外警告。
 func (*podGroupStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
+// Canonicalize 在校验后规范化 PodGroup；当前不执行额外转换。
 func (*podGroupStrategy) Canonicalize(obj runtime.Object) {}
 
+// AllowCreateOnUpdate 返回 false，PodGroup 必须通过 POST 创建。
 func (*podGroupStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// PrepareForUpdate 恢复旧 Status，并清理当前 Feature Gate 未启用且旧对象未使用的字段。
 func (*podGroupStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPodGroup := obj.(*scheduling.PodGroup)
 	oldPodGroup := old.(*scheduling.PodGroup)
@@ -106,16 +112,19 @@ func (*podGroupStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 	dropDisabledPodGroupFields(newPodGroup, oldPodGroup)
 }
 
+// ValidateUpdate 根据新旧对象校验 PodGroup 更新规则，包括不可变字段约束。
 func (*podGroupStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newPodGroup := obj.(*scheduling.PodGroup)
 	oldPodGroup := old.(*scheduling.PodGroup)
 	return validation.ValidatePodGroupUpdate(newPodGroup, oldPodGroup)
 }
 
+// WarningsOnUpdate 返回 PodGroup 主资源更新时的非阻断性警告；当前不产生额外警告。
 func (*podGroupStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
+// AllowUnconditionalUpdate 返回 false，更新请求必须携带 ResourceVersion 以执行乐观并发控制。
 func (*podGroupStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
@@ -124,13 +133,12 @@ type podGroupStatusStrategy struct {
 	*podGroupStrategy
 }
 
-// NewStatusStrategy creates a strategy for operating the status object.
+// NewStatusStrategy 基于主资源策略创建独立的 /status 子资源策略。
 func NewStatusStrategy(podGroupStrategy *podGroupStrategy) *podGroupStatusStrategy {
 	return &podGroupStatusStrategy{podGroupStrategy}
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy and
-// should not be modified by the user. For a status update that is the spec.
+// GetResetFields 声明 Status 子资源写入时需要重置的 metadata 和 Spec，确保该入口只能修改 Status。
 func (*podGroupStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"scheduling.k8s.io/v1beta1": fieldpath.NewSet(
@@ -146,6 +154,7 @@ func (*podGroupStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldp
 	return fields
 }
 
+// PrepareForUpdate 恢复旧 Spec，并重置受保护的元数据字段，只允许更新 Status。
 func (*podGroupStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPodGroup := obj.(*scheduling.PodGroup)
 	oldPodGroup := old.(*scheduling.PodGroup)
@@ -154,18 +163,19 @@ func (*podGroupStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old ru
 	dropDisabledPodGroupStatusFields(newPodGroup, oldPodGroup)
 }
 
+// ValidateUpdate 校验 PodGroup Status 的状态转换是否合法。
 func (r *podGroupStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newPodGroup := obj.(*scheduling.PodGroup)
 	oldPodGroup := old.(*scheduling.PodGroup)
 	return validation.ValidatePodGroupStatusUpdate(newPodGroup, oldPodGroup)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 PodGroup Status 更新时的非阻断性警告；当前不产生额外警告。
 func (*podGroupStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// dropDisabledPodGroupFields removes fields which are covered by a feature gate.
+// dropDisabledPodGroupFields 清理当前 Feature Gate 未启用且旧对象也未使用的 PodGroup 字段，兼容功能关闭或集群降级。
 func dropDisabledPodGroupFields(podGroup, oldPodGroup *scheduling.PodGroup) {
 	var podGroupSpec, oldPodGroupSpec *scheduling.PodGroupSpec
 	if podGroup != nil {
@@ -184,44 +194,44 @@ func dropDisabledPodGroupSpecFields(podGroupSpec, oldPodGroupSpec *scheduling.Po
 	dropDisabledParentCompositePodGroupNameField(podGroupSpec, oldPodGroupSpec)
 }
 
+// dropDisabledPodGroupStatusFields 在 DRAWorkloadResourceClaims 未启用且旧 Spec 未使用资源声明时，清空 Status 中的资源声明状态。
 func dropDisabledPodGroupStatusFields(newPodGroup, oldPodGroup *scheduling.PodGroup) {
 	var oldPodGroupSpec *scheduling.PodGroupSpec
 	if oldPodGroup != nil {
 		oldPodGroupSpec = &oldPodGroup.Spec
 	}
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAWorkloadResourceClaims) || draWorkloadResourceClaimsInUse(oldPodGroupSpec) {
-		// No need to drop anything.
+		// 对应特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 	newPodGroup.Status.ResourceClaimStatuses = nil
 }
 
-// dropDisabledSchedulingConstraintsFields drops the SchedulingConstraints field
-// from the new PodGroup if the TopologyAwareWorkloadScheduling feature gate is disabled
-// and it was not used in the old PodGroup.
+// dropDisabledSchedulingConstraintsFields 在 TopologyAwareWorkloadScheduling 未启用且旧 PodGroup 未使用该字段时，
+// 清空新对象的 SchedulingConstraints；若旧对象已使用，则保留以兼容降级。
 func dropDisabledSchedulingConstraintsFields(podGroupSpec, oldPodGroupSpec *scheduling.PodGroupSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.TopologyAwareWorkloadScheduling) || schedulingConstraintsInUse(oldPodGroupSpec) {
-		// No need to drop anything.
+		// 对应特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 	podGroupSpec.SchedulingConstraints = nil
 }
 
-// dropDisabledDRAWorkloadResourceClaimsFields removes resource claim references
-// unless they are already used by the old PodGroup spec.
+// dropDisabledDRAWorkloadResourceClaimsFields 在 DRAWorkloadResourceClaims 未启用且旧 Spec 未使用资源声明时，
+// 清空 ResourceClaims；旧对象已使用时保留原值。
 func dropDisabledDRAWorkloadResourceClaimsFields(podGroupSpec, oldPodGroupSpec *scheduling.PodGroupSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAWorkloadResourceClaims) || draWorkloadResourceClaimsInUse(oldPodGroupSpec) {
-		// No need to drop anything.
+		// 对应特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 	podGroupSpec.ResourceClaims = nil
 }
 
-// dropDisabledPreemptionPolicyField removes the PreemptionPolicy field unless it is
-// already used in the old PodGroup spec.
+// dropDisabledPreemptionPolicyField 在 PodGroupPreemptionPolicy 未启用且旧 Spec 未使用时清空 PreemptionPolicy，
+// 保留旧对象已有值以兼容降级。
 func dropDisabledPreemptionPolicyField(podGroupSpec, oldPodGroupSpec *scheduling.PodGroupSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodGroupPreemptionPolicy) || preemptionPolicyInUse(oldPodGroupSpec) {
-		// No need to drop anything.
+		// 对应特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 	podGroupSpec.PreemptionPolicy = nil
@@ -243,11 +253,11 @@ func parentCompositePodGroupNameInUse(podGroupSpec *scheduling.PodGroupSpec) boo
 	return podGroupSpec != nil && podGroupSpec.ParentCompositePodGroupName != nil
 }
 
-// dropDisabledParentCompositePodGroupNameField removes the ParentCompositePodGroupName field
-// unless it is already used in the old PodGroup spec.
+// dropDisabledParentCompositePodGroupNameField 在 CompositePodGroup 未启用且旧 Spec 未使用时清空 ParentCompositePodGroupName，
+// 旧对象已使用该字段时继续保留。
 func dropDisabledParentCompositePodGroupNameField(podGroupSpec, oldPodGroupSpec *scheduling.PodGroupSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.CompositePodGroup) || parentCompositePodGroupNameInUse(oldPodGroupSpec) {
-		// No need to drop anything.
+		// 对应特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 	podGroupSpec.ParentCompositePodGroupName = nil

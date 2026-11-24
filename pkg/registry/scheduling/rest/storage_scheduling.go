@@ -51,6 +51,7 @@ type RESTStorageProvider struct{}
 
 var _ genericapiserver.PostStartHookProvider = RESTStorageProvider{}
 
+// NewRESTStorage 初始化 Scheduling API Group，并按资源启用配置注册各 API 版本的 REST Storage。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(scheduling.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 
@@ -75,10 +76,11 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 构建 scheduling.k8s.io/v1 版本的资源存储映射。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// priorityclasses
+	// 注册集群级 PriorityClass 资源。
 	if resource := "priorityclasses"; apiResourceConfigSource.ResourceEnabled(schedulingapiv1.SchemeGroupVersion.WithResource(resource)) {
 		if priorityClassStorage, err := priorityclassstore.NewREST(restOptionsGetter); err != nil {
 			return nil, err
@@ -90,6 +92,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// v1beta1Storage 构建 scheduling.k8s.io/v1beta1 版本的资源存储映射；Workload 和 PodGroup 受 GenericWorkload 特性门控控制。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -121,6 +124,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 	return storage, nil
 }
 
+// v1alpha3Storage 构建 scheduling.k8s.io/v1alpha3 版本的资源存储映射；CompositePodGroup 受独立特性门控控制。
 func (p RESTStorageProvider) v1alpha3Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -165,14 +169,15 @@ func (p RESTStorageProvider) v1alpha3Storage(apiResourceConfigSource serverstora
 	return storage, nil
 }
 
+// PostStartHook 注册 API Server 启动后创建内置系统 PriorityClass 的 Hook。
 func (p RESTStorageProvider) PostStartHook() (string, genericapiserver.PostStartHookFunc, error) {
 	return PostStartHookName, AddSystemPriorityClasses(), nil
 }
 
+// AddSystemPriorityClasses 周期性检查并创建内置系统 PriorityClass；存储暂不可用时会重试，初始化超时则阻止 API Server 启动。
 func AddSystemPriorityClasses() genericapiserver.PostStartHookFunc {
 	return func(hookContext genericapiserver.PostStartHookContext) error {
-		// Adding system priority classes is important. If they fail to add, many critical system
-		// components may fail and cluster may break.
+		// 内置系统 PriorityClass 必须成功创建；如果缺失，多个关键系统组件可能无法正常运行，甚至导致集群不可用。
 		err := wait.Poll(1*time.Second, 30*time.Second, func() (done bool, err error) {
 			schedClientSet, err := schedulingclient.NewForConfig(hookContext.LoopbackClientConfig)
 			if err != nil {
@@ -189,14 +194,14 @@ func AddSystemPriorityClasses() genericapiserver.PostStartHookFunc {
 							klog.Infof("created PriorityClass %s with value %v", pc.Name, pc.Value)
 							continue
 						}
-						// ServiceUnavailble error is returned when the API server is blocked by storage version updates
+						// 存储版本升级阻塞 API Server 时，创建请求可能返回 ServiceUnavailable，需要等待后重试。
 						if apierrors.IsServiceUnavailable(err) {
 							klog.Infof("going to retry, unable to create PriorityClass %s: %v", pc.Name, err)
 							return false, nil
 						}
 						return false, err
 					} else {
-						// Unable to get the priority class for reasons other than "not found".
+						// 读取 PriorityClass 时发生非 NotFound 错误，暂时无法确认对象状态，记录警告并重试。
 						klog.Warningf("unable to get PriorityClass %v: %v. Retrying...", pc.Name, err)
 						return false, nil
 					}
@@ -205,7 +210,7 @@ func AddSystemPriorityClasses() genericapiserver.PostStartHookFunc {
 			klog.Infof("all system priority classes are created successfully or already exist.")
 			return true, nil
 		})
-		// if we're never able to make it through initialization, kill the API server.
+		// 如果在重试期限内始终无法完成系统 PriorityClass 初始化，则终止 API Server 启动。
 		if err != nil {
 			return fmt.Errorf("unable to add default system priority classes: %v", err)
 		}

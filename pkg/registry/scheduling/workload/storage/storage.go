@@ -27,12 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/scheduling/workload"
 )
 
-// REST implements a RESTStorage for workloads against etcd
+// REST 将 Workload 的 REST 请求映射到底层通用 Store，并通过 etcd 持久化。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against workloads.
+// NewREST 创建命名空间级 Workload Store，并配置资源策略和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &scheduling.Workload{} },

@@ -92,9 +92,9 @@ func TestCreate(t *testing.T) {
 	podGroup := validNewPodGroup()
 	podGroup.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		podGroup,
-		// invalid cases
+		// 非法创建用例
 		&scheduling.PodGroup{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "*badName",
@@ -109,10 +109,10 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := newTester(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewPodGroup(),
-		// valid update
-		// Update Status
+		// 合法更新用例
+		// 更新 Status；主资源更新接口不应覆盖控制器状态。
 		func(obj runtime.Object) runtime.Object {
 			pg := obj.(*scheduling.PodGroup)
 			pg.Status = scheduling.PodGroupStatus{
@@ -128,8 +128,8 @@ func TestUpdate(t *testing.T) {
 			}
 			return pg
 		},
-		// invalid update
-		// Switch scheduling policy
+		// 非法更新用例
+		// 切换调度策略，更新应当被拒绝。
 		func(obj runtime.Object) runtime.Object {
 			pg := obj.(*scheduling.PodGroup)
 			pg.Spec.SchedulingPolicy = scheduling.PodGroupSchedulingPolicy{
@@ -137,8 +137,8 @@ func TestUpdate(t *testing.T) {
 			}
 			return pg
 		},
-		// invalid update
-		// Update WorkloadRef
+		// 非法更新用例
+		// 修改 WorkloadRef，更新应当被拒绝。
 		func(obj runtime.Object) runtime.Object {
 			pg := obj.(*scheduling.PodGroup)
 			pg.Spec.WorkloadRef = &scheduling.WorkloadReference{
@@ -181,17 +181,17 @@ func TestWatch(t *testing.T) {
 	test := newTester(t, storage.Store)
 	test.TestWatch(
 		validNewPodGroup(),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -242,7 +242,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	podGroupOut := obj.(*scheduling.PodGroup)
-	// only compare relevant changes b/c of difference in metadata
+	// 元数据存在差异，因此只比较本测试关注的 Status 变化。
 	if !apiequality.Semantic.DeepEqual(podGroup.Status, podGroupOut.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(podGroup.Status, podGroupOut.Status))
 	}
