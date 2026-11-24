@@ -76,7 +76,7 @@ func TestPrepareForGeneration(t *testing.T) {
 				t.Error("Expected generation to be ", tc.expectedGenerationOnCreate, ", got ", hpa.Generation)
 			}
 
-			// Create an updated HPA with a different spec
+			// 创建一个 Spec 与原对象不同的 HPA 更新对象。
 			hpaUpdated := hpa.DeepCopy() // prepareHPA(zeroMinReplicas, withoutTolerance)
 			hpaUpdated.Spec.MaxReplicas = 100
 			Strategy.PrepareForUpdate(context.Background(), hpaUpdated, &hpa)
@@ -99,7 +99,7 @@ func TestPrepareForCreateConfigurableToleranceEnabled(t *testing.T) {
 }
 
 func TestPrepareForCreateConfigurableToleranceDisabled(t *testing.T) {
-	// Set emulated version to 1.36 so that disabling the feature gate is allowed.
+	// 将模拟版本设为 1.36，以满足关闭该特性门控的版本兼容条件。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.36"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HPAConfigurableTolerance, false)
 	hpa := prepareHPA(oneMinReplicas, withTolerance)
@@ -122,7 +122,7 @@ func TestPrepareForUpdateConfigurableToleranceEnabled(t *testing.T) {
 }
 
 func TestPrepareForUpdateConfigurableToleranceDisabled(t *testing.T) {
-	// Set emulated version to 1.36 so that disabling the feature gate is allowed.
+	// 将模拟版本设为 1.36，以满足关闭该特性门控的版本兼容条件。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.36"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HPAConfigurableTolerance, false)
 	newHPA := prepareHPA(oneMinReplicas, withTolerance)
@@ -156,8 +156,7 @@ func TestValidateOptionsScaleToZeroDisabled(t *testing.T) {
 	zeroReplicasHPA := prepareHPA(zeroMinReplicas, withoutTolerance)
 	oneReplicasHPA := prepareHPA(oneMinReplicas, withoutTolerance)
 
-	// MinReplicas should be 0 despite the gate being disabled since the old HPA
-	// had MinReplicas set to 0 already.
+	// 即使特性门控已关闭，旧 HPA 的 MinReplicas 已经是 0，因此仍应允许保持为 0。
 	opts := validationOptionsForHorizontalPodAutoscaler(&zeroReplicasHPA, &zeroReplicasHPA)
 	if opts.MinReplicasLowerBound != 0 {
 		t.Errorf("Expected zero minReplicasLowerBound, got %v", opts.MinReplicasLowerBound)
@@ -218,7 +217,7 @@ func TestValidationOptionsForHorizontalPodAutoscaler(t *testing.T) {
 		expectScaleTargetRefValidationOpts validation.CrossVersionObjectReferenceValidationOptions
 		expectMetricsValidationOpts        validation.CrossVersionObjectReferenceValidationOptions
 	}{
-		// MinReplicasLowerBound tests
+		// 测试 MinReplicas 的最小值边界。
 		{
 			name:                   "scale to zero disabled, no old hpa",
 			newHPA:                 hpa(1, "apps/v1", "Deployment", nil),
@@ -271,7 +270,7 @@ func TestValidationOptionsForHorizontalPodAutoscaler(t *testing.T) {
 				AllowInvalidAPIVersion: false, AllowEmptyAPIGroup: true,
 			},
 		},
-		// ScaleTargetRefValidationOptions tests
+		// 测试扩缩容目标引用的校验选项。
 		{
 			name:                   "ReplicationController with the legacy API Version",
 			newHPA:                 hpa(1, "", "ReplicationController", nil),
@@ -337,7 +336,7 @@ func TestValidationOptionsForHorizontalPodAutoscaler(t *testing.T) {
 				AllowInvalidAPIVersion: false, AllowEmptyAPIGroup: true,
 			},
 		},
-		// MetricsValidationOptions tests
+		// 测试指标引用的校验选项。
 		{
 			name:                   "no metrics",
 			newHPA:                 hpa(1, "apps/v1", "Deployment", nil),

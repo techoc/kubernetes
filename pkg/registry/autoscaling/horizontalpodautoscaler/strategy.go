@@ -142,7 +142,7 @@ func (autoscalerStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime
 	return nil
 }
 
-// AllowUnconditionalUpdate 决定是否允许不带 ResourceVersion 前置条件的更新；false 会保留乐观并发控制。
+// AllowUnconditionalUpdate 返回 true，允许不携带 ResourceVersion 前置条件的更新。
 func (autoscalerStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -154,8 +154,7 @@ type autoscalerStatusStrategy struct {
 // StatusStrategy 是更新 HPA Status 子资源时使用的专用策略。
 var StatusStrategy = autoscalerStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源更新时由服务端重置、不能由请求修改的 Spec 字段集合。
 func (autoscalerStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"autoscaling/v1": fieldpath.NewSet(
@@ -173,7 +172,7 @@ func (autoscalerStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 func (autoscalerStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newAutoscaler := obj.(*autoscaling.HorizontalPodAutoscaler)
 	oldAutoscaler := old.(*autoscaling.HorizontalPodAutoscaler)
-	// status changes are not allowed to update spec
+	// Status 子资源请求只能修改 Status，不能借此更新 Spec。
 	newAutoscaler.Spec = oldAutoscaler.Spec
 }
 
@@ -182,7 +181,7 @@ func (autoscalerStatusStrategy) ValidateUpdate(ctx context.Context, obj, old run
 	return validation.ValidateHorizontalPodAutoscalerStatusUpdate(obj.(*autoscaling.HorizontalPodAutoscaler), old.(*autoscaling.HorizontalPodAutoscaler))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 HPA Status 时的非阻断性警告；当前不产生额外警告。
 func (autoscalerStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

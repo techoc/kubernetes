@@ -86,7 +86,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 func (p RESTStorageProvider) v2Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, storageGetter hpaStorageGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// horizontalpodautoscalers
+	// 注册 HorizontalPodAutoscaler 主资源及其子资源。
 	if resource := "horizontalpodautoscalers"; apiResourceConfigSource.ResourceEnabled(autoscalingapiv2.SchemeGroupVersion.WithResource(resource)) {
 		hpaStorage, hpaStatusStorage, err := storageGetter()
 		if err != nil {

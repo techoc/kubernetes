@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/autoscaling"
 	api "k8s.io/kubernetes/pkg/apis/core"
 
-	// Ensure that autoscaling/v1 package is initialized.
+	// 显式导入 autoscaling/v1，确保该 API 版本的初始化逻辑执行。
 	_ "k8s.io/api/autoscaling/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -90,9 +90,9 @@ func TestCreate(t *testing.T) {
 	autoscaler := validNewHorizontalPodAutoscaler("foo")
 	autoscaler.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 有效对象
 		autoscaler,
-		// invalid
+		// 无效对象
 		&autoscaling.HorizontalPodAutoscaler{},
 	)
 }
@@ -103,9 +103,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 有效对象
 		validNewHorizontalPodAutoscaler("foo"),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*autoscaling.HorizontalPodAutoscaler)
 			object.Spec.MaxReplicas = object.Spec.MaxReplicas + 1
@@ -145,15 +145,15 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewHorizontalPodAutoscaler("foo"),
-		// matching labels
+		// 匹配的标签选择器
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配的标签选择器
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配的字段选择器
 		[]fields.Set{},
-		// not matching fields
+		// 不匹配的字段选择器
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": "foo"},
@@ -211,7 +211,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	autoscalerOut := obj.(*autoscaling.HorizontalPodAutoscaler)
-	// only compare the meaningful update b/c we can't compare due to metadata
+	// 元数据会产生与本次状态更新无关的差异，因此只比较实际需要验证的 Status。
 	if !apiequality.Semantic.DeepEqual(autoscalerIn.Status, autoscalerOut.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(autoscalerIn, autoscalerOut))
 	}
