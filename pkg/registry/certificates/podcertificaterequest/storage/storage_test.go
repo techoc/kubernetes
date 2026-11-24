@@ -85,7 +85,7 @@ func TestCreate(t *testing.T) {
 
 	podUID1 := types.UID("pod-uid-1")
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	_, _, ed25519PubPKIX2, ed25519Proof2 := mustMakeEd25519KeyAndProof(t, []byte("other-value"))
 	invalidPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
@@ -93,7 +93,7 @@ func TestCreate(t *testing.T) {
 	invalidPCRwithPKIX.Spec.ProofOfPossession = ed25519Proof2 //nolint:staticcheck // Deprecated fields must be tested
 	test.TestCreate(validPCRwithPKIX, invalidPCRwithPKIX)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	invalidPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	invalidPCRwithPKCS10.Spec.StubPKCS10Request = []byte("invalid-csr-bytes")
@@ -115,7 +115,7 @@ func TestUpdate(t *testing.T) {
 
 	podUID1 := types.UID("pod-uid-1")
 
-	// Define update functions
+	// 定义用于测试的更新函数。
 	validUpdate := func(object runtime.Object) runtime.Object {
 		pcr := object.(*certificates.PodCertificateRequest)
 		if pcr.ObjectMeta.Annotations == nil {
@@ -130,13 +130,13 @@ func TestUpdate(t *testing.T) {
 		return pcr
 	}
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	test.TestUpdate(validPCRwithPKIX, validUpdate, invalidUpdate)
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	test.TestUpdate(validPCRwithPKCS10, validUpdate, invalidUpdate)
 }
@@ -158,18 +158,18 @@ func TestUpdateStompsStatus(t *testing.T) {
 
 	stompStatus := func(object runtime.Object) runtime.Object {
 		pcr := object.(*certificates.PodCertificateRequest)
-		// The strategy should stomp status.
+		// 策略应恢复旧对象的 Status，不接受主资源请求对状态字段的修改。
 		pcr.Status.NotAfter = new(metav1.NewTime(mustParseTime(t, "2025-01-01T00:00:00Z")))
 		return pcr
 	}
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	test.TestUpdate(validPCRwithPKIX, stompStatus)
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	test.TestUpdate(validPCRwithPKCS10, stompStatus)
 }
@@ -196,7 +196,7 @@ func TestUpdateStatus(t *testing.T) {
 		return pcr
 	}
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, pubKeyPKIX := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	pod1CertPKIX := mustSignCertForPublicKey(t, 24*time.Hour, pubKeyPKIX, caCertDER, caPrivKey)
 	test.TestUpdate(
@@ -207,7 +207,7 @@ func TestUpdateStatus(t *testing.T) {
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, pubKeyPKCS10 := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	pod1CertPKCS10 := mustSignCertForPublicKey(t, 24*time.Hour, pubKeyPKCS10, caCertDER, caPrivKey)
 	test.TestUpdate(
@@ -234,18 +234,18 @@ func TestUpdateStatusStompsSpec(t *testing.T) {
 
 	stompSpec := func(object runtime.Object) runtime.Object {
 		pcr := object.(*certificates.PodCertificateRequest)
-		// The strategy should stomp spec.
+		// 策略应恢复旧对象的 Spec，不接受 Status 子资源请求对规格字段的修改。
 		pcr.Spec.SignerName = "foo.com/bar"
 		return pcr
 	}
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	test.TestUpdate(validPCRwithPKIX, stompSpec)
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	test.TestUpdate(validPCRwithPKCS10, stompSpec)
 }
@@ -270,7 +270,7 @@ func TestUpdateStatusFailsWhenAuthorizerDenies(t *testing.T) {
 		return object
 	}
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, pubKeyPKIX := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	pod1CertPKIX := mustSignCertForPublicKey(t, 24*time.Hour, pubKeyPKIX, caCertDER, caPrivKey)
 	test.TestUpdate(
@@ -281,7 +281,7 @@ func TestUpdateStatusFailsWhenAuthorizerDenies(t *testing.T) {
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, pubKeyPKCS10 := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	pod1CertPKCS10 := mustSignCertForPublicKey(t, 24*time.Hour, pubKeyPKCS10, caCertDER, caPrivKey)
 	test.TestUpdate(
@@ -306,13 +306,13 @@ func TestDelete(t *testing.T) {
 
 	podUID1 := types.UID("pod-uid-1")
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	test.TestDelete(validPCRwithPKIX)
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	test.TestDelete(validPCRwithPKCS10)
 }
@@ -332,13 +332,13 @@ func TestGet(t *testing.T) {
 
 	podUID1 := types.UID("pod-uid-1")
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	test.TestGet(validPCRwithPKIX)
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	test.TestGet(validPCRwithPKCS10)
 }
@@ -358,13 +358,13 @@ func TestList(t *testing.T) {
 
 	podUID1 := types.UID("pod-uid-1")
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	test.TestList(validPCRwithPKIX)
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	test.TestList(validPCRwithPKCS10)
 }
@@ -384,17 +384,17 @@ func TestWatch(t *testing.T) {
 
 	podUID1 := types.UID("pod-uid-1")
 
-	// Test PCR with PKIXPublicKey and ProofOfPossession fields
+	// 测试包含 PKIXPublicKey 和 ProofOfPossession 字段的 PodCertificateRequest。
 	validPCRwithPKIX, _ := makeValidPCR(t, "foo1", test.TestNamespace(), podUID1, false)
 	test.TestWatch(
 		validPCRwithPKIX,
-		// matching labels
+		// 匹配的标签选择器
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配的标签选择器
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配的字段选择器
 		[]fields.Set{
 			{
 				"metadata.namespace": test.TestNamespace(),
@@ -403,7 +403,7 @@ func TestWatch(t *testing.T) {
 				"spec.nodeName":      "node-1",
 			},
 		},
-		// not matching fields
+		// 不匹配的字段选择器
 		[]fields.Set{
 			{
 				"metadata.namespace": test.TestNamespace(),
@@ -416,17 +416,17 @@ func TestWatch(t *testing.T) {
 
 	clearStorage(t, server)
 
-	// Test PRC with StubPKCS10Request field
+	// 测试包含 StubPKCS10Request 字段的 PodCertificateRequest。
 	validPCRwithPKCS10, _ := makeValidPCR(t, "foo2", test.TestNamespace(), podUID1, true)
 	test.TestWatch(
 		validPCRwithPKCS10,
-		// matching labels
+		// 匹配的标签选择器
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配的标签选择器
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配的字段选择器
 		[]fields.Set{
 			{
 				"metadata.namespace": test.TestNamespace(),
@@ -435,7 +435,7 @@ func TestWatch(t *testing.T) {
 				"spec.nodeName":      "node-1",
 			},
 		},
-		// not matching fields
+		// 不匹配的字段选择器
 		[]fields.Set{
 			{
 				"metadata.namespace": test.TestNamespace(),
@@ -569,10 +569,9 @@ func makeValidPCR(t *testing.T, name string, namespace string, podUID types.UID,
 }
 
 func clearStorage(t *testing.T, server *etcd3testing.EtcdTestServer) {
-	// The resttest.Tester internally uses multiple namespaces ("test", "bar1", "bar2", etc.)
-	// to test namespace isolation. To prevent "already exists" conflicts between subtests
-	// within the same etcd instance, we wipe all podcertificaterequest keys across all
-	// namespaces directly from etcd using their resource prefix.
+	// resttest.Tester 内部会使用多个命名空间（如 test、bar1、bar2）验证命名空间隔离。
+	// 为避免同一个 etcd 实例中的子测试发生“对象已存在”冲突，
+	// 测试通过资源前缀直接清理 etcd 中所有命名空间下的 PodCertificateRequest 键。
 	if _, err := server.V3Client.Delete(context.TODO(), "/registry/podcertificaterequests", clientv3.WithPrefix()); err != nil {
 		t.Fatalf("unable to clear etcd database: %v", err)
 	}

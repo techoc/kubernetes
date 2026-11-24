@@ -70,7 +70,7 @@ func TestAllowUnconditionalUpdate(t *testing.T) {
 }
 
 func TestPrepareForCreate(t *testing.T) {
-	// PrepareForCreate should stomp any existing status fields.
+	// PrepareForCreate 应清空请求中预先设置的所有 Status 字段。
 
 	strategy := NewStrategy()
 
@@ -132,7 +132,7 @@ func TestPrepareForCreate(t *testing.T) {
 }
 
 func TestPrepareForUpdate(t *testing.T) {
-	// PrepareForUpdate should stomp any existing status fields.
+	// PrepareForUpdate 应恢复旧对象的 Status，忽略主资源更新请求对状态的修改。
 
 	strategy := NewStrategy()
 
@@ -233,8 +233,7 @@ func TestPrepareForUpdate(t *testing.T) {
 }
 
 func TestStatusPrepareForUpdate(t *testing.T) {
-	// StatusStrategy.PrepareForUpdate should reset all spec fields and most
-	// metadata fields in the new object.
+	// StatusStrategy.PrepareForUpdate 应恢复新对象中的全部 Spec 字段和大部分 Metadata 字段。
 
 	strategy := NewStrategy()
 	authz := &FakeAuthorizer{

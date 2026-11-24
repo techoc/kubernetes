@@ -286,7 +286,7 @@ func (csrApprovalStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.
 	return validation.ValidateCertificateSigningRequestApprovalUpdate(newCSR, oldCSR)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 Approval 子资源更新时的非阻断性警告；当前不产生额外警告。
 func (csrApprovalStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
