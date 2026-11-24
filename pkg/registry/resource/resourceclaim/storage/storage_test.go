@@ -81,9 +81,9 @@ func TestCreate(t *testing.T) {
 	claim := validNewClaim("foo", metav1.NamespaceDefault)
 	claim.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		claim,
-		// invalid
+		// 非法输入
 		&resource.ResourceClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 		},
@@ -96,9 +96,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewClaim("foo", metav1.NamespaceDefault),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*resource.ResourceClaim)
 			if object.Labels == nil {
@@ -107,7 +107,7 @@ func TestUpdate(t *testing.T) {
 			object.Labels["foo"] = "bar"
 			return object
 		},
-		// invalid update
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*resource.ResourceClaim)
 			object.Name = "^%$#@#%"
@@ -147,17 +147,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewClaim("foo", metav1.NamespaceDefault),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -199,7 +199,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	claimOut := obj.(*resource.ResourceClaim)
-	// only compare relevant changes b/c of difference in metadata
+	// 元数据存在差异，因此只比较本测试关注的状态字段。
 	if !apiequality.Semantic.DeepEqual(claim.Status, claimOut.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(claim.Status, claimOut.Status))
 	}

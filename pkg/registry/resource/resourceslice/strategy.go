@@ -38,18 +38,21 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// resourceSliceStrategy implements behavior for ResourceSlice objects
+// resourceSliceStrategy 定义 ResourceSlice 的创建、更新、校验和索引选择器策略。
 type resourceSliceStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
+// Strategy 是创建、更新和删除 ResourceSlice 时使用的默认 REST 策略。
 var Strategy = resourceSliceStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
+// NamespaceScoped 返回 false，因为 ResourceSlice 是集群级资源。
 func (resourceSliceStrategy) NamespaceScoped() bool {
 	return false
 }
 
+// PrepareForCreate 将 Generation 初始化为 1，并按 Feature Gate 清理不可用的新字段。
 func (resourceSliceStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	slice := obj.(*resource.ResourceSlice)
 	slice.Generation = 1
@@ -57,13 +60,14 @@ func (resourceSliceStrategy) PrepareForCreate(ctx context.Context, obj runtime.O
 	dropDisabledFields(slice, nil)
 }
 
+// Validate 校验 ResourceSlice 的 Driver、Pool、设备、容量和节点分配信息。
 func (resourceSliceStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	slice := obj.(*resource.ResourceSlice)
 	return validation.ValidateResourceSlice(slice)
 }
 
-// DeclarativeValidationConfig implements rest.DeclarativeValidationConfigurer to supply declarative
-// validation options to the generic BeforeCreate/BeforeUpdate code path.
+// DeclarativeValidationConfig 为通用 BeforeCreate/BeforeUpdate 流程提供声明式校验配置，
+// 同时应用 ResourceNormalizationRules 和 DRAPartitionableDevicesType 特性门控。
 func (resourceSliceStrategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	return rest.DeclarativeValidationConfig{
 		NormalizationRules: validation.ResourceNormalizationRules,
@@ -73,7 +77,7 @@ func (resourceSliceStrategy) DeclarativeValidationConfig(ctx context.Context, ob
 	}
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 检查 Driver 名称大小写，并返回非阻断性警告。
 func (resourceSliceStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newResourceSlice := obj.(*resource.ResourceSlice)
 	var warnings []string
@@ -86,18 +90,21 @@ func (resourceSliceStrategy) WarningsOnCreate(ctx context.Context, obj runtime.O
 	return warnings
 }
 
+// Canonicalize 在校验后规范化 ResourceSlice；当前不执行额外转换。
 func (resourceSliceStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 返回 false，ResourceSlice 必须通过 POST 创建。
 func (resourceSliceStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// PrepareForUpdate 在 Spec 变化时递增 Generation，并保留旧对象已经使用的特性字段。
 func (resourceSliceStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	slice := obj.(*resource.ResourceSlice)
 	oldSlice := old.(*resource.ResourceSlice)
 
-	// Any changes to the spec increment the generation number.
+	// Spec 发生变化时递增 Generation。
 	if !apiequality.Semantic.DeepEqual(oldSlice.Spec, slice.Spec) {
 		slice.Generation = oldSlice.Generation + 1
 	}
@@ -105,11 +112,12 @@ func (resourceSliceStrategy) PrepareForUpdate(ctx context.Context, obj, old runt
 	dropDisabledFields(slice, oldSlice)
 }
 
+// ValidateUpdate 根据新旧对象校验 ResourceSlice 更新是否合法。
 func (resourceSliceStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateResourceSliceUpdate(obj.(*resource.ResourceSlice), old.(*resource.ResourceSlice))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 检查更新后的 Driver 名称大小写，并返回非阻断性警告。
 func (resourceSliceStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	newResourceSlice := obj.(*resource.ResourceSlice)
 	var warnings []string
@@ -122,16 +130,18 @@ func (resourceSliceStrategy) WarningsOnUpdate(ctx context.Context, obj, old runt
 	return warnings
 }
 
+// AllowUnconditionalUpdate 返回 true，允许通用更新流程为缺少 ResourceVersion 的请求填入最新版本。
 func (resourceSliceStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
 var TriggerFunc = map[string]storage.IndexerFunc{
-	// Only one index is supported:
-	// https://github.com/kubernetes/kubernetes/blob/3aa8c59fec0bf339e67ca80ea7905c817baeca85/staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go#L346-L350
+	// 当前存储缓存索引只支持一个索引字段，因此仅为 ResourceSlice 的 NodeName 建立索引。
+	// 具体限制参见 apiserver/pkg/storage/cacher 中的索引触发逻辑。
 	resource.ResourceSliceSelectorNodeName: nodeNameTriggerFunc,
 }
 
+// nodeNameTriggerFunc 从 ResourceSlice 中提取 NodeName，作为缓存索引触发键。
 func nodeNameTriggerFunc(obj runtime.Object) string {
 	rs := obj.(*resource.ResourceSlice)
 	if rs.Spec.NodeName == nil {
@@ -141,13 +151,14 @@ func nodeNameTriggerFunc(obj runtime.Object) string {
 	}
 }
 
-// Indexers returns the indexers for ResourceSlice.
+// Indexers 返回 ResourceSlice 的字段索引器，目前仅索引 Spec.NodeName。
 func Indexers() *cache.Indexers {
 	return &cache.Indexers{
 		storage.FieldIndex(resource.ResourceSliceSelectorNodeName): nodeNameIndexFunc,
 	}
 }
 
+// nodeNameIndexFunc 返回 ResourceSlice 的 NodeName 索引值；未指定节点时使用空字符串。
 func nodeNameIndexFunc(obj interface{}) ([]string, error) {
 	slice, ok := obj.(*resource.ResourceSlice)
 	if !ok {
@@ -159,7 +170,7 @@ func nodeNameIndexFunc(obj interface{}) ([]string, error) {
 	return []string{*slice.Spec.NodeName}, nil
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 ResourceSlice 的标签和字段，供 List、Watch 选择器过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	slice, ok := obj.(*resource.ResourceSlice)
 	if !ok {
@@ -168,7 +179,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(slice.ObjectMeta.Labels), toSelectableFields(slice), nil
 }
 
-// Match returns a generic matcher for a given label and field selector.
+// Match 根据标签和字段选择器构造通用存储匹配器，并启用 NodeName 索引。
 func Match(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:       label,
@@ -178,13 +189,11 @@ func Match(label labels.Selector, field fields.Selector) storage.SelectionPredic
 	}
 }
 
-// toSelectableFields returns a field set that represents the object
-// TODO: fields are not labels, and the validation rules for them do not apply.
+// toSelectableFields 将 ResourceSlice 转换为可供字段选择器匹配的字段集合。
+// TODO：字段选择器不是标签选择器，不能套用标签值的校验规则。
 func toSelectableFields(slice *resource.ResourceSlice) fields.Set {
-	// The purpose of allocation with a given number of elements is to reduce
-	// amount of allocations needed to create the fields.Set. If you add any
-	// field here or the number of object-meta related fields changes, this should
-	// be adjusted.
+	// 预先分配固定容量可减少构造 fields.Set 时的内存分配。
+	// 如果在此处增加字段，或 ObjectMeta 相关字段数量发生变化，应同步调整容量。
 	fields := make(fields.Set, 4)
 	if slice.Spec.NodeName == nil {
 		fields[resource.ResourceSliceSelectorNodeName] = ""
@@ -194,11 +203,11 @@ func toSelectableFields(slice *resource.ResourceSlice) fields.Set {
 	fields[resource.ResourceSliceSelectorDriver] = slice.Spec.Driver
 	fields[resource.ResourceSliceSelectorPoolName] = slice.Spec.Pool.Name
 
-	// Adds one field.
+	// 再加入 ObjectMeta 中可供选择器匹配的字段。
 	return generic.AddObjectMetaFieldsSet(fields, &slice.ObjectMeta, false)
 }
 
-// dropDisabledFields removes fields which are covered by a feature gate.
+// dropDisabledFields 统一清理 ResourceSlice Spec 中由 Feature Gate 控制且旧对象未使用的字段。
 func dropDisabledFields(newSlice, oldSlice *resource.ResourceSlice) {
 	dropDisabledDRADeviceTaintsFields(newSlice, oldSlice)
 	dropDisabledDRAPartitionableDevicesFields(newSlice, oldSlice)
@@ -333,12 +342,12 @@ func draConsumableCapacityFeatureInUse(slice *resource.ResourceSlice) bool {
 	return false
 }
 
-// dropDisabledDRAConsumableCapacityFields drops AllowMultipleAllocations and RequestPolicy
-// fields from the new slice if they were not used in the old slice.
+// dropDisabledDRAConsumableCapacityFields 在 DRAConsumableCapacity 未启用且旧对象未使用时，
+// 清理 AllowMultipleAllocations 和 RequestPolicy 字段。
 func dropDisabledDRAConsumableCapacityFields(newSlice, oldSlice *resource.ResourceSlice) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAConsumableCapacity) ||
 		draConsumableCapacityFeatureInUse(oldSlice) {
-		// No need to drop anything.
+		// 特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 
@@ -368,14 +377,12 @@ func draDeviceCompatibilityGroupsFeatureInUse(slice *resource.ResourceSlice) boo
 	return false
 }
 
-// dropDisabledDRADeviceCompatibilityGroupsFields drops the CompatibilityGroups
-// field from each device.consumesCounters[] entry of the new slice if the
-// DRADeviceCompatibilityGroups feature is disabled and the field was not
-// already in use in the old slice.
+// dropDisabledDRADeviceCompatibilityGroupsFields 在 DRADeviceCompatibilityGroups 未启用且旧对象未使用时，
+// 清理每个 device.consumesCounters 条目中的 CompatibilityGroups。
 func dropDisabledDRADeviceCompatibilityGroupsFields(newSlice, oldSlice *resource.ResourceSlice) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRADeviceCompatibilityGroups) ||
 		draDeviceCompatibilityGroupsFeatureInUse(oldSlice) {
-		// No need to drop anything.
+		// 特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 
@@ -386,6 +393,7 @@ func dropDisabledDRADeviceCompatibilityGroupsFields(newSlice, oldSlice *resource
 	}
 }
 
+// dropDisabledDRANodeAllocatableResourcesFields 在特性关闭且旧对象未使用时清理设备节点可分配资源信息。
 func dropDisabledDRANodeAllocatableResourcesFields(newSlice, oldSlice *resource.ResourceSlice) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRANodeAllocatableResources) || draNodeAllocatableResourcesFeatureInUse(oldSlice) {
 		return
@@ -409,6 +417,7 @@ func draNodeAllocatableResourcesFeatureInUse(slice *resource.ResourceSlice) bool
 	return false
 }
 
+// dropDisableDRAListTypeAttributesFields 在特性关闭且旧对象未使用时清理属性中的多值字段。
 func dropDisableDRAListTypeAttributesFields(newSlice, oldSlice *resource.ResourceSlice) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAListTypeAttributes) ||
 		draListTypeAttributesFeatureInUse(oldSlice) {
@@ -453,6 +462,7 @@ func draListTypeAttributesFeatureInUse(slice *resource.ResourceSlice) bool {
 	return false
 }
 
+// dropDisabledDRAOptionalNodeOperationsFields 在特性关闭且旧对象未使用时清理 SkipNodeOperations。
 func dropDisabledDRAOptionalNodeOperationsFields(newSlice, oldSlice *resource.ResourceSlice) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAOptionalNodeOperations) || draOptionalNodeOperationsFeatureInUse(oldSlice) {
 		return

@@ -37,19 +37,20 @@ import (
 	resourceslicestore "k8s.io/kubernetes/pkg/registry/resource/resourceslice/storage"
 )
 
-// The REST storage registers resource kinds also without the corresponding
-// feature gate because it might be useful to provide access to these resources
-// while their feature is off to allow cleaning them up.
+// 即使对应 Feature Gate 未启用，也注册相关资源类型的 REST 存储；
+// 这样管理员仍可访问并清理功能关闭前遗留的对象。
 
+// RESTStorageProvider 持有 Namespace 客户端和授权器，负责装配 resource.k8s.io API Group 的 REST 存储。
 type RESTStorageProvider struct {
 	NamespaceClient v1.NamespaceInterface
 	Authorizer      authorizer.UnconditionalAuthorizer
 }
 
+// NewRESTStorage 初始化 Resource API Group，并分别注册 v1、v1alpha3、v1beta1 和 v1beta2 版本的资源存储。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(resource.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果在此处增加 API 版本，务必同时在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1Storage(apiResourceConfigSource, restOptionsGetter, p.NamespaceClient); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -78,6 +79,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 装配当前稳定版的 DeviceClass、DeviceTaintRule、ResourceClaim、ResourceClaimTemplate 和 ResourceSlice。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter, nsClient v1.NamespaceInterface) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -126,6 +128,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// v1alpha3Storage 装配旧版 DeviceTaintRule 和 ResourcePoolStatusRequest 资源及其 Status 子资源。
 func (p RESTStorageProvider) v1alpha3Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter, nsClient v1.NamespaceInterface) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -150,6 +153,7 @@ func (p RESTStorageProvider) v1alpha3Storage(apiResourceConfigSource serverstora
 	return storage, nil
 }
 
+// v1beta1Storage 装配 v1beta1 仍提供的 DeviceClass、ResourceClaim、ResourceClaimTemplate 和 ResourceSlice。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter, nsClient v1.NamespaceInterface) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -189,6 +193,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 	return storage, nil
 }
 
+// v1beta2Storage 装配 v1beta2 的 DeviceClass、DeviceTaintRule、ResourceClaim、ResourceClaimTemplate 和 ResourceSlice。
 func (p RESTStorageProvider) v1beta2Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter, nsClient v1.NamespaceInterface) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -237,6 +242,7 @@ func (p RESTStorageProvider) v1beta2Storage(apiResourceConfigSource serverstorag
 	return storage, nil
 }
 
+// GroupName 返回 Resource API Group 的名称。
 func (p RESTStorageProvider) GroupName() string {
 	return resource.GroupName
 }

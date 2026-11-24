@@ -40,7 +40,7 @@ func testRequest(attr *string) *resource.ResourcePoolStatusRequest {
 	}
 }
 
-// The partition type default is only accepted while DRAPartitionableDevicesType
+// 只有启用 DRAPartitionableDevicesType 特性门控时，才允许设置默认分区类型。
 // is enabled; otherwise it is dropped so the feature cannot be used piecemeal.
 func TestPrepareForCreatePartitionTypeAttribute(t *testing.T) {
 	testCases := map[string]struct {

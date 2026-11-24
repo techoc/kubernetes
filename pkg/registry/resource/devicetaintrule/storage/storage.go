@@ -32,19 +32,17 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// REST implements a RESTStorage for DeviceTaintRule.
+// REST 将 DeviceTaintRule 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewRESTv1 returns a RESTStorage object that will work against DeviceTaintRule
-// for the v1 API version.
+// NewRESTv1 创建 v1 版本的 DeviceTaintRule 主资源 Store 和 /status 子资源 Store；删除时不返回已删除对象。
 func NewRESTv1(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	return newREST(optsGetter, false /* returnDeletedObject */)
 }
 
-// NewRESTLegacy returns a RESTStorage object that will work against DeviceTaintRule
-// for the API versions < v1.
+// NewRESTLegacy 创建旧版 API 使用的 DeviceTaintRule 主资源和 /status 子资源 Store；保留旧版删除返回对象的行为。
 func NewRESTLegacy(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	return newREST(optsGetter, true /* returnDeletedObject */)
 }
@@ -76,34 +74,32 @@ func newREST(optsGetter generic.RESTOptionsGetter, returnDeletedObject bool) (*R
 	return &REST{store}, &StatusREST{store: &statusStore}, nil
 }
 
-// StatusREST implements the REST endpoint for changing the status of a DeviceTaintRule.
+// StatusREST 实现用于更新 DeviceTaintRule Status 的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// New creates a new DeviceTaintRule object.
+// New 返回一个空的 DeviceTaintRule 对象，供 Status 子资源请求使用。
 func (r *StatusREST) New() runtime.Object {
 	return &resource.DeviceTaintRule{}
 }
 
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此这里不能重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取 DeviceTaintRule；REST 子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 只更新 DeviceTaintRule 的 Status 子集，并禁止通过该子资源创建对象。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 调用底层 Store 时显式将 forceAllowCreate 设为 false，Status 子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回 Status 子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }

@@ -30,12 +30,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/resource/resourceclaimtemplate"
 )
 
-// REST implements a RESTStorage for ResourceClaimTemplate.
+// REST 将 ResourceClaimTemplate 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against ResourceClass.
+// NewREST 创建命名空间级 ResourceClaimTemplate Store，并注入 Namespace 客户端以执行策略校验。
 func NewREST(optsGetter generic.RESTOptionsGetter, nsClient v1.NamespaceInterface) (*REST, error) {
 	if nsClient == nil {
 		return nil, fmt.Errorf("namespace client is required")

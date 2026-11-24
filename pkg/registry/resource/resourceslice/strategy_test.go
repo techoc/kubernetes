@@ -221,9 +221,9 @@ var sliceWithListTypeAttributes = func() *resource.ResourceSlice {
 	return obj
 }()
 
-// The attribute is only permitted on a slice whose devices consume counters,
-// and each of them must carry it as a string. The bare "version" key qualifies
-// with the driver's own domain.
+// 该属性只允许出现在包含计数器消耗项的 ResourceSlice 中，
+// 且每个消耗项都必须以字符串形式携带该属性。裸键名 "version" 会自动使用
+// 对应 Driver 自身的域名作为限定前缀。
 var sliceWithPartitionTypeAttribute = func() *resource.ResourceSlice {
 	obj := sliceWithPartitionableDevicesConsumesCounters.DeepCopy()
 	obj.Spec.PartitionTypeAttribute = ptr.To(resource.FullyQualifiedName("testdriver.example.com/version"))
@@ -302,9 +302,9 @@ func TestResourceSliceStrategyCreate(t *testing.T) {
 				return obj
 			}(),
 		},
-		// This should return a validation error since the slice will not
-		// have a node selector after the perDeviceNodeSelection field got
-		// dropped.
+		// 这里应返回校验错误，因为清理 perDeviceNodeSelection 字段后，
+		// ResourceSlice 将不再具有节点选择器，
+		// 因而原有配置不再满足要求。
 		"drop-fields-partitionable-devices-with-per-device-node-selection": {
 			obj:                     sliceWithPartitionableDevicesPerDeviceNodeSelection,
 			featureOverrides:        featuregatetesting.FeatureOverrides{features.DRAPartitionableDevices: false},
@@ -1039,9 +1039,9 @@ func TestResourceSliceStrategyUpdate(t *testing.T) {
 			expectObj: func() *resource.ResourceSlice {
 				obj := sliceWithPartitionableDevicesConsumesCounters.DeepCopy()
 				obj.ResourceVersion = "4"
-				// The generation is bumped for the incoming spec change even
-				// though dropping the disabled field makes the stored spec
-				// identical again, like in the partitionable drop case above.
+				// 即使清理禁用字段后存储的 Spec 最终与旧对象相同，
+				// 对于本次请求中发生的 Spec 变化，Generation 仍会递增，
+				// 与上面的可分区设备字段清理场景保持一致。
 				obj.Generation = 1
 				return obj
 			}(),

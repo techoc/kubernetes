@@ -1275,7 +1275,7 @@ func TestStatusStrategyUpdate(t *testing.T) {
 				}
 			},
 		},
-		// Cannot add finalizers, annotations and labels during status update.
+		// Status 更新不能新增 Finalizers、Annotations 或 Labels。
 		"drop-meta-changes": {
 			oldObj: obj,
 			newObj: func() *resource.ResourceClaim {
@@ -1310,7 +1310,7 @@ func TestStatusStrategyUpdate(t *testing.T) {
 			featureOverrides: featuregatetesting.FeatureOverrides{features.DRAAdminAccess: true},
 			expectObj: func() *resource.ResourceClaim {
 				expectObj := objWithAdminAccessStatus.DeepCopy()
-				// Spec remains unchanged.
+				// Spec 应保持不变。
 				expectObj.Spec = obj.Spec
 				return expectObj
 			}(),
@@ -1358,9 +1358,9 @@ func TestStatusStrategyUpdate(t *testing.T) {
 				}
 			},
 		},
-		// Normally a claim without admin access in the spec shouldn't
-		// have one in the status either, but it's not invalid and thus
-		// let's test this.
+		// 通常 Spec 未请求 AdminAccess 的 ResourceClaim，其 Status 也不应授予该权限；
+		// 但这种状态并不违反校验规则，因此
+		// 这里专门覆盖这一兼容场景。
 		"keep-fields-admin-access-because-of-status": {
 			oldObj: func() *resource.ResourceClaim {
 				oldObj := objWithAdminAccessStatus.DeepCopy()

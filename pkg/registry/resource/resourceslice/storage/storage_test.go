@@ -71,9 +71,9 @@ func TestCreate(t *testing.T) {
 	resourceClass := validNewResourceSlice("foo")
 	resourceClass.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo"}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		resourceClass,
-		// invalid
+		// 非法输入
 		&resource.ResourceSlice{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 		},
@@ -86,15 +86,15 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewResourceSlice("foo"),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*resource.ResourceSlice)
 			object.Labels = map[string]string{"foo": "bar"}
 			return object
 		},
-		// invalid update
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*resource.ResourceSlice)
 			object.Spec.Driver = ""
@@ -135,17 +135,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		validNewResourceSlice("foo"),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

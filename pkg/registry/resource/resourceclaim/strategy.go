@@ -46,7 +46,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// resourceclaimStrategy implements behavior for ResourceClaim objects
+// resourceclaimStrategy 定义 ResourceClaim 的创建、更新、校验和 Status 子资源策略。
 type resourceclaimStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -54,7 +54,7 @@ type resourceclaimStrategy struct {
 	authorizer authorizer.UnconditionalAuthorizer
 }
 
-// NewStrategy is the default logic that applies when creating and updating ResourceClaim objects.
+// NewStrategy 创建 ResourceClaim 默认策略，并注入 Namespace 客户端和授权器。
 func NewStrategy(nsClient v1.NamespaceInterface, authorizer authorizer.UnconditionalAuthorizer) *resourceclaimStrategy {
 	return &resourceclaimStrategy{
 		rest.DeclarativeValidation{Scheme: legacyscheme.Scheme},
@@ -64,13 +64,12 @@ func NewStrategy(nsClient v1.NamespaceInterface, authorizer authorizer.Unconditi
 	}
 }
 
+// NamespaceScoped 返回 true，因为 ResourceClaim 属于命名空间。
 func (*resourceclaimStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy and
-// should not be modified by the user. For a new ResourceClaim that is the
-// status.
+// GetResetFields 声明主资源写入时需要重置的 Status 字段，避免客户端绕过控制器写入资源分配结果。
 func (*resourceclaimStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"resource.k8s.io/v1alpha3": fieldpath.NewSet(
@@ -90,14 +89,16 @@ func (*resourceclaimStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpa
 	return fields
 }
 
+// PrepareForCreate 清空客户端提交的 Status，并根据 Feature Gate 清理 Spec 中不可用的新字段。
 func (*resourceclaimStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	claim := obj.(*resource.ResourceClaim)
-	// Status must not be set by user on create.
+	// 创建请求不能设置 Status；资源分配状态由调度器和驱动控制器维护。
 	claim.Status = resource.ResourceClaimStatus{}
 
 	dropDisabledSpecFields(claim, nil)
 }
 
+// Validate 先检查请求是否具备 AdminAccess 权限，再执行 ResourceClaim 字段校验。
 func (s *resourceclaimStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	claim := obj.(*resource.ResourceClaim)
 
@@ -106,18 +107,12 @@ func (s *resourceclaimStrategy) Validate(ctx context.Context, obj runtime.Object
 	return allErrs
 }
 
-// DeclarativeValidationConfig implements rest.DeclarativeValidationConfigurer to supply declarative
-// validation options to the generic BeforeCreate/BeforeUpdate code path.
-//
-// TODO: Behavior drift introduced when wiring declarative validation
-// universally: the status substrategy embeds *resourceclaimStrategy and now
-// inherits this method, so status updates pick up
-// WithNormalizationRules(ResourceNormalizationRules). Previously the
-// pre-migration inline declarative-validation call on the status subresource
-// did NOT pass normalization rules. The change is additive (mismatch
-// comparisons are stricter on status updates) but should be reviewed; if the
-// status subresource should not use these rules, override
-// ValidationConfig on resourceclaimStatusStrategy.
+// DeclarativeValidationConfig 为通用 BeforeCreate/BeforeUpdate 流程提供声明式校验配置。
+// TODO：接入统一声明式校验后，Status 子策略通过嵌入 resourceclaimStrategy 继承了本方法，
+// 因此 Status 更新也会应用 ResourceNormalizationRules。迁移前，Status 子资源的内联声明式校验
+// 并未传入这些规范化规则。当前变化会使 Status 更新的声明式与手写校验差异比较更加严格，
+// 需要继续评估；如果 Status 子资源不应使用这些规则，应在 resourceclaimStatusStrategy 中
+// 单独覆盖 ValidationConfig。
 func (*resourceclaimStrategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	return rest.DeclarativeValidationConfig{NormalizationRules: validation.ResourceNormalizationRules}
 }
@@ -133,6 +128,7 @@ func (*resourceclaimStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// PrepareForUpdate 恢复旧 Status，并按旧对象保留已使用的特性字段。
 func (*resourceclaimStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newClaim := obj.(*resource.ResourceClaim)
 	oldClaim := old.(*resource.ResourceClaim)
@@ -141,10 +137,11 @@ func (*resourceclaimStrategy) PrepareForUpdate(ctx context.Context, obj, old run
 	dropDisabledSpecFields(newClaim, oldClaim)
 }
 
+// ValidateUpdate 校验 ResourceClaim 更新；Spec 不可变，因此无需重新执行 AdminAccess 授权检查。
 func (s *resourceclaimStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newClaim := obj.(*resource.ResourceClaim)
 	oldClaim := old.(*resource.ResourceClaim)
-	// AuthorizedForAdmin isn't needed here because the spec is immutable.
+	// Spec 创建后不可变，因此更新时无需再次执行 AuthorizedForAdmin 检查。
 	return validation.ValidateResourceClaimUpdate(newClaim, oldClaim)
 }
 
@@ -152,6 +149,7 @@ func (*resourceclaimStrategy) WarningsOnUpdate(ctx context.Context, obj, old run
 	return nil
 }
 
+// AllowUnconditionalUpdate 返回 true，允许通用更新流程为缺少 ResourceVersion 的请求填入最新版本。
 func (*resourceclaimStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -160,13 +158,12 @@ type resourceclaimStatusStrategy struct {
 	*resourceclaimStrategy
 }
 
-// NewStatusStrategy creates a strategy for operating the status object.
+// NewStatusStrategy 基于主资源策略创建独立的 ResourceClaim /status 子资源策略。
 func NewStatusStrategy(resourceclaimStrategy *resourceclaimStrategy) *resourceclaimStatusStrategy {
 	return &resourceclaimStatusStrategy{resourceclaimStrategy}
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy and
-// should not be modified by the user. For a status update that is the spec.
+// GetResetFields 声明 Status 子资源写入时需要重置的 Spec 和 metadata，确保该入口只能修改 Status。
 func (*resourceclaimStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"resource.k8s.io/v1alpha3": fieldpath.NewSet(
@@ -190,6 +187,7 @@ func (*resourceclaimStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*f
 	return fields
 }
 
+// PrepareForUpdate 恢复旧 Spec 和受保护的 metadata，再清理禁用特性字段及已解除分配的设备状态。
 func (*resourceclaimStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newClaim := obj.(*resource.ResourceClaim)
 	oldClaim := old.(*resource.ResourceClaim)
@@ -200,6 +198,7 @@ func (*resourceclaimStatusStrategy) PrepareForUpdate(ctx context.Context, obj, o
 	dropDeallocatedStatusDevices(newClaim, oldClaim) // NOP if fields got dropped, so do this last.
 }
 
+// ValidateUpdate 根据 DRAResourceClaimGranularStatusAuthorization 特性门控，分别校验 AdminAccess、绑定和驱动设备状态权限。
 func (r *resourceclaimStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newClaim := obj.(*resource.ResourceClaim)
 	oldClaim := old.(*resource.ResourceClaim)
@@ -215,8 +214,7 @@ func (r *resourceclaimStatusStrategy) ValidateUpdate(ctx context.Context, obj, o
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAResourceClaimGranularStatusAuthorization) {
 		errs = append(errs, resourceutils.AuthorizedForBinding(ctx, field.NewPath("status", "allocation"), r.authorizer, newClaim.Status, oldClaim.Status)...)
 
-		// Only authorize driver device status if the claim is actually allocated since
-		// we drop all the device status when the claim is deallocated.
+		// 只有 ResourceClaim 已完成分配时才检查驱动设备状态的授权；解除分配时会清除全部设备状态。
 		if utilfeature.DefaultFeatureGate.Enabled(features.DRAResourceClaimDeviceStatus) &&
 			newClaim.Status.Allocation != nil {
 			errs = append(errs, resourceutils.AuthorizedForDeviceStatus(ctx, field.NewPath("status", "devices"), r.authorizer, newClaim.Status, oldClaim.Status)...)
@@ -226,12 +224,12 @@ func (r *resourceclaimStatusStrategy) ValidateUpdate(ctx context.Context, obj, o
 	return errs
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 ResourceClaim Status 更新时的非阻断性警告；当前不产生额外警告。
 func (*resourceclaimStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// Match returns a generic matcher for a given label and field selector.
+// Match 根据标签和字段选择器构造通用存储匹配器。
 func Match(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:    label,
@@ -240,7 +238,7 @@ func Match(label labels.Selector, field fields.Selector) storage.SelectionPredic
 	}
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 ResourceClaim 的标签和字段，供 List、Watch 选择器过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	claim, ok := obj.(*resource.ResourceClaim)
 	if !ok {
@@ -249,13 +247,13 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(claim.Labels), toSelectableFields(claim), nil
 }
 
-// toSelectableFields returns a field set that represents the object
+// toSelectableFields 将 ResourceClaim 转换为可供字段选择器匹配的字段集合。
 func toSelectableFields(claim *resource.ResourceClaim) fields.Set {
 	fields := generic.ObjectMetaFieldsSet(&claim.ObjectMeta, true)
 	return fields
 }
 
-// dropDisabledSpecFields removes fields from the spec which are covered by a feature gate.
+// dropDisabledSpecFields 清理 Spec 中由 Feature Gate 控制、当前不允许新设置的字段。
 func dropDisabledSpecFields(newClaim, oldClaim *resource.ResourceClaim) {
 	var oldClaimSpec *resource.ResourceClaimSpec
 	if oldClaim != nil {
@@ -264,7 +262,7 @@ func dropDisabledSpecFields(newClaim, oldClaim *resource.ResourceClaim) {
 	resourceclaimspec.DropDisabledFields(&newClaim.Spec, oldClaimSpec)
 }
 
-// dropDisabledStatusFields removes fields from the status which are covered by a feature gate.
+// dropDisabledStatusFields 清理 Status 中由 Feature Gate 控制、当前不允许新设置的字段。
 func dropDisabledStatusFields(newClaim, oldClaim *resource.ResourceClaim) {
 	dropDisabledDRAResourceClaimDeviceStatusFields(newClaim, oldClaim)
 	dropDisabledDRAAdminAccessStatusFields(newClaim, oldClaim)
@@ -275,16 +273,13 @@ func dropDisabledStatusFields(newClaim, oldClaim *resource.ResourceClaim) {
 
 func dropDisabledDRAAdminAccessStatusFields(newClaim, oldClaim *resource.ResourceClaim) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAAdminAccess) {
-		// No need to drop anything.
+		// 特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 	if draAdminAccessFeatureInUse(oldClaim) {
-		// If anything was set in the past, then fields must not get
-		// dropped on potentially unrelated updates and, for example,
-		// adding a status with AdminAccess=true is allowed. The
-		// scheduler typically doesn't do that (it also checks the
-		// feature gate and refuses to schedule), but the apiserver
-		// would allow it.
+		// 如果旧对象曾经设置过 AdminAccess，即使本次更新与该字段无关，也不能清除它。
+		// 否则在功能关闭期间，客户端仍可能通过无关更新新增 AdminAccess=true；
+		// 调度器通常会检查特性门控并拒绝调度，但 API Server 本身仍可能接受该状态。
 		return
 	}
 
@@ -297,6 +292,7 @@ func dropDisabledDRAAdminAccessStatusFields(newClaim, oldClaim *resource.Resourc
 	}
 }
 
+// draAdminAccessFeatureInUse 检查旧 Spec 或 Allocation 是否已经使用 AdminAccess，决定降级时是否保留字段。
 func draAdminAccessFeatureInUse(claim *resource.ResourceClaim) bool {
 	if claim == nil {
 		return false
@@ -317,23 +313,21 @@ func draAdminAccessFeatureInUse(claim *resource.ResourceClaim) bool {
 	return false
 }
 
+// isDRAResourceClaimDeviceStatusInUse 判断旧 ResourceClaim 是否已经包含设备状态。
 func isDRAResourceClaimDeviceStatusInUse(claim *resource.ResourceClaim) bool {
 	return claim != nil && len(claim.Status.Devices) > 0
 }
 
+// dropDisabledDRAResourceClaimDeviceStatusFields 在特性关闭且旧对象未使用时清空 Status.Devices。
 func dropDisabledDRAResourceClaimDeviceStatusFields(newClaim, oldClaim *resource.ResourceClaim) {
-	// drop resourceClaim.Status.Devices field if feature gate is not enabled and it was not in use
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DRAResourceClaimDeviceStatus) && !isDRAResourceClaimDeviceStatusInUse(oldClaim) {
 		newClaim.Status.Devices = nil
 	}
 }
 
-// dropDeallocatedStatusDevices removes the status.devices that were allocated
-// in the oldClaim and that have been removed in the newClaim.
-//
-// In other words, it removes stale status entries after deallocation. Doing
-// this in the apiserver avoids having to update clients which might be unaware
-// of the status feature.
+// dropDeallocatedStatusDevices 移除旧 ResourceClaim 中已分配、但新对象中已经解除分配的设备状态。
+// 换言之，它会清理解除分配后残留的 Status.Devices 条目；由 API Server 执行该清理，
+// 可以避免要求尚不了解设备状态字段的旧客户端同步升级。
 func dropDeallocatedStatusDevices(newClaim, oldClaim *resource.ResourceClaim) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DRAResourceClaimDeviceStatus) && !isDRAResourceClaimDeviceStatusInUse(oldClaim) {
 		return
@@ -342,7 +336,7 @@ func dropDeallocatedStatusDevices(newClaim, oldClaim *resource.ResourceClaim) {
 	deallocatedDevices := sets.New[structured.SharedDeviceID]()
 
 	if oldClaim.Status.Allocation != nil {
-		// Get all devices in the oldClaim.
+		// 收集旧 ResourceClaim 分配结果中的全部设备标识。
 		for _, result := range oldClaim.Status.Allocation.Devices.Results {
 			deviceID := structured.MakeDeviceID(result.Driver, result.Pool, result.Device)
 			sharedDeviceID := structured.MakeSharedDeviceID(deviceID, result.ShareID)
@@ -350,7 +344,7 @@ func dropDeallocatedStatusDevices(newClaim, oldClaim *resource.ResourceClaim) {
 		}
 	}
 
-	// Remove devices from deallocatedDevices that are still in newClaim.
+	// 从待清理集合中移除仍然存在于新分配结果中的设备。
 	if newClaim.Status.Allocation != nil {
 		for _, result := range newClaim.Status.Allocation.Devices.Results {
 			deviceID := structured.MakeDeviceID(result.Driver, result.Pool, result.Device)
@@ -359,7 +353,7 @@ func dropDeallocatedStatusDevices(newClaim, oldClaim *resource.ResourceClaim) {
 		}
 	}
 
-	// Remove from newClaim.Status.Devices.
+	// 从新对象的 Status.Devices 中移除已经解除分配的设备。
 	n := 0
 	for _, device := range newClaim.Status.Devices {
 		deviceID := structured.MakeDeviceID(device.Driver, device.Pool, device.Device)
@@ -380,6 +374,7 @@ func dropDeallocatedStatusDevices(newClaim, oldClaim *resource.ResourceClaim) {
 	}
 }
 
+// draConsumableCapacityFeatureInUse 检查旧 Spec、Allocation 和设备状态是否已经使用共享设备或消耗容量字段。
 func draConsumableCapacityFeatureInUse(claim *resource.ResourceClaim) bool {
 	if claim == nil {
 		return false
@@ -407,6 +402,7 @@ func draConsumableCapacityFeatureInUse(claim *resource.ResourceClaim) bool {
 	return false
 }
 
+// draDeviceBindingConditionsInUse 检查旧分配结果是否已经包含设备绑定条件或绑定失败条件。
 func draDeviceBindingConditionsInUse(claim *resource.ResourceClaim) bool {
 	if claim == nil {
 		return false
@@ -421,12 +417,12 @@ func draDeviceBindingConditionsInUse(claim *resource.ResourceClaim) bool {
 	return false
 }
 
-// dropDisabledDRAResourceClaimConsumableCapacityStatusFields drops any new feature fields
-// from the newClaim status if they were not used in the oldClaim.
+// dropDisabledDRAResourceClaimConsumableCapacityStatusFields 在 DRAConsumableCapacity 未启用且旧对象未使用时，
+// 清理新对象 Status 中的 ShareID 和 ConsumedCapacity 字段。
 func dropDisabledDRAResourceClaimConsumableCapacityStatusFields(newClaim, oldClaim *resource.ResourceClaim) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAConsumableCapacity) ||
 		draConsumableCapacityFeatureInUse(oldClaim) {
-		// No need to drop anything.
+		// 特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 
@@ -444,12 +440,12 @@ func dropDisabledDRAResourceClaimConsumableCapacityStatusFields(newClaim, oldCla
 	}
 }
 
-// dropDeviceBindingConditionsFields drops any new feature fields
-// from the newClaim status if they were not used in the oldClaim.
+// dropDeviceBindingConditionsFields 在 DRADeviceBindingConditions 未启用且旧对象未使用时，
+// 清理分配结果中的 BindingConditions 和 BindingFailureConditions。
 func dropDeviceBindingConditionsFields(newClaim, oldClaim *resource.ResourceClaim) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRADeviceBindingConditions) ||
 		draDeviceBindingConditionsInUse(oldClaim) {
-		// No need to drop anything.
+		// 特性已启用，或旧对象已经使用该字段，因此无需清理。
 		return
 	}
 
@@ -461,6 +457,7 @@ func dropDeviceBindingConditionsFields(newClaim, oldClaim *resource.ResourceClai
 	}
 }
 
+// dropDisabledDRAOptionalNodeOperationsStatusFields 在特性关闭且旧对象未使用时清空 SkipNodeOperations。
 func dropDisabledDRAOptionalNodeOperationsStatusFields(newClaim, oldClaim *resource.ResourceClaim) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAOptionalNodeOperations) ||
 		draOptionalNodeOperationsStatusFeatureInUse(oldClaim) {
@@ -474,6 +471,7 @@ func dropDisabledDRAOptionalNodeOperationsStatusFields(newClaim, oldClaim *resou
 	}
 }
 
+// draOptionalNodeOperationsStatusFeatureInUse 判断旧 Allocation 是否已经设置 SkipNodeOperations。
 func draOptionalNodeOperationsStatusFeatureInUse(claim *resource.ResourceClaim) bool {
 	if claim == nil {
 		return false

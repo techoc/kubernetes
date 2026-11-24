@@ -33,9 +33,9 @@ import (
 	"k8s.io/kubernetes/pkg/apis/resource"
 )
 
-// TestGetModifiedDrivers contains the unit tests for the getModifiedDrivers function.
+// TestGetModifiedDrivers 验证 getModifiedDrivers 对新增、删除和变更 Driver 的识别结果。
 func TestGetModifiedDrivers(t *testing.T) {
-	// Helper to create AllocatedDeviceStatus
+	// 创建 AllocatedDeviceStatus 测试对象的辅助函数。
 	devStatus := func(driver, pool, device string, network *resource.NetworkDeviceData) resource.AllocatedDeviceStatus {
 		return resource.AllocatedDeviceStatus{
 			Driver:      driver,
@@ -45,7 +45,7 @@ func TestGetModifiedDrivers(t *testing.T) {
 		}
 	}
 
-	// Helper to create ResourceClaimStatus
+	// 创建 ResourceClaimStatus 测试对象的辅助函数。
 	claimStatus := func(devices ...resource.AllocatedDeviceStatus) resource.ResourceClaimStatus {
 		return resource.ResourceClaimStatus{
 			Devices: devices,
@@ -130,19 +130,19 @@ func TestGetModifiedDrivers(t *testing.T) {
 		},
 		"complex change (add, remove, modify)": {
 			newStatus: claimStatus(
-				// driver-a: dev-1 modified
+				// driver-a：dev-1 的状态已修改。
 				devStatus("driver-a", "pool-1", "dev-1", &resource.NetworkDeviceData{InterfaceName: "eth0", IPs: []string{"192.168.7.1/24"}}), // Modified
-				// driver-b: dev-2 unchanged
+				// driver-b：dev-2 的状态未变化。
 				devStatus("driver-b", "pool-1", "dev-2", nil),
-				// driver-c: dev-3 added
+				// driver-c：新增 dev-3。
 				devStatus("driver-c", "pool-1", "dev-3", nil),
 			),
 			oldStatus: claimStatus(
-				// driver-a: dev-1 old state
+				// driver-a：dev-1 的旧状态。
 				devStatus("driver-a", "pool-1", "dev-1", &resource.NetworkDeviceData{InterfaceName: "eth0"}),
-				// driver-b: dev-2 unchanged
+				// driver-b：dev-2 的状态未变化。
 				devStatus("driver-b", "pool-1", "dev-2", nil),
-				// driver-d: dev-4 removed
+				// driver-d：dev-4 已被移除。
 				devStatus("driver-d", "pool-1", "dev-4", nil),
 			),
 			expected: sets.New[string]("driver-a", "driver-c", "driver-d"),
@@ -196,8 +196,8 @@ func TestGetModifiedDrivers(t *testing.T) {
 	}
 }
 
-// fakeAuthorizer records authorization calls and returns preconfigured decisions.
-// The key format is "verb/resource/subresource/name".
+// fakeAuthorizer 记录授权调用，并根据预先配置的结果返回授权决策。
+// 匹配键格式为 verb/resource/subresource/name。
 type fakeAuthorizer struct {
 	rules      map[string]authorizer.Decision
 	err        error
@@ -221,8 +221,8 @@ func (f *fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes)
 	return authorizer.DecisionDeny, "no rule matched", nil
 }
 
-// withRequestContext builds a context with user info and request info set,
-// simulating what GetAuthorizerAttributes expects.
+// withRequestContext 构造包含用户信息和请求信息的上下文，
+// 模拟 GetAuthorizerAttributes 所需的请求上下文。
 func withRequestContext(ctx context.Context, u user.Info, verb string) context.Context {
 	ctx = genericapirequest.WithUser(ctx, u)
 	ctx = genericapirequest.WithRequestInfo(ctx, &genericapirequest.RequestInfo{
@@ -235,8 +235,8 @@ func withRequestContext(ctx context.Context, u user.Info, verb string) context.C
 		Namespace:         "default",
 		Name:              "test-claim",
 	})
-	// GetAuthorizerAttributes also needs an http.Request in context for audit, but
-	// the function doesn't fail without it — we simulate by using a dummy request.
+	// GetAuthorizerAttributes 还会从上下文读取 http.Request 以生成审计信息，但
+	// 缺少该请求不会导致函数失败，因此这里使用一个虚拟请求进行模拟。
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, "/", nil)
 	ctx = req.Context()
 	return ctx
@@ -437,7 +437,7 @@ func TestAuthorizedForDeviceStatus(t *testing.T) {
 				Devices: []resource.AllocatedDeviceStatus{{Driver: driverName, Pool: "pool", Device: "dev-old"}},
 			},
 			user: &user.DefaultInfo{Name: saName, Extra: map[string][]string{serviceaccount.NodeNameKey: {nodeName}}},
-			// Only grant associated-node, which should NOT be checked since nodes differ
+			// 只授予 associated-node 权限；由于节点不同，该权限不应被检查。
 			authz: &fakeAuthorizer{rules: map[string]authorizer.Decision{
 				fmt.Sprintf("associated-node:update/resourceclaims/driver/%s", driverName): authorizer.DecisionAllow,
 			}},

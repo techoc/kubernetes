@@ -74,9 +74,9 @@ func TestCreate(t *testing.T) {
 	patch := validNewDeviceTaint("foo")
 	patch.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo"}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		patch,
-		// invalid
+		// 非法输入
 		&resource.DeviceTaintRule{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 		},
@@ -89,9 +89,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewDeviceTaint("foo"),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*resource.DeviceTaintRule)
 			object.Labels = map[string]string{"foo": "bar"}
@@ -132,17 +132,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		validNewDeviceTaint("foo"),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -158,8 +158,8 @@ func TestUpdateStatus(t *testing.T) {
 
 	key, _ := storage.KeyFunc(ctx, "foo")
 	deviceTaintStart := validNewDeviceTaint("foo")
-	// v1 enforces ResourceVersion comparison on status update (see AllowUnconditionalUpdate),
-	// so we need the created object and its ResourceVersion.
+	// v1 的 Status 更新会校验 ResourceVersion（参见 AllowUnconditionalUpdate），
+	// 因此测试必须先创建对象并取得其 ResourceVersion。
 	var deviceTaintCreated resource.DeviceTaintRule
 	err := storage.Storage.Create(ctx, key, deviceTaintStart, &deviceTaintCreated, 0, false)
 	if err != nil {
@@ -183,7 +183,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	deviceTaintOut := obj.(*resource.DeviceTaintRule)
-	// only compare relevant changes b/c of difference in metadata
+	// 元数据存在差异，因此只比较本测试关注的状态字段。
 	if !apiequality.Semantic.DeepEqual(deviceTaint.Status, deviceTaintOut.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(deviceTaint.Status, deviceTaintOut.Status))
 	}

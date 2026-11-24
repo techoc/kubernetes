@@ -27,12 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/resource/resourceslice"
 )
 
-// REST implements a RESTStorage for ResourceSlice.
+// REST 将 ResourceSlice 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against ResourceSlice.
+// NewREST 创建集群级 ResourceSlice Store，并配置字段选择器、节点索引和事件触发函数。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &resource.ResourceSlice{} },

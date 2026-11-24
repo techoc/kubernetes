@@ -36,18 +36,16 @@ import (
 	"k8s.io/kubernetes/pkg/apis/resource"
 )
 
-// AuthorizedForAdmin checks if the request is authorized to get admin access to devices
-// based on namespace label
+// AuthorizedForAdmin 根据 Namespace 标签检查请求是否有权为设备申请 AdminAccess。
 func AuthorizedForAdmin(ctx context.Context, deviceRequests []resource.DeviceRequest, namespaceName string, nsClient v1.NamespaceInterface) field.ErrorList {
 	var allErrs field.ErrorList
 	adminRequested := false
 	var adminAccessPath *field.Path
 
-	// no need to check old request since spec is immutable
+	// ResourceClaim Spec 创建后不可变，因此无需比较旧请求。
 
 	for i := range deviceRequests {
-		// AdminAccess can not be set on subrequests, so it can
-		// only be used when the Exactly field is set.
+		// 子请求不能设置 AdminAccess；该字段只能出现在 Exactly 请求中。
 		if deviceRequests[i].Exactly == nil {
 			continue
 		}
@@ -59,11 +57,11 @@ func AuthorizedForAdmin(ctx context.Context, deviceRequests []resource.DeviceReq
 		}
 	}
 	if !adminRequested {
-		// No need to validate unless admin access is requested
+		// 只有明确请求 AdminAccess 时才需要执行授权校验。
 		return allErrs
 	}
 
-	// Retrieve the namespace object from the store
+	// 从存储中读取所属 Namespace，以检查其授权标签。
 	ns, err := nsClient.Get(ctx, namespaceName, metav1.GetOptions{})
 	if err != nil {
 		return append(allErrs, field.InternalError(adminAccessPath, fmt.Errorf("could not retrieve namespace to verify admin access: %w", err)))
@@ -75,23 +73,22 @@ func AuthorizedForAdmin(ctx context.Context, deviceRequests []resource.DeviceReq
 	return allErrs
 }
 
-// AuthorizedForAdminStatus checks if the request status is authorized to get admin access to devices
-// based on namespace label
+// AuthorizedForAdminStatus 根据 Namespace 标签检查 Status 中新增的设备 AdminAccess 是否获得授权。
 func AuthorizedForAdminStatus(ctx context.Context, newAllocationResult, oldAllocationResult []resource.DeviceRequestAllocationResult, namespaceName string, nsClient v1.NamespaceInterface) field.ErrorList {
 	var allErrs field.ErrorList
 	var adminAccessPath *field.Path
 
 	if wasGranted, _ := adminRequested(oldAllocationResult); wasGranted {
-		// No need to validate if old status has admin access granted, since status.Allocation is immutable
+		// 如果旧 Status 已经授予 AdminAccess，则无需重复校验，因为 Status.Allocation 不可变。
 		return allErrs
 	}
 	isRequested, adminAccessPath := adminRequested(newAllocationResult)
 	if !isRequested {
-		// No need to validate unless admin access is requested
+		// 只有明确请求 AdminAccess 时才需要执行授权校验。
 		return allErrs
 	}
 
-	// Retrieve the namespace object from the store
+	// 从存储中读取所属 Namespace，以检查其授权标签。
 	ns, err := nsClient.Get(ctx, namespaceName, metav1.GetOptions{})
 	if err != nil {
 		return append(allErrs, field.InternalError(adminAccessPath, fmt.Errorf("could not retrieve namespace to verify admin access: %w", err)))
@@ -103,6 +100,7 @@ func AuthorizedForAdminStatus(ctx context.Context, newAllocationResult, oldAlloc
 	return allErrs
 }
 
+// adminRequested 检查设备分配结果中是否包含 AdminAccess=true，并返回对应字段路径。
 func adminRequested(deviceRequestResults []resource.DeviceRequestAllocationResult) (bool, *field.Path) {
 	for i := range deviceRequestResults {
 		value := deviceRequestResults[i].AdminAccess
@@ -113,9 +111,8 @@ func adminRequested(deviceRequestResults []resource.DeviceRequestAllocationResul
 	return false, nil
 }
 
-// AuthorizedForBinding checks if the caller is authorized to update
-// status.allocation and status.reservedFor by verifying permission on the
-// synthetic resourceclaims/binding subresource.
+// AuthorizedForBinding 通过检查合成的 resourceclaims/binding 子资源权限，
+// 判断调用者是否有权更新 status.allocation 和 status.reservedFor。
 func AuthorizedForBinding(ctx context.Context, fieldPath *field.Path, authz authorizer.UnconditionalAuthorizer, newStatus, oldStatus resource.ResourceClaimStatus) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -143,10 +140,8 @@ func AuthorizedForBinding(ctx context.Context, fieldPath *field.Path, authz auth
 	return allErrs
 }
 
-// AuthorizedForDeviceStatus checks if the caller is authorized to update
-// status.devices by performing per-driver authorization checks using the
-// associated-node / arbitrary-node verb prefix pattern on the synthetic
-// resourceclaims/driver subresource.
+// AuthorizedForDeviceStatus 通过合成的 resourceclaims/driver 子资源，按 Driver 分别执行授权检查。
+// 如果 ServiceAccount 与设备分配到同一节点，优先使用 associated-node 动词前缀；否则使用 arbitrary-node 前缀。
 func AuthorizedForDeviceStatus(ctx context.Context, fieldPath *field.Path, a authorizer.UnconditionalAuthorizer, newStatus, oldStatus resource.ResourceClaimStatus) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -160,8 +155,8 @@ func AuthorizedForDeviceStatus(ctx context.Context, fieldPath *field.Path, a aut
 		return append(allErrs, field.InternalError(fieldPath, fmt.Errorf("cannot build authorizer attributes: %w", err)))
 	}
 
-	// if service account is on the same node as the claim, check associated-node verb first, fall back to arbitrary-node
-	// Otherwise, only try arbitrary-node
+	// 如果 ServiceAccount 所属节点与 ResourceClaim 分配节点相同，先检查 associated-node 动词，失败后回退到 arbitrary-node；
+	// 否则只检查 arbitrary-node 动词。
 	requestVerb := baseAttrs.GetVerb()
 	var verbs []string
 	if saAssociatedWithAllocatedNode(baseAttrs.GetUser(), nodeNameFromAllocation(newStatus.Allocation)) {
@@ -180,6 +175,7 @@ func AuthorizedForDeviceStatus(ctx context.Context, fieldPath *field.Path, a aut
 	return allErrs
 }
 
+// checkDriverAuthorization 按顺序尝试给定动词；任一动词授权成功即视为通过。
 func checkDriverAuthorization(ctx context.Context, baseAttrs authorizer.Attributes, verbs []string, driverName string, a authorizer.UnconditionalAuthorizer) error {
 	if len(verbs) == 0 {
 		return fmt.Errorf("no verbs set for driver %s", driverName) // impossible for all inputs today
@@ -205,8 +201,7 @@ func checkDriverAuthorization(ctx context.Context, baseAttrs authorizer.Attribut
 	return firstErr
 }
 
-// getModifiedDrivers identifies all drivers whose status entries were added,
-// removed, or changed between the old and new ResourceClaim objects.
+// getModifiedDrivers 找出新旧 ResourceClaim 之间设备状态条目新增、删除或发生变化的全部 Driver。
 func getModifiedDrivers(newAllocatedDeviceStatus, oldAllocatedDeviceStatus resource.ResourceClaimStatus) sets.Set[string] {
 	driversToAuthz := sets.Set[string]{}
 
@@ -215,21 +210,21 @@ func getModifiedDrivers(newAllocatedDeviceStatus, oldAllocatedDeviceStatus resou
 		oldDevices[makeDeviceKey(d)] = d
 	}
 
-	// Check for new or modified device entries
+	// 检查新增或发生变化的设备状态条目。
 	for _, d := range newAllocatedDeviceStatus.Devices {
 		key := makeDeviceKey(d)
 		oldDevice, ok := oldDevices[key]
-		delete(oldDevices, key) // Remove from map to track processed devices
+		delete(oldDevices, key) // 从旧设备映射中删除已处理条目，剩余条目即为已移除设备。
 
-		// If entry is new or changed, we need to authorize this driver.
+		// 如果设备条目是新增的或内容发生变化，则需要校验对应 Driver 的授权。
 		if !ok || !equality.Semantic.DeepEqual(oldDevice, d) {
 			driversToAuthz.Insert(d.Driver)
 		}
 	}
 
-	// Check for removed device entries
+	// 检查已经从新对象中移除的设备状态条目。
 	for _, d := range oldDevices {
-		// Any remaining device in oldDevices was removed in rcNew.
+		// oldDevices 中剩余的设备均已从新 ResourceClaim 状态中移除。
 		driversToAuthz.Insert(d.Driver)
 	}
 
@@ -243,6 +238,7 @@ type deviceKey struct {
 	shareID string
 }
 
+// makeDeviceKey 使用 Driver、Pool、Device 和 ShareID 唯一标识一个已分配设备。
 func makeDeviceKey(d resource.AllocatedDeviceStatus) deviceKey {
 	key := deviceKey{
 		driver: d.Driver,
@@ -255,6 +251,7 @@ func makeDeviceKey(d resource.AllocatedDeviceStatus) deviceKey {
 	return key
 }
 
+// nodeNameFromAllocation 仅在 NodeSelector 能精确表达单个 metadata.name 时返回节点名称。
 func nodeNameFromAllocation(allocation *resource.AllocationResult) string {
 	if allocation == nil || allocation.NodeSelector == nil {
 		return ""
@@ -274,24 +271,25 @@ func nodeNameFromAllocation(allocation *resource.AllocationResult) string {
 	return f.Values[0]
 }
 
+// saAssociatedWithAllocatedNode 检查调用者是否为带有唯一、合法 NodeName 扩展属性的 ServiceAccount，且该节点与分配节点一致。
 func saAssociatedWithAllocatedNode(u user.Info, allocatedNodeName string) bool {
 	if len(allocatedNodeName) == 0 {
 		return false
 	}
 
-	// Must be a ServiceAccount
+	// 调用者必须是 ServiceAccount。
 	if _, _, err := serviceaccount.SplitUsername(u.GetName()); err != nil {
 		return false
 	}
 
-	// Must have exactly one node-name extra attribute
+	// 用户信息必须且只能包含一个节点名称扩展属性。
 	nodeNames := u.GetExtra()[serviceaccount.NodeNameKey]
 	if len(nodeNames) != 1 {
 		return false
 	}
 	nodeName := nodeNames[0]
 
-	// Must be a valid node name format
+	// 扩展属性中的节点名称必须符合 Kubernetes 节点名称格式。
 	if len(validation.ValidateNodeName(nodeName, false)) != 0 {
 		return false
 	}
@@ -299,10 +297,11 @@ func saAssociatedWithAllocatedNode(u user.Info, allocatedNodeName string) bool {
 	return nodeName == allocatedNodeName
 }
 
+// checkAuthorization 执行授权判断；明确 Allow 时即使同时返回评估错误也视为授权成功。
 func checkAuthorization(ctx context.Context, a authorizer.UnconditionalAuthorizer, attributes authorizer.Attributes) error {
 	authorized, reason, err := a.Authorize(ctx, attributes)
 
-	// an authorizer like RBAC could encounter evaluation errors and still allow the request, so authorizer decision is checked before error here.
+	// RBAC 等授权器可能在评估过程中遇到错误，但最终仍明确允许请求；因此这里必须先判断授权决策，再处理错误。
 	if authorized == authorizer.DecisionAllow {
 		return nil
 	}
@@ -318,6 +317,7 @@ func checkAuthorization(ctx context.Context, a authorizer.UnconditionalAuthorize
 	return responsewriters.ForbiddenStatusError(attributes, msg)
 }
 
+// syntheticSubresourceAttrs 在原始请求授权属性上覆盖 verb、subresource、namespace 和 name，构造 DRA 专用子资源授权请求。
 type syntheticSubresourceAttrs struct {
 	authorizer.Attributes
 	verb        string

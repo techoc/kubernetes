@@ -62,9 +62,9 @@ func TestCreate(t *testing.T) {
 	deviceClass := validNewClass("foo")
 	deviceClass.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo"}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		deviceClass,
-		// invalid
+		// 非法输入
 		&resource.DeviceClass{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 		},
@@ -77,9 +77,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewClass("foo"),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*resource.DeviceClass)
 			object.Spec.Selectors = []resource.DeviceSelector{{
@@ -89,7 +89,7 @@ func TestUpdate(t *testing.T) {
 			}}
 			return object
 		},
-		//invalid update
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*resource.DeviceClass)
 			object.Spec.Selectors = []resource.DeviceSelector{{
@@ -134,17 +134,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		validNewClass("foo"),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

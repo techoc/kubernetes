@@ -31,8 +31,8 @@ import (
 	"k8s.io/kubernetes/pkg/apis/resource"
 )
 
-// synctestEpoch is when the clock inside a synctest bubble starts (part of the
-// package API, but not defined there in Go).
+// synctestEpoch 表示 synctest 测试环境中虚拟时钟的起始时间（该概念属于
+// package API，但 Go 语言本身未在该包中定义该类型）。
 var synctestEpoch = &metav1.Time{Time: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)}
 
 var obj = &resource.DeviceTaintRule{
@@ -158,7 +158,7 @@ func TestDeviceTaintRuleStrategyCreate(t *testing.T) {
 func TestDeviceTaintRuleStrategyUpdate(t *testing.T) {
 	ctx := genericapirequest.NewDefaultContext()
 
-	// The update happens some time after the epoch.
+	// 本次更新发生在虚拟时钟起点之后。
 	updateDelay := 10 * time.Second
 	updateTime := &metav1.Time{Time: synctestEpoch.Add(updateDelay)}
 	oldTime := &metav1.Time{Time: synctestEpoch.Add(updateDelay / 2)}
@@ -198,7 +198,7 @@ func TestDeviceTaintRuleStrategyUpdate(t *testing.T) {
 			expectObj: func() *resource.DeviceTaintRule {
 				obj := obj.DeepCopy()
 				obj.Spec.Taint.Effect = resource.DeviceTaintEffectNone
-				// Automatically bumped.
+				// TimeAdded 应由策略自动更新。
 				obj.Spec.Taint.TimeAdded = updateTime
 				obj.Generation++
 				return obj
@@ -241,7 +241,7 @@ func TestDeviceTaintRuleStrategyUpdate(t *testing.T) {
 			}(),
 			expectObj: func() *resource.DeviceTaintRule {
 				obj := obj.DeepCopy()
-				// Stored as requested.
+				// TimeAdded 应保留客户端明确提交的值。
 				obj.Spec.Taint.TimeAdded = oldTime
 				obj.Generation++
 				return obj
@@ -305,7 +305,7 @@ func TestStatusStrategyUpdate(t *testing.T) {
 			}(),
 			expectValidationError: fieldImmutableError,
 		},
-		// Cannot add finalizers, annotations and labels during status update.
+		// Status 更新不能新增 Finalizers、Annotations 或 Labels。
 		"drop-meta-changes": {
 			oldObj: obj,
 			newObj: func() *resource.DeviceTaintRule {
