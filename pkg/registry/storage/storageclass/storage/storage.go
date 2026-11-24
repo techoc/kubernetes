@@ -29,12 +29,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/storage/storageclass"
 )
 
-// REST implements a RESTStorage for storage classes.
+// REST 将 StorageClass 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against storage classes.
+// NewREST 创建 StorageClass 的 REST Store，并配置资源策略和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &storageapi.StorageClass{} },
@@ -57,10 +57,10 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	return &REST{store}, nil
 }
 
-// Implement ShortNamesProvider
+// 声明 REST 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 返回 StorageClass 资源的 kubectl 简称 sc。
 func (r *REST) ShortNames() []string {
 	return []string{"sc"}
 }

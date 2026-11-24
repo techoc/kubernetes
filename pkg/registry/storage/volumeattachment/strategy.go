@@ -34,23 +34,20 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// volumeAttachmentStrategy implements behavior for VolumeAttachment objects
+// volumeAttachmentStrategy 定义 VolumeAttachment 主资源和 Status 子资源的更新策略。
 type volumeAttachmentStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating
-// VolumeAttachment objects via the REST API.
+// Strategy 是通过 REST API 创建、更新和删除 VolumeAttachment 时使用的默认策略。
 var Strategy = volumeAttachmentStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped 声明该资源是否属于命名空间级别；返回 false 表示对象通过集群级 URL 管理，返回 true 表示 URL 中必须包含 namespace。
 func (volumeAttachmentStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 声明主资源写入时需要重置的 Status 字段，防止用户直接修改控制器维护的附加状态。
 func (volumeAttachmentStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"storage.k8s.io/v1": fieldpath.NewSet(
@@ -61,7 +58,7 @@ func (volumeAttachmentStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 	return fields
 }
 
-// ResetBeforeCreate clears the Status field which is not allowed to be set by end users on creation.
+// PrepareForCreate 清空客户端提交的 Status，附加状态由 Attach/Detach 控制器维护。
 func (volumeAttachmentStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	volumeAttachment := obj.(*storage.VolumeAttachment)
 	volumeAttachment.Status = storage.VolumeAttachmentStatus{}
@@ -73,27 +70,25 @@ func (volumeAttachmentStrategy) Validate(ctx context.Context, obj runtime.Object
 	return validation.ValidateVolumeAttachment(volumeAttachment)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 VolumeAttachment 时的非阻断性警告；当前不产生额外警告。
 func (volumeAttachmentStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 VolumeAttachment；当前不执行额外转换。
 func (volumeAttachmentStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate 决定 Update 请求在对象不存在时是否允许退化为创建；false 表示必须先显式 Create。
 func (volumeAttachmentStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// PrepareForUpdate sets the Status fields which is not allowed to be set by an end user updating a VolumeAttachment
+// PrepareForUpdate 恢复旧 Status；VolumeAttachment 的 Spec 不允许更新，因此无需递增 Generation。
 func (volumeAttachmentStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newVolumeAttachment := obj.(*storage.VolumeAttachment)
 	oldVolumeAttachment := old.(*storage.VolumeAttachment)
 
 	newVolumeAttachment.Status = oldVolumeAttachment.Status
-	// No need to increment Generation because we don't allow updates to spec
 
 }
 
@@ -104,27 +99,24 @@ func (volumeAttachmentStrategy) ValidateUpdate(ctx context.Context, obj, old run
 	return validation.ValidateVolumeAttachmentUpdate(newVolumeAttachmentObj, oldVolumeAttachmentObj)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 VolumeAttachment 时的非阻断性警告；当前不产生额外警告。
 func (volumeAttachmentStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// AllowUnconditionalUpdate 声明是否允许不携带 ResourceVersion 前置条件的更新；true 表示允许无条件更新，false 要求并发版本检查。
 func (volumeAttachmentStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
-// volumeAttachmentStatusStrategy implements behavior for VolumeAttachmentStatus subresource
+// volumeAttachmentStatusStrategy 定义 VolumeAttachment /status 子资源的更新策略。
 type volumeAttachmentStatusStrategy struct {
 	volumeAttachmentStrategy
 }
 
-// StatusStrategy is the default logic that applies when creating and updating
-// VolumeAttachmentStatus subresource via the REST API.
+// StatusStrategy 是通过 REST API 更新 VolumeAttachment Status 时使用的默认策略。
 var StatusStrategy = volumeAttachmentStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 声明 Status 子资源写入时需要重置的 Spec 和 metadata，确保该入口只能修改 Status。
 func (volumeAttachmentStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"storage.k8s.io/v1": fieldpath.NewSet(
@@ -136,7 +128,7 @@ func (volumeAttachmentStatusStrategy) GetResetFields() map[fieldpath.APIVersion]
 	return fields
 }
 
-// PrepareForUpdate sets the Status fields which is not allowed to be set by an end user updating a VolumeAttachment
+// PrepareForUpdate 恢复旧 Spec 并重置受保护的 metadata，只允许更新 Status。
 func (volumeAttachmentStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newVolumeAttachment := obj.(*storage.VolumeAttachment)
 	oldVolumeAttachment := old.(*storage.VolumeAttachment)
@@ -145,7 +137,7 @@ func (volumeAttachmentStatusStrategy) PrepareForUpdate(ctx context.Context, obj,
 	metav1.ResetObjectMetaForStatus(&newVolumeAttachment.ObjectMeta, &oldVolumeAttachment.ObjectMeta)
 
 	if !feature.DefaultFeatureGate.Enabled(features.MutableCSINodeAllocatableCount) {
-		// Only clear ErrorCode field if it isn't set in the old object
+		// 只有旧对象未设置 ErrorCode 时才清理新对象中的该字段，以兼容已有状态数据。
 		if newVolumeAttachment.Status.AttachError != nil {
 			if oldVolumeAttachment.Status.AttachError == nil || oldVolumeAttachment.Status.AttachError.ErrorCode == nil {
 				newVolumeAttachment.Status.AttachError.ErrorCode = nil

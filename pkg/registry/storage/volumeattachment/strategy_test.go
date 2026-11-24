@@ -90,7 +90,7 @@ func TestVolumeAttachmentStrategy(t *testing.T) {
 		t.Errorf("unexpected error validating %v", errs)
 	}
 
-	// Create with status should drop status
+	// 创建请求携带 Status 时，策略应清空该字段。
 	statusVolumeAttachment := volumeAttachment.DeepCopy()
 	statusVolumeAttachment.Status = storage.VolumeAttachmentStatus{Attached: true}
 	Strategy.PrepareForCreate(ctx, statusVolumeAttachment)
@@ -98,7 +98,7 @@ func TestVolumeAttachmentStrategy(t *testing.T) {
 		t.Errorf("unexpected objects difference after creating with status: %v", cmp.Diff(statusVolumeAttachment, volumeAttachment))
 	}
 
-	// Update of spec is disallowed
+	// 不允许更新 Spec。
 	newVolumeAttachment := volumeAttachment.DeepCopy()
 	newVolumeAttachment.Spec.NodeName = "valid-node-2"
 
@@ -109,7 +109,7 @@ func TestVolumeAttachmentStrategy(t *testing.T) {
 		t.Errorf("Expected a validation error")
 	}
 
-	// modifying status should be dropped
+	// 主资源更新中的 Status 修改应被丢弃。
 	statusVolumeAttachment = volumeAttachment.DeepCopy()
 	statusVolumeAttachment.Status = storage.VolumeAttachmentStatus{Attached: true}
 
@@ -155,7 +155,7 @@ func TestVolumeAttachmentStatusStrategy(t *testing.T) {
 
 	volumeAttachment := getValidVolumeAttachment("valid-attachment")
 
-	// modifying status should be allowed
+	// /status 子资源允许更新 Status。
 	statusVolumeAttachment := volumeAttachment.DeepCopy()
 	statusVolumeAttachment.Status = storage.VolumeAttachmentStatus{Attached: true}
 
@@ -165,7 +165,7 @@ func TestVolumeAttachmentStatusStrategy(t *testing.T) {
 		t.Errorf("unexpected objects difference after modifying status: %v", cmp.Diff(statusVolumeAttachment, expectedVolumeAttachment))
 	}
 
-	// spec and metadata modifications should be dropped
+	// /status 子资源中的 Spec 和 metadata 修改应被丢弃。
 	newVolumeAttachment := volumeAttachment.DeepCopy()
 	newVolumeAttachment.Spec.NodeName = "valid-node-2"
 	newVolumeAttachment.Labels = map[string]string{"foo": "bar"}
@@ -183,7 +183,7 @@ func TestVolumeAttachmentStatusStrategy(t *testing.T) {
 		t.Errorf("unexpected objects difference after modifying spec: %v", cmp.Diff(newVolumeAttachment, volumeAttachment))
 	}
 
-	// Verify that error codes are dropped when the feature gate is disabled.
+	// 验证 Feature Gate 关闭时会清理 ErrorCode。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, version.MustParse("1.35"))
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.MutableCSINodeAllocatableCount, false)
 
@@ -209,7 +209,7 @@ func TestVolumeAttachmentStatusStrategy(t *testing.T) {
 		t.Errorf("expected DetachError.ErrorCode to be nil, got %v", *statusWithError.Status.DetachError.ErrorCode)
 	}
 
-	// Verify that error codes are not dropped when set in the old object.
+	// 验证旧对象已经设置 ErrorCode 时，即使 Feature Gate 关闭也会保留该值。
 	oldStatusWithError := volumeAttachment.DeepCopy()
 	oldStatusErrCode := int32(8)
 	oldStatusWithError.Status = storage.VolumeAttachmentStatus{

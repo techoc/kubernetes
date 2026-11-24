@@ -26,17 +26,17 @@ import (
 	"k8s.io/kubernetes/pkg/registry/storage/csistoragecapacity"
 )
 
-// CSIStorageCapacityStorage includes storage for CSIStorageCapacity and all subresources
+// CSIStorageCapacityStorage 汇总 CSIStorageCapacity 主资源及其子资源的 REST 存储。
 type CSIStorageCapacityStorage struct {
 	CSIStorageCapacity *REST
 }
 
-// REST object that will work for CSIStorageCapacity
+// REST 将 CSIStorageCapacity 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewStorage returns a RESTStorage object that will work against CSIStorageCapacity
+// NewStorage 创建命名空间级 CSIStorageCapacity Store，并配置资源策略和默认表格转换器。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (*CSIStorageCapacityStorage, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &storageapi.CSIStorageCapacity{} },

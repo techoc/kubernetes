@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package storageClass provides Registry interface and its REST
-// implementation for storing storageclass api objects.
-// Package storageclass：StorageClass 定义动态卷供应所使用的 provisioner、参数、回收策略、绑定模式和允许拓扑。
+// Package storageclass 提供动态卷供应所使用的 provisioner、参数、回收策略、绑定模式和允许拓扑。
+
 package storageclass

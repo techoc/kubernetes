@@ -34,14 +34,15 @@ import (
 	volumeattributesclassstore "k8s.io/kubernetes/pkg/registry/storage/volumeattributesclass/storage"
 )
 
+// RESTStorageProvider 负责装配 storage.k8s.io API Group 各版本的 REST 存储。
 type RESTStorageProvider struct {
 }
 
 // NewRESTStorage 创建 storage.k8s.io API Group 元信息，按版本构建资源存储映射，并只注册 ResourceConfig 明确启用的资源。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(storageapi.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果在此处增加 API 版本，务必同时在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1beta1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -61,7 +62,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// register volumeattributesclasses
+	// 注册 VolumeAttributesClass 资源。
 	if resource := "volumeattributesclasses"; apiResourceConfigSource.ResourceEnabled(storageapiv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		volumeAttributesClassStorage, err := volumeattributesclassstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -86,18 +87,18 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 
 	storage := map[string]rest.Storage{}
 
-	// storageclasses
+	// 注册 StorageClass 资源。
 	if resource := "storageclasses"; apiResourceConfigSource.ResourceEnabled(storageapiv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = storageClassStorage
 	}
 
-	// volumeattachments
+	// 注册 VolumeAttachment 主资源及其 /status 子资源。
 	if resource := "volumeattachments"; apiResourceConfigSource.ResourceEnabled(storageapiv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = volumeAttachmentStorage.VolumeAttachment
 		storage[resource+"/status"] = volumeAttachmentStorage.Status
 	}
 
-	// register volumeattributesclasses
+	// 注册 VolumeAttributesClass 资源。
 	if resource := "volumeattributesclasses"; apiResourceConfigSource.ResourceEnabled(storageapiv1.SchemeGroupVersion.WithResource(resource)) {
 		volumeAttributesClassStorage, err := volumeattributesclassstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -106,7 +107,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = volumeAttributesClassStorage
 	}
 
-	// register csinodes
+	// 注册 CSINode 主资源及其 /status 子资源。
 	if resource := "csinodes"; apiResourceConfigSource.ResourceEnabled(storageapiv1.SchemeGroupVersion.WithResource(resource)) {
 		csiNodeStorage, err := csinodestore.NewStorage(restOptionsGetter)
 		if err != nil {
@@ -116,7 +117,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource+"/status"] = csiNodeStorage.Status
 	}
 
-	// register csidrivers
+	// 注册 CSIDriver 资源。
 	if resource := "csidrivers"; apiResourceConfigSource.ResourceEnabled(storageapiv1.SchemeGroupVersion.WithResource(resource)) {
 		csiDriverStorage, err := csidriverstore.NewStorage(restOptionsGetter)
 		if err != nil {
@@ -125,7 +126,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = csiDriverStorage.CSIDriver
 	}
 
-	// register csistoragecapacities
+	// 注册 CSIStorageCapacity 资源。
 	if resource := "csistoragecapacities"; apiResourceConfigSource.ResourceEnabled(storageapiv1.SchemeGroupVersion.WithResource(resource)) {
 		csiStorageStorage, err := csistoragecapacitystore.NewStorage(restOptionsGetter)
 		if err != nil {

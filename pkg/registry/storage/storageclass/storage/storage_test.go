@@ -72,9 +72,9 @@ func TestCreate(t *testing.T) {
 	storageClass.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo"}
 	deleteReclaimPolicy := api.PersistentVolumeReclaimDelete
 	test.TestCreate(
-		// valid
+		// 合法输入
 		storageClass,
-		// invalid
+		// 非法输入
 		&storageapi.StorageClass{
 			ObjectMeta:    metav1.ObjectMeta{Name: "*BadName!"},
 			ReclaimPolicy: &deleteReclaimPolicy,
@@ -88,15 +88,15 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewStorageClass("foo"),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*storageapi.StorageClass)
 			object.Parameters = map[string]string{"foo": "bar"}
 			return object
 		},
-		//invalid update
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*storageapi.StorageClass)
 			object.Parameters = map[string]string{"faz": "bar"}
@@ -137,17 +137,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		validNewStorageClass("foo"),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

@@ -36,22 +36,21 @@ const (
 	warningServiceAccountTokenInSecretsRecommended = "spec.serviceAccountTokenInSecrets is unset; if supported by this CSI driver, set to true to prevent possible logging of tokens in volume attributes"
 )
 
-// csiDriverStrategy implements behavior for CSIDriver objects
+// csiDriverStrategy 定义 CSIDriver 的创建、更新、校验和告警策略。
 type csiDriverStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating
-// CSIDriver objects via the REST API.
+// Strategy 是通过 REST API 创建、更新和删除 CSIDriver 时使用的默认策略。
 var Strategy = csiDriverStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped 声明该资源是否属于命名空间级别；返回 false 表示对象通过集群级 URL 管理，返回 true 表示 URL 中必须包含 namespace。
+// NamespaceScoped 返回 false，因为 CSIDriver 是集群级资源。
 func (csiDriverStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// PrepareForCreate clears the fields for which the corresponding feature is disabled.
+// PrepareForCreate 清理当前 Feature Gate 未启用的字段，防止客户端在功能关闭时新写入这些字段。
 func (csiDriverStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	csiDriver := obj.(*storage.CSIDriver)
 	if !utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
@@ -75,12 +74,12 @@ func (csiDriverStrategy) Validate(ctx context.Context, obj runtime.Object) field
 	return validation.ValidateCSIDriver(csiDriver)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 在配置 TokenRequests 但未明确启用 ServiceAccountTokenInSecrets 时，提示潜在令牌泄露风险。
 func (csiDriverStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	csiDriver := obj.(*storage.CSIDriver)
 	var warnings []string
 
-	// Warn if tokenRequests is configured but serviceAccountTokenInSecrets is not enabled
+	// 如果配置了 TokenRequests，却没有启用 ServiceAccountTokenInSecrets，则返回安全建议。
 	if utilfeature.DefaultFeatureGate.Enabled(features.CSIServiceAccountTokenSecrets) &&
 		len(csiDriver.Spec.TokenRequests) > 0 &&
 		csiDriver.Spec.ServiceAccountTokenInSecrets == nil {
@@ -90,18 +89,17 @@ func (csiDriverStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Objec
 	return warnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 CSIDriver；当前不执行额外转换。
 func (csiDriverStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate 决定 Update 请求在对象不存在时是否允许退化为创建；false 表示必须先显式 Create。
+// AllowCreateOnUpdate 返回 false，CSIDriver 必须通过 POST 创建。
 func (csiDriverStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// PrepareForUpdate clears the fields for which the corresponding feature is disabled and
-// existing object does not already have that field set. This allows the field to remain when
-// downgrading to a version that has the feature disabled.
+// PrepareForUpdate 清理当前 Feature Gate 未启用且旧对象未设置过的字段。
+// 如果旧对象已经使用该字段，则保留其值，避免集群降级或关闭特性时破坏已有配置。
 func (csiDriverStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newCSIDriver := obj.(*storage.CSIDriver)
 	oldCSIDriver := old.(*storage.CSIDriver)
@@ -126,7 +124,7 @@ func (csiDriverStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 		newCSIDriver.Spec.PreventPodSchedulingIfMissing = nil
 	}
 
-	// Any changes to the spec increment the generation number.
+	// Spec 发生变化时递增 Generation。
 	if !apiequality.Semantic.DeepEqual(oldCSIDriver.Spec, newCSIDriver.Spec) {
 		newCSIDriver.Generation = oldCSIDriver.Generation + 1
 	}
@@ -139,14 +137,14 @@ func (csiDriverStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Ob
 	return validation.ValidateCSIDriverUpdate(newCSIDriverObj, oldCSIDriverObj)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 在 TokenRequests 发生变化且未明确启用 ServiceAccountTokenInSecrets 时返回安全建议。
 func (csiDriverStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	newCSIDriver := obj.(*storage.CSIDriver)
 	oldCSIDriver := old.(*storage.CSIDriver)
 
 	var warnings []string
 
-	// Warn if tokenRequests is being changed and serviceAccountTokenInSecrets is not enabled
+	// 如果本次更新修改了 TokenRequests，却没有启用 ServiceAccountTokenInSecrets，则返回安全建议。
 	if utilfeature.DefaultFeatureGate.Enabled(features.CSIServiceAccountTokenSecrets) &&
 		!apiequality.Semantic.DeepEqual(oldCSIDriver.Spec.TokenRequests, newCSIDriver.Spec.TokenRequests) &&
 		len(newCSIDriver.Spec.TokenRequests) > 0 &&
@@ -157,7 +155,7 @@ func (csiDriverStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.
 	return warnings
 }
 
-// AllowUnconditionalUpdate 声明是否允许不携带 ResourceVersion 前置条件的更新；true 表示允许无条件更新，false 要求并发版本检查。
+// AllowUnconditionalUpdate 返回 false，更新请求必须携带 ResourceVersion。
 func (csiDriverStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }

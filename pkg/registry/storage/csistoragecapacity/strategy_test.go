@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/storage"
 )
 
-// getValidCSIStorageCapacity returns a fully-populated CSIStorageCapacity.
+// getValidCSIStorageCapacity 构造字段完整且合法的 CSIStorageCapacity 测试对象。
 func getValidCSIStorageCapacity(name string, capacityStr string) *storage.CSIStorageCapacity {
 	mib := resource.MustParse("1Mi")
 	c := &storage.CSIStorageCapacity{
@@ -80,12 +80,12 @@ func TestCSIStorageCapacityStrategy(t *testing.T) {
 		t.Errorf("unexpected error validating %v", errs)
 	}
 
-	// Create with status should have kept status and all other fields.
+	// 创建请求中的 Status 和其他合法字段都应按预期保留。
 	if !apiequality.Semantic.DeepEqual(capacity, original) {
 		t.Errorf("unexpected objects difference after creation: %v", cmp.Diff(original, capacity))
 	}
 
-	// Update of immutable fields is disallowed
+	// 不允许更新不可变字段。
 	fields := []struct {
 		name   string
 		update func(capacity *storage.CSIStorageCapacity)

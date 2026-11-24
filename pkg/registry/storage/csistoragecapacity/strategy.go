@@ -31,22 +31,21 @@ import (
 	"k8s.io/kubernetes/pkg/apis/storage/validation"
 )
 
-// csiStorageCapacityStrategy implements behavior for CSIStorageCapacity objects
+// csiStorageCapacityStrategy 定义 CSIStorageCapacity 的创建、更新和校验策略。
 type csiStorageCapacityStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating
-// CSIStorageCapacity objects via the REST API.
+// Strategy 是通过 REST API 创建、更新和删除 CSIStorageCapacity 时使用的默认策略。
 var Strategy = csiStorageCapacityStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped 声明该资源是否属于命名空间级别；返回 false 表示对象通过集群级 URL 管理，返回 true 表示 URL 中必须包含 namespace。
+// NamespaceScoped 返回 true，因为 CSIStorageCapacity 属于命名空间。
 func (csiStorageCapacityStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// PrepareForCreate is currently a NOP.
+// PrepareForCreate 当前无需修改 CSIStorageCapacity 的创建请求对象。
 func (csiStorageCapacityStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
@@ -60,21 +59,21 @@ func (csiStorageCapacityStrategy) Validate(ctx context.Context, obj runtime.Obje
 	return errs
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回 CSIStorageCapacity 创建时的拓扑和容量相关警告。
 func (csiStorageCapacityStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return storageutil.GetWarningsForCSIStorageCapacity(obj.(*storage.CSIStorageCapacity))
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 CSIStorageCapacity；当前不执行额外转换。
 func (csiStorageCapacityStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate 决定 Update 请求在对象不存在时是否允许退化为创建；false 表示必须先显式 Create。
+// AllowCreateOnUpdate 返回 false，CSIStorageCapacity 必须通过 POST 创建。
 func (csiStorageCapacityStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// PrepareForUpdate is currently a NOP.
+// PrepareForUpdate 当前无需修改 CSIStorageCapacity 的更新请求对象。
 func (csiStorageCapacityStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
@@ -89,12 +88,12 @@ func (csiStorageCapacityStrategy) ValidateUpdate(ctx context.Context, obj, old r
 	return append(errorList, validation.ValidateCSIStorageCapacityUpdate(newCSIStorageCapacityObj, oldCSIStorageCapacityObj)...)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 CSIStorageCapacity 时的拓扑和容量相关警告。
 func (csiStorageCapacityStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return storageutil.GetWarningsForCSIStorageCapacity(obj.(*storage.CSIStorageCapacity))
 }
 
-// AllowUnconditionalUpdate 声明是否允许不携带 ResourceVersion 前置条件的更新；true 表示允许无条件更新，false 要求并发版本检查。
+// AllowUnconditionalUpdate 返回 false，更新请求必须携带 ResourceVersion。
 func (csiStorageCapacityStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }

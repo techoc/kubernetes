@@ -31,22 +31,21 @@ import (
 	"k8s.io/kubernetes/pkg/apis/storage/validation"
 )
 
-// storageClassStrategy implements behavior for StorageClass objects
+// storageClassStrategy 定义 StorageClass 的创建、更新、校验和告警策略。
 type storageClassStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating
-// StorageClass objects via the REST API.
+// Strategy 是通过 REST API 创建、更新和删除 StorageClass 时使用的默认策略。
 var Strategy = storageClassStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped 声明该资源是否属于命名空间级别；返回 false 表示对象通过集群级 URL 管理，返回 true 表示 URL 中必须包含 namespace。
+// NamespaceScoped 返回 false，因为 StorageClass 是集群级资源。
 func (storageClassStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// ResetBeforeCreate clears the Status field which is not allowed to be set by end users on creation.
+// PrepareForCreate 是创建前的字段预处理入口；StorageClass 没有可由客户端设置的 Status 字段。
 func (storageClassStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
@@ -56,21 +55,21 @@ func (storageClassStrategy) Validate(ctx context.Context, obj runtime.Object) fi
 	return validation.ValidateStorageClass(storageClass)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回 StorageClass 创建时的拓扑和参数相关警告。
 func (storageClassStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return storageutil.GetWarningsForStorageClass(obj.(*storage.StorageClass))
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 StorageClass；当前不执行额外转换。
 func (storageClassStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate 决定 Update 请求在对象不存在时是否允许退化为创建；false 表示必须先显式 Create。
+// AllowCreateOnUpdate 返回 false，StorageClass 必须通过 POST 创建。
 func (storageClassStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// PrepareForUpdate sets the Status fields which is not allowed to be set by an end user updating a PV
+// PrepareForUpdate 是更新前的字段预处理入口；StorageClass 没有 Status 子资源需要恢复。
 func (storageClassStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
@@ -81,12 +80,12 @@ func (storageClassStrategy) ValidateUpdate(ctx context.Context, obj, old runtime
 	return allErrs
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 StorageClass 时的拓扑和参数相关警告。
 func (storageClassStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return storageutil.GetWarningsForStorageClass(obj.(*storage.StorageClass))
 }
 
-// AllowUnconditionalUpdate 声明是否允许不携带 ResourceVersion 前置条件的更新；true 表示允许无条件更新，false 要求并发版本检查。
+// AllowUnconditionalUpdate 返回 true，允许通用更新流程为缺少 ResourceVersion 的请求填入最新版本。
 func (storageClassStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }

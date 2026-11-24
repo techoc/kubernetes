@@ -71,9 +71,9 @@ func TestCreate(t *testing.T) {
 	csiNode := validNewCSINode("foo")
 	csiNode.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo"}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		csiNode,
-		// invalid
+		// 非法输入
 		&storageapi.CSINode{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 			Spec: storageapi.CSINodeSpec{
@@ -96,15 +96,15 @@ func TestUpdate(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewCSINode("foo"),
-		// we allow status field to be set in v1beta1
+		// v1beta1 允许请求携带 Status 字段。
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*storageapi.CSINode)
-			//object.Status = *getCSINodeStatus()
+			// object.Status = *getCSINodeStatus()：该赋值用于验证 v1beta1 Status 写入兼容行为。
 			return object
 		},
-		//invalid update
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*storageapi.CSINode)
 			object.Spec.Drivers[0].Name = "invalid-name-!@#$%^&*()"
@@ -144,17 +144,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		validNewCSINode("foo"),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

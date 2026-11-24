@@ -28,17 +28,17 @@ import (
 	"k8s.io/kubernetes/pkg/registry/storage/csidriver"
 )
 
-// CSIDriverStorage includes storage for CSIDrivers and all subresources
+// CSIDriverStorage 汇总 CSIDriver 主资源及其子资源的 REST 存储。
 type CSIDriverStorage struct {
 	CSIDriver *REST
 }
 
-// REST object that will work for CSIDrivers
+// REST 将 CSIDriver 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewStorage returns a RESTStorage object that will work against CSIDrivers
+// NewStorage 创建 CSIDriver 的 REST Store，并配置资源策略和表格输出转换器。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (*CSIDriverStorage, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &storageapi.CSIDriver{} },

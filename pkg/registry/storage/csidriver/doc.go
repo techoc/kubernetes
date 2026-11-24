@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package csidriver provides Registry interface and its REST
-// implementation for storing csidriver api objects.
-// Package csidriver：CSIDriver 描述集群中 CSI 驱动的能力与行为，例如 attach、mount、拓扑、令牌请求和卷限制。
+// Package csidriver 提供集群中 CSI 驱动的能力与行为描述，例如 attach、mount、拓扑、令牌请求和卷限制。
+
 package csidriver

@@ -184,7 +184,7 @@ func TestCSINodeStrategy(t *testing.T) {
 		t.Errorf("unexpected error validating %v", errs)
 	}
 
-	// Update of spec is allowed
+	// 允许更新 Spec。
 	newCSINode := csiNode.DeepCopy()
 	newCSINode.Spec.Drivers[0].NodeID = "valid-node-2"
 

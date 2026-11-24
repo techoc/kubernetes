@@ -73,7 +73,7 @@ func TestCSIDriverStrategy(t *testing.T) {
 		t.Errorf("unexpected error validating %v", errs)
 	}
 
-	// Update of spec is disallowed
+	// 不允许更新 Spec。
 	newCSIDriver := csiDriver.DeepCopy()
 	attachNotRequired := false
 	newCSIDriver.Spec.AttachRequired = &attachNotRequired
@@ -842,9 +842,9 @@ func TestCSIDriverValidation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// assume this feature is on for this test, detailed enabled/disabled tests in TestCSIDriverValidationSELinuxMountEnabledDisabled
-			// and TestCSIDriverValidationServiceAccountTokenInSecretsEnabledDisabled
-			// and TestCSIDriverValidationPreventPodSchedulingIfMissingEnabledDisabled
+			// 本测试假设该特性已启用；特性启用和禁用的详细场景分别由以下测试覆盖：
+			// ServiceAccountTokenInSecrets 特性的启用和禁用场景。
+			// PreventPodSchedulingIfMissing 特性的启用和禁用场景。
 			featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 				features.SELinuxMountReadWriteOncePod:   true,
 				features.MutableCSINodeAllocatableCount: true,

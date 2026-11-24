@@ -72,9 +72,9 @@ func TestCreate(t *testing.T) {
 	csiStorageCapacity := validNewCSIStorageCapacity("foo")
 	csiStorageCapacity.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo-"}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		csiStorageCapacity,
-		// invalid
+		// 非法输入
 		&storageapi.CSIStorageCapacity{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 		},
@@ -88,15 +88,15 @@ func TestUpdate(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewCSIStorageCapacity("foo"),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*storageapi.CSIStorageCapacity)
 			object.Labels = map[string]string{"a": "b"}
 			return object
 		},
-		//invalid update
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*storageapi.CSIStorageCapacity)
 			object.Name = "!@#$%"
@@ -136,17 +136,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewCSIStorageCapacity("foo"),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

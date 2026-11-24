@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package csinode provides Registry interface and its REST
-// implementation for storing csinode api objects.
-// Package csinode：CSINode 记录节点上已注册的 CSI 驱动及其节点级信息，供调度和卷管理流程查询。
+// Package csinode 提供节点上已注册的 CSI 驱动及其节点级信息，供调度和卷管理流程查询。
+
 package csinode

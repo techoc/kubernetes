@@ -74,9 +74,9 @@ func TestCreate(t *testing.T) {
 	volumeAttachment.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo"}
 	pvName := "foo"
 	test.TestCreate(
-		// valid
+		// 合法输入
 		volumeAttachment,
-		// invalid
+		// 非法输入
 		&storageapi.VolumeAttachment{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 			Spec: storageapi.VolumeAttachmentSpec{
@@ -97,16 +97,16 @@ func TestUpdate(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 
 	test.TestUpdate(
-		// valid
+		// 合法输入
 		validNewVolumeAttachment("foo"),
-		// we still allow status field to be set in both v1 and v1beta1
-		// it is just that in v1 the new value does not take effect.
+		// v1 和 v1beta1 都允许请求携带 Status 字段，
+		// 但在 v1 中，客户端提交的新值不会生效。
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*storageapi.VolumeAttachment)
 			object.Status.Attached = true
 			return object
 		},
-		//invalid update
+		// 非法更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*storageapi.VolumeAttachment)
 			object.Spec.Attacher = "invalid-attacher-!@#$%^&*()"
@@ -146,17 +146,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		validNewVolumeAttachment("foo"),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -179,7 +179,7 @@ func TestEtcdStatusUpdate(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// update status
+	// 更新 Status 子资源。
 	attachmentIn := obj.(*storageapi.VolumeAttachment).DeepCopy()
 	attachmentIn.Status.Attached = true
 
@@ -188,7 +188,7 @@ func TestEtcdStatusUpdate(t *testing.T) {
 		t.Fatalf("Failed to update status: %v", err)
 	}
 
-	// validate object got updated
+	// 验证对象已按预期更新。
 	obj, err = storage.Get(ctx, attachmentIn.ObjectMeta.Name, &metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
