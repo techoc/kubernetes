@@ -45,15 +45,15 @@ import (
 
 var _ genericapiserver.PostStartHookProvider = RESTStorageProvider{}
 
-// RESTStorageProvider is a provider of REST storage
+// RESTStorageProvider 负责装配 flowcontrol.apiserver.k8s.io API Group 的 REST 存储，并提供启动后配置协调钩子。
 type RESTStorageProvider struct {
 	InformerFactory informers.SharedInformerFactory
 }
 
-// PostStartHookName is the name of the post-start-hook provided by flow-control storage
+// PostStartHookName 是 APF 默认配置协调器注册到 API Server 的 PostStart Hook 名称。
 const PostStartHookName = "priority-and-fairness-config-producer"
 
-// NewRESTStorage creates a new rest storage for flow-control api models.
+// NewRESTStorage 创建 FlowControl API Group，并注册当前 API 版本中已启用的资源存储。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(flowcontrol.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 
@@ -70,7 +70,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 func (p RESTStorageProvider) storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter, groupVersion schema.GroupVersion) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// flow-schema
+	// 注册 FlowSchema 主资源及其 /status 子资源。
 	if resource := "flowschemas"; apiResourceConfigSource.ResourceEnabled(groupVersion.WithResource(resource)) {
 		flowSchemaStorage, flowSchemaStatusStorage, err := flowschemastore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -80,7 +80,7 @@ func (p RESTStorageProvider) storage(apiResourceConfigSource serverstorage.APIRe
 		storage[resource+"/status"] = flowSchemaStatusStorage
 	}
 
-	// priority-level-configuration
+	// 注册 PriorityLevelConfiguration 主资源及其 /status 子资源。
 	if resource := "prioritylevelconfigurations"; apiResourceConfigSource.ResourceEnabled(groupVersion.WithResource(resource)) {
 		priorityLevelConfigurationStorage, priorityLevelConfigurationStatusStorage, err := prioritylevelconfigurationstore.NewREST(restOptionsGetter)
 		if err != nil {
@@ -93,12 +93,12 @@ func (p RESTStorageProvider) storage(apiResourceConfigSource serverstorage.APIRe
 	return storage, nil
 }
 
-// GroupName returns group name of the storage
+// GroupName 返回 FlowControl API Group 的名称。
 func (p RESTStorageProvider) GroupName() string {
 	return flowcontrol.GroupName
 }
 
-// PostStartHook returns the hook func that launches the config provider
+// PostStartHook 返回 API Server 启动后执行 APF 引导配置协调的钩子函数。
 func (p RESTStorageProvider) PostStartHook() (string, genericapiserver.PostStartHookFunc, error) {
 	bce := &bootstrapConfigurationEnsurer{
 		informersSynced: []cache.InformerSynced{
@@ -125,8 +125,7 @@ func (bce *bootstrapConfigurationEnsurer) ensureAPFBootstrapConfiguration(hookCo
 	}
 
 	err = func() error {
-		// get a derived context that gets cancelled after 5m or
-		// when the StopCh gets closed, whichever happens first.
+		// 创建派生上下文：最多等待 5 分钟；如果 API Server 的停止通道先关闭，则立即取消。
 		ctx, cancel := contextFromChannelAndMaxWaitDuration(hookContext.Done(), 5*time.Minute)
 		defer cancel()
 
@@ -153,8 +152,7 @@ func (bce *bootstrapConfigurationEnsurer) ensureAPFBootstrapConfiguration(hookCo
 		return err
 	}
 
-	// we have successfully initialized the bootstrap configuration, now we
-	// spin up a goroutine which reconciles the bootstrap configuration periodically.
+	// 首次引导配置已经成功初始化；随后启动后台 goroutine，定期重新协调引导配置。
 	go func() {
 		wait.PollImmediateUntil(
 			time.Minute,
@@ -162,7 +160,7 @@ func (bce *bootstrapConfigurationEnsurer) ensureAPFBootstrapConfiguration(hookCo
 				if err := ensure(hookContext, clientset, bce.fsLister, bce.plcLister); err != nil {
 					klog.ErrorS(err, "APF bootstrap ensurer ran into error, will retry later")
 				}
-				// always auto update both suggested and mandatory configuration
+				// 每个周期都重新检查建议配置和强制配置；具体是否覆盖 Spec 由各自的维护策略决定。
 				return false, nil
 			}, hookContext.Done())
 		klog.Info("APF bootstrap ensurer is exiting")
@@ -175,9 +173,7 @@ func (bce *bootstrapConfigurationEnsurer) ensureAPFBootstrapConfiguration(hookCo
 func ensure(ctx context.Context, clientset flowcontrolclient.FlowcontrolV1Interface, fsLister flowcontrollisters.FlowSchemaLister, plcLister flowcontrollisters.PriorityLevelConfigurationLister) error {
 
 	if err := ensureSuggestedConfiguration(ctx, clientset, fsLister, plcLister); err != nil {
-		// We should not attempt creation of mandatory objects if ensuring the suggested
-		// configuration resulted in an error.
-		// This only happens when the stop channel is closed.
+		// 建议配置协调失败时，不继续创建强制配置。此处的错误通常意味着停止通道已关闭，协调流程应当终止。
 		return fmt.Errorf("failed ensuring suggested settings - %w", err)
 	}
 
@@ -237,12 +233,9 @@ func removeDanglingBootstrapPriorityLevel(ctx context.Context, clientset flowcon
 	return ensurer.RemoveUnwantedObjects(ctx, plcOps, bootstrap)
 }
 
-// contextFromChannelAndMaxWaitDuration returns a Context that is bound to the
-// specified channel and the wait duration. The derived context will be
-// cancelled when the specified channel stopCh is closed or the maximum wait
-// duration specified in maxWait elapses, whichever happens first.
-//
-// Note the caller must *always* call the CancelFunc, otherwise resources may be leaked.
+// contextFromChannelAndMaxWaitDuration 创建一个同时受停止通道和最长等待时长约束的上下文。
+// stopCh 关闭或 maxWait 到期时，派生上下文都会被取消，以先发生者为准。
+// 调用方必须始终调用返回的 CancelFunc，否则可能造成上下文及相关资源泄漏。
 func contextFromChannelAndMaxWaitDuration(stopCh <-chan struct{}, maxWait time.Duration) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -253,10 +246,8 @@ func contextFromChannelAndMaxWaitDuration(stopCh <-chan struct{}, maxWait time.D
 		case <-stopCh:
 		case <-time.After(maxWait):
 
-		// the caller can explicitly cancel the context which is an
-		// indication to us to exit the goroutine immediately.
-		// Note that we are calling cancel more than once when we are here,
-		// CancelFunc is idempotent and we expect no ripple effects here.
+		// 调用方主动取消上下文也表示应立即退出该 goroutine。
+		// 这里可能再次调用 cancel；CancelFunc 是幂等的，重复调用不会产生额外副作用。
 		case <-ctx.Done():
 		}
 	}()

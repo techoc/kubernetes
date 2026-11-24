@@ -48,7 +48,7 @@ func TestEnsureFlowSchema(t *testing.T) {
 		bootstrap *flowcontrolv1.FlowSchema
 		expected  *flowcontrolv1.FlowSchema
 	}{
-		// for suggested configurations
+		// 建议配置：允许管理员修改或删除，协调器不会强制覆盖管理员的 Spec。
 		{
 			name:      "suggested flow schema does not exist - the object should always be re-created",
 			strategy:  NewSuggestedEnsureStrategy[*flowcontrolv1.FlowSchema],
@@ -71,7 +71,7 @@ func TestEnsureFlowSchema(t *testing.T) {
 			expected:  newFlowSchema("fs1", "pl1", 200).WithAutoUpdateAnnotation("false").Object(),
 		},
 
-		// for mandatory configurations
+		// 强制配置：协调器会确保对象存在，并以引导配置修复 Spec。
 		{
 			name:      "mandatory flow schema does not exist - new object should be created",
 			strategy:  NewMandatoryEnsureStrategy[*flowcontrolv1.FlowSchema],

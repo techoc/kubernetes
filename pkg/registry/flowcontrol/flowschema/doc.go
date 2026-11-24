@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package flowschema provides model implementation of flow-schema api
+// Package flowschema 提供 FlowSchema API 资源的策略与存储实现。
 // Package flowschema：实现 API Priority and Fairness 的资源注册、校验或默认配置协调。
 package flowschema

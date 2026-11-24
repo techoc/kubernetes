@@ -31,22 +31,21 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// flowSchemaStrategy implements verification logic for FlowSchema.
+// flowSchemaStrategy 定义 FlowSchema 资源创建、更新和校验时使用的 REST 策略。
 type flowSchemaStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating flow schema objects.
+// Strategy 是创建、更新和删除 FlowSchema 对象时使用的默认策略。
 var Strategy = flowSchemaStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped returns false because all PriorityClasses are global.
+// NamespaceScoped 返回 false，因为 FlowSchema 是集群级资源，不属于任何命名空间。
 func (flowSchemaStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回主资源策略重置的 Status 字段集合，用户不能通过主资源接口修改状态。
 func (flowSchemaStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"flowcontrol.apiserver.k8s.io/v1beta1": fieldpath.NewSet(
@@ -66,55 +65,55 @@ func (flowSchemaStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.S
 	return fields
 }
 
-// PrepareForCreate clears the status of a flow-schema before creation.
+// PrepareForCreate 在创建 FlowSchema 前清空客户端提交的 Status，并将 Generation 初始化为 1。
 func (flowSchemaStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	fl := obj.(*flowcontrol.FlowSchema)
 	fl.Status = flowcontrol.FlowSchemaStatus{}
 	fl.Generation = 1
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 在更新时保护 Status，并在 Spec 发生变化时递增 Generation。
 func (flowSchemaStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newFlowSchema := obj.(*flowcontrol.FlowSchema)
 	oldFlowSchema := old.(*flowcontrol.FlowSchema)
 
-	// Spec updates bump the generation so that we can distinguish between status updates.
+	// 只有 Spec 变化才递增 Generation，以区分规格更新与仅修改状态的请求。
 	if !apiequality.Semantic.DeepEqual(newFlowSchema.Spec, oldFlowSchema.Spec) {
 		newFlowSchema.Generation = oldFlowSchema.Generation + 1
 	}
 	newFlowSchema.Status = oldFlowSchema.Status
 }
 
-// Validate validates a new flow-schema.
+// Validate 调用 FlowSchema 专用校验逻辑检查新对象。
 func (flowSchemaStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	return validation.ValidateFlowSchema(obj.(*flowcontrol.FlowSchema))
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 FlowSchema 时的非阻断性警告；当前不产生额外警告。
 func (flowSchemaStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 FlowSchema；当前无需额外处理。
 func (flowSchemaStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowUnconditionalUpdate 决定是否允许不携带 ResourceVersion 的无条件更新，以控制并发写入语义。
+// AllowUnconditionalUpdate 返回 true，允许 FlowSchema 更新请求不携带 ResourceVersion，由底层存储执行相应更新。
 func (flowSchemaStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// AllowCreateOnUpdate is false for flow-schemas; this means a POST is needed to create one.
+// AllowCreateOnUpdate 返回 false，FlowSchema 必须通过 POST 创建，不能由 PUT 更新请求隐式创建。
 func (flowSchemaStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 对照旧对象校验 FlowSchema 更新是否合法。
 func (flowSchemaStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateFlowSchemaUpdate(old.(*flowcontrol.FlowSchema), obj.(*flowcontrol.FlowSchema))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 FlowSchema 时的非阻断性警告；当前不产生额外警告。
 func (flowSchemaStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -123,11 +122,10 @@ type flowSchemaStatusStrategy struct {
 	flowSchemaStrategy
 }
 
-// StatusStrategy is the default logic that applies when updating flow-schema objects' status.
+// StatusStrategy 定义通过 /status 子资源更新 FlowSchema 状态时使用的策略。
 var StatusStrategy = flowSchemaStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源策略重置的 Metadata 和 Spec 字段集合，确保该入口只管理状态。
 func (flowSchemaStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"flowcontrol.apiserver.k8s.io/v1beta1": fieldpath.NewSet(
@@ -151,13 +149,12 @@ func (flowSchemaStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 	return fields
 }
 
-// PrepareForUpdate Status 更新入口恢复旧 Spec，并重置受保护的 metadata，确保 status 子资源只改变状态字段。
+// PrepareForUpdate 在 Status 更新入口恢复旧 Spec 和 ObjectMeta，同时保留本次请求生成的 ManagedFields，确保该子资源只改变状态字段。
 func (flowSchemaStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newFlowSchema := obj.(*flowcontrol.FlowSchema)
 	oldFlowSchema := old.(*flowcontrol.FlowSchema)
 
-	// managedFields must be preserved since it's been modified to
-	// track changed fields in the status update.
+	// 保留本次状态更新过程中重新计算的 ManagedFields，以记录字段管理器对 Status 字段的修改。
 	managedFields := newFlowSchema.ManagedFields
 	newFlowSchema.ObjectMeta = oldFlowSchema.ObjectMeta
 	newFlowSchema.ManagedFields = managedFields
@@ -169,7 +166,7 @@ func (flowSchemaStatusStrategy) ValidateUpdate(ctx context.Context, obj, old run
 	return validation.ValidateFlowSchemaStatusUpdate(old.(*flowcontrol.FlowSchema), obj.(*flowcontrol.FlowSchema))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 FlowSchema Status 更新时的非阻断性警告；当前不产生额外警告。
 func (flowSchemaStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

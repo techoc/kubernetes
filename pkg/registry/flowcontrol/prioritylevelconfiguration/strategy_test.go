@@ -142,7 +142,7 @@ func TestPriorityLevelConfigurationValidation(t *testing.T) {
 			errExpected: nil,
 		},
 
-		// the following use cases cover UPDATE
+		// 以下用例覆盖 PriorityLevelConfiguration 的 UPDATE 更新场景。
 		{
 			name:        "v1, update, zero value, existing has non-zero, no error expected",
 			obj:         v1ObjFn(ptr.To(int32(0))),

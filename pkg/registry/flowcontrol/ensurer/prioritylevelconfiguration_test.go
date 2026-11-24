@@ -51,7 +51,7 @@ func TestEnsurePriorityLevel(t *testing.T) {
 		bootstrap *flowcontrolv1.PriorityLevelConfiguration
 		expected  *flowcontrolv1.PriorityLevelConfiguration
 	}{
-		// for suggested configurations
+		// 建议配置：允许管理员修改或删除，协调器不会强制覆盖管理员的 Spec。
 		{
 			name:      "suggested priority level configuration does not exist - the object should always be re-created",
 			strategy:  NewSuggestedEnsureStrategy[*flowcontrolv1.PriorityLevelConfiguration],
@@ -74,7 +74,7 @@ func TestEnsurePriorityLevel(t *testing.T) {
 			expected:  newPLConfiguration("pl1").WithAutoUpdateAnnotation("false").WithLimited(10).Object(),
 		},
 
-		// for mandatory configurations
+		// 强制配置：协调器会确保对象存在，并以引导配置修复 Spec。
 		{
 			name:      "mandatory priority level configuration does not exist - new object should be created",
 			strategy:  NewMandatoryEnsureStrategy[*flowcontrolv1.PriorityLevelConfiguration],
@@ -496,7 +496,7 @@ func (b *plBuilder) WithLimited(nominalConcurrencyShares int32) *plBuilder {
 	return b
 }
 
-// must be called after WithLimited
+// 必须在调用 WithLimited 之后调用，以确保测试配置按预期生效。
 func (b *plBuilder) WithQueuing(queues, handSize, queueLengthLimit int32) *plBuilder {
 	limited := b.object.Spec.Limited
 	if limited == nil {
