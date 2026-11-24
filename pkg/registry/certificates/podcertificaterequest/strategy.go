@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package podcertificaterequest provides Registry interface and its RESTStorage
-// implementation for storing PodCertificateRequest objects.
+// Package podcertificaterequest 提供 PodCertificateRequest 的 Registry 接口及 RESTStorage 实现。
 package podcertificaterequest
 
 import (
@@ -39,7 +38,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// strategy implements behavior for PodCertificateRequests.
+// Strategy 定义 PodCertificateRequest 的 REST 写入策略。
 type Strategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -100,8 +99,7 @@ func (s *Strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回主资源写入时由服务端重置、不能由用户直接修改的 Status 字段集合。
 func (s *Strategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"certificates.k8s.io/v1": fieldpath.NewSet(
@@ -114,7 +112,7 @@ func (s *Strategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return fields
 }
 
-// StatusStrategy is the strategy for the status subresource.
+// StatusStrategy 定义 PodCertificateRequest Status 子资源的专用写入策略。
 type StatusStrategy struct {
 	*Strategy
 	authorizer authorizer.UnconditionalAuthorizer
@@ -129,8 +127,7 @@ func NewStatusStrategy(strategy *Strategy, authorizer authorizer.UnconditionalAu
 	}
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源更新时由服务端重置、不能由请求修改的 Metadata 和 Spec 字段。
 func (s *StatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"certificates.k8s.io/v1beta1": fieldpath.NewSet(
@@ -149,7 +146,7 @@ func (s *StatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 	newReq := obj.(*certificates.PodCertificateRequest)
 	oldReq := old.(*certificates.PodCertificateRequest)
 
-	// Updating /status should not modify spec
+	// Status 子资源请求只能修改 Status，不能借此更新 Spec。
 	newReq.Spec = oldReq.Spec
 
 	metav1.ResetObjectMetaForStatus(&newReq.ObjectMeta, &oldReq.ObjectMeta)
@@ -164,8 +161,7 @@ func (s *StatusStrategy) ValidateUpdate(ctx context.Context, new, old runtime.Ob
 		return errs
 	}
 
-	// If the caller is trying to change any status fields, they must have
-	// the appropriate "sign" permission on the requested signername.
+	// 调用方若要修改 Status，必须对该请求指定的 signerName 具有相应的 sign 授权。
 	if !equality.Semantic.DeepEqual(oldPCR.Status, newPCR.Status) {
 		user, ok := genericapirequest.UserFrom(ctx)
 		if !ok {
@@ -185,10 +181,10 @@ func (s *StatusStrategy) ValidateUpdate(ctx context.Context, new, old runtime.Ob
 	return nil
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 Status 子资源更新时的非阻断性警告；当前不产生额外警告。
 func (s *StatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前无需额外处理。
 func (s *StatusStrategy) Canonicalize(obj runtime.Object) {}
