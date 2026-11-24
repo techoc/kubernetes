@@ -34,22 +34,21 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// podDisruptionBudgetStrategy implements verification logic for PodDisruptionBudgets.
+// podDisruptionBudgetStrategy 定义 PodDisruptionBudget 的创建、更新和校验策略。
 type podDisruptionBudgetStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating PodDisruptionBudget objects.
+// Strategy 是创建、更新和删除 PodDisruptionBudget 对象时使用的默认策略。
 var Strategy = podDisruptionBudgetStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped returns true because all PodDisruptionBudget' need to be within a namespace.
+// NamespaceScoped 返回 true，因为 PodDisruptionBudget 必须归属于某个命名空间。
 func (podDisruptionBudgetStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 声明主资源写入时需要重置的 Status 字段，避免用户通过普通创建或更新接口修改控制器状态。
 func (podDisruptionBudgetStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"policy/v1beta1": fieldpath.NewSet(
@@ -63,10 +62,10 @@ func (podDisruptionBudgetStrategy) GetResetFields() map[fieldpath.APIVersion]*fi
 	return fields
 }
 
-// PrepareForCreate clears the status of an PodDisruptionBudget before creation.
+// PrepareForCreate 在创建前清空客户端提交的 Status，将 Generation 初始化为 1，并处理旧版 Selector 兼容字段。
 func (podDisruptionBudgetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	podDisruptionBudget := obj.(*policy.PodDisruptionBudget)
-	// create cannot set status
+	// 创建请求不能设置 Status；驱逐预算状态由 PDB 控制器维护。
 	podDisruptionBudget.Status = policy.PodDisruptionBudgetStatus{}
 
 	podDisruptionBudget.Generation = 1
@@ -74,16 +73,15 @@ func (podDisruptionBudgetStrategy) PrepareForCreate(ctx context.Context, obj run
 	dropDisabledFields(podDisruptionBudget, nil)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 在普通更新时恢复旧 Status；Spec 变化时递增 Generation，并处理旧版 Selector 兼容字段。
 func (podDisruptionBudgetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPodDisruptionBudget := obj.(*policy.PodDisruptionBudget)
 	oldPodDisruptionBudget := old.(*policy.PodDisruptionBudget)
-	// Update is not allowed to set status
+	// 普通更新请求不能修改 Status，避免绕过 PDB 控制器的状态管理。
 	newPodDisruptionBudget.Status = oldPodDisruptionBudget.Status
 
-	// Any changes to the spec increment the generation number, any changes to the
-	// status should reflect the generation number of the corresponding object.
-	// See metav1.ObjectMeta description for more information on Generation.
+	// Spec 发生变化时递增 Generation；Status 变化不应改变 Generation。
+	// 控制器可据此判断当前状态对应的 PDB 规则版本。
 	if !apiequality.Semantic.DeepEqual(oldPodDisruptionBudget.Spec, newPodDisruptionBudget.Spec) {
 		newPodDisruptionBudget.Generation = oldPodDisruptionBudget.Generation + 1
 	}
@@ -91,24 +89,23 @@ func (podDisruptionBudgetStrategy) PrepareForUpdate(ctx context.Context, obj, ol
 	dropDisabledFields(newPodDisruptionBudget, oldPodDisruptionBudget)
 }
 
-// dropDisabledFields 依据 Feature Gate 清理当前请求不允许新设置的字段，同时保留旧对象已有值以兼容集群降级。
+// dropDisabledFields 规范化旧版 v1beta1 空选择器兼容标签：保留精确匹配全部/无对象语义的选择器，并从普通选择器中移除该保留标签。
 func dropDisabledFields(pdb, oldPDB *policy.PodDisruptionBudget) {
 	if oldPDB != nil && apiequality.Semantic.DeepEqual(oldPDB.Spec.Selector, pdb.Spec.Selector) {
 		return
 	}
 	switch {
 	case apiequality.Semantic.DeepEqual(pdb.Spec.Selector, policy.NonV1beta1MatchNoneSelector):
-		// no-op, preserve
+		// 对于用于表达匹配全部或匹配无对象语义的兼容选择器，保留其特殊标签，不做清理。
 	case apiequality.Semantic.DeepEqual(pdb.Spec.Selector, policy.NonV1beta1MatchAllSelector):
-		// no-op, preserve
+		// 对于用于表达匹配全部或匹配无对象语义的兼容选择器，保留其特殊标签，不做清理。
 	default:
-		// otherwise, make sure the label intended to be used in a match-all or match-none selector
-		// never gets combined with user-specified fields
+		// 普通选择器需要移除仅用于旧版匹配全部或匹配无对象语义的特殊标签，避免它与用户自定义条件组合。
 		policy.StripPDBV1beta1Label(pdb.Spec.Selector)
 	}
 }
 
-// Validate validates a new PodDisruptionBudget.
+// Validate 校验新 PDB 的选择器、MinAvailable、MaxUnavailable 及其他驱逐预算约束。
 func (podDisruptionBudgetStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	podDisruptionBudget := obj.(*policy.PodDisruptionBudget)
 	opts := validation.PodDisruptionBudgetValidationOptions{
@@ -117,21 +114,21 @@ func (podDisruptionBudgetStrategy) Validate(ctx context.Context, obj runtime.Obj
 	return validation.ValidatePodDisruptionBudget(podDisruptionBudget, opts)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 PDB 时的非阻断性警告；当前不产生额外警告。
 func (podDisruptionBudgetStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 PDB；当前无需执行额外转换。
 func (podDisruptionBudgetStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is true for PodDisruptionBudget; this means you may create one with a PUT request.
+// AllowCreateOnUpdate 返回 false，PDB 必须通过 POST 创建，不能由 PUT 更新请求隐式创建。
 func (podDisruptionBudgetStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 根据旧对象是否包含历史无效标签值，选择兼容性校验选项后校验更新对象。
 func (podDisruptionBudgetStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	opts := validation.PodDisruptionBudgetValidationOptions{
 		AllowInvalidLabelValueInSelector: hasInvalidLabelValueInLabelSelector(old.(*policy.PodDisruptionBudget)),
@@ -139,13 +136,12 @@ func (podDisruptionBudgetStrategy) ValidateUpdate(ctx context.Context, obj, old 
 	return validation.ValidatePodDisruptionBudget(obj.(*policy.PodDisruptionBudget), opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 PDB 主资源时的非阻断性警告；当前不产生额外警告。
 func (podDisruptionBudgetStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// AllowUnconditionalUpdate is the default update policy for PodDisruptionBudget objects. Status update should
-// only be allowed if version match.
+// AllowUnconditionalUpdate 返回 false，更新请求必须携带 ResourceVersion 并与存储版本匹配，避免并发更新覆盖 PDB 状态。
 func (podDisruptionBudgetStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
@@ -154,11 +150,10 @@ type podDisruptionBudgetStatusStrategy struct {
 	podDisruptionBudgetStrategy
 }
 
-// StatusStrategy is the default logic invoked when updating object status.
+// StatusStrategy 定义通过 /status 子资源更新 PDB 状态时使用的默认策略。
 var StatusStrategy = podDisruptionBudgetStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 声明 /status 子资源写入时需要重置的 Spec 字段，避免状态更新请求修改驱逐预算规则。
 func (podDisruptionBudgetStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"policy/v1beta1": fieldpath.NewSet(
@@ -172,15 +167,15 @@ func (podDisruptionBudgetStatusStrategy) GetResetFields() map[fieldpath.APIVersi
 	return fields
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
+// PrepareForUpdate 在 Status 更新时恢复旧 Spec，确保该子资源不能修改驱逐预算规则。
 func (podDisruptionBudgetStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPodDisruptionBudget := obj.(*policy.PodDisruptionBudget)
 	oldPodDisruptionBudget := old.(*policy.PodDisruptionBudget)
-	// status changes are not allowed to update spec
+	// Status 更新请求不能修改 Spec，必须沿用旧对象中的驱逐预算配置。
 	newPodDisruptionBudget.Spec = oldPodDisruptionBudget.Spec
 }
 
-// ValidateUpdate is the default update validation for an end user updating status
+// ValidateUpdate 校验 PDB Status 更新；校验规则会根据请求 API 版本决定是否执行。
 func (podDisruptionBudgetStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	var apiVersion schema.GroupVersion
 	if requestInfo, found := genericapirequest.RequestInfoFrom(ctx); found {
@@ -193,7 +188,7 @@ func (podDisruptionBudgetStatusStrategy) ValidateUpdate(ctx context.Context, obj
 		old.(*policy.PodDisruptionBudget).Status, field.NewPath("status"), apiVersion)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 PDB Status 时的非阻断性警告；当前不产生额外警告。
 func (podDisruptionBudgetStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

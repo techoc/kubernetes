@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// 本文件负责装配 poddisruptionbudget API Group 的版本资源映射，并按资源启用配置注册 REST Storage。
+// 本文件验证 PDB REST 存储的创建、读取、列表、删除、Watch 与 Status 子资源更新行为。
 package storage
 
 import (
@@ -66,13 +66,13 @@ func TestCreate(t *testing.T) {
 	pdb := validNewPodDisruptionBudget()
 	pdb.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法输入
 		pdb,
-		// TODO: Add an invalid case when we have validation.
+		// TODO：待补充相应校验后，增加非法输入用例。
 	)
 }
 
-// TODO: Test updates to spec when we allow them.
+// TODO：待允许相应 Spec 更新后，补充 Spec 更新场景测试。
 
 func TestStatusUpdate(t *testing.T) {
 	storage, statusStorage, server := newStorage(t)
@@ -151,25 +151,25 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewPodDisruptionBudget(),
-		// matching labels
+		// 标签选择器匹配
 		[]labels.Set{
 			{"a": "b"},
 		},
-		// not matching labels
+		// 标签选择器不匹配
 		[]labels.Set{
 			{"a": "c"},
 			{"foo": "bar"},
 		},
 
-		// matching fields
+		// 字段选择器匹配
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 字段选择器不匹配
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
 	)
 }
 
-// TODO: Test generation number.
+// TODO：补充 Generation 递增规则测试。

@@ -66,14 +66,14 @@ func TestPodDisruptionBudgetStrategy(t *testing.T) {
 		},
 	}
 
-	// Nothing in Spec changes: OK
+	// Spec 未发生变化，更新应当通过。
 	Strategy.PrepareForUpdate(ctx, newPdb, pdb)
 	errs = Strategy.ValidateUpdate(ctx, newPdb, pdb)
 	if len(errs) != 0 {
 		t.Errorf("Unexpected error updating PodDisruptionBudget.")
 	}
 
-	// Changing the selector?  OK
+	// 修改 Selector，更新应当通过。
 	newPdb.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"a": "bar"}}
 	Strategy.PrepareForUpdate(ctx, newPdb, pdb)
 	errs = Strategy.ValidateUpdate(ctx, newPdb, pdb)
@@ -82,7 +82,7 @@ func TestPodDisruptionBudgetStrategy(t *testing.T) {
 	}
 	newPdb.Spec.Selector = pdb.Spec.Selector
 
-	// Changing MinAvailable?  OK
+	// 修改 MinAvailable，更新应当通过。
 	newMinAvailable := intstr.FromString("28%")
 	newPdb.Spec.MinAvailable = &newMinAvailable
 	Strategy.PrepareForUpdate(ctx, newPdb, pdb)
@@ -91,7 +91,7 @@ func TestPodDisruptionBudgetStrategy(t *testing.T) {
 		t.Errorf("Expected no error updating MinAvailable on poddisruptionbudgets.")
 	}
 
-	// Changing MinAvailable to MaxAvailable? OK
+	// 将 MinAvailable 切换为 MaxUnavailable，更新应当通过。
 	maxUnavailable := intstr.FromString("28%")
 	newPdb.Spec.MaxUnavailable = &maxUnavailable
 	newPdb.Spec.MinAvailable = nil
@@ -101,7 +101,7 @@ func TestPodDisruptionBudgetStrategy(t *testing.T) {
 		t.Errorf("Expected no error updating replacing MinAvailable with MaxUnavailable on poddisruptionbudgets.")
 	}
 
-	// Changing UnhealthyPodEvictionPolicy? OK
+	// 修改 UnhealthyPodEvictionPolicy，更新应当通过。
 	newPdb.Spec.UnhealthyPodEvictionPolicy = ptr.To(policy.IfHealthyBudget)
 	Strategy.PrepareForUpdate(ctx, newPdb, pdb)
 	errs = Strategy.ValidateUpdate(ctx, newPdb, pdb)
@@ -112,7 +112,7 @@ func TestPodDisruptionBudgetStrategy(t *testing.T) {
 		t.Errorf("Unexpected UnhealthyPodEvictionPolicy: expected %v, got %v", *newPdb.Spec.UnhealthyPodEvictionPolicy, policy.IfHealthyBudget)
 	}
 
-	// Changing to invalid UnhealthyPodEvictionPolicy.
+	// 将 UnhealthyPodEvictionPolicy 修改为非法值，更新应当被拒绝。
 	newPdb.Spec.UnhealthyPodEvictionPolicy = ptr.To(policy.UnhealthyPodEvictionPolicyType("invalid"))
 	Strategy.PrepareForUpdate(ctx, newPdb, pdb)
 	errs = Strategy.ValidateUpdate(ctx, newPdb, pdb)
