@@ -146,7 +146,6 @@ func (*resourcePoolStatusRequestStatusStrategy) GetResetFields() map[fieldpath.A
 }
 
 // PrepareForUpdate 恢复旧 Spec，并重置受保护的元数据字段，只允许更新 Status。
-// PrepareForUpdate 恢复旧 Spec，并重置受保护的元数据字段，只允许更新 Status。
 func (*resourcePoolStatusRequestStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newRequest := obj.(*resource.ResourcePoolStatusRequest)
 	oldRequest := old.(*resource.ResourcePoolStatusRequest)

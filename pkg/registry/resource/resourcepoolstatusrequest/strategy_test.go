@@ -41,7 +41,6 @@ func testRequest(attr *string) *resource.ResourcePoolStatusRequest {
 }
 
 // 只有启用 DRAPartitionableDevicesType 特性门控时，才允许设置默认分区类型。
-// is enabled; otherwise it is dropped so the feature cannot be used piecemeal.
 func TestPrepareForCreatePartitionTypeAttribute(t *testing.T) {
 	testCases := map[string]struct {
 		featureOverrides map[featuregate.Feature]bool
@@ -82,7 +81,7 @@ func TestPrepareForCreatePartitionTypeAttribute(t *testing.T) {
 	}
 }
 
-// A default already stored on the object survives a disabled gate.
+// 即使特性门控已关闭，对象中此前已保存的默认值仍会保留，以兼容已有资源。
 func TestPrepareForUpdateKeepsExistingPartitionTypeAttribute(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, map[featuregate.Feature]bool{
 		features.DRAResourcePoolStatus:       true,
