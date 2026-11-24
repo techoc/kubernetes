@@ -34,7 +34,7 @@ import (
 
 func TestResourceAttributesFrom(t *testing.T) {
 	knownResourceAttributesNames := sets.NewString(
-		// Fields we copy in ResourceAttributesFrom
+		// ResourceAttributesFrom 直接复制的字段。
 		"Verb",
 		"Namespace",
 		"Group",
@@ -43,11 +43,11 @@ func TestResourceAttributesFrom(t *testing.T) {
 		"Subresource",
 		"Name",
 
-		// Fields we read and parse in ResourceAttributesFrom
+		// ResourceAttributesFrom 需要读取并解析的字段。
 		"FieldSelector",
 		"LabelSelector",
 
-		// Fields we copy in NonResourceAttributesFrom
+		// NonResourceAttributesFrom 直接复制的字段。
 		"Path",
 		"Verb",
 	)
@@ -59,7 +59,7 @@ func TestResourceAttributesFrom(t *testing.T) {
 	})
 
 	knownAttributesRecordFieldNames := sets.NewString(
-		// Fields we set in ResourceAttributesFrom
+		// ResourceAttributesFrom 写入的 AttributesRecord 字段。
 		"User",
 		"Verb",
 		"Namespace",
@@ -70,13 +70,13 @@ func TestResourceAttributesFrom(t *testing.T) {
 		"Name",
 		"ResourceRequest",
 
-		// Fields we compute and set in ResourceAttributesFrom
+		// ResourceAttributesFrom 解析或计算后写入的字段。
 		"FieldSelectorRequirements",
 		"FieldSelectorParsingErr",
 		"LabelSelectorRequirements",
 		"LabelSelectorParsingErr",
 
-		// Fields we set in NonResourceAttributesFrom
+		// NonResourceAttributesFrom 写入的 AttributesRecord 字段。
 		"User",
 		"ResourceRequest",
 		"Path",
