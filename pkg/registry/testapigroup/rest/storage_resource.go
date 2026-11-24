@@ -28,14 +28,16 @@ import (
 	carpstore "k8s.io/kubernetes/pkg/registry/testapigroup/carp/storage"
 )
 
+// RESTStorageProvider 负责装配测试 API Group 的 REST 存储，并提供 Carp 所需的 Namespace 客户端。
 type RESTStorageProvider struct {
 	NamespaceClient v1.NamespaceInterface
 }
 
+// NewRESTStorage 初始化测试 API Group，并按资源启用配置注册 v1 版本的 Carp 主资源和 /status 子资源。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(testapigroup.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果在此处增加 API 版本，务必同时在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1Storage(apiResourceConfigSource, restOptionsGetter, p.NamespaceClient); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -46,6 +48,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 根据资源启用配置装配 Carp 主资源和 /status 子资源。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter, nsClient v1.NamespaceInterface) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -61,6 +64,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// GroupName 返回测试 API Group 的名称。
 func (p RESTStorageProvider) GroupName() string {
 	return testapigroup.GroupName
 }

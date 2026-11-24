@@ -35,14 +35,14 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// carpStrategy implements behavior for Carp objects
+// carpStrategy 定义测试用 Carp 资源的创建、更新和状态校验策略。
 type carpStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 	nsClient v1.NamespaceInterface
 }
 
-// NewStrategy is the default logic that applies when creating and updating Carp objects.
+// NewStrategy 创建 Carp 主资源使用的默认策略，并注入 Namespace 客户端。
 func NewStrategy(nsClient v1.NamespaceInterface) *carpStrategy {
 	return &carpStrategy{
 		rest.DeclarativeValidation{Scheme: legacyscheme.Scheme},
@@ -55,9 +55,7 @@ func (*carpStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy and
-// should not be modified by the user. For a new Carp that is the
-// status.
+// GetResetFields 返回 Carp 主资源写入时需要重置的字段集合；创建和普通更新时均禁止客户端设置 Status。
 func (*carpStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"testapigroup.apimachinery.k8s.io/v1": fieldpath.NewSet(
@@ -70,39 +68,47 @@ func (*carpStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 
 func (*carpStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	claim := obj.(*testapigroup.Carp)
-	// Status must not be set by user on create.
+	// 创建请求不能设置 Status，状态字段由专用状态更新入口维护。
 	claim.Status = testapigroup.CarpStatus{}
 }
 
+// Validate 校验新 Carp 对象；该测试 API 当前不附加业务校验规则。
 func (s *carpStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	return nil
 }
 
+// WarningsOnCreate 返回创建 Carp 时的非阻断性警告；当前不产生额外警告。
 func (*carpStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
+// Canonicalize 在校验后规范化 Carp；当前不执行额外转换。
 func (*carpStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 返回 false，Carp 必须通过 POST 创建。
 func (*carpStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// PrepareForUpdate 恢复旧 Status，防止普通更新请求修改状态字段。
 func (*carpStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newClaim := obj.(*testapigroup.Carp)
 	oldClaim := old.(*testapigroup.Carp)
 	newClaim.Status = oldClaim.Status
 }
 
+// ValidateUpdate 校验 Carp 更新；该测试 API 当前不附加业务校验规则。
 func (s *carpStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return nil
 }
 
+// WarningsOnUpdate 返回更新 Carp 时的非阻断性警告；当前不产生额外警告。
 func (*carpStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
+// AllowUnconditionalUpdate 返回 true，允许更新请求省略 ResourceVersion，由通用更新流程填入最新版本。
 func (*carpStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -111,13 +117,12 @@ type carpStatusStrategy struct {
 	*carpStrategy
 }
 
-// NewStatusStrategy creates a strategy for operating the status object.
+// NewStatusStrategy 创建 Carp /status 子资源使用的策略，并复用主资源策略。
 func NewStatusStrategy(carpStrategy *carpStrategy) *carpStatusStrategy {
 	return &carpStatusStrategy{carpStrategy}
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy and
-// should not be modified by the user. For a status update that is the spec.
+// GetResetFields 返回 /status 子资源需要重置的 Spec 字段集合，确保状态更新不能修改资源配置。
 func (*carpStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"testapigroup.apimachinery.k8s.io/v1": fieldpath.NewSet(
@@ -128,6 +133,7 @@ func (*carpStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.
 	return fields
 }
 
+// PrepareForUpdate 在状态更新时恢复旧 Spec 和受保护的元数据字段。
 func (*carpStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newClaim := obj.(*testapigroup.Carp)
 	oldClaim := old.(*testapigroup.Carp)
@@ -135,16 +141,17 @@ func (*carpStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtim
 	metav1.ResetObjectMetaForStatus(&newClaim.ObjectMeta, &oldClaim.ObjectMeta)
 }
 
+// ValidateUpdate 校验 Carp Status 更新；该测试 API 当前不附加业务校验规则。
 func (r *carpStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return nil
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 Carp Status 更新时的非阻断性警告；当前不产生额外警告。
 func (*carpStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// Match returns a generic matcher for a given label and field selector.
+// Match 根据标签选择器和字段选择器构造通用存储过滤条件。
 func Match(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:    label,
@@ -153,7 +160,7 @@ func Match(label labels.Selector, field fields.Selector) storage.SelectionPredic
 	}
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 Carp 对象的标签和可筛选字段，供 List、Watch 过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	claim, ok := obj.(*testapigroup.Carp)
 	if !ok {
@@ -162,7 +169,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(claim.Labels), toSelectableFields(claim), nil
 }
 
-// toSelectableFields returns a field set that represents the object
+// toSelectableFields 将 Carp 的 ObjectMeta 转换为可供字段选择器匹配的字段集合。
 func toSelectableFields(claim *testapigroup.Carp) fields.Set {
 	fields := generic.ObjectMetaFieldsSet(&claim.ObjectMeta, true)
 	return fields

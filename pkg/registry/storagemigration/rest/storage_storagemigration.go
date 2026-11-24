@@ -32,8 +32,10 @@ import (
 	storagemigrationstore "k8s.io/kubernetes/pkg/registry/storagemigration/storagemigration/storage"
 )
 
+// RESTStorageProvider 负责装配 storagemigration.k8s.io API Group 的 REST 存储。
 type RESTStorageProvider struct{}
 
+// NewRESTStorage 初始化 API Group，并按资源启用配置注册 v1beta1 和 v1 版本的 StorageVersionMigration 存储。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(storagemigration.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 
@@ -52,6 +54,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1beta1Storage 装配 v1beta1 版本的 StorageVersionMigration 主资源和 /status 子资源；只有特性门控开启时才注册。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -64,13 +67,14 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 			storage[resource] = svm
 			storage[resource+"/status"] = svmStatus
 		} else {
-			klog.Warning("StorageVersionMigrator storage is disabled because the StorageVersionMigrator feature gate is disabled")
+			klog.Warning("StorageVersionMigrator 特性门控未启用，因此不会注册 StorageVersionMigration 存储")
 		}
 	}
 
 	return storage, nil
 }
 
+// v1Storage 装配 v1 版本的 StorageVersionMigration 主资源和 /status 子资源；只有特性门控开启时才注册。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -83,13 +87,14 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 			storage[resource] = svm
 			storage[resource+"/status"] = svmStatus
 		} else {
-			klog.Warning("StorageVersionMigrator storage is disabled because the StorageVersionMigrator feature gate is disabled")
+			klog.Warning("StorageVersionMigrator 特性门控未启用，因此不会注册 StorageVersionMigration 存储")
 		}
 	}
 
 	return storage, nil
 }
 
+// GroupName 返回 StorageVersionMigration API Group 的名称。
 func (p RESTStorageProvider) GroupName() string {
 	return storagemigration.GroupName
 }

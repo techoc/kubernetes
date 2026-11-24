@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package storagemigration provides Registry interface and its RESTStorage
-// implementation for storing StorageVersionMigration objects.
+// Package storagemigration 提供 StorageVersionMigration 的 REST 策略和存储接口实现。
+// 该资源用于协调集群中 API 对象存储版本的迁移。
 package storagemigration
 
 import (
@@ -33,25 +33,25 @@ import (
 	svmvalidation "k8s.io/kubernetes/pkg/apis/storagemigration/validation"
 )
 
-// strategy implements behavior for ClusterTrustBundles.
+// strategy 定义 StorageVersionMigration 的创建、更新和删除策略。
 type strategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the create, update, and delete strategy for ClusterTrustBundles.
+// Strategy 是创建、更新和删除 StorageVersionMigration 对象时使用的默认 REST 策略。
 var Strategy = strategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 var _ rest.RESTCreateStrategy = Strategy
 var _ rest.RESTUpdateStrategy = Strategy
 var _ rest.RESTDeleteStrategy = Strategy
 
+// NamespaceScoped 返回 false，因为 StorageVersionMigration 是集群级资源。
 func (strategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回写入时需要重置的字段集合，防止客户端修改由控制器维护的字段。
 func (strategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"storagemigration.k8s.io/v1": fieldpath.NewSet(
@@ -65,43 +65,50 @@ func (strategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return fields
 }
 
-// PrepareForCreate clears the status of an StorageVersion before creation.
+// PrepareForCreate 在创建 StorageVersionMigration 时清空客户端提交的 Status。
 func (strategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	svm := obj.(*storagemigration.StorageVersionMigration)
 	svm.Status = storagemigration.StorageVersionMigrationStatus{}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 在普通更新时恢复旧 Status，避免客户端绕过迁移控制器修改状态。
 func (s strategy) PrepareForUpdate(ctx context.Context, new, old runtime.Object) {
 	svm := new.(*storagemigration.StorageVersionMigration)
 	svm.Status = old.(*storagemigration.StorageVersionMigration).Status
 }
 
+// Validate 校验 StorageVersionMigration 的 Spec、目标资源和迁移状态等字段。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	bundle := obj.(*storagemigration.StorageVersionMigration)
 	return svmvalidation.ValidateStorageVersionMigration(bundle)
 }
 
+// WarningsOnCreate 返回创建 StorageVersionMigration 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
+// Canonicalize 在校验后规范化 StorageVersionMigration；当前无需额外转换。
 func (strategy) Canonicalize(obj runtime.Object) {}
 
+// AllowCreateOnUpdate 返回 false，StorageVersionMigration 必须通过 POST 创建。
 func (strategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
+// ValidateUpdate 对照旧对象校验 StorageVersionMigration 更新是否合法。
 func (s strategy) ValidateUpdate(ctx context.Context, new, old runtime.Object) field.ErrorList {
 	newBundle := new.(*storagemigration.StorageVersionMigration)
 	oldBundle := old.(*storagemigration.StorageVersionMigration)
 	return svmvalidation.ValidateStorageVersionMigrationUpdate(newBundle, oldBundle)
 }
 
+// WarningsOnUpdate 返回更新 StorageVersionMigration 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
+// AllowUnconditionalUpdate 返回 false，更新必须携带 ResourceVersion 并与存储版本匹配。
 func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
@@ -110,10 +117,10 @@ type statusStrategy struct {
 	strategy
 }
 
+// StatusStrategy 是 StorageVersionMigration /status 子资源使用的策略。
 var StatusStrategy = statusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 /status 子资源需要重置的 metadata 和 Spec 字段，确保该入口只能更新 Status。
 func (statusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"storagemigration.k8s.io/v1": fieldpath.NewSet(
@@ -129,6 +136,7 @@ func (statusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return fields
 }
 
+// PrepareForUpdate 在 Status 更新时恢复旧 Spec 和受保护的元数据字段。
 func (statusStrategy) PrepareForUpdate(ctx context.Context, new, old runtime.Object) {
 	newBundle := new.(*storagemigration.StorageVersionMigration)
 	oldBundle := old.(*storagemigration.StorageVersionMigration)
@@ -137,6 +145,7 @@ func (statusStrategy) PrepareForUpdate(ctx context.Context, new, old runtime.Obj
 	metav1.ResetObjectMetaForStatus(&newBundle.ObjectMeta, &oldBundle.ObjectMeta)
 }
 
+// ValidateUpdate 校验 StorageVersionMigration Status 更新是否合法。
 func (s statusStrategy) ValidateUpdate(ctx context.Context, new, old runtime.Object) field.ErrorList {
 	newSVM := new.(*storagemigration.StorageVersionMigration)
 	oldSVM := old.(*storagemigration.StorageVersionMigration)
@@ -144,7 +153,7 @@ func (s statusStrategy) ValidateUpdate(ctx context.Context, new, old runtime.Obj
 	return svmvalidation.ValidateStorageVersionMigrationStatusUpdate(newSVM, oldSVM)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回 StorageVersionMigration Status 更新时的非阻断性警告；当前不产生额外警告。
 func (statusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
