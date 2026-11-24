@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// If you make changes to this file, you should also make the corresponding change in ReplicationController.
+// 修改此文件中的实现时，也应同步检查并修改 ReplicationController 中的对应实现。
 
 package storage
 
@@ -47,7 +47,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// ReplicaSetStorage includes dummy storage for ReplicaSets and for Scale subresource.
+// ReplicaSetStorage 聚合 ReplicaSet 主资源及其 Scale 子资源所需的存储入口。
 // ReplicaSetStorage 聚合 ReplicaSet 主资源、Status 和 Scale 子资源。
 type ReplicaSetStorage struct {
 	ReplicaSet *REST
@@ -195,10 +195,10 @@ func (r *ScaleREST) New() runtime.Object {
 	return &autoscaling.Scale{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储所拥有的资源。
 func (r *ScaleREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 由于底层 Store 与主资源 REST 共享，
+	// 因此不在此处显式销毁。
 }
 
 // Get 从父资源存储读取对象，并转换为 Scale 子资源表示。
@@ -267,7 +267,7 @@ func toScaleUpdateValidation(f rest.ValidateObjectUpdateFunc) rest.ValidateObjec
 	}
 }
 
-// scaleFromReplicaSet returns a scale subresource for a replica set.
+// scaleFromReplicaSet 将 ReplicaSet 转换为 Scale 子资源对象。
 // scaleFromReplicaSet 将 ReplicaSet 的副本数、Selector 和对象元数据转换为标准 autoscaling.Scale。
 func scaleFromReplicaSet(rs *apps.ReplicaSet) (*autoscaling.Scale, error) {
 	selector, err := metav1.LabelSelectorAsSelector(rs.Spec.Selector)
@@ -275,7 +275,7 @@ func scaleFromReplicaSet(rs *apps.ReplicaSet) (*autoscaling.Scale, error) {
 		return nil, err
 	}
 	return &autoscaling.Scale{
-		// TODO: Create a variant of ObjectMeta type that only contains the fields below.
+		// TODO：创建一个仅包含下列字段的 ObjectMeta 变体类型，避免复制不需要的元数据字段。
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              rs.Name,
 			Namespace:         rs.Namespace,
@@ -293,7 +293,7 @@ func scaleFromReplicaSet(rs *apps.ReplicaSet) (*autoscaling.Scale, error) {
 	}, nil
 }
 
-// scaleUpdatedObjectInfo transforms existing replicaset -> existing scale -> new scale -> new replicaset
+// scaleUpdatedObjectInfo 负责在现有 ReplicaSet、旧 Scale、新 Scale 和新 ReplicaSet 之间转换。
 type scaleUpdatedObjectInfo struct {
 	name           string
 	reqObjInfo     rest.UpdatedObjectInfo
@@ -310,7 +310,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 	if !ok {
 		return nil, errors.NewBadRequest(fmt.Sprintf("expected existing object type to be ReplicaSet, got %T", replicaset))
 	}
-	// if zero-value, the existing object does not exist
+	// 如果返回零值，表示目标对象当前不存在。
 	if len(replicaset.ResourceVersion) == 0 {
 		return nil, errors.NewNotFound(apps.Resource("replicasets/scale"), i.name)
 	}
@@ -331,7 +331,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 		replicasPathInReplicaSet,
 	)
 
-	// replicaset -> old scale
+	// 将现有 ReplicaSet 转换为旧 Scale 对象。
 	oldScale, err := scaleFromReplicaSet(replicaset)
 	if err != nil {
 		return nil, err
@@ -343,7 +343,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 	}
 	oldScale.ManagedFields = scaleManagedFields
 
-	// old scale -> new scale
+	// 基于旧 Scale 对象应用客户端修改，生成新 Scale 对象。
 	newScaleObj, err := i.reqObjInfo.UpdatedObject(ctx, oldScale)
 	if err != nil {
 		return nil, err
@@ -356,12 +356,12 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 		return nil, errors.NewBadRequest(fmt.Sprintf("expected input object type to be Scale, but %T", newScaleObj))
 	}
 
-	// validate
+	// 校验新旧 Scale 对象之间的变更是否合法。
 	if errs := autoscalingvalidation.ValidateScaleUpdate(ctx, scale, oldScale, legacyscheme.Scheme, i.scaleGVKMapper); len(errs) > 0 {
 		return nil, errors.NewInvalid(autoscaling.Kind("Scale"), replicaset.Name, errs)
 	}
 
-	// validate precondition if specified (resourceVersion matching is handled by storage)
+	// 如果请求指定了前置条件，则在此处校验；resourceVersion 匹配由底层存储层负责。
 	if len(scale.UID) > 0 && scale.UID != replicaset.UID {
 		return nil, errors.NewConflict(
 			apps.Resource("replicasets/scale"),
@@ -370,7 +370,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 		)
 	}
 
-	// move replicas/resourceVersion fields to object and return
+	// 将 replicas 和 resourceVersion 字段写回父 ReplicaSet 对象并返回。
 	replicaset.Spec.Replicas = scale.Spec.Replicas
 	replicaset.ResourceVersion = scale.ResourceVersion
 

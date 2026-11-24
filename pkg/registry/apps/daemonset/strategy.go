@@ -166,8 +166,7 @@ type daemonSetStatusStrategy struct {
 // StatusStrategy 专门处理 daemonsets/status；恢复完整 Spec，防止状态写入覆盖期望配置。
 var StatusStrategy = daemonSetStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回该策略会重置的字段集合，这些字段不允许用户通过当前子资源请求修改。
 func (daemonSetStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"apps/v1": fieldpath.NewSet(
@@ -188,7 +187,7 @@ func (daemonSetStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runt
 	return validation.ValidateDaemonSetStatusUpdate(obj.(*apps.DaemonSet), old.(*apps.DaemonSet))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新产生的非阻断性警告。
 func (daemonSetStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

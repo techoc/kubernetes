@@ -48,10 +48,10 @@ type rsStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating ReplicaSet objects.
+// Strategy 定义通过 REST API 创建和更新 ReplicaSet 时使用的默认策略。
 var Strategy = rsStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Make sure we correctly implement the interface.
+// 编译期检查：确保 Strategy 实现对应的 REST 策略接口。
 var _ = rest.GarbageCollectionDeleteStrategy(Strategy)
 
 // DefaultGarbageCollectionPolicy 返回 DeleteDependents：删除 ReplicaSet 时级联删除其依赖对象。
@@ -75,7 +75,7 @@ func (rsStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return fields
 }
 
-// PrepareForCreate clears the status of a ReplicaSet before creation.
+// PrepareForCreate 在创建 ReplicaSet 前清空由控制器维护的 Status。
 // 创建时清空控制器 Status、初始化 Generation，并按 Feature Gate 处理 PodTemplate 字段。
 func (rsStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	rs := obj.(*apps.ReplicaSet)
@@ -86,25 +86,21 @@ func (rsStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	pod.DropDisabledTemplateFields(&rs.Spec.Template, nil)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 清理更新时不允许终端用户设置的字段。
 // 主资源更新不能伪造 Status；只有 Spec 改变才递增 Generation，单独状态变化不影响期望状态版本。
 func (rsStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newRS := obj.(*apps.ReplicaSet)
 	oldRS := old.(*apps.ReplicaSet)
-	// update is not allowed to set status
+	// 主资源更新请求不允许修改 Status。
 	newRS.Status = oldRS.Status
 
 	pod.DropDisabledTemplateFields(&newRS.Spec.Template, &oldRS.Spec.Template)
 
 	// Generation 只表示 Spec 的期望状态版本。Status 写入者必须自行报告其观察到的 Generation，API Server 无法推断控制器读到的 Spec 版本。
-	// Any changes to the spec increment the generation number, any changes to the
-	// status should reflect the generation number of the corresponding object. We push
-	// the burden of managing the status onto the clients because we can't (in general)
-	// know here what version of spec the writer of the status has seen. It may seem like
-	// we can at first -- since obj contains spec -- but in the future we will probably make
-	// status its own object, and even if we don't, writes may be the result of a
-	// read-update-write loop, so the contents of spec may not actually be the spec that
-	// the ReplicaSet has *seen*.
+	// Spec 的任何变化都会递增 Generation；Status 写入者应将其观察到的 Spec 版本对应的 Generation 写入 Status。
+	// Status 的版本管理由客户端负责，因为 API Server 通常无法知道 Status 写入者实际观察到了哪个 Spec 版本。
+	// 虽然当前对象同时包含 Spec 和 Status，但写入可能来自先读取、再更新、最后写回的流程，
+	// 此时对象中的 Spec 不一定是控制器此前真正观察到的版本；未来 Status 也可能成为独立对象。
 	if !apiequality.Semantic.DeepEqual(oldRS.Spec, newRS.Spec) {
 		newRS.Generation = oldRS.Generation + 1
 	}
@@ -137,7 +133,7 @@ func (rsStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 执行面向普通用户的 ReplicaSet 更新校验。
 // ValidateUpdate 使用新旧 PodTemplate 生成校验选项，保留兼容字段规则并校验 Selector/Template 关系。
 func (rsStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newReplicaSet := obj.(*apps.ReplicaSet)
@@ -162,7 +158,7 @@ func (rsStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// ToSelectableFields returns a field set that represents the object.
+// ToSelectableFields 返回用于表示该对象的字段集合，供 FieldSelector 过滤使用。
 // ToSelectableFields 暴露 metadata 字段和 status.replicas，供 API Server 的 FieldSelector 使用。
 func ToSelectableFields(rs *apps.ReplicaSet) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&rs.ObjectMeta, true)
@@ -172,7 +168,7 @@ func ToSelectableFields(rs *apps.ReplicaSet) fields.Set {
 	return generic.MergeFieldsSets(objectMetaFieldsSet, rsSpecificFieldsSet)
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取指定对象的标签和字段，供资源过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	rs, ok := obj.(*apps.ReplicaSet)
 	if !ok {
@@ -181,9 +177,8 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(rs.ObjectMeta.Labels), ToSelectableFields(rs), nil
 }
 
-// MatchReplicaSet is the filter used by the generic etcd backend to route
-// watch events from etcd to clients of the apiserver only interested in specific
-// labels/fields.
+// MatchReplicaSet 是通用 etcd 后端使用的过滤谓词，用于将 Watch 事件仅发送给
+// 对特定标签或字段感兴趣的 API Server 客户端。
 // MatchReplicaSet 将标签/字段选择器与 GetAttrs 组合成 etcd Watch 过滤谓词。
 func MatchReplicaSet(label labels.Selector, field fields.Selector) apistorage.SelectionPredicate {
 	return apistorage.SelectionPredicate{
@@ -200,8 +195,7 @@ type rsStatusStrategy struct {
 // StatusStrategy 专门处理 replicasets/status；恢复 Spec 后只对允许的 Status 字段执行校验。
 var StatusStrategy = rsStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回该策略会重置的字段集合，这些字段不允许用户通过当前子资源请求修改。
 func (rsStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"apps/v1": fieldpath.NewSet(
@@ -214,7 +208,7 @@ func (rsStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set
 func (rsStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newRS := obj.(*apps.ReplicaSet)
 	oldRS := old.(*apps.ReplicaSet)
-	// update is not allowed to set spec
+	// Status 子资源更新请求不允许修改 Spec。
 	newRS.Spec = oldRS.Spec
 	dropDisabledStatusFields(&newRS.Status, &oldRS.Status)
 }
@@ -224,12 +218,12 @@ func (rsStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Obj
 	return appsvalidation.ValidateReplicaSetStatusUpdate(obj.(*apps.ReplicaSet), old.(*apps.ReplicaSet))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新产生的非阻断性警告。
 func (rsStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// dropDisabledStatusFields removes disabled fields from the replica set status.
+// dropDisabledStatusFields 从 ReplicaSet Status 中清除当前未启用特性对应的字段。
 // 关闭 TerminatingReplicas 特性时，若旧对象已经使用该字段则保留，否则丢弃请求中新写入的值。
 func dropDisabledStatusFields(rsStatus, oldRSStatus *apps.ReplicaSetStatus) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DeploymentReplicaSetTerminatingReplicas) &&

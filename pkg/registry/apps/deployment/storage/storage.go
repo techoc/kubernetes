@@ -192,7 +192,7 @@ func (r *RollbackREST) New() runtime.Object {
 	return &apps.DeploymentRollback{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储所拥有的资源。
 func (r *RollbackREST) Destroy() {
 	// 底层 Store 与主资源 REST 共享，因此不能在此处重复销毁。
 }
@@ -298,10 +298,10 @@ func (r *ScaleREST) New() runtime.Object {
 	return &autoscaling.Scale{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储所拥有的资源。
 func (r *ScaleREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 由于底层 Store 与主资源 REST 共享，
+	// 因此不在此处显式销毁。
 }
 
 // Get 从父资源存储读取对象，并转换为 Scale 子资源表示。
@@ -379,7 +379,7 @@ func scaleFromDeployment(deployment *apps.Deployment) (*autoscaling.Scale, error
 	}
 
 	return &autoscaling.Scale{
-		// TODO: Create a variant of ObjectMeta type that only contains the fields below.
+		// TODO：创建一个仅包含下列字段的 ObjectMeta 变体类型，避免复制不需要的元数据字段。
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              deployment.Name,
 			Namespace:         deployment.Namespace,

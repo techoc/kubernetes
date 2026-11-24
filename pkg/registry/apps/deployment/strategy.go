@@ -45,10 +45,10 @@ type deploymentStrategy struct {
 // Strategy 是通过 REST API 创建和更新 Deployment 时使用的默认策略。
 var Strategy = deploymentStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Make sure we correctly implement the interface.
+// 编译期检查：确保 Strategy 实现 REST 创建策略接口。
 var _ = rest.GarbageCollectionDeleteStrategy(Strategy)
 
-// DefaultGarbageCollectionPolicy returns DeleteDependents for all currently served versions.
+// DefaultGarbageCollectionPolicy 对所有当前提供服务的 API 版本返回 DeleteDependents。
 // 删除 Deployment 时默认级联删除其控制器依赖对象，避免遗留 ReplicaSet。
 func (deploymentStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	return rest.DeleteDependents
@@ -70,7 +70,7 @@ func (deploymentStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.S
 	return fields
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// PrepareForCreate 清理创建时不允许终端用户设置的字段。
 // 创建时由 API Server 初始化 Status 和 Generation，再按 Feature Gate 清理 PodTemplate 中不可用字段。
 func (deploymentStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	deployment := obj.(*apps.Deployment)
@@ -107,7 +107,7 @@ func (deploymentStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 清理更新时不允许终端用户设置的字段。
 // 更新时先恢复服务端维护的 Status，再清理禁用字段；Spec 或 Annotations 变化都会递增 Generation。
 func (deploymentStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newDeployment := obj.(*apps.Deployment)
@@ -117,9 +117,8 @@ func (deploymentStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime
 	pod.DropDisabledTemplateFields(&newDeployment.Spec.Template, &oldDeployment.Spec.Template)
 
 	// Generation 用于区分期望状态版本：Spec 变化代表控制器需要观察新的目标状态；Annotations 也会复制到 ReplicaSet，因此同样递增。
-	// Spec updates bump the generation so that we can distinguish between
-	// scaling events and template changes, annotation updates bump the generation
-	// because annotations are copied from deployments to their replica sets.
+	// Spec 更新会递增 Generation，以便区分扩缩容事件和 Pod 模板变更；Annotations 也会递增 Generation，
+	// 因为 Deployment 的注解会复制到其 ReplicaSet。
 	if !apiequality.Semantic.DeepEqual(newDeployment.Spec, oldDeployment.Spec) ||
 		!apiequality.Semantic.DeepEqual(newDeployment.Annotations, oldDeployment.Annotations) {
 		newDeployment.Generation = oldDeployment.Generation + 1
@@ -160,8 +159,7 @@ type deploymentStatusStrategy struct {
 // StatusStrategy 专门处理 deployments/status；只允许修改状态，不能借此改动 Spec 或 Labels。
 var StatusStrategy = deploymentStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回该策略会重置的字段集合，这些字段不允许用户通过当前子资源请求修改。
 func (deploymentStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"apps/v1": fieldpath.NewSet(
@@ -171,7 +169,7 @@ func (deploymentStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 	}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
+// PrepareForUpdate 清理 Status 更新请求中不允许终端用户设置的字段。
 // 状态更新恢复旧 Spec/Labels，并清理当前 Feature Gate 不允许且旧对象也未使用的状态字段。
 func (deploymentStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newDeployment := obj.(*apps.Deployment)
@@ -186,12 +184,12 @@ func (deploymentStatusStrategy) ValidateUpdate(ctx context.Context, obj, old run
 	return appsvalidation.ValidateDeploymentStatusUpdate(obj.(*apps.Deployment), old.(*apps.Deployment))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新产生的非阻断性警告。
 func (deploymentStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// dropDisabledStatusFields removes disabled fields from the deployment status.
+// dropDisabledStatusFields 从 Deployment Status 中清除当前未启用特性对应的字段。
 // 关闭 TerminatingReplicas 特性时，仅当旧状态未使用该字段才清除，保证已有对象升级期间兼容。
 func dropDisabledStatusFields(deploymentStatus, oldDeploymentStatus *apps.DeploymentStatus) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DeploymentReplicaSetTerminatingReplicas) &&

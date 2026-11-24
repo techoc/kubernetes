@@ -43,7 +43,7 @@ type statefulSetStrategy struct {
 // Strategy 是通过 REST API 创建和更新 StatefulSet 时使用的默认策略。
 var Strategy = statefulSetStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Make sure we correctly implement the interface.
+// 编译期检查：确保 Strategy 实现对应的 REST 策略接口。
 var _ = rest.GarbageCollectionDeleteStrategy(Strategy)
 
 // DefaultGarbageCollectionPolicy 返回 DeleteDependents：删除 StatefulSet 时级联删除其依赖对象。
@@ -67,11 +67,11 @@ func (statefulSetStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.
 	return fields
 }
 
-// PrepareForCreate clears the status of an StatefulSet before creation.
+// PrepareForCreate 在创建 StatefulSet 前清空由控制器维护的 Status。
 // 创建时重置 Status、初始化 Generation，并清理禁用的 StatefulSet 字段与 PodTemplate 字段。
 func (statefulSetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	statefulSet := obj.(*apps.StatefulSet)
-	// create cannot set status
+	// 创建请求不能直接设置 Status。
 	statefulSet.Status = apps.StatefulSetStatus{}
 
 	statefulSet.Generation = 1
@@ -80,7 +80,7 @@ func (statefulSetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Obj
 	pod.DropDisabledTemplateFields(&statefulSet.Spec.Template, nil)
 }
 
-// maxUnavailableInUse returns true if StatefulSet's maxUnavailable set(used)
+// maxUnavailableInUse 判断 StatefulSet 是否已经使用 maxUnavailable 字段。
 // maxUnavailableInUse 判断旧 StatefulSet 是否已配置 RollingUpdate.MaxUnavailable，用于关闭特性时保留已有字段。
 func maxUnavailableInUse(statefulset *apps.StatefulSet) bool {
 	if statefulset == nil {
@@ -93,28 +93,26 @@ func maxUnavailableInUse(statefulset *apps.StatefulSet) bool {
 	return statefulset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable != nil
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 清理更新时不允许终端用户设置的字段。
 // 更新时恢复 Status，按旧对象使用情况清理禁用字段；任何 Spec 变化都会递增 Generation。
 func (statefulSetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newStatefulSet := obj.(*apps.StatefulSet)
 	oldStatefulSet := old.(*apps.StatefulSet)
-	// Update is not allowed to set status
+	// 主资源更新请求不允许修改 Status。
 	newStatefulSet.Status = oldStatefulSet.Status
 
 	dropStatefulSetDisabledFields(newStatefulSet, oldStatefulSet)
 	pod.DropDisabledTemplateFields(&newStatefulSet.Spec.Template, &oldStatefulSet.Spec.Template)
 
-	// Any changes to the spec increment the generation number, any changes to the
-	// status should reflect the generation number of the corresponding object.
-	// See metav1.ObjectMeta description for more information on Generation.
+	// Spec 的任何变化都会递增 Generation；Status 写入者应报告其观察到的 Spec 版本对应的 Generation。
+	// Generation 的详细语义参见 metav1.ObjectMeta 文档。
 	if !apiequality.Semantic.DeepEqual(oldStatefulSet.Spec, newStatefulSet.Spec) {
 		newStatefulSet.Generation = oldStatefulSet.Generation + 1
 	}
 }
 
-// dropStatefulSetDisabledFields drops fields that are not used if their associated feature gates
-// are not enabled.
-// The typical pattern is:
+// dropStatefulSetDisabledFields 在对应 Feature Gate 未启用且旧对象未使用相关字段时，清理这些字段。
+// 典型处理模式如下：
 //
 //	if !utilfeature.DefaultFeatureGate.Enabled(features.MyFeature) && !myFeatureInUse(oldSvc) {
 //	    newSvc.Spec.MyFeature = nil
@@ -164,7 +162,7 @@ func (statefulSetStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 执行面向普通用户的 StatefulSet 更新校验。
 // 更新时对历史不可变字段采用兼容校验：旧 ServiceName/PVC 模板即使当前规则不合法，也不因无关更新而被拒绝。
 func (statefulSetStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newStatefulSet := obj.(*apps.StatefulSet)
@@ -209,8 +207,7 @@ type statefulSetStatusStrategy struct {
 // StatusStrategy 专门处理 statefulsets/status；它允许控制器更新副本状态，但不能更改 Spec。
 var StatusStrategy = statefulSetStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回该策略会重置的字段集合，这些字段不允许用户通过当前子资源请求修改。
 func (statefulSetStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"apps/v1": fieldpath.NewSet(
@@ -219,22 +216,22 @@ func (statefulSetStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fiel
 	}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update of status
+// PrepareForUpdate 清理 Status 更新请求中不允许终端用户设置的字段。
 // 状态子资源恢复旧 Spec，再单独校验 Status 字段。
 func (statefulSetStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newStatefulSet := obj.(*apps.StatefulSet)
 	oldStatefulSet := old.(*apps.StatefulSet)
-	// status changes are not allowed to update spec
+	// Status 变化不能反向修改 Spec。
 	newStatefulSet.Spec = oldStatefulSet.Spec
 }
 
 // ValidateUpdate 校验 StatefulSet Status 子资源的更新。
 func (statefulSetStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
-	// TODO: Validate status updates.
+	// TODO：补充 StatefulSet Status 更新校验。
 	return validation.ValidateStatefulSetStatusUpdate(obj.(*apps.StatefulSet), old.(*apps.StatefulSet))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新产生的非阻断性警告。
 func (statefulSetStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
