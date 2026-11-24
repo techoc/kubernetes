@@ -30,12 +30,14 @@ import (
 	leasecandidatestorage "k8s.io/kubernetes/pkg/registry/coordination/leasecandidate/storage"
 )
 
+// RESTStorageProvider 负责按 API 版本和资源启用配置装配 Coordination API Group 的 REST 存储。
 type RESTStorageProvider struct{}
 
+// NewRESTStorage 初始化 Coordination API Group，并依次装配 v1、v1beta1 和 v1alpha2 的资源存储。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(coordination.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 若在此处增加 API 版本，还必须在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将版本优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -58,10 +60,11 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 根据资源启用配置注册 coordination/v1 的 Lease 存储。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// leases
+	// 注册 coordination/v1 的 Lease 资源。
 	if resource := "leases"; apiResourceConfigSource.ResourceEnabled(coordinationv1.SchemeGroupVersion.WithResource(resource)) {
 		leaseStorage, err := leasestorage.NewREST(restOptionsGetter)
 		if err != nil {
@@ -72,10 +75,11 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// v1beta1Storage 根据资源启用配置注册 coordination/v1beta1 的 LeaseCandidate 存储。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// identity
+	// 注册当前 API 版本中的 LeaseCandidate 资源。
 	if resource := "leasecandidates"; apiResourceConfigSource.ResourceEnabled(coordinationv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		leaseCandidateStorage, err := leasecandidatestorage.NewREST(restOptionsGetter)
 		if err != nil {
@@ -86,10 +90,11 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 	return storage, nil
 }
 
+// v1alpha2Storage 根据资源启用配置注册 coordination/v1alpha2 的 LeaseCandidate 存储。
 func (p RESTStorageProvider) v1alpha2Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// identity
+	// 注册当前 API 版本中的 LeaseCandidate 资源。
 	if resource := "leasecandidates"; apiResourceConfigSource.ResourceEnabled(coordinationv1alpha2.SchemeGroupVersion.WithResource(resource)) {
 		leaseCandidateStorage, err := leasecandidatestorage.NewREST(restOptionsGetter)
 		if err != nil {
@@ -100,6 +105,7 @@ func (p RESTStorageProvider) v1alpha2Storage(apiResourceConfigSource serverstora
 	return storage, nil
 }
 
+// GroupName 返回 Coordination API Group 的名称。
 func (p RESTStorageProvider) GroupName() string {
 	return coordination.GroupName
 }

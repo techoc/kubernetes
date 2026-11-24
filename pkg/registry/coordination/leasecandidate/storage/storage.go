@@ -28,12 +28,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/coordination/leasecandidate"
 )
 
-// REST implements a RESTStorage for leasecandidates against etcd
+// REST 将 LeaseCandidate 资源的 REST 请求映射到底层通用 Store，并通过 etcd 持久化。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against leasecandidates.
+// NewREST 创建 LeaseCandidate 的 REST 存储，配置对象构造函数、资源名称、写入策略、筛选属性和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &coordinationapi.LeaseCandidate{} },

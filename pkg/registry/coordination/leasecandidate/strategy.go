@@ -33,64 +33,64 @@ import (
 	"k8s.io/kubernetes/pkg/apis/coordination/validation"
 )
 
-// LeaseCandidateStrategy implements verification logic for leasecandidates.
+// LeaseCandidateStrategy 定义 LeaseCandidate 资源创建、更新时使用的 REST 策略。
 type LeaseCandidateStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating leasecandidate objects.
+// Strategy 是创建、更新和删除 LeaseCandidate 对象时使用的默认策略。
 var Strategy = LeaseCandidateStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped returns true because all leasecandidate' need to be within a namespace.
+// NamespaceScoped 返回 true，表示 LeaseCandidate 必须归属于某个命名空间。
 func (LeaseCandidateStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// PrepareForCreate prepares leasecandidate for creation.
+// PrepareForCreate 当前不改写创建对象；字段合法性由 Validate 统一检查。
 func (LeaseCandidateStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 当前不改写新旧对象；更新约束由 ValidateUpdate 负责检查。
 func (LeaseCandidateStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
-// Validate validates a new leasecandidate.
+// Validate 校验新 LeaseCandidate 的字段格式和语义约束。
 func (LeaseCandidateStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	leasecandidate := obj.(*coordination.LeaseCandidate)
 	return validation.ValidateLeaseCandidate(leasecandidate)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 LeaseCandidate 时的非阻断性警告；当前不产生额外警告。
 func (LeaseCandidateStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 LeaseCandidate；当前无需额外处理。
 func (LeaseCandidateStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is true for leasecandidate; this means you may create one with a PUT request.
+// AllowCreateOnUpdate 返回 true，允许客户端通过 PUT 更新请求创建尚不存在的 LeaseCandidate。
 func (LeaseCandidateStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 对照旧对象校验 LeaseCandidate 更新是否合法。
 func (LeaseCandidateStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateLeaseCandidateUpdate(obj.(*coordination.LeaseCandidate), old.(*coordination.LeaseCandidate))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 LeaseCandidate 时的非阻断性警告；当前不产生额外警告。
 func (LeaseCandidateStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// AllowUnconditionalUpdate is the default update policy for leasecandidate objects.
+// AllowUnconditionalUpdate 返回 false，要求更新请求提供 ResourceVersion，以执行乐观并发控制。
 func (LeaseCandidateStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 LeaseCandidate 的标签和可筛选字段，供 List、Watch 等请求执行过滤。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	leasecandidate, ok := obj.(*coordination.LeaseCandidate)
 	if !ok {
@@ -99,8 +99,8 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(leasecandidate.ObjectMeta.Labels), ToSelectableFields(leasecandidate), nil
 }
 
-// ToSelectableFields returns a field set that represents the object
-// TODO: fields are not labels, and the validation rules for them do not apply.
+// ToSelectableFields 将 LeaseCandidate 转换为字段选择器可查询的字段集合。
+// TODO：字段选择器与标签选择器不是同一概念，不应套用标签选择器的校验规则。
 func ToSelectableFields(leasecandidate *coordination.LeaseCandidate) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&leasecandidate.ObjectMeta, true)
 	specificFieldsSet := fields.Set{
