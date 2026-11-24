@@ -36,26 +36,26 @@ type discoveryResourceResolver struct {
 // Resolve 查询对应 GroupVersion 的 Discovery 文档，按 Kind 查找资源并跳过子资源；找不到时返回 NoKindMatch。
 func (d *discoveryResourceResolver) Resolve(gvk schema.GroupVersionKind) (schema.GroupVersionResource, error) {
 	gv := gvk.GroupVersion()
-	// TODO: refactor this into an efficient gvk --> gvr resolver that remembers hits and re-resolves group/version info on misses
+	// TODO：重构为高效的 GVK→GVR 解析器，缓存已命中的结果，并在未命中时重新解析 Group/Version 信息。
 	resources, err := d.client.ServerResourcesForGroupVersion(gv.String())
 	if err != nil {
 		return schema.GroupVersionResource{}, err
 	}
 	for _, resource := range resources.APIResources {
 		if resource.Kind != gvk.Kind {
-			// ignore unrelated kinds
+			// 跳过 Kind 不匹配的 API 资源。
 			continue
 		}
 		if strings.Contains(resource.Name, "/") {
-			// ignore subresources
+			// 跳过子资源，只解析顶层资源。
 			continue
 		}
 		if resource.Group != "" && resource.Group != gvk.Group {
-			// group didn't match
+			// API Group 与目标 GVK 不匹配，继续检查下一项。
 			continue
 		}
 		if resource.Version != "" && resource.Version != gvk.Version {
-			// version didn't match
+			// API Version 与目标 GVK 不匹配，继续检查下一项。
 			continue
 		}
 		return gv.WithResource(resource.Name), nil
@@ -68,8 +68,10 @@ func NewDiscoveryResourceResolver(client discovery.DiscoveryInterface) (Resource
 	return &discoveryResourceResolver{client: client}, nil
 }
 
+// ResourceResolverFunc 将普通函数适配为 ResourceResolver 接口，便于测试注入自定义解析逻辑。
 type ResourceResolverFunc func(gvk schema.GroupVersionKind) (schema.GroupVersionResource, error)
 
+// Resolve 调用底层函数完成 GVK 到 GVR 的解析。
 func (f ResourceResolverFunc) Resolve(gvk schema.GroupVersionKind) (schema.GroupVersionResource, error) {
 	return f(gvk)
 }

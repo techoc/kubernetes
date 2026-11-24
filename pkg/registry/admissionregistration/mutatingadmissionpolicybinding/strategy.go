@@ -44,8 +44,7 @@ type mutatingAdmissionPolicyBindingStrategy struct {
 }
 
 type PolicyGetter interface {
-	// GetMutatingAdmissionPolicy 根据名称读取集群级 MutatingAdmissionPolicy。
-	// 该资源是集群级资源，因此查询不需要 Namespace 参数。
+	// GetMutatingAdmissionPolicy 按名称读取集群级 MutatingAdmissionPolicy，无需 Namespace 参数。
 	GetMutatingAdmissionPolicy(ctx context.Context, name string) (*admissionregistration.MutatingAdmissionPolicy, error)
 }
 
@@ -65,8 +64,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// PrepareForCreate 在创建 Binding 时初始化 Generation。
-// 创建时初始化 Generation；Binding 本身不维护控制器 Status。
+// PrepareForCreate 在创建 Binding 时初始化 Generation；该资源没有控制器维护的 Status 字段。
 func (v *mutatingAdmissionPolicyBindingStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.MutatingAdmissionPolicyBinding)
 	ic.Generation = 1
@@ -84,8 +82,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) PrepareForUpdate(ctx context.Co
 	}
 }
 
-// Validate 校验 Binding 的策略引用、匹配规则和参数引用，并执行相应授权检查。
-// Validate 校验 PolicyName/ParamRef 结构；字段合法后通过 authorizeCreate 确认关联策略与参数访问权限。
+// Validate 校验 PolicyName、匹配规则和 ParamRef；结构合法后检查关联策略及参数资源访问权限。
 func (v *mutatingAdmissionPolicyBindingStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.MutatingAdmissionPolicyBinding)
 	errs := validation.ValidateMutatingAdmissionPolicyBinding(ic)
@@ -114,7 +111,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) WarningsOnCreate(ctx context.Co
 func (v *mutatingAdmissionPolicyBindingStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate 返回 false，禁止通过 PUT 更新请求隐式创建 Binding。
+// AllowCreateOnUpdate 返回 false，禁止通过 PUT 更新请求隐式创建 MutatingAdmissionPolicyBinding。
 func (v *mutatingAdmissionPolicyBindingStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -140,8 +137,7 @@ func (v *mutatingAdmissionPolicyBindingStrategy) WarningsOnUpdate(ctx context.Co
 	return validation.WarningsForStaticSuffix(newIC.Name)
 }
 
-// AllowUnconditionalUpdate 返回 false，要求更新携带匹配的资源版本。
-// 更新必须基于匹配的资源版本执行。
+// AllowUnconditionalUpdate 返回 false，要求更新携带匹配的资源版本，避免覆盖并发修改。
 func (v *mutatingAdmissionPolicyBindingStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }

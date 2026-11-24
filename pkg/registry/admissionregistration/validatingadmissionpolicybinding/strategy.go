@@ -34,8 +34,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/admissionregistration/resolver"
 )
 
-// validatingAdmissionPolicyBindingStrategy 实现 ValidatingAdmissionPolicyBinding 的写入校验和参数访问授权。
-// validatingAdmissionPolicyBindingStrategy 定义集群级 PolicyBinding 写入策略，负责 Policy 关联、匹配资源和参数引用授权。
+// validatingAdmissionPolicyBindingStrategy 定义集群级 Binding 写入策略，负责 Policy 关联、匹配规则和参数引用授权。
 type validatingAdmissionPolicyBindingStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
@@ -70,8 +69,7 @@ func (v *validatingAdmissionPolicyBindingStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// PrepareForCreate 在创建 Binding 时初始化 Generation。
-// 创建时初始化 Generation；Binding 本身不维护由控制器回写的状态字段。
+// PrepareForCreate 在创建 Binding 时初始化 Generation；该资源没有控制器维护的 Status 字段。
 func (v *validatingAdmissionPolicyBindingStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.ValidatingAdmissionPolicyBinding)
 	ic.Generation = 1
@@ -89,8 +87,7 @@ func (v *validatingAdmissionPolicyBindingStrategy) PrepareForUpdate(ctx context.
 	}
 }
 
-// Validate 校验 Binding 的 Policy 引用、匹配规则和 ParamRef，并检查参数资源读取权限。
-// Validate 校验 PolicyName、MatchResources 和 ParamRef，再确保策略存在且调用者能读取参数对象。
+// Validate 校验 PolicyName、MatchResources 和 ParamRef，并确认关联策略存在且调用者有权读取参数对象。
 func (v *validatingAdmissionPolicyBindingStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	ic := obj.(*admissionregistration.ValidatingAdmissionPolicyBinding)
 	errs := validation.ValidateValidatingAdmissionPolicyBinding(ic)
@@ -119,7 +116,7 @@ func (v *validatingAdmissionPolicyBindingStrategy) WarningsOnCreate(ctx context.
 func (v *validatingAdmissionPolicyBindingStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate 返回 false，禁止通过 PUT 更新请求隐式创建 Binding。
+// AllowCreateOnUpdate 返回 false，禁止通过 PUT 更新请求隐式创建 ValidatingAdmissionPolicyBinding。
 func (v *validatingAdmissionPolicyBindingStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -145,8 +142,7 @@ func (v *validatingAdmissionPolicyBindingStrategy) WarningsOnUpdate(ctx context.
 	return validation.WarningsForStaticSuffix(newIC.Name)
 }
 
-// AllowUnconditionalUpdate 返回 false，要求更新携带匹配的资源版本。
-// 更新必须基于匹配的资源版本执行。
+// AllowUnconditionalUpdate 返回 false，要求更新携带匹配的资源版本，避免覆盖并发修改。
 func (v *validatingAdmissionPolicyBindingStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return false
 }

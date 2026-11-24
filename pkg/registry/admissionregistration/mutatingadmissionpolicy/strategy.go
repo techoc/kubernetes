@@ -57,8 +57,7 @@ func (v *mutatingAdmissionPolicyStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// PrepareForCreate 在创建时清空控制器维护的 Status，并初始化 Generation。
-// 创建时清空 Status 并初始化 Generation，状态由 Admission Policy Controller 管理。
+// PrepareForCreate 在创建时将 Generation 初始化为 1。
 func (v *mutatingAdmissionPolicyStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	ic := obj.(*admissionregistration.MutatingAdmissionPolicy)
 	ic.Generation = 1

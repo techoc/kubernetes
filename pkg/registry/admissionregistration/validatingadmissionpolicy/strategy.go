@@ -68,8 +68,7 @@ func (v *validatingAdmissionPolicyStrategy) PrepareForCreate(ctx context.Context
 	ic.Generation = 1
 }
 
-// PrepareForUpdate 保留服务端维护的 Status，并在 Spec 发生变化时递增 Generation。
-// 主资源更新不允许客户端改写 Status；只有 Spec 语义变化才递增 Generation。
+// PrepareForUpdate 阻止主资源更新修改控制器维护的 Status，并仅在 Spec 语义变化时递增 Generation。
 func (v *validatingAdmissionPolicyStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIC := obj.(*admissionregistration.ValidatingAdmissionPolicy)
 	oldIC := old.(*admissionregistration.ValidatingAdmissionPolicy)
@@ -77,9 +76,7 @@ func (v *validatingAdmissionPolicyStrategy) PrepareForUpdate(ctx context.Context
 	// 主资源更新不得修改由控制器维护的 Status。
 	newIC.Status = oldIC.Status
 
-	// Spec 发生变化时递增 Generation；控制器通过 Status 中的 observedGeneration 跟踪处理进度。
-	// 控制器通过 Status 中的 observedGeneration 跟踪已处理的对象版本。
-	// Generation 字段的语义详见 metav1.ObjectMeta 文档。
+	// Spec 发生语义变化时递增 Generation；字段语义详见 metav1.ObjectMeta 文档。
 	if !apiequality.Semantic.DeepEqual(oldIC.Spec, newIC.Spec) {
 		newIC.Generation = oldIC.Generation + 1
 	}
@@ -174,9 +171,7 @@ func (s *validatingAdmissionPolicyStatusStrategy) ValidateUpdate(ctx context.Con
 	return validation.ValidateValidatingAdmissionPolicyStatusUpdate(obj.(*admissionregistration.ValidatingAdmissionPolicy), old.(*admissionregistration.ValidatingAdmissionPolicy))
 }
 
-// PrepareForUpdate 与主资源策略相反：Status 子资源允许更新状态，但必须保留原有 Spec。
-// Status 子资源允许更新状态，但不允许修改 Spec。
-// /status 只允许策略控制器更新状态与条件；Spec 和相关元数据必须从旧对象恢复。
+// PrepareForUpdate 仅允许 /status 子资源更新 Status；Spec 和受保护的 ObjectMeta 字段均从旧对象恢复。
 func (s *validatingAdmissionPolicyStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newIC := obj.(*admissionregistration.ValidatingAdmissionPolicy)
 	oldIC := old.(*admissionregistration.ValidatingAdmissionPolicy)

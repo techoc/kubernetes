@@ -46,8 +46,8 @@ type RESTStorageProvider struct {
 // NewRESTStorage 依次注册 v1、v1beta1、v1alpha1 的资源映射；版本变更需与 aggregator 的优先级配置保持一致。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(admissionregistration.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果在此处新增 API 版本，必须同时在 `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go` 中配置对应的聚合优先级。
+	// TODO：重构装配流程，将版本优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -73,7 +73,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// use a simple wrapper so that initialization order won't cause a nil getter
+	// 使用简单的 Getter 包装器，避免存储初始化顺序导致 Getter 为 nil。
 	var policyGetter rest.Getter
 
 	r, err := resolver.NewDiscoveryResourceResolver(p.DiscoveryClient)
@@ -81,7 +81,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		return storage, err
 	}
 
-	// validatingwebhookconfigurations
+	// 注册 ValidatingWebhookConfiguration 资源；仅在该 API 版本启用此资源时创建 Store。
 	if resource := "validatingwebhookconfigurations"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1.SchemeGroupVersion.WithResource(resource)) {
 		validatingStorage, err := validatingwebhookconfigurationstorage.NewREST(restOptionsGetter)
 		if err != nil {
@@ -90,7 +90,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = validatingStorage
 	}
 
-	// mutatingwebhookconfigurations
+	// 注册 MutatingWebhookConfiguration 资源；仅在该 API 版本启用此资源时创建 Store。
 	if resource := "mutatingwebhookconfigurations"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1.SchemeGroupVersion.WithResource(resource)) {
 		mutatingStorage, err := mutatingwebhookconfigurationstorage.NewREST(restOptionsGetter)
 		if err != nil {
@@ -99,7 +99,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = mutatingStorage
 	}
 
-	// validatingadmissionpolicies
+	// 注册 ValidatingAdmissionPolicy 主资源及其 /status 子资源，并保存主资源 Getter 供 Binding 使用。
 	if resource := "validatingadmissionpolicies"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1.SchemeGroupVersion.WithResource(resource)) {
 		policyStorage, policyStatusStorage, err := validatingadmissionpolicystorage.NewREST(restOptionsGetter, p.Authorizer, r)
 		if err != nil {
@@ -110,7 +110,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource+"/status"] = policyStatusStorage
 	}
 
-	// validatingadmissionpolicybindings
+	// 注册 ValidatingAdmissionPolicyBinding；其策略 Getter 依赖前面创建的 Policy Store。
 	if resource := "validatingadmissionpolicybindings"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1.SchemeGroupVersion.WithResource(resource)) {
 		policyBindingStorage, err := policybindingstorage.NewREST(restOptionsGetter, p.Authorizer, &policybindingstorage.DefaultPolicyGetter{Getter: policyGetter}, r)
 		if err != nil {
@@ -119,7 +119,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = policyBindingStorage
 	}
 
-	// mutatingadmissionpolicies
+	// 注册 MutatingAdmissionPolicy 主资源，并更新当前版本的 Policy Getter。
 	if resource := "mutatingadmissionpolicies"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1.SchemeGroupVersion.WithResource(resource)) {
 		policyStorage, err := mutatingadmissionpolicystorage.NewREST(restOptionsGetter, p.Authorizer, r)
 		if err != nil {
@@ -129,7 +129,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 		storage[resource] = policyStorage
 	}
 
-	// mutatingadmissionpolicybindings
+	// 注册 MutatingAdmissionPolicyBinding；通过 Policy Getter 校验关联策略及参数引用。
 	if resource := "mutatingadmissionpolicybindings"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1.SchemeGroupVersion.WithResource(resource)) {
 		mutationpolicybindingstorage, err := mutationpolicybindingstorage.NewREST(restOptionsGetter, p.Authorizer, &mutationpolicybindingstorage.DefaultPolicyGetter{Getter: policyGetter}, r)
 		if err != nil {
@@ -145,7 +145,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// use a simple wrapper so that initialization order won't cause a nil getter
+	// 使用简单的 Getter 包装器，避免存储初始化顺序导致 Getter 为 nil。
 	var policyGetter rest.Getter
 
 	r, err := resolver.NewDiscoveryResourceResolver(p.DiscoveryClient)
@@ -153,7 +153,7 @@ func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstora
 		return storage, err
 	}
 
-	// mutatingadmissionpolicies
+	// 注册 MutatingAdmissionPolicy 主资源，并更新当前版本的 Policy Getter。
 	if resource := "mutatingadmissionpolicies"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1alpha1.SchemeGroupVersion.WithResource(resource)) {
 		policyStorage, err := mutatingadmissionpolicystorage.NewREST(restOptionsGetter, p.Authorizer, r)
 		if err != nil {
@@ -163,7 +163,7 @@ func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstora
 		storage[resource] = policyStorage
 	}
 
-	// mutatingadmissionpolicybindings
+	// 注册 MutatingAdmissionPolicyBinding；通过 Policy Getter 校验关联策略及参数引用。
 	if resource := "mutatingadmissionpolicybindings"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1alpha1.SchemeGroupVersion.WithResource(resource)) {
 		mutationpolicybindingstorage, err := mutationpolicybindingstorage.NewREST(restOptionsGetter, p.Authorizer, &mutationpolicybindingstorage.DefaultPolicyGetter{Getter: policyGetter}, r)
 		if err != nil {
@@ -179,7 +179,7 @@ func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstora
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// use a simple wrapper so that initialization order won't cause a nil getter
+	// 使用简单的 Getter 包装器，避免存储初始化顺序导致 Getter 为 nil。
 	var policyGetter rest.Getter
 
 	r, err := resolver.NewDiscoveryResourceResolver(p.DiscoveryClient)
@@ -187,7 +187,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 		return storage, err
 	}
 
-	// validatingadmissionpolicies
+	// 注册 ValidatingAdmissionPolicy 主资源及其 /status 子资源，并保存主资源 Getter 供 Binding 使用。
 	if resource := "validatingadmissionpolicies"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		policyStorage, policyStatusStorage, err := validatingadmissionpolicystorage.NewREST(restOptionsGetter, p.Authorizer, r)
 		if err != nil {
@@ -198,7 +198,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 		storage[resource+"/status"] = policyStatusStorage
 	}
 
-	// validatingadmissionpolicybindings
+	// 注册 ValidatingAdmissionPolicyBinding；其策略 Getter 依赖前面创建的 Policy Store。
 	if resource := "validatingadmissionpolicybindings"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		policyBindingStorage, err := policybindingstorage.NewREST(restOptionsGetter, p.Authorizer, &policybindingstorage.DefaultPolicyGetter{Getter: policyGetter}, r)
 		if err != nil {
@@ -207,7 +207,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 		storage[resource] = policyBindingStorage
 	}
 
-	// mutatingadmissionpolicies
+	// 注册 MutatingAdmissionPolicy 主资源，并更新当前版本的 Policy Getter。
 	if resource := "mutatingadmissionpolicies"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		policyStorage, err := mutatingadmissionpolicystorage.NewREST(restOptionsGetter, p.Authorizer, r)
 		if err != nil {
@@ -217,7 +217,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 		storage[resource] = policyStorage
 	}
 
-	// mutatingadmissionpolicybindings
+	// 注册 MutatingAdmissionPolicyBinding；通过 Policy Getter 校验关联策略及参数引用。
 	if resource := "mutatingadmissionpolicybindings"; apiResourceConfigSource.ResourceEnabled(admissionregistrationv1beta1.SchemeGroupVersion.WithResource(resource)) {
 		mutationpolicybindingstorage, err := mutationpolicybindingstorage.NewREST(restOptionsGetter, p.Authorizer, &mutationpolicybindingstorage.DefaultPolicyGetter{Getter: policyGetter}, r)
 		if err != nil {
@@ -229,6 +229,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 	return storage, nil
 }
 
+// GroupName 返回 AdmissionRegistration API 组名，供 kube-apiserver 注册 APIGroup。
 func (p RESTStorageProvider) GroupName() string {
 	return admissionregistration.GroupName
 }

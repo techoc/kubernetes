@@ -76,16 +76,18 @@ func (r *REST) Categories() []string {
 	return []string{"api-extensions"}
 }
 
+// PolicyGetter 定义 Binding 获取其所引用 MutatingAdmissionPolicy 的查询接口。
 type PolicyGetter interface {
-	// GetMutatingAdmissionPolicy returns a GetMutatingAdmissionPolicy
-	// 该资源是集群级资源，因此查询不需要 Namespace 参数。
+	// GetMutatingAdmissionPolicy 按名称读取集群级 MutatingAdmissionPolicy，无需 Namespace 参数。
 	GetMutatingAdmissionPolicy(ctx context.Context, name string) (*admissionregistration.MutatingAdmissionPolicy, error)
 }
 
+// DefaultPolicyGetter 使用通用 REST Getter 实现 PolicyGetter。
 type DefaultPolicyGetter struct {
 	Getter rest.Getter
 }
 
+// GetMutatingAdmissionPolicy 从底层 REST Getter 读取对象，并转换为内部 MutatingAdmissionPolicy 类型。
 func (g *DefaultPolicyGetter) GetMutatingAdmissionPolicy(ctx context.Context, name string) (*admissionregistration.MutatingAdmissionPolicy, error) {
 	p, err := g.Getter.Get(ctx, name, &metav1.GetOptions{})
 	if err != nil {
