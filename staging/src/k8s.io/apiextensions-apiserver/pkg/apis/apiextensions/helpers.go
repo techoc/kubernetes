@@ -143,7 +143,7 @@ func GetCRDStorageVersion(crd *CustomResourceDefinition) (string, error) {
 			return v.Name, nil
 		}
 	}
-	// This should not happened if crd is valid
+	// 如果 CRD 已通过完整校验，正常情况下不应进入此分支。
 	return "", fmt.Errorf("invalid CustomResourceDefinition, no storage version")
 }
 

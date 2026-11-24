@@ -112,7 +112,7 @@ func ValidateCustomResourceDefinition(ctx context.Context, obj *apiextensions.Cu
 		requireAtomicSetType:                     true,
 		requireMapListKeysMapSetValidation:       true,
 		celEnvironmentSet:                        environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion()),
-		// allowInvalidCABundle is set to true since the CRD is not established yet.
+		// CRD 尚未 Established，因此创建时允许暂时存在无效的 Conversion Webhook CABundle。
 		allowInvalidCABundle: true,
 	}
 
@@ -125,47 +125,46 @@ func ValidateCustomResourceDefinition(ctx context.Context, obj *apiextensions.Cu
 	return allErrs
 }
 
-// validationOptions groups several validation options, to avoid passing multiple bool parameters to methods
+// validationOptions 将多个校验选项集中封装，避免在方法之间传递大量布尔参数。
 type validationOptions struct {
-	// allowDefaults permits the validation schema to contain default attributes
+	// allowDefaults 表示是否允许校验 schema 中包含 default 属性。
 	allowDefaults bool
-	// disallowDefaultsReason gives a reason as to why allowDefaults is false (for better user feedback)
+	// disallowDefaultsReason 说明为何不允许 default，便于向用户提供更明确的错误信息。
 	disallowDefaultsReason string
-	// requireRecognizedConversionReviewVersion requires accepted webhook conversion versions to contain a recognized version
+	// requireRecognizedConversionReviewVersion 表示是否要求 Webhook ConversionReviewVersions 至少包含一个已识别版本。
 	requireRecognizedConversionReviewVersion bool
-	// requireImmutableNames disables changing spec.names
+	// requireImmutableNames 表示是否禁止修改 spec.names 中的不可变名称字段。
 	requireImmutableNames bool
-	// requireOpenAPISchema requires an openapi V3 schema be specified
+	// requireOpenAPISchema 表示是否必须提供 OpenAPI v3 schema。
 	requireOpenAPISchema bool
-	// requireValidPropertyType requires property types specified in the validation schema to be valid openapi v3 types
+	// requireValidPropertyType 表示是否要求校验 schema 中的属性类型属于合法的 OpenAPI v3 类型。
 	requireValidPropertyType bool
-	// requireStructuralSchema indicates that any schemas present must be structural
+	// requireStructuralSchema 表示所有已提供的 schema 都必须满足 Structural Schema 约束。
 	requireStructuralSchema bool
-	// requirePrunedDefaults indicates that defaults must be pruned
+	// requirePrunedDefaults 表示是否要求默认值经过 pruning 处理。
 	requirePrunedDefaults bool
-	// requireAtomicSetType indicates that the items type for a x-kubernetes-list-type=set list must be atomic.
+	// requireAtomicSetType 表示 x-kubernetes-list-type=set 列表的元素类型必须为 atomic。
 	requireAtomicSetType bool
-	// requireMapListKeysMapSetValidation indicates that:
-	// 1. For x-kubernetes-list-type=map list, key fields are not nullable, and are required or have a default
-	// 2. For x-kubernetes-list-type=map or x-kubernetes-list-type=set list, the whole item must not be nullable.
+	// requireMapListKeysMapSetValidation 控制 map/set 列表的额外校验：
+	// 1. map 列表的键字段不能为 nullable，且必须必填或提供默认值。
+	// 2. map/set 列表的整个元素不能为 nullable。
 	requireMapListKeysMapSetValidation bool
-	// preexistingExpressions tracks which CEL expressions existed in an object before an update. May be nil for create.
+	// preexistingExpressions 记录对象更新前已经存在的 CEL 表达式；创建操作时可以为 nil。
 	preexistingExpressions preexistingExpressions
-	// versionsWithUnchangedSchemas tracks schemas of which versions are unchanged when updating a CRD.
-	// Does not apply to creation or deletion.
-	// Some checks use this to avoid rejecting previously accepted versions due to a control plane upgrade/downgrade.
+	// versionsWithUnchangedSchemas 记录 CRD 更新时 schema 未发生变化的版本；创建和删除操作不使用该集合。
+	// 部分校验会利用它，避免控制平面升级或降级时拒绝此前已接受的版本。
 	versionsWithUnchangedSchemas sets.Set[string]
-	// suppressPerExpressionCost indicates whether CEL per-expression cost limit should be suppressed.
-	// It will be automatically set during Versions validation if the version is in versionsWithUnchangedSchemas.
+	// suppressPerExpressionCost 表示是否跳过 CEL 单表达式成本上限检查。
+	// 若某个版本位于 versionsWithUnchangedSchemas 中，版本校验时会自动设置该选项。
 	suppressPerExpressionCost bool
 
 	celEnvironmentSet *environment.EnvSet
-	// allowInvalidCABundle allows an invalid conversion webhook CABundle on update only if the existing CABundle is invalid.
-	// An invalid CABundle is also permitted on create and before a CRD is in an Established=True condition.
+	// allowInvalidCABundle 控制是否允许无效的 Conversion Webhook CABundle：更新时仅当旧值本身无效才允许保留；
+	// 创建阶段以及 CRD 尚未进入 Established=True 状态前，也允许暂时存在无效值。
 	allowInvalidCABundle bool
 
-	// allowTooManySelectableFields allows more than the MaxSelectableFields on update only if the existing
-	// selectable field count is more than the max selectable fields and the selectable fields are unchanged.
+	// allowTooManySelectableFields 仅在更新时允许字段选择器数量超过 MaxSelectableFields，
+	// 且必须满足旧对象已超限并且本次更新没有改变字段选择器集合。
 	allowTooManySelectableFields map[string]bool
 }
 
@@ -213,10 +212,9 @@ func findPreexistingExpressionsInSchema(schema *apiextensions.JSONSchemaProps, e
 	})
 }
 
-// findVersionsWithUnchangedSchemas finds each version that is in the new CRD object and differs from that of the old CRD object.
-// It returns a set of the names of mutated versions.
-// This function does not check for duplicated versions, top-level version not in versions, or coexistence of
-// top-level and per-version schemas, as further validations will check for these problems.
+// findVersionsWithUnchangedSchemas 找出新旧 CRD 对象中 schema 保持不变的版本，并返回这些版本名称的集合。
+// 本函数不检查重复版本、顶层版本是否包含在 versions 中，也不检查顶层与逐版本 schema 是否同时存在；
+// 这些问题会由后续校验步骤统一检查。
 func findVersionsWithUnchangedSchemas(obj, oldObject *apiextensions.CustomResourceDefinition) sets.Set[string] {
 	versionsWithUnchangedSchemas := sets.New[string]()
 	for _, version := range obj.Spec.Versions {
@@ -235,8 +233,7 @@ func findVersionsWithUnchangedSchemas(obj, oldObject *apiextensions.CustomResour
 	return versionsWithUnchangedSchemas
 }
 
-// suppressExpressionCostForUnchangedSchema returns a copy of opts with suppressPerExpressionCost set to true if
-// the specified version's schema is unchanged.
+// suppressExpressionCostForUnchangedSchema 在指定版本的 schema 未变化时，返回 suppressPerExpressionCost=true 的选项副本。
 func suppressExpressionCostForUnchangedSchema(opts validationOptions, version string) validationOptions {
 	if opts.versionsWithUnchangedSchemas.Has(version) {
 		opts.suppressPerExpressionCost = true
@@ -247,7 +244,7 @@ func suppressExpressionCostForUnchangedSchema(opts validationOptions, version st
 // ValidateCustomResourceDefinitionUpdate 对更新的 CRD 进行静态验证。
 // 与 ValidateCustomResourceDefinition 不同，更新验证需要比较新旧对象，
 // 检查不可变字段是否被修改、版本迁移是否合法等。
-// context is passed for supporting context cancellation during cel validation when validating defaults
+// 传入 context，以便校验默认值中的 CEL 表达式时支持取消操作。
 func ValidateCustomResourceDefinitionUpdate(ctx context.Context, obj, oldObj *apiextensions.CustomResourceDefinition) field.ErrorList {
 	opts := validationOptions{
 		allowDefaults:                            true,
@@ -278,7 +275,7 @@ func validateCustomResourceDefinitionUpdate(ctx context.Context, obj, oldObj *ap
 	return allErrs
 }
 
-// ValidateCustomResourceDefinitionStoredVersions statically validates
+// ValidateCustomResourceDefinitionStoredVersions 静态校验 CRD 的 storedVersions 与当前 Spec 版本配置是否一致。
 func ValidateCustomResourceDefinitionStoredVersions(storedVersions []string, versions []apiextensions.CustomResourceDefinitionVersion, fldPath *field.Path) field.ErrorList {
 	if len(storedVersions) == 0 {
 		return field.ErrorList{field.Invalid(fldPath, storedVersions, "must have at least one stored version")}
@@ -305,15 +302,15 @@ func ValidateCustomResourceDefinitionStoredVersions(storedVersions []string, ver
 	return allErrs
 }
 
-// ValidateUpdateCustomResourceDefinitionStatus statically validates custom resource definition status update.
+// ValidateUpdateCustomResourceDefinitionStatus 静态校验 CRD Status 更新是否合法。
 func ValidateUpdateCustomResourceDefinitionStatus(ctx context.Context, obj, oldObj *apiextensions.CustomResourceDefinition) field.ErrorList {
 	allErrs := genericvalidation.ValidateObjectMetaDeclaratively(ctx, operation.Update, &obj.ObjectMeta, &oldObj.ObjectMeta, false, nil, field.NewPath("metadata"), utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidationBeta))
 	allErrs = append(allErrs, ValidateCustomResourceDefinitionStatus(&obj.Status, field.NewPath("status"))...)
 	return allErrs
 }
 
-// validateCustomResourceDefinitionVersion statically validates.
-// context is passed for supporting context cancellation during cel validation when validating defaults
+// validateCustomResourceDefinitionVersion 静态校验 CRD 的单个版本配置。
+// 传入 context，以便校验默认值中的 CEL 表达式时支持取消操作。
 func validateCustomResourceDefinitionVersion(ctx context.Context, version *apiextensions.CustomResourceDefinitionVersion, fldPath *field.Path, statusEnabled bool, opts validationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, err := range validateDeprecationWarning(version.Deprecated, version.DeprecationWarning) {
@@ -372,7 +369,7 @@ func validateDeprecationWarning(deprecated bool, deprecationWarning *string) []s
 
 // validateCustomResourceDefinitionSpec 验证 CRD 的 spec 部分。
 // 包括组名、版本、名称、schema、打印列、子资源、conversion webhook 等。
-// context is passed for supporting context cancellation during cel validation when validating defaults
+// 传入 context，以便校验默认值中的 CEL 表达式时支持取消操作。
 func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensions.CustomResourceDefinitionSpec, opts validationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -386,13 +383,13 @@ func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensio
 
 	allErrs = append(allErrs, validateEnumStrings(fldPath.Child("scope"), string(spec.Scope), []string{string(apiextensions.ClusterScoped), string(apiextensions.NamespaceScoped)}, true)...)
 
-	// enabling pruning requires structural schemas
+	// 启用字段裁剪（pruning）要求使用 Structural Schema。
 	if spec.PreserveUnknownFields == nil || *spec.PreserveUnknownFields == false {
 		opts.requireStructuralSchema = true
 	}
 
 	if opts.requireOpenAPISchema {
-		// check that either a global schema or versioned schemas are set in all versions
+		// 检查是否为所有版本提供了顶层共享 schema，或分别提供逐版本 schema。
 		if spec.Validation == nil || spec.Validation.OpenAPIV3Schema == nil {
 			for i, v := range spec.Versions {
 				if v.Schema == nil || v.Schema.OpenAPIV3Schema == nil {
@@ -401,7 +398,7 @@ func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensio
 			}
 		}
 	} else if spec.PreserveUnknownFields == nil || *spec.PreserveUnknownFields == false {
-		// check that either a global schema or versioned schemas are set in served versions
+		// 检查是否为所有对外服务的版本提供了顶层共享 schema，或分别提供逐版本 schema。
 		if spec.Validation == nil || spec.Validation.OpenAPIV3Schema == nil {
 			for i, v := range spec.Versions {
 				schemaPath := fldPath.Child("versions").Index(i).Child("schema", "openAPIV3Schema")
@@ -440,7 +437,7 @@ func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensio
 		allErrs = append(allErrs, validateCustomResourceDefinitionVersion(ctx, &version, fldPath.Child("versions").Index(i), hasStatusEnabled(subresources), opts)...)
 	}
 
-	// The top-level and per-version fields are mutual exclusive
+	// 顶层字段与逐版本字段不能同时设置。
 	if spec.Validation != nil && hasPerVersionSchema(spec.Versions) {
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("validation"), "top-level and per-version schemas are mutually exclusive"))
 	}
@@ -451,7 +448,7 @@ func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensio
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("additionalPrinterColumns"), "top-level and per-version additionalPrinterColumns are mutually exclusive"))
 	}
 
-	// Per-version fields may not all be set to identical values (top-level field should be used instead)
+	// 不应将所有版本的字段都设置为完全相同的值；这种情况应改用顶层共享字段。
 	if hasIdenticalPerVersionSchema(spec.Versions) {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("versions"), spec.Versions, "per-version schemas may not all be set to identical values (top-level validation should be used instead)"))
 	}
@@ -477,7 +474,7 @@ func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensio
 		}
 	}
 
-	// in addition to the basic name restrictions, some names are required for spec, but not for status
+	// 除了基本名称格式限制外，Spec 中的部分名称字段为必填项，而 Status 校验不要求这些字段。
 	if len(spec.Names.Plural) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath.Child("names", "plural"), ""))
 	}
@@ -537,10 +534,10 @@ func validateEnumStrings(fldPath *field.Path, value string, accepted []string, r
 	return field.ErrorList{field.NotSupported(fldPath, value, accepted)}
 }
 
-// AcceptedConversionReviewVersions contains the list of ConversionReview versions the *prior* version of the API server understands.
-// 1.15: server understands v1beta1; accepted versions are ["v1beta1"]
-// 1.16: server understands v1, v1beta1; accepted versions are ["v1beta1"]
-// 1.17+: server understands v1, v1beta1; accepted versions are ["v1","v1beta1"]
+// AcceptedConversionReviewVersions 列出上一版本 API Server 能够理解的 ConversionReview 版本。
+// 1.15：服务器支持 v1beta1，接受的版本为 ["v1beta1"]。
+// 1.16：服务器支持 v1 和 v1beta1，接受的版本仍为 ["v1beta1"]。
+// 1.17 及以后：服务器支持 v1 和 v1beta1，接受的版本为 ["v1","v1beta1"]。
 var acceptedConversionReviewVersions = sets.NewString(apiextensionsv1.SchemeGroupVersion.Version, apiextensionsv1beta1.SchemeGroupVersion.Version)
 
 func isAcceptedConversionReviewVersion(v string) bool {
@@ -577,8 +574,7 @@ func validateConversionReviewVersions(versions []string, requireRecognizedVersio
 	return allErrs
 }
 
-// Allows invalid CA Bundle to be specified only if the existing CABundle is invalid
-// or if the CRD is not established yet.
+// 仅当旧 CABundle 本身无效，或 CRD 尚未 Established 时，才允许继续指定无效的 CA Bundle。
 func allowInvalidCABundle(oldCRD *apiextensions.CustomResourceDefinition) bool {
 	if !apiextensions.IsCRDConditionTrue(oldCRD, apiextensions.Established) {
 		return true
@@ -591,9 +587,9 @@ func allowInvalidCABundle(oldCRD *apiextensions.CustomResourceDefinition) bool {
 	return len(webhook.ValidateCABundle(field.NewPath("caBundle"), oldConversion.WebhookClientConfig.CABundle)) > 0
 }
 
-// findTooManySelectableFieldsAllowed returns a struct indicating which selectable field sets are allowed to be invalid.
-// A set of selectable fields is allowed to be invalid if the existing custom resource definition has more
-// selectable fields than MaxSelectableFields and the selectable fields are unchanged.
+// findTooManySelectableFieldsAllowed 返回各版本字段选择器集合的兼容标记。
+// 只有旧 CRD 的字段选择器数量已超过 MaxSelectableFields，
+// 且本次更新未改变该集合时，才允许保留超限状态。
 func findTooManySelectableFieldsAllowed(obj *apiextensions.CustomResourceDefinition, oldCRD *apiextensions.CustomResourceDefinition) map[string]bool {
 	result := map[string]bool{}
 
@@ -619,7 +615,7 @@ func findTooManySelectableFieldsAllowed(obj *apiextensions.CustomResourceDefinit
 	return result
 }
 
-// hasValidConversionReviewVersion return true if there is a valid version or if the list is empty.
+// hasValidConversionReviewVersionOrEmpty 在列表为空或至少包含一个受支持的版本时返回 true。
 func hasValidConversionReviewVersionOrEmpty(versions []string) bool {
 	if len(versions) < 1 {
 		return true
@@ -669,26 +665,25 @@ func validateCustomResourceConversion(conversion *apiextensions.CustomResourceCo
 
 // validateCustomResourceDefinitionSpecUpdate 验证 CRD spec 的更新。
 // 先执行完整 spec 验证，然后额外检查不可变字段和版本变更的合法性。
-// context is passed for supporting context cancellation during cel validation when validating defaults
+// 传入 context，以便校验默认值中的 CEL 表达式时支持取消操作。
 func validateCustomResourceDefinitionSpecUpdate(ctx context.Context, spec, oldSpec *apiextensions.CustomResourceDefinitionSpec, opts validationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := validateCustomResourceDefinitionSpec(ctx, spec, opts, fldPath)
 
 	if opts.requireImmutableNames {
-		// these effect the storage and cannot be changed therefore
+		// 这些字段会影响资源存储方式，因此一旦 CRD 建立便不可修改。
 		allErrs = append(allErrs, genericvalidation.ValidateImmutableField(spec.Scope, oldSpec.Scope, fldPath.Child("scope"))...)
 		allErrs = append(allErrs, genericvalidation.ValidateImmutableField(spec.Names.Kind, oldSpec.Names.Kind, fldPath.Child("names", "kind"))...)
 	}
 
-	// these affects the resource name, which is always immutable, so this can't be updated.
+	// 这些字段决定资源名称，资源名称始终不可变，因此不允许更新。
 	allErrs = append(allErrs, genericvalidation.ValidateImmutableField(spec.Group, oldSpec.Group, fldPath.Child("group"))...)
 	allErrs = append(allErrs, genericvalidation.ValidateImmutableField(spec.Names.Plural, oldSpec.Names.Plural, fldPath.Child("names", "plural"))...)
 
 	return allErrs
 }
 
-// getSubresourcesForVersion returns the subresources for given version in given CRD spec.
-// NOTE That this function assumes version always exist since it's used by the validation process
-// that iterates through the existing versions.
+// getSubresourcesForVersion 返回 CRD Spec 中指定版本的子资源配置。
+// 注意：调用方遍历的是已经存在的版本，因此本函数假定指定版本一定存在。
 func getSubresourcesForVersion(crd *apiextensions.CustomResourceDefinitionSpec, version string) *apiextensions.CustomResourceSubresources {
 	if !hasPerVersionSubresources(crd.Versions) {
 		return crd.Subresources
@@ -701,8 +696,7 @@ func getSubresourcesForVersion(crd *apiextensions.CustomResourceDefinitionSpec, 
 	return nil
 }
 
-// hasAnyStatusEnabled returns true if given CRD spec has at least one Status Subresource set
-// among the top-level and per-version Subresources.
+// hasAnyStatusEnabled 检查 CRD 顶层或任一版本的 Subresources 是否启用了 Status 子资源。
 func hasAnyStatusEnabled(crd *apiextensions.CustomResourceDefinitionSpec) bool {
 	if hasStatusEnabled(crd.Subresources) {
 		return true
@@ -715,7 +709,7 @@ func hasAnyStatusEnabled(crd *apiextensions.CustomResourceDefinitionSpec) bool {
 	return false
 }
 
-// hasStatusEnabled returns true if given CRD Subresources has non-nil Status set.
+// hasStatusEnabled 检查给定 Subresources 是否配置了非 nil 的 Status 子资源。
 func hasStatusEnabled(subresources *apiextensions.CustomResourceSubresources) bool {
 	if subresources != nil && subresources.Status != nil {
 		return true
@@ -723,7 +717,7 @@ func hasStatusEnabled(subresources *apiextensions.CustomResourceSubresources) bo
 	return false
 }
 
-// hasPerVersionSchema returns true if a CRD uses per-version schema.
+// hasPerVersionSchema 判断 CRD 是否使用逐版本 schema。
 func hasPerVersionSchema(versions []apiextensions.CustomResourceDefinitionVersion) bool {
 	for _, v := range versions {
 		if v.Schema != nil {
@@ -733,7 +727,7 @@ func hasPerVersionSchema(versions []apiextensions.CustomResourceDefinitionVersio
 	return false
 }
 
-// hasPerVersionSubresources returns true if a CRD uses per-version subresources.
+// hasPerVersionSubresources 判断 CRD 是否使用逐版本子资源配置。
 func hasPerVersionSubresources(versions []apiextensions.CustomResourceDefinitionVersion) bool {
 	for _, v := range versions {
 		if v.Subresources != nil {
@@ -743,7 +737,7 @@ func hasPerVersionSubresources(versions []apiextensions.CustomResourceDefinition
 	return false
 }
 
-// hasPerVersionColumns returns true if a CRD uses per-version columns.
+// hasPerVersionColumns 判断 CRD 是否使用逐版本打印列配置。
 func hasPerVersionColumns(versions []apiextensions.CustomResourceDefinitionVersion) bool {
 	for _, v := range versions {
 		if len(v.AdditionalPrinterColumns) > 0 {
@@ -753,8 +747,7 @@ func hasPerVersionColumns(versions []apiextensions.CustomResourceDefinitionVersi
 	return false
 }
 
-// hasIdenticalPerVersionSchema returns true if a CRD sets identical non-nil values
-// to all per-version schemas
+// hasIdenticalPerVersionSchema 判断 CRD 的所有版本是否都设置了完全相同的非 nil schema。
 func hasIdenticalPerVersionSchema(versions []apiextensions.CustomResourceDefinitionVersion) bool {
 	if len(versions) == 0 {
 		return false
@@ -768,8 +761,7 @@ func hasIdenticalPerVersionSchema(versions []apiextensions.CustomResourceDefinit
 	return true
 }
 
-// hasIdenticalPerVersionSubresources returns true if a CRD sets identical non-nil values
-// to all per-version subresources
+// hasIdenticalPerVersionSubresources 判断 CRD 的所有版本是否都设置了完全相同的非 nil 子资源配置。
 func hasIdenticalPerVersionSubresources(versions []apiextensions.CustomResourceDefinitionVersion) bool {
 	if len(versions) == 0 {
 		return false
@@ -783,8 +775,7 @@ func hasIdenticalPerVersionSubresources(versions []apiextensions.CustomResourceD
 	return true
 }
 
-// hasIdenticalPerVersionColumns returns true if a CRD sets identical non-nil values
-// to all per-version columns
+// hasIdenticalPerVersionColumns 判断 CRD 的所有版本是否都设置了完全相同的非 nil 打印列配置。
 func hasIdenticalPerVersionColumns(versions []apiextensions.CustomResourceDefinitionVersion) bool {
 	if len(versions) == 0 {
 		return false
@@ -806,7 +797,7 @@ func ValidateCustomResourceDefinitionStatus(status *apiextensions.CustomResource
 	return allErrs
 }
 
-// ValidateCustomResourceDefinitionNames statically validates
+// ValidateCustomResourceDefinitionNames 静态校验 CRD 的名称字段。
 func ValidateCustomResourceDefinitionNames(names *apiextensions.CustomResourceDefinitionNames, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if errs := utilvalidation.IsDNS1035Label(names.Plural); len(names.Plural) > 0 && len(errs) > 0 {
@@ -828,7 +819,7 @@ func ValidateCustomResourceDefinitionNames(names *apiextensions.CustomResourceDe
 		}
 	}
 
-	// kind and listKind may not be the same or parsing become ambiguous
+	// kind 与 listKind 不能相同，否则资源对象和列表对象的解析会产生歧义。
 	if len(names.Kind) > 0 && names.Kind == names.ListKind {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("listKind"), names.ListKind, "kind and listKind may not be the same"))
 	}
@@ -842,7 +833,7 @@ func ValidateCustomResourceDefinitionNames(names *apiextensions.CustomResourceDe
 	return allErrs
 }
 
-// ValidateCustomResourceColumnDefinition statically validates a printer column.
+// ValidateCustomResourceColumnDefinition 静态校验一条 AdditionalPrinterColumn 打印列定义。
 func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceColumnDefinition, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -877,7 +868,7 @@ func ValidateCustomResourceSelectableFields(selectableFields []apiextensions.Sel
 			allErrs = append(allErrs, field.Required(indexFldPath.Child("jsonPath"), ""))
 			continue
 		}
-		// Leverage the field path validation originally built for use with CEL features
+		// 复用最初为 CEL 功能构建的字段路径校验逻辑。
 		path, foundSchema, err := cel.ValidFieldPath(selectableField.JSONPath, schema, cel.WithFieldPathAllowArrayNotation(false))
 		if err != nil {
 			allErrs = append(allErrs, field.Invalid(indexFldPath.Child("jsonPath"), selectableField.JSONPath, fmt.Sprintf("is an invalid path: %v", err)))
@@ -914,22 +905,22 @@ func allowedSelectableFieldSchema(schema *structuralschema.Structural) bool {
 	}
 }
 
-// specStandardValidator applies validations for different OpenAPI specification versions.
+// specStandardValidator 根据不同 OpenAPI 规范版本应用相应的校验规则。
 type specStandardValidator interface {
 	validate(spec *apiextensions.JSONSchemaProps, fldPath *field.Path) field.ErrorList
 	withForbiddenDefaults(reason string) specStandardValidator
 
-	// insideResourceMeta returns true when validating either TypeMeta or ObjectMeta, from an embedded resource or on the top-level.
+	// insideResourceMeta 判断当前校验路径是否位于嵌入资源或顶层资源的 TypeMeta/ObjectMeta 中。
 	insideResourceMeta() bool
 	withInsideResourceMeta() specStandardValidator
 
-	// forbidOldSelfValidations returns the path to the first ancestor of the visited path that can't be safely correlated between two revisions of an object, or nil if there is no such path
+	// forbidOldSelfValidations 返回无法在对象两个版本之间安全关联的最上层祖先路径；若不存在此类路径则返回 nil。
 	forbidOldSelfValidations() *field.Path
 	withForbidOldSelfValidations(path *field.Path) specStandardValidator
 }
 
-// validateCustomResourceDefinitionValidation statically validates
-// context is passed for supporting context cancellation during cel validation when validating defaults
+// validateCustomResourceDefinitionValidation 静态校验 CRD 的 OpenAPI schema 和 CEL 规则。
+// 传入 context，以便校验默认值中的 CEL 表达式时支持取消操作。
 func validateCustomResourceDefinitionValidation(ctx context.Context, customResourceValidation *apiextensions.CustomResourceValidation, statusSubresourceEnabled bool, opts validationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -938,19 +929,19 @@ func validateCustomResourceDefinitionValidation(ctx context.Context, customResou
 	}
 
 	if schema := customResourceValidation.OpenAPIV3Schema; schema != nil {
-		// if the status subresource is enabled, only certain fields are allowed inside the root schema.
-		// these fields are chosen such that, if status is extracted as properties["status"], it's validation is not lost.
+		// 启用 Status 子资源时，根 schema 中只允许出现特定字段。
+		// 这些字段的选择确保将 status 提取为 properties["status"] 后，不会丢失对应的校验规则。
 		if statusSubresourceEnabled {
 			v := reflect.ValueOf(schema).Elem()
 			for i := 0; i < v.NumField(); i++ {
-				// skip zero values
+				// 跳过零值字段。
 				if value := v.Field(i).Interface(); reflect.DeepEqual(value, reflect.Zero(reflect.TypeOf(value)).Interface()) {
 					continue
 				}
 
 				fieldName := v.Type().Field(i).Name
 
-				// only "object" type is valid at root of the schema since validation schema for status is extracted as properties["status"]
+				// 根 schema 只允许 object 类型，因为 Status 校验 schema 会从 properties["status"] 中单独提取。
 				if fieldName == "Type" {
 					if schema.Type != "object" {
 						allErrs = append(allErrs, field.Invalid(fldPath.Child("openAPIV3Schema.type"), schema.Type, fmt.Sprintf(`only "object" is allowed as the type at the root of the schema if the status subresource is enabled`)))
@@ -980,27 +971,27 @@ func validateCustomResourceDefinitionValidation(ctx context.Context, customResou
 		var structuralSchemaInitErrs field.ErrorList
 		if opts.requireStructuralSchema {
 			if ss, err := structuralschema.NewStructural(schema); err != nil {
-				// These validation errors overlap with  OpenAPISchema validation errors so we keep track of them
-				// separately and only show them if OpenAPISchema validation does not report any errors.
+				// 这些错误与 OpenAPISchema 校验错误存在重叠，因此单独记录；
+				// 只有 OpenAPISchema 校验未报告错误时才展示。
 				structuralSchemaInitErrs = append(structuralSchemaInitErrs, field.Invalid(fldPath.Child("openAPIV3Schema"), "", err.Error()))
 			} else if validationErrors := structuralschema.ValidateStructural(fldPath.Child("openAPIV3Schema"), ss); len(validationErrors) > 0 {
 				allErrs = append(allErrs, validationErrors...)
 			} else if validationErrors, err := structuraldefaulting.ValidateDefaults(ctx, fldPath.Child("openAPIV3Schema"), ss, true, opts.requirePrunedDefaults); err != nil {
-				// this should never happen
+				// 正常情况下不应进入此分支。
 				allErrs = append(allErrs, field.Invalid(fldPath.Child("openAPIV3Schema"), "", err.Error()))
 			} else if len(validationErrors) > 0 {
 				allErrs = append(allErrs, validationErrors...)
 			} else {
-				// Only initialize CEL rule validation context if the structural schemas are valid.
-				// A nil CELSchemaContext indicates that no CEL validation should be attempted.
+				// 只有 Structural Schema 合法时才初始化 CEL 规则校验上下文。
+				// CELSchemaContext 为 nil 表示不应尝试执行 CEL 校验。
 				celContext = RootCELContext(schema)
 			}
 		}
 		allErrs = append(allErrs, ValidateCustomResourceDefinitionOpenAPISchema(schema, fldPath.Child("openAPIV3Schema"), openAPIV3Schema, true, &opts, celContext).AllErrors()...)
 
 		if len(allErrs) == 0 && len(structuralSchemaInitErrs) > 0 {
-			// Structural schema initialization errors overlap with OpenAPISchema validation errors so we only show them
-			// if there are no OpenAPISchema validation errors.
+			// Structural Schema 初始化错误可能与 OpenAPISchema 校验错误重叠，
+			// 因此仅在没有 OpenAPISchema 校验错误时展示。
 			allErrs = append(allErrs, structuralSchemaInitErrs...)
 		}
 
@@ -1017,7 +1008,7 @@ func validateCustomResourceDefinitionValidation(ctx context.Context, customResou
 		}
 	}
 
-	// if validation passed otherwise, make sure we can actually construct a schema validator from this custom resource validation.
+	// 如果前面的校验均通过，还需确认能够根据该自定义资源校验配置成功构建 schema validator。
 	if len(allErrs) == 0 {
 		if _, _, err := apiservervalidation.NewSchemaValidator(customResourceValidation.OpenAPIV3Schema); err != nil {
 			allErrs = append(allErrs, field.Invalid(fldPath, "", fmt.Sprintf("error building validator: %v", err)))
@@ -1028,14 +1019,14 @@ func validateCustomResourceDefinitionValidation(ctx context.Context, customResou
 
 var metaFields = sets.NewString("metadata", "kind", "apiVersion")
 
-// OpenAPISchemaErrorList tracks all validation errors reported ValidateCustomResourceDefinitionOpenAPISchema
-// with CEL related errors kept separate from schema related errors.
+// OpenAPISchemaErrorList 汇总 ValidateCustomResourceDefinitionOpenAPISchema 报告的所有错误，
+// 并将 CEL 相关错误与 schema 结构错误分别保存。
 type OpenAPISchemaErrorList struct {
 	SchemaErrors field.ErrorList
 	CELErrors    field.ErrorList
 }
 
-// AppendErrors appends all errors in the provided list with the errors of this list.
+// AppendErrors 将传入错误列表中的错误追加到当前列表。
 func (o *OpenAPISchemaErrorList) AppendErrors(list *OpenAPISchemaErrorList) {
 	if o == nil || list == nil {
 		return
@@ -1044,7 +1035,7 @@ func (o *OpenAPISchemaErrorList) AppendErrors(list *OpenAPISchemaErrorList) {
 	o.CELErrors = append(o.CELErrors, list.CELErrors...)
 }
 
-// AllErrors returns a list containing both schema and CEL errors.
+// AllErrors 返回同时包含 schema 错误和 CEL 错误的列表。
 func (o *OpenAPISchemaErrorList) AllErrors() field.ErrorList {
 	if o == nil {
 		return field.ErrorList{}
@@ -1052,7 +1043,7 @@ func (o *OpenAPISchemaErrorList) AllErrors() field.ErrorList {
 	return append(o.SchemaErrors, o.CELErrors...)
 }
 
-// ValidateCustomResourceDefinitionOpenAPISchema statically validates
+// ValidateCustomResourceDefinitionOpenAPISchema 静态校验 CRD 的 OpenAPI schema。
 func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSchemaProps, fldPath *field.Path, ssv specStandardValidator, isRoot bool, opts *validationOptions, celContext *CELSchemaContext) *OpenAPISchemaErrorList {
 	allErrs := &OpenAPISchemaErrorList{SchemaErrors: field.ErrorList{}, CELErrors: field.ErrorList{}}
 
@@ -1065,26 +1056,26 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 		allErrs.SchemaErrors = append(allErrs.SchemaErrors, field.Forbidden(fldPath.Child("uniqueItems"), "uniqueItems cannot be set to true since the runtime complexity becomes quadratic"))
 	}
 
-	// additionalProperties and properties are mutual exclusive because otherwise they
-	// contradict Kubernetes' API convention to ignore unknown fields.
+	// additionalProperties 与 properties 不能同时设置，
+	// 否则会与 Kubernetes 忽略未知字段的 API 约定冲突。
 	//
-	// In other words:
-	// - properties are for structs,
-	// - additionalProperties are for map[string]interface{}
+	// 换言之：
+	// - properties 用于描述结构体字段；
+	// - additionalProperties 用于描述 map[string]interface{}。
 	//
-	// Note: when patternProperties is added to OpenAPI some day, this will have to be
-	//       restricted like additionalProperties.
+	// 注意：未来若 OpenAPI 增加 patternProperties，也需要
+	// 像 additionalProperties 一样限制其使用范围。
 	if schema.AdditionalProperties != nil {
 		if len(schema.Properties) != 0 {
 			if !schema.AdditionalProperties.Allows || schema.AdditionalProperties.Schema != nil {
 				allErrs.SchemaErrors = append(allErrs.SchemaErrors, field.Forbidden(fldPath.Child("additionalProperties"), "additionalProperties and properties are mutual exclusive"))
 			}
 		}
-		// Note: we forbid additionalProperties at resource root, both embedded and top-level.
-		//       But further inside, additionalProperites is possible, e.g. for labels or annotations.
+		// 注意：无论嵌入资源还是顶层资源，根节点都禁止使用 additionalProperties。
+		// 但在更深层的字段中仍可使用，例如 labels 或 annotations。
 		subSsv := ssv
 		if ssv.insideResourceMeta() {
-			// we have to forbid defaults inside additionalProperties because pruning without actual value is ambiguous
+			// additionalProperties 内必须禁止设置默认值，因为缺少实际值时无法明确执行字段裁剪。
 			subSsv = ssv.withForbiddenDefaults("inside additionalProperties applying to object metadata")
 		}
 		allErrs.AppendErrors(ValidateCustomResourceDefinitionOpenAPISchema(schema.AdditionalProperties.Schema, fldPath.Child("additionalProperties"), subSsv, false, opts, celContext.ChildAdditionalPropertiesContext(schema.AdditionalProperties.Schema)))
@@ -1099,7 +1090,7 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 			}
 
 			if (isRoot || schema.XEmbeddedResource) && metaFields.Has(property) {
-				// we recurse into the schema that applies to ObjectMeta.
+				// 递归校验适用于 ObjectMeta 的 schema。
 				subSsv = subSsv.withInsideResourceMeta()
 				if isRoot {
 					subSsv = subSsv.withForbiddenDefaults(fmt.Sprintf("in top-level %s", property))
@@ -1143,9 +1134,9 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 	if schema.Items != nil {
 		subSsv := ssv
 
-		// we can only correlate old/new items for "map" and "set" lists, and correlation of
-		// "set" elements by identity is not supported for cel (x-kubernetes-validations)
-		// rules. an unset list type defaults to "atomic".
+		// 只有 map 和 set 列表能够关联新旧对象中的元素；
+		// CEL（x-kubernetes-validations）规则不支持按身份关联 set 元素。
+		// 未设置列表类型时，默认按 atomic 处理。
 		if schema.XListType == nil || *schema.XListType != "map" {
 			subSsv = subSsv.withForbidOldSelfValidations(fldPath)
 		}
@@ -1286,10 +1277,10 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 			}
 		}
 
-		// If any schema related validation errors have been found at this level or deeper, skip CEL expression validation.
-		// Invalid OpenAPISchemas are not always possible to convert into valid CEL DeclTypes, and can lead to CEL
-		// validation error messages that are not actionable (will go away once the schema errors are resolved) and that
-		// are difficult for CEL expression authors to understand.
+		// 如果当前层级或更深层级已经发现 schema 校验错误，则跳过 CEL 表达式校验。
+		// 无效的 OpenAPI schema 不一定能转换为合法的 CEL DeclTypes；继续校验可能产生
+		// 无法采取有效措施的错误（修复 schema 问题后这些错误就会消失），
+		// 也会增加 CEL 表达式编写者的理解难度。
 		if len(allErrs.SchemaErrors) == 0 && celContext != nil {
 			typeInfo, err := celContext.TypeInfo()
 			if err != nil {
@@ -1347,7 +1338,7 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 }
 
 func pathValid(schema *apiextensions.JSONSchemaProps, path string) bool {
-	// To avoid duplicated code and better maintain, using ValidaFieldPath func to check if the path is valid
+	// 为避免重复代码并便于维护，统一使用 ValidateFieldPath 函数检查路径是否合法。
 	if ss, err := structuralschema.NewStructural(schema); err == nil {
 		_, _, err := cel.ValidFieldPath(path, ss)
 		return err == nil
@@ -1355,11 +1346,11 @@ func pathValid(schema *apiextensions.JSONSchemaProps, path string) bool {
 	return true
 }
 
-// multiplyWithOverflowGuard returns the product of baseCost and cardinality unless that product
-// would exceed math.MaxUint, in which case math.MaxUint is returned.
+// multiplyWithOverflowGuard 返回 baseCost 与 cardinality 的乘积；
+// 若乘积会超过 math.MaxUint，则返回 math.MaxUint。
 func multiplyWithOverflowGuard(baseCost, cardinality uint64) uint64 {
 	if baseCost == 0 {
-		// an empty rule can return 0, so guard for that here
+		// 空规则可能返回 0，因此在此处进行保护处理。
 		return 0
 	} else if math.MaxUint/baseCost < cardinality {
 		return math.MaxUint
@@ -1378,9 +1369,9 @@ func getCostErrorMessage(costName string, expressionCost, costLimit uint64) stri
 	exceedFactor := float64(expressionCost) / float64(costLimit)
 	var factor string
 	if exceedFactor > 100.0 {
-		// if exceedFactor is greater than 2 orders of magnitude, the rule is likely O(n^2) or worse
-		// and will probably never validate without some set limits
-		// also in such cases the cost estimation is generally large enough to not add any value
+		// 如果 exceedFactor 超过两个数量级，该规则很可能达到 O(n²) 或更高复杂度，
+		// 若不设置限制通常无法通过校验。
+		// 在这种情况下，成本估算值通常已经足够大，进一步估算也不会带来额外价值。
 		factor = fmt.Sprintf("more than 100x")
 	} else if exceedFactor < 1.5 {
 		factor = fmt.Sprintf("%fx", exceedFactor) // avoid reporting "exceeds budge by a factor of 1.0x"
@@ -1408,14 +1399,14 @@ func validateMapListKeysMapSet(schema *apiextensions.JSONSchemaProps, fldPath *f
 		return nil
 	}
 
-	// set and map list items cannot be nullable
+	// set 和 map 列表的元素不能为 nullable。
 	if schema.Items.Schema.Nullable {
 		allErrs = append(allErrs, field.Forbidden(fldPath.Child("items").Child("nullable"), "cannot be nullable when x-kubernetes-list-type is "+*schema.XListType))
 	}
 
 	switch *schema.XListType {
 	case "map":
-		// ensure all map keys are required or have a default
+		// 确保所有 map 键字段均为必填项或提供了默认值。
 		isRequired := make(map[string]bool, len(schema.Items.Schema.Required))
 		for _, required := range schema.Items.Schema.Required {
 			isRequired[required] = true
@@ -1424,7 +1415,7 @@ func validateMapListKeysMapSet(schema *apiextensions.JSONSchemaProps, fldPath *f
 		for _, k := range schema.XListMapKeys {
 			obj, ok := schema.Items.Schema.Properties[k]
 			if !ok {
-				// we validate that all XListMapKeys are existing properties in ValidateCustomResourceDefinitionOpenAPISchema, so skipping here is ok
+				// ValidateCustomResourceDefinitionOpenAPISchema 已检查所有 XListMapKeys 是否对应现有属性，因此这里可以跳过重复检查。
 				continue
 			}
 
@@ -1437,7 +1428,7 @@ func validateMapListKeysMapSet(schema *apiextensions.JSONSchemaProps, fldPath *f
 			}
 		}
 	case "set":
-		// no other set-specific validation
+		// 没有其他针对 set 列表的专属校验。
 	}
 
 	return allErrs
@@ -1470,8 +1461,7 @@ func (v *specStandardValidatorV3) insideResourceMeta() bool {
 
 func (v *specStandardValidatorV3) withForbidOldSelfValidations(path *field.Path) specStandardValidator {
 	if v.uncorrelatableOldSelfValidationPath != nil {
-		// oldSelf validations are already forbidden. preserve the highest-level path
-		// causing oldSelf validations to be forbidden
+		// oldSelf 校验已被禁止；保留导致该限制生效的最高层级路径。
 		return v
 	}
 	clone := *v
@@ -1483,7 +1473,7 @@ func (v *specStandardValidatorV3) forbidOldSelfValidations() *field.Path {
 	return v.uncorrelatableOldSelfValidationPath
 }
 
-// validate validates against OpenAPI Schema v3.
+// validate 根据 OpenAPI Schema v3 执行校验。
 func (v *specStandardValidatorV3) validate(schema *apiextensions.JSONSchemaProps, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -1492,7 +1482,7 @@ func (v *specStandardValidatorV3) validate(schema *apiextensions.JSONSchemaProps
 	}
 
 	//
-	// WARNING: if anything new is allowed below, NewStructural must be adapted to support it.
+	// WARNING：如果在下方新增允许的字段或结构，必须同步调整 NewStructural 以支持这些内容。
 	//
 
 	if v.requireValidPropertyType && len(schema.Type) > 0 && !openapiV3Types.Has(schema.Type) {
@@ -1546,7 +1536,7 @@ func (v *specStandardValidatorV3) validate(schema *apiextensions.JSONSchemaProps
 	return allErrs
 }
 
-// ValidateCustomResourceDefinitionSubresources statically validates
+// ValidateCustomResourceDefinitionSubresources 静态校验 CRD 的 Status、Scale 等子资源配置。
 func ValidateCustomResourceDefinitionSubresources(subresources *apiextensions.CustomResourceSubresources, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -1558,7 +1548,7 @@ func ValidateCustomResourceDefinitionSubresources(subresources *apiextensions.Cu
 		if len(subresources.Scale.SpecReplicasPath) == 0 {
 			allErrs = append(allErrs, field.Required(fldPath.Child("scale.specReplicasPath"), ""))
 		} else {
-			// should be constrained json path under .spec
+			// 必须是 .spec 下受约束的 JSON 路径。
 			if errs := validateSimpleJSONPath(subresources.Scale.SpecReplicasPath, fldPath.Child("scale.specReplicasPath")); len(errs) > 0 {
 				allErrs = append(allErrs, errs...)
 			} else if !strings.HasPrefix(subresources.Scale.SpecReplicasPath, ".spec.") {
@@ -1569,7 +1559,7 @@ func ValidateCustomResourceDefinitionSubresources(subresources *apiextensions.Cu
 		if len(subresources.Scale.StatusReplicasPath) == 0 {
 			allErrs = append(allErrs, field.Required(fldPath.Child("scale.statusReplicasPath"), ""))
 		} else {
-			// should be constrained json path under .status
+			// 必须是 .status 下受约束的 JSON 路径。
 			if errs := validateSimpleJSONPath(subresources.Scale.StatusReplicasPath, fldPath.Child("scale.statusReplicasPath")); len(errs) > 0 {
 				allErrs = append(allErrs, errs...)
 			} else if !strings.HasPrefix(subresources.Scale.StatusReplicasPath, ".status.") {
@@ -1577,7 +1567,7 @@ func ValidateCustomResourceDefinitionSubresources(subresources *apiextensions.Cu
 			}
 		}
 
-		// if labelSelectorPath is present, it should be a constrained json path under .status
+		// 如果设置了 labelSelectorPath，则必须是 .status 下受约束的 JSON 路径。
 		if subresources.Scale.LabelSelectorPath != nil && len(*subresources.Scale.LabelSelectorPath) > 0 {
 			if errs := validateSimpleJSONPath(*subresources.Scale.LabelSelectorPath, fldPath.Child("scale.labelSelectorPath")); len(errs) > 0 {
 				allErrs = append(allErrs, errs...)
@@ -1618,10 +1608,10 @@ func allowedAtRootSchema(field string) bool {
 	return false
 }
 
-// requireOpenAPISchema returns true if the request group version requires a schema
+// requireOpenAPISchema 判断请求对应的 API Group/Version 是否必须提供 schema。
 func requireOpenAPISchema(oldCRDSpec *apiextensions.CustomResourceDefinitionSpec) bool {
 	if oldCRDSpec != nil && !allVersionsSpecifyOpenAPISchema(oldCRDSpec) {
-		// don't tighten validation on existing persisted data
+		// 不要收紧对已经持久化数据的校验要求，以保持升级兼容性。
 		return false
 	}
 	return true
@@ -1676,11 +1666,11 @@ func schemaHasRecurse(s *apiextensions.JSONSchemaProps, pred func(s *apiextensio
 	return SchemaHas(schema, pred)
 }
 
-// SchemaHas recursively traverses the Schema and calls the `pred`
-// predicate to see if the schema contains specific values.
+// SchemaHas 递归遍历 Schema，并调用 pred
+// 判断 schema 是否包含指定内容。
 //
-// The predicate MUST NOT keep a copy of the json schema NOR modify the
-// schema.
+// pred 不得保留 JSON Schema 的副本，也不得修改传入的
+// schema。
 func SchemaHas(s *apiextensions.JSONSchemaProps, pred func(s *apiextensions.JSONSchemaProps) bool) bool {
 	if s == nil {
 		return false
@@ -1770,10 +1760,10 @@ func schemaHasKubernetesExtensions(s *apiextensions.JSONSchemaProps) bool {
 	})
 }
 
-// requireStructuralSchema returns true if schemas specified must be structural
+// requireStructuralSchema 判断指定 API 版本是否要求 schema 必须满足 Structural Schema 约束。
 func requireStructuralSchema(oldCRDSpec *apiextensions.CustomResourceDefinitionSpec) bool {
 	if oldCRDSpec != nil && specHasNonStructuralSchema(oldCRDSpec) {
-		// don't tighten validation on existing persisted data
+		// 不要收紧对已经持久化数据的校验要求，以保持升级兼容性。
 		return false
 	}
 	return true
@@ -1801,7 +1791,7 @@ func schemaIsNonStructural(schema *apiextensions.JSONSchemaProps) bool {
 	return len(structuralschema.ValidateStructural(nil, ss)) > 0
 }
 
-// requirePrunedDefaults returns false if there are any unpruned default in oldCRDSpec, and true otherwise.
+// requirePrunedDefaults：如果旧 CRD Spec 中存在尚未裁剪的默认值则返回 false，否则返回 true。
 func requirePrunedDefaults(oldCRDSpec *apiextensions.CustomResourceDefinitionSpec) bool {
 	if oldCRDSpec.Validation != nil {
 		if has, err := schemaHasUnprunedDefaults(oldCRDSpec.Validation.OpenAPIV3Schema); err == nil && has {
@@ -1836,12 +1826,12 @@ func schemaHasUnprunedDefaults(schema *apiextensions.JSONSchemaProps) (bool, err
 	return !reflect.DeepEqual(ss, pruned), nil
 }
 
-// requireAtomicSetType returns true if the old CRD spec as at least one x-kubernetes-list-type=set with non-atomic items type.
+// requireAtomicSetType 判断旧 CRD Spec 是否包含至少一个元素类型非 atomic 的 x-kubernetes-list-type=set 列表。
 func requireAtomicSetType(oldCRDSpec *apiextensions.CustomResourceDefinitionSpec) bool {
 	return !HasSchemaWith(oldCRDSpec, hasNonAtomicSetType)
 }
 
-// hasNonAtomicSetType recurses over the schema and returns whether any list of type "set" as non-atomic item types.
+// hasNonAtomicSetType 递归遍历 schema，判断是否存在元素类型非 atomic 的 set 列表。
 func hasNonAtomicSetType(schema *apiextensions.JSONSchemaProps) bool {
 	return SchemaHas(schema, func(schema *apiextensions.JSONSchemaProps) bool {
 		if schema.XListType != nil && *schema.XListType == "set" && schema.Items != nil && schema.Items.Schema != nil { // we don't support schema.Items.JSONSchemas
@@ -1869,24 +1859,24 @@ func hasInvalidMapListKeysMapSet(schema *apiextensions.JSONSchemaProps) bool {
 	})
 }
 
-// requireValidPropertyType returns true if valid openapi v3 types should be required for the given API version
+// requireValidPropertyType 判断指定 API 版本是否要求属性类型必须属于合法的 OpenAPI v3 类型。
 func requireValidPropertyType(oldCRDSpec *apiextensions.CustomResourceDefinitionSpec) bool {
 	if oldCRDSpec != nil && specHasInvalidTypes(oldCRDSpec) {
-		// don't tighten validation on existing persisted data
+		// 不要收紧对已经持久化数据的校验要求，以保持升级兼容性。
 		return false
 	}
 	return true
 }
 
-// validateAPIApproval returns a list of errors if the API approval annotation isn't valid
+// validateAPIApproval 在 API 审批 annotation 不合法时返回对应的校验错误。
 func validateAPIApproval(newCRD, oldCRD *apiextensions.CustomResourceDefinition) field.ErrorList {
-	// check to see if we need confirm API approval for kube group.
+	// 检查当前 API Group 是否需要执行 Kubernetes API 审批。
 	if !apihelpers.IsProtectedCommunityGroup(newCRD.Spec.Group) {
-		// no-op for non-protected groups
+		// 非受保护的 API Group 无需执行审批校验。
 		return nil
 	}
 
-	// default to a state that allows missing values to continue to be missing
+	// 默认采用允许缺失值继续保持缺失的状态，以兼容已有对象。
 	var oldApprovalState *apihelpers.APIApprovalState
 	if oldCRD != nil {
 		t, _ := apihelpers.GetAPIApprovalState(oldCRD.Annotations)
@@ -1894,20 +1884,20 @@ func validateAPIApproval(newCRD, oldCRD *apiextensions.CustomResourceDefinition)
 	}
 	newApprovalState, reason := apihelpers.GetAPIApprovalState(newCRD.Annotations)
 
-	// if the approval state hasn't changed, never fail on approval validation
-	// this is allowed so that a v1 client that is simply updating spec and not mutating this value doesn't get rejected.  Imagine a controller controlling a CRD spec.
+	// 如果审批状态没有变化，则不因审批校验而拒绝更新。
+	// 这样仅更新 Spec、没有修改该字段的 v1 客户端不会被拒绝，例如负责持续调谐 CRD Spec 的控制器。
 	if oldApprovalState != nil && *oldApprovalState == newApprovalState {
 		return nil
 	}
 
-	// in v1, we require valid approval strings
+	// 对于 v1 API，审批 annotation 必须是合法字符串。
 	switch newApprovalState {
 	case apihelpers.APIApprovalInvalid:
 		return field.ErrorList{field.Invalid(field.NewPath("metadata", "annotations").Key(apiextensionsv1beta1.KubeAPIApprovedAnnotation), newCRD.Annotations[apiextensionsv1beta1.KubeAPIApprovedAnnotation], reason)}
 	case apihelpers.APIApprovalMissing:
 		return field.ErrorList{field.Required(field.NewPath("metadata", "annotations").Key(apiextensionsv1beta1.KubeAPIApprovedAnnotation), reason)}
 	case apihelpers.APIApproved, apihelpers.APIApprovalBypassed:
-		// success
+		// 审批校验通过。
 		return nil
 	default:
 		return field.ErrorList{field.Invalid(field.NewPath("metadata", "annotations").Key(apiextensionsv1beta1.KubeAPIApprovedAnnotation), newCRD.Annotations[apiextensionsv1beta1.KubeAPIApprovedAnnotation], reason)}
@@ -1916,13 +1906,13 @@ func validateAPIApproval(newCRD, oldCRD *apiextensions.CustomResourceDefinition)
 
 func validatePreserveUnknownFields(crd, oldCRD *apiextensions.CustomResourceDefinition) field.ErrorList {
 	if oldCRD != nil && oldCRD.Spec.PreserveUnknownFields != nil && *oldCRD.Spec.PreserveUnknownFields {
-		// no-op for compatibility with existing data
+		// 为兼容已有数据，不执行额外处理。
 		return nil
 	}
 
 	var errs field.ErrorList
 	if crd != nil && crd.Spec.PreserveUnknownFields != nil && *crd.Spec.PreserveUnknownFields {
-		// disallow changing spec.preserveUnknownFields=false to spec.preserveUnknownFields=true
+		// 禁止将 spec.preserveUnknownFields 从 false 改为 true。
 		errs = append(errs, field.Invalid(field.NewPath("spec").Child("preserveUnknownFields"), crd.Spec.PreserveUnknownFields, "cannot set to true, set x-kubernetes-preserve-unknown-fields to true in spec.versions[*].schema instead"))
 	}
 	return errs
@@ -1940,7 +1930,7 @@ func specHasInvalidTypes(spec *apiextensions.CustomResourceDefinitionSpec) bool 
 	return false
 }
 
-// SchemaHasInvalidTypes returns true if it contains invalid offending openapi-v3 specification.
+// SchemaHasInvalidTypes 判断 schema 是否包含不合法的 OpenAPI v3 类型定义。
 func SchemaHasInvalidTypes(s *apiextensions.JSONSchemaProps) bool {
 	return SchemaHas(s, func(s *apiextensions.JSONSchemaProps) bool {
 		return len(s.Type) > 0 && !openapiV3Types.Has(s.Type)

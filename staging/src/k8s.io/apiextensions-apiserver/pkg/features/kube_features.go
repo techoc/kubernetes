@@ -26,15 +26,13 @@ import (
 // 本文件定义 apiextensions-apiserver 的功能门控（Feature Gates）。
 // 每个功能门控控制一个 CRD 相关特性的开关状态（Alpha/Beta/GA）。
 //
-// Every feature gate should have an entry here following this template:
+// 每个功能门控都应按照以下模板在此处登记：
 //
 // // owner: @username
 // MyFeature() bool
 //
-// Feature gates should be listed in alphabetical, case-sensitive
-// (upper before any lower case character) order. This reduces the risk
-// of code conflicts because changes are more likely to be scattered
-// across the file.
+// 功能门控应按区分大小写的字母顺序排列（大写字母排在小写字母之前）。
+// 这样可以让不同功能门控的修改分散在文件各处，降低多人并行修改时发生冲突的概率。
 const (
 	// owner: @michaelasp
 	// kep: https://kep.k8s.io/4192
@@ -67,7 +65,7 @@ func init() {
 // 每个功能门控记录了从 Alpha → Beta → GA 的演进历程，包括默认值和锁定状态。
 // 为了支持 n-3 兼容性，功能门控在 GA 后至少保留 3 个版本才能移除。
 //
-// Entries are alphabetized.
+// 条目按字母顺序排列。
 var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate.VersionedSpecs{
 	CRDObservedGenerationTracking: {
 		{Version: version.MustParse("1.35"), PreRelease: featuregate.Beta, Default: false},
