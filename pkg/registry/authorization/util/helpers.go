@@ -30,7 +30,7 @@ import (
 	authorizationapi "k8s.io/kubernetes/pkg/apis/authorization"
 )
 
-// ResourceAttributesFrom combines the API object information and the user.Info from the context to build a full authorizer.AttributesRecord for resource access
+// ResourceAttributesFrom 将请求中的资源属性与用户身份组合为 Authorizer 所需的 AttributesRecord，并解析标签和字段选择器。
 func ResourceAttributesFrom(user user.Info, in authorizationapi.ResourceAttributes) authorizer.AttributesRecord {
 	ret := authorizer.AttributesRecord{
 		User:            user,
@@ -83,6 +83,7 @@ var labelSelectorOpToSelectionOp = map[metav1.LabelSelectorOperator]selection.Op
 	metav1.LabelSelectorOpDoesNotExist: selection.DoesNotExist,
 }
 
+// labelSelectorAsSelector 将 API LabelSelectorRequirement 转换为内部 labels.Requirements；无效项单独记录错误，其余有效项继续保留。
 func labelSelectorAsSelector(requirements []metav1.LabelSelectorRequirement) (labels.Requirements, error) {
 	if len(requirements) == 0 {
 		return nil, nil
@@ -107,17 +108,17 @@ func labelSelectorAsSelector(requirements []metav1.LabelSelectorRequirement) (la
 		reqs = append(reqs, *req)
 	}
 
-	// If this happens, it means all requirements ended up getting skipped.
-	// Return nil rather than [].
+	// 如果所有 Requirement 都因格式或操作符无效而被跳过，则返回 nil，避免返回一个非 nil 的空切片。
 	if len(reqs) == 0 {
 		reqs = nil
 	}
 
-	// Return any accumulated errors along with any accumulated requirements, so recognized / valid requirements can be considered by authorization.
-	// This is safe because requirements are ANDed together so dropping unknown / invalid ones results in a strictly broader authorization check.
+	// 同时返回已成功解析的 Requirement 和累计错误，使授权器仍可评估有效条件。
+	// Requirement 之间按 AND 组合；忽略无法识别的条件只会扩大匹配范围，不会意外缩小授权范围。
 	return labels.Requirements(reqs), utilerrors.NewAggregate(errs)
 }
 
+// fieldSelectorAsSelector 将 API FieldSelectorRequirement 转换为内部字段选择器条件；当前仅支持 In/NotIn 且每项必须恰有一个值。
 func fieldSelectorAsSelector(requirements []metav1.FieldSelectorRequirement) (fields.Requirements, error) {
 	if len(requirements) == 0 {
 		return nil, nil
@@ -137,14 +138,14 @@ func fieldSelectorAsSelector(requirements []metav1.FieldSelectorRequirement) (fi
 				errs = append(errs, fmt.Errorf("fieldSelectors in must have one value"))
 				continue
 			}
-			// when converting to fields.Requirement, use Equals to match how parsed field selectors behave
+			// 转换为 fields.Requirement 时使用 Equals，与解析原始字段选择器后的语义保持一致。
 			reqs = append(reqs, fields.Requirement{Field: expr.Key, Operator: selection.Equals, Value: expr.Values[0]})
 		case metav1.FieldSelectorOpNotIn:
 			if len(expr.Values) != 1 {
 				errs = append(errs, fmt.Errorf("fieldSelectors not in must have one value"))
 				continue
 			}
-			// when converting to fields.Requirement, use NotEquals to match how parsed field selectors behave
+			// 转换为 fields.Requirement 时使用 NotEquals，与解析原始字段选择器后的语义保持一致。
 			reqs = append(reqs, fields.Requirement{Field: expr.Key, Operator: selection.NotEquals, Value: expr.Values[0]})
 		case metav1.FieldSelectorOpExists, metav1.FieldSelectorOpDoesNotExist:
 			errs = append(errs, fmt.Errorf("fieldSelectors do not yet support %v", expr.Operator))
@@ -155,18 +156,17 @@ func fieldSelectorAsSelector(requirements []metav1.FieldSelectorRequirement) (fi
 		}
 	}
 
-	// If this happens, it means all requirements ended up getting skipped.
-	// Return nil rather than [].
+	// 如果所有 Requirement 都因格式或操作符无效而被跳过，则返回 nil，避免返回一个非 nil 的空切片。
 	if len(reqs) == 0 {
 		reqs = nil
 	}
 
-	// Return any accumulated errors along with any accumulated requirements, so recognized / valid requirements can be considered by authorization.
-	// This is safe because requirements are ANDed together so dropping unknown / invalid ones results in a strictly broader authorization check.
+	// 同时返回已成功解析的 Requirement 和累计错误，使授权器仍可评估有效条件。
+	// Requirement 之间按 AND 组合；忽略无法识别的条件只会扩大匹配范围，不会意外缩小授权范围。
 	return fields.Requirements(reqs), utilerrors.NewAggregate(errs)
 }
 
-// NonResourceAttributesFrom combines the API object information and the user.Info from the context to build a full authorizer.AttributesRecord for non resource access
+// NonResourceAttributesFrom 将用户身份与非资源请求属性组合为 Authorizer 所需的 AttributesRecord。
 func NonResourceAttributesFrom(user user.Info, in authorizationapi.NonResourceAttributes) authorizer.AttributesRecord {
 	return authorizer.AttributesRecord{
 		User:            user,
@@ -176,6 +176,7 @@ func NonResourceAttributesFrom(user user.Info, in authorizationapi.NonResourceAt
 	}
 }
 
+// convertToUserInfoExtra 将 API ExtraValue 转换为认证用户信息使用的 map[string][]string；nil 输入保持为 nil。
 func convertToUserInfoExtra(extra map[string]authorizationapi.ExtraValue) map[string][]string {
 	if extra == nil {
 		return nil
@@ -188,7 +189,7 @@ func convertToUserInfoExtra(extra map[string]authorizationapi.ExtraValue) map[st
 	return ret
 }
 
-// AuthorizationAttributesFrom takes a spec and returns the proper authz attributes to check it.
+// AuthorizationAttributesFrom 根据 SubjectAccessReviewSpec 构造资源请求或非资源请求对应的授权属性。
 func AuthorizationAttributesFrom(spec authorizationapi.SubjectAccessReviewSpec) authorizer.AttributesRecord {
 	userToCheck := &user.DefaultInfo{
 		Name:   spec.User,
@@ -207,7 +208,7 @@ func AuthorizationAttributesFrom(spec authorizationapi.SubjectAccessReviewSpec) 
 	return authorizationAttributes
 }
 
-// matchAllVersionIfEmpty returns a "*" if the version is unspecified
+// matchAllVersionIfEmpty 在请求未指定 API Version 时返回通配符 *，表示匹配所有版本。
 func matchAllVersionIfEmpty(version string) string {
 	if len(version) == 0 {
 		return "*"
@@ -215,8 +216,7 @@ func matchAllVersionIfEmpty(version string) string {
 	return version
 }
 
-// BuildEvaluationError constructs the evaluation error string to include in *SubjectAccessReview status
-// based on the authorizer evaluation error and any field and label selector parse errors.
+// BuildEvaluationError 汇总 Authorizer 执行错误以及字段/标签选择器解析错误，生成写入 SubjectAccessReview.Status 的诊断信息。
 func BuildEvaluationError(evaluationError error, attrs authorizer.AttributesRecord) string {
 	var evaluationErrors []string
 	if evaluationError != nil {

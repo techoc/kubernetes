@@ -29,33 +29,31 @@ import (
 	authorizationapi "k8s.io/kubernetes/pkg/apis/authorization"
 )
 
-// REST implements a RESTStorage for selfsubjectrulesreview.
+// REST 实现 SelfSubjectRulesReview 的无状态 REST 接口，通过 RuleResolver 查询当前用户的授权规则。
 type REST struct {
 	ruleResolver authorizer.RuleResolver
 }
 
-// NewREST returns a RESTStorage object that will work against selfsubjectrulesreview.
+// NewREST 创建 SelfSubjectRulesReview REST 处理器，并注入授权规则解析器。
 func NewREST(ruleResolver authorizer.RuleResolver) *REST {
 	return &REST{ruleResolver}
 }
 
-// NamespaceScoped fulfill rest.Scoper
+// NamespaceScoped 实现 rest.Scoper；该 API 本身是集群级资源，但请求内容必须指定目标 Namespace。
 func (r *REST) NamespaceScoped() bool {
 	return false
 }
 
-// New creates a new selfsubjectrulesreview object.
+// New 返回用于解码请求的空 SelfSubjectRulesReview 对象。
 func (r *REST) New() runtime.Object {
 	return &authorizationapi.SelfSubjectRulesReview{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 实现 REST 销毁接口；处理器不持有底层 Store，无需显式释放资源。
 func (r *REST) Destroy() {
-	// Given no underlying store, we don't destroy anything
-	// here explicitly.
 }
 
-// Create attempts to get self subject rules in specific namespace.
+// Create 校验请求用户和目标 Namespace，查询该用户在命名空间内的资源及非资源规则，并返回查询是否完整。
 func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	selfSRR, ok := obj.(*authorizationapi.SelfSubjectRulesReview)
 	if !ok {
@@ -97,10 +95,12 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 
 var _ rest.SingularNameProvider = &REST{}
 
+// GetSingularName 返回 SelfSubjectRulesReview 的单数资源名称。
 func (r *REST) GetSingularName() string {
 	return "selfsubjectrulesreview"
 }
 
+// getResourceRules 将 Authorizer 返回的资源规则信息转换为 API ResourceRule 列表。
 func getResourceRules(infos []authorizer.ResourceRuleInfo) []authorizationapi.ResourceRule {
 	rules := make([]authorizationapi.ResourceRule, len(infos))
 	for i, info := range infos {
@@ -114,6 +114,7 @@ func getResourceRules(infos []authorizer.ResourceRuleInfo) []authorizationapi.Re
 	return rules
 }
 
+// getNonResourceRules 将 Authorizer 返回的非资源规则信息转换为 API NonResourceRule 列表。
 func getNonResourceRules(infos []authorizer.NonResourceRuleInfo) []authorizationapi.NonResourceRule {
 	rules := make([]authorizationapi.NonResourceRule, len(infos))
 	for i, info := range infos {

@@ -31,35 +31,39 @@ import (
 	authorizationutil "k8s.io/kubernetes/pkg/registry/authorization/util"
 )
 
+// REST 实现 SelfSubjectAccessReview 的无状态 REST 接口：接收授权请求并返回实时计算的授权结果。
 type REST struct {
 	authorizer authorizer.UnconditionalAuthorizer
 	scheme     *runtime.Scheme
 }
 
+// NewREST(authorizer authorizer.UnconditionalAuthorizer, scheme *runtime.Scheme) 创建 SelfSubjectAccessReview REST 处理器，并注入授权器和内部 API Scheme。
 func NewREST(authorizer authorizer.UnconditionalAuthorizer, scheme *runtime.Scheme) *REST {
 	return &REST{authorizer, scheme}
 }
 
+// NamespaceScoped 返回 false，表示 SelfSubjectAccessReview 是集群级资源。
 func (r *REST) NamespaceScoped() bool {
 	return false
 }
 
+// New 返回用于解码请求的空 SelfSubjectAccessReview 对象。
 func (r *REST) New() runtime.Object {
 	return &authorizationapi.SelfSubjectAccessReview{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 实现 REST 销毁接口；该处理器不持有底层 Store 或其他需显式释放的资源。
 func (r *REST) Destroy() {
-	// Given no underlying store, we don't destroy anything
-	// here explicitly.
 }
 
 var _ rest.SingularNameProvider = &REST{}
 
+// GetSingularName 返回该 REST 资源的单数名称 selfsubjectaccessreview。
 func (r *REST) GetSingularName() string {
 	return "selfsubjectaccessreview"
 }
 
+// Create 校验 SelfSubjectAccessReview 请求，构造授权属性并调用 Authorizer；结果写入 Status 后直接返回，不持久化对象。
 func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	selfSAR, ok := obj.(*authorizationapi.SelfSubjectAccessReview)
 	if !ok {

@@ -31,19 +31,21 @@ import (
 	"k8s.io/kubernetes/pkg/registry/authorization/subjectaccessreview"
 )
 
+// RESTStorageProvider 持有授权决策器和规则解析器，负责装配 Authorization API 组的 REST 存储。
 type RESTStorageProvider struct {
 	Authorizer   authorizer.UnconditionalAuthorizer
 	RuleResolver authorizer.RuleResolver
 }
 
+// NewRESTStorage 创建 Authorization API 组的存储映射；未配置 Authorizer 时不注册该 API 组。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	if p.Authorizer == nil {
 		return genericapiserver.APIGroupInfo{}, nil
 	}
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(authorization.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果新增 API 版本，必须同时在 `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go` 中配置对应的聚合优先级。
+	// TODO：重构装配流程，将版本优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap := p.v1Storage(apiResourceConfigSource, restOptionsGetter); len(storageMap) > 0 {
 		apiGroupInfo.VersionedResourcesStorageMap[authorizationv1.SchemeGroupVersion.Version] = storageMap
@@ -52,25 +54,26 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 根据资源启用配置装配 SubjectAccessReview、SelfSubjectAccessReview、LocalSubjectAccessReview 和 SelfSubjectRulesReview。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) map[string]rest.Storage {
 	storage := map[string]rest.Storage{}
 
-	// subjectaccessreviews
+	// 注册可由调用者指定目标用户的 SubjectAccessReview。
 	if resource := "subjectaccessreviews"; apiResourceConfigSource.ResourceEnabled(authorizationv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = subjectaccessreview.NewREST(p.Authorizer, legacyscheme.Scheme)
 	}
 
-	// selfsubjectaccessreviews
+	// 注册针对当前请求用户执行授权检查的 SelfSubjectAccessReview。
 	if resource := "selfsubjectaccessreviews"; apiResourceConfigSource.ResourceEnabled(authorizationv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = selfsubjectaccessreview.NewREST(p.Authorizer, legacyscheme.Scheme)
 	}
 
-	// localsubjectaccessreviews
+	// 注册受命名空间约束、用于检查指定用户资源访问权限的 LocalSubjectAccessReview。
 	if resource := "localsubjectaccessreviews"; apiResourceConfigSource.ResourceEnabled(authorizationv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = localsubjectaccessreview.NewREST(p.Authorizer, legacyscheme.Scheme)
 	}
 
-	// selfsubjectrulesreviews
+	// 注册用于查询当前用户在指定命名空间内可见授权规则的 SelfSubjectRulesReview。
 	if resource := "selfsubjectrulesreviews"; apiResourceConfigSource.ResourceEnabled(authorizationv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = selfsubjectrulesreview.NewREST(p.RuleResolver)
 	}
@@ -78,6 +81,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage
 }
 
+// GroupName 返回 Authorization API 组名，供 kube-apiserver 注册 APIGroup。
 func (p RESTStorageProvider) GroupName() string {
 	return authorization.GroupName
 }
