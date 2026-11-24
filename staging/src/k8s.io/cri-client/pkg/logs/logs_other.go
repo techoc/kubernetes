@@ -24,6 +24,5 @@ import (
 
 // openFileShareDelete 打开日志文件。非 Windows 平台无需特殊共享模式，直接退化为普通打开。
 func openFileShareDelete(path string) (*os.File, error) {
-	// Noop. Only relevant for Windows.
 	return os.Open(path)
 }

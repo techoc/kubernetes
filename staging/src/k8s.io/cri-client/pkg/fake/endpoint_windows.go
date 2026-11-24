@@ -23,7 +23,6 @@ import (
 	"net"
 )
 
-// GenerateEndpoint generates a new tcp endpoint of grpc server.
 // GenerateEndpoint 返回一个新的 TCP 端点。与 Unix 平台不同，这里没有固定路径模板可用，
 // 因此先监听 localhost:0 让内核分配一个空闲端口，再据此拼出 tcp:// 地址。
 func GenerateEndpoint() (string, error) {

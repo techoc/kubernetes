@@ -37,7 +37,6 @@ func TestImageServiceSpansWithTP(t *testing.T) {
 	fakeRuntime, endpoint := createAndStartFakeRemoteRuntime(t)
 	defer func() {
 		fakeRuntime.Stop()
-		// clear endpoint file
 		// 清理测试产生的 unix socket 文件：解析端点得到路径，存在则删除。
 		if addr, _, err := util.GetAddressAndDialer(endpoint); err == nil {
 			if _, err := os.Stat(addr); err == nil {
@@ -78,7 +77,6 @@ func TestImageServiceSpansWithoutTP(t *testing.T) {
 	fakeRuntime, endpoint := createAndStartFakeRemoteRuntime(t)
 	defer func() {
 		fakeRuntime.Stop()
-		// clear endpoint file
 		// 清理测试产生的 unix socket 文件。
 		if addr, _, err := util.GetAddressAndDialer(endpoint); err == nil {
 			if _, err := os.Stat(addr); err == nil {
@@ -138,7 +136,6 @@ func TestNewRemoteImageServiceUnixSocketEndpoint(t *testing.T) {
 	fakeRuntime, endpoint := createAndStartFakeRemoteRuntime(t)
 	defer func() {
 		fakeRuntime.Stop()
-		// clear endpoint file
 		// 清理 socket 文件；删除失败时用 t.Errorf 暴露，避免残留影响后续测试。
 		if addr, _, err := util.GetAddressAndDialer(endpoint); err == nil {
 			if _, err := os.Stat(addr); err == nil {

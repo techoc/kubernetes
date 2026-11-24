@@ -22,7 +22,6 @@ import (
 	kubeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
-// ListImages lists existing images.
 // ListImages 列出假服务中已有的镜像，返回经请求 Filter 过滤后的结果。
 func (f *RemoteRuntime) ListImages(ctx context.Context, req *kubeapi.ListImagesRequest) (*kubeapi.ListImagesResponse, error) {
 	// 把请求中的过滤条件透传给假镜像服务，由后者在内存镜像集合上做筛选。
@@ -37,9 +36,6 @@ func (f *RemoteRuntime) ListImages(ctx context.Context, req *kubeapi.ListImagesR
 	}, nil
 }
 
-// ImageStatus returns the status of the image. If the image is not
-// present, returns a response with ImageStatusResponse.Image set to
-// nil.
 // ImageStatus 返回指定镜像的状态；镜像不存在时，假服务返回的响应中 Image 字段为 nil。
 // 此处固定传入 verbose=false，只请求基础状态信息。
 func (f *RemoteRuntime) ImageStatus(ctx context.Context, req *kubeapi.ImageStatusRequest) (*kubeapi.ImageStatusResponse, error) {
@@ -53,7 +49,6 @@ func (f *RemoteRuntime) ImageStatus(ctx context.Context, req *kubeapi.ImageStatu
 	return resp, nil
 }
 
-// PullImage pulls an image with authentication config.
 // PullImage 拉取镜像：把镜像规格、认证配置与 sandbox 配置一并交给假服务处理。
 func (f *RemoteRuntime) PullImage(ctx context.Context, req *kubeapi.PullImageRequest) (*kubeapi.PullImageResponse, error) {
 	// 假服务只记录拉取行为并返回一个镜像引用，不会真正下载镜像。
@@ -68,9 +63,6 @@ func (f *RemoteRuntime) PullImage(ctx context.Context, req *kubeapi.PullImageReq
 	}, nil
 }
 
-// RemoveImage removes the image.
-// This call is idempotent, and must not return an error if the image has
-// already been removed.
 // RemoveImage 从假服务中移除指定镜像；该操作是幂等的，镜像不存在时也不应报错。
 func (f *RemoteRuntime) RemoveImage(ctx context.Context, req *kubeapi.RemoveImageRequest) (*kubeapi.RemoveImageResponse, error) {
 	// 移除本身没有返回数据，成功时只需返回空响应。
@@ -82,7 +74,6 @@ func (f *RemoteRuntime) RemoveImage(ctx context.Context, req *kubeapi.RemoveImag
 	return &kubeapi.RemoveImageResponse{}, nil
 }
 
-// ImageFsInfo returns information of the filesystem that is used to store images.
 // ImageFsInfo 返回存放镜像的文件系统信息，数据来自假服务中的预置用量信息。
 func (f *RemoteRuntime) ImageFsInfo(ctx context.Context, req *kubeapi.ImageFsInfoRequest) (*kubeapi.ImageFsInfoResponse, error) {
 	// 假服务的 ImageFsInfo 不依赖请求参数，直接返回预置的文件系统用量。

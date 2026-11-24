@@ -32,7 +32,6 @@ import (
 // 由于函数无法直接比较，这里通过反射取得函数指针，再与预期的 tcpDial/npipeDial 指针比对。
 func TestGetAddressAndDialer(t *testing.T) {
 
-	// Compare dialer function by pointer
 	// 取两个拨号函数的入口地址作为比较基准；0 表示期望返回 nil 拨号函数。
 	tcpDialPointer := reflect.ValueOf(tcpDial).Pointer()
 	npipeDialPointer := reflect.ValueOf(npipeDial).Pointer()

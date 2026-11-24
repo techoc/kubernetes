@@ -33,7 +33,7 @@ func TestTail(t *testing.T) {
 		line + "\n" +
 		line + "\n" +
 		line + "\n" +
-		line[blockSize/2:]) // incomplete line
+		line[blockSize/2:]) // 不完整的行
 
 	// 表驱动用例：n 为请求跟随的行数，start 为期望的起始字节偏移。
 	for c, test := range []struct {

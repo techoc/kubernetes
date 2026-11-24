@@ -28,16 +28,13 @@ import (
 	utilexec "k8s.io/utils/exec"
 )
 
-// RemoteRuntime represents a fake remote container runtime.
 // RemoteRuntime 是假（测试用）的远程容器运行时，同时充当 CRI RuntimeService 与 ImageService 的 gRPC 服务端。
 // 它本身主要负责请求参数转换和响应包装，真正的状态维护与业务逻辑委托给内嵌的两个假服务。
 type RemoteRuntime struct {
 	// server 是底层的 gRPC 服务端实例，负责在指定端点上监听并处理 RPC。
 	server *grpc.Server
-	// Fake runtime service.
 	// RuntimeService 保存假的运行时服务，维护 PodSandbox、容器及其状态、统计与指标等数据。
 	RuntimeService *apitest.FakeRuntimeService
-	// Fake image service.
 	// ImageService 保存假的镜像服务，维护镜像列表、镜像状态与文件系统用量等数据。
 	ImageService *apitest.FakeImageService
 	// UnsafeImageServiceServer 嵌入后提供 mustEmbedUnimplementedImageServiceServer 方法，
@@ -48,7 +45,6 @@ type RemoteRuntime struct {
 	kubeapi.UnsafeRuntimeServiceServer
 }
 
-// NewFakeRemoteRuntime creates a new RemoteRuntime.
 // NewFakeRemoteRuntime 创建一个新的 RemoteRuntime：构造假的运行时/镜像服务与 gRPC 服务端，
 // 并把当前对象注册为这两个 CRI 服务的 gRPC 实现。
 func NewFakeRemoteRuntime() *RemoteRuntime {
@@ -70,7 +66,6 @@ func NewFakeRemoteRuntime() *RemoteRuntime {
 	return f
 }
 
-// Start starts the fake remote runtime.
 // Start 在指定端点上启动假运行时：创建监听器、在后台提供 gRPC 服务，
 // 并把假运行时的 RuntimeReady 与 NetworkReady 条件都置为就绪。
 func (f *RemoteRuntime) Start(endpoint string) error {
@@ -83,7 +78,6 @@ func (f *RemoteRuntime) Start(endpoint string) error {
 	// 用独立 goroutine 运行 gRPC 服务，避免阻塞 Start 的调用方。
 	go f.server.Serve(l)
 
-	// Set runtime and network conditions ready.
 	// 覆盖假服务的状态：运行时和网络都报告为 ready，使 kubelet 认为该运行时可用。
 	f.RuntimeService.FakeStatus = &kubeapi.RuntimeStatus{
 		Conditions: []*kubeapi.RuntimeCondition{
@@ -95,22 +89,18 @@ func (f *RemoteRuntime) Start(endpoint string) error {
 	return nil
 }
 
-// Stop stops the fake remote runtime.
 // Stop 停止假运行时的 gRPC 服务端，同时关闭其监听器与连接；不会等待在途请求完成。
 func (f *RemoteRuntime) Stop() {
 	f.server.Stop()
 }
 
-// Version returns the runtime name, runtime version, and runtime API version.
 // Version 返回运行时名称、运行时版本与运行时 API 版本；请求中的 Version 即 apiVersion。
 func (f *RemoteRuntime) Version(ctx context.Context, req *kubeapi.VersionRequest) (*kubeapi.VersionResponse, error) {
 	// 把请求携带的 apiVersion 直接传给假服务的 Version 方法。
 	return f.RuntimeService.Version(ctx, req.Version)
 }
 
-// RunPodSandbox creates and starts a pod-level sandbox. Runtimes must ensure
-// the sandbox is in the ready state on success.
-// RunPodSandbox 创建并启动一个 PodSandbox，成功时返回假服务生成的新 sandbox ID。
+// RunPodSandbox 创建并启动一个 PodSandbox；成功时必须确保 sandbox 已就绪，并返回假服务生成的新 sandbox ID。
 func (f *RemoteRuntime) RunPodSandbox(ctx context.Context, req *kubeapi.RunPodSandboxRequest) (*kubeapi.RunPodSandboxResponse, error) {
 	// 拆出请求中的 sandbox 配置与 runtime handler 两个参数传给假服务。
 	sandboxID, err := f.RuntimeService.RunPodSandbox(ctx, req.Config, req.RuntimeHandler)
@@ -122,10 +112,6 @@ func (f *RemoteRuntime) RunPodSandbox(ctx context.Context, req *kubeapi.RunPodSa
 	return &kubeapi.RunPodSandboxResponse{PodSandboxId: sandboxID}, nil
 }
 
-// StopPodSandbox stops any running process that is part of the sandbox and
-// reclaims network resources (e.g., IP addresses) allocated to the sandbox.
-// If there are any running containers in the sandbox, they must be forcibly
-// terminated.
 // StopPodSandbox 停止 sandbox 内的进程并回收其网络资源；sandbox 内的容器会被强制终止。
 func (f *RemoteRuntime) StopPodSandbox(ctx context.Context, req *kubeapi.StopPodSandboxRequest) (*kubeapi.StopPodSandboxResponse, error) {
 	// 按请求中的 PodSandboxId 定位 sandbox 并调用假服务停止它。
@@ -138,11 +124,8 @@ func (f *RemoteRuntime) StopPodSandbox(ctx context.Context, req *kubeapi.StopPod
 	return &kubeapi.StopPodSandboxResponse{}, nil
 }
 
-// RemovePodSandbox removes the sandbox. If there are any running containers
-// in the sandbox, they must be forcibly terminated and removed.
-// This call is idempotent, and must not return an error if the sandbox has
-// already been removed.
-// RemovePodSandbox 删除 sandbox 及其中的容器；该操作是幂等的，重复删除不应报错。
+// RemovePodSandbox 删除 sandbox；其中仍在运行的容器必须被强制终止并删除。
+// 该操作是幂等的，sandbox 已删除时不应报错。
 func (f *RemoteRuntime) RemovePodSandbox(ctx context.Context, req *kubeapi.RemovePodSandboxRequest) (*kubeapi.RemovePodSandboxResponse, error) {
 	// 按请求中的 PodSandboxId 调用假服务执行删除。
 	err := f.RuntimeService.RemovePodSandbox(ctx, req.PodSandboxId)
@@ -154,8 +137,6 @@ func (f *RemoteRuntime) RemovePodSandbox(ctx context.Context, req *kubeapi.Remov
 	return &kubeapi.RemovePodSandboxResponse{}, nil
 }
 
-// PodSandboxStatus returns the status of the PodSandbox. If the PodSandbox is not
-// present, returns an error.
 // PodSandboxStatus 返回指定 PodSandbox 的状态；sandbox 不存在时返回错误。
 // 此处固定传入 verbose=false，只查询基础状态。
 func (f *RemoteRuntime) PodSandboxStatus(ctx context.Context, req *kubeapi.PodSandboxStatusRequest) (*kubeapi.PodSandboxStatusResponse, error) {
@@ -169,7 +150,6 @@ func (f *RemoteRuntime) PodSandboxStatus(ctx context.Context, req *kubeapi.PodSa
 	return resp, nil
 }
 
-// ListPodSandbox returns a list of PodSandboxes.
 // ListPodSandbox 按请求中的 Filter 列出 PodSandbox。
 func (f *RemoteRuntime) ListPodSandbox(ctx context.Context, req *kubeapi.ListPodSandboxRequest) (*kubeapi.ListPodSandboxResponse, error) {
 	// 过滤条件由假服务在其维护的 sandbox 集合上应用。
@@ -182,7 +162,6 @@ func (f *RemoteRuntime) ListPodSandbox(ctx context.Context, req *kubeapi.ListPod
 	return &kubeapi.ListPodSandboxResponse{Items: items}, nil
 }
 
-// CreateContainer creates a new container in specified PodSandbox
 // CreateContainer 在指定 PodSandbox 中新建容器，返回假服务分配的容器 ID。
 func (f *RemoteRuntime) CreateContainer(ctx context.Context, req *kubeapi.CreateContainerRequest) (*kubeapi.CreateContainerResponse, error) {
 	// 依次传入所属 sandbox ID、容器配置与 sandbox 配置，让假服务记录对应关系。
@@ -195,7 +174,6 @@ func (f *RemoteRuntime) CreateContainer(ctx context.Context, req *kubeapi.Create
 	return &kubeapi.CreateContainerResponse{ContainerId: containerID}, nil
 }
 
-// StartContainer starts the container.
 // StartContainer 启动指定容器，使其状态切换为运行中。
 func (f *RemoteRuntime) StartContainer(ctx context.Context, req *kubeapi.StartContainerRequest) (*kubeapi.StartContainerResponse, error) {
 	// 按请求中的 ContainerId 调用假服务完成状态转换。
@@ -208,10 +186,7 @@ func (f *RemoteRuntime) StartContainer(ctx context.Context, req *kubeapi.StartCo
 	return &kubeapi.StartContainerResponse{}, nil
 }
 
-// StopContainer stops a running container with a grace period (i.e., timeout).
-// This call is idempotent, and must not return an error if the container has
-// already been stopped.
-// StopContainer 在给定的宽限期（超时时间）内停止容器；该操作是幂等的。
+// StopContainer 在给定的宽限期（超时时间）内停止运行中的容器；该操作是幂等的，容器已停止时不应报错。
 func (f *RemoteRuntime) StopContainer(ctx context.Context, req *kubeapi.StopContainerRequest) (*kubeapi.StopContainerResponse, error) {
 	// 把容器 ID 和超时时间一并透传给假服务。
 	err := f.RuntimeService.StopContainer(ctx, req.ContainerId, req.Timeout)
@@ -223,11 +198,7 @@ func (f *RemoteRuntime) StopContainer(ctx context.Context, req *kubeapi.StopCont
 	return &kubeapi.StopContainerResponse{}, nil
 }
 
-// RemoveContainer removes the container. If the container is running, the
-// container must be forcibly removed.
-// This call is idempotent, and must not return an error if the container has
-// already been removed.
-// RemoveContainer 删除容器，运行中的容器会被强制删除；该操作是幂等的。
+// RemoveContainer 删除容器，运行中的容器会被强制删除；该操作是幂等的，容器已删除时不应报错。
 func (f *RemoteRuntime) RemoveContainer(ctx context.Context, req *kubeapi.RemoveContainerRequest) (*kubeapi.RemoveContainerResponse, error) {
 	// 按请求中的 ContainerId 调用假服务执行删除。
 	err := f.RuntimeService.RemoveContainer(ctx, req.ContainerId)
@@ -239,7 +210,6 @@ func (f *RemoteRuntime) RemoveContainer(ctx context.Context, req *kubeapi.Remove
 	return &kubeapi.RemoveContainerResponse{}, nil
 }
 
-// ListContainers lists all containers by filters.
 // ListContainers 按请求中的 Filter 列出容器。
 func (f *RemoteRuntime) ListContainers(ctx context.Context, req *kubeapi.ListContainersRequest) (*kubeapi.ListContainersResponse, error) {
 	// 过滤逻辑由假服务在其维护的容器集合上完成。
@@ -252,8 +222,6 @@ func (f *RemoteRuntime) ListContainers(ctx context.Context, req *kubeapi.ListCon
 	return &kubeapi.ListContainersResponse{Containers: items}, nil
 }
 
-// ContainerStatus returns status of the container. If the container is not
-// present, returns an error.
 // ContainerStatus 返回指定容器的状态；容器不存在时返回错误。
 // 此处固定传入 verbose=false，只查询基础状态。
 func (f *RemoteRuntime) ContainerStatus(ctx context.Context, req *kubeapi.ContainerStatusRequest) (*kubeapi.ContainerStatusResponse, error) {
@@ -267,7 +235,6 @@ func (f *RemoteRuntime) ContainerStatus(ctx context.Context, req *kubeapi.Contai
 	return resp, nil
 }
 
-// ExecSync runs a command in a container synchronously.
 // ExecSync 在容器内同步执行命令，返回标准输出、标准错误与退出码。
 // 请求中的超时以秒为单位，这里转换为 time.Duration。
 func (f *RemoteRuntime) ExecSync(ctx context.Context, req *kubeapi.ExecSyncRequest) (*kubeapi.ExecSyncResponse, error) {
@@ -294,26 +261,21 @@ func (f *RemoteRuntime) ExecSync(ctx context.Context, req *kubeapi.ExecSyncReque
 	}, nil
 }
 
-// Exec prepares a streaming endpoint to execute a command in the container.
 // Exec 为容器内命令执行准备流式端点，请求与响应都直接交给假服务处理。
 func (f *RemoteRuntime) Exec(ctx context.Context, req *kubeapi.ExecRequest) (*kubeapi.ExecResponse, error) {
 	return f.RuntimeService.Exec(ctx, req)
 }
 
-// Attach prepares a streaming endpoint to attach to a running container.
 // Attach 为附着到运行中容器准备流式端点，直接委托给假服务。
 func (f *RemoteRuntime) Attach(ctx context.Context, req *kubeapi.AttachRequest) (*kubeapi.AttachResponse, error) {
 	return f.RuntimeService.Attach(ctx, req)
 }
 
-// PortForward prepares a streaming endpoint to forward ports from a PodSandbox.
 // PortForward 为 PodSandbox 的端口转发准备流式端点，直接委托给假服务。
 func (f *RemoteRuntime) PortForward(ctx context.Context, req *kubeapi.PortForwardRequest) (*kubeapi.PortForwardResponse, error) {
 	return f.RuntimeService.PortForward(ctx, req)
 }
 
-// ContainerStats returns stats of the container. If the container does not
-// exist, the call returns an error.
 // ContainerStats 返回指定容器的统计信息；容器不存在时返回错误。
 func (f *RemoteRuntime) ContainerStats(ctx context.Context, req *kubeapi.ContainerStatsRequest) (*kubeapi.ContainerStatsResponse, error) {
 	// 按容器 ID 从假服务取出统计信息。
@@ -326,7 +288,6 @@ func (f *RemoteRuntime) ContainerStats(ctx context.Context, req *kubeapi.Contain
 	return &kubeapi.ContainerStatsResponse{Stats: stats}, nil
 }
 
-// ListContainerStats returns stats of all running containers.
 // ListContainerStats 按 Filter 返回所有运行中容器的统计信息。
 func (f *RemoteRuntime) ListContainerStats(ctx context.Context, req *kubeapi.ListContainerStatsRequest) (*kubeapi.ListContainerStatsResponse, error) {
 	// 过滤在假服务中完成。
@@ -338,8 +299,6 @@ func (f *RemoteRuntime) ListContainerStats(ctx context.Context, req *kubeapi.Lis
 	return &kubeapi.ListContainerStatsResponse{Stats: stats}, nil
 }
 
-// PodSandboxStats returns stats of the pod. If the pod does not
-// exist, the call returns an error.
 // PodSandboxStats 返回指定 Pod 的统计信息；Pod 不存在时返回错误。
 func (f *RemoteRuntime) PodSandboxStats(ctx context.Context, req *kubeapi.PodSandboxStatsRequest) (*kubeapi.PodSandboxStatsResponse, error) {
 	// 按 PodSandboxId 从假服务取出统计信息。
@@ -351,7 +310,6 @@ func (f *RemoteRuntime) PodSandboxStats(ctx context.Context, req *kubeapi.PodSan
 	return &kubeapi.PodSandboxStatsResponse{Stats: stats}, nil
 }
 
-// ListPodSandboxStats returns stats of all running pods.
 // ListPodSandboxStats 按 Filter 返回所有运行中 Pod 的统计信息。
 func (f *RemoteRuntime) ListPodSandboxStats(ctx context.Context, req *kubeapi.ListPodSandboxStatsRequest) (*kubeapi.ListPodSandboxStatsResponse, error) {
 	// 过滤在假服务中完成。
@@ -363,7 +321,6 @@ func (f *RemoteRuntime) ListPodSandboxStats(ctx context.Context, req *kubeapi.Li
 	return &kubeapi.ListPodSandboxStatsResponse{Stats: stats}, nil
 }
 
-// UpdateRuntimeConfig updates the runtime configuration based on the given request.
 // UpdateRuntimeConfig 根据请求更新运行时配置。
 func (f *RemoteRuntime) UpdateRuntimeConfig(ctx context.Context, req *kubeapi.UpdateRuntimeConfigRequest) (*kubeapi.UpdateRuntimeConfigResponse, error) {
 	// 只把请求里的 RuntimeConfig 子结构传给假服务。
@@ -376,7 +333,6 @@ func (f *RemoteRuntime) UpdateRuntimeConfig(ctx context.Context, req *kubeapi.Up
 	return &kubeapi.UpdateRuntimeConfigResponse{}, nil
 }
 
-// Status returns the status of the runtime.
 // Status 返回运行时状态；此处固定传入 verbose=false。
 func (f *RemoteRuntime) Status(ctx context.Context, req *kubeapi.StatusRequest) (*kubeapi.StatusResponse, error) {
 	// 只查询基础状态，不请求详细信息。
@@ -389,7 +345,6 @@ func (f *RemoteRuntime) Status(ctx context.Context, req *kubeapi.StatusRequest) 
 	return resp, nil
 }
 
-// UpdateContainerResources updates ContainerConfig of the container.
 // UpdateContainerResources 更新容器的资源配置。
 func (f *RemoteRuntime) UpdateContainerResources(ctx context.Context, req *kubeapi.UpdateContainerResourcesRequest) (*kubeapi.UpdateContainerResourcesResponse, error) {
 	// 把请求中的 Linux 资源字段重新包装为 ContainerResources 后传给假服务。
@@ -401,7 +356,6 @@ func (f *RemoteRuntime) UpdateContainerResources(ctx context.Context, req *kubea
 	return &kubeapi.UpdateContainerResourcesResponse{}, nil
 }
 
-// ReopenContainerLog reopens the container log file.
 // ReopenContainerLog 重新打开指定容器的日志文件。
 func (f *RemoteRuntime) ReopenContainerLog(ctx context.Context, req *kubeapi.ReopenContainerLogRequest) (*kubeapi.ReopenContainerLogResponse, error) {
 	// 按容器 ID 调用假服务执行重新打开日志的操作。
@@ -413,7 +367,6 @@ func (f *RemoteRuntime) ReopenContainerLog(ctx context.Context, req *kubeapi.Reo
 	return &kubeapi.ReopenContainerLogResponse{}, nil
 }
 
-// CheckpointContainer checkpoints the given container.
 // CheckpointContainer 为指定容器创建检查点。
 // 注意：这里没有透传 req，而是向假服务传入了一个新建的空 CheckpointContainerRequest。
 func (f *RemoteRuntime) CheckpointContainer(ctx context.Context, req *kubeapi.CheckpointContainerRequest) (*kubeapi.CheckpointContainerResponse, error) {
@@ -425,7 +378,6 @@ func (f *RemoteRuntime) CheckpointContainer(ctx context.Context, req *kubeapi.Ch
 	return &kubeapi.CheckpointContainerResponse{}, nil
 }
 
-// CheckpointPod checkpoints the given pod sandbox.
 // CheckpointPod 为指定 PodSandbox 创建检查点，请求被原样交给假服务记录。
 func (f *RemoteRuntime) CheckpointPod(ctx context.Context, req *kubeapi.CheckpointPodRequest) (*kubeapi.CheckpointPodResponse, error) {
 	err := f.RuntimeService.CheckpointPod(ctx, req)
@@ -437,7 +389,6 @@ func (f *RemoteRuntime) CheckpointPod(ctx context.Context, req *kubeapi.Checkpoi
 	return &kubeapi.CheckpointPodResponse{}, nil
 }
 
-// RestorePod restores a pod sandbox from a checkpoint.
 // RestorePod 从检查点恢复 PodSandbox，直接把假服务的响应返回给调用方。
 func (f *RemoteRuntime) RestorePod(ctx context.Context, req *kubeapi.RestorePodRequest) (*kubeapi.RestorePodResponse, error) {
 	response, err := f.RuntimeService.RestorePod(ctx, req)
@@ -453,7 +404,6 @@ func (f *RemoteRuntime) GetContainerEvents(req *kubeapi.GetEventsRequest, ces ku
 	return nil
 }
 
-// ListMetricDescriptors gets the descriptors for the metrics that will be returned in ListPodSandboxMetrics.
 // ListMetricDescriptors 返回指标描述符列表，供调用方理解 ListPodSandboxMetrics 返回的指标含义。
 func (f *RemoteRuntime) ListMetricDescriptors(ctx context.Context, req *kubeapi.ListMetricDescriptorsRequest) (*kubeapi.ListMetricDescriptorsResponse, error) {
 	// 假服务不依赖请求参数，直接返回预置的描述符集合。
@@ -465,7 +415,6 @@ func (f *RemoteRuntime) ListMetricDescriptors(ctx context.Context, req *kubeapi.
 	return &kubeapi.ListMetricDescriptorsResponse{Descriptors: descs}, nil
 }
 
-// ListPodSandboxMetrics retrieves the metrics for all pod sandboxes.
 // ListPodSandboxMetrics 返回所有 PodSandbox 的指标数据。
 func (f *RemoteRuntime) ListPodSandboxMetrics(ctx context.Context, req *kubeapi.ListPodSandboxMetricsRequest) (*kubeapi.ListPodSandboxMetricsResponse, error) {
 	// 假服务返回其维护的全部 PodSandbox 指标，不做额外过滤。
@@ -477,7 +426,6 @@ func (f *RemoteRuntime) ListPodSandboxMetrics(ctx context.Context, req *kubeapi.
 	return &kubeapi.ListPodSandboxMetricsResponse{PodMetrics: podMetrics}, nil
 }
 
-// RuntimeConfig returns the configuration information of the runtime.
 // RuntimeConfig 返回运行时的配置信息，数据来自假服务的预设配置。
 func (f *RemoteRuntime) RuntimeConfig(ctx context.Context, req *kubeapi.RuntimeConfigRequest) (*kubeapi.RuntimeConfigResponse, error) {
 	resp, err := f.RuntimeService.RuntimeConfig(ctx)
@@ -488,13 +436,11 @@ func (f *RemoteRuntime) RuntimeConfig(ctx context.Context, req *kubeapi.RuntimeC
 	return resp, nil
 }
 
-// UpdatePodSandboxResources synchronously updates the PodSandboxConfig.
 // UpdatePodSandboxResources 同步更新 PodSandbox 的资源配置，请求与响应均直接透传给假服务。
 func (f *RemoteRuntime) UpdatePodSandboxResources(ctx context.Context, req *kubeapi.UpdatePodSandboxResourcesRequest) (*kubeapi.UpdatePodSandboxResourcesResponse, error) {
 	return f.RuntimeService.UpdatePodSandboxResources(ctx, req)
 }
 
-// StreamPodSandboxes returns a stream of PodSandboxes.
 // StreamPodSandboxes 以流的形式返回 PodSandbox 列表；此处一次性查询并发送单个响应。
 func (f *RemoteRuntime) StreamPodSandboxes(req *kubeapi.StreamPodSandboxesRequest, stream kubeapi.RuntimeService_StreamPodSandboxesServer) error {
 	// 使用流自身的 Context 作为调用上下文，并应用请求中的过滤条件。
@@ -506,7 +452,6 @@ func (f *RemoteRuntime) StreamPodSandboxes(req *kubeapi.StreamPodSandboxesReques
 	return stream.Send(&kubeapi.StreamPodSandboxesResponse{PodSandboxes: items})
 }
 
-// StreamContainers returns a stream of containers.
 // StreamContainers 以流的形式返回容器列表，按请求 Filter 过滤后发送单个响应。
 func (f *RemoteRuntime) StreamContainers(req *kubeapi.StreamContainersRequest, stream kubeapi.RuntimeService_StreamContainersServer) error {
 	// 上下文取自流对象，保证客户端取消能传递到查询过程。
@@ -517,7 +462,6 @@ func (f *RemoteRuntime) StreamContainers(req *kubeapi.StreamContainersRequest, s
 	return stream.Send(&kubeapi.StreamContainersResponse{Containers: items})
 }
 
-// StreamContainerStats returns a stream of container stats.
 // StreamContainerStats 以流的形式返回容器统计信息，按请求 Filter 过滤后发送单个响应。
 func (f *RemoteRuntime) StreamContainerStats(req *kubeapi.StreamContainerStatsRequest, stream kubeapi.RuntimeService_StreamContainerStatsServer) error {
 	// 上下文取自流对象，过滤条件由假服务处理。
@@ -528,7 +472,6 @@ func (f *RemoteRuntime) StreamContainerStats(req *kubeapi.StreamContainerStatsRe
 	return stream.Send(&kubeapi.StreamContainerStatsResponse{ContainerStats: stats})
 }
 
-// StreamPodSandboxStats returns a stream of pod sandbox stats.
 // StreamPodSandboxStats 以流的形式返回 PodSandbox 统计信息，按请求 Filter 过滤后发送单个响应。
 func (f *RemoteRuntime) StreamPodSandboxStats(req *kubeapi.StreamPodSandboxStatsRequest, stream kubeapi.RuntimeService_StreamPodSandboxStatsServer) error {
 	// 上下文取自流对象，过滤条件由假服务处理。
@@ -539,7 +482,6 @@ func (f *RemoteRuntime) StreamPodSandboxStats(req *kubeapi.StreamPodSandboxStats
 	return stream.Send(&kubeapi.StreamPodSandboxStatsResponse{PodSandboxStats: stats})
 }
 
-// StreamPodSandboxMetrics returns a stream of pod sandbox metrics.
 // StreamPodSandboxMetrics 以流的形式返回 PodSandbox 指标，发送单个响应。
 func (f *RemoteRuntime) StreamPodSandboxMetrics(req *kubeapi.StreamPodSandboxMetricsRequest, stream kubeapi.RuntimeService_StreamPodSandboxMetricsServer) error {
 	// 假服务的指标查询不接受过滤条件，直接使用流的上下文。
@@ -550,7 +492,6 @@ func (f *RemoteRuntime) StreamPodSandboxMetrics(req *kubeapi.StreamPodSandboxMet
 	return stream.Send(&kubeapi.StreamPodSandboxMetricsResponse{PodSandboxMetrics: podMetrics})
 }
 
-// StreamImages returns a stream of images.
 // StreamImages 以流的形式返回镜像列表，按请求 Filter 过滤后发送单个响应。
 // 注意：这里走的是假镜像服务，而不是假运行时服务。
 func (f *RemoteRuntime) StreamImages(req *kubeapi.StreamImagesRequest, stream kubeapi.ImageService_StreamImagesServer) error {
@@ -562,7 +503,6 @@ func (f *RemoteRuntime) StreamImages(req *kubeapi.StreamImagesRequest, stream ku
 	return stream.Send(&kubeapi.StreamImagesResponse{Images: images})
 }
 
-// Close will shutdown the internal gRPC client connection.
 // Close 关闭假运行时持有的内部 gRPC 客户端连接，实际动作由假运行时服务完成。
 func (f *RemoteRuntime) Close(ctx context.Context) error {
 	return f.RuntimeService.Close(ctx)

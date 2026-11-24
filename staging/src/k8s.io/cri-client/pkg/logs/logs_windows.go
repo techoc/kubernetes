@@ -23,13 +23,9 @@ import (
 	"syscall"
 )
 
-// Based on Windows implementation of Windows' syscall.Open
-// https://cs.opensource.google/go/go/+/refs/tags/go1.22.2:src/syscall/syscall_windows.go;l=342
-// In addition to syscall.Open, this function also adds the syscall.FILE_SHARE_DELETE flag to sharemode,
-// which will allow us to read from the file without blocking the file from being deleted or renamed.
-// This is essential for Log Rotation which is done by renaming the open file. Without this, the file rename would fail.
 // openFileShareDelete 在 Windows 上打开日志文件，并在共享模式中加入 FILE_SHARE_DELETE，
 // 使文件在被读取的同时仍可被删除或重命名；日志轮转正是通过重命名已打开的文件实现的。
+// 参考：https://cs.opensource.google/go/go/+/refs/tags/go1.22.2:src/syscall/syscall_windows.go;l=342
 func openFileShareDelete(path string) (*os.File, error) {
 	// Windows API 使用 UTF-16 字符串，先把路径转换过来。
 	pathp, err := syscall.UTF16PtrFromString(path)

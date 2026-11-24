@@ -41,7 +41,6 @@ import (
 	"k8s.io/cri-client/pkg/util"
 )
 
-// remoteImageService is a gRPC implementation of internalapi.ImageManagerService.
 // remoteImageService 是 internalapi.ImageManagerService 接口的 gRPC 远程实现。
 // 字段含义：timeout 是除 PullImage 以外各 RPC 的超时时间；imageClient 是真正发起
 // CRI v1 调用的客户端桩；conn 是底层 gRPC 连接，由 Close 关闭；useStreaming
@@ -50,27 +49,15 @@ type remoteImageService struct {
 	timeout     time.Duration
 	imageClient runtimeapi.ImageServiceClient
 	conn        *grpc.ClientConn
-	// useStreaming indicates whether to use streaming RPCs for list operations
-	// when the CRIListStreaming feature gate is enabled. It falls back to false
-	// if a streaming RPC returns Unimplemented. Multiple goroutines may
-	// concurrently observe Unimplemented and store false, but that is harmless
-	// because the store is idempotent.
 	// useStreaming 标记列表操作是否使用流式 RPC；服务端返回 Unimplemented 时
 	// 会被置为 false 并回退到一元 RPC。并发写入是幂等的，因此无需加锁。
 	useStreaming atomic.Bool
 }
 
-// RemoteImageServiceBuilder builds a new internalapi.ImageManagerService.
-//
-// Construct a builder with NewRemoteImageServiceBuilder, then chain With*
-// methods to set non-default options before calling Build. Adding new options
-// here is preferred over adding parameters to NewRemoteImageService so that
-// default values can be changed in a single place without having to update
-// every callsite.
 // RemoteImageServiceBuilder 负责按可选配置组装出 ImageManagerService。
 // 用法是先通过 NewRemoteImageServiceBuilder 创建构造器，链式调用 With* 方法
 // 设置非默认值，最后再调用 Build；新增选项集中在此处可避免改动所有调用点。
-// 字段含义：endpoint 是 gRPC 端点；connectionTimeout 同时用于建连与 RPC 超时；
+// 字段含义：endpoint 是 gRPC 端点；connectionTimeout 用于建连及除 PullImage 外的 RPC 超时；
 // tracerProvider 提供链路追踪；tracerProviderSet 记录是否显式调用过
 // WithTracerProvider（用于区分显式传 nil 与未设置）；useStreaming 决定列表
 // 操作是否使用流式 RPC。
@@ -78,48 +65,31 @@ type RemoteImageServiceBuilder struct {
 	endpoint          string
 	connectionTimeout time.Duration
 	tracerProvider    trace.TracerProvider
-	// tracerProviderSet tracks whether WithTracerProvider was called, so that
-	// an explicit nil can be distinguished from the unset default and used to
-	// opt out of installing the otelgrpc stats handler entirely.
 	// tracerProviderSet 记录调用方是否显式设置过 tracer provider：显式 nil
 	// 表示完全不安装 otelgrpc stats handler，与“未设置”走 noop 默认不同。
 	tracerProviderSet bool
-	// useStreaming indicates whether to use streaming RPCs for list operations
-	// when the CRIListStreaming feature gate is enabled. It is expected to
-	// default to true once the feature graduates to GA.
 	// useStreaming 决定列表操作是否优先使用流式 RPC；待特性 GA 后默认值将改为 true。
 	useStreaming bool
 }
 
-// NewRemoteImageServiceBuilder returns a builder with default options for
-// constructing a remote image service.
 // NewRemoteImageServiceBuilder 返回一个使用默认配置的构造器：各字段为零值，
 // 由后续 With* 方法覆盖，必填项在 Build 时校验。
 func NewRemoteImageServiceBuilder() *RemoteImageServiceBuilder {
 	return &RemoteImageServiceBuilder{}
 }
 
-// WithEndpoint sets the gRPC endpoint of the remote image service.
 // WithEndpoint 设置远端镜像服务的 gRPC 端点地址，返回构造器以便链式调用。
 func (b *RemoteImageServiceBuilder) WithEndpoint(endpoint string) *RemoteImageServiceBuilder {
 	b.endpoint = endpoint
 	return b
 }
 
-// WithConnectionTimeout sets the timeout used when connecting to the remote
-// image service.
 // WithConnectionTimeout 设置连接远端镜像服务所用的超时时间。
 func (b *RemoteImageServiceBuilder) WithConnectionTimeout(connectionTimeout time.Duration) *RemoteImageServiceBuilder {
 	b.connectionTimeout = connectionTimeout
 	return b
 }
 
-// WithTracerProvider sets the OpenTelemetry tracer provider used to
-// instrument the gRPC client. If WithTracerProvider is not called, the
-// otelgrpc stats handler is installed with a noop tracer provider, so no
-// traces are produced but gRPC context propagation still works. Passing a nil
-// provider explicitly opts out of installing the stats handler entirely,
-// disabling both tracing and context propagation.
 // WithTracerProvider 设置用于 gRPC 埋点的 OpenTelemetry tracer provider。
 // 显式传入 nil 表示彻底不安装 stats handler；不调用本方法则安装 noop provider，
 // 只保留上下文传播而不产生真实 trace。
@@ -130,9 +100,6 @@ func (b *RemoteImageServiceBuilder) WithTracerProvider(tp trace.TracerProvider) 
 	return b
 }
 
-// WithUseStreaming controls whether streaming RPCs are used for list
-// operations. If the runtime returns an Unimplemented error, the client
-// automatically falls back to the corresponding unary RPC.
 // WithUseStreaming 控制列表操作是否使用流式 RPC；若运行时返回 Unimplemented，
 // 客户端会自动回退到对应的一元 RPC。
 func (b *RemoteImageServiceBuilder) WithUseStreaming(useStreaming bool) *RemoteImageServiceBuilder {
@@ -140,8 +107,6 @@ func (b *RemoteImageServiceBuilder) WithUseStreaming(useStreaming bool) *RemoteI
 	return b
 }
 
-// Build creates a new internalapi.ImageManagerService using the configured
-// options.
 // Build 按已配置的选项创建 internalapi.ImageManagerService。
 func (b *RemoteImageServiceBuilder) Build(ctx context.Context) (internalapi.ImageManagerService, error) {
 	// endpoint 与连接超时均为必填项，提前校验可避免建连时出现难以理解的错误。
@@ -171,15 +136,11 @@ func (b *RemoteImageServiceBuilder) Build(ctx context.Context) (internalapi.Imag
 		grpc.WithAuthority("localhost"),
 		grpc.WithContextDialer(dialer),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
-	// When no tracer provider was configured, fall back to a noop provider
-	// so context propagation still works without producing real traces.
-	// See https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/examples/passthrough
 	// 未配置 tracer provider 时退化为 noop：不产生真实 span，但仍能传播 trace 上下文。
+	// 参考：https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/examples/passthrough
 	if !b.tracerProviderSet {
 		b.tracerProvider = noop.NewTracerProvider()
 	}
-	// Install the otelgrpc stats handler unless the caller explicitly opted
-	// out by calling WithTracerProvider(nil).
 	// 只有显式传 nil 才会跳过 stats handler，从而同时关闭追踪与上下文传播。
 	if b.tracerProvider != nil {
 		tracingOpts := []otelgrpc.Option{
@@ -227,16 +188,10 @@ func (b *RemoteImageServiceBuilder) Build(ctx context.Context) (internalapi.Imag
 	return service, nil
 }
 
-// NewRemoteImageService creates a new internalapi.ImageManagerService.
-// If useStreaming is true, streaming RPCs will be used for list operations
-// instead of unary RPCs. If the runtime returns an Unimplemented error,
-// the client automatically falls back to unary RPCs.
-//
-// Deprecated: Use NewRemoteImageServiceBuilder so that default values
-// (e.g. useStreaming) can be changed in a single place without updating
-// every callsite.
+// Deprecated: 请使用 NewRemoteImageServiceBuilder。
 // NewRemoteImageService 是旧版构造函数，仅为兼容保留，内部委托给 builder，
-// 以便默认值集中在一处维护。
+// 以便默认值集中在一处维护。useStreaming 为 true 时列表操作使用流式 RPC；
+// 运行时返回 Unimplemented 时自动回退到对应的一元 RPC。
 func NewRemoteImageService(ctx context.Context, endpoint string, connectionTimeout time.Duration, tp trace.TracerProvider, useStreaming bool) (internalapi.ImageManagerService, error) {
 	// 把各参数映射为 builder 选项，建连与校验仍由 Build 统一完成。
 	return NewRemoteImageServiceBuilder().
@@ -247,7 +202,6 @@ func NewRemoteImageService(ctx context.Context, endpoint string, connectionTimeo
 		Build(ctx)
 }
 
-// Close will shutdown the internal gRPC client connection.
 // Close 关闭内部持有的 gRPC 客户端连接。
 func (r *remoteImageService) Close(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
@@ -256,8 +210,6 @@ func (r *remoteImageService) Close(ctx context.Context) error {
 	return r.conn.Close()
 }
 
-// validateServiceConnection tries to connect to the remote image service by
-// using the CRI v1 API version and fails if that's not possible.
 // validateServiceConnection 通过 CRI v1 镜像 API 验证远端服务可用，
 // 不可用时返回错误。
 func (r *remoteImageService) validateServiceConnection(ctx context.Context, conn *grpc.ClientConn, endpoint string) error {
@@ -276,7 +228,6 @@ func (r *remoteImageService) validateServiceConnection(ctx context.Context, conn
 	return nil
 }
 
-// ListImages lists available images.
 // ListImages 列出节点上已有的镜像。
 func (r *remoteImageService) ListImages(ctx context.Context, filter *runtimeapi.ImageFilter) ([]*runtimeapi.Image, error) {
 	// 列表操作统一加超时，避免运行时卡住时 kubelet 被无限阻塞。
@@ -327,9 +278,6 @@ func (r *remoteImageService) streamImagesV1(ctx context.Context, filter *runtime
 			break
 		}
 		if err != nil {
-			// If the RPC is unimplemented, disable streaming and fall back to the unary RPC.
-			// The Unimplemented status is not returned when creating the stream,
-			// but when calling Recv() on the stream.
 			// 服务端未实现流式 RPC 时，持久关闭流式开关并回退到一元 RPC，
 			// 使后续调用不再重复尝试流式接口。
 			if status.Code(err) == codes.Unimplemented {
@@ -348,7 +296,6 @@ func (r *remoteImageService) streamImagesV1(ctx context.Context, filter *runtime
 	return images, nil
 }
 
-// ImageStatus returns the status of the image.
 // ImageStatus 查询指定镜像的状态。
 func (r *remoteImageService) ImageStatus(ctx context.Context, image *runtimeapi.ImageSpec, verbose bool) (*runtimeapi.ImageStatusResponse, error) {
 	// 查询操作加超时，避免运行时无响应时长时间阻塞。
@@ -385,7 +332,6 @@ func (r *remoteImageService) imageStatusV1(ctx context.Context, image *runtimeap
 	return resp, nil
 }
 
-// PullImage pulls an image with authentication config.
 // PullImage 按给定的认证信息拉取镜像，返回运行时分配的镜像引用。
 func (r *remoteImageService) PullImage(ctx context.Context, image *runtimeapi.ImageSpec, auth *runtimeapi.AuthConfig, podSandboxConfig *runtimeapi.PodSandboxConfig) (string, error) {
 	// 拉取镜像可能耗时很长，这里只派生可取消的 context 而不设置固定超时，
@@ -409,11 +355,6 @@ func (r *remoteImageService) pullImageV1(ctx context.Context, image *runtimeapi.
 		logger := klog.FromContext(ctx)
 		logger.Error(err, "PullImage from image service failed", "image", image.Image)
 
-		// We can strip the code from unknown status errors since they add no value
-		// and will make them easier to read in the logs/events.
-		//
-		// It also ensures that checking custom error types from pkg/kubelet/images/types.go
-		// works in `imageManager.EnsureImageExists` (pkg/kubelet/images/image_manager.go).
 		// 对 codes.Unknown 错误去掉状态码、只保留消息：状态码没有额外价值，
 		// 还会妨碍 kubelet 侧识别 pkg/kubelet/images/types.go 中的自定义错误类型。
 		statusErr, ok := status.FromError(err)
@@ -435,7 +376,6 @@ func (r *remoteImageService) pullImageV1(ctx context.Context, image *runtimeapi.
 	return resp.ImageRef, nil
 }
 
-// RemoveImage removes the image.
 // RemoveImage 从运行时中删除指定镜像。
 func (r *remoteImageService) RemoveImage(ctx context.Context, image *runtimeapi.ImageSpec) (err error) {
 	// 删除操作加超时，避免运行时卡住。
@@ -454,7 +394,6 @@ func (r *remoteImageService) RemoveImage(ctx context.Context, image *runtimeapi.
 	return nil
 }
 
-// ImageFsInfo returns information of the filesystem that is used to store images.
 // ImageFsInfo 返回用于存储镜像的文件系统信息。
 func (r *remoteImageService) ImageFsInfo(ctx context.Context) (*runtimeapi.ImageFsInfoResponse, error) {
 	// 查询操作加超时，避免运行时无响应时长时间阻塞。

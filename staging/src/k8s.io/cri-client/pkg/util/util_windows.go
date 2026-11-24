@@ -35,7 +35,6 @@ const (
 	npipeProtocol = "npipe"
 )
 
-// CreateListener creates a listener on the specified endpoint.
 // CreateListener 在 Windows 平台上根据端点协议创建监听器，支持 tcp 与 npipe（命名管道）两种。
 func CreateListener(endpoint string) (net.Listener, error) {
 	protocol, addr, err := parseEndpoint(endpoint)
@@ -57,7 +56,6 @@ func CreateListener(endpoint string) (net.Listener, error) {
 	}
 }
 
-// GetAddressAndDialer returns the address parsed from the given endpoint and a context dialer.
 // GetAddressAndDialer 解析端点并返回对应的拨号函数：TCP 用标准库拨号，npipe 用 winio 拨号。
 // 两个拨号函数都接受 context，以便 gRPC 取消连接时及时中止。
 func GetAddressAndDialer(endpoint string) (string, func(ctx context.Context, addr string) (net.Conn, error), error) {
@@ -88,7 +86,6 @@ func npipeDial(ctx context.Context, addr string) (net.Conn, error) {
 }
 
 // parseEndpoint 解析 Windows 平台的运行时端点，返回协议与地址。
-//
 // 关键处理：
 //   - url.Parse 不认识反斜杠 "\"，因此先把所有 "\" 替换为 "/"，避免解析失败；
 //   - tcp：取 host（形如 host:port）；
@@ -96,7 +93,6 @@ func npipeDial(ctx context.Context, addr string) (net.Conn, error) {
 //     规范形式 //<host><path>，例如 npipe://./pipe/foo -> //./pipe/foo；
 //   - 空 scheme 视为已弃用写法；其他 scheme 不支持。
 func parseEndpoint(endpoint string) (string, string, error) {
-	// url.Parse doesn't recognize \, so replace with / first.
 	// Windows 路径用反斜杠分隔，URL 解析器不支持，先统一替换为正斜杠。
 	endpoint = strings.Replace(endpoint, "\\", "/", -1)
 	u, err := url.Parse(endpoint)
@@ -112,7 +108,6 @@ func parseEndpoint(endpoint string) (string, string, error) {
 			return "npipe", u.Path, nil
 		}
 
-		// fallback host if not provided.
 		// 未提供 host 时默认使用 "."（本机），拼出标准命名管道路径。
 		host := u.Host
 		if host == "" {

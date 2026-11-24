@@ -164,7 +164,6 @@ func TestReadLogs(t *testing.T) {
 					},
 				},
 			}
-			// If follow is specified, mark the container as exited or else ReadLogs will run indefinitely
 			// follow 用例必须把容器标记为 EXITED，否则 ReadLogs 会一直等待新日志而不退出。
 			if tc.opts.Follow {
 				fakeRuntimeService.Containers[containerID].State = runtimeapi.ContainerState_CONTAINER_EXITED
@@ -215,7 +214,6 @@ func TestReadRotatedLog(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// Start to follow the container's log.
 	// 在独立 goroutine 中启动 follow 读取，主 goroutine 负责写文件与触发轮转。
 	fileName := file.Name()
 	go func(ctx context.Context) {
@@ -225,22 +223,17 @@ func TestReadRotatedLog(t *testing.T) {
 		_ = ReadLogs(ctx, fileName, containerID, &opts, fakeRuntimeService, stdoutBuf, stderrBuf)
 	}(ctx)
 
-	// log in stdout
 	// 期望偶数行进 stdout、奇数行进 stderr。
 	expectedStdout := "line0\nline2\nline4\nline6\nline8\n"
-	// log in stderr
 	expectedStderr := "line1\nline3\nline5\nline7\nline9\n"
 
 	dir := filepath.Dir(file.Name())
 	baseName := filepath.Base(file.Name())
 
-	// Write 10 lines to log file.
-	// Let ReadLogs start.
 	// 等待 50ms，让 ReadLogs 启动并进入等待日志变更的状态。
 	time.Sleep(50 * time.Millisecond)
 
 	for line := 0; line < 10; line++ {
-		// Write the first three lines to log file
 		// 每行使用当前时间作时间戳，按奇偶写入不同流，行间稍作间隔。
 		now := time.Now().Format(RFC3339NanoLenient)
 		if line%2 == 0 {
@@ -255,7 +248,6 @@ func TestReadRotatedLog(t *testing.T) {
 		if line == 5 {
 			// 关闭当前文件，模拟日志轮转。
 			file.Close()
-			// Pretend to rotate the log.
 			// 先把旧文件重命名，再创建一个同名新文件继续写。
 			rotatedName := fmt.Sprintf("%s.%s", baseName, time.Now().Format("220060102-150405"))
 			rotatedName = filepath.Join(dir, rotatedName)
@@ -274,13 +266,11 @@ func TestReadRotatedLog(t *testing.T) {
 		}
 	}
 
-	// Finished writing into the file, close it, so we can delete it later.
 	// 写完所有行后关闭文件，便于清理。
 	err = file.Close()
 	assert.NoErrorf(t, err, "could not close file.")
 
 	time.Sleep(20 * time.Millisecond)
-	// Make the function ReadLogs end.
 	// 将容器标记为 EXITED，使 follow 循环在读到 EOF 后退出。
 	fakeRuntimeService.Lock()
 	fakeRuntimeService.Containers[containerID].State = runtimeapi.ContainerState_CONTAINER_EXITED
@@ -308,7 +298,7 @@ func TestParseLog(t *testing.T) {
 		err  bool
 	}{
 		// Docker JSON 格式的 stdout 日志。
-		{ // Docker log format stdout
+		{ // Docker 日志格式 stdout
 			line: `{"log":"docker stdout test log","stream":"stdout","time":"2016-10-20T18:39:20.57606443Z"}` + "\n",
 			msg: &logMessage{
 				timestamp: timestamp,
@@ -317,7 +307,7 @@ func TestParseLog(t *testing.T) {
 			},
 		},
 		// Docker JSON 格式的 stderr 日志。
-		{ // Docker log format stderr
+		{ // Docker 日志格式 stderr
 			line: `{"log":"docker stderr test log","stream":"stderr","time":"2016-10-20T18:39:20.57606443Z"}` + "\n",
 			msg: &logMessage{
 				timestamp: timestamp,
@@ -326,7 +316,7 @@ func TestParseLog(t *testing.T) {
 			},
 		},
 		// CRI 格式的 stdout 完整行（F），正文保留结尾换行符。
-		{ // CRI log format stdout
+		{ // CRI 日志格式 stdout
 			line: "2016-10-20T18:39:20.57606443Z stdout F cri stdout test log\n",
 			msg: &logMessage{
 				timestamp: timestamp,
@@ -335,7 +325,7 @@ func TestParseLog(t *testing.T) {
 			},
 		},
 		// CRI 格式的 stderr 完整行（F）。
-		{ // CRI log format stderr
+		{ // CRI 日志格式 stderr
 			line: "2016-10-20T18:39:20.57606443Z stderr F cri stderr test log\n",
 			msg: &logMessage{
 				timestamp: timestamp,
@@ -344,13 +334,13 @@ func TestParseLog(t *testing.T) {
 			},
 		},
 		// 无法识别的日志格式，期望 getParseFunc 返回错误。
-		{ // Unsupported Log format
+		{ // 不支持的日志格式
 			line: "unsupported log format test log\n",
 			msg:  &logMessage{},
 			err:  true,
 		},
 		// CRI 部分日志行（P）：期望去掉正文结尾的换行符。
-		{ // Partial CRI log line
+		{ // 部分 CRI 日志行
 			line: "2016-10-20T18:39:20.57606443Z stdout P cri stdout partial test log\n",
 			msg: &logMessage{
 				timestamp: timestamp,
@@ -359,7 +349,7 @@ func TestParseLog(t *testing.T) {
 			},
 		},
 		// 带多个标签的 CRI 部分日志行（P）：只识别首个标签，正文同样去掉结尾换行符。
-		{ // Partial CRI log line with multiple log tags.
+		{ // 带多个日志标签的部分 CRI 日志行。
 			line: "2016-10-20T18:39:20.57606443Z stdout P:TAG1:TAG2 cri stdout partial test log\n",
 			msg: &logMessage{
 				timestamp: timestamp,
@@ -402,22 +392,22 @@ func TestWriteLogs(t *testing.T) {
 		expectStderr string
 	}{
 		// stderr 日志只写入 stderr 流。
-		{ // stderr log
+		{ // stderr 日志
 			stream:       runtimeapi.Stderr,
 			expectStderr: log,
 		},
 		// stdout 日志只写入 stdout 流。
-		{ // stdout log
+		{ // stdout 日志
 			stream:       runtimeapi.Stdout,
 			expectStdout: log,
 		},
 		// Since 晚于日志时间：该行被过滤，两个流都无输出。
-		{ // since is after timestamp
+		{ // since 晚于时间戳
 			stream: runtimeapi.Stdout,
 			since:  timestamp.Add(1 * time.Second),
 		},
 		// 开启时间戳：正文前应有格式化时间戳加空格。
-		{ // timestamp enabled
+		{ // 已启用时间戳
 			stream:       runtimeapi.Stderr,
 			timestamp:    true,
 			expectStderr: timestamp.Format(timeFormatOut) + " " + log,
@@ -461,31 +451,31 @@ func TestWriteLogsWithBytesLimit(t *testing.T) {
 		expectStderr string
 	}{
 		// 额度不足一行：只输出前 3 个字节。
-		{ // limit bytes less than one line
+		{ // 字节限制小于一行
 			stdoutLines:  3,
 			bytes:        3,
 			expectStdout: "abc",
 		},
 		// 额度跨行：第一行完整输出，第二行只输出部分。
-		{ // limit bytes across lines
+		{ // 字节限制跨多行
 			stdoutLines:  3,
 			bytes:        len(log) + 3,
 			expectStdout: "abcdefg\nabc",
 		},
 		// 额度大于总字节数：全部输出。
-		{ // limit bytes more than all lines
+		{ // 字节限制大于所有行
 			stdoutLines:  3,
 			bytes:        3 * len(log),
 			expectStdout: "abcdefg\nabcdefg\nabcdefg\n",
 		},
 		// 仅向 stderr 写入多行时，额度同样生效。
-		{ // limit bytes for stderr
+		{ // stderr 的字节限制
 			stderrLines:  3,
 			bytes:        len(log) + 3,
 			expectStderr: "abcdefg\nabc",
 		},
 		// 两路都写入：stdout 先消耗额度，剩余额度留给 stderr。
-		{ // limit bytes for both stdout and stderr, stdout first.
+		{ // stdout 与 stderr 的字节限制，stdout 优先。
 			stdoutLines:  1,
 			stderrLines:  2,
 			bytes:        len(log) + 3,
@@ -493,7 +483,7 @@ func TestWriteLogsWithBytesLimit(t *testing.T) {
 			expectStderr: "abc",
 		},
 		// 开启时间戳：时间戳前缀也计入字节额度。
-		{ // limit bytes with timestamp
+		{ // 带时间戳的字节限制
 			stdoutLines:  3,
 			timestamp:    true,
 			bytes:        len(timestampStr) + 1 + len(log) + 2,
@@ -555,10 +545,9 @@ func TestReadLogsLimitsWithTimestamps(t *testing.T) {
 	// 第二段同样以 F 行结束。
 	tmpfile.WriteString(logLineNewLine)
 
-	// two lines are in the buffer
 	// 预期最终缓冲区中只有两行完整日志。
 
-	defer os.Remove(tmpfile.Name()) // clean up
+	defer os.Remove(tmpfile.Name()) // 清理
 
 	assert.NoError(t, err)
 	tmpfile.Close()
@@ -577,13 +566,9 @@ func TestReadLogsLimitsWithTimestamps(t *testing.T) {
 	for scanner.Scan() {
 		lineCount++
 
-		// Split the line
 		// 以第一个空格为界拆出时间戳和日志正文。
 		ts, logline, _ := bytes.Cut(scanner.Bytes(), []byte(" "))
 
-		// Verification
-		//   1. The timestamp should exist
-		//   2. The last item in the log should be 9999
 		// 断言时间戳格式合法，且正文以 9999 结尾（未被截断/拼接错误）。
 		_, err = time.Parse(time.RFC3339, string(ts))
 		assert.NoError(t, err, "timestamp not found")

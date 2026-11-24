@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fake containers a fake gRPC implementation of internalapi.RuntimeService
-// and internalapi.ImageManagerService.
 // Package fake 提供 CRI 运行时服务与镜像服务的假 gRPC 实现，主要用于单元测试：
 // 它在内存中模拟 PodSandbox、容器与镜像的状态，并把 gRPC 请求转发给 cri-api 中的 testing 假服务。
 package fake

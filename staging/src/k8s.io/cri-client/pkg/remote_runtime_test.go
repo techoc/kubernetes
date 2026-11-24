@@ -44,10 +44,6 @@ import (
 // defaultConnectionTimeout 是测试中构造远程运行时客户端时使用的连接超时。
 const defaultConnectionTimeout = 15 * time.Second
 
-// createAndStartFakeRemoteRuntime creates and starts fakeremote.RemoteRuntime.
-// It returns the RemoteRuntime, endpoint on success.
-// Users should call fakeRuntime.Stop() to cleanup the server.
-//
 // createAndStartFakeRemoteRuntime 创建并启动一个假的 CRI 运行时服务端。
 // 返回假运行时实例与它的监听端点；调用方负责调用 fakeRuntime.Stop() 清理服务。
 func createAndStartFakeRemoteRuntime(t *testing.T) (*fakeremote.RemoteRuntime, string) {
@@ -68,7 +64,6 @@ func TestGetSpans(t *testing.T) {
 	fakeRuntime, endpoint := createAndStartFakeRemoteRuntime(t)
 	defer func() {
 		fakeRuntime.Stop()
-		// clear endpoint file
 		if addr, _, err := util.GetAddressAndDialer(endpoint); err == nil {
 			if _, err := os.Stat(addr); err == nil {
 				os.Remove(addr)
@@ -98,7 +93,6 @@ func TestVersion(t *testing.T) {
 	fakeRuntime, endpoint := createAndStartFakeRemoteRuntime(t)
 	defer func() {
 		fakeRuntime.Stop()
-		// clear endpoint file
 		if addr, _, err := util.GetAddressAndDialer(endpoint); err == nil {
 			if _, err := os.Stat(addr); err == nil {
 				os.Remove(addr)
@@ -204,10 +198,6 @@ func TestRestorePod(t *testing.T) {
 	require.ErrorContains(t, err, "requires non-nil")
 }
 
-// TestTracerProviderPropagation verifies that the otelgrpc stats handler
-// (which provides gRPC client context propagation) is installed when
-// WithTracerProvider is not called or is called with a non-nil provider, and
-// is skipped when WithTracerProvider(nil) is called explicitly.
 func TestTracerProviderPropagation(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp))
@@ -264,10 +254,6 @@ func TestTracerProviderPropagation(t *testing.T) {
 	}
 }
 
-// startCapturingFakeRuntime starts a fake CRI runtime on a fresh endpoint and
-// returns a flag that the unary server interceptor flips to true the first
-// time it sees a "traceparent" header (the W3C tracecontext header the
-// otelgrpc client propagator injects) in incoming gRPC metadata.
 func startCapturingFakeRuntime(t *testing.T) (string, *atomic.Bool, func()) {
 	endpoint, err := fakeremote.GenerateEndpoint()
 	require.NoError(t, err)
@@ -336,7 +322,6 @@ func TestNewRemoteRuntimeServiceUnixSocketEndpoint(t *testing.T) {
 	fakeRuntime, endpoint := createAndStartFakeRemoteRuntime(t)
 	defer func() {
 		fakeRuntime.Stop()
-		// clear endpoint file
 		if addr, _, err := util.GetAddressAndDialer(endpoint); err == nil {
 			if _, err := os.Stat(addr); err == nil {
 				if err := os.Remove(addr); err != nil {

@@ -30,14 +30,11 @@ import (
 )
 
 const (
-	// unixProtocol is the network protocol of unix socket.
 	// unixProtocol 是 unix socket 在网络层的协议名，用于 net.Listen / net.Dialer。
 	unixProtocol = "unix"
 )
 
-// CreateListener creates a listener on the specified endpoint.
 // CreateListener 在给定端点上创建一个 unix socket 监听器。
-//
 // 关键步骤：
 //  1. 解析端点，只接受 unix socket（tcp 等协议在此平台不支持）；
 //  2. 先 unlink 掉旧的 socket 文件，避免 "address already in use"；
@@ -55,7 +52,6 @@ func CreateListener(endpoint string) (net.Listener, error) {
 		return nil, fmt.Errorf("only support unix socket endpoint")
 	}
 
-	// Unlink to cleanup the previous socket file.
 	// 清理可能残留的旧 socket 文件；文件不存在是正常情况，不视为错误。
 	err = unix.Unlink(addr)
 	if err != nil && !os.IsNotExist(err) {
@@ -67,7 +63,6 @@ func CreateListener(endpoint string) (net.Listener, error) {
 		return nil, fmt.Errorf("error creating socket directory %q: %w", filepath.Dir(addr), err)
 	}
 
-	// Create the socket on a tempfile and move it to the destination socket to handle improper cleanup
 	// 先在同目录创建一个临时文件，随后删掉它以腾出路径；
 	// 这样即使监听建立失败，也不会污染最终的目标 socket 路径。
 	file, err := os.CreateTemp(filepath.Dir(addr), "")
@@ -93,7 +88,6 @@ func CreateListener(endpoint string) (net.Listener, error) {
 	return l, nil
 }
 
-// GetAddressAndDialer returns the address parsed from the given endpoint and a context dialer.
 // GetAddressAndDialer 解析端点，返回可用于 gRPC 拨号的 socket 路径以及支持 context 取消的拨号函数。
 // 与 CreateListener 一样，此平台只接受 unix socket。
 func GetAddressAndDialer(endpoint string) (string, func(ctx context.Context, addr string) (net.Conn, error), error) {
@@ -125,7 +119,6 @@ func parseEndpointWithFallbackProtocol(endpoint string, fallbackProtocol string)
 }
 
 // parseEndpoint 按 URL scheme 解析运行时端点，返回协议名与实际地址。
-//
 // 支持的 scheme：
 //   - tcp：返回 host（形如 host:port）；
 //   - unix：返回 URL 中的路径部分，即 socket 文件路径；

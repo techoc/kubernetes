@@ -44,67 +44,46 @@ import (
 	"k8s.io/cri-client/pkg/util"
 )
 
-// remoteRuntimeService is a gRPC implementation of internalapi.RuntimeService.
 // remoteRuntimeService 是 internalapi.RuntimeService 接口的 gRPC 实现，负责把 CRI 调用转发给容器运行时。
 type remoteRuntimeService struct {
 	// timeout 是单次同步请求的超时时间；runtimeClient 是调用 CRI RuntimeService 的 gRPC 客户端。
 	timeout       time.Duration
 	runtimeClient runtimeapi.RuntimeServiceClient
-	// Cache last per-container error message to reduce log spam
 	// logReduction 按容器缓存最近一次的错误消息，抑制重复错误日志刷屏。
 	// conn 是与容器运行时建立的底层 gRPC 连接，关闭服务时需要一并释放。
 	logReduction *logreduction.LogReduction
 	conn         *grpc.ClientConn
-	// useStreaming indicates whether to use streaming RPCs for list operations
-	// when the CRIListStreaming feature gate is enabled. It falls back to false
-	// if a streaming RPC returns Unimplemented. Multiple goroutines may
-	// concurrently observe Unimplemented and store false, but that is harmless
-	// because the store is idempotent.
 	// useStreaming 标记列表类操作是否改用流式 RPC；遇到 Unimplemented 时会被置回 false。
 	// 多个协程可能同时写入 false，但写入是幂等的，无需加锁保护。
 	useStreaming atomic.Bool
 }
 
 const (
-	// How frequently to report identical errors
 	// identicalErrorDelay 是相同错误消息允许重复上报的最小间隔。
 	identicalErrorDelay = 1 * time.Minute
 
-	// connection parameters
 	// 以下常量共同约束重连退避策略：最大退避、初始退避和最小连接超时。
 	maxBackoffDelay      = 3 * time.Second
 	baseBackoffDelay     = 100 * time.Millisecond
 	minConnectionTimeout = 5 * time.Second
 )
 
-// CRIVersion is the type for valid Container Runtime Interface (CRI) API
-// versions.
 // CRIVersion 表示合法的 CRI API 版本类型。
 type CRIVersion string
 
 var (
-	// ErrContainerStatusNil indicates that the returned container status is nil.
 	// ErrContainerStatusNil 表示运行时返回的容器状态为空。
 	ErrContainerStatusNil = errors.New("container status is nil")
 
-	// ErrCommandTimedOut indicates that the exec sync command timed.
 	// ErrCommandTimedOut 表示 exec 同步命令执行超时。
 	ErrCommandTimedOut = errors.New("command timed out")
 )
 
 const (
-	// CRIVersionV1 references the v1 CRI API.
 	// CRIVersionV1 表示 v1 版本的 CRI API。
 	CRIVersionV1 CRIVersion = "v1"
 )
 
-// RemoteRuntimeServiceBuilder builds a new internalapi.RuntimeService.
-//
-// Construct a builder with NewRemoteRuntimeServiceBuilder, then chain With*
-// methods to set non-default options before calling Build. Adding new options
-// here is preferred over adding parameters to NewRemoteRuntimeService so that
-// default values can be changed in a single place without having to update
-// every callsite.
 // RemoteRuntimeServiceBuilder 负责构建 internalapi.RuntimeService。
 // 先调用 NewRemoteRuntimeServiceBuilder 取得 builder，再链式调用 With* 设置非默认选项，最后调用 Build。
 // 把新选项放在这里优于给 NewRemoteRuntimeService 增加参数：默认值只需在一处修改，无需改动所有调用点。
@@ -114,29 +93,20 @@ type RemoteRuntimeServiceBuilder struct {
 	endpoint          string
 	connectionTimeout time.Duration
 	tracerProvider    trace.TracerProvider
-	// tracerProviderSet tracks whether WithTracerProvider was called, so that
-	// an explicit nil can be distinguished from the unset default and used to
-	// opt out of installing the otelgrpc stats handler entirely.
 	// tracerProviderSet 记录是否调用过 WithTracerProvider，用于区分“显式传入 nil”和“未设置”。
 	// 显式 nil 意味着完全不安装 otelgrpc stats handler。
 	tracerProviderSet bool
-	// useStreaming indicates whether to use streaming RPCs for list operations
-	// when the CRIListStreaming feature gate is enabled. It is expected to
-	// default to true once the feature graduates to GA.
 	// useStreaming 标记列表操作是否使用流式 RPC（受 CRIListStreaming 特性门控）。
 	// 该特性毕业为 GA 后预期默认值为 true。
 	useStreaming bool
 }
 
-// NewRemoteRuntimeServiceBuilder returns a builder with default options for
-// constructing a remote runtime service.
 // NewRemoteRuntimeServiceBuilder 返回一个使用默认选项的 builder，用于构造远端运行时服务。
 func NewRemoteRuntimeServiceBuilder() *RemoteRuntimeServiceBuilder {
 	// 直接返回零值实例，默认值在 Build 中补全，选项由 With* 方法设置。
 	return &RemoteRuntimeServiceBuilder{}
 }
 
-// WithEndpoint sets the gRPC endpoint of the remote runtime service.
 // WithEndpoint 设置远端运行时服务的 gRPC 端点。
 func (b *RemoteRuntimeServiceBuilder) WithEndpoint(endpoint string) *RemoteRuntimeServiceBuilder {
 	b.endpoint = endpoint
@@ -144,8 +114,6 @@ func (b *RemoteRuntimeServiceBuilder) WithEndpoint(endpoint string) *RemoteRunti
 	return b
 }
 
-// WithConnectionTimeout sets the timeout used when connecting to the remote
-// runtime service.
 // WithConnectionTimeout 设置连接远端运行时服务所使用的超时时间。
 func (b *RemoteRuntimeServiceBuilder) WithConnectionTimeout(connectionTimeout time.Duration) *RemoteRuntimeServiceBuilder {
 	b.connectionTimeout = connectionTimeout
@@ -153,12 +121,6 @@ func (b *RemoteRuntimeServiceBuilder) WithConnectionTimeout(connectionTimeout ti
 	return b
 }
 
-// WithTracerProvider sets the OpenTelemetry tracer provider used to
-// instrument the gRPC client. If WithTracerProvider is not called, the
-// otelgrpc stats handler is installed with a noop tracer provider, so no
-// traces are produced but gRPC context propagation still works. Passing a nil
-// provider explicitly opts out of installing the stats handler entirely,
-// disabling both tracing and context propagation.
 // WithTracerProvider 设置用于 gRPC 插桩的 OpenTelemetry tracer provider。
 // 未调用本方法时会用 noop provider 安装 stats handler：不产生 trace，但保留上下文传播。
 // 显式传入 nil 则完全不安装 stats handler，同时关闭追踪与上下文传播。
@@ -170,12 +132,6 @@ func (b *RemoteRuntimeServiceBuilder) WithTracerProvider(tp trace.TracerProvider
 	return b
 }
 
-// WithUseStreaming controls whether streaming RPCs are used for list
-// operations. If the runtime returns an Unimplemented error, the client
-// automatically falls back to the corresponding unary RPC.
-// NOTE: useStreaming is supposed to be gated by the CRIListStreaming feature
-// gate and is expected to default to true once the feature graduates to GA,
-// at which point this method may be removed.
 // WithUseStreaming 控制列表操作是否使用流式 RPC；运行时返回 Unimplemented 时会自动回退到相应的一元 RPC。
 // 注意：本选项应由 CRIListStreaming 特性门控，特性 GA 后预期默认值为 true，届时本方法可能被移除。
 func (b *RemoteRuntimeServiceBuilder) WithUseStreaming(useStreaming bool) *RemoteRuntimeServiceBuilder {
@@ -184,8 +140,6 @@ func (b *RemoteRuntimeServiceBuilder) WithUseStreaming(useStreaming bool) *Remot
 	return b
 }
 
-// Build creates a new internalapi.RuntimeService using the configured
-// options.
 // Build 按已配置的选项创建 internalapi.RuntimeService。
 func (b *RemoteRuntimeServiceBuilder) Build(ctx context.Context) (internalapi.RuntimeService, error) {
 	// endpoint 是必填项，缺失时尽早报错，避免后续连接到空地址。
@@ -214,15 +168,11 @@ func (b *RemoteRuntimeServiceBuilder) Build(ctx context.Context) (internalapi.Ru
 		grpc.WithAuthority("localhost"),
 		grpc.WithContextDialer(dialer),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
-	// When no tracer provider was configured, fall back to a noop provider
-	// so context propagation still works without producing real traces.
-	// See https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/examples/passthrough
 	// 未配置 tracer provider 时回退到 noop provider：不产生真实 trace，但仍保持上下文传播。
+	// 参考：https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/examples/passthrough
 	if !b.tracerProviderSet {
 		b.tracerProvider = noop.NewTracerProvider()
 	}
-	// Install the otelgrpc stats handler unless the caller explicitly opted
-	// out by calling WithTracerProvider(nil).
 	// 除非调用方通过 WithTracerProvider(nil) 显式关闭，否则安装 otelgrpc stats handler。
 	if b.tracerProvider != nil {
 		// 记录消息收发事件，并使用 TraceContext/Baggage 传播器透传链路上下文。
@@ -270,15 +220,9 @@ func (b *RemoteRuntimeServiceBuilder) Build(ctx context.Context) (internalapi.Ru
 	return service, nil
 }
 
-// NewRemoteRuntimeService creates a new internalapi.RuntimeService.
-// If useStreaming is true, streaming RPCs will be used for list operations
-// instead of unary RPCs. If the runtime returns an Unimplemented error,
-// the client automatically falls back to unary RPCs.
-//
-// Deprecated: Use NewRemoteRuntimeServiceBuilder so that default values
-// (e.g. useStreaming) can be changed in a single place without updating
-// every callsite.
+// Deprecated: 请使用 NewRemoteRuntimeServiceBuilder。
 // NewRemoteRuntimeService 直接构造远端运行时服务；已废弃，请改用 builder 以集中管理默认值。
+// useStreaming 为 true 时列表操作使用流式 RPC；运行时返回 Unimplemented 时自动回退到对应的一元 RPC。
 func NewRemoteRuntimeService(ctx context.Context, endpoint string, connectionTimeout time.Duration, tp trace.TracerProvider, useStreaming bool) (internalapi.RuntimeService, error) {
 	// 委托给 builder，按参数顺序链式设置选项后统一调用 Build。
 	return NewRemoteRuntimeServiceBuilder().
@@ -289,7 +233,6 @@ func NewRemoteRuntimeService(ctx context.Context, endpoint string, connectionTim
 		Build(ctx)
 }
 
-// Close will shutdown the internal gRPC client connection.
 // Close 关闭内部持有的 gRPC 客户端连接。
 func (r *remoteRuntimeService) Close(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
@@ -298,8 +241,6 @@ func (r *remoteRuntimeService) Close(ctx context.Context) error {
 	return r.conn.Close()
 }
 
-// validateServiceConnection tries to connect to the remote runtime service by
-// using the CRI v1 API version and fails if that's not possible.
 // validateServiceConnection 用 CRI v1 API 校验与远端运行时服务的连通性，不支持则构建失败。
 func (r *remoteRuntimeService) validateServiceConnection(ctx context.Context, conn *grpc.ClientConn, endpoint string) error {
 	logger := klog.FromContext(ctx)
@@ -316,7 +257,6 @@ func (r *remoteRuntimeService) validateServiceConnection(ctx context.Context, co
 	return nil
 }
 
-// Version returns the runtime name, runtime version and runtime API version.
 // Version 返回运行时名称、运行时版本以及运行时 API 版本。
 func (r *remoteRuntimeService) Version(ctx context.Context, apiVersion string) (*runtimeapi.VersionResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -366,13 +306,10 @@ func (r *remoteRuntimeService) versionV1(ctx context.Context, apiVersion string)
 	return typedVersion, err
 }
 
-// RunPodSandbox creates and starts a pod-level sandbox. Runtimes should ensure
-// the sandbox is in ready state.
 // RunPodSandbox 创建并启动一个 Pod 级别的 sandbox，运行时应保证其进入 ready 状态。
 func (r *remoteRuntimeService) RunPodSandbox(ctx context.Context, config *runtimeapi.PodSandboxConfig, runtimeHandler string) (string, error) {
-	// Use 2 times longer timeout for sandbox operation (4 mins by default)
-	// TODO: Make the pod sandbox timeout configurable.
-	// sandbox 创建涉及镜像拉取与网络配置，耗时通常远超普通调用，故使用两倍超时。
+	// TODO：使 Pod sandbox 超时时间可配置。
+	// sandbox 创建涉及镜像拉取与网络配置，耗时通常远超普通调用，故使用两倍超时（默认 4 分钟）。
 	timeout := r.timeout * 2
 
 	logger := klog.FromContext(ctx)
@@ -407,8 +344,6 @@ func (r *remoteRuntimeService) RunPodSandbox(ctx context.Context, config *runtim
 	return podSandboxID, nil
 }
 
-// StopPodSandbox stops the sandbox. If there are any running containers in the
-// sandbox, they should be forced to termination.
 // StopPodSandbox 停止 sandbox；其中的运行中容器应被强制终止。
 func (r *remoteRuntimeService) StopPodSandbox(ctx context.Context, podSandBoxID string) (err error) {
 	logger := klog.FromContext(ctx)
@@ -430,8 +365,6 @@ func (r *remoteRuntimeService) StopPodSandbox(ctx context.Context, podSandBoxID 
 	return nil
 }
 
-// RemovePodSandbox removes the sandbox. If there are any containers in the
-// sandbox, they should be forcibly removed.
 // RemovePodSandbox 删除 sandbox；其中的容器应被强制删除。
 func (r *remoteRuntimeService) RemovePodSandbox(ctx context.Context, podSandBoxID string) (err error) {
 	logger := klog.FromContext(ctx)
@@ -452,7 +385,6 @@ func (r *remoteRuntimeService) RemovePodSandbox(ctx context.Context, podSandBoxI
 	return nil
 }
 
-// PodSandboxStatus returns the status of the PodSandbox.
 // PodSandboxStatus 返回指定 PodSandbox 的状态。
 func (r *remoteRuntimeService) PodSandboxStatus(ctx context.Context, podSandBoxID string, verbose bool) (*runtimeapi.PodSandboxStatusResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -488,7 +420,6 @@ func (r *remoteRuntimeService) podSandboxStatusV1(ctx context.Context, podSandBo
 	return resp, nil
 }
 
-// ListPodSandbox returns a list of PodSandboxes.
 // ListPodSandbox 按过滤器返回 PodSandbox 列表。
 func (r *remoteRuntimeService) ListPodSandbox(ctx context.Context, filter *runtimeapi.PodSandboxFilter) ([]*runtimeapi.PodSandbox, error) {
 	logger := klog.FromContext(ctx)
@@ -540,9 +471,6 @@ func (r *remoteRuntimeService) streamPodSandboxesV1(ctx context.Context, filter 
 			break
 		}
 		if err != nil {
-			// If the RPC is unimplemented, disable streaming and fall back to the unary RPC.
-			// The Unimplemented status is not returned when creating the stream,
-			// but when calling Recv() on the stream.
 			// 运行时未实现该流式 RPC：关闭全局流式开关，并用一元 RPC 重新执行本次查询。
 			if status.Code(err) == codes.Unimplemented {
 				logger.Info("StreamPodSandboxes not implemented, falling back to ListPodSandbox", "filter", filter)
@@ -560,7 +488,6 @@ func (r *remoteRuntimeService) streamPodSandboxesV1(ctx context.Context, filter 
 	return items, nil
 }
 
-// CreateContainer creates a new container in the specified PodSandbox.
 // CreateContainer 在指定的 PodSandbox 中创建一个新容器。
 func (r *remoteRuntimeService) CreateContainer(ctx context.Context, podSandBoxID string, config *runtimeapi.ContainerConfig, sandboxConfig *runtimeapi.PodSandboxConfig) (string, error) {
 	logger := klog.FromContext(ctx)
@@ -597,7 +524,6 @@ func (r *remoteRuntimeService) createContainerV1(ctx context.Context, podSandBox
 	return resp.ContainerId, nil
 }
 
-// StartContainer starts the container.
 // StartContainer 启动已创建的容器。
 func (r *remoteRuntimeService) StartContainer(ctx context.Context, containerID string) (err error) {
 	logger := klog.FromContext(ctx)
@@ -617,13 +543,10 @@ func (r *remoteRuntimeService) StartContainer(ctx context.Context, containerID s
 	return nil
 }
 
-// StopContainer stops a running container with a grace period (i.e., timeout).
 // StopContainer 在宽限期内停止运行中的容器，超时后运行时应强制终止。
 func (r *remoteRuntimeService) StopContainer(ctx context.Context, containerID string, timeout int64) (err error) {
 	logger := klog.FromContext(ctx)
 	logger.V(10).Info("[RemoteRuntimeService] StopContainer", "containerID", containerID, "timeout", timeout)
-	// Use timeout + default timeout (2 minutes) as timeout to leave extra time
-	// for SIGKILL container and request latency.
 	// 在优雅停止时长之上再叠加默认超时，给 SIGKILL 和请求往返留出余量，避免 RPC 提前超时。
 	t := r.timeout + time.Duration(timeout)*time.Second
 	ctx, cancel := context.WithTimeout(ctx, t)
@@ -644,8 +567,6 @@ func (r *remoteRuntimeService) StopContainer(ctx context.Context, containerID st
 	return nil
 }
 
-// RemoveContainer removes the container. If the container is running, the container
-// should be forced to removal.
 // RemoveContainer 删除容器；若容器仍在运行，运行时应强制删除。
 func (r *remoteRuntimeService) RemoveContainer(ctx context.Context, containerID string) (err error) {
 	logger := klog.FromContext(ctx)
@@ -666,7 +587,6 @@ func (r *remoteRuntimeService) RemoveContainer(ctx context.Context, containerID 
 	return nil
 }
 
-// ListContainers lists containers by filters.
 // ListContainers 按过滤器列出容器。
 func (r *remoteRuntimeService) ListContainers(ctx context.Context, filter *runtimeapi.ContainerFilter) ([]*runtimeapi.Container, error) {
 	logger := klog.FromContext(ctx)
@@ -716,9 +636,6 @@ func (r *remoteRuntimeService) streamContainersV1(ctx context.Context, filter *r
 			break
 		}
 		if err != nil {
-			// If the RPC is unimplemented, disable streaming and fall back to the unary RPC.
-			// The Unimplemented status is not returned when creating the stream,
-			// but when calling Recv() on the stream.
 			// Unimplemented 在 Recv 阶段才出现，此时关闭流式开关并改用一元 RPC 重查。
 			if status.Code(err) == codes.Unimplemented {
 				logger.Info("StreamContainers not implemented, falling back to ListContainers", "filter", filter)
@@ -736,7 +653,6 @@ func (r *remoteRuntimeService) streamContainersV1(ctx context.Context, filter *r
 	return containers, nil
 }
 
-// ContainerStatus returns the container status.
 // ContainerStatus 返回指定容器的状态。
 func (r *remoteRuntimeService) ContainerStatus(ctx context.Context, containerID string, verbose bool) (*runtimeapi.ContainerStatusResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -755,7 +671,6 @@ func (r *remoteRuntimeService) containerStatusV1(ctx context.Context, containerI
 	})
 	logger := klog.FromContext(ctx)
 	if err != nil {
-		// Don't spam the log with endless messages about the same failure.
 		// kubelet 会高频轮询状态；同一容器的相同错误只在间隔到期后打印一次。
 		if r.logReduction.ShouldMessageBePrinted(err.Error(), containerID) {
 			logger.Error(err, "ContainerStatus from runtime service failed", "containerID", containerID)
@@ -778,7 +693,6 @@ func (r *remoteRuntimeService) containerStatusV1(ctx context.Context, containerI
 	return resp, nil
 }
 
-// UpdateContainerResources updates a containers resource config
 // UpdateContainerResources 更新容器的资源配置。
 func (r *remoteRuntimeService) UpdateContainerResources(ctx context.Context, containerID string, resources *runtimeapi.ContainerResources) (err error) {
 	logger := klog.FromContext(ctx)
@@ -800,18 +714,13 @@ func (r *remoteRuntimeService) UpdateContainerResources(ctx context.Context, con
 	return nil
 }
 
-// ExecSync executes a command in the container, and returns the stdout output.
-// If command exits with a non-zero exit code, an error is returned.
 // ExecSync 在容器内同步执行命令并返回标准输出；命令以非零码退出时会返回错误。
 func (r *remoteRuntimeService) ExecSync(ctx context.Context, containerID string, cmd []string, timeout time.Duration) (stdout []byte, stderr []byte, err error) {
 	logger := klog.FromContext(ctx)
 	logger.V(10).Info("[RemoteRuntimeService] ExecSync", "containerID", containerID, "timeout", timeout)
-	// Do not set timeout when timeout is 0.
-	// timeout 为 0 表示不限制命令执行时长，此时只挂 context.Cancel 而不设截止时间。
+	// timeout 为 0 表示不为命令额外设置超时；此时仅用 CancelFunc 在函数返回时取消 context，父 context 的截止时间仍然有效。
 	var cancel context.CancelFunc
 	if timeout != 0 {
-		// Use timeout + default timeout (2 minutes) as timeout to leave some time for
-		// the runtime to do cleanup.
 		// 额外叠加默认超时，给运行时清理进程留出时间，避免父 context 先于命令结束而取消。
 		ctx, cancel = context.WithTimeout(ctx, r.timeout+timeout)
 	} else {
@@ -836,7 +745,6 @@ func (r *remoteRuntimeService) execSyncV1(ctx context.Context, containerID strin
 	if err != nil {
 		logger.Error(err, "ExecSync cmd from runtime service failed", "containerID", containerID, "cmd", cmd)
 
-		// interpret DeadlineExceeded gRPC errors as timedout errors
 		// 把 gRPC 的 DeadlineExceeded 转译为更易识别的 ErrCommandTimedOut，便于上层分类处理。
 		if status.Code(err) == codes.DeadlineExceeded {
 			err = fmt.Errorf("%w: %q timed out after %s", ErrCommandTimedOut, strings.Join(cmd, " "), timeout)
@@ -859,7 +767,6 @@ func (r *remoteRuntimeService) execSyncV1(ctx context.Context, containerID strin
 	return resp.Stdout, resp.Stderr, err
 }
 
-// Exec prepares a streaming endpoint to execute a command in the container, and returns the address.
 // Exec 准备一个用于在容器中执行命令的流式端点，并返回其地址。
 func (r *remoteRuntimeService) Exec(ctx context.Context, req *runtimeapi.ExecRequest) (*runtimeapi.ExecResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -891,7 +798,6 @@ func (r *remoteRuntimeService) execV1(ctx context.Context, req *runtimeapi.ExecR
 	return resp, nil
 }
 
-// Attach prepares a streaming endpoint to attach to a running container, and returns the address.
 // Attach 准备一个连接到运行中容器的流式端点，并返回其地址。
 func (r *remoteRuntimeService) Attach(ctx context.Context, req *runtimeapi.AttachRequest) (*runtimeapi.AttachResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -922,7 +828,6 @@ func (r *remoteRuntimeService) attachV1(ctx context.Context, req *runtimeapi.Att
 	return resp, nil
 }
 
-// PortForward prepares a streaming endpoint to forward ports from a PodSandbox, and returns the address.
 // PortForward 准备一个从 PodSandbox 转发端口的流式端点，并返回其地址。
 func (r *remoteRuntimeService) PortForward(ctx context.Context, req *runtimeapi.PortForwardRequest) (*runtimeapi.PortForwardResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -955,8 +860,6 @@ func (r *remoteRuntimeService) portForwardV1(ctx context.Context, req *runtimeap
 	return resp, nil
 }
 
-// UpdatePodSandboxResources synchronously updates the PodSandboxConfig with
-// the pod-level resource configuration.
 // UpdatePodSandboxResources 用 Pod 级别的资源配置同步更新 PodSandboxConfig。
 func (r *remoteRuntimeService) UpdatePodSandboxResources(ctx context.Context, req *runtimeapi.UpdatePodSandboxResourcesRequest) (*runtimeapi.UpdatePodSandboxResourcesResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -975,9 +878,6 @@ func (r *remoteRuntimeService) UpdatePodSandboxResources(ctx context.Context, re
 	return resp, nil
 }
 
-// UpdateRuntimeConfig updates the config of a runtime service. The only
-// update payload currently supported is the pod CIDR assigned to a node,
-// and the runtime service just proxies it down to the network plugin.
 // UpdateRuntimeConfig 更新运行时服务的配置；目前仅支持节点 Pod CIDR，运行时会把它转交给网络插件。
 func (r *remoteRuntimeService) UpdateRuntimeConfig(ctx context.Context, runtimeConfig *runtimeapi.RuntimeConfig) (err error) {
 	logger := klog.FromContext(ctx)
@@ -985,9 +885,6 @@ func (r *remoteRuntimeService) UpdateRuntimeConfig(ctx context.Context, runtimeC
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	// Response doesn't contain anything of interest. This translates to an
-	// Event notification to the network plugin, which can't fail, so we're
-	// really looking to surface destination unreachable.
 	// 响应体没有有效信息：该调用本质是给网络插件发通知，不会失败，这里主要关注目标是否可达。
 	if _, err := r.runtimeClient.UpdateRuntimeConfig(ctx, &runtimeapi.UpdateRuntimeConfigRequest{
 		RuntimeConfig: runtimeConfig,
@@ -999,7 +896,6 @@ func (r *remoteRuntimeService) UpdateRuntimeConfig(ctx context.Context, runtimeC
 	return nil
 }
 
-// Status returns the status of the runtime.
 // Status 返回运行时整体的状态信息。
 func (r *remoteRuntimeService) Status(ctx context.Context, verbose bool) (*runtimeapi.StatusResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -1034,7 +930,6 @@ func (r *remoteRuntimeService) statusV1(ctx context.Context, verbose bool) (*run
 	return resp, nil
 }
 
-// ContainerStats returns the stats of the container.
 // ContainerStats 返回单个容器的统计信息。
 func (r *remoteRuntimeService) ContainerStats(ctx context.Context, containerID string) (*runtimeapi.ContainerStats, error) {
 	logger := klog.FromContext(ctx)
@@ -1065,7 +960,6 @@ func (r *remoteRuntimeService) containerStatsV1(ctx context.Context, containerID
 	return resp.GetStats(), nil
 }
 
-// ListContainerStats returns the list of ContainerStats given the filter.
 // ListContainerStats 按过滤器返回容器统计信息列表。
 func (r *remoteRuntimeService) ListContainerStats(ctx context.Context, filter *runtimeapi.ContainerStatsFilter) ([]*runtimeapi.ContainerStats, error) {
 	logger := klog.FromContext(ctx)
@@ -1114,9 +1008,6 @@ func (r *remoteRuntimeService) streamContainerStatsV1(ctx context.Context, filte
 			break
 		}
 		if err != nil {
-			// If the RPC is unimplemented, disable streaming and fall back to the unary RPC.
-			// The Unimplemented status is not returned when creating the stream,
-			// but when calling Recv() on the stream.
 			// 运行时未实现该流式 RPC：关闭流式开关并回退到一元 RPC 重查。
 			if status.Code(err) == codes.Unimplemented {
 				logger.Info("StreamContainerStats not implemented, falling back to ListContainerStats", "filter", filter)
@@ -1134,7 +1025,6 @@ func (r *remoteRuntimeService) streamContainerStatsV1(ctx context.Context, filte
 	return stats, nil
 }
 
-// PodSandboxStats returns the stats of the pod.
 // PodSandboxStats 返回单个 Pod 的统计信息。
 func (r *remoteRuntimeService) PodSandboxStats(ctx context.Context, podSandboxID string) (*runtimeapi.PodSandboxStats, error) {
 	logger := klog.FromContext(ctx)
@@ -1165,12 +1055,10 @@ func (r *remoteRuntimeService) podSandboxStatsV1(ctx context.Context, podSandbox
 	return resp.GetStats(), nil
 }
 
-// ListPodSandboxStats returns the list of pod sandbox stats given the filter
 // ListPodSandboxStats 按过滤器返回 Pod sandbox 的统计信息列表。
 func (r *remoteRuntimeService) ListPodSandboxStats(ctx context.Context, filter *runtimeapi.PodSandboxStatsFilter) ([]*runtimeapi.PodSandboxStats, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(10).Info("[RemoteRuntimeService] ListPodSandboxStats", "filter", filter)
-	// Set timeout, because runtimes are able to cache disk stats results
 	// 运行时可能缓存磁盘统计结果，因此仍需设置超时防止调用悬挂。
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
@@ -1216,9 +1104,6 @@ func (r *remoteRuntimeService) streamPodSandboxStatsV1(ctx context.Context, filt
 			break
 		}
 		if err != nil {
-			// If the RPC is unimplemented, disable streaming and fall back to the unary RPC.
-			// The Unimplemented status is not returned when creating the stream,
-			// but when calling Recv() on the stream.
 			// 运行时未实现该流式 RPC：关闭流式开关并回退到一元 RPC 重查。
 			if status.Code(err) == codes.Unimplemented {
 				logger.Info("StreamPodSandboxStats not implemented, falling back to ListPodSandboxStats", "filter", filter)
@@ -1236,7 +1121,6 @@ func (r *remoteRuntimeService) streamPodSandboxStatsV1(ctx context.Context, filt
 	return stats, nil
 }
 
-// ReopenContainerLog reopens the container log file.
 // ReopenContainerLog 重新打开容器的日志文件（例如日志轮转后需要重新链接）。
 func (r *remoteRuntimeService) ReopenContainerLog(ctx context.Context, containerID string) (err error) {
 	logger := klog.FromContext(ctx)
@@ -1254,7 +1138,6 @@ func (r *remoteRuntimeService) ReopenContainerLog(ctx context.Context, container
 	return nil
 }
 
-// CheckpointContainer triggers a checkpoint of the given CheckpointContainerRequest
 // CheckpointContainer 根据给定的 CheckpointContainerRequest 触发容器检查点操作。
 func (r *remoteRuntimeService) CheckpointContainer(ctx context.Context, options *runtimeapi.CheckpointContainerRequest) error {
 	logger := klog.FromContext(ctx)
@@ -1275,13 +1158,9 @@ func (r *remoteRuntimeService) CheckpointContainer(ctx context.Context, options 
 	ctx, cancel := func(ctx context.Context) (context.Context, context.CancelFunc) {
 		defaultTimeout := int64(r.timeout / time.Second)
 		if options.Timeout > defaultTimeout {
-			// The user requested a specific timeout, let's use that if it
-			// is larger than the CRI default.
 			// 用户请求的超时大于默认值时，按用户请求执行。
 			return context.WithTimeout(ctx, time.Duration(options.Timeout)*time.Second)
 		}
-		// If the user requested a timeout less than the
-		// CRI default, let's use the CRI default.
 		// 用户请求的超时小于默认值时改写请求字段并采用 CRI 默认超时。
 		options.Timeout = defaultTimeout
 		return context.WithTimeout(ctx, r.timeout)
@@ -1311,7 +1190,6 @@ func (r *remoteRuntimeService) CheckpointContainer(ctx context.Context, options 
 	return nil
 }
 
-// CheckpointPod triggers a checkpoint of the given CheckpointPodRequest
 // CheckpointPod 根据给定的 CheckpointPodRequest 触发 Pod 检查点操作。
 func (r *remoteRuntimeService) CheckpointPod(ctx context.Context, options *runtimeapi.CheckpointPodRequest) error {
 	logger := klog.FromContext(ctx)
@@ -1325,11 +1203,8 @@ func (r *remoteRuntimeService) CheckpointPod(ctx context.Context, options *runti
 		return errors.New("CheckpointPod requires non-nil CheckpointPodRequest parameter")
 	}
 
-	// The checkpoint is bounded by the caller's context deadline (the kubelet
-	// sets it from PodCheckpoint.spec.timeoutSeconds, clamped to its configured
-	// ceiling) rather than a request field (KEP-5823). The default runtime
-	// request timeout applies only when the caller did not set a deadline.
 	// 检查点的时限由调用方 context 的 deadline 决定（KEP-5823），而非请求字段；
+	// kubelet 根据 PodCheckpoint.spec.timeoutSeconds 设置该 deadline，并限制不超过其配置的上限。
 	// 仅当调用方未设置 deadline 时，才回退到运行时默认请求超时。
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
@@ -1360,7 +1235,6 @@ func (r *remoteRuntimeService) CheckpointPod(ctx context.Context, options *runti
 	return nil
 }
 
-// RestorePod restores a pod sandbox from a checkpoint
 // RestorePod 从检查点恢复一个 Pod sandbox。
 func (r *remoteRuntimeService) RestorePod(ctx context.Context, options *runtimeapi.RestorePodRequest) (*runtimeapi.RestorePodResponse, error) {
 	logger := klog.FromContext(ctx)
@@ -1374,9 +1248,6 @@ func (r *remoteRuntimeService) RestorePod(ctx context.Context, options *runtimea
 		return nil, errors.New("RestorePod requires non-nil RestorePodRequest parameter")
 	}
 
-	// As with CheckpointPod, the restore is bounded by the caller's context
-	// deadline rather than a request field (KEP-5823). The default runtime
-	// request timeout applies only when the caller did not set a deadline.
 	// 与 CheckpointPod 相同，恢复时限由调用方 context 的 deadline 决定（KEP-5823）；
 	// 仅当调用方未设置 deadline 时才回退到默认请求超时。
 	if _, ok := ctx.Deadline(); !ok {
@@ -1425,7 +1296,6 @@ func (r *remoteRuntimeService) GetContainerEvents(ctx context.Context, container
 	}
 
 	if connectionEstablishedCallback != nil {
-		// The connection is successfully established and we have a streaming client ready for use.
 		// 连接已就绪且拿到可用客户端，回调可用于启动依赖该流的后续逻辑。
 		connectionEstablishedCallback(containerEventsStreamingClient)
 	}
@@ -1448,7 +1318,6 @@ func (r *remoteRuntimeService) GetContainerEvents(ctx context.Context, container
 	}
 }
 
-// ListMetricDescriptors gets the descriptors for the metrics that will be returned in ListPodSandboxMetrics.
 // ListMetricDescriptors 获取 ListPodSandboxMetrics 将要返回的指标描述符。
 func (r *remoteRuntimeService) ListMetricDescriptors(ctx context.Context) ([]*runtimeapi.MetricDescriptor, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
@@ -1465,7 +1334,6 @@ func (r *remoteRuntimeService) ListMetricDescriptors(ctx context.Context) ([]*ru
 	return resp.GetDescriptors(), nil
 }
 
-// ListPodSandboxMetrics retrieves the metrics for all pod sandboxes.
 // ListPodSandboxMetrics 获取所有 Pod sandbox 的指标。
 func (r *remoteRuntimeService) ListPodSandboxMetrics(ctx context.Context) ([]*runtimeapi.PodSandboxMetrics, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
@@ -1508,9 +1376,6 @@ func (r *remoteRuntimeService) streamPodSandboxMetricsV1(ctx context.Context) ([
 			break
 		}
 		if err != nil {
-			// If the RPC is unimplemented, disable streaming and fall back to the unary RPC.
-			// The Unimplemented status is not returned when creating the stream,
-			// but when calling Recv() on the stream.
 			// 运行时未实现该流式 RPC：关闭流式开关并回退到一元 RPC 重查。
 			if status.Code(err) == codes.Unimplemented {
 				logger.Info("StreamPodSandboxMetrics not implemented, falling back to ListPodSandboxMetrics")
@@ -1528,7 +1393,6 @@ func (r *remoteRuntimeService) streamPodSandboxMetricsV1(ctx context.Context) ([
 	return metrics, nil
 }
 
-// RuntimeConfig returns the configuration information of the runtime.
 // RuntimeConfig 返回运行时的配置信息。
 func (r *remoteRuntimeService) RuntimeConfig(ctx context.Context) (*runtimeapi.RuntimeConfigResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)

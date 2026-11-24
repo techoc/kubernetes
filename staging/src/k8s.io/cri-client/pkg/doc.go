@@ -14,9 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package remote contains gRPC implementation of internalapi.RuntimeService
-// and internalapi.ImageManagerService.
-//
 // Package cri 提供 CRI（Container Runtime Interface，容器运行时接口）的远程 gRPC 客户端实现。
 // 主要入口包括：
 //   - remote_runtime.go：RuntimeService 的远程客户端，管理 PodSandbox 与容器的生命周期；

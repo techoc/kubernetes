@@ -96,7 +96,7 @@ func TestGetAddressAndDialer(t *testing.T) {
 			expectError: true,
 		},
 		{
-			// The misspelling is intentional to make it error
+			// htta 是故意拼错的协议名，用于验证未知 scheme 会返回错误。
 			endpoint:    "htta://free-test.com",
 			expectError: true,
 		},
@@ -110,7 +110,6 @@ func TestGetAddressAndDialer(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		// just test addr and err
 		// 这里只关心返回的地址和错误，忽略拨号函数本身。
 		addr, _, err := GetAddressAndDialer(test.endpoint)
 		if test.expectError {

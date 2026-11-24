@@ -21,15 +21,9 @@ import (
 	"io"
 )
 
-// blockSize is the block size used in tail.
 // blockSize 是查找尾部行时每次从文件中读取的块大小（字节数）。
 const blockSize = 1024
 
-// findTailLineStartIndex returns the start of last nth line.
-// * If n < 0, return the beginning of the file.
-// * If n >= 0, return the beginning of last nth line.
-// Notice that if the last line is incomplete (no end-of-line), it will not be counted
-// as one line.
 // findTailLineStartIndex 返回倒数第 n 行的起始字节偏移量。
 // n < 0 时返回文件开头；n >= 0 时返回倒数第 n 行的起始位置。
 // 注意：若最后一行不完整（没有换行符结尾），它不会被计为一行。
