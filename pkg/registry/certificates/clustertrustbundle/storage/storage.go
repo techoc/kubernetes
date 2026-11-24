@@ -32,7 +32,7 @@ import (
 	"k8s.io/kubernetes/pkg/registry/certificates/clustertrustbundle"
 )
 
-// REST is a RESTStorage for ClusterTrustBundle.
+// REST 为 ClusterTrustBundle 提供基于通用 Store 的 REST 存储实现。
 type REST struct {
 	*genericregistry.Store
 }
@@ -41,7 +41,7 @@ var _ rest.StandardStorage = &REST{}
 var _ rest.TableConvertor = &REST{}
 var _ genericregistry.GenericStore = &REST{}
 
-// NewREST returns a RESTStorage object for ClusterTrustBundle objects.
+// NewREST 创建 ClusterTrustBundle 的 REST 存储，并配置字段筛选和表格输出能力。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &api.ClusterTrustBundle{} },
@@ -65,6 +65,7 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	return &REST{store}, nil
 }
 
+// getAttrs 提取 ClusterTrustBundle 的标签和可筛选字段，供 List、Watch 等请求过滤。
 func getAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	bundle, ok := obj.(*api.ClusterTrustBundle)
 	if !ok {

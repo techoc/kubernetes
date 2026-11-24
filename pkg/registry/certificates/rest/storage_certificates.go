@@ -38,19 +38,21 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// RESTStorageProvider 根据 API 资源启用配置和特性门控，装配 Certificates API Group 的 REST 存储。
 type RESTStorageProvider struct {
 	Authorizer authorizer.UnconditionalAuthorizer
 	Generic    bool
 }
 
+// NewRESTStorage 初始化 Certificates API Group，并按 v1、v1beta1、v1alpha1 的顺序注册已启用资源。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	if p.Authorizer == nil {
 		return genericapiserver.APIGroupInfo{}, fmt.Errorf("certificates REST storage requires an authorizer")
 	}
 
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(certificates.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 若在此处增加 API 版本，还必须在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将版本优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -73,6 +75,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 	return apiGroupInfo, nil
 }
 
+// v1Storage 构建 certificates/v1 的 REST Storage，并分别注册资源及其支持的子资源。
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -114,6 +117,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 	return storage, nil
 }
 
+// v1beta1Storage 构建 certificates/v1beta1 中受支持且已启用的资源存储。
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -145,6 +149,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 	return storage, nil
 }
 
+// v1alpha1Storage 构建 certificates/v1alpha1 中受支持且已启用的资源存储。
 func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
@@ -163,6 +168,7 @@ func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstora
 	return storage, nil
 }
 
+// GroupName 返回 Certificates API Group 的名称。
 func (p RESTStorageProvider) GroupName() string {
 	return certificates.GroupName
 }

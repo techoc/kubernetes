@@ -41,7 +41,7 @@ const (
 )
 
 var (
-	// csrDurationRequested counts and categorizes how many certificates were issued when the client requested a duration.
+	// csrDurationRequested 统计客户端指定证书有效期且最终成功签发的证书数量，并按签名者分类。
 	csrDurationRequested = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -53,7 +53,7 @@ var (
 		[]string{"signerName"},
 	)
 
-	// csrDurationHonored counts and categorizes how many certificates were issued when the client requested a duration and the signer honored it.
+	// csrDurationHonored 统计签名者遵循客户端所请求有效期签发的证书数量，并按签名者分类。
 	csrDurationHonored = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -83,11 +83,11 @@ func countCSRDurationMetric(requested, honored counterVecMetric) genericregistry
 	return func(ctx context.Context, obj, old runtime.Object, options *metav1.UpdateOptions) (genericregistry.FinishFunc, error) {
 		return func(ctx context.Context, success bool) {
 			if !success {
-				return // ignore failures
+				return // 更新失败时不记录指标。
 			}
 
 			if dryrun.IsDryRun(options.DryRun) {
-				return // ignore things that would not get persisted
+				return // Dry-run 请求不会持久化对象，因此不记录指标。
 			}
 
 			oldCSR, ok := old.(*certificates.CertificateSigningRequest)
@@ -95,13 +95,13 @@ func countCSRDurationMetric(requested, honored counterVecMetric) genericregistry
 				return
 			}
 
-			// if the old CSR already has a certificate, do not double count it
+			// 旧 CSR 已包含签发证书，说明此前已统计过，避免重复计数。
 			if len(oldCSR.Status.Certificate) > 0 {
 				return
 			}
 
 			if oldCSR.Spec.ExpirationSeconds == nil {
-				return // ignore CSRs that are not using the CSR duration feature
+				return // 未使用 CSR 有效期特性的请求不纳入统计。
 			}
 
 			newCSR, ok := obj.(*certificates.CertificateSigningRequest)
@@ -110,19 +110,15 @@ func countCSRDurationMetric(requested, honored counterVecMetric) genericregistry
 			}
 			issuedCert := newCSR.Status.Certificate
 
-			// new CSR has no issued certificate yet so do not count it.
-			// note that this means that we will ignore CSRs that set a duration
-			// but never get approved/signed.  this is fine because the point
-			// of these metrics is to understand if the duration is honored
-			// by the signer.  we are not checking the behavior of the approver.
+			// 新 CSR 尚未签发证书，因此不计数。设置了有效期但最终未获批准或未被签名的 CSR 也会被忽略；
+			// 这是有意的，因为这些指标用于衡量签名者是否遵循请求的有效期，而不是评估批准者的行为。
 			if len(issuedCert) == 0 {
 				return
 			}
 
 			signer := compressSignerName(oldCSR.Spec.SignerName)
 
-			// at this point we know that this CSR is going to be persisted and
-			// the cert was just issued and the client requested a duration
+			// 到这里已确认该 CSR 更新将被持久化、刚刚签发了证书，并且客户端明确请求了有效期。
 			requested.WithLabelValues(signer).Inc()
 
 			certs, err := cert.ParseCertsPEM(issuedCert)
@@ -131,7 +127,7 @@ func countCSRDurationMetric(requested, honored counterVecMetric) genericregistry
 				return
 			}
 
-			// now we check to see if the signer honored the requested duration
+			// 检查签名者实际签发的证书有效期是否符合客户端请求。
 			certificate := certs[0]
 			wantDuration := csr.ExpirationSecondsToDuration(*oldCSR.Spec.ExpirationSeconds)
 			actualDuration := certificate.NotAfter.Sub(certificate.NotBefore)
@@ -148,7 +144,7 @@ func isDurationHonored(want, got time.Duration) bool {
 		delta = -delta
 	}
 
-	// short-lived cert backdating + 5% of want
+	// 容差由短有效期证书可能采用的回溯生效时间（5 分钟）加上请求有效期的 5% 组成。
 	maxDelta := 5*time.Minute + (want / 20)
 
 	return delta < maxDelta
