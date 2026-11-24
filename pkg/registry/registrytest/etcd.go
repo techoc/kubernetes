@@ -27,11 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/kubeapiserver"
 )
 
-// NewEtcdStorage is for testing.  It configures the etcd storage for a bogus resource; the test must not care.
+// NewEtcdStorage 为测试启动临时 etcd，并使用任意占位资源配置存储；调用方无需关心具体资源名称。
 func NewEtcdStorage(t *testing.T, group string) (*storagebackend.ConfigForResource, *etcd3testing.EtcdTestServer) {
 	return NewEtcdStorageForResource(t, schema.GroupResource{Group: group, Resource: "any"})
 }
 
+// NewEtcdStorageForResource 为指定 GroupResource 创建临时 etcd 测试服务，并返回对应的存储后端配置。
 func NewEtcdStorageForResource(t *testing.T, resource schema.GroupResource) (*storagebackend.ConfigForResource, *etcd3testing.EtcdTestServer) {
 	t.Helper()
 

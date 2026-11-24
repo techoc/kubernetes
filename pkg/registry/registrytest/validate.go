@@ -23,16 +23,14 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 )
 
-// ValidateStorageStrategies ensures any instances of the generic registry.Store in the given storage map
-// have expected strategies defined.
+// ValidateStorageStrategies 检查存储映射中的 genericregistry.Store 是否都配置了创建、更新和删除策略。
 func ValidateStorageStrategies(storageMap map[string]rest.Storage) []error {
 	errs := []error{}
 
 	for k, storage := range storageMap {
 		switch t := storage.(type) {
 		case registry.GenericStore:
-			// At this point it appears all uses of the generic registry store should have a create, update, and
-			// delete strategy set:
+			// 当前所有通用 Store 都应配置创建、更新和删除策略；缺少任意策略都会被记录为错误。
 			if t.GetCreateStrategy() == nil {
 				errs = append(errs, fmt.Errorf("store for type [%v] does not have a CreateStrategy", k))
 			}

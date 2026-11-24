@@ -23,6 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 )
 
+// AssertCategories 断言 REST 存储返回的资源类别与预期列表完全一致。
 func AssertCategories(t *testing.T, storage rest.CategoriesProvider, expected []string) {
 	actual := storage.Categories()
 	ok := reflect.DeepEqual(actual, expected)

@@ -27,7 +27,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// NodeRegistry implements node.Registry interface.
+// NodeRegistry 是用于测试的内存 Node 注册表模拟，通过互斥锁保护节点列表和错误状态。
 type NodeRegistry struct {
 	Err   error
 	Node  string
@@ -36,7 +36,7 @@ type NodeRegistry struct {
 	sync.Mutex
 }
 
-// MakeNodeList constructs api.NodeList from list of node names and a NodeResource.
+// MakeNodeList 根据节点名称列表和统一的资源容量构造 NodeList。
 func MakeNodeList(nodes []string, nodeResources api.ResourceList) *api.NodeList {
 	list := api.NodeList{
 		Items: make([]api.Node, len(nodes)),
@@ -48,18 +48,21 @@ func MakeNodeList(nodes []string, nodeResources api.ResourceList) *api.NodeList 
 	return &list
 }
 
+// SetError 设置后续节点操作统一返回的模拟错误。
 func (r *NodeRegistry) SetError(err error) {
 	r.Lock()
 	defer r.Unlock()
 	r.Err = err
 }
 
+// ListNodes 返回模拟注册表中的节点列表及当前设置的错误。
 func (r *NodeRegistry) ListNodes(ctx context.Context, options *metainternalversion.ListOptions) (*api.NodeList, error) {
 	r.Lock()
 	defer r.Unlock()
 	return &r.Nodes, r.Err
 }
 
+// CreateNode 记录新节点名称并将节点追加到模拟列表。
 func (r *NodeRegistry) CreateNode(ctx context.Context, node *api.Node) error {
 	r.Lock()
 	defer r.Unlock()
@@ -68,6 +71,7 @@ func (r *NodeRegistry) CreateNode(ctx context.Context, node *api.Node) error {
 	return r.Err
 }
 
+// UpdateNode 按节点名称替换模拟列表中的节点对象。
 func (r *NodeRegistry) UpdateNode(ctx context.Context, node *api.Node) error {
 	r.Lock()
 	defer r.Unlock()
@@ -80,6 +84,7 @@ func (r *NodeRegistry) UpdateNode(ctx context.Context, node *api.Node) error {
 	return r.Err
 }
 
+// GetNode 按名称读取节点；若节点不存在则返回标准 NotFound 错误。
 func (r *NodeRegistry) GetNode(ctx context.Context, nodeID string, options *metav1.GetOptions) (*api.Node, error) {
 	r.Lock()
 	defer r.Unlock()
@@ -94,6 +99,7 @@ func (r *NodeRegistry) GetNode(ctx context.Context, nodeID string, options *meta
 	return nil, errors.NewNotFound(api.Resource("nodes"), nodeID)
 }
 
+// DeleteNode 从模拟列表中移除指定节点，并保留其余节点名称元数据。
 func (r *NodeRegistry) DeleteNode(ctx context.Context, nodeID string) error {
 	r.Lock()
 	defer r.Unlock()
@@ -107,6 +113,7 @@ func (r *NodeRegistry) DeleteNode(ctx context.Context, nodeID string) error {
 	return r.Err
 }
 
+// WatchNodes 当前不产生事件流，仅返回预设的模拟错误。
 func (r *NodeRegistry) WatchNodes(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	r.Lock()
 	defer r.Unlock()

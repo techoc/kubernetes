@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package registrytest provides tests for Registry implementations
-// for storing Nodes, Pods, Schedulers and Services.
+// Package registrytest 提供 Registry 和 REST 存储实现的测试辅助工具，包含内存模拟、临时 etcd 和策略断言。
 package registrytest

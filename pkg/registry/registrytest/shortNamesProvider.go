@@ -23,6 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 )
 
+// AssertShortNames 断言 REST 存储返回的资源简称与预期列表完全一致。
 func AssertShortNames(t *testing.T, storage rest.ShortNamesProvider, expected []string) {
 	actual := storage.ShortNames()
 	ok := reflect.DeepEqual(actual, expected)
