@@ -175,7 +175,7 @@ func (daemonSetStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldp
 	}
 }
 
-// 状态子资源只接受 Status 变化，Spec 始终从旧对象恢复。
+// PrepareForUpdate 状态子资源只接受 Status 变化，Spec 始终从旧对象恢复。
 func (daemonSetStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newDaemonSet := obj.(*apps.DaemonSet)
 	oldDaemonSet := old.(*apps.DaemonSet)
