@@ -26,7 +26,6 @@ import (
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
-// FakeImageService fakes the image service.
 // FakeImageService 是 CRI ImageManagerService 的假实现（mock），用于单元测试中模拟镜像服务。
 // 它不真正与容器运行时通信，而是通过内存中的 map 保存镜像、通过 Called 记录方法调用、
 // 通过 Errors 注入预设错误，从而让测试可以精确控制服务的行为。
@@ -54,7 +53,6 @@ type FakeImageService struct {
 	FakeContainerFilesystemUsage []*runtimeapi.FilesystemUsage
 }
 
-// SetFakeImages sets the list of fake images for the FakeImageService.
 // SetFakeImages 用一组镜像名初始化假镜像列表，覆盖已有的 Images。
 // 每个镜像会生成一个不带注解的 ImageSpec，并据此构造假镜像。
 func (r *FakeImageService) SetFakeImages(images []string) {
@@ -73,7 +71,6 @@ func (r *FakeImageService) SetFakeImages(images []string) {
 	}
 }
 
-// SetFakeImagesWithAnnotations sets the list of fake images for the FakeImageService with annotations.
 // SetFakeImagesWithAnnotations 与 SetFakeImages 类似，但允许为每个镜像指定完整的 ImageSpec（含注解），
 // 便于测试依赖镜像注解的逻辑。
 func (r *FakeImageService) SetFakeImagesWithAnnotations(imageSpecs []*runtimeapi.ImageSpec) {
@@ -88,7 +85,6 @@ func (r *FakeImageService) SetFakeImagesWithAnnotations(imageSpecs []*runtimeapi
 	}
 }
 
-// SetFakeImageSize sets the image size for the FakeImageService.
 // SetFakeImageSize 设置构造假镜像时使用的统一镜像大小，影响后续所有 makeFakeImage 的结果。
 func (r *FakeImageService) SetFakeImageSize(size uint64) {
 	r.Lock()
@@ -97,7 +93,6 @@ func (r *FakeImageService) SetFakeImageSize(size uint64) {
 	r.FakeImageSize = size
 }
 
-// SetFakeImagePinned sets the image Pinned field for one image.
 // SetFakeImagePinned 设置单个镜像的 pinned（固定）标记。
 // 若 Pinned map 尚未初始化，会先创建它。
 func (r *FakeImageService) SetFakeImagePinned(image string, pinned bool) {
@@ -111,7 +106,6 @@ func (r *FakeImageService) SetFakeImagePinned(image string, pinned bool) {
 	r.Pinned[image] = pinned
 }
 
-// SetFakeFilesystemUsage sets the FilesystemUsage for FakeImageService.
 // SetFakeFilesystemUsage 设置 ImageFsInfo 返回的镜像文件系统用量。
 func (r *FakeImageService) SetFakeFilesystemUsage(usage []*runtimeapi.FilesystemUsage) {
 	r.Lock()
@@ -120,9 +114,7 @@ func (r *FakeImageService) SetFakeFilesystemUsage(usage []*runtimeapi.Filesystem
 	r.FakeFilesystemUsage = usage
 }
 
-// SetFakeFilesystemUsage sets the FilesystemUsage for FakeImageService.
 // SetFakeContainerFilesystemUsage 设置 ImageFsInfo 返回的容器文件系统用量。
-// （注意：上方原英文注释沿用了旧文案，实际本方法针对的是容器文件系统。）
 func (r *FakeImageService) SetFakeContainerFilesystemUsage(usage []*runtimeapi.FilesystemUsage) {
 	r.Lock()
 	defer r.Unlock()
@@ -130,7 +122,6 @@ func (r *FakeImageService) SetFakeContainerFilesystemUsage(usage []*runtimeapi.F
 	r.FakeContainerFilesystemUsage = usage
 }
 
-// NewFakeImageService creates a new FakeImageService.
 // NewFakeImageService 创建一个初始化好的 FakeImageService：
 // Called、Errors、Images 三个字段都被初始化为空集合，避免调用方遇到 nil map 或 nil 切片。
 func NewFakeImageService() *FakeImageService {
@@ -154,7 +145,6 @@ func (r *FakeImageService) makeFakeImage(image *runtimeapi.ImageSpec) *runtimeap
 	}
 }
 
-// stringInSlice returns true if s is in list
 // stringInSlice 判断字符串 s 是否存在于切片 list 中，存在返回 true，否则返回 false。
 func stringInSlice(s string, list []string) bool {
 	for _, v := range list {
@@ -166,7 +156,6 @@ func stringInSlice(s string, list []string) bool {
 	return false
 }
 
-// InjectError sets the error message for the FakeImageService.
 // InjectError 向指定方法名（f）的错误队列追加一个错误，用于模拟该方法下一次调用失败。
 // 多次调用可注入多个错误，popError 会按先进先出的顺序逐个取出。
 func (r *FakeImageService) InjectError(f string, err error) {
@@ -175,7 +164,6 @@ func (r *FakeImageService) InjectError(f string, err error) {
 	r.Errors[f] = append(r.Errors[f], err)
 }
 
-// caller of popError must grab a lock.
 // popError 取出并返回方法 f 对应的下一个待注入错误。
 // 注意：调用方必须先持有锁（本函数自身不加锁），因为每组错误是按调用顺序消费的。
 // 若 f 没有注入错误或队列已空，返回 nil，表示该方法应正常执行。
@@ -195,7 +183,6 @@ func (r *FakeImageService) popError(f string) error {
 	return err
 }
 
-// ListImages returns the list of images from FakeImageService or error if it was previously set.
 // ListImages 列出假镜像。若之前通过 InjectError 为 ListImages 注入了错误，则返回该错误。
 // 若 filter 指定了镜像名，只返回 RepoTags 中包含该名字的镜像。
 func (r *FakeImageService) ListImages(_ context.Context, filter *runtimeapi.ImageFilter) ([]*runtimeapi.Image, error) {
@@ -224,7 +211,6 @@ func (r *FakeImageService) ListImages(_ context.Context, filter *runtimeapi.Imag
 	return images, nil
 }
 
-// ImageStatus returns the status of the image from the FakeImageService.
 // ImageStatus 返回指定镜像的状态（这里直接从 Images map 中取镜像对象）。
 // verbose 参数在该假实现中不影响结果。
 func (r *FakeImageService) ImageStatus(_ context.Context, image *runtimeapi.ImageSpec, verbose bool) (*runtimeapi.ImageStatusResponse, error) {
@@ -240,7 +226,6 @@ func (r *FakeImageService) ImageStatus(_ context.Context, image *runtimeapi.Imag
 	return &runtimeapi.ImageStatusResponse{Image: r.Images[image.Image]}, nil
 }
 
-// PullImage emulate pulling the image from the FakeImageService.
 // PullImage 模拟拉取镜像：记录本次拉取的镜像与认证配置，并在本地镜像表中加入该镜像。
 // 真实运行时会为镜像生成随机 ID，这里直接用镜像名作为 ID 以简化测试。
 func (r *FakeImageService) PullImage(_ context.Context, image *runtimeapi.ImageSpec, auth *runtimeapi.AuthConfig, podSandboxConfig *runtimeapi.PodSandboxConfig) (string, error) {
@@ -254,8 +239,6 @@ func (r *FakeImageService) PullImage(_ context.Context, image *runtimeapi.ImageS
 
 	// 记录拉取时的镜像规格和认证信息，供 AssertImagePulledWithAuth 断言。
 	r.pulledImages = append(r.pulledImages, &pulledImage{imageSpec: image, authConfig: auth})
-	// ImageID should be randomized for real container runtime, but here just use
-	// image's name for easily making fake images.
 	imageID := image.Image
 	// 只有当镜像尚不存在时才创建假镜像，避免覆盖已有镜像。
 	if _, ok := r.Images[imageID]; !ok {
@@ -265,7 +248,6 @@ func (r *FakeImageService) PullImage(_ context.Context, image *runtimeapi.ImageS
 	return imageID, nil
 }
 
-// RemoveImage removes image from the FakeImageService.
 // RemoveImage 从假镜像表中删除指定镜像；若注入了错误则返回该错误。
 func (r *FakeImageService) RemoveImage(_ context.Context, image *runtimeapi.ImageSpec) error {
 	r.Lock()
@@ -276,14 +258,12 @@ func (r *FakeImageService) RemoveImage(_ context.Context, image *runtimeapi.Imag
 		return err
 	}
 
-	// Remove the image
 	// 直接从 map 中删除键；若镜像不存在，delete 是安全的空操作。
 	delete(r.Images, image.Image)
 
 	return nil
 }
 
-// ImageFsInfo returns information of the filesystem that is used to store images.
 // ImageFsInfo 返回镜像文件系统与容器文件系统的用量信息，这些数据由
 // SetFakeFilesystemUsage / SetFakeContainerFilesystemUsage 预先设置。
 func (r *FakeImageService) ImageFsInfo(_ context.Context) (*runtimeapi.ImageFsInfoResponse, error) {
@@ -302,7 +282,6 @@ func (r *FakeImageService) ImageFsInfo(_ context.Context) (*runtimeapi.ImageFsIn
 	}, nil
 }
 
-// AssertImagePulledWithAuth validates whether the image was pulled with auth and asserts if it wasn't.
 // AssertImagePulledWithAuth 断言之前是否用给定的认证配置拉取过指定镜像。
 // 它在 pulledImages 记录中查找匹配的项；若找不到，则通过 testify 的 assert 报告失败，
 // failMsg 为断言失败时输出自定义消息。
@@ -320,7 +299,6 @@ type pulledImage struct {
 	authConfig *runtimeapi.AuthConfig
 }
 
-// Close will shutdown the internal gRPC client connection.
 // Close 模拟关闭客户端连接；假实现中仅记录调用并处理可能注入的错误。
 func (r *FakeImageService) Close(_ context.Context) error {
 	r.Lock()

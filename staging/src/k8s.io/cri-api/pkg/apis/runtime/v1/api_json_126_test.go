@@ -18,7 +18,6 @@ limitations under the License.
 
 package v1
 
-// 1.26 marshals a \u-escaped replacement char
 // stdlibSerializedReplacementChar 定义在 Go 1.26 及更早版本下，encoding/json 对 UTF-8 替代字符（U+FFFD）
 // 序列化后的结果：会被转义成字面字符串 "\ufffd"（带反斜杠的 6 个 ASCII 字符）。
 // 该文件通过 //go:build !go1.27 约束，仅在 Go 1.27 之前生效。

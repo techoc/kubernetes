@@ -22,19 +22,14 @@ import (
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
-// BuildContainerName creates a unique container name string.
-//
 // BuildContainerName 根据容器元数据构造一个唯一的容器名称字符串。
 // 名称格式为：<沙箱ID>_<容器名>_<第几次尝试>。
 // 把 sandboxID 拼进去是为了避免不同 Pod 沙箱中同名容器之间发生冲突。
 func BuildContainerName(metadata *runtimeapi.ContainerMetadata, sandboxID string) string {
-	// include the sandbox ID to make the container ID unique.
 	// 拼入沙箱 ID，保证即使容器名和 attempt 相同，不同沙箱下的容器名仍然唯一。
 	return fmt.Sprintf("%s_%s_%d", sandboxID, metadata.Name, metadata.Attempt)
 }
 
-// BuildSandboxName creates a unique sandbox name string.
-//
 // BuildSandboxName 根据 Pod 沙箱元数据构造一个唯一的沙箱名称字符串。
 // 名称格式为：<沙箱名>_<命名空间>_<UID>_<第几次尝试>。
 // 其中 Name 和 Namespace 用于可读性，Uid 保证跨命名空间唯一，Attempt 区分重建次数。
@@ -45,7 +40,6 @@ func BuildSandboxName(metadata *runtimeapi.PodSandboxMetadata) string {
 // filterInLabels 判断 labels 是否完全匹配 filter 中指定的所有标签。
 // 这是一个"包含式"匹配：filter 中的每一个键值对都必须在 labels 中存在且值相等，
 // 而 labels 中额外的标签不影响结果。
-//
 // 匹配流程：
 //  1. 遍历 filter 的每个键值对；
 //  2. 若 labels 中不存在该键，返回 false；

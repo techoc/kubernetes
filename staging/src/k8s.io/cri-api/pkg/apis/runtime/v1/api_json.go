@@ -18,9 +18,6 @@ package v1
 
 import "encoding/json"
 
-// MarshalJSON() preserves pre-1.34 JSON encoding of value as a string (not base64),
-// stomping non-utf-8 data with the utf8 replacement character.
-//
 // MarshalJSON 为 KeyValue 实现自定义 JSON 序列化，以保持 Kubernetes 1.34 之前的行为：
 //   - Value 字段按普通字符串编码，而不是 protobuf 默认的 base64 编码；
 //   - 若 Value 中含有非法 UTF-8 字节，转换为字符串时会被替换为 UTF-8 替代字符（U+FFFD）。
@@ -35,9 +32,6 @@ func (k *KeyValue) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON preserves pre-1.34 JSON decoding of value as a string (not base64),
-// stomping non-utf-8 data with the utf8 replacement character.
-//
 // UnmarshalJSON 为 KeyValue 实现自定义 JSON 反序列化，与上面的 MarshalJSON 成对出现：
 //   - 把 JSON 中的 value 字符串按旧版本方式解析，而不是当作 base64 解码；
 //   - 非法 UTF-8 字节在解析阶段被替换为替代字符。
@@ -58,9 +52,6 @@ func (k *KeyValue) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// stringKeyValue matches the structure used to json-encode pre-1.34.
-// Non-UTF-8 characters in Value are coerced to the replacement character on encode/decode.
-//
 // stringKeyValue 是一个内部辅助结构，字段名和 json tag 都与 1.34 之前的 KeyValue 编码结构保持一致。
 // 它的 Value 使用 string 而非 []byte，从而在编解码时触发 Go 标准库对非法 UTF-8 的替换行为。
 type stringKeyValue struct {
