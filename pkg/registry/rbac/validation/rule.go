@@ -36,22 +36,20 @@ import (
 
 // AuthorizationRuleResolver 抽象 Role/Binding 查询与用户有效规则解析，供防提权存储层判断用户当前已拥有的权限。
 type AuthorizationRuleResolver interface {
-	// GetRoleReferenceRules attempts to resolve the role reference of a RoleBinding or ClusterRoleBinding.  The passed namespace should be the namespace
-	// of the role binding, the empty string if a cluster role binding.
+	// GetRoleReferenceRules 解析 RoleBinding 或 ClusterRoleBinding 中的 RoleRef。
+	// namespace 应传入 RoleBinding 所在命名空间；对于 ClusterRoleBinding 则传空字符串。
 	GetRoleReferenceRules(ctx context.Context, roleRef rbacv1.RoleRef, namespace string) ([]rbacv1.PolicyRule, error)
 
-	// RulesFor returns the list of rules that apply to a given user in a given namespace and error.  If an error is returned, the slice of
-	// PolicyRules may not be complete, but it contains all retrievable rules.  This is done because policy rules are purely additive and policy determinations
-	// can be made on the basis of those rules that are found.
+	// RulesFor 返回指定用户在指定 namespace 中适用的权限规则及查询错误。
+	// 即使返回错误，规则切片也可能包含已成功读取的部分结果；RBAC 规则是累加关系，可基于已取得的规则继续判断。
 	RulesFor(ctx context.Context, user user.Info, namespace string) ([]rbacv1.PolicyRule, error)
 
-	// VisitRulesFor invokes visitor() with each rule that applies to a given user in a given namespace, and each error encountered resolving those rules.
-	// If visitor() returns false, visiting is short-circuited.
+	// VisitRulesFor 将适用于指定用户和 namespace 的每条规则，以及解析过程中遇到的错误，依次传递给 visitor。
+	// visitor 返回 false 时立即停止遍历。
 	VisitRulesFor(ctx context.Context, user user.Info, namespace string, visitor func(source fmt.Stringer, rule *rbacv1.PolicyRule, err error) bool)
 }
 
-// ConfirmNoEscalation determines if the roles for a given user in a given namespace encompass the provided role.
-// ConfirmNoEscalation 解析当前用户在当前 namespace 已拥有的规则，并确认它们覆盖待授予规则；不允许仅凭绑定关系授予更高权限。
+// ConfirmNoEscalation 判断用户在指定 namespace 中已有的权限规则是否完整覆盖准备授予的规则，防止权限提升。
 func ConfirmNoEscalation(ctx context.Context, ruleResolver AuthorizationRuleResolver, rules []rbacv1.PolicyRule) error {
 	ruleResolutionErrors := []error{}
 
@@ -63,7 +61,7 @@ func ConfirmNoEscalation(ctx context.Context, ruleResolver AuthorizationRuleReso
 
 	ownerRules, err := ruleResolver.RulesFor(ctx, user, namespace)
 	if err != nil {
-		// As per AuthorizationRuleResolver contract, this may return a non fatal error with an incomplete list of policies. Log the error and continue.
+		// 根据 AuthorizationRuleResolver 接口约定，此处可能在返回部分规则的同时返回非致命错误；记录错误后继续使用已取得的规则进行判断。
 		klog.V(1).Infof("non-fatal error getting local rules for %v: %v", user, err)
 		ruleResolutionErrors = append(ruleResolutionErrors, err)
 	}
@@ -240,8 +238,7 @@ func (r *DefaultRuleResolver) VisitRulesFor(ctx context.Context, user user.Info,
 	}
 }
 
-// GetRoleReferenceRules attempts to resolve the RoleBinding or ClusterRoleBinding.
-// GetRoleReferenceRules 按 RoleRef.Kind 读取同命名空间 Role 或集群级 ClusterRole，返回其 PolicyRules。
+// GetRoleReferenceRules 根据 RoleRef.Kind 解析 RoleBinding 或 ClusterRoleBinding 指向的角色规则。
 func (r *DefaultRuleResolver) GetRoleReferenceRules(ctx context.Context, roleRef rbacv1.RoleRef, bindingNamespace string) ([]rbacv1.PolicyRule, error) {
 	switch roleRef.Kind {
 	case "Role":
@@ -263,9 +260,7 @@ func (r *DefaultRuleResolver) GetRoleReferenceRules(ctx context.Context, roleRef
 	}
 }
 
-// appliesTo returns whether any of the bindingSubjects applies to the specified subject,
-// and if true, the index of the first subject that applies
-// appliesTo 在 Binding.Subjects 中寻找第一个匹配用户的条目，并返回索引供授权错误描述使用。
+// appliesTo 检查 Binding.Subjects 中是否存在匹配指定用户的条目；若匹配，返回第一个匹配项的索引。
 func appliesTo(user user.Info, bindingSubjects []rbacv1.Subject, namespace string) (int, bool) {
 	for i, bindingSubject := range bindingSubjects {
 		if appliesToUser(user, bindingSubject, namespace) {
@@ -294,8 +289,8 @@ func appliesToUser(user user.Info, subject rbacv1.Subject, namespace string) boo
 		return has(user.GetGroups(), subject.Name)
 
 	case rbacv1.ServiceAccountKind:
-		// default the namespace to namespace we're working in if its available.  This allows rolebindings that reference
-		// SAs in th local namespace to avoid having to qualify them.
+		// 如果 Subject 未指定 namespace，则默认使用当前 RoleBinding 所在 namespace。
+		// 因此 RoleBinding 引用同命名空间的 ServiceAccount 时可以省略 namespace。
 		saNamespace := namespace
 		if len(subject.Namespace) > 0 {
 			saNamespace = subject.Namespace
@@ -303,14 +298,14 @@ func appliesToUser(user user.Info, subject rbacv1.Subject, namespace string) boo
 		if len(saNamespace) == 0 {
 			return false
 		}
-		// use a more efficient comparison for RBAC checking
+		// 使用专门的用户名匹配函数，避免为 RBAC 检查构造额外对象。
 		return serviceaccount.MatchesUsername(saNamespace, subject.Name, user.GetName())
 	default:
 		return false
 	}
 }
 
-// NewTestRuleResolver returns a rule resolver from lists of role objects.
+// NewTestRuleResolver 根据给定的 Role、RoleBinding、ClusterRole 和 ClusterRoleBinding 列表创建测试用规则解析器。
 func NewTestRuleResolver(roles []*rbacv1.Role, roleBindings []*rbacv1.RoleBinding, clusterRoles []*rbacv1.ClusterRole, clusterRoleBindings []*rbacv1.ClusterRoleBinding) (AuthorizationRuleResolver, *StaticRoles) {
 	r := StaticRoles{
 		roles:               roles,
@@ -325,7 +320,7 @@ func newMockRuleResolver(r *StaticRoles) AuthorizationRuleResolver {
 	return NewDefaultRuleResolver(r, r, r, r)
 }
 
-// StaticRoles is a rule resolver that resolves from lists of role objects.
+// StaticRoles 是基于内存中 RBAC 对象列表进行查询的静态规则解析器，主要用于测试。
 type StaticRoles struct {
 	roles               []*rbacv1.Role
 	roleBindings        []*rbacv1.RoleBinding
@@ -364,7 +359,7 @@ func (r *StaticRoles) ListRoleBindings(ctx context.Context, namespace string) ([
 		if roleBinding.Namespace != namespace {
 			continue
 		}
-		// TODO(ericchiang): need to implement label selectors?
+		// TODO：测试用静态解析器目前未实现 LabelSelector 过滤。
 		roleBindingList = append(roleBindingList, roleBinding)
 	}
 	return roleBindingList, nil

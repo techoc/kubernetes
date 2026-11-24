@@ -34,33 +34,31 @@ type strategy struct {
 	names.NameGenerator
 }
 
-// strategy is the default logic that applies when creating and updating
-// ClusterRoleBinding objects.
+// Strategy 是创建和更新 ClusterRoleBinding 对象时使用的默认 REST 策略。
 var Strategy = strategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Strategy should implement rest.RESTCreateStrategy
+// 确保 Strategy 实现 rest.RESTCreateStrategy 接口。
 var _ rest.RESTCreateStrategy = Strategy
 
-// Strategy should implement rest.RESTUpdateStrategy
+// 确保 Strategy 实现 rest.RESTUpdateStrategy 接口。
 var _ rest.RESTUpdateStrategy = Strategy
 
-// NamespaceScoped is false for ClusterRoleBindings.
+// NamespaceScoped 返回 false，因为 ClusterRoleBinding 是集群级资源。
 func (strategy) NamespaceScoped() bool {
 	return false
 }
 
-// AllowCreateOnUpdate is true for ClusterRoleBindings.
+// AllowCreateOnUpdate 返回 true，允许通过 PUT 更新请求创建尚不存在的 ClusterRoleBinding。
 func (strategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users
-// on creation.
+// PrepareForCreate 是 ClusterRoleBinding 创建前的字段预处理入口；当前不需要清理客户端提交的字段。
 func (strategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	_ = obj.(*rbac.ClusterRoleBinding)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 是 ClusterRoleBinding 更新前的字段预处理入口；当前不需要改写新旧对象字段。
 func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newClusterRoleBinding := obj.(*rbac.ClusterRoleBinding)
 	oldClusterRoleBinding := old.(*rbac.ClusterRoleBinding)
@@ -68,48 +66,42 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	_, _ = newClusterRoleBinding, oldClusterRoleBinding
 }
 
-// Validate validates a new ClusterRoleBinding. Validation must check for a correct signature.
-// Validate 校验集群绑定的 RoleRef 与 Subjects；ServiceAccount Subject 必须显式指定 namespace。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	clusterRoleBinding := obj.(*rbac.ClusterRoleBinding)
 	return validation.ValidateClusterRoleBinding(clusterRoleBinding)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 ClusterRoleBinding 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string { return nil }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 ClusterRoleBinding；当前不执行额外转换。
 func (strategy) Canonicalize(obj runtime.Object) {
 	_ = obj.(*rbac.ClusterRoleBinding)
 }
 
-// ValidateUpdate is the default update validation for an end user.
-// RoleRef 在创建后不可变；更新校验允许按规则调整 Subjects，但不能将绑定转向其他角色。
+// ValidateUpdate 校验 ClusterRoleBinding 更新，并确保创建后不可变的 RoleRef 没有改变。
 func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newObj := obj.(*rbac.ClusterRoleBinding)
 	oldObj := old.(*rbac.ClusterRoleBinding)
 	return validation.ValidateClusterRoleBindingUpdate(newObj, oldObj)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 ClusterRoleBinding 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
 // 短路返回手写 RoleRef 不可变错误，使 declarative 与传统校验对该字段给出一致结果。
 func (strategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
-	// Match declarative validation short-circuit errors with handwritten child field errors.
-	// This is required because ClusterRoleBinding.RoleRef is immutable.
+	// 让声明式校验的短路错误与手写校验的子字段错误保持一致。
+	// ClusterRoleBinding.RoleRef 创建后不可变，因此需要保留该错误路径。
 	return rest.DeclarativeValidationConfig{
 		ShortCircuitMismatch: true,
 	}
 }
 
-// If AllowUnconditionalUpdate() is true and the object specified by
-// the user does not have a resource version, then generic Update()
-// populates it with the latest version. Else, it checks that the
-// version specified by the user matches the version of latest etcd
-// object.
+// AllowUnconditionalUpdate 返回 true：请求未提供 ResourceVersion 时，通用更新流程会填入存储中的最新版本；
+// 若请求提供了版本，则仍需与 etcd 中的最新对象版本匹配。
 func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }

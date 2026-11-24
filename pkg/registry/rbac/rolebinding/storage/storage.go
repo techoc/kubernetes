@@ -27,13 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/rbac/rolebinding"
 )
 
-// REST implements a RESTStorage for RoleBinding
+// REST 将 RoleBinding 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against RoleBinding objects.
-// NewREST 创建命名空间级 RoleBinding Store；RoleRef 不可变的规则由 RoleBindingStrategy 校验。
+// NewREST 创建命名空间级 RoleBinding Store，注册对应的资源策略和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &rbac.RoleBinding{} },

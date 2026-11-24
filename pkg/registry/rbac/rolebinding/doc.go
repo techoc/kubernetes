@@ -14,7 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package certificates provides Registry interface and its RESTStorage
-// implementation for storing RoleBinding objects.
 // Package rolebinding 提供命名空间级 RoleBinding 的 REST 策略、读取适配器和 bind 权限校验包装。
 package rolebinding

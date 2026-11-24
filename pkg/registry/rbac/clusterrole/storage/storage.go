@@ -25,13 +25,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/rbac/clusterrole"
 )
 
-// REST implements a RESTStorage for ClusterRole
+// REST 将 ClusterRole 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against ClusterRole objects.
-// NewREST 创建集群级 ClusterRole Store，使用专门的 Selector 兼容校验策略。
+// NewREST 创建集群级 ClusterRole Store，注册对应的资源策略和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &rbac.ClusterRole{} },
@@ -43,7 +42,7 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 		UpdateStrategy: clusterrole.Strategy,
 		DeleteStrategy: clusterrole.Strategy,
 
-		// TODO: define table converter that exposes more than name/creation timestamp?
+		// TODO：考虑实现包含名称和创建时间以外更多字段的表格转换器。
 		TableConvertor: rest.NewDefaultTableConvertor(rbac.Resource("clusterroles")),
 	}
 	options := &generic.StoreOptions{RESTOptions: optsGetter}

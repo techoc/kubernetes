@@ -68,8 +68,8 @@ var _ genericapiserver.PostStartHookProvider = RESTStorageProvider{}
 // NewRESTStorage 创建 rbac.authorization.k8s.io APIGroupInfo，并按资源启用配置装配 v1 存储和启动后 Bootstrap RBAC Hook。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(rbac.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 如果在此处增加 API 版本，务必同时在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.storage(rbacapiv1.SchemeGroupVersion, apiResourceConfigSource, restOptionsGetter); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -108,22 +108,22 @@ func (p RESTStorageProvider) storage(version schema.GroupVersion, apiResourceCon
 		clusterrolebinding.AuthorizerAdapter{Registry: clusterrolebinding.NewRegistry(clusterRoleBindingsStorage)},
 	)
 
-	// roles
+	// 装配命名空间级 Role 存储。
 	if resource := "roles"; apiResourceConfigSource.ResourceEnabled(rbacapiv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = rolepolicybased.NewStorage(rolesStorage, p.Authorizer, authorizationRuleResolver)
 	}
 
-	// rolebindings
+	// 装配命名空间级 RoleBinding 存储。
 	if resource := "rolebindings"; apiResourceConfigSource.ResourceEnabled(rbacapiv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = rolebindingpolicybased.NewStorage(roleBindingsStorage, p.Authorizer, authorizationRuleResolver)
 	}
 
-	// clusterroles
+	// 装配集群级 ClusterRole 存储。
 	if resource := "clusterroles"; apiResourceConfigSource.ResourceEnabled(rbacapiv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = clusterrolepolicybased.NewStorage(clusterRolesStorage, p.Authorizer, authorizationRuleResolver)
 	}
 
-	// clusterrolebindings
+	// 装配集群级 ClusterRoleBinding 存储。
 	if resource := "clusterrolebindings"; apiResourceConfigSource.ResourceEnabled(rbacapiv1.SchemeGroupVersion.WithResource(resource)) {
 		storage[resource] = clusterrolebindingpolicybased.NewStorage(clusterRoleBindingsStorage, p.Authorizer, authorizationRuleResolver)
 	}
@@ -144,21 +144,24 @@ func (p RESTStorageProvider) PostStartHook() (string, genericapiserver.PostStart
 	return PostStartHookName, policy.EnsureRBACPolicy(), nil
 }
 
+// PolicyData 汇总 API Server 启动时需要创建或对账的内置 RBAC 角色、绑定及升级迁移映射。
 type PolicyData struct {
 	ClusterRoles        []rbacapiv1.ClusterRole
 	ClusterRoleBindings []rbacapiv1.ClusterRoleBinding
 	Roles               map[string][]rbacapiv1.Role
 	RoleBindings        map[string][]rbacapiv1.RoleBinding
-	// ClusterRolesToAggregate maps from previous clusterrole name to the new clusterrole name
+	// ClusterRolesToAggregate 记录升级迁移时旧 ClusterRole 名称到新聚合角色名称的映射。
 	ClusterRolesToAggregate map[string]string
-	// ClusterRoleBindingsToSplit maps from previous ClusterRoleBinding Name to a template for the new ClusterRoleBinding
+	// ClusterRoleBindingsToSplit 记录需要拆分的旧 ClusterRoleBinding 名称及新绑定对象模板。
 	ClusterRoleBindingsToSplit map[string]rbacapiv1.ClusterRoleBinding
 }
 
+// isConflictOrServiceUnavailable 判断错误是否属于并发冲突或存储版本升级期间的暂时不可用。
 func isConflictOrServiceUnavailable(err error) bool {
 	return apierrors.IsConflict(err) || apierrors.IsServiceUnavailable(err)
 }
 
+// retryOnConflictOrServiceUnavailable 仅对 Conflict 和 ServiceUnavailable 错误按指定退避策略重试。
 func retryOnConflictOrServiceUnavailable(backoff wait.Backoff, fn func() error) error {
 	return retry.OnError(backoff, isConflictOrServiceUnavailable, fn)
 }
@@ -166,8 +169,7 @@ func retryOnConflictOrServiceUnavailable(backoff wait.Backoff, fn func() error) 
 // EnsureRBACPolicy 周期性等待 loopback 客户端和 etcd 可用，再执行引导角色/绑定对账；初始化超时会阻止 API Server 正常启动。
 func (p *PolicyData) EnsureRBACPolicy() genericapiserver.PostStartHookFunc {
 	return func(hookContext genericapiserver.PostStartHookContext) error {
-		// initializing roles is really important.  On some e2e runs, we've seen cases where etcd is down when the server
-		// starts, the roles don't initialize, and nothing works.
+		// 初始化内置角色非常重要：端到端测试中曾出现 API Server 启动时 etcd 尚未就绪，导致角色未初始化、后续功能无法正常工作的情况。
 		err := wait.Poll(1*time.Second, 30*time.Second, func() (done bool, err error) {
 			client, err := clientset.NewForConfig(hookContext.LoopbackClientConfig)
 			if err != nil {
@@ -176,7 +178,7 @@ func (p *PolicyData) EnsureRBACPolicy() genericapiserver.PostStartHookFunc {
 			}
 			return ensureRBACPolicy(p, client)
 		})
-		// if we're never able to make it through initialization, kill the API server
+		// 如果在重试期限内始终无法完成初始化，则终止 API Server 启动。
 		if err != nil {
 			return fmt.Errorf("unable to initialize roles: %v", err)
 		}
@@ -188,7 +190,7 @@ func (p *PolicyData) EnsureRBACPolicy() genericapiserver.PostStartHookFunc {
 // ensureRBACPolicy 先确认 RBAC API 可读，再迁移旧聚合角色/绑定，最后逐项对账 ClusterRole、ClusterRoleBinding、Role 和 RoleBinding。
 func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err error) {
 	failedReconciliation := false
-	// Make sure etcd is responding before we start reconciling
+	// 开始对账前先通过 RBAC API 读取集群角色和绑定，确认 etcd 及存储链路已经可用。
 	if _, err := client.RbacV1().ClusterRoles().List(context.TODO(), metav1.ListOptions{}); err != nil {
 		utilruntime.HandleError(fmt.Errorf("unable to initialize clusterroles: %v", err))
 		return false, nil
@@ -198,8 +200,7 @@ func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err
 		return false, nil
 	}
 
-	// if the new cluster roles to aggregate do not yet exist, then we need to copy the old roles if they don't exist
-	// in new locations
+	// 如果目标聚合 ClusterRole 尚不存在，则需要在新名称下复制旧角色，迁移其历史自定义规则。
 	if err := primeAggregatedClusterRoles(p.ClusterRolesToAggregate, client.RbacV1()); err != nil {
 		utilruntime.HandleError(fmt.Errorf("unable to prime aggregated clusterroles: %v", err))
 		return false, nil
@@ -210,14 +211,14 @@ func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err
 		return false, nil
 	}
 
-	// ensure bootstrap roles are created or reconciled
+	// 创建或对账集群级引导角色。
 	for _, clusterRole := range p.ClusterRoles {
 		opts := reconciliation.ReconcileRoleOptions{
 			Role:    reconciliation.ClusterRoleRuleOwner{ClusterRole: &clusterRole},
 			Client:  reconciliation.ClusterRoleModifier{Client: client.RbacV1().ClusterRoles()},
 			Confirm: true,
 		}
-		// ServiceUnavailble error is returned when the API server is blocked by storage version updates
+		// 存储版本升级阻塞 API Server 时，更新请求可能返回 ServiceUnavailable，需要纳入重试。
 		err := retryOnConflictOrServiceUnavailable(retry.DefaultBackoff, func() error {
 			result, err := opts.Run()
 			if err != nil {
@@ -234,20 +235,20 @@ func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err
 			return nil
 		})
 		if err != nil {
-			// don't fail on failures, try to create as many as you can
+			// 单个对象对账失败不立即终止整个批次；继续处理其他对象，并在本轮结束后统一重试。
 			utilruntime.HandleError(fmt.Errorf("unable to reconcile clusterrole.%s/%s: %v", rbac.GroupName, clusterRole.Name, err))
 			failedReconciliation = true
 		}
 	}
 
-	// ensure bootstrap rolebindings are created or reconciled
+	// 创建或对账集群级引导 RoleBinding。
 	for _, clusterRoleBinding := range p.ClusterRoleBindings {
 		opts := reconciliation.ReconcileRoleBindingOptions{
 			RoleBinding: reconciliation.ClusterRoleBindingAdapter{ClusterRoleBinding: &clusterRoleBinding},
 			Client:      reconciliation.ClusterRoleBindingClientAdapter{Client: client.RbacV1().ClusterRoleBindings()},
 			Confirm:     true,
 		}
-		// ServiceUnavailble error is returned when the API server is blocked by storage version updates
+		// 存储版本升级阻塞 API Server 时，更新请求可能返回 ServiceUnavailable，需要纳入重试。
 		err := retryOnConflictOrServiceUnavailable(retry.DefaultBackoff, func() error {
 			result, err := opts.Run()
 			if err != nil {
@@ -266,13 +267,13 @@ func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err
 			return nil
 		})
 		if err != nil {
-			// don't fail on failures, try to create as many as you can
+			// 单个对象对账失败不立即终止整个批次；继续处理其他对象，并在本轮结束后统一重试。
 			utilruntime.HandleError(fmt.Errorf("unable to reconcile clusterrolebinding.%s/%s: %v", rbac.GroupName, clusterRoleBinding.Name, err))
 			failedReconciliation = true
 		}
 	}
 
-	// ensure bootstrap namespaced roles are created or reconciled
+	// 创建或对账各命名空间中的引导 Role。
 	for namespace, roles := range p.Roles {
 		for _, role := range roles {
 			opts := reconciliation.ReconcileRoleOptions{
@@ -280,7 +281,7 @@ func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err
 				Client:  reconciliation.RoleModifier{Client: client.RbacV1(), NamespaceClient: client.CoreV1().Namespaces()},
 				Confirm: true,
 			}
-			// ServiceUnavailble error is returned when the API server is blocked by storage version updates
+			// 存储版本升级阻塞 API Server 时，更新请求可能返回 ServiceUnavailable，需要纳入重试。
 			err := retryOnConflictOrServiceUnavailable(retry.DefaultBackoff, func() error {
 				result, err := opts.Run()
 				if err != nil {
@@ -297,14 +298,14 @@ func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err
 				return nil
 			})
 			if err != nil {
-				// don't fail on failures, try to create as many as you can
+				// 单个对象对账失败不立即终止整个批次；继续处理其他对象，并在本轮结束后统一重试。
 				utilruntime.HandleError(fmt.Errorf("unable to reconcile role.%s/%s in %v: %v", rbac.GroupName, role.Name, namespace, err))
 				failedReconciliation = true
 			}
 		}
 	}
 
-	// ensure bootstrap namespaced rolebindings are created or reconciled
+	// 创建或对账各命名空间中的引导 RoleBinding。
 	for namespace, roleBindings := range p.RoleBindings {
 		for _, roleBinding := range roleBindings {
 			opts := reconciliation.ReconcileRoleBindingOptions{
@@ -312,7 +313,7 @@ func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err
 				Client:      reconciliation.RoleBindingClientAdapter{Client: client.RbacV1(), NamespaceClient: client.CoreV1().Namespaces()},
 				Confirm:     true,
 			}
-			// ServiceUnavailble error is returned when the API server is blocked by storage version updates
+			// 存储版本升级阻塞 API Server 时，更新请求可能返回 ServiceUnavailable，需要纳入重试。
 			err := retryOnConflictOrServiceUnavailable(retry.DefaultBackoff, func() error {
 				result, err := opts.Run()
 				if err != nil {
@@ -331,13 +332,13 @@ func ensureRBACPolicy(p *PolicyData, client clientset.Interface) (done bool, err
 				return nil
 			})
 			if err != nil {
-				// don't fail on failures, try to create as many as you can
+				// 单个对象对账失败不立即终止整个批次；继续处理其他对象，并在本轮结束后统一重试。
 				utilruntime.HandleError(fmt.Errorf("unable to reconcile rolebinding.%s/%s in %v: %v", rbac.GroupName, roleBinding.Name, namespace, err))
 				failedReconciliation = true
 			}
 		}
 	}
-	// failed to reconcile some objects, retry
+	// 只要有对象对账失败，就返回未完成状态，让 PostStart Hook 在下一轮继续重试。
 	if failedReconciliation {
 		return false, nil
 	}
@@ -349,9 +350,7 @@ func (p RESTStorageProvider) GroupName() string {
 	return rbac.GroupName
 }
 
-// primeAggregatedClusterRoles copies roles that have transitioned to aggregated roles and may need to pick up changes
-// that were done to the legacy roles.
-// primeAggregatedClusterRoles 在新聚合 ClusterRole 不存在时把旧角色复制到新名称，避免升级时丢失用户自定义规则。
+// primeAggregatedClusterRoles 迁移已经转为聚合角色的旧角色，确保旧角色上尚未迁移的自定义规则不会丢失。
 func primeAggregatedClusterRoles(clusterRolesToAggregate map[string]string, clusterRoleClient rbacv1client.ClusterRolesGetter) error {
 	for oldName, newName := range clusterRolesToAggregate {
 		_, err := clusterRoleClient.ClusterRoles().Get(context.TODO(), newName, metav1.GetOptions{})
@@ -370,12 +369,12 @@ func primeAggregatedClusterRoles(clusterRolesToAggregate map[string]string, clus
 			return err
 		}
 		if existingRole.AggregationRule != nil {
-			// the old role already moved to an aggregated role, so there are no custom rules to migrate at this point
+			// 旧角色本身已经是聚合角色，说明迁移已完成，此时没有需要复制的自定义规则。
 			return nil
 		}
 		klog.V(1).Infof("migrating %v to %v", existingRole.Name, newName)
 		existingRole.Name = newName
-		existingRole.ResourceVersion = "" // clear this so the object can be created.
+		existingRole.ResourceVersion = "" // 清空 ResourceVersion，使该对象可以作为新资源创建。
 		if _, err := clusterRoleClient.ClusterRoles().Create(context.TODO(), existingRole, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
 			return err
 		}
@@ -384,13 +383,10 @@ func primeAggregatedClusterRoles(clusterRolesToAggregate map[string]string, clus
 	return nil
 }
 
-// primeSplitClusterRoleBindings ensures the existence of target ClusterRoleBindings
-// by copying Subjects, Annotations, and Labels from the specified source
-// ClusterRoleBinding, if present.
-// primeSplitClusterRoleBindings 为拆分后的目标绑定复制旧对象的 Subjects、Labels 和 Annotations，保留升级前自定义主体。
+// primeSplitClusterRoleBindings 确保拆分后的目标 ClusterRoleBinding 存在；如果源绑定存在，则将其 Subjects、Annotations 和 Labels 复制到目标模板。
 func primeSplitClusterRoleBindings(clusterRoleBindingToSplit map[string]rbacapiv1.ClusterRoleBinding, clusterRoleBindingClient rbacv1client.ClusterRoleBindingsGetter) error {
 	for existingBindingName, clusterRoleBindingToCreate := range clusterRoleBindingToSplit {
-		// If source ClusterRoleBinding does not exist, do nothing.
+		// 如果源 ClusterRoleBinding 不存在，则跳过该迁移项。
 		existingRoleBinding, err := clusterRoleBindingClient.ClusterRoleBindings().Get(context.TODO(), existingBindingName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			continue
@@ -399,7 +395,7 @@ func primeSplitClusterRoleBindings(clusterRoleBindingToSplit map[string]rbacapiv
 			return err
 		}
 
-		// If the target ClusterRoleBinding already exists, do nothing.
+		// 如果目标 ClusterRoleBinding 已存在，则无需重复创建。
 		_, err = clusterRoleBindingClient.ClusterRoleBindings().Get(context.TODO(), clusterRoleBindingToCreate.Name, metav1.GetOptions{})
 		if err == nil {
 			continue
@@ -408,8 +404,7 @@ func primeSplitClusterRoleBindings(clusterRoleBindingToSplit map[string]rbacapiv
 			return err
 		}
 
-		// If the source exists, but the target does not,
-		// copy the subjects, labels, and annotations from the former to create the latter.
+		// 如果源绑定存在而目标绑定不存在，则复制源对象的 Subjects、Labels 和 Annotations 来创建目标绑定。
 		klog.V(1).Infof("copying subjects, labels, and annotations from ClusterRoleBinding %q to template %q", existingBindingName, clusterRoleBindingToCreate.Name)
 		newCRB := clusterRoleBindingToCreate.DeepCopy()
 		newCRB.Subjects = existingRoleBinding.Subjects

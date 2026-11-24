@@ -27,19 +27,18 @@ import (
 	rbacv1helpers "k8s.io/kubernetes/pkg/apis/rbac/v1"
 )
 
-// Registry is an interface for things that know how to store ClusterRoles.
+// Registry 定义 集群级 ClusterRole 的读取接口，供授权规则解析器查询 RBAC 对象。
 type Registry interface {
 	GetClusterRole(ctx context.Context, name string, options *metav1.GetOptions) (*rbacv1.ClusterRole, error)
 }
 
-// storage puts strong typing around storage calls
+// storage 为通用 REST 存储调用提供强类型封装。
 type storage struct {
 	rest.Getter
 }
 
-// NewRegistry returns a new Registry interface for the given Storage. Any mismatched
-// types will panic.
-// NewRegistry 将 ClusterRole RESTStorage 适配为跨命名空间授权规则查询接口。
+// NewRegistry 将传入的 StandardStorage 适配为 集群级 ClusterRole 的强类型 Registry。
+// 如果底层返回的对象类型与预期不匹配，类型断言会触发 panic。
 func NewRegistry(s rest.StandardStorage) Registry {
 	return &storage{s}
 }
@@ -57,13 +56,12 @@ func (s *storage) GetClusterRole(ctx context.Context, name string, options *meta
 	return ret, nil
 }
 
-// AuthorizerAdapter adapts the registry to the authorizer interface
+// AuthorizerAdapter 将 Registry 适配为授权规则解析器所需的查询接口。
 type AuthorizerAdapter struct {
 	Registry Registry
 }
 
-// GetClusterRole returns the corresponding ClusterRole by name
-// GetClusterRole 读取 ClusterRole 并转换为 v1 对象，供 RuleResolver 展开其 PolicyRules。
+// GetClusterRole 按名称读取集群级 ClusterRole，并转换为公开 RBAC v1 类型。
 func (a AuthorizerAdapter) GetClusterRole(ctx context.Context, name string) (*rbacv1.ClusterRole, error) {
 	return a.Registry.GetClusterRole(genericapirequest.WithNamespace(ctx, ""), name, &metav1.GetOptions{})
 }

@@ -86,28 +86,28 @@ func TestEscalation(t *testing.T) {
 		expectAllowed bool
 		expectAuthz   bool
 	}{
-		// superuser doesn't even trigger an authz check, and is allowed
+		// 超级用户不会触发额外的授权检查，直接允许操作。
 		{
 			name:          "superuser",
 			user:          superuser,
 			expectAuthz:   false,
 			expectAllowed: true,
 		},
-		// bob triggers an authz check, is disallowed by the authorizer, and has no RBAC permissions, so is not allowed
+		// bob 会触发授权检查，但 Authorizer 拒绝请求，且其没有可覆盖目标规则的 RBAC 权限，因此操作被拒绝。
 		{
 			name:          "bob",
 			user:          bob,
 			expectAuthz:   true,
 			expectAllowed: false,
 		},
-		// steve triggers an authz check, is allowed by the authorizer, and has no RBAC permissions, but is still allowed
+		// steve 会触发授权检查；Authorizer 明确允许请求，因此即使没有对应 RBAC 规则也允许操作。
 		{
 			name:          "steve",
 			user:          steve,
 			expectAuthz:   true,
 			expectAllowed: true,
 		},
-		// alice triggers an authz check, is denied by the authorizer, but has RBAC permissions in the fakeRuleResolver, so is allowed
+		// alice 会触发授权检查且 Authorizer 未放行，但 FakeRuleResolver 显示其已有权限覆盖目标规则，因此仍允许操作。
 		{
 			name:          "alice",
 			user:          alice,

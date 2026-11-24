@@ -50,11 +50,11 @@ func TestCompactRules(t *testing.T) {
 
 				{Verbs: []string{"educate"}, APIGroups: []string{""}, Resources: []string{"dolphins"}},
 
-				// nil verbs are preserved in non-merge cases.
-				// these are the pirates who don't do anything.
+				// 不参与合并的规则必须保留 nil Verbs。
+				// 该测试用例刻意保留不执行任何操作的规则，验证其不会被错误合并。
 				{Verbs: nil, APIGroups: []string{""}, Resources: []string{"pirates"}},
 
-				// Test merging into a nil Verbs string set
+				// 测试将新 verbs 合并到原本为 nil 的 Verbs 集合中。
 				{Verbs: nil, APIGroups: []string{""}, Resources: []string{"pods"}},
 				{Verbs: []string{"create"}, APIGroups: []string{""}, Resources: []string{"pods"}},
 			},

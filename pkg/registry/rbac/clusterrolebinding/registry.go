@@ -27,19 +27,18 @@ import (
 	rbacv1helpers "k8s.io/kubernetes/pkg/apis/rbac/v1"
 )
 
-// Registry is an interface for things that know how to store ClusterRoleBindings.
+// Registry 定义 集群级 ClusterRoleBinding 的读取接口，供授权规则解析器查询 RBAC 对象。
 type Registry interface {
 	ListClusterRoleBindings(ctx context.Context, options *metainternalversion.ListOptions) (*rbacv1.ClusterRoleBindingList, error)
 }
 
-// storage puts strong typing around storage calls
+// storage 为通用 REST 存储调用提供强类型封装。
 type storage struct {
 	rest.Lister
 }
 
-// NewRegistry returns a new Registry interface for the given Storage. Any mismatched
-// types will panic.
-// NewRegistry 将 ClusterRoleBinding RESTStorage 适配为集群级 Binding 列表查询接口。
+// NewRegistry 将传入的 StandardStorage 适配为 集群级 ClusterRoleBinding 的强类型 Registry。
+// 如果底层返回的对象类型与预期不匹配，类型断言会触发 panic。
 func NewRegistry(s rest.StandardStorage) Registry {
 	return &storage{s}
 }
@@ -57,7 +56,7 @@ func (s *storage) ListClusterRoleBindings(ctx context.Context, options *metainte
 	return ret, nil
 }
 
-// AuthorizerAdapter adapts the registry to the authorizer interface
+// AuthorizerAdapter 将 Registry 适配为授权规则解析器所需的查询接口。
 type AuthorizerAdapter struct {
 	Registry Registry
 }

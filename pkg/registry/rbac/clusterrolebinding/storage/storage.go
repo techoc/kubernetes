@@ -27,13 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/rbac/clusterrolebinding"
 )
 
-// REST implements a RESTStorage for ClusterRoleBinding
+// REST 将 ClusterRoleBinding 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against ClusterRoleBinding objects.
-// NewREST 创建集群级 ClusterRoleBinding Store，并注入 RoleRef/Subject 绑定策略。
+// NewREST 创建集群级 ClusterRoleBinding Store，注册对应的资源策略和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &rbac.ClusterRoleBinding{} },

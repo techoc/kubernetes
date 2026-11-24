@@ -48,7 +48,7 @@ func NewStorage(s rest.StandardStorage, authorizer authorizer.UnconditionalAutho
 	return &Storage{s, authorizer, ruleResolver}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时销毁底层标准存储。
 func (r *Storage) Destroy() {
 	r.StandardStorage.Destroy()
 }
@@ -73,8 +73,8 @@ func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidati
 		return s.StandardStorage.Create(ctx, obj, createValidation, options)
 	}
 
-	// Get the namespace from the context (populated from the URL).
-	// The namespace in the object can be empty until StandardStorage.Create()->BeforeCreate() populates it from the context.
+	// 从请求上下文读取 URL 中的 namespace。
+	// 在 StandardStorage.Create() 的 BeforeCreate() 将 namespace 回填到对象之前，对象自身的 namespace 可能为空。
 	namespace, ok := genericapirequest.NamespaceFrom(ctx)
 	if !ok {
 		return nil, errors.NewBadRequest("namespace is required")
@@ -107,8 +107,8 @@ func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjec
 	}
 
 	nonEscalatingInfo := rest.WrapUpdatedObjectInfo(obj, func(ctx context.Context, obj runtime.Object, oldObj runtime.Object) (runtime.Object, error) {
-		// Get the namespace from the context (populated from the URL).
-		// The namespace in the object can be empty until StandardStorage.Update()->BeforeUpdate() populates it from the context.
+		// 从请求上下文读取 URL 中的 namespace。
+		// 在 StandardStorage.Update() 的 BeforeUpdate() 将 namespace 回填到对象之前，对象自身的 namespace 可能为空。
 		namespace, ok := genericapirequest.NamespaceFrom(ctx)
 		if !ok {
 			return nil, errors.NewBadRequest("namespace is required")
@@ -116,17 +116,17 @@ func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjec
 
 		roleBinding := obj.(*rbac.RoleBinding)
 
-		// if we're only mutating fields needed for the GC to eventually delete this obj, return
+		// 如果本次更新只修改垃圾回收最终删除对象所需的元数据，则无需重新执行绑定授权检查。
 		if rbacregistry.IsOnlyMutatingGCFields(obj, oldObj, kapihelper.Semantic) {
 			return obj, nil
 		}
 
-		// if we're explicitly authorized to bind this role, return
+		// 如果调用者已被明确授予对该 Role 的 bind 权限，则无需再检查其是否拥有目标规则。
 		if rbacregistry.BindingAuthorized(ctx, roleBinding.RoleRef, namespace, s.authorizer) {
 			return obj, nil
 		}
 
-		// Otherwise, see if we already have all the permissions contained in the referenced role
+		// 否则解析 RoleRef 指向的角色规则，确认调用者是否已经拥有其中全部权限。
 		v1RoleRef := rbacv1.RoleRef{}
 		err := rbacv1helpers.Convert_rbac_RoleRef_To_v1_RoleRef(&roleBinding.RoleRef, &v1RoleRef, nil)
 		if err != nil {

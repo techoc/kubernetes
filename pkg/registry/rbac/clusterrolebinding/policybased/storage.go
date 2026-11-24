@@ -47,7 +47,7 @@ func NewStorage(s rest.StandardStorage, authorizer authorizer.UnconditionalAutho
 	return &Storage{s, authorizer, ruleResolver}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时销毁底层标准存储。
 func (r *Storage) Destroy() {
 	r.StandardStorage.Destroy()
 }
@@ -101,17 +101,17 @@ func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjec
 	nonEscalatingInfo := rest.WrapUpdatedObjectInfo(obj, func(ctx context.Context, obj runtime.Object, oldObj runtime.Object) (runtime.Object, error) {
 		clusterRoleBinding := obj.(*rbac.ClusterRoleBinding)
 
-		// if we're only mutating fields needed for the GC to eventually delete this obj, return
+		// 如果本次更新只修改垃圾回收最终删除对象所需的元数据，则无需重新执行绑定授权检查。
 		if rbacregistry.IsOnlyMutatingGCFields(obj, oldObj, kapihelper.Semantic) {
 			return obj, nil
 		}
 
-		// if we're explicitly authorized to bind this clusterrole, return
+		// 如果调用者已被明确授予对该 ClusterRole 的 bind 权限，则无需再检查其是否拥有目标规则。
 		if rbacregistry.BindingAuthorized(ctx, clusterRoleBinding.RoleRef, metav1.NamespaceNone, s.authorizer) {
 			return obj, nil
 		}
 
-		// Otherwise, see if we already have all the permissions contained in the referenced clusterrole
+		// 否则解析 RoleRef 指向的 ClusterRole 规则，确认调用者是否已经拥有其中全部权限。
 		v1RoleRef := rbacv1.RoleRef{}
 		err := rbacv1helpers.Convert_rbac_RoleRef_To_v1_RoleRef(&clusterRoleBinding.RoleRef, &v1RoleRef, nil)
 		if err != nil {

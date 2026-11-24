@@ -46,7 +46,7 @@ func NewStorage(s rest.StandardStorage, authorizer authorizer.UnconditionalAutho
 	return &Storage{s, authorizer, ruleResolver}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时销毁底层标准存储。
 func (r *Storage) Destroy() {
 	r.StandardStorage.Destroy()
 }
@@ -82,7 +82,7 @@ func (s *Storage) Create(ctx context.Context, obj runtime.Object, createValidati
 	if err := rbacregistryvalidation.ConfirmNoEscalationInternal(ctx, s.ruleResolver, rules); err != nil {
 		return nil, apierrors.NewForbidden(groupResource, clusterRole.Name, err)
 	}
-	// to set the aggregation rule, since it can gather anything, requires * on *.*
+	// 设置 aggregationRule 可能聚合任意 ClusterRole 的权限，因此调用者必须拥有所有 API Group 和 Resource 的完整权限。
 	if hasAggregationRule(clusterRole) {
 		if err := rbacregistryvalidation.ConfirmNoEscalationInternal(ctx, s.ruleResolver, fullAuthority); err != nil {
 			return nil, apierrors.NewForbidden(groupResource, clusterRole.Name, errors.New("must have cluster-admin privileges to use the aggregationRule"))
@@ -102,7 +102,7 @@ func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjec
 		clusterRole := obj.(*rbac.ClusterRole)
 		oldClusterRole := oldObj.(*rbac.ClusterRole)
 
-		// if we're only mutating fields needed for the GC to eventually delete this obj, return
+		// 如果本次更新只修改垃圾回收最终删除对象所需的元数据，则无需重新执行权限覆盖检查。
 		if rbacregistry.IsOnlyMutatingGCFields(obj, oldObj, kapihelper.Semantic) {
 			return obj, nil
 		}
@@ -111,7 +111,7 @@ func (s *Storage) Update(ctx context.Context, name string, obj rest.UpdatedObjec
 		if err := rbacregistryvalidation.ConfirmNoEscalationInternal(ctx, s.ruleResolver, rules); err != nil {
 			return nil, apierrors.NewForbidden(groupResource, clusterRole.Name, err)
 		}
-		// to change the aggregation rule, since it can gather anything and prevent tightening, requires * on *.*
+		// 修改或移除 aggregationRule 可能改变聚合结果并阻止权限收紧，因此调用者必须拥有所有 API Group 和 Resource 的完整权限。
 		if hasAggregationRule(clusterRole) || hasAggregationRule(oldClusterRole) {
 			if err := rbacregistryvalidation.ConfirmNoEscalationInternal(ctx, s.ruleResolver, fullAuthority); err != nil {
 				return nil, apierrors.NewForbidden(groupResource, clusterRole.Name, errors.New("must have cluster-admin privileges to use the aggregationRule"))

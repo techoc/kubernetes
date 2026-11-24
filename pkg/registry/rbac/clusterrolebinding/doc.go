@@ -14,7 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package certificates provides Registry interface and its RESTStorage
-// implementation for storing ClusterRoleBinding objects.
 // Package clusterrolebinding 提供集群级 ClusterRoleBinding 的 REST 策略、主体绑定授权和存储接口。
 package clusterrolebinding

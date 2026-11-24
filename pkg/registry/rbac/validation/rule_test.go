@@ -30,7 +30,7 @@ import (
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// compute a hash of a policy rule so we can sort in a deterministic order
+// 为 PolicyRule 计算哈希，以便按照确定性顺序排序。
 func hashOf(p rbacv1.PolicyRule) string {
 	hash := fnv.New32()
 	writeStrings := func(slis ...[]string) {
@@ -44,7 +44,7 @@ func hashOf(p rbacv1.PolicyRule) string {
 	return string(hash.Sum(nil))
 }
 
-// byHash sorts a set of policy rules by a hash of its fields
+// byHash 根据 PolicyRule 各字段的哈希值对规则集合排序。
 type byHash []rbacv1.PolicyRule
 
 func (b byHash) Len() int           { return len(b) }
@@ -115,7 +115,7 @@ func TestDefaultRuleResolver(t *testing.T) {
 	tests := []struct {
 		StaticRoles
 
-		// For a given context, what are the rules that apply?
+		// 对于当前测试上下文，哪些权限规则应当生效？
 		user           user.Info
 		namespace      string
 		effectiveRules []rbacv1.PolicyRule
@@ -134,7 +134,7 @@ func TestDefaultRuleResolver(t *testing.T) {
 		},
 		{
 			StaticRoles: staticRoles1,
-			// Same as above but without a namespace. Only cluster rules should apply.
+			// 与上一个场景相同，但不指定 namespace；此时只能应用集群级规则。
 			user:           &user.DefaultInfo{Name: "foobar", Groups: []string{"admin"}},
 			effectiveRules: []rbacv1.PolicyRule{ruleAdmin},
 		},
@@ -153,7 +153,7 @@ func TestDefaultRuleResolver(t *testing.T) {
 			continue
 		}
 
-		// Sort for deep equals
+		// 排序后再执行深度相等比较，避免顺序差异影响断言。
 		sort.Sort(byHash(rules))
 		sort.Sort(byHash(tc.effectiveRules))
 

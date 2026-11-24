@@ -25,13 +25,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/rbac/role"
 )
 
-// REST implements a RESTStorage for Role
+// REST 将 Role 的 REST 请求映射到底层通用 Store。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against Role objects.
-// NewREST 创建命名空间级 Role Store，注入 RoleStrategy、字段筛选器及标准表格转换器。
+// NewREST 创建命名空间级 Role Store，注册对应的资源策略和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &rbac.Role{} },
@@ -43,7 +42,7 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 		UpdateStrategy: role.Strategy,
 		DeleteStrategy: role.Strategy,
 
-		// TODO: define table converter that exposes more than name/creation timestamp?
+		// TODO：考虑实现包含名称和创建时间以外更多字段的表格转换器。
 		TableConvertor: rest.NewDefaultTableConvertor(rbac.Resource("roles")),
 	}
 	options := &generic.StoreOptions{RESTOptions: optsGetter}

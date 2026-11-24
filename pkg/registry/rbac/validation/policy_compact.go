@@ -30,8 +30,7 @@ type simpleResource struct {
 }
 
 // CompactRules 将 APIGroup/Resource/ResourceName 完全相同、仅 Verbs 不同的简单规则合并，便于展示精简的缺失权限列表。
-// CompactRules combines rules that contain a single APIGroup/Resource, differ only by verb, and contain no other attributes.
-// this is a fast check, and works well with the decomposed "missing rules" list from a Covers check.
+
 // 复杂规则原样保留；简单规则按资源键聚合 verbs，避免在授权错误中重复列出几乎相同的规则。
 func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 	compacted := make([]rbacv1.PolicyRule, 0, len(rules))
@@ -40,13 +39,13 @@ func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 	for _, rule := range rules {
 		if resource, isSimple := isSimpleResourceRule(&rule); isSimple {
 			if existingRule, ok := simpleRules[resource]; ok {
-				// Add the new verbs to the existing simple resource rule
+				// 将当前规则中的 verbs 合并到已有的同资源简单规则中。
 				if existingRule.Verbs == nil {
 					existingRule.Verbs = []string{}
 				}
 				existingRule.Verbs = append(existingRule.Verbs, rule.Verbs...)
 			} else {
-				// Copy the rule to accumulate matching simple resource rules into
+				// 复制当前规则，作为后续聚合同一资源其他 verbs 的目标对象。
 				simpleRules[resource] = rule.DeepCopy()
 			}
 		} else {
@@ -54,7 +53,7 @@ func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 		}
 	}
 
-	// Once we've consolidated the simple resource rules, add them to the compacted list
+	// 简单资源规则合并完成后，将结果追加到精简后的规则列表。
 	for _, simpleRule := range simpleRules {
 		compacted = append(compacted, *simpleRule)
 	}
@@ -62,21 +61,20 @@ func CompactRules(rules []rbacv1.PolicyRule) ([]rbacv1.PolicyRule, error) {
 	return compacted, nil
 }
 
-// isSimpleResourceRule returns true if the given rule contains verbs, a single resource, a single API group, at most one Resource Name, and no other values
-// 只有单一 APIGroup、单一 Resource、Verbs 和至多一个 ResourceName、且无其他属性的规则才可安全合并。
+// isSimpleResourceRule 判断规则是否只包含 verbs、单个 APIGroup、单个 Resource 和至多一个 ResourceName，不含其他属性。
 func isSimpleResourceRule(rule *rbacv1.PolicyRule) (simpleResource, bool) {
 	resource := simpleResource{}
 
-	// If we have "complex" rule attributes, return early without allocations or expensive comparisons
+	// 如果规则包含复杂属性，立即返回，避免不必要的内存分配和高成本比较。
 	if len(rule.ResourceNames) > 1 || len(rule.NonResourceURLs) > 0 {
 		return resource, false
 	}
-	// If we have multiple api groups or resources, return early
+	// 如果规则包含多个 APIGroup 或 Resource，则不能安全合并，直接返回。
 	if len(rule.APIGroups) != 1 || len(rule.Resources) != 1 {
 		return resource, false
 	}
 
-	// Test if this rule only contains APIGroups/Resources/Verbs/ResourceNames
+	// 进一步确认规则除 APIGroup、Resource、Verb 和 ResourceName 外没有其他字段。
 	simpleRule := &rbacv1.PolicyRule{APIGroups: rule.APIGroups, Resources: rule.Resources, Verbs: rule.Verbs, ResourceNames: rule.ResourceNames}
 	if !reflect.DeepEqual(simpleRule, rule) {
 		return resource, false

@@ -34,33 +34,31 @@ type strategy struct {
 	names.NameGenerator
 }
 
-// strategy is the default logic that applies when creating and updating
-// RoleBinding objects.
+// Strategy 是创建和更新 RoleBinding 对象时使用的默认 REST 策略。
 var Strategy = strategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Strategy should implement rest.RESTCreateStrategy
+// 确保 Strategy 实现 rest.RESTCreateStrategy 接口。
 var _ rest.RESTCreateStrategy = Strategy
 
-// Strategy should implement rest.RESTUpdateStrategy
+// 确保 Strategy 实现 rest.RESTUpdateStrategy 接口。
 var _ rest.RESTUpdateStrategy = Strategy
 
-// NamespaceScoped is true for RoleBindings.
+// NamespaceScoped 返回 true，因为 RoleBinding 是命名空间级资源。
 func (strategy) NamespaceScoped() bool {
 	return true
 }
 
-// AllowCreateOnUpdate is true for RoleBindings.
+// AllowCreateOnUpdate 返回 true，允许通过 PUT 更新请求创建尚不存在的 RoleBinding。
 func (strategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users
-// on creation.
+// PrepareForCreate 是 RoleBinding 创建前的字段预处理入口；当前不需要清理客户端提交的字段。
 func (strategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	_ = obj.(*rbac.RoleBinding)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 是 RoleBinding 更新前的字段预处理入口；当前不需要改写新旧对象字段。
 func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newRoleBinding := obj.(*rbac.RoleBinding)
 	oldRoleBinding := old.(*rbac.RoleBinding)
@@ -68,23 +66,21 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	_, _ = newRoleBinding, oldRoleBinding
 }
 
-// Validate validates a new RoleBinding. Validation must check for a correct signature.
-// Validate 检查 RoleRef 的 kind/apiGroup/name、Subject 类型及 ServiceAccount namespace 等字段。
+// Validate 校验 RoleRef 的 kind、apiGroup、name，以及 Subject 类型和 ServiceAccount namespace。
 func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	roleBinding := obj.(*rbac.RoleBinding)
 	return validation.ValidateRoleBinding(roleBinding)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 RoleBinding 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string { return nil }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 RoleBinding；当前不执行额外转换。
 func (strategy) Canonicalize(obj runtime.Object) {
 	_ = obj.(*rbac.RoleBinding)
 }
 
-// ValidateUpdate is the default update validation for an end user.
-// RoleRef 不可变；更新时不能把现有 Binding 转而指向另一个 Role/ClusterRole。
+// ValidateUpdate 校验 RoleBinding 更新，并确保创建后不可变的 RoleRef 没有改变。
 func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 
 	newRoleBinding := obj.(*rbac.RoleBinding)
@@ -95,23 +91,18 @@ func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) fie
 
 // Declarative 与手写校验不一致时短路返回手写子字段错误，确保 RoleRef 不可变错误路径一致。
 func (strategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
-	// Match declarative validation short-circuit errors with handwritten child field errors.
-	// This is required because RoleBinding.RoleRef is immutable.
 	return rest.DeclarativeValidationConfig{
 		ShortCircuitMismatch: true,
 	}
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 RoleBinding 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// If AllowUnconditionalUpdate() is true and the object specified by
-// the user does not have a resource version, then generic Update()
-// populates it with the latest version. Else, it checks that the
-// version specified by the user matches the version of latest etcd
-// object.
+// AllowUnconditionalUpdate 返回 true：请求未提供 ResourceVersion 时，通用更新流程会填入存储中的最新版本；
+// 若请求提供了版本，则仍需与 etcd 中的最新对象版本匹配。
 func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
