@@ -49,7 +49,7 @@ type EstablishingController struct {
 	crdLister listers.CustomResourceDefinitionLister
 	crdSynced cache.InformerSynced
 
-	// To allow injection for testing.
+	// 通过函数注入同步逻辑，便于单元测试替换。
 	syncFn func(ctx context.Context, key string) error
 
 	queue workqueue.TypedRateLimitingInterface[string]
@@ -78,7 +78,7 @@ func (ec *EstablishingController) QueueCRD(key string, timeout time.Duration) {
 	ec.queue.AddAfter(key, timeout)
 }
 
-// RunWithContext starts the EstablishingController.
+// RunWithContext 启动 EstablishingController，等待缓存同步后运行工作线程，直到上下文取消。
 func (ec *EstablishingController) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 	defer ec.queue.ShutDown()
@@ -91,13 +91,13 @@ func (ec *EstablishingController) RunWithContext(ctx context.Context) {
 		return
 	}
 
-	// only start one worker thread since the EstablishingController is not a bottleneck
+	// 建立控制器不是性能瓶颈，因此只启动一个工作线程即可。
 	go wait.UntilWithContext(ctx, ec.runWorker, time.Second)
 
 	<-ctx.Done()
 }
 
-//logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
+//logcheck:context // 支持上下文日志的代码应调用 RunWithContext，而不是兼容旧接口的 Run。
 func (ec *EstablishingController) Run(stopCh <-chan struct{}) {
 	ec.RunWithContext(wait.ContextForChannel(stopCh))
 }
@@ -107,8 +107,8 @@ func (ec *EstablishingController) runWorker(ctx context.Context) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.
-// It returns false when it's time to quit.
+// processNextWorkItem 从队列中取出并处理一个 CRD 键。
+// 队列关闭或需要退出时返回 false。
 func (ec *EstablishingController) processNextWorkItem(ctx context.Context) bool {
 	key, quit := ec.queue.Get()
 	if quit {
@@ -147,8 +147,7 @@ func (ec *EstablishingController) sync(ctx context.Context, key string) error {
 
 	crd := cachedCRD.DeepCopy()
 
-	// If the conversion webhook CABundle is invalid, set Established
-	// condition to false and provide a reason
+	// 如果 Conversion Webhook 的 CABundle 无效，则将 Established 设为 False 并记录原因。
 	if cachedCRD.Spec.Conversion != nil &&
 		cachedCRD.Spec.Conversion.Webhook != nil &&
 		cachedCRD.Spec.Conversion.Webhook.ClientConfig != nil &&
@@ -170,10 +169,10 @@ func (ec *EstablishingController) sync(ctx context.Context, key string) error {
 		apiextensionshelpers.SetCRDCondition(crd, establishedCondition)
 	}
 
-	// Update server with new CRD condition.
+	// 通过 Status 子资源将新的 CRD 条件写回 API Server。
 	_, err = ec.crdClient.CustomResourceDefinitions().UpdateStatus(ctx, crd, metav1.UpdateOptions{})
 	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
-		// deleted or changed in the meantime, we'll get called again
+		// 对象可能已被删除或并发修改；后续事件或队列重试会再次触发处理。
 		return nil
 	}
 	if err != nil {
