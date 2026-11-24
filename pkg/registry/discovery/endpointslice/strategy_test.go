@@ -789,7 +789,7 @@ func Test_dropTopologyOnV1(t *testing.T) {
 				Endpoints: []discovery.Endpoint{
 					{
 						Hostname: ptr.To("hostname-1a"),
-						// Invalid node name because it did not exist in previous version of EndpointSlice
+						// 节点名在旧版 EndpointSlice 中不存在，因此不能通过兼容迁移逻辑保留。
 						DeprecatedTopology: map[string]string{corev1.LabelHostname: "node-3"},
 					},
 					{

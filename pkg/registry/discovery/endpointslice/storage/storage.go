@@ -27,12 +27,12 @@ import (
 	"k8s.io/kubernetes/pkg/registry/discovery/endpointslice"
 )
 
-// REST implements a RESTStorage for EndpointSlice against etcd
+// REST 将 EndpointSlice 的 REST 请求映射到底层通用 Store，并通过 etcd 持久化。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against endpoint slices.
+// NewREST 创建 EndpointSlice 的 REST 存储，配置对象构造函数、资源名称、写入策略和表格输出转换器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
 		NewFunc:                   func() runtime.Object { return &discovery.EndpointSlice{} },

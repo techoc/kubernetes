@@ -14,4 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package endpointslice 提供 EndpointSlice 资源的注册策略及 REST 存储实现。
 package endpointslice
