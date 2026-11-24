@@ -49,11 +49,9 @@ import (
 )
 
 const (
-	// maxRetries is the number of times a service will be retried before it is dropped out of the queue.
-	// With the current rate-limiter in use (5ms*2^(maxRetries-1)) the following numbers represent the
-	// sequence of delays between successive queuings of a service.
-	//
-	// 5ms, 10ms, 20ms, 40ms, 80ms, 160ms, 320ms, 640ms, 1.3s, 2.6s, 5.1s, 10.2s, 20.4s, 41s, 82s
+	// maxRetries 表示 Service 从队列中被放弃前允许重试的次数。当前限速器采用 5ms * 2^(重试次数-1)
+	// 的指数退避策略，连续重试间隔依次为：5ms、10ms、20ms、40ms、80ms、160ms、320ms、640ms、
+	// 1.3s、2.6s、5.1s、10.2s、20.4s、41s、82s。
 	maxRetries = 15
 	workers    = 5
 )

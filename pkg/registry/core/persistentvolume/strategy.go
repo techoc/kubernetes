@@ -43,16 +43,14 @@ type persistentvolumeStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating PersistentVolume
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 PersistentVolume（PV）时使用的默认策略。
 var Strategy = persistentvolumeStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 func (persistentvolumeStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回该策略会重置、用户不能直接修改的字段集合。
 func (persistentvolumeStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -63,7 +61,7 @@ func (persistentvolumeStrategy) GetResetFields() map[fieldpath.APIVersion]*field
 	return fields
 }
 
-// ResetBeforeCreate clears the Status field which is not allowed to be set by end users on creation.
+// ResetBeforeCreate 清理创建请求中不允许用户设置的 Status 字段。
 // 创建时重置客户端提交的 Status，清理关闭特性对应的 Spec 字段，并初始化 Pending Phase 与转换时间。
 func (persistentvolumeStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	pv := obj.(*api.PersistentVolume)
@@ -83,12 +81,12 @@ func (persistentvolumeStrategy) Validate(ctx context.Context, obj runtime.Object
 	return append(errorList, volumevalidation.ValidatePersistentVolume(persistentvolume)...)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 PV 时的非阻断性警告。
 func (persistentvolumeStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return pvutil.GetWarningsForPersistentVolume(obj.(*api.PersistentVolume))
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 PV 对象；当前策略无需额外处理。
 func (persistentvolumeStrategy) Canonicalize(obj runtime.Object) {
 }
 
@@ -96,7 +94,7 @@ func (persistentvolumeStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// PrepareForUpdate sets the Status fields which is not allowed to be set by an end user updating a PV
+// PrepareForUpdate 恢复普通更新请求中的旧 Status，防止用户通过主资源接口修改卷状态。
 // 普通 PV 更新保留旧 Status，只允许修改 Spec 中符合不可变性和 Feature Gate 规则的字段。
 func (persistentvolumeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPv := obj.(*api.PersistentVolume)
@@ -115,7 +113,7 @@ func (persistentvolumeStrategy) ValidateUpdate(ctx context.Context, obj, old run
 	return append(errorList, validation.ValidatePersistentVolumeUpdate(newPv, oldPv, opts)...)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 PV 时的非阻断性警告。
 func (persistentvolumeStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return pvutil.GetWarningsForPersistentVolume(obj.(*api.PersistentVolume))
 }
@@ -130,8 +128,7 @@ type persistentvolumeStatusStrategy struct {
 
 var StatusStrategy = persistentvolumeStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回该子资源写入时由策略重置、用户不能直接修改的字段集合。
 func (persistentvolumeStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -144,7 +141,7 @@ func (persistentvolumeStatusStrategy) GetResetFields() map[fieldpath.APIVersion]
 
 var NowFunc = metav1.Now
 
-// PrepareForUpdate sets the Spec field which is not allowed to be changed when updating a PV's Status
+// PrepareForUpdate 恢复旧 Spec，并根据 Phase 变化维护状态转换时间。
 // /status 不允许更改持久卷 Spec；Phase 改变时自动设置 LastPhaseTransitionTime，同一 Phase 则保留旧转换时间。
 func (persistentvolumeStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newPv := obj.(*api.PersistentVolume)
@@ -153,11 +150,11 @@ func (persistentvolumeStatusStrategy) PrepareForUpdate(ctx context.Context, obj,
 
 	switch {
 	case oldPv.Status.Phase == newPv.Status.Phase && newPv.Status.LastPhaseTransitionTime == nil:
-		// phase didn't change, preserve the existing transition time if set
+		// Phase 未变化时，保留已有的状态转换时间。
 		newPv.Status.LastPhaseTransitionTime = oldPv.Status.LastPhaseTransitionTime
 
 	case oldPv.Status.Phase != newPv.Status.Phase && (newPv.Status.LastPhaseTransitionTime == nil || newPv.Status.LastPhaseTransitionTime.Equal(oldPv.Status.LastPhaseTransitionTime)):
-		// phase changed and client didn't set or didn't change the transition time
+		// Phase 已变化且客户端未提供新的转换时间时，由服务端设置当前时间。
 		now := NowFunc()
 		newPv.Status.LastPhaseTransitionTime = &now
 	}
@@ -168,12 +165,12 @@ func (persistentvolumeStatusStrategy) ValidateUpdate(ctx context.Context, obj, o
 	return validation.ValidatePersistentVolumeStatusUpdate(obj.(*api.PersistentVolume), old.(*api.PersistentVolume))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 PV 时的非阻断性警告。
 func (persistentvolumeStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 PV 的 Labels 和可筛选字段，供 LIST/WATCH 过滤使用。
 // GetAttrs 提取 PV 的标签和可选择字段，供集群级 LIST/WATCH 过滤。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	persistentvolumeObj, ok := obj.(*api.PersistentVolume)
@@ -183,7 +180,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(persistentvolumeObj.Labels), PersistentVolumeToSelectableFields(persistentvolumeObj), nil
 }
 
-// MatchPersistentVolume returns a generic matcher for a given label and field selector.
+// MatchPersistentVolume 根据 LabelSelector 和 FieldSelector 创建 PV 存储层选择谓词。
 // MatchPersistentVolumes 将标签/字段选择器封装为存储层 SelectionPredicate。
 func MatchPersistentVolumes(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
@@ -193,11 +190,11 @@ func MatchPersistentVolumes(label labels.Selector, field fields.Selector) storag
 	}
 }
 
-// PersistentVolumeToSelectableFields returns a field set that represents the object
+// PersistentVolumeToSelectableFields 返回 PV 支持 FieldSelector 查询的字段集合。
 func PersistentVolumeToSelectableFields(persistentvolume *api.PersistentVolume) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&persistentvolume.ObjectMeta, false)
 	specificFieldsSet := fields.Set{
-		// This is a bug, but we need to support it for backward compatibility.
+		// name 并非规范的可选字段，但为保持向后兼容，必须继续支持。
 		"name": persistentvolume.Name,
 	}
 	return generic.MergeFieldsSets(objectMetaFieldsSet, specificFieldsSet)

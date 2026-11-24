@@ -48,38 +48,36 @@ type NodeStorage struct {
 	KubeletConnectionInfo client.ConnectionInfoGetter
 }
 
-// REST implements a RESTStorage for nodes.
+// REST 封装 Node 主资源的 RESTStorage，并提供节点连接信息查询能力。
 type REST struct {
 	*genericregistry.Store
 	connection     client.ConnectionInfoGetter
 	proxyTransport http.RoundTripper
 }
 
-// StatusREST implements the REST endpoint for changing the status of a node.
+// StatusREST 实现用于修改 Node.Status 的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// New creates a new Node object.
+// New 返回一个空的 Node 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &api.Node{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储拥有的资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与 Node 主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取 Node；状态子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 只更新 Node.Status，不允许通过该入口修改 Spec。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
@@ -164,16 +162,16 @@ func NewStorage(optsGetter generic.RESTOptionsGetter, kubeletClientConfig client
 	}, nil
 }
 
-// Implement Redirector.
+// 实现 Redirector 接口。
 var _ = rest.Redirector(&REST{})
 
-// ResourceLocation returns a URL to which one can send traffic for the specified node.
+// ResourceLocation 返回 Node 代理请求应转发到的目标 URL 和 Transport。
 // ResourceLocation 将 Node proxy 请求委托给 node 包的地址解析逻辑，返回目标 URL 与对应 HTTP Transport。
 func (r *REST) ResourceLocation(ctx context.Context, id string) (*url.URL, http.RoundTripper, error) {
 	return node.ResourceLocation(r, r.connection, r.proxyTransport, ctx, id)
 }
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回 Node 资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"no"}
 }

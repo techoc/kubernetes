@@ -41,17 +41,15 @@ type namespaceStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating Namespace
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 Namespace 时使用的默认策略。
 var Strategy = namespaceStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped is false for namespaces.
+// NamespaceScoped 返回 false：Namespace 是集群级资源，不隶属于任何命名空间。
 func (namespaceStrategy) NamespaceScoped() bool {
 	return false
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回主资源写入时由策略重置、用户不能直接修改的字段集合。
 func (namespaceStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -60,16 +58,15 @@ func (namespaceStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Se
 	}
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// PrepareForCreate 清理创建请求中不允许用户设置的字段。
 // 创建时强制 Phase=Active，并确保 kubernetes Finalizer 存在；它负责触发命名空间内容清理完成前的保护。
 func (namespaceStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
-	// on create, status is active
+	// 新建 Namespace 的初始 Phase 为 Active。
 	namespace := obj.(*api.Namespace)
 	namespace.Status = api.NamespaceStatus{
 		Phase: api.NamespaceActive,
 	}
-	// on create, we require the kubernetes value
-	// we cannot use this in defaults conversion because we let it get removed over life of object
+	// 创建时必须包含 kubernetes Finalizer。不能仅依赖默认值转换补充，因为对象生命周期中允许该 Finalizer 被移除。
 	hasKubeFinalizer := false
 	for i := range namespace.Spec.Finalizers {
 		if namespace.Spec.Finalizers[i] == api.FinalizerKubernetes {
@@ -86,7 +83,7 @@ func (namespaceStrategy) PrepareForCreate(ctx context.Context, obj runtime.Objec
 	}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 清理普通更新请求中不允许用户修改的字段。
 // 普通 Namespace 更新不允许客户端直接修改 Spec.Finalizers 或 Status，这两类字段分别由 finalize/status 子资源管理。
 func (namespaceStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newNamespace := obj.(*api.Namespace)
@@ -95,37 +92,27 @@ func (namespaceStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 	newNamespace.Status = oldNamespace.Status
 }
 
-// Validate validates a new namespace.
+// Validate 校验新创建的 Namespace。
 func (namespaceStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	namespace := obj.(*api.Namespace)
 	return validation.ValidateNamespace(namespace)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 Namespace 时的非阻断性警告；当前不产生额外警告。
 func (namespaceStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化 Namespace 对象。
 // Canonicalize 保证 kubernetes.io/metadata.name 标签始终与最终 Namespace 名称一致，尤其用于 GenerateName 创建路径。
 func (namespaceStrategy) Canonicalize(obj runtime.Object) {
-	// Ensure the label matches the name for namespaces just created using GenerateName,
-	// where the final name wasn't available for defaulting to make this change.
-	// This code needs to be kept in sync with the implementation that exists
-	// in Namespace defaulting (pkg/apis/core/v1)
-	// Why this hook *and* defaults.go?
-	//
-	// CREATE:
-	// Defaulting and PrepareForCreate happen before generateName is completed
-	// (i.e. the name is not yet known). Validation happens after generateName
-	// but should not modify objects. Canonicalize happens later, which makes
-	// it the best hook for setting the label.
-	//
-	// UPDATE:
-	// Defaulting and Canonicalize will both trigger with the full name.
-	//
-	// GET:
-	// Only defaulting will be applied.
+	// 对于通过 GenerateName 创建的 Namespace，默认值处理时最终名称尚未生成，因此要在此处确保标签值与最终名称一致。
+	// 本逻辑必须与 Namespace 默认值实现（pkg/apis/core/v1）保持同步。
+	// 为什么默认值处理和 Canonicalize 两处都需要处理？
+	// 创建：默认值处理和 PrepareForCreate 发生在 generateName 展开之前，此时名称尚未确定；校验阶段不应修改对象；
+	// Canonicalize 执行得更晚，适合在最终名称生成后设置标签。
+	// 更新：默认值处理和 Canonicalize 执行时都能获取完整名称。
+	// 读取：只执行默认值处理。
 	ns := obj.(*api.Namespace)
 	if ns.Labels == nil {
 		ns.Labels = map[string]string{}
@@ -133,18 +120,18 @@ func (namespaceStrategy) Canonicalize(obj runtime.Object) {
 	ns.Labels[v1.LabelMetadataName] = ns.Name
 }
 
-// AllowCreateOnUpdate is false for namespaces.
+// AllowCreateOnUpdate 返回 false：Namespace 不能通过更新请求隐式创建。
 func (namespaceStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 执行面向普通用户的 Namespace 更新校验。
 func (namespaceStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	errorList := validation.ValidateNamespace(obj.(*api.Namespace))
 	return append(errorList, validation.ValidateNamespaceUpdate(obj.(*api.Namespace), old.(*api.Namespace))...)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 Namespace 时的非阻断性警告；当前不产生额外警告。
 func (namespaceStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -159,8 +146,7 @@ type namespaceStatusStrategy struct {
 
 var StatusStrategy = namespaceStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回子资源写入时由策略重置、用户不能直接修改的字段集合。
 func (namespaceStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -180,7 +166,7 @@ func (namespaceStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runt
 	return validation.ValidateNamespaceStatusUpdate(obj.(*api.Namespace), old.(*api.Namespace))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回对应更新操作的非阻断性警告；当前不产生额外警告。
 func (namespaceStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -196,13 +182,12 @@ func (namespaceFinalizeStrategy) ValidateUpdate(ctx context.Context, obj, old ru
 	return validation.ValidateNamespaceFinalizeUpdate(obj.(*api.Namespace), old.(*api.Namespace))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回对应更新操作的非阻断性警告；当前不产生额外警告。
 func (namespaceFinalizeStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回子资源写入时由策略重置、用户不能直接修改的字段集合。
 func (namespaceFinalizeStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -211,7 +196,7 @@ func (namespaceFinalizeStrategy) GetResetFields() map[fieldpath.APIVersion]*fiel
 	}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 清理该子资源更新请求中不允许用户修改的字段。
 // /finalize 只允许改变 Spec.Finalizers；Status 必须沿用旧值，避免终结流程绕过 Namespace 生命周期状态机。
 func (namespaceFinalizeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newNamespace := obj.(*api.Namespace)
@@ -219,7 +204,7 @@ func (namespaceFinalizeStrategy) PrepareForUpdate(ctx context.Context, obj, old 
 	newNamespace.Status = oldNamespace.Status
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 Namespace 的 Labels 和可筛选字段，供 LIST/WATCH 过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	namespaceObj, ok := obj.(*api.Namespace)
 	if !ok {
@@ -228,7 +213,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(namespaceObj.Labels), NamespaceToSelectableFields(namespaceObj), nil
 }
 
-// MatchNamespace returns a generic matcher for a given label and field selector.
+// MatchNamespace 根据 LabelSelector 和 FieldSelector 创建 Namespace 存储层选择谓词。
 func MatchNamespace(label labels.Selector, field fields.Selector) apistorage.SelectionPredicate {
 	return apistorage.SelectionPredicate{
 		Label:    label,
@@ -237,13 +222,13 @@ func MatchNamespace(label labels.Selector, field fields.Selector) apistorage.Sel
 	}
 }
 
-// NamespaceToSelectableFields returns a field set that represents the object
+// NamespaceToSelectableFields 返回 Namespace 支持 FieldSelector 查询的字段集合。
 // NamespaceToSelectableFields 除标准 metadata 外，提供 status.phase 和历史兼容字段 name 供 FieldSelector 使用。
 func NamespaceToSelectableFields(namespace *api.Namespace) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&namespace.ObjectMeta, false)
 	specificFieldsSet := fields.Set{
 		"status.phase": string(namespace.Status.Phase),
-		// This is a bug, but we need to support it for backward compatibility.
+		// name 并非规范的可选字段，但为保持向后兼容，必须继续支持。
 		"name": namespace.Name,
 	}
 	return generic.MergeFieldsSets(objectMetaFieldsSet, specificFieldsSet)

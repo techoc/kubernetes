@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package event provides Registry interface and it's REST
-// implementation for storing Event api objects.
+// Package event 提供 Event API 对象的 Registry 接口及其 REST 存储实现。
 // Package event 提供 Event 的 REST 写入策略、字段选择器以及带 TTL 的事件存储接口。
 package event

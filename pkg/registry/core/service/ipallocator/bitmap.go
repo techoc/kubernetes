@@ -26,41 +26,28 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// Range is a contiguous block of IPs that can be allocated atomically.
-//
-// The internal structure of the range is:
-//
-//	For CIDR 10.0.0.0/24
-//	254 addresses usable out of 256 total (minus base and broadcast IPs)
-//	  The number of usable addresses is r.max
-//
-//	CIDR base IP          CIDR broadcast IP
-//	10.0.0.0                     10.0.0.255
-//	|                                     |
-//	0 1 2 3 4 5 ...         ... 253 254 255
-//	  |                              |
-//	r.base                     r.base + r.max
-//	  |                              |
-//	offset #0 of r.allocated   last offset of r.allocated
+// Range 表示可原子分配的一段连续 IP 地址范围。内部将 CIDR 地址映射为偏移位图。
+// 例如 10.0.0.0/24 共包含 256 个地址，排除网络地址和广播地址后，可分配地址数为 254（即 r.max）。
+// 位图偏移量从可分配地址起点开始编号：偏移量 0 对应首个可用地址，最后一位对应末尾可用地址。
 //
 // Range 将 IP CIDR 映射成偏移位图，负责排除不可分配地址、持久化快照并提供并发安全的分配操作。
 type Range struct {
 	net *net.IPNet
-	// base is a cached version of the start IP in the CIDR range as a *big.Int
+	// base 缓存 CIDR 起始 IP 的 big.Int 表示。
 	base *big.Int
-	// max is the maximum size of the usable addresses in the range
+	// max 表示该 CIDR 范围内可分配 IP 地址的数量。
 	max int
-	// family is the IP family of this range
+	// family 表示该地址范围所属的 IP 协议族（IPv4 或 IPv6）。
 	family api.IPFamily
 
 	alloc allocator.Interface
-	// metrics is a metrics recorder that can be disabled
+	// metrics 负责记录分配器指标，也可以禁用。
 	metrics metricsRecorderInterface
 }
 
 var _ Interface = (*Range)(nil)
 
-// New creates a Range over a net.IPNet, calling allocatorFactory to construct the backing store.
+// New 根据 net.IPNet 创建 IP 地址范围，并调用 allocatorFactory 构建底层分配存储。
 // New 根据 CIDR 计算可分配主机数量及动态/保留区边界，并创建底层位图分配器。
 func New(cidr *net.IPNet, allocatorFactory allocator.AllocatorWithOffsetFactory) (*Range, error) {
 	max := netutils.RangeSize(cidr)
@@ -70,23 +57,23 @@ func New(cidr *net.IPNet, allocatorFactory allocator.AllocatorWithOffsetFactory)
 
 	if netutils.IsIPv6CIDR(cidr) {
 		family = api.IPv6Protocol
-		// Limit the max size, since the allocator keeps a bitmap of that size.
+		// 分配器需要为每个地址维护一位，因此限制位图最大容量，避免占用过多内存。
 		if max > 65536 {
 			max = 65536
 		}
 	} else {
 		family = api.IPv4Protocol
-		// Don't use the IPv4 network's broadcast address, but don't just
-		// Allocate() it - we don't ever want to be able to release it.
+		// IPv4 网络的广播地址不可分配。不能简单地调用 Allocate() 将其标记为占用，
+		// 因为这样可能允许后续通过 Release() 将其释放。
 		max--
 	}
 
-	// Don't use the network's ".0" address, but don't just Allocate() it - we
-	// don't ever want to be able to release it.
+	// 网络地址（通常以 .0 结尾）不可分配。不能简单地调用 Allocate() 将其标记为占用，
+	// 否则后续可能通过 Release() 将其释放。
 	base.Add(base, big.NewInt(1))
 	max--
 
-	// cidr with whole mask can be negative
+	// 掩码覆盖整个地址空间的 CIDR 可能导致计算结果为负数。
 	if max < 0 {
 		max = 0
 	}
@@ -109,14 +96,14 @@ func New(cidr *net.IPNet, allocatorFactory allocator.AllocatorWithOffsetFactory)
 	return &r, nil
 }
 
-// NewInMemory creates an in-memory allocator.
+// NewInMemory 创建仅在内存中维护状态的 IP 分配器。
 func NewInMemory(cidr *net.IPNet) (*Range, error) {
 	return New(cidr, func(max int, rangeSpec string, offset int) (allocator.Interface, error) {
 		return allocator.NewAllocationMapWithOffset(max, rangeSpec, offset), nil
 	})
 }
 
-// NewFromSnapshot allocates a Range and initializes it from a snapshot.
+// NewFromSnapshot 创建 IP 地址范围，并使用给定快照初始化分配状态。
 func NewFromSnapshot(snap *api.RangeAllocation) (*Range, error) {
 	_, ipnet, err := netutils.ParseCIDRSloppy(snap.Range)
 	if err != nil {
@@ -139,34 +126,32 @@ func maximum(a, b int) int {
 	return b
 }
 
-// Free returns the count of IP addresses left in the range.
+// Free 返回该地址范围内剩余可分配的 IP 数量。
 func (r *Range) Free() int {
 	return r.alloc.Free()
 }
 
-// Used returns the count of IP addresses used in the range.
+// Used 返回该地址范围内已分配的 IP 数量。
 func (r *Range) Used() int {
 	return r.max - r.alloc.Free()
 }
 
-// CIDR returns the CIDR covered by the range.
+// CIDR 返回该分配器管理的 CIDR。
 func (r *Range) CIDR() net.IPNet {
 	return *r.net
 }
 
-// DryRun returns a non-persisting form of this Range.
+// DryRun 返回该地址范围的试运行视图；操作不会持久化到实际分配状态。
 func (r *Range) DryRun() Interface {
 	return dryRunRange{r}
 }
 
-// For clearer code.
+// 为使调用处的代码更清晰，提供该辅助方法。
 const dryRunTrue = true
 const dryRunFalse = false
 
-// Allocate attempts to reserve the provided IP. ErrNotInRange or
-// ErrAllocated will be returned if the IP is not valid for this range
-// or has already been reserved.  ErrFull will be returned if there
-// are no addresses left.
+// Allocate 尝试预留指定 IP。地址不属于当前范围时返回 ErrNotInRange，已被占用时返回 ErrAllocated，
+// 地址池耗尽时返回 ErrFull。
 func (r *Range) Allocate(ip net.IP) error {
 	return r.allocate(ip, dryRunFalse)
 }
@@ -176,7 +161,7 @@ func (r *Range) allocate(ip net.IP, dryRun bool) error {
 	ok, offset := r.contains(ip)
 	if !ok {
 		if !dryRun {
-			// update metrics
+			// 更新分配器指标。
 			r.metrics.incrementAllocationErrors(label.String(), "static")
 		}
 		return &ErrNotInRange{ip, r.net.String()}
@@ -189,18 +174,18 @@ func (r *Range) allocate(ip net.IP, dryRun bool) error {
 
 	allocated, err := r.alloc.Allocate(offset)
 	if err != nil {
-		// update metrics
+		// 更新分配器指标。
 		r.metrics.incrementAllocationErrors(label.String(), "static")
 
 		return err
 	}
 	if !allocated {
-		// update metrics
+		// 更新分配器指标。
 		r.metrics.incrementAllocationErrors(label.String(), "static")
 
 		return ErrAllocated
 	}
-	// update metrics
+	// 更新分配器指标。
 	r.metrics.incrementAllocations(label.String(), "static")
 	r.metrics.setAllocated(label.String(), r.Used())
 	r.metrics.setAvailable(label.String(), r.Free())
@@ -208,8 +193,7 @@ func (r *Range) allocate(ip net.IP, dryRun bool) error {
 	return nil
 }
 
-// AllocateNext reserves one of the IPs from the pool. ErrFull may
-// be returned if there are no addresses left.
+// AllocateNext 从地址池中自动分配一个 IP；地址池耗尽时返回 ErrFull。
 func (r *Range) AllocateNext() (net.IP, error) {
 	return r.allocateNext(dryRunFalse)
 }
@@ -217,25 +201,24 @@ func (r *Range) AllocateNext() (net.IP, error) {
 func (r *Range) allocateNext(dryRun bool) (net.IP, error) {
 	label := r.CIDR()
 	if dryRun {
-		// Don't bother finding a free value. It's racy and not worth the
-		// effort to plumb any further.
+		// 不额外预先查找空闲地址：该检查存在竞争窗口，无法保证后续分配一定成功。
 		return r.CIDR().IP, nil
 	}
 
 	offset, ok, err := r.alloc.AllocateNext()
 	if err != nil {
-		// update metrics
+		// 更新分配器指标。
 		r.metrics.incrementAllocationErrors(label.String(), "dynamic")
 
 		return nil, err
 	}
 	if !ok {
-		// update metrics
+		// 更新分配器指标。
 		r.metrics.incrementAllocationErrors(label.String(), "dynamic")
 
 		return nil, ErrFull
 	}
-	// update metrics
+	// 更新分配器指标。
 	r.metrics.incrementAllocations(label.String(), "dynamic")
 	r.metrics.setAllocated(label.String(), r.Used())
 	r.metrics.setAvailable(label.String(), r.Free())
@@ -243,9 +226,7 @@ func (r *Range) allocateNext(dryRun bool) (net.IP, error) {
 	return netutils.AddIPOffset(r.base, offset), nil
 }
 
-// Release releases the IP back to the pool. Releasing an
-// unallocated IP or an IP out of the range is a no-op and
-// returns no error.
+// Release 将 IP 归还地址池。释放未分配或不属于当前范围的 IP 时不执行任何操作，也不会返回错误。
 func (r *Range) Release(ip net.IP) error {
 	return r.release(ip, dryRunFalse)
 }
@@ -261,7 +242,7 @@ func (r *Range) release(ip net.IP, dryRun bool) error {
 
 	err := r.alloc.Release(offset)
 	if err == nil {
-		// update metrics
+		// 更新分配器指标。
 		label := r.CIDR()
 		r.metrics.setAllocated(label.String(), r.Used())
 		r.metrics.setAvailable(label.String(), r.Free())
@@ -269,7 +250,7 @@ func (r *Range) release(ip net.IP, dryRun bool) error {
 	return err
 }
 
-// ForEach calls the provided function for each allocated IP.
+// ForEach 对每个已分配的 IP 调用指定回调函数。
 func (r *Range) ForEach(fn func(net.IP)) {
 	r.alloc.ForEach(func(offset int) {
 		ip, _ := netutils.GetIndexedIP(r.net, offset+1) // +1 because Range doesn't store IP 0
@@ -277,8 +258,7 @@ func (r *Range) ForEach(fn func(net.IP)) {
 	})
 }
 
-// Has returns true if the provided IP is already allocated and a call
-// to Allocate(ip) would fail with ErrAllocated.
+// Has 判断指定 IP 是否已分配；若已分配，再次调用 Allocate(ip) 将返回 ErrAllocated。
 func (r *Range) Has(ip net.IP) bool {
 	ok, offset := r.contains(ip)
 	if !ok {
@@ -288,12 +268,12 @@ func (r *Range) Has(ip net.IP) bool {
 	return r.alloc.Has(offset)
 }
 
-// IPFamily returns the IP family of this range.
+// IPFamily 返回该地址范围所属的 IP 协议族。
 func (r *Range) IPFamily() api.IPFamily {
 	return r.family
 }
 
-// Snapshot saves the current state of the pool.
+// Snapshot 导出地址池当前状态。
 func (r *Range) Snapshot(dst *api.RangeAllocation) error {
 	snapshottable, ok := r.alloc.(allocator.Snapshottable)
 	if !ok {
@@ -305,8 +285,7 @@ func (r *Range) Snapshot(dst *api.RangeAllocation) error {
 	return nil
 }
 
-// Restore restores the pool to the previously captured state. ErrMismatchedNetwork
-// is returned if the provided IPNet range doesn't exactly match the previous range.
+// Restore 将地址池恢复到之前捕获的状态。若传入的 IPNet 与快照对应的网络范围不完全一致，则返回 ErrMismatchedNetwork。
 func (r *Range) Restore(net *net.IPNet, data []byte) error {
 	if !net.IP.Equal(r.net.IP) || net.Mask.String() != r.net.Mask.String() {
 		return ErrMismatchedNetwork
@@ -321,8 +300,8 @@ func (r *Range) Restore(net *net.IPNet, data []byte) error {
 	return nil
 }
 
-// contains returns true and the offset if the ip is in the range, and false
-// and nil otherwise. The first and last addresses of the CIDR are omitted.
+// contains 判断 IP 是否位于可分配范围内；若在范围内，返回 true 和对应偏移量，否则返回 false 和 nil。
+// CIDR 的首地址和末地址不包含在可分配范围内。
 func (r *Range) contains(ip net.IP) (bool, int) {
 	if !r.net.Contains(ip) {
 		return false, 0
@@ -335,28 +314,25 @@ func (r *Range) contains(ip net.IP) (bool, int) {
 	return true, offset
 }
 
-// Destroy shuts down internal allocator.
+// Destroy 关闭底层分配器。
 func (r *Range) Destroy() {
 	r.alloc.Destroy()
 }
 
-// EnableMetrics enables metrics recording.
+// EnableMetrics 启用指标记录。
 func (r *Range) EnableMetrics() {
 	registerMetrics()
 	r.metrics = &metricsRecorder{}
 }
 
-// calculateIPOffset calculates the integer offset of ip from base such that
-// base + offset = ip. It requires ip >= base.
+// calculateIPOffset 计算 IP 相对于 base 的整数偏移量，使 base + offset = ip；要求 ip 不小于 base。
 // calculateIPOffset 将 IP 地址映射成相对于 CIDR 起始地址的位图偏移量。
 func calculateIPOffset(base *big.Int, ip net.IP) int {
 	return int(big.NewInt(0).Sub(netutils.BigForIP(ip), base).Int64())
 }
 
-// calculateRangeOffset estimates the offset used on the range for statically allocation based on
-// the following formula `min(max($min, cidrSize/$step), $max)`, described as ~never less than
-// $min or more than $max, with a graduated step function between them~. The function returns 0
-// if any of the parameters is invalid.
+// calculateRangeOffset 根据 CIDR 大小估算静态分配预留区的长度，计算公式为 min(max(min, cidrSize/step), max)。
+// 结果不会小于 min 或大于 max，并在两者之间随 CIDR 大小阶梯式变化；任一参数无效时返回 0。
 // calculateRangeOffset 根据 CIDR 地址总量计算静态预留区大小，自动分配优先使用动态区。
 func calculateRangeOffset(cidr *net.IPNet) int {
 	// default values for min(max($min, cidrSize/$step), $max)
@@ -367,9 +343,8 @@ func calculateRangeOffset(cidr *net.IPNet) int {
 	)
 
 	cidrSize := netutils.RangeSize(cidr)
-	// available addresses are always less than the cidr size
-	// A /28 CIDR returns 16 addresses, but 2 of them, the network
-	// and broadcast addresses are not available.
+	// 可分配地址数量始终小于 CIDR 所包含的地址总数。
+	// 例如 /28 CIDR 共包含 16 个地址，但网络地址和广播地址不可分配。
 	if cidrSize <= min {
 		return 0
 	}

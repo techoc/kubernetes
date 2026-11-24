@@ -30,7 +30,7 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against limit ranges.
+// NewREST 创建并返回用于访问 LimitRange 资源的 RESTStorage。
 // NewREST 注册 LimitRange 对象构造器、资源名、Strategy 和默认表格转换器，并完成后端存储初始化。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
@@ -43,7 +43,7 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 		UpdateStrategy: limitrange.Strategy,
 		DeleteStrategy: limitrange.Strategy,
 
-		// TODO: define table converter that exposes more than name/creation timestamp
+		// TODO：定义更完整的表格转换器，除名称和创建时间外，还应展示更多 LimitRange 信息。
 		TableConvertor: rest.NewDefaultTableConvertor(api.Resource("limitranges")),
 	}
 	options := &generic.StoreOptions{RESTOptions: optsGetter}
@@ -53,10 +53,10 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	return &REST{store}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回 LimitRange 资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"limits"}
 }

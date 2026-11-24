@@ -40,14 +40,14 @@ type strategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating Secret
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 Secret 时使用的默认策略。
 var Strategy = strategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 var _ = rest.RESTCreateStrategy(Strategy)
 
 var _ = rest.RESTUpdateStrategy(Strategy)
 
+// NamespaceScoped 表示 Secret 是命名空间级资源。
 func (strategy) NamespaceScoped() bool {
 	return true
 }
@@ -64,14 +64,16 @@ func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorLis
 	return validation.ValidateSecret(newSecret)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 Secret 时的非阻断性警告，TLS Secret 会额外检查证书与私钥是否匹配。
 func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return warningsForSecret(obj.(*api.Secret))
 }
 
+// Canonicalize 在校验后规范化对象；Secret 的原始数据不在此处改写。
 func (strategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 返回 false：Secret 不能通过更新请求隐式创建。
 func (strategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -81,7 +83,7 @@ func (strategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newSecret := obj.(*api.Secret)
 	oldSecret := old.(*api.Secret)
 
-	// this is weird, but consistent with what the validatedUpdate function used to do.
+	// 此兼容行为沿用旧版 validatedUpdate 的处理方式：客户端省略 Type 时保留原类型。
 	if len(newSecret.Type) == 0 {
 		newSecret.Type = oldSecret.Type
 	}
@@ -96,19 +98,21 @@ func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) fie
 	return validation.ValidateSecretUpdate(newSecret, oldSecret)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 Secret 时的非阻断性警告。
 func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return warningsForSecret(obj.(*api.Secret))
 }
 
+// dropDisabledFields 清理 Feature Gate 关闭且旧 Secret 未使用的字段；旧对象已使用的字段需保留以兼容存量数据。
 func dropDisabledFields(secret *api.Secret, oldSecret *api.Secret) {
 }
 
+// AllowUnconditionalUpdate 允许不携带 resourceVersion 的无条件更新。
 func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 Secret 的 Labels 和可筛选字段，供 List/Watch 过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	secret, ok := obj.(*api.Secret)
 	if !ok {
@@ -117,7 +121,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(secret.Labels), SelectableFields(secret), nil
 }
 
-// Matcher returns a selection predicate for a given label and field selector.
+// Matcher 根据 LabelSelector 和 FieldSelector 创建存储层选择谓词。
 func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionPredicate {
 	return pkgstorage.SelectionPredicate{
 		Label:    label,
@@ -126,7 +130,7 @@ func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionP
 	}
 }
 
-// SelectableFields returns a field set that can be used for filter selection
+// SelectableFields 返回 Secret 支持 FieldSelector 查询的字段集合。
 // Secret 除标准 ObjectMeta 字段外，还暴露 type 字段选择器，允许按 Opaque/TLS 等类型筛选。
 func SelectableFields(obj *api.Secret) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&obj.ObjectMeta, true)
@@ -140,7 +144,7 @@ func SelectableFields(obj *api.Secret) fields.Set {
 func warningsForSecret(secret *api.Secret) []string {
 	var warnings []string
 	if secret.Type == api.SecretTypeTLS {
-		// Verify that the key matches the cert.
+		// 校验私钥是否与证书匹配。
 		_, err := tls.X509KeyPair(secret.Data[api.TLSCertKey], secret.Data[api.TLSPrivateKeyKey])
 		if err != nil {
 			warnings = append(warnings, err.Error())

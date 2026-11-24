@@ -17,20 +17,9 @@ limitations under the License.
 package portallocator
 
 // PortAllocationOperation 封装 NodePort 分配事务：新端口立即预留以防双重分配，旧端口延迟到提交时释放；失败时撤销新预留。
-// Encapsulates the semantics of a port allocation 'transaction':
-// It is better to leak ports than to double-allocate them,
-// so we allocate immediately, but defer release.
-// On commit we best-effort release the deferred releases.
-// On rollback we best-effort release any allocations we did.
-//
-// Pattern for use:
-//
-//	op := StartPortAllocationOperation(...)
-//	defer op.Finish
-//	...
-//	write(updatedOwner)
-//
-// /  op.Commit()
+// PortAllocationOperation 封装端口分配事务：为避免同一端口被重复分配，新端口立即预留，旧端口延迟释放。
+// 提交时尽力释放延迟释放的端口；回滚时尽力释放本事务新分配的端口。
+// 典型用法：创建事务并 defer Finish，在写入资源所有者成功后调用 Commit。
 type PortAllocationOperation struct {
 	pa              Interface
 	allocated       []int
@@ -39,8 +28,8 @@ type PortAllocationOperation struct {
 	dryRun          bool
 }
 
-// Creates a portAllocationOperation, tracking a set of allocations & releases
-// If dryRun is specified, never actually allocate or release anything
+// StartOperation 创建端口分配事务，跟踪本事务中的分配和释放操作。
+// dryRun 为 true 时只记录操作，不实际分配或释放端口。
 // StartOperation 创建事务跟踪器；DryRun 只在本地记录候选端口，不触碰真实端口池。
 func StartOperation(pa Interface, dryRun bool) *PortAllocationOperation {
 	op := &PortAllocationOperation{}
@@ -52,14 +41,14 @@ func StartOperation(pa Interface, dryRun bool) *PortAllocationOperation {
 	return op
 }
 
-// Will rollback unless marked as shouldRollback = false by a Commit().  Call from a defer block
+// Finish 通常通过 defer 调用；若事务尚未 Commit，则自动执行回滚。
 func (op *PortAllocationOperation) Finish() {
 	if op.shouldRollback {
 		op.Rollback()
 	}
 }
 
-// (Try to) undo any operations we did
+// Rollback 尽力撤销本事务已经执行的操作。
 // Rollback 释放本事务新申请的端口；延迟释放列表不会执行，因此原有 Service 端口保持占用。
 func (op *PortAllocationOperation) Rollback() []error {
 	if op.dryRun {
@@ -81,9 +70,8 @@ func (op *PortAllocationOperation) Rollback() []error {
 	return errors
 }
 
-// (Try to) perform any deferred operations.
-// Note that even if this fails, we don't rollback; we always want to err on the side of over-allocation,
-// and Commit should be called _after_ the owner is written
+// Commit 尽力执行所有延迟操作。即使释放失败也不回滚，因为宁可暂时多占用端口，也不能冒重复分配风险。
+// 必须在资源所有者成功写入后调用 Commit。
 // Commit 执行之前登记的延迟释放。即使释放失败也不回滚新分配，后续 Repair Controller 会修复多占用状态。
 func (op *PortAllocationOperation) Commit() []error {
 	if op.dryRun {
@@ -99,8 +87,7 @@ func (op *PortAllocationOperation) Commit() []error {
 		}
 	}
 
-	// Even on error, we don't rollback
-	// Problems should be fixed by an eventual reconciliation / restart
+	// 即使释放端口时发生错误，也不回滚新分配；遗留占用由后续协调或重启过程修复。
 	op.shouldRollback = false
 
 	if len(errors) == 0 {
@@ -110,7 +97,7 @@ func (op *PortAllocationOperation) Commit() []error {
 	return errors
 }
 
-// Allocates a port, and record it for future rollback
+// Allocate 分配指定端口，并记录下来，以便事务回滚时释放。
 func (op *PortAllocationOperation) Allocate(port int) error {
 	if op.dryRun {
 		if op.pa.Has(port) {
@@ -132,12 +119,11 @@ func (op *PortAllocationOperation) Allocate(port int) error {
 	return err
 }
 
-// Allocates a port, and record it for future rollback
+// Allocate 分配指定端口，并记录下来，以便事务回滚时释放。
 func (op *PortAllocationOperation) AllocateNext() (int, error) {
 	if op.dryRun {
-		// Find the max element of the allocated ports array.
-		// If no ports are already being allocated by this operation,
-		// then choose a sensible guess for a dummy port number
+		// 找出本事务已记录端口中的最大值。
+		// 如果本事务尚未分配端口，则选择一个合理的虚拟端口号作为起点。
 		var lastPort int
 		for _, allocatedPort := range op.allocated {
 			if allocatedPort > lastPort {
@@ -148,9 +134,8 @@ func (op *PortAllocationOperation) AllocateNext() (int, error) {
 			lastPort = 32768
 		}
 
-		// Try to find the next non allocated port.
-		// If too many ports are full, just reuse one,
-		// since this is just a dummy value.
+		// 尝试寻找下一个未被占用的端口。
+		// 如果可用端口难以找到，则复用一个候选值，因为该值仅用于 DryRun。
 		for port := lastPort + 1; port < 100; port++ {
 			err := op.Allocate(port)
 			if err == nil {
@@ -168,7 +153,7 @@ func (op *PortAllocationOperation) AllocateNext() (int, error) {
 	return port, err
 }
 
-// Marks a port so that it will be released if this operation Commits
+// ReleaseDeferred 将端口加入延迟释放列表；只有事务成功提交时才真正释放该端口。
 // ReleaseDeferred 只登记待释放端口；真正释放延后到 Service 对象成功持久化之后。
 func (op *PortAllocationOperation) ReleaseDeferred(port int) {
 	op.releaseDeferred = append(op.releaseDeferred, port)

@@ -70,7 +70,7 @@ type PodStorage struct {
 	PortForward         *podrest.PortForwardREST
 }
 
-// REST implements a RESTStorage for pods
+// REST 封装 Pod 主资源的通用 RESTStorage。
 type REST struct {
 	*genericregistry.Store
 	proxyTransport http.RoundTripper
@@ -133,46 +133,46 @@ func NewStorage(optsGetter generic.RESTOptionsGetter, k client.ConnectionInfoGet
 	}, nil
 }
 
-// Implement Redirector.
+// 实现 Redirector 接口。
 var _ = rest.Redirector(&REST{})
 
-// ResourceLocation returns a pods location from its HostIP
+// ResourceLocation 根据 Pod 的 HostIP 计算代理请求的目标地址。
 func (r *REST) ResourceLocation(ctx context.Context, name string) (*url.URL, http.RoundTripper, error) {
 	return registrypod.ResourceLocation(ctx, r, r.proxyTransport, name)
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回 Pod 资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"po"}
 }
 
-// Implement CategoriesProvider
+// 实现 CategoriesProvider 接口。
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider，返回 Pod 资源所属的类别列表。
 func (r *REST) Categories() []string {
 	return []string{"all"}
 }
 
-// BindingREST implements the REST endpoint for binding pods to nodes when etcd is in use.
+// BindingREST 实现将 Pod 绑定到 Node 的 REST 子资源端点。
 type BindingREST struct {
 	store *genericregistry.Store
 }
 
-// NamespaceScoped fulfill rest.Scoper
+// NamespaceScoped 实现 rest.Scoper，声明旧版 Binding 是命名空间级资源。
 func (r *BindingREST) NamespaceScoped() bool {
 	return r.store.NamespaceScoped()
 }
 
-// New creates a new binding resource
+// New 返回一个空的旧版 Binding 对象。
 func (r *BindingREST) New() runtime.Object {
 	return &api.Binding{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储拥有的资源。
 func (r *BindingREST) Destroy() {
 	// Given that underlying store is shared with REST,
 	// we don't destroy it here explicitly.
@@ -181,7 +181,7 @@ func (r *BindingREST) Destroy() {
 var _ = rest.NamedCreater(&BindingREST{})
 var _ = rest.SubresourceObjectMetaPreserver(&BindingREST{})
 
-// Create ensures a pod is bound to a specific host.
+// Create 处理旧版 Binding 请求，将指定 Pod 绑定到目标 Node。
 // Create 验证 Binding 的类型、URL 名称和 API 字段，再以原子更新方式把 Pod 绑定到目标 Node。
 func (r *BindingREST) Create(ctx context.Context, name string, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (out runtime.Object, err error) {
 	binding, ok := obj.(*api.Binding)
@@ -194,7 +194,7 @@ func (r *BindingREST) Create(ctx context.Context, name string, obj runtime.Objec
 		return nil, errors.NewBadRequest("name in URL does not match name in Binding object")
 	}
 
-	// TODO: move me to a binding strategy
+	// TODO：将 Binding 请求校验和字段准备逻辑迁移到独立的 Binding Strategy。
 	if errs := validation.ValidatePodBinding(binding); len(errs) != 0 {
 		return nil, errs.ToAggregate()
 	}
@@ -211,16 +211,14 @@ func (r *BindingREST) Create(ctx context.Context, name string, obj runtime.Objec
 	return
 }
 
-// PreserveRequestObjectMetaSystemFieldsOnSubresourceCreate indicates to a
-// handler that this endpoint requires the UID and ResourceVersion to use as
-// preconditions. Other fields, such as timestamp, are ignored.
+// PreserveRequestObjectMetaSystemFieldsOnSubresourceCreate 通知请求处理器：该子资源创建请求必须保留 UID 和 ResourceVersion 作为前置条件，
+// 其他系统元数据（例如时间戳）则忽略。
 func (r *BindingREST) PreserveRequestObjectMetaSystemFieldsOnSubresourceCreate() bool {
 	return true
 }
 
-// setPodNodeAndMetadata sets the given pod's nodeName to 'machine' if and only if
-// the pod is unassigned, and merges the provided annotations and labels with those of the pod.
-// Returns the current state of the pod, or an error.
+// setPodNodeAndMetadata 仅在 Pod 尚未分配节点时设置 spec.nodeName，并将请求中的 Annotations/Labels 合并到 Pod。
+// 返回更新后的 Pod 对象；如果对象已被绑定或更新失败，则返回错误。
 // setPodNodeAndMetadata 在 GuaranteedUpdate 回调内检查 Pod 前置条件并合并绑定数据，防止并发调度造成重复绑定。
 func (r *BindingREST) setPodNodeAndMetadata(ctx context.Context, podUID types.UID, podResourceVersion, podID, machine string, annotations, labels map[string]string, dryRun bool) (finalPod *api.Pod, err error) {
 	podKey, err := r.store.KeyFunc(ctx, podID)
@@ -254,14 +252,14 @@ func (r *BindingREST) setPodNodeAndMetadata(ctx context.Context, podUID types.UI
 		if pod.Spec.NodeName != "" {
 			return nil, fmt.Errorf("pod %v is already assigned to node %q", pod.Name, pod.Spec.NodeName)
 		}
-		// Reject binding to a scheduling un-ready Pod.
+		// Pod 的调度门控尚未解除时拒绝绑定。
 		// 调度门控尚未解除的 Pod 不能被绑定，即使调用方直接访问 binding 子资源也必须阻止。
 		if len(pod.Spec.SchedulingGates) != 0 {
 			return nil, fmt.Errorf("pod %v has non-empty .spec.schedulingGates", pod.Name)
 		}
 		// 通过 Binding 确认的目标 Node 写入 Pod.Spec.NodeName，后续 Kubelet watch 会据此接管 Pod。
 		pod.Spec.NodeName = machine
-		// Clear nomination hint to prevent stale information affecting external components.
+		// 清除调度提名信息，避免过期的 Nomination Hint 影响外部组件。
 		if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.ClearingNominatedNodeNameAfterBinding) {
 			pod.Status.NominatedNodeName = ""
 		}
@@ -277,11 +275,9 @@ func (r *BindingREST) setPodNodeAndMetadata(ctx context.Context, podUID types.UI
 		for k, v := range annotations {
 			pod.Annotations[k] = v
 		}
-		// Binding writes bypass the pod strategy (and thus DropDisabledPodFields),
-		// so scrub the merged annotations here the same way.
+		// Binding 写入绕过 Pod Strategy（也就不会执行 DropDisabledPodFields），因此必须在合并 Annotation 后执行相同的禁用字段清理。
 		podutil.DropInitContainerAnnotations(pod.Annotations)
-		// Copy all labels from the Binding over to the Pod object, overwriting
-		// any existing labels set on the Pod.
+		// 将 Binding 中的 Label 合并到 Pod；同名键以 Binding 提供的值覆盖 Pod 原值。
 		// 只有开启拓扑标签准入特性时才把 Binding 的 Labels 覆盖到 Pod，兼容旧版本行为。
 		if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.PodTopologyLabelsAdmission) {
 			copyLabelsWithOverwriting(pod, labels)
@@ -293,7 +289,7 @@ func (r *BindingREST) setPodNodeAndMetadata(ctx context.Context, podUID types.UI
 
 		// Binding 更新绕过普通 Pod Strategy，因此在合并后单独校验特定 Annotation 和总大小限制。
 		if len(annotations) > 0 {
-			// validate updated annotations
+			// 校验合并后的 Annotation。
 			fldPath := field.NewPath("metadata", "annotations")
 			allErrs := validation.ValidatePodSpecificAnnotationUpdates(pod, oldAnnotations, fldPath, validation.PodValidationOptions{})
 			if err := apimachineryvalidation.ValidateAnnotationsSize(pod.Annotations); err != nil {
@@ -312,19 +308,19 @@ func (r *BindingREST) setPodNodeAndMetadata(ctx context.Context, podUID types.UI
 
 func copyLabelsWithOverwriting(pod *api.Pod, labels map[string]string) {
 	if len(labels) == 0 {
-		// nothing to do
+		// 无需执行任何操作。
 		return
 	}
 	if pod.Labels == nil {
 		pod.Labels = make(map[string]string)
 	}
-	// Iterate over the binding's labels and copy them across to the Pod.
+	// 遍历 Binding 的 Labels，并将其复制到 Pod。
 	for k, v := range labels {
 		pod.Labels[k] = v
 	}
 }
 
-// assignPod assigns the given pod to the given machine.
+// assignPod 将指定 Pod 绑定到目标 Node，并把底层错误转换为 Kubernetes API 错误。
 // assignPod 封装绑定更新，并把底层读写错误转换为 Kubernetes API 的 NotFound/Conflict 状态码。
 func (r *BindingREST) assignPod(ctx context.Context, podUID types.UID, podResourceVersion, podID string, machine string, annotations, labels map[string]string, dryRun bool) (err error) {
 	if _, err = r.setPodNodeAndMetadata(ctx, podUID, podResourceVersion, podID, machine, annotations, labels, dryRun); err != nil {
@@ -339,7 +335,7 @@ func (r *BindingREST) assignPod(ctx context.Context, podUID types.UID, podResour
 
 var _ = rest.Creater(&LegacyBindingREST{})
 
-// LegacyBindingREST implements the REST endpoint for binding pods to nodes when etcd is in use.
+// LegacyBindingREST 实现兼容旧版 Binding 请求的 REST 子资源端点。
 type LegacyBindingREST struct {
 	bindingRest *BindingREST
 }
@@ -373,12 +369,12 @@ func (r *LegacyBindingREST) GetSingularName() string {
 	return "binding"
 }
 
-// StatusREST implements the REST endpoint for changing the status of a pod.
+// StatusREST 实现用于修改 Pod.Status 的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// New creates a new pod resource
+// New 返回一个空的 Pod 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &api.Pod{}
 }
@@ -389,20 +385,19 @@ func (r *StatusREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取 Pod；子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 只更新 Pod.Status，不允许通过该入口修改 Spec。
 // StatusREST.Update 强制禁止通过更新创建对象；子资源只能修改现存 Pod 的 Status。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回该子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
@@ -411,7 +406,7 @@ func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, 
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }
 
-// EphemeralContainersREST implements the REST endpoint for adding EphemeralContainers
+// EphemeralContainersREST 实现用于添加临时容器的 REST 子资源端点。
 type EphemeralContainersREST struct {
 	store *genericregistry.Store
 }
@@ -434,7 +429,7 @@ func (r *EphemeralContainersREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
-// Update alters the EphemeralContainers field in PodSpec
+// Update 只修改 Pod.Spec.EphemeralContainers，并由专用策略过滤其他字段变更。
 // EphemeralContainersREST.Update 复用独立的临时容器策略，并禁止 update 请求退化为 create。
 func (r *EphemeralContainersREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
@@ -442,7 +437,7 @@ func (r *EphemeralContainersREST) Update(ctx context.Context, name string, objIn
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// ResizeREST implements the REST endpoint for resizing Pod containers.
+// ResizeREST 实现用于原地调整 Pod 容器资源的 REST 子资源端点。
 type ResizeREST struct {
 	store *genericregistry.Store
 }
@@ -465,7 +460,7 @@ func (r *ResizeREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
-// Update alters the resource fields in PodSpec
+// Update 只修改 PodSpec 中允许原地调整的资源字段。
 // ResizeREST.Update 只开放策略允许的资源/扩缩容字段，并禁止通过该子资源创建 Pod。
 func (r *ResizeREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because

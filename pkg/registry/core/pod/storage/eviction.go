@@ -46,17 +46,14 @@ import (
 )
 
 const (
-	// MaxDisruptedPodSize is the max size of PodDisruptionBudgetStatus.DisruptedPods. API server eviction
-	// subresource handler will refuse to evict pods covered by the corresponding PDB
-	// if the size of the map exceeds this value. It means a large number of
-	// evictions have been approved by the API server but not noticed by the PDB controller yet.
-	// This situation should self-correct because the PDB controller removes
-	// entries from the map automatically after the PDB DeletionTimeout regardless.
+	// MaxDisruptedPodSize 限制 PodDisruptionBudgetStatus.DisruptedPods 映射的最大条目数。
+	// 如果超过该值，API Server 的 eviction 子资源会拒绝驱逐受对应 PDB 保护的 Pod。
+	// 这通常意味着 API Server 已批准大量驱逐，但 PDB Controller 尚未及时观测到这些驱逐。
+	// 该情况通常会自行恢复：无论驱逐是否完成，PDB Controller 都会在 DeletionTimeout 到期后自动清理映射中的记录。
 	MaxDisruptedPodSize = 2000
 )
 
-// EvictionsRetry is the retry for a conflict where multiple clients
-// are making changes to the same resource.
+// EvictionsRetry 指多个客户端并发修改同一资源时，遇到冲突后的重试次数。
 var EvictionsRetry = wait.Backoff{
 	Steps:    20,
 	Duration: 500 * time.Millisecond,
@@ -68,7 +65,7 @@ func newEvictionStorage(store rest.StandardStorage, podDisruptionBudgetClient po
 	return &EvictionREST{store: store, podDisruptionBudgetClient: podDisruptionBudgetClient}
 }
 
-// EvictionREST implements the REST endpoint for evicting pods from nodes
+// EvictionREST 实现从 Node 驱逐 Pod 的 REST 子资源端点。
 type EvictionREST struct {
 	store                     rest.StandardStorage
 	podDisruptionBudgetClient policyclient.PodDisruptionBudgetsGetter
@@ -80,12 +77,12 @@ var _ = rest.GroupVersionAcceptor(&EvictionREST{})
 
 var v1Eviction = schema.GroupVersionKind{Group: "policy", Version: "v1", Kind: "Eviction"}
 
-// GroupVersionKind specifies a particular GroupVersionKind to discovery
+// GroupVersionKind 返回 Eviction 资源用于 API Discovery 的 GroupVersionKind。
 func (r *EvictionREST) GroupVersionKind(containingGV schema.GroupVersion) schema.GroupVersionKind {
 	return v1Eviction
 }
 
-// AcceptsGroupVersion indicates both v1 and v1beta1 Eviction objects are acceptable
+// AcceptsGroupVersion 表示 v1 和 v1beta1 两个版本的 Eviction 对象均可被该端点接受。
 func (r *EvictionREST) AcceptsGroupVersion(gv schema.GroupVersion) bool {
 	switch gv {
 	case policyv1.SchemeGroupVersion, policyv1beta1.SchemeGroupVersion:
@@ -95,19 +92,18 @@ func (r *EvictionREST) AcceptsGroupVersion(gv schema.GroupVersion) bool {
 	}
 }
 
-// New creates a new eviction resource
+// New 返回一个空的 Eviction 对象。
 func (r *EvictionREST) New() runtime.Object {
 	return &policy.Eviction{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 子资源拥有的资源。
 func (r *EvictionREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与 Pod 主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Propagate dry-run takes the dry-run option from the request and pushes it into the eviction object.
-// It returns an error if they have non-matching dry-run options.
+// propagateDryRun 将请求 CreateOptions 中的 dry-run 设置传递到 Eviction.DeleteOptions。
+// 如果两处都指定了 dry-run 且取值不一致，则返回错误。
 // propagateDryRun 合并请求头中的 CreateOptions 与 Eviction.DeleteOptions；两处同时指定时必须完全一致。
 func propagateDryRun(eviction *policy.Eviction, options *metav1.CreateOptions) (*metav1.DeleteOptions, error) {
 	if eviction.DeleteOptions == nil {
@@ -127,7 +123,7 @@ func propagateDryRun(eviction *policy.Eviction, options *metav1.CreateOptions) (
 	return eviction.DeleteOptions, nil
 }
 
-// Create attempts to create a new eviction.  That is, it tries to evict a pod.
+// Create 处理 Eviction 请求，执行 Pod 驱逐流程。
 // Create 实现 Eviction API：读取 Pod、判断是否可跳过 PDB、扣减 disruptionsAllowed，最后带前置条件删除 Pod。
 func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	eviction, ok := obj.(*policy.Eviction)
@@ -162,7 +158,7 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 	// PDB 允许的驱逐次数可能被并发请求修改，因此默认仅对资源冲突重试；用户给出 ResourceVersion 时必须尊重其前置条件。
 	shouldRetry := errors.IsConflict
 	if !resourceVersionIsUnset(originalDeleteOptions) {
-		// if the original options included a resourceVersion precondition, don't retry
+		// 如果原始请求显式指定了 ResourceVersion 前置条件，则不重试，必须严格遵守客户端条件。
 		shouldRetry = func(err error) bool { return false }
 	}
 
@@ -173,21 +169,18 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 		}
 
 		// Pending/终态/已在删除中的 Pod 不会再造成新的可用副本损失，可以跳过 PDB 扣减直接删除。
-		// There is no need to check for pdb.
+		// 当前 Pod 状态允许跳过 PDB 检查，无需查询 PodDisruptionBudget。
 		if !canIgnorePDB(pod) {
-			// Pod is not in a state where we can skip checking PDBs, exit the loop, and continue to PDB checks.
+			// Pod 当前状态不满足跳过 PDB 检查的条件，退出快速路径，继续执行完整预算检查。
 			return nil
 		}
 
 		// 确定可忽略 PDB 后，仍尽可能补充 ResourceVersion 前置条件，避免检查 Pod 后发生状态变化。
 		deleteOptions := originalDeleteOptions
 
-		// We should check if resourceVersion is already set by the requestor
-		// as it might be older than the pod we just fetched and should be
-		// honored.
+		// 检查请求方是否已经指定 ResourceVersion；该版本可能早于刚读取到的 Pod，必须尊重客户端提供的前置条件。
 		if shouldEnforceResourceVersion(pod) && resourceVersionIsUnset(originalDeleteOptions) {
-			// Set deleteOptions.Preconditions.ResourceVersion to ensure we're not
-			// racing with another PDB-impacting process elsewhere.
+			// 设置 deleteOptions.Preconditions.ResourceVersion，避免与其他影响 PDB 预算的并发操作发生竞态。
 			deleteOptions = deleteOptions.DeepCopy()
 			setPreconditionsResourceVersion(deleteOptions, &pod.ResourceVersion)
 		}
@@ -200,18 +193,16 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 	})
 	switch {
 	case err != nil:
-		// this can happen in cases where the PDB can be ignored, but there was a problem issuing the pod delete:
-		// maybe we conflicted too many times or we didn't have permission or something else weird.
+		// 即使该 Pod 可以跳过 PDB 检查，删除操作本身仍可能失败，例如冲突重试次数耗尽、权限不足或其他异常。
 		return nil, err
 
 	// 已在上面的快速路径成功删除，直接返回成功，不再查询 PodDisruptionBudget。
 	case deletedPod:
-		// this happens when we successfully deleted the pod.  In this case, we're done executing because we've evicted/deleted the pod
+		// 快速路径已成功删除 Pod，驱逐流程结束。
 		return &metav1.Status{Status: metav1.StatusSuccess}, nil
 
 	default:
-		// this happens when we didn't have an error and we didn't delete the pod. The only branch that happens on is when
-		// we cannot ignored the PDB for this pod, so this is the fall through case.
+		// 没有发生错误但 Pod 尚未删除，说明不能忽略该 Pod 对应的 PDB，需要继续执行预算检查。
 	}
 
 	var rtStatus *metav1.Status
@@ -240,23 +231,23 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 		pdb := &pdbs[0]
 		pdbName = pdb.Name
 
-		// IsPodReady is the current implementation of IsHealthy
-		// If the pod is healthy, it should be guarded by the PDB.
+		// 当前以 IsPodReady 作为 IsHealthy 的实现。
+		// Pod 已 Ready 时属于健康副本，应受 PDB 预算保护。
 		// 对未 Ready 的 Pod 按 UnhealthyPodEvictionPolicy 决策；符合 AlwaysAllow 或健康预算有余量时不扣减 disruptionsAllowed。
 		if !podutil.IsPodReady(pod) {
 			if pdb.Spec.UnhealthyPodEvictionPolicy != nil && *pdb.Spec.UnhealthyPodEvictionPolicy == policyv1.AlwaysAllow {
-				// Delete the unhealthy pod, it doesn't count towards currentHealthy and desiredHealthy and we should not decrement disruptionsAllowed.
+				// 删除不健康 Pod：它不计入 currentHealthy 和 desiredHealthy，因此不应递减 disruptionsAllowed。
 				updateDeletionOptions = true
 				return nil
 			}
-			// default nil and IfHealthyBudget policy
+			// 未指定策略时默认按 IfHealthyBudget 处理。
 			if pdb.Status.CurrentHealthy >= pdb.Status.DesiredHealthy && pdb.Status.DesiredHealthy > 0 {
 				// Delete the unhealthy pod, it doesn't count towards currentHealthy and desiredHealthy and we should not decrement disruptionsAllowed.
-				// Application guarded by the PDB is not disrupted at the moment and deleting unhealthy (unready) pod will not disrupt it.
+				// PDB 保护的应用当前没有受到实际中断，删除未 Ready 的 Pod 不会进一步影响应用可用性。
 				updateDeletionOptions = true
 				return nil
 			}
-			// confirm no disruptions allowed in checkAndDecrement
+			// 在 checkAndDecrement 中确认当前没有可用的驱逐预算。
 		}
 
 		// PDB Status 更新可能冲突；发生冲突后重新读取最新 PDB，再重新判断并扣减预算。
@@ -268,10 +259,9 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 					return err
 				}
 			}
-			// Try to verify-and-decrement
+			// 尝试原子地校验并递减驱逐预算。
 
-			// If it was false already, or if it becomes false during the course of our retries,
-			// raise an error marked as a 429.
+			// 如果预算原本就不可用，或在重试过程中变为不可用，则返回标记为 HTTP 429 的错误，提示客户端稍后重试。
 			// 原子更新 PDB 的 Status：确认预算可用后递减数量，并记录正在驱逐的 Pod。
 			if err = r.checkAndDecrement(pod.Namespace, pod.Name, *pdb, dryrun.IsDryRun(originalDeleteOptions.DryRun)); err != nil {
 				refresh = true
@@ -293,14 +283,13 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 	}
 
 	// 到这里表示没有匹配 PDB、已成功扣减预算，或按不健康 Pod 策略允许删除；接下来才真正删除 Pod。
-	// the pod was unhealthy (unready) and we have enough healthy replicas
+	// Pod 不健康（未 Ready），且当前健康副本数量足够，允许继续删除。
 
 	deleteOptions := originalDeleteOptions
 
-	// Set deleteOptions.Preconditions.ResourceVersion to ensure
-	// the pod hasn't been considered healthy (ready) since we calculated
+	// 设置删除请求的 ResourceVersion 前置条件，确保从计算预算到实际删除期间，Pod 没有变为健康（Ready）。
 	if updateDeletionOptions {
-		// Take a copy so we can compare to client-provied Options later.
+		// 保存原始客户端选项副本，以便稍后比较 ResourceVersion 是否由客户端显式提供。
 		deleteOptions = deleteOptions.DeepCopy()
 		setPreconditionsResourceVersion(deleteOptions, &pod.ResourceVersion)
 	}
@@ -310,9 +299,8 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 	if err != nil {
 		if errors.IsConflict(err) && updateDeletionOptions &&
 			(originalDeleteOptions.Preconditions == nil || originalDeleteOptions.Preconditions.ResourceVersion == nil) {
-			// If we encounter a resource conflict error, we updated the deletion options to include them,
-			// and the original deletion options did not specify ResourceVersion, we send back
-			// TooManyRequests so clients will retry.
+			// 如果发生资源冲突，且本次请求是服务端补充了 ResourceVersion（客户端原本未指定），
+			// 则返回 TooManyRequests，促使客户端重新读取状态后重试。
 			return nil, createTooManyRequestsError(pdbName)
 		}
 		return nil, err
@@ -327,8 +315,7 @@ func addConditionAndDeletePod(r *EvictionREST, ctx context.Context, name string,
 	if !dryrun.IsDryRun(options.DryRun) {
 		// 更新前重新读取 etcd 最新对象，并检查 UID/ResourceVersion 前置条件，避免给已被替换的 Pod 标记驱逐。
 		getLatestPod := func(_ context.Context, _, oldObj runtime.Object) (runtime.Object, error) {
-			// Throwaway the newObj. We care only about the latest pod obtained from etcd (oldObj).
-			// So we can add DisruptionTarget condition in conditionAppender without conflicts.
+			// 丢弃 newObj；这里只关心从 etcd 读取到的最新 Pod（oldObj），以便 conditionAppender 能基于最新对象追加 DisruptionTarget，避免冲突。
 			latestPod := oldObj.(*api.Pod).DeepCopy()
 			if options.Preconditions != nil {
 				if uid := options.Preconditions.UID; uid != nil && len(*uid) > 0 && *uid != latestPod.UID {
@@ -373,7 +360,7 @@ func addConditionAndDeletePod(r *EvictionREST, ctx context.Context, name string,
 			if err != nil {
 				return err
 			}
-			// bump the resource version, since we are the one who modified it via the update
+			// 当前更新修改了 Pod，因此递增 ResourceVersion。
 			options = options.DeepCopy()
 			options.Preconditions.ResourceVersion = &newResourceVersion
 		}
@@ -398,8 +385,7 @@ func setPreconditionsResourceVersion(deleteOptions *metav1.DeleteOptions, resour
 	deleteOptions.Preconditions.ResourceVersion = resourceVersion
 }
 
-// canIgnorePDB returns true for pod conditions that allow the pod to be deleted
-// without checking PDBs.
+// canIgnorePDB 判断 Pod 当前状态是否允许跳过 PDB 检查并直接删除。
 func canIgnorePDB(pod *api.Pod) bool {
 	if pod.Status.Phase == api.PodSucceeded || pod.Status.Phase == api.PodFailed ||
 		pod.Status.Phase == api.PodPending || !pod.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -409,12 +395,11 @@ func canIgnorePDB(pod *api.Pod) bool {
 }
 
 func shouldEnforceResourceVersion(pod *api.Pod) bool {
-	// We don't need to enforce ResourceVersion for terminal pods
+	// 对于已经处于终态的 Pod，无需强制校验 ResourceVersion。
 	if pod.Status.Phase == api.PodSucceeded || pod.Status.Phase == api.PodFailed || !pod.ObjectMeta.DeletionTimestamp.IsZero() {
 		return false
 	}
-	// Return true for all other pods to ensure we don't race against a pod becoming
-	// healthy (ready) and violating PDBs.
+	// 其他状态的 Pod 必须执行 ResourceVersion 前置条件检查，防止 Pod 在检查期间变为 Ready，从而绕过 PDB 保护。
 	return true
 }
 
@@ -423,16 +408,14 @@ func resourceVersionIsUnset(options *metav1.DeleteOptions) bool {
 }
 
 func createTooManyRequestsError(name string) error {
-	// TODO: Once there are time-based
-	// budgets, we can sometimes compute a sensible suggested value.  But
-	// even without that, we can give a suggestion (even if small) that
-	// prevents well-behaved clients from hammering us.
+	// TODO：未来支持基于时间的预算后，可以计算更合理的建议重试时间。
+	// 即使尚无此能力，也应返回一个建议值（哪怕较短），避免遵守退避策略的客户端持续冲击 API Server。
 	err := errors.NewTooManyRequests("Cannot evict pod as it would violate the pod's disruption budget.", 10)
 	err.ErrStatus.Details.Causes = append(err.ErrStatus.Details.Causes, metav1.StatusCause{Type: policyv1.DisruptionBudgetCause, Message: fmt.Sprintf("The disruption budget %s is still being processed by the server.", name)})
 	return err
 }
 
-// checkAndDecrement checks if the provided PodDisruptionBudget allows any disruption.
+// checkAndDecrement 检查指定 PodDisruptionBudget 是否允许本次驱逐，并在允许时原子递减预算。
 // checkAndDecrement 校验 PDB 状态是否已观测到最新 Generation、预算是否为正，再扣减预算并登记 DisruptedPods。
 func (r *EvictionREST) checkAndDecrement(namespace string, podName string, pdb policyv1.PodDisruptionBudget, dryRun bool) error {
 	// Controller 尚未处理当前 PDB Spec 时，Status 不能作为可信预算，要求客户端稍后重试。
@@ -462,7 +445,7 @@ func (r *EvictionREST) checkAndDecrement(namespace string, podName string, pdb p
 		condition := meta.FindStatusCondition(pdb.Status.Conditions, policyv1.DisruptionAllowedCondition)
 		var msg string
 		switch {
-		// check whether sync is failed first because DesiredHealthy and CurrentHealthy are not trustworthy when the sync is failed
+		// 优先检查同步是否失败：同步失败时 DesiredHealthy 和 CurrentHealthy 都不可信，不能据此判断预算。
 		case condition != nil && condition.Status == metav1.ConditionFalse && len(condition.Message) > 0 && condition.Reason == policyv1.SyncFailedReason:
 			msg = fmt.Sprintf("The disruption budget %s does not allow evicting pods currently because it failed sync: %s", pdb.Name, condition.Message)
 		case pdb.Status.CurrentHealthy <= pdb.Status.DesiredHealthy:
@@ -488,7 +471,7 @@ func (r *EvictionREST) checkAndDecrement(namespace string, podName string, pdb p
 		pdbhelper.UpdateDisruptionAllowedCondition(&pdb)
 	}
 
-	// If this is a dry-run, we don't need to go any further than that.
+	// 如果是 dry-run，完成本地预算校验后即可返回，无需继续写入 API Server。
 	if dryRun {
 		return nil
 	}
@@ -498,9 +481,8 @@ func (r *EvictionREST) checkAndDecrement(namespace string, podName string, pdb p
 	}
 
 	// 把即将驱逐的 Pod 写入 DisruptedPods，通知 PDB Controller 暂时不要把它计入可用副本。超时后控制器会清理未完成的驱逐记录。
-	// so it should not consider it as available in calculations when updating PodDisruptions allowed.
-	// If the pod is not deleted within a reasonable time limit PDB controller will assume that it won't
-	// be deleted at all and remove it from DisruptedPod map.
+	// PDB Controller 更新 disruptionsAllowed 时，不应再将该 Pod 计为可用副本。
+	// 如果 Pod 在合理时间内仍未删除，PDB Controller 会认为驱逐未实际发生，并从 DisruptedPods 映射中移除该记录。
 	pdb.Status.DisruptedPods[podName] = metav1.Time{Time: time.Now()}
 	if _, err := r.podDisruptionBudgetClient.PodDisruptionBudgets(namespace).UpdateStatus(context.TODO(), &pdb, metav1.UpdateOptions{}); err != nil {
 		return err
@@ -509,7 +491,7 @@ func (r *EvictionREST) checkAndDecrement(namespace string, podName string, pdb p
 	return nil
 }
 
-// getPodDisruptionBudgets returns any PDBs that match the pod or err if there's an error.
+// getPodDisruptionBudgets 查找与指定 Pod 匹配的所有 PDB；查询失败时返回错误。
 // getPodDisruptionBudgets 列出 Pod 所在命名空间的 PDB，并按 LabelSelector 过滤出实际匹配该 Pod 的策略。
 func (r *EvictionREST) getPodDisruptionBudgets(ctx context.Context, pod *api.Pod) ([]policyv1.PodDisruptionBudget, error) {
 	pdbList, err := r.podDisruptionBudgetClient.PodDisruptionBudgets(pod.Namespace).List(context.TODO(), metav1.ListOptions{})
@@ -524,7 +506,7 @@ func (r *EvictionREST) getPodDisruptionBudgets(ctx context.Context, pod *api.Pod
 		}
 		selector, err := metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
+			// 该 PDB 的 Selector 无效，因此不会匹配当前 Pod。
 			continue
 		}
 		if !selector.Matches(labels.Set(pod.Labels)) {

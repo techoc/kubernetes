@@ -22,7 +22,7 @@ import (
 )
 
 // countBits 统计大整数位图中值为 1 的位数，用于从快照恢复当前已分配资源数量。
-// countBits returns the number of set bits in n
+// countBits 返回整数 n 的二进制表示中值为 1 的位数。
 func countBits(n *big.Int) int {
 	var count int = 0
 	for _, w := range n.Bits() {

@@ -38,24 +38,23 @@ type daemonSetStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating DaemonSet objects.
+// Strategy 是通过 REST API 创建和更新 DaemonSet 时使用的默认策略。
 var Strategy = daemonSetStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Make sure we correctly implement the interface.
+// 编译期检查：确保 Strategy 实现了垃圾回收删除策略接口。
 var _ = rest.GarbageCollectionDeleteStrategy(Strategy)
 
-// DefaultGarbageCollectionPolicy returns DeleteDependents for all currently served versions.
+// DefaultGarbageCollectionPolicy 返回 DeleteDependents：删除 DaemonSet 时级联删除其依赖对象。
 func (daemonSetStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	return rest.DeleteDependents
 }
 
-// NamespaceScoped returns true because all DaemonSets need to be within a namespace.
+// NamespaceScoped 表示 DaemonSet 必须属于某个命名空间。
 func (daemonSetStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源更新时需要重置、不能由请求修改的字段集合。
 func (daemonSetStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"apps/v1": fieldpath.NewSet(
@@ -66,7 +65,7 @@ func (daemonSetStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Se
 	return fields
 }
 
-// PrepareForCreate clears the status of a daemon set before creation.
+// PrepareForCreate 在创建 DaemonSet 前清空 Status，并初始化服务端维护的版本字段。
 // 创建时清空 Status、初始化 Generation/TemplateGeneration，并清理 PodTemplate 中被关闭的字段。
 func (daemonSetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	daemonSet := obj.(*apps.DaemonSet)
@@ -80,7 +79,7 @@ func (daemonSetStrategy) PrepareForCreate(ctx context.Context, obj runtime.Objec
 	pod.DropDisabledTemplateFields(&daemonSet.Spec.Template, nil)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 恢复不允许用户直接修改的字段，并根据 Spec/模板变化维护 Generation。
 // 更新时恢复 Status 和服务端维护的 TemplateGeneration；模板变化时两种 Generation 都递增，其他 Spec 变化只递增对象 Generation。
 func (daemonSetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newDaemonSet := obj.(*apps.DaemonSet)
@@ -88,23 +87,17 @@ func (daemonSetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 
 	pod.DropDisabledTemplateFields(&newDaemonSet.Spec.Template, &oldDaemonSet.Spec.Template)
 
-	// update is not allowed to set status
+	// 主资源更新请求不能修改 Status。
 	newDaemonSet.Status = oldDaemonSet.Status
 
-	// update is not allowed to set TemplateGeneration
+	// TemplateGeneration 由 API Server 维护，不能由客户端直接指定。
 	newDaemonSet.Spec.TemplateGeneration = oldDaemonSet.Spec.TemplateGeneration
 
-	// Any changes to the spec increment the generation number, any changes to the
-	// status should reflect the generation number of the corresponding object. We push
-	// the burden of managing the status onto the clients because we can't (in general)
-	// know here what version of spec the writer of the status has seen. It may seem like
-	// we can at first -- since obj contains spec -- but in the future we will probably make
-	// status its own object, and even if we don't, writes may be the result of a
-	// read-update-write loop, so the contents of spec may not actually be the spec that
-	// the manager has *seen*.
+	// Spec 发生变化时递增 Generation；Status 写入者应报告其观察到的 Generation。
+
 	//
-	// TODO: Any changes to a part of the object that represents desired state (labels,
-	// annotations etc) should also increment the generation.
+	// TODO：对象中其他代表期望状态的字段（如 Labels、Annotations）变化时，也应考虑递增 Generation。
+
 	// PodTemplateGeneration 专门标记模板版本，DaemonSet Controller 可据此判断是否需要触发新一轮 Pod 替换。
 	if !apiequality.Semantic.DeepEqual(oldDaemonSet.Spec.Template, newDaemonSet.Spec.Template) {
 		newDaemonSet.Spec.TemplateGeneration = oldDaemonSet.Spec.TemplateGeneration + 1
@@ -116,30 +109,29 @@ func (daemonSetStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 	}
 }
 
-// Validate validates a new daemon set.
+// Validate 校验新创建的 DaemonSet。
 func (daemonSetStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	daemonSet := obj.(*apps.DaemonSet)
 	opts := pod.GetValidationOptionsFromPodTemplate(&daemonSet.Spec.Template, nil)
 	return validation.ValidateDaemonSet(daemonSet, opts)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 DaemonSet 时发现的非阻断性警告。
 func (daemonSetStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newDaemonSet := obj.(*apps.DaemonSet)
 	return pod.GetWarningsForPodTemplate(ctx, field.NewPath("spec", "template"), &newDaemonSet.Spec.Template, nil)
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (daemonSetStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for daemon set; this means a POST is
-// needed to create one
+// AllowCreateOnUpdate 返回 false：创建 DaemonSet 必须使用 POST，不能通过更新请求隐式创建。
 func (daemonSetStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 执行面向普通用户的 DaemonSet 更新校验。
 // 更新校验允许兼容旧对象中历史上无效的 Selector Label 值，但仍校验本次更新规则。
 func (daemonSetStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newDaemonSet := obj.(*apps.DaemonSet)
@@ -151,7 +143,7 @@ func (daemonSetStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Ob
 	return validation.ValidateDaemonSetUpdate(newDaemonSet, oldDaemonSet, opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新产生的非阻断性警告。
 func (daemonSetStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	newDaemonSet := obj.(*apps.DaemonSet)
@@ -162,7 +154,7 @@ func (daemonSetStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.
 	return warnings
 }
 
-// AllowUnconditionalUpdate is the default update policy for daemon set objects.
+// AllowUnconditionalUpdate 表示 DaemonSet 允许不携带 resourceVersion 的无条件更新。
 func (daemonSetStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -191,6 +183,7 @@ func (daemonSetStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old ru
 	newDaemonSet.Spec = oldDaemonSet.Spec
 }
 
+// ValidateUpdate 校验 DaemonSet Status 子资源的更新。
 func (daemonSetStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateDaemonSetStatusUpdate(obj.(*apps.DaemonSet), old.(*apps.DaemonSet))
 }

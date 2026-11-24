@@ -46,17 +46,17 @@ type REST struct {
 	status *genericregistry.Store
 }
 
-// StatusREST implements the REST endpoint for changing the status of a namespace.
+// StatusREST 实现用于修改 Namespace.Status 的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// FinalizeREST implements the REST endpoint for finalizing a namespace.
+// FinalizeREST 实现用于修改 Namespace.Spec.Finalizers 的 REST 子资源端点。
 type FinalizeREST struct {
 	store *genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against namespaces.
+// NewREST 创建 Namespace 主资源、status 子资源和 finalize 子资源对应的 RESTStorage。
 // NewREST 创建主资源 Store，并复制出 StatusStrategy/FinalizeStrategy 两份 Store，使三个端点对字段的写入权限互相隔离。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, *FinalizeREST, error) {
 	store := &genericregistry.Store{
@@ -106,7 +106,7 @@ func (r *REST) New() runtime.Object {
 	return r.store.New()
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储拥有的资源。
 func (r *REST) Destroy() {
 	r.store.Destroy()
 }
@@ -135,7 +135,7 @@ func (r *REST) Watch(ctx context.Context, options *metainternalversion.ListOptio
 	return r.store.Watch(ctx, options)
 }
 
-// Delete enforces life-cycle rules for namespace termination
+// Delete 执行 Namespace 终止流程的生命周期约束。
 // Delete 是 Namespace 终止状态机入口：先校验 UID/ResourceVersion，再把 Phase 置为 Terminating 并设置 DeletionTimestamp/删除传播 Finalizer。
 func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	nsObj, err := r.Get(ctx, name, &metav1.GetOptions{})
@@ -145,7 +145,7 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 
 	namespace := nsObj.(*api.Namespace)
 
-	// Ensure we have a UID precondition
+	// 确保删除请求包含 UID 前置条件，防止误删名称相同但已被重建的 Namespace。
 	if options == nil {
 		options = metav1.NewDeleteOptions(0)
 	}
@@ -171,8 +171,8 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 		return nil, false, err
 	}
 
-	// upon first request to delete, we switch the phase to start namespace termination
-	// TODO: enhance graceful deletion's calls to DeleteStrategy to allow phase change and finalizer patterns
+	// 首次收到删除请求时，将 Namespace 切换到 Terminating，正式启动命名空间终止流程。
+	// TODO：增强优雅删除流程对 DeleteStrategy 的支持，使其能够统一处理 Phase 变更和 Finalizer 模式。
 	if namespace.DeletionTimestamp.IsZero() {
 		key, err := r.store.KeyFunc(ctx, name)
 		if err != nil {
@@ -187,33 +187,33 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 			storage.SimpleUpdate(func(existing runtime.Object) (runtime.Object, error) {
 				existingNamespace, ok := existing.(*api.Namespace)
 				if !ok {
-					// wrong type
+					// 底层对象类型不符合预期。
 					return nil, fmt.Errorf("expected *api.Namespace, got %v", existing)
 				}
 				if err := deleteValidation(ctx, existingNamespace); err != nil {
 					return nil, err
 				}
-				// Set the deletion timestamp if needed
+				// 尚未设置删除时间戳时，记录当前时间。
 				if existingNamespace.DeletionTimestamp.IsZero() {
 					now := metav1.Now()
 					existingNamespace.DeletionTimestamp = &now
 				}
-				// Set the namespace phase to terminating, if needed
+				// 尚未进入终止阶段时，将 Namespace Phase 设置为 Terminating。
 				if existingNamespace.Status.Phase != api.NamespaceTerminating {
 					existingNamespace.Status.Phase = api.NamespaceTerminating
 				}
 
-				// the current finalizers which are on namespace
+				// 收集 Namespace 当前已有的 Finalizer。
 				currentFinalizers := map[string]bool{}
 				for _, f := range existingNamespace.Finalizers {
 					currentFinalizers[f] = true
 				}
-				// the finalizers we should ensure on namespace
+				// 根据删除选项确定本次删除应保留的 Finalizer。
 				shouldHaveFinalizers := map[string]bool{
 					metav1.FinalizerOrphanDependents: shouldHaveOrphanFinalizer(options, currentFinalizers[metav1.FinalizerOrphanDependents]),
 					metav1.FinalizerDeleteDependents: shouldHaveDeleteDependentsFinalizer(options, currentFinalizers[metav1.FinalizerDeleteDependents]),
 				}
-				// determine whether there are changes
+				// 判断 Finalizer 集合是否需要变更。
 				changeNeeded := false
 				for finalizer, shouldHave := range shouldHaveFinalizers {
 					changeNeeded = currentFinalizers[finalizer] != shouldHave || changeNeeded
@@ -223,7 +223,7 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 						delete(currentFinalizers, finalizer)
 					}
 				}
-				// make the changes if needed
+				// 仅在确实发生变化时写回新的 Finalizer 集合。
 				if changeNeeded {
 					newFinalizers := []string{}
 					for f := range currentFinalizers {
@@ -249,14 +249,14 @@ func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.Va
 		return out, false, nil
 	}
 
-	// prior to final deletion, we must ensure that finalizers is empty
+	// 真正删除 Namespace 之前，必须确保所有 Finalizer 均已清空。
 	if len(namespace.Spec.Finalizers) != 0 {
 		return namespace, false, nil
 	}
 	return r.store.Delete(ctx, name, deleteValidation, options)
 }
 
-// ShouldDeleteNamespaceDuringUpdate adds namespace-specific spec.finalizer checks on top of the default generic ShouldDeleteDuringUpdate behavior
+// ShouldDeleteNamespaceDuringUpdate 在通用 ShouldDeleteDuringUpdate 规则之上，增加 Namespace 专属的 Spec.Finalizers 检查。
 // ShouldDeleteNamespaceDuringUpdate 让更新请求在 Namespace 已进入删除流程且 Finalizer 已清空时完成真正删除。
 func ShouldDeleteNamespaceDuringUpdate(ctx context.Context, key string, obj, existing runtime.Object) bool {
 	ns, ok := obj.(*api.Namespace)
@@ -293,10 +293,10 @@ func (e *REST) ConvertToTable(ctx context.Context, object runtime.Object, tableO
 	return e.store.ConvertToTable(ctx, object, tableOptions)
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回 Namespace 资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"ns"}
 }
@@ -307,7 +307,7 @@ func (r *REST) StorageVersion() runtime.GroupVersioner {
 	return r.store.StorageVersion()
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回该子资源会重置的字段集合。
 func (r *REST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
@@ -315,26 +315,24 @@ func (r *StatusREST) New() runtime.Object {
 	return r.store.New()
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 子资源拥有的资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取 Namespace；子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 只更新 Namespace.Status，不允许通过该入口修改 Spec。
 // Update 通过 StatusStrategy 更新 Namespace.Status，并明确禁止 update-on-create。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
@@ -347,21 +345,19 @@ func (r *FinalizeREST) New() runtime.Object {
 	return r.store.New()
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 子资源拥有的资源。
 func (r *FinalizeREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与 Namespace 主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Update alters the status finalizers subset of an object.
+// Update 只更新 Namespace.Spec.Finalizers，不允许通过 finalize 子资源修改 Status。
 // Update 通过 FinalizeStrategy 修改 Namespace.Spec.Finalizers；Namespace Controller 依赖此接口在清理完成后解除删除阻塞。
 func (r *FinalizeREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回子资源需要重置的字段集合。
 func (r *FinalizeREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }

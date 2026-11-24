@@ -32,7 +32,7 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work with ControllerRevision objects.
+// NewREST 创建并返回用于访问 ControllerRevision 资源的 RESTStorage。
 // NewREST 创建 ControllerRevision Store，注册对象类型、资源名、版本策略和表格输出器。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{

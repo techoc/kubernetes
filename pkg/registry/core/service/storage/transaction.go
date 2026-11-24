@@ -16,19 +16,16 @@ limitations under the License.
 
 package storage
 
-// transaction represents something that may need to be finalized on success or
-// failure of the larger transaction.
+// transaction 表示一个子事务；当外层事务成功或失败时，需要对该子事务执行最终处理。
 type transaction interface {
-	// Commit tells the transaction to finalize any changes it may have
-	// pending.  This cannot fail, so errors must be handled internally.
+	// Commit 通知子事务正式完成尚未提交的变更。该方法不能返回错误，因此实现必须在内部处理异常。
 	Commit()
 
-	// Revert tells the transaction to abandon or undo any changes it may have
-	// pending.  This cannot fail, so errors must be handled internally.
+	// Revert 通知子事务放弃或撤销尚未提交的变更。该方法不能返回错误，因此实现必须在内部处理异常。
 	Revert()
 }
 
-// metaTransaction is a collection of transactions.
+// metaTransaction 将多个子事务组合为一个事务，并统一提交或撤销。
 type metaTransaction []transaction
 
 // Commit 将组合事务逐个提交；具体子事务决定何时真正释放延迟回收的资源。
@@ -45,7 +42,7 @@ func (mt metaTransaction) Revert() {
 	}
 }
 
-// callbackTransaction is a transaction which calls arbitrary functions.
+// callbackTransaction 通过回调函数实现事务提交和撤销行为。
 type callbackTransaction struct {
 	commit func()
 	revert func()

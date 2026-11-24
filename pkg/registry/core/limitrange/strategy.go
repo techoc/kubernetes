@@ -35,10 +35,10 @@ type limitrangeStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating
-// LimitRange objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 LimitRange 时使用的默认策略。
 var Strategy = limitrangeStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
+// NamespaceScoped 表示 LimitRange 是命名空间级资源。
 func (limitrangeStrategy) NamespaceScoped() bool {
 	return true
 }
@@ -51,6 +51,7 @@ func (limitrangeStrategy) PrepareForCreate(ctx context.Context, obj runtime.Obje
 	}
 }
 
+// PrepareForUpdate 当前不改写对象；更新约束由 ValidateUpdate 统一检查。
 func (limitrangeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
@@ -60,12 +61,12 @@ func (limitrangeStrategy) Validate(ctx context.Context, obj runtime.Object) fiel
 	return validation.ValidateLimitRange(limitRange)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 LimitRange 时的非阻断性警告；当前不产生额外警告。
 func (limitrangeStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (limitrangeStrategy) Canonicalize(obj runtime.Object) {
 }
 
@@ -74,16 +75,18 @@ func (limitrangeStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
 
+// ValidateUpdate 校验更新后的 LimitRange 规则配置。
 func (limitrangeStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	limitRange := obj.(*api.LimitRange)
 	return validation.ValidateLimitRange(limitRange)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 LimitRange 时的非阻断性警告；当前不产生额外警告。
 func (limitrangeStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
+// AllowUnconditionalUpdate 允许不携带 resourceVersion 的无条件更新。
 func (limitrangeStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }

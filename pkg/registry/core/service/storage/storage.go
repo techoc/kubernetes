@@ -70,7 +70,7 @@ var (
 	_ rest.Redirector             = &REST{}
 )
 
-// NewREST returns a REST object that will work against services.
+// NewREST 创建用于访问 Service 资源的 RESTStorage。
 // NewREST 构建 Service 通用 Store，并安装 Decorator、BeginCreate、BeginUpdate、AfterDelete 钩子，把 API 持久化与网络资源分配连接起来。
 func NewREST(
 	optsGetter generic.RESTOptionsGetter,
@@ -127,16 +127,13 @@ func NewREST(
 	store.BeginCreate = genericStore.beginCreate
 	store.BeginUpdate = genericStore.beginUpdate
 
-	// users can patch the status to remove the finalizer,
-	// hence statusStore must participate on the AfterDelete
-	// hook to release the allocated resources
+	// 用户可以通过 Patch 修改 Status 并移除 Finalizer，因此 statusStore 也必须注册 AfterDelete 钩子，确保释放已分配的网络资源。
 	statusStore.AfterDelete = genericStore.afterDelete
 
 	return genericStore, &StatusREST{store: &statusStore}, &svcreg.ProxyREST{Redirector: genericStore, ProxyTransport: proxyTransport}, nil
 }
 
-// otherFamily returns the non-selected IPFamily.  This assumes the input is
-// valid.
+// otherFamily 返回与输入 IPFamily 相反的地址族；调用方必须保证输入值有效。
 func otherFamily(fam api.IPFamily) api.IPFamily {
 	if fam == api.IPv4Protocol {
 		return api.IPv6Protocol
@@ -149,23 +146,23 @@ var (
 	_ rest.CategoriesProvider = &REST{}
 )
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回 Service 资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"svc"}
 }
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider，返回 Service 所属的资源类别。
 func (r *REST) Categories() []string {
 	return []string{"all"}
 }
 
-// Destroy cleans up everything on shutdown.
+// Destroy 在 API Server 关闭时清理 Service Store 和 IP/端口分配器。
 func (r *REST) Destroy() {
 	r.Store.Destroy()
 	r.alloc.Destroy()
 }
 
-// StatusREST implements the REST endpoint for changing the status of a service.
+// StatusREST 实现用于修改 Service.Status 的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
@@ -174,21 +171,19 @@ func (r *StatusREST) New() runtime.Object {
 	return &api.Service{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 子资源拥有的资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与 Service 主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取 Service；状态子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 只更新 Service.Status，不允许通过该入口修改 Spec。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
@@ -196,22 +191,14 @@ func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, 
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回 Status 子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
 
-// We have a lot of functions that take a pair of "before" and "after" or
-// "oldSvc" and "newSvc" args.  Convention across the codebase is to pass them
-// as (new, old), but it's easy to screw up when they are the same type.
-//
-// These types force us to pay attention.  If the order of the arguments
-// matters, please receive them as:
-//    func something(after After, before Before) {
-//        oldSvc, newSvc := before.Service, after.Service
-//
-// If the order of arguments DOES NOT matter, please receive them as:
-//    func something(lhs, rhs *api.Service) {
+// 本文件有许多函数同时接收更新前后的 Service。代码约定通常按 (new, old) 传参，但两者类型相同时容易传反。
+// Before/After 包装类型用于显式标明参数角色：顺序有意义时使用 after/before，并在函数内部还原 oldSvc/newSvc；
+// 顺序无关时则直接接收 lhs/rhs，避免误导调用方。
 
 type Before struct {
 	*api.Service
@@ -220,11 +207,9 @@ type After struct {
 	*api.Service
 }
 
-// defaultOnRead sets interlinked fields that were not previously set on read.
-// We can't do this in the normal defaulting path because that same logic
-// applies on Get, Create, and Update, but we need to distinguish between them.
-//
-// This will be called on both Service and ServiceList types.
+// defaultOnRead 在读取时补齐历史对象中可能缺失的关联字段。
+// 不能放在常规默认值处理阶段，因为常规默认值逻辑同时作用于 Get、Create 和 Update，而这里必须只处理读取路径。
+// 此方法既可能接收 Service，也可能接收 ServiceList。
 // defaultOnRead 仅在读取时补齐历史 Service 的关联字段，不把这类兼容默认值写回 etcd。
 func (r *REST) defaultOnRead(obj runtime.Object) {
 	switch s := obj.(type) {
@@ -233,12 +218,11 @@ func (r *REST) defaultOnRead(obj runtime.Object) {
 	case *api.ServiceList:
 		r.defaultOnReadServiceList(s)
 	default:
-		// This was not an object we can default.  This is not an error, as the
-		// caching layer can pass through here, too.
+		// 当前对象类型不支持此处的默认值补全；这不是错误，因为缓存层也可能将其他对象传递到这里。
 	}
 }
 
-// defaultOnReadServiceList defaults a ServiceList.
+// defaultOnReadServiceList 为 ServiceList 中的每个 Service 补齐读取时的兼容字段。
 func (r *REST) defaultOnReadServiceList(serviceList *api.ServiceList) {
 	if serviceList == nil {
 		return
@@ -249,22 +233,20 @@ func (r *REST) defaultOnReadServiceList(serviceList *api.ServiceList) {
 	}
 }
 
-// defaultOnReadService defaults a single Service.
+// defaultOnReadService 为单个 Service 补齐读取时的兼容字段。
 func (r *REST) defaultOnReadService(service *api.Service) {
 	if service == nil {
 		return
 	}
 
-	// We might find Services that were written before ClusterIP became plural.
-	// We still want to present a consistent view of them.
+	// 历史对象可能创建于 ClusterIP 字段扩展为 ClusterIPs 之前；读取时需要统一呈现新旧字段。
 	normalizeClusterIPs(After{service}, Before{nil})
 
-	// Set ipFamilies and ipFamilyPolicy if needed.
+	// 必要时补齐 IPFamilies 和 IPFamilyPolicy。
 	r.defaultOnReadIPFamilies(service)
 
-	// We unintentionally defaulted internalTrafficPolicy when it's not needed
-	// for the ExternalName type. It's too late to change the field in storage,
-	// but we can drop the field when read.
+	// 历史上曾错误地为 ExternalName 类型默认设置 InternalTrafficPolicy。虽然无法直接修改已持久化的数据，
+	// 但可以在读取时清除该字段，避免向客户端暴露不适用的值。
 	defaultOnReadInternalTrafficPolicy(service)
 }
 
@@ -276,15 +258,13 @@ func defaultOnReadInternalTrafficPolicy(service *api.Service) {
 
 // defaultOnReadIPFamilies 为旧对象推导 IPFamilies/IPFamilyPolicy；Headless + selectorless 与普通 Headless Service 使用不同默认规则。
 func (r *REST) defaultOnReadIPFamilies(service *api.Service) {
-	// ExternalName does not need this.
+	// ExternalName 类型不需要 IP 地址族相关默认值。
 	if !needsClusterIP(service) {
 		return
 	}
 
-	// If IPFamilies is set, we assume IPFamilyPolicy is also set (it should
-	// not be possible to have one and not the other), and therefore we don't
-	// need further defaulting.  Likewise, if IPFamilies is *not* set, we
-	// assume IPFamilyPolicy can't be set either.
+	// 如果 IPFamilies 已设置，则假定 IPFamilyPolicy 也已设置（正常情况下不应只设置其中一个），无需继续补默认值。
+	// 同理，如果 IPFamilies 未设置，也假定 IPFamilyPolicy 不会单独设置。
 	if len(service.Spec.IPFamilies) > 0 {
 		return
 	}
@@ -293,24 +273,21 @@ func (r *REST) defaultOnReadIPFamilies(service *api.Service) {
 	requireDualStack := api.IPFamilyPolicyRequireDualStack
 
 	if service.Spec.ClusterIP == api.ClusterIPNone {
-		// Headless.
+		// Headless Service。
 		if len(service.Spec.Selector) == 0 {
-			// Headless + selectorless is a special-case.
+			// 同时满足 Headless 和无 Selector 的 Service 属于特殊场景。
 			//
-			// At this stage we don't know what kind of endpoints (specifically
-			// their IPFamilies) the user has assigned to this selectorless
-			// service. We assume it has dual-stack and we default it to
-			// RequireDualStack on any cluster (single- or dual-stack
-			// configured).
+			// 此时无法确定用户为无 Selector 的 Service 配置了哪种 Endpoint，尤其无法获知其 IP 地址族。
+			// 因此假定其使用双栈，并在单栈或双栈集群中都默认采用 RequireDualStack。
 			service.Spec.IPFamilyPolicy = &requireDualStack
 			service.Spec.IPFamilies = []api.IPFamily{r.primaryIPFamily, otherFamily(r.primaryIPFamily)}
 		} else {
-			// Headless + selector - default to single.
+			// Headless 且存在 Selector 时，默认使用单地址族。
 			service.Spec.IPFamilyPolicy = &singleStack
 			service.Spec.IPFamilies = []api.IPFamily{r.primaryIPFamily}
 		}
 	} else {
-		// Headful: init ipFamilies from clusterIPs.
+		// 非 Headless Service：根据 ClusterIPs 初始化 IPFamilies。
 		service.Spec.IPFamilies = make([]api.IPFamily, len(service.Spec.ClusterIPs))
 		for idx, ip := range service.Spec.ClusterIPs {
 			if netutil.IsIPv6String(ip) {
@@ -322,7 +299,7 @@ func (r *REST) defaultOnReadIPFamilies(service *api.Service) {
 		if len(service.Spec.IPFamilies) == 1 {
 			service.Spec.IPFamilyPolicy = &singleStack
 		} else if len(service.Spec.IPFamilies) == 2 {
-			// It shouldn't be possible to get here, but just in case.
+			// 正常情况下不应进入此分支，这里保留防御性处理。
 			service.Spec.IPFamilyPolicy = &requireDualStack
 		}
 	}
@@ -332,12 +309,10 @@ func (r *REST) defaultOnReadIPFamilies(service *api.Service) {
 func (r *REST) afterDelete(obj runtime.Object, options *metav1.DeleteOptions) {
 	svc := obj.(*api.Service)
 
-	// Normally this defaulting is done automatically, but the hook (Decorator)
-	// is called at the end of this process, and we want the fully-formed
-	// object.
+	// 通常这些默认值会自动完成，但 Decorator 在读取流程末尾才执行，因此这里需要确保拿到的是完整对象。
 	r.defaultOnReadService(svc)
 
-	// Only perform the cleanup if this is a non-dryrun deletion
+	// 只有非 dry-run 删除成功后才真正释放已分配的资源。
 	if !dryrun.IsDryRun(options.DryRun) {
 		r.alloc.releaseAllocatedResources(svc)
 	}
@@ -347,21 +322,17 @@ func (r *REST) afterDelete(obj runtime.Object, options *metav1.DeleteOptions) {
 func (r *REST) beginCreate(ctx context.Context, obj runtime.Object, options *metav1.CreateOptions) (genericregistry.FinishFunc, error) {
 	svc := obj.(*api.Service)
 
-	// Make sure ClusterIP and ClusterIPs are in sync.  This has to happen
-	// early, before anyone looks at them.
+	// 尽早同步 ClusterIP 和 ClusterIPs，确保后续逻辑读取到一致的地址字段。
 	normalizeClusterIPs(After{svc}, Before{nil})
 
-	// Allocate IPs and ports. If we had a transactional store, this would just
-	// be part of the larger transaction.  We don't have that, so we have to do
-	// it manually. This has to happen here and not in any earlier hooks (e.g.
-	// defaulting) because it needs to be aware of flags and be able to access
-	// API storage.
+	// 分配 IP 和端口。如果底层存储支持事务，这些操作本可纳入同一个事务；当前不支持，因此需要手动管理。
+	// 分配必须在此钩子执行，而不能提前放在默认值阶段，因为这里才能读取 Feature Gate/启动配置并访问 API 存储。
 	txn, err := r.alloc.allocateCreate(svc, dryrun.IsDryRun(options.DryRun))
 	if err != nil {
 		return nil, err
 	}
 
-	// Our cleanup callback
+	// 注册清理回调：后续持久化失败时回滚已预留的资源。
 	finish := func(_ context.Context, success bool) {
 		if success {
 			txn.Commit()
@@ -378,20 +349,18 @@ func (r *REST) beginUpdate(ctx context.Context, obj, oldObj runtime.Object, opti
 	newSvc := obj.(*api.Service)
 	oldSvc := oldObj.(*api.Service)
 
-	// Make sure the existing object has all fields we expect to be defaulted.
-	// This might not be true if the saved object predates these fields (the
-	// Decorator hook is not called on 'old' in the update path.
+	// 确保旧对象已经补齐当前版本预期存在的默认字段。
+	// 如果对象早于这些字段引入时创建，则可能缺少它们；更新路径不会对 old 对象调用 Decorator。
 	r.defaultOnReadService(oldSvc)
 
-	// Fix up allocated values that the client may have not specified (for
-	// idempotence).
+	// 补回客户端可能省略的系统分配值，使重复提交相同配置具备幂等性。
 	patchAllocatedValues(After{newSvc}, Before{oldSvc})
 
 	// Make sure ClusterIP and ClusterIPs are in sync.  This has to happen
 	// early, before anyone looks at them.
 	normalizeClusterIPs(After{newSvc}, Before{oldSvc})
 
-	// Allocate and initialize fields.
+	// 根据新旧 Service 的差异分配或初始化网络字段。
 	txn, err := r.alloc.allocateUpdate(After{newSvc}, Before{oldSvc}, dryrun.IsDryRun(options.DryRun))
 	if err != nil {
 		return nil, err
@@ -409,16 +378,16 @@ func (r *REST) beginUpdate(ctx context.Context, obj, oldObj runtime.Object, opti
 	return finish, nil
 }
 
-// ResourceLocation returns a URL to which one can send traffic for the specified service.
+// ResourceLocation 返回指定 Service 的代理目标 URL 和 HTTP Transport。
 // ResourceLocation 将 Service 名称/端口解析为 EndpointSlice 后端地址，并只选择能验证为 Pod IP 的 Endpoint。
 func (r *REST) ResourceLocation(ctx context.Context, id string) (*url.URL, http.RoundTripper, error) {
-	// Allow ID as "svcname", "svcname:port", or "scheme:svcname:port".
+	// 支持 svcname、svcname:port 或 scheme:svcname:port 三种请求标识格式。
 	svcScheme, svcName, portStr, valid := utilnet.SplitSchemeNamePort(id)
 	if !valid {
 		return nil, nil, errors.NewBadRequest(fmt.Sprintf("invalid service request %q", id))
 	}
 
-	// If a port *number* was specified, find the corresponding service port name
+	// 如果请求指定的是端口号，则查找对应的 Service Port 名称。
 	if portNum, err := strconv.ParseInt(portStr, 10, 64); err == nil {
 		obj, err := r.Get(ctx, svcName, &metav1.GetOptions{})
 		if err != nil {
@@ -428,7 +397,7 @@ func (r *REST) ResourceLocation(ctx context.Context, id string) (*url.URL, http.
 		found := false
 		for _, svcPort := range svc.Spec.Ports {
 			if int64(svcPort.Port) == portNum {
-				// use the declared port's name
+				// 使用 Service 中声明的端口名称。
 				portStr = svcPort.Name
 				found = true
 				break
@@ -455,7 +424,7 @@ func (r *REST) ResourceLocation(ctx context.Context, id string) (*url.URL, http.
 	}
 
 	hostPort, err := proxy.RandomEndpoint(svcName, slices, portStr, v1.IPFamily(r.primaryIPFamily), func(ep *discovery.Endpoint) bool {
-		// We only proxy to addresses that are actually pods.
+		// 只允许代理到确实对应 Pod 的 Endpoint 地址。
 		if err := isValidAddress(ctx, ep, r.pods); err != nil {
 			utilruntime.HandleError(fmt.Errorf("endpoint %v isn't valid (%w)", ep, err))
 			return false
@@ -488,7 +457,7 @@ func isValidAddress(ctx context.Context, ep *discovery.Endpoint, pods rest.Gette
 		return fmt.Errorf("pod is missing, skipping (%s/%s)", ep.TargetRef.Namespace, ep.TargetRef.Name)
 	}
 	for _, podIP := range pod.Status.PodIPs {
-		// (Addresses is an array but only Addresses[0] is used.)
+		// Addresses 虽然是数组，但这里只使用第一个地址。
 		if podIP.IP == ep.Addresses[0] {
 			return nil
 		}
@@ -496,65 +465,52 @@ func isValidAddress(ctx context.Context, ep *discovery.Endpoint, pods rest.Gette
 	return fmt.Errorf("pod ip(s) doesn't match endpoint ip, skipping: %v vs %s (%s/%s)", pod.Status.PodIPs, ep.Addresses[0], ep.TargetRef.Namespace, ep.TargetRef.Name)
 }
 
-// normalizeClusterIPs adjust clusterIPs based on ClusterIP.  This must not
-// consider any other fields.
+// normalizeClusterIPs 仅根据 ClusterIP 调整 ClusterIPs，不应依赖或修改其他字段。
 // normalizeClusterIPs 在校验前保持旧 ClusterIP 与新 ClusterIPs 字段一致，兼容只填写单数旧字段的客户端。
 func normalizeClusterIPs(after After, before Before) {
 	oldSvc, newSvc := before.Service, after.Service
 
-	// In all cases here, we don't need to over-think the inputs.  Validation
-	// will be called on the new object soon enough.  All this needs to do is
-	// try to divine what user meant with these linked fields. The below
-	// is verbosely written for clarity.
+	// 此处无需对输入做过度校验，后续很快会对新对象执行完整 Validation。
+	// 当前逻辑只需根据关联字段推断用户意图；下面采用较为展开的写法以便理解。
 
-	// **** IMPORTANT *****
-	// as a governing rule. User must (either)
-	// -- Use singular only (old client)
-	// -- singular and plural fields (new clients)
+	// **** 重要规则 *****
+	// 客户端必须选择以下一种写法：旧客户端只使用单数 ClusterIP；新客户端同时使用单数和复数 ClusterIPs。
 
 	if oldSvc == nil {
-		// This was a create operation.
-		// User specified singular and not plural (e.g. an old client), so init
-		// plural for them.
+		// 当前是创建操作。客户端只提供单数 ClusterIP（例如旧客户端），因此由服务端补齐复数 ClusterIPs。
 		if len(newSvc.Spec.ClusterIP) > 0 && len(newSvc.Spec.ClusterIPs) == 0 {
 			newSvc.Spec.ClusterIPs = []string{newSvc.Spec.ClusterIP}
 			return
 		}
 
-		// we don't init singular based on plural because
-		// new client must use both fields
+		// 不根据复数 ClusterIPs 反向补单数 ClusterIP，因为新客户端必须同时提交两个字段。
 
-		// Either both were not specified (will be allocated) or both were
-		// specified (will be validated).
+		// 两个字段要么都未指定（后续由分配器分配），要么都已指定（后续由校验器验证）。
 		return
 	}
 
-	// This was an update operation
+	// 当前是更新操作。
 
-	// ClusterIPs were cleared by an old client which was trying to patch
-	// some field and didn't provide ClusterIPs
+	// 旧客户端尝试 Patch 其他字段时没有提交 ClusterIPs，导致该字段被清空。
 	if len(oldSvc.Spec.ClusterIPs) > 0 && len(newSvc.Spec.ClusterIPs) == 0 {
-		// if ClusterIP is the same, then it is an old client trying to
-		// patch service and didn't provide ClusterIPs
+		// 如果 ClusterIP 未变化，说明旧客户端很可能只是更新其他字段时省略了 ClusterIPs。
 		if oldSvc.Spec.ClusterIP == newSvc.Spec.ClusterIP {
 			newSvc.Spec.ClusterIPs = oldSvc.Spec.ClusterIPs
 		}
 	}
 
-	// clusterIP is not the same
+	// ClusterIP 发生了变化。
 	if oldSvc.Spec.ClusterIP != newSvc.Spec.ClusterIP {
-		// this is a client trying to clear it
+		// 客户端正在尝试清空 ClusterIP。
 		if len(oldSvc.Spec.ClusterIP) > 0 && len(newSvc.Spec.ClusterIP) == 0 {
-			// if clusterIPs are the same, then clear on their behalf
+			// 如果 ClusterIPs 也未变化，则由服务端代替客户端同步清空。
 			if sameClusterIPs(oldSvc, newSvc) {
 				newSvc.Spec.ClusterIPs = nil
 			}
 
-			// if they provided nil, then we are fine (handled by patching case above)
-			// if they changed it then validation will catch it
+			// 如果客户端提交 nil，则前面的 Patch 兼容分支已经处理；如果提交了其他变化，则交由校验器判断。
 		} else {
-			// ClusterIP has changed but not cleared *and* ClusterIPs are the same
-			// then we set ClusterIPs based on ClusterIP
+			// ClusterIP 已修改但未清空，且 ClusterIPs 未变化时，根据新的 ClusterIP 同步设置 ClusterIPs。
 			if sameClusterIPs(oldSvc, newSvc) {
 				newSvc.Spec.ClusterIPs = []string{newSvc.Spec.ClusterIP}
 			}
@@ -562,10 +518,8 @@ func normalizeClusterIPs(after After, before Before) {
 	}
 }
 
-// patchAllocatedValues allows clients to avoid a read-modify-write cycle while
-// preserving values that we allocated on their behalf.  For example, they
-// might create a Service without specifying the ClusterIP, in which case we
-// allocate one.  If they resubmit that same YAML, we want it to succeed.
+// patchAllocatedValues 在客户端省略系统分配字段时补回旧值，使客户端无需先 GET 再 PUT，也能幂等地重复提交配置。
+// 例如，创建 Service 时未指定 ClusterIP，服务端自动分配了地址；客户端再次提交同一份 YAML 时仍应成功。
 // patchAllocatedValues 为 PUT/PATCH 中被客户端省略的系统分配字段补回旧值，避免无关更新意外释放或重新申请地址/端口。
 func patchAllocatedValues(after After, before Before) {
 	oldSvc, newSvc := before.Service, after.Service
@@ -590,12 +544,10 @@ func patchAllocatedValues(after After, before Before) {
 			return used
 		}
 
-		// Build a set of all the ports in oldSvc that are also in newSvc.  We know
-		// we can't patch these values.
+		// 收集 oldSvc 和 newSvc 中都存在的端口；这些端口属于已有配置，不能在此处自动补丁修改。
 		used := nodePortsUsed(oldSvc).Intersection(nodePortsUsed(newSvc))
 
-		// Map NodePorts by name.  The user may have changed other properties
-		// of the port, but we won't see that here.
+		// 按端口名称建立 NodePort 映射。用户可能修改了端口的其他属性，但这些变化不在此处处理。
 		np := map[string]int32{}
 		for i := range oldSvc.Spec.Ports {
 			p := &oldSvc.Spec.Ports[i]

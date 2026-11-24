@@ -57,8 +57,7 @@ type jobStrategy struct {
 // Strategy 是 Job 主资源的默认 REST 策略；删除传播策略按 API 版本保留历史兼容行为。
 var Strategy = jobStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// DefaultGarbageCollectionPolicy returns OrphanDependents for batch/v1 for backwards compatibility,
-// and DeleteDependents for all other versions.
+// DefaultGarbageCollectionPolicy 按 API 版本选择默认删除传播策略：batch/v1 保留孤儿化兼容行为，其他版本级联删除。
 // batch/v1 为兼容旧客户端默认孤儿化删除，其他版本默认级联删除 Job 所属 Pod。
 func (jobStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	var groupVersion schema.GroupVersion
@@ -67,20 +66,19 @@ func (jobStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.Garb
 	}
 	switch groupVersion {
 	case batchv1.SchemeGroupVersion:
-		// for back compatibility
+		// 为兼容旧版 batch/v1 客户端，保留孤儿化删除行为。
 		return rest.OrphanDependents
 	default:
 		return rest.DeleteDependents
 	}
 }
 
-// NamespaceScoped returns true because all jobs need to be within a namespace.
+// NamespaceScoped 表示 Job 是命名空间级资源，必须归属于某个 Namespace。
 func (jobStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回写入策略会重置的字段集合；这些字段不接受普通用户通过主资源接口修改。
 func (jobStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"batch/v1": fieldpath.NewSet(
@@ -91,7 +89,7 @@ func (jobStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return fields
 }
 
-// PrepareForCreate clears the status of a job before creation.
+// PrepareForCreate 在创建 Job 前清理由控制器维护的状态，并规范化用户提交的 Spec。
 // 创建时先生成/补全 Job Selector 与模板标签，再清空 Status、初始化 Generation，并清理禁用字段。
 func (jobStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	newJob := obj.(*batch.Job)
@@ -110,7 +108,7 @@ func (jobStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	pod.DropDisabledTemplateFields(&newJob.Spec.Template, nil)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 在更新 Job 时恢复只读状态字段，并清理当前 Feature Gate 不允许设置的字段。
 // 更新时保留旧 Status，清理禁用字段；只有 Job.Spec 变化才递增 Generation。
 func (jobStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newJob := obj.(*batch.Job)
@@ -121,32 +119,29 @@ func (jobStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object
 
 	pod.DropDisabledTemplateFields(&newJob.Spec.Template, &oldJob.Spec.Template)
 
-	// Any changes to the spec increment the generation number.
-	// See metav1.ObjectMeta description for more information on Generation.
+	// Spec 发生语义变化时递增 Generation，使控制器识别期望配置的新版本。
 	if !apiequality.Semantic.DeepEqual(newJob.Spec, oldJob.Spec) {
 		newJob.Generation = oldJob.Generation + 1
 	}
 
 }
 
-// Validate validates a new job.
+// Validate 对新建 Job 执行批处理资源校验，并根据新旧 PodTemplate 计算兼容选项。
 func (jobStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	job := obj.(*batch.Job)
 	opts := validationOptionsForJob(job, nil)
 	return batchvalidation.ValidateJobCreate(job, opts)
 }
 
-// DeclarativeValidationConfig declares the options referenced by this type's tags,
-// mapped to whether each is enabled.
+// DeclarativeValidationConfig 为声明式校验提供特性开关配置，键对应类型标签引用的校验选项。
 func (jobStrategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
 	return rest.DeclarativeValidationConfig{Options: map[string]bool{
 		string(features.WorkloadWithJob): utilfeature.DefaultFeatureGate.Enabled(features.WorkloadWithJob),
 	}}
 }
 
-// shouldAllowMutablePodTemplate returns true if the Job's pod template should
-// be mutable. This is safe for suspended jobs with no active pods that either
-// have never started or have the JobSuspended condition set.
+// shouldAllowMutablePodTemplate 判断 Job 的 PodTemplate 是否允许修改。
+// 只有 Job 已暂停、没有活跃 Pod，且从未启动或已有 JobSuspended=True 条件时才允许修改。
 // 仅当 Job 已暂停、没有活跃 Pod，且从未启动或控制器已报告 JobSuspended 时，才允许修改其 PodTemplate。
 func shouldAllowMutablePodTemplate(job *batch.Job) bool {
 	suspended := job.Spec.Suspend != nil && *job.Spec.Suspend
@@ -171,8 +166,7 @@ func validationOptionsForJob(newJob, oldJob *batch.Job) batchvalidation.JobValid
 	if oldJob != nil {
 		opts.AllowInvalidLabelValueInSelector = opts.AllowInvalidLabelValueInSelector || metav1validation.LabelSelectorHasInvalidLabelValue(oldJob.Spec.Selector)
 		// 普通 Job 的调度指令创建后不可随意修改；旧 Job 已暂停且未启动时才具备兼容更新条件。
-		// Updating node affinity, node selector and tolerations is allowed
-		// only for suspended jobs that never started before.
+		// nodeAffinity、nodeSelector 和 tolerations 等调度指令，仅允许从未启动且处于暂停状态的 Job 修改。
 		suspended := oldJob.Spec.Suspend != nil && *oldJob.Spec.Suspend
 		notStarted := oldJob.Status.StartTime == nil
 		opts.AllowMutableSchedulingDirectives = suspended && notStarted
@@ -183,8 +177,8 @@ func validationOptionsForJob(newJob, oldJob *batch.Job) batchvalidation.JobValid
 		if utilfeature.DefaultFeatureGate.Enabled(features.MutableSchedulingDirectivesForSuspendedJobs) {
 			opts.AllowMutableSchedulingDirectives = allowMutablePodTemplate
 		}
-		// Validation should not fail jobs if they don't have the new labels.
-		// This can be removed once we have high confidence that both labels exist (1.30 at least)
+		// 旧 Job 可能尚未包含新版标签，因此不能仅因缺少这些标签就使更新校验失败。
+		// 确认历史对象已普遍具备两个标签后，可移除此兼容逻辑。
 		_, hadJobName := oldJob.Spec.Template.Labels[batch.JobNameLabel]
 		_, hadControllerUid := oldJob.Spec.Template.Labels[batch.ControllerUidLabel]
 		opts.RequirePrefixedLabels = hadJobName && hadControllerUid
@@ -192,7 +186,7 @@ func validationOptionsForJob(newJob, oldJob *batch.Job) batchvalidation.JobValid
 	return opts
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 Job 时应告知客户端的非阻断性警告。
 func (jobStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newJob := obj.(*batch.Job)
 	var warnings []string
@@ -203,7 +197,7 @@ func (jobStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []s
 	return warnings
 }
 
-// generateSelectorIfNeeded checks the job's manual selector flag and generates selector labels if the flag is true.
+// generateSelectorIfNeeded 检查 manualSelector 开关；未启用手动 Selector 时，由 API Server 自动生成 Selector 及对应模板标签。
 // ManualSelector=false 时由 API Server 生成唯一 Selector，确保 Job Controller 只管理该 Job 创建的 Pod。
 func generateSelectorIfNeeded(obj *batch.Job) {
 	if !*obj.Spec.ManualSelector {
@@ -211,41 +205,35 @@ func generateSelectorIfNeeded(obj *batch.Job) {
 	}
 }
 
-// generateSelector adds a selector to a job and labels to its template
-// which can be used to uniquely identify the pods created by that job,
-// if the user has requested this behavior.
+// generateSelector 为 Job 生成 Selector，并向 PodTemplate 添加用于唯一识别该 Job 所创建 Pod 的标签。
+// 该逻辑仅在用户未要求手动指定 Selector 时调用。
 // generateSelector 同时给 PodTemplate 写入友好 JobName 和唯一 ControllerUID 标签，并将唯一 UID 标签写入 Job.Spec.Selector。
 func generateSelector(obj *batch.Job) {
 	if obj.Spec.Template.Labels == nil {
 		obj.Spec.Template.Labels = make(map[string]string)
 	}
-	// The job-name label is unique except in cases that are expected to be
-	// quite uncommon, and is more user friendly than uid.  So, we add it as
-	// a label.
+	// job-name 标签在常规场景下足以区分 Job，且比 UID 更便于用户识别，因此同时写入模板标签。
 	jobNameLabels := []string{batch.LegacyJobNameLabel, batch.JobNameLabel}
 	for _, value := range jobNameLabels {
 		_, found := obj.Spec.Template.Labels[value]
 		if found {
-			// User asked us to automatically generate a selector, but set manual labels.
-			// If there is a conflict, we will reject in validation.
+			// 用户要求自动生成 Selector，却预先设置了相关标签；这里不覆盖用户值，冲突交由后续校验拒绝。
 		} else {
 			obj.Spec.Template.Labels[value] = string(obj.ObjectMeta.Name)
 		}
 	}
 
-	// The controller-uid label makes the pods that belong to this job
-	// only match this job.
+	// controller-uid 标签携带 Job 的 UID，使该 Job 创建的 Pod 不会被其他 Job 的 Selector 匹配。
 	controllerUidLabels := []string{batch.LegacyControllerUidLabel, batch.ControllerUidLabel}
 	for _, value := range controllerUidLabels {
 		_, found := obj.Spec.Template.Labels[value]
 		if found {
-			// User asked us to automatically generate a selector, but set manual labels.
-			// If there is a conflict, we will reject in validation.
+			// 用户要求自动生成 Selector，却预先设置了相关标签；这里不覆盖用户值，冲突交由后续校验拒绝。
 		} else {
 			obj.Spec.Template.Labels[value] = string(obj.ObjectMeta.UID)
 		}
 	}
-	// Select the controller-uid label.  This is sufficient for uniqueness.
+	// 使用 controller-uid 作为 Selector 的核心匹配条件即可保证 Job 归属关系的唯一性。
 	if obj.Spec.Selector == nil {
 		obj.Spec.Selector = &metav1.LabelSelector{}
 	}
@@ -256,19 +244,12 @@ func generateSelector(obj *batch.Job) {
 	if _, found := obj.Spec.Selector.MatchLabels[batch.ControllerUidLabel]; !found {
 		obj.Spec.Selector.MatchLabels[batch.ControllerUidLabel] = string(obj.ObjectMeta.UID)
 	}
-	// If the user specified matchLabel controller-uid=$WRONGUID, then it should fail
-	// in validation, either because the selector does not match the pod template
-	// (controller-uid=$WRONGUID does not match controller-uid=$UID, which we applied
-	// above, or we will reject in validation because the template has the wrong
-	// labels.
+	// 如果用户在 MatchLabels 中指定了错误的 controller-uid，Selector 将无法匹配上面写入模板的真实 UID；若模板标签本身冲突，也会由后续校验拒绝。
 }
 
-// TODO: generalize generateSelector so it can work for other controller
-// objects such as ReplicaSet.  Can use pkg/api/meta to generically get the
-// UID, but need some way to generically access the selector and pod labels
-// fields.
+// TODO：将 generateSelector 抽象为可供 ReplicaSet 等控制器资源复用的通用实现；还需要统一访问 UID、Selector 和 Pod 标签字段的接口。
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验完成后规范化对象；当前 Job 策略无需额外处理。
 func (jobStrategy) Canonicalize(obj runtime.Object) {
 }
 
@@ -276,12 +257,12 @@ func (jobStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// AllowCreateOnUpdate is false for jobs; this means a POST is needed to create one.
+// AllowCreateOnUpdate 对 Job 返回 false，创建资源必须使用 POST，不能通过更新不存在的对象来创建。
 func (jobStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 对普通用户提交的 Job 更新执行完整校验，并结合旧对象应用兼容规则。
 func (jobStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	job := obj.(*batch.Job)
 	oldJob := old.(*batch.Job)
@@ -290,7 +271,7 @@ func (jobStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) 
 	return batchvalidation.ValidateJobUpdate(job, oldJob, opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 Job 时应告知客户端的非阻断性警告。
 func (jobStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	newJob := obj.(*batch.Job)
@@ -307,8 +288,7 @@ type jobStatusStrategy struct {
 
 var StatusStrategy = jobStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回写入策略会重置的字段集合；这些字段不接受普通用户通过主资源接口修改。
 func (jobStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"batch/v1": fieldpath.NewSet(
@@ -332,31 +312,14 @@ func (jobStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Ob
 	return batchvalidation.ValidateJobUpdateStatus(newJob, oldJob, opts)
 }
 
-// getStatusValidationOptions returns validation options for Job status
+// getStatusValidationOptions 根据新旧 Job 状态变化生成状态校验选项。
 // JobManagedBy 启用时强化外部控制器的 Status 状态机约束，阻止终态回退、索引重叠和时间戳非法变化。
 func getStatusValidationOptions(newJob, oldJob *batch.Job) batchvalidation.JobStatusValidationOptions {
 	// 仅当特性开启时启用强化状态转换规则；并且只校验本次发生变化的状态字段，避免历史异常阻塞无关更新。
 	if utilfeature.DefaultFeatureGate.Enabled(features.JobManagedBy) {
-		// A strengthened validation of the Job status transitions is needed since the
-		// Job managedBy field let's the Job object be controlled by external
-		// controllers. We want to make sure the transitions done by the external
-		// controllers meet the expectations of the clients of the Job API.
-		// For example, we verify that a Job in terminal state (Failed or Complete)
-		// does not flip to a non-terminal state.
-		//
-		// In the checks below we fail validation for Job status fields (or conditions) only if they change their values
-		// (compared to the oldJob). This allows proceeding with status updates unrelated to the fields violating the
-		// checks, while blocking bad status updates for jobs with correct status.
-		//
-		// Also note, there is another reason we run the validation rules only
-		// if the associated status fields changed. We do it also because some of
-		// the validation rules might be temporarily violated just after a user
-		// updating the spec. In that case we want to give time to the Job
-		// controller to "fix" the status in the following sync. For example, the
-		// rule for checking the format of completedIndexes expects them to be
-		// below .spec.completions, however, this it is ok if the
-		// status.completedIndexes go beyond completions just after a user scales
-		// down a Job.
+		// JobManagedBy 允许外部控制器管理 Job，因此必须强化状态转换校验，确保外部控制器写入的状态符合 Job API 对客户端的承诺，例如 Failed 或 Complete 等终态不能回退为非终态。
+		// 以下规则仅在对应状态字段或条件相较旧对象发生变化时才拒绝更新；无关状态字段的更新不应被历史异常连带阻塞。
+		// 此外，用户修改 Spec 后，部分状态可能暂时不满足新配置对应的约束，需要给 Job Controller 留出下一轮同步修正状态的时间。例如缩减 completions 后，completedIndexes 可能暂时包含超出新 completions 范围的索引。
 		isIndexed := ptr.Deref(newJob.Spec.CompletionMode, batch.NonIndexedCompletion) == batch.IndexedCompletion
 
 		isJobFinishedChanged := batchvalidation.IsJobFinished(oldJob) != batchvalidation.IsJobFinished(newJob)
@@ -373,15 +336,13 @@ func getStatusValidationOptions(newJob, oldJob *batch.Job) batchvalidation.JobSt
 		isReadyChanged := !ptr.Equal(oldJob.Status.Ready, newJob.Status.Ready)
 		isTerminatingChanged := !ptr.Equal(oldJob.Status.Terminating, newJob.Status.Terminating)
 		isSuspendedWithZeroCompletions := ptr.Equal(newJob.Spec.Suspend, ptr.To(true)) && ptr.Equal(newJob.Spec.Completions, ptr.To[int32](0))
-		// Detect job resume via condition changes (JobSuspended: True -> False)
-		// This handles the case where the controller updates status after the user has already
-		// changed spec.suspend=false, which is the scenario from https://github.com/kubernetes/kubernetes/issues/134521
+		// 通过 JobSuspended 条件从 True 变为 False 识别恢复运行；即使用户已先将 spec.suspend 设为 false，控制器随后才更新 Status，也能正确识别该恢复过程。
+		// 相关时序问题参见 https://github.com/kubernetes/kubernetes/issues/134521。
 		isJobResuming := batchvalidation.IsConditionTrue(oldJob.Status.Conditions, batch.JobSuspended) &&
 			batchvalidation.IsConditionFalse(newJob.Status.Conditions, batch.JobSuspended)
 
 		return batchvalidation.JobStatusValidationOptions{
-			// We allow to decrease the counter for succeeded pods for jobs which
-			// have equal parallelism and completions, as they can be scaled-down.
+			// 当 Indexed Job 的 parallelism 与 completions 相等时，缩容可能导致成功 Pod 计数下降，因此允许该计数回退。
 			RejectDecreasingSucceededCounter:             !isIndexed || !ptr.Equal(newJob.Spec.Completions, newJob.Spec.Parallelism),
 			RejectDecreasingFailedCounter:                true,
 			RejectDisablingTerminalCondition:             true,
@@ -410,12 +371,12 @@ func getStatusValidationOptions(newJob, oldJob *batch.Job) batchvalidation.JobSt
 	return batchvalidation.JobStatusValidationOptions{}
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 Job 时应告知客户端的非阻断性警告。
 func (jobStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// JobSelectableFields returns a field set that represents the object for matching purposes.
+// JobSelectableFields 返回 Job 可用于 FieldSelector 匹配的字段集合。
 // JobToSelectableFields 暴露 metadata 字段、status.successful 和 spec.* 等 Job 专属 FieldSelector。
 func JobToSelectableFields(job *batch.Job) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&job.ObjectMeta, true)
@@ -425,7 +386,7 @@ func JobToSelectableFields(job *batch.Job) fields.Set {
 	return generic.MergeFieldsSets(objectMetaFieldsSet, specificFieldsSet)
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 Job 的标签和可选择字段，供列表、监视等过滤操作使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	job, ok := obj.(*batch.Job)
 	if !ok {
@@ -434,9 +395,8 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(job.ObjectMeta.Labels), JobToSelectableFields(job), nil
 }
 
-// MatchJob is the filter used by the generic etcd backend to route
-// watch events from etcd to clients of the apiserver only interested in specific
-// labels/fields.
+// MatchJob 是通用 etcd 存储使用的事件过滤函数。
+// 它根据客户端指定的标签和字段选择器，判断是否向该客户端转发 Job 监视事件。
 func MatchJob(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:    label,

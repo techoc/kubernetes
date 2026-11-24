@@ -46,33 +46,32 @@ type ProxyREST struct {
 	ProxyTransport http.RoundTripper
 }
 
-// Implement Connecter
+// 实现 Connecter 接口。
 var _ = rest.Connecter(&ProxyREST{})
 
 var proxyMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 
-// New returns an empty podProxyOptions object.
+// New 返回一个空的 PodProxyOptions 对象。
 func (r *ProxyREST) New() runtime.Object {
 	return &api.PodProxyOptions{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 子资源拥有的资源。
 func (r *ProxyREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与 Pod 主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// ConnectMethods returns the list of HTTP methods that can be proxied
+// ConnectMethods 返回 Pod Proxy 支持转发的 HTTP 方法。
 func (r *ProxyREST) ConnectMethods() []string {
 	return proxyMethods
 }
 
-// NewConnectOptions returns versioned resource that represents proxy parameters
+// NewConnectOptions 返回承载代理参数的版本化 API 对象。
 func (r *ProxyREST) NewConnectOptions() (runtime.Object, bool, string) {
 	return &api.PodProxyOptions{}, true, "path"
 }
 
-// Connect returns a handler for the pod proxy
+// Connect 返回处理 Pod Proxy 请求的 Handler。
 // Connect 校验代理参数、解析 Pod 网络位置、拼接请求路径，并返回支持 WebSocket/HTTP Upgrade 的代理 Handler。
 func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	proxyOpts, ok := opts.(*api.PodProxyOptions)
@@ -88,7 +87,7 @@ func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object,
 	return newThrottledUpgradeAwareProxyHandler(location, transport, true, false, responder), nil
 }
 
-// Support both GET and POST methods. We must support GET for browsers that want to use WebSockets.
+// 同时支持 GET 和 POST；浏览器建立 WebSocket 连接时必须允许使用 GET。
 var upgradeableMethods = []string{"GET", "POST"}
 
 // AttachREST 实现 pods/{name}/attach，将标准输入/输出连接到指定容器已有进程的流式会话。
@@ -101,7 +100,7 @@ type AttachREST struct {
 // Implement Connecter
 var _ = rest.Connecter(&AttachREST{})
 
-// New creates a new podAttachOptions object.
+// New 返回一个空的 PodAttachOptions 对象。
 func (r *AttachREST) New() runtime.Object {
 	return &api.PodAttachOptions{}
 }
@@ -112,11 +111,11 @@ func (r *AttachREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
-// Connect returns a handler for the pod exec proxy
+// Connect 返回处理 Pod Exec 请求的代理 Handler。
 // Connect 先按 Feature Gate 检查兼容的 create 权限，再定位节点并根据 Kubelet WebSocket 能力决定是否在 API Server 转换协议。
 func (r *AttachREST) Connect(ctx context.Context, name string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
-	// Forces a authz check for "create", if feature gate enabled.
-	// See: https://github.com/kubernetes/kubernetes/issues/133515
+	// 启用对应 Feature Gate 时，强制额外执行 create 动作的授权检查。
+	// 背景说明：https://github.com/kubernetes/kubernetes/issues/133515
 	if utilfeature.DefaultFeatureGate.Enabled(features.AuthorizePodWebsocketUpgradeCreatePermission) {
 		if err := ensureAuthorizedForVerb(ctx, r.Authorizer, "create"); err != nil {
 			return nil, err
@@ -136,14 +135,13 @@ func (r *AttachREST) Connect(ctx context.Context, name string, opts runtime.Obje
 	nodeSupportsWebsockets := checkNodeSupportsWebsockets(connInfo.NodeFeatures)
 	handler := newThrottledUpgradeAwareProxyHandler(location, transport, false, true, responder)
 	if utilfeature.DefaultFeatureGate.Enabled(features.TranslateStreamCloseWebsocketRequests) {
-		// If the node supports websocket translation, revert to legacy proxy, and let kubelet handle it.
+		// 如果 Node 支持 WebSocket 协议转换，则回退到旧式代理，由 Kubelet 自行处理协议。
 		if utilfeature.DefaultFeatureGate.Enabled(features.ExtendWebSocketsToKubelet) && nodeSupportsWebsockets {
 			proxymetrics.IncWebSocketStreamingRequest(ctx, "attach", "proxied_to_kubelet")
 			return handler, nil
 		}
 		proxymetrics.IncWebSocketStreamingRequest(ctx, "attach", "translated_at_apiserver")
-		// Wrap the upgrade aware handler to implement stream translation
-		// for WebSocket/V5 upgrade requests.
+		// 使用支持 Upgrade 的 Handler 包装请求，为 WebSocket/V5 Upgrade 请求执行流协议转换。
 		streamOptions := translator.Options{
 			Stdin:  attachOpts.Stdin,
 			Stdout: attachOpts.Stdout,
@@ -157,12 +155,12 @@ func (r *AttachREST) Connect(ctx context.Context, name string, opts runtime.Obje
 	return handler, nil
 }
 
-// NewConnectOptions returns the versioned object that represents exec parameters
+// NewConnectOptions 返回承载 Exec 参数的版本化 API 对象。
 func (r *AttachREST) NewConnectOptions() (runtime.Object, bool, string) {
 	return &api.PodAttachOptions{}, false, ""
 }
 
-// ConnectMethods returns the methods supported by exec
+// ConnectMethods 返回 Exec 子资源支持的 HTTP 方法。
 func (r *AttachREST) ConnectMethods() []string {
 	return upgradeableMethods
 }
@@ -177,7 +175,7 @@ type ExecREST struct {
 // Implement Connecter
 var _ = rest.Connecter(&ExecREST{})
 
-// New creates a new podExecOptions object.
+// New 返回一个空的 PodExecOptions 对象。
 func (r *ExecREST) New() runtime.Object {
 	return &api.PodExecOptions{}
 }
@@ -253,7 +251,7 @@ type PortForwardREST struct {
 // Implement Connecter
 var _ = rest.Connecter(&PortForwardREST{})
 
-// New returns an empty podPortForwardOptions object
+// New 返回一个空的 PodPortForwardOptions 对象。
 func (r *PortForwardREST) New() runtime.Object {
 	return &api.PodPortForwardOptions{}
 }
@@ -264,18 +262,17 @@ func (r *PortForwardREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
-// NewConnectOptions returns the versioned object that represents the
-// portforward parameters
+// NewConnectOptions 返回承载 PortForward 参数的版本化 API 对象。
 func (r *PortForwardREST) NewConnectOptions() (runtime.Object, bool, string) {
 	return &api.PodPortForwardOptions{}, false, ""
 }
 
-// ConnectMethods returns the methods supported by portforward
+// ConnectMethods 返回 PortForward 子资源支持的 HTTP 方法。
 func (r *PortForwardREST) ConnectMethods() []string {
 	return upgradeableMethods
 }
 
-// Connect returns a handler for the pod portforward proxy
+// Connect 返回处理 Pod PortForward 请求的代理 Handler。
 // Connect 根据 Node 能力选择旧式 Kubelet 代理或 API Server WebSocket 隧道转换，并记录对应请求指标。
 func (r *PortForwardREST) Connect(ctx context.Context, name string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	// Forces a authz check for "create", if feature gate enabled.

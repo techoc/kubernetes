@@ -41,44 +41,37 @@ import (
 )
 
 // Repair 是旧式 RangeAllocation 的周期性 ClusterIP 修复控制器：根据当前 Service 列表重建快照，发现重复、越界和泄漏地址。
-// Repair is a controller loop that periodically examines all service ClusterIP allocations
-// and logs any errors, and then sets the compacted and accurate list of all allocated IPs.
-//
-// Handles:
-// * Duplicate ClusterIP assignments caused by operator action or undetected race conditions
-// * ClusterIPs that do not match the currently configured range
-// * Allocations to services that were not actually created due to a crash or powerloss
-// * Migrates old versions of Kubernetes services into the atomic ipallocator model automatically
-//
-// Can be run at infrequent intervals, and is best performed on startup of the master.
-// Is level driven and idempotent - all valid ClusterIPs will be updated into the ipallocator
-// map at the end of a single execution loop if no race is encountered.
-//
-// TODO: allocate new IPs if necessary
-// TODO: perform repair?
+// Repair 是周期性核对 Service ClusterIP 分配状态的控制器，并将准确、紧凑的已分配 IP 集合写回分配器。
+// 主要处理：
+// - 运维人员操作或未检测到的并发竞争导致的 ClusterIP 重复分配；
+// - ClusterIP 与当前配置的地址范围不匹配；
+// - 集群崩溃或断电导致地址已分配、但 Service 未成功创建；
+// - 自动将旧版本 Kubernetes Service 迁移到原子化 ipallocator 分配模型。
+// 该控制器可低频运行，最好在控制面启动时执行。它采用基于当前状态的幂等协调方式；
+// 如果执行期间没有并发竞争，一轮处理结束后，所有有效 ClusterIP 都会反映到分配器位图中。
+// TODO：必要时为异常 Service 重新分配 IP。
+// TODO：完善具体修复策略。
 type Repair struct {
 	interval      time.Duration
 	serviceClient corev1client.ServicesGetter
 
-	networkByFamily   map[v1.IPFamily]*net.IPNet                    // networks we operate on, by their family
-	allocatorByFamily map[v1.IPFamily]rangeallocation.RangeRegistry // allocators we use, by their family
+	networkByFamily   map[v1.IPFamily]*net.IPNet                    // 按 IP 协议族记录控制器负责管理的网络范围。
+	allocatorByFamily map[v1.IPFamily]rangeallocation.RangeRegistry // 按 IP 协议族记录对应使用的分配器。
 
-	leaksByFamily map[v1.IPFamily]map[string]int // counter per leaked IP per family
+	leaksByFamily map[v1.IPFamily]map[string]int // 按 IP 协议族和 IP 地址记录疑似泄漏次数。
 	broadcaster   events.EventBroadcaster
 	recorder      events.EventRecorder
 }
 
-// How many times we need to detect a leak before we clean up.  This is to
-// avoid races between allocating an IP and using it.
+// 清理疑似泄漏 IP 前需要连续检测到的次数，用于避免 IP 刚分配、尚未被 Service 使用时发生竞争。
 const numRepairsBeforeLeakCleanup = 3
 
-// NewRepair creates a controller that periodically ensures that all clusterIPs are uniquely allocated across the cluster
-// and generates informational warnings for a cluster that is not in sync.
+// NewRepair 创建 IP 分配修复控制器，定期确保集群内 ClusterIP 唯一分配，并在分配状态不一致时生成提示事件。
 func NewRepair(interval time.Duration, serviceClient corev1client.ServicesGetter, eventClient eventsv1client.EventsV1Interface, network *net.IPNet, alloc rangeallocation.RangeRegistry, secondaryNetwork *net.IPNet, secondaryAlloc rangeallocation.RangeRegistry) *Repair {
 	eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: eventClient})
 	recorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, "ipallocator-repair-controller")
 
-	// build *ByFamily struct members
+	// 初始化按 IP 协议族索引的网络、分配器和泄漏计数器。
 	networkByFamily := make(map[v1.IPFamily]*net.IPNet)
 	allocatorByFamily := make(map[v1.IPFamily]rangeallocation.RangeRegistry)
 	leaksByFamily := make(map[v1.IPFamily]map[string]int)
@@ -117,7 +110,7 @@ func NewRepair(interval time.Duration, serviceClient corev1client.ServicesGetter
 	}
 }
 
-// RunUntil starts the controller until the provided ch is closed.
+// RunUntil 启动周期性修复循环，直到 stopCh 关闭。
 func (c *Repair) RunUntil(onFirstSuccess func(), stopCh chan struct{}) {
 	c.broadcaster.StartRecordingToSink(stopCh)
 	defer c.broadcaster.Shutdown()
@@ -132,7 +125,7 @@ func (c *Repair) RunUntil(onFirstSuccess func(), stopCh chan struct{}) {
 	}, c.interval, stopCh)
 }
 
-// runOnce verifies the state of the cluster IP allocations and returns an error if an unrecoverable problem occurs.
+// runOnce 执行一轮 ClusterIP 分配状态核对；发生不可恢复的问题时返回错误。
 func (c *Repair) runOnce() error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		err := c.doRunOnce()

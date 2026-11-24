@@ -33,23 +33,21 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// autoscalerStrategy implements behavior for HorizontalPodAutoscalers
+// autoscalerStrategy 定义 HorizontalPodAutoscaler（HPA）的 REST 写入策略。
 type autoscalerStrategy struct {
 	rest.DeclarativeValidation
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating HorizontalPodAutoscaler
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 HorizontalPodAutoscaler 时使用的默认策略。
 var Strategy = autoscalerStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped is true for autoscaler.
+// NamespaceScoped 表示 HPA 是命名空间级资源。
 func (autoscalerStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源更新时由服务端重置、不能由请求修改的字段集合。
 func (autoscalerStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"autoscaling/v1": fieldpath.NewSet(
@@ -63,14 +61,14 @@ func (autoscalerStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.S
 	return fields
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// PrepareForCreate 清理创建请求中不允许用户设置的字段，并按 Feature Gate 初始化 Generation。
 func (autoscalerStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	newHPA := obj.(*autoscaling.HorizontalPodAutoscaler)
 
-	// create cannot set status
+	// 创建请求不能直接设置 Status。
 	newHPA.Status = autoscaling.HorizontalPodAutoscalerStatus{}
 
-	// Feature gated in case someone is setting the generation themselves, they can opt out of this for 1 release
+	// HPAGeneration 通过 Feature Gate 控制，以便为曾自行设置 Generation 的客户端保留一个版本的兼容窗口。
 	if utilfeature.DefaultFeatureGate.Enabled(features.HPAGeneration) {
 		newHPA.Generation = 1
 	}
@@ -78,18 +76,16 @@ func (autoscalerStrategy) PrepareForCreate(ctx context.Context, obj runtime.Obje
 	dropDisabledFields(newHPA, nil)
 }
 
-// Validate validates a new autoscaler.
+// Validate 校验新创建的 HPA。
 func (autoscalerStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	autoscaler := obj.(*autoscaling.HorizontalPodAutoscaler)
 	opts := validationOptionsForHorizontalPodAutoscaler(autoscaler, nil)
 	return validation.ValidateHorizontalPodAutoscaler(autoscaler, opts)
 }
 
-// DeclarativeValidationConfig implements rest.DeclarativeValidationConfigurer to supply declarative
-// validation options.
+// DeclarativeValidationConfig 实现 rest.DeclarativeValidationConfigurer，为声明式校验提供特性选项。
 func (autoscalerStrategy) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) rest.DeclarativeValidationConfig {
-	// HPAScaleToZero is enabled when its gate is enabled, or (on update) when the
-	// existing object already has MinReplicas == 0.
+	// 启用 HPAScaleToZero 特性时允许缩容至零；更新旧对象时，如果其 MinReplicas 已为 0，也继续允许该配置。
 	enableScaleToZero := utilfeature.DefaultFeatureGate.Enabled(features.HPAScaleToZero)
 	if !enableScaleToZero && oldObj != nil {
 		if oldHPA, ok := oldObj.(*autoscaling.HorizontalPodAutoscaler); ok {
@@ -103,25 +99,25 @@ func (autoscalerStrategy) DeclarativeValidationConfig(ctx context.Context, obj, 
 	}}
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 HPA 时的非阻断性警告；当前不产生额外警告。
 func (autoscalerStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (autoscalerStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for autoscalers.
+// AllowCreateOnUpdate 返回 false：HPA 不能通过更新请求隐式创建。
 func (autoscalerStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 恢复服务端维护的 Status，清理禁用字段，并在 Spec 变化时维护 Generation。
 func (autoscalerStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newHPA := obj.(*autoscaling.HorizontalPodAutoscaler)
 	oldHPA := old.(*autoscaling.HorizontalPodAutoscaler)
-	// Update is not allowed to set status
+	// 主资源更新请求不能修改 Status。
 	newHPA.Status = oldHPA.Status
 
 	dropDisabledFields(newHPA, oldHPA)
@@ -133,7 +129,7 @@ func (autoscalerStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime
 	}
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 执行面向普通用户的 HPA 更新校验。
 func (autoscalerStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newHPA := obj.(*autoscaling.HorizontalPodAutoscaler)
 	oldHPA := old.(*autoscaling.HorizontalPodAutoscaler)
@@ -141,7 +137,7 @@ func (autoscalerStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.O
 	return validation.ValidateHorizontalPodAutoscalerUpdate(newHPA, oldHPA, opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 HPA 时的非阻断性警告；当前不产生额外警告。
 func (autoscalerStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -155,7 +151,7 @@ type autoscalerStatusStrategy struct {
 	autoscalerStrategy
 }
 
-// StatusStrategy is the default logic invoked when updating object status.
+// StatusStrategy 是更新 HPA Status 子资源时使用的专用策略。
 var StatusStrategy = autoscalerStatusStrategy{Strategy}
 
 // GetResetFields returns the set of fields that get reset by the strategy
@@ -208,10 +204,10 @@ func validationOptionsForHorizontalPodAutoscaler(newHPA, oldHPA *autoscaling.Hor
 
 	switch {
 	case oldHPA != nil && oldHPA.Spec.ScaleTargetRef.APIVersion == newHPA.Spec.ScaleTargetRef.APIVersion && oldHPA.Spec.ScaleTargetRef.Kind == newHPA.Spec.ScaleTargetRef.Kind:
-		// skip apiVersion validation on updates that don't change the kind/apiVersion.
+		// 更新未改变目标 Kind 和 APIVersion 时，跳过 APIVersion 校验，以兼容历史对象。
 		opts.ScaleTargetRefValidationOptions.AllowInvalidAPIVersion = true
 	case newHPA.Spec.ScaleTargetRef.Kind == "ReplicationController":
-		// allow empty apiVersion for the only scalable type that exists in the core v1 API.
+		// ReplicationController 是 core/v1 中唯一可扩缩的资源，允许其目标引用省略 API Group。
 		opts.ScaleTargetRefValidationOptions.AllowEmptyAPIGroup = true
 	}
 
@@ -219,7 +215,7 @@ func validationOptionsForHorizontalPodAutoscaler(newHPA, oldHPA *autoscaling.Hor
 		for _, metric := range oldHPA.Spec.Metrics {
 			if metric.Type == autoscaling.ObjectMetricSourceType && metric.Object != nil {
 				if err := validation.ValidateAPIVersion(metric.Object.DescribedObject, opts.ObjectMetricsValidationOptions); err != nil {
-					// metrics are already invalid.
+					// 旧对象中的指标引用已经不合法；为避免无关更新被阻断，允许保留原有 APIVersion。
 					opts.ObjectMetricsValidationOptions.AllowInvalidAPIVersion = true
 					break
 				}
@@ -229,8 +225,7 @@ func validationOptionsForHorizontalPodAutoscaler(newHPA, oldHPA *autoscaling.Hor
 	return opts
 }
 
-// dropDisabledFields will drop any disabled fields that have not previously been
-// set on the old HPA. oldHPA is ignored if nil.
+// dropDisabledFields 清除 Feature Gate 已关闭且旧 HPA 从未使用过的字段；oldHPA 为 nil 时按新对象处理。
 func dropDisabledFields(newHPA, oldHPA *autoscaling.HorizontalPodAutoscaler) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.HPAConfigurableTolerance) {
 		return

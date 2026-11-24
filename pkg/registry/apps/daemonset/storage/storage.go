@@ -37,7 +37,7 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against DaemonSets.
+// NewREST 创建并返回用于访问 DaemonSet 资源的 RESTStorage。
 // NewREST 创建 DaemonSet Store，并使用 StatusStrategy 派生状态更新存储，确保主资源和状态写入边界分离。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
@@ -66,51 +66,49 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	return &REST{store}, &StatusREST{store: &statusStore}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回该资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"ds"}
 }
 
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider，返回该资源所属的类别列表。
 func (r *REST) Categories() []string {
 	return []string{"all"}
 }
 
-// StatusREST implements the REST endpoint for changing the status of a daemonset
+// StatusREST 实现用于修改 DaemonSet 状态的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// New creates a new DaemonSet object.
+// New 返回一个空的 DaemonSet 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &apps.DaemonSet{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储所拥有的资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取对象；REST 子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 更新对象的 Status 子集，不允许通过该入口修改其他字段。
 // Update 固定 forceAllowCreate=false，状态子资源只能更新已有 DaemonSet，不能在更新时隐式创建。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 调用底层 Store 时显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回该子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }

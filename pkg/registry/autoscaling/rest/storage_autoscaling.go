@@ -36,8 +36,8 @@ type RESTStorageProvider struct{}
 // NewRESTStorage 初始化 API Group 元信息，按版本构建资源存储映射，并遵循 API 资源启用配置。
 func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(autoscaling.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 若在此处增加 API 版本，还必须在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将版本优先级信息直接提供给 APIGroupInfo。
 
 	var hpaOnce sync.Once
 	var hpaStorage *horizontalpodautoscalerstore.REST
@@ -69,7 +69,7 @@ func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorag
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, storageGetter hpaStorageGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
 
-	// horizontalpodautoscalers
+	// 注册 HorizontalPodAutoscaler 主资源及其 Status 子资源。
 	if resource := "horizontalpodautoscalers"; apiResourceConfigSource.ResourceEnabled(autoscalingapiv1.SchemeGroupVersion.WithResource(resource)) {
 		hpaStorage, hpaStatusStorage, err := storageGetter()
 		if err != nil {

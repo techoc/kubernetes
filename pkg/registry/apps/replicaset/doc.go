@@ -15,5 +15,5 @@ limitations under the License.
 */
 
 // Package replicaset 提供 ReplicaSet 的 REST 写入策略、字段选择器和存储接口。
-// implementation for storing ReplicaSet api objects.
+// 本包实现 ReplicaSet API 对象的存储与 REST 访问。
 package replicaset

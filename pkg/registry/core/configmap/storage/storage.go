@@ -33,7 +33,7 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work with ConfigMap objects.
+// NewREST 创建并返回用于访问 ConfigMap 资源的 RESTStorage。
 // NewREST 注册 ConfigMap 对象构造器、Label/Field 筛选器、读写策略和表格转换器，再由 RESTOptions 完成后端初始化。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
@@ -59,10 +59,10 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	return &REST{store}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回 ConfigMap 资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"cm"}
 }

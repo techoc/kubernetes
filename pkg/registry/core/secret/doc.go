@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package secrets provides Registry interface and its REST
-// implementation for storing Secret api objects.
+// Package secret 提供 Secret API 对象的 Registry 接口及其 REST 存储实现。
 // 本包提供 Secret 的 REST 写入策略、敏感数据字段校验、TLS 告警和通用存储接口。
 package secret

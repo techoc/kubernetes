@@ -28,48 +28,45 @@ import (
 // AllocationBitmap 使用 big.Int 的每一位表示一个资源偏移量；锁保护位图与 count，使并发分配和释放保持原子性。
 // AllocationBitmap is a contiguous block of resources that can be allocated atomically.
 //
-// Each resource has an offset.  The internal structure is a bitmap, with a bit for each offset.
+// 每个资源都对应一个偏移量；内部使用位图表示，每个偏移量对应一位。
 //
-// If a resource is taken, the bit at that offset is set to one.
-// r.count is always equal to the number of set bits and can be recalculated at any time
-// by counting the set bits in r.allocated.
+// 资源被占用时，对应偏移位设为 1。
+// r.count 始终等于位图中值为 1 的位数，也可以随时通过统计 r.allocated 中的置位数重新计算。
 //
-// TODO: use RLE and compact the allocator to minimize space.
+// TODO：考虑使用游程编码（RLE）压缩位图，以减少分配器的内存占用。
 type AllocationBitmap struct {
-	// strategy carries the details of how to choose the next available item out of the range
+	// strategy 定义如何从资源范围内选择下一个可用资源。
 	strategy bitAllocator
-	// max is the maximum size of the usable items in the range
+	// max 表示当前资源池可分配资源的总数。
 	max int
-	// rangeSpec is the range specifier, matching RangeAllocation.Range
+	// rangeSpec 是资源范围描述，与 RangeAllocation.Range 字段对应。
 	rangeSpec string
 
-	// lock guards the following members
+	// lock 保护下面的成员，确保并发访问安全。
 	lock sync.Mutex
-	// count is the number of currently allocated elements in the range
+	// count 表示当前已分配的资源数量。
 	count int
-	// allocated is a bit array of the allocated items in the range
+	// allocated 是资源占用位图，每一位表示对应偏移量是否已分配。
 	allocated *big.Int
 }
 
-// AllocationBitmap implements Interface and Snapshottable
+// AllocationBitmap 实现 Interface 和 Snapshottable 接口。
 var _ Interface = &AllocationBitmap{}
 var _ Snapshottable = &AllocationBitmap{}
 
-// bitAllocator represents a search strategy in the allocation map for a valid item.
+// bitAllocator 定义在位图中搜索并选择有效空闲资源的策略。
 type bitAllocator interface {
 	AllocateBit(allocated *big.Int, max, count int) (int, bool)
 }
 
-// NewAllocationMap creates an allocation bitmap using the random scan strategy.
+// NewAllocationMap 使用随机扫描策略创建资源分配位图。
 func NewAllocationMap(max int, rangeSpec string) *AllocationBitmap {
 	return NewAllocationMapWithOffset(max, rangeSpec, 0)
 }
 
-// NewAllocationMapWithOffset creates an allocation bitmap using a random scan strategy that
-// allows to pass an offset that divides the allocation bitmap in two blocks.
-// The first block of values will not be used for random value assigned by the AllocateNext()
-// method until the second block of values has been exhausted.
-// The offset value must be always smaller than the bitmap size.
+// NewAllocationMapWithOffset 使用随机扫描策略创建分配位图，并通过 offset 将位图划分为两个区间。
+// AllocateNext 会优先从第二个区间分配；只有该区间耗尽后，才会使用第一个区间。
+// offset 必须小于位图的总大小。
 // NewAllocationMapWithOffset 创建带分段优先级的资源池：自动分配优先从 offset 之后的动态区选择，耗尽后才使用前面的保留区。
 func NewAllocationMapWithOffset(max int, rangeSpec string, offset int) *AllocationBitmap {
 	a := AllocationBitmap{
@@ -86,14 +83,13 @@ func NewAllocationMapWithOffset(max int, rangeSpec string, offset int) *Allocati
 	return &a
 }
 
-// Allocate attempts to reserve the provided item.
-// Returns true if it was allocated, false if it was already in use
+// Allocate 尝试预留指定偏移量。若本次成功分配则返回 true；若该资源已被占用则返回 false。
 // Allocate 预留调用方指定的偏移量；所有越界检查、位图写入和计数更新都在同一把锁内完成。
 func (r *AllocationBitmap) Allocate(offset int) (bool, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	// max is the maximum size of the usable items in the range
+	// max 表示当前资源池可分配资源的总数。
 	if offset < 0 || offset >= r.max {
 		return false, fmt.Errorf("offset %d out of range [0,%d]", offset, r.max)
 	}
@@ -105,8 +101,7 @@ func (r *AllocationBitmap) Allocate(offset int) (bool, error) {
 	return true, nil
 }
 
-// AllocateNext reserves one of the items from the pool.
-// (0, false, nil) may be returned if there are no items left.
+// AllocateNext 从资源池中自动分配一个资源。资源池耗尽时返回 (0, false, nil)。
 // AllocateNext 委托 bitAllocator 选择空闲位，再在锁保护下置位并递增已分配计数。
 func (r *AllocationBitmap) AllocateNext() (int, bool, error) {
 	r.lock.Lock()
@@ -121,9 +116,7 @@ func (r *AllocationBitmap) AllocateNext() (int, bool, error) {
 	return next, true, nil
 }
 
-// Release releases the item back to the pool. Releasing an
-// unallocated item or an item out of the range is a no-op and
-// returns no error.
+// Release 将资源归还到资源池。释放尚未分配或超出范围的偏移量时不执行任何操作，也不会返回错误。
 func (r *AllocationBitmap) Release(offset int) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -138,14 +131,13 @@ func (r *AllocationBitmap) Release(offset int) error {
 }
 
 const (
-	// Find the size of a big.Word in bytes.
+	// 计算 big.Word 的字节数。
 	notZero   = uint64(^big.Word(0))
 	wordPower = (notZero>>8)&1 + (notZero>>16)&1 + (notZero>>32)&1
 	wordSize  = 1 << wordPower
 )
 
-// ForEach calls the provided function for each allocated bit.  The
-// AllocationBitmap may not be modified while this loop is running.
+// ForEach 对每个已分配的偏移量调用回调函数。遍历期间会持有分配器锁，因此不能在回调中修改该位图。
 func (r *AllocationBitmap) ForEach(fn func(int)) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -164,8 +156,7 @@ func (r *AllocationBitmap) ForEach(fn func(int)) {
 	}
 }
 
-// Has returns true if the provided item is already allocated and a call
-// to Allocate(offset) would fail.
+// Has 判断指定偏移量是否已分配；若已分配，对其调用 Allocate(offset) 将失败。
 func (r *AllocationBitmap) Has(offset int) bool {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -173,14 +164,14 @@ func (r *AllocationBitmap) Has(offset int) bool {
 	return r.allocated.Bit(offset) == 1
 }
 
-// Free returns the count of items left in the range.
+// Free 返回资源范围内尚未分配的资源数量。
 func (r *AllocationBitmap) Free() int {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	return r.max - r.count
 }
 
-// Snapshot saves the current state of the pool.
+// Snapshot 导出资源池当前状态。
 // Snapshot 导出资源范围描述和位图字节；count 可在恢复时通过 countBits 重新计算。
 func (r *AllocationBitmap) Snapshot() (string, []byte) {
 	r.lock.Lock()
@@ -189,7 +180,7 @@ func (r *AllocationBitmap) Snapshot() (string, []byte) {
 	return r.rangeSpec, r.allocated.Bytes()
 }
 
-// Restore restores the pool to the previously captured state.
+// Restore 将资源池恢复到之前捕获的状态。
 // Restore 仅允许恢复到同一 rangeSpec，避免把其他容量/范围的位图错误加载到当前资源池。
 func (r *AllocationBitmap) Restore(rangeSpec string, data []byte) error {
 	r.lock.Lock()
@@ -205,13 +196,11 @@ func (r *AllocationBitmap) Restore(rangeSpec string, data []byte) error {
 	return nil
 }
 
-// Destroy cleans up everything on shutdown.
+// Destroy 在关闭时释放分配器持有的资源；当前实现没有额外清理工作。
 func (r *AllocationBitmap) Destroy() {
 }
 
-// randomScanStrategy chooses a random address from the provided big.Int, and then
-// scans forward looking for the next available address (it will wrap the range if
-// necessary).
+// randomScanStrategy 从资源范围内随机选择起点，然后向前扫描空闲偏移量；到达范围末尾时会回绕到起点继续搜索。
 type randomScanStrategy struct {
 	rand *rand.Rand
 }
@@ -232,10 +221,8 @@ func (rss randomScanStrategy) AllocateBit(allocated *big.Int, max, count int) (i
 
 var _ bitAllocator = randomScanStrategy{}
 
-// randomScanStrategyWithOffset choose a random address from the provided big.Int and then scans
-// forward looking for the next available address. The big.Int range is subdivided so it will try
-// to allocate first from the reserved upper range of addresses (it will wrap the upper subrange if necessary).
-// If there is no free address it will try to allocate one from the lower range too.
+// randomScanStrategyWithOffset 随机选择起点并向前扫描空闲偏移量。资源范围被划分为两个区间：优先从上方动态分配区分配，
+// 并在该区间内回绕搜索；如果动态区间已满，再尝试从下方区间分配。
 type randomScanStrategyWithOffset struct {
 	rand   *rand.Rand
 	offset int
@@ -246,9 +233,9 @@ func (rss randomScanStrategyWithOffset) AllocateBit(allocated *big.Int, max, cou
 	if count >= max {
 		return 0, false
 	}
-	// size of the upper subrange, prioritized for random allocation
+	// 上方子区间的大小；自动分配时优先使用该区间。
 	subrangeMax := max - rss.offset
-	// try to get a value from the upper range [rss.reserved, max]
+	// 尝试从上方区间 [offset, max) 中分配资源。
 	start := rss.rand.Intn(subrangeMax)
 	for i := 0; i < subrangeMax; i++ {
 		at := rss.offset + ((start + i) % subrangeMax)
@@ -258,7 +245,7 @@ func (rss randomScanStrategyWithOffset) AllocateBit(allocated *big.Int, max, cou
 	}
 
 	start = rss.rand.Intn(rss.offset)
-	// subrange full, try to get the value from the first block before giving up.
+	// 上方子区间已满；放弃前再尝试从第一个区间分配。
 	for i := 0; i < rss.offset; i++ {
 		at := (start + i) % rss.offset
 		if allocated.Bit(at) == 0 {

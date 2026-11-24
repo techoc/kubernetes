@@ -54,18 +54,17 @@ var Strategy = rsStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme
 // Make sure we correctly implement the interface.
 var _ = rest.GarbageCollectionDeleteStrategy(Strategy)
 
-// DefaultGarbageCollectionPolicy returns DeleteDependents for all currently served versions.
+// DefaultGarbageCollectionPolicy 返回 DeleteDependents：删除 ReplicaSet 时级联删除其依赖对象。
 func (rsStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	return rest.DeleteDependents
 }
 
-// NamespaceScoped returns true because all ReplicaSets need to be within a namespace.
+// NamespaceScoped 表示 ReplicaSet 必须属于某个命名空间。
 func (rsStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源更新时需要重置、不能由请求修改的字段集合。
 func (rsStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"apps/v1": fieldpath.NewSet(
@@ -111,14 +110,14 @@ func (rsStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object)
 	}
 }
 
-// Validate validates a new ReplicaSet.
+// Validate 校验新创建的 ReplicaSet。
 func (rsStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	rs := obj.(*apps.ReplicaSet)
 	opts := pod.GetValidationOptionsFromPodTemplate(&rs.Spec.Template, nil)
 	return appsvalidation.ValidateReplicaSet(rs, opts)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 ReplicaSet 时发现的非阻断性警告。
 func (rsStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newRS := obj.(*apps.ReplicaSet)
 	var warnings []string
@@ -129,12 +128,11 @@ func (rsStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []st
 	return warnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (rsStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for ReplicaSets; this means a POST is
-// needed to create one.
+// AllowCreateOnUpdate 返回 false：创建 ReplicaSet 必须使用 POST，而不能通过更新请求创建。
 func (rsStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -149,7 +147,7 @@ func (rsStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) f
 	return appsvalidation.ValidateReplicaSetUpdate(newReplicaSet, oldReplicaSet, opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新产生的非阻断性警告。
 func (rsStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	newReplicaSet := obj.(*apps.ReplicaSet)
@@ -221,6 +219,7 @@ func (rsStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.O
 	dropDisabledStatusFields(&newRS.Status, &oldRS.Status)
 }
 
+// ValidateUpdate 校验 ReplicaSet Status 子资源的更新。
 func (rsStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return appsvalidation.ValidateReplicaSetStatusUpdate(obj.(*apps.ReplicaSet), old.(*apps.ReplicaSet))
 }

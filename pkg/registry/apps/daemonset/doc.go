@@ -15,5 +15,5 @@ limitations under the License.
 */
 
 // Package daemonset 提供 DaemonSet 的 REST 写入策略、Pod 模板版本控制和存储接口。
-// implementation for storing DaemonSet api objects.
+// 本包实现 DaemonSet API 对象的存储与 REST 访问。
 package daemonset

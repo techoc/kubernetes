@@ -68,7 +68,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// Config provides information needed to build RESTStorage for core.
+// Config 提供构建 Core API RESTStorage 所需的配置信息。
 // Config 汇总 legacy core API Group 的存储后端、Service 网络范围、事件 TTL 和启动后修复控制器所需依赖。
 type Config struct {
 	GenericConfig
@@ -86,7 +86,7 @@ type ProxyConfig struct {
 }
 
 type ServicesConfig struct {
-	// Service IP ranges
+	// Service ClusterIP 地址范围。
 	ClusterIPRange          net.IPNet
 	SecondaryClusterIPRange net.IPNet
 	NodePortRange           utilnet.PortRange
@@ -127,14 +127,14 @@ func New(c Config, authorizer authorizer.UnconditionalAuthorizer) (*legacyProvid
 		authorizer:                       authorizer,
 	}
 
-	// create service node port repair controller
+	// 创建 Service NodePort 分配修复控制器。
 	client, err := kubernetes.NewForConfig(c.LoopbackClientConfig)
 	if err != nil {
 		return nil, err
 	}
 	p.startServiceNodePortsRepair = portallocatorcontroller.NewRepair(c.Services.IPRepairInterval, client.CoreV1(), client.EventsV1(), c.Services.NodePortRange, rangeRegistries.nodePort).RunUntil
 
-	// create service cluster ip repair controller
+	// 创建 Service ClusterIP 分配修复控制器。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.MultiCIDRServiceAllocator) {
 		p.startServiceClusterIPRepair = serviceipallocatorcontroller.NewRepair(
 			c.Services.IPRepairInterval,
@@ -227,13 +227,13 @@ func (p *legacyProvider) NewRESTStorage(apiResourceConfigSource serverstorage.AP
 		storage = map[string]rest.Storage{}
 	}
 
-	// client for getting service account token bound objects
+	// 创建客户端，用于读取 ServiceAccount Token 所绑定的对象。
 	whClient, err := admissionregistrationv1client.NewForConfig(p.LoopbackClientConfig)
 	if err != nil {
 		return genericapiserver.APIGroupInfo{}, err
 	}
 
-	// potentially override the generic serviceaccount storage with one that supports pods
+	// 如需支持 Pod 绑定信息，则使用专用实现替换通用 ServiceAccount Storage。
 	var serviceAccountStorage *serviceaccountstore.REST
 	if p.ServiceAccountIssuer != nil {
 		var nodeGetter rest.Getter
@@ -286,9 +286,9 @@ func (p *legacyProvider) NewRESTStorage(apiResourceConfigSource serverstorage.AP
 		}
 	}
 
-	// potentially override generic storage for service account (with pod support)
+	// 如需支持 Pod 绑定信息，则替换通用 ServiceAccount Storage。
 	if resource := "serviceaccounts"; serviceAccountStorage != nil && apiResourceConfigSource.ResourceEnabled(corev1.SchemeGroupVersion.WithResource(resource)) {
-		// don't leak go routines
+		// 销毁被替换的 Storage，避免其后台 Goroutine 泄漏。
 		storage[resource].Destroy()
 		if storage[resource+"/token"] != nil {
 			storage[resource+"/token"].Destroy()
@@ -359,7 +359,7 @@ func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryCl
 		primaryClusterIPAllocator, err = ipallocator.New(&serviceClusterIPRange, func(max int, rangeSpec string, offset int) (allocator.Interface, error) {
 			var mem allocator.Snapshottable
 			mem = allocator.NewAllocationMapWithOffset(max, rangeSpec, offset)
-			// TODO etcdallocator package to return a storage interface via the storageFactory
+			// TODO：让 etcdallocator 包通过 storageFactory 返回统一的 Storage 接口。
 			etcd, err := serviceallocator.NewEtcd(mem, "/ranges/serviceips", serviceStorageConfig.ForResource(api.Resource("serviceipallocations")))
 			if err != nil {
 				return nil, err
@@ -383,9 +383,8 @@ func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryCl
 				if err != nil {
 					return nil, err
 				}
-				// It is possible to start apiserver clusters with the new allocator and dual write enable on new environments.
-				// If this is the case we need to initialize the bitmap or it will fail to allocate IP addresses because
-				// the ResourceVersion of the opaque API object is zero.
+				// 新环境可能直接启用新分配器和双写模式启动 API Server。
+				// 此时必须先初始化位图；否则不透明 API 对象的 ResourceVersion 为零，位图分配器将无法分配 IP 地址。
 				rangeRegistry, err := etcd.Get()
 				if err != nil {
 					return nil, err
@@ -406,10 +405,9 @@ func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryCl
 			}
 
 		}
-		// TODO(aojea) Revisit the initialization of the allocators
-		// since right now it depends on the service-cidr flags and
-		// sets the default IPFamily that may not be coherent with the
-		// existing default ServiceCIDR
+		// TODO(aojea)：重新审视分配器的初始化方式。
+		// 当前初始化依赖 service-cidr 启动参数，并据此设置默认 IPFamily；
+		// 该默认值可能与集群中已有的默认 ServiceCIDR 不一致。
 		primaryClusterIPAllocator, err = ipallocator.NewMetaAllocator(
 			networkingv1Client,
 			c.Informers.Networking().V1().ServiceCIDRs(),
@@ -451,14 +449,13 @@ func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryCl
 			if !utilfeature.DefaultFeatureGate.Enabled(features.DisableAllocatorDualWrite) {
 				bitmapAllocator, err = ipallocator.New(&c.Services.SecondaryClusterIPRange, func(max int, rangeSpec string, offset int) (allocator.Interface, error) {
 					mem := allocator.NewAllocationMapWithOffset(max, rangeSpec, offset)
-					// TODO etcdallocator package to return a storage interface via the storageFactory
+					// TODO：让 etcdallocator 包通过 storageFactory 返回统一的 Storage 接口。
 					etcd, err := serviceallocator.NewEtcd(mem, "/ranges/secondaryserviceips", serviceStorageConfig.ForResource(api.Resource("serviceipallocations")))
 					if err != nil {
 						return nil, err
 					}
-					// It is possible to start apiserver clusters with the new allocator and dual write enable on new environments.
-					// If this is the case we need to initialize the bitmap or it will fail to allocate IP addresses because
-					// the ResourceVersion of the opaque API object is zero.
+					// 新环境可能直接启用新分配器和双写模式启动 API Server。
+					// 此时必须先初始化位图；否则不透明 API 对象的 ResourceVersion 为零，位图分配器将无法分配 IP 地址。
 					rangeRegistry, err := etcd.Get()
 					if err != nil {
 						return nil, err
@@ -478,10 +475,9 @@ func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryCl
 					return rangeRegistries{}, nil, nil, nil, fmt.Errorf("cannot create cluster secondary IP allocator: %w", err)
 				}
 			}
-			// TODO(aojea) Revisit the initialization of the allocators
-			// since right now it depends on the service-cidr flags and
-			// sets the default IPFamily that may not be coherent with the
-			// existing default ServiceCIDR
+			// TODO(aojea)：重新审视分配器的初始化方式。
+			// 当前初始化依赖 service-cidr 启动参数，并据此设置默认 IPFamily；
+			// 该默认值可能与集群中已有的默认 ServiceCIDR 不一致。
 			secondaryClusterIPAllocator, err = ipallocator.NewMetaAllocator(
 				networkingv1Client,
 				c.Informers.Networking().V1().ServiceCIDRs(),
@@ -520,15 +516,9 @@ var _ genericapiserver.PostStartHookProvider = &legacyProvider{}
 // PostStartHook 在 API Server 启动后运行 ClusterIP 与 NodePort Repair Controller；首次修复完成前阻止 Ready，超过 1 分钟则启动失败。
 func (p *legacyProvider) PostStartHook() (string, genericapiserver.PostStartHookFunc, error) {
 	return "start-service-ip-repair-controllers", func(context genericapiserver.PostStartHookContext) error {
-		// We start both repairClusterIPs and repairNodePorts to ensure repair
-		// loops of ClusterIPs and NodePorts.
-		// We run both repair loops using RunUntil public interface.
-		// However, we want to fail liveness/readiness until the first
-		// successful repair loop, so we basically pass appropriate
-		// callbacks to RunUtil methods.
-		// Additionally, we ensure that we don't wait for it for longer
-		// than 1 minute for backward compatibility of failing the whole
-		// apiserver if we can't repair them.
+		// 同时启动 ClusterIP 和 NodePort 两个修复循环，并通过 RunUntil 接口运行。
+		// 在两个循环首次成功完成前，API Server 的存活/就绪检查必须保持失败，因此向 RunUntil 传入相应回调。
+		// 为兼容旧行为，首次修复等待时间最多为 1 分钟；超时后整个 API Server 启动失败。
 		wg := sync.WaitGroup{}
 		wg.Add(2)
 		runner := async.NewRunner(
@@ -541,9 +531,8 @@ func (p *legacyProvider) PostStartHook() (string, genericapiserver.PostStartHook
 			<-context.Done()
 		}()
 
-		// For backward compatibility, we ensure that if we never are able
-		// to repair clusterIPs and/or nodeports, we not only fail the liveness
-		// and/or readiness, but also explicitly fail.
+		// 为保持向后兼容，如果 ClusterIP 或 NodePort 始终无法完成修复，
+		// 不仅要让存活/就绪检查失败，还要显式返回错误，使 API Server 启动失败。
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
@@ -573,8 +562,8 @@ type componentStatusStorage struct {
 
 // serversToValidate 构建 ComponentStatus 的探测目标：本机 controller-manager、scheduler 以及每个 etcd 后端实例。
 func (s componentStatusStorage) serversToValidate() map[string]componentstatus.Server {
-	// this is fragile, which assumes that the default port is being used
-	// TODO: switch to secure port until these components remove the ability to serve insecurely.
+	// 当前实现依赖组件使用默认端口，存在脆弱性。
+	// TODO：待这些组件移除不安全服务能力后，改为探测安全端口。
 	serversToValidate := map[string]componentstatus.Server{
 		"controller-manager": &componentstatus.HttpServer{EnableHTTPS: true, TLSConfig: &tls.Config{InsecureSkipVerify: true}, Addr: "127.0.0.1", Port: ports.KubeControllerManagerPort, Path: "/healthz"},
 		"scheduler":          &componentstatus.HttpServer{EnableHTTPS: true, TLSConfig: &tls.Config{InsecureSkipVerify: true}, Addr: "127.0.0.1", Port: kubeschedulerconfig.DefaultKubeSchedulerPort, Path: "/healthz"},

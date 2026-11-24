@@ -58,20 +58,20 @@ type DeploymentStorage struct {
 	Rollback   *RollbackREST
 }
 
-// ReplicasPathMappings returns the mappings between each group version and a replicas path
+// ReplicasPathMappings 返回各 API 版本中 replicas 字段对应的父资源路径映射。
 // ReplicasPathMappings 声明不同 apps API 版本中副本字段在父资源里的路径，供 Scale ManagedFields 在父子资源间转换。
 func ReplicasPathMappings() managedfields.ResourcePathMappings {
 	return replicasPathInDeployment
 }
 
-// maps a group version to the replicas path in a deployment object
+// 将 API 组版本映射到 Deployment 对象中的 replicas 字段路径。
 var replicasPathInDeployment = managedfields.ResourcePathMappings{
 	schema.GroupVersion{Group: "apps", Version: "v1beta1"}.String(): fieldpath.MakePathOrDie("spec", "replicas"),
 	schema.GroupVersion{Group: "apps", Version: "v1beta2"}.String(): fieldpath.MakePathOrDie("spec", "replicas"),
 	schema.GroupVersion{Group: "apps", Version: "v1"}.String():      fieldpath.MakePathOrDie("spec", "replicas"),
 }
 
-// NewStorage returns new instance of DeploymentStorage.
+// NewStorage 创建并返回 DeploymentStorage 实例。
 // NewStorage 组合主资源、Status、Scale 和 Rollback；Scale 与 Rollback 复用 Deployment 的底层 Store。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (DeploymentStorage, error) {
 	deploymentRest, deploymentStatusRest, deploymentRollbackRest, err := NewREST(optsGetter)
@@ -87,12 +87,12 @@ func NewStorage(optsGetter generic.RESTOptionsGetter) (DeploymentStorage, error)
 	}, nil
 }
 
-// REST implements a RESTStorage for Deployments.
+// REST 为 Deployment 实现 RESTStorage 接口。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against deployments.
+// NewREST 创建并返回用于访问 Deployment 资源的 RESTStorage。
 // NewREST 装配通用 Store，并为 Status 子资源复制 Store 后替换 UpdateStrategy，限制它只能写 Status。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, *RollbackREST, error) {
 	store := &genericregistry.Store{
@@ -119,51 +119,49 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, *Rollbac
 	return &REST{store}, &StatusREST{store: &statusStore}, &RollbackREST{store: store}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回该资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"deploy"}
 }
 
-// Implement CategoriesProvider
+// 实现 CategoriesProvider 接口。
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider，返回该资源所属的类别列表。
 func (r *REST) Categories() []string {
 	return []string{"all"}
 }
 
-// StatusREST implements the REST endpoint for changing the status of a deployment
+// StatusREST 实现用于修改 Deployment 状态的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// New returns empty Deployment object.
+// New 返回一个空的 Deployment 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &apps.Deployment{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储所拥有的资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取对象；REST 子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 更新对象的 Status 子集，不允许通过该入口修改其他字段。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 调用底层 Store 时显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回该子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
@@ -172,39 +170,36 @@ func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, 
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }
 
-// RollbackREST implements the REST endpoint for initiating the rollback of a deployment
+// RollbackREST 实现用于触发 Deployment 回滚的 REST 子资源端点。
 type RollbackREST struct {
 	store *genericregistry.Store
 }
 
-// ProducesMIMETypes returns a list of the MIME types the specified HTTP verb (GET, POST, DELETE,
-// PATCH) can respond with.
+// ProducesMIMETypes 返回指定 HTTP 方法（GET、POST、DELETE、PATCH）可响应的 MIME 类型；nil 表示使用默认处理。
 func (r *RollbackREST) ProducesMIMETypes(verb string) []string {
 	return nil
 }
 
-// ProducesObject returns an object the specified HTTP verb respond with. It will overwrite storage object if
-// it is not nil. Only the type of the return object matters, the value will be ignored.
+// ProducesObject 返回指定 HTTP 方法的响应对象类型。若返回值非 nil，会覆盖存储对象；这里只使用对象类型，忽略其具体值。
 func (r *RollbackREST) ProducesObject(verb string) interface{} {
 	return metav1.Status{}
 }
 
 var _ = rest.StorageMetadata(&RollbackREST{})
 
-// New creates a rollback
+// New 创建一个 DeploymentRollback 请求对象。
 func (r *RollbackREST) New() runtime.Object {
 	return &apps.DeploymentRollback{}
 }
 
 // Destroy cleans up resources on shutdown.
 func (r *RollbackREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此不能在此处重复销毁。
 }
 
 var _ = rest.NamedCreater(&RollbackREST{})
 
-// Create runs rollback for deployment
+// Create 校验回滚请求，并执行 Deployment 回滚操作。
 // Create 校验 DeploymentRollback 请求后，通过更新 Deployment.Spec.RollbackTo 触发控制器执行回滚。
 func (r *RollbackREST) Create(ctx context.Context, name string, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	rollback, ok := obj.(*apps.DeploymentRollback)
@@ -225,7 +220,7 @@ func (r *RollbackREST) Create(ctx context.Context, name string, obj runtime.Obje
 		}
 	}
 
-	// Update the Deployment with information in DeploymentRollback to trigger rollback
+	// 将 DeploymentRollback 中的信息写入 Deployment，以触发回滚流程。
 	err := r.rollbackDeployment(ctx, rollback.Name, &rollback.RollbackTo, rollback.UpdatedAnnotations, dryrun.IsDryRun(options.DryRun))
 	if err != nil {
 		return nil, err
@@ -274,16 +269,16 @@ func (r *RollbackREST) setDeploymentRollback(ctx context.Context, deploymentID s
 	return finalDeployment, err
 }
 
-// ScaleREST implements a Scale for Deployment.
+// ScaleREST 为 Deployment 实现标准 Scale 子资源。
 type ScaleREST struct {
 	store *genericregistry.Store
 }
 
-// ScaleREST implements Patcher
+// 确认 ScaleREST 实现 Patcher 接口。
 var _ = rest.Patcher(&ScaleREST{})
 var _ = rest.GroupVersionKindProvider(&ScaleREST{})
 
-// GroupVersionKind returns GroupVersionKind for Deployment Scale object
+// GroupVersionKind 根据父资源 API 版本返回 Deployment Scale 对象的 GVK。
 // 根据调用方使用的 Deployment API 版本返回对应 Scale GVK，保持旧版本客户端的内容协商兼容。
 func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.GroupVersionKind {
 	switch containingGV {
@@ -298,7 +293,7 @@ func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.Gr
 	}
 }
 
-// New creates a new Scale object
+// New 创建一个空的 Scale 对象。
 func (r *ScaleREST) New() runtime.Object {
 	return &autoscaling.Scale{}
 }
@@ -309,7 +304,7 @@ func (r *ScaleREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
-// Get retrieves object from Scale storage.
+// Get 从父资源存储读取对象，并转换为 Scale 子资源表示。
 // Get 从 Deployment 读取副本期望值与状态值，再投影为 autoscaling.Scale 对象。
 func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	obj, err := r.store.Get(ctx, name, options)
@@ -324,7 +319,7 @@ func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOpt
 	return scale, nil
 }
 
-// Update alters scale subset of Deployment object.
+// Update 更新 Deployment 的 Scale 子集，并将变更写回父资源。
 // Update 将 Scale 子资源请求适配成 Deployment 更新，并强制禁止通过 scale 子资源创建对象。
 func (r *ScaleREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	obj, _, err := r.store.Update(
@@ -375,7 +370,7 @@ func toScaleUpdateValidation(f rest.ValidateObjectUpdateFunc) rest.ValidateObjec
 	}
 }
 
-// scaleFromDeployment returns a scale subresource for a deployment.
+// scaleFromDeployment 将 Deployment 转换为对应的 Scale 子资源对象。
 // scaleFromDeployment 把 Deployment 的副本数、Selector 和元数据映射成 autoscaling.Scale 返回给客户端。
 func scaleFromDeployment(deployment *apps.Deployment) (*autoscaling.Scale, error) {
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
@@ -419,7 +414,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 	if !ok {
 		return nil, errors.NewBadRequest(fmt.Sprintf("expected existing object type to be Deployment, got %T", deployment))
 	}
-	// if zero-value, the existing object does not exist
+	// objInfo 返回零值时，表示目标对象当前不存在。
 	if len(deployment.ResourceVersion) == 0 {
 		return nil, errors.NewNotFound(apps.Resource("deployments/scale"), i.name)
 	}
@@ -440,7 +435,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 		replicasPathInDeployment,
 	)
 
-	// deployment -> old scale
+	// 将旧 Deployment 转换为旧 Scale 表示。
 	oldScale, err := scaleFromDeployment(deployment)
 	if err != nil {
 		return nil, err
@@ -451,7 +446,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 	}
 	oldScale.ManagedFields = scaleManagedFields
 
-	// old scale -> new scale
+	// 基于旧 Scale 应用客户端修改，得到新 Scale。
 	newScaleObj, err := i.reqObjInfo.UpdatedObject(ctx, oldScale)
 	if err != nil {
 		return nil, err
@@ -464,12 +459,12 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 		return nil, errors.NewBadRequest(fmt.Sprintf("expected input object type to be Scale, but %T", newScaleObj))
 	}
 
-	// validate
+	// 校验新旧 Scale 的变更是否合法。
 	if errs := autoscalingvalidation.ValidateScaleUpdate(ctx, scale, oldScale, legacyscheme.Scheme, i.scaleGVKMapper); len(errs) > 0 {
 		return nil, errors.NewInvalid(autoscaling.Kind("Scale"), deployment.Name, errs)
 	}
 
-	// validate precondition if specified (resourceVersion matching is handled by storage)
+	// 若请求指定了前置条件，则在此校验；resourceVersion 匹配由底层存储层负责。
 	if len(scale.UID) > 0 && scale.UID != deployment.UID {
 		return nil, errors.NewConflict(
 			apps.Resource("deployments/scale"),
@@ -478,7 +473,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 		)
 	}
 
-	// move replicas/resourceVersion fields to object and return
+	// 将 replicas 与 resourceVersion 字段写回父 Deployment 对象并返回。
 	deployment.Spec.Replicas = scale.Spec.Replicas
 	deployment.ResourceVersion = scale.ResourceVersion
 

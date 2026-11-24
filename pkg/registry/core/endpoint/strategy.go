@@ -36,65 +36,62 @@ type endpointsStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating Endpoint
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 Endpoints 时使用的默认策略。
 var Strategy = endpointsStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped is true for endpoints.
+// NamespaceScoped 表示 Endpoints 是命名空间级资源。
 func (endpointsStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users on creation.
+// PrepareForCreate 当前不重置字段；Endpoints 的创建约束由 Validate 统一执行。
 // Endpoints 没有需要由 API Server 在创建前重置的字段；这里保留空钩子以满足通用 REST Strategy 接口。
 func (endpointsStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
+// PrepareForUpdate 当前不重置字段；Endpoints 的更新约束由 ValidateUpdate 统一执行。
 func (endpointsStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
-// Validate validates a new endpoints.
+// Validate 校验新创建的 Endpoints。
 // Validate 检查 Endpoints 的 Subsets、Address、NotReadyAddress 和端口结构是否符合 API 约束。
 func (endpointsStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	return validation.ValidateEndpointsCreate(obj.(*api.Endpoints))
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 Endpoints 时发现的非阻断性警告。
 func (endpointsStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return endpointsWarnings(obj.(*api.Endpoints))
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (endpointsStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is true for endpoints.
+// AllowCreateOnUpdate 返回 true：为兼容旧式 Endpoints 上报流程，允许更新请求在对象不存在时创建。
 func (endpointsStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 执行面向普通用户的 Endpoints 更新校验。
 func (endpointsStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return validation.ValidateEndpointsUpdate(obj.(*api.Endpoints), old.(*api.Endpoints))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 Endpoints 时发现的非阻断性警告。
 func (endpointsStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return endpointsWarnings(obj.(*api.Endpoints))
 }
 
+// AllowUnconditionalUpdate 允许不携带 resourceVersion 的无条件更新。
 func (endpointsStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
 // endpointsWarnings 为手工维护的 Endpoints 检查异常 IP；由 Endpoints Controller 管理的对象跳过重复检查以节省开销。
 func endpointsWarnings(endpoints *api.Endpoints) []string {
-	// Save time by not checking for bad IPs if the request is coming from the
-	// Endpoints controller, since we know it fixes up any invalid IPs from its input
-	// data when outputting the Endpoints. (The "managed-by" label is new, so this
-	// heuristic may fail in skewed clusters, but that just means we won't get the
-	// optimization during the skew.)
+	// 请求来自 Endpoints Controller 时跳过异常 IP 检查：控制器在输出 Endpoints 前已修正输入中的无效 IP。
+	// managed-by 标签在滚动升级期间可能因版本不一致而缺失，此时只是无法获得这项性能优化，不影响正确性。
 	// managed-by 标签表明该对象由控制器生成，控制器已在写出前校正 IP，可跳过重复告警扫描。
 	if endpoints.Labels[endpointscontroller.LabelManagedBy] == endpointscontroller.ControllerName {
 		return nil

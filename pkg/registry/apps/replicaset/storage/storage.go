@@ -55,19 +55,19 @@ type ReplicaSetStorage struct {
 	Scale      *ScaleREST
 }
 
-// ReplicasPathMappings returns the mappings between each group version and a replicas path
+// ReplicasPathMappings 返回各 API 版本中 replicas 字段对应的父资源路径映射。
 // ReplicasPathMappings 描述各 API 版本下 replicas 字段在 ReplicaSet 父对象中的位置，供 ManagedFields 转换使用。
 func ReplicasPathMappings() managedfields.ResourcePathMappings {
 	return replicasPathInReplicaSet
 }
 
-// maps a group version to the replicas path in a replicaset object
+// 将 API 组版本映射到 ReplicaSet 对象中的 replicas 字段路径。
 var replicasPathInReplicaSet = managedfields.ResourcePathMappings{
 	schema.GroupVersion{Group: "apps", Version: "v1beta2"}.String(): fieldpath.MakePathOrDie("spec", "replicas"),
 	schema.GroupVersion{Group: "apps", Version: "v1"}.String():      fieldpath.MakePathOrDie("spec", "replicas"),
 }
 
-// NewStorage returns new instance of ReplicaSetStorage.
+// NewStorage 创建并返回 ReplicaSetStorage 实例。
 // NewStorage 将主资源、Status 和 Scale Handler 组合起来；三个端点共享同一持久化 Store。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (ReplicaSetStorage, error) {
 	replicaSetRest, replicaSetStatusRest, err := NewREST(optsGetter)
@@ -82,12 +82,12 @@ func NewStorage(optsGetter generic.RESTOptionsGetter) (ReplicaSetStorage, error)
 	}, nil
 }
 
-// REST implements a RESTStorage for ReplicaSet.
+// REST 为 ReplicaSet 实现 RESTStorage 接口。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against ReplicaSet.
+// NewREST 创建并返回用于访问 ReplicaSet 资源的 RESTStorage。
 // NewREST 创建 ReplicaSet 通用 Store，并复制 Store 配置给 Status 子资源以替换为专用更新策略。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
@@ -116,51 +116,49 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	return &REST{store}, &StatusREST{store: &statusStore}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回该资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"rs"}
 }
 
-// Implement CategoriesProvider
+// 实现 CategoriesProvider 接口。
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider，返回该资源所属的类别列表。
 func (r *REST) Categories() []string {
 	return []string{"all"}
 }
 
-// StatusREST implements the REST endpoint for changing the status of a ReplicaSet
+// StatusREST 实现用于修改 ReplicaSet 状态的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// New returns empty ReplicaSet object.
+// New 返回一个空的 ReplicaSet 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &apps.ReplicaSet{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储所拥有的资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取对象；REST 子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 更新对象的 Status 子集，不允许通过该入口修改其他字段。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 调用底层 Store 时显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回该子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
@@ -169,16 +167,16 @@ func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, 
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }
 
-// ScaleREST implements a Scale for ReplicaSet.
+// ScaleREST 为 ReplicaSet 实现标准 Scale 子资源。
 type ScaleREST struct {
 	store *genericregistry.Store
 }
 
-// ScaleREST implements Patcher
+// 确认 ScaleREST 实现 Patcher 接口。
 var _ = rest.Patcher(&ScaleREST{})
 var _ = rest.GroupVersionKindProvider(&ScaleREST{})
 
-// GroupVersionKind returns GroupVersionKind for ReplicaSet Scale object
+// GroupVersionKind 根据父资源 API 版本返回 ReplicaSet Scale 对象的 GVK。
 func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.GroupVersionKind {
 	switch containingGV {
 	case extensionsv1beta1.SchemeGroupVersion:
@@ -192,7 +190,7 @@ func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.Gr
 	}
 }
 
-// New creates a new Scale object
+// New 创建一个空的 Scale 对象。
 func (r *ScaleREST) New() runtime.Object {
 	return &autoscaling.Scale{}
 }
@@ -203,7 +201,7 @@ func (r *ScaleREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
-// Get retrieves object from Scale storage.
+// Get 从父资源存储读取对象，并转换为 Scale 子资源表示。
 // Get 从 ReplicaSet 投影 Scale：Spec.Replicas 表示期望副本数，Status.Replicas 表示当前副本数。
 func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	obj, err := r.store.Get(ctx, name, options)
@@ -218,7 +216,7 @@ func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOpt
 	return scale, err
 }
 
-// Update alters scale subset of ReplicaSet object.
+// Update 更新 ReplicaSet 的 Scale 子集，并将变更写回父资源。
 // Update 将 Scale 请求适配到 ReplicaSet 父对象更新流程，并返回更新后的 Scale 表示。
 func (r *ScaleREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	obj, _, err := r.store.Update(

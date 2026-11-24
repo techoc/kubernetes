@@ -51,20 +51,20 @@ type StatefulSetStorage struct {
 	Scale       *ScaleREST
 }
 
-// ReplicasPathMappings returns the mappings between each group version and a replicas path
+// ReplicasPathMappings 返回各 API 版本中 replicas 字段对应的父资源路径映射。
 // ReplicasPathMappings 声明 apps/v1 与历史版本中 replicas 字段的父资源路径，供 Scale ManagedFields 映射使用。
 func ReplicasPathMappings() managedfields.ResourcePathMappings {
 	return replicasPathInStatefulSet
 }
 
-// maps a group version to the replicas path in a statefulset object
+// 将 API 组版本映射到 StatefulSet 对象中的 replicas 字段路径。
 var replicasPathInStatefulSet = managedfields.ResourcePathMappings{
 	schema.GroupVersion{Group: "apps", Version: "v1beta1"}.String(): fieldpath.MakePathOrDie("spec", "replicas"),
 	schema.GroupVersion{Group: "apps", Version: "v1beta2"}.String(): fieldpath.MakePathOrDie("spec", "replicas"),
 	schema.GroupVersion{Group: "apps", Version: "v1"}.String():      fieldpath.MakePathOrDie("spec", "replicas"),
 }
 
-// NewStorage returns new instance of StatefulSetStorage.
+// NewStorage 创建并返回 StatefulSetStorage 实例。
 // NewStorage 将 StatefulSet 主资源、Status 和 Scale Handler 组合到同一个存储对象中。
 func NewStorage(optsGetter generic.RESTOptionsGetter) (StatefulSetStorage, error) {
 	statefulSetRest, statefulSetStatusRest, err := NewREST(optsGetter)
@@ -79,7 +79,7 @@ func NewStorage(optsGetter generic.RESTOptionsGetter) (StatefulSetStorage, error
 	}, nil
 }
 
-// REST implements a RESTStorage for statefulsets against etcd
+// REST 实现面向 etcd 中 StatefulSet 资源的 RESTStorage。
 type REST struct {
 	*genericregistry.Store
 }
@@ -112,43 +112,41 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	return &REST{store}, &StatusREST{store: &statusStore}, nil
 }
 
-// Implement CategoriesProvider
+// 实现 CategoriesProvider 接口。
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider，返回该资源所属的类别列表。
 func (r *REST) Categories() []string {
 	return []string{"all"}
 }
 
-// StatusREST implements the REST endpoint for changing the status of an statefulSet
+// StatusREST 实现用于修改 StatefulSet 状态的 REST 子资源端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// New returns empty StatefulSet object.
+// New 返回一个空的 StatefulSet 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &apps.StatefulSet{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 存储所拥有的资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与主资源 REST 共享，因此不能在此处重复销毁。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从底层存储读取对象；REST 子资源需要实现该方法以支持 Patch。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
+// Update 更新对象的 Status 子集，不允许通过该入口修改其他字段。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 调用底层 Store 时显式将 forceAllowCreate 设为 false，因为子资源绝不能通过更新请求创建对象。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy，返回该子资源需要重置的字段集合。
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
@@ -157,24 +155,24 @@ func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, 
 	return r.store.ConvertToTable(ctx, object, tableOptions)
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回该资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"sts"}
 }
 
-// ScaleREST implements a Scale for Deployment.
+// ScaleREST 为 Deployment 实现标准 Scale 子资源。
 type ScaleREST struct {
 	store *genericregistry.Store
 }
 
-// ScaleREST implements Patcher
+// 确认 ScaleREST 实现 Patcher 接口。
 var _ = rest.Patcher(&ScaleREST{})
 var _ = rest.GroupVersionKindProvider(&ScaleREST{})
 
-// GroupVersionKind returns GroupVersionKind for StatefulSet Scale object
+// GroupVersionKind 根据父资源 API 版本返回 StatefulSet Scale 对象的 GVK。
 func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.GroupVersionKind {
 	switch containingGV {
 	case appsv1beta1.SchemeGroupVersion:
@@ -186,7 +184,7 @@ func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.Gr
 	}
 }
 
-// New creates a new Scale object
+// New 创建一个空的 Scale 对象。
 func (r *ScaleREST) New() runtime.Object {
 	return &autoscaling.Scale{}
 }
@@ -197,7 +195,7 @@ func (r *ScaleREST) Destroy() {
 	// we don't destroy it here explicitly.
 }
 
-// Get retrieves object from Scale storage.
+// Get 从父资源存储读取对象，并转换为 Scale 子资源表示。
 // Get 将 StatefulSet 当前副本期望值、运行值和 Selector 投影为标准 Scale 对象。
 func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	obj, err := r.store.Get(ctx, name, options)
@@ -212,7 +210,7 @@ func (r *ScaleREST) Get(ctx context.Context, name string, options *metav1.GetOpt
 	return scale, err
 }
 
-// Update alters scale subset of StatefulSet object.
+// Update 更新 StatefulSet 的 Scale 子集，并将变更写回父资源。
 // Update 将客户端 Scale 更新转换为 StatefulSet 父资源更新，最终只改变 Spec.Replicas 及对应 ManagedFields。
 func (r *ScaleREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
 	obj, _, err := r.store.Update(
@@ -263,7 +261,7 @@ func toScaleUpdateValidation(f rest.ValidateObjectUpdateFunc) rest.ValidateObjec
 	}
 }
 
-// scaleFromStatefulSet returns a scale subresource for a statefulset.
+// scaleFromStatefulSet 将 StatefulSet 转换为对应的 Scale 子资源对象。
 // scaleFromStatefulSet 将 StatefulSet 的副本数、Selector 和元数据转为 autoscaling.Scale。
 func scaleFromStatefulSet(ss *apps.StatefulSet) (*autoscaling.Scale, error) {
 	selector, err := metav1.LabelSelectorAsSelector(ss.Spec.Selector)

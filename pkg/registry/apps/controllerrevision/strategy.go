@@ -34,23 +34,25 @@ type strategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating ControllerRevision
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 ControllerRevision 时使用的默认策略。
 var Strategy = strategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Strategy should implement rest.RESTCreateStrategy
+// 编译期检查：确保 Strategy 实现 REST 创建策略接口。
 var _ rest.RESTCreateStrategy = Strategy
 
-// Strategy should implement rest.RESTUpdateStrategy
+// 编译期检查：确保 Strategy 实现 REST 更新策略接口。
 var _ rest.RESTUpdateStrategy = Strategy
 
+// NamespaceScoped 表示 ControllerRevision 是命名空间级资源。
 func (strategy) NamespaceScoped() bool {
 	return true
 }
 
+// Canonicalize 在校验后规范化对象；ControllerRevision 保留控制器提交的快照内容，因此无需改写。
 func (strategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 返回 false：ControllerRevision 必须通过创建请求产生，不能由更新请求隐式创建。
 func (strategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -67,7 +69,7 @@ func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorLis
 	return validation.ValidateControllerRevisionCreate(revision)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 ControllerRevision 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string { return nil }
 
 // 更新准备阶段仅确认对象类型，不在 API Server 自动合并快照内容；可更新性由后续 ValidateUpdate 决定。
@@ -76,6 +78,7 @@ func (strategy) PrepareForUpdate(ctx context.Context, newObj, oldObj runtime.Obj
 	_ = newObj.(*apps.ControllerRevision)
 }
 
+// AllowUnconditionalUpdate 允许不携带 resourceVersion 的无条件更新。
 func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -86,5 +89,5 @@ func (strategy) ValidateUpdate(ctx context.Context, newObj, oldObj runtime.Objec
 	return validation.ValidateControllerRevisionUpdate(newRevision, oldRevision)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 ControllerRevision 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string { return nil }

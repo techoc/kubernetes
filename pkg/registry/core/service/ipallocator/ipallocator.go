@@ -44,8 +44,7 @@ import (
 
 const ControllerName = "ipallocator.k8s.io"
 
-// Allocator implements current ipallocator interface using IPAddress API object
-// and an informer as backend.
+// Allocator 使用 IPAddress API 对象记录地址分配关系，并通过 Informer 缓存提供查询能力，实现当前 IP 分配接口。
 // Allocator 管理单个 CIDR 内的 IP 地址；底层位图记录占用状态，IPAddress API 对象保存地址所有权与 Service 引用。
 type Allocator struct {
 	cidr          *net.IPNet
@@ -61,11 +60,10 @@ type Allocator struct {
 	client          networkingv1client.NetworkingV1Interface
 	ipAddressLister networkingv1listers.IPAddressLister
 	ipAddressSynced cache.InformerSynced
-	// ready indicates if the allocator is able to allocate new IP addresses.
-	// This is required because it depends on the ServiceCIDR to be ready.
+	// ready 表示分配器是否可以分配新 IP；只有关联的 ServiceCIDR 就绪后才允许分配。
 	ready atomic.Bool
 
-	// metrics is a metrics recorder that can be disabled
+	// metrics 负责记录分配器指标，也可以禁用。
 	metrics     metricsRecorderInterface
 	metricLabel string
 
@@ -74,9 +72,7 @@ type Allocator struct {
 
 var _ Interface = &Allocator{}
 
-// NewIPAllocator returns an IP allocator associated to a network range
-// that use the IPAddress object to track the assigned IP addresses,
-// using an informer cache as storage.
+// NewIPAllocator 创建与指定网络范围关联的 IP 分配器，使用 IPAddress 对象跟踪已分配地址，并通过 Informer 缓存读取状态。
 // NewIPAllocator 创建单一 CIDR 的 ClusterIP 分配器，并可通过 IPAddress Informer 缓存查询已占用地址。
 func NewIPAllocator(
 	cidr *net.IPNet,
@@ -92,7 +88,7 @@ func NewIPAllocator(
 		return nil, fmt.Errorf("shortest allowed prefix length for service CIDR is 64, got %d", prefix.Bits())
 	}
 
-	// TODO: use the utils/net function once is available
+	// TODO：相关 utils/net 方法可用后，改为复用该实现。
 	size := hostsPerNetwork(cidr)
 	var family api.IPFamily
 	if netutils.IsIPv6CIDR(cidr) {
@@ -100,22 +96,21 @@ func NewIPAllocator(
 	} else {
 		family = api.IPv4Protocol
 	}
-	// Caching the first, offset and last addresses allows to optimize
-	// the search loops by using the netip.Addr iterator instead
-	// of having to do conversions with IP addresses.
-	// Don't allocate the network's ".0" address.
+	// 缓存首地址、偏移地址和末地址后，可在搜索循环中直接使用 netip.Addr 迭代器，
+	// 避免反复进行 IP 地址格式转换。
+	// 不分配网络地址（通常以 .0 结尾）。
 	ipFirst := prefix.Masked().Addr().Next()
-	// Use the broadcast address as last address for IPv6
+	// IPv6 没有广播地址，此处使用地址范围末地址作为最后一个边界。
 	ipLast, err := broadcastAddress(prefix)
 	if err != nil {
 		return nil, err
 	}
-	// For IPv4 don't use the network's broadcast address
+	// IPv4 不分配网络广播地址。
 	if family == api.IPv4Protocol {
 		ipLast = ipLast.Prev()
 	}
-	// KEP-3070: Reserve Service IP Ranges For Dynamic and Static IP Allocation
-	// calculate the subrange offset
+	// KEP-3070：为 Service IP 地址的动态分配和静态分配预留不同的地址区间。
+	// 计算动态分配区与静态预留区之间的偏移边界。
 	rangeOffset := calculateRangeOffset(cidr)
 	offsetAddress, err := addOffsetAddress(ipFirst, uint64(rangeOffset))
 	if err != nil {

@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package endpoint provides Registry interface and it's RESTStorage
-// implementation for storing Endpoint api objects.
+// Package endpoint 提供 Endpoints API 对象的 Registry 接口及其 RESTStorage 实现。
 // Package endpoint 提供旧版 Endpoints 资源的 REST 策略、字段校验和通用存储实现。
 package endpoint

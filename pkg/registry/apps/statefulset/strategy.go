@@ -40,24 +40,23 @@ type statefulSetStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating Replication StatefulSet objects.
+// Strategy 是通过 REST API 创建和更新 StatefulSet 时使用的默认策略。
 var Strategy = statefulSetStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 // Make sure we correctly implement the interface.
 var _ = rest.GarbageCollectionDeleteStrategy(Strategy)
 
-// DefaultGarbageCollectionPolicy returns DeleteDependents for all currently served versions.
+// DefaultGarbageCollectionPolicy 返回 DeleteDependents：删除 StatefulSet 时级联删除其依赖对象。
 func (statefulSetStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	return rest.DeleteDependents
 }
 
-// NamespaceScoped returns true because all StatefulSet' need to be within a namespace.
+// NamespaceScoped 表示 StatefulSet 必须属于某个命名空间。
 func (statefulSetStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源更新时需要重置、不能由请求修改的字段集合。
 func (statefulSetStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"apps/v1": fieldpath.NewSet(
@@ -130,7 +129,7 @@ func dropStatefulSetDisabledFields(newSS *apps.StatefulSet, oldSS *apps.Stateful
 	}
 }
 
-// Validate validates a new StatefulSet.
+// Validate 校验新创建的 StatefulSet。
 // 创建时必须使用合法 ServiceName 和 PVC 模板；Recreate 更新策略则按对应 Feature Gate 决定是否允许。
 func (statefulSetStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	statefulSet := obj.(*apps.StatefulSet)
@@ -142,7 +141,7 @@ func (statefulSetStrategy) Validate(ctx context.Context, obj runtime.Object) fie
 	return validation.ValidateStatefulSet(statefulSet, setOpts, opts)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 StatefulSet 时发现的非阻断性警告。
 func (statefulSetStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newStatefulSet := obj.(*apps.StatefulSet)
 	warnings := pod.GetWarningsForPodTemplate(ctx, field.NewPath("spec", "template"), &newStatefulSet.Spec.Template, nil)
@@ -156,11 +155,11 @@ func (statefulSetStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Obj
 	return warnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (statefulSetStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for StatefulSet; this means POST is needed to create one.
+// AllowCreateOnUpdate 返回 false：创建 StatefulSet 必须使用 POST，不能通过更新请求隐式创建。
 func (statefulSetStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -180,7 +179,7 @@ func (statefulSetStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.
 	return validation.ValidateStatefulSetUpdate(newStatefulSet, oldStatefulSet, setOpts, opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新产生的非阻断性警告。
 func (statefulSetStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	newStatefulSet := obj.(*apps.StatefulSet)
@@ -198,7 +197,7 @@ func (statefulSetStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtim
 	return warnings
 }
 
-// AllowUnconditionalUpdate is the default update policy for StatefulSet objects.
+// AllowUnconditionalUpdate 表示 StatefulSet 允许不携带 resourceVersion 的无条件更新。
 func (statefulSetStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -229,7 +228,7 @@ func (statefulSetStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old 
 	newStatefulSet.Spec = oldStatefulSet.Spec
 }
 
-// ValidateUpdate is the default update validation for an end user updating status
+// ValidateUpdate 校验 StatefulSet Status 子资源的更新。
 func (statefulSetStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	// TODO: Validate status updates.
 	return validation.ValidateStatefulSetStatusUpdate(obj.(*apps.StatefulSet), old.(*apps.StatefulSet))

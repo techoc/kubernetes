@@ -33,7 +33,7 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against endpoints.
+// NewREST 创建并返回用于访问 Endpoints 资源的 RESTStorage。
 // NewREST 注册 Endpoints 的对象类型、REST Strategy 和表格转换器，并初始化底层持久化 Store。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{
@@ -55,10 +55,10 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	return &REST{store}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider，返回 Endpoints 资源支持的简称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"ep"}
 }

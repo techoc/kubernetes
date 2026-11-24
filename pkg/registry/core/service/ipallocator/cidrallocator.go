@@ -45,14 +45,10 @@ import (
 )
 
 // MetaAllocator 为每个 ServiceCIDR 管理独立 IP 分配器；重叠 CIDR 共用地址引用，只有 Ready 的分配器才可分配新 IP。
-// MetaAllocator maintains a structure with IP alloctors for the corresponding ServiceCIDRs.
-// CIDR overlapping is allowed and the MetaAllocator should take this into consideration.
-// Each allocator doesn't stored the IPAddresses, instead it reads them from the informer
-// cache, it is cheap to create and delete IP Allocators.
-// MetaAllocator use any READY allocator to Allocate IP addresses that has available IPs.
-
-// MetaAllocator implements current allocator interface using
-// ServiceCIDR and IPAddress API objects.
+// MetaAllocator 为每个 ServiceCIDR 管理独立 IP 分配器；CIDR 允许重叠，因此必须考虑多个分配器覆盖同一地址的情况。
+// 分配器本身不保存 IPAddress 对象，而是从 Informer 缓存读取，因此创建和删除分配器的成本较低。
+// 自动分配时，可以使用任意一个已就绪且仍有可用地址的分配器。
+// MetaAllocator 基于 ServiceCIDR 和 IPAddress API 对象实现 IP 地址分配接口。
 type MetaAllocator struct {
 	client            networkingv1client.NetworkingV1Interface
 	serviceCIDRLister networkingv1listers.ServiceCIDRLister
@@ -64,17 +60,15 @@ type MetaAllocator struct {
 
 	internalStopCh chan struct{}
 
-	// allocators is a map indexed by the network prefix
-	// Multiple ServiceCIDR can contain the same network prefix
-	// so we need to store the references from each allocators to
-	// the corresponding ServiceCIDRs
+	// allocators 以网络前缀为键保存分配器。多个 ServiceCIDR 可能包含相同前缀，
+	// 因此每个分配器还需要记录引用它的 ServiceCIDR 集合。
 	mu         sync.Mutex
 	allocators map[string]*item
 
 	ipFamily api.IPFamily
 	metrics  bool // enable the metrics collection
 
-	// TODO(aojea): remove with the feature gate DisableAllocatorDualWrite
+	// TODO(aojea)：DisableAllocatorDualWrite 特性门控完成迁移后，移除此旧位图分配器兼容字段。
 	bitmapAllocator Interface
 }
 
@@ -85,9 +79,7 @@ type item struct {
 
 var _ Interface = &MetaAllocator{}
 
-// NewMetaAllocator returns an IP allocator that use the IPAddress
-// and ServiceCIDR objects to track the assigned IP addresses,
-// using an informer cache as storage.
+// NewMetaAllocator 创建基于 IPAddress 和 ServiceCIDR 对象跟踪已分配 IP 的分配器，并通过 Informer 缓存读取存储状态。
 // NewMetaAllocator 以 ServiceCIDR/IPAddress Informer 构建多 CIDR 分配器，并启动负责同步各 CIDR 地址池的后台控制循环。
 func NewMetaAllocator(
 	client networkingv1client.NetworkingV1Interface,
@@ -102,14 +94,14 @@ func NewMetaAllocator(
 	return c, nil
 }
 
-// newMetaAllocator is used to build the allocator for testing
+// newMetaAllocator 构建 IP 分配器，主要供测试使用。
 func newMetaAllocator(client networkingv1client.NetworkingV1Interface,
 	serviceCIDRInformer networkingv1informers.ServiceCIDRInformer,
 	ipAddressInformer networkingv1informers.IPAddressInformer,
 	isIPv6 bool,
 	bitmapAllocator Interface,
 ) *MetaAllocator {
-	// TODO: make the NewMetaAllocator agnostic of the IP family
+	// TODO：让 NewMetaAllocator 不再依赖调用方指定 IP 协议族。
 	family := api.IPv4Protocol
 	if isIPv6 {
 		family = api.IPv6Protocol
@@ -138,9 +130,8 @@ func newMetaAllocator(client networkingv1client.NetworkingV1Interface,
 		UpdateFunc: func(old, new interface{}) {
 			c.enqueueServiceCIDR(new)
 		},
-		// Process the deletion directly in the handler to be able to use the object fields
-		// without having to cache them. ServiceCIDRs are protected by finalizers
-		// so the "started deletion" logic will be handled in the reconcile loop.
+		// 在事件处理器中直接处理删除事件，以便读取对象字段，而不必再次从缓存获取。
+		// ServiceCIDR 受 Finalizer 保护，因此“开始删除”的后续逻辑仍由协调循环处理。
 		DeleteFunc: c.deleteServiceCIDR,
 	})
 
@@ -171,22 +162,21 @@ func (c *MetaAllocator) deleteServiceCIDR(obj interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, cidr := range serviceCIDR.Spec.CIDRs {
-		// skip IP families not supported by this MetaAllocator
+		// 跳过当前 MetaAllocator 不支持的 IP 协议族。
 		if c.ipFamily != api.IPFamily(convertToV1IPFamily(netutils.IPFamilyOfCIDRString(cidr))) {
 			continue
 		}
-		// get the Allocator used by this ServiceCIDR
+		// 获取该 ServiceCIDR 使用的分配器。
 		v, ok := c.allocators[cidr]
 		if !ok {
 			continue
 		}
-		// remove the reference to this ServiceCIDR
+		// 从分配器的引用集合中移除此 ServiceCIDR。
 		v.serviceCIDRs.Delete(serviceCIDR.Name)
 		if v.serviceCIDRs.Len() > 0 {
 			klog.V(2).Infof("deleted Service CIDR from allocator %s, remaining %v", cidr, v.serviceCIDRs)
 		} else {
-			// if there are no references to this Allocator
-			// destroy and remove it from the map
+			// 如果该分配器已没有任何 ServiceCIDR 引用，则销毁分配器并从映射中删除。
 			v.allocator.Destroy()
 			delete(c.allocators, cidr)
 			klog.Infof("deleted ClusterIP allocator for Service CIDR %s", cidr)
@@ -201,13 +191,13 @@ func (c *MetaAllocator) run() {
 	klog.Info("starting ServiceCIDR Allocator Controller")
 	defer klog.Info("stopping ServiceCIDR Allocator Controller")
 
-	// Wait for all involved caches to be synced, before processing items from the queue is started
+	// 等待所有相关 Informer 缓存同步完成，再开始处理工作队列中的事件。
 	if !cache.WaitForCacheSync(c.internalStopCh, c.serviceCIDRSynced, c.ipAddressSynced) {
 		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 		return
 	}
 
-	// this is single threaded only one serviceCIDR at a time
+	// 使用单 worker 串行处理，每次只协调一个 ServiceCIDR。
 	go wait.Until(c.runWorker, time.Second, c.internalStopCh)
 
 	<-c.internalStopCh
@@ -219,14 +209,14 @@ func (c *MetaAllocator) runWorker() {
 }
 
 func (c *MetaAllocator) processNextItem() bool {
-	// Wait until there is a new item in the working queue
+	// 等待工作队列中出现新任务。
 	key, quit := c.queue.Get()
 	if quit {
 		return false
 	}
 	defer c.queue.Done(key)
 	err := c.syncAllocators()
-	// Handle the error if something went wrong during the execution of the business logic
+	// 处理业务逻辑执行过程中发生的错误，并按限速策略决定是否重新入队。
 	if err != nil {
 		if c.queue.NumRequeues(key) < 5 {
 			klog.Infof("error syncing cidr %v: %v", key, err)
@@ -238,8 +228,7 @@ func (c *MetaAllocator) processNextItem() bool {
 	return true
 }
 
-// syncAllocators adds new allocators and syncs the ready state of the allocators
-// deletion of allocators is handled directly on the event handler.
+// syncAllocators 根据 ServiceCIDR 创建分配器并同步其就绪状态；分配器删除由事件处理器直接完成。
 // syncAllocators 根据 ServiceCIDR 列表建立或更新按 CIDR 索引的分配器；同一前缀可由多个 ServiceCIDR 引用。
 func (c *MetaAllocator) syncAllocators() error {
 	start := time.Now()
@@ -258,22 +247,22 @@ func (c *MetaAllocator) syncAllocators() error {
 
 	for _, serviceCIDR := range serviceCIDRs {
 		for _, cidr := range serviceCIDR.Spec.CIDRs {
-			// skip IP families not supported by this MetaAllocator
+			// 跳过当前 MetaAllocator 不支持的 IP 协议族。
 			if c.ipFamily != api.IPFamily(convertToV1IPFamily(netutils.IPFamilyOfCIDRString(cidr))) {
 				continue
 			}
-			// the allocator is ready if the object is ready and is not being deleted
+			// 只有 ServiceCIDR 已就绪且未进入删除流程时，对应分配器才可用于新分配。
 			ready := false
 			if isReady(serviceCIDR) && serviceCIDR.DeletionTimestamp.IsZero() {
 				ready = true
 			}
 
-			// check if an allocator already exist for this CIDR
+			// 检查当前 CIDR 是否已有对应分配器。
 			v, ok := c.allocators[cidr]
-			// Update allocator with ServiceCIDR
+			// 将当前 ServiceCIDR 加入已有分配器的引用集合。
 			if ok {
 				v.serviceCIDRs.Insert(serviceCIDR.Name)
-				// an Allocator is ready if at least one of the ServiceCIDRs is ready
+				// 只要引用该分配器的任意一个 ServiceCIDR 就绪，分配器就可以用于新分配。
 				if ready {
 					v.allocator.ready.Store(true)
 				} else if v.serviceCIDRs.Has(serviceCIDR.Name) && len(v.serviceCIDRs) == 1 {
@@ -283,13 +272,13 @@ func (c *MetaAllocator) syncAllocators() error {
 				continue
 			}
 
-			// Create new allocator for ServiceCIDR
+			// 为该 ServiceCIDR 创建新的分配器。
 			_, ipnet, err := netutils.ParseCIDRSloppy(cidr) // this was already validated
 			if err != nil {
 				klog.Infof("error parsing cidr %s: %v", cidr, err)
 				continue
 			}
-			// New ServiceCIDR, create new allocator
+			// 遇到新的 ServiceCIDR，创建对应的分配器。
 			allocator, err := NewIPAllocator(ipnet, c.client, c.ipAddressInformer)
 			if err != nil {
 				klog.Infof("error creating new IPAllocator for Service CIDR %s: %v", cidr, err)
@@ -309,17 +298,15 @@ func (c *MetaAllocator) syncAllocators() error {
 	return nil
 }
 
-// getAllocator returns any allocator that contains the IP passed as argument.
-// if ready is set only an allocator that is ready is returned.
-// Allocate operations can work with ANY allocator that is ready, the allocators
-// contain references to the IP addresses hence does not matter what allocators have
-// the IP. Release operations need to work with ANY allocator independent of its state.
+// getAllocator 查找包含目标 IP 的任意分配器。ready 为 true 时，只返回已就绪的分配器。
+// 分配操作必须使用已就绪的分配器；由于各分配器通过缓存看到相同的 IPAddress，选择哪个覆盖该地址的分配器并不重要。
+// 释放操作则可以使用任意匹配的分配器，不受其就绪状态限制。
 // getAllocator 查找包含目标 IP 的 CIDR 分配器；分配时要求 Ready，释放时允许使用非 Ready 分配器。
 func (c *MetaAllocator) getAllocator(ip net.IP, ready bool) (*Allocator, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	address := servicecidr.IPToAddr(ip)
-	// use the first allocator that contains the address
+	// 使用第一个包含目标地址的分配器。
 	for cidr, item := range c.allocators {
 		prefix, err := netip.ParsePrefix(cidr)
 		if err != nil {
@@ -355,12 +342,9 @@ func (c *MetaAllocator) AllocateService(service *api.Service, ip net.IP) error {
 	return allocator.AllocateService(service, ip)
 }
 
-// Allocate attempts to reserve the provided IP. ErrNotInRange or
-// ErrAllocated will be returned if the IP is not valid for this range
-// or has already been reserved.  ErrFull will be returned if there
-// are no addresses left.
-// Only for testing, it will fail to create the IPAddress object because
-// the Service reference is required.s
+// Allocate 尝试预留指定 IP。地址不在范围内时返回 ErrNotInRange，已被占用时返回 ErrAllocated，
+// 地址池耗尽时返回 ErrFull。该方法主要供测试使用；由于创建 IPAddress 需要关联 Service，
+// 未提供 Service 引用时可能无法成功创建对应对象。
 func (c *MetaAllocator) Allocate(ip net.IP) error {
 	return c.AllocateService(nil, ip)
 
@@ -368,8 +352,7 @@ func (c *MetaAllocator) Allocate(ip net.IP) error {
 
 // AllocateNextService 在双写迁移期先尝试旧位图池，再回退到新 ServiceCIDR/IPAddress 分配器，以保持升级兼容。
 func (c *MetaAllocator) AllocateNextService(service *api.Service) (net.IP, error) {
-	// If the cluster is still using the old allocators use them first to try to
-	// get an IP address to keep backwards compatibility.
+	// 在双写迁移阶段，如果集群仍启用旧分配器，则优先尝试从旧分配器获取 IP，以保持向后兼容。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DisableAllocatorDualWrite) {
 		ip, err := c.bitmapAllocator.AllocateNext()
 		if err == nil {
@@ -384,12 +367,9 @@ func (c *MetaAllocator) AllocateNextService(service *api.Service) (net.IP, error
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// TODO(aojea) add strategy to return a random allocator but
-	// taking into consideration the number of addresses of each allocator.
-	// Per example, if we have allocator A and B with 256 and 1024 possible
-	// addresses each, the chances to get B has to be 4 times the chances to
-	// get A so we can spread the load of IPs randomly.
-	// However, we need to validate the best strategy before going to Beta.
+	// TODO(aojea)：增加随机选择分配器的策略，并根据各分配器的地址容量调整权重。
+	// 例如，分配器 A 和 B 分别有 256、1024 个可用地址时，选择 B 的概率应为选择 A 的 4 倍，
+	// 从而让地址分配负载按容量随机分散。该策略需在进入 Beta 前进一步验证。
 	isIPv6 := c.ipFamily == api.IPFamily(v1.IPv6Protocol)
 	for cidr, item := range c.allocators {
 		if netutils.IsIPv6CIDRString(cidr) != isIPv6 {
@@ -399,7 +379,7 @@ func (c *MetaAllocator) AllocateNextService(service *api.Service) (net.IP, error
 		if err == nil {
 			return ip, nil
 		}
-		// only keep trying if the allocator is full or not ready
+		// 只有当前分配器已满或尚未就绪时，才继续尝试下一个分配器。
 		if !errors.Is(err, ErrFull) && !errors.Is(err, ErrNotReady) {
 			return nil, err
 		}
@@ -407,9 +387,8 @@ func (c *MetaAllocator) AllocateNextService(service *api.Service) (net.IP, error
 	return nil, ErrFull
 }
 
-// AllocateNext return an IP address that wasn't allocated yet.
-// Only for testing, it will fail to create the IPAddress object because
-// the Service reference is required
+// AllocateNext 返回一个尚未分配的 IP。该方法主要供测试使用；由于创建 IPAddress 需要 Service 引用，
+// 未提供 Service 时可能无法创建对应对象。
 func (c *MetaAllocator) AllocateNext() (net.IP, error) {
 	return c.AllocateNextService(nil)
 }
@@ -467,7 +446,7 @@ func (c *MetaAllocator) Destroy() {
 	}
 }
 
-// for testing
+// 仅供测试使用。
 func (c *MetaAllocator) Used() int {
 	ipLabelSelector := labels.Set(map[string]string{
 		networkingv1.LabelIPAddressFamily: string(c.IPFamily()),
@@ -480,14 +459,14 @@ func (c *MetaAllocator) Used() int {
 	return len(ips)
 }
 
-// for testing
+// 仅供测试使用。
 func (c *MetaAllocator) Free() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	size := 0
 	prefixes := []netip.Prefix{}
-	// Get all the existing prefixes
+	// 获取所有现存的网络前缀。
 	for cidr := range c.allocators {
 		prefix, err := netip.ParsePrefix(cidr)
 		if err != nil {
@@ -495,7 +474,7 @@ func (c *MetaAllocator) Free() int {
 		}
 		prefixes = append(prefixes, prefix)
 	}
-	// only count the top level prefixes to not double count
+	// 只统计最顶层前缀，避免重叠 CIDR 导致重复计数。
 	for _, prefix := range prefixes {
 		if !isNotContained(prefix, prefixes) {
 			continue
@@ -538,13 +517,12 @@ func isReady(serviceCIDR *networkingv1.ServiceCIDR) bool {
 			return condition.Status == metav1.ConditionStatus(metav1.ConditionTrue)
 		}
 	}
-	// assume the ServiceCIDR is Ready, in order to handle scenarios where kcm is not running
+	// 假定 ServiceCIDR 已就绪，以便在 kube-controller-manager 未运行时仍能处理相关场景。
 	return true
 }
 
-// Convert netutils.IPFamily to v1.IPFamily
-// TODO: consolidate helpers
-// copied from pkg/proxy/util/utils.go
+// 将 netutils.IPFamily 转换为 v1.IPFamily。
+// TODO：统一此类辅助函数，避免与 pkg/proxy/util/utils.go 中的实现重复。
 func convertToV1IPFamily(ipFamily netutils.IPFamily) v1.IPFamily {
 	switch ipFamily {
 	case netutils.IPv4:
@@ -560,11 +538,11 @@ func convertToV1IPFamily(ipFamily netutils.IPFamily) v1.IPFamily {
 // of the passed prefixes.
 func isNotContained(prefix netip.Prefix, prefixes []netip.Prefix) bool {
 	for _, p := range prefixes {
-		// skip same prefix
+		// 跳过与目标前缀完全相同的前缀。
 		if prefix == p {
 			continue
 		}
-		// 192.168.0.0/24 is contained within 192.168.0.0/16
+		// 例如，192.168.0.0/24 位于 192.168.0.0/16 的地址范围内。
 		if prefix.Overlaps(p) && prefix.Bits() >= p.Bits() {
 			return false
 		}

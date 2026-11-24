@@ -39,16 +39,16 @@ type strategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating ConfigMap
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 ConfigMap 时使用的默认策略。
 var Strategy = strategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// Strategy should implement rest.RESTCreateStrategy
+// 编译期检查：确保 Strategy 实现 REST 创建策略接口。
 var _ rest.RESTCreateStrategy = Strategy
 
-// Strategy should implement rest.RESTUpdateStrategy
+// 编译期检查：确保 Strategy 实现 REST 更新策略接口。
 var _ rest.RESTUpdateStrategy = Strategy
 
+// NamespaceScoped 表示 ConfigMap 是命名空间级资源。
 func (strategy) NamespaceScoped() bool {
 	return true
 }
@@ -66,13 +66,14 @@ func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorLis
 	return validation.ValidateConfigMap(cfg)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 ConfigMap 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string { return nil }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (strategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 返回 false：ConfigMap 不能通过更新请求隐式创建。
 func (strategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -91,17 +92,19 @@ func (strategy) ValidateUpdate(ctx context.Context, newObj, oldObj runtime.Objec
 	return validation.ValidateConfigMapUpdate(newCfg, oldCfg)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 ConfigMap 时的非阻断性警告；当前不产生额外警告。
 func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string { return nil }
 
+// dropDisabledFields 在相关 Feature Gate 关闭时清理新对象中不再允许设置的字段；旧对象已使用的字段需保留以兼容存量数据。
 func dropDisabledFields(configMap *api.ConfigMap, oldConfigMap *api.ConfigMap) {
 }
 
+// AllowUnconditionalUpdate 允许不携带 resourceVersion 的无条件更新。
 func (strategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 ConfigMap 的 Labels 和可筛选字段，供 List/Watch 过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	configMap, ok := obj.(*api.ConfigMap)
 	if !ok {
@@ -110,7 +113,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(configMap.Labels), SelectableFields(configMap), nil
 }
 
-// Matcher returns a selection predicate for a given label and field selector.
+// Matcher 根据 LabelSelector 和 FieldSelector 创建存储层选择谓词。
 // Matcher 将请求中的 LabelSelector/FieldSelector 与 ConfigMap GetAttrs 绑定为存储层过滤谓词。
 func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionPredicate {
 	return pkgstorage.SelectionPredicate{
@@ -120,7 +123,7 @@ func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionP
 	}
 }
 
-// SelectableFields returns a field set that can be used for filter selection
+// SelectableFields 返回 ConfigMap 支持 FieldSelector 查询的字段集合。
 // ConfigMap 当前只暴露标准 ObjectMeta 字段选择器，不把 Data 内容开放为 FieldSelector。
 func SelectableFields(obj *api.ConfigMap) fields.Set {
 	return generic.ObjectMetaFieldsSet(&obj.ObjectMeta, true)

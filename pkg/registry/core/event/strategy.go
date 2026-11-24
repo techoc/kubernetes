@@ -41,8 +41,7 @@ type eventStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating
-// Event objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 Event 时使用的默认策略。
 var Strategy = eventStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 // Event 不支持普通 OwnerReference 级联垃圾回收，生命周期由 Store 配置的 TTL 控制。
@@ -50,13 +49,16 @@ func (eventStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.Ga
 	return rest.Unsupported
 }
 
+// NamespaceScoped 表示 Event 是命名空间级资源。
 func (eventStrategy) NamespaceScoped() bool {
 	return true
 }
 
+// PrepareForCreate 不改写 Event 字段；事件时间、来源和涉及对象由事件生产者提供。
 func (eventStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 }
 
+// PrepareForUpdate 保留客户端提交的事件更新内容，字段约束由版本感知的 ValidateUpdate 执行。
 func (eventStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 }
 
@@ -67,13 +69,14 @@ func (eventStrategy) Validate(ctx context.Context, obj runtime.Object) field.Err
 	return validation.ValidateEventCreate(event, groupVersion)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 Event 时的非阻断性警告；当前不产生额外警告。
 func (eventStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string { return nil }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后规范化对象；当前策略无需额外处理。
 func (eventStrategy) Canonicalize(obj runtime.Object) {
 }
 
+// AllowCreateOnUpdate 返回 true：为兼容 Event 上报客户端，允许更新请求在对象不存在时创建事件。
 func (eventStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
@@ -86,16 +89,17 @@ func (eventStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object
 	return validation.ValidateEventUpdate(event, oldEvent, groupVersion)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新 Event 时的非阻断性警告；当前不产生额外警告。
 func (eventStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
+// AllowUnconditionalUpdate 允许不携带 resourceVersion 的无条件更新。
 func (eventStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 提取 Event 的 Labels 和可筛选字段，供 List/Watch 过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	event, ok := obj.(*api.Event)
 	if !ok {
@@ -104,7 +108,7 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(event.Labels), ToSelectableFields(event), nil
 }
 
-// Matcher returns a selection predicate for a given label and field selector.
+// Matcher 根据 LabelSelector 和 FieldSelector 创建存储层选择谓词。
 func Matcher(label labels.Selector, field fields.Selector) storage.SelectionPredicate {
 	return storage.SelectionPredicate{
 		Label:    label,
@@ -113,7 +117,7 @@ func Matcher(label labels.Selector, field fields.Selector) storage.SelectionPred
 	}
 }
 
-// ToSelectableFields returns a field set that represents the object.
+// ToSelectableFields 返回 Event 支持 FieldSelector 查询的字段集合。
 // ToSelectableFields 暴露 involvedObject、reason、type、reportingComponent 和旧 source 等事件查询字段。
 func ToSelectableFields(event *api.Event) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&event.ObjectMeta, true)
@@ -130,14 +134,14 @@ func ToSelectableFields(event *api.Event) fields.Set {
 		"involvedObject.resourceVersion": event.InvolvedObject.ResourceVersion,
 		"involvedObject.fieldPath":       event.InvolvedObject.FieldPath,
 		"reason":                         event.Reason,
-		"reportingComponent":             event.ReportingController, // use the core/v1 field name
+		"reportingComponent":             event.ReportingController, // 使用 core/v1 API 对外暴露的字段名。
 		"source":                         source,
 		"type":                           event.Type,
 	}
 	return generic.MergeFieldsSets(specificFieldsSet, objectMetaFieldsSet)
 }
 
-// requestGroupVersion returns the group/version associated with the given context, or a zero-value group/version.
+// requestGroupVersion 从请求上下文中提取 API Group/Version；若上下文没有 RequestInfo，则返回零值。
 // requestGroupVersion 从 RequestInfo 取出客户端请求版本，供事件版本感知的校验函数使用。
 func requestGroupVersion(ctx context.Context) schema.GroupVersion {
 	if requestInfo, found := genericapirequest.RequestInfoFrom(ctx); found {

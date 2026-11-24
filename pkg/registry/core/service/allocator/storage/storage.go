@@ -40,10 +40,10 @@ var (
 )
 
 // Etcd 为内存 Snapshottable 分配器提供 etcd 持久化外壳，每次修改都通过 GuaranteedUpdate 保存快照并处理资源版本冲突。
-// Etcd exposes a service.Allocator
-// TODO: allow multiple allocations to be tried at once
-// TODO: subdivide the keyspace to reduce conflicts
-// TODO: investigate issuing a CAS without reading first
+// Etcd 将底层分配器封装为可持久化到 etcd 的 service.Allocator。
+// TODO：支持在一次持久化更新中尝试批量分配多个资源。
+// TODO：拆分存储键空间，以降低并发更新冲突。
+// TODO：研究无需先读取对象即可执行 CAS 更新的可行性。
 type Etcd struct {
 	lock sync.Mutex
 
@@ -61,11 +61,9 @@ type Etcd struct {
 var _ allocator.Interface = &Etcd{}
 var _ rangeallocation.RangeRegistry = &Etcd{}
 
-// NewEtcd returns an allocator that is backed by Etcd and can manage
-// persisting the snapshot state of allocation after each allocation is made.
+// NewEtcd 创建由 etcd 支撑的分配器；每次分配状态变更后，都会持久化对应快照。
 func NewEtcd(alloc allocator.Snapshottable, baseKey string, config *storagebackend.ConfigForResource) (*Etcd, error) {
-	// note that newFunc, newListFunc
-	// can be left blank unless the storage.Watch method is used
+	// 除非使用 storage.Watch 方法，否则 newFunc 和 newListFunc 可以留空。
 	storage, d, err := generic.NewRawStorage(config, nil, nil, baseKey)
 	if err != nil {
 		return nil, err
@@ -81,7 +79,7 @@ func NewEtcd(alloc allocator.Snapshottable, baseKey string, config *storagebacke
 	}, nil
 }
 
-// Allocate attempts to allocate the item.
+// Allocate 尝试分配指定资源，并将更新后的快照持久化到 etcd。
 func (e *Etcd) Allocate(offset int) (bool, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -105,7 +103,7 @@ func (e *Etcd) Allocate(offset int) (bool, error) {
 	return true, nil
 }
 
-// AllocateNext attempts to allocate the next item.
+// AllocateNext 尝试自动分配下一个资源，并将更新后的快照持久化到 etcd。
 func (e *Etcd) AllocateNext() (int, bool, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -114,7 +112,7 @@ func (e *Etcd) AllocateNext() (int, bool, error) {
 	var err error
 
 	err = e.tryUpdate(func() error {
-		// update the offset here
+		// 在此处更新分配偏移量。
 		offset, ok, err = e.alloc.AllocateNext()
 		if err != nil {
 			return err
@@ -134,7 +132,7 @@ func (e *Etcd) AllocateNext() (int, bool, error) {
 	return offset, true, nil
 }
 
-// Release attempts to release the provided item.
+// Release 尝试释放指定资源，并持久化释放后的快照。
 func (e *Etcd) Release(item int) error {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -179,8 +177,7 @@ func (e *Etcd) tryUpdate(fn func() error) error {
 	return storeerr.InterpretUpdateError(err, e.resource, "")
 }
 
-// Get returns an api.RangeAllocation that represents the current state in
-// etcd. If the key does not exist, the object will have an empty ResourceVersion.
+// Get 从 etcd 读取当前 RangeAllocation。若键不存在，返回对象的 ResourceVersion 为空。
 func (e *Etcd) Get() (*api.RangeAllocation, error) {
 	existing := &api.RangeAllocation{}
 	if err := e.storage.Get(context.TODO(), e.baseKey, storage.GetOptions{IgnoreNotFound: true}, existing); err != nil {
@@ -189,8 +186,7 @@ func (e *Etcd) Get() (*api.RangeAllocation, error) {
 	return existing, nil
 }
 
-// CreateOrUpdate attempts to update the current etcd state with the provided
-// allocation.
+// CreateOrUpdate 使用传入的分配状态创建或更新 etcd 中的 RangeAllocation。
 // CreateOrUpdate 用资源版本前置条件初始化/替换 RangeAllocation，并在持久化成功后同步恢复本地分配器。
 func (e *Etcd) CreateOrUpdate(snapshot *api.RangeAllocation) error {
 	e.lock.Lock()
@@ -223,7 +219,7 @@ func (e *Etcd) CreateOrUpdate(snapshot *api.RangeAllocation) error {
 	return err
 }
 
-// Has implements allocator.Interface::Has
+// Has 实现 allocator.Interface 的 Has 方法。
 func (e *Etcd) Has(item int) bool {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -231,7 +227,7 @@ func (e *Etcd) Has(item int) bool {
 	return e.alloc.Has(item)
 }
 
-// Free implements allocator.Interface::Free
+// Free 实现 allocator.Interface 的 Free 方法。
 func (e *Etcd) Free() int {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -239,7 +235,7 @@ func (e *Etcd) Free() int {
 	return e.alloc.Free()
 }
 
-// Destroy implement allocator.Interface::Destroy
+// Destroy 实现 allocator.Interface 的 Destroy 方法。
 func (e *Etcd) Destroy() {
 	e.destroyFn()
 }

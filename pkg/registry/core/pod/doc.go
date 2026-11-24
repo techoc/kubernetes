@@ -15,6 +15,5 @@ limitations under the License.
 */
 
 // Package pod 提供 Pod 资源的 Registry 策略、索引能力以及 RESTStorage 实现。
-// Package pod provides Registry interface and it's RESTStorage
-// implementation for storing Pod api objects.
+// 本包提供 Pod API 对象的 Registry 接口及其 RESTStorage 实现。
 package pod

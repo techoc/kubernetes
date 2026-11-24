@@ -38,8 +38,8 @@ type StorageProvider struct{}
 // NewRESTStorage 创建 apps APIGroupInfo，并将已启用资源的 v1 REST 接口挂入版本化 StorageMap。
 func (p StorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(apps.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
-	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
-	// TODO refactor the plumbing to provide the information in the APIGroupInfo
+	// 若在此处增加 API 版本，还必须在 kube-apiserver/app/aggregator.go 中为该版本配置对应的优先级。
+	// TODO：重构版本装配流程，将版本优先级信息直接提供给 APIGroupInfo。
 
 	if storageMap, err := p.v1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
 		return genericapiserver.APIGroupInfo{}, err
@@ -109,7 +109,7 @@ func (p StorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIReso
 	return storage, nil
 }
 
-// GroupName returns name of the group
+// GroupName 返回 apps API 组名称。
 func (p StorageProvider) GroupName() string {
 	return apps.GroupName
 }

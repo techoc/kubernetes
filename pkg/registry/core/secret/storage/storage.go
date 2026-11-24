@@ -32,7 +32,7 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against secrets.
+// NewREST 创建并返回用于访问 Secret 资源的 RESTStorage。
 // NewREST 注册 Secret 对象构造器、字段筛选器、读写策略和表格转换器，再初始化底层持久化 Store。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{

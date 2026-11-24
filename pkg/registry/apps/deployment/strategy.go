@@ -42,8 +42,7 @@ type deploymentStrategy struct {
 }
 
 // Strategy 是 Deployment 主资源的默认 REST 策略；删除时使用级联删除策略，清理其 ReplicaSet/Pod 依赖。
-// Strategy is the default logic that applies when creating and updating Deployment
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 Deployment 时使用的默认策略。
 var Strategy = deploymentStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 // Make sure we correctly implement the interface.
@@ -55,13 +54,12 @@ func (deploymentStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) re
 	return rest.DeleteDependents
 }
 
-// NamespaceScoped is true for deployment.
+// NamespaceScoped 表示 Deployment 是命名空间级资源。
 func (deploymentStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回 Status 子资源更新时需要重置、因而不能由请求修改的字段。
 func (deploymentStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"apps/v1": fieldpath.NewSet(
@@ -82,14 +80,14 @@ func (deploymentStrategy) PrepareForCreate(ctx context.Context, obj runtime.Obje
 	pod.DropDisabledTemplateFields(&deployment.Spec.Template, nil)
 }
 
-// Validate validates a new deployment.
+// Validate 校验新创建的 Deployment。
 func (deploymentStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	deployment := obj.(*apps.Deployment)
 	opts := pod.GetValidationOptionsFromPodTemplate(&deployment.Spec.Template, nil)
 	return appsvalidation.ValidateDeployment(deployment, opts)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建 Deployment 时发现的非阻断性警告。
 func (deploymentStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newDeployment := obj.(*apps.Deployment)
 	var warnings []string
@@ -100,11 +98,11 @@ func (deploymentStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Obje
 	return warnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验后对对象进行规范化；当前策略无需额外处理。
 func (deploymentStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for deployments.
+// AllowCreateOnUpdate 返回 false：Deployment 不允许通过更新请求隐式创建。
 func (deploymentStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
@@ -128,7 +126,7 @@ func (deploymentStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime
 	}
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 执行面向普通用户的 Deployment 更新校验。
 // ValidateUpdate 同时校验新对象与新旧 PodTemplate，处理不可变字段和模板兼容规则。
 func (deploymentStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newDeployment := obj.(*apps.Deployment)
@@ -140,7 +138,7 @@ func (deploymentStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.O
 	return allErrs
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新产生的非阻断性警告。
 func (deploymentStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	newDeployment := obj.(*apps.Deployment)
@@ -183,7 +181,7 @@ func (deploymentStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old r
 	dropDisabledStatusFields(&newDeployment.Status, &oldDeployment.Status)
 }
 
-// ValidateUpdate is the default update validation for an end user updating status
+// ValidateUpdate 校验 Deployment Status 子资源的更新。
 func (deploymentStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	return appsvalidation.ValidateDeploymentStatusUpdate(obj.(*apps.Deployment), old.(*apps.Deployment))
 }

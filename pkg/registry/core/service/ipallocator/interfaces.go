@@ -25,8 +25,7 @@ import (
 )
 
 // Interface 定义 IP 地址池契约，包含指定 IP/自动分配、释放、遍历、网络族查询及 DryRun 影子操作。
-// Interface manages the allocation of IP addresses out of a range. Interface
-// should be threadsafe.
+// Interface 定义 IP 地址范围分配契约；所有实现都必须支持并发安全调用。
 type Interface interface {
 	Allocate(net.IP) error
 	AllocateNext() (net.IP, error)
@@ -38,7 +37,7 @@ type Interface interface {
 	Destroy()
 	EnableMetrics()
 
-	// DryRun offers a way to try operations without persisting them.
+	// DryRun 提供试运行能力，可验证分配操作而不持久化实际状态。
 	DryRun() Interface
 }
 
