@@ -68,15 +68,15 @@ type peerEndpointLeases struct {
 // 中文说明：用 lease（TTL）而非静态配置，才能让实例崩溃后在有限时间内自动过期，
 // 避免 peer 一直把流量转发到不存在的地址。
 type PeerEndpointLeaseReconciler interface {
-	// GetEndpoint retrieves the endpoint for a given apiserverId
+	// GetEndpoint 返回指定 apiserverId 的端点。
 	GetEndpoint(serverId string) (string, error)
-	// UpdateLease updates the ip and port of peer servers
+	// UpdateLease 更新对端服务器的 IP 和端口。
 	UpdateLease(serverId string, ip string, endpointPorts []corev1.EndpointPort) error
-	// RemoveEndpoints removes this apiserver's peer endpoint lease.
+	// RemoveLease 删除此 apiserver 的对端端点租约。
 	RemoveLease(serverId string) error
-	// Destroy cleans up everything on shutdown.
+	// Destroy 清理关停时占用的所有资源。
 	Destroy()
-	// StopReconciling turns any later ReconcileEndpoints call into a noop.
+	// StopReconciling 使后续 ReconcileEndpoints 调用变为空操作。
 	StopReconciling()
 }
 
@@ -85,13 +85,12 @@ type peerEndpointLeaseReconciler struct {
 	stopReconcilingCalled atomic.Bool
 }
 
-// NewPeerEndpointLeaseReconciler creates a new peer endpoint lease reconciler
+// NewPeerEndpointLeaseReconciler 创建新的对端端点租约协调器。
 //
 // 中文说明：这里只做存储读写，不使用 watch，因此 newFunc/newListFunc 留空；
 // destroyFn 用 sync.Once 包裹，保证 Stop 与 Destroy 重复调用安全。
 func NewPeerEndpointLeaseReconciler(config *storagebackend.ConfigForResource, baseKey string, leaseTime time.Duration) (PeerEndpointLeaseReconciler, error) {
-	// note that newFunc, newListFunc
-	// can be left blank unless the storage.Watch method is used
+	// 不使用 storage.Watch 时，newFunc 和 newListFunc 可留空。
 	leaseStorage, destroyFn, err := storagefactory.Create(*config, nil, nil, baseKey)
 	if err != nil {
 		return nil, fmt.Errorf("error creating storage factory: %v", err)
@@ -107,25 +106,22 @@ func NewPeerEndpointLeaseReconciler(config *storagebackend.ConfigForResource, ba
 	}, nil
 }
 
-// PeerEndpointController is the controller manager for updating the peer endpoint leases.
-// This provides a separate independent reconciliation loop for peer endpoint leases
-// which ensures that the peer kube-apiservers are fetching the updated endpoint info for a given apiserver
-// in the case when the peer wants to proxy the request to the given apiserver because it can not serve the
-// request itself due to version mismatch.
+// PeerEndpointLeaseController 是更新对端端点租约的控制器管理器。
+// 它为对端端点租约提供独立调谐循环，确保当某个 peer kube-apiserver 因版本不匹配
+// 无法处理请求、需要代理到目标 apiserver 时，能够获取目标实例的最新端点信息。
 //
 // 中文说明：controller 与 reconciler 分离，便于把“调度节奏/生命周期”和“存储交互”分开测试。
 type PeerEndpointLeaseController struct {
 	reconciler       PeerEndpointLeaseReconciler
 	endpointInterval time.Duration
 	serverId         string
-	// peeraddress stores the IP and port of this kube-apiserver. Used by peer kube-apiservers to
-	// route request to this apiserver in case of a version skew.
+	// peeraddress 保存此 kube-apiserver 的 IP 和端口；版本偏斜时，peer 据此将请求路由到本实例。
 	peeraddress string
 
 	client kubernetes.Interface
 
 	lock   sync.Mutex
-	stopCh chan struct{} // closed by Stop()
+	stopCh chan struct{} // 由 Stop() 关闭
 }
 
 func New(serverId string, peeraddress string,
@@ -133,8 +129,7 @@ func New(serverId string, peeraddress string,
 	return &PeerEndpointLeaseController{
 		reconciler: reconciler,
 		serverId:   serverId,
-		// peeraddress stores the IP and port of this kube-apiserver. Used by peer kube-apiservers to
-		// route request to this apiserver in case of a version skew.
+		// peeraddress 保存此 kube-apiserver 的 IP 和端口；版本偏斜时，peer 据此将请求路由到本实例。
 		peeraddress:      peeraddress,
 		endpointInterval: endpointInterval,
 		client:           client,
@@ -142,26 +137,25 @@ func New(serverId string, peeraddress string,
 	}
 }
 
-// Start begins the peer endpoint lease reconciler loop that must exist for bootstrapping
-// a cluster.
+// Start 启动 peer endpoint lease 调谐循环，这是集群引导所必需的。
 func (c *PeerEndpointLeaseController) Start(stopCh <-chan struct{}) {
 	localStopCh := make(chan struct{})
 	go func() {
 		defer close(localStopCh)
 		select {
-		case <-stopCh: // from Start
-		case <-c.stopCh: // from Stop
+		case <-stopCh: // 来自 Start
+		case <-c.stopCh: // 来自 Stop
 		}
 	}()
 	go c.Run(localStopCh)
 }
 
-// RunPeerEndpointReconciler periodically updates the peer endpoint leases
+// Run 周期性地更新 peer endpoint leases。
 //
-// 中文说明：先轮询 /readyz，确保本实例真正可服务后再声明自己；
+// 先轮询 /readyz，确保本实例真正可服务后再声明自己；
 // 否则 peer 可能把请求转发到一个尚未就绪的实例。
 func (c *PeerEndpointLeaseController) Run(stopCh <-chan struct{}) {
-	// wait until process is ready
+	// 等待进程就绪
 	wait.PollImmediateUntil(100*time.Millisecond, func() (bool, error) {
 		var code int
 		c.client.CoreV1().RESTClient().Get().AbsPath("/readyz").Do(context.TODO()).StatusCode(&code)
@@ -175,9 +169,9 @@ func (c *PeerEndpointLeaseController) Run(stopCh <-chan struct{}) {
 	}, c.endpointInterval, stopCh)
 }
 
-// Stop cleans up this apiserver's peer endpoint leases.
+// Stop 清理本 apiserver 的 peer endpoint leases。
 //
-// 中文说明：先 StopReconciling 再 RemoveLease，避免删除后又有一个并发
+// 先 StopReconciling 再 RemoveLease，避免删除后又有一个并发
 // Reconcile 把 key 写回来；最后按 2*interval 超时兜底，etcd 不可达时也要能完成关停。
 func (c *PeerEndpointLeaseController) Stop() {
 	c.lock.Lock()
@@ -185,7 +179,7 @@ func (c *PeerEndpointLeaseController) Stop() {
 
 	select {
 	case <-c.stopCh:
-		return // only close once
+		return // 只关闭一次
 	default:
 		close(c.stopCh)
 	}
@@ -193,10 +187,10 @@ func (c *PeerEndpointLeaseController) Stop() {
 	go func() {
 		defer close(finishedReconciling)
 		klog.Infof("Shutting down peer endpoint lease reconciler")
-		// stop reconciliation
+		// 停止调谐
 		c.reconciler.StopReconciling()
 
-		// Ensure that there will be no race condition with the ReconcileEndpointLeases.
+		// 确保不会与 ReconcileEndpointLeases 产生竞态。
 		if err := c.reconciler.RemoveLease(c.serverId); err != nil {
 			klog.Errorf("Unable to remove peer endpoint leases: %v", err)
 		}
@@ -205,14 +199,14 @@ func (c *PeerEndpointLeaseController) Stop() {
 
 	select {
 	case <-finishedReconciling:
-		// done
+		// 完成
 	case <-time.After(2 * c.endpointInterval):
-		// don't block server shutdown forever if we can't reach etcd to remove ourselves
+		// 若无法访问 etcd 摘除自己，也不要永远阻塞 server 关停
 		klog.Warning("peer_endpoint_controller's RemoveEndpoints() timed out")
 	}
 }
 
-// UpdatePeerEndpointLeases attempts to update the peer endpoint leases.
+// UpdatePeerEndpointLeases 尝试更新 peer endpoint leases。
 func (c *PeerEndpointLeaseController) UpdatePeerEndpointLeases() error {
 	host, port, err := net.SplitHostPort(c.peeraddress)
 	if err != nil {
@@ -225,40 +219,37 @@ func (c *PeerEndpointLeaseController) UpdatePeerEndpointLeases() error {
 	}
 	endpointPorts := createEndpointPortSpec(p, "https")
 
-	// Ensure that there will be no race condition with the RemoveEndpointLeases.
+	// 确保不会与 RemoveEndpointLeases 产生竞态。
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	// Refresh the TTL on our key, independently of whether any error or
-	// update conflict happens below. This makes sure that at least some of
-	// the servers will add our endpoint lease.
+	// 无论下面的更新是否出错或发生冲突，都要刷新我们自己 key 的 TTL。
+	// 这样至少能保证部分 server 会登记我们的 endpoint lease。
 	if err := c.reconciler.UpdateLease(c.serverId, host, endpointPorts); err != nil {
 		return err
 	}
 	return nil
 }
 
-// UpdateLease resets the TTL on a server IP in storage
-// UpdateLease will create a new key if it doesn't exist.
-// We use the first element in endpointPorts as a part of the lease's base key
-// This is done to support out tests that simulate 2 apiservers running on the same ip but
-// different ports
-
-// It will also do the following if UnknownVersionInteroperabilityProxy feature is enabled
-// 1. store the apiserverId as a label
-// 2. store the values passed to --peer-advertise-ip and --peer-advertise-port flags to kube-apiserver as an annotation
-// with value of format <ip:port>
+// UpdateLease 重置存储中某个 server IP 的 TTL，key 不存在时会新建。
+// 这里把 endpointPorts 的第一个元素作为 lease base key 的一部分，
+// 以便支持“两个 apiserver 使用同一 IP 但不同端口”的测试场景。
 //
-// 中文说明：key 用 serverId 而非 ip:port，是因为同一 IP 上可能跑多个实例；
+// 若启用 UnknownVersionInteroperabilityProxy 特性，还会：
+//  1. 把 apiserverId 存为 label；
+//  2. 把 kube-apiserver 的 --peer-advertise-ip 与 --peer-advertise-port 取值
+//     以 <ip:port> 格式的 annotation 存下来。
+//
+// key 用 serverId 而非 ip:port，是因为同一 IP 上可能跑多个实例；
 // 代价是不校验 ip/port 的唯一性，冲突时以最后一次写入为准。
 func (r *peerEndpointLeaseReconciler) UpdateLease(serverId string, ip string, endpointPorts []corev1.EndpointPort) error {
-	// reconcile endpoints only if apiserver was not shutdown
+	// 仅在 apiserver 尚未关停时才调谐 endpoint
 	if r.stopReconcilingCalled.Load() {
 		return nil
 	}
 
-	// we use the serverID as the key to avoid using the server IP, port as the key.
-	// note: this means that this lease doesn't enforce mutual exclusion of ip/port usage between apiserver.
+	// 用 serverID 作为 key，避免以 server 的 IP、端口作为 key。
+	// 注意：这意味着该 lease 不会在各 apiserver 之间强制 ip/port 的互斥使用。
 	key := path.Join(r.serverLeases.baseKey, serverId)
 	return r.serverLeases.storage.GuaranteedUpdate(apirequest.NewDefaultContext(), key, &corev1.Endpoints{}, true, nil, func(input kruntime.Object, respMeta storage.ResponseMeta) (kruntime.Object, *uint64, error) {
 		existing := input.(*corev1.Endpoints)
@@ -269,22 +260,19 @@ func (r *peerEndpointLeaseReconciler) UpdateLease(serverId string, ip string, en
 			},
 		}
 
-		// store this server's identity (serverId) as a label. This will be used by
-		// peers to find the IP of this server when the peer can not serve a request
-		// due to version skew.
+		// 把本 server 的身份（serverId）存为 label。当 peer 因版本偏斜无法
+		// 处理请求时，需要用该 label 找到本 server 的 IP。
 		if existing.Labels == nil {
 			existing.Labels = map[string]string{}
 		}
 		existing.Labels[APIServerIdentityLabel] = serverId
 
-		// leaseTime needs to be in seconds
+		// leaseTime 需要换算成秒
 		leaseTime := uint64(r.serverLeases.leaseTime / time.Second)
 
-		// NB: GuaranteedUpdate does not perform the store operation unless
-		// something changed between load and store (not including resource
-		// version), meaning we can't refresh the TTL without actually
-		// changing a field.
-		// 中文说明：递增 Generation 正是为了“制造变化”，否则 TTL 不会刷新。
+		// 注意：GuaranteedUpdate 只有在 load 与 store 之间发生变化（resource
+		// version 除外）时才会真正写入，因此不改动任何字段就无法刷新 TTL。
+		// 递增 Generation 正是为了“制造变化”，否则 TTL 不会刷新。
 		existing.Generation++
 
 		klog.V(6).Infof("Resetting TTL on server IP %q listed in storage to %v", ip, leaseTime)
@@ -292,8 +280,8 @@ func (r *peerEndpointLeaseReconciler) UpdateLease(serverId string, ip string, en
 	}, nil)
 }
 
-// ListLeases retrieves a list of the current server IPs from storage
-// 中文说明：Recursive + RV "0"（NotOlderThan）读本地/最新缓存，避免为发现请求
+// ListLeases 从存储中获取当前 server IP 列表。
+// 采用 Recursive + RV "0"（NotOlderThan）读本地/最新缓存，避免为发现请求
 // 付出线性一致读的成本；租约数据的时效性由 TTL 保证。
 func (r *peerEndpointLeaseReconciler) ListLeases() ([]string, error) {
 	storageOpts := storage.ListOptions{
@@ -316,8 +304,8 @@ func (r *peerEndpointLeaseReconciler) ListLeases() ([]string, error) {
 	return ipList, nil
 }
 
-// GetLease retrieves the server IP and port for a specific server id
-// 中文说明：空 serverId 直接报错，避免 key 退化为 baseKey 而匹配到任意租约。
+// GetLease 获取指定 server id 对应的 server IP 与端口。
+// 空 serverId 直接报错，避免 key 退化为 baseKey 而匹配到任意租约。
 func (r *peerEndpointLeaseReconciler) GetLease(serverId string) (string, error) {
 	var fullAddr string
 	if serverId == "" {
@@ -358,10 +346,9 @@ func (r *peerEndpointLeaseReconciler) StopReconciling() {
 	r.stopReconcilingCalled.Store(true)
 }
 
-// RemoveLease removes the lease on a server IP in storage
-// We use the first element in endpointPorts as a part of the lease's base key
-// This is done to support out tests that simulate 2 apiservers running on the same ip but
-// different ports
+// RemoveLease 删除存储中某个 server IP 上的 lease。
+// 与 UpdateLease 一致，把 endpointPorts 的第一个元素作为 lease base key 的一部分，
+// 以支持“两个 apiserver 使用同一 IP 但不同端口”的测试场景。
 func (r *peerEndpointLeaseReconciler) RemoveLease(serverId string) error {
 	key := path.Join(r.serverLeases.baseKey, serverId)
 	return r.serverLeases.storage.Delete(apirequest.NewDefaultContext(), key, &corev1.Endpoints{}, nil, rest.ValidateAllObjectFunc, nil, storage.DeleteOptions{})
@@ -383,7 +370,7 @@ func (r *peerEndpointLeaseReconciler) getIpInfoList(storageOpts storage.ListOpti
 	return ipInfoList, nil
 }
 
-// createEndpointPortSpec creates the endpoint ports
+// createEndpointPortSpec 构造 endpoint 的端口列表。
 func createEndpointPortSpec(endpointPort int, endpointPortName string) []corev1.EndpointPort {
 	return []corev1.EndpointPort{{
 		Protocol: corev1.ProtocolTCP,

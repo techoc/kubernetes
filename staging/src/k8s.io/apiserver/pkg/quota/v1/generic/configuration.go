@@ -23,7 +23,7 @@ import (
 	quota "k8s.io/apiserver/pkg/quota/v1"
 )
 
-// implements a basic configuration
+// 实现基础配额配置。
 //
 // 该实现不可变：构造后只读，因此无需加锁即可并发访问。
 type simpleConfiguration struct {
@@ -31,7 +31,7 @@ type simpleConfiguration struct {
 	ignoredResources map[schema.GroupResource]struct{}
 }
 
-// NewConfiguration creates a quota configuration
+// NewConfiguration 根据评估器列表和忽略资源集合创建配额配置。
 func NewConfiguration(evaluators []quota.Evaluator, ignoredResources map[schema.GroupResource]struct{}) quota.Configuration {
 	return &simpleConfiguration{
 		evaluators:       evaluators,

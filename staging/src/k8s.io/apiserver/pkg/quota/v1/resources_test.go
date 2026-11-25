@@ -195,7 +195,7 @@ func TestAdd(t *testing.T) {
 	}
 }
 
-// TestSubtract 验证逐资源求差；结果允许为负数（empty-value 用例即如此）。
+// TestSubtract 验证逐资源求差；结果允许为负数（空值与非空值相减即如此）。
 func TestSubtract(t *testing.T) {
 	testCases := map[string]struct {
 		a        corev1.ResourceList

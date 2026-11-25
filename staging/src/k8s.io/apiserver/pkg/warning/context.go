@@ -24,28 +24,28 @@ import (
 	"context"
 )
 
-// The key type is unexported to prevent collisions
-// 中文说明：与 request 包同样的未导出 key 约定，避免跨包覆盖 context 值。
+// key 类型未导出，避免与其他包定义的 context key 冲突。
+// 与 request 包采用同样的未导出 key 约定，防止跨包覆盖 context 值。
 type key int
 
 const (
-	// warningRecorderKey is the context key for the warning recorder.
+	// warningRecorderKey 是存放 warning recorder 的 context key。
 	warningRecorderKey key = iota
 )
 
-// Recorder provides a method for recording warnings
+// Recorder 提供记录警告的方法。
 //
-// 中文说明：实现方负责把警告写入 HTTP Warning 头；输入校验（UTF-8、无控制字符）
+// 实现方负责把警告写入 HTTP Warning 头；输入校验（UTF-8、无控制字符）
 // 是契约的一部分，调用方不能假设 Recorder 会宽容处理非法内容。
 type Recorder interface {
-	// AddWarning adds the specified warning to the response.
-	// agent must be valid UTF-8, and must not contain spaces, quotes, backslashes, or control characters.
-	// text must be valid UTF-8, and must not contain control characters.
+	// AddWarning 向响应中添加指定告警。
+	// agent 必须是合法 UTF-8，且不得包含空格、引号、反斜杠或控制字符。
+	// text 必须是合法 UTF-8，且不得包含控制字符。
 	AddWarning(agent, text string)
 }
 
-// WithWarningRecorder returns a new context that wraps the provided context and contains the provided Recorder implementation.
-// The returned context can be passed to AddWarning().
+// WithWarningRecorder 返回包装了给定 context 的新 context，其中携带给定的 Recorder 实现。
+// 返回的 context 可传给 AddWarning() 使用。
 func WithWarningRecorder(ctx context.Context, recorder Recorder) context.Context {
 	return context.WithValue(ctx, warningRecorderKey, recorder)
 }
@@ -55,12 +55,12 @@ func warningRecorderFrom(ctx context.Context) (Recorder, bool) {
 	return recorder, ok
 }
 
-// AddWarning records a warning for the specified agent and text to the Recorder added to the provided context using WithWarningRecorder().
-// If no Recorder exists in the provided context, this is a no-op.
-// agent must be valid UTF-8, and must not contain spaces, quotes, backslashes, or control characters.
-// text must be valid UTF-8, and must not contain control characters.
+// AddWarning 把指定 agent 与 text 的警告记录到通过 WithWarningRecorder() 绑定在 context 上的 Recorder。
+// 若给定 context 中不存在 Recorder，则不做任何事。
+// agent 必须是合法 UTF-8，且不得包含空格、引号、反斜杠或控制字符。
+// text 必须是合法 UTF-8，且不得包含控制字符。
 //
-// 中文说明：无 Recorder 时静默忽略，使插件可以在测试或非 HTTP 场景下无条件调用。
+// 无 Recorder 时静默忽略，使插件可以在测试或非 HTTP 场景下无条件调用。
 func AddWarning(ctx context.Context, agent string, text string) {
 	recorder, ok := warningRecorderFrom(ctx)
 	if !ok {

@@ -20,41 +20,40 @@ syntax = "proto3";
 package v2;
 option go_package = "k8s.io/apiserver/pkg/storage/value/encrypt/envelope/kmsv2/v2";
 
-// EncryptedObject is the representation of data stored in etcd after envelope encryption.
+// EncryptedObject 表示信封加密后存储在 etcd 中的数据。
 message EncryptedObject {
-  // EncryptedData is the encrypted data.
+  // EncryptedData 是加密后的数据。
   bytes encryptedData = 1;
 
-  // KeyID is the KMS key ID used for encryption operations.
-  // keyID must satisfy the following constraints:
-  // 1. The keyID is not empty.
-  // 2. The size of keyID is less than 1 kB.
+  // KeyID 是加密操作使用的 KMS 密钥 ID。
+  // keyID 必须满足以下约束：
+  // 1. keyID 不能为空。
+  // 2. keyID 的大小小于 1 kB。
   string keyID = 2;
 
-  // EncryptedDEKSource is the ciphertext of the source of the DEK used to encrypt the data stored in encryptedData.
-  // encryptedDEKSourceType defines the process of using the plaintext of this field to determine the aforementioned DEK.
-  // encryptedDEKSource must satisfy the following constraints:
-  // 1. The encrypted DEK source is not empty.
-  // 2. The size of encrypted DEK source is less than 1 kB.
+  // EncryptedDEKSource 是用于加密 encryptedData 中所存数据的 DEK 来源的密文。
+  // encryptedDEKSourceType 定义使用此字段的明文确定上述 DEK 的流程。
+  // encryptedDEKSource 必须满足以下约束：
+  // 1. 加密的 DEK 来源不能为空。
+  // 2. 加密的 DEK 来源大小小于 1 kB。
   bytes encryptedDEKSource = 3;
 
-  // Annotations is additional metadata that was provided by the KMS plugin.
-  // Annotations must satisfy the following constraints:
-  //  1. Annotation key must be a fully qualified domain name that conforms to the definition in DNS (RFC 1123).
-  //  2. The size of annotations keys + values is less than 32 kB.
+  // Annotations 是 KMS 插件提供的附加元数据。
+  // Annotations 必须满足以下约束：
+  //  1. 注解键必须是符合 DNS（RFC 1123）定义的完全限定域名。
+  //  2. 注解键和值的大小总和小于 32 kB。
   map<string, bytes> annotations = 4;
 
-  // encryptedDEKSourceType defines the process of using the plaintext of encryptedDEKSource to determine the DEK.
+  // encryptedDEKSourceType 定义使用 encryptedDEKSource 的明文确定 DEK 的流程。
   EncryptedDEKSourceType encryptedDEKSourceType = 5;
 }
 
 enum EncryptedDEKSourceType {
-  // AES_GCM_KEY means that the plaintext of encryptedDEKSource is the DEK itself, with AES-GCM as the encryption algorithm.
+  // AES_GCM_KEY 表示 encryptedDEKSource 的明文就是 DEK 本身，加密算法为 AES-GCM。
   AES_GCM_KEY = 0;
 
-  // HKDF_SHA256_XNONCE_AES_GCM_SEED means that the plaintext of encryptedDEKSource is the pseudo random key
-  // (referred to as the seed throughout the code) that is fed into HKDF expand.  SHA256 is the hash algorithm
-  // and first 32 bytes of encryptedData are the info param.  The first 32 bytes from the HKDF stream are used
-  // as the DEK with AES-GCM as the encryption algorithm.
+  // HKDF_SHA256_XNONCE_AES_GCM_SEED 表示 encryptedDEKSource 的明文是输入 HKDF expand 的伪随机密钥
+  // （在代码中称为种子）。SHA256 是哈希算法，encryptedData 的前 32 个字节是 info 参数。
+  // HKDF 输出流的前 32 个字节用作 DEK，加密算法为 AES-GCM。
   HKDF_SHA256_XNONCE_AES_GCM_SEED = 1;
 }

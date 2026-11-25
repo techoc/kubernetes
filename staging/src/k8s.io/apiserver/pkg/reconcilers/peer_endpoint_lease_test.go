@@ -69,7 +69,8 @@ func NewFakePeerEndpointReconciler(t *testing.T, baseKey string, s storage.Inter
 		storage:   s,
 		destroyFn: func() {},
 		baseKey:   baseKey,
-		leaseTime: 1 * time.Minute, // avoid the lease to timeout on tests
+		// 延长租约时间，避免测试执行期间过期。
+		leaseTime: 1 * time.Minute,
 	}}
 }
 
@@ -86,7 +87,7 @@ func (f *peerEndpointLeaseReconciler) SetKeys(servers []serverInfo) error {
 // TestPeerEndpointLeaseReconciler 验证 lease 地址的选取规则：
 // 已有地址优先沿用，新地址出现时以新地址为准，无已有地址时直接登记新地址。
 func TestPeerEndpointLeaseReconciler(t *testing.T) {
-	// enable feature flags
+	// 启用测试所需特性。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.APIServerIdentity: true,
 		features.StorageVersionAPI: true,
@@ -152,8 +153,8 @@ func TestPeerEndpointLeaseReconciler(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.testName, func(t *testing.T) {
-			// use the same base key used by the controlplane, but add a random
-			// prefix so we can reuse the etcd instance for subtests independently.
+			// 使用控制平面相同的 base key，并添加随机前缀，
+			// 让各子测试可以独立复用同一个 etcd 实例。
 			baseKey := "/" + uuid.New().String() + "/peerserverleases/"
 			s, dFunc, err := factory.Create(*sc.ForResource(schema.GroupResource{Resource: "endpoints"}), newFunc, newListFunc, baseKey)
 			if err != nil {
@@ -180,7 +181,7 @@ func TestPeerEndpointLeaseReconciler(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			// sort for comparison
+			// 排序后比较。
 			sort.Strings(leases)
 			sort.Strings(test.expectLeases)
 			if !reflect.DeepEqual(leases, test.expectLeases) {
@@ -203,7 +204,7 @@ func TestPeerEndpointLeaseReconciler(t *testing.T) {
 // TestPeerLeaseRemoveEndpoints 验证 lease 删除语义：正常启动时只删除目标 lease，
 // 已停止调谐的实例不再执行删除。
 func TestPeerLeaseRemoveEndpoints(t *testing.T) {
-	// enable feature flags
+	// 启用测试所需特性。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.APIServerIdentity: true,
 		features.StorageVersionAPI: true,
@@ -260,8 +261,8 @@ func TestPeerLeaseRemoveEndpoints(t *testing.T) {
 	}
 	for _, test := range stopTests {
 		t.Run(test.testName, func(t *testing.T) {
-			// use the same base key used by the controlplane, but add a random
-			// prefix so we can reuse the etcd instance for subtests independently.
+			// 使用控制平面相同的 base key，并添加随机前缀，
+			// 让各子测试可以独立复用同一个 etcd 实例。
 			baseKey := "/" + uuid.New().String() + "/peerserverleases/"
 			s, dFunc, err := factory.Create(*sc.ForResource(schema.GroupResource{Resource: "pods"}), newFunc, newListFunc, baseKey)
 			if err != nil {
@@ -280,7 +281,7 @@ func TestPeerLeaseRemoveEndpoints(t *testing.T) {
 			for _, server := range test.servers {
 				if server.removeLease {
 					err = fakeReconciler.RemoveLease(server.id)
-					// if the ip is not on the endpoints, it must return an storage error and stop reconciling
+					// 若 IP 不在端点列表中，删除必须返回存储错误并停止调谐。
 					if err != nil {
 						t.Errorf("unexpected error reconciling: %v", err)
 					}
@@ -291,7 +292,7 @@ func TestPeerLeaseRemoveEndpoints(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			// sort for comparison
+			// 排序后比较。
 			sort.Strings(leases)
 			sort.Strings(test.expectLeases)
 			if !reflect.DeepEqual(leases, test.expectLeases) {

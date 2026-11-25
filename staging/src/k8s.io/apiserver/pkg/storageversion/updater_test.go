@@ -42,7 +42,7 @@ var (
 		DecodableVersions: []string{"v1", "v2"},
 		ServedVersions:    []string{"v1", "v2"},
 	}
-	// ssv3 has a different encoding version
+	// ssv3 使用不同的编码版本
 	ssv3 = v1alpha1.ServerStorageVersion{
 		APIServerID:       "3",
 		EncodingVersion:   "v2",

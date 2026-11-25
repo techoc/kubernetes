@@ -27,64 +27,60 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	_ "k8s.io/component-base/metrics/prometheus/workqueue" // for workqueue metric registration
+	_ "k8s.io/component-base/metrics/prometheus/workqueue" // 用于注册 workqueue 指标
 	"k8s.io/klog/v2"
 )
 
-// ResourceInfo contains the information to register the resource to the
-// storage version API.
+// ResourceInfo 包含把资源注册到 storage version API 所需的信息。
 type ResourceInfo struct {
 	GroupResource schema.GroupResource
 
 	// EncodingVersion 是该资源写入 etcd 时使用的版本。
 	EncodingVersion string
-	// Used to calculate decodable versions. Can only be used after all
-	// equivalent versions are registered by InstallREST.
-	//
-	// 依赖 InstallREST 完成后才能使用：等价资源映射需在所有版本注册完毕后才完整。
+	// 用于计算可解码版本。必须在 InstallREST 注册完所有等价版本之后才能使用：
+	// 等价资源映射需在所有版本注册完毕后才完整。
 	EquivalentResourceMapper runtime.EquivalentResourceRegistry
 
-	// DirectlyDecodableVersions is a list of versions that the converter for REST storage knows how to convert.  This
-	// contains items like apiextensions.k8s.io/v1beta1 even if we don't serve that version.
+	// DirectlyDecodableVersions 是 REST 存储的转换器能够转换的版本列表。即使某个版本
+	// 并未对外提供服务（如 apiextensions.k8s.io/v1beta1），也会包含在其中。
 	DirectlyDecodableVersions []schema.GroupVersion
 
-	// ServedVersions holds a list of all versions of GroupResource that are served.  Note that a server may be able to
-	// decode a particular version, but still not serve it.
+	// ServedVersions 列出 GroupResource 所有对外提供服务的版本。注意：服务端可能能够
+	// 解码某个版本，却并不对外提供该版本。
 	ServedVersions []string
 }
 
-// Manager records the resources whose StorageVersions need updates, and provides a method to update those StorageVersions.
+// Manager 记录需要更新 StorageVersion 的资源，并提供更新这些 StorageVersion 的方法。
 //
 // StorageVersion 对象用于让存储迁移器判断某资源是否已全部迁移到目标版本；
 // 在更新完成前，写请求可能被阻塞（见 Completed）。
 type Manager interface {
-	// AddResourceInfo records resources whose StorageVersions need updates
+	// AddResourceInfo 记录需要更新 StorageVersion 的资源
 	AddResourceInfo(resources ...*ResourceInfo)
-	// UpdateStorageVersions tries to update the StorageVersions of the recorded resources
+	// UpdateStorageVersions 尝试更新已记录资源的 StorageVersion
 	UpdateStorageVersions(kubeAPIServerClientConfig *rest.Config, apiserverID string)
-	// PendingUpdate returns true if the StorageVersion of the given resource is still pending update.
+	// PendingUpdate 在给定资源的 StorageVersion 仍待更新时返回 true。
 	PendingUpdate(gr schema.GroupResource) bool
-	// LastUpdateError returns the last error hit when updating the storage version of the given resource.
+	// LastUpdateError 返回更新给定资源 storage version 时最近一次遇到的错误。
 	LastUpdateError(gr schema.GroupResource) error
-	// Completed returns true if updating StorageVersions of all recorded resources has completed.
+	// Completed 在所有已记录资源的 StorageVersion 均更新完成时返回 true。
 	Completed() bool
 }
 
 // 编译期断言：默认实现满足 Manager 接口。
 var _ Manager = &defaultManager{}
 
-// defaultManager indicates if an apiserver has completed reporting its storage versions.
+// defaultManager 表示某个 apiserver 是否已完成其 storage version 的上报。
 type defaultManager struct {
 	// completed 用原子变量，因为它在请求热路径上被高频读取，不应争用互斥锁。
 	completed atomic.Bool
 
 	mu sync.RWMutex
-	// managedResourceInfos records the ResourceInfos whose StorageVersions will get updated in the next
-	// UpdateStorageVersions call
+	// managedResourceInfos 记录将在下一次 UpdateStorageVersions 调用中更新 StorageVersion 的 ResourceInfo
 	managedResourceInfos map[*ResourceInfo]struct{}
-	// managedStatus records the update status of StorageVersion for each GroupResource. Since one
-	// ResourceInfo may expand into multiple GroupResource (e.g. ingresses.networking.k8s.io and ingresses.extensions),
-	// this map allows quick status lookup for a GroupResource, during API request handling.
+	// managedStatus 记录每个 GroupResource 的 StorageVersion 更新状态。由于一个
+	// ResourceInfo 可能展开为多个 GroupResource（如 ingresses.networking.k8s.io 与 ingresses.extensions），
+	// 该 map 使得 API 请求处理过程中可以直接按 GroupResource 快速查询状态。
 	managedStatus map[schema.GroupResource]*updateStatus
 }
 
@@ -94,7 +90,7 @@ type updateStatus struct {
 	lastErr error
 }
 
-// NewDefaultManager creates a new defaultManager.
+// NewDefaultManager 创建一个新的 defaultManager。
 func NewDefaultManager() Manager {
 	s := &defaultManager{}
 	s.completed.Store(false)
@@ -103,7 +99,7 @@ func NewDefaultManager() Manager {
 	return s
 }
 
-// AddResourceInfo adds ResourceInfo to the manager.
+// AddResourceInfo 向 manager 添加 ResourceInfo。
 func (s *defaultManager) AddResourceInfo(resources ...*ResourceInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -125,7 +121,7 @@ func (s *defaultManager) addPendingManagedStatusLocked(r *ResourceInfo) {
 	}
 }
 
-// UpdateStorageVersions tries to update the StorageVersions of the recorded resources
+// UpdateStorageVersions 尝试更新已记录资源的 StorageVersion。
 //
 // 该方法在后台周期性调用；任何失败都会保留 PendingUpdate 状态并在下轮重试，
 // 只有全部成功才置 Completed，从而避免在存储版本未对齐时放行写请求。
@@ -144,21 +140,17 @@ func (s *defaultManager) UpdateStorageVersions(kubeAPIServerClientConfig *rest.C
 	}
 	s.mu.RUnlock()
 	hasFailure := false
-	// Sorting the list to make sure we have a consistent dedup result, and
-	// therefore avoid creating unnecessarily duplicated StorageVersion objects.
-	// For example, extensions.ingresses and networking.k8s.io.ingresses share
-	// the same underlying storage. Without sorting, in an HA cluster, one
-	// apiserver may dedup and update StorageVersion for extensions.ingresses,
-	// while another apiserver may dedup and update StorageVersion for
-	// networking.k8s.io.ingresses. The storage migrator (which migrates objects
-	// per GroupResource) will migrate these resources twice, since both
-	// StorageVersion objects have CommonEncodingVersion (each with one server registered).
+	// 对列表排序以保证去重结果一致，从而避免创建不必要的重复 StorageVersion 对象。
+	// 例如 extensions.ingresses 与 networking.k8s.io.ingresses 共享同一底层存储。
+	// 若不排序，在 HA 集群中一个 apiserver 可能对 extensions.ingresses 去重并更新
+	// StorageVersion，而另一个 apiserver 对 networking.k8s.io.ingresses 去重并更新
+	// StorageVersion。存储迁移器按 GroupResource 迁移对象，此时两个 StorageVersion
+	// 对象都带有 CommonEncodingVersion（各自注册了一个 server），会导致这些资源被迁移两次。
 	sortResourceInfosByGroupResource(resources)
 	for _, r := range dedupResourceInfos(resources) {
 		decodableVersions := decodableVersions(r.DirectlyDecodableVersions, r.EquivalentResourceMapper, r.GroupResource)
 		gr := r.GroupResource
-		// Group must be a valid subdomain in DNS (RFC 1123)
-		//
+		// Group 必须是合法的 DNS 子域（RFC 1123）：
 		// 核心组的 Group 为空，但 StorageVersion 资源要求合法 DNS 子域，故用 "core" 代替。
 		if len(gr.Group) == 0 {
 			gr.Group = "core"
@@ -182,11 +174,10 @@ func (s *defaultManager) UpdateStorageVersions(kubeAPIServerClientConfig *rest.C
 	s.setComplete()
 }
 
-// dedupResourceInfos dedups ResourceInfos with the same underlying storage.
-// ResourceInfos from the same Group with different Versions share the same underlying storage.
-// ResourceInfos from different Groups may share the same underlying storage, e.g.
-// networking.k8s.io ingresses and extensions ingresses. The StorageVersion manager
-// only needs to update one StorageVersion for the equivalent Groups.
+// dedupResourceInfos 对共享同一底层存储的 ResourceInfo 去重。
+// 同 Group 下不同 Version 的 ResourceInfo 共享底层存储；不同 Group 的
+// ResourceInfo 也可能共享，例如 networking.k8s.io ingresses 与 extensions ingresses。
+// StorageVersion manager 对等价的 Group 只需更新一个 StorageVersion。
 //
 // 去重规则：若某 ResourceInfo 的所有等价 GroupResource 已被先前条目覆盖，则跳过；
 // 否则记录其全部等价资源并保留该条目。输入需已排序以保证跨 apiserver 结果一致。
@@ -229,7 +220,7 @@ func (s byGroupResource) Less(i, j int) bool {
 // Swap 交换两个元素。
 func (s byGroupResource) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-// recordStatusSuccess marks updated ResourceInfo as completed.
+// recordStatusSuccess 把已更新的 ResourceInfo 标记为完成。
 func (s *defaultManager) recordStatusSuccess(r *ResourceInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -253,7 +244,7 @@ func (s *defaultManager) recordSuccessGroupResourceLocked(gr schema.GroupResourc
 	s.managedStatus[gr].lastErr = nil
 }
 
-// recordStatusFailure records latest error updating ResourceInfo.
+// recordStatusFailure 记录更新 ResourceInfo 时的最近一次错误。
 func (s *defaultManager) recordStatusFailure(r *ResourceInfo, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -276,7 +267,7 @@ func (s *defaultManager) recordErrorGroupResourceLocked(gr schema.GroupResource,
 	s.managedStatus[gr].lastErr = err
 }
 
-// PendingUpdate returns if the StorageVersion of a resource is still wait to be updated.
+// PendingUpdate 返回某个资源的 StorageVersion 是否仍有待更新。
 //
 // 未登记的资源视为无需更新（返回 false），避免对不存在的资源做写阻塞。
 func (s *defaultManager) PendingUpdate(gr schema.GroupResource) bool {
@@ -288,7 +279,7 @@ func (s *defaultManager) PendingUpdate(gr schema.GroupResource) bool {
 	return !s.managedStatus[gr].done
 }
 
-// LastUpdateError returns the last error hit when updating the storage version of the given resource.
+// LastUpdateError 返回更新给定资源 storage version 时最近一次遇到的错误。
 func (s *defaultManager) LastUpdateError(gr schema.GroupResource) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -298,12 +289,12 @@ func (s *defaultManager) LastUpdateError(gr schema.GroupResource) error {
 	return s.managedStatus[gr].lastErr
 }
 
-// setComplete marks the completion of updating StorageVersions. No write requests need to be blocked anymore.
+// setComplete 标记 StorageVersion 更新已完成，此后无需再阻塞写请求。
 func (s *defaultManager) setComplete() {
 	s.completed.Store(true)
 }
 
-// Completed returns if updating StorageVersions has completed.
+// Completed 返回 StorageVersion 的更新是否已完成。
 func (s *defaultManager) Completed() bool {
 	return s.completed.Load()
 }

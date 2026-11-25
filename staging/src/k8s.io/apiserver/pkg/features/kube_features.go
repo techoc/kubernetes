@@ -29,84 +29,75 @@ import (
 	zpagesfeatures "k8s.io/component-base/zpages/features"
 )
 
-// Every feature gate should have an entry here following this template:
+// 每个特性门控都应在此按照以下模板登记：
 //
 // // owner: @username
 // MyFeature featuregate.Feature = "MyFeature"
 //
-// Feature gates should be listed in alphabetical, case-sensitive
-// (upper before any lower case character) order. This reduces the risk
-// of code conflicts because changes are more likely to be scattered
-// across the file.
+// 特性门控按区分大小写的字母序排列（大写字符排在小写字符之前），
+// 让变更分散在文件各处，降低合并冲突的概率。
 //
 // 约定：常量名与字符串值必须完全一致，否则 --feature-gates 无法对应；
 // 顺序按字母序排列以减少合并冲突。
 const (
 	// owner: @ilackams
 	//
-	// Enables compression of REST responses (GET and LIST only)
+	// 压缩 REST 响应（仅 GET 和 LIST）。
 	APIResponseCompression featuregate.Feature = "APIResponseCompression"
 
 	// owner: @roycaihw
 	//
-	// Assigns each kube-apiserver an ID in a cluster.
+	// 为集群中的每个 kube-apiserver 分配标识。
 	APIServerIdentity featuregate.Feature = "APIServerIdentity"
 
 	// owner: @pmengelbert
 	// kep: https://kep.k8s.io/6060
 	//
-	// Controls whether the apiserver supports dispensing tokens for authenticating
-	// the Kubernetes API Server and Aggregated API Servers to webhooks.
+	// 控制 apiserver 是否签发令牌，供 Kubernetes API Server 与聚合 API Server
+	// 向 webhook 证明身份。
 	APIServerWebhookAuthenticationToken featuregate.Feature = "APIServerWebhookAuthenticationToken"
 
 	// owner: @linxiulei
 	//
-	// Enables serving watch requests in separate goroutines.
+	// 在独立 goroutine 中处理 watch 请求。
 	APIServingWithRoutine featuregate.Feature = "APIServingWithRoutine"
 
 	// owner: @jefftree
 	//
-	// Remove the v2beta1 apidiscovery.k8s.io/v2beta1 group version. Aggregated
-	// discovery implements its own handlers and follows a different lifecycle than
-	// traditional k8s resources.
+	// 移除 apidiscovery.k8s.io/v2beta1 组版本。聚合发现使用自己的处理器，
+	// 其生命周期不同于传统 Kubernetes 资源。
 	AggregatedDiscoveryRemoveBetaType featuregate.Feature = "AggregatedDiscoveryRemoveBetaType"
 
 	// owner: @modulitos
 	//
-	// Allow user.DefaultInfo.UID to be set from x509 cert during cert auth.
+	// 允许证书认证根据 x509 证书设置 user.DefaultInfo.UID。
 	AllowParsingUserUIDFromCertAuth featuregate.Feature = "AllowParsingUserUIDFromCertAuth"
 
 	// owner: @stlaz @tkashem @dgrisonnet @ibihim
 	// kep: https://kep.k8s.io/3926
 	//
-	// Enables the cluster admin to identify resources that fail to
-	// decrypt or fail to be decoded into an object, and introduces
-	// a new delete option to allow deletion of such corrupt
-	// resources using the Kubernetes API only.
+	// 允许集群管理员识别解密失败或无法解码为对象的资源，并引入新的删除选项，
+	// 使其仅通过 Kubernetes API 即可删除这些损坏资源。
 	AllowUnsafeMalformedObjectDeletion featuregate.Feature = "AllowUnsafeMalformedObjectDeletion"
 
 	// owner: @benluddy
 	// kep: https://kep.k8s.io/4222
 	//
-	// Enables CBOR as a supported encoding for requests and responses, and as the
-	// preferred storage encoding for custom resources.
+	// 支持使用 CBOR 编码请求和响应，并将其作为自定义资源的首选存储编码。
 	CBORServingAndStorage featuregate.Feature = "CBORServingAndStorage"
 
 	// owner: @serathius
-	// Enables concurrent watch object decoding to avoid starving watch cache when conversion webhook is installed.
+	// 并发解码 watch 对象，避免安装转换 webhook 后 watch cache 因等待解码而饥饿。
 	ConcurrentWatchObjectDecode featuregate.Feature = "ConcurrentWatchObjectDecode"
 
 	// owner: @yedou37
 	//
-	// Skip the timeout fallback to storage when a consistent LIST from cache cannot be served,
-	// and return a retryable response instead.
+	// 当缓存无法提供一致 LIST 时，跳过回退到存储的超时等待，改为返回可重试响应。
 	// See https://github.com/kubernetes/kubernetes/issues/138494.
 	ConsistentListFromCacheSkipTimeoutFallback featuregate.Feature = "ConsistentListFromCacheSkipTimeoutFallback"
 
 	// owner: @enj @qiujian16
 	// kep: https://kep.k8s.io/5284
-	//
-	// Enables impersonation that is constrained to specific requests instead of being all or nothing.
 	//
 	// 传统 impersonation 一旦授权即拥有目标用户的全部权限；该特性把授权范围
 	// 收窄到具体请求（动词/资源/名字等），降低误用与越权风险。
@@ -115,33 +106,30 @@ const (
 	// owner: @jefftree
 	// kep: https://kep.k8s.io/4355
 	//
-	// Enables coordinated leader election in the API server
+	// 在 API Server 中启用协调式领导者选举。
 	CoordinatedLeaderElection featuregate.Feature = "CoordinatedLeaderElection"
 
 	// owner: @jpbetz @aaron-prindle @yongruilin
 	// kep: http://kep.k8s.io/5073
 	// beta: v1.33
 	//
-	// When enabled, results of declarative validation are compared against handwritten
-	// validation and mismatches are logged as metrics. Declarative validation itself is
-	// always executed independent of this gate; per-tag enforcement is controlled by the
-	// lifecycle prefix and the DeclarativeValidationBeta gate.
+	// 启用时，将声明式校验结果与手写校验结果比较，并把不一致记录为指标。
+	// 声明式校验本身始终执行，不受此门控影响；按 tag 强制执行的策略由
+	// 生命周期前缀和 DeclarativeValidationBeta 门控控制。
 	DeclarativeValidation featuregate.Feature = "DeclarativeValidation"
 
 	// owner: @jpbetz @aaron-prindle @yongruilin
 	// kep: http://kep.k8s.io/5073
 	// beta: v1.36
 	//
-	// This feature gate acts as the Global Safety Switch for Beta-stage validation rules (+k8s:beta).
-	// It allows cluster admins to disable enforcement for validations in the Beta stage if
-	// regressions are found, forcing them back to Shadow mode.
-	// In Shadow mode, declarative validation is executed and mismatches against handwritten
-	// validation are logged as metrics, but failures do not reject requests.
-	// Handwritten validation remains authoritative and enforced.
-	// Enforcement by lifecycle prefix:
-	// - Standard tags (no prefix): Always Enforced (Bypasses this gate).
-	// - Beta tags (+k8s:beta): Enforced when this gate is enabled (default), otherwise Shadowed.
-	// - Alpha tags (+k8s:alpha): Always Shadowed.
+	// 此门控是 Beta 阶段校验规则（+k8s:beta）的全局安全开关。发现回归问题时，
+	// 集群管理员可关闭它，让这些规则退回影子模式。
+	//
+	// 影子模式仍执行声明式校验，并把与手写校验的不一致记录为指标，但失败不再拒绝请求。
+	// 手写校验始终具有权威性并强制执行。按生命周期前缀执行的策略如下：
+	// - 标准 tag（无前缀）：始终强制执行（不受此门控影响）。
+	// - Beta tag（+k8s:beta）：门控开启时强制执行（默认），否则进入影子模式。
+	// - Alpha tag（+k8s:alpha）：始终处于影子模式。
 	DeclarativeValidationBeta featuregate.Feature = "DeclarativeValidationBeta"
 
 	// owner: @jpbetz @aaron-prindle @yongruilin
@@ -153,18 +141,10 @@ const (
 	// 已弃用：由 DeclarativeValidationBeta 取代。开启时声明式校验错误会直接返回给调用方，
 	// 关闭时始终返回手写校验错误（即“影子模式”）。注意两种实现的错误数量与文案可能不同。
 	//
-	// When enabled, declarative validation errors are returned directly to the caller,
-	// replacing hand-written validation errors for rules that have declarative implementations.
-	// When disabled, hand-written validation errors are always returned, effectively putting
-	// declarative validation in a "shadow mode" that monitors but does not affect API responses.
-	// Note: Although declarative validation aims for functional equivalence with hand-written validation,
-	// the exact number, format, and content of error messages may differ between the two approaches.
 	DeclarativeValidationTakeover featuregate.Feature = "DeclarativeValidationTakeover"
 
 	// owner: @serathius
 	// kep: https://kep.k8s.io/4988
-	//
-	// Enabled cache inconsistency detection.
 	//
 	// 检测 watch cache 与 etcd 之间的不一致，是诊断缓存 bug 的重要手段；
 	// 开启会带来额外开销，因此历史上曾以 Alpha 形式提供。
@@ -172,22 +152,20 @@ const (
 
 	// owner: @jefftree
 	//
-	// Enables the RangeStream RPC for list operations in etcd.
+	// 在 etcd 的列表操作中启用 RangeStream RPC。
 	EtcdRangeStream featuregate.Feature = "EtcdRangeStream"
 
 	// owner: @aramase @BenTheElder
 	// kep: https://kep.k8s.io/5793
 	//
-	// Enables excluding the same set of authentication and authorization virtual resources
-	// from ValidatingAdmissionWebhook and MutatingAdmissionWebhook that ValidatingAdmissionPolicy
-	// and MutatingAdmissionPolicy already exclude.
+	// 从 ValidatingAdmissionWebhook 和 MutatingAdmissionWebhook 中排除同一组
+	// 认证与授权虚拟资源；ValidatingAdmissionPolicy 和 MutatingAdmissionPolicy
+	// 已经排除这些资源。
 	ExcludeAdmissionWebhookVirtualResources featuregate.Feature = "ExcludeAdmissionWebhookVirtualResources"
 
 	// owner: @aramase
 	// kep: https://kep.k8s.io/3299
 	// deprecated: v1.28
-	//
-	// Enables KMS v1 API for encryption at rest.
 	//
 	// 已弃用：KMS v1 存在安全与可扩展性缺陷，应迁移到 KMS v2。
 	KMSv1 featuregate.Feature = "KMSv1"
@@ -195,123 +173,107 @@ const (
 	// owner: @serathius
 	// kep: https://kep.k8s.io/4988
 	//
-	// Enables generating snapshots of watch cache store and using them to serve LIST requests.
+	// 生成 watch cache store 的快照，并使用快照服务 LIST 请求。
 	ListFromCacheSnapshot featuregate.Feature = "ListFromCacheSnapshot"
 
 	// owner: @aramase @BenTheElder
 	// kep: https://kep.k8s.io/5793
 	//
-	// Enables manifest-based admission control configuration for webhooks and policies.
-	// When enabled, admission webhooks and policies can be loaded from
-	// manifest files on disk at API server startup, providing bootstrap-time enforcement
-	// and protection against API-based modification.
+	// 启用基于清单的 webhook 与策略准入控制配置。开启后，准入 webhook 和策略
+	// 可在 API Server 启动时从磁盘清单文件加载，从而在启动早期强制执行，
+	// 并防止通过 API 修改配置。
 	ManifestBasedAdmissionControlConfig featuregate.Feature = "ManifestBasedAdmissionControlConfig"
 
 	// owner: @alexzielenski, @cici37, @jiahuif, @jpbetz
 	// kep: https://kep.k8s.io/3962
 	//
-	// Enables the MutatingAdmissionPolicy in Admission Chain
+	// 在准入链中启用 MutatingAdmissionPolicy。
 	MutatingAdmissionPolicy featuregate.Feature = "MutatingAdmissionPolicy"
 
 	// owner: @jiahuif
 	// kep: https://kep.k8s.io/2887
 	//
-	// Enables populating "enum" field of OpenAPI schemas
-	// in the spec returned from kube-apiserver.
+	// 在 kube-apiserver 返回的 OpenAPI 规范中填充 "enum" 字段。
 	OpenAPIEnums featuregate.Feature = "OpenAPIEnums"
 
 	// owner: @stlaz
 	//
-	// Enable kube-apiserver to accept UIDs via request header authentication.
-	// This will also make the kube-apiserver's API aggregator add UIDs via standard
-	// headers when forwarding requests to the servers serving the aggregated API.
+	// 允许 kube-apiserver 通过请求头认证接受 UID，并让 API 聚合器在向聚合 API
+	// 的后端服务转发请求时，通过标准请求头补充 UID。
 	RemoteRequestHeaderUID featuregate.Feature = "RemoteRequestHeaderUID"
 
 	// owner: @cici37
 	//
-	// Allow watch cache to create a watch on a dedicated RPC.
-	// This prevents watch cache from being starved by other watches.
+	// 允许 watch cache 在专用 RPC 上创建 watch，避免被其他 watch 请求饿死。
 	SeparateCacheWatchRPC featuregate.Feature = "SeparateCacheWatchRPC"
 
 	// owner: @jefftree
 	// kep: https://kep.k8s.io/5866
 	//
-	// Enables the shard selector parameter on List/Watch requests,
-	// allowing clients to receive a filtered subset of objects based
-	// on hash ranges of metadata fields (e.g. UID).
+	// 为 List/Watch 请求启用 shard selector 参数，使客户端可基于元数据字段
+	// （如 UID）的哈希范围接收经过筛选的对象子集。
 	ShardedListAndWatch featuregate.Feature = "ShardedListAndWatch"
 
 	// owner: @serathius
 	//
-	// Enables APF to use size of objects for estimating request cost.
+	// 让 APF 根据对象大小估算请求成本。
 	SizeBasedListCostEstimate featuregate.Feature = "SizeBasedListCostEstimate"
 
 	// owner: @caesarxuchao @roycaihw
 	//
-	// Enable the storage version API.
+	// 启用存储版本 API。
 	StorageVersionAPI featuregate.Feature = "StorageVersionAPI"
 
 	// owner: @caesarxuchao
 	//
-	// Allow apiservers to expose the storage version hash in the discovery
-	// document.
+	// 允许 apiserver 在发现文档中公开存储版本哈希。
 	StorageVersionHash featuregate.Feature = "StorageVersionHash"
 
 	// owner: @aramase, @enj, @nabokihms
 	// kep: https://kep.k8s.io/3331
 	//
-	// Enables Egress Selector in Structured Authentication Configuration
+	// 在结构化认证配置中启用 Egress Selector。
 	StructuredAuthenticationConfigurationEgressSelector featuregate.Feature = "StructuredAuthenticationConfigurationEgressSelector"
 
 	// owner: @aramase, @enj, @nabokihms
 	// kep: https://kep.k8s.io/3331
 	//
-	// Enables JWKs metrics for Structured Authentication Configuration
+	// 为结构化认证配置启用 JWKs 指标。
 	StructuredAuthenticationConfigurationJWKSMetrics featuregate.Feature = "StructuredAuthenticationConfigurationJWKSMetrics"
 
 	// owner: @aramase
 	//
-	// Enables validation of service account UID in TokenRequest API.
-	//
-	// This feature gate is used to ensure that the UID provided in the TokenRequest
-	// matches the UID of the service account for which the token is being requested.
-	// It helps prevent misuse of the TokenRequest API by ensuring that tokens are only
-	// issued for the correct service account.
+	// 在 TokenRequest API 中校验服务账号 UID，确保所请求令牌的 UID
+	// 与目标服务账号一致，防止 API 被滥用于为错误账号签发令牌。
 	TokenRequestServiceAccountUIDValidation featuregate.Feature = "TokenRequestServiceAccountUIDValidation"
 
 	// owner: @enj
 	//
-	// Enables http2 DOS mitigations for unauthenticated clients.
-	//
 	// 默认开启以防御未认证客户端发起 HTTP/2 攻击；位于 L7 负载均衡之后
 	// 或私有网络中的集群可评估关闭，以避免连接复用性能回退。
 	//
-	// Some known reasons to disable these mitigations:
+	// 已知可考虑关闭这些防护措施的情形包括：
 	//
-	// An API server that is fronted by an L7 load balancer that is set up
-	// to mitigate http2 attacks may opt to disable this protection to prevent
-	// unauthenticated clients from disabling connection reuse between the load
-	// balancer and the API server (many incoming connections could share the
-	// same backend connection).
+	// API Server 位于已配置 HTTP/2 攻击防护的 L7 负载均衡之后时，可关闭此保护，
+	// 避免未认证客户端迫使负载均衡与 API Server 之间无法复用连接
+	// （多个入站连接本可共享同一个后端连接）。
 	//
-	// An API server that is on a private network may opt to disable this
-	// protection to prevent performance regressions for unauthenticated
-	// clients.
+	// API Server 位于私有网络时，也可关闭此保护，避免未认证客户端的性能回退。
 	UnauthenticatedHTTP2DOSMitigation featuregate.Feature = "UnauthenticatedHTTP2DOSMitigation"
 
 	// owner: @richabanker
 	//
-	// Proxies client to an apiserver capable of serving the request in the event of version skew.
+	// 版本偏斜时，将客户端代理到能够处理该请求的 apiserver。
 	UnknownVersionInteroperabilityProxy featuregate.Feature = "UnknownVersionInteroperabilityProxy"
 
 	// owner: @wojtek-t
 	//
-	// Enables post-start-hook for storage readiness
+	// 启用存储就绪的启动后钩子（post-start-hook）。
 	WatchCacheInitializationPostStartHook featuregate.Feature = "WatchCacheInitializationPostStartHook"
 
 	// owner: @p0lyn0mial
 	//
-	// Allow the API server to stream individual items instead of chunking
+	// 允许 API Server 逐条流式传输对象，而不是分块传输。
 	//
 	// 开启后 watch 事件逐条流式编码，减少大对象列表带来的内存峰值；
 	// 1.33 曾因 json/proto 编码器表现更佳而回退默认值。
@@ -319,15 +281,14 @@ const (
 
 	// owner: @p0lyn0mial
 	//
-	// Enables compression for WatchList responses
+	// 为 WatchList 响应启用压缩。
 	WatchListCompression featuregate.Feature = "WatchListCompression"
 
 	// owner: @aojea
 	// beta: v1.37
 	//
-	// Enables using a custom resolving RoundTripper to load-balance admission
-	// webhook requests across service endpoints instead of caching connections
-	// by service name.
+	// 使用自定义解析型 RoundTripper，在服务端点间均衡 admission webhook 请求，
+	// 不再按服务名称缓存连接。
 	WebhookRoundTripLoadBalancing featuregate.Feature = "WebhookRoundTripLoadBalancing"
 )
 
@@ -338,12 +299,10 @@ func init() {
 	runtime.Must(zpagesfeatures.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }
 
-// defaultVersionedKubernetesFeatureGates consists of all known Kubernetes-specific feature keys with VersionedSpecs.
-// To add a new feature, define a key for it above and add it here. The features will be
-// available throughout Kubernetes binaries.
+// defaultVersionedKubernetesFeatureGates 包含所有 Kubernetes 专属特性键及其版本化规格。
+// 新增特性时，需先在上方定义键，再在此登记；这些特性会用于所有 Kubernetes 二进制。
 //
-// Entries are alphabetized and separated from each other with blank lines to avoid sweeping gofmt changes
-// when adding or removing one entry.
+// 各条目按字母序排列，并以空行分隔，避免新增或删除条目时产生大范围 gofmt 差异。
 //
 // 每个门控按版本列出 (Version, Default, PreRelease)：门控的默认值随版本演进，
 // 同一二进制在不同 --emulated-version 下会得到不同的默认行为。
@@ -406,7 +365,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	DeclarativeValidation: {
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA and LockToDefault in 1.36, remove in 1.39
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 1.36 进入 GA 并锁定默认值，计划在 1.39 移除。
 	},
 
 	DeclarativeValidationBeta: {
@@ -517,7 +476,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	WatchList: {
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.32"), Default: true, PreRelease: featuregate.Beta},
-		// switch this back to false because the json and proto streaming encoders appear to work better.
+		// 1.33 改回 false，因为 json 与 proto 流式编码器的表现似乎更好。
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Beta},
 	},

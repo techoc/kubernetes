@@ -34,16 +34,15 @@ import (
 	apisharding "k8s.io/apimachinery/pkg/sharding"
 )
 
-// Parse parses a CEL-based shard selector expression into a Selector.
+// Parse 把基于 CEL 的分片选择器表达式解析为 Selector。
 //
-// The expression format is:
+// 表达式格式为：
 //
 //	shardRange(object.metadata.uid, '0x0', '0x8000000000000000')
 //	shardRange(object.metadata.uid, '0x0', '0x8000000000000000') || shardRange(...)
 //
-// Only the shardRange() function and || operator are permitted. The CEL
-// expression is parsed but never evaluated — the AST is walked to extract
-// shard range requirements.
+// 仅允许 shardRange() 函数与 || 运算符。CEL 表达式只解析、绝不求值——
+// 这里遍历 AST 以提取分片区间要求。
 //
 // 所有区间必须使用同一个字段，否则无法用单一分片键做一致性路由，直接报错。
 func Parse(expr string) (apisharding.Selector, error) {
@@ -53,7 +52,7 @@ func Parse(expr string) (apisharding.Selector, error) {
 	}
 
 	// 不注册任何宏，防止宏展开引入非预期的 AST 结构。
-	p, err := celparser.NewParser(celparser.Macros( /* no macros */ ))
+	p, err := celparser.NewParser(celparser.Macros( /* 不注册任何宏 */ ))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CEL parser: %w", err)
 	}
@@ -69,7 +68,7 @@ func Parse(expr string) (apisharding.Selector, error) {
 		return nil, err
 	}
 
-	// Validate that all requirements use the same field key.
+	// 校验所有要求使用同一字段键。
 	for i := 1; i < len(reqs); i++ {
 		if reqs[i].Key != reqs[0].Key {
 			return nil, fmt.Errorf("all shard ranges must use the same field, got %q and %q", reqs[0].Key, reqs[i].Key)
@@ -79,16 +78,15 @@ func Parse(expr string) (apisharding.Selector, error) {
 	return apisharding.NewSelector(reqs...), nil
 }
 
-// walkExpr recursively walks the CEL AST and extracts ShardRangeRequirement values.
-// The root expression must be either a shardRange() call or a chain of || operators
-// combining shardRange() calls.
+// walkExpr 递归遍历 CEL AST 并提取 ShardRangeRequirement。
+// 根表达式必须是 shardRange() 调用，或由 || 运算符串联的若干 shardRange() 调用。
 func walkExpr(e ast.Expr) ([]apisharding.ShardRangeRequirement, error) {
 	if e.Kind() == ast.CallKind {
 		call := e.AsCall()
 		fn := call.FunctionName()
 
 		if fn == operators.LogicalOr {
-			// _||_ operator: recurse into both sides
+			// || 运算符：递归处理两侧操作数
 			args := call.Args()
 			if len(args) != 2 {
 				return nil, fmt.Errorf("|| operator requires exactly 2 arguments")
@@ -119,41 +117,41 @@ func walkExpr(e ast.Expr) ([]apisharding.ShardRangeRequirement, error) {
 	return nil, fmt.Errorf("unexpected expression kind %v; expected shardRange() call or || operator", e.Kind())
 }
 
-// parseShardRangeCall extracts a ShardRangeRequirement from a shardRange(field, start, end) call.
+// parseShardRangeCall 从 shardRange(field, start, end) 调用中提取一个 ShardRangeRequirement。
 func parseShardRangeCall(call ast.CallExpr) (apisharding.ShardRangeRequirement, error) {
 	args := call.Args()
 	if len(args) != 3 {
 		return apisharding.ShardRangeRequirement{}, fmt.Errorf("shardRange() requires exactly 3 arguments, got %d", len(args))
 	}
 
-	// Arg 0: field path (select chain like object.metadata.uid)
+	// 参数 0：字段路径（形如 object.metadata.uid 的 select 链）
 	fieldPath, err := extractFieldPath(args[0])
 	if err != nil {
 		return apisharding.ShardRangeRequirement{}, fmt.Errorf("shardRange() first argument: %w", err)
 	}
 
-	// Validate field path
+	// 校验字段路径：
 	// 只允许能稳定映射到分片键的字段，避免出现无法按对象定位的分片。
 	switch fieldPath {
 	case "object.metadata.uid", "object.metadata.namespace":
-		// ok
+		// 命中受支持的分片键
 	default:
 		return apisharding.ShardRangeRequirement{}, fmt.Errorf("unsupported field path %q; supported: object.metadata.uid, object.metadata.namespace", fieldPath)
 	}
 
-	// Arg 1: hex start (string literal)
+	// 参数 1：十六进制区间起点（字符串字面量）
 	hexStart, err := extractHexLiteral(args[1], "hexStart")
 	if err != nil {
 		return apisharding.ShardRangeRequirement{}, err
 	}
 
-	// Arg 2: hex end (string literal)
+	// 参数 2：十六进制区间终点（字符串字面量）
 	hexEnd, err := extractHexLiteral(args[2], "hexEnd")
 	if err != nil {
 		return apisharding.ShardRangeRequirement{}, err
 	}
 
-	// Validate start < end using the canonical hex comparison.
+	// 用规范的十六进制比较校验 start < end。
 	if !apisharding.HexLess(hexStart, hexEnd) {
 		return apisharding.ShardRangeRequirement{}, fmt.Errorf("shard range start %s must be less than end %s", hexStart, hexEnd)
 	}
@@ -165,7 +163,7 @@ func parseShardRangeCall(call ast.CallExpr) (apisharding.ShardRangeRequirement, 
 	}, nil
 }
 
-// extractFieldPath walks a select chain (object.metadata.uid) and returns the dot-joined path.
+// extractFieldPath 遍历 select 链（object.metadata.uid）并返回以点连接的路径。
 func extractFieldPath(e ast.Expr) (string, error) {
 	switch e.Kind() {
 	case ast.IdentKind:
@@ -182,8 +180,8 @@ func extractFieldPath(e ast.Expr) (string, error) {
 	}
 }
 
-// extractHexLiteral extracts a hex string from a CEL string literal.
-// The literal must be a single-quoted string like '0xff' with a 0x prefix.
+// extractHexLiteral 从 CEL 字符串字面量中提取十六进制字符串。
+// 字面量必须是带 0x 前缀的单引号字符串，例如 '0xff'。
 //
 // 严格要求 16 位十六进制，使区间边界可以直接按无符号 64 位整数比较；
 // 唯一例外是 2^64（17 位），用作开区间上界。
@@ -217,8 +215,8 @@ func extractHexLiteral(e ast.Expr, name string) (string, error) {
 		}
 	}
 
-	// Require exactly 16 hex digits, except for the special case
-	// "0x10000000000000000" (2^64) which is the exclusive upper bound.
+	// 必须恰好 16 位十六进制；唯一例外是开区间上界
+	// "0x10000000000000000"（即 2^64）。
 	if len(hex) == 17 {
 		if s != "0x10000000000000000" {
 			return "", fmt.Errorf("%s: 17-digit hex value must be '0x10000000000000000' (2^64), got %q", name, s)

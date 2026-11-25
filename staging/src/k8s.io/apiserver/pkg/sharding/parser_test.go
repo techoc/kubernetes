@@ -91,8 +91,6 @@ func TestParse(t *testing.T) {
 				{Key: "object.metadata.uid", Start: "0x0000000000000000", End: "0x8000000000000000"},
 			},
 		},
-		// Error cases
-		//
 		// 错误用例分四类：十六进制格式（缺 0x、空值、超长、非法字符、位数不足）、
 		// 不支持的字段/函数、越界语法（&&、比较、嵌套调用、参数个数）、
 		// 区间语义非法（起点等于或大于终点）。
@@ -235,7 +233,7 @@ func TestParseRoundTrip(t *testing.T) {
 			if output != input {
 				t.Errorf("Parse(%q).String() = %q, want %q", input, output, input)
 			}
-			// Round-trip — parse(string(parse(input))) should be stable.
+			// 往返校验：parse(string(parse(input))) 的结果应当稳定。
 			sel2, err := Parse(output)
 			if err != nil {
 				t.Fatalf("Parse(%q) (round-trip) error: %v", output, err)

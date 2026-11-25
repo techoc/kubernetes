@@ -24,71 +24,71 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// UsageStatsOptions is an options structs that describes how stats should be calculated
+// UsageStatsOptions 是描述用量统计方式的选项结构体。
 // UsageStatsOptions 描述统计口径：命名空间、作用域与资源集合共同决定哪些对象
 // 会被计入用量。
 type UsageStatsOptions struct {
-	// Namespace where stats should be calculate
+	// 统计所在的命名空间。
 	Namespace string
-	// Scopes that must match counted objects
+	// 被计入的对象必须匹配的作用域。
 	Scopes []corev1.ResourceQuotaScope
-	// Resources are the set of resources to include in the measurement
+	// 计入测量的资源集合。
 	Resources     []corev1.ResourceName
 	ScopeSelector *corev1.ScopeSelector
 }
 
-// UsageStats is result of measuring observed resource use in the system
+// UsageStats 是系统中已观察资源用量的测量结果。
 type UsageStats struct {
-	// Used maps resource to quantity used
+	// 资源到已用数量的映射。
 	Used corev1.ResourceList
 }
 
-// Evaluator knows how to evaluate quota usage for a particular group resource
+// Evaluator 知道如何评估特定组资源的配额用量。
 // Evaluator 是每种资源类型（如 pods、services）的用量计算插件。
 type Evaluator interface {
-	// Constraints ensures that each required resource is present on item
+	// Constraints 确保对象的每个必需资源都存在。
 	Constraints(required []corev1.ResourceName, item runtime.Object) error
-	// GroupResource returns the groupResource that this object knows how to evaluate
+	// GroupResource 返回此评估器能够处理的组资源。
 	GroupResource() schema.GroupResource
-	// Handles determines if quota could be impacted by the specified attribute.
-	// If true, admission control must perform quota processing for the operation, otherwise it is safe to ignore quota.
+	// Handles 判断指定操作是否可能影响配额。返回 true 时，准入控制必须执行配额处理；
+	// 返回 false 时，可以安全地忽略该操作的配额。
 	Handles(operation admission.Attributes) bool
-	// Matches returns true if the specified quota matches the input item
+	// Matches 在指定配额匹配输入对象时返回 true。
 	Matches(resourceQuota *corev1.ResourceQuota, item runtime.Object) (bool, error)
-	// MatchingScopes takes the input specified list of scopes and input object and returns the set of scopes that matches input object.
+	// MatchingScopes 返回给定作用域列表中与输入对象匹配的作用域。
 	MatchingScopes(item runtime.Object, scopes []corev1.ScopedResourceSelectorRequirement) ([]corev1.ScopedResourceSelectorRequirement, error)
-	// UncoveredQuotaScopes takes the input matched scopes which are limited by configuration and the matched quota scopes. It returns the scopes which are in limited scopes but don't have a corresponding covering quota scope
+	// UncoveredQuotaScopes 返回受配置限制、但没有对应覆盖配额作用域的作用域。
 	UncoveredQuotaScopes(limitedScopes []corev1.ScopedResourceSelectorRequirement, matchedQuotaScopes []corev1.ScopedResourceSelectorRequirement) ([]corev1.ScopedResourceSelectorRequirement, error)
-	// MatchingResources takes the input specified list of resources and returns the set of resources evaluator matches.
+	// MatchingResources 返回输入资源列表中与评估器匹配的资源。
 	MatchingResources(input []corev1.ResourceName) []corev1.ResourceName
-	// Usage returns the resource usage for the specified object
+	// Usage 返回指定对象的资源用量。
 	Usage(item runtime.Object) (corev1.ResourceList, error)
-	// UsageStats calculates latest observed usage stats for all objects
+	// UsageStats 计算所有对象的最新观察用量。
 	UsageStats(options UsageStatsOptions) (UsageStats, error)
 }
 
-// Configuration defines how the quota system is configured.
+// Configuration 定义配额系统的配置方式。
 // Configuration 提供准入控制器所需的静态配置：忽略资源与评估器集合。
 type Configuration interface {
-	// IgnoredResources are ignored by quota.
+	// IgnoredResources 返回配额忽略的资源。
 	IgnoredResources() map[schema.GroupResource]struct{}
-	// Evaluators for quota evaluation.
+	// Evaluators 返回用于配额评估的评估器。
 	Evaluators() []Evaluator
 }
 
-// Registry maintains a list of evaluators
+// Registry 维护评估器列表。
 // Registry 把 GroupResource 映射到 Evaluator；实现需保证并发安全。
 type Registry interface {
-	// Add to registry
+	// Add 将评估器加入注册表。
 	Add(e Evaluator)
-	// Remove from registry
+	// Remove 从注册表移除评估器。
 	Remove(e Evaluator)
-	// Get by group resource
+	// Get 按组资源获取评估器。
 	Get(gr schema.GroupResource) Evaluator
-	// List from registry
+	// List 返回注册表中的评估器。
 	List() []Evaluator
 }
 
-// ListerForResourceFunc knows how to get a lister for a specific resource
+// ListerForResourceFunc 知道如何获取指定资源的 lister。
 // 评估器借助它从 informer 缓存读取对象，用于批量计算已用量。
 type ListerForResourceFunc func(schema.GroupVersionResource) (cache.GenericLister, error)

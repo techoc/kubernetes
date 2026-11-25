@@ -23,17 +23,17 @@ import (
 	quota "k8s.io/apiserver/pkg/quota/v1"
 )
 
-// implements a basic registry
+// 实现基础评估器注册表。
 //
 // simpleRegistry 是 Evaluator 的进程内注册表，按 GroupResource 唯一索引；
 // 读写锁允许高频的 Get 与低频的 Add/Remove 并发。
 type simpleRegistry struct {
 	lock sync.RWMutex
-	// evaluators tracked by the registry
+	// 注册表跟踪的评估器。
 	evaluators map[schema.GroupResource]quota.Evaluator
 }
 
-// NewRegistry creates a simple registry with initial list of evaluators
+// NewRegistry 根据初始评估器列表创建简单注册表。
 // 初始列表按 GroupResource 去重，后出现的条目覆盖先出现的。
 func NewRegistry(evaluators []quota.Evaluator) quota.Registry {
 	return &simpleRegistry{
@@ -70,7 +70,7 @@ func (r *simpleRegistry) List() []quota.Evaluator {
 	return evaluatorsList(r.evaluators)
 }
 
-// evaluatorsByGroupResource converts a list of evaluators to a map by group resource.
+// evaluatorsByGroupResource 把评估器列表转换为按组资源索引的映射。
 // 重复条目按“后者胜出”处理，与 Add 的覆盖语义保持一致。
 func evaluatorsByGroupResource(items []quota.Evaluator) map[schema.GroupResource]quota.Evaluator {
 	result := map[schema.GroupResource]quota.Evaluator{}
@@ -80,7 +80,7 @@ func evaluatorsByGroupResource(items []quota.Evaluator) map[schema.GroupResource
 	return result
 }
 
-// evaluatorsList converts a map of evaluators to list
+// evaluatorsList 把评估器映射转换为列表。
 func evaluatorsList(input map[schema.GroupResource]quota.Evaluator) []quota.Evaluator {
 	var result []quota.Evaluator
 	for _, item := range input {

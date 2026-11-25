@@ -30,16 +30,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Client has the methods required to update the storage version.
-// 只暴露更新所需的最小方法集，便于测试替换。
+// Client 只暴露更新 storage version 所需的最小方法集，便于测试替换。
 type Client interface {
 	Create(context.Context, *v1alpha1.StorageVersion, metav1.CreateOptions) (*v1alpha1.StorageVersion, error)
 	UpdateStatus(context.Context, *v1alpha1.StorageVersion, metav1.UpdateOptions) (*v1alpha1.StorageVersion, error)
 	Get(context.Context, string, metav1.GetOptions) (*v1alpha1.StorageVersion, error)
 }
 
-// SetCommonEncodingVersion updates the CommonEncodingVersion and the AllEncodingVersionsEqual
-// condition based on the StorageVersions.
+// SetCommonEncodingVersion 依据 StorageVersions 更新 CommonEncodingVersion
+// 以及 AllEncodingVersionsEqual 条件。
 //
 // 公共编码版本取所有实例编码版本的“交集”——只有全部实例一致时才设置；
 // 任一实例不同就清空，迫使调用方继续使用可解码的版本。
@@ -96,14 +95,12 @@ func findStatusCondition(conditions []v1alpha1.StorageVersionCondition,
 	return nil
 }
 
-// setStatusCondition sets the corresponding condition in conditions to newCondition.
-// conditions must be non-nil.
-//  1. if the condition of the specified type already exists: all fields of the existing condition are updated to
-//     newCondition, LastTransitionTime is set to now if the new status differs from the old status
-//  2. if a condition of the specified type does not exist: LastTransitionTime is set to now() if unset,
-//     and newCondition is appended
+// setStatusCondition 把 conditions 中对应类型的条件设置为 newCondition，conditions 不可为 nil。
+//  1. 指定类型的条件已存在：用 newCondition 覆盖其全部字段；若新旧状态不同，
+//     把 LastTransitionTime 设为当前时间
+//  2. 指定类型的条件不存在：若 LastTransitionTime 未设置则置为当前时间，并追加 newCondition
 //
-// NOTE: forceTransition allows overwriting LastTransitionTime even when the status doesn't change.
+// 注意：forceTransition 允许在状态未变化时仍然覆盖 LastTransitionTime。
 func setStatusCondition(conditions *[]v1alpha1.StorageVersionCondition, newCondition v1alpha1.StorageVersionCondition,
 	forceTransition bool) {
 	if conditions == nil {
@@ -129,7 +126,7 @@ func setStatusCondition(conditions *[]v1alpha1.StorageVersionCondition, newCondi
 	existingCondition.ObservedGeneration = newCondition.ObservedGeneration
 }
 
-// updateStorageVersionFor updates the storage version object for the resource.
+// updateStorageVersionFor 更新该资源的 storage version 对象。
 //
 // 有限重试（3 次）：StorageVersion 是集群级共享对象，多 apiserver 并发
 // 更新时冲突很常见，但不应无限重试拖慢启动。
@@ -177,7 +174,7 @@ func singleUpdate(c Client, apiserverID string, gr schema.GroupResource, encodin
 		if err != nil {
 			return err
 		}
-		// assign the calculated status to the object just created, then update status
+		// 把计算出的 status 赋给刚创建的对象，然后更新 status
 		createdSV.Status = updatedSV.Status
 		_, err = c.UpdateStatus(context.TODO(), createdSV, metav1.UpdateOptions{})
 		return err
@@ -186,8 +183,8 @@ func singleUpdate(c Client, apiserverID string, gr schema.GroupResource, encodin
 	return err
 }
 
-// localUpdateStorageVersion updates the input storageversion with given server storageversion info.
-// The function updates the input storageversion in place.
+// localUpdateStorageVersion 用给定 server 的 storageversion 信息更新入参 storageversion，
+// 该函数就地修改入参对象。
 //
 // 以 apiserverID 为键做 upsert：同一实例重启后只更新自己的条目，
 // 不会把其它实例的信息覆盖掉。

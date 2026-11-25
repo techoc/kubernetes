@@ -64,7 +64,7 @@ func TestCachedHasSynced(t *testing.T) {
 		t.Fatal("expected true")
 	}
 	if called != 3 {
-		// no more calls once we return true
+		// 返回 true 后不再调用底层函数。
 		t.Fatalf("expected called=3, got %d", called)
 	}
 }
