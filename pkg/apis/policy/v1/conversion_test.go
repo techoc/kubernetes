@@ -20,8 +20,6 @@ import (
 	"reflect"
 	"testing"
 
-	"math/rand"
-
 	"k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"
 	metafuzzer "k8s.io/apimachinery/pkg/apis/meta/fuzzer"
@@ -29,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/kubernetes/pkg/apis/policy"
 	internalfuzzer "k8s.io/kubernetes/pkg/apis/policy/fuzzer"
+	"math/rand"
 )
 
 func TestEvictionMemoryIdenticalConversion(t *testing.T) {

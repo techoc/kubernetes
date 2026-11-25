@@ -24,9 +24,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"net/http"
-	"net/http/httptest"
-
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,6 +39,8 @@ import (
 	clientfeaturestesting "k8s.io/client-go/features/testing"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"net/http"
+	"net/http/httptest"
 )
 
 // triggerFunc 在测试中修改 fake dynamic client 来产生 informer 事件。

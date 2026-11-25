@@ -17,9 +17,8 @@ limitations under the License.
 package lists
 
 import (
-	"testing"
-
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"testing"
 )
 
 // Test 验证 +k8s:ifEnabled/ifDisabled 包裹 listType=map 重复校验与

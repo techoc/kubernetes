@@ -22,9 +22,8 @@ import (
 	"fmt"
 	"time"
 
-	"unsafe"
-
 	"golang.org/x/sys/unix"
+	"unsafe"
 
 	"k8s.io/klog/v2"
 )

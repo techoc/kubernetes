@@ -18,11 +18,10 @@ package mutation
 
 import (
 	"fmt"
-	"reflect"
-
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"reflect"
 )
 
 // jsonPatchType 是所有 JSONPatch 值共享的类型对象，作为 CEL 类型系统中的单例。

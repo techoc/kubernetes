@@ -17,11 +17,10 @@ limitations under the License.
 package internalversion
 
 import (
+	api "k8s.io/kubernetes/pkg/apis/core"
 	"reflect"
 	"sort"
 	"testing"
-
-	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
 // TestSortableResourceNamesSorting 验证 SortableResourceNames 可按字典序原地排序，

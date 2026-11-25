@@ -17,9 +17,8 @@ limitations under the License.
 package eviction
 
 import (
-	"time"
-
 	"k8s.io/klog/v2"
+	"time"
 )
 
 const (

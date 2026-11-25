@@ -17,9 +17,8 @@ limitations under the License.
 package v1
 
 import (
-	"testing"
-
 	"k8s.io/klog/v2/ktesting"
+	"testing"
 )
 
 // TestTolerationToleratesTaint 验证 Toleration 在各类 key/effect/operator/value

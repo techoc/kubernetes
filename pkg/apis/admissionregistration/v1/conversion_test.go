@@ -17,11 +17,10 @@ limitations under the License.
 package v1_test
 
 import (
+	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 	"math/rand"
 	"reflect"
 	"testing"
-
-	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 
 	extv1 "k8s.io/api/admissionregistration/v1"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"

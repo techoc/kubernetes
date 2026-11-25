@@ -17,10 +17,9 @@ limitations under the License.
 package discriminators
 
 import (
-	"testing"
-
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
+	"testing"
 )
 
 // Test 验证 +k8s:ifEnabled/ifDisabled 包裹 discriminator 校验时，

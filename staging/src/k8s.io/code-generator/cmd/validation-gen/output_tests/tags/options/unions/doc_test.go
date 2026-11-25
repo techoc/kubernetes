@@ -17,9 +17,8 @@ limitations under the License.
 package unions
 
 import (
-	"testing"
-
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"testing"
 )
 
 // Test 验证 ifEnabled/ifDisabled 条件作用在 union、zeroOrOneOf 及其列表项上：

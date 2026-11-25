@@ -67,7 +67,7 @@ func LoadManifests[T metav1.Object](
 			return nil, "", fmt.Errorf("error loading %s: %w", fd.FilePath, err)
 		}
 
-		items, err := acceptFileObject[T](obj, fd.FilePath, seenNames, decoder, acceptObject)
+		items, err := acceptFileObject(obj, fd.FilePath, seenNames, decoder, acceptObject)
 		if err != nil {
 			return nil, "", fmt.Errorf("error loading %s: %w", fd.FilePath, err)
 		}
@@ -99,7 +99,7 @@ func acceptFileObject[T metav1.Object](
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode list item: %w", err)
 			}
-			items, err := acceptFileObject[T](itemObj, filePath, seenNames, decoder, acceptObject)
+			items, err := acceptFileObject(itemObj, filePath, seenNames, decoder, acceptObject)
 			if err != nil {
 				return nil, err
 			}

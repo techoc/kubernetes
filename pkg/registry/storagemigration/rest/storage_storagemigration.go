@@ -67,7 +67,7 @@ func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorag
 			storage[resource] = svm
 			storage[resource+"/status"] = svmStatus
 		} else {
-			klog.Warning("StorageVersionMigrator 特性门控未启用，因此不会注册 StorageVersionMigration 存储")
+			klog.Warning("StorageVersionMigrator storage is disabled because the StorageVersionMigrator feature gate is disabled")
 		}
 	}
 
@@ -87,7 +87,7 @@ func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.API
 			storage[resource] = svm
 			storage[resource+"/status"] = svmStatus
 		} else {
-			klog.Warning("StorageVersionMigrator 特性门控未启用，因此不会注册 StorageVersionMigration 存储")
+			klog.Warning("StorageVersionMigrator storage is disabled because the StorageVersionMigrator feature gate is disabled")
 		}
 	}
 

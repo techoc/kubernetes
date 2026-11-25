@@ -19,10 +19,9 @@ limitations under the License.
 package pluginwatcher
 
 import (
-	"os"
-
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/kubernetes/pkg/kubelet/util"
+	"os"
 )
 
 // getStat 获取事件对应路径的文件信息。

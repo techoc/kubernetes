@@ -17,10 +17,9 @@ limitations under the License.
 package topology
 
 import (
-	"testing"
-
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"testing"
 )
 
 // Test_GetZoneKey 覆盖 GetZoneKey 的两组关键行为：旧 beta 标签与新 GA 标签共存时的

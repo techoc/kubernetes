@@ -17,11 +17,10 @@ limitations under the License.
 package library
 
 import (
-	"strings"
-
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"strings"
 )
 
 // JSONPatch 提供 JSONPatch 相关的 CEL 函数库。

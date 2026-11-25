@@ -31,32 +31,6 @@ import (
 	"k8s.io/kubernetes/third_party/forked/gonum/graph/simple"
 )
 
-// Graph 维护一个有向无环图，表示 Kubernetes 资源到 Node 的依赖关系。
-// 所有边都指向 Node 顶点，方向为：资源 -> ... -> Node。
-// 用于 Node 授权器快速判断某个资源是否与指定节点关联。
-//
-// 图的边方向示例：
-//
-//	node <- pod
-//	pod  <- secret,configmap,pvc
-//	pvc  <- pv
-//	pv   <- secret
-//
-// 当 kubelet 请求访问某个资源时，授权器在图中查找从该资源到 kubelet 所在节点的路径。
-// 如果存在路径，则允许访问；否则拒绝。
-type Graph struct {
-	lock sync.RWMutex // 保护图的并发访问
-	// graph.SetEdge 仅允许由 Graph.addEdgeLocked 调用，以确保边和索引同步更新。
-	graph *simple.DirectedAcyclicGraph // 底层有向无环图实现
-	// vertices 按 类型 -> 命名空间 -> 名称 -> 顶点 组织，用于快速查找。
-	vertices map[vertexType]namespaceVertexMapping // 快速查找顶点：类型 -> 命名空间 -> 名称 -> 顶点
-
-	// destinationEdgeIndex 保存 顶点 -> 可达目标 Node ID 集合 的映射。
-	destinationEdgeIndex map[int]*intSet // 优化：缓存每个顶点可达的 Node ID 集合，避免重复 DFS
-	// destinationEdgeThreshold 是维护索引所需的最少不同目标 ID 数。
-	destinationEdgeThreshold int // 只有当顶点的出边数超过此阈值时，才维护 destinationEdgeIndex（节省内存）
-}
-
 // namedVertex 实现 graph.Node 接口，表示图中一个 API 对象的顶点。
 // 记录对象的类型、命名空间和名称，用于在图中定位和标识资源。
 type namedVertex struct {
@@ -100,6 +74,32 @@ func (e *destinationEdge) From() graph.Node   { return e.F }
 func (e *destinationEdge) To() graph.Node     { return e.T }
 func (e *destinationEdge) Weight() float64    { return 0 }
 func (e *destinationEdge) DestinationID() int { return e.Destination.ID() }
+
+// Graph 维护一个有向无环图，表示 Kubernetes 资源到 Node 的依赖关系。
+// 所有边都指向 Node 顶点，方向为：资源 -> ... -> Node。
+// 用于 Node 授权器快速判断某个资源是否与指定节点关联。
+//
+// 图的边方向示例：
+//
+//	node <- pod
+//	pod  <- secret,configmap,pvc
+//	pvc  <- pv
+//	pv   <- secret
+//
+// 当 kubelet 请求访问某个资源时，授权器在图中查找从该资源到 kubelet 所在节点的路径。
+// 如果存在路径，则允许访问；否则拒绝。
+type Graph struct {
+	lock sync.RWMutex // 保护图的并发访问
+	// graph.SetEdge 仅允许由 Graph.addEdgeLocked 调用，以确保边和索引同步更新。
+	graph *simple.DirectedAcyclicGraph // 底层有向无环图实现
+	// vertices 按 类型 -> 命名空间 -> 名称 -> 顶点 组织，用于快速查找。
+	vertices map[vertexType]namespaceVertexMapping // 快速查找顶点：类型 -> 命名空间 -> 名称 -> 顶点
+
+	// destinationEdgeIndex 保存 顶点 -> 可达目标 Node ID 集合 的映射。
+	destinationEdgeIndex map[int]*intSet // 优化：缓存每个顶点可达的 Node ID 集合，避免重复 DFS
+	// destinationEdgeThreshold 是维护索引所需的最少不同目标 ID 数。
+	destinationEdgeThreshold int // 只有当顶点的出边数超过此阈值时，才维护 destinationEdgeIndex（节省内存）
+}
 
 // namespaceVertexMapping 表示 命名空间 -> 名称 -> 顶点 的映射
 type namespaceVertexMapping map[string]nameVertexMapping
