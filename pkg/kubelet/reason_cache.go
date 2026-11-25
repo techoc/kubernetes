@@ -32,8 +32,8 @@ import (
 //  2. 使用 LRU 缓存避免额外的垃圾回收工作，
 //     因此部分条目可能在 Pod 删除前就被回收。
 //
-// TODO(random-liu): Use more reliable cache which could collect garbage of failed pod.
-// TODO(random-liu): Move reason cache to somewhere better.
+// TODO(random-liu): 使用更可靠的缓存，以便回收失败 Pod 的条目。
+// TODO(random-liu): 将原因缓存迁移到更合适的位置。
 type ReasonCache struct {
 	cache *lru.Cache
 }

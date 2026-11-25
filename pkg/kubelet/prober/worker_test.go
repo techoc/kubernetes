@@ -90,17 +90,17 @@ func TestDoProbe(t *testing.T) {
 			expectedResult       results.Result
 			setDeletionTimestamp bool
 		}{
-			{ // No status.
+			{ // 无状态。
 				expectContinue: map[string]bool{
 					liveness.String():  true,
 					readiness.String(): true,
 					startup.String():   true,
 				},
 			},
-			{ // Pod failed
+			{ // Pod 失败
 				podStatus: &failedStatus,
 			},
-			{ // Pod deletion
+			{ // Pod 删除
 				podStatus:            &runningStatus,
 				setDeletionTimestamp: true,
 				expectSet:            true,
@@ -109,7 +109,7 @@ func TestDoProbe(t *testing.T) {
 				},
 				expectedResult: results.Success,
 			},
-			{ // No container status
+			{ // 无容器状态
 				podStatus: &otherStatus,
 				expectContinue: map[string]bool{
 					liveness.String():  true,
@@ -117,7 +117,7 @@ func TestDoProbe(t *testing.T) {
 					startup.String():   true,
 				},
 			},
-			{ // Container waiting
+			{ // 容器等待中
 				podStatus: &pendingStatus,
 				expectContinue: map[string]bool{
 					liveness.String():  true,
@@ -127,12 +127,12 @@ func TestDoProbe(t *testing.T) {
 				expectSet:      true,
 				expectedResult: results.Failure,
 			},
-			{ // Container terminated
+			{ // 容器已终止
 				podStatus:      &terminatedStatus,
 				expectSet:      true,
 				expectedResult: results.Failure,
 			},
-			{ // Probe successful.
+			{ // 探测成功。
 				podStatus: &runningStatus,
 				expectContinue: map[string]bool{
 					liveness.String():  true,
@@ -142,7 +142,7 @@ func TestDoProbe(t *testing.T) {
 				expectSet:      true,
 				expectedResult: results.Success,
 			},
-			{ // Initial delay passed
+			{ // 初始延迟已结束
 				podStatus: &runningStatus,
 				probe: v1.Probe{
 					InitialDelaySeconds: -100,
@@ -921,7 +921,7 @@ func TestChangeContainerStatusOnKubeletRestart(t *testing.T) {
 		initialValue   results.Result
 		expectSet      bool
 		isSidecar      bool
-		expectedResult results.Result // only checked if expectSet is true
+		expectedResult results.Result // 仅在 expectSet 为 true 时检查
 	}{
 		{
 			name:           "feature enabled, is restart, readiness",
@@ -1046,7 +1046,7 @@ func TestChangeContainerStatusOnKubeletRestart(t *testing.T) {
 			initialValue:   results.Unknown,
 			expectSet:      true,
 			isSidecar:      true,
-			expectedResult: results.Success, // Sidecars get Success, not initialValue
+			expectedResult: results.Success, // Sidecar 使用 Success，而不是 initialValue
 		},
 		{
 			name:           "feature disabled, is restart, liveness, sidecar",
@@ -1054,7 +1054,7 @@ func TestChangeContainerStatusOnKubeletRestart(t *testing.T) {
 			isRestart:      true,
 			probeType:      liveness,
 			initialValue:   results.Success,
-			expectSet:      false, // Readiness/liveness probes not set for sidecars on restart
+			expectSet:      false, // Sidecar 重启后未设置就绪/存活探针
 			isSidecar:      true,
 		},
 		{
@@ -1063,7 +1063,7 @@ func TestChangeContainerStatusOnKubeletRestart(t *testing.T) {
 			isRestart:      true,
 			probeType:      readiness,
 			initialValue:   results.Failure,
-			expectSet:      false, // Readiness/liveness probes not set for sidecars on restart
+			expectSet:      false, // Sidecar 重启后未设置就绪/存活探针
 			isSidecar:      true,
 		},
 	}

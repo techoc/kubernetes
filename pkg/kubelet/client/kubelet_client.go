@@ -95,7 +95,7 @@ func makeTransport(config *KubeletClientConfig, insecureSkipTLSVerify bool) (htt
 	if insecureSkipTLSVerify {
 		// 忽略证书校验时清空 CA 文件，避免同时存在两种校验配置。
 		transportConfig.TLS.Insecure = true
-		transportConfig.TLS.CAFile = "" // we are only using files so we can ignore CAData
+		transportConfig.TLS.CAFile = "" // 仅使用文件，因此可以忽略 CAData
 	}
 
 	// 配置了 egress selector 时通过它获取拨号器（如 Konnectivity）。

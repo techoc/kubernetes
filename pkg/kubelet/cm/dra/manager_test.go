@@ -1324,7 +1324,7 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="PrepareRe
 				features.DRAExtendedResource:       true,
 				features.DRAConsumableCapacity:     true,
 				features.DRAWorkloadResourceClaims: test.draWorkloadResourceClaimsEnabled,
-				features.GenericWorkload:           test.draWorkloadResourceClaimsEnabled, // dependency of DRAWorkloadResourceClaims
+				features.GenericWorkload:           test.draWorkloadResourceClaimsEnabled, // DRAWorkloadResourceClaims 的依赖项。
 			})
 			err = manager.PrepareResources(backgroundCtx, test.pod)
 
@@ -1335,13 +1335,13 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="PrepareRe
 				if err != nil {
 					assert.ErrorContains(t, err, test.expectedErrMsg)
 				}
-				return // PrepareResources returned an error so stopping the test case here
+				return // PrepareResources 返回错误，因此停止当前测试用例。
 			}
 
 			require.NoError(t, err)
 
 			if test.wantResourceSkipped {
-				return // resource skipped so no need to continue
+				return // 资源被跳过，无需继续。
 			}
 
 			// 校验缓存中包含预期的 claim info
@@ -1739,7 +1739,7 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="Unprepare
 				if err != nil {
 					assert.ErrorContains(t, err, test.expectedErrMsg)
 				}
-				return // PrepareResources returned an error so stopping the test case here
+				return // PrepareResources 返回错误，因此停止当前测试用例。
 			}
 
 			require.NoError(t, err)
@@ -1758,7 +1758,7 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="Unprepare
 						assert.True(t, cachedClaim.PodUIDs.Has(uid), "other pod UID %q must still reference the claim", uid)
 					}
 				}
-				return // resource skipped so no need to continue
+				return // 资源被跳过，无需继续。
 			}
 
 			// 仅在 unprepare 成功时才应清理缓存
@@ -1917,14 +1917,14 @@ func TestParallelPrepareUnprepareResources(t *testing.T) {
 	}
 
 	// 并行调用 PrepareResources
-	var wgSync, wgStart sync.WaitGroup // groups to sync goroutines
+	var wgSync, wgStart sync.WaitGroup // 用于同步 goroutine 的分组。
 	numGoroutines := 30
 	wgSync.Add(numGoroutines)
 	wgStart.Add(1)
 	for i := 0; i < numGoroutines; i++ {
 		go func(t *testing.T, goRoutineNum int) {
 			defer wgSync.Done()
-			wgStart.Wait() // Wait to start all goroutines at the same time
+			wgStart.Wait() // 等待所有 goroutine 同时启动。
 
 			var err error
 			claimName := fmt.Sprintf("test-pod-claim-%d", goRoutineNum)
@@ -1982,8 +1982,8 @@ func TestParallelPrepareUnprepareResources(t *testing.T) {
 
 		}(t, i)
 	}
-	wgStart.Done() // Start executing goroutines
-	wgSync.Wait()  // Wait for all goroutines to finish
+	wgStart.Done() // 开始执行 goroutine。
+	wgSync.Wait()  // 等待所有 goroutine 完成。
 }
 
 // TestHandleWatchResourcesStream 验证 manager 处理 DRA 插件 WatchResources 流
@@ -2488,7 +2488,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 // TestUpdateAllocatedResourcesStatus 验证 manager 能根据不同类型的 DRA claim
 // 正确地把健康信息写入 PodStatus。
 // 覆盖以下几类在 e2e 环境中因时序问题难以稳定测试的主要场景：
-//  1. 直接 claim：Pod 中的 resource claim 名与 ResourceClaim 对象名一致；
+//  1. 直接声明：Pod 中的 resource claim 名与 ResourceClaim 对象名一致；
 //  2. 重命名 claim：Pod 使用本地名引用对象名不同的 ResourceClaim；
 //  3. 模板化 claim：claim 由模板生成，Pod 状态中保存动态生成的 claim 名。
 func TestUpdateAllocatedResourcesStatus(t *testing.T) {

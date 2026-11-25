@@ -49,7 +49,7 @@ type PodDevicesEntry struct {
 }
 
 // checkpointData 用于在 checkpoint 文件中保存 Pod 到设备的分配信息。
-// TODO: add version control when we need to change checkpoint format.
+// TODO：需要变更 checkpoint 格式时增加版本控制。
 type checkpointData struct {
 	PodDeviceEntries  []PodDevicesEntry
 	RegisteredDevices map[string][]string

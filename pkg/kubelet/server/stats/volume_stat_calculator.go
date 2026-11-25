@@ -47,7 +47,9 @@ type volumeStatCalculator struct {
 
 // PodVolumeStats 封装 Pod 的卷统计，分别包含本地临时卷与持久卷两个列表。
 type PodVolumeStats struct {
-	EphemeralVolumes  []stats.VolumeStats
+	// EphemeralVolumes 保存本地临时卷的统计。
+	EphemeralVolumes []stats.VolumeStats
+	// PersistentVolumes 保存持久卷的统计。
 	PersistentVolumes []stats.VolumeStats
 }
 

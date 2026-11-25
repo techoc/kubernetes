@@ -47,5 +47,5 @@ type ImageManager interface {
 	// EnsureImageExists 确保 requestedImage 指定的镜像存在，必要时触发拉取。
 	EnsureImageExists(ctx context.Context, objRef *v1.ObjectReference, pod *v1.Pod, requestedImage string, pullSecrets []v1.Secret, podSandboxConfig *runtimeapi.PodSandboxConfig, podRuntimeHandler string, pullPolicy v1.PullPolicy) (imageRef, message string, err error)
 
-	// TODO(ronl): consolidating image managing and deleting operation in this interface
+	// TODO(ronl): 整合该接口中的镜像管理与删除操作。
 }

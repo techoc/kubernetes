@@ -1631,8 +1631,8 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 			},
 			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),       // Pod spec 4 CPU（容器未设请求，回退到 Pod 级；DRA 不改变该行为）
 			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // Pod spec 4 CPU（容器未设上限，回退到 Pod 级；DRA 不改变该行为）
-			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 1Gi
-			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)},   // 继承 Pod spec 的 4Mi
+			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 为 1Gi
+			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)},   // Pod spec 为 4Mi
 		},
 		{
 			name:               "container limits omitted + pod level limits omitted + DRA allocations",
@@ -1657,7 +1657,7 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 			name:                "container limits specified + no DRA allocations",
 			draNodeAllocatable:  true,
 			containerLimits:     v1.ResourceList{v1.ResourceCPU: resource.MustParse("2"), v1.ResourceMemory: resource.MustParse("500Mi"), "hugepages-2Mi": resource.MustParse("2Mi")},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),       // spec 为 2 CPU, requests omitted defaults to limits
+			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),       // spec 为 2 CPU；省略 requests 时默认为 limits。
 			expectedCPUQuota:    cm.MilliCPUToQuota(2*1000, cm.QuotaPeriod), // spec 为 2 CPU
 			expectedMemoryLimit: 500 * Mi,                                   // spec 为 500Mi
 			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)},   // spec 为 2Mi
@@ -1667,10 +1667,10 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 			draNodeAllocatable:  true,
 			podLevelResources:   true,
 			podLimits:           v1.ResourceList{v1.ResourceCPU: resource.MustParse("4"), v1.ResourceMemory: resource.MustParse("1Gi"), "hugepages-2Mi": resource.MustParse("4Mi")},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),       // Pod spec 4 CPU
-			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // Pod spec 4 CPU
-			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 1Gi
-			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)},   // Pod spec 4Mi
+			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),       // Pod spec 为 4 CPU
+			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // Pod spec 为 4 CPU
+			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 为 1Gi
+			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)},   // Pod spec 为 4Mi
 		},
 		{
 			name:                "container limits omitted + pod level limits omitted + no DRA allocations (default disallowed/unlimited)",
@@ -1843,8 +1843,8 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 				},
 			},
 			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),
-			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // Pod spec 4 CPU (DRA is not added because limits were originally omitted in container spec)
-			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 1Gi (DRA is not added because limits were originally omitted in container spec)
+			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // Pod spec 为 4 CPU（容器 spec 最初未声明 limits，因此不叠加 DRA）
+			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 为 1Gi（容器 spec 最初未声明 limits，因此不叠加 DRA）
 		},
 	}
 

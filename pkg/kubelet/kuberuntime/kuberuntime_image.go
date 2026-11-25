@@ -60,7 +60,7 @@ func (m *kubeGenericRuntimeManager) PullImage(ctx context.Context, image kubecon
 		}
 
 		imageRef, err := m.imageService.PullImage(ctx, imgSpec, auth, podSandboxConfig)
-		// If there was no error, return success
+		// 未发生错误时返回成功。
 		if err == nil {
 			return imageRef, &currentCreds, nil
 		}

@@ -91,8 +91,8 @@ func (c *client) Connect(ctx context.Context) error {
 // Run 运行设备插件 gRPC 客户端，持续消费 ListAndWatch 流。
 func (c *client) Run(ctx context.Context) {
 	logger := klog.FromContext(ctx)
-	// FIXME: passing real context to ListAndWatch results in
-	// failing TestDevicePluginReRegistration with "context cancelled" error
+	// FIXME：向 ListAndWatch 传递真实 context 会导致
+	// TestDevicePluginReRegistration 因 "context cancelled" 错误而失败。
 	// 启动 ListAndWatch；流结束即认为插件异常退出，记录错误后返回。
 	stream, err := c.client.ListAndWatch(context.TODO(), &api.Empty{})
 	if err != nil {

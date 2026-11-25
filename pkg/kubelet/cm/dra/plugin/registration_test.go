@@ -157,10 +157,10 @@ func TestRegistrationHandler(t *testing.T) {
 			description:       "two-services",
 			driverName:        pluginB,
 			socketFile:        socketFileB,
-			supportedServices: []string{drapb.DRAPluginService, "v1alpha1.NodeHealth" /* TODO: add v1 here once we have it */},
+			supportedServices: []string{drapb.DRAPluginService, "v1alpha1.NodeHealth" /* TODO：有 v1 后在此处添加 v1。 */},
 			chosenService:     drapb.DRAPluginService,
 		},
-		// TODO: use v1beta1 here once we have v1
+		// TODO：有 v1 后在此处改用 v1beta1。
 		// {
 		// 	description:       "old-service",
 		// 	driverName:        pluginB,
@@ -169,7 +169,7 @@ func TestRegistrationHandler(t *testing.T) {
 		// 	chosenService:     drapbv1alpha4.NodeService,
 		// },
 		{
-			// Legacy behavior of picking v1alpha4 is no longer supported.
+			// 不再支持固定选择 v1alpha4 的旧行为。
 			description:       "version",
 			driverName:        pluginB,
 			socketFile:        socketFileB,
@@ -221,7 +221,7 @@ func TestRegistrationHandler(t *testing.T) {
 			}
 
 			// DRAPluginManager 启动时会清理该节点上的所有 ResourceSlice。
-			draPlugins := NewDRAPluginManager(tCtx, client, getFakeNode, &mockStreamHandler{}, time.Second /* very short wiping delay for testing */)
+			draPlugins := NewDRAPluginManager(tCtx, client, getFakeNode, &mockStreamHandler{}, time.Second /* 测试使用极短的擦除延迟。 */)
 			// 有 client 时，启动清理会删除启动前遗留的 slice，下面用 requireNoSlices 确认。
 			tCtx.Cleanup(draPlugins.Stop)
 			if test.withClient {

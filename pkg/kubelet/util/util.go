@@ -72,10 +72,9 @@ type ResourceOpts struct {
 // GetLimits 计算容器的资源限制。
 // 优先使用容器显式设置的限制；若容器级 CPU 或内存限制未设置（即为零），
 // 则使用 Pod 级资源需求中的对应限制作为默认值。
-// TODO(ndixita): Consolidate resource limit logic
-// The implementation of CPU/Memory limit calculation is duplicated here and in
-// pkg/kubelet/kuberuntime/kuberuntime_container_linux.go (getCPULimits/getMemoryLimits).
-// Refactor into a shared utility function.
+// TODO(ndixita): 整合资源限制逻辑。CPU/内存限制的计算在此处与
+// pkg/kubelet/kuberuntime/kuberuntime_container_linux.go（getCPULimits/getMemoryLimits）
+// 重复，应重构为共享的工具函数。
 func GetLimits(res *ResourceOpts) v1.ResourceList {
 	if res == nil {
 		return v1.ResourceList{}

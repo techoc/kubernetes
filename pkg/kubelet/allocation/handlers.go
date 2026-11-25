@@ -77,7 +77,7 @@ func (h *podResizesAdmitHandler) Admit(ctx context.Context, attrs *lifecycle.Pod
 	// Pod 级资源发生变化时，同样校验 Pod 级原地扩缩容是否允许。
 	if !apiequality.Semantic.DeepEqual(pod.Spec.Resources, allocatedPod.Spec.Resources) {
 		if resizable, msg, reason := IsInPlacePodLevelResourcesVerticalScalingAllowed(pod); !resizable {
-			// If there is a pending pod-level resources resize but the resize is not allowed, always use the allocated resources.
+			// 存在待处理的 Pod 级资源 resize 但不被允许时，始终使用已分配资源。
 			metrics.PodInfeasibleResizes.WithLabelValues(reason).Inc()
 			return lifecycle.PodAdmitResult{Admit: false, Reason: v1.PodReasonInfeasible, Message: msg}
 		}

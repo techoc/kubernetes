@@ -117,7 +117,7 @@ func Test_ASW_RemovePlugin_Positive(t *testing.T) {
 		Name:       "test",
 	}
 	err := asw.AddPlugin(tCtx, pluginInfo)
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPlugin failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -156,7 +156,7 @@ func Test_ASW_PluginExistsWithCorrectUUID_Negative_WrongUUID(t *testing.T) {
 		Name:       "test",
 	}
 	err := asw.AddPlugin(tCtx, pluginInfo)
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPlugin failed. Expected: <no error> Actual: <%v>", err)
 	}

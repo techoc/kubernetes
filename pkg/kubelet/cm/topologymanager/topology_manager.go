@@ -84,7 +84,6 @@ func (e *PodLevelTopologyAffinityError) Type() string {
 
 // Manager 接口为 Kubelet 提供管理 Pod 拓扑提示的方法。
 type Manager interface {
-	// PodAdmitHandler is implemented by Manager
 	// PodAdmitHandler 由 Manager 实现，使其能够参与 Pod 准入流程。
 	lifecycle.PodAdmitHandler
 	// AddHintProvider 向 Manager 注册提示提供者，表示生成拓扑提示时需要征求其意见。
@@ -243,7 +242,6 @@ func NewManager(logger klog.Logger, topology []cadvisorapi.Node, topologyPolicyN
 
 // initializeMetrics 预创建所有指标标签组合，确保它们在首次观测前就以 0 值暴露。
 func (m *manager) initializeMetrics() {
-	// ensure the values exist
 	// 通过 Add(0) 触发指标向量创建，避免首次真实观测前指标缺失。
 	metrics.ContainerAlignedComputeResources.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedNUMANode).Add(0)
 	metrics.ContainerAlignedComputeResources.WithLabelValues(metrics.AlignScopePod, metrics.AlignedNUMANode).Add(0)

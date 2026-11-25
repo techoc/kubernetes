@@ -83,7 +83,7 @@ func TestTCPPortExhaustion(t *testing.T) {
 				results.NewManager(),
 				results.NewManager(),
 				results.NewManager(),
-				nil, // runner
+				nil, // 执行器
 				&record.FakeRecorder{},
 			).(*manager)
 			defer cleanup(t, m)
@@ -158,7 +158,7 @@ func TestTCPPortExhaustion(t *testing.T) {
 					// 任何一个探针失败都说明临时端口耗尽，测试应失败。
 					case "Failure":
 						t.Errorf("Failure %s on contantinerID: %v Pod %v", probeType, result.ContainerID, result.PodUID)
-					case "UNKNOWN": // startup probes
+					case "UNKNOWN": // 启动探针
 						t.Logf("UNKNOWN state for %v", result)
 					default:
 					}

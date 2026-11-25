@@ -151,7 +151,7 @@ func (sc *stateCheckpoint) loadAndMigrateCheckpointV3() (*MemoryManagerCheckpoin
 
 // loadAndMigrateCheckpointV2 加载 v2 checkpoint，必要时从 v1 迁移。
 func (sc *stateCheckpoint) loadAndMigrateCheckpointV2() (*MemoryManagerCheckpointV2, error) {
-	// Try to load as V2.
+	// 尝试按 V2 加载。
 	checkpointV2 := newMemoryManagerCheckpointV2()
 	err := sc.checkpointManager.GetCheckpoint(sc.checkpointName, checkpointV2)
 	if err == nil {

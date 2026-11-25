@@ -226,11 +226,11 @@ func (m *cgroupCommon) libctCgroupConfig(logger klog.Logger, in *CgroupConfig, n
 	// 对 systemd 而言，必须设置 Name 和 Parent，因为与 systemd 交互时需要使用它们。
 	// Path 是可选的，可由 Name 和 Parent 推导出来。
 
-	// TODO(filbranden): This logic belongs in libcontainer/cgroup/systemd instead.
-	// It should take a libcontainerconfigs.Cgroup.Path field (rather than Name and Parent)
-	// and split it appropriately, using essentially the logic below.
-	// This was done for cgroupfs in opencontainers/runc#497 but a counterpart
-	// for systemd was never introduced.
+	// TODO(filbranden)：该逻辑应放在 libcontainer/cgroup/systemd 中。
+	// 该函数应接收 libcontainerconfigs.Cgroup.Path 字段（而不是 Name 和 Parent），
+	// 并参照下面的逻辑进行适当拆分。
+	// cgroupfs 已在 opencontainers/runc#497 中完成这一改造，
+	// 但 systemd 一直没有对应的实现。
 	dir, base := path.Split(in.Name.ToSystemd())
 	if dir == "/" {
 		// 根目录在 systemd 中对应 "-.slice"。
@@ -411,7 +411,7 @@ func (m *cgroupCommon) Create(logger klog.Logger, cgroupConfig *CgroupConfig) er
 		return err
 	}
 
-	// Apply(-1) 是一个 hack，用于为每个资源子系统创建 cgroup 目录。
+	// Apply(-1) 是一个变通方案，用于为每个资源子系统创建 cgroup 目录。
 	// 函数 [cgroups.Manager.apply()] 会把 cgroup 配置应用到指定 pid 的进程：
 	// 它为每个子系统创建 cgroup 文件，并把 pid 写入 tasks 文件。
 	// 这里借此创建所有必需的 cgroup 文件，但不把任何“真实” pid 挂入 cgroup。
@@ -497,7 +497,7 @@ func readCgroupMemoryConfig(cgroupPath string, memLimitFile string) (*ResourceCo
 		return nil, fmt.Errorf("failed to read %s for cgroup %v: %v", memLimitFile, cgroupPath, err)
 	}
 	mLim := int64(memLimit)
-	//TODO(vinaykul,InPlacePodVerticalScaling): Add memory request support
+	// TODO(vinaykul,InPlacePodVerticalScaling)：增加内存请求支持。
 	return &ResourceConfig{Memory: &mLim}, nil
 
 }

@@ -480,7 +480,7 @@ func NewMainKubelet(ctx context.Context,
 	}
 
 	if !cloudprovider.IsExternal(cloudProvider) && len(cloudProvider) != 0 {
-		// in-tree cloud provider 已被移除，这里显式报错，避免静默降级为无云厂商模式。
+		// 树内云厂商实现已被移除，这里显式报错，避免静默降级为无云厂商模式。
 		cloudprovider.DisableWarningForProvider(cloudProvider)
 		return nil, cloudprovider.ErrorForDisabledProvider(cloudProvider)
 	}
@@ -1509,7 +1509,7 @@ type Kubelet struct {
 	// 保存上一次 tryUpdateNodeStatus() 运行时的 Node.Spec.Unschedulable 值。
 	lastNodeUnschedulable bool
 
-	// pod sync loop 期间要调用的 handler 列表。
+	// Pod 同步循环期间要调用的处理器列表。
 	lifecycle.PodSyncLoopHandlers
 
 	// pod 同步期间要调用的 handler 列表。
@@ -1553,7 +1553,7 @@ type Kubelet struct {
 	// 管理 user namespace。
 	usernsManager *userns.UsernsManager
 
-	// OpenTelemetry Tracer。
+	// OpenTelemetry 追踪器。
 	tracer trace.Tracer
 
 	// 跟踪节点启动延迟。
@@ -2624,9 +2624,9 @@ func (kl *Kubelet) syncLoop(ctx context.Context, updates <-chan kubetypes.PodUpd
 // 4.  housekeepingCh: 读取 housekeeping 事件的 channel
 // 5.  plegCh:         读取 PLEG 更新的 channel
 //
-// 同时也会从 kubelet liveness manager 的更新 channel 读取事件。
+// 同时也会从 kubelet 存活管理器的更新通道读取事件。
 //
-// 流程是：读取一个 channel、处理该事件，并更新 sync loop monitor 中的时间戳。
+// 流程是：读取一个通道、处理该事件，并更新同步循环监视器中的时间戳。
 //
 // 此处需要说明：尽管 select 的语法与 switch 相似，但当多个 channel 就绪时，
 // select 中的 case 会以伪随机顺序求值。换言之，case 的顺序是随机的，
@@ -3162,7 +3162,7 @@ func (kl *Kubelet) HandlePodSyncs(ctx context.Context, pods []*v1.Pod) {
 	}
 }
 
-// LatestLoopEntryTime 返回 sync loop monitor 中记录的最近一次进入时间。
+// LatestLoopEntryTime 返回同步循环监视器中记录的最近一次进入时间。
 func (kl *Kubelet) LatestLoopEntryTime() time.Time {
 	val := kl.syncLoopMonitor.Load()
 	if val == nil {

@@ -50,9 +50,9 @@ var servicesSupportedByKubelet = []string{
 // kubelet 支持的所有 DRAResourceHealth API 版本，按从新到旧排序。
 // kubelet 选择插件同样声明支持的第一个版本。
 //
-// TODO(harche): remove v1alpha1 in 1.40. It exists as a three release
-// transition (1.37 through 1.39) for drivers which shipped a v1alpha1
-// health server before v1 existed.
+// TODO(harche)：在 1.40 中移除 v1alpha1。它作为三个版本的过渡期
+// （1.37 至 1.39）存在，供那些在 v1 出现之前就已发布 v1alpha1
+// 健康服务的驱动使用。
 var healthServicesSupportedByKubelet = []string{
 	drahealthv1.DRAResourceHealthService,
 	drahealthv1alpha1.DRAResourceHealthService,

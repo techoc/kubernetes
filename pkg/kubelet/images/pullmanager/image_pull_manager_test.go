@@ -392,14 +392,14 @@ func Test_pulledRecordMergeNewCreds(t *testing.T) {
 			current: testRecord.DeepCopy(),
 			credsForMerging: &kubeletconfiginternal.ImagePullCredentials{
 				KubernetesServiceAccounts: []kubeletconfiginternal.ImagePullServiceAccount{
-					{UID: "different-uid", Namespace: "default", Name: "sa1"}, // Different UID
+					{UID: "different-uid", Namespace: "default", Name: "sa1"}, // UID 不同
 				},
 			},
 			expectedRecord: withImageRecord(testRecord.DeepCopy(), "test-image-with-sa",
 				kubeletconfiginternal.ImagePullCredentials{
 					KubernetesServiceAccounts: []kubeletconfiginternal.ImagePullServiceAccount{
-						{UID: "different-uid", Namespace: "default", Name: "sa1"}, // New
-						{UID: "sa-uid1", Namespace: "default", Name: "sa1"},       // Original
+						{UID: "different-uid", Namespace: "default", Name: "sa1"}, // 新增
+						{UID: "sa-uid1", Namespace: "default", Name: "sa1"},       // 原有
 					},
 				},
 			),
@@ -1146,7 +1146,7 @@ func TestFileBasedImagePullManager_RecordImagePulled(t *testing.T) {
 			pullsInFlight:        1,
 			expectPullingRemoved: "sha256-f24acc752be18b93b0504c86312bbaf482c9efb0c45e925bbccb0a591cebd7af",
 			checkedPullFile:      "sha256-917e8b3439bf8a7a6f37ffd2d2ddfdfafac8a251bf214a0be39675742b420b1a",
-			expectUpdated:        false, // Should not update since service account already exists
+			expectUpdated:        false, // 服务账户已存在，不应更新
 			expectedPullRecord: kubeletconfiginternal.ImagePulledRecord{
 				ImageRef: "testimageref-sa",
 				CredentialMapping: map[string]kubeletconfiginternal.ImagePullCredentials{
@@ -1657,8 +1657,8 @@ func Test_mergePullServiceAccounts(t *testing.T) {
 				{UID: "sa2", Namespace: "kube-system", Name: "serviceaccount2"},
 			},
 			new: []kubeletconfiginternal.ImagePullServiceAccount{
-				{UID: "sa1", Namespace: "default", Name: "serviceaccount1"}, // duplicate
-				{UID: "sa3", Namespace: "default", Name: "serviceaccount3"}, // new
+				{UID: "sa1", Namespace: "default", Name: "serviceaccount1"}, // 重复项
+				{UID: "sa3", Namespace: "default", Name: "serviceaccount3"}, // 新增项
 			},
 			expected: []kubeletconfiginternal.ImagePullServiceAccount{
 				{UID: "sa1", Namespace: "default", Name: "serviceaccount1"},

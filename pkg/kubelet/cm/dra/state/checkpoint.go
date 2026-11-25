@@ -26,8 +26,10 @@ import (
 
 const (
 	// DRA checkpoint 的 API 组、类型与版本。
-	CheckpointAPIGroup   = "checkpoint.dra.kubelet.k8s.io"
-	CheckpointKind       = "DRACheckpoint"
+	CheckpointAPIGroup = "checkpoint.dra.kubelet.k8s.io"
+	// CheckpointKind 是 DRA checkpoint 的类型标识。
+	CheckpointKind = "DRACheckpoint"
+	// CheckpointAPIVersion 是 DRA checkpoint 的 API 版本。
 	CheckpointAPIVersion = CheckpointAPIGroup + "/v1"
 )
 

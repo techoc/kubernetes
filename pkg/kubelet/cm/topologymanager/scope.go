@@ -125,7 +125,7 @@ func (s *scope) RemoveContainer(logger klog.Logger, containerID string) error {
 	defer s.mutex.Unlock()
 
 	logger.Info("RemoveContainer", "containerID", containerID)
-	// Get the podUID and containerName associated with the containerID to be removed and remove it
+	// 获取与待移除 containerID 关联的 podUID 和 containerName，并将其移除。
 	// 找不到映射说明容器从未登记，直接返回成功。
 	podUIDString, containerName, err := s.podMap.GetContainerRef(containerID)
 	if err != nil {

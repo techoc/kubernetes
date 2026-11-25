@@ -246,7 +246,7 @@ func (cgc *containerGC) evictContainers(ctx context.Context, gcPolicy kubecontai
 	if allSourcesReady {
 		for key, unit := range evictUnits {
 			if cgc.podStateProvider.ShouldPodContentBeRemoved(key.uid) || (evictNonDeletedPods && cgc.podStateProvider.ShouldPodRuntimeBeRemoved(key.uid)) {
-				cgc.removeOldestN(ctx, unit, len(unit)) // Remove all.
+				cgc.removeOldestN(ctx, unit, len(unit)) // 移除全部。
 				delete(evictUnits, key)
 			}
 		}

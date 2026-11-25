@@ -26,12 +26,12 @@ import (
 	"path"
 	"time"
 
-	// Register supported container handlers.
+	// 注册支持的容器处理器。
 	_ "github.com/google/cadvisor/lib/container/containerd/install"
 	_ "github.com/google/cadvisor/lib/container/crio/install"
 	_ "github.com/google/cadvisor/lib/container/systemd/install"
 
-	// Register filesystem plugins needed for container stats.
+	// 注册采集容器统计信息所需的文件系统插件。
 	_ "github.com/google/cadvisor/lib/fs/btrfs/install"
 	_ "github.com/google/cadvisor/lib/fs/nfs/install"
 	_ "github.com/google/cadvisor/lib/fs/overlay/install"
@@ -62,7 +62,7 @@ type cadvisorClient struct {
 // 编译期断言：cadvisorClient 必须实现 Interface 接口。
 var _ Interface = new(cadvisorClient)
 
-// TODO(vmarmol): Make configurable.
+// TODO(vmarmol): 使该时长可配置。
 // 统计信息在内存中保留的时长。
 const statsCacheDuration = 2 * time.Minute
 
@@ -128,7 +128,7 @@ func New(logger klog.Logger, imageFsInfoProvider ImageFsInfoProvider, rootPath s
 		DisableContainerDiscovery: disableContainerDiscovery,
 	}
 
-	// Create the cAdvisor container manager.
+	// 创建 cAdvisor 容器管理器。
 	m, err := manager.New(memory.New(statsCacheDuration, nil), sysFs, housekeepingConfig, includedMetrics, cgroupRoots, nil /* containerEnvMetadataWhiteList */, "" /* perfEventsFile */, time.Duration(0) /*resctrlInterval*/)
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func (cc *cadvisorClient) ImagesFsInfo(ctx context.Context) (cadvisorapi.FsInfo,
 }
 
 // IsPsiEnabled 通过 opencontainers/cgroups 库打开根 cgroup 的 cpu.pressure 文件，
-// 检查宿主机是否支持 PSI（Pressure Stall Information）。该库与 cAdvisor 读取 PSI
+// 检查宿主机是否支持 PSI（压力停顿信息）。该库与 cAdvisor 读取 PSI
 // 值时使用的库相同。PSI 是单一内核特性（CONFIG_PSI / 启动参数 "psi="），
 // 因此只检查 cpu.pressure 就足以判断 cpu、memory、io 三种资源是否支持。
 func IsPsiEnabled(logger klog.Logger) bool {
@@ -214,7 +214,7 @@ func (cc *cadvisorClient) getFsInfo(ctx context.Context, label string) (cadvisor
 	if len(res) == 0 {
 		return cadvisorapi.FsInfo{}, fmt.Errorf("failed to find information for the filesystem labeled %q", label)
 	}
-	// TODO(vmarmol): Handle this better when a label has more than one image filesystem.
+	// TODO(vmarmol): 当一个标签对应多个镜像文件系统时，需要更好地处理。
 	// 同一标签对应多个文件系统时只使用第一个。
 	if len(res) > 1 {
 		klog.FromContext(ctx).Info("More than one filesystem labeled. Only using the first one", "label", label, "fileSystem", res)

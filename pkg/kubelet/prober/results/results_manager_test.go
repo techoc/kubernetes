@@ -78,7 +78,7 @@ func TestUpdates(t *testing.T) {
 		case u := <-m.Updates():
 			t.Errorf("Unexpected update %v: %s", u, msg)
 		default:
-			// Pass
+			// 通过。
 		}
 	}
 

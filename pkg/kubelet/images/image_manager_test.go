@@ -67,9 +67,9 @@ type pullerTestCase struct {
 	containerImage             string
 	policy                     v1.PullPolicy
 	pullSecrets                []v1.Secret
-	allowedCredentials         *mockImagePullManagerConfig                       // controls what the image pull manager considers "allowed"
-	serviceAccountName         string                                            // for testing service account coordinates
-	registryCredentials        map[string][]credentialprovider.TrackedAuthConfig // image -> registry credentials (obtained from credential providers using SA tokens)
+	allowedCredentials         *mockImagePullManagerConfig                       // 控制镜像拉取管理器认为哪些凭据被“允许”
+	serviceAccountName         string                                            // 用于测试服务账户坐标
+	registryCredentials        map[string][]credentialprovider.TrackedAuthConfig // image -> 注册表凭据（凭据提供程序使用 SA token 获取）
 	inspectErr                 error
 	pullerErr                  error
 	qps                        float32
@@ -82,8 +82,8 @@ type pullerTestCase struct {
 // mockImagePullManagerConfig 配置 mock 拉取管理器认为“允许”的凭据。
 type mockImagePullManagerConfig struct {
 	allowAll               bool
-	allowedSecrets         map[string][]kubeletconfiginternal.ImagePullSecret         // image -> allowed secrets
-	allowedServiceAccounts map[string][]kubeletconfiginternal.ImagePullServiceAccount // image -> allowed service accounts
+	allowedSecrets         map[string][]kubeletconfiginternal.ImagePullSecret         // image -> 允许的 Secret
+	allowedServiceAccounts map[string][]kubeletconfiginternal.ImagePullServiceAccount // image -> 允许的服务账户
 }
 
 // pullerTestCases 汇总默认用例与 KubeletEnsureSecretPulledImages 特性门控用例。
@@ -97,7 +97,7 @@ func pullerTestCases() []pullerTestCase {
 // noFGPullerTestCases 返回无需开启任何特性门控即可验证默认行为的全部用例。
 func noFGPullerTestCases() []pullerTestCase {
 	return []pullerTestCase{
-		{ // pull missing image
+		{ // 拉取缺失的镜像
 			testName:       "image missing, pull",
 			containerImage: "missing_image",
 			policy:         v1.PullIfNotPresent,
@@ -115,7 +115,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("ifnotpresent", "false", "true"),
 		},
 
-		{ // image present, don't pull
+		{ // 镜像已存在，无需拉取
 			testName:       "image present, allow all, don't pull ",
 			containerImage: "present_image",
 			policy:         v1.PullIfNotPresent,
@@ -669,7 +669,7 @@ func ensureSecretImagesTestCases() []pullerTestCase {
 							Username: "node-user",
 							Password: "node-pass",
 						},
-						Source:         nil, // No source means node-accessible
+						Source:         nil, // 无来源表示节点可访问
 						AuthConfigHash: "node-hash-123",
 					},
 				},
@@ -1033,7 +1033,7 @@ func TestPullAndListImageWithPodAnnotations(t *testing.T) {
 		},
 	}
 
-	c := pullerTestCase{ // pull missing image
+	c := pullerTestCase{ // 拉取缺失的镜像
 		testName:       "test pull and list image with pod annotations",
 		containerImage: "missing_image",
 		policy:         v1.PullIfNotPresent,
@@ -1098,7 +1098,7 @@ func TestPullAndListImageWithRuntimeHandlerInImageCriAPIFeatureGate(t *testing.T
 			Uid:       string(pod.UID),
 		},
 	}
-	c := pullerTestCase{ // pull missing image
+	c := pullerTestCase{ // 拉取缺失的镜像
 		testName:       "test pull and list image with pod annotations",
 		containerImage: "missing_image",
 		policy:         v1.PullIfNotPresent,
@@ -1497,7 +1497,7 @@ func TestEnsureImageExistsWithServiceAccountCoordinates(t *testing.T) {
 				},
 			},
 			shouldCallMustAttemptPull: true,
-			mustAttemptPullReturn:     false, // Image doesn't need to be pulled
+			mustAttemptPullReturn:     false, // 无需拉取镜像
 			expectedImagePull:         false,
 		},
 		{
@@ -1513,7 +1513,7 @@ func TestEnsureImageExistsWithServiceAccountCoordinates(t *testing.T) {
 				},
 			},
 			shouldCallMustAttemptPull: true,
-			mustAttemptPullReturn:     true, // Image needs to be pulled
+			mustAttemptPullReturn:     true, // 需要拉取镜像
 			expectedImagePull:         true,
 		},
 		{
@@ -1635,7 +1635,7 @@ func TestEnsureImageExistsWithNodeCredentialsOnly(t *testing.T) {
 
 	mockPullManager := &mockImagePullManagerWithTracking{
 		allowAll:          false,
-		mustAttemptReturn: false, // Don't force pull
+		mustAttemptReturn: false, // 不强制拉取
 	}
 
 	repoToPull := "docker.io/library/present_image"
@@ -1647,7 +1647,7 @@ func TestEnsureImageExistsWithNodeCredentialsOnly(t *testing.T) {
 						Username: "nodeuser",
 						Password: "nodepass",
 					},
-					Source:         nil, // No source means node-accessible
+					Source:         nil, // 无来源表示节点可访问
 					AuthConfigHash: "node-hash-123",
 				},
 			},

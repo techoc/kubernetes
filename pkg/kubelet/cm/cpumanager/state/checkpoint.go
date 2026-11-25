@@ -55,7 +55,7 @@ type CPUManagerCheckpointData struct {
 	Baselines     map[string]map[string]ContainerCPUs `json:"baselines,omitempty"`
 }
 
-// CPUManagerCheckpoint 是保存 CPU manager checkpoint 数据的结构。
+// CPUManagerCheckpoint 是保存 CPU manager 检查点数据的结构。
 // 采用双校验和格式以保持向后兼容：Data 字符串与 DataChecksum 是权威的 V4 载荷。
 type CPUManagerCheckpoint struct {
 	// 向后兼容：内嵌的 V2 checkpoint 不得再增强；当支持的最旧版本也能理解 V4 后，
@@ -145,7 +145,7 @@ func (cp *CPUManagerCheckpointV2) MarshalCheckpoint() ([]byte, error) {
 
 // MarshalCheckpoint 以 v3 格式序列化 checkpoint。
 func (cp *CPUManagerCheckpointV3) MarshalCheckpoint() ([]byte, error) {
-	// make sure checksum wasn't set before so it doesn't affect output checksum
+	// 确保此前未设置校验和，以免影响输出校验和。
 	cp.Checksum = 0
 
 	// 为了保持回滚兼容，必须使用旧结构名 "CPUManagerCheckpoint"（而不是

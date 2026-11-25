@@ -160,7 +160,7 @@ func TestCalculateCPUMaximum(t *testing.T) {
 
 // TestCalculateWindowsResources 验证 Windows 容器资源（CPU 最大值与内存限制）的计算。
 func TestCalculateWindowsResources(t *testing.T) {
-	// TODO: remove skip once the failing test has been fixed.
+	// TODO: 修复失败用例后移除跳过。
 	// 已知失败用例，先跳过以免阻塞 CI。
 	t.Skip("Skip failing test on Windows.")
 

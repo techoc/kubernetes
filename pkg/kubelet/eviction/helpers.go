@@ -179,8 +179,7 @@ func addAllocatableThresholds(thresholds []evictionapi.Threshold) []evictionapi.
 	for _, threshold := range thresholds {
 		// 只派生硬阈值：软阈值的宽限期语义无法直接复制到可分配内存信号上。
 		if threshold.Signal == evictionapi.SignalMemoryAvailable && isHardEvictionThreshold(threshold) {
-			// 复制操作符、取值和最小回收量，仅替换信号名。
-			// Copy the SignalMemoryAvailable to SignalAllocatableMemoryAvailable
+			// 复制操作符、取值和最小回收量，仅将信号替换为 SignalAllocatableMemoryAvailable。
 			additionalThresholds = append(additionalThresholds, evictionapi.Threshold{
 				Signal:     evictionapi.SignalAllocatableMemoryAvailable,
 				Operator:   threshold.Operator,
@@ -211,8 +210,7 @@ func UpdateContainerFsThresholds(thresholds []evictionapi.Threshold, imageFs, se
 	softContainerFsDisk := -1
 	hardContainerFsINodes := -1
 	softContainerFsINodes := -1
-	// 记录各信号的阈值，后面按文件系统布局重新计算 containerfs 阈值。
-	// Find the imagefs and nodefs thresholds
+	// 记录 imagefs 与 nodefs 的各信号阈值，后面按文件系统布局重新计算 containerfs 阈值。
 	var err error = nil
 	for idx, threshold := range thresholds {
 		if threshold.Signal == evictionapi.SignalImageFsAvailable && isHardEvictionThreshold(threshold) {
@@ -540,7 +538,7 @@ func processUsage(processStats *statsapi.ProcessStats) uint64 {
 }
 
 // localVolumeNames 返回 Pod 中会消耗本地存储的卷名，包括 hostPath 和本地临时卷。
-// TODO: summary API should report what volumes consume local storage rather than hard-code here.
+// TODO: 汇总 API 应报告哪些卷消耗本地存储，而非在此硬编码。
 func localVolumeNames(pod *v1.Pod) []string {
 	result := []string{}
 	for _, volume := range pod.Spec.Volumes {
@@ -632,9 +630,9 @@ func cachedStatsFunc(podStats []statsapi.PodStats) statsFunc {
 
 // Cmp 比较 p1 与 p2，返回 -1/0/+1 表示小于/等于/大于。
 //
-//	-1 if p1 <  p2
-//	 0 if p1 == p2
-//	+1 if p1 >  p2
+//	-1 表示 p1 < p2
+//	 0 表示 p1 == p2
+//	+1 表示 p1 > p2
 type cmpFunc func(p1, p2 *v1.Pod) int
 
 // multiSorter 按给定的比较函数序列依次比较，实现多级排序。
@@ -673,15 +671,15 @@ func (ms *multiSorter) Less(i, j int) bool {
 	var k int
 	for k = 0; k < len(ms.cmp)-1; k++ {
 		cmpResult := ms.cmp[k](p1, p2)
-		// p1 is less than p2
+		// p1 小于 p2。
 		if cmpResult < 0 {
 			return true
 		}
-		// p1 is greater than p2
+		// p1 大于 p2。
 		if cmpResult > 0 {
 			return false
 		}
-		// we don't know yet
+		// 尚无法判定，继续比较下一级。
 	}
 	// 前面全部相等时，由最后一个比较函数决定顺序。
 	return ms.cmp[k](p1, p2) < 0
@@ -725,7 +723,7 @@ func memory(stats statsFunc) cmpFunc {
 		p1Stats, p1Found := stats(p1)
 		p2Stats, p2Found := stats(p2)
 		if !p1Found || !p2Found {
-			// prioritize evicting the pod for which no stats were found
+			// 缺少统计数据的 Pod 优先驱逐。
 			return cmpBool(!p1Found, !p2Found)
 		}
 
@@ -749,7 +747,7 @@ func process(stats statsFunc) cmpFunc {
 		p1Stats, p1Found := stats(p1)
 		p2Stats, p2Found := stats(p2)
 		if !p1Found || !p2Found {
-			// prioritize evicting the pod for which no stats were found
+			// 缺少统计数据的 Pod 优先驱逐。
 			return cmpBool(!p1Found, !p2Found)
 		}
 
@@ -765,7 +763,7 @@ func exceedDiskRequests(stats statsFunc, fsStatsToMeasure []fsStatsType, diskRes
 		p1Stats, p1Found := stats(p1)
 		p2Stats, p2Found := stats(p2)
 		if !p1Found || !p2Found {
-			// prioritize evicting the pod for which no stats were found
+			// 缺少统计数据的 Pod 优先驱逐。
 			return cmpBool(!p1Found, !p2Found)
 		}
 
@@ -780,7 +778,7 @@ func exceedDiskRequests(stats statsFunc, fsStatsToMeasure []fsStatsType, diskRes
 		p2Disk := p2Usage[diskResource]
 		p1ExceedsRequests := p1Disk.Cmp(v1resource.GetResourceRequestQuantity(p1, diskResource)) == 1
 		p2ExceedsRequests := p2Disk.Cmp(v1resource.GetResourceRequestQuantity(p2, diskResource)) == 1
-		// prioritize evicting the pod which exceeds its requests
+		// 超过 request 的 Pod 优先驱逐。
 		return cmpBool(p1ExceedsRequests, p2ExceedsRequests)
 	}
 }
@@ -791,17 +789,17 @@ func disk(stats statsFunc, fsStatsToMeasure []fsStatsType, diskResource v1.Resou
 		p1Stats, p1Found := stats(p1)
 		p2Stats, p2Found := stats(p2)
 		if !p1Found || !p2Found {
-			// prioritize evicting the pod for which no stats were found
+			// 缺少统计数据的 Pod 优先驱逐。
 			return cmpBool(!p1Found, !p2Found)
 		}
 		p1Usage, p1Err := podDiskUsage(p1Stats, p1, fsStatsToMeasure)
 		p2Usage, p2Err := podDiskUsage(p2Stats, p2, fsStatsToMeasure)
 		if p1Err != nil || p2Err != nil {
-			// prioritize evicting the pod which had an error getting stats
+			// 获取统计数据出错的 Pod 优先驱逐。
 			return cmpBool(p1Err != nil, p2Err != nil)
 		}
 
-		// adjust p1, p2 usage relative to the request (if any)
+		// 按 request（如有）调整 p1、p2 的用量。
 		p1Disk := p1Usage[diskResource]
 		p2Disk := p2Usage[diskResource]
 		p1Request := v1resource.GetResourceRequestQuantity(p1, v1.ResourceEphemeralStorage)

@@ -390,7 +390,7 @@ func expectUpdate(t *testing.T, ch chan sourceUpdate, testCase *testCase) {
 				continue
 			}
 			for _, pod := range update.Pods {
-				// TODO: remove the conversion when validation is performed on versioned objects.
+				// TODO: 在基于版本化对象执行校验时移除此转换。
 				internalPod := &api.Pod{}
 				if err := k8s_api_v1.Convert_v1_Pod_To_core_Pod(pod, internalPod, nil); err != nil {
 					t.Fatalf("%s: Cannot convert pod %#v, %#v", testCase.desc, pod, err)

@@ -655,7 +655,7 @@ func (m *kubeGenericRuntimeManager) getPodContainerStatuses(ctx context.Context,
 
 	statuses := []*kubecontainer.Status{}
 	activeContainerStatuses := []*kubecontainer.Status{}
-	// TODO: optimization: set maximum number of containers per container name to examine.
+	// TODO: 优化检查范围，限制每个容器名称最多检查的实例数。
 	for _, c := range pod.Containers {
 		resp, err := m.runtimeService.ContainerStatus(ctx, c.ID.ID, false)
 		// List（ListContainers）与检查（ContainerStatus）之间，其他线程可能移除该容器，这是正常的。
@@ -1326,7 +1326,7 @@ func (m *kubeGenericRuntimeManager) GetAttach(ctx context.Context, id kubecontai
 // RunInContainer 在容器中同步执行命令并返回输出。
 func (m *kubeGenericRuntimeManager) RunInContainer(ctx context.Context, id kubecontainer.ContainerID, cmd []string, timeout time.Duration) ([]byte, error) {
 	stdout, stderr, err := m.runtimeService.ExecSync(ctx, id.ID, cmd, timeout)
-	// NOTE(tallclair): 这里无法正确交错 stdout 和 stderr，但对日志用途已足够。
+	// 注意（tallclair）：这里无法正确交错 stdout 和 stderr，但对日志用途已足够。
 	// 若将来需要更精确的输出顺序，需为 ExecSyncRequest 增加合并输出的选项。
 	return append(stdout, stderr...), err
 }

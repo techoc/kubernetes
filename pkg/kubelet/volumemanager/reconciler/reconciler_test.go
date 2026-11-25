@@ -54,11 +54,11 @@ import (
 )
 
 const (
-	// reconcilerLoopSleepDuration is the amount of time the reconciler loop
-	// waits between successive executions
+	// reconcilerLoopSleepDuration 是 reconciler 循环
+	// 两次执行之间的等待时间。
 	reconcilerLoopSleepDuration = 1 * time.Nanosecond
-	// waitForAttachTimeout is the maximum amount of time a
-	// operationexecutor.Mount call will wait for a volume to be attached.
+	// waitForAttachTimeout 是 operationexecutor.Mount
+	// 调用等待卷挂接完成的最长时间。
 	waitForAttachTimeout         = 1 * time.Second
 	nodeName                     = k8stypes.NodeName("mynodename")
 	kubeletPodsDir               = "fake-dir"
@@ -74,7 +74,7 @@ func hasAddedPods() bool { return true }
 // 验证 attach、detach、mount、unmount 等操作一次都不会被调用。
 func Test_Run_Positive_DoNothing(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -106,7 +106,7 @@ func Test_Run_Positive_DoNothing(t *testing.T) {
 	// Act
 	runReconciler(ctx, reconciler)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyZeroAttachCalls(fakePlugin))
 	assert.NoError(t, volumetesting.VerifyZeroWaitForAttachCallCount(fakePlugin))
 	assert.NoError(t, volumetesting.VerifyZeroMountDeviceCallCount(fakePlugin))
@@ -119,7 +119,7 @@ func Test_Run_Positive_DoNothing(t *testing.T) {
 // 验证会触发 attach/mount 等操作，且不会触发 detach/unmount。
 func Test_Run_Positive_VolumeAttachAndMount(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -170,7 +170,7 @@ func Test_Run_Positive_VolumeAttachAndMount(t *testing.T) {
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -178,7 +178,7 @@ func Test_Run_Positive_VolumeAttachAndMount(t *testing.T) {
 	// Act
 	runReconciler(ctx, reconciler)
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyAttachCallCount(
 		1 /* expectedAttachCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
@@ -194,7 +194,7 @@ func Test_Run_Positive_VolumeAttachAndMount(t *testing.T) {
 // 与 VolumeAttachAndMount 相同，但开启 in-tree 到 CSI 的迁移。
 // 验证迁移后的卷仍能完成 attach/mount，且没有 detach/unmount。
 func Test_Run_Positive_VolumeAttachAndMountMigrationEnabled(t *testing.T) {
-	// Arrange
+	// 准备测试数据。
 	logger, ctx := ktesting.NewTestContext(t)
 	intreeToCSITranslator := csitrans.New()
 	node := &v1.Node{
@@ -278,7 +278,7 @@ func Test_Run_Positive_VolumeAttachAndMountMigrationEnabled(t *testing.T) {
 		nil, /* SELinuxContexts */
 	)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -287,7 +287,7 @@ func Test_Run_Positive_VolumeAttachAndMountMigrationEnabled(t *testing.T) {
 	// Act
 	runReconciler(ctx, reconciler)
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
 		1 /* expectedWaitForAttachCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyMountDeviceCallCount(
@@ -302,7 +302,7 @@ func Test_Run_Positive_VolumeAttachAndMountMigrationEnabled(t *testing.T) {
 // 验证只有 mount 调用、没有 unmount 调用，同时 attach/detach 由控制器负责，reconciler 不应发起。
 func Test_Run_Positive_VolumeMountControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备测试数据。
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: string(nodeName),
@@ -367,7 +367,7 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabled(t *testing.T) {
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 	dsw.MarkVolumesReportedInUse([]v1.UniqueVolumeName{generatedVolumeName})
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -376,7 +376,7 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabled(t *testing.T) {
 	runReconciler(ctx, reconciler)
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyZeroAttachCalls(fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
 		1 /* expectedWaitForAttachCallCount */, fakePlugin))
@@ -392,7 +392,7 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabled(t *testing.T) {
 // 但卷未被报告为 in-use。验证不会进入 wait-for-mount，也不会触发指数退避重试。
 func Test_Run_Negative_VolumeMountControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -443,7 +443,7 @@ func Test_Run_Negative_VolumeMountControllerAttachEnabled(t *testing.T) {
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -457,7 +457,7 @@ func Test_Run_Negative_VolumeMountControllerAttachEnabled(t *testing.T) {
 		t.Errorf("operation on volume %s is not safe to retry", generatedVolumeName)
 	}
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyZeroAttachCalls(fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
 		0 /* expectedWaitForAttachCallCount */, fakePlugin))
@@ -469,7 +469,7 @@ func Test_Run_Negative_VolumeMountControllerAttachEnabled(t *testing.T) {
 // 随后从 DSW 删除该 volume/pod，验证会发出 unmount/detach。
 func Test_Run_Positive_VolumeAttachMountUnmountDetach(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -520,7 +520,7 @@ func Test_Run_Positive_VolumeAttachMountUnmountDetach(t *testing.T) {
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -528,7 +528,7 @@ func Test_Run_Positive_VolumeAttachMountUnmountDetach(t *testing.T) {
 	// Act
 	runReconciler(ctx, reconciler)
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyAttachCallCount(
 		1 /* expectedAttachCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
@@ -544,7 +544,7 @@ func Test_Run_Positive_VolumeAttachMountUnmountDetach(t *testing.T) {
 	dsw.DeletePodFromVolume(podName, generatedVolumeName)
 	waitForDetach(t, generatedVolumeName, asw)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyTearDownCallCount(
 		1 /* expectedTearDownCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyDetachCallCount(
@@ -556,7 +556,7 @@ func Test_Run_Positive_VolumeAttachMountUnmountDetach(t *testing.T) {
 // 且全程没有 attach/detach（由控制器负责）。
 func Test_Run_Positive_VolumeUnmountControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备测试数据。
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: string(nodeName),
@@ -620,7 +620,7 @@ func Test_Run_Positive_VolumeUnmountControllerAttachEnabled(t *testing.T) {
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -631,7 +631,7 @@ func Test_Run_Positive_VolumeUnmountControllerAttachEnabled(t *testing.T) {
 	dsw.MarkVolumesReportedInUse([]v1.UniqueVolumeName{generatedVolumeName})
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyZeroAttachCalls(fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
 		1 /* expectedWaitForAttachCallCount */, fakePlugin))
@@ -646,7 +646,7 @@ func Test_Run_Positive_VolumeUnmountControllerAttachEnabled(t *testing.T) {
 	dsw.DeletePodFromVolume(podName, generatedVolumeName)
 	waitForDetach(t, generatedVolumeName, asw)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyTearDownCallCount(
 		1 /* expectedTearDownCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
@@ -692,7 +692,7 @@ func Test_Run_Positive_VolumeAttachAndMap(t *testing.T) {
 		},
 	}
 
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -727,7 +727,7 @@ func Test_Run_Positive_VolumeAttachAndMap(t *testing.T) {
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -735,7 +735,7 @@ func Test_Run_Positive_VolumeAttachAndMap(t *testing.T) {
 	// Act
 	runReconciler(ctx, reconciler)
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyAttachCallCount(
 		1 /* expectedAttachCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
@@ -803,7 +803,7 @@ func Test_Run_Positive_BlockVolumeMapControllerAttachEnabled(t *testing.T) {
 		},
 	}
 
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgrWithNode(t, node)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -839,7 +839,7 @@ func Test_Run_Positive_BlockVolumeMapControllerAttachEnabled(t *testing.T) {
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 	dsw.MarkVolumesReportedInUse([]v1.UniqueVolumeName{generatedVolumeName})
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -848,7 +848,7 @@ func Test_Run_Positive_BlockVolumeMapControllerAttachEnabled(t *testing.T) {
 	runReconciler(ctx, reconciler)
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyZeroAttachCalls(fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
 		1 /* expectedWaitForAttachCallCount */, fakePlugin))
@@ -901,7 +901,7 @@ func Test_Run_Positive_BlockVolumeAttachMapUnmapDetach(t *testing.T) {
 		PersistentVolume: gcepv,
 	}
 
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -933,7 +933,7 @@ func Test_Run_Positive_BlockVolumeAttachMapUnmapDetach(t *testing.T) {
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -941,7 +941,7 @@ func Test_Run_Positive_BlockVolumeAttachMapUnmapDetach(t *testing.T) {
 	// Act
 	runReconciler(ctx, reconciler)
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyAttachCallCount(
 		1 /* expectedAttachCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
@@ -955,7 +955,7 @@ func Test_Run_Positive_BlockVolumeAttachMapUnmapDetach(t *testing.T) {
 	dsw.DeletePodFromVolume(podName, generatedVolumeName)
 	waitForDetach(t, generatedVolumeName, asw)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyTearDownDeviceCallCount(
 		1 /* expectedTearDownDeviceCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyDetachCallCount(
@@ -1020,7 +1020,7 @@ func Test_Run_Positive_VolumeUnmapControllerAttachEnabled(t *testing.T) {
 		},
 	}
 
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgrWithNode(t, node)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -1055,7 +1055,7 @@ func Test_Run_Positive_VolumeUnmapControllerAttachEnabled(t *testing.T) {
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -1066,7 +1066,7 @@ func Test_Run_Positive_VolumeUnmapControllerAttachEnabled(t *testing.T) {
 	dsw.MarkVolumesReportedInUse([]v1.UniqueVolumeName{generatedVolumeName})
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyZeroAttachCalls(fakePlugin))
 	assert.NoError(t, volumetesting.VerifyWaitForAttachCallCount(
 		1 /* expectedWaitForAttachCallCount */, fakePlugin))
@@ -1079,7 +1079,7 @@ func Test_Run_Positive_VolumeUnmapControllerAttachEnabled(t *testing.T) {
 	dsw.DeletePodFromVolume(podName, generatedVolumeName)
 	waitForDetach(t, generatedVolumeName, asw)
 
-	// Assert
+	// 断言结果。
 	assert.NoError(t, volumetesting.VerifyTearDownDeviceCallCount(
 		1 /* expectedTearDownDeviceCallCount */, fakePlugin))
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
@@ -1129,7 +1129,7 @@ func Test_GenerateMapVolumeFunc_Plugin_Not_Found(t *testing.T) {
 				Pod:        pod,
 				VolumeSpec: tmpSpec}
 			err := oex.MountVolume(waitForAttachTimeout, volumeToMount, asw, false)
-			// Assert
+			// 断言结果。
 			if assert.Error(t, err) {
 				assert.ErrorContains(t, err, tc.expectedErrMsg)
 			}
@@ -1173,7 +1173,7 @@ func Test_GenerateUnmapVolumeFunc_Plugin_Not_Found(t *testing.T) {
 				PluginName: "fake-file-plugin",
 				VolumeSpec: tmpSpec}
 			err := oex.UnmountVolume(volumeToUnmount, asw, "" /* podsDir */)
-			// Assert
+			// 断言结果。
 			if assert.Error(t, err) {
 				assert.ErrorContains(t, err, tc.expectedErrMsg)
 			}
@@ -1216,7 +1216,7 @@ func Test_GenerateUnmapDeviceFunc_Plugin_Not_Found(t *testing.T) {
 			tmpSpec := &volume.Spec{PersistentVolume: &v1.PersistentVolume{Spec: v1.PersistentVolumeSpec{VolumeMode: &volumeMode}}}
 			deviceToDetach := operationexecutor.AttachedVolume{VolumeSpec: tmpSpec, PluginName: "fake-file-plugin"}
 			err := oex.UnmountDevice(deviceToDetach, asw, hostutil)
-			// Assert
+			// 断言结果。
 			if assert.Error(t, err) {
 				assert.ErrorContains(t, err, tc.expectedErrMsg)
 			}
@@ -1289,7 +1289,7 @@ func Test_Run_Positive_VolumeFSResizeControllerAttachEnabled(t *testing.T) {
 			pvc := getTestPVC("pv", tc.volumeMode, tc.pvcSize, tc.pvcStatusSize)
 			pod := getTestPod(pvc.Name)
 
-			// deep copy before reconciler runs to avoid data race.
+			// 在 reconciler 运行前深拷贝，避免数据竞争。
 			pvWithSize := pv.DeepCopy()
 			node := &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1340,24 +1340,24 @@ func Test_Run_Positive_VolumeFSResizeControllerAttachEnabled(t *testing.T) {
 			podName := util.GetUniquePodName(pod)
 			volumeName, err := dsw.AddPodToVolume(
 				logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
-			// Assert
+			// 断言结果。
 			if err != nil {
 				t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 			}
 			dsw.MarkVolumesReportedInUse([]v1.UniqueVolumeName{volumeName})
 
-			// Start the reconciler to fill ASW.
+			// 启动 reconciler 以填充 ASW。
 			stopChan, stoppedChan := make(chan struct{}), make(chan struct{})
 			go func() {
 				defer close(stoppedChan)
 				reconciler.Run(ctx, stopChan)
 			}()
 			waitForMount(t, fakePlugin, volumeName, asw)
-			// Stop the reconciler.
+			// 停止 reconciler。
 			close(stopChan)
 			<-stoppedChan
 
-			// Simulate what DSOWP does
+			// 模拟 DSOWP 的行为。
 			pvWithSize.Spec.Capacity[v1.ResourceStorage] = tc.newPVSize
 			volumeSpec = &volume.Spec{PersistentVolume: pvWithSize}
 			_, err = dsw.AddPodToVolume(logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxContexts */)
@@ -1606,13 +1606,13 @@ func Test_UncertainDeviceGlobalMounts(t *testing.T) {
 				podName := util.GetUniquePodName(pod)
 				volumeName, err := dsw.AddPodToVolume(
 					logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
-				// Assert
+				// 断言结果。
 				if err != nil {
 					t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 				}
 				dsw.MarkVolumesReportedInUse([]v1.UniqueVolumeName{volumeName})
 
-				// Start the reconciler to fill ASW.
+				// 启动 reconciler 以填充 ASW。
 				stopChan, stoppedChan := make(chan struct{}), make(chan struct{})
 				go func() {
 					reconciler.Run(ctx, stopChan)
@@ -1620,13 +1620,13 @@ func Test_UncertainDeviceGlobalMounts(t *testing.T) {
 				}()
 				waitForVolumeToExistInASW(t, volumeName, asw)
 				if tc.volumeName == volumetesting.TimeoutAndFailOnMountDeviceVolumeName {
-					// Wait upto 10s for reconciler to catch up
+					// 最多等待 10 秒，让 reconciler 追上进度。
 					time.Sleep(reconcilerSyncWaitDuration)
 				}
 
 				if tc.volumeName == volumetesting.SuccessAndFailOnMountDeviceName ||
 					tc.volumeName == volumetesting.SuccessAndTimeoutDeviceName {
-					// wait for mount and then break it via remount
+					// 等待挂载完成后通过重新挂载破坏其状态。
 					waitForMount(t, fakePlugin, volumeName, asw)
 					asw.MarkRemountRequired(logger, podName)
 					time.Sleep(reconcilerSyncWaitDuration)
@@ -1833,30 +1833,30 @@ func Test_UncertainVolumeMountState(t *testing.T) {
 				podName := util.GetUniquePodName(pod)
 				volumeName, err := dsw.AddPodToVolume(
 					logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxLabel */)
-				// Assert
+				// 断言结果。
 				if err != nil {
 					t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 				}
 				dsw.MarkVolumesReportedInUse([]v1.UniqueVolumeName{volumeName})
 
-				// Start the reconciler to fill ASW.
+				// 启动 reconciler 以填充 ASW。
 				stopChan, stoppedChan := make(chan struct{}), make(chan struct{})
 				go func() {
 					reconciler.Run(ctx, stopChan)
 					close(stoppedChan)
 				}()
 				waitForVolumeToExistInASW(t, volumeName, asw)
-				// all of these tests rely on device to be globally mounted and hence waiting for global
-				// mount ensures that unmountDevice is called as expected.
+				// 这些测试都依赖设备已全局挂载，因此等待全局
+				// 挂载可确保按预期调用 unmountDevice。
 				waitForGlobalMount(t, volumeName, asw)
 				if tc.volumeName == volumetesting.TimeoutAndFailOnSetupVolumeName {
-					// Wait upto 10s for reconciler to catchup
+					// 最多等待 10 秒，让 reconciler 追上进度。
 					time.Sleep(reconcilerSyncWaitDuration)
 				}
 
 				if tc.volumeName == volumetesting.SuccessAndFailOnSetupVolumeName ||
 					tc.volumeName == volumetesting.SuccessAndTimeoutSetupVolumeName {
-					// wait for mount and then break it via remount
+					// 等待挂载完成后通过重新挂载破坏其状态。
 					waitForMount(t, fakePlugin, volumeName, asw)
 					asw.MarkRemountRequired(logger, podName)
 					time.Sleep(reconcilerSyncWaitDuration)
@@ -1907,7 +1907,7 @@ func Test_UncertainVolumeMountState(t *testing.T) {
 
 // 轮询等待卷在 ASW 中以 DeviceMountUncertain 状态全局挂载，超时则测试失败。
 func waitForUncertainGlobalMount(t *testing.T, volumeName v1.UniqueVolumeName, asw cache.ActualStateOfWorld) {
-	// check if volume is globally mounted in uncertain state
+	// 检查卷是否处于全局挂载状态不确定的状态
 	err := retryWithExponentialBackOff(
 		testOperationBackOffDuration,
 		func() (bool, error) {
@@ -1928,7 +1928,7 @@ func waitForUncertainGlobalMount(t *testing.T, volumeName v1.UniqueVolumeName, a
 
 // 轮询等待卷出现在 ASW 的全局已挂载卷列表中，超时则测试失败。
 func waitForGlobalMount(t *testing.T, volumeName v1.UniqueVolumeName, asw cache.ActualStateOfWorld) {
-	// check if volume is globally mounted
+	// 检查卷是否已全局挂载
 	err := retryWithExponentialBackOff(
 		testOperationBackOffDuration,
 		func() (bool, error) {
@@ -1950,7 +1950,7 @@ func waitForGlobalMount(t *testing.T, volumeName v1.UniqueVolumeName, asw cache.
 // 轮询等待卷以"不确定"状态挂载到指定 Pod，超时则测试失败。
 func waitForUncertainPodMount(t *testing.T, volumeName v1.UniqueVolumeName, podName types.UniquePodName, asw cache.ActualStateOfWorld) {
 	logger, _ := ktesting.NewTestContext(t)
-	// check if volume is locally pod mounted in uncertain state
+	// 检查卷是否以不确定状态挂载到 Pod
 	err := retryWithExponentialBackOff(
 		testOperationBackOffDuration,
 		func() (bool, error) {
@@ -2008,9 +2008,6 @@ func waitForUnmount(
 	err := retryWithExponentialBackOff(
 		testOperationBackOffDuration,
 		func() (bool, error) {
-			// GetAllMountedVolumes includes both VolumeMounted and VolumeMountUncertain
-			// states, so this correctly detects unmount for reconstructed (uncertain)
-			// volumes as well as normally mounted volumes.
 			for _, v := range asw.GetAllMountedVolumes() {
 				if v.PodName == podName {
 					return false, nil
@@ -2148,7 +2145,7 @@ func createtestClientWithPVPVC(pv *v1.PersistentVolume, pvc *v1.PersistentVolume
 // 通过 fake 插件的 hook 精确控制步骤 1-4 的交错顺序。
 func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备测试数据。
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: string(nodeName),
@@ -2209,13 +2206,10 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 	}
 
 	// 本测试通过插件回调制造交错执行，步骤顺序与代码顺序不同，按注释中的编号阅读。
-	// Some steps are executes out of order in callbacks, follow the numbers.
 
 	// 1. 把卷加入 DSW 并等待其挂载完成，作为竞态测试的初始状态。
-	// 1. Add a volume to DSW and wait until it's mounted
 	volumeSpec := &volume.Spec{Volume: &pod.Spec.Volumes[0]}
 	// reconciler 会并发读取 volumeSpec，因此回调里必须使用独立副本以避免数据竞争。
-	// copy before reconciler runs to avoid data race.
 	volumeSpecCopy := &volume.Spec{Volume: &pod.Spec.Volumes[0]}
 	podName := util.GetUniquePodName(pod)
 	generatedVolumeName, err := dsw.AddPodToVolume(
@@ -2225,14 +2219,14 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
-	// Start the reconciler to fill ASW.
+	// 启动 reconciler 以填充 ASW。
 	stopChan, stoppedChan := make(chan struct{}), make(chan struct{})
 	go func() {
 		reconciler.Run(ctx, stopChan)
 		close(stoppedChan)
 	}()
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
-	// Stop the reconciler.
+	// 停止 reconciler。
 	close(stopChan)
 	<-stoppedChan
 
@@ -2241,9 +2235,8 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 
 	fakePlugin.Lock()
 	fakePlugin.UnmountDeviceHook = func(mountPath string) error {
-		// Act:
+		// 执行：
 		// 3. 卷正在卸载时把它重新加入 DSW，复现"卸载与重新挂载"的交错。
-		// 3. While a volume is being unmounted, add it back to the desired state of world
 		logger.Info("UnmountDevice called")
 		var generatedVolumeNameCopy v1.UniqueVolumeName
 		generatedVolumeNameCopy, err = dsw.AddPodToVolume(
@@ -2256,9 +2249,8 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 		defer finishedOnce.Do(func() {
 			close(finished)
 		})
-		// Assert
+		// 断言结果。
 		// 4. 卷再次挂载时，UnmountDevice 不应清空 devicePath，否则重新 attach 会丢失设备路径。
-		// 4. When the volume is mounted again, expect that UnmountDevice operation did not clear devicePath
 		if devicePath == "" {
 			logger.Error(nil, "Expected WaitForAttach called with devicePath from Node.Status")
 			return "", fmt.Errorf("Expected devicePath from Node.Status")
@@ -2268,11 +2260,9 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 	fakePlugin.Unlock()
 
 	// 重新启动 reconciler，让步骤 2 的删除操作触发卸载回调。
-	// Start the reconciler again.
 	go reconciler.Run(ctx, wait.NeverStop)
 
 	// 2. 从 DSW 删除卷，触发卸载，并等待回调中的步骤 3/4 完成。
-	// 2. Delete the volume from DSW (and wait for callbacks)
 	dsw.DeletePodFromVolume(podName, generatedVolumeName)
 
 	<-finished
@@ -2364,10 +2354,8 @@ func getReconciler(kubeletDir string, t *testing.T, volumePaths []string, kubeCl
 // 一个卷在 Node.Status 中有记录，另一个没有，二者应分别得到不同的更新结果。
 func TestReconcileWithUpdateReconstructedFromAPIServer(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Calls Run() with two reconstructed volumes.
-	// Verifies the devicePaths + volume attachability are reconstructed from node.status.
 
-	// Arrange
+	// 准备测试数据。
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: string(nodeName),
@@ -2409,7 +2397,7 @@ func TestReconcileWithUpdateReconstructedFromAPIServer(t *testing.T) {
 		kubeletPodsDir)
 	reconciler := rc.(*reconciler)
 
-	// The pod has two volumes, fake-device1 is attachable, fake-device2 is not.
+	// Pod 有两个卷：fake-device1 可挂接，fake-device2 不可挂接。
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pod1",
@@ -2452,11 +2440,9 @@ func TestReconcileWithUpdateReconstructedFromAPIServer(t *testing.T) {
 	reconciler.volumesNeedUpdateFromNodeStatus = append(reconciler.volumesNeedUpdateFromNodeStatus, volumeName1, volumeName2)
 	// Act - 只运行一次 reconcile 循环。
 	// 由于 volumesNeedUpdateFromNodeStatus 非空，本次循环只做状态回填，不会触发卸载。
-	// Act - run reconcile loop just once.
-	// "volumesNeedUpdateFromNodeStatus" is not empty, so no unmount will be triggered.
 	reconciler.reconcile(ctx)
 
-	// Assert
+	// 断言结果。
 	assert.True(t, reconciler.StatesHasBeenSynced())
 	assert.Empty(t, reconciler.volumesNeedUpdateFromNodeStatus)
 
@@ -2464,12 +2450,12 @@ func TestReconcileWithUpdateReconstructedFromAPIServer(t *testing.T) {
 	assert.Lenf(t, attachedVolumes, 2, "two volumes in ASW expected")
 	for _, vol := range attachedVolumes {
 		if vol.VolumeName == volumeName1 {
-			// devicePath + attachability must have been updated from node.status
+			// devicePath 和可挂接属性必须从 Node.Status 更新。
 			assert.True(t, vol.PluginIsAttachable)
 			assert.Equal(t, "fake/path", vol.DevicePath)
 		}
 		if vol.VolumeName == volumeName2 {
-			// only attachability was updated from node.status
+			// 仅可挂接属性从 Node.Status 更新。
 			assert.False(t, vol.PluginIsAttachable)
 			assert.Equal(t, "/dev/reconstructed", vol.DevicePath)
 		}
@@ -2480,12 +2466,12 @@ func TestReconcileWithUpdateReconstructedFromAPIServer(t *testing.T) {
 // fake 插件在非重建卷时模拟卷数据文件丢失，确保卸载路径不依赖重新加载卷数据。
 func TestReconstructedVolumeShouldUnmountSucceedAfterSetupFailed(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备测试数据。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
-	// fake Setup error
+	// 模拟 Setup 错误
 	fakePlugin.SetUpHook = func(plugin volume.VolumePlugin, mounterArgs volume.MounterArgs) error {
 		if !mounterArgs.ReconstructedVolume {
-			// mock cleaned volume files while it's not a reconstructed volume
+			// 在非重建卷场景中模拟卷文件已清理。
 			plugin.(*volumetesting.FakeVolumePlugin).NewUnmounterError = errors.New("unmounter failed to load volume data file")
 		}
 		return errors.New("csiRPCError")
@@ -2575,7 +2561,7 @@ func TestReconstructedVolumeShouldUnmountSucceedAfterSetupFailed(t *testing.T) {
 	generatedVolumeName, err := dsw.AddPodToVolume(logger,
 		podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGidValue */, nil)
 
-	// Assert
+	// 断言结果。
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -2607,12 +2593,12 @@ func TestReconstructedVolumeShouldUnmountSucceedAfterSetupFailed(t *testing.T) {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act first reconcile to trigger mount reconstructed volume
+	// 执行：第一次 reconcile 触发重建卷挂载。
 	reconciler.reconcile(ctx)
 
-	// Wait for the operation executor to finish processing the mount failure.
-	// SetUp returning is not sufficient because the executor clears the pending
-	// operation after the generated operation handles the error.
+	// 等待操作执行器完成处理挂载失败。
+	// 仅等待 SetUp 返回不够，因为执行器会在生成的
+	// 操作处理错误后才清除待处理操作。
 	err = retryWithExponentialBackOff(
 		testOperationBackOffDuration,
 		func() (bool, error) {
@@ -2629,11 +2615,11 @@ func TestReconstructedVolumeShouldUnmountSucceedAfterSetupFailed(t *testing.T) {
 
 	waitForUncertainPodMount(t, generatedVolumeName, podName, asw)
 
-	// mock remove pod
+	// 模拟删除 Pod
 	dsw.DeletePodFromVolume(podName, generatedVolumeName)
-	// Act second reconcile to trigger unmount reconstructed volume after removed pod from volume
+	// 执行：从卷中移除 Pod 后，第二次 reconcile 触发重建卷卸载。
 	reconciler.reconcile(ctx)
 
-	// assert volume unmount succeed
+	// 断言卷卸载成功
 	waitForUnmount(t, generatedVolumeName, podName, asw)
 }

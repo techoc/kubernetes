@@ -481,8 +481,10 @@ type KernelTunableBehavior string
 
 const (
 	// 内核参数取值：warn 仅告警，error 报错，modify 主动修改。
-	KernelTunableWarn   KernelTunableBehavior = "warn"
-	KernelTunableError  KernelTunableBehavior = "error"
+	KernelTunableWarn KernelTunableBehavior = "warn"
+	// KernelTunableError 表示内核参数不符合预期时返回错误。
+	KernelTunableError KernelTunableBehavior = "error"
+	// KernelTunableModify 表示内核参数不符合预期时直接修改。
 	KernelTunableModify KernelTunableBehavior = "modify"
 )
 

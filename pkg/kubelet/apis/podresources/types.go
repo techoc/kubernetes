@@ -69,7 +69,7 @@ type DynamicResourcesProvider interface {
 	GetDynamicResources(logger klog.Logger, pod *v1.Pod, container *v1.Container) []*podresourcesapi.DynamicResource
 }
 
-// PodResourcesProviders 汇总 Pod resources API 需要的各类 provider。
+// PodResourcesProviders 汇总 PodResources API 需要的各类 provider。
 type PodResourcesProviders struct {
 	Pods             PodsProvider
 	Devices          DevicesProvider

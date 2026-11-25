@@ -78,7 +78,7 @@ type Runtime interface {
 
 	// APIVersion 返回缓存的容器运行时 API 版本信息；实现应定期刷新缓存。
 	// 该版本可能与运行时引擎自身的版本不同。
-	// TODO(random-liu): We should fold this into Version()
+	// TODO(random-liu): 应将其合并到 Version() 中。
 	APIVersion() (Version, error)
 	// Status 返回运行时状态；仅当状态查询本身失败时才返回 error。
 	Status(ctx context.Context) (*RuntimeStatus, error)
@@ -94,19 +94,19 @@ type Runtime interface {
 	// 例如不要删除无法识别 Pod 的全部容器。
 	// evictNonDeletedPods 为 true 时，终止但尚未删除的 Pod 的容器与 sandbox
 	// 也会被清理；否则只清理已删除的 Pod。
-	// TODO: Revisit this method and make it cleaner.
+	// TODO: 重新审视此方法并简化其设计。
 	GarbageCollect(ctx context.Context, gcPolicy GCPolicy, allSourcesReady bool, evictNonDeletedPods bool) error
 	// SyncPod 把运行中的 Pod 同步到期望状态。
 	SyncPod(ctx context.Context, pod *v1.Pod, podStatus *PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff, restartAllContainers bool) PodSyncResult
 	// KillPod 终止 Pod 的所有容器；pod 可以为 nil，runningPod 不可以。
-	// TODO(random-liu): Return PodSyncResult in KillPod.
+	// TODO(random-liu): 让 KillPod 返回 PodSyncResult。
 	// gracePeriodOverride 非空时允许调用方覆盖 Pod 默认的优雅终止期。
 	// kubelet 中只有硬杀路径可以传入 gracePeriodOverride，避免破坏用户数据：
 	// 例如硬驱逐时发 SIGKILL，或软驱逐时使用最大宽限期。
 	KillPod(ctx context.Context, pod *v1.Pod, runningPod Pod, gracePeriodOverride *int64) error
 	// GetPodStatus 获取 Pod 状态，包括运行时可见的全部容器信息。
 	GetPodStatus(ctx context.Context, pod *Pod) (*PodStatus, error)
-	// TODO(vmarmol): Unify pod and containerID args.
+	// TODO(vmarmol): 统一 pod 与 containerID 参数。
 	// GetContainerLogs 返回指定容器的日志。默认返回日志快照；
 	// follow 为 true 时流式读取；为 false 时按 tailLines 返回末尾若干行
 	// （如 "100" 或 "all"）。
@@ -211,7 +211,7 @@ type Pod struct {
 	// 该 Pod 关联的 sandbox 列表。sandbox 被临时转换为 Container，
 	// 以避免对其他组件做大幅改动；该字段仅由 kuberuntime 填充，
 	// 并按创建时间从新到旧排序。
-	// TODO: use the runtimeApi.PodSandbox type directly.
+	// TODO: 直接使用 runtimeApi.PodSandbox 类型。
 	Sandboxes []*Container
 	// Timestamp 是该 Pod 对象从运行时读取的时间。
 	Timestamp time.Time
@@ -471,21 +471,25 @@ type Image struct {
 
 // EnvVar 表示环境变量。
 type EnvVar struct {
-	Name  string
-	Value string // TODO: switch to []byte
+	// 环境变量名。
+	Name string
+	// 环境变量值。
+	// TODO: 改为 []byte。
+	Value string
 }
 
 // Annotation 表示一条注解。
 type Annotation struct {
-	Name  string
+	// 注解名称。
+	Name string
+	// 注解值。
 	Value string
 }
 
 // Mount 表示一次卷挂载。
 type Mount struct {
 	// 卷挂载名称。
-	// TODO(yifan): Remove this field, as this is not representing the unique name of the mount,
-	// but the volume name only.
+	// TODO(yifan): 移除此字段；它表示卷名，而非挂载的唯一名称。
 	Name string
 	// 容器内的挂载路径。
 	ContainerPath string
@@ -556,7 +560,7 @@ type RunContainerOptions struct {
 	// 这些注解由其他组件（而非用户）生成；
 	// 目前只有设备插件会填充它们。
 	Annotations []Annotation
-	// 容器指定了 TerminationMessagePath 时，用该目录创建并挂载日志文件到
+	// 容器指定 TerminationMessagePath 时，用该目录创建并挂载日志文件到
 	// container.TerminationMessagePath。
 	PodContainerDir string
 	// 容器 rootfs 是否只读。
@@ -663,9 +667,12 @@ func (c *RuntimeCondition) String() string {
 
 // RuntimeFeatures 包含运行时实现的功能集合。
 type RuntimeFeatures struct {
-	SupplementalGroupsPolicy  bool
+	// 是否支持 SupplementalGroupsPolicy。
+	SupplementalGroupsPolicy bool
+	// 是否支持用户命名空间与宿主网络组合。
 	UserNamespacesHostNetwork bool
-	MountOptions              bool
+	// 是否支持挂载选项。
+	MountOptions bool
 }
 
 // String 把运行时特性格式化为人类可读字符串；f 为 nil 时返回 "nil"。

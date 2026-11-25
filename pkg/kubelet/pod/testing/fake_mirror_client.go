@@ -60,7 +60,7 @@ func (fmc *FakeMirrorClient) CreateMirrorPod(_ context.Context, pod *v1.Pod) err
 }
 
 // DeleteMirrorPod 删除镜像 Pod 记录并累加删除次数。
-// TODO (Robert Krawitz): Implement UID checking
+// TODO（Robert Krawitz）：实现 UID 校验。
 func (fmc *FakeMirrorClient) DeleteMirrorPod(_ context.Context, podFullName string, _ *types.UID) (bool, error) {
 	fmc.mirrorPodLock.Lock()
 	defer fmc.mirrorPodLock.Unlock()

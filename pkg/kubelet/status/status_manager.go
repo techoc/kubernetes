@@ -146,7 +146,7 @@ type podStatusNotification struct {
 	podIsFinished bool
 }
 
-// Manager 是 kubelet Pod 状态的事实来源（source of truth），应始终保持与最新的
+// Manager 是 kubelet Pod 状态的事实来源，应始终保持与最新的
 // v1.PodStatus 一致，同时负责把更新同步回 API server。
 type Manager interface {
 	PodStatusProvider
@@ -278,7 +278,7 @@ func (m *manager) Start(ctx context.Context) {
 
 	logger.Info("Starting to sync pod status with apiserver")
 
-	//nolint:staticcheck // SA1015 Ticker can leak since this is only called once and doesn't handle termination.
+	//nolint:staticcheck // SA1015 Ticker 可能泄漏，因为这里只调用一次，且不处理终止信号。
 	syncTicker := time.NewTicker(syncPeriod).C
 
 	// syncPod 与 syncBatch 共用同一个 goroutine，避免同步过程中的竞态。
@@ -780,7 +780,7 @@ func (m *manager) TerminatePod(logger klog.Logger, pod *v1.Pod) {
 	}
 
 	// 确保所有 Pod 都被转换为终态。
-	// TODO(#116484): Also assign terminal phase to static an pods.
+	// TODO(#116484): 同时为静态 Pod 设置终态阶段。
 	if !kubetypes.IsStaticPod(pod) {
 		switch status.Phase {
 		case v1.PodSucceeded, v1.PodFailed:
@@ -830,7 +830,7 @@ func hasPodInitialized(logger klog.Logger, pod *v1.Pod) bool {
 				containerStatus.Started != nil && *containerStatus.Started {
 				return true
 			}
-		} else { // regular init container
+		} else { // 普通初始化容器
 			if state := containerStatus.LastTerminationState; state.Terminated != nil && state.Terminated.ExitCode == 0 {
 				return true
 			}
@@ -944,7 +944,7 @@ func (m *manager) updateStatusInternal(logger klog.Logger, pod *v1.Pod, status v
 	cachedStatus, isCached := m.podStatuses[pod.UID]
 	if isCached {
 		oldStatus = cachedStatus.status
-		// TODO(#116484): Also assign terminal phase to static pods.
+		// TODO(#116484): 同时为静态 Pod 设置终态阶段。
 		if !kubetypes.IsStaticPod(pod) {
 			// 一旦标记为 finished 就不能回退，否则已上报的终态可能被后续更新覆盖。
 			if cachedStatus.podIsFinished && !podIsFinished {
@@ -1152,7 +1152,7 @@ func (m *manager) deletePodStatus(uid types.UID) {
 }
 
 // RemoveOrphanedStatuses 扫描状态缓存，删除不在给定 podUIDs 中的 Pod 条目。
-// TODO(filipg): It'd be cleaner if we can do this without signal from user.
+// TODO(filipg): 若无需用户发送信号即可完成，实现会更简洁。
 func (m *manager) RemoveOrphanedStatuses(logger klog.Logger, podUIDs map[types.UID]bool) {
 	m.podStatusesLock.Lock()
 	defer m.podStatusesLock.Unlock()
@@ -1250,7 +1250,7 @@ func (m *manager) syncBatch(ctx context.Context, all bool) int {
 // syncPod 把给定状态同步到 API server。调用方不得持有状态锁。
 func (m *manager) syncPod(ctx context.Context, uid types.UID, status versionedPodStatus) {
 	logger := klog.FromContext(ctx)
-	// TODO: make me easier to express from client code
+	// TODO: 让客户端代码能更便捷地表达该状态。
 	pod, err := m.kubeClient.CoreV1().Pods(status.podNamespace).Get(ctx, status.podName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		logger.V(3).Info("Pod does not exist on the server",
@@ -1362,7 +1362,7 @@ func (m *manager) canBeDeleted(logger klog.Logger, pod *v1.Pod, status v1.PodSta
 // kubelet 应强制发送一次更新来纠正，因为 kubelet 才是 Pod 状态的事实来源。
 // NOTE(random-liu): 直接传入 mirror Pod uid 并按 uid 获取 mirror Pod 会更简单，但
 // 目前 pod manager 只支持通过静态 Pod 获取 mirror Pod，因此这里必须传静态 Pod uid。
-// TODO(random-liu): Simplify the logic when mirror pod manager is added.
+// TODO(random-liu): 加入 mirror Pod 管理器后简化该逻辑。
 func (m *manager) needsReconcile(logger klog.Logger, uid types.UID, status v1.PodStatus) bool {
 	// Pod 可能是静态 Pod，因此需要先做转换。
 	pod, ok := m.podManager.GetPodByUID(uid)

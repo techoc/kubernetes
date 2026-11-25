@@ -42,8 +42,6 @@ type runtimeState struct {
 	rtFeatures               *kubecontainer.RuntimeFeatures
 }
 
-// A health check function should be efficient and not rely on external
-// components (e.g., container runtime).
 // healthCheckFnType 是运行时健康检查函数类型。
 // 检查必须轻量且不能依赖外部组件（如容器运行时），否则检查本身会阻塞或形成递归依赖。
 type healthCheckFnType func() (bool, error)

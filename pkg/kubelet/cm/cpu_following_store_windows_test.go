@@ -99,8 +99,8 @@ func TestCPUFollowingStoreGetAffinity(t *testing.T) {
 	testCases := []struct {
 		name          string
 		exclusiveCPUs cpuset.CPUSet
-		expectFollow  bool  // true → expect derived mask; false → expect base returned
-		expectedNodes []int // only used when expectFollow is true
+		expectFollow  bool  // true 表示预期得到派生掩码；false 表示预期返回基础掩码。
+		expectedNodes []int // 仅在 expectFollow 为 true 时使用。
 	}{
 		{
 			name:          "exclusive CPUs on a single node follows that node",
@@ -116,7 +116,7 @@ func TestCPUFollowingStoreGetAffinity(t *testing.T) {
 		},
 		{
 			name:          "exclusive CPUs partially mapped follows only the mapped node(s)",
-			exclusiveCPUs: cpuset.New(0, 99), // 0 -> node 0; 99 has no NUMA node and is dropped
+			exclusiveCPUs: cpuset.New(0, 99), // 0 -> 节点 0；99 没有 NUMA 节点，因此被丢弃。
 			expectFollow:  true,
 			expectedNodes: []int{0},
 		},

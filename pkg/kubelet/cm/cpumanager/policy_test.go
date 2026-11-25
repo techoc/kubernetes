@@ -210,7 +210,7 @@ var (
 	}
 
 	/*
-		Topology from https://www.open-mpi.org/projects/hwloc/lstopo/images/KNL.SNC4.H50.v1.11.png.
+		拓扑来自 https://www.open-mpi.org/projects/hwloc/lstopo/images/KNL.SNC4.H50.v1.11.png.
 		Socket0:
 		0-2,9-10,13-14,21-22,25-26,33-34,38-39,46-47,50,57-58,71-72,79-80,87-88,95-96,103-104,109-110,117-118,
 		131-132,139-140,147-148,155-156,163-164,169-170,177-178,191-192,199-200,207-208,215-216,223-224,229-230,
@@ -525,7 +525,7 @@ var (
 		},
 	}
 	/*
-		Topology from dual xeon gold 6230; lscpu excerpt
+		拓扑来自 dual xeon gold 6230；lscpu 输出节选
 		CPU(s):              80
 		On-line CPU(s) list: 0-79
 		Thread(s) per core:  2
@@ -627,8 +627,8 @@ var (
 		},
 	}
 	/*
-		Topology type 2 from dual xeon gold 6230; lscpu excerpt
-		Topology from https://www-lb.open-mpi.org/projects/hwloc/lstopo/images/2XeonSPv2+2kmem.v2.1.png.
+		拓扑类型 2 来自双路 xeon gold 6230；lscpu 输出节选
+		拓扑来自 https://www-lb.open-mpi.org/projects/hwloc/lstopo/images/2XeonSPv2+2kmem.v2.1.png.
 		CPU(s):              80
 		On-line CPU(s) list: 0-79
 		Thread(s) per core:  2
@@ -730,11 +730,10 @@ var (
 		},
 	}
 	/*
-		FAKE Topology from dual xeon gold 6230
-		(see: topoDualSocketMultiNumaPerSocketHT).
-		We flip NUMA cells and Sockets to exercise the code.
-		TODO(fromanirh): replace with a real-world topology
-		once we find a suitable one.
+		模拟拓扑：基于双路 xeon gold 6230
+		（参见 topoDualSocketMultiNumaPerSocketHT）。
+		我们交换 NUMA 单元和 socket，以触发相关代码路径。
+		TODO（fromanirh）：找到合适的真实拓扑后替换。
 	*/
 	// 假拓扑：每个 NUMA 节点跨两个 socket，开启超线程。
 	fakeTopoMultiSocketDualSocketPerNumaHT = &topology.CPUTopology{
@@ -827,7 +826,7 @@ var (
 	}
 
 	/*
-		Topology from dual AMD EPYC 7742 64-Core Processor; lscpu excerpt
+		拓扑来自 dual AMD EPYC 7742 64-Core Processor；lscpu 输出节选
 		CPU(s):              256
 		On-line CPU(s) list: 0-255
 		Thread(s) per core:  2
@@ -1109,7 +1108,7 @@ var (
 		},
 	}
 	/*
-		Topology from dual AMD EPYC 9654 96-Core Processor; lscpu excerpt
+		拓扑来自 dual AMD EPYC 9654 96-Core Processor；lscpu 输出节选
 		CPU(s):                384
 		On-line CPU(s) list:   0-383
 		Thread(s) per core:    2
@@ -1514,7 +1513,7 @@ var (
 		},
 	}
 	/*
-		Topology from single AMD EPYC 7702P 64C; lscpu excerpt
+		拓扑来自 single AMD EPYC 7702P 64C；lscpu 输出节选
 		CPU(s):                128
 		On-line CPU(s) list:   0-127
 		Thread(s) per core:    2
@@ -1662,7 +1661,7 @@ var (
 		},
 	}
 	/*
-		Topology from single AMD EPYC 7702P 64C; lscpu excerpt
+		拓扑来自 single AMD EPYC 7702P 64C；lscpu 输出节选
 		CPU(s):                64
 		On-line CPU(s) list:   0-63
 		Thread(s) per core:    1
@@ -1746,7 +1745,7 @@ var (
 		},
 	}
 	/*
-		Topology from dual AMD EPYC 7303 32C; lscpu excerpt
+		拓扑来自 dual AMD EPYC 7303 32C；lscpu 输出节选
 		CPU(s):                64
 		On-line CPU(s) list:   0-127
 		Thread(s) per core:    1
@@ -1831,7 +1830,7 @@ var (
 		},
 	}
 	/*
-		Topology from single AMD EPYC 7303 32C; lscpu excerpt
+		拓扑来自 single AMD EPYC 7303 32C；lscpu 输出节选
 		CPU(s):                32
 		On-line CPU(s) list:   0-31
 		Thread(s) per core:    1
@@ -1883,7 +1882,7 @@ var (
 		},
 	}
 	/*
-		Topology from dual AMD EPYC 9754 128C; lscpu excerpt
+		拓扑来自 dual AMD EPYC 9754 128C；lscpu 输出节选
 		CPU(s):                128
 		On-line CPU(s) list:   0-255
 		Thread(s) per core:    2
@@ -2159,7 +2158,7 @@ var (
 		},
 	}
 	/*
-		Topology from dual AMD EPYC 9654 96-Core Processor; lscpu excerpt
+		拓扑来自 dual AMD EPYC 9654 96-Core Processor；lscpu 输出节选
 		CPU(s):                192
 		On-line CPU(s) list:   0-191
 		Thread(s) per core:    1
@@ -2374,7 +2373,7 @@ var (
 		},
 	}
 	/*
-		Topology from dual Intel Xeon Platinum 8490H 60-Core Processor; lscpu excerpt
+		拓扑来自 dual Intel Xeon Platinum 8490H 60-Core Processor；lscpu 输出节选
 		CPU(s):                240
 		On-line CPU(s) list:   0-239
 		Thread(s) per core:    2
@@ -2637,7 +2636,7 @@ var (
 		},
 	}
 	/*
-		Topology from dual Intel Core i7-12850HX 10-Core Processor; lscpu excerpt
+		拓扑来自 dual Intel Core i7-12850HX 10-Core Processor；lscpu 输出节选
 		CPU(s):                24
 		On-line CPU(s) list:   0-23
 		Thread(s) per core:    2
@@ -2648,7 +2647,7 @@ var (
 	// 单 socket、单 NUMA 节点、仅含 P-core 且开启超线程，uncore cache 为单片结构。
 	topoSingleSocketSingleNumaPerSocketPCoreHTMonolithicUncore = &topology.CPUTopology{
 		NumCPUs:        24,
-		NumCores:       16, // 8 E-Cores and 8 P-Cores
+		NumCores:       16, // 8 个 E-Core 和 8 个 P-Core。
 		NumUncoreCache: 1,
 		NumSockets:     1,
 		NumNUMANodes:   1,
@@ -2680,7 +2679,7 @@ var (
 		},
 	}
 	/*
-		Topology from 1P ARM Ampere Altra 128C; lscpu excerpt
+		拓扑来自 1P ARM Ampere Altra 128C；lscpu 输出节选
 		CPU(s):                128
 		On-line CPU(s) list:   0-127
 		Thread(s) per core:    1
@@ -2827,7 +2826,7 @@ var (
 		},
 	}
 	/*
-		Topology from 1P AWS Graviton3 64C; lscpu excerpt
+		拓扑来自 1P AWS Graviton3 64C；lscpu 输出节选
 		CPU(s):                64
 		On-line CPU(s) list:   0-63
 		Thread(s) per core:    1

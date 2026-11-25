@@ -58,7 +58,7 @@ type endpointImpl struct {
 	// stopTime 是插件停止的时间；零值表示仍在运行。
 	stopTime time.Time
 	// client 仅供测试使用。
-	client plugin.Client // for testing only
+	client plugin.Client // 仅用于测试。
 }
 
 // newEndpointImpl 为给定插件创建 endpoint，用于正常的设备插件注册流程。

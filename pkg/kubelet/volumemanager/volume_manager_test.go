@@ -528,7 +528,7 @@ func newTestVolumeManager(t *testing.T, tmpDir string, podManager kubepod.Manage
 	}
 	fakeRecorder := &record.FakeRecorder{}
 	plugMgr := &volume.VolumePluginMgr{}
-	// TODO (#51147) inject mock prober
+	// TODO（#51147）：注入模拟探测器。
 	fakeVolumeHost := volumetest.NewFakeKubeletVolumeHost(t, tmpDir, kubeClient, nil)
 	fakeVolumeHost.WithNode(node)
 

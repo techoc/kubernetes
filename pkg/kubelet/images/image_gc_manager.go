@@ -54,7 +54,9 @@ const imageIndexTupleFormat = "%s,%s"
 // ImageGarbageCollectedTotalReason* 说明某镜像在
 // `image_garbage_collected_total` 指标中被垃圾回收的原因。
 const (
-	ImageGarbageCollectedTotalReasonAge   = "age"
+	// ImageGarbageCollectedTotalReasonAge 表示镜像因长时间未使用而被垃圾回收。
+	ImageGarbageCollectedTotalReasonAge = "age"
+	// ImageGarbageCollectedTotalReasonSpace 表示镜像因需要释放磁盘空间而被垃圾回收。
 	ImageGarbageCollectedTotalReasonSpace = "space"
 )
 
@@ -647,10 +649,14 @@ type evictionInfo struct {
 // byLastUsedAndDetected 实现 sort.Interface，按 lastUsed 对 evictionInfo 排序。
 type byLastUsedAndDetected []evictionInfo
 
-func (ev byLastUsedAndDetected) Len() int      { return len(ev) }
+// Len 返回参与排序的镜像条目数量。
+func (ev byLastUsedAndDetected) Len() int { return len(ev) }
+
+// Swap 交换两个镜像条目的位置。
 func (ev byLastUsedAndDetected) Swap(i, j int) { ev[i], ev[j] = ev[j], ev[i] }
+
+// Less 按最近使用时间排序，相同时按首次检测时间排序。
 func (ev byLastUsedAndDetected) Less(i, j int) bool {
-	// 按最近使用时间排序，相同时按首次检测时间排序。
 	if ev[i].lastUsed.Equal(ev[j].lastUsed) {
 		return ev[i].firstDetected.Before(ev[j].firstDetected)
 	}

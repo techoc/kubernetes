@@ -320,7 +320,7 @@ fd00::6	podFoo.domainFoo	podFoo
 // TestRunInContainerNoSuchPod 验证对不存在的 pod 执行命令时返回错误且无输出。
 func TestRunInContainerNoSuchPod(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	// 使用 fake runtime 与 fake command runner，测试不依赖真实运行时。
+	// 使用伪运行时与伪命令运行器，测试不依赖真实运行时。
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
@@ -373,7 +373,7 @@ func TestRunInContainer(t *testing.T) {
 		actualOutput, err := kubelet.RunInContainer(tCtx, "podFoo_nsFoo", "", "containerFoo", cmd)
 		assert.Equal(t, containerID, fakeCommandRunner.ContainerID, "(testError=%v) ID", testError)
 		assert.Equal(t, cmd, fakeCommandRunner.Cmd, "(testError=%v) command", testError)
-		// this isn't 100% foolproof as a bug in a real CommandRunner where it fails to copy to stdout/stderr wouldn't be caught by this test
+		// 这并非万无一失：若真实 CommandRunner 存在无法复制 stdout/stderr 的错误，本测试无法发现。
 		assert.Equal(t, "foo", string(actualOutput), "(testError=%v) output", testError)
 		assert.Equal(t, testError, err, "(testError=%v) err", testError)
 	}
@@ -439,19 +439,19 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 	trueValue := true
 	falseValue := false
 	testCases := []struct {
-		name               string                 // the name of the test case
-		ns                 string                 // the namespace to generate environment for
-		enableServiceLinks *bool                  // enabling service links
-		container          *v1.Container          // the container to use
-		nilLister          bool                   // whether the lister should be nil
-		staticPod          bool                   // whether the pod should be a static pod (versus an API pod)
-		unsyncedServices   bool                   // whether the services should NOT be synced
-		configMap          *v1.ConfigMap          // an optional ConfigMap to pull from
-		secret             *v1.Secret             // an optional Secret to pull from
-		podIPs             []string               // the pod IPs
-		expectedEnvs       []kubecontainer.EnvVar // a set of expected environment vars
-		expectedError      bool                   // does the test fail
-		expectedEvent      string                 // does the test emit an event
+		name               string                 // 测试用例名称
+		ns                 string                 // 生成环境变量所在的命名空间
+		enableServiceLinks *bool                  // 是否启用 service links
+		container          *v1.Container          // 使用的容器
+		nilLister          bool                   // lister 是否为 nil
+		staticPod          bool                   // Pod 是否应为静态 Pod（相对于 API Pod）
+		unsyncedServices   bool                   // 是否不应同步 Service
+		configMap          *v1.ConfigMap          // 可选的 ConfigMap 来源
+		secret             *v1.Secret             // 可选的 Secret 来源
+		podIPs             []string               // Pod IP 列表
+		expectedEnvs       []kubecontainer.EnvVar // 期望的环境变量集合
+		expectedError      bool                   // 测试是否应失败
+		expectedEvent      string                 // 测试是否产生事件
 	}{
 		{
 			name:               "if services aren't synced, non-static pods should fail",
@@ -465,7 +465,7 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 			expectedError:      true,
 		},
 		{
-			name:               "if services aren't synced, static pods should succeed", // if there is no service
+			name:               "if services aren't synced, static pods should succeed", // 不存在 Service 时
 			ns:                 "test1",
 			enableServiceLinks: &falseValue,
 			container:          &v1.Container{Env: []v1.EnvVar{}},
@@ -3486,7 +3486,7 @@ func TestPodPhaseWithContainerRestartPolicy(t *testing.T) {
 		},
 		{
 			name: "At least one container with restartable container-level restart policy failed",
-			// Spec to simulate containerB having RestartPolicy: Always
+			// 模拟 containerB 设置 RestartPolicy: Always 的 spec
 			spec: &v1.PodSpec{
 				Containers: []v1.Container{
 					{
@@ -3682,7 +3682,7 @@ func TestPodPhaseWithRestartAllContainers(t *testing.T) {
 		statuses      []v1.ContainerStatus
 		expectedPhase v1.PodPhase
 	}{
-		// Trigger RestartAllContainers
+		// 触发 RestartAllContainers
 		{
 			name: "regular container triggers RestartAllContainers",
 			spec: &v1.PodSpec{
@@ -3733,7 +3733,7 @@ func TestPodPhaseWithRestartAllContainers(t *testing.T) {
 			},
 			expectedPhase: v1.PodPending,
 		},
-		// Cleanup phase
+		// 清理阶段
 		{
 			name: "regular container triggers RestartAllContainers, cleaned up",
 			spec: &v1.PodSpec{
@@ -3784,7 +3784,7 @@ func TestPodPhaseWithRestartAllContainers(t *testing.T) {
 			},
 			expectedPhase: v1.PodPending,
 		},
-		// Startup phase
+		// 启动阶段
 		{
 			name: "regular container triggered RestartAllContainers; init container succeeded",
 			spec: &v1.PodSpec{
@@ -3960,8 +3960,8 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 				runningState("containerB"),
 			},
 			containers: desiredState.Containers,
-			// no init containers
-			// is not an init container
+			// 无 init 容器
+			// 不是 init 容器
 			expected: []v1.ContainerStatus{
 				waitingWithLastTerminationUnknown("containerA", 0),
 				waitingWithLastTerminationUnknown("containerB", 0),
@@ -3984,8 +3984,8 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 				runningState("containerB"),
 			},
 			containers: desiredState.Containers,
-			// no init containers
-			// is not an init container
+			// 无 init 容器
+			// 不是 init 容器
 			expected: []v1.ContainerStatus{
 				waitingWithLastTerminationUnknown("containerA", 1),
 				waitingWithLastTerminationUnknown("containerB", 1),
@@ -4002,8 +4002,8 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 				withRestartCount(failedState("containerB"), 5),
 			},
 			containers: desiredState.Containers,
-			// no init containers
-			// is not an init container
+			// 无 init 容器
+			// 不是 init 容器
 			expected: []v1.ContainerStatus{
 				withRestartCount(failedState("containerA"), 5),
 				withRestartCount(failedState("containerB"), 5),
@@ -4032,8 +4032,8 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 				withRestartCount(failedState("containerB"), 5),
 			},
 			containers: desiredState.Containers,
-			// no init containers
-			// is not an init container
+			// 无 init 容器
+			// 不是 init 容器
 			expected: []v1.ContainerStatus{
 				withRestartCount(withLastTerminationState(runningState("containerA"), v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{
@@ -4307,7 +4307,6 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 			)
 			for i, status := range containerStatuses {
 				// 清理与用例无关的字段，聚焦被测转换逻辑。
-				// cleanup irrelevant fields
 				status.ContainerID = ""
 				status.Resources = nil
 				if status.State.Terminated != nil {
@@ -4331,7 +4330,7 @@ func (r *imageDigestRuntime) GetImageRef(ctx context.Context, image kubecontaine
 }
 
 // TestConvertToAPIContainerStatusesWithImageVolumeDigest 验证镜像卷 digest 被写入
-// VolumeMountStatus。
+// 写入 VolumeMountStatus。
 func TestConvertToAPIContainerStatusesWithImageVolumeDigest(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	const (
@@ -4481,7 +4480,7 @@ func TestConvertToAPIContainerStatusesWithImageVolumeDigest(t *testing.T) {
 			defer testKubelet.Cleanup()
 			kl := testKubelet.kubelet
 
-			// Mock the container runtime to return the expected image digest
+			// 模拟容器运行时返回期望的镜像 digest
 			kl.containerRuntime = &imageDigestRuntime{
 				FakeRuntime: &containertest.FakeRuntime{},
 				digest:      imageDigest,
@@ -4896,7 +4895,7 @@ func Test_generateAPIPodStatus(t *testing.T) {
 					runningState("containerA"),
 					runningState("containerB"),
 				},
-				// Reason and message should be preserved
+				// 应保留 Reason 和 Message
 				Reason:  "Test",
 				Message: "test",
 			},
@@ -4951,7 +4950,7 @@ func Test_generateAPIPodStatus(t *testing.T) {
 					succeededState("containerA"),
 					succeededState("containerB"),
 				},
-				// Reason and message should be preserved
+				// 应保留 Reason 和 Message
 				Reason:  "Test",
 				Message: "test",
 			},
@@ -5883,8 +5882,8 @@ func Test_generateAPIPodStatus(t *testing.T) {
 						Ready: true,
 					},
 				},
-				// Resources field should reflect total allocated pod level requests (standard + DRA).
-				// Limits stay empty: DRA is not added to limits the containers do not declare.
+				// Resources 字段应反映 Pod 级已分配请求总量（标准资源 + DRA）。
+				// Limits 保持为空：容器未声明限制时，不将 DRA 计入限制。
 				Resources: &v1.ResourceRequirements{
 					Requests: v1.ResourceList{
 						v1.ResourceCPU:    resource.MustParse("150m"),
@@ -5892,7 +5891,7 @@ func Test_generateAPIPodStatus(t *testing.T) {
 					},
 					Limits: v1.ResourceList{},
 				},
-				// AllocatedResources should sum standard requests (100m, 100Mi) + DRA allocations (50m, 50Mi)
+				// AllocatedResources 应汇总标准请求（100m、100Mi）与 DRA 分配（50m、50Mi）
 				AllocatedResources: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("150m"),
 					v1.ResourceMemory: resource.MustParse("150Mi"),
@@ -6335,7 +6334,7 @@ func TestGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 			},
 		},
 		{
-			// by default the cluster prefers IPv4
+			// 集群默认优先使用 IPv4
 			name: "CRI dual-stack PodIPs override NodeAddresses prefer IPv4",
 			nodeAddresses: []v1.NodeAddress{
 				{Type: v1.NodeInternalIP, Address: "10.0.0.1"},
@@ -6497,7 +6496,7 @@ func TestNodeAddressUpdatesGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 				pod.Status.PodIP = pod.Status.PodIPs[0].IP
 			}
 
-			// set old status
+			// 设置旧状态
 			podStatus := &kubecontainer.PodStatus{
 				ID:        pod.UID,
 				Name:      pod.Name,
@@ -6774,11 +6773,9 @@ func TestConvertToAPIContainerStatusesDataRace(t *testing.T) {
 	defer testKubelet.Cleanup()
 	kl := testKubelet.kubelet
 
-	// convertToAPIContainerStatuses is purely transformative and shouldn't alter the state of the kubelet
-	// as there are no synchronisation events in that function (no locks, no channels, ...) each test routine
-	// should have its own vector clock increased independently. Golang race detector uses pure happens-before
-	// detection, so would catch a race condition consistently, despite only spawning 2 goroutines
-	// 两个 goroutine 访问同一输入，若存在数据竞争会被检测到。
+	// convertToAPIContainerStatuses 仅转换数据，不应改变 kubelet 状态。
+	// 该函数没有锁、通道等同步事件，因此每个测试例程都应独立递增自己的向量时钟。
+	// Go 竞争检测器基于先发生关系检测，即使只启动两个 goroutine 也能稳定发现数据竞争。
 	for i := 0; i < 2; i++ {
 		go func() {
 			kl.convertToAPIContainerStatuses(tCtx, pod, criStatus, []v1.ContainerStatus{}, []v1.Container{}, nil, false, false, false)
@@ -6877,10 +6874,10 @@ func TestConvertToAPIContainerStatusesForResources(t *testing.T) {
 	// 每个用例使用独立 pod 名称，避免 allocationManager 状态冲突。
 	idx := 0
 	for tdesc, tc := range map[string]struct {
-		State              kubecontainer.State // Defaults to Running
+		State              kubecontainer.State // 默认为 Running
 		Resources          v1.ResourceRequirements
 		AllocatedResources *v1.ResourceRequirements          // Defaults to Resources
-		ActualResources    *kubecontainer.ContainerResources // Defaults to Resources equivalent
+		ActualResources    *kubecontainer.ContainerResources // 默认为 Resources 的等效值
 		OldStatus          v1.ContainerStatus
 		Expected           v1.ContainerStatus
 	}{
@@ -7185,7 +7182,7 @@ func TestConvertToAPIContainerStatusesForResources(t *testing.T) {
 		},
 		"newly terminated Pod": {
 			State: kubecontainer.ContainerStateExited,
-			// Actual resources were different, but they should be ignored once the container is terminated.
+			// 实际资源虽然不同，但容器终止后应忽略这些值。
 			Resources:          v1.ResourceRequirements{Limits: CPU1AndMem1GAndStorage2G, Requests: CPU1AndMem1GAndStorage2G},
 			AllocatedResources: &v1.ResourceRequirements{Limits: CPU2AndMem2GAndStorage2G, Requests: CPU2AndMem2GAndStorage2G},
 			OldStatus: v1.ContainerStatus{
@@ -7258,11 +7255,10 @@ func TestConvertToAPIContainerStatusesForResources(t *testing.T) {
 			podStatus := testPodStatus(state, resources)
 			cStatuses := kubelet.convertToAPIContainerStatuses(tCtx, tPod, podStatus, []v1.ContainerStatus{tc.OldStatus}, tPod.Spec.Containers, nil, false, false, false)
 			actual := cStatuses[0]
-			// Explicitly test AllocatedResources and Resources separately for debuggability.
-			// 分开断言资源字段，失败时更易定位。
+			// 分开断言 AllocatedResources 与 Resources，便于定位失败原因。
 			assert.Equal(t, tc.Expected.AllocatedResources, actual.AllocatedResources, "AllocatedResources")
 			assert.Equal(t, tc.Expected.Resources, actual.Resources, "Resources")
-			// Catch-all for any other status changes.
+			// 兜底比对其余状态变化。
 			assert.Equal(t, tc.Expected, cStatuses[0])
 		})
 	}
@@ -7381,8 +7377,7 @@ func TestConvertToAPIContainerStatusesForUser(t *testing.T) {
 			}),
 		},
 	} {
-		// Set emulation version so that the feature gate can be disabled in the test
-		// 模拟 1.34 版本，以便关闭 SupplementalGroupsPolicy。
+		// 模拟 1.34 版本，以便在测试中关闭 SupplementalGroupsPolicy 特性门控。
 		featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SupplementalGroupsPolicy, tc.featureEnabled)
 		tPod := testPod.DeepCopy()
@@ -7497,8 +7492,7 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 			wantWorker: func(t *testing.T, w *podWorkers, records map[types.UID][]syncPodRecord) {
 				drainAllWorkers(w)
 				uid := types.UID("1")
-				// we expect runtime pods to be cleared from the status history as soon as they
-				// reach completion
+				// 预期运行时 Pod 完成后立即从状态历史中清除
 				if len(w.podSyncStatuses) != 0 {
 					t.Fatalf("unexpected sync statuses: %#v", w.podSyncStatuses)
 				}

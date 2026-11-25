@@ -33,7 +33,7 @@ import (
 // TestMakeMountsWindows 验证 Windows 下容器挂载路径的规范化与 etc-hosts 挂载生成。
 func TestMakeMountsWindows(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// TODO: remove skip once the failing test has been fixed.
+	// TODO: 修复失败用例后移除跳过。
 	// 已知失败用例，先跳过以免阻塞 CI。
 	t.Skip("Skip failing test on Windows.")
 	// 构造覆盖正斜杠、反斜杠、盘符与命名管道路径的挂载点。

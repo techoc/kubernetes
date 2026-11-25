@@ -840,18 +840,18 @@ func (s *Server) getContainerLogs(request *restful.Request, response *restful.Re
 	ctx := request.Request.Context()
 
 	if len(podID) == 0 {
-		// TODO: Why return JSON when the rest return plaintext errors?
-		// TODO: Why return plaintext errors?
+		// TODO: 为何这里返回 JSON，而其他错误返回纯文本？
+		// TODO: 为何不使用纯文本错误？
 		response.WriteError(http.StatusBadRequest, fmt.Errorf(`{"message": "Missing podID."}`))
 		return
 	}
 	if len(containerName) == 0 {
-		// TODO: Why return JSON when the rest return plaintext errors?
+		// TODO: 为何这里返回 JSON，而其他错误返回纯文本？
 		response.WriteError(http.StatusBadRequest, fmt.Errorf(`{"message": "Missing container name."}`))
 		return
 	}
 	if len(podNamespace) == 0 {
-		// TODO: Why return JSON when the rest return plaintext errors?
+		// TODO: 为何这里返回 JSON，而其他错误返回纯文本？
 		response.WriteError(http.StatusBadRequest, fmt.Errorf(`{"message": "Missing podNamespace."}`))
 		return
 	}
@@ -947,9 +947,8 @@ func encodePods(pods []*v1.Pod) (data []byte, err error) {
 	for _, pod := range pods {
 		podList.Items = append(podList.Items, *pod)
 	}
-	// TODO: this needs to be parameterized to the kubelet, not hardcoded. Depends on Kubelet
-	//   as API server refactor.
-	// TODO: Locked to v1, needs to be made generic
+	// TODO: 版本不应硬编码，需由 kubelet 传入；这取决于 kubelet 作为 API server 的重构。
+	// TODO: 目前固定为 v1，需要改为通用版本。
 	codec := legacyscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion)
 	return runtime.Encode(codec, podList)
 }
@@ -1088,7 +1087,7 @@ func GETOnlyRestfulFilter() restful.FilterFunction {
 }
 
 // AllowedMethodsRestfulFilter 返回一个 restful.FilterFunction，拒绝 HTTP 方法不在
-// allowed 中的请求。拒绝时返回 405 Method Not Allowed，并在 Allow 头中列出允许的
+// allowed 集合中的请求。拒绝时返回 405 Method Not Allowed，并在 Allow 头中列出允许的
 // 方法（RFC 9110）。
 func AllowedMethodsRestfulFilter(allowed ...string) restful.FilterFunction {
 	allowedSet := make(map[string]struct{}, len(allowed))
@@ -1457,7 +1456,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	handler.ServeHTTP(w, req)
 }
 
-// prometheusHostAdapter 把 HostInterface 适配为 cAdvisor prometheus collector
+// prometheusHostAdapter 把 HostInterface 适配为 cAdvisor 的 Prometheus 采集器
 // 所需的接口。
 type prometheusHostAdapter struct {
 	host HostInterface
@@ -1480,7 +1479,7 @@ func (a prometheusHostAdapter) GetMachineInfo() (*cadvisorapi.MachineInfo, error
 
 // oomEventsHostAdapter 包装 prometheusHostAdapter，把每个容器的 OOM 事件计数替换为
 // kubelet OOM watcher（pkg/kubelet/oom）维护的计数，使 container_oom_events_total
-// 由 kubelet 而非 cadvisor 生成。
+// 由 kubelet 而非 cAdvisor 生成。
 type oomEventsHostAdapter struct {
 	prometheusHostAdapter
 }

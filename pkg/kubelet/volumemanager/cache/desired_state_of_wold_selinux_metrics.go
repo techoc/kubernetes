@@ -25,7 +25,7 @@ import (
 
 // SELinux 卷挂载相关指标。
 var (
-	// TODO: add plugin name + access mode labels to all these metrics
+	// TODO: 为这些指标补充插件名称和访问模式标签。
 	// seLinuxContainerContextErrors 统计无法为容器计算 SELinux 上下文的错误数。
 	seLinuxContainerContextErrors = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{

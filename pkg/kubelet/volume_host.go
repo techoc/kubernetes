@@ -243,7 +243,7 @@ func (kvh *kubeletVolumeHost) GetMounter() mount.Interface {
 
 // GetNodeAllocatable 返回节点可分配资源。
 func (kvh *kubeletVolumeHost) GetNodeAllocatable() (v1.ResourceList, error) {
-	// TODO: Pass proper context when VolumeHost interface methods support context parameters
+	// TODO: VolumeHost 接口方法支持上下文参数后，传入正确的上下文。
 	node, err := kvh.kubelet.getNodeAnyWay(context.TODO())
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node: %v", err)
@@ -298,7 +298,7 @@ func (kvh *kubeletVolumeHost) GetPodCertificateCredentialBundle(ctx context.Cont
 
 // GetNodeLabels 返回节点标签。
 func (kvh *kubeletVolumeHost) GetNodeLabels() (map[string]string, error) {
-	// TODO: Pass proper context when VolumeHost interface methods support context parameters
+	// TODO: VolumeHost 接口方法支持上下文参数后，传入正确的上下文。
 	node, err := kvh.kubelet.GetNode(context.TODO())
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node: %v", err)
@@ -308,7 +308,7 @@ func (kvh *kubeletVolumeHost) GetNodeLabels() (map[string]string, error) {
 
 // GetAttachedVolumesFromNodeStatus 从节点状态构建卷名到设备路径的映射。
 func (kvh *kubeletVolumeHost) GetAttachedVolumesFromNodeStatus() (map[v1.UniqueVolumeName]string, error) {
-	// TODO: Pass proper context when VolumeHost interface methods support context parameters
+	// TODO: VolumeHost 接口方法支持上下文参数后，传入正确的上下文。
 	node, err := kvh.kubelet.GetNode(context.TODO())
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving node: %v", err)

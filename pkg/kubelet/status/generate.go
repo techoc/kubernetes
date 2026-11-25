@@ -40,7 +40,7 @@ const (
 	ContainersNotReady = "ContainersNotReady"
 	// ContainersNotInitialized 表示一个或多个 init 容器尚未成功。
 	ContainersNotInitialized = "ContainersNotInitialized"
-	// ReadinessGatesNotReady 表示一个或多个 Pod readiness gate 未满足。
+	// ReadinessGatesNotReady 表示一个或多个 Pod 就绪门控未满足。
 	ReadinessGatesNotReady = "ReadinessGatesNotReady"
 	// RestartAllContainersStarted 表示有容器退出并触发了重启所有容器的动作。
 	RestartAllContainersStarted = "RestartAllContainersStarted"

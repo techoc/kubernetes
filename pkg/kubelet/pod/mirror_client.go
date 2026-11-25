@@ -96,7 +96,7 @@ func (mc *basicMirrorClient) CreateMirrorPod(ctx context.Context, pod *v1.Pod) e
 	// 已存在时比较 hash：一致说明镜像已是最新，返回成功。
 	apiPod, err := mc.apiserverClient.CoreV1().Pods(copyPod.Namespace).Create(ctx, &copyPod, metav1.CreateOptions{})
 	if err != nil && apierrors.IsAlreadyExists(err) {
-		// Check if the existing pod is the same as the pod we want to create.
+		// 检查已存在的 Pod 是否与待创建的 Pod 相同。
 		if h, ok := apiPod.Annotations[kubetypes.ConfigMirrorAnnotationKey]; ok && h == hash {
 			return nil
 		}

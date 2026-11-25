@@ -138,7 +138,7 @@ func (mp *MemoryManagerCheckpointV1) MarshalCheckpoint() ([]byte, error) {
 
 // MarshalCheckpoint 以 v2 格式序列化 checkpoint。
 func (mp *MemoryManagerCheckpointV2) MarshalCheckpoint() ([]byte, error) {
-	// make sure checksum wasn't set before so it doesn't affect output checksum
+	// 确保此前未设置校验和，以免影响输出校验和。
 	mp.Checksum = 0
 
 	// 为了保持回滚兼容，必须使用旧结构名 "MemoryManagerCheckpoint"（而不是

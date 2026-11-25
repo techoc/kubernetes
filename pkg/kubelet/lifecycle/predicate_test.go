@@ -60,77 +60,77 @@ func TestRemoveMissingExtendedResources(t *testing.T) {
 		{
 			desc: "requests in Limits should be ignored",
 			pod: makeTestPod(
-				v1.ResourceList{}, // Requests
-				v1.ResourceList{extendedResource: quantity}, // Limits
+				v1.ResourceList{}, // 请求量
+				v1.ResourceList{extendedResource: quantity}, // 限制量
 			),
 			node: makeTestNode(
-				v1.ResourceList{"foo.com/baz": quantity}, // Allocatable
+				v1.ResourceList{"foo.com/baz": quantity}, // 可分配量
 			),
 			expectedPod: makeTestPod(
-				v1.ResourceList{}, // Requests
-				v1.ResourceList{extendedResource: quantity}, // Limits
+				v1.ResourceList{}, // 请求量
+				v1.ResourceList{extendedResource: quantity}, // 限制量
 			),
 		},
 		{
 			desc: "requests for resources available in node should not be removed",
 			pod: makeTestPod(
-				v1.ResourceList{extendedResource: quantity}, // Requests
-				v1.ResourceList{}, // Limits
+				v1.ResourceList{extendedResource: quantity}, // 请求量
+				v1.ResourceList{}, // 限制量
 			),
 			node: makeTestNode(
-				v1.ResourceList{extendedResource: quantity}, // Allocatable
+				v1.ResourceList{extendedResource: quantity}, // 可分配量
 			),
 			expectedPod: makeTestPod(
-				v1.ResourceList{extendedResource: quantity}, // Requests
-				v1.ResourceList{}), // Limits
+				v1.ResourceList{extendedResource: quantity}, // 请求量
+				v1.ResourceList{}), // 限制量
 		},
 		{
 			desc: "requests for resources unavailable in node should be removed",
 			pod: makeTestPod(
-				v1.ResourceList{extendedResource: quantity}, // Requests
-				v1.ResourceList{}, // Limits
+				v1.ResourceList{extendedResource: quantity}, // 请求量
+				v1.ResourceList{}, // 限制量
 			),
 			node: makeTestNode(
-				v1.ResourceList{"foo.com/baz": quantity}, // Allocatable
+				v1.ResourceList{"foo.com/baz": quantity}, // 可分配量
 			),
 			expectedPod: makeTestPod(
-				v1.ResourceList{}, // Requests
-				v1.ResourceList{}, // Limits
+				v1.ResourceList{}, // 请求量
+				v1.ResourceList{}, // 限制量
 			),
 		},
 		{
 			desc: "requests for extended resources with Allocatable 0 should not be removed",
 			pod: makeTestPod(
-				v1.ResourceList{extendedResource: quantity}, // Requests
-				v1.ResourceList{extendedResource: quantity}, // Limits
+				v1.ResourceList{extendedResource: quantity}, // 请求量
+				v1.ResourceList{extendedResource: quantity}, // 限制量
 			),
 			node: makeTestNode(
-				v1.ResourceList{extendedResource: *resource.NewQuantity(0, resource.DecimalSI)}, // Allocatable = 0
+				v1.ResourceList{extendedResource: *resource.NewQuantity(0, resource.DecimalSI)}, // 可分配量 = 0
 			),
 			expectedPod: makeTestPod(
-				v1.ResourceList{extendedResource: quantity}, // Requests
-				v1.ResourceList{extendedResource: quantity}, // Limits
+				v1.ResourceList{extendedResource: quantity}, // 请求量
+				v1.ResourceList{extendedResource: quantity}, // 限制量
 			),
 		},
 		{
 			desc: "requests for extended resources that are not available in node should be removed",
 			pod: makeTestPod(
-				v1.ResourceList{extendedResource: quantity}, // Requests
-				v1.ResourceList{extendedResource: quantity}, // Limits
+				v1.ResourceList{extendedResource: quantity}, // 请求量
+				v1.ResourceList{extendedResource: quantity}, // 限制量
 			),
 			node: makeTestNode(
-				v1.ResourceList{}, // Allocatable is absent for foo.com/bar
+				v1.ResourceList{}, // foo.com/bar 没有可分配量
 			),
 			expectedPod: makeTestPod(
-				v1.ResourceList{}, // Requests are filtered
-				v1.ResourceList{extendedResource: quantity}, // Limits
+				v1.ResourceList{}, // 请求量已被过滤
+				v1.ResourceList{extendedResource: quantity}, // 限制量
 			),
 		},
 		{
 			desc: "request for extended resource backed by DRA should be removed if Allocatable is 0",
 			pod:  makeTestPodWithDRAResource(extendedResource, quantity),
 			node: makeTestNode(
-				v1.ResourceList{extendedResource: *resource.NewQuantity(0, resource.DecimalSI)}, // Allocatable = 0
+				v1.ResourceList{extendedResource: *resource.NewQuantity(0, resource.DecimalSI)}, // 可分配量 = 0
 			),
 			enableDRAExtendedResource: true,
 			expectedPod:               emptyRequests(makeTestPodWithDRAResource(extendedResource, quantity)),
@@ -139,7 +139,7 @@ func TestRemoveMissingExtendedResources(t *testing.T) {
 			desc: "request for extended resource backed by DRA should be removed if Allocatable is absent",
 			pod:  makeTestPodWithDRAResource(extendedResource, quantity),
 			node: makeTestNode(
-				v1.ResourceList{}, // Allocatable is absent for foo.com/bar
+				v1.ResourceList{}, // foo.com/bar 没有可分配量
 			),
 			enableDRAExtendedResource: true,
 			expectedPod:               emptyRequests(makeTestPodWithDRAResource(extendedResource, quantity)),

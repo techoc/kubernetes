@@ -488,7 +488,7 @@ func TestReinspect(t *testing.T) {
 		updateCacheError  error
 		podDeleted        bool
 		expectUpdateCache bool
-		expectReinspect   bool // value in podsToReinspect AFTER relist
+		expectReinspect   bool // relist 后 podsToReinspect 中的值
 		expectEvent       bool
 		expectStatus      bool
 	}{
@@ -571,7 +571,7 @@ func TestReinspect(t *testing.T) {
 			expectUpdateCache: true,
 			expectReinspect:   false,
 			expectEvent:       true,
-			expectStatus:      false, // Deleted from cache
+			expectStatus:      false, // 已从缓存删除
 		},
 	}
 
@@ -909,7 +909,7 @@ func TestWorkerLoop(t *testing.T) {
 		pod1 := &kubecontainer.Pod{ID: "pod1", Name: "pod1", Containers: []*kubecontainer.Container{{ID: kubecontainer.ContainerID{Type: "test", ID: "c1"}, State: kubecontainer.ContainerStateRunning}}}
 		pod2 := &kubecontainer.Pod{ID: "pod2", Name: "pod2", Containers: []*kubecontainer.Container{{ID: kubecontainer.ContainerID{Type: "test", ID: "c2"}, State: kubecontainer.ContainerStateRunning}}}
 
-		var call *mock.Call // Used to assert order of mock calls.
+		var call *mock.Call // 用于断言 mock 调用的顺序。
 
 		startTime := time.Now()
 		pleg.globalRelistTimer = pleg.clock.NewTimer(2 * time.Second)
@@ -938,7 +938,7 @@ func TestWorkerLoop(t *testing.T) {
 		p1Status := requireUnblocked(t, p1res) // pod1 现已解除阻塞
 		assert.Equal(t, pod1.ID, p1Status.ID)
 		assert.Equal(t, time.Now(), p1Status.TimeStamp)
-		requireBlocked(t, p2res) // pod2 is still blocked
+		requireBlocked(t, p2res) // pod2 仍处于阻塞状态
 
 		p1NewRes := getNewerThanAsync(t, cache, pod1.ID, startTime.Add(2*time.Second))
 		requireBlocked(t, p1NewRes)
@@ -1019,7 +1019,7 @@ func requireBlocked[T any](t *testing.T, ch <-chan T) {
 	case r := <-ch:
 		t.Fatalf("Receive should have blocked, but got: %v", r)
 	default:
-		// OK.
+		// 正常。
 	}
 }
 

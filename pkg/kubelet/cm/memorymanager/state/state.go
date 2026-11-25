@@ -79,7 +79,7 @@ func (nm NUMANodeMap) Clone() NUMANodeMap {
 
 // Block 表示一段内存分配。
 type Block struct {
-	// NUMAAffinity contains the string that represents NUMA affinity bitmask
+	// NUMAAffinity 包含表示 NUMA 亲和性位掩码的字符串。
 	NUMAAffinity []int           `json:"numaAffinity"`
 	Type         v1.ResourceName `json:"type"`
 	Size         uint64          `json:"size"`

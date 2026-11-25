@@ -132,7 +132,7 @@ func getTestPod() *v1.Pod {
 
 // setTestProbe 把探针设置到对应容器字段，并填入加速测试的默认参数。
 func setTestProbe(pod *v1.Pod, probeType probeType, probeSpec v1.Probe) {
-	// 所有测试都依赖 fake exec prober。
+	// 所有测试都依赖模拟 Exec 探针。
 	probeSpec.ProbeHandler = v1.ProbeHandler{
 		Exec: &v1.ExecAction{},
 	}
@@ -161,7 +161,7 @@ func setTestProbe(pod *v1.Pod, probeType probeType, probeSpec v1.Probe) {
 	}
 }
 
-// newTestManager 构造使用 fake 组件与 fake exec prober 的 prober manager。
+// newTestManager 构造使用模拟组件与模拟 Exec 探针的探针管理器。
 func newTestManager() *manager {
 	podManager := kubepod.NewBasicPodManager()
 	podStartupLatencyTracker := kubeletutil.NewPodStartupLatencyTracker()
@@ -172,7 +172,7 @@ func newTestManager() *manager {
 		results.NewManager(),
 		results.NewManager(),
 		results.NewManager(),
-		nil, // runner
+		nil, // 执行器
 		&record.FakeRecorder{},
 	).(*manager)
 	// 不真正执行探针。

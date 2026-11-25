@@ -328,7 +328,7 @@ func TestExtractPodsFromHTTP(t *testing.T) {
 			t.Errorf("%s: Expected: %#v, Got: %#v", testCase.desc, testCase.expected, update)
 		}
 		for _, pod := range update.Pods {
-			// TODO: remove the conversion when validation is performed on versioned objects.
+			// TODO: 在基于版本化对象执行校验时移除此转换。
 			// 当前校验器只接受内部类型，所以先把 v1 Pod 转成 core.Pod 再校验。
 			internalPod := &api.Pod{}
 			if err := k8s_api_v1.Convert_v1_Pod_To_core_Pod(pod, internalPod, nil); err != nil {

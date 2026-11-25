@@ -295,7 +295,7 @@ func TestImageStatsWithError(t *testing.T) {
 func TestPullWithSecrets(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	logger := tCtx.Logger()
-	// auth value is equivalent to: "username":"passed-user","password":"passed-password"
+	// 认证值等价于： "username":"passed-user","password":"passed-password"
 	dockerCfg := map[string]map[string]string{"index.docker.io/v1/": {"email": "passed-email", "auth": "cGFzc2VkLXVzZXI6cGFzc2VkLXBhc3N3b3Jk"}}
 	dockercfgContent, err := json.Marshal(dockerCfg)
 	if err != nil {
@@ -395,8 +395,8 @@ func TestPullWithSecrets(t *testing.T) {
 			imagePullManager,
 			flowcontrol.NewBackOff(time.Second, 300*time.Second),
 			false,
-			ptr.To[int32](0), // No limit on max parallel image pulls,
-			0,                // Disable image pull throttling by setting QPS to 0,
+			ptr.To[int32](0), // 不限制并行镜像拉取数，
+			0,                // 将 QPS 设为 0 以禁用镜像拉取限流，
 			0,
 			&fakePodPullingTimeRecorder{},
 		)
@@ -489,8 +489,8 @@ func TestPullWithSecretsWithError(t *testing.T) {
 				imagePullManager,
 				flowcontrol.NewBackOff(time.Second, 300*time.Second),
 				false,
-				ptr.To[int32](0), // No limit on max parallel image pulls,
-				0,                // Disable image pull throttling by setting QPS to 0,
+				ptr.To[int32](0), // 不限制并行镜像拉取数，
+				0,                // 将 QPS 设为 0 以禁用镜像拉取限流，
 				0,
 				&fakePodPullingTimeRecorder{},
 			)

@@ -73,7 +73,7 @@ func (w *Watcher) Start(ctx context.Context, stopCh <-chan struct{}) error {
 		for {
 			select {
 			case event := <-fsWatcher.Events:
-				//TODO: Handle errors by taking corrective measures
+				// TODO: 处理错误并采取纠正措施。
 				if event.Has(fsnotify.Create) {
 					err := w.handleCreateEvent(ctx, event)
 					if err != nil {
@@ -148,7 +148,7 @@ func (w *Watcher) traversePluginDir(ctx context.Context, dir string) error {
 				Name: path,
 				Op:   fsnotify.Create,
 			}
-			//TODO: Handle errors by taking corrective measures
+			// TODO: 处理错误并采取纠正措施。
 			if err := w.handleCreateEvent(ctx, event); err != nil {
 				logger.Error(err, "Error when handling create", "event", event)
 			}

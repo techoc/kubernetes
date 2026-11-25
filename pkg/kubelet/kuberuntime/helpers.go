@@ -147,7 +147,7 @@ func (m *kubeGenericRuntimeManager) toKubeContainer(ctx context.Context, c *runt
 
 // sandboxToKubeContainer 把 runtimeapi.PodSandbox 转换为 kubecontainer.Container。
 // 这样做只是为了让 PLEG 把 sandbox 当作 kubecontainer.Container 处理，避免对 PLEG 做大改。
-// TODO: Remove this once it becomes obsolete.
+// TODO: 不再需要此兼容逻辑时移除。
 func (m *kubeGenericRuntimeManager) sandboxToKubeContainer(s *runtimeapi.PodSandbox) (*kubecontainer.Container, error) {
 	if s == nil || s.Id == "" {
 		return nil, fmt.Errorf("unable to convert a nil pointer to a runtime container")

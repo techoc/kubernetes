@@ -56,7 +56,7 @@ func listSecret(ctx context.Context, fakeClient clientset.Interface) listObjectF
 	}
 }
 
-// watchSecret 返回使用 fake client watch Secret 的 watchObjectFunc。
+// watchSecret 返回使用模拟客户端监听 Secret 的 watchObjectFunc。
 func watchSecret(ctx context.Context, fakeClient clientset.Interface) watchObjectFunc {
 	return func(namespace string, opts metav1.ListOptions) (watch.Interface, error) {
 		return fakeClient.CoreV1().Secrets(namespace).Watch(ctx, opts)

@@ -228,7 +228,7 @@ type volumeManager struct {
 	volumePluginMgr *volume.VolumePluginMgr
 
 	// desiredStateOfWorld 保存卷管理器的期望状态：哪些卷应被附加、哪些 Pod 引用了它们。
-	// 该结构由 desired state of world populator 借助 kubelet PodManager 填充。
+	// 该结构由期望状态填充器借助 kubelet PodManager 填充。
 	desiredStateOfWorld cache.DesiredStateOfWorld
 
 	// actualStateOfWorld 保存卷管理器的实际状态：本节点已附加哪些卷、卷已挂载给哪些 Pod。

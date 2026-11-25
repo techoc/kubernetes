@@ -70,11 +70,14 @@ const (
 	// InsufficientResourcePrefix 是 kubelet 因资源不足拒绝 Pod 时准入原因的前缀。
 	InsufficientResourcePrefix = "OutOf"
 
-	// 以下原因表示节点因资源不足而拒绝 Pod 准入。
-	OutOfCPU              = "OutOfcpu"
-	OutOfMemory           = "OutOfmemory"
+	// OutOfCPU 表示节点因 CPU 资源不足而拒绝 Pod 准入。
+	OutOfCPU = "OutOfcpu"
+	// OutOfMemory 表示节点因内存资源不足而拒绝 Pod 准入。
+	OutOfMemory = "OutOfmemory"
+	// OutOfEphemeralStorage 表示节点因临时存储资源不足而拒绝 Pod 准入。
 	OutOfEphemeralStorage = "OutOfephemeral-storage"
-	OutOfPods             = "OutOfpods"
+	// OutOfPods 表示节点因 Pod 数量达到上限而拒绝 Pod 准入。
+	OutOfPods = "OutOfpods"
 )
 
 // getNodeAnyWayFuncType 是获取节点信息的函数类型；useCache 为 false 时需绕过缓存同步获取。
@@ -304,7 +307,7 @@ func rejectPodAdmissionBasedOnOSField(pod *v1.Pod) bool {
 // 注意：当该特性仍处于 Alpha 阶段（或尚未发布的模拟版本）时，出于向后兼容
 // 应允许准入。
 func rejectPodAdmissionBasedOnSupplementalGroupsPolicy(pod *v1.Pod, node *v1.Node) bool {
-	admit, reject := false, true // just for readability
+	admit, reject := false, true // 仅为提高可读性
 
 	inUse := (pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.SupplementalGroupsPolicy != nil)
 	if !inUse {
@@ -382,10 +385,14 @@ func removeMissingExtendedResources(pod *v1.Pod, nodeInfo *schedulerframework.No
 
 // InsufficientResourceError 描述因某类资源达到上限而导致的不适配失败。
 type InsufficientResourceError struct {
+	// ResourceName 是资源不足的资源名称。
 	ResourceName v1.ResourceName
-	Requested    int64
-	Used         int64
-	Capacity     int64
+	// Requested 是请求的资源数量。
+	Requested int64
+	// Used 是已被占用的资源数量。
+	Used int64
+	// Capacity 是节点可用的资源总量。
+	Capacity int64
 }
 
 // Error 返回资源不足错误的可读描述。
@@ -411,7 +418,9 @@ func (e *InsufficientResourceError) GetInsufficientAmount() int64 {
 
 // PredicateFailureError 描述断言失败的错误。
 type PredicateFailureError struct {
+	// PredicateName 是失败的断言名称。
 	PredicateName string
+	// PredicateDesc 是断言失败的可读描述。
 	PredicateDesc string
 }
 

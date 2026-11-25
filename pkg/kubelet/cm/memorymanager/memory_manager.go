@@ -362,7 +362,7 @@ func (m *manager) GetTopologyHints(logger klog.Logger, pod *v1.Pod, container *v
 }
 
 // removeStaleState 清理不再属于任何活跃 Pod 的容器状态。
-// TODO: move the method to the upper level, to re-use it under the CPU and memory managers
+// TODO：将此方法上移，以便在 CPU 和内存管理器中复用。
 func (m *manager) removeStaleState(logger klog.Logger) {
 
 	// 只有所有配置源都就绪时才尝试清理陈旧状态，

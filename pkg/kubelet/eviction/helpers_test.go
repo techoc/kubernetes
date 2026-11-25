@@ -856,8 +856,8 @@ func TestOrderedByExceedsRequestMemory(t *testing.T) {
 	}, nil)
 	// below 比请求少 1Mi（-1），exceeds 比请求多 1Mi（+1）；超出者应优先被驱逐。
 	stats := map[*v1.Pod]statsapi.PodStats{
-		below:   newPodMemoryStats(below, resource.MustParse("199Mi")),   // -1 relative to request
-		exceeds: newPodMemoryStats(exceeds, resource.MustParse("101Mi")), // 1 relative to request
+		below:   newPodMemoryStats(below, resource.MustParse("199Mi")),   // -1 相对于 request
+		exceeds: newPodMemoryStats(exceeds, resource.MustParse("101Mi")), // 1 相对于 request
 	}
 	statsFn := func(pod *v1.Pod) (statsapi.PodStats, bool) {
 		result, found := stats[pod]
@@ -883,8 +883,8 @@ func TestOrderedByExceedsRequestDisk(t *testing.T) {
 		newContainer("exceeds-requests", v1.ResourceList{v1.ResourceEphemeralStorage: resource.MustParse("100Mi")}, newResourceList("", "", "")),
 	}, nil)
 	stats := map[*v1.Pod]statsapi.PodStats{
-		below:   newPodDiskStats(below, resource.MustParse("100Mi"), resource.MustParse("99Mi"), resource.MustParse("0Mi")),  // -1 relative to request
-		exceeds: newPodDiskStats(exceeds, resource.MustParse("90Mi"), resource.MustParse("11Mi"), resource.MustParse("0Mi")), // 1 relative to request
+		below:   newPodDiskStats(below, resource.MustParse("100Mi"), resource.MustParse("99Mi"), resource.MustParse("0Mi")),  // -1 相对于 request
+		exceeds: newPodDiskStats(exceeds, resource.MustParse("90Mi"), resource.MustParse("11Mi"), resource.MustParse("0Mi")), // 1 相对于 request
 	}
 	statsFn := func(pod *v1.Pod) (statsapi.PodStats, bool) {
 		result, found := stats[pod]
@@ -1093,14 +1093,14 @@ func TestOrderedByPriorityDisk(t *testing.T) {
 		}),
 	})
 	stats := map[*v1.Pod]statsapi.PodStats{
-		pod1: newPodDiskStats(pod1, resource.MustParse("200Mi"), resource.MustParse("100Mi"), resource.MustParse("200Mi")), // 500 relative to request
-		pod2: newPodDiskStats(pod2, resource.MustParse("10Mi"), resource.MustParse("10Mi"), resource.MustParse("30Mi")),    // 50 relative to request
-		pod3: newPodDiskStats(pod3, resource.MustParse("200Mi"), resource.MustParse("150Mi"), resource.MustParse("250Mi")), // 500 relative to request
-		pod4: newPodDiskStats(pod4, resource.MustParse("90Mi"), resource.MustParse("50Mi"), resource.MustParse("10Mi")),    // 50 relative to request
-		pod5: newPodDiskStats(pod5, resource.MustParse("500Mi"), resource.MustParse("200Mi"), resource.MustParse("100Mi")), // -200 relative to request
-		pod6: newPodDiskStats(pod6, resource.MustParse("50Mi"), resource.MustParse("100Mi"), resource.MustParse("50Mi")),   // -800 relative to request
-		pod7: newPodDiskStats(pod7, resource.MustParse("250Mi"), resource.MustParse("500Mi"), resource.MustParse("50Mi")),  // -200 relative to request
-		pod8: newPodDiskStats(pod8, resource.MustParse("100Mi"), resource.MustParse("60Mi"), resource.MustParse("40Mi")),   // -800 relative to request
+		pod1: newPodDiskStats(pod1, resource.MustParse("200Mi"), resource.MustParse("100Mi"), resource.MustParse("200Mi")), // 500 相对于 request
+		pod2: newPodDiskStats(pod2, resource.MustParse("10Mi"), resource.MustParse("10Mi"), resource.MustParse("30Mi")),    // 50 相对于 request
+		pod3: newPodDiskStats(pod3, resource.MustParse("200Mi"), resource.MustParse("150Mi"), resource.MustParse("250Mi")), // 500 相对于 request
+		pod4: newPodDiskStats(pod4, resource.MustParse("90Mi"), resource.MustParse("50Mi"), resource.MustParse("10Mi")),    // 50 相对于 request
+		pod5: newPodDiskStats(pod5, resource.MustParse("500Mi"), resource.MustParse("200Mi"), resource.MustParse("100Mi")), // -200 相对于 request
+		pod6: newPodDiskStats(pod6, resource.MustParse("50Mi"), resource.MustParse("100Mi"), resource.MustParse("50Mi")),   // -800 相对于 request
+		pod7: newPodDiskStats(pod7, resource.MustParse("250Mi"), resource.MustParse("500Mi"), resource.MustParse("50Mi")),  // -200 相对于 request
+		pod8: newPodDiskStats(pod8, resource.MustParse("100Mi"), resource.MustParse("60Mi"), resource.MustParse("40Mi")),   // -800 相对于 request
 	}
 	statsFn := func(pod *v1.Pod) (statsapi.PodStats, bool) {
 		result, found := stats[pod]
@@ -1188,12 +1188,12 @@ func TestOrderedByMemory(t *testing.T) {
 		newContainer("guaranteed-low", newResourceList("", "1Gi", ""), newResourceList("", "1Gi", "")),
 	}, nil)
 	stats := map[*v1.Pod]statsapi.PodStats{
-		pod1: newPodMemoryStats(pod1, resource.MustParse("500Mi")), // 500 relative to request
-		pod2: newPodMemoryStats(pod2, resource.MustParse("300Mi")), // 300 relative to request
-		pod3: newPodMemoryStats(pod3, resource.MustParse("800Mi")), // 700 relative to request
-		pod4: newPodMemoryStats(pod4, resource.MustParse("300Mi")), // 200 relative to request
-		pod5: newPodMemoryStats(pod5, resource.MustParse("800Mi")), // -200 relative to request
-		pod6: newPodMemoryStats(pod6, resource.MustParse("200Mi")), // -800 relative to request
+		pod1: newPodMemoryStats(pod1, resource.MustParse("500Mi")), // 500 相对于 request
+		pod2: newPodMemoryStats(pod2, resource.MustParse("300Mi")), // 300 相对于 request
+		pod3: newPodMemoryStats(pod3, resource.MustParse("800Mi")), // 700 相对于 request
+		pod4: newPodMemoryStats(pod4, resource.MustParse("300Mi")), // 200 相对于 request
+		pod5: newPodMemoryStats(pod5, resource.MustParse("800Mi")), // -200 相对于 request
+		pod6: newPodMemoryStats(pod6, resource.MustParse("200Mi")), // -800 相对于 request
 	}
 	statsFn := func(pod *v1.Pod) (statsapi.PodStats, bool) {
 		result, found := stats[pod]
@@ -1236,14 +1236,14 @@ func TestOrderedByPriorityMemory(t *testing.T) {
 		newContainer("below-requests-high-priority-low-usage", newResourceList("", "1Gi", ""), newResourceList("", "", "")),
 	}, nil)
 	stats := map[*v1.Pod]statsapi.PodStats{
-		pod1: newPodMemoryStats(pod1, resource.MustParse("500Mi")), // 500 relative to request
-		pod2: newPodMemoryStats(pod2, resource.MustParse("50Mi")),  // 50 relative to request
-		pod3: newPodMemoryStats(pod3, resource.MustParse("600Mi")), // 500 relative to request
-		pod4: newPodMemoryStats(pod4, resource.MustParse("150Mi")), // 50 relative to request
-		pod5: newPodMemoryStats(pod5, resource.MustParse("800Mi")), // -200 relative to request
-		pod6: newPodMemoryStats(pod6, resource.MustParse("200Mi")), // -800 relative to request
-		pod7: newPodMemoryStats(pod7, resource.MustParse("800Mi")), // -200 relative to request
-		pod8: newPodMemoryStats(pod8, resource.MustParse("200Mi")), // -800 relative to request
+		pod1: newPodMemoryStats(pod1, resource.MustParse("500Mi")), // 500 相对于 request
+		pod2: newPodMemoryStats(pod2, resource.MustParse("50Mi")),  // 50 相对于 request
+		pod3: newPodMemoryStats(pod3, resource.MustParse("600Mi")), // 500 相对于 request
+		pod4: newPodMemoryStats(pod4, resource.MustParse("150Mi")), // 50 相对于 request
+		pod5: newPodMemoryStats(pod5, resource.MustParse("800Mi")), // -200 相对于 request
+		pod6: newPodMemoryStats(pod6, resource.MustParse("200Mi")), // -800 相对于 request
+		pod7: newPodMemoryStats(pod7, resource.MustParse("800Mi")), // -200 相对于 request
+		pod8: newPodMemoryStats(pod8, resource.MustParse("200Mi")), // -800 相对于 request
 	}
 	statsFn := func(pod *v1.Pod) (statsapi.PodStats, bool) {
 		result, found := stats[pod]
@@ -1456,7 +1456,7 @@ func TestMakeSignalObservations(t *testing.T) {
 				Inodes:         &nodeFsInodes,
 			},
 			SystemContainers: []statsapi.ContainerStats{
-				// Used for memory signal observations on linux
+				// 用于在 Linux 上观测内存信号
 				{
 					Name: statsapi.SystemContainerPods,
 					Memory: &statsapi.MemoryStats{
@@ -1464,7 +1464,7 @@ func TestMakeSignalObservations(t *testing.T) {
 						WorkingSetBytes: &nodeWorkingSetBytes,
 					},
 				},
-				// Used for memory signal observations on windows
+				// 用于在 Windows 上观测内存信号
 				{
 					Name: statsapi.SystemContainerWindowsGlobalCommitMemory,
 					Memory: &statsapi.MemoryStats{
@@ -1487,7 +1487,7 @@ func TestMakeSignalObservations(t *testing.T) {
 	}
 	res := quantityMustParse("5Gi")
 	// 可分配内存的阈值恒为 100%，因此其容量必须等于 allocatable 容量。
-	// Allocatable thresholds are always 100%.  Verify that Threshold == Capacity.
+	// 可分配阈值始终为 100%，验证 Threshold 等于 Capacity。
 	if res.CmpInt64(int64(allocatableMemoryCapacity)) != 0 {
 		t.Errorf("Expected Threshold %v to be equal to value %v", res.Value(), allocatableMemoryCapacity)
 	}
@@ -3547,7 +3547,7 @@ func TestEvictionMessage(t *testing.T) {
 			containers: []v1.Container{
 				newContainer(regular1, newResourceList("", "200Mi", ""), newResourceList("", "", "")),
 			},
-			// Terminated init containers aren't included in the containerMemoryStats
+			// containerMemoryStats 不包含已终止的 init 容器
 			containerMemoryStats: []containerMemoryStat{
 				{name: restartableInit1, usage: "150Mi"},
 				{name: regular1, usage: "100Mi"},
@@ -3564,7 +3564,7 @@ func TestEvictionMessage(t *testing.T) {
 			containers: []v1.Container{
 				newContainer(regular1, newResourceList("", "200Mi", ""), newResourceList("", "", "")),
 			},
-			// An eviction occurred while the init container was running
+			// init 容器运行期间发生了驱逐
 			containerMemoryStats: []containerMemoryStat{
 				{name: init1, usage: "150Mi"},
 			},
@@ -3586,7 +3586,7 @@ func TestEvictionMessage(t *testing.T) {
 			containers: []v1.Container{
 				newContainer(regular1, newResourceList("", "200Mi", ""), newResourceList("", "", "")),
 			},
-			// Terminated init containers aren't included in the containerMemoryStats
+			// containerMemoryStats 不包含已终止的 init 容器
 			containerMemoryStats: []containerMemoryStat{
 				{name: restartableInit1, usage: "250Mi"},
 				{name: restartableInit2, usage: "150Mi"},
@@ -3610,7 +3610,7 @@ func TestEvictionMessage(t *testing.T) {
 				newContainer(regular1, newResourceList("", "200Mi", ""), newResourceList("", "", "")),
 				newContainer(regular2, newResourceList("", "300Mi", ""), newResourceList("", "", "")),
 			},
-			// Terminated init containers aren't included in the containerMemoryStats
+			// containerMemoryStats 不包含已终止的 init 容器
 			containerMemoryStats: []containerMemoryStat{
 				{name: restartableInit1, usage: "200Mi"},
 				{name: regular1, usage: "250Mi"},
@@ -3636,7 +3636,7 @@ func TestEvictionMessage(t *testing.T) {
 			ephemeralContainers: []v1.EphemeralContainer{
 				{TargetContainerName: regular1, EphemeralContainerCommon: v1.EphemeralContainerCommon{Name: ephemeral1}},
 			},
-			// Terminated init containers aren't included in the containerMemoryStats
+			// containerMemoryStats 不包含已终止的 init 容器
 			containerMemoryStats: []containerMemoryStat{
 				{name: restartableInit1, usage: "200Mi"},
 				{name: regular1, usage: "150Mi"},
@@ -3654,7 +3654,7 @@ func TestEvictionMessage(t *testing.T) {
 			containers: []v1.Container{
 				newContainer("regular1", newResourceList("", "", ""), newResourceList("", "", "")),
 			},
-			// Terminated init containers aren't included in the containerMemoryStats
+			// containerMemoryStats 不包含已终止的 init 容器
 			containerMemoryStats: []containerMemoryStat{
 				{name: restartableInit1, usage: "250Mi"},
 				{name: restartableInit2, usage: "250Mi"},
@@ -3684,7 +3684,7 @@ func TestEvictionMessage(t *testing.T) {
 				newContainer(regular2, newResourceList("", "200Mi", ""), newResourceList("", "", "")),
 				newContainer(regular3, newResourceList("", "100Mi", ""), newResourceList("", "", "")),
 			},
-			// Terminated init containers aren't included in the containerMemoryStats
+			// containerMemoryStats 不包含已终止的 init 容器
 			containerMemoryStats: []containerMemoryStat{
 				{name: restartableInit1, usage: "150Mi"},
 				{name: restartableInit2, usage: "250Mi"},
@@ -3741,8 +3741,7 @@ func TestEvictionMessage(t *testing.T) {
 		if len(tc.ephemeralContainers) > 0 {
 			pod.Spec.EphemeralContainers = tc.ephemeralContainers
 		}
-		// Create PodMemoryStats with dummy container memory
-		// and override container stats with the provided values.
+		// 使用虚拟容器内存创建 PodMemoryStats，并用给定值覆盖容器统计。
 		dummyContainerMemory := resource.MustParse("1Mi")
 		if tc.podLevelResourcesEnabled {
 			dummyContainerMemory = resource.MustParse(tc.podMemoryStats)

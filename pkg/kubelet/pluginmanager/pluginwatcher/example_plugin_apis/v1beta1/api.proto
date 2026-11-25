@@ -28,8 +28,8 @@ message ExampleResponse {
 	string error  = 1;
 }
 
-// Example is a simple example service for general reference on the recommended
-// kubelet plugin model and plugin watcher testing.
+// Example 是一个简单的示例服务，可供参考，以了解推荐的
+// kubelet 插件模型和插件监视器测试。
 service Example {
 	rpc GetExampleInfo(ExampleRequest) returns (ExampleResponse) {}
 }

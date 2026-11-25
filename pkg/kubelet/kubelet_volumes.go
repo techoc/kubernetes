@@ -41,10 +41,8 @@ func (kl *Kubelet) ListVolumesForPod(podUID types.UID) (map[string]volume.Volume
 	podVolumes := kl.volumeManager.GetMountedVolumesForPod(
 		volumetypes.UniquePodName(podUID))
 	for outerVolumeSpecName, volume := range podVolumes {
-		// TODO: volume.Mounter could be nil if volume object is recovered
-		// from reconciler's sync state process. PR 33616 will fix this problem
-		// to create Mounter object when recovering volume state.
-		// 从 reconciler 恢复状态得到的卷可能缺少 Mounter，跳过以避免空指针。
+		// TODO: 从 reconciler 的同步状态恢复卷对象时，volume.Mounter 可能为 nil。
+		// PR 33616 将修复恢复卷状态时创建 Mounter 对象的问题。
 		if volume.Mounter == nil {
 			continue
 		}
@@ -61,9 +59,8 @@ func (kl *Kubelet) ListBlockVolumesForPod(podUID types.UID) (map[string]volume.B
 	podVolumes := kl.volumeManager.GetMountedVolumesForPod(
 		volumetypes.UniquePodName(podUID))
 	for outerVolumeSpecName, volume := range podVolumes {
-		// TODO: volume.Mounter could be nil if volume object is recovered
-		// from reconciler's sync state process. PR 33616 will fix this problem
-		// to create Mounter object when recovering volume state.
+		// TODO: 从 reconciler 的同步状态恢复卷对象时，volume.Mounter 可能为 nil。
+		// PR 33616 将修复恢复卷状态时创建 Mounter 对象的问题。
 		// 块设备卷缺少 BlockVolumeMapper 时同样跳过。
 		if volume.BlockVolumeMapper == nil {
 			continue
@@ -81,9 +78,8 @@ func (kl *Kubelet) podVolumesExist(logger klog.Logger, podUID types.UID) bool {
 	if kl.volumeManager.HasPossiblyMountedVolumesForPod(volumetypes.UniquePodName(podUID)) {
 		return true
 	}
-	// TODO: This checks pod volume paths and whether they are mounted. If checking returns error, podVolumesExist will return true
-	// which means we consider volumes might exist and requires further checking.
-	// There are some volume plugins such as flexvolume might not have mounts. See issue #61229
+	// TODO: 这里检查 Pod 卷路径及其挂载状态。若检查出错，podVolumesExist 会返回 true，
+	// 表示卷可能仍存在，需要进一步确认。flexvolume 等插件可能没有挂载点，参见 issue #61229。
 	volumePaths, err := kl.getMountedVolumePathListFromDisk(logger, podUID)
 	if err != nil {
 		// 检查失败时宁可保留，避免误删仍在使用的卷。
@@ -196,8 +192,8 @@ func (kl *Kubelet) cleanupOrphanedPodDirs(logger klog.Logger, pods []*v1.Pod, ru
 		totalPods++
 
 		// 若卷尚未卸载/解挂，不要删除目录，否则可能导致数据损坏。
-		// TODO: getMountedVolumePathListFromDisk() call may be redundant with
-		// kl.getPodVolumePathListFromDisk(). Can this be cleaned up?
+		// TODO: getMountedVolumePathListFromDisk() 的调用可能与
+		// kl.getPodVolumePathListFromDisk() 重复，能否清理掉？
 		if podVolumesExist := kl.podVolumesExist(logger, uid); podVolumesExist {
 			errorPods++
 			logger.V(3).Info("Orphaned pod found, but volumes are not cleaned up", "podUID", uid)

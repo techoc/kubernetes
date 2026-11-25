@@ -39,7 +39,7 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
-	timedworkers "k8s.io/kubernetes/pkg/controller/tainteviction" // TODO (?): move this common helper somewhere else?
+	timedworkers "k8s.io/kubernetes/pkg/controller/tainteviction" // TODO (?)：将此通用辅助函数移到其他位置？
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubelet/pluginmanager/cache"
 	"k8s.io/utils/ptr"
@@ -182,7 +182,7 @@ func NewDRAPluginManager(ctx context.Context, kubeClient kubernetes.Interface, g
 		ctx := pm.backgroundCtx
 		logger := klog.LoggerWithName(klog.FromContext(ctx), "startup")
 		ctx = klog.NewContext(ctx, logger)
-		pm.wipeResourceSlices(ctx, "" /* all drivers */)
+		pm.wipeResourceSlices(ctx, "" /* 所有驱动。 */)
 	}()
 
 	return pm

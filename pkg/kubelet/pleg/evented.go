@@ -116,7 +116,7 @@ func (e *EventedPLEG) processCRIEvents(logger klog.Logger, containerEventsRespon
 		// 已找不到容器所属的 podSandbox。忽略是安全的：
 		// a) sandbox 删除本身会产生事件；
 		// b) 最坏情况下后续 relist 也会同步 Pod 状态。
-		// TODO(#114371): Figure out a way to handle this case instead of ignoring.
+		// TODO(#114371): 设法处理这种情况，而不是直接忽略。
 		if event.PodSandboxStatus == nil || event.PodSandboxStatus.Metadata == nil {
 			logger.Error(nil, "Evented PLEG: received ContainerEventResponse with nil PodSandboxStatus or PodSandboxStatus.Metadata", "containerEventResponse", event)
 			continue

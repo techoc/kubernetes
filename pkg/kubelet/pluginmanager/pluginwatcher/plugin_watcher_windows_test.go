@@ -31,9 +31,7 @@ func TestGetStatWindows(t *testing.T) {
 	event := fsnotify.Event{Name: "name", Op: fsnotify.Create}
 	fi, err := getStat(event)
 	fiExpected, errExpected := os.Stat(event.Name)
-	// TODO: This is a workaround for Windows 20H2 issue for os.Stat(). Please see
-	// 这是针对 Windows 20H2 上 os.Stat() 问题的临时方案，详见 microsoft/Windows-Containers#97。
-	// 该问题修复后，就不需要再回退到 os.Lstat()。
+	// TODO: Windows 20H2 的 os.Stat() 存在问题，临时回退到 os.Lstat()；修复后可移除，详见 microsoft/Windows-Containers#97。
 	if errExpected != nil {
 		fiExpected, errExpected = os.Lstat(event.Name)
 	}

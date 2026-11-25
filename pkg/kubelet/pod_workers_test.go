@@ -366,14 +366,14 @@ func (w *timeIncrementingWorkers) drainUnpausedWorkers() {
 		}
 		stillWorking := false
 
-		// ignore held workers
+		// 忽略被暂停的 worker
 		w.lock.Lock()
 		for uid := range w.holds {
 			pausedWorkers[uid] = struct{}{}
 		}
 		w.lock.Unlock()
 
-		// check for at least one still working non-paused worker
+		// 检查是否至少有一个未暂停的 worker 仍在工作
 		w.w.podLock.Lock()
 		for uid, worker := range w.w.podSyncStatuses {
 			if _, ok := pausedWorkers[uid]; ok {
@@ -412,8 +412,7 @@ func createTimeIncrementingPodWorkers(logger klog.Logger) (*timeIncrementingWork
 		ch := make(chan struct{})
 		go func() {
 			defer close(ch)
-			// TODO: this is an eager loop, we might want to lazily read from in only once
-			// ch is empty
+			// TODO: 当前是主动循环；可以考虑仅在 ch 为空时从 in 惰性读取一次。
 			for range in {
 				w.waitForPod(uid)
 				w.tick()
@@ -595,7 +594,6 @@ func TestUpdatePodParallel(t *testing.T) {
 		}
 
 		// PodWorker 保证最后一次更新一定会被处理，因此最后一条记录必须是最新版本。
-		// PodWorker guarantees the last event will be processed
 		last := len(events) - 1
 		if events[last].name != strconv.Itoa(i) {
 			t.Errorf("Pod %v: incorrect order %v, %#v", i, last, events)
@@ -629,7 +627,6 @@ func TestUpdatePod(t *testing.T) {
 	expectPodSyncStatus := func(t *testing.T, expected, status *podSyncStatus) {
 		t.Helper()
 		// cancelFn 与 ctx 无法直接比较，先比较是否为 nil 再清零。
-		// handle special non-comparable fields
 		if status != nil {
 			clearLogger := func(opts *UpdatePodOptions) {
 				if opts == nil {
@@ -703,7 +700,7 @@ func TestUpdatePod(t *testing.T) {
 				terminatedAt:       time.Unix(6, 0),
 				gracePeriod:        30,
 				startedTerminating: true,
-				restartRequested:   true, // because we received a create during termination
+				restartRequested:   true, // 因为终止期间收到了 create
 				finished:           true,
 				activeUpdate: &UpdatePodOptions{
 					Pod:            newNamedPod("1", "ns", "running-pod", false),
@@ -820,7 +817,7 @@ func TestUpdatePod(t *testing.T) {
 				UpdateType: kubetypes.SyncPodCreate,
 				Pod:        newPodWithPhase("1", "done-pod", v1.PodSucceeded),
 			},
-			runtimeStatus: &kubecontainer.PodStatus{ /* we know about this pod */ },
+			runtimeStatus: &kubecontainer.PodStatus{ /* 已知该 Pod */ },
 			expectBeforeWorker: &podSyncStatus{
 				fullname:      "done-pod_ns",
 				syncedAt:      time.Unix(1, 0),
@@ -830,7 +827,7 @@ func TestUpdatePod(t *testing.T) {
 					UpdateType: kubetypes.SyncPodCreate,
 					Pod:        newPodWithPhase("1", "done-pod", v1.PodSucceeded),
 				},
-				finished:           false, // Should be marked as not finished initially (to ensure `SyncTerminatedPod` will run) and status will progress to terminated.
+				finished:           false, // 初始应标记为未完成（确保 `SyncTerminatedPod` 会运行），随后状态进展为已终止。
 				startedTerminating: true,
 				working:            true,
 			},
@@ -847,8 +844,7 @@ func TestUpdatePod(t *testing.T) {
 					Pod:        newPodWithPhase("1", "done-pod", v1.PodSucceeded),
 				},
 
-				// 之前从未见过该 Pod，因此不存在"重启"语义。
-				// if we have never seen the pod before, a restart makes no sense
+				// 之前从未见过该 Pod，因此不存在“重启”语义。
 				restartRequested: false,
 			}),
 			expectKnownTerminated: true,
@@ -874,10 +870,7 @@ func TestUpdatePod(t *testing.T) {
 				working:         true,
 			},
 			// 运行中的孤儿 Pod 终止后会被移出历史；由于它本来就不在期望 Pod 集合中，
-			// 因此这里特意期望外部查询返回"未知"。
-			// Once a running pod is fully terminated, we stop tracking it in history, and so it
-			// is deliberately expected not to be known outside the pod worker since the source of
-			// the pod is also not in the desired pod set.
+			// 因此这里特意期望外部查询返回“未知”。
 			expectKnownTerminated: false,
 		},
 		{
@@ -918,8 +911,6 @@ func TestUpdatePod(t *testing.T) {
 			}
 
 			// 预先设置 UpdatePod 阶段可见的 runtime 状态；worker 实际调用 podCache 前会再清空。
-			// set up an initial pod status for the UpdatePod invocation which is
-			// reset before workers call the podCache
 			if tc.runtimeStatus != nil {
 				podWorkers.runtime.PodStatus = *tc.runtimeStatus
 				podWorkers.runtime.Err = nil
@@ -940,8 +931,7 @@ func TestUpdatePod(t *testing.T) {
 
 			expectPodSyncStatus(t, tc.expect, podWorkers.w.podSyncStatuses[uid])
 
-			// TODO: validate processed records for the pod based on the test case, which reduces
-			// the amount of testing we need to do in kubelet_pods_test.go
+			// TODO: 根据测试用例校验 Pod 的处理记录，以减少 kubelet_pods_test.go 中的测试量。
 		})
 	}
 }
@@ -1132,7 +1122,7 @@ func TestCompleteWork_PendingUpdate(t *testing.T) {
 
 		select {
 		case <-p.podUpdates[podUID]:
-			// Success! The channel received the signal as expected.
+			// 成功！通道按预期收到信号。
 		default:
 			t.Fatal("expected an update to be queued on the podUpdates channel, but none was received")
 		}
@@ -1146,7 +1136,6 @@ func TestUpdatePodForRuntimePod(t *testing.T) {
 	podWorkers, _, processed := createPodWorkers(logger)
 
 	// 非 kill 类型的 RuntimePod 更新应被忽略。
-	// ignores running pod of wrong sync type
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		UpdateType: kubetypes.SyncPodCreate,
 		RunningPod: &kubecontainer.Pod{ID: "1", Name: "1", Namespace: "test"},
@@ -1157,7 +1146,6 @@ func TestUpdatePodForRuntimePod(t *testing.T) {
 	}
 
 	// kill 类型的 RuntimePod 会合成一个 Pod 并触发终止同步。
-	// creates synthetic pod
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		UpdateType: kubetypes.SyncPodKill,
 		RunningPod: &kubecontainer.Pod{ID: "1", Name: "1", Namespace: "test"},
@@ -1188,7 +1176,7 @@ func TestUpdatePodForTerminatedRuntimePod(t *testing.T) {
 		gracePeriod:        1,
 	}
 
-	// creates synthetic pod
+	// 创建合成 Pod
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		UpdateType: kubetypes.SyncPodKill,
 		RunningPod: &kubecontainer.Pod{ID: "1", Name: "1", Namespace: "test"},
@@ -1230,10 +1218,8 @@ func TestUpdatePodDoesNotForgetSyncPodKill(t *testing.T) {
 	}
 	for i := 0; i < numPods; i++ {
 		uid := types.UID(strconv.Itoa(i))
-		// 每个 Pod 应被处理两到三次（kill,terminate 或 create,kill,terminate）：
+		// 每个 Pod 应被处理两到三次（kill、terminate 或 create、kill、terminate）：
 		// pending 更新会被缓冲，worker 可能把 create 与 kill 合并。
-		// each pod should be processed two or three times (kill,terminate or create,kill,terminate) because
-		// we buffer pending updates and the pod worker may compress the create and kill
 		syncPodRecords := processed[uid]
 		var match bool
 		grace := int64(30)
@@ -1306,33 +1292,33 @@ func TestTerminalPhaseTransition(t *testing.T) {
 	terminalPhaseSyncer := newTerminalPhaseSync(podWorkers.podSyncer.(*podSyncerFuncs).syncPod)
 	podWorkers.podSyncer.(*podSyncerFuncs).syncPod = terminalPhaseSyncer.SyncPod
 
-	// start pod
+	// 启动 Pod
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("1", "test1", "pod1", false),
 		UpdateType: kubetypes.SyncPodUpdate,
 	})
 	drainAllWorkers(podWorkers)
 
-	// should observe pod running
+	// 应观察到 Pod 正在运行
 	pod1 := podWorkers.podSyncStatuses[types.UID("1")]
 	if pod1.IsTerminated() {
 		t.Fatalf("unexpected pod state: %#v", pod1)
 	}
 
-	// send another update to the pod
+	// 向 Pod 发送另一条更新
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("1", "test1", "pod1", false),
 		UpdateType: kubetypes.SyncPodUpdate,
 	})
 	drainAllWorkers(podWorkers)
 
-	// should observe pod still running
+	// 应观察到 Pod 仍在运行
 	pod1 = podWorkers.podSyncStatuses[types.UID("1")]
 	if pod1.IsTerminated() {
 		t.Fatalf("unexpected pod state: %#v", pod1)
 	}
 
-	// the next sync should result in a transition to terminal
+	// 下一次同步应使状态转换为终止
 	terminalPhaseSyncer.SetTerminal(types.UID("1"))
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("1", "test1", "pod1", false),
@@ -1340,7 +1326,7 @@ func TestTerminalPhaseTransition(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// should observe pod terminating
+	// 应观察到 Pod 正在终止
 	pod1 = podWorkers.podSyncStatuses[types.UID("1")]
 	if !pod1.IsTerminationRequested() || !pod1.IsTerminated() {
 		t.Fatalf("unexpected pod state: %#v", pod1)
@@ -1364,7 +1350,7 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Fatalf("unable to test static pod")
 	}
 
-	// start two pods with the same name, one static, one apiserver
+	// 启动两个同名 Pod，一个为静态 Pod，一个来自 API 服务器
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("1-normal", "test1", "pod1", false),
 		UpdateType: kubetypes.SyncPodUpdate,
@@ -1375,7 +1361,7 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// should observe both pods running
+	// 应观察到两个 Pod 都在运行
 	pod1 := podWorkers.podSyncStatuses[types.UID("1-normal")]
 	if pod1.IsTerminated() {
 		t.Fatalf("unexpected pod state: %#v", pod1)
@@ -1397,7 +1383,7 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Fatalf("unexpected started static pods: %s", cmp.Diff(e, a))
 	}
 
-	// attempt to start a second and third static pod, which should not start
+	// 尝试启动第二个和第三个静态 Pod，它们不应启动
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("3-static", "test1", "pod1", true),
 		UpdateType: kubetypes.SyncPodUpdate,
@@ -1408,7 +1394,7 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// should observe both pods running but last pod shouldn't have synced
+	// 应观察到两个 Pod 在运行，但最后一个 Pod 尚未同步
 	pod1 = podWorkers.podSyncStatuses[types.UID("1-normal")]
 	if pod1.IsTerminated() {
 		t.Fatalf("unexpected pod state: %#v", pod1)
@@ -1450,12 +1436,12 @@ func TestStaticPodExclusion(t *testing.T) {
 	if e, a := map[string][]types.UID{"pod1_test1": {"3-static", "4-static"}}, podWorkers.waitingToStartStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected waiting static pods: %s", cmp.Diff(e, a))
 	}
-	// verify all are enqueued
+	// 确认所有 Pod 均已入队
 	if e, a := sets.New[string]("1-normal", "2-static", "4-static", "3-static"), podWorkers.workQueue.(*fakeQueue).Set(); !e.Equal(a) {
 		t.Fatalf("unexpected queued items: %s", cmp.Diff(e, a))
 	}
 
-	// send a basic update for 3-static
+	// 向 3-static 发送基本更新
 	podWorkers.workQueue.GetWork()
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("3-static", "test1", "pod1", true),
@@ -1463,19 +1449,19 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// 3-static should not be started because 2-static is still running
+	// 2-static 仍在运行，因此不应启动 3-static
 	if e, a := map[string]types.UID{"pod1_test1": "2-static"}, podWorkers.startedStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected started static pods: %s", cmp.Diff(e, a))
 	}
 	if e, a := map[string][]types.UID{"pod1_test1": {"3-static", "4-static"}}, podWorkers.waitingToStartStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected waiting static pods: %s", cmp.Diff(e, a))
 	}
-	// the queue should include a single item for 3-static (indicating we need to retry later)
+	// 队列中应仅有 3-static（表示稍后需要重试）
 	if e, a := sets.New[string]("3-static"), newUIDSet(podWorkers.workQueue.GetWork()...); !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected queued items: %s", cmp.Diff(e, a))
 	}
 
-	// mark 3-static as deleted while 2-static is still running
+	// 在 2-static 仍运行时将 3-static 标记为已删除
 	podWorkers.workQueue.GetWork()
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("3-static", "test1", "pod1", true),
@@ -1483,32 +1469,32 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// should observe 3-static as terminated because it has never started, but other state should be a no-op
+	// 3-static 从未启动，因此应观察到它已终止，其他状态保持不变
 	pod3 = podWorkers.podSyncStatuses[types.UID("3-static")]
 	if !pod3.IsTerminated() {
 		t.Fatalf("unexpected pod state: %#v", pod3)
 	}
-	// the queue should be empty because the worker is now done
+	// worker 已完成，因此队列应为空
 	if e, a := sets.New[string](), newUIDSet(podWorkers.workQueue.GetWork()...); !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected queued items: %s", cmp.Diff(e, a))
 	}
-	// 2-static is still running
+	// 2-static 仍在运行
 	if e, a := map[string]types.UID{"pod1_test1": "2-static"}, podWorkers.startedStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected started static pods: %s", cmp.Diff(e, a))
 	}
-	// 3-static and 4-static are both still queued
+	// 3-static 和 4-static 仍在队列中
 	if e, a := map[string][]types.UID{"pod1_test1": {"3-static", "4-static"}}, podWorkers.waitingToStartStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected waiting static pods: %s", cmp.Diff(e, a))
 	}
 
-	// terminate 2-static
+	// 终止 2-static
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("2-static", "test1", "pod1", true),
 		UpdateType: kubetypes.SyncPodKill,
 	})
 	drainAllWorkers(podWorkers)
 
-	// should observe 2-static as terminated, and 2-static should no longer be reported as the started static pod
+	// 应观察到 2-static 已终止，且不再将其上报为已启动的静态 Pod
 	pod2 = podWorkers.podSyncStatuses[types.UID("2-static")]
 	if !pod2.IsTerminated() {
 		t.Fatalf("unexpected pod state: %#v", pod3)
@@ -1520,14 +1506,14 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Fatalf("unexpected waiting static pods: %s", cmp.Diff(e, a))
 	}
 
-	// simulate a periodic event from the work queue for 4-static
+	// 模拟工作队列向 4-static 发送周期事件
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("4-static", "test1", "pod1", true),
 		UpdateType: kubetypes.SyncPodUpdate,
 	})
 	drainAllWorkers(podWorkers)
 
-	// 4-static should be started because 3-static has already terminated
+	// 3-static 已终止，因此应启动 4-static
 	pod4 = podWorkers.podSyncStatuses[types.UID("4-static")]
 	if pod4.IsTerminated() {
 		t.Fatalf("unexpected pod state: %#v", pod3)
@@ -1539,7 +1525,7 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Fatalf("unexpected waiting static pods: %s", cmp.Diff(e, a))
 	}
 
-	// initiate a sync with all pods remaining
+	// 对全部剩余 Pod 发起同步
 	state := podWorkers.SyncKnownPods(logger, []*v1.Pod{
 		newNamedPod("1-normal", "test1", "pod1", false),
 		newNamedPod("2-static", "test1", "pod1", true),
@@ -1548,7 +1534,7 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// 2-static and 3-static should both be listed as terminated
+	// 2-static 和 3-static 均应被列为已终止
 	if e, a := map[types.UID]PodWorkerSync{
 		"1-normal": {State: SyncPod, HasConfig: true},
 		"2-static": {State: TerminatedPod, HasConfig: true, Static: true},
@@ -1557,12 +1543,12 @@ func TestStaticPodExclusion(t *testing.T) {
 	}, state; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected actual state: %s", cmp.Diff(e, a))
 	}
-	// 3-static is still in the config, it should still be in our status
+	// 3-static 仍在配置中，因此应保留其状态
 	if status, ok := podWorkers.podSyncStatuses["3-static"]; !ok || status.terminatedAt.IsZero() || !status.finished || status.working {
 		t.Fatalf("unexpected post termination status: %#v", status)
 	}
 
-	// initiate a sync with 3-static removed
+	// 移除 3-static 后发起同步
 	state = podWorkers.SyncKnownPods(logger, []*v1.Pod{
 		newNamedPod("1-normal", "test1", "pod1", false),
 		newNamedPod("2-static", "test1", "pod1", true),
@@ -1570,7 +1556,7 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// expect sync to put 3-static into final state and remove the status
+	// 预期同步将 3-static 置为最终状态并移除其状态记录
 	if e, a := map[types.UID]PodWorkerSync{
 		"1-normal": {State: SyncPod, HasConfig: true},
 		"2-static": {State: TerminatedPod, HasConfig: true, Static: true},
@@ -1582,13 +1568,13 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Fatalf("unexpected post termination status: %#v", status)
 	}
 
-	// start a static pod, kill it, then add another one, but ensure the pod worker
-	// for pod 5 doesn't see the kill event (so it remains waiting to start)
+	// 启动一个静态 Pod，将其终止后再添加另一个，但确保 Pod 5 的 worker
+	// 看不到 kill 事件（因此它仍在等待启动）
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("5-static", "test1", "pod1", true),
 		UpdateType: kubetypes.SyncPodUpdate,
 	})
-	// Wait for the previous work to be delivered to the worker
+	// 等待先前的工作交付给 worker
 	drainAllWorkers(podWorkers)
 	channels.Channel("5-static").Hold()
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
@@ -1601,7 +1587,7 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainWorkersExcept(podWorkers, "5-static")
 
-	// pod 5 should have termination requested, but hasn't cleaned up
+	// Pod 5 应已请求终止，但尚未完成清理
 	pod5 := podWorkers.podSyncStatuses[types.UID("5-static")]
 	if !pod5.IsTerminationRequested() || pod5.IsTerminated() {
 		t.Fatalf("unexpected status for pod 5: %#v", pod5)
@@ -1613,7 +1599,7 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Fatalf("unexpected waiting static pods: %s", cmp.Diff(e, a))
 	}
 
-	// terminate 4-static and wake 6-static
+	// 终止 4-static 并唤醒 6-static
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("4-static", "test1", "pod1", true),
 		UpdateType: kubetypes.SyncPodKill,
@@ -1625,7 +1611,7 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainWorkersExcept(podWorkers, "5-static")
 
-	// 5-static should still be waiting, 6-static should have started and synced
+	// 5-static 应仍在等待，6-static 应已启动并同步
 	pod5 = podWorkers.podSyncStatuses[types.UID("5-static")]
 	if !pod5.IsTerminationRequested() || pod5.IsTerminated() {
 		t.Fatalf("unexpected status for pod 5: %#v", pod5)
@@ -1633,18 +1619,18 @@ func TestStaticPodExclusion(t *testing.T) {
 	if e, a := map[string]types.UID{"pod1_test1": "6-static"}, podWorkers.startedStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected started static pods: %s", cmp.Diff(e, a))
 	}
-	// no static pods shoud be waiting
+	// 不应有静态 Pod 等待启动
 	if e, a := map[string][]types.UID{}, podWorkers.waitingToStartStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected waiting static pods: %s", cmp.Diff(e, a))
 	}
-	// prove 6-static synced
+	// 确认 6-static 已同步
 	if expected, actual :=
 		[]syncPodRecord{{name: "pod1", updateType: kubetypes.SyncPodUpdate}},
 		processed[types.UID("6-static")]; !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("unexpected sync pod calls: %s", cmp.Diff(expected, actual))
 	}
 
-	// ensure 5-static exits when we deliver the event out of order
+	// 确认乱序交付事件时 5-static 会退出
 	channels.Channel("5-static").Release()
 	drainAllWorkers(podWorkers)
 	pod5 = podWorkers.podSyncStatuses[types.UID("5-static")]
@@ -1652,8 +1638,8 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Fatalf("unexpected status for pod 5: %#v", pod5)
 	}
 
-	// start three more static pods, kill the previous static pod blocking start,
-	// and simulate the second pod of three (8) getting to run first
+	// 再启动三个静态 Pod，终止此前阻塞启动的静态 Pod，
+	// 并模拟三个 Pod 中的第二个（8）先运行
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("7-static", "test1", "pod1", true),
 		UpdateType: kubetypes.SyncPodUpdate,
@@ -1683,19 +1669,19 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// 6 should have been detected as restartable
+	// 6 应已被识别为可重启
 	if status := podWorkers.podSyncStatuses["6-static"]; !status.restartRequested {
 		t.Fatalf("unexpected restarted static pod: %#v", status)
 	}
-	// 7 and 8 should both be waiting still with no syncs
+	// 7 和 8 应仍在等待，且尚未同步
 	if e, a := map[string]types.UID{}, podWorkers.startedStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected started static pods: %s", cmp.Diff(e, a))
 	}
-	// only 7-static can start now, but it hasn't received an event
+	// 当前仅 7-static 可以启动，但它尚未收到事件
 	if e, a := map[string][]types.UID{"pod1_test1": {"7-static", "8-static", "9-static"}}, podWorkers.waitingToStartStaticPodsByFullname; !reflect.DeepEqual(e, a) {
 		t.Fatalf("unexpected waiting static pods: %s", cmp.Diff(e, a))
 	}
-	// none of the new pods have synced
+	// 新 Pod 均尚未同步
 	if expected, actual :=
 		[]syncPodRecord(nil),
 		processed[types.UID("7-static")]; !reflect.DeepEqual(expected, actual) {
@@ -1712,7 +1698,7 @@ func TestStaticPodExclusion(t *testing.T) {
 		t.Fatalf("unexpected sync pod calls: %s", cmp.Diff(expected, actual))
 	}
 
-	// terminate 7-static and wake 8-static
+	// 终止 7-static 并唤醒 8-static
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		Pod:        newNamedPod("7-static", "test1", "pod1", true),
 		UpdateType: kubetypes.SyncPodKill,
@@ -1724,14 +1710,14 @@ func TestStaticPodExclusion(t *testing.T) {
 	})
 	drainAllWorkers(podWorkers)
 
-	// 8 should have synced
+	// 8 应已同步
 	if expected, actual :=
 		[]syncPodRecord{{name: "pod1", updateType: kubetypes.SyncPodUpdate}},
 		processed[types.UID("8-static")]; !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("unexpected sync pod calls: %s", cmp.Diff(expected, actual))
 	}
 
-	// initiate a sync with all but 8-static pods undesired
+	// 发起同步，仅保留 8-static 为期望 Pod
 	state = podWorkers.SyncKnownPods(logger, []*v1.Pod{
 		newNamedPod("8-static", "test1", "pod1", true),
 	})
@@ -1744,6 +1730,7 @@ func TestStaticPodExclusion(t *testing.T) {
 	}
 }
 
+// WorkChannelItem 封装单个 Pod worker 的工作通道及其暂停队列。
 type WorkChannelItem struct {
 	out   chan struct{}
 	lock  sync.Mutex
@@ -1859,7 +1846,7 @@ func TestSyncKnownPods(t *testing.T) {
 	desiredPods[types.UID("14")] = sets.Empty{}
 	desiredPodList := []*v1.Pod{newNamedPod("2", "ns", "name", false), newNamedPod("14", "ns", "name", false)}
 
-	// kill all but the requested pods
+	// 终止除指定 Pod 外的所有 Pod
 	for i := 0; i < numPods; i++ {
 		pod := newNamedPod(strconv.Itoa(i), "ns", "name", false)
 		if _, ok := desiredPods[pod.UID]; ok {
@@ -1946,8 +1933,7 @@ func TestSyncKnownPods(t *testing.T) {
 		t.Errorf("Expected pod to be suitable for removal (does not exist and synced at least once)")
 	}
 
-	// verify workers that are not terminated stay open even if config no longer
-	// sees them
+	// 确认即使配置中已不存在，尚未终止的 Pod worker 仍保持打开
 	podWorkers.SyncKnownPods(logger, nil)
 	drainAllWorkers(podWorkers)
 	if len(podWorkers.podUpdates) != 0 {
@@ -1966,7 +1952,7 @@ func TestSyncKnownPods(t *testing.T) {
 	}
 	drainWorkers(podWorkers, numPods)
 
-	// verify once those pods terminate (via some other flow) the workers are cleared
+	// 确认这些 Pod 经其他流程终止后，worker 会被清理
 	podWorkers.SyncKnownPods(logger, nil)
 	if len(podWorkers.podUpdates) != 0 {
 		t.Errorf("Incorrect number of open channels %v", len(podWorkers.podUpdates))
@@ -2355,8 +2341,8 @@ func Test_allowPodStart(t *testing.T) {
 		allowedEver                                bool
 	}{
 		{
-			// TODO: Do we want to allow non-static pods with the same full name?
-			// Note that it may disable the force deletion of pods.
+			// TODO: 是否允许非静态 Pod 使用相同的全名？
+			// 注意这可能会禁用 Pod 的强制删除。
 			desc: "non-static pod",
 			pod:  newNamedPod("uid-0", "ns", "test", false),
 			podSyncStatuses: map[types.UID]*podSyncStatus{
@@ -2371,8 +2357,7 @@ func Test_allowPodStart(t *testing.T) {
 			allowedEver: true,
 		},
 		{
-			// TODO: Do we want to allow a non-static pod with the same full name
-			// as the started static pod?
+			// TODO: 是否允许非静态 Pod 与已启动的静态 Pod 使用相同的全名？
 			desc: "non-static pod when there is a started static pod with the same full name",
 			pod:  newNamedPod("uid-0", "ns", "test", false),
 			podSyncStatuses: map[types.UID]*podSyncStatus{
@@ -2393,8 +2378,7 @@ func Test_allowPodStart(t *testing.T) {
 			allowedEver: true,
 		},
 		{
-			// TODO: Do we want to allow a static pod with the same full name as the
-			// started non-static pod?
+			// TODO: 是否允许静态 Pod 与已启动的非静态 Pod 使用相同的全名？
 			desc: "static pod when there is a started non-static pod with the same full name",
 			pod:  newNamedPod("uid-0", "ns", "test", false),
 			podSyncStatuses: map[types.UID]*podSyncStatus{
@@ -2673,7 +2657,7 @@ func Test_allowPodStart(t *testing.T) {
 				}
 			}
 
-			// if maps are neither nil nor empty
+			// 若映射既非 nil 也非空
 			if len(podWorkers.startedStaticPodsByFullname) != 0 ||
 				len(podWorkers.startedStaticPodsByFullname) != len(tc.expectedStartedStaticPodsByFullname) {
 				if !reflect.DeepEqual(
@@ -2685,7 +2669,7 @@ func Test_allowPodStart(t *testing.T) {
 				}
 			}
 
-			// if maps are neither nil nor empty
+			// 若映射既非 nil 也非空
 			if len(podWorkers.waitingToStartStaticPodsByFullname) != 0 ||
 				len(podWorkers.waitingToStartStaticPodsByFullname) != len(tc.expectedWaitingToStartStaticPodsByFullname) {
 				if !reflect.DeepEqual(

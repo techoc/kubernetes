@@ -35,7 +35,6 @@ type podScope struct {
 	scope
 }
 
-// Ensure podScope implements Scope interface
 // 编译期断言：podScope 实现 Scope 接口。
 var _ Scope = &podScope{}
 

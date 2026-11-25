@@ -57,7 +57,7 @@ func TestStateMemory_EmptyDirVolumeLimits(t *testing.T) {
 	assert.False(t, existsNonexistent)
 
 	// 返回的 Quantity 必须是深拷贝，修改它不能影响内部状态。
-	qty.Set(1024 * 1024 * 512) // Modify the returned Quantity value to 512Mi
+	qty.Set(1024 * 1024 * 512) // 将返回的 Quantity 修改为 512Mi
 	refreshedQty, exists := state.GetEmptyDirVolumeLimit(podUID, volName)
 	require.True(t, exists)
 	assert.True(t, targetLimit.Equal(*refreshedQty), "Modifying the returned Quantity pointer should not alter Kubelet's internal memory state")

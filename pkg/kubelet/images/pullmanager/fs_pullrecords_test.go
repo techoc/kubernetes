@@ -38,7 +38,7 @@ func TestNewFSPullRecordsAccessor(t *testing.T) {
 		initPulled      []string
 		modIntent       func(string) string
 		modPulledRecord func(string) string
-		wantErr         bool // TODO: do I ever want an error?
+		wantErr         bool // TODO: 是否需要考虑错误情况？
 	}{
 		{
 			name:     "kubelet root dir does not exist",

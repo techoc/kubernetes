@@ -108,7 +108,7 @@ type DeviceRunContainerOptions struct {
 	CDIDevices []kubecontainer.CDIDevice
 }
 
-// TODO: evaluate whether we need this error definition.
+// TODO：评估是否需要此错误定义。
 const (
 	// errEndpointStopped 是插件 endpoint 已停止时的错误格式。
 	errEndpointStopped = "endpoint %v has been stopped"

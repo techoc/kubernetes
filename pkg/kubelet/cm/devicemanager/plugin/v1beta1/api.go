@@ -39,7 +39,7 @@ type ClientHandler interface {
 	PluginListAndWatchReceiver(klog.Logger, string, *api.ListAndWatchResponse)
 }
 
-// TODO: evaluate whether we need these error definitions.
+// TODO：评估是否需要这些错误定义。
 const (
 	// errFailedToDialDevicePlugin 表示无法通过注册的 socket 连接设备插件。
 	errFailedToDialDevicePlugin = "failed to dial device plugin:"

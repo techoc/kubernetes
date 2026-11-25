@@ -30,7 +30,7 @@ const (
 )
 
 // GetPids 返回指定 cgroup 中的 PID。
-// 逻辑 fork 自 opencontainers/runc/libcontainer/cgroup/fs.Manager.GetPids()。
+// 逻辑派生自 opencontainers/runc/libcontainer/cgroup/fs.Manager.GetPids()。
 func GetPids(cgroupPath string) ([]int, error) {
 	dir := ""
 

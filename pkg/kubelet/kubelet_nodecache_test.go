@@ -105,7 +105,7 @@ func TestGetCachedNode(t *testing.T) {
 			cachedNode:    nil,
 			nodeListerErr: fmt.Errorf("test error"),
 
-			expectedNode:       nil, // This will be filled in by the test logic below.
+			expectedNode:       nil, // 该值将由下方测试逻辑填充。
 			expectedErr:        false,
 			expectedCachedNode: nil,
 		},

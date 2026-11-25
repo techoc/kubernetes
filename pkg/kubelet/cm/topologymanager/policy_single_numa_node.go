@@ -45,7 +45,7 @@ func (p *singleNumaNodePolicy) canAdmitPodResult(hint *TopologyHint) bool {
 	return hint.Preferred
 }
 
-// filterSingleNumaHints 只保留 preferred 的 don't care hint 与恰好一个 NUMA 节点的 hint。
+// filterSingleNumaHints 只保留 preferred 的无拓扑偏好 hint 与恰好一个 NUMA 节点的 hint。
 func filterSingleNumaHints(allResourcesHints [][]TopologyHint) [][]TopologyHint {
 	var filteredResourcesHints [][]TopologyHint
 	for _, oneResourceHints := range allResourcesHints {
@@ -63,10 +63,10 @@ func filterSingleNumaHints(allResourcesHints [][]TopologyHint) [][]TopologyHint 
 	return filteredResourcesHints
 }
 
-// Merge 只保留单 NUMA 节点与 don't care 的 hint，再合并并决定是否准入。
+// Merge 只保留单 NUMA 节点与无拓扑偏好的 hint，再合并并决定是否准入。
 func (p *singleNumaNodePolicy) Merge(logger klog.Logger, providersHints []map[string][]TopologyHint) (TopologyHint, bool) {
 	filteredHints := filterProvidersHints(logger, providersHints)
-	// 只保留 don't care 与单 NUMA 节点的 hint。
+	// 只保留无拓扑偏好与单 NUMA 节点的 hint。
 	singleNumaHints := filterSingleNumaHints(filteredHints)
 
 	merger := NewHintMerger(p.numaInfo, singleNumaHints, p.Name(), p.opts)

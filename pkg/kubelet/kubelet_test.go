@@ -135,7 +135,7 @@ const (
 	testKubeletHostIP   = "127.0.0.1"
 	testKubeletHostIPv6 = "::1"
 
-	// TODO(harry) any global place for these two?
+	// TODO(harry): 这两个常量是否有更合适的全局位置？
 	// 所有容器镜像的合理大小范围；Docker Hub 上 90% 的镜像落在这个区间。
 	minImgSize int64 = 23 * 1024 * 1024
 	maxImgSize int64 = 1000 * 1024 * 1024
@@ -173,7 +173,7 @@ func (tk *TestKubelet) Cleanup() {
 		if tk.pluginManagerStopCh != nil {
 			close(tk.pluginManagerStopCh)
 			tk.pluginManagerStopCh = nil
-			// Allow the plugin manager goroutines to observe stopCh before TempDir cleanup.
+			// 等待插件管理器 goroutine 观察到 stopCh，再清理临时目录。
 			time.Sleep(20 * time.Millisecond)
 		}
 		os.RemoveAll(tk.kubelet.rootDirectory)
@@ -448,7 +448,7 @@ func newTestKubeletWithImageList(
 		allPlugins = append(allPlugins, volumesecret.ProbeVolumePlugins()...)
 	}
 
-	var prober volume.DynamicPluginProber // TODO (#51147) inject mock
+	var prober volume.DynamicPluginProber // TODO（#51147）：注入 mock
 	kubelet.volumePluginMgr, err =
 		NewInitializedVolumePluginMgr(logger, kubelet, kubelet.secretManager, kubelet.configMapManager, token.NewManager(kubelet.kubeClient), &clustertrustbundle.NoopManager{}, allPlugins, prober)
 	require.NoError(t, err, "Failed to initialize VolumePluginMgr")
@@ -631,7 +631,7 @@ func TestHandlePodCleanupsPerQOS(t *testing.T) {
 	fakeRuntime := testKubelet.fakeRuntime
 	fakeContainerManager := testKubelet.fakeContainerManager
 	// 把 Pod 注册进假 cgroup 管理器，同时让假运行时报告它仍在运行。
-	fakeContainerManager.PodContainerManager.AddPodFromCgroups(pod) // add pod to mock cgroup
+	fakeContainerManager.PodContainerManager.AddPodFromCgroups(pod) // 将 Pod 添加到 mock cgroup
 	fakeRuntime.PodList = []*containertest.FakePod{
 		{Pod: pod},
 	}
@@ -861,7 +861,7 @@ func TestHandlePodCleanups(t *testing.T) {
 func TestVolumeAttachLimitExceededCleanup(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	const podCount = 500
-	tk := newTestKubelet(t, true /* controller-attach-detach enabled */)
+	tk := newTestKubelet(t, true /* 启用控制器挂载与解挂 */)
 	defer tk.Cleanup()
 	kl := tk.kubelet
 
@@ -1110,7 +1110,7 @@ func TestHandleHostNameConflicts(t *testing.T) {
 
 	kl.HandlePodAdditions(tCtx, pods)
 
-	// Check pod status stored in the status map.
+	// 检查状态映射中保存的 Pod 状态。
 	checkPodStatus(t, kl, notfittingPod, v1.PodFailed)
 	checkPodStatus(t, kl, fittingPod, v1.PodPending)
 }
@@ -1145,7 +1145,7 @@ func TestHandleNodeSelector(t *testing.T) {
 
 	kl.HandlePodAdditions(tCtx, pods)
 
-	// Check pod status stored in the status map.
+	// 检查状态映射中保存的 Pod 状态。
 	checkPodStatus(t, kl, notfittingPod, v1.PodFailed)
 	checkPodStatus(t, kl, fittingPod, v1.PodPending)
 }
@@ -1203,7 +1203,7 @@ func TestHandleNodeSelectorBasedOnOS(t *testing.T) {
 
 			kl.HandlePodAdditions(tCtx, []*v1.Pod{pod})
 
-			// Check pod status stored in the status map.
+			// 检查状态映射中保存的 Pod 状态。
 			checkPodStatus(t, kl, pod, test.podStatus)
 		})
 	}
@@ -1371,14 +1371,14 @@ func TestHandlePluginResources(t *testing.T) {
 
 	kl.HandlePodAdditions(tCtx, []*v1.Pod{fittingPod, emptyPod, missingPod, failedPod})
 
-	// Check pod status stored in the status map.
+	// 检查状态映射中保存的 Pod 状态。
 	checkPodStatus(t, kl, fittingPod, v1.PodPending)
 	checkPodStatus(t, kl, emptyPod, v1.PodFailed)
 	checkPodStatus(t, kl, missingPod, v1.PodPending)
 	checkPodStatus(t, kl, failedPod, v1.PodFailed)
 }
 
-// TODO(filipg): This test should be removed once StatusSyncer can do garbage collection without external signal.
+// TODO(filipg): StatusSyncer 能够无需外部信号执行垃圾回收后，应移除此测试。
 // 验证清理流程会删除已不存在 Pod 的状态缓存条目。
 func TestPurgingObsoleteStatusMapEntries(t *testing.T) {
 	tCtx := ktesting.Init(t)
@@ -1413,8 +1413,8 @@ func TestValidateContainerLogStatus(t *testing.T) {
 	containerName := "x"
 	testCases := []struct {
 		statuses []v1.ContainerStatus
-		success  bool // whether getting logs for the container should succeed.
-		pSuccess bool // whether getting logs for the previous container should succeed.
+		success  bool // 是否应成功获取容器日志。
+		pSuccess bool // 是否应成功获取上一个容器的日志。
 	}{
 		{
 			statuses: []v1.ContainerStatus{
@@ -1609,7 +1609,7 @@ func TestDeleteOutdatedMirrorPod(t *testing.T) {
 	})
 	pod.Annotations[kubetypes.ConfigSourceAnnotationKey] = "file"
 
-	// Mirror pod has an outdated spec.
+	// 镜像 Pod 的 spec 已过时。
 	mirrorPod := podWithUIDNameNsSpec("11111111", "foo", "ns", v1.PodSpec{
 		Containers: []v1.Container{
 			{Name: "1234", Image: "bar"},
@@ -1747,11 +1747,11 @@ func TestFilterOutInactivePods(t *testing.T) {
 	pods := newTestPods(8)
 	now := metav1.NewTime(time.Now())
 
-	// terminal pods are excluded
+	// 排除已终止的 Pod
 	pods[0].Status.Phase = v1.PodFailed
 	pods[1].Status.Phase = v1.PodSucceeded
 
-	// deleted pod is included unless it's known to be terminated
+	// 已删除但尚未判定终止的 Pod 仍被保留
 	pods[2].Status.Phase = v1.PodRunning
 	pods[2].DeletionTimestamp = &now
 	pods[2].Status.ContainerStatuses = []v1.ContainerStatus{
@@ -1762,22 +1762,21 @@ func TestFilterOutInactivePods(t *testing.T) {
 		}},
 	}
 
-	// pending and running pods are included
+	// 保留等待中和运行中的 Pod
 	pods[3].Status.Phase = v1.PodPending
 	pods[4].Status.Phase = v1.PodRunning
 
-	// pod that is running but has been rejected by admission is excluded
+	// 排除运行中但已被准入拒绝的 Pod
 	pods[5].Status.Phase = v1.PodRunning
 	kubelet.statusManager.SetPodStatus(logger, pods[5], v1.PodStatus{Phase: v1.PodFailed})
 
-	// pod that is running according to the api but is known terminated is excluded
+	// 排除 API 显示运行中但已知终止的 Pod
 	pods[6].Status.Phase = v1.PodRunning
 	kubelet.podWorkers.(*fakePodWorkers).terminated = map[types.UID]bool{
 		pods[6].UID: true,
 	}
 
-	// pod that is failed but still terminating is included (it may still be consuming
-	// resources)
+	// 已失败但仍在终止的 Pod 会被保留（它可能仍占用资源）
 	pods[7].Status.Phase = v1.PodFailed
 	kubelet.podWorkers.(*fakePodWorkers).terminationRequested = map[types.UID]bool{
 		pods[7].UID: true,
@@ -2479,7 +2478,7 @@ func TestGenerateAPIPodStatusWithDifferentRestartPolicies(t *testing.T) {
 		expectedLastTerminationState map[string]v1.ContainerState
 		// 只有 init 容器结果与普通容器不同时才单独设置 expectedInitState。
 		expectedInitState map[string]v1.ContainerState
-		// Only set expectedInitLastTerminationState when it is different from expectedLastTerminationState
+		// 仅当 expectedInitLastTerminationState 与 expectedLastTerminationState 不同时才设置前者
 		expectedInitLastTerminationState map[string]v1.ContainerState
 	}{
 		{
@@ -2562,14 +2561,14 @@ func TestGenerateAPIPodStatusWithDifferentRestartPolicies(t *testing.T) {
 		},
 	} {
 		pod.Spec.RestartPolicy = test.restartPolicy
-		// Test normal containers
+		// 测试普通容器
 		pod.Spec.Containers = containers
 		apiStatus := kubelet.generateAPIPodStatus(tCtx, pod, podStatus, false)
 		expectedState, expectedLastTerminationState := test.expectedState, test.expectedLastTerminationState
 		verifyContainerStatuses(t, apiStatus.ContainerStatuses, expectedState, expectedLastTerminationState, fmt.Sprintf("case %d", c))
 		pod.Spec.Containers = nil
 
-		// Test init containers
+		// 测试 init 容器
 		pod.Spec.InitContainers = containers
 		apiStatus = kubelet.generateAPIPodStatus(tCtx, pod, podStatus, false)
 		if test.expectedInitState != nil {
@@ -2845,7 +2844,7 @@ func TestHandlePodAdditionsInvokesPodAdmitHandlers(t *testing.T) {
 
 	kl.HandlePodAdditions(tCtx, pods)
 
-	// Check pod status stored in the status map.
+	// 检查状态映射中保存的 Pod 状态。
 	checkPodStatus(t, kl, podToReject, v1.PodFailed)
 	checkPodStatus(t, kl, podToAdmit, v1.PodPending)
 }
@@ -3164,7 +3163,7 @@ func TestSyncTerminatingPodKillPod(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Check pod status stored in the status map.
+	// 检查状态映射中保存的 Pod 状态。
 	checkPodStatus(t, kl, pod, v1.PodFailed)
 }
 
@@ -3441,7 +3440,7 @@ func waitForVolumeUnmount(
 	err := retryWithExponentialBackOff(
 		time.Duration(50*time.Millisecond),
 		func() (bool, error) {
-			// Verify volumes detached
+			// 确认卷已解挂
 			hasVolumes := volumeManager.HasPossiblyMountedVolumesForPod(
 				util.GetUniquePodName(pod))
 			return !hasVolumes, nil
@@ -3464,7 +3463,7 @@ func waitForVolumeDetach(
 	err := retryWithExponentialBackOff(
 		time.Duration(50*time.Millisecond),
 		func() (bool, error) {
-			// Verify volumes detached
+			// 确认卷已解挂
 			volumeAttached := volumeManager.VolumeIsAttached(volumeName)
 			return !volumeAttached, nil
 		},
@@ -3617,7 +3616,7 @@ func TestNewMainKubeletStandAlone(t *testing.T) {
 		Auth:                 nil,
 		CAdvisorInterface:    cadvisor,
 		ContainerManager:     cm.NewStubContainerManager(),
-		KubeClient:           nil, // standalone mode
+		KubeClient:           nil, // 独立模式
 		HeartbeatClient:      nil,
 		EventClient:          nil,
 		TracerProvider:       tp,
@@ -3781,7 +3780,7 @@ func TestNewMainKubeletWithCertAndCAReloadingEnabled(t *testing.T) {
 		Auth:                 nil,
 		CAdvisorInterface:    cadvisor,
 		ContainerManager:     cm.NewStubContainerManager(),
-		KubeClient:           nil, // standalone mode
+		KubeClient:           nil, // 独立模式
 		HeartbeatClient:      nil,
 		EventClient:          nil,
 		TracerProvider:       tp,
@@ -4155,10 +4154,10 @@ func TestRecordAdmissionRejection(t *testing.T) {
 	// 逐个用例执行。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear the metrics after the test.
+			// 测试后清空指标。
 			metrics.AdmissionRejectionsTotal.Reset()
 
-			// Call the function.
+			// 调用该函数。
 			recordAdmissionRejection(tc.reason)
 
 			if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(tc.wants), "kubelet_admission_rejections_total"); err != nil {
@@ -4343,7 +4342,7 @@ func TestSyncPodWithErrorsDuringInPlacePodResize(t *testing.T) {
 			}
 			gotResizeConditions := kubelet.statusManager.GetPodResizeConditions(pod.UID)
 			for _, c := range gotResizeConditions {
-				// ignore last probe and transition times for comparison
+				// 比较时忽略最近探测时间和状态转换时间
 				c.LastProbeTime = metav1.Time{}
 				c.LastTransitionTime = metav1.Time{}
 			}
@@ -4391,7 +4390,7 @@ func TestHandlePodUpdates_RecordContainerRequestedResizes(t *testing.T) {
 		updatedPod         *v1.Pod
 		updateExpectedFunc func(*expectedMetricsStruct)
 	}{
-		// Memory requests
+		// 内存请求
 		{
 			name: "add memory requests",
 			initialAllocation: &v1.Pod{
@@ -4489,7 +4488,7 @@ func TestHandlePodUpdates_RecordContainerRequestedResizes(t *testing.T) {
 			},
 		},
 
-		// Memory limits
+		// 内存限制
 		{
 			name: "add memory limits",
 			initialAllocation: &v1.Pod{
@@ -4587,7 +4586,7 @@ func TestHandlePodUpdates_RecordContainerRequestedResizes(t *testing.T) {
 			},
 		},
 
-		// CPU requests
+		// CPU 请求
 		{
 			name: "add cpu requests",
 			initialAllocation: &v1.Pod{
@@ -4685,7 +4684,7 @@ func TestHandlePodUpdates_RecordContainerRequestedResizes(t *testing.T) {
 			},
 		},
 
-		// CPU limits
+		// CPU 限制
 		{
 			name: "add cpu limits",
 			initialAllocation: &v1.Pod{
@@ -4783,7 +4782,7 @@ func TestHandlePodUpdates_RecordContainerRequestedResizes(t *testing.T) {
 			},
 		},
 
-		// Some combinations of things
+		// 若干组合场景
 		{
 			name: "add cpu limits + increase memory requests",
 			initialAllocation: &v1.Pod{
@@ -5618,7 +5617,7 @@ func TestSyncPodNodeDeclaredFeaturesUpdate(t *testing.T) {
 			defer testKubelet.Cleanup()
 			kubelet := testKubelet.kubelet
 
-			// Setup mocks
+			// 设置 mock
 			recorder := record.NewFakeRecorder(10)
 			kubelet.recorder = recorder
 
@@ -5647,7 +5646,7 @@ func TestSyncPodNodeDeclaredFeaturesUpdate(t *testing.T) {
 				case event := <-recorder.Events:
 					t.Errorf("Expected no event, but received: %s", event)
 				default:
-					// No event received, which is correct.
+					// 未收到事件，符合预期。
 				}
 			}
 		})
@@ -5743,8 +5742,8 @@ func TestSyncPodRestartAllContainersRequeue(t *testing.T) {
 		syncPodFn: func(ctx context.Context, updateType kubetypes.SyncPodType, pod, mirrorPod *v1.Pod, podStatus *kubecontainer.PodStatus) (bool, func(), error) {
 			callCount++
 			if callCount > 1 {
-				// In the second call the SyncResult will not include the RemoveContainer.
-				// This ensures no infinite loop.
+				// 第二次调用时，SyncResult 不再包含 RemoveContainer。
+				// 以此避免无限循环。
 				testKubelet.fakeRuntime.SyncResults = &kubecontainer.PodSyncResult{}
 			}
 			return kubelet.SyncPod(ctx, updateType, pod, mirrorPod, podStatus)

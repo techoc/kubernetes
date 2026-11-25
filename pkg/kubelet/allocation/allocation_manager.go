@@ -342,7 +342,7 @@ func (m *manager) sortPendingResizes(logger klog.Logger) {
 		}
 
 		// 第三优先级：QoS 等级更高的 Pod 优先（Guaranteed > Burstable）。
-		// Best effort Pod 没有资源请求或限制，无需在此考虑。
+		// BestEffort QoS 的 Pod 没有资源请求或限制，无需在此考虑。
 		firstPodQOS := v1qos.GetPodQOS(firstPod)
 		secondPodQOS := v1qos.GetPodQOS(secondPod)
 		if firstPodQOS == v1.PodQOSGuaranteed && secondPodQOS != v1.PodQOSGuaranteed {

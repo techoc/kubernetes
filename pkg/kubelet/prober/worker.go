@@ -205,7 +205,7 @@ probeLoop:
 func (w *worker) stop() {
 	select {
 	case w.stopCh <- struct{}{}:
-	default: // Non-blocking.
+	default: // 非阻塞。
 	}
 }
 
@@ -237,7 +237,7 @@ func (w *worker) doProbe(ctx context.Context) (keepGoing bool) {
 			// 容器尚未创建或已被删除。
 			logger.V(3).Info("Probe target container not found",
 				"pod", klog.KObj(w.pod), "containerName", w.container.Name)
-			return true // Wait for more information.
+			return true // 等待更多信息。
 		}
 	}
 

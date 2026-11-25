@@ -85,14 +85,14 @@ type staticPolicyTest struct {
 func (spt staticPolicyTest) PseudoClone() staticPolicyTest {
 	return staticPolicyTest{
 		description:     spt.description,
-		topo:            spt.topo, // accessed in read-only
+		topo:            spt.topo, // 以只读方式访问。
 		numReservedCPUs: spt.numReservedCPUs,
 		podUID:          spt.podUID,
-		options:         spt.options, // accessed in read-only
+		options:         spt.options, // 以只读方式访问。
 		containerName:   spt.containerName,
 		stAssignments:   spt.stAssignments.Clone(),
 		stDefaultCPUSet: spt.stDefaultCPUSet.Clone(),
-		pod:             spt.pod, // accessed in read-only
+		pod:             spt.pod, // 以只读方式访问。
 		expErr:          spt.expErr,
 		expCPUAlloc:     spt.expCPUAlloc,
 		expCSet:         spt.expCSet.Clone(),
@@ -867,7 +867,7 @@ func TestStaticPolicyReuseCPUs(t *testing.T) {
 	}
 }
 
-// TestStaticPolicyDoNotReuseCPUs 验证可重启 init 容器（restartable sidecar）的 CPU 在分配后
+// TestStaticPolicyDoNotReuseCPUs 验证可重启 init 容器的 CPU 在分配后
 // 不会被后续容器复用
 func TestStaticPolicyDoNotReuseCPUs(t *testing.T) {
 	testCases := []struct {
@@ -1121,7 +1121,7 @@ type staticPolicyTestWithResvList struct {
 	expNewErr        error
 	expCPUAlloc      bool
 	expCSet          cpuset.CPUSet
-	expUncoreCache   cpuset.CPUSet // represents the expected UncoreCacheIDs
+	expUncoreCache   cpuset.CPUSet // 表示预期的 UncoreCacheIDs。
 }
 
 // TestStaticPolicyStartWithResvList 验证配置预留 CPU 列表时策略启动的校验逻辑，
@@ -3005,7 +3005,7 @@ func getPodUncoreCacheIDs(s state.Reader, topo *topology.CPUTopology, pod *v1.Po
 	return uncoreCacheIDs, nil
 }
 
-// 以下 lifecycle 测试验证 static CPU manager 策略会根据给定的 lifecycle.Operation
+// 以下生命周期测试验证 static CPU manager 策略会根据给定的 lifecycle.Operation
 // 决定执行还是跳过相应操作。
 // 由于 Allocate* 与 GetTopologyHints* 在操作不受支持时不会返回错误
 // （它们静默返回 nil/空 hint，以免中断所有 hint provider 的整体流程），

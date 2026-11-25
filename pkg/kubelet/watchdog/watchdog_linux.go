@@ -90,13 +90,10 @@ func NewHealthChecker(logger klog.Logger, opts ...Option) (HealthChecker, error)
 		o(hc)
 	}
 
-	// get watchdog information
 	// 读取 watchdog 超时配置；配置错误直接返回。
 	watchdogVal, err := hc.watchdog.SdWatchdogEnabled(false)
 	if err != nil {
-		// Failed to get watchdog configuration information.
-		// This occurs when we want to start the watchdog but the configuration is incorrect,
-		// for example, the time is not configured correctly.
+		// 尝试启动 watchdog 时配置不正确，例如超时时间设置有误，会导致读取配置失败。
 		return nil, fmt.Errorf("configure watchdog: %w", err)
 	}
 	// 未启用 watchdog 时返回空实例，Start 不会执行检查。
@@ -125,7 +122,6 @@ func NewHealthChecker(logger klog.Logger, opts ...Option) (HealthChecker, error)
 
 // SetHealthCheckers 合并默认检查器与调用方提供的检查器，并原子替换。
 func (hc *healthChecker) SetHealthCheckers(syncLoop syncLoopHealthChecker, checkers []healthz.HealthChecker) {
-	// Define the default set of health checkers that should always be present
 	// 默认检查器始终存在：ping、日志与同步循环健康检查。
 	defaultCheckers := []healthz.HealthChecker{
 		healthz.PingHealthz,

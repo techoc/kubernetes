@@ -25,7 +25,8 @@ import (
 
 const (
 	// 准入错误原因标识。
-	ErrorReasonUnexpected         = "UnexpectedAdmissionError"
+	ErrorReasonUnexpected = "UnexpectedAdmissionError"
+	// ErrorReasonEmptyPodSharedPool 表示 Pod 共享池为空。
 	ErrorReasonEmptyPodSharedPool = "EmptyPodSharedPoolError"
 )
 

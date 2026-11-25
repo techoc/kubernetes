@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	// TODO: Migrate kubelet to either use its own internal objects or client library.
+	// TODO：迁移 kubelet，使其使用自身的内部对象或客户端库。
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apiserver/pkg/server/healthz"
 	internalapi "k8s.io/cri-api/pkg/apis"
@@ -207,6 +207,7 @@ type NodeAllocatableConfig struct {
 	HardEvictionThresholds   []evictionapi.Threshold
 }
 
+// Status 汇总容器管理器未满足的软性要求。
 type Status struct {
 	// 任何未满足的软性要求。
 	SoftRequirements error

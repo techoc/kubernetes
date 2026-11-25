@@ -29,13 +29,19 @@ import (
 const (
 	// 非 Linux 平台没有 cgroup 配额/份额概念，以下常量全部返回 0。
 	MinShares = 0
+	// MaxShares 是非 Linux 平台的最大份额占位值。
 	MaxShares = 0
 
-	SharesPerCPU  = 0
+	// SharesPerCPU 是非 Linux 平台的每 CPU 份额占位值。
+	SharesPerCPU = 0
+	// MilliCPUToCPU 是非 Linux 平台的毫核换算占位值。
 	MilliCPUToCPU = 0
 
-	QuotaPeriod      = 0
-	MinQuotaPeriod   = 0
+	// QuotaPeriod 是非 Linux 平台的配额周期占位值。
+	QuotaPeriod = 0
+	// MinQuotaPeriod 是非 Linux 平台的最小配额周期占位值。
+	MinQuotaPeriod = 0
+	// MinMilliCPULimit 是非 Linux 平台的最小毫核限制占位值。
 	MinMilliCPULimit = 0
 )
 

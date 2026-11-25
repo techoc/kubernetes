@@ -184,7 +184,7 @@ func testNormalVolumeEvent(tCtx ktesting.TContext) {
 		Events: eventStore,
 	}
 
-	// Calculate stats for pod
+	// 计算 Pod 的卷统计。
 	statsCalculator := newVolumeStatCalculator(mockStats, time.Minute, fakePod, &fakeEventRecorder)
 	statsCalculator.calcAndStoreStats(logger)
 

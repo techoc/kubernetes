@@ -578,10 +578,10 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 	// 这些字段的变化不应被 isPodStatusByKubeletEqual 忽略。
 	kubeletOwnedFields := sets.NewString(
 		"Phase",
-		"Conditions", // Conditions are specially handled, but considered owned.
+		"Conditions", // Conditions 经过特殊处理，但仍视为由 kubelet 所有。
 		"Message",
 		"Reason",
-		"NominatedNodeName", // kubelet sets this to empty when pod is scheduled
+		"NominatedNodeName", // Pod 被调度后，kubelet 会将该字段置空
 		"HostIP",
 		"HostIPs",
 		"PodIP",
@@ -898,7 +898,7 @@ func TestStatusNormalizeTimeStamp(t *testing.T) {
 	}
 }
 
-// 验证 static pod 在 mirror pod 创建前后的状态读取与同步行为，以及 mirror pod UID 变化时的处理。
+// 验证静态 Pod 在 mirror Pod 创建前后的状态读取与同步行为，以及 mirror Pod UID 变化时的处理。
 func TestStaticPod(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	staticPod := getTestPod()
@@ -1849,7 +1849,7 @@ func TestSetContainerStartup(t *testing.T) {
 
 	logger.Info("Setting container startup should generate update but not pod startup")
 	m.SetContainerStartup(logger, pod.UID, cID1, true)
-	verifyUpdates(t, m, 1) // Started = nil to false
+	verifyUpdates(t, m, 1) // Started 从 nil 变为 false
 	status = expectPodStatus(t, m, pod)
 	verifyStartup("c1 ready", &status, true, false, false)
 
@@ -1916,7 +1916,7 @@ func TestReconcilePodStatus(t *testing.T) {
 	syncer := newTestManager(client)
 	syncer.SetPodStatus(logger, testPod, getRandomPodStatus())
 	t.Logf("Call syncBatch directly to test reconcile")
-	syncer.syncBatch(ctx, true) // The apiStatusVersions should be set now
+	syncer.syncBatch(ctx, true) // 此时 apiStatusVersions 应已设置
 	client.ClearActions()
 
 	podStatus, ok := syncer.GetPodStatus(testPod.UID)
@@ -3419,7 +3419,7 @@ func TestPodDeferredResizeDurationSeconds(t *testing.T) {
 		podUID             types.UID
 		priority           *int32
 		conditionReason    string
-		action             string // "clear", "delete", "orphan"
+		action             string // 操作："clear"、"delete"、"orphan"
 		resolution         metrics.DeferredResizeResolution
 		expectedResolution metrics.DeferredResizeResolution
 		expectedPriority   metrics.PriorityBucket
@@ -3493,7 +3493,7 @@ func TestPodDeferredResizeDurationSeconds(t *testing.T) {
 		{
 			name:               "deferred condition removed via DeletePodStatus as terminated with missing pod (unknown priority)",
 			podUID:             "pod-deleted-missing",
-			priority:           int32Ptr(0), // Doesn't matter because pod is missing
+			priority:           int32Ptr(0), // Pod 已不存在，因此无需考虑
 			conditionReason:    v1.PodReasonDeferred,
 			action:             "delete",
 			expectedResolution: metrics.DeferredResizeResolutionTerminated,
@@ -3504,7 +3504,7 @@ func TestPodDeferredResizeDurationSeconds(t *testing.T) {
 		{
 			name:               "deferred condition removed via RemoveOrphanedStatuses as terminated with missing pod (unknown priority)",
 			podUID:             "pod-orphaned-missing",
-			priority:           int32Ptr(0), // Doesn't matter because pod is missing
+			priority:           int32Ptr(0), // Pod 已不存在，因此无需考虑
 			conditionReason:    v1.PodReasonDeferred,
 			action:             "orphan",
 			expectedResolution: metrics.DeferredResizeResolutionTerminated,

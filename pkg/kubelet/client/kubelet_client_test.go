@@ -348,7 +348,7 @@ func TestGetConnectionInfo(t *testing.T) {
 			},
 			nodeName:             "test-node",
 			expectedHost:         "192.168.1.10",
-			expectedPort:         "10250", // default port
+			expectedPort:         "10250", // 默认端口
 			expectedNodeFeatures: nil,
 			expectError:          false,
 		},
@@ -369,7 +369,7 @@ func TestGetConnectionInfo(t *testing.T) {
 				},
 			},
 			nodeName:             "test-node",
-			expectedHost:         "203.0.113.10", // External IP should be preferred when available
+			expectedHost:         "203.0.113.10", // 可用时应优先选择 External IP
 			expectedPort:         "10250",
 			expectedNodeFeatures: nil,
 			expectError:          false,

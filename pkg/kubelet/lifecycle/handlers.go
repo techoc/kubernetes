@@ -42,7 +42,7 @@ import (
 
 const (
 	// 单次 HTTP 响应体读取上限，防止生命周期钩子返回超大响应体时占用过多内存。
-	maxRespBodyLength = 10 * 1 << 10 // 10KB
+	maxRespBodyLength = 10 * 1 << 10
 
 	// AppArmorNotAdmittedReason 是 Pod 因 AppArmor 校验失败而被拒绝准入的原因。
 	AppArmorNotAdmittedReason = "AppArmor"
@@ -88,7 +88,7 @@ func (hr *handlerRunner) Run(ctx context.Context, containerID kubecontainer.Cont
 	switch {
 	case handler.Exec != nil:
 		var msg string
-		// TODO(tallclair): Pass a proper timeout value.
+		// TODO(tallclair): 传入合适的超时值。
 		// 超时传 0 表示使用运行时默认值；失败时附带命令输出，便于排查。
 		output, err := hr.commandRunner.RunInContainer(ctx, containerID, handler.Exec.Command, 0)
 		if err != nil {

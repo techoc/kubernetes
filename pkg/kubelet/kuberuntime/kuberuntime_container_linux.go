@@ -278,7 +278,7 @@ func (m *kubeGenericRuntimeManager) configureContainerSwapResources(ctx context.
 	}
 
 	swapConfigurationHelper := newSwapConfigurationHelper(*m.machineInfo, m.getSwapControllerAvailable)
-	// NOTE(ehashman): 该行为由 opencontainers 运行时规范定义：
+	// 注意（ehashman）：该行为由 opencontainers 运行时规范定义：
 	// https://github.com/opencontainers/runtime-spec/blob/1c3f411f041711bbeecf35ff7e93461ea6789220/config-linux.md#memory
 	switch m.GetContainerSwapBehavior(pod, container) {
 	case types.NoSwap:

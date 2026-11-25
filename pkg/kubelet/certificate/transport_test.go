@@ -171,7 +171,7 @@ func TestRotateShutsDownConnections(t *testing.T) {
 	m.setCurrent(client1CertData.certificate)
 
 	// lastSeenLeafCert 保存服务端最后一次看到的客户端证书。
-	lastSeenLeafCert := new(atomic.Value) // Always *x509.Certificate
+	lastSeenLeafCert := new(atomic.Value) // 始终存储 *x509.Certificate
 
 	// 用最后证书的序列号判断客户端是否换用了新证书。
 	lastSerialNumber := func() *big.Int {

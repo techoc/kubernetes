@@ -579,7 +579,7 @@ func (kl *Kubelet) updateNode(ctx context.Context, originalNode *v1.Node) (*v1.N
 	return node, changed
 }
 
-// patchNodeStatus 以 originalNode 为基线 patch API server 上的节点对象；
+// patchNodeStatus 以 originalNode 为基线，patch API 服务器上的节点对象；
 // 成功时刷新 kubelet 的上报时间，并返回更新后的节点。
 func (kl *Kubelet) patchNodeStatus(originalNode, node *v1.Node) (*v1.Node, error) {
 	// 只有状态确有变化或到达上报周期时才会走到这里，以减少控制面写入。
@@ -622,7 +622,7 @@ func (kl *Kubelet) markVolumesFromNode(node *v1.Node) {
 // kl.nodeRef 在 kubelet 启动时（NewMainKubelet）构造一次，那时 Node 对象尚不保证
 // 已存在于 apiserver，因此它有意只带 kind+name、不带 UID
 // （见 https://github.com/kubernetes/kubernetes/issues/42701）。这导致 kubelet
-// 记录的所有节点事件都没有 involvedObject.uid，`kubectl describe node` 等消费方
+// 记录的所有节点事件都没有 involvedObject.uid，`kubectl describe node` 等使用方
 // 无法按 UID 把事件关联到节点（见 https://github.com/kubernetes/kubernetes/issues/138524）。
 //
 // 一旦本地缓存中能看到 Node，就解析一次 UID 并把结果缓存到 kl.cachedNodeRef。
@@ -689,8 +689,8 @@ func (kl *Kubelet) recordNodeSchedulableEvent(ctx context.Context, node *v1.Node
 }
 
 // setNodeStatus 填充给定 Node 的 Status 字段，已设置的值会被覆盖。
-// TODO(madhusudancs): Simplify the logic for setting node conditions and
-// refactor the node status condition code out to a different file.
+// TODO(madhusudancs): 简化设置节点条件的逻辑，
+// 并将节点状态条件代码重构到单独的文件中。
 func (kl *Kubelet) setNodeStatus(ctx context.Context, node *v1.Node) {
 	logger := klog.FromContext(ctx)
 	// 单个 setter 失败只记录日志，不阻断其余字段，保证节点状态尽量可用。
@@ -730,10 +730,9 @@ func (kl *Kubelet) defaultNodeStatusFuncs() []func(context.Context, *v1.Node) er
 		nodestatus.ReadyCondition(kl.clock.Now, kl.runtimeState.runtimeErrors, kl.runtimeState.networkErrors, kl.runtimeState.storageErrors,
 			kl.containerManager.Status, kl.shutdownManager.ShutdownStatus, kl.recordNodeStatusEvent, kl.supportLocalStorageCapacityIsolation()),
 		nodestatus.VolumesInUse(kl.volumeManager.ReconcilerStatesHasBeenSynced, kl.volumeManager.GetVolumesInUse),
-		// TODO(mtaufen): I decided not to move this setter for now, since all it does is send an event
-		// and record state back to the Kubelet runtime object. In the future, I'd like to isolate
-		// these side-effects by decoupling the decisions to send events and partial status recording
-		// from the Node setters.
+		// TODO(mtaufen): 我决定暂时不移动这个 setter，因为它只负责发送事件，
+		// 并将状态记录回 Kubelet 运行时对象。未来希望通过解耦事件发送决策
+		// 与部分状态记录决策，将这些副作用与 Node setter 分离。
 		kl.recordNodeSchedulableEvent,
 	)
 	return setters

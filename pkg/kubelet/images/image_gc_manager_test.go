@@ -726,14 +726,14 @@ func TestGarbageCollectNotEnoughFreed(t *testing.T) {
 
 	// 初始状态：使用率 95%，其中 5% 是可回收的垃圾镜像。
 	capacity := uint64(10 * 1024 * 1024 * 1024)
-	available := capacity / 20 // 5% available, 95% usage
+	available := capacity / 20
 	imageFs := &statsapi.FsStats{
 		AvailableBytes: ptr.To(available),
 		CapacityBytes:  ptr.To(capacity),
 	}
 	mockStatsProvider.EXPECT().ImageFsStats(mock.Anything).Return(imageFs, imageFs, nil)
 	// 该镜像未被使用，可以删除；但它的体积小于需要释放的空间。
-	imageSize := int64(500 * 1024 * 1024) // 500 MiB
+	imageSize := int64(500 * 1024 * 1024)
 	fakeRuntime.ImageList = []container.Image{
 		makeImage(0, imageSize),
 	}

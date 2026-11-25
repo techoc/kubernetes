@@ -228,13 +228,13 @@ kubelet_pod_start_sli_duration_seconds_count 1
 
 		podInitializing := buildInitializingPod()
 		tracker.ObservedPodOnWatch(logger, podInitializing, frozenTime)
-		// Image 1: 10-16s
+		// 镜像 1：10-16 秒
 		fakeClock.SetTime(frozenTime.Add(time.Second * 10))
 		tracker.RecordImageStartedPulling(podInitializing.UID)
-		// Image 2: 11-18s
+		// 镜像 2：11-18 秒
 		fakeClock.SetTime(frozenTime.Add(time.Second * 11))
 		tracker.RecordImageStartedPulling(podInitializing.UID)
-		// Image 3: 14-20s
+		// 镜像 3：14-20 秒
 		fakeClock.SetTime(frozenTime.Add(time.Second * 14))
 		tracker.RecordImageStartedPulling(podInitializing.UID)
 		fakeClock.SetTime(frozenTime.Add(time.Second * 16))
@@ -386,7 +386,7 @@ kubelet_pod_start_sli_duration_seconds_count 1
 			"Total init container runtime should be 3.5s (2s + 1.5s)")
 
 		totalImageTime := calculateImagePullingTime(state.imagePullSessions)
-		expectedImageTime := 3300 * time.Millisecond // 1s + 1s + 1.3s concurrent overlap
+		expectedImageTime := 3300 * time.Millisecond // 1 秒 + 1 秒 + 1.3 秒的并发重叠
 		assert.Equal(t, expectedImageTime, totalImageTime,
 			"Image pulling time should be 3.3s: init-1(1s) + init-2(1s) + concurrent-main(1.3s)")
 
@@ -858,9 +858,9 @@ func TestCalculateImagePullingTime(t *testing.T) {
 
 	t.Run("incomplete sessions should be ignored (for example: kubelet restart)", func(t *testing.T) {
 		sessions := []imagePullSession{
-			{start: baseTime, end: baseTime.Add(3 * time.Second)},                        // valid: 3s
-			{start: baseTime.Add(5 * time.Second), end: time.Time{}},                     // incomplete, ignored
-			{start: baseTime.Add(10 * time.Second), end: baseTime.Add(12 * time.Second)}, // valid: 2s
+			{start: baseTime, end: baseTime.Add(3 * time.Second)},                        // 有效：3 秒
+			{start: baseTime.Add(5 * time.Second), end: time.Time{}},                     // 不完整，忽略
+			{start: baseTime.Add(10 * time.Second), end: baseTime.Add(12 * time.Second)}, // 有效：2 秒
 		}
 		result := calculateImagePullingTime(sessions)
 		assert.Equal(t, 5*time.Second, result) // 3s + 2s
@@ -879,8 +879,8 @@ func TestCalculateImagePullingTime(t *testing.T) {
 	t.Run("partially overlapping sessions", func(t *testing.T) {
 		sessions := []imagePullSession{
 			{start: baseTime, end: baseTime.Add(5 * time.Second)},                       // 0-5s
-			{start: baseTime.Add(3 * time.Second), end: baseTime.Add(8 * time.Second)},  // 3-8s (overlap 3-5s)
-			{start: baseTime.Add(7 * time.Second), end: baseTime.Add(12 * time.Second)}, // 7-12s (overlap 7-8s)
+			{start: baseTime.Add(3 * time.Second), end: baseTime.Add(8 * time.Second)},  // 3-8 秒（重叠 3-5 秒）
+			{start: baseTime.Add(7 * time.Second), end: baseTime.Add(12 * time.Second)}, // 7-12 秒（重叠 7-8 秒）
 		}
 		result := calculateImagePullingTime(sessions)
 		assert.Equal(t, 12*time.Second, result) // 12s
@@ -889,18 +889,18 @@ func TestCalculateImagePullingTime(t *testing.T) {
 	t.Run("completely overlapped sessions", func(t *testing.T) {
 		sessions := []imagePullSession{
 			{start: baseTime, end: baseTime.Add(10 * time.Second)},                     // 0-10s
-			{start: baseTime.Add(2 * time.Second), end: baseTime.Add(8 * time.Second)}, // 2-8s (completely inside)
-			{start: baseTime.Add(3 * time.Second), end: baseTime.Add(5 * time.Second)}, // 3-5s (completely inside)
+			{start: baseTime.Add(2 * time.Second), end: baseTime.Add(8 * time.Second)}, // 2-8 秒（完全包含）
+			{start: baseTime.Add(3 * time.Second), end: baseTime.Add(5 * time.Second)}, // 3-5 秒（完全包含）
 		}
 		result := calculateImagePullingTime(sessions)
-		assert.Equal(t, 10*time.Second, result) // Only outer session: 10s
+		assert.Equal(t, 10*time.Second, result) // 仅最外层会话：10 秒
 	})
 
 	t.Run("partially and completely overlapping sessions", func(t *testing.T) {
 		sessions := []imagePullSession{
 			{start: baseTime, end: baseTime.Add(10 * time.Second)},                     // 0-10s
-			{start: baseTime.Add(2 * time.Second), end: baseTime.Add(5 * time.Second)}, // 2-5s (completely inside first)
-			{start: baseTime.Add(3 * time.Second), end: baseTime.Add(7 * time.Second)}, // 3-7s (completely inside first and partially overlapping second)
+			{start: baseTime.Add(2 * time.Second), end: baseTime.Add(5 * time.Second)}, // 2-5 秒（完全包含于第一个会话）
+			{start: baseTime.Add(3 * time.Second), end: baseTime.Add(7 * time.Second)}, // 3-7 秒（完全包含于第一个会话，并与第二个会话部分重叠）
 		}
 		result := calculateImagePullingTime(sessions)
 		assert.Equal(t, 10*time.Second, result) // 10s
@@ -910,11 +910,11 @@ func TestCalculateImagePullingTime(t *testing.T) {
 		// 混合完全重叠的会话与相互独立的会话
 		sessions := []imagePullSession{
 			{start: baseTime, end: baseTime.Add(8 * time.Second)},                        // 0-8s
-			{start: baseTime.Add(2 * time.Second), end: baseTime.Add(6 * time.Second)},   // 2-6s (completely inside first)
-			{start: baseTime.Add(3 * time.Second), end: baseTime.Add(5 * time.Second)},   // 3-5s (completely inside first)
-			{start: baseTime.Add(15 * time.Second), end: baseTime.Add(20 * time.Second)}, // 15-20s (separate)
-			{start: baseTime.Add(16 * time.Second), end: baseTime.Add(18 * time.Second)}, // 16-18s (completely inside fourth)
-			{start: baseTime.Add(17 * time.Second), end: baseTime.Add(21 * time.Second)}, // 17-21s (partially overlapping fourth and fifth)
+			{start: baseTime.Add(2 * time.Second), end: baseTime.Add(6 * time.Second)},   // 2-6 秒（完全包含于第一个会话）
+			{start: baseTime.Add(3 * time.Second), end: baseTime.Add(5 * time.Second)},   // 3-5 秒（完全包含于第一个会话）
+			{start: baseTime.Add(15 * time.Second), end: baseTime.Add(20 * time.Second)}, // 15-20 秒（独立会话）
+			{start: baseTime.Add(16 * time.Second), end: baseTime.Add(18 * time.Second)}, // 16-18 秒（完全包含于第四个会话）
+			{start: baseTime.Add(17 * time.Second), end: baseTime.Add(21 * time.Second)}, // 17-21 秒（与第四个会话部分重叠，并完全包含于第五个会话）
 		}
 		result := calculateImagePullingTime(sessions)
 		// 8s（第一组）+ 6s（第二组）= 14s

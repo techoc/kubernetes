@@ -100,7 +100,7 @@ func (rc *reconciler) reconstructVolumes(logger klog.Logger) {
 func (rc *reconciler) updateStates(logger klog.Logger, reconstructedVolumes map[v1.UniqueVolumeName]*globalVolumeInfo) {
 	for _, gvl := range reconstructedVolumes {
 		err := rc.actualStateOfWorld.AddAttachUncertainReconstructedVolume(
-			//TODO: the devicePath might not be correct for some volume plugins: see issue #54108
+			// TODO: 某些卷插件返回的 devicePath 可能不准确，参见 issue #54108。
 			logger, gvl.volumeName, gvl.volumeSpec, rc.nodeName, gvl.devicePath)
 		if err != nil {
 			logger.Error(err, "Could not add volume information to actual state of world", "volumeName", gvl.volumeName)

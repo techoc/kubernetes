@@ -224,8 +224,8 @@ func TestManagerScope(t *testing.T) {
 // mockHintProvider 是返回预置拓扑提示的 HintProvider 桩。
 type mockHintProvider struct {
 	th map[string][]TopologyHint
-	//TODO: Add this field and add some tests to make sure things error out
-	//appropriately on allocation errors.
+	// TODO：添加此字段并增加测试，确保分配错误时
+	// 能够按预期返回错误。
 	//allocateError error
 }
 

@@ -194,10 +194,10 @@ func (s *server) Register(ctx context.Context, r *api.RegisterRequest) (*api.Emp
 
 // isVersionCompatibleWithPlugin 判断插件声明的版本中是否有当前支持版本。
 func (s *server) isVersionCompatibleWithPlugin(versions ...string) bool {
-	// TODO(vikasc): Currently this is fine as we only have a single supported version. When we do need to support
-	// multiple versions in the future, we may need to extend this function to return a supported version.
-	// E.g., say kubelet supports v1beta1 and v1beta2, and we get v1alpha1 and v1beta1 from a device plugin,
-	// this function should return v1beta1
+	// TODO(vikasc)：目前只有一个受支持版本，因此这样处理没有问题。将来需要支持
+	// 多个版本时，可能需要扩展此函数以返回受支持的版本。
+	// 例如，kubelet 支持 v1beta1 和 v1beta2，而设备插件提供 v1alpha1 和 v1beta1，
+	// 此函数应返回 v1beta1。
 	for _, version := range versions {
 		for _, supportedVersion := range api.SupportedVersions {
 			if version == supportedVersion {

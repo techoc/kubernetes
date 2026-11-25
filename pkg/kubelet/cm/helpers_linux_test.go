@@ -59,8 +59,8 @@ func TestResourceConfigForPod(t *testing.T) {
 	const Mi = int64(1024 * 1024)
 	const Gi = int64(1024 * 1024 * 1024)
 	// quota period 在内部以微秒表示，因此这里把时间常量换算为微秒。
-	defaultQuotaPeriod := uint64(100 * time.Millisecond / time.Microsecond) // in microseconds
-	tunedQuotaPeriod := uint64(5 * time.Millisecond / time.Microsecond)     // in microseconds
+	defaultQuotaPeriod := uint64(100 * time.Millisecond / time.Microsecond) // 单位为微秒。
+	tunedQuotaPeriod := uint64(5 * time.Millisecond / time.Microsecond)     // 单位为微秒。
 	tunedQuota := int64(1 * time.Millisecond / time.Microsecond)
 
 	minShares := uint64(MinShares)
@@ -82,7 +82,7 @@ func TestResourceConfigForPod(t *testing.T) {
 		pod                                *v1.Pod
 		expected                           *ResourceConfig
 		enforceCPULimits                   bool
-		quotaPeriod                        uint64 // in microseconds
+		quotaPeriod                        uint64 // 单位为微秒。
 		podLevelResourcesEnabled           bool
 		draNodeAllocatableResourcesEnabled bool
 	}{
@@ -493,8 +493,8 @@ func TestResourceConfigForPod(t *testing.T) {
 					Containers: []v1.Container{
 						{
 							Resources: getResourceRequirements(
-								getResourceList("1", "200Mi"), // requests
-								getResourceList("3", "500Mi"), // limits
+								getResourceList("1", "200Mi"), // 请求
+								getResourceList("3", "500Mi"), // 限制
 							),
 						},
 					},
@@ -514,8 +514,8 @@ func TestResourceConfigForPod(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: true,
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
-			// CPUShares：c1 请求 (1) + direct claim (2)
-			// CPUQuota：c1 限制 (3) + direct claim (2)
+			// CPUShares：c1 请求 (1) + 直接声明 (2)
+			// CPUQuota：c1 限制 (3) + 直接声明 (2)
 			expected: &ResourceConfig{CPUShares: new(MilliCPUToShares((1 + 2) * 1000)), CPUQuota: new(MilliCPUToQuota((3+2)*1000, int64(defaultQuotaPeriod))), CPUPeriod: &defaultQuotaPeriod, Memory: new(500 * Mi)},
 		},
 		{
@@ -525,8 +525,8 @@ func TestResourceConfigForPod(t *testing.T) {
 					Containers: []v1.Container{
 						{
 							Resources: getResourceRequirements(
-								getResourceList("1", "200Mi"), // requests
-								getResourceList("3", "500Mi"), // limits
+								getResourceList("1", "200Mi"), // 请求
+								getResourceList("3", "500Mi"), // 限制
 							),
 						},
 					},
@@ -560,8 +560,8 @@ func TestResourceConfigForPod(t *testing.T) {
 					Containers: []v1.Container{
 						{
 							Resources: getResourceRequirements(
-								getResourceList("1", "200Mi"), // requests
-								getResourceList("3", "500Mi"), // limits
+								getResourceList("1", "200Mi"), // 请求
+								getResourceList("3", "500Mi"), // 限制
 							),
 						},
 					},
@@ -611,8 +611,8 @@ func TestResourceConfigForPod(t *testing.T) {
 					Containers: []v1.Container{
 						{
 							Resources: getResourceRequirements(
-								getResourceList("1", "200Mi"), // requests
-								getResourceList("3", "500Mi"), // limits
+								getResourceList("1", "200Mi"), // 请求
+								getResourceList("3", "500Mi"), // 限制
 							),
 						},
 					},
@@ -642,8 +642,8 @@ func TestResourceConfigForPod(t *testing.T) {
 					Containers: []v1.Container{
 						{
 							Resources: getResourceRequirements(
-								getResourceList("1", "200Mi"), // requests
-								getResourceList("3", "500Mi"), // limits
+								getResourceList("1", "200Mi"), // 请求
+								getResourceList("3", "500Mi"), // 限制
 							),
 						},
 					},
@@ -721,8 +721,8 @@ func TestResourceConfigForPod(t *testing.T) {
 						{
 							Name: "c1",
 							Resources: getResourceRequirements(
-								getResourceList("100m", "200Mi"), // requests
-								getResourceList("300m", "500Mi"), // limits
+								getResourceList("100m", "200Mi"), // 请求
+								getResourceList("300m", "500Mi"), // 限制
 							),
 						},
 					},
@@ -766,15 +766,15 @@ func TestResourceConfigForPod(t *testing.T) {
 						{
 							Name: "c1",
 							Resources: getResourceRequirements(
-								getResourceList("100m", "200Mi"), // requests
-								getResourceList("300m", "500Mi"), // limits
+								getResourceList("100m", "200Mi"), // 请求
+								getResourceList("300m", "500Mi"), // 限制
 							),
 						},
 						{
 							Name: "c2",
 							Resources: getResourceRequirements(
-								getResourceList("200m", "300Mi"), // requests
-								getResourceList("400m", "600Mi"), // limits
+								getResourceList("200m", "300Mi"), // 请求
+								getResourceList("400m", "600Mi"), // 限制
 							),
 						},
 					},
@@ -814,15 +814,15 @@ func TestResourceConfigForPod(t *testing.T) {
 						{
 							Name: "c1",
 							Resources: getResourceRequirements(
-								getResourceList("1", "200Mi"), // requests
-								getResourceList("3", "500Mi"), // limits
+								getResourceList("1", "200Mi"), // 请求
+								getResourceList("3", "500Mi"), // 限制
 							),
 						},
 						{
 							Name: "c2",
 							Resources: getResourceRequirements(
-								getResourceList("2", "300Mi"), // requests
-								getResourceList("4", "600Mi"), // limits
+								getResourceList("2", "300Mi"), // 请求
+								getResourceList("4", "600Mi"), // 限制
 							),
 						},
 					},
@@ -844,12 +844,12 @@ func TestResourceConfigForPod(t *testing.T) {
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
 			expected: &ResourceConfig{
-				// CPUShares：c1 请求 (1) + c2 请求 (2) + direct claim CPU (2)（共享的 direct 资源不重复累加）
+				// CPUShares：c1 请求 (1) + c2 请求 (2) + 直接声明 CPU (2)（共享的直接资源不重复累加）
 				CPUShares: new(MilliCPUToShares((1 + 2 + 2) * 1000)),
-				// CPUQuota：c1 限制 (3) + c2 限制 (4) + direct claim CPU (2)
+				// CPUQuota：c1 限制 (3) + c2 限制 (4) + 直接声明 CPU (2)
 				CPUQuota:  new(MilliCPUToQuota((3+4+2)*1000, int64(defaultQuotaPeriod))),
 				CPUPeriod: &defaultQuotaPeriod,
-				// Memory：c1 限制 (500) + c2 限制 (600) + direct claim memory (400)
+				// Memory：c1 限制 (500) + c2 限制 (600) + 直接声明内存 (400)
 				Memory: ptr.To((500 + 600 + 400) * Mi),
 			},
 		},
@@ -893,8 +893,8 @@ func TestResourceConfigForPod(t *testing.T) {
 						{
 							Name: "c1",
 							Resources: getResourceRequirements(
-								getResourceList("1", "300Mi"), // requests
-								getResourceList("1", "300Mi"), // limits
+								getResourceList("1", "300Mi"), // 请求
+								getResourceList("1", "300Mi"), // 限制
 							),
 						},
 					},
@@ -916,12 +916,12 @@ func TestResourceConfigForPod(t *testing.T) {
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
 			expected: &ResourceConfig{
-				// CPUShares：c1 请求 (1) + direct claim CPU (2)
+				// CPUShares：c1 请求 (1) + 直接声明 CPU (2)
 				CPUShares: new(MilliCPUToShares((1 + 2) * 1000)),
-				// CPUQuota：c1 限制 (1) + direct claim CPU (2)
+				// CPUQuota：c1 限制 (1) + 直接声明 CPU (2)
 				CPUQuota:  new(MilliCPUToQuota((1+2)*1000, int64(defaultQuotaPeriod))),
 				CPUPeriod: &defaultQuotaPeriod,
-				// Memory：c1 限制 (300) + direct claim memory (400)
+				// Memory：c1 限制 (300) + 直接声明内存 (400)
 				Memory: ptr.To((300 + 400) * Mi),
 			},
 		},
@@ -1116,8 +1116,8 @@ func TestHugePageLimits(t *testing.T) {
 // 会按 QoS 类别写入 memory.min / memory.low。
 func TestResourceConfigForPodWithEnforceMemoryQoS(t *testing.T) {
 	// quota period 在内部以微秒表示，因此这里把时间常量换算为微秒。
-	defaultQuotaPeriod := uint64(100 * time.Millisecond / time.Microsecond) // in microseconds
-	tunedQuotaPeriod := uint64(5 * time.Millisecond / time.Microsecond)     // in microseconds
+	defaultQuotaPeriod := uint64(100 * time.Millisecond / time.Microsecond) // 单位为微秒。
+	tunedQuotaPeriod := uint64(5 * time.Millisecond / time.Microsecond)     // 单位为微秒。
 
 	minShares := uint64(MinShares)
 	burstableShares := MilliCPUToShares(100)
@@ -1136,7 +1136,7 @@ func TestResourceConfigForPodWithEnforceMemoryQoS(t *testing.T) {
 		pod              *v1.Pod
 		expected         *ResourceConfig
 		enforceCPULimits bool
-		quotaPeriod      uint64 // in microseconds
+		quotaPeriod      uint64 // 单位为微秒。
 	}{
 		"besteffort": {
 			pod: &v1.Pod{

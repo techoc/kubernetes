@@ -81,7 +81,7 @@ type containerOptions struct {
 }
 
 // TestPodGuaranteedCPUs 校验 podGuaranteedCPUs 的 CPU 计数规则：
-// Guaranteed Pod 取各容器请求之和，init 与 restartable init 容器按最大/累计语义计入。
+// Guaranteed Pod 取各容器请求之和，init 与可重启 init 容器按最大/累计语义计入。
 func TestPodGuaranteedCPUs(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	options := [][]*containerOptions{
@@ -111,7 +111,7 @@ func TestPodGuaranteedCPUs(t *testing.T) {
 	testPod7 := makeMultiContainerPodWithOptions(options[2], options[1])
 	// 单个 Pod 包含多个普通容器的测试用例。
 	testPod8 := makeMultiContainerPodWithOptions(options[3], options[3])
-	// 含 restartable init 容器（sidecar）的测试用例。
+	// 含可重启 init 容器（sidecar）的测试用例。
 	testPod9 := makeMultiContainerPodWithOptions([]*containerOptions{
 		{request: "1", limit: "1", restartPolicy: v1.ContainerRestartPolicyAlways},
 	}, []*containerOptions{

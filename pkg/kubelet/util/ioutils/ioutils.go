@@ -27,8 +27,8 @@ func LimitWriter(w io.Writer, n int64) io.Writer { return &LimitedWriter{w, n} }
 // 每次 Write 都会更新 N 以反映剩余额度；
 // 当 N <= 0 或底层 W 返回 EOF 时，Write 返回 EOF。
 type LimitedWriter struct {
-	W io.Writer // underlying writer
-	N int64     // max bytes remaining
+	W io.Writer // 底层 Writer
+	N int64     // 剩余可写入的最大字节数
 }
 
 // Write 写入数据并在达到上限时截断，同时返回 ErrShortWrite。

@@ -38,13 +38,15 @@ type deviceAllocateInfo struct {
 }
 
 // resourceAllocateInfo 以资源名为键，保存该资源下各容器的设备分配信息。
-type resourceAllocateInfo map[string]deviceAllocateInfo // Keyed by resourceName.
+type resourceAllocateInfo map[string]deviceAllocateInfo
+
 // containerDevices 以容器名为键，保存该容器的资源分配信息。
-type containerDevices map[string]resourceAllocateInfo // Keyed by containerName.
+type containerDevices map[string]resourceAllocateInfo
+
 // podDevices 以 Pod UID 为键，保存各 Pod 的设备分配缓存；内嵌 RWMutex 保护并发访问。
 type podDevices struct {
 	sync.RWMutex
-	devs map[string]containerDevices // Keyed by podUID.
+	devs map[string]containerDevices
 }
 
 // newPodDevices 返回一个 podDevices 对象，自带读写锁，

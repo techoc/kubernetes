@@ -156,14 +156,14 @@ func wait(epfd, eventfd int, timeout time.Duration) (bool, error) {
 	// EINTR 表示被信号中断，忽略即可。
 	if n == -1 {
 		if err == unix.EINTR {
-			// Interrupt, ignore the error
+			// 被信号中断，忽略该错误。
 			return false, nil
 		}
 		return false, err
 	}
 	// 超时。
 	if n == 0 {
-		// Timeout
+		// 等待超时。
 		return false, nil
 	}
 	// 返回事件数超出预期，说明缓冲区不足，直接报错。

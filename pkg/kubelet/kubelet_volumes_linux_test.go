@@ -170,7 +170,7 @@ func TestCleanupOrphanedPodDirs(t *testing.T) {
 				return validateDirExists(filepath.Join(podDir, "volume-subpaths/volume/container/index"))
 			},
 		},
-		// TODO: test volume in volume-manager
+		// TODO: 测试 volume-manager 中的卷。
 	}
 
 	for name, tc := range testCases {

@@ -84,7 +84,7 @@ func (s *mockState) GetCPUSetOrDefault(podUID string, containerName string) cpus
 	return s.GetDefaultCPUSet()
 }
 
-// GetPodCPUSet 返回 pod 级独占 cpuset，仅在 pod-level resources 场景使用。
+// GetPodCPUSet 返回 Pod 级独占 cpuset，仅在 Pod 级资源场景使用。
 func (s *mockState) GetPodCPUSet(podUID string) (cpuset.CPUSet, bool) {
 	res, ok := s.podAssignments[podUID]
 	return res.CPUSet.Clone(), ok
@@ -277,7 +277,7 @@ func makePod(podUID, containerName, cpuRequest, cpuLimit string) *v1.Pod {
 	return pod
 }
 
-// makePodWithPodLevelResources 在容器级资源之上追加 pod 级资源，用于 pod-level resources 测试。
+// makePodWithPodLevelResources 在容器级资源之上追加 Pod 级资源，用于 Pod 级资源测试。
 func makePodWithPodLevelResources(podUID, podCPURequest, podCPULimit, containerName, cpuRequest, cpuLimit string) *v1.Pod {
 	pod := makePod(podUID, containerName, cpuRequest, cpuLimit)
 	pod.Spec.Resources = &v1.ResourceRequirements{
@@ -1542,7 +1542,7 @@ func TestReconcileStateBaselineLog(t *testing.T) {
 		{
 			description:   "feature gate enabled, no current container CPU assignments, CPU assignments recorded at admission time doesn't match default shared CPU set, log expected",
 			fgEnabled:     true,
-			stAssignments: state.ContainerCPUAssignments{}, // so we will get the default CPUSet for the container
+			stAssignments: state.ContainerCPUAssignments{}, // 这样容器就能使用默认的 CPUSet。
 			stBaselines: state.ContainerCPUBaselines{
 				"fakePodUID": map[string]state.ContainerCPUBaseline{
 					"fakeContainerName": {Baseline: cpuset.New(3, 4)},

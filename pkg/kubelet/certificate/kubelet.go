@@ -106,16 +106,16 @@ func NewKubeletServerCertificateManager(kubeClient clientset.Interface, kubeCfg 
 			Name:      "certificate_manager_server_rotation_seconds",
 			Help:      "Histogram of the number of seconds the previous certificate lived before being rotated.",
 			Buckets: []float64{
-				60,        // 1  minute
-				3600,      // 1  hour
-				14400,     // 4  hours
-				86400,     // 1  day
-				604800,    // 1  week
-				2592000,   // 1  month
-				7776000,   // 3  months
-				15552000,  // 6  months
-				31104000,  // 1  year
-				124416000, // 4  years
+				60,        // 1 分钟
+				3600,      // 1 小时
+				14400,     // 4 小时
+				86400,     // 1 天
+				604800,    // 1 周
+				2592000,   // 1 个月
+				7776000,   // 3 个月
+				15552000,  // 6 个月
+				31104000,  // 1 年
+				124416000, // 4 年
 			},
 			StabilityLevel: compbasemetrics.ALPHA,
 		},

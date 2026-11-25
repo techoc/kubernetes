@@ -217,8 +217,8 @@ func (kl *Kubelet) GetPods() []*v1.Pod {
 	pods := kl.podManager.GetPods()
 	for i, p := range pods {
 		// Pod 缓存不会更新静态 Pod 的状态。
-		// TODO(tallclair): Most callers of GetPods() do not need pod status. We should either parameterize this,
-		// or move the status injection to only the callers that do need it (maybe just the /pods http handler?).
+		// TODO(tallclair): GetPods() 的大多数调用方不需要 Pod 状态。我们可以将其参数化，
+		// 或仅向确实需要状态的调用方注入状态（也许只有 /pods HTTP 处理器需要）。
 		if kubelettypes.IsStaticPod(p) {
 			if status, ok := kl.statusManager.GetPodStatus(p.UID); ok {
 				// 不要修改缓存

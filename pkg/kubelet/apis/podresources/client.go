@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubelet/pkg/apis/podresources/v1alpha1"
 )
 
-// 注意：pod resources API 的使用方不应导入本包，
+// 注意：PodResources API 的使用方不应导入本包，
 // 而应把相关函数复制到自己的项目中。
 
 // GetV1alpha1Client 返回 PodResourcesLister gRPC 服务的客户端。

@@ -73,8 +73,7 @@ func NewSummaryProvider(ctx context.Context, statsProvider Provider) SummaryProv
 
 // Get 汇总节点、根 cgroup、文件系统与各 Pod 的统计，生成完整的 Summary。
 func (sp *summaryProviderImpl) Get(ctx context.Context, updateStats bool) (*statsapi.Summary, error) {
-	// TODO(timstclair): Consider returning a best-effort response if any of
-	// the following errors occur.
+	// TODO(timstclair): 考虑在以下任一采集失败时返回尽力而为的部分结果。
 	node, err := sp.provider.GetNode(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node info: %v", err)
@@ -138,8 +137,7 @@ func (sp *summaryProviderImpl) Get(ctx context.Context, updateStats bool) (*stat
 
 // GetCPUAndMemoryStats 只采集 CPU 与内存相关统计，避免触发文件系统等开销较大的采集。
 func (sp *summaryProviderImpl) GetCPUAndMemoryStats(ctx context.Context) (*statsapi.Summary, error) {
-	// TODO(timstclair): Consider returning a best-effort response if any of
-	// the following errors occur.
+	// TODO(timstclair): 考虑在以下任一采集失败时返回尽力而为的部分结果。
 	node, err := sp.provider.GetNode(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node info: %v", err)

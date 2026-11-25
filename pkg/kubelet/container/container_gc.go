@@ -53,7 +53,7 @@ type SourcesReadyProvider interface {
 	AllReady() bool
 }
 
-// TODO(vmarmol): Preferentially remove pod infra containers.
+// TODO(vmarmol): 优先移除 Pod 的基础设施容器。
 type realContainerGC struct {
 	// runtime 是容器运行时。
 	runtime Runtime

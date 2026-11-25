@@ -316,7 +316,7 @@ func getCgroupSubsystemsV1() (*CgroupSubsystems, error) {
 		// 挂载点选择策略的演进：BEFORE 阶段每个子系统随机选挂载点；
 		// NOW 阶段更确定：统一选用路径最短的挂载点；
 		// FUTURE 阶段的选择规则将在文档中明确。
-		// ref. issue: https://github.com/kubernetes/kubernetes/issues/95488
+		// 参考问题：https://github.com/kubernetes/kubernetes/issues/95488。
 
 		// 同一子系统可能挂载在多个位置，选最短路径保证结果确定且可复现。
 		for _, subsystem := range mount.Subsystems {

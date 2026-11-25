@@ -463,7 +463,7 @@ func TestToKubeContainerStatusWithResources(t *testing.T) {
 	} {
 		t.Run(desc, func(t *testing.T) {
 			if test.skipOnWindows && goruntime.GOOS == "windows" {
-				// TODO: remove skip once the failing test has been fixed.
+				// TODO: 修复失败用例后移除跳过。
 				t.Skip("Skip failing test on Windows.")
 			}
 

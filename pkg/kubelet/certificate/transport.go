@@ -103,7 +103,7 @@ func addCertRotation(logger klog.Logger, stopCh <-chan struct{}, period time.Dur
 	// 检查逻辑可能被多个 goroutine 触发，用互斥锁串行化。
 	checkLock := &sync.Mutex{}
 	checkNewCertificateAndRotate := func() {
-		// don't run concurrently
+		// 避免并发执行。
 		checkLock.Lock()
 		defer checkLock.Unlock()
 
@@ -114,7 +114,7 @@ func addCertRotation(logger klog.Logger, stopCh <-chan struct{}, period time.Dur
 			now := time.Now()
 			// 证书缺失：超过期限且服务器可达时退出，让上层重新引导。
 			if curr == nil {
-				// the certificate has been deleted from disk or is otherwise corrupt
+				// 证书已从磁盘删除或已损坏。
 				if now.After(lastCertAvailable.Add(exitAfter)) {
 					if clientCertificateManager.ServerHealthy() {
 						logger.Error(nil, "No valid client certificate is found and the server is responsive, exiting.", "lastCertificateAvailabilityTime", lastCertAvailable, "shutdownThreshold", exitAfter)
@@ -124,7 +124,6 @@ func addCertRotation(logger klog.Logger, stopCh <-chan struct{}, period time.Dur
 					}
 				}
 			} else {
-				// the certificate is expired
 				// 证书已过期：服务器可达时退出。
 				if now.After(curr.Leaf.NotAfter) {
 					if clientCertificateManager.ServerHealthy() {
@@ -140,7 +139,7 @@ func addCertRotation(logger klog.Logger, stopCh <-chan struct{}, period time.Dur
 
 		// 证书未变化，无需处理。
 		if curr == nil || lastCert == curr {
-			// Cert hasn't been rotated.
+			// 证书尚未轮转。
 			return
 		}
 		lastCert = curr
@@ -152,7 +151,6 @@ func addCertRotation(logger klog.Logger, stopCh <-chan struct{}, period time.Dur
 		d.CloseAll()
 	}
 
-	// start long-term check
 	// 周期性检查证书变化，直到 stopCh 关闭。
 	go wait.Until(checkNewCertificateAndRotate, period, stopCh)
 

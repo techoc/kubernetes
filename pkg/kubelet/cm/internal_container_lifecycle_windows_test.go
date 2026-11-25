@@ -39,16 +39,16 @@ func makeRange(min, max int) []int {
 func TestComputeCPUSet(t *testing.T) {
 	// 构造两个处理器组：组 0 掩码 0b1010，组 1 掩码 0b1001。
 	affinities := []winstats.GroupAffinity{
-		{Mask: 0b1010, Group: 0}, // CPUs 1 and 3 in Group 0
-		{Mask: 0b1001, Group: 1}, // CPUs 0 and 3 in Group 1
+		{Mask: 0b1010, Group: 0}, // Group 0 中的 CPU 1 和 3。
+		{Mask: 0b1001, Group: 1}, // Group 1 中的 CPU 0 和 3。
 	}
 
 	// 全局 CPU 编号 = 组号*64 + 组内位号。
 	expected := map[int]struct{}{
-		1:  {}, // Group 0, CPU 1
-		3:  {}, // Group 0, CPU 3
-		64: {}, // Group 1, CPU 0
-		67: {}, // Group 1, CPU 3
+		1:  {}, // 处理器组 0，CPU 1
+		3:  {}, // 处理器组 0，CPU 3
+		64: {}, // 处理器组 1，CPU 0
+		67: {}, // 处理器组 1，CPU 3
 	}
 
 	// 比较长度并逐个确认期望 CPU 都在结果中。
@@ -124,7 +124,7 @@ func TestComputeFinalCpuSet(t *testing.T) {
 			name:          "Both managers enabled, CPU manager selects more CPUs",
 			allocatedCPUs: cpuset.New(0, 1, 2, 3),
 			allNumaNodeCPUs: []winstats.GroupAffinity{
-				{Mask: 0b0011, Group: 0}, // CPUs 0 and 1 in Group 0
+				{Mask: 0b0011, Group: 0}, // Group 0 中的 CPU 0 和 1。
 			},
 			expectedCPUSet: sets.New[int](0, 1, 2, 3),
 		},
@@ -132,7 +132,7 @@ func TestComputeFinalCpuSet(t *testing.T) {
 			name:          "Both managers enabled, CPU manager selects fewer CPUs within NUMA nodes",
 			allocatedCPUs: cpuset.New(0, 1),
 			allNumaNodeCPUs: []winstats.GroupAffinity{
-				{Mask: 0b1111, Group: 0}, // CPUs 0, 1, 2, 3 in Group 0
+				{Mask: 0b1111, Group: 0}, // Group 0 中的 CPU 0、1、2、3。
 			},
 			expectedCPUSet: sets.New[int](0, 1),
 		},
@@ -140,7 +140,7 @@ func TestComputeFinalCpuSet(t *testing.T) {
 			name:          "Both managers enabled, CPU manager selects fewer CPUs outside NUMA nodes",
 			allocatedCPUs: cpuset.New(0, 1),
 			allNumaNodeCPUs: []winstats.GroupAffinity{
-				{Mask: 0b1100, Group: 0}, // CPUs 2 and 3 in Group 0
+				{Mask: 0b1100, Group: 0}, // Group 0 中的 CPU 2 和 3。
 			},
 			// CPU Manager 的分配具有权威性，不会合并 NUMA CPU。
 			expectedCPUSet: sets.New[int](0, 1),
@@ -155,7 +155,7 @@ func TestComputeFinalCpuSet(t *testing.T) {
 			name:          "Only memory manager enabled",
 			allocatedCPUs: cpuset.New(),
 			allNumaNodeCPUs: []winstats.GroupAffinity{
-				{Mask: 0b1100, Group: 0}, // CPUs 2 and 3 in Group 0
+				{Mask: 0b1100, Group: 0}, // Group 0 中的 CPU 2 和 3。
 			},
 			expectedCPUSet: sets.New[int](2, 3),
 		},
@@ -169,8 +169,8 @@ func TestComputeFinalCpuSet(t *testing.T) {
 			name:          "Multi-group NUMA: memory manager selects NUMA node spanning 2 groups",
 			allocatedCPUs: cpuset.New(),
 			allNumaNodeCPUs: []winstats.GroupAffinity{
-				{Mask: 0xFFFFFFFFFFFFFFFF, Group: 0}, // CPUs 0-63
-				{Mask: 0xFFFFFFFFFFFFFFFF, Group: 1}, // CPUs 64-127
+				{Mask: 0xFFFFFFFFFFFFFFFF, Group: 0}, // CPU 0-63
+				{Mask: 0xFFFFFFFFFFFFFFFF, Group: 1}, // CPU 64-127
 			},
 			expectedCPUSet: sets.New[int](makeRange(0, 127)...),
 		},
@@ -178,8 +178,8 @@ func TestComputeFinalCpuSet(t *testing.T) {
 			name:          "Multi-group NUMA: CPU manager CPUs in group 0, NUMA spans groups 0 and 1",
 			allocatedCPUs: cpuset.New(0, 1, 2, 3),
 			allNumaNodeCPUs: []winstats.GroupAffinity{
-				{Mask: 0xFFFFFFFFFFFFFFFF, Group: 0}, // CPUs 0-63
-				{Mask: 0xFFFFFFFFFFFFFFFF, Group: 1}, // CPUs 64-127
+				{Mask: 0xFFFFFFFFFFFFFFFF, Group: 0}, // CPU 0-63
+				{Mask: 0xFFFFFFFFFFFFFFFF, Group: 1}, // CPU 64-127
 			},
 			expectedCPUSet: sets.New[int](0, 1, 2, 3),
 		},

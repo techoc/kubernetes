@@ -119,11 +119,9 @@ func areMemoryBlocksEqual(mb1, mb2 []state.Block) bool {
 		for i, copyBlock := range copyMemoryBlocks {
 			if reflect.DeepEqual(block, copyBlock) {
 				// 用末尾元素覆盖已匹配项再截断，避免 O(n^2) 的切片删除开销。
-				// move the element that equals to the block to the end of the slice
 				copyMemoryBlocks[i] = copyMemoryBlocks[len(copyMemoryBlocks)-1]
 
 				// 截断末尾，副本长度即剩余未匹配数量。
-				// remove the last element from our slice
 				copyMemoryBlocks = copyMemoryBlocks[:len(copyMemoryBlocks)-1]
 
 				break
@@ -337,7 +335,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 3 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -382,7 +380,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -393,7 +391,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -427,7 +425,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -471,7 +469,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -510,7 +508,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -560,7 +558,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -606,7 +604,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 2,
 							},
@@ -652,7 +650,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 2,
 							},
@@ -718,7 +716,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 4,
 							},
@@ -775,7 +773,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -837,7 +835,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -899,7 +897,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2 * gb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -1070,7 +1068,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2176 * mb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -1081,7 +1079,7 @@ func TestStaticPolicyStart(t *testing.T) {
 						Memory: 2176 * mb,
 						HugePages: []cadvisorapi.HugePagesInfo{
 							{
-								// size in KB
+								// 单位为 KB。
 								PageSize: pageSize1Gb,
 								NumPages: 1,
 							},
@@ -5028,7 +5026,7 @@ func getPodWithContainersAndPodLevelResources(podName, podMemRequest, podMemLimi
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: podName,
-			UID:  "podUID", // Using a static UID for simplicity in tests, can be overridden.
+			UID:  "podUID", // 为简化测试使用固定 UID，可覆盖该值。
 		},
 		Spec: v1.PodSpec{
 			InitContainers: []v1.Container{},

@@ -479,7 +479,7 @@ func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 		1 /* expectedSetUpCallCount */, testKubelet.volumePlugin))
 
 	// 移除 Pod。
-	// TODO: technically waitForVolumeUnmount
+	// TODO: 严格来说应等待 waitForVolumeUnmount。
 	kubelet.podWorkers.(*fakePodWorkers).setPodRuntimeBeRemoved(pod.UID)
 	kubelet.podManager.SetPods([]*v1.Pod{})
 

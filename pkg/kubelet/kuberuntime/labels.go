@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	// TODO: change those label names to follow kubernetes's format
+	// TODO: 调整这些标签名以符合 Kubernetes 的格式。
 	// 这些标签/注解键名由 kubelet 写入容器运行时，用于重启后重建 Pod 与容器状态。
 	podDeletionGracePeriodLabel    = "io.kubernetes.pod.deletionGracePeriod"
 	podTerminationGracePeriodLabel = "io.kubernetes.pod.terminationGracePeriod"

@@ -523,7 +523,7 @@ func (p *staticPolicy) enforceSMTAlignment(s state.State, numCPUs int) error {
 // Allocate 为容器分配独占 CPU；只支持 Add 操作。
 func (p *staticPolicy) Allocate(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) (rerr error) {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "podUID", pod.UID, "containerName", container.Name, "operation", operation)
-	logger.Info("Allocate start") // V=0 for backward compatibility
+	logger.Info("Allocate start") // V=0 用于向后兼容。
 	defer logger.V(2).Info("Allocate end")
 
 	switch operation {
@@ -615,7 +615,7 @@ func getAssignedCPUsOfSiblings(s state.State, podUID string, containerName strin
 // RemoveContainer 释放容器占用的 CPU；Pod 级分配在最后一个容器移除时整体释放。
 func (p *staticPolicy) RemoveContainer(logger klog.Logger, s state.State, podUID string, containerName string) error {
 	logger = klog.LoggerWithValues(logger, "podUID", podUID, "containerName", containerName)
-	logger.Info("RemoveContainer start") // backward compatibility
+	logger.Info("RemoveContainer start") // 用于向后兼容。
 	defer logger.V(4).Info("RemoveContainer start")
 	toRelease, ok := s.GetCPUSet(podUID, containerName)
 	if !ok {
@@ -630,7 +630,7 @@ func (p *staticPolicy) RemoveContainer(logger klog.Logger, s state.State, podUID
 			if len(s.GetCPUAssignments()[podUID]) == 0 {
 				updatedCPUSets := s.GetDefaultCPUSet().Union(podCPUSet)
 				s.SetDefaultCPUSet(updatedCPUSets)
-				s.DeletePod(podUID) // Clean up all state for the pod.
+				s.DeletePod(podUID) // 清理该 Pod 的所有状态。
 				p.updateMetricsOnRelease(logger, s, podCPUSet)
 				logger.Info("Released pod-level CPUs", "defaultCPUSet", updatedCPUSets)
 			}
@@ -1035,9 +1035,9 @@ func (p *staticPolicy) getAlignedCPUs(numaAffinity bitmask.BitMask, allocatableC
 // initializeMetrics 初始化 CPU 管理相关指标，确保标签值存在。
 func (p *staticPolicy) initializeMetrics(logger klog.Logger, s state.State) {
 	metrics.CPUManagerSharedPoolSizeMilliCores.Set(float64(p.GetAvailableCPUs(s).Size() * 1000))
-	metrics.ContainerAlignedComputeResourcesFailure.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedPhysicalCPU).Add(0) // ensure the value exists
-	metrics.ContainerAlignedComputeResources.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedPhysicalCPU).Add(0)        // ensure the value exists
-	metrics.ContainerAlignedComputeResources.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedUncoreCache).Add(0)        // ensure the value exists
+	metrics.ContainerAlignedComputeResourcesFailure.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedPhysicalCPU).Add(0)
+	metrics.ContainerAlignedComputeResources.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedPhysicalCPU).Add(0)
+	metrics.ContainerAlignedComputeResources.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedUncoreCache).Add(0)
 	totalAssignedCPUs := getTotalAssignedExclusiveCPUs(s)
 	metrics.CPUManagerExclusiveCPUsAllocationCount.Set(float64(totalAssignedCPUs.Size()))
 	updateAllocationPerNUMAMetric(logger, p.topology, totalAssignedCPUs)

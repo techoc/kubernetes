@@ -142,8 +142,8 @@ func NewStaticPolicyOptions(policyOptions map[string]string) (StaticPolicyOption
 			}
 			opts.PreferAlignByUncoreCacheOption = optValue
 		default:
-			// this should never be reached, we already detect unknown options,
-			// but we keep it as further safety.
+			// 这里不应到达，因为前面已经检测到未知选项；
+			// 保留该分支是为了提供额外的安全保护。
 			return opts, fmt.Errorf("unsupported cpumanager option: %q (%s)", name, value)
 		}
 	}
@@ -153,7 +153,7 @@ func NewStaticPolicyOptions(policyOptions map[string]string) (StaticPolicyOption
 		return opts, fmt.Errorf("static policy options %s and %s can not be used at the same time", FullPCPUsOnlyOption, DistributeCPUsAcrossCoresOption)
 	}
 
-	// TODO(@Jeffwan): Remove this check after more compatibility tests are done.
+	// TODO(@Jeffwan)：完成更多兼容性测试后移除此检查。
 	// 两个选项同时启用会互相冲突。
 	if opts.DistributeCPUsAcrossNUMA && opts.DistributeCPUsAcrossCores {
 		return opts, fmt.Errorf("static policy options %s and %s can not be used at the same time", DistributeCPUsAcrossNUMAOption, DistributeCPUsAcrossCoresOption)
@@ -176,11 +176,11 @@ func NewStaticPolicyOptions(policyOptions map[string]string) (StaticPolicyOption
 func ValidateStaticPolicyOptions(opts StaticPolicyOptions, topology *topology.CPUTopology, topologyManager topologymanager.Store) error {
 	// 按 socket 对齐与 single-numa-node 策略、以及 socket 多于 NUMA 的硬件不兼容。
 	if opts.AlignBySocket {
-		// Not compatible with topology manager single-numa-node policy option.
+		// 与 topology manager 的 single-numa-node 策略选项不兼容。
 		if topologyManager.GetPolicy().Name() == topologymanager.PolicySingleNumaNode {
 			return fmt.Errorf("Topolgy manager %s policy is incompatible with CPUManager %s policy option", topologymanager.PolicySingleNumaNode, AlignBySocketOption)
 		}
-		// Not compatible with topology when number of sockets are more than number of NUMA nodes.
+		// 当 socket 数量多于 NUMA 节点数量时，与拓扑不兼容。
 		if topology.NumSockets > topology.NumNUMANodes {
 			return fmt.Errorf("Align by socket is not compatible with hardware where number of sockets are more than number of NUMA")
 		}

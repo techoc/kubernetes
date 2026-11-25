@@ -219,7 +219,7 @@ func (cm *containerManagerImpl) getCgroupConfig(rl v1.ResourceList, compressible
 // getCgroupConfigInternal 是不依赖 containerManager 的部分，
 // 便于单元测试直接调用而无需构造完整的 containerManager。
 func getCgroupConfigInternal(rl v1.ResourceList, compressibleResourcesOnly bool) *ResourceConfig {
-	// TODO(vishh): Set CPU Quota if necessary.
+	// TODO(vishh)：必要时设置 CPU Quota。
 	if rl == nil {
 		return nil
 	}

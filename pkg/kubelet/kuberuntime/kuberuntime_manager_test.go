@@ -113,9 +113,9 @@ func createTestRuntimeManager(ctx context.Context, opts ...testRuntimeManagerOpt
 	}
 	fakeImageService := apitest.NewFakeImageService()
 	// 单测容器均为 BestEffort，machineInfo 只需提供非零内存容量。
-	// Only an empty machineInfo is needed here, because in unit test all containers are besteffort,
-	// data in machineInfo is not used. If burstable containers are used in unit test in the future,
-	// we may want to set memory capacity.
+	// 单元测试中所有容器均为 BestEffort，因此这里只需空的 machineInfo；
+	// 不会使用其中的数据。若未来单元测试引入 Burstable 容器，
+	// 可能需要设置内存容量。
 	memoryCapacityQuantity := resource.MustParse(fakeNodeAllocatableMemory)
 	machineInfo := &cadvisorapi.MachineInfo{
 		MemoryCapacity: uint64(memoryCapacityQuantity.Value()),
@@ -195,7 +195,7 @@ func makeFakePodSandbox(tCtx ktesting.TContext, m *kubeGenericRuntimeManager, te
 			Labels: config.Labels,
 		},
 	}
-	// assign additional IPs
+	// 分配附加 IP
 	// fake sandbox 支持多 IP，用于覆盖双栈场景。
 	additionalIPs := apitest.FakePodSandboxIPs[1:]
 	additionalPodIPs := make([]*runtimeapi.PodIP, 0, len(additionalIPs))
@@ -384,7 +384,7 @@ func TestGetPodStatus(t *testing.T) {
 		},
 	}
 
-	// Set fake sandbox and faked containers to fakeRuntime.
+	// 将模拟 sandbox 和容器设置到 fakeRuntime。
 	// 先把 sandbox 与容器写入 fake runtime。
 	makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 
@@ -428,7 +428,7 @@ func TestStopContainerWithNotFoundError(t *testing.T) {
 		},
 	}
 
-	// Set fake sandbox and faked containers to fakeRuntime.
+	// 将模拟 sandbox 和容器设置到 fakeRuntime。
 	makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 	// 注入 NotFound，KillPod 应把它当作容器已不存在处理。
 	fakeRuntime.InjectError("StopContainer", status.Error(codes.NotFound, "No such container"))
@@ -471,7 +471,7 @@ func TestGetPodStatusWithNotFoundError(t *testing.T) {
 		},
 	}
 
-	// Set fake sandbox and faked containers to fakeRuntime.
+	// 将模拟 sandbox 和容器设置到 fakeRuntime。
 	makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 	// ContainerStatus 的 NotFound 不应导致整个状态查询失败。
 	fakeRuntime.InjectError("ContainerStatus", status.Error(codes.NotFound, "No such container"))
@@ -517,10 +517,10 @@ func testGetPods(tCtx ktesting.TContext) {
 		},
 	}
 
-	// Set fake sandbox and fake containers to fakeRuntime.
+	// 将模拟 sandbox 和容器设置到 fakeRuntime。
 	fakeSandbox, fakeContainers := makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 
-	// Convert the fakeContainers to kubecontainer.Container
+	// 将 fakeContainers 转换为 kubecontainer.Container。
 	// 把 fake 容器转回 kubecontainer 类型，作为期望值。
 	containers := make([]*kubecontainer.Container, len(fakeContainers))
 	for i := range containers {
@@ -542,7 +542,7 @@ func testGetPods(tCtx ktesting.TContext) {
 		}
 		containers[i] = c
 	}
-	// Convert fakeSandbox to kubecontainer.Container
+	// 将 fakeSandbox 转换为 kubecontainer.Container。
 	sandbox, err := m.sandboxToKubeContainer(&runtimeapi.PodSandbox{
 		Id:          fakeSandbox.Id,
 		Metadata:    fakeSandbox.Metadata,
@@ -606,7 +606,7 @@ func TestGetPodsSorted(t *testing.T) {
 
 	assert.Len(t, actual, 3)
 
-	// Verify that the pods are sorted by their creation time (newest/biggest timestamp first)
+	// 验证 Pod 按创建时间排序，最新的（时间戳最大）在前。
 	// GetPods 必须按创建时间从新到旧返回。
 	assert.Equal(t, uint64(createdTimestamps[2]), actual[0].CreatedAt)
 	assert.Equal(t, uint64(createdTimestamps[0]), actual[1].CreatedAt)
@@ -647,10 +647,10 @@ func TestKillPod(t *testing.T) {
 		},
 	}
 
-	// Set fake sandbox and fake containers to fakeRuntime.
+	// 将模拟 sandbox 和容器设置到 fakeRuntime。
 	fakeSandbox, fakeContainers := makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 
-	// Convert the fakeContainers to kubecontainer.Container
+	// 将 fakeContainers 转换为 kubecontainer.Container。
 	// 先转换 fake 容器，再转换 sandbox，作为期望的 kubecontainer.Pod。
 	containers := make([]*kubecontainer.Container, len(fakeContainers))
 	for i := range containers {
@@ -883,7 +883,7 @@ func TestSyncPodWithInitContainers(t *testing.T) {
 
 	backOff := flowcontrol.NewBackOff(time.Second, time.Minute)
 
-	// 1. should only create the init container.
+	// 1. 应仅创建 init 容器。
 	// 分阶段验证 init 生命周期：先 init，再应用容器。
 	runtimePod, err := m.GetPod(tCtx, pod.UID)
 	if err != nil {
@@ -902,7 +902,7 @@ func TestSyncPodWithInitContainers(t *testing.T) {
 	}
 	verifyContainerStatuses(t, fakeRuntime, expected, "start only the init container")
 
-	// 2. should not create app container because init container is still running.
+	// 2. init 容器仍在运行，因此不应创建应用容器。
 	// init 尚未完成时再次同步不应创建应用容器。
 	runtimePod, err = m.GetPod(tCtx, pod.UID)
 	require.NoError(t, err)
@@ -912,8 +912,8 @@ func TestSyncPodWithInitContainers(t *testing.T) {
 	require.NoError(t, result.Error())
 	verifyContainerStatuses(t, fakeRuntime, expected, "init container still running; do nothing")
 
-	// 3. should create all app containers because init container finished.
-	// Stop init container instance 0.
+	// 3. init 容器已结束，因此应创建所有应用容器。
+	// 停止 init 容器实例 0。
 	// 停止 init 容器，模拟其成功退出。
 	sandboxIDs, err := m.getSandboxIDByPodUID(tCtx, pod.UID)
 	require.NoError(t, err)
@@ -922,7 +922,7 @@ func TestSyncPodWithInitContainers(t *testing.T) {
 	require.NoError(t, err)
 	err = fakeRuntime.StopContainer(tCtx, initID0, 0)
 	require.NoError(t, err)
-	// Sync again.
+	// 再次同步。
 	runtimePod, err = m.GetPod(tCtx, pod.UID)
 	require.NoError(t, err)
 	podStatus, err = m.GetPodStatus(tCtx, runtimePod)
@@ -936,12 +936,12 @@ func TestSyncPodWithInitContainers(t *testing.T) {
 	}
 	verifyContainerStatuses(t, fakeRuntime, expected, "init container completed; all app containers should be running")
 
-	// 4. should restart the init container if needed to create a new podsandbox
-	// Stop the pod sandbox.
+	// 4. 如需创建新的 PodSandbox，应重启 init 容器。
+	// 停止 PodSandbox。
 	// sandbox 重建后 init 容器必须重跑。
 	err = fakeRuntime.StopPodSandbox(tCtx, sandboxID)
 	require.NoError(t, err)
-	// Sync again.
+	// 再次同步。
 	runtimePod, err = m.GetPod(tCtx, pod.UID)
 	require.NoError(t, err)
 	podStatus, err = m.GetPodStatus(tCtx, runtimePod)
@@ -949,10 +949,10 @@ func TestSyncPodWithInitContainers(t *testing.T) {
 	result = m.SyncPod(tCtx, pod, podStatus, []v1.Secret{}, backOff, false)
 	require.NoError(t, result.Error())
 	expected = []*cRecord{
-		// The first init container instance is purged and no longer visible.
-		// The second (attempt == 1) instance has been started and is running.
+		// 第一个 init 容器实例已被清除，不再可见。
+		// 第二个实例（attempt == 1）已启动并运行。
 		{name: initContainers[0].Name, attempt: 1, state: runtimeapi.ContainerState_CONTAINER_RUNNING},
-		// All containers are killed.
+		// 所有容器均已被杀死。
 		{name: containers[0].Name, attempt: 0, state: runtimeapi.ContainerState_CONTAINER_EXITED},
 		{name: containers[1].Name, attempt: 0, state: runtimeapi.ContainerState_CONTAINER_EXITED},
 	}
@@ -1015,7 +1015,7 @@ func TestSyncPodWithRestartAllContainers(t *testing.T) {
 
 	backOff := flowcontrol.NewBackOff(time.Second, time.Minute)
 
-	// 1. Run the pod first. First SyncPod should execute the init container.
+	// 1. 先运行 Pod；第一次 SyncPod 应执行 init 容器。
 	// 分阶段触发 RestartAllContainers，验证清理与重新启动。
 	runtimePod, err := m.GetPod(tCtx, pod.UID)
 	if err != nil {
@@ -1034,8 +1034,8 @@ func TestSyncPodWithRestartAllContainers(t *testing.T) {
 	}
 	verifyContainerStatuses(t, fakeRuntime, expected, "start only the init container")
 
-	// 2. should run all app containers because init container finished.
-	// Stop init container instance 0.
+	// 2. init 容器已结束，因此应运行所有应用容器。
+	// 停止 init 容器实例 0。
 	sandboxIDs, err := m.getSandboxIDByPodUID(tCtx, pod.UID)
 	require.NoError(t, err)
 	sandboxID := sandboxIDs[0]
@@ -1043,7 +1043,7 @@ func TestSyncPodWithRestartAllContainers(t *testing.T) {
 	require.NoError(t, err)
 	err = fakeRuntime.StopContainer(tCtx, initID0, 0)
 	require.NoError(t, err)
-	// Sync again.
+	// 再次同步。
 	runtimePod, err = m.GetPod(tCtx, pod.UID)
 	require.NoError(t, err)
 	podStatus, err = m.GetPodStatus(tCtx, runtimePod)
@@ -1057,8 +1057,8 @@ func TestSyncPodWithRestartAllContainers(t *testing.T) {
 	}
 	verifyContainerStatuses(t, fakeRuntime, expected, "init container completed; all app containers should be running")
 
-	// 3. Exits the container foo2 with code 42, the pod should be marked for RestartAllContainers, and
-	// should remove all containers.
+	// 3. 容器 foo2 以退出码 42 退出，Pod 应标记为 RestartAllContainers，
+	// 并移除所有容器。
 	// 让 foo2 以 42 退出，命中 RestartAllContainers 规则。
 	sandboxIDs, err = m.getSandboxIDByPodUID(tCtx, pod.UID)
 	require.NoError(t, err)
@@ -1079,7 +1079,7 @@ func TestSyncPodWithRestartAllContainers(t *testing.T) {
 	expected = []*cRecord{}
 	verifyContainerStatuses(t, fakeRuntime, expected, "kill all containers")
 
-	// 4. Unmark the pod. Now it should start the init container first.
+	// 4. 取消 Pod 标记；此时应先启动 init 容器。
 	// 清理标记后应重新从 init 容器开始。
 	runtimePod, err = m.GetPod(tCtx, pod.UID)
 	require.NoError(t, err)
@@ -1143,7 +1143,7 @@ func TestSyncPodNoEventsInSteadyState(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a recorder with a large enough buffer to hold all events generated during a single sync
+			// 创建缓冲区足够大的 recorder，以容纳单次同步产生的所有事件。
 			// 使用大缓冲 recorder，避免首次 sync 的事件阻塞。
 			recorder := record.NewFakeRecorder(100)
 
@@ -1160,7 +1160,7 @@ func TestSyncPodNoEventsInSteadyState(t *testing.T) {
 				Spec: tc.podspec,
 			}
 
-			// Sync the pod and store the resulting pod status.
+			// 同步 Pod 并保存得到的 Pod 状态。
 			backOff := flowcontrol.NewBackOff(time.Second, time.Minute)
 			result := m.SyncPod(tCtx, pod, &kubecontainer.PodStatus{}, []v1.Secret{}, backOff, false)
 			require.NoError(t, result.Error())
@@ -1170,12 +1170,12 @@ func TestSyncPodNoEventsInSteadyState(t *testing.T) {
 			podStatus, err := m.GetPodStatus(tCtx, runtimePod)
 			require.NoError(t, err)
 
-			// We need to consume events from the initial sync, but their content is not important.
+			// 需要消费初始同步产生的事件，但不关心其内容。
 			// 首次同步的事件内容不重要，清空缓冲以便观察稳态。
 			events := consumeEvents(recorder)
 			t.Logf("recorded events during initial sync: %v", events)
 
-			// Sync again, passing in pod status from the previous sync. This should be steady state.
+			// 再次同步并传入上一次的 Pod 状态；此时应达到稳定状态。
 			result = m.SyncPod(tCtx, pod, podStatus, []v1.Secret{}, backOff, false)
 			require.NoError(t, result.Error())
 
@@ -1272,8 +1272,8 @@ func TestComputePodActions(t *testing.T) {
 	_, _, m, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
 
-	// Creating a pair reference pod and status for the test cases to refer
-	// the specific fields.
+	// 创建供测试用例引用的 Pod 与状态对，
+	// 以引用具体字段。
 	// 用一对基准 pod/status 作为各用例的修改起点。
 	basePod, baseStatus := makeBasePodAndStatus()
 	noAction := podActions{
@@ -1293,7 +1293,7 @@ func TestComputePodActions(t *testing.T) {
 		},
 		"start pod sandbox and all containers for a new pod": {
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// No container or sandbox exists.
+				// 容器和 sandbox 均不存在。
 				status.SandboxStatuses = []*runtimeapi.PodSandboxStatus{}
 				status.ContainerStatuses = []*kubecontainer.Status{}
 			},
@@ -1308,11 +1308,11 @@ func TestComputePodActions(t *testing.T) {
 		"restart exited containers if RestartPolicy == Always": {
 			mutatePodFn: func(pod *v1.Pod) { pod.Spec.RestartPolicy = v1.RestartPolicyAlways },
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// The first container completed, restart it,
+				// 第一个容器已完成，重启它；
 				status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[0].ExitCode = 0
 
-				// The second container exited with failure, restart it,
+				// 第二个容器异常退出，重启它；
 				status.ContainerStatuses[1].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[1].ExitCode = 111
 			},
@@ -1325,11 +1325,11 @@ func TestComputePodActions(t *testing.T) {
 		"restart failed containers if RestartPolicy == OnFailure": {
 			mutatePodFn: func(pod *v1.Pod) { pod.Spec.RestartPolicy = v1.RestartPolicyOnFailure },
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// The first container completed, don't restart it,
+				// 第一个容器已完成，不重启它；
 				status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[0].ExitCode = 0
 
-				// The second container exited with failure, restart it,
+				// 第二个容器异常退出，重启它；
 				status.ContainerStatuses[1].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[1].ExitCode = 111
 			},
@@ -1342,11 +1342,11 @@ func TestComputePodActions(t *testing.T) {
 		"restart created but not started containers if RestartPolicy == OnFailure": {
 			mutatePodFn: func(pod *v1.Pod) { pod.Spec.RestartPolicy = v1.RestartPolicyOnFailure },
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// The first container completed, don't restart it.
+				// 第一个容器已完成，不重启它。
 				status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[0].ExitCode = 0
 
-				// The second container was created, but never started.
+				// 第二个容器已创建但从未启动。
 				status.ContainerStatuses[1].State = kubecontainer.ContainerStateCreated
 			},
 			actions: podActions{
@@ -1358,7 +1358,7 @@ func TestComputePodActions(t *testing.T) {
 		"don't restart containers if RestartPolicy == Never": {
 			mutatePodFn: func(pod *v1.Pod) { pod.Spec.RestartPolicy = v1.RestartPolicyNever },
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// Don't restart any containers.
+				// 不重启任何容器。
 				status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[0].ExitCode = 0
 				status.ContainerStatuses[1].State = kubecontainer.ContainerStateExited
@@ -1459,10 +1459,10 @@ func TestComputePodActions(t *testing.T) {
 				pod.Spec.RestartPolicy = v1.RestartPolicyNever
 			},
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// no ready sandbox
+				// 没有就绪的 sandbox
 				status.SandboxStatuses[0].State = runtimeapi.PodSandboxState_SANDBOX_NOTREADY
 				status.SandboxStatuses[0].Metadata.Attempt = uint32(1)
-				// all containers exited
+				// 所有容器已退出
 				for i := range status.ContainerStatuses {
 					status.ContainerStatuses[i].State = kubecontainer.ContainerStateExited
 					status.ContainerStatuses[i].ExitCode = 0
@@ -1482,10 +1482,10 @@ func TestComputePodActions(t *testing.T) {
 				pod.Spec.RestartPolicy = v1.RestartPolicyOnFailure
 			},
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// no ready sandbox
+				// 没有就绪的 sandbox
 				status.SandboxStatuses[0].State = runtimeapi.PodSandboxState_SANDBOX_NOTREADY
 				status.SandboxStatuses[0].Metadata.Attempt = uint32(1)
-				// all containers succeeded
+				// 所有容器均成功
 				for i := range status.ContainerStatuses {
 					status.ContainerStatuses[i].State = kubecontainer.ContainerStateExited
 					status.ContainerStatuses[i].ExitCode = 0
@@ -1505,10 +1505,10 @@ func TestComputePodActions(t *testing.T) {
 				pod.Spec.RestartPolicy = v1.RestartPolicyNever
 			},
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// no ready sandbox
+				// 没有就绪的 sandbox
 				status.SandboxStatuses[0].State = runtimeapi.PodSandboxState_SANDBOX_NOTREADY
 				status.SandboxStatuses[0].Metadata.Attempt = uint32(2)
-				// no visible containers
+				// 没有可见容器
 				status.ContainerStatuses = []*kubecontainer.Status{}
 			},
 			actions: podActions{
@@ -1666,10 +1666,10 @@ func TestComputePodActionsForRestartAllContainers(t *testing.T) {
 			},
 		},
 		"init container exit triggers RestartAllContainers": {
-			// The init3 container exited and triggers RestartAllContainers,
-			// the init2 container is a running sidecar. First, the init1
-			// should be removed; second, the init2 containers should killed and
-			// be removed; lastly, init3 container should be removed.
+			// init3 容器退出并触发 RestartAllContainers：
+			// init2 容器是运行中的 sidecar。首先应移除 init1；
+			// 其次应杀死并移除 init2 容器；
+			// 最后移除 init3 容器。
 			podFunc: func() *v1.Pod {
 				pod, _ := makeBasePodAndStatusWithInitContainers()
 				sidecar := pod.Spec.InitContainers[1]
@@ -1700,9 +1700,9 @@ func TestComputePodActionsForRestartAllContainers(t *testing.T) {
 			},
 		},
 		"sidecar container exit triggers RestartAllContainres": {
-			// Restartable-init-3 fails and triggers RestartAllContainers.
-			// The running foo1 should be killed and removed first; then init-1 and init-2
-			// should be killed and removed; lastly init-3 should be removed.
+			// 可重启的 init-3 失败并触发 RestartAllContainers。
+			// 应先杀死并移除运行中的 foo1，再杀死并移除 init-1 和 init-2；
+			// 最后移除 init-3。
 			podFunc: func() *v1.Pod {
 				pod, _ := makeBasePodAndStatusWithRestartableInitContainers()
 				source := pod.Spec.InitContainers[2]
@@ -1775,9 +1775,9 @@ func TestComputePodActionsForRestartAllContainers(t *testing.T) {
 			},
 		},
 		"removes past terminated statuses": {
-			// foo3 terminated and triggers restart all containers. All containers have started once at t0, and
-			// restarted once at t1. All container statuses should be removed; foo3 should be removed last
-			// because it triggered restart all containers.
+			// foo3 终止并触发全部容器重启。所有容器在 t0 启动过一次，在 t1 重启过一次，
+			// 应移除所有容器状态；foo3 应最后移除，
+			// 因为它触发了全部容器重启。
 			podFunc: func() *v1.Pod {
 				pod, _ := makeBasePodAndStatus()
 				pod.Spec.RestartPolicy = v1.RestartPolicyAlways
@@ -1841,7 +1841,7 @@ func TestComputePodActionsForRestartAllContainers(t *testing.T) {
 			},
 			podStatusFunc: func() *kubecontainer.PodStatus {
 				_, status := makeBasePodAndStatus()
-				// Remove all containers from PodStatus to simulate cleanup
+				// 从 PodStatus 移除所有容器，模拟清理完成。
 				status.ContainerStatuses = []*kubecontainer.Status{}
 				return status
 			},
@@ -1854,7 +1854,7 @@ func TestComputePodActionsForRestartAllContainers(t *testing.T) {
 			},
 			podStatusFunc: func() *kubecontainer.PodStatus {
 				_, status := makeBasePodAndStatus()
-				// Remove all containers from PodStatus to simulate cleanup
+				// 从 PodStatus 移除所有容器，模拟清理完成。
 				status.ContainerStatuses = []*kubecontainer.Status{}
 				return status
 			},
@@ -1869,7 +1869,7 @@ func TestComputePodActionsForRestartAllContainers(t *testing.T) {
 			pod := test.podFunc()
 			status := test.podStatusFunc()
 
-			// Initialize the actuated resources.
+			// 初始化已生效资源。
 			// 先初始化 actuated 资源，使 resize 用例有基准。
 			m.InitializeActuatedPod(tCtx.Logger(), pod)
 
@@ -1948,7 +1948,7 @@ func modifyKillMapContainerImage(containersToKill map[kubecontainer.ContainerID]
 // verifyActions 清理不关心的字段后比较 podActions。
 func verifyActions(t *testing.T, expected, actual *podActions, desc string) {
 	if actual.ContainersToKill != nil {
-		// Clear the message and reason fields since we don't need to verify them.
+		// 清空 message 和 reason 字段，因为无需验证它们。
 		for k, info := range actual.ContainersToKill {
 			info.message = ""
 			info.reason = ""
@@ -1956,7 +1956,7 @@ func verifyActions(t *testing.T, expected, actual *podActions, desc string) {
 		}
 	}
 	if expected.ContainersToUpdate == nil && actual.ContainersToUpdate != nil {
-		// No need to distinguish empty and nil maps for the test.
+		// 测试无需区分空 map 和 nil map。
 		expected.ContainersToUpdate = map[v1.ResourceName][]containerToUpdateInfo{}
 	}
 	assert.Equal(t, expected, actual, desc)
@@ -1969,8 +1969,8 @@ func TestComputePodActionsWithInitContainers(t *testing.T) {
 	cpu800m := resource.MustParse("800m")
 	memory800Mi := resource.MustParse("800Mi")
 
-	// Creating a pair reference pod and status for the test cases to refer
-	// the specific fields.
+	// 创建供测试用例引用的 Pod 与状态对，
+	// 以引用具体字段。
 	// 用一对基准 pod/status 作为各用例的修改起点。
 	basePod, baseStatus := makeBasePodAndStatusWithInitContainers()
 	noAction := podActions{
@@ -2258,7 +2258,7 @@ func TestComputePodActionsWithInitContainers(t *testing.T) {
 					},
 				},
 			},
-			skipWindows: true, // Windows does not support resize.
+			skipWindows: true, // Windows 不支持扩缩容。
 		},
 		"resize of a running non-sidecar init container with FG disabled": {
 			mutatePodFn: func(pod *v1.Pod) {
@@ -2280,7 +2280,7 @@ func TestComputePodActionsWithInitContainers(t *testing.T) {
 				ContainersToKill:      getKillMapWithInitContainers(basePod, baseStatus, []int{}),
 				ContainersToUpdate:    map[v1.ResourceName][]containerToUpdateInfo{},
 			},
-			skipWindows:          true, // Windows does not support resize.
+			skipWindows:          true, // Windows 不支持扩缩容。
 			disableIPPRInitCtrFG: true,
 		},
 	} {
@@ -2301,13 +2301,13 @@ func TestComputePodActionsWithInitContainers(t *testing.T) {
 			// 初始化 actuated 状态，确保 resize 用例的当前值固定。
 			pod, status := makeBasePodAndStatusWithInitContainers()
 
-			// Sync the actuated state with the base values before any resize
+			// 在任何扩缩容前，将已生效状态同步为基准值。
 			m.InitializeActuatedPod(tCtx.Logger(), pod)
 
 			if test.actions.ContainersToUpdate != nil {
 				for res := range test.actions.ContainersToUpdate {
 					for i := range test.actions.ContainersToUpdate[res] {
-						// Link the expected action to the mutated pod container
+						// 将预期动作关联到变更后的 Pod 容器。
 						test.actions.ContainersToUpdate[res][i].container = &pod.Spec.InitContainers[0]
 					}
 				}
@@ -2349,8 +2349,8 @@ func makeBasePodAndStatusWithInitContainers() (*v1.Pod, *kubecontainer.PodStatus
 			Image: "bar-image",
 		},
 	}
-	// Replace the original statuses of the containers with those for the init
-	// containers.
+	// 用 init 容器的状态替换容器原始状态。
+	// 容器。
 	status.ContainerStatuses = []*kubecontainer.Status{
 		{
 			ID:   kubecontainer.ContainerID{ID: "initid1"},
@@ -2379,8 +2379,8 @@ func TestComputePodActionsWithRestartableInitContainers(t *testing.T) {
 	_, _, m, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
 
-	// Creating a pair reference pod and status for the test cases to refer
-	// the specific fields.
+	// 创建供测试用例引用的 Pod 与状态对，
+	// 以引用具体字段。
 	basePod, baseStatus := makeBasePodAndStatusWithRestartableInitContainers()
 	noAction := podActions{
 		SandboxID:         baseStatus.SandboxStatuses[0].Id,
@@ -2682,7 +2682,7 @@ func TestComputePodActionsWithRestartableInitContainers(t *testing.T) {
 			mutateStatusFn: func(pod *v1.Pod, status *kubecontainer.PodStatus) {
 				status.ContainerStatuses[2].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[2].ExitCode = 137
-				// all main containers are running
+				// 所有主容器均在运行
 				for i := 1; i <= 3; i++ {
 					status.ContainerStatuses = append(status.ContainerStatuses, &kubecontainer.Status{
 						ID:    kubecontainer.ContainerID{ID: fmt.Sprintf("id%d", i)},
@@ -2702,7 +2702,7 @@ func TestComputePodActionsWithRestartableInitContainers(t *testing.T) {
 		"kill the pod if all main containers succeeded if pod's RestartPolicy == Never": {
 			mutatePodFn: func(pod *v1.Pod) { pod.Spec.RestartPolicy = v1.RestartPolicyNever },
 			mutateStatusFn: func(pod *v1.Pod, status *kubecontainer.PodStatus) {
-				// all main containers succeeded
+				// 所有主容器均成功
 				for i := 1; i <= 3; i++ {
 					status.ContainerStatuses = append(status.ContainerStatuses, &kubecontainer.Status{
 						ID:       kubecontainer.ContainerID{ID: fmt.Sprintf("id%d", i)},
@@ -2735,7 +2735,7 @@ func TestComputePodActionsWithRestartableInitContainers(t *testing.T) {
 		},
 		"stale main container with mixed restartable and non-restartable init containers; start the first one": {
 			mutatePodFn: func(pod *v1.Pod) {
-				// Make the second init container non-restartable while keeping the others restartable.
+				// 将第二个 init 容器改为不可重启，其余保持可重启。
 				pod.Spec.InitContainers[1].RestartPolicy = nil
 			},
 			mutateStatusFn: func(pod *v1.Pod, status *kubecontainer.PodStatus) {
@@ -2804,8 +2804,8 @@ func makeBasePodAndStatusWithRestartableInitContainers() (*v1.Pod, *kubecontaine
 			StartupProbe:  &v1.Probe{},
 		},
 	}
-	// Replace the original statuses of the containers with those for the init
-	// containers.
+	// 用 init 容器的状态替换容器原始状态。
+	// 容器。
 	status.ContainerStatuses = []*kubecontainer.Status{
 		{
 			ID:   kubecontainer.ContainerID{ID: "initid1"},
@@ -2830,7 +2830,7 @@ func makeBasePodAndStatusWithRestartableInitContainers() (*v1.Pod, *kubecontaine
 // TestComputePodActionsWithInitAndEphemeralContainers 验证 init 与 ephemeral
 // 容器并存时的决策。
 func TestComputePodActionsWithInitAndEphemeralContainers(t *testing.T) {
-	// Make sure existing test cases pass with feature enabled
+	// 确保启用特性后既有测试用例仍通过
 	// 先跑已有用例，确保特性开启后行为不回归。
 	TestComputePodActions(t)
 	TestComputePodActionsWithInitContainers(t)
@@ -2941,7 +2941,7 @@ func TestComputePodActionsWithInitAndEphemeralContainers(t *testing.T) {
 				pod.Spec.RestartPolicy = v1.RestartPolicyNever
 			},
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// all regular containers exited
+				// 所有普通容器已退出
 				for i := 0; i < 3; i++ {
 					status.ContainerStatuses[i].State = kubecontainer.ContainerStateExited
 					status.ContainerStatuses[i].ExitCode = 0
@@ -2981,7 +2981,7 @@ func TestComputePodActionsWithInitAndEphemeralContainers(t *testing.T) {
 // TestComputePodActionsWithContainerRestartRules 验证容器级重启规则下的启停决策。
 func TestComputePodActionsWithContainerRestartRules(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	// Make sure existing test cases pass with feature enabled
+	// 确保启用特性后既有测试用例仍通过
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ContainerRestartRules, true)
 	// 先跑已有用例，确保容器级重启规则开启后行为不回归。
 	TestComputePodActions(t)
@@ -2993,8 +2993,8 @@ func TestComputePodActionsWithContainerRestartRules(t *testing.T) {
 		containerRestartPolicyNever     = v1.ContainerRestartPolicyNever
 	)
 
-	// Creating a pair reference pod and status for the test cases to refer
-	// the specific fields.
+	// 创建供测试用例引用的 Pod 与状态对，
+	// 以引用具体字段。
 	basePod, baseStatus := makeBasePodAndStatus()
 	noAction := podActions{
 		SandboxID:         baseStatus.SandboxStatuses[0].Id,
@@ -3015,11 +3015,11 @@ func TestComputePodActionsWithContainerRestartRules(t *testing.T) {
 				pod.Spec.RestartPolicy = v1.RestartPolicyNever
 			},
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// The first container completed, restart it,
+				// 第一个容器已完成，重启它；
 				status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[0].ExitCode = 0
 
-				// The second container exited with failure, restart it,
+				// 第二个容器异常退出，重启它；
 				status.ContainerStatuses[1].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[1].ExitCode = 111
 			},
@@ -3036,11 +3036,11 @@ func TestComputePodActionsWithContainerRestartRules(t *testing.T) {
 				pod.Spec.RestartPolicy = v1.RestartPolicyNever
 			},
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// The first container completed, don't restart it,
+				// 第一个容器已完成，不重启它；
 				status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[0].ExitCode = 0
 
-				// The second container exited with failure, restart it,
+				// 第二个容器异常退出，重启它；
 				status.ContainerStatuses[1].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[1].ExitCode = 111
 			},
@@ -3057,11 +3057,11 @@ func TestComputePodActionsWithContainerRestartRules(t *testing.T) {
 				pod.Spec.RestartPolicy = v1.RestartPolicyNever
 			},
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// The first container completed, don't restart it.
+				// 第一个容器已完成，不重启它。
 				status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[0].ExitCode = 0
 
-				// The second container was created, but never started.
+				// 第二个容器已创建但从未启动。
 				status.ContainerStatuses[1].State = kubecontainer.ContainerStateCreated
 			},
 			actions: podActions{
@@ -3077,7 +3077,7 @@ func TestComputePodActionsWithContainerRestartRules(t *testing.T) {
 				pod.Spec.RestartPolicy = v1.RestartPolicyAlways
 			},
 			mutateStatusFn: func(status *kubecontainer.PodStatus) {
-				// Don't restart any containers.
+				// 不重启任何容器。
 				status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 				status.ContainerStatuses[0].ExitCode = 0
 				status.ContainerStatuses[1].State = kubecontainer.ContainerStateExited
@@ -3151,9 +3151,8 @@ func TestSyncPodWithSandboxAndDeletedPod(t *testing.T) {
 	// 把 pod 标记为 removed，模拟它已从 pod provider 中消失。
 	m.podStateProvider.(*fakePodStateProvider).removed = map[types.UID]struct{}{pod.UID: {}}
 
-	// GetPodStatus and the following SyncPod will not return errors in the
-	// case where the pod has been deleted. We are not adding any pods into
-	// the fakePodProvider so they are 'deleted'.
+	// GetPodStatus 及随后的 SyncPod 在 Pod 已删除时不会返回错误；
+	// 由于未向 fakePodProvider 添加任何 Pod，它们会被视为已删除。
 	runtimePod, err := m.GetPod(tCtx, pod.UID)
 	if err != nil {
 		runtimePod = &kubecontainer.Pod{
@@ -3165,7 +3164,7 @@ func TestSyncPodWithSandboxAndDeletedPod(t *testing.T) {
 	podStatus, err := m.GetPodStatus(tCtx, runtimePod)
 	require.NoError(t, err)
 	result := m.SyncPod(tCtx, pod, podStatus, []v1.Secret{}, backOff, false)
-	// This will return an error if the pod has _not_ been deleted.
+	// 若 Pod 尚未删除，此处会返回错误。
 	require.NoError(t, result.Error())
 }
 
@@ -3457,7 +3456,7 @@ func TestComputePodActionsForPodResize(t *testing.T) {
 						v1.ResourceMemory: mem100M.DeepCopy(),
 					},
 				})
-				// no resources set for c1 container
+				// c1 容器未设置资源
 				c2 := &pod.Spec.Containers[2]
 				c2.Resources = v1.ResourceRequirements{
 					Limits: v1.ResourceList{v1.ResourceCPU: cpu100m, v1.ResourceMemory: mem100M},
@@ -3534,7 +3533,7 @@ func TestComputePodActionsForPodResize(t *testing.T) {
 						v1.ResourceMemory: mem100M.DeepCopy(),
 					},
 				})
-				// no resources set for c1 container
+				// c1 容器未设置资源
 				c1 := &pod.Spec.Containers[1]
 				setupActuatedResources(pod, c1, v1.ResourceRequirements{})
 				c1.ResizePolicy = []v1.ContainerResizePolicy{cpuPolicyRestartRequired, memPolicyRestartNotRequired}
@@ -4071,7 +4070,7 @@ func TestComputePodActionsForPodResize(t *testing.T) {
 			pod, status := makeBasePodAndStatus()
 			// 默认 resizePolicy 为 NotRequired，符合特性开启后的语义。
 			for idx := range pod.Spec.Containers {
-				// default resize policy when pod resize feature is enabled
+				// 启用 Pod 扩缩容特性时的默认策略
 				pod.Spec.Containers[idx].ResizePolicy = []v1.ContainerResizePolicy{cpuPolicyRestartNotRequired, memPolicyRestartNotRequired}
 			}
 			if test.setupFn != nil {
@@ -4080,7 +4079,7 @@ func TestComputePodActionsForPodResize(t *testing.T) {
 			t.Cleanup(func() { _ = m.actuatedState.RemovePod(logger, pod.UID) })
 
 			for idx := range pod.Spec.Containers {
-				// compute hash
+				// 计算哈希
 				if kcs := status.FindContainerStatusByName(pod.Spec.Containers[idx].Name); kcs != nil {
 					kcs.Hash = kubecontainer.HashContainer(&pod.Spec.Containers[idx])
 				}
@@ -4089,7 +4088,7 @@ func TestComputePodActionsForPodResize(t *testing.T) {
 			tCtx := ktesting.Init(t)
 			expectedActions := test.getExpectedPodActionsFn(pod, status)
 
-			// Capture container resource limits before computePodActions to check for mutation
+			// 在 computePodActions 前保存容器资源限制，以检查是否被修改。
 			// 先快照容器 limits，验证 computePodActions 不会修改输入 spec。
 			preComputeLimits := make([]v1.ResourceList, len(pod.Spec.Containers))
 			for i := range pod.Spec.Containers {
@@ -4098,7 +4097,7 @@ func TestComputePodActionsForPodResize(t *testing.T) {
 
 			actions := m.computePodActions(tCtx, pod, status, false)
 
-			// Mutation check: Ensure pod.Spec.Containers[i].Resources.Limits is not mutated
+			// 变更检查：确保 pod.Spec.Containers[i].Resources.Limits 未被修改。
 			for i := range pod.Spec.Containers {
 				if !reflect.DeepEqual(preComputeLimits[i], pod.Spec.Containers[i].Resources.Limits) {
 					t.Errorf("pod.Spec.Containers[%d].Resources.Limits was mutated! pre: %v, post: %v", i, preComputeLimits[i], pod.Spec.Containers[i].Resources.Limits)
@@ -4139,26 +4138,26 @@ func TestComputePodResizeActionForOOMKilledContainer(t *testing.T) {
 		{ResourceName: v1.ResourceCPU, RestartPolicy: v1.NotRequired},
 		{ResourceName: v1.ResourceMemory, RestartPolicy: v1.NotRequired},
 	}
-	// record the pre-resize resource limits as what was last actuated.
+	// 将扩缩容前的资源限制记录为上次已生效值。
 	// 记录 resize 前的 actuated 资源。
 	m.InitializeActuatedPod(logger, pod)
 
-	// Pod Resized
+	// Pod 已调整大小
 	resize := pod.Spec.Containers[0].Resources.DeepCopy()
 	resize.Requests[v1.ResourceMemory] = mem200M
 	resize.Limits[v1.ResourceMemory] = mem200M
 	pod.Spec.Containers[0].Resources = *resize
 
-	// simulate OOMKilled
+	// 模拟 OOMKilled
 	// 模拟容器因内存不足被 OOMKilled。
 	status.ContainerStatuses[0].State = kubecontainer.ContainerStateExited
 	status.ContainerStatuses[0].Hash = kubecontainer.HashContainer(&pod.Spec.Containers[0])
 
 	actions := m.computePodActions(tCtx, pod, status, false)
 
-	// the container is OOMKilled and must not be added to ContainersToUpdate (no live CRI call).
+	// 容器已被 OOMKilled，不得加入 ContainersToUpdate（不调用实时 CRI）。
 	assert.Empty(t, actions.ContainersToUpdate, "OOMKilled container must not be in ContainersToUpdate")
-	// UpdatePodResources must be true so doPodResizeAction updates the pod-level cgroup.
+	// UpdatePodResources 必须为 true，使 doPodResizeAction 更新 Pod 级 cgroup。
 	assert.True(t, actions.UpdatePodResources, "UpdatePodResources must be true for OOMKilled container with pending resize")
 }
 
@@ -4179,7 +4178,7 @@ func TestComputePodResizeActionForOOMKilledInitContainer(t *testing.T) {
 	cpu100m := resource.MustParse("100m")
 
 	pod, status := makeBasePodAndStatus()
-	// a single init container.
+	// 单个 init 容器。
 	pod.Spec.InitContainers = []v1.Container{
 		{
 			Name:  "init1",
@@ -4194,7 +4193,7 @@ func TestComputePodResizeActionForOOMKilledInitContainer(t *testing.T) {
 			},
 		},
 	}
-	// no regular containers running so pod is not yet initialized.
+	// 没有普通容器运行，因此 Pod 尚未初始化。
 	status.ContainerStatuses = []*kubecontainer.Status{
 		{
 			ID:       kubecontainer.ContainerID{ID: "initid1"},
@@ -4208,10 +4207,10 @@ func TestComputePodResizeActionForOOMKilledInitContainer(t *testing.T) {
 	pod.Spec.Containers = nil
 	pod.Status.ContainerStatuses = nil
 
-	// record pre-resize resource limits as what was last actuated.
+	// 将扩缩容前的资源限制记录为上次已生效值。
 	m.InitializeActuatedPod(logger, pod)
 
-	// Pod Resized
+	// Pod 已调整大小
 	resize := pod.Spec.InitContainers[0].Resources.DeepCopy()
 	resize.Requests[v1.ResourceMemory] = mem200M
 	resize.Limits[v1.ResourceMemory] = mem200M
@@ -4219,9 +4218,9 @@ func TestComputePodResizeActionForOOMKilledInitContainer(t *testing.T) {
 
 	actions := m.computePodActions(tCtx, pod, status, false)
 
-	// the init container is OOMKilled and must not be in ContainersToUpdate.
+	// init 容器已被 OOMKilled，不得出现在 ContainersToUpdate 中。
 	assert.Empty(t, actions.ContainersToUpdate, "OOMKilled init container must not be in ContainersToUpdate")
-	// UpdatePodResources must be true so doPodResizeAction updates the pod-level cgroup.
+	// UpdatePodResources 必须为 true，使 doPodResizeAction 更新 Pod 级 cgroup。
 	assert.True(t, actions.UpdatePodResources, "UpdatePodResources must be true for OOMKilled init container with pending resize")
 }
 
@@ -4246,7 +4245,7 @@ func TestComputePodResizeActionForOOMKilledSidecarContainer(t *testing.T) {
 	pod.Status.ContainerStatuses = nil
 	status.ContainerStatuses = nil
 
-	// one running regular container so the pod is considered initialized.
+	// 有一个普通容器运行，因此认为 Pod 已初始化。
 	regularContainer := v1.Container{
 		Name:  "app",
 		Image: "busybox",
@@ -4259,7 +4258,7 @@ func TestComputePodResizeActionForOOMKilledSidecarContainer(t *testing.T) {
 		Hash:  kubecontainer.HashContainer(&pod.Spec.Containers[0]),
 	})
 
-	// one sidecar that has been OOMKilled.
+	// 一个已被 OOMKilled 的 sidecar。
 	sidecar := v1.Container{
 		Name:          "sidecar",
 		Image:         "bar-image",
@@ -4283,10 +4282,10 @@ func TestComputePodResizeActionForOOMKilledSidecarContainer(t *testing.T) {
 		Hash:     kubecontainer.HashContainer(&pod.Spec.InitContainers[0]),
 	})
 
-	// record pre-resize resource limits as what was last actuated.
+	// 将扩缩容前的资源限制记录为上次已生效值。
 	m.InitializeActuatedPod(logger, pod)
 
-	// Pod Resized
+	// Pod 已调整大小
 	resize := pod.Spec.InitContainers[0].Resources.DeepCopy()
 	resize.Requests[v1.ResourceMemory] = mem200M
 	resize.Limits[v1.ResourceMemory] = mem200M
@@ -4294,9 +4293,9 @@ func TestComputePodResizeActionForOOMKilledSidecarContainer(t *testing.T) {
 
 	actions := m.computePodActions(tCtx, pod, status, false)
 
-	// the sidecar is OOMKilled and must not be in ContainersToUpdate.
+	// sidecar 已被 OOMKilled，不得出现在 ContainersToUpdate 中。
 	assert.Empty(t, actions.ContainersToUpdate, "OOMKilled sidecar must not be in ContainersToUpdate")
-	// UpdatePodResources must be true so doPodResizeAction updates the pod-level cgroup.
+	// UpdatePodResources 必须为 true，使 doPodResizeAction 更新 Pod 级 cgroup。
 	assert.True(t, actions.UpdatePodResources, "UpdatePodResources must be true for OOMKilled sidecar with pending resize")
 }
 
@@ -4404,7 +4403,7 @@ func TestUpdatePodContainerResources(t *testing.T) {
 
 			if allSideCarCtrs {
 				for idx := range pod.Spec.InitContainers {
-					// default resize policy when pod resize feature is enabled
+					// 启用 Pod 扩缩容特性时的默认策略
 					pod.Spec.InitContainers[idx].Resources = tc.apiSpecResources[idx]
 					pod.Status.ContainerStatuses[idx].Resources = &tc.apiStatusResources[idx]
 					cinfo := containerToUpdateInfo(&pod.Spec.InitContainers[idx], idx)
@@ -4412,7 +4411,7 @@ func TestUpdatePodContainerResources(t *testing.T) {
 				}
 			} else {
 				for idx := range pod.Spec.Containers {
-					// default resize policy when pod resize feature is enabled
+					// 启用 Pod 扩缩容特性时的默认策略
 					pod.Spec.Containers[idx].Resources = tc.apiSpecResources[idx]
 					pod.Status.ContainerStatuses[idx].Resources = &tc.apiStatusResources[idx]
 					cinfo := containerToUpdateInfo(&pod.Spec.Containers[idx], idx)
@@ -4559,7 +4558,7 @@ func TestGetImageVolumes(t *testing.T) {
 		"multiple volumes but one failed to pull": {
 			pod: &v1.Pod{Spec: v1.PodSpec{Volumes: []v1.Volume{
 				{Name: volume1, VolumeSource: v1.VolumeSource{Image: &v1.ImageVolumeSource{Reference: image1, PullPolicy: v1.PullAlways}}},
-				{Name: volume2, VolumeSource: v1.VolumeSource{Image: &v1.ImageVolumeSource{Reference: "image", PullPolicy: v1.PullNever}}}, // fails
+				{Name: volume2, VolumeSource: v1.VolumeSource{Image: &v1.ImageVolumeSource{Reference: "image", PullPolicy: v1.PullNever}}}, // 预期失败
 			}}},
 			expectedImageVolumePulls: imageVolumePulls{
 				volume1: imageVolumePullResult{spec: &imageSpec1},
@@ -4618,7 +4617,7 @@ func TestDoPodResizeAction(t *testing.T) {
 			},
 			otherContainersHaveLimits: true,
 			updatedResources:          []v1.ResourceName{v1.ResourceCPU, v1.ResourceMemory},
-			expectPodCgroupUpdates:    3, // cpu req, cpu lim, mem lim
+			expectPodCgroupUpdates:    3, // CPU 请求、CPU limit、内存 limit
 		},
 		{
 			testName: "Increase cpu and memory requests and limits, with computed pod limits and set a runtime error",
@@ -4647,10 +4646,10 @@ func TestDoPodResizeAction(t *testing.T) {
 				cpuRequest: 200, cpuLimit: 200,
 				memoryRequest: 200, memoryLimit: 200,
 			},
-			// If some containers don't have limits, pod level limits are not applied
+			// 若部分容器没有限制，则不应用 Pod 级限制。
 			otherContainersHaveLimits: false,
 			updatedResources:          []v1.ResourceName{v1.ResourceCPU, v1.ResourceMemory},
-			expectPodCgroupUpdates:    1, // cpu req, cpu lim, mem lim
+			expectPodCgroupUpdates:    1, // CPU 请求、CPU limit、内存 limit
 		},
 		{
 			testName: "Increase cpu and memory requests only",
@@ -4663,7 +4662,7 @@ func TestDoPodResizeAction(t *testing.T) {
 				memoryRequest: 150, memoryLimit: 200,
 			},
 			updatedResources:       []v1.ResourceName{v1.ResourceCPU},
-			expectPodCgroupUpdates: 1, // cpu req
+			expectPodCgroupUpdates: 1, // CPU 请求
 		},
 		{
 			testName: "Resize memory request no limits",
@@ -4675,7 +4674,7 @@ func TestDoPodResizeAction(t *testing.T) {
 				cpuRequest:    100,
 				memoryRequest: 200,
 			},
-			// Memory request resize doesn't generate an update action.
+			// 调整内存 request 不会生成更新动作。
 			updatedResources: []v1.ResourceName{},
 		},
 		{
@@ -4689,7 +4688,7 @@ func TestDoPodResizeAction(t *testing.T) {
 				memoryRequest: 100,
 			},
 			updatedResources:       []v1.ResourceName{v1.ResourceCPU},
-			expectPodCgroupUpdates: 1, // cpu req
+			expectPodCgroupUpdates: 1, // CPU 请求
 		},
 		{
 			testName: "Add limits",
@@ -4716,7 +4715,7 @@ func TestDoPodResizeAction(t *testing.T) {
 			},
 			otherContainersHaveLimits: true,
 			updatedResources:          []v1.ResourceName{v1.ResourceCPU, v1.ResourceMemory},
-			expectPodCgroupUpdates:    2, // cpu lim, memory lim
+			expectPodCgroupUpdates:    2, // CPU limit、内存 limit
 		},
 		{
 			testName: "Fail updatePodSandboxResources blocks resize",
@@ -4757,12 +4756,12 @@ func TestDoPodResizeAction(t *testing.T) {
 				cpuRequest: 200, cpuLimit: 200,
 			},
 			updatedResources:       []v1.ResourceName{v1.ResourceCPU},
-			expectPodCgroupUpdates: 1, // Should proceed to cgroups despite the error
+			expectPodCgroupUpdates: 1, // 即使发生错误也应继续更新 cgroup
 			runtimeErrors: map[string][]error{
-				// Use a GRPC Unimplemented error
+				// 使用 gRPC Unimplemented 错误
 				"UpdatePodSandboxResources": {status.Error(codes.Unimplemented, "not supported")},
 			},
-			// No error expected because we swallow Unimplemented
+			// 预期无错误，因为会忽略 Unimplemented
 			expectedError:        "",
 			expectedErrorMessage: "",
 		},
@@ -4775,12 +4774,12 @@ func TestDoPodResizeAction(t *testing.T) {
 				cpuRequest: 200, cpuLimit: 200,
 			},
 			updatedResources:       []v1.ResourceName{v1.ResourceCPU},
-			expectPodCgroupUpdates: 1, // Should proceed to cgroups despite the error
+			expectPodCgroupUpdates: 1, // 即使发生错误也应继续更新 cgroup
 			runtimeErrors: map[string][]error{
-				// Use a GRPC Unimplemented error
+				// 使用 gRPC Unimplemented 错误
 				"UpdatePodSandboxResources": {status.Error(codes.Unknown, "not implemented yet")},
 			},
-			// No error expected because we swallow Unimplemented
+			// 预期无错误，因为会忽略 Unimplemented
 			expectedError:        "",
 			expectedErrorMessage: "",
 		},
@@ -4800,7 +4799,7 @@ func TestDoPodResizeAction(t *testing.T) {
 			},
 			desiredPodLevelResources: &resourceRequirements{
 				cpuRequest: 100, cpuLimit: 100,
-				memoryRequest: 200, memoryLimit: 100, // Memory request increase
+				memoryRequest: 200, memoryLimit: 100, // 增加内存 request
 			},
 			updatedPodLevelResources: true,
 			updatedResources:         []v1.ResourceName{},
@@ -4822,7 +4821,7 @@ func TestDoPodResizeAction(t *testing.T) {
 			},
 			desiredPodLevelResources: &resourceRequirements{
 				cpuRequest: 100, cpuLimit: 100,
-				memoryRequest: 100, memoryLimit: 200, // Memory limit increase
+				memoryRequest: 100, memoryLimit: 200, // 增加内存 limit
 			},
 			updatedPodLevelResources: true,
 			updatedResources:         []v1.ResourceName{},
@@ -4841,7 +4840,7 @@ func TestDoPodResizeAction(t *testing.T) {
 				cpuRequest: 100, cpuLimit: 100,
 			},
 			desiredPodLevelResources: &resourceRequirements{
-				cpuRequest: 200, cpuLimit: 100, // CPU request increase
+				cpuRequest: 200, cpuLimit: 100, // 增加 CPU request
 			},
 			updatedPodLevelResources: true,
 			updatedResources:         []v1.ResourceName{},
@@ -4860,7 +4859,7 @@ func TestDoPodResizeAction(t *testing.T) {
 				cpuRequest: 100, cpuLimit: 100,
 			},
 			desiredPodLevelResources: &resourceRequirements{
-				cpuRequest: 100, cpuLimit: 200, // CPU limit increase
+				cpuRequest: 100, cpuLimit: 200, // 增加 CPU limit
 			},
 			updatedPodLevelResources: true,
 			updatedResources:         []v1.ResourceName{},
@@ -4873,17 +4872,17 @@ func TestDoPodResizeAction(t *testing.T) {
 				cpuRequest: 100, cpuLimit: 100,
 			},
 			desiredResources: resourceRequirements{
-				cpuRequest: 100, cpuLimit: 200, // Container limit increase
+				cpuRequest: 100, cpuLimit: 200, // 增加容器 limit
 			},
 			currentPodLevelResources: &resourceRequirements{
 				cpuRequest: 100, cpuLimit: 100,
 			},
 			desiredPodLevelResources: &resourceRequirements{
-				cpuRequest: 100, cpuLimit: 300, // Pod limit increase
+				cpuRequest: 100, cpuLimit: 300, // 增加 Pod limit
 			},
 			updatedPodLevelResources: true,
 			updatedResources:         []v1.ResourceName{v1.ResourceCPU},
-			expectPodCgroupUpdates:   1, // Pod level cgroup update
+			expectPodCgroupUpdates:   1, // 更新 Pod 级 cgroup
 			enablePLR:                true,
 		},
 		{
@@ -4892,17 +4891,17 @@ func TestDoPodResizeAction(t *testing.T) {
 				memoryRequest: 100, memoryLimit: 200,
 			},
 			desiredResources: resourceRequirements{
-				memoryRequest: 150, memoryLimit: 200, // Container request increase
+				memoryRequest: 150, memoryLimit: 200, // 增加容器 request
 			},
 			currentPodLevelResources: &resourceRequirements{
 				memoryRequest: 100, memoryLimit: 200,
 			},
 			desiredPodLevelResources: &resourceRequirements{
-				memoryRequest: 200, memoryLimit: 200, // Pod request increase
+				memoryRequest: 200, memoryLimit: 200, // 增加 Pod request
 			},
 			updatedPodLevelResources: true,
 			updatedResources:         []v1.ResourceName{v1.ResourceMemory},
-			expectPodCgroupUpdates:   0, // Memory request doesn't update cgroup
+			expectPodCgroupUpdates:   0, // 调整内存 request 不更新 cgroup
 			enablePLR:                true,
 		},
 		{
@@ -4911,17 +4910,17 @@ func TestDoPodResizeAction(t *testing.T) {
 				cpuRequest: 100, cpuLimit: 200,
 			},
 			desiredResources: resourceRequirements{
-				cpuRequest: 150, cpuLimit: 200, // Container request increase
+				cpuRequest: 150, cpuLimit: 200, // 增加容器 request
 			},
 			currentPodLevelResources: &resourceRequirements{
 				cpuRequest: 100, cpuLimit: 200,
 			},
 			desiredPodLevelResources: &resourceRequirements{
-				cpuRequest: 200, cpuLimit: 200, // Pod request increase
+				cpuRequest: 200, cpuLimit: 200, // 增加 Pod request
 			},
 			updatedPodLevelResources: true,
 			updatedResources:         []v1.ResourceName{v1.ResourceCPU},
-			expectPodCgroupUpdates:   1, // Pod level cgroup update for cpu shares
+			expectPodCgroupUpdates:   1, // 为 CPU shares 更新 Pod 级 cgroup
 			enablePLR:                true,
 		},
 		{
@@ -4930,17 +4929,17 @@ func TestDoPodResizeAction(t *testing.T) {
 				memoryLimit: 200,
 			},
 			desiredResources: resourceRequirements{
-				memoryLimit: 250, // Container limit increase
+				memoryLimit: 250, // 增加容器 limit
 			},
 			currentPodLevelResources: &resourceRequirements{
 				memoryLimit: 200,
 			},
 			desiredPodLevelResources: &resourceRequirements{
-				memoryLimit: 300, // Pod limit increase
+				memoryLimit: 300, // 增加 Pod limit
 			},
 			updatedPodLevelResources: true,
 			updatedResources:         []v1.ResourceName{v1.ResourceMemory},
-			expectPodCgroupUpdates:   1, // Pod level cgroup update for memory limit
+			expectPodCgroupUpdates:   1, // 为内存 limit 更新 Pod 级 cgroup
 			enablePLR:                true,
 		},
 	} {
@@ -4948,7 +4947,7 @@ func TestDoPodResizeAction(t *testing.T) {
 			_, _, m, err := createTestRuntimeManager(tCtx, withErrors(tc.runtimeErrors))
 			require.NoError(t, err)
 			// 打开 CPU 配额，覆盖 CPU limit 的 cgroup 更新路径。
-			m.cpuCFSQuota = true // Enforce CPU Limits
+			m.cpuCFSQuota = true // 强制实施 CPU 限制
 
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodLevelResourcesVerticalScaling, tc.enablePLR)
 
@@ -4963,7 +4962,7 @@ func TestDoPodResizeAction(t *testing.T) {
 				Memory: ptr.To(tc.currentResources.memoryLimit),
 			}, nil).Maybe()
 			mockPCM.EXPECT().GetPodCgroupMemoryUsage(mock.Anything).Return(0, nil).Maybe()
-			// Set up mock pod cgroup config
+			// 设置模拟 Pod cgroup 配置
 			podCPURequest := tc.currentResources.cpuRequest
 			podCPULimit := tc.currentResources.cpuLimit
 			if tc.otherContainersHaveLimits {
@@ -4975,7 +4974,7 @@ func TestDoPodResizeAction(t *testing.T) {
 				CPUQuota:  ptr.To(cm.MilliCPUToQuota(podCPULimit, cm.QuotaPeriod)),
 			}, nil).Maybe()
 			if tc.expectPodCgroupUpdates > 0 {
-				// TODO: Update to use proper logger once contextual logging migration is complete
+				// TODO: 上下文日志迁移完成后，改用正确的 logger。
 				call := mockPCM.EXPECT().SetPodCgroupConfig(klog.TODO(), mock.Anything, mock.Anything)
 				if tc.injectPodUpdateCgroupsError != nil {
 					call.Return(tc.injectPodUpdateCgroupsError).Times(1)
@@ -4986,7 +4985,7 @@ func TestDoPodResizeAction(t *testing.T) {
 
 			pod, kps := makeBasePodAndStatus()
 			if tc.desiredPodLevelResources != nil {
-				// pod spec and allocated resources are already updated as desired when doPodResizeAction() is called.
+				// 调用 doPodResizeAction() 时，Pod spec 和已分配资源已按预期更新。
 				// doPodResizeAction 调用时，pod spec 与 allocated 已经是目标值。
 				pod.Spec.Resources = &v1.ResourceRequirements{
 					Requests: v1.ResourceList{
@@ -5000,7 +4999,7 @@ func TestDoPodResizeAction(t *testing.T) {
 				}
 			}
 			if tc.currentPodLevelResources != nil {
-				// Seed initial actuated state
+				// 初始化已生效状态
 				initialActuated := &v1.ResourceRequirements{
 					Requests: v1.ResourceList{
 						v1.ResourceCPU:    *resource.NewMilliQuantity(tc.currentPodLevelResources.cpuRequest, resource.DecimalSI),
@@ -5083,7 +5082,7 @@ func TestDoPodResizeAction(t *testing.T) {
 			} else {
 				require.NoError(t, resizeResult.Error, resizeResult.Message)
 				if tc.desiredPodLevelResources != nil {
-					// VERIFY Actuated State for successful resizes
+					// 验证成功扩缩容后的已生效状态
 					updatedActuated, found := m.actuatedState.GetPodLevelResources(pod.UID)
 					require.True(t, found, "actuated resources should exist for pod")
 					if tc.enablePLR {
@@ -5364,7 +5363,7 @@ func TestDoPodResizeAction_Volumes(t *testing.T) {
 				},
 			}
 
-			// Pre-seed initial state for both volumes so we can observe state changes
+			// 预先为两个卷设置初始状态，以便观察状态变化。
 			// 预置两个卷的初始 actuated 值，用于观察状态变化。
 			require.NoError(t, m.actuatedState.SetEmptyDirVolumeLimit(pod.UID, "down-vol", resource.NewQuantity(300, resource.BinarySI)))
 			require.NoError(t, m.actuatedState.SetEmptyDirVolumeLimit(pod.UID, "up-vol", resource.NewQuantity(50, resource.BinarySI)))
@@ -5419,13 +5418,13 @@ func TestDoPodResizeAction_Volumes(t *testing.T) {
 				}
 			}
 
-			// Check final actuated state
+			// 检查最终已生效状态
 			for volName, expectedLimit := range tc.expectedActuated {
 				limit, found := m.actuatedState.GetEmptyDirVolumeLimit(pod.UID, volName)
 				require.True(t, found, "actuated state should exist for %s", volName)
 				assert.Equal(t, expectedLimit.Value(), limit.Value(), "actuated state for %s", volName)
 			}
-			// If downsize failed, upsize is not executed and up-vol stays at initial state (50)
+			// 若缩容失败，则不会扩容，up-vol 保持初始值 50。
 			if tc.expectedResultErr {
 				limit, found := m.actuatedState.GetEmptyDirVolumeLimit(pod.UID, "up-vol")
 				require.True(t, found)
@@ -5716,7 +5715,7 @@ func TestValidatePodResizeAction(t *testing.T) {
 			require.NoError(t, err)
 
 			pod, kps := makeBasePodAndStatus()
-			// pod spec and allocated resources are already updated as desired when doPodResizeAction() is called.
+			// 调用 doPodResizeAction() 时，Pod spec 和已分配资源已按预期更新。
 			pod.Spec.Containers[0].Resources = v1.ResourceRequirements{
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    *resource.NewMilliQuantity(tc.desiredResources.cpuRequest, resource.DecimalSI),
@@ -5881,7 +5880,7 @@ func TestIncrementImageVolumeMetrics(t *testing.T) {
 		},
 	}
 
-	// Run tests.
+	// 运行测试。
 	// 每个用例前重置计数器。
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
@@ -5889,7 +5888,7 @@ func TestIncrementImageVolumeMetrics(t *testing.T) {
 			metrics.ImageVolumeMountedErrorsTotal.Reset()
 			metrics.ImageVolumeMountedSucceedTotal.Reset()
 
-			// Call the function.
+			// 调用该函数。
 			incrementImageVolumeMetrics(tc.err, tc.msg, &v1.Container{VolumeMounts: tc.volumeMounts}, tc.imageVolumes)
 
 			if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(tc.wants),
@@ -5914,7 +5913,7 @@ func TestIsPodResizeInProgress(t *testing.T) {
 		actuated                *testResources
 		nonSidecarInit, sidecar bool
 		isRunning               bool
-		unstarted               bool // Whether the container is missing from the pod status
+		unstarted               bool // 容器是否不在 Pod 状态中
 	}
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeDeclaredFeatures, true)
@@ -6046,7 +6045,7 @@ func TestIsPodResizeInProgress(t *testing.T) {
 			unstarted: true,
 		}, {
 			allocated: testResources{100, 200, 100, 200},
-			actuated:  &testResources{200, 200, 100, 200}, // Resized
+			actuated:  &testResources{200, 200, 100, 200}, // 已调整大小
 			isRunning: true,
 		}},
 		expectHasResize: true,
@@ -6230,7 +6229,7 @@ func TestIsPodResizeInProgress(t *testing.T) {
 			}
 
 			for i, c := range test.containers {
-				// Add the container to the pod
+				// 将容器添加到 Pod。
 				container := mkContainer(i, c)
 				if c.nonSidecarInit || c.sidecar {
 					pod.Spec.InitContainers = append(pod.Spec.InitContainers, container)
@@ -6238,7 +6237,7 @@ func TestIsPodResizeInProgress(t *testing.T) {
 					pod.Spec.Containers = append(pod.Spec.Containers, container)
 				}
 
-				// Add the container to the pod status, if it's started.
+				// 若容器已启动，将其添加到 Pod 状态。
 				if !test.containers[i].unstarted {
 					cs := kubecontainer.Status{
 						Name: container.Name,
@@ -6251,7 +6250,7 @@ func TestIsPodResizeInProgress(t *testing.T) {
 					podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, &cs)
 				}
 
-				// Register the actuated container (if needed)
+				// 按需注册已生效容器。
 				// 登记 actuated 资源；缺失时 IsPodResizeInProgress 应返回 false。
 				if c.actuated != nil {
 					actuatedContainer := container.DeepCopy()
@@ -6577,7 +6576,7 @@ type testRuntimeHelper struct {
 	onPodSandboxReadyPod          *v1.Pod
 	onPodSandboxReadyCtx          context.Context
 	onPodSandboxReadyError        error
-	captureStateFunc              func() // optional function to capture state when OnPodSandboxReady is called
+	captureStateFunc              func() // 在调用 OnPodSandboxReady 时捕获状态的可选函数
 	prepareDynamicResourcesCalled bool
 	prepareDynamicResourcesError  error
 }
@@ -6634,7 +6633,7 @@ func TestOnPodSandboxReadyInvocation(t *testing.T) {
 			onPodSandboxReadyShouldErr: true,
 			deviceAllocationShouldErr:  false,
 			expectOnPodSandboxReady:    true,
-			expectSyncPodSuccess:       true, // SyncPod still succeed even if OnPodSandboxReady fails
+			expectSyncPodSuccess:       true, // 即使 OnPodSandboxReady 失败，SyncPod 仍成功
 			expectDeviceAllocation:     false,
 			description:                "Verifies OnPodSandboxReady errors don't block pod creation",
 		},
@@ -6652,7 +6651,7 @@ func TestOnPodSandboxReadyInvocation(t *testing.T) {
 			onPodSandboxReadyShouldErr: false,
 			deviceAllocationShouldErr:  true,
 			expectOnPodSandboxReady:    false,
-			expectSyncPodSuccess:       true, // SyncPod doesn't return error, just returns early if `PrepareDynamicResources` call ends up failing
+			expectSyncPodSuccess:       true, // 若 `PrepareDynamicResources` 调用失败，SyncPod 不返回错误，只提前返回
 			expectDeviceAllocation:     true,
 			description:                "Verifies PrepareDynamicResources failure causes early return in case of pod with ResourceClaims",
 		},
@@ -6660,7 +6659,7 @@ func TestOnPodSandboxReadyInvocation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// step 1 - setup test helper and inject errors
+			// 步骤 1：设置测试辅助对象并注入错误
 			// step 1 - 构造 helper，并按用例注入错误。
 			fakeRuntime, fakeImage, m, err := createTestRuntimeManager(tCtx)
 			require.NoError(t, err)
@@ -6676,7 +6675,7 @@ func TestOnPodSandboxReadyInvocation(t *testing.T) {
 			}
 			m.runtimeHelper = testHelper
 
-			// step 2 - create pod (with/without devices)
+			// 步骤 2：创建 Pod（含或不含设备）
 			// step 2 - 只有带 ResourceClaims 的 pod 才触发 DRA 分配。
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -6702,7 +6701,7 @@ func TestOnPodSandboxReadyInvocation(t *testing.T) {
 				}
 			}
 
-			// step 3 - run SyncPod
+			// 步骤 3：运行 SyncPod
 			// step 3 - 执行同步。
 			backOff := flowcontrol.NewBackOff(time.Second, time.Minute)
 			result := m.SyncPod(tCtx, pod, &kubecontainer.PodStatus{}, []v1.Secret{}, backOff, false)
@@ -6713,7 +6712,7 @@ func TestOnPodSandboxReadyInvocation(t *testing.T) {
 				require.Error(t, result.Error(), test.description)
 			}
 
-			// step 4 - verify device allocation
+			// 步骤 4：验证设备分配
 			// step 4 - 验证 DRA 分配调用。
 			if test.expectDeviceAllocation {
 				require.True(t, testHelper.prepareDynamicResourcesCalled,
@@ -6725,7 +6724,7 @@ func TestOnPodSandboxReadyInvocation(t *testing.T) {
 				}
 			}
 
-			// step 5 - verify OnPodSandboxReady invocation
+			// 步骤 5：验证 OnPodSandboxReady 调用
 			// step 5 - 验证 OnPodSandboxReady 调用。
 			assert.Equal(t, test.expectOnPodSandboxReady, testHelper.onPodSandboxReadyCalled, "OnPodSandboxReady invocation mismatch: "+test.description)
 
@@ -6742,7 +6741,7 @@ func TestOnPodSandboxReadyInvocation(t *testing.T) {
 				}
 			}
 
-			// step 6 - verify the final pod state
+			// 步骤 6：验证最终 Pod 状态
 			// step 6 - 验证最终 runtime 状态。
 			if test.expectSyncPodSuccess && !test.deviceAllocationShouldErr {
 				assert.Len(t, fakeRuntime.Containers, 1, "container should be created")
@@ -6767,7 +6766,7 @@ func TestOnPodSandboxReadyTiming(t *testing.T) {
 	fakeRuntime, fakeImage, m, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
 
-	// track the state of pod when OnPodSandboxReady is invoked
+	// 记录调用 OnPodSandboxReady 时的 Pod 状态
 	// 在回调中捕获 sandbox/container/image 数量，验证调用时机。
 	var sandboxCount int
 	var containerCount int
@@ -6805,14 +6804,14 @@ func TestOnPodSandboxReadyTiming(t *testing.T) {
 	result := m.SyncPod(tCtx, pod, &kubecontainer.PodStatus{}, []v1.Secret{}, backOff, false)
 	require.NoError(t, result.Error())
 
-	// verify the order that OnPodSandboxReady should be invoked after sandbox creation but before containers
+	// 验证 OnPodSandboxReady 应在创建 sandbox 之后、创建容器之前调用
 	// OnPodSandboxReady 必须在 sandbox 创建之后、容器创建之前调用。
 	assert.Equal(t, 1, sandboxCount, "sandbox should exist when OnPodSandboxReady is invoked")
 	assert.Equal(t, 0, containerCount, "containers should not exist yet when OnPodSandboxReady is invoked")
-	// Note that image may or may not be pulled at OnPodSandboxReady time depending on whether image exists
+	// 注意：调用 OnPodSandboxReady 时是否拉取镜像取决于镜像是否已存在。
 	t.Logf("At OnPodSandboxReady time: sandboxes=%d, containers=%d, images=%d", sandboxCount, containerCount, imageCount)
 
-	// verify the final state of pod
+	// 验证 Pod 最终状态
 	assert.Len(t, fakeRuntime.Sandboxes, 1, "final sandbox count")
 	assert.Len(t, fakeRuntime.Containers, 1, "final container count")
 }

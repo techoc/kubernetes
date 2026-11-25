@@ -32,7 +32,7 @@ type VolumeToHealthCheck struct {
 	PodName volumetypes.UniquePodName
 	// Pod 是使用该卷的 Pod 对象。
 	Pod             *v1.Pod
-	OuterVolumeName string // pod.spec.volumes[].name
+	OuterVolumeName string // Pod.Spec.Volumes[].Name
 	// DriverName 是 CSI 驱动名称。
 	DriverName string
 	// CSIVolumeHandle 是 CSI 卷句柄。

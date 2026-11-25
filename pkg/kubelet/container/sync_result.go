@@ -24,8 +24,7 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
-// BackoffError should be used whenever an error needs to specify a particular backoff duration
-// to the Kubelet.
+// BackoffError 用于包装需要向 kubelet 指定退避时长的错误。
 type BackoffError struct {
 	error       error
 	backoffTime time.Time
@@ -83,7 +82,7 @@ func MinBackoffExpiration(err error) (time.Time, bool) {
 	}
 }
 
-// TODO(random-liu): We need to better organize runtime errors for introspection.
+// TODO(random-liu): 需要更好地组织运行时错误，以便内省。
 
 // ErrCrashLoopBackOff 表示容器已终止且 kubelet 正在退避重启。
 var ErrCrashLoopBackOff = errors.New("CrashLoopBackOff")
@@ -147,13 +146,11 @@ type SyncResult struct {
 	Message string
 }
 
-// NewSyncResult generates new SyncResult with specific Action and Target
 // NewSyncResult 创建携带指定动作与目标的 SyncResult。
 func NewSyncResult(action SyncAction, target interface{}) *SyncResult {
 	return &SyncResult{Action: action, Target: target}
 }
 
-// Fail fails the SyncResult with specific error and message
 // Fail 标记该动作失败，并记录错误与可读信息。
 func (r *SyncResult) Fail(err error, msg string) {
 	r.Error, r.Message = err, msg
@@ -167,20 +164,17 @@ type PodSyncResult struct {
 	SyncError error
 }
 
-// AddSyncResult adds multiple SyncResult to current PodSyncResult
 // AddSyncResult 追加若干动作结果。
 func (p *PodSyncResult) AddSyncResult(result ...*SyncResult) {
 	p.SyncResults = append(p.SyncResults, result...)
 }
 
-// AddPodSyncResult merges a PodSyncResult to current one
 // AddPodSyncResult 合并另一个 PodSyncResult：动作结果追加，SyncError 直接覆盖。
 func (p *PodSyncResult) AddPodSyncResult(result PodSyncResult) {
 	p.AddSyncResult(result.SyncResults...)
 	p.SyncError = result.SyncError
 }
 
-// Fail fails the PodSyncResult with an error occurred in SyncPod() and KillPod() itself
 // Fail 记录 SyncPod()/KillPod() 本身的错误。
 func (p *PodSyncResult) Fail(err error) {
 	p.SyncError = err

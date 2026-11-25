@@ -46,7 +46,7 @@ const TmpfsNoswapOption = "noswap"
 
 // IsTmpfsNoswapOptionSupported 判断当前环境是否支持 tmpfs 的 noswap 选项。
 func IsTmpfsNoswapOptionSupported(mounter mount.Interface, mountPath string) bool {
-	// TODO: it needs to be replaced by a proper context in the future
+	// TODO: 未来应替换为合适的上下文。
 	ctx := context.TODO()
 	logger := klog.FromContext(ctx)
 	isTmpfsNoswapOptionSupportedHelper := func() bool {
@@ -120,7 +120,7 @@ func IsTmpfsNoswapOptionSupported(mounter mount.Interface, mountPath string) boo
 // isSwapOnAccordingToProcSwaps 接收 /proc/swaps 的内容，判断系统是否启用了 swap。
 func isSwapOnAccordingToProcSwaps(logger klog.Logger, procSwapsContent []byte) bool {
 	// 去掉末尾换行，避免把空行误判为 swap 条目。
-	procSwapsContent = bytes.TrimSpace(procSwapsContent) // extra trailing \n
+	procSwapsContent = bytes.TrimSpace(procSwapsContent)
 	procSwapsStr := string(procSwapsContent)
 	procSwapsLines := strings.Split(procSwapsStr, "\n")
 
@@ -142,7 +142,7 @@ func IsSwapOn() (bool, error) {
 			return false, nil
 		}
 
-		// TODO: it needs to be replaced by a proper context in the future
+		// TODO: 未来应替换为合适的上下文。
 		ctx := context.TODO()
 		logger := klog.FromContext(ctx)
 

@@ -36,7 +36,7 @@ func (a FeatureGateAdapter) Enabled(key string) bool {
 
 // discoverNodeDeclaredFeatures 使用发现库计算最终要声明的节点特性集合。
 func (kl *Kubelet) discoverNodeDeclaredFeatures() []string {
-	// 适配默认特性门控，供 node declared features 库按字符串查询特性状态。
+	// 适配默认特性门控，供节点声明特性库按字符串查询特性状态。
 	adaptedFG := FeatureGateAdapter{FeatureGate: utilfeature.DefaultFeatureGate}
 
 	runtimeFeatures := nodedeclaredfeatures.RuntimeFeatures{}

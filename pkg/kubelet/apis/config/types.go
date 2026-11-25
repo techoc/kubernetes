@@ -479,7 +479,7 @@ type KubeletConfiguration struct {
 	LocalStorageCapacityIsolation bool
 
 	// ContainerRuntimeEndpoint 是容器运行时的端点。
-	// Linux 支持 unix domain socket，Windows 支持 npipes 与 tcp 端点。
+	// Linux 支持 Unix 域套接字，Windows 支持命名管道与 TCP 端点。
 	// 示例：'unix:///path/to/runtime.sock'、'npipe:////./pipe/runtime'。
 	ContainerRuntimeEndpoint string
 
@@ -536,7 +536,7 @@ type KubeletWebhookAuthorization struct {
 type KubeletAuthentication struct {
 	// x509 包含 x509 客户端证书认证相关设置。
 	X509 KubeletX509Authentication
-	// webhook 包含 webhook bearer token 认证相关设置。
+	// webhook 包含 Webhook 的 bearer token 认证设置。
 	Webhook KubeletWebhookAuthentication
 	// anonymous 包含匿名认证相关设置。
 	Anonymous KubeletAnonymousAuthentication
@@ -737,6 +737,7 @@ type ShutdownGracePeriodByPodPriority struct {
 	ShutdownGracePeriodSeconds int64
 }
 
+// MemorySwapConfiguration 配置容器工作负载的 swap 使用方式。
 type MemorySwapConfiguration struct {
 	// swapBehavior 配置容器工作负载可用的 swap 内存，取值可以是：
 	// ""、"NoSwap"：工作负载不能使用 swap，这是默认选项。

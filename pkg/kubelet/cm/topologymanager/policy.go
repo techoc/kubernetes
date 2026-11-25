@@ -213,36 +213,36 @@ func (m HintMerger) compare(current *TopologyHint, candidate *TopologyHint) *Top
 	//    候选等于目标值则立即采用；两者都低于目标值时选择更接近目标值的，
 	//    数量相等时再比较亲和性掩码。
 
-	// Case 1
+	// 情况 1
 	if current.NUMANodeAffinity.Count() > m.BestNonPreferredAffinityCount {
 		return m.CompareNUMAAffinityMasks(current, candidate)
 	}
-	// Case 2
+	// 情况 2
 	if current.NUMANodeAffinity.Count() == m.BestNonPreferredAffinityCount {
 		if candidate.NUMANodeAffinity.Count() != m.BestNonPreferredAffinityCount {
 			return current
 		}
 		return m.CompareNUMAAffinityMasks(current, candidate)
 	}
-	// Case 3a
+	// 情况 3a
 	if candidate.NUMANodeAffinity.Count() > m.BestNonPreferredAffinityCount {
 		return current
 	}
-	// Case 3b
+	// 情况 3b
 	if candidate.NUMANodeAffinity.Count() == m.BestNonPreferredAffinityCount {
 		return candidate
 	}
 
-	// Case 3ca
+	// 情况 3ca
 	if candidate.NUMANodeAffinity.Count() > current.NUMANodeAffinity.Count() {
 		return candidate
 	}
-	// Case 3cb
+	// 情况 3cb
 	if candidate.NUMANodeAffinity.Count() < current.NUMANodeAffinity.Count() {
 		return current
 	}
 
-	// Case 3cc
+	// 情况 3cc
 	return m.CompareNUMAAffinityMasks(current, candidate)
 
 }

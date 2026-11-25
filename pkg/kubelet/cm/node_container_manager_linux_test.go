@@ -27,7 +27,7 @@ import (
 	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
 )
 
-// TestNodeAllocatableReservationForScheduling 验证 node allocatable reservation
+// TestNodeAllocatableReservationForScheduling 验证节点可分配资源预留
 // 的计算结果：kubeReserved、systemReserved 与硬驱逐阈值（绝对值或百分比）应被正确叠加。
 func TestNodeAllocatableReservationForScheduling(t *testing.T) {
 	memoryEvictionThreshold := resource.MustParse("100Mi")
@@ -176,7 +176,7 @@ func TestNodeAllocatableReservationForScheduling(t *testing.T) {
 	}
 }
 
-// TestNodeAllocatableForEnforcement 验证 node allocatable 绝对值的计算：
+// TestNodeAllocatableForEnforcement 验证节点可分配资源绝对值的计算：
 // 容量减去 kubeReserved/systemReserved 后的结果应如预期。
 func TestNodeAllocatableForEnforcement(t *testing.T) {
 	memoryEvictionThreshold := resource.MustParse("100Mi")

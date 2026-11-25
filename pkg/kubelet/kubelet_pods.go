@@ -530,8 +530,8 @@ func nodeHostsFileContent(hostsFilePath string, hostAliases []v1.HostAlias) ([]b
 func managedHostsFileContent(hostIPs []string, hostName, hostDomainName string, hostAliases []v1.HostAlias) []byte {
 	var buffer bytes.Buffer
 	buffer.WriteString(managedHostsHeader)
-	buffer.WriteString("127.0.0.1\tlocalhost\n")                      // ipv4 localhost
-	buffer.WriteString("::1\tlocalhost ip6-localhost ip6-loopback\n") // ipv6 localhost
+	buffer.WriteString("127.0.0.1\tlocalhost\n")                      // IPv4 回环地址
+	buffer.WriteString("::1\tlocalhost ip6-localhost ip6-loopback\n") // IPv6 回环地址
 	buffer.WriteString("fe00::0\tip6-localnet\n")
 	buffer.WriteString("fe00::0\tip6-mcastprefix\n")
 	buffer.WriteString("fe00::1\tip6-allnodes\n")
@@ -783,7 +783,7 @@ func (kl *Kubelet) makeEnvironmentVariables(ctx context.Context, pod *v1.Pod, co
 	var (
 		configMaps = make(map[string]*v1.ConfigMap)
 		secrets    = make(map[string]*v1.Secret)
-		tmpEnv     = make(map[string]string) // TODO: switch to map[string][]byte
+		tmpEnv     = make(map[string]string) // TODO: 切换为 map[string][]byte
 	)
 
 	// Env 会覆盖 EnvFrom 中的变量：
@@ -2272,7 +2272,7 @@ func (kl *Kubelet) convertToAPIContainerStatuses(ctx context.Context, pod *v1.Po
 			ContainerID: cid,
 		}
 		if oldStatus != nil {
-			status.VolumeMounts = oldStatus.VolumeMounts // immutable
+			status.VolumeMounts = oldStatus.VolumeMounts // 不可变
 			if utilfeature.DefaultFeatureGate.Enabled(features.RestartAllContainersOnContainerExits) {
 				if oldStatus.RestartCount > status.RestartCount {
 					status.RestartCount = oldStatus.RestartCount
@@ -2350,8 +2350,8 @@ func (kl *Kubelet) convertToAPIContainerStatuses(ctx context.Context, pod *v1.Po
 			}
 
 		case cs.State == kubecontainer.ContainerStateUnknown &&
-			oldStatus != nil && // we have an old status
-			oldStatus.State.Running != nil: // our previous status was running
+			oldStatus != nil && // 存在旧状态
+			oldStatus.State.Running != nil: // 先前状态为运行中
 
 			reason := kubecontainer.ContainerReasonStatusUnknown
 			// Pod 正在重启时，reason 应为 RestartingAllContainers
@@ -2366,7 +2366,7 @@ func (kl *Kubelet) convertToAPIContainerStatuses(ctx context.Context, pod *v1.Po
 			status.State.Terminated = &v1.ContainerStateTerminated{
 				Reason:   reason,
 				Message:  "The container could not be located when the pod was terminated",
-				ExitCode: 137, // this code indicates an error
+				ExitCode: 137, // 此退出码表示错误
 			}
 			// 重启次数通常来自 CRI（见方法开头），但这里是为 CRI 未返回状态的情况
 			// 显式补充，因此需要手动递增以保证准确。
@@ -2510,7 +2510,7 @@ func (kl *Kubelet) convertToAPIContainerStatuses(ctx context.Context, pod *v1.Po
 								"featureGate", features.RecursiveReadOnlyMounts)
 						}
 					}
-					volStatus.RecursiveReadOnly = &rroMode // Disabled or Enabled
+					volStatus.RecursiveReadOnly = &rroMode // 禁用或启用
 				}
 				status.VolumeMounts = append(status.VolumeMounts, volStatus)
 			}

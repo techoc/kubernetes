@@ -84,7 +84,7 @@ func (m *ManagerImpl) GetTopologyHints(logger klog.Logger, pod *v1.Pod, containe
 // GetPodTopologyHints 实现 topologymanager.HintProvider 接口，确保在创建 Pod 级
 // 拓扑感知提示时咨询 Device Manager。
 func (m *ManagerImpl) GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, _ lifecycle.Operation) map[string][]topologymanager.TopologyHint {
-	// Garbage collect any stranded device resources before providing TopologyHints
+	// 在提供 TopologyHints 之前回收所有孤立的设备资源。
 	m.UpdateAllocatedDevices(logger)
 
 	deviceHints := make(map[string][]topologymanager.TopologyHint)
@@ -93,7 +93,7 @@ func (m *ManagerImpl) GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, _ lif
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	for resource, requested := range accumulatedResourceRequests {
-		// Only consider devices that actually contain topology information.
+		// 仅考虑实际包含拓扑信息的设备。
 		if aligned := m.deviceHasTopologyAlignment(resource); !aligned {
 			logger.Info("Resource does not have a topology preference", "resourceName", resource, "pod", klog.KObj(pod), "request", requested)
 			deviceHints[resource] = nil
@@ -115,7 +115,7 @@ func (m *ManagerImpl) GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, _ lif
 			continue
 		}
 
-		// Get the list of available devices, for which TopologyHints should be generated.
+		// 获取应为其生成 TopologyHints 的可用设备列表。
 		available := m.getAvailableDevices(resource)
 		// 可用设备不足以满足请求时返回空提示。
 		if available.Len() < requested {
@@ -124,8 +124,8 @@ func (m *ManagerImpl) GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, _ lif
 			continue
 		}
 
-		// Generate TopologyHints for this resource given the current
-		// request size and the list of available devices.
+		// 根据当前请求大小和可用设备列表，
+		// 为该资源生成 TopologyHints。
 		deviceHints[resource] = m.generateDeviceTopologyHints(logger, resource, available, sets.Set[string]{}, requested)
 	}
 

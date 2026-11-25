@@ -153,8 +153,8 @@ func newFakeKubeRuntimeManager(ctx context.Context, runtimeService internalapi.R
 		&imagepullmanager.NoopImagePullManager{},
 		flowcontrol.NewBackOff(time.Second, 300*time.Second),
 		false,
-		ptr.To[int32](0), // No limit on max parallel image pulls,
-		0,                // Disable image pull throttling by setting QPS to 0,
+		ptr.To[int32](0), // 不限制并行镜像拉取数，
+		0,                // 将 QPS 设为 0 以禁用镜像拉取限流，
 		0,
 		&fakePodPullingTimeRecorder{},
 	)

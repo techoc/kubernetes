@@ -70,8 +70,7 @@ func EphemeralStorageCapacityFromFsInfo(info cadvisorapi.FsInfo) v1.ResourceList
 
 // UsingLegacyCadvisorStats 判断容器统计是否由 cAdvisor 而非 CRI 提供。
 // CRI 集成应通过 CRI 获取容器指标。
-// TODO: cri-o relies on cadvisor as a temporary workaround. The code should
-// be removed. Related issue:
+// TODO: CRI-O 暂时依赖 cAdvisor 作为变通方案，应移除该逻辑。相关问题：
 // https://github.com/kubernetes/kubernetes/issues/51798
 func UsingLegacyCadvisorStats(runtimeEndpoint string) bool {
 	// 若启用 PodAndContainerStatsFromCRI 特性，则认为用户希望使用 CRI 统计；

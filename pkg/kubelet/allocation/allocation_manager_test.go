@@ -408,9 +408,9 @@ func TestRetryPendingResizes(t *testing.T) {
 		newLimits                    v1.ResourceList
 		originalPodRequests          v1.ResourceList
 		newPodRequests               v1.ResourceList
-		originalInProgress           bool // Whether to prepopulate an in-progress condition.
-		originalPending              bool // Whether to prepopulate a pending condition.
-		newResourcesAllocated        bool // Whether the new requests have already been allocated (but not actuated)
+		originalInProgress           bool // 是否预先填入进行中的条件。
+		originalPending              bool // 是否预先填入待处理条件。
+		newResourcesAllocated        bool // 新请求是否已分配（但尚未实际应用）
 		expectedAllocatedReqs        v1.ResourceList
 		expectedAllocatedLims        v1.ResourceList
 		expectedAllocatedPodReqs     v1.ResourceList
@@ -429,7 +429,7 @@ func TestRetryPendingResizes(t *testing.T) {
 				{
 					Type:    v1.PodResizeInProgress,
 					Status:  "True",
-					Message: "", // Expect the original InProgress condition to be cleared.
+					Message: "", // 预期清除原有的 InProgress 条件。
 				},
 			},
 			expectPodSyncTriggered: "true",
@@ -539,7 +539,7 @@ func TestRetryPendingResizes(t *testing.T) {
 				{
 					Type:    v1.PodResizeInProgress,
 					Status:  "True",
-					Message: originalInProgressMsg, // Since the allocation didn't change, the condition isn't reset.
+					Message: originalInProgressMsg, // 分配未改变，因此不重置条件。
 				},
 			},
 			// 条件已变化（需要更新状态），因此应触发一次同步，
@@ -576,12 +576,12 @@ func TestRetryPendingResizes(t *testing.T) {
 					Type:    v1.PodResizePending,
 					Status:  "True",
 					Reason:  "Deferred",
-					Message: "Node didn't have enough resource: memory", // Deferred condition should be updated.
+					Message: "Node didn't have enough resource: memory", // 应更新 Deferred 条件。
 				},
 				{
 					Type:    v1.PodResizeInProgress,
 					Status:  "True",
-					Message: originalInProgressMsg, // InProgress condition should be unchanged.
+					Message: originalInProgressMsg, // InProgress 条件应保持不变。
 				},
 			},
 			expectPodSyncTriggered: "true",
@@ -625,7 +625,7 @@ func TestRetryPendingResizes(t *testing.T) {
 			name:                  "Increase CPU from min limit",
 			originalRequests:      v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")},
 			originalLimits:        v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")},
-			newRequests:           v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")}, // Unchanged
+			newRequests:           v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")}, // 不变
 			newLimits:             v1.ResourceList{v1.ResourceCPU: resource.MustParse("20m")},
 			expectedAllocatedReqs: v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")},
 			expectedAllocatedLims: v1.ResourceList{v1.ResourceCPU: resource.MustParse("20m")},
@@ -642,7 +642,7 @@ func TestRetryPendingResizes(t *testing.T) {
 			name:                  "Decrease CPU to min limit",
 			originalRequests:      v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")},
 			originalLimits:        v1.ResourceList{v1.ResourceCPU: resource.MustParse("20m")},
-			newRequests:           v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")}, // Unchanged
+			newRequests:           v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")}, // 不变
 			newLimits:             v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")},
 			expectedAllocatedReqs: v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")},
 			expectedAllocatedLims: v1.ResourceList{v1.ResourceCPU: resource.MustParse("10m")},
@@ -676,7 +676,7 @@ func TestRetryPendingResizes(t *testing.T) {
 			name:                         "pod-level: Request CPU and memory decrease - expect InProgress",
 			inPlacePodLevelResizeEnabled: true,
 			originalPodRequests:          v1.ResourceList{v1.ResourceCPU: cpu1500m, v1.ResourceMemory: mem1500M},
-			newPodRequests:               v1.ResourceList{v1.ResourceCPU: cpu1200m, v1.ResourceMemory: mem1200M}, // still > container reqs
+			newPodRequests:               v1.ResourceList{v1.ResourceCPU: cpu1200m, v1.ResourceMemory: mem1200M}, // 仍大于容器请求量
 			originalRequests:             v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M},
 			newRequests:                  v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M},
 			expectedAllocatedReqs:        v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M},
@@ -735,7 +735,7 @@ func TestRetryPendingResizes(t *testing.T) {
 			isInitContainer := containerType != "regular"
 
 			if tt.inPlacePodLevelResizeEnabled && isInitContainer {
-				continue // pod level resources makes the distinction between container types irrelevant
+				continue // Pod 级资源使容器类型的差异不再重要
 			}
 			t.Run(fmt.Sprintf("%s/containerType=%s", tt.name, containerType), func(t *testing.T) {
 				if tt.inPlacePodLevelResizeEnabled {
@@ -866,7 +866,7 @@ func TestRetryPendingResizes(t *testing.T) {
 	}
 }
 
-// TestRetryPendingResizesGuanteedQOSPods 验证 Guaranteed QoS pod 在 static CPU/内存管理器策略下，
+// TestRetryPendingResizesGuanteedQOSPods 验证 Guaranteed QoS 的 Pod 在 static CPU/内存管理器策略下，
 // resize 被判定为 Infeasible 的行为（含 sidecar 容器）。
 func TestRetryPendingResizesGuanteedQOSPods(t *testing.T) {
 	if goruntime.GOOS == "windows" {
@@ -916,10 +916,10 @@ func TestRetryPendingResizesGuanteedQOSPods(t *testing.T) {
 	mem1000M := resource.MustParse("1Gi")
 	mem2000M := resource.MustParse("2Gi")
 
-	// Guaranteed QoS pod 的 requests 与 limits 设为相同值。
+	// Guaranteed QoS 的 Pod 将 requests 与 limits 设为相同值。
 	guaranteedQOSPod := createTestPod("1111", "pod1", "ns1", v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, false)
 	guaranteedQOSPodWithSidecar := createTestPod("2222", "pod2", "ns2", v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, true)
-	// Best effort pod 的 requests 与 limits 设为不同值。
+	// BestEffort QoS 的 Pod 将 requests 与 limits 设为不同值。
 	bestEffortPod := createTestPod("333", "pod3", "ns3", v1.ResourceList{v1.ResourceCPU: cpu500m, v1.ResourceMemory: mem500M}, v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, false)
 	bestEffortPodWithSidecar := createTestPod("444", "pod4", "ns4", v1.ResourceList{v1.ResourceCPU: cpu500m, v1.ResourceMemory: mem500M}, v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, true)
 
@@ -2866,7 +2866,7 @@ func TestAllocationManager_EmptyDirVolumeLimits_UpdatePodFromAllocation(t *testi
 							VolumeSource: v1.VolumeSource{
 								EmptyDir: &v1.EmptyDirVolumeSource{
 									Medium:    v1.StorageMediumMemory,
-									SizeLimit: resource.NewQuantity(1024*1024*64, resource.BinarySI), // 64Mi in spec
+									SizeLimit: resource.NewQuantity(1024*1024*64, resource.BinarySI), // spec 中为 64Mi
 								},
 							},
 						},
@@ -2904,7 +2904,7 @@ func TestAllocationManager_EmptyDirVolumeLimits_UpdatePodFromAllocation(t *testi
 							VolumeSource: v1.VolumeSource{
 								EmptyDir: &v1.EmptyDirVolumeSource{
 									Medium:    v1.StorageMediumMemory,
-									SizeLimit: resource.NewQuantity(1024*1024*64, resource.BinarySI), // 64Mi in spec
+									SizeLimit: resource.NewQuantity(1024*1024*64, resource.BinarySI), // spec 中为 64Mi
 								},
 							},
 						},
@@ -3105,7 +3105,7 @@ func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T
 							VolumeSource: v1.VolumeSource{
 								EmptyDir: &v1.EmptyDirVolumeSource{
 									Medium:    v1.StorageMediumMemory,
-									SizeLimit: resource.NewQuantity(1024*1024*256, resource.BinarySI), // Scaled to 256Mi
+									SizeLimit: resource.NewQuantity(1024*1024*256, resource.BinarySI), // 扩展至 256Mi
 								},
 							},
 						},
@@ -3182,7 +3182,7 @@ func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T
 							VolumeSource: v1.VolumeSource{
 								EmptyDir: &v1.EmptyDirVolumeSource{
 									Medium:    v1.StorageMediumMemory,
-									SizeLimit: resource.NewQuantity(1024*1024*64, resource.BinarySI), // Scaled down to 64Mi
+									SizeLimit: resource.NewQuantity(1024*1024*64, resource.BinarySI), // 缩减至 64Mi
 								},
 							},
 						},
@@ -3389,7 +3389,7 @@ func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T
 							Name: "container-1",
 							Resources: v1.ResourceRequirements{
 								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse("5"), // 5 CPU: exceeds Node Allocatable CPU 4!
+									v1.ResourceCPU:    resource.MustParse("5"), // 5 CPU：超过节点可分配 CPU 4！
 									v1.ResourceMemory: resource.MustParse("256Mi"),
 								},
 							},
@@ -3401,7 +3401,7 @@ func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T
 							VolumeSource: v1.VolumeSource{
 								EmptyDir: &v1.EmptyDirVolumeSource{
 									Medium:    v1.StorageMediumMemory,
-									SizeLimit: resource.NewQuantity(1024*1024*256, resource.BinarySI), // 256Mi target
+									SizeLimit: resource.NewQuantity(1024*1024*256, resource.BinarySI), // 目标为 256Mi
 								},
 							},
 						},
@@ -3409,7 +3409,7 @@ func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T
 				},
 			},
 			expectResizeAllocated:  false,
-			expectedAllocatedLimit: resource.NewQuantity(1024*1024*128, resource.BinarySI), // Stays at 128Mi
+			expectedAllocatedLimit: resource.NewQuantity(1024*1024*128, resource.BinarySI), // 保持 128Mi
 			expectedResizeConditions: []*v1.PodCondition{
 				{
 					Type:               v1.PodResizePending,
@@ -3478,7 +3478,7 @@ func makeAllocationManager(t *testing.T, runtime *containertest.FakeRuntime, all
 		logger,
 		statusManager,
 		func(_ context.Context, pod *v1.Pod) {
-			/* For testing, just mark the pod as having a pod sync triggered in an annotation. */
+			/* 测试时只需在注解中标记该 Pod 已触发同步。 */
 			if pod.Annotations == nil {
 				pod.Annotations = make(map[string]string)
 			}

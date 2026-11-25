@@ -66,6 +66,7 @@ func TestContainerMapCloneUnshared(t *testing.T) {
 	}
 }
 
+// TestContainerMap 验证容器映射的添加、查询与删除。
 func TestContainerMap(t *testing.T) {
 	testCases := []struct {
 		podUID         string

@@ -720,7 +720,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			podSELinuxOptions:           &incompleteSELinuxOpts,
 
 			expectError:          false,
-			expectedSELinuxLabel: completeSELinuxLabel, // kubelet files the missing SELinuxOptions fields
+			expectedSELinuxLabel: completeSELinuxLabel, // kubelet 补齐缺失的 SELinuxOptions 字段
 		},
 		{
 			name:                        "RWOP: ReadWriteOncePod no SELinuxOptions",
@@ -740,7 +740,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			podSELinuxOptions:           &completeSELinuxOpts,
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // The plugin does not support SELinux
+			expectedSELinuxLabel: "", // 插件不支持 SELinux
 		},
 		{
 			name:                        "RWOP: ReadWriteMany with plugin that supports SELinux mount",
@@ -759,7 +759,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			volumePluginSupportsSELinux: true,
 			volumeAccessMode:            v1.ReadWriteMany,
 			podSELinuxOptions:           &completeSELinuxOpts,
-			podChangePolicy:             nil, // emphasize the default value
+			podChangePolicy:             nil, // 强调默认值
 
 			expectError:          false,
 			expectedSELinuxLabel: "",
@@ -786,7 +786,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			podChangePolicy:             ptr.To(v1.SELinuxChangePolicyMountOption),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // still not supported for RWX
+			expectedSELinuxLabel: "", // RWX 仍不支持
 		},
 		{
 			name:                        "RWOP+ChangePolicy: ReadWriteOncePod with Recursive policy",
@@ -797,7 +797,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			podChangePolicy:             ptr.To(v1.SELinuxChangePolicyRecursive),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // "Recursive" is applied to RWOP volumes too
+			expectedSELinuxLabel: "", // "Recursive" 也应用于 RWOP 卷
 		},
 		{
 			name:                        "RWOP+ChangePolicy: ReadWriteOncePod with MountOption policy",
@@ -809,7 +809,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			podChangePolicy: ptr.To(v1.SELinuxChangePolicyMountOption),
 
 			expectError:          false,
-			expectedSELinuxLabel: completeSELinuxLabel, // the policy is ignored, but mounting with SELinux is the default
+			expectedSELinuxLabel: completeSELinuxLabel, // 忽略该策略，但默认启用 SELinux 挂载
 		},
 		{
 			name:                        "RWOP+ChangePolicy+Mount: ReadWriteMany with the default policy",
@@ -817,7 +817,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			volumePluginSupportsSELinux: true,
 			volumeAccessMode:            v1.ReadWriteMany,
 			podSELinuxOptions:           &completeSELinuxOpts,
-			podChangePolicy:             nil, // emphasize the default value
+			podChangePolicy:             nil, // 强调默认值
 
 			expectError:          false,
 			expectedSELinuxLabel: completeSELinuxLabel,
@@ -853,7 +853,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			podChangePolicy:             ptr.To(v1.SELinuxChangePolicyRecursive),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // "Recursive" is applied to RWOP volumes too
+			expectedSELinuxLabel: "", // "Recursive" 也应用于 RWOP 卷
 		},
 		{
 			name:                        "RWOP+ChangePolicy+Mount: ReadWriteOncePod with MountOption policy",
@@ -1020,7 +1020,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			secondPodSELinuxOptions: &completeSELinuxOpts,
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // RWX does not support SELinux mount (yet)
+			expectedSELinuxLabel: "", // RWX 尚不支持 SELinux 挂载
 		},
 		{
 			name:                    "RWOP+ChangePolicy: ReadWriteOncePod with the same SELinux options",
@@ -1042,7 +1042,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyRecursive),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // Recursive is applied to RWOP volumes
+			expectedSELinuxLabel: "", // Recursive 应用于 RWOP 卷
 		},
 		{
 			name:                    "RWOP+ChangePolicy: ReadWriteOncePod with the same SELinux options and conflicting policies",
@@ -1053,8 +1053,8 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			firstChangePolicy:       ptr.To(v1.SELinuxChangePolicyRecursive),
 			secondChangePolicy:      nil,
 
-			expectError:          true, // Conflicting policies with RWOP are an error
-			expectedSELinuxLabel: "",   // Recursive policy is applied to the first volume
+			expectError:          true, // RWOP 卷上策略冲突属于错误
+			expectedSELinuxLabel: "",   // Recursive 策略应用于第一个卷
 		},
 		{
 			name:                    "RWOP+ChangePolicy: ReadWriteMany with the same SELinux options with Recursive policy",
@@ -1066,7 +1066,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyRecursive),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // The policy is ignored, but no mount is the default
+			expectedSELinuxLabel: "", // 忽略该策略，且默认不挂载。
 		},
 		{
 			name:                    "RWOP+ChangePolicy: ReadWriteMany with the same SELinux options with MountOption policy",
@@ -1078,7 +1078,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyMountOption),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // The policy is ignored, but no mount is the default
+			expectedSELinuxLabel: "", // 忽略该策略，且默认不挂载。
 		},
 		{
 			name:                    "RWOP+ChangePolicy: ReadWriteMany with the same SELinux options with conflicting policies",
@@ -1090,7 +1090,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyRecursive),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // The policy is ignored, no error is raised
+			expectedSELinuxLabel: "", // 忽略该策略，不返回错误。
 		},
 		{
 			name:                    "RWOP+ChangePolicy: ReadWriteMany with conflicting SELinux options and Recursive policy",
@@ -1101,7 +1101,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			firstChangePolicy:       ptr.To(v1.SELinuxChangePolicyRecursive),
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyRecursive),
 
-			expectError:          false, // Conflicting SELinux options are allowed with recursive policy
+			expectError:          false, // recursive 策略允许 SELinux 选项冲突
 			expectedSELinuxLabel: "",
 		},
 		{
@@ -1114,7 +1114,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyMountOption),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // The policy is ignored, no error is raised
+			expectedSELinuxLabel: "", // 忽略该策略，不返回错误。
 		},
 		{
 			name:                    "RWOP+ChangePolicy+Mount: ReadWriteOncePod with the same SELinux options",
@@ -1136,7 +1136,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyRecursive),
 
 			expectError:          false,
-			expectedSELinuxLabel: "", // Recursive is applied to RWOP volumes
+			expectedSELinuxLabel: "", // Recursive 应用于 RWOP 卷
 		},
 		{
 			name:                    "RWOP+ChangePolicy+Mount: ReadWriteOncePod with the same SELinux options and conflicting policies",
@@ -1147,8 +1147,8 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			firstChangePolicy:       ptr.To(v1.SELinuxChangePolicyRecursive),
 			secondChangePolicy:      nil,
 
-			expectError:          true, // Conflicting policies with RWOP are an error
-			expectedSELinuxLabel: "",   // Recursive policy is applied to the first volume
+			expectError:          true, // RWOP 卷上策略冲突属于错误
+			expectedSELinuxLabel: "",   // Recursive 策略应用于第一个卷
 		},
 		{
 			name:                    "RWOP+ChangePolicy+Mount: ReadWriteMany with the same SELinux options with Recursive policy",
@@ -1180,7 +1180,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			volumeAccessMode:        v1.ReadWriteMany,
 			firstPodSELinuxOptions:  &completeSELinuxOpts,
 			secondPodSELinuxOptions: &completeSELinuxOpts,
-			firstChangePolicy:       nil, // nil should default to MountOption
+			firstChangePolicy:       nil, // nil 应默认为 MountOption
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyMountOption),
 
 			expectError:          false,
@@ -1196,7 +1196,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyRecursive),
 
 			expectError:          true,
-			expectedSELinuxLabel: completeSELinuxLabel, // MountOption policy is applied to the first volume
+			expectedSELinuxLabel: completeSELinuxLabel, // MountOption 策略应用于第一个卷
 		},
 		{
 			name:                    "RWOP+ChangePolicy+Mount: ReadWriteMany with conflicting SELinux options and Recursive policy",
@@ -1207,7 +1207,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			firstChangePolicy:       ptr.To(v1.SELinuxChangePolicyRecursive),
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyRecursive),
 
-			expectError:          false, // Conflicting SELinux options are allowed with recursive policy
+			expectError:          false, // recursive 策略允许 SELinux 选项冲突
 			expectedSELinuxLabel: "",
 		},
 		{
@@ -1219,8 +1219,8 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			firstChangePolicy:       ptr.To(v1.SELinuxChangePolicyMountOption),
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyMountOption),
 
-			expectError:          true,                 // SELinux options cannot conflict with MountOption policy
-			expectedSELinuxLabel: completeSELinuxLabel, // The SELinux label of the first pods is used
+			expectError:          true,                 // SELinux 选项不能与 MountOption 策略冲突
+			expectedSELinuxLabel: completeSELinuxLabel, // 使用第一个 Pod 的 SELinux 标签
 		},
 	}
 	for _, tc := range tests {

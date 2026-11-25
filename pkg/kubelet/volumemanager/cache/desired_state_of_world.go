@@ -606,7 +606,7 @@ func handleSELinuxMetricError(logger klog.Logger, err error, seLinuxSupported bo
 		return err
 	}
 
-	// This is not an error yet, but it will be when support for other access modes is added.
+	// 目前尚未支持其他访问模式，因此不返回错误；支持后会将其视为错误。
 	warningMetric.Add(1.0)
 	logger.V(4).Info("Please report this error in https://github.com/kubernetes/enhancements/issues/1710, together with full Pod yaml file", "err", err)
 	return nil

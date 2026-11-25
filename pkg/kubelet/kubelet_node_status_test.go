@@ -124,7 +124,7 @@ func generateImageTags() []string {
 	return tagList
 }
 
-// applyNodeStatusPatch 把 strategic merge patch 应用到原始 Node 上，返回更新后的 Node。
+// applyNodeStatusPatch 将战略合并补丁应用到原始 Node 上，返回更新后的 Node。
 func applyNodeStatusPatch(originalNode *v1.Node, patch []byte) (*v1.Node, error) {
 	original, err := json.Marshal(originalNode)
 	if err != nil {
@@ -232,7 +232,7 @@ func TestUpdateNewNodeStatus(t *testing.T) {
 			kubelet := testKubelet.kubelet
 			// 覆盖 kubelet 的镜像上报上限；镜像列表已按上限多构造一个以验证截断。
 			kubelet.nodeStatusMaxImages = tc.nodeStatusMaxImages
-			kubelet.kubeClient = nil // ensure only the heartbeat client is used
+			kubelet.kubeClient = nil // 确保只使用心跳客户端
 			kubelet.containerManager = &localCM{
 				ContainerManager: cm.NewStubContainerManager(),
 				allocatableReservation: v1.ResourceList{
@@ -365,8 +365,8 @@ func TestUpdateExistingNodeStatus(t *testing.T) {
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
-	kubelet.nodeStatusMaxImages = 5 // don't truncate the image list that gets constructed by hand for this test
-	kubelet.kubeClient = nil        // ensure only the heartbeat client is used
+	kubelet.nodeStatusMaxImages = 5 // 不要截断本测试手工构造的镜像列表
+	kubelet.kubeClient = nil        // 确保只使用心跳客户端
 	kubelet.containerManager = &localCM{
 		ContainerManager: cm.NewStubContainerManager(),
 		allocatableReservation: v1.ResourceList{
@@ -591,7 +591,7 @@ func TestUpdateExistingNodeStatusTimeout(t *testing.T) {
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
-	kubelet.kubeClient = nil // ensure only the heartbeat client is used
+	kubelet.kubeClient = nil // 确保只使用心跳客户端
 	kubelet.heartbeatClient, err = clientset.NewForConfig(config)
 	require.NoError(t, err)
 	kubelet.onRepeatedHeartbeatFailure = func() {
@@ -628,8 +628,8 @@ func TestUpdateNodeStatusWithRuntimeStateError(t *testing.T) {
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
-	kubelet.nodeStatusMaxImages = 5 // don't truncate the image list that gets constructed by hand for this test
-	kubelet.kubeClient = nil        // ensure only the heartbeat client is used
+	kubelet.nodeStatusMaxImages = 5 // 不要截断本测试手工构造的镜像列表
+	kubelet.kubeClient = nil        // 确保只使用心跳客户端
 	kubelet.containerManager = &localCM{
 		ContainerManager: cm.NewStubContainerManager(),
 		allocatableReservation: v1.ResourceList{
@@ -841,7 +841,7 @@ func TestUpdateNodeStatusError(t *testing.T) {
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
-	kubelet.kubeClient = nil // ensure only the heartbeat client is used
+	kubelet.kubeClient = nil // 确保只使用心跳客户端
 	// 没有与 kubelet 匹配的节点。
 	testKubelet.fakeKubeClient.ReactionChain = fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{}}).ReactionChain
 	require.Error(t, kubelet.updateNodeStatus(tCtx))
@@ -855,8 +855,8 @@ func TestUpdateNodeStatusWithLease(t *testing.T) {
 	defer testKubelet.Cleanup()
 	clock := testKubelet.fakeClock
 	kubelet := testKubelet.kubelet
-	kubelet.nodeStatusMaxImages = 5 // don't truncate the image list that gets constructed by hand for this test
-	kubelet.kubeClient = nil        // ensure only the heartbeat client is used
+	kubelet.nodeStatusMaxImages = 5 // 不要截断本测试手工构造的镜像列表
+	kubelet.kubeClient = nil        // 确保只使用心跳客户端
 	kubelet.containerManager = &localCM{
 		ContainerManager: cm.NewStubContainerManager(),
 		allocatableReservation: v1.ResourceList{
@@ -1148,7 +1148,7 @@ func TestUpdateNodeStatusAndVolumesInUseWithNodeLease(t *testing.T) {
 			defer testKubelet.Cleanup()
 
 			kubelet := testKubelet.kubelet
-			kubelet.kubeClient = nil // ensure only the heartbeat client is used
+			kubelet.kubeClient = nil // 确保只使用心跳客户端
 			kubelet.containerManager = &localCM{ContainerManager: cm.NewStubContainerManager()}
 			kubelet.lastStatusReportTime = kubelet.clock.Now()
 			kubelet.nodeStatusReportFrequency = time.Hour
@@ -1559,7 +1559,7 @@ func TestTryRegisterWithApiServer(t *testing.T) {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, utilversion.MustParse("1.32"))
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletRegistrationGetOnExistsOnly, true)
 			}
-			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled is a don't-care for this test */)
+			testKubelet := newTestKubelet(t, false /* 本测试不关心 controllerAttachDetachEnabled */)
 			defer testKubelet.Cleanup()
 			kubelet := testKubelet.kubelet
 			kubeClient := testKubelet.fakeKubeClient
@@ -1624,7 +1624,7 @@ func TestUpdateNewNodeStatusTooLargeReservation(t *testing.T) {
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
 	kubelet.nodeStatusMaxImages = nodeStatusMaxImages
-	kubelet.kubeClient = nil // ensure only the heartbeat client is used
+	kubelet.kubeClient = nil // 确保只使用心跳客户端
 	kubelet.containerManager = &localCM{
 		ContainerManager: cm.NewStubContainerManager(),
 		allocatableReservation: v1.ResourceList{
@@ -1687,7 +1687,7 @@ func TestUpdateNewNodeStatusTooLargeReservation(t *testing.T) {
 // 验证节点标签的默认值写入以及已有标签的保留。
 func TestUpdateDefaultLabels(t *testing.T) {
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
-	testKubelet.kubelet.kubeClient = nil // ensure only the heartbeat client is used
+	testKubelet.kubelet.kubeClient = nil // 确保只使用心跳客户端
 
 	cases := []struct {
 		name         string
@@ -2500,7 +2500,7 @@ func TestReconcileHugePageResource(t *testing.T) {
 func TestReconcileExtendedResource(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
-	testKubelet.kubelet.kubeClient = nil // ensure only the heartbeat client is used
+	testKubelet.kubelet.kubeClient = nil // 确保只使用心跳客户端
 	testKubelet.kubelet.containerManager = cm.NewStubContainerManagerWithExtendedResource(true /* shouldResetExtendedResourceCapacity*/)
 	testKubeletNoReset := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubeletNoReset.Cleanup()

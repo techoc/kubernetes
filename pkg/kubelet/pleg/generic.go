@@ -342,7 +342,7 @@ func (g *GenericPLEG) reconcilePodRecord(ctx context.Context, pid types.UID) {
 	_, reinspect := g.podsToReinspect.LoadAndDelete(pid)
 
 	if len(events) == 0 && !reinspect {
-		// Nothing else needed for this pod.
+		// 该 pod 无需其他处理。
 		return
 	}
 
@@ -515,9 +515,8 @@ func (g *GenericPLEG) updateCache(ctx context.Context, pod *kubecontainer.Pod, p
 	timestamp := pod.Timestamp
 	status, err := g.runtime.GetPodStatus(ctx, pod)
 	if err != nil {
-		// nolint:logcheck // Not using the result of klog.V inside the
-		// if branch is okay, we just use it to determine whether the
-		// additional "podStatus" key and its value should be added.
+		// nolint:logcheck // 在 if 分支内未使用 klog.V 的结果没有问题，
+		// 这里只用它判断是否应添加额外的 "podStatus" 键及其值。
 		if logger.V(6).Enabled() {
 			logger.Error(err, "PLEG: Write status", "pod", klog.KRef(pod.Namespace, pod.Name), "podStatus", status)
 		} else {

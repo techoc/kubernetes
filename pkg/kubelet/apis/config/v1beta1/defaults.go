@@ -24,7 +24,7 @@ import (
 	kruntime "k8s.io/apimachinery/pkg/runtime"
 	kubeletconfigv1beta1 "k8s.io/kubelet/config/v1beta1"
 
-	// TODO: Cut references to k8s.io/kubernetes, eventually there should be none from this package
+	// TODO: 逐步移除对 k8s.io/kubernetes 的引用，最终使本包不再依赖它。
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	logsapi "k8s.io/component-base/logs/api/v1"
 	"k8s.io/kubernetes/pkg/cluster/ports"
@@ -35,11 +35,16 @@ import (
 )
 
 const (
-	// TODO: Move these constants to k8s.io/kubelet/config/v1beta1 instead?
-	DefaultIPTablesMasqueradeBit   = 14
-	DefaultIPTablesDropBit         = 15
-	DefaultVolumePluginDir         = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-	DefaultPodLogsDir              = "/var/log/pods"
+	// TODO: 将这些常量移至 k8s.io/kubelet/config/v1beta1？
+	// DefaultIPTablesMasqueradeBit 是 iptables 伪装标记使用的默认位。
+	DefaultIPTablesMasqueradeBit = 14
+	// DefaultIPTablesDropBit 是 iptables 丢弃标记使用的默认位。
+	DefaultIPTablesDropBit = 15
+	// DefaultVolumePluginDir 是第三方卷插件可执行文件的默认目录。
+	DefaultVolumePluginDir = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+	// DefaultPodLogsDir 是 Pod 日志的默认目录。
+	DefaultPodLogsDir = "/var/log/pods"
+	// DefaultMemoryReservationPolicy 是默认内存预留策略。
 	DefaultMemoryReservationPolicy = kubeletconfigv1beta1.NoneMemoryReservationPolicy
 	// MaxContainerBackOff 是容器重启的最大退避周期，导出给 e2e 测试使用。
 	MaxContainerBackOff = 300 * time.Second
@@ -47,7 +52,7 @@ const (
 
 var (
 	zeroDuration = metav1.Duration{}
-	// TODO: Move these constants to k8s.io/kubelet/config/v1beta1 instead?
+	// TODO: 将这些常量移至 k8s.io/kubelet/config/v1beta1？
 	// 默认只强制 pods 的节点可分配资源；详见 Node Allocatable 文档
 	// https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable
 	DefaultNodeAllocatableEnforcement = []string{"pods"}
@@ -62,14 +67,9 @@ func addDefaultingFuncs(scheme *kruntime.Scheme) error {
 // nil 表示字段未显式设置；零值表示未配置，需要替换为默认值。
 func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfiguration) {
 
-	// TODO(lauralorenz): Reasses conditional feature gating on defaults. Here
-	// we 1) copy the gates to a local var, unilaterally merge it with the gate
-	// config while being defaulted. Alternatively we could unilaterally set the
-	// default value, later check the gate and wipe it if needed, like API
-	// strategy does for gate-disabled fields. Meanwhile, KubeletConfiguration
-	// is increasingly dynamic and the configured gates may change depending on
-	// when this is called. See also validation.go.
-	// 做法是：先复制全局门控并合并配置中的门控，再据此决定默认值。
+	// TODO(lauralorenz): 重新评估默认值中的条件特性门控：当前会复制门控并与配置中的门控合并。
+	// 也可以直接设置默认值，随后按 API 策略清除被禁用字段的值。
+	// KubeletConfiguration 动态性日益增强，调用时配置的门控可能变化；另见 validation.go。
 	// 使用局部副本，避免默认化过程修改全局门控状态。
 	localFeatureGate := utilfeature.DefaultMutableFeatureGate.DeepCopy()
 	if err := localFeatureGate.SetFromMap(obj.FeatureGates); err != nil {

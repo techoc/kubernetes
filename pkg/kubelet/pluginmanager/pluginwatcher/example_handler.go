@@ -39,7 +39,7 @@ type exampleHandler struct {
 	SupportedVersions []string
 	ExpectedNames     map[string]int
 
-	eventChans map[string]chan examplePluginEvent // map[pluginName]eventChan
+	eventChans map[string]chan examplePluginEvent // 映射结构为 map[pluginName]eventChan
 
 	m sync.Mutex
 

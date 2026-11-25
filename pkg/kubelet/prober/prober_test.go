@@ -166,50 +166,50 @@ func TestProbe(t *testing.T) {
 		expectCommand  []string
 		unsupported    bool
 	}{
-		{ // No probe
+		{ // 无探针
 			probe:          nil,
 			expectedResult: results.Success,
 		},
-		{ // No handler
+		{ // 无处理器
 			probe:          &v1.Probe{},
 			expectError:    true,
 			expectedResult: results.Failure,
 		},
-		{ // Probe fails
+		{ // 探测失败
 			probe:          execProbe,
 			execResult:     probe.Failure,
 			expectedResult: results.Failure,
 		},
-		{ // Probe succeeds
+		{ // 探测成功
 			probe:          execProbe,
 			execResult:     probe.Success,
 			expectedResult: results.Success,
 		},
-		{ // Probe result is warning
+		{ // 探测结果为警告
 			probe:          execProbe,
 			execResult:     probe.Warning,
 			expectedResult: results.Success,
 		},
-		{ // Probe result is unknown with no error
+		{ // 探测结果未知，且无错误
 			probe:          execProbe,
 			execResult:     probe.Unknown,
 			expectError:    false,
 			expectedResult: results.Failure,
 		},
-		{ // Probe result is unknown with an error
+		{ // 探测结果未知，且有错误
 			probe:          execProbe,
 			execError:      true,
 			expectError:    true,
 			execResult:     probe.Unknown,
 			expectedResult: results.Failure,
 		},
-		{ // Unsupported probe type
+		{ // 不支持的探针类型
 			probe:          nil,
 			expectedResult: results.Failure,
 			expectError:    true,
 			unsupported:    true,
 		},
-		{ // Probe arguments are passed through
+		{ // 探针参数被透传
 			probe: &v1.Probe{
 				ProbeHandler: v1.ProbeHandler{
 					Exec: &v1.ExecAction{
@@ -221,7 +221,7 @@ func TestProbe(t *testing.T) {
 			execResult:     probe.Success,
 			expectedResult: results.Success,
 		},
-		{ // Probe arguments are passed through
+		{ // 探针参数被透传
 			probe: &v1.Probe{
 				ProbeHandler: v1.ProbeHandler{
 					Exec: &v1.ExecAction{

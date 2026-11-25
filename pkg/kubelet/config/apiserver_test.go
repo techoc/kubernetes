@@ -63,7 +63,7 @@ func TestNewSourceApiserver_UpdatesAndMultiplePods(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "q"},
 		Spec:       v1.PodSpec{Containers: []v1.Container{{Image: "image/blah"}}}}
 
-	// 构造 fake API client 与 watch。
+	// 构造伪造的 API 客户端与 watch。
 	fakeWatch := watch.NewFake()
 	lw := fakePodLW{
 		listResp:  &v1.PodList{Items: []v1.Pod{*pod1v1}},
@@ -127,7 +127,7 @@ func TestNewSourceApiserver_UpdatesAndMultiplePods(t *testing.T) {
 	if !ok {
 		t.Errorf("Unable to read from channel when expected")
 	}
-	expected = createSourceUpdate() // Empty update.
+	expected = createSourceUpdate() // 空更新。
 	if !apiequality.Semantic.DeepEqual(expected, update) {
 		t.Errorf("Expected %#v, update %#v", expected, update)
 	}
@@ -190,7 +190,7 @@ func TestNewSourceApiserverInitialEmptySendsEmptyPodUpdate(t *testing.T) {
 	if !ok {
 		t.Errorf("Unable to read from channel when expected")
 	}
-	expected := createSourceUpdate() // Expect empty update.
+	expected := createSourceUpdate() // 预期收到空更新。
 	if !apiequality.Semantic.DeepEqual(expected, update) {
 		t.Errorf("Expected %#v; update %#v", expected, update)
 	}

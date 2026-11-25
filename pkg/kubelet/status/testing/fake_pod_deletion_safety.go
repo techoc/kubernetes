@@ -20,6 +20,7 @@ import v1 "k8s.io/api/core/v1"
 
 // FakePodDeletionSafetyProvider 是测试用的 PodDeletionSafetyProvider 假实现。
 type FakePodDeletionSafetyProvider struct {
+	// HasRunning 是 PodCouldHaveRunningContainers 的预设返回值。
 	HasRunning bool
 }
 

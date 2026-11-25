@@ -310,7 +310,7 @@ func NewKubeGenericRuntimeManager(
 	}
 
 	// 当前只支持完全匹配 kubeRuntimeAPIVersion 的运行时
-	// TODO: Runtime API machinery is under discussion at https://github.com/kubernetes/kubernetes/issues/28642
+	// TODO: Runtime API 机制仍在讨论中，见 https://github.com/kubernetes/kubernetes/issues/28642。
 	if typedVersion.Version != kubeRuntimeAPIVersion {
 		logger.Error(err, "This runtime api version is not supported",
 			"apiVersion", typedVersion.Version,
@@ -597,7 +597,7 @@ type containerToKillInfo struct {
 	// 说明容器为何将被杀死。
 	message string
 	// reason 是容器被杀原因更清晰的来源
-	// TODO: replace message with reason?
+	// TODO: 改用 reason 替代 message？
 	reason containerKillReason
 }
 
@@ -738,7 +738,7 @@ func podResourcesFromRequirements(requirements *v1.ResourceRequirements) resourc
 
 // computePodResizeAction 判断对指定容器做原地扩缩容需要哪些动作。
 // 返回是否保留（true）或重启（false）该容器。
-// TODO(vibansal): Make this function to be agnostic to whether it is dealing with a restartable init container or not (i.e. remove the argument `isRestartableInitContainer`).
+// TODO(vibansal)：让此函数不关心容器是否为可重启 init 容器，即移除 `isRestartableInitContainer` 参数。
 func (m *kubeGenericRuntimeManager) computePodResizeAction(ctx context.Context, pod *v1.Pod, containerIdx int, initContainer bool, kubeContainerStatus *kubecontainer.Status, changes *podActions) (keepContainer bool) {
 	logger := klog.FromContext(ctx)
 	// 未开启原地扩缩容或 pod 不可调整时，直接保留容器
@@ -1074,13 +1074,13 @@ func (m *kubeGenericRuntimeManager) doPodResizeAction(ctx context.Context, pod *
 		var err error
 		// 扩容时先扩 limit 再扩 request，保持 "requests <= limits"。
 		if newPodCgLimValue > currPodCgLimValue {
-			// TODO: Pass logger from context once contextual logging migration is complete
+			// TODO: 上下文日志迁移完成后，从 context 获取 logger。
 			if err = setPodCgroupConfig(klog.TODO(), rName, true); err != nil {
 				return err
 			}
 		}
 		if newPodCgReqValue > currPodCgReqValue {
-			// TODO: Pass logger from context once contextual logging migration is complete
+			// TODO: 上下文日志迁移完成后，从 context 获取 logger。
 			if err = setPodCgroupConfig(klog.TODO(), rName, false); err != nil {
 				return err
 			}
@@ -1094,13 +1094,13 @@ func (m *kubeGenericRuntimeManager) doPodResizeAction(ctx context.Context, pod *
 
 		// 缩容时先缩 request 再缩 limit，保持 "requests <= limits"。
 		if newPodCgReqValue < currPodCgReqValue {
-			// TODO: Pass logger from context once contextual logging migration is complete
+			// TODO: 上下文日志迁移完成后，从 context 获取 logger。
 			if err = setPodCgroupConfig(klog.TODO(), rName, false); err != nil {
 				return err
 			}
 		}
 		if newPodCgLimValue < currPodCgLimValue {
-			// TODO(#127825): Pass logger from context once contextual logging migration is complete
+			// TODO（#127825）：上下文日志迁移完成后，从 context 获取 logger。
 			if err = setPodCgroupConfig(klog.TODO(), rName, true); err != nil {
 				return err
 			}
@@ -1130,7 +1130,7 @@ func (m *kubeGenericRuntimeManager) doPodResizeAction(ctx context.Context, pod *
 	if len(podContainerChanges.ContainersToUpdate[v1.ResourceMemory]) > 0 || podContainerChanges.UpdatePodResources || podContainerChanges.UpdatePodLevelResources {
 		if podResources.Memory == nil {
 			// 未设置 pod 内存 limit 时沿用当前值，避免把它意外改成“无限制”。
-			// TODO(#128675): This does not support removing limits.
+			// TODO（#128675）：目前不支持移除限制。
 			podResources.Memory = currentPodMemoryConfig.Memory
 		}
 		if errResize := resizeContainers(v1.ResourceMemory, int64(*currentPodMemoryConfig.Memory), *podResources.Memory, 0, 0); errResize != nil {
@@ -1157,7 +1157,7 @@ func (m *kubeGenericRuntimeManager) doPodResizeAction(ctx context.Context, pod *
 		}
 
 		// 未设置 pod CPU limit 时沿用当前 CPUQuota，避免 pod limit 被意外更新。
-		// TODO(#128675): This does not support removing limits.
+		// TODO（#128675）：目前不支持移除限制。
 		if podResources.CPUQuota == nil {
 			podResources.CPUQuota = currentPodCPUConfig.CPUQuota
 		}
@@ -1409,8 +1409,7 @@ func (m *kubeGenericRuntimeManager) computePodActions(ctx context.Context, pod *
 	}
 
 	// 检查初始化进度。
-	// TODO: Remove this code path as logically it is the subset of the next
-	// code path.
+	// TODO: 从逻辑上看此分支是下一分支的子集，移除该分支。
 	hasInitialized := m.computeInitContainerActions(ctx, pod, podStatus, &changes)
 	if changes.KillPod || !hasInitialized {
 		// 初始化失败或仍在进行中，跳过对普通容器的检查。
@@ -1840,7 +1839,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(ctx context.Context, pod *v1.Pod, po
 			return err
 		}
 
-		// NOTE (aramase) podIPs 在单栈和双栈集群中都会被填充。这里只发送 podIPs。
+		// 注意（aramase）：podIPs 在单栈和双栈集群中都会被填充。这里只发送 podIPs。
 		msg, err = m.startContainer(ctx, podSandboxID, podSandboxConfig, spec, pod, podStatus, pullSecrets, podIP, podIPs, imageVolumes)
 		incrementImageVolumeMetrics(err, msg, spec.container, imageVolumes)
 		if err != nil {
@@ -2182,7 +2181,7 @@ func (m *kubeGenericRuntimeManager) GetPodStatus(ctx context.Context, pod *kubec
 	//	   好在这种概率极低。
 	//	2. 对于没有重启次数 label 的旧版本容器，只能假定其重启次数为 0。
 	// 无论如何，我们只承诺 "best-effort" 地报告重启次数，可以暂时忽略这些限制。
-	// TODO: move this comment to SyncPod.
+	// TODO: 将此注释移到 SyncPod。
 	podFullName := format.PodDesc(pod.Name, pod.Namespace, pod.ID)
 	logger = logger.WithValues("pod", podFullName)
 	ctx = klog.NewContext(ctx, logger)
@@ -2309,8 +2308,7 @@ func (m *kubeGenericRuntimeManager) GarbageCollect(ctx context.Context, gcPolicy
 // UpdatePodCIDR 是一个透传方法，把 kubelet 提供的 podCIDR 更新到 shim 的 runtimeConfig 中。
 func (m *kubeGenericRuntimeManager) UpdatePodCIDR(ctx context.Context, podCIDR string) error {
 	logger := klog.FromContext(ctx)
-	// TODO(#35531): do we really want to write a method on this manager for each
-	// field of the config?
+	// TODO（#35531）：是否真有必要为 config 的每个字段都在此管理器上写一个方法？
 	logger.Info("Updating runtime config through cri with podcidr", "CIDR", podCIDR)
 	return m.runtimeService.UpdateRuntimeConfig(ctx,
 		&runtimeapi.RuntimeConfig{

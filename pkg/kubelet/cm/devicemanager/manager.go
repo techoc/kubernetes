@@ -64,9 +64,9 @@ type ActivePodsFunc func() []*v1.Pod
 type ManagerImpl struct {
 	checkpointdir string
 
-	endpointStore map[string]map[string]*endpointInfo // resourceName -> socketPath -> endpointInfo
+	endpointStore map[string]map[string]*endpointInfo // resourceName -> socketPath -> endpointInfo 的映射。
 
-	endpoints map[string]endpointInfo // Key is ResourceName
+	endpoints map[string]endpointInfo // 键为 ResourceName。
 	mutex     sync.Mutex
 
 	server plugin.Server
@@ -1055,7 +1055,7 @@ func (m *ManagerImpl) callPreStartContainerIfNeeded(ctx context.Context, podUID,
 	if err != nil {
 		return fmt.Errorf("device plugin PreStartContainer rpc failed with err: %v", err)
 	}
-	// TODO: Add metrics support for init RPC
+	// TODO：为 init RPC 增加指标支持。
 	return nil
 }
 

@@ -149,6 +149,7 @@ type processedPods struct {
 	sync.RWMutex
 }
 
+// Run 持续填充 Pod 的期望卷状态；配置源就绪前也必须循环，避免就绪前已存在的 Pod 被遗漏。
 func (dswp *desiredStateOfWorldPopulator) Run(ctx context.Context, sourcesReady config.SourcesReady) {
 	// 等待配置源全部就绪后启动的那一轮循环完成，再据此设置 hasAddedPods。
 	logger := klog.FromContext(ctx)

@@ -97,43 +97,43 @@ func TestFindAndAddNewPods_WithDifferentConditions(t *testing.T) {
 		desc          string
 		hasAddedPods  bool
 		podState      string
-		expectedFound bool // Found pod is added to DSW
+		expectedFound bool // 找到的 Pod 会加入 DSW
 	}{
 		{
 			desc:          "HasAddedPods is false, ShouldPodRuntimeBeRemoved and ShouldPodContainerBeTerminating are both true",
 			hasAddedPods:  false,
 			podState:      Removed,
-			expectedFound: false, // Pod should not be added to DSW
+			expectedFound: false, // Pod 不应加入 DSW
 		},
 		{
 			desc:          "HasAddedPods is false, ShouldPodRuntimeBeRemoved is false, ShouldPodContainerBeTerminating is true",
 			hasAddedPods:  false,
 			podState:      Terminating,
-			expectedFound: true, // Pod should be added to DSW
+			expectedFound: true, // Pod 应加入 DSW
 		},
 		{
 			desc:          "HasAddedPods is false, other condition",
 			hasAddedPods:  false,
 			podState:      Other,
-			expectedFound: true, // Pod should be added to DSW
+			expectedFound: true, // Pod 应加入 DSW
 		},
 		{
 			desc:          "HasAddedPods is true, ShouldPodRuntimeBeRemoved is false, ShouldPodContainerBeTerminating is true",
 			hasAddedPods:  true,
 			podState:      Terminating,
-			expectedFound: false, // Pod should not be added to DSW
+			expectedFound: false, // Pod 不应加入 DSW
 		},
 		{
 			desc:          "HasAddedPods is true, ShouldPodRuntimeBeRemoved and ShouldPodContainerBeTerminating are both true",
 			hasAddedPods:  true,
 			podState:      Removed,
-			expectedFound: false, // Pod should not be added to DSW
+			expectedFound: false, // Pod 不应加入 DSW
 		},
 		{
 			desc:          "HasAddedPods is true, other condition",
 			hasAddedPods:  true,
 			podState:      Other,
-			expectedFound: true, // Pod should be added to DSW
+			expectedFound: true, // Pod 应加入 DSW
 		},
 	}
 
@@ -1201,7 +1201,7 @@ func TestCheckVolumeSELinux(t *testing.T) {
 			accessModes:             []v1.PersistentVolumeAccessMode{v1.ReadWriteMany},
 			newContainerSELinuxOpts: fullOpts,
 			pluginSupportsSELinux:   true,
-			expectedContext:         "", // RWX volumes don't support SELinux
+			expectedContext:         "", // RWX 卷不支持 SELinux
 		},
 		{
 			name:                       "RWX with plugin with SELinux with full context in pod and SELinuxMount feature enabled",
@@ -1216,7 +1216,7 @@ func TestCheckVolumeSELinux(t *testing.T) {
 			accessModes:             []v1.PersistentVolumeAccessMode{v1.ReadWriteOncePod},
 			newContainerSELinuxOpts: fullOpts,
 			pluginSupportsSELinux:   false,
-			expectedContext:         "", // plugin doesn't support SELinux
+			expectedContext:         "", // 插件不支持 SELinux
 		},
 		{
 			name:                    "RWOP with plugin with SELinux with no context in pod",

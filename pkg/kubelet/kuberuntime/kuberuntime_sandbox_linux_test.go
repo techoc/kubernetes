@@ -210,10 +210,10 @@ func TestApplySandboxResources(t *testing.T) {
 			},
 			draEnabled: true,
 			expectedResource: &runtimeapi.LinuxContainerResources{
-				MemoryLimitInBytes: 402653184, // 256Mi spec + 128Mi DRA = 384Mi
+				MemoryLimitInBytes: 402653184, // spec 256Mi + DRA 128Mi = 384Mi
 				CpuPeriod:          100000,
-				CpuQuota:           420000, // 4 CPUs spec + 0.2 CPU DRA = 4.2 CPUs
-				CpuShares:          2252,   // 2 CPUs spec + 0.2 CPU DRA = 2.2 CPUs
+				CpuQuota:           420000, // spec 4 CPU + DRA 0.2 CPU = 4.2 CPU
+				CpuShares:          2252,   // spec 2 CPU + DRA 0.2 CPU = 2.2 CPU
 				Unified:            map[string]string{"memory.oom.group": "1"},
 			},
 			expectedOverhead: &runtimeapi.LinuxContainerResources{},
@@ -250,10 +250,10 @@ func TestApplySandboxResources(t *testing.T) {
 			},
 			draEnabled: true,
 			expectedResource: &runtimeapi.LinuxContainerResources{
-				MemoryLimitInBytes: 0, // no container limits declared, DRA is not added to limits and the sandbox stays unlimited
+				MemoryLimitInBytes: 0, // 未声明容器 limits，不叠加 DRA，sandbox 保持无限制
 				CpuPeriod:          100000,
 				CpuQuota:           0,
-				CpuShares:          2252, // 2 CPUs spec + 0.2 CPU DRA = 2.2 CPUs
+				CpuShares:          2252, // spec 2 CPU + DRA 0.2 CPU = 2.2 CPU
 				Unified:            map[string]string{"memory.oom.group": "1"},
 			},
 			expectedOverhead: &runtimeapi.LinuxContainerResources{},
@@ -294,10 +294,10 @@ func TestApplySandboxResources(t *testing.T) {
 			},
 			draEnabled: false,
 			expectedResource: &runtimeapi.LinuxContainerResources{
-				MemoryLimitInBytes: 268435456, // DRA ignored, only 256Mi spec limit is used
+				MemoryLimitInBytes: 268435456, // 忽略 DRA，仅使用 spec 中的 256Mi limit
 				CpuPeriod:          100000,
-				CpuQuota:           400000, // DRA ignored, only 4 CPUs spec limit is used
-				CpuShares:          2048,   // DRA ignored, only 2 CPUs spec request is used
+				CpuQuota:           400000, // 忽略 DRA，仅使用 spec 中的 4 CPU limit
+				CpuShares:          2048,   // 忽略 DRA，仅使用 spec 中的 2 CPU request
 				Unified:            map[string]string{"memory.oom.group": "1"},
 			},
 			expectedOverhead: &runtimeapi.LinuxContainerResources{},
@@ -349,10 +349,10 @@ func TestApplySandboxResources(t *testing.T) {
 			draEnabled:               true,
 			podLevelResourcesEnabled: true,
 			expectedResource: &runtimeapi.LinuxContainerResources{
-				MemoryLimitInBytes: 1073741824, // Pod-level limit of 1Gi = 1073741824 bytes (overrides container limits and DRA)
+				MemoryLimitInBytes: 1073741824, // Pod 级 limit 1Gi = 1073741824 字节（覆盖容器 limits 和 DRA）
 				CpuPeriod:          100000,
-				CpuQuota:           800000, // Pod-level limit of 8 CPUs = 800000 quota
-				CpuShares:          4096,   // Pod-level request of 4 CPUs = 4096 shares
+				CpuQuota:           800000, // Pod 级 limit 8 CPU = quota 800000
+				CpuShares:          4096,   // Pod 级 request 4 CPU = shares 4096
 				Unified:            map[string]string{"memory.oom.group": "1"},
 			},
 			expectedOverhead: &runtimeapi.LinuxContainerResources{},
@@ -405,12 +405,12 @@ func TestApplySandboxResources(t *testing.T) {
 			},
 			draEnabled: true,
 			expectedResource: &runtimeapi.LinuxContainerResources{
-				// spec 256Mi + mapping 128Mi + perPod 100Mi + perContainer 50Mi = 534Mi = 560000000 bytes approx.
+				// 规格 256Mi + 映射 128Mi + perPod 100Mi + perContainer 50Mi = 534Mi，约为 560000000 字节。
 				MemoryLimitInBytes: (256 + 128 + 100 + 50) * 1024 * 1024,
 				CpuPeriod:          100000,
-				// limit: spec 4 + mapping 200m + perPod 100m + perContainer 50m = 4.35 CPUs
+				// 限制：spec 4 + mapping 200m + perPod 100m + perContainer 50m = 4.35 CPUs。
 				CpuQuota: 435000,
-				// request: spec 2 + mapping 200m + perPod 100m + perContainer 50m  = 2.35 CPUs
+				// 请求：spec 2 + mapping 200m + perPod 100m + perContainer 50m = 2.35 CPUs。
 				CpuShares: 2406,
 				Unified:   map[string]string{"memory.oom.group": "1"},
 			},

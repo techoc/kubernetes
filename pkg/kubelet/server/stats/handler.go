@@ -85,7 +85,9 @@ type Provider interface {
 
 // handler 是 stats 处理器，依赖 Provider 与 SummaryProvider。
 type handler struct {
-	provider        Provider
+	// provider 提供节点、Pod 与卷的原始统计。
+	provider Provider
+	// summaryProvider 生成对外返回的统计摘要。
 	summaryProvider SummaryProvider
 }
 

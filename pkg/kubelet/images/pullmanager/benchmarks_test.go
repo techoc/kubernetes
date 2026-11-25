@@ -149,7 +149,7 @@ func benchmarkAllPullAccessorsWrite(b *testing.B, writerRunner benchmarkedCheckF
 				pullManger := PullManager{
 					recordsAccessor:     namedInit.accessorInit(b),
 					imagePolicyEnforcer: AlwaysVerifyImagePullPolicy(),
-					imageService:        nil, // only needed during init, we're skipping that here
+					imageService:        nil, // 仅初始化时需要，这里跳过
 					intentAccessors:     NewStripedLockSet(int32(runtime.NumCPU())),
 					intentCounters:      &sync.Map{},
 					pulledAccessors:     NewStripedLockSet(int32(runtime.NumCPU())),
@@ -240,7 +240,7 @@ func benchmarkPullAccessorCacheRead(b *testing.B, bc recordAccessorBenchmark, be
 		pullManager := &PullManager{
 			recordsAccessor:     accessor,
 			imagePolicyEnforcer: AlwaysVerifyImagePullPolicy(),
-			imageService:        nil, // only needed during init, we're skipping that here
+			imageService:        nil, // 仅初始化时需要，这里跳过
 			intentAccessors:     NewStripedLockSet(int32(runtime.NumCPU())),
 			intentCounters:      &sync.Map{},
 			pulledAccessors:     NewStripedLockSet(int32(runtime.NumCPU())),

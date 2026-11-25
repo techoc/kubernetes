@@ -33,11 +33,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/helper"
 	schedulingapi "k8s.io/kubernetes/pkg/apis/scheduling"
 
-	// TODO: remove this import if
-	// api.Registry.GroupOrDie(v1.GroupName).GroupVersion.String() is changed
-	// to "v1"?
+	// TODO: 若 api.Registry.GroupOrDie(v1.GroupName).GroupVersion.String()
+	// 改为 "v1"，则移除此导入。
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
-	// Ensure that core apis are installed
+	// 确保已安装核心 API
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 	k8s_api_v1 "k8s.io/kubernetes/pkg/apis/core/v1"
 	"k8s.io/kubernetes/pkg/apis/core/validation"

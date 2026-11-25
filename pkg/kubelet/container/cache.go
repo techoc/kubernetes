@@ -149,7 +149,7 @@ func (c *cache) UpdateTime(timestamp time.Time) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.timestamp = &timestamp
-	// Notify all the subscribers if the condition is met.
+	// 条件满足时通知所有订阅者。
 	for id := range c.subscribers {
 		c.notify(id, *c.timestamp)
 	}

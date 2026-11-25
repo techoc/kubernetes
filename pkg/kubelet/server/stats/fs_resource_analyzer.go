@@ -113,8 +113,8 @@ func (s *fsResourceAnalyzer) GetPodVolumeStats(uid types.UID) (PodVolumeStats, b
 	cache := s.cachedVolumeStats.Load().(statCache)
 	statCalc, found := cache[uid]
 	if !found {
-		// TODO: Differentiate between stats being empty
-		// See issue #20679
+		// TODO: 区分统计结果为空与统计尚未就绪。
+		// 参见 issue #20679。
 		return PodVolumeStats{}, false
 	}
 	return statCalc.GetLatest()

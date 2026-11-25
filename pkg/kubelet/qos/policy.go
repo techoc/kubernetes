@@ -28,9 +28,9 @@ import (
 )
 
 const (
-	// KubeletOOMScoreAdj is the OOM score adjustment for Kubelet
+	// KubeletOOMScoreAdj 是 Kubelet 的 OOM 分数调整值。
 	KubeletOOMScoreAdj int = -999
-	// KubeProxyOOMScoreAdj is the OOM score adjustment for kube-proxy
+	// KubeProxyOOMScoreAdj 是 kube-proxy 的 OOM 分数调整值。
 	KubeProxyOOMScoreAdj  int = -999
 	guaranteedOOMScoreAdj int = -997
 	besteffortOOMScoreAdj int = 1000
@@ -67,8 +67,7 @@ func GetContainerOOMScoreAdjust(pod *v1.Pod, container *v1.Container, memoryCapa
 	// https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/2837-pod-level-resource-spec/README.md#oom-score-adjustment
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources) &&
 		resourcehelper.IsPodLevelRequestsSet(pod) {
-		// TODO(ndixita): Refactor to use this formula in all cases, as
-		// remainingReqPerContainer will be 0 when pod-level resources are not set.
+		// TODO(ndixita): 重构为所有情况都使用该公式；未设置 Pod 级资源时 remainingReqPerContainer 为 0。
 		remainingReqPerContainer = remainingPodMemReqPerContainer(pod)
 		oomScoreAdjust = 1000 - (1000 * (containerMemReq + remainingReqPerContainer) / memoryCapacity)
 	} else {
@@ -81,15 +80,11 @@ func GetContainerOOMScoreAdjust(pod *v1.Pod, container *v1.Container, memoryCapa
 		// 先找出普通容器中最小的内存请求。
 		minMemoryRequest := minRegularContainerMemory(pod)
 
-		// When calculating minMemoryOomScoreAdjust for sidecar containers with PodLevelResources enabled,
-		// we add the per-container share of unallocated pod memory requests to the minimum memory request.
-		// This ensures the OOM score adjustment i.e. minMemoryOomScoreAdjust
-		// calculation remains consistent
-		//  with how we handle pod-level memory requests for regular containers.
+		// 启用 PodLevelResources 时，计算边车容器的 minMemoryOomScoreAdjust
+		// 还要加上未分配 Pod 内存请求的每容器分摊份额，确保其计算
+		// 与普通容器的 Pod 级内存请求处理方式一致。
 		if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources) &&
 			resourcehelper.IsPodLevelRequestsSet(pod) {
-			// 启用 PodLevelResources 时，计算边车的 minMemoryOomScoreAdjust 也要加上
-			// 未分配 Pod 内存的每容器分摊份额，保持与普通容器处理方式一致。
 			minMemoryRequest += remainingReqPerContainer
 		}
 		// 边车容器的 OOM 分数不得高于普通容器中的最低者。
@@ -137,7 +132,7 @@ func getEffectiveContainerMemoryRequest(pod *v1.Pod, container *v1.Container) in
 	var draMemoryShare int64
 	// 只统计引用了该容器的 claim。
 	for _, claimStatus := range pod.Status.NodeAllocatableResourceClaimStatuses {
-		// Check if this container references the claim
+		// 判断此容器是否引用了该 claim
 		if !slices.Contains(claimStatus.Containers, container.Name) {
 			continue
 		}

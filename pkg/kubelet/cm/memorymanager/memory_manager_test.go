@@ -178,7 +178,7 @@ func getPod(podUID string, containerName string, requirements *v1.ResourceRequir
 }
 
 // getPodWithPodLevelResources 在 getPod 基础上补充 pod 级 resources，
-// 用于覆盖 pod-level resources 特性下的内存分配。
+// 用于覆盖 Pod 级资源特性下的内存分配。
 func getPodWithPodLevelResources(podUID string, podRequirements *v1.ResourceRequirements, containerName string, containerRequirements *v1.ResourceRequirements) *v1.Pod {
 	pod := getPod(podUID, containerName, containerRequirements)
 	pod.Spec.Resources = podRequirements

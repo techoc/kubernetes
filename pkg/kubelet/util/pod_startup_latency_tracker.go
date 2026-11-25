@@ -308,7 +308,7 @@ func (p *basicPodStartupLatencyTracker) RecordStatusUpdated(logger klog.Logger, 
 }
 
 // hasPodStartedSLO 检查 Pod 的每个容器是否都至少启动过一次。
-// 该判断对应 Pod startup latency SLI 的定义，参见
+// 该判断对应 Pod 启动延迟 SLI 的定义，参见
 // https://github.com/kubernetes/community/blob/master/sig-scalability/slos/pod_startup_latency.md
 func hasPodStartedSLO(pod *v1.Pod) bool {
 	for _, cs := range pod.Status.ContainerStatuses {

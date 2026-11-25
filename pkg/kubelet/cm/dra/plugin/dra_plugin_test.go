@@ -57,6 +57,7 @@ type fakeGRPCServer struct {
 var _ drapbv1.DRAPluginServer = &fakeGRPCServer{}
 var _ fakeGRPCServerInterface = &fakeGRPCServer{}
 
+// NodePrepareResources 返回包含固定测试设备的准备结果。
 func (f *fakeGRPCServer) NodePrepareResources(ctx context.Context, in *drapbv1.NodePrepareResourcesRequest) (*drapbv1.NodePrepareResourcesResponse, error) {
 	return &drapbv1.NodePrepareResourcesResponse{Claims: map[string]*drapbv1.NodePrepareResourceResponse{"claim-uid": {
 		Devices: []*drapbv1.Device{
@@ -68,11 +69,13 @@ func (f *fakeGRPCServer) NodePrepareResources(ctx context.Context, in *drapbv1.N
 	}}}, nil
 }
 
+// NodeUnprepareResources 返回空的释放结果。
 func (f *fakeGRPCServer) NodeUnprepareResources(ctx context.Context, in *drapbv1.NodeUnprepareResourcesRequest) (*drapbv1.NodeUnprepareResourcesResponse, error) {
 
 	return &drapbv1.NodeUnprepareResourcesResponse{}, nil
 }
 
+// NodeWatchResources 发送一条健康的设备状态后结束流。
 func (f *fakeGRPCServer) NodeWatchResources(in *drahealthv1.NodeWatchResourcesRequest, srv drahealthv1.DRAResourceHealth_NodeWatchResourcesServer) error {
 	resp := &drahealthv1.NodeWatchResourcesResponse{
 		Devices: []*drahealthv1.DeviceHealth{
@@ -142,7 +145,7 @@ func setupGRPCServerWithFake(ctx context.Context, service, addr string, fakeGRPC
 
 	teardown := func() {
 		cancel()
-		wg.Wait() // wait for Serve() to finish
+		wg.Wait() // 等待 Serve() 完成。
 	}
 
 	return teardown, nil
@@ -505,6 +508,7 @@ type timeoutFakeGRPCServer struct {
 	done    chan struct{}
 }
 
+// NodePrepareResources 阻塞到测试解除阻塞，模拟客户端超时。
 func (f *timeoutFakeGRPCServer) NodePrepareResources(ctx context.Context, in *drapbv1.NodePrepareResourcesRequest) (*drapbv1.NodePrepareResourcesResponse, error) {
 	defer close(f.done)
 	now := time.Now()
@@ -581,6 +585,7 @@ type fakeV1Alpha1HealthServer struct {
 	drahealthv1alpha1.UnimplementedDRAResourceHealthServer
 }
 
+// NodeWatchResources 发送一条不健康的设备状态后结束流。
 func (f *fakeV1Alpha1HealthServer) NodeWatchResources(in *drahealthv1alpha1.NodeWatchResourcesRequest, srv drahealthv1alpha1.DRAResourceHealth_NodeWatchResourcesServer) error {
 	resp := &drahealthv1alpha1.NodeWatchResourcesResponse{
 		Devices: []*drahealthv1alpha1.DeviceHealth{

@@ -479,7 +479,7 @@ func TestUnknownStateContainerGC(t *testing.T) {
 	fakeRuntime, _, m, err := createTestRuntimeManager(tCtx)
 	assert.NoError(t, err)
 
-	// podStateProvider := m.containerGC.podStateProvider.(*fakePodStateProvider)
+	// 备选构造方式：podStateProvider := m.containerGC.podStateProvider.(*fakePodStateProvider)
 	defaultGCPolicy := kubecontainer.GCPolicy{MinAge: time.Hour, MaxPerPodContainer: 0, MaxContainers: 0}
 
 	fakeContainers := makeFakeContainers(tCtx, m, []containerTemplate{

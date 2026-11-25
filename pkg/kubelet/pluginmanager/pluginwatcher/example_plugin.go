@@ -38,8 +38,8 @@ import (
 type examplePlugin struct {
 	grpcServer         *grpc.Server
 	wg                 sync.WaitGroup
-	registrationStatus chan registerapi.RegistrationStatus // for testing
-	endpoint           string                              // for testing
+	registrationStatus chan registerapi.RegistrationStatus // 用于测试
+	endpoint           string                              // 用于测试
 	pluginName         string
 	pluginType         string
 	versions           []string
@@ -163,7 +163,7 @@ func (e *examplePlugin) Serve(ctx context.Context, services ...string) error {
 	e.wg.Add(1)
 	go func() {
 		defer e.wg.Done()
-		// Blocking call to accept incoming connections.
+		// 阻塞等待并接受传入连接。
 		if err := e.grpcServer.Serve(lis); err != nil {
 			logger.Error(err, "Example server stopped serving")
 		}

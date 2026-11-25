@@ -258,6 +258,7 @@ type CPUSortingStrategy string
 const (
 	// 两种排序策略的取值。
 	CPUSortingStrategyPacked CPUSortingStrategy = "packed"
+	// CPUSortingStrategySpread 表示优先跨核分散 CPU。
 	CPUSortingStrategySpread CPUSortingStrategy = "spread"
 )
 
@@ -680,7 +681,7 @@ func takeByTopologyNUMAPacked(logger klog.Logger, topo *topology.CPUTopology, av
 		return cpuset.New(), fmt.Errorf("not enough cpus available to satisfy request: requested=%d, available=%d", numCPUs, availableCPUs.Size())
 	}
 
-	// 算法：拓扑感知的最佳适配（topology-aware best-fit）。
+	// 算法：拓扑感知的最佳适配。
 	// 1. 需求超过一个 NUMA 节点或 socket 时，优先整块认领。
 	//    NUMA 节点包含多个 socket 时先取 NUMA 节点，
 	//    否则先取 socket。

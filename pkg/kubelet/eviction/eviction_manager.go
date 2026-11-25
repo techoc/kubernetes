@@ -582,7 +582,7 @@ func (m *managerImpl) podEphemeralStorageLimitEviction(logger klog.Logger, podSt
 		return false
 	}
 
-	// pod stats API 汇总了临时存储用量（容器、emptyDir、宿主机文件如 etc-hosts、日志等）
+	// Pod 统计 API 汇总临时存储用量，包括容器、emptyDir 以及 etc-hosts、日志等宿主机文件。
 	podEphemeralStorageTotalUsage := &resource.Quantity{}
 	if podStats.EphemeralStorage != nil && podStats.EphemeralStorage.UsedBytes != nil {
 		podEphemeralStorageTotalUsage = resource.NewQuantity(int64(*podStats.EphemeralStorage.UsedBytes), resource.BinarySI)

@@ -60,7 +60,7 @@ const (
 // TestNodeAddress 验证 NodeAddress setter 在不同 nodeIP、云厂商、IPv4/IPv6
 // 与单双栈组合下生成的地址列表，以及 provided-node-ip 注解的写入/清理。
 //
-// TODO(mtaufen): below is ported from the old kubelet_node_status_test.go code, potentially add more test coverage for NodeAddress setter in future
+// TODO(mtaufen): 以下代码移植自旧的 kubelet_node_status_test.go，未来可补充更多 NodeAddress setter 测试。
 func TestNodeAddress(t *testing.T) {
 	existingNodeAddress := v1.NodeAddress{Address: "10.1.1.2"}
 	cases := []struct {
@@ -340,7 +340,7 @@ func TestNodeAddress(t *testing.T) {
 			if err != nil && !testCase.shouldError {
 				t.Fatalf("unexpected error: %v", err)
 			} else if err != nil && testCase.shouldError {
-				// expected an error, and got one, so just return early here
+				// 预期会出错且确实出错时，直接提前返回。
 				return
 			}
 
@@ -1239,9 +1239,8 @@ func TestReadyCondition(t *testing.T) {
 			desc:             "new, ready",
 			node:             withCapacity.DeepCopy(),
 			expectConditions: []v1.NodeCondition{*makeReadyCondition(true, "kubelet is posting ready status", now, now)},
-			// TODO(mtaufen): The current behavior is that we don't send an event for the initial NodeReady condition,
-			// the reason for this is unclear, so we may want to actually send an event, and change these test cases
-			// to ensure an event is sent.
+			// TODO(mtaufen): 当前不会为初始 NodeReady 条件发送事件，原因尚不明确。
+			// 可以考虑实际发送事件，并调整这些测试用例以验证事件已发送。
 		},
 		{
 			desc: "new, ready: soft requirement warning",
@@ -1850,7 +1849,7 @@ func TestDaemonEndpoints(t *testing.T) {
 	}
 }
 
-// Test Helpers:
+// 测试辅助函数：
 
 // testEvent 记录 setter 在测试中发出的事件，供断言事件类型与内容。
 type testEvent struct {

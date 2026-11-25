@@ -373,7 +373,7 @@ func (m *manager) UpdatePodStatus(ctx context.Context, pod *v1.Pod, podStatus *v
 			// 检查是否存在尚未执行过结果的就绪探针。
 			w, exists := m.getWorker(pod.UID, c.Name, readiness)
 			// 无就绪探针的容器始终视为就绪。
-			ready = !exists // no readinessProbe -> always ready
+			ready = !exists // 未设置 readinessProbe -> 始终就绪
 			if exists {
 				// 主动触发一次就绪探针的立即执行，以便尽快刷新 Ready 状态。
 				select {
@@ -432,7 +432,7 @@ func (m *manager) UpdatePodStatus(ctx context.Context, pod *v1.Pod, podStatus *v
 			// 检查是否存在尚未执行过结果的就绪探针。
 			w, exists := m.getWorker(pod.UID, c.Name, readiness)
 			// 无就绪探针的容器始终视为就绪。
-			ready = !exists // no readinessProbe -> always ready
+			ready = !exists // 未设置 readinessProbe -> 始终就绪
 			if exists {
 				// 主动触发一次就绪探针的立即执行，以便尽快刷新 Ready 状态。
 				select {

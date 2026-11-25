@@ -174,7 +174,7 @@ func getAllowlistImagePattern(pattern string) (string, bool, error) {
 		if len(trimmedPattern) == 1 {
 			return "", false, fmt.Errorf("at least registry hostname is required")
 		}
-	} else { // not a wildcard
+	} else { // 非通配模式
 		// 非通配模式必须是合法镜像名，且不能带 tag 或 digest。
 		image, err := trimImageTagDigest(trimmedPattern)
 		if err != nil {

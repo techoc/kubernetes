@@ -210,8 +210,8 @@ func MachineInfo(nodeName string,
 		var devicePluginCapacity v1.ResourceList
 		var removedDevicePlugins []string
 
-		// TODO: Post NotReady if we cannot get MachineInfo from cAdvisor. This needs to start
-		// cAdvisor locally, e.g. for test-cmd.sh, and in integration test.
+		// TODO: 无法从 cAdvisor 获取 MachineInfo 时上报 NotReady。这需要在本地启动
+		// cAdvisor，例如 test-cmd.sh 和集成测试。
 		info, err := machineInfoFunc()
 		if err != nil {
 			node.Status.Capacity[v1.ResourceCPU] = *resource.NewMilliQuantity(0, resource.DecimalSI)
@@ -237,8 +237,8 @@ func MachineInfo(nodeName string,
 
 			if node.Status.NodeInfo.BootID != "" &&
 				node.Status.NodeInfo.BootID != info.BootID {
-				// TODO: This requires a transaction, either both node status is updated
-				// and event is recorded or neither should happen, see issue #6055.
+				// TODO: 这两步需要具备事务性：要么同时更新节点状态并记录事件，
+				// 要么两者都不执行。参见 issue #6055。
 				//
 				// 只上报一次重启事件：recordEventFunc 会把事件入队，可能产生大量重复重启事件。
 				rebootEvent.Do(func() {
@@ -248,8 +248,8 @@ func MachineInfo(nodeName string,
 			}
 			node.Status.NodeInfo.BootID = info.BootID
 
-			// TODO: all the node resources should use ContainerManager.GetCapacity instead of deriving the
-			// capacity for every node status request
+			// TODO: 所有节点资源都应使用 ContainerManager.GetCapacity，
+			// 而不是在每次请求节点状态时重新计算容量。
 			initialCapacity := capacityFunc(logger, localStorageCapacityIsolation)
 			if initialCapacity != nil {
 				if v, exists := initialCapacity[v1.ResourceEphemeralStorage]; exists {

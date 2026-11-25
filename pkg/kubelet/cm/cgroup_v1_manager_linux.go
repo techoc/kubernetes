@@ -96,7 +96,7 @@ func (c *cgroupV1impl) MemoryUsage(name CgroupName) (int64, error) {
 	var path, file string
 	// 内存用量只能从 memory 控制器的挂载点读取。
 	mp, ok := c.subsystems.MountPoints["memory"]
-	if !ok { // should not happen
+	if !ok { // 不应发生。
 		return -1, errors.New("no cgroup v1 mountpoint for memory controller found")
 	}
 	path = mp + "/" + c.Name(name)

@@ -84,7 +84,7 @@ type RuntimeHelper interface {
 }
 
 // ShouldContainerBeRestarted 判断容器是否需要重启。
-// TODO(yifan): Think about how to refactor this.
+// TODO(yifan): 考虑如何重构此函数。
 func ShouldContainerBeRestarted(logger klog.Logger, container *v1.Container, pod *v1.Pod, podStatus *PodStatus) bool {
 	// pod 一旦被标记删除，就不应再重启，避免删除过程中被重新拉起。
 	if pod.DeletionTimestamp != nil {
@@ -231,7 +231,7 @@ func v1EnvVarsToMap(envs []v1.EnvVar) map[string]string {
 // ExpandContainerCommandOnlyStatic 仅用容器环境定义中的静态变量值做替换，
 // 不处理 valueFrom 引用。未绑定的变量既不会展开也不会被替换为空串，
 // 即 "echo $(MISSING) => echo $(MISSING)"。
-// TODO: callers should use ExpandContainerCommandAndArgs with a fully resolved list of environment.
+// TODO: 调用方应使用 ExpandContainerCommandAndArgs，并传入已完整解析的环境变量列表。
 func ExpandContainerCommandOnlyStatic(containerCommand []string, envs []v1.EnvVar) (command []string) {
 	mapping := expansion.MappingFuncFor(v1EnvVarsToMap(envs))
 	// 逐个展开命令参数；空命令直接返回空切片。
@@ -345,7 +345,7 @@ func IsHostNetworkPod(pod *v1.Pod) bool {
 }
 
 // ConvertPodStatusToRunningPod 根据 PodStatus 和容器运行时名称构造 Pod。
-// TODO(random-liu): Convert PodStatus to running Pod, should be deprecated soon
+// TODO(random-liu): 把 PodStatus 转换为运行中的 Pod；该函数即将废弃。
 func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod {
 	runningPod := Pod{
 		ID:        podStatus.ID,
@@ -383,7 +383,7 @@ func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod 
 // SandboxToContainerState 把 runtimeapi.PodSandboxState 转换为 kubecontainer.State。
 // 之所以需要转换，是为了把 sandbox 当作 kubecontainer.Container 返回，
 // 避免对 PLEG 做大改动。
-// TODO: Remove this once it becomes obsolete.
+// TODO: 一旦不再需要就移除此函数。
 func SandboxToContainerState(state runtimeapi.PodSandboxState) State {
 	switch state {
 	case runtimeapi.PodSandboxState_SANDBOX_READY:

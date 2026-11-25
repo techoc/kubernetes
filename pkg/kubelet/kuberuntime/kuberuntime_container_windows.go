@@ -43,7 +43,6 @@ func (m *kubeGenericRuntimeManager) applyPlatformSpecificContainerConfig(ctx con
 	return nil
 }
 
-// generateContainerResources generates platform specific (windows) container resources config for runtime
 // generateContainerResources 生成 Windows 平台的容器资源配置。
 func (m *kubeGenericRuntimeManager) generateContainerResources(ctx context.Context, pod *v1.Pod, container *v1.Container) *runtimeapi.ContainerResources {
 	return &runtimeapi.ContainerResources{
@@ -51,7 +50,6 @@ func (m *kubeGenericRuntimeManager) generateContainerResources(ctx context.Conte
 	}
 }
 
-// generateUpdatePodSandboxResourcesRequest generates platform specific podsandox resources config for runtime
 // generateUpdatePodSandboxResourcesRequest 在 Windows 上返回 nil（不支持该请求）。
 func (m *kubeGenericRuntimeManager) generateUpdatePodSandboxResourcesRequest(sandboxID string, pod *v1.Pod, podResources *cm.ResourceConfig) *runtimeapi.UpdatePodSandboxResourcesRequest {
 	return nil
@@ -77,37 +75,19 @@ func (m *kubeGenericRuntimeManager) calculateWindowsResources(ctx context.Contex
 		// 更符合用户意图；早期曾设置 CpuWeights，结果导致 limits 失效。
 		//
 		// 该机制分三部分：
-		// 一、Windows 内核：cpuMaximum 的文档见
-		// https://docs.microsoft.com/en-us/virtualization/windowscontainers/manage-containers/resource-controls，
-		// 取值范围与 CPU 数的关系见
-		// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_cpu_rate_control_information；
-		// 进程隔离开启 JOB_OBJECT_CPU_RATE_CONTROL_ENABLE，可设为 WEIGHT_BASED 或 HARD_CAP，二者互斥。
-		// 二、Docker：若同时传入 CpuWeight 与 CpuMaximum，Docker 会启用 WEIGHT_BASED 并忽略 CpuMaximum。
-		// 方案 a：设置 HostConfig.CpuPercent，单位为整百分比，分辨率随核数变化；
-		// 方案 b：设置 HostConfig.NanoCpus（10e-9 CPU 单位），Moby 会缩放到 1-10000，分辨率更高。
-		// 三、CRI 与 containerd：kubelet 在 Linux 直接写 cgroup，Windows 上需经 CRI 传递；
-		// cpu_maximum 字段范围为百分数*100（1-10000）；若同时设置 CpuWeight 与 CpuMaximum，containerd 会报错。
-
-		// There are 3 parts to how this works:
-		// Part one - Windows kernel
-		//   cpuMaximum is documented at https://docs.microsoft.com/en-us/virtualization/windowscontainers/manage-containers/resource-controls
-		//   the range and how it relates to number of CPUs is at https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_cpu_rate_control_information
-		//   For process isolation, these are applied to the job object setting JOB_OBJECT_CPU_RATE_CONTROL_ENABLE, which can be set to either
-		//   JOB_OBJECT_CPU_RATE_CONTROL_WEIGHT_BASED or JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP. This is why the settings are mutually exclusive.
-		// Part two - Docker (doc: https://docs.docker.com/engine/api/v1.30)
-		//   If both CpuWeight and CpuMaximum are passed to Docker, then it sets
-		//   JOB_OBJECT_CPU_RATE_CONTROL_ENABLE = JOB_OBJECT_CPU_RATE_CONTROL_WEIGHT_BASED ignoring CpuMaximum.
-		//   Option a: Set HostConfig.CpuPercent. The units are whole percent of the total CPU capacity of the system, meaning the resolution
-		//      is different based on the number of cores.
-		//   Option b: Set HostConfig.NanoCpus integer <int64> - CPU quota in units of 10e-9 CPUs. Moby scales this to the Windows job object
-		//      resolution of 1-10000, so it's higher resolution than option a.
-		//      src: https://github.com/moby/moby/blob/10866714412aea1bb587d1ad14b2ce1ba4cf4308/daemon/oci_windows.go#L426
-		// Part three - CRI & ContainerD's implementation
-		//   The kubelet sets these directly on CGroups in Linux, but needs to pass them across CRI on Windows.
-		//   There is an existing cpu_maximum field, with a range of percent * 100, so 1-10000. This is different from Docker, but consistent with OCI
-		//   https://github.com/kubernetes/kubernetes/blob/56d1c3b96d0a544130a82caad33dd57629b8a7f8/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto#L681-L682
-		//   https://github.com/opencontainers/runtime-spec/blob/ad53dcdc39f1f7f7472b10aa0a45648fe4865496/config-windows.md#cpu
-		//   If both CpuWeight and CpuMaximum are set - ContainerD catches this invalid case and returns an error instead.
+		// 一、Windows 内核：进程隔离通过 JOB_OBJECT_CPU_RATE_CONTROL_ENABLE 应用 CPU 限制，
+		// WEIGHT_BASED 与 HARD_CAP 互斥。cpuMaximum 的取值范围还与 CPU 数相关。
+		// https://docs.microsoft.com/en-us/virtualization/windowscontainers/manage-containers/resource-controls
+		// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_cpu_rate_control_information
+		// 二、Docker：同时传入 CpuWeight 与 CpuMaximum 时会启用 WEIGHT_BASED 并忽略 CpuMaximum。
+		// 方案一的 HostConfig.CpuPercent 使用整百分比，分辨率随核数变化；方案二的
+		// HostConfig.NanoCpus 使用 10e-9 CPU 单位，Moby 会缩放到 1-10000，分辨率更高。
+		// https://docs.docker.com/engine/api/v1.30
+		// https://github.com/moby/moby/blob/10866714412aea1bb587d1ad14b2ce1ba4cf4308/daemon/oci_windows.go#L426
+		// 三、CRI 与 containerd：Linux 直接写 cgroup，Windows 需经 CRI 传递。
+		// cpu_maximum 范围为百分数*100（1-10000）；同时设置 CpuWeight 与 CpuMaximum 会被 containerd 拒绝。
+		// https://github.com/kubernetes/kubernetes/blob/56d1c3b96d0a544130a82caad33dd57629b8a7f8/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto#L681-L682
+		// https://github.com/opencontainers/runtime-spec/blob/ad53dcdc39f1f7f7472b10aa0a45648fe4865496/config-windows.md#cpu
 		// 把 CPU limit 换算为 Windows 的 1-10000 范围。
 		resources.CpuMaximum = calculateCPUMaximum(cpuLimit, int64(winstats.ProcessorCount()))
 	}
