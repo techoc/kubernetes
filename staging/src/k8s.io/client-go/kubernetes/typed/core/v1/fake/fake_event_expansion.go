@@ -92,8 +92,8 @@ func (c *fakeEvents) PatchWithEventNamespace(event *v1.Event, data []byte) (*v1.
 // PatchWithEventNamespaceWithContext patches an existing event. Returns the copy of the event the server returns, or an error.
 // TODO: Should take a PatchType as an argument probably.
 func (c *fakeEvents) PatchWithEventNamespaceWithContext(_ context.Context, event *v1.Event, data []byte) (*v1.Event, error) {
-	// TODO: Should be configurable to support additional patch strategies.
-	// fake 使用战略合并补丁，与真实客户端对 Event 的默认补丁策略一致。
+	// TODO: 应可配置以支持更多补丁策略。
+	// 当前 fake 使用战略合并补丁，与真实客户端对 Event 的默认补丁策略一致。
 	pt := types.StrategicMergePatchType
 	var action core.PatchActionImpl
 	if c.Namespace() != "" {

@@ -115,7 +115,7 @@ func loadKey(t *testing.T, filepath string, alg jose.SignatureAlgorithm, unmarsh
 	return key
 }
 
-// staticKeySet implements oidc.KeySet.
+// staticKeySet 实现 oidc.KeySet 接口，
 // 用内存中的公钥集合替代远程 JWKS，使大部分用例无需启动 key 服务。
 type staticKeySet struct {
 	keys []*jose.JSONWebKey
@@ -192,7 +192,7 @@ func (c *testClaimsServer) getKeys() jose.JSONWebKeySet {
 	return c.keys
 }
 
-// Replace formats the contents of v into the provided template.
+// replace 把 v 的内容格式化进给定的模板。
 // 所有涉及测试服务器 URL 的字符串都通过它注入，避免用例里硬编码端口。
 func replace(tmpl string, v interface{}) string {
 	t := template.Must(template.New("test").Parse(tmpl))
@@ -397,7 +397,6 @@ func (c *claimsTest) run(t *testing.T) {
 		t.Fatalf("serialize token: %v", err)
 	}
 
-	// wait for the authenticator to be healthy
 	// 认证器在后台异步拉取 JWKS，健康前 AuthenticateToken 可能返回
 	// “尚未就绪”类错误，因此先等待健康。
 	err = wait.PollUntilContextCancel(ctx, time.Millisecond, true, func(context.Context) (bool, error) {

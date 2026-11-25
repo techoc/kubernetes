@@ -59,7 +59,7 @@ func (s *replicationControllerLister) GetPodControllers(pod *v1.Pod) ([]*v1.Repl
 		rc := items[i]
 		selector := labels.Set(rc.Spec.Selector).AsSelectorPreValidated()
 
-		// If an rc with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入 nil 或空选择器的 rc，它应匹配零个对象而非全部：
 		// 空选择器在 K8s 语义中表示“不选中任何对象”，不能退化为 labels.Everything()。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue

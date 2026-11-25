@@ -76,7 +76,7 @@ func (apiServerStrategy) PrepareForCreate(ctx context.Context, obj runtime.Objec
 	// 否则用户可以伪造 Available 绕过后端健康检查。
 	apiservice.Status = apiregistration.APIServiceStatus{}
 
-	// mark local API services as immediately available on create
+	// 创建时把本地 API service 直接标记为可用。
 	// 本地服务不需要经过健康探测：请求由自身 handler 处理，若它不可用整个
 	// apiserver 都已经挂了；标成 Available 可以让聚合层立刻开始转发。
 	if apiservice.Spec.Service == nil {
@@ -186,7 +186,7 @@ func (apiServerStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old ru
 	return nil
 }
 
-// GetAttrs returns the labels and fields of an API server for filtering purposes.
+// GetAttrs 返回 API server 对象的 labels 和 fields，用于过滤。
 // 把对象拆成 label/field 两组，etcd 层才能分别用 selector 过滤 watch 事件；
 // 类型不匹配返回错误而不是 panic，避免一条坏数据打挂整个 LIST 请求。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
@@ -207,7 +207,7 @@ func MatchAPIService(label labels.Selector, field fields.Selector) storage.Selec
 	}
 }
 
-// ToSelectableFields returns a field set that represents the object.
+// ToSelectableFields 返回表示该对象的字段集。
 // 第二个参数 true 表示把 metadata.namespace 也放进字段集；APIService 虽然是
 // 集群级资源，但保持与其他资源一致的字段选择器（按 namespace 精确匹配空串）
 // 可以避免通用查询逻辑在这里开特例。

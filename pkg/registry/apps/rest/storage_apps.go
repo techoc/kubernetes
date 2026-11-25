@@ -34,7 +34,6 @@ import (
 // StorageProvider 负责装配 apps API Group 的 RESTStorage，并根据 APIResourceConfigSource 决定注册哪些资源。
 type StorageProvider struct{}
 
-// NewRESTStorage returns APIGroupInfo object.
 // NewRESTStorage 创建 apps APIGroupInfo，并将已启用资源的 v1 REST 接口挂入版本化 StorageMap。
 func (p StorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error) {
 	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(apps.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)

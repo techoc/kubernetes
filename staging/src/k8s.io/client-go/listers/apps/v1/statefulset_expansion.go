@@ -25,15 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// StatefulSetListerExpansion allows custom methods to be added to
-// StatefulSetLister.
+// StatefulSetListerExpansion 允许向 StatefulSetLister 添加自定义方法。
 // 扩展接口由生成的 StatefulSetLister 嵌入，避免手写方法被 lister-gen 覆盖。
 type StatefulSetListerExpansion interface {
 	GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet, error)
 }
 
-// StatefulSetNamespaceListerExpansion allows custom methods to be added to
-// StatefulSetNamespaceLister.
+// StatefulSetNamespaceListerExpansion 允许向 StatefulSetNamespaceLister 添加自定义方法。
 // 当前没有命名空间级扩展方法，保留空接口以支持后续增量添加而不破坏 API。
 type StatefulSetNamespaceListerExpansion interface{}
 
@@ -71,7 +69,7 @@ func (s *statefulSetLister) GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet
 			continue
 		}
 
-		// If a StatefulSet with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入 nil 或空选择器的 StatefulSet，它应匹配零个对象而非全部：
 		// labels.Everything() 的语义与空选择器不同，必须显式排除，否则会误匹配全部 Pod。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue

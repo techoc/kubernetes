@@ -22,8 +22,8 @@ import (
 	policy "k8s.io/api/policy/v1"
 )
 
-// The EvictionExpansion interface allows manually adding extra methods to the ScaleInterface.
-// （原文如此：此处实际扩展的是 EvictionInterface。）
+// EvictionExpansion 接口允许手动为 EvictionInterface 追加额外方法
+// （英文原文误写成 ScaleInterface）。
 //
 // EvictionExpansion 通过手写代码为生成的 EvictionInterface 补充 Evict 方法，
 // 因为 eviction 是以 Pod 子资源的形式提供的，无法由代码生成器直接表达。

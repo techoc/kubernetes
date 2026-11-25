@@ -56,7 +56,7 @@ func TestCloseAll(t *testing.T) {
 	}
 }
 
-// TestCloseAllRace ensures CloseAll works with connections being simultaneously dialed
+// TestCloseAllRace 确保 CloseAll 与正在并发建立的连接能协同工作。
 // 压测 Dial 与 CloseAll 的并发：两者都在频繁修改跟踪集合，必须无竞态且不丢连接。
 func TestCloseAllRace(t *testing.T) {
 	conns := int64(0)
@@ -94,8 +94,7 @@ func TestCloseAllRace(t *testing.T) {
 		}
 	}()
 
-	// Trigger both goroutines as close to the same time as possible
-	// 同时放行两个 goroutine，制造最大并发窗口。
+	// 尽可能同时放行两个 goroutine，制造最大并发窗口。
 	begin.Done()
 
 	// Wait for goroutines

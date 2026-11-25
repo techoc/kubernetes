@@ -76,7 +76,7 @@ func newTimeBudget() timeBudget {
 	return result
 }
 
-// takeAvailable returns all currently available budget and resets it to zero.
+// takeAvailable 返回当前全部可用预算并重置为零。
 // 调用方必须把未用完的部分通过 returnUnused 归还，否则这部分额度丢失。
 func (t *timeBudgetImpl) takeAvailable() time.Duration {
 	t.Lock()
@@ -97,13 +97,13 @@ func (t *timeBudgetImpl) takeAvailable() time.Duration {
 	return result
 }
 
-// returnUnused adds back budget that was not consumed.
+// returnUnused 把未消耗掉的预算加回去。
 // 负值意味着实际超支，此时不做任何补偿（超支部分无法追回）。
 func (t *timeBudgetImpl) returnUnused(unused time.Duration) {
 	t.Lock()
 	defer t.Unlock()
 	if unused < 0 {
-		// We used more than allowed.
+		// 实际用量超出允许值时不做任何补偿。
 		return
 	}
 	// add the unused time directly to the budget

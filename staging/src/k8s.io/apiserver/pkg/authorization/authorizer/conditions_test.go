@@ -311,7 +311,6 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantReason:      "only NoOpinion conditions always evaluate to NoOpinion",
 			wantString:      `NoOpinion(reason="only NoOpinion conditions always evaluate to NoOpinion")`,
 		},
-		// Union constructor simplification cases
 		// 并集化简：单个无条件决策直接塌缩；单个 ConditionsMap 保留为 Union；
 		// 全部 NoOpinion 时合并原因与错误。以下用例逐项锁定这些规则。
 		{
@@ -1475,7 +1474,7 @@ func celEvaluateConditions(ctx context.Context, conditionsMap authorizer.Conditi
 	})
 }
 
-// evalCEL compiles and evaluates a single CEL expression, returning true/false.
+// evalCEL 编译并求值单个 CEL 表达式，返回 true/false。
 // 结果不是 bool 也视为错误，避免把非布尔值误当作允许。
 func evalCEL(env *cel.Env, expr string, vars map[string]any) (bool, error) {
 	ast, issues := env.Compile(expr)

@@ -62,8 +62,6 @@ func TestSetFeatureGatesDuringTest(t *testing.T) {
 	fakeGates := &fakeFeatureGates{map[features.Feature]bool{featureA: true, featureB: true}}
 	replaceFeatureGatesForTest(t, fakeGates)
 	t.Cleanup(func() {
-		// since cleanup functions will be called in last added, first called order.
-		// check if the original feature wasn't restored
 		// Cleanup 按后进先出执行，因此这里在 replaceFeatureGatesForTest 的恢复之后运行，
 		// 用来确认原始 gates 已被恢复。
 		require.True(t, features.FeatureGates().Enabled(featureA), "the original feature = %v wasn't restored", featureA)

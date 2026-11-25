@@ -57,8 +57,7 @@ func (s *podDisruptionBudgetLister) GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*
 		pdb := list[i]
 		selector, err = metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
-			// 选择器非法的 PDB 视为不匹配，避免因为单个坏对象影响整体结果。
+			// 该对象的 selector 非法，视为不匹配该 pod，避免因为单个坏对象影响整体结果。
 			continue
 		}
 

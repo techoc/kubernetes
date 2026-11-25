@@ -269,9 +269,9 @@ func dataFromSliceOrFile(data []byte, file string) ([]byte, error) {
 	return nil, nil
 }
 
-// rootCertPool returns nil if caData is empty.  When passed along, this will mean "use system CAs".
-// When caData is not empty, it will be the ONLY information used in the CertPool.
-// 中文：语义是“要么用系统根证书，要么只用给定 CA”，不支持二者并存。
+// rootCertPool 在 caData 为空时返回 nil；把 nil 继续传递下去即表示“使用系统根 CA”。
+// caData 非空时，它是 CertPool 唯一的信息来源。
+// 语义是“要么用系统根证书，要么只用给定 CA”，不支持二者并存。
 func rootCertPool(caData []byte) (*x509.CertPool, error) {
 	// What we really want is a copy of x509.systemRootsPool, but that isn't exposed.  It's difficult to build (see the go
 	// code for a look at the platform specific insanity), so we'll use the fact that RootCAs == nil gives us the system values
@@ -293,9 +293,9 @@ func rootCertPool(caData []byte) (*x509.CertPool, error) {
 	return certPool, nil
 }
 
-// createErrorParsingCAData ALWAYS returns an error.  We call it because know we failed to AppendCertsFromPEM
-// but we don't know the specific error because that API is just true/false
-// 中文：逐个 PEM block 解析，以给出比 “AppendCertsFromPEM=false” 更可诊断的错误。
+// createErrorParsingCAData 总是返回 error。之所以要调用它，是因为 AppendCertsFromPEM 只返回
+// true/false，我们无法得知具体失败原因；这里逐个解析 PEM block，
+// 以给出比 “AppendCertsFromPEM=false” 更可诊断的错误。
 func createErrorParsingCAData(pemCerts []byte) error {
 	for len(pemCerts) > 0 {
 		var block *pem.Block

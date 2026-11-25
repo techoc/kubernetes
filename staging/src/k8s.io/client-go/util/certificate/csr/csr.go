@@ -152,7 +152,7 @@ func get(ctx context.Context, client clientset.Interface, name string) (*certifi
 
 // create 优先走 v1；若 API 不存在或使用 legacy-unknown signer，则回退 v1beta1。
 func create(ctx context.Context, client clientset.Interface, csr *certificatesv1.CertificateSigningRequest) (reqName string, reqUID types.UID, err error) {
-	// only attempt a create via v1 if we specified signerName and usages and are not using the legacy unknown signerName
+	// 只有在指定了 signerName 与 usages、且没有使用 legacy-unknown signerName 时才尝试走 v1 创建：
 	// v1 要求 signerName/usages 必填，且 legacy-unknown 只在 v1beta1 中可表达。
 	if len(csr.Spec.Usages) > 0 && len(csr.Spec.SignerName) > 0 && csr.Spec.SignerName != "kubernetes.io/legacy-unknown" {
 		v1req, v1err := client.CertificatesV1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
@@ -170,8 +170,7 @@ func create(ctx context.Context, client clientset.Interface, csr *certificatesv1
 		}
 	}
 
-	// convert relevant bits to v1beta1
-	// v1beta1 的 SignerName 是可选指针，必须显式取地址。
+	// 把相关字段转换为 v1beta1 表示。v1beta1 的 SignerName 是可选指针，必须显式取地址。
 	v1beta1csr := &certificatesv1beta1.CertificateSigningRequest{
 		ObjectMeta: csr.ObjectMeta,
 		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
@@ -378,10 +377,8 @@ func ensureCompatible(new, orig *certificatesv1.CertificateSigningRequest, priva
 	return nil
 }
 
-// formatError preserves the type of an API message but alters the message. Expects
-// a single argument format string, and returns the wrapped error.
-// 保留 APIStatus 类型（从而保住 Status/Reason 字段），只改写 Message，供上层做
-// apierrors 判断或展示。
+// formatError 保留 APIStatus 类型（从而保住 Status/Reason 字段），只改写 Message，
+// 供上层做 apierrors 判断或展示。它接收单参数格式化字符串，并返回包装后的错误。
 func formatError(format string, err error) error {
 	if s, ok := err.(apierrors.APIStatus); ok {
 		se := &apierrors.StatusError{ErrStatus: s.Status()}

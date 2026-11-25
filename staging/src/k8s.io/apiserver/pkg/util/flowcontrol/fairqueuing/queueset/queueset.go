@@ -668,8 +668,7 @@ func (qs *queueSet) enqueueToBoundLocked(request *request) {
 	queue := request.queue
 	now := qs.clock.Now()
 	if queue.requestsWaiting.Length() == 0 && queue.requestsExecuting.Len() == 0 {
-		// the queue’s start R is set to the virtual time.
-		// 空队列从当前虚拟时间开始，避免继承历史积压造成的过早 virtualStart。
+		// 空队列的起始 R 被设为当前虚拟时间，避免继承历史积压造成的过早 virtualStart。
 		queue.nextDispatchR = qs.currentR
 		klogV := klog.V(6)
 		if klogV.Enabled() {
@@ -976,8 +975,7 @@ func (qs *queueSet) finishRequestLocked(r *request) {
 		// request has finished, remove from requests executing
 		r.queue.requestsExecuting = r.queue.requestsExecuting.Delete(r)
 
-		// When a request finishes being served, and the actual service time was S,
-		// the queue’s start R is decremented by (G - S)*width.
+		// 请求服务结束、实际服务时间为 S 时，队列的起始 R 按 (G - S)*width 递减：
 		// 实际服务时间短于估计时把多算的虚拟时间退还，长于估计则提前推进。
 		r.queue.nextDispatchR -= fqrequest.SeatsTimesDuration(float64(r.InitialSeats()), qs.estimatedServiceDuration-actualServiceDuration)
 		qs.boundNextDispatchLocked(r.queue)

@@ -88,13 +88,13 @@ func init() {
 	legacyregistry.MustRegister(ApiserverAuditDroppedCounter)
 }
 
-// ObserveEvent updates the relevant prometheus metrics for the generated audit event.
+// ObserveEvent 为产生的审计事件更新相应的 prometheus 指标。
 // 每个真正产生并交给后端的审计事件计一次。
 func ObserveEvent(ctx context.Context) {
 	eventCounter.WithContext(ctx).Inc()
 }
 
-// ObservePolicyLevel updates the relevant prometheus metrics with the audit level for a request.
+// ObservePolicyLevel 按请求的审计级别更新相应的 prometheus 指标。
 // 每个请求只调用一次，因此该计数可用来估算不同审计级别下的请求量。
 func ObservePolicyLevel(ctx context.Context, level auditinternal.Level) {
 	levelCounter.WithContext(ctx).WithLabelValues(string(level)).Inc()

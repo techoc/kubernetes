@@ -123,13 +123,11 @@ func (ts *transcoders) getTranscoder(rt reflect.Type) transcoder {
 // getTranscoderLocked 在持有写锁时构建转码器。
 func (ts *transcoders) getTranscoderLocked(rt reflect.Type) *transcoder {
 	if tpp, ok := ts.m[rt]; ok {
-		// A transcoder for this type was cached while waiting to acquire the lock.
 		// 等待锁期间可能已被其他 goroutine 填充，直接复用。
 		return *tpp
 	}
 
-	// Cache the transcoder now, before populating fn, so that circular references between types
-	// don't overflow the call stack.
+	// 先缓存转码器再填充 fn，使类型间的循环引用不会撑爆调用栈；
 	// 先占位再递归构建子类型，是处理自引用类型（如链表）的关键。
 	t := new(transcoder)
 	if ts.m == nil {
@@ -163,9 +161,8 @@ func (ts *transcoders) getTranscoderLocked(rt reflect.Type) *transcoder {
 			return nil
 		}
 	case reflect.Interface:
-		// Any interface value might have a dynamic type involving RawExtension. It needs to
-		// be checked.
-		// 接口的静态类型无法确定，只能在运行时按动态类型查表。
+		// 任何接口值的动态类型都可能涉及 RawExtension，需要检查：接口的静态类型无法确定，
+		// 只能在运行时按动态类型查表。
 		t.fn = func(rv reflect.Value) error {
 			if rv.IsNil() {
 				return nil

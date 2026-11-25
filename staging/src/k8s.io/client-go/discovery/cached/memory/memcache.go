@@ -308,7 +308,6 @@ func (d *memCacheClient) OpenAPIV3WithContext(ctx context.Context) openapi.Clien
 }
 
 func (d *memCacheClient) openAPIV3(ctx context.Context) *cachedopenapi.Client {
-	// Must take lock since Invalidate call may modify openapiClient
 	// Invalidate 会把 openapiClient 置 nil，因此这里必须持锁惰性创建。
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -405,8 +404,7 @@ func (d *memCacheClient) refreshLocked(ctx context.Context) error {
 			for gv, resources := range resources {
 				d.groupToServerResources[gv.String()] = &cacheEntry{resources, nil}
 			}
-			// Cache GroupVersion discovery errors
-			// 单个 GV 的失败也缓存，避免每次访问都重新请求失败的 GV。
+			// GroupVersion 的 discovery 错误也缓存，避免每次访问都重新请求失败的 GV。
 			for gv, err := range failedGVs {
 				d.groupToServerResources[gv.String()] = &cacheEntry{nil, err}
 			}

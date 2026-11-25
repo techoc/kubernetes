@@ -769,8 +769,8 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithoutInitialSet(t *testing.T) 
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, false /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetAddVolumeNodeNotReset
-// 验证对已存在卷/节点重复 AddVolumeNode 不会重置 mountedByNode（仍为 false），
+// Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetAddVolumeNodeNotReset 验证对已存在
+// 卷/节点重复 AddVolumeNode 不会重置 mountedByNode（仍为 false），
 // 也不会引入非零的 DetachRequestedTime。
 func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetAddVolumeNodeNotReset(t *testing.T) {
 	// 准备
@@ -805,8 +805,8 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetAddVolumeNodeNotRe
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, false /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetVerifyDetachRequestedTimePerserved
-// 验证 SetVolumesMountedByNode 只影响 mountedByNode，不会清除此前
+// Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetVerifyDetachRequestedTimePerserved 验证
+// SetVolumesMountedByNode 只影响 mountedByNode，不会清除此前
 // SetDetachRequestTime 记录的时间戳；时间戳必须与操作前完全一致。
 func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetVerifyDetachRequestedTimePerserved(t *testing.T) {
 	// 准备
@@ -952,8 +952,8 @@ func Test_MarkDesireToDetach_Positive_MarkedAddVolumeNodeReset(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Test_RemoveVolumeFromReportAsAttached_Positive_UnsetWithInitialSetVolumesMountedByNodePreserved
-// 验证两种状态变更互不干扰：取消 mountedByNode 后再设置卸载请求时间，
+// Test_RemoveVolumeFromReportAsAttached_Positive_UnsetWithInitialSetVolumesMountedByNodePreserved 验证
+// 两种状态变更互不干扰：取消 mountedByNode 后再设置卸载请求时间，
 // mountedByNode 保持 false 且 DetachRequestedTime 非零。
 func Test_RemoveVolumeFromReportAsAttached_Positive_UnsetWithInitialSetVolumesMountedByNodePreserved(t *testing.T) {
 	// 准备
@@ -1023,8 +1023,8 @@ func Test_RemoveVolumeFromReportAsAttached(t *testing.T) {
 
 }
 
-// Test_RemoveVolumeFromReportAsAttached_AddVolumeToReportAsAttached_Positive
-// 验证取消上报后可通过 AddVolumeToReportAsAttached 恢复，节点卷列表重新为一条。
+// Test_RemoveVolumeFromReportAsAttached_AddVolumeToReportAsAttached_Positive 验证取消上报后可通过
+// AddVolumeToReportAsAttached 恢复，节点卷列表重新为一条。
 func Test_RemoveVolumeFromReportAsAttached_AddVolumeToReportAsAttached_Positive(t *testing.T) {
 	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)

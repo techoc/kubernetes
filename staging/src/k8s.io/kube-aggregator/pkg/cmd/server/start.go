@@ -56,8 +56,7 @@ type AggregatorOptions struct {
 	StdErr io.Writer
 }
 
-// NewCommandStartAggregator provides a CLI handler for 'start master' command
-// with a default AggregatorOptions.
+// NewCommandStartAggregator 为 'start master' 命令提供 CLI handler（带默认 AggregatorOptions）。
 // 这里对 options 做的是值拷贝：同一份默认值可以用于构造多个命令，
 // 每个命令解析 flag 时只改自己的那份，不会串到别的命令上。
 func NewCommandStartAggregator(ctx context.Context, defaults *AggregatorOptions) *cobra.Command {
@@ -90,7 +89,7 @@ func NewCommandStartAggregator(ctx context.Context, defaults *AggregatorOptions)
 	return cmd
 }
 
-// AddFlags is necessary because hyperkube doesn't work using cobra, so we have to have different registration and execution paths
+// 之所以单独提供 AddFlags，是因为 hyperkube 不使用 cobra，注册与执行需要走不同路径。
 // 把 flag 注册拆成独立方法，是为了让 cobra 路径和 hyperkube 路径共用同一套开关定义；
 // 否则两种入口迟早会出现"某个参数只有一边认"的漂移。
 func (o *AggregatorOptions) AddFlags(fs *pflag.FlagSet) {
@@ -118,8 +117,7 @@ func NewDefaultOptions(out, err io.Writer) *AggregatorOptions {
 	return o
 }
 
-// Validate validates all the required options.
-// 把各子配置的错误汇总后再返回，而不是遇到第一个就退出：
+// Validate 校验所有必填选项。把各子配置的错误汇总后再返回，而不是遇到第一个就退出：
 // 启动一个 API server 要填的参数很多，逐个报错能省掉反复改配置的循环。
 func (o AggregatorOptions) Validate(args []string) error {
 	errors := []error{}
@@ -136,7 +134,7 @@ func (o *AggregatorOptions) Complete() error {
 
 // RunAggregator runs the API Aggregator.
 func (o AggregatorOptions) RunAggregator(ctx context.Context) error {
-	// TODO have a "real" external address
+	// TODO: 使用"真正的"对外地址。
 	// Aggregator 作为独立进程部署时未必有人配好证书，所以这里先用自签名证书兜底，
 	// 保证服务能起来。真正的对外地址要等部署侧确定后再补上。
 	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, nil); err != nil {

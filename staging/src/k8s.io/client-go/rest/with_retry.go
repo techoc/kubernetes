@@ -178,8 +178,7 @@ func (r *withRetry) IsNextRetry(ctx context.Context, restReq *Request, httpReq *
 	}
 
 	if restReq.body != nil {
-		// we have an opaque reader, we can't safely reset it
-		// 请求体是不可重置的 reader，无法安全重放，因此不重试。
+		// 请求体是不透明（opaque）且不可重置的 reader，无法安全重放，因此不重试。
 		return false
 	}
 
@@ -193,8 +192,6 @@ func (r *withRetry) IsNextRetry(ctx context.Context, restReq *Request, httpReq *
 	var errIsRetryable bool
 	if f != nil && err != nil && f.IsErrorRetryable(httpReq, err) {
 		errIsRetryable = true
-		// we have a retryable error, for which we will create an
-		// artificial "Retry-After" response.
 		// 对可重试错误伪造一个 500 + Retry-After: 1 的响应，
 		// 以便复用统一的等待逻辑。
 		resp = retryAfterResponse()
@@ -242,7 +239,7 @@ func (r *withRetry) Before(ctx context.Context, request *Request) error {
 		return nil
 	}
 
-	// if we are here, we have made attempt(s) at least once before.
+	// 走到这里说明此前至少已经尝试过一次。
 	// 重试时取客户端退避与 Retry-After 的较大值，避免早于服务端要求的时间重试。
 	if request.backoff != nil {
 		delay := request.backoff.CalculateBackoffWithContext(ctx, url)

@@ -23,7 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-// GroupAdder adds groups to an authenticated user.Info
+// GroupAdder 把组附加到已认证的 user.Info 上。
 // 典型用途是把 system:masters 等特权组附加到回环客户端身份上。
 type GroupAdder struct {
 	// Authenticator is delegated to make the authentication decision
@@ -32,7 +32,7 @@ type GroupAdder struct {
 	Groups []string
 }
 
-// NewGroupAdder wraps a request authenticator, and adds the specified groups to the returned user when authentication succeeds
+// NewGroupAdder 包装一个请求认证器，并在认证成功时把指定的组附加到返回的 user 上。
 // 只包裹认证请求阶段；认证失败时原样返回，不改变错误与 ok 语义。
 func NewGroupAdder(auth authenticator.Request, groups []string) authenticator.Request {
 	return &GroupAdder{auth, groups}

@@ -74,9 +74,8 @@ type TransformFunc func(interface{}) (interface{}, error)
 // we cannot manipulate the environmental variable because
 // it will affect other tests in this package.
 //
-// The identity string can be left empty if the logger in the context already
-// identifies what is being watched.
-// 中文：检测逻辑会额外发起一次指向 etcd 的 LIST，因此只应在 CI/测试中开启。
+// 若上下文中的 logger 已经能标识被监听的对象，identity 字符串可以留空。
+// 检测逻辑会额外发起一次指向 etcd 的 LIST，因此只应在 CI/测试中开启。
 func CheckDataConsistency[T runtime.Object, U any](ctx context.Context, identity string, lastSyncedResourceVersion string, listFn ListFunc[T], listItemTransformFunc TransformFunc, listOptions metav1.ListOptions, retrieveItemsFn RetrieveItemsFunc[U]) {
 	logger := klog.FromContext(ctx)
 	if identity != "" {
@@ -133,9 +132,8 @@ func CheckDataConsistency[T runtime.Object, U any](ctx context.Context, identity
 	}
 }
 
-// canFormAdditionalListCall ensures that we can form a valid LIST requests
-// for checking data consistency.
-// 中文：Exact RV 查询不允许带 continue，也不允许 RV="0"，否则请求会被 apiserver 拒绝。
+// canFormAdditionalListCall 确保能够构造出用于一致性校验的合法 LIST 请求。
+// Exact RV 查询不允许带 continue，也不允许 RV="0"，否则请求会被 apiserver 拒绝。
 func canFormAdditionalListCall(lastSyncedResourceVersion string, listOptions metav1.ListOptions) bool {
 	// since we are setting ResourceVersionMatch to metav1.ResourceVersionMatchExact
 	// we need to make sure that the continuation hasn't been set

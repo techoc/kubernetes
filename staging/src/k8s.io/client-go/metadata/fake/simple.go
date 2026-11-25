@@ -59,9 +59,8 @@ func NewTestScheme() *runtime.Scheme {
 func NewSimpleMetadataClient(scheme *runtime.Scheme, objects ...runtime.Object) *FakeMetadataClient {
 	gvkFakeList := schema.GroupVersionKind{Group: "fake-metadata-client-group", Version: "v1", Kind: "List"}
 	if !scheme.Recognizes(gvkFakeList) {
-		// In order to use List with this client, you have to have the v1.List registered in your scheme, since this is a test
-		// type we modify the input scheme
-		// 元数据 List 结果统一用 v1.List 承载，这里按需把它注册进调用方提供的 scheme。
+		// 要用本客户端执行 List，scheme 中必须注册 v1.List；元数据 List 结果统一用 v1.List 承载，
+		// 由于这是测试用的类型，这里直接修改调用方传入的 scheme。
 		scheme.AddKnownTypeWithName(gvkFakeList, &metav1.List{})
 	}
 

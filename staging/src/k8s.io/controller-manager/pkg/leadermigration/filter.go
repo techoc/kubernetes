@@ -26,16 +26,11 @@ const (
 	//  and thus should NOT be started by this controller manager.
 	ControllerUnowned = iota
 	// 该控制器归另一个组件所有，本组件不应启动它。
-	// ControllerMigrated indicates that the controller manager should start this controller
-	// 本组件应启动该控制器，并使用“迁移锁”。
-	//  with the migration lock.
+	// ControllerMigrated 表示本组件应启动该控制器，并使用“迁移锁”。
 	ControllerMigrated
-	// ControllerNonMigrated indicates that the controller manager should start this controller
-	// 该控制器不参与迁移，使用常规的主锁启动。
-	//  with the main lock.
+	// ControllerNonMigrated 表示该控制器不参与迁移，使用常规的主锁启动。
 	ControllerNonMigrated
 )
 
-// FilterFunc takes a name of controller, returning a FilterResult indicating how to start controller.
-// 根据控制器名字返回启动策略的函数类型。
+// FilterFunc 是函数类型：接受控制器名字，返回 FilterResult 指示应如何启动该控制器。
 type FilterFunc func(controllerName string) FilterResult

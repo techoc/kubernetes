@@ -65,8 +65,8 @@ func testJSONPath(tests []jsonpathTest, allowMissingKeys bool, t *testing.T) {
 	}
 }
 
-// testJSONPathSortOutput test cases related to map, the results may print in random order
-// 遍历 map 时 Go 不保证顺序，因此这里把实际与期望输出都按空白切分并排序后再比较。
+// testJSONPathSortOutput 处理与 map 相关的用例：结果可能以随机顺序输出，
+// 因此把实际与期望输出都按空白切分并排序后再比较。
 func testJSONPathSortOutput(tests []jsonpathTest, t *testing.T) {
 	for _, test := range tests {
 		j := New(test.name)
@@ -330,7 +330,7 @@ func TestJSONInput(t *testing.T) {
 	testJSONPath(pointsTests, false, t)
 }
 
-// TestKubernetes tests some use cases from kubernetes
+// TestKubernetes 覆盖来自 kubernetes 的若干用例，
 // 复刻 kubectl 常见的 jsonpath 用法：range、联合键、过滤、转义点号与递归字段。
 func TestKubernetes(t *testing.T) {
 	var input = []byte(`{

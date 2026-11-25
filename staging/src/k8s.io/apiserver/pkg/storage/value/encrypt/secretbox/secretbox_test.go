@@ -63,8 +63,7 @@ func TestSecretboxKeyRotation(t *testing.T) {
 		t.Fatalf("unexpected data: %t %q", stale, from)
 	}
 
-	// verify changing the context does not fails storage
-	// Secretbox is not currently an authenticating store
+	// 验证：更换上下文不应导致存储失败。
 	// 这记录的是当前实现的已知属性：secretbox 不绑定 dataCtx，
 	// 因此改变上下文仍可解密（不同于 AES-GCM 等认证模式）。
 	_, _, err = p.TransformFromStorage(ctx, out, value.DefaultContext([]byte("incorrect_context")))
@@ -72,7 +71,7 @@ func TestSecretboxKeyRotation(t *testing.T) {
 		t.Fatalf("secretbox is not authenticated")
 	}
 
-	// reverse the order, use the second key
+	// 调换转换器顺序，使用第二个密钥：
 	// 调换顺序模拟"新密钥成为当前密钥"：旧数据仍能读，但必须报告
 	// stale 以便上层用新密钥重写。
 	p = value.NewPrefixTransformers(testErr,

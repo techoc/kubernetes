@@ -38,7 +38,6 @@ func TestOpenAPIEmbeddedTest(t *testing.T) {
 		t.Error("empty paths")
 	}
 
-	// spot check specific paths
 	// 抽查内置的核心/常用 API 组路径，防止内嵌数据整体缺失。
 	expectedPaths := []string{
 		"api/v1",
@@ -53,7 +52,6 @@ func TestOpenAPIEmbeddedTest(t *testing.T) {
 		}
 	}
 
-	// make sure all paths can load
 	// 逐个加载 schema 并做严格反序列化，确保内嵌文件都是合法的 OpenAPI v3。
 	for path, gv := range paths {
 		data, err := gv.Schema("application/json")

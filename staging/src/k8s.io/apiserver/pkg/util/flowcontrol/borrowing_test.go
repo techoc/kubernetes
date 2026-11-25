@@ -171,7 +171,7 @@ func TestBorrowing(t *testing.T) {
 				controllerCompletionCh <- controller.Run(stopCh)
 			}()
 
-			// ensure that the controller has run its first loop.
+			// 确保控制器已经跑完首轮调谐循环。
 			// 先等控制器完成首次调谐，否则请求会因找不到优先级配置而被拒。
 			err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 				return controller.hasPriorityLevelState(plcObjs[0].Name), nil
@@ -217,7 +217,7 @@ func TestBorrowing(t *testing.T) {
 				}
 			}
 			startWG.Wait()
-			// Make sure the controller has had time to sense the load and adjust
+			// 确保控制器有时间感知负载并作出调整。
 			// 前 10 秒用于预热，借入可能在这段时间内的任意时刻开始，故不计入统计。
 			clk.Sleep(10 * time.Second)
 			// Start the stats that matter from now

@@ -102,8 +102,7 @@ func NewScheme() *Scheme {
 	}
 	s.converter = conversion.NewConverter(nil)
 
-	// Enable couple default conversions by default.
-	// Object<->RawExtension 与 string 相关转换是几乎所有 scheme 都需要的基础能力。
+	// 默认启用几组默认转换：Object<->RawExtension 与 string 相关转换是几乎所有 scheme 都需要的基础能力。
 	utilruntime.Must(RegisterEmbeddedConversions(s))
 	utilruntime.Must(RegisterStringConversions(s))
 	return s
@@ -572,7 +571,7 @@ func copyAndSetTargetKind(copy bool, obj Object, kind schema.GroupVersionKind) (
 func setTargetKind(obj Object, kind schema.GroupVersionKind) {
 	if kind.Version == APIVersionInternal {
 		// internal 版本是一种特殊情况。
-		// TODO: look at removing the need to special case this
+		// TODO: 看看能否去掉这个特例。
 		// internal 对象不应暴露 GVK，清空以避免序列化时写入伪版本。
 		obj.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 		return

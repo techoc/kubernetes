@@ -44,9 +44,8 @@ func (s *SecureServingInfo) NewClientConfig(caCert []byte) (*restclient.Config, 
 	}
 
 	return &restclient.Config{
-		// Do not limit loopback client QPS.
-		// 回环客户端代表 apiserver 自身内部调用，限流会造成自死锁式
-		// 的排队，因此显式关闭。
+		// 不限制回环客户端的 QPS：回环客户端代表 apiserver 自身内部调用，
+		// 限流会造成自死锁式的排队，因此显式关闭。
 		QPS:  -1,
 		Host: "https://" + net.JoinHostPort(host, port),
 		TLSClientConfig: restclient.TLSClientConfig{
@@ -82,7 +81,7 @@ func LoopbackHostPort(bindAddress string) (string, string, error) {
 
 	isIPv6 := netutils.IsIPv6String(host)
 
-	// Value is expected to be an IP or DNS name, not "0.0.0.0".
+	// 期望的值是具体 IP 或 DNS 名，而不是 "0.0.0.0"：
 	// 通配地址不能直接用于连接，必须替换为具体回环地址。
 	if host == "0.0.0.0" || host == "::" {
 		// Get ip of local interface, but fall back to "localhost".

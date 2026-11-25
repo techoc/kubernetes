@@ -20,13 +20,13 @@ package config
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-// NodeLifecycleControllerConfiguration contains elements describing CloudNodeLifecycleController.
+// NodeLifecycleControllerConfiguration 包含描述 CloudNodeLifecycleController 的各个要素。
 // 该控制器负责监测节点对应的云实例是否仍存在或已关机，因此配置项围绕巡检周期与并发度。
 type NodeLifecycleControllerConfiguration struct {
-	// NodeMonitorPeriod is the period for syncing NodeStatus in CloudNodeLifecycleController.
+	// NodeMonitorPeriod 是 CloudNodeLifecycleController 中同步 NodeStatus 的周期。
 	// 周期越短，已删除实例对应的 Node 越早被清理，但对云 API 的压力也越大。
 	NodeMonitorPeriod metav1.Duration
-	// ConcurrentNodeLifecycleSyncs is the number of workers for syncing NodeStatus in CloudNodeLifecycleController.
+	// ConcurrentNodeLifecycleSyncs 是 CloudNodeLifecycleController 中同步 NodeStatus 的 worker 数量。
 	// 调大可提升大规模集群的巡检吞吐，需与云 API 限流能力匹配。
 	ConcurrentNodeLifecycleSyncs int32
 }

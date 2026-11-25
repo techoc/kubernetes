@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-// ensure the watch delivers the requested and only the requested items.
+// 确保 watch 恰好投递所请求的那些条目，既不缺也不多。
 // consume 依次消费 watch 通道中的事件，断言其 resourceVersion 与期望序列一致，
 // 并确认之后不会再多出任何事件。done 用于与测试主协程同步。
 func consume(t *testing.T, w watch.Interface, rvs []string, done *sync.WaitGroup) {
@@ -100,9 +100,8 @@ func TestRCNumber(t *testing.T) {
 	wg.Wait()
 }
 
-// TestResetWatch validates that the FakeController correctly mocks a watch
-// falling behind and ResourceVersions aging out.
-// 验证 ResetWatch 会丢弃历史变更：过旧的 RV 无法再 watch，但当前 RV 仍可正常监听后续事件。
+// TestResetWatch 验证 FakeController 能正确模拟 watch 落后与 ResourceVersion 过期。
+// ResetWatch 会丢弃历史变更：过旧的 RV 无法再 watch，但当前 RV 仍可正常监听后续事件。
 func TestResetWatch(t *testing.T) {
 	pod := func(name string) *v1.Pod {
 		return &v1.Pod{

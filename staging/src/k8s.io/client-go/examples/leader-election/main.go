@@ -95,7 +95,6 @@ func main() {
 	client := clientset.NewForConfigOrDie(config)
 
 	run := func(ctx context.Context) {
-		// complete your controller loop here
 		// 示例用空 select 永久阻塞，真实控制器应在此运行 reconcile 循环。
 		logger.Info("Controller loop...")
 

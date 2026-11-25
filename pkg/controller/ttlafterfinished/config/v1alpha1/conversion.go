@@ -26,14 +26,14 @@ import (
 // 必须像这样手动公开，其他引用本包的包才能在生成的转换代码中调用它们。
 // TODO: 修复 conversion-gen 的缺陷，使其也能在自动生成的代码中发现这些 Convert_* 函数。
 
-// Convert_v1alpha1_TTLAfterFinishedControllerConfiguration_To_config_TTLAfterFinishedControllerConfiguration
-// 是生成的外部版本到内部版本的转换函数；在此手动公开，供生成代码调用。
+// Convert_v1alpha1_TTLAfterFinishedControllerConfiguration_To_config_TTLAfterFinishedControllerConfiguration 是生成的外部版本到内部版本的转换函数；
+// 在此手动公开，供生成代码调用。
 func Convert_v1alpha1_TTLAfterFinishedControllerConfiguration_To_config_TTLAfterFinishedControllerConfiguration(in *v1alpha1.TTLAfterFinishedControllerConfiguration, out *config.TTLAfterFinishedControllerConfiguration, s conversion.Scope) error {
 	return autoConvert_v1alpha1_TTLAfterFinishedControllerConfiguration_To_config_TTLAfterFinishedControllerConfiguration(in, out, s)
 }
 
-// Convert_config_TTLAfterFinishedControllerConfiguration_To_v1alpha1_TTLAfterFinishedControllerConfiguration
-// 是生成的内部版本到外部版本的转换函数；在此手动公开，供生成代码调用。
+// Convert_config_TTLAfterFinishedControllerConfiguration_To_v1alpha1_TTLAfterFinishedControllerConfiguration 是生成的内部版本到外部版本的转换函数；
+// 在此手动公开，供生成代码调用。
 func Convert_config_TTLAfterFinishedControllerConfiguration_To_v1alpha1_TTLAfterFinishedControllerConfiguration(in *config.TTLAfterFinishedControllerConfiguration, out *v1alpha1.TTLAfterFinishedControllerConfiguration, s conversion.Scope) error {
 	return autoConvert_config_TTLAfterFinishedControllerConfiguration_To_v1alpha1_TTLAfterFinishedControllerConfiguration(in, out, s)
 }

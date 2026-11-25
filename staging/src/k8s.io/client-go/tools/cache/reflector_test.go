@@ -109,9 +109,8 @@ func TestRunUntil(t *testing.T) {
 		defer close(doneCh)
 		r.RunWithContext(ctx)
 	}()
-	// Synchronously add a dummy pod into the watch channel so we
-	// know the RunUntil go routine is in the watch handler.
-	// 先塞入一个事件，确保 goroutine 已进入 watch 处理循环，再触发取消。
+	// 同步向 watch channel 塞入一个 dummy pod，确认 RunUntil goroutine 已进入 watch handler，
+	// 再触发取消。
 	fw.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "bar"}})
 
 	cancel(errors.New("done"))
@@ -611,9 +610,8 @@ func TestReflectorListAndWatch(t *testing.T) {
 				defer close(errCh)
 				errCh <- r.ListAndWatchWithContext(ctx)
 			}()
-			// Stop ListAndWatch and wait for the error channel to close.
-			// Validate it didn't error in Cleanup, not a defer.
-			// 放在 Cleanup 而非 defer，是为了在断言之前完成取消并收集错误。
+			// 停止 ListAndWatch 并等待 error channel 关闭，确认其中没有错误。
+			// 断言放在 Cleanup 而非 defer，是为了在断言之前完成取消并收集错误。
 			t.Cleanup(func() {
 				cancel()
 				for err := range errCh {

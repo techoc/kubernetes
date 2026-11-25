@@ -39,12 +39,10 @@ func init() {
 	install.Install(scheme)
 }
 
-// LoadConfiguration loads the provided configuration.
 // 解析 ResourceQuota 准入控制器的配置文件；返回的是内部版本，调用方无需
 // 关心外部版本差异。nil 输入被视为“未配置”，返回默认配置。
 func LoadConfiguration(config io.Reader) (*resourcequotaapi.Configuration, error) {
-	// if no config is provided, return a default configuration
-	// 借助外部版本构造再转换，保证与真实解码路径共用同一套默认值逻辑。
+	// 没有提供配置时返回默认配置：借助外部版本构造再转换，保证与真实解码路径共用同一套默认值逻辑。
 	if config == nil {
 		externalConfig := &resourcequotav1.Configuration{}
 		scheme.Default(externalConfig)

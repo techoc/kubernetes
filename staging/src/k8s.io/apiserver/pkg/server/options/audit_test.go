@@ -155,7 +155,7 @@ func TestAuditValidOptions(t *testing.T) {
 			options := tc.options()
 			require.NotNil(t, options)
 
-			// Verify flags don't change defaults.
+			// 验证 flags 不会改变默认值：
 			// 解析空参数集后选项必须与初始默认值完全一致：
 			// 这能捕获 AddFlags 默认值写错导致的静默差异。
 			fs := pflag.NewFlagSet("Test", pflag.PanicOnError)
@@ -185,7 +185,7 @@ func TestAuditValidOptions(t *testing.T) {
 				assert.Equal(t, os.Stdout, w)
 				assert.NoFileExists(t, options.LogOptions.Path)
 			} else if options.LogOptions.MaxSize == 0 {
-				// When MaxSize is 0, we return a raw file writer (os.File) for unlimited size
+				// MaxSize 为 0 时返回原始文件 writer（os.File）表示不限量：
 				// MaxSize=0 表示不轮转，使用原始 os.File；否则应得到 lumberjack 轮转器。
 				file, ok := w.(*os.File)
 				assert.True(t, ok, "Writer should be of type *os.File when MaxSize is 0")

@@ -369,8 +369,6 @@ func (b *Builder) WithScheme(scheme *runtime.Scheme, decodingVersions ...schema.
 	b.objectTyper = scheme
 	codecFactory := serializer.NewCodecFactory(scheme)
 	negotiatedSerializer := runtime.NegotiatedSerializer(codecFactory)
-	// if you specified versions, you're specifying a desire for external types, which you don't want to round-trip through
-	// internal types
 	// 指定版本即表示要外部类型，禁用转换可避免对象被转成 internal 版本。
 	if len(decodingVersions) > 0 {
 		negotiatedSerializer = codecFactory.WithoutConversion()
@@ -680,7 +678,6 @@ func (b *Builder) ResourceTypeOrNameArgs(allowEmptySelector bool, args ...string
 		return b
 	}
 	if len(args) > 0 {
-		// Try replacing aliases only in types
 		// 只替换类型位置的别名（如 all->pods,rc,svc），名字位置保持原样。
 		args[0] = b.ReplaceAliases(args[0])
 	}
@@ -1076,9 +1073,8 @@ func (b *Builder) getClient(gv schema.GroupVersion) (RESTClient, error) {
 
 // visitByResource 处理 "resource/name" 形式；每种资源类型复用一个客户端。
 func (b *Builder) visitByResource() *Result {
-	// if b.singleItemImplied is false, this could be by default, so double-check length
-	// of resourceTuples to determine if in fact it is singleItemImplied or not
-	// 只有一个 tuple 时也视为单对象语义，供调用方决定输出形态。
+	// singleItemImplied 为 false 时可能只是默认值，需要再核对 resourceTuples 的长度
+	// 才能确定是否单对象语义；只有一个 tuple 时也视为单对象语义，供调用方决定输出形态。
 	isSingleItemImplied := b.singleItemImplied
 	if !isSingleItemImplied {
 		isSingleItemImplied = len(b.resourceTuples) == 1

@@ -44,8 +44,7 @@ func DefaultNameSystem() string {
 	return "public"
 }
 
-// GetTargets makes targets to generate.
-// 对每个输入包做三重筛选：是否 opt-in、是否为 internal 包、是否已有手写 register.go；
+// GetTargets 构造要生成的目标列表。对每个输入包做三重筛选：是否 opt-in、是否为 internal 包、是否已有手写 register.go；
 // 任一条件不满足即跳过，避免覆盖人工维护的注册文件。
 func GetTargets(context *generator.Context, args *args.Args) []generator.Target {
 	boilerplate, err := gengo.GoBoilerplate(args.GoHeaderFile, gengo.StdBuildTag, gengo.StdGeneratedBy)
@@ -95,8 +94,8 @@ func GetTargets(context *generator.Context, args *args.Args) []generator.Target 
 			gv.Group = clientgentypes.Group(pathParts[len(pathParts)-2])
 			gv.Version = clientgentypes.Version(pathParts[len(pathParts)-1])
 
-			// if there is a comment of the form "// +groupName=somegroup" or "// +groupName=somegroup.foo.bar.io",
-			// extract the fully qualified API group name from it and overwrite the group inferred from the package path
+			// 若存在形如 `// +groupName=somegroup` 或 `// +groupName=somegroup.foo.bar.io` 的注释，
+			// 则从中提取全限定的 API group 名，覆盖从包路径推断出的 group。
 			// 目录名与真实 API group 并不总是一致（例如 example3.io），因此允许注释覆盖。
 			override, ok, err := apidefinitions.GroupNameForPackage(pkg.Comments)
 			if err != nil {
@@ -155,8 +154,7 @@ func isRegisterGenTarget(pkg *types.Package, idOpts []apidefinitions.Option) boo
 	return info.ShouldGenerate()
 }
 
-// isInternal determines whether the given package
-// contains the internal types or not
+// isInternal 判定给定包是否包含 internal 类型。
 // 判定依据是 TypeMeta 成员是否带 json tag：internal 类型不加 tag。
 func isInternal(p *types.Package) (bool, error) {
 	for _, t := range p.Types {

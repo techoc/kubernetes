@@ -29,7 +29,7 @@ import (
 // 之所以保留该方法，是为了让依赖 status 子资源更新的调用方在测试中也能正常工作。
 // TODO: Should take a PatchType as an argument probably.
 func (c *fakeNodes) PatchStatus(_ context.Context, nodeName string, data []byte) (*v1.Node, error) {
-	// TODO: Should be configurable to support additional patch strategies.
+	// TODO: 应可配置以支持更多补丁策略。
 	// 固定补丁类型：fake 测试对象默认就用战略合并补丁语义。
 	pt := types.StrategicMergePatchType
 	// 构造 RootPatchSubresourceAction 交给 Fake.Invokes，

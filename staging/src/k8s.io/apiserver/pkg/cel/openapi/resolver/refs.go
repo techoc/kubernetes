@@ -57,7 +57,6 @@ func populateRefs(schemaOf func(ref string) (*spec.Schema, bool), visited sets.S
 			}, nil
 		}
 		visited.Insert(ref)
-		// restore visited state at the end of the recursion.
 		// 回溯时移除，保证 visited 只描述当前路径。
 		defer func() {
 			visited.Delete(ref)
@@ -125,10 +124,9 @@ func refOf(schema *spec.Schema) (string, bool) {
 	if schema.Ref.GetURL() != nil {
 		return schema.Ref.String(), true
 	}
-	// A Ref may be wrapped in allOf to preserve its description
+	// Ref 可能被包在 allOf 里以便保留其 description；对 kube-openapi 而言 allOf 只用于包裹 Ref，
+	// 因此只检查一层 allOf：kube-openapi 的约定保证不会出现更深的嵌套。
 	// see https://github.com/kubernetes/kubernetes/issues/106387
-	// For kube-openapi, allOf is only used for wrapping a Ref.
-	// 只检查一层 allOf：kube-openapi 的约定保证不会出现更深的嵌套。
 	for _, allOf := range schema.AllOf {
 		if ref, isRef := refOf(&allOf); isRef {
 			return ref, isRef

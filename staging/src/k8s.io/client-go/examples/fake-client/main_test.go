@@ -61,7 +61,7 @@ func TestFakeClient(t *testing.T) {
 		return true, watch, nil
 	})
 
-	// We will create an informer that writes added pods to a channel.
+	// 创建一个 informer，把新增的 pod 写入 channel。
 	// 通道缓冲为 1，避免 handler 在测试主协程尚未读取时阻塞。
 	pods := make(chan *v1.Pod, 1)
 	informers := informers.NewSharedInformerFactory(client, 0)
@@ -91,7 +91,7 @@ func TestFakeClient(t *testing.T) {
 	// in an integration/E2E test if you need to test complex behavior with
 	// informer/controllers.
 	<-watcherStarted
-	// Inject an event into the fake client.
+	// 向 fake client 注入一个事件。
 	// 需要注意：Create 的命名空间是 test-ns，而 informer 监听所有命名空间。
 	p := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "my-pod"}}
 	_, err := client.CoreV1().Pods("test-ns").Create(context.TODO(), p, metav1.CreateOptions{})

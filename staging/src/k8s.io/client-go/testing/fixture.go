@@ -681,8 +681,8 @@ func (t *tracker) add(gvr schema.GroupVersionResource, obj runtime.Object, ns st
 		t.objects[gvr] = make(map[types.NamespacedName]versionedObject)
 	}
 
-	// Determine resource version for the new or updated object.
-	// 每个 GVR 维护一个单调递增的版本号，用于 List/Watch 之间的衔接。
+	// 确定新建或更新对象使用的 resource version：每个 GVR 维护一个单调递增的版本号，
+	// 用于 List/Watch 之间的衔接。
 	resourceVersion, ok := t.resourceVersions[gvr]
 	if !ok {
 		resourceVersion = 1
@@ -705,8 +705,8 @@ func (t *tracker) add(gvr schema.GroupVersionResource, obj runtime.Object, ns st
 	}
 
 	if replaceExisting {
-		// Tried to update but no matching object was found.
-		// 与真实服务端一样，Update 不存在的对象返回 NotFound，而不是隐式创建。
+		// 尝试更新却没有找到匹配的对象：与真实服务端一样，Update 不存在的对象返回 NotFound，
+		// 而不是隐式创建。
 		return apierrors.NewNotFound(gr, newMeta.GetName())
 	}
 

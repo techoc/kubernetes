@@ -82,8 +82,7 @@ func Convert_v1_JSON_To_apiextensions_JSON(in *JSON, out *apiextensions.JSON, s 
 	return nil
 }
 
-// Convert_apiextensions_CustomResourceDefinitionSpec_To_v1_CustomResourceDefinitionSpec
-// 将内部版本的 Spec 转换为 v1 版本。
+// Convert_apiextensions_CustomResourceDefinitionSpec_To_v1_CustomResourceDefinitionSpec 将内部版本的 CustomResourceDefinitionSpec 转换为 v1 版本。
 // 内部版本使用顶层字段（Version、Subresources、Validation 等），
 // v1 版本使用 per-version 结构。转换时将顶层字段复制到所有版本。
 func Convert_apiextensions_CustomResourceDefinitionSpec_To_v1_CustomResourceDefinitionSpec(in *apiextensions.CustomResourceDefinitionSpec, out *CustomResourceDefinitionSpec, s conversion.Scope) error {
@@ -141,8 +140,7 @@ func Convert_apiextensions_CustomResourceDefinitionSpec_To_v1_CustomResourceDefi
 	return nil
 }
 
-// Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefinitionSpec
-// 将 v1 版本的 Spec 转换为内部版本。
+// Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefinitionSpec 将 v1 版本的 CustomResourceDefinitionSpec 转换为内部版本。
 // 如果所有版本的 per-version 字段相同，提取到顶层字段以节省存储空间。
 // 如果各版本不同，保留 per-version 结构。
 func Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefinitionSpec(in *CustomResourceDefinitionSpec, out *apiextensions.CustomResourceDefinitionSpec, s conversion.Scope) error {
@@ -215,7 +213,7 @@ func Convert_v1_CustomResourceDefinitionSpec_To_apiextensions_CustomResourceDefi
 	return nil
 }
 
-// Convert_v1_CustomResourceConversion_To_apiextensions_CustomResourceConversion
+// Convert_v1_CustomResourceConversion_To_apiextensions_CustomResourceConversion 将 v1 版本的 CustomResourceConversion 转换为内部版本：
 // v1 版本的 Conversion 结构将 Webhook 配置嵌套在 Webhook 子对象中，
 // 内部版本将其展平为顶层字段。此函数处理结构差异。
 func Convert_v1_CustomResourceConversion_To_apiextensions_CustomResourceConversion(in *CustomResourceConversion, out *apiextensions.CustomResourceConversion, s conversion.Scope) error {
@@ -237,8 +235,7 @@ func Convert_v1_CustomResourceConversion_To_apiextensions_CustomResourceConversi
 	return nil
 }
 
-// Convert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversion
-// 将内部版本的扁平化 webhook 配置重新嵌套到 v1 的 Webhook 子对象中。
+// Convert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversion 将内部版本的扁平化 webhook 配置重新嵌套到 v1 的 Webhook 子对象中。
 func Convert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversion(in *apiextensions.CustomResourceConversion, out *CustomResourceConversion, s conversion.Scope) error {
 	if err := autoConvert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversion(in, out, s); err != nil {
 		return err
@@ -258,7 +255,7 @@ func Convert_apiextensions_CustomResourceConversion_To_v1_CustomResourceConversi
 	return nil
 }
 
-// Convert_apiextensions_ValidationRules_To_v1_ValidationRules
+// Convert_apiextensions_ValidationRules_To_v1_ValidationRules 将内部版本的 ValidationRules 转换为 v1 版本：
 // 使用 unsafe.Pointer 直接复制切片，因为两个版本的 ValidationRules 类型完全相同。
 // 这是一种性能优化，避免逐个元素复制。
 func Convert_apiextensions_ValidationRules_To_v1_ValidationRules(in *apiextensions.ValidationRules, out *ValidationRules, s conversion.Scope) error {

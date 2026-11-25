@@ -26,14 +26,14 @@ import (
 // 转换函数必须像这样手动暴露，其他引用本包的包才能以自动生成的方式调用它们。
 // TODO: 修复 conversion-gen 的缺陷，使其也能在自动生成的代码中发现这些 Convert_* 函数。
 
-// Convert_v1alpha1_EphemeralVolumeControllerConfiguration_To_config_EphemeralVolumeControllerConfiguration
-// 是自动生成的转换函数，将外部 v1alpha1 配置转换为内部配置。
+// Convert_v1alpha1_EphemeralVolumeControllerConfiguration_To_config_EphemeralVolumeControllerConfiguration 是自动生成的转换函数，
+// 将外部 v1alpha1 配置转换为内部配置。
 func Convert_v1alpha1_EphemeralVolumeControllerConfiguration_To_config_EphemeralVolumeControllerConfiguration(in *v1alpha1.EphemeralVolumeControllerConfiguration, out *config.EphemeralVolumeControllerConfiguration, s conversion.Scope) error {
 	return autoConvert_v1alpha1_EphemeralVolumeControllerConfiguration_To_config_EphemeralVolumeControllerConfiguration(in, out, s)
 }
 
-// Convert_config_EphemeralVolumeControllerConfiguration_To_v1alpha1_EphemeralVolumeControllerConfiguration
-// 是自动生成的转换函数，将内部配置转换为外部 v1alpha1 配置。
+// Convert_config_EphemeralVolumeControllerConfiguration_To_v1alpha1_EphemeralVolumeControllerConfiguration 是自动生成的转换函数，
+// 将内部配置转换为外部 v1alpha1 配置。
 func Convert_config_EphemeralVolumeControllerConfiguration_To_v1alpha1_EphemeralVolumeControllerConfiguration(in *config.EphemeralVolumeControllerConfiguration, out *v1alpha1.EphemeralVolumeControllerConfiguration, s conversion.Scope) error {
 	return autoConvert_config_EphemeralVolumeControllerConfiguration_To_v1alpha1_EphemeralVolumeControllerConfiguration(in, out, s)
 }

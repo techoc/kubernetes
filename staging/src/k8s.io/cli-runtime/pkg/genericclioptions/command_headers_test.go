@@ -72,8 +72,7 @@ func TestParseCommandHeaders(t *testing.T) {
 			rootCmd := buildCommandChain(tc.commands)
 			ch := &CommandHeaderRoundTripper{}
 			ch.ParseCommandHeaders(rootCmd, []string{})
-			// Unique session ID header should always be present.
-			// 无论命令层级如何，会话 ID 都必须生成，测试不作具体值断言。
+			// 唯一会话 ID 头必须存在：无论命令层级如何，会话 ID 都必须生成，测试不作具体值断言。
 			if _, found := ch.Headers[kubectlSessionHeader]; !found {
 				t.Errorf("expected kubectl session header (%s) is missing", kubectlSessionHeader)
 			}
@@ -143,8 +142,8 @@ func TestCancelRequest(t *testing.T) {
 	}
 }
 
-// Test RoundTripper with CancelRequest function.
-// cancellableRoundTripper 通过把 req.Close 置为 true 来模拟取消已生效。
+// cancellableRoundTripper 实现 CancelRequest，通过把 req.Close 置为 true 来模拟取消已生效，
+// 用于测试带 CancelRequest 的 RoundTripper。
 type cancellableRoundTripper struct{}
 
 func (rtc *cancellableRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -155,8 +154,8 @@ func (rtc *cancellableRoundTripper) CancelRequest(req *http.Request) {
 	req.Close = true
 }
 
-// Test RoundTripper without CancelRequest function.
-// nonCancellableRoundTripper 故意不实现 CancelRequest，用于验证不会误调用。
+// nonCancellableRoundTripper 故意不实现 CancelRequest，用于测试不带 CancelRequest 的
+// RoundTripper，验证不会误调用。
 type nonCancellableRoundTripper struct{}
 
 func (rtc *nonCancellableRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {

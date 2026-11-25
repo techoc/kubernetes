@@ -36,7 +36,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_KMSConfiguration applies defaults to KMSConfiguration.
+// SetDefaults_KMSConfiguration 为 KMSConfiguration 设置默认值。
 // KMS 调用超时默认 3 秒；未指定 APIVersion 时按 v1 处理。
 func SetDefaults_KMSConfiguration(obj *KMSConfiguration) {
 	if obj.Timeout == nil {
@@ -47,7 +47,6 @@ func SetDefaults_KMSConfiguration(obj *KMSConfiguration) {
 		obj.APIVersion = defaultAPIVersion
 	}
 
-	// cacheSize is relevant only for kms v1
 	// cacheSize 仅 KMS v1 使用，v2 由 KMS 插件自身缓存，故不设置默认值。
 	if obj.CacheSize == nil && obj.APIVersion == "v1" {
 		obj.CacheSize = &defaultCacheSize

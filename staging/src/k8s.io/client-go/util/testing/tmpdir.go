@@ -20,11 +20,9 @@ import (
 	"os"
 )
 
-// MkTmpdir creates a temporary directory based upon the prefix passed in.
-// If successful, it returns the temporary directory path. The directory can be
-// deleted with a call to "os.RemoveAll(...)".
-// In case of error, it'll return an empty string and the error.
-// 在系统临时目录下创建带指定前缀的目录；调用方负责用 os.RemoveAll 清理。
+// MkTmpdir 在系统临时目录下创建带指定前缀的目录。
+// 成功时返回临时目录路径，出错时返回空字符串和错误。
+// 目录需用 "os.RemoveAll(...)" 删除，清理责任在调用方。
 func MkTmpdir(prefix string) (string, error) {
 	tmpDir, err := os.MkdirTemp(os.TempDir(), prefix)
 	if err != nil {
@@ -33,8 +31,7 @@ func MkTmpdir(prefix string) (string, error) {
 	return tmpDir, nil
 }
 
-// MkTmpdirOrDie does the same work as "MkTmpdir", except in case of
-// errors, it'll trigger a panic.
+// MkTmpdirOrDie 与 "MkTmpdir" 作用相同，只是出错时会触发 panic。
 // 适用于测试初始化等"失败即无法继续"的场景，省去逐处 if err 检查。
 func MkTmpdirOrDie(prefix string) string {
 	tmpDir, err := MkTmpdir(prefix)

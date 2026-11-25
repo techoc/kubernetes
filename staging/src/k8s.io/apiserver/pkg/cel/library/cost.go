@@ -37,7 +37,7 @@ import (
 // 测试里开启 panic 是为了强制新增函数必须补上成本模型。
 var panicOnUnknown = false
 
-// builtInFunctions is a list of functions used in cost tests that are not handled by CostEstimator.
+// knownUnhandledFunctions 列出成本测试用到、但不交给 CostEstimator 处理的函数。
 // 这些是 CEL 内建/基础运算符，成本由 CEL 自身计费，因此这里显式列为“无需处理”，
 // 以免测试模式下的 panic 误报。
 var knownUnhandledFunctions = map[string]bool{
@@ -289,9 +289,8 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 // WARNING: Any changes to this code impact API compatibility! The estimated cost is used to determine which CEL rules may be written to a
 // CRD and any change (cost increases and cost decreases) are breaking.
 func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *checker.AstNode, args []checker.AstNode) *checker.CallEstimate {
-	// WARNING: Any changes to this code impact API compatibility! The estimated cost is used to determine which CEL rules may be written to a
-	// CRD and any change (cost increases and cost decreases) are breaking.
-	// 因此任何调整都必须视为 API 变更，需要走 KEP/版本化流程。
+	// WARNING: 任何改动这段代码都会影响 API 兼容性！估算成本用于决定哪些 CEL 规则可以写入 CRD，
+	// 成本的任何变化（升高或降低）都是 breaking 变更，因此任何调整都必须视为 API 变更，需要走 KEP/版本化流程。
 	switch function {
 	case "check":
 		// An authorization check has a fixed cost

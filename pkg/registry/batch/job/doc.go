@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package job provides Registry interface and it's RESTStorage
-// implementation for storing Job api objects.
-// Package job 提供 Job 的 REST 写入策略、Selector 自动生成、状态转换校验和存储实现。
+// Package job 提供用于存储 Job API 对象的 Registry 接口及其 RESTStorage 实现，
+// 涵盖 REST 写入策略、Selector 自动生成、状态转换校验和存储实现。
 package job

@@ -24,9 +24,8 @@ import (
 	"path/filepath"
 )
 
-// CanReadCertAndKey returns true if the certificate and key files already exists,
-// otherwise returns false. If lost one of cert and key, returns error.
-// 中文：证书与私钥必须成对存在，只缺其一会被视为配置错误而非“未配置”。
+// 若证书与私钥文件都已存在则返回 true，否则返回 false；缺少其中之一会返回错误。
+// 证书与私钥必须成对存在，只缺其一会被视为配置错误而非“未配置”。
 func CanReadCertAndKey(certPath, keyPath string) (bool, error) {
 	certReadable := canReadFile(certPath)
 	keyReadable := canReadFile(keyPath)
@@ -87,9 +86,9 @@ func NewPool(filename string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// NewPoolFromBytes returns an x509.CertPool containing the certificates in the given PEM-encoded bytes.
-// Returns an error if the file could not be read, a certificate could not be parsed, or if the file does not contain any certificates
-// 中文：会新建一个空池，不会包含系统根证书。
+// NewPoolFromBytes 返回一个 x509.CertPool，其中包含给定 PEM 编码字节里的证书。
+// 若内容无法读取、证书无法解析，或其中不含任何证书则返回错误。
+// 会新建一个空池，不会包含系统根证书。
 func NewPoolFromBytes(pemBlock []byte) (*x509.CertPool, error) {
 	certs, err := ParseCertsPEM(pemBlock)
 	if err != nil {
@@ -102,9 +101,9 @@ func NewPoolFromBytes(pemBlock []byte) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// CertsFromFile returns the x509.Certificates contained in the given PEM-encoded file.
-// Returns an error if the file could not be read, a certificate could not be parsed, or if the file does not contain any certificates
-// 中文：错误信息会带上文件路径，便于定位是哪个证书文件损坏。
+// CertsFromFile 返回给定 PEM 编码文件中包含的 x509.Certificate 列表。
+// 若文件无法读取、证书无法解析，或文件中不含任何证书则返回错误。
+// 错误信息会带上文件路径，便于定位是哪个证书文件损坏。
 func CertsFromFile(file string) ([]*x509.Certificate, error) {
 	pemBlock, err := os.ReadFile(file)
 	if err != nil {

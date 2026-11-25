@@ -28,7 +28,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// WaitForAPIServer waits for the API Server's /healthz endpoint to report "ok" with timeout.
 // WaitForAPIServer 在 timeout 时间内反复探测 apiserver 的 /healthz 端点，
 // 直到返回 HTTP 200（"ok"）才认为 apiserver 就绪。
 // controller-manager 在启动控制器之前调用它，以免 apiserver 尚未启动时产生大量无意义报错。
@@ -68,7 +67,6 @@ func WaitForAPIServer(client clientset.Interface, timeout time.Duration) error {
 	return nil
 }
 
-// IsControllerEnabled check if a specified controller enabled or not.
 // IsControllerEnabled 判断名为 name 的控制器是否应当启用。
 // controllers 来自 --controllers 参数，支持三种写法：
 //
@@ -95,7 +93,6 @@ func IsControllerEnabled(name string, disabledByDefaultControllers sets.String, 
 			hasStar = true
 		}
 	}
-	// if we get here, there was no explicit choice
 	// 能执行到这里说明没有找到针对该控制器的显式规则。
 	if !hasStar {
 		// 没有通配符：不在显式名单里的控制器默认全部关闭。

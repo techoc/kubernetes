@@ -49,15 +49,13 @@ func main() {
 	}
 	flag.Parse()
 
-	// use the current context in kubeconfig
-	// 中文：空 masterURL 表示完全依赖 kubeconfig 中的 current-context。
+	// 使用 kubeconfig 中的 current-context：masterURL 传空字符串，表示完全依赖 kubeconfig。
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	// create the clientset
-	// 中文：NewForConfig 会深拷贝并补全默认值（QPS、限流器等），可安全复用。
+	// 创建 clientset：NewForConfig 会深拷贝并补全默认值（QPS、限流器等），可安全复用。
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())

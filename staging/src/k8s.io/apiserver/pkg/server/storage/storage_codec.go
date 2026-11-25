@@ -26,7 +26,7 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 )
 
-// StorageCodecConfig are the arguments passed to newStorageCodecFn
+// StorageCodecConfig 是传递给 newStorageCodecFn 的参数，
 // 描述 etcd 中数据格式的版本与序列化配置；StorageVersion 是写入 etcd 的版本，
 // MemoryVersion 是进程内对象使用的版本。
 type StorageCodecConfig struct {
@@ -64,9 +64,8 @@ func NewStorageCodec(opts StorageCodecConfig) (runtime.Codec, runtime.GroupVersi
 
 	s := serializer.Serializer
 
-	// Give callers the opportunity to wrap encoders and decoders.  For decoders, each returned decoder will
-	// be passed to the recognizer so that multiple decoders are available.
-	// 装饰器允许上层注入压缩、加密等处理，且不改变版本选择逻辑。
+	// 装饰器允许调用方包装编码器与解码器（借此注入压缩、加密等处理）；解码器返回列表中的
+	// 每一个都会传给 recognizer，因此可同时保留多个解码器，且不改变版本选择逻辑。
 	var encoder runtime.Encoder = s
 	if opts.EncoderDecoratorFn != nil {
 		encoder = opts.EncoderDecoratorFn(encoder)
@@ -76,11 +75,10 @@ func NewStorageCodec(opts StorageCodecConfig) (runtime.Codec, runtime.GroupVersi
 		s,
 		// universal deserializer as a fallback
 		opts.StorageSerializer.UniversalDeserializer(),
-		// base64-wrapped universal deserializer as a last resort.
-		// this allows reading base64-encoded protobuf, which should only exist if etcd2+protobuf was used at some point.
-		// data written that way could exist in etcd2, or could have been migrated to etcd3.
 		// TODO: flag this type of data if we encounter it, require migration (read to decode, write to persist using a supported encoder), and remove in 1.8
-		// base64 包装是历史遗留格式，仅为兼容早期 etcd2+protobuf 写入的数据。
+		// base64 包装的通用反序列化器是最后的兜底手段，用于读取 base64 编码的 protobuf；
+		// 这类历史遗留格式只在早期用过 etcd2+protobuf 时才会出现，数据可能仍在 etcd2 中，
+		// 也可能已迁移到 etcd3。
 		runtime.NewBase64Serializer(nil, opts.StorageSerializer.UniversalDeserializer()),
 	}
 	if opts.DecoderDecoratorFn != nil {

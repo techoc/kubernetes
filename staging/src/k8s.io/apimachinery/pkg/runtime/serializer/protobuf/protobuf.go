@@ -251,8 +251,8 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.
 	if s.options.StreamingCollectionsEncoding {
 		listData, err := getStreamingListData(obj)
 		if err == nil {
-			// Doesn't honor custom proto marshaling methods (like json streaming), because all proto objects implement proto methods.
-			// 仅对 list 生效；非 list 时 getStreamingListData 返回错误，继续走普通路径。
+			// 该路径不遵循自定义的 proto 序列化方法（如 json streaming），因为所有 proto 对象都实现了 proto 方法；
+			// 仅对 list 生效：非 list 时 getStreamingListData 返回错误，继续走普通路径。
 			return streamingEncodeUnknownList(w, unk, listData, memAlloc)
 		}
 	}
@@ -276,8 +276,7 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.
 		return err
 
 	case unbufferedMarshaller:
-		// this path performs extra allocations
-		// 该接口只能返回完整字节，无法预知大小，因此多一次分配与拷贝。
+		// 该接口只能返回完整字节，无法预知大小，因此这条路径多一次分配与拷贝。
 		data, err := t.Marshal()
 		if err != nil {
 			return err

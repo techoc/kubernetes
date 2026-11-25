@@ -1229,7 +1229,7 @@ func startAPFController(t *testing.T, stopCh <-chan struct{}, apfConfiguration [
 	return controller, controllerCompletedCh
 }
 
-// returns a started http2 server, with a client function to send request to the server.
+// newHTTP2ServerWithClient 返回一个已启动的 http2 server，以及一个向该 server 发送请求的 client 函数。
 // 必须启用 HTTP/2：测试要区分"普通超时响应"与"stream reset"两种语义。
 func newHTTP2ServerWithClient(handler http.Handler, clientTimeout time.Duration) (*httptest.Server, func(path string) (*http.Response, error)) {
 	server := httptest.NewUnstartedServer(handler)
@@ -1441,7 +1441,7 @@ func checkForExpectedMetrics(t *testing.T, expectedMetrics []string) {
 	}
 }
 
-// gaugeValueMatch ensures that the value of gauge metrics matching the labelFilter is as expected.
+// gaugeValueMatch 确保带 labelFilter 的 gauge 指标取值符合预期。
 // 汇总所有匹配标签的序列，兼容同名 gauge 因其他维度拆分成多条的情况。
 func gaugeValueMatch(name string, labelFilter map[string]string, wantValue int) error {
 	metrics, err := legacyregistry.DefaultGatherer.Gather()

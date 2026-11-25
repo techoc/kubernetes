@@ -26,15 +26,15 @@ import (
 // 必须像这样手动暴露出来，其他引用本包的包才能以自动生成的方式调用这些转换函数。
 // TODO: 修复 conversion-gen 的缺陷，使其也能在自动生成的代码中发现这些 Convert_* 函数。
 
-// Convert_v1alpha1_EndpointControllerConfiguration_To_config_EndpointControllerConfiguration
-// 是由 conversion-gen 生成的转换函数，将外部 v1alpha1 配置转换为内部配置。
+// Convert_v1alpha1_EndpointControllerConfiguration_To_config_EndpointControllerConfiguration 是由 conversion-gen 生成的转换函数，
+// 将外部 v1alpha1 配置转换为内部配置。
 // 之所以手动包装，是因为生成代码中的 autoConvert 不会被外部包自动发现（见上方 TODO）。
 func Convert_v1alpha1_EndpointControllerConfiguration_To_config_EndpointControllerConfiguration(in *v1alpha1.EndpointControllerConfiguration, out *endpointconfig.EndpointControllerConfiguration, s conversion.Scope) error {
 	return autoConvert_v1alpha1_EndpointControllerConfiguration_To_config_EndpointControllerConfiguration(in, out, s)
 }
 
-// Convert_config_EndpointControllerConfiguration_To_v1alpha1_EndpointControllerConfiguration
-// 是由 conversion-gen 生成的反向转换函数，将内部配置转换回外部 v1alpha1 配置。
+// Convert_config_EndpointControllerConfiguration_To_v1alpha1_EndpointControllerConfiguration 是由 conversion-gen 生成的反向转换函数，
+// 将内部配置转换回外部 v1alpha1 配置。
 // 手动暴露的原因同上：外部包需要能直接调用到生成的转换逻辑。
 func Convert_config_EndpointControllerConfiguration_To_v1alpha1_EndpointControllerConfiguration(in *endpointconfig.EndpointControllerConfiguration, out *v1alpha1.EndpointControllerConfiguration, s conversion.Scope) error {
 	return autoConvert_config_EndpointControllerConfiguration_To_v1alpha1_EndpointControllerConfiguration(in, out, s)

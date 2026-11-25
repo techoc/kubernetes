@@ -29,7 +29,6 @@ import (
 	flowcontrolrequest "k8s.io/apiserver/pkg/util/flowcontrol/request"
 )
 
-// QueueSetDump is an instant dump of queue-set.
 // QueueSetDump 是一个优先级的队列集合在某一时刻的快照。
 type QueueSetDump struct {
 	Queues                     []QueueDump
@@ -44,8 +43,7 @@ type QueueSetDump struct {
 	Cancelled                  int
 }
 
-// QueueDump is an instant dump of one queue in a queue-set.
-// QueueDump 是单个队列快照；Requests 只包含仍在等待的请求，
+// QueueDump 是单个队列在某一时刻的快照；Requests 只包含仍在等待的请求，
 // 正在执行的请求单独放在 RequestsExecuting 中。
 type QueueDump struct {
 	QueueSum          QueueSum
@@ -64,8 +62,7 @@ type QueueSum struct {
 	TotalWorkSum string
 }
 
-// RequestDump is an instant dump of one requests pending in the queue.
-// RequestDump 描述一个等待中（或执行中）请求的快照，
+// RequestDump 描述队列中某一个等待中（或执行中）请求在某一时刻的快照，
 // 包含其匹配的 FlowSchema、到达/开始时间与工作量估算。
 type RequestDump struct {
 	MatchedFlowSchema string

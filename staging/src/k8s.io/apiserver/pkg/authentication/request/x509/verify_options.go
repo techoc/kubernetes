@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/util/cert"
 )
 
-// StaticVerifierFn is a VerifyOptionFunc that always returns the same value.  This allows verify options that cannot change.
+// StaticVerifierFn 是一个总是返回同一个值的 VerifyOptionFunc，用于构造不会变化的校验选项。
 // 第二个返回值为 false 时表示“无可用校验配置”，调用方据此决定是否跳过校验。
 func StaticVerifierFn(opts x509.VerifyOptions) VerifyOptionFunc {
 	return func() (x509.VerifyOptions, bool) {
@@ -52,7 +52,7 @@ func NewStaticVerifierFromFile(clientCA string) (VerifyOptionFunc, error) {
 	return StaticVerifierFn(opts), nil
 }
 
-// StringSliceProvider is a way to get a string slice value.  It is heavily used for authentication headers among other places.
+// StringSliceProvider 是获取字符串切片值的抽象，认证头等场景大量使用它。
 // 抽象成接口是为了支持动态值（如轮转的请求头/证书），同时保持调用方无锁读取。
 type StringSliceProvider interface {
 	// Value returns the current string slice.  Callers should never mutate the returned value.

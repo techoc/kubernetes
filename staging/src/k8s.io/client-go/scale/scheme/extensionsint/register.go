@@ -26,7 +26,7 @@ import (
 // GroupName is the group name use in this package
 const GroupName = extensionsv1beta1.GroupName
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所使用的组版本。
 // 内部版本不参与线缆传输，仅作为 extensions group 的转换枢纽。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
@@ -47,7 +47,7 @@ var (
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// Adds the list of known types to api.Scheme.
+// 把已知类型列表注册到 api.Scheme。
 // 复用 scale/scheme 的 Scale 类型，并以 extensions 的内部组版本注册，从而与其他
 // group 的内部类型区分开。
 func addKnownTypes(scheme *runtime.Scheme) error {

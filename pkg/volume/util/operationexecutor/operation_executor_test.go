@@ -53,8 +53,7 @@ const (
 
 var _ OperationGenerator = &fakeOperationGenerator{}
 
-// TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachableAndNonDevicemountablePlugins
-// 验证不可挂载、非设备挂载插件的挂载操作可以并发执行。
+// TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachableAndNonDevicemountablePlugins 验证不可挂载、非设备挂载插件的挂载操作可以并发执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachableAndNonDevicemountablePlugins(t *testing.T) {
 	// 准备
 	ch, quit, oe := setup()
@@ -82,8 +81,7 @@ func TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachableAndNonDevi
 	}
 }
 
-// TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins
-// 验证可挂载插件的挂载操作必须串行执行。
+// TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins 验证可挂载插件的挂载操作必须串行执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins(t *testing.T) {
 	t.Parallel()
 
@@ -111,8 +109,7 @@ func TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins(t *te
 	}
 }
 
-// TestOperationExecutor_MountVolume_ConcurrentMountForDeviceMountablePlugins
-// 验证设备挂载插件的挂载操作必须串行执行。
+// TestOperationExecutor_MountVolume_ConcurrentMountForDeviceMountablePlugins 验证设备挂载插件的挂载操作必须串行执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForDeviceMountablePlugins(t *testing.T) {
 	t.Parallel()
 
@@ -140,8 +137,7 @@ func TestOperationExecutor_MountVolume_ConcurrentMountForDeviceMountablePlugins(
 	}
 }
 
-// TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins
-// 验证所有类型插件的卸载操作都可以并发执行。
+// TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins 验证所有类型插件的卸载操作都可以并发执行。
 func TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins(t *testing.T) {
 	// 准备
 	ch, quit, oe := setup()
@@ -200,8 +196,7 @@ func TestOperationExecutor_UnmountDeviceConcurrently(t *testing.T) {
 	}
 }
 
-// TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToSameNode
-// 验证单节点卷挂到同一节点时必须串行执行。
+// TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToSameNode 验证单节点卷挂到同一节点时必须串行执行。
 func TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToSameNode(t *testing.T) {
 	t.Parallel()
 
@@ -233,8 +228,7 @@ func TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToSameNode(t *testi
 	}
 }
 
-// TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToSameNode
-// 验证多节点卷挂到同一节点时必须串行执行。
+// TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToSameNode 验证多节点卷挂到同一节点时必须串行执行。
 func TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToSameNode(t *testing.T) {
 	t.Parallel()
 
@@ -266,8 +260,7 @@ func TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToSameNode(t *testin
 	}
 }
 
-// TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToDifferentNodes
-// 验证单节点卷挂到不同节点时必须串行执行。
+// TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToDifferentNodes 验证单节点卷挂到不同节点时必须串行执行。
 func TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToDifferentNodes(t *testing.T) {
 	t.Parallel()
 
@@ -299,8 +292,7 @@ func TestOperationExecutor_AttachSingleNodeVolumeConcurrentlyToDifferentNodes(t 
 	}
 }
 
-// TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToDifferentNodes
-// 验证多节点卷挂到不同节点时可以并发执行。
+// TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToDifferentNodes 验证多节点卷挂到不同节点时可以并发执行。
 func TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToDifferentNodes(t *testing.T) {
 	// 准备
 	ch, quit, oe := setup()
@@ -330,8 +322,7 @@ func TestOperationExecutor_AttachMultiNodeVolumeConcurrentlyToDifferentNodes(t *
 	}
 }
 
-// TestOperationExecutor_DetachSingleNodeVolumeConcurrentlyFromSameNode
-// 验证从同一节点卸载单节点卷时必须串行执行。
+// TestOperationExecutor_DetachSingleNodeVolumeConcurrentlyFromSameNode 验证从同一节点卸载单节点卷时必须串行执行。
 func TestOperationExecutor_DetachSingleNodeVolumeConcurrentlyFromSameNode(t *testing.T) {
 	t.Parallel()
 
@@ -363,8 +354,7 @@ func TestOperationExecutor_DetachSingleNodeVolumeConcurrentlyFromSameNode(t *tes
 	}
 }
 
-// TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromSameNode
-// 验证从同一节点卸载多节点卷时必须串行执行。
+// TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromSameNode 验证从同一节点卸载多节点卷时必须串行执行。
 func TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromSameNode(t *testing.T) {
 	t.Parallel()
 
@@ -396,8 +386,7 @@ func TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromSameNode(t *test
 	}
 }
 
-// TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromDifferentNodes
-// 验证从不同节点卸载多节点卷时可以并发执行。
+// TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromDifferentNodes 验证从不同节点卸载多节点卷时可以并发执行。
 func TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromDifferentNodes(t *testing.T) {
 	// 准备
 	ch, quit, oe := setup()
@@ -427,8 +416,7 @@ func TestOperationExecutor_DetachMultiNodeVolumeConcurrentlyFromDifferentNodes(t
 	}
 }
 
-// TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnSameNode
-// 验证同一节点上卷挂载状态校验操作可以并发执行。
+// TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnSameNode 验证同一节点上卷挂载状态校验操作可以并发执行。
 func TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnSameNode(t *testing.T) {
 	// 准备
 	ch, quit, oe := setup()
@@ -444,8 +432,7 @@ func TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnSameNode(t *tes
 	}
 }
 
-// TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnDifferentNodes
-// 验证不同节点上卷挂载状态校验操作可以并发执行。
+// TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnDifferentNodes 验证不同节点上卷挂载状态校验操作可以并发执行。
 func TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnDifferentNodes(t *testing.T) {
 	// 准备
 	ch, quit, oe := setup()
@@ -464,8 +451,7 @@ func TestOperationExecutor_VerifyVolumesAreAttachedConcurrentlyOnDifferentNodes(
 	}
 }
 
-// TestOperationExecutor_VerifyControllerAttachedVolumeConcurrently
-// 验证控制器挂载状态校验操作必须串行执行。
+// TestOperationExecutor_VerifyControllerAttachedVolumeConcurrently 验证控制器挂载状态校验操作必须串行执行。
 func TestOperationExecutor_VerifyControllerAttachedVolumeConcurrently(t *testing.T) {
 	t.Parallel()
 
@@ -489,8 +475,7 @@ func TestOperationExecutor_VerifyControllerAttachedVolumeConcurrently(t *testing
 	}
 }
 
-// TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachablePlugins_VolumeMode_Block
-// 验证块模式下不可挂载插件的映射操作可以并发执行。
+// TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachablePlugins_VolumeMode_Block 验证块模式下不可挂载插件的映射操作可以并发执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachablePlugins_VolumeMode_Block(t *testing.T) {
 	// 准备
 	ch, quit, oe := setup()
@@ -520,8 +505,7 @@ func TestOperationExecutor_MountVolume_ConcurrentMountForNonAttachablePlugins_Vo
 	}
 }
 
-// TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins_VolumeMode_Block
-// 验证块模式下可挂载插件的映射操作必须串行执行。
+// TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins_VolumeMode_Block 验证块模式下可挂载插件的映射操作必须串行执行。
 func TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins_VolumeMode_Block(t *testing.T) {
 	t.Parallel()
 
@@ -553,8 +537,7 @@ func TestOperationExecutor_MountVolume_ConcurrentMountForAttachablePlugins_Volum
 	}
 }
 
-// TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins_VolumeMode_Block
-// 验证块模式下所有插件的取消映射操作可以并发执行。
+// TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins_VolumeMode_Block 验证块模式下所有插件的取消映射操作可以并发执行。
 func TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins_VolumeMode_Block(t *testing.T) {
 	// 准备
 	ch, quit, oe := setup()
@@ -593,8 +576,7 @@ func TestOperationExecutor_UnmountVolume_ConcurrentUnmountForAllPlugins_VolumeMo
 	}
 }
 
-// TestOperationExecutor_UnmountDeviceConcurrently_VolumeMode_Block
-// 验证块模式下设备取消映射操作必须串行执行。
+// TestOperationExecutor_UnmountDeviceConcurrently_VolumeMode_Block 验证块模式下设备取消映射操作必须串行执行。
 func TestOperationExecutor_UnmountDeviceConcurrently_VolumeMode_Block(t *testing.T) {
 	t.Parallel()
 

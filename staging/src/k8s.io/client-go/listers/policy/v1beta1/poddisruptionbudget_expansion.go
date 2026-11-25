@@ -25,16 +25,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// PodDisruptionBudgetListerExpansion allows custom methods to be added to
-// PodDisruptionBudgetLister.
+// PodDisruptionBudgetListerExpansion 允许向 PodDisruptionBudgetLister 添加自定义方法。
 // 这里是 lister 的扩展点：生成代码保留该方法，手写的扩展逻辑通过内嵌接口实现。
 type PodDisruptionBudgetListerExpansion interface {
 	// GetPodPodDisruptionBudgets 返回与给定 pod 标签匹配的所有 PDB。
 	GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*policy.PodDisruptionBudget, error)
 }
 
-// PodDisruptionBudgetNamespaceListerExpansion allows custom methods to be added to
-// PodDisruptionBudgetNamespaceLister.
+// PodDisruptionBudgetNamespaceListerExpansion 允许向 PodDisruptionBudgetNamespaceLister 添加自定义方法。
 // 目前没有命名空间级扩展方法，仅保留占位接口，便于日后在不破坏兼容性的前提下新增。
 type PodDisruptionBudgetNamespaceListerExpansion interface{}
 
@@ -57,7 +55,7 @@ func (s *podDisruptionBudgetLister) GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*
 			continue
 		}
 
-		// If a PDB with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入 nil 或空选择器的 PDB，它应匹配零个对象而非全部。
 		// 这一点与 ReplicaSet 等控制器不同：空选择器会匹配所有 pod，而 PDB 的空选择器应视为不匹配。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue

@@ -60,20 +60,16 @@ func TranscodeToJSON(dst io.Writer, src io.Reader) error {
 		return errors.New("extraneous data")
 	}
 
-	// Use an Encoder to avoid the extra []byte allocated by Marshal. Encode, unlike Marshal,
-	// appends a trailing newline to separate consecutive encodings of JSON values that aren't
-	// self-delimiting, like numbers. Strip the newline to avoid the assumption that every
-	// json.Unmarshaler implementation will accept trailing whitespace.
-	// 译注：用 Encoder 省去 Marshal 的临时切片；其附加的换行由 suppressor 去掉，
-	// 以免依赖所有 json.Unmarshaler 都容忍尾随空白。
+	// 用 Encoder 代替 Marshal，省去 Marshal 额外分配的 []byte。Encode 与 Marshal 不同，
+	// 会在末尾追加换行以分隔不能自定界的连续 JSON 编码值（如数字）；该换行由 suppressor
+	// 去掉，以免依赖所有 json.Unmarshaler 实现都容忍尾随空白。
 	enc := json.NewEncoder(&trailingLinefeedSuppressor{delegate: dst})
 	enc.SetIndent("", "")
 	return enc.Encode(tmp)
 }
 
-// trailingLinefeedSuppressor is an io.Writer that wraps another io.Writer, suppressing a single
-// trailing linefeed if it is the last byte written by the latest call to Write.
-// 它只抑制“最后一次 Write 的最后一个换行”，若之后还有写入，会把缓存的换行补发出去，
+// trailingLinefeedSuppressor 是一个包装其他 io.Writer 的 io.Writer，当最后一次 Write 写入的
+// 最后一个字节是换行时，将其抑制。它只抑制“最后一次 Write 的最后一个换行”，若之后还有写入，会把缓存的换行补发出去，
 // 从而保证多次 Encode 到同一 writer 时各值仍被正确分隔。
 type trailingLinefeedSuppressor struct {
 	lf       bool

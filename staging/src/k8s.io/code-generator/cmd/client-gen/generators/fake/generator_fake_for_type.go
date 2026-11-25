@@ -134,7 +134,7 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 
 	generateApply := len(g.applyConfigurationPackage) > 0
 	if generateApply {
-		// Generated apply builder type references required for generated Apply function
+		// 为生成的 Apply 函数准备 apply builder 类型引用：
 		// ApplyConfiguration 位于 applyconfiguration 包的 <group>/<version> 子包下，
 		// 名称由类型名加 ApplyConfiguration 后缀构成。
 		_, gvString := util.ParsePathGroupVersion(g.inputPackage)
@@ -162,7 +162,7 @@ func (g *genFakeForType) GenerateType(c *generator.Context, t *types.Type, w io.
 
 	_, typeGVString := util.ParsePathGroupVersion(g.inputPackage)
 
-	// generate extended client methods
+	// 生成扩展客户端方法：
 	// 扩展动词（如 get/update 的 Scale 子资源）可以覆盖输入/结果类型，
 	// 因此每个扩展都复制一份参数表，避免污染基础方法。
 	for _, e := range tags.Extensions {
@@ -281,8 +281,7 @@ const (
 // * withList, withApply: index 3.
 // Go enforces index unicity in these kinds of declarations.
 
-// struct declarations
-// 四个槽位必须与上面的位值保持一致：索引即 list|apply 的组合值。
+// 结构体声明：四个槽位必须与上面的位值保持一致，索引即 list|apply 的组合值。
 var structType = []string{
 	noList | noApply: `
 	// fake$.type|publicPlural$ implements $.type|public$Interface
@@ -314,8 +313,7 @@ var structType = []string{
 	`,
 }
 
-// Constructors for the struct, in all variants
-// 构造函数的四个槽位与 structType 一一对应，泛型实参随变体递增。
+// 各变体的结构体构造函数：构造函数的四个槽位与 structType 一一对应，泛型实参随变体递增。
 var newStruct = []string{
 	noList | noApply: `
 	func newFake$.type|publicPlural$(fake *Fake$.GroupGoName$$.Version$$if .namespaced$, namespace string$end$) $.realClientInterface|raw$ {

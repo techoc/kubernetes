@@ -61,7 +61,7 @@ func Test_ConfigMapFakeClient(t *testing.T) {
 	}
 }
 
-// This test checks decoding behavior for the actual client to ensure the fake client (tested above) is consistent.
+// 本测试检查真实客户端的解码行为，以确保上面测过的 fake client 与之保持一致。
 // 复现生成代码中 Get 的解码路径：即使响应体带 apiVersion/kind，解码到目标类型后也不会设置 GVK。
 func TestGetDecoding(t *testing.T) {
 	// this the duplication of logic from the real Get API for configmaps.  This will prove that the generated client will not return a GVK
@@ -84,7 +84,7 @@ func TestGetDecoding(t *testing.T) {
 	}
 }
 
-// This test checks decoding behavior for the actual client to ensure the fake client (tested above) is consistent.
+// 本测试检查真实客户端的解码行为，以确保上面测过的 fake client 与之保持一致。
 // 与 Get 同理，List 结果也不会携带 GVK。
 func TestListDecoding(t *testing.T) {
 	// this the duplication of logic from the real Get API for configmaps.  This will prove that the generated client will not return a GVK

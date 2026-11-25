@@ -109,8 +109,7 @@ func (h *priorityAndFairnessHandler) Handle(w http.ResponseWriter, r *http.Reque
 
 	isWatchRequest := watchVerbs.Has(requestInfo.Verb)
 
-	// Skip tracking long running non-watch requests.
-	// 长连接（exec/port-forward 等）可能持续很久，占用 APF 并发额度会
+	// 跳过对长时非 watch 请求的跟踪：长连接（exec/port-forward 等）可能持续很久，占用 APF 并发额度会
 	// 导致正常请求饥饿；watch 例外，因为它需要按初始化时间计费。
 	if h.longRunningRequestCheck != nil && h.longRunningRequestCheck(r, requestInfo) && !isWatchRequest {
 		klog.V(6).Infof("Serving RequestInfo=%#+v, user.Info=%#+v as longrunning\n", requestInfo, user)
@@ -235,7 +234,7 @@ func (h *priorityAndFairnessHandler) Handle(w http.ResponseWriter, r *http.Reque
 			watchInitializationSignal.Wait()
 		}
 
-		// Ensure that an item can be put to resultCh asynchronously.
+		// 保证可以异步向 resultCh 投递一个结果：
 		// 缓冲 1 保证负责 APF 的 goroutine 总能投递结果而不泄漏。
 		resultCh := make(chan interface{}, 1)
 

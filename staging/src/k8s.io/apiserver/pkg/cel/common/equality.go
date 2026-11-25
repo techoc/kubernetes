@@ -49,8 +49,7 @@ type CorrelatedObject struct {
 	// to determine how to correlate the old object.
 	Schema Schema
 
-	// Duration spent on ratcheting validation for this object and all of its
-	// children.
+	// Duration 是该对象及其所有子节点做 ratcheting 校验所花的时间。
 	// 用指针共享同一个累计器，子节点直接累加到父节点上，避免逐层回传。
 	Duration *time.Duration
 
@@ -59,7 +58,7 @@ type CorrelatedObject struct {
 	// Cached comparison result of DeepEqual of `value` and `thunk.oldValue`
 	comparisonResult *bool
 
-	// Cached map representation of a map-type list, or nil if not map-type list
+	// mapList 缓存 map 类型列表的 map 表示，不是 map 类型列表时为 nil。
 	// 惰性构建：只有真正按索引访问 map 类型列表时才需要它。
 	mapList MapList
 
@@ -205,14 +204,11 @@ func (r *CorrelatedObject) CachedDeepEqual() (res bool) {
 			child := r.Index(i)
 			if child == nil {
 				if r.mapList == nil {
-					// Treat non-correlatable array as a unit with reflect.DeepEqual
-					// 普通列表无法按下标配对时，只能整体比较，这是保守但正确的选择。
+					// 无法关联的列表用 reflect.DeepEqual 当作整体比较，这是保守但正确的选择。
 					return reflect.DeepEqual(oldAsArray, newAsArray)
 				}
 
-				// If array is correlatable, but old not found. Just short circuit
-				// comparison
-				// 可关联列表却找不到对应旧元素，等价于新增元素，直接判不相等。
+				// 列表可关联却找不到对应旧元素时直接短路比较：等价于新增元素，判不相等。
 				return false
 
 			} else if !child.CachedDeepEqual() {

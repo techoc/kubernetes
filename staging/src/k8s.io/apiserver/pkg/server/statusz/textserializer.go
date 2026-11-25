@@ -30,14 +30,14 @@ import (
 	v1beta1 "k8s.io/apiserver/pkg/server/statusz/api/v1beta1"
 )
 
-// statuszTextSerializer implements runtime.Serializer for text/plain output.
+// statuszTextSerializer 实现 runtime.Serializer，用于 text/plain 输出。
 // 只实现编码方向：statusz 是只读端点，从不反序列化请求体。
 type statuszTextSerializer struct {
 	componentName string
 	reg           statuszRegistry
 }
 
-// Encode writes the statusz information in plain text format to the given writer, using the provided obj.
+// Encode 用提供的 obj 把 statusz 信息以纯文本格式写入给定的 writer。
 //
 // 所有动态值都经过 html.EscapeString 转义：该输出可能被浏览器直接打开，
 // 转义可避免组件名、版本号等字段注入标记。
@@ -89,7 +89,7 @@ func (s statuszTextSerializer) Decode(data []byte, gvk *schema.GroupVersionKind,
 	return nil, nil, fmt.Errorf("decode not supported for text/plain")
 }
 
-// Identifier returns a unique identifier for this serializer.
+// Identifier 返回该序列化器的唯一标识符。
 // 常量标识符使运行时可以按序列化器类型做缓存与比较。
 func (s statuszTextSerializer) Identifier() runtime.Identifier {
 	return runtime.Identifier("statuszTextSerializer")

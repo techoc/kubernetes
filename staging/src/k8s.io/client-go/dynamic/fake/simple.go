@@ -105,7 +105,6 @@ func NewSimpleDynamicClientWithCustomListKinds(scheme *runtime.Scheme, gvrToList
 		}
 		listGVK := gvr.GroupVersion().WithKind(listKind)
 
-		// if we already have this type registered, just skip it
 		// 已注册的类型直接采用；未注册的补一个 UnstructuredList，保证 tracker 能创建列表。
 		if _, err := scheme.New(listGVK); err == nil {
 			completeGVRToListKind[gvr] = listKind

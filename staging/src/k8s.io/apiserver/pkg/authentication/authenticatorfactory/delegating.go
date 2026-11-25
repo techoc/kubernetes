@@ -37,10 +37,8 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// DelegatingAuthenticatorConfig is the minimal configuration needed to create an authenticator
-// built to delegate authentication to a kube API server
-// DelegatingAuthenticatorConfig 汇总可选的认证方式；New 按固定优先级把它们
-// 组合成单一 authenticator.Request。
+// DelegatingAuthenticatorConfig 是创建「把认证委托给 kube API server」的认证器所需的最小配置，
+// 它汇总可选的认证方式；New 按固定优先级把它们组合成单一 authenticator.Request。
 type DelegatingAuthenticatorConfig struct {
 	Anonymous *apiserver.AnonymousAuthConfig
 
@@ -75,8 +73,7 @@ func (c DelegatingAuthenticatorConfig) New() (authenticator.Request, *spec.Secur
 	authenticators := []authenticator.Request{}
 	securityDefinitions := spec.SecurityDefinitions{}
 
-	// front-proxy first, then remote
-	// Add the front proxy authenticator if requested
+	// 优先 front-proxy，其次远程认证：若配置了 front-proxy 就把它加为第一个认证器。
 	// 请求头认证必须放在最前：front-proxy 已在 TLS 层验证过客户端，后续认证器
 	// 不应再覆盖其身份判断。
 	if c.RequestHeaderConfig != nil {

@@ -45,7 +45,6 @@ import (
 
 var ignoreErrValueDetail = cmpopts.IgnoreFields(field.Error{}, "BadValue", "Detail")
 
-// TestJobStrategy_PrepareForUpdate tests various scenarios for PrepareForUpdate
 // TestJobStrategy_PrepareForUpdate 覆盖 Job Spec 更新时的 Generation、暂停 Job 模板可变性和 Feature Gate 字段清理。
 func TestJobStrategy_PrepareForUpdate(t *testing.T) {
 	validSelector := getValidLabelSelector()
@@ -475,7 +474,6 @@ func TestJobStrategy_PrepareForUpdate(t *testing.T) {
 	}
 }
 
-// TestJobStrategy_PrepareForCreate tests various scenarios for PrepareForCreate
 // TestJobStrategy_PrepareForCreate 验证新 Job 自动生成 selector/模板标签、重置 Status 并初始化 Generation。
 func TestJobStrategy_PrepareForCreate(t *testing.T) {
 	validSelector := getValidLabelSelector()

@@ -58,7 +58,7 @@ func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Pack
 	}
 
 	// Build a mapping from openAPI type name to GVK.
-	// Find the root types needed by by client-go for apply.
+	// 找出 client-go apply 所需的根类型：
 	// 只有同时具备 +genclient 与 apply/applyStatus verb 的类型才是 apply 根对象，
 	// 其余类型通过引用闭包被间接纳入。
 	gvkToOpenAPIType := map[clientgentypes.GroupVersionKind]string{}
@@ -81,7 +81,7 @@ func newTypeModels(openAPISchemaFilePath string, pkgTypes map[string]*types.Pack
 		}
 	}
 
-	// Trim the schema down to just the types needed by client-go for apply.
+	// 把 schema 裁剪到只保留 client-go apply 所需的类型：
 	// 裁剪可缩小序列化/校验成本，也避免未引用的外部 schema 造成校验失败。
 	requiredDefs := make(map[string]spec.Schema)
 	for name, def := range rootDefs {
@@ -129,7 +129,7 @@ func toValidatedModels(openAPISchema *spec.Swagger) (utilproto.Models, error) {
 }
 
 // findReferenced recursively finds all schemas referenced from the given def.
-// toValidatedModels makes sure no references get missed.
+// toValidatedModels 确保不会漏掉任何引用。
 // 递归覆盖 OpenAPI schema 中所有可能嵌套 schema 的位置；漏掉任一分支都会导致
 // 裁剪后的文档出现悬空 $ref，从而在模型校验阶段报错。
 func findReferenced(def *spec.Schema, allSchemas, referencedOut map[string]spec.Schema) {

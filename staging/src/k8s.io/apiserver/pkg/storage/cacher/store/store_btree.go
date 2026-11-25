@@ -61,7 +61,7 @@ func (si *threadedStoreIndexer) Count(prefix, continueKey string) (count int) {
 // btree 的 Clone 是写时复制，代价低；但底层实现要求调用时不并发修改，
 // 因此这里必须持有写锁而非读锁——这也是注释「Clone 不应并发调用」的由来。
 func (si *threadedStoreIndexer) Clone() Snapshot {
-	// Clone should not be called concurrently.
+	// Clone 不应被并发调用。
 	si.lock.Lock()
 	defer si.lock.Unlock()
 	return si.store.Clone()

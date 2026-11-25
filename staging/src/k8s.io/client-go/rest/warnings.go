@@ -135,8 +135,7 @@ type warningWriter struct {
 	out io.Writer
 	// opts contains options controlling warning output
 	opts WarningWriterOptions
-	// writtenLock guards written and writtenCount
-	// 中文：同时保护去重集合与计数器，使多个并发请求的 warning 输出串行化。
+	// writtenLock 保护去重集合 written 与计数器 writtenCount，使多个并发请求的 warning 输出串行化。
 	writtenLock  sync.Mutex
 	writtenCount int
 	written      map[string]struct{}
@@ -144,9 +143,8 @@ type warningWriter struct {
 
 // WarningWriterOptions controls the behavior of a WarningHandler constructed using NewWarningWriter()
 type WarningWriterOptions struct {
-	// Deduplicate indicates a given warning message should only be written once.
-	// Setting this to true in a long-running process handling many warnings can result in increased memory use.
-	// 中文：去重集合只增不减，长生命周期进程中可能持续增长，需权衡内存。
+	// Deduplicate 表示同一条 warning 消息只输出一次；
+	// 在处理大量 warning 的长生命周期进程中置为 true，会因去重集合只增不减而持续占用内存，需权衡。
 	Deduplicate bool
 	// Color indicates that warning output can include ANSI color codes
 	Color bool

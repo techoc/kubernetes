@@ -43,7 +43,7 @@ var (
 	// PanicOnCacheInconsistency enables the consistency checking mechanism for cache.
 	// Based on KUBE_WATCHCACHE_CONSISTENCY_CHECKER environment variable.
 	PanicOnCacheInconsistency = false
-	// checkerListPageSize is the checker's request chunk size of list operations.
+	// checkerListPageSize 是检查器发起 list 操作时的分块大小：
 	// 分页可避免一次性拉取超大资源集合；该值与 etcd 的默认页大小对齐。
 	checkerListPageSize = int64(10000)
 )
@@ -150,7 +150,7 @@ func (c *Checker) CalculateDigests(ctx context.Context) (*Digest, error) {
 		return nil, fmt.Errorf("failed calculating cache digest: %w", err)
 	}
 	etcdDigest, etcdResourceVersion, err := c.calculateStoreDigest(ctx, c.etcd, cacheResourceVersion, checkerListPageSize, func(obj metav1.Object) {
-		// compare the item in etcd's list against cacheItems which is cacher's list
+		// 将 etcd 列表中的逐项与 cacheItems（即 cacher 的列表）比对：
 		// 找到第一处差异即停止记录，并释放 cacheItems 以便 GC 回收。
 		if foundDiff != nil {
 			return

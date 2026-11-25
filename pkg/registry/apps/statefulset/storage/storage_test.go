@@ -40,8 +40,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TODO: allow for global factory override
 // newStorage 创建带 etcd 测试后端的 StatefulSet/Status/Scale 存储组合。
+// TODO: 允许全局覆盖 factory。
 func newStorage(t *testing.T) (StatefulSetStorage, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorage(t, apps.GroupName)
 	restOptions := generic.RESTOptions{StorageConfig: etcdStorage, Decorator: generic.UndecoratedStorage, DeleteCollectionWorkers: 1, ResourcePrefix: "statefulsets"}

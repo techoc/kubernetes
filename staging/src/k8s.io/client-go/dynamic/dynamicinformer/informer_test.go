@@ -268,10 +268,8 @@ func TestFilteredDynamicSharedInformerFactory(t *testing.T) {
 			if ts.existingObj != nil {
 				objs = append(objs, ts.existingObj)
 			}
-			// don't adjust the scheme to include deploymentlist. This is testing whether an informer can be created against using
-			// a client that doesn't have a type registered in the scheme.
-			// 中文：只登记 GVR→ListKind 映射，不注册具体类型，以验证动态 informer 在不依赖
-			// scheme 类型的情况下也能工作。
+			// 不调整 scheme 以包含 DeploymentList：这里只登记 GVR→ListKind 映射、不注册具体类型，
+			// 以验证动态 informer 在不依赖 scheme 类型的情况下也能工作。
 			gvrToListKind := map[schema.GroupVersionResource]string{
 				{Group: "apps", Version: "v1", Resource: "deployments"}: "DeploymentList",
 			}
@@ -402,9 +400,8 @@ func TestDynamicSharedInformerFactory(t *testing.T) {
 			if ts.existingObj != nil {
 				objs = append(objs, ts.existingObj)
 			}
-			// don't adjust the scheme to include deploymentlist. This is testing whether an informer can be created against using
-			// a client that doesn't have a type registered in the scheme.
-			// 中文：同上，仅提供 ListKind 映射，验证动态 informer 不依赖 scheme 注册类型。
+			// 同样不调整 scheme 以包含 DeploymentList，仅提供 ListKind 映射，
+			// 验证动态 informer 不依赖 scheme 注册类型。
 			gvrToListKind := map[schema.GroupVersionResource]string{
 				{Group: "extensions", Version: "v1beta1", Resource: "deployments"}: "DeploymentList",
 			}

@@ -74,8 +74,8 @@ func WithRetryAfter(handler http.Handler, shutdownDelayDurationElapsedCh <-chan 
 		Message:            "The apiserver is shutting down, please try again later.",
 	}
 
-	// NOTE: both WithRetryAfter and WithWaitGroup must use the same exact isRequestExemptFunc 'isRequestExemptFromRetryAfter,
-	// otherwise SafeWaitGroup might wait indefinitely and will prevent the server from shutting down gracefully.
+	// 注意：WithRetryAfter 和 WithWaitGroup 必须使用完全相同的 isRequestExemptFunc
+	// 'isRequestExemptFromRetryAfter'，否则 SafeWaitGroup 可能无限等待，阻碍服务器优雅退出；
 	// 两者判断不一致会导致被 wait group 跟踪的请求被这里提前拒绝，或反之，最终卡住优雅退出。
 	return withRetryAfter(handler, isRequestExemptFromRetryAfter, func() (*retryAfterParams, bool) {
 		select {
@@ -107,7 +107,7 @@ func withRetryAfter(handler http.Handler, isRequestExemptFn isRequestExemptFunc,
 			w.Header().Set("Connection", "close")
 		}
 
-		// Return a 429 status asking the client to try again after 5 seconds
+		// 返回 429 状态，要求客户端 5 秒后再试：
 		// 固定 5 秒是经验值：足够 kube-proxy/负载均衡摘除该实例，又不至于让客户端等待过久。
 		w.Header().Set("Retry-After", "5")
 		http.Error(w, params.Message, http.StatusTooManyRequests)

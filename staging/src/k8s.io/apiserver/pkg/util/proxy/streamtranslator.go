@@ -45,7 +45,7 @@ type StreamTranslatorHandler struct {
 	Location *url.URL
 	// Transport provides an optional round tripper to use to proxy. If nil, the default proxy transport is used
 	Transport http.RoundTripper
-	// MaxBytesPerSec throttles stream Reader/Writer if necessary
+	// MaxBytesPerSec 在需要时对流 Reader/Writer 限速。
 	// 0 表示不限速。限速作用在单个流上，而非底层连接。
 	MaxBytesPerSec int64
 	// Options define the requested streams (e.g. stdin, stdout).
@@ -66,10 +66,9 @@ func NewStreamTranslatorHandler(location *url.URL, transport http.RoundTripper, 
 // ServeHTTP upgrades the inbound WebSocket connection and bridges it to an
 // upstream SPDY stream.
 func (h *StreamTranslatorHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// Create WebSocket server, including particular streams requested. If this websocket
-	// endpoint is not able to be upgraded, the websocket library will return errors
-	// to the client.
-	// 升级失败视为客户端错误（400），此时还没有可用的 websocket 流来回写状态。
+	// 创建 WebSocket server，并接入请求指定的各个流。如果该 websocket 端点无法完成升级，
+	// websocket 库会把错误返回给客户端：升级失败视为客户端错误（400），
+	// 此时还没有可用的 websocket 流来回写状态。
 	websocketStreams, err := webSocketServerStreams(req, w, h.Options)
 	if err != nil {
 		// Client error increments bad request status code.
@@ -78,8 +77,7 @@ func (h *StreamTranslatorHandler) ServeHTTP(w http.ResponseWriter, req *http.Req
 	}
 	defer websocketStreams.conn.Close()
 
-	// Creating SPDY executor, ensuring redirects are not followed.
-	// 不跟随重定向是安全边界：Location 指向集群内 kubelet，被重定向到任意
+	// 创建 SPDY executor，并确保不跟随重定向：Location 指向集群内 kubelet，被重定向到任意
 	// 地址会变成 SSRF 通道。
 	spdyRoundTripper, err := spdy.NewRoundTripperWithConfig(spdy.RoundTripperConfig{UpgradeTransport: h.Transport, PingPeriod: 5 * time.Second})
 	if err != nil {
@@ -99,10 +97,9 @@ func (h *StreamTranslatorHandler) ServeHTTP(w http.ResponseWriter, req *http.Req
 		return
 	}
 
-	// Wire the WebSocket server streams output to the SPDY client input. The stdin/stdout/stderr streams
-	// can be throttled if the transfer rate exceeds the "MaxBytesPerSec" (zero means unset). Throttling
-	// the streams instead of the underlying connection *may* not perform the same if two streams
-	// traveling the same direction (e.g. stdout, stderr) are being maxed out.
+	// 把 WebSocket server 流的输出接到 SPDY client 的输入。当传输速率超过 "MaxBytesPerSec"
+	// 时（零表示未设置）会对 stdin/stdout/stderr 流限速；对各个流而不是底层连接限速，
+	// 在两个同向流（例如 stdout、stderr）同时被打满时表现*可能*不同。
 	// 方向说明：stdin 是 websocket -> SPDY，因此用 Reader 限速；stdout/stderr
 	// 是 SPDY -> websocket，因此用 Writer 限速。
 	opts := remotecommand.StreamOptions{}

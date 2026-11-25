@@ -377,7 +377,6 @@ func makeValidStatefulSetWithUpdateStrategy(strategyType apps.StatefulSetUpdateS
 	}
 }
 
-// TestDropStatefulSetDisabledFields tests if the drop functionality is working fine or not
 // TestDropStatefulSetDisabledFields 验证 MaxUnavailable 特性关闭时，新字段被清理而旧对象已使用的值继续保留。
 func TestDropStatefulSetDisabledFields(t *testing.T) {
 	testCases := []struct {

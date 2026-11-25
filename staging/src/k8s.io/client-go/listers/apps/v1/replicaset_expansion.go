@@ -66,7 +66,7 @@ func (s *replicaSetLister) GetPodReplicaSets(pod *v1.Pod) ([]*apps.ReplicaSet, e
 			continue
 		}
 
-		// If a ReplicaSet with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入 nil 或空选择器的 ReplicaSet，它应匹配零个对象而非全部：
 		// 空选择器按 Kubernetes 约定匹配零个对象，不能退化为匹配全部。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue

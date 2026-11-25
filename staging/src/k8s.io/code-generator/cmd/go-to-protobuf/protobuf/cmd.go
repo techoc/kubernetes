@@ -227,8 +227,7 @@ func Run(g *Generator) {
 		return
 	}
 
-	// order package by imports, importees first
-	// 按包依赖做拓扑排序：被依赖的包先处理，保证引用它的 IDL 已存在。
+	// 按导入关系排序包，被导入的包排在前面：按包依赖做拓扑排序，保证引用它的 IDL 已存在。
 	deps := deps(c, protobufNames.packages)
 	order, err := importOrder(deps)
 	if err != nil {
@@ -313,8 +312,7 @@ func Run(g *Generator) {
 			continue
 		}
 
-		// alter the generated protobuf file to remove the generated types (but leave the serializers) and rewrite the
-		// package statement to match the desired package name
+		// 改写生成的 protobuf 文件：删除生成的类型（保留序列化器），并把 package 语句改为目标包名。
 		// 原因：pkg 目录下的 Go 类型已存在，protoc 生成的定义会冲突；
 		// 因此只保留序列化相关代码并改写包名。
 		if err := RewriteGeneratedGogoProtobufFile(outputPath, p.ExtractGeneratedType, p.OptionalTypeName, buf.Bytes(), g.DropGogoGo); err != nil {
@@ -323,8 +321,7 @@ func Run(g *Generator) {
 
 		outputPaths := []string{outputPath}
 
-		// sort imports
-		// 改写后导入必然有缺失或冗余，需要 goimports 修正。
+		// 排序导入：改写后导入必然有缺失或冗余，需要 goimports 修正。
 		cmd = exec.Command("goimports", append([]string{"-w"}, outputPaths...)...)
 		out, err = cmd.CombinedOutput()
 		if len(out) > 0 {
@@ -352,8 +349,7 @@ func Run(g *Generator) {
 	}
 
 	if !g.KeepGogoproto {
-		// generate, but do so without gogoprotobuf extensions
-		// 再跑一遍生成器并设置 OmitGogo，用不带 gogo 扩展的版本覆盖之前的结果。
+		// 重新生成，但不带 gogoprotobuf 扩展：再跑一遍生成器并设置 OmitGogo，用不带 gogo 扩展的版本覆盖之前的结果。
 		for _, outputPackage := range outputPackages {
 			p := outputPackage.(*protobufPackage)
 			p.OmitGogo = true

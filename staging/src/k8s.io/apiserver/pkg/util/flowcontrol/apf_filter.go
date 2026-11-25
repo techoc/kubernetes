@@ -37,8 +37,8 @@ import (
 	flowcontrolclient "k8s.io/client-go/kubernetes/typed/flowcontrol/v1"
 )
 
-// ConfigConsumerAsFieldManager is how the config consuminng
-// controller appears in an ObjectMeta ManagedFieldsEntry.Manager
+// ConfigConsumerAsFieldManager 是配置消费控制器在 ObjectMeta 的
+// ManagedFieldsEntry.Manager 中显示的名称；
 // 固定该名称可让多个 API server 的 server-side apply 修改同一字段时正确合并。
 const ConfigConsumerAsFieldManager = "api-priority-and-fairness-config-consumer-v1"
 
@@ -149,7 +149,7 @@ type TestableConfig struct {
 	QueueSetFactory fq.QueueSetFactory
 }
 
-// NewTestable is extra flexible to facilitate testing
+// NewTestable 额外灵活，便于测试；
 // 通过注入时钟、field manager 与队列工厂，可在单测中确定性地复现调度行为。
 func NewTestable(config TestableConfig) Interface {
 	return newTestableController(config)

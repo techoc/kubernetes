@@ -67,31 +67,26 @@ type PersistentVolumeRecyclerConfiguration struct {
 	IncrementTimeoutHostPath int32
 }
 
-// VolumeConfiguration contains *all* enumerated flags meant to configure all volume
-// plugins. From this config, the controller-manager binary will create many instances of
-// volume.VolumeConfig, each containing only the configuration needed for that plugin which
-// are then passed to the appropriate plugin. The ControllerManager binary is the only part
-// of the code which knows what plugins are supported and which flags correspond to each plugin.
+// VolumeConfiguration 包含用于配置所有 volume 插件的全部枚举开关。controller-manager
+// 二进制会从这里为每个插件派生出只含该插件所需配置的 volume.VolumeConfig 实例并传给对应插件；
+// 只有 ControllerManager 本身知道支持哪些插件、哪个开关对应哪个插件。
 // 这里把各插件的开关汇总在一处，是为了让配置文件只对应一个卷配置入口；
 // 具体插件只接收与自己相关的子配置，从而不知道其他插件的存在。
 // 这种集中定义、分散消费的划分让插件不必感知控制器的启动参数，
 // 也避免插件之间因为共用同一份配置结构而产生隐式耦合。
 type VolumeConfiguration struct {
-	// enableHostPathProvisioning enables HostPath PV provisioning when running without a
-	// cloud provider. This allows testing and development of provisioning features. HostPath
-	// provisioning is not supported in any way, won't work in a multi-node cluster, and
-	// should not be used for anything other than testing or development.
+	// enableHostPathProvisioning 在无云厂商环境时启用 HostPath PV 供给，仅用于供给功能的
+	// 测试与开发；HostPath 供给不受任何方式的支持，无法在多节点集群中工作，
+	// 除测试或开发外不应用于其他用途。
 	// 用指针布尔值是为了区分“显式关闭”与“未配置走默认值”：
 	// 默认值是 false，显式写成 true 才打开这个仅供开发测试的路径。
 	EnableHostPathProvisioning *bool
-	// enableDynamicProvisioning enables the provisioning of volumes when running within an environment
-	// that supports dynamic provisioning. Defaults to true.
+	// enableDynamicProvisioning 在支持动态供给的环境中启用卷供给，默认值为 true。
 	// 用指针布尔值是为了支持显式关闭默认开启的动态供给。
 	EnableDynamicProvisioning *bool
 	// persistentVolumeRecyclerConfiguration holds configuration for persistent volume plugins.
 	PersistentVolumeRecyclerConfiguration PersistentVolumeRecyclerConfiguration
-	// volumePluginDir is the full path of the directory in which the flex
-	// volume plugin should search for additional third party volume plugins
+	// volumePluginDir 是 flex 卷插件搜索额外第三方卷插件的目录的完整路径。
 	// FlexVolume 是外部插件机制，插件以可执行文件形式放在该目录，
 	// 控制器按约定扫描它来发现第三方卷插件。
 	FlexVolumePluginDir string
@@ -217,7 +212,7 @@ type KubeControllerManagerConfiguration struct {
 	ResourceClaimController ResourceClaimControllerConfiguration
 }
 
-// AttachDetachControllerConfiguration contains elements describing AttachDetachController.
+// AttachDetachControllerConfiguration 包含描述 AttachDetachController 的各个要素。
 // Attach/Detach 控制器通过周期性对账把期望状态与集群实际状态对齐，
 // 因为卷的挂载状态可能因为节点重启或外部操作而悄悄偏离记录值。
 // Disable 开头的布尔值与命令行开关同名，保持配置项到 flag 的直接映射；
@@ -225,19 +220,15 @@ type KubeControllerManagerConfiguration struct {
 // 超时后的强制卸载单独设开关，是因为强制操作可能中断正在使用卷的 Pod，
 // 默认情况下允许，但给出显式关闭的余地。
 type AttachDetachControllerConfiguration struct {
-	// Reconciler runs a periodic loop to reconcile the desired state of the with
-	// the actual state of the world by triggering attach detach operations.
-	// This flag enables or disables reconcile.  Is false by default, and thus enabled.
-	// 字段名带 Disable 而默认值为 false，等于默认启用对账；
+	// DisableAttachDetachReconcilerSync 启用或禁用对账：对账循环通过触发 attach/detach
+	// 操作使期望状态与集群实际状态保持一致。字段名带 Disable 而默认值为 false，等于默认启用对账；
 	// 保留这种反向命名是为了兼容已有命令行开关，避免改配置时语义错位。
 	DisableAttachDetachReconcilerSync bool
 	// ReconcilerSyncLoopPeriod is the amount of time the reconciler sync states loop
 	// wait between successive executions. Is set to 60 sec by default.
 	ReconcilerSyncLoopPeriod metav1.Duration
-	// DisableForceDetachOnTimeout disables force detach when the maximum unmount
-	// time is exceeded. Is false by default, and thus force detach on unmount is
-	// enabled.
-	// 反向命名同样是为了对齐命令行开关；默认 false 表示超时后仍允许强制卸载。
+	// DisableForceDetachOnTimeout 在超过最大卸载时间后禁用强制卸载。默认为 false，
+	// 即超时后仍启用强制卸载；反向命名同样是为了对齐命令行开关。
 	DisableForceDetachOnTimeout bool `json:"disableForceDetachOnTimeout"`
 }
 
@@ -266,9 +257,8 @@ type CSRSigningControllerConfiguration struct {
 	// legacyUnknownSignerConfiguration holds the certificate and key used to issue certificates for the kubernetes.io/legacy-unknown
 	LegacyUnknownSignerConfiguration CSRSigningConfiguration
 
-	// clusterSigningDuration is the max length of duration signed certificates will be given.
-	// Individual CSRs may request shorter certs by setting spec.expirationSeconds.
-	// 这是签发证书的有效期上限，让签发方可以给不同用途设置不同的最大值。
+	// clusterSigningDuration 是签发证书时长的上限，允许为不同签发方设置不同的最大值；
+	// 单个 CSR 仍可通过设置 spec.expirationSeconds 申请更短的证书。
 	ClusterSigningDuration metav1.Duration
 }
 
@@ -291,10 +281,8 @@ type CSRSigningConfiguration struct {
 // 并发数针对的是不同的 DaemonSet 对象，不影响单个 DaemonSet 内 Pod 的调度顺序。
 // 调大可以提高响应速度，代价是更多的 CPU 与 API Server 压力，属于典型的吞吐取舍。
 type DaemonSetControllerConfiguration struct {
-	// concurrentDaemonSetSyncs is the number of daemonset objects that are
-	// allowed to sync concurrently. Larger number = more responsive daemonset,
-	// but more CPU (and network) load.
-	// 提高并发会按比例增加 API Server 负载，调整前需评估集群规模。
+	// concurrentDaemonSetSyncs 是允许并发同步的 daemonset 对象数量：数量越大响应越快，
+	// 但 CPU（及网络）负载也越高。提高并发会按比例增加 API Server 负载，调整前需评估集群规模。
 	ConcurrentDaemonSetSyncs int32
 }
 
@@ -303,21 +291,17 @@ type DaemonSetControllerConfiguration struct {
 // 并发数限制同时处理的 Deployment 对象数量，
 // 让一个集群里的大量工作负载更新不会同时压向 API Server。
 type DeploymentControllerConfiguration struct {
-	// concurrentDeploymentSyncs is the number of deployment objects that are
-	// allowed to sync concurrently. Larger number = more responsive deployments,
-	// but more CPU (and network) load.
-	// 提高并发会按比例增加 API Server 负载，调整前需评估集群规模。
+	// concurrentDeploymentSyncs 是允许并发同步的 deployment 对象数量：数量越大响应越快，
+	// 但 CPU（及网络）负载也越高。提高并发会按比例增加 API Server 负载，调整前需评估集群规模。
 	ConcurrentDeploymentSyncs int32
 }
 
-// DisruptionControllerConfiguration contains elements describing DisruptionController.
+// DisruptionControllerConfiguration 包含描述 DisruptionController 的各个要素。
 // PDB 的状态直接决定驱逐是否放行，因此同步并发数会影响驱逐判断的及时性；
 // 这里的取舍和其他控制器一样，是在响应速度与 API 负载之间找平衡点。
 type DisruptionControllerConfiguration struct {
-	// concurrentDisruptionSyncs is the number of PodDisruptionBudget objects that
-	// are allowed to sync concurrently. Larger number = more responsive PDB
-	// updates, but more CPU (and network) load.
-	// 提高并发会加快 PDB 状态更新，代价是更多的 API 调用。
+	// concurrentDisruptionSyncs 是允许并发同步的 PodDisruptionBudget 对象数量：数量越大
+	// PDB 更新越及时，但 CPU（及网络）负载也越高。提高并发会加快 PDB 状态更新，代价是更多的 API 调用。
 	ConcurrentDisruptionSyncs int32
 }
 
@@ -326,10 +310,8 @@ type DisruptionControllerConfiguration struct {
 // 并发数针对多个 StatefulSet 对象，而不是同一个集合内的多个 Pod，
 // 因此提高并发不会破坏有状态应用依赖的序号语义。
 type StatefulSetControllerConfiguration struct {
-	// concurrentStatefulSetSyncs is the number of statefulset objects that are
-	// allowed to sync concurrently. Larger number = more responsive statefulsets,
-	// but more CPU (and network) load.
-	// 提高并发只影响对象级并行，不破坏单个 StatefulSet 内的顺序约束。
+	// concurrentStatefulSetSyncs 是允许并发同步的 statefulset 对象数量：数量越大响应越快，
+	// 但 CPU（及网络）负载也越高。提高并发只影响对象级并行，不破坏单个 StatefulSet 内的顺序约束。
 	ConcurrentStatefulSetSyncs int32
 }
 
@@ -413,10 +395,8 @@ type EndpointSliceMirroringControllerConfiguration struct {
 // 其生命周期跟随 Pod，与被独立管理的 PVC 不同。
 // 并发数限制同时同步的卷对象数量，避免大量 Pod 创建时集中产生 PVC。
 type EphemeralVolumeControllerConfiguration struct {
-	// ConcurrentEphemeralVolumeSyncseSyncs is the number of ephemeral volume syncing operations
-	// that will be done concurrently. Larger number = faster ephemeral volume updating,
-	// but more CPU (and network) load.
-	// 提高并发可缓解大量短生命周期 Pod 同时创建 PVC 时的积压。
+	// ConcurrentEphemeralVolumeSyncs 是并发执行的临时卷同步操作数量：数量越大临时卷更新越快，
+	// 但 CPU（及网络）负载也越高。提高并发可缓解大量短生命周期 Pod 同时创建 PVC 时的积压。
 	ConcurrentEphemeralVolumeSyncs int32
 }
 
@@ -428,15 +408,13 @@ type EphemeralVolumeControllerConfiguration struct {
 // 避免控制器的通用清理规则误伤需要自行决定生命周期的资源。
 // 并发数控制 GC worker，既要及时清理，也要防止扫描依赖图时压垮 API Server。
 type GarbageCollectorControllerConfiguration struct {
-	// enables the generic garbage collector. MUST be synced with the
-	// corresponding flag of the kube-apiserver. WARNING: the generic garbage
-	// collector is an alpha feature.
-	// 用指针布尔值是为了显式表达“关闭”，并强制与 kube-apiserver 的同名开关对齐。
+	// EnableGarbageCollector 启用通用垃圾回收器（WARNING：这是 alpha 特性），
+	// 必须与 kube-apiserver 的同名开关保持同步；用指针布尔值是为了显式表达“关闭”。
 	EnableGarbageCollector *bool
 	// concurrentGCSyncs is the number of garbage collector workers that are
 	// allowed to sync concurrently.
 	ConcurrentGCSyncs int32
-	// gcIgnoredResources is the list of GroupResources that garbage collection should ignore.
+	// gcIgnoredResources 是垃圾回收应忽略的 GroupResource 列表；
 	// 忽略列表按 GroupResource 精确匹配，不会误伤同组下的其他资源。
 	GCIgnoredResources []GroupResource
 }
@@ -449,9 +427,8 @@ type GarbageCollectorControllerConfiguration struct {
 // CPU 初始化期与就绪延迟针对刚启动的 Pod：此时 CPU 样本尚未稳定，
 // 直接用于计算容易把启动峰值误判为持续负载。
 type HPAControllerConfiguration struct {
-	// ConcurrentHorizontalPodAutoscalerSyncs is the number of HPA objects that are allowed to sync concurrently.
-	// Larger number = more responsive HPA processing, but more CPU (and network) load.
-	// 提高并发让更多 HPA 及时响应指标变化，但需要更多 CPU 与 API 调用。
+	// ConcurrentHorizontalPodAutoscalerSyncs 是允许并发同步的 HPA 对象数量：数量越大
+	// HPA 处理越及时，但需要更多 CPU、网络与 API 调用开销。
 	ConcurrentHorizontalPodAutoscalerSyncs int32
 	// HorizontalPodAutoscalerSyncPeriod is the period for syncing the number of
 	// pods in horizontal pod autoscaler.
@@ -459,9 +436,8 @@ type HPAControllerConfiguration struct {
 	// HorizontalPodAutoscalerDowncaleStabilizationWindow is a period for which autoscaler will look
 	// backwards and not scale down below any recommendation it made during that period.
 	HorizontalPodAutoscalerDownscaleStabilizationWindow metav1.Duration
-	// HorizontalPodAutoscalerTolerance is the tolerance for when
-	// resource usage suggests upscaling/downscaling
-	// 容忍度是相对比例：只有指标偏离目标值超过该比例才触发扩缩，用于过滤噪声。
+	// HorizontalPodAutoscalerTolerance 是判断资源用量是否建议扩缩容的容忍度：
+	// 为相对比例，只有指标偏离目标值超过该比例才触发扩缩，用于过滤噪声。
 	HorizontalPodAutoscalerTolerance float64
 	// HorizontalPodAutoscalerCPUInitializationPeriod is the period after pod start when CPU samples
 	// might be skipped.
@@ -478,21 +454,17 @@ type HPAControllerConfiguration struct {
 // 并发数控制同时同步的 Job 对象数量，
 // 数值越大任务状态更新越及时，但对应更多的 API 调用。
 type JobControllerConfiguration struct {
-	// concurrentJobSyncs is the number of job objects that are
-	// allowed to sync concurrently. Larger number = more responsive jobs,
-	// but more CPU (and network) load.
-	// 提高并发可让更多 Job 及时更新状态，代价是更多 API 调用。
+	// concurrentJobSyncs 是允许并发同步的 job 对象数量：数量越大响应越快，
+	// 但 CPU（及网络）负载也越高。提高并发可让更多 Job 及时更新状态，代价是更多 API 调用。
 	ConcurrentJobSyncs int32
 }
 
-// CronJobControllerConfiguration contains elements describing CrongJob2Controller.
+// CronJobControllerConfiguration 包含描述 CronJobController 的各个要素。
 // CronJob 有独立的并发配置，因为它的同步逻辑由 CronJob 控制器负责，
 // 与 Job 控制器处理的对象和触发节奏都不同，直接复用同一数值没有必要。
 type CronJobControllerConfiguration struct {
-	// concurrentCronJobSyncs is the number of job objects that are
-	// allowed to sync concurrently. Larger number = more responsive jobs,
-	// but more CPU (and network) load.
-	// 与 Job 控制器分开限速，避免定时任务调度与 Job 执行相互拖慢。
+	// concurrentCronJobSyncs 是允许并发同步的 job 对象数量：数量越大响应越快，
+	// 但 CPU（及网络）负载也越高。与 Job 控制器分开限速，避免定时任务调度与 Job 执行相互拖慢。
 	ConcurrentCronJobSyncs int32
 }
 
@@ -503,9 +475,8 @@ type CronJobControllerConfiguration struct {
 // 这里的周期同时承担“多久检查一次”和“多久算过期”的角色，
 // 配置过短可能误删仍在使用的 token。
 type LegacySATokenCleanerConfiguration struct {
-	// CleanUpPeriod is the period of time since the last usage of an
-	// auto-generated service account token before it can be deleted.
-	// 周期同时决定检查频率和过期门槛，设置过短可能清理掉仍在使用的 token。
+	// CleanUpPeriod 是自动生成的 ServiceAccount token 自最后一次使用后、可被删除前需经过的时长；
+	// 该周期同时决定检查频率和过期门槛，设置过短可能清理掉仍在使用的 token。
 	CleanUpPeriod metav1.Duration
 }
 
@@ -515,12 +486,10 @@ type LegacySATokenCleanerConfiguration struct {
 // 因此需要周期性地重新扫描，而不是只靠一次删除请求驱动。
 // 并发数控制同时处理的 Namespace 数量，避免批量删除时压垮 API Server。
 type NamespaceControllerConfiguration struct {
-	// namespaceSyncPeriod is the period for syncing namespace life-cycle
-	// updates.
+	// namespaceSyncPeriod 是同步命名空间生命周期更新的周期。
 	// 删除命名空间需要多轮终结器处理，靠周期重入推进，而不是一次请求完成。
 	NamespaceSyncPeriod metav1.Duration
-	// concurrentNamespaceSyncs is the number of namespace objects that are
-	// allowed to sync concurrently.
+	// concurrentNamespaceSyncs 是允许并发同步的 namespace 对象数量。
 	// 提高并发可同时终结更多命名空间，但在大批量删除时会增加 API 压力。
 	ConcurrentNamespaceSyncs int32
 }
@@ -533,15 +502,15 @@ type NamespaceControllerConfiguration struct {
 type NodeIPAMControllerConfiguration struct {
 	// serviceCIDR is CIDR Range for Services in cluster.
 	ServiceCIDR string
-	// secondaryServiceCIDR is CIDR Range for Services in cluster. This is used in dual stack clusters. SecondaryServiceCIDR must be of different IP family than ServiceCIDR
-	// 只在双栈集群中使用，必须与主 CIDR 属于不同地址族。
+	// secondaryServiceCIDR 是集群中 Service 的 CIDR 范围，只在双栈集群中使用，
+	// SecondaryServiceCIDR 必须与 ServiceCIDR 属于不同地址族。
 	SecondaryServiceCIDR string
 	// NodeCIDRMaskSize is the mask size for node cidr in cluster.
 	NodeCIDRMaskSize int32
-	// NodeCIDRMaskSizeIPv4 is the mask size for node cidr in dual-stack cluster.
+	// NodeCIDRMaskSizeIPv4 是双栈集群中节点 CIDR 的 IPv4 掩码大小；
 	// 双栈场景按地址族分别设定掩码，以便为 IPv4 和 IPv6 分配不同大小的网段。
 	NodeCIDRMaskSizeIPv4 int32
-	// NodeCIDRMaskSizeIPv6 is the mask size for node cidr in dual-stack cluster.
+	// NodeCIDRMaskSizeIPv6 是双栈集群中节点 CIDR 的 IPv6 掩码大小；
 	// 双栈场景按地址族分别设定掩码，以便为 IPv4 和 IPv6 分配不同大小的网段。
 	NodeCIDRMaskSizeIPv6 int32
 }
@@ -572,15 +541,15 @@ type NodeLifecycleControllerConfiguration struct {
 	NodeMonitorGracePeriod metav1.Duration
 	// podEvictionTimeout is the grace period for deleting pods on failed nodes.
 	PodEvictionTimeout metav1.Duration
-	// secondaryNodeEvictionRate is implicitly overridden to 0 for clusters smaller than or equal to largeClusterSizeThreshold
-	// 小集群中同时驱逐过多节点风险更大，超过该阈值才启用次驱逐速率。
+	// 对于规模小于或等于 largeClusterSizeThreshold 的集群，secondaryNodeEvictionRate
+	// 会被隐式覆盖为 0；小集群中同时驱逐过多节点风险更大，超过该阈值才启用次驱逐速率。
 	LargeClusterSizeThreshold int32
-	// Zone is treated as unhealthy in nodeEvictionRate and secondaryNodeEvictionRate when at least
-	// unhealthyZoneThreshold (no less than 3) of Nodes in the zone are NotReady
+	// 当可用区中至少有 unhealthyZoneThreshold（不小于 3）个节点处于 NotReady 时，
+	// nodeEvictionRate 与 secondaryNodeEvictionRate 会将该可用区视为不健康；
 	// 下限设为至少 3 个节点，避免单节点故障被误判成整个可用区不健康。
 	UnhealthyZoneThreshold float32
-	// NodeMonitorPeriod is the period for syncing NodeStatus in NodeLifecycleController.
-	// 这是节点状态重新评估的周期，与宽限期配合决定失联判定速度。
+	// NodeMonitorPeriod 是 NodeLifecycleController 中同步 NodeStatus 的周期，
+	// 与宽限期配合决定失联判定速度。
 	NodeMonitorPeriod metav1.Duration
 }
 
@@ -590,8 +559,7 @@ type NodeLifecycleControllerConfiguration struct {
 // 把同步周期和卷配置放在一起，是因为 PV/Claim 绑定控制器同时负责
 // 匹配与卷插件相关的 Provision/Delete 操作，两者共用同一轮同步节奏。
 type PersistentVolumeBinderControllerConfiguration struct {
-	// pvClaimBinderSyncPeriod is the period for syncing persistent volumes
-	// and persistent volume claims.
+	// pvClaimBinderSyncPeriod 是同步持久卷与持久卷声明的周期；
 	// 绑定、供给和删除都在同一轮同步里推进，因此共用一个周期。
 	PVClaimBinderSyncPeriod metav1.Duration
 	// volumeConfiguration holds configuration for volume related features.
@@ -603,9 +571,7 @@ type PersistentVolumeBinderControllerConfiguration struct {
 // 阈值按已终止 Pod 的数量触发清理，而不是按存活时间，
 // 因为目标是限制遗留对象总量；小于等于 0 表示关闭该清理器。
 type PodGCControllerConfiguration struct {
-	// terminatedPodGCThreshold is the number of terminated pods that can exist
-	// before the terminated pod garbage collector starts deleting terminated pods.
-	// If <= 0, the terminated pod garbage collector is disabled.
+	// terminatedPodGCThreshold 是已终止 pod 垃圾回收器开始删除前可存在的已终止 Pod 数量；
 	// 按数量而不是按时间触发，目标是限制遗留对象总量；小于等于 0 表示关闭。
 	TerminatedPodGCThreshold int32
 }
@@ -615,10 +581,8 @@ type PodGCControllerConfiguration struct {
 // 并发数限制同时处理的 ReplicaSet 数量，
 // 提高后副本数调整更及时，代价是更高的 API 调用频率。
 type ReplicaSetControllerConfiguration struct {
-	// concurrentRSSyncs is the number of replica sets that are  allowed to sync
-	// concurrently. Larger number = more responsive replica  management, but more
-	// CPU (and network) load.
-	// 提高并发可让更多 ReplicaSet 及时补齐副本，代价是更多 API 调用。
+	// concurrentRSSyncs 是允许并发同步的 replica set 数量：数量越大副本管理越及时，
+	// 但 CPU（及网络）负载也越高。提高并发可让更多 ReplicaSet 及时补齐副本，代价是更多 API 调用。
 	ConcurrentRSSyncs int32
 }
 
@@ -627,10 +591,8 @@ type ReplicaSetControllerConfiguration struct {
 // 与 ReplicaSet 分开配置，是因为两者由不同的控制器实现，
 // 复制控制器仍需为旧工作负载保留，不能假设它的参数会随 ReplicaSet 一起调整。
 type ReplicationControllerConfiguration struct {
-	// concurrentRCSyncs is the number of replication controllers that are
-	// allowed to sync concurrently. Larger number = more responsive replica
-	// management, but more CPU (and network) load.
-	// 与 ReplicaSet 控制器各自限速，因为两者处理的是不同的工作负载对象。
+	// concurrentRCSyncs 是允许并发同步的 replication controller 数量：数量越大副本管理越及时，
+	// 但 CPU（及网络）负载也越高。与 ReplicaSet 控制器各自限速，因为两者处理的是不同的工作负载对象。
 	ConcurrentRCSyncs int32
 }
 
@@ -643,10 +605,8 @@ type ResourceQuotaControllerConfiguration struct {
 	// resourceQuotaSyncPeriod is the period for syncing quota usage status
 	// in the system.
 	ResourceQuotaSyncPeriod metav1.Duration
-	// concurrentResourceQuotaSyncs is the number of resource quotas that are
-	// allowed to sync concurrently. Larger number = more responsive quota
-	// management, but more CPU (and network) load.
-	// 提高并发可让更多命名空间的配额状态及时重算，代价是更多 API 调用。
+	// concurrentResourceQuotaSyncs 是允许并发同步的 resource quota 数量：数量越大配额管理越及时，
+	// 但 CPU（及网络）负载也越高。提高并发可让更多命名空间的配额状态及时重算，代价是更多 API 调用。
 	ConcurrentResourceQuotaSyncs int32
 }
 
@@ -662,9 +622,8 @@ type SAControllerConfiguration struct {
 	// concurrentSATokenSyncs is the number of service account token syncing operations
 	// that will be done concurrently.
 	ConcurrentSATokenSyncs int32
-	// rootCAFile is the root certificate authority will be included in service
-	// account's token secret. This must be a valid PEM-encoded CA bundle.
-	// 该 CA 会被写进 token secret 供 Pod 校验 API Server，必须是合法的 PEM bundle。
+	// rootCAFile 是会被包含进 ServiceAccount token secret 的根证书颁发机构，供 Pod 校验
+	// API Server，必须是合法的 PEM 编码 CA bundle。
 	RootCAFile string
 }
 
@@ -684,11 +643,8 @@ type TTLAfterFinishedControllerConfiguration struct {
 // 让声明了策略的用户能看到编译是否通过，而不必等到实际请求被拒绝才知道。
 // 并发数主要影响类型检查的吞吐，提高后状态更新更快但会占用更多 CPU。
 type ValidatingAdmissionPolicyStatusControllerConfiguration struct {
-	// ConcurrentPolicySyncs is the number of policy objects that are
-	// allowed to sync concurrently. Larger number = quicker type checking,
-	// but more CPU (and network) load.
-	// The default value is 5.
-	// 并发数影响类型检查的吞吐，让策略状态尽快反映声明是否可用。
+	// ConcurrentPolicySyncs 是允许并发同步的 policy 对象数量，默认值为 5：数量越大类型检查越快，
+	// 但 CPU（及网络）负载也越高，能让策略状态尽快反映声明是否可用。
 	ConcurrentPolicySyncs int32
 }
 
@@ -699,25 +655,19 @@ type ValidatingAdmissionPolicyStatusControllerConfiguration struct {
 // 并发数限制这两类操作的并行量：默认值偏向保守，避免设备批量故障时
 // 同时驱逐过多 Pod 造成二次冲击。
 type DeviceTaintEvictionControllerConfiguration struct {
-	// ConcurrentSyncs is the number of operations (deleting a pod, updating a ResourcClaim status, etc.)
-	// that will be done concurrently. Larger number = processing, but more CPU (and network) load.
-	//
-	// The default is 10.
-	// 默认并发数不同，是因为设备污点控制器只在设备异常时工作，
+	// ConcurrentSyncs 是并发执行的操作数量（删除 pod、更新 ResourceClaim 状态等），默认为 10：
+	// 数量越大处理越快，但 CPU（及网络）负载也越高。默认并发数不同，是因为设备污点控制器只在设备异常时工作，
 	// 而 ResourceClaim 控制器负责所有 claim 的常规生命周期。
 	ConcurrentSyncs int32
 }
 
-// ResourceClaimControllerConfiguration contains elements configuring the resource claim controller.
+// ResourceClaimControllerConfiguration 包含配置 resource claim 控制器的各个要素。
 // ResourceClaim 控制器负责 DRA 资源声明的完整生命周期，
 // 工作范围覆盖集群中所有 claim，因此默认并发数高于只处理特定事件的设备污点控制器。
 // 并发数限制删除 Pod、更新状态等操作的并行量，防止 DRA 组件集中操作时压垮 API Server。
 type ResourceClaimControllerConfiguration struct {
-	// ConcurrentSyncs is the number of operations (deleting a pod, updating a ResourcClaim status, etc.)
-	// that will be done concurrently. Larger number = processing, but more CPU (and network) load.
-	//
-	// The default is 50.
-	// 默认并发数不同，是因为设备污点控制器只在设备异常时工作，
+	// ConcurrentSyncs 是并发执行的操作数量（删除 pod、更新 ResourceClaim 状态等），默认为 50：
+	// 数量越大处理越快，但 CPU（及网络）负载也越高。默认并发数不同，是因为设备污点控制器只在设备异常时工作，
 	// 而 ResourceClaim 控制器负责所有 claim 的常规生命周期。
 	ConcurrentSyncs int32
 }

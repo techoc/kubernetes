@@ -32,8 +32,8 @@ import (
 	"k8s.io/kubernetes/pkg/registry/registrytest"
 )
 
-// TODO: allow for global factory override
 // newStorage 启动隔离 etcd 并构造 CronJob 主资源/Status REST Handler。
+// TODO: 允许全局覆盖 factory。
 func newStorage(t *testing.T) (*REST, *StatusREST, *etcd3testing.EtcdTestServer) {
 	etcdStorage, server := registrytest.NewEtcdStorageForResource(t, batch.SchemeGroupVersion.WithResource("cronjobs").GroupResource())
 	restOptions := generic.RESTOptions{

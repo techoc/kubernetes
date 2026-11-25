@@ -53,8 +53,7 @@ func TestHeapBasic(t *testing.T) {
 	wg.Add(2)
 	const amount = 500
 	var i, u int
-	// Insert items in the heap in opposite orders in two go routines.
-	// 两个 goroutine 以相反顺序插入，制造并发乱序写入。
+	// 两个 goroutine 以相反顺序向堆中插入元素，制造并发乱序写入。
 	go func() {
 		for i = amount; i > 0; i-- {
 			h.Add(mkHeapObj(string([]rune{'a', rune(i)}), i))
@@ -118,7 +117,7 @@ func TestHeap_Add(t *testing.T) {
 func TestHeap_BulkAdd(t *testing.T) {
 	h := NewHeap(testHeapObjectKeyFunc, compareInts)
 	const amount = 500
-	// Insert items in the heap in opposite orders in a go routine.
+	// 在一个 goroutine 中以相反顺序向堆中插入元素。
 	// BulkAdd 与并发 Pop 交错执行，验证批量写入具备原子性（Pop 不会读到半批数据）。
 	go func() {
 		l := []interface{}{}

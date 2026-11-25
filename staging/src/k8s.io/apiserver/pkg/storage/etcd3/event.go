@@ -41,18 +41,16 @@ type event struct {
 	// a special annotation will be added
 	// to the bookmark event.
 	//
-	// note that we decided to extend the event
-	// struct field to eliminate contention
-	// between startWatching and processEvent
-	// 用事件字段而非共享状态传递“初始事件已同步完”，避免两个 goroutine
-	// 为同一个标记加锁。
+	// 为消除 startWatching 与 processEvent 两个 goroutine 对同一标记的争用，
+	// 这里选择扩展事件结构体字段，而非用共享状态传递“初始事件已同步完”的标记，
+	// 避免两个 goroutine 为同一个标记加锁。
 	isInitialEventsEndBookmark bool
 	// isInitialEvent indicates the event was generated from an initial state sync.
 	isInitialEvent bool
 	recordTime     time.Time
 }
 
-// parseKV converts a KeyValue retrieved from an initial sync() listing to a synthetic isCreated event.
+// parseKV 把初始 sync() listing 取回的 KeyValue 转换为合成的 isCreated 事件。
 // 初始 list 没有真实的 watch 事件，合成 created 事件让下游与增量路径共用逻辑。
 func parseKV(kv *mvccpb.KeyValue) *event {
 	return &event{

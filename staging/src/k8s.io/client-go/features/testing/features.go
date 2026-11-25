@@ -116,7 +116,7 @@ func setFeatureDuringTestInternal(tb testing.TB, feature clientfeatures.Feature,
 	return nil
 }
 
-// copied from component-base/featuregate/testing
+// 实现复制自 component-base/featuregate/testing。
 // sameTestOrSubtest 判断 testName 是否为 tb 本身或其父级子测试名，
 // 从而允许同一测试树的父子测试共享覆盖。
 func sameTestOrSubtest(tb testing.TB, testName string) bool {

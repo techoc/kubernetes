@@ -111,10 +111,8 @@ type envVarFeatureGates struct {
 // 未知开关直接 panic，是为了尽早暴露拼写错误，而不是静默返回 false。
 func (f *envVarFeatureGates) Enabled(key Feature) bool {
 	if v, ok := f.wasFeatureEnabledViaSetMethod(key); ok {
-		// ensue that the state of all known features
-		// is loaded from environment variables
-		// on the first call to Enabled method.
-		// 即使命中 Set 值，也触发一次环境变量加载，保证日志中打印的是完整状态。
+		// 即使命中 Set 值，也要触发一次环境变量加载，确保首次调用 Enabled 时
+		// 已把所有已知 feature 的状态从环境变量读入，保证日志中打印的是完整状态。
 		if !f.hasAlreadyReadEnvVar() {
 			_ = f.getEnabledMapFromEnvVar()
 		}

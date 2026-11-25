@@ -41,8 +41,7 @@ var updateLabelBackoff = wait.Backoff{
 	Jitter:   1.0,
 }
 
-// AddOrUpdateLabelsOnNode updates the labels on the node and returns true on
-// success and false on failure.
+// AddOrUpdateLabelsOnNode 更新节点上的标签，成功返回 true、失败返回 false。
 // 失败只记录错误并返回 false，调用方（如节点注册）可继续完成其余初始化步骤。
 func AddOrUpdateLabelsOnNode(kubeClient clientset.Interface, labelsToUpdate map[string]string, node *v1.Node) bool {
 	err := addOrUpdateLabelsOnNode(kubeClient, node.Name, labelsToUpdate)
@@ -67,8 +66,7 @@ func addOrUpdateLabelsOnNode(kubeClient clientset.Interface, nodeName string, la
 	return clientretry.RetryOnConflict(updateLabelBackoff, func() error {
 		var err error
 		var node *v1.Node
-		// First we try getting node from the API server cache, as it's cheaper. If it fails
-		// we get it from etcd to be sure to have fresh data.
+		// 先尝试从 API server 缓存读取 node，因为代价更小；失败时改从 etcd 直读，确保拿到最新数据。
 		// ResourceVersion="0" 允许从缓存读；重试时改为强一致读，避免基于陈旧版本生成补丁。
 		if firstTry {
 			node, err = kubeClient.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{ResourceVersion: "0"})
@@ -80,8 +78,7 @@ func addOrUpdateLabelsOnNode(kubeClient clientset.Interface, nodeName string, la
 			return err
 		}
 
-		// Make a copy of the node and update the labels.
-		// 只在副本上修改，确保用于生成 diff 的原始对象保持不变。
+		// 复制一份 node 再更新标签；只在副本上修改，确保用于生成 diff 的原始对象保持不变。
 		newNode := node.DeepCopy()
 		if newNode.Labels == nil {
 			newNode.Labels = make(map[string]string)

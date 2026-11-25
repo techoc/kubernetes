@@ -50,7 +50,7 @@ func (c *staticCAContent) Name() string {
 
 func (c *staticCAContent) AddListener(Listener) {}
 
-// CurrentCABundleContent provides ca bundle byte content
+// CurrentCABundleContent 返回 ca bundle 的字节内容。
 // 返回的切片与内部状态共享，调用方不得修改。
 func (c *staticCAContent) CurrentCABundleContent() (cabundle []byte) {
 	return c.caBundle.caBundle
@@ -70,7 +70,7 @@ type staticCertKeyContent struct {
 
 // NewStaticCertKeyContent returns a CertKeyContentProvider that always returns the same value
 func NewStaticCertKeyContent(name string, cert, key []byte) (CertKeyContentProvider, error) {
-	// Ensure that the key matches the cert and both are valid
+	// 确保私钥与证书匹配且两者都合法：
 	// 构造时即校验，避免把不匹配的证书/私钥带入运行期，直到握手时才
 	// 以晦涩的 TLS 错误暴露。
 	_, err := tls.X509KeyPair(cert, key)

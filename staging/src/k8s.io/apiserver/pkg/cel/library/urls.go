@@ -184,18 +184,14 @@ func stringToUrl(arg ref.Val) ref.Val {
 	if !ok {
 		return types.MaybeNoSuchOverloadErr(arg)
 	}
-	// Use ParseRequestURI to check the URL before conversion.
-	// ParseRequestURI requires absolute URLs and is used by the OpenAPIv3 'uri' format.
-	// 用与 OpenAPIv3 'uri' 格式一致的严格校验，保持策略语义与 CRD
-	// schema 校验一致。
+	// 转换前先用 ParseRequestURI 校验 URL：它要求绝对 URL，也正是 OpenAPIv3 'uri' 格式使用的校验，
+	// 以此保持策略语义与 CRD schema 校验一致。
 	_, err := url.ParseRequestURI(s)
 	if err != nil {
 		return types.NewErr("URL parse error during conversion from string: %v", err)
 	}
-	// We must parse again with Parse since ParseRequestURI incorrectly parses URLs that contain a fragment
-	// part and will incorrectly append the fragment to either the path or the query, depending on which it was adjacent to.
-	// ParseRequestURI 对 fragment 的处理有缺陷，因此校验通过后必须用
-	// url.Parse 重新解析才能得到正确的组件划分。
+	// ParseRequestURI 对含 fragment 的 URL 解析有错误，会按相邻关系把 fragment 追加到 path 或 query 上，
+	// 因此校验通过后必须用 url.Parse 重新解析才能得到正确的组件划分。
 	u, err := url.Parse(s)
 	if err != nil {
 		// Errors are not expected here since Parse is a more lenient parser than ParseRequestURI.

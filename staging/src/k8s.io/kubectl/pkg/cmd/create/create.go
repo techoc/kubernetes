@@ -38,7 +38,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// CreateOptions is the commandline options for 'create' sub command
+// CreateOptions 是 'create' 子命令的命令行选项。
 // 生命周期：NewCreateOptions（构造默认值）→ Complete（从 cmd 填充）→ Validate（校验组合）→ RunCreate（消费）
 type CreateOptions struct {
 	PrintFlags  *genericclioptions.PrintFlags  // -o 输出格式等打印选项
@@ -117,8 +117,7 @@ func NewCmdCreate(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobr
 		},
 	}
 
-	// bind flag structs
-	// --record 已废弃但仍保留解析，避免老脚本报 "unknown flag"
+	// 绑定各 flag 结构体：--record 已废弃但仍保留解析，避免老脚本报 "unknown flag"
 	o.RecordFlags.AddFlags(cmd)
 
 	usage := "to use to create the resource"
@@ -136,8 +135,7 @@ func NewCmdCreate(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobr
 
 	o.PrintFlags.AddFlags(cmd) // -o name 等输出格式；create 默认打印 "xxx/yyy created"，不需要完整对象
 
-	// create subcommands
-	// 聚合所有 `create <type>` 快捷子命令，它们共享同一个 factory 和 ioStreams
+	// 注册 create 子命令：聚合所有 `create <type>` 快捷子命令，它们共享同一个 factory 和 ioStreams
 	cmd.AddCommand(NewCmdCreateNamespace(f, ioStreams))
 	cmd.AddCommand(NewCmdCreateQuota(f, ioStreams))
 	cmd.AddCommand(NewCmdCreateSecret(f, ioStreams))
@@ -158,8 +156,7 @@ func NewCmdCreate(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobr
 	return cmd
 }
 
-// Validate makes sure there is no discrepancy in command options
-// Validate 校验 flag 组合的互斥性。注意仅在 Validate 阶段报错可以在
+// Validate 确保命令选项之间没有冲突。校验 flag 组合的互斥性；仅在 Validate 阶段报错可以在
 // 触碰 apiserver 之前就拦下非法组合（如 --raw 与 --edit 不能并存）。
 func (o *CreateOptions) Validate() error {
 	// -f 文件、目录、URL 或 kustomize.yaml 至少要给一个
@@ -275,8 +272,7 @@ func (o *CreateOptions) RunCreate(f cmdutil.Factory) error {
 		return o.editOptions.Run()
 	}
 
-	// raw only makes sense for a single file resource multiple objects aren't likely to do what you want.
-	// the validator enforces this, so
+	// --raw 只对单文件资源有意义（多个对象大概率不是你想要的），validator 已强制这一约束。
 	// --raw 路径：RESTClient 的 transport（TLS/认证）由 kubeconfig 提供，Body 来自唯一的数据源文件
 	if len(o.Raw) > 0 {
 		restClient, err := f.RESTClient()

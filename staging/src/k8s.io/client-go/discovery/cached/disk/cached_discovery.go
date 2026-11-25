@@ -178,7 +178,6 @@ func (d *CachedDiscoveryClient) ServerGroupsWithContext(ctx context.Context) (*m
 // getCachedFile 读取缓存文件并检查 TTL；任何失败都返回错误，由调用方回退到
 // 实时请求，因此这里不区分“不存在/已过期/被失效”的原因（日志之外）。
 func (d *CachedDiscoveryClient) getCachedFile(filename string) ([]byte, error) {
-	// after invalidation ignore cache files not created by this process
 	// 失效后只信任本进程写出的文件，避免沿用其他进程可能写入的陈旧内容。
 	d.mutex.Lock()
 	_, ourFile := d.ourFiles[filename]
@@ -251,8 +250,7 @@ func (d *CachedDiscoveryClient) writeCachedFile(filename string, obj runtime.Obj
 		return err
 	}
 
-	// atomic rename
-	// rename 与 ourFiles 更新必须在同一把锁内完成，否则并发 Invalidate 可能
+	// 原子 rename：rename 与 ourFiles 更新必须在同一把锁内完成，否则并发 Invalidate 可能
 	// 清空 ourFiles 后又被这里补回，破坏“失效后不信任旧文件”的语义。
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -433,8 +431,7 @@ func (d *CachedDiscoveryClient) WithLegacyWithContext(ctx context.Context) disco
 // If discoveryCacheDir is empty, cached server resource data will be looked up in the current directory.
 func NewCachedDiscoveryClientForConfig(config *restclient.Config, discoveryCacheDir, httpCacheDir string, ttl time.Duration) (*CachedDiscoveryClient, error) {
 	if len(httpCacheDir) > 0 {
-		// update the given restconfig with a custom roundtripper that
-		// understands how to handle cache responses.
+		// 用能处理缓存响应的自定义 roundtripper 更新传入的 restconfig。
 		// 复制 config 再包裹，避免修改调用方传入的共享配置。
 		config = restclient.CopyConfig(config)
 		config.Wrap(func(rt http.RoundTripper) http.RoundTripper {

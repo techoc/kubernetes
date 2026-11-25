@@ -21,12 +21,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name used in this package
-// 该组名同时用作 /configz 的注册名，变更会破坏外部配置的兼容性。
+// GroupName 是本包使用的组名；该组名同时用作 /configz 的注册名，变更会破坏外部配置的兼容性。
 const GroupName = "cloudcontrollermanager.config.k8s.io"
 
 var (
-	// SchemeGroupVersion is group version used to register these objects
+	// SchemeGroupVersion 是注册这些对象所使用的 group/version。
 	// 内部版本使用 runtime.APIVersionInternal，只用于进程内传递，不对外序列化。
 	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
@@ -35,7 +34,7 @@ var (
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// addKnownTypes registers known types to the given scheme
+// addKnownTypes 把已知类型注册到给定 scheme。
 // 内部类型与外部类型必须一一对应，否则 v1alpha1 转换会失败。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,

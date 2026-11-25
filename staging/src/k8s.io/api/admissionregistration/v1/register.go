@@ -33,7 +33,7 @@ func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
+// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
 // localSchemeBuilder 和 AddToScheme 将留在 k8s.io/kubernetes 中。
 var (
 	// SchemeBuilder 指向要添加到 Scheme 的函数列表。

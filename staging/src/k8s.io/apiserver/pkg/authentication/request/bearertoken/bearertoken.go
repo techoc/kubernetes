@@ -67,8 +67,7 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.R
 
 	// Empty bearer tokens aren't valid
 	if len(token) == 0 {
-		// The space before the token case
-		// 三段说明 token 前存在额外空格，给出可操作的 warning。
+		// 三段说明 token 前存在额外空格（形如 "Bearer  token"），给出可操作的 warning。
 		if len(parts) == 3 {
 			warning.AddWarning(req.Context(), "", invalidTokenWithSpaceWarning)
 		}
@@ -76,9 +75,8 @@ func (a *Authenticator) AuthenticateRequest(req *http.Request) (*authenticator.R
 	}
 
 	resp, ok, err := a.auth.AuthenticateToken(req.Context(), token)
-	// if we authenticated successfully, go ahead and remove the bearer token so that no one
-	// is ever tempted to use it inside of the API server
-	// 认证成功后立即删除头，防止下游组件（审计、代理、控制器）意外记录或转发凭据。
+	// 认证成功之后就移除 bearer token，免得有人想把它用在 API server 内部；
+	// 立即删除头也防止下游组件（审计、代理、控制器）意外记录或转发凭据。
 	if ok {
 		req.Header.Del("Authorization")
 	}

@@ -121,7 +121,7 @@ func (authzHandler unionAuthzHandler) ConditionsAwareAuthorize(ctx context.Conte
 		decision := currAuthzHandler.Authorizer.ConditionsAwareAuthorize(ctx, a)
 		decisions.Add(currAuthzHandler.AuthorizerName, decision)
 
-		// If there is any Allow/Deny decision leaf, no need to walk the chain further.
+		// 出现任何 Allow/Deny 决策叶子时无需继续遍历链条；
 		// 无条件的 Allow/Deny 与 Authorize 的短路行为保持一致。
 		if decision.ContainsUnconditionalAllowOrDeny() {
 			return decisions.ToDecision()
@@ -167,8 +167,7 @@ func (authzHandler unionAuthzHandler) EvaluateConditions(ctx context.Context, un
 		// ConditionsMap or Union types are evaluated by their authorizer
 		case unevaluatedSubDecision.IsConditionsMap(), unevaluatedSubDecision.IsUnion():
 			decision, reason, err = authzHandler.evaluateConditions(ctx, currentAuthorizerName, unevaluatedSubDecision, data)
-			// Guard against impossible evaluations.
-			// 求值结果必须是该子决策声明过的可能结果之一，否则 fail closed。
+			// 防御不可能的求值结果：求值结果必须是该子决策声明过的可能结果之一，否则 fail closed。
 			if !unevaluatedSubDecision.PossibleDecisions().Has(decision) {
 				decision, reason, err = unevaluatedSubDecision.FailureDecision(), "failed closed", fmt.Errorf("evaluated to decision %s, but only %v were possible", decision, sets.List(unevaluatedSubDecision.PossibleDecisions()))
 			}

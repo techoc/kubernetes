@@ -26,7 +26,7 @@ const (
 	subsystem = "validation"
 )
 
-// ValidationMetrics is the interface for validation metrics.
+// ValidationMetrics 是 validation 指标的接口。
 // 用接口而非全局计数器，便于测试替换并避免各包直接依赖具体实现。
 type ValidationMetrics interface {
 	IncDeclarativeValidationMismatchMetric(validationIdentifier string)
@@ -88,7 +88,7 @@ var validationMetricsInstance = &validationMetrics{
 	),
 }
 
-// Metrics provides access to validation metrics.
+// Metrics 提供对 validation 指标的访问。
 // 包级可变变量而非常量：测试可以通过替换它注入假指标实现。
 var Metrics ValidationMetrics = validationMetricsInstance
 
@@ -120,7 +120,7 @@ func (m *validationMetrics) Reset() {
 	m.DuplicateValidationErrorCounter.Reset()
 }
 
-// IncDeclarativeValidationMismatchMetric increments the counter for the declarative_validation_mismatch_total metric.
+// IncDeclarativeValidationMismatchMetric 递增 declarative_validation_mismatch_total 指标的计数，
 // 同时更新聚合计数与按标识拆分计数，二者始终成对增长。
 func (m *validationMetrics) IncDeclarativeValidationMismatchMetric(validationIdentifier string) {
 	m.DeclarativeValidationMismatchCounter.Inc()

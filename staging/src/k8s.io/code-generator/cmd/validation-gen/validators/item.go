@@ -81,9 +81,8 @@ func (itv *itemTagValidator) GetValidations(context Context, tag codetags.Tag) (
 	// TODO: Support regular maps with syntax like:
 	// +k8s:item("map-key")=+k8s:immutable
 
-	// This tag can apply to value and pointer fields, as well as typedefs
-	// (which should never be pointers). We need to check the concrete type.
-	// 只有真实 slice 才有“元素”；元素本身还会被剥到 struct 再生成比较条件。
+	// 该标签可用于值字段和指针字段，也可用于类型别名（类型别名绝不应是指针），
+	// 因此需要检查具体类型。只有真实 slice 才有“元素”；元素本身还会被剥到 struct 再生成比较条件。
 	nt := util.NonPointer(util.NativeType(context.Type))
 	if nt.Kind != types.Slice {
 		return Validations{}, fmt.Errorf("can only be used on list types")
@@ -111,8 +110,7 @@ func (itv *itemTagValidator) GetValidations(context Context, tag codetags.Tag) (
 		return Validations{}, fmt.Errorf("no selection criteria was specified")
 	}
 
-	// Extract validations from the stored tag
-	// itemKey 是生成的 selector 字符串，同时用作 cohort 名，确保同一元素的
+	// 从存储的标签中提取校验定义：itemKey 是生成的 selector 字符串，同时用作 cohort 名，确保同一元素的
 	// 多个校验连续输出且按稳定顺序执行。
 	itemKey := selectorString(criteria)
 	itemPath := context.Path.Key(itemKey)
@@ -285,8 +283,7 @@ func criteriaFromArgs(args []codetags.Arg) ([]keyValuePair, error) {
 	return criteria, nil
 }
 
-// parseTypedValue parses a value based on its detected type
-// 解析失败时带上字段名上下文，方便定位是哪个选择条件写错了。
+// parseTypedValue 按检测到的类型解析取值；解析失败时带上字段名上下文，方便定位是哪个选择条件写错了。
 func parseTypedValue(value string, argType codetags.ArgType) (any, codetags.ValueType, error) {
 	switch argType {
 	case codetags.ArgTypeString:

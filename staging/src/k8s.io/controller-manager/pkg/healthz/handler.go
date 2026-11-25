@@ -27,19 +27,13 @@ import (
 // MutableHealthzHandler returns a http.Handler that handles "/healthz"
 // following the standard healthz mechanism.
 //
-// This handler can register health checks after its creation, which
-// is originally not allowed with standard healthz handler.
 // 标准 healthz handler 不允许在创建后再添加检查项。
 // MutableHealthzHandler 通过“加检查时重建内部 handler + 读写锁”绕开这个限制，
 // 使 controller-manager 能在启动后继续把控制器的健康检查挂到 /healthz 上。
 type MutableHealthzHandler struct {
-	// handler is the underlying handler that will be replaced every time
-	// new checks are added.
-	// 当前实际处理请求的 handler；每次新增检查都会被替换成新的 mux。
+	// handler 是当前实际处理请求的底层 handler；每次新增检查都会被替换成新的 mux。
 	handler http.Handler
-	// mutex is a RWMutex that allows concurrent health checks (read)
-	// but disallow replacing the handler at the same time (write).
-	// 读锁用于并发处理健康检查请求，写锁用于安全替换 handler。
+	// mutex 是一个 RWMutex：读锁用于并发处理健康检查请求，写锁用于安全替换 handler。
 	mutex  sync.RWMutex
 	checks []healthz.HealthChecker
 }
@@ -53,11 +47,7 @@ func (h *MutableHealthzHandler) ServeHTTP(writer http.ResponseWriter, request *h
 	h.handler.ServeHTTP(writer, request)
 }
 
-// AddHealthChecker adds health check(s) to the handler.
-//
-// Every time this function is called, the handler have to be re-initiated.
-// It is advised to add as many checks at once as possible.
-// 追加检查项并重建内部 handler。
+// AddHealthChecker 向 handler 追加健康检查项并重建内部 handler。
 // 每次调用都要重建 mux，因此建议尽量批量添加，减少重建次数。
 func (h *MutableHealthzHandler) AddHealthChecker(checks ...healthz.HealthChecker) {
 	h.mutex.Lock()

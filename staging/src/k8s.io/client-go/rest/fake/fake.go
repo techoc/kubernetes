@@ -64,7 +64,7 @@ type RESTClient struct {
 	// Req will not be recorded, Resp will not be returned, and Client will not be
 	// invoked.
 	Err error
-	// Req is set to the last request that was executed (had the methods Do/DoRaw) invoked.
+	// Req 是最后一次被执行（调用过 Do/DoRaw）的请求。
 	// 注意只保留最后一次请求，便于断言最终发出的 URL/方法/请求体。
 	Req *http.Request
 	// If Client is specified, the client will be invoked instead of returning Resp if
@@ -125,7 +125,7 @@ func (c *RESTClient) Request() *restclient.Request {
 	return restclient.NewRequestWithClient(&url.URL{Scheme: "https", Host: "localhost"}, c.VersionedAPIPath, config, CreateHTTPClient(c.do))
 }
 
-// do is invoked when a Request() created by this client is executed.
+// do 在本客户端创建的 Request() 被执行时调用。
 // 它实现了请求拦截：优先返回 Err，其次委托给 Client，最后直接返回预设的 Resp。
 func (c *RESTClient) do(req *http.Request) (*http.Response, error) {
 	if c.Err != nil {

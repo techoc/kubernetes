@@ -206,7 +206,7 @@ func hcsStatsToNetworkStats(timestamp time.Time, hcsStats *hnslib.HNSEndpointSta
 
 	iStat := hcsStatToInterfaceStat(hcsStats, endpointName)
 
-	// TODO: add support of multiple interfaces for getting default interface.
+	// TODO: 增加多接口场景下获取默认接口的支持；
 	// 当前只能把单个接口同时作为默认接口和接口列表的唯一元素。
 	result.Interfaces = append(result.Interfaces, iStat)
 	result.InterfaceStats = iStat

@@ -30,7 +30,7 @@ import (
 	"k8s.io/controller-manager/config/v1beta1"
 )
 
-// ResourceLockLeases is the resourceLock value for 'leases' API
+// ResourceLockLeases 是 'leases' API 对应的 resourceLock 取值。
 // 迁移配置中允许的两种资源锁类型常量。
 const ResourceLockLeases = "leases"
 
@@ -60,10 +60,8 @@ func init() {
 	util.Must(cfgScheme.SetVersionPriority(v1.SchemeGroupVersion))
 }
 
-// ReadLeaderMigrationConfiguration reads LeaderMigrationConfiguration from a YAML file at the given path.
-// The parsed LeaderMigrationConfiguration may be invalid.
-// It returns an error if the file did not exist.
-// 从 YAML 文件读取迁移配置：
+// ReadLeaderMigrationConfiguration 从给定路径的 YAML 文件读取迁移配置，文件不存在时返回错误。
+// 解析出的配置可能并不合法，这里只做解析：
 // 1) 读文件；
 // 2) 用严格模式的通用解码器解析（未知字段/重复字段会报错）；
 // 3) 断言结果为内部版本类型。
@@ -87,10 +85,8 @@ func ReadLeaderMigrationConfiguration(configFilePath string) (*internal.LeaderMi
 	return internalConfig, nil
 }
 
-// ValidateLeaderMigrationConfiguration validates the LeaderMigrationConfiguration against common errors.
-// It checks required names and whether resourceLock is either 'leases' or 'endpoints'.
-// It will return nil if it does not find anything wrong.
-// 校验迁移配置：leaderName 必填、resourceLock 只能是 leases/endpoints、
+// ValidateLeaderMigrationConfiguration 校验 LeaderMigrationConfiguration 的常见错误，
+// 未发现问题时返回 nil：leaderName 必填、resourceLock 只能是 leases/endpoints、
 // 每个 controllerLeaders 条目的 name 与 component 必填。
 func ValidateLeaderMigrationConfiguration(config *internal.LeaderMigrationConfiguration) (allErrs field.ErrorList) {
 	if config.LeaderName == "" {
@@ -103,8 +99,7 @@ func ValidateLeaderMigrationConfiguration(config *internal.LeaderMigrationConfig
 		allErrs = append(allErrs, field.Invalid(field.NewPath("resourceLock"), config.ResourceLock,
 			"resource Lock must be one of 'leases' or 'endpoints'"))
 	}
-	// validate controllerLeaders
-	// 逐项校验控制器列表，并带上数组下标作为字段路径，便于定位是哪一条出错。
+	// 校验 controllerLeaders：逐项校验控制器列表，并带上数组下标作为字段路径，便于定位是哪一条出错。
 	fldPath := field.NewPath("controllerLeaders")
 	for i, controllerLeader := range config.ControllerLeaders {
 		path := fldPath.Index(i)

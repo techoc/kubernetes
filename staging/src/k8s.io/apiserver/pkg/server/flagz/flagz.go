@@ -65,7 +65,7 @@ type mux interface {
 	Handle(path string, handler http.Handler)
 }
 
-// Install installs the flagz endpoint to the given mux.
+// Install 把 flagz 端点挂载到给定的 mux 上。
 // 内部总是注册 v1alpha1 与 v1beta1 两个版本，v1alpha1 标记为已弃用，
 // 结构化响应会按内容协商选择版本并附带 Warning 头。
 func Install(m mux, componentName string, flagReader Reader, opts ...Option) {
@@ -90,8 +90,7 @@ func Install(m mux, componentName string, flagReader Reader, opts ...Option) {
 	m.Handle(DefaultFlagzPath, handleFlagz(componentName, reg, filteredCodecFactory, restrictions))
 }
 
-// newFlagzCodecFactory creates a codec factory with the standard serializers for flagz,
-// filtering out unsupported media types (e.g., protobuf).
+// newFlagzCodecFactory 创建包含 flagz 标准序列化器的 codec factory，并过滤掉不支持的媒体类型（如 protobuf）。
 // 过滤是必要的：flagz 是文本型调试端点，protobuf 既无意义又会让协商错误信息
 // 列出实际不可用的类型。遇到未知媒体类型时返回错误但仍返回可用的工厂，
 // 由调用方决定是否仅记录日志。

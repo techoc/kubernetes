@@ -39,14 +39,14 @@ func WithAudiences(ctx context.Context, auds Audiences) context.Context {
 	return context.WithValue(ctx, audiencesKey, auds)
 }
 
-// AudiencesFrom returns a request's expected audiences stored in the request context.
+// AudiencesFrom 返回存放在 request context 中的、该请求期望的 audiences。
 // 第二个返回值区分"未设置"与"设置为空"，调用方可据此决定是否回退到默认 audience。
 func AudiencesFrom(ctx context.Context) (Audiences, bool) {
 	auds, ok := ctx.Value(audiencesKey).(Audiences)
 	return auds, ok
 }
 
-// Has checks if Audiences contains a specific audiences.
+// Has 检查 Audiences 是否包含指定的 audience。
 // 线性扫描足够：audience 列表通常只有个位数，避免为每次校验构造 map 的开销。
 func (a Audiences) Has(taud string) bool {
 	for _, aud := range a {
@@ -57,8 +57,7 @@ func (a Audiences) Has(taud string) bool {
 	return false
 }
 
-// Intersect intersects Audiences with a target Audiences and returns all
-// elements in both.
+// Intersect 求 Audiences 与目标 Audiences 的交集，返回同时属于两者的全部元素。
 // 结果按 tauds 的顺序排列，保证同一输入总是产生相同顺序，便于比较与日志稳定。
 func (a Audiences) Intersect(tauds Audiences) Audiences {
 	selected := Audiences{}
