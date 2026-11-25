@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package core 实现核心 API 组资源的配额评估器（quota evaluators）。
+// Package core 实现核心 API 组资源的配额评估器。
 //
 // Kubernetes 资源配额（ResourceQuota）系统通过 Evaluator 接口来评估各种资源
 // 对配额的占用情况。此包提供了以下核心资源的评估器：

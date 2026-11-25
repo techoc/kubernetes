@@ -118,7 +118,7 @@ func (p *keyCache) GetPublicKeys(ctx context.Context, keyID string) []serviceacc
 		return pubKeys
 	}
 
-	// If we didn't find it, trigger a sync.
+	// 未找到密钥时触发同步刷新。
 	if err := p.syncKeys(ctx); err != nil {
 		klog.ErrorS(err, "Error while syncing keys")
 		return []serviceaccount.PublicKey{}
@@ -129,7 +129,7 @@ func (p *keyCache) GetPublicKeys(ctx context.Context, keyID string) []serviceacc
 		return pubKeys
 	}
 
-	// If we still didn't find it, then it's an unknown keyID.
+	// 刷新后仍未找到，说明 keyID 未知。
 	klog.Errorf("Key id %q not found after refresh", keyID)
 	return []serviceaccount.PublicKey{}
 }
@@ -180,16 +180,16 @@ func (p *keyCache) syncKeys(ctx context.Context) error {
 // keysChanged 判断新旧密钥集是否有变化。
 // 比较时间戳、数量、keyID 顺序和 OIDC 排除标志，但不比较密钥内容本身（避免深度比较开销）。
 func keysChanged(oldPublicKeys, newPublicKeys *VerificationKeys) bool {
-	// If the timestamp changed, we changed
+	// 时间戳变化即表示密钥集已更新。
 	if !oldPublicKeys.DataTimestamp.Equal(newPublicKeys.DataTimestamp) {
 		return true
 	}
-	// Avoid deepequal checks on key content itself.
-	// If the number of keys changed, we changed
+	// 避免对密钥内容本身做深比较。
+	// 密钥数量变化即表示密钥集已更新。
 	if len(oldPublicKeys.Keys) != len(newPublicKeys.Keys) {
 		return true
 	}
-	// If the order, key id, or oidc discovery flag changed, we changed.
+	// 顺序、密钥 ID 或 OIDC 发现标志变化即表示密钥集已更新。
 	for i := range oldPublicKeys.Keys {
 		if oldPublicKeys.Keys[i].KeyID != newPublicKeys.Keys[i].KeyID {
 			return true
@@ -206,7 +206,7 @@ func (p *keyCache) broadcastUpdate() {
 	defer p.listenersLock.Unlock()
 
 	for _, l := range p.listeners {
-		// don't block on a slow listener
+		// 不阻塞等待响应缓慢的监听器。
 		go l.Enqueue()
 	}
 }
@@ -220,7 +220,7 @@ func (p *keyCache) getTokenVerificationKeys(ctx context.Context) (*VerificationK
 	if err != nil {
 		return nil, fmt.Errorf("while getting externally supported jwt signing keys: %w", err)
 	}
-	// Validate the refresh hint.
+	// 校验刷新提示。
 	if resp.RefreshHintSeconds <= 0 {
 		return nil, fmt.Errorf("found invalid refresh hint (%ds)", resp.RefreshHintSeconds)
 	}

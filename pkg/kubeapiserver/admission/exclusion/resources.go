@@ -34,21 +34,21 @@ var included = []schema.GroupResource{
 	{Group: "", Resource: "pods/exec"},
 	{Group: "", Resource: "pods/portforward"},
 
-	// ref: https://github.com/kubernetes/kubernetes/issues/122205#issuecomment-1927390823
+	// 背景见 https://github.com/kubernetes/kubernetes/issues/122205#issuecomment-1927390823
 	{Group: "", Resource: "serviceaccounts/token"},
 }
 
 // excluded 列出基于表达式的准入控制器应忽略的资源。
 // 此处省略版本，同一 GroupResource 的所有版本一视同仁。
 var excluded = []schema.GroupResource{
-	// BEGIN interception of these non-persisted resources may break the cluster
+	// 拦截以下不持久化资源可能破坏集群，故保持排除。
 	{Group: "authentication.k8s.io", Resource: "selfsubjectreviews"},
 	{Group: "authentication.k8s.io", Resource: "tokenreviews"},
 	{Group: "authorization.k8s.io", Resource: "localsubjectaccessreviews"},
 	{Group: "authorization.k8s.io", Resource: "selfsubjectaccessreviews"},
 	{Group: "authorization.k8s.io", Resource: "selfsubjectrulesreviews"},
 	{Group: "authorization.k8s.io", Resource: "subjectaccessreviews"},
-	// END interception of these non-persisted resources may break the cluster
+	// 以上不持久化资源不得纳入拦截范围。
 }
 
 // Included 返回应被基于表达式的准入控制器拦截的资源列表副本。

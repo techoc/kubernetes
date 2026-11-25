@@ -34,7 +34,7 @@ import (
 //
 // 注意：Windows 平台使用 syscall.Handle(fd) 而非 int(fd)，因为 Windows 的文件描述符类型不同。
 //
-// Ref: https://issues.k8s.io/89898
+// 参考：https://issues.k8s.io/89898
 func ProbeDialer() *net.Dialer {
 	dialer := &net.Dialer{
 		// Control 函数在连接建立前执行，用于设置 socket 选项

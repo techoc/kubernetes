@@ -54,12 +54,8 @@ type ServiceAccountTokenGetter interface {
 // GenerateToken 将公共和私有 claim 合并为 JWT payload，并用私钥签名。
 // 公共 claim 优先级高于私有 claim，如果两者有同名字段，使用公共 claim 的值。
 type TokenGenerator interface {
-	// GenerateToken generates a token which will identify the given
-	// ServiceAccount. privateClaims is an interface that will be
-	// serialized into the JWT payload JSON encoding at the root level of
-	// the payload object. Public claims take precedent over private
-	// claims i.e. if both claims and privateClaims have an "exp" field,
-	// the value in claims will be used.
+	// GenerateToken 生成标识给定 ServiceAccount 的 Token。
+	// privateClaims 序列化为 JWT payload 根对象上的 JSON 字段；同名字段以公共 claims 为准。
 	GenerateToken(ctx context.Context, claims *jwt.Claims, privateClaims interface{}) (string, error)
 }
 
@@ -95,15 +91,9 @@ func JWTTokenGenerator(iss string, privateKey interface{}) (TokenGenerator, erro
 	}, nil
 }
 
-// keyIDFromPublicKey derives a key ID non-reversibly from a public key.
-//
-// The Key ID is field on a given on JWTs and JWKs that help relying parties
-// pick the correct key for verification when the identity party advertises
-// multiple keys.
-//
-// Making the derivation non-reversible makes it impossible for someone to
-// accidentally obtain the real key from the key ID and use it for token
-// validation.
+// keyIDFromPublicKey 从公钥不可逆地派生密钥 ID。
+// JWT/JWK 的密钥 ID 帮助依赖方在身份提供方公布多个密钥时选择正确的验证密钥。
+// 不可逆派生可避免从密钥 ID 反推真实密钥并用于 Token 验证。
 func keyIDFromPublicKey(publicKey interface{}) (string, error) {
 	publicKeyDERBytes, err := x509.MarshalPKIXPublicKey(publicKey)
 	if err != nil {
@@ -128,13 +118,13 @@ func signerFromRSAPrivateKey(keyPair *rsa.PrivateKey) (jose.Signer, error) {
 		return nil, fmt.Errorf("failed to derive keyID: %v", err)
 	}
 
-	// IMPORTANT: The RSA algorithms listed below must be kept in sync with:
+	// 重要：以下 RSA 算法必须与这些校验/签名实现保持同步：
 	// - pkg/serviceaccount/externaljwt/plugin/plugin.go validateJWTHeader
 	// - pkg/serviceaccount/jwt.go signerFromRSAPrivateKey
 	// - pkg/serviceaccount/jwt.go signerFromECDSAPrivateKey
 	// - test/images/agnhost/openidmetadata/openidmetadata.go validate SupportedSigningAlgs
 
-	// Wrap the RSA keypair in a JOSE JWK with the designated key ID.
+	// 将 RSA 密钥对包装为带指定密钥 ID 的 JOSE JWK。
 	privateJWK := &jose.JSONWebKey{
 		Algorithm: string(jose.RS256),
 		Key:       keyPair,
@@ -162,7 +152,7 @@ func signerFromRSAPrivateKey(keyPair *rsa.PrivateKey) (jose.Signer, error) {
 func signerFromECDSAPrivateKey(keyPair *ecdsa.PrivateKey) (jose.Signer, error) {
 	var alg jose.SignatureAlgorithm
 
-	// IMPORTANT: The EC algorithms listed below must be kept in sync with:
+	// 重要：以下 EC 算法必须与这些校验/签名实现保持同步：
 	// - pkg/serviceaccount/externaljwt/plugin/plugin.go validateJWTHeader
 	// - pkg/serviceaccount/jwt.go signerFromRSAPrivateKey
 	// - pkg/serviceaccount/jwt.go signerFromECDSAPrivateKey
@@ -184,7 +174,7 @@ func signerFromECDSAPrivateKey(keyPair *ecdsa.PrivateKey) (jose.Signer, error) {
 		return nil, fmt.Errorf("failed to derive keyID: %v", err)
 	}
 
-	// Wrap the ECDSA keypair in a JOSE JWK with the designated key ID.
+	// 将 ECDSA 密钥对包装为带指定密钥 ID 的 JOSE JWK。
 	privateJWK := &jose.JSONWebKey{
 		Algorithm: string(alg),
 		Key:       keyPair,
@@ -261,7 +251,7 @@ func JWTTokenAuthenticator[PrivateClaims any](issuers []string, publicKeysGetter
 // 当公钥更新时，PublicKeysGetter 调用所有注册的 Listener 的 Enqueue 方法，
 // 触发依赖方（如 OIDC 元数据提供者）重新生成缓存数据。
 type Listener interface {
-	// Enqueue should be called when an input may have changed
+	// 输入可能变化时应调用 Enqueue。
 	Enqueue()
 }
 
@@ -269,17 +259,15 @@ type Listener interface {
 // 支持静态公钥（StaticPublicKeysGetter）和动态公钥（如 external-jwt-signer 的 keyCache）。
 // 通过 Listener 机制通知公钥变化，支持密钥轮换。
 type PublicKeysGetter interface {
-	// AddListener is adds a listener to be notified of potential input changes.
-	// This is a noop on static providers.
+	// AddListener 注册监听器，以便在输入可能变化时收到通知；静态提供方不执行任何操作。
 	AddListener(listener Listener)
 
-	// GetCacheAgeMaxSeconds returns the seconds a call to GetPublicKeys() can be cached for.
-	// If the results of GetPublicKeys() can be dynamic, this means a new key must be included in the results
-	// for at least this long before it is used to sign new tokens.
+	// GetCacheAgeMaxSeconds 返回 GetPublicKeys() 结果可缓存的秒数。
+	// 若结果会动态变化，新密钥必须在此时间内持续返回，之后才能用于签署新 Token。
 	GetCacheAgeMaxSeconds() int
 
-	// GetPublicKeys returns public keys to use for verifying a token with the given key id.
-	// keyIDHint may be empty if the token did not have a kid header, or if all public keys are desired.
+	// GetPublicKeys 返回用于验证指定密钥 ID 的 Token 的公钥。
+	// Token 无 kid header 或调用方需要全部公钥时，keyIDHint 可以为空。
 	GetPublicKeys(ctx context.Context, keyIDHint string) []PublicKey
 }
 
@@ -306,7 +294,7 @@ func StaticPublicKeysGetter(keys []interface{}) (PublicKeysGetter, error) {
 	publicKeysByID := map[string][]PublicKey{}
 	for _, key := range keys {
 		if privateKey, isPrivateKey := key.(publicKeyGetter); isPrivateKey {
-			// This is a private key. Extract its public key.
+			// 私钥仅用于派生对应的公钥。
 			key = privateKey.Public()
 		}
 
@@ -325,11 +313,11 @@ func StaticPublicKeysGetter(keys []interface{}) (PublicKeysGetter, error) {
 }
 
 func (s staticPublicKeysGetter) AddListener(listener Listener) {
-	// no-op, static key content never changes
+	// 静态密钥内容不会变化，无需响应通知。
 }
 
 func (s staticPublicKeysGetter) GetCacheAgeMaxSeconds() int {
-	// hard-coded to match cache max-age set in OIDC discovery
+	// 与 OIDC 发现文档中的缓存 max-age 保持一致。
 	return 3600
 }
 
@@ -353,9 +341,8 @@ type jwtTokenAuthenticator[PrivateClaims any] struct {
 // PrivateClaims 是认证器反序列化 JWT payload 的目标结构体。
 // 实现者可以假设调用 Validate 时，Token 的 issuer 和签名已经验证通过。
 type Validator[PrivateClaims any] interface {
-	// Validate validates a token and returns user information or an error.
-	// Validator can assume that the issuer and signature of a token are already
-	// verified when this function is called.
+	// Validate 校验 Token 并返回用户信息或错误。
+	// 调用时 Token 的 issuer 和签名已完成验证。
 	Validate(ctx context.Context, tokenData string, public *jwt.Claims, private *PrivateClaims) (*apiserverserviceaccount.ServiceAccountInfo, error)
 }
 
@@ -375,7 +362,7 @@ func (j *jwtTokenAuthenticator[PrivateClaims]) AuthenticateToken(ctx context.Con
 	public := &jwt.Claims{}
 	private := new(PrivateClaims)
 
-	// Pick the key that has the same key ID as `tok`, if one exists.
+	// 若存在与 Token 密钥 ID 相同的密钥，则选择该密钥。
 	var kid string
 	for _, header := range tok.Headers {
 		if header.KeyID != "" {
@@ -405,14 +392,14 @@ func (j *jwtTokenAuthenticator[PrivateClaims]) AuthenticateToken(ctx context.Con
 		return nil, false, utilerrors.NewAggregate(errlist)
 	}
 
-	// sanity check issuer since we parsed it out before signature validation
+	// 签名验证前已解析 issuer，此处再次校验。
 	if !j.issuers[public.Issuer] {
 		return nil, false, fmt.Errorf("token issuer %q is invalid", public.Issuer)
 	}
 
 	tokenAudiences := authenticator.Audiences(public.Audience)
 	if len(tokenAudiences) == 0 {
-		// only apiserver audiences are allowed for legacy tokens
+		// 旧版 Token 只允许 API Server 的 audience。
 		audit.AddAuditAnnotation(ctx, "authentication.k8s.io/legacy-token", public.Subject)
 		legacyTokensTotal.WithContext(ctx).Inc()
 		tokenAudiences = j.implicitAuds
@@ -420,7 +407,7 @@ func (j *jwtTokenAuthenticator[PrivateClaims]) AuthenticateToken(ctx context.Con
 
 	requestedAudiences, ok := authenticator.AudiencesFrom(ctx)
 	if !ok {
-		// default to apiserver audiences
+		// 默认使用 API Server 的 audience。
 		requestedAudiences = j.implicitAuds
 	}
 
@@ -429,8 +416,7 @@ func (j *jwtTokenAuthenticator[PrivateClaims]) AuthenticateToken(ctx context.Con
 		return nil, false, fmt.Errorf("token audiences %q is invalid for the target audiences %q", tokenAudiences, requestedAudiences)
 	}
 
-	// If we get here, we have a token with a recognized signature and
-	// issuer string.
+	// 至此 Token 的签名和 issuer 均已识别，再验证其余 claims。
 	sa, err := j.validator.Validate(ctx, tokenData, public, private)
 	if err != nil {
 		return nil, false, err
@@ -442,12 +428,9 @@ func (j *jwtTokenAuthenticator[PrivateClaims]) AuthenticateToken(ctx context.Con
 	}, true, nil
 }
 
-// hasCorrectIssuer returns true if tokenData is a valid JWT in compact
-// serialization format and the "iss" claim matches the iss field of this token
-// authenticator, and otherwise returns false.
-//
-// Note: go-jose currently does not allow access to unverified JWS payloads.
-// See https://github.com/square/go-jose/issues/169
+// hasCorrectIssuer 判断 tokenData 是否为紧凑序列化格式的有效 JWT，且 "iss" claim 与认证器的 iss 配置一致。
+// 注意：go-jose 目前不允许读取未经验证的 JWS payload。
+// 参见 https://github.com/square/go-jose/issues/169
 func (j *jwtTokenAuthenticator[PrivateClaims]) hasCorrectIssuer(tokenData string) bool {
 	if strings.HasPrefix(strings.TrimSpace(tokenData), "{") {
 		return false
@@ -461,7 +444,7 @@ func (j *jwtTokenAuthenticator[PrivateClaims]) hasCorrectIssuer(tokenData string
 		return false
 	}
 	claims := struct {
-		// WARNING: this JWT is not verified. Do not trust these claims.
+		// 警告：此 JWT 尚未验证，不可信任其中的 claim。
 		Issuer string `json:"iss"`
 	}{}
 	if err := json.Unmarshal(payload, &claims); err != nil {
@@ -470,9 +453,9 @@ func (j *jwtTokenAuthenticator[PrivateClaims]) hasCorrectIssuer(tokenData string
 	return j.issuers[claims.Issuer]
 }
 
-// GenerateToken is shared between internal and external signer code to ensure that claim merging logic remains consistent between them.
+// GenerateToken 供内部和外部签名器共用，确保两者的 claim 合并逻辑一致。
 func GenerateToken(signer jose.Signer, iss string, claims *jwt.Claims, privateClaims interface{}) (string, error) {
-	// claims are applied in reverse precedence
+	// claims 按优先级从低到高应用。
 	return jwt.Signed(signer).
 		Claims(privateClaims).
 		Claims(claims).

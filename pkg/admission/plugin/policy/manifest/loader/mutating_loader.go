@@ -42,7 +42,7 @@ type LoadedMutatingPolicyManifests struct {
 
 // LoadMutatingManifestsFromDirectory 读取指定目录下的所有 YAML/JSON 文件，
 // 将其解析为 MutatingAdmissionPolicy 或 MutatingAdmissionPolicyBinding 资源。
-// 文件按字母序处理，保证加载结果可复现（deterministic）。
+// 文件按字母序处理，保证加载结果确定且可复现。
 //
 // 与 VAP 版本一样，文件遍历、List 展开、名称唯一性/静态后缀检查、
 // binding 引用检查以及排序均由通用 loader 完成；本文件只提供 MAP 类型的

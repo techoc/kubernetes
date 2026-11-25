@@ -113,18 +113,30 @@ func MkdirAll(path string, perm os.FileMode) error {
 const (
 	// Windows 的 syscall 包里没有定义这些权限位，以下为 SDDL 中使用的访问掩码。
 
-	USER_READ      = 0x100                                       // 所有者读取权限
-	USER_WRITE     = 0x80                                        // 所有者写入权限
-	USER_EXECUTE   = 0x40                                        // 所有者执行权限
-	GROUP_READ     = 0x20                                        // 属组读取权限
-	GROUP_WRITE    = 0x10                                        // 属组写入权限
-	GROUP_EXECUTE  = 0x8                                         // 属组执行权限
-	OTHERS_READ    = 0x4                                         // 其他用户读取权限
-	OTHERS_WRITE   = 0x2                                         // 其他用户写入权限
-	OTHERS_EXECUTE = 0x1                                         // 其他用户执行权限
-	USER_ALL       = USER_READ | USER_WRITE | USER_EXECUTE       // 所有者全部权限
-	GROUP_ALL      = GROUP_READ | GROUP_WRITE | GROUP_EXECUTE    // 属组全部权限
-	OTHERS_ALL     = OTHERS_READ | OTHERS_WRITE | OTHERS_EXECUTE // 其他用户全部权限
+	// USER_READ 表示所有者的读取权限。
+	USER_READ = 0x100
+	// USER_WRITE 表示所有者的写入权限。
+	USER_WRITE = 0x80
+	// USER_EXECUTE 表示所有者的执行权限。
+	USER_EXECUTE = 0x40
+	// GROUP_READ 表示属组的读取权限。
+	GROUP_READ = 0x20
+	// GROUP_WRITE 表示属组的写入权限。
+	GROUP_WRITE = 0x10
+	// GROUP_EXECUTE 表示属组的执行权限。
+	GROUP_EXECUTE = 0x8
+	// OTHERS_READ 表示其他用户的读取权限。
+	OTHERS_READ = 0x4
+	// OTHERS_WRITE 表示其他用户的写入权限。
+	OTHERS_WRITE = 0x2
+	// OTHERS_EXECUTE 表示其他用户的执行权限。
+	OTHERS_EXECUTE = 0x1
+	// USER_ALL 表示所有者的全部权限。
+	USER_ALL = USER_READ | USER_WRITE | USER_EXECUTE
+	// GROUP_ALL 表示属组的全部权限。
+	GROUP_ALL = GROUP_READ | GROUP_WRITE | GROUP_EXECUTE
+	// OTHERS_ALL 表示其他用户的全部权限。
+	OTHERS_ALL = OTHERS_READ | OTHERS_WRITE | OTHERS_EXECUTE
 )
 
 // Chmod 设置文件或目录的访问权限。

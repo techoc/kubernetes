@@ -151,7 +151,7 @@ func getErrorCode(err error) string {
 		return codes.OK.String()
 	}
 
-	// handle errors wrapped with fmt.Errorf and similar
+	// 同时处理 fmt.Errorf 等包装后的错误。
 	var s gRPCError
 	if errors.As(err, &s) {
 		return s.GRPCStatus().Code().String()

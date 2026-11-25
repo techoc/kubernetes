@@ -14,14 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package internalversion 提供针对 Kubernetes 内部版本（internal version）资源的打印处理器。
-// 通过 AddHandlers 函数为所有核心资源类型注册表格打印逻辑，
-// 使 kubectl get 等命令能以表格形式展示各种资源。
+// Package internalversion 为 Kubernetes 内部 API 类型注册表格打印处理器。
+// AddHandlers 注册各资源类型的列定义和打印函数，使 kubectl get 等命令能以表格形式展示资源。
 package internalversion
 
 import (
-	// 以下空白导入用于注册各 API 组的 scheme，确保打印处理器能正确识别和转换资源类型
-	// TODO: 当 get 命令不再需要 legacy scheme 时移除这些手动安装
+	// 空白导入会注册各 API 组的 legacy scheme；打印处理器依赖这些类型信息，不能仅依赖转换后的版本化类型。
+	// TODO: 当 get 命令不再需要 legacy scheme 时移除这些手动安装。
 	_ "k8s.io/kubernetes/pkg/apis/apps/install"
 	_ "k8s.io/kubernetes/pkg/apis/authentication/install"
 	_ "k8s.io/kubernetes/pkg/apis/authorization/install"

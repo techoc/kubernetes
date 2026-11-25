@@ -71,7 +71,7 @@ func DetermineEffectiveSecurityContext(pod *v1.Pod, container *v1.Container) *v1
 			effectiveSc.WindowsOptions = &v1.WindowsSecurityContextOptions{}
 		}
 		if containerSc.WindowsOptions.GMSACredentialSpecName != nil || containerSc.WindowsOptions.GMSACredentialSpec != nil {
-			// both GMSA fields go hand in hand
+			// 两个 GMSA 字段需一起覆盖，不能只继承其中一个。
 			effectiveSc.WindowsOptions.GMSACredentialSpecName = containerSc.WindowsOptions.GMSACredentialSpecName
 			effectiveSc.WindowsOptions.GMSACredentialSpec = containerSc.WindowsOptions.GMSACredentialSpec
 		}

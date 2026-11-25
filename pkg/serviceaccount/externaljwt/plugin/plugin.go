@@ -48,7 +48,7 @@ type VerificationKeys struct {
 }
 
 // New 创建外部 JWT 签名器插件，建立与外部签名器的 gRPC 连接。
-// 通过 Unix domain socket 通信，使用 insecure 凭证（因为 Unix socket 本身提供 OS 级别的访问控制）。
+// 通过 Unix 域套接字通信，使用 insecure 凭证（因为 Unix socket 本身提供 OS 级别的访问控制）。
 // 启动时同步获取初始密钥集，然后在后台 goroutine 中定期同步。
 // ctx 控制整个插件的生命周期，取消时关闭 gRPC 连接。
 func New(ctx context.Context, issuer, socketPath string, keySyncTimeout time.Duration, allowSigningWithNonOIDCKeys bool) (*Plugin, *keyCache, error) {
@@ -181,13 +181,13 @@ func (p *Plugin) validateJWTHeader(ctx context.Context, response *externaljwtv1.
 		return fmt.Errorf("key id longer than 1 kb")
 	}
 	switch header.Algorithm {
-	// IMPORTANT: The algorithms listed below must be kept in sync with:
+	// 重要：以下算法必须与这些校验/签名实现保持同步：
 	// - pkg/serviceaccount/externaljwt/plugin/plugin.go validateJWTHeader
 	// - pkg/serviceaccount/jwt.go signerFromRSAPrivateKey
 	// - pkg/serviceaccount/jwt.go signerFromECDSAPrivateKey
 	// - test/images/agnhost/openidmetadata/openidmetadata.go validate SupportedSigningAlgs
 	case "RS256", "ES256", "ES384", "ES512":
-		// OK
+		// 算法受支持。
 	default:
 		return fmt.Errorf("bad signing algorithm %q", header.Algorithm)
 	}
@@ -195,7 +195,7 @@ func (p *Plugin) validateJWTHeader(ctx context.Context, response *externaljwtv1.
 	if !p.allowSigningWithNonOIDCKeys {
 		publicKeys := p.keyCache.GetPublicKeys(ctx, header.KeyID)
 		for _, key := range publicKeys {
-			// Such keys shall only be used for validating formerly issued tokens.
+			// 此类密钥只能用于验证以前签发的 Token。
 			if key.ExcludeFromOIDCDiscovery {
 				return fmt.Errorf("key used for signing JWT (kid: %s) is excluded from OIDC discovery docs", header.KeyID)
 			}
@@ -212,7 +212,7 @@ func mergeClaims(iss string, claims *jwt.Claims, privateClaims interface{}) ([]b
 	if len(out) == 0 {
 		return nil, fmt.Errorf("failed to marshal: %w", err)
 	}
-	return out, nil // error is safe to ignore as long as we have the payload bytes
+	return out, nil // 已取得 payload 字节，因此可以忽略此错误。
 }
 
 var _ jose.Signer = payloadGrabber(nil)
@@ -221,7 +221,7 @@ type payloadGrabber func(payload []byte)
 
 func (p payloadGrabber) Sign(payload []byte) (*jose.JSONWebSignature, error) {
 	p(payload)
-	return nil, jose.ErrUnprotectedNonce // return some error to stop after we have the payload
+	return nil, jose.ErrUnprotectedNonce // 取得 payload 后返回错误，以停止后续处理。
 }
 
 func (p payloadGrabber) Options() jose.SignerOptions { return jose.SignerOptions{} }

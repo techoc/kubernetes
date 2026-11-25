@@ -32,7 +32,7 @@ import (
 // 而不是正常发送完数据后用 FIN 包优雅关闭。1秒是一个折中值，既减少了 TIME-WAIT 时间，
 // 又保证了数据能完整传输。
 //
-// Ref: https://issues.k8s.io/89898
+// 参考：https://issues.k8s.io/89898
 func ProbeDialer() *net.Dialer {
 	dialer := &net.Dialer{
 		// Control 函数在连接建立前执行，用于设置 socket 选项

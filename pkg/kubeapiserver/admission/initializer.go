@@ -26,7 +26,7 @@ import (
 	webhookloader "k8s.io/kubernetes/pkg/admission/plugin/webhook/manifest/loader"
 )
 
-// TODO add a `WantsToRun` which takes a stopCh.  Might make it generic.
+// TODO: 增加接收 stopCh 的 `WantsToRun` 接口，或可将此初始化逻辑泛化。
 
 // PluginInitializer 用于初始化 Kubernetes 特有的准入插件。
 type PluginInitializer struct {

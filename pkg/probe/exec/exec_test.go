@@ -39,10 +39,12 @@ func (f *FakeCmd) Run() error {
 	return nil
 }
 
+// CombinedOutput 返回预置输出和错误，模拟 exec 探针读取合并输出的路径。
 func (f *FakeCmd) CombinedOutput() ([]byte, error) {
 	return f.out, f.err
 }
 
+// Output 返回预置标准输出和错误，便于单独验证 stdout 处理。
 func (f *FakeCmd) Output() ([]byte, error) {
 	return f.stdout, f.err
 }
@@ -63,6 +65,7 @@ func (f *FakeCmd) SetEnv(env []string) {}
 
 func (f *FakeCmd) Stop() {}
 
+// Start 在配置 writer 时同步写入预置输出，模拟探针启动命令后的输出读取。
 func (f *FakeCmd) Start() error {
 	if f.writer != nil {
 		f.writer.Write(f.out)
@@ -114,8 +117,8 @@ func (f *fakeExitError) ExitStatus() int {
 func TestExec(t *testing.T) {
 	prober := New()
 
-	tenKilobyte := strings.Repeat("logs-123", 128*10)      // 8*128*10=10240 = 10KB of text.
-	elevenKilobyte := strings.Repeat("logs-123", 8*128*11) // 8*128*11=11264 = 11KB of text.
+	tenKilobyte := strings.Repeat("logs-123", 128*10)      // 8*128*10=10240，即 10KB 文本。
+	elevenKilobyte := strings.Repeat("logs-123", 8*128*11) // 8*128*11=11264，即 11KB 文本。
 
 	tests := []struct {
 		expectedStatus probe.Result

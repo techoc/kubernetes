@@ -353,8 +353,7 @@ func TestContainerIter(t *testing.T) {
 func TestPodSecrets(t *testing.T) {
 	// 这个 stub 穷举 Pod 中可能出现的 Secret 引用位置；
 	// 每个引用的名字就是反射发现的字段路径，便于精确定位漏报。
-	// Stub containing all possible secret references in a pod.
-	// The names of the referenced secrets match struct paths detected by reflection.
+	// 包含 Pod 中全部 Secret 引用的测试桩，引用名与反射发现的字段路径一致。
 	pod := &v1.Pod{
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
@@ -447,13 +446,13 @@ func TestPodSecrets(t *testing.T) {
 	})
 
 	// 名字含 secret 但不是 Secret 对象引用的字段（如 SecretFile），需要显式排除。
-	// excludedSecretPaths holds struct paths to fields with "secret" in the name that are not actually references to secret API objects
+	// excludedSecretPaths 保存名称含 "secret" 但并非 Secret API 对象引用的字段路径。
 	excludedSecretPaths := sets.New[string](
 		"Spec.Volumes[*].VolumeSource.CephFS.SecretFile",
 	)
 	// 期望路径清单：每条都必须在上面的 stub 中有一个以该路径为名字的引用。
-	// expectedSecretPaths holds struct paths to fields with "secret" in the name that are references to secret API objects.
-	// every path here should be represented as an example in the Pod stub above, with the secret name set to the path.
+	// expectedSecretPaths 保存引用 Secret API 对象且名称含 "secret" 的字段路径。
+	// 每个路径都必须在上方 Pod 测试桩中有对应实例，且 Secret 名设为该路径。
 	expectedSecretPaths := sets.New[string](
 		"Spec.Containers[*].EnvFrom[*].SecretRef",
 		"Spec.Containers[*].Env[*].ValueFrom.SecretKeyRef",
@@ -497,7 +496,7 @@ func TestPodSecrets(t *testing.T) {
 	}
 
 	// 空名字段必须被忽略，否则会向调用方返回无法使用的 Secret 名。
-	// emptyPod is a stub containing empty object names
+	// emptyPod 是对象名为空的测试桩。
 	emptyPod := &v1.Pod{
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
@@ -533,9 +532,7 @@ func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, n
 	case reflect.Pointer:
 		resourcePaths.Insert(sets.List[string](collectResourcePaths(t, resourcename, path, name, tp.Elem()))...)
 	case reflect.Struct:
-		// ObjectMeta 是通用结构且包含指针环，递归没有意义，直接跳过。
-		// ObjectMeta is generic and therefore should never have a field with a specific resource's name;
-		// it contains cycles so it's easiest to just skip it.
+		// ObjectMeta 是通用结构，不应包含特定资源名称字段，且存在指针环，因此直接跳过。
 		if name == "ObjectMeta" {
 			break
 		}
@@ -551,7 +548,6 @@ func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, n
 		resourcePaths.Insert(sets.List[string](collectResourcePaths(t, resourcename, path.Key("*"), "", tp.Elem()))...)
 	default:
 		// 基本类型无法继续下钻，递归到此结束。
-		// all primitive types
 	}
 
 	return resourcePaths
@@ -561,8 +557,7 @@ func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, n
 // 覆盖 Pod 中全部 ConfigMap 引用，且忽略空名字。
 func TestPodConfigmaps(t *testing.T) {
 	// 每个引用的名字就是其字段路径，便于反射比对时定位漏报。
-	// Stub containing all possible ConfigMap references in a pod.
-	// The names of the referenced ConfigMaps match struct paths detected by reflection.
+	// 包含 Pod 中全部 ConfigMap 引用的测试桩，引用名与反射发现的字段路径一致。
 	pod := &v1.Pod{
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
@@ -616,8 +611,8 @@ func TestPodConfigmaps(t *testing.T) {
 	})
 
 	// 期望路径清单：每条都要在 stub 中有对应的引用实例。
-	// expectedPaths holds struct paths to fields with "ConfigMap" in the name that are references to ConfigMap API objects.
-	// every path here should be represented as an example in the Pod stub above, with the ConfigMap name set to the path.
+	// expectedPaths 保存名称含 "ConfigMap" 且引用 ConfigMap API 对象的字段路径。
+	// 每个路径都必须在上方 Pod 测试桩中有对应实例，且 ConfigMap 名设为该路径。
 	expectedPaths := sets.New[string](
 		"Spec.Containers[*].EnvFrom[*].ConfigMapRef",
 		"Spec.Containers[*].Env[*].ValueFrom.ConfigMapKeyRef",
@@ -647,8 +642,8 @@ func TestPodConfigmaps(t *testing.T) {
 		t.Error("Extra names extracted. Verify VisitPodConfigmapNames() is correctly extracting resource names")
 	}
 
-	// 空名字段必须被忽略，否则会向调用方返回无法使用的 Secret 名。
-	// emptyPod is a stub containing empty object names
+	// 空名字段必须被忽略，否则会向调用方返回无法使用的 ConfigMap 名。
+	// emptyPod 是对象名为空的测试桩。
 	emptyPod := &v1.Pod{
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
@@ -1359,7 +1354,7 @@ func TestContainerHasRestartablePolicy(t *testing.T) {
 			expected:  false,
 		},
 		// 以下用例覆盖最低优先级的 Pod 级策略回退。
-		// --- Scenarios for Pod-Level Restart Policy (Lowest Priority) ---
+		// --- Pod 级重启策略场景（最低优先级） ---
 		{
 			name:      "Pod Policy: Fallback to pod 'Always'",
 			container: v1.Container{},
@@ -1400,10 +1395,10 @@ func TestContainerHasRestartablePolicy(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 用 tc.name 作为子测试名，失败时可以直接看出是哪条规则组合。
-			// Execute the function under test
+			// 执行被测函数。
 			got := ContainerShouldRestart(tc.container, tc.podSpec, tc.exitCode)
 
-			// Assert the result
+			// 断言结果。
 			if got != tc.expected {
 				t.Errorf("ContainerHasRestartablePolicy() = %v, want %v", got, tc.expected)
 			}

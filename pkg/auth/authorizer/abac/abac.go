@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package abac 使用基于属性的访问控制（Attribute-based access control）方案
+// Package abac 使用基于属性的访问控制方案
 // 对 Kubernetes API 请求做授权：策略以文件形式提供，逐行描述允许的属性组合。
 package abac
 
@@ -46,6 +46,7 @@ type policyLoadError struct {
 	err  error
 }
 
+// Error 返回策略加载错误；能定位到行号时附带原始行，便于排查语法问题。
 func (p policyLoadError) Error() string {
 	// line >= 0 表示错误定位到了某一行，把原始行内容一并输出方便排查。
 	if p.line >= 0 {

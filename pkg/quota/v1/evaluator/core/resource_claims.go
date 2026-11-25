@@ -314,7 +314,7 @@ func (p *claimEvaluator) UsageStats(options quota.UsageStatsOptions) (quota.Usag
 	return generic.CalculateUsageStats(options, p.listFuncByNamespace, generic.MatchesNoScopeFunc, p.Usage)
 }
 
-// ensure we implement required interface
+// 确认实现所需的配额评估器接口。
 var _ quota.Evaluator = &claimEvaluator{}
 
 // toExternalResourceClaimOrError 将 runtime.Object 转换为外部 ResourceClaim 对象。

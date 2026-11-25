@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package internalversion 提供针对 Kubernetes 内部版本（internal version）资源的打印处理器。
-// 通过 AddHandlers 函数为所有核心资源类型注册表格打印逻辑，
-// 使 kubectl get 等命令能以表格形式展示各种资源。
+// Package internalversion 为 Kubernetes 内部 API 类型注册表格打印处理器。
+// AddHandlers 为默认资源类型注册列定义与打印函数，使 kubectl get 等命令能以表格形式展示资源。
 //
 // 核心概念：
 //   - 每种资源类型定义一组 TableColumnDefinition 描述表格列
@@ -108,7 +107,7 @@ const (
 
 // AddHandlers 为所有默认 Kubernetes 资源类型注册打印处理器。
 // 每种资源类型定义一组列定义（TableColumnDefinition），然后注册对应的 print 函数。
-// 列定义中的 Priority > 0 的列仅在 `kubectl get -o wide` 模式下显示。
+// 列定义中 Priority != 0 的列仅在 `kubectl get -o wide` 模式下显示。
 // 错误被忽略，因为 TableHandler 内部已记录日志。
 func AddHandlers(h printers.PrintHandler) {
 	// ---- Pod 资源：显示名称、就绪状态、状态、重启次数、年龄 ----
@@ -793,14 +792,11 @@ func AddHandlers(h printers.PrintHandler) {
 	// ---- DeviceTaint 资源：显示设备污点键值对和影响 ----
 	deviceTaintColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
-		// The filter criteria are not printed. They could be lengthy (CEL!) and in practice many of them
-		// will be empty. Instead, the admin could pick a descriptive name.
-		//
-		// The taint is more useful.
+		// 不展示过滤条件：CEL 表达式可能很长，且实际常为空；相比之下，污点本身更具诊断价值。
 		{Name: "Key", Type: "string", Description: resourceapi.DeviceTaint{}.SwaggerDoc()["key"]},
 		{Name: "Value", Type: "string", Description: resourceapi.DeviceTaint{}.SwaggerDoc()["value"]},
 		{Name: "Effect", Type: "string", Description: resourceapi.DeviceTaint{}.SwaggerDoc()["effect"]},
-		// TimeAdded and Age are often the same, but not necessarily.
+		// TimeAdded 与 Age 通常接近，但二者含义不同，不能互相替代。
 		{Name: "TimeAdded", Type: "string", Description: resourceapi.DeviceTaint{}.SwaggerDoc()["timeAdded"]},
 		{Name: "Age", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["creationTimestamp"]},
 	}
@@ -908,21 +904,21 @@ func formatEndpoints(endpoints *api.Endpoints, ports sets.String) string {
 	for i := range endpoints.Subsets {
 		ss := &endpoints.Subsets[i]
 		if len(ss.Ports) == 0 {
-			// It's possible to have headless services with no ports.
+			// headless Service 可以没有端口，此时只能展示地址。
 			count += len(ss.Addresses)
 			for i := range ss.Addresses {
 				if len(list) == max {
 					more = true
-					// the next loop is redundant
+					// 已达到展示上限，后续循环只会重复计数
 					break
 				}
 				list = append(list, ss.Addresses[i].IP)
 			}
-			// avoid nesting code too deeply
+			// 无端口分支到此结束，避免嵌套过深
 			continue
 		}
 
-		// "Normal" services with ports defined.
+		// 带端口的 Service 分别展示每个端口。
 		for i := range ss.Ports {
 			port := &ss.Ports[i]
 			if ports == nil || ports.Has(port.Name) {
@@ -930,7 +926,7 @@ func formatEndpoints(endpoints *api.Endpoints, ports sets.String) string {
 				for i := range ss.Addresses {
 					if len(list) == max {
 						more = true
-						// the next loop is redundant
+						// 已达到展示上限，后续循环只会重复计数
 						break
 					}
 					addr := &ss.Addresses[i]
@@ -1062,7 +1058,7 @@ func printPod(pod *api.Pod, options printers.GenerateOptions) ([]metav1.TableRow
 		reason = pod.Status.Reason
 	}
 
-	// If the Pod carries {type:PodScheduled, reason:SchedulingGated}, set reason to 'SchedulingGated'.
+	// 调度门控比 Pod 当前阶段更具体，优先用 SchedulingGated 作为展示原因。
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == api.PodScheduled && condition.Reason == apiv1.PodReasonSchedulingGated {
 			reason = apiv1.PodReasonSchedulingGated
@@ -1117,7 +1113,7 @@ func printPod(pod *api.Pod, options printers.GenerateOptions) ([]metav1.TableRow
 			}
 			continue
 		case container.State.Terminated != nil:
-			// initialization is failed
+			// 初始化容器失败时，用其退出原因替代当前阶段。
 			if len(container.State.Terminated.Reason) == 0 {
 				if container.State.Terminated.Signal != 0 {
 					reason = fmt.Sprintf("Init:Signal:%d", container.State.Terminated.Signal)
@@ -1173,7 +1169,7 @@ func printPod(pod *api.Pod, options printers.GenerateOptions) ([]metav1.TableRow
 			}
 		}
 
-		// change pod status back to "Running" if there is at least one container still reporting as "Running" status
+		// 即使阶段已显示 Completed，只要仍有运行中的容器且 Pod 已就绪，就应展示为 Running。
 		if reason == "Completed" {
 			if hasRunning && hasPodReadyCondition(pod.Status.Conditions) {
 				reason = "Running"
@@ -1311,7 +1307,7 @@ func printPodDisruptionBudgetList(list *policy.PodDisruptionBudgetList, options 
 	return rows, nil
 }
 
-// TODO(AdoHe): try to put wide output in a single method
+// TODO(AdoHe): 尝试将宽模式输出整合到单个方法中
 func printReplicationController(obj *api.ReplicationController, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
@@ -1474,8 +1470,8 @@ func printCronJobList(list *batch.CronJobList, options printers.GenerateOptions)
 	return rows, nil
 }
 
-// loadBalancerStatusStringer behaves mostly like a string interface and converts the given status to a string.
-// `wide` indicates whether the returned value is meant for --o=wide output. If not, it's clipped to 16 bytes.
+// loadBalancerStatusStringer 将负载均衡状态转换为排序去重后的地址列表。
+// wide 为 false 时按普通输出约束截断到 16 字节，避免挤占其他列；--o=wide 保留完整列表。
 func loadBalancerStatusStringer(s api.LoadBalancerStatus, wide bool) string {
 	ingress := s.Ingress
 	result := sets.NewString()
@@ -1620,8 +1616,8 @@ func printIngress(obj *networking.Ingress, options printers.GenerateOptions) ([]
 	return []metav1.TableRow{row}, nil
 }
 
-// ingressLoadBalancerStatusStringer behaves mostly like a string interface and converts the given status to a string.
-// `wide` indicates whether the returned value is meant for --o=wide output. If not, it's clipped to 16 bytes.
+// ingressLoadBalancerStatusStringer 将 Ingress 负载均衡状态转换为排序去重后的地址列表。
+// wide 为 false 时截断到 16 字节，避免普通输出过宽；--o=wide 保留完整列表。
 func ingressLoadBalancerStatusStringer(s networking.IngressLoadBalancerStatus, wide bool) string {
 	ingress := s.Ingress
 	result := sets.NewString()
@@ -1964,8 +1960,7 @@ func printValidatingAdmissionPolicyBinding(obj *admissionregistration.Validating
 			if pr.Namespace != "" {
 				paramName = pr.Namespace + "/" + pr.Name
 			} else {
-				// Can't tell from here if param is cluster-scoped, so all
-				// params without names get * namespace
+				// 此处无法判断参数是否为集群级；未指定命名空间时用 * 表示作用域未知。
 				paramName = "*/" + pr.Name
 			}
 		} else if pr.Selector != nil {
@@ -2022,8 +2017,7 @@ func printMutatingAdmissionPolicyBinding(obj *admissionregistration.MutatingAdmi
 			if pr.Namespace != "" {
 				paramName = pr.Namespace + "/" + pr.Name
 			} else {
-				// Can't tell from here if param is cluster-scoped, so all
-				// params without names get * namespace
+				// 此处无法判断参数是否为集群级；未指定命名空间时用 * 表示作用域未知。
 				paramName = "*/" + pr.Name
 			}
 		} else if pr.Selector != nil {
@@ -2152,7 +2146,7 @@ func printNode(obj *api.Node, options printers.GenerateOptions) ([]metav1.TableR
 		if crVersion == "" {
 			crVersion = "<unknown>"
 		}
-		// append arch to kernelVersion
+		// 架构与内核版本展示在同一列，空架构不追加占位信息。
 		if obj.Status.NodeInfo.Architecture != "" {
 			kernelVersion += " (" + obj.Status.NodeInfo.Architecture + ")"
 		}
@@ -2162,7 +2156,7 @@ func printNode(obj *api.Node, options printers.GenerateOptions) ([]metav1.TableR
 	return []metav1.TableRow{row}, nil
 }
 
-// Returns first external ip of the node or "<none>" if none is found.
+// getNodeExternalIP 返回节点地址列表中的首个外部 IP；未配置时返回 "<none>"。
 func getNodeExternalIP(node *api.Node) string {
 	for _, address := range node.Status.Addresses {
 		if address.Type == api.NodeExternalIP {
@@ -2173,7 +2167,7 @@ func getNodeExternalIP(node *api.Node) string {
 	return "<none>"
 }
 
-// Returns the internal IP of the node or "<none>" if none is found.
+// getNodeInternalIP 返回节点地址列表中的首个内部 IP；未配置时返回 "<none>"。
 func getNodeInternalIP(node *api.Node) string {
 	for _, address := range node.Status.Addresses {
 		if address.Type == api.NodeInternalIP {
@@ -2184,10 +2178,9 @@ func getNodeInternalIP(node *api.Node) string {
 	return "<none>"
 }
 
-// findNodeRoles returns the roles of a given node.
-// The roles are determined by looking for:
-// * a node-role.kubernetes.io/<role>="" label
-// * a kubernetes.io/role="<role>" label
+// findNodeRoles 从节点标签提取角色并返回排序去重后的结果，识别两种约定：
+//   - node-role.kubernetes.io/<role>=""
+//   - kubernetes.io/role="<role>"
 func findNodeRoles(node *api.Node) []string {
 	roles := sets.NewString()
 	for k, v := range node.Labels {
@@ -2335,7 +2328,7 @@ func printEvent(obj *api.Event, options printers.GenerateOptions) ([]metav1.Tabl
 		lastTimestamp = translateMicroTimestampSince(obj.Series.LastObservedTime)
 		count = obj.Series.Count
 	} else if count == 0 {
-		// Singleton events don't have a count set in the new API.
+		// 新版 API 的单次事件可能不设置 Count，展示时按一次计。
 		count = 1
 	}
 
@@ -2371,7 +2364,7 @@ func printEvent(obj *api.Event, options printers.GenerateOptions) ([]metav1.Tabl
 	return []metav1.TableRow{row}, nil
 }
 
-// Sorts and prints the EventList in a human-friendly format.
+// printEventList 按列表顺序将 EventList 转换为便于阅读的表格行。
 func printEventList(list *api.EventList, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	rows := make([]metav1.TableRow, 0, len(list.Items))
 	for i := range list.Items {
@@ -2398,7 +2391,7 @@ func printRoleBinding(obj *rbac.RoleBinding, options printers.GenerateOptions) (
 	return []metav1.TableRow{row}, nil
 }
 
-// Prints the RoleBinding in a human-friendly format.
+// printRoleBindingList 将 RoleBinding 列表转换为便于阅读的表格行。
 func printRoleBindingList(list *rbac.RoleBindingList, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	rows := make([]metav1.TableRow, 0, len(list.Items))
 	for i := range list.Items {
@@ -2425,7 +2418,7 @@ func printClusterRoleBinding(obj *rbac.ClusterRoleBinding, options printers.Gene
 	return []metav1.TableRow{row}, nil
 }
 
-// Prints the ClusterRoleBinding in a human-friendly format.
+// printClusterRoleBindingList 将 ClusterRoleBinding 列表转换为便于阅读的表格行。
 func printClusterRoleBindingList(list *rbac.ClusterRoleBindingList, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	rows := make([]metav1.TableRow, 0, len(list.Items))
 	for i := range list.Items {
@@ -2468,7 +2461,7 @@ func extractCSRStatus(csr *certificates.CertificateSigningRequest) string {
 		}
 	}
 	var status string
-	// must be in order of presidence
+	// 状态展示有优先级：拒绝先于批准，未决状态最后。
 	if denied {
 		status += "Denied"
 	} else if approved {
@@ -2526,8 +2519,7 @@ func printPodCertificateRequest(obj *certificates.PodCertificateRequest, options
 		Object: runtime.RawExtension{Object: obj},
 	}
 
-	// "Issued", "Denied", and "Failed" are all mutually-exclusive states, and
-	// they must have Status "True".
+	// API 约束：Issued、Denied 和 Failed 互斥，且这些终态条件的 Status 必须为 True。
 	state := "Pending"
 	for _, cond := range obj.Status.Conditions {
 		switch cond.Type {
@@ -2842,7 +2834,7 @@ func printStorageClassInternal(obj *storage.StorageClass, options printers.Gener
 func printStorageClassList(list *storage.StorageClassList, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	rows := make([]metav1.TableRow, 0, len(list.Items))
 
-	// Find the effective default StorageClass (most recently created one with default annotation)
+	// 先确定有效默认 StorageClass，再为整个列表统一标记，避免逐项选择造成不一致。
 	effectiveDefault := getEffectiveDefaultStorageClass(list.Items)
 
 	for i := range list.Items {
@@ -2855,9 +2847,8 @@ func printStorageClassList(list *storage.StorageClassList, options printers.Gene
 	return rows, nil
 }
 
-// getEffectiveDefaultStorageClass returns the name of the effective default StorageClass.
-// When multiple StorageClasses have the default annotation, the most recently created one
-// is the effective default. If timestamps are equal, the one with alphabetically first name wins.
+// getEffectiveDefaultStorageClass 返回有效默认 StorageClass 的名称；没有默认类时返回空字符串。
+// 多个类同时带默认注解时选创建时间最新者，时间相同时按名称字典序取最小者，确保结果稳定。
 func getEffectiveDefaultStorageClass(items []storage.StorageClass) string {
 	var effectiveDefault *storage.StorageClass
 	for i := range items {
@@ -2954,7 +2945,7 @@ func printStatus(obj *metav1.Status, options printers.GenerateOptions) ([]metav1
 	return []metav1.TableRow{row}, nil
 }
 
-// Lay out all the containers on one line if use wide output.
+// layoutContainerCells 将容器名称和镜像分别拼接为逗号分隔的单元格，供普通及宽模式表格复用。
 func layoutContainerCells(containers []api.Container) (names string, images string) {
 	var namesBuffer bytes.Buffer
 	var imagesBuffer bytes.Buffer
@@ -2970,8 +2961,8 @@ func layoutContainerCells(containers []api.Container) (names string, images stri
 	return namesBuffer.String(), imagesBuffer.String()
 }
 
-// formatEventSource formats EventSource as a comma separated string excluding Host when empty.
-// It uses reportingController when Source.Component is empty and reportingInstance when Source.Host is empty
+// formatEventSource 将事件来源格式化为 component, instance；字段为空时省略对应部分。
+// Component 和 Host 缺失时分别回退到 reportingController 与 reportingInstance。
 func formatEventSource(es api.EventSource, reportingController, reportingInstance string) string {
 	return formatEventSourceComponentInstance(
 		firstNonEmpty(es.Component, reportingController),
@@ -3029,8 +3020,7 @@ func printControllerRevisionList(list *apps.ControllerRevisionList, options prin
 	return rows, nil
 }
 
-// formatResourceName receives a resource kind, name, and boolean specifying
-// whether or not to update the current name to "kind/name"
+// formatResourceName 在 withKind 为 true 且类型非空时返回 "kind/name"，否则仅返回名称。
 func formatResourceName(kind schema.GroupKind, name string, withKind bool) string {
 	if !withKind || kind.Empty() {
 		return name
@@ -3058,7 +3048,7 @@ func printResourceQuota(resourceQuota *api.ResourceQuota, options printers.Gener
 		usedQuantity := resourceQuota.Status.Used[resource]
 		hardQuantity := resourceQuota.Status.Hard[resource]
 
-		// use limitColumn writer if a resource name prefixed with "limits" is found
+		// limits 开头的资源属于限制配额，与请求配额分列展示。
 		if pieces := strings.Split(resource.String(), "."); len(pieces) > 1 && pieces[0] == "limits" {
 			w = limitColumn
 		}
@@ -3483,11 +3473,11 @@ func printResourcePoolStatusRequest(obj *resource.ResourcePoolStatusRequest, opt
 		if obj.Status.PoolCount != nil {
 			poolCount = *obj.Status.PoolCount
 		}
-		// Show truncation info in status
+		// 部分资源池结果被省略时，在状态中展示已返回数量与总数，避免误认为查询完整。
 		if status == "Complete" && poolCount > int32(len(obj.Status.Pools)) {
 			status = fmt.Sprintf("Complete (%d/%d pools)", len(obj.Status.Pools), poolCount)
 		}
-		// Aggregate device counts if not failed
+		// 仅汇总非失败状态的设备数；失败时保留 "-"，避免把不完整统计当作有效结果。
 		if !isFailed {
 			var sumTotal, sumAvail, sumAlloc, sumUnavail int32
 			var errorCount int32
@@ -3706,7 +3696,7 @@ func printEvictionRequest(obj *lifecycle.EvictionRequest, options printers.Gener
 	var wideCells []interface{}
 	row.Cells = append(row.Cells, obj.Name)
 
-	// resolve target
+	// 解析驱逐目标及其类型。
 	target := "<unset>"
 	targetType := "<unset>"
 	if obj.Spec.Target.Pod != nil {
@@ -3715,11 +3705,11 @@ func printEvictionRequest(obj *lifecycle.EvictionRequest, options printers.Gener
 	}
 	row.Cells = append(row.Cells, target, targetType)
 
-	// resolve status
+	// 根据已观察代次和条件解析展示状态。
 	evictionStatus := resolveEvictionStatusConditions(obj.Status.ObservedGeneration, obj.Status.Conditions)
 	row.Cells = append(row.Cells, evictionStatus)
 
-	// resolve requester, intent, age
+	// 展示请求者、驱逐意图和年龄。
 	row.Cells = append(row.Cells, obj.Spec.Requester, string(obj.Spec.Intent), translateTimestampSince(obj.CreationTimestamp))
 
 	row.Cells = append(row.Cells, wideCells...)
@@ -3744,7 +3734,7 @@ func printEviction(obj *lifecycle.Eviction, options printers.GenerateOptions) ([
 	var wideCells []interface{}
 	row.Cells = append(row.Cells, obj.Name)
 
-	// resolve target
+	// 解析驱逐目标及其类型。
 	target := "<unset>"
 	targetType := "<unset>"
 	if obj.Spec.Target.Pod != nil {
@@ -3753,11 +3743,11 @@ func printEviction(obj *lifecycle.Eviction, options printers.GenerateOptions) ([
 	}
 	row.Cells = append(row.Cells, target, targetType)
 
-	// resolve status
+	// 根据已观察代次和条件解析展示状态。
 	evictionStatus := resolveEvictionStatusConditions(obj.Status.ObservedGeneration, obj.Status.Conditions)
 	row.Cells = append(row.Cells, evictionStatus)
 
-	// resolve responder progress and find an active responder
+	// 统计响应者进度，并选取仍在执行或最近处理的响应者。
 	totalResponders := len(obj.Status.TargetResponders)
 	processedOrActiveResponders := 0
 	var lastActiveResponder, lastProcessedResponder *lifecycle.TargetResponder
@@ -3773,7 +3763,7 @@ func printEviction(obj *lifecycle.Eviction, options printers.GenerateOptions) ([
 		}
 	}
 	if lastActiveResponder == nil {
-		// present last completed one if all have been processed
+		// 全部处理完毕后回退到最近已处理的响应者，保留可供诊断的状态信息。
 		lastActiveResponder = lastProcessedResponder
 	}
 	activeResponder := "<unset>"
@@ -3783,7 +3773,7 @@ func printEviction(obj *lifecycle.Eviction, options printers.GenerateOptions) ([
 	activeResponderWithCount := fmt.Sprintf("%s (%d/%d)", activeResponder, processedOrActiveResponders, totalResponders)
 	row.Cells = append(row.Cells, activeResponderWithCount)
 
-	// resolve responder status and finish time
+	// 解析响应者状态和预计完成时间；心跳与状态消息仅宽模式展示。
 	activeResponderExpectedCompletionTime := "<unknown>"
 	responderStatus := "<unset>"
 	heartbeat := "<unset>"
@@ -3803,7 +3793,7 @@ func printEviction(obj *lifecycle.Eviction, options printers.GenerateOptions) ([
 						if responder.ExpectedCompletionTime.After(time.Now()) {
 							activeResponderExpectedCompletionTime = fmt.Sprintf("in %s", translateTimestampUntil(*responder.ExpectedCompletionTime))
 						} else {
-							// in case the estimate is wrong, or a kubelet is slow
+							// 预计时间可能不准或 kubelet 执行较慢，过期后改为展示已耗时。
 							activeResponderExpectedCompletionTime = fmt.Sprintf("%s ago", translateTimestampSince(*responder.ExpectedCompletionTime))
 						}
 					}
@@ -3833,7 +3823,7 @@ func printEviction(obj *lifecycle.Eviction, options printers.GenerateOptions) ([
 	}
 	row.Cells = append(row.Cells, responderStatus, activeResponderExpectedCompletionTime)
 
-	// resolve requesters
+	// 忽略已撤回的请求者，排序后限制展示数量，并区分无人请求与全部撤回。
 	var requesters []string
 	for _, requester := range obj.Status.Requesters {
 		if requester.Intent != lifecycle.RequesterIntentWithdrawn {
@@ -3899,17 +3889,20 @@ func printBool(value bool) string {
 	return "False"
 }
 
-// SortableResourceNames - An array of sortable resource names
+// SortableResourceNames 按资源名称的字典序排序，实现 sort.Interface。
 type SortableResourceNames []api.ResourceName
 
+// Len 返回待排序资源名称的数量。
 func (list SortableResourceNames) Len() int {
 	return len(list)
 }
 
+// Swap 交换两个位置的资源名称。
 func (list SortableResourceNames) Swap(i, j int) {
 	list[i], list[j] = list[j], list[i]
 }
 
+// Less 按字典序比较两个资源名称。
 func (list SortableResourceNames) Less(i, j int) bool {
 	return list[i] < list[j]
 }

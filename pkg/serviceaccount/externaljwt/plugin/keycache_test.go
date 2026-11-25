@@ -232,7 +232,7 @@ func TestExternalPublicKeyGetter(t *testing.T) {
 				}
 				expectedRefreshHintSec := time.Now().Add(time.Duration(tc.refreshHintSec) * time.Second)
 				difference := signingKeys.NextRefreshHint.Sub(expectedRefreshHintSec).Seconds()
-				if difference > 1 || difference < -1 { // tolerate 1 sec of skew for test
+				if difference > 1 || difference < -1 { // 测试中容忍 1 秒时钟偏差。
 					t.Fatalf("refreshHint not as expected; got: %v want: %v", signingKeys.NextRefreshHint, expectedRefreshHintSec)
 				}
 			}

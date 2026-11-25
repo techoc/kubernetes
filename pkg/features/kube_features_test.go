@@ -79,8 +79,8 @@ func TestAllRegisteredFeaturesExpected(t *testing.T) {
 // TestEnsureAlphaGatesAreNotSwitchedOnByDefault 保证 Alpha 功能默认不开启且不能锁定到默认值。
 func TestEnsureAlphaGatesAreNotSwitchedOnByDefault(t *testing.T) {
 	checkAlphaGates := func(feature featuregate.Feature, spec featuregate.FeatureSpec) {
-		// FIXME(dims): remove this check when WindowsHostNetwork is fixed up or removed
-		// entirely. Please do NOT add more entries here.
+		// FIXME(dims): WindowsHostNetwork 修复或移除后删除此例外。
+		// 不要再添加其他豁免项，否则会削弱对 Alpha 门控的约束。
 		if feature == "WindowsHostNetwork" {
 			return
 		}
@@ -101,6 +101,7 @@ func TestEnsureAlphaGatesAreNotSwitchedOnByDefault(t *testing.T) {
 }
 
 // TestAllDependenciesRegistered 保证每个功能都显式登记了依赖（即使为空列表）。
+// 空列表表示已确认没有依赖；缺项则无法区分遗漏登记与确实无依赖。
 func TestAllDependenciesRegistered(t *testing.T) {
 	// 从默认门控读取实际登记的依赖关系。
 	registeredDependencies := utilfeature.DefaultFeatureGate.Dependencies()

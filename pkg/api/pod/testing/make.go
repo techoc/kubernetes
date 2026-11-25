@@ -26,15 +26,18 @@ import (
 
 // Tweak 是修改 Pod 的函数。
 type Tweak func(*api.Pod)
+
+// TweakContainer 是修改 Pod 中单个容器的函数。
 type TweakContainer func(*api.Container)
+
+// TweakPodStatus 是修改 Pod 状态的函数。
 type TweakPodStatus func(*api.PodStatus)
 
 // MakePod 用于构造能通过 API 校验的 Pod 对象，比直接写结构体字面量更简洁清晰。
 // 默认生成一个只含一个容器（名为 ctr）的 Pod。
 // 调用方可以传入任意数量的 tweak 函数，对结果做进一步修改。
 func MakePod(name string, tweaks ...Tweak) *api.Pod {
-	// NOTE: Any field that would be populated by defaulting needs to be
-	// present and valid here.
+	// 所有本会被默认值填充的字段都必须在此显式提供有效值。
 	pod := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -465,8 +468,8 @@ func MakeContainerStatus(name string, allocatedResources api.ResourceList) api.C
 	return cs
 }
 
-// TweakContainers applies the container tweaks to all containers (regular & init) in the pod.
-// Note: this should typically be added to pod tweaks after all containers have been added.
+// TweakContainers 将容器 tweak 应用于 Pod 的全部普通容器和 init 容器。
+// 通常应在所有容器添加完毕后，再将它加入 Pod tweak。
 func TweakContainers(tweaks ...TweakContainer) Tweak {
 	return func(pod *api.Pod) {
 		for i := range pod.Spec.InitContainers {

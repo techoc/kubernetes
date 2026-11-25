@@ -178,8 +178,8 @@ func TestPodEvaluatorUsage(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	evaluator := NewPodEvaluator(nil, fakeClock)
 
-	// fields use to simulate a pod undergoing termination
-	// note: we set the deletion time in the past
+	// 用这些字段模拟正在终止的 Pod。
+	// 注意：将删除时间设在过去，以触发终止状态判定。
 	now := fakeClock.Now()
 	terminationGracePeriodSeconds := int64(30)
 	deletionTimestampPastGracePeriod := metav1.NewTime(now.Add(time.Duration(terminationGracePeriodSeconds) * time.Second * time.Duration(-2)))

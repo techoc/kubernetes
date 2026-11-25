@@ -51,11 +51,11 @@ type AdmissionOptions struct {
 //	关心准入链的 server 可在创建后覆盖或追加该字段。
 func NewAdmissionOptions() *AdmissionOptions {
 	options := genericoptions.NewAdmissionOptions()
-	// register all admission plugins
+	// 注册所有准入插件。
 	RegisterAllAdmissionPlugins(options.Plugins)
-	// set RecommendedPluginOrder
+	// 为不关心准入链的 server 设置推荐执行顺序。
 	options.RecommendedPluginOrder = AllOrderedPlugins
-	// set DefaultOffPlugins
+	// 设置默认关闭的插件。
 	options.DefaultOffPlugins = DefaultOffAdmissionPlugins()
 
 	return &AdmissionOptions{

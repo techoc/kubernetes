@@ -30,19 +30,21 @@ import (
 type GenerateOptions struct {
 	// NoHeaders 为 true 时不输出表格列定义（表头）
 	NoHeaders bool
-	// Wide 为 true 时显示所有列，包括 Priority > 0 的"宽模式"列
+	// Wide 为 true 时显示所有列，包括 Priority != 0 的“宽模式”列
 	Wide bool
 }
 
 // TableGenerator 将 runtime.Object 转换为 metav1.Table 的接口。
 // 实现此接口可以为不同类型的资源提供自定义的表格输出逻辑。
 type TableGenerator interface {
+	// GenerateTable 按 options 指定的表头和列范围生成表格；实现必须保留对象的分页元数据。
 	GenerateTable(obj runtime.Object, options GenerateOptions) (*metav1.Table, error)
 }
 
 // PrintHandler 用于注册打印处理器的接口。
 // 通过 TableHandler 方法为特定类型注册列定义和对应的打印函数。
 type PrintHandler interface {
+	// TableHandler 注册列定义及生成表格行的函数；同一对象类型只能注册一次。
 	TableHandler(columns []metav1.TableColumnDefinition, printFunc interface{}) error
 }
 

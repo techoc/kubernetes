@@ -24,8 +24,8 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// TestSortableResourceNamesSorting 验证 SortableResourceNames 类型实现了 sort.Interface，
-// 能正确按字典序排序资源名称。空字符串排在最前，数字排在字母前。
+// TestSortableResourceNamesSorting 验证 SortableResourceNames 可按字典序原地排序，
+// 覆盖空前缀、数字与字母的边界，并确保排序保留重复名称。
 func TestSortableResourceNamesSorting(t *testing.T) {
 	want := SortableResourceNames{
 		api.ResourceName(""),

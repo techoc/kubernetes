@@ -32,15 +32,15 @@ import (
 // ResourcePrinter 是资源打印器接口，知道如何打印 runtime 对象。
 // 用于 kubectl 等工具将 Kubernetes 资源格式化为人类可读的输出。
 type ResourcePrinter interface {
-	// PrintObj 接收一个 runtime 对象，格式化后输出到指定的 writer
+	// PrintObj 将 runtime 对象格式化后写入 writer；格式化或写入失败时返回错误。
 	PrintObj(runtime.Object, io.Writer) error
 }
 
-// ResourcePrinterFunc 是可直接作为 ResourcePrinter 使用的函数类型
-// 允许以函数形式实现打印逻辑，无需定义完整结构体
+// ResourcePrinterFunc 是可直接作为 ResourcePrinter 使用的函数类型，
+// 允许以函数形式实现打印逻辑，无需定义完整结构体。
 type ResourcePrinterFunc func(runtime.Object, io.Writer) error
 
-// PrintObj 实现了 ResourcePrinter 接口
+// PrintObj 调用底层函数，实现 ResourcePrinter 接口。
 func (fn ResourcePrinterFunc) PrintObj(obj runtime.Object, w io.Writer) error {
 	return fn(obj, w)
 }

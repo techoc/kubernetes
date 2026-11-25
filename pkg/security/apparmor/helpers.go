@@ -41,7 +41,7 @@ func isRequired(pod *v1.Pod) bool {
 	inUse := !podutil.VisitContainers(&pod.Spec, podutil.AllContainers, func(c *v1.Container, _ podutil.ContainerType) bool {
 		if c.SecurityContext != nil && c.SecurityContext.AppArmorProfile != nil &&
 			c.SecurityContext.AppArmorProfile.Type != v1.AppArmorProfileTypeUnconfined {
-			return false // is in use; short-circuit
+			return false // 已在使用 AppArmor，提前终止遍历
 		}
 		return true
 	})

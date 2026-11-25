@@ -129,7 +129,7 @@ func Claims(sa core.ServiceAccount, pod *core.Pod, secret *core.Secret, node *co
 			UID:  string(pod.UID),
 		}
 		if utilfeature.DefaultFeatureGate.Enabled(features.ServiceAccountTokenPodNodeInfo) {
-			// if this is bound to a pod and the node information is available, persist that too
+			// 若 Token 绑定 Pod 且能获取节点信息，也将节点信息写入 claim。
 			if node != nil {
 				pc.Kubernetes.Node = &ref{
 					Name: node.Name,
@@ -196,7 +196,7 @@ func (v *validator) Validate(ctx context.Context, _ string, public *jwt.Claims, 
 	})
 	switch err {
 	case nil:
-		// successful validation
+		// 校验通过。
 
 	case jwt.ErrExpired:
 		return nil, errors.New("service account token has expired")
@@ -207,17 +207,17 @@ func (v *validator) Validate(ctx context.Context, _ string, public *jwt.Claims, 
 	case jwt.ErrIssuedInTheFuture:
 		return nil, errors.New("service account token is issued in the future")
 
-	// our current use of jwt.Expected above should make these cases impossible to hit
+	// 按 jwt.Expected 的校验逻辑，以下分支不应可达。
 	case jwt.ErrInvalidAudience, jwt.ErrInvalidID, jwt.ErrInvalidIssuer, jwt.ErrInvalidSubject:
 		klog.Errorf("service account token claim validation got unexpected validation failure: %v", err)
-		return nil, fmt.Errorf("service account token claims could not be validated: %w", err) // safe to pass these errors back to the user
+		return nil, fmt.Errorf("service account token claims could not be validated: %w", err) // 这些错误可安全返回给用户。
 
 	default:
-		klog.Errorf("service account token claim validation got unexpected error type: %T", err)                         // avoid leaking unexpected information into the logs
-		return nil, errors.New("service account token claims could not be validated due to unexpected validation error") // return an opaque error
+		klog.Errorf("service account token claim validation got unexpected error type: %T", err)                         // 避免将意外信息写入日志。
+		return nil, errors.New("service account token claims could not be validated due to unexpected validation error") // 返回不透明错误。
 	}
 
-	// consider things deleted prior to now()-leeway to be invalid
+	// 将 now()-leeway 之前删除的对象视为已失效。
 	invalidIfDeletedBefore := nowTime.Add(-jwt.DefaultLeeway)
 	namespace := private.Kubernetes.Namespace
 	saref := private.Kubernetes.Svcacct
@@ -226,7 +226,7 @@ func (v *validator) Validate(ctx context.Context, _ string, public *jwt.Claims, 
 	secref := private.Kubernetes.Secret
 	valref := private.Kubernetes.ValidatingWebhookConfiguration
 	mutref := private.Kubernetes.MutatingWebhookConfiguration
-	// Make sure service account still exists (name and UID)
+	// 确认 ServiceAccount 仍存在，且名称和 UID 均匹配。
 	serviceAccount, err := v.getter.GetServiceAccount(ctx, namespace, saref.Name)
 	if err != nil {
 		klog.V(4).Infof("Could not retrieve service account %s/%s: %v", namespace, saref.Name, err)
@@ -243,7 +243,7 @@ func (v *validator) Validate(ctx context.Context, _ string, public *jwt.Claims, 
 	}
 
 	if secref != nil {
-		// Make sure token hasn't been invalidated by deletion of the secret
+		// 确认 Token 未因 Secret 删除而失效。
 		secret, err := v.getter.GetSecret(ctx, namespace, secref.Name)
 		if err != nil {
 			klog.V(4).Infof("Could not retrieve bound secret %s/%s for service account %s/%s: %v", namespace, secref.Name, namespace, saref.Name, err)
@@ -261,7 +261,7 @@ func (v *validator) Validate(ctx context.Context, _ string, public *jwt.Claims, 
 
 	var podName, podUID string
 	if podref != nil {
-		// Make sure token hasn't been invalidated by deletion of the pod
+		// 确认 Token 未因 Pod 删除而失效。
 		pod, err := v.getter.GetPod(ctx, namespace, podref.Name)
 		if err != nil {
 			klog.V(4).Infof("Could not retrieve bound pod %s/%s for service account %s/%s: %v", namespace, podref.Name, namespace, saref.Name, err)
@@ -284,7 +284,7 @@ func (v *validator) Validate(ctx context.Context, _ string, public *jwt.Claims, 
 		switch {
 		case podref != nil:
 			if utilfeature.DefaultFeatureGate.Enabled(features.ServiceAccountTokenPodNodeInfo) {
-				// for pod-bound tokens, just extract the node claims
+				// 对于绑定 Pod 的 Token，直接提取节点相关 claim。
 				nodeName = noderef.Name
 				nodeUID = noderef.UID
 			}
@@ -341,7 +341,7 @@ func (v *validator) Validate(ctx context.Context, _ string, public *jwt.Claims, 
 		}
 	}
 
-	// Check special 'warnafter' field for projected service account token transition.
+	// 检查投射的服务账号令牌迁移使用的特殊 warnafter 字段。
 	warnafter := private.Kubernetes.WarnAfter
 	if warnafter != nil && *warnafter != 0 {
 		if nowTime.After(warnafter.Time()) {

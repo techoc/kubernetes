@@ -44,7 +44,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/storage/install"
 	_ "k8s.io/kubernetes/pkg/apis/storagemigration/install"
 
-	// Put the deprecated apis last to ensure that the latest apis can be used first.
-	// Related issue: https://github.com/kubernetes/kubernetes/issues/112682
+	// 将已弃用的 API 放在最后，确保优先使用最新 API。
+	// 相关问题：https://github.com/kubernetes/kubernetes/issues/112682
 	_ "k8s.io/kubernetes/pkg/apis/extensions/install"
 )

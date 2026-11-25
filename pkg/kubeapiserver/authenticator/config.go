@@ -54,7 +54,7 @@ import (
 	"k8s.io/kubernetes/pkg/serviceaccount"
 )
 
-// Config 包含如何对 Kube API Server 的请求进行认证的数据。
+// Config 包含如何对 kube-apiserver 的请求进行认证的数据。
 type Config struct {
 	// Anonymous 保存生效的匿名认证配置，可能来自配置文件
 	//（从 AuthenticationConfig 中提取）或由标志值构造。
@@ -261,7 +261,7 @@ func newJWTAuthenticator(serverLifecycle context.Context, config *apiserver.Auth
 	var jwtAuthenticators []authenticator.Token
 	var healthChecks []func() error
 	for _, jwtAuthenticator := range config.JWT {
-		// TODO remove this CAContentProvider indirection
+		// TODO: 移除 CAContentProvider 这一间接层。
 		var oidcCAContent oidc.CAContentProvider
 		if len(jwtAuthenticator.Issuer.CertificateAuthority) > 0 {
 			var oidcCAError error
@@ -323,7 +323,7 @@ func (c *authenticationConfigUpdater) updateAuthenticationConfig(ctx context.Con
 		return lastErr == nil, nil
 	}); lastErr != nil || waitErr != nil {
 		updatedJWTAuthenticator.cancel()
-		return utilerrors.NewAggregate([]error{lastErr, waitErr}) // filters out nil errors
+		return utilerrors.NewAggregate([]error{lastErr, waitErr}) // 过滤 nil 错误
 	}
 
 	newIssuers := sets.New[string]()
@@ -345,7 +345,7 @@ func (c *authenticationConfigUpdater) updateAuthenticationConfig(ctx context.Con
 		case <-c.serverLifecycle.Done():
 		case <-t.C:
 		}
-		// TODO maybe track requests so we know when this is safe to do
+		// TODO: 可跟踪在途请求，以确定何时可以安全取消旧认证器。
 		oldJWTAuthenticator.cancel()
 
 		// shouldRecordFunc 未加锁，额外等待让取消前已检查过它的在途请求

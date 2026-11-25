@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package probe 提供健康探针（health probing）的工具和状态信息。
+// Package probe 提供健康探针的工具和状态信息。
 //
 // Kubernetes 使用探针来检测容器的健康状态，支持三种类型：
 //   - LivenessProbe（存活探针）：判断容器是否存活，失败时重启容器

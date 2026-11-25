@@ -42,12 +42,12 @@ func (obj *TestPrintType) DeepCopyObject() runtime.Object {
 	return &clone
 }
 
-// PrintCustomType 是成功的自定义 print handler，将 TestPrintType 的 Data 字段作为表格单元格返回。
+// PrintCustomType 是成功的自定义 print handler，将 TestPrintType 的 Data 字段作为唯一单元格返回。
 func PrintCustomType(obj *TestPrintType, options GenerateOptions) ([]metav1beta1.TableRow, error) {
 	return []metav1beta1.TableRow{{Cells: []interface{}{obj.Data}}}, nil
 }
 
-// ErrorPrintHandler 是始终返回错误的自定义 print handler，用于验证错误传播。
+// ErrorPrintHandler 始终返回固定错误，供测试核对 GenerateTable 是否原样向上传播处理器错误。
 func ErrorPrintHandler(obj *TestPrintType, options GenerateOptions) ([]metav1beta1.TableRow, error) {
 	return nil, fmt.Errorf("ErrorPrintHandler error")
 }

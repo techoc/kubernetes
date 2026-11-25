@@ -55,7 +55,7 @@ var pvcResources = []corev1.ResourceName{
 //   - bronze.storageclass.storage.k8s.io/requests.storage: 500Gi
 const storageClassSuffix string = ".storageclass.storage.k8s.io/"
 
-/* TODO: prune?
+/* TODO: 清理不再使用的实现？
 // ResourceByStorageClass 根据 StorageClass 返回配额资源名。
 func ResourceByStorageClass(storageClass string, resourceName corev1.ResourceName) corev1.ResourceName {
 	return corev1.ResourceName(string(storageClass + storageClassSuffix + string(resourceName)))
@@ -266,7 +266,7 @@ func (p *pvcEvaluator) UsageStats(options quota.UsageStatsOptions) (quota.UsageS
 	return generic.CalculateUsageStats(options, p.listFuncByNamespace, generic.MatchesNoScopeFunc, p.Usage)
 }
 
-// ensure we implement required interface
+// 确认实现所需的配额评估器接口。
 var _ quota.Evaluator = &pvcEvaluator{}
 
 // toExternalPersistentVolumeClaimOrError 将 runtime.Object 转换为外部 PVC 对象。
@@ -316,8 +316,8 @@ func pvcMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, obje
 	if selector.ScopeName == corev1.ResourceQuotaScopeVolumeAttributesClass {
 		// Exists 操作符只需检查 PVC 是否有 VolumeAttributesClass
 		if selector.Operator == corev1.ScopeSelectorOpExists {
-			// This is just checking for existence of a volumeAttributesClass on the pvc,
-			// no need to take the overhead of selector parsing/evaluation.
+			// 这里只检查 PVC 是否引用了 volumeAttributesClass，
+			// 无需付出解析和计算 selector 的开销。
 			vacNames := getReferencedVolumeAttributesClassNames(pvc)
 			return len(vacNames) != 0, nil
 		}

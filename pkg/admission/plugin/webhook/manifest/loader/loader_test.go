@@ -23,6 +23,8 @@ import (
 	"testing"
 )
 
+// TestLoadValidatingManifests 覆盖校验型 webhook 清单的加载、默认值和错误边界，
+// 防止无效配置或资源类型混入时被静默接受。
 func TestLoadValidatingManifests(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -424,6 +426,8 @@ webhooks:
 	}
 }
 
+// TestLoadMutatingManifests 覆盖变更型 webhook 清单的加载、默认值和错误边界，
+// 确保两类 webhook 配置不会互相误判。
 func TestLoadMutatingManifests(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -562,6 +566,7 @@ webhooks:
 	}
 }
 
+// TestLoadManifestsFromDirectory_EmptyPath 验证空路径不会被当作当前目录加载。
 func TestLoadManifestsFromDirectory_EmptyPath(t *testing.T) {
 	_, err := LoadValidatingManifests("")
 	if err == nil {
@@ -569,6 +574,7 @@ func TestLoadManifestsFromDirectory_EmptyPath(t *testing.T) {
 	}
 }
 
+// TestLoadManifestsFromDirectory_NonExistentDirectory 验证目录不存在时返回错误。
 func TestLoadManifestsFromDirectory_NonExistentDirectory(t *testing.T) {
 	_, err := LoadValidatingManifests("/nonexistent/directory/path")
 	if err == nil {
@@ -576,6 +582,8 @@ func TestLoadManifestsFromDirectory_NonExistentDirectory(t *testing.T) {
 	}
 }
 
+// TestLoadManifestsFromDirectory_AlphabeticalOrder 验证加载顺序不依赖目录遍历顺序，
+// 以保证配置摘要和访问器顺序可复现。
 func TestLoadManifestsFromDirectory_AlphabeticalOrder(t *testing.T) {
 	dir := t.TempDir()
 
@@ -596,13 +604,13 @@ func TestLoadManifestsFromDirectory_AlphabeticalOrder(t *testing.T) {
 		t.Fatalf("expected 3 configurations, got %d", len(result.Configurations))
 	}
 
-	// Verify order is deterministic based on configuration names (which match file prefixes)
+	// 验证顺序由配置名（与文件前缀一致）确定，避免目录遍历顺序影响结果。
 	accessors := result.GetWebhookAccessors()
 	if len(accessors) != 3 {
 		t.Fatalf("expected 3 accessors, got %d", len(accessors))
 	}
 
-	// The configs should be sorted by name (01-config.static.k8s.io, 02-config.static.k8s.io, 03-config.static.k8s.io)
+	// 配置应按名称排序（01-config.static.k8s.io、02-config.static.k8s.io、03-config.static.k8s.io）。
 	expected := []string{"01-config.static.k8s.io", "02-config.static.k8s.io", "03-config.static.k8s.io"}
 	for i, acc := range accessors {
 		if acc.GetConfigurationName() != expected[i] {
@@ -631,6 +639,7 @@ webhooks:
 `
 }
 
+// TestLoadManifestsFromDirectory_ListTypes 验证类型化 List 的展开及类型不匹配时的拒绝行为。
 func TestLoadManifestsFromDirectory_ListTypes(t *testing.T) {
 	t.Run("validating lists", func(t *testing.T) {
 		tests := []struct {

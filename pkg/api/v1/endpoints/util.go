@@ -56,7 +56,7 @@ func RepackSubsets(subsets []v1.EndpointSubset) []v1.EndpointSubset {
 	for port, addrs := range portToAddrReadyMap {
 		key := keyString(hashAddresses(addrs))
 		keyToAddrReadyMap[key] = addrs
-		if port.Port > 0 { // avoid sentinels
+		if port.Port > 0 { // 排除哨兵端口。
 			addrReadyMapKeyToPorts[key] = append(addrReadyMapKeyToPorts[key], port)
 		} else {
 			if _, found := addrReadyMapKeyToPorts[key]; !found {
@@ -115,8 +115,7 @@ func mapAddressByPort(addr *v1.EndpointAddress, port v1.EndpointPort, ready bool
 	// 同一个地址只在首次出现时复制入 allAddrs。
 	existingAddress := allAddrs[key]
 	if existingAddress == nil {
-		// Make a copy so we don't write to the
-		// input args of this function.
+		// 复制地址，避免修改函数输入。
 		existingAddress = &v1.EndpointAddress{}
 		*existingAddress = *addr
 		allAddrs[key] = existingAddress

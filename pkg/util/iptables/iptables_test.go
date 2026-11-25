@@ -680,7 +680,7 @@ func testRestore(t *testing.T, protocol Protocol) {
 		t.Errorf("%s flush, restore: Expected cmd containing '%s -T %s --counters', got '%s'", protocol, iptablesRestoreCmd, string(TableNAT), fcmd.CombinedOutputLog[numCalls-1])
 	}
 
-	// FlushTables + NoRestoreCounters
+	// FlushTables + NoRestoreCounters：清空表且不恢复计数器。
 	err = runner.Restore(TableNAT, []byte{}, FlushTables, NoRestoreCounters)
 	if err != nil {
 		t.Errorf("%s flush, no restore: Expected success, got %v", protocol, err)
@@ -692,7 +692,7 @@ func testRestore(t *testing.T, protocol Protocol) {
 		t.Errorf("%s flush, no restore: Expected cmd containing '--noflush' or '--counters', got '%s'", protocol, fcmd.CombinedOutputLog[numCalls-1])
 	}
 
-	// NoFlushTables + RestoreCounters
+	// NoFlushTables + RestoreCounters：不清空表但恢复计数器。
 	err = runner.Restore(TableNAT, []byte{}, NoFlushTables, RestoreCounters)
 	if err != nil {
 		t.Errorf("%s no flush, restore: Expected success, got %v", protocol, err)
@@ -704,7 +704,7 @@ func testRestore(t *testing.T, protocol Protocol) {
 		t.Errorf("%s no flush, restore: Expected cmd containing '--noflush' and '--counters', got '%s'", protocol, fcmd.CombinedOutputLog[numCalls-1])
 	}
 
-	// NoFlushTables + NoRestoreCounters
+	// NoFlushTables + NoRestoreCounters：既不清空表，也不恢复计数器。
 	err = runner.Restore(TableNAT, []byte{}, NoFlushTables, NoRestoreCounters)
 	if err != nil {
 		t.Errorf("%s no flush, no restore: Expected success, got %v", protocol, err)

@@ -33,7 +33,7 @@ import (
 // 检查哪些资源名称由 Service 评估器处理（如 services、services.nodeport 等）。
 func TestServiceEvaluatorMatchesResources(t *testing.T) {
 	evaluator := NewServiceEvaluator(nil)
-	// we give a lot of resources
+	// 提供较多资源，覆盖超出实际匹配范围的输入。
 	input := []corev1.ResourceName{
 		corev1.ResourceConfigMaps,
 		corev1.ResourceCPU,
@@ -41,7 +41,7 @@ func TestServiceEvaluatorMatchesResources(t *testing.T) {
 		corev1.ResourceServicesNodePorts,
 		corev1.ResourceServicesLoadBalancers,
 	}
-	// but we only match these...
+	// 但只匹配其中这些资源。
 	expected := quota.ToSet([]corev1.ResourceName{
 		corev1.ResourceServices,
 		corev1.ResourceServicesNodePorts,

@@ -34,8 +34,9 @@ type TableConvertor struct {
 	printers.TableGenerator
 }
 
-// ConvertToTable 将给定的 runtime 对象转换为 metav1.Table 对象。
-// 解析 tableOptions 中的 NoHeaders 选项，始终启用 Wide 模式以显示所有列。
+// ConvertToTable 将给定对象转换为 metav1.Table。
+// 仅从 *metav1.TableOptions 读取 NoHeaders（nil 按 false 处理），其他选项类型直接报错；
+// 服务端表格转换始终启用 Wide，以保留注册的全部列。
 func (c TableConvertor) ConvertToTable(ctx context.Context, obj runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	noHeaders := false
 	if tableOptions != nil {

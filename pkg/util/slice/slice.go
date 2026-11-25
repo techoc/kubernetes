@@ -23,7 +23,7 @@ import (
 
 // CopyStrings 将指定字符串切片的内容复制到一个新切片中。
 //
-// Deprecated: Use slices.Clone instead.
+// Deprecated: 请改用 slices.Clone。
 //
 //go:fix inline
 func CopyStrings(s []string) []string {
@@ -33,7 +33,7 @@ func CopyStrings(s []string) []string {
 // SortStrings 原地排序指定的字符串切片。
 // 返回传入的同一个切片，方便链式调用。
 //
-// Deprecated: Use slices.Sort instead.
+// Deprecated: 请改用 slices.Sort。
 func SortStrings(s []string) []string {
 	slices.Sort(s)
 	return s
@@ -42,7 +42,7 @@ func SortStrings(s []string) []string {
 // ContainsString 检查给定的字符串切片是否包含指定的字符串。
 // 如果提供了 modifier 函数，比较前会先用它转换切片中的元素。
 //
-// Deprecated: Use slices.ContainsFunc or slices.Contains instead.
+// Deprecated: 请改用 slices.ContainsFunc 或 slices.Contains。
 func ContainsString(slice []string, s string, modifier func(s string) string) bool {
 	if slices.Contains(slice, s) {
 		return true

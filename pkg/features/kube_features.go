@@ -85,10 +85,9 @@ const (
 	// owner: @fromanirh
 	// beta：见下文。
 	//
-	// 允许微调 cpumanager 策略，即实验性的 alpha 质量选项
-	// 依据 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
-	// 我们要避免功能门控泛滥。该门控：
-	// - 将守护一组质量为 alpha 的 cpumanager 选项。
+	// 允许微调 cpumanager 策略，即实验性的 alpha 质量选项。
+	// 为避免功能门控泛滥，该门控：
+	// - 集中控制一组质量为 alpha 的 cpumanager 选项。
 	// - 永远不会晋升到 beta 或 stable。
 	// 参见 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
 	// 了解该门控移除的细节。
@@ -97,11 +96,10 @@ const (
 	// owner: @fromanirh
 	// beta：见下文。
 	//
-	// 允许微调 cpumanager 策略，即实验性的 beta 质量选项
-	// 依据 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
-	// 我们要避免功能门控泛滥。该门控：
-	// - 将守护一组质量为 beta 的 cpumanager 选项。
-	// - 因此*引入*即为 beta
+	// 允许微调 cpumanager 策略，即实验性的 beta 质量选项。
+	// 为避免功能门控泛滥，该门控：
+	// - 集中控制一组质量为 beta 的 cpumanager 选项。
+	// - 引入时即为 beta。
 	// - 永远不会晋升到 stable。
 	// 参见 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
 	// 了解该门控移除的细节。
@@ -213,10 +211,8 @@ const (
 	// kep: http://kep.k8s.io/5007
 	// alpha：v1.34
 	//
-	// 启用对延迟绑定那些依赖带绑定条件设备的 Pod 的支持
-	//
-	// 还需要启用 DRAResourceClaimDeviceStatus
-	// 。
+	// 启用对延迟绑定那些依赖带绑定条件设备的 Pod 的支持。
+	// 还需要启用 DRAResourceClaimDeviceStatus。
 	DRADeviceBindingConditions featuregate.Feature = "DRADeviceBindingConditions"
 
 	// owner: @omeryahud
@@ -592,7 +588,7 @@ const (
 	// kep: https://kep.k8s.io/6032
 	//
 	// 在 nftables kube-proxy 后端启用用户态 TCP 代理，
-	// 以在 IPv4 和 IPv6 上服务 localhost NodePort Service。
+	// 以为 IPv4 和 IPv6 网络中的 localhost NodePort 服务提供代理。
 	KubeProxyNFTablesLocalhostNodePorts featuregate.Feature = "KubeProxyNFTablesLocalhostNodePorts"
 
 	// owner: @tallclair
@@ -603,7 +599,7 @@ const (
 	// owner: @marquiz
 	// kep: http://kep.k8s.io/4033
 	//
-	// 启用从 CRI 检测 kubelet cgroup driver 配置选项。
+	// 启用通过 CRI 检测 kubelet 的 cgroup 驱动配置选项。
 	// CRI 运行时尚需支持该特性，此时
 	// kubelet 会忽略 cgroupDriver（--cgroup-driver）
 	// 配置项。若运行时不支持，kubelet 将
@@ -646,12 +642,12 @@ const (
 
 	// owner: @moshe010
 	//
-	// 启用 POD resources API 返回由动态资源分配的资源
+	// 启用 POD resources API，返回由动态资源分配提供的资源。
 	KubeletPodResourcesDynamicResources featuregate.Feature = "KubeletPodResourcesDynamicResources"
 
 	// owner: @moshe010
 	//
-	// 启用带 Get 方法的 POD resources API
+	// 为 POD resources API 启用 Get 方法。
 	KubeletPodResourcesGet featuregate.Feature = "KubeletPodResourcesGet"
 
 	// owner: @ffromani
@@ -784,7 +780,7 @@ const (
 
 	// owner: @michaelasp
 	//
-	// Node Lifecycle Controller 的门控，确保标记节点不健康前 Lease 对象确实已过期。
+	// 节点生命周期控制器的门控，确保标记节点不健康前 Lease 对象确实已过期。
 	NodeControllerLeaseCircuitBreaker featuregate.Feature = "NodeControllerLeaseCircuitBreaker"
 
 	// owner: @pravk03, @tallclair
@@ -997,12 +993,12 @@ const (
 
 	// owner: @harshaln
 	//
-	// 启用一种 kubelet 配置：从文件路径监控并加载 ClientCA
+	// 启用一种 kubelet 配置：监控配置中的文件路径，并在 ClientCA 文件变化时重新加载。
 	ReloadKubeletClientCAFile = "ReloadKubeletClientCAFile"
 
 	// owner: @zhangweikop
 	//
-	// 当指定证书文件变化时，允许 kubelet tls server 更新证书。
+	// 当指定证书文件变化时，允许 kubelet TLS 服务端更新证书。
 	// 在 kubelet 配置中指定 tlsCertFile 和 tlsPrivateKeyFile 时该特性很有用。
 	// 对其他情况（如使用 serverTLSbootstrap）无影响。
 	ReloadKubeletServerCertificateFile featuregate.Feature = "ReloadKubeletServerCertificateFile"
@@ -1027,7 +1023,7 @@ const (
 
 	// owner: @mikedanese
 	//
-	// 从 Certificate Signing Request API 为 kubelet 获取服务端证书，
+	// 通过 Certificate Signing Request API 为 kubelet 获取服务端证书。
 	// 而非生成自签名证书，并在证书即将过期时
 	// 自动轮换。
 	RotateKubeletServerCertificate featuregate.Feature = "RotateKubeletServerCertificate"
@@ -1088,7 +1084,7 @@ const (
 	// owner: @atosatto @yuanchen8911
 	// kep: http://kep.k8s.io/3902
 	//
-	// 将执行基于污点的 Pod 驱逐的 Taint Eviction Controller 与 Node Lifecycle Controller 解耦。
+	// 将基于污点的 Pod 驱逐控制器与节点生命周期控制器解耦。
 	SeparateTaintEvictionController featuregate.Feature = "SeparateTaintEvictionController"
 
 	// owner: @aramase
@@ -1336,7 +1332,7 @@ const (
 // 所有 Kubernetes 二进制中可用。
 // 对于仅通过 apiserver、cloud-controller-manager 等特定组件提供的特性，
 // 需找到对应的 kube_features.go 文件
-// （如 staging/src/apiserver/pkg/features/kube_features.go），在其中定义版本化
+// （如 staging/src/k8s.io/apiserver/pkg/features/kube_features.go），在其中定义版本化
 // 功能门控，并在本文件中引用。
 // 为支持 n-3 版本兼容，特性在毕业 3 个版本后才可移除。
 //
@@ -1582,7 +1578,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 		{Version: version.MustParse("1.32"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA},
 		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true},
-		// TODO (https://github.com/kubernetes/kubernetes/issues/134459): remove completely in 1.38
+		// TODO (https://github.com/kubernetes/kubernetes/issues/134459): 在 1.38 中完全移除。
 	},
 
 	EmptyDirVolumeMode: {

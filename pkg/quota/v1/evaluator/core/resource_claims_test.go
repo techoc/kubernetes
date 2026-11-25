@@ -394,14 +394,14 @@ func TestResourceClaimEvaluatorUsage(t *testing.T) {
 
 	informerFactory.Start(tCtx.Done())
 	t.Cleanup(func() {
-		// Need to cancel before waiting for the shutdown.
+		// 等待关闭前先取消，避免协程继续运行。
 		tCancel()
-		// Now we can wait for all goroutines to stop.
+		// 取消后可等待所有协程退出。
 		informerFactory.Shutdown()
 	})
 	informerFactory.WaitForCacheSync(tCtx.Done())
 
-	// wait for informer sync
+	// 等待 informer 完成同步。
 	time.Sleep(1 * time.Second)
 
 	evaluator := NewResourceClaimEvaluator(nil, nil, nil, claimGetter)
@@ -450,8 +450,7 @@ func TestResourceClaimEvaluatorUsage(t *testing.T) {
 				"requests.example.com/gpu":                        resource.MustParse("1"),
 			},
 		},
-		// both claims set the same pod as owner, the second claim cannot get the usage
-		// subtraction from pod requests.
+		// 两个 Claim 都归同一个 Pod 所有，第二个 Claim 不能再从 Pod requests 中扣除用量。
 		"nil-status-two-extended-resource-claims": {
 			evaluator: evaluatorWithDeviceMapping,
 			claim:     nilStatusExtendedResourceClaim,
@@ -535,7 +534,7 @@ func TestResourceClaimEvaluatorUsage(t *testing.T) {
 		"admin": {
 			claim: func() *api.ResourceClaim {
 				claim := validClaim.DeepCopy()
-				// Admins are *not* exempt from quota.
+				// 管理员也*不能*豁免配额。
 				claim.Spec.Devices.Requests[0].Exactly.AdminAccess = ptr.To(true)
 				return claim
 			}(),
@@ -657,14 +656,14 @@ func TestResourceClaimEvaluatorMatchingResources(t *testing.T) {
 
 	informerFactory.Start(tCtx.Done())
 	t.Cleanup(func() {
-		// Need to cancel before waiting for the shutdown.
+		// 等待关闭前先取消，避免协程继续运行。
 		tCancel()
-		// Now we can wait for all goroutines to stop.
+		// 取消后可等待所有协程退出。
 		informerFactory.Shutdown()
 	})
 	informerFactory.WaitForCacheSync(tCtx.Done())
 
-	// wait for informer sync
+	// 等待 informer 完成同步。
 	time.Sleep(1 * time.Second)
 
 	testCases := map[string]struct {
@@ -688,7 +687,7 @@ func TestResourceClaimEvaluatorMatchingResources(t *testing.T) {
 		},
 		"unsupported-resources": {
 			items: []corev1.ResourceName{
-				"resourceclaims", // no such alias
+				"resourceclaims", // 不存在此别名
 				"storage",
 				"ephemeral-storage",
 				"bronze.deviceclass.resource.k8s.io/storage",

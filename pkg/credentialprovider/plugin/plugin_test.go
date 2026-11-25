@@ -597,7 +597,7 @@ func Test_ProvideWithCoordinates(t *testing.T) {
 			}
 
 			klog.Flush()
-			klog.SetOutput(&bytes.Buffer{}) // prevent further writes into buf
+			klog.SetOutput(&bytes.Buffer{}) // 防止继续向 buf 写入。
 			capturedOutput := buf.String()
 
 			if len(testcase.wantLog) > 0 && !strings.Contains(capturedOutput, testcase.wantLog) {

@@ -72,19 +72,13 @@ func NewStorageFactoryConfig() *StorageFactoryConfig {
 func NewStorageFactoryConfigEffectiveVersion(effectiveVersion basecompatibility.EffectiveVersion) *StorageFactoryConfig {
 	// 某些资源必须以非最新版本存储，以支持向还不支持新版本的老 apiserver 回滚一个版本。
 	resources := []schema.GroupVersionResource{
-		// If a resource has to be stored in a version that is not the
-		// latest, then it can be listed here. Usually this is the case
-		// when a new version for a resource gets introduced and a
-		// downgrade to an older apiserver that doesn't know the new
-		// version still needs to be supported for one release.
-		//
-		// Example from Kubernetes 1.24 where csistoragecapacities had just
-		// graduated to GA:
-		//
-		// TODO (https://github.com/kubernetes/kubernetes/issues/108451): remove the override in 1.25.
+		// 若资源必须以非最新版本存储，可列在此处；通常用于引入新版本后，
+		// 仍需在一个发布周期内支持回退到尚不认识新版本的老 apiserver。
+		// 例如 Kubernetes 1.24 中刚转为 GA 的 csistoragecapacities：
+		// TODO（https://github.com/kubernetes/kubernetes/issues/108451）：在 1.25 移除此覆盖。
 		// apisstorage.Resource("csistoragecapacities").WithVersion("v1beta1"),
 		coordination.Resource("leasecandidates").WithVersion("v1beta1"),
-		certificates.Resource("clustertrustbundles").WithVersion("v1beta1"), // TODO: remove in 1.38
+		certificates.Resource("clustertrustbundles").WithVersion("v1beta1"), // TODO: 在 1.38 移除
 		certificates.Resource("podcertificaterequests").WithVersion("v1beta1"),
 		storagemigration.Resource("storageversionmigrations").WithVersion("v1beta1"),
 		resource.Resource("devicetaintrules").WithVersion("v1beta2"),

@@ -359,8 +359,7 @@ func TestExternalTokenGenerator(t *testing.T) {
 				t.Fatalf("Bad claims; diff (-got +want):\n%s", diff)
 			}
 
-			// Don't check header or signature values since we're not testing
-			// our (fake) backends.
+			// 本测试不验证 header 或签名值，因为未测试模拟后端。
 		})
 	}
 
@@ -413,13 +412,13 @@ type supportedKeyT struct {
 type dummyExtrnalSigner struct {
 	externaljwtv1.UnimplementedExternalJWTSignerServer
 
-	// required for Sign()
+	// Sign() 所需。
 	keyID            string
 	signingAlgorithm string
 	signature        string
 	headerType       string
 
-	// required for FetchKeys()
+	// FetchKeys() 所需。
 	keyLock               sync.Mutex
 	supportedKeys         map[string]supportedKeyT
 	refreshHintSeconds    int

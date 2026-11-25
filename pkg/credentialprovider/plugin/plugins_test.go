@@ -122,7 +122,7 @@ func TestRegisterCredentialProviderPlugin(t *testing.T) {
 	testCases := []struct {
 		name           string
 		firstProvider  string
-		secondProvider string // empty means no second provider
+		secondProvider string // 空值表示没有第二个提供器。
 		shouldPanic    bool
 	}{
 		{

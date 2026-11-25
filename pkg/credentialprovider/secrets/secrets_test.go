@@ -353,7 +353,7 @@ func Test_MakeDockerKeyring(t *testing.T) {
 				t.Errorf("unexpected lookup for image: %s", testcase.image)
 			}
 
-			if !reflect.DeepEqual(authConfigs, testcase.expectedAuthConfigs) { // TODO: we may need better comparison as the result is unordered
+			if !reflect.DeepEqual(authConfigs, testcase.expectedAuthConfigs) { // TODO：结果顺序不固定，可能需要更合理的比较方式。
 				t.Logf("actual auth configs: %#v", authConfigs)
 				t.Logf("expected auth configs: %#v", testcase.expectedAuthConfigs)
 				t.Error("auth configs did not match")

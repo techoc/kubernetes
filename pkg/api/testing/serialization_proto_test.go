@@ -250,7 +250,7 @@ func BenchmarkDecodeIntoProtobuf(b *testing.B) {
 		}
 		encoded[i] = data
 		validate := &v1.Pod{}
-		validate.Reset() // decode normally resets internally
+		validate.Reset() // 正常解码会在内部重置状态。
 		if err := validate.Unmarshal(data); err != nil {
 			b.Fatalf("Failed to unmarshal %d: %v\n%#v", i, err, items[i])
 		}
@@ -258,7 +258,7 @@ func BenchmarkDecodeIntoProtobuf(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		obj := &v1.Pod{}
-		obj.Reset() // decode normally resets internally
+		obj.Reset() // 正常解码会在内部重置状态。
 		if err := obj.Unmarshal(encoded[i%width]); err != nil {
 			b.Fatal(err)
 		}

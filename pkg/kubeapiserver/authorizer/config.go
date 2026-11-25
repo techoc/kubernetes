@@ -45,7 +45,7 @@ import (
 	"k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac/bootstrappolicy"
 )
 
-// Config 包含如何对 Kube API Server 的请求进行授权的数据。
+// Config 包含如何对 kube-apiserver 的请求进行授权的数据。
 type Config struct {
 	// ModeABAC 的选项
 
@@ -97,7 +97,7 @@ func (config Config) New(ctx context.Context, serverID string) (authorizer.Autho
 	for _, configuredAuthorizer := range config.AuthorizationConfiguration.Authorizers {
 		seenTypes.Insert(configuredAuthorizer.Type)
 
-		// Keep cases in sync with constant list in k8s.io/kubernetes/pkg/kubeapiserver/authorizer/modes/modes.go.
+		// 各分支须与 k8s.io/kubernetes/pkg/kubeapiserver/authorizer/modes/modes.go 中的常量列表保持同步。
 		switch configuredAuthorizer.Type {
 		case authzconfig.AuthorizerType(modes.ModeNode):
 			var slices resourceinformers.ResourceSliceInformer
@@ -116,7 +116,7 @@ func (config Config) New(ctx context.Context, serverID string) (authorizer.Autho
 				config.VersionedInformerFactory.Core().V1().Pods(),
 				config.VersionedInformerFactory.Core().V1().PersistentVolumes(),
 				config.VersionedInformerFactory.Storage().V1().VolumeAttachments(),
-				slices, // Nil check in AddGraphEventHandlers can be removed when always creating this.
+				slices, // 若始终创建该字段，可移除 AddGraphEventHandlers 中的 nil 检查。
 				podCertificateRequestInformer,
 			)
 			r.nodeAuthorizer = node.NewAuthorizer(graph, nodeidentifier.NewDefaultNodeIdentifier(), bootstrappolicy.NodeRules())

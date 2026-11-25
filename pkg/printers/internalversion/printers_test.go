@@ -70,7 +70,7 @@ func TestFormatResourceName(t *testing.T) {
 	}{
 		{schema.GroupKind{}, "", ""},
 		{schema.GroupKind{}, "name", "name"},
-		{schema.GroupKind{Kind: "Kind"}, "", "kind/"}, // should not happen in practice
+		{schema.GroupKind{Kind: "Kind"}, "", "kind/"}, // 实际不应出现这种输入
 		{schema.GroupKind{Kind: "Kind"}, "name", "kind/name"},
 		{schema.GroupKind{Group: "group", Kind: "Kind"}, "name", "kind.group/name"},
 	}
@@ -112,7 +112,7 @@ func TestPrintEvent(t *testing.T) {
 		options  printers.GenerateOptions
 		expected []metav1.TableRow
 	}{
-		// Basic event; no generate options
+		// 基础事件；不启用生成选项
 		{
 			event: api.Event{
 				Source: api.EventSource{Component: "kubelet"},
@@ -130,10 +130,10 @@ func TestPrintEvent(t *testing.T) {
 				ObjectMeta:     metav1.ObjectMeta{Name: "event1"},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Last Seen, Type, Reason, Object, Message
+			// 列： Last Seen, Type, Reason, Object, Message
 			expected: []metav1.TableRow{{Cells: []interface{}{"2d", "Normal", "Event Reason", "pod/Pod Name", "Message Data"}}},
 		},
-		// Basic event; generate options=Wide
+		// 基础事件；启用 Wide 生成选项
 		{
 			event: api.Event{
 				Source: api.EventSource{
@@ -154,10 +154,10 @@ func TestPrintEvent(t *testing.T) {
 				ObjectMeta:     metav1.ObjectMeta{Name: "event2"},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
+			// 列： Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
 			expected: []metav1.TableRow{{Cells: []interface{}{"2d", "Warning", "Event Reason", "deployment/Deployment Name", "spec.containers{foo}", "kubelet, Node1", "Message Data", "3d", int64(6), "event2"}}},
 		},
-		// Basic event, w/o FirstTimestamp set
+		// 基础事件；未设置 FirstTimestamp
 		{
 			event: api.Event{
 				Source: api.EventSource{
@@ -178,10 +178,10 @@ func TestPrintEvent(t *testing.T) {
 				ObjectMeta:    metav1.ObjectMeta{Name: "event3"},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
+			// 列： Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
 			expected: []metav1.TableRow{{Cells: []interface{}{"3d", "Warning", "Event Reason", "deployment/Deployment Name", "spec.containers{foo}", "kubelet, Node1", "Message Data", "3d", int64(1), "event3"}}},
 		},
-		// Basic event, w/o LastTimestamp set
+		// 基础事件；未设置 LastTimestamp
 		{
 			event: api.Event{
 				Source: api.EventSource{
@@ -202,10 +202,10 @@ func TestPrintEvent(t *testing.T) {
 				ObjectMeta:     metav1.ObjectMeta{Name: "event4"},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
+			// 列： Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
 			expected: []metav1.TableRow{{Cells: []interface{}{"3d", "Warning", "Event Reason", "deployment/Deployment Name", "spec.containers{foo}", "kubelet, Node1", "Message Data", "3d", int64(1), "event4"}}},
 		},
-		// Basic event, w/o FirstTimestamp and LastTimestamp set
+		// 基础事件；FirstTimestamp 与 LastTimestamp 均未设置
 		{
 			event: api.Event{
 				Source: api.EventSource{
@@ -225,10 +225,10 @@ func TestPrintEvent(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "event5"},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
+			// 列： Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
 			expected: []metav1.TableRow{{Cells: []interface{}{"3d", "Warning", "Event Reason", "deployment/Deployment Name", "spec.containers{foo}", "kubelet, Node1", "Message Data", "3d", int64(1), "event5"}}},
 		},
-		// Basic event serie, w/o FirstTimestamp, LastTimestamp and Count set
+		// 基础事件序列；FirstTimestamp、LastTimestamp 与 Count 均未设置
 		{
 			event: api.Event{
 				Source: api.EventSource{
@@ -251,10 +251,10 @@ func TestPrintEvent(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "event6"},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
+			// 列： Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
 			expected: []metav1.TableRow{{Cells: []interface{}{"2d", "Warning", "Event Reason", "deployment/Deployment Name", "spec.containers{foo}", "kubelet, Node1", "Message Data", "3d", int64(2), "event6"}}},
 		},
-		// Singleton event, w/o FirstTimestamp, LastTimestamp and Count set
+		// 单次事件；FirstTimestamp、LastTimestamp 与 Count 均未设置
 		{
 			event: api.Event{
 				Source: api.EventSource{
@@ -273,10 +273,10 @@ func TestPrintEvent(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "event7"},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
+			// 列： Last Seen, Type, Reason, Object, Subobject, Message, First Seen, Count, Name
 			expected: []metav1.TableRow{{Cells: []interface{}{"3d", "Warning", "Event Reason", "deployment/Deployment Name", "spec.containers{foo}", "kubelet, Node1", "Message Data", "3d", int64(1), "event7"}}},
 		},
-		// Basic event, with empty Source; generate options=Wide
+		// 基础事件；Source 为空且启用 Wide，验证来源字段的回退逻辑
 		{
 			event: api.Event{
 				ReportingController: "kubelet",
@@ -295,7 +295,7 @@ func TestPrintEvent(t *testing.T) {
 				ObjectMeta:     metav1.ObjectMeta{Name: "event2"},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Last Seen, Type, Reason, Object, Subobject, Source, Message, First Seen, Count, Name
+			// 列： Last Seen, Type, Reason, Object, Subobject, Source, Message, First Seen, Count, Name
 			expected: []metav1.TableRow{{Cells: []interface{}{"2d", "Warning", "Event Reason", "deployment/Deployment Name", "spec.containers{foo}", "kubelet, test", "Message Data", "3d", int64(6), "event2"}}},
 		},
 	}
@@ -352,7 +352,7 @@ func TestPrintEventsResultSorted(t *testing.T) {
 	if len(rows) != 3 {
 		t.Errorf("Generate Event List: Wrong number of table rows returned. Expected 3, got (%d)", len(rows))
 	}
-	// Verify the watch event dates are in order.
+	// 验证 watch 事件的时间顺序。
 	firstRow := rows[0]
 	message1 := firstRow.Cells[4]
 	if message1.(string) != "Item 1" {
@@ -375,7 +375,7 @@ func TestPrintNamespace(t *testing.T) {
 		namespace api.Namespace
 		expected  []metav1.TableRow
 	}{
-		// Basic namespace with status and age.
+		// 基础 Namespace；包含状态和年龄
 		{
 			namespace: api.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -386,17 +386,17 @@ func TestPrintNamespace(t *testing.T) {
 					Phase: "FooStatus",
 				},
 			},
-			// Columns: Name, Status, Age
+			// 列： Name, Status, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"namespace1", "FooStatus", "0s"}}},
 		},
-		// Basic namespace without status or age.
+		// 基础 Namespace；缺少状态或年龄
 		{
 			namespace: api.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "namespace2",
 				},
 			},
-			// Columns: Name, Status, Age
+			// 列： Name, Status, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"namespace2", "", "<unknown>"}}},
 		},
 	}
@@ -420,7 +420,7 @@ func TestPrintSecret(t *testing.T) {
 		secret   api.Secret
 		expected []metav1.TableRow
 	}{
-		// Basic namespace with type, data, and age.
+		// 基础 Secret；包含类型、数据和年龄
 		{
 			secret: api.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -432,10 +432,10 @@ func TestPrintSecret(t *testing.T) {
 					"token": []byte("secret data"),
 				},
 			},
-			// Columns: Name, Type, Data, Age
+			// 列： Name, Type, Data, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"secret1", "kubernetes.io/service-account-token", int64(1), "0s"}}},
 		},
-		// Basic namespace with type and age; no data.
+		// 基础 Secret；包含类型和年龄，但没有数据
 		{
 			secret: api.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -444,7 +444,7 @@ func TestPrintSecret(t *testing.T) {
 				},
 				Type: "kubernetes.io/service-account-token",
 			},
-			// Columns: Name, Type, Data, Age
+			// 列： Name, Type, Data, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"secret1", "kubernetes.io/service-account-token", int64(0), "0s"}}},
 		},
 	}
@@ -468,7 +468,7 @@ func TestPrintServiceAccount(t *testing.T) {
 		serviceAccount api.ServiceAccount
 		expected       []metav1.TableRow
 	}{
-		// Basic service account without secrets
+		// 无 Secret 的基础 ServiceAccount；当前表格仅展示名称和年龄
 		{
 			serviceAccount: api.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
@@ -477,10 +477,10 @@ func TestPrintServiceAccount(t *testing.T) {
 				},
 				Secrets: []api.ObjectReference{},
 			},
-			// Columns: Name, (Num) Secrets, Age
+			// 列： Name, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"sa1", "0s"}}},
 		},
-		// Basic service account with two secrets.
+		// 带两个 Secret 的 ServiceAccount；验证密钥不占表格列
 		{
 			serviceAccount: api.ServiceAccount{
 				ObjectMeta: metav1.ObjectMeta{
@@ -492,7 +492,7 @@ func TestPrintServiceAccount(t *testing.T) {
 					{Name: "Secret2"},
 				},
 			},
-			// Columns: Name, (Num) Secrets, Age
+			// 列： Name, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"sa1", "0s"}}},
 		},
 	}
@@ -522,7 +522,7 @@ func TestPrintNodeStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo1"},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionTrue}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo1", "Ready", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -531,7 +531,7 @@ func TestPrintNodeStatus(t *testing.T) {
 				Spec:       api.NodeSpec{Unschedulable: true},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionTrue}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo2", "Ready,SchedulingDisabled", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -541,7 +541,7 @@ func TestPrintNodeStatus(t *testing.T) {
 					{Type: api.NodeReady, Status: api.ConditionTrue},
 					{Type: api.NodeReady, Status: api.ConditionTrue}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo3", "Ready", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -549,7 +549,7 @@ func TestPrintNodeStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo4"},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionFalse}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo4", "NotReady", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -558,7 +558,7 @@ func TestPrintNodeStatus(t *testing.T) {
 				Spec:       api.NodeSpec{Unschedulable: true},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionFalse}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo5", "NotReady,SchedulingDisabled", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -566,7 +566,7 @@ func TestPrintNodeStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo6"},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: "InvalidValue", Status: api.ConditionTrue}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo6", "Unknown", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -574,7 +574,7 @@ func TestPrintNodeStatus(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo7"},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo7", "Unknown", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -583,7 +583,7 @@ func TestPrintNodeStatus(t *testing.T) {
 				Spec:       api.NodeSpec{Unschedulable: true},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: "InvalidValue", Status: api.ConditionTrue}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo8", "Unknown,SchedulingDisabled", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -592,7 +592,7 @@ func TestPrintNodeStatus(t *testing.T) {
 				Spec:       api.NodeSpec{Unschedulable: true},
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo9", "Unknown,SchedulingDisabled", "<none>", "<unknown>", ""}}},
 		},
 	}
@@ -621,7 +621,7 @@ func TestPrintNodeRole(t *testing.T) {
 			node: api.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: "foo9"},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo9", "Unknown", "<none>", "<unknown>", ""}}},
 		},
 		{
@@ -631,7 +631,7 @@ func TestPrintNodeRole(t *testing.T) {
 					Labels: map[string]string{"node-role.kubernetes.io/master": "", "node-role.kubernetes.io/control-plane": "", "node-role.kubernetes.io/proxy": "", "kubernetes.io/role": "node"},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo10", "Unknown", "control-plane,master,node,proxy", "<unknown>", ""}}},
 		},
 		{
@@ -641,7 +641,7 @@ func TestPrintNodeRole(t *testing.T) {
 					Labels: map[string]string{"kubernetes.io/role": "node"},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"foo11", "Unknown", "node", "<unknown>", ""}}},
 		},
 	}
@@ -674,7 +674,7 @@ func TestPrintNodeOSImage(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo1", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "fake-os-image", "<unknown>", "<unknown>"},
@@ -689,7 +689,7 @@ func TestPrintNodeOSImage(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo2", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "fake-kernel-version", "<unknown>"},
@@ -726,7 +726,7 @@ func TestPrintNodeKernelVersion(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo1", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "fake-kernel-version", "<unknown>"},
@@ -741,7 +741,7 @@ func TestPrintNodeKernelVersion(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo2", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "fake-os-image", "<unknown>", "<unknown>"},
@@ -778,10 +778,10 @@ func TestPrintNodeArch(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
-					// case 1: KernelVersion with Arch
+					// 情形 1：KernelVersion 与 Arch 均非空
 					Cells: []interface{}{"foo", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "fake-kernel-version (fake-arch-amd64)", "<unknown>"},
 				},
 			},
@@ -794,10 +794,10 @@ func TestPrintNodeArch(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
-					// case 2: KernelVersion unknown with Arch
+					// 情形 2：KernelVersion 为空，但 Arch 非空
 					Cells: []interface{}{"foo", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "<unknown> (fake-arch-arm64)", "<unknown>"},
 				},
 			},
@@ -810,10 +810,10 @@ func TestPrintNodeArch(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
-					// case 3: KernelVersion with Arch unknowngs
+					// 情形 3：KernelVersion 非空，但 Arch 为空
 					Cells: []interface{}{"foo", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "fake-kernel-version", "<unknown>"},
 				},
 			},
@@ -848,7 +848,7 @@ func TestPrintNodeContainerRuntimeVersion(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo1", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "<unknown>", "foo://1.2.3"},
@@ -863,7 +863,7 @@ func TestPrintNodeContainerRuntimeVersion(t *testing.T) {
 					Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}},
 				},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo2", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "<unknown>", "<unknown>"},
@@ -897,14 +897,14 @@ func TestPrintNodeName(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "127.0.0.1"},
 				Status:     api.NodeStatus{},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"127.0.0.1", "Unknown", "<none>", "<unknown>", ""}}}},
 		{
 			node: api.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: ""},
 				Status:     api.NodeStatus{},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion
 			expected: []metav1.TableRow{{Cells: []interface{}{"", "Unknown", "<none>", "<unknown>", ""}}},
 		},
 	}
@@ -934,7 +934,7 @@ func TestPrintNodeExternalIP(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo1"},
 				Status:     api.NodeStatus{Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo1", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "<unknown>", "<unknown>"},
@@ -946,7 +946,7 @@ func TestPrintNodeExternalIP(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo2"},
 				Status:     api.NodeStatus{Addresses: []api.NodeAddress{{Type: api.NodeInternalIP, Address: "1.1.1.1"}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo2", "Unknown", "<none>", "<unknown>", "", "1.1.1.1", "<none>", "<unknown>", "<unknown>", "<unknown>"},
@@ -995,7 +995,7 @@ func TestPrintNodeInternalIP(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo1"},
 				Status:     api.NodeStatus{Addresses: []api.NodeAddress{{Type: api.NodeInternalIP, Address: "1.1.1.1"}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo1", "Unknown", "<none>", "<unknown>", "", "1.1.1.1", "<none>", "<unknown>", "<unknown>", "<unknown>"},
@@ -1007,7 +1007,7 @@ func TestPrintNodeInternalIP(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo2"},
 				Status:     api.NodeStatus{Addresses: []api.NodeAddress{{Type: api.NodeExternalIP, Address: "1.1.1.1"}}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo2", "Unknown", "<none>", "<unknown>", "", "<none>", "1.1.1.1", "<unknown>", "<unknown>", "<unknown>"},
@@ -1023,7 +1023,7 @@ func TestPrintNodeInternalIP(t *testing.T) {
 					{Type: api.NodeInternalIP, Address: "4.4.4.4"},
 				}},
 			},
-			// Columns: Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
+			// 列： Name, Status, Roles, Age, KubeletVersion, NodeInternalIP, NodeExternalIP, OSImage, KernelVersion, ContainerRuntimeVersion
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"foo3", "Unknown", "<none>", "<unknown>", "", "2.2.2.2", "3.3.3.3", "<unknown>", "<unknown>", "<unknown>"},
@@ -1075,7 +1075,7 @@ func TestPrintIngress(t *testing.T) {
 			},
 		},
 	}
-	// Columns: Name, Hosts, Address, Ports, Age
+	// 列： Name, Hosts, Address, Ports, Age
 	expected := []metav1.TableRow{{Cells: []interface{}{"test1", "foo", "*", "2.3.4.5", "80", "10y"}}}
 
 	rows, err := printIngress(&ingress, printers.GenerateOptions{})
@@ -1174,7 +1174,7 @@ func TestPrintServiceLoadBalancer(t *testing.T) {
 		options  printers.GenerateOptions
 		expected []metav1.TableRow
 	}{
-		// Test load balancer service with multiple external IP's
+		// 验证多个外部 IP 去重后按字典序展示。
 		{
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "service1"},
@@ -1189,10 +1189,10 @@ func TestPrintServiceLoadBalancer(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"service1", "LoadBalancer", "1.2.3.4", "2.3.4.5,3.4.5.6", "80/TCP", "<unknown>"}}},
 		},
-		// Test load balancer service with pending external IP.
+		// 验证负载均衡外部 IP 尚未分配时展示 <pending>。
 		{
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "service2"},
@@ -1203,10 +1203,10 @@ func TestPrintServiceLoadBalancer(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"service2", "LoadBalancer", "1.3.4.5", "<pending>", "80/TCP,8090/UDP,8000/TCP,7777/SCTP", "<unknown>"}}},
 		},
-		// Test load balancer service with multiple ports.
+		// 验证同一服务的多个端口按定义顺序展示。
 		{
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "service3"},
@@ -1221,10 +1221,10 @@ func TestPrintServiceLoadBalancer(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"service3", "LoadBalancer", "1.4.5.6", "2.3.4.5", "80/TCP,8090/UDP,8000/TCP", "<unknown>"}}},
 		},
-		// Long external IP's list gets elided.
+		// 验证普通模式截断过长的外部 IP 列表。
 		{
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "service4"},
@@ -1239,10 +1239,10 @@ func TestPrintServiceLoadBalancer(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"service4", "LoadBalancer", "1.5.6.7", "2.3.4.5,3.4.5...", "80/TCP,8090/UDP,8000/TCP", "<unknown>"}}},
 		},
-		// Generate options: Wide, includes selectors.
+		// 启用 Wide，额外展示选择器。
 		{
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "service4"},
@@ -1258,7 +1258,7 @@ func TestPrintServiceLoadBalancer(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"service4", "LoadBalancer", "1.5.6.7", "2.3.4.5,3.4.5.6,5.6.7.8", "80/TCP,8090/UDP,8000/TCP", "<unknown>", "foo=bar"}}},
 		},
 	}
@@ -1284,7 +1284,7 @@ func TestPrintPod(t *testing.T) {
 		expect []metav1.TableRow
 	}{
 		{
-			// Test name, num of containers, restarts, container ready status
+			// 验证名称、容器数、重启次数和容器就绪状态
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1299,7 +1299,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test1", "1/2", "podPhase", "6", "<unknown>"}}},
 		},
 		{
-			// Test container error overwrites pod phase
+			// 验证容器错误优先于 Pod 阶段展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test2"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1314,7 +1314,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test2", "1/2", "ContainerWaitingReason", "6", "<unknown>"}}},
 		},
 		{
-			// Test the same as the above but with Terminated state and the first container overwrites the rest
+			// 将上一场景改为 Terminated，验证倒序扫描时首个容器状态覆盖后续容器
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test3"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1329,7 +1329,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test3", "0/2", "ContainerWaitingReason", "6", "<unknown>"}}},
 		},
 		{
-			// Test ready is not enough for reporting running
+			// 验证仅 Ready 不足以判定容器正在运行
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test4"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1344,7 +1344,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test4", "1/2", "podPhase", "6", "<unknown>"}}},
 		},
 		{
-			// Test ready is not enough for reporting running
+			// 验证仅 Ready 不足以判定容器正在运行
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test5"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1360,7 +1360,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test5", "1/2", "podReason", "6", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 containers, one is running and the other is completed, w/o ready condition
+			// 两个容器分别为 Running、Completed，且无就绪条件
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test6"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1376,7 +1376,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test6", "1/2", "NotReady", "6", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 containers, one is running and the other is completed, with ready condition
+			// 两个容器分别为 Running、Completed，且有就绪条件，验证 Completed 被修正为 Running
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test6"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1395,7 +1395,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test6", "1/2", "Running", "6", "<unknown>"}}},
 		},
 		{
-			// Test pod has 1 init container restarting and 1 container not running
+			// 一个初始化容器重启、一个业务容器未运行，验证初始化状态优先
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test7"},
 				Spec:       api.PodSpec{InitContainers: make([]api.Container, 1), Containers: make([]api.Container, 1)},
@@ -1421,7 +1421,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test7", "0/1", "Init:0/1", "3 (10s ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 init containers, one restarting and the other not running, and 1 container not running
+			// 两个初始化容器分别重启、未运行，一个业务容器未运行
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test8"},
 				Spec:       api.PodSpec{InitContainers: make([]api.Container, 2), Containers: make([]api.Container, 1)},
@@ -1450,7 +1450,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test8", "0/1", "Init:0/2", "3 (10s ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 init containers, one completed without restarts and the other restarting, and 1 container not running
+			// 两个初始化容器分别无重启完成、正在重启，一个业务容器未运行
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test9"},
 				Spec:       api.PodSpec{InitContainers: make([]api.Container, 2), Containers: make([]api.Container, 1)},
@@ -1479,7 +1479,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test9", "0/1", "Init:1/2", "3 (10s ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 init containers, one completed with restarts and the other restarting, and 1 container not running
+			// 两个初始化容器分别重启后完成、正在重启，一个业务容器未运行
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test10"},
 				Spec:       api.PodSpec{InitContainers: make([]api.Container, 2), Containers: make([]api.Container, 1)},
@@ -1510,7 +1510,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test10", "0/1", "Init:1/2", "5 (10s ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 1 init container completed with restarts and one container restarting
+			// 初始化容器重启后完成，业务容器正在重启
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test11"},
 				Spec:       api.PodSpec{InitContainers: make([]api.Container, 1), Containers: make([]api.Container, 1)},
@@ -1537,7 +1537,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test11", "0/1", "Running", "4 (20s ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 1 container that restarted 5d ago
+			// 单个容器在 5 天前重启，验证相对时间展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test12"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 1)},
@@ -1556,7 +1556,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test12", "1/1", "Running", "3 (5d ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 containers, one has never restarted and the other has restarted 10d ago
+			// 两个容器分别从未重启、10 天前重启
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test13"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1580,7 +1580,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test13", "2/2", "Running", "3 (10d ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 containers, one restarted 5d ago and the other restarted 20d ago
+			// 两个容器分别在 5 天、20 天前重启，验证展示最近一次重启
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test14"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1605,7 +1605,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test14", "2/2", "Running", "9 (5d ago)", "<unknown>"}}},
 		},
 		{
-			// Test PodScheduled condition with reason SchedulingGated
+			// 验证 PodScheduled 的 SchedulingGated 原因优先于阶段展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test15"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -1623,7 +1623,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test15", "0/2", apiv1.PodReasonSchedulingGated, "0", "<unknown>"}}},
 		},
 		{
-			// Test pod condition succeed
+			// 验证成功 Pod 附带完成条件
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test16"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 1)},
@@ -1640,7 +1640,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Conditions: podSuccessConditions, Cells: []interface{}{"test16", "0/1", "Completed", "0", "<unknown>"}}},
 		},
 		{
-			// Test pod condition failed
+			// 验证失败 Pod 附带完成条件
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test17"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 1)},
@@ -1657,7 +1657,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Conditions: podFailedConditions, Cells: []interface{}{"test17", "0/1", "Error", "0", "<unknown>"}}},
 		},
 		{
-			// Test pod condition succeed with deletion
+			// 验证删除中的成功 Pod 仍保留终态，不改写为 Terminating
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test18", DeletionTimestamp: &deleteTime},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 1)},
@@ -1674,7 +1674,7 @@ func TestPrintPod(t *testing.T) {
 			[]metav1.TableRow{{Conditions: podSuccessConditions, Cells: []interface{}{"test18", "0/1", "Completed", "0", "<unknown>"}}},
 		},
 		{
-			// Test pod condition running with deletion
+			// 验证删除中的运行 Pod 展示为 Terminating
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test19", DeletionTimestamp: &deleteTime},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 1)},
@@ -1690,7 +1690,7 @@ func TestPrintPod(t *testing.T) {
 			},
 			[]metav1.TableRow{{Cells: []interface{}{"test19", "0/1", "Terminating", "0", "<unknown>"}}},
 		},
-		{ // Test pod condition pending with deletion
+		{ // 验证删除中的待处理 Pod 展示为 Terminating
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test20", DeletionTimestamp: &deleteTime},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 1)},
@@ -1700,8 +1700,8 @@ func TestPrintPod(t *testing.T) {
 			},
 			[]metav1.TableRow{{Cells: []interface{}{"test20", "0/1", "Terminating", "0", "<unknown>"}}},
 		},
-		// Test the two containers. They are ready and State are Error/Running
-		// reference: https://github.com/kubernetes/kubernetes/issues/107713
+		// 两个容器分别为 Error、Running，其中一个就绪；覆盖错误状态与运行状态并存
+		// 参考：https://github.com/kubernetes/kubernetes/issues/107713
 		{
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test21"},
@@ -1735,8 +1735,8 @@ func TestPrintPod(t *testing.T) {
 				},
 			},
 		},
-		// Test the two containers. They are ready and State are Running/Error
-		// reference: https://github.com/kubernetes/kubernetes/issues/107713
+		// 交换上例的容器状态顺序，验证结果不依赖状态列表顺序
+		// 参考：https://github.com/kubernetes/kubernetes/issues/107713
 		{
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test22"},
@@ -1771,7 +1771,7 @@ func TestPrintPod(t *testing.T) {
 			},
 		},
 		{
-			// Test the three containers. They are ready and State are Running/Error/Completed
+			// 三个容器分别为 Running、Error、Completed，且均就绪
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test23"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 3)},
@@ -1813,7 +1813,7 @@ func TestPrintPod(t *testing.T) {
 			},
 		},
 		{
-			// Test the three containers. They are notReady and State are Running/Error/Completed
+			// 三个容器分别为 Running、Error、Completed，但均未就绪
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test24"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 3)},
@@ -1876,7 +1876,7 @@ func TestPrintPodWithRestartableInitContainer(t *testing.T) {
 		expect []metav1.TableRow
 	}{
 		{
-			// Test pod has 2 restartable init containers, the first one running but not started.
+			// 两个可重启初始化容器，首个 Running 但 Started 为 false
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec: api.PodSpec{
@@ -1917,7 +1917,7 @@ func TestPrintPodWithRestartableInitContainer(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test1", "0/3", "Init:0/2", "3 (10s ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 restartable init containers, the first one started and the second one running but not started.
+			// 两个可重启初始化容器，首个已启动，第二个 Running 但未启动
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec: api.PodSpec{
@@ -1958,7 +1958,7 @@ func TestPrintPodWithRestartableInitContainer(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test1", "0/3", "Init:1/2", "3 (10s ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 restartable init containers started and 1 container running
+			// 两个可重启初始化容器均已启动，一个业务容器正在运行
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test2"},
 				Spec: api.PodSpec{
@@ -2000,7 +2000,7 @@ func TestPrintPodWithRestartableInitContainer(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test2", "1/3", "Running", "7 (10s ago)", "<unknown>"}}},
 		},
 		{
-			// Test pod has 2 restartable init containers completed with non-zero and 1 container completed
+			// 两个可重启初始化容器以非零码完成，一个业务容器完成
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test3"},
 				Spec: api.PodSpec{
@@ -2049,7 +2049,7 @@ func TestPrintPodWithRestartableInitContainer(t *testing.T) {
 			},
 		},
 		{
-			// Test pod has container statuses for non-existent initContainers and containers
+			// 状态列表包含规格中不存在的容器，验证不会因此崩溃
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test4"},
 				Spec: api.PodSpec{
@@ -2099,7 +2099,7 @@ func TestPrintPodwide(t *testing.T) {
 		expect []metav1.TableRow
 	}{
 		{
-			// Test when the NodeName and PodIP are not none
+			// 验证 NodeName 与 PodIP 非空时按实际值展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec: api.PodSpec{
@@ -2140,7 +2140,7 @@ func TestPrintPodwide(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test1", "1/2", "podPhase", "6", "<unknown>", "1.1.1.1", "test1", "node1", "1/3"}}},
 		},
 		{
-			// Test when the NodeName and PodIP are not none
+			// 验证 NodeName 与 PodIP 非空时按实际值展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec: api.PodSpec{
@@ -2181,7 +2181,7 @@ func TestPrintPodwide(t *testing.T) {
 			[]metav1.TableRow{{Cells: []interface{}{"test1", "1/2", "podPhase", "6", "<unknown>", "1.1.1.1", "test1", "node1", "1/3"}}},
 		},
 		{
-			// Test when the NodeName and PodIP are none
+			// 验证 NodeName 与 PodIP 为空时展示 <none>
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test2"},
 				Spec: api.PodSpec{
@@ -2252,29 +2252,29 @@ func TestPrintPodConditions(t *testing.T) {
 		pod    *api.Pod
 		expect []metav1.TableRow
 	}{
-		// Should not have TableRowCondition
+		// 非终态 Pod 不应附带 TableRowCondition
 		{
 			pod: runningPod,
-			// Columns: Name, Ready, Reason, Restarts, Age
+			// 列： Name, Ready, Reason, Restarts, Age
 			expect: []metav1.TableRow{{Cells: []interface{}{"test1", "1/2", "Running", "6", "<unknown>"}}},
 		},
-		// Should have TableRowCondition: podSuccessConditions
+		// 成功 Pod 应附带 podSuccessConditions
 		{
 			pod: succeededPod,
 			expect: []metav1.TableRow{
 				{
-					// Columns: Name, Ready, Reason, Restarts, Age
+					// 列： Name, Ready, Reason, Restarts, Age
 					Cells:      []interface{}{"test1", "1/2", "Succeeded", "6", "<unknown>"},
 					Conditions: podSuccessConditions,
 				},
 			},
 		},
-		// Should have TableRowCondition: podFailedCondition
+		// 失败 Pod 应附带 podFailedConditions
 		{
 			pod: failedPod,
 			expect: []metav1.TableRow{
 				{
-					// Columns: Name, Ready, Reason, Restarts, Age
+					// 列： Name, Ready, Reason, Restarts, Age
 					Cells:      []interface{}{"test2", "1/2", "Failed", "6", "<unknown>"},
 					Conditions: podFailedConditions,
 				},
@@ -2301,7 +2301,7 @@ func TestPrintPodList(t *testing.T) {
 		pods   api.PodList
 		expect []metav1.TableRow
 	}{
-		// Test podList's pod: name, num of containers, restarts, container ready status
+		// 验证 PodList 中单个 Pod 的名称、容器数、重启次数和就绪状态
 		{
 			api.PodList{
 				Items: []api.Pod{
@@ -2353,7 +2353,7 @@ func TestPrintNonTerminatedPod(t *testing.T) {
 		expect []metav1.TableRow
 	}{
 		{
-			// Test pod phase Running should be printed
+			// Running 阶段应原样展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -2365,11 +2365,11 @@ func TestPrintNonTerminatedPod(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Ready, Reason, Restarts, Age
+			// 列： Name, Ready, Reason, Restarts, Age
 			[]metav1.TableRow{{Cells: []interface{}{"test1", "1/2", "Running", "6", "<unknown>"}}},
 		},
 		{
-			// Test pod phase Pending should be printed
+			// Pending 阶段应原样展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test2"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -2381,11 +2381,11 @@ func TestPrintNonTerminatedPod(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Ready, Reason, Restarts, Age
+			// 列： Name, Ready, Reason, Restarts, Age
 			[]metav1.TableRow{{Cells: []interface{}{"test2", "1/2", "Pending", "6", "<unknown>"}}},
 		},
 		{
-			// Test pod phase Unknown should be printed
+			// Unknown 阶段应原样展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test3"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -2397,11 +2397,11 @@ func TestPrintNonTerminatedPod(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Ready, Reason, Restarts, Age
+			// 列： Name, Ready, Reason, Restarts, Age
 			[]metav1.TableRow{{Cells: []interface{}{"test3", "1/2", "Unknown", "6", "<unknown>"}}},
 		},
 		{
-			// Test pod phase Succeeded should be printed
+			// Succeeded 阶段应原样展示
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test4"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -2413,7 +2413,7 @@ func TestPrintNonTerminatedPod(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Ready, Reason, Restarts, Age
+			// 列： Name, Ready, Reason, Restarts, Age
 			[]metav1.TableRow{
 				{
 					Cells:      []interface{}{"test4", "1/2", "Succeeded", "6", "<unknown>"},
@@ -2422,7 +2422,7 @@ func TestPrintNonTerminatedPod(t *testing.T) {
 			},
 		},
 		{
-			// Test pod phase Failed shouldn't be printed
+			// Failed 阶段不应进入非终态 Pod 的输出
 			api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test5"},
 				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
@@ -2434,7 +2434,7 @@ func TestPrintNonTerminatedPod(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Ready, Reason, Restarts, Age
+			// 列： Name, Ready, Reason, Restarts, Age
 			[]metav1.TableRow{
 				{
 					Cells:      []interface{}{"test5", "1/2", "Failed", "6", "<unknown>"},
@@ -2464,7 +2464,7 @@ func TestPrintPodTemplate(t *testing.T) {
 		options     printers.GenerateOptions
 		expected    []metav1.TableRow
 	}{
-		// Test basic pod template with no containers.
+		// 基础 PodTemplate；无容器
 		{
 			podTemplate: api.PodTemplate{
 				ObjectMeta: metav1.ObjectMeta{Name: "pod-template-1"},
@@ -2477,10 +2477,10 @@ func TestPrintPodTemplate(t *testing.T) {
 			},
 
 			options: printers.GenerateOptions{},
-			// Columns: Name, Containers, Images, Pod Labels
+			// 列： Name, Containers, Images, Pod Labels
 			expected: []metav1.TableRow{{Cells: []interface{}{"pod-template-1", "", "", "<none>"}}},
 		},
-		// Test basic pod template with two containers.
+		// 基础 PodTemplate；两个容器
 		{
 			podTemplate: api.PodTemplate{
 				ObjectMeta: metav1.ObjectMeta{Name: "pod-template-2"},
@@ -2502,10 +2502,10 @@ func TestPrintPodTemplate(t *testing.T) {
 			},
 
 			options: printers.GenerateOptions{},
-			// Columns: Name, Containers, Images, Pod Labels
+			// 列： Name, Containers, Images, Pod Labels
 			expected: []metav1.TableRow{{Cells: []interface{}{"pod-template-2", "fake-container1,fake-container2", "fake-image1,fake-image2", "<none>"}}},
 		},
-		// Test basic pod template with pod labels
+		// 基础 PodTemplate；验证 Pod 标签展示
 		{
 			podTemplate: api.PodTemplate{
 				ObjectMeta: metav1.ObjectMeta{Name: "pod-template-3"},
@@ -2521,7 +2521,7 @@ func TestPrintPodTemplate(t *testing.T) {
 			},
 
 			options: printers.GenerateOptions{},
-			// Columns: Name, Containers, Images, Pod Labels
+			// 列： Name, Containers, Images, Pod Labels
 			expected: []metav1.TableRow{{Cells: []interface{}{"pod-template-3", "", "", "foo=bar"}}},
 		},
 	}
@@ -2571,7 +2571,7 @@ func TestPrintPodTemplateList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Containers, Images, Pod Labels
+	// 列： Name, Containers, Images, Pod Labels
 	expectedRows := []metav1.TableRow{
 		{Cells: []interface{}{"pod-template-1", "", "", "foo=bar"}},
 		{Cells: []interface{}{"pod-template-2", "", "", "a=b"}},
@@ -2615,9 +2615,8 @@ func TestTranslateTimestampSince(t *testing.T) {
 }
 
 func TestTranslateTimestampUntil(t *testing.T) {
-	// Since this method compares the time with time.Now() internally,
-	// small buffers of 0.1 seconds are added on comparing times to consider method call overhead.
-	// Otherwise, the output strings become shorter than expected.
+	// 被测函数内部调用 time.Now()，因此比较时预留 0.1 秒余量，
+	// 避免函数调用开销让耗时字符串比预期更短。
 	const buf = 1e8
 	tl := stringTestList{
 		{"a while ago", translateTimestampUntil(metav1.Time{Time: time.Now().Add(-2.1e9)}), "<invalid>"},
@@ -2677,18 +2676,18 @@ func TestPrintDeployment(t *testing.T) {
 		options    printers.GenerateOptions
 		expected   []metav1.TableRow
 	}{
-		// Test Deployment with no generate options.
+		// 验证 Deployment 在普通模式下仅展示基础列
 		{
 			deployment: testDeployment,
 			options:    printers.GenerateOptions{},
-			// Columns: Name, ReadyReplicas, UpdatedReplicas, AvailableReplicas, Age
+			// 列： Name, ReadyReplicas, UpdatedReplicas, AvailableReplicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", "0/5", int64(2), int64(1), "0s"}}},
 		},
-		// Test generate options: Wide.
+		// 验证 Wide 模式增加容器、镜像和选择器列
 		{
 			deployment: testDeployment,
 			options:    printers.GenerateOptions{Wide: true},
-			// Columns: Name, ReadyReplicas, UpdatedReplicas, AvailableReplicas, Age, Containers, Images, Selectors
+			// 列： Name, ReadyReplicas, UpdatedReplicas, AvailableReplicas, Age, Containers, Images, Selectors
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", "0/5", int64(2), int64(1), "0s", "fake-container1,fake-container2", "fake-image1,fake-image2", "foo=bar"}}},
 		},
 	}
@@ -2745,18 +2744,18 @@ func TestPrintDaemonSet(t *testing.T) {
 		options   printers.GenerateOptions
 		expected  []metav1.TableRow
 	}{
-		// Test generate daemon set with no generate options.
+		// 验证 DaemonSet 在普通模式下的基础列
 		{
 			daemonSet: testDaemonSet,
 			options:   printers.GenerateOptions{},
-			// Columns: Name, Num Desired, Num Current, Num Ready, Num Updated, Num Available, Selectors, Age
+			// 列： Name, Num Desired, Num Current, Num Ready, Num Updated, Num Available, Selectors, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", int64(3), int64(2), int64(1), int64(2), int64(0), "<none>", "0s"}}},
 		},
-		// Test generate daemon set with "Wide" generate options.
+		// 测试使用 "Wide" 生成选项生成守护进程集。
 		{
 			daemonSet: testDaemonSet,
 			options:   printers.GenerateOptions{Wide: true},
-			// Columns: Name, Num Desired, Num Current, Num Ready, Num Updated, Num Available, Node Selectors, Age, Containers, Images, Labels
+			// 列： Name, Num Desired, Num Current, Num Ready, Num Updated, Num Available, Node Selectors, Age, Containers, Images, Labels
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", int64(3), int64(2), int64(1), int64(2), int64(0), "<none>", "0s", "fake-container1,fake-container2", "fake-image1,fake-image2", "foo=bar"}}},
 		},
 	}
@@ -2828,7 +2827,7 @@ func TestPrintDaemonSetList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Num Desired, Num Current, Num Ready, Num Updated, Num Available, Selectors, Age
+	// 列： Name, Num Desired, Num Current, Num Ready, Num Updated, Num Available, Selectors, Age
 	expectedRows := []metav1.TableRow{
 		{Cells: []interface{}{"daemonset1", int64(3), int64(2), int64(1), int64(2), int64(0), "<none>", "0s"}},
 		{Cells: []interface{}{"daemonset2", int64(2), int64(4), int64(9), int64(3), int64(3), "<none>", "0s"}},
@@ -2855,7 +2854,7 @@ func TestPrintJob(t *testing.T) {
 		expected []metav1.TableRow
 	}{
 		{
-			// Generate table rows for Job with no generate options.
+			// 为不指定生成选项的 Job 生成表格行。
 			job: batch.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "job1",
@@ -2884,10 +2883,10 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job1", "Running", "1/2", "", "0s"}}},
 		},
-		// Generate table rows for Job with generate options "Wide".
+		// 为指定生成选项 "Wide" 的 Job 生成表格行。
 		{
 			job: batch.Job{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2917,14 +2916,14 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Status, Completions, Duration, Age, Containers, Images, Selectors
+			// 列： Name, Status, Completions, Duration, Age, Containers, Images, Selectors
 			expected: []metav1.TableRow{
 				{
 					Cells: []interface{}{"job1", "Running", "1/2", "", "0s", "fake-job-container1,fake-job-container2", "fake-job-image1,fake-job-image2", "job-label=job-label-value"},
 				},
 			},
 		},
-		// Job with ten-year age.
+		// 已存在十年的 Job。
 		{
 			job: batch.Job{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2939,10 +2938,10 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job2", "Running", "0/1", "", "10y"}}},
 		},
-		// Job with duration.
+		// 带持续时间的 Job。
 		{
 			job: batch.Job{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2959,7 +2958,7 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job3", "Running", "0/1", "30m", "10y"}}},
 		},
 		{
@@ -2977,7 +2976,7 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job4", "Running", "0/1", "20m", "10y"}}},
 		},
 		{
@@ -3000,7 +2999,7 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job5", "Complete", "0/1", "", "0s"}}},
 		},
 		{
@@ -3023,7 +3022,7 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job6", "Failed", "0/1", "", "0s"}}},
 		},
 		{
@@ -3046,7 +3045,7 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job7", "Suspended", "0/1", "", "0s"}}},
 		},
 		{
@@ -3069,7 +3068,7 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job8", "FailureTarget", "0/1", "", "0s"}}},
 		},
 		{
@@ -3084,7 +3083,7 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job9", "Terminating", "0/1", "", "0s"}}},
 		},
 		{
@@ -3107,7 +3106,7 @@ func TestPrintJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Status, Completions, Duration, Age
+			// 列： Name, Status, Completions, Duration, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"job10", "SuccessCriteriaMet", "0/1", "", "0s"}}},
 		},
 	}
@@ -3188,7 +3187,7 @@ func TestPrintJobList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Status, Completions, Duration, Age
+	// 列： Name, Status, Completions, Duration, Age
 	expectedRows := []metav1.TableRow{
 		{Cells: []interface{}{"job1", "Running", "1/2", "", "0s"}},
 		{Cells: []interface{}{"job2", "Running", "2/2", "20m", "0s"}},
@@ -3218,7 +3217,7 @@ func TestPrintHPA(t *testing.T) {
 		hpa      autoscaling.HorizontalPodAutoscaler
 		expected []metav1.TableRow
 	}{
-		// minReplicas unset
+		// 未设置 minReplicas
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3234,10 +3233,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "<none>", "<unset>", int64(10), int64(4), "<unknown>"}}},
 		},
-		// external source type, target average value (no current)
+		// External 来源类型，目标平均值（无当前值）
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3269,10 +3268,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "<unknown>/100m (avg)", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// external source type, target average value
+		// External 来源类型，目标平均值
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3318,10 +3317,10 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "50m/100m (avg)", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// external source type, target value (no current)
+		// External 来源类型，目标值（无当前值）
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3353,10 +3352,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "<unknown>/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// external source type, target value
+		// External 来源类型，目标值
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3401,10 +3400,10 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "50m/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// pods source type (no current)
+		// Pods 来源类型（无当前值）
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3435,10 +3434,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "<unknown>/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// pods source type
+		// Pods 来源类型
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3482,10 +3481,10 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "50m/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// object source type (no current)
+		// Object 来源类型（无当前值）
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3520,10 +3519,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "<unknown>/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// object source type
+		// Object 来源类型
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3575,10 +3574,10 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "50m/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// resource source type, targetVal (no current)
+		// Resource 来源类型，目标值（无当前值）
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3607,10 +3606,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "cpu: <unknown>/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// resource source type, targetVal
+		// Resource 来源类型，目标值
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3650,10 +3649,10 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "cpu: 50m/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// resource source type, targetUtil (no current)
+		// Resource 来源类型，目标利用率（无当前值）
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3682,10 +3681,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "cpu: <unknown>/80%", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// resource source type, targetUtil
+		// Resource 来源类型，目标利用率
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3726,10 +3725,10 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "cpu: 50%/80%", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// container resource source type, targetVal (no current)
+		// ContainerResource 来源类型，目标值（无当前值）
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3759,10 +3758,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "cpu: <unknown>/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// container resource source type, targetVal
+		// ContainerResource 来源类型，目标值
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3803,10 +3802,10 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "cpu: 50m/100m", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// container resource source type, targetUtil (no current)
+		// ContainerResource 来源类型，目标利用率（无当前值）
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3836,10 +3835,10 @@ func TestPrintHPA(t *testing.T) {
 					DesiredReplicas: 5,
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "cpu: <unknown>/80%", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// container resource source type, targetUtil
+		// ContainerResource 来源类型，目标利用率
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3881,10 +3880,10 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "cpu: 50%/80%", "2", int64(10), int64(4), "<unknown>"}}},
 		},
-		// multiple specs
+		// 多个规格
 		{
 			hpa: autoscaling.HorizontalPodAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{Name: "some-hpa"},
@@ -3960,7 +3959,7 @@ func TestPrintHPA(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
+			// 列： Name, Reference, Targets, MinPods, MaxPods, Replicas, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-hpa", "ReplicationController/some-rc", "50m/100m, cpu: 50%/80% + 1 more...", "2", int64(10), int64(4), "<unknown>"}}},
 		},
 	}
@@ -3988,7 +3987,7 @@ func TestPrintService(t *testing.T) {
 		expected []metav1.TableRow
 	}{
 		{
-			// Test name, cluster ip, port with protocol
+			// 测试名称、集群 IP、带协议的端口
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec: api.ServiceSpec{
@@ -4000,15 +3999,15 @@ func TestPrintService(t *testing.T) {
 						},
 					},
 					ClusterIPs: []string{"10.9.8.7"},
-					Selector:   map[string]string{"foo": "bar"}, // Does NOT get printed.
+					Selector:   map[string]string{"foo": "bar"}, // 不打印。
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", "ClusterIP", "10.9.8.7", "<none>", "2233/tcp", "<unknown>"}}},
 		},
 		{
-			// Test generate options: Wide includes selectors.
+			// 测试生成选项：Wide 包含选择器。
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec: api.ServiceSpec{
@@ -4024,11 +4023,11 @@ func TestPrintService(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age, Selector
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age, Selector
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", "ClusterIP", "10.9.8.7", "<none>", "2233/tcp", "<unknown>", "foo=bar"}}},
 		},
 		{
-			// Test NodePort service
+			// 测试 NodePort 服务
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "test2"},
 				Spec: api.ServiceSpec{
@@ -4044,11 +4043,11 @@ func TestPrintService(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test2", "NodePort", "10.9.8.7", "<none>", "8888:9999/tcp", "<unknown>"}}},
 		},
 		{
-			// Test LoadBalancer service
+			// 测试 LoadBalancer 服务
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "test3"},
 				Spec: api.ServiceSpec{
@@ -4063,11 +4062,11 @@ func TestPrintService(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test3", "LoadBalancer", "10.9.8.7", "<pending>", "8888/tcp", "<unknown>"}}},
 		},
 		{
-			// Test LoadBalancer service with single ExternalIP and no LoadBalancerStatus
+			// 测试具有单个 ExternalIP 且没有 LoadBalancerStatus 的 LoadBalancer 服务
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "test4"},
 				Spec: api.ServiceSpec{
@@ -4083,11 +4082,11 @@ func TestPrintService(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test4", "LoadBalancer", "10.9.8.7", "80.11.12.10", "8888/tcp", "<unknown>"}}},
 		},
 		{
-			// Test LoadBalancer service with single ExternalIP
+			// 测试具有单个 ExternalIP 的 LoadBalancer 服务
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "test5"},
 				Spec: api.ServiceSpec{
@@ -4113,11 +4112,11 @@ func TestPrintService(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test5", "LoadBalancer", "10.9.8.7", "3.4.5.6,80.11.12.10", "8888/tcp", "<unknown>"}}},
 		},
 		{
-			// Test LoadBalancer service with mul ExternalIPs
+			// 测试具有多个 ExternalIP 的 LoadBalancer 服务
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "test6"},
 				Spec: api.ServiceSpec{
@@ -4147,11 +4146,11 @@ func TestPrintService(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test6", "LoadBalancer", "10.9.8.7", "2.3.4.5,3.4.5.6,80.11.12.10,80.11.12.11", "8888/tcp", "<unknown>"}}},
 		},
 		{
-			// Test ExternalName service
+			// 测试 ExternalName 服务
 			service: api.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "test7"},
 				Spec: api.ServiceSpec{
@@ -4160,7 +4159,7 @@ func TestPrintService(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+			// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test7", "ExternalName", "<none>", "my.database.example.com", "<none>", "<unknown>"}}},
 		},
 	}
@@ -4211,7 +4210,7 @@ func TestPrintServiceList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Type, Cluster-IP, External-IP, Port(s), Age
+	// 列： Name, Type, Cluster-IP, External-IP, Port(s), Age
 	expectedRows := []metav1.TableRow{
 		{Cells: []interface{}{"service1", "ClusterIP", "10.9.8.7", "<none>", "2233/tcp", "<unknown>"}},
 		{Cells: []interface{}{"service2", "NodePort", "1.2.3.4", "<none>", "5566/udp", "<unknown>"}},
@@ -4236,7 +4235,7 @@ func TestPrintPodDisruptionBudget(t *testing.T) {
 		pdb      policy.PodDisruptionBudget
 		expected []metav1.TableRow
 	}{
-		// Min Available set, no Max Available.
+		// 已设置 Min Available，未设置 Max Available。
 		{
 			pdb: policy.PodDisruptionBudget{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4251,10 +4250,10 @@ func TestPrintPodDisruptionBudget(t *testing.T) {
 					DisruptionsAllowed: 5,
 				},
 			},
-			// Columns: Name, Min Available, Max Available, Allowed Disruptions, Age
+			// 列： Name, Min Available, Max Available, Allowed Disruptions, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"pdb1", "22", "N/A", int64(5), "0s"}}},
 		},
-		// Max Available set, no Min Available.
+		// 已设置 Max Available，未设置 Min Available。
 		{
 			pdb: policy.PodDisruptionBudget{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4269,7 +4268,7 @@ func TestPrintPodDisruptionBudget(t *testing.T) {
 					DisruptionsAllowed: 5,
 				},
 			},
-			// Columns: Name, Min Available, Max Available, Allowed Disruptions, Age
+			// 列： Name, Min Available, Max Available, Allowed Disruptions, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"pdb2", "N/A", "11", int64(5), "0s"}}},
 		}}
 
@@ -4322,7 +4321,7 @@ func TestPrintPodDisruptionBudgetList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Min Available, Max Available, Allowed Disruptions, Age
+	// 列： Name, Min Available, Max Available, Allowed Disruptions, Age
 	expectedRows := []metav1.TableRow{
 		{Cells: []interface{}{"pdb1", "N/A", "11", int64(5), "0s"}},
 		{Cells: []interface{}{"pdb2", "22", "N/A", int64(3), "0s"}},
@@ -4423,7 +4422,7 @@ func TestPrintConfigMap(t *testing.T) {
 		configMap api.ConfigMap
 		expected  []metav1.TableRow
 	}{
-		// Basic config map with no data.
+		// 无数据的基本 ConfigMap。
 		{
 			configMap: api.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4431,10 +4430,10 @@ func TestPrintConfigMap(t *testing.T) {
 					CreationTimestamp: metav1.Time{Time: time.Now().Add(1.9e9)},
 				},
 			},
-			// Columns: Name, Data, Age
+			// 列： Name, Data, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"configmap1", int64(0), "0s"}}},
 		},
-		// Basic config map with one data entry
+		// 包含一个数据项的基本 ConfigMap
 		{
 			configMap: api.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4445,10 +4444,10 @@ func TestPrintConfigMap(t *testing.T) {
 					"foo": "bar",
 				},
 			},
-			// Columns: Name, (Num) Data, Age
+			// 列： Name, (Num) Data, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"configmap2", int64(1), "0s"}}},
 		},
-		// Basic config map with one data and one binary data entry.
+		// 包含一个数据项和一个二进制数据项的基本 ConfigMap。
 		{
 			configMap: api.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4462,7 +4461,7 @@ func TestPrintConfigMap(t *testing.T) {
 					"bin": []byte("binary data"),
 				},
 			},
-			// Columns: Name, (Num) Data, Age
+			// 列： Name, (Num) Data, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"configmap3", int64(2), "0s"}}},
 		},
 	}
@@ -4486,7 +4485,7 @@ func TestPrintNetworkPolicy(t *testing.T) {
 		policy   networking.NetworkPolicy
 		expected []metav1.TableRow
 	}{
-		// Basic network policy with empty spec.
+		// 空 Spec 的基本 NetworkPolicy。
 		{
 			policy: networking.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4495,10 +4494,10 @@ func TestPrintNetworkPolicy(t *testing.T) {
 				},
 				Spec: networking.NetworkPolicySpec{},
 			},
-			// Columns: Name, Pod-Selector, Age
+			// 列： Name, Pod-Selector, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"policy1", "<none>", "0s"}}},
 		},
-		// Basic network policy with pod selector.
+		// 带 Pod 选择器的基本 NetworkPolicy。
 		{
 			policy: networking.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4509,7 +4508,7 @@ func TestPrintNetworkPolicy(t *testing.T) {
 					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
 				},
 			},
-			// Columns: Name, Pod-Selector, Age
+			// 列： Name, Pod-Selector, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"policy2", "foo=bar", "0s"}}},
 		},
 	}
@@ -4534,7 +4533,7 @@ func TestPrintRoleBinding(t *testing.T) {
 		options  printers.GenerateOptions
 		expected []metav1.TableRow
 	}{
-		// Basic role binding
+		// 基本 RoleBinding
 		{
 			binding: rbac.RoleBinding{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4553,10 +4552,10 @@ func TestPrintRoleBinding(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Age
+			// 列： Name, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"binding1", "Role/extension-apiserver-authentication-reader", "0s"}}},
 		},
-		// Generate options=Wide; print subject and roles.
+		// 生成选项为 Wide；打印主体和角色。
 		{
 			binding: rbac.RoleBinding{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4584,7 +4583,7 @@ func TestPrintRoleBinding(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Age, Role, Users, Groups, ServiceAccounts
+			// 列： Name, Age, Role, Users, Groups, ServiceAccounts
 			expected: []metav1.TableRow{{Cells: []interface{}{"binding2", "Role/role-name", "0s", "user-name", "group-name", "service-account-namespace/service-account-name"}}},
 		},
 	}
@@ -4609,7 +4608,7 @@ func TestPrintClusterRoleBinding(t *testing.T) {
 		options  printers.GenerateOptions
 		expected []metav1.TableRow
 	}{
-		// Basic cluster role binding
+		// 基本 ClusterRoleBinding
 		{
 			binding: rbac.ClusterRoleBinding{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4628,10 +4627,10 @@ func TestPrintClusterRoleBinding(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Age
+			// 列： Name, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"binding1", "Role/extension-apiserver-authentication-reader", "0s"}}},
 		},
-		// Generate options=Wide; print subject and roles.
+		// 生成选项为 Wide；打印主体和角色。
 		{
 			binding: rbac.ClusterRoleBinding{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4659,7 +4658,7 @@ func TestPrintClusterRoleBinding(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Age, Role, Users, Groups, ServiceAccounts
+			// 列： Name, Age, Role, Users, Groups, ServiceAccounts
 			expected: []metav1.TableRow{{Cells: []interface{}{"binding2", "Role/role-name", "0s", "user-name", "group-name", "service-account-namespace/service-account-name"}}},
 		},
 	}
@@ -4682,7 +4681,7 @@ func TestPrintCertificateSigningRequest(t *testing.T) {
 		csr      certificates.CertificateSigningRequest
 		expected []metav1.TableRow
 	}{
-		// Basic CSR with no spec or status; defaults to status: Pending.
+		// 基本 CSR，未设置 Spec 或 Status；默认状态为 Pending。
 		{
 			csr: certificates.CertificateSigningRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4692,10 +4691,10 @@ func TestPrintCertificateSigningRequest(t *testing.T) {
 				Spec:   certificates.CertificateSigningRequestSpec{},
 				Status: certificates.CertificateSigningRequestStatus{},
 			},
-			// Columns: Name, Age, SignerName, Requestor, RequestedDuration, Condition
+			// 列： Name, Age, SignerName, Requestor, RequestedDuration, Condition
 			expected: []metav1.TableRow{{Cells: []interface{}{"csr1", "0s", "<none>", "", "<none>", "Pending"}}},
 		},
-		// Basic CSR with Spec and Status=Approved.
+		// 基本 CSR，已设置 Spec 且 Status=Approved。
 		{
 			csr: certificates.CertificateSigningRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4713,10 +4712,10 @@ func TestPrintCertificateSigningRequest(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Age, SignerName, Requestor, RequestedDuration, Condition
+			// 列： Name, Age, SignerName, Requestor, RequestedDuration, Condition
 			expected: []metav1.TableRow{{Cells: []interface{}{"csr2", "0s", "<none>", "CSR Requestor", "<none>", "Approved"}}},
 		},
-		// Basic CSR with Spec and SignerName set
+		// 基本 CSR，已设置 Spec 和 SignerName
 		{
 			csr: certificates.CertificateSigningRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4735,10 +4734,10 @@ func TestPrintCertificateSigningRequest(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Age, SignerName, Requestor, RequestedDuration, Condition
+			// 列： Name, Age, SignerName, Requestor, RequestedDuration, Condition
 			expected: []metav1.TableRow{{Cells: []interface{}{"csr2", "0s", "example.com/test-signer", "CSR Requestor", "<none>", "Approved"}}},
 		},
-		// Basic CSR with Spec, SignerName and ExpirationSeconds set
+		// 基本 CSR，已设置 Spec、SignerName 和 ExpirationSeconds
 		{
 			csr: certificates.CertificateSigningRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4748,7 +4747,7 @@ func TestPrintCertificateSigningRequest(t *testing.T) {
 				Spec: certificates.CertificateSigningRequestSpec{
 					Username:          "CSR Requestor",
 					SignerName:        "example.com/test-signer",
-					ExpirationSeconds: csr.DurationToExpirationSeconds(7*24*time.Hour + time.Hour), // a little bit more than a week
+					ExpirationSeconds: csr.DurationToExpirationSeconds(7*24*time.Hour + time.Hour), // 比一周稍长
 				},
 				Status: certificates.CertificateSigningRequestStatus{
 					Conditions: []certificates.CertificateSigningRequestCondition{
@@ -4758,10 +4757,10 @@ func TestPrintCertificateSigningRequest(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Age, SignerName, Requestor, RequestedDuration, Condition
+			// 列： Name, Age, SignerName, Requestor, RequestedDuration, Condition
 			expected: []metav1.TableRow{{Cells: []interface{}{"csr2", "0s", "example.com/test-signer", "CSR Requestor", "7d1h", "Approved"}}},
 		},
-		// Basic CSR with Spec and Status=Approved; certificate issued.
+		// 基本 CSR，已设置 Spec 且 Status=Approved；已签发证书。
 		{
 			csr: certificates.CertificateSigningRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4780,10 +4779,10 @@ func TestPrintCertificateSigningRequest(t *testing.T) {
 					Certificate: []byte("cert data"),
 				},
 			},
-			// Columns: Name, Age, SignerName, Requestor, RequestedDuration, Condition
+			// 列： Name, Age, SignerName, Requestor, RequestedDuration, Condition
 			expected: []metav1.TableRow{{Cells: []interface{}{"csr2", "0s", "<none>", "CSR Requestor", "<none>", "Approved,Issued"}}},
 		},
-		// Basic CSR with Spec and Status=Denied.
+		// 基本 CSR，已设置 Spec 且 Status=Denied。
 		{
 			csr: certificates.CertificateSigningRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4801,7 +4800,7 @@ func TestPrintCertificateSigningRequest(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Age, SignerName, Requestor, RequestedDuration, Condition
+			// 列： Name, Age, SignerName, Requestor, RequestedDuration, Condition
 			expected: []metav1.TableRow{{Cells: []interface{}{"csr3", "0s", "<none>", "CSR Requestor", "<none>", "Denied"}}},
 		},
 	}
@@ -4827,7 +4826,7 @@ func TestPrintReplicationController(t *testing.T) {
 		options  printers.GenerateOptions
 		expected []metav1.TableRow
 	}{
-		// Basic print replication controller without replicas or status.
+		// 基本 ReplicationController 打印结果，未设置副本数或状态。
 		{
 			name: "basic",
 			rc: api.ReplicationController{
@@ -4858,10 +4857,10 @@ func TestPrintReplicationController(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Desired, Current, Ready, Age
+			// 列： Name, Desired, Current, Ready, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"rc1", int64(0), int64(0), int64(0), "<unknown>"}}},
 		},
-		// Basic print replication controller with replicas; does not print containers or labels
+		// 基本 ReplicationController 打印结果，已设置副本数；不打印容器或标签
 		{
 			name: "basic with replicas",
 			rc: api.ReplicationController{
@@ -4896,10 +4895,10 @@ func TestPrintReplicationController(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Desired, Current, Ready, Age
+			// 列： Name, Desired, Current, Ready, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"rc1", int64(5), int64(3), int64(1), "<unknown>"}}},
 		},
-		// Generate options: Wide; print containers and labels.
+		// 生成选项为 Wide；打印容器和标签。
 		{
 			name: "wide",
 			rc: api.ReplicationController{
@@ -4933,11 +4932,11 @@ func TestPrintReplicationController(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Desired, Current, Ready, Age, Containers, Images, Selector
+			// 列： Name, Desired, Current, Ready, Age, Containers, Images, Selector
 			expected: []metav1.TableRow{{Cells: []interface{}{"rc1", int64(5), int64(3), int64(1), "<unknown>", "test", "test_image", "a=b"}}},
 		},
 		{
-			// make sure Bookmark event will not lead a panic
+			// 确保 Bookmark 事件不会引发 panic
 			name: "no panic",
 			rc: api.ReplicationController{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4950,7 +4949,7 @@ func TestPrintReplicationController(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Desired, Current, Ready, Age, Containers, Images, Selector
+			// 列： Name, Desired, Current, Ready, Age, Containers, Images, Selector
 			expected: []metav1.TableRow{{Cells: []interface{}{"", int64(0), int64(0), int64(0), "<unknown>", "", "", "<none>"}}},
 		},
 	}
@@ -4975,7 +4974,7 @@ func TestPrintReplicaSet(t *testing.T) {
 		options    printers.GenerateOptions
 		expected   []metav1.TableRow
 	}{
-		// Generate options empty
+		// 生成选项为空
 		{
 			replicaSet: apps.ReplicaSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5006,10 +5005,10 @@ func TestPrintReplicaSet(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Desired, Current, Ready, Age
+			// 列： Name, Desired, Current, Ready, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", int64(5), int64(5), int64(2), "0s"}}},
 		},
-		// Generate options "Wide"
+		// 生成选项为 "Wide"
 		{
 			replicaSet: apps.ReplicaSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5040,7 +5039,7 @@ func TestPrintReplicaSet(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Desired, Current, Ready, Age, Containers, Images, Selector
+			// 列： Name, Desired, Current, Ready, Age, Containers, Images, Selector
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", int64(5), int64(5), int64(2), "0s", "fake-container1,fake-container2", "fake-image1,fake-image2", "foo=bar"}}},
 		},
 	}
@@ -5108,7 +5107,7 @@ func TestPrintReplicaSetList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Desired, Current, Ready, Age
+	// 列： Name, Desired, Current, Ready, Age
 	expectedRows := []metav1.TableRow{
 		{Cells: []interface{}{"replicaset1", int64(5), int64(5), int64(2), "0s"}},
 		{Cells: []interface{}{"replicaset2", int64(4), int64(3), int64(1), "0s"}},
@@ -5132,7 +5131,7 @@ func TestPrintStatefulSet(t *testing.T) {
 		options     printers.GenerateOptions
 		expected    []metav1.TableRow
 	}{
-		// Basic stateful set; no generate options.
+		// 基本 StatefulSet；不指定生成选项。
 		{
 			statefulSet: apps.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5162,10 +5161,10 @@ func TestPrintStatefulSet(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Ready, Age
+			// 列： Name, Ready, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", "2/5", "0s"}}},
 		},
-		// Generate options "Wide"; includes containers and images.
+		// 生成选项为 "Wide"；包含容器和镜像。
 		{
 			statefulSet: apps.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5195,7 +5194,7 @@ func TestPrintStatefulSet(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Ready, Age, Containers, Images
+			// 列： Name, Ready, Age, Containers, Images
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", "2/5", "0s", "fake-container1,fake-container2", "fake-image1,fake-image2"}}},
 		},
 	}
@@ -5227,7 +5226,7 @@ func TestPrintPersistentVolume(t *testing.T) {
 		expected []metav1.TableRow
 	}{
 		{
-			// Test bound
+			// 测试 Bound 状态
 			pv: api.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test1",
@@ -5246,7 +5245,7 @@ func TestPrintPersistentVolume(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", "4Gi", "ROX", "", "Bound", "default/test", "", "<unset>", "", "<unknown>", "<unset>"}}},
 		},
 		{
-			// Test failed
+			// 测试 Failed 状态
 			pv: api.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test2",
@@ -5265,7 +5264,7 @@ func TestPrintPersistentVolume(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test2", "4Gi", "ROX", "", "Failed", "default/test", "", "<unset>", "", "<unknown>", "<unset>"}}},
 		},
 		{
-			// Test pending
+			// 测试 Pending 状态
 			pv: api.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test3",
@@ -5284,7 +5283,7 @@ func TestPrintPersistentVolume(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test3", "10Gi", "RWX", "", "Pending", "default/test", "", "<unset>", "", "<unknown>", "<unset>"}}},
 		},
 		{
-			// Test pending, storageClass
+			// 测试 Pending 状态、StorageClass
 			pv: api.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test4",
@@ -5304,7 +5303,7 @@ func TestPrintPersistentVolume(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test4", "10Gi", "RWO", "", "Pending", "default/test", "my-scn", "<unset>", "", "<unknown>", "<unset>"}}},
 		},
 		{
-			// Test pending, storageClass, volumeAttributesClass
+			// 测试 Pending 状态、StorageClass、VolumeAttributesClass
 			pv: api.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test4",
@@ -5325,7 +5324,7 @@ func TestPrintPersistentVolume(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test4", "10Gi", "RWO", "", "Pending", "default/test", "my-scn", "my-vacn", "", "<unknown>", "<unset>"}}},
 		},
 		{
-			// Test available
+			// 测试 Available 状态
 			pv: api.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test5",
@@ -5345,7 +5344,7 @@ func TestPrintPersistentVolume(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test5", "10Gi", "RWO", "", "Available", "default/test", "my-scn", "<unset>", "", "<unknown>", "<unset>"}}},
 		},
 		{
-			// Test released
+			// 测试 Released 状态
 			pv: api.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test6",
@@ -5389,7 +5388,7 @@ func TestPrintPersistentVolumeClaim(t *testing.T) {
 		expected []metav1.TableRow
 	}{
 		{
-			// Test name, num of containers, restarts, container ready status
+			// 验证名称、容器数、重启次数和容器就绪状态
 			pvc: api.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test1",
@@ -5409,7 +5408,7 @@ func TestPrintPersistentVolumeClaim(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", "Bound", "my-volume", "4Gi", "ROX", "", "<unset>", "<unknown>", "Filesystem"}}},
 		},
 		{
-			// Test name, num of containers, restarts, container ready status
+			// 验证名称、容器数、重启次数和容器就绪状态
 			pvc: api.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test2",
@@ -5428,7 +5427,7 @@ func TestPrintPersistentVolumeClaim(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test2", "Lost", "", "", "", "", "<unset>", "<unknown>", "Filesystem"}}},
 		},
 		{
-			// Test name, num of containers, restarts, container ready status
+			// 验证名称、容器数、重启次数和容器就绪状态
 			pvc: api.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test3",
@@ -5448,7 +5447,7 @@ func TestPrintPersistentVolumeClaim(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test3", "Pending", "my-volume", "10Gi", "RWX", "", "<unset>", "<unknown>", "Filesystem"}}},
 		},
 		{
-			// Test name, num of containers, restarts, container ready status
+			// 验证名称、容器数、重启次数和容器就绪状态
 			pvc: api.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test4",
@@ -5469,7 +5468,7 @@ func TestPrintPersistentVolumeClaim(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test4", "Pending", "my-volume", "10Gi", "RWO", "my-scn", "<unset>", "<unknown>", "Filesystem"}}},
 		},
 		{
-			// Test name, num of containers, restarts, container ready status
+			// 验证名称、容器数、重启次数和容器就绪状态
 			pvc: api.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test5",
@@ -5489,7 +5488,7 @@ func TestPrintPersistentVolumeClaim(t *testing.T) {
 			expected: []metav1.TableRow{{Cells: []interface{}{"test5", "Pending", "my-volume", "10Gi", "RWO", "my-scn", "<unset>", "<unknown>", "<unset>"}}},
 		},
 		{
-			// Test name, num of containers, restarts, container ready status
+			// 验证名称、容器数、重启次数和容器就绪状态
 			pvc: api.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test5",
@@ -5530,7 +5529,7 @@ func TestPrintComponentStatus(t *testing.T) {
 		componentStatus api.ComponentStatus
 		expected        []metav1.TableRow
 	}{
-		// Basic component status without conditions
+		// 无 Condition 的基本 ComponentStatus。
 		{
 			componentStatus: api.ComponentStatus{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5538,10 +5537,10 @@ func TestPrintComponentStatus(t *testing.T) {
 				},
 				Conditions: []api.ComponentCondition{},
 			},
-			// Columns: Name, Status, Message, Error
+			// 列： Name, Status, Message, Error
 			expected: []metav1.TableRow{{Cells: []interface{}{"cs1", "Unknown", "", ""}}},
 		},
-		// Basic component status with healthy condition.
+		// 带健康 Condition 的基本 ComponentStatus。
 		{
 			componentStatus: api.ComponentStatus{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5556,10 +5555,10 @@ func TestPrintComponentStatus(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Status, Message, Error
+			// 列： Name, Status, Message, Error
 			expected: []metav1.TableRow{{Cells: []interface{}{"cs2", "Healthy", "test message", "test error"}}},
 		},
-		// Basic component status with healthy condition.
+		// 带健康 Condition 的基本 ComponentStatus。
 		{
 			componentStatus: api.ComponentStatus{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5574,7 +5573,7 @@ func TestPrintComponentStatus(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Status, Message, Error
+			// 列： Name, Status, Message, Error
 			expected: []metav1.TableRow{{Cells: []interface{}{"cs3", "Unhealthy", "test message", "test error"}}},
 		},
 	}
@@ -5602,7 +5601,7 @@ func TestPrintCronJob(t *testing.T) {
 		options  printers.GenerateOptions
 		expected []metav1.TableRow
 	}{
-		// Basic cron job; does not print containers, images, or labels.
+		// 基本 CronJob；不打印容器、镜像或标签。
 		{
 			cronjob: batch.CronJob{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5638,10 +5637,10 @@ func TestPrintCronJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Schedule, Suspend, Active, Last Schedule, Age
+			// 列： Name, Schedule, Suspend, Active, Last Schedule, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"cronjob1", "0/5 * * * ?", "<none>", "False", int64(0), "0s", "0s"}}},
 		},
-		// Basic cron job; does not print containers, images, or labels.
+		// 基本 CronJob；不打印容器、镜像或标签。
 		{
 			cronjob: batch.CronJob{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5678,10 +5677,10 @@ func TestPrintCronJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Schedule, Suspend, Active, Last Schedule, Age
+			// 列： Name, Schedule, Suspend, Active, Last Schedule, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"cronjob1", "0/5 * * * ?", "LOCAL", "False", int64(0), "0s", "0s"}}},
 		},
-		// Generate options: Wide; prints containers, images, and labels.
+		// 生成选项为 Wide；打印容器、镜像和标签。
 		{
 			cronjob: batch.CronJob{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5717,10 +5716,10 @@ func TestPrintCronJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{Wide: true},
-			// Columns: Name, Schedule, Suspend, Active, Last Schedule, Age
+			// 列： Name, Schedule, Suspend, Active, Last Schedule, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"cronjob1", "0/5 * * * ?", "<none>", "False", int64(0), "0s", "0s", "fake-job-container1,fake-job-container2", "fake-job-image1,fake-job-image2", "a=b"}}},
 		},
-		// CronJob with Last Schedule and Age
+		// 包含 Last Schedule 和 Age 的 CronJob
 		{
 			cronjob: batch.CronJob{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5736,10 +5735,10 @@ func TestPrintCronJob(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Schedule, Suspend, Active, Last Schedule, Age
+			// 列： Name, Schedule, Suspend, Active, Last Schedule, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"cronjob2", "0/5 * * * ?", "<none>", "False", int64(0), "30s", "5m"}}},
 		},
-		// CronJob without Last Schedule
+		// 不包含 Last Schedule 的 CronJob
 		{
 			cronjob: batch.CronJob{
 				ObjectMeta: metav1.ObjectMeta{
@@ -5753,7 +5752,7 @@ func TestPrintCronJob(t *testing.T) {
 				Status: batch.CronJobStatus{},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, Schedule, Suspend, Active, Last Schedule, Age
+			// 列： Name, Schedule, Suspend, Active, Last Schedule, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"cronjob3", "0/5 * * * ?", "<none>", "False", int64(0), "<none>", "5m"}}},
 		},
 	}
@@ -5821,7 +5820,7 @@ func TestPrintCronJobList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Schedule, Suspend, Active, Last Schedule, Age
+	// 列： Name, Schedule, Suspend, Active, Last Schedule, Age
 	expectedRows := []metav1.TableRow{
 		{Cells: []interface{}{"cronjob1", "0/5 * * * ?", "LOCAL", "False", int64(0), "0s", "0s"}},
 		{Cells: []interface{}{"cronjob2", "4/5 1 1 1 ?", "<none>", "False", int64(0), "20m", "0s"}},
@@ -6289,7 +6288,7 @@ func TestPrintEndpoint(t *testing.T) {
 		endpoint api.Endpoints
 		expected []metav1.TableRow
 	}{
-		// Basic endpoint with no IP's
+		// 无 IP 的基本 Endpoint。
 		{
 			endpoint: api.Endpoints{
 				ObjectMeta: metav1.ObjectMeta{
@@ -6297,10 +6296,10 @@ func TestPrintEndpoint(t *testing.T) {
 					CreationTimestamp: metav1.Time{Time: time.Now().Add(1.9e9)},
 				},
 			},
-			// Columns: Name, Endpoints, Age
+			// 列： Name, Endpoints, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"endpoint1", "<none>", "0s"}}},
 		},
-		// Endpoint with no ports
+		// 无端口的 Endpoint
 		{
 			endpoint: api.Endpoints{
 				ObjectMeta: metav1.ObjectMeta{
@@ -6320,10 +6319,10 @@ func TestPrintEndpoint(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Endpoints, Age
+			// 列： Name, Endpoints, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"endpoint3", "1.2.3.4,5.6.7.8", "5m"}}},
 		},
-		// Basic endpoint with two IP's and one port
+		// 包含两个 IP 和一个端口的基本 Endpoint
 		{
 			endpoint: api.Endpoints{
 				ObjectMeta: metav1.ObjectMeta{
@@ -6349,10 +6348,10 @@ func TestPrintEndpoint(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Endpoints, Age
+			// 列： Name, Endpoints, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"endpoint2", "1.2.3.4:8001,5.6.7.8:8001", "0s"}}},
 		},
-		// Basic endpoint with greater than three IP's triggering "more" string
+		// 包含超过三个 IP 并触发 "more" 字符串的基本 Endpoint
 		{
 			endpoint: api.Endpoints{
 				ObjectMeta: metav1.ObjectMeta{
@@ -6384,7 +6383,7 @@ func TestPrintEndpoint(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Endpoints, Age
+			// 列： Name, Endpoints, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"endpoint2", "1.2.3.4:8001,5.6.7.8:8001,9.8.7.6:8001 + 1 more...", "0s"}}},
 		},
 	}
@@ -6427,7 +6426,7 @@ func TestPrintEndpointSlice(t *testing.T) {
 					Addresses: []string{"10.1.2.3", "2001:db8::1234:5678"},
 				}},
 			},
-			// Columns: Name, AddressType, Ports, Endpoints, Age
+			// 列： Name, AddressType, Ports, Endpoints, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"abcslice.123", "IPv4", "80", "10.1.2.3,2001:db8::1234:5678", "0s"}}},
 		}, {
 			endpointSlice: discovery.EndpointSlice{
@@ -6451,7 +6450,7 @@ func TestPrintEndpointSlice(t *testing.T) {
 					Addresses: []string{"10.2.3.4", "2001:db8::2345:6789"},
 				}},
 			},
-			// Columns: Name, AddressType, Ports, Endpoints, Age
+			// 列： Name, AddressType, Ports, Endpoints, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"longerslicename.123", "IPv6", "80,443", "10.1.2.3,2001:db8::1234:5678,10.2.3.4 + 1 more...", "5m"}}},
 		}, {
 			endpointSlice: discovery.EndpointSlice{
@@ -6483,7 +6482,7 @@ func TestPrintEndpointSlice(t *testing.T) {
 					Addresses: []string{"10.2.3.4", "2001:db8::2345:6789"},
 				}},
 			},
-			// Columns: Name, AddressType, Ports, Endpoints, Age
+			// 列： Name, AddressType, Ports, Endpoints, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"multiportslice.123", "IPv4", "80,443,3000 + 1 more...", "10.1.2.3,2001:db8::1234:5678,10.2.3.4 + 1 more...", "5m"}}},
 		},
 	}
@@ -6558,7 +6557,7 @@ func TestPrintFlowSchema(t *testing.T) {
 					}},
 				},
 			},
-			// Columns: Name, PriorityLevelName, MatchingPrecedence, DistinguisherMethod, Age, MissingPL
+			// 列： Name, PriorityLevelName, MatchingPrecedence, DistinguisherMethod, Age, MissingPL
 			expected: []metav1.TableRow{{Cells: []interface{}{"all-matcher", "allee", int64(math.MaxInt32), "ByUser", "0s", "?"}}},
 		}, {
 			fs: flowcontrol.FlowSchema{
@@ -6604,7 +6603,7 @@ func TestPrintFlowSchema(t *testing.T) {
 					}},
 				},
 			},
-			// Columns: Name, PriorityLevelName, MatchingPrecedence, DistinguisherMethod, Age, MissingPL
+			// 列： Name, PriorityLevelName, MatchingPrecedence, DistinguisherMethod, Age, MissingPL
 			expected: []metav1.TableRow{{Cells: []interface{}{"some-matcher", "allee", int64(0), "ByNamespace", "5m", "True"}}},
 		}, {
 			fs: flowcontrol.FlowSchema{
@@ -6631,7 +6630,7 @@ func TestPrintFlowSchema(t *testing.T) {
 					}},
 				},
 			},
-			// Columns: Name, PriorityLevelName, MatchingPrecedence, DistinguisherMethod, Age, MissingPL
+			// 列： Name, PriorityLevelName, MatchingPrecedence, DistinguisherMethod, Age, MissingPL
 			expected: []metav1.TableRow{{Cells: []interface{}{"exempt", "allee", int64(0), "<none>", "5m", "?"}}},
 		},
 	}
@@ -6663,18 +6662,18 @@ func TestPrintDeviceClass(t *testing.T) {
 					CreationTimestamp: metav1.Time{Time: time.Now().Add(-3e11)},
 				},
 			},
-			// Columns: Name, Age
+			// 列： Name, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-deviceclass", "5m"}}},
 		},
 		{
-			// test case for Empty creation timestamp that is translated to <unknown>
+			// 空创建时间戳转换为 <unknown> 的测试用例
 			deviceClass: resourceapis.DeviceClass{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-deviceclass",
 					CreationTimestamp: metav1.Time{},
 				},
 			},
-			// Columns: Name, Age
+			// 列： Name, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-deviceclass", "<unknown>"}}},
 		},
 	}
@@ -6722,11 +6721,11 @@ func TestPrintResourceClaim(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, State, Age
+			// 列： Name, State, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-resourceclaim", "pending", "5m"}}},
 		},
 		{
-			// test case for Empty creation timestamp that is translated to <unknown>
+			// 空创建时间戳转换为 <unknown> 的测试用例
 			name: "ResourceClaim with Pending State and Empty creation timestamp",
 			resourceClaim: resourceapis.ResourceClaim{
 				ObjectMeta: metav1.ObjectMeta{
@@ -6748,7 +6747,7 @@ func TestPrintResourceClaim(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, State, Age
+			// 列： Name, State, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-resourceclaim", "pending", "<unknown>"}}},
 		},
 		{
@@ -6783,7 +6782,7 @@ func TestPrintResourceClaim(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, State, Age
+			// 列： Name, State, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-resourceclaim", "allocated,reserved", "5m"}}},
 		},
 		{
@@ -6809,7 +6808,7 @@ func TestPrintResourceClaim(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, State, Age
+			// 列： Name, State, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-resourceclaim", "deleted", "5m"}}},
 		},
 	}
@@ -6855,11 +6854,11 @@ func TestPrintResourceClaimTemplate(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Age
+			// 列： Name, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-resourceclaimtemplate", "5m"}}},
 		},
 		{
-			// test case for Empty creation timestamp that is translated to <unknown>
+			// 空创建时间戳转换为 <unknown> 的测试用例
 			resourceClaimTemplate: resourceapis.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-resourceclaimtemplate",
@@ -6880,7 +6879,7 @@ func TestPrintResourceClaimTemplate(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Age
+			// 列： Name, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-resourceclaimtemplate", "<unknown>"}}},
 		},
 	}
@@ -6920,7 +6919,7 @@ func TestPrintResourceSlice(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Node, Driver, Pool, Age
+			// 列： Name, Node, Driver, Pool, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-resourceslice", "nodeName", "driverName", "poolName", "5m"}}},
 		},
 		{
@@ -6938,7 +6937,7 @@ func TestPrintResourceSlice(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Node, Driver, Pool, Age
+			// 列： Name, Node, Driver, Pool, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-resourceslice", "nodeName", "driverName", "poolName", "<unknown>"}}},
 		},
 	}
@@ -6972,7 +6971,7 @@ func TestPrintPriorityLevelConfiguration(t *testing.T) {
 					Type: flowcontrol.PriorityLevelEnablementExempt,
 				},
 			},
-			// Columns: Name, Type, NominalConcurrencyShares, Queues, HandSize, QueueLengthLimit, Age
+			// 列： Name, Type, NominalConcurrencyShares, Queues, HandSize, QueueLengthLimit, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"unlimited", "Exempt", "<none>", "<none>", "<none>", "<none>", "0s"}}},
 		},
 		{
@@ -6991,7 +6990,7 @@ func TestPrintPriorityLevelConfiguration(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Type, NominalConcurrencyShares, Queues, HandSize, QueueLengthLimit, Age
+			// 列： Name, Type, NominalConcurrencyShares, Queues, HandSize, QueueLengthLimit, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"unqueued", "Limited", int32(47), "<none>", "<none>", "<none>", "0s"}}},
 		},
 		{
@@ -7015,7 +7014,7 @@ func TestPrintPriorityLevelConfiguration(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Type, NominalConcurrencyShares, Queues, HandSize, QueueLengthLimit, Age
+			// 列： Name, Type, NominalConcurrencyShares, Queues, HandSize, QueueLengthLimit, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"queued", "Limited", int32(42), int32(8), int32(3), int32(4), "0s"}}},
 		},
 	}
@@ -7048,7 +7047,7 @@ func TestPrintStorageVersion(t *testing.T) {
 				},
 				Status: apiserverinternal.StorageVersionStatus{},
 			},
-			// Columns: Name, CommonEncodingVersion, StorageVersions, Age
+			// 列： Name, CommonEncodingVersion, StorageVersions, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"empty", "<unset>", "<unset>", "0s"}}},
 		},
 		{
@@ -7073,7 +7072,7 @@ func TestPrintStorageVersion(t *testing.T) {
 					CommonEncodingVersion: &commonEncodingVersion,
 				},
 			},
-			// Columns: Name, CommonEncodingVersion, StorageVersions, Age
+			// 列： Name, CommonEncodingVersion, StorageVersions, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"valid", "v1", "1=v1,2=v1", "0s"}}},
 		},
 		{
@@ -7102,7 +7101,7 @@ func TestPrintStorageVersion(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, CommonEncodingVersion, StorageVersions, Age
+			// 列： Name, CommonEncodingVersion, StorageVersions, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"disagree", "<unset>", "1=v1,2=v1,3=v2", "0s"}}},
 		},
 		{
@@ -7137,7 +7136,7 @@ func TestPrintStorageVersion(t *testing.T) {
 					CommonEncodingVersion: &commonEncodingVersion,
 				},
 			},
-			// Columns: Name, CommonEncodingVersion, StorageVersions, Age
+			// 列： Name, CommonEncodingVersion, StorageVersions, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"agreeWithMore", "v1", "1=v1,2=v1,3=v1 + 1 more...", "0s"}}},
 		},
 	}
@@ -7807,8 +7806,8 @@ func TestTableRowDeepCopyShouldNotPanic(t *testing.T) {
 			func() {
 				defer func() {
 					if err := recover(); err != nil {
-						// Same as stdlib http server code. Manually allocate stack
-						// trace buffer size to prevent excessively large logs
+						// 与标准库 HTTP 服务代码一致。手动分配栈跟踪缓冲区大小，
+						// 以防日志过大
 						const size = 64 << 10
 						buf := make([]byte, size)
 						buf = buf[:runtime.Stack(buf, false)]
@@ -7818,7 +7817,7 @@ func TestTableRowDeepCopyShouldNotPanic(t *testing.T) {
 					}
 				}()
 
-				// should not panic
+				// 不应发生 panic
 				rows[0].DeepCopy()
 			}()
 
@@ -7841,7 +7840,7 @@ func TestPrintIPAddress(t *testing.T) {
 			},
 		},
 	}
-	// Columns: Name, ParentRef, Age
+	// 列： Name, ParentRef, Age
 	expected := []metav1.TableRow{{Cells: []interface{}{"192.168.2.2", "myresource.mygroup/mynamespace/myname", "10y"}}}
 
 	rows, err := printIPAddress(&ip, printers.GenerateOptions{})
@@ -7886,7 +7885,7 @@ func TestPrintIPAddressList(t *testing.T) {
 			},
 		},
 	}
-	// Columns: Name, ParentRef, Age
+	// 列： Name, ParentRef, Age
 	expected := []metav1.TableRow{
 		{Cells: []interface{}{"192.168.2.2", "myresource.mygroup/mynamespace/myname", "<unknown>"}},
 		{Cells: []interface{}{"2001:db8::2", "myresource2.mygroup2/mynamespace2/myname2", "<unknown>"}},
@@ -7916,7 +7915,7 @@ func TestPrintServiceCIDR(t *testing.T) {
 		expected []metav1.TableRow
 	}{
 		{
-			// Test name, IPv4 only.
+			// 测试名称，仅 IPv4。
 			ccc: networking.ServiceCIDR{
 				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
 				Spec: networking.ServiceCIDRSpec{
@@ -7924,11 +7923,11 @@ func TestPrintServiceCIDR(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, IPv4, IPv6, Age.
+			// 列： Name, IPv4, IPv6, Age.
 			expected: []metav1.TableRow{{Cells: []interface{}{"test1", ipv4CIDR, "<unknown>"}}},
 		},
 		{
-			// Test name, IPv6 only.
+			// 测试名称，仅 IPv6。
 			ccc: networking.ServiceCIDR{
 				ObjectMeta: metav1.ObjectMeta{Name: "test5"},
 				Spec: networking.ServiceCIDRSpec{
@@ -7936,11 +7935,11 @@ func TestPrintServiceCIDR(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, PerNodeHostBits, IPv4, IPv6, Age
+			// 列： Name, PerNodeHostBits, IPv4, IPv6, Age
 			expected: []metav1.TableRow{{Cells: []interface{}{"test5", ipv6CIDR, "<unknown>"}}},
 		},
 		{
-			// Test name, DualStack.
+			// 测试名称，DualStack。
 			ccc: networking.ServiceCIDR{
 				ObjectMeta: metav1.ObjectMeta{Name: "test9"},
 				Spec: networking.ServiceCIDRSpec{
@@ -7948,7 +7947,7 @@ func TestPrintServiceCIDR(t *testing.T) {
 				},
 			},
 			options: printers.GenerateOptions{},
-			// Columns: Name, PerNodeHostBits, IPv4, IPv6, Age.
+			// 列： Name, PerNodeHostBits, IPv4, IPv6, Age.
 			expected: []metav1.TableRow{{Cells: []interface{}{"test9", ipv4CIDR + "," + ipv6CIDR, "<unknown>"}}},
 		},
 	}
@@ -7990,19 +7989,19 @@ func TestPrintServiceCIDRList(t *testing.T) {
 		expected []metav1.TableRow
 	}{
 		{
-			// Test name, DualStack with node selector, wide.
+			// 测试名称，带节点选择器的 DualStack，Wide。
 			options: printers.GenerateOptions{Wide: false},
 			expected: []metav1.TableRow{
-				// Columns: Name, IPv4, IPv6, Age.
+				// 列： Name, IPv4, IPv6, Age.
 				{Cells: []interface{}{"ccc1", "10.1.0.0/16,fd00:1:1::/64", "<unknown>"}},
 				{Cells: []interface{}{"ccc2", "10.2.0.0/16,fd00:2:1::/64", "<unknown>"}},
 			},
 		},
 		{
-			// Test name, DualStack with node selector, wide.
+			// 测试名称，带节点选择器的 DualStack，Wide。
 			options: printers.GenerateOptions{Wide: true},
 			expected: []metav1.TableRow{
-				// Columns: Name, CIDRs, Age.
+				// 列： Name, CIDRs, Age.
 				{Cells: []interface{}{"ccc1", "10.1.0.0/16,fd00:1:1::/64", "<unknown>"}},
 				{Cells: []interface{}{"ccc2", "10.2.0.0/16,fd00:2:1::/64", "<unknown>"}},
 			},
@@ -8052,7 +8051,7 @@ func TestPrintStorageVersionMigration(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Resource, Status
+	// 列： Name, Resource, Status
 	expected := []metav1.TableRow{{Cells: []interface{}{"print-test", "test-resource.test-group", "Succeeded"}}}
 
 	rows, err := printStorageVersionMigration(&storageVersionMigration, printers.GenerateOptions{})
@@ -8121,7 +8120,7 @@ func TestPrintStorageVersionMigrationList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Resource, Status
+	// 列： Name, Resource, Status
 	expected := []metav1.TableRow{
 		{Cells: []interface{}{"print-test", "test-resource", "Succeeded"}},
 		{Cells: []interface{}{"print-test2", "test-resource2.test-group2", "Running"}},
@@ -8161,7 +8160,7 @@ func TestPrintWorkload(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Age
+	// 列： Name, Age
 	expected := []metav1.TableRow{{Cells: []interface{}{"workload1", "<unknown>"}}}
 
 	rows, err := printWorkload(workload, printers.GenerateOptions{})
@@ -8217,7 +8216,7 @@ func TestPrintWorkloadList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Age
+	// 列： Name, Age
 	expected := []metav1.TableRow{
 		{Cells: []interface{}{"workload1", "<unknown>"}},
 		{Cells: []interface{}{"workload2", "0s"}},
@@ -8256,7 +8255,7 @@ func TestPrintPodGroup(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Policy, Workload, Status, Age
+	// 列： Name, Policy, Workload, Status, Age
 	expected := []metav1.TableRow{{Cells: []interface{}{"podgroup1", "Gang", "w", "Pending", "<unknown>"}}}
 
 	rows, err := printPodGroup(podGroup, printers.GenerateOptions{})
@@ -8404,7 +8403,7 @@ func TestPrintPodGroupList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Policy, Workload, Status, Age
+	// 列： Name, Policy, Workload, Status, Age
 	expected := []metav1.TableRow{
 		{Cells: []interface{}{"podgroup1", "Gang", "w1", "Pending", "<unknown>"}},
 		{Cells: []interface{}{"podgroup2", "Gang", "w1", "Pending", "0s"}},
@@ -8446,7 +8445,7 @@ func TestPrintResourcePoolStatusRequest(t *testing.T) {
 					Driver: "driver.example.com",
 				},
 			},
-			// Columns: Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
+			// 列： Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-request", "driver.example.com", "-", "-", "-", "-", "-", int32(0), "Pending", "<none>"}}},
 		},
 		{
@@ -8499,7 +8498,7 @@ func TestPrintResourcePoolStatusRequest(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
+			// 列： Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-request", "driver.example.com", "24", "12", "6", "6", "0", int32(3), "Complete", "5m"}}},
 		},
 		{
@@ -8543,8 +8542,8 @@ func TestPrintResourcePoolStatusRequest(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
-			// Status shows truncation: "Complete (2/5 pools)" because len(Pools)=2 < PoolCount=5
+			// 列： Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
+			// 状态显示截断：由于 len(Pools)=2 < PoolCount=5，显示 "Complete (2/5 pools)"
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-request", "driver.example.com", "18", "9", "5", "4", "0", int32(5), "Complete (2/5 pools)", "5m"}}},
 		},
 		{
@@ -8566,7 +8565,7 @@ func TestPrintResourcePoolStatusRequest(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
+			// 列： Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-request", "driver.example.com", "-", "-", "-", "-", "-", int32(0), "Failed", "<none>"}}},
 		},
 		{
@@ -8607,8 +8606,8 @@ func TestPrintResourcePoolStatusRequest(t *testing.T) {
 					},
 				},
 			},
-			// Columns: Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
-			// Only the healthy pool's device counts are summed; the error pool has nil counts.
+			// 列： Name, Driver, Total, Available, Allocated, Unavailable, Errors, Pools, Status, Completed
+			// 仅汇总健康池的设备计数；错误池的计数为 nil。
 			expected: []metav1.TableRow{{Cells: []interface{}{"test-request", "driver.example.com", "10", "5", "3", "2", "1", int32(2), "Complete", "5m"}}},
 		},
 	}
@@ -8658,7 +8657,7 @@ func TestPrintEvictionRequest(t *testing.T) {
 	}{
 		{
 			expected: []metav1.TableRow{
-				// Columns: Name, Target, Target Type, Status, Requester, Intent, Age
+				// 列： Name, Target, Target Type, Status, Requester, Intent, Age
 				{Cells: []interface{}{"pod-1-pod1", "pod1", "Pod", "Progressing", "drain.foo.com/bar", "Eviction", "5d"}},
 			},
 		},
@@ -8819,7 +8818,7 @@ func TestPrintEvictionRequestList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Target, Target Type, Status, Requester, Intent, Age
+	// 列： Name, Target, Target Type, Status, Requester, Intent, Age
 	expected := []metav1.TableRow{
 		{Cells: []interface{}{"pod-1-pod1", "pod1", "Pod", "TargetEvicted (PodDeleted)", "drain.foo.com/bar", "Eviction", "5d"}},
 		{Cells: []interface{}{"pod-1-pod2", "pod2", "Pod", "Failed (NoFurtherResponder)", "drain.foo.com/bar", "Eviction", "5d"}},
@@ -8889,14 +8888,14 @@ func TestPrintEviction(t *testing.T) {
 		{
 			options: printers.GenerateOptions{Wide: false},
 			expected: []metav1.TableRow{
-				// Columns: Name, Target, Target Type, Status, Active Responder, Responder Status, Responder Expected Finish, Requesters, Age
+				// 列： Name, Target, Target Type, Status, Active Responder, Responder Status, Responder Expected Finish, Requesters, Age
 				{Cells: []interface{}{"pod-1-pod1", "pod1", "Pod", "Progressing", "responder2 (2/2)", "Started (3d ago)", "in 2d", "drain.foo.com/bar", "5d"}},
 			},
 		},
 		{
 			options: printers.GenerateOptions{Wide: true},
 			expected: []metav1.TableRow{
-				// Columns: Name, Target, Target Type, Status, Active Responder, Responder Status, Responder Expected Finish, Requesters, Age, Responder Status Message, Responder Heartbeat
+				// 列： Name, Target, Target Type, Status, Active Responder, Responder Status, Responder Expected Finish, Requesters, Age, Responder Status Message, Responder Heartbeat
 				{Cells: []interface{}{"pod-1-pod1", "pod1", "Pod", "Progressing", "responder2 (2/2)", "Started (3d ago)", "in 2d", "drain.foo.com/bar", "5d", "3d ago", "migrating pod1 message"}},
 			},
 		},
@@ -9254,7 +9253,7 @@ func TestPrintEvictionList(t *testing.T) {
 		},
 	}
 
-	// Columns: Name, Target, Target Type, Status, Active Responder, Responder Status, Responder Expected Finish, Requesters, Age
+	// 列： Name, Target, Target Type, Status, Active Responder, Responder Status, Responder Expected Finish, Requesters, Age
 	expected := []metav1.TableRow{
 		{Cells: []interface{}{"pod-1-pod1", "pod1", "Pod", "TargetEvicted (PodDeleted)", "responder1 (1/1)", "Completed (4d ago)", "-", "drain.foo.com/bar", "5d"}},
 		{Cells: []interface{}{"pod-1-pod2", "pod2", "Pod", "Failed (NoFurtherResponder)", "responder1 (1/1)", "Interrupted", "-", "drain.foo.com/bar", "5d"}},

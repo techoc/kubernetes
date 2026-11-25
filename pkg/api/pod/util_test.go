@@ -1730,7 +1730,7 @@ func TestDropNodeInclusionPolicyFields(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// 门控已 GA，只有禁用路径需要先降低模拟版本才能关闭。
 			if !test.enabled {
-				// TODO: this will be removed in 1.36
+				// TODO: 此兼容逻辑将在 1.36 移除。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.32"))
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeInclusionPolicyInPodTopologySpread, test.enabled)
 			}
@@ -7896,7 +7896,7 @@ func TestHasRestartContainerForNonSidecarInitContainer(t *testing.T) {
 					},
 				},
 			},
-			expected: false, // Should be false because it's a sidecar
+			expected: false, // sidecar 应返回 false。
 		},
 		{
 			name: "non-sidecar init container with NotRequired policy",

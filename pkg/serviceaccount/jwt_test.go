@@ -62,14 +62,14 @@ WwIDAQAB
 -----END PUBLIC KEY-----
 `
 
-// Obtained by:
+// 派生方式：
 //
-//  1. Serializing rsaPublicKey as DER
-//  2. Taking the SHA256 of the DER bytes
-//  3. URLSafe Base64-encoding the sha bytes
+//  1. 将 rsaPublicKey 序列化为 DER
+//  2. 计算 DER 字节的 SHA256
+//  3. 对 SHA256 字节做 URLSafe Base64 编码
 const rsaKeyID = "JHJehTTTZlsspKHT-GaJxK7Kd1NQgZJu3fyK6K_QDYU"
 
-// Fake value for testing.
+// 测试用固定值。
 const rsaPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEA249XwEo9k4tM8fMxV7zxOhcrP+WvXn917koM5Qr2ZXs4vo26
 e4ytdlrV0bQ9SlcLpQVSYjIxNfhTZdDt+ecIzshKuv1gKIxbbLQMOuK1eA/4HALy
@@ -100,7 +100,7 @@ X024wzbiw1q07jFCyfQmODzURAx1VNT7QVUMdz/N8vy47/H40AZJ
 `
 
 // openssl ecparam -name prime256v1 -genkey -noout -out ecdsa256.pem
-// Fake value for testing.
+// 测试用固定值。
 const ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIEZmTmUhuanLjPA2CLquXivuwBDHTt5XYwgIr/kA1LtRoAoGCCqGSM49
 AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
@@ -113,11 +113,11 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPL
 X2i8uIp/C/ASqiIGUeeKQtX0/IR3qCXyThP/dbCiHrF3v1cuhBOHY8CLVg==
 -----END PUBLIC KEY-----`
 
-// Obtained by:
+// 派生方式：
 //
-//  1. Serializing ecdsaPublicKey as DER
-//  2. Taking the SHA256 of the DER bytes
-//  3. URLSafe Base64-encoding the sha bytes
+//  1. 将 ecdsaPublicKey 序列化为 DER
+//  2. 计算 DER 字节的 SHA256
+//  3. 对 SHA256 字节做 URLSafe Base64 编码
 const ecdsaKeyID = "SoABiieYuNx4UdqYvZRVeuC6SihxgLrhLy9peHMHpTc"
 
 func getPrivateKey(data string) interface{} {
@@ -143,7 +143,7 @@ func TestTokenGenerateAndValidate(t *testing.T) {
 	expectedUserName := "system:serviceaccount:test:my-service-account"
 	expectedUserUID := "12345"
 
-	// Related API objects
+	// 相关 API 对象。
 	serviceAccount := &v1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-service-account",
@@ -173,7 +173,7 @@ func TestTokenGenerateAndValidate(t *testing.T) {
 		},
 	}
 
-	// Generate the RSA token
+	// 生成 RSA Token。
 	rsaGenerator, err := serviceaccount.JWTTokenGenerator(serviceaccount.LegacyIssuer, getPrivateKey(rsaPrivateKey))
 	if err != nil {
 		t.Fatalf("error making generator: %v", err)
@@ -192,7 +192,7 @@ func TestTokenGenerateAndValidate(t *testing.T) {
 
 	checkJSONWebSignatureHasKeyID(t, rsaToken, rsaKeyID)
 
-	// Generate RSA token with invalidAutoSecret
+	// 使用 invalidAutoSecret 生成 RSA Token。
 	c, pc = serviceaccount.LegacyClaims(*serviceAccount, *invalidAutoSecret)
 	invalidAutoSecretToken, err := rsaGenerator.GenerateToken(context.TODO(), c, pc)
 	if err != nil {
@@ -207,7 +207,7 @@ func TestTokenGenerateAndValidate(t *testing.T) {
 
 	checkJSONWebSignatureHasKeyID(t, invalidAutoSecretToken, rsaKeyID)
 
-	// Generate the ECDSA token
+	// 生成 ECDSA Token。
 	ecdsaToken := generateECDSAToken(t, serviceaccount.LegacyIssuer, serviceAccount, ecdsaSecret)
 
 	ecdsaSecret.Data = map[string][]byte{
@@ -218,7 +218,7 @@ func TestTokenGenerateAndValidate(t *testing.T) {
 
 	ecdsaTokenMalformedIss := generateECDSATokenWithMalformedIss(t, serviceAccount, ecdsaSecret)
 
-	// Generate signer with same keys as RSA signer but different unrecognized issuer
+	// 使用与 RSA 签名器相同的密钥，但 issuer 不可识别。
 	badIssuerGenerator, err := serviceaccount.JWTTokenGenerator("foo", getPrivateKey(rsaPrivateKey))
 	if err != nil {
 		t.Fatalf("error making generator: %v", err)
@@ -229,7 +229,7 @@ func TestTokenGenerateAndValidate(t *testing.T) {
 		t.Fatalf("error generating token: %v", err)
 	}
 
-	// Generate signer with same keys as RSA signer but different recognized issuer
+	// 使用与 RSA 签名器相同的密钥，但 issuer 是另一个可识别值。
 	differentIssuerGenerator, err := serviceaccount.JWTTokenGenerator("bar", getPrivateKey(rsaPrivateKey))
 	if err != nil {
 		t.Fatalf("error making generator: %v", err)
@@ -407,7 +407,7 @@ func TestTokenGenerateAndValidate(t *testing.T) {
 
 		authn := serviceaccount.JWTTokenAuthenticator([]string{serviceaccount.LegacyIssuer, "bar"}, keysGetter, auds, validator)
 
-		// An invalid, non-JWT token should always fail
+		// 无效的非 JWT Token 必须始终失败。
 		ctx := authenticator.WithAudiences(context.TODO(), auds)
 		if _, ok, err := authn.AuthenticateToken(ctx, "invalid token"); err != nil || ok {
 			t.Errorf("%s: Expected err=nil, ok=false for non-JWT token", k)
@@ -415,7 +415,7 @@ func TestTokenGenerateAndValidate(t *testing.T) {
 		}
 
 		if tc.ExpectedOK {
-			// if authentication is otherwise expected to succeed, demonstrate changing key ids makes it fail
+			// 认证本应成功时，演示修改密钥 ID 会导致失败。
 			keysGetter.keyIDPrefix = "bogus"
 			if _, ok, err := authn.AuthenticateToken(ctx, tc.Token); err == nil || !strings.Contains(err.Error(), "no keys found") || ok {
 				t.Errorf("%s: Expected err containing 'no keys found', ok=false when key lookup by ID fails", k)
@@ -498,7 +498,7 @@ func (f *fakeIndexer) GetByKey(key string) (interface{}, bool, error) {
 	parts := strings.SplitN(key, "/", 2)
 	namespace := parts[0]
 	name := ""
-	// implies the key does not contain a / (this is a cluster-scoped object)
+	// 路径只有一段说明密钥名不含 "/"，即对应集群作用域对象。
 	if len(parts) == 1 {
 		name = parts[0]
 		namespace = ""

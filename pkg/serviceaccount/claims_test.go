@@ -39,12 +39,12 @@ import (
 
 func init() {
 	now = func() time.Time {
-		// epoch time: 1514764800
+		// 固定为 Unix 纪元时间 1514764800。
 		return time.Date(2018, time.January, 1, 0, 0, 0, 0, time.UTC)
 	}
 
 	newUUID = func() string {
-		// always return a fixed/static UUID for testing
+		// 测试中始终返回固定 UUID。
 		return "fixed"
 	}
 }
@@ -81,7 +81,7 @@ func TestClaims(t *testing.T) {
 		},
 	}
 	cs := []struct {
-		// input
+		// 输入。
 		sa           core.ServiceAccount
 		pod          *core.Pod
 		sec          *core.Secret
@@ -93,27 +93,27 @@ func TestClaims(t *testing.T) {
 		aud          []string
 		attestations map[string]authentication.AttestationValue
 		err          string
-		// desired
+		// 期望结果。
 		sc       *jwt.Claims
 		pc       *privateClaims
-		wantJSON string // if set, assert the raw JSON of private claims matches this exactly
+		wantJSON string // 若设置，则精确断言私有 claim 的原始 JSON。
 	}{
 		{
-			// pod and secret
+			// Pod 与 Secret 不能同时绑定。
 			sa:  sa,
 			pod: pod,
 			sec: sec,
-			// really fast
+			// 立即过期。
 			exp: 0,
-			// nil audience
+			// 空 audience。
 			aud: nil,
 			err: "internal error, token can only be bound to one object type",
 		},
 		{
-			// pod
+			// 仅绑定 Pod。
 			sa:  sa,
 			pod: pod,
-			// empty audience
+			// audience 列表为空但非 nil。
 			aud: []string{},
 			exp: 100,
 
@@ -133,11 +133,11 @@ func TestClaims(t *testing.T) {
 			},
 		},
 		{
-			// secret
+			// 仅绑定 Secret。
 			sa:  sa,
 			sec: sec,
 			exp: 100,
-			// single member audience
+			// audience 仅含一个成员。
 			aud: []string{"1"},
 
 			sc: &jwt.Claims{
@@ -157,10 +157,10 @@ func TestClaims(t *testing.T) {
 			},
 		},
 		{
-			// no obj binding
+			// 不绑定对象。
 			sa:  sa,
 			exp: 100,
-			// multimember audience
+			// audience 含多个成员。
 			aud: []string{"1", "2"},
 
 			sc: &jwt.Claims{
@@ -179,12 +179,12 @@ func TestClaims(t *testing.T) {
 			},
 		},
 		{
-			// warn after provided
+			// 提供 warnafter。
 			sa:        sa,
 			pod:       pod,
 			exp:       60 * 60 * 24,
 			warnafter: 60 * 60,
-			// nil audience
+			// 空 audience。
 			aud: nil,
 
 			sc: &jwt.Claims{
@@ -204,12 +204,12 @@ func TestClaims(t *testing.T) {
 			},
 		},
 		{
-			// node alone
+			// 仅绑定 Node。
 			sa:   sa,
 			node: node,
-			// really fast
+			// 立即过期。
 			exp: 0,
-			// nil audience
+			// 空 audience。
 			aud: nil,
 
 			sc: &jwt.Claims{
@@ -228,13 +228,13 @@ func TestClaims(t *testing.T) {
 			},
 		},
 		{
-			// node and pod
+			// 同时绑定 Node 与 Pod。
 			sa:   sa,
 			pod:  pod,
 			node: node,
-			// really fast
+			// 立即过期。
 			exp: 0,
-			// nil audience
+			// 空 audience。
 			aud: nil,
 
 			sc: &jwt.Claims{
@@ -254,22 +254,22 @@ func TestClaims(t *testing.T) {
 			},
 		},
 		{
-			// node and secret should error
+			// Node 与 Secret 不能同时绑定。
 			sa:   sa,
 			sec:  sec,
 			node: node,
-			// really fast
+			// 立即过期。
 			exp: 0,
-			// nil audience
+			// 空 audience。
 			aud: nil,
 			err: "internal error, token can only be bound to one object type",
 		},
 		{
-			// ensure JTI is set
+			// 确保设置 JTI。
 			sa: sa,
-			// really fast
+			// 立即过期。
 			exp: 0,
-			// nil audience
+			// 空 audience。
 			aud: nil,
 
 			sc: &jwt.Claims{
@@ -287,7 +287,7 @@ func TestClaims(t *testing.T) {
 			},
 		},
 		{
-			// validating webhook configuration binding
+			// 绑定 ValidatingWebhookConfiguration。
 			sa: sa,
 			validating: &admissionregistrationv1.ValidatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{Name: "myvalidating", UID: "myvalidating-uid"},
@@ -318,7 +318,7 @@ func TestClaims(t *testing.T) {
 			wantJSON: `{"kubernetes.io":{"namespace":"myns","serviceaccount":{"name":"mysvcacct","uid":"mysvcacct-uid"},"validatingwebhookconfiguration":{"name":"myvalidating","uid":"myvalidating-uid"},"attestations":{"admissionReviewAPIGroups":["apps"]}}}`,
 		},
 		{
-			// mutating webhook configuration binding
+			// 绑定 MutatingWebhookConfiguration。
 			sa: sa,
 			mutating: &admissionregistrationv1.MutatingWebhookConfiguration{
 				ObjectMeta: metav1.ObjectMeta{Name: "mymutating", UID: "mymutating-uid"},
@@ -351,9 +351,7 @@ func TestClaims(t *testing.T) {
 	}
 	for i, c := range cs {
 		t.Run(fmt.Sprintf("case %d", i), func(t *testing.T) {
-			// comparing json spews has the benefit over
-			// reflect.DeepEqual that we are also asserting that
-			// claims structs are json serializable
+			// 比较 JSON 展开结果而非 reflect.DeepEqual，可同时断言 claims 结构可序列化为 JSON。
 			spew := func(obj interface{}) string {
 				b, err := json.Marshal(obj)
 				if err != nil {
@@ -639,8 +637,7 @@ func TestValidatePrivateClaimsWebhookFeatureGateDisabled(t *testing.T) {
 	nowUnix := int64(1514764800)
 	serviceAccount := &v1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "saname", Namespace: "ns", UID: "sauid"}}
 
-	// With the feature gate disabled, a token that has webhook claims should
-	// still validate successfully — the webhook ref is simply ignored.
+	// 关闭特性门控时，带 webhook claim 的 Token 仍应校验通过，因为 webhook 引用会被忽略。
 	v := &validator{getter: fakeGetter{serviceAccount: serviceAccount}}
 	expiry := jwt.NumericDate(nowUnix)
 	private := &privateClaims{Kubernetes: kubernetes{

@@ -136,7 +136,7 @@ type ServiceAccountAuthenticationOptions struct {
 	ExtendExpiration      bool
 	MaxExpiration         time.Duration
 	MaxExtendedExpiration time.Duration
-	// OptionalTokenGetter 返回自定义的 ServiceAccount token getter；未设置时使用默认值。
+	// OptionalTokenGetter 返回自定义的服务账号令牌获取器；未设置时使用默认值。
 	OptionalTokenGetter func(factory informers.SharedInformerFactory) serviceaccount.ServiceAccountTokenGetter
 	// 传入 `--service-account-signing-endpoint` 时设置 ExternalPublicKeysGetter。
 	// 它与 KeyFiles 互斥。
@@ -737,7 +737,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 	}
 
 	authenticatorConfig.APIServerID = apiServerID
-	// var openAPIV3SecuritySchemes spec3.SecuritySchemes
+	// New 同时返回认证器、热更新函数及 OpenAPI 安全定义。
 	authenticator, updateAuthenticationConfig, openAPIV2SecurityDefinitions, openAPIV3SecuritySchemes, err := authenticatorConfig.New(ctx)
 	if err != nil {
 		return err
@@ -758,7 +758,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 			time.Minute,
 			o.AuthenticationConfigFile,
 			func() {
-				// TODO collapse onto shared logic with DynamicEncryptionConfigContent controller
+				// TODO: 与 DynamicEncryptionConfigContent 控制器共用重载逻辑。
 
 				// 串行处理文件变更，避免并发回调交错更新跟踪状态。
 				mu.Lock()
@@ -873,7 +873,7 @@ func init() {
 	install.Install(cfgScheme)
 }
 
-// loadAuthenticationConfig parses the authentication configuration from the given file and returns it and the file's contents.
+// loadAuthenticationConfig 从给定文件读取认证配置，并返回配置及原始文件内容。
 func loadAuthenticationConfig(configFilePath string) (*apiserver.AuthenticationConfiguration, string, error) {
 	data, err := os.ReadFile(configFilePath)
 	if err != nil {
@@ -902,7 +902,7 @@ func loadAuthenticationConfigFromData(data []byte) (*apiserver.AuthenticationCon
 	if !ok {
 		return nil, fmt.Errorf("expected AuthenticationConfiguration, got %T", decodedObj)
 	}
-	if configuration == nil { // sanity check, this should never happen but check just in case since we rely on it
+	if configuration == nil { // 后续逻辑依赖非 nil 配置；正常情况下不会为空，仍作防御性检查
 		return nil, fmt.Errorf("expected non-nil AuthenticationConfiguration")
 	}
 

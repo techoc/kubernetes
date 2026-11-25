@@ -745,7 +745,7 @@ func TestWarnings(t *testing.T) {
 					VolumeSource: api.VolumeSource{
 						Projected: &api.ProjectedVolumeSource{
 							Sources: []api.VolumeProjection{
-								{}, // one item, no fields set
+								{}, // 仅一个条目，未设置字段。
 							},
 						},
 					},
@@ -804,7 +804,7 @@ func TestWarnings(t *testing.T) {
 					{Name: "a", Value: ""},
 					{Name: "a", Value: "$(a)"},
 					{Name: "a", ValueFrom: &api.EnvVarSource{}},
-					{Name: "a", Value: "$(a) $(a)"}, // no warning
+					{Name: "a", Value: "$(a) $(a)"}, // 无警告。
 				}}},
 				Containers: []api.Container{{Env: []api.EnvVar{
 					{Name: "b", Value: "b"},
@@ -813,7 +813,7 @@ func TestWarnings(t *testing.T) {
 					{Name: "b", Value: ""},
 					{Name: "b", Value: "$(b)"},
 					{Name: "b", ValueFrom: &api.EnvVarSource{}},
-					{Name: "b", Value: "$(b) $(b)"}, // no warning
+					{Name: "b", Value: "$(b) $(b)"}, // 无警告。
 				}}},
 			}},
 			expected: []string{

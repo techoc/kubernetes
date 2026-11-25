@@ -132,7 +132,7 @@ func (o *ConvertOptions) Complete(f cmdutil.Factory, cmd *cobra.Command) (err er
 		return f.Validator(directive)
 	}
 
-	// build the printer
+	// 构造输出打印机。
 	o.Printer, err = o.PrintFlags.ToPrinter()
 	return err
 }
@@ -237,7 +237,7 @@ func asVersionedObjects(infos []*resource.Info, specifiedOutputVersion schema.Gr
 		}
 
 		targetVersions := []schema.GroupVersion{}
-		// objects that are not part of api.Scheme must be converted to JSON
+		// 未注册到 api.Scheme 的对象需先转换为 JSON。
 		// TODO: 未来考虑转成 map[string]interface{} 并挂到 runtime.Unknown 上。
 		if !specifiedOutputVersion.Empty() {
 			if _, _, err := scheme.Scheme.ObjectKinds(info.Object); runtime.IsNotRegisteredError(err) {

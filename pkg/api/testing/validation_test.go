@@ -62,7 +62,7 @@ func TestVersionedValidationByFuzzing(t *testing.T) {
 	}
 
 	// 完整 fuzz 轮次开销较大，这里缩减到十分之一。
-	fuzzIters := *roundtrip.FuzzIters / 10 // TODO: Find a better way to manage test running time
+	fuzzIters := *roundtrip.FuzzIters / 10 // TODO: 寻找更优的测试运行时间管理方式。
 	f := fuzzer.FuzzerFor(FuzzerFuncs, rand.NewSource(rand.Int63()), legacyscheme.Codecs)
 
 	for _, gvk := range gvks {
@@ -80,10 +80,8 @@ func TestVersionedValidationByFuzzing(t *testing.T) {
 				}
 
 				var opts []ValidationTestConfig
-				// TODO(API group level configuration): Consider configuring normalization rules at the
-				// API group level to avoid potential collisions when multiple rule sets are combined.
-				// This would allow each API group to register its own normalization rules independently.
 				// 合并各 group 的归一化规则：版本间字段路径可能不同，需先归一化再比较错误。
+				// TODO（API group level configuration）：可按 API group 配置规则，避免多组规则冲突，并允许各组独立注册。
 				allRules := append([]field.NormalizationRule{}, resourcevalidation.ResourceNormalizationRules...)
 				allRules = append(allRules, nodevalidation.NodeNormalizationRules...)
 				opts = append(opts, WithNormalizationRules(allRules...), WithFuzzer(f))

@@ -46,7 +46,7 @@ func setupServer(t *testing.T, iss string, keys serviceaccount.PublicKeysGetter)
 	c := restful.NewContainer()
 	s := httptest.NewServer(c)
 
-	// JWKS needs to be https, so swap that for the test
+	// JWKS 必须使用 HTTPS，测试中替换为 HTTPS 地址。
 	jwksURI, err := url.Parse(s.URL)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func setupServer(t *testing.T, iss string, keys serviceaccount.PublicKeysGetter)
 
 var defaultKeys = []interface{}{getPublicKey(rsaPublicKey), getPublicKey(ecdsaPublicKey)}
 
-// Configuration is an OIDC configuration, including most but not all required fields.
+// Configuration 表示包含大部分（而非全部）OIDC 必填字段的配置。
 // https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
 type Configuration struct {
 	Issuer        string   `json:"issuer"`
@@ -121,11 +121,11 @@ func TestServeConfiguration(t *testing.T) {
 
 	expectConfiguration(t, reqURL, wantEC)
 
-	// modify the underlying keys, expect the same response
+	// 修改底层密钥，响应应保持不变。
 	keysGetter.PublicKeysGetter = rsaKeysGetter
 	expectConfiguration(t, reqURL, wantEC)
 
-	// notify the metadata the keys changed, expected a modified response
+	// 通知元数据密钥已变化，响应应随之更新。
 	for _, listener := range keysGetter.listeners {
 		listener.Enqueue()
 	}
@@ -340,11 +340,11 @@ func TestServeKeys(t *testing.T) {
 			expectKeys(t, reqURL, tt.WantKeys)
 
 			if tt.updatedKeysGetter != nil {
-				// modify the underlying keys, expect the same response
+				// 修改底层密钥，响应应保持不变。
 				keysGetter.PublicKeysGetter = tt.updatedKeysGetter
 				expectKeys(t, reqURL, tt.WantKeys)
 
-				// notify the metadata the keys changed, expected a modified response
+				// 通知元数据密钥已变化，响应应随之更新。
 				for _, listener := range keysGetter.listeners {
 					listener.Enqueue()
 				}
@@ -451,7 +451,7 @@ func TestNewOpenIDMetadata(t *testing.T) {
 			name:      "valid inputs, default JWKSURI to external address",
 			issuerURL: exampleIssuer,
 			jwksURI:   "",
-			// We expect host + port, no scheme, when API server calculates ExternalAddress.
+			// API Server 计算 ExternalAddress 时应只得到 host + port，不含 scheme。
 			externalAddress: "192.0.2.1:80",
 			keys:            defaultKeys,
 			wantConfig:      `{"issuer":"https://issuer.example.com","jwks_uri":"https://192.0.2.1:80/openid/v1/jwks","response_types_supported":["id_token"],"subject_types_supported":["public"],"id_token_signing_alg_values_supported":["ES256","RS256"]}`,
@@ -583,7 +583,7 @@ type dummyPublicKeyGetter struct {
 }
 
 func (d dummyPublicKeyGetter) AddListener(listener serviceaccount.Listener) {
-	// no-op
+	// 无需注册监听器。
 }
 
 func (d dummyPublicKeyGetter) GetCacheAgeMaxSeconds() int {

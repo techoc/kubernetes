@@ -24,9 +24,9 @@ import (
 )
 
 // clientAdapter 将 k8s.io/component-base/featuregate.MutableFeatureGate 适配为 client-go 的
-// Gate 与 Registry 接口。component-base 的 Feature、FeatureSpec、prerelease 类型及常量
-// 在 client-go 中有一套平行定义。之所以重复定义，是为了让 client-go 的功能门控也能
-// 复用这套机制，同时避免 component-base 与 client-go 之间产生循环依赖。
+// Gates 与 VersionedRegistry 接口。两包的 Feature、FeatureSpec、prerelease 类型及常量
+// 各自独立定义，避免 component-base 与 client-go 产生循环依赖；适配器负责桥接两套定义，
+// 使 client-go 能复用 component-base 的门控机制。
 type clientAdapter struct {
 	// mfg 是底层可变的 feature gate，所有操作都委托给它。
 	mfg featuregate.MutableFeatureGate
@@ -76,6 +76,7 @@ func (a *clientAdapter) Add(in map[clientfeatures.Feature]clientfeatures.Feature
 }
 
 // AddVersioned 批量注册带版本信息的 client-go 功能门控。
+// 先转换全部定义再一次性提交，避免注册过程中只应用部分条目。
 func (a *clientAdapter) AddVersioned(in map[clientfeatures.Feature]clientfeatures.VersionedSpecs) error {
 	// 版本化注册要求底层门控实现特定接口；否则报错而不是静默降级。
 	mvfg, ok := a.mfg.(featuregate.MutableVersionedFeatureGate)
@@ -116,6 +117,7 @@ func (a *clientAdapter) AddVersioned(in map[clientfeatures.Feature]clientfeature
 
 // Set 实现 client-go 测试包所要求的非导出接口
 // k8s.io/client-go/features/testing.SetFeatureDuringTest，使集成测试能够临时覆盖 client-go 功能门控。
+// 修改经底层门控校验，因此锁定默认值或未注册的功能不能借此强制切换。
 func (a *clientAdapter) Set(name clientfeatures.Feature, enabled bool) error {
 	return a.mfg.SetFromMap(map[string]bool{string(name): enabled})
 }

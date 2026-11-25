@@ -44,7 +44,7 @@ func TestKeyIDStability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The derived key id for a given public key must not change or validation of previously issued tokens will fail to find associated keys
+	// 公钥派生的密钥 ID 必须保持不变，否则以前签发的 Token 将无法找到对应密钥完成验证。
 	if expected, actual := "JHJehTTTZlsspKHT-GaJxK7Kd1NQgZJu3fyK6K_QDYU", keyID; expected != actual {
 		t.Fatalf("expected stable key id %q, got %q", expected, actual)
 	}

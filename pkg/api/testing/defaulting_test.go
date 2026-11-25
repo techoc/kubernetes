@@ -44,7 +44,7 @@ func (o orderedGroupVersionKinds) Less(i, j int) bool {
 	return o[i].String() < o[j].String()
 }
 
-// TODO: add a reflexive test that verifies that all SetDefaults functions are registered
+// TODO: 增加反射式测试，验证所有 SetDefaults 函数均已注册。
 // TestDefaulting 验证哪些类型会在 fuzz 后触发默认值设置。
 // 对 fuzz 出的对象调用 scheme.Default，检查结果是否与预期“会/不会”发生默认值变化。
 func TestDefaulting(t *testing.T) {

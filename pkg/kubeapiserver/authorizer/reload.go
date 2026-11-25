@@ -65,7 +65,7 @@ type reloadableAuthorizerResolver struct {
 	nodeAuthorizer *node.NodeAuthorizer
 	rbacAuthorizer *rbac.RBACAuthorizer
 	abacAuthorizer abac.PolicyList
-	compiler       authorizationcel.Compiler // non-nil and shared across reloads.
+	compiler       authorizationcel.Compiler // 非 nil，且跨重载共享。
 
 	// lastLoadedLock 保护重载过程中的配置比对与 current 发布，避免并发重载相互覆盖。
 	lastLoadedLock   sync.Mutex
@@ -120,7 +120,7 @@ func (r *reloadableAuthorizerResolver) newForConfig(authzConfig *authzconfig.Aut
 	})
 
 	for _, configuredAuthorizer := range authzConfig.Authorizers {
-		// Keep cases in sync with constant list in k8s.io/kubernetes/pkg/kubeapiserver/authorizer/modes/modes.go.
+		// 各分支须与 k8s.io/kubernetes/pkg/kubeapiserver/authorizer/modes/modes.go 中的常量列表保持同步。
 		switch configuredAuthorizer.Type {
 		case authzconfig.AuthorizerType(modes.ModeNode):
 			// Node/ABAC/RBAC 等授权器在启动时构建一次，重载时不允许新增未在初始配置中启用的类型。

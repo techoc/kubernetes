@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package loader provides kube-apiserver-specific webhook manifest loading with
-// scheme-based defaulting and validation. The generic load loop lives in the
-// staging loader package; this package injects the kube-apiserver scheme, internal
-// type conversion, and API validation.
+// Package loader 提供 kube-apiserver 专用的 webhook 清单加载能力。
+// 通用加载流程位于 staging loader 包；本包注入 kube-apiserver 的 scheme，
+// 负责内部类型转换和 API 校验，使静态 webhook 配置遵循 apiserver 的语义。
 package loader
 
 import (
@@ -33,8 +32,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/admissionregistration/validation"
 )
 
-// Re-export staging types so existing callers keep working.
+// ValidatingLoadResult 重新导出 staging 类型，保持现有调用方兼容。
 type ValidatingLoadResult = stagingloader.ValidatingLoadResult
+
+// MutatingLoadResult 重新导出 staging 类型，保持现有调用方兼容。
 type MutatingLoadResult = stagingloader.MutatingLoadResult
 
 var (
@@ -47,10 +48,9 @@ func init() {
 	scheme.AddUnversionedTypes(metav1.SchemeGroupVersion, &metav1.List{}, &metav1.Status{})
 }
 
-// LoadValidatingManifests reads all YAML and JSON files from the specified directory
-// and parses them as ValidatingWebhookConfiguration resources.
-// Files containing MutatingWebhookConfiguration cause an error.
-// Files are processed in alphabetical order for deterministic behavior.
+// LoadValidatingManifests 读取指定目录中的所有 YAML 和 JSON 文件，
+// 并将其解析为 ValidatingWebhookConfiguration 资源。
+// 文件包含 MutatingWebhookConfiguration 时返回错误；文件按字母序处理，保证结果可复现。
 func LoadValidatingManifests(dir string) (*ValidatingLoadResult, error) {
 	configs, hash, err := stagingloader.LoadManifests(dir, codecs.UniversalDeserializer(), func(obj runtime.Object) ([]*admissionregistrationv1.ValidatingWebhookConfiguration, error) {
 		return acceptObject(obj, extractValidating, defaultAndValidateVWC)
@@ -61,10 +61,9 @@ func LoadValidatingManifests(dir string) (*ValidatingLoadResult, error) {
 	return &ValidatingLoadResult{Configurations: configs, Hash: hash}, nil
 }
 
-// LoadMutatingManifests reads all YAML and JSON files from the specified directory
-// and parses them as MutatingWebhookConfiguration resources.
-// Files containing ValidatingWebhookConfiguration cause an error.
-// Files are processed in alphabetical order for deterministic behavior.
+// LoadMutatingManifests 读取指定目录中的所有 YAML 和 JSON 文件，
+// 并将其解析为 MutatingWebhookConfiguration 资源。
+// 文件包含 ValidatingWebhookConfiguration 时返回错误；文件按字母序处理，保证结果可复现。
 func LoadMutatingManifests(dir string) (*MutatingLoadResult, error) {
 	configs, hash, err := stagingloader.LoadManifests(dir, codecs.UniversalDeserializer(), func(obj runtime.Object) ([]*admissionregistrationv1.MutatingWebhookConfiguration, error) {
 		return acceptObject(obj, extractMutating, defaultAndValidateMWC)
@@ -75,11 +74,10 @@ func LoadMutatingManifests(dir string) (*MutatingLoadResult, error) {
 	return &MutatingLoadResult{Configurations: configs, Hash: hash}, nil
 }
 
-// acceptObject is a generic helper that handles type dispatch for decoded objects.
-// extract attempts to get typed items from a single object or typed List.
-// process applies defaulting and API validation to each individual item.
-// Returns (items, nil) when the type is recognized, (nil, nil) when not
-// recognized, or (nil, err) when recognized but processing fails.
+// acceptObject 对解码后的对象做类型分派。
+// extract 从单个对象或类型化 List 中取出条目；process 逐项填充默认值并执行 API 校验。
+// 类型可识别时返回 (items, nil)，不可识别时返回 (nil, nil)，
+// 可识别但处理失败时返回 (nil, err)。
 func acceptObject[T runtime.Object](
 	obj runtime.Object,
 	extract func(runtime.Object) ([]T, bool),
@@ -125,8 +123,8 @@ func extractMutating(obj runtime.Object) ([]*admissionregistrationv1.MutatingWeb
 	return nil, false
 }
 
-// defaultAndValidateVWC applies scheme defaults and runs standard API validation
-// on a ValidatingWebhookConfiguration.
+// defaultAndValidateVWC 对 ValidatingWebhookConfiguration 填充 scheme 默认值，
+// 并按内部 API 语义执行标准校验，确保静态配置与 apiserver 的接受范围一致。
 func defaultAndValidateVWC(config *admissionregistrationv1.ValidatingWebhookConfiguration) error {
 	scheme.Default(config)
 
@@ -145,8 +143,8 @@ func defaultAndValidateVWC(config *admissionregistrationv1.ValidatingWebhookConf
 	return nil
 }
 
-// defaultAndValidateMWC applies scheme defaults and runs standard API validation
-// on a MutatingWebhookConfiguration.
+// defaultAndValidateMWC 对 MutatingWebhookConfiguration 填充 scheme 默认值，
+// 并按内部 API 语义执行标准校验，确保静态配置与 apiserver 的接受范围一致。
 func defaultAndValidateMWC(config *admissionregistrationv1.MutatingWebhookConfiguration) error {
 	scheme.Default(config)
 

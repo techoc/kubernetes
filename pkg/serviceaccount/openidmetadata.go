@@ -40,7 +40,7 @@ const (
 	// https://openid.net/specs/openid-connect-discovery-1_0.html
 	OpenIDConfigPath = "/.well-known/openid-configuration"
 
-	// JWKSPath 是 API Server 提供 JWKS（JSON Web Key Set）的路径。
+	// JWKSPath 是 API 服务器提供 JWKS（JSON Web Key Set）的路径。
 	// 包含用于验证 ServiceAccount Token 签名的所有公钥，支持密钥轮换。
 	JWKSPath = "/openid/v1/jwks"
 )
@@ -117,11 +117,8 @@ func (p *openidConfigProvider) Update() error {
 	return nil
 }
 
-// NewOpenIDMetadataProvider returns a provider for the OIDC discovery
-// endpoints, or an error if they could not be constructed. Callers should note
-// that this function may perform additional validation on inputs that is not
-// backwards-compatible with all command-line validation. The recommendation is
-// to log the error and skip installing the OIDC discovery endpoints.
+// NewOpenIDMetadataProvider 创建 OIDC 发现端点提供方，创建失败时返回错误。
+// 此函数可能执行命令行校验之外且不向后兼容的额外输入校验；调用方应记录错误并跳过安装发现端点。
 func NewOpenIDMetadataProvider(issuerURL, jwksURI, defaultExternalAddress string, pubKeyGetter PublicKeysGetter) (OpenIDMetadataProvider, error) {
 	if issuerURL == "" {
 		return nil, fmt.Errorf("empty issuer URL")
@@ -133,8 +130,7 @@ func NewOpenIDMetadataProvider(issuerURL, jwksURI, defaultExternalAddress string
 		return nil, fmt.Errorf("no public key getter provided")
 	}
 
-	// Ensure the issuer URL meets the OIDC spec (this is the additional
-	// validation the doc comment warns about).
+	// 确保 issuer URL 满足 OIDC 规范，即文档注释所述的额外校验。
 	// https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
 	iss, err := url.Parse(issuerURL)
 	if err != nil {
@@ -150,8 +146,7 @@ func NewOpenIDMetadataProvider(issuerURL, jwksURI, defaultExternalAddress string
 		return nil, fmt.Errorf("issuer URL may not include a fragment, got: %s", issuerURL)
 	}
 
-	// Either use the provided JWKS URI or default to ExternalAddress plus
-	// the JWKS path.
+	// 使用提供的 JWKS URI；未提供时由 ExternalAddress 加 JWKS 路径推导。
 	if jwksURI == "" {
 		const msg = "attempted to build jwks_uri from external " +
 			"address %s, but could not construct a valid URL. Error: %v"
@@ -168,13 +163,9 @@ func NewOpenIDMetadataProvider(issuerURL, jwksURI, defaultExternalAddress string
 		}
 		jwksURI = u.String()
 
-		// TODO(mtaufen): I think we can probably expect ExternalAddress is
-		// at most just host + port and skip the sanity check, but want to be
-		// careful until that is confirmed.
+		// TODO(mtaufen): ExternalAddress 可能只需 host + port，但确认前仍保留此检查。
 
-		// Sanity check that the jwksURI we produced is the valid URL we expect.
-		// This is just in case ExternalAddress came in as something weird,
-		// like a scheme + host + port, instead of just host + port.
+		// 检查推导出的 jwksURI 是否是预期 URL，防止 ExternalAddress 误含 scheme + host + port。
 		parsed, err := url.Parse(jwksURI)
 		if err != nil {
 			return nil, fmt.Errorf(msg, defaultExternalAddress, err)
@@ -185,7 +176,7 @@ func NewOpenIDMetadataProvider(issuerURL, jwksURI, defaultExternalAddress string
 				fmt.Errorf("got %v, expected %v", parsed, u))
 		}
 	} else {
-		// Double-check that jwksURI is an https URL
+		// 再次确认显式提供的 jwksURI 是 HTTPS URL。
 		if u, err := url.Parse(jwksURI); err != nil {
 			return nil, err
 		} else if u.Scheme != "https" {
@@ -198,32 +189,29 @@ func NewOpenIDMetadataProvider(issuerURL, jwksURI, defaultExternalAddress string
 		jwksURI:      jwksURI,
 		pubKeyGetter: pubKeyGetter,
 	}
-	// Register to be notified if public keys change
+	// 注册公钥变化通知。
 	pubKeyGetter.AddListener(provider)
-	// Synchronously construct the config / keyset json once at startup to ensure a successful starting point
+	// 启动时同步生成配置和密钥集 JSON，确保初始端点可用。
 	if err := provider.Update(); err != nil {
 		return nil, err
 	}
 	return provider, nil
 }
 
-// openIDMetadata provides a minimal subset of OIDC provider metadata:
+// openIDMetadata 提供 OIDC 提供者元数据的最小子集：
 // https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
 type openIDMetadata struct {
-	Issuer string `json:"issuer"` // REQUIRED in OIDC; meaningful to relying parties.
-	// TODO(mtaufen): Since our goal is compatibility for relying parties that
-	// need to validate ID tokens, but do not need to initiate login flows,
-	// and since we aren't sure what to put in authorization_endpoint yet,
-	// we will omit this field until someone files a bug.
-	// AuthzEndpoint string   `json:"authorization_endpoint"`                // REQUIRED in OIDC; but useless to relying parties.
-	JWKSURI       string   `json:"jwks_uri"`                              // REQUIRED in OIDC; meaningful to relying parties.
-	ResponseTypes []string `json:"response_types_supported"`              // REQUIRED in OIDC
-	SubjectTypes  []string `json:"subject_types_supported"`               // REQUIRED in OIDC
-	SigningAlgs   []string `json:"id_token_signing_alg_values_supported"` // REQUIRED in OIDC
+	Issuer string `json:"issuer"` // OIDC 必填；依赖方据此识别签发者。
+	// TODO(mtaufen): 依赖方只需验证 ID Token，无需发起登录流程；
+	// authorization_endpoint 的取值尚未确定，在有人反馈前保持省略。
+	// AuthzEndpoint string   `json:"authorization_endpoint"`                // OIDC 必填；但依赖方无需使用。
+	JWKSURI       string   `json:"jwks_uri"`                              // OIDC 必填；依赖方据此获取验证密钥。
+	ResponseTypes []string `json:"response_types_supported"`              // OIDC 必填。
+	SubjectTypes  []string `json:"subject_types_supported"`               // OIDC 必填。
+	SigningAlgs   []string `json:"id_token_signing_alg_values_supported"` // OIDC 必填。
 }
 
-// openIDConfigJSON returns the JSON OIDC Discovery Doc for the service
-// account issuer.
+// openIDConfigJSON 返回服务账号签发者的 OIDC Discovery JSON 文档。
 func openIDConfigJSON(iss, jwksURI string, keys []PublicKey) ([]byte, error) {
 	keyset, errs := publicJWKSFromKeys(keys)
 	if errs != nil {
@@ -233,9 +221,9 @@ func openIDConfigJSON(iss, jwksURI string, keys []PublicKey) ([]byte, error) {
 	metadata := openIDMetadata{
 		Issuer:        iss,
 		JWKSURI:       jwksURI,
-		ResponseTypes: []string{"id_token"}, // Kubernetes only produces ID tokens
+		ResponseTypes: []string{"id_token"}, // Kubernetes 只签发 ID Token。
 		SubjectTypes:  []string{"public"},   // https://openid.net/specs/openid-connect-core-1_0.html#SubjectIDTypes
-		SigningAlgs:   getAlgs(keyset),      // REQUIRED by OIDC
+		SigningAlgs:   getAlgs(keyset),      // OIDC 必填。
 	}
 
 	metadataJSON, err := json.Marshal(metadata)
@@ -246,8 +234,7 @@ func openIDConfigJSON(iss, jwksURI string, keys []PublicKey) ([]byte, error) {
 	return metadataJSON, nil
 }
 
-// openIDKeysetJSON returns the JSON Web Key Set for the service account
-// issuer's keys.
+// openIDKeysetJSON 返回 ServiceAccount issuer 所用密钥的 JSON Web Key Set。
 func openIDKeysetJSON(keys []PublicKey) ([]byte, error) {
 	keyset, errs := publicJWKSFromKeys(keys)
 	if errs != nil {
@@ -267,7 +254,7 @@ func getAlgs(keys *jose.JSONWebKeySet) []string {
 	for _, k := range keys.Keys {
 		algs.Insert(k.Algorithm)
 	}
-	// Note: List returns a sorted slice.
+	// List 返回排序后的切片。
 	return algs.List()
 }
 
@@ -275,10 +262,9 @@ type publicKeyGetter interface {
 	Public() crypto.PublicKey
 }
 
-// publicJWKSFromKeys constructs a JSONWebKeySet from a list of keys. The key
-// set will only contain the public keys associated with the input keys.
+// publicJWKSFromKeys 从输入密钥构造 JSONWebKeySet，且只包含对应的公钥。
 func publicJWKSFromKeys(in []PublicKey) (*jose.JSONWebKeySet, errors.Aggregate) {
-	// Decode keys into a JWKS.
+	// 将密钥解码到 JWKS。
 	var keys jose.JSONWebKeySet
 	var errs []error
 	for i, key := range in {
@@ -323,9 +309,7 @@ func jwkFromPublicKey(publicKey PublicKey) (*jose.JSONWebKey, error) {
 func algorithmFromPublicKey(publicKey crypto.PublicKey) (jose.SignatureAlgorithm, error) {
 	switch pk := publicKey.(type) {
 	case *rsa.PublicKey:
-		// IMPORTANT: If this function is updated to support additional key sizes,
-		// signerFromRSAPrivateKey in serviceaccount/jwt.go must also be
-		// updated to support the same key sizes. Today we only support RS256.
+		// 重要：若支持更多密钥长度，必须同步更新 serviceaccount/jwt.go 的 signerFromRSAPrivateKey；目前仅支持 RS256。
 		return jose.RS256, nil
 	case *ecdsa.PublicKey:
 		switch pk.Curve {

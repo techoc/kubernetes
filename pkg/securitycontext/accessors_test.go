@@ -125,7 +125,7 @@ func TestPodSecurityContextMutator(t *testing.T) {
 			originalSC := tc.newSC()
 			m := NewPodSecurityContextMutator(sc)
 
-			// no-op sets should not modify the object
+			// 将字段设为原值不应修改对象
 			m.SetFSGroup(m.FSGroup())
 			m.SetRunAsNonRoot(m.RunAsNonRoot())
 			m.SetRunAsUser(m.RunAsUser())
@@ -344,7 +344,7 @@ func TestContainerSecurityContextMutator(t *testing.T) {
 			originalSC := tc.newSC()
 			m := NewContainerSecurityContextMutator(sc)
 
-			// no-op sets should not modify the object
+			// 将字段设为原值不应修改对象
 			m.SetAllowPrivilegeEscalation(m.AllowPrivilegeEscalation())
 			m.SetCapabilities(m.Capabilities())
 			m.SetPrivileged(m.Privileged())
@@ -687,7 +687,7 @@ func TestEffectiveContainerSecurityContextMutator(t *testing.T) {
 				NewContainerSecurityContextMutator(sc),
 			)
 
-			// no-op sets should not modify the object
+			// 将字段设为原值不应修改对象
 			m.SetAllowPrivilegeEscalation(m.AllowPrivilegeEscalation())
 			m.SetCapabilities(m.Capabilities())
 			m.SetPrivileged(m.Privileged())

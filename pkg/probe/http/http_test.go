@@ -70,7 +70,7 @@ func TestHTTPProbeProxy(t *testing.T) {
 	followNonLocalRedirects := true
 	prober := New(followNonLocalRedirects)
 
-	// take some time to wait server boot
+	// 等待测试服务器启动。
 	time.Sleep(2 * time.Second)
 	url, err := url.Parse("http://example.com")
 	if err != nil {
@@ -106,7 +106,7 @@ func TestHTTPProbeChecker(t *testing.T) {
 		}
 	}
 
-	// Echo handler that returns the contents of request headers in the body
+	// 将请求头内容回显到响应体的 handler。
 	headerEchoHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		output := ""
@@ -118,13 +118,13 @@ func TestHTTPProbeChecker(t *testing.T) {
 		w.Write([]byte(output))
 	}
 
-	// Handler that returns the number of request headers in the body
+	// 将请求头数量写入响应体的 handler。
 	headerCounterHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte(strconv.Itoa(len(r.Header))))
 	}
 
-	// Handler that returns the keys of request headers in the body
+	// 将请求头名称写入响应体的 handler。
 	headerKeysNamesHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		keys := make([]string, 0, len(r.Header))
@@ -166,7 +166,7 @@ func TestHTTPProbeChecker(t *testing.T) {
 		accBody    string
 		notBody    string
 	}{
-		// The probe will be filled in below.  This is primarily testing that an HTTP GET happens.
+		// 下方填充探针；本用例主要验证确实发出了 HTTP GET 请求。
 		{
 			handler: handleReq(http.StatusOK, "ok body"),
 			health:  probe.Success,
@@ -297,7 +297,7 @@ func TestHTTPProbeChecker(t *testing.T) {
 			accBody:    "Accept: */*",
 		},
 		{
-			// Echo handler that returns the contents of Host in the body
+			// 将 Host 请求头内容回显到响应体的 handler。
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(200)
 				w.Write([]byte(r.Host))
@@ -355,12 +355,12 @@ func TestHTTPProbeChecker(t *testing.T) {
 			health:  probe.Failure,
 		},
 		{
-			handler: redirectHandlerWithBody(http.StatusPermanentRedirect, ""), // redirect with empty body
+			handler: redirectHandlerWithBody(http.StatusPermanentRedirect, ""), // 重定向响应体为空
 			health:  probe.Warning,
 			accBody: "Probe terminated redirects, Response body:",
 		},
 		{
-			handler: redirectHandlerWithBody(http.StatusPermanentRedirect, "ok body"), // redirect with body
+			handler: redirectHandlerWithBody(http.StatusPermanentRedirect, "ok body"), // 重定向响应体非空
 			health:  probe.Warning,
 			accBody: "Probe terminated redirects, Response body: ok body",
 		},

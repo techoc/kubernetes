@@ -357,7 +357,7 @@ func TestToAuthenticationConfig(t *testing.T) {
 		APIAudiences:            authenticator.Audiences{"http://foo.bar.com"},
 		Anonymous:               apiserver.AnonymousAuthConfig{Enabled: false},
 		BootstrapToken:          false,
-		ClientCAContentProvider: nil, // this is nil because you can't compare functions
+		ClientCAContentProvider: nil, // 函数无法直接比较，故置为 nil
 		TokenAuthFile:           "/testTokenFile",
 		AuthenticationConfig: &apiserver.AuthenticationConfiguration{
 			JWT: []apiserver.JWTAuthenticator{
@@ -389,7 +389,7 @@ func TestToAuthenticationConfig(t *testing.T) {
 			UIDHeaders:          headerrequest.StaticStringSlice{"x-remote-uid"},
 			GroupHeaders:        headerrequest.StaticStringSlice{"x-remote-group"},
 			ExtraHeaderPrefixes: headerrequest.StaticStringSlice{"x-remote-extra-"},
-			CAContentProvider:   nil, // this is nil because you can't compare functions
+			CAContentProvider:   nil, // 函数无法直接比较，故置为 nil
 			AllowedClientNames:  headerrequest.StaticStringSlice{"kube-aggregator"},
 		},
 	}

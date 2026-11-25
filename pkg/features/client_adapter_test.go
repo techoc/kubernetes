@@ -27,6 +27,7 @@ import (
 )
 
 // TestClientAdapterEnabled 验证 Enabled 正确转发查询：已注册项返回 true，未知项按底层门控语义 panic。
+// 同时固定查询错误的行为，防止适配器把未知功能误判为未启用。
 func TestClientAdapterEnabled(t *testing.T) {
 	// 用独立的门控实例，避免测试间相互干扰。
 	fg := featuregate.NewFeatureGate()
@@ -55,6 +56,7 @@ func TestClientAdapterEnabled(t *testing.T) {
 }
 
 // TestClientAdapterAdd 验证 Add 把 client-go 的 FeatureSpec（含四种稳定性等级）正确转换并注册。
+// 默认值与锁定标记必须原样保留，否则会改变生产环境的功能开关语义。
 func TestClientAdapterAdd(t *testing.T) {
 	fg := featuregate.NewFeatureGate()
 	a := &clientAdapter{fg}
@@ -111,6 +113,7 @@ func TestClientAdapterAdd(t *testing.T) {
 }
 
 // TestClientAdapterAddVersioned 验证 AddVersioned 的转换、版本字段保留及未知 prerelease 的 panic 行为。
+// 版本边界还决定默认值切换，因此同时检查跨版本解析，避免仅转换字段却选错版本。
 func TestClientAdapterAddVersioned(t *testing.T) {
 	// 用指定版本的门控，确保版本化注册可用。
 	fg := featuregate.NewVersionedFeatureGate(version.MustParse("1.29"))

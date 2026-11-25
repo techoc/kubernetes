@@ -18,7 +18,7 @@ package oom
 
 // OOMAdjuster 调整进程的 OOM 分数。
 // 这里用结构体而非接口，是为了便于在测试中注入进程 PID 列举函数和 OOM 分数写入函数。
-// TODO: make this an interface, and inject a mock ioutil struct for testing.
+// TODO: 改为接口，并注入模拟的 ioutil 结构以便测试。
 type OOMAdjuster struct {
 	pidLister                 func(cgroupName string) ([]int, error)
 	ApplyOOMScoreAdj          func(pid int, oomScoreAdj int) error

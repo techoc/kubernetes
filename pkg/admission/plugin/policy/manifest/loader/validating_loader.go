@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package loader 提供从清单文件（manifest）加载 VAP/MAP 配置的能力，
-// 并在加载过程中完成基于 scheme 的默认值填充（defaulting）和校验（validation）。
+// Package loader 提供从清单文件加载 VAP/MAP 配置的能力，
+// 并在加载过程中基于 scheme 完成默认值填充和校验。
 //
 // 这里只负责“单个对象的类型识别 + 默认值 + 内部类型校验”；
 // 文件遍历、YAML 多文档拆分、v1.List 展开、名称唯一性/静态后缀检查、
@@ -68,7 +68,7 @@ type LoadedValidatingPolicyManifests struct {
 
 // LoadValidatingManifestsFromDirectory 读取指定目录下的所有 YAML/JSON 文件，
 // 将其解析为 ValidatingAdmissionPolicy 或 ValidatingAdmissionPolicyBinding 资源。
-// 文件按字母序处理，保证加载结果可复现（deterministic）。
+// 文件按字母序处理，保证加载结果确定且可复现。
 //
 // 实际流程（由 policyloader.LoadPolicyManifests 完成）：
 //  1. 读取目录下所有文件并计算 Hash；

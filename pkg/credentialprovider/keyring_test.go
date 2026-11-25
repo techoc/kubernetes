@@ -215,7 +215,7 @@ func TestDockerKeyringForGlob(t *testing.T) {
 	for i, test := range tests {
 		email := "foo@bar.baz"
 		username := "foo"
-		password := "bar" // Fake value for testing.
+		password := "bar" // 用于测试的假值。
 		// 用假凭据生成 auth 字段，避免触碰真实凭证。
 		auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
 		sampleDockerConfig := fmt.Sprintf(`{
@@ -287,7 +287,7 @@ func TestKeyringMiss(t *testing.T) {
 	for _, test := range tests {
 		email := "foo@bar.baz"
 		username := "foo"
-		password := "bar" // Fake value for testing.
+		password := "bar" // 用于测试的假值。
 		auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
 		sampleDockerConfig := fmt.Sprintf(`{
    "%s": {
@@ -317,7 +317,7 @@ func TestKeyringMissWithDockerHubCredentials(t *testing.T) {
 	url := defaultRegistryKey
 	email := "foo@bar.baz"
 	username := "foo"
-	password := "bar" // Fake value for testing.
+	password := "bar" // 用于测试的假值。
 	auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
 	sampleDockerConfig := fmt.Sprintf(`{
    "https://%s": {
@@ -345,7 +345,7 @@ func TestKeyringHitWithUnqualifiedDockerHub(t *testing.T) {
 	url := defaultRegistryKey
 	email := "foo@bar.baz"
 	username := "foo"
-	password := "bar" // Fake value for testing.
+	password := "bar" // 用于测试的假值。
 	auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
 	sampleDockerConfig := fmt.Sprintf(`{
    "https://%s": {
@@ -388,7 +388,7 @@ func TestKeyringHitWithUnqualifiedLibraryDockerHub(t *testing.T) {
 	url := defaultRegistryKey
 	email := "foo@bar.baz"
 	username := "foo"
-	password := "bar" // Fake value for testing.
+	password := "bar" // 用于测试的假值。
 	auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
 	sampleDockerConfig := fmt.Sprintf(`{
    "https://%s": {
@@ -431,7 +431,7 @@ func TestKeyringHitWithQualifiedDockerHub(t *testing.T) {
 	url := defaultRegistryKey
 	email := "foo@bar.baz"
 	username := "foo"
-	password := "bar" // Fake value for testing.
+	password := "bar" // 用于测试的假值。
 	auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
 	sampleDockerConfig := fmt.Sprintf(`{
    "https://%s": {
@@ -525,14 +525,14 @@ func TestDockerKeyringLookup(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletEnsureSecretPulledImages, true)
 	ada := AuthConfig{
 		Username: "ada",
-		Password: "smash", // Fake value for testing.
+		Password: "smash", // 用于测试的假值。
 		Email:    "ada@example.com",
 	}
 	adaHash := "353258b53f5e9a57b059eab3f05312fc35bbeb874f08ce101e7bf0bf46977423"
 
 	grace := AuthConfig{
 		Username: "grace",
-		Password: "squash", // Fake value for testing.
+		Password: "squash", // 用于测试的假值。
 		Email:    "grace@example.com",
 	}
 	graceHash := "f949b3837a1eb733a951b6aeda0b3327c09ec50c917de9ca35818e8fbf567e29"
@@ -596,7 +596,7 @@ func TestIssue3797(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletEnsureSecretPulledImages, true)
 	rex := AuthConfig{
 		Username: "rex",
-		Password: "tiny arms", // Fake value for testing.
+		Password: "tiny arms", // 用于测试的假值。
 		Email:    "rex@example.com",
 	}
 	rexHash := "899748fec74c8dd761845fca727f4249b05be275ff24026676fcd4351f656363"

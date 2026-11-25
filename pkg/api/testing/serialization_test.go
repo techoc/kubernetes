@@ -209,8 +209,7 @@ func TestCommonKindsRegistered(t *testing.T) {
 					t.Errorf("expected %v: %v\n%s", gvk, err, string(data))
 					continue
 				}
-				// TODO: this is wrong, but legacy clients expect it
-				// Status 是历史遗留例外：旧客户端期望 apiVersion 固定为 v1。
+				// TODO: 此行为不符合预期，但旧客户端期望 Status 的 apiVersion 固定为 v1。
 				if !bytes.Contains(data, []byte(`"kind":"`+kind+`","apiVersion":"v1"`)) {
 					t.Errorf("expected %v: %v\n%s", gvk, err, string(data))
 					continue

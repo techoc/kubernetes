@@ -22,7 +22,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
-// PodSecurityContextAccessor allows reading the values of a PodSecurityContext object
+// PodSecurityContextAccessor 提供 PodSecurityContext 字段的只读访问。
 type PodSecurityContextAccessor interface {
 	SELinuxOptions() *api.SELinuxOptions
 	RunAsUser() *int64
@@ -34,7 +34,7 @@ type PodSecurityContextAccessor interface {
 	FSGroupChangePolicy() *api.PodFSGroupChangePolicy
 }
 
-// PodSecurityContextMutator allows reading and writing the values of a PodSecurityContext object
+// PodSecurityContextMutator 提供 PodSecurityContext 字段的读写访问。
 type PodSecurityContextMutator interface {
 	PodSecurityContextAccessor
 
@@ -47,18 +47,18 @@ type PodSecurityContextMutator interface {
 	SetFSGroup(*int64)
 	SetFSGroupChangePolicy(*api.PodFSGroupChangePolicy)
 
-	// PodSecurityContext returns the current PodSecurityContext object
+	// PodSecurityContext 返回当前的 PodSecurityContext 对象。
 	PodSecurityContext() *api.PodSecurityContext
 }
 
-// NewPodSecurityContextAccessor returns an accessor for the given pod security context.
-// May be initialized with a nil PodSecurityContext.
+// NewPodSecurityContextAccessor 为指定 Pod 安全上下文创建访问器。
+// podSC 可以为 nil，此时 getter 返回零值。
 func NewPodSecurityContextAccessor(podSC *api.PodSecurityContext) PodSecurityContextAccessor {
 	return &podSecurityContextWrapper{podSC: podSC}
 }
 
-// NewPodSecurityContextMutator returns a mutator for the given pod security context.
-// May be initialized with a nil PodSecurityContext.
+// NewPodSecurityContextMutator 为指定 Pod 安全上下文创建可变访问器。
+// podSC 可以为 nil，首次写入非 nil 字段时会自动初始化。
 func NewPodSecurityContextMutator(podSC *api.PodSecurityContext) PodSecurityContextMutator {
 	return &podSecurityContextWrapper{podSC: podSC}
 }
@@ -190,7 +190,7 @@ func (w *podSecurityContextWrapper) SetFSGroupChangePolicy(v *api.PodFSGroupChan
 	w.podSC.FSGroupChangePolicy = v
 }
 
-// ContainerSecurityContextAccessor allows reading the values of a SecurityContext object
+// ContainerSecurityContextAccessor 提供 SecurityContext 字段的只读访问。
 type ContainerSecurityContextAccessor interface {
 	Capabilities() *api.Capabilities
 	Privileged() *bool
@@ -204,7 +204,7 @@ type ContainerSecurityContextAccessor interface {
 	AllowPrivilegeEscalation() *bool
 }
 
-// ContainerSecurityContextMutator allows reading and writing the values of a SecurityContext object
+// ContainerSecurityContextMutator 提供 SecurityContext 字段的读写访问。
 type ContainerSecurityContextMutator interface {
 	ContainerSecurityContextAccessor
 
@@ -378,14 +378,12 @@ func (w *containerSecurityContextWrapper) SetAllowPrivilegeEscalation(v *bool) {
 	w.containerSC.AllowPrivilegeEscalation = v
 }
 
-// NewEffectiveContainerSecurityContextAccessor returns an accessor for reading effective values
-// for the provided pod security context and container security context
+// NewEffectiveContainerSecurityContextAccessor 创建访问器，读取指定 Pod 与容器安全上下文合并后的有效值。
 func NewEffectiveContainerSecurityContextAccessor(podSC PodSecurityContextAccessor, containerSC ContainerSecurityContextMutator) ContainerSecurityContextAccessor {
 	return &effectiveContainerSecurityContextWrapper{podSC: podSC, containerSC: containerSC}
 }
 
-// NewEffectiveContainerSecurityContextMutator returns a mutator for reading and writing effective values
-// for the provided pod security context and container security context
+// NewEffectiveContainerSecurityContextMutator 创建可变访问器，读写指定 Pod 与容器安全上下文合并后的有效值。
 func NewEffectiveContainerSecurityContextMutator(podSC PodSecurityContextAccessor, containerSC ContainerSecurityContextMutator) ContainerSecurityContextMutator {
 	return &effectiveContainerSecurityContextWrapper{podSC: podSC, containerSC: containerSC}
 }

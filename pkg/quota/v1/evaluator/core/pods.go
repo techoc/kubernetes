@@ -89,13 +89,12 @@ func maskResourceWithPrefix(resource corev1.ResourceName, prefix string) corev1.
 // 扩展资源不支持超卖，因此只允许 "requests.resourceName" 格式的配额对象。
 // 同时也支持隐式扩展资源格式 "requests.deviceclass.resource.kubernetes.io/device-class-name"。
 func isExtendedResourceNameForQuota(name corev1.ResourceName) bool {
-	// As overcommit is not supported by extended resources for now,
-	// quota objects in format of "requests.resourceName" is allowed
+	// 扩展资源目前不支持超卖，因此配额对象只接受 "requests.resourceName" 格式。
 	nonNative := !helper.IsNativeResource(name)
-	// allow the implicit extended resource name in the format of
+	// 同时接受隐式扩展资源格式：
 	// requests.deviceclass.resource.kubernetes.io/device-class-name
 	implicitExtendedResource := strings.HasPrefix(string(name), resourceRequestsDeviceClassPrefix)
-	// name starts with 'requests.'
+	// 资源名必须以 "requests." 开头。
 	isQuotaRequest := strings.HasPrefix(string(name), corev1.DefaultResourceRequestsPrefix)
 
 	return (nonNative || implicitExtendedResource) && isQuotaRequest
@@ -270,7 +269,7 @@ func (p *podEvaluator) UncoveredQuotaScopes(limitedScopes []corev1.ScopedResourc
 // Usage 计算单个 Pod 的配额使用量。
 // 委托给 PodUsageFunc 实现。
 func (p *podEvaluator) Usage(item runtime.Object) (corev1.ResourceList, error) {
-	// delegate to normal usage
+	// 复用普通 Pod 用量计算逻辑。
 	return PodUsageFunc(item, p.clock)
 }
 
@@ -280,7 +279,7 @@ func (p *podEvaluator) UsageStats(options quota.UsageStatsOptions) (quota.UsageS
 	return generic.CalculateUsageStats(options, p.listFuncByNamespace, podMatchesScopeFunc, p.Usage)
 }
 
-// verifies we implement the required interface.
+// 确认实现所需的配额评估器接口。
 var _ quota.Evaluator = &podEvaluator{}
 
 // enforcePodContainerConstraints 检查容器中未设置的必需资源，并添加到 missingSet。
@@ -339,7 +338,7 @@ func podComputeUsageHelper(requests corev1.ResourceList, limits corev1.ResourceL
 		}
 		// 处理 DRA 扩展资源，只允许 "requests.resourceName" 格式
 		if schedutil.IsDRAExtendedResourceName(resource) {
-			// only quota objects in format of "requests.resourceName" is allowed for extended resource.
+			// 扩展资源只接受 "requests.resourceName" 格式的配额对象。
 			result[maskResourceWithPrefix(resource, corev1.DefaultResourceRequestsPrefix)] = request
 		}
 	}
@@ -384,8 +383,8 @@ func podMatchesScopeFunc(selector corev1.ScopedResourceSelectorRequirement, obje
 	case corev1.ResourceQuotaScopePriorityClass:
 		// Exists 操作符只需检查 Pod 是否有 PriorityClassName，无需解析 selector
 		if selector.Operator == corev1.ScopeSelectorOpExists {
-			// This is just checking for existence of a priorityClass on the pod,
-			// no need to take the overhead of selector parsing/evaluation.
+			// 这里只检查 Pod 是否设置了 priorityClass，
+			// 无需付出解析和计算 selector 的开销。
 			return len(pod.Spec.PriorityClassName) != 0, nil
 		}
 		return podMatchesSelector(pod, selector)
