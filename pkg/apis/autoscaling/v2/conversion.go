@@ -42,7 +42,7 @@ func Convert_v2_HorizontalPodAutoscaler_To_autoscaling_HorizontalPodAutoscaler(i
 	if err := autoConvert_v2_HorizontalPodAutoscaler_To_autoscaling_HorizontalPodAutoscaler(in, out, s); err != nil {
 		return err
 	}
-	// v2 round-trips to internal without any serialized annotations, make sure any from other versions don't get serialized
+	// v2 与 internal 之间不需要注解即可完成往返，清掉其他版本遗留的注解避免被序列化。
 	out.Annotations, _ = autoscaling.DropRoundTripHorizontalPodAutoscalerAnnotations(out.Annotations)
 	return nil
 }

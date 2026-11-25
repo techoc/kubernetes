@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-// PodDisruptionBudgetSpec is a description of a PodDisruptionBudget.
+// PodDisruptionBudgetSpec 描述 PodDisruptionBudget 的期望配置。
 type PodDisruptionBudgetSpec struct {
 	// An eviction is allowed if at least "minAvailable" pods selected by
 	// "selector" will still be available after the eviction, i.e. even in the
@@ -110,16 +110,16 @@ type PodDisruptionBudgetStatus struct {
 	// +optional
 	DisruptedPods map[string]metav1.Time
 
-	// Number of pod disruptions that are currently allowed.
+	// 当前允许的 Pod 中断数量。
 	DisruptionsAllowed int32
 
-	// current number of healthy pods
+	// 当前健康 pod 数量。
 	CurrentHealthy int32
 
-	// minimum desired number of healthy pods
+	// 期望的最少健康 Pod 数量。
 	DesiredHealthy int32
 
-	// total number of pods counted by this disruption budget
+	// 本中断预算计入的 Pod 总数。
 	ExpectedPods int32
 
 	// Conditions contain conditions for PDB
@@ -129,7 +129,7 @@ type PodDisruptionBudgetStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodDisruptionBudget is an object to define the max disruption that can be caused to a collection of pods
+// PodDisruptionBudget 用于定义一组 Pod 可承受的最大中断程度。
 type PodDisruptionBudget struct {
 	metav1.TypeMeta
 	// +optional
@@ -145,7 +145,7 @@ type PodDisruptionBudget struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodDisruptionBudgetList is a collection of PodDisruptionBudgets.
+// PodDisruptionBudgetList 是 PodDisruptionBudget 的集合。
 type PodDisruptionBudgetList struct {
 	metav1.TypeMeta
 	// +optional

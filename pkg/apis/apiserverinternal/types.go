@@ -28,7 +28,7 @@ type StorageVersion struct {
 	// The name is <group>.<resource>.
 	metav1.ObjectMeta
 
-	// Spec is an empty spec. It is here to comply with Kubernetes API style.
+	// spec 为空，仅为符合 Kubernetes API 规范而保留。
 	Spec StorageVersionSpec
 
 	// API server instances report the version they can decode and the version they
@@ -36,7 +36,7 @@ type StorageVersion struct {
 	Status StorageVersionStatus
 }
 
-// StorageVersionSpec is an empty spec.
+// StorageVersionSpec 是空规格。
 type StorageVersionSpec struct{}
 
 // StorageVersionStatus API server instances report the versions they can decode and the version they
@@ -52,7 +52,7 @@ type StorageVersionStatus struct {
 	// +optional
 	CommonEncodingVersion *string
 
-	// The latest available observations of the storageVersion's state.
+	// conditions 记录 storageVersion 状态的最新观测结果。
 	// +optional
 	Conditions []StorageVersionCondition
 }
@@ -72,7 +72,7 @@ type ServerStorageVersion struct {
 	DecodableVersions []string
 
 	// The API server can serve these versions.
-	// DecodableVersions must include all ServedVersions.
+	// decodableVersions 必须涵盖所有 servedVersions。
 	ServedVersions []string
 }
 

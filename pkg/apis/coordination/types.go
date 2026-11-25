@@ -22,55 +22,51 @@ import (
 
 type CoordinatedLeaseStrategy string
 
-// CoordinatedLeaseStrategy defines the strategy for picking the leader for coordinated leader election.
+// CoordinatedLeaseStrategy 定义协同选主时挑选 leader 的策略。
 const (
-	// OldestEmulationVersion picks the oldest LeaseCandidate, where "oldest" is defined as follows
-	// 1) Select the candidate(s) with the lowest emulation version
-	// 2) If multiple candidates have the same emulation version, select the candidate(s) with the lowest binary version. (Note that binary version must be greater or equal to emulation version)
-	// 3) If multiple candidates have the same binary version, select the candidate with the oldest creationTimestamp.
-	// If a candidate does not specify the emulationVersion and binaryVersion fields, it will not be considered a candidate for the lease.
+	// OldestEmulationVersion 选择“最老”的 LeaseCandidate。“最老”按如下方式判定：
+	// 1) 选择模拟版本最低的候选者；
+	// 2) 若有多个候选者模拟版本相同，选择二进制版本最低的候选者（注意二进制版本必须大于或等于模拟版本）；
+	// 3) 若仍有多个候选者二进制版本相同，选择 creationTimestamp 最早的候选者。
+	// 未指定 emulationVersion 和 binaryVersion 字段的候选者不会被纳入租约候选。
 	OldestEmulationVersion CoordinatedLeaseStrategy = "OldestEmulationVersion"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Lease defines a lease concept.
+// Lease 定义租约概念。
 type Lease struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// spec contains the specification of the Lease.
+	// spec 包含 Lease 的规格定义。
 	// +optional
 	Spec LeaseSpec
 }
 
-// LeaseSpec is a specification of a Lease.
+// LeaseSpec 是 Lease 的规格。
 type LeaseSpec struct {
-	// holderIdentity contains the identity of the holder of a current lease.
-	// If Coordinated Leader Election is used, the holder identity must be
-	// equal to the elected LeaseCandidate.metadata.name field.
+	// holderIdentity 包含当前租约持有者的标识。
+	// 如果使用协同选主，持有者标识必须等于选出的 LeaseCandidate.metadata.name 字段。
 	// +optional
 	HolderIdentity *string
-	// leaseDurationSeconds is a duration that candidates for a lease need
-	// to wait to force acquire it. This is measure against time of last
-	// observed renewTime.
+	// leaseDurationSeconds 是租约候选者在强制获取租约前需要等待的时长，
+	// 以最后一次观测到的 renewTime 为基准计算。
 	// +optional
 	LeaseDurationSeconds *int32
-	// acquireTime is a time when the current lease was acquired.
+	// acquireTime 是当前租约被获取的时间。
 	// +optional
 	AcquireTime *metav1.MicroTime
-	// renewTime is a time when the current holder of a lease has last
-	// updated the lease.
+	// renewTime 是当前租约持有者最近一次更新租约的时间。
 	// +optional
 	RenewTime *metav1.MicroTime
-	// leaseTransitions is the number of transitions of a lease between
-	// holders.
+	// leaseTransitions 是租约在持有者之间切换的次数。
 	// +optional
 	LeaseTransitions *int32
-	// Strategy indicates the strategy for picking the leader for coordinated leader election.
-	// If the field is not specified, there is no active coordination for this lease.
-	// (Alpha) Using this field requires the CoordinatedLeaderElection feature gate to be enabled.
+	// strategy 表示协同选主时挑选 leader 的策略。
+	// 若未指定该字段，则此租约没有激活的协同。
+	// (Alpha) 使用该字段需要启用 CoordinatedLeaderElection 特性门控。
 	// +featureGate=CoordinatedLeaderElection
 	// +optional
 	Strategy *CoordinatedLeaseStrategy
@@ -84,7 +80,7 @@ type LeaseSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LeaseList is a list of Lease objects.
+// LeaseList 是 Lease 对象的列表。
 type LeaseList struct {
 	metav1.TypeMeta
 	// +optional
@@ -96,8 +92,8 @@ type LeaseList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LeaseCandidate defines a candidate for a Lease object.
-// Candidates are created such that coordinated leader election will pick the best leader from the list of candidates.
+// LeaseCandidate 定义一个 Lease 对象的候选者。
+// 创建候选者是为了让协调式 leader election 从候选列表中选出最佳 leader。
 type LeaseCandidate struct {
 	metav1.TypeMeta
 	// +optional
@@ -105,7 +101,7 @@ type LeaseCandidate struct {
 	Spec LeaseCandidateSpec
 }
 
-// LeaseCandidateSpec is a specification of a Lease.
+// LeaseCandidateSpec 是 Lease 的规格定义。
 type LeaseCandidateSpec struct {
 	// LeaseName is the name of the lease for which this candidate is contending.
 	// The limits on this field are the same as on Lease.name. Multiple lease candidates
@@ -136,10 +132,9 @@ type LeaseCandidateSpec struct {
 	// This field is required when strategy is "OldestEmulationVersion"
 	// +optional
 	EmulationVersion string
-	// Strategy is the strategy that coordinated leader election will use for picking the leader.
-	// If multiple candidates for the same Lease return different strategies, the strategy provided
-	// by the candidate with the latest BinaryVersion will be used. If there is still conflict,
-	// this is a user error and coordinated leader election will not operate the Lease until resolved.
+	// strategy 是协调式 leader election 用于挑选 leader 的策略。
+	// 若同一 Lease 的多个候选者返回不同策略，则采用 BinaryVersion 最新的候选者所提供的策略。
+	// 若仍有冲突，则属于用户错误；在问题解决前，协调式 leader election 不会操作该 Lease。
 	// +listType=atomic
 	// +required
 	Strategy CoordinatedLeaseStrategy

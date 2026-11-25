@@ -31,17 +31,17 @@ func ResourceMatches(rule *PolicyRule, combinedRequestedResource, requestedSubre
 		if ruleResource == ResourceAll {
 			return true
 		}
-		// if we have an exact match, we match
+		// 资源名完全一致时直接命中。
 		if ruleResource == combinedRequestedResource {
 			return true
 		}
 
-		// We can also match a */subresource.
-		// if there isn't a subresource, then continue
+		// 还支持 "*/subresource" 形式：对任意资源的该子资源授权。
+		// 请求不涉及子资源时无需继续尝试这种形式。
 		if len(requestedSubresource) == 0 {
 			continue
 		}
-		// if the rule isn't in the format */subresource, then we don't match, continue
+		// 规则不是 "*/subresource" 格式（长度不符或缺少前缀/后缀）时不匹配。
 		if len(ruleResource) == len(requestedSubresource)+2 &&
 			strings.HasPrefix(ruleResource, "*/") &&
 			strings.HasSuffix(ruleResource, requestedSubresource) {
@@ -83,7 +83,7 @@ func (r PolicyRule) String() string {
 	return "PolicyRule" + r.CompactString()
 }
 
-// CompactString exposes a compact string representation for use in escalation error messages
+// CompactString 返回规则的紧凑字符串表示，用于权限提升（escalation）相关的错误信息。
 func (r PolicyRule) CompactString() string {
 	formatStringParts := []string{}
 	formatArgs := []interface{}{}

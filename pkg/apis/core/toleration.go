@@ -21,7 +21,7 @@ package core
 
 // MatchToleration 判断当前容忍是否与 tolerationToMatch 匹配。
 // 容忍以 <key,effect,operator,value> 组合作为唯一标识，四者全部相同才视为匹配。
-// TODO: uniqueness check for tolerations in api validations.
+// TODO: 在 API 校验中加入容忍的唯一性检查。
 func (t *Toleration) MatchToleration(tolerationToMatch *Toleration) bool {
 	return t.Key == tolerationToMatch.Key &&
 		t.Effect == tolerationToMatch.Effect &&

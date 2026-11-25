@@ -41,26 +41,25 @@ type StorageVersionMigration struct {
 	Status StorageVersionMigrationStatus
 }
 
-// Spec of the storage version migration.
+// StorageVersionMigrationSpec 描述存储版本迁移的规格。
 type StorageVersionMigrationSpec struct {
-	// The resource that is being migrated. The migrator sends requests to
-	// the endpoint serving the resource.
-	// Immutable.
+	// 待迁移的资源。迁移器向服务该资源的 endpoint 发送请求。
+	// 该字段不可变。
 	Resource metav1.GroupResource
 }
 
 type MigrationConditionType string
 
 const (
-	// Indicates that the migration is running.
+	// 表示迁移正在进行。
 	MigrationRunning MigrationConditionType = "Running"
-	// Indicates that the migration has completed successfully.
+	// 表示迁移已成功完成。
 	MigrationSucceeded MigrationConditionType = "Succeeded"
-	// Indicates that the migration has failed.
+	// 表示迁移已失败。
 	MigrationFailed MigrationConditionType = "Failed"
 )
 
-// Status of the storage version migration.
+// StorageVersionMigrationStatus 描述存储版本迁移的状态。
 type StorageVersionMigrationStatus struct {
 	// The latest available observations of the migration's current state.
 	// +patchMergeKey=type
@@ -69,16 +68,16 @@ type StorageVersionMigrationStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition
-	// ResourceVersion to compare with the GC cache for performing the migration.
-	// This is the current resource version of given group, version and resource when
-	// kube-controller-manager first observes this StorageVersionMigration resource.
+	// 执行迁移时与 GC 缓存进行比较的 ResourceVersion。
+	// 这是 kube-controller-manager 首次观察到该 StorageVersionMigration 资源时，
+	// 给定 group、version 和 resource 的当前资源版本。
 	ResourceVersion string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.30
 
-// StorageVersionMigrationList is a collection of storage version migrations.
+// StorageVersionMigrationList 是存储版本迁移对象的集合。
 type StorageVersionMigrationList struct {
 	metav1.TypeMeta
 
@@ -86,6 +85,6 @@ type StorageVersionMigrationList struct {
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
-	// Items is the list of StorageVersionMigration
+	// Items 为 StorageVersionMigration 对象的列表。
 	Items []StorageVersionMigration
 }

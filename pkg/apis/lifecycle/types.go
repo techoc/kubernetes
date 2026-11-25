@@ -22,14 +22,14 @@ import (
 )
 
 const (
-	// EvictionResponderImperativeEviction is a default responder with a priority of 100 that will evict
-	// pods using the imperative Eviction API (pods/<name>/eviction subresource) with a backoff.
+	// EvictionResponderImperativeEviction 是默认 responder，通过带退避的 imperative
+	// Eviction API（pods/<name>/eviction 子资源）驱逐 pod。
 	EvictionResponderImperativeEviction string = "imperative-eviction.k8s.io/evictor"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EvictionRequest defines a request that should ideally result in a graceful eviction of a
+// EvictionRequest 定义一项请求，理想情况下应促成 .spec.target 的优雅驱逐
 // .spec.target（例如 Pod 的终止）。
 //
 // evictionrequest-controller 观察所有 EvictionRequest 的意图，并将其转换为
@@ -53,28 +53,28 @@ type EvictionRequest struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// spec defines the eviction request specification.
+	// spec 定义该 eviction request 的规格。
 	// https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +required
 	Spec EvictionRequestSpec
 
-	// status represents the most recently observed status of the eviction request.
+	// status 表示最近观测到的 eviction request 状态。
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status EvictionRequestStatus
 }
 
-// EvictionRequestSpec is a specification of an EvictionRequest.
+// EvictionRequestSpec 是 EvictionRequest 的规格。
 type EvictionRequestSpec struct {
 	// target 包含对要被驱逐的对象（例如 Pod）的引用。
 	// 该字段必填且不可变。
 	// +required
 	Target EvictionRequestTarget
 
-	// requester allows you to identify the entity, that requested the eviction of the target.
+	// requester 用于标识请求驱逐 target 的实体。
 	//
 	// 必须是带域名前缀的合法 key（例如 "acme.io/foo"）。
-	// Domain names *.k8s.io and *.kubernetes.io are reserved.
+	// 域名 *.k8s.io 和 *.kubernetes.io 保留。
 	// 该字段必填且不可变。
 	// +required
 	Requester string
@@ -83,16 +83,16 @@ type EvictionRequestSpec struct {
 	//
 	// - Eviction 表示请求者希望对目标执行驱逐。
 	// - Withdrawn 表示请求者不再希望对目标执行驱逐。
-	//   If all requesters' intents are withdrawn for a common target, the eviction will be canceled.
+	// 如果同一 target 的所有 requester 的 intent 都变为 Withdrawn，驱逐将被取消。
 	//   Cancellation consequences:
-	//   - Inactive responders will never run.
-	//   - Active responders are expected to cancel the eviction.
-	//   - Completed or Interrupted responders should not take any action.
+	// - Inactive 的 responder 永远不会运行。
+	// - Active 的 responder 应当取消驱逐。
+	// - Completed 或 Interrupted 的 responder 不应采取任何动作。
 	// +required
 	Intent EvictionRequestIntent
 }
 
-// EvictionRequestTarget contains a reference to an object that should be evicted.
+// EvictionRequestTarget 包含对要被驱逐的对象的引用。
 type EvictionRequestTarget struct {
 	// pod 引用一个将被驱逐/终止的 Pod。
 	// 不支持属于 PodGroup 的 Pod（即设置了 .spec.schedulingGroup 的 Pod）。
@@ -108,30 +108,30 @@ type EvictionRequestPodReference struct {
 	// +required
 	Name string
 	// uid of the target.
-	// It can be found in .metadata.uid of the target and is a lowercase UUID in 8-4-4-4-12 format.
+	// 可在目标的 .metadata.uid 中找到，为 8-4-4-4-12 格式的小写 UUID。
 	// 该字段必填。
 	// +required
 	UID apimachinerytypes.UID
 }
 
-// EvictionRequestIntent specifies a requester intent.
+// EvictionRequestIntent 表示 requester 的 intent。
 type EvictionRequestIntent string
 
-// These are intents that can be set by each requester.
+// 以下是每个 requester 可以设置的 intent。
 const (
-	// EvictionRequestIntentEviction means that the requester is interested in the eviction of the target.
+	// EvictionRequestIntentEviction 表示 requester 希望驱逐 target。
 	EvictionRequestIntentEviction EvictionRequestIntent = "Eviction"
 
-	// EvictionRequestIntentWithdrawn means that the requester is no longer interested in the eviction of the target.
-	// If all requesters' intents are withdrawn for a common target, the eviction will be canceled.
-	// Cancellation consequences:
-	// - Inactive responders will never run.
-	// - Active responders are expected to cancel the eviction.
-	// - Completed or Interrupted responders should not take any action.
+	// EvictionRequestIntentWithdrawn 表示 requester 不再希望驱逐 target。
+	// 如果同一 target 的所有 requester 的 intent 都变为 Withdrawn，驱逐将被取消。
+	// 取消的后果：
+	// - Inactive 的 responder 永远不会运行。
+	// - Active 的 responder 应当取消驱逐。
+	// - Completed 或 Interrupted 的 responder 不应采取任何动作。
 	EvictionRequestIntentWithdrawn EvictionRequestIntent = "Withdrawn"
 )
 
-// EvictionRequestStatus represents the last observed status of the eviction request.
+// EvictionRequestStatus 表示最近观测到的 eviction request 状态。
 type EvictionRequestStatus struct {
 	// conditions contain information about the eviction request.
 	//
@@ -152,9 +152,9 @@ type EvictionRequestStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition
 
-	// observedGeneration is EvictionRequest's .metadata.generation observed by the evictionrequest-controller.
-	// The observed generation value cannot be negative and can only be incremented.
-	// The minimum value is 1.
+	// observedGeneration 是 evictionrequest-controller 观测到的 EvictionRequest 的 .metadata.generation。
+	// 观测到的 generation 值不能为负，且只能递增。
+	// 最小值为 1。
 	// 该字段由 evictionrequest-controller 管理。
 	// +optional
 	ObservedGeneration *int64
@@ -162,31 +162,31 @@ type EvictionRequestStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EvictionRequestList contains a list of EvictionRequests resources.
+// EvictionRequestList 包含 EvictionRequests 资源列表。
 type EvictionRequestList struct {
 	metav1.TypeMeta
-	// metadata is the standard list metadata.
+	// metadata 是标准列表元数据。
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
-	// items is the list of EvictionRequests.
+	// items 是 EvictionRequests 列表。
 	Items []EvictionRequest
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Eviction initiates an eviction process, which should ideally result in a graceful eviction of a
+// Eviction 发起一次驱逐流程，理想情况下应促成 .spec.target 的优雅驱逐
 // .spec.target（例如 Pod 的终止）。
 //
 // evictionrequest-controller 观察所有 EvictionRequest 的意图，并将其转换为
-// Evictions. It manages the Eviction lifecycle.
-// Requesters are preserved in .status.requesters even after they have withdrawn their request.
+// Eviction，并管理 Eviction 的生命周期。
+// 即使在 requester 撤回请求后，.status.requesters 中仍会保留这些 requester。
 // 若所有请求者都撤回对同一目标的驱逐意图，驱逐将被
-// canceled. Once all EvictionRequest corresponding to this Eviction .spec.target have been
-// removed, this Eviction object will eventually be garbage collected.
+// 当与该 Eviction 的 .spec.target 对应的所有 EvictionRequest 都被移除后，
+// 这个 Eviction 对象最终会被垃圾回收。
 //
-// If the target is a pod, the .status.targetResponders is populated from Pod's
+// 如果 target 是 pod，.status.targetResponders 将根据 Pod 的
 // .spec.evictionResponders.
 //
 // Responders should observe and communicate through the .status to help with the eviction
@@ -196,53 +196,53 @@ type EvictionRequestList struct {
 // updated within the heartbeat deadline defined by the Eviction API (currently 20 minutes), the
 // eviction is passed over to the next responder with a lower priority.
 //
-// If there are no other responders and the target is a pod, the last default
-// imperative-eviction.k8s.io/evictor responder with a priority of 100 will evict the pod using the
-// imperative Eviction API (pods/<name>/eviction subresource).
+// 如果没有其他 responder 且 target 是 pod，最后一个优先级为 100 的默认
+// imperative-eviction.k8s.io/evictor responder 将通过 imperative Eviction API
+// （pods/<name>/eviction 子资源）驱逐该 pod。
 type Eviction struct {
 	metav1.TypeMeta
 
 	// metadata 是标准的对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
-	// .metadata.name set by the evictionrequest-controller is purely informative and subject to change.
-	// .spec.target field should be used to identify the target precisesly.
+	// 由 evictionrequest-controller 设置的 .metadata.name 仅作提示，可能发生变化。
+	// 应使用 .spec.target 字段精确标识 target。
 	//
-	// The requester and responder names will be used as label keys and added to the labels of the
-	// eviction in one of the following formats:
+	// requester 和 responder 的名字会作为 label key，按以下格式之一添加到
+	// eviction 的 labels 中：
 	// 1. acme.io/foo: "requester"
 	// 2. acme.io/foo: "responder"
 	// 3. acme.io/foo: "requester-responder"
 	//
-	// Please see EvictionParticipantRole for available role label values.
+	// 可用的角色 label 值请参见 EvictionParticipantRole。
 	// +optional
 	metav1.ObjectMeta
 
-	// spec defines the eviction specification.
+	// spec 定义该 eviction 的规格。
 	// https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +required
 	Spec EvictionSpec
 
-	// status represents the most recently observed status of the eviction.
-	// Populated by responders and evictionrequest-controller.
+	// status 表示最近观测到的 eviction 状态。
+	// 由 responder 和 evictionrequest-controller 填充。
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status EvictionStatus
 }
 
-// EvictionParticipantRole specifies a role of an eviction participant intent.
+// EvictionParticipantRole 表示 eviction 参与者的角色。
 type EvictionParticipantRole string
 
 const (
 	// EvictionParticipantRoleRequester identifies a requester which creates EvictionRequests.
 	EvictionParticipantRoleRequester EvictionParticipantRole = "requester"
 
-	// EvictionParticipantRoleResponder identifies a responder which responds to an Eviction.
+	// EvictionParticipantRoleResponder 标识响应 Eviction 的 responder。
 	EvictionParticipantRoleResponder EvictionParticipantRole = "responder"
 
-	// EvictionParticipantRoleRequesterResponder is both a "requester" and a "responder" at the same time.
+	// EvictionParticipantRoleRequesterResponder 表示同时是 "requester" 和 "responder"。
 	EvictionParticipantRoleRequesterResponder EvictionParticipantRole = "requester-responder"
 )
 
-// EvictionSpec is a specification of an Eviction.
+// EvictionSpec 是 Eviction 的规格。
 type EvictionSpec struct {
 	// target 包含对要被驱逐的对象（例如 Pod）的引用。
 	// 该字段必填且不可变。
@@ -250,7 +250,7 @@ type EvictionSpec struct {
 	Target EvictionTarget
 }
 
-// EvictionTarget contains a reference to an object that should be evicted.
+// EvictionTarget 包含对要被驱逐的对象的引用。
 // +union
 type EvictionTarget struct {
 	// pod 引用一个将被驱逐/终止的 Pod。
@@ -267,13 +267,13 @@ type EvictionPodReference struct {
 	// +required
 	Name string
 	// uid of the target.
-	// It can be found in .metadata.uid of the target and is a lowercase UUID in 8-4-4-4-12 format.
+	// 可在目标的 .metadata.uid 中找到，为 8-4-4-4-12 格式的小写 UUID。
 	// 该字段必填。
 	// +required
 	UID apimachinerytypes.UID
 }
 
-// EvictionStatus represents the last observed status of the eviction request.
+// EvictionStatus 表示最近观测到的 eviction request 状态。
 type EvictionStatus struct {
 	// conditions contain information about the eviction request.
 	//
@@ -291,18 +291,17 @@ type EvictionStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition
 
-	// observedGeneration is Eviction's .metadata.generation observed by the evictionrequest-controller.
-	// The observed generation value cannot be negative and can only be incremented.
-	// The minimum value is 1.
+	// observedGeneration 是 evictionrequest-controller 观测到的 Eviction 的 .metadata.generation。
+	// 观测到的 generation 值不能为负，且只能递增。
+	// 最小值为 1。
 	// 该字段由 evictionrequest-controller 管理。
 	// +optional
 	ObservedGeneration *int64
 
-	// requesters allow you to identify the entities, that requested the eviction of the target.
-	// If all the requesters withdraw their eviction intent, the eviction will be canceled.
-	//
-	// The maximum length of the requesters list is 100.
-	// If this limit is exceeded, requesters with Withdrawn intent should be dropped first.
+	// requesters 用于标识请求驱逐 target 的实体。
+	// 如果所有 requester 都撤回其驱逐 intent，驱逐将被取消。
+	// requesters 列表的最大长度为 100。
+	// 若超出该限制，应优先丢弃 intent 为 Withdrawn 的 requester。
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -317,17 +316,17 @@ type EvictionStatus struct {
 	// Eventually each responder can end up in an Interrupted, Canceled or, Completed state.
 	// Responders should observe these states in order to navigate their lifecycle.
 	//
-	// If the target is a pod, the field is populated from Pod's .spec.evictionResponders. Default
-	// responders may be added to the list according to the target.
+	// 如果 target 是 pod，该字段根据 Pod 的 .spec.evictionResponders 填充。
+	// 根据 target 的不同，列表中还可能加入默认 responder。
 	//
 	// Default responders:
-	// - imperative-eviction.k8s.io/evictor responder with a priority of 100 is added to the list if the
-	//   target is a pod. It will call the imperative Eviction API (pods/<name>/eviction subresource).
-	//   This call may not succeed due to PodDisruptionBudgets, which may block the pod termination.
-	//   It will update the responder message and try again with a backoff.
+	// - 若 target 是 pod，则将优先级为 100 的 imperative-eviction.k8s.io/evictor responder
+	// 加入列表。它将调用 imperative Eviction API（pods/<name>/eviction 子资源）。
+	// 该调用可能因 PodDisruptionBudget 阻止 pod 终止而失败。
+	// 此时它会更新 responder 的 message，并带退避重试。
 	//
-	// The maximum length of the responders list is 11.
-	// The length and keys of the list cannot change once set.
+	// responders 列表的最大长度为 11。
+	// 列表的长度和 key 一旦设置便不可更改。
 	// 该字段由 evictionrequest-controller 管理。
 	// +optional
 	// +patchMergeKey=name
@@ -336,15 +335,11 @@ type EvictionStatus struct {
 	// +listMapKey=name
 	TargetResponders []TargetResponder
 
-	// responders represents the eviction process status of each declared responder.
-	//
-	// The responder list should be the same length and have the same .name fields as
-	// .status.targetResponders. Only responders with .name that have Active state in
-	// .targetResponders[].state should be updated and can be mutated. First initialization
-	// of the list is allowed.
-	//
-	// Each ResponderStatus is initialized by evictionrequest-controller and then managed by
-	// the designated responder.
+	// responders 表示每个已声明 responder 的驱逐流程状态。
+	// responder 列表的长度和 .name 字段应与 .status.targetResponders 一致。
+	// 只有 .name 在 .targetResponders[].state 中处于 Active 状态的 responder 才应被更新，
+	// 也只有它们可以被修改。允许对该列表做首次初始化。
+	// 每个 ResponderStatus 由 evictionrequest-controller 初始化，之后由指定的 responder 管理。
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -355,7 +350,7 @@ type EvictionStatus struct {
 
 type EvictionConditionType string
 
-// These are built-in conditions of an eviction request.
+// 以下是 eviction request 内置的 conditions。
 const (
 	// EvictionConditionFailed means that the eviction request is no longer being processed
 	// by any eviction responder. This can happen if the request is canceled or if no responder
@@ -369,45 +364,44 @@ const (
 
 type EvictionConditionReason string
 
-// These are built-in condition reasons of an eviction request.
+// 以下是 eviction request 内置的 condition reason。
 const (
-	// EvictionConditionReasonAwaitingEviction means that this Eviction works as expected and the target
-	// is scheduled for an eviction.
-	// This reason is set for the Failed and TargetEvicted condition.
+	// EvictionConditionReasonAwaitingEviction 表示该 Eviction 工作正常，target 已被安排驱逐。
+	// 该 reason 用于 Failed 和 TargetEvicted condition。
 	EvictionConditionReasonAwaitingEviction EvictionConditionReason = "AwaitingEviction"
 	// EvictionConditionReasonEvictionInvalid means that the Eviction is not accepted because the
 	// initial configuration is not valid.
 	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonEvictionInvalid EvictionConditionReason = "EvictionInvalid"
-	// EvictionConditionReasonCanceledDueToNoRequesters means that the Eviction is canceled because there is no
-	// EvictionRequest with the same target and Eviction intent in .spec.intent.
+	// EvictionConditionReasonCanceledDueToNoRequesters 表示不存在 target 相同且 .spec.intent 为 Eviction
+	// 的 EvictionRequest，因此该 Eviction 被取消。
 	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonCanceledDueToNoRequesters EvictionConditionReason = "CanceledDueToNoRequesters"
-	// EvictionConditionReasonSucceeded means that the Eviction has successfully evicted the target.
+	// EvictionConditionReasonSucceeded 表示该 Eviction 已成功驱逐 target。
 	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonSucceeded EvictionConditionReason = "Succeeded"
-	// EvictionConditionReasonNoFurtherResponder means that the Eviction responders failed to evict
-	// the target and that no further responder is available.
+	// EvictionConditionReasonNoFurtherResponder 表示 Eviction 的 responder 未能驱逐 target，
+	// 且没有更多可用的 responder。
 	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonNoFurtherResponder EvictionConditionReason = "NoFurtherResponder"
-	// EvictionConditionReasonPodDeleted means that the target pod has been deleted.
+	// EvictionConditionReasonPodDeleted 表示作为 target 的 pod 已被删除。
 	// 该原因用于 TargetEvicted 条件。
 	EvictionConditionReasonPodDeleted EvictionConditionReason = "PodDeleted"
-	// EvictionConditionReasonPodTerminal means that the target pod has reached a terminal state.
+	// EvictionConditionReasonPodTerminal 表示作为 target 的 pod 已进入终止状态。
 	// 该原因用于 TargetEvicted 条件。
 	EvictionConditionReasonPodTerminal EvictionConditionReason = "PodTerminal"
-	// EvictionConditionReasonEvictionFailed means that the eviction of the target was unsuccessful.
+	// EvictionConditionReasonEvictionFailed 表示对 target 的驱逐未成功。
 	// 该原因用于 TargetEvicted 条件。
 	EvictionConditionReasonEvictionFailed EvictionConditionReason = "EvictionFailed"
 )
 
-// Requester allows you to identify the entity, that requested the eviction of the target.
+// Requester 用于标识请求驱逐 target 的实体。
 // +structType=atomic
 type Requester struct {
-	// name allows you to identify the entity, that requested the eviction of the target.
+	// name 用于标识请求驱逐 target 的实体。
 	//
 	// 必须是带域名前缀的合法 key（例如 "acme.io/foo"）。
-	// This field must be unique for each requester.
+	// 每个 requester 的该字段必须唯一。
 	// 该字段必填。
 	// +required
 	Name string
@@ -416,41 +410,41 @@ type Requester struct {
 	//
 	// - Eviction 表示请求者希望对目标执行驱逐。
 	// - Withdrawn 表示请求者不再希望对目标执行驱逐。
-	//   If all requesters' intents are withdrawn, the eviction will be canceled.
+	// 如果所有 requester 的 intent 都变为 Withdrawn，驱逐将被取消。
 	//   Cancellation consequences:
-	//   - Inactive responders will never run.
-	//   - Active responders are expected to cancel the eviction.
-	//   - Completed or Interrupted responders should not take any action.
+	// - Inactive 的 responder 永远不会运行。
+	// - Active 的 responder 应当取消驱逐。
+	// - Completed 或 Interrupted 的 responder 不应采取任何动作。
 	// +required
 	Intent RequesterIntent
 }
 
-// RequesterIntent specifies a requester intent.
+// RequesterIntent 表示 requester 的 intent。
 type RequesterIntent string
 
-// These are intents that can be set by each requester.
+// 以下是每个 requester 可以设置的 intent。
 const (
-	// RequesterIntentEviction means that the requester is interested in the eviction of the target.
+	// RequesterIntentEviction 表示 requester 希望驱逐 target。
 	RequesterIntentEviction RequesterIntent = "Eviction"
 
-	// RequesterIntentWithdrawn means that the requester is no longer interested in the eviction of the target.
-	// If all requesters' intents are withdrawn, the eviction will be canceled.
-	// Cancellation consequences:
-	// - Inactive responders will never run.
-	// - Active responders are expected to cancel the eviction.
-	// - Completed or Interrupted responders should not take any action.
+	// RequesterIntentWithdrawn 表示 requester 不再希望驱逐 target。
+	// 如果所有 requester 的 intent 都变为 Withdrawn，驱逐将被取消。
+	// 取消的后果：
+	// - Inactive 的 responder 永远不会运行。
+	// - Active 的 responder 应当取消驱逐。
+	// - Completed 或 Interrupted 的 responder 不应采取任何动作。
 	RequesterIntentWithdrawn RequesterIntent = "Withdrawn"
 )
 
-// TargetResponder allows you to specify the responder reacting to the Eviction.
-// Responders should observe and communicate through the Eviction API (see .state) to help
-// with the graceful eviction of a target (e.g. termination of a pod).
+// TargetResponder 用于指定响应 Eviction 的 responder。
+// responder 应通过观察 Eviction API（见 .state）进行协作，以帮助优雅驱逐 target
+// （例如终止一个 pod）。
 // +structType=atomic
 type TargetResponder struct {
-	// name allows you to identify the responder reacting to the Eviction.
+	// name 用于标识响应 Eviction 的 responder。
 	//
 	// 必须是带域名前缀的合法 key（例如 "acme.io/foo"）。
-	// This field must be unique for each responder.
+	// 每个响应者的此字段必须唯一。
 	// 该字段必填。
 	// +required
 	Name string
@@ -464,75 +458,65 @@ type TargetResponder struct {
 	// this field to 10000 to allow both for preemption or fallback registration by other
 	// responders.
 	//
-	// The minimum value is 0 and the maximum value is 100000.
-	// The interval 0-999 is reserved for responders with *.k8s.io suffix.
+	// 最小值为 0，最大值为 100000。
+	// 0-999 区间保留给后缀为 *.k8s.io 的响应者。
 	// 该字段必填且不可变。
 	// +required
 	Priority *int32
 
-	// state specifies a state that is assigned by the evictionrequest-controller. Responders should observe
-	// this state in order to navigate their lifecycle.
-	// - Inactive means that the responder should not yet process this eviction request.
-	// - Active means that the responder is either running or expected to start soon.
-	//   Also, startTime has been set in the ResponderStatus by the evictionrequest-controller.
-	//
-	//   An active responder should currently interact with the eviction process by updating
-	//   .status.responders, where .name is the active responder name. ResponderStatus fields
-	//   should be periodically updated to indicate the progress or completion of the eviction process.
-	//   If .status.responders[].heartbeatTime field is not updated within the heartbeat deadline defined
-	//   by the Eviction API (currently 20 minutes), the eviction is passed over to the next responder
-	//	 with a lower priority. Only one responder can be active at a time.
-	// - Interrupted means that the responder has failed to start or failed to update
-	//   heartbeatTime in ResponderStatus in a timely manner.
-	// - Canceled means that the responder has been canceled. In other words, there	is no
-	//   EvictionRequest with the same target and Eviction intent in .spec.intent.
-	// - Completed means that the responder has successfully completed and set completionTime
-	//   in ResponderStatus.
-	//
-	// Please refer to the ResponderStatus in .status.responders for more details on each responder.
+	// state 是由 evictionrequest-controller 分配的状态；responder 应观察该状态以推进自身生命周期。
+	// - Inactive 表示 responder 尚不应处理此 eviction request。
+	// - Active 表示 responder 正在运行或即将启动。
+	// 同时，evictionrequest-controller 已在 ResponderStatus 中设置 startTime。
+	// 处于 Active 的 responder 应通过更新 .status.responders 参与驱逐流程，其中 .name 为该
+	// Active responder 的名字。应定期更新 ResponderStatus 字段以表明驱逐流程的进展或完成。
+	// 如果 .status.responders[].heartbeatTime 未在 Eviction API 定义的 heartbeat 截止时间内
+	// 更新（当前为 20 分钟），驱逐将转交给优先级更低的下一个 responder。同一时刻只能有一个
+	// Active responder。
+	// - Interrupted 表示 responder 启动失败，或未及时更新 ResponderStatus 中的 heartbeatTime。
+	// - Canceled 表示 responder 已被取消。换言之，不存在 target 相同且 .spec.intent 为
+	// Eviction 的 EvictionRequest。
+	// - Completed 表示 responder 已成功完成，并在 ResponderStatus 中设置了 completionTime。
+	// 各 responder 的更多细节请参见 .status.responders 中的 ResponderStatus。
 	// +required
 	State ResponderStateType
 }
 
-// ResponderStateType specifies a state that is assigned by the evictionrequest-controller.
+// ResponderStateType 表示由 evictionrequest-controller 分配的状态。
 type ResponderStateType string
 
 const (
-	// ResponderStateInactive means that the responder should not yet process this eviction request.
+	// ResponderStateInactive 表示 responder 尚不应处理此 eviction request。
 	ResponderStateInactive ResponderStateType = "Inactive"
 
-	// ResponderStateActive means that the responder is either running or expected to start soon.
-	// Also, startTime has been set in the ResponderStatus by the evictionrequest-controller.
-	//
-	// An active responder should currently interact with the eviction process by updating
-	// .status.responders, where .name is the active responder name. ResponderStatus fields
-	// should be periodically updated to indicate the progress or completion of the eviction process.
-	// If .status.responders[].heartbeatTime field is not updated within the heartbeat deadline defined
-	// by the Eviction API (currently 20 minutes), the eviction is passed over to the next responder
-	// with a lower priority. Only one responder can be active at a time.
+	// ResponderStateActive 表示 responder 正在运行或即将启动。
+	// 同时，evictionrequest-controller 已在 ResponderStatus 中设置 startTime。
+	// 处于 Active 的 responder 应通过更新 .status.responders 参与驱逐流程，其中 .name 为该
+	// Active responder 的名字。应定期更新 ResponderStatus 字段以表明驱逐流程的进展或完成。
+	// 如果 .status.responders[].heartbeatTime 未在 Eviction API 定义的 heartbeat 截止时间内
+	// 更新（当前为 20 分钟），驱逐将转交给优先级更低的下一个 responder。同一时刻只能有一个
+	// Active responder。
 	ResponderStateActive ResponderStateType = "Active"
 
-	// ResponderStateInterrupted means that the responder has failed to start or failed to update
-	// heartbeatTime in ResponderStatus in a timely manner.
+	// ResponderStateInterrupted 表示 responder 启动失败，或未及时更新 ResponderStatus 中的 heartbeatTime。
 	ResponderStateInterrupted ResponderStateType = "Interrupted"
 
-	// ResponderStateCanceled means that the responder has been canceled. In other words, there
-	// is no EvictionRequest with the same target and Eviction intent in .spec.intent.
+	// ResponderStateCanceled 表示 responder 已被取消。换言之，不存在 target 相同且 .spec.intent
+	// 为 Eviction 的 EvictionRequest。
 	ResponderStateCanceled ResponderStateType = "Canceled"
 
-	// ResponderStateCompleted means that the responder has successfully completed and set completionTime
-	// in ResponderStatus.
+	// ResponderStateCompleted 表示 responder 已成功完成，并在 ResponderStatus 中设置了 completionTime。
 	ResponderStateCompleted ResponderStateType = "Completed"
 )
 
-// ResponderStatus represents the last observed status of the eviction process of the responder.
-// It should be only updated by the designated responder whose name is .name field.
+// ResponderStatus 表示 responder 观测到的驱逐流程最近状态。
+// 只应由名字为 .name 字段的指定 responder 更新。
 // +structType=granular
 type ResponderStatus struct {
-	// name allows you to identify the responder reacting to the Eviction.
+	// name 用于标识响应 Eviction 的 responder。
 	//
 	// 必须是带域名前缀的合法 key（例如 "acme.io/foo"）。
-	// This field is initialized by Kubernetes and must be unique for each responder.
+	// 该字段由 Kubernetes 初始化，且每个 responder 必须唯一。
 	// 该字段必填。
 	// +required
 	Name string
@@ -541,7 +525,7 @@ type ResponderStatus struct {
 	// processing the eviction request.
 	// 设置时应反映当前时间。
 	// This field is initialized by Kubernetes when this responder becomes active.
-	// This field becomes immutable once set.
+	// 一旦设置便不可变。
 	// +optional
 	StartTime *metav1.Time
 
@@ -553,38 +537,36 @@ type ResponderStatus struct {
 	// +optional
 	HeartbeatTime *metav1.Time
 
-	// expectedCompletionTime is the time at which the eviction process step is expected to end for the
-	// responder.
-	// The time cannot be set to the past.
-	// May be omitted if no estimate can be made.
+	// expectedCompletionTime 是 responder 预期完成当前驱逐步骤的时间。
+	// 该时间不能设为过去。
+	// 如果无法估算，可以省略。
 	// +optional
 	ExpectedCompletionTime *metav1.Time
 
-	// completionTime tracks the time at which the Responder stopped processing the eviction request.
-	// Completion means that the responders has either fully or partially completed the
-	// eviction process, which may have resulted in target eviction (e.g. pod termination).
+	// completionTime 记录 responder 停止处理 eviction request 的时间。
+	// Completed 意味着 responder 已全部或部分完成驱逐流程，这可能已导致 target 被驱逐
+	// （例如 pod 被终止）。
 	// 设置时应反映当前时间。
-	// This field becomes immutable once set.
+	// 一旦设置便不可变。
 	// +optional
 	CompletionTime *metav1.Time
 
-	// message provides human-readable details about the state of the responder and the eviction
-	// process.
-	// Maximum length is 4000 characters.
+	// message 提供关于 responder 状态和驱逐流程的人类可读详情。
+	// 最大长度为 4000 个字符。
 	// +optional
 	Message *string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EvictionList contains a list of Eviction resources.
+// EvictionList 包含 Eviction 资源列表。
 type EvictionList struct {
 	metav1.TypeMeta
-	// metadata is the standard list metadata.
+	// metadata 是标准列表元数据。
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
-	// items is the list of Evictions.
+	// items 是 Eviction 列表。
 	Items []Eviction
 }

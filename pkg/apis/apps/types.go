@@ -25,10 +25,10 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// StatefulSet represents a set of pods with consistent identities.
+// StatefulSet 表示一组具有一致身份的 Pod。
 // Identities are defined as:
-//   - Network: A single stable DNS and hostname.
-//   - Storage: As many VolumeClaims as requested.
+// - 网络：单一稳定的 DNS 和主机名。
+// - 存储：按需提供任意数量的 VolumeClaim。
 //
 // The StatefulSet guarantees that a given network identity will always
 // map to the same storage identity.
@@ -37,24 +37,21 @@ type StatefulSet struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the desired identities of pods in this set.
+	// Spec 定义该集合中 Pod 的期望身份。
 	// +optional
 	Spec StatefulSetSpec
 
-	// Status is the current status of Pods in this StatefulSet. This data
-	// may be out of date by some window of time.
+	// Status 是该 StatefulSet 中 Pod 的当前状态。这些数据可能存在一定程度的时间延迟。
 	// +optional
 	Status StatefulSetStatus
 }
 
-// PodManagementPolicyType defines the policy for creating pods under a stateful set.
+// PodManagementPolicyType 定义 StatefulSet 下创建 Pod 的策略。
 type PodManagementPolicyType string
 
 const (
-	// OrderedReadyPodManagement will create pods in strictly increasing order on
-	// scale up and strictly decreasing order on scale down, progressing only when
-	// the previous pod is ready or terminated. At most one pod will be changed
-	// at any time.
+	// OrderedReadyPodManagement 在扩容时按严格递增顺序创建 Pod，在缩容时按严格递减顺序删除，
+	// 且仅在前一个 Pod 就绪或终止后才继续。任意时刻最多只变更一个 Pod。
 	OrderedReadyPodManagement PodManagementPolicyType = "OrderedReady"
 	// ParallelPodManagement will create and delete pods as soon as the stateful set
 	// replica count is changed, and will not wait for pods to be ready or complete
@@ -68,45 +65,38 @@ const (
 type StatefulSetUpdateStrategy struct {
 	// Type indicates the type of the StatefulSetUpdateStrategy.
 	Type StatefulSetUpdateStrategyType
-	// RollingUpdate is used to communicate parameters when Type is RollingUpdateStatefulSetStrategyType.
+	// 当 Type 为 RollingUpdateStatefulSetStrategyType 时，用 RollingUpdate 传递相关参数。
 	RollingUpdate *RollingUpdateStatefulSetStrategy
 }
 
-// StatefulSetUpdateStrategyType is a string enumeration type that enumerates
-// all possible update strategies for the StatefulSet controller.
+// StatefulSetUpdateStrategyType 是字符串枚举类型，枚举
+// StatefulSet 控制器所有可能的更新策略。
 type StatefulSetUpdateStrategyType string
 
 const (
-	// RollingUpdateStatefulSetStrategyType indicates that update will be
-	// applied to all Pods in the StatefulSet with respect to the StatefulSet
-	// ordering constraints. When a scale operation is performed with this
-	// strategy, new Pods will be created from the specification version indicated
-	// by the StatefulSet's updateRevision.
+	// RollingUpdateStatefulSetStrategyType 表示更新会按照 StatefulSet 的
+	// 顺序约束应用到 StatefulSet 中的所有 Pod。使用该策略执行扩容时，
+	// 新 Pod 会依据 StatefulSet 的 updateRevision 所指的 spec 版本创建。
 	RollingUpdateStatefulSetStrategyType StatefulSetUpdateStrategyType = "RollingUpdate"
-	// OnDeleteStatefulSetStrategyType disables ordered rolling restarts. Version
-	// tracking is done on a best-effort basis - the controller will try to
-	// eventually converge StatefulSet's currentRevision with updateRevision.
-	// Pods are recreated from the StatefulSetSpec when they are manually deleted.
-	// When a scale operation is performed with this strategy, new Pods will be
-	// created from the specification version indicated by the StatefulSet's updateRevision.
+	// OnDeleteStatefulSetStrategyType 禁用有序滚动重启。版本跟踪以尽力而为的方式进行 ——
+	// 控制器会尝试最终使 StatefulSet 的 currentRevision 与 updateRevision 收敛。
+	// Pod 被手动删除时，会依据 StatefulSetSpec 重新创建。
+	// 以该策略执行扩容时，新 Pod 会依据 StatefulSet 的 updateRevision 所指明的规格版本创建。
 	OnDeleteStatefulSetStrategyType StatefulSetUpdateStrategyType = "OnDelete"
-	// RecreateStatefulSetStrategyType indicates that all existing pods will be
-	// deleted and fully terminated before any new-revision pods are created.
-	// This ensures that old and new revision Pods never run at the same time.
-	// This is an alpha type and requires enabling StatefulSetRecreateStrategy feature gate.
-	// Switching to the Recreate strategy is allowed when the feature gate is enabled,
-	// and switching away from it to a different update strategy is also allowed.
-	//
+	// RecreateStatefulSetStrategyType 表示在创建任何新版本 Pod 之前，
+	// 先删除所有现有 Pod 并等待其完全终止。
+	// 这确保旧版本和新版本的 Pod 不会同时运行。
+	// 这是 alpha 类型，需要启用 StatefulSetRecreateStrategy feature gate。
+	// 启用该 feature gate 时允许切换到 Recreate 策略，也允许从该策略切换到其他更新策略。
 	// +featureGate=StatefulSetRecreateStrategy
 	RecreateStatefulSetStrategyType StatefulSetUpdateStrategyType = "Recreate"
 )
 
-// RollingUpdateStatefulSetStrategy is used to communicate parameter for RollingUpdateStatefulSetStrategyType.
+// RollingUpdateStatefulSetStrategy 用于传递 RollingUpdateStatefulSetStrategyType 的参数。
 type RollingUpdateStatefulSetStrategy struct {
-	// Partition indicates the ordinal at which the StatefulSet should be partitioned
-	// for updates. During a rolling update, all pods from ordinal Replicas-1 to
-	// Partition are updated. All pods from ordinal Partition-1 to 0 remain untouched.
-	// This is helpful in being able to do a canary based deployment. The default value is 0.
+	// Partition 表示 StatefulSet 更新时分段的起始序号。滚动更新期间，
+	// 序号从 Replicas-1 到 Partition 的所有 Pod 都会被更新，
+	// 序号从 Partition-1 到 0 的所有 Pod 保持不动。这便于进行金丝雀发布。默认值为 0。
 	Partition int32
 	// 更新期间允许不可用的 Pod 最大数量。
 	// 值可以是绝对数量（如 5）或期望 Pod 数的百分比（如 10%）。
@@ -140,7 +130,7 @@ const (
 )
 
 // StatefulSetPersistentVolumeClaimRetentionPolicy describes the policy used for PVCs
-// created from the StatefulSet VolumeClaimTemplates.
+// StatefulSet VolumeClaimTemplates 创建的 PVC 使用的保留策略。
 type StatefulSetPersistentVolumeClaimRetentionPolicy struct {
 	// WhenDeleted specifies what happens to PVCs created from StatefulSet
 	// VolumeClaimTemplates when the StatefulSet is deleted. The default policy
@@ -158,25 +148,22 @@ type StatefulSetPersistentVolumeClaimRetentionPolicy struct {
 // StatefulSetOrdinals describes the policy used for replica ordinal assignment
 // in this StatefulSet.
 type StatefulSetOrdinals struct {
-	// start is the number representing the first replica's index. It may be used
-	// to number replicas from an alternate index (eg: 1-indexed) over the default
-	// 0-indexed names, or to orchestrate progressive movement of replicas from
-	// one StatefulSet to another.
-	// If set, replica indices will be in the range:
-	//   [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas).
-	// If unset, defaults to 0. Replica indices will be in the range:
-	//   [0, .spec.replicas).
+	// start 表示第一个副本的起始序号。可用于从其他序号（例如从 1 开始）为副本编号，
+	// 以替代默认的从 0 开始命名，也可用于协调副本从一个 StatefulSet 逐步迁移到另一个。
+	// 如果设置，副本序号范围为：
+	// 如果未设置，默认为 0，副本序号范围为：
+	// [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas).
+	// [0, .spec.replicas).
 	// +optional
 	Start int32
 }
 
-// A StatefulSetSpec is the specification of a StatefulSet.
+// StatefulSetSpec 是 StatefulSet 的规格定义。
 type StatefulSetSpec struct {
-	// Replicas is the desired number of replicas of the given Template.
-	// These are replicas in the sense that they are instantiations of the
-	// same Template, but individual replicas also have a consistent identity.
-	// If unspecified, defaults to 1.
-	// TODO: Consider a rename of this field.
+	// replicas 是给定 Template 的期望副本数。
+	// 这里的副本是指同一 Template 的实例，但每个副本也具有一致的身份。
+	// 如果未指定，默认为 1。
+	// TODO: 考虑重命名该字段。
 	// +optional
 	Replicas int32
 
@@ -224,15 +211,13 @@ type StatefulSetSpec struct {
 	// +optional
 	PodManagementPolicy PodManagementPolicyType
 
-	// updateStrategy indicates the StatefulSetUpdateStrategy that will be
-	// employed to update Pods in the StatefulSet when a revision is made to
-	// Template.
+	// updateStrategy 表示当 Template 发生变更时，用于更新
+	// StatefulSet 中 Pod 的 StatefulSetUpdateStrategy。
 	UpdateStrategy StatefulSetUpdateStrategy
 
-	// revisionHistoryLimit is the maximum number of revisions that will
-	// be maintained in the StatefulSet's revision history. The revision history
-	// consists of all revisions not represented by a currently applied
-	// StatefulSetSpec version. The default value is 10.
+	// revisionHistoryLimit 是 StatefulSet 修订历史中保留的最大修订数。
+	// 修订历史由所有未被当前应用的 StatefulSetSpec 版本表示的修订组成。
+	// 默认值为 10。
 	RevisionHistoryLimit *int32
 
 	// 新建 Pod 必须保持 Ready 状态的最短秒数。
@@ -250,49 +235,47 @@ type StatefulSetSpec struct {
 	// +optional
 	PersistentVolumeClaimRetentionPolicy *StatefulSetPersistentVolumeClaimRetentionPolicy
 
-	// ordinals controls the numbering of replica indices in a StatefulSet. The
-	// default ordinals behavior assigns a "0" index to the first replica and
-	// increments the index by one for each additional replica requested.
+	// ordinals 控制 StatefulSet 中副本索引的编号方式。
+	// 默认行为是首个副本索引为 "0"，之后每增加一个副本索引加一。
 	// +optional
 	Ordinals *StatefulSetOrdinals
 }
 
-// StatefulSetStatus represents the current state of a StatefulSet.
+// StatefulSetStatus 表示 StatefulSet 的当前状态。
 type StatefulSetStatus struct {
-	// observedGeneration is the most recent generation observed for this StatefulSet. It corresponds to the
-	// StatefulSet's generation, which is updated on mutation by the API Server.
+	// observedGeneration 是该 StatefulSet 最近一次观测到的 generation，对应 StatefulSet 的
+	// generation，由 API Server 在变更时更新。
 	// +optional
 	ObservedGeneration *int64
 
-	// replicas is the number of Pods created by the StatefulSet controller.
+	// replicas 是 StatefulSet 控制器创建的 Pod 数。
 	Replicas int32
 
 	// readyReplicas is the number of Pods created by the StatefulSet controller that have a Ready Condition.
 	ReadyReplicas int32
 
-	// currentReplicas is the number of Pods created by the StatefulSet controller from the StatefulSet version
-	// indicated by currentRevision.
+	// currentReplicas 是 StatefulSet 控制器依据 currentRevision 所指版本
+	// 创建的 Pod 数。
 	CurrentReplicas int32
 
-	// updatedReplicas is the number of Pods created by the StatefulSet controller from the StatefulSet version
-	// indicated by updateRevision.
+	// updatedReplicas 是 StatefulSet 控制器依据 updateRevision 所指明的
+	// StatefulSet 版本创建的 Pod 数量。
 	UpdatedReplicas int32
 
-	// currentRevision, if not empty, indicates the version of the StatefulSet used to generate Pods in the
-	// sequence [0,currentReplicas).
+	// currentRevision 如果非空，表示用于生成序列 [0,currentReplicas) 中
+	// Pod 的 StatefulSet 版本。
 	CurrentRevision string
 
-	// updateRevision, if not empty, indicates the version of the StatefulSet used to generate Pods in the sequence
+	// updateRevision 非空时，表示用于生成序号区间 [replicas-updatedReplicas,replicas) 内 Pod 的 StatefulSet 版本。
 	// [replicas-updatedReplicas,replicas)
 	UpdateRevision string
 
-	// collisionCount is the count of hash collisions for the StatefulSet. The StatefulSet controller
-	// uses this field as a collision avoidance mechanism when it needs to create the name for the
-	// newest ControllerRevision.
+	// collisionCount 是 StatefulSet 的哈希冲突计数。当控制器需要为最新的
+	// ControllerRevision 生成名称时，将该字段用作避免冲突的机制。
 	// +optional
 	CollisionCount *int32
 
-	// Represents the latest available observations of a statefulset's current state.
+	// 表示对 statefulset 当前状态的最新可用观测。
 	Conditions []StatefulSetCondition
 
 	// Total number of available pods (ready for at least minReadySeconds) targeted by this statefulset.
@@ -304,16 +287,16 @@ type StatefulSetStatus struct {
 type StatefulSetConditionType string
 
 const (
-	// StatefulSetProgressing means the StatefulSet is progressing through an update.
-	// This condition is an alpha type and requires enabling StatefulSetRecreateStrategy feature gate.
+	// StatefulSetProgressing 表示 StatefulSet 正在更新中。
+	// 该条件为 alpha 类型，需要启用 StatefulSetRecreateStrategy feature gate。
 	StatefulSetProgressing StatefulSetConditionType = "Progressing"
 )
 
 // TODO: Add valid condition types for Statefulsets.
 
-// StatefulSetCondition describes the state of a statefulset at a certain point.
+// StatefulSetCondition 描述某个时刻 statefulset 的状态。
 type StatefulSetCondition struct {
-	// Type of statefulset condition.
+	// statefulset 条件的类型。
 	Type StatefulSetConditionType
 	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus
@@ -327,7 +310,7 @@ type StatefulSetCondition struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// StatefulSetList is a collection of StatefulSets.
+// StatefulSetList 是 StatefulSet 的集合。
 type StatefulSetList struct {
 	metav1.TypeMeta
 	// +optional
@@ -353,13 +336,13 @@ type ControllerRevision struct {
 	// Data is the Object representing the state.
 	Data runtime.RawExtension
 
-	// Revision indicates the revision of the state represented by Data.
+	// revision 表示 Data 所代表状态的修订号。
 	Revision int64
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ControllerRevisionList is a resource containing a list of ControllerRevision objects.
+// ControllerRevisionList 是包含 ControllerRevision 对象列表的资源。
 type ControllerRevisionList struct {
 	metav1.TypeMeta
 	// +optional
@@ -400,7 +383,7 @@ type DeploymentSpec struct {
 	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	Template api.PodTemplateSpec
 
-	// The deployment strategy to use to replace existing pods with new ones.
+	// 用新 Pod 替换现有 Pod 时采用的部署策略。
 	// +optional
 	Strategy DeploymentStrategy
 
@@ -439,13 +422,13 @@ type DeploymentSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DeploymentRollback stores the information required to rollback a deployment.
+// DeploymentRollback 保存回滚 Deployment 所需的信息。
 // 已弃用。
 type DeploymentRollback struct {
 	metav1.TypeMeta
 	// Required: This must match the Name of a deployment.
 	Name string
-	// The annotations to be updated to a deployment
+	// 要更新到 Deployment 上的注解。
 	// +optional
 	UpdatedAnnotations map[string]string
 	// The config of this deployment rollback.
@@ -470,7 +453,7 @@ const (
 // DeploymentStrategy stores information about the strategy and rolling-update
 // behavior of a deployment.
 type DeploymentStrategy struct {
-	// Type of deployment. Can be "Recreate" or "RollingUpdate". Default is RollingUpdate.
+	// Deployment 的类型。可取 "Recreate" 或 "RollingUpdate"。默认为 RollingUpdate。
 	// +optional
 	Type DeploymentStrategyType
 
@@ -487,7 +470,7 @@ type DeploymentStrategy struct {
 type DeploymentStrategyType string
 
 const (
-	// RecreateDeploymentStrategyType - kill all existing pods before creating new ones.
+	// RecreateDeploymentStrategyType 在创建新 Pod 前杀掉所有现有 Pod。
 	RecreateDeploymentStrategyType DeploymentStrategyType = "Recreate"
 
 	// RollingUpdateDeploymentStrategyType - Replace the old RCs by new one using rolling update i.e gradually scale down the old RCs and scale up the new one.
@@ -525,45 +508,43 @@ type RollingUpdateDeployment struct {
 
 // DeploymentStatus holds information about the observed status of a deployment.
 type DeploymentStatus struct {
-	// The generation observed by the deployment controller.
+	// 部署控制器观测到的 generation。
 	// +optional
 	ObservedGeneration int64
 
-	// Total number of non-terminating pods targeted by this deployment (their labels match the selector).
+	// 该 Deployment 关联的未终止 Pod 总数（标签与选择器匹配）。
 	// +optional
 	Replicas int32
 
-	// Total number of non-terminating pods targeted by this deployment that have the desired template spec.
+	// 该 Deployment 关联且具有期望模板规格的未终止 Pod 总数。
 	// +optional
 	UpdatedReplicas int32
 
-	// Total number of non-terminating pods targeted by this Deployment with a Ready Condition.
+	// 该 Deployment 关联且处于 Ready 条件的未终止 Pod 总数。
 	// +optional
 	ReadyReplicas int32
 
-	// Total number of available non-terminating pods (ready for at least minReadySeconds) targeted by this deployment.
+	// 该 Deployment 关联的可用未终止 Pod 总数（就绪至少 minReadySeconds）。
 	// +optional
 	AvailableReplicas int32
 
-	// Total number of unavailable pods targeted by this deployment. This is the total number of
-	// pods that are still required for the deployment to have 100% available capacity. They may
-	// either be pods that are running but not yet available or pods that still have not been created.
+	// 该 Deployment 所面向的不可用 Pod 总数。这是该 Deployment 达到 100% 可用容量
+	// 仍所需的 Pod 总数。它们可能是运行中但尚未可用的 Pod，也可能是尚未创建的 Pod。
 	// +optional
 	UnavailableReplicas int32
 
-	// Total number of terminating pods targeted by this deployment. Terminating pods have a non-null
+	// 本 Deployment 所针对的终止中 Pod 总数。终止中 Pod 的 .metadata.deletionTimestamp
 	// .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.
 	//
 	// 这是 beta 字段，需要开启 DeploymentReplicaSetTerminatingReplicas 特性（默认开启）。
 	// +optional
 	TerminatingReplicas *int32
 
-	// Represents the latest available observations of a deployment's current state.
+	// 对 Deployment 当前状态的最新可用观测。
 	Conditions []DeploymentCondition
 
-	// Count of hash collisions for the Deployment. The Deployment controller uses this
-	// field as a collision avoidance mechanism when it needs to create the name for the
-	// newest ReplicaSet.
+	// Deployment 的哈希冲突计数。Deployment 控制器在需要为最新的 ReplicaSet
+	// 生成名称时，用该字段作为避免冲突的机制。
 	// +optional
 	CollisionCount *int32
 }
@@ -571,24 +552,22 @@ type DeploymentStatus struct {
 // DeploymentConditionType defines conditions of a deployment.
 type DeploymentConditionType string
 
-// These are valid conditions of a deployment.
+// 以下是 deployment 的有效条件。
 const (
-	// Available means the deployment is available, ie. at least the minimum available
-	// replicas required are up and running for at least minReadySeconds.
+	// Available 表示 Deployment 可用，即至少所需的最小可用副本数已运行至少 minReadySeconds。
 	DeploymentAvailable DeploymentConditionType = "Available"
 	// Progressing means the deployment is progressing. Progress for a deployment is
 	// considered when a new replica set is created or adopted, and when new pods scale
 	// up or old pods scale down. Progress is not estimated for paused deployments or
 	// when progressDeadlineSeconds is not specified.
 	DeploymentProgressing DeploymentConditionType = "Progressing"
-	// ReplicaFailure is added in a deployment when one of its pods fails to be created
-	// or deleted.
+	// ReplicaFailure 在 Deployment 的某个 Pod 创建或删除失败时添加。
 	DeploymentReplicaFailure DeploymentConditionType = "ReplicaFailure"
 )
 
-// DeploymentCondition describes the state of a deployment at a certain point.
+// DeploymentCondition 描述 Deployment 在某一时刻的状态。
 type DeploymentCondition struct {
-	// Type of deployment condition.
+	// Deployment 条件的类型。
 	Type DeploymentConditionType
 	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus
@@ -610,7 +589,7 @@ type DeploymentList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of deployments.
+	// Items 是 Deployment 的列表。
 	Items []Deployment
 }
 
@@ -637,7 +616,7 @@ const (
 	// RollingUpdateDaemonSetStrategyType - Replace the old daemons by new ones using rolling update i.e replace them on each node one after the other.
 	RollingUpdateDaemonSetStrategyType DaemonSetUpdateStrategyType = "RollingUpdate"
 
-	// OnDeleteDaemonSetStrategyType - Replace the old daemons only when it's killed
+	// OnDeleteDaemonSetStrategyType 仅在旧 daemon 被杀掉后才替换它。
 	OnDeleteDaemonSetStrategyType DaemonSetUpdateStrategyType = "OnDelete"
 )
 
@@ -682,7 +661,7 @@ type RollingUpdateDaemonSet struct {
 	MaxSurge intstr.IntOrString
 }
 
-// DaemonSetSpec is the specification of a daemon set.
+// DaemonSetSpec 是 daemon set 的 spec。
 type DaemonSetSpec struct {
 	// A label query over pods that are managed by the daemon set.
 	// 必须匹配才能被控制。
@@ -703,10 +682,8 @@ type DaemonSetSpec struct {
 	// +optional
 	UpdateStrategy DaemonSetUpdateStrategy
 
-	// The minimum number of seconds for which a newly created DaemonSet pod should
-	// be ready without any of its container crashing, for it to be considered
-	// available. Defaults to 0 (pod will be considered available as soon as it
-	// is ready).
+	// 新创建的 DaemonSet Pod 在被视为可用之前，必须处于就绪状态且容器均未崩溃的最短秒数。
+	// 默认为 0（Pod 一旦就绪即被视为可用）。
 	// +optional
 	MinReadySeconds int32
 
@@ -723,29 +700,26 @@ type DaemonSetSpec struct {
 	RevisionHistoryLimit *int32
 }
 
-// DaemonSetStatus represents the current status of a daemon set.
+// DaemonSetStatus 表示 daemon set 的当前状态。
 type DaemonSetStatus struct {
-	// The number of nodes that are running at least 1
-	// daemon pod and are supposed to run the daemon pod.
+	// 运行至少 1 个 daemon Pod 且本应运行该 daemon Pod 的节点数。
 	CurrentNumberScheduled int32
 
-	// The number of nodes that are running the daemon pod, but are
-	// not supposed to run the daemon pod.
+	// 正在运行守护进程 Pod 但本不应运行该守护进程 Pod 的节点数。
 	NumberMisscheduled int32
 
-	// The total number of nodes that should be running the daemon
-	// pod (including nodes correctly running the daemon pod).
+	// 本应运行 daemon Pod 的节点总数（包括正确运行 daemon Pod 的节点）。
 	DesiredNumberScheduled int32
 
 	// The number of nodes that should be running the daemon pod and have one
 	// or more of the daemon pod running and ready.
 	NumberReady int32
 
-	// The most recent generation observed by the daemon set controller.
+	// daemon set 控制器最近观察到的 generation。
 	// +optional
 	ObservedGeneration int64
 
-	// The total number of nodes that are running updated daemon pod
+	// 正在运行更新后 daemon Pod 的节点总数。
 	// +optional
 	UpdatedNumberScheduled int32
 
@@ -761,24 +735,23 @@ type DaemonSetStatus struct {
 	// +optional
 	NumberUnavailable int32
 
-	// Count of hash collisions for the DaemonSet. The DaemonSet controller
-	// uses this field as a collision avoidance mechanism when it needs to
-	// create the name for the newest ControllerRevision.
+	// DaemonSet 的哈希冲突计数。当控制器需要为最新的
+	// ControllerRevision 生成名称时，将该字段用作避免冲突的机制。
 	// +optional
 	CollisionCount *int32
 
-	// Represents the latest available observations of a DaemonSet's current state.
+	// 表示对 DaemonSet 当前状态的最新可用观测。
 	Conditions []DaemonSetCondition
 }
 
 // DaemonSetConditionType defines a daemon set condition.
 type DaemonSetConditionType string
 
-// TODO: Add valid condition types of a DaemonSet.
+// TODO: 补充 DaemonSet 的有效条件类型。
 
-// DaemonSetCondition describes the state of a DaemonSet at a certain point.
+// DaemonSetCondition 描述某个时刻 DaemonSet 的状态。
 type DaemonSetCondition struct {
-	// Type of DaemonSet condition.
+	// DaemonSet 条件的类型。
 	Type DaemonSetConditionType
 	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus
@@ -792,7 +765,7 @@ type DaemonSetCondition struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DaemonSet represents the configuration of a daemon set.
+// DaemonSet 表示 daemon set 的配置。
 type DaemonSet struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
@@ -824,7 +797,7 @@ const (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DaemonSetList is a collection of daemon sets.
+// DaemonSetList 是 daemon set 的集合。
 type DaemonSetList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
@@ -832,19 +805,19 @@ type DaemonSetList struct {
 	// +optional
 	metav1.ListMeta
 
-	// A list of daemon sets.
+	// daemon set 的列表。
 	Items []DaemonSet
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ReplicaSet ensures that a specified number of pod replicas are running at any given time.
+// ReplicaSet 确保任意时刻都有指定数量的 Pod 副本在运行。
 type ReplicaSet struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the desired behavior of this ReplicaSet.
+	// Spec 定义 ReplicaSet 期望行为的规格。
 	// +optional
 	Spec ReplicaSetSpec
 
@@ -856,7 +829,7 @@ type ReplicaSet struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ReplicaSetList is a collection of ReplicaSets.
+// ReplicaSetList 是 ReplicaSet 的集合。
 type ReplicaSetList struct {
 	metav1.TypeMeta
 	// +optional
@@ -865,7 +838,7 @@ type ReplicaSetList struct {
 	Items []ReplicaSet
 }
 
-// ReplicaSetSpec is the specification of a ReplicaSet.
+// ReplicaSetSpec 是 ReplicaSet 的 spec。
 // As the internal representation of a ReplicaSet, it must have
 // a Template set.
 type ReplicaSetSpec struct {
@@ -892,36 +865,36 @@ type ReplicaSetSpec struct {
 	Template api.PodTemplateSpec
 }
 
-// ReplicaSetStatus represents the current status of a ReplicaSet.
+// ReplicaSetStatus 表示 ReplicaSet 的当前状态。
 type ReplicaSetStatus struct {
-	// Replicas is the most recently observed number of non-terminating pods.
+	// Replicas 是最近一次观测到的非终止中 Pod 数量。
 	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	Replicas int32
 
-	// The number of non-terminating pods that have labels matching the labels of the pod template of the replicaset.
+	// label 匹配该 replicaset Pod 模板 label 的非终止中 Pod 数。
 	// +optional
 	FullyLabeledReplicas int32
 
-	// The number of non-terminating pods targeted by this ReplicaSet with a Ready Condition.
+	// 该 ReplicaSet 所针对的、处于 Ready Condition 的非终止中 Pod 数。
 	// +optional
 	ReadyReplicas int32
 
-	// The number of available non-terminating pods (ready for at least minReadySeconds) for this replica set.
+	// 该副本集可用的非终止中 Pod 数量（就绪至少 minReadySeconds）。
 	// +optional
 	AvailableReplicas int32
 
-	// The number of terminating pods for this replica set. Terminating pods have a non-null .metadata.deletionTimestamp
-	// and have not yet reached the Failed or Succeeded .status.phase.
+	// 本 replica set 的终止中 Pod 数。终止中 Pod 的 .metadata.deletionTimestamp 非空，
+	// 且尚未进入 Failed 或 Succeeded 的 .status.phase。
 	//
 	// 这是 beta 字段，需要开启 DeploymentReplicaSetTerminatingReplicas 特性（默认开启）。
 	// +optional
 	TerminatingReplicas *int32
 
-	// ObservedGeneration reflects the generation of the most recently observed ReplicaSet.
+	// ObservedGeneration 反映最近观察到的 ReplicaSet 的 generation。
 	// +optional
 	ObservedGeneration int64
 
-	// Represents the latest available observations of a replica set's current state.
+	// 对 replica set 当前状态的最新可用观测。
 	// +optional
 	Conditions []ReplicaSetCondition
 }
@@ -929,17 +902,17 @@ type ReplicaSetStatus struct {
 // ReplicaSetConditionType is a condition of a replica set.
 type ReplicaSetConditionType string
 
-// These are valid conditions of a replica set.
+// 以下是 replica set 的有效条件。
 const (
-	// ReplicaSetReplicaFailure is added in a replica set when one of its pods fails to be created
-	// due to insufficient quota, limit ranges, pod security policy, node selectors, etc. or deleted
-	// due to kubelet being down or finalizers are failing.
+	// ReplicaSetReplicaFailure 在 replica set 的某个 Pod 因配额不足、limit range、
+	// pod security policy、node selector 等原因无法创建，或因 kubelet 宕机、
+	// finalizer 失败而无法删除时添加。
 	ReplicaSetReplicaFailure ReplicaSetConditionType = "ReplicaFailure"
 )
 
-// ReplicaSetCondition describes the state of a replica set at a certain point.
+// ReplicaSetCondition 描述某个时刻 replica set 的状态。
 type ReplicaSetCondition struct {
-	// Type of replica set condition.
+	// replica set 条件的类型。
 	Type ReplicaSetConditionType
 	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus

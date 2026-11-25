@@ -38,11 +38,11 @@ func init() {
 
 var (
 	// SchemeBuilder 是本包的 scheme 构造器，保存了需要执行的初始化函数。
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
 	SchemeBuilder runtime.SchemeBuilder
 	// localSchemeBuilder ïs a pointer to SchemeBuilder instance. Using localSchemeBuilder
 	// defaulting and conversion init funcs are registered as well.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// localSchemeBuilder 和 AddToScheme 仍留在 k8s.io/kubernetes。
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme 是通用的注册函数，把本包的 group/version 与类型映射到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
@@ -50,8 +50,8 @@ var (
 
 func init() {
 	// 这里只手动注册手写函数，生成器负责注册其余部分：
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 在生成文件中完成。这种分离保证
+	// 即使生成文件缺失，代码也能编译
 	localSchemeBuilder.Register(addKnownTypes, RegisterDefaults)
 }
 

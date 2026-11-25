@@ -3238,7 +3238,7 @@ func TestSetMinimumScalePod(t *testing.T) {
 
 // TestSetDefaultRequestsPod 验证容器 requests 默认从 limits 推导，且显式设置为零的值被保留。
 func TestSetDefaultRequestsPod(t *testing.T) {
-	// verify we default if limits are specified (and that request=0 is preserved)
+	// 有 limits 时会触发默认化；同时验证 request=0 这类显式值不被覆盖。
 	// 第一段：limits 存在时，缺失的 CPU request 应从 limits 复制，而显式为 0 的 memory request 保持为 0。
 	s := v1.PodSpec{}
 	s.Containers = []v1.Container{

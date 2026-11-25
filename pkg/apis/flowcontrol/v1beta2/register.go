@@ -40,7 +40,7 @@ var (
 
 func init() {
 	// 这里只手动注册手写函数，生成器负责注册其余部分：
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 在生成文件中完成。这种分离保证
+	// 即使生成文件缺失，代码也能编译
 	localSchemeBuilder.Register(RegisterDefaults)
 }

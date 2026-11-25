@@ -82,7 +82,7 @@ func SetDefaults_DaemonSet(obj *extensionsv1beta1.DaemonSet) {
 // 从 Pod 模板推导标签和选择器保持了旧版本 API 的行为；MaxInt32 的超时与历史上限
 // 等价于「未设置」，这样默认逻辑不会改变用户期望的语义。
 func SetDefaults_Deployment(obj *extensionsv1beta1.Deployment) {
-	// Default labels and selector to labels from pod template spec.
+	// 对象标签和 selector 默认取自 pod 模板，保证选择范围一致。
 	// 标签与选择器默认取 Pod 模板的标签，保证控制器能选中模板创建的 Pod。
 	labels := obj.Spec.Template.Labels
 
@@ -113,7 +113,7 @@ func SetDefaults_Deployment(obj *extensionsv1beta1.Deployment) {
 			strategy.RollingUpdate = &rollingUpdate
 		}
 		if strategy.RollingUpdate.MaxUnavailable == nil {
-			// Set default MaxUnavailable as 1 by default.
+			// 默认允许 1 个 Pod 不可用，逐节点更新以免整体中断。
 			// 默认最多一个副本不可用，平衡可用性与发布速度。
 			maxUnavailable := intstr.FromInt32(1)
 			strategy.RollingUpdate.MaxUnavailable = &maxUnavailable

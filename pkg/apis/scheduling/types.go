@@ -49,9 +49,9 @@ const (
 type PreemptionPolicy string
 
 const (
-	// PreemptLowerPriority means that pod/podgroup can preempt other pods with lower priority.
+	// PreemptLowerPriority 表示 Pod 可以抢占优先级更低的其他 Pod。
 	PreemptLowerPriority PreemptionPolicy = "PreemptLowerPriority"
-	// PreemptNever means that pod/podgroup never preempts other pods with lower priority.
+	// PreemptNever 表示 Pod 从不抢占其他 Pod。
 	PreemptNever PreemptionPolicy = "Never"
 )
 
@@ -65,8 +65,8 @@ type PriorityClass struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// value represents the integer value of this priority class. This is the actual priority that pods
-	// receive when they have the name of this class in their pod spec.
+	// value 表示此优先级类的整数值。当 Pod 的 spec 中指定该类名时，
+	// 这就是 Pod 实际获得的优先级。
 	Value int32
 
 	// globalDefault specifies whether this PriorityClass should be considered as
@@ -77,21 +77,20 @@ type PriorityClass struct {
 	// +optional
 	GlobalDefault bool
 
-	// description is an arbitrary string that usually provides guidelines on
-	// when this priority class should be used.
+	// description 是任意字符串，通常说明何时应使用此优先级类。
 	// +optional
 	Description string
 
 	// preemptionPolicy it the Policy for preempting pods with lower priority.
 	// 取值为 Never 或 PreemptLowerPriority。
-	// Defaults to PreemptLowerPriority if unset.
+	// 如果未设置，默认为 PreemptLowerPriority。
 	// +optional
 	PreemptionPolicy *core.PreemptionPolicy
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PriorityClassList is a collection of priority classes.
+// PriorityClassList 是优先级类的集合。
 type PriorityClassList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
@@ -117,15 +116,14 @@ type Workload struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the desired behavior of a Workload.
-	//
+	// spec 定义 Workload 的期望行为。
 	// +required
 	Spec WorkloadSpec
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// WorkloadList contains a list of Workload resources.
+// WorkloadList 包含一组 Workload 资源。
 type WorkloadList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
@@ -133,19 +131,19 @@ type WorkloadList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of Workloads.
+	// items 是 Workload 列表。
 	Items []Workload
 }
 
 const (
-	// WorkloadMaxPodGroupTemplates is the maximum number of pod group templates per Workload.
+	// WorkloadMaxPodGroupTemplates 是每个 Workload 允许的 Pod 组模板上限。
 	WorkloadMaxPodGroupTemplates = 8
 	// WorkloadMaxTemplateDepth is the maximum allowed depth of top-level composite pod group
 	// templates defined in a Workload object.
 	WorkloadMaxTemplateDepth = 4
 )
 
-// WorkloadSpec defines the desired state of a Workload.
+// WorkloadSpec 定义 Workload 的期望状态。
 type WorkloadSpec struct {
 	// ControllerRef is an optional reference to the controlling object, such as a
 	// Deployment or Job. This field is intended for use by tools like CLIs
@@ -169,7 +167,7 @@ type WorkloadSpec struct {
 	// The maximum number of templates is 8. This field is immutable.
 	// Exactly one of CompositePodGroupTemplates and PodGroupTemplates must be set.
 	//
-	// This field is used only when the CompositePodGroup feature gate is enabled.
+	// 仅当 CompositePodGroup 特性门控启用时使用此字段。
 	//
 	// +featureGate=CompositePodGroup
 	// +optional
@@ -178,7 +176,7 @@ type WorkloadSpec struct {
 	CompositePodGroupTemplates []CompositePodGroupTemplate
 }
 
-// TypedLocalObjectReference allows to reference typed object inside the same namespace.
+// TypedLocalObjectReference 用于引用同一命名空间内的类型化对象。
 type TypedLocalObjectReference struct {
 	// APIGroup is the group for the resource being referenced.
 	// If APIGroup is empty, the specified Kind must be in the core API group.
@@ -187,27 +185,21 @@ type TypedLocalObjectReference struct {
 	//
 	// +optional
 	APIGroup string
-	// Kind is the type of resource being referenced.
-	// It must be a path segment name.
-	//
+	// kind 是被引用资源的类型，必须是合法的路径段名称。
 	// +required
 	Kind string
-	// Name is the name of resource being referenced.
-	// It must be a path segment name.
-	//
+	// name 是被引用资源的名称，必须是合法的路径段名称。
 	// +required
 	Name string
 }
 
-// MaxPodGroupResourceClaims is the maximum number of resource claims for a
-// PodGroup or a Workload's PodGroupTemplate.
+// MaxPodGroupResourceClaims 是 PodGroup 或 Workload 的 PodGroupTemplate
+// 允许的最大资源申领数。
 const MaxPodGroupResourceClaims = 4
 
-// PodGroupTemplate represents a template for a set of pods with a scheduling policy.
+// PodGroupTemplate 表示一组带调度策略的 Pod 的模板。
 type PodGroupTemplate struct {
-	// Name is a unique identifier for the PodGroupTemplate within the Workload.
-	// It must be a DNS label. This field is immutable.
-	//
+	// name 是 PodGroupTemplate 在 Workload 内的唯一标识，必须是 DNS 标签，且不可变。
 	// +required
 	Name string
 
@@ -275,11 +267,9 @@ type PodGroupTemplate struct {
 	PreemptionPolicy *PreemptionPolicy
 }
 
-// CompositePodGroupTemplate represents a template for a CompositePodGroup with a scheduling policy.
+// CompositePodGroupTemplate 表示带调度策略的 CompositePodGroup 模板。
 type CompositePodGroupTemplate struct {
-	// Name is a unique identifier for the CompositePodGroupTemplate within the Workload.
-	// It must be a DNS label. This field is required.
-	//
+	// name 是 CompositePodGroupTemplate 在 Workload 内的唯一标识，必须是 DNS 标签，为必填项。
 	// +required
 	Name string
 
@@ -356,18 +346,13 @@ type CompositePodGroupTemplate struct {
 //
 // +union
 type PodGroupSchedulingPolicy struct {
-	// Basic specifies that the pods in this group should be scheduled using
-	// standard Kubernetes scheduling behavior. Setting this field at group creation time
-	// opts this group to basic scheduling; this field cannot be changed afterward.
-	//
+	// basic 指定组内 Pod 使用标准 Kubernetes 调度行为。创建组时设置此字段即选用基础调度，
+	// 之后不可更改。
 	// +optional
 	Basic *BasicSchedulingPolicy
 
-	// Gang specifies that the pods in this group should be scheduled using
-	// all-or-nothing semantics. Setting this field at group creation time
-	// opts this group to gang scheduling; this field cannot be set or unset afterward.
-	// The minCount field within Gang scheduling policy remains mutable after group creation.
-	//
+	// gang 指定组内 Pod 使用全有或全无（all-or-nothing）语义调度。创建组时设置此字段即选用 gang 调度，
+	// 之后不可设置或取消。Gang 策略中的 minCount 字段在组创建后仍可修改。
 	// +optional
 	Gang *GangSchedulingPolicy
 }
@@ -381,7 +366,7 @@ type BasicSchedulingPolicy struct {
 	// (gang) scheduling.
 }
 
-// GangSchedulingPolicy defines the parameters for gang scheduling.
+// GangSchedulingPolicy 定义 gang 调度的参数。
 type GangSchedulingPolicy struct {
 	// MinCount is the minimum number of pods that must be schedulable or scheduled
 	// at the same time for the scheduler to admit the entire group.
@@ -408,9 +393,7 @@ type GangSchedulingPolicy struct {
 // own Spec.ResourceClaims. The Pod's claim must match all fields of the
 // PodGroup's claim exactly.
 type PodGroupResourceClaim struct {
-	// Name uniquely identifies this resource claim inside the PodGroup.
-	// This must be a DNS_LABEL.
-	//
+	// name 在 PodGroup 内唯一标识此资源声明，必须是 DNS_LABEL。
 	// +required
 	Name string
 
@@ -449,23 +432,21 @@ type PodGroupResourceClaim struct {
 //
 // +union
 type DisruptionMode struct {
-	// Single specifies that children can be disrupted independently from each other.
-	//
+	// single 指定各子项可以彼此独立地被中断。
 	// +optional
 	Single *SingleDisruptionMode
 
-	// All specifies that all children can only be disrupted together.
-	//
+	// all 指定所有子项只能一起被中断。
 	// +optional
 	All *AllDisruptionMode
 }
 
-// SingleDisruptionMode specifies that children can be disrupted independently.
+// SingleDisruptionMode 指定各子对象可被独立中断。
 type SingleDisruptionMode struct {
 	// Intentionally empty now.
 }
 
-// AllDisruptionMode specifies that children can only be disrupted together.
+// AllDisruptionMode 指定各子对象只能作为一个整体被中断。
 type AllDisruptionMode struct {
 	// Intentionally empty now.
 }
@@ -484,20 +465,18 @@ type PodGroup struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the desired state of the PodGroup.
-	//
+	// spec 定义 PodGroup 的期望状态。
 	// +required
 	Spec PodGroupSpec
 
-	// Status represents the current observed state of the PodGroup.
-	//
+	// status 表示 PodGroup 当前观测到的状态。
 	// +optional
 	Status PodGroupStatus
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodGroupList contains a list of PodGroup resources.
+// PodGroupList 包含一组 PodGroup 资源。
 type PodGroupList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
@@ -509,12 +488,12 @@ type PodGroupList struct {
 	Items []PodGroup
 }
 
-// PodGroupSpec defines the desired state of a PodGroup.
+// PodGroupSpec 定义 PodGroup 的期望状态。
 type PodGroupSpec struct {
 	// ParentCompositePodGroupName contains the name of the parent composite pod group
 	// within the same namespace as this pod group.
 	// If it's nil, then this pod group is a root of a workload's hierarchy.
-	// This field is used only when the CompositePodGroup feature gate is enabled.
+	// 仅当 CompositePodGroup 特性门控启用时使用此字段。
 	// 该字段不可变。
 	//
 	// +featureGate=CompositePodGroup
@@ -601,7 +580,7 @@ type PodGroupSpec struct {
 	PreemptionPolicy *PreemptionPolicy
 }
 
-// PodGroupStatus represents information about the status of a pod group.
+// PodGroupStatus 表示 PodGroup 的状态信息。
 type PodGroupStatus struct {
 	// Conditions represent the latest observations of the PodGroup's state.
 	//
@@ -639,22 +618,21 @@ type PodGroupStatus struct {
 	ResourceClaimStatuses []PodGroupResourceClaimStatus
 }
 
-// Well-known condition types for PodGroups.
+// PodGroup 的已知条件类型。
 const (
-	// PodGroupInitiallyScheduled represents status of the scheduling process for this PodGroup till first success.
+	// PodGroupInitiallyScheduled 表示此 PodGroup 从开始到首次成功期间的调度过程状态。
 	PodGroupInitiallyScheduled string = "PodGroupInitiallyScheduled"
-	// DisruptionTarget indicates the PodGroup is about to be terminated due to disruption
-	// such as preemption.
+	// DisruptionTarget 表示 PodGroup 即将因抢占等中断而被终止。
 	DisruptionTarget string = "DisruptionTarget"
 )
 
-// Well-known condition reasons for PodGroups.
+// PodGroup 的已知条件原因。
 const (
-	// Unschedulable reason in the PodGroupInitiallyScheduled condition indicates that the PodGroup cannot be scheduled
-	// due to resource constraints, affinity/anti-affinity rules, or insufficient capacity for the PodGroup.
+	// PodGroupInitiallyScheduled 条件中的 Unschedulable 原因表示因资源不足、亲和/反亲和规则
+	// 或 PodGroup 容量不足而无法调度。
 	PodGroupReasonUnschedulable string = "Unschedulable"
-	// SchedulerError reason in the PodGroupInitiallyScheduled condition means that some internal error happens
-	// during scheduling, for example due to nodeAffinity parsing errors.
+	// PodGroupInitiallyScheduled 条件中的 SchedulerError 原因表示调度期间发生了内部错误，
+	// 例如 nodeAffinity 解析错误。
 	PodGroupReasonSchedulerError string = "SchedulerError"
 	// PreemptionByScheduler reason in the DisruptionTarget condition indicates the PodGroup was preempted
 	// to make room for higher-priority PodGroups or Pods.
@@ -665,10 +643,8 @@ const (
 // PodGroupResourceClaim which references a ResourceClaimTemplate. It stores the
 // generated name for the corresponding ResourceClaim.
 type PodGroupResourceClaimStatus struct {
-	// Name uniquely identifies this resource claim inside the PodGroup. This
-	// must match the name of an entry in podgroup.spec.resourceClaims, which
-	// implies that the string must be a DNS_LABEL.
-	//
+	// name 在 PodGroup 内唯一标识此资源声明，必须与 podgroup.spec.resourceClaims 中
+	// 某个条目的名称一致，因此该字符串必须是 DNS_LABEL。
 	// +required
 	Name string
 
@@ -700,17 +676,15 @@ type WorkloadReference struct {
 	TemplateName string
 }
 
-// PodGroupSchedulingConstraints defines scheduling constraints (e.g. topology) for a PodGroup.
+// PodGroupSchedulingConstraints 定义 PodGroup 的调度约束（如拓扑）。
 type PodGroupSchedulingConstraints struct {
-	// Topology defines the topology constraints for the pod group.
-	// Currently only a single topology constraint can be specified. This may change in the future.
-	//
+	// topology 定义 Pod 组的拓扑约束。目前只能指定单个拓扑约束，将来可能改变。
 	// +optional
 	// +listType=atomic
 	Topology []TopologyConstraint
 }
 
-// TopologyConstraint defines a topology constraint for a PodGroup.
+// TopologyConstraint 定义 PodGroup 的拓扑约束。
 type TopologyConstraint struct {
 	// Key specifies the key of the node label representing the topology domain.
 	// All pods within the PodGroup must be colocated within the same domain instance.
@@ -750,7 +724,7 @@ type CompositePodGroup struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CompositePodGroupList contains a list of CompositePodGroup resources.
+// CompositePodGroupList 包含一组 CompositePodGroup 资源。
 type CompositePodGroupList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
@@ -758,11 +732,11 @@ type CompositePodGroupList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of CompositePodGroups.
+	// Items 是 CompositePodGroup 列表。
 	Items []CompositePodGroup
 }
 
-// CompositePodGroupSpec defines the desired state of CompositePodGroup.
+// CompositePodGroupSpec 定义 CompositePodGroup 的期望状态。
 type CompositePodGroupSpec struct {
 	// ParentCompositePodGroupName contains the name of the parent composite pod group
 	// within the same namespace as this composite pod group. It must be a DNS name.
@@ -872,18 +846,16 @@ type CompositeGangSchedulingPolicy struct {
 	MinGroupCount int32
 }
 
-// CompositeDisruptionMode defines how individual entities within a composite pod group can be disrupted.
-// Exactly one mode must be set.
+// CompositeDisruptionMode 定义复合 PodGroup 中各实体可被中断的方式。
+// 必须且只能设置一种模式。
 //
 // +union
 type CompositeDisruptionMode struct {
-	// Single specifies that children groups can be disrupted independently from each other.
-	//
+	// single 指定各子组可以彼此独立地被中断。
 	// +optional
 	Single *SingleCompositeDisruptionMode
 
-	// All specifies that all children groups can only be disrupted together.
-	//
+	// all 指定所有子组只能一起被中断。
 	// +optional
 	All *AllCompositeDisruptionMode
 }
@@ -900,7 +872,7 @@ type AllCompositeDisruptionMode struct {
 	// This is intentionally empty.
 }
 
-// CompositePodGroupStatus represents information about the status of a composite pod group.
+// CompositePodGroupStatus 表示复合 PodGroup 的状态信息。
 type CompositePodGroupStatus struct {
 	// Conditions represent the latest observations of the CompositePodGroup's state.
 	//
@@ -933,11 +905,9 @@ type CompositePodGroupStatus struct {
 	Conditions []metav1.Condition
 }
 
-// CompositePodGroupSchedulingConstraints defines scheduling constraints (e.g. topology) for a CompositePodGroup.
+// CompositePodGroupSchedulingConstraints 定义 CompositePodGroup 的调度约束（如拓扑）。
 type CompositePodGroupSchedulingConstraints struct {
-	// Topology defines the topology constraints for the composite pod group.
-	// Currently only a single topology constraint can be specified. This may change in the future.
-	//
+	// topology 定义复合 Pod 组的拓扑约束。目前只能指定单个拓扑约束，将来可能改变。
 	// +optional
 	// +listType=atomic
 	Topology []TopologyConstraint

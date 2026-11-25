@@ -21,8 +21,8 @@ import (
 )
 
 // Authorization is calculated against
-// 1. evaluation of ClusterRoleBindings - short circuit on match
-// 2. evaluation of RoleBindings in the namespace requested - short circuit on match
+// 1. 评估 ClusterRoleBindings——命中即短路
+// 2. 评估所请求命名空间中的 RoleBindings——命中即短路
 // 3. deny by default
 
 // APIGroupAll and these consts are default values for rbac authorization.
@@ -36,7 +36,7 @@ const (
 	ServiceAccountKind = "ServiceAccount"
 	UserKind           = "User"
 
-	// AutoUpdateAnnotationKey is the name of an annotation which prevents reconciliation if set to "false"
+	// AutoUpdateAnnotationKey 是防止自动更新的注解名，值为 "false" 时不再执行协调（reconcile）
 	AutoUpdateAnnotationKey = "rbac.authorization.kubernetes.io/autoupdate"
 )
 
@@ -49,24 +49,24 @@ type PolicyRule struct {
 	// APIGroups is the name of the APIGroup that contains the resources.
 	// If multiple API groups are specified, any action requested against one of the enumerated resources in any API group will be allowed. "" represents the core API group and "*" represents all API groups.
 	APIGroups []string
-	// Resources is a list of resources this rule applies to.  '*' represents all resources in the specified apiGroups.
-	// '*/foo' represents the subresource 'foo' for all resources in the specified apiGroups.
+	// resources 是本规则适用的资源列表。'*' 表示指定 apiGroups 中的所有资源。
+	// '*/foo' 表示指定 apiGroups 中所有资源的子资源 'foo'。
 	Resources []string
 	// ResourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.
 	ResourceNames []string
 
 	// NonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path
 	// If an action is not a resource API request, then the URL is split on '/' and is checked against the NonResourceURLs to look for a match.
-	// Since non-resource URLs are not namespaced, this field is only applicable for ClusterRoles referenced from a ClusterRoleBinding.
-	// Rules can either apply to API resources (such as "pods" or "secrets") or non-resource URL paths (such as "/api"),  but not both.
+	// 非资源 URL 不属于命名空间，因此本字段仅适用于被 ClusterRoleBinding 引用的 ClusterRole
+	// 规则只能针对 API 资源（如 "pods"、"secrets"）或非资源 URL 路径（如 "/api"），二者不可兼得
 	NonResourceURLs []string
 }
 
-// Subject contains a reference to the object or user identities a role binding applies to.  This can either hold a direct API object reference,
-// or a value for non-objects such as user and group names.
+// Subject 引用角色绑定所作用的对象或用户身份，既可以是直接的 API 对象引用，
+// 也可以是非对象的值，例如用户名和组名
 type Subject struct {
-	// Kind of object being referenced. Values defined by this API group are "User", "Group", and "ServiceAccount".
-	// If the Authorizer does not recognized the kind value, the Authorizer should report an error.
+	// 被引用对象的 kind。本 API 组定义的值为 "User"、"Group" 和 "ServiceAccount"。
+	// 如果 Authorizer 无法识别该 kind 值，应报告错误。
 	Kind string
 	// APIGroup holds the API group of the referenced subject.
 	// Defaults to "" for ServiceAccount subjects.
@@ -74,24 +74,24 @@ type Subject struct {
 	APIGroup string
 	// Name of the object being referenced.
 	Name string
-	// Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty
-	// the Authorizer should report an error.
+	// 被引用对象所在的命名空间。若对象为非命名空间类型（如 "User" 或 "Group"）而此值非空，
+	// 授权器应报错
 	Namespace string
 }
 
-// RoleRef contains information that points to the role being used
+// RoleRef 包含指向所用角色的信息。
 type RoleRef struct {
 	// APIGroup is the group for the resource being referenced
 	APIGroup string
-	// Kind is the type of resource being referenced
+	// kind 为被引用资源的类型。
 	Kind string
-	// Name is the name of resource being referenced
+	// name 是被引用资源的名称。
 	Name string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Role is a namespaced, logical grouping of PolicyRules that can be referenced as a unit by a RoleBinding.
+// Role 是命名空间级别的 PolicyRules 逻辑分组，可被 RoleBinding 作为一个整体引用
 type Role struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
@@ -103,18 +103,18 @@ type Role struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RoleBinding references a role, but does not contain it.  It can reference a Role in the same namespace or a ClusterRole in the global namespace.
-// It adds who information via Subjects and namespace information by which namespace it exists in.  RoleBindings in a given
-// namespace only have effect in that namespace.
+// RoleBinding 引用角色但不包含角色本身。它可以引用同一命名空间中的 Role，或全局命名空间中的 ClusterRole
+// 它通过 Subjects 提供主体信息，通过自身所在命名空间提供命名空间信息。给定命名空间中的 RoleBinding
+// 只在该命名空间内生效
 type RoleBinding struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 
-	// Subjects holds references to the objects the role applies to.
+	// subjects 包含角色所作用对象的引用。
 	Subjects []Subject
 
 	// RoleRef can reference a Role in the current namespace or a ClusterRole in the global namespace.
-	// If the RoleRef cannot be resolved, the Authorizer must return an error.
+	// 若 RoleRef 无法解析，授权器必须返回错误
 	// 该字段不可变。
 	RoleRef RoleRef
 }
@@ -139,13 +139,13 @@ type RoleList struct {
 	// 标准的对象元数据。
 	metav1.ListMeta
 
-	// Items is a list of roles
+	// Items 为 Role 列表。
 	Items []Role
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterRole is a cluster level, logical grouping of PolicyRules that can be referenced as a unit by a RoleBinding or ClusterRoleBinding.
+// ClusterRole 是集群级别的 PolicyRules 逻辑分组，可被 RoleBinding 或 ClusterRoleBinding 作为一个整体引用
 type ClusterRole struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
@@ -160,7 +160,7 @@ type ClusterRole struct {
 	AggregationRule *AggregationRule
 }
 
-// AggregationRule describes how to locate ClusterRoles to aggregate into the ClusterRole
+// AggregationRule 描述如何定位要聚合进本 ClusterRole 的其他 ClusterRole
 type AggregationRule struct {
 	// ClusterRoleSelectors holds a list of selectors which will be used to find ClusterRoles and create the rules.
 	// If any of the selectors match, then the ClusterRole's permissions will be added
@@ -169,18 +169,18 @@ type AggregationRule struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterRoleBinding references a ClusterRole, but not contain it.  It can reference a ClusterRole in the global namespace,
-// and adds who information via Subject.
+// ClusterRoleBinding 引用但不包含 ClusterRole。它只能引用全局命名空间中的 ClusterRole，
+// 并通过 Subject 提供主体信息
 type ClusterRoleBinding struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
 	metav1.ObjectMeta
 
-	// Subjects holds references to the objects the role applies to.
+	// subjects 包含角色所作用对象的引用。
 	Subjects []Subject
 
 	// RoleRef can only reference a ClusterRole in the global namespace.
-	// If the RoleRef cannot be resolved, the Authorizer must return an error.
+	// 若 RoleRef 无法解析，授权器必须返回错误
 	// 该字段不可变。
 	RoleRef RoleRef
 }

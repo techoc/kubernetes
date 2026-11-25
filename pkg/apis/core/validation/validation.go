@@ -82,7 +82,7 @@ var pdPartitionErrorMsg string = validation.InclusiveRangeError(1, 255)
 var fileModeErrorMsg = "must be a number between 0 and 0777 (octal), both inclusive"
 var emptyDirModeErrorMsg = "must be a number between 0 and 01777 (octal), both inclusive"
 
-// BannedOwners is a black list of object that are not allowed to be owners.
+// BannedOwners 是不允许作为 owner 的对象黑名单。
 var BannedOwners = apimachineryvalidation.BannedOwners
 
 // nodeDeclaredFeatureRegexp defines the allowed format for feature names.
@@ -1877,7 +1877,7 @@ type ValidateCSIDriverNameOption int
 const (
 	// The required check is covered by declarative validation
 	RequiredCovered ValidateCSIDriverNameOption = iota
-	// The list size check is covered by declarative validation.
+	// 列表长度（元素数量）的检查已由声明式校验覆盖。
 	SizeCovered
 	// The format check is covered by declarative validation.
 	FormatCovered
@@ -8722,9 +8722,9 @@ func ValidateEndpoints(endpoints, oldEndpoints *core.Endpoints) field.ErrorList 
 	subsetErrs := validateEndpointSubsets(endpoints.Subsets, field.NewPath("subsets"))
 	if len(subsetErrs) != 0 {
 		// If this is an update, and Subsets was unchanged, then ignore the
-		// validation errors, since apparently older versions of Kubernetes
-		// considered the data valid. (We only check this after getting a
-		// validation error since Endpoints may be large and DeepEqual is slow.)
+		// 老版本 Kubernetes 曾认为这些数据合法，不应因为升级而导致存量对象无法更新。
+		// 只有先拿到错误才做 DeepEqual，是因为 Endpoints 可能很大、比较开销高；
+		// 没有错误时无需付出这份代价。
 		if oldEndpoints != nil && apiequality.Semantic.DeepEqual(oldEndpoints.Subsets, endpoints.Subsets) {
 			subsetErrs = nil
 		}

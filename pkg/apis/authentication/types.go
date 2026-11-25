@@ -22,20 +22,19 @@ import (
 )
 
 const (
-	// ImpersonateUserHeader is used to impersonate a particular user during an API server request
+	// ImpersonateUserHeader 用于在 API 服务器请求期间模拟指定用户。
 	ImpersonateUserHeader = "Impersonate-User"
 
-	// ImpersonateUIDHeader is used to impersonate a particular UID during an API server request.
+	// ImpersonateUIDHeader 用于在 API 服务器请求期间模拟指定 UID。
 	ImpersonateUIDHeader = "Impersonate-Uid"
 
-	// ImpersonateGroupHeader is used to impersonate a particular group during an API server request.
-	// It can be repeated multiplied times for multiple groups.
+	// ImpersonateGroupHeader 用于在 API 服务器请求期间模拟指定用户组。
+	// 多个组可重复多次该请求头。
 	ImpersonateGroupHeader = "Impersonate-Group"
 
-	// ImpersonateUserExtraHeaderPrefix is a prefix for any header used to impersonate an entry in the
-	// extra map[string][]string for user.Info.  The key will be every after the prefix.
-	// It can be repeated multiplied times for multiple map keys and the same key can be repeated multiple
-	// times to have multiple elements in the slice under a single key
+	// ImpersonateUserExtraHeaderPrefix 是用于模拟 user.Info 中 extra map[string][]string
+	// 条目的请求头前缀，前缀之后的全部内容即为键名。
+	// 多个 map 键可重复多次该请求头；同一个键也可重复多次，以为该键下的切片提供多个元素。
 	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
 
 	// AttestationAdmissionReviewAPIGroups is the map key for the
@@ -75,70 +74,65 @@ type TokenReview struct {
 	// REST handler 路径能够正常工作。
 	metav1.ObjectMeta
 
-	// Spec holds information about the request being evaluated
+	// spec 包含待评估请求的信息。
 	Spec TokenReviewSpec
 
-	// Status is filled in by the server and indicates whether the request can be authenticated.
+	// status 由服务器填写，指示该请求能否通过认证。
 	Status TokenReviewStatus
 }
 
-// TokenReviewSpec is a description of the token authentication request.
+// TokenReviewSpec 描述令牌认证请求。
 type TokenReviewSpec struct {
 	// Token 是不透明的 bearer token。
 	Token string `datapolicy:"token"`
-	// Audiences is a list of the identifiers that the resource server presented
-	// with the token identifies as. Audience-aware token authenticators will
-	// verify that the token was intended for at least one of the audiences in
-	// this list. If no audiences are provided, the audience will default to the
-	// audience of the Kubernetes apiserver.
+	// audiences 是资源服务器随令牌提供的标识符列表。支持 audience 的令牌认证器会验证
+	// 令牌的预期 audience 是否至少与列表中的一个匹配。若未提供 audience，则默认为
+	// Kubernetes apiserver 的 audience。
 	Audiences []string
 }
 
-// TokenReviewStatus is the result of the token authentication request.
+// TokenReviewStatus 是令牌认证请求的结果。
 // This type mirrors the authentication.Token interface
 type TokenReviewStatus struct {
-	// Authenticated indicates that the token was associated with a known user.
+	// authenticated 表示令牌与某个已知用户相关联。
 	Authenticated bool
-	// User is the UserInfo associated with the provided token.
+	// user 是与所提供令牌关联的 UserInfo。
 	User UserInfo
-	// Audiences are audience identifiers chosen by the authenticator that are
-	// compatible with both the TokenReview and token. An identifier is any
-	// identifier in the intersection of the TokenReviewSpec audiences and the
-	// token's audiences. A client of the TokenReview API that sets the
-	// spec.audiences field should validate that a compatible audience identifier
-	// is returned in the status.audiences field to ensure that the TokenReview
-	// server is audience aware. If a TokenReview returns an empty
-	// status.audience field where status.authenticated is "true", the token is
-	// valid against the audience of the Kubernetes API server.
+	// audiences 是认证器选出的、同时与 TokenReview 和令牌兼容的 audience 标识符。
+	// 标识符取自 TokenReviewSpec 的 audiences 与令牌 audiences 的交集。
+	// 设置了 spec.audiences 的 TokenReview API 客户端应校验 status.audiences 中返回了
+	// 兼容的 audience 标识符，以确认 TokenReview 服务器支持 audience 感知。
+	// 若 TokenReview 在 status.authenticated 为 "true" 时返回空的 status.audience 字段，
+	// 则说明该令牌对 Kubernetes API 服务器的 audience 有效。
 	Audiences []string
-	// Error indicates that the token couldn't be checked
+	// error 表示无法校验该 token。
 	Error string
 }
 
 // UserInfo holds the information about the user needed to implement the
 // user.Info interface.
 type UserInfo struct {
-	// The name that uniquely identifies this user among all active users.
+	// username 是在所有活跃用户中唯一标识该用户的名称。
 	Username string
 	// A unique value that identifies this user across time. If this user is
 	// deleted and another user by the same name is added, they will have
 	// different UIDs.
 	UID string
-	// The names of groups this user is a part of.
+	// groups 是该用户所属组的名称。
 	Groups []string
-	// Any additional information provided by the authenticator.
+	// extra 是认证器提供的任何附加信息。
 	Extra map[string]ExtraValue
 }
 
 // ExtraValue 对值做掩码，使 protobuf 能够生成
 type ExtraValue []string
 
-// AttestationValue masks the value so protobuf can generate
+// AttestationValue 对值做包装，以便 protobuf 生成代码。
 type AttestationValue []string
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TokenRequest requests a token for a given service account.
+// TokenRequest 为指定的 ServiceAccount 请求令牌。
 type TokenRequest struct {
 	metav1.TypeMeta
 	// ObjectMeta 实现 metav1.ObjectMetaAccessor 接口，以便标准
@@ -149,14 +143,11 @@ type TokenRequest struct {
 	Status TokenRequestStatus
 }
 
-// TokenRequestSpec contains client provided parameters of a token request.
+// TokenRequestSpec 包含客户端提供的令牌请求参数。
 type TokenRequestSpec struct {
-	// Audiences are the intended audiences of the token. A recipient of a
-	// token must identify themself with an identifier in the list of
-	// audiences of the token, and otherwise should reject the token. A
-	// token issued for multiple audiences may be used to authenticate
-	// against any of the audiences listed but implies a high degree of
-	// trust between the target audiences.
+	// audiences 是令牌的预期 audience。令牌接收方必须用令牌 audience 列表中的某个标识符
+	// 表明自己的身份，否则应拒绝该令牌。为多个 audience 签发的令牌可用于向其中任意一个
+	// audience 认证，但这意味着目标 audience 之间存在高度信任。
 	Audiences []string
 
 	// ExpirationSeconds is the requested duration of validity of the request. The
@@ -171,15 +162,13 @@ type TokenRequestSpec struct {
 	// small if you want prompt revocation.
 	BoundObjectRef *BoundObjectReference
 
-	// Attestations is map of well-known keys to string-slice values.
-	// The values for each key have a specific semantic meaning, which is
-	// documented on the key definition. Requesters of tokens may ask
-	// the Kubernetes API Server to attest to certain claims. The API Server
-	// may perform authorization checks depending on the contents of this field.
+	// attestations 是已知键到字符串切片值的映射。
+	// 每个键的值都有特定语义，文档见对应键的定义。令牌请求者可请求 Kubernetes API 服务器
+	// 对某些声明作出证明。API 服务器可能会根据该 map 的键执行授权检查。
 	Attestations map[string]AttestationValue
 }
 
-// TokenRequestStatus is the result of a token request.
+// TokenRequestStatus 是令牌请求的结果。
 type TokenRequestStatus struct {
 	// Token 是不透明的 bearer token。
 	Token string `datapolicy:"token"`
@@ -187,14 +176,14 @@ type TokenRequestStatus struct {
 	ExpirationTimestamp metav1.Time
 }
 
-// BoundObjectReference is a reference to an object that a token is bound to.
+// BoundObjectReference 指向令牌所绑定的对象。
 type BoundObjectReference struct {
 	// Kind of the referent. Valid kinds are 'Pod' and 'Secret'.
 	Kind string
 	// API version of the referent.
 	APIVersion string
 
-	// Name of the referent.
+	// 被引用对象的 name。
 	Name string
 	// UID of the referent.
 	UID types.UID
@@ -202,19 +191,19 @@ type BoundObjectReference struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SelfSubjectReview contains the user information that the kube-apiserver has about the user making this request.
-// When using impersonation, users will receive the user info of the user being impersonated.  If impersonation or
-// request header authentication is used, any extra keys will have their case ignored and returned as lowercase.
+// SelfSubjectReview 包含 kube-apiserver 所掌握的关于发起请求的用户的信息。
+// 使用身份冒充时，用户将收到被冒充用户的信息。如果使用身份冒充或请求头认证，
+// 任何额外键都会忽略大小写并以小写形式返回。
 type SelfSubjectReview struct {
 	metav1.TypeMeta
 	// ObjectMeta fulfills the metav1.ObjectMetaAccessor interface so that the stock.
 	// REST handler paths work.
 	metav1.ObjectMeta
-	// Status is filled in by the server with the user attributes.
+	// status 由服务端填入用户属性。
 	Status SelfSubjectReviewStatus
 }
 
-// SelfSubjectReviewStatus is filled by the kube-apiserver and sent back to a user.
+// SelfSubjectReviewStatus 由 kube-apiserver 填入并返回给用户。
 type SelfSubjectReviewStatus struct {
 	// User attributes of the user making this request.
 	UserInfo UserInfo

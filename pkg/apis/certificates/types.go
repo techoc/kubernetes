@@ -102,7 +102,7 @@ type CertificateSigningRequestSpec struct {
 	// 详见 user.Info 接口。
 	// +optional
 	Username string
-	// UID information about the requesting user.
+	// UID 是发起请求用户的 UID 信息。
 	// 详见 user.Info 接口。
 	// +optional
 	UID string
@@ -120,21 +120,19 @@ type CertificateSigningRequestSpec struct {
 // None of these usages are related to ServiceAccount token secrets
 // `.data[ca.crt]` in any way.
 const (
-	// Signs certificates that will be honored as client-certs by the
-	// kube-apiserver. Never auto-approved by kube-controller-manager.
+	// 签发会被 kube-apiserver 认可为客户端证书的证书。
+	// 从不会被 kube-controller-manager 自动批准。
 	KubeAPIServerClientSignerName = "kubernetes.io/kube-apiserver-client"
 
-	// Signs client certificates that will be honored as client-certs by the
-	// kube-apiserver for a kubelet.
-	// May be auto-approved by kube-controller-manager.
+	// 为 kubelet 签发会被 kube-apiserver 认可为客户端证书的客户端证书。
+	// 可能被 kube-controller-manager 自动批准。
 	KubeAPIServerClientKubeletSignerName = "kubernetes.io/kube-apiserver-client-kubelet"
 
-	// Signs serving certificates that are honored as a valid kubelet serving
-	// certificate by the kube-apiserver, but has no other guarantees.
+	// 签发会被 kube-apiserver 认可为有效 kubelet 服务端证书的服务端证书，但无其他保证。
 	KubeletServingSignerName = "kubernetes.io/kubelet-serving"
 
-	// Has no guarantees for trust at all. Some distributions may honor these
-	// as client certs, but that behavior is not standard kubernetes behavior.
+	// 完全不保证信任。某些发行版可能将其作为客户端证书认可，
+	// 但该行为不是标准 Kubernetes 行为。
 	LegacyUnknownSignerName = "kubernetes.io/legacy-unknown"
 )
 
@@ -142,18 +140,18 @@ const (
 type ExtraValue []string
 
 type CertificateSigningRequestStatus struct {
-	// Conditions applied to the request, such as approval or denial.
+	// 应用于请求的条件，例如批准或拒绝。
 	// +optional
 	Conditions []CertificateSigningRequestCondition
 
-	// If request was approved, the controller will place the issued certificate here.
+	// 若请求被批准，控制器会将签发的证书放在这里。
 	// +optional
 	Certificate []byte
 }
 
 type RequestConditionType string
 
-// These are the possible conditions for a certificate request.
+// 证书请求可能具有的条件。
 const (
 	CertificateApproved RequestConditionType = "Approved"
 	CertificateDenied   RequestConditionType = "Denied"
@@ -161,7 +159,7 @@ const (
 )
 
 type CertificateSigningRequestCondition struct {
-	// type of the condition. Known conditions include "Approved", "Denied", and "Failed".
+	// 条件的类型。已知条件包括 "Approved"、"Denied" 和 "Failed"。
 	Type RequestConditionType
 	// 条件的状态，取值为 True、False 或 Unknown。
 	// Approved, Denied, and Failed conditions may not be "False" or "Unknown".
@@ -193,7 +191,7 @@ type CertificateSigningRequestList struct {
 	Items []CertificateSigningRequest
 }
 
-// KeyUsages specifies valid usage contexts for keys.
+// KeyUsage 指定密钥的有效使用场景。
 // See:
 //
 //	https://tools.ietf.org/html/rfc5280#section-4.2.1.3
@@ -243,12 +241,12 @@ type ClusterTrustBundle struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec contains the signer (if any) and trust anchors.
+	// spec 包含签名者（如有）和信任锚。
 	// +optional
 	Spec ClusterTrustBundleSpec
 }
 
-// ClusterTrustBundleSpec contains the signer and trust anchors.
+// ClusterTrustBundleSpec 包含签名者和信任锚。
 type ClusterTrustBundleSpec struct {
 	// SignerName indicates the associated signer, if any.
 	SignerName string
@@ -275,7 +273,7 @@ type ClusterTrustBundleList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is a collection of ClusterTrustBundle objects
+	// items 是 ClusterTrustBundle 对象的集合。
 	Items []ClusterTrustBundle
 }
 
@@ -287,16 +285,16 @@ const MaxTrustBundleSize = 1 * 1024 * 1024
 // PodCertificateRequest encodes a pod requesting a certificate from a given
 // signer.
 //
-// Kubelets use this API to implement podCertificate projected volumes
+// Kubelet 使用该 API 实现 podCertificate 投影卷。
 type PodCertificateRequest struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec contains the details about the certificate being requested.
+	// spec 包含所请求证书的详细信息。
 	Spec PodCertificateRequestSpec
 
-	// Status contains the issued certificate, and a standard set of conditions.
+	// status 包含签发的证书和一组标准状况。
 	// +optional
 	Status PodCertificateRequestStatus
 }
@@ -329,21 +327,17 @@ type PodCertificateRequestSpec struct {
 	// NodeUID is the UID of the node the pod is assigned to.
 	NodeUID types.UID
 
-	// maxExpirationSeconds is the maximum lifetime permitted for the
-	// certificate.
-	//
-	// If omitted, kube-apiserver will set it to 86400(24 hours). kube-apiserver
-	// will reject values shorter than 3600 (1 hour).
-	//
-	// The signer implementation is then free to issue a certificate with any
-	// lifetime *shorter* than MaxExpirationSeconds, but no shorter than 3600
-	// seconds (1 hour).  This constraint is enforced by kube-apiserver.
+	// maxExpirationSeconds 是证书允许的最大有效期。
+	// 若省略，kube-apiserver 会将其设为 86400（24 小时）。kube-apiserver
+	// 会拒绝短于 3600（1 小时）的值。允许的最大值为 7862400（91 天）。
+	// 签名者实现可以自由签发有效期*短于* MaxExpirationSeconds 的证书，
+	// 但不得短于 3600 秒（1 小时）。此约束由 kube-apiserver 强制。
 	MaxExpirationSeconds *int32
 
 	// The PKIX-serialized public key the signer will issue the certificate to.
 	//
-	// The key must be one of RSA3072, RSA4096, ECDSAP256, ECDSAP384, ECDSAP521,
-	// or ED25519. Note that this list may be expanded in the future.
+	// 密钥必须是 RSA3072、RSA4096、ECDSAP256、ECDSAP384、ECDSAP521 或
+	// ED25519 之一。注意此列表将来可能扩展。
 	//
 	// Signer 实现无需支持 kube-apiserver 和 kubelet 支持的所有密钥类型。
 	// 若 signer 不支持某个 PodCertificateRequest 使用的密钥类型，
@@ -373,16 +367,16 @@ type PodCertificateRequestSpec struct {
 	// the pod UID, using RSASSA-PSS from RFC 8017 (as implemented by the golang
 	// function crypto/rsa.SignPSS with nil options).
 	//
-	// If the key is an ECDSA key, then the signature is as described by [SEC 1,
+	// 若密钥是 ECDSA 密钥，签名如 [SEC 1, Version 2.0]
 	// Version 2.0](https://www.secg.org/sec1-v2.pdf) (as implemented by the
-	// golang library function crypto/ecdsa.SignASN1)
+	// crypto/ecdsa.SignASN1 实现）。
 	//
 	// If the key is an ED25519 key, the the signature is as described by the
 	// [ED25519 Specification](https://ed25519.cr.yp.to/) (as implemented by the
 	// golang library crypto/ed25519.Sign).
 	//
 	// 已弃用：该字段由 StubPKCS10Request 取代。若
-	// StubPKCS10Request is set, this field must be empty.
+	// 此字段必须为空。
 	//
 	// +optional
 	ProofOfPossession []byte
@@ -407,56 +401,34 @@ type PodCertificateRequestSpec struct {
 	// （承接上一行）。
 	StubPKCS10Request []byte
 
-	// unverifiedUserAnnotations allow pod authors to pass additional information to
-	// the signer implementation. Kubernetes does not restrict or validate this
-	// metadata in any way.
-	//
-	// Entries are subject to the same validation as object metadata annotations,
-	// with the addition that all keys must be domain-prefixed. No restrictions
-	// are placed on values, except an overall size limitation on the entire field.
-	//
-	// Signers should document the keys and values they support. Signers should
-	// deny requests that contain keys they do not recognize.
+	// unverifiedUserAnnotations 允许 Pod 作者向签名者实现传递附加信息。
+	// Kubernetes 不会以任何方式限制或校验这些元数据。
+	// 条目遵循与对象元数据注解相同的校验规则，但所有键必须带域名前缀。除整个字段的总大小限制外，
+	// 对值没有限制。
+	// 签名者应记录自己支持的键和值，并拒绝含有无法识别键的请求。
 	UnverifiedUserAnnotations map[string]string
 }
 
 type PodCertificateRequestStatus struct {
-	// conditions applied to the request. Known conditions are "Denied",
-	// "Failed", and "Issued".
-	//
-	// The types "Issued", "Denied", and "Failed" have special handling.  At
-	// most one of these conditions may be present, and they must have status
-	// "True".
-	//
-	// If the request is denied with `Reason=UnsupportedKeyType`, the signer may
-	// suggest a key type that will work in the message field.
-	//
+	// 应用在请求上的状况。
+	// "Issued"、"Denied" 和 "Failed" 类型有特殊处理：这些状况最多出现一个，
+	// 且状态必须为 "True"。
+	// 若请求以 `Reason=UnsupportedKeyType` 被拒绝，签名者可在 message 字段建议使用可用的密钥类型。
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition
 
-	// certificateChain is populated with an issued certificate by the signer.
-	// This field is set via the /status subresource. Once populated, this field
-	// is immutable.
-	//
-	// If the certificate signing request is denied, a condition of type
-	// "Denied" is added and this field remains empty. If the signer cannot
-	// issue the certificate, a condition of type "Failed" is added and this
-	// field remains empty.
-	//
-	// Validation requirements:
-	//  1. certificateChain must consist of one or more PEM-formatted certificates.
-	//  2. Each entry must be a valid PEM-wrapped, DER-encoded ASN.1 Certificate as
-	//     described in section 4 of RFC5280.
-	//
-	// If more than one block is present, and the definition of the requested
-	// spec.signerName does not indicate otherwise, the first block is the
-	// issued certificate, and subsequent blocks should be treated as
-	// intermediate certificates and presented in TLS handshakes.  When
-	// projecting the chain into a pod volume, kubelet will drop any data
-	// in-between the PEM blocks, as well as any PEM block headers.
-	//
+	// certificateChain 由签名者填入签发的证书。
+	// 该字段通过 /status 子资源设置，填充后不可修改。
+	// 若证书签名请求被拒绝，会添加类型为 "Denied" 的状况，该字段保持为空。
+	// 若签名者无法签发证书，会添加类型为 "Failed" 的状况，该字段同样保持为空。
+	// 校验要求：
+	// 1. certificateChain 必须由一个或多个 PEM 格式的证书组成。
+	// 2. 每一项必须是 RFC5280 第 4 节描述的、合法 PEM 包裹的 DER 编码 ASN.1 证书。
+	// 如果存在多个块，且请求的 spec.signerName 定义未另行说明，则第一个块是签发的证书，
+	// 后续块应视为中间证书并在 TLS 握手中提供。将证书链投影到 Pod 卷时，
+	// kubelet 会丢弃 PEM 块之间的数据以及任何 PEM 块头部。
 	// +optional
 	CertificateChain string
 
@@ -467,14 +439,9 @@ type PodCertificateRequestStatus struct {
 	// +optional
 	NotBefore *metav1.Time
 
-	// beginRefreshAt is the time at which the kubelet should begin trying to
-	// refresh the certificate.  This field is set via the /status subresource,
-	// and must be set at the same time as certificateChain.  Once populated,
-	// this field is immutable.
-	//
-	// This field is only a hint.  Kubelet may start refreshing before or after
-	// this time if necessary.
-	//
+	// beginRefreshAt 是 kubelet 应开始尝试刷新证书的时间。该字段通过 /status 子资源设置，
+	// 必须与 certificateChain 同时设置，填充后不可修改。
+	// 该字段仅作提示，必要时 kubelet 可早于或晚于该时间开始刷新。
 	// +optional
 	BeginRefreshAt *metav1.Time
 
@@ -488,23 +455,22 @@ type PodCertificateRequestStatus struct {
 
 // Well-known condition types for PodCertificateRequests
 const (
-	// Denied indicates the request was denied by the signer.
+	// Denied 表示请求被签名者拒绝。
 	PodCertificateRequestConditionTypeDenied string = "Denied"
-	// Failed indicates the signer failed to issue the certificate.
+	// Failed 表示签名者签发证书失败。
 	PodCertificateRequestConditionTypeFailed string = "Failed"
-	// Issued indicates the certificate has been issued.
+	// Issued 表示证书已签发。
 	PodCertificateRequestConditionTypeIssued string = "Issued"
 )
 
 // Well-known condition reasons for PodCertificateRequests
 const (
-	// UnsupportedKeyType should be set on "Denied" conditions when the signer
-	// doesn't support the key type of publicKey.
+	// UnsupportedKeyType 应在签名者不支持 publicKey 的密钥类型时，
+	// 设置到 "Denied" 状况上。
 	PodCertificateRequestConditionUnsupportedKeyType string = "UnsupportedKeyType"
 
-	// InvalidUnverifiedUserAnnotations should be set on "Denied" conditions when the signer
-	// does not recognize one of the keys passed in userConfig, or if the signer
-	// otherwise considers the userConfig of the request to be invalid.
+	// InvalidUnverifiedUserAnnotations 应在签名者不识别 userConfig 中的某个键，
+	// 或认为请求的 userConfig 无效时，设置到 "Denied" 状况上。
 	PodCertificateRequestConditionInvalidUserConfig string = "InvalidUnverifiedUserAnnotations"
 )
 
@@ -543,6 +509,6 @@ type PodCertificateRequestList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is a collection of PodCertificateRequest objects
+	// items 是 PodCertificateRequest 对象的集合。
 	Items []PodCertificateRequest
 }

@@ -103,16 +103,16 @@ type APIResourceDiscovery struct {
 	// +listType=set
 	ShortNames []string
 	// categories 是该资源所属的资源分组列表（例如 'all'）。
-	// Clients may use this to simplify acting on multiple resource types at once.
+	// 客户端可借此简化对多种资源类型的批量操作。
 	// +listType=set
 	Categories []string
-	// subresources is a list of subresources provided by this resource. Subresources are located at /apis/<APIGroupDiscovery.objectMeta.name>/<APIVersionDiscovery.version>/<APIResourceDiscovery.Resource>/name-of-instance/<APIResourceDiscovery.subresources[i].subresource>
+	// subresources 为此资源提供的子资源列表。子资源位于 /apis/<APIGroupDiscovery.objectMeta.name>/<APIVersionDiscovery.version>/<APIResourceDiscovery.Resource>/name-of-instance/<APIResourceDiscovery.subresources[i].subresource>
 	// +listType=map
 	// +listMapKey=subresource
 	Subresources []APISubresourceDiscovery
 }
 
-// ResourceScope is an enum defining the different scopes available to a resource.
+// ResourceScope 是枚举，定义资源可用的不同作用域。
 type ResourceScope string
 
 const (
@@ -120,7 +120,7 @@ const (
 	ScopeNamespace ResourceScope = "Namespaced"
 )
 
-// DiscoveryFreshness is an enum defining whether the Discovery document published by an apiservice is up to date (fresh).
+// DiscoveryFreshness 是枚举，表示 apiservice 发布的发现文档是否为最新。
 type DiscoveryFreshness string
 
 const (
@@ -128,18 +128,16 @@ const (
 	DiscoveryFreshnessStale   DiscoveryFreshness = "Stale"
 )
 
-// APISubresourceDiscovery provides information about an API subresource for discovery.
+// APISubresourceDiscovery 提供某 API 子资源的发现信息。
 type APISubresourceDiscovery struct {
-	// subresource is the name of the subresource.  This is used in the URL path and is the unique identifier
-	// for this resource across all versions.
+	// subresource 为子资源名称，用于 URL 路径，是此资源在所有版本中的唯一标识。
 	Subresource string
 	// responseKind 描述该端点通常返回的对象类型所使用的序列化 schema 的组、版本和 kind。
-	// Some subresources do not return normal resources, these will have null or empty return types.
+	// 部分子资源不返回普通资源，其返回类型为 null 或空。
 	ResponseKind *v1.GroupVersionKind
-	// acceptedTypes describes the kinds that this endpoint accepts.
-	// Subresources may accept the standard content types or define
-	// custom negotiation schemes. The list may not be exhaustive for
-	// all operations.
+	// acceptedTypes 描述该端点接受的种类。
+	// 子资源可接受标准内容类型或定义自定义协商方案。
+	// 该列表未必涵盖所有操作。
 	// +listType=map
 	// +listMapKey=group
 	// +listMapKey=version

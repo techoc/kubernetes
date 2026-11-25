@@ -81,7 +81,7 @@ type StorageClass struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// StorageClassList is a collection of storage classes.
+// StorageClassList 是存储类的集合。
 type StorageClassList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
@@ -98,7 +98,7 @@ type StorageClassList struct {
 // Captures the intent to attach or detach the specified volume to/from
 // the specified node.
 //
-// VolumeAttachment objects are non-namespaced.
+// VolumeAttachment 对象是非命名空间对象。
 type VolumeAttachment struct {
 	metav1.TypeMeta
 
@@ -107,8 +107,8 @@ type VolumeAttachment struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Specification of the desired attach/detach volume behavior.
-	// Populated by the Kubernetes system.
+	// spec 表示期望的卷挂载/卸载行为的规格。
+	// 由 Kubernetes 系统填充。
 	Spec VolumeAttachmentSpec
 
 	// Status of the VolumeAttachment request.
@@ -120,7 +120,7 @@ type VolumeAttachment struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// VolumeAttachmentList is a collection of VolumeAttachment objects.
+// VolumeAttachmentList 是 VolumeAttachment 对象的集合。
 type VolumeAttachmentList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
@@ -138,7 +138,7 @@ type VolumeAttachmentSpec struct {
 	// request. This is the name returned by GetPluginName().
 	Attacher string
 
-	// Source represents the volume that should be attached.
+	// source 表示应附加的卷。
 	Source VolumeAttachmentSource
 
 	// The node that the volume should be attached to.
@@ -154,12 +154,10 @@ type VolumeAttachmentSource struct {
 	// +optional
 	PersistentVolumeName *string
 
-	// inlineVolumeSpec contains all the information necessary to attach
-	// a persistent volume defined by a pod's inline VolumeSource. This field
-	// is populated only for the CSIMigration feature. It contains
-	// translated fields from a pod's inline VolumeSource to a
-	// PersistentVolumeSpec. This field is beta-level and is only
-	// honored by servers that enabled the CSIMigration feature.
+	// inlineVolumeSpec 包含挂载由 pod 内联 VolumeSource 定义的持久卷所需的全部信息。
+	// 此字段仅为 CSIMigration 特性填充，包含从 pod 内联 VolumeSource
+	// 转换到 PersistentVolumeSpec 的字段。此字段处于 beta 级别，
+	// 仅在启用了 CSIMigration 特性的服务端上生效。
 	// +optional
 	InlineVolumeSpec *api.PersistentVolumeSpec
 }
@@ -198,22 +196,19 @@ type VolumeError struct {
 	// +optional
 	Time metav1.Time
 
-	// String detailing the error encountered during Attach or Detach operation.
-	// This string may be logged, so it should not contain sensitive
-	// information.
+	// message 表示 Attach 或 Detach 操作期间遇到的错误。此字符串可能被记录到日志，
+	// 因此不应包含敏感信息。
 	// +optional
 	Message string
 
-	// errorCode is a numeric gRPC code representing the error encountered during Attach or Detach operations.
-	//
-	// This is an optional field that requires the MutableCSINodeAllocatableCount feature gate being enabled to be set.
-	//
+	// errorCode 是表示 Attach 或 Detach 操作期间遇到错误的数字 gRPC 码。
+	// 这是可选的 beta 字段，需要启用 MutableCSINodeAllocatableCount 特性门控才可设置。
 	// +featureGate=MutableCSINodeAllocatableCount
 	// +optional
 	ErrorCode *int32
 }
 
-// VolumeBindingMode indicates how PersistentVolumeClaims should be bound.
+// VolumeBindingMode 表示 PersistentVolumeClaim 应如何被绑定。
 type VolumeBindingMode string
 
 const (
@@ -257,7 +252,7 @@ type CSIDriver struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CSIDriverList is a collection of CSIDriver objects.
+// CSIDriverList 是 CSIDriver 对象的集合。
 type CSIDriverList struct {
 	metav1.TypeMeta
 
@@ -266,11 +261,11 @@ type CSIDriverList struct {
 	// +optional
 	metav1.ListMeta
 
-	// items is the list of CSIDriver
+	// items 是 CSIDriver 列表。
 	Items []CSIDriver
 }
 
-// CSIDriverSpec is the specification of a CSIDriver.
+// CSIDriverSpec 是 CSIDriver 的规格。
 type CSIDriverSpec struct {
 	// attachRequired indicates this CSI volume driver requires an attach
 	// operation (because it implements the CSI ControllerPublishVolume()
@@ -325,7 +320,7 @@ type CSIDriverSpec struct {
 	// inside the pod spec with CSIVolumeSource and their lifecycle is tied to
 	// the lifecycle of that pod. A driver has to be aware of this
 	// because it is only going to get a NodePublishVolume call for such a volume.
-	// For more information about implementing this mode, see
+	// 有关实现此模式的更多信息，参见
 	// https://kubernetes-csi.github.io/docs/ephemeral-local-volumes.html
 	// A driver can support one or more of these mode and
 	// more modes may be added in the future.
@@ -335,22 +330,12 @@ type CSIDriverSpec struct {
 	// +optional
 	VolumeLifecycleModes []VolumeLifecycleMode
 
-	// If set to true, storageCapacity indicates that the CSI
-	// volume driver wants pod scheduling to consider the storage
-	// capacity that the driver deployment will report by creating
-	// CSIStorageCapacity objects with capacity information.
-	//
-	// The check can be enabled immediately when deploying a driver.
-	// In that case, provisioning new volumes with late binding
-	// will pause until the driver deployment has published
-	// some suitable CSIStorageCapacity object.
-	//
-	// Alternatively, the driver can be deployed with the field
-	// unset or false and it can be flipped later when storage
-	// capacity information has been published.
-	//
-	// This field was immutable in Kubernetes <= 1.22 and now is mutable.
-	//
+	// storageCapacity 设为 true 时表示 CSI 卷驱动希望 Pod 调度考虑其通过创建带有容量信息的
+	// CSIStorageCapacity 对象所报告的存储容量。
+	// 部署驱动时可立即启用此检查，此时采用延迟绑定的新卷供给会暂停，直到驱动部署发布了
+	// 合适的 CSIStorageCapacity 对象。也可先不设置该字段或设为 false 部署驱动，待容量信息
+	// 发布后再切换。
+	// 此字段在 Kubernetes <= 1.22 中不可变，现在可变。
 	// +optional
 	StorageCapacity *bool
 
@@ -420,16 +405,12 @@ type CSIDriverSpec struct {
 	// +optional
 	SELinuxMount *bool
 
-	// nodeAllocatableUpdatePeriodSeconds specifies the interval between periodic updates of
-	// the CSINode allocatable capacity for this driver. When set, both periodic updates and
-	// updates triggered by capacity-related failures are enabled. If not set, no updates
-	// occur (neither periodic nor upon detecting capacity-related failures), and the
-	// allocatable.count remains static. The minimum allowed value for this field is 10 seconds.
-	//
-	// This feature requires the MutableCSINodeAllocatableCount feature gate to be enabled.
-	//
-	// This field is mutable.
-	//
+	// nodeAllocatableUpdatePeriodSeconds 指定此驱动的 CSINode 可分配容量
+	// 周期性更新的间隔。设置后，会同时启用周期性更新和由容量相关失败触发的更新。
+	// 未设置时不会进行任何更新（既不周期性更新，也不在检测到容量相关失败时更新），
+	// allocatable.count 保持静态。此字段允许的最小值为 10 秒。
+	// 此特性需要启用 MutableCSINodeAllocatableCount 特性门控。
+	// 此字段可变。
 	// +featureGate=MutableCSINodeAllocatableCount
 	// +optional
 	NodeAllocatableUpdatePeriodSeconds *int64
@@ -487,29 +468,22 @@ type CSIDriverSpec struct {
 type FSGroupPolicy string
 
 const (
-	// ReadWriteOnceWithFSTypeFSGroupPolicy indicates that each volume will be examined
-	// to determine if the volume ownership and permissions
-	// should be modified. If a fstype is defined and the volume's access mode
-	// contains ReadWriteOnce or ReadWriteOncePod, then the defined fsGroup will be applied.
-	// This mode should be defined if it's expected that the
-	// fsGroup may need to be modified depending on the pod's SecurityPolicy.
-	// This is the default behavior if no other FSGroupPolicy is defined.
+	// ReadWriteOnceWithFSTypeFSGroupPolicy 表示会检查每个卷，以确定是否应修改
+	// 卷的所有权和权限。若定义了 fstype 且卷的访问模式包含 ReadWriteOnce
+	// 或 ReadWriteOncePod，则会应用定义的 fsGroup。
+	// 如果预期 fsGroup 可能需要根据 pod 的 SecurityPolicy 修改，应使用此模式。
+	// 若未定义其他 FSGroupPolicy，这是默认行为。
 	ReadWriteOnceWithFSTypeFSGroupPolicy FSGroupPolicy = "ReadWriteOnceWithFSType"
 
-	// FileFSGroupPolicy indicates that CSI driver supports volume ownership
-	// and permission change via fsGroup, and Kubernetes will change the permissions
-	// and ownership of every file in the volume to match the user requested fsGroup in
-	// the pod's SecurityPolicy regardless of fstype or access mode.
-	// Use this mode if Kubernetes should modify the permissions and ownership
-	// of the volume.
+	// FileFSGroupPolicy 表示 CSI 驱动支持通过 fsGroup 修改卷的所有权和权限。无论 fstype 或
+	// 访问模式如何，Kubernetes 都会把卷中每个文件的权限和所有权改为与 Pod SecurityPolicy
+	// 中用户请求的 fsGroup 一致。若希望由 Kubernetes 修改卷的权限和所有权，请使用此模式。
 	FileFSGroupPolicy FSGroupPolicy = "File"
 
-	// NoneFSGroupPolicy indicates that volumes will be mounted without performing
-	// any ownership or permission modifications, as the CSIDriver does not support
-	// these operations.
-	// This mode should be selected if the CSIDriver does not support fsGroup modifications,
-	// for example when Kubernetes cannot change ownership and permissions on a volume due
-	// to root-squash settings on a NFS volume.
+	// NoneFSGroupPolicy 表示挂载卷时不执行任何所有权或权限修改，因为 CSIDriver
+	// 不支持这些操作。
+	// 当 CSIDriver 不支持 fsGroup 修改时应选择此模式，例如由于 NFS 卷上的
+	// root-squash 设置导致 Kubernetes 无法更改卷的所有权和权限。
 	NoneFSGroupPolicy FSGroupPolicy = "None"
 )
 
@@ -517,11 +491,10 @@ const (
 // More modes may be added in the future.
 type VolumeLifecycleMode string
 
-// TokenRequest contains parameters of a service account token.
+// TokenRequest 包含 service account token 的参数。
 type TokenRequest struct {
-	// Audience is the intended audience of the token in "TokenRequestSpec".
-	// It will default to the audiences of kube apiserver.
-	//
+	// audience 是 "TokenRequestSpec" 中 token 的目标受众。
+	// 默认为 kube apiserver 的 audience。
 	Audience string
 
 	// ExpirationSeconds is the duration of validity of the token in "TokenRequestSpec".
@@ -532,22 +505,17 @@ type TokenRequest struct {
 }
 
 const (
-	// VolumeLifecyclePersistent explicitly confirms that the driver implements
-	// the full CSI spec. It is the default when CSIDriverSpec.VolumeLifecycleModes is not
-	// set. Such volumes are managed in Kubernetes via the persistent volume
-	// claim mechanism and have a lifecycle that is independent of the pods which
-	// use them.
+	// VolumeLifecyclePersistent 明确确认驱动实现了完整的 CSI 规范。
+	// 当 CSIDriverSpec.VolumeLifecycleModes 未设置时，这是默认模式。
+	// 这类卷在 Kubernetes 中通过 persistent volume claim 机制管理，
+	// 其生命周期与使用它们的 pod 无关。
 	VolumeLifecyclePersistent VolumeLifecycleMode = "Persistent"
-	// VolumeLifecycleEphemeral indicates that the driver can be used for
-	// ephemeral inline volumes. Such volumes are specified inside the pod
-	// spec with a CSIVolumeSource and, as far as Kubernetes is concerned, have
-	// a lifecycle that is tied to the lifecycle of the pod. For example, such
-	// a volume might contain data that gets created specifically for that pod,
-	// like secrets.
-	// But how the volume actually gets created and managed is entirely up to
-	// the driver. It might also use reference counting to share the same volume
-	// instance among different pods if the CSIVolumeSource of those pods is
-	// identical.
+	// VolumeLifecycleEphemeral 表示驱动可用于临时内联卷。
+	// 这类卷在 pod spec 中通过 CSIVolumeSource 指定，就 Kubernetes 而言，
+	// 其生命周期与 pod 的生命周期绑定。例如，这类卷可能包含专门为某个 pod
+	// 创建的数据，如 secret。
+	// 但卷实际如何创建和管理完全由驱动决定。如果不同 pod 的 CSIVolumeSource
+	// 相同，驱动还可以使用引用计数在这些 pod 之间共享同一卷实例。
 	VolumeLifecycleEphemeral VolumeLifecycleMode = "Ephemeral"
 )
 
@@ -570,15 +538,15 @@ type CSINode struct {
 	// metadata.name must be the Kubernetes node name.
 	metav1.ObjectMeta
 
-	// spec is the specification of CSINode
+	// spec 是 CSINode 的规格。
 	Spec CSINodeSpec
 
-	// status contains health and status information for the node's storage.
+	// status 包含节点存储的健康和状态信息。
 	// +optional
 	Status CSINodeStatus
 }
 
-// CSINodeSpec holds information about the specification of all CSI drivers installed on a node
+// CSINodeSpec 保存节点上安装的所有 CSI 驱动的规格信息。
 type CSINodeSpec struct {
 	// drivers is a list of information of all CSI Drivers existing on a node.
 	// If all drivers in the list are uninstalled, this can become empty.
@@ -587,7 +555,7 @@ type CSINodeSpec struct {
 	Drivers []CSINodeDriver
 }
 
-// CSINodeDriver holds information about the specification of one CSI driver installed on a node
+// CSINodeDriver 保存节点上安装的某个 CSI 驱动的规格信息。
 type CSINodeDriver struct {
 	// This is the name of the CSI driver that this object refers to.
 	// This MUST be the same name returned by the CSI GetPluginName() call for
@@ -618,28 +586,27 @@ type CSINodeDriver struct {
 	// +optional
 	TopologyKeys []string
 
-	// allocatable represents the volume resources of a node that are available for scheduling.
+	// allocatable 表示节点上可供调度使用的卷资源。
 	// +optional
 	Allocatable *VolumeNodeResources
 }
 
-// VolumeNodeResources is a set of resource limits for scheduling of volumes.
+// VolumeNodeResources 是用于卷调度的一组资源限制。
 type VolumeNodeResources struct {
-	// Maximum number of unique volumes managed by the CSI driver that can be used on a node.
-	// A volume that is both attached and mounted on a node is considered to be used once, not twice.
-	// The same rule applies for a unique volume that is shared among multiple pods on the same node.
-	// If this field is not specified, then the supported number of volumes on this node is unbounded.
+	// count 表示 CSI 驱动管理的、可在节点上使用的唯一卷的最大数量。同时附加并挂载到节点上的卷
+	// 只算一次使用，而非两次；同一唯一卷在同一节点上被多个 Pod 共享时也遵循此规则。
+	// 若此字段为 nil，则此节点支持的卷数量无上限。
 	// +optional
 	Count *int32
 }
 
-// StorageHealthStatusType describes the health status category of a storage backend.
+// StorageHealthStatusType 描述存储后端的健康状态类别。
 type StorageHealthStatusType string
 
 const (
-	// StorageUnreachable indicates the storage backend is unreachable.
+	// StorageUnreachable 表示存储后端不可达。
 	StorageUnreachable StorageHealthStatusType = "StorageUnreachable"
-	// StorageDegraded indicates the storage backend is functioning with reduced capability.
+	// StorageDegraded 表示存储后端功能降级。
 	StorageDegraded StorageHealthStatusType = "StorageDegraded"
 )
 
@@ -649,15 +616,15 @@ type StorageHealthCondition struct {
 	// status is the health status category.
 	// One of "StorageUnreachable", "StorageDegraded".
 	Status StorageHealthStatusType
-	// reason is a brief CamelCase machine-parseable reason.
+	// reason 是简短的、机器可解析的 CamelCase 原因。
 	Reason string
-	// message is a human-readable description.
+	// message 是人类可读的描述。
 	// +optional
 	Message string
-	// accessMode is the access mode affected. Nil means all access modes are affected.
+	// accessMode 是受影响的访问模式，nil 表示所有访问模式均受影响。
 	// +optional
 	AccessMode *api.PersistentVolumeAccessMode
-	// volumeMode is the volume mode affected. Nil means both are affected.
+	// volumeMode 是受影响的卷模式，nil 表示两种模式均受影响。
 	// +optional
 	VolumeMode *api.PersistentVolumeMode
 	// lastTransitionTime is when this condition first appeared at its current state.
@@ -665,9 +632,9 @@ type StorageHealthCondition struct {
 	LastTransitionTime metav1.Time
 }
 
-// StorageHealth contains storage backend health reported by a CSI driver on a node.
+// StorageHealth 包含 CSI 驱动在节点上报告的存储后端健康状况。
 type StorageHealth struct {
-	// name is the CSI driver name, matching CSINodeDriver.name.
+	// name 是 CSI 驱动名称，与 CSINodeDriver.name 一致。
 	Name string
 	// healthConditions are the adverse storage backend conditions reported by the CSI driver.
 	// At most 16 conditions may be reported.
@@ -676,7 +643,7 @@ type StorageHealth struct {
 	HealthConditions []StorageHealthCondition
 }
 
-// CSINodeStatus contains health and status information for storage on a node.
+// CSINodeStatus 包含节点上存储的健康和状态信息。
 type CSINodeStatus struct {
 	// storageHealth contains backend health reports for CSI drivers registered on the node.
 	// +optional
@@ -688,7 +655,7 @@ type CSINodeStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CSINodeList is a collection of CSINode objects.
+// CSINodeList 是 CSINode 对象的集合。
 type CSINodeList struct {
 	metav1.TypeMeta
 
@@ -697,7 +664,7 @@ type CSINodeList struct {
 	// +optional
 	metav1.ListMeta
 
-	// items is the list of CSINode
+	// items 是 CSINode 列表。
 	Items []CSINode
 }
 
@@ -708,9 +675,9 @@ type CSINodeList struct {
 // particular topology segment.  This can be used when considering where to
 // instantiate new PersistentVolumes.
 //
-// For example this can express things like:
-// - StorageClass "standard" has "1234 GiB" available in "topology.kubernetes.io/zone=us-east1"
-// - StorageClass "localssd" has "10 GiB" available in "kubernetes.io/hostname=knode-abc123"
+// 例如可表达如下信息：
+// - 存储类别 "standard" 在 "topology.kubernetes.io/zone=us-east1" 有 "1234 GiB" 可用
+// - 存储类别 "localssd" 在 "kubernetes.io/hostname=knode-abc123" 有 "10 GiB" 可用
 //
 // The following three cases all imply that no capacity is available for
 // a certain combination:
@@ -718,7 +685,7 @@ type CSINodeList struct {
 // - such an object exists, but the capacity is unset
 // - such an object exists, but the capacity is zero
 //
-// The producer of these objects can decide which approach is more suitable.
+// 这些对象的生产者可自行决定采用哪种方式。
 //
 // They are consumed by the kube-scheduler when a CSI driver opts into
 // capacity-aware scheduling with CSIDriverSpec.StorageCapacity. The scheduler
@@ -787,7 +754,7 @@ type CSIStorageCapacity struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CSIStorageCapacityList is a collection of CSIStorageCapacity objects.
+// CSIStorageCapacityList 是 CSIStorageCapacity 对象的集合。
 type CSIStorageCapacityList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
@@ -795,15 +762,15 @@ type CSIStorageCapacityList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of CSIStorageCapacity objects.
+	// items 是 CSIStorageCapacity 对象的列表。
 	Items []CSIStorageCapacity
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// VolumeAttributesClass represents a specification of mutable volume attributes
-// defined by the CSI driver. The class can be specified during dynamic provisioning
-// of PersistentVolumeClaims, and changed in the PersistentVolumeClaim spec after provisioning.
+// VolumeAttributesClass 表示 CSI 驱动定义的可变卷属性规格。
+// 该类可在 PersistentVolumeClaim 动态创建时指定，并在创建后通过
+// PersistentVolumeClaim 的 spec 修改。
 type VolumeAttributesClass struct {
 	metav1.TypeMeta
 
@@ -816,25 +783,18 @@ type VolumeAttributesClass struct {
 	// 该字段不可变。
 	DriverName string
 
-	// parameters hold volume attributes defined by the CSI driver. These values
-	// are opaque to the Kubernetes and are passed directly to the CSI driver.
-	// The underlying storage provider supports changing these attributes on an
-	// existing volume, however the parameters field itself is immutable. To
-	// invoke a volume update, a new VolumeAttributesClass should be created with
-	// new parameters, and the PersistentVolumeClaim should be updated to reference
-	// the new VolumeAttributesClass.
-	//
-	// This field is required and must contain at least one key/value pair.
-	// The keys cannot be empty, and the maximum number of parameters is 512, with
-	// a cumulative max size of 256K. If the CSI driver rejects invalid parameters,
-	// the target PersistentVolumeClaim will be set to an "Infeasible" state in the
-	// modifyVolumeStatus field.
+	// parameters 保存 CSI 驱动定义的卷属性，这些值对 Kubernetes 是不透明的，直接传给 CSI 驱动。
+	// 底层存储供应商支持修改已有卷的这些属性，但 parameters 字段本身不可变。要触发卷更新，
+	// 应创建带有新参数的新 VolumeAttributesClass，并更新 PersistentVolumeClaim 以引用新类。
+	// 此字段为必填，至少包含一个键/值对。键不能为空，参数最多 512 个，累计大小上限 256K。
+	// 若 CSI 驱动拒绝无效参数，目标 PersistentVolumeClaim 的 modifyVolumeStatus 字段会被
+	// 设为 "Infeasible" 状态。
 	Parameters map[string]string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// VolumeAttributesClassList is a collection of VolumeAttributesClass objects.
+// VolumeAttributesClassList 是 VolumeAttributesClass 对象的集合。
 type VolumeAttributesClassList struct {
 	metav1.TypeMeta
 
@@ -843,7 +803,7 @@ type VolumeAttributesClassList struct {
 	// +optional
 	metav1.ListMeta
 
-	// items is the list of VolumeAttributesClass objects.
+	// items 是 VolumeAttributesClass 对象列表。
 	// +listType=map
 	// +listMapKey=name
 	Items []VolumeAttributesClass

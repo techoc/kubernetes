@@ -40,42 +40,36 @@ type EndpointSlice struct {
 	// * IPv6: Represents an IPv6 Address.
 	// * FQDN: Represents a Fully Qualified Domain Name. [DEPRECATED]
 	AddressType AddressType
-	// endpoints is a list of unique endpoints in this slice. Each slice may
-	// include a maximum of 1000 endpoints.
+	// endpoints 是此切片中唯一端点的列表，每个切片最多可包含 1000 个端点。
 	// +listType=atomic
 	Endpoints []Endpoint
-	// ports specifies the list of network ports exposed by each endpoint in
-	// this slice. Each port must have a unique name. When ports is empty, it
-	// indicates that there are no defined ports. When a port is defined with a
-	// nil port value, it indicates "all ports". Each slice may include a
-	// maximum of 100 ports.
+	// ports 指定此 slice 中每个端点暴露的网络端口列表。每个端口必须有唯一名称。
+	// ports 为空表示未定义端口；若端口的 port 值为 nil，则表示“所有端口”。
+	// 每个 slice 最多可包含 100 个端口。
 	// +optional
 	// +listType=atomic
 	Ports []EndpointPort
 }
 
-// AddressType represents the type of address referred to by an endpoint.
+// AddressType 表示端点所指地址的类型。
 type AddressType string
 
 const (
-	// AddressTypeIPv4 represents an IPv4 Address.
+	// AddressTypeIPv4 表示 IPv4 地址。
 	AddressTypeIPv4 = AddressType(api.IPv4Protocol)
-	// AddressTypeIPv6 represents an IPv6 Address.
+	// AddressTypeIPv6 表示 IPv6 地址。
 	AddressTypeIPv6 = AddressType(api.IPv6Protocol)
 	// AddressTypeFQDN represents a FQDN.
 	AddressTypeFQDN = AddressType("FQDN")
 )
 
-// Endpoint represents a single logical "backend" implementing a service.
+// Endpoint 表示实现某个服务的单个逻辑“后端”。
 type Endpoint struct {
-	// addresses of this endpoint. The contents of this field are interpreted
-	// according to the corresponding EndpointSlice addressType field. Consumers
-	// must handle different types of addresses in the context of their own
-	// capabilities. This must contain at least one address but no more than
-	// 100.
+	// addresses 是此端点的地址。字段内容按对应 EndpointSlice 的 addressType 解释，
+	// 消费方需根据自身能力处理不同类型地址。至少一个、最多 100 个地址。
 	// +listType=set
 	Addresses []string
-	// conditions contains information about the current status of the endpoint.
+	// conditions 包含端点当前状态的信息。
 	Conditions EndpointConditions
 	// hostname of this endpoint. This field may be used by consumers of
 	// endpoints to distinguish endpoints from each other (e.g. in DNS names).
@@ -84,8 +78,7 @@ type Endpoint struct {
 	// 校验。
 	// +optional
 	Hostname *string
-	// targetRef is a reference to a Kubernetes object that represents this
-	// endpoint.
+	// targetRef 是指向表示此端点的 Kubernetes 对象的引用。
 	// +optional
 	TargetRef *api.ObjectReference
 	// deprecatedTopology is deprecated and only retained for round-trip
@@ -93,21 +86,19 @@ type Endpoint struct {
 	// should be removed, too.
 	// +optional
 	DeprecatedTopology map[string]string
-	// nodeName represents the name of the Node hosting this endpoint. This can
-	// be used to determine endpoints local to a Node.
+	// nodeName 表示承载此端点的节点名称，可用于确定节点本地的端点。
 	// +optional
 	NodeName *string
-	// zone is the name of the Zone this endpoint exists in.
+	// zone 是此端点所在可用区的名称。
 	// +optional
 	Zone *string
-	// hints contains information associated with how an endpoint should be
-	// consumed.
+	// hints 包含与端点应如何使用相关的信息。
 	// +featureGate=TopologyAwareHints
 	// +optional
 	Hints *EndpointHints
 }
 
-// EndpointConditions represents the current condition of an endpoint.
+// EndpointConditions 表示端点的当前状况。
 type EndpointConditions struct {
 	// ready indicates that this endpoint is prepared to receive traffic,
 	// according to whatever system is managing the endpoint. A nil value
@@ -118,21 +109,19 @@ type EndpointConditions struct {
 	// Service has set the publishNotReadyAddresses flag.
 	Ready *bool
 
-	// serving is identical to ready except that it is set regardless of the
-	// terminating state of endpoints. This condition should be set to true for
-	// a ready endpoint that is terminating. If nil, consumers should defer to
-	// the ready condition.
+	// serving 与 ready 相同，但不考虑端点的终止状态。
+	// 处于终止中但仍就绪的端点应将此条件设为 true。
+	// 若为 nil，消费方应参考 ready 条件。
 	// +optional
 	Serving *bool
 
-	// terminating indicates that this endpoint is terminating. A nil value
-	// indicates an unknown state. Consumers should interpret this unknown state
-	// to mean that the endpoint is not terminating.
+	// terminating 表示此端点正在终止。nil 表示状态未知，
+	// 消费方应将未知状态理解为端点未终止。
 	// +optional
 	Terminating *bool
 }
 
-// EndpointHints provides hints describing how an endpoint should be consumed.
+// EndpointHints 提供描述端点应如何使用提示。
 type EndpointHints struct {
 	// forZones indicates the zone(s) this endpoint should be consumed by when
 	// 使用拓扑感知路由。最多可包含 8 个条目。
@@ -143,50 +132,40 @@ type EndpointHints struct {
 	ForNodes []ForNode
 }
 
-// ForZone provides information about which zones should consume this endpoint.
+// ForZone 提供哪些可用区应消费此端点的信息。
 type ForZone struct {
-	// name represents the name of the zone.
+	// name 表示可用区的名称。
 	Name string
 }
 
-// ForNode provides information about which nodes should consume this endpoint.
+// ForNode 提供哪些节点应消费此端点的信息。
 type ForNode struct {
-	// name represents the name of the node.
+	// name 表示节点的名称。
 	Name string
 }
 
 // EndpointPort represents a Port used by an EndpointSlice.
 type EndpointPort struct {
-	// The name of this port. All ports in an EndpointSlice must have a unique
-	// name. If the EndpointSlice is derived from a Kubernetes service, this
-	// corresponds to the Service.ports[].name.
-	// Name must either be an empty string or pass DNS_LABEL validation:
-	// * must be no more than 63 characters long.
-	// * must consist of lower case alphanumeric characters or '-'.
-	// * must start and end with an alphanumeric character.
+	// name 表示此端口的名称，EndpointSlice 中所有端口名必须唯一。
+	// 若 EndpointSlice 源自 Kubernetes Service，则对应 Service.ports[].name。
+	// Name 必须为空字符串或通过 DNS_LABEL 校验：长度不超过 63 个字符；
+	// 只能包含小写字母数字字符和 '-'；必须以字母数字字符开头和结尾。默认为空字符串。
 	Name *string
-	// The IP protocol for this port.
-	// Must be UDP, TCP, or SCTP.
+	// 此端口的 IP 协议。
+	// 必须是 UDP、TCP 或 SCTP。
 	Protocol *corev1.Protocol
-	// The port number of the endpoint.
-	// If this is not specified, ports are not restricted and must be
-	// interpreted in the context of the specific consumer.
+	// port 表示端点的端口号。
+	// 若未指定，则端口不受限制，需由具体消费方的上下文解释。
 	Port *int32
-	// The application protocol for this port.
-	// This is used as a hint for implementations to offer richer behavior for protocols that they understand.
-	// This field follows standard Kubernetes label syntax.
-	// Valid values are either:
-	//
-	// * Un-prefixed protocol names - reserved for IANA standard service names (as per
+	// 此端口的应用层协议。实现方可将其作为提示，为理解的协议提供更丰富的行为。
+	// 此字段遵循标准 Kubernetes 标签语法，有效值为：
+	// * 无前缀的协议名 —— 保留给 IANA 标准服务名（参见 RFC-6335 及
+	// * Kubernetes 定义的前缀名：
+	// * 其他协议应使用实现自定义的前缀名，例如 mycompany.com/my-custom-protocol。
 	// RFC-6335 and https://www.iana.org/assignments/service-names).
-	//
-	// * Kubernetes-defined prefixed names:
-	//   * 'kubernetes.io/h2c' - HTTP/2 prior knowledge over cleartext as described in https://www.rfc-editor.org/rfc/rfc9113.html#name-starting-http-2-with-prior-
-	//   * 'kubernetes.io/ws'  - WebSocket over cleartext as described in https://www.rfc-editor.org/rfc/rfc6455
-	//   * 'kubernetes.io/wss' - WebSocket over TLS as described in https://www.rfc-editor.org/rfc/rfc6455
-	//
-	// * Other protocols should use implementation-defined prefixed names such as
-	// mycompany.com/my-custom-protocol.
+	// * 'kubernetes.io/h2c' - HTTP/2 prior knowledge over cleartext as described in https://www.rfc-editor.org/rfc/rfc9113.html#name-starting-http-2-with-prior-
+	// * 'kubernetes.io/ws'  - WebSocket over cleartext as described in https://www.rfc-editor.org/rfc/rfc6455
+	// * 'kubernetes.io/wss' - WebSocket over TLS as described in https://www.rfc-editor.org/rfc/rfc6455
 	// +optional
 	AppProtocol *string
 }

@@ -39,7 +39,7 @@ func Resource(resource string) schema.GroupResource {
 }
 
 var (
-	// SchemeBuilder points to a list of functions added to Scheme.
+	// SchemeBuilder 保存要依次应用到 Scheme 的注册函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	// AddToScheme 依次执行所有已保存的注册函数。
 	AddToScheme = SchemeBuilder.AddToScheme

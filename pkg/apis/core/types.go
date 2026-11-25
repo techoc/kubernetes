@@ -29,15 +29,15 @@ const (
 	NamespaceDefault = "default"
 	// NamespaceAll 是在上下文中指定跨所有命名空间列出或过滤资源时使用的默认参数
 	NamespaceAll = ""
-	// NamespaceNone is the argument for a context when there is no namespace.
+	// NamespaceNone 是无 namespace 场景下传给 context 的参数。
 	NamespaceNone = ""
-	// NamespaceSystem is the system namespace where we place system components.
+	// NamespaceSystem 是部署系统组件的 namespace。
 	NamespaceSystem = "kube-system"
-	// NamespacePublic is the namespace where we place public info (ConfigMaps)
+	// NamespacePublic 是存放公开信息（ConfigMap）的 namespace。
 	NamespacePublic = "kube-public"
-	// NamespaceNodeLease is the namespace where we place node lease objects (used for node heartbeats)
+	// NamespaceNodeLease 是放置节点租约对象（用于节点心跳）的命名空间
 	NamespaceNodeLease = "kube-node-lease"
-	// TerminationMessagePathDefault means the default path to capture the application termination message running in a container
+	// TerminationMessagePathDefault 表示捕获容器中运行的应用程序终止消息的默认路径。
 	TerminationMessagePathDefault = "/dev/termination-log"
 )
 
@@ -48,13 +48,13 @@ type Volume struct {
 	Name string
 	// The VolumeSource represents the location and type of a volume to mount.
 	// This is optional for now. If not specified, the Volume is implied to be an EmptyDir.
-	// This implied behavior is deprecated and will be removed in a future version.
+	// 此隐含行为已弃用，将在未来版本中移除。
 	// +optional
 	VolumeSource
 }
 
 // VolumeSource represents the source location of a volume to mount.
-// Only one of its members may be specified.
+// 只能指定其中一个成员。
 type VolumeSource struct {
 	// hostPath represents file or directory on the host machine that is
 	// directly exposed to the container. This is generally used for system
@@ -65,13 +65,12 @@ type VolumeSource struct {
 	// mount host directories as read/write.
 	// +optional
 	HostPath *HostPathVolumeSource
-	// emptyDir represents a temporary directory that shares a pod's lifetime.
+	// emptyDir 表示与 Pod 生命周期相同的临时目录。
 	// +optional
 	EmptyDir *EmptyDirVolumeSource
-	// gcePersistentDisk represents a GCE Disk resource that is attached to a
-	// kubelet's host machine and then exposed to the pod.
-	// Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree
-	// gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver.
+	// gcePersistentDisk 表示挂载到 kubelet 主机、再暴露给 Pod 的 GCE 磁盘资源。
+	// Deprecated: GCEPersistentDisk 已弃用。树内 gcePersistentDisk 类型的所有操作
+	// 都会重定向到 pd.csi.storage.gke.io CSI 驱动。
 	// +optional
 	GCEPersistentDisk *GCEPersistentDiskVolumeSource
 	// awsElasticBlockStore represents an AWS EBS disk that is attached to a
@@ -80,43 +79,40 @@ type VolumeSource struct {
 	// awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver.
 	// +optional
 	AWSElasticBlockStore *AWSElasticBlockStoreVolumeSource
-	// gitRepo represents a git repository at a particular revision.
-	// Deprecated: GitRepo is deprecated. To provision a container with a git repo, mount an
-	// EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir
-	// into the Pod's container.
+	// gitRepo 表示处于特定版本的 git 仓库。
+	// Deprecated: GitRepo 已弃用。若要为容器提供 git 仓库，可将一个 EmptyDir 挂载到
+	// InitContainer，用 git 克隆仓库，然后再将该 EmptyDir 挂载到 Pod 的容器中。
 	// +optional
 	GitRepo *GitRepoVolumeSource
-	// secret represents a secret that should populate this volume.
+	// secret 表示用于填充该卷的 secret。
 	// +optional
 	Secret *SecretVolumeSource
-	// nfs represents an NFS mount on the host that shares a pod's lifetime
+	// nfs 表示主机上的 NFS 挂载，其生命周期与 Pod 相同。
 	// +optional
 	NFS *NFSVolumeSource
-	// iscsi represents an ISCSI Disk resource that is attached to a
-	// kubelet's host machine and then exposed to the pod.
+	// iscsi 表示挂载到 kubelet 主机、再暴露给 Pod 的 ISCSI 磁盘资源。
 	// +optional
 	ISCSI *ISCSIVolumeSource
-	// glusterfs represents a Glusterfs mount on the host that shares a pod's lifetime.
-	// Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported.
+	// glusterfs 表示主机上与 Pod 生命周期相同的 Glusterfs 挂载。
+	// Deprecated: Glusterfs 已弃用，不再支持树内 glusterfs 类型。
 	// +optional
 	Glusterfs *GlusterfsVolumeSource
 	// persistentVolumeClaim represents a reference to a PersistentVolumeClaim in the same namespace
 	// +optional
 	PersistentVolumeClaim *PersistentVolumeClaimVolumeSource
-	// rdb represents a Rados Block Device mount on the host that shares a pod's lifetime.
-	// Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported.
+	// rbd 表示主机上与 Pod 生命周期相同的 Rados Block Device 挂载。
+	// Deprecated: RBD 已弃用，不再支持树内 rbd 类型。
 	// +optional
 	RBD *RBDVolumeSource
 
-	// flexVolume represents a generic volume resource that is
-	// provisioned/attached using an exec based plugin.
-	// Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead.
+	// flexVolume 表示通过基于 exec 的插件供给/挂载的通用卷资源。
+	// Deprecated: FlexVolume 已弃用。建议改用 CSIDriver。
 	// +optional
 	FlexVolume *FlexVolumeSource
 
-	// cinder represents a cinder volume attached and mounted on kubelet's host machine.
-	// Deprecated: Cinder is deprecated. All operations for the in-tree cinder type
-	// are redirected to the cinder.csi.openstack.org CSI driver.
+	// cinder 表示挂载到 kubelet 主机的 cinder 卷。
+	// Deprecated: Cinder 已弃用。树内 cinder 类型的所有操作
+	// 都会重定向到 cinder.csi.openstack.org CSI 驱动。
 	// +optional
 	Cinder *CinderVolumeSource
 
@@ -125,59 +121,58 @@ type VolumeSource struct {
 	// +optional
 	CephFS *CephFSVolumeSource
 
-	// flocker represents a Flocker volume attached to a kubelet's host machine. This depends on the Flocker control service being running.
-	// Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported.
+	// flocker 表示挂载到 kubelet 主机的 Flocker 卷。依赖 Flocker 控制服务正在运行。
+	// Deprecated: Flocker 已弃用，不再支持树内 flocker 类型。
 	// +optional
 	Flocker *FlockerVolumeSource
 
 	// downwardAPI represents metadata about the pod that should populate this volume
 	// +optional
 	DownwardAPI *DownwardAPIVolumeSource
-	// fc represents a Fibre Channel resource that is attached to a kubelet's host machine and then exposed to the pod.
+	// fc 表示挂载到 kubelet 主机、再暴露给 Pod 的 Fibre Channel 资源。
 	// +optional
 	FC *FCVolumeSource
-	// azureFile represents an Azure File Service mount on the host and bind mount to the pod.
-	// Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type
-	// are redirected to the file.csi.azure.com CSI driver.
+	// azureFile 表示主机上的 Azure File Service 挂载，并绑定挂载到 Pod。
+	// Deprecated: AzureFile 已弃用。树内 azureFile 类型的所有操作
+	// 都会重定向到 file.csi.azure.com CSI 驱动。
 	// +optional
 	AzureFile *AzureFileVolumeSource
 	// ConfigMap represents a configMap that should populate this volume
 	// +optional
 	ConfigMap *ConfigMapVolumeSource
-	// vsphereVolume represents a vSphere volume attached and mounted on kubelet's host machine.
-	// Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type
-	// are redirected to the csi.vsphere.vmware.com CSI driver.
+	// vsphereVolume 表示挂载到 kubelet 主机的 vSphere 卷。
+	// Deprecated: VsphereVolume 已弃用。树内 vsphereVolume 类型的所有操作
+	// 都会重定向到 csi.vsphere.vmware.com CSI 驱动。
 	// +optional
 	VsphereVolume *VsphereVirtualDiskVolumeSource
-	// quobyte represents a Quobyte mount on the host that shares a pod's lifetime.
-	//
-	// Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported.
+	// quobyte 表示主机上与 Pod 生命周期相同的 Quobyte 挂载。
+	// Deprecated: Quobyte 已弃用，不再支持树内 quobyte 类型。
 	// +optional
 	Quobyte *QuobyteVolumeSource
-	// azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod.
-	// Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type
-	// are redirected to the disk.csi.azure.com CSI driver.
+	// azureDisk 表示主机上的 Azure 数据盘挂载，并绑定挂载到 Pod。
+	// Deprecated: AzureDisk 已弃用。树内 azureDisk 类型的所有操作
+	// 都会重定向到 disk.csi.azure.com CSI 驱动。
 	// +optional
 	AzureDisk *AzureDiskVolumeSource
-	// photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine.
-	// Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.
+	// photonPersistentDisk 表示挂载到 kubelet 主机的 PhotonController 持久盘。
+	// Deprecated: PhotonPersistentDisk 已弃用，不再支持树内 photonPersistentDisk 类型。
 	PhotonPersistentDisk *PhotonPersistentDiskVolumeSource
-	// Items for all in one resources secrets, configmaps, and downward API
+	// projected 将 secret、configmap 和 downward API 全部汇聚到一处。
 	Projected *ProjectedVolumeSource
-	// portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
-	// Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-	// are redirected to the pxd.portworx.com CSI driver.
+	// portworxVolume 表示挂载到 kubelet 主机的 portworx 卷。
+	// Deprecated: PortworxVolume 已弃用。树内 portworxVolume 类型的所有操作
+	// 都会重定向到 pxd.portworx.com CSI 驱动。
 	// +optional
 	PortworxVolume *PortworxVolumeSource
-	// scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes.
-	// Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported.
+	// scaleIO 表示挂载到 Kubernetes 节点的 ScaleIO 持久卷。
+	// Deprecated: ScaleIO 已弃用，不再支持树内 scaleIO 类型。
 	// +optional
 	ScaleIO *ScaleIOVolumeSource
 	// storageOS represents a StorageOS volume that is attached to the kubelet's host machine and mounted into the pod.
-	// Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported.
+	// 已弃用：StorageOS 已弃用，不再支持树内 storageos 类型。
 	// +optional
 	StorageOS *StorageOSVolumeSource
-	// csi (Container Storage Interface) represents ephemeral storage that is handled by certain external CSI drivers.
+	// csi（容器存储接口）表示由某些外部 CSI 驱动处理的临时存储。
 	// +optional
 	CSI *CSIVolumeSource
 	// ephemeral represents a volume that is handled by a cluster storage driver.
@@ -207,20 +202,19 @@ type VolumeSource struct {
 	//
 	// +optional
 	Ephemeral *EphemeralVolumeSource
-	// image represents an OCI object (a container image or artifact) pulled and mounted on the kubelet's host machine.
-	// The volume is resolved at pod startup depending on which PullPolicy value is provided:
-	//
-	// - Always: the kubelet always attempts to pull the reference. Container creation will fail If the pull fails.
-	// - Never: the kubelet never pulls the reference and only uses a local image or artifact. Container creation will fail if the reference isn't present.
-	// - IfNotPresent: the kubelet pulls if the reference isn't already present on disk. Container creation will fail if the reference isn't present and the pull fails.
-	//
-	// The volume gets re-resolved if the pod gets deleted and recreated, which means that new remote content will become available on pod recreation.
-	// A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
-	// The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
-	// The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-	// The volume will be mounted read-only (ro).
-	// Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
-	// The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
+	// image 表示在 kubelet 主机上拉取并挂载的 OCI 对象（容器镜像或制品）。
+	// 卷在 Pod 启动时根据所提供的 PullPolicy 值进行解析：
+	// - Always：kubelet 总是尝试拉取引用。拉取失败则容器创建失败。
+	// - Never：kubelet 从不拉取引用，只使用本地镜像或制品。引用不存在则容器创建失败。
+	// - IfNotPresent：若磁盘上尚无引用，kubelet 才会拉取。引用不存在且拉取失败则容器创建失败。
+	// 若 Pod 被删除并重建，卷会重新解析，因此重建 Pod 后可使用新的远端内容。
+	// Pod 启动期间解析或拉取镜像失败会阻塞容器启动，并可能带来显著延迟。
+	// 失败会按常规卷退避策略重试，并反映在 Pod 的 reason 和 message 中。
+	// 该卷可挂载的对象类型由主机上的容器运行时实现定义，至少须包含 container image 字段支持的所有有效类型。
+	// OCI 对象以与容器镜像相同的方式合并清单层，挂载到单个目录（spec.containers[*].volumeMounts.mountPath）中。
+	// 卷以只读（ro）方式挂载。
+	// 1.33 之前不支持容器的子路径挂载（spec.containers[*].volumeMounts.subpath）。
+	// 字段 spec.securityContext.fsGroupChangePolicy 对此卷类型无效。
 	// +optional
 	Image *ImageVolumeSource
 }
@@ -228,16 +222,14 @@ type VolumeSource struct {
 // PersistentVolumeSource is similar to VolumeSource but meant for the administrator who creates PVs.
 // Exactly one of its members must be set.
 type PersistentVolumeSource struct {
-	// gcePersistentDisk represents a GCE Disk resource that is attached to a
-	// kubelet's host machine and then exposed to the pod. Provisioned by an admin.
-	// Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree
-	// gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver.
+	// gcePersistentDisk 表示挂载到 kubelet 主机、再暴露给 Pod 的 GCE 磁盘资源，由管理员供给。
+	// Deprecated: GCEPersistentDisk 已弃用。树内 gcePersistentDisk 类型的所有操作
+	// 都会重定向到 pd.csi.storage.gke.io CSI 驱动。
 	// +optional
 	GCEPersistentDisk *GCEPersistentDiskVolumeSource
-	// awsElasticBlockStore represents an AWS Disk resource that is attached to a
-	// kubelet's host machine and then exposed to the pod.
-	// Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree
-	// awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver.
+	// awsElasticBlockStore 表示挂载到 kubelet 主机、再暴露给 Pod 的 AWS 磁盘资源。
+	// Deprecated: AWSElasticBlockStore 已弃用。树内 awsElasticBlockStore 类型的所有操作
+	// 都会重定向到 ebs.csi.aws.com CSI 驱动。
 	// +optional
 	AWSElasticBlockStore *AWSElasticBlockStoreVolumeSource
 	// hostPath represents a directory on the host.
@@ -246,87 +238,79 @@ type PersistentVolumeSource struct {
 	// On-host storage is not supported in any way and WILL NOT WORK in a multi-node cluster.
 	// +optional
 	HostPath *HostPathVolumeSource
-	// glusterfs represents a Glusterfs volume that is attached to a host and
-	// exposed to the pod. Provisioned by an admin.
-	// Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported.
+	// glusterfs 表示挂载到主机、再暴露给 Pod 的 Glusterfs 卷，由管理员供给。
+	// Deprecated: Glusterfs 已弃用，不再支持树内 glusterfs 类型。
 	// +optional
 	Glusterfs *GlusterfsPersistentVolumeSource
-	// nfs represents an NFS mount on the host that shares a pod's lifetime
+	// nfs 表示主机上的 NFS 挂载，其生命周期与 Pod 相同。
 	// +optional
 	NFS *NFSVolumeSource
-	// rbd represents a Rados Block Device mount on the host that shares a pod's lifetime.
-	// Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported.
+	// rbd 表示主机上与 Pod 生命周期相同的 Rados Block Device 挂载。
+	// Deprecated: RBD 已弃用，不再支持树内 rbd 类型。
 	// +optional
 	RBD *RBDPersistentVolumeSource
-	// iscsi represents an ISCSI resource that is attached to a
-	// kubelet's host machine and then exposed to the pod.
+	// iscsi 表示挂载到 kubelet 主机、再暴露给 Pod 的 ISCSI 磁盘资源，由管理员供给。
 	// +optional
 	ISCSI *ISCSIPersistentVolumeSource
-	// cinder represents a cinder volume attached and mounted on kubelets host machine.
-	// Deprecated: Cinder is deprecated. All operations for the in-tree cinder type
-	// are redirected to the cinder.csi.openstack.org CSI driver.
+	// cinder 表示挂载到 kubelet 主机的 cinder 卷。
+	// Deprecated: Cinder 已弃用。树内 cinder 类型的所有操作
+	// 都会重定向到 cinder.csi.openstack.org CSI 驱动。
 	// +optional
 	Cinder *CinderPersistentVolumeSource
-	// cephFS represents a Ceph FS mount on the host that shares a pod's lifetime.
-	// Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported.
+	// cephFS 表示主机上与 Pod 生命周期相同的 Ceph FS 挂载。
+	// Deprecated: CephFS 已弃用，不再支持树内 cephfs 类型。
 	// +optional
 	CephFS *CephFSPersistentVolumeSource
-	// fc represents a Fibre Channel resource that is attached to a kubelet's host machine and then exposed to the pod.
+	// fc 表示挂载到 kubelet 主机、再暴露给 Pod 的 Fibre Channel 资源。
 	// +optional
 	FC *FCVolumeSource
-	// flocker represents a Flocker volume attached to a kubelet's host machine and exposed to the pod for its usage. This depends on the Flocker control service being running.
-	//
-	// Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported.
+	// flocker 表示挂载到 kubelet 主机、供 Pod 使用的 Flocker 卷。依赖 Flocker 控制服务正在运行。
+	// Deprecated: Flocker 已弃用，不再支持树内 flocker 类型。
 	// +optional
 	Flocker *FlockerVolumeSource
-	// flexVolume represents a generic volume resource that is
-	// provisioned/attached using an exec based plugin.
-	//
-	// Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead.
+	// flexVolume 表示通过基于 exec 的插件供给/挂载的通用卷资源。
+	// Deprecated: FlexVolume 已弃用。建议改用 CSIDriver。
 	// +optional
 	FlexVolume *FlexPersistentVolumeSource
-	// azureFile represents an Azure File Service mount on the host and bind mount to the pod.
-	//
-	// Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type
-	// are redirected to the file.csi.azure.com CSI driver.
+	// azureFile 表示主机上的 Azure File Service 挂载，并绑定挂载到 Pod。
+	// Deprecated: AzureFile 已弃用。树内 azureFile 类型的所有操作
+	// 都会重定向到 file.csi.azure.com CSI 驱动。
 	// +optional
 	AzureFile *AzureFilePersistentVolumeSource
-	// vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine.
-	//
-	// Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type
-	// are redirected to the csi.vsphere.vmware.com CSI driver.
+	// vsphereVolume 表示挂载到 kubelet 主机的 vSphere 卷。
+	// Deprecated: VsphereVolume 已弃用。树内 vsphereVolume 类型的所有操作
+	// 都会重定向到 csi.vsphere.vmware.com CSI 驱动。
 	// +optional
 	VsphereVolume *VsphereVirtualDiskVolumeSource
-	// quobyte represents a Quobyte mount on the host that shares a pod's lifetime.
-	//
-	// Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported.
+	// quobyte 表示主机上与 Pod 生命周期相同的 Quobyte 挂载。
+	// Deprecated: Quobyte 已弃用，不再支持树内 quobyte 类型。
 	// +optional
 	Quobyte *QuobyteVolumeSource
-	// azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod.
-	// Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type
-	// are redirected to the disk.csi.azure.com CSI driver.
+	// azureDisk 表示主机上的 Azure 数据盘挂载，并绑定挂载到 Pod。
+	// Deprecated: AzureDisk 已弃用。树内 azureDisk 类型的所有操作
+	// 都会重定向到 disk.csi.azure.com CSI 驱动。
 	// +optional
 	AzureDisk *AzureDiskVolumeSource
-	// photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine.
-	// Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.
+	// photonPersistentDisk 表示挂载到 kubelet 主机的 PhotonController 持久盘。
+	// Deprecated: PhotonPersistentDisk 已弃用，不再支持树内 photonPersistentDisk 类型。
 	PhotonPersistentDisk *PhotonPersistentDiskVolumeSource
-	// portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
-	// Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-	// are redirected to the pxd.portworx.com CSI driver.
+	// portworxVolume 表示挂载到 kubelet 主机的 portworx 卷。
+	// Deprecated: PortworxVolume 已弃用。树内 portworxVolume 类型的所有操作
+	// 都会重定向到 pxd.portworx.com CSI 驱动。
 	// +optional
 	PortworxVolume *PortworxVolumeSource
-	// scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes.
-	// Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported.
+	// scaleIO 表示挂载到 Kubernetes 节点的 ScaleIO 持久卷。
+	// Deprecated: ScaleIO 已弃用，不再支持树内 scaleIO 类型。
 	// +optional
 	ScaleIO *ScaleIOPersistentVolumeSource
-	// local represents directly-attached storage with node affinity
+	// local 表示带有节点亲和性的直接挂载存储。
 	// +optional
 	Local *LocalVolumeSource
-	// storageOS represents a StorageOS volume that is attached to the kubelet's host machine and mounted into the pod.
-	// Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported.
+	// storageOS 表示挂载到 kubelet 主机并挂载进 Pod 的 StorageOS 卷。
+	// Deprecated: StorageOS 已弃用，不再支持树内 storageos 类型。
 	// +optional
 	StorageOS *StorageOSPersistentVolumeSource
-	// csi represents storage that is handled by an external CSI driver.
+	// csi 表示由外部 CSI 驱动处理的存储。
 	// +optional
 	CSI *CSIPersistentVolumeSource
 }
@@ -342,7 +326,7 @@ type PersistentVolumeClaimVolumeSource struct {
 }
 
 const (
-	// BetaStorageClassAnnotation represents the beta/previous StorageClass annotation.
+	// BetaStorageClassAnnotation 表示 beta/旧版 StorageClass 注解。
 	// It's deprecated and will be removed in a future release. (#51440)
 	BetaStorageClassAnnotation = "volume.beta.kubernetes.io/storage-class"
 
@@ -378,7 +362,7 @@ type PersistentVolumeSpec struct {
 	AccessModes []PersistentVolumeAccessMode
 	// ClaimRef is part of a bi-directional binding between PersistentVolume and PersistentVolumeClaim.
 	// ClaimRef is expected to be non-nil when bound.
-	// claim.VolumeName is the authoritative bind between PV and PVC.
+	// claim.VolumeName 才是 PV 与 PVC 绑定的权威依据。
 	// When set to non-nil value, PVC.Spec.Selector of the referenced PVC is
 	// ignored, i.e. labels of this PV do not need to match PVC selector.
 	// +optional
@@ -394,8 +378,8 @@ type PersistentVolumeSpec struct {
 	// simply fail if one is invalid.
 	// +optional
 	MountOptions []string
-	// volumeMode defines if a volume is intended to be used with a formatted filesystem
-	// or to remain in raw block state. Value of Filesystem is implied when not included in spec.
+	// volumeMode 定义卷是应使用格式化文件系统，还是保持原始块状态。
+	// spec 中未包含时隐含为 Filesystem。
 	// +optional
 	VolumeMode *PersistentVolumeMode
 	// NodeAffinity defines constraints that limit what nodes this volume can be accessed from.
@@ -414,9 +398,9 @@ type PersistentVolumeSpec struct {
 	VolumeAttributesClassName *string
 }
 
-// VolumeNodeAffinity defines constraints that limit what nodes this volume can be accessed from.
+// VolumeNodeAffinity 定义限制可从哪些节点访问该卷的约束。
 type VolumeNodeAffinity struct {
-	// Required specifies hard node constraints that must be met.
+	// required 指定必须满足的硬性节点约束。
 	Required *NodeSelector
 }
 
@@ -424,37 +408,38 @@ type VolumeNodeAffinity struct {
 type PersistentVolumeReclaimPolicy string
 
 const (
-	// PersistentVolumeReclaimRecycle means the volume will be recycled back into the pool of unbound persistent volumes on release from its claim.
-	// The volume plugin must support Recycling.
+	// PersistentVolumeReclaimRecycle 表示卷从其声明释放后会被回收到未绑定持久卷池中。
+	// 卷插件必须支持回收（Recycling）。
 	// DEPRECATED: The PersistentVolumeReclaimRecycle called Recycle is being deprecated. See announcement here: https://groups.google.com/forum/#!topic/kubernetes-dev/uexugCza84I
 	PersistentVolumeReclaimRecycle PersistentVolumeReclaimPolicy = "Recycle"
-	// PersistentVolumeReclaimDelete means the volume will be deleted from Kubernetes on release from its claim.
-	// The volume plugin must support Deletion.
+	// PersistentVolumeReclaimDelete 表示卷从其声明释放后会从 Kubernetes 中删除。
+	// 卷插件必须支持删除（Deletion）。
 	PersistentVolumeReclaimDelete PersistentVolumeReclaimPolicy = "Delete"
-	// PersistentVolumeReclaimRetain means the volume will be left in its current phase (Released) for manual reclamation by the administrator.
-	// The default policy is Retain.
+	// PersistentVolumeReclaimRetain 表示卷保持当前阶段（Released），由管理员手动回收。
+	// 默认策略为 Retain。
 	PersistentVolumeReclaimRetain PersistentVolumeReclaimPolicy = "Retain"
 )
 
-// PersistentVolumeMode describes how a volume is intended to be consumed, either Block or Filesystem.
+// PersistentVolumeMode 描述卷的使用方式：Block 或 Filesystem。
 type PersistentVolumeMode string
 
 const (
-	// PersistentVolumeBlock means the volume will not be formatted with a filesystem and will remain a raw block device.
+	// PersistentVolumeBlock 表示卷不会用文件系统格式化，而是保持为原始块设备。
 	PersistentVolumeBlock PersistentVolumeMode = "Block"
-	// PersistentVolumeFilesystem means the volume will be or is formatted with a filesystem.
+	// PersistentVolumeFilesystem 表示卷将或已使用文件系统格式化。
 	PersistentVolumeFilesystem PersistentVolumeMode = "Filesystem"
 )
 
 // PersistentVolumeStatus represents the status of PV storage
 type PersistentVolumeStatus struct {
-	// Phase indicates if a volume is available, bound to a claim, or released by a claim
+	// phase 表示卷是否可用、已绑定到声明或已被声明释放。
 	// +optional
 	Phase PersistentVolumePhase
-	// A human-readable message indicating details about why the volume is in this state.
+	// message 是人类可读的消息，说明卷处于该状态的详细原因。
 	// +optional
 	Message string
-	// Reason is a brief CamelCase string that describes any failure and is meant for machine parsing and tidy display in the CLI
+	// reason 是简短的 CamelCase 字符串，描述任何故障，
+	// 便于机器解析并在 CLI 中整洁展示。
 	// +optional
 	Reason string
 	// LastPhaseTransitionTime is the time the phase transitioned from one to another
@@ -475,7 +460,7 @@ type PersistentVolumeList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PersistentVolumeClaim is a user's request for and claim to a persistent volume
+// PersistentVolumeClaim 是用户对持久卷的请求和声明
 type PersistentVolumeClaim struct {
 	metav1.TypeMeta
 	// +optional
@@ -524,18 +509,17 @@ type PersistentVolumeClaimSpec struct {
 	// More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes/#class-1
 	// +optional
 	StorageClassName *string
-	// volumeMode defines what type of volume is required by the claim.
-	// Value of Filesystem is implied when not included in claim spec.
+	// volumeMode 定义声明所需的卷类型。
+	// 声明 spec 中未包含时隐含为 Filesystem。
 	// +optional
 	VolumeMode *PersistentVolumeMode
-	// This field can be used to specify either:
-	// * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot)
-	// * An existing PVC (PersistentVolumeClaim)
-	// If the provisioner or an external controller can support the specified data source,
-	// it will create a new volume based on the contents of the specified data source.
-	// dataSource contents will be copied to dataSourceRef, and dataSourceRef contents
-	// will be copied to dataSource when dataSourceRef.namespace is not specified.
-	// If the namespace is specified, then dataSourceRef will not be copied to dataSource.
+	// dataSource 字段可用于指定以下之一：
+	// * 现有的 VolumeSnapshot 对象（snapshot.storage.k8s.io/VolumeSnapshot）
+	// * 现有的 PVC（PersistentVolumeClaim）
+	// 如果供给器或外部控制器支持指定的数据源，它将基于该数据源的内容创建新卷。
+	// dataSource 的内容会复制到 dataSourceRef；当 dataSourceRef.namespace 未指定时，
+	// dataSourceRef 的内容也会复制到 dataSource。
+	// 若指定了命名空间，则 dataSourceRef 不会复制到 dataSource。
 	// +optional
 	DataSource *TypedLocalObjectReference
 	// Specifies the object from which to populate the volume with data, if a non-empty
@@ -561,15 +545,12 @@ type PersistentVolumeClaimSpec struct {
 	//   in any namespaces.
 	// +optional
 	DataSourceRef *TypedObjectReference
-	// volumeAttributesClassName may be used to set the VolumeAttributesClass used by this claim.
-	// If specified, the CSI driver will create or update the volume with the attributes defined
-	// in the corresponding VolumeAttributesClass. This has a different purpose than storageClassName,
-	// it can be changed after the claim is created. An empty string or nil value indicates that no
-	// VolumeAttributesClass will be applied to the claim. If the claim enters an Infeasible error state,
-	// this field can be reset to its previous value (including nil) to cancel the modification.
-	// If the resource referred to by volumeAttributesClass does not exist, this PersistentVolumeClaim will be
-	// set to a Pending state, as reflected by the modifyVolumeStatus field, until such as a resource
-	// exists.
+	// volumeAttributesClassName 可用于设置此声明使用的 VolumeAttributesClass。
+	// 若指定，CSI 驱动会使用相应 VolumeAttributesClass 中定义的属性创建或更新卷。
+	// 它的用途与 storageClassName 不同，可在声明创建后修改。空字符串或 nil 表示不会对该声明应用任何 VolumeAttributesClass。
+	// 如果声明进入 Infeasible 错误状态，可将此字段重置为之前的值（包括 nil）以取消修改。
+	// 如果 volumeAttributesClass 引用的资源不存在，此 PersistentVolumeClaim 会被置为 Pending 状态，
+	// 如 modifyVolumeStatus 字段所示，直至该资源存在为止。
 	// More info: https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/
 	// +featureGate=VolumeAttributesClass
 	// +optional
@@ -577,31 +558,32 @@ type PersistentVolumeClaimSpec struct {
 }
 
 type TypedObjectReference struct {
-	// APIGroup is the group for the resource being referenced.
-	// If APIGroup is not specified, the specified Kind must be in the core API group.
-	// For any other third-party types, APIGroup is required.
+	// APIGroup 是被引用资源所属的组。
+	// 若未指定 APIGroup，则指定的 Kind 必须属于核心 API 组。
+	// 对于其他任何第三方类型，APIGroup 为必填项。
 	// +optional
 	APIGroup *string
-	// Kind is the type of resource being referenced
+	// Kind 是被引用资源的类型
 	Kind string
-	// Name is the name of resource being referenced
+	// Name 是被引用资源的名称
 	Name string
-	// Namespace is the namespace of resource being referenced
-	// Note that when a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the ReferenceGrant documentation for details.
-	// (Alpha) This field requires the CrossNamespaceVolumeDataSource feature gate to be enabled.
+	// Namespace 是被引用资源所在的命名空间
+	// 注意，指定命名空间时，被引用命名空间中必须存在一个 gateway.networking.k8s.io/ReferenceGrant 对象，
+	// 以允许该命名空间的所有者接受此引用。详情参见 ReferenceGrant 文档。
+	// (Alpha) 此字段需要启用 CrossNamespaceVolumeDataSource 特性门控。
 	// +featureGate=CrossNamespaceVolumeDataSource
 	// +optional
 	Namespace *string
 }
 
-// PersistentVolumeClaimConditionType defines the condition of PV claim.
+// PersistentVolumeClaimConditionType 定义 PVC 的条件类型。
 // Valid values are:
 //   - "Resizing", "FileSystemResizePending"
 //
 // If RecoverVolumeExpansionFailure feature gate is enabled, then following additional values can be expected:
 //   - "ControllerResizeError", "NodeResizeError"
 //
-// If VolumeAttributesClass feature gate is enabled, then following additional values can be expected:
+// 若启用 VolumeAttributesClass 特性门控，则可能还有以下额外值：
 //   - "ModifyVolumeError", "ModifyingVolume"
 type PersistentVolumeClaimConditionType string
 
@@ -609,28 +591,25 @@ type PersistentVolumeClaimConditionType string
 const (
 	// An user trigger resize of pvc has been started
 	PersistentVolumeClaimResizing PersistentVolumeClaimConditionType = "Resizing"
-	// PersistentVolumeClaimFileSystemResizePending - controller resize is finished and a file system resize is pending on node
+	// PersistentVolumeClaimFileSystemResizePending 表示控制器扩容已完成，节点上仍待进行文件系统扩容
 	PersistentVolumeClaimFileSystemResizePending PersistentVolumeClaimConditionType = "FileSystemResizePending"
 
-	// PersistentVolumeClaimControllerResizeError indicates an error while resizing volume for size in the controller
+	// PersistentVolumeClaimControllerResizeError 表示控制器扩容卷容量时发生错误
 	PersistentVolumeClaimControllerResizeError PersistentVolumeClaimConditionType = "ControllerResizeError"
-	// PersistentVolumeClaimNodeResizeError indicates an error while resizing volume for size in the node.
+	// PersistentVolumeClaimNodeResizeError 表示节点扩容卷容量时发生错误。
 	PersistentVolumeClaimNodeResizeError PersistentVolumeClaimConditionType = "NodeResizeError"
 
-	// Applying the target VolumeAttributesClass encountered an error
+	// 应用目标 VolumeAttributesClass 时遇到错误
 	PersistentVolumeClaimVolumeModifyVolumeError PersistentVolumeClaimConditionType = "ModifyVolumeError"
 	// Volume is being modified
 	PersistentVolumeClaimVolumeModifyingVolume PersistentVolumeClaimConditionType = "ModifyingVolume"
 
-	// PersistentVolumeClaimUnused indicates whether the PVC is currently not in use by any Pod.
-	// When status is True, the PVC is not referenced by any non-terminal Pod.
-	// The lastTransitionTime indicates when the PVC last transitioned to being unused.
-	//
-	// Both in-use time and unused time duration indicated by this condition may be shorter or
-	// slightly longer than actual in-use time or unused time because of processing delays or
-	// when this feature was enabled in the cluster.
-	//
-	// Requires PersistentVolumeClaimUnusedSinceTime beta featuregate
+	// PersistentVolumeClaimUnused 表示该 PVC 当前是否未被任何 Pod 使用。
+	// 状态为 True 时，该 PVC 未被任何非终止态 Pod 引用。
+	// lastTransitionTime 表示 PVC 上次转变为未使用状态的时间。
+	// 由于处理延迟或集群中启用该功能的时间点不同，此条件所指示的使用时长和未使用时长
+	// 可能短于或略长于实际的使用/未使用时长。
+	// 需要 PersistentVolumeClaimUnusedSinceTime beta 特性门控
 	PersistentVolumeClaimUnused PersistentVolumeClaimConditionType = "Unused"
 )
 
@@ -644,18 +623,17 @@ const (
 	// State set when resize controller starts resizing the volume in control-plane
 	PersistentVolumeClaimControllerResizeInProgress ClaimResourceStatus = "ControllerResizeInProgress"
 
-	// State set when resize has failed in resize controller with a terminal unrecoverable error.
-	// Transient errors such as timeout should not set this status and should leave allocatedResourceStatus
-	// unmodified, so as resize controller can resume the volume expansion.
+	// 当调整容量控制器因不可恢复的终结性错误而扩容失败时设置的状态。
+	// 超时等瞬时错误不应设置此状态，也不应修改 allocatedResourceStatus，
+	// 以便调整容量控制器可以继续卷扩容。
 	PersistentVolumeClaimControllerResizeInfeasible ClaimResourceStatus = "ControllerResizeInfeasible"
 
 	// State set when resize controller has finished resizing the volume but further resizing of volume
 	// is needed on the node.
 	PersistentVolumeClaimNodeResizePending ClaimResourceStatus = "NodeResizePending"
-	// State set when kubelet starts resizing the volume.
+	// 当 kubelet 开始扩容卷时设置的状态
 	PersistentVolumeClaimNodeResizeInProgress ClaimResourceStatus = "NodeResizeInProgress"
-	// State set when resizing has failed in kubelet with a terminal unrecoverable error. Transient errors
-	// shouldn't set this status
+	// 当 kubelet 扩容因不可恢复的终结性错误而失败时设置的状态。瞬时错误不应设置此状态
 	PersistentVolumeClaimNodeResizeInfeasible ClaimResourceStatus = "NodeResizeInfeasible"
 )
 
@@ -664,30 +642,26 @@ const (
 type PersistentVolumeClaimModifyVolumeStatus string
 
 const (
-	// Pending indicates that the PersistentVolumeClaim cannot be modified due to unmet requirements, such as
-	// the specified VolumeAttributesClass not existing
+	// Pending 表示因未满足条件（例如指定的 VolumeAttributesClass 不存在），PersistentVolumeClaim 无法被修改
 	PersistentVolumeClaimModifyVolumePending PersistentVolumeClaimModifyVolumeStatus = "Pending"
-	// InProgress indicates that the volume is being modified
+	// InProgress 表示卷正在被修改
 	PersistentVolumeClaimModifyVolumeInProgress PersistentVolumeClaimModifyVolumeStatus = "InProgress"
-	// Infeasible indicates that the request has been rejected as invalid by the CSI driver. To
-	// resolve the error, a valid VolumeAttributesClass needs to be specified
+	// Infeasible 表示请求被 CSI 驱动判定为无效而拒绝。要解决该错误，需指定有效的 VolumeAttributesClass
 	PersistentVolumeClaimModifyVolumeInfeasible PersistentVolumeClaimModifyVolumeStatus = "Infeasible"
 )
 
-// ModifyVolumeStatus represents the status object of ControllerModifyVolume operation
+// ModifyVolumeStatus 表示 ControllerModifyVolume 操作的状态对象
 type ModifyVolumeStatus struct {
-	// targetVolumeAttributesClassName is the name of the VolumeAttributesClass the PVC currently being reconciled
+	// targetVolumeAttributesClassName 是当前正在进行协调的 PVC 所使用的 VolumeAttributesClass 名称
 	TargetVolumeAttributesClassName string
-	// status is the status of the ControllerModifyVolume operation. It can be in any of following states:
-	//  - Pending
-	//    Pending indicates that the PersistentVolumeClaim cannot be modified due to unmet requirements, such as
-	//    the specified VolumeAttributesClass not existing.
-	//  - InProgress
-	//    InProgress indicates that the volume is being modified.
-	//  - Infeasible
-	//   Infeasible indicates that the request has been rejected as invalid by the CSI driver. To
-	// 	  resolve the error, a valid VolumeAttributesClass needs to be specified.
-	// Note: New statuses can be added in the future. Consumers should check for unknown statuses and fail appropriately.
+	// status 是 ControllerModifyVolume 操作的状态，可以是以下任一状态：
+	// - Pending
+	// Pending 表示因未满足条件（例如指定的 VolumeAttributesClass 不存在），PersistentVolumeClaim 无法被修改。
+	// - InProgress
+	// InProgress 表示卷正在被修改。
+	// - Infeasible
+	// Infeasible 表示请求被 CSI 驱动判定为无效而拒绝。要解决该错误，需指定有效的 VolumeAttributesClass。
+	// 注意：未来可能新增状态。消费方应检查未知状态并作适当处理。
 	Status PersistentVolumeClaimModifyVolumeStatus
 }
 
@@ -705,15 +679,15 @@ type PersistentVolumeClaimCondition struct {
 	Message string
 }
 
-// VolumeHealthStatusType describes the health status category of a volume.
+// VolumeHealthStatusType 描述卷的健康状态类别。
 type VolumeHealthStatusType string
 
 const (
-	// VolumeHealthInaccessible indicates the volume cannot be accessed.
+	// VolumeHealthInaccessible 表示无法访问该卷。
 	VolumeHealthInaccessible VolumeHealthStatusType = "Inaccessible"
-	// VolumeHealthDataLoss indicates data loss has been detected on the volume.
+	// VolumeHealthDataLoss 表示检测到该卷发生数据丢失。
 	VolumeHealthDataLoss VolumeHealthStatusType = "DataLoss"
-	// VolumeHealthDegraded indicates the volume is functioning but with reduced capability.
+	// VolumeHealthDegraded 表示卷仍可工作，但能力有所下降。
 	VolumeHealthDegraded VolumeHealthStatusType = "Degraded"
 )
 
@@ -725,10 +699,10 @@ type VolumeHealthCondition struct {
 	// - "DataLoss": data loss has been detected on the volume.
 	// - "Degraded": the volume is functioning with reduced capability.
 	Status VolumeHealthStatusType
-	// reason is a brief CamelCase machine-parseable reason.
-	// Together with status it forms the unique identity of a condition entry.
+	// reason 是简短的、机器可解析的 CamelCase 原因。
+	// 与 status 一起构成某个条件条目的唯一标识。
 	Reason string
-	// message is a human-readable description.
+	// message 是人类可读的描述。
 	// +optional
 	Message string
 }
@@ -838,13 +812,13 @@ type PersistentVolumeClaimStatus struct {
 	// +mapType=granular
 	// +optional
 	AllocatedResourceStatuses map[ResourceName]ClaimResourceStatus
-	// currentVolumeAttributesClassName is the current name of the VolumeAttributesClass the PVC is using.
-	// When unset, there is no VolumeAttributeClass applied to this PersistentVolumeClaim
+	// currentVolumeAttributesClassName 是 PVC 当前使用的 VolumeAttributesClass 名称。
+	// 未设置时，表示此 PersistentVolumeClaim 未应用任何 VolumeAttributeClass
 	// +featureGate=VolumeAttributesClass
 	// +optional
 	CurrentVolumeAttributesClassName *string
-	// ModifyVolumeStatus represents the status object of ControllerModifyVolume operation.
-	// When this is unset, there is no ModifyVolume operation being attempted.
+	// ModifyVolumeStatus 表示 ControllerModifyVolume 操作的状态对象。
+	// 未设置时，表示没有正在尝试的 ModifyVolume 操作。
 	// +featureGate=VolumeAttributesClass
 	// +optional
 	ModifyVolumeStatus *ModifyVolumeStatus
@@ -862,12 +836,12 @@ type PersistentVolumeAccessMode string
 const (
 	// can be mounted read/write mode to exactly 1 host
 	ReadWriteOnce PersistentVolumeAccessMode = "ReadWriteOnce"
-	// can be mounted in read-only mode to many hosts
+	// 可以以只读模式挂载到多台主机
 	ReadOnlyMany PersistentVolumeAccessMode = "ReadOnlyMany"
-	// can be mounted in read/write mode to many hosts
+	// 可以以读写模式挂载到多台主机
 	ReadWriteMany PersistentVolumeAccessMode = "ReadWriteMany"
-	// can be mounted read/write mode to exactly 1 pod
-	// cannot be used in combination with other access modes
+	// 可以以读写模式挂载到恰好 1 个 Pod
+	// 不能与其他访问模式组合使用
 	ReadWriteOncePod PersistentVolumeAccessMode = "ReadWriteOncePod"
 )
 
@@ -887,7 +861,7 @@ const (
 	// released volumes must be recycled before becoming available again
 	// this phase is used by the persistent volume claim binder to signal to another process to reclaim the resource
 	VolumeReleased PersistentVolumePhase = "Released"
-	// used for PersistentVolumes that failed to be correctly recycled or deleted after being released from a claim
+	// 用于从声明释放后未能正确回收或删除的持久卷
 	VolumeFailed PersistentVolumePhase = "Failed"
 )
 
@@ -896,7 +870,7 @@ type PersistentVolumeClaimPhase string
 
 // These are the valid value for PersistentVolumeClaimPhase
 const (
-	// used for PersistentVolumeClaims that are not yet bound
+	// 用于尚未绑定的持久卷声明
 	ClaimPending PersistentVolumeClaimPhase = "Pending"
 	// used for PersistentVolumeClaims that are bound
 	ClaimBound PersistentVolumeClaimPhase = "Bound"
@@ -911,28 +885,28 @@ type HostPathType string
 
 // These are the valid values for HostPathType
 const (
-	// For backwards compatible, leave it empty if unset
+	// 为向后兼容，未设置时留空
 	HostPathUnset HostPathType = ""
-	// If nothing exists at the given path, an empty directory will be created there
-	// as needed with file mode 0755, having the same group and ownership with Kubelet.
+	// 若给定路径下不存在任何内容，将按需创建一个空目录，
+	// 文件模式为 0755，且与 Kubelet 具有相同的组和所有权。
 	HostPathDirectoryOrCreate HostPathType = "DirectoryOrCreate"
-	// A directory must exist at the given path
+	// 给定路径下必须存在一个目录
 	HostPathDirectory HostPathType = "Directory"
-	// If nothing exists at the given path, an empty file will be created there
-	// as needed with file mode 0644, having the same group and ownership with Kubelet.
+	// 若给定路径下不存在任何内容，将按需创建一个空文件，
+	// 文件模式为 0644，且与 Kubelet 具有相同的组和所有权。
 	HostPathFileOrCreate HostPathType = "FileOrCreate"
-	// A file must exist at the given path
+	// 给定路径下必须存在一个文件
 	HostPathFile HostPathType = "File"
-	// A UNIX socket must exist at the given path
+	// 给定路径下必须存在一个 UNIX socket
 	HostPathSocket HostPathType = "Socket"
-	// A character device must exist at the given path
+	// 给定路径下必须存在一个字符设备
 	HostPathCharDev HostPathType = "CharDevice"
-	// A block device must exist at the given path
+	// 给定路径下必须存在一个块设备
 	HostPathBlockDev HostPathType = "BlockDevice"
 )
 
 // HostPathVolumeSource represents a host path mapped into a pod.
-// Host path volumes do not support ownership management or SELinux relabeling.
+// 主机路径卷不支持所有权管理或 SELinux 重标记。
 type HostPathVolumeSource struct {
 	// If the path is a symlink, it will follow the link to the real path.
 	Path string
@@ -941,14 +915,14 @@ type HostPathVolumeSource struct {
 }
 
 // EmptyDirVolumeSource represents an empty directory for a pod.
-// Empty directory volumes support ownership management and SELinux relabeling.
+// 空目录卷支持所有权管理和 SELinux 重标记。
 type EmptyDirVolumeSource struct {
 	// TODO: Longer term we want to represent the selection of underlying
 	// media more like a scheduling problem - user says what traits they
 	// need, we give them a backing store that satisfies that.  For now
 	// this will cover the most common needs.
 	// Optional: what type of storage medium should back this directory.
-	// The default is "" which means to use the node's default medium.
+	// 默认为 ""，表示使用节点的默认介质。
 	// +optional
 	Medium StorageMedium
 	// Total amount of local storage required for this EmptyDir volume.
@@ -970,7 +944,7 @@ type EmptyDirVolumeSource struct {
 	Mode *int32
 }
 
-// StorageMedium defines ways that storage can be allocated to a volume.
+// StorageMedium 定义卷的存储分配方式。
 type StorageMedium string
 
 // These are the valid value for StorageMedium
@@ -978,18 +952,18 @@ const (
 	StorageMediumDefault         StorageMedium = ""           // use whatever the default is for the node
 	StorageMediumMemory          StorageMedium = "Memory"     // use memory (tmpfs)
 	StorageMediumHugePages       StorageMedium = "HugePages"  // use hugepages
-	StorageMediumHugePagesPrefix StorageMedium = "HugePages-" // prefix for full medium notation HugePages-<size>
+	StorageMediumHugePagesPrefix StorageMedium = "HugePages-" // 完整介质表示法 HugePages-<size> 的前缀
 )
 
-// Protocol defines network protocols supported for things like container ports.
+// Protocol 定义容器端口等所使用的网络协议。
 type Protocol string
 
 const (
-	// ProtocolTCP is the TCP protocol.
+	// ProtocolTCP 表示 TCP 协议。
 	ProtocolTCP Protocol = "TCP"
-	// ProtocolUDP is the UDP protocol.
+	// ProtocolUDP 表示 UDP 协议。
 	ProtocolUDP Protocol = "UDP"
-	// ProtocolSCTP is the SCTP protocol.
+	// ProtocolSCTP 表示 SCTP 协议。
 	ProtocolSCTP Protocol = "SCTP"
 )
 
@@ -1003,9 +977,9 @@ type GCEPersistentDiskVolumeSource struct {
 	// Unique name of the PD resource. Used to identify the disk in GCE
 	PDName string
 	// Filesystem type to mount.
-	// Must be a filesystem type supported by the host operating system.
-	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
-	// TODO: how do we prevent errors in the filesystem from compromising the machine
+	// 必须是宿主机操作系统支持的文件系统类型。
+	// 例如 "ext4"、"xfs"、"ntfs"。未指定时默认为 "ext4"。
+	// TODO: 如何防止文件系统中的错误危及整机
 	// +optional
 	FSType string
 	// Optional: Partition on the disk to mount.
@@ -1014,14 +988,14 @@ type GCEPersistentDiskVolumeSource struct {
 	// +optional
 	Partition int32
 	// Optional: Defaults to false (read/write). ReadOnly here will force
-	// the ReadOnly setting in VolumeMounts.
+	// VolumeMounts 中的 ReadOnly 设置。
 	// +optional
 	ReadOnly bool
 }
 
 // ISCSIVolumeSource represents an ISCSI disk.
-// ISCSI volumes can only be mounted as read/write once.
-// ISCSI volumes support ownership management and SELinux relabeling.
+// ISCSI 卷只能以读写方式挂载一次。
+// ISCSI 卷支持所有权管理和 SELinux 重新标记。
 type ISCSIVolumeSource struct {
 	// Required: iSCSI target portal
 	// the portal is either an IP or ip_addr:port if port is other than default (typically TCP ports 860 and 3260)
@@ -1037,13 +1011,13 @@ type ISCSIVolumeSource struct {
 	// +optional
 	ISCSIInterface string
 	// Filesystem type to mount.
-	// Must be a filesystem type supported by the host operating system.
-	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
-	// TODO: how do we prevent errors in the filesystem from compromising the machine
+	// 必须是宿主机操作系统支持的文件系统类型。
+	// 例如 "ext4"、"xfs"、"ntfs"。未指定时默认为 "ext4"。
+	// TODO: 如何防止文件系统中的错误危及整机
 	// +optional
 	FSType string
 	// Optional: Defaults to false (read/write). ReadOnly here will force
-	// the ReadOnly setting in VolumeMounts.
+	// VolumeMounts 中的 ReadOnly 设置。
 	// +optional
 	ReadOnly bool
 	// Optional: list of iSCSI target portal ips for high availability.
@@ -1061,15 +1035,15 @@ type ISCSIVolumeSource struct {
 	// +optional
 	SecretRef *LocalObjectReference
 	// Optional: Custom initiator name per volume.
-	// If initiatorName is specified with iscsiInterface simultaneously, new iSCSI interface
+	// 如果同时指定 initiatorName 和 iscsiInterface，将为该连接创建新的 iSCSI 接口
 	// <target portal>:<volume name> will be created for the connection.
 	// +optional
 	InitiatorName *string
 }
 
-// ISCSIPersistentVolumeSource represents an ISCSI disk.
-// ISCSI volumes can only be mounted as read/write once.
-// ISCSI volumes support ownership management and SELinux relabeling.
+// ISCSIPersistentVolumeSource 表示 ISCSI 磁盘。
+// ISCSI 卷只能以读写方式挂载一次。
+// ISCSI 卷支持所有权管理和 SELinux 重新标记。
 type ISCSIPersistentVolumeSource struct {
 	// Required: iSCSI target portal
 	// the portal is either an IP or ip_addr:port if port is other than default (typically TCP ports 860 and 3260)
@@ -1085,13 +1059,13 @@ type ISCSIPersistentVolumeSource struct {
 	// +optional
 	ISCSIInterface string
 	// Filesystem type to mount.
-	// Must be a filesystem type supported by the host operating system.
-	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
-	// TODO: how do we prevent errors in the filesystem from compromising the machine
+	// 必须是宿主机操作系统支持的文件系统类型。
+	// 例如 "ext4"、"xfs"、"ntfs"。未指定时默认为 "ext4"。
+	// TODO: 如何防止文件系统中的错误危及整机
 	// +optional
 	FSType string
 	// Optional: Defaults to false (read/write). ReadOnly here will force
-	// the ReadOnly setting in VolumeMounts.
+	// VolumeMounts 中的 ReadOnly 设置。
 	// +optional
 	ReadOnly bool
 	// Optional: list of iSCSI target portal ips for high availability.
@@ -1109,15 +1083,15 @@ type ISCSIPersistentVolumeSource struct {
 	// +optional
 	SecretRef *SecretReference
 	// Optional: Custom initiator name per volume.
-	// If initiatorName is specified with iscsiInterface simultaneously, new iSCSI interface
+	// 如果同时指定 initiatorName 和 iscsiInterface，将为该连接创建新的 iSCSI 接口
 	// <target portal>:<volume name> will be created for the connection.
 	// +optional
 	InitiatorName *string
 }
 
 // FCVolumeSource represents a Fibre Channel volume.
-// Fibre Channel volumes can only be mounted as read/write once.
-// Fibre Channel volumes support ownership management and SELinux relabeling.
+// Fibre Channel 卷只能以读写方式挂载一次。
+// Fibre Channel 卷支持所有权管理和 SELinux 重新标记。
 type FCVolumeSource struct {
 	// Optional: FC target worldwide names (WWNs)
 	// +optional
@@ -1144,7 +1118,7 @@ type FCVolumeSource struct {
 // FlexPersistentVolumeSource represents a generic persistent volume resource that is
 // provisioned/attached using an exec based plugin.
 type FlexPersistentVolumeSource struct {
-	// Driver is the name of the driver to use for this volume.
+	// driver 是该卷要使用的驱动名称。
 	Driver string
 	// Filesystem type to mount.
 	// Must be a filesystem type supported by the host operating system.
@@ -1170,7 +1144,7 @@ type FlexPersistentVolumeSource struct {
 // FlexVolumeSource represents a generic volume resource that is
 // provisioned/attached using an exec based plugin.
 type FlexVolumeSource struct {
-	// Driver is the name of the driver to use for this volume.
+	// driver 是该卷要使用的驱动名称。
 	Driver string
 	// Filesystem type to mount.
 	// Must be a filesystem type supported by the host operating system.
@@ -1203,9 +1177,9 @@ type AWSElasticBlockStoreVolumeSource struct {
 	// Unique id of the persistent disk resource. Used to identify the disk in AWS
 	VolumeID string
 	// Filesystem type to mount.
-	// Must be a filesystem type supported by the host operating system.
-	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
-	// TODO: how do we prevent errors in the filesystem from compromising the machine
+	// 必须是宿主机操作系统支持的文件系统类型。
+	// 例如 "ext4"、"xfs"、"ntfs"。未指定时默认为 "ext4"。
+	// TODO: 如何防止文件系统中的错误危及整机
 	// +optional
 	FSType string
 	// Optional: Partition on the disk to mount.
@@ -1214,28 +1188,27 @@ type AWSElasticBlockStoreVolumeSource struct {
 	// +optional
 	Partition int32
 	// Optional: Defaults to false (read/write). ReadOnly here will force
-	// the ReadOnly setting in VolumeMounts.
+	// VolumeMounts 中的 ReadOnly 设置。
 	// +optional
 	ReadOnly bool
 }
 
 // GitRepoVolumeSource represents a volume that is populated with the contents of a git repository.
-// Git repo volumes do not support ownership management.
-// Git repo volumes support SELinux relabeling.
+// Git 仓库卷不支持所有权管理。
+// Git 仓库卷支持 SELinux 重新标记。
 //
 // DEPRECATED: GitRepo is deprecated. To provision a container with a git repo, mount an
-// EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir
-// into the Pod's container.
+// InitContainer 中，由后者使用 git 克隆仓库，然后将该 EmptyDir 挂载到
+// Pod 的容器中。
 type GitRepoVolumeSource struct {
 	// Repository URL
 	Repository string
 	// Commit hash, this is optional
 	// +optional
 	Revision string
-	// Clone target, this is optional
-	// Must not contain or start with '..'.  If '.' is supplied, the volume directory will be the
-	// git repository.  Otherwise, if specified, the volume will contain the git repository in
-	// the subdirectory with the given name.
+	// directory 是目标目录名称。
+	// 不得包含或以 '..' 开头。若提供 '.'，卷目录即为 Git 仓库本身。
+	// 否则，若指定了该字段，卷将在具有给定名称的子目录中包含 Git 仓库。
 	// +optional
 	Directory string
 	// TODO: Consider credentials here.
@@ -1250,28 +1223,25 @@ type SecretVolumeSource struct {
 	// Name of the secret in the pod's namespace to use.
 	// +optional
 	SecretName string
-	// If unspecified, each key-value pair in the Data field of the referenced
-	// Secret will be projected into the volume as a file whose name is the
-	// key and content is the value. If specified, the listed keys will be
-	// projected into the specified paths, and unlisted keys will not be
-	// present. If a key is specified which is not present in the Secret,
-	// the volume setup will error unless it is marked optional. Paths must be
-	// relative and may not contain the '..' path or start with '..'.
+	// items 若未指定，所引用 Secret 的 Data 字段中的每个键值对都将投影到卷中，
+	// 文件名即键，内容即值。若指定，则列出的键将投影到指定路径，未列出的键不会出现。
+	// 如果指定了 Secret 中不存在的键，除非标记为 optional，否则卷设置将报错。
+	// 路径必须为相对路径，不得包含 '..' 路径或以 '..' 开头。
 	// +optional
 	Items []KeyToPath
 	// Mode bits to use on created files by default. Must be a value between
 	// 0 and 0777.
 	// Directories within the path are not affected by this setting.
-	// This might be in conflict with other options that affect the file
-	// mode, like fsGroup, and the result can be other mode bits set.
+	// 这可能与其他影响文件权限的选项（如 fsGroup）冲突，
+	// 最终结果可能是其他权限位被设置。
 	// +optional
 	DefaultMode *int32
 	// Specify whether the Secret or its key must be defined
 	// +optional
 	Optional *bool
-	// The owner UID of the created files by default.
-	// The defaultUser field is only used as a fallback when the item-level user field is unset.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// defaultUser 为可选项：所创建文件的默认所有者 UID。
+	// defaultUser 字段仅在 item 级别的 user 字段未设置时作为回退值。
+	// (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	DefaultUser *int64
@@ -1285,24 +1255,21 @@ type SecretVolumeSource struct {
 // mode.
 type SecretProjection struct {
 	LocalObjectReference
-	// If unspecified, each key-value pair in the Data field of the referenced
-	// Secret will be projected into the volume as a file whose name is the
-	// key and content is the value. If specified, the listed keys will be
-	// projected into the specified paths, and unlisted keys will not be
-	// present. If a key is specified which is not present in the Secret,
-	// the volume setup will error unless it is marked optional. Paths must be
-	// relative and may not contain the '..' path or start with '..'.
+	// items 若未指定，所引用 Secret 的 Data 字段中的每个键值对都将投影到卷中，
+	// 文件名即键，内容即值。若指定，则列出的键将投影到指定路径，未列出的键不会出现。
+	// 如果指定了 Secret 中不存在的键，除非标记为 optional，否则卷设置将报错。
+	// 路径必须为相对路径，不得包含 '..' 路径或以 '..' 开头。
 	// +optional
 	Items []KeyToPath
-	// Specify whether the Secret or its key must be defined
+	// optional 字段指定是否必须定义 Secret 或其键。
 	// +optional
 	Optional *bool
 }
 
 // NFSVolumeSource represents an NFS mount that lasts the lifetime of a pod.
-// NFS volumes do not support ownership management or SELinux relabeling.
+// NFS 卷不支持所有权管理或 SELinux 重新标记。
 type NFSVolumeSource struct {
-	// Server is the hostname or IP address of the NFS server
+	// server 是 NFS 服务器的主机名或 IP 地址。
 	Server string
 
 	// Path is the exported NFS share
@@ -1315,14 +1282,14 @@ type NFSVolumeSource struct {
 }
 
 // QuobyteVolumeSource represents a Quobyte mount that lasts the lifetime of a pod.
-// Quobyte volumes do not support ownership management or SELinux relabeling.
+// Quobyte 卷不支持所有权管理或 SELinux 重新标记。
 type QuobyteVolumeSource struct {
-	// Registry represents a single or multiple Quobyte Registry services
-	// specified as a string as host:port pair (multiple entries are separated with commas)
-	// which acts as the central registry for volumes
+	// registry 表示一个或多个 Quobyte Registry 服务，
+	// 以 host:port 形式的字符串指定（多个条目以逗号分隔），
+	// 作为卷的中央注册中心。
 	Registry string
 
-	// Volume is a string that references an already created Quobyte volume by name.
+	// volume 是按名称引用已创建 Quobyte 卷的字符串。
 	Volume string
 
 	// Defaults to false (read/write). ReadOnly here will force
@@ -1335,19 +1302,19 @@ type QuobyteVolumeSource struct {
 	// +optional
 	User string
 
-	// Group to map volume access to
-	// Default is no group
+	// group 指定卷访问映射到的组。
+	// 默认不指定组。
 	// +optional
 	Group string
 
-	// Tenant owning the given Quobyte volume in the Backend
-	// Used with dynamically provisioned Quobyte volumes, value is set by the plugin
+	// tenant 是后端中拥有该 Quobyte 卷的租户。
+	// 用于动态配置的 Quobyte 卷，其值由插件设置。
 	// +optional
 	Tenant string
 }
 
 // GlusterfsVolumeSource represents a Glusterfs mount that lasts the lifetime of a pod.
-// Glusterfs volumes do not support ownership management or SELinux relabeling.
+// Glusterfs 卷不支持所有权管理或 SELinux 重标记。
 type GlusterfsVolumeSource struct {
 	// Required: EndpointsName is the endpoint name that details Glusterfs topology
 	EndpointsName string
@@ -1362,13 +1329,13 @@ type GlusterfsVolumeSource struct {
 }
 
 // GlusterfsPersistentVolumeSource represents a Glusterfs mount that lasts the lifetime of a pod.
-// Glusterfs volumes do not support ownership management or SELinux relabeling.
+// Glusterfs 卷不支持所有权管理或 SELinux 重标记。
 type GlusterfsPersistentVolumeSource struct {
 	// EndpointsName is the endpoint name that details Glusterfs topology.
 	// More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod
 	EndpointsName string
 
-	// Path is the Glusterfs volume path.
+	// path 是 Glusterfs 卷路径。
 	// More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod
 	Path string
 
@@ -1386,16 +1353,16 @@ type GlusterfsPersistentVolumeSource struct {
 }
 
 // RBDVolumeSource represents a Rados Block Device mount that lasts the lifetime of a pod.
-// RBD volumes support ownership management and SELinux relabeling.
+// RBD 卷支持所有权管理和 SELinux 重标记。
 type RBDVolumeSource struct {
 	// Required: CephMonitors is a collection of Ceph monitors
 	CephMonitors []string
 	// Required: RBDImage is the rados image name
 	RBDImage string
 	// Filesystem type to mount.
-	// Must be a filesystem type supported by the host operating system.
-	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
-	// TODO: how do we prevent errors in the filesystem from compromising the machine
+	// 必须是宿主机操作系统支持的文件系统类型。
+	// 例如 "ext4"、"xfs"、"ntfs"。未指定时默认为 "ext4"。
+	// TODO: 如何防止文件系统中的错误危及整机
 	// +optional
 	FSType string
 	// Optional: RadosPool is the rados pool name,default is rbd
@@ -1411,22 +1378,22 @@ type RBDVolumeSource struct {
 	// +optional
 	SecretRef *LocalObjectReference
 	// Optional: Defaults to false (read/write). ReadOnly here will force
-	// the ReadOnly setting in VolumeMounts.
+	// VolumeMounts 中的 ReadOnly 设置。
 	// +optional
 	ReadOnly bool
 }
 
 // RBDPersistentVolumeSource represents a Rados Block Device mount that lasts the lifetime of a pod.
-// RBD volumes support ownership management and SELinux relabeling.
+// RBD 卷支持所有权管理和 SELinux 重标记。
 type RBDPersistentVolumeSource struct {
 	// Required: CephMonitors is a collection of Ceph monitors
 	CephMonitors []string
 	// Required: RBDImage is the rados image name
 	RBDImage string
 	// Filesystem type to mount.
-	// Must be a filesystem type supported by the host operating system.
-	// Ex. "ext4", "xfs", "ntfs". Implicitly inferred to be "ext4" if unspecified.
-	// TODO: how do we prevent errors in the filesystem from compromising the machine
+	// 必须是宿主机操作系统支持的文件系统类型。
+	// 例如 "ext4"、"xfs"、"ntfs"。未指定时默认为 "ext4"。
+	// TODO: 如何防止文件系统中的错误危及整机
 	// +optional
 	FSType string
 	// Optional: RadosPool is the rados pool name,default is rbd
@@ -1442,7 +1409,7 @@ type RBDPersistentVolumeSource struct {
 	// +optional
 	SecretRef *SecretReference
 	// Optional: Defaults to false (read/write). ReadOnly here will force
-	// the ReadOnly setting in VolumeMounts.
+	// VolumeMounts 中的 ReadOnly 设置。
 	// +optional
 	ReadOnly bool
 }
@@ -1492,14 +1459,14 @@ type CinderPersistentVolumeSource struct {
 }
 
 // CephFSVolumeSource represents a Ceph Filesystem mount that lasts the lifetime of a pod
-// Cephfs volumes do not support ownership management or SELinux relabeling.
+// CephFS 卷不支持所有权管理或 SELinux 重新标记。
 type CephFSVolumeSource struct {
-	// Required: Monitors is a collection of Ceph monitors
+	// monitors 为必填项：Ceph monitor 的集合。
 	Monitors []string
-	// Optional: Used as the mounted root, rather than the full Ceph tree, default is /
+	// path 为可选项：用作挂载根目录，而非整个 Ceph 目录树，默认值为 /。
 	// +optional
 	Path string
-	// Optional: User is the rados user name, default is admin
+	// user 为可选项：rados 用户名，默认值为 admin。
 	// +optional
 	User string
 	// Optional: SecretFile is the path to key ring for User, default is /etc/ceph/user.secret
@@ -1517,23 +1484,23 @@ type CephFSVolumeSource struct {
 // SecretReference represents a Secret Reference. It has enough information to retrieve secret
 // in any namespace
 type SecretReference struct {
-	// Name is unique within a namespace to reference a secret resource.
+	// name 在命名空间内唯一，用于引用 Secret 资源。
 	// +optional
 	Name string
-	// Namespace defines the space within which the secret name must be unique.
+	// namespace 定义了 Secret 名称必须唯一的作用域。
 	// +optional
 	Namespace string
 }
 
 // CephFSPersistentVolumeSource represents a Ceph Filesystem mount that lasts the lifetime of a pod
-// Cephfs volumes do not support ownership management or SELinux relabeling.
+// CephFS 卷不支持所有权管理或 SELinux 重新标记。
 type CephFSPersistentVolumeSource struct {
-	// Required: Monitors is a collection of Ceph monitors
+	// monitors 为必填项：Ceph monitor 的集合。
 	Monitors []string
-	// Optional: Used as the mounted root, rather than the full Ceph tree, default is /
+	// path 为可选项：用作挂载根目录，而非整个 Ceph 目录树，默认值为 /。
 	// +optional
 	Path string
-	// Optional: User is the rados user name, default is admin
+	// user 为可选项：rados 用户名，默认值为 admin。
 	// +optional
 	User string
 	// Optional: SecretFile is the path to key ring for User, default is /etc/ceph/user.secret
@@ -1549,8 +1516,8 @@ type CephFSPersistentVolumeSource struct {
 }
 
 // FlockerVolumeSource represents a Flocker volume mounted by the Flocker agent.
-// One and only one of datasetName and datasetUUID should be set.
-// Flocker volumes do not support ownership management or SELinux relabeling.
+// datasetName 与 datasetUUID 必须且只能设置其中一个。
+// Flocker 卷不支持所有权管理或 SELinux 重新标记。
 type FlockerVolumeSource struct {
 	// Name of the dataset stored as metadata -> name on the dataset for Flocker
 	// should be considered as deprecated
@@ -1561,8 +1528,8 @@ type FlockerVolumeSource struct {
 	DatasetUUID string
 }
 
-// DownwardAPIVolumeSource represents a volume containing downward API info.
-// Downward API volumes support ownership management and SELinux relabeling.
+// DownwardAPIVolumeSource 表示包含 downward API 信息的卷。
+// downward API 卷支持所有权管理和 SELinux 重新标记。
 type DownwardAPIVolumeSource struct {
 	// Items is a list of DownwardAPIVolume file
 	// +optional
@@ -1570,13 +1537,13 @@ type DownwardAPIVolumeSource struct {
 	// Mode bits to use on created files by default. Must be a value between
 	// 0 and 0777.
 	// Directories within the path are not affected by this setting.
-	// This might be in conflict with other options that affect the file
-	// mode, like fsGroup, and the result can be other mode bits set.
+	// 这可能与其他影响文件权限的选项（如 fsGroup）冲突，
+	// 最终结果可能是其他权限位被设置。
 	// +optional
 	DefaultMode *int32
-	// The owner UID of the created files by default.
-	// The defaultUser field is only used as a fallback when the item-level user field is unset.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// defaultUser 可选：默认情况下所创建文件的所有者 UID。
+	// 仅当条目级别的 user 字段未设置时，才使用 defaultUser 作为回退值。
+	// （Alpha）此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	DefaultUser *int64
@@ -1586,22 +1553,22 @@ type DownwardAPIVolumeSource struct {
 type DownwardAPIVolumeFile struct {
 	// Required: Path is  the relative path name of the file to be created. Must not be absolute or contain the '..' path. Must be utf-8 encoded. The first item of the relative path must not start with '..'
 	Path string
-	// Required: Selects a field of the pod: only annotations, labels, name, namespace and uid are supported.
+	// 必填：选择 Pod 的一个字段：目前仅支持 annotations、labels、name、namespace 和 uid。
 	// +optional
 	FieldRef *ObjectFieldSelector
-	// Selects a resource of the container: only resources limits and requests
-	// (limits.cpu, limits.memory, requests.cpu and requests.memory) are currently supported.
+	// 选择容器的一种资源：目前仅支持资源限制和请求
+	// （limits.cpu、limits.memory、requests.cpu 和 requests.memory）。
 	// +optional
 	ResourceFieldRef *ResourceFieldSelector
 	// Optional: mode bits to use on this file, must be a value between 0
 	// and 0777. If not specified, the volume defaultMode will be used.
-	// This might be in conflict with other options that affect the file
-	// mode, like fsGroup, and the result can be other mode bits set.
+	// 这可能与其他影响文件权限的选项（如 fsGroup）冲突，
+	// 最终结果可能是其他权限位被设置。
 	// +optional
 	Mode *int32
-	// The owner UID of the created file.
-	// If specified, the item-level user field takes precedence over defaultUser.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// user 可选：所创建文件的所有者 UID。
+	// 若指定，条目级别的 user 字段优先于 defaultUser。
+	// （Alpha）此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	User *int64
@@ -1611,7 +1578,7 @@ type DownwardAPIVolumeFile struct {
 // Note that this is identical to a downwardAPI volume source without the default
 // mode.
 type DownwardAPIProjection struct {
-	// Items is a list of DownwardAPIVolume file
+	// Items 是 DownwardAPIVolume 文件的列表。
 	// +optional
 	Items []DownwardAPIVolumeFile
 }
@@ -1671,7 +1638,7 @@ type PhotonPersistentDiskVolumeSource struct {
 	FSType string
 }
 
-// PortworxVolumeSource represents a Portworx volume resource.
+// PortworxVolumeSource 表示 Portworx 卷资源。
 type PortworxVolumeSource struct {
 	// VolumeID uniquely identifies a Portworx volume
 	VolumeID string
@@ -1721,15 +1688,16 @@ type AzureDiskVolumeSource struct {
 	// the ReadOnly setting in VolumeMounts.
 	// +optional
 	ReadOnly *bool
-	// Expected values Shared: multiple blob disks per storage account  Dedicated: single blob disk per storage account  Managed: azure managed data disk (only in managed availability set). defaults to shared
+	// kind 的预期值为 Shared（每个存储账户多个 Blob 磁盘）、Dedicated（每个存储账户单个 Blob 磁盘）、
+	// Managed（Azure 托管数据磁盘，仅适用于托管可用性集）。默认值为 Shared。
 	Kind *AzureDataDiskKind
 }
 
 // ScaleIOVolumeSource represents a persistent ScaleIO volume
 type ScaleIOVolumeSource struct {
-	// The host address of the ScaleIO API Gateway.
+	// gateway 是 ScaleIO API Gateway 的主机地址。
 	Gateway string
-	// The name of the storage system as configured in ScaleIO.
+	// system 是 ScaleIO 中配置的存储系统名称。
 	System string
 	// SecretRef references to the secret for ScaleIO user and other
 	// sensitive information. If this is not provided, Login operation will fail.
@@ -1765,9 +1733,9 @@ type ScaleIOVolumeSource struct {
 // ScaleIOPersistentVolumeSource represents a persistent ScaleIO volume that can be defined
 // by a an admin via a storage class, for instance.
 type ScaleIOPersistentVolumeSource struct {
-	// The host address of the ScaleIO API Gateway.
+	// gateway 是 ScaleIO API Gateway 的主机地址。
 	Gateway string
-	// The name of the storage system as configured in ScaleIO.
+	// system 是 ScaleIO 中配置的存储系统名称。
 	System string
 	// SecretRef references to the secret for ScaleIO user and other
 	// sensitive information. If this is not provided, Login operation will fail.
@@ -1864,28 +1832,25 @@ type StorageOSPersistentVolumeSource struct {
 // ConfigMap volumes support ownership management and SELinux relabeling.
 type ConfigMapVolumeSource struct {
 	LocalObjectReference
-	// If unspecified, each key-value pair in the Data field of the referenced
-	// ConfigMap will be projected into the volume as a file whose name is the
-	// key and content is the value. If specified, the listed keys will be
-	// projected into the specified paths, and unlisted keys will not be
-	// present. If a key is specified which is not present in the ConfigMap,
-	// the volume setup will error unless it is marked optional. Paths must be
-	// relative and may not contain the '..' path or start with '..'.
+	// items 若未指定，所引用 ConfigMap 的 Data 字段中的每个键值对都将投影到卷中，
+	// 文件名即键，内容即值。若指定，则列出的键将投影到指定路径，未列出的键不会出现。
+	// 如果指定了 ConfigMap 中不存在的键，除非标记为 optional，否则卷设置将报错。
+	// 路径必须为相对路径，不得包含 '..' 路径或以 '..' 开头。
 	// +optional
 	Items []KeyToPath
 	// Mode bits to use on created files by default. Must be a value between
 	// 0 and 0777.
 	// Directories within the path are not affected by this setting.
-	// This might be in conflict with other options that affect the file
-	// mode, like fsGroup, and the result can be other mode bits set.
+	// 这可能与其他影响文件权限的选项（如 fsGroup）冲突，
+	// 最终结果可能是其他权限位被设置。
 	// +optional
 	DefaultMode *int32
-	// Specify whether the ConfigMap or its keys must be defined
+	// optional 指定是否必须定义 ConfigMap 或其键。
 	// +optional
 	Optional *bool
-	// The owner UID of the created files by default.
-	// The defaultUser field is only used as a fallback when the item-level user field is unset.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// defaultUser 为可选项：所创建文件的默认所有者 UID。
+	// defaultUser 字段仅在 item 级别的 user 字段未设置时作为回退值。
+	// (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	DefaultUser *int64
@@ -1900,16 +1865,13 @@ type ConfigMapVolumeSource struct {
 // mode.
 type ConfigMapProjection struct {
 	LocalObjectReference
-	// If unspecified, each key-value pair in the Data field of the referenced
-	// ConfigMap will be projected into the volume as a file whose name is the
-	// key and content is the value. If specified, the listed keys will be
-	// projected into the specified paths, and unlisted keys will not be
-	// present. If a key is specified which is not present in the ConfigMap,
-	// the volume setup will error unless it is marked optional. Paths must be
-	// relative and may not contain the '..' path or start with '..'.
+	// items 若未指定，所引用 ConfigMap 的 Data 字段中的每个键值对都将投影到卷中，
+	// 文件名即键，内容即值。若指定，则列出的键将投影到指定路径，未列出的键不会出现。
+	// 如果指定了 ConfigMap 中不存在的键，除非标记为 optional，否则卷设置将报错。
+	// 路径必须为相对路径，不得包含 '..' 路径或以 '..' 开头。
 	// +optional
 	Items []KeyToPath
-	// Specify whether the ConfigMap or its keys must be defined
+	// optional 指定是否必须定义 ConfigMap 或其键。
 	// +optional
 	Optional *bool
 }
@@ -1919,10 +1881,8 @@ type ConfigMapProjection struct {
 // the pods runtime filesystem for use against APIs (Kubernetes API Server or
 // otherwise).
 type ServiceAccountTokenProjection struct {
-	// Audience is the intended audience of the token. A recipient of a token
-	// must identify itself with an identifier specified in the audience of the
-	// token, and otherwise should reject the token. The audience defaults to the
-	// identifier of the apiserver.
+	// audience 是令牌的目标受众。令牌接收方必须使用令牌受众中指定的标识符表明自身身份，
+	// 否则应拒绝该令牌。受众默认为 apiserver 的标识符。
 	Audience string
 	// ExpirationSeconds is the requested duration of validity of the service
 	// account token. As the token approaches expiration, the kubelet volume
@@ -1932,12 +1892,11 @@ type ServiceAccountTokenProjection struct {
 	// and must be at least 10 minutes.
 	// +optional
 	ExpirationSeconds *int64
-	// Path is the path relative to the mount point of the file to project the
-	// token into.
+	// path 是令牌投影文件的路径，相对于挂载点。
 	Path string
-	// The owner UID of the created file.
-	// If specified, the item-level user field takes precedence over defaultUser.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// user 为可选项：所创建文件的所有者 UID。
+	// 若指定，item 级别的 user 字段优先于 defaultUser。
+	// (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	User *int64
@@ -1962,12 +1921,12 @@ type ClusterTrustBundleProjection struct {
 	// Block pod startup if the selected ClusterTrustBundle(s) aren't available?
 	Optional *bool
 
-	// Relative path from the volume root to write the bundle.
+	// 写入 bundle 的路径，相对于卷根目录。
 	Path string
 
-	// The owner UID of the created file.
-	// If specified, the item-level user field takes precedence over defaultUser.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// user 为可选项：所创建文件的所有者 UID。
+	// 若指定，item 级别的 user 字段优先于 defaultUser。
+	// (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	User *int64
@@ -2002,19 +1961,12 @@ type PodCertificateProjection struct {
 	// longer than 24 hours.
 	MaxExpirationSeconds *int32
 
-	// Write the credential bundle at this path in the projected volume.
-	//
-	// The credential bundle is a single file that contains multiple PEM blocks.
-	// The first PEM block is a PRIVATE KEY block, containing a PKCS#8 private
-	// key.
-	//
-	// The remaining blocks are CERTIFICATE blocks, containing the issued
-	// certificate chain from the signer (leaf and any intermediates).
-	//
-	// Using credentialBundlePath lets your Pod's application code make a single
-	// atomic read that retrieves a consistent key and certificate chain.  If you
-	// project them to separate files, your application code will need to
-	// additionally check that the leaf certificate was issued to the key.
+	// 将凭据包写入投影卷中的此路径。
+	// 凭据包是单个文件，包含多个 PEM 块。第一个 PEM 块是 PRIVATE KEY 块，
+	// 其中包含 PKCS#8 私钥。
+	// 其余块为 CERTIFICATE 块，包含签名者签发的证书链（叶子证书及所有中间证书）。
+	// 使用 credentialBundlePath 可让 Pod 中的应用代码通过一次原子读取获得一致的
+	// 私钥和证书链。若将它们投影到不同文件，应用代码还需额外检查叶子证书是否签发给该私钥。
 	CredentialBundlePath string
 
 	// Write the key at this path in the projected volume.
@@ -2042,9 +1994,9 @@ type PodCertificateProjection struct {
 	// deny requests that contain keys they do not recognize.
 	UserAnnotations map[string]string
 
-	// The owner UID of the created file.
-	// If specified, the item-level user field takes precedence over defaultUser.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// user 为可选项：所创建文件的所有者 UID。
+	// 若指定，item 级别的 user 字段优先于 defaultUser。
+	// (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	User *int64
@@ -2057,13 +2009,13 @@ type ProjectedVolumeSource struct {
 	// Mode bits to use on created files by default. Must be a value between
 	// 0 and 0777.
 	// Directories within the path are not affected by this setting.
-	// This might be in conflict with other options that affect the file
-	// mode, like fsGroup, and the result can be other mode bits set.
+	// 这可能与其他影响文件权限的选项（如 fsGroup）冲突，
+	// 最终结果可能是其他权限位被设置。
 	// +optional
 	DefaultMode *int32
-	// The owner UID of the created files by default.
-	// The defaultUser field is only used as a fallback when the item-level user field is unset.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// defaultUser 为可选项：所创建文件的默认所有者 UID。
+	// defaultUser 字段仅在 item 级别的 user 字段未设置时作为回退值。
+	// (Alpha) 此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	DefaultUser *int64
@@ -2073,9 +2025,9 @@ type ProjectedVolumeSource struct {
 type VolumeProjection struct {
 	// all types below are the supported types for projection into the same volume
 
-	// information about the secret data to project
+	// secret 是要投影的 Secret 数据的相关信息。
 	Secret *SecretProjection
-	// information about the downwardAPI data to project
+	// downwardAPI 是要投影的 downwardAPI 数据的相关信息。
 	DownwardAPI *DownwardAPIProjection
 	// information about the configMap data to project
 	ConfigMap *ConfigMapProjection
@@ -2092,20 +2044,20 @@ type KeyToPath struct {
 	// The key to project.
 	Key string
 
-	// The relative path of the file to map the key to.
-	// May not be an absolute path.
-	// May not contain the path element '..'.
-	// May not start with the string '..'.
+	// path 是键所映射到的文件的相对路径。
+	// 不能是绝对路径。
+	// 不能包含路径元素 '..'。
+	// 不能以字符串 '..' 开头。
 	Path string
 	// Optional: mode bits to use on this file, should be a value between 0
 	// and 0777. If not specified, the volume defaultMode will be used.
-	// This might be in conflict with other options that affect the file
-	// mode, like fsGroup, and the result can be other mode bits set.
+	// 这可能与其他影响文件权限的选项（如 fsGroup）冲突，
+	// 最终结果可能是其他权限位被设置。
 	// +optional
 	Mode *int32
-	// The owner UID of the created file.
-	// If specified, the item-level user field takes precedence over defaultUser.
-	// (Alpha) This field requires the AtomicWriteVolumeUserFields feature gate to be enabled.
+	// user 是可选的：所创建文件的所有者 UID。
+	// 如果指定，条目级别的 user 字段优先于 defaultUser。
+	// （Alpha）此字段需要启用 AtomicWriteVolumeUserFields 特性门控。
 	// +featureGate=AtomicWriteVolumeUserFields
 	// +optional
 	User *int64
@@ -2113,8 +2065,8 @@ type KeyToPath struct {
 
 // LocalVolumeSource represents directly-attached storage with node affinity
 type LocalVolumeSource struct {
-	// The full path to the volume on the node.
-	// It can be either a directory or block device (disk, partition, ...).
+	// path 是节点上卷的完整路径。
+	// 它可以是目录或块设备（磁盘、分区等）。
 	Path string
 
 	// Filesystem type to mount.
@@ -2127,8 +2079,8 @@ type LocalVolumeSource struct {
 
 // CSIPersistentVolumeSource represents storage that is managed by an external CSI volume driver.
 type CSIPersistentVolumeSource struct {
-	// Driver is the name of the driver to use for this volume.
-	// Required.
+	// driver 是要用于此卷的驱动名称。
+	// 必填。
 	Driver string
 
 	// VolumeHandle is the unique volume name returned by the CSI volume
@@ -2194,9 +2146,8 @@ type CSIPersistentVolumeSource struct {
 
 // CSIVolumeSource represents a source location of a volume to mount, managed by an external CSI driver
 type CSIVolumeSource struct {
-	// Driver is the name of the CSI driver that handles this volume.
-	// Consult with your admin for the correct name as registered in the cluster.
-	// Required.
+	// driver 是处理此卷的 CSI 驱动名称。
+	// 请向管理员咨询集群中注册的正确名称。
 	Driver string
 
 	// Specifies a read-only configuration for the volume.
@@ -2251,7 +2202,7 @@ type EphemeralVolumeSource struct {
 }
 
 // PersistentVolumeClaimTemplate is used to produce
-// PersistentVolumeClaim objects as part of an EphemeralVolumeSource.
+// PersistentVolumeClaim 对象。
 type PersistentVolumeClaimTemplate struct {
 	// ObjectMeta may contain labels and annotations that will be copied into the PVC
 	// when creating it. No other fields are allowed and will be rejected during
@@ -2259,10 +2210,9 @@ type PersistentVolumeClaimTemplate struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec for the PersistentVolumeClaim. The entire content is
-	// copied unchanged into the PVC that gets created from this
-	// template. The same fields as in a PersistentVolumeClaim
-	// are also valid here.
+	// PersistentVolumeClaim 的规格。全部内容会原样复制到
+	// 由此模板创建的 PVC 中。PersistentVolumeClaim 中的字段
+	// 在此处同样有效。
 	Spec PersistentVolumeClaimSpec
 }
 
@@ -2273,7 +2223,7 @@ type ContainerPort struct {
 	// +optional
 	Name string
 	// Optional: If specified, this must be a valid port number, 0 < x < 65536.
-	// If HostNetwork is specified, this must match ContainerPort.
+	// 如果指定了 HostNetwork，此值必须与 ContainerPort 一致。
 	// +optional
 	HostPort int32
 	// Required: This must be a valid port number, 0 < x < 65536.
@@ -2286,29 +2236,22 @@ type ContainerPort struct {
 	HostIP string
 }
 
-// VolumeMount describes a mounting of a Volume within a container.
+// VolumeMount 描述将卷挂载到容器中的一个挂载点。
 type VolumeMount struct {
 	// Required: This must match the Name of a Volume [above].
 	Name string
 	// Optional: Defaults to false (read-write).
 	// +optional
 	ReadOnly bool
-	// RecursiveReadOnly specifies whether read-only mounts should be handled
-	// recursively.
-	//
-	// If ReadOnly is false, this field has no meaning and must be unspecified.
-	//
-	// If ReadOnly is true, and this field is set to Disabled, the mount is not made
-	// recursively read-only.  If this field is set to IfPossible, the mount is made
-	// recursively read-only, if it is supported by the container runtime.  If this
-	// field is set to Enabled, the mount is made recursively read-only if it is
-	// supported by the container runtime, otherwise the pod will not be started and
-	// an error will be generated to indicate the reason.
-	//
-	// If this field is set to IfPossible or Enabled, MountPropagation must be set to
-	// None (or be unspecified, which defaults to None).
-	//
-	// If this field is not specified, it is treated as an equivalent of Disabled.
+	// RecursiveReadOnly 指定是否以递归方式处理只读挂载。
+	// 如果 ReadOnly 为 false，此字段无意义且必须不指定。
+	// 如果 ReadOnly 为 true 且此字段设为 Disabled，则挂载不会递归只读。
+	// 如果设为 IfPossible，且容器运行时支持，则挂载会递归只读。
+	// 如果设为 Enabled，且容器运行时支持，则挂载会递归只读；
+	// 否则 Pod 不会启动，并会生成指明原因的错误。
+	// 如果此字段设为 IfPossible 或 Enabled，MountPropagation 必须设为
+	// None（或不指定，默认为 None）。
+	// 如果未指定此字段，则视为等同于 Disabled。
 	// +optional
 	RecursiveReadOnly *RecursiveReadOnlyMode
 	// Required. If the path is not an absolute path (e.g. some/path) it
@@ -2316,43 +2259,41 @@ type VolumeMount struct {
 	// system.  On Linux this is '/', on Windows this is 'C:\'.
 	MountPath string
 	// Path within the volume from which the container's volume should be mounted.
-	// Defaults to "" (volume's root).
+	// 默认为 ""（卷的根目录）。
 	// +optional
 	SubPath string
-	// mountPropagation determines how mounts are propagated from the host
-	// to container and the other way around.
-	// When not set, MountPropagationNone is used.
-	// This field is beta in 1.10.
-	// When RecursiveReadOnly is set to IfPossible or to Enabled, MountPropagation must be None or unspecified
-	// (which defaults to None).
+	// mountPropagation 决定挂载如何从主机传播到容器，以及反向传播。
+	// 未设置时使用 MountPropagationNone。
+	// 此字段在 1.10 中为 beta。
+	// 当 RecursiveReadOnly 设为 IfPossible 或 Enabled 时，MountPropagation 必须为 None 或不指定
+	// （默认为 None）。
 	// +optional
 	MountPropagation *MountPropagationMode
-	// Expanded path within the volume from which the container's volume should be mounted.
-	// Behaves similarly to SubPath but environment variable references $(VAR_NAME) are expanded using the container's environment.
-	// Defaults to "" (volume's root).
-	// SubPathExpr and SubPath are mutually exclusive.
+	// 卷内要挂载到容器的扩展路径。
+	// 行为类似 SubPath，但环境变量引用 $(VAR_NAME) 会使用容器的环境变量展开。
+	// 默认为 ""（卷的根目录）。
+	// SubPathExpr 与 SubPath 互斥。
 	// +optional
 	SubPathExpr string
-	// bindMountOptions is the list of additional bind mount options to apply when
-	// mounting this volume into the container. Allowed values are noexec,
-	// nodev, and nosuid. These are Linux mount options and have no effect on
-	// Windows nodes.
-	// This field is not supported with image volumes.
-	// This is an alpha field and requires enabling the VolumeBindMountOptions feature gate.
+	// bindMountOptions 是挂载此卷到容器时要应用的额外绑定挂载选项列表。
+	// 允许的值为 noexec、nodev 和 nosuid。这些是 Linux 挂载选项，
+	// 在 Windows 节点上无效。
+	// 此字段不支持镜像卷。
+	// 这是 alpha 字段，需要启用 VolumeBindMountOptions 特性门控。
 	// +featureGate=VolumeBindMountOptions
 	// +optional
 	BindMountOptions []string
 }
 
-// BindMountOption defines the supported bind mount options.
+// BindMountOption 定义支持的绑定挂载选项。
 type BindMountOption string
 
 const (
-	// BindMountOptionNoExec prevents execution of binaries on the mounted volume.
+	// BindMountOptionNoExec 阻止在挂载的卷上执行二进制文件。
 	BindMountOptionNoExec BindMountOption = "noexec"
-	// BindMountOptionNoDev ignores device special files on the mounted volume.
+	// BindMountOptionNoDev 忽略挂载的卷上的设备特殊文件。
 	BindMountOptionNoDev BindMountOption = "nodev"
-	// BindMountOptionNoSUID ignores set-user-identifier or set-group-identifier bits on the mounted volume.
+	// BindMountOptionNoSUID 忽略挂载的卷上的 set-user-identifier 或 set-group-identifier 位。
 	BindMountOptionNoSUID BindMountOption = "nosuid"
 )
 
@@ -2360,51 +2301,49 @@ const (
 type MountPropagationMode string
 
 const (
-	// MountPropagationNone means that the volume in a container will
-	// not receive new mounts from the host or other containers, and filesystems
-	// mounted inside the container won't be propagated to the host or other
-	// containers.
-	// Note that this mode corresponds to "private" in Linux terminology.
+	// MountPropagationNone 表示容器中的卷
+	// 不会接收来自主机或其他容器的新挂载，容器内挂载的文件系统
+	// 也不会传播到主机或其他容器。
+	// 注意此模式对应 Linux 术语中的 "private"。
 	MountPropagationNone MountPropagationMode = "None"
-	// MountPropagationHostToContainer means that the volume in a container will
-	// receive new mounts from the host or other containers, but filesystems
-	// mounted inside the container won't be propagated to the host or other
-	// containers.
-	// Note that this mode is recursively applied to all mounts in the volume
-	// ("rslave" in Linux terminology).
+	// MountPropagationHostToContainer 表示容器中的卷
+	// 会接收来自主机或其他容器的新挂载，但容器内挂载的文件系统
+	// 不会传播到主机或其他容器。
+	// 注意此模式会递归应用于卷中的所有挂载
+	// （Linux 术语中的 "rslave"）。
 	MountPropagationHostToContainer MountPropagationMode = "HostToContainer"
-	// MountPropagationBidirectional means that the volume in a container will
-	// receive new mounts from the host or other containers, and its own mounts
-	// will be propagated from the container to the host or other containers.
-	// Note that this mode is recursively applied to all mounts in the volume
-	// ("rshared" in Linux terminology).
+	// MountPropagationBidirectional 表示容器中的卷
+	// 会接收来自主机或其他容器的新挂载，其自身的挂载
+	// 也会从容器传播到主机或其他容器。
+	// 注意此模式会递归应用于卷中的所有挂载
+	// （Linux 术语中的 "rshared"）。
 	MountPropagationBidirectional MountPropagationMode = "Bidirectional"
 )
 
-// RecursiveReadOnlyMode describes recursive-readonly mode.
+// RecursiveReadOnlyMode 描述递归只读模式。
 type RecursiveReadOnlyMode string
 
 const (
-	// RecursiveReadOnlyDisabled disables recursive-readonly mode.
+	// RecursiveReadOnlyDisabled 禁用递归只读模式。
 	RecursiveReadOnlyDisabled RecursiveReadOnlyMode = "Disabled"
-	// RecursiveReadOnlyIfPossible enables recursive-readonly mode if possible.
+	// RecursiveReadOnlyIfPossible 在可能的情况下启用递归只读模式。
 	RecursiveReadOnlyIfPossible RecursiveReadOnlyMode = "IfPossible"
-	// RecursiveReadOnlyEnabled enables recursive-readonly mode, or raise an error.
+	// RecursiveReadOnlyEnabled 启用递归只读模式，否则报错。
 	RecursiveReadOnlyEnabled RecursiveReadOnlyMode = "Enabled"
 )
 
 // VolumeDevice describes a mapping of a raw block device within a container.
 type VolumeDevice struct {
-	// name must match the name of a persistentVolumeClaim in the pod
+	// name 必须与 Pod 中某个 persistentVolumeClaim 的名称匹配。
 	Name string
-	// devicePath is the path inside of the container that the device will be mapped to.
+	// devicePath 是设备将映射到的容器内路径。
 	DevicePath string
 }
 
-// EnvVar represents an environment variable present in a Container.
+// EnvVar 表示容器中存在的一个环境变量。
 type EnvVar struct {
-	// Required: Name of the environment variable.
-	// May consist of any printable ASCII characters except '='.
+	// 环境变量的名称。
+	// 可以包含除 '=' 以外的任意可打印 ASCII 字符。
 	Name string
 	// Optional: no more than one of the following may be specified.
 	// Optional: Defaults to ""; variable references $(VAR_NAME) are expanded
@@ -2422,58 +2361,56 @@ type EnvVar struct {
 	ValueFrom *EnvVarSource
 }
 
-// EnvVarSource represents a source for the value of an EnvVar.
+// EnvVarSource 表示 EnvVar 值的来源。
 // Only one of its fields may be set.
 type EnvVarSource struct {
 	// Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
 	// metadata.uid, spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
 	// +optional
 	FieldRef *ObjectFieldSelector
-	// Selects a resource of the container: only resources limits and requests
-	// (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+	// 选择容器的一个资源：目前仅支持资源限制和请求
+	// （limits.cpu、limits.memory、limits.ephemeral-storage、requests.cpu、requests.memory 和 requests.ephemeral-storage）。
 	// +optional
 	ResourceFieldRef *ResourceFieldSelector
-	// Selects a key of a ConfigMap.
+	// 选择 ConfigMap 的一个键。
 	// +optional
 	ConfigMapKeyRef *ConfigMapKeySelector
-	// Selects a key of a secret in the pod's namespace.
+	// 选择 Pod 命名空间中某个 Secret 的一个键。
 	// +optional
 	SecretKeyRef *SecretKeySelector
-	// FileKeyRef selects a key of the env file.
-	// Requires the EnvFiles feature gate to be enabled.
-	//
+	// FileKeyRef 选择 env 文件中的一个键。
+	// 需要启用 EnvFiles 特性门控。
 	// +featureGate=EnvFiles
 	// +optional
 	FileKeyRef *FileKeySelector
 }
 
-// FileKeySelector selects a key of the env file.
+// FileKeySelector 选择 env 文件中的一个键。
 type FileKeySelector struct {
-	// The name of the volume mount containing the env file.
+	// 包含该 env 文件的卷挂载的名称。
 	// +required
 	VolumeName string
 	// The path within the volume from which to select the file.
-	// Must be relative and may not contain the '..' path or start with '..'.
+	// 必须是相对路径，且不能包含 '..' 路径或以 '..' 开头。
 	// +required
 	Path string
-	// The key within the env file. An invalid key will prevent the pod from starting.
-	// The keys defined within a source may consist of any printable ASCII characters except '='.
-	// During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+	// env 文件中的键。无效的键会阻止 Pod 启动。
+	// 来源中定义的键可以包含除 '=' 以外的任意可打印 ASCII 字符。
+	// 在 EnvFiles 特性门控的 Alpha 阶段，键的长度限制为 128 个字符。
 	// +required
 	Key string
-	// Specify whether the file or its key must be defined. If the file or key
-	// does not exist, then the env var is not published.
-	// If optional is set to true and the specified key does not exist,
-	// the environment variable will not be set in the Pod's containers.
-	//
-	// If optional is set to false and the specified key does not exist,
-	// an error will be returned during Pod creation.
+	// 指定是否必须定义文件或其键。如果文件或键不存在，
+	// 则不会发布该环境变量。
+	// 如果 optional 设为 true 且指定的键不存在，
+	// 则不会在 Pod 的容器中设置该环境变量。
+	// 如果 optional 设为 false 且指定的键不存在，
+	// 则在创建 Pod 时会返回错误。
 	// +optional
 	// +default=false
 	Optional *bool
 }
 
-// ObjectFieldSelector selects an APIVersioned field of an object.
+// ObjectFieldSelector 选择对象的一个带 API 版本的字段。
 type ObjectFieldSelector struct {
 	// Required: Version of the schema the FieldPath is written in terms of.
 	// If no value is specified, it will be defaulted to the APIVersion of the
@@ -2483,7 +2420,7 @@ type ObjectFieldSelector struct {
 	FieldPath string
 }
 
-// ResourceFieldSelector represents container resources (cpu, memory) and their output format
+// ResourceFieldSelector 表示容器资源（cpu、memory）及其输出格式。
 type ResourceFieldSelector struct {
 	// Container name: required for volumes, optional for env vars
 	// +optional
@@ -2497,7 +2434,7 @@ type ResourceFieldSelector struct {
 
 // ConfigMapKeySelector selects a key from a ConfigMap.
 type ConfigMapKeySelector struct {
-	// The ConfigMap to select from.
+	// 要选择的 ConfigMap。
 	LocalObjectReference
 	// The key to select.
 	Key string
@@ -2506,27 +2443,27 @@ type ConfigMapKeySelector struct {
 	Optional *bool
 }
 
-// SecretKeySelector selects a key of a Secret.
+// SecretKeySelector 选择 Secret 的一个键。
 type SecretKeySelector struct {
-	// The name of the secret in the pod's namespace to select from.
+	// 要选择 Pod 命名空间中 Secret 的名称。
 	LocalObjectReference
-	// The key of the secret to select from.  Must be a valid secret key.
+	// 要选择的 Secret 的键。必须是有效的 Secret 键。
 	Key string
 	// Specify whether the Secret or its key must be defined
 	// +optional
 	Optional *bool
 }
 
-// EnvFromSource represents the source of a set of ConfigMaps or Secrets
+// EnvFromSource 表示一组 ConfigMap 或 Secret 的来源。
 type EnvFromSource struct {
-	// Optional text to prepend to the name of each environment variable.
-	// May consist of any printable ASCII characters except '='.
+	// 可选：在每个环境变量名称前添加的前缀文本。
+	// 可以包含除 '=' 以外的任意可打印 ASCII 字符。
 	// +optional
 	Prefix string
-	// The ConfigMap to select from.
+	// 要选择的 ConfigMap。
 	// +optional
 	ConfigMapRef *ConfigMapEnvSource
-	// The Secret to select from.
+	// 要选择的 Secret。
 	// +optional
 	SecretRef *SecretEnvSource
 }
@@ -2537,7 +2474,7 @@ type EnvFromSource struct {
 // The contents of the target ConfigMap's Data field will represent the
 // key-value pairs as environment variables.
 type ConfigMapEnvSource struct {
-	// The ConfigMap to select from.
+	// 要选择的 ConfigMap。
 	LocalObjectReference
 	// Specify whether the ConfigMap must be defined
 	// +optional
@@ -2550,17 +2487,17 @@ type ConfigMapEnvSource struct {
 // The contents of the target Secret's Data field will represent the
 // key-value pairs as environment variables.
 type SecretEnvSource struct {
-	// The Secret to select from.
+	// 要选择的 Secret。
 	LocalObjectReference
 	// Specify whether the Secret must be defined
 	// +optional
 	Optional *bool
 }
 
-// HTTPHeader describes a custom header to be used in HTTP probes
+// HTTPHeader 描述要在 HTTP 探针中使用的自定义请求头。
 type HTTPHeader struct {
 	// The header field name.
-	// This will be canonicalized upon output, so case-variant names will be understood as the same header.
+	// 输出时会被规范化，因此大小写不同的名称会被视为同一个请求头。
 	Name string
 	// The header field value
 	Value string
@@ -2571,14 +2508,14 @@ type HTTPHeader struct {
 type HTTPProtocol string
 
 const (
-	// HTTPProtocolHTTP1 uses HTTP/1.1 (the existing default).
+	// HTTPProtocolHTTP1 使用 HTTP/1.1（现有默认行为）。
 	HTTPProtocolHTTP1 HTTPProtocol = "HTTP1"
-	// HTTPProtocolHTTP2 uses HTTP/2.
-	// Currently, only cleartext with prior knowledge (h2c) is supported, and must be used with scheme HTTP.
+	// HTTPProtocolHTTP2 使用 HTTP/2。
+	// 目前仅支持明文且预先知晓（h2c）的方式，且必须与 HTTP scheme 一起使用。
 	HTTPProtocolHTTP2 HTTPProtocol = "HTTP2"
 )
 
-// HTTPGetAction describes an action based on HTTP Get requests.
+// HTTPGetAction 描述基于 HTTP Get 请求的动作。
 type HTTPGetAction struct {
 	// Optional: Path to access on the HTTP server.
 	// +optional
@@ -2586,8 +2523,7 @@ type HTTPGetAction struct {
 	// Required: Name or number of the port to access on the container.
 	// +optional
 	Port intstr.IntOrString
-	// Optional: Host name to connect to, defaults to the pod IP. You
-	// probably want to set "Host" in httpHeaders instead.
+	// 要连接到的主机名，默认为 Pod IP。通常你可能想在 httpHeaders 中设置 "Host"。
 	// +optional
 	Host string
 	// Optional: Scheme to use for connecting to the host, defaults to HTTP.
@@ -2596,13 +2532,13 @@ type HTTPGetAction struct {
 	// Optional: Custom headers to set in the request. HTTP allows repeated headers.
 	// +optional
 	HTTPHeaders []HTTPHeader
-	// Protocol selects the wire protocol for the probe connection.
-	// Nil defaults to HTTP/1.1.
+	// Protocol 选择探针连接的线协议。
+	// 为 nil 时默认为 HTTP/1.1。
 	// +optional
 	Protocol *HTTPProtocol
 }
 
-// URIScheme identifies the scheme used for connection to a host for Get actions
+// URIScheme 标识 Get 动作连接主机时使用的 scheme。
 type URIScheme string
 
 const (
@@ -2612,36 +2548,37 @@ const (
 	URISchemeHTTPS URIScheme = "HTTPS"
 )
 
-// TCPSocketAction describes an action based on opening a socket
+// TCPSocketAction 描述基于打开 socket 的动作。
 type TCPSocketAction struct {
 	// Required: Port to connect to.
 	// +optional
 	Port intstr.IntOrString
-	// Optional: Host name to connect to, defaults to the pod IP.
+	// 可选：要连接到的主机名，默认为 Pod IP。
 	// +optional
 	Host string
 }
 
-// ExecAction describes a "run in container" action.
+// ExecAction 描述"在容器内运行"的动作。
 type ExecAction struct {
-	// Command is the command line to execute inside the container, the working directory for the
-	// command  is root ('/') in the container's filesystem.  The command is simply exec'd, it is
-	// not run inside a shell, so traditional shell instructions ('|', etc) won't work.  To use
-	// a shell, you need to explicitly call out to that shell.
+	// Command 是要在容器内执行的命令行，命令的工作目录
+	// 是容器文件系统的根目录（'/'）。命令只是被直接 exec，
+	// 并不在 shell 中运行，因此传统的 shell 指令（'|' 等）不起作用。
+	// 若要使用 shell，需要显式调用该 shell。
+	// 退出状态 0 视为存活/健康，非零视为不健康。
 	// +optional
 	Command []string
 }
 
-// SleepAction describes a "sleep" action.
+// SleepAction 描述"休眠"动作。
 type SleepAction struct {
-	// Seconds is the number of seconds to sleep.
+	// Seconds 是要休眠的秒数。
 	Seconds int64
 }
 
 // Probe describes a health check to be performed against a container to determine whether it is
 // alive or ready to receive traffic.
 type Probe struct {
-	// The action taken to determine the health of a container
+	// 用于判断容器健康状况的动作
 	ProbeHandler
 	// Length of time before health checking is activated.  In seconds.
 	// +optional
@@ -2672,22 +2609,22 @@ type Probe struct {
 	TerminationGracePeriodSeconds *int64
 }
 
-// PullPolicy describes a policy for if/when to pull a container image
+// PullPolicy 描述是否/何时拉取容器镜像的策略。
 type PullPolicy string
 
 const (
-	// PullAlways means that kubelet always attempts to pull the latest image.  Container will fail If the pull fails.
+	// PullAlways 表示 kubelet 总是尝试拉取最新镜像。如果拉取失败，容器将启动失败。
 	PullAlways PullPolicy = "Always"
-	// PullNever means that kubelet never pulls an image, but only uses a local image.  Container will fail if the image isn't present
+	// PullNever 表示 kubelet 从不拉取镜像，只使用本地镜像。如果镜像不存在，容器将启动失败。
 	PullNever PullPolicy = "Never"
-	// PullIfNotPresent means that kubelet pulls if the image isn't present on disk. Container will fail if the image isn't present and the pull fails.
+	// PullIfNotPresent 表示如果磁盘上没有该镜像，kubelet 就会拉取。如果镜像不存在且拉取失败，容器将启动失败。
 	PullIfNotPresent PullPolicy = "IfNotPresent"
 )
 
-// ResourceResizeRestartPolicy specifies how to handle container resource resize.
+// ResourceResizeRestartPolicy 指定如何处理容器资源调整。
 type ResourceResizeRestartPolicy string
 
-// These are the valid resource resize restart policy values:
+// 以下是有效的资源调整重启策略值：
 const (
 	// 'NotRequired' means Kubernetes will try to resize the container
 	// without restarting it, if possible. Kubernetes may however choose to
@@ -2701,36 +2638,36 @@ const (
 	RestartContainer ResourceResizeRestartPolicy = "RestartContainer"
 )
 
-// ContainerResizePolicy represents resource resize policy for the container.
+// ContainerResizePolicy 表示容器的资源调整策略。
 type ContainerResizePolicy struct {
-	// Name of the resource to which this resource resize policy applies.
-	// Supported values: cpu, memory.
+	// 此资源调整策略适用的资源名称。
+	// 支持的值：cpu、memory。
 	ResourceName ResourceName
-	// Restart policy to apply when specified resource is resized.
-	// If not specified, it defaults to NotRequired.
+	// 调整指定资源时要应用的重启策略。
+	// 如果未指定，默认为 NotRequired。
 	RestartPolicy ResourceResizeRestartPolicy
 }
 
-// PreemptionPolicy describes a policy for if/when to preempt a pod.
+// PreemptionPolicy 描述是否/何时抢占 Pod 的策略。
 type PreemptionPolicy string
 
 const (
-	// PreemptLowerPriority means that pod can preempt other pods with lower priority.
+	// PreemptLowerPriority 表示 Pod 可以抢占优先级更低的 Pod。
 	PreemptLowerPriority PreemptionPolicy = "PreemptLowerPriority"
-	// PreemptNever means that pod never preempts other pods with lower priority.
+	// PreemptNever 表示 Pod 从不抢占其他优先级更低的 Pod。
 	PreemptNever PreemptionPolicy = "Never"
 )
 
-// TerminationMessagePolicy describes how termination messages are retrieved from a container.
+// TerminationMessagePolicy 描述如何从容器获取终止消息。
 type TerminationMessagePolicy string
 
 const (
-	// TerminationMessageReadFile is the default behavior and will set the container status message to
-	// the contents of the container's terminationMessagePath when the container exits.
+	// TerminationMessageReadFile 是默认行为，容器退出时会将
+	// 容器的 terminationMessagePath 内容设为容器状态消息。
 	TerminationMessageReadFile TerminationMessagePolicy = "File"
-	// TerminationMessageFallbackToLogsOnError will read the most recent contents of the container logs
-	// for the container status message when the container exits with an error and the
-	// terminationMessagePath has no contents.
+	// TerminationMessageFallbackToLogsOnError 会在容器以错误退出且
+	// terminationMessagePath 没有内容时，读取容器日志的最新内容
+	// 作为容器状态消息。
 	TerminationMessageFallbackToLogsOnError TerminationMessagePolicy = "FallbackToLogsOnError"
 )
 
@@ -2747,52 +2684,45 @@ type Capabilities struct {
 	Drop []Capability
 }
 
-// ResourceRequirements describes the compute resource requirements.
+// ResourceRequirements 描述计算资源需求。
 type ResourceRequirements struct {
 	// Limits describes the maximum amount of compute resources allowed.
 	// +optional
 	Limits ResourceList
-	// Requests describes the minimum amount of compute resources required.
-	// If Request is omitted for a container, it defaults to Limits if that is explicitly specified,
-	// otherwise to an implementation-defined value
+	// Requests 描述所需计算资源的最小值。
+	// 如果容器省略 Requests，则默认为显式指定的 Limits，
+	// 否则为具体实现定义的值。Requests 不能超过 Limits。
 	// +optional
 	Requests ResourceList
-	// Claims lists the names of resources, defined in spec.resourceClaims,
-	// that are used by this container.
-	//
-	// This field depends on the
-	// DynamicResourceAllocation feature gate.
-	//
-	// This field is immutable. It can only be set for containers.
-	//
+	// Claims 列出了 spec.resourceClaims 中定义的、
+	// 由此容器使用的资源名称。
+	// 此字段依赖 DynamicResourceAllocation 特性门控。
+	// 此字段不可变，且只能为容器设置。
 	// +featureGate=DynamicResourceAllocation
 	// +optional
 	Claims []ResourceClaim
 }
 
-// VolumeResourceRequirements describes the storage resource requirements for a volume.
+// VolumeResourceRequirements 描述卷的存储资源需求。
 type VolumeResourceRequirements struct {
-	// Limits describes the maximum amount of compute resources allowed.
+	// Limits 描述允许使用的计算资源上限。
 	// +optional
 	Limits ResourceList
-	// Requests describes the minimum amount of compute resources required.
-	// If Request is omitted for a container, it defaults to Limits if that is explicitly specified,
-	// otherwise to an implementation-defined value
+	// Requests 描述所需计算资源的最小值。
+	// 如果容器省略 Requests，则默认为显式指定的 Limits，
+	// 否则为具体实现定义的值。Requests 不能超过 Limits。
 	// +optional
 	Requests ResourceList
 }
 
-// ResourceClaim references one entry in PodSpec.ResourceClaims.
+// ResourceClaim 引用 PodSpec.ResourceClaims 中的一个条目。
 type ResourceClaim struct {
-	// Name must match the name of one entry in pod.spec.resourceClaims of
-	// the Pod where this field is used. It makes that resource available
-	// inside a container.
+	// Name 必须与使用该字段的 Pod 的 pod.spec.resourceClaims 中某个条目的名称匹配。
+	// 它使该资源在容器内可用。
 	Name string
 
-	// Request is the name chosen for a request in the referenced claim.
-	// If empty, everything from the claim is made available, otherwise
-	// only the result of this request.
-	//
+	// Request 是所引用 claim 中某个请求的名称。
+	// 如果为空，则 claim 中的全部内容均可用；否则只有该请求的结果可用。
 	// +optional
 	Request string
 }
@@ -2825,13 +2755,12 @@ type Container struct {
 	WorkingDir string
 	// +optional
 	Ports []ContainerPort
-	// List of sources to populate environment variables in the container.
-	// The keys defined within a source may consist of any printable ASCII characters except '='.
-	// All invalid keys
-	// will be reported as an event when the container is starting. When a key exists in multiple
-	// sources, the value associated with the last source will take precedence.
-	// Values defined by an Env with a duplicate key will take precedence.
-	// Cannot be updated.
+	// 用于填充容器中环境变量的来源列表。
+	// 来源中定义的键可以包含除 '=' 以外的任意可打印 ASCII 字符。
+	// 当某个键存在于多个来源时，
+	// 最后一个来源关联的值优先。
+	// 由带有重复键的 Env 定义的值优先。
+	// 不可更新。
 	// +optional
 	EnvFrom []EnvFromSource
 	// +optional
@@ -2885,7 +2814,7 @@ type Container struct {
 	RestartPolicyRules []ContainerRestartRule
 	// +optional
 	VolumeMounts []VolumeMount
-	// volumeDevices is the list of block devices to be used by the container.
+	// volumeDevices 是容器要使用的块设备列表。
 	// +optional
 	VolumeDevices []VolumeDevice
 	// +optional
@@ -2903,13 +2832,13 @@ type Container struct {
 	TerminationMessagePolicy TerminationMessagePolicy
 	// Required: Policy for pulling images for this container
 	ImagePullPolicy PullPolicy
-	// Optional: SecurityContext defines the security options the container should be run with.
-	// If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext.
+	// SecurityContext 定义容器运行时应使用的安全选项。
+	// 如果设置，SecurityContext 中的字段会覆盖 PodSecurityContext 中的对应字段。
 	// +optional
 	SecurityContext *SecurityContext
 
-	// Variables for interactive containers, these have very specialized use-cases (e.g. debugging)
-	// and shouldn't be used for general purpose containers.
+	// 交互式容器的变量，这些有非常专门的用例（例如调试），
+	// 不应用于通用容器。
 	// +optional
 	Stdin bool
 	// +optional
@@ -2918,8 +2847,8 @@ type Container struct {
 	TTY bool
 }
 
-// ProbeHandler defines a specific action that should be taken in a probe.
-// One and only one of the fields must be specified.
+// ProbeHandler 定义探针中要采取的具体动作。
+// 必须指定且只能指定其中一个字段。
 type ProbeHandler struct {
 	// Exec specifies the action to take.
 	// +optional
@@ -2936,8 +2865,8 @@ type ProbeHandler struct {
 	GRPC *GRPCAction
 }
 
-// LifecycleHandler defines a specific action that should be taken in a lifecycle
-// hook. One and only one of the fields, except TCPSocket must be specified.
+// LifecycleHandler 定义生命周期钩子中要采取的具体动作。
+// 除 TCPSocket 外，必须指定且只能指定其中一个字段。
 type LifecycleHandler struct {
 	// Exec specifies the action to take.
 	// +optional
@@ -2956,8 +2885,7 @@ type LifecycleHandler struct {
 }
 
 type GRPCAction struct {
-	// Port number of the gRPC service.
-	// Note: Number must be in the range 1 to 65535.
+	// gRPC 服务的端口号。数字必须在 1 到 65535 范围内。
 	Port int32
 
 	// Service is the name of the service to place in the gRPC HealthCheckRequest
@@ -2967,25 +2895,23 @@ type GRPCAction struct {
 	// +optional
 	Service *string
 
-	// mode specifies the connection mode for the gRPC health probe.
-	// Set to "TLS" to use TLS without certificate verification.
-	// Set to "Plaintext" to use a plaintext (insecure) connection explicitly.
-	// If not specified, the probe uses a plaintext (insecure) connection.
+	// mode 指定 gRPC 健康检查探针的连接模式。
+	// 设为 "TLS" 时使用 TLS 但不校验证书。
+	// 设为 "Plaintext" 时显式使用明文（不安全）连接。
+	// 如果未指定，探针使用明文（不安全）连接。
 	// +featureGate=GRPCContainerProbeTLS
 	// +optional
 	Mode *GRPCProbeMode
 }
 
-// GRPCProbeMode describes the connection mode for a gRPC probe.
+// GRPCProbeMode 描述 gRPC 探针的连接模式。
 // +enum
 type GRPCProbeMode string
 
 const (
-	// GRPCProbeModePlaintext indicates that the probe should use a plaintext
-	// (insecure) gRPC connection.
+	// GRPCProbeModePlaintext 表示探针应使用明文（不安全的）gRPC 连接。
 	GRPCProbeModePlaintext GRPCProbeMode = "Plaintext"
-	// GRPCProbeModeTLS indicates that the probe should connect using TLS
-	// without certificate verification.
+	// GRPCProbeModeTLS 表示探针应使用 TLS 连接但不校验证书。
 	GRPCProbeModeTLS GRPCProbeMode = "TLS"
 )
 
@@ -3061,29 +2987,27 @@ const (
 	SIGRTMAX        Signal = "SIGRTMAX"
 )
 
-// Lifecycle describes actions that the management system should take in response to container lifecycle
+// Lifecycle 描述管理系统应针对容器生命周期事件采取的动作。
 // events.  For the PostStart and PreStop lifecycle handlers, management of the container blocks
-// until the action is complete, unless the container process fails, in which case the handler is aborted.
+// 否则对容器的管理会阻塞直到动作完成。
 type Lifecycle struct {
 	// PostStart is called immediately after a container is created.  If the handler fails, the container
 	// is terminated and restarted.
 	// More info: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks
 	// +optional
 	PostStart *LifecycleHandler
-	// PreStop is called immediately before a container is terminated due to an
-	// API request or management event such as liveness/startup probe failure,
-	// preemption, resource contention, etc. The handler is not called if the
-	// container crashes or exits. The Pod's termination grace period countdown begins before the
-	// PreStop hook is executed. Regardless of the outcome of the handler, the
-	// container will eventually terminate within the Pod's termination grace
-	// period (unless delayed by finalizers). Other management of the container blocks until the hook completes
-	// or until the termination grace period is reached.
+	// PreStop 在容器因 API 请求或管理事件（如存活/启动探针失败、
+	// 抢占、资源争用等）而即将被终止前立即调用。如果容器崩溃或退出，则不会调用此钩子。
+	// Pod 的终止宽限期倒计时在 PreStop 钩子执行之前就开始。
+	// 无论钩子的结果如何，容器最终都会在 Pod 的终止宽限期内终止
+	// （除非被 finalizer 延迟）。对容器的其他管理会阻塞直到钩子完成
+	// 或达到终止宽限期。
 	// More info: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks
 	// +optional
 	PreStop *LifecycleHandler
-	// StopSignal defines which signal will be sent to a container when it is being stopped.
-	// If not specified, the default is defined by the container runtime in use.
-	// StopSignal can only be set for Pods with a non-empty .spec.os.name
+	// StopSignal 定义容器被停止时要发送的信号。
+	// 如果未指定，默认值由所使用的容器运行时定义。
+	// StopSignal 只能为 .spec.os.name 非空的 Pod 设置。
 	// +optional
 	StopSignal *Signal
 }
@@ -3095,8 +3019,8 @@ type ConditionStatus string
 
 // These are valid condition statuses. "ConditionTrue" means a resource is in the condition;
 // "ConditionFalse" means a resource is not in the condition; "ConditionUnknown" means kubernetes
-// can't decide if a resource is in the condition or not. In the future, we could add other
-// intermediate conditions, e.g. ConditionDegraded.
+// 无法确定资源是否处于该条件。将来，我们可能会添加其他
+// 中间状态，例如 ConditionDegraded。
 const (
 	ConditionTrue    ConditionStatus = "True"
 	ConditionFalse   ConditionStatus = "False"
@@ -3136,9 +3060,9 @@ type ContainerStateTerminated struct {
 	ContainerID string
 }
 
-// ContainerState holds a possible state of container.
-// Only one of its members may be specified.
-// If none of them is specified, the default one is ContainerStateWaiting.
+// ContainerState 表示容器可能处于的状态。
+// 只能指定其中一个成员。
+// 如果都未指定，则默认为 ContainerStateWaiting。
 type ContainerState struct {
 	// +optional
 	Waiting *ContainerStateWaiting
@@ -3148,64 +3072,57 @@ type ContainerState struct {
 	Terminated *ContainerStateTerminated
 }
 
-// ContainerStatus contains details for the current status of this container.
+// ContainerStatus 包含此容器当前状态的详细信息。
 type ContainerStatus struct {
-	// Name is a DNS_LABEL representing the unique name of the container.
-	// Each container in a pod must have a unique name across all container types.
-	// Cannot be updated.
+	// Name 是表示容器唯一名称的 DNS_LABEL。
+	// Pod 中的每个容器在所有容器类型中都必须具有唯一的名称。
+	// 不可更新。
 	Name string
-	// State holds details about the container's current condition.
+	// State 保存容器当前状况的详细信息。
 	// +optional
 	State ContainerState
-	// LastTerminationState holds the last termination state of the container to
-	// help debug container crashes and restarts. This field is not
-	// populated if the container is still running and RestartCount is 0.
+	// LastTerminationState 保存容器的上一次终止状态，
+	// 用于帮助调试容器崩溃和重启。如果容器仍在运行且 RestartCount 为 0，
+	// 则不会填充该字段。
 	// +optional
 	LastTerminationState ContainerState
-	// Ready specifies whether the container is currently passing its readiness check.
-	// The value will change as readiness probes keep executing. If no readiness
-	// probes are specified, this field defaults to true once the container is
-	// fully started (see Started field).
-	//
-	// The value is typically used to determine whether a container is ready to
-	// accept traffic.
+	// Ready 指定容器当前是否通过就绪性检查。
+	// 该值会随着就绪性探针持续执行而变化。如果未指定就绪性探针，
+	// 则在容器完全启动后该字段默认为 true（参见 Started 字段）。
+	// 该值通常用于判断容器是否已准备好接收流量。
 	Ready bool
-	// RestartCount holds the number of times the container has been restarted.
-	// Kubelet makes an effort to always increment the value, but there
-	// are cases when the state may be lost due to node restarts and then the value
-	// may be reset to 0. The value is never negative.
+	// RestartCount 保存容器被重启的次数。
+	// Kubelet 会努力始终递增该值，但在某些情况下状态可能因节点重启而丢失，
+	// 此时该值可能被重置为 0。该值永不为负数。
 	RestartCount int32
-	// Image is the name of container image that the container is running.
-	// The container image may not match the image used in the PodSpec,
-	// as it may have been resolved by the runtime.
+	// Image 是容器正在运行的容器镜像的名称。
+	// 该镜像可能与 PodSpec 中指定的镜像不同，
+	// 因为它可能已被运行时解析。
 	// More info: https://kubernetes.io/docs/concepts/containers/images.
 	Image string
-	// ImageID is the image ID of the container's image. The image ID may not
-	// match the image ID of the image used in the PodSpec, as it may have been
-	// resolved by the runtime.
+	// ImageID 是容器镜像的镜像 ID。该镜像 ID 可能与
+	// PodSpec 中使用的镜像的 ID 不同，因为它可能已被运行时解析。
 	ImageID string
+	// 其中 type 是容器运行时标识符，由 CRI API 的 Version 调用返回
+	// （例如 "containerd"）。
 	// ContainerID is the ID of the container in the format '<type>://<container_id>'.
-	// Where type is a container runtime identifier, returned from Version call of CRI API
-	// (for example "containerd").
 	// +optional
 	ContainerID string
-	// Started indicates whether the container has finished its postStart lifecycle hook
-	// and passed its startup probe.
-	// Initialized as false, becomes true after startupProbe is considered
-	// successful. Resets to false when the container is restarted, or if kubelet
-	// loses state temporarily. In both cases, startup probes will run again.
-	// Is always true when no startupProbe is defined and container is running and
-	// has passed the postStart lifecycle hook. The null value must be treated the
-	// same as false.
+	// Started 表示容器是否已完成 postStart 生命周期钩子
+	// 并通过了启动探针。
+	// 初始值为 false，在 startupProbe 被认为成功后变为 true。
+	// 当容器重启或 kubelet 临时丢失状态时重置为 false；这两种情况下启动探针都会重新运行。
+	// 如果未定义 startupProbe 且容器正在运行并已通过 postStart 生命周期钩子，则该值始终为 true。
+	// null 值必须按 false 处理。
 	// +optional
 	Started *bool
-	// AllocatedResources represents the compute resources allocated for this container by the
-	// node. Kubelet sets this value to Container.Resources.Requests upon successful pod admission
-	// and after successfully admitting desired pod resize.
+	// AllocatedResources 表示节点为此容器分配的计算资源。
+	// Kubelet 在 Pod 准入成功以及期望的 Pod 扩缩容准入成功后，
+	// 将此值设置为 Container.Resources.Requests。
 	// +optional
 	AllocatedResources ResourceList
-	// Resources represents the compute resource requests and limits that have been successfully
-	// enacted on the running container after it has been started or has been successfully resized.
+	// Resources 表示在容器启动后或成功扩缩容后，
+	// 已在此运行容器上成功生效的计算资源请求和限制。
 	// +featureGate=InPlacePodVerticalScaling
 	// +optional
 	Resources *ResourceRequirements
@@ -3213,12 +3130,11 @@ type ContainerStatus struct {
 	// +listType=atomic
 	// +optional
 	VolumeMounts []VolumeMountStatus
-	// User represents user identity information initially attached to the first process of the container
+	// User 表示最初附加到容器第一个进程的用户身份信息。
 	// +featureGate=SupplementalGroupsPolicy
 	// +optional
 	User *ContainerUser
-	// AllocatedResourcesStatus represents the status of various resources
-	// allocated for this Pod.
+	// AllocatedResourcesStatus 表示为此 Pod 分配的各种资源的状态。
 	// +featureGate=ResourceHealthStatus
 	// +optional
 	AllocatedResourcesStatus []ResourceStatus
@@ -3231,20 +3147,20 @@ type ContainerStatus struct {
 }
 
 type ResourceStatus struct {
-	// Name of the resource. Must be unique within the pod and in case of non-DRA resource, match one of the resources from the pod spec.
-	// For DRA resources, the value must be "claim:<claim_name>/<request>" when
-	// container.resources.claims[*].request is set or "claim:<claim_name>" when
-	// container.resources.claims[*].request is empty.
-	// For DRA-backed extended resources, "claim:<claim_name>/<request>" is used
-	// when the claim name and request name are recorded in pod.status.extendedResourceClaimStatus.
-	// When this status is reported about a container, the "claim_name" and "request"
-	// must match one of the claims of this container.
+	// 资源名称。在 Pod 内必须唯一；对于非 DRA 资源，必须与 Pod spec 中的某个资源匹配。
+	// 对于 DRA 资源，当设置了 container.resources.claims[*].request 时，
+	// 值必须为 "claim:<claim_name>/<request>"；当 container.resources.claims[*].request 为空时，
+	// 值必须为 "claim:<claim_name>"。
+	// 对于 DRA 支持的扩展资源，当声明名称和请求名称记录在 pod.status.extendedResourceClaimStatus 中时，
+	// 使用 "claim:<claim_name>/<request>"。
+	// 当报告的是关于某个容器的状态时，"claim_name" 和 "request"
+	// 必须与该容器的某个声明匹配。
 	// +required
 	Name ResourceName
-	// List of unique resources health. Each element in the list contains an unique resource ID and its health.
-	// At a minimum, for the lifetime of a Pod, resource ID must uniquely identify the resource allocated to the Pod on the Node.
-	// If other Pod on the same Node reports the status with the same resource ID, it must be the same resource they share.
-	// See ResourceID type definition for a specific format it has in various use cases.
+	// 资源健康状态的唯一列表。列表中的每个元素包含一个唯一的资源 ID 及其健康状况。
+	// 至少在 Pod 的生命周期内，资源 ID 必须唯一标识节点上分配给该 Pod 的资源。
+	// 如果同一节点上的其他 Pod 报告了具有相同资源 ID 的状态，则它们必须是共享的同一资源。
+	// 有关其在各种使用场景下的具体格式，请参见 ResourceID 类型定义。
 	// +listType=map
 	// +listMapKey=resourceID
 	Resources []ResourceHealth
@@ -3252,16 +3168,16 @@ type ResourceStatus struct {
 	// allow to extend this struct in future with the overall health fields or things like Device Plugin version
 }
 
-// ResourceID is calculated based on the source of this resource health information.
+// ResourceID 根据此资源健康信息的来源计算得出。
 // For DevicePlugin:
 //
 //	DeviceID, where DeviceID is how device plugin identifies the device. The same DeviceID can be found in PodResources API.
 //
-// DevicePlugin ID is usually a constant for the lifetime of a Node and typically can be used to uniquely identify the device on the node.
+// DevicePlugin ID 通常在节点的生命周期内保持不变，通常可用于唯一标识节点上的设备。
 //
 // For DRA:
 //
-//	<driver name>/<pool name>/<device name>: such a device can be looked up in the information published by that DRA driver to learn more about it. It is designed to be globally unique in a cluster.
+// <driver name>/<pool name>/<device name>：可以在该 DRA 驱动程序发布的信息中查找此类设备以了解更多信息。它被设计为在集群内全局唯一。
 type ResourceID string
 
 type ResourceHealthStatus string
@@ -3272,21 +3188,19 @@ const (
 	ResourceHealthStatusUnknown   ResourceHealthStatus = "Unknown"
 )
 
-// ResourceHealth represents the health of a resource. It has the latest device health information.
+// ResourceHealth 表示资源的健康状况，包含最新的设备健康信息。
 // This is a part of KEP https://kep.k8s.io/4680.
 type ResourceHealth struct {
-	// ResourceID is the unique identifier of the resource. See the ResourceID type for more information.
+	// ResourceID 是资源的唯一标识符。有关更多信息，请参见 ResourceID 类型。
 	ResourceID ResourceID
-	// Health of the resource.
-	// can be one of:
-	//  - Healthy: operates as normal
-	//  - Unhealthy: reported unhealthy. We consider this a temporary health issue
-	//               since we do not have a mechanism today to distinguish
-	//               temporary and permanent issues.
-	//  - Unknown: The status cannot be determined.
-	//             For example, Device Plugin got unregistered and hasn't been re-registered since.
-	//
-	// In future we may want to introduce the PermanentlyUnhealthy Status.
+	// 资源的健康状况。
+	// 可以是以下之一：
+	// - Healthy：正常运行
+	// - Unhealthy：报告为不健康。我们认为这是暂时的健康问题，
+	// 因为我们目前没有机制区分暂时性和永久性问题。
+	// - Unknown：无法确定状态。
+	// 例如，Device Plugin 已注销且此后未重新注册。
+	// 将来我们可能会引入 PermanentlyUnhealthy 状态。
 	Health ResourceHealthStatus
 	// Message provides human-readable context for Health (e.g. "ECC error count exceeded threshold").
 	// This field is populated by the kubelet when ResourceHealthStatusMessage is enabled.
@@ -3295,43 +3209,43 @@ type ResourceHealth struct {
 
 // ContainerUser represents user identity information
 type ContainerUser struct {
-	// Linux holds user identity information initially attached to the first process of the containers in Linux.
-	// Note that the actual running identity can be changed if the process has enough privilege to do so.
+	// Linux 保存最初附加到 Linux 容器中容器第一个进程的用户身份信息。
+	// 请注意，如果进程有足够权限，实际运行时的身份可以更改。
 	// +optional
 	Linux *LinuxContainerUser
 
 	// Windows holds user identity information of the first process of the containers in Windows
-	// This is just reserved for future use.
+	// 这只是为将来使用而保留。
 	// Windows *WindowsContainerUser
 }
 
-// LinuxContainerUser represents user identity information in Linux containers
+// LinuxContainerUser 表示 Linux 容器中的用户身份信息。
 type LinuxContainerUser struct {
-	// UID is the primary uid initially attached to the first process in the container
+	// UID 是最初附加到容器中第一个进程的主 uid。
 	UID int64
-	// GID is the primary gid initially attached to the first process in the container
+	// GID 是最初附加到容器中第一个进程的主 gid。
 	GID int64
-	// SupplementalGroups are the supplemental groups initially attached to the first process in the container
+	// SupplementalGroups 是最初附加到容器中第一个进程的附加组。
 	SupplementalGroups []int64
 }
 
-// PodPhase is a label for the condition of a pod at the current time.
+// PodPhase 是当前时刻 Pod 所处状况的标签。
 type PodPhase string
 
-// These are the valid statuses of pods.
+// 以下是 Pod 的有效状态。
 const (
-	// PodPending means the pod has been accepted by the system, but one or more of the containers
-	// has not been started. This includes time before being bound to a node, as well as time spent
-	// pulling images onto the host.
+	// PodPending 表示系统已接受该 Pod，但一个或多个容器
+	// 尚未启动。这包括绑定到节点之前的时间，以及
+	// 将镜像拉取到主机上所花费的时间。
 	PodPending PodPhase = "Pending"
-	// PodRunning means the pod has been bound to a node and all of the containers have been started.
-	// At least one container is still running or is in the process of being restarted.
+	// PodRunning 表示 Pod 已绑定到节点且所有容器都已启动。
+	// 至少有一个容器仍在运行或正在重新启动。
 	PodRunning PodPhase = "Running"
-	// PodSucceeded means that all containers in the pod have voluntarily terminated
-	// with a container exit code of 0, and the system is not going to restart any of these containers.
+	// PodSucceeded 表示 Pod 中的所有容器都已自愿终止，
+	// 退出码为 0，且系统不会再重启其中任何容器。
 	PodSucceeded PodPhase = "Succeeded"
-	// PodFailed means that all containers in the pod have terminated, and at least one container has
-	// terminated in a failure (exited with a non-zero exit code or was stopped by the system).
+	// PodFailed 表示 Pod 中的所有容器都已终止，且至少有一个容器
+	// 以失败状态终止（以非零退出码退出或被系统停止）。
 	PodFailed PodPhase = "Failed"
 	// PodUnknown means that for some reason the state of the pod could not be obtained, typically due
 	// to an error in communicating with the host of the pod.
@@ -3344,30 +3258,28 @@ type PodConditionType string
 
 // These are valid conditions of pod.
 const (
-	// PodScheduled represents status of the scheduling process for this pod.
+	// PodScheduled 表示此 Pod 的调度过程的状态。
 	PodScheduled PodConditionType = "PodScheduled"
-	// PodReady means the pod is able to service requests and should be added to the
-	// load balancing pools of all matching services.
+	// PodReady 表示 Pod 能够处理请求，应将其加入
+	// 所有匹配服务的负载均衡池。
 	PodReady PodConditionType = "Ready"
-	// PodInitialized means that all init containers in the pod have started successfully.
+	// PodInitialized 表示 Pod 中的所有 init 容器都已成功启动。
 	PodInitialized PodConditionType = "Initialized"
-	// ContainersReady indicates whether all containers in the pod are ready.
+	// ContainersReady 表示 Pod 中的所有容器是否都已就绪。
 	ContainersReady PodConditionType = "ContainersReady"
-	// DisruptionTarget indicates the pod is about to be terminated due to a
-	// disruption (such as preemption, eviction API or garbage-collection).
+	// DisruptionTarget 表示该 Pod 由于中断（如抢占、驱逐 API 或垃圾回收）
+	// 即将被终止。
 	DisruptionTarget PodConditionType = "DisruptionTarget"
-	// PodResizePending indicates that the pod has been resized, but kubelet has not
-	// yet allocated the resources. If both PodResizePending and PodResizeInProgress
-	// are set, it means that a new resize was requested in the middle of a previous
-	// pod resize that is still in progress.
+	// PodResizePending 表示 Pod 已完成调整大小，但 kubelet 尚未
+	// 分配资源。如果同时设置了 PodResizePending 和 PodResizeInProgress，
+	// 表示在上一次仍在进行的 Pod 调整过程中又请求了一次新的调整。
 	PodResizePending PodConditionType = "PodResizePending"
-	// PodResizeInProgress indicates that a resize is in progress, and is present whenever
-	// the Kubelet has allocated resources for the resize, but has not yet actuated all of
-	// the required changes.
-	// If both PodResizePending and PodResizeInProgress are set, it means that a new resize was
-	// requested in the middle of a previous pod resize that is still in progress.
+	// PodResizeInProgress 表示调整正在进行中，只要 kubelet 已为调整分配资源
+	// 但尚未完成所有必需变更，就会存在此状况。
+	// 如果同时设置了 PodResizePending 和 PodResizeInProgress，
+	// 表示在上一次仍在进行的 Pod 调整过程中又请求了一次新的调整。
 	PodResizeInProgress PodConditionType = "PodResizeInProgress"
-	// AllContainersRestarting indicates that all containers of the pod is being restarted.
+	// AllContainersRestarting 表示 Pod 中的所有容器正在重启。
 	AllContainersRestarting PodConditionType = "AllContainersRestarting"
 )
 
@@ -3387,51 +3299,49 @@ type PodCondition struct {
 	Message string
 }
 
-// Deprecated: PodResizeStatus shows status of desired resize of a pod's containers.
+// Deprecated: PodResizeStatus 表示 Pod 容器期望调整大小的状态。
 type PodResizeStatus string
 
 const (
-	// Pod resources resize has been accepted by node and is being actuated.
+	// Pod 资源调整已被节点接受，正在执行。
 	PodResizeStatusInProgress PodResizeStatus = "InProgress"
-	// Node cannot resize the pod at this time and will keep retrying.
+	// 节点当前无法调整 Pod 的大小，将继续重试。
 	PodResizeStatusDeferred PodResizeStatus = "Deferred"
-	// Requested pod resize is not feasible and will not be re-evaluated.
+	// 请求的 Pod 调整不可行，不会重新评估。
 	PodResizeStatusInfeasible PodResizeStatus = "Infeasible"
 )
 
-// VolumeMountStatus shows status of volume mounts.
+// VolumeMountStatus 显示卷挂载的状态。
 type VolumeMountStatus struct {
-	// Name corresponds to the name of the original VolumeMount.
+	// Name 对应原始 VolumeMount 的名称。
 	Name string
-	// MountPath corresponds to the original VolumeMount.
+	// MountPath 对应原始 VolumeMount。
 	MountPath string
-	// ReadOnly corresponds to the original VolumeMount.
+	// ReadOnly 对应原始 VolumeMount。
 	// +optional
 	ReadOnly bool
-	// RecursiveReadOnly must be set to Disabled, Enabled, or unspecified (for non-readonly mounts).
-	// An IfPossible value in the original VolumeMount must be translated to Disabled or Enabled,
-	// depending on the mount result.
+	// RecursiveReadOnly 必须设置为 Disabled、Enabled 或未指定（对于非只读挂载）。
+	// 原始 VolumeMount 中的 IfPossible 值必须根据挂载结果转换为 Disabled 或 Enabled。
 	// +optional
 	RecursiveReadOnly *RecursiveReadOnlyMode
-	// volumeStatus represents volume-type-specific status about the mounted
-	// volume.
+	// volumeStatus 表示已挂载卷的特定于卷类型的状态。
 	// +optional
 	VolumeStatus *VolumeStatus
 }
 
-// VolumeStatus represents the status of a mounted volume.
-// At most one of its members must be specified.
+// VolumeStatus 表示已挂载卷的状态。
+// 最多只能指定其中一个成员。
 type VolumeStatus struct {
-	// image represents an OCI object (a container image or artifact) pulled and mounted on the kubelet's host machine.
+	// image 表示在 kubelet 主机上拉取并挂载的 OCI 对象（容器镜像或制品）。
 	// +featureGate=ImageVolumeWithDigest
 	// +optional
 	Image *ImageVolumeStatus
 }
 
 type ImageVolumeStatus struct {
-	// ImageRef is the digest of the image used for this volume.
-	// It should have a value that's similar to the pod's status.containerStatuses[i].imageID.
-	// The ImageRef length should not exceed 256 characters.
+	// ImageRef 是此卷所用镜像的摘要。
+	// 其值应类似于 Pod 的 status.containerStatuses[i].imageID。
+	// ImageRef 长度不应超过 256 个字符。
 	// +kubebuilder:validation:MaxLength=256
 	// +required
 	ImageRef string
@@ -3450,8 +3360,8 @@ const (
 	RestartPolicyNever     RestartPolicy = "Never"
 )
 
-// ContainerRestartPolicy is the restart policy for a single container.
-// The only allowed values are "Always", "Never", and "OnFailure".
+// ContainerRestartPolicy 是单个容器的重启策略。
+// 唯一允许的值为 "Always"、"Never" 和 "OnFailure"。
 type ContainerRestartPolicy string
 
 const (
@@ -3460,11 +3370,10 @@ const (
 	ContainerRestartPolicyOnFailure ContainerRestartPolicy = "OnFailure"
 )
 
-// ContainerRestartRule describes how a container exit is handled.
+// ContainerRestartRule 描述如何处理容器退出。
 type ContainerRestartRule struct {
-	// Specifies the action taken on a container exit if the requirements
-	// are satisfied. The only possible value is "Restart" to restart the
-	// container.
+	// 指定在满足条件时对容器退出采取的操作。唯一可能的值为 "Restart"，
+	// 表示重启容器。
 	// +required
 	Action ContainerRestartRuleAction
 
@@ -3491,17 +3400,14 @@ const (
 // ContainerRestartRuleOnExitCodes describes the condition
 // for handling an exited container based on its exit codes.
 type ContainerRestartRuleOnExitCodes struct {
-	// Represents the relationship between the container exit code(s) and the
-	// specified values. Possible values are:
-	// - In: the requirement is satisfied if the container exit code is in the
-	//   set of specified values.
-	// - NotIn: the requirement is satisfied if the container exit code is
-	//   not in the set of specified values.
+	// 表示容器退出码与指定值之间的关系。可能的值为：
+	// - In：如果容器退出码在指定值集合中，则满足条件。
+	// - NotIn：如果容器退出码不在指定值集合中，则满足条件。
 	// +required
 	Operator ContainerRestartRuleOnExitCodesOperator
 
 	// Specifies the set of values to check for container exit codes.
-	// At most 255 elements are allowed.
+	// 最多允许 255 个元素。
 	// +optional
 	// +listType=set
 	Values []int32
@@ -3518,7 +3424,7 @@ const (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodList is a list of Pods.
+// PodList 是 Pod 的列表。
 type PodList struct {
 	metav1.TypeMeta
 	// +optional
@@ -3527,27 +3433,23 @@ type PodList struct {
 	Items []Pod
 }
 
-// DNSPolicy defines how a pod's DNS will be configured.
+// DNSPolicy 定义 Pod 的 DNS 配置方式。
 type DNSPolicy string
 
 const (
-	// DNSClusterFirstWithHostNet indicates that the pod should use cluster DNS
-	// first, if it is available, then fall back on the default
-	// (as determined by kubelet) DNS settings.
+	// DNSClusterFirstWithHostNet 表示 Pod 应优先使用集群 DNS（如果可用），
+	// 然后回退到默认（由 kubelet 确定）DNS 设置。
 	DNSClusterFirstWithHostNet DNSPolicy = "ClusterFirstWithHostNet"
 
-	// DNSClusterFirst indicates that the pod should use cluster DNS
-	// first unless hostNetwork is true, if it is available, then
-	// fall back on the default (as determined by kubelet) DNS settings.
+	// DNSClusterFirst 表示除非 hostNetwork 为 true，否则 Pod 应优先使用集群 DNS
+	// （如果可用），然后回退到默认（由 kubelet 确定）DNS 设置。
 	DNSClusterFirst DNSPolicy = "ClusterFirst"
 
-	// DNSDefault indicates that the pod should use the default (as
-	// determined by kubelet) DNS settings.
+	// DNSDefault 表示 Pod 应使用默认（由 kubelet 确定）DNS 设置。
 	DNSDefault DNSPolicy = "Default"
 
-	// DNSNone indicates that the pod should use empty DNS settings. DNS
-	// parameters such as nameservers and search paths should be defined via
-	// DNSConfig.
+	// DNSNone 表示 Pod 应使用空的 DNS 设置。nameservers 和 search paths 等 DNS
+	// 参数应通过 DNSConfig 定义。
 	DNSNone DNSPolicy = "None"
 )
 
@@ -3575,14 +3477,13 @@ type NodeSelectorTerm struct {
 type NodeSelectorRequirement struct {
 	// The label key that the selector applies to.
 	Key string
-	// Represents a key's relationship to a set of values.
-	// Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
+	// 表示键与一组值之间的关系。
+	// 有效的操作符有 In、NotIn、Exists、DoesNotExist、Gt 和 Lt。
 	Operator NodeSelectorOperator
-	// An array of string values. If the operator is In or NotIn,
-	// the values array must be non-empty. If the operator is Exists or DoesNotExist,
-	// the values array must be empty. If the operator is Gt or Lt, the values
-	// array must have a single element, which will be interpreted as an integer.
-	// This array is replaced during a strategic merge patch.
+	// 字符串值数组。如果操作符是 In 或 NotIn，则 values 数组必须非空。
+	// 如果操作符是 Exists 或 DoesNotExist，则 values 数组必须为空。
+	// 如果操作符是 Gt 或 Lt，则 values 数组必须只有一个元素，该元素将被解释为整数。
+	// 在 strategic merge patch 期间会替换此数组。
 	// +optional
 	Values []string
 }
@@ -3602,10 +3503,10 @@ const (
 )
 
 // TopologySelectorTerm represents the result of label queries.
-// A null or empty topology selector term matches no objects.
-// The requirements of them are ANDed.
-// It provides a subset of functionality as NodeSelectorTerm.
-// This is an alpha feature and may change in the future.
+// 为 null 或空的拓扑选择器项不匹配任何对象。
+// 其中的要求为 AND 关系。
+// 它提供 NodeSelectorTerm 功能的子集。
+// 这是一个 alpha 特性，将来可能会改变。
 type TopologySelectorTerm struct {
 	// A list of topology selector requirements by labels.
 	// +optional
@@ -3613,7 +3514,7 @@ type TopologySelectorTerm struct {
 }
 
 // TopologySelectorLabelRequirement is a selector that matches given label.
-// This is an alpha feature and may change in the future.
+// 这是一个 alpha 特性，将来可能会改变。
 type TopologySelectorLabelRequirement struct {
 	// The label key that the selector applies to.
 	Key string
@@ -3622,9 +3523,9 @@ type TopologySelectorLabelRequirement struct {
 	Values []string
 }
 
-// Affinity is a group of affinity scheduling rules.
+// Affinity 是一组亲和性调度规则。
 type Affinity struct {
-	// Describes node affinity scheduling rules for the pod.
+	// 描述 Pod 的节点亲和性调度规则。
 	// +optional
 	NodeAffinity *NodeAffinity
 	// Describes pod affinity scheduling rules (e.g. co-locate this pod in the same node, zone, etc. as some other pod(s)).
@@ -3708,10 +3609,9 @@ type PodAntiAffinity struct {
 // WeightedPodAffinityTerm represents the weights of all of the matched WeightedPodAffinityTerm
 // fields are added per-node to find the most preferred node(s)
 type WeightedPodAffinityTerm struct {
-	// weight associated with matching the corresponding podAffinityTerm,
-	// in the range 1-100.
+	// 与匹配相应 podAffinityTerm 关联的权重，范围为 1-100。
 	Weight int32
-	// Required. A pod affinity term, associated with the corresponding weight.
+	// 必需。与相应权重关联的 Pod 亲和性项。
 	PodAffinityTerm PodAffinityTerm
 }
 
@@ -3722,50 +3622,41 @@ type WeightedPodAffinityTerm struct {
 // the label with key <topologyKey> matches that of any node on which
 // a pod of the set of pods is running.
 type PodAffinityTerm struct {
-	// A label query over a set of resources, in this case pods.
-	// If it's null, this PodAffinityTerm matches with no Pods.
+	// 对一组资源（此处为 Pod）的标签查询。
+	// 如果为 null，则此 PodAffinityTerm 不匹配任何 Pod。
 	// +optional
 	LabelSelector *metav1.LabelSelector
-	// namespaces specifies a static list of namespace names that the term applies to.
-	// The term is applied to the union of the namespaces listed in this field
-	// and the ones selected by namespaceSelector.
-	// null or empty namespaces list and null namespaceSelector means "this pod's namespace".
+	// namespaces 指定此条件适用的一组命名空间的静态列表。
+	// 该条件应用于此字段列出的命名空间与 namespaceSelector 选择的命名空间的并集。
+	// namespaces 列表为 null 或为空且 namespaceSelector 为 null 时表示“此 Pod 所在的命名空间”。
 	// +optional
 	Namespaces []string
-	// This pod should be co-located (affinity) or not co-located (anti-affinity) with the pods matching
-	// the labelSelector in the specified namespaces, where co-located is defined as running on a node
-	// whose value of the label with key topologyKey matches that of any node on which any of the
-	// selected pods is running.
-	// Empty topologyKey is not allowed.
+	// 此 Pod 应与指定命名空间中匹配 labelSelector 的 Pod 共置（亲和性）或不共置（反亲和性），
+	// 其中共置定义为运行在一个节点上，该节点上键为 topologyKey 的标签值
+	// 与任一被选中 Pod 所在节点的对应标签值匹配。
+	// topologyKey 不得为空。
 	TopologyKey string
-	// A label query over the set of namespaces that the term applies to.
-	// The term is applied to the union of the namespaces selected by this field
-	// and the ones listed in the namespaces field.
-	// null selector and null or empty namespaces list means "this pod's namespace".
-	// An empty selector ({}) matches all namespaces.
+	// 对此条件适用的一组命名空间的标签查询。
+	// 该条件应用于此字段选择的命名空间与 namespaces 字段中列出的命名空间的并集。
+	// null 选择器且 namespaces 列表为 null 或为空时表示“此 Pod 所在的命名空间”。
+	// 空选择器（{}）匹配所有命名空间。
 	// +optional
 	NamespaceSelector *metav1.LabelSelector
-	// MatchLabelKeys is a set of pod label keys to select which pods will
-	// be taken into consideration. The keys are used to lookup values from the
-	// incoming pod labels, those key-value labels are merged with `labelSelector` as `key in (value)`
-	// to select the group of existing pods which pods will be taken into consideration
-	// for the incoming pod's pod (anti) affinity. Keys that don't exist in the incoming
-	// pod labels will be ignored. The default value is empty.
-	// The same key is forbidden to exist in both matchLabelKeys and labelSelector.
-	// Also, matchLabelKeys cannot be set when labelSelector isn't set.
-	//
+	// MatchLabelKeys 是一组 Pod 标签键，用于选择要考虑的 Pod。
+	// 这些键用于从新传入 Pod 的标签中查找值，这些键值标签与 `labelSelector` 合并为 `key in (value)`，
+	// 以选出在新传入 Pod 的 Pod（反）亲和性中需要考虑的现有 Pod 组。
+	// 新传入 Pod 标签中不存在的键将被忽略。默认值为空。
+	// 同一键不得同时存在于 matchLabelKeys 和 labelSelector 中。
+	// 此外，如果未设置 labelSelector，则不能设置 matchLabelKeys。
 	// +listType=atomic
 	// +optional
 	MatchLabelKeys []string
-	// MismatchLabelKeys is a set of pod label keys to select which pods will
-	// be taken into consideration. The keys are used to lookup values from the
-	// incoming pod labels, those key-value labels are merged with `labelSelector` as `key notin (value)`
-	// to select the group of existing pods which pods will be taken into consideration
-	// for the incoming pod's pod (anti) affinity. Keys that don't exist in the incoming
-	// pod labels will be ignored. The default value is empty.
-	// The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
-	// Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-	//
+	// MismatchLabelKeys 是一组 Pod 标签键，用于选择要考虑的 Pod。
+	// 这些键用于从新传入 Pod 的标签中查找值，这些键值标签与 `labelSelector` 合并为 `key notin (value)`，
+	// 以选出在新传入 Pod 的 Pod（反）亲和性中需要考虑的现有 Pod 组。
+	// 新传入 Pod 标签中不存在的键将被忽略。默认值为空。
+	// 同一键不得同时存在于 mismatchLabelKeys 和 labelSelector 中。
+	// 此外，如果未设置 labelSelector，则不能设置 mismatchLabelKeys。
 	// +listType=atomic
 	// +optional
 	MismatchLabelKeys []string
@@ -3803,9 +3694,9 @@ type NodeAffinity struct {
 }
 
 // PreferredSchedulingTerm represents an empty preferred scheduling term matches all objects with implicit weight 0
-// (i.e. it's a no-op). A null preferred scheduling term matches no objects (i.e. is also a no-op).
+// 为 null 时不匹配任何对象（同样是无操作）。
 type PreferredSchedulingTerm struct {
-	// Weight associated with matching the corresponding nodeSelectorTerm, in the range 1-100.
+	// 与匹配相应 nodeSelectorTerm 关联的权重，范围为 1-100。
 	Weight int32
 	// A node selector term, associated with the corresponding weight.
 	Preference NodeSelectorTerm
@@ -3820,11 +3711,10 @@ type Taint struct {
 	// Required. The taint value corresponding to the taint key.
 	// +optional
 	Value string
-	// Required. The effect of the taint on pods
-	// that do not tolerate the taint.
-	// Valid effects are NoSchedule, PreferNoSchedule and NoExecute.
+	// 必需。此污点对不容忍它的 Pod 的影响。
+	// 有效的影响有 NoSchedule、PreferNoSchedule 和 NoExecute。
 	Effect TaintEffect
-	// TimeAdded represents the time at which the taint was added.
+	// TimeAdded 表示添加此污点的时间。
 	// +optional
 	TimeAdded *metav1.Time
 }
@@ -3834,14 +3724,13 @@ type TaintEffect string
 
 // These are valid values for TaintEffect
 const (
-	// Do not allow new pods to schedule onto the node unless they tolerate the taint,
-	// but allow all pods submitted to Kubelet without going through the scheduler
-	// to start, and allow all already-running pods to continue running.
-	// Enforced by the scheduler.
+	// 不允许新的 Pod 调度到该节点上，除非它们容忍此污点，
+	// 但允许所有未经过调度器而直接提交给 Kubelet 的 Pod 启动，
+	// 并允许所有已在运行的 Pod 继续运行。
+	// 由调度器强制执行。
 	TaintEffectNoSchedule TaintEffect = "NoSchedule"
-	// Like TaintEffectNoSchedule, but the scheduler tries not to schedule
-	// new pods onto the node, rather than prohibiting new pods from scheduling
-	// onto the node entirely. Enforced by the scheduler.
+	// 与 TaintEffectNoSchedule 类似，但调度器会尽量不将新 Pod 调度到该节点上，
+	// 而不是完全禁止新 Pod 调度到该节点。由调度器强制执行。
 	TaintEffectPreferNoSchedule TaintEffect = "PreferNoSchedule"
 	// NOT YET IMPLEMENTED. TODO: Uncomment field once it is implemented.
 	// Like TaintEffectNoSchedule, but additionally do not allow pods submitted to
@@ -3849,38 +3738,36 @@ const (
 	// Enforced by Kubelet and the scheduler.
 	// TaintEffectNoScheduleNoAdmit TaintEffect = "NoScheduleNoAdmit"
 
-	// Evict any already-running pods that do not tolerate the taint.
-	// Currently enforced by NodeController.
+	// 驱逐所有不容忍此污点的、已在运行的 Pod。
+	// 当前由 NodeController 强制执行。
 	TaintEffectNoExecute TaintEffect = "NoExecute"
 )
 
 // Toleration represents the toleration object that can be attached to a pod.
-// The pod this Toleration is attached to tolerates any taint that matches
-// the triple <key,value,effect> using the matching operator <operator>.
+// Toleration 所附加到的 Pod 会容忍任何与三元组 <key,value,effect> 匹配的污点，
+// 匹配使用操作符 <operator>。
 type Toleration struct {
-	// Key is the taint key that the toleration applies to. Empty means match all taint keys.
-	// If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+	// Key 是此容忍所适用的污点键。空表示匹配所有污点键。
+	// 如果键为空，则操作符必须为 Exists；此组合表示匹配所有的值和所有的键。
 	// +optional
 	Key string
-	// Operator represents a key's relationship to the value.
-	// Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
-	// Exists is equivalent to wildcard for value, so that a pod can
-	// tolerate all taints of a particular category.
-	// Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+	// Operator 表示键与值之间的关系。
+	// 有效的操作符有 Exists、Equal、Lt 和 Gt。默认为 Equal。
+	// Exists 等价于值的通配符，因此 Pod 可以容忍某一类别的所有污点。
+	// Lt 和 Gt 执行数值比较（需要启用特性门控 TaintTolerationComparisonOperators）。
 	// +optional
 	Operator TolerationOperator
-	// Value is the taint value the toleration matches to.
-	// If the operator is Exists, the value should be empty, otherwise just a regular string.
+	// Value 是此容忍匹配的污点值。
+	// 如果操作符为 Exists，则值应为空，否则为普通字符串。
 	// +optional
 	Value string
-	// Effect indicates the taint effect to match. Empty means match all taint effects.
-	// When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+	// Effect 指示要匹配的污点影响。空表示匹配所有污点影响。
+	// 指定时，允许的值为 NoSchedule、PreferNoSchedule 和 NoExecute。
 	// +optional
 	Effect TaintEffect
-	// TolerationSeconds represents the period of time the toleration (which must be
-	// of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
-	// it is not set, which means tolerate the taint forever (do not evict). Zero and
-	// negative values will be treated as 0 (evict immediately) by the system.
+	// TolerationSeconds 表示容忍（其影响必须为 NoExecute，否则忽略此字段）
+	// 容忍该污点的时长。默认情况下未设置，表示永久容忍该污点（不驱逐）。
+	// 零值和负值将被系统视为 0（立即驱逐）。
 	// +optional
 	TolerationSeconds *int64
 }
@@ -3896,9 +3783,9 @@ const (
 	TolerationOpGt     TolerationOperator = "Gt"
 )
 
-// PodReadinessGate contains the reference to a pod condition
+// PodReadinessGate 包含对 Pod 状况的引用。
 type PodReadinessGate struct {
-	// ConditionType refers to a condition in the pod's condition list with matching type.
+	// ConditionType 引用 Pod 状况列表中类型匹配的状况。
 	ConditionType PodConditionType
 }
 
@@ -3909,33 +3796,32 @@ type PodSpec struct {
 	InitContainers []Container
 	// List of containers belonging to the pod.
 	Containers []Container
-	// List of ephemeral containers run in this pod. Ephemeral containers may be run in an existing
-	// pod to perform user-initiated actions such as debugging. This list cannot be specified when
-	// creating a pod, and it cannot be modified by updating the pod spec. In order to add an
-	// ephemeral container to an existing pod, use the pod's ephemeralcontainers subresource.
+	// 在此 Pod 中运行的临时容器列表。临时容器可以在现有 Pod 中运行，
+	// 以执行用户发起的操作（例如调试）。创建 Pod 时不能指定此列表，
+	// 也不能通过更新 Pod spec 来修改它。要向现有 Pod 添加临时容器，
+	// 请使用该 Pod 的 ephemeralcontainers 子资源。
 	// +optional
 	EphemeralContainers []EphemeralContainer
 	// +optional
 	RestartPolicy RestartPolicy
-	// Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request.
-	// Value must be non-negative integer. The value zero indicates stop immediately via the kill
-	// signal (no opportunity to shut down).
-	// If this value is nil, the default grace period will be used instead.
-	// The grace period is the duration in seconds after the processes running in the pod are sent
-	// a termination signal and the time when the processes are forcibly halted with a kill signal.
-	// Set this value longer than the expected cleanup time for your process.
+	// Pod 优雅终止所需的可选秒数，可在删除请求中减小。
+	// 值必须为非负整数。值为 0 表示通过 kill 信号立即停止（没有关停机会）。
+	// 如果此值为 nil，则使用默认的优雅终止时间。
+	// 优雅终止时间是指从向 Pod 中运行的进程发送终止信号，
+	// 到进程被 kill 信号强制停止之间的秒数。
+	// 请将此值设置为长于进程的预期清理时间。
+	// 默认为 30 秒。
 	// +optional
 	TerminationGracePeriodSeconds *int64
 	// Optional duration in seconds relative to the StartTime that the pod may be active on a node
 	// before the system actively tries to terminate the pod; value must be positive integer
 	// +optional
 	ActiveDeadlineSeconds *int64
-	// Set DNS policy for the pod.
-	// Defaults to "ClusterFirst".
-	// Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'.
-	// DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy.
-	// To have DNS options set along with hostNetwork, you have to specify DNS policy
-	// explicitly to 'ClusterFirstWithHostNet'.
+	// 设置 Pod 的 DNS 策略。
+	// 默认为 "ClusterFirst"。
+	// 有效值为 'ClusterFirstWithHostNet'、'ClusterFirst'、'Default' 或 'None'。
+	// DNSConfig 中给定的 DNS 参数将与 DNSPolicy 选择的策略合并。
+	// 要与 hostNetwork 一起设置 DNS 选项，必须显式将 DNS 策略指定为 'ClusterFirstWithHostNet'。
 	// +optional
 	DNSPolicy DNSPolicy
 	// NodeSelector is a selector which must be true for the pod to fit on a node
@@ -3945,19 +3831,18 @@ type PodSpec struct {
 	// ServiceAccountName is the name of the ServiceAccount to use to run this pod
 	// The pod will be allowed to use secrets referenced by the ServiceAccount
 	ServiceAccountName string
-	// DeprecatedServiceAccount is a deprecated alias for ServiceAccountName.
-	//
-	// Deprecated: Use serviceAccountName instead.
+	// DeprecatedServiceAccount 是 ServiceAccountName 的已弃用别名。
+	// Deprecated: 请改用 serviceAccountName。
 	// +optional
 	DeprecatedServiceAccount string
-	// AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.
+	// AutomountServiceAccountToken 表示是否应自动挂载 service account token。
 	// +optional
 	AutomountServiceAccountToken *bool
 
-	// NodeName indicates in which node this pod is scheduled.
-	// If empty, this pod is a candidate for scheduling by the scheduler defined in schedulerName.
-	// Once this field is set, the kubelet for this node becomes responsible for the lifecycle of this pod.
-	// This field should not be used to express a desire for the pod to be scheduled on a specific node.
+	// NodeName 表示此 Pod 被调度到哪个节点上。
+	// 如果为空，则此 Pod 是由 schedulerName 指定的调度器的候选调度对象。
+	// 一旦设置此字段，该节点的 kubelet 就负责此 Pod 的生命周期。
+	// 此字段不应用于表达希望将 Pod 调度到特定节点的意愿。
 	// https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodename
 	// +optional
 	NodeName string
@@ -3968,12 +3853,12 @@ type PodSpec struct {
 	HostNetwork bool
 	// Use the host's pid namespace.
 	// Optional: Default to false.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	HostPID bool
 	// Use the host's ipc namespace.
 	// Optional: Default to false.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	HostIPC bool
 	// Share a single process namespace between all of the containers in a pod.
@@ -3984,27 +3869,27 @@ type PodSpec struct {
 	// Optional: Default to false.
 	// +optional
 	ShareProcessNamespace *bool
-	// SecurityContext holds pod-level security attributes and common container settings.
-	// Optional: Defaults to empty.  See type description for default values of each field.
+	// SecurityContext 保存 Pod 级别的安全属性和通用容器设置。
+	// 可选：默认为空。各字段的默认值请参见类型说明。
 	// +optional
 	SecurityContext *PodSecurityContext
-	// ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec.
-	// If specified, these secrets will be passed to individual puller implementations for them to use.
+	// ImagePullSecrets 是同一命名空间中 secret 引用的可选列表，用于拉取此 PodSpec 中使用的任何镜像。
+	// 如果指定，这些 secret 将传递给各个拉取器实现供其使用。
 	// +optional
 	ImagePullSecrets []LocalObjectReference
-	// Specifies the hostname of the Pod.
-	// If not specified, the pod's hostname will be set to a system-defined value.
+	// 指定 Pod 的主机名。
+	// 如果未指定，Pod 的主机名将设置为系统定义的值。
 	// +optional
 	Hostname string
-	// If specified, the fully qualified Pod hostname will be "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>".
-	// If not specified, the pod will not have a domainname at all.
+	// 如果指定，Pod 的完整限定主机名为 "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>"。
+	// 如果未指定，Pod 将完全没有域名。
 	// +optional
 	Subdomain string
 	// If specified, the pod's scheduling constraints
 	// +optional
 	Affinity *Affinity
 	// If specified, the pod will be dispatched by specified scheduler.
-	// If not specified, the pod will be dispatched by default scheduler.
+	// 如果未指定，Pod 将由默认调度器分派。
 	// +optional
 	SchedulerName string
 	// If specified, the pod's tolerations.
@@ -4014,24 +3899,20 @@ type PodSpec struct {
 	// file if specified.
 	// +optional
 	HostAliases []HostAlias
-	// If specified, indicates the pod's priority. "system-node-critical" and
-	// "system-cluster-critical" are two special keywords which indicate the
-	// highest priorities with the former being the highest priority. Any other
-	// name must be defined by creating a PriorityClass object with that name.
-	// If not specified, the pod priority will be default or zero if there is no
-	// default.
+	// 如果指定，表示 Pod 的优先级。"system-node-critical" 和
+	// "system-cluster-critical" 是两个特殊关键字，表示最高优先级，前者优先级最高。
+	// 任何其他名称必须通过创建具有该名称的 PriorityClass 对象来定义。
+	// 如果未指定，Pod 优先级将为默认值；如果没有默认值则为 0。
 	// +optional
 	PriorityClassName string
-	// The priority value. Various system components use this field to find the
-	// priority of the pod. When Priority Admission Controller is enabled, it
-	// prevents users from setting this field. The admission controller populates
-	// this field from PriorityClassName.
-	// The higher the value, the higher the priority.
+	// 优先级值。各种系统组件使用此字段查找 Pod 的优先级。
+	// 启用 Priority Admission Controller 时，会阻止用户设置此字段。
+	// 该准入控制器会根据 PriorityClassName 填充此字段。
+	// 值越高，优先级越高。
 	// +optional
 	Priority *int32
-	// Specifies the DNS parameters of a pod.
-	// Parameters specified here will be merged to the generated DNS
-	// configuration based on DNSPolicy.
+	// 指定 Pod 的 DNS 参数。
+	// 此处指定的参数将与基于 DNSPolicy 生成的 DNS 配置合并。
 	// +optional
 	DNSConfig *PodDNSConfig
 	// If specified, all readiness gates will be evaluated for pod readiness.
@@ -4040,31 +3921,31 @@ type PodSpec struct {
 	// More info: https://git.k8s.io/enhancements/keps/sig-network/580-pod-readiness-gates
 	// +optional
 	ReadinessGates []PodReadinessGate
-	// RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which should be used
-	// to run this pod.  If no RuntimeClass resource matches the named class, the pod will not be run.
-	// If unset or empty, the "legacy" RuntimeClass will be used, which is an implicit class with an
-	// empty definition that uses the default runtime handler.
+	// RuntimeClassName 引用 node.k8s.io 组中的 RuntimeClass 对象，应用于运行此 Pod。
+	// 如果没有与指定名称匹配的 RuntimeClass 资源，则不会运行该 Pod。
+	// 如果未设置或为空，将使用 "legacy" RuntimeClass，这是一个隐式类，
+	// 其定义为空，使用默认的运行时处理程序。
 	// More info: https://git.k8s.io/enhancements/keps/sig-node/585-runtime-class
 	// +optional
 	RuntimeClassName *string
 	// EnableServiceLinks indicates whether information about services should be injected into pod's
-	// environment variables, matching the syntax of Docker links.
+	// 其语法与 Docker links 匹配。
 	// If not specified, the default is true.
 	// +optional
 	EnableServiceLinks *bool
-	// PreemptionPolicy is the Policy for preempting pods with lower priority.
-	// One of Never, PreemptLowerPriority.
-	// When Priority Admission Controller is enabled, it prevents users from setting
-	// this field. The admission controller populates this field from PriorityClassName.
-	// Defaults to PreemptLowerPriority if unset.
+	// PreemptionPolicy 是抢占较低优先级 Pod 的策略。
+	// 取 Never、PreemptLowerPriority 之一。
+	// 启用 Priority Admission Controller 时，会阻止用户设置此字段。
+	// 该准入控制器会根据 PriorityClassName 填充此字段。
+	// 如果未设置，默认为 PreemptLowerPriority。
 	// +optional
 	PreemptionPolicy *PreemptionPolicy
-	// Overhead represents the resource overhead associated with running a pod for a given RuntimeClass.
-	// This field will be autopopulated at admission time by the RuntimeClass admission controller. If
-	// the RuntimeClass admission controller is enabled, overhead must not be set in Pod create requests.
-	// The RuntimeClass admission controller will reject Pod create requests which have the overhead already
-	// set. If RuntimeClass is configured and selected in the PodSpec, Overhead will be set to the value
-	// defined in the corresponding RuntimeClass, otherwise it will remain unset and treated as zero.
+	// Overhead 表示在给定 RuntimeClass 下运行 Pod 相关的资源开销。
+	// 此字段将在准入时由 RuntimeClass 准入控制器自动填充。如果启用了
+	// RuntimeClass 准入控制器，则 Pod 创建请求中不得设置 overhead。
+	// RuntimeClass 准入控制器将拒绝已设置 overhead 的 Pod 创建请求。
+	// 如果在 PodSpec 中配置并选择了 RuntimeClass，Overhead 将设置为
+	// 相应 RuntimeClass 中定义的值，否则保持未设置并视为 0。
 	// More info: https://git.k8s.io/enhancements/keps/sig-node/688-pod-overhead
 	// +optional
 	Overhead ResourceList
@@ -4073,10 +3954,11 @@ type PodSpec struct {
 	// All topologySpreadConstraints are ANDed.
 	// +optional
 	TopologySpreadConstraints []TopologySpreadConstraint
-	// If true the pod's hostname will be configured as the pod's FQDN, rather than the leaf name (the default).
-	// In Linux containers, this means setting the FQDN in the hostname field of the kernel (the nodename field of struct utsname).
-	// In Windows containers, this means setting the registry value of hostname for the registry key HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters to FQDN.
-	// If a pod does not have FQDN, this has no effect.
+	// 如果为 true，Pod 的主机名将配置为 Pod 的 FQDN，而不是叶子名称（默认）。
+	// 在 Linux 容器中，这意味着在内核的 hostname 字段（struct utsname 的 nodename 字段）中设置 FQDN。
+	// 在 Windows 容器中，这意味着将注册表键 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters 下的 hostname 注册表值设置为 FQDN。
+	// 如果 Pod 没有 FQDN，则此设置无效。
+	// 默认为 false。
 	// +optional
 	SetHostnameAsFQDN *bool
 	// Specifies the OS of the containers in the pod.
@@ -4126,12 +4008,10 @@ type PodSpec struct {
 	// +optional
 	HostUsers *bool
 
-	// SchedulingGates is an opaque list of values that if specified will block scheduling the pod.
-	// If schedulingGates is not empty, the pod will stay in the SchedulingGated state and the
-	// scheduler will not attempt to schedule the pod.
-	//
-	// SchedulingGates can only be set at pod creation time, and be removed only afterwards.
-	//
+	// SchedulingGates 是一个不透明的列表，如果指定将阻止 Pod 被调度。
+	// 如果 schedulingGates 非空，Pod 将保持在 SchedulingGated 状态，
+	// 调度器不会尝试调度该 Pod。
+	// SchedulingGates 只能在 Pod 创建时设置，之后只能删除。
 	// +optional
 	SchedulingGates []PodSchedulingGate
 	// ResourceClaims defines which ResourceClaims must be allocated
@@ -4148,11 +4028,11 @@ type PodSpec struct {
 	// +optional
 	ResourceClaims []PodResourceClaim
 	// Resources is the total amount of CPU and Memory resources required by all
-	// containers in the pod. It supports specifying Requests and Limits for
-	// "cpu", "memory" and "hugepages-" resource names only. ResourceClaims are not supported.
+	// 它仅支持为 "cpu"、"memory" 和 "hugepages-" 资源名称指定 Requests 和 Limits。
+	// 不支持 ResourceClaims。
 	//
-	// This field enables fine-grained control over resource allocation for the
-	// entire pod, allowing resource sharing among containers in a pod.
+	// 此字段可对整个 Pod 的资源分配进行细粒度控制，允许 Pod 内容器之间共享资源。
+	// TODO: 进入 beta 阶段时，请扩展此注释以提供更详细的说明。
 	// TODO: For beta graduation, expand this comment with a detailed explanation.
 	//
 	// This is an alpha field and requires enabling the PodLevelResources feature
@@ -4161,16 +4041,14 @@ type PodSpec struct {
 	// +featureGate=PodLevelResources
 	// +optional
 	Resources *ResourceRequirements
-	// HostnameOverride specifies an explicit override for the pod's hostname as perceived by the pod.
-	// This field only specifies the pod's hostname and does not affect its DNS records.
-	// When this field is set to a non-empty string:
-	// - It takes precedence over the values set in `hostname` and `subdomain`.
-	// - The Pod's hostname will be set to this value.
-	// - `setHostnameAsFQDN` must be nil or set to false.
-	// - `hostNetwork` must be set to false.
-	//
-	// This field must be a valid DNS subdomain as defined in RFC 1123 and contain at most 64 characters.
-	//
+	// HostnameOverride 为 Pod 自身感知到的主机名指定显式覆盖值。
+	// 此字段仅指定 Pod 的主机名，不影响其 DNS 记录。
+	// 当此字段设置为非空字符串时：
+	// - 它优先于 `hostname` 和 `subdomain` 中设置的值。
+	// - Pod 的主机名将设置为此值。
+	// - `setHostnameAsFQDN` 必须为 nil 或设置为 false。
+	// - `hostNetwork` 必须设置为 false。
+	// 此字段必须是 RFC 1123 定义的有效 DNS 子域，且最多包含 64 个字符。
 	// +featureGate=HostnameOverride
 	// +optional
 	HostnameOverride *string
@@ -4191,29 +4069,25 @@ type PodSpec struct {
 	// +optional
 	SchedulingGroup *PodSchedulingGroup
 
-	// evictionResponders reference responders that react to Evictions based on EvictionRequests.
-	// Responders should observe and communicate through the Eviction Resource API to help with
-	// the graceful termination of a pod. The responders are selected sequentially, according to
-	// their specified priority.
-	//
-	// Responders should periodically report on an eviction progress by updating the
-	// .status.responders[].heartbeatTime field of the Eviction object. If this field is not updated
-	// within the heartbeat deadline defined by the Eviction API (currently 20 minutes), the eviction
-	// is passed over to the next responder with a lower priority. If there is no other responder,
-	// the last default imperative-eviction.k8s.io/evictor responder with a priority of 100 will
-	// evict the pod using the imperative Eviction API (pods/<name>/eviction subresource).
-	//
-	// The maximum length of the responders list is 10.
-	// Responders are not supported when the pod is part of a PodGroup (.spec.schedulingGroup is set).
-	// This field can only be set on creation and is immutable afterwards.
+	// evictionResponders 引用基于 EvictionRequests 对驱逐做出响应的响应器。
+	// 响应器应通过观察并通过 Eviction Resource API 通信，协助 Pod 的优雅终止。
+	// 响应器按其指定优先级依次选择。
+	// 响应器应通过更新 Eviction 对象的 .status.responders[].heartbeatTime 字段
+	// 定期报告驱逐进度。如果未在 Eviction API 定义的心跳截止时间（目前为 20 分钟）内
+	// 更新此字段，驱逐将移交给下一个优先级较低的响应器。如果没有其他响应器，
+	// 最后的默认 imperative-eviction.k8s.io/evictor 响应器（优先级为 100）将使用
+	// 命令式 Eviction API（pods/<name>/eviction 子资源）驱逐该 Pod。
+	// 响应器列表的最大长度为 10。
+	// 当 Pod 属于 PodGroup（设置了 .spec.schedulingGroup）时，不支持响应器。
+	// 此字段只能在创建时设置，之后不可变。
 	// +featureGate=EvictionRequestAPI
 	// +optional
 	EvictionResponders []EvictionResponder
 }
 
 // PodResourceClaim references exactly one ResourceClaim through a ClaimSource.
-// It adds a name to it that uniquely identifies the ResourceClaim inside the Pod.
-// Containers that need access to the ResourceClaim reference it with this name.
+// 它会添加一个名称，在 Pod 内唯一标识该 ResourceClaim。
+// 需要访问该 ResourceClaim 的容器使用此名称引用它。
 //
 // When the DRAWorkloadResourceClaims feature gate is enabled and this Pod
 // belongs to a PodGroup, a PodResourceClaim is matched to a
@@ -4223,15 +4097,12 @@ type PodSpec struct {
 // the PodGroup in ResourceClaimStatus.ReservedFor rather than for individual
 // Pods.
 type PodResourceClaim struct {
-	// Name uniquely identifies this resource claim inside the pod.
-	// This must be a DNS_LABEL.
+	// Name 在该 Pod 内唯一标识此资源声明。
+	// 必须是 DNS_LABEL。
 	Name string
 
-	// ResourceClaimName is the name of a ResourceClaim object in the same
-	// namespace as this pod.
-	//
-	// Exactly one of ResourceClaimName and ResourceClaimTemplateName must
-	// be set.
+	// ResourceClaimName 是与该 Pod 处于同一命名空间中的 ResourceClaim 对象的名称。
+	// ResourceClaimName 与 ResourceClaimTemplateName 必须且只能设置其中一个。
 	ResourceClaimName *string
 
 	// ResourceClaimTemplateName is the name of a ResourceClaimTemplate
@@ -4266,22 +4137,17 @@ type PodResourceClaim struct {
 // which references a ResourceClaimTemplate. It stores the generated name for
 // the corresponding ResourceClaim.
 type PodResourceClaimStatus struct {
-	// Name uniquely identifies this resource claim inside the pod.
-	// This must match the name of an entry in pod.spec.resourceClaims,
-	// which implies that the string must be a DNS_LABEL.
+	// Name 在该 Pod 内唯一标识此资源声明。
+	// 必须与 pod.spec.resourceClaims 中某个条目的名称一致，
+	// 这意味着该字符串必须是 DNS_LABEL。
 	Name string
 
-	// ResourceClaimName is the name of the ResourceClaim that was
-	// generated for the Pod in the namespace of the Pod.
-	//
-	// When the DRAWorkloadResourceClaims feature is enabled and the
-	// corresponding PodResourceClaim matches a PodGroupResourceClaim
-	// made by the Pod's PodGroup, then this is the name of the
-	// ResourceClaim generated and reserved for the PodGroup.
-	//
-	// If this is unset, then generating a ResourceClaim was not
-	// necessary. The pod.spec.resourceClaims entry can be ignored in
-	// this case.
+	// ResourceClaimName 是在 Pod 所在命名空间中为该 Pod 生成的 ResourceClaim 的名称。
+	// 当 DRAWorkloadResourceClaims 特性启用，且对应的 PodResourceClaim 与该 Pod 所属
+	// PodGroup 创建的 PodGroupResourceClaim 匹配时，此值为为 PodGroup 生成并预留的
+	// ResourceClaim 的名称。
+	// 如果未设置此值，说明无需生成 ResourceClaim。此时可以忽略 pod.spec.resourceClaims
+	// 中的相应条目。
 	ResourceClaimName *string
 }
 
@@ -4293,8 +4159,7 @@ type PodExtendedResourceClaimStatus struct {
 	// in the generated ResourceClaim.
 	RequestMappings []ContainerExtendedResourceRequest
 
-	// ResourceClaimName is the name of the ResourceClaim that was
-	// generated for the Pod in the namespace of the Pod.
+	// ResourceClaimName 是在 Pod 所在命名空间中为该 Pod 生成的 ResourceClaim 的名称。
 	ResourceClaimName string
 }
 
@@ -4307,7 +4172,7 @@ type ContainerExtendedResourceRequest struct {
 	RequestName string
 }
 
-// OSName is the set of OS'es that can be used in OS.
+// OSName 是可在 OS 中使用的操作系统类型集合。
 type OSName string
 
 // These are valid values for OSName
@@ -4316,31 +4181,30 @@ const (
 	Windows OSName = "windows"
 )
 
-// PodOS defines the OS parameters of a pod.
+// PodOS 定义 Pod 的操作系统参数。
 type PodOS struct {
-	// Name is the name of the operating system. The currently supported values are linux and windows.
-	// Additional value may be defined in future and can be one of:
+	// Name 是操作系统名称。当前支持的值为 linux 和 windows。
+	// 未来可能定义其他值，示例参见：
+	// 客户端应能处理其他取值，并将此字段中无法识别的值视为 os: null。
 	// https://github.com/opencontainers/runtime-spec/blob/master/config.md#platform-specific-configuration
-	// Clients should expect to handle additional values and treat unrecognized values in this field as os: null
 	Name OSName
 }
 
-// PodSchedulingGate is associated to a Pod to guard its scheduling.
+// PodSchedulingGate 与 Pod 关联，用于阻止其调度。
 type PodSchedulingGate struct {
-	// Name of the scheduling gate.
-	// Each scheduling gate must have a unique name field.
+	// Name 是调度门控的名称。
+	// 每个调度门控的名称字段必须唯一。
 	Name string
 }
 
-// PodSchedulingGroup identifies the runtime scheduling group instance that a Pod belongs to.
-// The scheduler uses this information to apply workload-aware scheduling semantics.
-// Exactly one field must be specified.
+// PodSchedulingGroup 标识 Pod 所属的运行时调度组实例。
+// 调度器使用此信息来应用考虑工作负载的调度语义。
+// 必须且只能指定一个字段。
 // +union
 type PodSchedulingGroup struct {
-	// PodGroupName specifies the name of the standalone PodGroup object
-	// that represents the runtime instance of this group.
-	// Must be a DNS subdomain.
-	//
+	// PodGroupName 指定独立 PodGroup 对象的名称，
+	// 该对象代表此调度组的运行时实例。
+	// 必须是 DNS 子域名。
 	// +optional
 	// +oneOf=GroupSelection
 	PodGroupName *string
@@ -4353,7 +4217,7 @@ type HostAlias struct {
 	Hostnames []string
 }
 
-// Sysctl defines a kernel parameter to be set
+// Sysctl 定义要设置的内核参数。
 type Sysctl struct {
 	// Name of a property to set
 	Name string
@@ -4366,14 +4230,11 @@ type Sysctl struct {
 type PodFSGroupChangePolicy string
 
 const (
-	// FSGroupChangeOnRootMismatch indicates that volume's ownership and permissions will be changed
-	// only when permission and ownership of root directory does not match with expected
-	// permissions on the volume. This can help shorten the time it takes to change
-	// ownership and permissions of a volume.
+	// FSGroupChangeOnRootMismatch 表示仅当卷根目录的权限和所有权与卷上预期的权限不匹配时，
+	// 才更改卷的所有权和权限。这有助于缩短更改卷所有权和权限所需的时间。
 	FSGroupChangeOnRootMismatch PodFSGroupChangePolicy = "OnRootMismatch"
-	// FSGroupChangeAlways indicates that volume's ownership and permissions
-	// should always be changed whenever volume is mounted inside a Pod. This the default
-	// behavior.
+	// FSGroupChangeAlways 表示每当卷在 Pod 内挂载时，都应更改其所有权和权限。
+	// 这是默认行为。
 	FSGroupChangeAlways PodFSGroupChangePolicy = "Always"
 )
 
@@ -4382,18 +4243,15 @@ const (
 type SupplementalGroupsPolicy string
 
 const (
-	// SupplementalGroupsPolicyMerge means that the container's provided
-	// SupplementalGroups and FsGroup (specified in SecurityContext) will be
-	// merged with the primary user's groups as defined in the container image
-	// (in /etc/group).
+	// SupplementalGroupsPolicyMerge 表示容器提供的 SupplementalGroups 和 FsGroup
+	// （在 SecurityContext 中指定）将与容器镜像中定义的主用户组（/etc/group）合并。
 	SupplementalGroupsPolicyMerge SupplementalGroupsPolicy = "Merge"
-	// SupplementalGroupsPolicyStrict means that the container's provided
-	// SupplementalGroups and FsGroup (specified in SecurityContext) will be
-	// used instead of any groups defined in the container image.
+	// SupplementalGroupsPolicyStrict 表示使用容器提供的 SupplementalGroups 和 FsGroup
+	// （在 SecurityContext 中指定），而不使用容器镜像中定义的任何组。
 	SupplementalGroupsPolicyStrict SupplementalGroupsPolicy = "Strict"
 )
 
-// PodSELinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod.
+// PodSELinuxChangePolicy 定义容器的 SELinux 标签如何应用到 Pod 使用的所有卷上。
 type PodSELinuxChangePolicy string
 
 const (
@@ -4409,9 +4267,9 @@ const (
 	SELinuxChangePolicyMountOption PodSELinuxChangePolicy = "MountOption"
 )
 
-// PodSecurityContext holds pod-level security attributes and common container settings.
-// Some fields are also present in container.securityContext.  Field values of
-// container.securityContext take precedence over field values of PodSecurityContext.
+// PodSecurityContext 保存 Pod 级别的安全属性和通用容器设置。
+// 部分字段也存在于 container.securityContext 中。
+// container.securityContext 的字段值优先于 PodSecurityContext 的字段值。
 type PodSecurityContext struct {
 	// The SELinux context to be applied to all containers.
 	// If unspecified, the container runtime will allocate a random SELinux context for each
@@ -4467,7 +4325,7 @@ type PodSecurityContext struct {
 	// Valid values are "Merge" and "Strict". If not specified, "Merge" is used.
 	// (Alpha) Using the field requires the SupplementalGroupsPolicy feature gate to be enabled
 	// and the container runtime must implement support for this feature.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// TODO: update the default value to "Merge" when spec.os.name is not windows in v1.34
 	// +featureGate=SupplementalGroupsPolicy
 	// +optional
@@ -4484,9 +4342,9 @@ type PodSecurityContext struct {
 	// Note that this field cannot be set when spec.os.name is windows.
 	// +optional
 	FSGroup *int64
-	// Sysctls hold a list of namespaced sysctls used for the pod. Pods with unsupported
-	// sysctls (by the container runtime) might fail to launch.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// Sysctls 保存该 Pod 使用的命名空间级 sysctl 列表。
+	// 如果 Pod 使用了容器运行时不支持的 sysctl，可能无法启动。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	Sysctls []Sysctl
 	// fsGroupChangePolicy defines behavior of changing ownership and permission of the volume
@@ -4506,64 +4364,61 @@ type PodSecurityContext struct {
 	// Note that this field cannot be set when spec.os.name is windows.
 	// +optional
 	AppArmorProfile *AppArmorProfile
-	// seLinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod.
-	// It has no effect on nodes that do not support SELinux or to volumes does not support SELinux.
-	// Valid values are "MountOption" and "Recursive".
-	//
-	// "Recursive" means relabeling of all files on all Pod volumes by the container runtime.
-	// This may be slow for large volumes, but allows mixing privileged and unprivileged Pods sharing the same volume on the same node.
-	//
-	// "MountOption" mounts all eligible Pod volumes with `-o context` mount option.
-	// This requires all Pods that share the same volume to use the same SELinux label.
-	// It is not possible to share the same volume among privileged and unprivileged Pods.
-	// Eligible volumes are in-tree FibreChannel and iSCSI volumes, and all CSI volumes
-	// whose CSI driver announces SELinux support by setting spec.seLinuxMount: true in their
-	// CSIDriver instance. Other volumes are always re-labelled recursively.
-	//
-	// If not specified, "MountOption" is used.
-	//
-	// This field affects only Pods that have SELinux label set, either in PodSecurityContext or in SecurityContext of all containers.
-	//
-	// All Pods that use the same volume should use the same seLinuxChangePolicy, otherwise some pods can get stuck in ContainerCreating state.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// SELinuxChangePolicy 定义容器的 SELinux 标签如何应用到 Pod 使用的所有卷上。
+	// 对不支持 SELinux 的节点或不支持 SELinux 的卷无效。
+	// 有效值为 "MountOption" 和 "Recursive"。
+	// "Recursive" 表示由容器运行时对所有 Pod 卷上的所有文件重新打标签。
+	// 对于大容量卷这可能较慢，但允许在同一节点上共享同一卷的特权 Pod 与非特权 Pod 混用。
+	// "MountOption" 使用 `-o context` 挂载选项挂载所有符合条件的 Pod 卷。
+	// 这要求共享同一卷的所有 Pod 使用相同的 SELinux 标签。
+	// 特权 Pod 与非特权 Pod 之间无法共享同一卷。
+	// 符合条件的卷包括树内 FibreChannel 和 iSCSI 卷，以及所有在其 CSIDriver 实例中
+	// 通过设置 spec.seLinuxMount: true 声明支持 SELinux 的 CSI 卷。
+	// 其他卷始终递归重新打标签。
+	// 如果未指定，则使用 "MountOption"。
+	// 此字段仅影响设置了 SELinux 标签的 Pod，无论是在 PodSecurityContext 中，
+	// 还是在所有容器的 SecurityContext 中设置的标签。
+	// 使用同一卷的所有 Pod 应使用相同的 seLinuxChangePolicy，
+	// 否则某些 Pod 可能卡在 ContainerCreating 状态。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +featureGate=SELinuxChangePolicy
 	// +optional
 	SELinuxChangePolicy *PodSELinuxChangePolicy
 }
 
-// SeccompProfile defines a pod/container's seccomp profile settings.
-// Only one profile source may be set.
+// SeccompProfile 定义 Pod/容器的 seccomp 配置设置。
+// 只能设置一种配置来源。
 // +union
 type SeccompProfile struct {
 	// +unionDiscriminator
 	Type SeccompProfileType
 	// Load a profile defined in static file on the node.
-	// The profile must be preconfigured on the node to work.
+	// 该配置必须预先在节点上配置好才能生效。
 	// LocalhostProfile cannot be an absolute nor a descending path.
 	// +optional
 	LocalhostProfile *string
 }
 
-// SeccompProfileType defines the supported seccomp profile types.
+// SeccompProfileType 定义支持的 seccomp 配置类型。
 type SeccompProfileType string
 
 const (
 	// SeccompProfileTypeUnconfined is when no seccomp profile is applied (A.K.A. unconfined).
 	SeccompProfileTypeUnconfined SeccompProfileType = "Unconfined"
-	// SeccompProfileTypeRuntimeDefault represents the default container runtime seccomp profile.
+	// SeccompProfileTypeRuntimeDefault 表示容器运行时的默认 seccomp 配置。
 	SeccompProfileTypeRuntimeDefault SeccompProfileType = "RuntimeDefault"
 	// SeccompProfileTypeLocalhost represents custom made profiles stored on the node's disk.
 	SeccompProfileTypeLocalhost SeccompProfileType = "Localhost"
 )
 
-// AppArmorProfile defines a pod or container's AppArmor settings.
+// AppArmorProfile 定义 Pod 或容器的 AppArmor 设置。
 // +union
 type AppArmorProfile struct {
-	// type indicates which kind of AppArmor profile will be applied.
-	// Valid options are:
-	//   Localhost - a profile pre-loaded on the node.
-	//   RuntimeDefault - the container runtime's default profile.
-	//   Unconfined - no AppArmor enforcement.
+	// Type 指示将应用哪种 AppArmor 配置。
+	// 有效选项为：
+	// Localhost - 节点上预加载的配置。
+	// RuntimeDefault - 容器运行时的默认配置。
+	// Unconfined - 不实施 AppArmor 限制。
 	// +unionDiscriminator
 	Type AppArmorProfileType
 
@@ -4579,16 +4434,15 @@ type AppArmorProfile struct {
 type AppArmorProfileType string
 
 const (
-	// AppArmorProfileTypeUnconfined indicates that no AppArmor profile should be enforced.
+	// AppArmorProfileTypeUnconfined 表示不实施任何 AppArmor 配置。
 	AppArmorProfileTypeUnconfined AppArmorProfileType = "Unconfined"
-	// AppArmorProfileTypeRuntimeDefault indicates that the container runtime's default AppArmor
-	// profile should be used.
+	// AppArmorProfileTypeRuntimeDefault 表示使用容器运行时的默认 AppArmor 配置。
 	AppArmorProfileTypeRuntimeDefault AppArmorProfileType = "RuntimeDefault"
-	// AppArmorProfileTypeLocalhost indicates that a profile pre-loaded on the node should be used.
+	// AppArmorProfileTypeLocalhost 表示使用节点上预加载的配置。
 	AppArmorProfileTypeLocalhost AppArmorProfileType = "Localhost"
 )
 
-// PodQOSClass defines the supported qos classes of Pods.
+// PodQOSClass 定义 Pod 支持的 QoS 类别。
 type PodQOSClass string
 
 // These are valid values for PodQOSClass
@@ -4604,25 +4458,25 @@ const (
 // PodDNSConfig defines the DNS parameters of a pod in addition to
 // those generated from DNSPolicy.
 type PodDNSConfig struct {
-	// A list of DNS name server IP addresses.
-	// This will be appended to the base nameservers generated from DNSPolicy.
-	// Duplicated nameservers will be removed.
+	// Nameservers 是 DNS 名称服务器 IP 地址列表。
+	// 会追加到由 DNSPolicy 生成的基础名称服务器列表之后。
+	// 重复的名称服务器会被去除。
 	// +optional
 	Nameservers []string
-	// A list of DNS search domains for host-name lookup.
-	// This will be appended to the base search paths generated from DNSPolicy.
-	// Duplicated search paths will be removed.
+	// Searches 是用于主机名查找的 DNS 搜索域列表。
+	// 会追加到由 DNSPolicy 生成的基础搜索路径之后。
+	// 重复的搜索路径会被去除。
 	// +optional
 	Searches []string
-	// A list of DNS resolver options.
-	// This will be merged with the base options generated from DNSPolicy.
-	// Duplicated entries will be removed. Resolution options given in Options
-	// will override those that appear in the base DNSPolicy.
+	// Options 是 DNS 解析器选项列表。
+	// 会与由 DNSPolicy 生成的基础选项合并。
+	// 重复的条目会被去除。Options 中给出的解析选项
+	// 会覆盖基础 DNSPolicy 中出现的选项。
 	// +optional
 	Options []PodDNSConfigOption
 }
 
-// PodDNSConfigOption defines DNS resolver options of a pod.
+// PodDNSConfigOption 定义 Pod 的 DNS 解析器选项。
 type PodDNSConfigOption struct {
 	// Required.
 	Name string
@@ -4630,22 +4484,22 @@ type PodDNSConfigOption struct {
 	Value *string
 }
 
-// PodIP represents a single IP address allocated to the pod.
+// PodIP 表示分配给 Pod 的单个 IP 地址。
 type PodIP struct {
-	// IP is the IP address assigned to the pod
+	// IP 是分配给 Pod 的 IP 地址。
 	IP string
 }
 
-// HostIP represents a single IP address allocated to the host.
+// HostIP 表示分配给主机的单个 IP 地址。
 type HostIP struct {
 	// IP is the IP address assigned to the host
 	IP string
 }
 
-// EphemeralContainerCommon is a copy of all fields in Container to be inlined in
-// EphemeralContainer. This separate type allows easy conversion from EphemeralContainer
-// to Container and allows separate documentation for the fields of EphemeralContainer.
-// When a new field is added to Container it must be added here as well.
+// EphemeralContainerCommon 是 Container 中所有字段的副本，用于内联到 EphemeralContainer 中。
+// 这个独立类型便于将 EphemeralContainer 转换为 Container，
+// 也便于单独为 EphemeralContainer 的字段编写文档。
+// 向 Container 添加新字段时，也必须在此处添加。
 type EphemeralContainerCommon struct {
 	// Required: This must be a DNS_LABEL.  Each container in a pod must
 	// have a unique name.
@@ -4671,7 +4525,7 @@ type EphemeralContainerCommon struct {
 	// Optional: Defaults to the container runtime's default working directory.
 	// +optional
 	WorkingDir string
-	// Ports are not allowed for ephemeral containers.
+	// Ports 不允许为临时容器设置端口。
 	// +optional
 	Ports []ContainerPort
 	// List of sources to populate environment variables in the container.
@@ -4685,8 +4539,7 @@ type EphemeralContainerCommon struct {
 	EnvFrom []EnvFromSource
 	// +optional
 	Env []EnvVar
-	// Resources are not allowed for ephemeral containers. Ephemeral containers use spare resources
-	// already allocated to the pod.
+	// Resources 不允许为临时容器设置资源。临时容器使用已分配给 Pod 的空闲资源。
 	// +optional
 	Resources ResourceRequirements
 	// Resources resize policy for the container.
@@ -4726,7 +4579,7 @@ type EphemeralContainerCommon struct {
 	// Probes are not allowed for ephemeral containers.
 	// +optional
 	StartupProbe *Probe
-	// Lifecycle is not allowed for ephemeral containers.
+	// Lifecycle 不允许为临时容器设置生命周期钩子。
 	// +optional
 	Lifecycle *Lifecycle
 	// Required.
@@ -4736,13 +4589,13 @@ type EphemeralContainerCommon struct {
 	TerminationMessagePolicy TerminationMessagePolicy
 	// Required: Policy for pulling images for this container
 	ImagePullPolicy PullPolicy
-	// Optional: SecurityContext defines the security options the ephemeral container should be run with.
-	// If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext.
+	// SecurityContext 定义临时容器运行时的安全选项（可选）。
+	// 如果设置，SecurityContext 中的字段会覆盖 PodSecurityContext 中的对应字段。
 	// +optional
 	SecurityContext *SecurityContext
 
-	// Variables for interactive containers, these have very specialized use-cases (e.g. debugging)
-	// and shouldn't be used for general purpose containers.
+	// 交互式容器的变量，这些有非常专门的用例（例如调试），
+	// 不应用于通用容器。
 	// +optional
 	Stdin bool
 	// +optional
@@ -4761,8 +4614,8 @@ var _ = Container(EphemeralContainerCommon{})
 // removed or restarted. The kubelet may evict a Pod if an ephemeral container causes the
 // Pod to exceed its resource allocation.
 //
-// To add an ephemeral container, use the ephemeralcontainers subresource of an existing
-// Pod. Ephemeral containers may not be removed or restarted.
+// 要添加临时容器，请使用现有 Pod 的 ephemeralcontainers 子资源。
+// 临时容器不能被移除或重启。
 type EphemeralContainer struct {
 	// Ephemeral containers have all of the fields of Container, plus additional fields
 	// specific to ephemeral containers. Fields in common with Container are in the
@@ -4785,27 +4638,22 @@ type EphemeralContainer struct {
 // the graceful eviction of a target (e.g. termination of a pod).
 // +structType=atomic
 type EvictionResponder struct {
-	// name allows you to identify the responder responding to the Eviction.
-	//
-	// It must be a valid domain-prefixed key (such as "acme.io/foo").
-	// Domain names *.k8s.io and *.kubernetes.io are reserved.
-	// This field must be unique for each responder.
-	// This field is required.
+	// Name 用于标识响应 Eviction 的响应者。
+	// 必须是有效的带域名前缀的键（例如 "acme.io/foo"）。
+	// 域名 *.k8s.io 和 *.kubernetes.io 保留。
+	// 每个响应者的此字段必须唯一。
+	// 此字段必填。
 	// +required
 	Name string
 
-	// priority for this responder. Higher priorities are selected first by the evictionrequest-controller.
-	// If there are responders with the same priority, the responder whose domain name comes first in the
-	// alphabetical higher domain order, will be picked. This means that the top domain labels are compared
-	// alphabetically first, followed by the lower domain labels. The key is compared last.
-	//
-	// The responder that is the managing controller of the pod should set the value of
-	// this field to 10000 to allow both for preemption or fallback registration by other
-	// responders.
-	//
-	// The minimum value is 0 and the maximum value is 100000.
-	// The interval 0-999 is reserved for responders with *.k8s.io suffix.
-	// This field is required.
+	// Priority 是此响应者的优先级。evictionrequest-controller 会优先选择优先级更高的响应者。
+	// 如果存在优先级相同的响应者，则选择域名按字母序靠前的响应者。
+	// 这意味着先按字母序比较顶级域名标签，再比较下级域名标签，最后比较键。
+	// 作为 Pod 管理控制器的响应者应将此字段值设为 10000，
+	// 以便其他响应者进行抢占或回退注册。
+	// 最小值为 0，最大值为 100000。
+	// 0-999 区间保留给后缀为 *.k8s.io 的响应者。
+	// 此字段必填。
 	// +required
 	Priority *int32
 }
@@ -4813,14 +4661,14 @@ type EvictionResponder struct {
 // PodStatus represents information about the status of a pod. Status may trail the actual
 // state of a system.
 type PodStatus struct {
-	// If set, this represents the .metadata.generation that the pod status was set based upon.
+	// ObservedGeneration 如果设置，表示 Pod 状态是基于哪个 .metadata.generation 设置的。
 	// +optional
 	ObservedGeneration int64
 	// +optional
 	Phase PodPhase
 	// +optional
 	Conditions []PodCondition
-	// A human readable message indicating details about why the pod is in this state.
+	// Message 是人类可读的消息，说明 Pod 处于当前状态的详细原因。
 	// +optional
 	Message string
 	// A brief CamelCase message indicating details about why the pod is in this state. e.g. 'Evicted'
@@ -4834,9 +4682,9 @@ type PodStatus struct {
 	// +optional
 	NominatedNodeName string
 
-	// HostIP holds the IP address of the host to which the pod is assigned. Empty if the pod has not started yet.
-	// A pod can be assigned to a node that has a problem in kubelet which in turns mean that HostIP will
-	// not be updated even if there is a node is assigned to pod
+	// HostIP 保存 Pod 被分配到的主机的 IP 地址。Pod 尚未启动时为空。
+	// Pod 可能被分配到 kubelet 有问题的节点，这意味着即使 Pod 已分配到节点，
+	// HostIP 也不会更新。
 	// +optional
 	HostIP string
 
@@ -4899,12 +4747,12 @@ type PodStatus struct {
 	// +optional
 	EphemeralContainerStatuses []ContainerStatus
 
-	// Status of resources resize desired for pod's containers.
-	// It is empty if no resources resize is pending.
-	// Any changes to container resources will automatically set this to "Proposed"
-	// Deprecated: Resize status is moved to two pod conditions PodResizePending and PodResizeInProgress.
-	// PodResizePending will track states where the spec has been resized, but the Kubelet has not yet allocated the resources.
-	// PodResizeInProgress will track in-progress resizes, and should be present whenever allocated resources != acknowledged resources.
+	// Resize 是 Pod 容器期望的资源调整状态。
+	// 如果没有待处理的资源调整，则为空。
+	// 对容器资源的任何更改都会自动将其设置为 "Proposed"。
+	// Deprecated: 调整状态已迁移到两个 Pod 条件：PodResizePending 和 PodResizeInProgress。
+	// PodResizePending 用于跟踪 spec 已调整但 Kubelet 尚未分配资源的状态。
+	// PodResizeInProgress 用于跟踪进行中的调整，当已分配资源 != 已确认资源时应存在该条件。
 	// +featureGate=InPlacePodVerticalScaling
 	// +optional
 	Resize PodResizeStatus
@@ -4919,9 +4767,8 @@ type PodStatus struct {
 	// +optional
 	ExtendedResourceClaimStatus *PodExtendedResourceClaimStatus
 
-	// AllocatedResources is the total requests allocated for this pod by the node.
-	// If pod-level requests are not set, this will be the total requests aggregated
-	// across containers in the pod.
+	// AllocatedResources 是节点为此 Pod 分配的总请求量。
+	// 如果未设置 Pod 级别请求，则为 Pod 内各容器请求量的总和。
 	// +featureGate=InPlacePodLevelResourcesVerticalScaling
 	// +optional
 	AllocatedResources ResourceList
@@ -4970,7 +4817,7 @@ type Pod struct {
 	Status PodStatus
 }
 
-// PodTemplateSpec describes the data a pod should have when created from a template
+// PodTemplateSpec 描述从模板创建 Pod 时该 Pod 应具备的数据。
 type PodTemplateSpec struct {
 	// Metadata of the pods created from this template.
 	// +optional
@@ -4983,20 +4830,20 @@ type PodTemplateSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodTemplate describes a template for creating copies of a predefined pod.
+// PodTemplate 描述用于创建预定义 Pod 副本的模板。
 type PodTemplate struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Template defines the pods that will be created from this pod template
+	// Template 定义将从此 Pod 模板创建的 Pod。
 	// +optional
 	Template PodTemplateSpec
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodTemplateList is a list of PodTemplates.
+// PodTemplateList 是 PodTemplate 的列表。
 type PodTemplateList struct {
 	metav1.TypeMeta
 	// +optional
@@ -5005,16 +4852,15 @@ type PodTemplateList struct {
 	Items []PodTemplate
 }
 
-// ReplicationControllerSpec is the specification of a replication controller.
+// ReplicationControllerSpec 是副本控制器的规格说明。
 // As the internal representation of a replication controller, it may have either
 // a TemplateRef or a Template set.
 type ReplicationControllerSpec struct {
 	// Replicas is the number of desired replicas.
 	Replicas *int32
 
-	// Minimum number of seconds for which a newly created pod should be ready
-	// without any of its container crashing, for it to be considered available.
-	// Defaults to 0 (pod will be considered available as soon as it is ready)
+	// 新创建的 Pod 在被视为可用之前，需要保持就绪且容器不崩溃的最短秒数。
+	// 默认为 0（Pod 一旦就绪即被视为可用）。
 	// +optional
 	MinReadySeconds int32
 
@@ -5027,10 +4873,8 @@ type ReplicationControllerSpec struct {
 	// +optional
 	// TemplateRef *ObjectReference
 
-	// Template is the object that describes the pod that will be created if
-	// insufficient replicas are detected. Internally, this takes precedence over a
-	// TemplateRef.
-	// The only allowed template.spec.restartPolicy value is "Always".
+	// Template 是描述当检测到副本不足时要创建的 Pod 的对象。其优先级高于 TemplateRef。
+	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	// +optional
 	Template *PodTemplateSpec
 }
@@ -5041,15 +4885,15 @@ type ReplicationControllerStatus struct {
 	// Replicas is the number of actual replicas.
 	Replicas int32
 
-	// The number of pods that have labels matching the labels of the pod template of the replication controller.
+	// 标签与副本控制器 Pod 模板的标签相匹配的 Pod 数量。
 	// +optional
 	FullyLabeledReplicas int32
 
-	// The number of ready replicas for this replication controller.
+	// 此副本控制器中就绪的副本数。
 	// +optional
 	ReadyReplicas int32
 
-	// The number of available replicas (ready for at least minReadySeconds) for this replication controller.
+	// 此副本控制器中可用的副本数（至少就绪 minReadySeconds 秒）。
 	// +optional
 	AvailableReplicas int32
 
@@ -5057,7 +4901,7 @@ type ReplicationControllerStatus struct {
 	// +optional
 	ObservedGeneration int64
 
-	// Represents the latest available observations of a replication controller's current state.
+	// 表示对副本控制器当前状态的最新可用观测。
 	// +optional
 	Conditions []ReplicationControllerCondition
 }
@@ -5065,34 +4909,34 @@ type ReplicationControllerStatus struct {
 // ReplicationControllerConditionType defines the conditions of a replication controller.
 type ReplicationControllerConditionType string
 
-// These are valid conditions of a replication controller.
+// 以下是副本控制器的有效条件。
 const (
-	// ReplicationControllerReplicaFailure is added in a replication controller when one of its pods
-	// fails to be created due to insufficient quota, limit ranges, pod security policy, node selectors,
-	// etc. or deleted due to kubelet being down or finalizers are failing.
+	// 当副本控制器的某个 Pod 因配额不足、限制范围、Pod 安全策略、节点选择器等原因
+	// 无法创建，或因 kubelet 宕机、finalizer 失败而被删除时，
+	// 会为该副本控制器添加 ReplicationControllerReplicaFailure 条件。
 	ReplicationControllerReplicaFailure ReplicationControllerConditionType = "ReplicaFailure"
 )
 
-// ReplicationControllerCondition describes the state of a replication controller at a certain point.
+// ReplicationControllerCondition 描述副本控制器在某一时刻的状态。
 type ReplicationControllerCondition struct {
 	// Type of replication controller condition.
 	Type ReplicationControllerConditionType
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False、Unknown 之一。
 	Status ConditionStatus
 	// The last time the condition transitioned from one status to another.
 	// +optional
 	LastTransitionTime metav1.Time
-	// The reason for the condition's last transition.
+	// 条件最近一次状态变化的原因。
 	// +optional
 	Reason string
-	// A human readable message indicating details about the transition.
+	// 用自然语言描述状态变化的详细信息。
 	// +optional
 	Message string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ReplicationController represents the configuration of a replication controller.
+// ReplicationController 表示一个副本控制器的配置。
 type ReplicationController struct {
 	metav1.TypeMeta
 	// +optional
@@ -5103,14 +4947,14 @@ type ReplicationController struct {
 	Spec ReplicationControllerSpec
 
 	// Status is the current status of this replication controller. This data may be
-	// out of date by some window of time.
+	// 在一段时间内处于过期状态。
 	// +optional
 	Status ReplicationControllerStatus
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ReplicationControllerList is a collection of replication controllers.
+// ReplicationControllerList 是副本控制器的集合。
 type ReplicationControllerList struct {
 	metav1.TypeMeta
 	// +optional
@@ -5120,14 +4964,14 @@ type ReplicationControllerList struct {
 }
 
 const (
-	// ClusterIPNone - do not assign a cluster IP
-	// no proxying required and no environment variables should be created for pods
+	// ClusterIPNone - 不分配集群 IP。
+	// 无需代理，也不应为 Pod 创建环境变量。
 	ClusterIPNone = "None"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ServiceList holds a list of services.
+// ServiceList 保存 Service 的列表。
 type ServiceList struct {
 	metav1.TypeMeta
 	// +optional
@@ -5140,10 +4984,10 @@ type ServiceList struct {
 type ServiceAffinity string
 
 const (
-	// ServiceAffinityClientIP is the Client IP based.
+	// ServiceAffinityClientIP 表示基于客户端 IP 的会话亲和。
 	ServiceAffinityClientIP ServiceAffinity = "ClientIP"
 
-	// ServiceAffinityNone - no session affinity.
+	// ServiceAffinityNone 表示无会话亲和。
 	ServiceAffinityNone ServiceAffinity = "None"
 )
 
@@ -5156,18 +5000,18 @@ const (
 	MaxClientIPServiceAffinitySeconds int32 = 86400
 )
 
-// SessionAffinityConfig represents the configurations of session affinity.
+// SessionAffinityConfig 表示会话亲和的配置。
 type SessionAffinityConfig struct {
-	// clientIP contains the configurations of Client IP based session affinity.
+	// clientIP 包含基于客户端 IP 的会话亲和配置。
 	// +optional
 	ClientIP *ClientIPConfig
 }
 
-// ClientIPConfig represents the configurations of Client IP based session affinity.
+// ClientIPConfig 表示基于客户端 IP 的会话亲和配置。
 type ClientIPConfig struct {
-	// timeoutSeconds specifies the seconds of ClientIP type session sticky time.
-	// The value must be >0 && <=86400(for 1 day) if ServiceAffinity == "ClientIP".
-	// Default value is 10800(for 3 hours).
+	// timeoutSeconds 指定 ClientIP 类型会话保持的秒数。
+	// 当 ServiceAffinity == "ClientIP" 时，该值必须 >0 && <=86400（1 天）。
+	// 默认值为 10800（3 小时）。
 	// +optional
 	TimeoutSeconds *int32
 }
@@ -5180,18 +5024,15 @@ const (
 	// cluster, via the ClusterIP.
 	ServiceTypeClusterIP ServiceType = "ClusterIP"
 
-	// ServiceTypeNodePort means a service will be exposed on one port of
-	// every node, in addition to 'ClusterIP' type.
+	// ServiceTypeNodePort 表示在 'ClusterIP' 类型的基础上，在每个节点的某个端口上暴露 Service。
 	ServiceTypeNodePort ServiceType = "NodePort"
 
-	// ServiceTypeLoadBalancer means a service will be exposed via an
-	// external load balancer (if the cloud provider supports it), in addition
-	// to 'NodePort' type.
+	// ServiceTypeLoadBalancer 表示在 'NodePort' 类型的基础上，通过外部负载均衡器
+	// （如果云厂商支持）暴露 Service。
 	ServiceTypeLoadBalancer ServiceType = "LoadBalancer"
 
-	// ServiceTypeExternalName means a service consists of only a reference to
-	// an external name that kubedns or equivalent will return as a CNAME
-	// record, with no exposing or proxying of any pods involved.
+	// ServiceTypeExternalName 表示 Service 仅包含一个对外部名称的引用，
+	// kubedns 或类似组件会将其作为 CNAME 记录返回，不涉及任何 Pod 的暴露或代理。
 	ServiceTypeExternalName ServiceType = "ExternalName"
 )
 
@@ -5200,12 +5041,11 @@ const (
 type ServiceInternalTrafficPolicy string
 
 const (
-	// ServiceInternalTrafficPolicyCluster routes traffic to all endpoints.
+	// ServiceInternalTrafficPolicyCluster 将流量路由到所有端点。
 	ServiceInternalTrafficPolicyCluster ServiceInternalTrafficPolicy = "Cluster"
 
-	// ServiceInternalTrafficPolicyLocal routes traffic only to endpoints on the same
-	// node as the traffic was received on (dropping the traffic if there are no
-	// local endpoints).
+	// ServiceInternalTrafficPolicyLocal 仅将流量路由到与客户端 Pod 位于同一节点的端点
+	// （如果没有本地端点则丢弃流量）。
 	ServiceInternalTrafficPolicyLocal ServiceInternalTrafficPolicy = "Local"
 )
 
@@ -5215,49 +5055,39 @@ const (
 type ServiceExternalTrafficPolicy string
 
 const (
-	// ServiceExternalTrafficPolicyCluster routes traffic to all endpoints.
+	// ServiceExternalTrafficPolicyCluster 将流量路由到所有端点。
 	ServiceExternalTrafficPolicyCluster ServiceExternalTrafficPolicy = "Cluster"
 
-	// ServiceExternalTrafficPolicyLocal preserves the source IP of the traffic by
-	// routing only to endpoints on the same node as the traffic was received on
-	// (dropping the traffic if there are no local endpoints).
+	// ServiceExternalTrafficPolicyLocal 仅将流量路由到接收该流量的节点上的端点，
+	// 从而保留流量的源 IP（如果没有本地端点则丢弃流量）。
 	ServiceExternalTrafficPolicyLocal ServiceExternalTrafficPolicy = "Local"
 )
 
-// These are valid values for the TrafficDistribution field of a Service.
+// 以下是 Service 的 TrafficDistribution 字段的有效值。
 const (
-	// ServiceTrafficDistributionPreferSameZone indicates a preference for routing
-	// traffic to endpoints that are in the same zone as the client. Users should only
-	// set this value if they have ensured that clients and endpoints are distributed
-	// in such a way that the "same zone" preference will not result in endpoints
-	// getting overloaded.
+	// ServiceTrafficDistributionPreferSameZone 表示倾向于将流量路由到与客户端位于同一可用区的端点。
+	// 用户只有在确保客户端与端点的分布不会因"同可用区"偏好导致端点过载时，才应设置此值。
 	ServiceTrafficDistributionPreferSameZone = "PreferSameZone"
 
-	// ServiceTrafficDistributionPreferSameNode indicates a preference for routing
-	// traffic to endpoints that are on the same node as the client. Users should only
-	// set this value if they have ensured that clients and endpoints are distributed
-	// in such a way that the "same node" preference will not result in endpoints
-	// getting overloaded.
+	// ServiceTrafficDistributionPreferSameNode 表示倾向于将流量路由到与客户端位于同一节点的端点。
+	// 用户只有在确保客户端与端点的分布不会因"同节点"偏好导致端点过载时，才应设置此值。
 	ServiceTrafficDistributionPreferSameNode = "PreferSameNode"
 
-	// ServiceTrafficDistributionPreferClose is the original name of "PreferSameZone".
-	// Despite the generic-sounding name, it has exactly the same meaning as
-	// "PreferSameZone".
-	// Deprecated: use "PreferSameZone" instead.
+	// ServiceTrafficDistributionPreferClose 是 "PreferSameZone" 的原名。
+	// 尽管名称听起来很宽泛，其含义与 "PreferSameZone" 完全相同。
+	// Deprecated: 请改用 "PreferSameZone"。
 	ServiceTrafficDistributionPreferClose = "PreferClose"
 )
 
-// These are the valid conditions of a service.
+// 以下是 Service 的有效条件。
 const (
-	// LoadBalancerPortsError represents the condition of the requested ports
-	// on the cloud load balancer instance.
+	// LoadBalancerPortsError 表示云负载均衡器实例上所请求端口的条件。
 	LoadBalancerPortsError = "LoadBalancerPortsError"
 )
 
 // ServiceStatus represents the current status of a service
 type ServiceStatus struct {
-	// LoadBalancer contains the current status of the load-balancer,
-	// if one is present.
+	// LoadBalancer 包含负载均衡器的当前状态（如果存在）。
 	// +optional
 	LoadBalancer LoadBalancerStatus
 
@@ -5268,22 +5098,20 @@ type ServiceStatus struct {
 
 // LoadBalancerStatus represents the status of a load-balancer
 type LoadBalancerStatus struct {
-	// Ingress is a list containing ingress points for the load-balancer;
-	// traffic intended for the service should be sent to these ingress points.
+	// Ingress 是包含负载均衡器入口点的列表。
+	// 发往该 Service 的流量应发送到这些入口点。
 	// +optional
 	Ingress []LoadBalancerIngress
 }
 
-// LoadBalancerIngress represents the status of a load-balancer ingress point:
-// traffic intended for the service should be sent to an ingress point.
+// LoadBalancerIngress 表示负载均衡器入口点的状态：
+// 发往该 Service 的流量应发送到某个入口点。
 type LoadBalancerIngress struct {
-	// IP is set for load-balancer ingress points that are IP based
-	// (typically GCE or OpenStack load-balancers)
+	// IP 用于基于 IP 的负载均衡器入口点（通常是 GCE 或 OpenStack 负载均衡器）。
 	// +optional
 	IP string
 
-	// Hostname is set for load-balancer ingress points that are DNS based
-	// (typically AWS load-balancers)
+	// Hostname 用于基于 DNS 的负载均衡器入口点（通常是 AWS 负载均衡器）。
 	// +optional
 	Hostname string
 
@@ -5296,24 +5124,24 @@ type LoadBalancerIngress struct {
 	// +optional
 	IPMode *LoadBalancerIPMode
 
-	// Ports is a list of records of service ports
-	// If used, every port defined in the service should have an entry in it
+	// Ports 是 Service 端口记录的列表。
+	// 如果使用该字段，Service 中定义的每个端口都应有一条对应记录。
 	// +optional
 	Ports []PortStatus
 }
 
-// IPFamily represents the IP Family (IPv4 or IPv6). This type is used
-// to express the family of an IP expressed by a type (e.g. service.spec.ipFamilies).
+// IPFamily 表示 IP 协议族（IPv4 或 IPv6）。该类型用于表达某个类型所描述的 IP 的协议族
+// （例如 service.spec.ipFamilies）。
 type IPFamily string
 
 const (
-	// IPv4Protocol indicates that this IP is IPv4 protocol
+	// IPv4Protocol 表示此 IP 为 IPv4 协议。
 	IPv4Protocol IPFamily = "IPv4"
-	// IPv6Protocol indicates that this IP is IPv6 protocol
+	// IPv6Protocol 表示此 IP 为 IPv6 协议。
 	IPv6Protocol IPFamily = "IPv6"
 )
 
-// IPFamilyPolicy represents the dual-stack-ness requested or required by a Service
+// IPFamilyPolicy 表示 Service 请求或要求的双栈特性。
 type IPFamilyPolicy string
 
 const (
@@ -5339,14 +5167,13 @@ const (
 // ServiceSpec describes the attributes that a user creates on a service
 type ServiceSpec struct {
 
-	// Required: The list of ports that are exposed by this service.
+	// 此 Service 暴露的端口列表。
 	Ports []ServicePort
 
-	// Route service traffic to pods with label keys and values matching this
-	// selector. If empty or not present, the service is assumed to have an
-	// external process managing its endpoints, which Kubernetes will not
-	// modify. Only applies to types ClusterIP, NodePort, and LoadBalancer.
-	// Ignored if type is ExternalName.
+	// 将 Service 流量路由到标签键和值与此 selector 匹配的 Pod。
+	// 如果为空或不存在，则认为该 Service 由外部进程管理其端点，Kubernetes 不会修改。
+	// 仅适用于 ClusterIP、NodePort 和 LoadBalancer 类型。
+	// 当类型为 ExternalName 时忽略。
 	// More info: https://kubernetes.io/docs/concepts/services-networking/service/
 	Selector map[string]string
 
@@ -5446,18 +5273,15 @@ type ServiceSpec struct {
 	// +optional
 	HealthCheckNodePort int32
 
-	// publishNotReadyAddresses indicates that any agent which deals with endpoints for this
-	// Service should disregard any indications of ready/not-ready.
-	// The primary use case for setting this field is for a StatefulSet's Headless Service to
-	// propagate SRV DNS records for its Pods for the purpose of peer discovery.
-	// The Kubernetes controllers that generate Endpoints and EndpointSlice resources for
-	// Services interpret this to mean that all endpoints are considered "ready" even if the
-	// Pods themselves are not. Agents which consume only Kubernetes generated endpoints
-	// through the Endpoints or EndpointSlice resources can safely assume this behavior.
+	// publishNotReadyAddresses 表示处理此 Service 端点的任何代理都应忽略就绪/未就绪的标记。
+	// 设置此字段的主要场景是 StatefulSet 的无头 Service 传播其 Pod 的 SRV DNS 记录，用于对等发现。
+	// 为 Service 生成 Endpoints 和 EndpointSlice 资源的 Kubernetes 控制器会将其理解为：
+	// 即使 Pod 本身未就绪，所有端点也视为"就绪"。
+	// 仅通过 Endpoints 或 EndpointSlice 资源消费 Kubernetes 生成端点的代理，可以安全地依赖此行为。
 	// +optional
 	PublishNotReadyAddresses bool
 
-	// sessionAffinityConfig contains the configurations of session affinity.
+	// sessionAffinityConfig 包含会话亲和的配置。
 	// +optional
 	SessionAffinityConfig *SessionAffinityConfig
 
@@ -5504,21 +5328,17 @@ type ServiceSpec struct {
 	// +optional
 	LoadBalancerClass *string
 
-	// InternalTrafficPolicy describes how nodes distribute service traffic they
-	// receive on the ClusterIP. If set to "Local", the proxy will assume that pods
-	// only want to talk to endpoints of the service on the same node as the pod,
-	// dropping the traffic if there are no local endpoints. The default value,
-	// "Cluster", uses the standard behavior of routing to all endpoints evenly
-	// (possibly modified by topology and other features).
+	// InternalTrafficPolicy 描述节点如何分发其在 ClusterIP 上接收到的 Service 流量。
+	// 若设为 "Local"，代理会假定 Pod 只希望与同一节点上的 Service 端点通信，
+	// 如果没有本地端点则丢弃流量。默认值 "Cluster" 使用标准行为：
+	// 均匀路由到所有端点（可能受拓扑及其他特性影响）。
 	// +optional
 	InternalTrafficPolicy *ServiceInternalTrafficPolicy
 
-	// TrafficDistribution offers a way to express preferences for how traffic
-	// is distributed to Service endpoints. Implementations can use this field
-	// as a hint, but are not required to guarantee strict adherence. If the
-	// field is not set, the implementation will apply its default routing
-	// strategy. If set to "PreferClose", implementations should prioritize
-	// endpoints that are in the same zone.
+	// TrafficDistribution 提供一种表达流量分发到 Service 端点的偏好的方式。
+	// 实现可以将此字段作为提示，但无需保证严格遵循。
+	// 如果未设置此字段，实现将采用其默认路由策略。
+	// 如果设为 "PreferClose"，实现应优先选择同一可用区内的端点。
 	// +optional
 	TrafficDistribution *string
 }
@@ -5578,7 +5398,7 @@ type Service struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the behavior of a service.
+	// Spec 定义 Service 的行为。
 	// +optional
 	Spec ServiceSpec
 
@@ -5590,25 +5410,25 @@ type Service struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ServiceAccount binds together:
-// * a name, understood by users, and perhaps by peripheral systems, for an identity
-// * a principal that can be authenticated and authorized
+// * 一个可供用户（可能还有外围系统）理解的名称，用于标识身份
+// * 一个可被认证和授权的主体
 // * a set of secrets
 type ServiceAccount struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Secrets is a list of the secrets in the same namespace that pods running using this ServiceAccount are allowed to use.
-	// Pods are only limited to this list if this service account has a "kubernetes.io/enforce-mountable-secrets" annotation set to "true".
-	// The "kubernetes.io/enforce-mountable-secrets" annotation is deprecated since v1.32.
-	// Prefer separate namespaces to isolate access to mounted secrets.
-	// This field should not be used to find auto-generated service account token secrets for use outside of pods.
-	// Instead, tokens can be requested directly using the TokenRequest API, or service account token secrets can be manually created.
+	// Secrets 是同一命名空间中的 Secret 列表，使用此 ServiceAccount 运行的 Pod 可以使用这些 Secret。
+	// 只有当此 ServiceAccount 设置了 "kubernetes.io/enforce-mountable-secrets" 注解为 "true" 时，
+	// Pod 才受此列表限制。
+	// "kubernetes.io/enforce-mountable-secrets" 注解自 v1.32 起已弃用。
+	// 建议使用独立的命名空间来隔离对已挂载 Secret 的访问。
+	// 不应使用此字段查找自动生成的 ServiceAccount 令牌 Secret 以供 Pod 之外使用。
+	// 应改用 TokenRequest API 直接请求令牌，或手动创建 ServiceAccount 令牌 Secret。
 	Secrets []ObjectReference
 
-	// ImagePullSecrets is a list of references to secrets in the same namespace to use for pulling any images
-	// in pods that reference this ServiceAccount.  ImagePullSecrets are distinct from Secrets because Secrets
-	// can be mounted in the pod, but ImagePullSecrets are only accessed by the kubelet.
+	// ImagePullSecrets 是对同一命名空间中 Secret 的引用列表，用于拉取引用此 ServiceAccount 的 Pod 中的任何镜像。
+	// ImagePullSecrets 与 Secrets 不同：Secret 可以挂载到 Pod 中，而 ImagePullSecrets 只有 kubelet 访问。
 	// +optional
 	ImagePullSecrets []LocalObjectReference
 
@@ -5654,7 +5474,7 @@ type Endpoints struct {
 }
 
 // EndpointSubset is a group of addresses with a common set of ports.  The
-// expanded set of endpoints is the Cartesian product of Addresses x Ports.
+// 展开后的端点集合是 Addresses × Ports 的笛卡尔积。
 // For example, given:
 //
 //	{
@@ -5662,7 +5482,7 @@ type Endpoints struct {
 //	  Ports:     [{"name": "a", "port": 8675}, {"name": "b", "port": 309}]
 //	}
 //
-// The resulting set of endpoints can be viewed as:
+// 得到的端点集合可视为：
 //
 //	a: [ 10.10.1.1:8675, 10.10.2.2:8675 ],
 //	b: [ 10.10.1.1:309, 10.10.2.2:309 ]
@@ -5674,15 +5494,15 @@ type EndpointSubset struct {
 
 // EndpointAddress is a tuple that describes single IP address.
 type EndpointAddress struct {
-	// The IP of this endpoint.
-	// May not be loopback (127.0.0.0/8 or ::1), link-local (169.254.0.0/16 or fe80::/10),
-	// or link-local multicast (224.0.0.0/24 or ff02::/16).
+	// 此端点的 IP。
+	// 不得为回环地址（127.0.0.0/8 或 ::1）、链路本地地址（169.254.0.0/16 或 fe80::/10），
+	// 或链路本地组播地址（224.0.0.0/24 或 ff02::/16）。
 	IP string
 	// Optional: Hostname of this endpoint
 	// Meant to be used by DNS servers etc.
 	// +optional
 	Hostname string
-	// Optional: Node hosting this endpoint. This can be used to determine endpoints local to a node.
+	// 可选：承载此端点的节点。可用于确定某个节点上的本地端点。
 	// +optional
 	NodeName *string
 	// Optional: The kubernetes object related to the entry point.
@@ -5698,7 +5518,7 @@ type EndpointPort struct {
 	// The port number.
 	Port int32
 
-	// The IP protocol for this port.
+	// 此端口的 IP 协议。
 	Protocol Protocol
 
 	// The application protocol for this port.
@@ -5731,7 +5551,7 @@ type EndpointsList struct {
 	Items []Endpoints
 }
 
-// NodeSpec describes the attributes that a node is created with.
+// NodeSpec 描述创建节点时所使用的属性。
 type NodeSpec struct {
 	// PodCIDRs represents the IP ranges assigned to the node for usage by Pods on that node. It may
 	// contain AT MOST one value for each of IPv4 and IPv6.
@@ -5744,7 +5564,7 @@ type NodeSpec struct {
 	// +optional
 	ProviderID string
 
-	// Unschedulable controls node schedulability of new pods. By default node is schedulable.
+	// Unschedulable 控制新 Pod 是否可调度到该节点。默认情况下节点是可调度的。
 	// +optional
 	Unschedulable bool
 
@@ -5752,11 +5572,11 @@ type NodeSpec struct {
 	// +optional
 	Taints []Taint
 
-	// Deprecated: Previously used to specify the source of the node's configuration for the DynamicKubeletConfig feature. This feature is removed.
+	// Deprecated: 曾用于指定 DynamicKubeletConfig 特性中节点配置的来源。该特性已被移除。
 	// +optional
 	ConfigSource *NodeConfigSource
 
-	// Deprecated. Not all kubelets will set this field. Remove field after 1.13.
+	// 已弃用。并非所有 kubelet 都会设置此字段。1.13 之后将移除该字段。
 	// see: https://issues.k8s.io/61966
 	// +optional
 	DoNotUseExternalID string
@@ -5768,7 +5588,7 @@ type NodeSpec struct {
 	PodPreemptionPolicy *NodePodPreemptionPolicy
 }
 
-// NodePodPreemptionPolicy defines the node-level policies governing preemption for pods on this node.
+// NodePodPreemptionPolicy 定义管理此节点上 Pod 抢占行为的节点级策略。
 type NodePodPreemptionPolicy struct {
 	// DisableResizePreemption lists the owners that have requested to disable scheduler and Kubelet preemption for in-place pod resize on this node.
 	// This is an alpha field and requires enabling the InPlacePodVerticalScalingSchedulerPreemption feature gate.
@@ -5783,30 +5603,30 @@ type NodeConfigSource struct {
 
 // Deprecated: ConfigMapNodeConfigSource represents the config map of a node
 type ConfigMapNodeConfigSource struct {
-	// Namespace is the metadata.namespace of the referenced ConfigMap.
-	// This field is required in all cases.
+	// Namespace 是被引用 ConfigMap 的 metadata.namespace。
+	// 此字段在任何情况下都是必填的。
 	Namespace string
 
-	// Name is the metadata.name of the referenced ConfigMap.
-	// This field is required in all cases.
+	// Name 是被引用 ConfigMap 的 metadata.name。
+	// 此字段在任何情况下都是必填的。
 	Name string
 
-	// UID is the metadata.UID of the referenced ConfigMap.
-	// This field is forbidden in Node.Spec, and required in Node.Status.
+	// UID 是被引用 ConfigMap 的 metadata.UID。
+	// 此字段在 Node.Spec 中禁止使用，在 Node.Status 中为必填。
 	// +optional
 	UID types.UID
 
-	// ResourceVersion is the metadata.ResourceVersion of the referenced ConfigMap.
-	// This field is forbidden in Node.Spec, and required in Node.Status.
+	// ResourceVersion 是被引用 ConfigMap 的 metadata.ResourceVersion。
+	// 此字段在 Node.Spec 中禁止使用，在 Node.Status 中为必填。
 	// +optional
 	ResourceVersion string
 
-	// KubeletConfigKey declares which key of the referenced ConfigMap corresponds to the KubeletConfiguration structure
-	// This field is required in all cases.
+	// KubeletConfigKey 声明被引用 ConfigMap 中哪个键对应 KubeletConfiguration 结构。
+	// 此字段在任何情况下都是必填的。
 	KubeletConfigKey string
 }
 
-// DaemonEndpoint contains information about a single Daemon endpoint.
+// DaemonEndpoint 包含单个守护进程端点的信息。
 type DaemonEndpoint struct {
 	/*
 		The port tag was not properly in quotes in earlier releases, so it must be
@@ -5814,31 +5634,31 @@ type DaemonEndpoint struct {
 		'Port').
 	*/
 
-	// Port number of the given endpoint.
+	// 给定端点的端口号。
 	Port int32
 }
 
-// NodeDaemonEndpoints lists ports opened by daemons running on the Node.
+// NodeDaemonEndpoints 列出节点上运行的守护进程所开放的端口。
 type NodeDaemonEndpoints struct {
-	// Endpoint on which Kubelet is listening.
+	// Kubelet 监听的端点。
 	// +optional
 	KubeletEndpoint DaemonEndpoint
 }
 
-// NodeRuntimeHandlerFeatures is a set of features implemented by the runtime handler.
+// NodeRuntimeHandlerFeatures 是运行时处理器实现的一组特性。
 type NodeRuntimeHandlerFeatures struct {
-	// RecursiveReadOnlyMounts is set to true if the runtime handler supports RecursiveReadOnlyMounts.
+	// 如果运行时处理器支持 RecursiveReadOnlyMounts，则 RecursiveReadOnlyMounts 设为 true。
 	// +optional
 	RecursiveReadOnlyMounts *bool
-	// UserNamespaces is set to true if the runtime handler supports UserNamespaces, including for volumes.
+	// 如果运行时处理器支持 UserNamespaces（包括卷），则 UserNamespaces 设为 true。
 	// +optional
 	UserNamespaces *bool
 }
 
-// NodeRuntimeHandler is a set of runtime handler information.
+// NodeRuntimeHandler 是一组运行时处理器信息。
 type NodeRuntimeHandler struct {
 	// Runtime handler name.
-	// Empty for the default runtime handler.
+	// 默认运行时处理器时为空。
 	// +optional
 	Name string
 	// Supported features.
@@ -5846,23 +5666,23 @@ type NodeRuntimeHandler struct {
 	Features *NodeRuntimeHandlerFeatures
 }
 
-// NodeFeatures describes the set of features implemented by the CRI implementation.
-// The features contained in the NodeFeatures should depend only on the cri implementation
+// NodeFeatures 描述 CRI 实现所具备的特性集合。
+// 其中包含的特性应仅取决于 CRI 实现，
 // independent of runtime handlers.
 type NodeFeatures struct {
-	// SupplementalGroupsPolicy is set to true if the runtime supports SupplementalGroupsPolicy and ContainerUser.
+	// 如果运行时支持 SupplementalGroupsPolicy 和 ContainerUser，则 SupplementalGroupsPolicy 设为 true。
 	// +optional
 	SupplementalGroupsPolicy *bool
 }
 
-// NodeSystemInfo is a set of ids/uuids to uniquely identify the node.
+// NodeSystemInfo 是一组用于唯一标识节点的 id/uuid。
 type NodeSystemInfo struct {
-	// MachineID reported by the node. For unique machine identification
-	// in the cluster this field is preferred. Learn more from man(5)
+	// 节点上报的 MachineID。在集群中唯一标识机器时
+	// 首选此字段。更多信息参见 man(5)
 	// machine-id: http://man7.org/linux/man-pages/man5/machine-id.5.html
 	MachineID string
-	// SystemUUID reported by the node. For unique machine identification
-	// MachineID is preferred. This field is specific to Red Hat hosts
+	// 节点上报的 SystemUUID。如需唯一标识机器，
+	// 首选 MachineID。此字段仅适用于 Red Hat 主机
 	// https://access.redhat.com/documentation/en-us/red_hat_subscription_management/1/html/rhsm/uuid
 	SystemUUID string
 	// Boot ID reported by the node.
@@ -5889,42 +5709,36 @@ type NodeSystemInfo struct {
 	RunningInUserNamespace *bool
 }
 
-// NodeSwapStatus represents swap memory information.
+// NodeSwapStatus 表示交换内存信息。
 type NodeSwapStatus struct {
 	// Total amount of swap memory in bytes.
 	// +optional
 	Capacity *int64
 }
 
-// NodeConfigStatus describes the status of the config assigned by Node.Spec.ConfigSource.
+// NodeConfigStatus 描述由 Node.Spec.ConfigSource 分配的配置的状态。
 type NodeConfigStatus struct {
-	// Assigned reports the checkpointed config the node will try to use.
-	// When Node.Spec.ConfigSource is updated, the node checkpoints the associated
-	// config payload to local disk, along with a record indicating intended
-	// config. The node refers to this record to choose its config checkpoint, and
-	// reports this record in Assigned. Assigned only updates in the status after
-	// the record has been checkpointed to disk. When the Kubelet is restarted,
-	// it tries to make the Assigned config the Active config by loading and
-	// validating the checkpointed payload identified by Assigned.
+	// Assigned 记录节点将尝试使用的已存档配置。
+	// 当 Node.Spec.ConfigSource 更新时，节点会将相应的配置载荷以及一条表明目标配置的记录
+	// 存档到本地磁盘。节点依据该记录选择配置存档点，并在 Assigned 中上报这条记录。
+	// 只有在记录已存档到磁盘后，Assigned 才会更新到 status 中。
+	// Kubelet 重启时，会尝试通过加载并校验 Assigned 所指向的存档配置载荷，
+	// 将 Assigned 配置作为 Active 配置。
 	// +optional
 	Assigned *NodeConfigSource
-	// Active reports the checkpointed config the node is actively using.
-	// Active will represent either the current version of the Assigned config,
-	// or the current LastKnownGood config, depending on whether attempting to use the
-	// Assigned config results in an error.
+	// Active 记录节点当前实际使用的已存档配置。
+	// Active 可能表示 Assigned 配置的当前版本，也可能表示 LastKnownGood 配置的当前版本，
+	// 具体取决于尝试使用 Assigned 配置时是否出错。
 	// +optional
 	Active *NodeConfigSource
-	// LastKnownGood reports the checkpointed config the node will fall back to
-	// when it encounters an error attempting to use the Assigned config.
-	// The Assigned config becomes the LastKnownGood config when the node determines
-	// that the Assigned config is stable and correct.
-	// This is currently implemented as a 10-minute soak period starting when the local
-	// record of Assigned config is updated. If the Assigned config is Active at the end
-	// of this period, it becomes the LastKnownGood. Note that if Spec.ConfigSource is
-	// reset to nil (use local defaults), the LastKnownGood is also immediately reset to nil,
-	// because the local default config is always assumed good.
-	// You should not make assumptions about the node's method of determining config stability
-	// and correctness, as this may change or become configurable in the future.
+	// LastKnownGood 记录节点在尝试使用 Assigned 配置出错时将回退到的已存档配置。
+	// 当节点判定 Assigned 配置稳定且正确时，该配置就会成为 LastKnownGood 配置。
+	// 目前的实现方式是：从本地 Assigned 配置记录更新开始，进行 10 分钟的观察期。
+	// 若观察期结束时 Assigned 配置仍处于 Active 状态，它便成为 LastKnownGood。
+	// 注意，如果 Spec.ConfigSource 被重置为 nil（使用本地默认配置），LastKnownGood 也会立即重置为 nil，
+	// 因为本地默认配置始终被认为是正确的。
+	// 不要对节点判断配置稳定性和正确性的方式做任何假设，
+	// 因为将来这种方式可能会改变或变得可配置。
 	// +optional
 	LastKnownGood *NodeConfigSource
 	// Error describes any problems reconciling the Spec.ConfigSource to the Active config.
@@ -5943,45 +5757,46 @@ type NodeConfigStatus struct {
 	Error string
 }
 
-// NodeStatus is information about the current status of a node.
+// NodeStatus 描述节点的当前状态信息。
 type NodeStatus struct {
-	// Capacity represents the total resources of a node.
+	// Capacity 表示节点的总资源量。
 	// +optional
 	Capacity ResourceList
-	// Allocatable represents the resources of a node that are available for scheduling.
+	// Allocatable 表示节点上可供调度使用的资源。
+	// 默认为 Capacity。
 	// +optional
 	Allocatable ResourceList
 	// NodePhase is the current lifecycle phase of the node.
 	// +optional
 	Phase NodePhase
-	// Conditions is an array of current node conditions.
+	// Conditions 是当前观察到的节点状况列表。
 	// +optional
 	Conditions []NodeCondition
 	// Queried from cloud provider, if available.
 	// +optional
 	Addresses []NodeAddress
-	// Endpoints of daemons running on the Node.
+	// 节点上运行的守护进程的端点。
 	// +optional
 	DaemonEndpoints NodeDaemonEndpoints
-	// Set of ids/uuids to uniquely identify the node.
+	// 用于唯一标识节点的一组 id/uuid。
 	// +optional
 	NodeInfo NodeSystemInfo
 	// List of container images on this node
 	// +optional
 	Images []ContainerImage
-	// List of attachable volumes in use (mounted) by the node.
+	// 节点正在使用（挂载）的可挂载卷列表。
 	// +optional
 	VolumesInUse []UniqueVolumeName
-	// List of volumes that are attached to the node.
+	// 已附加到节点的卷列表。
 	// +optional
 	VolumesAttached []AttachedVolume
-	// Status of the config assigned to the node via the dynamic Kubelet config feature.
+	// 通过动态 Kubelet 配置功能分配给节点的配置的状态。
 	// +optional
 	Config *NodeConfigStatus
 	// The available runtime handlers.
 	// +optional
 	RuntimeHandlers []NodeRuntimeHandler
-	// Features describes the set of features implemented by the CRI implementation.
+	// Features 描述 CRI 实现所具备的特性集合。
 	// +featureGate=SupplementalGroupsPolicy
 	// +optional
 	Features *NodeFeatures
@@ -5994,7 +5809,7 @@ type NodeStatus struct {
 // UniqueVolumeName defines the name of attached volume
 type UniqueVolumeName string
 
-// AttachedVolume describes a volume attached to a node
+// AttachedVolume 描述附加到节点的卷
 type AttachedVolume struct {
 	// Name of the attached volume
 	Name UniqueVolumeName
@@ -6007,8 +5822,8 @@ type AttachedVolume struct {
 // Node annotation with key scheduler.alpha.kubernetes.io/preferAvoidPods and
 // will eventually become a field of NodeStatus.
 type AvoidPods struct {
-	// Bounded-sized list of signatures of pods that should avoid this node, sorted
-	// in timestamp order from oldest to newest. Size of the slice is unspecified.
+	// 应避开此节点的 Pod 的签名列表，数量有上限，按时间戳从旧到新排序。
+	// 切片大小未作规定。
 	// +optional
 	PreferAvoidPods []PreferAvoidPodsEntry
 }
@@ -6029,7 +5844,7 @@ type PreferAvoidPodsEntry struct {
 }
 
 // PodSignature describes the class of pods that should avoid this node.
-// Exactly one field should be set.
+// 应当只设置其中一个字段。
 type PodSignature struct {
 	// Reference to controller whose pods should avoid this node.
 	// +optional
@@ -6049,60 +5864,53 @@ type ContainerImage struct {
 // NodePhase defines the phase in which a node is in
 type NodePhase string
 
-// These are the valid phases of node.
+// 以下是节点的有效阶段。
 const (
-	// NodePending means the node has been created/added by the system, but not configured.
+	// NodePending 表示节点已被系统创建/加入，但尚未配置。
 	NodePending NodePhase = "Pending"
-	// NodeRunning means the node has been configured and has Kubernetes components running.
+	// NodeRunning 表示节点已完成配置，且 Kubernetes 组件正在运行。
 	NodeRunning NodePhase = "Running"
-	// NodeTerminated means the node has been removed from the cluster.
+	// NodeTerminated 表示节点已从集群中移除。
 	NodeTerminated NodePhase = "Terminated"
 )
 
 // NodeConditionType defines node's condition
 type NodeConditionType string
 
-// These are valid but not exhaustive conditions of node. A cloud provider may set a condition not listed here.
-// Relevant events contain "NodeReady", "NodeNotReady", "NodeSchedulable", and "NodeNotSchedulable".
+// 以下是节点的有效状况，但并不穷尽所有可能。云服务商可以设置此处未列出的状况。
+// 相关事件包括 "NodeReady"、"NodeNotReady"、"NodeSchedulable" 和 "NodeNotSchedulable"。
 const (
-	// NodeReady means kubelet is healthy and ready to accept pods.
+	// NodeReady 表示 kubelet 健康，可以接收 Pod。
 	NodeReady NodeConditionType = "Ready"
-	// NodeMemoryPressure means the kubelet is under pressure due to insufficient available memory.
+	// NodeMemoryPressure 表示 kubelet 因可用内存不足而处于压力状态。
 	NodeMemoryPressure NodeConditionType = "MemoryPressure"
-	// NodeDiskPressure means the kubelet is under pressure due to insufficient available disk.
+	// NodeDiskPressure 表示 kubelet 因可用磁盘空间不足而处于压力状态。
 	NodeDiskPressure NodeConditionType = "DiskPressure"
-	// NodeNetworkUnavailable means that network for the node is not correctly configured.
+	// NodeNetworkUnavailable 表示节点的网络未正确配置。
 	NodeNetworkUnavailable NodeConditionType = "NetworkUnavailable"
-	// NodeGracefulNodeShutdownInProgress reports whether Graceful Node Shutdown is determined to be in progress on this Node.
-	//
-	// The admin is responsible for setting and clearing this condition.
+	// NodeGracefulNodeShutdownInProgress 报告此节点是否正在执行优雅关机。
+	// 管理员负责设置和清除此状况。
 	NodeGracefulNodeShutdownInProgress NodeConditionType = "GracefulNodeShutdownInProgress"
-	// NodeDrainInProgress reports that this Node is actively being drained,
-	// according to the admin's definition of drain.
-	// Commonly, this involves removing some amount of Pods, volumes, and networks.
-	//
-	// The admin is responsible for setting and clearing this condition.
+	// NodeDrainInProgress 报告此节点正在被排空，
+	// 具体依据管理员对排空的定义。
+	// 通常这意味着移除一些 Pod、卷和网络。
+	// 管理员负责设置和清除此状况。
 	NodeDrainInProgress NodeConditionType = "DrainInProgress"
-	// NodeDrained reports that this Node has reached the drain criteria selected by the admin.
-	//
-	// The admin is responsible for setting and clearing this condition.
+	// NodeDrained 报告此节点已达到管理员选择的排空标准。
+	// 管理员负责设置和清除此状况。
 	NodeDrained NodeConditionType = "Drained"
-	// NodeMaintenancePlanned reports that this Node is expected to undergo a change in the future.
-	// If this change impacts Node users, the admin should drain the Node first.
-	//
-	// Admins can use the Node maintenance condition for cases like hardware or software rollout,
-	// remediation, decommissioning, or debugging.
-	//
-	// The admin is responsible for setting and clearing this condition.
+	// NodeMaintenancePlanned 报告此节点预计在未来将发生变更。
+	// 如果此变更会影响节点使用者，管理员应先排空该节点。
+	// 管理员可将节点维护状况用于硬件或软件升级、
+	// 修复、下线或调试等场景。
+	// 管理员负责设置和清除此状况。
 	NodeMaintenancePlanned NodeConditionType = "MaintenancePlanned"
-	// NodeMaintenanceInProgress reports that this Node is actively undergoing maintenance.
-	//
-	// The admin decides whether the change will impact Node users and require a Node drain.
-	// For example, it is recommended to drain a Node before a Kubernetes upgrade.
-	// In contrast, a kernel live patch may not require a Node drain, but it can still be useful
-	// to communicate that maintenance is in progress.
-	//
-	// The admin is responsible for setting and clearing this condition.
+	// NodeMaintenanceInProgress 报告此节点正在执行维护。
+	// 管理员决定该变更是否会影响节点使用者并需要排空节点。
+	// 例如，建议在 Kubernetes 升级前排空节点。
+	// 相反，内核热补丁可能不需要排空节点，但通告维护正在进行
+	// 仍然是有用的。
+	// 管理员负责设置和清除此状况。
 	NodeMaintenanceInProgress NodeConditionType = "MaintenanceInProgress"
 )
 
@@ -6125,9 +5933,8 @@ type NodeAddressType string
 
 // These are valid values of node address type
 const (
-	// NodeHostName identifies a name of the node. Although every node can be assumed
-	// to have a NodeAddress of this type, its exact syntax and semantics are not
-	// defined, and are not consistent between different clusters.
+	// NodeHostName 标识节点的名称。虽然可以认为每个节点都有此类型的 NodeAddress，
+	// 但其确切的语法和语义并未定义，在不同集群之间也不一致。
 	NodeHostName NodeAddressType = "Hostname"
 
 	// NodeInternalIP identifies an IP address which is assigned to one of the node's
@@ -6154,14 +5961,12 @@ const (
 	// efficient for node-to-node traffic than a NodeInternalIP).
 	NodeExternalIP NodeAddressType = "ExternalIP"
 
-	// NodeInternalDNS identifies a DNS name which resolves to an IP address which has
-	// the characteristics of a NodeInternalIP. The IP it resolves to may or may not
-	// be a listed NodeInternalIP address.
+	// NodeInternalDNS 标识解析为具有 NodeInternalIP 特性的 IP 地址的 DNS 名称。
+	// 其解析出的 IP 可能是、也可能不是列出的 NodeInternalIP 地址。
 	NodeInternalDNS NodeAddressType = "InternalDNS"
 
-	// NodeExternalDNS identifies a DNS name which resolves to an IP address which has
-	// the characteristics of a NodeExternalIP. The IP it resolves to may or may not
-	// be a listed NodeExternalIP address.
+	// NodeExternalDNS 标识解析为具有 NodeExternalIP 特性的 IP 地址的 DNS 名称。
+	// 其解析出的 IP 可能是、也可能不是列出的 NodeExternalIP 地址。
 	NodeExternalDNS NodeAddressType = "ExternalDNS"
 )
 
@@ -6171,7 +5976,7 @@ type NodeAddress struct {
 	Address string
 }
 
-// ResourceName is the name identifying various resources in a ResourceList.
+// ResourceName 是 ResourceList 中标识各种资源的名称。
 type ResourceName string
 
 // Resource names must be not more than 63 characters, consisting of upper- or lower-case alphanumeric characters,
@@ -6180,13 +5985,13 @@ type ResourceName string
 // camel case, separating compound words.
 // Fully-qualified resource typenames are constructed from a DNS-style subdomain, followed by a slash `/` and a name.
 const (
-	// CPU, in cores. (500m = .5 cores)
+	// CPU，单位为核数。（500m = .5 核）
 	ResourceCPU ResourceName = "cpu"
-	// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	// 内存，单位为字节。（500Gi = 500GiB = 500 * 1024 * 1024 * 1024）
 	ResourceMemory ResourceName = "memory"
-	// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
+	// 卷大小，单位为字节（例如 5Gi = 5GiB = 5 * 1024 * 1024 * 1024）
 	ResourceStorage ResourceName = "storage"
-	// Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	// 本地临时存储，单位为字节。（500Gi = 500GiB = 500 * 1024 * 1024 * 1024）
 	ResourceEphemeralStorage ResourceName = "ephemeral-storage"
 )
 
@@ -6199,7 +6004,7 @@ const (
 	ResourceAttachableVolumesPrefix = "attachable-volumes-"
 )
 
-// ResourceList is a set of (resource name, quantity) pairs.
+// ResourceList 是一组（资源名称，数量）对。
 type ResourceList map[ResourceName]resource.Quantity
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -6211,7 +6016,7 @@ type Node struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the behavior of a node.
+	// Spec 定义节点的行为。
 	// +optional
 	Spec NodeSpec
 
@@ -6233,11 +6038,11 @@ type NodeList struct {
 
 // NamespaceSpec describes the attributes on a Namespace
 type NamespaceSpec struct {
-	// Finalizers is an opaque list of values that must be empty to permanently remove object from storage
+	// Finalizers 是一个不透明的值列表，必须为空才能将对象从存储中永久删除。
 	Finalizers []FinalizerName
 }
 
-// FinalizerName is the name identifying a finalizer during namespace lifecycle.
+// FinalizerName 是在命名空间生命周期中标识终结器的名称。
 type FinalizerName string
 
 // These are internal finalizer values to Kubernetes, must be qualified name unless defined here or
@@ -6246,9 +6051,9 @@ const (
 	FinalizerKubernetes FinalizerName = "kubernetes"
 )
 
-// NamespaceStatus is information about the current status of a Namespace.
+// NamespaceStatus 描述 Namespace 的当前状态信息。
 type NamespaceStatus struct {
-	// Phase is the current lifecycle phase of the namespace.
+	// Phase 是命名空间当前的生命周期阶段。
 	// +optional
 	Phase NamespacePhase
 	// +optional
@@ -6258,11 +6063,11 @@ type NamespaceStatus struct {
 // NamespacePhase defines the phase in which the namespace is
 type NamespacePhase string
 
-// These are the valid phases of a namespace.
+// 以下是命名空间的有效阶段。
 const (
-	// NamespaceActive means the namespace is available for use in the system
+	// NamespaceActive 表示命名空间可在系统中使用
 	NamespaceActive NamespacePhase = "Active"
-	// NamespaceTerminating means the namespace is undergoing graceful termination
+	// NamespaceTerminating 表示命名空间正在优雅终止
 	NamespaceTerminating NamespacePhase = "Terminating"
 )
 
@@ -6276,11 +6081,11 @@ const (
 	NamespaceDeletionGVParsingFailure NamespaceConditionType = "NamespaceDeletionGroupVersionParsingFailure"
 )
 
-// NamespaceCondition contains details about state of namespace.
+// NamespaceCondition 包含命名空间状态的详细信息。
 type NamespaceCondition struct {
 	// Type of namespace controller condition.
 	Type NamespaceConditionType
-	// Status of the condition, one of True, False, Unknown.
+	// 状况的状态，取值为 True、False 或 Unknown。
 	Status ConditionStatus
 	// +optional
 	LastTransitionTime metav1.Time
@@ -6292,25 +6097,25 @@ type NamespaceCondition struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Namespace provides a scope for Names.
+// Namespace 为名称提供了一个作用域。
 // Use of multiple namespaces is optional
 type Namespace struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the behavior of the Namespace.
+	// Spec 定义 Namespace 的行为。
 	// +optional
 	Spec NamespaceSpec
 
-	// Status describes the current status of a Namespace
+	// Status 描述 Namespace 的当前状态。
 	// +optional
 	Status NamespaceStatus
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NamespaceList is a list of Namespaces.
+// NamespaceList 是 Namespace 的列表。
 type NamespaceList struct {
 	metav1.TypeMeta
 	// +optional
@@ -6332,19 +6137,19 @@ type Binding struct {
 	Target ObjectReference
 }
 
-// Preconditions must be fulfilled before an operation (update, delete, etc.) is carried out.
+// 在执行操作（更新、删除等）之前必须满足的前置条件。
 type Preconditions struct {
-	// Specifies the target UID.
+	// 指定目标 UID。
 	// +optional
 	UID *types.UID
 }
 
 const (
-	// LogStreamStdout is the stream type for stdout.
+	// LogStreamStdout 表示 stdout 的流类型。
 	LogStreamStdout = "Stdout"
-	// LogStreamStderr is the stream type for stderr.
+	// LogStreamStderr 表示 stderr 的流类型。
 	LogStreamStderr = "Stderr"
-	// LogStreamAll represents the combined stdout and stderr.
+	// LogStreamAll 表示 stdout 和 stderr 的合并流。
 	LogStreamAll = "All"
 )
 
@@ -6360,22 +6165,22 @@ type PodLogOptions struct {
 	Follow bool
 	// If true, return previous terminated container logs
 	Previous bool
-	// A relative time in seconds before the current time from which to show logs. If this value
-	// precedes the time a pod was started, only logs since the pod start will be returned.
-	// If this value is in the future, no logs will be returned.
-	// Only one of sinceSeconds or sinceTime may be specified.
+	// 相对于当前时间往前推的秒数，从该时间点开始显示日志。如果此值
+	// 早于 Pod 启动时间，则只返回 Pod 启动以来的日志。
+	// 如果此值在未来，则不返回任何日志。
+	// sinceSeconds 和 sinceTime 只能指定其中之一。
 	SinceSeconds *int64
-	// An RFC3339 timestamp from which to show logs. If this value
-	// precedes the time a pod was started, only logs since the pod start will be returned.
-	// If this value is in the future, no logs will be returned.
-	// Only one of sinceSeconds or sinceTime may be specified.
+	// 从该 RFC3339 时间戳开始显示日志。如果此值
+	// 早于 Pod 启动时间，则只返回 Pod 启动以来的日志。
+	// 如果此值在未来，则不返回任何日志。
+	// sinceSeconds 和 sinceTime 只能指定其中之一。
 	SinceTime *metav1.Time
 	// If true, add an RFC 3339 timestamp with 9 digits of fractional seconds at the beginning of every line
 	// of log output.
 	Timestamps bool
-	// If set, the number of lines from the end of the logs to show. If not specified,
-	// logs are shown from the creation of the container or sinceSeconds or sinceTime.
-	// Note that when "TailLines" is specified, "Stream" can only be set to nil or "All".
+	// 若设置，表示从日志末尾开始显示的行数。如果未指定，
+	// 则从容器创建起，或从 sinceSeconds / sinceTime 指定的时间点起显示日志。
+	// 注意，指定 "TailLines" 时，"Stream" 只能设为 nil 或 "All"。
 	TailLines *int64
 	// If set, the number of bytes to read from the server before terminating the
 	// log output. This may not display a complete final line of logging, and may return
@@ -6391,10 +6196,10 @@ type PodLogOptions struct {
 	// +optional
 	InsecureSkipTLSVerifyBackend bool
 
-	// Specify which container log stream to return to the client.
-	// Acceptable values are "All", "Stdout" and "Stderr". If not specified, "All" is used, and both stdout and stderr
-	// are returned interleaved.
-	// Note that when "TailLines" is specified, "Stream" can only be set to nil or "All".
+	// 指定向客户端返回哪个容器日志流。
+	// 可接受的值为 "All"、"Stdout" 和 "Stderr"。若未指定，则使用 "All"，
+	// 并将 stdout 和 stderr 交错返回。
+	// 注意，指定 "TailLines" 时，"Stream" 只能设为 nil 或 "All"。
 	// +featureGate=PodLogsQuerySplitStreams
 	// +optional
 	Stream *string
@@ -6403,7 +6208,7 @@ type PodLogOptions struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PodAttachOptions is the query options to a Pod's remote attach call
-// TODO: merge w/ PodExecOptions below for stdin, stdout, etc
+// TODO: 与下方的 PodExecOptions 合并，统一处理 stdin、stdout 等
 type PodAttachOptions struct {
 	metav1.TypeMeta
 
@@ -6470,7 +6275,7 @@ type PodPortForwardOptions struct {
 type PodProxyOptions struct {
 	metav1.TypeMeta
 
-	// Path is the URL path to use for the current proxy request
+	// Path 是本次到 Pod 的代理请求所使用的 URL 路径。
 	Path string
 }
 
@@ -6480,13 +6285,13 @@ type PodProxyOptions struct {
 type NodeProxyOptions struct {
 	metav1.TypeMeta
 
-	// Path is the URL path to use for the current proxy request
+	// Path 是本次到 Node 的代理请求所使用的 URL 路径。
 	Path string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ServiceProxyOptions is the query options to a Service's proxy call.
+// ServiceProxyOptions 是 Service 代理调用的查询选项。
 type ServiceProxyOptions struct {
 	metav1.TypeMeta
 
@@ -6498,7 +6303,7 @@ type ServiceProxyOptions struct {
 	Path string
 }
 
-// ObjectReference contains enough information to let you inspect or modify the referred object.
+// ObjectReference 包含足够的信息，可用于检查或修改被引用的对象。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ObjectReference struct {
 	// +optional
@@ -6534,14 +6339,14 @@ type LocalObjectReference struct {
 
 // TypedLocalObjectReference contains enough information to let you locate the typed referenced object inside the same namespace.
 type TypedLocalObjectReference struct {
-	// APIGroup is the group for the resource being referenced.
-	// If APIGroup is not specified, the specified Kind must be in the core API group.
-	// For any other third-party types, APIGroup is required.
+	// APIGroup 是被引用资源所属的组。
+	// 如果未指定 APIGroup，则指定的 Kind 必须属于核心 API 组。
+	// 对于其他第三方类型，APIGroup 是必填的。
 	// +optional
 	APIGroup *string
-	// Kind is the type of resource being referenced
+	// Kind 是被引用资源的类型
 	Kind string
-	// Name is the name of resource being referenced
+	// Name 是被引用资源的名称
 	Name string
 }
 
@@ -6564,11 +6369,11 @@ type EventSource struct {
 	Host string
 }
 
-// Valid values for event types (new types could be added in future)
+// 事件类型的有效值（将来可能新增类型）
 const (
-	// Information only and will not cause any problems
+	// 仅提供信息，不会导致任何问题
 	EventTypeNormal string = "Normal"
-	// These events are to warn that something might go wrong
+	// 此类事件用于警告可能出问题
 	EventTypeWarning string = "Warning"
 )
 
@@ -6592,7 +6397,7 @@ type Event struct {
 	// Optional; this should be a short, machine understandable string that gives the reason
 	// for this event being generated. For example, if the event is reporting that a container
 	// can't start, the Reason might be "ImageNotFound".
-	// TODO: provide exact specification for format.
+	// TODO: 提供确切的格式规范。
 	// +optional
 	Reason string
 
@@ -6605,7 +6410,7 @@ type Event struct {
 	// +optional
 	Source EventSource
 
-	// The time at which the event was first recorded. (Time of server receipt is in TypeMeta.)
+	// 事件首次被记录的时间。（服务端接收时间见 TypeMeta。）
 	// +optional
 	FirstTimestamp metav1.Time
 
@@ -6625,11 +6430,11 @@ type Event struct {
 	// +optional
 	EventTime metav1.MicroTime
 
-	// Data about the Event series this event represents or nil if it's a singleton Event.
+	// 此事件所属事件序列的数据；若为单次事件则为 nil。
 	// +optional
 	Series *EventSeries
 
-	// What action was taken/failed regarding to the Regarding object.
+	// 针对 Regarding 对象已执行/失败的动作。
 	// +optional
 	Action string
 
@@ -6656,7 +6461,7 @@ type EventSeries struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EventList is a list of events.
+// EventList 是事件列表。
 type EventList struct {
 	metav1.TypeMeta
 	// +optional
@@ -6667,7 +6472,7 @@ type EventList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// List holds a list of objects, which may not be known by the server.
+// List 保存一组对象，服务端可能并不知晓这些对象的类型。
 type List metainternalversion.List
 
 // LimitType defines a type of object that is limited
@@ -6706,7 +6511,7 @@ type LimitRangeItem struct {
 
 // LimitRangeSpec defines a min/max usage limit for resources that match on kind
 type LimitRangeSpec struct {
-	// Limits is the list of LimitRangeItem objects that are enforced
+	// Limits 是需要强制执行的 LimitRangeItem 对象列表。
 	Limits []LimitRangeItem
 }
 
@@ -6725,7 +6530,7 @@ type LimitRange struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LimitRangeList is a list of LimitRange items.
+// LimitRangeList 是 LimitRange 对象的列表。
 type LimitRangeList struct {
 	metav1.TypeMeta
 	// +optional
@@ -6735,11 +6540,11 @@ type LimitRangeList struct {
 	Items []LimitRange
 }
 
-// The following identify resource constants for Kubernetes object types
+// 以下常量标识 Kubernetes 对象类型的资源。
 const (
-	// Pods, number
+	// Pod 数量。
 	ResourcePods ResourceName = "pods"
-	// Services, number
+	// Service 数量。
 	ResourceServices ResourceName = "services"
 	// ReplicationControllers, number
 	ResourceReplicationControllers ResourceName = "replicationcontrollers"
@@ -6755,28 +6560,28 @@ const (
 	ResourceServicesNodePorts ResourceName = "services.nodeports"
 	// ResourceServicesLoadBalancers, number
 	ResourceServicesLoadBalancers ResourceName = "services.loadbalancers"
-	// CPU request, in cores. (500m = .5 cores)
+	// CPU 请求，单位为核数（500m = 0.5 核）。
 	ResourceRequestsCPU ResourceName = "requests.cpu"
-	// Memory request, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	// 内存请求，单位为字节（500Gi = 500GiB = 500 * 1024 * 1024 * 1024）。
 	ResourceRequestsMemory ResourceName = "requests.memory"
 	// Storage request, in bytes
 	ResourceRequestsStorage ResourceName = "requests.storage"
-	// Local ephemeral storage request, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	// 本地临时存储请求，单位为字节（500Gi = 500GiB = 500 * 1024 * 1024 * 1024）。
 	ResourceRequestsEphemeralStorage ResourceName = "requests.ephemeral-storage"
-	// CPU limit, in cores. (500m = .5 cores)
+	// CPU 限制，单位为核数（500m = 0.5 核）。
 	ResourceLimitsCPU ResourceName = "limits.cpu"
-	// Memory limit, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	// 内存限制，单位为字节（500Gi = 500GiB = 500 * 1024 * 1024 * 1024）。
 	ResourceLimitsMemory ResourceName = "limits.memory"
-	// Local ephemeral storage limit, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	// 本地临时存储限制，单位为字节（500Gi = 500GiB = 500 * 1024 * 1024 * 1024）。
 	ResourceLimitsEphemeralStorage ResourceName = "limits.ephemeral-storage"
-	// resource.k8s.io devices requested with a certain DeviceClass, number
+	// 按指定 DeviceClass 请求的 resource.k8s.io 设备数量。
 	ResourceClaimsPerClass string = ".deviceclass.resource.k8s.io/devices"
 )
 
-// The following identify resource prefix for Kubernetes object types
+// 以下常量标识 Kubernetes 对象类型的资源前缀。
 const (
-	// HugePages request, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
-	// As burst is not supported for HugePages, we would only quota its request, and ignore the limit.
+	// HugePages 请求，单位为字节（500Gi = 500GiB = 500 * 1024 * 1024 * 1024）。
+	// HugePages 不支持突发的用量，因此只对其请求值配额，忽略限制值。
 	ResourceRequestsHugePagesPrefix = "requests.hugepages-"
 	// Default resource requests prefix
 	DefaultResourceRequestsPrefix = "requests."
@@ -6787,17 +6592,17 @@ type ResourceQuotaScope string
 
 // These are valid values for resource quota spec
 const (
-	// Match all pod objects where spec.activeDeadlineSeconds >=0
+	// 匹配所有 spec.activeDeadlineSeconds >=0 的 Pod 对象。
 	ResourceQuotaScopeTerminating ResourceQuotaScope = "Terminating"
-	// Match all pod objects where spec.activeDeadlineSeconds is nil
+	// 匹配所有 spec.activeDeadlineSeconds 为 nil 的 Pod 对象。
 	ResourceQuotaScopeNotTerminating ResourceQuotaScope = "NotTerminating"
-	// Match all pod objects that have best effort quality of service
+	// 匹配所有服务质量为 best effort 的 Pod 对象。
 	ResourceQuotaScopeBestEffort ResourceQuotaScope = "BestEffort"
-	// Match all pod objects that do not have best effort quality of service
+	// 匹配所有服务质量不为 best effort 的 Pod 对象。
 	ResourceQuotaScopeNotBestEffort ResourceQuotaScope = "NotBestEffort"
-	// Match all pod objects that have priority class mentioned
+	// 匹配所有指定了优先级类别的 Pod 对象。
 	ResourceQuotaScopePriorityClass ResourceQuotaScope = "PriorityClass"
-	// Match all pod objects that have cross-namespace pod (anti)affinity mentioned
+	// 匹配所有指定了跨命名空间 Pod（反）亲和性的 Pod 对象。
 	ResourceQuotaScopeCrossNamespacePodAffinity ResourceQuotaScope = "CrossNamespacePodAffinity"
 
 	// Match all pvc objects that have volume attributes class mentioned.
@@ -6806,15 +6611,15 @@ const (
 
 // ResourceQuotaSpec defines the desired hard limits to enforce for Quota
 type ResourceQuotaSpec struct {
-	// Hard is the set of desired hard limits for each named resource
+	// hard 是各命名资源所期望的硬性限制集合。
 	// +optional
 	Hard ResourceList
 	// A collection of filters that must match each object tracked by a quota.
-	// If not specified, the quota matches all objects.
+	// 若未指定，则配额匹配所有对象。
 	// +optional
 	Scopes []ResourceQuotaScope
 	// ScopeSelector is also a collection of filters like Scopes that must match each object tracked by a quota
-	// but expressed using ScopeSelectorOperator in combination with possible values.
+	// 但它通过 ScopeSelectorOperator 与可能的取值组合来表达。
 	// +optional
 	ScopeSelector *ScopeSelector
 }
@@ -6828,17 +6633,16 @@ type ScopeSelector struct {
 }
 
 // ScopedResourceSelectorRequirement is a selector that contains values, a scope name, and an operator
-// that relates the scope name and values.
+// 以及用于关联作用域名称与这些值的操作符。
 type ScopedResourceSelectorRequirement struct {
 	// The name of the scope that the selector applies to.
 	ScopeName ResourceQuotaScope
-	// Represents a scope's relationship to a set of values.
-	// Valid operators are In, NotIn, Exists, DoesNotExist.
+	// 表示作用域与一组值之间的关系。
+	// 有效操作符为 In、NotIn、Exists、DoesNotExist。
 	Operator ScopeSelectorOperator
-	// An array of string values. If the operator is In or NotIn,
-	// the values array must be non-empty. If the operator is Exists or DoesNotExist,
-	// the values array must be empty.
-	// This array is replaced during a strategic merge patch.
+	// 字符串值数组。当操作符为 In 或 NotIn 时，该数组必须非空；
+	// 当操作符为 Exists 或 DoesNotExist 时，该数组必须为空。
+	// 在 strategic merge patch 中会替换此数组。
 	// +optional
 	Values []string
 }
@@ -6857,17 +6661,17 @@ const (
 
 // ResourceQuotaStatus defines the enforced hard limits and observed use
 type ResourceQuotaStatus struct {
-	// Hard is the set of enforced hard limits for each named resource
+	// Hard 是各命名资源已施加的硬性限制集合。
 	// +optional
 	Hard ResourceList
-	// Used is the current observed total usage of the resource in the namespace
+	// Used 是该命名空间中当前观测到的资源总使用量。
 	// +optional
 	Used ResourceList
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ResourceQuota sets aggregate quota restrictions enforced per namespace
+// ResourceQuota 设置每个命名空间所施加的聚合配额限制。
 type ResourceQuota struct {
 	metav1.TypeMeta
 	// +optional
@@ -6877,7 +6681,7 @@ type ResourceQuota struct {
 	// +optional
 	Spec ResourceQuotaSpec
 
-	// Status defines the actual enforced quota and its current usage
+	// Status 定义实际施加的配额及其当前使用量。
 	// +optional
 	Status ResourceQuotaStatus
 }
@@ -6904,14 +6708,12 @@ type Secret struct {
 	metav1.ObjectMeta
 
 	// Immutable field, if set, ensures that data stored in the Secret cannot
-	// be updated (only object metadata can be modified).
+	// （只能修改对象元数据）。
 	// +optional
 	Immutable *bool
 
-	// Data contains the secret data. Each key must consist of alphanumeric
-	// characters, '-', '_' or '.'. The serialized form of the secret data is a
-	// base64 encoded string, representing the arbitrary (possibly non-string)
-	// data value here.
+	// Data 包含私密数据。每个键必须由字母数字字符、'-'、'_' 或 '.' 组成。
+	// 私密数据的序列化形式为 base64 编码字符串，表示此处任意（可能是非字符串）的数据值。
 	// +optional
 	Data map[string][]byte `datapolicy:"password,security-key,token"`
 
@@ -6929,82 +6731,76 @@ type SecretType string
 
 // These are the valid values for SecretType
 const (
-	// SecretTypeOpaque is the default; arbitrary user-defined data
+	// SecretTypeOpaque 是默认值，表示任意用户自定义数据。
 	SecretTypeOpaque SecretType = "Opaque"
 
-	// SecretTypeServiceAccountToken contains a token that identifies a service account to the API
-	//
-	// Required fields:
-	// - Secret.Annotations["kubernetes.io/service-account.name"] - the name of the ServiceAccount the token identifies
-	// - Secret.Annotations["kubernetes.io/service-account.uid"] - the UID of the ServiceAccount the token identifies
-	// - Secret.Data["token"] - a token that identifies the service account to the API
+	// SecretTypeServiceAccountToken 包含一个用于向 API 标识服务账号的令牌。
+	// 必填字段：
+	// - Secret.Annotations["kubernetes.io/service-account.name"] - 令牌所标识的 ServiceAccount 的名称
+	// - Secret.Annotations["kubernetes.io/service-account.uid"] - 令牌所标识的 ServiceAccount 的 UID
+	// - Secret.Data["token"] - 向 API 标识该服务账号的令牌
 	SecretTypeServiceAccountToken SecretType = "kubernetes.io/service-account-token"
 
-	// ServiceAccountNameKey is the key of the required annotation for SecretTypeServiceAccountToken secrets
+	// ServiceAccountNameKey 是 SecretTypeServiceAccountToken 类型 Secret 必填注解的键。
 	ServiceAccountNameKey = "kubernetes.io/service-account.name"
-	// ServiceAccountUIDKey is the key of the required annotation for SecretTypeServiceAccountToken secrets
+	// ServiceAccountUIDKey 是 SecretTypeServiceAccountToken 类型 Secret 必填注解的键。
 	ServiceAccountUIDKey = "kubernetes.io/service-account.uid"
-	// ServiceAccountTokenKey is the key of the required data for SecretTypeServiceAccountToken secrets
+	// ServiceAccountTokenKey 是 SecretTypeServiceAccountToken 类型 Secret 必填数据的键。
 	ServiceAccountTokenKey = "token"
-	// ServiceAccountKubeconfigKey is the key of the optional kubeconfig data for SecretTypeServiceAccountToken secrets
+	// ServiceAccountKubeconfigKey 是 SecretTypeServiceAccountToken 类型 Secret 可选 kubeconfig 数据的键。
 	ServiceAccountKubeconfigKey = "kubernetes.kubeconfig"
-	// ServiceAccountRootCAKey is the key of the optional root certificate authority for SecretTypeServiceAccountToken secrets
+	// ServiceAccountRootCAKey 是 SecretTypeServiceAccountToken 类型 Secret 可选根证书颁发机构的键。
 	ServiceAccountRootCAKey = "ca.crt"
-	// ServiceAccountNamespaceKey is the key of the optional namespace to use as the default for namespaced API calls
+	// ServiceAccountNamespaceKey 是可选命名空间的键，该命名空间用作命名空间级 API 调用的默认值。
 	ServiceAccountNamespaceKey = "namespace"
 
-	// SecretTypeDockercfg contains a dockercfg file that follows the same format rules as ~/.dockercfg
-	//
-	// Required fields:
-	// - Secret.Data[".dockercfg"] - a serialized ~/.dockercfg file
+	// SecretTypeDockercfg 包含一个遵循 ~/.dockercfg 相同格式规则的 dockercfg 文件。
+	// 必填字段：
+	// - Secret.Data[".dockercfg"] - 序列化后的 ~/.dockercfg 文件
 	SecretTypeDockercfg SecretType = "kubernetes.io/dockercfg"
 
-	// DockerConfigKey is the key of the required data for SecretTypeDockercfg secrets
+	// DockerConfigKey 是 SecretTypeDockercfg 类型 Secret 必填数据的键。
 	DockerConfigKey = ".dockercfg"
 
 	// SecretTypeDockerConfigJSON contains a dockercfg file that follows the same format rules as ~/.docker/config.json
 	//
 	// Required fields:
-	// - Secret.Data[".dockerconfigjson"] - a serialized ~/.docker/config.json file
+	// - Secret.Data[".dockerconfigjson"] - 序列化后的 ~/.docker/config.json 文件
 	SecretTypeDockerConfigJSON SecretType = "kubernetes.io/dockerconfigjson"
 
 	// DockerConfigJSONKey is the key of the required data for SecretTypeDockerConfigJson secrets
 	DockerConfigJSONKey = ".dockerconfigjson"
 
-	// SecretTypeBasicAuth contains data needed for basic authentication.
-	//
-	// Required at least one of fields:
-	// - Secret.Data["username"] - username used for authentication
-	// - Secret.Data["password"] - password or token needed for authentication
+	// SecretTypeBasicAuth 包含基本认证所需的数据。
+	// 至少要求以下字段之一：
+	// - Secret.Data["username"] - 用于认证的用户名
+	// - Secret.Data["password"] - 认证所需的密码或令牌
 	SecretTypeBasicAuth SecretType = "kubernetes.io/basic-auth"
 
-	// BasicAuthUsernameKey is the key of the username for SecretTypeBasicAuth secrets
+	// BasicAuthUsernameKey 是 SecretTypeBasicAuth 类型 Secret 用户名的键。
 	BasicAuthUsernameKey = "username"
-	// BasicAuthPasswordKey is the key of the password or token for SecretTypeBasicAuth secrets
+	// BasicAuthPasswordKey 是 SecretTypeBasicAuth 类型 Secret 密码或令牌的键。
 	BasicAuthPasswordKey = "password"
 
-	// SecretTypeSSHAuth contains data needed for SSH authentication.
-	//
-	// Required field:
-	// - Secret.Data["ssh-privatekey"] - private SSH key needed for authentication
+	// SecretTypeSSHAuth 包含 SSH 认证所需的数据。
+	// 必填字段：
+	// - Secret.Data["ssh-privatekey"] - 认证所需的 SSH 私钥
 	SecretTypeSSHAuth SecretType = "kubernetes.io/ssh-auth"
 
-	// SSHAuthPrivateKey is the key of the required SSH private key for SecretTypeSSHAuth secrets
+	// SSHAuthPrivateKey 是 SecretTypeSSHAuth 类型 Secret 必填 SSH 私钥的键。
 	SSHAuthPrivateKey = "ssh-privatekey"
 
-	// SecretTypeTLS contains information about a TLS client or server secret. It
-	// is primarily used with TLS termination of the Ingress resource, but may be
-	// used in other types.
-	//
-	// Required fields:
-	// - Secret.Data["tls.key"] - TLS private key.
-	//   Secret.Data["tls.crt"] - TLS certificate.
-	// TODO: Consider supporting different formats, specifying CA/destinationCA.
+	// SecretTypeTLS 包含 TLS 客户端或服务端 Secret 的信息。它主要用于 Ingress 资源的 TLS 终止，
+	// 也可用于其他类型。
+	// 必填字段：
+	// - Secret.Data["tls.key"] - TLS 私钥。
+	// Secret.Data["tls.crt"] - TLS 证书。
+	// TODO: 考虑支持不同格式，以及指定 CA/destinationCA。
 	SecretTypeTLS SecretType = "kubernetes.io/tls"
 
-	// TLSCertKey is the key for tls certificates in a TLS secret.
+	// TLSCertKey 是 TLS Secret 中 TLS 证书的键。
 	TLSCertKey = "tls.crt"
-	// TLSPrivateKeyKey is the key for the private key field in a TLS secret.
+	// TLSPrivateKeyKey 是 TLS Secret 中私钥字段的键。
 	TLSPrivateKeyKey = "tls.key"
 	// SecretTypeBootstrapToken is used during the automated bootstrap process (first
 	// implemented by kubeadm). It stores tokens that are used to sign well known
@@ -7032,15 +6828,14 @@ type ConfigMap struct {
 	metav1.ObjectMeta
 
 	// Immutable field, if set, ensures that data stored in the ConfigMap cannot
-	// be updated (only object metadata can be modified).
+	// （只能修改对象元数据）。
 	// +optional
 	Immutable *bool
 
-	// Data contains the configuration data.
-	// Each key must consist of alphanumeric characters, '-', '_' or '.'.
-	// Values with non-UTF-8 byte sequences must use the BinaryData field.
-	// The keys stored in Data must not overlap with the keys in
-	// the BinaryData field, this is enforced during validation process.
+	// Data 包含配置数据。
+	// 每个键必须由字母数字字符、'-'、'_' 或 '.' 组成。
+	// 含非 UTF-8 字节序列的值必须使用 BinaryData 字段。
+	// Data 中的键不得与 BinaryData 字段中的键重叠，校验过程会强制检查这一点。
 	// +optional
 	Data map[string]string
 
@@ -7057,7 +6852,7 @@ type ConfigMap struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ConfigMapList is a resource containing a list of ConfigMap objects.
+// ConfigMapList 是包含 ConfigMap 对象列表的资源。
 type ConfigMapList struct {
 	metav1.TypeMeta
 	// +optional
@@ -7075,33 +6870,33 @@ type ConfigMapList struct {
 // constants in it.  Suggestions for more appropriate alternatives are
 // definitely welcome!
 const (
-	// Enable stdin for remote command execution
+	// 为远程命令执行启用 stdin。
 	ExecStdinParam = "input"
-	// Enable stdout for remote command execution
+	// 为远程命令执行启用 stdout。
 	ExecStdoutParam = "output"
-	// Enable stderr for remote command execution
+	// 为远程命令执行启用 stderr。
 	ExecStderrParam = "error"
-	// Enable TTY for remote command execution
+	// 为远程命令执行启用 TTY。
 	ExecTTYParam = "tty"
 	// Command to run for remote command execution
 	ExecCommandParam = "command"
 
 	// Name of header that specifies stream type
 	StreamType = "streamType"
-	// Value for streamType header for stdin stream
+	// stdin 流的 streamType 请求头值。
 	StreamTypeStdin = "stdin"
-	// Value for streamType header for stdout stream
+	// stdout 流的 streamType 请求头值。
 	StreamTypeStdout = "stdout"
-	// Value for streamType header for stderr stream
+	// stderr 流的 streamType 请求头值。
 	StreamTypeStderr = "stderr"
-	// Value for streamType header for data stream
+	// 数据流的 streamType 请求头值。
 	StreamTypeData = "data"
-	// Value for streamType header for error stream
+	// 错误流的 streamType 请求头值。
 	StreamTypeError = "error"
-	// Value for streamType header for terminal resize stream
+	// 终端调整大小流的 streamType 请求头值。
 	StreamTypeResize = "resize"
 
-	// Name of header that specifies the port being forwarded
+	// 指定被转发端口的请求头名称。
 	PortHeader = "port"
 	// Name of header that specifies a request ID used to associate the error
 	// and data streams for a single forwarded connection
@@ -7111,7 +6906,7 @@ const (
 // ComponentConditionType defines type and constants for component health validation.
 type ComponentConditionType string
 
-// These are the valid conditions for the component.
+// 以下是组件的有效状态。
 const (
 	ComponentHealthy ComponentConditionType = "Healthy"
 )
@@ -7151,65 +6946,64 @@ type ComponentStatusList struct {
 	Items []ComponentStatus
 }
 
-// SecurityContext holds security configuration that will be applied to a container.
-// Some fields are present in both SecurityContext and PodSecurityContext.  When both
-// are set, the values in SecurityContext take precedence.
+// SecurityContext 保存将应用于容器的安全配置。
+// 有些字段同时存在于 SecurityContext 和 PodSecurityContext 中。当两者都设置时，
+// SecurityContext 中的值优先。
 type SecurityContext struct {
-	// The capabilities to add/drop when running containers.
-	// Defaults to the default set of capabilities granted by the container runtime.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 运行容器时添加/删除的能力（capabilities）。
+	// 默认为容器运行时授予的默认能力集。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	Capabilities *Capabilities
-	// Run container in privileged mode.
-	// Processes in privileged containers are essentially equivalent to root on the host.
-	// Defaults to false.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 以特权模式运行容器。
+	// 特权容器中的进程基本上等同于宿主机上的 root。
+	// 默认为 false。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	Privileged *bool
-	// The SELinux context to be applied to the container.
-	// If unspecified, the container runtime will allocate a random SELinux context for each
-	// container.  May also be set in PodSecurityContext.  If set in both SecurityContext and
-	// PodSecurityContext, the value specified in SecurityContext takes precedence.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 要应用于容器的 SELinux 上下文。
+	// 若未指定，容器运行时会为每个容器分配一个随机的 SELinux 上下文。
+	// 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和
+	// PodSecurityContext 中设置，则以 SecurityContext 中的值为准。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	SELinuxOptions *SELinuxOptions
-	// The Windows specific settings applied to all containers.
-	// If unspecified, the options from the PodSecurityContext will be used.
-	// If set in both SecurityContext and PodSecurityContext, the value specified in SecurityContext takes precedence.
-	// Note that this field cannot be set when spec.os.name is linux.
+	// 应用于所有容器的 Windows 特有设置。
+	// 若未指定，则使用 PodSecurityContext 中的选项。
+	// 若同时在 SecurityContext 和 PodSecurityContext 中设置，则以 SecurityContext 中的值为准。
+	// 注意，当 spec.os.name 为 linux 时不能设置此字段。
 	// +optional
 	WindowsOptions *WindowsSecurityContextOptions
-	// The UID to run the entrypoint of the container process.
-	// Defaults to user specified in image metadata if unspecified.
-	// May also be set in PodSecurityContext.  If set in both SecurityContext and
-	// PodSecurityContext, the value specified in SecurityContext takes precedence.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 运行容器进程入口点的 UID。
+	// 若未指定，默认使用镜像元数据中指定的用户。
+	// 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和
+	// PodSecurityContext 中设置，则以 SecurityContext 中的值为准。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	RunAsUser *int64
-	// The GID to run the entrypoint of the container process.
-	// Uses runtime default if unset.
-	// May also be set in PodSecurityContext.  If set in both SecurityContext and
-	// PodSecurityContext, the value specified in SecurityContext takes precedence.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 运行容器进程入口点的 GID。
+	// 若未设置，则使用运行时默认值。
+	// 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和
+	// PodSecurityContext 中设置，则以 SecurityContext 中的值为准。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	RunAsGroup *int64
-	// Indicates that the container must run as a non-root user.
-	// If true, the Kubelet will validate the image at runtime to ensure that it
-	// does not run as UID 0 (root) and fail to start the container if it does.
-	// If unset or false, no such validation will be performed.
-	// May also be set in PodSecurityContext.  If set in both SecurityContext and
-	// PodSecurityContext, the value specified in SecurityContext takes precedence.
+	// 表示容器必须以非 root 用户身份运行。
+	// 若为 true，Kubelet 会在运行时校验镜像，确保不以 UID 0（root）运行；否则容器启动失败。
+	// 若未设置或为 false，则不执行此类校验。
+	// 也可在 PodSecurityContext 中设置。若同时在 SecurityContext 和
+	// PodSecurityContext 中设置，则以 SecurityContext 中的值为准。
 	// +optional
 	RunAsNonRoot *bool
 	// The read-only root filesystem allows you to restrict the locations that an application can write
 	// files to, ensuring the persistent data can only be written to mounts.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	ReadOnlyRootFilesystem *bool
 	// AllowPrivilegeEscalation controls whether a process can gain more
 	// privileges than its parent process. This bool directly controls if
 	// the no_new_privs flag will be set on the container process.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	AllowPrivilegeEscalation *bool
 	// ProcMount denotes the type of proc mount to use for the containers.
@@ -7218,15 +7012,14 @@ type SecurityContext struct {
 	// Note that this field cannot be set when spec.os.name is windows.
 	// +optional
 	ProcMount *ProcMountType
-	// The seccomp options to use by this container. If seccomp options are
-	// provided at both the pod & container level, the container options
-	// override the pod options.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// 此容器使用的 seccomp 选项。若同时在 Pod 和容器级别提供 seccomp 选项，
+	// 容器级别的选项会覆盖 Pod 级别的选项。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	SeccompProfile *SeccompProfile
-	// appArmorProfile is the AppArmor options to use by this container. If set, this profile
-	// overrides the pod's appArmorProfile.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// appArmorProfile 是此容器使用的 AppArmor 选项。若设置，此配置会
+	// 覆盖 Pod 的 appArmorProfile。
+	// 注意，当 spec.os.name 为 windows 时不能设置此字段。
 	// +optional
 	AppArmorProfile *AppArmorProfile
 }
@@ -7235,14 +7028,12 @@ type SecurityContext struct {
 type ProcMountType string
 
 const (
-	// DefaultProcMount uses the container runtime defaults for readonly and masked
-	// paths for /proc.  Most container runtimes mask certain paths in /proc to avoid
-	// accidental security exposure of special devices or information.
+	// DefaultProcMount 对 /proc 的只读路径和屏蔽路径使用容器运行时的默认设置。
+	// 大多数容器运行时会屏蔽 /proc 中的某些路径，以避免特殊设备或信息被意外暴露。
 	DefaultProcMount ProcMountType = "Default"
 
-	// UnmaskedProcMount bypasses the default masking behavior of the container
-	// runtime and ensures the newly created /proc the container stays intact with
-	// no modifications.
+	// UnmaskedProcMount 绕过容器运行时的默认屏蔽行为，确保容器中新建的 /proc
+	// 保持原样，不做任何修改。
 	UnmaskedProcMount ProcMountType = "Unmasked"
 )
 
@@ -7262,15 +7053,15 @@ type SELinuxOptions struct {
 	Level string
 }
 
-// WindowsSecurityContextOptions contain Windows-specific options and credentials.
+// WindowsSecurityContextOptions 包含 Windows 特有的选项和凭据。
 type WindowsSecurityContextOptions struct {
-	// GMSACredentialSpecName is the name of the GMSA credential spec to use.
+	// GMSACredentialSpecName 是要使用的 GMSA 凭据规范的名称。
 	// +optional
 	GMSACredentialSpecName *string
 
-	// GMSACredentialSpec is where the GMSA admission webhook
+	// GMSACredentialSpec 是 GMSA 准入 webhook
+	// 该规范由 GMSACredentialSpecName 字段指定。
 	// (https://github.com/kubernetes-sigs/windows-gmsa) inlines the contents of the
-	// GMSA credential spec named by the GMSACredentialSpecName field.
 	// +optional
 	GMSACredentialSpec *string
 
@@ -7281,10 +7072,10 @@ type WindowsSecurityContextOptions struct {
 	// +optional
 	RunAsUserName *string
 
-	// HostProcess determines if a container should be run as a 'Host Process' container.
-	// All of a Pod's containers must have the same effective HostProcess value
-	// (it is not allowed to have a mix of HostProcess containers and non-HostProcess containers).
-	// In addition, if HostProcess is true then HostNetwork must also be set to true.
+	// HostProcess 决定容器是否应作为“Host Process”容器运行。
+	// Pod 中所有容器的 HostProcess 有效值必须相同
+	// （不允许混合使用 HostProcess 容器和非 HostProcess 容器）。
+	// 此外，若 HostProcess 为 true，则 HostNetwork 也必须设为 true。
 	// +optional
 	HostProcess *bool
 }
@@ -7328,47 +7119,40 @@ const (
 type UnsatisfiableConstraintAction string
 
 const (
-	// DoNotSchedule instructs the scheduler not to schedule the pod
-	// when constraints are not satisfied.
+	// DoNotSchedule 指示调度器在约束未满足时不要调度该 Pod。
 	DoNotSchedule UnsatisfiableConstraintAction = "DoNotSchedule"
-	// ScheduleAnyway instructs the scheduler to schedule the pod
-	// even if constraints are not satisfied.
+	// ScheduleAnyway 指示调度器即使约束未满足也调度该 Pod。
 	ScheduleAnyway UnsatisfiableConstraintAction = "ScheduleAnyway"
 )
 
-// NodeInclusionPolicy defines the type of node inclusion policy
+// NodeInclusionPolicy 定义节点纳入策略的类型。
 // +enum
 type NodeInclusionPolicy string
 
 const (
-	// NodeInclusionPolicyIgnore means ignore this scheduling directive when calculating pod topology spread skew.
+	// NodeInclusionPolicyIgnore 表示在计算 Pod 拓扑分布倾斜时忽略此调度指令。
 	NodeInclusionPolicyIgnore NodeInclusionPolicy = "Ignore"
-	// NodeInclusionPolicyHonor means use this scheduling directive when calculating pod topology spread skew.
+	// NodeInclusionPolicyHonor 表示在计算 Pod 拓扑分布倾斜时使用此调度指令。
 	NodeInclusionPolicyHonor NodeInclusionPolicy = "Honor"
 )
 
-// TopologySpreadConstraint specifies how to spread matching pods among the given topology.
+// TopologySpreadConstraint 指定如何将匹配的 Pod 分布到给定的拓扑结构中。
 type TopologySpreadConstraint struct {
-	// MaxSkew describes the degree to which pods may be unevenly distributed.
-	// When `whenUnsatisfiable=DoNotSchedule`, it is the maximum permitted difference
-	// between the number of matching pods in the target topology and the global minimum.
-	// The global minimum is the minimum number of matching pods in an eligible domain
-	// or zero if the number of eligible domains is less than MinDomains.
-	// For example, in a 3-zone cluster, MaxSkew is set to 1, and pods with the same
-	// labelSelector spread as 2/2/1:
-	// In this case, the global minimum is 1.
+	// MaxSkew 描述 Pod 分布不均匀的最大程度。
+	// 当 `whenUnsatisfiable=DoNotSchedule` 时，它是目标拓扑中匹配 Pod 数量与全局最小值之间
+	// 允许的最大差值。全局最小值是合格域中匹配 Pod 数量的最小值；如果合格域数量少于
+	// MinDomains，则全局最小值为 0。
+	// 例如，在一个有 3 个可用区的集群中，MaxSkew 设为 1，具有相同 labelSelector 的 Pod
+	// 分布为 2/2/1：
+	// 此时全局最小值为 1。
+	// - 若 MaxSkew 为 1，新来的 Pod 只能调度到 zone3，使其变为 2/2/2；
+	// 若调度到 zone1（zone2），则 zone1（zone2）上的 ActualSkew（3-1）会违反 MaxSkew（1）。
+	// - 若 MaxSkew 为 2，新来的 Pod 可以调度到任意可用区。
+	// 当 `whenUnsatisfiable=ScheduleAnyway` 时，该值用于对满足约束的拓扑赋予更高优先级。
+	// 这是必填字段。默认值为 1，不允许为 0。
 	// +-------+-------+-------+
-	// | zone1 | zone2 | zone3 |
 	// +-------+-------+-------+
-	// |  P P  |  P P  |   P   |
 	// +-------+-------+-------+
-	// - if MaxSkew is 1, incoming pod can only be scheduled to zone3 to become 2/2/2;
-	// scheduling it onto zone1(zone2) would make the ActualSkew(3-1) on zone1(zone2)
-	// violate MaxSkew(1).
-	// - if MaxSkew is 2, incoming pod can be scheduled onto any zone.
-	// When `whenUnsatisfiable=ScheduleAnyway`, it is used to give higher precedence
-	// to topologies that satisfy it.
-	// It's a required field. Default value is 1 and 0 is not allowed.
 	MaxSkew int32
 	// TopologyKey is the key of node labels. Nodes that have a label with this key
 	// and identical values are considered to be in the same topology.
@@ -7381,72 +7165,57 @@ type TopologySpreadConstraint struct {
 	// And, if TopologyKey is "topology.kubernetes.io/zone", each zone is a domain of that topology.
 	// It's a required field.
 	TopologyKey string
-	// WhenUnsatisfiable indicates how to deal with a pod if it doesn't satisfy
-	// the spread constraint.
-	// - DoNotSchedule (default) tells the scheduler not to schedule it.
-	// - ScheduleAnyway tells the scheduler to schedule the pod in any location,
-	//   but giving higher precedence to topologies that would help reduce the
-	//   skew.
-	// A constraint is considered "Unsatisfiable" for an incoming pod
-	// if and only if every possible node assignment for that pod would violate
-	// "MaxSkew" on some topology.
-	// For example, in a 3-zone cluster, MaxSkew is set to 1, and pods with the same
-	// labelSelector spread as 3/1/1:
+	// WhenUnsatisfiable 指示当 Pod 不满足分布约束时如何处理。
+	// - DoNotSchedule（默认）告诉调度器不要调度该 Pod。
+	// - ScheduleAnyway 告诉调度器可以将 Pod 调度到任意位置，
+	// 但优先选择有助于降低倾斜度的拓扑。
+	// 当且仅当对某个新来的 Pod，所有可能的节点分配都会在某一拓扑上违反 "MaxSkew" 时，
+	// 才认为该约束对此 Pod "无法满足"。
+	// 例如，在一个有 3 个可用区的集群中，MaxSkew 设为 1，具有相同 labelSelector 的 Pod
+	// 分布为 3/1/1：
+	// 若 WhenUnsatisfiable 设为 DoNotSchedule，新来的 Pod 只能调度到 zone2（zone3），
+	// 使其变为 3/2/1（3/1/2），因为 zone2（zone3）上的 ActualSkew（2-1）满足 MaxSkew（1）。
+	// 换句话说，集群仍可能是不均衡的，但调度器不会让它*更*不均衡。
+	// 这是必填字段。
 	// +-------+-------+-------+
-	// | zone1 | zone2 | zone3 |
 	// +-------+-------+-------+
-	// | P P P |   P   |   P   |
 	// +-------+-------+-------+
-	// If WhenUnsatisfiable is set to DoNotSchedule, incoming pod can only be scheduled
-	// to zone2(zone3) to become 3/2/1(3/1/2) as ActualSkew(2-1) on zone2(zone3) satisfies
-	// MaxSkew(1). In other words, the cluster can still be imbalanced, but scheduler
-	// won't make it *more* imbalanced.
-	// It's a required field.
 	WhenUnsatisfiable UnsatisfiableConstraintAction
-	// LabelSelector is used to find matching pods.
-	// Pods that match this label selector are counted to determine the number of pods
-	// in their corresponding topology domain.
+	// LabelSelector 用于查找匹配的 Pod。
+	// 匹配该标签选择器的 Pod 会被计数，以确定其所在拓扑域中的 Pod 数量。
 	// +optional
 	LabelSelector *metav1.LabelSelector
-	// MinDomains indicates a minimum number of eligible domains.
-	// When the number of eligible domains with matching topology keys is less than minDomains,
-	// Pod Topology Spread treats "global minimum" as 0, and then the calculation of Skew is performed.
-	// And when the number of eligible domains with matching topology keys equals or greater than minDomains,
-	// this value has no effect on scheduling.
-	// As a result, when the number of eligible domains is less than minDomains,
-	// scheduler won't schedule more than maxSkew Pods to those domains.
-	// If value is nil, the constraint behaves as if MinDomains is equal to 1.
-	// Valid values are integers greater than 0.
-	// When value is not nil, WhenUnsatisfiable must be DoNotSchedule.
-	//
-	// For example, in a 3-zone cluster, MaxSkew is set to 2, MinDomains is set to 5 and pods with the same
-	// labelSelector spread as 2/2/2:
+	// MinDomains 表示合格域的最小数量。
+	// 当具有匹配拓扑键的合格域数量少于 minDomains 时，Pod 拓扑分布会将"全局最小值"视为 0，
+	// 然后进行倾斜度的计算。
+	// 当具有匹配拓扑键的合格域数量大于或等于 minDomains 时，此值对调度没有影响。
+	// 因此，当合格域数量少于 minDomains 时，调度器向这些域调度的 Pod 不会超过 maxSkew 个。
+	// 若值为 nil，则该约束的行为等同于 MinDomains 等于 1。
+	// 有效值为大于 0 的整数。
+	// 当值不为 nil 时，WhenUnsatisfiable 必须为 DoNotSchedule。
+	// 例如，在一个有 3 个可用区的集群中，MaxSkew 设为 2，MinDomains 设为 5，
+	// 具有相同 labelSelector 的 Pod 分布为 2/2/2：
+	// 域数量少于 5（MinDomains），因此"全局最小值"被视为 0。
+	// 此时具有相同 labelSelector 的新 Pod 无法被调度，
+	// 因为若将其调度到三个可用区中的任何一个，计算出的倾斜度将为 3（3 - 0），
+	// 从而违反 MaxSkew。
 	// +-------+-------+-------+
-	// | zone1 | zone2 | zone3 |
 	// +-------+-------+-------+
-	// |  P P  |  P P  |  P P  |
 	// +-------+-------+-------+
-	// The number of domains is less than 5(MinDomains), so "global minimum" is treated as 0.
-	// In this situation, new pod with the same labelSelector cannot be scheduled,
-	// because computed skew will be 3(3 - 0) if new Pod is scheduled to any of the three zones,
-	// it will violate MaxSkew.
 	// +optional
 	MinDomains *int32
-	// NodeAffinityPolicy indicates how we will treat Pod's nodeAffinity/nodeSelector
-	// when calculating pod topology spread skew. Options are:
-	// - Honor: only nodes matching nodeAffinity/nodeSelector are included in the calculations.
-	// - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
-	//
-	// If this value is nil, the behavior is equivalent to the Honor policy.
+	// NodeAffinityPolicy 指示在计算 Pod 拓扑分布倾斜度时如何处理 Pod 的 nodeAffinity/nodeSelector。
+	// 可选项为：
+	// - Honor：仅将匹配 nodeAffinity/nodeSelector 的节点纳入计算。
+	// - Ignore：忽略 nodeAffinity/nodeSelector，所有节点都纳入计算。
+	// 若此值为 nil，则行为等同于 Honor 策略。
 	// +optional
 	NodeAffinityPolicy *NodeInclusionPolicy
-	// NodeTaintsPolicy indicates how we will treat node taints when calculating
-	// pod topology spread skew. Options are:
-	// - Honor: nodes without taints, along with tainted nodes for which the incoming pod
-	// has a toleration, are included.
-	// - Ignore: node taints are ignored. All nodes are included.
-	//
-	// If this value is nil, the behavior is equivalent to the Ignore policy.
+	// NodeTaintsPolicy 指示在计算 Pod 拓扑分布倾斜度时如何处理节点污点。
+	// 可选项为：
+	// - Honor：包含无污点的节点，以及新来的 Pod 能够容忍其污点的节点。
+	// - Ignore：忽略节点污点，包含所有节点。
+	// 若此值为 nil，则行为等同于 Ignore 策略。
 	// +optional
 	NodeTaintsPolicy *NodeInclusionPolicy
 	// MatchLabelKeys is a set of pod label keys to select the pods over which
@@ -7466,26 +7235,23 @@ type TopologySpreadConstraint struct {
 
 // These are the built-in errors for PortStatus.
 const (
-	// MixedProtocolNotSupported error in PortStatus means that the cloud provider
-	// can't ensure the port on the load balancer because mixed values of protocols
-	// on the same LoadBalancer type of Service are not supported by the cloud provider.
+	// MixedProtocolNotSupported 在 PortStatus 中表示云端提供商无法在负载均衡器上发布该端口，
+	// 因为同一 LoadBalancer 类型 Service 上混合使用多种协议不受云端提供商支持。
 	MixedProtocolNotSupported = "MixedProtocolNotSupported"
 )
 
-// PortStatus represents the error condition of a service port
+// PortStatus 表示 Service 端口的错误状态。
 type PortStatus struct {
-	// Port is the port number of the service port of which status is recorded here
+	// Port 是记录此处状态的 Service 端口的端口号。
 	Port int32
 	// Protocol is the protocol of the service port of which status is recorded here
 	Protocol Protocol
-	// Error is to record the problem with the service port
-	// The format of the error shall comply with the following rules:
-	// - built-in error values shall be specified in this file and those shall use
-	//   CamelCase names
-	// - cloud provider specific error values must have names that comply with the
-	//   format foo.example.com/CamelCase.
+	// Error 记录 Service 端口的问题。
+	// 错误格式必须遵循以下规则：
+	// - 内置错误值必须在本文件中指定，且使用 CamelCase 命名
+	// - 云端提供商特有的错误值必须符合 foo.example.com/CamelCase 格式。
+	// 其匹配的正则表达式为 (dns1123SubdomainFmt/)?(qualifiedNameFmt)
 	// ---
-	// The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
 	// +optional
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$`
@@ -7493,19 +7259,17 @@ type PortStatus struct {
 	Error *string
 }
 
-// LoadBalancerIPMode represents the mode of the LoadBalancer ingress IP
+// LoadBalancerIPMode 表示 LoadBalancer 入口 IP 的模式。
 type LoadBalancerIPMode string
 
 const (
-	// LoadBalancerIPModeVIP indicates that traffic is delivered to the node with
-	// the destination set to the load-balancer's IP and port.
+	// LoadBalancerIPModeVIP 表示流量被送达节点，目标地址设为负载均衡器的 IP 和端口。
 	LoadBalancerIPModeVIP LoadBalancerIPMode = "VIP"
-	// LoadBalancerIPModeProxy indicates that traffic is delivered to the node or pod with
-	// the destination set to the node's IP and port or the pod's IP and port.
+	// LoadBalancerIPModeProxy 表示流量被送达节点或 Pod，目标地址设为节点的 IP 和端口或 Pod 的 IP 和端口。
 	LoadBalancerIPModeProxy LoadBalancerIPMode = "Proxy"
 )
 
-// ImageVolumeSource represents a image volume resource.
+// ImageVolumeSource 表示一个镜像卷资源。
 type ImageVolumeSource struct {
 	// Required: Image or artifact reference to be used.
 	// Behaves in the same way as pod.spec.containers[*].image.
@@ -7516,11 +7280,11 @@ type ImageVolumeSource struct {
 	// +optional
 	Reference string
 
-	// Policy for pulling OCI objects. Possible values are:
-	// Always: the kubelet always attempts to pull the reference. Container creation will fail If the pull fails.
-	// Never: the kubelet never pulls the reference and only uses a local image or artifact. Container creation will fail if the reference isn't present.
-	// IfNotPresent: the kubelet pulls if the reference isn't already present on disk. Container creation will fail if the reference isn't present and the pull fails.
-	// Defaults to Always if :latest tag is specified, or IfNotPresent otherwise.
+	// 拉取 OCI 对象的策略。可能的值为：
+	// Always：kubelet 总是尝试拉取引用。若拉取失败，容器创建将失败。
+	// Never：kubelet 从不拉取引用，只使用本地镜像或制品。若引用不存在，容器创建将失败。
+	// IfNotPresent：若磁盘上不存在该引用，kubelet 才会拉取。若引用不存在且拉取失败，容器创建将失败。
+	// 指定 :latest 标签时默认为 Always，否则默认为 IfNotPresent。
 	// +optional
 	PullPolicy PullPolicy
 }

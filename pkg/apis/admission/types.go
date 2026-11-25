@@ -66,7 +66,7 @@ type AdmissionRequest struct {
 	// +optional
 	RequestKind *metav1.GroupVersionKind
 	// RequestResource 是原始 API 请求的完整限定资源（例如 v1.pods）。
-	// If this is specified and differs from the value in "resource", an equivalent match and conversion was performed.
+	// 若填写此值且与 "resource" 不同，说明曾执行等价匹配与转换
 	//
 	// 例如，若 deployment 可通过 apps/v1 和 apps/v1beta1 修改，而 webhook 注册了如下规则：
 	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` 且 `matchPolicy: Equivalent`，
@@ -78,7 +78,7 @@ type AdmissionRequest struct {
 	// +optional
 	RequestResource *metav1.GroupVersionResource
 	// RequestSubResource 是原始 API 请求中的子资源名称（如有），例如 "status" 或 "scale"。
-	// If this is specified and differs from the value in "subResource", an equivalent match and conversion was performed.
+	// 若填写此值且与 "subResource" 不同，说明曾执行等价匹配与转换
 	// 参见 webhook 配置类型中 "matchPolicy" 字段的文档。
 	// +optional
 	RequestSubResource string
@@ -115,7 +115,7 @@ type AdmissionRequest struct {
 	Options runtime.Object
 }
 
-// AdmissionResponse describes an admission response.
+// AdmissionResponse 描述准入响应
 type AdmissionResponse struct {
 	// UID is an identifier for the individual request/response.
 	// 应从对应的 AdmissionRequest 中原样复制。
