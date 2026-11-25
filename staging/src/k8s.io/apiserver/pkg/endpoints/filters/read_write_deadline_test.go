@@ -33,11 +33,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-// NOTE: The following tests assert on low-level error returned from net/http, if
-// a new version of Go changes the error type returned, then some of these tests
-// might fail during GoLang update, we can fix the broken test(s) by changing the
-// wanted error in the test setup to the new observed error.
-//
+// 注意：以下测试断言的是 net/http 返回的底层错误。如果某个 Go 版本
+// 改变了返回的错误类型，这些测试在升级 Go 时可能会失败；我们可以通过
+// 把测试设置中期望的错误改为新观察到的错误来修复它们。
 // 本文件用真实 net/http 服务器刻画 per-request 读/写 deadline 的底层行为，
 // 作为 filters 中 SetReadDeadline/SetWriteDeadline 实现的“事实基线”。断言依赖
 // 标准库错误文本，升级 Go 时可能需要同步调整。
@@ -45,27 +43,26 @@ import (
 // TestPerRequestWithWriteEventuallyReturnsDeadlineError 验证：deadline 过后持续写入，
 // 直到内核/缓冲写满时 Write 才返回超时错误；期间不 flush 时客户端拿不到内容。
 func TestPerRequestWithWriteEventuallyReturnsDeadlineError(t *testing.T) {
-	// This test documents the behavior of the per request write deadline
-	// using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-request 写 deadline 的行为。
 	//
-	// scenario: we want to observe the circumstances under which the Write
-	// method of the ResponseWriter object returns an "i/o timeout" error:
-	//  - a) write deadline is set to 100ms
-	//  - b) the handler waits until the write deadline exceeds
-	//  - c) after timeout occurs, the handler keeps writing 1kB of data at a time
-	// we expect the following:
-	//  - d) client: expected to receive an error from the server
-	//  - e) server: the Write method of the ResponseWriter object should
-	//       return an "i/o timeout" error once its internal buffer is full
+	// 场景：我们想观察 ResponseWriter 对象的 Write 方法在什么情况下返回
+	// "i/o timeout" 错误：
+	//  - a) write deadline 设置为 100ms
+	//  - b) handler 等待直到 write deadline 超时
+	//  - c) 超时发生后，handler 每次持续写入 1kB 数据
+	// 预期行为如下：
+	//  - d) 客户端：预期从服务器收到一个错误
+	//  - e) 服务器：ResponseWriter 对象的 Write 方法在其内部缓冲区
+	//       写满后应返回 "i/o timeout" 错误
 	//
-	// The size of the internal buffer is 4kB bytes:
+	// 内部缓冲区大小为 4kB 字节：
 	//
-	// http/1x: the net.Conn is written to by a buffered Writer
-	// (*bufio.Writer) of default size of 4kB bytes:
+	// http/1x：net.Conn 由默认大小 4kB 字节的带缓冲 Writer
+	// （*bufio.Writer）写入：
 	//  a) https://github.com/golang/go/blob/ffb3e574012ce9d3d5193d7b8df135189b8a6671/src/net/http/server.go#L1650
 	//  b) https://github.com/golang/go/blob/ffb3e574012ce9d3d5193d7b8df135189b8a6671/src/net/http/server.go#L2014
 	//
-	// http/2.0: a buffered writer (4kB bytes) writes to the unerlying net.Conn
+	// http/2.0：带缓冲的 writer（4kB 字节）写入底层 net.Conn
 	//  a) https://github.com/golang/go/blob/ffb3e574012ce9d3d5193d7b8df135189b8a6671/src/net/http/h2_bundle.go#L3568
 	//  b) https://github.com/golang/go/blob/ffb3e574012ce9d3d5193d7b8df135189b8a6671/src/net/http/h2_bundle.go#L4279
 	t.Parallel()
@@ -79,12 +76,12 @@ func TestPerRequestWithWriteEventuallyReturnsDeadlineError(t *testing.T) {
 	}{
 		{
 			protoMajor: 1, // http/1x
-			// NOTE: we can't use channel based waiiter for http/1x,
-			// since the request handler is executed in the same
-			// goroutine as the connection serving goroutine
+			// 注意：http/1x 不能使用基于 channel 的 waiter，
+			// 因为请求 handler 与连接服务 goroutine 在同一个
+			// goroutine 中执行
 			// https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/4460-per-request-deadline#client-hanging-indefinitely
-			// write timeout is set to 100ms, a wait of 5s should be
-			// enough to withstand flakes in CI.
+			// write timeout 设置为 100ms，等待 5s 应当足以
+			// 抵御 CI 中的偶发失败。
 			waiter:             &waitWithDuration{after: 5 * time.Second},
 			clientErrVerifier:  wantContains{contains: "local error: tls: bad record MAC"},
 			handlerErrVerifier: wantError{err: os.ErrDeadlineExceeded},
@@ -106,18 +103,18 @@ func TestPerRequestWithWriteEventuallyReturnsDeadlineError(t *testing.T) {
 					return
 				}
 
-				// a) set write deadline for this request
+				// a) 为本请求设置写 deadline
 				ctrl := http.NewResponseController(w)
 				if err := ctrl.SetWriteDeadline(time.Now().Add(deadline)); err != nil {
 					t.Errorf("server: unexpected error from SetWriteDeadline: %v", err)
 					return
 				}
 
-				// b) wait until the write deadline exceeds
+				// b) 等待直到 write deadline 超时
 				<-test.waiter.wait()
 
-				// c) keep writing 1kB of data at a time, Write
-				// will eventually return an i/o timeout error
+				// c) 每次持续写入 1kB 数据，Write
+				// 最终会返回 i/o timeout 错误
 				func() {
 					now := time.Now()
 					written := 0
@@ -147,14 +144,13 @@ func TestPerRequestWithWriteEventuallyReturnsDeadlineError(t *testing.T) {
 				client.Timeout = wait.ForeverTestTimeout
 
 				_, err := client.Get(server.URL)
-				// d) verify that the client receives the appropriate error
-				// the client should not see a response body since the timeout
-				// exceeded before the handler returned, and the handler
-				// never invoked flush before the timeout.
+				// d) 验证客户端收到相应的错误。
+				// 客户端不应看到响应体，因为超时在 handler 返回之前
+				// 就已到期，且 handler 在超时前从未调用 flush。
 				test.clientErrVerifier.verify(t, err)
 			}()
 
-			// e) verify that the handler returns the right error
+			// e) 验证 handler 返回了正确的错误
 			err := handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 		})
@@ -164,20 +160,18 @@ func TestPerRequestWithWriteEventuallyReturnsDeadlineError(t *testing.T) {
 // TestPerRequestWithFlushReturnsErrorAfterDeadline 验证 deadline 过后的 FlushError
 // 立即返回超时错误——即使此前写入的数据还停留在缓冲区。
 func TestPerRequestWithFlushReturnsErrorAfterDeadline(t *testing.T) {
-	// This test documents the behavior of the per request write deadline
-	// using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-request 写 deadline 的行为。
 	//
-	// scenario: the handler writes to and flushes the ResponseWriter object
-	// after write timeout occurs:
-	//  - a) write deadline is set to 100ms
-	//  - b) the handler waits until the write deadline exceeds
-	//  - c) the handler writes a few bytes so there is some content to be flushed
-	//  - d) the handler invokes FlushError
-	// timeout occurs before the handler writes to the ResponseWriter object,
-	// so we expect the following:
-	//    e) client: expected to receive an error from the server
-	//    f) server: FlushError method of the ResponseWriter object should
-	//       return an "i/o timeout" error immediately.
+	// 场景：handler 在 write 超时发生后写入并 flush ResponseWriter 对象：
+	//  - a) write deadline 设置为 100ms
+	//  - b) handler 等待直到 write deadline 超时
+	//  - c) handler 写入若干字节，使缓冲区中有内容可 flush
+	//  - d) handler 调用 FlushError
+	// 超时在 handler 写入 ResponseWriter 对象之前发生，
+	// 因此预期如下：
+	//    e) 客户端：预期从服务器收到一个错误
+	//    f) 服务器：ResponseWriter 对象的 FlushError 方法应
+	//       立即返回 "i/o timeout" 错误。
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -189,8 +183,8 @@ func TestPerRequestWithFlushReturnsErrorAfterDeadline(t *testing.T) {
 	}{
 		{
 			protoMajor: 1,
-			// write timeout is set to 100ms, a wait of 5s should
-			// be enough to withstand flakes in CI.
+			// write timeout 设置为 100ms，等待 5s 应当
+			// 足以抵御 CI 中的偶发失败。
 			waiter:             &waitWithDuration{after: 5 * time.Second},
 			clientErrVerifier:  wantContains{contains: "local error: tls: bad record MAC"},
 			handlerErrVerifier: wantError{err: os.ErrDeadlineExceeded},
@@ -217,34 +211,34 @@ func TestPerRequestWithFlushReturnsErrorAfterDeadline(t *testing.T) {
 					return
 				}
 
-				// a) set write deadline for this request
+				// a) 为本请求设置写 deadline
 				ctrl := http.NewResponseController(w)
 				if err := ctrl.SetWriteDeadline(time.Now().Add(deadline)); err != nil {
 					t.Errorf("server: unexpected error from SetWriteDeadline: %v", err)
 					return
 				}
 
-				// b) wait until the write deadline exceeds
+				// b) 等待直到 write deadline 超时
 				<-test.waiter.wait()
 
-				// c) write a few bytes so there is something in the buffer to
-				// flush, the client should never see these bytes in the response.
-				// NOTE: since the intenal buffered Writer has a size of 4kB, this
-				// Write operation should not cause an actual write to the net.Conn
+				// c) 写入若干字节，使缓冲区中有内容可 flush，
+				// 客户端绝不应在响应中看到这些字节。
+				// 注意：由于内部带缓冲的 Writer 大小为 4kB，这次
+				// Write 操作不应真正写入 net.Conn
 				if _, err := w.Write([]byte("hello")); err != nil {
 					t.Errorf("server: unexpected error from Write after timeout: %v", err)
 					return
 				}
-				// d) flush the payload in the buffer
-				// NOTE: FlushError, on the other hand, is expected
-				// to return a timeout error immediately.
+				// d) flush 缓冲区中的内容
+				// 注意：另一方面，预期 FlushError 会
+				// 立即返回超时错误。
 				if err := flusher.FlushError(); err != nil {
 					handlerErrCh <- err
 				}
 
-				// NOTE: the handler goroutine is expected to terminate as soon
-				// as it receives an error from either Write or FlushError. This
-				// is how we prevent a request handler from running indefinitely.
+				// 注意：预期 handler goroutine 一旦从 Write 或 FlushError
+				// 收到错误就立即终止。这正是我们防止请求 handler
+				// 无限运行的方式。
 			}))
 
 			defer server.Close()
@@ -257,11 +251,11 @@ func TestPerRequestWithFlushReturnsErrorAfterDeadline(t *testing.T) {
 				defer test.waiter.close()
 
 				_, err := server.Client().Get(server.URL)
-				// e) verify that the client receives the appropriate error
+				// e) 验证客户端收到相应的错误
 				test.clientErrVerifier.verify(t, err)
 			}()
 
-			// f) verify that the handler returns the right error
+			// f) 验证 handler 返回了正确的错误
 			err := handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 		})
@@ -271,20 +265,18 @@ func TestPerRequestWithFlushReturnsErrorAfterDeadline(t *testing.T) {
 // TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline 验证在 deadline
 // 之前写入、deadline 之后才 flush 的内容不会到达客户端。
 func TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline(t *testing.T) {
-	// This test documents the behavior of the per handler write
-	// deadline using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-handler 写 deadline 的行为。
 	//
-	// scenario: the handler writes to, but does not flush the ResponseWriter object
-	// before write timeout occurs:
-	//  - a) the handler writes a few bytes so there is some content to be flushed later
-	//  - b) write deadline is set to 100ms
-	//  - c) wait until the write deadline elapses
-	//  - d) the handler invokes FlushError
-	// timeout occurs after the handler writes to but has not flushed the
-	// ResponseWriter object yet, we expect the following:
-	//  - e) client: expected to receive an error from the server
-	/// - f) server: FlushError method of the ResponseWriter object should
-	//       return an "i/o timeout" error immediately
+	// 场景：handler 在 write 超时发生之前写入 ResponseWriter 对象但不 flush：
+	//  - a) handler 写入若干字节，使后续有内容可 flush
+	//  - b) write deadline 设置为 100ms
+	//  - c) 等待直到 write deadline 超时
+	//  - d) handler 调用 FlushError
+	// 超时发生在 handler 写入之后、但尚未 flush ResponseWriter 对象之前，
+	// 预期如下：
+	//  - e) 客户端：预期从服务器收到一个错误
+	/// - f) 服务器：ResponseWriter 对象的 FlushError 方法应
+	//       立即返回 "i/o timeout" 错误
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -296,8 +288,8 @@ func TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline(t *testing
 	}{
 		{
 			protoMajor: 1,
-			// write timeout is set to 100ms, a wait of 5s should
-			// be enough to withstand flakes in CI.
+			// write timeout 设置为 100ms，等待 5s 应当
+			// 足以抵御 CI 中的偶发失败。
 			waiter:             &waitWithDuration{after: 5 * time.Second},
 			clientErrVerifier:  wantContains{contains: "local error: tls: bad record MAC"},
 			handlerErrVerifier: wantError{err: os.ErrDeadlineExceeded},
@@ -324,24 +316,24 @@ func TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline(t *testing
 					return
 				}
 
-				// a) write a few bytes so the internal buffer
-				// is not full, don't flush yet
+				// a) 写入若干字节，使内部缓冲区
+				// 未满，先不要 flush
 				if _, err := w.Write([]byte("hello")); err != nil {
 					t.Errorf("server: unexpected error from Write: %v", err)
 					return
 				}
 
-				// b) set write deadline for this request
+				// b) 为本请求设置 write deadline
 				ctrl := http.NewResponseController(w)
 				if err := ctrl.SetWriteDeadline(time.Now().Add(deadline)); err != nil {
 					t.Errorf("server: unexpected error from SetWriteDeadline: %v", err)
 					return
 				}
 
-				// c) wait until the write deadline exceeds
+				// c) 等待直到 write deadline 超时
 				<-test.waiter.wait()
 
-				// d) flush the payload in the buffer
+				// d) flush 缓冲区中的内容
 				if err := flusher.FlushError(); err != nil {
 					handlerErrCh <- err
 				}
@@ -357,14 +349,14 @@ func TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline(t *testing
 				defer test.waiter.close()
 
 				_, err := server.Client().Get(server.URL)
-				// f) verify that the client receives the appropriate error
-				// NOTE: due to 'a' (the handler wrote but did not flush), and
-				// since the handler did not return before the timeout, the
-				// client will not receive an http.Response with the data written.
+				// f) 验证客户端收到相应的错误
+				// 注意：由于 'a'（handler 写入但未 flush），且
+				// handler 在超时前没有返回，客户端不会收到包含
+				// 已写数据的 http.Response。
 				test.clientErrVerifier.verify(t, err)
 			}()
 
-			// f) verify that the handler returns the right error
+			// f) 验证 handler 返回了正确的错误
 			err := handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 		})
@@ -374,25 +366,22 @@ func TestPerRequestWithClientNeverReceivesContentFlushedAfterDeadline(t *testing
 // TestPerRequestWithClientReceivesContentFlushedBeforeDeadline 验证 deadline 前已
 // 写入并 flush 的内容可以到达客户端；deadline 后的写入失败不应影响已发送部分。
 func TestPerRequestWithClientReceivesContentFlushedBeforeDeadline(t *testing.T) {
-	// This test documents the behavior of the per handler write
-	// deadline using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-handler 写 deadline 的行为。
 	//
-	// scenario: the handler writes to and flushes the ResponseWriter object
-	// before the write deadline elapses:
-	//  - a) the handler writes message 1 ("hello") to the ResponseWriter object
-	//  - b) the handler invokes FlushError
-	//  - c) write deadline is set to 100ms
-	//  - d) wait until the write deadline elapses
-	//  - e) the handler writes message 2 ("world") to the ResponseWriter object
-	//  - f) the handler invokes FlushError
-	// timeout occurs after the handler writes to and flushes the
-	// ResponseWriter object, so we expect the following:
-	//  - g) client: expected to receive a response (200 OK) from the server,
-	//       while reading the Body of the response, the client will read
-	//       message 1 from the stream, and then it will encounter an error.
-	//       the client should never see message 2.
-	//  - h) server: FlushError method of the ResponseWriter object should
-	//       return an "i/o timeout" error immediately after the write timeout
+	// 场景：handler 在 write deadline 超时之前写入并 flush ResponseWriter 对象：
+	//  - a) handler 向 ResponseWriter 对象写入消息 1（"hello"）
+	//  - b) handler 调用 FlushError
+	//  - c) write deadline 设置为 100ms
+	//  - d) 等待直到 write deadline 超时
+	//  - e) handler 向 ResponseWriter 对象写入消息 2（"world"）
+	//  - f) handler 调用 FlushError
+	// 超时发生在 handler 写入并 flush ResponseWriter 对象之后，
+	// 因此预期如下：
+	//  - g) 客户端：预期从服务器收到响应（200 OK），读取响应 Body 时，
+	//       客户端会先从流中读到消息 1，随后遇到错误。
+	//       客户端绝不应看到消息 2。
+	//  - h) 服务器：ResponseWriter 对象的 FlushError 方法应在
+	//       write 超时后立即返回 "i/o timeout" 错误
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -404,8 +393,8 @@ func TestPerRequestWithClientReceivesContentFlushedBeforeDeadline(t *testing.T) 
 	}{
 		{
 			protoMajor: 1,
-			// write timeout is set to 100ms, a wait of 5s should
-			// be enough to withstand flakes in CI.
+			// write timeout 设置为 100ms，等待 5s 应当
+			// 足以抵御 CI 中的偶发失败。
 			waiter:             &waitWithDuration{after: 5 * time.Second},
 			clientErrVerifier:  wantContains{contains: "local error: tls: bad record MAC"},
 			handlerErrVerifier: wantError{err: os.ErrDeadlineExceeded},
@@ -433,34 +422,34 @@ func TestPerRequestWithClientReceivesContentFlushedBeforeDeadline(t *testing.T) 
 					return
 				}
 
-				// a) write message 1
+				// a) 写入消息 1
 				if _, err := w.Write([]byte(msg1)); err != nil {
 					t.Errorf("server: unexpected error from Write: %v", err)
 					return
 				}
-				// b) flush the payload that has been written to the buffer
+				// b) flush 已写入缓冲区的内容
 				if err := flusher.FlushError(); err != nil {
 					t.Errorf("server: unexpected error from FlushError: %v", err)
 					return
 				}
 
-				// c) set write deadline for this request
+				// c) 为本请求设置 write deadline
 				ctrl := http.NewResponseController(w)
 				if err := ctrl.SetWriteDeadline(time.Now().Add(deadline)); err != nil {
 					t.Errorf("server: unexpected error from SetWriteDeadline: %v", err)
 					return
 				}
 
-				// d) wait until the write deadline exceeds
+				// d) 等待直到 write deadline 超时
 				<-test.waiter.wait()
 
-				// e) write message 2 (the client should never
-				// see the following message, and the test
-				// verifies that in step g)
+				// e) 写入消息 2（客户端绝不应看到
+				// 以下消息，测试将在步骤 g) 中
+				// 验证这一点）
 				if _, err := w.Write([]byte(msg2)); err != nil {
 					t.Errorf("server: unexpected error from Write after timeout: %v", err)
 				}
-				// f) flush the payload in the buffer
+				// f) flush 缓冲区中的内容
 				if err := flusher.FlushError(); err != nil {
 					handlerErrCh <- err
 				}
@@ -479,27 +468,27 @@ func TestPerRequestWithClientReceivesContentFlushedBeforeDeadline(t *testing.T) 
 					t.Errorf("unexpected error from client.Get: %v", err)
 					return
 				}
-				// g) the client expects a response from the server since content
-				// has been written and flushed before the write deadline elapsed
+				// g) 客户端预期从服务器收到响应，因为内容
+				// 在 write deadline 超时前已写入并 flush
 				if resp.StatusCode != http.StatusOK {
 					t.Errorf("expected staus code: %d, but got: %d", http.StatusOK, resp.StatusCode)
 				}
 				defer closeResponseBody(t, resp)
 
-				// g) the client expects to read the paylaod from the Body of
-				// the response that was flushed before the write deadline elapsed
+				// g) 客户端预期从响应 Body 中读到在 write
+				// deadline 超时前已 flush 的内容
 				b := make([]byte, len(msg1))
 				if _, err := io.ReadFull(resp.Body, b); err != nil || msg1 != string(b) {
 					t.Errorf("expected to read the initial write from the server, but got: %v", err)
 				}
 
-				// g) at this point, any further attempt to read
-				// the Body of the response should yield an error
+				// g) 此时，任何进一步读取响应
+				// Body 的尝试都应产生错误
 				_, err = io.ReadAll(resp.Body)
 				test.clientErrVerifier.verify(t, err)
 			}()
 
-			// h) verify that the handler returns the right error
+			// h) 验证 handler 返回了正确的错误
 			err := handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 		})
@@ -509,19 +498,18 @@ func TestPerRequestWithClientReceivesContentFlushedBeforeDeadline(t *testing.T) 
 // TestPerRequestWithHandlerShouldAbortWriteAfterDeadline 验证无限写入的 handler 会在
 // deadline 到达时因 Write 报错而终止，不会永久挂起占用连接。
 func TestPerRequestWithHandlerShouldAbortWriteAfterDeadline(t *testing.T) {
-	// This test documents the behavior of the per handler write
-	// deadline using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-handler 写 deadline 的行为。
 	//
-	// scenario: the handler keeps writing to the ResponseWriter object indefinitely:
-	//  - a) write deadline is set to 300ms
-	//  - b) the handler keeps writing to the ResponseWriter object
-	//       indefinitely, no explicit FlushError invocation
-	// expectation:
-	//  - c) client: expected to receive a response (200 OK) from the server since
-	//       some content has been written to and flushed by the server.
-	//  - d) server: the Write method is expected to return an "i/o timeout"
-	//       error as soon as write deadline returns, and the handler is
-	//       expected to terminate as a result
+	// 场景：handler 无限持续写入 ResponseWriter 对象：
+	//  - a) write deadline 设置为 300ms
+	//  - b) handler 无限持续写入 ResponseWriter 对象，
+	//       不显式调用 FlushError
+	// 预期：
+	//  - c) 客户端：由于服务器已写入并 flush 了部分内容，
+	//       预期从服务器收到响应（200 OK）。
+	//  - d) 服务器：预期 Write 方法在 write deadline 到期后
+	//       立即返回 "i/o timeout" 错误，并且 handler
+	//       因此终止
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -554,14 +542,14 @@ func TestPerRequestWithHandlerShouldAbortWriteAfterDeadline(t *testing.T) {
 					return
 				}
 
-				// a) set write deadline for this request
+				// a) 为本请求设置写 deadline
 				ctrl := http.NewResponseController(w)
 				if err := ctrl.SetWriteDeadline(time.Now().Add(deadline)); err != nil {
 					t.Errorf("server: unexpected error from SetWriteDeadline: %v", err)
 					return
 				}
 
-				// b) keep writing to the ResponseWriter indefinitely
+				// b) 无限持续写入 ResponseWriter 对象
 				if _, err := io.Copy(w, neverEnding('a')); err != nil {
 					handlerErrCh <- err
 				}
@@ -577,23 +565,22 @@ func TestPerRequestWithHandlerShouldAbortWriteAfterDeadline(t *testing.T) {
 				client := server.Client()
 				client.Timeout = wait.ForeverTestTimeout
 				resp, err := client.Get(server.URL)
-				// c) under normal conditions the client expects a
-				// response from the server, but under stress the
-				// server may return an error as well:
+				// c) 正常情况下客户端预期从服务器收到响应，
+				// 但在压力下服务器也可能返回错误：
 				//   go test -race k8s.io/apiserver/pkg/endpoints/filters -c
 				//   stress -p=256 ./filters.test -test.run=TestPerRequestWriteDeadlineWithHandlerWritingIndefinitely
-				// the above stress test causes the server to return error
+				// 上述压力测试会使服务器返回错误
 				if err != nil {
 					test.clientErrVerifier.verify(t, err)
 					return
 				}
 				defer closeResponseBody(t, resp)
 				_, err = io.ReadAll(resp.Body)
-				// c) reading the Body of the response should yield an error
+				// c) 读取响应 Body 应产生错误
 				test.clientErrVerifier.verify(t, err)
 			}()
 
-			// d) verify that the handler returns the right error
+			// d) 验证 handler 返回了正确的错误
 			err := handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 		})
@@ -603,20 +590,19 @@ func TestPerRequestWithHandlerShouldAbortWriteAfterDeadline(t *testing.T) {
 // TestPerRequestWithBodyReadShouldTimeoutAfterDeadline 验证读 deadline 能中断
 // “客户端迟迟不发送 body”的请求，避免服务端 goroutine 被慢客户端拖住。
 func TestPerRequestWithBodyReadShouldTimeoutAfterDeadline(t *testing.T) {
-	// This test documents the behavior of the per handler read
-	// deadline using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-handler 读 deadline 的行为。
 	//
-	// scenario: the client sets up a request body, but never sends any content:
-	//  - a) client sets up a request body, keeps the stream open but does not send any content
-	//  - b) read deadline is set to 500ms
-	//  - c) the handler tries to read the Body of the request
-	//  - d) read timeout elapses
-	//  - e) the handler writes to and flushes the ResponseWriter object
-	// after read read timeout occurs, we expect the following:
-	//  - f) client: expected to see a response from the server since the
-	//       the handler, in the case of this test completed normally
-	//  - g) server: reading the Body of the request should yield
-	//       an "i/o timeout" error
+	// 场景：客户端设置了请求 body，但从不发送任何内容：
+	//  - a) 客户端设置请求 body，保持流打开但不发送任何内容
+	//  - b) read deadline 设置为 500ms
+	//  - c) handler 尝试读取请求的 Body
+	//  - d) read 超时到期
+	//  - e) handler 写入并 flush ResponseWriter 对象
+	// read 超时发生后，预期如下：
+	//  - f) 客户端：预期看到服务器的响应，因为本测试中
+	//       handler 正常完成了执行
+	//  - g) 服务器：读取请求 Body 应产生
+	//       "i/o timeout" 错误
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -649,22 +635,22 @@ func TestPerRequestWithBodyReadShouldTimeoutAfterDeadline(t *testing.T) {
 					return
 				}
 
-				// b) set read deadline for this request
+				// b) 为本请求设置 read deadline
 				ctrl := http.NewResponseController(w)
 				if err := ctrl.SetReadDeadline(time.Now().Add(deadline)); err != nil {
 					t.Errorf("server: unexpected error from SetReadDeadline: %v", err)
 					return
 				}
 
-				// c) read the Body of the request
+				// c) 读取请求的 Body
 				if _, err := io.Copy(io.Discard, req.Body); err != nil {
-					// d) read timeout elapses here since the client
-					// never sent any data before the read deadline elapsed
+					// d) 由于客户端在 read deadline 到期前从未
+					// 发送任何数据，read 超时在此处到期
 					handlerErrCh <- err
 				}
 
-				// e) the handler writes to and flushes the
-				// ResponseWriter object after read timeout occurs
+				// e) read 超时发生后，handler 写入并
+				// flush ResponseWriter 对象
 				if _, err := w.Write([]byte(msg)); err != nil {
 					t.Errorf("server: unexpected error from Write after read timeout: %v", err)
 					return
@@ -689,8 +675,8 @@ func TestPerRequestWithBodyReadShouldTimeoutAfterDeadline(t *testing.T) {
 			}()
 
 			func() {
-				// a) the client sets up the request with a Body
-				// but never writes to it.
+				// a) 客户端设置了带 Body 的请求，
+				// 但从不向其写入。
 				resp, err := server.Client().Post(server.URL, "text/foo", reader)
 				if err != nil {
 					t.Errorf("expected no error from Post, but got: %v", err)
@@ -698,8 +684,8 @@ func TestPerRequestWithBodyReadShouldTimeoutAfterDeadline(t *testing.T) {
 				}
 				defer closeResponseBody(t, resp)
 
-				// f) sine the handler wrote a response, we expect
-				// the client to read it successfully.
+				// f) 由于 handler 已写出响应，我们预期
+				// 客户端能成功读取它。
 				if resp.StatusCode != http.StatusOK {
 					t.Errorf("expected staus code: %d, but got: %d", http.StatusOK, resp.StatusCode)
 				}
@@ -708,7 +694,7 @@ func TestPerRequestWithBodyReadShouldTimeoutAfterDeadline(t *testing.T) {
 				}
 			}()
 
-			// g) verify that the handler returns the right error
+			// g) 验证 handler 返回了正确的错误
 			err := handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 		})
@@ -718,24 +704,22 @@ func TestPerRequestWithBodyReadShouldTimeoutAfterDeadline(t *testing.T) {
 // TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline 验证 deadline 前
 // 已读到的 body 数据不会因后续读取超时而丢失或回滚。
 func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testing.T) {
-	// This test documents the behavior of the per request read
-	// deadline using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-request 读 deadline 的行为。
 	//
-	// scenario: read deadline elapses after the handler partially
-	// reads the Body of the request:
-	//  - a) client sets up a request with a Body
-	//  - b) client writes (message 1 + message 2) to the Body, and then keeps the stream open
-	//  - c) the handler reads exactly N bytes, N=len(message 1) from the Body of the request
-	//  - d) read deadline is set to 300ms
-	//  - e) the handler tries to read the remaining bytes off of request body
-	//  - f) read timeout occurs after 300ms (since the stream is still open)
-	//  - g) the handler terminates
-	//  - h) client closes the stream after the handler terminates
-	// expectation:
-	//  - i) client: since the handler in the case of this test returns normally,
-	//       the client is expected to see a response from the server.
-	//  - j) server: the handler should see an "i/o timeout" error while reading
-	//       the Body of the request
+	// 场景：handler 部分读取请求 Body 之后 read deadline 到期：
+	//  - a) 客户端设置带 Body 的请求
+	//  - b) 客户端向 Body 写入（消息 1 + 消息 2），然后保持流打开
+	//  - c) handler 从请求 Body 恰好读取 N 字节，N=len(消息 1)
+	//  - d) read deadline 设置为 300ms
+	//  - e) handler 尝试读取请求 body 的剩余字节
+	//  - f) read 超时在 300ms 后发生（因为流仍打开）
+	//  - g) handler 终止
+	//  - h) handler 终止后客户端关闭流
+	// 预期：
+	//  - i) 客户端：由于本测试中 handler 正常返回，
+	//       预期客户端会看到服务器的响应。
+	//  - j) 服务器：handler 在读取请求 Body 时应遇到
+	//       "i/o timeout" 错误
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -764,7 +748,7 @@ func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testin
 					return
 				}
 
-				// c) read message 1, N = len(message 1) from the Body of the request
+				// c) 从请求 Body 读取消息 1，N = len(消息 1)
 				b := make([]byte, len(msg1))
 				n, err := io.ReadFull(req.Body, b)
 				if err != nil || string(b[:n]) != msg1 {
@@ -772,21 +756,20 @@ func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testin
 					return
 				}
 
-				// d) set read deadline for this request
+				// d) 为本请求设置 read deadline
 				ctrl := http.NewResponseController(w)
 				if err := ctrl.SetReadDeadline(time.Now().Add(deadline)); err != nil {
 					t.Errorf("server: unexpected error from SetReadDeadline: %v", err)
 					return
 				}
 
-				// e) the handler reads the remaining bytes off
-				// of the Body and then eventually times out.
-				// NOTE: at this point, there are some bytes left
-				// in the Body of the request, and the EOF will
-				// not be reached since the client is keeping the
-				// stream open until after the handler terminates
+				// e) handler 读取 Body 的剩余字节，
+				// 最终超时。
+				// 注意：此时请求 Body 中仍有一些字节剩余，
+				// 且不会到达 EOF，因为客户端会一直保持流
+				// 打开，直到 handler 终止之后
 				got, err := io.ReadAll(req.Body)
-				// f) read timeout has occurred
+				// f) read 超时已发生
 				if msg2 != string(got) {
 					t.Errorf("server: expected %q, but got: %q", msg2, string(got))
 					return
@@ -795,7 +778,7 @@ func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testin
 					handlerErrCh <- err
 				}
 
-				// g) the handler terminates
+				// g) handler 终止
 			}))
 
 			defer server.Close()
@@ -808,14 +791,14 @@ func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testin
 			clientWriterDoneCh := make(chan error, 1)
 			go func() {
 				defer close(clientWriterDoneCh)
-				// b) write (message 1 + message 2) to the Body,
-				// but don't close the stream yet
+				// b) 向 Body 写入（消息 1 + 消息 2），
+				// 但先不关闭流
 				if _, err := writer.Write([]byte(msg1 + msg2)); err != nil {
 					t.Errorf("unexpected error from Write to Body of the request: %v", err)
 				}
 
-				// h) wait until the handler terminates before
-				// closing the stream
+				// h) 等待 handler 终止后再
+				// 关闭流
 				<-handlerDoneCh
 				if err := writer.Close(); err != nil {
 					t.Errorf("unexpected error from Close: %v", err)
@@ -824,7 +807,7 @@ func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testin
 
 			client := server.Client()
 
-			// a) sets up a request with a Body
+			// a) 设置带 Body 的请求
 			resp, err := client.Post(server.URL, "text/foo", reader)
 			if err != nil {
 				t.Errorf("expected no error, but got: %v", err)
@@ -837,13 +820,13 @@ func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testin
 				t.Errorf("expected the client writer to have terminated")
 			}
 
-			// i) the client receives a response since the handler terminates normally
+			// i) 客户端收到响应，因为 handler 正常终止
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("expected staus code: %d, but got: %d", http.StatusOK, resp.StatusCode)
 			}
 			defer closeResponseBody(t, resp)
 
-			// j) verify that the handler returns the right error
+			// j) 验证 handler 返回了正确的错误
 			err = handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 		})
@@ -853,16 +836,15 @@ func TestPerRequestWithBodyReadShouldYieldPartialContentBeforeDeadline(t *testin
 // TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline 验证空 body 的
 // 读取不受读 deadline 影响（无数据可读时无需等待网络）。
 func TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline(t *testing.T) {
-	// This test documents the behavior of the per request read
-	// deadline using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-request 读 deadline 的行为。
 	//
-	// scenario: does the read deadline have any impact if the request body is empty?
-	//  - a) client sets up a request with an empty body
-	//  - b) read deadline is set to 100ms
-	//  - c) wait for the read deadline to elapse
-	//  - d) the handler reads the Body of the request
-	// expectation:
-	//  - e) server: read timeout has no effect on the handler
+	// 场景：如果请求 body 为空，read deadline 会有影响吗？
+	//  - a) 客户端设置一个带空 body 的请求
+	//  - b) read deadline 设置为 100ms
+	//  - c) 等待 read deadline 到期
+	//  - d) handler 读取请求的 Body
+	// 预期：
+	//  - e) 服务器：read 超时对 handler 没有影响
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -892,22 +874,22 @@ func TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline(t *testi
 					return
 				}
 
-				// b) set read deadline for this request
+				// b) 为本请求设置 read deadline
 				ctrl := http.NewResponseController(w)
 				if err := ctrl.SetReadDeadline(time.Now().Add(deadline)); err != nil {
 					t.Errorf("server: unexpected error SetReadDeadline: %v", err)
 					return
 				}
 
-				// c) wait for the read deadline to elapse
+				// c) 等待 read deadline 到期
 				<-test.waiter.wait()
 
-				// we expect no timeout reading from an empty body since
-				// for server requests, the Request Body is always non-nil
-				// but will return EOF immediately when no body is present.
+				// 我们预期读取空 body 不会超时，因为对于服务端
+				// 请求，Request Body 永远非 nil，但在没有 body 时
+				// 会立即返回 EOF。
 				t.Logf("request Body type: %T", req.Body)
-				// d) the handler reads the Body of the request,
-				// this should return immediately without any error.
+				// d) handler 读取请求的 Body，
+				// 这应立即返回且不产生任何错误。
 				if _, err := io.Copy(io.Discard, req.Body); err != nil {
 					handlerErrCh <- err
 				}
@@ -921,7 +903,7 @@ func TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline(t *testi
 
 			func() {
 				defer test.waiter.close()
-				// a) client sets up a request without any body
+				// a) 客户端设置一个不带任何 body 的请求
 				resp, err := server.Client().Get(server.URL)
 				if err != nil {
 					t.Errorf("expected no error from Post, but got: %v", err)
@@ -933,7 +915,7 @@ func TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline(t *testi
 				}
 			}()
 
-			// e) verify that the handler did not return an error
+			// e) 验证 handler 没有返回错误
 			err := handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 		})
@@ -944,18 +926,17 @@ func TestPerRequestWithReadingEmptyBodyShouldNotYieldErrorAfterDeadline(t *testi
 // TestPerRequestWithHijackedConnectionShouldResetDeadline 验证 hijack 后的连接
 // 不受 handler 设置的读/写 deadline 约束——hijack 相当于接管原始 net.Conn。
 func TestPerRequestWithHijackedConnectionShouldResetDeadline(t *testing.T) {
-	// This test documents the behavior of the per handler read/write
-	// deadline using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-handler 读/写 deadline 的行为。
 	//
-	// scenario: does the read/write deadline have any adverse impact on
-	// a hijacked connection?
-	//  - a) both read and write deadline are set for the request
-	//  - b) the handler hijacks the connection
-	//  - c) let read and write deadline elapse
-	//  - d) the handler uses the hijacked connection to send a message to the client
-	//  - e) the client receieves the message
-	// we expect the read/write deadline set by the handler to have no
-	// impact on a hijacked connection.
+	// 场景：read/write deadline 会对被 hijack 的连接产生
+	// 不利影响吗？
+	//  - a) 为该请求同时设置 read 和 write deadline
+	//  - b) handler hijack 该连接
+	//  - c) 让 read 和 write deadline 到期
+	//  - d) handler 使用被 hijack 的连接向客户端发送消息
+	//  - e) 客户端收到该消息
+	// 我们预期 handler 设置的 read/write deadline 对被 hijack
+	// 的连接没有影响。
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -969,7 +950,7 @@ func TestPerRequestWithHijackedConnectionShouldResetDeadline(t *testing.T) {
 			return
 		}
 
-		// a) set both read and write deadline for this request
+		// a) 为本请求同时设置 read 和 write deadline
 		ctrl := http.NewResponseController(w)
 		if err := ctrl.SetWriteDeadline(time.Now().Add(deadline)); err != nil {
 			t.Errorf("server: unexpected error from SetWriteDeadline: %v", err)
@@ -980,19 +961,19 @@ func TestPerRequestWithHijackedConnectionShouldResetDeadline(t *testing.T) {
 			return
 		}
 
-		// b) hijack the connection
+		// b) hijack 该连接
 		conn, bufrw, err := hijacker.Hijack()
 		if err != nil {
 			t.Errorf("server: unexpected error from Hijack: %v", err)
 			return
 		}
 
-		// c) let both read and write deadline to elapse, 5s should be
-		// enough to withstand any flakes in CI
+		// c) 让 read 和 write deadline 都到期，5s 应当足以
+		// 抵御 CI 中的任何偶发失败
 		<-time.After(5 * time.Second)
 
-		// d) use the raw connection to send a message to the client,
-		// the connection should be usable after read/write timeout
+		// d) 使用原始连接向客户端发送消息，
+		// read/write 超时后连接应当仍然可用
 		payload := fmt.Sprintf("HTTP/1.0 200 OK\r\nContent-Length: %d\r\n\r\n%s", len(msg), msg)
 		if _, err := bufrw.Write([]byte(payload)); err != nil {
 			t.Errorf("server: unexpected error from Write: %v", err)
@@ -1020,7 +1001,7 @@ func TestPerRequestWithHijackedConnectionShouldResetDeadline(t *testing.T) {
 			t.Errorf("expected staus code: %d, but got: %d", http.StatusOK, resp.StatusCode)
 		}
 		defer closeResponseBody(t, resp)
-		// e) verify that the client receives the message as expected
+		// e) 验证客户端如预期收到消息
 		if got, err := io.ReadAll(resp.Body); err != nil || msg != string(got) {
 			t.Errorf("expected to read what the hijacked connection wrote, want: %q, got: %q, err: %v", msg, got, err)
 		}
@@ -1033,20 +1014,18 @@ func TestPerRequestWithHijackedConnectionShouldResetDeadline(t *testing.T) {
 // TestPerRequestWithConnectionIsReused 验证首个请求超时后连接仍可复用，
 // 从而确认分母端 deadline 不会污染 keep-alive 连接的后续请求。
 func TestPerRequestWithConnectionIsReused(t *testing.T) {
-	// This test documents the behavior of the per request write deadline
-	// using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-request 写 deadline 的行为。
 	//
-	// scenario: we want to observe whether a connection on the client is
-	// reused after a previous request riding on it fails with write timeout,
-	// we send two requests, "/1", and "/2" serially:
-	//  - a) the client sends the first request, at "/1"
-	//  - b) the handler writes to and flushes some content for the first request
-	//  - c) the handler sets write deadline to 100ms for the first request
-	//  - d) the handler waits until the write deadline exceeds
-	//  - e) the handler writes to and flushes the ResponseWriter object after timeout
-	//  - f) the client receives a response for the first request
-	//  - g) the client sends the second request, at "/2"
-	//  - h) the server sends 200 OK to the client
+	// 场景：我们想观察当连接上承载的前一个请求因 write 超时失败后，
+	// 客户端的连接是否会被复用。我们依次发送两个请求 "/1" 和 "/2"：
+	//  - a) 客户端发送第一个请求，路径为 "/1"
+	//  - b) handler 为第一个请求写入并 flush 一些内容
+	//  - c) handler 为第一个请求设置 write deadline 为 100ms
+	//  - d) handler 等待直到 write deadline 超时
+	//  - e) 超时后 handler 写入并 flush ResponseWriter 对象
+	//  - f) 客户端收到第一个请求的响应
+	//  - g) 客户端发送第二个请求，路径为 "/2"
+	//  - h) 服务器向客户端发送 200 OK
 	t.Parallel()
 
 	const deadline = 100 * time.Millisecond
@@ -1059,8 +1038,8 @@ func TestPerRequestWithConnectionIsReused(t *testing.T) {
 	}{
 		{
 			protoMajor: 1, // http/1x
-			// write timeout is set to 100ms, a wait of 5s should be
-			// enough to withstand flakes in CI.
+			// write timeout 设置为 100ms，等待 5s 应当足以
+			// 抵御 CI 中的偶发失败。
 			waiter:             &waitWithDuration{after: 5 * time.Second},
 			clientErrVerifier:  wantContains{contains: "local error: tls: bad record MAC"},
 			handlerErrVerifier: wantError{err: os.ErrDeadlineExceeded},
@@ -1092,7 +1071,7 @@ func TestPerRequestWithConnectionIsReused(t *testing.T) {
 							return
 						}
 
-						// b) write to and flush the writer so client sees some content
+						// b) 写入并 flush，使客户端能看到部分内容
 						if _, err := w.Write([]byte("hello")); err != nil {
 							t.Errorf("server: unexpected error from Write: %v", err)
 							return
@@ -1102,17 +1081,17 @@ func TestPerRequestWithConnectionIsReused(t *testing.T) {
 							return
 						}
 
-						// c) set write deadline for the first request
+						// c) 为第一个请求设置 write deadline
 						ctrl := http.NewResponseController(w)
 						if err := ctrl.SetWriteDeadline(time.Now().Add(deadline)); err != nil {
 							t.Errorf("server: unexpected error from SetWriteDeadline: %v", err)
 							return
 						}
 
-						// d) wait until the write deadline exceeds
+						// d) 等待直到 write deadline 超时
 						<-test.waiter.wait()
 
-						// e) write to and flush the writer to get the timeout error
+						// e) 写入并 flush 以获取超时错误
 						if _, err := w.Write([]byte("world")); err != nil {
 							t.Errorf("server: unexpected error from Write after timeout: %v", err)
 							return
@@ -1123,7 +1102,7 @@ func TestPerRequestWithConnectionIsReused(t *testing.T) {
 						}
 					}()
 				case req.URL.Path == "/2":
-					// h) return here, it sends OK 200 to the client
+					// h) 在此返回，向客户端发送 200 OK
 				}
 			}))
 
@@ -1136,7 +1115,7 @@ func TestPerRequestWithConnectionIsReused(t *testing.T) {
 			client := server.Client()
 			func() {
 				defer test.waiter.close()
-				// a) send the first request, it should always be on a new request
+				// a) 发送第一个请求，它应当总是走新的连接
 				resp, err := sendWithTrace(t, client, server.URL+"/1", shouldUseNewConnection)
 				if err != nil {
 					t.Errorf("unexpected error from client.Get for the first request: %v", err)
@@ -1149,15 +1128,15 @@ func TestPerRequestWithConnectionIsReused(t *testing.T) {
 				defer closeResponseBody(t, resp)
 
 				_, err = io.ReadAll(resp.Body)
-				// f) verify that the client receives the appropriate error
+				// f) 验证客户端收到相应的错误
 				test.clientErrVerifier.verify(t, err)
 			}()
 
 			err := handlerErrCh.wait(t, time.After(wait.ForeverTestTimeout))
 			test.handlerErrVerifier.verify(t, err)
 
-			// g) send the second request using the same underlying transport object
-			// verify that the connection from the first request is reused
+			// g) 使用同一个底层 transport 对象发送第二个请求，
+			// 验证第一个请求的连接被复用
 			func() {
 				resp, err := sendWithTrace(t, client, server.URL+"/2", test.connReuseFn)
 				if err != nil {
@@ -1176,23 +1155,20 @@ func TestPerRequestWithConnectionIsReused(t *testing.T) {
 // TestPerRequestWithSlowReader 是一个跳过的手动实验：模拟慢速读客户端，
 // 用于复现“写超时被慢读放大”的场景，不适合放进常规 CI。
 func TestPerRequestWithSlowReader(t *testing.T) {
-	// This test documents the behavior of the per handler write
-	// deadline using a standard net http server.
+	// 本测试用标准 net http 服务器记录 per-handler 写 deadline 的行为。
 	//
-	// scenario: simulate a slow network by adding delays while the client
-	// reads the response from the server:
-	// - a) the handler assigns a context to the request with a deadline of 5ms
-	// - b) the handler sets write deadline for the rquest to 50ms
-	// - c) the handler writes to and flushes the ResponseWriter object with
-	//   1kB of data at a time, until it writes 10MB of data or write deadline
-	//   elapses, whichever happens first
-	// - d) the client receives a response from the server
-	// - e) the client reads 125 bytes at a time with a delay of 1ms
+	// 场景：通过在客户端读取服务器响应时加入延迟来模拟慢速网络：
+	// - a) handler 为请求分配一个 deadline 为 5ms 的 context
+	// - b) handler 为该请求设置 write deadline 为 50ms
+	// - c) handler 每次写入并 flush 1kB 数据到 ResponseWriter 对象，
+	//   直到写满 10MB 数据或 write deadline 到期，以先到者为准
+	// - d) 客户端收到服务器的响应
+	// - e) 客户端每次读取 125 字节，间隔延迟 1ms
 	t.Skip("This test is experimental, to simulate a client that reads the response body slowly")
 
 	const (
-		// set it to false to reproduce an indefinitely hanging request
-		// NOTE: setting this to false will cause a test timeout in CI
+		// 设为 false 可复现无限挂起的请求
+		// 注意：将其设为 false 会导致 CI 中的测试超时
 		enableWriteTimeout = true
 
 		ctxDeadline   = 5 * time.Millisecond
@@ -1208,8 +1184,8 @@ func TestPerRequestWithSlowReader(t *testing.T) {
 			close(handlerErrCh)
 		}()
 
-		// a) assign a context with a deadline of 5ms
-		// NOTE: the context deadline has no bearing on the ResponseWriter object
+		// a) 分配一个 deadline 为 5ms 的 context
+		// 注意：context deadline 对 ResponseWriter 对象没有影响
 		ctx, cancel := context.WithTimeout(context.Background(), ctxDeadline)
 		defer cancel()
 		req = req.WithContext(ctx)
@@ -1225,7 +1201,7 @@ func TestPerRequestWithSlowReader(t *testing.T) {
 			return
 		}
 		if enableWriteTimeout {
-			// b) set write deadline for the request
+			// b) 为该请求设置 write deadline
 			ctrl := http.NewResponseController(w)
 			if err := ctrl.SetWriteDeadline(time.Now().Add(writeDeadline)); err != nil {
 				t.Errorf("unexpected error from SetWriteDeadline: %v", err)
@@ -1233,9 +1209,9 @@ func TestPerRequestWithSlowReader(t *testing.T) {
 			}
 		}
 
-		// c) the handler writes 1kB of data at a time, and it will
-		// write at most 10MB (10*1000*1000) bytes, it will abort as
-		// soon as Write returns an error.
+		// c) handler 每次写入 1kB 数据，最多写入
+		// 10MB（10*1000*1000）字节，一旦 Write 返回错误
+		// 就立即中止。
 		for i := 0; i < 10*1000; i++ {
 			n, err := w.Write(bytes.Repeat([]byte("a"), 1000))
 			if err != nil {
@@ -1258,7 +1234,7 @@ func TestPerRequestWithSlowReader(t *testing.T) {
 	go func() {
 		defer close(clientErrCh)
 
-		// we don't set up a request context with deadline on the client-side
+		// 客户端侧不设置带 deadline 的请求 context
 		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/foo", nil)
 		if err != nil {
 			t.Errorf("failed to create a new request: %v", err)
@@ -1271,45 +1247,44 @@ func TestPerRequestWithSlowReader(t *testing.T) {
 			return
 		}
 
-		// d) client expects a response from the server
+		// d) 客户端预期收到服务器的响应
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("expected staus code: %d, but got: %d", http.StatusOK, resp.StatusCode)
 		}
 		defer closeResponseBody(t, resp)
 
-		// e) we read 125 bytes at a time, and then sleep for 1ms,
-		// it will add 80 seconds (10*1000*1000*/125 milliseconds)
-		// of delay to the entire read of the response, this simulates
-		// a slow reader or a slow network that exceeds
-		// wait.ForeverTestTimeout (30s), so we expect the test to
-		// timeout and fail after ForeverTestTimeout elapses.
+		// e) 我们每次读取 125 字节，然后休眠 1ms，
+		// 这会给整个响应读取过程增加 80 秒
+		// （10*1000*1000/125 毫秒）的延迟，以此模拟
+		// 超过 wait.ForeverTestTimeout（30s）的慢读者或慢网络，
+		// 因此我们预期在 ForeverTestTimeout 到期后
+		// 测试会超时并失败。
 		//
-		// without write timeout, this is what we observe:
-		// server:
-		//  - the handler successfully writes the entire payload of 10MB,
-		//    it takes about 1m for the handler to finish.
-		//  - FlushError completes without error
-		//  - the handler returns after 1m
-		// note that having a request context with a deadline of 5ms has no
-		// impact on the Write/Flush operations.
+		// 在没有 write 超时的情况下，我们观察到：
+		// 服务器：
+		//  - handler 成功写完了整个 10MB 的 payload，
+		//    handler 完成大约耗时 1 分钟。
+		//  - FlushError 正常完成、没有报错
+		//  - handler 在 1 分钟后返回
+		// 注意：请求 context 带有 5ms 的 deadline，对
+		// Write/Flush 操作没有任何影响。
 		//
-		// client:
-		//  - the client continues to read from the response body, and
-		//    it successfully finishes reading the body if the test
-		//    does not preemptively end after ForeverTestTimeout elapses.
-		//  - the connection stays active since the Body of the
-		//    response is still in use
+		// 客户端：
+		//  - 客户端持续读取响应 body，如果测试不在
+		//    ForeverTestTimeout 到期后提前结束，客户端
+		//    最终会成功读完整个 body。
+		//  - 由于响应的 Body 仍在使用中，连接会保持活跃
 		//
-		// when we enable write timeout on the server we see the following:
-		// server:
-		//  - write timeout happens after 50ms, the handler writes the
-		//    payload partially only.
-		//  - Write or FlushError return an 'i/o timeout' error
-		//  - the handler returns immediately after the write timeout
+		// 当我们在服务端启用 write 超时后，会看到：
+		// 服务器：
+		//  - write 超时在 50ms 后发生，handler 只写完了
+		//    部分 payload。
+		//  - Write 或 FlushError 返回 'i/o timeout' 错误
+		//  - handler 在 write 超时后立即返回
 		//
-		// client:
-		//  - client will finish reading the partial payload from the
-		//    response body, and then it will see a stream reset error
+		// 客户端：
+		//  - 客户端会读完响应 body 中已写出的那部分 payload，
+		//    随后会看到 stream reset 错误
 		b := make([]byte, 125)
 		now := time.Now()
 		var read, iteration int
@@ -1393,9 +1368,9 @@ type waiter interface {
 	close()
 }
 
-// sleep based waiter implementation, the request handler sleeps for certain
-// duration before it returns, we need to choose the sleep duration wisely
-// in order to avoid flakes in CI.
+// 基于睡眠的 waiter 实现：请求 handler 在返回前睡眠一段
+// 指定时长，我们需要明智地选择睡眠时长，
+// 以避免 CI 中的偶发失败。
 type waitWithDuration struct {
 	after time.Duration
 }
@@ -1403,24 +1378,23 @@ type waitWithDuration struct {
 func (w waitWithDuration) wait() <-chan time.Time { return time.After(w.after) }
 func (w waitWithDuration) close()                 {}
 
-// channel based waiter implementation, the request handler waits on a channel
-// to close, these are the steps:
-// a) the client sends a request to the http/2.0 server
-// a) the request handler sets per-request write timeout, and then
-// b) the request handler blocks indefinitely on this channel to close
-// c) write timeout elapses, and http/2.0 server asynchronously resets the stream
-// d) the client receives a stream reset error immediately
-// after the write timeout occurs.
-// e) the client then closes this channel
-// f) the request handler unblocks and terminates
+// 基于 channel 的 waiter 实现：请求 handler 等待某个 channel
+// 关闭，步骤如下：
+// a) 客户端向 http/2.0 服务器发送请求
+// a) 请求 handler 设置 per-request write timeout，然后
+// b) 请求 handler 无限期阻塞等待该 channel 关闭
+// c) write 超时到期，http/2.0 服务器异步重置该 stream
+// d) write 超时发生后，客户端立即收到
+// stream reset 错误
+// e) 随后客户端关闭该 channel
+// f) 请求 handler 解除阻塞并终止
 //
-// This waiter can be used for http/2.0 only, since the request handler executes
-// on a separate goroutine than the tcp connection serving gorutine, this allows
-// the connection serving loop to asynchronously reset the http2 stream. On the
-// other hand, http/1x executes the request handler in the same goroutine as the
-// connection serving goroutine, this forces the connection serving goroutine to
-// wait for he handler to return.
-// See https://github.com/golang/go/blob/b8ac61e6e64c92f23d8cf868a92a70d13e20a124/src/net/http/server.go#L3285
+// 该 waiter 只能用于 http/2.0：请求 handler 运行在与 tcp
+// 连接服务 goroutine 不同的 goroutine 上，这使得连接服务循环
+// 可以异步重置 http2 stream。另一方面，http/1x 在连接服务
+// goroutine 所在的同一 goroutine 中执行请求 handler，
+// 这会迫使连接服务 goroutine 等待 handler 返回。
+// 参见 https://github.com/golang/go/blob/b8ac61e6e64c92f23d8cf868a92a70d13e20a124/src/net/http/server.go#L3285
 type waitForClose struct {
 	after chan time.Time
 }
@@ -1451,8 +1425,8 @@ func (ch chanErr) wait(t *testing.T, timeoutCh <-chan time.Time) error {
 		t.Errorf("timed out while waiting to receive from the channel")
 	}
 
-	// let's wait for the channel to be closed, this permits the test
-	// goroutine to wait for other goroutines to finish before.
+	// 我们等待该 channel 被关闭，这使得测试 goroutine
+	// 能够等待其他 goroutine 先完成。
 	select {
 	case <-ch:
 	case <-timeoutCh:
