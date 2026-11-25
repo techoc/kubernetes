@@ -13,9 +13,9 @@
 | 4 | apimachinery 残余 | 7 | [x] |
 | 5 | `kubectl` 小包 | 58 | [x] |
 | 6 | `kubectl/pkg/cmd` | 196 | [x] |
-| 7 | `test/utils/`、`test/images/`（拆 2 批） | 134 | [ ] |
-| 8 | `test/` 其他小目录 | 58 | [ ] |
-| 9 | `test/integration/` | 417 | [ ] |
+| 7 | `test/utils/`、`test/images/`（拆 2 批） | 134 | [x] |
+| 8 | `test/` 其他小目录 | 58 | [x] |
+| 9 | `test/integration/`（拆 3 批） | 290（已翻 190） | [ ] |
 | 10 | `test/e2e/` | 537 | [ ] |
 | 11 | `test/e2e_node/`、`test/e2e_node_windows/` | 177 | [ ] |
 | 12 | `hack/`、`third_party/`、`cluster/`、`build/`、小 staging 模块 | ~155 | [ ] |
@@ -35,3 +35,10 @@
 | 2026-11-25 | `59261435822` | apimachinery runtime 与 sharding 注释 |
 | 2026-11-25 | `4a1ac922a6c` | kubectl config、describe 与工具类注释 |
 | 2026-11-25 | `c4f6b6d2b06` | kubectl 命令注释 |
+| 2026-11-25 | `48450030fd1` | 守卫误报修正 |
+| 2026-11-25 | `58ebf6c18cd` | test/utils 与 test/images 注释 |
+| 2026-11-25 | `7b3ed4b9cc5` | 补漏的 agnhost 指标注释 |
+| 2026-11-25 | `6030957c638` | test/ 小目录注释 |
+| 2026-11-25 | `23cbe0c8ad4` | integration apimachinery 与 scheduler 注释 |
+| 2026-11-25 | `75690c6f8ea` | integration 补漏注释 |
+| 2026-11-25 | `d434e55a745` | integration scheduler 与 framework 注释 |
