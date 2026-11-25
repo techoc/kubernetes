@@ -117,7 +117,7 @@ func (p *metricProvider) createMetric(metricName string, metricLabels map[string
 	}
 }
 
-// getMetrics returns all metrics matching the given name and label selector
+// getMetrics 返回与给定名称和标签选择器匹配的所有指标
 func (p *metricProvider) getMetrics(metricName string, labelSelector map[string]string) []*externalMetric {
 	p.externalMetricsLock.RLock()
 	defer p.externalMetricsLock.RUnlock()
