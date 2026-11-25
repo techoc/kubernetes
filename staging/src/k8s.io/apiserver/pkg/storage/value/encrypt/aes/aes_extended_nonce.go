@@ -33,14 +33,11 @@ import (
 )
 
 const (
-	// cacheTTL is the TTL of KDF cache entries.  We assume that the value.Context.AuthenticatedData
-	// for every call is the etcd storage path of the associated resource, and use that as the primary
-	// cache key (with a secondary check that confirms that the info matches).  Thus if a client
-	// is constantly creating resources with new names (and thus new paths), they will keep adding new
-	// entries to the cache for up to this TTL before the GC logic starts deleting old entries.  Each
-	// entry is ~300 bytes in size, so even a malicious client will be bounded in the overall memory
-	// it can consume.
-	// KDF 派生结果的缓存 TTL；以认证数据（通常是 etcd 存储路径）为主键，条目很小。
+	// cacheTTL 是 KDF 缓存条目的存活时间。我们假设每次调用
+	// value.Context.AuthenticatedData 得到的都是对应资源的 etcd 存储路径，并把它作为
+	// 主缓存键（另有二次检查确认 info 与之匹配）。因此若客户端不断创建新名称（从而
+	// 新路径）的资源，就会持续向缓存添加新条目，直到达到该 TTL 后 GC 逻辑才开始删除
+	// 旧条目。每个条目约 300 字节，所以即使恶意客户端所能消耗的总内存也有上界。
 	cacheTTL = 10 * time.Minute
 
 	// 下面三个常量都等于 commonSize（32 字节）：派生密钥长度、KDF info 长度与 seed 的最小长度。
@@ -49,23 +46,17 @@ const (
 	MinSeedSizeExtendedNonceGCM
 )
 
-// NewHKDFExtendedNonceGCMTransformer is the same as NewGCMTransformer but trades storage,
-// memory and CPU to work around the limitations of AES-GCM's 12 byte nonce size.  The input seed
-// is assumed to be a cryptographically strong slice of MinSeedSizeExtendedNonceGCM+ random bytes.
-// Unlike NewGCMTransformer, this function is immune to the birthday attack because a new key is generated
-// per encryption via a key derivation function: KDF(seed, random_bytes) -> key.  The derived key is
-// only used once as an AES-GCM key with a random 12 byte nonce.  This avoids any concerns around
-// cryptographic wear out (by either number of encryptions or the amount of data being encrypted).
-// Speaking on the cryptographic safety, the limit on the number of operations that can be preformed
-// with a single seed with derived keys and randomly generated nonces is not practically reachable.
-// Thus, the scheme does not impose any specific requirements on the seed rotation schedule.
-// Reusing the same seed is safe to do over time and across process restarts.  Whenever a new
-// seed is needed, the caller should generate it via GenerateKey(MinSeedSizeExtendedNonceGCM).
-// In regard to KMSv2, organization standards or compliance policies around rotation may require
-// that the seed be rotated at some interval.  This can be implemented externally by rotating
-// the key encryption key via a key ID change.
-// NewHKDFExtendedNonceGCMTransformer 用 KDF 为每次加密派生一次性密钥，绕开 AES-GCM
-// 12 字节 nonce 的生日界限制。seed 必须至少为 MinSeedSizeExtendedNonceGCM 字节。
+// NewHKDFExtendedNonceGCMTransformer 与 NewGCMTransformer 相同，但以存储、内存和 CPU
+// 开销为代价来绕开 AES-GCM 12 字节 nonce 的限制。输入 seed 应当是密码学强随机的、长度
+// 至少为 MinSeedSizeExtendedNonceGCM 字节的随机切片。与 NewGCMTransformer 不同，本函数
+// 不受生日攻击影响，因为每次加密都会通过密钥派生函数生成新密钥：
+// KDF(seed, random_bytes) -> key。派生出的密钥只作为 AES-GCM 密钥使用一次，并配合随机
+// 生成的 12 字节 nonce，因此不存在密码学损耗（无论是加密次数还是加密数据量）方面的顾虑。
+// 就密码学安全性而言，用单个 seed 派生密钥并配合随机 nonce 可执行的操作次数上限在实践中
+// 无法达到，所以该方案不对 seed 的轮换周期提出特定要求：随时间推移以及进程重启之间重复
+// 使用同一个 seed 是安全的。需要新 seed 时，调用方应通过
+// GenerateKey(MinSeedSizeExtendedNonceGCM) 生成。就 KMSv2 而言，组织规范或合规策略可能
+// 要求按一定周期轮换 seed，这可以在外部通过变更 keyID 来轮换密钥加密密钥实现。
 func NewHKDFExtendedNonceGCMTransformer(seed []byte) (value.Transformer, error) {
 	if seedLen := len(seed); seedLen < MinSeedSizeExtendedNonceGCM {
 		// seed 过短会削弱 KDF 的安全边际，直接拒绝。
@@ -127,7 +118,7 @@ func (e *extendedNonceGCM) derivedKeyTransformer(info []byte, dataCtx value.Cont
 			return transformer, nil
 		}
 
-		// on read, this is a subslice of a much larger slice and we do not want to hold onto that larger slice
+		// 读取时 info 只是一个更大切片的子切片，我们不想继续持有那个更大的切片，
 		// 克隆后缓存才不会拖住底层整块数据，避免内存泄漏。
 		info = bytes.Clone(info)
 	}
@@ -182,10 +173,9 @@ func newGCMTransformerWithInfo(key, info []byte) (*transformerWithInfo, error) {
 // 写入先写 info 再写密文，读取时校验并剥离前缀。
 type transformerWithInfo struct {
 	transformer value.Transformer
-	// info are extra opaque bytes prepended to the writes from transformer and stripped from reads.
-	// currently info is used to generate a key via KDF(seed, info) -> key
-	// and transformer is the output of NewGCMTransformer(aes.NewCipher(key))
-	// info 是可透传的附加字节，当前用于 KDF(seed, info) 派生密钥。
+	// info 是附加的不透明字节：写入时拼接在 transformer 的输出之前，读取时被剥离。
+	// 目前 info 用于通过 KDF(seed, info) -> key 派生密钥，而 transformer 则是
+	// NewGCMTransformer(aes.NewCipher(key)) 的输出。
 	info []byte
 }
 

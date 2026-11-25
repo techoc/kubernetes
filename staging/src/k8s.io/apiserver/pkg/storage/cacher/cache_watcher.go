@@ -35,7 +35,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// possible states of the cache watcher
+// cacheWatcher 可能的状态取值。
 // 状态机的用途：客户端可以通过 resourceVersionMatch=NotOlderThan + 初始 RV
 // 要求“先收到一个 RV 不早于该值的 bookmark，再开始接收事件”。
 // 在收到该 bookmark 前，不能向客户端发送普通事件，否则会破坏 watch 契约。
@@ -53,11 +53,9 @@ const (
 	cacheWatcherBookmarkSent
 )
 
-// cacheWatcher implements watch.Interface
-// this is not thread-safe
-// cacheWatcher 把 watchCache 中的事件按过滤器转换为客户端可见的 watch.Event。
-// 除 state 由 stateMutex 保护外，其余字段均由 Cacher 的锁或单一 goroutine 持有，
-// 因此注释声明“非线程安全”；调用方必须遵守既有的锁约定。
+// cacheWatcher 实现了 watch.Interface，把 watchCache 中的事件按过滤器转换为
+// 客户端可见的 watch.Event。它是非线程安全的：除 state 由 stateMutex 保护外，
+// 其余字段均由 Cacher 的锁或单一 goroutine 持有，调用方必须遵守既有的锁约定。
 type cacheWatcher struct {
 	input     chan *watchCacheEvent
 	result    chan watch.Event
@@ -66,9 +64,8 @@ type cacheWatcher struct {
 	stopped   bool
 	forget    func(bool)
 	versioner storage.Versioner
-	// The watcher will be closed by server after the deadline,
-	// save it here to send bookmark events before that.
-	// deadline 前需要主动发送 bookmark，避免客户端在超时前无法确认进度。
+	// 服务端会在 deadline 之后关闭该 watcher，这里保存 deadline 以便在此之前
+	// 主动发送 bookmark 事件，避免客户端在超时前无法确认进度。
 	deadline            time.Time
 	allowWatchBookmarks bool
 	groupResource       schema.GroupResource
@@ -79,9 +76,8 @@ type cacheWatcher struct {
 	// instance with request
 	identifier string
 
-	// drainInputBuffer indicates whether we should delay closing this watcher
-	// and send all event in the input buffer.
-	// 用于“已收到目标 bookmark 但尚未发送”的场景：先把缓冲区排空，
+	// drainInputBuffer 表示是否应推迟关闭该 watcher，先把输入缓冲区中的事件全部
+	// 发送出去。用于“已收到目标 bookmark 但尚未发送”的场景：先把缓冲区排空，
 	// 客户端才能拿到它等待的 RV 并重建 watch。
 	drainInputBuffer bool
 
@@ -157,12 +153,9 @@ func (c *cacheWatcher) stopLocked() {
 		close(c.input)
 	}
 
-	// Even if the watcher was already stopped, if it previously was
-	// using draining mode and it's not using it now we need to
-	// close the done channel now. Otherwise we could leak the
-	// processing goroutine if it will be trying to put more objects
-	// into result channel, the channel will be full and there will
-	// already be noone on the processing the events on the receiving end.
+	// 即使 watcher 之前已经停止，只要它此前处于 draining 模式而现在不再需要排空，
+	// 我们就必须在此处关闭 done 通道。否则处理 goroutine 可能泄漏：它会继续尝试把
+	// 对象放入 result 通道，而该通道已满、接收端已经没有人处理事件了。
 	// 这段处理针对“先 graceful 停止、后强制停止”的转换，防止处理 goroutine
 	// 阻塞在满的 result 通道上永久泄漏。
 	if !c.drainInputBuffer && !c.isDoneChannelClosedLocked() {
@@ -300,9 +293,8 @@ func (c *cacheWatcher) wasBookmarkAfterRvReceived() bool {
 	return c.wasBookmarkAfterRvReceivedLocked()
 }
 
-// wasBookmarkAfterRvReceivedLocked checks if the given cacheWatcher
-// have seen a bookmark event >= bookmarkAfterResourceVersion
-// 调用方需持有 stateMutex。
+// wasBookmarkAfterRvReceivedLocked 检查该 cacheWatcher 是否已看到
+// RV >= bookmarkAfterResourceVersion 的 bookmark 事件。调用方需持有 stateMutex。
 func (c *cacheWatcher) wasBookmarkAfterRvReceivedLocked() bool {
 	return c.state != cacheWatcherWaitingForBookmark
 }
@@ -324,9 +316,8 @@ func (c *cacheWatcher) markBookmarkAfterRvAsReceived(event *watchCacheEvent) {
 	}
 }
 
-// wasBookmarkAfterRvSentLocked checks if a bookmark event
-// with an RV >= the bookmarkAfterResourceVersion has been sent by this watcher
-// 调用方需持有 stateMutex。
+// wasBookmarkAfterRvSentLocked 检查该 watcher 是否已发送过
+// RV >= bookmarkAfterResourceVersion 的 bookmark 事件。调用方需持有 stateMutex。
 func (c *cacheWatcher) wasBookmarkAfterRvSentLocked() bool {
 	return c.state == cacheWatcherBookmarkSent
 }
@@ -355,7 +346,7 @@ func (c *cacheWatcher) markBookmarkAfterRvSent(event *watchCacheEvent) {
 	}
 }
 
-// setBookmarkAfterResourceVersion sets the bookmarkAfterResourceVersion and the state associated with it
+// setBookmarkAfterResourceVersion 设置 bookmarkAfterResourceVersion 及其关联状态。
 // 仅应在 watcher 启动前调用（字段注释已说明启动后不得修改）。
 func (c *cacheWatcher) setBookmarkAfterResourceVersion(bookmarkAfterResourceVersion uint64) {
 	state := cacheWatcherWaitingForBookmark
@@ -449,8 +440,8 @@ func (c *cacheWatcher) convertToWatchEvent(event *watchCacheEvent) *watch.Event 
 	return nil
 }
 
-// NOTE: sendWatchCacheEvent is assumed to not modify <event> !!!
-// sendWatchCacheEvent 把事件写入 result 通道，返回构建与发送时刻供指标使用。
+// 注意：sendWatchCacheEvent 被约定为不会修改 <event>！！！
+// 它把事件写入 result 通道，返回构建与发送时刻供指标使用。
 // 关键不变量：关闭 done 后不能向 result 写入新事件，但必须先把已进入选择前的
 // 事件按序发送完，因此这里先做一次 done 的非阻塞检查，再在 select 中发送。
 func (c *cacheWatcher) sendWatchCacheEvent(event *watchCacheEvent) (builtAt, sentAt time.Time) {
@@ -567,7 +558,7 @@ func (c *cacheWatcher) processInterval(ctx context.Context, cacheInterval *watch
 		klog.V(2).Infof("processing %d initEvents of %s (%s) took %v", initEventCount, c.groupResource, c.identifier, processingTime)
 	}
 
-	// send bookmark after sending all events in cacheInterval for watchlist request
+	// 对 watchlist 请求，在发送完 cacheInterval 中的全部事件之后再发送 bookmark：
 	// watchlist（SendInitialEvents）必须用 bookmark 标记初始事件结束，
 	// 客户端才能确认自己已拿到完整快照。
 	if cacheInterval.initialEventsEndBookmark != nil {
@@ -578,13 +569,12 @@ func (c *cacheWatcher) processInterval(ctx context.Context, cacheInterval *watch
 
 // process 处理来自 watchCache 的实时事件，直到输入通道关闭或 ctx 取消。
 func (c *cacheWatcher) process(ctx context.Context, resourceVersion uint64) {
-	// At this point we already start processing incoming watch events.
-	// However, the init event can still be processed because their serialization
-	// and sending to the client happens asynchrnously.
+	// 此时我们已经能处理传入的 watch 事件，但初始事件可能仍在处理中：它们的序列化
+	// 以及发送给客户端都是异步完成的。这里通知 APF：该 watch 已就绪，
+	// 可以开始计费/调度后续请求。
 	// TODO: As describe in the KEP, we would like to estimate that by delaying
 	//   the initialization signal proportionally to the number of events to
 	//   process, but we're leaving this to the tuning phase.
-	// 通知 APF：该 watch 已就绪，可以开始计费/调度后续请求。
 	utilflowcontrol.WatchInitialized(ctx)
 
 	for {
@@ -593,9 +583,8 @@ func (c *cacheWatcher) process(ctx context.Context, resourceVersion uint64) {
 			if !ok {
 				return
 			}
-			// only send events newer than resourceVersion
-			// or a bookmark event with an RV equal to resourceVersion
-			// if we haven't sent one to the client
+			// 只发送比 resourceVersion 更新的事件；或者当 RV 恰等于 resourceVersion
+			// 且我们尚未向客户端发送过 bookmark 时，发送该 bookmark 事件。
 			// 过滤掉不新于起始 RV 的事件，保证不“回退时间”；
 			// 例外是恰好等于起始 RV 且尚未发送过 bookmark 的情况。
 			if event.ResourceVersion > resourceVersion || (event.Type == watch.Bookmark && event.ResourceVersion == resourceVersion && !c.wasBookmarkAfterRvSent()) {

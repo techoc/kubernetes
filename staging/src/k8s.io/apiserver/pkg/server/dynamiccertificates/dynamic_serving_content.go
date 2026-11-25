@@ -32,7 +32,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// DynamicCertKeyPairContent provides a CertKeyContentProvider that can dynamically react to new file content
 // 它监听证书/私钥文件变化并原子替换内存中的内容，供 TLS 握手并发读取。
 type DynamicCertKeyPairContent struct {
 	name string
@@ -42,8 +41,7 @@ type DynamicCertKeyPairContent struct {
 	// keyFile is the name of the key file to read.
 	keyFile string
 
-	// certKeyPair is a certKeyContent that contains the last read, non-zero length content of the key and cert
-	// 用 atomic.Value 发布，读路径无需锁；写入的是不可变快照。
+	// certKeyPair 保存 *certKeyContent，即最近一次读取到的证书与私钥的非空内容；用 atomic.Value 发布，读路径无需锁，写入的是不可变快照。
 	certKeyPair atomic.Value
 
 	listeners []Listener
@@ -56,7 +54,7 @@ type DynamicCertKeyPairContent struct {
 var _ CertKeyContentProvider = &DynamicCertKeyPairContent{}
 var _ ControllerRunner = &DynamicCertKeyPairContent{}
 
-// NewDynamicServingContentFromFiles returns a dynamic CertKeyContentProvider based on a cert and key filename
+// NewDynamicServingContentFromFiles 基于证书与私钥文件名返回一个动态的 CertKeyContentProvider。
 // 构造时立即加载一次，确保启动即暴露文件缺失或证书不匹配的问题。
 func NewDynamicServingContentFromFiles(purpose, certFile, keyFile string) (*DynamicCertKeyPairContent, error) {
 	if len(certFile) == 0 || len(keyFile) == 0 {
@@ -80,8 +78,7 @@ func NewDynamicServingContentFromFiles(purpose, certFile, keyFile string) (*Dyna
 	return ret, nil
 }
 
-// AddListener adds a listener to be notified when the serving cert content changes.
-// 必须在 Run 之前注册；运行期并发修改 listeners 不受支持。
+// AddListener 注册在服务证书内容变化时收到通知的监听者；必须在 Run 之前注册，运行期并发修改 listeners 不受支持。
 func (c *DynamicCertKeyPairContent) AddListener(listener Listener) {
 	c.listeners = append(c.listeners, listener)
 }
@@ -100,8 +97,7 @@ func (c *DynamicCertKeyPairContent) loadCertKeyPair() error {
 		return fmt.Errorf("missing content for serving cert %q", c.Name())
 	}
 
-	// Ensure that the key matches the cert and both are valid
-	// 这一步同时校验配对关系；文件更新可能先后到达，不匹配时保留旧内容。
+	// 确保私钥与证书匹配且均合法：这一步同时校验配对关系；文件更新可能先后到达，不匹配时保留旧内容。
 	_, err = tls.X509KeyPair(cert, key)
 	if err != nil {
 		return err
@@ -112,8 +108,7 @@ func (c *DynamicCertKeyPairContent) loadCertKeyPair() error {
 		key:  key,
 	}
 
-	// check to see if we have a change. If the values are the same, do nothing.
-	// 内容未变时不触发 listener，避免无谓的 TLS 配置重建（会中断连接池）。
+	// 检查内容是否变化，相同则什么都不做：未变化时不触发 listener，避免无谓的 TLS 配置重建（会中断连接池）。
 	existing, ok := c.certKeyPair.Load().(*certKeyContent)
 	if ok && existing != nil && existing.Equal(newCertKey) {
 		return nil
@@ -142,12 +137,10 @@ func (c *DynamicCertKeyPairContent) Run(ctx context.Context, workers int) {
 	klog.InfoS("Starting controller", "name", c.name)
 	defer klog.InfoS("Shutting down controller", "name", c.name)
 
-	// doesn't matter what workers say, only start one.
 	// 单 worker 即可：加载是幂等的，且需要串行化 listener 通知。
 	go wait.Until(c.runWorker, time.Second, ctx.Done())
 
-	// start the loop that watches the cert and key files until stopCh is closed.
-	// 定时重试覆盖 fsnotify 失效（例如文件被整体替换、inotify 丢失）的情况。
+	// 启动监听证书与私钥文件的循环，直至 stopCh 关闭；定时重试可覆盖 fsnotify 失效（例如文件被整体替换、inotify 丢失）的情况。
 	go wait.Until(func() {
 		if err := c.watchCertKeyFile(ctx.Done()); err != nil {
 			klog.ErrorS(err, "Failed to watch cert and key file, will retry later")
@@ -196,8 +189,7 @@ func (c *DynamicCertKeyPairContent) watchCertKeyFile(stopCh <-chan struct{}) err
 // change. When an event of the other file is received, it will trigger reloading the files again and the new content
 // will be loaded and used.
 func (c *DynamicCertKeyPairContent) handleWatchEvent(e fsnotify.Event, w *fsnotify.Watcher) error {
-	// This should be executed after restarting the watch (if applicable) to ensure no file event will be missing.
-	// defer 保证“重挂 watch 失败”时也仍会触发一次重载。
+	// 该操作应在重挂 watch（如适用）之后执行，以确保不遗漏文件事件；defer 保证“重挂 watch 失败”时也仍会触发一次重载。
 	defer c.queue.Add(workItemKey)
 	if !e.Has(fsnotify.Remove) && !e.Has(fsnotify.Rename) {
 		return nil

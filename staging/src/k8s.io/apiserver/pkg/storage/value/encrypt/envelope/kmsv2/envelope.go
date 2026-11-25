@@ -72,8 +72,8 @@ func SetNowFuncForTests(kmsName string, fn func() time.Time) func() {
 	return func() { nowFuncPerKMS.Delete(kmsName) }
 }
 
-// GetNowFunc returns the time function for the given KMS provider name
-// 未注册时回退到 time.Now，保证生产路径永远可用。
+// GetNowFunc 返回给定 KMS provider 名称对应的时间函数；未注册时回退到 time.Now，
+// 保证生产路径永远可用。
 func GetNowFunc(kmsName string) func() time.Time {
 	nowFunc, ok := nowFuncPerKMS.Load(kmsName)
 	if !ok {
@@ -198,7 +198,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 	defer span.End(500 * time.Millisecond)
 
 	span.AddEvent("About to decode encrypted object")
-	// Deserialize the EncryptedObject from the data.
+	// 从数据中反序列化出 EncryptedObject。
 	// 解码同时做结构校验：字段缺失、类型未知或尺寸超限都视为数据损坏，绝不猜测。
 	encryptedObject, err := t.doDecode(data)
 	if err != nil {
@@ -227,7 +227,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 	// Look up the decrypted DEK from cache first
 	transformer := t.cache.get(encryptedObjectCacheKey)
 
-	// fallback to the envelope service if we do not have the transformer locally
+	// 若本地没有对应的 transformer，则回退到 envelope service（远端 KMS）。
 	// 缓存未命中才访问远端 KMS；miss 计数用于观察重启/轮换后的冷启动成本。
 	if transformer == nil {
 		span.AddEvent("About to decrypt DEK using remote service")
@@ -267,7 +267,7 @@ func (t *envelopeTransformer) TransformFromStorage(ctx context.Context, data []b
 	}
 
 	span.AddEvent("Data decryption succeeded")
-	// data is considered stale if the key ID does not match our current write transformer
+	// 若 keyID 与我们当前用于写入的 transformer 不匹配，则认为数据已经陈旧。
 	// keyID 或 DEK 类型与当前写状态不一致即视为陈旧，从而触发后台重写（存储迁移）。
 	return out,
 		stale ||
@@ -348,7 +348,7 @@ func (t *envelopeTransformer) addTransformerForDecryption(cacheKey []byte, key [
 	var transformer value.Read
 	var err error
 	if useSeed {
-		// the input key is considered safe to use here because it is coming from the KMS plugin / etcd
+		// 这里的输入密钥被认为可以安全使用，因为它来自 KMS plugin / etcd。
 		// seed 模式用 HKDF 派生扩展 nonce 密钥，避免 GCM 的 nonce 复用风险。
 		transformer, err = aestransformer.NewHKDFExtendedNonceGCMTransformer(key)
 	} else {
@@ -368,8 +368,8 @@ func (t *envelopeTransformer) addTransformerForDecryption(cacheKey []byte, key [
 	return transformer, nil
 }
 
-// doEncode encodes the EncryptedObject to a byte array.
-// 编码前再校验一次，防止内存中被错误修改的对象落盘。
+// doEncode 把 EncryptedObject 编码为字节数组。编码前再校验一次，
+// 防止内存中被错误修改的对象落盘。
 func (t *envelopeTransformer) doEncode(request *kmstypes.EncryptedObject) ([]byte, error) {
 	if err := ValidateEncryptedObject(request); err != nil {
 		return nil, err
@@ -377,8 +377,8 @@ func (t *envelopeTransformer) doEncode(request *kmstypes.EncryptedObject) ([]byt
 	return proto.Marshal(request)
 }
 
-// doDecode decodes the byte array to an EncryptedObject.
-// 解码后立即校验，使后续逻辑可以信任字段的尺寸与类型。
+// doDecode 把字节数组解码为 EncryptedObject。解码后立即校验，
+// 使后续逻辑可以信任字段的尺寸与类型。
 func (t *envelopeTransformer) doDecode(originalData []byte) (*kmstypes.EncryptedObject, error) {
 	o := &kmstypes.EncryptedObject{}
 	if err := proto.Unmarshal(originalData, o); err != nil {
@@ -480,9 +480,9 @@ func ValidateEncryptedObject(o *kmstypes.EncryptedObject) error {
 	return nil
 }
 
-// validateEncryptedDEKSource tests the following:
-// 1. The encrypted DEK source is not empty.
-// 2. The size of encrypted DEK source is less than 1 kB.
+// validateEncryptedDEKSource 校验以下两点：
+// 1. 加密后的 DEK source 不为空。
+// 2. 加密后的 DEK source 大小小于 1 kB。
 // 尺寸上限防止畸形数据导致后续分配与 KMS 调用放大（解压缩/分片攻击面）。
 func validateEncryptedDEKSource(encryptedDEKSource []byte) error {
 	if len(encryptedDEKSource) == 0 {
@@ -515,9 +515,9 @@ func validateAnnotations(annotations map[string][]byte) error {
 	return utilerrors.NewAggregate(errs)
 }
 
-// ValidateKeyID tests the following:
-// 1. The keyID is not empty.
-// 2. The size of keyID is less than 1 kB.
+// ValidateKeyID 校验以下两点：
+// 1. keyID 不为空。
+// 2. keyID 的大小小于 1 kB。
 // 返回的 ErrCodeKeyID 可直接作为指标标签，避免把 keyID 本身暴露为高基数标签。
 func ValidateKeyID(keyID string) (ErrCodeKeyID, error) {
 	if len(keyID) == 0 {
@@ -587,7 +587,7 @@ func generateCacheKey(encryptedDEKSourceType kmstypes.EncryptedDEKSourceType, en
 	return b.Bytes()
 }
 
-// toBytes performs unholy acts to avoid allocations
+// toBytes 为避免内存分配而执行了一些“不洁”的 unsafe 操作。
 // 仅在生命周期确定短于源字符串时使用；空字符串返回 nil，因为 unsafe.StringData
 // 对空串的行为未定义。
 func toBytes(s string) []byte {
@@ -600,7 +600,7 @@ func toBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-// GetHashIfNotEmpty returns the sha256 hash of the data if it is not empty.
+// GetHashIfNotEmpty 在 data 非空时返回其 sha256 哈希。
 // 错误信息中使用哈希而非原始 keyID，既可用于比对又不泄露密钥标识。
 func GetHashIfNotEmpty(data string) string {
 	if len(data) > 0 {

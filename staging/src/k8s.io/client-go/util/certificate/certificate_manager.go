@@ -310,8 +310,8 @@ type manager struct {
 	ctx    context.Context
 	cancel func(err error)
 
-	// the clientFn must only be accessed under the clientAccessLock
-	// clientsetFn 的注释要求串行调用：每次轮换都会重建 clientset。
+	// clientsetFn 只能在持有 clientAccessLock 时访问，也就是必须串行调用：
+	// 每次轮换都会重建 clientset。
 	clientAccessLock sync.Mutex
 	clientsetFn      ClientsetFunc
 
@@ -357,7 +357,7 @@ func NewManager(config *Config) (Manager, error) {
 		now:                          time.Now,
 	}
 
-	// Determine the name that is to be included in log output from this manager instance.
+	// 确定该 manager 实例在日志输出中使用的名称。
 	// 优先级：显式 Name > SignerName > 按用途推断，便于在多证书组件中区分日志。
 	name := config.Name
 	if len(name) == 0 {
@@ -620,8 +620,7 @@ func (m *manager) rotateCerts(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	// request the client each time
-	// 客户端凭据可能刚轮换过，每次重新构造 clientset 以避免使用失效证书。
+	// 每次都重新获取 client：客户端凭据可能刚轮换过，重新构造 clientset 可避免使用失效证书。
 	clientSet, err := m.getClientset()
 	if err != nil {
 		utilruntime.HandleErrorWithContext(ctx, err, "Unable to load a client to request certificates")
@@ -652,8 +651,7 @@ func (m *manager) rotateCerts(ctx context.Context) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, certificateWaitTimeout)
 	defer cancel()
 
-	// Once we've successfully submitted a CSR for this template, record that we did so
-	// 记录 cancel 与模板，模板监视线程可据此取消已过时的等待。
+	// CSR 成功提交后记下本次请求：保存 cancel 与模板，模板监视线程可据此取消已过时的等待。
 	m.setLastRequest(cancel, template)
 
 	// Wait for the certificate to be signed. This interface and internal timout
@@ -747,8 +745,7 @@ func (m *manager) certSatisfiesTemplate(logger klog.Logger) bool {
 // current certificate should be rotated, 80%+/-10% of the expiration of the
 // certificate.
 func (m *manager) nextRotationDeadline(logger klog.Logger) time.Time {
-	// forceRotation is not protected by locks
-	// 自举证书需要立即可轮换，因此这里返回 now 并清除标记。
+	// forceRotation 不受锁保护：自举证书需要立即可轮换，因此这里返回 now 并清除标记。
 	if m.forceRotation {
 		m.forceRotation = false
 		return m.now()
@@ -803,16 +800,14 @@ func (m *manager) updateServerError(err error) error {
 	defer m.certAccessLock.Unlock()
 	switch {
 	case apierrors.IsUnauthorized(err):
-		// SSL terminating proxies may report this error instead of the master
-		// 401 往往来自中间代理而非控制面，因此仍认为服务器可达。
+		// 终结 SSL 的代理可能代替 master 报出该错误：401 往往来自中间代理而非控制面，因此仍认为服务器可达。
 		m.serverHealth = true
 	case apierrors.IsUnexpectedServerError(err):
 		// generally indicates a proxy or other load balancer problem, rather than a problem coming
 		// from the master
 		m.serverHealth = false
 	default:
-		// Identify known errors that could be expected for a cert request that
-		// indicate everything is working normally
+		// 识别证书请求中预期可能出现、表明一切正常的已知错误：
 		// 404/403 是 CSR 流程的正常业务错误，说明 API Server 本身健康。
 		m.serverHealth = apierrors.IsNotFound(err) || apierrors.IsForbidden(err)
 	}

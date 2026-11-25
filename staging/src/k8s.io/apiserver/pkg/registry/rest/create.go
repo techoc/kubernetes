@@ -35,9 +35,8 @@ import (
 	"k8s.io/apiserver/pkg/warning"
 )
 
-// RESTCreateStrategy defines the minimum validation, accepted input, and
-// name generation behavior to create an object that follows Kubernetes
-// API conventions.
+// RESTCreateStrategy 定义创建一个遵循 Kubernetes API 约定对象所必需的最小校验、
+// 可接受输入以及名称生成行为。
 // 各资源的实现只需关注自身字段语义；命名空间、UID 等通用元数据由本包统一处理。
 type RESTCreateStrategy interface {
 	runtime.ObjectTyper
@@ -100,9 +99,8 @@ func validatePathSegment(name string, prefix bool) []string {
 	return content.IsPathSegmentName(name)
 }
 
-// BeforeCreate ensures that common operations for all resources are performed on creation. It only returns
-// errors that can be converted to api.Status. It invokes PrepareForCreate, then Validate.
-// It returns nil if the object should be created.
+// BeforeCreate 负责在创建时执行所有资源的公共操作，只返回可转换为 api.Status 的错误。
+// 它先调用 PrepareForCreate，再调用 Validate；若该对象应当被创建则返回 nil。
 // 执行顺序不可随意调整：先确认系统字段与命名空间，再归一化、校验、告警、规范化，
 // 任何一步失败都必须阻止对象落库。
 func BeforeCreate(strategy RESTCreateStrategy, ctx context.Context, obj runtime.Object) error {
@@ -111,7 +109,7 @@ func BeforeCreate(strategy RESTCreateStrategy, ctx context.Context, obj runtime.
 		return kerr
 	}
 
-	// ensure that system-critical metadata has been populated
+	// 确认系统关键元数据已经填充完毕。
 	// UID、创建时间等系统字段由存储层/处理器预填；缺失说明调用链有误，属于内部错误。
 	if !metav1.HasObjectMetaSystemFieldValues(objectMeta) {
 		return errors.NewInternalError(fmt.Errorf("system metadata was not initialized"))
@@ -122,7 +120,7 @@ func BeforeCreate(strategy RESTCreateStrategy, ctx context.Context, obj runtime.
 		return errors.NewInternalError(fmt.Errorf("metadata.name was not generated"))
 	}
 
-	// ensure namespace on the object is correct, or error if a conflicting namespace was set in the object
+	// 确认对象上的命名空间正确；若对象内设置了与之冲突的命名空间则报错。
 	// 以请求 URL 中的命名空间为准，拒绝对象自带冲突命名空间，防止跨命名空间写入。
 	requestNamespace, ok := genericapirequest.NamespaceFrom(ctx)
 	if !ok {
@@ -177,8 +175,7 @@ func ValidateCreate(ctx context.Context, obj runtime.Object, strategy RESTCreate
 	return errs
 }
 
-// CheckGeneratedNameError checks whether an error that occurred creating a resource is due
-// to generation being unable to pick a valid name.
+// CheckGeneratedNameError 检查创建资源时发生的错误是否由于无法生成有效名称所致。
 // 只有 AlreadyExists 且确实使用了 generateName 时才改写错误，
 // 否则保留原错误（用户显式指定的名称冲突应原样返回）。
 func CheckGeneratedNameError(ctx context.Context, strategy RESTCreateStrategy, err error, obj runtime.Object) error {
@@ -203,13 +200,12 @@ func CheckGeneratedNameError(ctx context.Context, strategy RESTCreateStrategy, e
 		gr = schema.GroupResource{Group: gvk.Group, Resource: requestInfo.Resource}
 	}
 
-	// If we have a name and generated name, the server picked a name
-	// that already exists.
+	// 如果对象同时具有 name 和 generateName，说明服务端挑出的名称已经存在。
 	// 返回专门的 GenerateNameConflict，提示客户端重试即可，而非名称本身有问题。
 	return errors.NewGenerateNameConflict(gr, objectMeta.GetName(), 1)
 }
 
-// objectMetaAndKind retrieves kind and ObjectMeta from a runtime object, or returns an error.
+// objectMetaAndKind 从 runtime 对象中取出 kind 与 ObjectMeta，失败时返回错误。
 // 任何失败都视为内部错误：调用方传入的对象本应是合法的 runtime.Object。
 func objectMetaAndKind(typer runtime.ObjectTyper, obj runtime.Object) (metav1.Object, schema.GroupVersionKind, error) {
 	objectMeta, err := meta.Accessor(obj)
@@ -230,7 +226,7 @@ type NamespaceScopedStrategy interface {
 	NamespaceScoped() bool
 }
 
-// AdmissionToValidateObjectFunc converts validating admission to a rest validate object func
+// AdmissionToValidateObjectFunc 把校验型准入转换为 rest 的对象校验函数。
 // 用于在删除等“对象已从存储读出、尚未变更”的路径上重新执行准入校验。
 // 若准入实现不支持 ValidationInterface，返回恒成功的函数，避免影响主流程。
 func AdmissionToValidateObjectFunc(admit admission.Interface, staticAttributes admission.Attributes, o admission.ObjectInterfaces) ValidateObjectFunc {
@@ -240,7 +236,7 @@ func AdmissionToValidateObjectFunc(admit admission.Interface, staticAttributes a
 	}
 	return func(ctx context.Context, obj runtime.Object) error {
 		name := staticAttributes.GetName()
-		// in case the generated name is populated
+		// 应对名称由 generateName 生成的情况。
 		// generateName 场景下请求中没有最终名称，需要从对象本身补齐，
 		// 否则准入策略看到的 name 为空，可能误判。
 		if len(name) == 0 {

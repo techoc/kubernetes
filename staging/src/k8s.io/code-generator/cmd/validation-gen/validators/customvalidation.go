@@ -35,8 +35,7 @@ const (
 	customValidationFuncPrefix = "ValidateCustom_"
 )
 
-// Fixed types in the custom-validation signature; value/oldValue types vary.
-// 这些是签名中位置固定的参数类型，只有 value/oldValue 随被验证类型变化。
+// custom-validation 签名中类型固定的参数；只有 value/oldValue 的类型随被校验类型变化。
 var (
 	contextType   = types.Name{Package: "context", Name: "Context"}
 	operationType = types.Name{Package: "k8s.io/apimachinery/pkg/api/operation", Name: "Operation"}
@@ -84,8 +83,8 @@ func (customValidationTagValidator) ValidScopes() sets.Set[Scope] {
 
 // GetValidations 按命名约定定位手写函数并校验其签名，然后把它登记为一个函数调用。
 func (v *customValidationTagValidator) GetValidations(context Context, _ codetags.Tag) (Validations, error) {
-	// Resolve the output package for the type that owns the call site (the type
-	// itself, or the containing struct for a field), as done for Validate_<Type>.
+	// 解析调用处所属类型的输出包（类型本身，或者字段所在的外层结构体），
+	// 做法与 Validate_<Type> 一致。
 	// 字段作用域的函数定义在包含它的结构体所属的生成包中，而非字段类型的包。
 	definingType := context.Type
 	if context.Scope == ScopeField {
@@ -96,7 +95,7 @@ func (v *customValidationTagValidator) GetValidations(context Context, _ codetag
 		return Validations{}, fmt.Errorf("cannot resolve generated package for %s (is it being processed by validation-gen?)", definingType.Name.Package)
 	}
 
-	// Resolve the function name from the naming convention.
+	// 按命名约定解析函数名。
 	// 字段级函数名附加字段名，避免同一类型多个字段冲突。
 	funcName := customValidationFuncPrefix + definingType.Name.Name
 	if context.Scope == ScopeField {
@@ -104,8 +103,7 @@ func (v *customValidationTagValidator) GetValidations(context Context, _ codetag
 	}
 	fn := types.Name{Package: outPkg, Name: funcName}
 
-	// value and oldValue are the nilable form of the validated value, matching
-	// what the generated traversal passes to the function.
+	// value 和 oldValue 是被校验值的可空形式，与生成的遍历代码传给该函数的形式一致。
 	// 指针化后调用方可以区分“未设置”与零值，这也是 ratcheting 比较所需的形式。
 	valueType := context.Type
 	if !util.IsNilableType(valueType) {
@@ -155,7 +153,7 @@ func (v *customValidationTagValidator) verifyCustomFunctions() error {
 				}
 			}
 		}
-		// A ValidateCustom_* function in the generated package with no tag.
+		// 生成包中没有对应标签的 ValidateCustom_* 函数。
 		// 多个输入包可能映射到同一输出包，用 scanned 去重避免重复报告。
 		if scanned[outPkg] {
 			continue

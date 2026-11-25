@@ -184,8 +184,7 @@ func newOIDCAuthProvider(clusterAddress string, cfg map[string]string, persister
 type oidcAuthProvider struct {
 	client *http.Client
 
-	// Method for determining the current time.
-	// 提取为字段便于测试中伪造时间，避免依赖真实时钟。
+	// now 用于确定当前时间；提取为字段便于测试中伪造时间，避免依赖真实时钟。
 	now func() time.Time
 
 	// Mutex guards persisting to the kubeconfig file and allows synchronized
@@ -231,8 +230,8 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// shallow copy of the struct
 	r2 := new(http.Request)
 	*r2 = *req
-	// deep copy of the Header so we don't modify the original
-	// request's Header (as per RoundTripper contract).
+	// 对 Header 做深拷贝，避免修改原请求的 Header（这是 RoundTripper 契约的要求）：
+	// Header 是 map，浅拷贝仍共享底层数据，必须逐项复制。
 	// Header 是 map，浅拷贝仍共享底层数据，必须逐项复制以遵守 RoundTripper 不得修改入参的约定。
 	r2.Header = make(http.Header)
 	for k, s := range req.Header {
@@ -296,22 +295,19 @@ func (p *oidcAuthProvider) idToken() (string, error) {
 		return "", fmt.Errorf("token response did not contain an id_token, either the scope \"openid\" wasn't requested upon login, or the provider doesn't support id_tokens as part of the refresh response")
 	}
 
-	// Create a new config to persist.
-	// 复制一份再改，避免在持久化失败时污染内存中的旧配置。
+	// 新建一份待持久化的配置：复制一份再改，避免在持久化失败时污染内存中的旧配置。
 	newCfg := make(map[string]string)
 	for key, val := range p.cfg {
 		newCfg[key] = val
 	}
 
-	// Update the refresh token if the server returned another one.
-	// 部分 IdP 会轮换 refresh token；未返回新值则保留旧值。
+	// 服务端返回了新的 refresh token 时更新：部分 IdP 会轮换 refresh token；未返回新值则保留旧值。
 	if token.RefreshToken != "" && token.RefreshToken != rt {
 		newCfg[cfgRefreshToken] = token.RefreshToken
 	}
 	newCfg[cfgIDToken] = idToken
 
-	// Persist new config and if successful, update the in memory config.
-	// 先落盘成功再更新内存，保证进程内与 kubeconfig 一致。
+	// 先持久化新配置、成功后再更新内存中的配置，保证进程内与 kubeconfig 一致。
 	if err = p.persister.Persist(newCfg); err != nil {
 		return "", fmt.Errorf("could not persist new tokens: %v", err)
 	}
@@ -340,8 +336,7 @@ func tokenEndpoint(client *http.Client, issuer string) (string, error) {
 		return "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		// Don't produce an error that's too huge (e.g. if we get HTML back for some reason).
-		// 截断响应体，避免把整页 HTML 塞进错误信息。
+		// 不要生成过大的错误信息（例如不知为何返回了 HTML 页面）：截断响应体，避免把整页 HTML 塞进错误信息。
 		const n = 80
 		if len(body) > n {
 			body = append(body[:n], []byte("...")...)

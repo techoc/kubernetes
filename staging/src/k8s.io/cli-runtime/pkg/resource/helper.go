@@ -36,16 +36,14 @@ var metadataAccessor = meta.NewAccessor()
 // Helper provides methods for retrieving or mutating a RESTful
 // resource.
 type Helper struct {
-	// The name of this resource as the server would recognize it
-	// 中文：服务端识别的复数资源名，如 "pods"。
+	// Resource 是服务端识别的复数资源名，如 "pods"。
 	Resource string
-	// The name of the subresource as the server would recognize it
-	// 中文：子资源名，如 "status"；为空表示直接操作主资源。
+	// Subresource 是服务端识别的子资源名，如 "status"；为空表示直接操作主资源。
 	Subresource string
 	// A RESTClient capable of mutating this resource.
 	RESTClient RESTClient
-	// True if the resource type is scoped to namespaces
-	// 中文：决定请求路径是否带 namespaces/<ns> 前缀。
+	// NamespaceScoped 为 true 表示该资源类型属于命名空间作用域，
+	// 决定请求路径是否带 namespaces/<ns> 前缀。
 	NamespaceScoped bool
 	// If true, then use server-side dry-run to not persist changes to storage
 	// for verbs and resources that support server-side dry-run.
@@ -64,8 +62,8 @@ type Helper struct {
 	FieldValidation string
 }
 
-// NewHelper creates a Helper from a ResourceMapping
-// 中文：资源名与命名空间作用域都取自 RESTMapping，保证与实际注册的资源一致。
+// NewHelper 从 ResourceMapping 创建 Helper。
+// 资源名与命名空间作用域都取自 RESTMapping，保证与实际注册的资源一致。
 func NewHelper(client RESTClient, mapping *meta.RESTMapping) *Helper {
 	return &Helper{
 		Resource:        mapping.Resource.Resource,
@@ -74,9 +72,9 @@ func NewHelper(client RESTClient, mapping *meta.RESTMapping) *Helper {
 	}
 }
 
-// DryRun, if true, will use server-side dry-run to not persist changes to storage.
-// Otherwise, changes will be persisted to storage.
-// 中文：server-side dry-run 只在服务端支持时生效，否则变更仍会落盘，调用方需自行确认兼容性。
+// DryRun 设置是否为 true：为 true 时使用 server-side dry-run，不把变更写入存储；
+// 否则变更会落盘。
+// 注意 server-side dry-run 只在服务端支持时生效，否则变更仍会落盘，调用方需自行确认兼容性。
 func (m *Helper) DryRun(dryRun bool) *Helper {
 	m.ServerDryRun = dryRun
 	return m
@@ -120,10 +118,9 @@ func (m *Helper) List(namespace, apiVersion string, options *metav1.ListOptions)
 	return req.Do(context.TODO()).Get()
 }
 
-// FollowContinue handles the continue parameter returned by the API server when using list
-// chunking. To take advantage of this, the initial ListOptions provided by the consumer
-// should include a non-zero Limit parameter.
-// 中文：循环拉取直到服务端不再返回 continue token，调用方据此拿到完整结果集。
+// FollowContinue 处理使用 list 分页（chunking）时 API 服务端返回的 continue 参数。
+// 要利用它，调用方给出的初始 ListOptions 应包含非零的 Limit 参数。
+// 循环拉取直到服务端不再返回 continue token，调用方据此拿到完整结果集。
 func FollowContinue(initialOpts *metav1.ListOptions,
 	listFunc func(metav1.ListOptions) (runtime.Object, error)) error {
 	opts := initialOpts
@@ -149,8 +146,7 @@ func EnhanceListError(err error, opts metav1.ListOptions, subj string) error {
 	}
 	if apierrors.IsBadRequest(err) || apierrors.IsNotFound(err) {
 		if se, ok := err.(*apierrors.StatusError); ok {
-			// modify the message without hiding this is an API error
-			// 中文：仅改 Message，保留 StatusError 类型，调用方仍可做 IsNotFound 等判断。
+			// 修改消息但不掩盖它仍然是 API 错误：仅改 Message，保留 StatusError 类型，调用方仍可做 IsNotFound 等判断。
 			if len(opts.LabelSelector) == 0 && len(opts.FieldSelector) == 0 {
 				se.ErrStatus.Message = fmt.Sprintf("Unable to list %q: %v", subj,
 					se.ErrStatus.Message)
@@ -234,8 +230,8 @@ func (m *Helper) CreateWithOptions(namespace string, modify bool, obj runtime.Ob
 		options.FieldValidation = m.FieldValidation
 	}
 	if modify {
-		// Attempt to version the object based on client logic.
-		// 中文：创建时若对象带了 resourceVersion，服务端会拒绝；先清空以适配“apply 式”创建。
+		// 按客户端逻辑尝试为对象设置版本。
+		// 创建时若对象带了 resourceVersion，服务端会拒绝；先清空以适配“apply 式”创建。
 		version, err := metadataAccessor.ResourceVersion(obj)
 		if err != nil {
 			// We don't know how to clear the version on this object, so send it to the server as is
@@ -299,8 +295,8 @@ func (m *Helper) Replace(namespace, name string, overwrite bool, obj runtime.Obj
 		options.FieldValidation = m.FieldValidation
 	}
 
-	// Attempt to version the object based on client logic.
-	// 中文：overwrite 且对象没有 resourceVersion 时先取服务端版本回填，避免无条件覆盖他人改动。
+	// 按客户端逻辑尝试为对象设置版本。
+	// overwrite 且对象没有 resourceVersion 时先取服务端版本回填，避免无条件覆盖他人改动。
 	version, err := metadataAccessor.ResourceVersion(obj)
 	if err != nil {
 		// We don't know how to version this object, so send it to the server as is

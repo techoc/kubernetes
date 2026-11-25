@@ -78,7 +78,7 @@ BRjCI+izPzFTjsxD4aORE+WOkyWFCGPWKfNejfw0
 -----END CERTIFICATE-----`
 )
 
-// writeCAFile writes CA data to a temporary file
+// writeCAFile 把 CA 数据写入临时文件。
 // 文件路径成为 transport 监测的 CA 来源；测试结束后自动清理。
 func writeCAFile(t testing.TB, caData []byte) string {
 	tmpDir := t.TempDir()
@@ -96,7 +96,7 @@ func writeCAFile(t testing.TB, caData []byte) string {
 	return caFile
 }
 
-// createTestTransport creates a test transport with TLS config
+// createTestTransport 创建带 TLS 配置的测试 transport。
 // 仅设置 RootCAs，足以验证根证书池被替换；不需要真实的拨号行为。
 func createTestTransport(t testing.TB, caData []byte) *http.Transport {
 	CAs, err := rootCertPool(caData)
@@ -451,7 +451,7 @@ func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 	t.Logf("Success! Client permanently failed to reconnect as expected. Last error: %v", lastPollErr)
 }
 
-// testCAReloadsMetric is a fake metric recorder that records calls to Increment.
+// testCAReloadsMetric 是一个假的 metric recorder，记录对 Increment 的调用。
 // 用切片而非计数保存每次调用，便于断言 result/reason 组合。
 type testCAReloadsMetric struct {
 	calls []caReloadCall
@@ -552,7 +552,7 @@ func TestCARotationMetricsEmitted(t *testing.T) {
 	}
 }
 
-// helper to create a simple, non-blocking test server with a given certificate.
+// 辅助函数：创建一个使用指定证书的简单、非阻塞测试服务器。
 // 使用未启动的 httptest.Server，便于调用方自行指定 Listener（复用端口）。
 func newTestServer(t *testing.T, certPEM, keyPEM []byte) *httptest.Server {
 	t.Helper()

@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	// taken from https://github.com/kubernetes/kubernetes/blob/release-1.27/staging/src/k8s.io/kube-aggregator/pkg/apiserver/handler_proxy.go#L47
+	// 取值参考 https://github.com/kubernetes/kubernetes/blob/release-1.27/staging/src/k8s.io/kube-aggregator/pkg/apiserver/handler_proxy.go#L47
 	// discovery 请求被假定为廉价且快速；短超时可避免某个故障的聚合 apiserver
 	// 拖慢所有客户端的发现过程。
 	aggregatedDiscoveryTimeout = 5 * time.Second
@@ -69,8 +69,7 @@ func ResolveEndpoint(services listersv1.ServiceLister, endpointSlices EndpointSl
 
 	switch {
 	case svc.Spec.Type == v1.ServiceTypeClusterIP, svc.Spec.Type == v1.ServiceTypeLoadBalancer, svc.Spec.Type == v1.ServiceTypeNodePort:
-		// these are fine
-		// ExternalName 没有可解析的后端，因此不支持。
+		// 这些服务类型都有可解析的后端，可以代理；ExternalName 没有可解析的后端，因此不支持。
 	default:
 		return nil, fmt.Errorf("unsupported service type %q", svc.Spec.Type)
 	}
@@ -112,9 +111,7 @@ func ResolveEndpoint(services listersv1.ServiceLister, endpointSlices EndpointSl
 // 优先族优先保证双栈环境下不会随机选到不可达的地址族。
 func RandomEndpoint(svcName string, slices []*discoveryv1.EndpointSlice, svcPortName string, preferredIPFamily v1.IPFamily, validEndpoint func(*discoveryv1.Endpoint) bool) (string, error) {
 	if len(slices) > 1 {
-		// If there are multiple slices, we want to look at them in a random
-		// order, but we need to look at all of the slices of the preferred IP
-		// family first.
+		// 存在多个 slice 时希望以随机顺序访问它们，但必须先看完所有属于首选 IP 族的 slice。
 		// 排序键 = (是否为主 IP 族, 随机序号)，一次排序同时满足两个偏好。
 		preferredAddressType := discoveryv1.AddressType(preferredIPFamily)
 		randomOrder := rand.Perm(len(slices))
@@ -139,8 +136,7 @@ func RandomEndpoint(svcName string, slices []*discoveryv1.EndpointSlice, svcPort
 				continue
 			}
 
-			// Starting from a random index, find a Ready endpoint
-			// 从随机偏移开始遍历，使同一 slice 内各端点也被均匀选中。
+			// 从随机偏移开始遍历，寻找一个 Ready 端点，使同一 slice 内各端点也被均匀选中。
 			offset := rand.Intn(len(slice.Endpoints))
 			for epi := range slice.Endpoints {
 				ep := &slice.Endpoints[(epi+offset)%len(slice.Endpoints)]
@@ -206,8 +202,7 @@ func NewRequestForProxy(location *url.URL, req *http.Request) (*http.Request, co
 	cancelFn := func() {}
 
 	if requestInfo, ok := genericapirequest.RequestInfoFrom(req.Context()); ok {
-		// trim leading and trailing slashes. Then "/apis/group/version" requests are for discovery, so if we have exactly three
-		// segments that we are going to proxy, we have a discovery request.
+		// 先去掉首尾斜杠；“/apis/group/version”形式的请求是 discovery 请求，因此若代理路径恰好有三段，即为 discovery 请求。
 		// 仅非资源请求且路径形如 /apis/<group>/<version> 时才施加短超时。
 		if !requestInfo.IsResourceRequest && len(strings.Split(strings.Trim(requestInfo.Path, "/"), "/")) == 3 {
 			// discovery requests are used by kubectl and others to determine which resources a server has.  This is a cheap call that
@@ -223,8 +218,7 @@ func NewRequestForProxy(location *url.URL, req *http.Request) (*http.Request, co
 	newReq.URL = location
 	newReq.Host = location.Host
 
-	// If the original request has an audit ID, let's make sure we propagate this
-	// to the aggregated server.
+	// 若原始请求带有审计 ID，则将其传播给聚合服务器。
 	// 传播审计 ID 让聚合层与后端 apiserver 的日志可以关联同一次用户请求。
 	if auditID, found := audit.AuditIDFrom(req.Context()); found {
 		newReq.Header.Set(auditinternal.HeaderAuditID, string(auditID))

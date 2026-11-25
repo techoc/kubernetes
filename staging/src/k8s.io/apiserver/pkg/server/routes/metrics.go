@@ -29,19 +29,16 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// DefaultMetrics installs the default prometheus metrics handler
 // 只读端点：用于标准 /metrics 暴露。
 type DefaultMetrics struct{}
 
-// Install adds the DefaultMetrics handler
 // register 必须在使用处理器前调用，否则第一次抓取会缺少指标元数据。
 func (m DefaultMetrics) Install(c *mux.PathRecorderMux) {
 	register()
 	c.Handle("/metrics", legacyregistry.Handler())
 }
 
-// MetricsWithReset install the prometheus metrics handler extended with support for the DELETE method
-// which resets the metrics.
+// MetricsWithReset 安装支持 DELETE 方法重置指标的 prometheus metrics 处理器。
 // 重置能力主要服务于测试与调试；生产环境应通过鉴权限制访问。
 type MetricsWithReset struct{}
 
@@ -51,7 +48,6 @@ func (m MetricsWithReset) Install(c *mux.PathRecorderMux) {
 	c.Handle("/metrics", legacyregistry.HandlerWithReset())
 }
 
-// register apiserver and etcd metrics
 // 集中注册可确保各子系统指标在处理器安装时全部可见，避免抓取结果随注册顺序变化。
 func register() {
 	apimetrics.Register()

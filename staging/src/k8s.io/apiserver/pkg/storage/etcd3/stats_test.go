@@ -73,8 +73,7 @@ func TestStatsCache(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(10), stats.EstimatedAverageObjectSizeBytes)
 
-	// Snapshot revision from revision 3
-	// 用 revision 3 的快照覆盖：旧条目不得覆盖已删除/更新的状态。
+	// 使用 revision 3 的快照：旧条目不得覆盖已删除/更新后的状态。
 	store.Update([]*mvccpb.KeyValue{
 		{Key: []byte("/prefix/foo1"), Value: []byte("0123456789"), ModRevision: 2},
 		{Key: []byte("/prefix/foo2"), Value: []byte("01234567890123456789"), ModRevision: 3},
@@ -83,8 +82,7 @@ func TestStatsCache(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(10), stats.EstimatedAverageObjectSizeBytes)
 
-	// Replay from revision 2
-	// 从 revision 2 开始重放增量事件，平均值随事件推进而更新。
+	// 从 revision 2 开始重放增量事件：平均值随事件推进而更新。
 	store.UpdateKey(&mvccpb.KeyValue{Key: []byte("/prefix/foo1"), Value: []byte("0123456789"), ModRevision: 2})
 	stats, err = store.Stats(ctx)
 	require.NoError(t, err)
@@ -117,8 +115,7 @@ func TestStatsCache(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), stats.EstimatedAverageObjectSizeBytes)
 
-	// Old snapshot might restore old revision if keys were recreated
-	// 键被重建后，旧快照可能把已删除的旧 revision 重新带入，这里确认其影响。
+	// 若键曾被重建，旧快照可能带回旧的 revision：这里确认它对已删除旧 revision 的影响。
 	store.getKeys = func(ctx context.Context) ([]string, error) { return []string{"foo1", "foo2"}, nil }
 	store.Update([]*mvccpb.KeyValue{
 		{Key: []byte("/prefix/foo1"), Value: []byte("0123456789"), ModRevision: 2},
@@ -128,8 +125,7 @@ func TestStatsCache(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(15), stats.EstimatedAverageObjectSizeBytes)
 
-	// Cleanup if keys were deleted
-	// 键集合为空时，即使缓存中仍有条目，平均值也必须为 0。
+	// 键被删除后的清理：键集合为空时，即使缓存中仍有条目，平均值也必须为 0。
 	store.getKeys = func(ctx context.Context) ([]string, error) { return []string{}, nil }
 	stats, err = store.Stats(ctx)
 	require.NoError(t, err)

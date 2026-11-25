@@ -115,8 +115,7 @@ var codecs serializer.CodecFactory
 // 按 KMS 名称分键而非全局开关，是为了让并行集成测试互不干扰。
 var kdfEnabledPerKMS sync.Map // map[string]bool, KMS name -> KDF enabled
 
-// this function should only be called in tests to swap enablement of the KMSv2KDF feature
-// Caller must guarantee that all KMS providers have distinct names across all tests.
+// SetKDFForTests 仅供测试中切换 KMSv2KDF 特性开关使用；调用方必须保证所有测试中的 KMS provider 名称互不相同。
 // 返回的函数用于恢复默认行为（删除该条目的记录）。
 func SetKDFForTests(kmsName string, b bool) func() {
 	if len(kmsName) == 0 { // guarantee that GetKDF("") returns the default value
@@ -225,8 +224,7 @@ type EncryptionConfiguration struct {
 	// HealthChecks is a list of healthz.HealthChecker that will be used to check the health of the encryption providers.
 	HealthChecks []healthz.HealthChecker
 
-	// EncryptionFileContentHash is the hash of the encryption config file.
-	// 只保留哈希而不保留原文，避免明文密钥长期驻留内存。
+	// EncryptionFileContentHash 是加密配置文件内容的哈希；只保留哈希而不保留原文，避免明文密钥长期驻留内存。
 	EncryptionFileContentHash string
 
 	// KMSCloseGracePeriod is the duration we will wait before closing old transformers.
@@ -313,9 +311,7 @@ func getTransformerOverridesAndKMSPluginProbes(ctx context.Context, config *apis
 			// check if resource is masked by *.group rule
 			anyResourceInGroup := schema.GroupResource{Group: gr.Group, Resource: "*"}
 			if _, masked := resourceToPrefixTransformer[anyResourceInGroup]; masked {
-				// an earlier rule already configured a transformer for *.group, masking this rule
-				// return error since this is not allowed
-				// 前面的通配规则已覆盖该资源，后续更具体的规则将永不生效，属于配置错误。
+				// 较早的规则已为 *.group 配置了 transformer，遮蔽了本规则：后续更具体的规则将永不生效，这属于不允许的配置，必须报错。
 				return nil, nil, nil, fmt.Errorf("resource %q is masked by earlier rule %q", grYAMLString(gr), grYAMLString(anyResourceInGroup))
 			}
 
@@ -680,8 +676,7 @@ func aesPrefixTransformer(config *apiserver.AESConfiguration, fn blockTransforme
 			return result, fmt.Errorf("error while creating transformer for named key %s: %w", keyData.Name, err)
 		}
 
-		// Create a new PrefixTransformer for this key
-		// 前缀包含密钥名，读取时据此分流到正确密钥；写入始终使用第一个。
+		// 为该密钥创建新的 PrefixTransformer：前缀包含密钥名，读取时据此分流到正确密钥；写入始终使用第一个。
 		keyTransformers = append(keyTransformers,
 			storagevalue.PrefixTransformer{
 				Transformer: transformer,
@@ -825,8 +820,7 @@ func kmsPrefixTransformer(ctx context.Context, config *apiserver.KMSConfiguratio
 			lastResponse: &kmsPluginHealthzResponse{},
 			apiServerID:  apiServerID,
 		}
-		// initialize state so that Load always works
-		// 先放入仅含 provider 名的空状态，避免 transformer 构造后读到 nil。
+		// 先初始化状态，保证 Load 永远可用：放入仅含 provider 名的空状态，避免 transformer 构造后读到 nil。
 		probe.state.Store(&envelopekmsv2.State{
 			KMSProviderName: kmsName,
 		})
@@ -960,8 +954,8 @@ func computeEncryptionConfigHash(data []byte) string {
 var _ storagevalue.ResourceTransformers = &DynamicTransformers{}
 var _ healthz.HealthChecker = &DynamicTransformers{}
 
-// DynamicTransformers holds transformers that may be dynamically updated via a single external actor, likely a controller.
-// This struct must avoid locks (even read write locks) as it is inline to all calls to storage.
+// DynamicTransformers 持有可由单一外部角色（通常是控制器）动态更新的 transformers。
+// 该结构必须避免加锁（读写锁也不行），因为它位于所有存储调用的关键路径上。
 // 因此用 atomic.Value 整体替换快照，读路径零锁。
 type DynamicTransformers struct {
 	transformTracker *atomic.Value

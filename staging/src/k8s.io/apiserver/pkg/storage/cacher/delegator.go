@@ -93,14 +93,12 @@ func (c *CacheDelegator) EnableResourceSizeEstimation(keys storage.KeysFunc) err
 // Delete 转交底层存储执行删除，并尽量把缓存中的最新对象作为“当前版本”传入，
 // 供底层做前置条件校验；缓存不可用时回退为不带建议对象的路径。
 func (c *CacheDelegator) Delete(ctx context.Context, key string, out runtime.Object, preconditions *storage.Preconditions, validateDeletion storage.ValidateObjectFunc, cachedExistingObject runtime.Object, opts storage.DeleteOptions) error {
-	// Ignore the suggestion and try to pass down the current version of the object
-	// read from cache.
+	// 忽略传入的建议对象，尝试把当前从缓存读出的对象版本传递下去。
 	// 缓存读取失败不应阻塞写；记录日志后回退到不带建议对象的删除。
 	if elem, exists, err := c.cacher.watchCache.storage.GetByKey(key); err != nil {
 		klog.Errorf("GetByKey returned error: %v", err)
 	} else if exists {
-		// DeepCopy the object since we modify resource version when serializing the
-		// current object.
+		// 对对象做 DeepCopy，因为我们在序列化当前对象时会修改 resource version。
 		// 序列化会修改 resourceVersion，必须深拷贝，避免污染缓存中共享的对象。
 		currObj := elem.(*store.Element).Object.DeepCopyObject()
 		return c.storage.Delete(ctx, key, out, preconditions, validateDeletion, currObj, opts)
@@ -116,8 +114,8 @@ func (c *CacheDelegator) Watch(ctx context.Context, key string, opts storage.Lis
 	// one. "latest" is ensured by serving the watch from
 	// the underlying storage.
 	//
-	// it should never happen due to our validation but let's just be super-safe here
-	// and disable sendingInitialEvents when the feature wasn't enabled
+	// 按我们的校验逻辑这不该发生，但这里还是做得绝对安全一些：
+	// 特性未开启时把 sendingInitialEvents 关掉。
 	// 未启用 WatchList 时不能发送初始事件；这里做兜底，防止上游漏校验。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.WatchList) && opts.SendInitialEvents != nil {
 		opts.SendInitialEvents = nil
@@ -128,21 +126,19 @@ func (c *CacheDelegator) Watch(ctx context.Context, key string, opts storage.Lis
 // Get 按 resourceVersion 语义在缓存与底层存储之间分流。
 func (c *CacheDelegator) Get(ctx context.Context, key string, opts storage.GetOptions, objPtr runtime.Object) error {
 	if opts.ResourceVersion == "" {
-		// If resourceVersion is not specified, serve it from underlying
-		// storage (for backward compatibility).
+		// 未指定 resourceVersion 时，由底层存储提供服务（保持向后兼容）。
 		// 未指定 RV 时无法判断缓存是否足够新，按历史行为走底层存储。
 		return c.storage.Get(ctx, key, opts, objPtr)
 	}
 
 	if !c.cacher.Ready() {
-		// If Cache is not initialized, delegator Get requests to storage
-		// as described in https://kep.k8s.io/4568
+		// Cache 尚未初始化时，按 https://kep.k8s.io/4568 的描述把 delegator 的 Get
+		// 请求委派给存储。
 		// 缓存尚未完成初始同步，读取必须回退底层存储。
 		return c.storage.Get(ctx, key, opts, objPtr)
 	}
-	// If resourceVersion is specified, serve it from cache.
-	// It's guaranteed that the returned value is at least that
-	// fresh as the given resourceVersion.
+	// 指定了 resourceVersion 时由缓存提供服务，并保证返回的值至少与该
+	// resourceVersion 一样新。
 	// 先校验 RV 格式，避免把非法值带入缓存路径。
 	if _, err := c.cacher.versioner.ParseResourceVersion(opts.ResourceVersion); err != nil {
 		return err
@@ -172,8 +168,8 @@ func (c *CacheDelegator) GetList(ctx context.Context, key string, opts storage.L
 	}
 
 	if !c.cacher.Ready() && shouldDelegateListOnNotReadyCache(opts) {
-		// If Cacher is not initialized, delegator List requests to storage
-		// as described in https://kep.k8s.io/4568
+		// Cacher 尚未初始化时，按 https://kep.k8s.io/4568 的描述把 delegator 的 List
+		// 请求委派给存储。
 		// 缓存未就绪且请求是简单的 limit 查询，回退底层以免阻塞。
 		return c.storage.GetList(ctx, key, opts, listObj)
 	}
@@ -186,8 +182,8 @@ func (c *CacheDelegator) GetList(ctx context.Context, key string, opts storage.L
 			return c.storage.GetList(ctx, key, opts, listObj)
 		}
 		if result.ConsistentRead {
-			// IsTooLargeResourceVersion occurs when the requested RV is higher than cache's current RV
-			// and cache hasn't caught up within the timeout period.
+			// IsTooLargeResourceVersion 出现在请求的 RV 高于缓存当前 RV、
+			// 且缓存在超时时间内未能追平时。
 			// 请求 RV 超过缓存进度且缓存未在超时内追上时：
 			// 要么明确拒绝让客户端重试，要么回退底层存储，由 feature gate 决定。
 			if storage.IsTooLargeResourceVersion(err) {
@@ -233,8 +229,7 @@ func (c *CacheDelegator) GuaranteedUpdate(ctx context.Context, key string, desti
 	if elem, exists, err := c.cacher.watchCache.storage.GetByKey(key); err != nil {
 		klog.Errorf("GetByKey returned error: %v", err)
 	} else if exists {
-		// DeepCopy the object since we modify resource version when serializing the
-		// current object.
+		// 对对象做 DeepCopy，因为我们在序列化当前对象时会修改 resource version。
 		// 序列化会修改 resourceVersion，必须深拷贝，避免污染缓存中共享的对象。
 		currObj := elem.(*store.Element).Object.DeepCopyObject()
 		return c.storage.GuaranteedUpdate(ctx, key, destination, ignoreNotFound, preconditions, tryUpdate, currObj)

@@ -34,8 +34,7 @@ import (
 // Fairness API objects are formatted into JSON.  The other types of
 // objects here are formatted into golang source.
 
-// Stringer marks the given value for custom formatting by this package.
-// 仅保存引用，不做任何拷贝或序列化，因此构造本身几乎零成本。
+// Stringer 标记给定值由本包进行自定义格式化；仅保存引用，不做任何拷贝或序列化，因此构造本身几乎零成本。
 type Stringer struct{ val interface{} }
 
 // Fmt marks the given value for custom formatting by this package.
@@ -43,8 +42,7 @@ func Fmt(val interface{}) Stringer {
 	return Stringer{val}
 }
 
-// String formats to a string in full detail
-// APF API 对象输出 JSON（便于复制进 issue），其他类型输出 Go 源码形式。
+// String 以完整细节将值格式化为字符串：APF API 对象输出 JSON（便于复制进 issue），其他类型输出 Go 源码形式。
 func (sr Stringer) String() string {
 	if sr.val == nil {
 		return "nil"
@@ -90,8 +88,7 @@ func ToJSON(val interface{}) string {
 	return str
 }
 
-// FmtPriorityLevelConfiguration returns a golang source expression
-// equivalent to the given value
+// FmtPriorityLevelConfiguration 返回与给定值等价的 Go 源码表达式。
 // 输出可直接粘贴进测试代码，用于构造期望值。
 func FmtPriorityLevelConfiguration(pl *flowcontrol.PriorityLevelConfiguration) string {
 	if pl == nil {
@@ -148,8 +145,7 @@ func FmtFlowSchemaSpec(fsSpec *flowcontrol.FlowSchemaSpec) string {
 	return buf.String()
 }
 
-// BufferFlowSchemaSpec writes a golang source expression for the
-// given value to the given buffer
+// BufferFlowSchemaSpec 将给定值对应的 Go 源码表达式写入给定 buffer。
 // 手写拼接而非反射，保证输出稳定且不触发未导出字段的格式化问题。
 func BufferFlowSchemaSpec(buf *bytes.Buffer, fsSpec *flowcontrol.FlowSchemaSpec) {
 	buf.WriteString(fmt.Sprintf("flowcontrolv1.FlowSchemaSpec{PriorityLevelConfiguration: %#+v, MatchingPrecedence: %d, DistinguisherMethod: ",
@@ -208,8 +204,7 @@ func BufferFmtPolicyRulesWithSubjectsSlim(buf *bytes.Buffer, rule flowcontrol.Po
 	buf.WriteString(fmt.Sprintf("}, ResourceRules: %#+v, NonResourceRules: %#+v}", rule.ResourceRules, rule.NonResourceRules))
 }
 
-// FmtUsers produces a golang source expression of the value.
-// 用于在日志中展示请求主体集合。
+// FmtUsers 生成该值的 Go 源码表达式，用于在日志中展示请求主体集合。
 func FmtUsers(list []user.Info) string {
 	var buf bytes.Buffer
 	buf.WriteString("[]user.Info{")

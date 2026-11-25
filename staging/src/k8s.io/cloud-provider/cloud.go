@@ -29,9 +29,8 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
-// ControllerClientBuilder allows you to get clients and configs for controllers
-// Please note a copy also exists in pkg/controller/client_builder.go
-// TODO: Make this depend on the separate controller utilities repo (issues/68947)
+// ControllerClientBuilder 允许为各控制器获取 client 与 config。
+// 注意 pkg/controller/client_builder.go 中也有一份拷贝；TODO: 使其依赖独立的 controller utilities 仓库（issues/68947）。
 // 控制器按名称获取独立客户端，便于为不同控制器分配不同 ServiceAccount。
 type ControllerClientBuilder interface {
 	// Config 返回指定控制器使用的 REST 配置，可能因 ServiceAccount 不同而不同。
@@ -44,39 +43,32 @@ type ControllerClientBuilder interface {
 	ClientOrDie(name string) clientset.Interface
 }
 
-// Interface is an abstract, pluggable interface for cloud providers.
-// 它是 CCM 与云实现之间的唯一契约：各能力接口通过返回 (impl, supported) 可选地暴露，
+// Interface 是云 provider 的抽象、可插拔接口，也是 CCM 与云实现之间的唯一契约：各能力接口通过返回 (impl, supported) 可选地暴露，
 // 控制器据此决定是否启用对应控制循环。所有实现必须并发安全，因为控制器 worker 会并行调用。
 type Interface interface {
-	// Initialize provides the cloud with a kubernetes client builder and may spawn goroutines
-	// to perform housekeeping or run custom controllers specific to the cloud provider.
-	// Any tasks started here should be cleaned up when the stop channel closes.
-	// 在启动所有控制器之前调用一次；厂商可在此启动自有控制器，但必须监听 stop。
+	// Initialize 为 cloud provider 提供 kubernetes client builder，并可启动用于日常维护或云厂商自定义控制器的 goroutine；这些任务必须在 stop channel 关闭时被清理。
+	// 该调用在所有控制器启动之前执行一次；厂商可在此启动自有控制器，但必须监听 stop。
 	Initialize(clientBuilder ControllerClientBuilder, stop <-chan struct{})
 	// LoadBalancer returns a balancer interface. Also returns true if the interface is supported, false otherwise.
 	LoadBalancer() (LoadBalancer, bool)
 	// Instances returns an instances interface. Also returns true if the interface is supported, false otherwise.
 	Instances() (Instances, bool)
-	// InstancesV2 is an implementation for instances and should only be implemented by external cloud providers.
-	// Implementing InstancesV2 is behaviorally identical to Instances but is optimized to significantly reduce
-	// API calls to the cloud provider when registering and syncing nodes. Implementation of this interface will
-	// disable calls to the Zones interface. Also returns true if the interface is supported, false otherwise.
+	// InstancesV2 是 instances 的实现，只应由外部云 provider 实现。其行为与 Instances 相同，但经过优化以显著减少注册/同步节点时对云的 API 调用；实现该接口后将不再调用 Zones。
 	// 若返回 supported=true，CCM 会优先使用 InstancesV2 并停止调用 Instances/Zones，
 	// 因此实现方必须同时提供元数据中的 zone/region 信息。
 	InstancesV2() (InstancesV2, bool)
-	// Zones returns a zones interface. Also returns true if the interface is supported, false otherwise.
+	// Zones 返回一个 zones 接口；若支持该接口也返回 true，否则返回 false。
 	// DEPRECATED: Zones is deprecated in favor of retrieving zone/region information from InstancesV2.
-	// This interface will not be called if InstancesV2 is enabled.
-	// 已弃用：启用 InstancesV2 后不会再调用该接口，新实现应通过 InstanceMetadata 返回拓扑。
+	// 启用 InstancesV2 后不会再调用该接口；新实现应通过 InstanceMetadata 返回拓扑。
 	Zones() (Zones, bool)
 	// Clusters returns a clusters interface.  Also returns true if the interface is supported, false otherwise.
 	Clusters() (Clusters, bool)
 	// Routes returns a routes interface along with whether the interface is supported.
 	Routes() (Routes, bool)
-	// ProviderName returns the cloud provider ID.
+	// ProviderName 返回云 provider 的 ID。
 	// 该值同样用于拼接 ProviderID（<provider>://<instance-id>），必须稳定且不含 "://"。
 	ProviderName() string
-	// HasClusterID returns true if a ClusterID is required and set
+	// HasClusterID 在需要且已设置 ClusterID 时返回 true。
 	// 仅当配置了 cluster-id 且云要求它时返回 true；false 时 CCM 允许无 cluster-id 运行。
 	HasClusterID() bool
 }
@@ -96,18 +88,16 @@ type Clusters interface {
 	Master(ctx context.Context, clusterName string) (string, error)
 }
 
-// (DEPRECATED) DefaultLoadBalancerName is the default load balancer name that is called from
-// LoadBalancer.GetLoadBalancerName. Use this method to maintain backward compatible names for
-// LoadBalancers that were created prior to Kubernetes v1.12. In the future, each provider should
-// replace this method call in GetLoadBalancerName with a provider-specific implementation that
-// is less cryptic than the Service's UUID.
+// (DEPRECATED) DefaultLoadBalancerName 是 LoadBalancer.GetLoadBalancerName 调用的默认负载均衡器名称，
+// 用于为 Kubernetes v1.12 之前创建的 LoadBalancer 保持向后兼容的命名；各 provider 今后应在 GetLoadBalancerName 中
+// 替换为该 provider 自己的、不再依赖 Service UUID 的命名实现。
 // 该函数基于 Service UID 生成名称，虽然不可读，但能保证删除重建后名称不冲突。
 func DefaultLoadBalancerName(service *v1.Service) string {
-	//GCE requires that the name of a load balancer starts with a lower case letter.
+	// GCE 要求负载均衡器名称以小写字母开头。
 	// 前置 "a" 同时保证 UID 以数字开头时也满足 GCE 的命名限制。
 	ret := "a" + string(service.UID)
 	ret = strings.Replace(ret, "-", "", -1)
-	//AWS requires that the name of a load balancer is shorter than 32 bytes.
+	// AWS 要求负载均衡器名称短于 32 字节。
 	// AWS 的 32 字节上限要求截断；UID 的随机性足以避免截断后碰撞。
 	if len(ret) > 32 {
 		ret = ret[:32]
@@ -115,10 +105,8 @@ func DefaultLoadBalancerName(service *v1.Service) string {
 	return ret
 }
 
-// GetInstanceProviderID builds a ProviderID for a node in a cloud.
-// Note that if the instance does not exist, we must return ("", cloudprovider.InstanceNotFound)
-// cloudprovider.InstanceNotFound should NOT be returned for instances that exist but are stopped/sleeping
-// ProviderID 统一为 <provider-name>://<instance-id>；协议头让不同云的 ID 可以共存于同一集群。
+// GetInstanceProviderID 为云中的节点构造 ProviderID，统一为 <provider-name>://<instance-id>；协议头让不同云的 ID 可以共存于同一集群。
+// 若实例不存在，必须返回 ("", cloudprovider.InstanceNotFound)；但对存在而处于停止/休眠状态的实例不得返回 InstanceNotFound。
 func GetInstanceProviderID(ctx context.Context, cloud Interface, nodeName types.NodeName) (string, error) {
 	instances, ok := cloud.Instances()
 	if !ok {
@@ -139,67 +127,38 @@ func GetInstanceProviderID(ctx context.Context, cloud Interface, nodeName types.
 	return cloud.ProviderName() + "://" + instanceID, nil
 }
 
-// LoadBalancer is an abstract, pluggable interface for load balancers.
-//
-// Cloud provider may chose to implement the logic for
-// constructing/destroying specific kinds of load balancers in a
-// controller separate from the ServiceController.  If this is the case,
-// then {Ensure,Update}LoadBalancer must return the ImplementedElsewhere error.
-// For the given LB service, the GetLoadBalancer must return "exists=True" if
-// there exists a LoadBalancer instance created by ServiceController.
-// In all other cases, GetLoadBalancer must return a NotFound error.
-// EnsureLoadBalancerDeleted must not return ImplementedElsewhere to ensure
-// proper teardown of resources that were allocated by the ServiceController.
-// This can happen if a user changes the type of LB via an update to the resource
-// or when migrating from ServiceController to alternate implementation.
-// The finalizer on the service will be added and removed by ServiceController
-// irrespective of the ImplementedElsewhere error. Additional finalizers for
-// LB services must be managed in the alternate implementation.
+// LoadBalancer 是负载均衡器的抽象、可插拔接口。
+// 云 provider 可以选择在独立于 ServiceController 的控制器中实现创建/销毁特定负载均衡器的逻辑；此时 {Ensure,Update}LoadBalancer 必须返回 ImplementedElsewhere 错误。
+// 对启用负载均衡器的 Service，若存在由 ServiceController 创建的 LoadBalancer 实例，GetLoadBalancer 必须返回 "exists=True"；其余所有情况必须返回 NotFound 错误。
+// 为确保 ServiceController 分配的资源被正确拆除，EnsureLoadBalancerDeleted 不得返回 ImplementedElsewhere——用户更改 LB 类型、或从 ServiceController 迁移到替代实现时就可能遇到。
+// 无论是否返回 ImplementedElsewhere，ServiceController 都会负责增删 Service 上的 finalizer；LB Service 的其他 finalizer 必须在替代实现中自行管理。
 // 关键不变量：所有方法都把 Service/Node 视为只读；幂等由实现方保证，
 // 因为控制器可能在任意步骤失败并重试整个 Ensure。
 type LoadBalancer interface {
-	// GetLoadBalancer returns whether the specified load balancer exists, and
-	// if so, what its status is.
-	// Implementations must treat the *v1.Service parameter as read-only and not modify it.
-	// Parameter 'clusterName' is the name of the cluster as presented to kube-controller-manager.
+	// GetLoadBalancer 返回指定负载均衡器是否存在，若存在则返回其状态。
+	// 实现必须将 *v1.Service 参数视为只读，不得修改；参数 'clusterName' 是提交给 kube-controller-manager 的集群名称。
 	// exists=false 且无错误会让控制器进入创建流程；资源已部分存在时也应返回 true。
 	// TODO: Break this up into different interfaces (LB, etc) when we have more than one type of service
 	GetLoadBalancer(ctx context.Context, clusterName string, service *v1.Service) (status *v1.LoadBalancerStatus, exists bool, err error)
-	// GetLoadBalancerName returns the name of the load balancer. Implementations must treat the
-	// *v1.Service parameter as read-only and not modify it.
+	// GetLoadBalancerName 返回负载均衡器的名称；实现必须将 *v1.Service 参数视为只读，不得修改。
 	// 名称必须根据 Service 确定性地生成，才能跨重启、跨副本定位同一 LB。
 	GetLoadBalancerName(ctx context.Context, clusterName string, service *v1.Service) string
-	// EnsureLoadBalancer creates a new load balancer 'name', or updates the existing one. Returns the status of the balancer
-	// Implementations must treat the *v1.Service and *v1.Node
-	// parameters as read-only and not modify them.
-	// Parameter 'clusterName' is the name of the cluster as presented to kube-controller-manager.
-	//
-	// Implementations may return a (possibly wrapped) api.RetryError to enforce
-	// backing off at a fixed duration. This can be used for cases like when the
-	// load balancer is not ready yet (e.g., it is still being provisioned) and
-	// polling at a fixed rate is preferred over backing off exponentially in
-	// order to minimize latency.
+	// EnsureLoadBalancer 创建名为 'name' 的新负载均衡器或更新已有的，并返回负载均衡器状态。
+	// 实现必须将 *v1.Service 与 *v1.Node 参数视为只读，不得修改；参数 'clusterName' 是提交给 kube-controller-manager 的集群名称。
+	// 实现可以返回（可能被包装的）api.RetryError 来按固定时长退避；例如负载均衡器尚未就绪（仍在创建中）时，固定速率轮询优于指数退避，可将延迟降到最低。
 	// 返回 RetryError 可控制重试节奏，避免默认指数退避把正在创建的 LB 拖慢。
 	EnsureLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) (*v1.LoadBalancerStatus, error)
-	// UpdateLoadBalancer updates hosts under the specified load balancer.
-	// Implementations must treat the *v1.Service and *v1.Node
-	// parameters as read-only and not modify them.
-	// Parameter 'clusterName' is the name of the cluster as presented to kube-controller-manager
+	// UpdateLoadBalancer 更新指定负载均衡器下的后端主机；实现必须将 *v1.Service 与 *v1.Node 参数视为只读，不得修改；参数 'clusterName' 是提交给 kube-controller-manager 的集群名称。
 	// 仅在后端节点集合变化时调用；不应在此重复创建或销毁 LB。
 	UpdateLoadBalancer(ctx context.Context, clusterName string, service *v1.Service, nodes []*v1.Node) error
-	// EnsureLoadBalancerDeleted deletes the specified load balancer if it
-	// exists, returning nil if the load balancer specified either didn't exist or
-	// was successfully deleted.
-	// This construction is useful because many cloud providers' load balancers
-	// have multiple underlying components, meaning a Get could say that the LB
-	// doesn't exist even if some part of it is still laying around.
-	// Implementations must treat the *v1.Service parameter as read-only and not modify it.
-	// Parameter 'clusterName' is the name of the cluster as presented to kube-controller-manager
+	// EnsureLoadBalancerDeleted 删除指定的负载均衡器（若存在）；当负载均衡器本就不存在或已成功删除时返回 nil。
+	// 这种约定很有用：许多云 provider 的负载均衡器由多个底层组件构成，Get 可能显示 LB 不存在而部分组件仍然残留。
+	// 实现必须将 *v1.Service 参数视为只读，不得修改；参数 'clusterName' 是提交给 kube-controller-manager 的集群名称。
 	// 必须清理所有底层组件；仅在确认全部删除后才返回 nil，以便 finalizer 安全移除。
 	EnsureLoadBalancerDeleted(ctx context.Context, clusterName string, service *v1.Service) error
 }
 
-// Instances is an abstract, pluggable interface for sets of instances.
+// Instances 是实例集合的抽象、可插拔接口。
 // 这些方法均以节点名或 ProviderID 为键；实现应返回 InstanceNotFound/NotImplemented
 // 等哨兵错误，供控制器区分“实例不存在”与“暂时性 API 失败”。
 type Instances interface {
@@ -225,19 +184,15 @@ type Instances interface {
 	// CurrentNodeName returns the name of the node we are currently running on
 	// On most clouds (e.g. GCE) this is the hostname, so we provide the hostname
 	CurrentNodeName(ctx context.Context, hostname string) (types.NodeName, error)
-	// InstanceExistsByProviderID returns true if the instance for the given provider exists.
-	// If false is returned with no error, the instance will be immediately deleted by the cloud controller manager.
-	// This method should still return true for instances that exist but are stopped/sleeping.
+	// InstanceExistsByProviderID 在给定 providerID 对应的实例存在时返回 true；若返回 false 且无错误，实例会被 cloud controller manager 立即删除。
 	// 误报 false 会导致 Node 被删除，因此停止/休眠实例必须仍返回 true。
 	InstanceExistsByProviderID(ctx context.Context, providerID string) (bool, error)
-	// InstanceShutdownByProviderID returns true if the instance is shutdown in cloudprovider
+	// InstanceShutdownByProviderID 在实例于 cloudprovider 侧已关机时返回 true。
 	// 仅表示实例处于可安全卸载卷的关机状态，不等同于实例不存在。
 	InstanceShutdownByProviderID(ctx context.Context, providerID string) (bool, error)
 }
 
-// InstancesV2 is an abstract, pluggable interface for cloud provider instances.
-// Unlike the Instances interface, it is designed for external cloud providers and should only be used by them.
-// Implementation of this interface will disable calls to the Zones interface.
+// InstancesV2 是云 provider 实例的抽象、可插拔接口；与 Instances 不同，它面向外部云 provider 设计，只应由它们实现，实现该接口后将不再调用 Zones。
 // 设计目标是一次调用返回节点的全部元数据，显著减少注册/同步节点时的 API 往返。
 type InstancesV2 interface {
 	// InstanceExists returns true if the instance for the given node exists according to the cloud provider.
@@ -246,16 +201,13 @@ type InstancesV2 interface {
 	// InstanceShutdown returns true if the instance is shutdown according to the cloud provider.
 	// Use the node.name or node.spec.providerID field to find the node in the cloud provider.
 	InstanceShutdown(ctx context.Context, node *v1.Node) (bool, error)
-	// InstanceMetadata returns the instance's metadata. The values returned in InstanceMetadata are
-	// translated into specific fields and labels in the Node object on registration.
-	// Implementations should always check node.spec.providerID first when trying to discover the instance
-	// for a given node. In cases where node.spec.providerID is empty, implementations can use other
-	// properties of the node like its name, labels and annotations.
+	// InstanceMetadata 返回实例的元数据；InstanceMetadata 中的值会在节点注册时被翻译为 Node 对象上的特定字段与标签。
+	// 实现在查找给定节点对应的实例时应始终先检查 node.spec.providerID；当 node.spec.providerID 为空时，可以使用节点的其他属性，如其名称、标签和注解。
 	// 返回 (nil, nil) 表示元数据暂不可用，控制器会把节点重新入队而不是判定失败。
 	InstanceMetadata(ctx context.Context, node *v1.Node) (*InstanceMetadata, error)
 }
 
-// Route is a representation of an advanced routing rule.
+// Route 是一条高级路由规则的表示。
 // 控制器以 (TargetNode, DestinationCIDR) 作为逻辑身份；Name 仅由云侧使用。
 // EnableNodeAddresses 是兼容开关：老版本云实现不认 TargetNodeAddresses，
 // 置 false 时控制器忽略该字段，避免每次对账都误判为需要重建。
@@ -278,7 +230,7 @@ type Route struct {
 	Blackhole bool
 }
 
-// Routes is an abstract, pluggable interface for advanced routing rules.
+// Routes 是高级路由规则的抽象、可插拔接口。
 // 控制器只管理落在 --cluster-cidr 内的路由，其他路由不会传入删除路径。
 type Routes interface {
 	// ListRoutes lists all managed routes that belong to the specified clusterName
@@ -309,10 +261,9 @@ type Zone struct {
 	Region        string
 }
 
-// Zones is an abstract, pluggable interface for zone enumeration.
+// Zones 是用于枚举可用区的抽象、可插拔接口。
 // DEPRECATED: Zones is deprecated in favor of retrieving zone/region information from InstancesV2.
-// This interface will not be called if InstancesV2 is enabled.
-// 已弃用：仅在未启用 InstancesV2 的旧实现中使用；新实现应通过 InstanceMetadata 返回拓扑。
+// 启用 InstancesV2 后不会再调用该接口；仅在未启用 InstancesV2 的旧实现中使用，新实现应通过 InstanceMetadata 返回拓扑。
 type Zones interface {
 	// GetZone returns the Zone containing the current failure zone and locality region that the program is running in
 	// In most cases, this method is called from the kubelet querying a local metadata service to acquire its zone.
@@ -331,15 +282,14 @@ type Zones interface {
 	GetZoneByNodeName(ctx context.Context, nodeName types.NodeName) (Zone, error)
 }
 
-// PVLabeler is an abstract, pluggable interface for fetching labels for volumes
+// PVLabeler 是获取卷标签的抽象、可插拔接口。
 // DEPRECATED: PVLabeler is deprecated in favor of CSI topology feature.
-// 已弃用：卷拓扑应通过 CSI 的 topology 能力表达，而不是在 PV 上打标签。
+// 卷拓扑应通过 CSI 的 topology 能力表达，而不是在 PV 上打标签。
 type PVLabeler interface {
 	GetLabelsForVolume(ctx context.Context, pv *v1.PersistentVolume) (map[string]string, error)
 }
 
-// InstanceMetadata contains metadata about a specific instance.
-// Values returned in InstanceMetadata are translated into specific fields and labels for Node.
+// InstanceMetadata 包含特定实例的元数据；其中返回的值会被翻译为 Node 的特定字段和标签。
 // 它是 InstancesV2 的返回值，注册节点时按字段分别写入 spec、status 与 labels。
 type InstanceMetadata struct {
 	// ProviderID is a unique ID used to identify an instance on the cloud provider.
@@ -372,9 +322,7 @@ type InstanceMetadata struct {
 	//   * failure-domain.beta.kubernetes.io/region=<region> (DEPRECATED)
 	Region string
 
-	// AdditionalLabels is a map of additional labels provided by the cloud provider.
-	// When provided, they will be applied to the node and enable cloud providers
-	// to labels nodes with information that may be valuable to that provider.
+	// AdditionalLabels 是云 provider 提供的附加标签 map；提供时将被应用到节点上，使云 provider 能够给节点打上对该 provider 有价值的信息。
 	// 云厂商自定义标签会与标准拓扑标签一起写入；保留键由控制器负责维持正确性。
 	AdditionalLabels map[string]string
 }

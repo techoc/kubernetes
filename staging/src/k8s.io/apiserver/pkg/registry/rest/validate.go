@@ -110,9 +110,8 @@ type DeclarativeValidationConfig struct {
 	ShortCircuitMismatch bool
 }
 
-// ValidationConfigOption is the internal configuration used by
-// ValidateDeclarativelyWithMigrationChecks. It is exported for use in tests.
-// 导出仅为方便测试构造完整的选项集合。
+// ValidationConfigOption 是 ValidateDeclarativelyWithMigrationChecks 使用的内部配置，
+// 导出它仅为方便测试构造完整的选项集合。构造完整的选项集合。
 type ValidationConfigOption struct {
 	OpType               operation.Type
 	ValidationIdentifier string
@@ -197,8 +196,8 @@ func parseSubresourcePath(subresourcePath string) ([]string, error) {
 	return parts, nil
 }
 
-// compareDeclarativeErrorsAndEmitMismatches checks for mismatches between imperative and declarative validation
-// and logs + emits metrics when inconsistencies are found
+// compareDeclarativeErrorsAndEmitMismatches 检查手写（imperative）校验与声明式校验之间的
+// 不一致，并在发现差异时记录日志、上报指标。
 // 每个不一致单独记日志与计数，便于按错误类型定位声明式校验实现的缺陷。
 func compareDeclarativeErrorsAndEmitMismatches(ctx context.Context, imperativeErrs, declarativeErrs field.ErrorList, validationIdentifier string, enforced bool, opts ValidationConfigOption) {
 	logger := klog.FromContext(ctx)
@@ -223,7 +222,7 @@ func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field
 	if len(imperativeErrs) == 0 && len(declarativeErrs) == 0 {
 		return mismatchDetails
 	}
-	// default recommendation based on enforcement status
+	// 根据是否强制执行给出默认建议。
 	// 已强制时声明式结果会真正生效，因此建议关闭 beta 特性门以保持一致；
 	// 未强制时手写校验仍是权威，差异不影响运行。
 	const (
@@ -311,7 +310,7 @@ func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field
 		}
 	}
 
-	// Any remaining unmatched declarative errors are considered "extra"
+	// 其余未被匹配上的声明式错误都视为“多余错误”。
 	// 多余的声明式错误同样意味着实现不一致：它会在强制后改变用户可见的校验结果。
 	for dIdx, dErr := range declarativeErrs {
 		if matchedDeclarative[dIdx] {
@@ -336,8 +335,8 @@ func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field
 	return mismatchDetails
 }
 
-// runDeclarativeValidationWithRecover invokes validateDeclaratively with panic recovery.
-// On panic, the panic metric is incremented and an InternalError is appended to the returned errors.
+// runDeclarativeValidationWithRecover 调用 validateDeclaratively，并带 panic 恢复。
+// 发生 panic 时会累加 panic 指标，并在返回的错误列表中追加一个 InternalError。
 // 声明式校验由生成代码执行，panic 不能拖垮整个请求；转为内部错误并计数以便发现缺陷。
 func runDeclarativeValidationWithRecover(ctx context.Context, scheme *runtime.Scheme, obj, oldObj runtime.Object, o *ValidationConfigOption) (errs field.ErrorList) {
 	defer func() {
@@ -424,8 +423,7 @@ func WithAllDeclarativeEnforcedForTest(ctx context.Context) context.Context {
 // 过滤出真正生效的声明式错误，最后去掉被其覆盖的手写错误并追加声明式错误。
 // 这样用户只会看到每个字段的一条权威错误，而指标仍能反映两侧差异。
 func ValidateDeclarativelyWithMigrationChecks(ctx context.Context, scheme *runtime.Scheme, obj, oldObj runtime.Object, errs field.ErrorList, opType operation.Type, config DeclarativeValidationConfig) field.ErrorList {
-	// These errors must be errors returned by the handwritten validation.
-	// 标记来源后，后续匹配与过滤才能区分手写错误与声明式错误。
+	// 这里的 errs 必须来自手写校验返回的错误。标记来源后，后续匹配与过滤才能区分手写错误与声明式错误。
 	errs = errs.MarkFromImperative()
 	validationIdentifier, err := metricIdentifier(ctx, scheme, obj, opType)
 	if err != nil {
@@ -466,7 +464,7 @@ func ValidateDeclarativelyWithMigrationChecks(ctx context.Context, scheme *runti
 	return errs
 }
 
-// RecordDuplicateValidationErrors increments a metric and log the error when duplicate validation errors are found.
+// RecordDuplicateValidationErrors 在发现重复的校验错误时累加指标并记录日志。
 // 重复错误通常来自重复调用校验函数，属于实现缺陷；只记录与计数，不影响返回结果。
 func RecordDuplicateValidationErrors(ctx context.Context, qualifiedKind schema.GroupKind, errs field.ErrorList) {
 	logger := klog.FromContext(ctx)

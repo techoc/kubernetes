@@ -27,20 +27,20 @@ import (
 	migration "k8s.io/controller-manager/pkg/leadermigration/options"
 )
 
-// GenericControllerManagerConfigurationOptions holds the options which are generic.
+// GenericControllerManagerConfigurationOptions 持有通用的选项。
 // 该结构聚合了 controller-manager 的“通用”命令行选项：
 // 通用配置、调试选项以及领导者迁移选项。KCM 与 CCM 共享这部分定义。
 type GenericControllerManagerConfigurationOptions struct {
 	*cmconfig.GenericControllerManagerConfiguration
 	Debugging *DebuggingOptions
-	// LeaderMigration is the options for leader migration, a nil indicates default options should be applied.
-	// 领导者迁移选项；nil 表示走默认配置（即关闭迁移）。
+	// LeaderMigration 是领导者迁移选项；为 nil 表示应应用默认选项。
+	// nil 表示走默认配置（即关闭迁移）。
 	LeaderMigration *migration.LeaderMigrationOptions
 }
 
-// NewGenericControllerManagerConfigurationOptions returns generic configuration default values for both
-// the kube-controller-manager and the cloud-contoller-manager. Any common changes should
-// be made here. Any individual changes should be made in that controller.
+// NewGenericControllerManagerConfigurationOptions 为 kube-controller-manager 和
+// cloud-controller-manager 返回通用的配置默认值。
+// 任何公共修改都应放在这里；各个控制器的个性化修改放在各自组件中。
 // 基于传入的通用配置对象创建选项，并填入推荐的默认值。
 // 两个 controller-manager 的公共修改都应放在这里，个性化修改放在各自的组件里。
 func NewGenericControllerManagerConfigurationOptions(cfg *cmconfig.GenericControllerManagerConfiguration) *GenericControllerManagerConfigurationOptions {
@@ -55,7 +55,7 @@ func NewGenericControllerManagerConfigurationOptions(cfg *cmconfig.GenericContro
 	return o
 }
 
-// AddFlags adds flags related to generic for controller manager to the specified FlagSet.
+// AddFlags 将与 controller manager 通用配置相关的 flag 注册到指定的 FlagSet。
 // 向 NamedFlagSets 注册通用 flag，按主题分组为 debugging / leader-migration / generic。
 func (o *GenericControllerManagerConfigurationOptions) AddFlags(fss *cliflag.NamedFlagSets, allControllers, disabledByDefaultControllers []string, controllerAliases map[string]string) {
 	if o == nil {
@@ -82,7 +82,7 @@ func (o *GenericControllerManagerConfigurationOptions) AddFlags(fss *cliflag.Nam
 	options.BindLeaderElectionFlags(&o.LeaderElection, genericfs)
 }
 
-// ApplyTo fills up generic config with options.
+// ApplyTo 用选项填充通用配置。
 // 把命令行选项落地到正式配置对象：先应用子选项，再复制标量字段，
 // 最后把控制器别名解析成规范名称（保留启用/禁用前缀）。
 func (o *GenericControllerManagerConfigurationOptions) ApplyTo(cfg *cmconfig.GenericControllerManagerConfiguration, allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string) error {
@@ -106,7 +106,7 @@ func (o *GenericControllerManagerConfigurationOptions) ApplyTo(cfg *cmconfig.Gen
 	cfg.ControllerStartInterval = o.ControllerStartInterval
 	cfg.LeaderElection = o.LeaderElection
 
-	// copy controller names and replace aliases with canonical names
+	// 复制控制器名称，并把别名替换为规范名称。
 	// 用户可能输入别名，这里统一替换为规范名称，保证后续判断（IsControllerEnabled 等）一致。
 	cfg.Controllers = make([]string, len(o.Controllers))
 	for i, initialName := range o.Controllers {
@@ -127,7 +127,7 @@ func (o *GenericControllerManagerConfigurationOptions) ApplyTo(cfg *cmconfig.Gen
 	return nil
 }
 
-// Validate checks validation of GenericOptions.
+// Validate 校验 GenericOptions。
 // 校验选项：调试选项、领导者选举锁类型，以及每个控制器名是否在已知列表中。
 func (o *GenericControllerManagerConfigurationOptions) Validate(allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string) []error {
 	if o == nil {
@@ -139,8 +139,8 @@ func (o *GenericControllerManagerConfigurationOptions) Validate(allControllers [
 	errs = append(errs, o.Debugging.Validate()...)
 
 	// TODO: This can be removed when ResourceLock is not available
-	// 临时约束：开启领导者选举时只允许使用 leases 锁（迁移期兼容性的考虑）。
-	// Lock the ResourceLock using leases
+	// 临时约束：开启领导者选举时只允许使用 leases 锁（迁移期兼容性的考虑），
+	// 即把 ResourceLock 锁定为 leases。
 	if o.LeaderElection.LeaderElect && o.LeaderElection.ResourceLock != "leases" {
 		errs = append(errs, fmt.Errorf(`resourceLock value must be "leases"`))
 	}

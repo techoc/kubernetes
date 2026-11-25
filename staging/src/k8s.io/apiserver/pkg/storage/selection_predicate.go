@@ -80,7 +80,7 @@ func (f AttrFunc) WithFieldMutation(fieldMutator FieldMutationFunc) AttrFunc {
 	}
 }
 
-// SelectionPredicate is used to represent the way to select objects from api storage.
+// SelectionPredicate 用于描述从 API 存储中筛选对象的方式。
 // 同时承载 List/Watch 的过滤条件、分页状态与分片选择器。
 type SelectionPredicate struct {
 	Label               labels.Selector
@@ -91,7 +91,7 @@ type SelectionPredicate struct {
 	Limit               int64
 	Continue            string
 	AllowWatchBookmarks bool
-	// ShardSelector is the parsed shard selector for filtering objects by hash range.
+	// ShardSelector 是解析后的分片选择器，用于按哈希区间过滤对象。
 	// 仅在 ShardedListAndWatch 特性开启时生效。
 	ShardSelector sharding.Selector
 }
@@ -135,8 +135,7 @@ func (s *SelectionPredicate) MatchesObjectAttributes(l labels.Set, f fields.Set)
 	return matched
 }
 
-// MatchesSingleNamespace will return (namespace, true) if and only if s.Field matches on the object's
-// namespace.
+// MatchesSingleNamespace 当且仅当 s.Field 命中对象的 namespace 时返回 (namespace, true)。
 // 用于把列表请求下推为按命名空间前缀的直接读取；带 continue 时无法下推。
 func (s *SelectionPredicate) MatchesSingleNamespace() (string, bool) {
 	if len(s.Continue) > 0 || s.Field == nil {
@@ -163,9 +162,8 @@ func (s *SelectionPredicate) MatchesSingle() (string, bool) {
 
 // Empty returns true if the predicate performs no filtering.
 func (s *SelectionPredicate) Empty() bool {
-	// Check the selector before the feature gate: Empty is called per event on
-	// watch paths, and the nil check is free while the gate lookup is not.
-	// 先做廉价的 nil 检查，再查特性门控，降低 watch 热路径开销。
+	// 先检查选择器再查特性门控：Empty 在 watch 路径上每个事件都会被调用，
+	// nil 检查几乎零成本，特性门控查询却不是，因此该顺序能降低热路径开销。
 	if s.ShardSelector != nil && !s.ShardSelector.Empty() &&
 		utilfeature.DefaultFeatureGate.Enabled(features.ShardedListAndWatch) {
 		return false
@@ -187,7 +185,7 @@ func (s *SelectionPredicate) MatcherIndex(ctx context.Context) []MatchValue {
 		if value, ok := s.Field.RequiresExactMatch(field); ok {
 			result = append(result, MatchValue{IndexName: FieldIndex(field), Value: value})
 		} else if field == "metadata.namespace" {
-			// list pods in the namespace. i.e. /api/v1/namespaces/default/pods
+			// 列出该命名空间中的 Pod，例如 /api/v1/namespaces/default/pods。
 			// 路径中的命名空间等价于 metadata.namespace 的精确匹配，可走索引。
 			if namespace, isNamespaceScope := isNamespaceScopedRequest(ctx); isNamespaceScope {
 				result = append(result, MatchValue{IndexName: FieldIndex(field), Value: namespace})
@@ -214,7 +212,7 @@ func (s *SelectionPredicate) MatchesSharding(obj runtime.Object) (bool, error) {
 	return true, nil
 }
 
-// SetShardInfoOnList sets shard metadata on the list response if sharding is active.
+// SetShardInfoOnList 在分片生效时把分片元数据写入 list 响应。
 // 把选择器回填到响应中，便于客户端确认本次结果只覆盖某个分片。
 func (s *SelectionPredicate) SetShardInfoOnList(listObj runtime.Object) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.ShardedListAndWatch) {
@@ -236,7 +234,7 @@ func isNamespaceScopedRequest(ctx context.Context) (string, bool) {
 	return re.Namespace, true
 }
 
-// LabelIndex add prefix for label index.
+// LabelIndex 为标签索引添加前缀。
 // 前缀区分标签索引与字段索引，避免同名 key 冲突。
 func LabelIndex(label string) string {
 	return "l:" + label

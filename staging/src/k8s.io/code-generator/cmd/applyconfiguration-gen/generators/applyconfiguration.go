@@ -36,7 +36,7 @@ import (
 	clientgentypes "k8s.io/code-generator/cmd/client-gen/types"
 )
 
-// applyConfigurationGenerator produces apply configurations for a given GroupVersion and type.
+// applyConfigurationGenerator 为给定的 GroupVersion 与类型生成 apply configuration。
 // 每个生成器实例只负责一个具体类型（见 Filter），因此可以安全地把该类型的
 // 命名、标签与引用图等上下文直接保存在结构体里。
 type applyConfigurationGenerator struct {
@@ -72,9 +72,8 @@ func (g *applyConfigurationGenerator) Imports(*generator.Context) (imports []str
 	return g.imports.ImportLines()
 }
 
-// TypeParams provides a struct that an apply configuration
-// is generated for as well as the apply configuration details
-// and types referenced by the struct.
+// TypeParams 提供生成 apply configuration 所针对的 struct、apply configuration 的细节，
+// 以及该 struct 引用到的类型。
 // 它是模板参数聚合体：模板里通过它访问源类型、命名信息以及生成所需的辅助类型。
 type TypeParams struct {
 	Struct      *types.Type // 源 API 类型
@@ -247,8 +246,8 @@ func (g *applyConfigurationGenerator) generateWithFuncs(t *types.Type, typeParam
 				continue
 			}
 
-			// For slices where the items are generated apply configuration types, accept varargs of
-			// pointers of the type as "with" function arguments so the "with" function can be used like so:
+			// 对于元素是已生成 apply configuration 类型的切片，"with" 函数接受该类型指针的
+			// 变长参数作为入参，于是 "with" 函数可以这样使用：
 			// WithFoos(Foo().WithName("x"), Foo().WithName("y"))
 			// 先用 deref 处理指向切片的指针，再判断元素是否为 apply configuration。
 			if t := deref(member.Type); t.Kind == types.Slice && g.refGraph.isApplyConfig(t.Elem) {
@@ -347,8 +346,8 @@ func isNillable(t *types.Type) bool {
 	return t.Kind == types.Slice || t.Kind == types.Map
 }
 
-// commentsWithoutMarkers removes comment lines that start with '+' as they are codegen markers
-// and ensures all comments have the proper // prefix
+// commentsWithoutMarkers 删除以 '+' 开头的注释行，因为它们是代码生成标记；
+// 同时确保所有注释都带正确的 // 前缀。
 // 空行会被折叠并通过延迟写入放在下一段非空注释前，避免尾部多余空注释。
 func commentsWithoutMarkers(comments []string) string {
 	b := strings.Builder{}

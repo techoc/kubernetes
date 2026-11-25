@@ -29,21 +29,21 @@ import (
 	"k8s.io/client-go/util/apply"
 )
 
-// objectWithMeta matches objects implementing both runtime.Object and metav1.Object.
-// 同时满足 runtime.Object（可序列化）与 metav1.Object（有 metadata）约束，是泛型客户端的最小对象要求。
+// objectWithMeta 匹配同时实现 runtime.Object 与 metav1.Object 的对象，
+// 既可序列化又带 metadata，是泛型客户端对对象的最小要求。
 type objectWithMeta interface {
 	runtime.Object
 	metav1.Object
 }
 
-// namedObject matches comparable objects implementing GetName(); it is intended for use with apply declarative configurations.
+// namedObject 匹配实现了 GetName() 且可比较的对象，用于 apply 声明式配置。
 // 要求 comparable，是为了能用零值比较判断 Apply 传入的对象是否为 nil（C 可能是值类型而非指针）。
 type namedObject interface {
 	comparable
 	GetName() *string
 }
 
-// Client represents a client, optionally namespaced, with no support for lists or apply declarative configurations.
+// Client 表示可选命名空间、不支持 list 与 apply 声明式配置的客户端。
 // 所有生成类型客户端共享的基础实现：通过 rest.Interface 拼接通用 REST 请求，
 // 具体资源名、命名空间与空对象构造器由生成代码注入。
 type Client[T objectWithMeta] struct {
@@ -57,7 +57,7 @@ type Client[T objectWithMeta] struct {
 	prefersProtobuf bool
 }
 
-// ClientWithList represents a client with support for lists.
+// ClientWithList 表示支持 list 的客户端。
 // 通过组合 alsoLister 获得 List/DeleteCollection 能力，而不是继承，便于按需拼装不同能力。
 type ClientWithList[T objectWithMeta, L runtime.Object] struct {
 	*Client[T]
@@ -77,8 +77,8 @@ type ClientWithListAndApply[T objectWithMeta, L runtime.Object, C namedObject] s
 	alsoApplier[T, C]
 }
 
-// Helper types for composition
-// alsoLister 为 Client 组合出列表能力；它持有 client 指针以复用同一 REST 配置。
+// 用于组合的辅助类型：alsoLister 为 Client 组合出列表能力；
+// 它持有 client 指针以复用同一 REST 配置。
 type alsoLister[T objectWithMeta, L runtime.Object] struct {
 	client  *Client[T]
 	newList func() L

@@ -32,8 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-// Feature is the name of each feature in storage that we check in feature_support_checker.
-// 用别名而非新类型，方便直接把字符串常量作为 map key 与开关使用。
+// Feature 是存储层各个特性的名称，由 feature_support_checker 逐个检查其支持情况。
+// 这里用类型别名而非新类型，方便直接把字符串常量作为 map 的 key 与开关使用。
 type Feature = string
 
 // RequestWatchProgress is an etcd feature for progress notification requests.
@@ -96,17 +96,15 @@ type ResponseMeta struct {
 	ResourceVersion uint64
 }
 
-// IndexerFunc is a function that for a given object computes
-// `<value of an index>` for a particular `<index>`.
-// 返回单个字符串意味着一个索引键对应一个值；多值索引需编码为单一字符串。
+// IndexerFunc 针对给定对象计算某个特定 `<index>` 的 `<value of an index>`。
+// 返回单个字符串意味着一个索引键只对应一个值；多值索引需编码为单一字符串。
 type IndexerFunc func(obj runtime.Object) string
 
 // IndexerFuncs is a mapping from `<index name>` to function that
 // for a given object computes `<value for that index>`.
 type IndexerFuncs map[string]IndexerFunc
 
-// Everything accepts all objects.
-// 注意：SelectionPredicate 内含接口字段，不要直接修改此包级变量。
+// Everything 接受所有对象。注意：SelectionPredicate 内含接口字段，不要直接修改此包级变量。
 var Everything = SelectionPredicate{
 	Label: labels.Everything(),
 	Field: fields.Everything(),
@@ -137,7 +135,7 @@ func ValidateAllObjectFunc(ctx context.Context, obj runtime.Object) error {
 	return nil
 }
 
-// Preconditions must be fulfilled before an operation (update, delete, etc.) is carried out.
+// Preconditions 是在执行操作（更新、删除等）之前必须满足的前置条件，
 // 仅包含不可变身份字段（UID）与乐观锁字段（ResourceVersion）。
 type Preconditions struct {
 	// Specifies the target UID.
@@ -207,14 +205,12 @@ type Interface interface {
 		ctx context.Context, key string, out runtime.Object, preconditions *Preconditions,
 		validateDeletion ValidateObjectFunc, cachedExistingObject runtime.Object, opts DeleteOptions) error
 
-	// Watch begins watching the specified key. Events are decoded into API objects,
-	// and any items selected by 'p' are sent down to returned watch.Interface.
-	// 调用方负责关闭返回的 watch.Interface；resourceVersion "0" 的语义见下。
-	// resourceVersion may be used to specify what version to begin watching,
-	// which should be the current resourceVersion, and no longer rv+1
-	// (e.g. reconnecting without missing any updates).
-	// If resource version is "0", this interface will get current object at given key
-	// and send it in an "ADDED" event, before watch starts.
+	// Watch 开始监听指定的 key。事件会被解码为 API 对象，其中被 'p' 选中的条目
+	// 发送到返回的 watch.Interface，关闭该接口由调用方负责。
+	// resourceVersion 可用于指定从哪个版本开始监听，应当使用当前的 resourceVersion，
+	// 而不再是 rv+1（例如重连时不丢失任何更新）。
+	// 如果 resourceVersion 为 "0"，该接口会先获取给定 key 当前的对象，
+	// 以一个 "ADDED" 事件发出，然后才开始 watch。
 	Watch(ctx context.Context, key string, opts ListOptions) (watch.Interface, error)
 
 	// Get unmarshals object found at key into objPtr. On a not found error, will either
@@ -232,20 +228,18 @@ type Interface interface {
 	// match 'opts.ResourceVersion' according 'opts.ResourceVersionMatch'.
 	GetList(ctx context.Context, key string, opts ListOptions, listObj runtime.Object) error
 
-	// GuaranteedUpdate keeps calling 'tryUpdate()' to update key 'key' (of type 'destination')
-	// retrying the update until success if there is index conflict.
-	// 这是“读-改-写”的原子替代：tryUpdate 可能被多次调用，必须幂等。
-	// Note that object passed to tryUpdate may change across invocations of tryUpdate() if
-	// other writers are simultaneously updating it, so tryUpdate() needs to take into account
-	// the current contents of the object when deciding how the update object should look.
-	// If the key doesn't exist, it will return NotFound storage error if ignoreNotFound=false
-	// else `destination` will be set to the zero value of it's type.
-	// If the eventual successful invocation of `tryUpdate` returns an output with the same serialized
-	// contents as the input, it won't perform any update, but instead set `destination` to an object with those
-	// contents.
-	// If 'cachedExistingObject' is non-nil, it can be used as a suggestion about the
-	// current version of the object to avoid read operation from storage to get it.
-	// However, the implementations have to retry in case suggestion is stale.
+	// GuaranteedUpdate 会反复调用 'tryUpdate()' 更新 key 'key'（其类型为 'destination'），
+	// 若发生索引冲突则一直重试直到成功。这是“读-改-写”的原子替代：tryUpdate 可能被
+	// 多次调用，因此必须幂等。
+	// 注意：如果有其他写入者并发修改同一对象，传给 tryUpdate 的对象在多次调用之间可能
+	// 发生变化，所以 tryUpdate() 在决定更新后的对象应该是什么样子时，必须以对象当时的
+	// 内容为准。
+	// 如果 key 不存在：ignoreNotFound=false 时返回 NotFound 存储错误，否则把 `destination`
+	// 设置为其类型的零值。
+	// 如果最终成功的那次 `tryUpdate` 调用返回的序列化内容与输入完全相同，则不执行任何
+	// 更新，而是把 `destination` 设置为具有该内容的那个对象。
+	// 如果 'cachedExistingObject' 非 nil，可把它当作关于对象当前版本的建议，以免再从
+	// 存储读取一次；但实现仍需要在该建议过期时重试。
 	//
 	// Example:
 	//
@@ -363,12 +357,10 @@ type ListOptions struct {
 	RecordTimestamps bool
 }
 
-// WatchEventWithRecordTime wraps a runtime.Object with the timestamp at which the
-// storage layer decoded the corresponding watch event.
-// 该类型只在进程内部流转，绝不能泄漏给客户端。 It is produced by the
-// storage layer only when ListOptions.RecordTimestamps is set, and is consumed
-// and stripped by the watch cache before the underlying object is stored or
-// serialized. It is never sent to watch clients.
+// WatchEventWithRecordTime 包装一个 runtime.Object，并携带存储层解码对应 watch 事件
+// 时的时间戳。该类型只在进程内部流转，绝不能泄漏给客户端：仅当 ListOptions.RecordTimestamps
+// 被置位时才由存储层产生，并在底层对象被存储或序列化之前由 watch cache 消费并剥离，
+// 绝不会发送给 watch 客户端。
 type WatchEventWithRecordTime interface {
 	runtime.Object
 	// RecordTime returns the decode timestamp of the wrapped event.

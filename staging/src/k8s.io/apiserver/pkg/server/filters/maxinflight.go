@@ -33,13 +33,10 @@ import (
 )
 
 const (
-	// Constant for the retry-after interval on rate limiting.
 	// 单位秒；429 响应提示客户端至少等待 1s 再重试。
 	retryAfter = "1"
 
-	// How often inflight usage metric should be updated. Because
-	// the metrics tracks maximal value over period making this
-	// longer will increase the metric value.
+	// inflight 使用量指标的更新周期；由于指标统计的是周期内的最大值，周期越长，指标值越大。
 	// 周期越长，聚合窗口内的峰值越大，因此保持 1s 以贴近真实并发。
 	inflightUsageMetricUpdatePeriod = time.Second
 )
@@ -59,7 +56,6 @@ func handleError(w http.ResponseWriter, r *http.Request, err error) {
 	klog.Error(err.Error())
 }
 
-// requestWatermark is used to track maximal numbers of requests in a particular phase of handling
 // requestWatermark 记录观测窗口内的并发峰值，并周期性重置；峰值而非瞬时值
 // 才能反映限流上限是否逼近。
 type requestWatermark struct {
@@ -99,7 +95,7 @@ var watermark = &requestWatermark{
 	phase: metrics.ExecutingPhase,
 }
 
-// startWatermarkMaintenance starts the goroutines to observe and maintain the specified watermark.
+// startWatermarkMaintenance 启动用于观测和维护指定水位（watermark）的 goroutine。
 // 每个周期读取并清零峰值，交给指标层累计；这样不同周期的峰值不会叠加。
 func startWatermarkMaintenance(watermark *requestWatermark, stopCh <-chan struct{}) {
 	// Periodically update the inflight usage metric.
@@ -138,7 +134,6 @@ func initMaxInFlight(nonMutatingLimit, mutatingLimit int) {
 	})
 }
 
-// WithMaxInFlightLimit limits the number of in-flight requests to buffer size of the passed in channel.
 // 用带缓冲 channel 当信号量：容量即并发上限。两类请求（只读/变更）各自
 // 独立计数，避免慢写请求耗尽只读能力。
 func WithMaxInFlightLimit(
@@ -175,8 +170,7 @@ func WithMaxInFlightLimit(
 			return
 		}
 
-		// Skip tracking long running events.
-		// watch 等长连接会长期占住名额，若计入并发会使正常请求被饿死。
+		// 跳过对长时运行请求的跟踪：watch 等长连接会长期占住并发名额，若计入会使正常请求被饿死。
 		if longRunningRequestCheck != nil && longRunningRequestCheck(r, requestInfo) {
 			handler.ServeHTTP(w, r)
 			return
@@ -197,10 +191,7 @@ func WithMaxInFlightLimit(
 
 			select {
 			case c <- true:
-				// We note the concurrency level both while the
-				// request is being served and after it is done being
-				// served, because both states contribute to the
-				// sampled stats on concurrency.
+				// 请求处理中与处理完成后都记录并发水位：
 				// 进入与退出都采样：指标按时间点抓取，只记进入会低估尾部。
 				if isMutatingRequest {
 					watermark.recordMutating(len(c))
@@ -218,10 +209,8 @@ func WithMaxInFlightLimit(
 				handler.ServeHTTP(w, r)
 
 			default:
-				// at this point we're about to return a 429, BUT not all actors should be rate limited.  A system:master is so powerful
-				// that they should always get an answer.  It's a super-admin or a loopback connection.
-				// system:masters 用于集群恢复（如 kubelet/loopback），即使过载也必须
-				// 放行，否则会失去自救能力。
+				// 此时我们即将返回 429，但并非所有调用方都应被限流：system:master 足够强大，应当总能得到响应——即超级管理员或回环连接。
+				// system:masters 用于集群恢复（如 kubelet/loopback），即使过载也必须放行，否则会失去自救能力。
 				if currUser, ok := apirequest.UserFrom(ctx); ok {
 					for _, group := range currUser.GetGroups() {
 						if group == user.SystemPrivilegedGroup {
@@ -239,8 +228,7 @@ func WithMaxInFlightLimit(
 	})
 }
 
-// StartMaxInFlightWatermarkMaintenance starts the goroutines to observe and maintain watermarks for max-in-flight
-// requests.
+// StartMaxInFlightWatermarkMaintenance 启动 goroutine，观测并维护 max-in-flight 请求的水位。
 // 由 apiserver 启动阶段调用一次，stopCh 关闭时停止后台指标刷新。
 func StartMaxInFlightWatermarkMaintenance(stopCh <-chan struct{}) {
 	startWatermarkMaintenance(watermark, stopCh)

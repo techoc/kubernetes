@@ -70,13 +70,13 @@ func (e shortcutExpander) KindFor(resource schema.GroupVersionResource) (schema.
 
 // KindForWithContext fulfills meta.RESTMapperWithContext
 func (e shortcutExpander) KindForWithContext(ctx context.Context, resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
-	// expandResourceShortcut works with current API resources as read from discovery cache.
-	// In case of new CRDs this means we potentially don't have current state of discovery.
-	// In the current wiring in k8s.io/cli-runtime/pkg/genericclioptions/config_flags.go#toRESTMapper,
-	// we are using DeferredDiscoveryRESTMapper which on KindFor failure will clear the
-	// cache and fetch all data from a cluster (see k8s.io/client-go/restmapper/discovery.go#KindFor).
-	// Thus another call to expandResourceShortcut, after a NoMatchError should successfully
-	// read Kind to the user or an error.
+	// expandResourceShortcut 基于 discovery 缓存里读到的当前 API 资源来展开资源短名。
+	// 对新建的 CRD 而言，这意味着我们可能没有最新的发现结果。
+	// 在 k8s.io/cli-runtime/pkg/genericclioptions/config_flags.go#toRESTMapper 当前的接线下，
+	// 使用的是 DeferredDiscoveryRESTMapper，它在 KindFor 失败时会清空缓存并从集群重新拉取全部数据
+	// （见 k8s.io/client-go/restmapper/discovery.go#KindFor）。
+	// 因此在遇到 NoMatchError 之后再调用一次 expandResourceShortcut，
+	// 就应当能把 Kind 读出来交给用户，或者返回错误。
 	// 这里的重试是有意为之：底层 mapper 在未命中时会刷新 discovery 缓存，
 	// 第二次展开才能看到刚创建的 CRD。
 	gvk, err := e.RESTMapper.KindForWithContext(ctx, e.expandResourceShortcut(ctx, resource))
@@ -152,7 +152,7 @@ func (e shortcutExpander) RESTMapping(gk schema.GroupKind, versions ...string) (
 	return e.RESTMappingWithContext(context.Background(), gk, versions...)
 }
 
-// RESTMappingWithContext fulfills meta.RESTMapperWithContext
+// RESTMappingWithContext 实现 meta.RESTMapperWithContext 接口。
 // 按 GroupKind 查询时不存在资源短名问题，直接透传。
 func (e shortcutExpander) RESTMappingWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
 	return e.RESTMapper.RESTMappingWithContext(ctx, gk, versions...)
@@ -178,8 +178,7 @@ func (e shortcutExpander) RESTMappingsWithContext(ctx context.Context, gk schema
 // NOTE that the list is ordered by group priority.
 func (e shortcutExpander) getShortcutMappings(ctx context.Context) ([]*metav1.APIResourceList, []resourceShortcuts, error) {
 	res := []resourceShortcuts{}
-	// get server resources
-	// This can return an error *and* the results it was able to find.  We don't need to fail on the error.
+	// 获取服务端资源：这里可能同时返回错误 *和* 已经找到的结果，不必因为错误而失败。
 	// 部分 group 不可用时仍可基于已取到的结果工作，因此仅记录日志。
 	_, apiResList, err := e.discoveryClient.ServerGroupsAndResourcesWithContext(ctx)
 	if err != nil {
@@ -213,7 +212,7 @@ func (e shortcutExpander) getShortcutMappings(ctx context.Context) ([]*metav1.AP
 func (e shortcutExpander) expandResourceShortcut(ctx context.Context, resource schema.GroupVersionResource) schema.GroupVersionResource {
 	// get the shortcut mappings and return on first match.
 	if allResources, shortcutResources, err := e.getShortcutMappings(ctx); err == nil {
-		// avoid expanding if there's an exact match to a full resource name
+		// 已经与完整资源名精确匹配时就不要再做短名展开：
 		// 完整资源名（或其单数形式）优先，绝不能被短名规则误改。
 		for _, apiResources := range allResources {
 			gv, err := schema.ParseGroupVersion(apiResources.GroupVersion)
@@ -266,7 +265,7 @@ func (e shortcutExpander) expandResourceShortcut(ctx context.Context, resource s
 			return rsc
 		}
 
-		// we didn't find exact match so match on group prefixing. This allows autoscal to match autoscaling
+		// 没找到精确匹配，于是按 group 前缀匹配，这样 autoscal 也能匹配到 autoscaling：
 		// 前缀匹配只在调用方指定了 group 时进行，避免产生意外解析。
 		if len(resource.Group) == 0 {
 			return resource

@@ -143,17 +143,14 @@ func tweakSetIPFamilies(families ...v1.IPFamily) serviceTweak {
 	}
 }
 
-// Wrap newService so that you don't have to call default arguments again and again.
-// 返回一个最常见的 LoadBalancer 类型 Service。
+// defaultExternalService 包装 newService，避免反复传入默认参数，返回一个最常见的 LoadBalancer 类型 Service。
 func defaultExternalService() *v1.Service {
 	return newService("external-balancer", v1.ServiceTypeLoadBalancer)
 }
 
-// newController creates a new service controller. Callers have the option to
-// specify `stopChan` for test cases which might require running the
-// node/service informers and reacting to resource events. Callers can also
-// specify `objects` which represent the initial state of objects, used to
-// populate the client set / informer cache at start-up.
+// newController 创建一个新的 service controller。调用方可以传入 `stopChan`，
+// 供需要运行 node/service informer 并响应资源事件的用例使用；
+// 也可以传入 `objects` 表示对象的初始状态，用于在启动时填充 client set / informer 缓存。
 // 测试控制器不调用 New()，而是手工装配字段，以便替换 lister/queue 等组件。
 func newController(ctx context.Context, objects ...runtime.Object) (*Controller, *fakecloud.Cloud, *fake.Clientset) {
 	stopCh := ctx.Done()
@@ -266,8 +263,8 @@ func TestSyncLoadBalancerIfNeeded(t *testing.T) {
 		expectPatchStatus:    false,
 		expectPatchFinalizer: false,
 	}, {
-		// Finalizer test cases below.
-		// 以下用例区分“带 finalizer 但已不需要 LB”“正在删除”“带 finalizer 且仍需要 LB”。
+		// 以下是 finalizer 相关的测试用例。
+		// 这组用例区分“带 finalizer 但已不需要 LB”“正在删除”“带 finalizer 且仍需要 LB”。
 		desc:                 "service with finalizer that no longer wants LB",
 		service:              newService("no-external-balancer", v1.ServiceTypeClusterIP, tweakAddLBIngress("8.8.8.8"), tweakAddFinalizers(servicehelper.LoadBalancerCleanupFinalizer)),
 		lbExists:             true,
@@ -771,7 +768,7 @@ func TestNodeChangesInExternalLoadBalancer(t *testing.T) {
 	}
 }
 
-// compareUpdateCalls compares if the same update calls were made in both left and right inputs despite the order.
+// compareUpdateCalls 忽略顺序，比较 left 与 right 中是否发生了相同的 update 调用。
 // 并发 worker 导致调用顺序不确定，因此按内容集合比较而不是顺序比较。
 func compareUpdateCalls(t *testing.T, left, right []fakecloud.UpdateBalancerCall) {
 	if len(left) != len(right) {
@@ -796,7 +793,7 @@ func compareUpdateCalls(t *testing.T, left, right []fakecloud.UpdateBalancerCall
 	}
 }
 
-// compareHostSets compares if the nodes in left are in right, despite the order.
+// compareHostSets 忽略顺序，比较 left 中的节点是否都在 right 中。
 // 节点集合来自 map/list，顺序不稳定，只能按集合语义比较。
 func compareHostSets(t *testing.T, left, right []*v1.Node) bool {
 	if len(left) != len(right) {
@@ -983,8 +980,7 @@ func TestProcessServiceCreateOrUpdate(t *testing.T) {
 
 }
 
-// TestProcessServiceCreateOrUpdateK8sError tests processServiceCreateOrUpdate
-// with various kubernetes errors when patching status.
+// TestProcessServiceCreateOrUpdateK8sError 在 patch status 出现各种 kubernetes 错误时测试 processServiceCreateOrUpdate。
 // Conflict 应返回错误并发出告警事件；NotFound 应被忽略（Service 已消失）。
 func TestProcessServiceCreateOrUpdateK8sError(t *testing.T) {
 	svcName := "svc-k8s-err"
@@ -1555,10 +1551,9 @@ func TestNeedsUpdate(t *testing.T) {
 	}
 }
 
-// All the test cases for ServiceCache uses a single cache, these below test cases should be run in order,
-// as tc1 (addCache would add elements to the cache)
-// and tc2 (delCache would remove element from the cache without it adding automatically)
-// Please keep this in mind while adding new test cases.
+// ServiceCache 的所有用例共用同一个缓存，因此以下用例必须按顺序运行：
+// tc1（addCache 会向缓存添加元素）、tc2（delCache 会在不自动添加的情况下移除元素）。
+// 新增用例时请牢记这一点。
 // TestServiceCache 顺序覆盖 serviceCache 的 getOrCreate/delete/set/get/ListKeys/
 // GetByKey/allServices；用例之间共享同一缓存，不能随意调整顺序。
 func TestServiceCache(t *testing.T) {
@@ -2472,24 +2467,21 @@ func (l *fakeNodeLister) Get(name string) (*v1.Node, error) {
 	return nil, nil
 }
 
-// spyWorkQueue implements a work queue and adds the ability to inspect processed
-// items for testing purposes.
+// spyWorkQueue 实现了一个工作队列，并为测试目的增加了检查已处理条目的能力。
 // 包装真实队列并记录 AddAfter 的 key 与延迟，用于断言 RetryError 的精确重试时间。
 type spyWorkQueue struct {
 	workqueue.TypedRateLimitingInterface[string]
 	items []spyQueueItem
 }
 
-// spyQueueItem represents an item that was being processed.
-// spyQueueItem 记录一次 AddAfter 调用。
+// spyQueueItem 表示一个被处理过的条目，即一次 AddAfter 调用。
 type spyQueueItem struct {
 	Key string
 	// Delay represents the delayed duration if and only if AddAfter was invoked.
 	Delay time.Duration
 }
 
-// AddAfter is like workqueue.RateLimitingInterface.AddAfter but records the
-// added key and delay internally.
+// AddAfter 的行为与 workqueue.RateLimitingInterface.AddAfter 相同，但在内部记录所添加的 key 和延迟。
 // AddAfter 先记录再委托真实队列，保证观测不影响队列行为。
 func (f *spyWorkQueue) AddAfter(key string, delay time.Duration) {
 	f.items = append(f.items, spyQueueItem{
@@ -2500,8 +2492,7 @@ func (f *spyWorkQueue) AddAfter(key string, delay time.Duration) {
 	f.TypedRateLimitingInterface.AddAfter(key, delay)
 }
 
-// getItems returns all items that were recorded.
-// getItems 返回已记录的 AddAfter 条目。
+// getItems 返回所有已记录的 AddAfter 条目。
 func (f *spyWorkQueue) getItems() []spyQueueItem {
 	return f.items
 }

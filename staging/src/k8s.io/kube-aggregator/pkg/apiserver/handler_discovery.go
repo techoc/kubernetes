@@ -47,16 +47,12 @@ import (
 
 var APIRegistrationGroupVersion metav1.GroupVersion = metav1.GroupVersion{Group: "apiregistration.k8s.io", Version: "v1"}
 
-// Maximum is 20000. Set to higher than that so apiregistration always is listed
-// first (mirrors v1 discovery behavior)
-// 用超出合法范围的 20001 作为优先级，是为了让 apiregistration 组恒定排在 discovery 列表最前，
-// 与 v1 discovery 的行为保持一致；其他聚合组的优先级由 APIService 指定，最大只能到 20000。
+// 上限是 20000。这里设得更大，是为了让 apiregistration 组恒定排在 discovery 列表最前，与 v1 discovery 的行为保持一致；
+// 其他聚合组的优先级由 APIService 指定，最大只能到 20000。
 var APIRegistrationGroupPriority int = 20001
 
-// discoveryRefreshInterval is the interval at which the discovery manager
-// re-fetches discovery documents from aggregated API servers to detect changes.
-// This also caps the exponential backoff for failed fetches, so retries never
-// wait longer than the normal refresh period.
+// discoveryRefreshInterval 是 discovery manager 从聚合 API server 重新拉取发现文档以感知变化的间隔；
+// 它同时封顶失败拉取的指数退避，保证重试等待从不超过正常刷新周期。
 // 定时刷新与失败退避共用同一个时长：成功同步后会按这个间隔重新入队以感知聚合服务的变更；
 // 失败重试的退避上限也设为它，保证重试永远不会比正常刷新周期更慢。
 const discoveryRefreshInterval = 1 * time.Minute
@@ -111,10 +107,9 @@ type discoveryManager struct {
 	// (Note that many APIServices might use the same APIService.Spec.Service)
 	cachedResults map[serviceKey]cachedResult
 
-	// Queue of dirty apiServiceKey which need to be refreshed
-	// It is important that the reconciler for this queue does not excessively
-	// contact the apiserver if a key was enqueued before the server was last
-	// contacted.
+	// 待刷新的 dirty apiServiceKey 队列。
+	// 重要的是：该队列的调和逻辑不能在某个 key 于上次联系服务端之前入队时，
+	// 还反复去请求 apiserver。
 	// 入队与时间戳配合做去重：即使同一 APIService 被反复标记为 dirty，
 	// 只要缓存的拉取时间晚于最后一次标记时间，fetchFreshDiscoveryForService 就会直接复用缓存，
 	// 不会对聚合 API Server 发起多余请求。
@@ -127,7 +122,7 @@ type discoveryManager struct {
 	codecs serializer.CodecFactory
 }
 
-// Version of Service/Spec with relevant fields for use as a cache key
+// Service/Spec 中与缓存键相关的字段版本。
 // 只取 namespace、name、port 三个会影响“连到哪个服务”的字段作为缓存键。
 // 其他字段（如 label、端口名）变化不影响发现文档本身，不纳入键可以避免不必要的缓存失效。
 type serviceKey struct {
@@ -178,16 +173,13 @@ type cachedResult struct {
 
 // Information about a specific APIService/GroupVersion
 type groupVersionInfo struct {
-	// Date this APIService was marked dirty.
-	// Guaranteed to be a time greater than the most recent time the APIService
-	// was known to be modified.
+	// 该 APIService 被标记为 dirty 的日期。
+	// 保证它一定晚于该 APIService 最近一次已知被修改的时间。
 	//
-	// Used for request deduplication to ensure the data used to reconcile each
-	// apiservice was retrieved after the time of the APIService change:
+	// 用于请求去重，确保调和某个 apiservice 所用的数据是在 APIService 变更之后获取的：
 	// real_apiservice_change_time < groupVersionInfo.lastMarkedDirty < cachedResult.lastUpdated < real_document_fresh_time
 	//
-	// This ensures that if the apiservice was changed after the last cached entry
-	// was stored, the discovery document will always be re-fetched.
+	// 这保证了：若 apiservice 在上次缓存条目写入之后发生了变更，发现文档一定会被重新拉取。
 	// 这组时间戳不等式是去重的核心：只有 lastUpdated 严格晚于 lastMarkedDirty 才认为缓存可用。
 	// 取时间必须在发请求之前，才能保证缓存内容一定不早于“变脏”那一刻，避免竞态下使用陈旧数据。
 	lastMarkedDirty time.Time
@@ -232,13 +224,10 @@ func NewDiscoveryManager(
 	}
 }
 
-// Returns discovery data for the given apiservice.
-// Caches the result.
-// Returns the cached result if it is retrieved after the apiservice was last
-// marked dirty
-// If there was an error in fetching, returns the stale cached result if it exists,
-// and a non-nil error
-// If the result is current, returns nil error and non-nil result
+// 返回给定 apiservice 的 discovery 数据，并缓存结果。
+// 若结果是在 apiservice 最后一次标记 dirty 之后拉取的，则返回缓存结果。
+// 若拉取出错，且存在过期的缓存结果，则返回它并附带一个非 nil 错误。
+// 若结果是最新的，返回 nil 错误和非 nil 结果。
 // 优先尝试聚合发现（/apis 返回 APIGroupDiscoveryList），失败时按传统 discovery
 // （/apis/<group>/<version> 返回 APIResourceList）回退，以兼容尚未提供 v2 文档的聚合服务。
 // 注意传统回退只拿到单个 group/version 的数据，因此不会写回共享缓存，
@@ -247,7 +236,7 @@ func (dm *discoveryManager) fetchFreshDiscoveryForService(gv metav1.GroupVersion
 	// Lookup last cached result for this apiservice's service.
 	cached, exists := dm.getCacheEntryForService(info.service)
 
-	// If entry exists and was updated after the given time, just stop now
+	// 若条目存在且更新时间晚于给定时间，直接返回。
 	// 缓存时间晚于“变脏”时间即可直接返回，无需发请求。
 	// 这是去重的关键路径：同一 Service 被多个 APIService 引用时，只有第一个触发拉取，其余复用结果。
 	if exists && cached.lastUpdated.After(info.lastMarkedDirty) {
@@ -264,7 +253,7 @@ func (dm *discoveryManager) fetchFreshDiscoveryForService(gv metav1.GroupVersion
 		return &cached, fmt.Errorf("failed to create http.Request: %v", err)
 	}
 
-	// Apply aggregator user to request
+	// 为请求应用聚合器身份。
 	// 以 system:masters 身份访问聚合服务，保证即使目标服务对外开放了授权检查，
 	// 发现文档的拉取也不会因权限不足而失败；聚合层自身是可信组件。
 	req = req.WithContext(
@@ -291,7 +280,7 @@ func (dm *discoveryManager) fetchFreshDiscoveryForService(gv metav1.GroupVersion
 
 	switch {
 	case writer.RespCode() == http.StatusNotModified:
-		// Keep old entry, update timestamp
+		// 保留旧条目，只更新时间戳。
 		// 服务端用 ETag 判断文档没变化，内容仍是旧的那份，但拉取时间要刷新为 now，
 		// 这样后续 apiservice 变更时能正确判断缓存是否需要重新拉取。
 		cached = cachedResult{
@@ -313,15 +302,14 @@ func (dm *discoveryManager) fetchFreshDiscoveryForService(gv metav1.GroupVersion
 
 		klog.V(3).Infof("DiscoveryManager: Successfully downloaded discovery for %s", info.service.String())
 
-		// Convert discovery info into a map for convenient lookup later
+		// 把 discovery 信息转成 map，便于后续按 GroupVersion 快速查找。
 		// 摊平成 map 便于 syncAPIService 按 GroupVersion 直接取出自己那一份。
 		discoMap := map[metav1.GroupVersion]apidiscoveryv2.APIVersionDiscovery{}
 		for _, g := range parsed.Items {
 			for _, v := range g.Versions {
 				discoMap[metav1.GroupVersion{Group: g.Name, Version: v.Version}] = v
 				for i := range v.Resources {
-					// avoid nil panics in v0.26.0-v0.26.3 client-go clients
-					// see https://github.com/kubernetes/kubernetes/issues/118361
+					// 避免 v0.26.0-v0.26.3 客户端出现 nil panic，详见 https://github.com/kubernetes/kubernetes/issues/118361。
 					// 老版本客户端生成的文档里 ResponseKind 可能为 nil，直接下传会让它解引用时空指针。
 					// 在这里补成空对象，代价小且能兼容 v0.26.0-v0.26.3 的客户端。
 					if v.Resources[i].ResponseKind == nil {
@@ -336,7 +324,7 @@ func (dm *discoveryManager) fetchFreshDiscoveryForService(gv metav1.GroupVersion
 			}
 		}
 
-		// Save cached result
+		// 保存缓存结果。
 		// 把 Etag 一并缓存，下次请求带上 If-None-Match；目标服务文档没变时返回 304，
 		// 既省去重复解码，也减少对聚合 API Server 的负载。
 		cached = cachedResult{
@@ -347,8 +335,7 @@ func (dm *discoveryManager) fetchFreshDiscoveryForService(gv metav1.GroupVersion
 		dm.setCacheEntryForService(info.service, cached)
 		return &cached, nil
 	default:
-		// Could not get acceptable response for Aggregated Discovery.
-		// Fall back to legacy discovery information
+		// 无法为 Aggregated Discovery 获取可接受的响应，回退到传统 discovery 信息。
 		// 没有版本号的 group（如本地那些只支持老式 discovery 的）无法构造传统路径，
 		// 直接放弃；其余情况下按 /api/<version> 或 /apis/<group>/<version> 回退。
 		if len(gv.Version) == 0 {
@@ -413,16 +400,15 @@ func (dm *discoveryManager) fetchFreshDiscoveryForService(gv metav1.GroupVersion
 			lastUpdated: now,
 		}
 
-		// Do not save the resolve as the legacy fallback only fetches
-		// one group version and an API Service may serve multiple
-		// group versions.
+		// 不要把这次结果写入缓存：传统回退只拉取一个 group version，
+		// 而一个 APIService 可能服务多个 group version。
 		// 传统回退只包含一个 group/version，而同一个 Service 往往服务多个版本；
 		// 若写回共享缓存，后续其他 APIService 会读到这份残缺文档，所以此处只返回不缓存。
 		return &cached, nil
 	}
 }
 
-// Try to sync a single APIService.
+// 尝试同步单个 APIService。
 // 把一个 APIService 对应的 discovery 信息合并进统一文档。
 // 即使拉取失败，也会插入一个标记 stale 的空条目：宁可在 discovery 中暴露一个
 // 资源为空、新鲜度为 stale 的 group/version，也不要让整个组凭空消失，
@@ -470,8 +456,7 @@ func (dm *discoveryManager) syncAPIService(apiServiceName string) error {
 		}
 	}
 
-	// The entry's staleness depends upon if `fetchFreshDiscoveryForService`
-	// returned an error or not.
+	// 条目是否 stale 取决于 `fetchFreshDiscoveryForService` 是否返回了错误。
 	// 用错误是否存在来决定 Freshness：拉取失败时即便有旧缓存可用，也要标记为 stale，
 	// 让客户端知道这份数据可能已过时，而不是当作最新内容信任。
 	if err == nil {
@@ -498,8 +483,7 @@ func (dm *discoveryManager) getAPIServiceKeys() []string {
 	return keys
 }
 
-// Spawns a goroutine which waits for added/updated apiservices and updates
-// the discovery document accordingly
+// 启动一个 goroutine，等待 apiservice 的添加/更新事件并相应更新 discovery 文档。
 // 启动时先把已知的 APIService 全部同步一遍并关闭 discoverySyncedCh，
 // 确保 readiness 检查通过时统一文档已完整；之后才启动 worker 处理后续变更。
 func (dm *discoveryManager) Run(stopCh <-chan struct{}, discoverySyncedCh chan<- struct{}) {
@@ -508,14 +492,14 @@ func (dm *discoveryManager) Run(stopCh <-chan struct{}, discoverySyncedCh chan<-
 	// Shutdown the queue since stopCh was signalled
 	defer dm.dirtyAPIServiceQueue.ShutDown()
 
-	// Ensure that apiregistration.k8s.io is the first group in the discovery group.
+	// 确保 apiregistration.k8s.io 是 discovery 组列表中的第一个 group。
 	// 用 BuiltinSource 设置这个优先级，把它与聚合来源的 APIService 区分开；
 	// 一个超大优先级值保证它始终显示在最前面，符合客户端的预期顺序。
 	dm.mergedDiscoveryHandler.WithSource(discoveryendpoint.BuiltinSource).SetGroupVersionPriority(APIRegistrationGroupVersion, APIRegistrationGroupPriority, 0)
 
 	// Ensure that all APIServices are present before readiness check succeeds
 	var wg sync.WaitGroup
-	// Iterate on a copy of the keys to be thread safe with syncAPIService
+	// 在 key 的副本上迭代，与 syncAPIService 保持线程安全。
 	// 先复制 key 快照，避免遍历 map 的同时 syncAPIService 修改 apiServices 导致并发问题。
 	keys := dm.getAPIServiceKeys()
 
@@ -523,8 +507,7 @@ func (dm *discoveryManager) Run(stopCh <-chan struct{}, discoverySyncedCh chan<-
 		wg.Add(1)
 		go func(k string) {
 			defer wg.Done()
-			// If an error was returned, the APIService will still have been
-			// added but marked as stale. Ignore the return value here
+			// 即使返回了错误，该 APIService 也已被添加、只是被标记为 stale。这里忽略返回值。
 			// 启动阶段并发同步各个 APIService 以缩短就绪等待时间；
 			// 个别失败不影响整体就绪，stale 条目后续由 worker 继续重试。
 			_ = dm.syncAPIService(k)
@@ -536,11 +519,10 @@ func (dm *discoveryManager) Run(stopCh <-chan struct{}, discoverySyncedCh chan<-
 		close(discoverySyncedCh)
 	}
 
-	// Spawn workers
-	// These workers wait for APIServices to be marked dirty.
-	// Worker ensures the cached discovery document hosted by the ServiceReference of
-	// the APIService is at least as fresh as the APIService, then includes the
-	// APIService's groupversion into the merged document
+	// 启动 worker。
+	// 这些 worker 等待 APIService 被标记为 dirty。
+	// worker 确保 ServiceReference 上托管的缓存 discovery 文档至少与 APIService 一样新，
+	// 然后把该 APIService 的 groupversion 并入合并后的文档。
 	// 用两个 worker 并发处理不同 key：同一个 key 由 workqueue 保证不会并发处理，
 	// 因此无需担心对同一 APIService 的并发拉取，又能提高多个 APIService 同时变更时的吞吐。
 	for i := 0; i < 2; i++ {
@@ -574,8 +556,8 @@ func (dm *discoveryManager) Run(stopCh <-chan struct{}, discoverySyncedCh chan<-
 	<-stopCh
 }
 
-// Takes a snapshot of all currently used services by known APIServices and
-// purges the cache entries of those not present in the snapshot.
+// 对当前所有已知 APIService 使用的 service 做一次快照，
+// 并清掉不在快照中的缓存条目。
 // 删除 APIService 或修改其 Service 引用后调用，回收不再被任何 APIService 使用的缓存条目，
 // 防止长期运行下缓存无限膨胀。先快照再清理是为了避免同时持有两把锁造成死锁。
 func (dm *discoveryManager) removeUnusedServices() {
@@ -609,14 +591,13 @@ func (dm *discoveryManager) removeUnusedServices() {
 	}()
 }
 
-// Adds an APIService to be tracked by the discovery manager. If the APIService
-// is already known
+// 让 discovery manager 跟踪一个 APIService（即使它已经已知）。
 // 注册或更新一个 APIService 的信息，并把它标记为 dirty 以触发一次同步。
 // 用 time.Now 作为 lastMarkedDirty，保证随后拉取到的文档时间晚于这次变更，
 // 从而一定会被重新拉取而不是命中旧缓存。
 func (dm *discoveryManager) AddAPIService(apiService *apiregistrationv1.APIService, handler http.Handler) {
-	// If service is nil then its information is contained by a local APIService
-	// which is has already been added to the manager.
+	// 若 Service 为 nil，其信息包含在一个本地 APIService 中，
+	// 而本地 APIService 早已被添加到 manager。
 	// 本地 APIService 由聚合层自己提供，不需要联系远端 Service，
 	// 其信息已由内置来源初始化，因此直接跳过。
 	if apiService.Spec.Service == nil {
@@ -647,7 +628,7 @@ func (dm *discoveryManager) RemoveAPIService(apiServiceName string) {
 }
 
 //
-// Lock-protected accessors
+// 受锁保护的访问器
 // 以下访问器把加锁细节收敛在一处，调用方无需关心 servicesLock / resultsLock 的存在。
 // 每个 accessor 都只做一件事，便于组合出“先快照、再处理”的无死锁流程。
 //

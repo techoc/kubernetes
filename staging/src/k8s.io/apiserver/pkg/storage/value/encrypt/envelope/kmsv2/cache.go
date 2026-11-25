@@ -30,17 +30,16 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// simpleCache stores the decryption subset of value.Transformer (value.Read).
-// this statically enforces that transformers placed in the cache are not used for encryption.
-// this is relevant in the context of nonce collision since transformers that are created
-// from encrypted DEKs retrieved from etcd cannot maintain their nonce counter state.
+// simpleCache 存储 value.Transformer 中负责解密的子集（value.Read），以此在类型层面
+// 强制缓存中的 transformer 不被用于加密。这在 nonce 冲突的语境下尤为重要：由从 etcd
+// 取回的加密 DEK 构造出的 transformer 无法维护自身的 nonce 计数器状态。
 // 只缓存 value.Read 可以从类型上禁止拿缓存里的 transformer 去加密，避免
 // 从 etcd 恢复的 DEK 因 nonce 计数器状态丢失而重复 nonce（GCM 下是灾难性的）。
 type simpleCache struct {
 	cache *utilcache.Expiring
 	ttl   time.Duration
-	// hashPool is a per cache pool of hash.Hash (to avoid allocations from building the Hash)
-	// SHA-256 is used to prevent collisions
+	// hashPool 是每个 cache 独有的 hash.Hash 对象池（避免构造 Hash 带来的分配），
+	// 并使用 SHA-256 以防止哈希碰撞。
 	// 缓存键是 DEK 的 SHA-256，既压缩内存又避免把明文 DEK 作为 map 键。
 	hashPool        *sync.Pool
 	providerName    string
@@ -75,7 +74,7 @@ func (c *simpleCache) get(key []byte) value.Read {
 	return record.(value.Read)
 }
 
-// set caches the record for the key
+// set 为给定 key 缓存这条记录。
 // panic 而非返回错误：空 key/空 transformer 说明调用方逻辑错误，继续运行
 // 只会把问题推迟到更难排查的解密失败。
 func (c *simpleCache) set(key []byte, transformer value.Read) {
@@ -92,8 +91,7 @@ func (c *simpleCache) set(key []byte, transformer value.Read) {
 	c.recordCacheSize(c.providerName, c.cache.Len())
 }
 
-// keyFunc generates a string key by hashing the inputs.
-// This lowers the memory requirement of the cache.
+// keyFunc 通过对输入做哈希生成字符串键，从而降低缓存的内存占用。
 // 复用 hash.Hash 并跳过 base64，是为了在高频读取路径上减少内存分配。
 func (c *simpleCache) keyFunc(s []byte) string {
 	h := c.hashPool.Get().(hash.Hash)
@@ -108,7 +106,7 @@ func (c *simpleCache) keyFunc(s []byte) string {
 	return key
 }
 
-// toString performs unholy acts to avoid allocations
+// toString 为避免内存分配而执行了一些“不洁”的 unsafe 操作。
 // 依赖 unsafe 把字节切片零拷贝转成字符串；调用方必须保证 b 之后不再被修改，
 // hash.Sum 返回的正是刚分配且不再复用的切片，满足该前提。
 func toString(b []byte) string {

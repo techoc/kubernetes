@@ -120,7 +120,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The options didn't require a custom TLS config
+	// 这些选项不需要自定义 TLS 配置：
 	// 没有自定义 TLS/Dial/Proxy 时复用全局 DefaultTransport，最大化连接复用。
 	if tlsConfig == nil && config.DialHolder == nil && config.Proxy == nil {
 		return http.DefaultTransport, nil
@@ -188,8 +188,8 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	transportWithGC := &trackedTransport{rt: transport}
 
 	if cancel != nil {
-		// capture metric as local var so that cleanups do not influence other tests via globals
-		// 清理回调在对象被回收时运行，因此不能捕获 cache 全局状态以外的可变状态。
+		// 把 metric 捕获为局部变量，这样清理回调就不会通过全局变量影响其他测试：
+		// 清理回调在对象被回收时才运行，因此不能依赖 cache 全局状态以外的可变状态。
 		transportCertRotationGCCalls := metrics.TransportCertRotationGCCalls
 		runtime.AddCleanup(transportWithGC, func(_ struct{}) {
 			cancel()
@@ -207,7 +207,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 
-			// make sure we only delete the weak pointer created by this specific setLocked call
+			// 确保只删除本次 setLocked 调用创建的弱指针：
 			// 若同 key 已被新 transport 覆盖，旧条目的清理不能误删新条目。
 			if c.transports[key] != wp {
 				transportCacheGCCalls.Increment("skipped")
@@ -279,8 +279,7 @@ func tlsConfigKey(c *Config) (tlsCacheKey, bool, error) {
 	}
 
 	if c.Proxy != nil {
-		// cannot determine equality for functions
-		// 无法比较函数是否相等，只能放弃缓存。
+		// 无法判断两个函数是否相等，只能放弃缓存。
 		return tlsCacheKey{}, false, nil
 	}
 

@@ -25,14 +25,11 @@ import (
 )
 
 const (
-	// maxRetryAfter represents the maximum possible retryAfter.
-	// 上限 32 秒：再长的 Retry-After 会让客户端长时间空转，也可能被误当作服务不可用。
+	// maxRetryAfter 表示 Retry-After 的最大取值：上限 32 秒——再长会让客户端长时间空转，也可能被误当作服务不可用。
 	maxRetryAfter = int64(32)
 )
 
-// DroppedRequestsTracker is an interface that allows tracking
-// a history od dropped requests in the system for the purpose
-// of adjusting RetryAfter header to avoid system overload.
+// DroppedRequestsTracker 是一个接口，用于跟踪系统中被丢弃请求的历史，以便调整 Retry-After 头部、避免系统过载。
 // DroppedRequestsTracker 按优先级跟踪被丢弃请求的历史，
 // 据此动态调整 Retry-After，避免客户端在过载时盲目重试形成正反馈。
 type DroppedRequestsTracker interface {
@@ -58,7 +55,6 @@ type unixStat struct {
 type droppedRequestsStats struct {
 	lock sync.RWMutex
 
-	// history stores the history of dropped requests.
 	// 只保留与当前 retryAfter 窗口相关的条目，防止无界增长。
 	history []unixStat
 
@@ -190,9 +186,7 @@ func (s *droppedRequestsStats) updateRetryAfterIfNeededLocked(unixTime int64) {
 	}
 }
 
-// droppedRequestsTracker implement DroppedRequestsTracker interface
-// for the purpose of adjusting RetryAfter header for newly dropped
-// requests to avoid system overload.
+// droppedRequestsTracker 实现 DroppedRequestsTracker 接口，用于为新丢弃的请求调整 Retry-After 头部，避免系统过载。
 // droppedRequestsTracker 按优先级名称聚合 droppedRequestsStats。
 type droppedRequestsTracker struct {
 	now func() time.Time
@@ -229,8 +223,7 @@ func (t *droppedRequestsTracker) RecordDroppedRequest(plName string) {
 		}
 		t.lock.RUnlock()
 
-		// Slow path taking writer lock to update the map.
-		// 双重检查：解锁后可能有其他 goroutine 先创建了该条目。
+		// 慢路径：持有写锁更新 map。双重检查：解锁后可能有其他 goroutine 先创建了该条目。
 		t.lock.Lock()
 		defer t.lock.Unlock()
 		if plStats, ok := t.plStats[plName]; ok {

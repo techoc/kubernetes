@@ -42,12 +42,9 @@ import (
 )
 
 const (
-	// blockTimeout determines how long we're willing to block the request
-	// to wait for a given resource version to be propagated to cache,
-	// before terminating request and returning Timeout error with retry
-	// after suggestion.
-	// 读取一致性由缓存追平 revision 保证；超过该时间仍未追平则返回
-	// TooLargeResourceVersion，让客户端带 Retry-After 重试。
+	// blockTimeout 决定我们愿意把请求阻塞多久来等待指定 resourceVersion 被同步进缓存。
+	// 读取一致性由缓存追平 revision 保证；超过该时间仍未追平，则终止请求并返回超时类
+	// 错误（实现上是 TooLargeResourceVersion），附带 Retry-After 建议让客户端重试。
 	blockTimeout = 3 * time.Second
 
 	// resourceVersionTooHighRetrySeconds is the seconds before a operation should be retried by the client
@@ -55,10 +52,8 @@ const (
 	resourceVersionTooHighRetrySeconds = 1
 )
 
-// watchCacheEvent is a single "watch event" that is send to users of
-// watchCache. Additionally to a typical "watch.Event" it contains
-// the previous value of the object to enable proper filtering in the
-// upper layers.
+// watchCacheEvent 是发送给 watchCache 使用方的单个 "watch 事件"。除常见的 "watch.Event"
+// 内容外，它还包含对象的上一个取值，以便在上方各层进行正确的过滤。
 // 保留前后两个版本的标签/字段，是为了让上层能在不反序列化对象的情况下
 // 判断事件是否因选择器变化而需要转成 Added/Deleted（例如标签被移除）。
 type watchCacheEvent struct {
@@ -79,16 +74,14 @@ type watchCacheEvent struct {
 // watchCache implements a Store interface.
 // However, it depends on the elements implementing runtime.Object interface.
 //
-// watchCache is a "sliding window" (with a limited capacity) of objects
-// observed from a watch.
+// watchCache 是从 watch 中观测到的对象构成的“滑动窗口”（容量有限）。
 // watchCache 同时维护“当前对象索引”和“最近的 revision 历史事件窗口”：
 // list/get 走前者，watch 从后者按 revision 起始回放，窗口越界则要求
 // 调用方回退到 etcd。
 type watchCache struct {
 	sync.RWMutex
 
-	// Condition on which lists are waiting for the fresh enough
-	// resource version.
+	// cond 是列表请求等待足够新的 resourceVersion 时所用的条件变量。
 	// 等待者持有读锁并 cond.Wait；事件写入方拿写锁后 Broadcast。
 	cond *sync.Cond
 
@@ -174,8 +167,8 @@ func newWatchCache(
 	return wc
 }
 
-// Add takes runtime.Object as an argument.
-// 把 reflector 的 Added 通知转换为缓存事件；resourceVersion 从对象元数据中取，
+// Add 以 runtime.Object 作为参数，把 reflector 的 Added 通知转换为缓存事件；
+// resourceVersion 从对象元数据中取，
 // 保证缓存 revision 与事件一致。
 func (w *watchCache) Add(obj interface{}) error {
 	object, resourceVersion, err := w.objectToVersionedRuntimeObject(obj)
@@ -223,8 +216,7 @@ func (w *watchCache) objectToVersionedRuntimeObject(obj interface{}) (runtime.Ob
 	return object, resourceVersion, nil
 }
 
-// processEvent is safe as long as there is at most one call to it in flight
-// at any point in time.
+// 只要同一时刻最多只有一次 processEvent 调用在飞行中，它就是安全的。
 // 这个串行前提来自 reflector：它从单一 goroutine 同步回调 Add/Update/Delete，
 // 因此更新 history/storage/revision 不需要额外的每事件锁顺序协议。
 func (w *watchCache) processEvent(event watch.Event, resourceVersion uint64) error {
@@ -300,11 +292,9 @@ func (w *watchCache) processEvent(event watch.Event, resourceVersion uint64) err
 		return err
 	}
 
-	// Avoid calling event handler under lock.
-	// This is safe as long as there is at most one call to Add/Update/Delete and
-	// UpdateResourceVersion in flight at any point in time, which is true now,
-	// because reflector calls them synchronously from its main thread.
-	// 处理器在锁外调用，避免下游回调（可能较慢）阻塞所有读请求。
+	// 避免在持锁时调用事件处理器，以免下游回调（可能较慢）阻塞所有读请求。
+	// 只要同一时刻最多只有一次 Add/Update/Delete 或 UpdateResourceVersion 调用在飞行中，
+	// 这样做就是安全的；目前 reflector 正是从其主线程同步调用它们。
 	if w.config.eventHandler != nil {
 		w.config.eventHandler(wcEvent)
 	}
@@ -342,7 +332,7 @@ func (w *watchCache) UpdateResourceVersion(resourceVersion string) {
 	metrics.RecordResourceVersion(w.config.groupResource, rv)
 }
 
-// waitUntilFreshLocked waits until cache is at least as fresh as given resourceVersion.
+// waitUntilFreshLocked 等待缓存至少与给定的 resourceVersion 一样新。
 // 调用方必须持有读锁。resourceVersion 为 0 表示接受任意（可能过期的）结果，
 // 因此直接返回；否则在 cond 上等待，超时后返回 TooLargeResourceVersion。
 func (w *watchCache) waitUntilFreshLocked(ctx context.Context, consistentReadSupported bool, resourceVersion uint64) error {
@@ -362,15 +352,11 @@ func (w *watchCache) waitUntilFreshLocked(ctx context.Context, consistentReadSup
 		}
 	}()
 
-	// In case resourceVersion is 0, we accept arbitrarily stale result.
-	// As a result, the condition in the below for loop will never be
-	// satisfied (w.resourceVersion is never negative), this call will
-	// never hit the w.cond.Wait().
-	// As a result - we can optimize the code by not firing the wakeup
-	// function (and avoid starting a gorotuine), especially given that
-	// resourceVersion=0 is the most common case.
-	// 仅在需要等待时才启动超时唤醒 goroutine：它会在 blockTimeout 后
-	// Broadcast，让 Wait 循环有机会检查并返回超时错误。
+	// 当 resourceVersion 为 0 时我们接受任意过期的结果，所以下面 for 循环的条件永远
+	// 不会被满足（w.resourceVersion 不可能为负），本次调用也不会进入 w.cond.Wait()。
+	// 由此可以优化代码：不必启动唤醒函数（也免去一个 goroutine），尤其是
+	// resourceVersion=0 是最常见的情况。因此仅在确实需要等待时才启动超时唤醒
+	// goroutine：它会在 blockTimeout 后 Broadcast，让 Wait 循环有机会检查并返回超时错误。
 	if resourceVersion > 0 {
 		go func() {
 			// Wake us up when the time limit has expired.  The docs
@@ -433,10 +419,9 @@ func (c *watchCache) waitUntilFreshAndGetList(ctx context.Context, key string, o
 	return listResp{ResourceVersion: readResourceVersion}, "", nil
 }
 
-// WaitUntilFreshAndList returns list of pointers to `storeElement` objects along
-// with their ResourceVersion and the name of the index, if any, that was used.
-// 原注释沿用了旧函数名（历史遗留）；本函数实际只返回键，供上层按需取对象，
-// 减少一次性拷贝。
+// WaitUntilFreshAndList（沿用了旧函数名，实际对应 WaitUntilFreshAndGetKeys）
+// 返回 `storeElement` 指针列表及其 ResourceVersion 和所使用的索引名称（若有）。
+// 本函数实际只返回键，供上层按需取对象，减少一次性拷贝。
 func (w *watchCache) WaitUntilFreshAndGetKeys(ctx context.Context, resourceVersion uint64) ([]string, error) {
 	span := tracing.SpanFromContext(ctx)
 	consistentReadSupported := delegator.ConsistentReadSupported()
@@ -453,8 +438,8 @@ func (w *watchCache) WaitUntilFreshAndGetKeys(ctx context.Context, resourceVersi
 	return keys, nil
 }
 
-// NOTICE: Structure follows the shouldDelegateList function in
-// staging/src/k8s.io/apiserver/pkg/storage/cacher/delegator.go
+// 注意：本函数的分支结构遵循
+// staging/src/k8s.io/apiserver/pkg/storage/cacher/delegator.go 中的 shouldDelegateList。
 // 分支顺序与委派判定保持一致，避免出现“委派说能服务、缓存却拒绝”的分叉；
 // 修改任一处都需同步另一处。
 func (w *watchCache) waitUntilFreshAndList(ctx context.Context, key string, opts storage.ListOptions) (resp listResp, index string, err error) {
@@ -467,9 +452,8 @@ func (w *watchCache) waitUntilFreshAndList(ctx context.Context, key string, opts
 		return w.waitAndListExactRV(ctx, key, "", listRV)
 	case metav1.ResourceVersionMatchNotOlderThan:
 	case "":
-		// Continue
-		// 分页 continue token 内含起始键与 revision；revision 为 0 时无法
-		// 精确定位，退化为一致性读。
+		// Continue 分支：分页 continue token 内含起始键与 revision；revision 为 0
+		// 时无法精确定位，退化为一致性读。
 		if len(opts.Predicate.Continue) > 0 {
 			continueKey, continueRV, err := storage.DecodeContinue(opts.Predicate.Continue, key)
 			if err != nil {
@@ -482,8 +466,8 @@ func (w *watchCache) waitUntilFreshAndList(ctx context.Context, key string, opts
 				return w.waitAndListConsistent(ctx, key, continueKey, nil)
 			}
 		}
-		// Legacy exact match
-		// 带 limit 且指定了非零 revision 的历史行为按精确快照处理。
+		// 历史遗留的精确匹配（Legacy exact match）：带 limit 且指定了非零 revision
+		// 的历史行为按精确快照处理。
 		if opts.Predicate.Limit > 0 && len(opts.ResourceVersion) > 0 && opts.ResourceVersion != "0" {
 			return w.waitAndListExactRV(ctx, key, "", listRV)
 		}
@@ -601,7 +585,7 @@ func (w *watchCache) notFresh(resourceVersion uint64) bool {
 	return resourceVersion > w.resourceVersion
 }
 
-// WaitUntilFreshAndGet returns a pointers to <storeElement> object.
+// WaitUntilFreshAndGet 返回指向 <storeElement> 对象的指针。
 // 返回的 revision 是本次读取实际观察到的缓存 revision，供调用方在响应中回写。
 func (w *watchCache) WaitUntilFreshAndGet(ctx context.Context, resourceVersion uint64, key string) (interface{}, bool, uint64, error) {
 	span := tracing.SpanFromContext(ctx)
@@ -623,8 +607,8 @@ func (w *watchCache) WaitUntilFreshAndGet(ctx context.Context, resourceVersion u
 	return value, exists, w.resourceVersion, err
 }
 
-// Replace takes slice of runtime.Object as a parameter.
-// 用一次全量 list 的结果替换缓存（初始同步或 re-list）。先在锁外完成所有
+// Replace 以 runtime.Object 切片作为参数，用一次全量 list 的结果替换缓存
+// （初始同步或 re-list）。先在锁外完成所有
 // key/属性计算，任何对象失败即整体放弃，保证缓存不会处于半替换状态。
 func (w *watchCache) Replace(objs []interface{}, resourceVersion string) error {
 	version, err := w.config.versioner.ParseResourceVersion(resourceVersion)
@@ -662,8 +646,8 @@ func (w *watchCache) Replace(objs []interface{}, resourceVersion string) error {
 	// using their own start/end indexes calculated from previous buffer
 	// content.
 
-	// Empty the cyclic buffer, ensuring startIndex doesn't decrease.
-	// Reset 而不是清零复用索引：递增的 startIndex 能让旧 interval 立即
+	// 清空循环缓冲区，并保证 startIndex 不会减小。
+	// 这里用 Reset 而不是清零复用索引：递增的 startIndex 能让旧 interval 立即
 	// 失效，避免它们把新缓冲区的内容当作旧 revision 读出。
 	w.history.ResetLocked()
 
@@ -710,9 +694,8 @@ func (w *watchCache) suggestedWatchChannelSize(indexExists, triggerUsed bool) in
 	return w.history.suggestedWatchChannelSize(indexExists, triggerUsed)
 }
 
-// getAllEventsSinceLocked returns a watchCacheInterval that can be used to
-// retrieve events since a certain resourceVersion. This function assumes to
-// be called under the watchCache lock.
+// getAllEventsSinceLocked 返回一个可用于读取某个 resourceVersion 之后事件的
+// watchCacheInterval。该函数假定在持有 watchCache 锁时被调用。
 // getIntervalFromStoreLocked 在两种情况下使用：sendInitialEvents 需要完整
 // 初始状态；resourceVersion=0 且未显式禁用初始事件时保持旧行为（先返回当前
 // 状态再从此处 watch）。
@@ -734,10 +717,8 @@ func (w *watchCache) getAllEventsSinceLocked(resourceVersion uint64, key string,
 			// TODO: In v2 api, we should stop returning the current state - #13969.
 			return w.getIntervalFromStoreLocked(key, matchesSingle)
 		}
-		// SendInitialEvents = false and resourceVersion = 0
-		// means that the request would like to start watching
-		// from Any resourceVersion
-		// 从当前 revision 起 watch，不回放历史。
+		// SendInitialEvents = false 且 resourceVersion = 0 表示请求方希望从任意
+		// resourceVersion 开始 watch：从当前 revision 起 watch，不回放历史。
 		resourceVersion = w.resourceVersion
 	}
 
@@ -748,9 +729,9 @@ func (w *watchCache) getAllEventsSinceLocked(resourceVersion uint64, key string,
 // that covers the entire storage state.
 // This function assumes to be called under the watchCache lock.
 func (w *watchCache) getIntervalFromStoreLocked(key string, matchesSingle bool) (*watchCacheInterval, error) {
-	// When not matching a single key, an immutable snapshot lets us
-	// defer the O(N) interval build off the watchCache lock.
-	// 单键查询数据量小，直接同步构建即可；非单键必须懒构建以免长时间持锁。
+	// 若不是匹配单个 key，不可变快照可以让我们把 O(N) 的 interval 构建挪到
+	// watchCache 锁之外：单键查询数据量小，直接同步构建即可；非单键必须懒构建
+	// 以免长时间持锁。
 	if !matchesSingle {
 		if snapshot, ok := w.storage.LatestSnapshotLocked(); ok {
 			return newCacheIntervalFromLazySnapshot(w.resourceVersion, snapshot), nil

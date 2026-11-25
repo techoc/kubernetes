@@ -22,9 +22,8 @@ import (
 )
 
 const (
-	// rsaPrivateKey is a RSA Private Key in PKCS#1 format
+	// rsaPrivateKey 是 PKCS#1 格式的 RSA 私钥（测试数据）。
 	// openssl genrsa -out rsa2048.pem 2048
-	// PKCS#1 格式的 RSA 私钥（测试数据）。
 	rsaPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA92mVjhBKOFsdxFzb/Pjq+7b5TJlODAdY5hK+WxLZTIrfhDPq
 FWrGKdjSNiHbXrdEtwJh9V+RqPZVSN3aWy1224RgkyNdMJsXhJKuCC24ZKY8SXtW
@@ -53,9 +52,8 @@ C0eAlsC3BCMvkpidKQmra6IqIrvTGI6EFgkrb3aknWdup2w8j2udYCNqyE3W+fVe
 p8FdYQ1FkACQ+daO5VlClL/9l0sGjKXlNKbpmJ2H4ngZmXj5uGmxuQ==
 -----END RSA PRIVATE KEY-----`
 
-	// rsaPublicKey is a RSA Public Key in PEM encoded format
+	// rsaPublicKey 是 PEM 编码的 RSA 公钥（测试数据）。
 	// openssl rsa -in rsa2048.pem -pubout -out rsa2048pub.pem
-	// PEM 编码的 RSA 公钥（测试数据）。
 	rsaPublicKey = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA92mVjhBKOFsdxFzb/Pjq
 +7b5TJlODAdY5hK+WxLZTIrfhDPqFWrGKdjSNiHbXrdEtwJh9V+RqPZVSN3aWy12
@@ -66,9 +64,8 @@ uIrBQN+Y7tkN2T60Qq/TkKXUrhDefwlTlktZVJ/GztLYU41b2GcWsh/XO+PH831r
 mwIDAQAB
 -----END PUBLIC KEY-----`
 
-	// certificate is an x509 certificate in PEM encoded format
+	// certificate 是 PEM 编码的 x509 证书（测试数据）；用于验证从证书中提取公钥。
 	// openssl req -new -key rsa2048.pem -sha256 -nodes -x509 -days 1826 -out x509certificate.pem -subj "/C=US/CN=not-valid"
-	// PEM 编码的 x509 证书（测试数据）；用于验证从证书中提取公钥。
 	certificate = `-----BEGIN CERTIFICATE-----
 MIIDFTCCAf2gAwIBAgIJAN8B8NOwtiUCMA0GCSqGSIb3DQEBCwUAMCExCzAJBgNV
 BAYTAlVTMRIwEAYDVQQDDAlub3QtdmFsaWQwHhcNMTcwMzIyMDI1NjM2WhcNMjIw
@@ -89,9 +86,8 @@ v+aKjAwrPUNX11cXOCPxBv2qXMetxaovBem6AI2hvypCInXaVQfP+yOLubzlTDjS
 Y708SlY38hmS1uTwDpyLOn8AKkZ8jtx75g==
 -----END CERTIFICATE-----`
 
-	// ecdsaPrivateKeyWithParams is a ECDSA Private Key with included EC Parameters block
+	// ecdsaPrivateKeyWithParams 是自带 EC PARAMETERS 块的 ECDSA 私钥；解析器需要容忍额外的参数块。
 	// openssl ecparam -name prime256v1 -genkey -out ecdsa256params.pem
-	// 带 EC PARAMETERS 块的 ECDSA 私钥；解析器需要容忍额外的参数块。
 	ecdsaPrivateKeyWithParams = `-----BEGIN EC PARAMETERS-----
 BggqhkjOPQMBBw==
 -----END EC PARAMETERS-----
@@ -101,18 +97,16 @@ AwEHoUQDQgAEyxYNrs6a6tsNCFNYn+l+JDUZ0PnUZbcsDgJn2O62D1se8M5iQ5rY
 iIv6RpxE3VHvlHEIvYgCZkG0jHszTUopBg==
 -----END EC PRIVATE KEY-----`
 
-	// ecdsaPrivateKey is a ECDSA Private Key in ASN.1 format
+	// ecdsaPrivateKey 是 ASN.1 格式的 ECDSA 私钥（测试数据）。
 	// openssl ecparam -name prime256v1 -genkey -noout -out ecdsa256.pem
-	// ASN.1 格式的 ECDSA 私钥（测试数据）。
 	ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIP6Qw6dHDiLsSnLXUhQVTPE0fTQQrj3XSbiQAZPXnk5+oAoGCCqGSM49
 AwEHoUQDQgAEZZzi1u5f2/AEGFI/HYUhU+u6cTK1q2bbtE7r1JMK+/sQA5sNAp+7
 Vdc3psr1OaNzyTyuhTECyRdFKXm63cMnGg==
 -----END EC PRIVATE KEY-----`
 
-	// ecdsaPublicKey is a ECDSA Public Key in PEM encoded format
+	// ecdsaPublicKey 是 PEM 编码的 ECDSA 公钥（测试数据）。
 	// openssl ec -in ecdsa256.pem -pubout -out ecdsa256pub.pem
-	// PEM 编码的 ECDSA 公钥（测试数据）。
 	ecdsaPublicKey = `-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZZzi1u5f2/AEGFI/HYUhU+u6cTK1
 q2bbtE7r1JMK+/sQA5sNAp+7Vdc3psr1OaNzyTyuhTECyRdFKXm63cMnGg==

@@ -62,14 +62,13 @@ func TestTimeBudget(t *testing.T) {
 		t.Errorf("Expected: %v, got: %v", budget.refresh, res)
 	}
 
-	// return a negative value to the budget
-	// we didn't advanced on time yet
+	// 向预算归还一个负值——此时时间还没有向前推进。
 	// 负数归还应把预算压到 0 而不是负值，否则后续累积会被无谓地抵消。
 	budget.returnUnused(-time.Duration(50))
 	if res := budget.takeAvailable(); res != time.Duration(0) {
 		t.Errorf("Expected: %v, got: %v", time.Duration(0), res)
 	}
-	// handle back in time problem with an empty budget
+	// 处理预算为空时时钟回拨的问题。
 	// 时钟回拨：预算为空时应保持为空，不能算出负的经过时间而给出额外预算。
 	nextTime = nextTime.Add(-2 * time.Minute)
 	fakeClock.SetTime(nextTime)
@@ -84,7 +83,7 @@ func TestTimeBudget(t *testing.T) {
 		t.Errorf("Expected: %v, got: %v", budget.maxBudget, res)
 	}
 
-	// handle back in time problem with time on the budget
+	// 处理预算中已有时间时时钟回拨的问题。
 	// 预算非空时回拨时钟：仍应给出已累积的预算，且不因时间倒退而崩溃或放大。
 	budget.returnUnused(10 * time.Second)
 	nextTime = nextTime.Add(-2 * time.Minute)

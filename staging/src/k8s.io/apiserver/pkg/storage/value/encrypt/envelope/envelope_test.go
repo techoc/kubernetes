@@ -38,9 +38,9 @@ const (
 	testEnvelopeCacheSize = 10
 )
 
-// testEnvelopeService is a mock Envelope service which can be used to simulate remote Envelope services
-// for testing of Envelope based encryption providers.
-// 用 "keyVersion:base64" 的简单文本协议模拟远端 KMS，便于验证缓存与轮换。
+// testEnvelopeService 是一个 mock Envelope service，可用于模拟远端 Envelope 服务，
+// 以便测试基于 Envelope 的加密 provider。它用 "keyVersion:base64" 的简单文本协议
+// 模拟远端 KMS，便于验证缓存与密钥轮换。
 type testEnvelopeService struct {
 	disabled   bool
 	keyVersion string
@@ -84,8 +84,8 @@ func newTestEnvelopeService() *testEnvelopeService {
 	}
 }
 
-// Throw error if Envelope transformer tries to contact Envelope without hitting cache.
-// TestEnvelopeCaching 验证 DEK 缓存能让读取在 KMS 故障时仍成功；
+// TestEnvelopeCaching 验证 DEK 缓存能让读取在 KMS 故障时仍成功；若 Envelope
+// transformer 未命中缓存而直接访问 Envelope service，则抛出错误。
 // cacheSize=0 时没有缓存，插件故障会直接导致读取失败。
 func TestEnvelopeCaching(t *testing.T) {
 	testCases := []struct {
@@ -156,7 +156,7 @@ func TestEnvelopeCaching(t *testing.T) {
 	}
 }
 
-// Makes Envelope transformer hit cache limit, throws error if it misbehaves.
+// TestEnvelopeCacheLimit 让 Envelope transformer 触及缓存容量上限，行为异常时抛错。
 // 写入超过缓存容量的条目后仍能全部读回，验证缓存淘汰不会导致解密失败。
 func TestEnvelopeCacheLimit(t *testing.T) {
 	cbcTransformer := func(block cipher.Block) (value.Transformer, error) {
@@ -259,8 +259,8 @@ func benchmarkRead(b *testing.B, transformer value.Transformer, valueLength int)
 	b.StopTimer()
 }
 
-// remove after 1.13
 // TestBackwardsCompatibility 验证旧格式（2 字节长度 + DEK + 数据）写入的数据仍能被读取。
+// 该用例可在 1.13 之后移除。
 func TestBackwardsCompatibility(t *testing.T) {
 	envelopeService := newTestEnvelopeService()
 	cbcTransformer := func(block cipher.Block) (value.Transformer, error) {
@@ -294,8 +294,8 @@ func TestBackwardsCompatibility(t *testing.T) {
 	}
 }
 
-// remove after 1.13
 // oldTransformToStorage 复刻旧版封装格式，仅用于向后兼容测试。
+// 该函数可在 1.13 之后移除。
 func oldTransformToStorage(ctx context.Context, t *envelopeTransformer, data []byte, dataCtx value.Context) ([]byte, error) {
 	newKey, err := generateKey(32)
 	if err != nil {

@@ -63,31 +63,24 @@ const (
 	flagProxyURL             = "proxy-url"
 )
 
-// RESTClientGetter is an interface that the ConfigFlags describe to provide an easier way to mock for commands
-// and eliminate the direct coupling to a struct type.  Users may wish to duplicate this type in their own packages
-// as per the golang type overlapping.
-// 中文：把命令真正需要的能力（REST 配置、发现客户端、REST 映射、原始 kubeconfig 加载器）抽成接口，
-// 既能解耦具体结构体，也方便测试注入假实现。
+// RESTClientGetter 把命令真正需要的能力（REST 配置、发现客户端、REST 映射、原始 kubeconfig 加载器）抽成接口，
+// 既方便命令侧 mock，也消除对具体结构体类型的直接耦合。
+// 按 Go 接口重叠的惯例，使用方也可以在自己的包里复制一份同样的类型定义。
 type RESTClientGetter interface {
-	// ToRESTConfig returns restconfig
-	// 返回最终用于连接集群的 rest.Config（已应用 flag 覆盖与 WrapConfigFn）。
+	// ToRESTConfig 返回最终用于连接集群的 rest.Config（已应用 flag 覆盖与 WrapConfigFn）。
 	ToRESTConfig() (*rest.Config, error)
-	// ToDiscoveryClient returns discovery client
-	// 返回带缓存的发现客户端；持久化模式下同一实例会被复用。
+	// ToDiscoveryClient 返回带缓存的发现客户端；持久化模式下同一实例会被复用。
 	ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error)
-	// ToRESTMapper returns a restmapper
-	// 返回在发现客户端之上构建的 REST 映射器，用于 GVK 与资源路径互转。
+	// ToRESTMapper 返回在发现客户端之上构建的 REST 映射器，用于 GVK 与资源路径互转。
 	ToRESTMapper() (meta.RESTMapper, error)
-	// ToRawKubeConfigLoader return kubeconfig loader as-is
-	// 原样返回 kubeconfig 加载器，供需要自行组合加载规则的调用方使用。
+	// ToRawKubeConfigLoader 原样返回 kubeconfig 加载器，供需要自行组合加载规则的调用方使用。
 	ToRawKubeConfigLoader() clientcmd.ClientConfig
 }
 
 var _ RESTClientGetter = &ConfigFlags{}
 
-// ConfigFlags composes the set of values necessary
-// for obtaining a REST client config
-// 中文：各字段存放 flag 指针，AddFlags 绑定后由用户输入写入。字段为 nil 表示该 flag 不注册，
+// ConfigFlags 汇集获取 REST 客户端配置所需的一组取值。
+// 各字段存放 flag 指针，AddFlags 绑定后由用户输入写入。字段为 nil 表示该 flag 不注册，
 // 命令可借此裁剪暴露给用户的选项。
 type ConfigFlags struct {
 	// 发现缓存目录，优先级：显式 flag > KUBECACHEDIR > ~/.kube/cache。
@@ -95,7 +88,6 @@ type ConfigFlags struct {
 	// 显式 kubeconfig 路径；非空时覆盖默认加载规则。
 	KubeConfig *string
 
-	// config flags
 	// 以下为 kubeconfig 覆盖项，分身份认证、集群连接、上下文三类。
 	ClusterName          *string
 	AuthInfoName         *string
@@ -117,9 +109,8 @@ type ConfigFlags struct {
 	Timeout              *string
 	DisableCompression   *bool
 	ProxyURL             *string
-	// If non-nil, wrap config function can transform the Config
-	// before it is returned in ToRESTConfig function.
-	// 中文：给调用方一个钩子，在配置返回前统一注入自定义行为（如客户端限流、用户代理）。
+	// WrapConfigFn 非 nil 时，ToRESTConfig 会在返回配置前用它转换 Config，
+	// 相当于给调用方一个钩子，统一注入自定义行为（如客户端限流、用户代理）。
 	WrapConfigFn func(*rest.Config) *rest.Config
 
 	// 持久化模式下缓存的原始 kubeconfig 加载器，用互斥锁保护懒初始化。
@@ -134,10 +125,8 @@ type ConfigFlags struct {
 	discoveryClient     discovery.CachedDiscoveryInterface
 	discoveryClientLock sync.Mutex
 
-	// If set to true, will use persistent client config, rest mapper, discovery client, and
-	// propagate them to the places that need them, rather than
-	// instantiating them multiple times.
-	// 中文：持久化可避免一次命令里重复构建这些对象、重复打发现请求。
+	// usePersistentConfig 为 true 时复用同一份 client config、REST 映射器和发现客户端，
+	// 并把它们传递给需要的一方，避免一次命令里重复构建这些对象、重复打发现请求。
 	usePersistentConfig bool
 	// Allows increasing burst used for discovery, this is useful
 	// in clusters with many registered resources
@@ -145,9 +134,8 @@ type ConfigFlags struct {
 	// Allows increasing qps used for discovery, this is useful
 	// in clusters with many registered resources
 	discoveryQPS float32
-	// Allows all possible warnings are printed in a standardized
-	// format.
-	// 中文：用于输出发现过程中（如废弃 API 用法的）警告，统一到 stderr。
+	// warningPrinter 用于以标准格式输出所有可能的警告，
+	// 例如发现过程中（废弃 API 用法）的警告，统一打到 stderr。
 	warningPrinter *printers.WarningPrinter
 }
 
@@ -193,8 +181,7 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 
 	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
 
-	// bind auth info flag values to overrides
-	// 中文：文件类 flag 与内嵌数据互斥，指定文件时清空内嵌数据，避免加载器选错来源。
+	// 把身份认证相关的 flag 值绑定到 overrides：文件类 flag 与内嵌数据互斥，指定文件时清空内嵌数据，避免加载器选错来源。
 	if f.CertFile != nil {
 		overrides.AuthInfo.ClientCertificate = *f.CertFile
 		overrides.AuthInfo.ClientCertificateData = nil
@@ -238,8 +225,7 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 		overrides.AuthInfo.Password = *f.Password
 	}
 
-	// bind cluster flags
-	// 中文：集群连接相关覆盖，直接映射到集群条目。
+	// 绑定集群 flag：集群连接相关覆盖，直接映射到集群条目。
 	if f.APIServer != nil {
 		overrides.ClusterInfo.Server = *f.APIServer
 	}
@@ -259,8 +245,7 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 		overrides.ClusterInfo.ProxyURL = *f.ProxyURL
 	}
 
-	// bind context flags
-	// 中文：上下文覆盖，决定当前选中哪个 cluster/authinfo/namespace。
+	// 绑定上下文 flag：上下文覆盖，决定当前选中哪个 cluster/authinfo/namespace。
 	if f.Context != nil {
 		overrides.CurrentContext = *f.Context
 	}
@@ -278,8 +263,7 @@ func (f *ConfigFlags) toRawKubeConfigLoader() clientcmd.ClientConfig {
 		overrides.Timeout = *f.Timeout
 	}
 
-	// we only have an interactive prompt when a password is allowed
-	// 中文：仅当注册了 --password 时才启用交互式加载，避免无终端场景阻塞等待输入。
+	// 只有允许输入密码时才存在交互式提示：仅当注册了 --password 时才启用交互式加载，避免无终端场景阻塞等待输入。
 	if f.Password == nil {
 		return &clientConfig{clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)}
 	}
@@ -405,8 +389,8 @@ func (f *ConfigFlags) toRESTMapper() (meta.RESTMapper, error) {
 	return expander, nil
 }
 
-// AddFlags binds client configuration flags to a given flagset
-// 中文：只为非 nil 字段注册 flag，nil 即表示该选项不暴露，供不同命令复用同一结构体。
+// AddFlags 把客户端配置 flag 绑定到给定的 flagset。
+// 只为非 nil 字段注册 flag，nil 即表示该选项不暴露，供不同命令复用同一结构体。
 func (f *ConfigFlags) AddFlags(flags *pflag.FlagSet) {
 	if f.KubeConfig != nil {
 		flags.StringVar(f.KubeConfig, "kubeconfig", *f.KubeConfig, "Path to the kubeconfig file to use for CLI requests.")
@@ -479,8 +463,8 @@ func (f *ConfigFlags) AddFlags(flags *pflag.FlagSet) {
 	}
 }
 
-// WithDeprecatedPasswordFlag enables the username and password config flags
-// 中文：用户名/密码属于已废弃的认证方式，默认不注册，只有显式调用才暴露。
+// WithDeprecatedPasswordFlag 开启用户名/密码配置 flag。
+// 用户名/密码属于已废弃的认证方式，默认不注册，只有显式调用才暴露。
 func (f *ConfigFlags) WithDeprecatedPasswordFlag() *ConfigFlags {
 	f.Username = ptr.To("")
 	f.Password = ptr.To("")
@@ -511,8 +495,8 @@ func (f *ConfigFlags) WithWarningPrinter(ioStreams genericiooptions.IOStreams) *
 	return f
 }
 
-// NewConfigFlags returns ConfigFlags with default values set
-// 中文：所有字段预置为空指针值，保证 AddFlags 能注册完整的 kubeconfig 选项集。
+// NewConfigFlags 返回已设置默认值的 ConfigFlags。
+// 所有字段预置为空指针值，保证 AddFlags 能注册完整的 kubeconfig 选项集。
 func NewConfigFlags(usePersistentConfig bool) *ConfigFlags {
 	impersonateGroup := []string{}
 	impersonateUserExtra := []string{}
@@ -555,11 +539,9 @@ var overlyCautiousIllegalFileCharacters = regexp.MustCompile(`[^(\w/.)]`)
 
 // computeDiscoverCacheDir takes the parentDir and the host and comes up with a "usually non-colliding" name.
 func computeDiscoverCacheDir(parentDir, host string) string {
-	// strip the optional scheme from host if its there:
-	// 中文：去掉 scheme，只保留 host，作为缓存子目录名的基础。
+	// 若 host 带有 scheme 则先去掉，只保留 host，作为缓存子目录名的基础。
 	schemelessHost := strings.Replace(strings.Replace(host, "https://", "", 1), "http://", "", 1)
-	// now do a simple collapse of non-AZ09 characters.  Collisions are possible but unlikely.  Even if we do collide the problem is short lived
-	// 中文：用保守的字符白名单替换非法字符（Windows 文件名限制更严）；理论上可能碰撞，但影响短暂且可接受。
+	// 再把非字母数字字符统一折叠替换。碰撞理论上可能但概率很低，即使碰撞，影响也很短暂。
 	safeHost := overlyCautiousIllegalFileCharacters.ReplaceAllString(schemelessHost, "_")
 	return filepath.Join(parentDir, safeHost)
 }

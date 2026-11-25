@@ -35,8 +35,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Package symbols referenced in emitted test fixtures. fmtPkgSymbols (shared
-// with validation.go) covers Fprintln.
+// 生成的测试夹具里引用到的包级符号；与 validation.go 共用的 fmtPkgSymbols 覆盖 Fprintln。
 // 提前解析成符号集合，是为了在模板里通过 raw namer 输出时能正确登记导入。
 var (
 	schemaPkg               = "k8s.io/apimachinery/pkg/runtime/schema"
@@ -53,7 +52,7 @@ var (
 // helper or main package, which we skip).
 var apiVersionRe = regexp.MustCompile(`^v\d+(alpha\d+|beta\d+)?$`)
 
-// rule is one declared field-validation error.
+// rule 表示一条已声明的字段校验错误。
 // ErrorType 对应 field.ErrorType；Origin 为空表示未标注来源。
 type rule struct {
 	ErrorType string
@@ -168,8 +167,8 @@ func loadAllowlist(path string) ([]allowlistEntry, error) {
 	return entries, nil
 }
 
-// coverageTestGen emits test files for validation-gen coverage.
-// It can emit rule registrations (init func), apiVersions variable, and TestMain.
+// coverageTestGen 为 validation-gen 的覆盖率生成测试文件。
+// 它可以输出规则注册（init 函数）、apiVersions 变量以及 TestMain。
 // 同一包会生成两类文件：按版本注册规则的 *_test.go，以及汇总断言的 main_test.go。
 type coverageTestGen struct {
 	generator.GoGenerator
@@ -377,7 +376,7 @@ func testTargets(testOutputRoot, filePrefix string, groupKindReports map[schema.
 	return out
 }
 
-// collectRules walks node's type tree and returns its declared FieldRules.
+// collectRules 遍历 node 的类型树，返回其中声明的 FieldRules。
 // seen 用 defer delete 维护“当前路径”的访问集：同一类型出现在兄弟分支是允许的，
 // 只有递归回环才应剪枝。
 func collectRules(node *typeNode) fieldRules {
@@ -479,8 +478,8 @@ func recordRules(rules fieldRules, basePath string, fg validators.FunctionGen, s
 	}
 }
 
-// joinPath joins seg onto base; empty seg is a no-op so inline-embedded
-// struct fields (jsonName "") stay transparent.
+// joinPath 把 seg 拼接到 base 之后；seg 为空时什么也不做，
+// 因此内嵌的 struct 字段（jsonName 为 ""）保持透明。
 // 以 "[" 开头的段（如 "[*]"）直接拼接，不再加点号，以匹配 field.Path 的渲染形式。
 func joinPath(base, seg string) string {
 	if seg == "" {

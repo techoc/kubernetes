@@ -23,11 +23,11 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +k8s:prerelease-lifecycle-gen:deprecated=1.19
 // +k8s:prerelease-lifecycle-gen:replacement=apiregistration.k8s.io,v1,APIServiceList
 
-// APIServiceList is a list of APIService objects.
+// APIServiceList 是 APIService 对象的列表。
 // 指令 +k8s:prerelease-lifecycle-gen:introduced=1.7 等几行记录本类型的生命周期：
 // 1.7 引入、1.19 弃用，并指向 v1 版本的同类资源。生成器据此产出元数据，
 // 客户端拿到 1.19 之前的版本时才知道该往哪里迁移。
-// 这里用的是"对象列表"而不是简单切片，因为列表本身要携带 TypeMeta 和 ListMeta，
+// 这里用的是“对象列表”而不是简单切片，因为列表本身要携带 TypeMeta 和 ListMeta，
 // 分页、资源版本这些信息都挂在它上面。
 type APIServiceList struct {
 	metav1.TypeMeta `json:""`
@@ -40,10 +40,10 @@ type APIServiceList struct {
 	Items []APIService `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
-// ServiceReference holds a reference to Service.legacy.k8s.io
+// ServiceReference 持有对 Service.legacy.k8s.io 的引用。
 // 聚合层要访问后端时并不直接塞一个 IP，而是引用集群里的 Service，
 // 这样后端重启、扩缩容都交给 Service 的端点机制处理。
-// Port 用指针而不是 int32，是为了区分"没指定"和"指定端口 0"；
+// Port 用指针而不是 int32，是为了区分“没指定”和“指定端口 0”；
 // 默认值逻辑只在前者上落 443，后者则留给校验去拒绝。
 type ServiceReference struct {
 	// Namespace is the namespace of the service
@@ -57,10 +57,9 @@ type ServiceReference struct {
 	Port *int32 `json:"port,omitempty" protobuf:"varint,3,opt,name=port"`
 }
 
-// APIServiceSpec contains information for locating and communicating with a server.
-// Only https is supported, though you are able to disable certificate verification.
-// 这个结构同时承担两件事：一是回答"这个 GroupVersion 由谁处理"，
-// 二是回答"在 discovery 文档里它应该排在什么位置"。
+// APIServiceSpec 包含定位并与服务端通信所需的信息；仅支持 https，但可以关闭证书校验。
+// 这个结构同时承担两件事：一是回答“这个 GroupVersion 由谁处理”，
+// 二是回答“在 discovery 文档里它应该排在什么位置”。
 // 前者靠 Service / CABundle，后者靠两个不同层级的优先级：
 // GroupPriorityMinimum 决定整个组的位置，VersionPriority 决定组内版本顺序。
 // 两个优先级都要求为正数，校验层会据此拒绝零值和负值。
@@ -105,15 +104,15 @@ type APIServiceSpec struct {
 	// v10, v2, v1, v11beta2, v10beta3, v3beta1, v12alpha1, v11alpha2, foo1, foo10.
 	VersionPriority int32 `json:"versionPriority" protobuf:"varint,8,opt,name=versionPriority"`
 
-	// leaving this here so everyone remembers why proto index 6 is skipped
-	// Priority int64 `json:"priority" protobuf:"varint,6,opt,name=priority"`
-	// 上面这行注释掉的字段不是遗漏，而是一块"墓碑"：编号 6 过去被占用过，
+	// 这里保留这一行，让所有人都记得 protobuf 编号 6 为什么被跳过：
+	// Priority int64 `json:"priority" protobuf:"varint:6,opt,name=priority"`
+	// 上面这行注释掉的字段不是遗漏，而是一块“墓碑”：编号 6 过去被占用过，
 	// protobuf 的字段编号一旦用过就不能回收，否则旧数据会按新字段被误读。
 	// 留在这里就是为了让人别顺手把 6 填回某个新字段上。
 }
 
-// ConditionStatus indicates the status of a condition (true, false, or unknown).
-// 用 string 而不是 bool，是为了给"目前判断不了"留一个明确的位置：
+// ConditionStatus 表示某个条件的状态（true、false 或 unknown）。
+// 用 string 而不是 bool，是为了给“目前判断不了”留一个明确的位置：
 // 聚合层可能根本连不上后端，此时既不该说可用，也不该断言不可用。
 // 这个类型在多个 API 组里都有同名定义，彼此独立，转换时靠显式映射而不是隐式相等。
 type ConditionStatus string
@@ -128,8 +127,8 @@ const (
 	ConditionUnknown ConditionStatus = "Unknown"
 )
 
-// APIServiceConditionType is a valid value for APIServiceCondition.Type
-// 当前只有 Available 一种类型，但条件列表本身按"类型"组织而不是按位置，
+// APIServiceConditionType 是 APIServiceCondition.Type 的合法取值。
+// 当前只有 Available 一种类型，但条件列表本身按“类型”组织而不是按位置，
 // 就是为了日后加新条件时不必改动消费方读取条件的方式。
 type APIServiceConditionType string
 
@@ -138,10 +137,10 @@ const (
 	Available APIServiceConditionType = "Available"
 )
 
-// APIServiceCondition describes the state of an APIService at a particular point
+// APIServiceCondition 描述某个时间点上 APIService 的状态。
 // Reason 和 Message 分开存是有意的：Reason 是给程序用的短标识，
 // Message 才是给人看的细节。控制器只在状态真正翻转时才刷新 LastTransitionTime，
-// 这样"为什么当前是这个状态"和"这个状态持续了多久"都能回答。
+// 这样“为什么当前是这个状态”和“这个状态持续了多久”都能回答。
 type APIServiceCondition struct {
 	// Type is the type of the condition.
 	Type APIServiceConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=APIServiceConditionType"`
@@ -159,7 +158,7 @@ type APIServiceCondition struct {
 	Message string `json:"message,omitempty" protobuf:"bytes,5,opt,name=message"`
 }
 
-// APIServiceStatus contains derived information about an API server
+// APIServiceStatus 包含从 API 服务器派生出的信息。
 // 状态字段带 patchMergeKey=type / listType=map 这一组标签，
 // 指令 +patchMergeKey=type、指令 +listType=map、指令 +listMapKey=type 的含义是：
 // 条件列表按 type 当主键做合并，而不是整体替换。这样多个控制器各写自己的条件时，
@@ -181,10 +180,9 @@ type APIServiceStatus struct {
 // +k8s:prerelease-lifecycle-gen:deprecated=1.19
 // +k8s:prerelease-lifecycle-gen:replacement=apiregistration.k8s.io,v1,APIService
 
-// APIService represents a server for a particular GroupVersion.
-// Name must be "version.group".
+// APIService 表示某个特定 GroupVersion 的服务器，Name 必须形如 “version.group”。
 // 指令 +genclient:nonNamespaced 说明这是集群级资源：一个 GroupVersion 在全集群只能有一个入口，
-// 放进 namespace 反而会让"谁是权威"变得含糊。名字必须是 version.group，
+// 放进 namespace 反而会让“谁是权威”变得含糊。名字必须是 version.group，
 // 校验层会把这条约束真正执行一遍，避免配置和名字对不上。
 // Spec 与 Status 分开是刻意的：前者由用户声明，后者由控制器回写，
 // 两条更新路径互不干扰。

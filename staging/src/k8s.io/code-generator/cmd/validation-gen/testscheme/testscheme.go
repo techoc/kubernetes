@@ -43,10 +43,9 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
-// Scheme is similar to runtime.Scheme, but for validation testing purposes. Scheme only supports validation,
-// supports registration of any type (not just runtime.Object) and implements Register directly, allowing it
-// to also be used as a scheme builder.
-// Must only be used with tests that perform all registration before calls to validate.
+// Scheme 与 runtime.Scheme 类似，但只用于校验测试：只做校验、可注册任意类型
+// （不限于 runtime.Object），并直接实现 Register，因此也能当作 scheme builder 使用。
+// 只能用于在调用 validate 之前完成全部注册的测试。
 // 由于测试是单线程的，这里用普通 map 保存注册函数，无需加锁。
 type Scheme struct {
 	validationFuncs    map[reflect.Type]func(ctx context.Context, op operation.Operation, object, oldObject interface{}) field.ErrorList
@@ -58,14 +57,12 @@ func New() *Scheme {
 	return &Scheme{validationFuncs: map[reflect.Type]func(ctx context.Context, op operation.Operation, object interface{}, oldObject interface{}) field.ErrorList{}}
 }
 
-// AddValidationFunc registers a validation function.
-// Last writer wins.
-// 以 reflect.Type 为键，同一类型重复注册时后注册者覆盖前者。
+// AddValidationFunc 以 reflect.Type 为键注册校验函数，重复注册时后写者胜出。
 func (s *Scheme) AddValidationFunc(srcType any, fn func(ctx context.Context, op operation.Operation, object, oldObject interface{}) field.ErrorList) {
 	s.validationFuncs[reflect.TypeOf(srcType)] = fn
 }
 
-// Validate validates an object using the registered validation function.
+// Validate 使用已注册的校验函数校验对象。
 // 注册阶段出现错误时短路返回，避免测试因后续 panic 而丢失根因。
 func (s *Scheme) Validate(ctx context.Context, options map[string]bool, object any, subresources ...string) field.ErrorList {
 	if len(s.registrationErrors) > 0 {
@@ -88,7 +85,7 @@ func (s *Scheme) ValidateUpdate(ctx context.Context, options map[string]bool, ob
 	return nil
 }
 
-// Register adds a scheme setup function to the list.
+// Register 把一个 scheme 初始化函数加入列表。
 // 与 runtime.Scheme 不同，注册错误被累积而不是立即 panic，
 // 便于在 Validate* 中统一呈现。
 func (s *Scheme) Register(funcs ...func(*Scheme) error) {
@@ -110,8 +107,7 @@ func (s *Scheme) Test(t *testing.T) *ValidationTestBuilder {
 	return &ValidationTestBuilder{t, s}
 }
 
-// ValidationTestBuilder provides convenience functions to build
-// validation tests.
+// ValidationTestBuilder 提供构建校验测试的便捷函数。
 // 它包装 *testing.T 与 Scheme，所有 Expect* 方法都会创建子测试，
 // 便于定位失败用例。
 type ValidationTestBuilder struct {
@@ -256,8 +252,7 @@ func (s *ValidationTestBuilder) Value(value any) *ValidationTester {
 	return &ValidationTester{ValidationTestBuilder: s, value: value}
 }
 
-// ValidationTester provides convenience functions to define validation
-// tests for a validatable value.
+// ValidationTester 提供便捷函数，为某个可校验值定义校验测试。
 // oldValue 非 nil 时自动切换为 update 校验，因此链式调用顺序有意义。
 type ValidationTester struct {
 	*ValidationTestBuilder

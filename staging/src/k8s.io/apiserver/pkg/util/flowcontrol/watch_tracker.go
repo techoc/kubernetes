@@ -29,7 +29,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// readOnlyVerbs contains verbs for read-only requests.
 // 只读请求不会触发 watch 扇出，因此不计入成本估算。
 var readOnlyVerbs = sets.NewString("get", "list", "watch", "proxy")
 
@@ -50,8 +49,7 @@ type watchIdentifier struct {
 	name      string
 }
 
-// ForgetWatchFunc is a function that should be called to forget
-// the previously registered watch from the watch tracker.
+// ForgetWatchFunc 是用于从 watch tracker 中注销先前注册的 watch 的函数。
 // 必须且只能调用一次，否则计数会永久泄漏。
 type ForgetWatchFunc func()
 
@@ -137,7 +135,6 @@ type indexValue struct {
 	value    string
 }
 
-// RegisterWatch implements WatchTracker interface.
 // 非 watch 请求返回 nil，调用方需容忍 nil 的 forget 函数。
 func (w *watchTracker) RegisterWatch(r *http.Request) ForgetWatchFunc {
 	requestInfo, ok := request.RequestInfoFrom(r.Context())
@@ -183,8 +180,7 @@ func (w *watchTracker) updateIndexLocked(identifier *watchIdentifier, index *ind
 		// is that the difference between the actual number of watchers that
 		// will be processed, i.e. (a)+(b) above and the one from our
 		// approximation i.e. (a)+[(b) for field value of ""] will be small.
-		// This seem to be true in almost all production clusters, which makes
-		// it a reasonable first step simplification to unblock progres on it.
+		// 这在几乎所有生产集群中都成立，因此作为解锁相关工作的第一步简化是合理的。
 		// 未指定索引字段或取值为空的 watch 会被计入所有事件，属于保守近似。
 		if index.value == unsetValue || index.value == "" {
 			w.watchCount[*identifier] += incr

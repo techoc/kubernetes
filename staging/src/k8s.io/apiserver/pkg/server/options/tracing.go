@@ -53,9 +53,8 @@ var (
 )
 
 func init() {
-	// Prevent memory leak from OTel metrics, which we don't use:
+	// 显式安装 noop MeterProvider，避免并不使用的 OTel 指标造成内存泄漏（否则默认全局 provider 会保留指标状态）：
 	// https://github.com/open-telemetry/opentelemetry-go-contrib/issues/5190
-	// 显式安装 noop MeterProvider，否则 OTel 默认全局 provider 会保留指标状态。
 	otel.SetMeterProvider(noop.NewMeterProvider())
 }
 
@@ -75,8 +74,7 @@ func NewTracingOptions() *TracingOptions {
 	return &TracingOptions{}
 }
 
-// AddFlags adds flags related to tracing to the specified FlagSet
-// nil receiver 时直接返回，便于嵌入到可选的子选项中。
+// AddFlags 将与追踪相关的 flag 添加到指定 FlagSet；nil receiver 时直接返回，便于嵌入到可选的子选项中。
 func (o *TracingOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -86,8 +84,7 @@ func (o *TracingOptions) AddFlags(fs *pflag.FlagSet) {
 		"File with apiserver tracing configuration.")
 }
 
-// ApplyTo fills up Tracing config with options.
-// 未配置时保持 TracerProvider 为空（不启用追踪）。
+// ApplyTo 用选项填充 Tracing 配置：未配置时保持 TracerProvider 为空（即不启用追踪）。
 func (o *TracingOptions) ApplyTo(es *egressselector.EgressSelector, c *server.Config) error {
 	if o == nil || o.ConfigFile == "" {
 		return nil
@@ -105,9 +102,7 @@ func (o *TracingOptions) ApplyTo(es *egressselector.EgressSelector, c *server.Co
 
 	opts := []otlptracegrpc.Option{}
 	if es != nil {
-		// Only use the egressselector dialer if egressselector is enabled.
-		// Endpoint is on the "ControlPlane" network
-		// 追踪导出流量必须走 controlplane 网络，避免绕过集群的出站策略。
+		// 仅在启用 egressselector 时才使用其 dialer：追踪端点位于 ControlPlane 网络，导出流量必须走该网络，避免绕过集群的出站策略。
 		egressDialer, err := es.Lookup(egressselector.ControlPlane.AsNetworkContext())
 		if err != nil {
 			return err
@@ -164,8 +159,7 @@ func ReadTracingConfiguration(configFilePath string) (*tracingapi.TracingConfigu
 		return nil, fmt.Errorf("unable to read tracing configuration from %q: %v", configFilePath, err)
 	}
 	internalConfig := &apiserver.TracingConfiguration{}
-	// this handles json/yaml/whatever, and decodes all registered version to the internal version
-	// 先解码到内部版本再对外暴露，使调用方只依赖稳定的内部类型。
+	// 该解码调用支持 json/yaml 等各种格式，并把所有已注册版本解码为内部版本；先解码到内部版本再对外暴露，使调用方只依赖稳定的内部类型。
 	if err := runtime.DecodeInto(codecs.UniversalDecoder(), data, internalConfig); err != nil {
 		return nil, fmt.Errorf("unable to decode tracing configuration data: %v", err)
 	}

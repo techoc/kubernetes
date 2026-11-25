@@ -148,7 +148,7 @@ func (h *HumanReadablePrinter) PrintObj(obj runtime.Object, output io.Writer) er
 			// This is done when receiving tables in watch events to save bandwidth.
 			table.ColumnDefinitions = h.lastColumns
 		} else if !reflect.DeepEqual(table.ColumnDefinitions, h.lastColumns) {
-			// If this table has column definitions, remember them for future use.
+			// 若本表带有列定义，就记住它们供后续使用。
 			// 列定义变化说明服务端切换了资源类型或版本，需要重置表头状态。
 			h.lastColumns = table.ColumnDefinitions
 			h.printedHeaders = false
@@ -257,8 +257,8 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 	}
 
 	if !options.NoHeaders {
-		// avoid printing headers if we have no rows to display
-		// 空表连表头都不输出，避免脚本把只有表头的输出误判为有资源。
+		// 没有任何行可显示时不要打印表头：空表连表头都不输出，
+		// 避免脚本把只有表头的输出误判为有资源。
 		if len(table.Rows) == 0 {
 			return nil
 		}
@@ -368,7 +368,7 @@ func appendCellValue(w io.Writer, buf []byte, val string) []byte {
 		return append(buf, val...)
 	}
 
-	// Slow path: flush accumulated buffer, then handle the special value.
+	// 慢路径：先 flush 累积的缓冲区，再处理这个特殊值。
 	// 之所以先 flush 再直接写，是为了让转义/截断只作用于当前单元格，
 	// 同时保持之前的行内内容顺序不变。
 	if len(buf) > 0 {
@@ -416,8 +416,7 @@ func addColumns(pos columnAddPosition, table *metav1.Table, columns []metav1.Tab
 		newCells := make([]interface{}, 0, len(columns)+len(table.Rows[i].Cells))
 
 		if pos == end {
-			// If we're appending, start with the existing cells,
-			// then add nil cells to match the number of columns
+			// 追加模式下先取已有单元格，再补 nil 单元格凑齐列数：
 			// 先用 nil 补齐列定义数量，避免服务端返回的短行在追加后错位。
 			newCells = append(newCells, table.Rows[i].Cells...)
 			for len(newCells) < len(table.ColumnDefinitions) {
@@ -533,7 +532,7 @@ func decorateTable(table *metav1.Table, options PrintOptions) error {
 					m = acc
 				}
 			}
-			// if we can't get an accessor, fill out the appropriate columns with empty spaces
+			// 取不到 accessor 时，用空格把相应的列填满：
 			// 取不到 metadata 时仍要补齐单元格，否则表格列数不齐会破坏 tabwriter 对齐。
 			if m == nil {
 				if options.WithNamespace {

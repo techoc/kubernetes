@@ -469,7 +469,7 @@ func TestProxyHandler(t *testing.T) {
 				t.Errorf("expected %v, got %v", e, a)
 				return
 			}
-			// this varies every test
+			// 这个头每次测试都在变。
 			// 该头包含本次测试服务器的地址，每次都不同，无法写进固定期望值。
 			delete(target.headers, "X-Forwarded-Host")
 			if e, a := tc.expectedHeaders, target.headers; !reflect.DeepEqual(e, a) {
@@ -699,7 +699,7 @@ func TestProxyUpgrade(t *testing.T) {
 			}
 			defer ws.Close()
 
-			// if the egressselector is configured assume it has to be called
+			// 如果配置了 egressselector，就假定它一定被调用。
 			// 配置了 egress selector 就必须走它的拨号器，否则代理绕过了网络策略约束。
 			if dialer != nil && dialer.called != 1 {
 				t.Errorf("expect egress dialer gets called %d times, got %d", 1, dialer.called)
@@ -877,7 +877,7 @@ func TestGetContextForNewRequest(t *testing.T) {
 	}))
 	defer proxyServer.Close()
 
-	// normal clients will not be setting a timeout, don't set one here.  Our proxy logic should construct this for us
+	// 正常客户端不会设置 timeout，这里也不要设置；我们的代理逻辑应当替我们构造它。
 	// 故意不设置客户端超时，用来证明超时完全由代理自己构造的上下文提供。
 	resp, err := proxyServer.Client().Get(proxyServer.URL + "/apis/group/version")
 	if err != nil {
@@ -1065,8 +1065,8 @@ func TestNewRequestForProxyWithAuditID(t *testing.T) {
 // Note: this test doesn't use apiserviceRegistrationController nor it doesn't start DynamicServingContentFromFiles controller
 // instead it manually calls to updateAPIService and RunOnce to reload the certificate
 func TestProxyCertReload(t *testing.T) {
-	// STEP 1: set up a backend server that will require the client certificate
-	//         this server uses clientCaCrt() to validate the client certificate
+	// STEP 1: 搭建一个要求客户端证书的后端 server；
+	//         该 server 使用 clientCaCrt() 校验客户端证书。
 	// 后端强制校验客户端证书，这样代理换证书前后的行为差异才能被观察到。
 	backendHandler := &targetHTTPHandler{}
 	backendServer := httptest.NewUnstartedServer(backendHandler)
@@ -1081,7 +1081,7 @@ func TestProxyCertReload(t *testing.T) {
 	backendServer.StartTLS()
 	defer backendServer.Close()
 
-	// STEP 2: set up the aggregator that will use an invalid certificate (it won't be validated by the clientCA) to auth against the backend server
+	// STEP 2: 搭建聚合层，它使用一张无效证书（不会被 clientCA 接受）向后端 server 认证。
 	// 先把后端证书当作客户端证书使用，它无法通过 clientCA 校验，预期第一次请求得到 503。
 	aggregatorHandler := &proxyHandler{
 		localDelegate:   http.NewServeMux(),
@@ -1137,8 +1137,8 @@ func TestProxyCertReload(t *testing.T) {
 		t.Fatalf("Expected status code 503 but got %d", resp.StatusCode)
 	}
 
-	// STEP 3: swap the certificate used by the aggregator to auth against the backend server and verify the request passes
-	//         note that this step uses the certificate that can be validated by the backend server with clientCaCrt()
+	// STEP 3: 更换聚合层向后端 server 认证所用的证书，并验证请求可以通过；
+	//         注意这一步使用的证书能被后端 server 的 clientCaCrt() 校验通过。
 	// 直接改写磁盘上的证书文件并重新 RunOnce，模拟外部证书轮转后代理自动加载新证书。
 	writeCerts(certFile, keyFile, clientCert(), clientKey(), t)
 	err = certProvider.RunOnce(ctx)
@@ -1349,7 +1349,7 @@ func readTestFile(filename string) []byte {
 	return data
 }
 
-// cert and ca for client auth
+// 用于客户端认证的证书与 CA。
 // 这一组辅助函数把双向 TLS 测试所需的证书集中命名，
 // 用例里只出现语义化函数名，不直接写死文件名。
 func clientCert() []byte { return readTestFile("client.pem") }

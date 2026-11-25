@@ -191,8 +191,8 @@ func (lttv listTypeTagValidator) GetValidations(context Context, tag codetags.Ta
 		}
 	case "set":
 		lm.ownership = ownershipShared
-		// If uniqueTagValidator has run for `unique=set` or `unique=map`,
-		// lm.semantic will be non-empty and non-atomic.
+		// 若 uniqueTagValidator 已针对 `unique=set` 或 `unique=map` 运行过，
+		// lm.semantic 就是非空且非 atomic 的。
 		// 同时声明 listType=set 与 unique=set 是冗余配置。
 		if lm.semantic != "" && lm.semantic != semanticAtomic {
 			return Validations{}, fmt.Errorf("unique tag is redundant for listType=%q", tag.Value)
@@ -353,7 +353,7 @@ func (utv uniqueTagValidator) GetValidations(context Context, tag codetags.Tag) 
 
 	lm.stabilityLevel = context.StabilityLevel
 
-	// If listType has already run and set a non-atomic ownership, this is an error.
+	// 若 listType 已经运行并设置了非 atomic 的归属，这里就算错误：
 	// set/map 已隐含唯一性，再写 unique 只是重复。
 	if lm.ownership != "" && lm.ownership != ownershipSingle {
 		return Validations{}, fmt.Errorf("unique tag may not be used with listType=set or listType=map")
@@ -493,12 +493,11 @@ func getListMeta(byPath map[string]*listMetadata, context Context) (*listMetadat
 	return lm, nil
 }
 
-// keep track of things we have already done
-// 去重表：同一个路径会因多个 key 或 listType+listMapKey 组合被多次触发延迟生成，
+// 记录已经处理过的项：去重表；同一个路径会因多个 key 或 listType+listMapKey 组合被多次触发延迟生成，
 // 但唯一性校验函数只应生成一次。
 var listsGenerated = map[string]bool{}
 
-// Finish work on the accumulated list metadata.
+// 基于累积下来的 list 元数据收尾。
 // getListValidations 根据累积的元数据生成 set/map 语义的唯一性校验函数。
 func getListValidations(byPath map[string]*listMetadata, context Context) (Validations, error) {
 	// 非列表类型不适用，静默跳过。

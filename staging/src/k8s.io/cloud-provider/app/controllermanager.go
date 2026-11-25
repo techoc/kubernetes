@@ -72,17 +72,17 @@ func init() {
 }
 
 const (
-	// ControllerStartJitter is the jitter value used when starting controller managers.
+	// ControllerStartJitter 是启动各控制器时使用的抖动值。
 	// 依次启动控制器时加入 1.0 抖动，避免所有控制器在重启瞬间同时打 API。
 	ControllerStartJitter = 1.0
-	// ConfigzName is the name used for register cloud-controller manager /configz, same with GroupName.
+	// ConfigzName 是注册 cloud-controller manager /configz 时使用的名称，与 GroupName 相同。
 	// 与配置 GroupName 相同，便于通过 /configz 直接识别组件类型。
 	ConfigzName = "cloudcontrollermanager.config.k8s.io"
 )
 
-// NewCloudControllerManagerCommand creates a *cobra.Command object with default parameters
-// controllerInitFuncConstructors is a map of controller name(as defined by controllers flag in https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/#options) to their InitFuncConstructor.
-// additionalFlags provides controller specific flags to be included in the complete set of controller manager flags
+// NewCloudControllerManagerCommand 使用默认参数创建 *cobra.Command 对象。
+// controllerInitFuncConstructors 是控制器名称（如 https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/#options 中 controllers flag 所定义）到其 InitFuncConstructor 的映射。
+// additionalFlags 提供控制器专属 flag，并入控制器管理器的完整 flag 集合。
 // 这是不经过 CommandBuilder 的传统入口；与 builder 路径的区别在于 webhook 集合固定为空。
 func NewCloudControllerManagerCommand(s *options.CloudControllerManagerOptions, cloudInitializer InitCloudFunc, controllerInitFuncConstructors map[string]ControllerInitFuncConstructor, controllerAliases map[string]string, additionalFlags cliflag.NamedFlagSets, stopCh <-chan struct{}) *cobra.Command {
 	logOptions := logs.NewOptions()
@@ -94,9 +94,7 @@ the cloud specific control loops shipped with Kubernetes.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			verflag.PrintAndExitIfRequested()
 
-			// Activate logging as soon as possible, after that
-			// show flags with the final logging configuration.
-			// 先应用日志配置再打印 flag，输出的日志选项与实际运行时一致。
+			// 尽快激活日志配置，之后再打印 flags，使输出的日志选项与实际运行时一致。
 			if err := logsapi.ValidateAndApply(logOptions, utilfeature.DefaultFeatureGate); err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 				return err
@@ -162,7 +160,7 @@ the cloud specific control loops shipped with Kubernetes.`,
 	return cmd
 }
 
-// Run runs the ExternalCMServer.  This should never exit.
+// Run 运行 ExternalCMServer，且不应退出。
 // 职责：建立事件与 metrics 管道、注册 /configz 与健康检查、按需启动 webhook 与安全服务端，
 // 最后在选主成功（或未启用选主）时启动控制器。返回错误仅代表启动阶段失败。
 func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface, controllerInitializers map[string]InitFunc, webhooks map[string]WebhookHandler,
@@ -189,7 +187,7 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 		return fmt.Errorf("unable to set configz: %w", err)
 	}
 
-	// Setup any health checks we will want to use.
+	// 设置后续要用到的健康检查。
 	// 选主健康检查在失去租约后 20 秒内失败，给探针足够时间反映状态。
 	var checks []healthz.HealthChecker
 	var electionChecker *leaderelection.HealthzAdaptor
@@ -210,7 +208,7 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 	}
 
 	healthzHandler := controllerhealthz.NewMutableHealthzHandler(checks...)
-	// Start the controller manager HTTP server
+	// 启动控制器管理器的 HTTP 服务器。
 	// 安全服务端承载 /healthz、/metrics 等；未配置时（测试场景）跳过。
 	if c.SecureServing != nil {
 		unsecuredMux := genericcontrollermanager.NewBaseHandler(&c.ComponentConfig.Generic.Debugging, healthzHandler)
@@ -246,7 +244,7 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 		return nil
 	}
 
-	// Identity used to distinguish between multiple cloud controller manager instances
+	// 用于区分多个 cloud controller manager 实例的身份标识。
 	// hostname + UUID 保证同机多进程也能区分，避免误判为同一候选者。
 	id, err := os.Hostname()
 	if err != nil {
@@ -268,7 +266,7 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 			"cloud-controller-manager")
 	}
 
-	// Start the main lock
+	// 启动主锁。
 	// 主锁只运行“未迁移”控制器；迁移锁由旧版本持有，二者通过 migration-ready 信号协调。
 	go leaderElectAndRun(c, id, electionChecker,
 		c.ComponentConfig.Generic.LeaderElection.ResourceLock,
@@ -318,13 +316,13 @@ func Run(c *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface
 	return nil
 }
 
-// startControllers starts the cloud specific controller loops.
+// startControllers 启动云厂商特定的控制器循环。
 // 先让云实现完成 Initialize 并注入 informer，再依次启动已启用的控制器；
 // 每个控制器启动后短暂抖动，最后等待 informer 缓存同步并阻塞直到停机。
 func startControllers(ctx context.Context, cloud cloudprovider.Interface, controllerContext genericcontrollermanager.ControllerContext, c *cloudcontrollerconfig.CompletedConfig, stopCh <-chan struct{}, controllers map[string]InitFunc, healthzHandler *controllerhealthz.MutableHealthzHandler) error {
 	// Initialize the cloud provider with a reference to the clientBuilder
 	cloud.Initialize(c.ClientBuilder, stopCh)
-	// Set the informer on the user cloud object
+	// 为云对象设置 informer。
 	// 仅部分云实现需要共享 informer；类型断言失败时静默跳过。
 	if informerUserCloud, ok := cloud.(cloudprovider.InformerUser); ok {
 		informerUserCloud.SetInformers(c.SharedInformers)
@@ -377,25 +375,23 @@ func startControllers(ctx context.Context, cloud cloudprovider.Interface, contro
 	return nil
 }
 
-// InitCloudFunc is used to initialize cloud
+// InitCloudFunc 用于初始化 cloud provider。
 // 由厂商注入：根据完整配置构造 cloudprovider.Interface。返回 nil 会导致后续 panic。
 type InitCloudFunc func(config *cloudcontrollerconfig.CompletedConfig) cloudprovider.Interface
 
-// InitFunc is used to launch a particular controller. It returns a controller
-// that can optionally implement other interfaces so that the controller manager
-// can support the requested features.
-// The returned controller may be nil, which will be considered an anonymous controller
-// that requests no additional features from the controller manager.
-// Any error returned will cause the controller process to `Fatal`
-// The bool indicates whether the controller was enabled.
+// InitFunc 用于启动特定控制器。它返回一个 controller，该 controller 可以选择实现其他接口，
+// 以便控制器管理器支持所请求的功能。
+// 返回的 controller 可以为 nil，此时视为匿名控制器，不向控制器管理器请求额外功能。
+// 返回任何错误都会导致控制器进程 `Fatal`。
+// 返回的 bool 表示控制器是否被启用。
 // 返回 enabled=false 表示前置条件不满足（如云不支持该能力），属于正常跳过而非错误。
 type InitFunc func(ctx context.Context, controllerContext genericcontrollermanager.ControllerContext) (controller controller.Interface, enabled bool, err error)
 
-// InitFuncConstructor is used to construct InitFunc
+// InitFuncConstructor 用于构造 InitFunc。
 // 把厂商无关的配置与云对象绑定到具体控制器，生成可被 startControllers 调用的 InitFunc。
 type InitFuncConstructor func(initcontext ControllerInitContext, completedConfig *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface) InitFunc
 
-// ControllerNames indicate the default controller we are known.
+// ControllerNames 返回我们已知的默认控制器列表。
 // 排序后返回，保证 flag/help 输出稳定。
 func ControllerNames(controllerInitFuncConstructors map[string]ControllerInitFuncConstructor) []string {
 	ret := sets.StringKeySet(controllerInitFuncConstructors)
@@ -403,7 +399,7 @@ func ControllerNames(controllerInitFuncConstructors map[string]ControllerInitFun
 }
 
 var (
-	// ControllersDisabledByDefault is the controller disabled default when starting cloud-controller managers.
+	// ControllersDisabledByDefault 是启动 cloud-controller manager 时默认禁用的控制器集合。
 	// 当前为空：所有注册的 CCM 控制器默认启用，与历史行为保持一致。
 	ControllersDisabledByDefault = sets.NewString()
 
@@ -418,8 +414,8 @@ var (
 	DisabledByDefaultWebhooks = []string{}
 )
 
-// ConstructControllerInitializers is a map of controller name(as defined by controllers flag in https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/#options) to their InitFuncConstructor.
-// paired to their InitFunc.  This allows for structured downstream composition and subdivision.
+// ConstructControllerInitializers 将控制器名称（如 https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/#options 中 controllers flag 所定义）到
+// 其 InitFuncConstructor 的映射转换为名称到 InitFunc 的映射，便于下游结构化地组合与拆分。
 // 在此一次性完成所有构造，使启动阶段只做简单调用，便于错误集中暴露。
 func ConstructControllerInitializers(controllerInitFuncConstructors map[string]ControllerInitFuncConstructor, completedConfig *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface) map[string]InitFunc {
 	controllers := map[string]InitFunc{}
@@ -442,7 +438,7 @@ type ControllerInitContext struct {
 	ClientName string
 }
 
-// StartCloudNodeControllerWrapper is used to take cloud config as input and start cloud node controller
+// StartCloudNodeControllerWrapper 用于接收云配置作为输入并启动 cloud node controller。
 // 包装成 InitFunc，延迟到选主成功后才真正创建客户端与控制器。
 func StartCloudNodeControllerWrapper(initContext ControllerInitContext, completedConfig *cloudcontrollerconfig.CompletedConfig, cloud cloudprovider.Interface) InitFunc {
 	return func(ctx context.Context, controllerContext genericcontrollermanager.ControllerContext) (controller.Interface, bool, error) {
@@ -471,12 +467,11 @@ func StartRouteControllerWrapper(initContext ControllerInitContext, completedCon
 	}
 }
 
-// DefaultInitFuncConstructors is a map of default named controller groups paired with InitFuncConstructor
+// DefaultInitFuncConstructors 是默认命名的控制器组到 InitFuncConstructor 的映射。
 // 名称常量来自 names 包，避免字符串散落导致 flag 与实现不一致。
 var DefaultInitFuncConstructors = map[string]ControllerInitFuncConstructor{
-	// The cloud-node controller shares the "node-controller" identity with the cloud-node-lifecycle
-	// controller for historical reasons.  See
-	// https://github.com/kubernetes/kubernetes/pull/72764#issuecomment-453300990 for more context.
+	// 出于历史原因，cloud-node 控制器与 cloud-node-lifecycle 控制器共享 "node-controller" 身份，参见
+	// https://github.com/kubernetes/kubernetes/pull/72764#issuecomment-453300990 了解更多背景。
 	// 共享客户端身份是为了兼容既有 RBAC 绑定，新控制器不应继续沿用这一做法。
 	names.CloudNodeController: {
 		InitContext: ControllerInitContext{
@@ -504,9 +499,8 @@ var DefaultInitFuncConstructors = map[string]ControllerInitFuncConstructor{
 	},
 }
 
-// CreateControllerContext creates a context struct containing references to resources needed by the
-// controllers such as the cloud provider and clientBuilder. rootClientBuilder is only used for
-// the shared-informers client and token controller.
+// CreateControllerContext 创建一个上下文结构，包含控制器所需资源的引用，例如云 provider 和 clientBuilder。
+// rootClientBuilder 仅用于共享 informer 的客户端和 token 控制器。
 // 这里同时创建共享 informer、metadata informer 与可刷新的 discovery RESTMapper。
 func CreateControllerContext(s *cloudcontrollerconfig.CompletedConfig, clientBuilder clientbuilder.ControllerClientBuilder, stop <-chan struct{}) (genericcontrollermanager.ControllerContext, error) {
 	versionedClient := clientBuilder.ClientOrDie("shared-informers")
@@ -522,7 +516,7 @@ func CreateControllerContext(s *cloudcontrollerconfig.CompletedConfig, clientBui
 		return genericcontrollermanager.ControllerContext{}, fmt.Errorf("failed to wait for apiserver being healthy: %v", err)
 	}
 
-	// Use a discovery client capable of being refreshed.
+	// 使用可刷新的 discovery 客户端。
 	// discovery 结果会随 CRD 等资源变化而失效，因此定期 Reset 延迟初始化的 RESTMapper。
 	discoveryClient := clientBuilder.ClientOrDie("controller-discovery")
 	cachedClient := cacheddiscovery.NewMemCacheClient(discoveryClient.Discovery())
@@ -545,8 +539,7 @@ func CreateControllerContext(s *cloudcontrollerconfig.CompletedConfig, clientBui
 	return ctx, nil
 }
 
-// ResyncPeriod returns a function which generates a duration each time it is
-// invoked; this is because that multiple controllers don't get into lock-step.
+// ResyncPeriod 返回一个每次调用都生成新时长的函数；这是为了避免多个控制器陷入锁步同步。
 // 在 [1,2) 倍 MinResyncPeriod 之间随机取值，让各 informer 的周期同步错开。
 func ResyncPeriod(c *cloudcontrollerconfig.CompletedConfig) func() time.Duration {
 	return func() time.Duration {
@@ -555,8 +548,8 @@ func ResyncPeriod(c *cloudcontrollerconfig.CompletedConfig) func() time.Duration
 	}
 }
 
-// leaderElectAndRun runs the leader election, and runs the callbacks once the leader lease is acquired.
-// TODO: extract this function into staging/controller-manager
+// leaderElectAndRun 运行 leader 选举，并在获得 leader 租约后运行回调。
+// TODO: 将此函数提取到 staging/controller-manager。
 // 租约使用独立 kubeconfig；获得租约后回调内启动控制器，永久运行直到进程退出。
 func leaderElectAndRun(c *cloudcontrollerconfig.CompletedConfig, lockIdentity string, electionChecker *leaderelection.HealthzAdaptor, resourceLock string, leaseName string, callbacks leaderelection.LeaderCallbacks) {
 	rl, err := resourcelock.NewFromKubeconfig(resourceLock,
@@ -585,9 +578,9 @@ func leaderElectAndRun(c *cloudcontrollerconfig.CompletedConfig, lockIdentity st
 	panic("unreachable")
 }
 
-// filterInitializers returns initializers that has filterFunc(name) == expected.
-// filterFunc can be nil, in which case the original initializers will be returned directly.
-// InitFunc is local to cloud-controller-manager, and thus filterInitializers has to be local too.
+// filterInitializers 返回满足 filterFunc(name) == expected 的 initializers。
+// filterFunc 可以为 nil，此时直接返回原始 initializers。
+// InitFunc 是 cloud-controller-manager 内部类型，因此 filterInitializers 也必须留在本地。
 // 迁移场景下按“已迁移/未迁移”把控制器分给两把锁，避免同一控制器被启动两次。
 func filterInitializers(allInitializers map[string]InitFunc, filterFunc leadermigration.FilterFunc, expected leadermigration.FilterResult) map[string]InitFunc {
 	if filterFunc == nil {

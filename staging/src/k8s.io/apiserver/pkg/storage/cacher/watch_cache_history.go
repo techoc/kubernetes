@@ -54,8 +54,7 @@ func newWatchCacheHistory(config *ImmutableWatchCacheConfig, eventFreshDuration 
 	return h
 }
 
-// capacityUpperBound denotes the maximum possible capacity of the watch cache
-// to which it can resize.
+// capacityUpperBound 表示 watch cache 可以扩容到的最大容量。
 // 目标是让高 churn 场景下仍能覆盖整个 eventFreshDuration 的窗口。
 func capacityUpperBound(eventFreshDuration time.Duration) int {
 	if eventFreshDuration <= DefaultEventFreshDuration {
@@ -72,8 +71,7 @@ func capacityUpperBound(eventFreshDuration time.Duration) int {
 	// proportion to the next power of two.
 	exponent := int(math.Ceil((math.Log2(eventFreshDuration.Seconds() / DefaultEventFreshDuration.Seconds()))))
 	if maxExponent := int(math.Floor((math.Log2(math.MaxInt32 / defaultUpperBoundCapacity)))); exponent > maxExponent {
-		// Making sure that the capacity's upper bound fits in a 32-bit integer.
-		// 位移过大将溢出 int，因此显式截断并告警。
+		// 确保容量上界能放进 32 位整数：位移过大将溢出 int，因此显式截断并告警。
 		exponent = maxExponent
 		klog.Warningf("Capping watch cache capacity upper bound to %v", defaultUpperBoundCapacity<<exponent)
 	}
@@ -100,9 +98,8 @@ type watchCacheHistory struct {
 	cache      []*watchCacheEvent
 	startIndex int
 	endIndex   int
-	// removedEventSinceRelist holds the information whether any of the events
-	// were already removed from the `cache` cyclic buffer since the last relist
-	// 该标志决定 GetIntervalLocked 能安全回溯到哪个 resourceVersion。
+	// removedEventSinceRelist 记录自上次 relist 以来 `cache` 循环缓冲区中是否已有
+	// 事件被淘汰。该标志决定 GetIntervalLocked 能安全回溯到哪个 resourceVersion。
 	removedEventSinceRelist bool
 
 	// eventFreshDuration defines the minimum watch history watchcache will store.
@@ -113,7 +110,7 @@ type watchCacheHistory struct {
 func (w *watchCacheHistory) updateCache(event *watchCacheEvent) {
 	w.resizeCacheLocked(event.RecordTime)
 	if w.isCacheFullLocked() {
-		// Cache is full - remove the oldest element.
+		// 缓存已满——移除最旧的那个元素。
 		// 覆盖写即“淘汰”：只推进 startIndex，稍后写入会覆盖对应槽位。
 		w.startIndex++
 		w.removedEventSinceRelist = true
@@ -155,7 +152,7 @@ func (w *watchCacheHistory) isCacheFullLocked() bool {
 func (w *watchCacheHistory) doCacheResizeLocked(capacity int) {
 	newCache := make([]*watchCacheEvent, capacity)
 	if capacity < w.capacity {
-		// adjust startIndex if cache capacity shrink.
+		// 若缓存容量发生收缩，则调整 startIndex。
 		// 收缩时丢弃最旧的事件，并把 startIndex 调整到仍能完整映射新数组的位置。
 		w.startIndex = w.endIndex - capacity
 	}
@@ -232,8 +229,8 @@ func (w *watchCacheHistory) GetIntervalLocked(resourceVersion uint64, listResour
 	var oldest uint64
 	switch {
 	case listResourceVersion > 0 && !w.removedEventSinceRelist:
-		// If no event was removed from the buffer since last relist, the oldest watch
-		// event we can deliver is one greater than the resource version of the list.
+		// 如果自上次 relist 后缓冲区中没有事件被淘汰，那么我们能够下发的最旧 watch
+		// 事件就是 list 的 resourceVersion+1。
 		// 利用 list 的 RV 可安全回溯到更早的事件，即使它们已被后续事件覆盖。
 		oldest = listResourceVersion + 1
 	case size > 0:
@@ -252,7 +249,7 @@ func (w *watchCacheHistory) GetIntervalLocked(resourceVersion uint64, listResour
 		return nil, errors.NewResourceExpired(fmt.Sprintf("too old resource version: %d (%d)", resourceVersion, oldest-1))
 	}
 
-	// Binary search the smallest index at which resourceVersion is greater than the given one.
+	// 二分查找 resourceVersion 大于给定值的最小下标。
 	// 环形缓冲的逻辑下标从 startIndex 起算，取模映射到物理槽位。
 	f := func(i int) bool {
 		return w.cache[(w.startIndex+i)%w.capacity].ResourceVersion > resourceVersion

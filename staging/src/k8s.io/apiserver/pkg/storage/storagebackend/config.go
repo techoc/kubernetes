@@ -70,7 +70,7 @@ type TransportConfig struct {
 	TracerProvider oteltrace.TracerProvider
 }
 
-// Config is configuration for creating a storage backend.
+// Config 是创建存储后端所需的配置。
 // 一个 Config 描述“同一组 etcd 服务器上的同一套编码/加密设置”，可被多个
 // GroupResource 共享；按资源特化的部分见 ConfigForResource。
 type Config struct {
@@ -90,8 +90,7 @@ type Config struct {
 	// Transformer allows the value to be transformed prior to persisting into etcd.
 	Transformer value.Transformer
 
-	// CompactionInterval is an interval of requesting compaction from apiserver.
-	// If the value is 0, no compaction will be issued.
+	// CompactionInterval 是 apiserver 向 etcd 发起压缩请求的间隔；为 0 表示不发起压缩。
 	// 压缩是回收 etcd 历史版本空间的手段，缺失会导致 etcd 磁盘无限增长。
 	CompactionInterval time.Duration
 	// CountMetricPollPeriod specifies how often should count metric be updated
@@ -122,7 +121,7 @@ type ConfigForResource struct {
 	GroupResource schema.GroupResource
 }
 
-// ForResource specializes to the given resource
+// ForResource 把通用配置特化为给定资源的配置。
 // 返回的是值拷贝：对返回值的修改不会影响原始 Config。
 func (config *Config) ForResource(resource schema.GroupResource) *ConfigForResource {
 	return &ConfigForResource{
@@ -131,7 +130,7 @@ func (config *Config) ForResource(resource schema.GroupResource) *ConfigForResou
 	}
 }
 
-// NewDefaultConfig returns a Config populated with production defaults.
+// NewDefaultConfig 返回一个填好生产默认值的 Config。
 // 调用方仍需填写 Transport.ServerList；TracerProvider 默认是 no-op，
 // 避免未配置 tracing 时产生额外开销。
 func NewDefaultConfig(prefix string, codec runtime.Codec) *Config {

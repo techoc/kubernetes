@@ -69,7 +69,7 @@ type Storage interface {
 	Destroy()
 }
 
-// StorageWithReadiness extends Storage interface with the readiness check.
+// StorageWithReadiness 在 Storage 接口之上扩展了就绪检查。
 // 用于需要等待底层存储（如 etcd 连接、缓存同步）就绪的资源。
 type StorageWithReadiness interface {
 	Storage
@@ -320,7 +320,7 @@ type StandardStorage interface {
 	Destroy()
 }
 
-// Redirector know how to return a remote resource's location.
+// Redirector 知道如何返回远端资源的位置。
 // 用于代理/重定向类资源（如 nodes/proxy），由存储层决定实际远端地址。
 type Redirector interface {
 	// ResourceLocation should return the remote location of the given resource, and an optional transport to use to request it, or an error.
@@ -389,8 +389,8 @@ type StorageVersionProvider interface {
 	StorageVersion() runtime.GroupVersioner
 }
 
-// ResetFieldsStrategy is an optional interface that a storage object can
-// implement if it wishes to provide the fields reset by its strategies.
+// ResetFieldsStrategy 是一个可选接口，存储对象若希望提供其各策略所重置的字段，
+// 便可以实现它。
 // 字段重置用于在更新时清除由系统管理的字段，避免客户端持久化这些值。
 type ResetFieldsStrategy interface {
 	GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set

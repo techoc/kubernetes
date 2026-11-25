@@ -28,7 +28,7 @@ import (
 	"k8s.io/cloud-provider/config"
 )
 
-// Config is the main context object for the cloud controller manager.
+// Config 是 cloud controller manager 的主要上下文对象。
 // Config 是 cloud-controller-manager 的运行时上下文：控制器初始化函数只依赖它，
 // 而不直接读取命令行参数，从而让配置解析与业务逻辑解耦。
 type Config struct {
@@ -37,7 +37,7 @@ type Config struct {
 
 	// SecureServing 承载主服务端口（healthz/configz/metrics 等）的 TLS 与监听配置。
 	SecureServing *apiserver.SecureServingInfo
-	// LoopbackClientConfig is a config for a privileged loopback connection
+	// LoopbackClientConfig 是特权回环连接的配置。
 	// 回环客户端配置使用特权身份访问自身 API，供健康检查等内部调用使用，不对外暴露。
 	LoopbackClientConfig *restclient.Config
 
@@ -45,37 +45,36 @@ type Config struct {
 	Authentication apiserver.AuthenticationInfo
 	Authorization  apiserver.AuthorizationInfo
 
-	// WebhookSecureServing is a separate SecureServing configuration from
-	// healthz, configz, and metrics.
+	// WebhookSecureServing 是与 healthz、configz 和 metrics 相互独立的 SecureServing 配置。
 	// Webhook 使用独立端口，避免准入请求与运维端点共享监听器而互相影响。
 	WebhookSecureServing *apiserver.SecureServingInfo
 
-	// the general kube client
+	// 通用的 kube 客户端。
 	// Client 是使用组件 user-agent 构造的通用客户端，供控制器直接调用 API。
 	Client *clientset.Clientset
 
-	// the rest config for the master
+	// 连接 master 的 rest 配置。
 	// Kubeconfig 是所有派生客户端（含按身份区分的 ClientBuilder）的 rest 配置基础。
 	Kubeconfig *restclient.Config
 
-	// EventBroadcaster is broadcaster events to all sinks.
+	// EventBroadcaster 将事件广播到所有 sink。
 	// 事件广播器负责把同一事件分发到日志与 API Server 等多个 sink。
 	EventBroadcaster record.EventBroadcaster
 
-	// EventRecord is a sink for events.
+	// EventRecord 是事件的 sink。
 	// EventRecorder 是控制器写事件时使用的入口，背后由 EventBroadcaster 驱动。
 	EventRecorder record.EventRecorder
 
-	// ClientBuilder will provide a client for this controller to use
+	// ClientBuilder 会为本控制器提供可用的客户端。
 	// ClientBuilder 依据控制器 ClientName 生成带独立身份的客户端；启用
 	// UseServiceAccountCredentials 时每个控制器使用各自的最小权限 ServiceAccount。
 	ClientBuilder cloudprovider.ControllerClientBuilder
 
-	// VersionedClient will provide a client for informers
+	// VersionedClient 为 informer 提供客户端。
 	// VersionedClient 专供 informer 使用，与控制器自己的客户端分离，便于审计与限流。
 	VersionedClient clientset.Interface
 
-	// SharedInformers gives access to informers for the controller.
+	// SharedInformers 为控制器提供访问 informer 的入口。
 	// 所有控制器共享同一 informer factory，避免对同一资源重复建立 watch。
 	SharedInformers informers.SharedInformerFactory
 }
@@ -86,14 +85,14 @@ type completedConfig struct {
 	*Config
 }
 
-// CompletedConfig same as Config, just to swap private object.
+// CompletedConfig 与 Config 相同，只是替换了私有对象。
 // 外部包只能持有 CompletedConfig，从而在类型层面保证配置已经过 Complete 处理。
 type CompletedConfig struct {
 	// Embed a private pointer that cannot be instantiated outside of this package.
 	*completedConfig
 }
 
-// Complete fills in any fields not set that are required to have valid data. It's mutating the receiver.
+// Complete 为所有必填但未设置的字段填充有效数据，它会原地修改接收者。
 // Complete 会对接收者做原地修改，用回环客户端配置补全委托认证/授权信息。
 func (c *Config) Complete() *CompletedConfig {
 	cc := completedConfig{c}

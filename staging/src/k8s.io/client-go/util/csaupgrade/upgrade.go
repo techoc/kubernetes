@@ -159,11 +159,11 @@ func UpgradeManagedFieldsPatch(
 		return nil, nil
 	}
 
-	// Create a patch with a diff between old and new objects.
-	// Just include all managed fields since that is only thing that will change
+	// 创建一份基于 old 与 new 对象差异的 patch。
+	// 只放入全部 managedFields，因为那是唯一会变的部分。
 	//
-	// Also include test for RV to avoid race condition
-	// 用资源版本做条件写：若服务端在读取后已被他人修改，patch 会失败而不是覆盖。
+	// 同时带上对 RV 的判断，以避免竞态：
+	// 用资源版本做条件写，若服务端在读取后已被他人修改，patch 会失败而不是覆盖。
 	jsonPatch := []map[string]interface{}{
 		{
 			"op":    "replace",
@@ -228,7 +228,7 @@ func upgradedManagedFields(
 			return managedFields, nil
 		}
 
-		// Convert CSA manager into SSA manager
+		// 把 CSA manager 转换成 SSA manager：
 		// 直接改写最新 CSA 条目的类型与名字，避免新增一条导致所有权分裂。
 		managedFields[replaceIndex].Operation = metav1.ManagedFieldsOperationApply
 		managedFields[replaceIndex].Manager = ssaManagerName
@@ -238,7 +238,7 @@ func upgradedManagedFields(
 		return nil, err
 	}
 
-	// Create version of managed fields which has no CSA managers with the given name
+	// 生成一份不含同名 CSA manager 的 managedFields：
 	// 其余 Update 条目是旧版本残留，迁移后统一删除，防止同一字段被多个 manager 声明。
 	filteredManagers := filter(managedFields, func(entry metav1.ManagedFieldsEntry) bool {
 		return !(entry.Manager == csaManagerName &&
@@ -260,8 +260,8 @@ func unionManagerIntoIndex(
 ) error {
 	ssaManager := entries[targetIndex]
 
-	// find Update manager of same APIVersion, union ssa fields with it.
-	// discard all other Update managers of the same name
+	// 找出 APIVersion 相同的 Update manager，把 SSA 字段与它合并；
+	// 丢弃其余同名的 Update manager。
 	// 只在同一 APIVersion 内合并：不同版本的字段路径语义可能不同。
 	csaManagerIndex, csaManagerExists := findFirstIndex(entries,
 		func(entry metav1.ManagedFieldsEntry) bool {

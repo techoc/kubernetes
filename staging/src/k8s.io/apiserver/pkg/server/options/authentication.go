@@ -41,8 +41,7 @@ import (
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 )
 
-// DefaultAuthWebhookRetryBackoff is the default backoff parameters for
-// both authentication and authorization webhook used by the apiserver.
+// DefaultAuthWebhookRetryBackoff 返回 apiserver 认证与授权 webhook 共用的默认退避参数。
 // 5 次重试、1.5 倍增长并带抖动，用于在 webhook 后端抖动时限制重试风暴的扇出。
 func DefaultAuthWebhookRetryBackoff() *wait.Backoff {
 	return &wait.Backoff{
@@ -166,8 +165,7 @@ func (s *RequestHeaderAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 		"by the authorities in --requestheader-client-ca-file is allowed.")
 }
 
-// ToAuthenticationRequestHeaderConfig returns a RequestHeaderConfig config object for these options
-// if necessary, nil otherwise.
+// ToAuthenticationRequestHeaderConfig 在需要时返回这些选项对应的 RequestHeaderConfig 配置对象，否则返回 nil。
 // 未配置 ClientCAFile 时返回 nil，表示不启用该认证方式；
 // 配置了则把 CA 文件包装成动态提供者，使证书轮换无需重启。
 func (s *RequestHeaderAuthenticationOptions) ToAuthenticationRequestHeaderConfig() (*authenticatorfactory.RequestHeaderConfig, error) {
@@ -202,7 +200,7 @@ type ClientCertAuthenticationOptions struct {
 	CAContentProvider dynamiccertificates.CAContentProvider
 }
 
-// GetClientVerifyOptionFn provides verify options for your authenticator while respecting the preferred order of verifiers.
+// GetClientVerifyOptionFn 为认证器提供 verify options，并遵循各校验器的优先顺序。
 // 显式传入的 CAContentProvider 优先于文件路径：调用方（如聚合层）可能已持有动态 CA。
 func (s *ClientCertAuthenticationOptions) GetClientCAContentProvider() (dynamiccertificates.CAContentProvider, error) {
 	if s.CAContentProvider != nil {
@@ -224,9 +222,7 @@ func (s *ClientCertAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 		"corresponding to the CommonName of the client certificate.")
 }
 
-// DelegatingAuthenticationOptions provides an easy way for composing API servers to delegate their authentication to
-// the root kube API server.  The API federator will act as
-// a front proxy and direction connections will be able to delegate to the core kube API server
+// DelegatingAuthenticationOptions 让组合式 API 服务器可以便捷地把认证委托给集群根 kube API 服务器。API 联邦组件将充当前置代理，定向来的连接能够委托给核心 kube API 服务器。
 // 聚合 apiserver 通常自身不持有用户数据，而是通过 TokenReview/SubjectAccessReview 委托给核心 apiserver 判定。
 type DelegatingAuthenticationOptions struct {
 	// RemoteKubeConfigFile is the file to use to connect to a "normal" kube API server which hosts the
@@ -268,7 +264,6 @@ type DelegatingAuthenticationOptions struct {
 // NewDelegatingAuthenticationOptions 返回带默认值的委托认证配置。
 func NewDelegatingAuthenticationOptions() *DelegatingAuthenticationOptions {
 	return &DelegatingAuthenticationOptions{
-		// very low for responsiveness, but high enough to handle storms
 		// 缓存时间很短：既保证令牌吊销能较快生效，又能吸收短时间内的重复校验。
 		CacheTTL:   10 * time.Second,
 		ClientCert: ClientCertAuthenticationOptions{},
@@ -374,7 +369,6 @@ func (s *DelegatingAuthenticationOptions) ApplyTo(authenticationInfo *server.Aut
 		cfg.TokenAccessReviewClient = client.AuthenticationV1()
 	}
 
-	// get the clientCA information
 	// 显式配置了客户端证书时优先使用；否则尝试从集群 ConfigMap 读取，
 	// 以便与核心 apiserver 的 CA 自动保持一致。
 	clientCASpecified := s.ClientCert != ClientCertAuthenticationOptions{}
@@ -486,8 +480,7 @@ func (s *DelegatingAuthenticationOptions) createRequestHeaderConfig(client kuber
 	}, nil
 }
 
-// getClient returns a Kubernetes clientset. If s.RemoteKubeConfigFileOptional is true, nil will be returned
-// if no kubeconfig is specified by the user and the in-cluster config is not found.
+// getClient 返回一个 Kubernetes clientset。若 s.RemoteKubeConfigFileOptional 为 true，则当用户未指定 kubeconfig 且找不到 in-cluster 配置时返回 nil。
 // 返回 nil 客户端是合法状态：表示未配置委托认证，调用方需据此跳过 TokenReview。
 func (s *DelegatingAuthenticationOptions) getClient() (kubernetes.Interface, error) {
 	var clientConfig *rest.Config

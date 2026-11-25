@@ -35,7 +35,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/controllers"
 )
 
-// APIHandlerManager defines the behaviour that an API handler should have.
+// APIHandlerManager 定义了 API handler 应具备的行为。
 // 把“如何把某个 GroupVersion 挂到代理路由上”抽象成接口，
 // 让注册控制器只负责监听 APIService 变化，而不依赖具体的 handler 实现；
 // 测试时也能用假实现替代真实的聚合 handler。
@@ -44,7 +44,7 @@ type APIHandlerManager interface {
 	RemoveAPIService(apiServiceName string)
 }
 
-// APIServiceRegistrationController is responsible for registering and removing API services.
+// APIServiceRegistrationController 负责注册和移除 API services。
 // 该控制器监听 APIService 资源，把变化同步到代理 handler 的路由表：
 // 新增/更新时挂载路由，删除时摘除。用 workqueue 而不是在事件回调里直接改路由，
 // 是为了借助队列的合并与限速能力，避免事件风暴时频繁改动共享的代理状态。
@@ -54,7 +54,7 @@ type APIServiceRegistrationController struct {
 	apiServiceLister listers.APIServiceLister
 	apiServiceSynced cache.InformerSynced
 
-	// To allow injection for testing.
+	// 允许为测试注入。
 	// 把同步逻辑抽成函数字段，测试时可以直接替换，无需构造完整的 informer 与 handler。
 	syncFn func(key string) error
 
@@ -65,7 +65,7 @@ type APIServiceRegistrationController struct {
 
 var _ dynamiccertificates.Listener = &APIServiceRegistrationController{}
 
-// NewAPIServiceRegistrationController returns a new APIServiceRegistrationController.
+// NewAPIServiceRegistrationController 返回一个新的 APIServiceRegistrationController。
 // 构造函数把 informer 的 lister / HasSynced 与 handler 管理器绑在一起，并注册三类事件回调；
 // 回调只做入队，真正的同步留给 worker，从而让事件处理保持轻量。
 func NewAPIServiceRegistrationController(apiServiceInformer informers.APIServiceInformer, apiHandlerManager APIHandlerManager) *APIServiceRegistrationController {
@@ -118,7 +118,7 @@ func (c *APIServiceRegistrationController) Run(stopCh <-chan struct{}, handlerSy
 		return
 	}
 
-	/// initially sync all APIServices to make sure the proxy handler is complete
+	// 先对全部 APIService 做一次同步，确保代理 handler 是完整的。
 	// 在开启 worker 前必须先全量同步一次：informer 的 add 事件只能保证缓存里有对象，
 	// 不能保证代理 handler 已挂载全部路由。用 PollImmediateUntil 重试而不是一次失败就退出，
 	// 是因为此时聚合层还没就绪，短暂失败（例如 handler 尚未初始化）是常态。
@@ -143,8 +143,7 @@ func (c *APIServiceRegistrationController) Run(stopCh <-chan struct{}, handlerSy
 	}
 	close(handlerSyncedCh)
 
-	// only start one worker thread since its a slow moving API and the aggregation server adding bits
-	// aren't threadsafe
+	// 只启动一个 worker 线程：这是低频变动的 API，而且聚合 server 的添加逻辑不是线程安全的。
 	// 只起一个 worker：APIService 变动频率低，单线程足以处理；
 	// 更重要的是代理 handler 的路由表不是线程安全的，并发写入会引发数据竞争。
 
@@ -158,7 +157,7 @@ func (c *APIServiceRegistrationController) runWorker() {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key；需要退出时返回 false。
 // 同步成功就 Forget 清掉失败计数；失败则 AddRateLimited 重新入队，
 // 借助限速队列的指数退避避免持续失败时陷入热循环。
 func (c *APIServiceRegistrationController) processNextWorkItem() bool {
@@ -225,8 +224,8 @@ func (c *APIServiceRegistrationController) deleteAPIService(obj interface{}) {
 	c.enqueueInternal(castObj)
 }
 
-// Enqueue queues all apiservices to be rehandled.
-// This method is used by the controller to notify when the proxy cert content changes.
+// Enqueue 把所有 apiservices 入队以重新处理；
+// 控制器用该方法在代理证书内容变化时收到通知。
 // 代理证书变更会影响所有 APIService 的连接，所以这里把全部对象重新入队，
 // 让每个 handler 用最新的 cert/key 重建传输层配置。
 func (c *APIServiceRegistrationController) Enqueue() {

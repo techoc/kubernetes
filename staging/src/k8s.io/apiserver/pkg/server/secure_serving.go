@@ -43,7 +43,6 @@ const (
 	defaultKeepAlivePeriod = 3 * time.Minute
 )
 
-// tlsConfig produces the tls.Config to serve with.
 // 静态 TLS 参数在这里确定；证书内容则通过 GetConfigForClient 动态获取，
 // 从而支持运行期热更新证书而无需重建 listener。
 func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, error) {
@@ -82,10 +81,8 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 	}
 
 	if s.ClientCA != nil {
-		// Populate PeerCertificates in requests, but don't reject connections without certificates
-		// This allows certificates to be validated by authenticators, while still allowing other auth types
-		// 因此这里用 RequestClientCert 而不是 RequireAndVerifyClientCert：
-		// 是否需要客户端证书由认证器决定，而不是 TLS 层。
+		// 在请求中填充 PeerCertificates，但不拒绝没有证书的客户端：证书可交由认证器校验，其他认证方式也仍然可用。
+		// 因此这里用 RequestClientCert 而不是 RequireAndVerifyClientCert：是否需要客户端证书由认证器决定，而不是 TLS 层。
 		tlsConfig.ClientAuth = tls.RequestClientCert
 	}
 
@@ -114,7 +111,6 @@ func (s *SecureServingInfo) tlsConfig(stopCh <-chan struct{}) (*tls.Config, erro
 			case <-ctx.Done():
 			}
 		}()
-		// start controllers if possible
 		// RunOnce 仅用于预热；文件必须已经存在，失败并不致命，
 		// 后续 Run 阶段仍会重试并最终 fail closed。
 		if controller, ok := s.ClientCA.(dynamiccertificates.ControllerRunner); ok {
@@ -221,7 +217,6 @@ func (s *SecureServingInfo) Serve(handler http.Handler, shutdownTimeout time.Dur
 		}
 	}
 
-	// use tlsHandshakeErrorWriter to handle messages of tls handshake error
 	// 握手错误通常来自扫描器或配置错误，数量可能极大；
 	// 由专用 writer 降级到 V(5) 并计入指标，避免刷爆日志。
 	tlsErrorWriter := &tlsHandshakeErrorWriter{os.Stderr}
@@ -248,7 +243,6 @@ func RunServer(
 		return nil, nil, fmt.Errorf("listener must not be nil")
 	}
 
-	// Shutdown server gracefully.
 	// Shutdown 会等待活跃请求完成（受 shutDownTimeout 限制），
 	// 这是在快速退出与不中断请求之间取的折中。
 	serverShutdownCh, listenerStoppedCh := make(chan struct{}), make(chan struct{})

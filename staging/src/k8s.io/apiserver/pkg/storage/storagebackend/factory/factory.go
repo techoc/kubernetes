@@ -26,12 +26,12 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 )
 
-// DestroyFunc is to destroy any resources used by the storage returned in Create() together.
+// DestroyFunc 用于一并销毁 Create() 返回的存储所占用的资源。
 // 调用方必须把 Create 返回的 DestroyFunc 与存储实例绑定，在关闭时成对释放，
 // 否则会泄漏 etcd 客户端连接与后台 goroutine。
 type DestroyFunc func()
 
-// Create creates a storage backend based on given config.
+// Create 根据给定配置创建存储后端。
 // 当前仅支持 etcd3（以及未显式配置时默认 etcd3）。etcd2 被显式拒绝而
 // 不是静默回退，是为了让仍在使用旧配置的部署尽早暴露问题。
 func Create(c storagebackend.ConfigForResource, newFunc, newListFunc func() runtime.Object, resourcePrefix string) (storage.Interface, DestroyFunc, error) {
@@ -45,7 +45,7 @@ func Create(c storagebackend.ConfigForResource, newFunc, newListFunc func() runt
 	}
 }
 
-// CreateHealthCheck creates a healthcheck function based on given config.
+// CreateHealthCheck 根据给定配置创建健康检查函数。
 // 返回的函数用于存活探针；它与 ready check 分开，是因为 etcd 短暂不可用时
 // 可能仍应保持进程存活，避免重启放大故障。
 func CreateHealthCheck(c storagebackend.Config, stopCh <-chan struct{}) (func() error, error) {
@@ -98,7 +98,7 @@ func CreateMonitor(c storagebackend.Config) (metrics.Monitor, error) {
 	}
 }
 
-// Prober is an interface that defines the Probe function for doing etcd readiness/liveness checks.
+// Prober 是定义 Probe 函数的接口，用于执行 etcd 的就绪性与存活检查。
 // Close 用于释放探针持有的连接，必须与创建配对调用。
 type Prober interface {
 	Probe(ctx context.Context) error

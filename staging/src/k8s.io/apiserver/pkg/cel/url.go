@@ -27,7 +27,6 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 )
 
-// URL provides a CEL representation of a URL.
 // 包装 *url.URL 以便实现 ref.Val，使 CEL 表达式可以直接持有并比较 URL
 // 值，而不必退化为字符串比较。
 type URL struct {
@@ -43,7 +42,6 @@ var (
 	URLType = cel.ObjectType("kubernetes.URL")
 )
 
-// ConvertToNative implements ref.Val.ConvertToNative.
 // 支持转换到 *url.URL 或 string，其他目标类型直接报错，避免静默产生零值。
 func (d URL) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	if reflect.TypeOf(d.URL).AssignableTo(typeDesc) {
@@ -55,7 +53,6 @@ func (d URL) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	return nil, fmt.Errorf("type conversion error from 'URL' to '%v'", typeDesc)
 }
 
-// ConvertToType implements ref.Val.ConvertToType.
 // 只接受自身类型与 type 类型；其他转换一律返回 CEL 错误值。
 func (d URL) ConvertToType(typeVal ref.Type) ref.Val {
 	switch typeVal {
@@ -67,7 +64,6 @@ func (d URL) ConvertToType(typeVal ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", typeValue, typeVal)
 }
 
-// Equal implements ref.Val.Equal.
 // 按字符串形式比较而非结构体比较：URL 的语义相等应以序列化结果为准，
 // 这样不同构造方式得到的等价 URL 也能判定相等。
 func (d URL) Equal(other ref.Val) ref.Val {
@@ -83,7 +79,6 @@ func (d URL) Type() ref.Type {
 	return typeValue
 }
 
-// Value implements ref.Val.Value.
 // 返回底层 *url.URL，供需要 Go 原生值的调用方使用。
 func (d URL) Value() interface{} {
 	return d.URL

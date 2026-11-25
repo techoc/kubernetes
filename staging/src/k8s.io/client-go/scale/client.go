@@ -64,8 +64,7 @@ type scaleClient struct {
 // to resources using the given RESTMapper, and API paths using
 // the given dynamic.APIPathResolverFunc.
 func NewForConfig(cfg *restclient.Config, mapper PreferredResourceMapper, resolver dynamic.APIPathResolverFunc, scaleKindResolver ScaleKindResolver) (ScalesGetter, error) {
-	// so that the RESTClientFor doesn't complain
-	// 通用 REST client 不绑定单一 GV，必须显式清空，否则 RESTClientFor 会报错。
+	// 显式清空 GroupVersion，免得 RESTClientFor 报错：通用 REST client 不绑定单一 GV。
 	cfg.GroupVersion = &schema.GroupVersion{}
 
 	// 不做版本转换：响应体由 convertToScale 自行解码/转换。
@@ -96,9 +95,9 @@ func New(baseClient restclient.Interface, mapper PreferredResourceMapper, resolv
 
 // apiPathFor returns the absolute api path for the given GroupVersion
 func (c *scaleClient) apiPathFor(groupVer schema.GroupVersion) string {
-	// we need to set the API path based on GroupVersion (defaulting to the legacy path if none is set)
-	// TODO: we "cheat" here since the API path really only depends on group ATM, but this should
-	// *probably* take GroupVersionResource and not GroupVersionKind.
+	// 需要按 GroupVersion 决定 API 路径（解析不出时回退到 legacy 路径）。
+	// TODO: 这里算是"作弊"：API 路径实际只取决于 group，但这里或许更应接受
+	// GroupVersionResource 而不是 GroupVersionKind。
 	// 解析器只关心 group，这里用空 Kind 即可；空前缀回退到历史路径 /api。
 	apiPath := c.apiPathResolverFunc(groupVer.WithKind(""))
 	if apiPath == "" {
@@ -142,8 +141,7 @@ func convertToScale(result *restclient.Result) (*autoscaling.Scale, error) {
 		return nil, err
 	}
 
-	// convert whatever this is to autoscaling/v1.Scale
-	// 统一出口类型，调用方只需处理 autoscaling/v1。
+	// 把任何来源的对象统一转换成 autoscaling/v1.Scale，调用方只需处理这一种类型。
 	scaleObj, err := scaleConverter.ConvertToVersion(rawScaleObj, autoscaling.SchemeGroupVersion)
 	if err != nil {
 		return nil, fmt.Errorf("received an object from a /scale endpoint which was not convertible to autoscaling Scale: %v", err)
@@ -196,8 +194,7 @@ func (c *namespacedScaleClient) Update(ctx context.Context, resource schema.Grou
 	// Until we have support for the alternative API representations proposal,
 	// we need to deal with sending and accepting different API versions.
 
-	// figure out what scale we actually need here
-	// 写请求必须先确定端点接受的具体 GVK，再做编码，否则 server 会拒绝。
+	// 弄清楚这里实际需要哪个版本的 scale：写请求必须先确定端点接受的具体 GVK，再做编码，否则 server 会拒绝。
 	desiredGVK, err := c.client.scaleKindResolver.ScaleForResource(gvr)
 	if err != nil {
 		return nil, fmt.Errorf("could not find proper group-version for scale subresource of %s: %v", gvr.String(), err)
@@ -224,10 +221,8 @@ func (c *namespacedScaleClient) Update(ctx context.Context, resource schema.Grou
 		Body(scaleUpdateBytes).
 		Do(ctx)
 	if err := result.Error(); err != nil {
-		// propagate "raw" error from the API
-		// this allows callers to interpret underlying Reason field
-		// for example: errors.IsConflict(err)
-		// 不要包装错误，否则调用方无法用 errors.IsConflict 判断资源版本冲突。
+		// 透传 API 返回的"原始"错误，这样调用方才能解读底层的 Reason 字段，
+		// 例如 errors.IsConflict(err)：不要包装错误，否则调用方无法判断资源版本冲突。
 		return nil, err
 	}
 

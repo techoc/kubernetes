@@ -55,8 +55,8 @@ func newDiscoveryManager(rm discoveryendpoint.ResourceManager) *discoveryManager
 	return dm
 }
 
-// Returns true if the queue of services to sync is complete which means
-// everything has been reconciled and placed into merged document
+// 当待同步 service 的队列完成时返回 true，即所有内容都已被协调
+// 并放入了合并后的文档。
 // 复用 cache 的同步等待语义：每隔一小段时间轮询队列状态直到 complete 或 stop，
 // 避免测试用固定 sleep 造成偶发的假通过。
 func waitForQueueComplete(stopCh <-chan struct{}, dm *discoveryManager) bool {
@@ -65,7 +65,7 @@ func waitForQueueComplete(stopCh <-chan struct{}, dm *discoveryManager) bool {
 	})
 }
 
-// Test that the discovery manager starts and aggregates from two local API services
+// 测试 discovery manager 能够启动，并从两个本地 API service 聚合。
 // 用 fuzz 生成大量 group/version 后再逐个注册 APIService，验证聚合不是只适用于
 // 手工拼出的一两个对象；第三组专门覆盖 ResponseKind 缺失/为空的修复逻辑。
 func TestBasic(t *testing.T) {
@@ -254,8 +254,8 @@ func checkAPIGroups(t *testing.T, api apidiscoveryv2.APIGroupDiscoveryList, resp
 	}
 }
 
-// TestInitialRunHasAllAPIServices tests that when discovery is ready, all APIService
-// are present and ones that have not synced are in the list as Stale.
+// TestInitialRunHasAllAPIServices 验证当 discovery 就绪时，所有 APIService 都在列表中，
+// 且尚未同步完成的以 Stale 状态存在。
 // 发现文档就绪时不能因为某个后端慢就把它整组藏起来：客户端需要看到完整的
 // API 地图，未同步的部分用 Stale 标记，自己决定是否重试。
 func TestInitialRunHasAllAPIServices(t *testing.T) {
@@ -350,7 +350,7 @@ func TestServiceGC(t *testing.T) {
 
 	require.Equal(t, 1, getCacheLen())
 
-	// Change the service of the same APIService a bit to create duplicate entry
+	// 略微改变同一个 APIService 的 service 字段，以制造重复条目。
 	// 服务名变了但对象名没变，缓存键只用对象名，正好检验旧结果是否被覆盖而不是追加。
 	aggregatedManager.AddAPIService(&apiregistrationv1.APIService{
 		ObjectMeta: metav1.ObjectMeta{
@@ -369,8 +369,7 @@ func TestServiceGC(t *testing.T) {
 	require.Equal(t, 1, getCacheLen())
 }
 
-// Test that a handler associated with an APIService gets pinged after the
-// APIService has been marked as dirty
+// 测试 APIService 被标记为 dirty 后，与之关联的 handler 会被实际访问。
 // 后端发现文档是拉取而不是推送的：只有 APIService 变更时主动请求一次，
 // 才能知道后端有哪些资源；这个用例确认“脏标记”确实触发了这次请求。
 func TestDirty(t *testing.T) {
@@ -407,8 +406,8 @@ func TestDirty(t *testing.T) {
 	}
 }
 
-// Shows that waitForQueueComplete also waits for syncing to
-// complete by artificially making the sync handler take a long time
+// 说明 waitForQueueComplete 也会等待同步真正完成：
+// 这里人为让 sync handler 耗时很长。
 // 队列清空不等于结果已写入：Done 在同步完成之后才调用，若 waitForQueueComplete
 // 只看队列长度就会过早返回，导致后续断言读到旧文档。
 func TestWaitForSync(t *testing.T) {
@@ -446,8 +445,7 @@ func TestWaitForSync(t *testing.T) {
 	}
 }
 
-// Show that an APIService can be removed and that its group no longer remains
-// if there are no versions
+// 说明 APIService 可以被移除，且当组内不再有任何版本时，该组也不会残留在文档中。
 // 删除最后一个版本时要连空组一起清掉：留一个没有任何版本的组会让客户端
 // 误以为该组仍可用，却找不到任何可调用的资源。
 func TestRemoveAPIService(t *testing.T) {
@@ -595,7 +593,7 @@ func TestLegacyFallbackNoCache(t *testing.T) {
 		} else if r.URL.Path == "/apis/stable.example.com/v1alpha1" {
 			legacyResourceHandlerV1Alpha1.ServeHTTP(w, r)
 		} else if r.URL.Path == "/apis/stable.example.com/v2alpha1" {
-			// serve the most minimal discovery doc that could have worked prior to aggregated discovery
+			// 提供聚合发现出现之前最简、但仍可能正常工作的 discovery 文档。
 			// 故意只给资源名和子资源名，不给 ResponseKind：这正是老文档最常缺的字段，
 			// 聚合后应该被补成空的 GroupVersionKind，而不是整条丢弃。
 			json.NewEncoder(w).Encode(&metav1.APIResourceList{
@@ -610,7 +608,7 @@ func TestLegacyFallbackNoCache(t *testing.T) {
 		} else if r.URL.Path == "/apis" {
 			rootAPIsHandler.ServeHTTP(w, r)
 		} else {
-			// Unknown url
+			// 未知 URL。
 			// 聚合器只应访问已知路径；多出来的请求说明回退逻辑找错了端点，
 			// 直接 fail 比默默返回空文档更容易定位问题。
 			t.Fatalf("unexpected request sent to %v", r.URL.Path)
@@ -918,9 +916,9 @@ func TestAPIServiceStale(t *testing.T) {
 	}, doc.Items)
 }
 
-// Exercises the 304 Not Modified Path of the aggregator
-// This path in 1.26.0 would result in a deadlock if an aggregated APIService
-// returned a 304 Not Modified response for its own aggregated discovery document.
+// 演练聚合器的 304 Not Modified 路径。
+// 在 1.26.0 中，如果聚合的 APIService 对自己的聚合发现文档返回 304 Not Modified，
+// 这条路径会导致死锁。
 // 测试通过分批注册 APIService 来构造“先有缓存、后端再回 304”的顺序，
 // 回归会表现为等待超时，而不是断言失败，所以设了 5 秒超时兜底。
 func TestNotModified(t *testing.T) {
@@ -1051,8 +1049,7 @@ func fetchPath(handler http.Handler, etag string) (*http.Response, []byte, *apid
 	return w.Result(), bytes, decoded
 }
 
-// completerWorkqueue is a workqueue.RateLimitingInterface that implements
-// isComplete
+// completerWorkqueue 是一个实现了 isComplete 的 workqueue.RateLimitingInterface。
 // 生产用的限速队列只暴露 Len，无法区分“空闲”和“正在处理中”；
 // 这里额外用 processing 集合跟踪已取出但未 Done 的键，让测试能精确等待协调结束。
 type completerWorkqueue struct {
@@ -1078,9 +1075,9 @@ func (q *completerWorkqueue) Add(item string) {
 }
 
 func (q *completerWorkqueue) AddAfter(item string, duration time.Duration) {
-	// Normally apiservices are continuously re-synced and never leave the
-	// queue. Make this a no-op in the unit test so that isComplete()
-	// reflects whether all explicitly dirtied items have been processed.
+	// 正常情况下 apiservice 会被持续重新同步，永远不会离开队列。
+	// 在单测里把 AddAfter 变成 no-op，使 isComplete() 只反映
+	// 显式标记为 dirty 的条目是否都已处理完毕。
 	// 延迟入队会让队列永远有“未来工作”，isComplete 就再也不会变真；
 	// 单测只关心显式标记过的对象，因此这里刻意丢弃延迟请求。
 }

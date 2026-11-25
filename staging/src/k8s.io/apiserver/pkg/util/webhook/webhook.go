@@ -37,9 +37,7 @@ import (
 // timeout of the HTTP request, including reading the response body.
 const defaultRequestTimeout = 30 * time.Second
 
-// DefaultRetryBackoffWithInitialDelay returns the default backoff parameters for webhook retry from a given initial delay.
-// Handy for the client that provides a custom initial delay only.
-// 重试策略与认证/授权 webhook 保持一致：5 步、1.5 倍增长、20% 抖动，抑制同步重试风暴。
+// DefaultRetryBackoffWithInitialDelay 返回基于给定初始延迟的 webhook 重试默认退避参数；仅定制初始延迟的客户端可直接使用。重试策略与认证/授权 webhook 保持一致：5 步、1.5 倍增长、20% 抖动，抑制同步重试风暴。
 func DefaultRetryBackoffWithInitialDelay(initialBackoffDelay time.Duration) wait.Backoff {
 	return wait.Backoff{
 		Duration: initialBackoffDelay,
@@ -49,8 +47,7 @@ func DefaultRetryBackoffWithInitialDelay(initialBackoffDelay time.Duration) wait
 	}
 }
 
-// GenericWebhook defines a generic client for webhooks with commonly used capabilities,
-// such as retry requests.
+// GenericWebhook 定义了带有常用能力（如请求重试）的通用 webhook 客户端。
 // 字段可被调用方覆盖以定制重试策略；零值 ShouldRetry 会回退到 DefaultShouldRetry。
 type GenericWebhook struct {
 	RestClient   *rest.RESTClient
@@ -58,10 +55,7 @@ type GenericWebhook struct {
 	ShouldRetry  func(error) bool
 }
 
-// DefaultShouldRetry is a default implementation for the GenericWebhook ShouldRetry function property.
-// If the error reason is one of: networking (connection reset) or http (InternalServerError (500), GatewayTimeout (504), TooManyRequests (429)),
-// or apierrors.SuggestsClientDelay() returns true, then the function advises a retry.
-// Otherwise it returns false for an immediate fail.
+// DefaultShouldRetry 是 GenericWebhook 的 ShouldRetry 属性函数的默认实现：若错误原因为网络问题（连接重置）或 HTTP 问题（InternalServerError (500)、GatewayTimeout (504)、TooManyRequests (429)），或 apierrors.SuggestsClientDelay() 返回 true，则建议重试；否则返回 false，立即失败。
 // 只重试明确可恢复的错误：4xx（除 429）等确定性失败重试无益，反而放大负载。
 func DefaultShouldRetry(err error) bool {
 	// these errors indicate a transient error that should be retried.
@@ -75,7 +69,6 @@ func DefaultShouldRetry(err error) bool {
 	return false
 }
 
-// NewGenericWebhook creates a new GenericWebhook from the provided rest.Config.
 // 启动时校验 scheme 是否已注册所需 groupVersion，尽早暴露装配错误，
 // 否则首个 webhook 调用才会失败且错误信息不够直接。
 func NewGenericWebhook(scheme *runtime.Scheme, codecFactory serializer.CodecFactory, config *rest.Config, groupVersions []schema.GroupVersion, retryBackoff wait.Backoff) (*GenericWebhook, error) {
@@ -140,8 +133,7 @@ func WithExponentialBackoff(ctx context.Context, retryBackoff wait.Backoff, webh
 	})
 
 	switch {
-	// we check for webhookErr first, if webhookErr is set it's the most important error to return.
-	// 上下文取消/超时时 wait 返回的错误信息较笼统，优先返回真实的 webhook 错误更有诊断价值。
+	// 优先检查 webhookErr——若其存在，它才是最需要返回的错误：上下文取消/超时时 wait 返回的错误信息较笼统，优先返回真实的 webhook 错误更有诊断价值。
 	case webhookErr != nil:
 		return webhookErr
 	case err != nil:
@@ -170,8 +162,7 @@ func LoadKubeconfig(kubeConfigFile string, customDial utilnet.DialFunc) (*rest.C
 	//
 	// https://github.com/kubernetes/client-go/blob/master/tools/clientcmd/overrides.go
 	//
-	// Set this to something reasonable so request to webhooks don't hang forever.
-	// 这是包含读取响应体在内的绝对超时，防止异常后端无限占用连接。
+	// 将其设为一个合理的值，避免对 webhook 的请求永远挂起：这是包含读取响应体在内的绝对超时，防止异常后端无限占用连接。
 	clientConfig.Timeout = defaultRequestTimeout
 
 	// Avoid client-side rate limiting talking to the webhook backend.

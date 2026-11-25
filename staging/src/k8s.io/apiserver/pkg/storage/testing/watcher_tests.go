@@ -666,8 +666,7 @@ func RunOptionalTestProgressNotify(ctx context.Context, t *testing.T, store stor
 	})
 }
 
-// RunTestClusterScopedWatch tests watches of cluster-scoped resources.
-// It tests watches of cluster-scoped resources.
+// RunTestClusterScopedWatch 测试集群级（cluster-scoped）资源的 watch。
 // 覆盖按名称、field selector、以及 deletecollection 等场景下的事件分发。
 func RunTestClusterScopedWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	tests := []struct {
@@ -822,8 +821,7 @@ func RunTestClusterScopedWatch(ctx context.Context, t *testing.T, store storage.
 	}
 }
 
-// It tests watch of namespace-scoped resources.
-// RunTestNamespaceScopedWatch tests watches of namespace-scoped resources.
+// RunTestNamespaceScopedWatch 测试命名空间级（namespace-scoped）资源的 watch。
 // 重点验证 /pods/ 与 /pods/ns 前缀的递归 watch 不会串到其他命名空间。
 func RunTestNamespaceScopedWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	tests := []struct {
@@ -1316,12 +1314,11 @@ func RunTestOptionalWatchBookmarksWithCorrectResourceVersion(ctx context.Context
 	}
 }
 
-// RunSendInitialEventsBackwardCompatibility test backward compatibility
-// when SendInitialEvents option is set against various implementations.
-// Backward compatibility is defined as RV = "" || RV = "O" and AllowWatchBookmark is set to false.
-// In that case we expect a watch request to be established.
-// RunSendInitialEventsBackwardCompatibility 验证旧客户端不设置 SendInitialEvents 时，
-// 行为保持与以往一致（不会突然收到大量初始事件）。
+// RunSendInitialEventsBackwardCompatibility 测试各实现设置了 SendInitialEvents 选项时的
+// 向后兼容性。向后兼容性定义为 RV = "" 或 RV = "0"，且 AllowWatchBookmarks 设为 false；
+// 此时期望 watch 请求能够正常建立。
+// 该用例同时验证旧客户端不设置 SendInitialEvents 时，行为保持与以往一致
+// （不会突然收到大量初始事件）。
 func RunSendInitialEventsBackwardCompatibility(ctx context.Context, t *testing.T, store storage.Interface) {
 	opts := storage.ListOptions{Predicate: storage.Everything}
 	opts.SendInitialEvents = ptr.To(true)
@@ -1340,9 +1337,9 @@ func RunSendInitialEventsBackwardCompatibility(ctx context.Context, t *testing.T
 // | 1               | true/false          | true/false        |
 // | Current         | true/false          | true/false        |
 // +-----------------+---------------------+-------------------+
-// where:
-// - false indicates the value of the param was set to "false" by a test case
-// - true  indicates the value of the param was set to "true" by a test case
+// 其中：
+// - false 表示测试用例把该参数设为 "false"
+// - true 表示测试用例把该参数设为 "true"
 // RunWatchSemantics 覆盖 watch 的核心语义：同名对象多次更新、删除、
 // 以及带 SendInitialEvents 时的 Added/Bookmark 顺序。
 func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interface) {
@@ -1646,8 +1643,7 @@ func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interfac
 // RunWatchSemanticInitialEventsExtended checks if the bookmark event
 // marking the end of the list stream contains the global RV.
 //
-// note that this scenario differs from the one in RunWatchSemantics
-// by adding the pod to a different ns to advance the global RV
+// 注意该场景与 RunWatchSemantics 的区别：把 Pod 添加到另一个命名空间以推进全局 RV。
 // RunWatchSemanticInitialEventsExtended 是 RunWatchSemantics 的扩展场景，
 // 覆盖带 annotation 的对象与初始事件书签的组合。
 func RunWatchSemanticInitialEventsExtended(ctx context.Context, t *testing.T, store storage.Interface) {

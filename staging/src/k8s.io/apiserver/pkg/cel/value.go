@@ -27,7 +27,6 @@ import (
 	"github.com/google/cel-go/common/types/traits"
 )
 
-// EncodeStyle is a hint for string encoding of parsed values.
 // 用于记录原始 YAML/JSON 中的排版风格，序列化回文本时尽量保持用户书写习惯。
 type EncodeStyle int
 
@@ -99,7 +98,6 @@ func (dv *DynValue) ConvertToNative(typeDesc reflect.Type) (interface{}, error) 
 func (dv *DynValue) Equal(other ref.Val) ref.Val {
 	dvType := dv.Type()
 	otherType := other.Type()
-	// Preserve CEL's homogeneous equality constraint.
 	// CEL 规定不同类型之间不可比较；这里不返回 false 而是“无此重载”错误。
 	if dvType.TypeName() != otherType.TypeName() {
 		return types.MaybeNoSuchOverloadErr(other)
@@ -133,8 +131,7 @@ func (dv *DynValue) Value() interface{} {
 	return dv.value
 }
 
-// SetValue updates the underlying value held by this reference.
-// 同时重建 CEL 值与声明类型；失败时保留原始 value 但返回错误，调用方不应继续使用。
+// SetValue 更新该引用持有的底层值：同时重建 CEL 值与声明类型；失败时保留原始 value 但返回错误，调用方不应继续使用。
 func (dv *DynValue) SetValue(value interface{}) error {
 	dv.value = value
 	var err error
@@ -180,8 +177,7 @@ func exprValue(value interface{}) (ref.Val, *DeclType, error) {
 	}
 }
 
-// PlainTextValue is a text string literal which must not be treated as an expression.
-// 与普通 string 区分，避免被误当作 CEL 表达式再次求值。
+// PlainTextValue 是纯文本字符串字面量，不得当作表达式处理：与普通 string 区分，避免被误当作 CEL 表达式再次求值。
 type PlainTextValue string
 
 // MultilineStringValue is a multiline string value which has been parsed in a way which omits
@@ -205,7 +201,6 @@ type structValue struct {
 	fieldMap map[string]*Field
 }
 
-// AddField appends a MapField to the MapValue and indexes the field by name.
 // 重复添加同名字段会覆盖索引但保留列表中的旧项；调用方应避免重复。
 func (sv *structValue) AddField(field *Field) {
 	sv.Fields = append(sv.Fields, field)
@@ -221,8 +216,7 @@ func (sv *structValue) ConvertToNative(typeDesc reflect.Type) (interface{}, erro
 		return nil, fmt.Errorf("type conversion error from object to '%v'", typeDesc)
 	}
 
-	// Unwrap pointers, but track their use.
-	// 只允许一层指针：更深层指针在 CEL 中没有对应语义。
+	// 解包指针并跟踪其使用情况：只允许一层指针，更深层指针在 CEL 中没有对应语义。
 	isPtr := false
 	if typeDesc.Kind() == reflect.Pointer {
 		tk := typeDesc
@@ -552,7 +546,7 @@ func NewListValue() *ListValue {
 	}
 }
 
-// ListValue contains a list of dynamically typed entries.
+// ListValue 包含一个动态类型条目的列表。
 // valueSet 是惰性构建的哈希集合，用于加速 Contains；Append 会使其失效。
 type ListValue struct {
 	Entries      []*DynValue
@@ -582,8 +576,7 @@ func (lv *ListValue) Add(other ref.Val) ref.Val {
 // Append adds another entry into the ListValue.
 func (lv *ListValue) Append(entry *DynValue) {
 	lv.Entries = append(lv.Entries, entry)
-	// The append resets all previously built indices.
-	// sync.Once 无法复位，只能整体替换为零值以允许下次重建。
+	// 追加会重置所有已建立的索引：sync.Once 无法复位，只能整体替换为零值以允许下次重建。
 	lv.initValueSet = sync.Once{}
 }
 
@@ -726,8 +719,7 @@ func (lv *ListValue) Value() interface{} {
 	return lv
 }
 
-// finalizeValueSet inspects the ListValue entries in order to make internal optimizations once all list
-// entries are known.
+// finalizeValueSet 检查 ListValue 的条目，在所有条目确定后用于内部优化。
 // 只有全部为可哈希的标量时才建立集合；出现复合类型则放弃优化（valueSet 保持 nil）。
 func (lv *ListValue) finalizeValueSet() {
 	valueSet := make(map[ref.Val]struct{})

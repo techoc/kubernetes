@@ -65,7 +65,7 @@ func init() {
 	utilruntime.Must(examplev1.AddToScheme(scheme))
 }
 
-// GetPodAttrs returns labels and fields of a given object for filtering purposes.
+// GetPodAttrs 返回给定对象用于过滤的 labels 与 fields。
 // cacher 依赖该函数把对象映射为字段集合，从而支持字段选择器索引与过滤。
 func GetPodAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	pod, ok := obj.(*example.Pod)
@@ -652,7 +652,7 @@ func withClusterScopedKeyFunc(options *setupOptions) {
 	}
 }
 
-// mirror indexer configuration from pkg/registry/core/pod/strategy.go
+// 索引配置与 pkg/registry/core/pod/strategy.go 保持一致。
 // 同时配置 cacher 内部索引与 client-go cache 索引，确保测试覆盖两条索引路径。
 func withNodeNameAndNamespaceIndex(options *setupOptions) {
 	options.indexerFuncs = map[string]storage.IndexerFunc{

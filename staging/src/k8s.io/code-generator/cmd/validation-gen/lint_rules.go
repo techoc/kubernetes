@@ -47,8 +47,8 @@ func checkAlphaBetaUsage(tag codetags.Tag, isRoot bool) (string, error) {
 	return "", nil
 }
 
-// alphaBetaPrefix enforces that +k8s:alpha and +k8s:beta tags are always used as prefix to
-// 另一条规则：稳定性标签必须位于标签链最外层，作为内部验证的前缀。
+// alphaBetaPrefix 是另一条规则：+k8s:alpha 与 +k8s:beta 必须位于标签链最外层，
+// 作为内部验证标签的前缀。
 func alphaBetaPrefix() lintRule {
 	return func(container *types.Type, t *types.Type, tags []codetags.Tag) (string, error) {
 		for _, tag := range tags {
@@ -61,8 +61,7 @@ func alphaBetaPrefix() lintRule {
 	}
 }
 
-// checkTagStability recursively checks that a tag and its nested tags
-// satisfy the stability requirements of the context.
+// checkTagStability 递归检查某个标签及其嵌套标签是否满足当前上下文的稳定性要求。
 // 未知标签（非声明式验证标签）没有稳定性元数据，直接放行交给其他规则处理。
 func checkTagStability(tag codetags.Tag, contextLevel validators.TagStabilityLevel) (string, error) {
 	tagStability, err := validators.GetStability(tag.Name)
@@ -92,10 +91,9 @@ func validationStability() lintRule {
 			pkgPath = container.Name.Package
 		}
 
-		// Unprefixed validations are normally required to be Stable.
-		// In Alpha packages, we allow Alpha-level and Beta-level validations
-		// without a prefix. In Beta packages, we allow Beta-level validations
-		// without a prefix.
+		// 不带前缀的验证标签通常要求是 Stable 级。
+		// 在 Alpha 包里允许不带前缀使用 Alpha 级和 Beta 级验证标签；
+		// 在 Beta 包里允许不带前缀使用 Beta 级验证标签。
 		// 包路径末段（如 v1alpha1）决定了默认的稳定性上下文。
 		defaultContextLevel := validators.TagStabilityLevelStable
 		// APIVersion is the last element of the package path.
@@ -124,11 +122,9 @@ func validationStability() lintRule {
 				tagToCheck = *tag.ValueTag
 			}
 
-			// For feature gate tags, we allow developers to use nested beta validation tags
-			// without forcing validation authors to write redundant handwritten code (bypassing the
-			// declarative validation equivalence check), we automatically relax the stability
-			// context to Beta if the current context is Stable.
-			// 这样特性门控内的 beta 验证不必额外手写等价实现。
+			// 对特性门控标签，允许开发者在其中嵌套 beta 级验证标签，而不必强迫验证作者
+			// 额外手写代码（那会绕过声明式验证的等价性检查）：当前上下文为 Stable 时，
+			// 自动把稳定性上下文放宽为 Beta，特性门控内的 beta 验证因此不必手写等价实现。
 			if tagToCheck.Name == "k8s:ifEnabled" || tagToCheck.Name == "k8s:ifDisabled" {
 				if contextLevel == validators.TagStabilityLevelStable {
 					contextLevel = validators.TagStabilityLevelBeta
@@ -147,7 +143,7 @@ func validationStability() lintRule {
 	}
 }
 
-// hasTag recursively checks if a tag with given name exists in the tag tree.
+// hasTag 递归检查标签树中是否存在给定名称的标签。
 // 条件标签（如 ifEnabled）的载荷里可能还有验证标签，必须一并检查。
 func hasTag(tags []codetags.Tag, name string) bool {
 	for _, tag := range tags {
@@ -167,7 +163,7 @@ func hasRequirednessTag(tags []codetags.Tag) bool {
 	return hasTag(tags, "k8s:optional") || hasTag(tags, "k8s:required") || hasTag(tags, "k8s:forbidden")
 }
 
-// hasNonOpaqueValidationTag returns true if tags contain any registered validation tag that is not opaqueType.
+// tags 中包含任何已注册且不是 opaqueType 的验证标签时，hasNonOpaqueValidationTag 返回 true。
 // chainTags 中的标签会展开其 ValueTag 继续检查；其余已知验证标签即视为存在验证。
 func hasNonOpaqueValidationTag(extractor validators.ValidationExtractor, chainTags sets.Set[string], tags []codetags.Tag) bool {
 	for _, tag := range tags {

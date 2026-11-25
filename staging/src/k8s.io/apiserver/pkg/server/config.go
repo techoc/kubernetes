@@ -122,10 +122,9 @@ type Config struct {
 	// Authorization is the configuration for authorization
 	Authorization AuthorizationInfo
 
-	// LoopbackClientConfig is a config for a privileged loopback connection to the API server
-	// This is required for proper functioning of the PostStartHooks on a GenericAPIServer
-	// TODO: move into SecureServing(WithLoopback) as soon as insecure serving is gone
+	// LoopbackClientConfig 是到 API 服务器的特权回环连接的客户端配置，GenericAPIServer 上的 PostStartHooks 必须依赖它才能正常工作。
 	// 回环客户端使用特权令牌，仅用于服务器内部组件（如 post-start hook）调用自身。
+	// TODO: move into SecureServing(WithLoopback) as soon as insecure serving is gone
 	LoopbackClientConfig *restclient.Config
 
 	// EgressSelector provides a lookup mechanism for dialing outbound connections.
@@ -140,8 +139,7 @@ type Config struct {
 	AdmissionControl      admission.Interface
 	CorsAllowedOriginList []string
 	HSTSDirectives        []string
-	// FlowControl, if not nil, gives priority and fairness to request handling
-	// 配置后启用 APF；否则退化为固定上限的 max-in-flight 限流（见 DefaultBuildHandlerChain）。
+	// FlowControl 非 nil 时为请求处理提供优先级与公平性（APF）；配置后启用 APF，否则退化为固定上限的 max-in-flight 限流（见 DefaultBuildHandlerChain）。
 	FlowControl utilflowcontrol.Interface
 
 	EnableIndex     bool
@@ -160,17 +158,14 @@ type Config struct {
 	// EffectiveVersion determines which apis and features are available
 	// based on when the api/feature lifecyle.
 	EffectiveVersion basecompatibility.EffectiveVersion
-	// EmulationForwardCompatible is an option to implicitly enable all APIs which are introduced after the emulation version and
-	// have higher priority than APIs of the same group resource enabled at the emulation version.
-	// If true, all APIs that have higher priority than the APIs(beta+) of the same group resource enabled at the emulation version will be installed.
-	// This is needed when a controller implementation migrates to newer API versions, for the binary version, and also uses the newer API versions even when emulation version is set.
-	// Not applicable to alpha APIs.
+	// EmulationForwardCompatible 是一个隐式启用所有在模拟版本之后引入、且优先级高于模拟版本下已启用的同组同资源 API 的选项。
+	// 为 true 时，所有优先级高于模拟版本下已启用的同组同资源 API（beta+）的 API 都会被安装。
+	// 当控制器实现已在二进制版本中迁移到更新的 API 版本、即使设置了模拟版本也要继续使用新版本时，需要开启该选项。
 	// 仅对 GA/Beta API 生效；alpha API 不受模拟版本兼容逻辑影响。
 	EmulationForwardCompatible bool
-	// RuntimeConfigEmulationForwardCompatible is an option to explicitly enable specific APIs introduced after the emulation version through the runtime-config.
-	// If true, APIs identified by group/version that are enabled in the --runtime-config flag will be installed even if it is introduced after the emulation version. --runtime-config flag values that identify multiple APIs, such as api/all,api/ga,api/beta, are not influenced by this flag and will only enable APIs available at the current emulation version.
-	// If false, error would be thrown if any GroupVersion or GroupVersionResource explicitly enabled in the --runtime-config flag is introduced after the emulation version.
-	// 聚合型取值（api/all 等）不受该开关影响，只启用当前模拟版本已有的 API。
+	// RuntimeConfigEmulationForwardCompatible 是通过 runtime-config 显式启用特定在模拟版本之后引入的 API 的选项。
+	// 为 true 时，--runtime-config 中按 group/version 启用的 API 即使晚于模拟版本引入也会被安装；为 false 时，若 --runtime-config 显式启用了此类晚于模拟版本的 API 则会报错。
+	// 聚合型取值（如 api/all、api/ga、api/beta）不受该开关影响，只启用当前模拟版本已有的 API。
 	RuntimeConfigEmulationForwardCompatible bool
 	// FeatureGate is a way to plumb feature gate through if you have them.
 	FeatureGate featuregate.FeatureGate
@@ -230,12 +225,10 @@ type Config struct {
 	// RESTOptionsGetter is used to construct RESTStorage types via the generic registry.
 	RESTOptionsGetter genericregistry.RESTOptionsGetter
 
-	// If specified, all requests except those which match the LongRunningFunc predicate will timeout
-	// after this duration.
+	// RequestTimeout 指定后，除匹配 LongRunningFunc 谓词的请求外，所有请求超过该时长即超时。
 	// 超时通过上下文截止实现，handler 可继续在后台运行，但客户端已收到超时响应。
 	RequestTimeout time.Duration
-	// If specified, long running requests such as watch will be allocated a random timeout between this value, and
-	// twice this value.  Note that it is up to the request handlers to ignore or honor this timeout. In seconds.
+	// MinRequestTimeout 指定后，watch 等长时请求会被分配一个介于该值与其两倍之间的随机超时（单位：秒）；是否遵循该超时由请求处理器自行决定。
 	// 随机化可避免大量 watch 同时超时重连，形成惊群。
 	MinRequestTimeout int
 
@@ -248,9 +241,7 @@ type Config struct {
 	// elapsed, /livez will assume that unfinished post-start hooks will complete successfully and
 	// therefore return true.
 	LivezGracePeriod time.Duration
-	// ShutdownDelayDuration allows to block shutdown for some time, e.g. until endpoints pointing to this API server
-	// have converged on all node. During this time, the API server keeps serving, /healthz will return 200,
-	// but /readyz will return failure.
+	// ShutdownDelayDuration 允许推迟关闭一段时间，例如直到指向本 API 服务器的 endpoints 在所有节点上收敛。在此期间 API 服务器持续服务，/healthz 返回 200，但 /readyz 返回失败。
 	// 该延迟让负载均衡器有时间把流量切走，减少滚动更新时的连接错误。
 	ShutdownDelayDuration time.Duration
 
@@ -258,8 +249,7 @@ type Config struct {
 	// patch may cause.
 	// This affects all places that applies json patch in the binary.
 	JSONPatchMaxCopyBytes int64
-	// The limit on the request size that would be accepted and decoded in a write request
-	// 0 means no limit.
+	// MaxRequestBodyBytes 限制写请求可接受并解码的请求体大小；0 表示不限制。
 	// 默认 3MB，用于防止超大请求耗尽内存；etcd 侧推荐的请求上限为 1.5MB。
 	MaxRequestBodyBytes int64
 	// MaxRequestsInFlight is the maximum number of parallel non-long-running requests. Every further
@@ -271,11 +261,8 @@ type Config struct {
 	// Predicate which is true for paths of long-running http requests
 	LongRunningFunc apirequest.LongRunningRequestCheck
 
-	// GoawayChance is the probability that send a GOAWAY to HTTP/2 clients. When client received
-	// GOAWAY, the in-flight requests will not be affected and new requests will use
-	// a new TCP connection to triggering re-balancing to another server behind the load balance.
-	// Default to 0, means never send GOAWAY. Max is 0.02 to prevent break the apiserver.
-	// 概率性 GOAWAY 用于推动客户端重新建连，从而在负载均衡后端之间再平衡。
+	// GoawayChance 是向 HTTP/2 客户端发送 GOAWAY 的概率：收到 GOAWAY 后客户端在途请求不受影响，新请求会新建 TCP 连接，从而触发负载均衡到后端另一台服务器。
+	// 默认为 0，表示从不发送 GOAWAY；上限为 0.02，以免压垮 apiserver。概率性 GOAWAY 用于推动客户端重新建连，从而在负载均衡后端之间再平衡。
 	GoawayChance float64
 
 	// MergedResourceConfig indicates which groupVersion enabled and its resources enabled/disabled.
@@ -283,23 +270,16 @@ type Config struct {
 	// If not specify any in flags, then genericapiserver will only enable defaultAPIResourceConfig.
 	MergedResourceConfig *serverstore.ResourceConfig
 
-	// lifecycleSignals provides access to the various signals
-	// that happen during lifecycle of the apiserver.
-	// it's intentionally marked private as it should never be overridden.
-	// 生命周期信号驱动优雅关闭的各个阶段，禁止外部覆盖。
+	// lifecycleSignals 提供对 API 服务器生命周期中各个信号的访问。
+	// 该字段有意声明为私有，绝不应被外部覆盖；生命周期信号驱动优雅关闭的各个阶段。
 	lifecycleSignals lifecycleSignals
 
 	// StorageObjectCountTracker is used to keep track of the total number of objects
 	// in the storage per resource, so we can estimate width of incoming requests.
 	StorageObjectCountTracker flowcontrolrequest.StorageObjectCountTracker
 
-	// ShutdownSendRetryAfter dictates when to initiate shutdown of the HTTP
-	// Server during the graceful termination of the apiserver. If true, we wait
-	// for non longrunning requests in flight to be drained and then initiate a
-	// shutdown of the HTTP Server. If false, we initiate a shutdown of the HTTP
-	// Server as soon as ShutdownDelayDuration has elapsed.
-	// If enabled, after ShutdownDelayDuration elapses, any incoming request is
-	// rejected with a 429 status code and a 'Retry-After' response.
+	// ShutdownSendRetryAfter 决定 API 服务器优雅终止期间何时启动 HTTP Server 关闭：为 true 时，先排空在途的非长时请求再发起关闭；为 false 时，ShutdownDelayDuration 一到就立即发起关闭。
+	// 若开启，ShutdownDelayDuration 到期后新到的请求将被拒绝，并返回 429 状态码和 'Retry-After' 响应。
 	// 开启后客户端能明确感知"正在关闭"，并按照 Retry-After 重试到其他实例。
 	ShutdownSendRetryAfter bool
 
@@ -324,22 +304,10 @@ type Config struct {
 
 	// AggregatedDiscoveryGroupManager serves /apis in an aggregated form.
 	AggregatedDiscoveryGroupManager discoveryendpoint.ResourceManager
-
-	// ShutdownWatchTerminationGracePeriod, if set to a positive value,
-	// is the maximum duration the apiserver will wait for all active
-	// watch request(s) to drain.
-	// Once this grace period elapses, the apiserver will no longer
-	// wait for any active watch request(s) in flight to drain, it will
-	// proceed to the next step in the graceful server shutdown process.
-	// If set to a positive value, the apiserver will keep track of the
-	// number of active watch request(s) in flight and during shutdown
-	// it will wait, at most, for the specified duration and allow these
-	// active watch requests to drain with some rate limiting in effect.
-	// The default is zero, which implies the apiserver will not keep
-	// track of active watch request(s) in flight and will not wait
-	// for them to drain, this maintains backward compatibility.
-	// This grace period is orthogonal to other grace periods, and
-	// it is not overridden by any other grace period.
+	// ShutdownWatchTerminationGracePeriod 为正值时，表示 API 服务器等待所有活跃 watch 请求排空的最长时长；宽限期一到，服务器便不再等待在途的活跃 watch，直接继续优雅关闭流程的下一步。
+	// 设置为正值后，API 服务器会跟踪在途活跃 watch 请求的数量，并在关闭时最多等待指定时长，让这些活跃 watch 请求在限速生效的情况下排空。
+	// 默认值为 0，表示 API 服务器既不跟踪在途活跃 watch 请求，也不等待它们排空，以保持向后兼容。
+	// 该宽限期与其他宽限期相互独立，不会被任何其他宽限期覆盖。
 	// 为 0 时保持旧行为：不跟踪、不等待活跃 watch；正值会启用限速排空。
 	ShutdownWatchTerminationGracePeriod time.Duration
 }
@@ -598,10 +566,8 @@ type CompletedConfig struct {
 	*completedConfig
 }
 
-// AddHealthChecks adds a health check to our config to be exposed by the health endpoints
-// of our configured apiserver. We should prefer this to adding healthChecks directly to
-// the config unless we explicitly want to add a healthcheck only to a specific health endpoint.
-// 该方法会同时注册到 healthz/livez/readyz 三个端点。
+// AddHealthChecks 将健康检查同时注册到 healthz/livez/readyz 三个端点。
+// 应优先使用本方法添加健康检查，除非明确只想把某个检查加到特定的健康端点，才直接向 config 添加 healthChecks。
 func (c *Config) AddHealthChecks(healthChecks ...healthz.HealthChecker) {
 	c.HealthzChecks = append(c.HealthzChecks, healthChecks...)
 	c.LivezChecks = append(c.LivezChecks, healthChecks...)
@@ -642,8 +608,7 @@ func (c *Config) AddPostStartHook(name string, hook PostStartHookFunc) error {
 	}
 
 	if postStartHook, exists := c.PostStartHooks[name]; exists {
-		// this is programmer error, but it can be hard to debug
-		// 记录首次注册的调用栈，重名时直接指出来源，省去二分排查。
+		// 这属于编程错误，但可能难以排查：记录首次注册的调用栈，重名时直接指出来源，省去二分排查。
 		return fmt.Errorf("unable to add %q because it was already registered by: %s", name, postStartHook.originatingStack)
 	}
 	c.PostStartHooks[name] = PostStartHookConfigEntry{hook: hook, originatingStack: string(debug.Stack())}
@@ -664,8 +629,7 @@ func completeOpenAPI(config *openapicommon.Config, version *version.Version) {
 		return
 	}
 	if config.SecurityDefinitions != nil {
-		// Setup OpenAPI security: all APIs will have the same authentication for now.
-		// 排序后生成 DefaultSecurity，保证输出稳定、便于 diff。
+		// 设置 OpenAPI security：目前所有 API 使用相同的认证方式；排序后生成 DefaultSecurity，保证输出稳定、便于 diff。
 		config.DefaultSecurity = []map[string][]string{}
 		keys := []string{}
 		for k := range *config.SecurityDefinitions {
@@ -740,7 +704,7 @@ func completeOpenAPIV3(config *openapicommon.OpenAPIV3Config, version *version.V
 	}
 }
 
-// DrainedNotify returns a lifecycle signal of genericapiserver already drained while shutting down.
+// DrainedNotify 返回表示 genericapiserver 在关闭过程中已排空在途请求的生命周期信号，
 // 用于等待所有在途请求处理完成后再关闭外部依赖（如 etcd 客户端）。
 func (c *Config) DrainedNotify() <-chan struct{} {
 	return c.lifecycleSignals.InFlightRequestsDrained.Signaled()
@@ -761,7 +725,6 @@ func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedCo
 		c.ExternalAddress = c.PublicAddress.String()
 	}
 
-	// if there is no port, and we listen on one securely, use that one
 	// 外部地址缺少端口时从安全监听推断，否则生成的发现地址不可用。
 	if _, _, err := net.SplitHostPort(c.ExternalAddress); err != nil {
 		if c.SecureServing == nil {
@@ -938,7 +901,6 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		}
 	}
 
-	// first add poststarthooks from delegated targets
 	// 先注册被委托服务器的 hook，再注册本地配置的 hook，保证重名检测覆盖两者。
 	for k, v := range delegationTarget.PostStartHooks() {
 		s.postStartHooks[k] = v
@@ -955,7 +917,6 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		}
 	}
 
-	// register mux signals from the delegated server
 	// mux/discovery 完成信号参与 503 兜底逻辑，必须汇总到同一个服务器实例上。
 	for k, v := range delegationTarget.MuxAndDiscoveryCompleteSignals() {
 		if err := s.RegisterMuxAndDiscoveryCompleteSignal(k, v); err != nil {
@@ -997,7 +958,7 @@ func (c completedConfig) New(name string, delegationTarget DelegationTarget) (*G
 		klog.V(3).Infof("Not requested to run hook %s", priorityAndFairnessConfigConsumerHookName)
 	}
 
-	// Add PostStartHooks for maintaining the watermarks for the Priority-and-Fairness and the Max-in-Flight filters.
+	// 添加 PostStartHooks 以维护 Priority-and-Fairness 与 Max-in-Flight 两类过滤器的水位；
 	// 二者互斥：启用 APF 时由 APF 的排队/并发指标驱动，否则由 max-in-flight 采样驱动。
 	if c.FlowControl != nil {
 		const priorityAndFairnessFilterHookName = "priority-and-fairness-filter"

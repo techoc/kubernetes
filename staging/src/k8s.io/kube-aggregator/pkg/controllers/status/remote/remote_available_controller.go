@@ -56,14 +56,14 @@ import (
 // 证书会轮换，每次同步时取最新内容，才能保证聚合层用当前有效的证书访问聚合服务。
 type certKeyFunc func() ([]byte, []byte)
 
-// ServiceResolver knows how to convert a service reference into an actual location.
+// ServiceResolver 知道如何把 service reference 转换成实际位置。
 // 与 apiserver 包中的同名接口相互独立：这里的用途是把 Service 解析成健康检查的目标地址，
 // 只依赖接口便于在测试中注入假解析器，无需真实的 Service/EndpointSlice。
 type ServiceResolver interface {
 	ResolveEndpoint(namespace, name string, port int32) (*url.URL, error)
 }
 
-// AvailableConditionController handles checking the availability of registered API services.
+// AvailableConditionController 负责检查已注册 APIService 的可用性。
 // 该控制器只负责远端 APIService 的健康检查：先看 Service/EndpointSlice 是否可用，
 // 再实际请求发现端点，最后把结果写回 APIService 的 Available condition。
 // 本地 APIService 由另一个控制器处理，因此在 sync 开头就跳过。
@@ -85,13 +85,13 @@ type AvailableConditionController struct {
 	proxyCurrentCertKeyContent certKeyFunc
 	serviceResolver            ServiceResolver
 
-	// To allow injection for testing.
+	// 允许为测试注入。
 	// 把同步逻辑抽成函数字段，测试可直接替换，无需构造完整的 informer。
 	syncFn func(key string) error
 
 	// 限速队列：合并同一 APIService 的重复事件，失败时快速重试并逐步退避到 30 秒。
 	queue workqueue.TypedRateLimitingInterface[string]
-	// map from service-namespace -> service-name -> apiservice names
+	// service-namespace -> service-name -> apiservice names 的映射。
 	// 反向索引：Service/EndpointSlice 事件到达时，通过它快速找到受影响的 APIService 入队，
 	// 而不必每次都遍历全部 APIService。
 	cache map[string]map[string][]string
@@ -102,7 +102,7 @@ type AvailableConditionController struct {
 	metrics *availabilitymetrics.Metrics
 }
 
-// New returns a new remote APIService AvailableConditionController.
+// New 返回一个新的远端 APIService AvailableConditionController。
 // 同时监听 APIService、Service、EndpointSlice 三类资源：前者决定“检查谁”，
 // 后两者决定“什么时候需要重新检查”；构造时把三者的 HasSynced 都纳入等待，
 // 保证队列在真正开始前已积累完整事件。
@@ -129,9 +129,8 @@ func New(
 		endpointSliceGetter: endpointSliceGetter,
 		serviceResolver:     serviceResolver,
 		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
-			// We want a fairly tight requeue time.  The controller listens to the API, but because it relies on the routability of the
-			// service network, it is possible for an external, non-watchable factor to affect availability.  This keeps
-			// the maximum disruption time to a minimum, but it does prevent hot loops.
+			// 我们希望能有较紧的重入队时间。控制器虽然监听 API，但它依赖 Service 网络的可路由性，
+			// 外部的、不可 watch 的因素也可能影响可用性。这样能把最长中断时间压到最低，同时避免热循环。
 			// 初始重试间隔很小（5ms）是为了尽快恢复短暂抖动；上限 30 秒防止持续失败时刷屏。
 			// 网络可达性不是资源事件能反映的，必须靠快速重试来兜底。
 			workqueue.NewTypedItemExponentialFailureRateLimiter[string](5*time.Millisecond, 30*time.Second),
@@ -142,9 +141,8 @@ func New(
 		metrics:                    metrics,
 	}
 
-	// resync on this one because it is low cardinality and rechecking the actual discovery
-	// allows us to detect health in a more timely fashion when network connectivity to
-	// nodes is snipped, but the network still attempts to route there.  See
+	// 对该 informer 做周期性 resync：它基数低，且重新检查实际 discovery 能让我们更及时地
+	// 发现健康状态——比如到节点的连通性已恢复、但网络此前仍会把流量路由过去。参见
 	// https://github.com/openshift/origin/issues/17159#issuecomment-341798063
 	// APIService 数量少，30 秒全量 resync 代价可控；网络被切断但路由仍存在时，
 	// 没有资源事件可依赖，只能靠周期性主动探测及时发现不健康状态。
@@ -176,8 +174,7 @@ func New(
 	return c, nil
 }
 
-// BuildTransportConfig builds a transport.Config for an APIService.
-// It ignores TLS verification if InsecureSkipTLSVerify is true.
+// BuildTransportConfig 为 APIService 构造 transport.Config；当 InsecureSkipTLSVerify 为 true 时忽略 TLS 校验。
 // ServerName 用 Service 的 DNS 名而非 IP，保证 TLS SNI 与证书中的名称一致；
 // 客户端证书/CA 来自参数或 APIService 的 CABundle，配合可选的自定义 dial 函数
 // 支持在特殊网络环境下建立连接。
@@ -213,7 +210,7 @@ func (c *AvailableConditionController) sync(key string) error {
 	}
 
 	if originalAPIService.Spec.Service == nil {
-		// handled by the local APIService controller
+		// 由本地 APIService 控制器处理。
 		// 本地 APIService 不需要走 Service 网络，其可用性由另一个控制器维护。
 		return nil
 	}
@@ -244,7 +241,7 @@ func (c *AvailableConditionController) sync(key string) error {
 	}
 
 	if service.Spec.Type == v1.ServiceTypeClusterIP {
-		// if we have a cluster IP service, it must be listening on configured port and we can check that
+		// 如果是 ClusterIP 类型的 Service，它必须在配置的端口上监听，我们可以直接检查这一点。
 		// ClusterIP 类型可以直接判断端口与后端 EndpointSlice 是否就绪，
 		// 这些结构性检查比实际发请求便宜且能给出更具体的失败原因。
 
@@ -293,7 +290,7 @@ func (c *AvailableConditionController) sync(key string) error {
 			return err
 		}
 	}
-	// actually try to hit the discovery endpoint when it isn't local and when we're routing as a service.
+	// 当 APIService 不是本地类型且我们以 Service 方式路由时，真正去访问发现端点。
 	// 结构性检查通过后，再真正发请求验证发现端点可达：前面的检查只能证明“配置上有后端”，
 	// 无法证明网络实际通畅，因此这两层缺一不可。
 	if apiService.Spec.Service != nil && c.serviceResolver != nil {
@@ -310,7 +307,7 @@ func (c *AvailableConditionController) sync(key string) error {
 		}
 		discoveryClient := &http.Client{
 			Transport: restTransport,
-			// the request should happen quickly.
+			// 请求应当快速完成。
 			// 单次健康检查必须有超时，否则一个无响应的后端会拖住 worker；
 			// 下面还额外用 select 做了 6 秒兜底，覆盖 DNS/拨号卡住的情况。
 			Timeout: 5 * time.Second,
@@ -330,7 +327,7 @@ func (c *AvailableConditionController) sync(key string) error {
 					results <- err
 					return
 				}
-				// render legacyAPIService health check path when it is delegated to a service
+				// 当 legacy APIService 的健康检查被委托给 Service 时，渲染对应的检查路径。
 				// v1. 是核心 API（无 group）的占位 APIService，路径用 /api/<version>；
 				// 其他聚合服务走 /apis/<group>/<version>。
 				if apiService.Name == "v1." {
@@ -348,7 +345,7 @@ func (c *AvailableConditionController) sync(key string) error {
 						return
 					}
 
-					// setting the system-masters identity ensures that we will always have access rights
+					// 设置 system-masters 身份可确保我们始终拥有访问权限。
 					// 以 system:masters 身份探测，避免聚合服务因鉴权拒绝而返回非 2xx，
 					// 被误判为不可用；这里检查的是可达性，不是权限模型。
 					transport.SetAuthProxyHeaders(newReq, "system:kube-aggregator", "", []string{"system:masters"}, nil)
@@ -373,8 +370,8 @@ func (c *AvailableConditionController) sync(key string) error {
 						return
 					}
 
-					// we had trouble with slow dial and DNS responses causing us to wait too long.
-					// we added this as insurance
+					// 我们曾遇到拨号和 DNS 响应过慢导致等待过久的问题，
+					// 加入下面这段逻辑作为保险。
 					// http.Client.Timeout 对某些 DNS/拨号卡住的情况覆盖不到，
 					// 这里用外层 select 做 6 秒硬超时兜底，并主动关闭空闲连接。
 				case <-time.After(6 * time.Second):
@@ -390,7 +387,7 @@ func (c *AvailableConditionController) sync(key string) error {
 		var lastError error
 		for range attempts {
 			lastError = <-results
-			// if we had at least one success, we are successful overall and we can return now
+			// 只要有一次成功，整体就算成功，可以直接返回。
 			// 只要有一次成功就认为服务整体可用；循环读取剩余结果是为了让所有 goroutine
 			// 都能写入已带缓冲的通道并顺利退出，而不是卡在发送上。
 			if lastError == nil {
@@ -437,8 +434,8 @@ func hasAvailableEndpoint(portName string, es ...*discoveryv1.EndpointSlice) boo
 	})
 }
 
-// updateAPIServiceStatus only issues an update if a change is detected.  We have a tight resync loop to quickly detect dead
-// apiservices. Doing that means we don't want to quickly issue no-op updates.
+// updateAPIServiceStatus 只在检测到变化时才发起更新。我们用较紧的 resync 循环来快速发现
+// 不可用的 apiservice，因此不能随之频繁发出无效的 no-op 更新。
 // 每次同步都会刷新不可用 gauge（反映最新观测），但只有 status 真正变化时才发 UpdateStatus，
 // 避免在 30 秒 resync 下对 apiserver 产生大量无效写入。
 func (c *AvailableConditionController) updateAPIServiceStatus(originalAPIService, newAPIService *apiregistrationv1.APIService) (*apiregistrationv1.APIService, error) {
@@ -478,7 +475,7 @@ func (c *AvailableConditionController) updateAPIServiceStatus(originalAPIService
 	return newAPIService, nil
 }
 
-// Run starts the AvailableConditionController loop which manages the availability condition of API services.
+// Run 启动 AvailableConditionController 循环，管理 API service 的可用性条件。
 // workers 大于 1 时用多 worker 并发处理不同 key；同一个 key 由 workqueue 保证串行处理。
 func (c *AvailableConditionController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
@@ -487,10 +484,9 @@ func (c *AvailableConditionController) Run(workers int, stopCh <-chan struct{}) 
 	klog.Info("Starting RemoteAvailability controller")
 	defer klog.Info("Shutting down RemoteAvailability controller")
 
-	// This waits not just for the informers to sync, but for our handlers
-	// to be called; since the handlers are three different ways of
-	// enqueueing the same thing, waiting for this permits the queue to
-	// maximally de-duplicate the entries.
+	// 这里不仅等待 informer 同步完成，还等待我们的 handler 被调用过；
+	// 由于 handler 会以三种不同方式把同一个对象入队，等待它可以
+	// 让队列最大程度地合并重复条目。
 	// 等 handler 都被调用过，意味着初始事件已全部入队；此时再启动 worker，
 	// workqueue 能把这些重复 key 合并，避免启动时对同一 APIService 做多次相同检查。
 	if !controllers.WaitForCacheSync("RemoteAvailability", stopCh, c.apiServiceSynced, c.servicesSynced, c.endpointSlicesSynced) {
@@ -509,7 +505,7 @@ func (c *AvailableConditionController) runWorker() {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key；当需要退出时返回 false。
 // 成功就 Forget 清掉失败计数；失败则重新入队按退避重试，
 // 保证网络抖动导致的偶发失败能被自动恢复。
 func (c *AvailableConditionController) processNextWorkItem() bool {
@@ -587,9 +583,9 @@ func (c *AvailableConditionController) getAPIServicesFor(serviceNamespace, servi
 	return c.cache[serviceNamespace][serviceName]
 }
 
-// if the service/endpointslice handler wins the race against the cache rebuilding, it may queue a no-longer-relevant apiservice
-// (which will get processed an extra time - this doesn't matter),
-// and miss a newly relevant apiservice (which will get queued by the apiservice handler)
+// 如果 service/endpointslice handler 在与缓存重建的竞态中获胜，它可能入队一个
+// 已不再相关的 apiservice（会多处理一次，这无关紧要），
+// 并漏掉一个新近相关的 apiservice（后者会由 apiservice handler 入队）。
 // 从 APIService 列表整体重建“Service -> APIService 列表”的反向索引。
 // 不做增量更新而全量重建，是因为 APIService 数量少，整体重建更简单；
 // 竞态下漏掉的新引用会由 APIService 自己的事件补上，多入队的旧引用只是多检查一次，无碍正确性。
@@ -611,7 +607,7 @@ func (c *AvailableConditionController) rebuildAPIServiceCache() {
 	c.cache = newCache
 }
 
-// TODO, think of a way to avoid checking on every service manipulation
+// TODO：想个办法避免每次 Service 变更都触发检查。
 // 下面三个 Service handler 不在回调里直接检查，而是把引用它的 APIService 入队，
 // 由 worker 统一执行；这样多个事件能合并，检查逻辑也只有一份。
 

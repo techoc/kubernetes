@@ -57,8 +57,7 @@ type promiseFactory func(initial interface{}, doneCtx context.Context, doneVal i
 // promiseFactoryFactory returns the promiseFactory to use for the given queueSet
 type promiseFactoryFactory func(*queueSet) promiseFactory
 
-// `*queueSetCompleter` implements QueueSetCompleter.  Exactly one of
-// the fields `factory` and `theSet` is non-nil.
+// `*queueSetCompleter` 实现 `QueueSetCompleter`；`factory` 与 `theSet` 两个字段恰好只有一个非 nil。
 // factory 非 nil 表示首次构造，theSet 非 nil 表示在既有队列集上重配置。
 type queueSetCompleter struct {
 	factory              *queueSetFactory
@@ -179,8 +178,7 @@ func NewQueueSetFactory(c eventclock.Interface) fq.QueueSetFactory {
 	return newTestableQueueSetFactory(c, ordinaryPromiseFactoryFactory)
 }
 
-// newTestableQueueSetFactory creates a new QueueSetFactory object with the given promiseFactoryFactory
-// 可替换 promiseFactory 让测试能够精确控制请求被派发/取消的时机。
+// newTestableQueueSetFactory 用给定的 promiseFactoryFactory 创建新的 QueueSetFactory；可替换的 promiseFactory 让测试能够精确控制请求被派发/取消的时机。
 func newTestableQueueSetFactory(c eventclock.Interface, promiseFactoryFactory promiseFactoryFactory) fq.QueueSetFactory {
 	return &queueSetFactory{
 		clock:                 c,
@@ -203,9 +201,7 @@ func (qsf *queueSetFactory) BeginConstruction(qCfg fq.QueuingConfig, reqsGaugePa
 		dealer:               dealer}, nil
 }
 
-// checkConfig returns a non-nil Dealer if the config is valid and
-// calls for one, and returns a non-nil error if the given config is
-// invalid.
+// checkConfig 在配置合法且需要 dealer 时返回非 nil 的 Dealer，在配置非法时返回非 nil 的 error。
 // DesiredNumQueues <= 0 表示不排队（仅并发限制），此时不需要 dealer。
 func checkConfig(qCfg fq.QueuingConfig) (*shufflesharding.Dealer, error) {
 	if qCfg.DesiredNumQueues <= 0 {
@@ -240,8 +236,7 @@ func (qsc *queueSetCompleter) Complete(dCfg fq.DispatchingConfig) fq.QueueSet {
 	return qs
 }
 
-// createQueues is a helper method for initializing an array of n queues
-// baseIndex 保证新增队列的 index 连续，避免与既有队列冲突。
+// createQueues 是初始化 n 个队列数组的辅助方法；baseIndex 保证新增队列的 index 连续，避免与既有队列冲突。
 func createQueues(n, baseIndex int) []*queue {
 	fqqueues := make([]*queue, n)
 	for i := 0; i < n; i++ {
@@ -330,7 +325,6 @@ func (qs *queueSet) StartRequest(ctx context.Context, workEstimate *fqrequest.Wo
 
 	// ========================================================================
 	// Step 0:
-	// Apply only concurrency limit, if zero queues desired
 	// 不排队模式下只做并发限制：容量不足立即拒绝，否则直接开始执行。
 	if qs.qCfg.DesiredNumQueues < 1 {
 		if !qs.canAccommodateSeatsLocked(workEstimate.MaxSeats()) {
@@ -447,8 +441,7 @@ func (req *request) wait() (bool, bool) {
 	}
 	// TODO(aaron-prindle) add metrics for this case
 	klog.V(5).Infof("QS(%s): Ejecting request %#+v %#+v from its queue", qs.qCfg.Name, req.descr1, req.descr2)
-	// remove the request from the queue as its queue wait time has exceeded
-	// 只有确实仍在队列中时才需要回滚计数；已派发的请求取消属于正常执行路径。
+	// 排队等待时长已超限，将请求从队列中移除；只有确实仍在队列中时才需要回滚计数，已派发的请求取消属于正常执行路径。
 	queue := req.queue
 	if req.removeFromQueueLocked() != nil {
 		// 队首变化后需要重新应用 anti-windup，故延迟 boundNextDispatchLocked。
@@ -660,8 +653,7 @@ func (qs *queueSet) shuffleShardLocked(hashValue uint64, descr1, descr2 interfac
 func (qs *queueSet) rejectOrEnqueueToBoundLocked(request *request) bool {
 	queue := request.queue
 	curQueueLength := queue.requestsWaiting.Length()
-	// rejects the newly arrived request if resource criteria not met
-	// 两个条件必须同时满足才拒绝：仍有并发余量时即便队列满也应先派发。
+	// 资源条件不满足时拒绝新到达的请求；两个条件必须同时满足才拒绝：仍有并发余量时即便队列满也应先派发。
 	if qs.totSeatsInUse >= qs.dCfg.ConcurrencyLimit &&
 		curQueueLength >= qs.qCfg.QueueLengthLimit {
 		return false
@@ -781,7 +773,7 @@ func (qs *queueSet) dispatchLocked() bool {
 			qs.qCfg.Name, request.startTime.Format(nsTimeFmt), qs.currentR, request.descr1, request.descr2,
 			request.workEstimate, queue.index, queue.nextDispatchR, queue.requestsWaiting.Length(), queue.requestsExecuting.Len(), queue.seatsInUse, qs.totSeatsInUse)
 	}
-	// When a request is dequeued for service -> qs.virtualStart += G * width
+	// 请求出队获得服务时：qs.virtualStart += G * width
 	// 单个请求的工作量若异常巨大，说明估算或配置有误，仅记录日志而不阻断。
 	if request.totalWork() > rDecrement/100 { // A single increment should never be so big
 		klog.Errorf("QS(%s) at t=%s R=%v: dispatching request %#+v %#+v with implausibly high work %v from queue %d with start R %v",
@@ -798,7 +790,6 @@ func (qs *queueSet) dispatchLocked() bool {
 func (qs *queueSet) canAccommodateSeatsLocked(seats int) bool {
 	switch {
 	case qs.qCfg.DesiredNumQueues < 0:
-		// This is code for exemption from limitation
 		// 负值表示豁免流（exempt），完全不受并发限制。
 		return true
 	case seats > qs.dCfg.ConcurrencyLimit:
@@ -874,9 +865,7 @@ func (qs *queueSet) findDispatchQueueToBoundLocked() (*queue, *request) {
 	}
 	oldestReqFromMinQueue.removeFromQueueLocked()
 
-	// If the requested final seats exceed capacity of that queue,
-	// we reduce them to current capacity and adjust additional latency
-	// to preserve the total amount of work.
+	// 若请求的最终席位超过该队列容量，则将其降为当前容量并调整附加延迟，以保持总工作量守恒；
 	// 这是“超出并发上限的请求”的补偿：减少席位、增加延迟，保持总工作量守恒。
 	if oldestReqFromMinQueue.workEstimate.FinalSeats > uint64(qs.dCfg.ConcurrencyLimit) {
 		finalSeats := uint64(qs.dCfg.ConcurrencyLimit)
@@ -964,10 +953,7 @@ func (qs *queueSet) finishRequestLocked(r *request) {
 		} else {
 			klogV.Infof("QS(%s) at t=%s R=%v: request %#+v %#+v finished main use of %d seats but lingering on %d seats for %v seconds, qs will have %d requests occupying %d seats", qs.qCfg.Name, now.Format(nsTimeFmt), qs.currentR, r.descr1, r.descr2, r.workEstimate.InitialSeats, r.workEstimate.FinalSeats, additionalLatency.Seconds(), qs.totRequestsExecuting, qs.totSeatsInUse)
 		}
-		// EventAfterDuration will execute the event func in a new goroutine,
-		// so the seats allocated to this request will be released after
-		// AdditionalLatency elapses, this ensures that the additional
-		// latency has no impact on the user experience.
+		// EventAfterDuration 会在新 goroutine 中执行事件函数，因此分配给该请求的席位要等 AdditionalLatency 过后才释放，从而确保附加延迟不影响用户体验。
 		// 延迟释放期间席位仍计入 totSeatsInUse，从而真正降低并发而不是仅做统计。
 		qs.clock.EventAfterDuration(func(_ time.Time) {
 			qs.lockAndSyncTime(r.ctx)

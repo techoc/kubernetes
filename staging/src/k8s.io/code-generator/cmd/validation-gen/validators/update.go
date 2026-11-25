@@ -45,7 +45,7 @@ type updateMetadata struct {
 	stabilityLevel ValidationStabilityLevel
 }
 
-// updateTagCollector collects +k8s:update tags
+// updateTagCollector 收集 +k8s:update 标签。
 // 因为标签是逐个到达的，而运行时校验希望每个字段只调用一次，所以先累积、
 // 再通过 Deferred 在上下文完整后统一生成。
 type updateTagCollector struct {
@@ -71,7 +71,7 @@ func (updateTagCollector) ValidScopes() sets.Set[Scope] {
 
 // GetValidations 解析约束值，元素作用域立即生成校验，字段作用域则累积后延迟生成。
 func (utc updateTagCollector) GetValidations(context Context, tag codetags.Tag) (Validations, error) {
-	// Parse constraint from this tag
+	// 从当前标签解析约束条件：
 	// 只接受固定的五个语义化取值，拼写错误直接报错而不是静默忽略。
 	var constraint validate.UpdateConstraint
 	switch tag.Value {
@@ -118,8 +118,7 @@ func (utc updateTagCollector) GetValidations(context Context, tag codetags.Tag) 
 		return v, nil
 	}
 
-	// Initialize metadata if doesn't exist
-	// 字段第一次出现时创建累积槽；后续标签只做合并。
+	// 元数据不存在时先初始化：字段第一次出现时创建累积槽；后续标签只做合并。
 	fieldPath := context.Path.String()
 	if utc.byFieldPath[fieldPath] == nil {
 		utc.byFieldPath[fieldPath] = &updateMetadata{constraints: sets.New[validate.UpdateConstraint]()}
@@ -263,8 +262,7 @@ func getUpdateValidations(byFieldPath map[string]*updateMetadata, listByPath map
 
 // generateUpdateValidation 按类型分派到 slice/map/标量三条生成路径。
 func generateUpdateValidation(listByPath map[string]*listMetadata, context Context, constraints []validate.UpdateConstraint) (Validations, error) {
-	// Sort constraints to ensure deterministic order
-	// 约束集合本身无序，排序后生成的函数参数顺序才稳定。
+	// 对约束排序以保证顺序确定：约束集合本身无序，排序后生成的函数参数顺序才稳定。
 	slices.Sort(constraints)
 
 	t := util.NonPointer(util.NativeType(context.Type))

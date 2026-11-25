@@ -45,7 +45,6 @@ const (
 	defaultCacheSize = 200
 )
 
-// ClientConfig defines parameters required for creating a hook client.
 // ClientConfig 是构建 webhook 客户端所需的最小配置，取值来自
 // admissionregistration 等 API 的 webhook 定义。
 type ClientConfig struct {
@@ -63,8 +62,7 @@ type ClientConfigService struct {
 	Port      int32
 }
 
-// ClientManager builds REST clients to talk to webhooks. It caches the clients
-// to avoid duplicate creation.
+// ClientManager 构建与 webhook 通信的 REST 客户端，并缓存客户端以避免重复创建。
 // 缓存键基于配置内容的 JSON（忽略 Name），因此多个 webhook 共用同一
 // service/URL+CA 时只创建一个连接池，避免连接爆炸。
 type ClientManager struct {
@@ -74,7 +72,7 @@ type ClientManager struct {
 	cache                *lru.Cache
 }
 
-// NewClientManager creates a clientManager.
+// NewClientManager 创建 ClientManager。
 // gvs 决定 webhook 请求/响应使用的编解码版本；额外的 addToSchemaFuncs
 // 用于注册 webhook 负载中出现的类型。
 func NewClientManager(gvs []schema.GroupVersion, addToSchemaFuncs ...func(s *runtime.Scheme) error) (ClientManager, error) {
@@ -93,8 +91,7 @@ func NewClientManager(gvs []schema.GroupVersion, addToSchemaFuncs ...func(s *run
 	}, nil
 }
 
-// SetAuthenticationInfoResolverWrapper sets the
-// AuthenticationInfoResolverWrapper.
+// SetAuthenticationInfoResolverWrapper 设置 AuthenticationInfoResolverWrapper。
 // 装饰器模式：在保留已有 resolver 的前提下叠加身份/凭据逻辑。
 func (cm *ClientManager) SetAuthenticationInfoResolverWrapper(wrapper AuthenticationInfoResolverWrapper) {
 	if wrapper != nil {
@@ -114,8 +111,7 @@ func (cm *ClientManager) SetServiceResolver(sr ServiceResolver) {
 	}
 }
 
-// Validate checks if ClientManager is properly set up.
-// 一次性汇总所有缺失依赖，便于启动阶段一次修复。
+// Validate 检查 ClientManager 是否正确装配：一次性汇总所有缺失依赖，便于启动阶段一次修复。
 func (cm *ClientManager) Validate() error {
 	var errs []error
 	if cm.negotiatedSerializer == nil {
@@ -160,13 +156,11 @@ func (cm *ClientManager) HookClient(cc ClientConfig) (*rest.RESTClient, error) {
 // hookClientConfig 根据 service 或 URL 两种模式构建 rest.Config。
 func (cm *ClientManager) hookClientConfig(cc ClientConfig) (*rest.Config, error) {
 	complete := func(cfg *rest.Config) (*rest.Config, error) {
-		// Avoid client-side rate limiting talking to the webhook backend.
-		// Rate limiting should happen when deciding how many requests to serve.
+		// 避免对 webhook 后端进行客户端限流；限流应当发生在决定服务多少请求的时候。
 		// webhook 调用属于请求处理的一部分，客户端限流会把排队成本转嫁为请求失败。
 		cfg.QPS = -1
 
-		// Combine CAData from the config with any existing CA bundle provided
-		// 追加而非覆盖，以便同时信任集群 CA 与 webhook 自带 CA。
+		// 将配置中的 CAData 与 webhook 自带的既有 CA bundle 合并（追加而非覆盖），以便同时信任集群 CA 与 webhook 自带 CA。
 		if len(cfg.TLSClientConfig.CAData) > 0 {
 			cfg.TLSClientConfig.CAData = append(cfg.TLSClientConfig.CAData, '\n')
 		}
@@ -175,8 +169,7 @@ func (cm *ClientManager) hookClientConfig(cc ClientConfig) (*rest.Config, error)
 		cfg.ContentConfig.NegotiatedSerializer = cm.negotiatedSerializer
 		cfg.ContentConfig.ContentType = runtime.ContentTypeJSON
 
-		// Add a transport wrapper that allows detection of TLS connections to
-		// servers with serving certificates with deprecated characteristics
+		// 添加一个 transport 包装器，用于检测服务端证书带有已弃用特征的 TLS 连接。
 		// 用于告警弱证书（缺少 SAN、SHA1），而不是拒绝连接，保持向后兼容。
 		cfg.Wrap(x509metrics.NewDeprecatedCertificateRoundTripperWrapperConstructor(
 			x509MissingSANCounter,
@@ -208,9 +201,7 @@ func (cm *ClientManager) hookClientConfig(cc ClientConfig) (*rest.Config, error)
 		host := net.JoinHostPort(serverName, strconv.Itoa(int(port)))
 		cfg.Host = "https://" + host
 		cfg.APIPath = cc.Service.Path
-		// Set the server name if not already set
-		// TLS ServerName 必须指向 service DNS 名而非解析后的 Pod IP，
-		// 否则证书校验会失败。
+		// 若尚未设置则填充 TLS ServerName：它必须指向 service DNS 名而非解析后的 Pod IP，否则证书校验会失败。
 		if len(cfg.TLSClientConfig.ServerName) == 0 {
 			cfg.TLSClientConfig.ServerName = serverName
 		}
@@ -233,10 +224,8 @@ func (cm *ClientManager) hookClientConfig(cc ClientConfig) (*rest.Config, error)
 				return delegateDialer(ctx, network, addr)
 			}
 		} else {
-			// Use a custom roundtripper since http transport caches
-			// the connections by the URL. Host. The service resolver
-			// provides the actual endpoint address, if we use a custom
-			// dialer then the cached connection may not be closed.
+			// 使用自定义 roundtripper，因为 http transport 会按 URL 的 Host 缓存连接。service resolver 提供的是实际端点地址，
+			// 若改用自定义 dialer，被缓存的连接可能不会被关闭。
 			// 在 RoundTrip 层解析可让每个请求重新做负载均衡，
 			// 代价是请求 URL 的 Host 与连接目标不一致，需要显式处理 Host 头。
 			cfg.Wrap(func(rt http.RoundTripper) http.RoundTripper {
@@ -321,8 +310,7 @@ func (r *resolvingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 		return nil, err
 	}
 	newReq := req.Clone(req.Context())
-	// Preserve the original Host header
-	// 保留 Host 才能让后端基于 service 名的虚拟主机/证书工作。
+	// 保留原始 Host 头：只有保留 Host，后端基于 service 名的虚拟主机/证书才能正常工作。
 	if len(newReq.Host) == 0 {
 		newReq.Host = req.URL.Host
 	}

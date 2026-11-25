@@ -21,32 +21,25 @@ import (
 	"strings"
 )
 
-// MapList provides a "lookup by key" operation for lists (arrays) with x-kubernetes-list-type=map.
 // MapList 为 x-kubernetes-list-type=map 的列表提供按 key 查找第一个匹配元素的能力。
 type MapList interface {
-	// Get returns the first element having given key, for all
-	// x-kubernetes-list-map-keys, to the provided object. If the provided object isn't itself a valid MapList element,
-	// get returns nil.
+	// Get 针对所有 x-kubernetes-list-map-keys 返回第一个具有给定 key 的元素；若传入对象本身不是合法的 MapList 元素，则返回 nil。
 	// 缺少任一 key 或 key 值不是标量时，同样返回 nil。
 	Get(interface{}) interface{}
 }
 
 // keyStrategy 负责把对象转换为其在 map 列表中的复合键。
 type keyStrategy interface {
-	// CompositeKeyFor returns a composite key for the provided object, if possible, and a
-	// boolean that indicates whether or not a key could be generated for the provided object.
+	// CompositeKeyFor 尽力为给定对象生成复合键，并返回一个布尔值表示是否成功生成了 key。
 	// 无法生成 key（缺字段或值不是标量）时返回 ok=false。
 	CompositeKeyFor(map[string]interface{}) (interface{}, bool)
 }
 
-// singleKeyStrategy is a cheaper strategy for associative lists that have exactly one key.
-// 单 key 列表无需构造复合字符串，直接取值比较即可。
+// singleKeyStrategy 是恰好只有一个 key 的关联列表的更省开销的实现：单 key 列表无需构造复合字符串，直接取值比较即可。
 type singleKeyStrategy struct {
 	key string
 }
 
-// CompositeKeyFor directly returns the value of the single key  to
-// use as a composite key.
 // CompositeKeyFor 直接返回唯一 key 的值；仅接受 bool/float64/int64/string 等标量。
 func (ks *singleKeyStrategy) CompositeKeyFor(obj map[string]interface{}) (interface{}, bool) {
 	v, ok := obj[ks.key]
@@ -63,14 +56,11 @@ func (ks *singleKeyStrategy) CompositeKeyFor(obj map[string]interface{}) (interf
 	}
 }
 
-// multiKeyStrategy computes a composite key of all key values.
 // 多 key 列表需要把各 key 值编码成一个可比较的复合键。
 type multiKeyStrategy struct {
 	sts Schema
 }
 
-// CompositeKeyFor returns a composite key computed from the values of all
-// keys.
 // CompositeKeyFor 按 schema 声明的顺序把各 key 值编码为字符串；任一 key 缺失或非标量即失败。
 func (ks *multiKeyStrategy) CompositeKeyFor(obj map[string]interface{}) (interface{}, bool) {
 	const keyDelimiter = "\x00" // 0 byte should never appear in the composite key except as delimiter
@@ -99,8 +89,7 @@ func (ks *multiKeyStrategy) CompositeKeyFor(obj map[string]interface{}) (interfa
 	return delimited.String(), true
 }
 
-// emptyMapList is a MapList containing no elements.
-// emptyMapList 用于非 map 列表或空列表，始终查不到元素。
+// emptyMapList 是一个不含任何元素的 MapList，用于非 map 列表或空列表，始终查不到元素。
 type emptyMapList struct{}
 
 // Get 对空列表始终返回 nil。
@@ -113,10 +102,8 @@ func (emptyMapList) Get(interface{}) interface{} {
 type mapListImpl struct {
 	sts Schema
 	ks  keyStrategy
-	// keyedItems contains all lazily keyed map items
 	// keyedItems 缓存已计算 key 的元素。
 	keyedItems map[interface{}]interface{}
-	// unkeyedItems contains all map items that have not yet been keyed
 	// unkeyedItems 保存尚未计算 key 的元素。
 	unkeyedItems []interface{}
 }
@@ -138,7 +125,6 @@ func (a *mapListImpl) Get(obj interface{}) interface{} {
 		// 命中已建立的索引。
 		return match
 	}
-	// keep keying items until we either find a match or run out of unkeyed items
 	// 逐个索引剩余元素，找到目标即可短路；未处理部分继续保持惰性。
 	for len(a.unkeyedItems) > 0 {
 		// dequeue an unkeyed item
@@ -187,9 +173,6 @@ func makeKeyStrategy(sts Schema) keyStrategy {
 	}
 }
 
-// MakeMapList returns a queryable interface over the provided x-kubernetes-list-type=map
-// keyedItems. If the provided schema is _not_ an array with x-kubernetes-list-type=map, returns an
-// empty mapList.
 // MakeMapList 为 map 类型数组返回可查询的 MapList；schema 不匹配或列表为空时返回空实现。
 func MakeMapList(sts Schema, items []interface{}) (rv MapList) {
 	if sts.Type() != "array" || sts.XListType() != "map" || len(sts.XListMapKeys()) == 0 || len(items) == 0 {

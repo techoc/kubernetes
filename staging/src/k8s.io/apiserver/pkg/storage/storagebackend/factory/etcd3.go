@@ -172,7 +172,7 @@ func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan
 		lock.Lock()
 		defer lock.Unlock()
 		newProber, err := newETCD3ProberMonitor(c)
-		// Ensure that server is already not shutting down.
+		// 确认服务端此时尚未进入关闭流程。
 		// 关闭竞态：若 stopCh 已关闭而本次连接成功，需要立即释放，避免泄漏。
 		select {
 		case <-stopCh:
@@ -204,8 +204,8 @@ func newETCD3Check(c storagebackend.Config, timeout time.Duration, stopCh <-chan
 		}
 	}()
 
-	// limit to a request every half of the configured timeout with a maximum burst of one
-	// rate limited requests will receive the last request sent error (note: not the last received response)
+	// 限速为每半个配置的超时时间一次请求，最大突发量为 1；被限流的调用会收到
+	// 最近一次已发送请求的错误（注意：不是最近一次收到的响应）。
 	// 限速避免健康检查本身给 etcd 造成压力；被限流的调用返回最近一次结果。
 	limiter := rate.NewLimiter(rate.Every(timeout/2), 1)
 	// initial state is the clientErr
@@ -313,8 +313,8 @@ var newETCD3Client = func(c storagebackend.TransportConfig) (*kubernetes.Client,
 	if err != nil {
 		return nil, err
 	}
-	// NOTE: Client relies on nil tlsConfig
-	// for non-secure connections, update the implicit variable
+	// 注意：client 依赖 tlsConfig 为 nil 来表示非安全（明文）连接，
+	// 因此这里要更新这个隐式变量。
 	// 未配置任何证书文件时显式置 nil，表示使用明文连接。
 	if len(c.CertFile) == 0 && len(c.KeyFile) == 0 && len(c.TrustedCAFile) == 0 {
 		tlsConfig = nil
@@ -496,7 +496,7 @@ func newETCD3Storage(c storagebackend.ConfigForResource, newFunc, newListFunc fu
 		return nil, nil, err
 	}
 
-	// decorate the KV instance so we can track etcd latency per request.
+	// 装饰 KV 实例，以便我们按请求跟踪 etcd 延迟。
 	// 指标按 GVR 记录延迟，装饰器把请求级信息注入到 etcd 调用中。
 	client.KV = etcd3.NewETCDLatencyTracker(client.KV)
 

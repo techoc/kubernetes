@@ -20,7 +20,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// APIServiceList is a list of APIService objects.
+// APIServiceList 是 APIService 对象的列表。
 // 资源列表类型之所以存在，是因为 APIService 是集群级资源，列表接口需要统一的类型元数据和分页信息；
 // 它的 Items 保存的是对象值而非指针，以保持与其他 k8s 列表类型一致的序列化形态。
 type APIServiceList struct {
@@ -36,9 +36,8 @@ type ServiceReference struct {
 	Namespace string
 	// Name is the name of the service
 	Name string
-	// If specified, the port on the service that hosting the service.
-	// Default to 443 for backward compatibility.
-	// `port` should be a valid port number (1-65535, inclusive).
+	// 若指定，则为承载该服务的 Service 上的端口；为向后兼容默认为 443；
+	// `port` 应为合法端口号（1-65535，含端点）。
 	// +optional
 	// 内部类型用 int32 零值表示“未指定”，对外版本则多用指针区分；
 	// 默认值机制在进入内部类型前把缺省端口归一到 443。
@@ -48,10 +47,9 @@ type ServiceReference struct {
 // APIServiceSpec contains information for locating and communicating with a server.
 // Only https is supported, though you are able to disable certificate verification.
 type APIServiceSpec struct {
-	// Service is a reference to the service for this API server.  It must communicate
-	// on port 443.
-	// If the Service is nil, that means the handling for the API groupversion is handled locally on this server.
-	// The call will simply delegate to the normal handler chain to be fulfilled.
+	// Service 是对该 API server 对应 Service 的引用，必须在端口 443 上通信。
+	// 若 Service 为 nil，表示该 API groupversion 由本 server 在本地处理，
+	// 调用将直接委托给普通 handler 链完成。
 	// +optional
 	// 把 Service 留空作为“本地组”的标记，避免为内置 API 再维护一份自指的服务引用；
 	// 代理层据此走委托链而非发起真正的网络转发。
@@ -64,33 +62,31 @@ type APIServiceSpec struct {
 	// InsecureSkipTLSVerify disables TLS certificate verification when communicating with this server.
 	// This is strongly discouraged.  You should use the CABundle instead.
 	InsecureSkipTLSVerify bool
-	// CABundle is a PEM encoded CA bundle which will be used to validate an API server's serving certificate.
-	// If unspecified, system trust roots on the apiserver are used.
+	// CABundle 是 PEM 编码的 CA 包，用于校验 API server 的服务证书；未指定时使用 apiserver 上的系统信任根。
 	// +listType=atomic
 	// +optional
 	// CA 包视为原子整体而非可合并列表，因为它表示一份完整的信任根集合，
 	// 逐元素合并会产生难以推理的中间信任状态。
 	CABundle []byte
 
-	// GroupPriorityMinimum is the priority this group should have at least. Higher priority means that the group is preferred by clients over lower priority ones.
-	// Note that other versions of this group might specify even higher GroupPriorityMinimum values such that the whole group gets a higher priority.
-	// The primary sort is based on GroupPriorityMinimum, ordered highest number to lowest (20 before 10).
-	// The secondary sort is based on the alphabetical comparison of the name of the object.  (v1.bar before v1.foo)
-	// We'd recommend something like: *.k8s.io (except extensions) at 18000 and
-	// PaaSes (OpenShift, Deis) are recommended to be in the 2000s
+	// GroupPriorityMinimum 是该组至少应具有的优先级。优先级越高，客户端越偏好该组。
+	// 注意同一组的其他版本可能声明更高的 GroupPriorityMinimum，从而使整组获得更高优先级。
+	// 主排序依据 GroupPriorityMinimum，数值从大到小（20 排在 10 前）。
+	// 次排序依据对象名称的字母序比较（v1.bar 排在 v1.foo 前）。
+	// 建议把 *.k8s.io（extensions 除外）设在 18000 左右，
+	// PaaS（OpenShift、Deis）建议放在 2000 多的区间。
 	// 组级优先级与版本级优先级分开，是为了让同一组内的所有版本共享一次“组排序”，
 	// 再在组内按较小粒度的 VersionPriority 决定首选版本。
 	GroupPriorityMinimum int32
 
-	// VersionPriority controls the ordering of this API version inside of its group.  Must be greater than zero.
-	// The primary sort is based on VersionPriority, ordered highest to lowest (20 before 10).
-	// Since it's inside of a group, the number can be small, probably in the 10s.
-	// In case of equal version priorities, the version string will be used to compute the order inside a group.
-	// If the version string is "kube-like", it will sort above non "kube-like" version strings, which are ordered
-	// lexicographically. "Kube-like" versions start with a "v", then are followed by a number (the major version),
-	// then optionally the string "alpha" or "beta" and another number (the minor version). These are sorted first
-	// by GA > beta > alpha (where GA is a version with no suffix such as beta or alpha), and then by comparing major
-	// version, then minor version. An example sorted list of versions:
+	// VersionPriority 控制该 API 版本在其组内的排序，必须大于 0。
+	// 主排序依据 VersionPriority，从大到小（20 排在 10 前）。
+	// 由于只影响组内顺序，数值可以很小，大概在 10 量级即可。
+	// 版本优先级相同时，用版本字符串计算组内顺序。
+	// 若版本字符串是 “kube-like”，它排在非 “kube-like” 版本字符串之前，后者按字典序排列。
+	// “Kube-like” 版本以 “v” 开头，后跟一个数字（主版本），
+	// 再可选地跟字符串 “alpha” 或 “beta” 和另一个数字（次版本）。这些版本先按
+	// GA > beta > alpha 排序（GA 指没有 beta/alpha 后缀的版本），再比较主版本、次版本。一个排序后的版本示例：
 	// v10, v2, v1, v11beta2, v10beta3, v3beta1, v12alpha1, v11alpha2, foo1, foo10.
 	// 对“kube 风格”版本号做专门解析，是因为纯字典序会把 v10 排在 v2 之前；
 	// 识别 GA/beta/alpha 后，才能让稳定版本天然优先于预发布版本。
@@ -100,10 +96,9 @@ type APIServiceSpec struct {
 // ConditionStatus indicates the status of a condition (true, false, or unknown).
 type ConditionStatus string
 
-// These are valid condition statuses. "ConditionTrue" means a resource is in the condition;
-// "ConditionFalse" means a resource is not in the condition; "ConditionUnknown" means kubernetes
-// can't decide if a resource is in the condition or not. In the future, we could add other
-// intermediate conditions, e.g. ConditionDegraded.
+// 以下是合法的 condition 状态。“ConditionTrue” 表示资源处于该状态；
+// “ConditionFalse” 表示资源不处于该状态；“ConditionUnknown” 表示 kubernetes
+// 无法判断资源是否处于该状态。将来还可以添加其他中间状态，例如 ConditionDegraded。
 // 条件状态保留 Unknown 三态，是为了区分“明确不可用”和“控制器还没法判断”，
 // 这样状态同步方不会因为一次探测失败就武断地下结论。
 const (
@@ -131,7 +126,7 @@ type APIServiceCondition struct {
 	LastTransitionTime metav1.Time
 	// Unique, one-word, CamelCase reason for the condition's last transition.
 	Reason string
-	// Human-readable message indicating details about last transition.
+	// Message 是描述最近一次状态转换细节的、人类可读的消息。
 	// 把 Reason（机器可读）与 Message（人可读）拆开，是因为两者消费方不同：
 	// 控制器按 Reason 做判断，人则看 Message 排查问题。
 	Message string
@@ -139,7 +134,7 @@ type APIServiceCondition struct {
 
 // APIServiceStatus contains derived information about an API server
 type APIServiceStatus struct {
-	// Current service state of apiService.
+	// APIService 当前的服务状态。
 	// +listType=map
 	// +listMapKey=type
 	// 指令 +listType=map 与 +listMapKey=type 一起使用，使得不同控制器并发更新时
@@ -151,8 +146,7 @@ type APIServiceStatus struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// APIService represents a server for a particular GroupVersion.
-// Name must be "version.group".
+// APIService 表示某个特定 GroupVersion 的服务器，Name 必须形如 “version.group”。
 // 对象名固定为“版本.组”的形式，是为了让名字本身就能被解析出 Group/Version，
 // 从而免去在spec之外再存一份重复标识。
 // 指令 +genclient:nonNamespaced 说明它是集群级资源：聚合层面对的是整个集群的 API 组，
@@ -161,10 +155,10 @@ type APIService struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 
-	// Spec contains information for locating and communicating with a server
+	// Spec 包含定位并与服务端通信所需的信息。
 	// Spec 描述期望的静态配置，由用户/安装器提供。
 	Spec APIServiceSpec
-	// Status contains derived information about an API server
+	// Status 包含从 API server 派生出的信息。
 	// Status 描述控制器探测出来的运行状态，与 Spec 分开存放，
 	// 这样状态更新不会意外改动用户声明的配置。
 	Status APIServiceStatus

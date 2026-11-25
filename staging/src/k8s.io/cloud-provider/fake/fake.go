@@ -32,7 +32,7 @@ import (
 // defaultProviderName 是未显式设置 Provider 时 ProviderName 的返回值。
 const defaultProviderName = "fake"
 
-// Balancer is a fake storage of balancer information
+// Balancer 是负载均衡器信息的假存储。
 // 记录一次 EnsureLoadBalancer 写入的负载均衡器规格，供测试断言。
 type Balancer struct {
 	Name           string
@@ -42,7 +42,7 @@ type Balancer struct {
 	Hosts          []*v1.Node
 }
 
-// UpdateBalancerCall represents a fake call to update load balancers
+// UpdateBalancerCall 表示一次更新负载均衡器的假调用。
 // 同时用于 Ensure 与 Update 的调用记录，二者参数形状相同。
 type UpdateBalancerCall struct {
 	Service *v1.Service
@@ -60,7 +60,7 @@ var _ cloudprovider.PVLabeler = (*Cloud)(nil)
 var _ cloudprovider.Clusters = (*Cloud)(nil)
 var _ cloudprovider.InstancesV2 = (*Cloud)(nil)
 
-// Cloud is a test-double implementation of Interface, LoadBalancer, Instances, and Routes. It is useful for testing.
+// Cloud 是 Interface、LoadBalancer、Instances 和 Routes 的测试替身实现，便于测试使用。
 // 字段分为三类：行为开关（Disable*/Enable*）、返回值（Err*/Exists* 等）与观测记录
 // （Calls/UpdateCalls/EnsureCalls/Balancers/RouteMap）。测试通过组合它们构造场景。
 type Cloud struct {
@@ -122,7 +122,7 @@ type Cloud struct {
 	RequestDelay time.Duration
 }
 
-// Route is a representation of an advanced routing rule.
+// Route 是一条高级路由规则的表示。
 // 在 cloudprovider.Route 之外附带集群名，便于按集群过滤。
 type Route struct {
 	ClusterName string
@@ -389,7 +389,7 @@ func (f *Cloud) InstanceShutdown(ctx context.Context, node *v1.Node) (bool, erro
 	return f.NodeShutdown, f.ErrShutdownByProviderID
 }
 
-// InstanceMetadata returns metadata of the specified instance.
+// InstanceMetadata 返回指定实例的元数据。
 // 优先走 OverrideInstanceMetadata；否则从各字段拼装，模拟 InstancesV2 的一次调用
 // 同时返回地址、类型、拓扑与附加标签，以减少对云 API 的往返。
 func (f *Cloud) InstanceMetadata(ctx context.Context, node *v1.Node) (*cloudprovider.InstanceMetadata, error) {
@@ -419,8 +419,8 @@ func (f *Cloud) InstanceMetadata(ctx context.Context, node *v1.Node) (*cloudprov
 	}, f.MetadataErr
 }
 
-// List is a test-spy implementation of Instances.List.
-// It adds an entry "list" into the internal method call record.
+// List 是 Instances.List 的测试 spy 实现，
+// 会在内部方法调用记录中添加一条 "list" 条目。
 // filter 作为正则表达式匹配机器名；无效正则按不匹配处理。
 func (f *Cloud) List(filter string) ([]types.NodeName, error) {
 	f.addCall("list")
@@ -458,7 +458,7 @@ func (f *Cloud) GetZoneByNodeName(ctx context.Context, nodeName types.NodeName) 
 	return f.Zone, f.Err
 }
 
-// ListRoutes lists all managed routes that belong to the specified clusterName
+// ListRoutes 列出属于指定 clusterName 的所有托管路由。
 // 只返回 ClusterName 精确匹配的路由；返回副本，避免调用方修改内部状态。
 func (f *Cloud) ListRoutes(ctx context.Context, clusterName string) ([]*cloudprovider.Route, error) {
 	f.Lock.Lock()
@@ -474,9 +474,8 @@ func (f *Cloud) ListRoutes(ctx context.Context, clusterName string) ([]*cloudpro
 	return routes, f.Err
 }
 
-// CreateRoute creates the described managed route
-// route.Name will be ignored, although the cloud-provider may use nameHint
-// to create a more user-meaningful name.
+// CreateRoute 创建描述的托管路由；
+// route.Name 会被忽略，但云厂商可以用 nameHint 生成对用户更有意义的名称。
 // 假实现用 cluster-targetNode-CIDR 生成唯一键，重复创建会返回错误，
 // 以便测试覆盖“路由已存在”这一云侧冲突场景。
 func (f *Cloud) CreateRoute(ctx context.Context, clusterName string, nameHint string, route *cloudprovider.Route) error {
@@ -496,8 +495,8 @@ func (f *Cloud) CreateRoute(ctx context.Context, clusterName string, nameHint st
 	return nil
 }
 
-// DeleteRoute deletes the specified managed route
-// Route should be as returned by ListRoutes
+// DeleteRoute 删除指定的托管路由；
+// 传入的 Route 应当是 ListRoutes 返回的那个对象。
 // 通过 CIDR、目标节点与集群名三要素定位，而不是依赖 Name，
 // 因为真实云侧返回的名称不一定与创建时一致。
 func (f *Cloud) DeleteRoute(ctx context.Context, clusterName string, route *cloudprovider.Route) error {

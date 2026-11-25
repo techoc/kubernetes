@@ -109,10 +109,9 @@ func validateCommonFields(obj, old runtime.Object, strategy RESTUpdateStrategy) 
 	return allErrs
 }
 
-// BeforeUpdate ensures that common operations for all resources are performed on update. It only returns
-// errors that can be converted to api.Status. It will invoke update validation with the provided existing
-// and updated objects.
-// It sets zero values only if the object does not have a zero value for the respective field.
+// BeforeUpdate 负责在所有资源更新时执行公共操作，只返回可转换为 api.Status 的错误，
+// 并使用给定的已存在对象与更新后对象调用更新校验。
+// 只有当对象相应字段尚无零值时，它才写入零值。
 // 这里显式回填 generation、UID、时间戳与优雅删除参数：这些字段由服务器管理，
 // 客户端在 PUT 中携带的任何改动都必须被覆盖，否则会破坏对象生命周期语义。
 func BeforeUpdate(strategy RESTUpdateStrategy, ctx context.Context, obj, old runtime.Object) error {
@@ -139,7 +138,7 @@ func BeforeUpdate(strategy RESTUpdateStrategy, ctx context.Context, obj, old run
 
 	strategy.PrepareForUpdate(ctx, obj, old)
 
-	// Use the existing UID if none is provided
+	// 未提供 UID 时沿用旧对象的 UID。
 	// 允许客户端省略 UID（服务端补齐），但不允许改成另一个值——那会被后续校验拒绝。
 	if len(objectMeta.GetUID()) == 0 {
 		objectMeta.SetUID(oldMeta.GetUID())
@@ -152,7 +151,7 @@ func BeforeUpdate(strategy RESTUpdateStrategy, ctx context.Context, obj, old run
 	if !oldMeta.GetDeletionTimestamp().IsZero() {
 		objectMeta.SetDeletionTimestamp(oldMeta.GetDeletionTimestamp())
 	}
-	// an update can never remove/change grace period seconds
+	// 更新操作永远不能移除或修改优雅删除期秒数。
 	// 注意只在客户端未提供时回填：finalizer 等流程可能合法地调整优雅删除期。
 	if oldMeta.GetDeletionGracePeriodSeconds() != nil && objectMeta.GetDeletionGracePeriodSeconds() == nil {
 		objectMeta.SetDeletionGracePeriodSeconds(oldMeta.GetDeletionGracePeriodSeconds())
@@ -187,7 +186,7 @@ func ValidateUpdate(ctx context.Context, obj runtime.Object, old runtime.Object,
 	return errs
 }
 
-// TransformFunc is a function to transform and return newObj
+// TransformFunc 用于转换并返回 newObj。
 // 变换函数可以在持久化前注入服务端生成的字段，或基于旧对象做局部更新。
 type TransformFunc func(ctx context.Context, newObj runtime.Object, oldObj runtime.Object) (transformedNewObj runtime.Object, err error)
 
@@ -206,7 +205,7 @@ func DefaultUpdatedObjectInfo(obj runtime.Object, transformers ...TransformFunc)
 	return &defaultUpdatedObjectInfo{obj, transformers}
 }
 
-// Preconditions satisfies the UpdatedObjectInfo interface.
+// Preconditions 实现 UpdatedObjectInfo 接口。
 // 若对象带有 UID，则生成 UID 前置条件，保证删除后重建的同名对象不会被误更新。
 func (i *defaultUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
 	// Attempt to get the UID out of the object
@@ -232,9 +231,9 @@ func (i *defaultUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj run
 	// Start with the configured object
 	newObj := i.obj
 
-	// If the original is non-nil (might be nil if the first transformer builds the object from the oldObj), make a copy,
-	// so we don't return the original. BeforeUpdate can mutate the returned object, doing things like clearing ResourceVersion.
-	// If we're re-called, we need to be able to return the pristine version.
+	// 若原始对象非 nil（当第一个 transformer 基于 oldObj 构造对象时可能为 nil），就做一次
+	// 拷贝，以免把原始对象返回出去：BeforeUpdate 可能修改返回的对象，例如清空
+	// ResourceVersion；如果被再次调用，我们必须能返回未被污染的版本。
 	// 深拷贝是关键：UpdatedObject 可能在重试中被多次调用，必须每次返回未受污染的原始对象。
 	if newObj != nil {
 		newObj = newObj.DeepCopyObject()
@@ -268,7 +267,7 @@ func WrapUpdatedObjectInfo(objInfo UpdatedObjectInfo, transformers ...TransformF
 	return &wrappedUpdatedObjectInfo{objInfo, transformers}
 }
 
-// Preconditions satisfies the UpdatedObjectInfo interface.
+// Preconditions 实现 UpdatedObjectInfo 接口。
 // 前置条件由被包装对象决定，包装层不额外添加。
 func (i *wrappedUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
 	return i.objInfo.Preconditions()
@@ -293,7 +292,7 @@ func (i *wrappedUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj run
 	return newObj, nil
 }
 
-// AdmissionToValidateObjectUpdateFunc converts validating admission to a rest validate object update func
+// AdmissionToValidateObjectUpdateFunc 把校验型准入转换为 rest 的更新对象校验函数。
 // 与创建版本对称：准入不处理该操作时直接放行，否则用新旧对象重新构造属性执行校验。
 func AdmissionToValidateObjectUpdateFunc(admit admission.Interface, staticAttributes admission.Attributes, o admission.ObjectInterfaces) ValidateObjectUpdateFunc {
 	validatingAdmission, ok := admit.(admission.ValidationInterface)

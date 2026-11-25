@@ -29,19 +29,19 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// LabelZonesToSet converts a PV label value from string containing a delimited list of zones to set
+// LabelZonesToSet 把 PV 标签值（包含分隔符分隔的 zone 列表的字符串）转换为集合。
 // PV 多可用区标签使用 cloudvolume.LabelMultiZoneDelimiter 分隔，而不是逗号。
 func LabelZonesToSet(labelZonesValue string) (sets.String, error) {
 	return stringToSet(labelZonesValue, cloudvolume.LabelMultiZoneDelimiter)
 }
 
-// ZonesSetToLabelValue converts zones set to label value
+// ZonesSetToLabelValue 将 zone 集合转换为标签值。
 // 顺序不重要（集合语义），因此使用 UnsortedList 避免额外排序开销。
 func ZonesSetToLabelValue(strSet sets.String) string {
 	return strings.Join(strSet.UnsortedList(), cloudvolume.LabelMultiZoneDelimiter)
 }
 
-// ZonesToSet converts a string containing a comma separated list of zones to set
+// ZonesToSet 将逗号分隔的 zone 列表字符串转换为集合。
 // 用于 StorageClass 的 zones 参数解析；与 PV 标签使用不同的分隔符。
 func ZonesToSet(zonesString string) (sets.String, error) {
 	zones, err := stringToSet(zonesString, ",")
@@ -51,7 +51,7 @@ func ZonesToSet(zonesString string) (sets.String, error) {
 	return zones, nil
 }
 
-// StringToSet converts a string containing list separated by specified delimiter to a set
+// StringToSet 把由指定分隔符分隔的列表字符串转换为集合。
 // 去空白后不允许空项：空 zone 会使后续拓扑选择无法收敛。
 func stringToSet(str, delimiter string) (sets.String, error) {
 	zonesSlice := strings.Split(str, delimiter)
@@ -69,13 +69,13 @@ func stringToSet(str, delimiter string) (sets.String, error) {
 	return zonesSet, nil
 }
 
-// LabelZonesToList converts a PV label value from string containing a delimited list of zones to list
+// LabelZonesToList 把 PV 标签值（包含分隔符分隔的 zone 列表的字符串）转换为列表。
 // 与 LabelZonesToSet 不同，这里保留输入顺序（例如主 zone 在前），供需要确定顺序的调用方使用。
 func LabelZonesToList(labelZonesValue string) ([]string, error) {
 	return stringToList(labelZonesValue, cloudvolume.LabelMultiZoneDelimiter)
 }
 
-// StringToList converts a string containing list separated by specified delimiter to a list
+// StringToList 把由指定分隔符分隔的列表字符串转换为列表。
 // 与 stringToSet 一样拒绝空项，但保留顺序与重复项。
 func stringToList(str, delimiter string) ([]string, error) {
 	zonesSlice := make([]string, 0)
@@ -92,8 +92,8 @@ func stringToList(str, delimiter string) ([]string, error) {
 	return zonesSlice, nil
 }
 
-// SelectZoneForVolume is a wrapper around SelectZonesForVolume
-// to select a single zone for a volume based on parameters
+// SelectZoneForVolume 是对 SelectZonesForVolume 的包装，
+// 根据参数为卷挑选单个 zone。
 // 单副本场景的便捷入口；PopAny 对单元素集合等价于取唯一值。
 func SelectZoneForVolume(zoneParameterPresent, zonesParameterPresent bool, zoneParameter string, zonesParameter, zonesWithNodes sets.String, node *v1.Node, allowedTopologies []v1.TopologySelectorTerm, pvcName string) (string, error) {
 	zones, err := SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent, zoneParameter, zonesParameter, zonesWithNodes, node, allowedTopologies, pvcName, 1)
@@ -107,9 +107,9 @@ func SelectZoneForVolume(zoneParameterPresent, zonesParameterPresent bool, zoneP
 	return zone, nil
 }
 
-// SelectZonesForVolume selects zones for a volume based on several factors:
-// node.zone, allowedTopologies, zone/zones parameters from storageclass,
-// zones with active nodes from the cluster. The number of zones = replicas.
+// SelectZonesForVolume 基于多个因素为卷选择 zone：
+// node.zone、allowedTopologies、StorageClass 中的 zone/zones 参数、
+// 集群中有活动节点的 zone；所选 zone 的数量等于副本数（replicas）。
 // 优先级：node 的 zone（WaitForFirstConsumer 场景）> allowedTopologies > zone/zones 参数
 // > 集群中有节点的 zone。zone 与 zones 参数互斥，同时出现直接报错。
 func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zoneParameter string, zonesParameter, zonesWithNodes sets.String, node *v1.Node, allowedTopologies []v1.TopologySelectorTerm, pvcName string, numReplicas uint32) (sets.String, error) {
@@ -120,13 +120,13 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 	var zoneFromNode string
 	// pick one zone from node if present
 	if node != nil {
-		// VolumeScheduling implicit since node is not nil
+		// node 非 nil 意味着隐式启用了 VolumeScheduling。
 		// 有 node 说明处于 WaitForFirstConsumer：StorageClass 中再指定 zone 会与调度结果冲突。
 		if zoneParameterPresent || zonesParameterPresent {
 			return nil, fmt.Errorf("zone[s] cannot be specified in StorageClass if VolumeBindingMode is set to WaitForFirstConsumer. Please specify allowedTopologies in StorageClass for constraining zones")
 		}
 
-		// pick node's zone for one of the replicas
+		// 把 node 所在 zone 分配给其中一个副本。
 		// 优先新标签，回退到已弃用的 failure-domain 标签，兼容未升级的节点。
 		var ok bool
 		zoneFromNode, ok = node.ObjectMeta.Labels[v1.LabelTopologyZone]
@@ -136,7 +136,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 				return nil, fmt.Errorf("Either %s or %s Label for node missing", v1.LabelTopologyZone, v1.LabelFailureDomainBetaZone)
 			}
 		}
-		// if single replica volume and node with zone found, return immediately
+		// 若为单副本卷且找到了带 zone 的 node，立即返回。
 		// 单副本必须与 Pod 同 zone，无需再考虑其他候选。
 		if numReplicas == 1 {
 			return sets.NewString(zoneFromNode), nil
@@ -197,7 +197,7 @@ func SelectZonesForVolume(zoneParameterPresent, zonesParameterPresent bool, zone
 	return nil, fmt.Errorf("cannot determine zones to provision volume in")
 }
 
-// ZonesFromAllowedTopologies returns a list of zones specified in allowedTopologies
+// ZonesFromAllowedTopologies 返回 allowedTopologies 中指定的 zone 列表。
 // 只接受 zone 相关 key；出现其他 topology key 时报错，避免误把 region 等约束当作 zone。
 func ZonesFromAllowedTopologies(allowedTopologies []v1.TopologySelectorTerm) (sets.String, error) {
 	zones := make(sets.String)
@@ -215,9 +215,9 @@ func ZonesFromAllowedTopologies(allowedTopologies []v1.TopologySelectorTerm) (se
 	return zones, nil
 }
 
-// chooseZonesForVolumeIncludingZone is a wrapper around ChooseZonesForVolume that ensures zoneToInclude is chosen
-// zoneToInclude can either be empty in which case it is ignored. If non-empty, zoneToInclude is expected to be member of zones.
-// numReplicas is expected to be > 0 and <= zones.Len()
+// chooseZonesForVolumeIncludingZone 是对 ChooseZonesForVolume 的包装，确保 zoneToInclude 一定会被选中。
+// zoneToInclude 可以为空（此时被忽略）；若非空，则它应当是 zones 的成员；
+// numReplicas 预期满足 > 0 且 <= zones.Len()。
 // 先扣除必选 zone 再补选剩余副本，保证结果仍由 PVC 名称的哈希决定（可重现）。
 func chooseZonesForVolumeIncludingZone(zones sets.String, pvcName, zoneToInclude string, numReplicas uint32) (sets.String, error) {
 	if numReplicas == 0 {
@@ -245,7 +245,7 @@ func chooseZonesForVolumeIncludingZone(zones sets.String, pvcName, zoneToInclude
 	return zonesChosen, nil
 }
 
-// ChooseZonesForVolume is identical to ChooseZoneForVolume, but selects a multiple zones, for multi-zone disks.
+// ChooseZonesForVolume 与 ChooseZoneForVolume 相同，但为多 zone 盘选择多个 zone。
 // 选择结果只取决于 pvcName 与 zone 列表：同一 PVC 会稳定落在相同 zone，
 // 使 StatefulSet 的卷分布在集群 zone 集合不变时保持可预测。
 func ChooseZonesForVolume(zones sets.String, pvcName string, numZones uint32) sets.String {
@@ -259,14 +259,11 @@ func ChooseZonesForVolume(zones sets.String, pvcName string, numZones uint32) se
 	// Eventually the scheduler will coordinate placement into an available zone
 	hash, index := getPVCNameHashAndIndexOffset(pvcName)
 
-	// Zones.List returns zones in a consistent order (sorted)
-	// We do have a potential failure case where volumes will not be properly spread,
-	// if the set of zones changes during StatefulSet volume creation.  However, this is
-	// probably relatively unlikely because we expect the set of zones to be essentially
-	// static for clusters.
-	// Hopefully we can address this problem if/when we do full scheduler integration of
-	// PVC placement (which could also e.g. avoid putting volumes in overloaded or
-	// unhealthy zones)
+	// Zones.List 以一致（排序后）的顺序返回 zone。
+	// 存在一个潜在的失败场景：若 zone 集合在 StatefulSet 创建卷的过程中发生变化，
+	// 卷的分布可能不均匀；不过这基本不会发生，因为我们期望集群的 zone 集合几乎静态。
+	// 如果未来把 PVC 放置完整接入调度器，也许能解决这个问题
+	// （届时还能避免把卷放到过载或不健康的 zone）。
 	// 排序保证哈希取模结果跨进程稳定；zone 集合变化会改变映射，这是已知限制。
 	zoneSlice := zones.List()
 

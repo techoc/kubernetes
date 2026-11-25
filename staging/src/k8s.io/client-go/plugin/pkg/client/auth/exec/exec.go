@@ -84,8 +84,7 @@ var (
 	//
 	// 缓存以配置内容的 dump 为键，避免相同配置反复创建 Authenticator 与 TLS 连接池。
 	globalCache = newCache()
-	// The list of API versions we accept.
-	// 支持的 ExecCredential API 版本；未列出的版本会在创建时被拒绝。
+	// 本包接受的 ExecCredential API 版本列表；未列出的版本会在创建时被拒绝。
 	apiVersions = map[string]schema.GroupVersion{
 		clientauthenticationv1beta1.SchemeGroupVersion.String(): clientauthenticationv1beta1.SchemeGroupVersion,
 		clientauthenticationv1.SchemeGroupVersion.String():      clientauthenticationv1.SchemeGroupVersion,
@@ -372,9 +371,8 @@ func (a *Authenticator) UpdateTransportConfig(c *transport.Config) error {
 			return errors.New("invalid transport.Config.DialHolder: wrapped Dial function is nil")
 		}
 
-		// if c has a custom dialer, we have to wrap it
-		// TLS config caching is not supported for this config
-		// 包装自定义拨号器并接入连接跟踪，以便证书轮换后能关闭旧连接。
+		// 这里配有自定义拨号器，必须把它包装起来并接入连接跟踪，以便证书轮换后能关闭旧连接；
+		// 代价是该配置不支持 TLS config 缓存。
 		d := connrotation.NewDialerWithTracker(c.DialHolder.Dial, a.connTracker)
 		c.DialHolder = &transport.DialHolder{Dial: d.DialContext}
 	} else {
@@ -466,8 +464,7 @@ func (a *Authenticator) maybeRefreshCreds(creds *credentials) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// Since we're not making a new pointer to a.cachedCreds in getCreds, no
-	// need to do deep comparison.
+	// getCreds 不会给 a.cachedCreds 换新指针，所以这里无需深比较：
 	// 指针不一致说明期间已被其他请求刷新，无需重复执行插件。
 	if creds != a.cachedCreds {
 		// Credentials already rotated.
@@ -580,9 +577,8 @@ func (a *Authenticator) refreshCredsLocked() error {
 
 	oldCreds := a.cachedCreds
 	a.cachedCreds = newCreds
-	// Only close all connections when TLS cert rotates. Token rotation doesn't
-	// need the extra noise.
-	// 仅证书变化时才关闭所有连接（mTLS 下旧连接仍持有旧证书）；token 轮换通过请求头即可生效。
+	// 只有在 TLS 证书轮换时才关闭所有连接（mTLS 下旧连接仍持有旧证书）；
+	// token 轮换通过请求头即可生效，不必制造这些额外的断连噪音。
 	if oldCreds != nil && !reflect.DeepEqual(oldCreds.cert, a.cachedCreds.cert) {
 		// Can be nil if the exec auth plugin only returned token auth.
 		if oldCreds.cert != nil && oldCreds.cert.Leaf != nil {
@@ -673,8 +669,8 @@ func (a *Authenticator) checkAllowlistLocked(cmd *exec.Cmd) error {
 	} else {
 		// cmd.Path is unchanged, do LookPath ourselves
 		cmdResolvedPath, cmdResolvedErr = exec.LookPath(cmd.Path)
-		// update cmd.Path to cmdResolvedPath so we only run the resolved path
-		// 固定为解析后的路径，避免检查与执行之间 PATH 变化导致 TOCTOU。
+		// 把 cmd.Path 更新为 cmdResolvedPath，只执行已解析出的路径，
+		// 避免检查与执行之间 PATH 变化导致 TOCTOU。
 		if cmdResolvedPath != "" {
 			cmd.Path = cmdResolvedPath
 		}
@@ -689,8 +685,7 @@ func (a *Authenticator) checkAllowlistLocked(cmd *exec.Cmd) error {
 		return nil
 	}
 
-	// There is no verbatim match
-	// 允许列表中的条目可能也是相对命令名，尝试解析它们再比对。
+	// 没有逐字匹配：允许列表中的条目可能也是相对命令名，尝试解析它们再比对。
 	a.resolveAllowListEntriesLocked(cmd.Path)
 
 	// allowlistLookup may have changed, recheck

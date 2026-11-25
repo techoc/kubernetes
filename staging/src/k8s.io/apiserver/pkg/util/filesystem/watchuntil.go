@@ -65,7 +65,6 @@ func WatchUntil(ctx context.Context, pollInterval time.Duration, path string, ev
 		errorHandler = func(err error) {}
 	}
 
-	// Initialize watcher, fall back to no-op.
 	// 创建 watcher 失败不应致命：调用方通常依赖此回调来加载证书等关键数据，
 	// 宁可退化为较慢的轮询，也不要直接退出。
 	var (
@@ -85,14 +84,12 @@ func WatchUntil(ctx context.Context, pollInterval time.Duration, path string, ev
 		}()
 	}
 
-	// Initialize background poll
 	// 即使 watcher 正常，轮询也始终运行：作为事件通道的兜底。
 	t := time.NewTicker(pollInterval)
 	defer t.Stop()
 
 	attemptPeriodicRewatch := false
 
-	// Start watching the path
 	// 首次 Add 失败时不在 select 循环里立即重试，而是交给周期性 tick，
 	// 避免路径长期不存在时形成忙等。
 	if err := watcher.Add(path); err != nil {
@@ -110,13 +107,11 @@ func WatchUntil(ctx context.Context, pollInterval time.Duration, path string, ev
 			return
 
 		case <-t.C:
-			// Prioritize exiting if context is canceled
 			// ctx.Done 与 t.C 可能同时就绪，显式检查避免取消后仍触发一次回调。
 			if ctx.Err() != nil {
 				return
 			}
 
-			// Try to re-establish the watcher if we previously got a watch error
 			// 先 Remove 再 Add：某些平台对重复 Add 同一路径返回错误。
 			if attemptPeriodicRewatch {
 				_ = watcher.Remove(path)
@@ -136,7 +131,6 @@ func WatchUntil(ctx context.Context, pollInterval time.Duration, path string, ev
 				return
 			}
 
-			// Try to re-establish the watcher for events which dropped the existing watch
 			// 编辑器常以“写临时文件 + rename”方式原子替换，被监听的 inode 会消失，
 			// 必须重新 Add 才能继续收到后续事件。
 			if e.Name == path && (e.Has(fsnotify.Remove) || e.Has(fsnotify.Rename)) {

@@ -160,7 +160,7 @@ var (
 
 var registerMetrics sync.Once
 
-// Register all metrics.
+// Register 注册所有指标。
 // 幂等注册：多个入口（如 /metrics 路由与测试）都可能调用，重复注册会 panic。
 func Register() {
 	// Register the metrics.
@@ -181,7 +181,7 @@ func Register() {
 	})
 }
 
-// UpdateStoreStats sets the stats metrics.
+// UpdateStoreStats 写入存储统计指标。
 // 获取统计失败时写入 -1 作为哨兵值，让告警规则能区分“0 个对象”和“读取失败”。
 func UpdateStoreStats(groupResource schema.GroupResource, stats storage.Stats, err error) {
 	if err != nil {
@@ -204,7 +204,7 @@ func UpdateStoreStats(groupResource schema.GroupResource, stats storage.Stats, e
 	}
 }
 
-// DeleteStoreStats delete the stats metrics.
+// DeleteStoreStats 删除存储统计指标。
 // 资源被删除时同步清理标签值，防止指标基数无限增长。
 func DeleteStoreStats(groupResource schema.GroupResource) {
 	objectCounts.Delete(map[string]string{"resource": groupResource.String()})
@@ -214,9 +214,8 @@ func DeleteStoreStats(groupResource schema.GroupResource) {
 	}
 }
 
-// RecordEtcdRequest updates and sets the etcd_request_duration_seconds,
-// etcd_request_total, etcd_request_errors_total metrics.
-// 无论成败都记录延迟与计数，失败时额外累加错误计数。
+// RecordEtcdRequest 更新并设置 etcd_request_duration_seconds、etcd_request_total
+// 和 etcd_request_errors_total 指标。无论成败都记录延迟与计数，失败时额外累加错误计数。
 func RecordEtcdRequest(verb string, groupResource schema.GroupResource, err error, startTime time.Time) {
 	etcdRequestLatency.WithLabelValues(verb, groupResource.Group, groupResource.Resource).Observe(sinceInSeconds(startTime))
 	etcdRequestCounts.WithLabelValues(verb, groupResource.Group, groupResource.Resource).Inc()
@@ -225,7 +224,7 @@ func RecordEtcdRequest(verb string, groupResource schema.GroupResource, err erro
 	}
 }
 
-// RecordListLatency sets the storage_list_duration_seconds metric.
+// RecordListLatency 设置 storage_list_duration_seconds 指标。
 // streamed 标签区分是否走 etcd RangeStream，便于比较两种读取路径的性能。
 func RecordListLatency(groupResource schema.GroupResource, streamed bool, startTime time.Time) {
 	streamedLabel := "false"
@@ -240,7 +239,7 @@ func RecordEtcdEvent(groupResource schema.GroupResource) {
 	etcdEventsReceivedCounts.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
 }
 
-// RecordEtcdBookmark updates the etcd_bookmark_total metric.
+// RecordEtcdBookmark 更新 etcd_bookmark_total 指标。
 // 同时更新已弃用的 gauge 与新的 counter，兼容旧仪表盘与告警。
 func RecordEtcdBookmark(groupResource schema.GroupResource) {
 	etcdBookmarkCounts.WithLabelValues(groupResource.Group, groupResource.Resource).Inc()
@@ -259,13 +258,13 @@ func Reset() {
 
 // sinceInSeconds gets the time since the specified start in seconds.
 //
-// This is a variable to facilitate testing.
-// 用变量而非函数，便于测试替换为确定性实现，避免依赖真实时间。
+// 这里把它声明为变量是为了方便测试：用变量而非函数，便于测试替换为确定性实现，
+// 避免依赖真实时间。
 var sinceInSeconds = func(start time.Time) float64 {
 	return time.Since(start).Seconds()
 }
 
-// SetStorageMonitorGetter sets monitor getter to allow monitoring etcd stats.
+// SetStorageMonitorGetter 设置 monitor getter，以便监控 etcd 统计信息。
 // 通过 getter 间接访问 monitor，避免 metrics 包直接依赖 etcd 客户端实现。
 func SetStorageMonitorGetter(getter func() ([]Monitor, error)) {
 	storageMonitor.setGetter(getter)
@@ -278,7 +277,7 @@ func UpdateLeaseObjectCount(count int64) {
 	etcdLeaseObjectCounts.WithLabelValues().Observe(float64(count))
 }
 
-// RecordStorageListMetrics notes various metrics of the cost to serve a LIST request.
+// RecordStorageListMetrics 记录服务一次 LIST 请求开销的各项指标。
 // 委托给通用 storage metrics，后端标识固定为 etcd。
 func RecordStorageListMetrics(groupResource schema.GroupResource, index string, numFetched, numEvald, numReturned int) {
 	storagemetrics.RecordStorageListMetrics(groupResource, storagemetrics.StorageBackendEtcd, index, numFetched, numEvald, numReturned)
@@ -323,7 +322,7 @@ func (c *monitorCollector) DescribeWithStability(ch chan<- *compbasemetrics.Desc
 	ch <- storageSizeDescription
 }
 
-// CollectWithStability implements compbasemetrics.StableColletor
+// CollectWithStability 实现 compbasemetrics.StableCollector。
 // 抓取时对每个 monitor 单独设置 1 秒超时：某个 etcd 实例无响应不应拖垮整个 /metrics 端点。
 func (c *monitorCollector) CollectWithStability(ch chan<- compbasemetrics.Metric) {
 	monitors, err := c.getGetter()()

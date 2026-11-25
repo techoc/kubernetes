@@ -33,12 +33,10 @@ import (
 type CloudControllerManagerConfiguration struct {
 	metav1.TypeMeta
 
-	// Generic holds configuration for a generic controller-manager
-	// 通用 controller-manager 配置：leader election、客户端限流、健康检查端口等。
+	// Generic 保存通用 controller-manager 的配置：leader election、客户端限流、健康检查端口等。
 	Generic cmconfig.GenericControllerManagerConfiguration
-	// KubeCloudSharedConfiguration holds configuration for shared related features
-	// both in cloud controller manager and kube-controller manager.
-	// 与 kube-controller-manager 共用的云相关配置（云厂商名、集群名、CIDR 等）。
+	// KubeCloudShared 保存 cloud controller manager 与 kube-controller manager 共用的相关配置，
+	// 即与 kube-controller-manager 共享的云相关配置（云厂商名、集群名、CIDR 等）。
 	KubeCloudShared KubeCloudSharedConfiguration
 
 	// NodeController holds configuration for node controller
@@ -53,7 +51,7 @@ type CloudControllerManagerConfiguration struct {
 	// related features.
 	ServiceController serviceconfig.ServiceControllerConfiguration
 
-	// NodeStatusUpdateFrequency is the frequency at which the controller updates nodes' status
+	// NodeStatusUpdateFrequency 是控制器更新节点 status 的频率。
 	// 周期性地从云厂商拉取节点地址并回写 Node.Status；过短会放大云 API 调用量。
 	NodeStatusUpdateFrequency metav1.Duration
 
@@ -69,24 +67,23 @@ type CloudControllerManagerConfiguration struct {
 type KubeCloudSharedConfiguration struct {
 	// CloudProviderConfiguration holds configuration for CloudProvider related features.
 	CloudProvider CloudProviderConfiguration
-	// externalCloudVolumePlugin specifies the plugin to use when cloudProvider is "external".
-	// It is currently used by the in repo cloud providers to handle node and volume control in the KCM.
+	// externalCloudVolumePlugin 指定 cloudProvider 为 "external" 时使用的插件；
+	// 目前由仓库内的云提供商用它把节点与卷控制放在 KCM 中处理。
 	// 当 --cloud-provider=external 时，KCM 仍需要一个 in-tree 插件来接管节点与卷操作。
 	ExternalCloudVolumePlugin string
-	// useServiceAccountCredentials indicates whether controllers should be run with
-	// individual service account credentials.
+	// useServiceAccountCredentials 表示控制器是否使用各自独立的 service account 凭据运行。
 	// 为 true 时各控制器使用自己的 ServiceAccount 而非共享 CCM 身份，便于最小权限。
 	UseServiceAccountCredentials bool
-	// run with untagged cloud instances
+	// AllowUntaggedCloud 表示以未打标签的云实例运行。
 	// 允许集群包含没有云侧标签的实例；默认要求实例带集群标签以避免误纳管。
 	AllowUntaggedCloud bool
-	// routeReconciliationPeriod is the period for reconciling routes created for Nodes by cloud provider..
+	// routeReconciliationPeriod 是对账云 provider 为节点创建的路由的周期。
 	// 路由全量对账周期；仅在启用 --configure-cloud-routes 时有意义。
 	RouteReconciliationPeriod metav1.Duration
-	// clusterName is the instance prefix for the cluster.
+	// clusterName 是集群实例名称的前缀。
 	// 云资源名称前缀，同时用于识别哪些资源属于本集群，避免多集群互相干扰。
 	ClusterName string
-	// clusterCIDR is CIDR Range for Pods in cluster.
+	// clusterCIDR 是集群内 Pod 的 CIDR 范围。
 	// 逗号分隔的 Pod CIDR；route controller 用它界定自己负责的路由范围。
 	ClusterCIDR string
 	// AllocateNodeCIDRs enables CIDRs for Pods to be allocated and, if
@@ -105,10 +102,9 @@ type KubeCloudSharedConfiguration struct {
 
 // CloudProviderConfiguration contains basically elements about cloud provider.
 type CloudProviderConfiguration struct {
-	// Name is the provider for cloud services.
-	// 对应 --cloud-provider；为空表示不使用任何云提供商。
+	// Name 是云服务的 provider 名称，对应 --cloud-provider；为空表示不使用任何云提供商。
 	Name string
-	// cloudConfigFile is the path to the cloud provider configuration file.
+	// cloudConfigFile 是云 provider 配置文件的路径。
 	// 各云厂商自定义的配置文件，格式由插件自身解释。
 	CloudConfigFile string
 }

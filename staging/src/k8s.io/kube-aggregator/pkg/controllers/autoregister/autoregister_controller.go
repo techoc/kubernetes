@@ -52,8 +52,8 @@ const (
 	manageContinuously = "true"
 )
 
-// AutoAPIServiceRegistration is an interface which callers can re-declare locally and properly cast to for
-// adding and removing APIServices
+// AutoAPIServiceRegistration 是一个接口，调用方可以在本地重新声明它并安全地断言转换，
+// 用于添加和删除 APIService。
 // 让调用方在本地重声明这个接口，是为了让各组件只依赖自己需要的注册方法，
 // 不必引入整个控制器的实现类型；编译期仍由 Go 的鸭子类型保证兼容。
 type AutoAPIServiceRegistration interface {
@@ -83,7 +83,7 @@ type autoRegisterController struct {
 	syncedSuccessfullyLock *sync.RWMutex
 	syncedSuccessfully     map[string]bool
 
-	// remember names of services that existed when we started
+	// 记住启动时就已存在的 service 名称。
 	// onstart 语义只对启动时就存在的对象生效：后来才出现的同名对象可能是别的组件创建的，
 	// 不能因为打了个历史标签就把人家的对象接管或删掉。
 	apiServicesAtStart map[string]bool
@@ -156,14 +156,14 @@ func (c *autoRegisterController) Run(workers int, stopCh <-chan struct{}) {
 	klog.Info("Starting autoregister controller")
 	defer klog.Info("Shutting down autoregister controller")
 
-	// wait for your secondary caches to fill before starting your work
+	// 在开始工作前先等待二级缓存填充完成。
 	// 缓存未同步就开始协调会看到空列表，进而把本应保留的对象当作多余对象删除；
 	// 宁可启动慢一点，也不能在启动瞬间产生破坏性写入。
 	if !controllers.WaitForCacheSync("autoregister", stopCh, c.apiServiceSynced) {
 		return
 	}
 
-	// record APIService objects that existed when we started
+	// 记录启动时就已存在的 APIService 对象。
 	// 只在这里采样一次：后续新增的对象不享有 onstart 语义，
 	// 否则每次重启都会把运行中新建的对象误认为“启动即存在”。
 	if services, err := c.apiServiceLister.List(labels.Everything()); err == nil {
@@ -190,7 +190,7 @@ func (c *autoRegisterController) runWorker() {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key；需要退出时返回 false。
 // 错误一律重新入队而不是就地重试：一次失败通常是 apiserver 暂时不可用，
 // 带退避的重试既能自愈，也不会让一个卡住的对象饿死队列里的其他工作。
 func (c *autoRegisterController) processNextWorkItem() bool {
@@ -240,7 +240,7 @@ func (c *autoRegisterController) checkAPIService(name string) (err error) {
 	desired := c.GetAPIServiceToSync(name)
 	curr, err := c.apiServiceLister.Get(name)
 
-	// if we've never synced this service successfully, record a successful sync.
+	// 若该 service 从未成功同步过，则记录一次成功同步。
 	// onstart 要求“只做一次”，是否做过只在进程内记：重启后重新启动一次符合语义，
 	// 但同一次运行里 informer 反复触发事件不会让对象被反复写回。
 	hasSynced := c.hasSyncedSuccessfully(name)
@@ -265,7 +265,7 @@ func (c *autoRegisterController) checkAPIService(name string) (err error) {
 	case isAutomanagedOnStart(desired) && hasSynced:
 		return nil
 
-	// we don't have an entry and we do want one (2B,2C)
+	// 我们没有对应的 APIService，但期望有一个（2B、2C）。
 	// AlreadyExists 表示另一个协调循环刚刚创建成功，informer 事件随后会再来，
 	// 这里直接返回成功，避免把一个正常的并发结果当成错误重试。
 	case apierrors.IsNotFound(err) && desired != nil:
@@ -288,7 +288,7 @@ func (c *autoRegisterController) checkAPIService(name string) (err error) {
 	case isAutomanagedOnStart(curr) && hasSynced:
 		return nil
 
-	// we have a spurious APIService that we're managing, delete it (5A,6A)
+	// 我们有一个自己管理的、多余的 APIService，删除它（5A、6A）。
 	// UID 前置条件保证只删除刚刚看到的那一个实例：若期间对象被重建，
 	// 删除会因 UID 不匹配而冲突，下一次协调再按新对象判断，防止误删别人的服务。
 	case desired == nil:
@@ -305,7 +305,7 @@ func (c *autoRegisterController) checkAPIService(name string) (err error) {
 		return nil
 	}
 
-	// we have an entry and we have a desired, now we deconflict.  Only a few fields matter. (5B,5C,6B,6C)
+	// 我们已有条目、也有期望对象，现在做冲突消解；只有少数几个字段重要（5B、5C、6B、6C）。
 	// 只覆盖 Spec 并保留元数据、状态：状态由状态控制器维护，标签和注解可能来自
 	// 其他控制器，整体替换 desired 会把这些并发写入全部抹掉，还会造成无谓的冲突。
 	apiService := curr.DeepCopy()

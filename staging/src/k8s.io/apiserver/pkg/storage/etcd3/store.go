@@ -70,7 +70,7 @@ const (
 // force deletion and recreation of keys to weaken that angle.
 type authenticatedDataString string
 
-// AuthenticatedData implements the value.Context interface.
+// AuthenticatedData 实现 value.Context 接口。
 // 认证数据是 etcd 中的完整 key：加密值被搬到另一个 key 下会因 AAD 不匹配而解密失败。
 func (d authenticatedDataString) AuthenticatedData() []byte {
 	return []byte(string(d))
@@ -676,8 +676,8 @@ func (s *store) GuaranteedUpdate(
 }
 
 func getNewItemFunc(listObj runtime.Object, v reflect.Value) func() runtime.Object {
-	// For unstructured lists with a target group/version, preserve the group/version in the instantiated list items
-	// 必须保留 apiVersion，否则无结构化对象在 list 中会丢失类型信息。
+	// 对于带有目标 group/version 的 unstructured list，要在实例化的列表项中保留该
+	// group/version。必须保留 apiVersion，否则无结构化对象在 list 中会丢失类型信息。
 	if unstructuredList, isUnstructured := listObj.(*unstructured.UnstructuredList); isUnstructured {
 		if apiVersion := unstructuredList.GetAPIVersion(); len(apiVersion) > 0 {
 			return func() runtime.Object {
@@ -790,7 +790,7 @@ func (s *store) GetCurrentResourceVersion(ctx context.Context) (uint64, error) {
 	return uint64(getResp.Revision), nil
 }
 
-// shouldStream determines whether a list request should use etcd RangeStream.
+// shouldStream 决定一次 list 请求是否使用 etcd RangeStream。
 // 运行时探测服务端能力：老版本 etcd 不支持流式 Range，需回退到分页。
 func shouldStream(opts storage.ListOptions) bool {
 	// Only recursive lists stream, a non-recursive request reads a single object.
@@ -850,8 +850,7 @@ func (s *store) GetList(ctx context.Context, key string, opts storage.ListOption
 	var numEvald int
 	var streamed bool
 	startTime := time.Now()
-	// Because these metrics are for understanding the costs of handling LIST requests,
-	// get them recorded even in error cases.
+	// 这些指标用于理解处理 LIST 请求的开销，因此即使在出错情况下也要记录。
 	// 用 defer 记录，保证提前 return 的分支也有指标，否则慢查询/错误会被统计漏掉。
 	defer func() {
 		numReturn := v.Len()
@@ -980,7 +979,7 @@ func (s *store) pagedChunks(ctx context.Context, keyPrefix string, opts storage.
 	}
 }
 
-// listReadError maps an etcd list read error to the error GetList returns.
+// listReadError 把 etcd 的列表读取错误映射为 GetList 返回的错误。
 // ErrFutureRev 说明请求的 revision 尚未产生，返回 TooLargeResourceVersion 让客户端重试；
 // 此时读取当前 RV 只为在错误信息中给出参考值，失败也不影响主错误。
 func (s *store) listReadError(ctx context.Context, err error, withRev int64, paging bool, continueKey, keyPrefix string) error {
@@ -1050,8 +1049,8 @@ func (s *store) streamChunks(ctx context.Context, keyPrefix string, withRev, lim
 			if estimator != nil && len(rangeResp.Kvs) > 0 {
 				estimator.Update(rangeResp.Kvs)
 			}
-			// A pinned stream's final header holds the latest store revision, not withRev.
-			// 固定了 revision 时沿用请求值，避免误用服务端最新修订号破坏一致性假设。
+			// 固定 revision（pinned）的流，其最后一个 header 携带的是存储最新 revision，
+			// 而不是 withRev。固定了 revision 时沿用请求值，避免误用服务端最新修订号破坏一致性假设。
 			if revision == nil && rangeResp.Header != nil {
 				revision = &rangeResp.Header.Revision
 			}

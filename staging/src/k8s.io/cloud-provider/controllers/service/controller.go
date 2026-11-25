@@ -48,16 +48,12 @@ import (
 )
 
 const (
-	// Interval of synchronizing service status from apiserver
-	// 定期全量重同步 Service，兜住 informer 事件丢失或云侧状态漂移。
+	// 从 apiserver 定期全量重同步 Service 状态的间隔：兜住 informer 事件丢失或云侧状态漂移。
 	serviceSyncPeriod = 30 * time.Second
-	// Interval of synchronizing node status from apiserver
-	// 节点变化会影响所有 LB 的后端，重同步周期比 Service 更长以降低云 API 压力。
+	// 从 apiserver 同步节点状态的间隔。节点变化会影响所有 LB 的后端，重同步周期比 Service 更长以降低云 API 压力。
 	nodeSyncPeriod = 100 * time.Second
 
-	// How long to wait before retrying the processing of a service change.
-	// If this changes, the sleep in hack/jenkins/e2e.sh before downing a cluster
-	// should be changed appropriately.
+	// 处理 Service 变更失败后重试前的最短等待时间。若修改此值，hack/jenkins/e2e.sh 中下线集群前的 sleep 也需相应调整。
 	// 失败重试采用指数退避，范围 5s~300s；e2e 脚本中的等待时间与此假设相关。
 	minRetryDelay = 5 * time.Second
 	maxRetryDelay = 300 * time.Second
@@ -80,16 +76,14 @@ type serviceCache struct {
 	serviceMap map[string]*cachedService
 }
 
-// Controller keeps cloud provider service resources
-// (like load balancers) in sync with the registry.
-// Controller 就 Service 期望状态与云负载均衡实际状态做收敛：
+// Controller 让云厂商 Service 资源（如负载均衡器）与 registry 中的期望状态保持同步：
 // Service 变更由 serviceQueue 驱动，节点变更由 nodeQueue 驱动并扇出到所有 LB。
 type Controller struct {
 	cloud       cloudprovider.Interface
 	kubeClient  clientset.Interface
 	clusterName string
 	balancer    cloudprovider.LoadBalancer
-	// TODO(#85155): Stop relying on this and remove the cache completely.
+	// TODO(#85155): 停止依赖该 cache 并最终将其彻底移除。
 	// cache 记录 Service 状态，用于无 finalizer 的删除路径；finalizer 路径不依赖它。
 	cache               *serviceCache
 	serviceLister       corelisters.ServiceLister // 只读访问 informer 缓存，不能直接修改返回对象。
@@ -101,17 +95,13 @@ type Controller struct {
 	// services and nodes that need to be synced
 	serviceQueue workqueue.TypedRateLimitingInterface[string]
 	nodeQueue    workqueue.TypedRateLimitingInterface[string]
-	// lastSyncedNodes is used when reconciling node state and keeps track of
-	// the last synced set of nodes per service key. This is accessed from the
-	// service and node controllers, hence it is protected by a lock.
 	// lastSyncedNodes 记录每个 Service 上次同步给云厂商的节点集合，用于跳过
 	// 无实质变化的更新。service worker 与 node worker 都会访问，故需加锁。
 	lastSyncedNodes     map[string][]*v1.Node
 	lastSyncedNodesLock sync.Mutex
 }
 
-// New returns a new service controller to keep cloud provider service resources
-// (like load balancers) in sync with the registry.
+// New 返回一个新的 service controller，让云厂商 Service 资源（如负载均衡器）与 registry 保持同步。
 // New 只负责接线与注册事件处理器，实际循环在 Run 中启动。
 func New(
 	cloud cloudprovider.Interface,
@@ -152,8 +142,6 @@ func New(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(cur interface{}) {
 				svc, ok := cur.(*v1.Service)
-				// Check cleanup here can provide a remedy when controller failed to handle
-				// changes before it exiting (e.g. crashing, restart, etc.).
 				// 重启后重放 Add 事件时，带清理需求的对象也会被重新入队，弥补崩溃前的遗漏。
 				if ok && (wantsLoadBalancer(svc) || needsCleanup(svc)) {
 					s.enqueueService(cur)
@@ -167,8 +155,6 @@ func New(
 					s.enqueueService(cur)
 				}
 			},
-			// No need to handle deletion event because the deletion would be handled by
-			// the update path when the deletion timestamp is added.
 			// Service 的最终删除由 update（deletionTimestamp 被设置）触发清理，不监听 Delete。
 		},
 		serviceSyncPeriod,
@@ -211,7 +197,7 @@ func New(
 	return s, nil
 }
 
-// obj could be an *v1.Service, or a DeletionFinalStateUnknown marker item.
+// obj 可能是 *v1.Service，也可能是 DeletionFinalStateUnknown 标记项。
 // 使用 DeletionHandlingMetaNamespaceKeyFunc，确保删除事件也能得到 key。
 func (c *Controller) enqueueService(obj interface{}) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
@@ -222,7 +208,7 @@ func (c *Controller) enqueueService(obj interface{}) {
 	c.serviceQueue.Add(key)
 }
 
-// obj could be an *v1.Service, or a DeletionFinalStateUnknown marker item.
+// obj 可能是 *v1.Service，也可能是 DeletionFinalStateUnknown 标记项。
 // 节点 key 只用于触发重算，不用于定位单个节点。
 func (c *Controller) enqueueNode(obj interface{}) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
@@ -233,16 +219,10 @@ func (c *Controller) enqueueNode(obj interface{}) {
 	c.nodeQueue.Add(key)
 }
 
-// Run starts a background goroutine that watches for changes to services that
-// have (or had) LoadBalancers=true and ensures that they have
-// load balancers created and deleted appropriately.
-// serviceSyncPeriod controls how often we check the cluster's services to
-// ensure that the correct load balancers exist.
-// nodeSyncPeriod controls how often we check the cluster's nodes to determine
-// if load balancers need to be updated to point to a new set.
-//
-// It's an error to call Run() more than once for a given ServiceController
-// object.
+// Run 启动一个后台 goroutine，监听（当前或曾经）设置了 LoadBalancers=true 的 Service 变更，
+// 确保负载均衡器被正确创建和删除。serviceSyncPeriod 控制检查集群 Service 以确保正确 LB 存在的频率；
+// nodeSyncPeriod 控制检查集群节点以决定是否需更新 LB 指向新节点集的频率。
+// 对同一 ServiceController 实例多次调用 Run() 是错误用法。
 // Run 启动事件广播、缓存同步与 worker 循环；同一实例重复调用会导致重复消费队列。
 func (c *Controller) Run(ctx context.Context, workers int, controllerManagerMetrics *controllersmetrics.ControllerManagerMetrics) {
 	// 事件广播器绑定运行期上下文，ctx 取消时自动停止分发。
@@ -254,8 +234,7 @@ func (c *Controller) Run(ctx context.Context, workers int, controllerManagerMetr
 	defer c.serviceQueue.ShutDown()
 	defer c.nodeQueue.ShutDown()
 
-	// Start event processing pipeline.
-	// 事件同时写入结构日志与 API Server，便于排障和用户可见。
+	// 启动事件处理管道：事件同时写入结构日志与 API Server，便于排障和用户可见。
 	c.eventBroadcaster.StartStructuredLogging(0)
 	c.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.kubeClient.CoreV1().Events("")})
 	defer c.eventBroadcaster.Shutdown()
@@ -275,24 +254,21 @@ func (c *Controller) Run(ctx context.Context, workers int, controllerManagerMetr
 		go wait.UntilWithContext(ctx, c.serviceWorker, time.Second)
 	}
 
-	// Initialize one go-routine servicing node events. This ensure we only
-	// process one node at any given moment in time
-	// 节点同步只用一个 goroutine，避免多个 node sync 同时改写 LB 后端。
+	// 只初始化一个处理节点事件的 goroutine，确保任意时刻只处理一个节点，
+	// 避免多个 node sync 同时改写 LB 后端。
 	go wait.UntilWithContext(ctx, func(ctx context.Context) { c.nodeWorker(ctx, workers) }, time.Second)
 
 	<-ctx.Done()
 }
 
-// worker runs a worker thread that just dequeues items, processes them, and marks them done.
-// It enforces that the syncHandler is never invoked concurrently with the same key.
+// worker 运行一个工作线程，从队列取出条目、处理并标记完成；它保证同一 key 的 syncHandler 不会被并发调用。
 // serviceWorker 循环消费 Service key；同名 key 由队列保证不会并发处理。
 func (c *Controller) serviceWorker(ctx context.Context) {
 	for c.processNextServiceItem(ctx) {
 	}
 }
 
-// worker runs a worker thread that just dequeues items, processes them, and marks them done.
-// It enforces that the syncHandler is never invoked concurrently with the same key.
+// worker 运行一个工作线程，从队列取出条目、处理并标记完成；它保证同一 key 的 syncHandler 不会被并发调用。
 // nodeWorker 消费节点 key，并调用 syncNodes 扇出到所有 LB。
 func (c *Controller) nodeWorker(ctx context.Context, workers int) {
 	for c.processNextNodeItem(ctx, workers) {
@@ -360,24 +336,20 @@ func (c *Controller) init() error {
 	return nil
 }
 
-// processServiceCreateOrUpdate operates loadbalancers for the incoming service accordingly.
-// Returns an error if processing the service update failed.
+// processServiceCreateOrUpdate 根据传入的 Service 相应地操作负载均衡器；处理 Service 更新失败时返回错误。
 // 该函数维护 cache 与最终状态：只有当 LB 删除成功后才移除缓存。
 func (c *Controller) processServiceCreateOrUpdate(ctx context.Context, service *v1.Service, key string) error {
 	// TODO(@MrHohn): Remove the cache once we get rid of the non-finalizer deletion
 	// path. Ref https://github.com/kubernetes/enhancements/issues/980.
 	cachedService := c.cache.getOrCreate(key)
 	if cachedService.state != nil && cachedService.state.UID != service.UID {
-		// This happens only when a service is deleted and re-created
-		// in a short period, which is only possible when it doesn't
-		// contain finalizer.
+		// 这种情况只会发生在 Service 于短时间内被删除并重建时，而这只可能在旧对象不带 finalizer 时出现。
 		// UID 变化意味着同名 Service 已被重建，必须先用旧对象清理旧的云资源。
 		if err := c.processLoadBalancerDelete(ctx, cachedService.state, key); err != nil {
 			return err
 		}
 	}
-	// Always cache the service, we need the info for service deletion in case
-	// when load balancer cleanup is not handled via finalizer.
+	// 始终缓存 Service：当负载均衡器清理未通过 finalizer 处理时，Service 删除需要用到这份信息。
 	// 即便后续同步失败也要缓存，删除事件才能拿到足够信息做兜底清理。
 	cachedService.state = service
 	op, err := c.syncLoadBalancerIfNeeded(ctx, service, key)
@@ -403,15 +375,12 @@ const (
 	maxNodeNamesToLog = 20
 )
 
-// syncLoadBalancerIfNeeded ensures that service's status is synced up with loadbalancer
-// i.e. creates loadbalancer for service if requested and deletes loadbalancer if the service
-// doesn't want a loadbalancer no more. Returns whatever error occurred.
+// syncLoadBalancerIfNeeded 确保 Service 状态与负载均衡器同步：按需为 Service 创建 LB，Service 不再需要时删除 LB，并返回其中发生的错误。
 // finalizer 的增删与云资源操作严格配对：加 finalizer 后再创建，删除成功后再移除。
 func (c *Controller) syncLoadBalancerIfNeeded(ctx context.Context, service *v1.Service, key string) (loadBalancerOperation, error) {
 	// Note: It is safe to just call EnsureLoadBalancer.  But, on some clouds that requires a delete & create,
 	// which may involve service interruption.  Also, we would like user-friendly events.
 
-	// Save the state so we can avoid a write if it doesn't change
 	// 保存旧状态用于比较，避免无变化的 status patch 触发不必要的 watch 事件。
 	previousStatus := service.Status.LoadBalancer.DeepCopy()
 	var newStatus *v1.LoadBalancerStatus
@@ -440,16 +409,14 @@ func (c *Controller) syncLoadBalancerIfNeeded(ctx context.Context, service *v1.S
 				}
 			}
 		}
-		// Always remove finalizer when load balancer is deleted, this ensures Services
-		// can be deleted after all corresponding load balancer resources are deleted.
+		// 负载均衡器删除后总是移除 finalizer，确保 Service 在对应云资源全部清理后可被删除。
 		// 只有云资源清理成功后才移除 finalizer，防止 Service 先被删除导致资源泄漏。
 		if err := c.removeFinalizer(service); err != nil {
 			return op, fmt.Errorf("failed to remove load balancer cleanup finalizer: %v", err)
 		}
 		c.eventRecorder.Event(service, v1.EventTypeNormal, "DeletedLoadBalancer", "Deleted load balancer")
 	} else {
-		// Create or update the load balancer if service wants one.
-		// 先加 finalizer 再创建，保证创建过程中 Service 不会被删除。
+		// 若 Service 需要负载均衡器则创建或更新：先加 finalizer 再创建，保证创建过程中 Service 不会被删除。
 		op = ensureLoadBalancer
 		klog.V(2).Infof("Ensuring load balancer for service %s", key)
 		c.eventRecorder.Event(service, v1.EventTypeNormal, "EnsuringLoadBalancer", "Ensuring load balancer")
@@ -461,15 +428,12 @@ func (c *Controller) syncLoadBalancerIfNeeded(ctx context.Context, service *v1.S
 		newStatus, err = c.ensureLoadBalancer(ctx, service)
 		if err != nil {
 			if err == cloudprovider.ImplementedElsewhere {
-				// ImplementedElsewhere indicates that the ensureLoadBalancer is a nop and the
+				// ImplementedElsewhere 表示 ensureLoadBalancer 是空操作，该功能由其他控制器实现；此时立即返回，不做任何操作。
 				// 不属于本控制器的 Service，不写 status、不改事件，直接放弃。
-				// functionality is implemented by a different controller.  In this case, we
-				// return immediately without doing anything.
 				klog.V(4).Infof("LoadBalancer for service %s implemented by a different controller %s, Ignoring error", key, c.cloud.ProviderName())
 				return op, nil
 			}
-			// Use %w deliberately so that a returned RetryError can be handled.
-			// 保留错误链，processNextServiceItem 才能识别 RetryError。
+			// 有意使用 %w 包装错误以保留错误链，这样返回的 RetryError 才能被 processNextServiceItem 识别并处理。
 			return op, fmt.Errorf("failed to ensure load balancer: %w", err)
 		}
 		if newStatus == nil {
@@ -480,11 +444,8 @@ func (c *Controller) syncLoadBalancerIfNeeded(ctx context.Context, service *v1.S
 	}
 
 	if err := c.patchStatus(service, previousStatus, newStatus); err != nil {
-		// Only retry error that isn't not found:
-		// NotFound 通常意味着 finalizer 移除后 Service 立即消失，重试没有意义。
-		// - Not found error mostly happens when service disappears right after
-		//   we remove the finalizer.
-		// - We can't patch status on non-exist service anyway.
+		// 只重试非 NotFound 的错误：NotFound 通常发生在移除 finalizer 后 Service 立即消失时，
+		// 而对不存在的 Service 也无法 patch status，重试没有意义。
 		if !apierrors.IsNotFound(err) {
 			return op, fmt.Errorf("failed to update load balancer status: %v", err)
 		}
@@ -501,7 +462,7 @@ func (c *Controller) ensureLoadBalancer(ctx context.Context, service *v1.Service
 	if err != nil {
 		return nil, err
 	}
-	// If there are no available nodes for LoadBalancer service, make a EventTypeWarning event for it.
+	// LoadBalancer 类型 Service 没有可用节点时，发出 Warning 事件。
 	// 空后端仍交给云厂商处理（部分实现会创建空 LB），但事件提示用户检查节点。
 	if len(nodes) == 0 {
 		c.eventRecorder.Event(service, v1.EventTypeWarning, "UnAvailableLoadBalancer", "There are no available nodes for LoadBalancer")
@@ -533,8 +494,7 @@ func (c *Controller) getLastSyncedNodes(svc *v1.Service) []*v1.Node {
 	return c.lastSyncedNodes[key]
 }
 
-// ListKeys implements the interface required by DeltaFIFO to list the keys we
-// already know about.
+// ListKeys 实现 DeltaFIFO 要求的接口，列出我们已知的 key。
 // 返回当前缓存中的所有 key；调用方只应读取，不应修改底层 map。
 func (s *serviceCache) ListKeys() []string {
 	s.mu.RLock()
@@ -546,7 +506,7 @@ func (s *serviceCache) ListKeys() []string {
 	return keys
 }
 
-// GetByKey returns the value stored in the serviceMap under the given key
+// GetByKey 返回 serviceMap 中给定 key 下存储的值。
 // 实现 cache.Store 语义：不存在时返回 (nil,false,nil)。
 func (s *serviceCache) GetByKey(key string) (interface{}, bool, error) {
 	s.mu.RLock()
@@ -557,8 +517,6 @@ func (s *serviceCache) GetByKey(key string) (interface{}, bool, error) {
 	return nil, false, nil
 }
 
-// ListKeys implements the interface required by DeltaFIFO to list the keys we
-// already know about.
 // allServices 返回缓存中所有 Service 的快照，用于节点变化时的全量扇出。
 // 注意：这里复制切片但不深拷贝 Service 对象，调用方不得修改返回值。
 func (s *serviceCache) allServices() []*v1.Service {
@@ -605,7 +563,7 @@ func (s *serviceCache) delete(serviceName string) {
 	delete(s.serviceMap, serviceName)
 }
 
-// needsCleanup checks if load balancer needs to be cleaned up as indicated by finalizer.
+// needsCleanup 根据 finalizer 判断负载均衡器是否需要清理。
 // 判定条件：带 LB finalizer，且（正在删除 或 已不再需要 LB）。
 func needsCleanup(service *v1.Service) bool {
 	if !servicehelper.HasLBFinalizer(service) {
@@ -616,8 +574,7 @@ func needsCleanup(service *v1.Service) bool {
 		return true
 	}
 
-	// Service doesn't want loadBalancer but owns loadBalancer finalizer also need to be cleaned up.
-	// 类型被改回非 LoadBalancer 时也必须清理遗留的云资源。
+	// Service 不再需要负载均衡器但仍持有 loadBalancer finalizer 时（如类型被改回非 LoadBalancer），也必须清理遗留的云资源。
 	if service.Spec.Type != v1.ServiceTypeLoadBalancer {
 		return true
 	}
@@ -625,7 +582,7 @@ func needsCleanup(service *v1.Service) bool {
 	return false
 }
 
-// needsUpdate checks if load balancer needs to be updated due to change in attributes.
+// needsUpdate 检查是否因属性变化需要更新负载均衡器。
 // 逐项比较所有会影响 LB 的字段；任一变化都返回 true。无关字段变化不触发同步。
 func needsUpdate(oldService *v1.Service, newService *v1.Service) bool {
 	if !wantsLoadBalancer(oldService) && !wantsLoadBalancer(newService) {
@@ -680,9 +637,9 @@ func needsUpdate(oldService *v1.Service, newService *v1.Service) bool {
 		return true
 	}
 
-	// User can upgrade (add another clusterIP or ipFamily) or can downgrade (remove secondary clusterIP or ipFamily),
-	// but CAN NOT change primary/secondary clusterIP || ipFamily UNLESS they are changing from/to/ON ExternalName
-	// so not care about order, only need check the length.
+	// 用户可以升级（再添加一个 clusterIP 或 ipFamily）或降级（移除次要 clusterIP 或 ipFamily），
+	// 但只要不涉及改成/来自/基于 ExternalName，就不能更改主/次 clusterIP 或 ipFamily，
+	// 因此无需关心顺序，只需检查数量。
 	// API 已禁止原地修改 IPFamily，这里只需按数量判断双栈升级/降级。
 	if len(oldService.Spec.IPFamilies) != len(newService.Spec.IPFamilies) {
 		klog.V(2).Infof("Service %s IPFamilies' count changed from %d to %d", klog.KObj(newService), len(oldService.Spec.IPFamilies), len(newService.Spec.IPFamilies))
@@ -725,7 +682,7 @@ func portSlicesEqualForLB(x, y []*v1.ServicePort) bool {
 
 // portEqualForLB 比较单个端口的全部转发相关属性。
 func portEqualForLB(x, y *v1.ServicePort) bool {
-	// TODO: Should we check name?  (In theory, an LB could expose it)
+	// TODO: 是否应该检查端口名？（理论上 LB 也可能暴露它）
 	// 端口名目前已在下方的 Name 比较中覆盖。
 	if x.Name != y.Name {
 		return false
@@ -776,20 +733,16 @@ func loggableNodeNames(nodes []*v1.Node) []string {
 // shouldSyncUpdatedNode 判断节点更新是否需要触发 LB 重算。
 // 只看会影响后端集合的字段：是否被排除、providerID 是否变化。
 func shouldSyncUpdatedNode(oldNode, newNode *v1.Node) bool {
-	// Evaluate the individual node exclusion predicate before evaluating the
-	// compounded result of all predicates.
-	//
-	// The sync function compares lastSyncedNodes with the new (existing) set of nodes
-	// for each service, so services which are synced with the same set of nodes
-	// should be skipped internally in the sync function. This is needed as to
-	// trigger a global sync for all services and make sure no service gets
-	// skipped due to a changing node predicate.
+	// 先逐个评估单个节点剔除谓词，再评估所有谓词的复合结果。
+	// sync 函数会将每个 Service 的 lastSyncedNodes 与新的节点集合比较，
+	// 与同一节点集合同步过的 Service 会在 sync 函数内部被跳过；这是为了确保
+	// 为所有 Service 触发全局同步，并保证没有 Service 会因节点谓词变化而被跳过。
 	// 只比较单个谓词而非全部谓词，避免某个节点从 Ready 变为 NotReady 时
 	// 触发全量 LB 更新（stableNodeSetPredicates 不包含 Ready 条件）。
 	if respectsPredicates(oldNode, nodeIncludedPredicate) != respectsPredicates(newNode, nodeIncludedPredicate) {
 		return true
 	}
-	// For the same reason as above, also check for any change to the providerID
+	// 出于与上面相同的原因，还要检查 providerID 的任何变化。
 	// providerID 是云侧实例身份，变化会影响 LB 后端寻址。
 	if oldNode.Spec.ProviderID != newNode.Spec.ProviderID {
 		return true
@@ -798,8 +751,7 @@ func shouldSyncUpdatedNode(oldNode, newNode *v1.Node) bool {
 	return false
 }
 
-// syncNodes handles updating the hosts pointed to by all load
-// balancers whenever the set of nodes in the cluster changes.
+// syncNodes 负责在集群节点集合变化时，更新所有负载均衡器指向的后端主机。
 // 返回需要重试的 Service key 集合；调用方负责把它们重新入队。
 func (c *Controller) syncNodes(ctx context.Context, workers int) sets.String {
 	startTime := time.Now()
@@ -819,11 +771,9 @@ func (c *Controller) syncNodes(ctx context.Context, workers int) sets.String {
 	return servicesToRetry
 }
 
-// nodeSyncService syncs the nodes for one load balancer type service. The return value
-// indicates if we should retry. Hence, this functions returns false if we've updated
-// load balancers and finished doing it successfully, or didn't try to at all because
-// there's no need. This function returns true if we tried to update load balancers and
-// failed, indicating to the caller that we should try again.
+// nodeSyncService 为一个 LoadBalancer 类型的 Service 同步节点。返回值指示是否应重试：
+// 若已成功更新负载均衡器、或根本无需更新而未尝试，返回 false；
+// 若尝试更新负载均衡器但失败，返回 true，告知调用方应再试一次。
 // 这里只做 Read-Modify-Write 中的后两步，Service 对象来自缓存快照，不做 status 回写。
 func (c *Controller) nodeSyncService(svc *v1.Service) bool {
 	const retSuccess = false
@@ -840,11 +790,6 @@ func (c *Controller) nodeSyncService(svc *v1.Service) bool {
 	}
 	newNodes = filterWithPredicates(newNodes, stableNodeSetPredicates...)
 	oldNodes := filterWithPredicates(c.getLastSyncedNodes(svc), stableNodeSetPredicates...)
-	// Store last synced nodes without actually determining if we successfully
-	// synced them or not. Failed node syncs are passed off to retries in the
-	// service queue, so no need to wait. If we don't store it now, we risk
-	// re-syncing all LBs twice, one from another sync in the node sync and
-	// from the service sync
 	// 失败由 serviceQueue 重试，所以此处仍先记录新集合，避免重复扇出。
 	c.storeLastSyncedNodes(svc, newNodes)
 	// 节点集合无实质变化时直接跳过，避免频繁调用云 API。
@@ -868,7 +813,7 @@ func nodesSufficientlyEqual(oldNodes, newNodes []*v1.Node) bool {
 		return false
 	}
 
-	// This holds the Node fields which trigger a sync when changed.
+	// 这里只保存变化时会触发同步的 Node 字段。
 	// 只提取必要字段，避免为比较而深拷贝整个 Node。
 	type protoNode struct {
 		providerID string
@@ -892,15 +837,12 @@ func nodesSufficientlyEqual(oldNodes, newNodes []*v1.Node) bool {
 	return reflect.DeepEqual(mOld, mNew)
 }
 
-// updateLoadBalancerHosts updates all existing load balancers so that
-// they will match the latest list of nodes with input number of workers.
-// Returns the list of services that couldn't be updated.
-// 并发度由 workers 控制；每个 Service 的云调用彼此独立。
+// updateLoadBalancerHosts 以输入数量的 worker 让所有现存负载均衡器与最新节点列表保持一致。
+// 返回未能更新的 Service 列表；并发度由 workers 控制；每个 Service 的云调用彼此独立。
 func (c *Controller) updateLoadBalancerHosts(ctx context.Context, services []*v1.Service, workers int) (servicesToRetry sets.String) {
 	klog.V(4).Infof("Running updateLoadBalancerHosts(len(services)==%d, workers==%d)", len(services), workers)
 
-	// lock for servicesToRetry
-	// ParallelizeUntil 的 worker 并发写入重试集合，必须加锁。
+	// 该锁保护 servicesToRetry：ParallelizeUntil 的 worker 并发写入重试集合，必须加锁。
 	servicesToRetry = sets.NewString()
 	lock := sync.Mutex{}
 
@@ -918,8 +860,7 @@ func (c *Controller) updateLoadBalancerHosts(ctx context.Context, services []*v1
 	return servicesToRetry
 }
 
-// Updates the load balancer of a service, assuming we hold the mutex
-// associated with the service.
+// 更新某个 Service 的负载均衡器，前提是我们持有与该 Service 关联的互斥锁。
 // 函数名中的 locked 指调用方已持有该 Service 的并发控制权（当前由单 node worker 保证）。
 func (c *Controller) lockedUpdateLoadBalancerHosts(service *v1.Service, hosts []*v1.Node) error {
 	startTime := time.Now()
@@ -931,8 +872,7 @@ func (c *Controller) lockedUpdateLoadBalancerHosts(service *v1.Service, hosts []
 	}()
 	klog.V(2).Infof("Updating backends for load balancer %s/%s with %d nodes: %v", service.Namespace, service.Name, len(hosts), loggableNodeNames(hosts))
 
-	// This operation doesn't normally take very long (and happens pretty often), so we only record the final event
-	// 该调用很频繁，只记录最终结果事件，避免事件刷屏。
+	// 该操作通常耗时不长且发生频繁，因此只记录最终结果事件，避免事件刷屏。
 	err := c.balancer.UpdateLoadBalancer(context.TODO(), c.clusterName, service, hosts)
 	if err == nil {
 		// If there are no available nodes for LoadBalancer service, make a EventTypeWarning event for it.
@@ -944,13 +884,11 @@ func (c *Controller) lockedUpdateLoadBalancerHosts(service *v1.Service, hosts []
 		return nil
 	}
 	if err == cloudprovider.ImplementedElsewhere {
-		// ImplementedElsewhere indicates that the UpdateLoadBalancer is a nop and the
-		// functionality is implemented by a different controller.  In this case, we
-		// return immediately without doing anything.
+		// ImplementedElsewhere 表示 UpdateLoadBalancer 是空操作，该功能由其他控制器实现；此时立即返回，不做任何操作。
 		// 该 Service 不归本控制器管理，视为成功。
 		return nil
 	}
-	// It's only an actual error if the load balancer still exists.
+	// 只有当负载均衡器仍然存在时才算真正的错误。
 	// LB 已被删除时上游错误可忽略，删除流程会处理剩余清理。
 	if _, exists, err := c.balancer.GetLoadBalancer(context.TODO(), c.clusterName, service); err != nil {
 		runtime.HandleError(fmt.Errorf("failed to check if load balancer exists for service %s/%s: %v", service.Namespace, service.Name, err))
@@ -964,8 +902,7 @@ func (c *Controller) lockedUpdateLoadBalancerHosts(service *v1.Service, hosts []
 
 // wantsLoadBalancer 判断 Service 是否由本控制器负责。
 func wantsLoadBalancer(service *v1.Service) bool {
-	// if LoadBalancerClass is set, the user does not want the default cloud-provider Load Balancer
-	// LoadBalancerClass 非空表示交给自定义实现，本控制器不得介入。
+	// 若设置了 LoadBalancerClass，说明用户不想要默认的 cloud-provider 负载均衡器，本控制器不得介入。
 	return service.Spec.Type == v1.ServiceTypeLoadBalancer && service.Spec.LoadBalancerClass == nil
 }
 
@@ -974,9 +911,8 @@ func loadBalancerIPsAreEqual(oldService, newService *v1.Service) bool {
 	return oldService.Spec.LoadBalancerIP == newService.Spec.LoadBalancerIP
 }
 
-// syncService will sync the Service with the given key if it has had its expectations fulfilled,
-// meaning it did not expect to see any more of its pods created or deleted. This function is not meant to be
-// invoked concurrently with the same key.
+// syncService 同步给定 key 对应的 Service（其期望已满足，即不再期望看到更多 Pod 被创建或删除）。
+// 该函数不得针对同一 key 并发调用。
 // syncService 从 informer 读取最新对象并分派到创建/更新或删除路径。
 func (c *Controller) syncService(ctx context.Context, key string) error {
 	startTime := time.Now()
@@ -989,20 +925,17 @@ func (c *Controller) syncService(ctx context.Context, key string) error {
 		return err
 	}
 
-	// service holds the latest service info from apiserver
+	// service 保存着来自 apiserver 的最新 Service 信息。
 	// informer 缓存的对象是共享只读的，后续路径必须先 DeepCopy 再修改。
 	service, err := c.serviceLister.Services(namespace).Get(name)
 	switch {
 	case apierrors.IsNotFound(err):
-		// service absence in store means watcher caught the deletion, ensure LB info is cleaned
+		// store 中没有该 Service 意味着 watcher 已捕获删除事件，要确保清理 LB 信息。
 		// 缓存中不存在即视为已删除，走兜底清理路径（可能没有 finalizer）。
 		err = c.processServiceDeletion(ctx, key)
 	case err != nil:
 		runtime.HandleError(fmt.Errorf("Unable to retrieve service %v from store: %v", key, err))
 	default:
-		// It is not safe to modify an object returned from an informer.
-		// As reconcilers may modify the service object we need to copy
-		// it first.
 		// 深拷贝后，后续 patch/status 操作才不会污染所有控制器共享的缓存。
 		err = c.processServiceCreateOrUpdate(ctx, service.DeepCopy(), key)
 	}
@@ -1030,8 +963,7 @@ func (c *Controller) processServiceDeletion(ctx context.Context, key string) err
 
 // processLoadBalancerDelete 调用云接口删除 LB，并发出成功/失败事件。
 func (c *Controller) processLoadBalancerDelete(ctx context.Context, service *v1.Service, key string) error {
-	// delete load balancer info only if the service type is LoadBalancer
-	// 非 LB 类型没有对应云资源，直接跳过。
+	// 仅当 Service 类型为 LoadBalancer 时才删除负载均衡器信息；非 LB 类型没有对应云资源，直接跳过。
 	if !wantsLoadBalancer(service) {
 		return nil
 	}
@@ -1044,7 +976,7 @@ func (c *Controller) processLoadBalancerDelete(ctx context.Context, service *v1.
 	return nil
 }
 
-// addFinalizer patches the service to add finalizer.
+// addFinalizer 通过 patch 为 Service 添加 finalizer。
 // 使用 patch 而非 update，减少与用户/其他控制器的写冲突。
 func (c *Controller) addFinalizer(service *v1.Service) error {
 	if servicehelper.HasLBFinalizer(service) {
@@ -1060,7 +992,7 @@ func (c *Controller) addFinalizer(service *v1.Service) error {
 	return err
 }
 
-// removeFinalizer patches the service to remove finalizer.
+// removeFinalizer 通过 patch 为 Service 移除 finalizer。
 // 移除后 Service 可被 API Server 真正删除，因此必须在云资源清理成功之后调用。
 func (c *Controller) removeFinalizer(service *v1.Service) error {
 	if !servicehelper.HasLBFinalizer(service) {
@@ -1076,8 +1008,7 @@ func (c *Controller) removeFinalizer(service *v1.Service) error {
 	return err
 }
 
-// removeString returns a newly created []string that contains all items from slice that
-// are not equal to s.
+// removeString 返回一个新建的 []string，包含 slice 中所有不等于 s 的元素。
 // 返回新切片，避免原地修改调用方（通常是 informer 对象）的数据。
 func removeString(slice []string, s string) []string {
 	var newSlice []string
@@ -1089,7 +1020,7 @@ func removeString(slice []string, s string) []string {
 	return newSlice
 }
 
-// patchStatus patches the service with the given LoadBalancerStatus.
+// patchStatus 用给定的 LoadBalancerStatus 对 Service 执行 patch。
 // 状态未变化时直接返回，避免无意义的写放大。
 func (c *Controller) patchStatus(service *v1.Service, previousStatus, newStatus *v1.LoadBalancerStatus) error {
 	if servicehelper.LoadBalancerStatusEqual(previousStatus, newStatus) {
@@ -1104,8 +1035,7 @@ func (c *Controller) patchStatus(service *v1.Service, previousStatus, newStatus 
 	return err
 }
 
-// NodeConditionPredicate is a function that indicates whether the given node's conditions meet
-// some set of criteria defined by the function.
+// NodeConditionPredicate 是一个函数，用于表示给定节点的条件是否满足其定义的一组标准。
 // 谓词只读访问 Node，必须是无副作用的纯函数，因为会被并发调用。
 type NodeConditionPredicate func(node *v1.Node) bool
 
@@ -1131,7 +1061,7 @@ var (
 	}
 )
 
-// We consider the node for load balancing only when the node is not labelled for exclusion.
+// 只有节点未被打上剔除标签时，才将其纳入负载均衡候选。
 // 标签值按 bool 解析；无法解析时保守地排除该节点。
 func nodeIncludedPredicate(node *v1.Node) bool {
 	v, hasExcludeBalancerLabel := node.Labels[v1.LabelNodeExcludeBalancers]
@@ -1145,7 +1075,7 @@ func nodeIncludedPredicate(node *v1.Node) bool {
 	return !hasExcludeBalancerLabel
 }
 
-// We consider the node for load balancing only when its not tainted for deletion by the cluster autoscaler.
+// 只有节点未被 Cluster Autoscaler 打上缩容 taint 时才纳入负载均衡。
 // 与 Cluster Autoscaler 的缩容协议对齐：带该 taint 的节点不再接收新流量。
 func nodeUnTaintedPredicate(node *v1.Node) bool {
 	for _, taint := range node.Spec.Taints {
@@ -1156,7 +1086,7 @@ func nodeUnTaintedPredicate(node *v1.Node) bool {
 	return true
 }
 
-// We consider the node for load balancing only when its NodeReady condition status is ConditionTrue
+// 仅当节点的 NodeReady 条件状态为 ConditionTrue 时才纳入负载均衡候选。
 // 缺少 NodeReady 条件时视为不可用。
 func nodeReadyPredicate(node *v1.Node) bool {
 	for _, cond := range node.Status.Conditions {
@@ -1172,7 +1102,7 @@ func nodeNotDeletedPredicate(node *v1.Node) bool {
 	return node.DeletionTimestamp.IsZero()
 }
 
-// listWithPredicate gets nodes that matches all predicate functions.
+// listWithPredicates 获取满足所有谓词函数的节点。
 // 先全量 List 再本地过滤，避免为每种谓词组合构造 label selector。
 func listWithPredicates(nodeLister corelisters.NodeLister, predicates ...NodeConditionPredicate) ([]*v1.Node, error) {
 	nodes, err := nodeLister.List(labels.Everything())

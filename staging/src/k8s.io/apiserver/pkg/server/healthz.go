@@ -26,7 +26,6 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// healthMux is an interface describing the methods InstallHandler requires.
 // 抽象成接口是为了让测试可以注入假 mux，而不必启动完整 HTTP 服务器。
 type healthMux interface {
 	Handle(pattern string, handler http.Handler)
@@ -84,9 +83,7 @@ func (reg *healthCheckRegistry) installHandlerWithHealthyFunc(mux healthMux, fir
 	healthz.InstallPathHandlerWithHealthyFunc(mux, reg.path, firstTimeHealthy, reg.checks...)
 }
 
-// AddHealthChecks adds HealthCheck(s) to health endpoints (healthz, livez, readyz) but
-// configures the liveness grace period to be zero, which means we expect this health check
-// to immediately indicate that the apiserver is unhealthy.
+// AddHealthChecks 将 HealthCheck 添加到各健康端点（healthz、livez、readyz），但把存活宽限期设为零，即该检查需立即反映 apiserver 是否不健康。
 // 适用于通用健康检查（如存储可用性），它们与启动序列无关，无需宽限期。
 func (s *GenericAPIServer) AddHealthChecks(checks ...healthz.HealthChecker) error {
 	// we opt for a delay of zero here, because this entrypoint adds generic health checks
@@ -94,19 +91,13 @@ func (s *GenericAPIServer) AddHealthChecks(checks ...healthz.HealthChecker) erro
 	return s.addHealthChecks(0, checks...)
 }
 
-// AddBootSequenceHealthChecks adds health checks to the old healthz endpoint (for backwards compatibility reasons)
-// as well as livez and readyz. The livez grace period is defined by the value of the
-// command-line flag --livez-grace-period; before the grace period elapses, the livez health checks
-// will default to healthy. One may want to set a grace period in order to prevent the kubelet from restarting
-// the kube-apiserver due to long-ish boot sequences. Readyz health checks, on the other hand, have no grace period,
-// since readyz should fail until boot fully completes.
+// AddBootSequenceHealthChecks 将健康检查加入旧的 healthz 端点（出于向后兼容）以及 livez 和 readyz。livez 的宽限期由命令行参数 --livez-grace-period 决定；宽限期未过之前，livez 检查默认视为健康。设置宽限期可避免 kubelet 因较长的启动序列而重启 kube-apiserver。而 readyz 检查没有宽限期，因为 readyz 在启动完全完成之前应当失败。
 // 宽限期只作用于 livez：启动慢不应导致 kubelet 重启进程，但 readyz 必须诚实反映未就绪。
 func (s *GenericAPIServer) AddBootSequenceHealthChecks(checks ...healthz.HealthChecker) error {
 	return s.addHealthChecks(s.livezGracePeriod, checks...)
 }
 
-// addHealthChecks adds health checks to healthz, livez, and readyz. The delay passed in will set
-// a corresponding grace period on livez.
+// addHealthChecks 将健康检查添加到 healthz、livez 和 readyz。传入的 delay 会在 livez 上设置相应的宽限期。
 // 同一个检查被注册到三个端点；只有 livez 使用延迟包装，healthz 与 readyz 立即生效。
 func (s *GenericAPIServer) addHealthChecks(livezGracePeriod time.Duration, checks ...healthz.HealthChecker) error {
 	if err := s.healthzRegistry.addHealthChecks(checks...); err != nil {
@@ -123,8 +114,7 @@ func (s *GenericAPIServer) AddReadyzChecks(checks ...healthz.HealthChecker) erro
 	return s.readyzRegistry.addHealthChecks(checks...)
 }
 
-// AddLivezChecks allows you to add a HealthCheck to livez.
-// delay 为该检查的宽限期，期间 livez 会忽略其失败。
+// AddLivezChecks 允许向 livez 添加 HealthCheck。delay 为该检查的宽限期，期间 livez 会忽略其失败。
 func (s *GenericAPIServer) AddLivezChecks(delay time.Duration, checks ...healthz.HealthChecker) error {
 	return s.livezRegistry.addDelayedHealthChecks(delay, checks...)
 }
@@ -141,8 +131,7 @@ func (s *GenericAPIServer) installHealthz() {
 	s.healthzRegistry.installHandler(s.Handler.NonGoRestfulMux)
 }
 
-// installReadyz creates the readyz endpoint for this server.
-// 首次全部就绪时发出 HasBeenReady 信号，用于驱动依赖“服务已就绪”的启动逻辑。
+// installReadyz 为本服务器创建 readyz 端点：首次全部就绪时发出 HasBeenReady 信号，用于驱动依赖“服务已就绪”的启动逻辑。
 func (s *GenericAPIServer) installReadyz() {
 	s.readyzRegistry.installHandlerWithHealthyFunc(s.Handler.NonGoRestfulMux, func() {
 		// note: installHandlerWithHealthyFunc guarantees that this is called only once
@@ -155,8 +144,7 @@ func (s *GenericAPIServer) installLivez() {
 	s.livezRegistry.installHandler(s.Handler.NonGoRestfulMux)
 }
 
-// delayedHealthCheck wraps a health check which will not fail until the explicitly defined delay has elapsed. This
-// is intended for use primarily for livez health checks.
+// delayedHealthCheck 包装一个健康检查，在显式定义的延迟到期之前不会失败；主要供 livez 健康检查使用。
 // 到期时间在包装时计算一次，因此宽限期从注册时刻起算，而非从第一次探测起算。
 func delayedHealthCheck(check healthz.HealthChecker, clock clock.Clock, delay time.Duration) healthz.HealthChecker {
 	return delayedLivezCheck{

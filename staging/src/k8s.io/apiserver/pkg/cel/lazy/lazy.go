@@ -47,8 +47,7 @@ type MapValue struct {
 	values map[string]ref.Val
 	// callbacks are a map of field name to the function that returns the field Val
 	callbacks map[string]GetFieldFunc
-	// knownValues are registered names, used for iteration
-	// 保留注册顺序，使迭代结果稳定；不能直接遍历 callbacks（map 顺序随机）。
+	// knownValues 保存已注册的字段名，供迭代使用：保留注册顺序使迭代结果稳定；不能直接遍历 callbacks（map 顺序随机）。
 	knownValues []string
 }
 
@@ -61,15 +60,13 @@ func NewMapValue(objectType ref.Type) *MapValue {
 	}
 }
 
-// Append adds the given field with its name and callback.
-// 同名重复 Append 会覆盖回调但保留重复的名称项；调用方应保证字段名唯一。
+// Append 以给定名称与回调添加字段。同名重复 Append 会覆盖回调但保留重复的名称项；调用方应保证字段名唯一。
 func (m *MapValue) Append(name string, callback GetFieldFunc) {
 	m.knownValues = append(m.knownValues, name)
 	m.callbacks[name] = callback
 }
 
-// Contains checks if the key is known to the map
-// 注意它会触发字段求值：求值出错时按 CEL 语义返回错误而不是 false。
+// Contains 检查 map 是否已知该 key。注意它会触发字段求值：求值出错时按 CEL 语义返回错误而不是 false。
 func (m *MapValue) Contains(key ref.Val) ref.Val {
 	v, found := m.Find(key)
 	if v != nil && types.IsUnknownOrError(v) {
@@ -88,8 +85,7 @@ func (m *MapValue) Size() ref.Val {
 	return types.Int(len(m.callbacks))
 }
 
-// ConvertToNative returns an error because it is disallowed
-// 惰性 map 没有可导出的原生表示，禁止转换可避免在 CEL 之外意外触发全部求值。
+// ConvertToNative 一律返回错误，因为惰性 map 禁止原生转换：它没有可导出的原生表示，禁止转换可避免在 CEL 之外意外触发全部求值。
 func (m *MapValue) ConvertToNative(typeDesc reflect.Type) (any, error) {
 	return nil, fmt.Errorf("disallowed conversion from %q to %q", m.typeValue.TypeName(), typeDesc.Name())
 }
@@ -106,8 +102,7 @@ func (m *MapValue) ConvertToType(typeVal ref.Type) ref.Val {
 	return types.NewErr("disallowed conversion from %q to %q", m.typeValue.TypeName(), typeVal.TypeName())
 }
 
-// Equal returns true if the other object is the same pointer-wise.
-// 指针相等是唯一可行的比较方式：逐个字段比较会触发全部惰性求值。
+// Equal 仅在 other 指针相同时返回 true：指针相等是唯一可行的比较方式，逐字段比较会触发全部惰性求值。
 func (m *MapValue) Equal(other ref.Val) ref.Val {
 	otherMap, ok := other.(*MapValue)
 	if !ok {
@@ -126,8 +121,7 @@ func (m *MapValue) Value() any {
 	return types.NoSuchOverloadErr()
 }
 
-// resolveField resolves the field. Calls the callback if the value is not yet stored.
-// 回调只在首次访问时执行一次；nil 值也会被缓存，避免重复求值。
+// resolveField 解析字段：若值尚未保存则调用回调。回调只在首次访问时执行一次；nil 值也会被缓存，避免重复求值。
 func (m *MapValue) resolveField(name string) ref.Val {
 	v, seen := m.values[name]
 	if seen {

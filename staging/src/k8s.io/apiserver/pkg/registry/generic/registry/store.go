@@ -57,8 +57,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// FinishFunc is a function returned by Begin hooks to complete an operation.
-// success 表示操作最终是否提交；实现方应据此提交或回滚副作用。
+// FinishFunc 是 Begin 钩子返回的、用于完成某个操作的函数。参数 success 表示操作
+// 最终是否提交；实现方应据此提交或回滚副作用。
 type FinishFunc func(ctx context.Context, success bool)
 
 // AfterDeleteFunc is the type used for the Store.AfterDelete hook.
@@ -276,8 +276,7 @@ const (
 	resourceCountPollPeriodJitter = 1.2
 )
 
-// NamespaceKeyRootFunc is the default function for constructing storage paths
-// to resource directories enforcing namespace rules.
+// NamespaceKeyRootFunc 是构造资源目录存储路径的默认函数，会强制遵循命名空间规则。
 // 命名空间来自请求上下文，而不是对象本身，确保存储路径与 URL 一致。
 func NamespaceKeyRootFunc(ctx context.Context, prefix string) string {
 	key := prefix
@@ -468,8 +467,8 @@ func (e *Store) List(ctx context.Context, options *metainternalversion.ListOptio
 // SelectionPredicate.
 func (e *Store) ListPredicate(ctx context.Context, p storage.SelectionPredicate, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	if options == nil {
-		// By default we should serve the request from etcd.
-		// 空 ResourceVersion 表示读取最新（或缓存最新）数据，而不是任意历史版本。
+		// 默认应当直接由 etcd 服务该请求：空 ResourceVersion 表示读取最新
+		// （或缓存最新）数据，而不是任意历史版本。
 		options = &metainternalversion.ListOptions{ResourceVersion: ""}
 	}
 	p.Limit = options.Limit
@@ -490,7 +489,7 @@ func (e *Store) ListPredicate(ctx context.Context, p storage.SelectionPredicate,
 		Recursive:            true,
 	}
 
-	// if we're not already namespace-scoped, see if the field selector narrows the scope of the watch
+	// 如果请求还不是命名空间范围的，看看字段选择器能否收窄 watch 的范围。
 	// 形如 metadata.namespace=foo 的字段选择器可以收窄为单命名空间查询，
 	// 从而减少扫描范围；仅当命名空间名合法时才应用该优化。
 	if requestNamespace, _ := genericapirequest.NamespaceFrom(ctx); len(requestNamespace) == 0 {
@@ -771,10 +770,9 @@ func (e *Store) Update(ctx context.Context, name string, objInfo rest.UpdatedObj
 			if objectMeta, err := meta.Accessor(obj); err != nil {
 				return nil, nil, err
 			} else {
-				// Wipe metadata on create-via-update and create-via-apply
-				// requests to match create behavior. Note that this happens
-				// AFTER preconditions are checked.
-				// 清空系统字段后重新填充，防止客户端伪造 UID/时间戳等。
+				// 对 create-via-update 和 create-via-apply 请求清空元数据，以与 create
+				// 行为保持一致。注意：这一步发生在前置条件检查之后。清空系统字段后
+				// 重新填充，可防止客户端伪造 UID/时间戳等。
 				rest.WipeObjectMetaSystemFields(objectMeta)
 				rest.FillObjectMetaSystemFields(objectMeta)
 			}
@@ -875,7 +873,7 @@ func (e *Store) Update(ctx context.Context, name string, objInfo rest.UpdatedObj
 				return nil, nil, err
 			}
 		}
-		// Check the default delete-during-update conditions, and store-specific conditions if provided
+		// 检查默认的 delete-during-update 条件，以及（若提供）存储自身实现的条件。
 		// 移除最后一个 finalizer 的更新等价于删除：在这里转为删除流程，
 		// 避免对象以“已无 finalizer 但仍存在”的状态残留。
 		if ShouldDeleteDuringUpdate(ctx, key, obj, existing) &&
@@ -1123,10 +1121,9 @@ func markAsDeleting(obj runtime.Object, now time.Time) (err error) {
 	if kerr != nil {
 		return kerr
 	}
-	// This handles Generation bump for resources that don't support graceful
-	// deletion. For resources that support graceful deletion is handle in
-	// pkg/api/rest/delete.go
-	// generation 递增让客户端能观察到“删除已开始”这一代际变化。
+	// 这里处理不支持优雅删除（graceful deletion）的资源的 Generation 递增；支持优雅
+	// 删除的资源由 pkg/api/rest/delete.go 处理。generation 递增让客户端能观察到
+	// “删除已开始”这一代际变化。
 	if objectMeta.GetDeletionTimestamp() == nil && objectMeta.GetGeneration() > 0 {
 		objectMeta.SetGeneration(objectMeta.GetGeneration() + 1)
 	}
@@ -1252,8 +1249,8 @@ func (e *Store) Delete(ctx context.Context, name string, deleteValidation rest.V
 		return nil, false, storeerr.InterpretDeleteError(err, qualifiedResource, name)
 	}
 
-	// support older consumers of delete by treating "nil" as delete immediately
-	// nil 选项按“立即删除”处理，兼容未传 DeleteOptions 的旧客户端。
+	// 把 "nil" 视为立即删除，以兼容 delete 的旧调用方；即 nil 选项按“立即删除”处理，
+	// 兼容未传 DeleteOptions 的旧客户端。
 	if options == nil {
 		options = metav1.NewDeleteOptions(0)
 	}
@@ -1319,8 +1316,7 @@ func (e *Store) Delete(ctx context.Context, name string, deleteValidation rest.V
 	klog.V(6).InfoS("Going to delete object from registry", "object", klog.KRef(genericapirequest.NamespaceValue(ctx), name))
 	out = e.NewFunc()
 	if err := e.Storage.Delete(ctx, key, out, &preconditions, storage.ValidateObjectFunc(deleteValidation), dryrun.IsDryRun(options.DryRun), nil, storage.DeleteOptions{}); err != nil {
-		// Please refer to the place where we set ignoreNotFound for the reason
-		// why we ignore the NotFound error .
+		// 忽略 NotFound 错误的原因请参见我们设置 ignoreNotFound 的位置。
 		// 并发删除时 NotFound 属预期：用最后一次看到的对象收尾，返回成功语义。
 		if storage.IsNotFound(err) && ignoreNotFound && lastExisting != nil {
 			// The lastExisting object may not be the last state of the object
@@ -1393,11 +1389,10 @@ func (e *Store) DeleteCollection(ctx context.Context, deleteValidation rest.Vali
 					errs <- err
 					return
 				}
-				// DeepCopy the deletion options because individual graceful deleters communicate changes via a mutating
-				// function in the delete strategy called in the delete method.  While that is always ugly, it works
-				// when making a single call.  When making multiple calls via delete collection, the mutation applied to
-				// pod/A can change the option ultimately used for pod/B.
-				// 因此每个对象使用独立的 options 副本，避免跨对象污染。
+				// 对删除选项做 DeepCopy：各个优雅删除器会通过 delete 方法中调用的删除策略里的
+				// 变更函数来传递改动。这种做法虽然一直都很丑陋，但单次调用时是能工作的。
+				// 而通过 delete collection 发起多次调用时，作用于 pod/A 的修改可能改变
+				// pod/B 最终使用的选项，因此每个对象使用独立的 options 副本，避免跨对象污染。
 				if _, _, err := e.Delete(ctx, accessor.GetName(), deleteValidation, options.DeepCopy()); err != nil && !apierrors.IsNotFound(err) {
 					klog.V(4).InfoS("Delete object in DeleteCollection failed", "object", klog.KObj(accessor), "err", err)
 					errs <- err
@@ -1570,7 +1565,7 @@ func (e *Store) WatchPredicate(ctx context.Context, p storage.SelectionPredicate
 		SendInitialEvents: sendInitialEvents,
 	}
 
-	// if we're not already namespace-scoped, see if the field selector narrows the scope of the watch
+	// 如果请求还不是命名空间范围的，看看字段选择器能否收窄 watch 的范围。
 	// 与 List 相同的优化：字段选择器锁定单命名空间时缩小 watch 范围。
 	if requestNamespace, _ := genericapirequest.NamespaceFrom(ctx); len(requestNamespace) == 0 {
 		if selectorNamespace, ok := p.MatchesSingleNamespace(); ok {
@@ -1826,7 +1821,7 @@ func (e *Store) GetSingularName() string {
 	return e.SingularQualifiedResource.Resource
 }
 
-// validateIndexers will check the prefix of indexers.
+// validateIndexers 检查各索引器的名称前缀。
 // 索引名必须以 "l:"（标签）或 "f:"（字段）开头，缓存层依赖该前缀
 // 区分索引维度。
 func validateIndexers(indexers *cache.Indexers) error {

@@ -52,12 +52,12 @@ import (
 )
 
 const (
-	// CloudControllerManagerUserAgent is the userAgent name when starting cloud-controller managers.
+	// CloudControllerManagerUserAgent 是启动 cloud-controller manager 时使用的 userAgent 名称，
 	// 固定 user-agent 便于 API Server 审计与限流识别组件来源。
 	CloudControllerManagerUserAgent = "cloud-controller-manager"
 )
 
-// CloudControllerManagerOptions is the main context object for the controller manager.
+// CloudControllerManagerOptions 是 controller manager 的主要上下文对象。
 // 各字段分别对应一个 flag 分组；Options 是可变的（flag 解析会写入），
 // 校验完成后才通过 ApplyTo 复制到不可变的运行时 Config。
 type CloudControllerManagerOptions struct {
@@ -78,14 +78,13 @@ type CloudControllerManagerOptions struct {
 	WebhookServing *WebhookServingOptions
 	Webhook        *WebhookOptions
 
-	// NodeStatusUpdateFrequency is the frequency at which the controller updates nodes' status
+	// NodeStatusUpdateFrequency 是控制器更新节点 status 的频率。
 	// 节点状态写回频率；过低会拖慢调度，过高会放大 API Server 写压力。
 	NodeStatusUpdateFrequency metav1.Duration
 }
 
-// ProviderDefaults are provided by the consumer when calling
-// NewCloudControllerManagerOptions(), so that they can customize certain flag
-// default values.
+// ProviderDefaults 由调用方在调用 NewCloudControllerManagerOptions() 时传入，
+// 以便定制部分 flag 的默认值。
 // 云提供商可在不回退到 flag 的情况下调整 webhook 端点的默认监听地址。
 type ProviderDefaults struct {
 	// WebhookBindAddress is the default address.  It can be overridden by "--webhook-bind-address".
@@ -94,16 +93,15 @@ type ProviderDefaults struct {
 	WebhookBindPort *int
 }
 
-// NewCloudControllerManagerOptions creates a new ExternalCMServer with a default config.
+// NewCloudControllerManagerOptions 创建一个使用默认配置的 ExternalCMServer。
 // 使用空的 ProviderDefaults，即所有默认值均来自组件配置。
 func NewCloudControllerManagerOptions() (*CloudControllerManagerOptions, error) {
 	return NewCloudControllerManagerOptionsWithProviderDefaults(ProviderDefaults{})
 }
 
-// NewCloudControllerManagerOptionsWithProviderDefaults creates a new
-// ExternalCMServer with a default config, but allows the cloud provider to
-// override a select number of default option values.
-// 允许云提供商定制 webhook 的默认绑定地址/端口。
+// NewCloudControllerManagerOptionsWithProviderDefaults 创建一个使用默认配置的
+// ExternalCMServer，但允许云提供商覆盖其中一部分默认选项值，
+// 例如定制 webhook 的默认绑定地址/端口。
 func NewCloudControllerManagerOptionsWithProviderDefaults(defaults ProviderDefaults) (*CloudControllerManagerOptions, error) {
 	// 先通过 scheme 默认化 v1alpha1 再转换为内部类型，确保默认值只有一处定义。
 	componentConfig, err := NewDefaultComponentConfig()
@@ -147,7 +145,7 @@ func NewCloudControllerManagerOptionsWithProviderDefaults(defaults ProviderDefau
 	return &s, nil
 }
 
-// NewDefaultComponentConfig returns cloud-controller manager configuration object.
+// NewDefaultComponentConfig 返回 cloud-controller manager 的配置对象。
 // 默认化在外部版本上执行，再转换到内部版本，避免默认值逻辑分散到两个版本。
 func NewDefaultComponentConfig() (*ccmconfig.CloudControllerManagerConfiguration, error) {
 	versioned := &ccmconfigv1alpha1.CloudControllerManagerConfiguration{}
@@ -162,7 +160,7 @@ func NewDefaultComponentConfig() (*ccmconfig.CloudControllerManagerConfiguration
 	return internal, nil
 }
 
-// Flags returns flags for a specific CloudController by section name
+// Flags 返回按分组名称组织的 CloudController 各 flag。
 // 每个控制器/子系统使用独立 FlagSet，使 --help 输出按功能分组。
 func (o *CloudControllerManagerOptions) Flags(allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string, allWebhooks, disabledByDefaultWebhooks []string) cliflag.NamedFlagSets {
 	fss := cliflag.NamedFlagSets{}
@@ -192,14 +190,13 @@ func (o *CloudControllerManagerOptions) Flags(allControllers []string, disabledB
 	return fss
 }
 
-// ApplyTo fills up cloud controller manager config with options.
+// ApplyTo 用选项填充 cloud controller manager 的配置。
 // 把选项复制到运行时 Config；调用前必须已通过 Validate。
 func (o *CloudControllerManagerOptions) ApplyTo(c *config.Config, allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string, userAgent string) error {
 	var err error
 
-	// Build kubeconfig first to so that if it fails, it doesn't cause leaking
-	// goroutines (started from initializing secure serving - which underneath
-	// creates a queue which in its constructor starts a goroutine).
+	// 先构建 kubeconfig，这样即使失败也不会泄漏 goroutine
+	// （这些 goroutine 来自初始化 secure serving——其内部会创建一个队列，而队列构造函数会启动一个 goroutine）。
 	// 先构建 kubeconfig：一旦失败立即返回，避免已启动的后台 goroutine 泄漏。
 	c.Kubeconfig, err = clientcmd.BuildConfigFromFlags(o.Master, o.Generic.ClientConnection.Kubeconfig)
 	if err != nil {
@@ -271,8 +268,8 @@ func (o *CloudControllerManagerOptions) ApplyTo(c *config.Config, allControllers
 	// resync 周期加入随机抖动，避免所有 CCM 实例同时向 API Server 发起全量 list。
 	c.SharedInformers = informers.NewSharedInformerFactory(c.VersionedClient, resyncPeriod(c)())
 
-	// sync back to component config
-	// TODO: find more elegant way than syncing back the values.
+	// 同步回写到 component config。
+	// TODO: 寻找比回写这些值更优雅的方式。
 	// flag 值保存在 Options 中，这里回写到 ComponentConfig，保证两种表示一致。
 	c.ComponentConfig.NodeStatusUpdateFrequency = o.NodeStatusUpdateFrequency
 	if err = o.NodeController.ApplyTo(&c.ComponentConfig.NodeController); err != nil {
@@ -285,7 +282,7 @@ func (o *CloudControllerManagerOptions) ApplyTo(c *config.Config, allControllers
 	return nil
 }
 
-// Validate is used to validate config before launching the cloud controller manager
+// Validate 在启动 cloud controller manager 之前校验配置。
 // 汇总所有子选项的校验错误后一次性返回，避免用户反复修一个跑一次。
 func (o *CloudControllerManagerOptions) Validate(allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string, allWebhooks, disabledByDefaultWebhooks []string) error {
 	errors := []error{}
@@ -316,7 +313,7 @@ func (o *CloudControllerManagerOptions) Validate(allControllers []string, disabl
 	return utilerrors.NewAggregate(errors)
 }
 
-// resyncPeriod computes the time interval a shared informer waits before resyncing with the api server
+// resyncPeriod 计算共享 informer 在与 api server 重新同步之前等待的时间间隔。
 // 在 [1,2) 倍 MinResyncPeriod 之间随机取值，打散多副本的重同步峰值。
 func resyncPeriod(c *config.Config) func() time.Duration {
 	return func() time.Duration {
@@ -325,7 +322,7 @@ func resyncPeriod(c *config.Config) func() time.Duration {
 	}
 }
 
-// Config return a cloud controller manager config objective
+// Config 返回一个 cloud controller manager 配置对象。
 // 校验 -> 生成自签证书 -> 应用选项，产出可直接交给命令运行的 Config。
 func (o *CloudControllerManagerOptions) Config(allControllers []string, disabledByDefaultControllers []string, controllerAliases map[string]string, allWebhooks, disabledByDefaultWebhooks []string) (*config.Config, error) {
 	if err := o.Validate(allControllers, disabledByDefaultControllers, controllerAliases, allWebhooks, disabledByDefaultWebhooks); err != nil {

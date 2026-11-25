@@ -42,8 +42,8 @@ import (
 // 而不是去匹配错误消息文本。
 var ErrAPIServiceNotFound = errors.New("resource not found")
 
-// SpecAggregator calls out to http handlers of APIServices and merges specs. It keeps state of the last
-// known specs including the http etag.
+// SpecAggregator 调用各 APIService 的 http handler 并合并 OpenAPI spec，
+// 同时保存最近一次已知 spec（包括 http etag）的状态。
 // 接口把“注册/更新/删除单个 APIService”与“对外提供合并后的 spec”解耦：
 // 控制器负责前三者，OpenAPI handler 只消费合并结果，双方不需要了解彼此的内部结构。
 type SpecAggregator interface {
@@ -58,7 +58,7 @@ const (
 	specDownloadTimeout           = time.Minute
 	localDelegateChainNamePattern = "k8s_internal_local_delegation_chain_%010d"
 
-	// A randomly generated UUID to differentiate local and remote eTags.
+	// 随机生成的 UUID，用于区分本地与远端的 eTag。
 	// 本地生成的 ETag 使用固定前缀以区别于远端 APIService 的 ETag；
 	// 二者若相同，合并后的 ETag 就无法反映真实变化，缓存会误判。
 	locallyGeneratedEtagPrefix = "\"6E8F849B434D4B98A569B9D7718876E9-"
@@ -71,10 +71,8 @@ type openAPISpecInfo struct {
 	// spec is the cached OpenAPI spec
 	spec cached.LastSuccess[*spec.Swagger]
 
-	// The downloader is used only for non-local apiservices to
-	// re-update the spec every so often.
-	// Calling Get() is not thread safe and should only be called by a single
-	// thread via the openapi controller.
+	// downloader 仅用于非本地 apiservice，周期性地重新更新 spec。
+	// 调用 Get() 不是线程安全的，只应由 openapi controller 用单个线程调用。
 	// 本地 spec 是静态的，不需要下载器；只有远端 APIService 才需要周期性刷新。
 	downloader CacheableDownloader
 }
@@ -85,7 +83,7 @@ type specAggregator struct {
 	// mutex protects the specsByAPIServiceName map and its contents.
 	mutex sync.Mutex
 
-	// Map of API Services' OpenAPI specs by their name
+	// 按名字保存各 API Service 的 OpenAPI spec 的映射。
 	// 用 APIService 名字做键，便于控制器按名字做增量更新，而不必重建整张表。
 	specsByAPIServiceName map[string]*openAPISpecInfo
 
@@ -140,9 +138,8 @@ func BuildAndRegisterAggregator(downloader *Downloader, delegationTarget server.
 		if handler == nil {
 			continue
 		}
-		// ignore errors for the empty delegate we attach at the end the chain
-		// atm the empty delegate returns 503 when the server hasn't been fully initialized
-		// and the spec downloader only silences 404s
+		// 忽略链尾空 delegate 的错误：目前空 delegate 在 server 尚未完全初始化时返回 503，
+		// 而 spec 下载器只静默 404。
 		// 链尾的空委托没有列出任何路径，下载它的 spec 只会得到 503，
 		// 而下载器只忽略 404，所以这里直接跳过以免产生无意义的警告。
 		if len(delegate.ListedPaths()) == 0 && delegate.NextDelegate() == nil {
@@ -166,7 +163,7 @@ func (s *specAggregator) addLocalSpec(name string, cachedSpec cached.Value[*spec
 	s.specsByAPIServiceName[name] = info
 }
 
-// buildMergeSpecLocked creates a new cached mergeSpec from the list of cached specs.
+// buildMergeSpecLocked 基于缓存的 spec 列表创建新的 cached mergeSpec。
 // map 遍历顺序不稳定，必须先按优先级排序，才能保证合并结果（尤其是冲突消解和 ETag）稳定。
 // 返回的 cached.Value 把合并计算延迟到真正需要时，避免在每次 APIService 变动时都同步重算。
 func (s *specAggregator) buildMergeSpecLocked() cached.Value[*spec.Swagger] {
@@ -187,8 +184,7 @@ func (s *specAggregator) buildMergeSpecLocked() cached.Value[*spec.Swagger] {
 		for _, specInfo := range results {
 			result, etag, err := specInfo.Get()
 			if err != nil {
-				// APIService name and err message will be included in
-				// the error message as part of decorateError
+				// APIService 名字与错误信息会由 decorateError 一并放进错误消息。
 				// 单个 APIService 拉取失败不应让整份 spec 不可用，记日志后跳过即可；
 				// cached 层会保留上次成功的 spec 供后续使用。
 				klog.Warning(err)
@@ -197,8 +193,8 @@ func (s *specAggregator) buildMergeSpecLocked() cached.Value[*spec.Swagger] {
 			if merged == nil {
 				merged = &spec.Swagger{}
 				*merged = *result
-				// Paths, Definitions and parameters are set by
-				// MergeSpecsIgnorePathConflictRenamingDefinitionsAndParameters
+				// Paths、Definitions 和 parameters 由
+				// MergeSpecsIgnorePathConflictRenamingDefinitionsAndParameters 负责设置。
 				// 先以第一个 spec 为基底，再清空这三块由合并函数专门处理的字段，
 				// 避免它们被基底内容“抢占”而使后续合并失去冲突检测的机会。
 				merged.Paths = nil
@@ -210,15 +206,14 @@ func (s *specAggregator) buildMergeSpecLocked() cached.Value[*spec.Swagger] {
 				return nil, "", fmt.Errorf("failed to build merge specs: %v", err)
 			}
 		}
-		// Printing the etags list is stable because it is sorted.
+		// 打印 etags 列表是稳定的，因为它经过排序。
 		// 合并后的 ETag 由各 spec ETag 列表的哈希生成，只要任一来源变化就会改变；
 		// 顺序来自前面的优先级排序，因此相同输入总能得到相同 ETag。
 		return merged, fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%#v", etags)))), nil
 	}, caches)
 }
 
-// updateServiceLocked updates the spec cache by downloading the latest
-// version of the spec.
+// updateServiceLocked 通过下载最新版本的 spec 来更新 spec 缓存。
 // 下载得到的完整 spec 需要按该 APIService 声明的 group/version 过滤路径，
 // 否则一个聚合 API 会意外暴露后端服务 spec 中属于其他组的路径。
 func (s *specAggregator) updateServiceLocked(name string) error {
@@ -247,8 +242,8 @@ func (s *specAggregator) UpdateAPIServiceSpec(apiServiceName string) error {
 	return s.updateServiceLocked(apiServiceName)
 }
 
-// AddUpdateAPIService adds the api service. It is thread safe. If the
-// apiservice already exists, it will be updated.
+// AddUpdateAPIService 添加 api service，该方法是线程安全的；
+// 若 apiservice 已存在，则会被更新。
 // 本地 APIService（Service 为空）在构造阶段已经注册过，这里直接忽略，
 // 避免为内置 API 建立多余的远端下载器。
 func (s *specAggregator) AddUpdateAPIService(apiService *v1.APIService, handler http.Handler) error {
@@ -289,7 +284,7 @@ func (s *specAggregator) RemoveAPIService(apiServiceName string) {
 		return
 	}
 	delete(s.specsByAPIServiceName, apiServiceName)
-	// Re-create the mergeSpec for the new list of apiservices
+	// 为新的 apiservice 列表重建 mergeSpec。
 	// 删除后合并项集合发生变化，必须重建合并 spec，否则已删除 API 的路径仍会出现。
 	s.openAPIVersionedService.UpdateSpecLazy(s.buildMergeSpecLocked())
 }

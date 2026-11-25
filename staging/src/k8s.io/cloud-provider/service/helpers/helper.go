@@ -42,15 +42,14 @@ const (
 	// defaultLoadBalancerSourceRanges 在未指定来源范围时放行全部流量，保持向后兼容。
 	defaultLoadBalancerSourceRanges = "0.0.0.0/0"
 
-	// LoadBalancerCleanupFinalizer is the finalizer added to load balancer
-	// services to ensure the Service resource is not fully deleted until
-	// the correlating load balancer resources are deleted.
+	// LoadBalancerCleanupFinalizer 是添加到负载均衡器 service 上的 finalizer，
+	// 用于确保在相应的负载均衡器资源被删除之前，Service 资源不会被彻底删除。
 	// 该 finalizer 由 ServiceController 管理；外部 LB 实现若需额外清理，
 	// 必须使用自己的 finalizer，不能依赖这一个。
 	LoadBalancerCleanupFinalizer = "service.kubernetes.io/load-balancer-cleanup"
 )
 
-// IsAllowAll checks whether the utilnet.IPNet allows traffic from 0.0.0.0/0
+// IsAllowAll 检查该 utilnet.IPNet 是否允许来自 0.0.0.0/0 的流量。
 // 仅识别 IPv4 全放行；IPv6 的 ::/0 不在判断范围内，调用方需注意。
 func IsAllowAll(ipnets utilnet.IPNetSet) bool {
 	for _, s := range ipnets.StringSlice() {
@@ -61,9 +60,9 @@ func IsAllowAll(ipnets utilnet.IPNetSet) bool {
 	return false
 }
 
-// GetLoadBalancerSourceRanges first try to parse and verify LoadBalancerSourceRanges field from a service.
-// If the field is not specified, turn to parse and verify the AnnotationLoadBalancerSourceRangesKey annotation from a service,
-// extracting the source ranges to allow, and if not present returns a default (allow-all) value.
+// GetLoadBalancerSourceRanges 优先解析并校验 service 的 LoadBalancerSourceRanges 字段；
+// 若未指定，则转而解析并校验 AnnotationLoadBalancerSourceRangesKey 注解，提取要放行的来源范围；
+// 两者都不存在时返回默认值（allow-all）。
 // 字段优先级：spec 字段 > 注解 > 全放行；返回错误时调用方应停止 LB 更新，避免放宽访问控制。
 func GetLoadBalancerSourceRanges(service *v1.Service) (utilnet.IPNetSet, error) {
 	var ipnets utilnet.IPNetSet
@@ -92,7 +91,7 @@ func GetLoadBalancerSourceRanges(service *v1.Service) (utilnet.IPNetSet, error) 
 	return ipnets, nil
 }
 
-// GetServiceHealthCheckPathPort returns the path and nodePort programmed into the Cloud LB Health Check
+// GetServiceHealthCheckPathPort 返回配置到云端 LB 健康检查中的路径和 nodePort。
 // 只有 Local 流量策略的 LoadBalancer 才需要健康检查；否则返回空路径与 0，
 // 表示云实现应走普通（全节点）健康检查。
 func GetServiceHealthCheckPathPort(service *v1.Service) (string, int32) {
@@ -106,7 +105,7 @@ func GetServiceHealthCheckPathPort(service *v1.Service) (string, int32) {
 	return "/healthz", port
 }
 
-// RequestsOnlyLocalTraffic checks if service requests OnlyLocal traffic.
+// RequestsOnlyLocalTraffic 检查 service 是否请求 OnlyLocal 流量。
 // 仅 LoadBalancer/NodePort 支持 ExternalTrafficPolicy=Local；其他类型一律视为否。
 func RequestsOnlyLocalTraffic(service *v1.Service) bool {
 	if service.Spec.Type != v1.ServiceTypeLoadBalancer &&
@@ -116,7 +115,7 @@ func RequestsOnlyLocalTraffic(service *v1.Service) bool {
 	return service.Spec.ExternalTrafficPolicy == v1.ServiceExternalTrafficPolicyLocal
 }
 
-// NeedsHealthCheck checks if service needs health check.
+// NeedsHealthCheck 检查 service 是否需要健康检查。
 // 只有 LoadBalancer 且要求 Local 流量时才需要按节点做健康检查。
 func NeedsHealthCheck(service *v1.Service) bool {
 	if service.Spec.Type != v1.ServiceTypeLoadBalancer {
@@ -135,14 +134,14 @@ func HasLBFinalizer(service *v1.Service) bool {
 	return false
 }
 
-// LoadBalancerStatusEqual checks if load balancer status are equal
+// LoadBalancerStatusEqual 检查负载均衡器 status 是否相等。
 // 只比较 Ingress；nil 与空切片在 Semantic.DeepEqual 下被视为相等，避免无意义写入。
 func LoadBalancerStatusEqual(l, r *v1.LoadBalancerStatus) bool {
 	return apiequality.Semantic.DeepEqual(l.Ingress, r.Ingress)
 }
 
-// PatchService patches the given service's Status or ObjectMeta based on the original and
-// updated ones. Change to spec will be ignored.
+// PatchService 根据 service 的原始对象与更新后对象，为其 Status 或 ObjectMeta 生成 patch；
+// 对 spec 的改动会被忽略。
 // 先重置 spec 再生成 patch，防止控制器用陈旧副本覆盖用户对 Service 规格的并发修改。
 func PatchService(c corev1.CoreV1Interface, oldSvc, newSvc *v1.Service) (*v1.Service, error) {
 	// Reset spec to make sure only patch for Status or ObjectMeta.

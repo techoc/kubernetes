@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
-// TestEscaping tests that property names are escaped as expected.
 // TestEscaping 验证属性名转义规则，并检查转义结果的合法性与往返一致性。
 func TestEscaping(t *testing.T) {
 	cases := []struct {
@@ -33,8 +32,6 @@ func TestEscaping(t *testing.T) {
 		escaped     string
 		unescapable bool
 	}{
-		// '.', '-', '/' and '__' are escaped since
-		// CEL only allows identifiers of the form: [a-zA-Z_][a-zA-Z0-9_]*
 		// '.'、'-'、'/' 与 '__' 必须转义，因为 CEL 标识符只允许 [a-zA-Z_][a-zA-Z0-9_]*。
 		{unescaped: "a.a", escaped: "a__dot__a"},
 		{unescaped: "a-a", escaped: "a__dash__a"},
@@ -46,7 +43,6 @@ func TestEscaping(t *testing.T) {
 		{unescaped: "a____a", escaped: "a__underscores____underscores__a"},
 		{unescaped: "a__dot__a", escaped: "a__underscores__dot__underscores__a"},
 		{unescaped: "a__underscores__a", escaped: "a__underscores__underscores__underscores__a"},
-		// CEL lexer RESERVED keywords must be escaped
 		// CEL 词法保留字必须转义，否则会被解析为关键字而不是字段名。
 		{unescaped: "true", escaped: "__true__"},
 		{unescaped: "false", escaped: "__false__"},
@@ -69,13 +65,10 @@ func TestEscaping(t *testing.T) {
 		{unescaped: "var", escaped: "__var__"},
 		{unescaped: "void", escaped: "__void__"},
 		{unescaped: "while", escaped: "__while__"},
-		// Not all property names are escapable
 		// 并非所有属性名都可转义：以数字或非法字符开头的名称无法映射为合法标识符。
 		{unescaped: "@", unescapable: true},
 		{unescaped: "1up", unescapable: true},
 		{unescaped: "👑", unescapable: true},
-		// CEL macro and function names do not need to be escaped because the parser keeps identifiers in a
-		// different namespace than function and  macro names.
 		// CEL 宏与函数名和标识符不在同一命名空间，因此无需转义。
 		{unescaped: "has", escaped: "has"},
 		{unescaped: "all", escaped: "all"},
@@ -98,7 +91,6 @@ func TestEscaping(t *testing.T) {
 		{unescaped: "getMinutes", escaped: "getMinutes"},
 		{unescaped: "getMonth", escaped: "getMonth"},
 		{unescaped: "getSeconds", escaped: "getSeconds"},
-		// we don't escape a single _
 		// 单个下划线是合法标识符，不触发转义。
 		{unescaped: "_if", escaped: "_if"},
 		{unescaped: "_has", escaped: "_has"},
@@ -209,7 +201,6 @@ func TestCanSkipRegex(t *testing.T) {
 		// 非法字符必须被标记出来，而不是落入快速路径。
 		{unescaped: "@", invalidCharFound: true},
 		{unescaped: "👑", invalidCharFound: true},
-		// if escape keyword is detected before invalid character, invalidCharFound
 		// 若先遇到转义关键字再遇到非法字符，invalidCharFound 不会被置位。
 		{unescaped: "/👑", canSkip: false},
 	}

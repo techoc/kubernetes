@@ -56,7 +56,6 @@ func TestTunnelingHandler_UpgradeStreamingAndTunneling(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
-	// Create fake upstream SPDY server, with channel receiving SPDY streams.
 	// 该服务端模拟 kubelet：完成握手后把收到的流交给测试，并在 stopServerChan 关闭前保持连接。
 	streamChan := make(chan httpstream.Stream)
 	defer close(streamChan)
@@ -100,9 +99,7 @@ func TestTunnelingHandler_UpgradeStreamingAndTunneling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, constants.PortForwardV1Name, protocol)
 	defer spdyClient.Close() //nolint:errcheck
-	// Create a SPDY client stream, which will queue a SPDY server stream
-	// on the stream creation channel. Send random data on the client stream
-	// reading off the SPDY server stream, and validating it was tunneled.
+	// 创建 SPDY 客户端流（会在流创建 channel 上排入对应的 SPDY 服务端流），向客户端流发送随机数据，再从 SPDY 服务端流读出并校验数据确实被隧道转发。
 	// 1 MiB 随机数据足以暴露分片/缓冲处理错误，而不会让测试过慢。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
@@ -646,7 +643,6 @@ func (m *mockConnInitializer) InitializeWrite(backendResponse *http.Response, ba
 	return err
 }
 
-// mockConn implements "net.Conn" interface.
 // 仅实现测试需要的行为：记录写入内容与 deadline。
 var _ net.Conn = &mockConn{}
 
@@ -691,7 +687,6 @@ func (mc *mockConn) SetReadDeadline(t time.Time) error { mc.readDeadline = t; re
 // SetWriteDeadline 记录写 deadline。
 func (mc *mockConn) SetWriteDeadline(t time.Time) error { mc.writeDeadline = t; return mc.deadlineErr }
 
-// mockResponseWriter implements "http.ResponseWriter" interface
 // 记录 header、body 与状态码，用于断言包装器的转发行为。
 type mockResponseWriter struct {
 	header     http.Header
@@ -711,7 +706,6 @@ func (mrw *mockResponseWriter) Write(p []byte) (int, error) {
 // WriteHeader 记录状态码。
 func (mrw *mockResponseWriter) WriteHeader(statusCode int) { mrw.statusCode = statusCode }
 
-// fakeResponder implements "rest.Responder" interface.
 // 错误响应器在测试中不做任何输出，避免干扰隧道数据。
 var _ rest.Responder = &fakeResponder{}
 
@@ -724,8 +718,6 @@ func (fr *fakeResponder) Object(statusCode int, obj runtime.Object) {}
 // Error 忽略错误响应。
 func (fr *fakeResponder) Error(err error) {}
 
-// justQueueStream skips the usual stream validation before
-// queueing the stream on the stream channel.
 // 测试只需要拿到流本身，因此跳过生产实现中的头部校验与回执等待。
 func justQueueStream(streams chan httpstream.Stream) func(httpstream.Stream, <-chan struct{}) error {
 	return func(stream httpstream.Stream, replySent <-chan struct{}) error {

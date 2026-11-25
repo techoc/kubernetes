@@ -31,43 +31,36 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	//
-	// Uncomment to load all auth plugins
 	// 取消注释可加载全部认证插件（会注册所有内置提供者）。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth"
 	//
-	// Or uncomment to load specific auth plugins
-	// 或只加载特定认证插件，减少二进制体积与副作用。
+	// 也可以只取消注释特定认证插件，减少二进制体积与副作用。
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
 
 func main() {
-	// creates the in-cluster config
-	// 从 Pod 环境（service account token、service 环境变量、CA 证书）构造配置。
+	// 创建 in-cluster 配置：从 Pod 环境（service account token、service 环境变量、CA 证书）构造。
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		panic(err.Error())
 	}
-	// creates the clientset
-	// 基于配置创建类型化 clientset，连接信息复用同一个 HTTP 客户端。
+	// 创建 clientset：基于上面的配置创建类型化 clientset，连接信息复用同一个 HTTP 客户端。
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
 	for {
-		// get pods in all the namespaces by omitting namespace
-		// Or specify namespace to get pods in particular namespace
-		// 空命名空间表示列举所有命名空间中的 Pod。
+		// 省略 namespace 即列举所有命名空间中的 Pod；
+		// 指定 namespace 则只取该命名空间下的 Pod。
 		pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			panic(err.Error())
 		}
 		fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
 
-		// Examples for error handling:
-		// - Use helper functions e.g. errors.IsNotFound()
-		// - And/or cast to StatusError and use its properties like e.g. ErrStatus.Message
-		// 演示两种错误处理方式：errors.IsNotFound 判断语义类型，
-		// 或断言 *errors.StatusError 读取服务端返回的详细信息。
+		// 错误处理示例：
+		// - 使用辅助函数判断语义类型，例如 errors.IsNotFound()
+		// - 或者断言为 *errors.StatusError，用它的属性读取服务端返回的详细信息，例如 ErrStatus.Message
 		_, err = clientset.CoreV1().Pods("default").Get(context.TODO(), "example-xxxxx", metav1.GetOptions{})
 		if errors.IsNotFound(err) {
 			fmt.Printf("Pod example-xxxxx not found in default namespace\n")

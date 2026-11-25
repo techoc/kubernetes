@@ -41,16 +41,14 @@ import (
 )
 
 func init() {
-	// If instantiated more than once or together with other servers, the
-	// servers would try to modify the global logging state. This must get
-	// ignored during testing.
+	// 如果被实例化多次或与其他 server 一起启动，
+	// 这些 server 会尝试修改全局日志状态；测试期间必须忽略这种修改。
 	// 测试中可能同时启动多个服务端，忽略未变化的日志重配置可避免全局状态冲突。
 	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
 
-	// Because the test server gets started after other goroutines are
-	// running already, we also have to initialize logging here when
-	// those goroutines are not running yet. This works because the
-	// test server uses the default config.
+	// 由于测试服务端启动时其他 goroutine 已经在运行，
+	// 我们也必须在这里（它们尚未运行时）初始化日志；
+	// 之所以可行，是因为测试服务端使用的是默认配置。
 	// 启动服务端时已有 goroutine 在运行，无法再安全地重新初始化日志，
 	// 因此在 init 阶段用默认配置完成一次初始化。
 	config := logsapi.NewLoggingConfiguration()
@@ -59,11 +57,11 @@ func init() {
 	}
 }
 
-// TearDownFunc is to be called to tear down a test server.
+// TearDownFunc 在销毁测试服务端时被调用。
 // 调用方必须在用完 TestServer 后执行该函数，否则监听端口与临时文件会泄漏。
 type TearDownFunc func()
 
-// TestServer return values supplied by kube-test-ApiServer
+// TestServer 返回 kube-test-ApiServer 提供的各项值。
 // TestServer 汇总测试用 cloud-controller-manager 的连接信息与清理入口。
 type TestServer struct {
 	LoopbackClientConfig *restclient.Config                     // Rest client config using the magic token; 使用特权回环 token，测试可直接调用服务端内部 API。
@@ -73,20 +71,19 @@ type TestServer struct {
 	TmpDir               string                                 // Temp Dir used, by the apiserver
 }
 
-// StartTestServer starts a cloud-controller-manager. A rest client config and a tear-down func,
-// and location of the tmpdir are returned.
+// StartTestServer 启动一个 cloud-controller-manager，返回 rest 客户端配置、
+// tear-down 函数以及临时目录的位置。
 //
-// Note: we return a tear-down func instead of a stop channel because the later will leak temporary
-// files that because Golang testing's call to os.Exit will not give a stop channel go routine
-// enough time to remove temporary files.
+// 注意：返回 tear-down 函数而不是 stop channel，因为 Go testing 调用 os.Exit 时
+// 不会给 stop channel 的 goroutine 留足清理临时文件的时间，那样会泄漏临时文件。
 // StartTestServer 使用默认控制器集合与别名启动测试服务端。
 func StartTestServer(t *testing.T, ctx context.Context, customFlags []string) (result TestServer, err error) {
 	return StartTestServerWithOptions(t, ctx, customFlags, app.DefaultInitFuncConstructors, names.CCMControllerAliases())
 }
 
-// StartTestServerWithOptions starts a cloud-controller-manager with extra controller loop initializer constructors
-// and controller loop aliaes. Within the returned TestServer, a rest client config, a tear-down func,
-// and location of the tmpdir are returned; or an error if one occurred.
+// StartTestServerWithOptions 启动一个带额外控制器循环初始化构造器与别名集的
+// cloud-controller-manager；返回的 TestServer 中包含 rest 客户端配置、tear-down 函数
+// 和临时目录位置，若出错则返回错误。
 // 允许调用方注入自定义控制器构造器与别名，用于测试扩展控制器的装配路径。
 func StartTestServerWithOptions(t *testing.T,
 	ctx context.Context,
@@ -103,8 +100,7 @@ func StartTestServerWithOptions(t *testing.T,
 	tearDown := func() {
 		close(stopCh)
 
-		// If cloud-controller-manager was started, let's wait for
-		// it to shutdown clearly.
+		// 如果 cloud-controller-manager 已经启动，就等待它明确关闭。
 		// 等待命令 goroutine 返回，确保优雅关闭完成后再清理 configz。
 		if errCh != nil {
 			err, ok := <-errCh
@@ -122,7 +118,7 @@ func StartTestServerWithOptions(t *testing.T,
 
 	result.TmpDir = t.TempDir()
 
-	// Do not run leader election.
+	// 不运行 leader election。
 	// 测试中只运行一个实例，禁用选主可避免等待 lease 获取而拖慢启动。
 	s, err := options.NewCloudControllerManagerOptions()
 	if err != nil {
@@ -155,8 +151,8 @@ func StartTestServerWithOptions(t *testing.T,
 	disableSecure := false
 	webhookServing := false
 	for _, arg := range customFlags {
-		// This block collects all custom flags other than secure serving flags,
-		// which are added after creating a listener.
+		// 这段逻辑收集除 secure serving 相关之外的所有自定义 flag，
+		// secure serving 的 flag 要在创建 listener 之后再添加。
 		// 安全监听端口需要先占用空闲端口再回填 flag，因此这里把相关 flag 单独筛出；
 		// --secure-port=0 表示显式禁用安全端口，直接透传。
 		if strings.HasPrefix(arg, "--secure-port=") || strings.HasPrefix(arg, "--cert-dir=") {
@@ -261,7 +257,7 @@ func StartTestServerWithOptions(t *testing.T,
 	return result, nil
 }
 
-// StartTestServerOrDie calls StartTestServer panic if it does not succeed.
+// StartTestServerOrDie 调用 StartTestServer，失败时 panic。
 // StartTestServerOrDie 在启动失败时直接终止当前测试，适合不需要断言错误的场景。
 func StartTestServerOrDie(t *testing.T, ctx context.Context, flags []string) *TestServer {
 	result, err := StartTestServer(t, ctx, flags)

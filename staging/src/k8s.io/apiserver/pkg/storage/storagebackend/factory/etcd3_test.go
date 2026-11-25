@@ -28,23 +28,21 @@ import (
 // last error 不会被更旧的错误回退。
 func Test_atomicLastError(t *testing.T) {
 	aError := &atomicLastError{err: fmt.Errorf("initial error")}
-	// no timestamp is always updated
-	// 零值时间戳视为“立即更新”，用于首次或无法取到时间的场景。
+	// 不带时间戳（零值）时总会更新：零值时间戳视为“立即更新”，
+	// 用于首次记录或无法取到时间的场景。
 	aError.Store(errors.New("updated error"), time.Time{})
 	err := aError.Load()
 	if err.Error() != "updated error" {
 		t.Fatalf("Expected: \"updated error\" got: %s", err.Error())
 	}
-	// update to current time
-	// 当前时间晚于零值，应当生效。
+	// 更新时间戳为当前时间：当前时间晚于零值，应当生效。
 	now := time.Now()
 	aError.Store(errors.New("now error"), now)
 	err = aError.Load()
 	if err.Error() != "now error" {
 		t.Fatalf("Expected: \"now error\" got: %s", err.Error())
 	}
-	// no update to past time
-	// 更早的时间戳必须被忽略，避免旧错误覆盖新错误。
+	// 过去的时间戳不会更新：更早的时间戳必须被忽略，避免旧错误覆盖新错误。
 	past := now.Add(-5 * time.Second)
 	aError.Store(errors.New("past error"), past)
 	err = aError.Load()

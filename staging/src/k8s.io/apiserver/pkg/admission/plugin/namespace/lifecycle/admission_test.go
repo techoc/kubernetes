@@ -42,13 +42,13 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
-// newHandlerForTest returns a configured handler for testing.
+// newHandlerForTest 返回一个为测试配置好的 handler。
 // 使用真实时钟，适用于不关心 forceLiveLookupTTL 的用例。
 func newHandlerForTest(c clientset.Interface) (*Lifecycle, informers.SharedInformerFactory, error) {
 	return newHandlerForTestWithClock(c, clock.RealClock{})
 }
 
-// newHandlerForTestWithClock returns a configured handler for testing.
+// newHandlerForTestWithClock 返回一个为测试配置好、可指定时钟的 handler。
 // 可注入假时钟，便于测试强制实时查询的有效期；初始化流程与生产一致，
 // 以便 ValidateInitialization 能发现缺少依赖的问题。
 func newHandlerForTestWithClock(c clientset.Interface, cacheClock clock.Clock) (*Lifecycle, informers.SharedInformerFactory, error) {
@@ -63,7 +63,7 @@ func newHandlerForTestWithClock(c clientset.Interface, cacheClock clock.Clock) (
 	return handler, f, err
 }
 
-// newMockClientForTest creates a mock client that returns a client configured for the specified list of namespaces with the specified phase.
+// newMockClientForTest 创建一个 mock 客户端，按指定的 phase 返回给定那批命名空间的对象。
 // 只拦截 list：插件的 lister 由 informer 填充，其余请求走默认的 fake 行为。
 func newMockClientForTest(namespaces map[string]v1.NamespacePhase) *fake.Clientset {
 	mockClient := &fake.Clientset{}
@@ -91,7 +91,7 @@ func newMockClientForTest(namespaces map[string]v1.NamespacePhase) *fake.Clients
 	return mockClient
 }
 
-// newPod returns a new pod for the specified namespace
+// newPod 返回指定命名空间下的一个新 Pod。
 // 只带最小字段，避免无关字段影响准入判断。
 func newPod(namespace string) v1.Pod {
 	return v1.Pod{
@@ -128,7 +128,7 @@ func TestAccessReviewCheckOnMissingNamespace(t *testing.T) {
 	}
 }
 
-// TestAdmissionNamespaceDoesNotExist verifies pod is not admitted if namespace does not exist.
+// TestAdmissionNamespaceDoesNotExist 验证命名空间不存在时 Pod 不会被准入。
 // 同时覆盖了“更新/删除不受命名空间缺失影响”的兼容性约束：
 // 已存在于存储中的对象必须仍可被清理或更新。
 func TestAdmissionNamespaceDoesNotExist(t *testing.T) {
@@ -214,7 +214,7 @@ func TestAdmissionNamespaceFullyDeleted(t *testing.T) {
 	}
 }
 
-// TestAdmissionNamespaceActive verifies a resource is admitted when the namespace is active.
+// TestAdmissionNamespaceActive 验证命名空间处于 Active 时资源会被准入。
 // 活跃命名空间下，Create 应当无任何错误地通过。
 func TestAdmissionNamespaceActive(t *testing.T) {
 	namespace := "test"
@@ -235,7 +235,7 @@ func TestAdmissionNamespaceActive(t *testing.T) {
 	}
 }
 
-// TestAdmissionNamespaceTerminating verifies a resource is not created when the namespace is active.
+// TestAdmissionNamespaceTerminating 验证命名空间处于 Terminating 时不会创建资源。
 // 终止中的命名空间：Create 被拒绝且带 NamespaceTerminatingCause，Update/Delete 放行；
 // 另外 default 与 kube-system 这类 immortal 命名空间永远不能被删除。
 func TestAdmissionNamespaceTerminating(t *testing.T) {
@@ -290,7 +290,7 @@ func TestAdmissionNamespaceTerminating(t *testing.T) {
 	}
 }
 
-// TestAdmissionNamespaceForceLiveLookup verifies live lookups are done after deleting a namespace
+// TestAdmissionNamespaceForceLiveLookup 验证删除命名空间之后会执行实时（绕过缓存）查询。
 // 删除命名空间后，informer 缓存可能仍显示 Active，因此需要在
 // forceLiveLookupTTL 窗口内绕过缓存直接查询 API Server；窗口结束后恢复走缓存，
 // 避免每个请求都产生一次额外 API 调用。
@@ -333,7 +333,7 @@ func TestAdmissionNamespaceForceLiveLookup(t *testing.T) {
 	}
 	getCalls = 0
 
-	// simulate the phase changing
+	// 模拟 phase 发生变化。
 	// 只改 reactor 中的 phase，不更新 informer 缓存，模拟“缓存滞后于真实状态”。
 	phases[namespace] = v1.NamespaceTerminating
 

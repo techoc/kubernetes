@@ -31,7 +31,7 @@ import (
 	"k8s.io/code-generator/cmd/client-gen/generators/util"
 )
 
-// genClientForType produces a file for each top-level type.
+// genClientForType 为每个顶层类型生成一个文件。
 // 一个实例只服务一个类型（见 Filter），因此 typed client 的接口、实现和组级
 // 访问器能放在同一个文件里，且彼此引用无需跨文件解析。
 type genClientForType struct {
@@ -70,9 +70,8 @@ func (g *genClientForType) Imports(c *generator.Context) (imports []string) {
 	return g.imports.ImportLines()
 }
 
-// Ideally, we'd like genStatus to return true if there is a subresource path
-// registered for "status" in the API server, but we do not have that
-// information, so genStatus returns true if the type has a status field.
+// 理想情况是 API Server 为 "status" 注册了子资源路径时 genStatus 才返回 true，
+// 但我们拿不到那个信息，所以只要类型有 status 字段就返回 true。
 // 这是保守启发式：有 Status 字段且未声明 +genclient:noStatus 就生成 Status 相关 verb。
 func genStatus(t *types.Type) bool {
 	// Default to true if we have a Status member
@@ -86,7 +85,7 @@ func genStatus(t *types.Type) bool {
 	return hasStatus && !util.MustParseClientGenTags(append(t.SecondClosestCommentLines, t.CommentLines...)).NoStatus
 }
 
-// GenerateType makes the body of a file implementing the individual typed client for type t.
+// GenerateType 生成实现类型 t 的单个 typed client 的文件主体。
 // 生成流程分三段：Getter 接口 → 接口方法集合 → 结构体/构造器；扩展 verb
 // 在接口与实现两处分别展开，必须使用相同的模板替换逻辑以保证签名一致。
 func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
@@ -205,7 +204,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 	}
 
 	if generateApply {
-		// Generated apply configuration type references required for generated Apply function
+		// 生成 Apply 函数所需的 apply configuration 类型引用：
 		// apply configuration 与被生成代码位于同一 GV 子包下，因此需要重新解析链接串。
 		_, gvString := util.ParsePathGroupVersion(g.inputPackage)
 		m["inputApplyConfig"] = types.Ref(path.Join(g.applyConfigurationPackage, gvString), t.Name.Name+"ApplyConfiguration")
@@ -267,8 +266,7 @@ func (g *genClientForType) GenerateType(c *generator.Context, t *types.Type, w i
 	sw.Do(structType[listableOrAppliable], m)
 	sw.Do(newStruct[structNamespaced|listableOrAppliable], m)
 
-	// generate expansion methods
-	// 扩展方法逐个生成；m 是共享 map，每次循环覆写相关键，因此必须在同一轮内
+	// 逐个生成扩展方法（expansion methods）；m 是共享 map，每次循环覆写相关键，因此必须在同一轮内
 	// 生成所有 verb，避免不同扩展之间串值。
 	for _, e := range tags.Extensions {
 		if e.HasVerb("apply") && !generateApply {
@@ -414,7 +412,7 @@ ApplyStatus(ctx $.context|raw$, $.inputType|private$ *$.inputApplyConfig|raw$, o
 	return m
 }
 
-// group client will implement this interface.
+// getterComment 是该组级 client 会实现的接口声明。
 // 组级 Getter 是 typed client 与具体类型 client 之间的桥梁：
 // 调用方通过 client.<Plural>(namespace) 拿到类型客户端。
 var getterComment = `
@@ -468,9 +466,8 @@ const (
 // the non-namespaced variants are offset by 1.
 // Go enforces index unicity in these kinds of declarations.
 
-// struct declarations
-// Namespacedness does not matter
-// structType 用位掩码索引选择实现：Client / ClientWithList / ClientWithApply /
+// struct 声明。
+// structType 与是否命名空间无关，用位掩码索引选择实现：Client / ClientWithList / ClientWithApply /
 // ClientWithListAndApply 分别对应不同的能力组合，避免生成大量重复样板。
 var structType = []string{
 	noList | noApply: `
@@ -499,9 +496,9 @@ var structType = []string{
 	`,
 }
 
-// Constructors for the struct, in all variants
-// Namespacedness matters
-// 构造器按“是否命名空间 + 能力位”索引；非命名空间变体把 namespace 参数替换为 ""。
+// struct 构造器的全部变体。
+// newStruct 的索引与是否命名空间有关：构造器按“是否命名空间 + 能力位”索引；
+// 非命名空间变体把 namespace 参数替换为 ""。
 var newStruct = []string{
 	namespaced | noList | noApply: `
 	// new$.type|publicPlural$ returns a $.type|publicPlural$

@@ -88,7 +88,7 @@ func (g *genProtoIDL) Namers(c *generator.Context) namer.NameSystems {
 	}
 }
 
-// Filter ignores types that are identified as not exportable.
+// Filter 忽略被判定为不可导出的类型。
 // 类型级 +protobuf=true/false 优先于包级 generateAll；未显式标注时，
 // 只有可被 proto 表达的类型才会输出。
 func (g *genProtoIDL) Filter(c *generator.Context, t *types.Type) bool {
@@ -180,7 +180,7 @@ func (g *genProtoIDL) Imports(c *generator.Context) (imports []string) {
 	return lines
 }
 
-// GenerateType makes the body of a file implementing a set for type t.
+// GenerateType 生成实现类型 t 对应集合的文件主体。
 // 别名与 struct 分别走 doAlias/doStruct；其他 Kind 说明生成器不应处理该类型。
 func (g *genProtoIDL) GenerateType(c *generator.Context, t *types.Type, w io.Writer) error {
 	sw := generator.NewSnippetWriter(w, c, "$", "$")
@@ -231,8 +231,8 @@ type protobufLocator struct {
 	localGoPackage string
 }
 
-// CastTypeName returns the cast type name of a Go type
-// TODO: delegate to a new localgo namer?
+// CastTypeName 返回某个 Go 类型的 cast 类型名。
+// TODO: 是否该交给新的 localgo namer 处理？
 // 本包内类型只写短名；跨包类型写全限定名，供 gogoproto.casttype 使用。
 func (p protobufLocator) CastTypeName(name types.Name) string {
 	if name.Package == p.localGoPackage {
@@ -588,7 +588,7 @@ func memberTypeToProtobufField(locator ProtobufLocator, field *protoField, t *ty
 	return err
 }
 
-// protobufTagToField extracts information from an existing protobuf tag
+// protobufTagToField 从已有的 protobuf 标签中提取信息。
 // 手写 protobuf:"..." 标签可覆盖自动推导的 wire type、字段号与名称；
 // 显式 wire type（varint/bytes 等）表示字段保持自动映射，只是编号/名称被固定。
 func protobufTagToField(tag string, field *protoField, m types.Member, t *types.Type, localPackage types.Name) error {
