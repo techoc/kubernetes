@@ -35,27 +35,27 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// DeclarativeValidationStrategy defines how a strategy may opt-in to declarative validation.
+// DeclarativeValidationStrategy 定义 strategy 可以如何启用声明式校验。
 //
-// When strategies implements ValidateDeclaratively and handwritten validation (Validate / ValidateUpdate),
-// the errors of both are merged and migration checks are performed.
+// 当 strategy 同时实现 ValidateDeclaratively 和手写校验（Validate / ValidateUpdate）时，
+// 二者的错误会被合并，并执行迁移期检查。
 type DeclarativeValidationStrategy interface {
-	// ValidateDeclaratively runs declarative validation, merges the declarative validation errors with any
-	// validationErrs returned from the strategy's Validate / ValidateUpdate functions (which implement hand-written validation)
-	// and performs migration checks.
+	// ValidateDeclaratively 运行声明式校验，把声明式校验错误与 strategy 的
+	// Validate / ValidateUpdate 函数（实现手写校验）返回的 validationErrs 合并，
+	// 并执行迁移期检查。
 	ValidateDeclaratively(ctx context.Context, obj, oldObj runtime.Object, validationErrs field.ErrorList, opType operation.Type, config DeclarativeValidationConfig) field.ErrorList
 
-	// DeclarativeValidationConfig configures declarative validation for a single request.
+	// DeclarativeValidationConfig 为单个请求配置声明式校验。
 	DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) DeclarativeValidationConfig
 }
 
-// DeclarativeValidation is an implementation of DeclarativeValidationStrategy that
-// provides a convenient way for a strategy to opt-in to declarative validation.
+// DeclarativeValidation 是 DeclarativeValidationStrategy 的一种实现，
+// 为 strategy 提供了启用声明式校验的便捷方式。
 //
 // 内嵌 DeclarativeValidation 即可让 strategy 自动获得声明式校验能力；
 // 它只持有 *runtime.Scheme，所有方法都是值接收者，可安全地嵌入无状态 strategy。
 //
-// For example:
+// 例如：
 //
 //		type podStrategy struct {
 //		  rest.DeclarativeValidation
@@ -63,7 +63,7 @@ type DeclarativeValidationStrategy interface {
 //		}
 //	    var Strategy = podStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 //
-// Once a strategy opts-in this way, any generated declarative validation code is run automatically.
+// strategy 以此方式启用后，任何生成的声明式校验代码都会自动运行。
 type DeclarativeValidation struct {
 	*runtime.Scheme
 }
@@ -82,59 +82,54 @@ func (d DeclarativeValidation) ValidateDeclaratively(ctx context.Context, obj, o
 // DeclarativeValidationConfig 返回零值配置，即使用默认的选项、无路径归一化规则。
 // 需要定制的 strategy 应覆写此方法。
 func (d DeclarativeValidation) DeclarativeValidationConfig(ctx context.Context, obj, oldObj runtime.Object) DeclarativeValidationConfig {
-	// The zero value of DeclarativeValidationConfig is the default.
+	// DeclarativeValidationConfig 的零值即为默认配置。
 	return DeclarativeValidationConfig{}
 }
 
-// DeclarativeValidationConfig holds configuration for declarative validation.
-// Strategies that need to customize declarative validation behavior implement
-// DeclarativeValidationConfigurer and return this struct.
+// DeclarativeValidationConfig 保存声明式校验的配置。
+// 需要定制声明式校验行为的 strategy 应实现 DeclarativeValidationConfigurer
+// 并返回该结构体。
 type DeclarativeValidationConfig struct {
-	// Options contains the validation options that declarative validation tags expect,
-	// mapping option name to whether it is enabled. Every option a resource's validation
-	// tags reference must be defined here; an option that is not defined is reported as an
-	// internal error rather than treated as disabled. Option names often correspond to
-	// feature gates.
+	// Options 包含声明式校验 tag 所期望的校验选项，
+	// 从选项名映射到其是否启用。资源校验 tag 引用的每个选项都必须在此定义；
+	// 未定义的选项会报告为内部错误，而不是被视为关闭。选项名通常对应特性门。
 	Options map[string]bool
 
-	// NormalizationRules are applied to field paths when comparing
-	// handwritten and declarative validation errors.
+	// NormalizationRules 在比较手写校验错误与声明式校验错误时
+	// 应用于字段路径。
 	NormalizationRules []field.NormalizationRule
 
-	// SubresourceGVKMapper maps a subresource request to the GVK of the
-	// subresource type for polymorphic subresources like /scale.
+	// SubresourceGVKMapper 针对 /scale 这类多态子资源，把子资源请求
+	// 映射到该子资源类型的 GVK。
 	SubresourceGVKMapper GroupVersionKindProvider
 
-	// ShortCircuitMismatch allows a short-circuit declarative validation error for a field
-	// to match with any handwritten validation error on its subfields.
+	// ShortCircuitMismatch 允许某字段的短路声明式校验错误与其
+	// 子字段上的任意手写校验错误相匹配。
 	ShortCircuitMismatch bool
 }
 
 // ValidationConfigOption 是 ValidateDeclarativelyWithMigrationChecks 使用的内部配置，
-// 导出它仅为方便测试构造完整的选项集合。构造完整的选项集合。
+// 导出它仅为方便测试构造完整的选项集合。
 type ValidationConfigOption struct {
 	OpType               operation.Type
 	ValidationIdentifier string
 	DeclarativeValidationConfig
 }
 
-// validateDeclaratively validates obj and oldObj against declarative
-// validation tags defined in its Go type. It uses the API version extracted from
-// ctx and the provided scheme for validation.
+// validateDeclaratively 依据 obj 与 oldObj 的 Go 类型上定义的声明式校验 tag
+// 进行校验。它使用从 ctx 提取的 API 版本和给定的 scheme 完成校验。
 //
-// The ctx MUST contain requestInfo, which determines the target API for
-// validation. The obj is converted to the API version using the provided scheme
-// before validation occurs. The scheme MUST have the declarative validation
-// registered for the requested resource/subresource.
+// ctx 必须包含 requestInfo，它决定校验的目标 API。
+// 校验发生前，obj 会先用给定的 scheme 转换为对应的 API 版本。
+// scheme 必须已为请求的资源/子资源注册声明式校验。
 //
-// Returns a field.ErrorList containing any validation errors. An internal error
-// is included if requestInfo is missing from the context or if version
-// conversion fails.
+// 返回包含所有校验错误的 field.ErrorList。若上下文中缺少 requestInfo
+// 或版本转换失败，其中会包含一个内部错误。
 //
 // 必须先转换到请求所用的版本化类型：声明式校验 tag 由版本化类型生成，
 // 直接校验内部类型会漏掉或误判 tag。
 func validateDeclaratively(ctx context.Context, scheme *runtime.Scheme, obj, oldObj runtime.Object, o *ValidationConfigOption) field.ErrorList {
-	// Find versionedGroupVersion, which identifies the API version to use for declarative validation.
+	// 找出 versionedGroupVersion，它标识声明式校验要使用的 API 版本。
 	versionedGroupVersion, subresources, err := requestInfo(ctx, o.SubresourceGVKMapper)
 	if err != nil {
 		return field.ErrorList{field.InternalError(nil, err)}
@@ -203,22 +198,22 @@ func compareDeclarativeErrorsAndEmitMismatches(ctx context.Context, imperativeEr
 	logger := klog.FromContext(ctx)
 	mismatchDetails := gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs, enforced, opts)
 	for _, detail := range mismatchDetails {
-		// Log information about the mismatch using contextual logger
+		// 使用上下文 logger 记录该 mismatch 的信息
 		logger.Error(nil, detail)
 
-		// Increment the metric for the mismatch
+		// 累加 mismatch 对应的指标
 		validationmetrics.Metrics.IncDeclarativeValidationMismatchMetric(validationIdentifier)
 	}
 }
 
-// gatherDeclarativeValidationMismatches compares imperative and declarative validation errors
-// and returns detailed information about any mismatches found. Errors are compared via type, field, and origin
+// gatherDeclarativeValidationMismatches 比较手写（imperative）校验错误与声明式校验错误，
+// 并返回所发现差异的详细信息。错误通过类型、字段和 origin 进行比较。
 //
 // 只比较被声明式校验“覆盖”（CoveredByDeclarative）的手写错误：新 API 的标准
 // 声明式错误可能根本没有手写对应物，不该被当成缺失。
 func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field.ErrorList, enforced bool, opts ValidationConfigOption) []string {
 	var mismatchDetails []string
-	// short circuit here to minimize allocs for usual case of 0 validation errors
+	// 此处短路返回，以在常见的 0 个校验错误场景下最小化内存分配
 	if len(imperativeErrs) == 0 && len(declarativeErrs) == 0 {
 		return mismatchDetails
 	}
@@ -239,10 +234,10 @@ func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field
 	// 短路匹配用于声明式校验在父字段处提前返回、而手写校验逐个报告子字段的情况。
 	fuzzyMatcherWithShortCircuit := fuzzyMatcher.MatchAncestorShortCircuit()
 
-	// Dedupe imperative errors using the fuzzy matcher (type, field, and origin) as they are
-	// not intended and come from (buggy) duplicate validation calls.
-	// This is necessary as without deduping we could get unmatched
-	// imperative errors for cases that are correct (matching).
+	// 使用模糊匹配器（类型、字段和 origin）对手写校验错误去重，因为它们并非有意产生，
+	// 而是来自（有缺陷的）重复校验调用。
+	// 这一步是必要的：若不先去重，本应正确（匹配）的情形可能会出现
+	// 未匹配上的手写校验错误。
 	dedupedImperativeErrs := field.ErrorList{}
 	for _, err := range imperativeErrs {
 		found := false
@@ -260,15 +255,15 @@ func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field
 
 	matchedDeclarative := make([]bool, len(declarativeErrs))
 
-	// Match each "covered" imperative error to declarative errors.
-	// We use a fuzzy matching approach to find corresponding declarative errors
-	// for each imperative error marked as CoveredByDeclarative.
-	// They are matched with a "many:many" mapping: an imperative error can match multiple
-	// declarative errors, and a declarative error can match multiple imperative errors.
-	// This allows us to:
-	// 1. Detect imperative errors that should have matching declarative errors but don't
-	// 2. Identify extra declarative errors with no imperative counterpart
-	// Both cases indicate issues with the declarative validation implementation.
+	// 把每个被“覆盖”的手写校验错误与声明式校验错误相匹配。
+	// 我们采用模糊匹配的方式，为每个标记为 CoveredByDeclarative 的手写校验错误
+	// 找到对应的声明式校验错误。
+	// 二者以“多对多”映射匹配：一个手写校验错误可以匹配多个声明式校验错误，
+	// 一个声明式校验错误也可以匹配多个手写校验错误。
+	// 这使我们能够：
+	// 1. 检测本应有对应声明式校验错误却没有的错误
+	// 2. 识别没有手写校验对应物的多余声明式错误
+	// 这两种情况都表明声明式校验实现存在问题。
 	for _, iErr := range imperativeErrs {
 		// 未标记为被声明式覆盖的错误不参与比较：它们本来就只由手写校验产生。
 		if !iErr.CoveredByDeclarative {
@@ -283,7 +278,7 @@ func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field
 				matchedDeclarative[dIdx] = true
 			}
 		}
-		// see if the error matches with a short circuited DV error.
+		// 查看该错误能否与某个短路（short-circuit）的声明式校验错误匹配。
 		if opts.ShortCircuitMismatch && matchCount == 0 {
 			for _, dErr := range declarativeErrs {
 				if fuzzyMatcherWithShortCircuit.Matches(iErr, dErr) {
@@ -295,7 +290,7 @@ func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field
 
 		if matchCount == 0 {
 			rec := defaultRecommendation
-			// If the imperative error is explicitly Alpha, it is never enforced, so HV is authoritative.
+			// 若手写校验错误显式标记为 Alpha，则永远不会被强制执行，因此手写校验（HV）是权威。
 			if iErr.IsAlpha() {
 				rec = authoritativeMsg
 			}
@@ -317,7 +312,7 @@ func gatherDeclarativeValidationMismatches(imperativeErrs, declarativeErrs field
 			continue
 		}
 		rec := defaultRecommendation
-		// If the declarative error is Alpha, it is never enforced (shadowed), so HV is authoritative.
+		// 若声明式校验错误是 Alpha，则永远不会被强制执行（被遮蔽），因此手写校验（HV）是权威。
 		if dErr.IsAlpha() {
 			rec = authoritativeMsg
 		}
@@ -355,7 +350,7 @@ func metricIdentifier(ctx context.Context, scheme *runtime.Scheme, obj runtime.O
 	var identifier string
 
 	identifier = "unknown_resource"
-	// Use kind for identifier.
+	// 用 Kind 构造标识符。
 	if obj != nil && scheme != nil {
 		gvks, _, err := scheme.ObjectKinds(obj)
 		if err != nil {
@@ -366,12 +361,12 @@ func metricIdentifier(ctx context.Context, scheme *runtime.Scheme, obj runtime.O
 		}
 	}
 
-	// Use requestInfo for subresource.
+	// 用 requestInfo 获取子资源。
 	requestInfo, found := genericapirequest.RequestInfoFrom(ctx)
 	if !found {
 		errs = errors.Join(errs, fmt.Errorf("could not find requestInfo in context"))
 	} else if len(requestInfo.Subresource) > 0 {
-		// subresource can be a path, so replace '/' with '_'
+		// 子资源可能是一个路径，因此把 '/' 替换为 '_'
 		identifier += "_" + strings.ReplaceAll(requestInfo.Subresource, "/", "_")
 	}
 
@@ -387,37 +382,35 @@ func metricIdentifier(ctx context.Context, scheme *runtime.Scheme, obj runtime.O
 	return identifier, errs
 }
 
-// ValidateDeclarativelyWithMigrationChecks executes declarative validation and implements the Validation Lifecycle strategy.
-// Declarative validation is always authoritative; the lifecycle prefix on each tag controls the visible behavior:
-//   - Standard (no prefix): Enforced. HV counterparts are expected to be deleted from source.
-//   - Beta (+k8s:beta): Enforced when DeclarativeValidationBeta is enabled. Otherwise shadowed (HV remains authoritative).
-//   - Alpha (+k8s:alpha): Always shadowed; HV remains authoritative.
+// ValidateDeclarativelyWithMigrationChecks 执行声明式校验并实现 Validation Lifecycle（校验生命周期）策略。
+// 声明式校验始终是权威的；每个 tag 上的生命周期前缀控制可见行为：
+//   - Standard（无前缀）：强制执行。对应的手写校验（HV）错误应当已从源码中删除。
+//   - Beta（+k8s:beta）：启用 DeclarativeValidationBeta 时强制执行；否则被遮蔽（HV 仍是权威）。
+//   - Alpha（+k8s:alpha）：始终被遮蔽；HV 仍是权威。
 //
-// Mismatches between HV and DV are logged when the DeclarativeValidation gate is enabled. Only Alpha and
-// Beta errors are mismatch-checked, since Standard DV errors may have no HV counterpart in new APIs.
-// WithAllDeclarativeEnforcedForTest returns a copy of parent context with allDeclarativeEnforcedKey set to true.
-// This is used for testing to expose all declarative validation errors and filter all handwritten validation errors
-// that are covered by declarative validation, regardless of the feature gate or maturity level.
+// 启用 DeclarativeValidation 特性门时，会记录 HV 与 DV 之间的 mismatch。仅对 Alpha 和
+// Beta 错误做 mismatch 检查，因为新 API 中 Standard 的 DV 错误可能没有 HV 对应物。
 //
-// NOTE: This function is intended for testing purposes only and should not be used in production code.
+// WithAllDeclarativeEnforcedForTest 返回父上下文的副本，并把 allDeclarativeEnforcedKey 置为 true，
+// 仅用于测试：让所有声明式校验错误可见，并过滤掉所有被声明式校验覆盖的手写校验错误，
+// 与特性门或成熟度级别无关。
 //
-// WithAllDeclarativeEnforcedForTest 在上下文里打上“全部强制”标记，仅用于测试：
-// 让所有声明式错误可见并过滤掉被覆盖的手写错误，与特性门和成熟度无关。
+// NOTE: 本函数仅供测试目的使用，不应当用于生产代码。
 func WithAllDeclarativeEnforcedForTest(ctx context.Context) context.Context {
 	return validate.WithAllDeclarativeEnforcedForTest(ctx)
 }
 
-// ValidateDeclarativelyWithMigrationChecks executes declarative validation and implements the Validation Lifecycle strategy.
-// Declarative validation is always authoritative; the lifecycle prefix on each tag controls the visible behavior:
-//   - Standard (no prefix): Enforced. HV counterparts are expected to be deleted from source.
-//   - Beta (+k8s:beta): Enforced when DeclarativeValidationBeta is enabled. Otherwise shadowed (HV remains authoritative).
-//   - Alpha (+k8s:alpha): Always shadowed; HV remains authoritative.
+// ValidateDeclarativelyWithMigrationChecks 执行声明式校验并实现 Validation Lifecycle（校验生命周期）策略。
+// 声明式校验始终是权威的；每个 tag 上的生命周期前缀控制可见行为：
+//   - Standard（无前缀）：强制执行。对应的手写校验（HV）错误应当已从源码中删除。
+//   - Beta（+k8s:beta）：启用 DeclarativeValidationBeta 时强制执行；否则被遮蔽（HV 仍是权威）。
+//   - Alpha（+k8s:alpha）：始终被遮蔽；HV 仍是权威。
 //
-// Mismatches between HV and DV are logged when the DeclarativeValidation gate is enabled. Only Alpha and
-// Beta errors are mismatch-checked, since Standard DV errors may have no HV counterpart in new APIs.
+// 启用 DeclarativeValidation 特性门时，会记录 HV 与 DV 之间的 mismatch。仅对 Alpha 和
+// Beta 错误做 mismatch 检查，因为新 API 中 Standard 的 DV 错误可能没有 HV 对应物。
 //
-// For testing purposes, WithAllDeclarativeEnforcedForTest enforces all declarative validations regardless
-// of lifecycle and filters all covered handwritten validations.
+// 测试场景下，WithAllDeclarativeEnforcedForTest 会无视生命周期强制全部声明式校验，
+// 并过滤掉全部被覆盖的手写校验。
 //
 // 执行顺序很关键：先做 mismatch 比较（使用未过滤的两侧错误），再按生命周期
 // 过滤出真正生效的声明式错误，最后去掉被其覆盖的手写错误并追加声明式错误。
@@ -427,7 +420,7 @@ func ValidateDeclarativelyWithMigrationChecks(ctx context.Context, scheme *runti
 	errs = errs.MarkFromImperative()
 	validationIdentifier, err := metricIdentifier(ctx, scheme, obj, opType)
 	if err != nil {
-		// Log the error, but continue with the best-effort identifier.
+		// 记录该错误，但继续使用尽力而为的标识符。
 		klog.FromContext(ctx).Error(err, "failed to generate complete validation identifier for declarative validation")
 	}
 
@@ -442,8 +435,8 @@ func ValidateDeclarativelyWithMigrationChecks(ctx context.Context, scheme *runti
 	// betaEnabled 同时决定 Beta 错误是否生效，以及 mismatch 建议文案。
 	betaEnabled := utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidationBeta)
 	if utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidation) {
-		// Standard errors are authoritative and may not have handwritten counterparts (e.g., in new APIs).
-		// Only Alpha and Beta errors are eligible for mismatch checking.
+		// Standard 错误是权威的，可能没有手写对应物（例如新 API）。
+		// 只有 Alpha 和 Beta 错误才符合 mismatch 检查的条件。
 		var mismatchCandidateErrs field.ErrorList
 		for _, err := range declarativeErrs {
 			if err.IsAlpha() || err.IsBeta() {
@@ -453,12 +446,12 @@ func ValidateDeclarativelyWithMigrationChecks(ctx context.Context, scheme *runti
 		compareDeclarativeErrorsAndEmitMismatches(ctx, errs, mismatchCandidateErrs, validationIdentifier, betaEnabled, *cfg)
 	}
 
-	// Collect the declarative errors that are enforced (i.e. surfaced to the user) in the current mode.
+	// 收集当前模式下会被强制执行（即呈现给用户）的声明式校验错误。
 	enforcedDeclarativeErrs := validate.FilterEnforcedDeclarativeErrors(ctx, declarativeErrs, betaEnabled)
-	// Remove handwritten errors that are superseded by an enforced declarative counterpart.
+	// 移除已被某个生效的声明式校验对应物取代的手写校验错误。
 	errs = validate.FilterCoveredHandwrittenErrors(ctx, errs, enforcedDeclarativeErrs, betaEnabled, cfg.NormalizationRules...)
 
-	// Append the enforced declarative errors.
+	// 追加生效的声明式校验错误。
 	errs = append(errs, enforcedDeclarativeErrs...)
 
 	return errs

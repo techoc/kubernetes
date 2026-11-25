@@ -25,7 +25,7 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
-// partialConditionEvaluationResultType is a small enum for the type of ConditionEvaluationResult
+// partialConditionEvaluationResultType 是一个小型枚举，表示 ConditionEvaluationResult 的类型
 type partialConditionEvaluationResultType int
 
 const (
@@ -35,10 +35,10 @@ const (
 	partialConditionEvaluationResultTypeError
 )
 
-// ConditionEvaluationResult is an enum type with four variants:
-// - true and false: Evaluation was successful, and evaluated to this value
-// - error: The condition could be evaluated, but errored during eval.
-// - unevaluatable: The condition cannot readily be evaluated. This is the struct zero value.
+// ConditionEvaluationResult 是一个具有四种取值的枚举类型：
+// - true 与 false：求值成功，并求值为该值
+// - error：条件可以求值，但求值过程中出错。
+// - unevaluatable：条件无法直接求值。这是结构体的零值。
 //
 // 使用紧凑枚举而非 (bool, error) 二元组，是为了明确区分“求值为 false”和
 // “根本无法求值”两种情况——前者参与决策，后者必须留给后续评估器。
@@ -47,7 +47,7 @@ type ConditionEvaluationResult struct {
 	err        error
 }
 
-// ConditionEvaluationResultBoolean constructs an evaluation result with a boolean value.
+// ConditionEvaluationResultBoolean 构造一个带布尔取值的求值结果。
 func ConditionEvaluationResultBoolean(evalResult bool) ConditionEvaluationResult {
 	if evalResult {
 		return ConditionEvaluationResult{resultType: partialConditionEvaluationResultTypeTrue}
@@ -55,9 +55,9 @@ func ConditionEvaluationResultBoolean(evalResult bool) ConditionEvaluationResult
 	return ConditionEvaluationResult{resultType: partialConditionEvaluationResultTypeFalse}
 }
 
-// ConditionEvaluationResultError indicates that the condition could be evaluated, but failed.
-// A nil error is normalized to a non-nil sentinel so callers can always trust
-// IsError() implies Error() != nil.
+// ConditionEvaluationResultError 表示条件可以求值，但求值失败。
+// nil 错误会被规范化为非 nil 的哨兵错误，这样调用方始终可以相信
+// IsError() 意味着 Error() != nil。
 func ConditionEvaluationResultError(err error) ConditionEvaluationResult {
 	if err == nil {
 		return ConditionEvaluationResult{
@@ -71,52 +71,52 @@ func ConditionEvaluationResultError(err error) ConditionEvaluationResult {
 	}
 }
 
-// ConditionsEvaluationResultUnevaluatable indicates direct conditions evaluation is not possible.
+// ConditionsEvaluationResultUnevaluatable 表示无法直接进行条件求值。
 // 返回零值：这样任何零值 ConditionEvaluationResult 都被视为“不可求值”，
 // 避免调用方忘记显式初始化时被误当作 false 而错误地放行。
 func ConditionsEvaluationResultUnevaluatable() ConditionEvaluationResult {
 	return ConditionEvaluationResult{
-		resultType: partialConditionEvaluationResultTypeUnevaluatable, // == 0 (which matches the zero value of the struct)
+		resultType: partialConditionEvaluationResultTypeUnevaluatable, // == 0（与结构体的零值一致）
 	}
 }
 
-// IsTrue indicates that the conditions evaluation was successful, and evaluated to true, which means it influences the ConditionsMap decision.
-// IsTrue reports whether evaluation succeeded and produced true.
+// IsTrue 表示条件求值成功且结果为 true，这意味着它会影响 ConditionsMap 的决策。
+// IsTrue 报告求值是否成功并得出 true。
 func (r ConditionEvaluationResult) IsTrue() bool {
 	return r.resultType == partialConditionEvaluationResultTypeTrue
 }
 
-// IsFalse indicates that the conditions evaluation was successful, but evaluated to false, and it not thus taken into account.
-// IsFalse reports whether evaluation succeeded and produced false.
+// IsFalse 表示条件求值成功但结果为 false，因此不被计入考量。
+// IsFalse 报告求值是否成功并得出 false。
 func (r ConditionEvaluationResult) IsFalse() bool {
 	return r.resultType == partialConditionEvaluationResultTypeFalse
 }
 
-// IsError indicates whether conditions evaluation failed.
-// IsError reports whether evaluation was attempted but failed.
+// IsError 表示条件求值是否失败。
+// IsError 报告是否尝试了求值但失败。
 func (r ConditionEvaluationResult) IsError() bool {
 	return r.resultType == partialConditionEvaluationResultTypeError
 }
 
-// Error returns the evaluation error, if any.
+// Error 返回求值错误（如果有的话）。
 func (r ConditionEvaluationResult) Error() error { return r.err }
 
-// IsUnevaluatable is true whenever none of the other variants is, that is, the zero value.
-// IsUnevaluatable reports whether no evaluator could handle the condition.
+// IsUnevaluatable 当不属于其他任何取值时为 true，也就是零值的情况。
+// IsUnevaluatable 报告是否没有任何求值器能够处理该条件。
 func (r ConditionEvaluationResult) IsUnevaluatable() bool {
 	return r.resultType == partialConditionEvaluationResultTypeUnevaluatable
 }
 
-// Evaluate evaluates the ConditionsMap primarily using the Conditions' own Evaluate() function,
-// and secondarily using evaluateConditionFn, if set. The first matching (true) condition
-// short-circuits the process, in order for the evaluation to be as efficient as possible.
+// Evaluate 主要使用各 Condition 自带的 Evaluate() 函数求值 ConditionsMap，
+// 其次在设置了 evaluateConditionFn 时使用它。第一条匹配（true）的条件
+// 会短路整个过程，以使求值尽可能高效。
 //
 // 调用方传入的 evaluateConditionFn 永远不会返回 unevaluatable，因此结果必然
 // 收敛为 Allow/Deny/NoOpinion；unconditionalParts 负责剥掉这层包装。
 func (c ConditionsMap) Evaluate(ctx context.Context, data ConditionsData, evaluateConditionFn EvaluateConditionFunc) (Decision, string, error) {
-	// This is a translation between the generic, private function, and the interface we want to expose to callers.
+	// 这是在通用的私有函数与我们希望暴露给调用方的接口之间做一次转换。
 	return partiallyEvaluateConditionsMapInternal(ctx, c, data, func(ctx context.Context, cond Condition, condData ConditionsData) ConditionEvaluationResult {
-		// Because we never return "unevaluatable", the returned ConditionsAwareDecision is always one of Allow/Deny/NoOpinion, and thus can we split it into unconditionalParts
+		// 由于我们从不返回 "unevaluatable"，返回的 ConditionsAwareDecision 必然是 Allow/Deny/NoOpinion 之一，因此可以用 unconditionalParts 将其拆分
 		applied, err := evaluateConditionFn(ctx, cond, condData)
 		if err != nil {
 			return ConditionEvaluationResultError(err)
@@ -125,21 +125,20 @@ func (c ConditionsMap) Evaluate(ctx context.Context, data ConditionsData, evalua
 	}).unconditionalParts()
 }
 
-// partiallyEvaluateConditionsMapInternal evaluates the ConditionsMap primarily using the Conditions' own Evaluate() function,
-// and secondarily using evaluateFunc, if set. If evaluateFunc is non-nil and never returns
-// ConditionsEvaluationResultUnevaluatable, the returned decision is guaranteed to be Allow/Deny/NoOpinion.
-// However, this method can also be used to evaluate a subset of the conditions (e.g. for builtin
-// conditions evaluators that support a certain conditions type), returning ConditionsEvaluationResultUnevaluatable
-// for conditions that the evaluator does not recognize. In the latter case, a partially evaluated,
-// ConditionsMap might be returned.
+// partiallyEvaluateConditionsMapInternal 主要使用各 Condition 自带的 Evaluate() 函数求值
+// ConditionsMap，其次在设置了 evaluateFunc 时使用它。若 evaluateFunc 非 nil 且从不返回
+// ConditionsEvaluationResultUnevaluatable，则返回的决策保证是 Allow/Deny/NoOpinion。
+// 不过，本方法也可以用于求值条件子集（例如只支持某类条件的内置条件求值器），
+// 对求值器无法识别的条件返回 ConditionsEvaluationResultUnevaluatable。
+// 后一种情况下，可能返回一个部分求值的 ConditionsMap。
 //
 // 求值顺序固定为 Deny -> NoOpinion -> Allow，这是安全性的核心：任何一条 Deny
 // 生效都立即否决，绝不会被后面对 Allow 的求值“覆盖”。同一效果内部，
 // true > error > unevaluatable > false。
 func partiallyEvaluateConditionsMapInternal(ctx context.Context, c ConditionsMap, data ConditionsData, evaluateConditionFn MaybeEvaluateConditionFunc) ConditionsAwareDecision {
 	evalCond := func(cond Condition) ConditionEvaluationResult {
-		// First, try to use the condition's own evaluate function.
-		// Fallback to evaluateConditionFn if set and unevaluatable
+		// 首先尝试使用条件自带的求值函数。
+		// 若结果为 unevaluatable 且设置了 evaluateConditionFn，则回退到它
 		result := cond.Evaluate(ctx, data)
 		if result.IsUnevaluatable() && evaluateConditionFn != nil {
 			return evaluateConditionFn(ctx, cond, data)
@@ -147,7 +146,7 @@ func partiallyEvaluateConditionsMapInternal(ctx context.Context, c ConditionsMap
 		return result
 	}
 
-	// General logic: Deny > NoOpinion > Allow. Within a set of same-effect conditions true > error > unevaluatable > false.
+	// 总体逻辑：Deny > NoOpinion > Allow。在一组效果相同的条件内部，true > error > unevaluatable > false。
 
 	// 先求 Deny：一旦命中直接拒绝，后续条件无需再算。
 	if len(c.denyConditions) != 0 {
@@ -155,9 +154,9 @@ func partiallyEvaluateConditionsMapInternal(ctx context.Context, c ConditionsMap
 			c.DenyConditions(), evalCond, "Deny", "denied the request")
 
 		if len(appliedReason) != 0 {
-			// No errors are returned here, as that would turn this into a 500 instead of 403 in the WithAuthorization HTTP filter
-			// TODO(luxas): We might want to change the WithAuthorization logic such that it becomes possible for an authorizer to
-			// surface non-critical errors also in the precence of denies.
+			// 这里不返回任何错误，否则在 WithAuthorization HTTP 过滤器中会把响应变成 500 而不是 403
+			// TODO(luxas): 我们可能想修改 WithAuthorization 的逻辑，使授权器在存在 deny 的情况下
+			// 也能上报非关键错误。
 			return ConditionsAwareDecisionDeny(appliedReason, nil)
 		}
 		if len(errored) != 0 {
@@ -168,7 +167,7 @@ func partiallyEvaluateConditionsMapInternal(ctx context.Context, c ConditionsMap
 		}
 	}
 
-	// If we got here, all Deny conditions could be evaluated, and evaluated to false, nil
+	// 如果走到这里，说明所有 Deny 条件都能求值，且求值结果均为 false、nil
 
 	// Deny 全部为 false，再看 NoOpinion：命中即终止，但返回的是“无意见”。
 	if len(c.noOpinionConditions) != 0 {
@@ -176,19 +175,19 @@ func partiallyEvaluateConditionsMapInternal(ctx context.Context, c ConditionsMap
 			c.NoOpinionConditions(), evalCond, "NoOpinion", "evaluated to NoOpinion")
 
 		if len(appliedReason) != 0 {
-			// No errors are returned here, as that would turn this into a 500 instead of 403 in the WithAuthorization HTTP filter
+			// 这里不返回任何错误，否则在 WithAuthorization HTTP 过滤器中会把响应变成 500 而不是 403
 			return ConditionsAwareDecisionNoOpinion(appliedReason, nil)
 		}
 		if len(errored) != 0 {
 			return ConditionsAwareDecisionNoOpinion("one or more conditional evaluation errors occurred", utilerrors.NewAggregate(errored))
 		}
 		if len(unevaluated) != 0 {
-			// Note: If len(c.allowConditions) == 0, ConditionsAwareDecisionConditionsMap will fold this into an unconditional NoOpinion.
+			// 注意：如果 len(c.allowConditions) == 0，ConditionsAwareDecisionConditionsMap 会把这折叠成一个无条件的 NoOpinion。
 			return ConditionsAwareDecisionConditionsMap(nil, unevaluated, c.allowConditions)
 		}
 	}
 
-	// If we got here, all Deny and NoOpinion conditions could be evaluated, and evaluated to false, nil
+	// 如果走到这里，说明所有 Deny 和 NoOpinion 条件都能求值，且求值结果均为 false、nil
 
 	// 最后看 Allow：只有没有 Deny/NoOpinion 生效时才可能放行。
 	if len(c.allowConditions) != 0 {
@@ -196,8 +195,8 @@ func partiallyEvaluateConditionsMapInternal(ctx context.Context, c ConditionsMap
 			c.AllowConditions(), evalCond, "Allow", "allowed the request")
 
 		if len(appliedReason) != 0 {
-			// Errors could technically be returned with an Allow (and be logged), but no errors are returned for
-			// the short-circuit true case, as the error list might be incomplete.
+			// 技术上可以在 Allow 的同时返回（并记录）错误，但对于短路命中 true 的情况
+			// 不返回错误，因为此时错误列表可能不完整。
 			return ConditionsAwareDecisionAllow(appliedReason, nil)
 		}
 		if len(errored) != 0 {
@@ -208,13 +207,13 @@ func partiallyEvaluateConditionsMapInternal(ctx context.Context, c ConditionsMap
 		}
 	}
 
-	// All conditions evaluated to false. This means a simple default NoOpinion.
+	// 所有条件求值结果均为 false。这意味着一个简单的默认 NoOpinion。
 	return ConditionsAwareDecisionNoOpinion("no conditions matched", nil)
 }
 
-// Note: the signature is string, error, []Condition, as that is the order in which the return values should be processed
-// The first true short-circuits the evaluation with a nil error, even though some potentially happened before the first
-// true evaluation, as the errors list in that case wouldn't necessarily be comprehensive.
+// 注意：签名为 string、error、[]Condition，因为这是处理各返回值的顺序
+// 第一条 true 会以 nil 错误短路求值，尽管在第一条 true 求值之前可能已经发生了一些错误，
+// 因为那种情况下的错误列表未必是完整的。
 //
 // 三态返回：命中的原因字符串、累计的错误、以及无法求值的条件（留给后续评估器）。
 func conditionsToAppliedErroredUnevaluated(conditions iter.Seq[Condition], evalCond func(cond Condition) ConditionEvaluationResult, effect, appliedDescription string) (string, []error, []Condition) {
@@ -229,7 +228,7 @@ func conditionsToAppliedErroredUnevaluated(conditions iter.Seq[Condition], evalC
 			if desc := cond.GetDescription(); len(desc) != 0 {
 				reason += fmt.Sprintf(" with description %q", desc)
 			}
-			// Note: nil is returned for errors here as the list is not comprehensive in the short-circuit case.
+			// 注意：在短路命中的情况下，这里对错误返回 nil，因为列表并不完整。
 			return reason, nil, nil
 		case evalResult.IsFalse():
 			continue
@@ -247,56 +246,56 @@ func conditionsToAppliedErroredUnevaluated(conditions iter.Seq[Condition], evalC
 	return "", errs, unevaluatedConditions
 }
 
-// PartiallyEvaluateConditionsAwareDecision evaluates the ConditionsAwareDecision primarily using any conditions' own Evaluate() function,
-// and secondarily/optionally using evaluateConditionFn, if set. If evaluateConditionFn is non-nil and never returns
-// ConditionsEvaluationResultUnevaluatable, the returned decision is guaranteed to be Allow/Deny/NoOpinion.
-// However, this method can also be used to evaluate a subset of the conditions (e.g. for builtin
-// conditions evaluators that only support a certain conditions type), returning ConditionsEvaluationResultUnevaluatable
-// for conditions that the evaluator does not recognize. In the latter case, a partially evaluated ConditionsAwareDecision is returned.
-// When evaluating a ConditionsMap, only the first matching (true) condition short-circuits the process,
-// in order for the evaluation to be as efficient as possible.
+// PartiallyEvaluateConditionsAwareDecision 主要使用各条件自带的 Evaluate() 函数求值
+// ConditionsAwareDecision，其次/可选地在设置了 evaluateConditionFn 时使用它。若
+// evaluateConditionFn 非 nil 且从不返回 ConditionsEvaluationResultUnevaluatable，
+// 则返回的决策保证是 Allow/Deny/NoOpinion。
+// 不过，本方法也可以用于求值条件子集（例如只支持某类条件的内置条件求值器），
+// 对求值器无法识别的条件返回 ConditionsEvaluationResultUnevaluatable。
+// 后一种情况下会返回一个部分求值的 ConditionsAwareDecision。
+// 求值 ConditionsMap 时，只有第一条匹配（true）的条件会短路整个过程，
+// 以使求值尽可能高效。
 func PartiallyEvaluateConditionsAwareDecision(ctx context.Context, unevaluatedDecision ConditionsAwareDecision, data ConditionsData, evaluateConditionFn MaybeEvaluateConditionFunc) ConditionsAwareDecision {
 	switch {
 	case unevaluatedDecision.IsConditionsMap():
-		// 叶子节点：尝试用内置求值器把条件图折叠成具体决策。
-		// Try to evaluate or refine the leaf ConditionsMap using the builtin evaluator.
+		// 叶子节点：尝试用内置求值器求值或细化该叶子 ConditionsMap，折叠成具体决策。
 		return partiallyEvaluateConditionsMapInternal(ctx, unevaluatedDecision.ConditionsMap(), data, evaluateConditionFn)
 	case unevaluatedDecision.IsUnion():
 		// 联合节点：深度优先重建决策链，保持与原链相同的短路语义。
 		var newDecisionChain ConditionsAwareDecisionUnion
-		// Recursively walk through the decision DAG in a depth-first manner.
-		// The logic in this function should be the same as in the union authorizer's ConditionsAwareAuthorize.
+		// 以深度优先方式递归遍历决策 DAG。
+		// 本函数中的逻辑应当与 union authorizer 的 ConditionsAwareAuthorize 保持一致。
 
 		collectTailAfterConditionalDecision := false
 		for authorizerName, unevaluatedSubDecision := range unevaluatedDecision.UnionedDecisions() {
-			// If collectAndShortcircuitOnly == true, a conditional decision that couldn't
-			// be evaluated to Allow/Deny/NoOpinion was encountered during a previous
-			// loop iteration. Then all latter decisions stay unevaluated.
+			// 若 collectAndShortcircuitOnly == true，说明在上一次循环迭代中遇到了
+			// 无法求值为 Allow/Deny/NoOpinion 的条件性决策。
+			// 此时后续的所有决策都保持未求值状态。
 			if collectTailAfterConditionalDecision {
 				newDecisionChain.Add(authorizerName, unevaluatedSubDecision)
 				continue
 			}
 
-			// When !collectTailAfterConditionalDecision: All decisions so far in newDecisionChain are NoOpinions,
-			// as if there existed a previous decision of type ConditionsMap or Union, collectTailAfterConditionalDecision == true,
-			// and if there existed an Allow or Deny earlier, the function would have returned.
+			// 当 !collectTailAfterConditionalDecision 时：newDecisionChain 中迄今的所有决策都是 NoOpinion，
+			// 因为如果之前存在 ConditionsMap 或 Union 类型的决策，collectTailAfterConditionalDecision 就为 true，
+			// 而如果更早存在 Allow 或 Deny，函数就已经返回了。
 
-			// Try evaluating or refining the leaf ConditionsMaps in this tree of decisions.
+			// 尝试求值或细化这棵决策树中的叶子 ConditionsMap。
 			possiblyEvaluatedSubDecision := PartiallyEvaluateConditionsAwareDecision(ctx, unevaluatedSubDecision, data, evaluateConditionFn)
 			newDecisionChain.Add(authorizerName, possiblyEvaluatedSubDecision)
 
-			// If there is any Allow/Deny decision leaf, no need to walk the chain further.
+			// 如果存在任何 Allow/Deny 决策叶子，就无需继续遍历该链。
 			if possiblyEvaluatedSubDecision.ContainsUnconditionalAllowOrDeny() {
 				return newDecisionChain.ToDecision()
 			}
 
-			// Stop partially evaluating after encountering a conditional decision
+			// 遇到条件性决策后停止部分求值
 			if !possiblyEvaluatedSubDecision.IsUnconditional() {
 				collectTailAfterConditionalDecision = true
 			}
 		}
-		// If we reached here, all leaf decisions were either of NoOpinion or ConditionsMap type.
-		// If all decisions were NoOpinions, the constructor folds into a single NoOpinion decision.
+		// 如果走到这里，所有叶子决策都是 NoOpinion 或 ConditionsMap 类型。
+		// 如果所有决策都是 NoOpinion，构造函数会将其折叠为单个 NoOpinion 决策。
 		return newDecisionChain.ToDecision()
 	default:
 		// 已经是无条件决策，无需简化。

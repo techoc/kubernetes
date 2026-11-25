@@ -14,87 +14,69 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package queueset implements a technique called "fair queuing for
-// server requests".  One QueueSet is a set of queues operating
-// according to this technique.
+// Package queueset 实现了一种称为「服务器请求公平排队」
+// （fair queuing for server requests）的技术。一个 QueueSet 就是
+// 按照该技术运行的一组队列。
 //
-// Fair queuing for server requests is inspired by the fair queuing
-// technique from the world of networking.  You can find a good paper
-// on that at https://dl.acm.org/citation.cfm?doid=75247.75248 or
+// 服务器请求的公平排队借鉴自网络领域的公平排队
+// 技术。可以在 https://dl.acm.org/citation.cfm?doid=75247.75248 或
 // http://people.csail.mit.edu/imcgraw/links/research/pubs/networks/WFQ.pdf
-// and there is an implementation outline in the Wikipedia article at
-// https://en.wikipedia.org/wiki/Fair_queuing .
+// 找到一篇关于它的优秀论文，并且在
+// https://en.wikipedia.org/wiki/Fair_queuing 这篇维基百科文章中
+// 有一份实现纲要。
 //
-// Fair queuing for server requests differs from traditional fair
-// queuing in three ways: (1) we are dispatching application layer
-// requests to a server rather than transmitting packets on a network
-// link, (2) multiple requests can be executing at once, and (3) the
-// service time (execution duration) is not known until the execution
-// completes.
+// 服务器请求的公平排队与传统公平排队有三点
+// 不同：(1) 我们是把应用层请求分派给服务器，而不是在网络
+// 链路上传输数据包，(2) 可以有多个请求同时执行，(3) 服务
+// 时间（执行时长）在执行完成之前是未知的。
 //
-// The first two differences can easily be handled by straightforward
-// adaptation of the concept called "R(t)" in the original paper and
-// "virtual time" in the implementation outline. In that
-// implementation outline, the notation now() is used to mean reading
-// the virtual clock. In the original paper’s terms, "R(t)" is the
-// number of "rounds" that have been completed at real time t ---
-// where a round consists of virtually transmitting one bit from every
-// non-empty queue in the router (regardless of which queue holds the
-// packet that is really being transmitted at the moment); in this
-// conception, a packet is considered to be "in" its queue until the
-// packet’s transmission is finished. For our problem, we can define a
-// round to be giving one nanosecond of CPU to every non-empty queue
-// in the apiserver (where emptiness is judged based on both queued
-// and executing requests from that queue), and define R(t) = (server
-// start time) + (1 ns) * (number of rounds since server start). Let
-// us write NEQ(t) for that number of non-empty queues in the
-// apiserver at time t.  Let us also write C for the concurrency
-// limit.  In the original paper, the partial derivative of R(t) with
-// respect to t is
+// 前两个差异可以通过对原论文中称为 "R(t)" 的概念以及
+// 实现纲要中称为 "virtual time"（虚拟时间）的概念做直接
+// 改编来轻松处理。在那个实现纲要中，记号 now() 用来表示读取
+// 虚拟时钟。用原论文的术语来说，"R(t)" 是在真实时间 t 已经完成的
+// "轮"（round）数——每一轮的内容是对路由器中每个
+// 非空队列虚拟地发送一个比特（不管此刻真正在被发送的数据包
+// 属于哪个队列）；在这种概念下，一个数据包直到其发送完成之前都被认为
+// "在"它的队列里。对于我们的问题，可以把一轮定义为
+// 给 apiserver 中每个非空队列分配一纳秒的 CPU（队列是否为空依据该队列
+// 排队中和执行中的请求共同判断），并定义 R(t) =（服务器
+// 启动时间）+（1 ns）*（自服务器启动以来的轮数）。
+// 我们用 NEQ(t) 表示时间 t 时 apiserver 中非空队列的数量，
+// 并用 C 表示并发上限。在原论文中，R(t) 对 t 的偏导数是
 //
 //	1 / NEQ(t) .
 //
-// To generalize from transmitting one packet at a time to executing C
-// requests at a time, that derivative becomes
+// 从一次只发送一个数据包推广到一次执行 C 个请求后，该导数变为
 //
 //	C / NEQ(t) .
 //
-// However, sometimes there are fewer than C requests available to
-// execute.  For a given queue "q", let us also write "reqs(q, t)" for
-// the number of requests of that queue that are executing at that
-// time.  The total number of requests executing is sum[over q]
-// reqs(q, t) and if that is less than C then virtual time is not
-// advancing as fast as it would if all C seats were occupied; in this
-// case the numerator of the quotient in that derivative should be
-// adjusted proportionally.  Putting it all together for fair queing
-// for server requests: at a particular time t, the partial derivative
-// of R(t) with respect to t is
+// 然而，有时可执行的请求少于 C 个。对于给定的队列 "q"，
+// 我们再用 "reqs(q, t)" 表示该队列在那个时刻正在执行的请求
+// 数。正在执行的请求总数是 sum[over q] reqs(q, t)，如果它小于 C，
+// 那么虚拟时间的推进速度就不如所有 C 个位置都被占用时那么快；这种
+// 情况下，该导数中商的分子应当按比例调整。把以上全部内容
+// 综合到服务器请求的公平排队中：在特定时刻 t，R(t) 对 t 的偏导
+// 数是
 //
 //	min( C, sum[over q] reqs(q, t) ) / NEQ(t) .
 //
-// In terms of the implementation outline, this is the rate at which
-// virtual time is advancing at time t (in virtual nanoseconds per
-// real nanosecond). Where the networking implementation outline adds
-// packet size to a virtual time, in our version this corresponds to
-// adding a service time (i.e., duration) to virtual time.
+// 用实现纲要的术语来说，这就是虚拟时间在时刻 t 的推进速率
+// （以每真实纳秒对应的虚拟纳秒数计）。网络场景的实现纲要中是把
+// 数据包大小加到虚拟时间上，在我们的版本中这对应于
+// 把服务时间（即执行时长）加到虚拟时间上。
 //
-// The third difference is handled by modifying the algorithm to
-// dispatch based on an initial guess at the request’s service time
-// (duration) and then make the corresponding adjustments once the
-// request’s actual service time is known. This is similar, although
-// not exactly isomorphic, to the original paper’s adjustment by
-// `$\delta$` for the sake of promptness.
+// 第三个差异通过修改算法来处理：先基于对请求服务时间（时长）
+// 的初始猜测进行分派，等请求的实际服务时间已知后再做相应调整。
+// 这与原论文为了及时性而做的 `$\delta$` 调整类似，
+// 但并不完全同构。
 //
-// For implementation simplicity (see below), let us use the same
-// initial service time guess for every request; call that duration
-// G. A good choice might be the service time limit (1
-// minute). Different guesses will give slightly different dynamics,
-// but any positive number can be used for G without ruining the
-// long-term behavior.
+// 为了实现的简单（见下文），我们对所有请求使用相同的
+// 初始服务时间猜测值；称该时长为 G。一个不错的选择可能是服务时间
+// 上限（1 分钟）。不同的猜测值会带来略有不同的动态特性，
+// 但任何正数都可以用作 G 而不损害长期行为。
 //
-// As in ordinary fair queuing, there is a bound on divergence from
-// the ideal. In plain fair queuing the bound is one packet; in our
-// version it is C requests.
+// 与普通公平排队一样，与理想状态的偏差存在
+// 上界。在朴素公平排队中该上界是一个数据包；在我们的版本中是 C 个请求。
 //
 // 为了在请求的实际服务时间已知后能高效地做出必要调整，请求的虚拟完成时间与
 // 队列的最后虚拟完成时间都不直接表示，而是由队列长度、请求在队列中的位置，

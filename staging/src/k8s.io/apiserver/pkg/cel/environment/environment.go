@@ -29,59 +29,51 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 )
 
-// Type defines the different types of CEL environments used in Kubernetes.
-// CEL environments are used to compile and evaluate CEL expressions.
-// Environments include:
-//   - Function libraries
-//   - Variables
-//   - Types (both core CEL types and Kubernetes types)
-//   - Other CEL environment and program options
+// Type 定义 Kubernetes 中使用的不同 CEL 环境类型。
+// CEL 环境用于编译和求值 CEL 表达式。
+// 环境包含：
+//   - 函数库
+//   - 变量
+//   - 类型（CEL 核心类型与 Kubernetes 类型）
+//   - 其他 CEL 环境与程序选项
 type Type string
 
 const (
-	// NewExpressions is used to validate new or modified expressions in
-	// requests that write expressions to API resources.
+	// NewExpressions 用于校验在写入表达式的请求中新增或修改的表达式。
 	//
-	// This environment type is compatible with a specific Kubernetes
-	// major/minor version. To ensure safe rollback, this environment type
-	// may not include all the function libraries, variables, type declarations, and CEL
-	// language settings available in the StoredExpressions environment type.
+	// 该环境类型与特定的 Kubernetes 主/次版本兼容。为了保证安全回滚，
+	// 该环境类型可能不包含 StoredExpressions 环境类型中可用的全部函数库、
+	// 变量、类型声明和 CEL 语言设置。
 	//
-	// NewExpressions must be used to validate (parse, compile, type check)
-	// all new or modified CEL expressions before they are written to storage.
+	// 所有新增或修改的 CEL 表达式在写入存储之前，必须使用 NewExpressions
+	// 进行校验（解析、编译、类型检查）。
 	NewExpressions Type = "NewExpressions"
 
-	// StoredExpressions is used to compile and run CEL expressions that have been
-	// persisted to storage.
+	// StoredExpressions 用于编译和运行已持久化到存储的 CEL 表达式。
 	//
-	// This environment type is compatible with CEL expressions that have been
-	// persisted to storage by all known versions of Kubernetes. This is the most
-	// permissive environment available.
+	// 该环境类型与所有已知 Kubernetes 版本持久化到存储的 CEL 表达式兼容，
+	// 是可用环境中最为宽松的一个。
 	//
-	// StoredExpressions is appropriate for use with CEL expressions in
-	// configuration files.
+	// StoredExpressions 适合用于配置文件中的 CEL 表达式。
 	StoredExpressions Type = "StoredExpressions"
 )
 
-// EnvSet manages the creation and extension of CEL environments. Each EnvSet contains
-// both an NewExpressions and StoredExpressions environment. EnvSets are created
-// and extended using VersionedOptions so that the EnvSet can prepare environments according
-// to what options were introduced at which versions.
+// EnvSet 管理 CEL 环境的创建与扩展。每个 EnvSet 同时包含一个
+// NewExpressions 和一个 StoredExpressions 环境。EnvSet 的创建和扩展
+// 通过 VersionedOptions 完成，使 EnvSet 能够按照各选项在哪个版本引入来准备环境。
 //
-// Each EnvSet is given a compatibility version when it is created, and prepares the
-// NewExpressions environment to be compatible with that version. The EnvSet also
-// prepares StoredExpressions to be compatible with all known versions of Kubernetes.
+// 每个 EnvSet 在创建时会被给定一个兼容版本（compatibility version），
+// 并据此准备与该版本兼容的 NewExpressions 环境；同时 EnvSet 还会准备
+// 与所有已知 Kubernetes 版本兼容的 StoredExpressions 环境。
 type EnvSet struct {
-	// compatibilityVersion is the version that all configuration in
-	// the NewExpressions environment is compatible with.
+	// compatibilityVersion 是 NewExpressions 环境中所有配置都必须兼容的版本。
 	compatibilityVersion *version.Version
 
-	// newExpressions is an environment containing only configuration
-	// in this EnvSet that is enabled at this compatibilityVersion.
+	// newExpressions 是只包含本 EnvSet 中在该 compatibilityVersion 上已启用的
+	// 配置的环境。
 	newExpressions *cel.Env
 
-	// storedExpressions is an environment containing the latest configuration
-	// in this EnvSet.
+	// storedExpressions 是包含本 EnvSet 中最新配置的环境。
 	storedExpressions *cel.Env
 }
 
@@ -106,19 +98,19 @@ func mustNewEnvSet(ver *version.Version, opts []VersionedOptions) *EnvSet {
 	return envSet
 }
 
-// NewExpressionsEnv returns the NewExpressions environment Type for this EnvSet.
-// See NewExpressions for details.
+// NewExpressionsEnv 返回本 EnvSet 的 NewExpressions 环境（Type）。
+// 详见 NewExpressions 的说明。
 func (e *EnvSet) NewExpressionsEnv() *cel.Env {
 	return e.newExpressions
 }
 
-// StoredExpressionsEnv returns the StoredExpressions environment Type for this EnvSet.
-// See StoredExpressions for details.
+// StoredExpressionsEnv 返回本 EnvSet 的 StoredExpressions 环境（Type）。
+// 详见 StoredExpressions 的说明。
 func (e *EnvSet) StoredExpressionsEnv() *cel.Env {
 	return e.storedExpressions
 }
 
-// Env returns the CEL environment for the given Type.
+// Env 返回给定 Type 对应的 CEL 环境。
 func (e *EnvSet) Env(envType Type) (*cel.Env, error) {
 	switch envType {
 	case NewExpressions:
@@ -130,16 +122,14 @@ func (e *EnvSet) Env(envType Type) (*cel.Env, error) {
 	}
 }
 
-// VersionedOptions provides a set of CEL configuration options as well as the version the
-// options were introduced and, optionally, the version the options were removed.
+// VersionedOptions 提供一组 CEL 配置选项，以及选项引入的版本，并可选地
+// 提供选项被移除的版本。
 type VersionedOptions struct {
-	// IntroducedVersion is the version at which these options were introduced.
-	// The NewExpressions environment will only include options introduced at or before the
-	// compatibility version of the EnvSet.
+	// IntroducedVersion 是这些选项被引入的版本。
+	// NewExpressions 环境只包含在 EnvSet 的兼容版本当时或之前引入的选项。
 	//
-	// For example, to configure a CEL environment with an "object" variable bound to a
-	// resource kind, first create a DeclType from the groupVersionKind of the resource and then
-	// populate a VersionedOptions with the variable and the type:
+	// 例如，要配置一个把 "object" 变量绑定到某个资源 Kind 的 CEL 环境，
+	// 先由资源的 groupVersionKind 创建 DeclType，再把变量和类型填入 VersionedOptions：
 	//
 	//    schema := schemaResolver.ResolveSchema(groupVersionKind)
 	//    objectType := apiservercel.SchemaDeclType(schema, true)
@@ -150,26 +140,24 @@ type VersionedOptions struct {
 	//      EnvOptions: []cel.EnvOption{ cel.Variable("object", objectType.CelType()) },
 	//    },
 	//
-	// To create an DeclType from a CRD, use a structural schema. For example:
+	// 要从 CRD 创建 DeclType，请使用 structural schema，例如：
 	//
 	//    schema := structuralschema.NewStructural(crdJSONProps)
 	//    objectType := apiservercel.SchemaDeclType(schema, true)
 	//
-	// Required.
+	// 必填。
 	IntroducedVersion *version.Version
-	// RemovedVersion is the version at which these options were removed.
-	// The NewExpressions environment will not include options removed at or before the
-	// compatibility version of the EnvSet.
+	// RemovedVersion 是这些选项被移除的版本。
+	// NewExpressions 环境不会包含在 EnvSet 的兼容版本当时或之前被移除的选项。
 	//
-	// All option removals must be backward compatible; the removal must either be paired
-	// with a compatible replacement introduced at the same version, or the removal must be non-breaking.
-	// The StoredExpressions environment will not include removed options.
+	// 所有选项移除都必须保持向后兼容；移除要么与同版本引入的兼容替代项配对，
+	// 要么本身不破坏兼容性。
+	// StoredExpressions 环境不会包含已被移除的选项。
 	//
-	// A function library may be upgraded by setting the RemovedVersion of the old library
-	// to the same value as the IntroducedVersion of the new library. The new library must
-	// be backward compatible with the old library.
+	// 升级函数库的方式：把旧库的 RemovedVersion 设为与新库的 IntroducedVersion
+	// 相同的值。新库必须与旧库向后兼容。
 	//
-	// For example:
+	// 例如：
 	//
 	//    VersionOptions{
 	//      IntroducedVersion: version.MajorMinor(1, 26), RemovedVersion: version.MajorMinor(1, 27),
@@ -180,53 +168,49 @@ type VersionedOptions struct {
 	//      EnvOptions: []EnvOptions{ libraries.Example(libraries.ExampleVersion(2)) },
 	//    },
 	//
-	// Optional.
+	// 可选。
 	RemovedVersion *version.Version
-	// FeatureEnabled returns true if these options are enabled by feature gates,
-	// and returns false if these options are not enabled due to feature gates.
+	// FeatureEnabled 在这些选项因特性门控而启用时返回 true，
+	// 因特性门控未启用而关闭时返回 false。
 	//
-	// This takes priority over IntroducedVersion / RemovedVersion for the NewExpressions environment.
+	// 对 NewExpressions 环境而言，它的优先级高于 IntroducedVersion / RemovedVersion。
 	//
-	// The StoredExpressions environment ignores this function.
+	// StoredExpressions 环境会忽略该函数。
 	//
-	// Optional.
+	// 可选。
 	FeatureEnabled func() bool
-	// EnvOptions provides CEL EnvOptions. This may be used to add a cel.Variable, a
-	// cel.Library, or to enable other CEL EnvOptions such as language settings.
+	// EnvOptions 提供 CEL EnvOptions，可用于添加 cel.Variable、cel.Library，
+	// 或启用其他 CEL EnvOptions（如语言设置）。
 	//
-	// If an added cel.Variable has an OpenAPI type, the type must be included in DeclTypes.
+	// 若添加的 cel.Variable 带有 OpenAPI 类型，该类型必须包含在 DeclTypes 中。
 	EnvOptions []cel.EnvOption
-	// ProgramOptions provides CEL ProgramOptions. This may be used to set a cel.CostLimit,
-	// enable optimizations, and set other program level options that should be enabled
-	// for all programs using this environment.
+	// ProgramOptions 提供 CEL ProgramOptions，可用于设置 cel.CostLimit、启用
+	// 优化项，以及设置应对该环境下所有程序生效的其他程序级选项。
 	ProgramOptions []cel.ProgramOption
-	// DeclTypes provides OpenAPI type declarations to register with the environment.
+	// DeclTypes 提供要注册到环境的 OpenAPI 类型声明。
 	//
-	// If cel.Variables added to EnvOptions refer to a OpenAPI type, the type must be included in
-	// DeclTypes.
+	// 若添加到 EnvOptions 的 cel.Variables 引用了某个 OpenAPI 类型，
+	// 该类型必须包含在 DeclTypes 中。
 	DeclTypes []*apiservercel.DeclType
 }
 
-// Extend returns an EnvSet based on this EnvSet but extended with given VersionedOptions.
-// This EnvSet is not mutated.
-// The returned EnvSet has the same compatibility version as the EnvSet that was extended.
+// Extend 返回一个基于当前 EnvSet 并用给定 VersionedOptions 扩展出的新 EnvSet。
+// 当前 EnvSet 不会被修改。
+// 返回的 EnvSet 与被扩展的 EnvSet 具有相同的兼容版本。
 //
 // 两个环境分别扩展：NewExpressions 用本 EnvSet 的兼容版本过滤，且尊重
 // feature gate；StoredExpressions 用“最大版本”过滤且忽略 feature gate，
 // 以保证任何历史表达式都能被编译。
 //
-// Extend is an expensive operation and each call to Extend that adds DeclTypes increases
-// the depth of a chain of resolvers. For these reasons, calls to Extend should be kept
-// to a minimum.
+// Extend 是开销较大的操作，而且每次 Extend 添加 DeclTypes 都会加深一层
+// resolver 链。因此应将 Extend 的调用次数控制在最少。
 //
-// Some best practices:
+// 一些最佳实践：
 //
-//   - Minimize calls Extend when handling API requests. Where possible, call Extend
-//     when initializing components.
-//   - If an EnvSets returned by Extend can be used to compile multiple CEL programs,
-//     call Extend once and reuse the returned EnvSets.
-//   - Prefer a single call to Extend with a full list of VersionedOptions over
-//     making multiple calls to Extend.
+//   - 处理 API 请求时尽量减少 Extend 调用；尽可能在初始化组件时调用 Extend。
+//   - 若 Extend 返回的 EnvSet 可用于编译多个 CEL 程序，则调用一次 Extend
+//     并复用返回的 EnvSet。
+//   - 优先用一次 Extend 传入完整的 VersionedOptions 列表，而不是多次调用 Extend。
 func (e *EnvSet) Extend(options ...VersionedOptions) (*EnvSet, error) {
 	if len(options) > 0 {
 		newExprOpts, err := e.filterAndBuildOpts(e.newExpressions, e.compatibilityVersion, true, options)
@@ -262,8 +246,8 @@ func (e *EnvSet) filterAndBuildOpts(base *cel.Env, compatVer *version.Version, h
 	for _, opt := range opts {
 		var allowedByFeatureGate, allowedByVersion bool
 		if opt.FeatureEnabled != nil && honorFeatureGateEnablement {
-			// Feature-gate-enabled libraries must follow compatible default feature enablement.
-			// Enabling alpha features in their first release enables libraries the previous API server is unaware of.
+			// 由特性门控启用的库必须遵循兼容的默认启用状态。
+			// 在其首个发布版本中就启用 alpha 特性，会启用旧版 API server 并不知晓的库。
 			allowedByFeatureGate = opt.FeatureEnabled()
 			if !allowedByFeatureGate {
 				continue

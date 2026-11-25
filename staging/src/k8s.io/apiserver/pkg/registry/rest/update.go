@@ -32,63 +32,57 @@ import (
 	"k8s.io/apiserver/pkg/warning"
 )
 
-// RESTUpdateStrategy defines the minimum validation, accepted input, and
-// name generation behavior to update an object that follows Kubernetes
-// API conventions. A resource may have many UpdateStrategies, depending on
-// the call pattern in use.
+// RESTUpdateStrategy 定义更新遵循 Kubernetes API 约定的对象时，
+// 所需的最小校验、可接受的输入以及名称生成行为。一个资源可能有多个
+// UpdateStrategy，取决于所使用的调用模式。
 //
-// The context that is passed to these methods can be used to retrieve
-// information about the request with request.RequestInfoFrom(ctx) and
-// to return different responses depending on the APIVersion in the
-// request.
+// 传给这些方法的 context 可以用来通过 request.RequestInfoFrom(ctx)
+// 获取有关请求的信息，并据此根据请求中的 APIVersion 返回不同的响应。
 type RESTUpdateStrategy interface {
 	runtime.ObjectTyper
-	// NamespaceScoped returns true if the object must be within a namespace.
+	// NamespaceScoped 在对象必须位于某个 namespace 内时返回 true。
 	NamespaceScoped() bool
-	// AllowCreateOnUpdate returns true if the object can be created by a PUT.
+	// AllowCreateOnUpdate 在对象可以通过 PUT 创建时返回 true。
 	AllowCreateOnUpdate(ctx context.Context) bool
-	// PrepareForUpdate is invoked on update before validation to normalize
-	// the object.  For example: remove fields that are not to be persisted,
-	// sort order-insensitive list fields, etc.  This should not remove fields
-	// whose presence would be considered a validation error.
+	// PrepareForUpdate 在校验之前于更新时调用，用于规范化对象。
+	// 例如：移除不应持久化的字段、对顺序不敏感的列表字段排序等。
+	// 它不应移除那些一旦出现就会被视为校验错误的字段。
 	PrepareForUpdate(ctx context.Context, obj, old runtime.Object)
-	// ValidateUpdate is invoked after default fields in the object have been
-	// filled in before the object is persisted.  This method should not mutate
-	// the object.
+	// ValidateUpdate 在对象中的默认字段填充完毕后、对象持久化之前调用。
+	// 该方法不应修改对象。
 	ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList
-	// WarningsOnUpdate returns warnings to the client performing the update.
-	// WarningsOnUpdate is invoked after default fields in the object have been filled in
-	// and after ValidateUpdate has passed, before Canonicalize is called, and before the object is persisted.
-	// This method must not mutate either object.
+	// WarningsOnUpdate 返回给执行更新的客户端的警告。
+	// WarningsOnUpdate 在对象中的默认字段填充完毕、且 ValidateUpdate 通过之后调用，
+	// 在 Canonicalize 被调用之前，也在对象持久化之前。
+	// 该方法必须不修改任何一个对象。
 	//
-	// Be brief; limit warnings to 120 characters if possible.
-	// Don't include a "Warning:" prefix in the message (that is added by clients on output).
-	// Warnings returned about a specific field should be formatted as "path.to.field: message".
-	// For example: `spec.imagePullSecrets[0].name: invalid empty name ""`
+	// 保持简短；警告尽量限制在 120 个字符以内。
+	// 不要在消息中包含 "Warning:" 前缀（该前缀由客户端在输出时添加）。
+	// 关于特定字段的警告应当格式化为 "path.to.field: message"。
+	// 例如：`spec.imagePullSecrets[0].name: invalid empty name ""`
 	//
-	// Use warning messages to describe problems the client making the API request should correct or be aware of.
-	// For example:
-	// - use of deprecated fields/labels/annotations that will stop working in a future release
-	// - use of obsolete fields/labels/annotations that are non-functional
-	// - malformed or invalid specifications that prevent successful handling of the submitted object,
-	//   but are not rejected by validation for compatibility reasons
+	// 使用警告消息来描述发起 API 请求的客户端应当修正或需要知晓的问题。
+	// 例如：
+	// - 使用了将在未来版本停止工作的已弃用字段/标签/注解
+	// - 使用了已废弃且无功能的字段/标签/注解
+	// - 格式错误或无效的配置，会导致提交的对象无法被成功处理，
+	//   但出于兼容性原因校验并未拒绝它们
 	//
-	// Warnings should not be returned for fields which cannot be resolved by the caller.
-	// For example, do not warn about spec fields in a status update.
+	// 对于调用方无法解决的问题字段，不应返回警告。
+	// 例如，不要在 status 更新中针对 spec 字段发出警告。
 	WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string
-	// Canonicalize allows an object to be mutated into a canonical form. This
-	// ensures that code that operates on these objects can rely on the common
-	// form for things like comparison.  Canonicalize is invoked after
-	// validation has succeeded but before the object has been persisted.
-	// This method may mutate the object.
+	// Canonicalize 允许将对象修改为规范形式。这确保操作这些对象的
+	// 代码可以依赖统一的形式来做比较之类的事情。Canonicalize 在校验
+	// 成功之后、对象持久化之前调用。
+	// 该方法可以修改对象。
 	Canonicalize(obj runtime.Object)
-	// AllowUnconditionalUpdate returns true if the object can be updated
-	// unconditionally (irrespective of the latest resource version), when
-	// there is no resource version specified in the object.
+	// AllowUnconditionalUpdate 在对象中未指定 resource version 时，
+	// 若对象可以被无条件更新（无论最新的 resource version 是什么），
+	// 则返回 true。
 	AllowUnconditionalUpdate(ctx context.Context) bool
 }
 
-// TODO: add other common fields that require global validation.
+// TODO: 添加其他需要全局校验的公共字段。
 // validateCommonFields 校验所有资源共有的元数据：名称/命名空间合法性，
 // 以及更新时不允许改变的字段（UID、创建时间等由 ValidateObjectMetaAccessorUpdate 处理）。
 func validateCommonFields(obj, old runtime.Object, strategy RESTUpdateStrategy) field.ErrorList {
@@ -120,7 +114,7 @@ func BeforeUpdate(strategy RESTUpdateStrategy, ctx context.Context, obj, old run
 		return kerr
 	}
 
-	// ensure namespace on the object is correct, or error if a conflicting namespace was set in the object
+	// 确保对象上的 namespace 正确；若对象中设置了冲突的 namespace 则报错
 	requestNamespace, ok := genericapirequest.NamespaceFrom(ctx)
 	if !ok {
 		return errors.NewInternalError(fmt.Errorf("no namespace information found in request context"))
@@ -129,7 +123,7 @@ func BeforeUpdate(strategy RESTUpdateStrategy, ctx context.Context, obj, old run
 		return err
 	}
 
-	// Ensure requests cannot update generation
+	// 确保请求无法更新 generation
 	oldMeta, err := meta.Accessor(old)
 	if err != nil {
 		return err
@@ -143,11 +137,11 @@ func BeforeUpdate(strategy RESTUpdateStrategy, ctx context.Context, obj, old run
 	if len(objectMeta.GetUID()) == 0 {
 		objectMeta.SetUID(oldMeta.GetUID())
 	}
-	// ignore changes to timestamp
+	// 忽略对 creationTimestamp 的修改
 	if oldCreationTime := oldMeta.GetCreationTimestamp(); !oldCreationTime.IsZero() {
 		objectMeta.SetCreationTimestamp(oldMeta.GetCreationTimestamp())
 	}
-	// an update can never remove/change a deletion timestamp
+	// 更新操作永远不能移除或修改 deletion timestamp
 	if !oldMeta.GetDeletionTimestamp().IsZero() {
 		objectMeta.SetDeletionTimestamp(oldMeta.GetDeletionTimestamp())
 	}
@@ -171,11 +165,11 @@ func BeforeUpdate(strategy RESTUpdateStrategy, ctx context.Context, obj, old run
 	return nil
 }
 
-// ValidateUpdate performs common and strategy-specific validation for an update operation.
+// ValidateUpdate 针对一次更新操作执行公共校验和策略特定的校验。
 func ValidateUpdate(ctx context.Context, obj runtime.Object, old runtime.Object, strategy RESTUpdateStrategy) field.ErrorList {
 
-	// TODO: Replace this check with the ObjectMeta name validation (validatePathSegment) once we are sure that all other validations are covered by strategy.Validate and strategy.ValidateDeclaratively.
-	// Ensure some common fields, like UID, are validated for all resources.
+	// TODO: 一旦确认所有其他校验都已由 strategy.Validate 和 strategy.ValidateDeclaratively 覆盖，就用 ObjectMeta 名称校验（validatePathSegment）替换此检查。
+	// 确保所有资源的一些公共字段（例如 UID）经过校验。
 	errs := validateCommonFields(obj, old, strategy)
 
 	errs = append(errs, strategy.ValidateUpdate(ctx, obj, old)...)
@@ -190,17 +184,17 @@ func ValidateUpdate(ctx context.Context, obj runtime.Object, old runtime.Object,
 // 变换函数可以在持久化前注入服务端生成的字段，或基于旧对象做局部更新。
 type TransformFunc func(ctx context.Context, newObj runtime.Object, oldObj runtime.Object) (transformedNewObj runtime.Object, err error)
 
-// defaultUpdatedObjectInfo implements UpdatedObjectInfo
+// defaultUpdatedObjectInfo 实现 UpdatedObjectInfo
 type defaultUpdatedObjectInfo struct {
-	// obj is the updated object
+	// obj 是被更新的对象
 	obj runtime.Object
 
-	// transformers is an optional list of transforming functions that modify or
-	// replace obj using information from the context, old object, or other sources.
+	// transformers 是可选的变换函数列表，用于借助来自上下文、旧对象
+	// 或其他来源的信息来修改或替换 obj。
 	transformers []TransformFunc
 }
 
-// DefaultUpdatedObjectInfo returns an UpdatedObjectInfo impl based on the specified object.
+// DefaultUpdatedObjectInfo 返回一个基于指定对象的 UpdatedObjectInfo 实现。
 func DefaultUpdatedObjectInfo(obj runtime.Object, transformers ...TransformFunc) UpdatedObjectInfo {
 	return &defaultUpdatedObjectInfo{obj, transformers}
 }
@@ -208,14 +202,14 @@ func DefaultUpdatedObjectInfo(obj runtime.Object, transformers ...TransformFunc)
 // Preconditions 实现 UpdatedObjectInfo 接口。
 // 若对象带有 UID，则生成 UID 前置条件，保证删除后重建的同名对象不会被误更新。
 func (i *defaultUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
-	// Attempt to get the UID out of the object
+	// 尝试从对象中读取 UID
 	accessor, err := meta.Accessor(i.obj)
 	if err != nil {
-		// If no UID can be read, no preconditions are possible
+		// 如果读不出 UID，就不可能有前置条件
 		return nil
 	}
 
-	// If empty, no preconditions needed
+	// 如果为空，则不需要前置条件
 	uid := accessor.GetUID()
 	if len(uid) == 0 {
 		return nil
@@ -224,11 +218,11 @@ func (i *defaultUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
 	return &metav1.Preconditions{UID: &uid}
 }
 
-// UpdatedObject satisfies the UpdatedObjectInfo interface.
-// It returns a copy of the held obj, passed through any configured transformers.
+// UpdatedObject 满足 UpdatedObjectInfo 接口。
+// 它返回所持 obj 的副本，并让其经过所有已配置的 transformers 处理。
 func (i *defaultUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runtime.Object) (runtime.Object, error) {
 	var err error
-	// Start with the configured object
+	// 从配置的对象开始
 	newObj := i.obj
 
 	// 若原始对象非 nil（当第一个 transformer 基于 oldObj 构造对象时可能为 nil），就做一次
@@ -239,7 +233,7 @@ func (i *defaultUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj run
 		newObj = newObj.DeepCopyObject()
 	}
 
-	// Allow any configured transformers to update the new object
+	// 允许所有已配置的 transformers 更新新对象
 	for _, transformer := range i.transformers {
 		newObj, err = transformer(ctx, newObj, oldObj)
 		if err != nil {
@@ -250,19 +244,19 @@ func (i *defaultUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj run
 	return newObj, nil
 }
 
-// wrappedUpdatedObjectInfo allows wrapping an existing objInfo and
-// chaining additional transformations/checks on the result of UpdatedObject()
+// wrappedUpdatedObjectInfo 允许包装一个已有的 objInfo，
+// 并在 UpdatedObject() 的结果上串联额外的转换/检查
 type wrappedUpdatedObjectInfo struct {
-	// obj is the updated object
+	// obj 是被更新的对象
 	objInfo UpdatedObjectInfo
 
-	// transformers is an optional list of transforming functions that modify or
-	// replace obj using information from the context, old object, or other sources.
+	// transformers 是可选的变换函数列表，用于借助来自上下文、旧对象
+	// 或其他来源的信息来修改或替换 obj。
 	transformers []TransformFunc
 }
 
-// WrapUpdatedObjectInfo returns an UpdatedObjectInfo impl that delegates to
-// the specified objInfo, then calls the passed transformers
+// WrapUpdatedObjectInfo 返回一个 UpdatedObjectInfo 实现：先委托给
+// 指定的 objInfo，然后调用传入的 transformers
 func WrapUpdatedObjectInfo(objInfo UpdatedObjectInfo, transformers ...TransformFunc) UpdatedObjectInfo {
 	return &wrappedUpdatedObjectInfo{objInfo, transformers}
 }
@@ -273,15 +267,15 @@ func (i *wrappedUpdatedObjectInfo) Preconditions() *metav1.Preconditions {
 	return i.objInfo.Preconditions()
 }
 
-// UpdatedObject satisfies the UpdatedObjectInfo interface.
-// It delegates to the wrapped objInfo and passes the result through any configured transformers.
+// UpdatedObject 满足 UpdatedObjectInfo 接口。
+// 它委托给被包装的 objInfo，并把结果传递给所有已配置的 transformers。
 func (i *wrappedUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runtime.Object) (runtime.Object, error) {
 	newObj, err := i.objInfo.UpdatedObject(ctx, oldObj)
 	if err != nil {
 		return newObj, err
 	}
 
-	// Allow any configured transformers to update the new object or error
+	// 允许所有已配置的 transformers 更新新对象或返回错误
 	for _, transformer := range i.transformers {
 		newObj, err = transformer(ctx, newObj, oldObj)
 		if err != nil {

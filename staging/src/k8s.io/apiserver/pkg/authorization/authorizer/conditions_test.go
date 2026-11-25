@@ -37,9 +37,9 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 )
 
-// unionDecision builds a ConditionsAwareDecisionUnion from the given decisions, assigning each
-// a synthetic authorizerName ("0.example.com", "1.example.com", ...), and returns the equivalent ConditionsAwareDecision.
-// It is a thin shim over the public Add + ToDecision API to keep the existing test cases readable.
+// unionDecision 用给定的 decisions 构造 ConditionsAwareDecisionUnion，为每个
+// decision 分配合成的 authorizerName（"0.example.com"、"1.example.com"……），并返回等价的 ConditionsAwareDecision。
+// 它只是公共 Add + ToDecision API 之上的薄封装，目的是让现有测试用例保持可读。
 func unionDecision(decisions ...authorizer.ConditionsAwareDecision) authorizer.ConditionsAwareDecision {
 	var u authorizer.ConditionsAwareDecisionUnion
 	for i, d := range decisions {
@@ -297,8 +297,8 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantString:      `NoOpinion(reason="no conditions", err="at least one condition must be passed to ConditionsAwareDecisionConditionsMap(), got none")`,
 		},
 		{
-			// Short-circuit: only NoOpinion conditions => the constructor folds the result to NoOpinion
-			// directly, without ever returning a ConditionsMap (which would then evaluate to NoOpinion anyway).
+			// 短路：仅有 NoOpinion 条件 => 构造函数直接把结果化简为 NoOpinion，
+			// 根本不会返回 ConditionsMap（即便返回了，其求值结果也是 NoOpinion）。
 			name: "noopinion-only conditions short-circuit to NoOpinion",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				authorizer.ConditionsAwareDecisionConditionsMap(
@@ -325,8 +325,8 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionNoOpinion),
 		},
 		{
-			// A single unconditional decision is simplified to that decision; the reason gets
-			// an "%s: %s" authorizer-name prefix (the sub-decision's authorizerName) per ToDecision.
+			// 单个无条件决策会被化简为该决策本身；按 ToDecision 的行为，reason 会被
+			// "%s: %s" 格式的 authorizer 名前缀修饰（前缀即子决策的 authorizerName）。
 			name: "union: single Allow simplifies to Allow",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(authorizer.ConditionsAwareDecisionAllow("ok", nil)),
@@ -398,10 +398,9 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionNoOpinion),
 		},
 		{
-			// Inner union folds to NoOpinion with an already-aggregated reason. When the
-			// outer union folds, collectReasonsAndErrors matches the inner as an unconditional
-			// NoOpinion leaf and prepends only the outer sub-name; the inner's aggregated
-			// string appears verbatim after the colon.
+			// 内层并集带已聚合的 reason 化简为 NoOpinion。外层并集化简时，
+			// collectReasonsAndErrors 把内层匹配为无条件 NoOpinion 叶子，只在其前面
+			// 加上外层子名；内层聚合后的字符串原样出现在冒号之后。
 			name: "union: nested NoOpinion fold embeds inner aggregate under outer prefix",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -418,9 +417,8 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionNoOpinion),
 		},
 		{
-			// Both inner unions fold to NoOpinion with their own aggregated reasons. The
-			// outer union then folds and produces a flattened, prefix-embedded string that
-			// contains both inner aggregates in order.
+			// 两个内层并集各自带着自己聚合的 reason 化简为 NoOpinion。随后外层并集
+			// 化简，产生扁平化、带前缀嵌入的字符串，按顺序包含两个内层聚合结果。
 			name: "union: nested NoOpinion fold with siblings at each level",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -441,11 +439,9 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionNoOpinion),
 		},
 		{
-			// Errors at multiple depths: the inner union's fold wraps its own child's error
-			// with the inner sub-name; the outer fold wraps the (already-wrapped) inner
-			// aggregate again with the outer sub-name, and additionally aggregates a sibling
-			// error at the outer level. Result: two prefix-wrapped errors in a length-2
-			// aggregate.
+			// 多层级深度的错误：内层并集化简时用内层子名包装其子节点的错误；外层化简
+			// 再用外层子名包装（已被包装过的）内层聚合结果，并在外层额外聚合一个
+			// 兄弟错误。结果：两个带前缀包装的错误位于长度为 2 的聚合错误中。
 			name: "union: nested NoOpinion fold with errors at multiple depths",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -464,9 +460,9 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionNoOpinion),
 		},
 		{
-			// Add short-circuits after the first Allow/Deny leaf, so the trailing Deny("second")
-			// is dropped. The remaining inner slice is [NoOpinion, NoOpinion, Allow], so the
-			// simplified reason references the Allow at authorizer name "2.example.com".
+			// Add 在遇到第一个 Allow/Deny 叶子后即短路，因此末尾的 Deny("second") 被丢弃。
+			// 剩余的内层切片是 [NoOpinion, NoOpinion, Allow]，所以化简后的 reason
+			// 指向 authorizer 名为 "2.example.com" 的 Allow。
 			name: "union: Allow before Deny returns Allow, NoOpinions are ignored",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -498,7 +494,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantString:                           `Deny(reason="2.example.com: {first}")`,
 			wantPossibleDecisions:                sets.New(authorizer.DecisionDeny),
 		},
-		// Actual union decisions (not simplified)
+		// 真正的并集决策（未被化简）
 		{
 			name: "union: noopinion + conditionsmap(allow) + noopinion",
 			testDecisions: []authorizer.ConditionsAwareDecision{
@@ -514,9 +510,9 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionNoOpinion, authorizer.DecisionAllow),
 		},
 		{
-			// ConditionsMap(allow-only) followed by Allow has PossibleDecisions={Allow}: if the
-			// ConditionsMap evaluates to Allow, the answer is Allow; if it evaluates to NoOpinion,
-			// the trailing Allow takes over. Either way, the union eagerly simplifies to Allow.
+			// ConditionsMap(仅 allow) 后接 Allow 时 PossibleDecisions={Allow}：若
+			// ConditionsMap 求值为 Allow，结果是 Allow；若求值为 NoOpinion，
+			// 则由末尾的 Allow 接管。无论哪种情况，并集都会立即化简为 Allow。
 			name: "union: conditionsmap(allow) + allow simplifies to Allow",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(condMapAllow, authorizer.ConditionsAwareDecisionAllow("allowed", nil)),
@@ -533,7 +529,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 				unionDecision(condMapAllow, authorizer.ConditionsAwareDecisionDeny("no", nil)),
 			},
 			wantIsUnion:                          true,
-			wantContainsUnconditionalAllowOrDeny: true, // There is an inner Deny
+			wantContainsUnconditionalAllowOrDeny: true, // 内部存在一个 Deny
 			wantReason:                           "",
 			wantString:                           `Union[0.example.com: ConditionsMap(allows=1), 1.example.com: Deny(reason="no")]`,
 			wantPossibleDecisions:                sets.New(authorizer.DecisionAllow, authorizer.DecisionDeny),
@@ -555,7 +551,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 				unionDecision(condMapDeny, authorizer.ConditionsAwareDecisionAllow("allowed", unexpectedErr)),
 			},
 			wantIsUnion:                          true,
-			wantContainsUnconditionalAllowOrDeny: true, // There is an inner Allow
+			wantContainsUnconditionalAllowOrDeny: true, // 内部存在一个 Allow
 			wantReason:                           "",
 			wantString:                           `Union[0.example.com: ConditionsMap(denies=1), 1.example.com: Allow(reason="allowed", err="unexpected things happened")]`,
 			wantPossibleDecisions:                sets.New(authorizer.DecisionAllow, authorizer.DecisionDeny),
@@ -572,10 +568,10 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionNoOpinion, authorizer.DecisionAllow, authorizer.DecisionDeny),
 		},
 		{
-			// The inner union [condMapAllow, Allow("ok")] simplifies to Allow(reason="1.example.com: ok").
-			// The trailing NoOpinion is dropped by the outer Add's short-circuit (an Allow is
-			// already present). The remaining outer inner is [condMapAllow, Allow("1.example.com: ok")],
-			// which again simplifies to Allow with a nested authorizer-name prefix.
+			// 内层并集 [condMapAllow, Allow("ok")] 化简为 Allow(reason="1.example.com: ok")。
+			// 末尾的 NoOpinion 被外层 Add 的短路逻辑丢弃（已存在 Allow）。
+			// 剩余的外层内层是 [condMapAllow, Allow("1.example.com: ok")]，
+			// 它会再次化简为 Allow，并带上嵌套的 authorizer 名前缀。
 			name: "union: nested with allow simplifies through both levels",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -591,9 +587,9 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionAllow),
 		},
 		{
-			// Two-level nesting where every level folds. Inner fold produces
-			// Allow(reason="0.example.com: deep"); outer fold matches that as an
-			// unconditional Allow leaf and prefixes with its own sub-name.
+			// 两层嵌套且每一层都发生化简。内层化简产生
+			// Allow(reason="0.example.com: deep")；外层化简把它匹配为无条件 Allow 叶子，
+			// 并用外层自己的子名加前缀。
 			name: "union: two-level nested allow (inner union folds to Allow)",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -607,10 +603,9 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionAllow),
 		},
 		{
-			// Three-level nesting with an error carried through each fold. Each fold wraps
-			// the sub-decision's Error() with the sub-name prefix (via fmt.Errorf %w) and
-			// puts it back into a single-element aggregate, so the final err prints
-			// (without brackets) as three concatenated prefixes.
+			// 三层嵌套，错误在每次化简中一路传递。每次化简都用子名前缀包装子决策的
+			// Error()（通过 fmt.Errorf %w），再放回单元素聚合错误中，因此最终的 err
+			// 打印出来（不带方括号）是三个拼接的前缀。
 			name: "union: three-level nested allow with error propagates through every fold",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -627,9 +622,9 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionAllow),
 		},
 		{
-			// Outer union has a NoOpinion sibling. NoOpinion doesn't match the Allow filter
-			// and contributes nothing to the aggregate; only the folded inner Allow's
-			// reason surfaces, prefixed with the outer sub-name.
+			// 外层并集有一个 NoOpinion 兄弟节点。NoOpinion 不匹配 Allow 过滤条件，
+			// 对聚合结果没有贡献；只有已化简的内层 Allow 的 reason 会浮现，
+			// 并带上外层子名前缀。
 			name: "union: nested allow with sibling NoOpinion in outer",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -644,12 +639,11 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionAllow),
 		},
 		{
-			// Contrast with the "two-level nested allow" case: here the nested union does
-			// NOT fold (its PossibleDecisions is {NoOpinion, Allow} — two outcomes). During
-			// the outer fold, collectReasonsAndErrors recurses INTO the still-Union inner
-			// via the IsUnion branch. The inner has no matching Allow leaves (its NoOpinion
-			// is filtered out, ConditionsMap is skipped by both branches), so only the
-			// outer's direct Allow leaf contributes.
+			// 与 "two-level nested allow" 用例对照：这里嵌套的并集并不会化简
+			// （其 PossibleDecisions 是 {NoOpinion, Allow} —— 两个结果）。外层化简时，
+			// collectReasonsAndErrors 通过 IsUnion 分支递归进入仍是 Union 的内层。
+			// 内层没有匹配的 Allow 叶子（它的 NoOpinion 被过滤掉，ConditionsMap
+			// 被两个分支都跳过），因此只有外层直接的 Allow 叶子有贡献。
 			name: "union: nested allow where inner union stays a Union (recursed into, not folded)",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -684,7 +678,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionNoOpinion, authorizer.DecisionAllow, authorizer.DecisionDeny),
 		},
 
-		// --- Unconditional leaves carrying a side-channel error ---
+		// --- 携带旁路（side-channel）错误的无条件叶子 ---
 		{
 			name: "Allow with error",
 			testDecisions: []authorizer.ConditionsAwareDecision{
@@ -721,7 +715,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions: sets.New(authorizer.DecisionNoOpinion),
 		},
 
-		// --- Bare ConditionsMap effect-group combinations ---
+		// --- 纯 ConditionsMap 效果组（effect group）组合 ---
 		{
 			name: "conditionsmap: allow-only -> {NoOpinion, Allow}",
 			testDecisions: []authorizer.ConditionsAwareDecision{
@@ -789,7 +783,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions: sets.New(authorizer.DecisionNoOpinion, authorizer.DecisionAllow, authorizer.DecisionDeny),
 		},
 
-		// --- Union sequences not already covered above ---
+		// --- 上文未覆盖的并集序列 ---
 		{
 			name: "union: single ConditionsMap(deny) -> {NoOpinion, Deny}",
 			testDecisions: []authorizer.ConditionsAwareDecision{
@@ -801,21 +795,21 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions: sets.New(authorizer.DecisionNoOpinion, authorizer.DecisionDeny),
 		},
 		{
-			// CM(deny) → Deny short-circuits there; CM(deny) → NoOpinion falls through to Allow.
-			// Both outcomes are reachable, so the union stays a Union.
+			// CM(deny) → Deny 会在那里短路；CM(deny) → NoOpinion 则落到后面的 Allow。
+			// 两种结果都可达，所以该并集保持为 Union。
 			name: "union: conditionsmap(deny) + allow stays Union",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(condMapDeny, allow),
 			},
 			wantIsUnion:                          true,
-			wantContainsUnconditionalAllowOrDeny: true, // trailing Allow leaf
+			wantContainsUnconditionalAllowOrDeny: true, // 末尾的 Allow 叶子
 			wantReason:                           "",
 			wantString:                           `Union[0.example.com: ConditionsMap(denies=1), 1.example.com: Allow]`,
 			wantPossibleDecisions:                sets.New(authorizer.DecisionAllow, authorizer.DecisionDeny),
 		},
 		{
-			// CM(deny) either yields Deny or NoOpinion; the trailing Deny then catches the NoOpinion
-			// branch — so the union eagerly simplifies to Deny.
+			// CM(deny) 要么给出 Deny，要么给出 NoOpinion；末尾的 Deny 兜住 NoOpinion
+			// 分支——所以该并集会立即化简为 Deny。
 			name: "union: conditionsmap(deny) + deny simplifies to Deny",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(condMapDeny, deny),
@@ -827,7 +821,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionDeny),
 		},
 		{
-			// Deny counterpart to the two-level nested Allow case.
+			// 两层嵌套 Allow 用例的 Deny 对应版本。
 			name: "union: two-level nested deny (inner union folds to Deny)",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -841,8 +835,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionDeny),
 		},
 		{
-			// Three-level Deny fold carrying an error through every level. Same
-			// mechanism as the three-level Allow variant.
+			// 三层 Deny 化简，错误逐层传递。机制与三层 Allow 变体相同。
 			name: "union: three-level nested deny with error propagates through every fold",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -859,11 +852,10 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionDeny),
 		},
 		{
-			// Deny counterpart to "nested allow where inner union stays a Union": the
-			// inner union has PossibleDecisions={NoOpinion, Deny} (two outcomes, does not
-			// fold). Outer folds to Deny; collectReasonsAndErrors recurses into the still-
-			// Union inner but its NoOpinion is filtered out and CM(deny) is skipped, so
-			// only the outer Deny leaf contributes.
+			// "嵌套 Allow 且内层并集保持 Union" 的 Deny 对应版本：内层并集的
+			// PossibleDecisions={NoOpinion, Deny}（两个结果，不会化简）。外层化简为 Deny；
+			// collectReasonsAndErrors 递归进入仍是 Union 的内层，但其 NoOpinion 被过滤掉、
+			// CM(deny) 被跳过，因此只有外层直接的 Deny 叶子有贡献。
 			name: "union: nested deny where inner union stays a Union (recursed into, not folded)",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(
@@ -878,7 +870,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 			wantPossibleDecisions:                sets.New(authorizer.DecisionDeny),
 		},
 		{
-			// No downstream Allow/Deny to short-circuit, so NoOpinion remains a possible outcome.
+			// 后面没有可短路的 Allow/Deny，因此 NoOpinion 仍是可能结果。
 			name: "union: conditionsmap(allow) + noopinion (no leaf) stays Union",
 			testDecisions: []authorizer.ConditionsAwareDecision{
 				unionDecision(condMapAllow, noOp),
@@ -904,7 +896,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 				unionDecision(noOp, condMapAllow, deny),
 			},
 			wantIsUnion:                          true,
-			wantContainsUnconditionalAllowOrDeny: true, // trailing Deny leaf
+			wantContainsUnconditionalAllowOrDeny: true, // 末尾的 Deny 叶子
 			wantReason:                           "",
 			wantString:                           `Union[0.example.com: NoOpinion, 1.example.com: ConditionsMap(allows=1), 2.example.com: Deny]`,
 			wantPossibleDecisions:                sets.New(authorizer.DecisionAllow, authorizer.DecisionDeny),
@@ -951,7 +943,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 						t.Errorf("IsUnconditional() = %v, want %v", isUnconditional, wantIsUnconditional)
 					}
 					containsUnconditionalAllowOrDeny := d.ContainsUnconditionalAllowOrDeny()
-					// default assertion value for the plain Allow/Deny cases to avoid stutter
+					// 普通 Allow/Deny 用例的默认断言值，避免字段冗余（stutter）
 					if tt.wantIsDeny || tt.wantIsAllow {
 						tt.wantContainsUnconditionalAllowOrDeny = true
 					}
@@ -959,7 +951,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 						t.Errorf("ContainsUnconditionalAllowOrDeny() = %v, want %v", containsUnconditionalAllowOrDeny, tt.wantContainsUnconditionalAllowOrDeny)
 					}
 					gotPossibleDecisions := d.PossibleDecisions()
-					// default assertion value for the plain Allow/Deny/NoOpinion cases to avoid stutter
+					// 普通 Allow/Deny/NoOpinion 用例的默认断言值，避免字段冗余（stutter）
 					if tt.wantPossibleDecisions == nil {
 						tt.wantPossibleDecisions = make(sets.Set[authorizer.Decision])
 					}
@@ -977,7 +969,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 							slices.Sorted(maps.Keys(gotPossibleDecisions)),
 							slices.Sorted(maps.Keys(tt.wantPossibleDecisions)))
 					}
-					// dynamic property-based assertion, ordered after dynamic defaults to tt.wantPossibleDecisions
+					// 动态的基于属性的断言，排在向 tt.wantPossibleDecisions 填充动态默认值之后
 					wantFailureDecision := authorizer.DecisionNoOpinion
 					if tt.wantPossibleDecisions.Has(authorizer.DecisionDeny) {
 						wantFailureDecision = authorizer.DecisionDeny
@@ -987,7 +979,7 @@ func TestConditionsAwareDecision(t *testing.T) {
 						t.Errorf("FailureDecision() = %v, want %v", failureDecision, wantFailureDecision)
 					}
 					if tt.wantIsConditionsMap {
-						// also ensure the ConditionsMap's FailureDecision is aligned
+						// 同时确认 ConditionsMap 的 FailureDecision 与之对齐
 						failureDecision := d.ConditionsMap().FailureDecision()
 						if failureDecision != wantFailureDecision {
 							t.Errorf("ConditionsMap.FailureDecision() = %v, want %v", failureDecision, wantFailureDecision)
@@ -1033,7 +1025,7 @@ func (a sampleAuthorizer) ConditionsAwareAuthorize(ctx context.Context, attrs au
 	case "bob":
 		return authorizer.ConditionsAwareDecisionDeny("", nil)
 	case "carol":
-		// allow carol to read anything, but require seting the owner=carol label on writes
+		// 允许 carol 读取任何资源，但要求写入时设置 owner=carol 标签
 		switch attrs.GetVerb() {
 		case "list":
 			return authorizer.ConditionsAwareDecisionAllow("", nil)
@@ -1053,7 +1045,7 @@ func (a sampleAuthorizer) ConditionsAwareAuthorize(ctx context.Context, attrs au
 			return authorizer.ConditionsAwareDecisionNoOpinion("", nil)
 		}
 	case "dave":
-		// allow dave to read anything, but never set the classified label on writes
+		// 允许 dave 读取任何资源，但写入时不得设置 classified 标签
 		switch attrs.GetVerb() {
 		case "list":
 			return authorizer.ConditionsAwareDecisionAllow("", nil)
@@ -1109,17 +1101,17 @@ func unconditionalParts(d authorizer.ConditionsAwareDecision) (authorizer.Decisi
 	case d.IsNoOpinion():
 		return authorizer.DecisionNoOpinion, d.Reason(), d.Error()
 	default:
-		// An error is not returned here, as that could yield a HTTP response code of 500 instead of 403.
-		// For the use-case described above with regards to calling this function in Authorize, not returning
-		// an error is important, as it is valid to always fail closed, as if this happens, no unconditional
-		// permissions were given the requestor.
+		// 这里不返回错误，因为那可能导致 HTTP 响应码为 500 而不是 403。
+		// 对于上文描述的在 Authorize 中调用本函数的场景，不返回错误很重要：
+		// 始终 fail closed 是合法行为，因为一旦出现这种情况，说明请求者并未获得
+		// 任何无条件权限。
 		return d.FailureDecision(), "failed closed: tried to return conditional decision to conditions-unaware authorizer", nil
 	}
 }
 
-// TestConditionsAwareDecisionConditionsMap_ClonesInputSlices verifies that
-// ConditionsAwareDecisionConditionsMap defensively copies its input slices, so that
-// callers mutating the slices after construction cannot alter the resulting decision.
+// TestConditionsAwareDecisionConditionsMap_ClonesInputSlices 验证
+// ConditionsAwareDecisionConditionsMap 会对输入切片做防御性拷贝，使得调用方
+// 在构造完成后修改切片也无法改变所得到的决策。
 //
 // 防御性拷贝避免调用方在构造后修改切片，悄悄改变授权判定（属于安全边界）。
 func TestConditionsAwareDecisionConditionsMap_ClonesInputSlices(t *testing.T) {
@@ -1132,7 +1124,7 @@ func TestConditionsAwareDecisionConditionsMap_ClonesInputSlices(t *testing.T) {
 		t.Fatalf("expected ConditionsMap decision, got %s", d.String())
 	}
 
-	// Mutate every element of every input slice through the caller's backing arrays.
+	// 通过调用方持有的底层数组，修改每个输入切片的每个元素。
 	denyConditions[0] = authorizer.GenericCondition{ID: "deny-mutated"}
 	noOpinionConditions[0] = authorizer.GenericCondition{ID: "nop-mutated"}
 	allowConditions[0] = authorizer.GenericCondition{ID: "allow-mutated"}
@@ -1164,7 +1156,7 @@ func TestSampleAuthorizer(t *testing.T) {
 		name      string
 		object    *unstructured.Unstructured
 		oldObject *unstructured.Unstructured
-		// the first case is with conditions-unaware, the second is conditions-aware.
+		// 第一个元素对应不感知条件（conditions-unaware）的结果，第二个对应感知条件的结果。
 		authorizeDecision [2]string
 		finalDecision     [2]string
 	}
@@ -1174,7 +1166,7 @@ func TestSampleAuthorizer(t *testing.T) {
 		attrs authorizer.AttributesRecord
 		cases []evalCase
 	}{
-		// alice: unconditional allow for all verbs
+		// alice：对所有动词无条件 Allow
 		{
 			name: "alice list",
 			attrs: authorizer.AttributesRecord{
@@ -1195,7 +1187,7 @@ func TestSampleAuthorizer(t *testing.T) {
 				{name: "allow", authorizeDecision: [2]string{`Allow`, `Allow`}},
 			},
 		},
-		// bob: unconditional deny for all verbs
+		// bob：对所有动词无条件 Deny
 		{
 			name: "bob list",
 			attrs: authorizer.AttributesRecord{
@@ -1216,7 +1208,7 @@ func TestSampleAuthorizer(t *testing.T) {
 				{name: "deny", authorizeDecision: [2]string{`Deny`, `Deny`}},
 			},
 		},
-		// carol: allow reads, conditional writes (allow on owner=carol)
+		// carol：允许读取；写入有条件（设置 owner=carol 时 Allow）
 		{
 			name: "carol list",
 			attrs: authorizer.AttributesRecord{
@@ -1285,7 +1277,7 @@ func TestSampleAuthorizer(t *testing.T) {
 				{name: "no opinion", authorizeDecision: [2]string{`NoOpinion`, `NoOpinion`}},
 			},
 		},
-		// dave: allow reads, conditional writes (deny on supersecret label)
+		// dave：允许读取；写入有条件（存在 supersecret 标签时 Deny）
 		{
 			name: "dave list",
 			attrs: authorizer.AttributesRecord{
@@ -1386,7 +1378,7 @@ func TestSampleAuthorizer(t *testing.T) {
 				{name: "no opinion", authorizeDecision: [2]string{`NoOpinion`, `NoOpinion`}},
 			},
 		},
-		// unknown user: no opinion
+		// unknown user：无意见（NoOpinion）
 		{
 			name: "unknown user get",
 			attrs: authorizer.AttributesRecord{
@@ -1403,7 +1395,7 @@ func TestSampleAuthorizer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, tc := range tt.cases {
-				// if only the authorization decision is specified, the final one is the same
+				// 若只指定了授权决策，最终决策与其相同
 				if len(tc.finalDecision[0]) == 0 && len(tc.finalDecision[1]) == 0 {
 					tc.finalDecision[0] = tc.authorizeDecision[0]
 					tc.finalDecision[1] = tc.authorizeDecision[1]
@@ -1421,10 +1413,10 @@ func TestSampleAuthorizer(t *testing.T) {
 							t.Errorf("got Authorize() decision %s, want %s", decision.String(), tc.authorizeDecision[i])
 						}
 
-						// Only object and oldObject is used in celEvaluateConditions, so let all other values be zero here, as they are anyways unused.
+						// celEvaluateConditions 只用到 object 和 oldObject，其余值一律置零，因为它们反正不会被使用。
 						data := admission.NewAttributesRecord(tc.object, tc.oldObject, schema.GroupVersionKind{}, "", "", schema.GroupVersionResource{}, "", "", nil, false, nil)
 
-						// Wrap in the ConditionsAwareDecision format just to get an unified string comparison mechanism.
+						// 包装成 ConditionsAwareDecision 形式，只是为了获得统一的字符串比较机制。
 						final := decision
 						if !decision.IsUnconditional() {
 							final = authorizer.ConditionsAwareDecisionFromParts(authz.EvaluateConditions(t.Context(), decision, data))
