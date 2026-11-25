@@ -354,11 +354,11 @@ func getPodAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set{"name": pod.ObjectMeta.Name}, nil, nil
 }
 
-// matchPodName returns selection predicate that matches any pod with name in the set.
-// Makes testing simpler.
+// matchPodName 返回一个选择谓词，匹配集合中任意名称的 pod，
+// 让测试更简单。
 func matchPodName(names ...string) storage.SelectionPredicate {
-	// Note: even if pod name is a field, we have to use labels,
-	// because field selector doesn't support "IN" operator.
+	// 注意：即使 pod name 是 field，也必须使用 labels，
+	// 因为 field selector 不支持 "IN" 操作符。
 	l, err := labels.NewRequirement("name", selection.In, names)
 	if err != nil {
 		panic("Labels requirement must validate successfully")
@@ -452,7 +452,7 @@ func TestStoreList(t *testing.T) {
 				t.Fatalf("Unexpected error %v", err)
 			}
 
-			// DeepDerivative e,a is needed here b/c the storage layer sets ResourceVersion
+			// 这里需要 DeepDerivative(e, a)，因为存储层会设置 ResourceVersion
 			if e, a := item.out, list; !apiequality.Semantic.DeepDerivative(e, a) {
 				t.Fatalf("%v: Expected %#v, got %#v", name, e, a)
 			}
@@ -460,11 +460,9 @@ func TestStoreList(t *testing.T) {
 	}
 }
 
-// TestStoreListResourceVersion tests that if List with ResourceVersion > 0, it will wait until
-// the results are as fresh as given version.
-//
-// 验证带 ResourceVersion 的 List 会阻塞到存储追平该版本：先以 rev+1
-// 发起 List，确认 500ms 内不返回，创建第二个对象后才返回两条结果。
+// TestStoreListResourceVersion 验证带 ResourceVersion 的 List 会阻塞到存储追平该版本：
+// 若 List 使用的 ResourceVersion > 0，它必须等待结果新鲜到给定版本才返回。
+// 先以 rev+1 发起 List，确认 500ms 内不返回，创建第二个对象后才返回两条结果。
 func TestStoreListResourceVersion(t *testing.T) {
 	fooPod := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "foo"},
@@ -493,7 +491,7 @@ func TestStoreListResourceVersion(t *testing.T) {
 	waitListCh := make(chan runtime.Object, 1)
 	go func(listRev uint64) {
 		option := &metainternalversion.ListOptions{ResourceVersion: strconv.FormatUint(listRev, 10)}
-		// It will wait until we create the second pod.
+		// 它会一直等待，直到我们创建第二个 pod。
 		l, err := registry.List(ctx, option)
 		if err != nil {
 			close(waitListCh)
@@ -543,66 +541,66 @@ func TestStoreCreate(t *testing.T) {
 	testContext := genericapirequest.WithNamespace(genericapirequest.NewContext(), "test")
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
-	// re-define delete strategy to have graceful delete capability
+	// 重新定义 delete strategy，使其具备优雅删除能力
 	defaultDeleteStrategy := testRESTStrategy{scheme, names.SimpleNameGenerator, true, false, true}
 	registry.DeleteStrategy = testGracefulStrategy{defaultDeleteStrategy}
 
-	// create the object with denying admission
+	// 在准入拒绝的情况下创建对象
 	_, err := registry.Create(testContext, podA, denyCreateValidation, &metav1.CreateOptions{})
 	if err == nil {
 		t.Errorf("Expected admission error: %v", err)
 	}
 
-	// create the object
+	// 创建对象
 	objA, err := registry.Create(testContext, podA, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// get the object
+	// 获取对象
 	checkobj, err := registry.Get(testContext, podA.Name, &metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// verify objects are equal
+	// 验证两个对象相等
 	if e, a := objA, checkobj; !reflect.DeepEqual(e, a) {
 		t.Errorf("Expected %#v, got %#v", e, a)
 	}
 
-	// now try to create the second pod
+	// 现在尝试创建第二个 pod
 	_, err = registry.Create(testContext, podB, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if !errors.IsAlreadyExists(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// verify graceful delete capability is defined
+	// 验证已定义优雅删除能力
 	_, ok := registry.DeleteStrategy.(rest.RESTGracefulDeleteStrategy)
 	if !ok {
 		t.Fatalf("No graceful capability set.")
 	}
 
-	// now delete pod with graceful period set
+	// 现在带 graceful period 删除 pod
 	delOpts := &metav1.DeleteOptions{GracePeriodSeconds: &gracefulPeriod}
 	_, _, err = registry.Delete(testContext, podA.Name, rest.ValidateAllObjectFunc, delOpts)
 	if err != nil {
 		t.Fatalf("Failed to delete pod gracefully. Unexpected error: %v", err)
 	}
 
-	// try to create before graceful deletion period is over
+	// 在优雅删除期结束前尝试创建
 	_, err = registry.Create(testContext, podA, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err == nil || !errors.IsAlreadyExists(err) {
 		t.Fatalf("Expected 'already exists' error from storage, but got %v", err)
 	}
 
-	// check the 'alredy exists' msg was edited
+	// 检查 'already exists' 消息已被改写
 	msg := &err.(*errors.StatusError).ErrStatus.Message
 	if !strings.Contains(*msg, "object is being deleted:") {
 		t.Errorf("Unexpected error without the 'object is being deleted:' in message: %v", err)
 	}
 }
 
-// sequentialNameGenerator generates names by appending a monotonically-increasing integer to the base.
+// sequentialNameGenerator 通过在 base 后追加单调递增的整数来生成名称。
 type sequentialNameGenerator struct {
 	seq int
 }
@@ -656,8 +654,8 @@ func TestStoreCreateWithRetryNameGenerate(t *testing.T) {
 		t.Errorf("Expected prefix-7 but got %s", generatedMeta.GetName())
 	}
 
-	// Now that 8 generated names (0..7) are claimed, 8 name generation attempts will not be enough
-	// and create should return an already exists error.
+	// 现在 8 个生成的名称（0..7）都已被占用，8 次名称生成尝试将不够用，
+	// create 应当返回 already exists 错误。
 	seqNameGenerator.seq = 0
 	_, err = registry.Create(testContext, generateNameObj, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err == nil || !errors.IsAlreadyExists(err) {
@@ -671,8 +669,8 @@ func TestStoreCreateWithRetryNameGenerate(t *testing.T) {
 func TestNewCreateOptionsFromUpdateOptions(t *testing.T) {
 	f := randfill.New().NilChance(0.0).NumElements(1, 1)
 
-	// The goal here is to trigger when any changes are made to either
-	// CreateOptions or UpdateOptions types, so we can update the converter.
+	// 这里的目的是：只要 CreateOptions 或 UpdateOptions 类型发生任何改动，
+	// 本测试就会触发失败，以便我们同步更新转换器。
 	for i := 0; i < 20; i++ {
 		in := &metav1.UpdateOptions{}
 		f.Fill(in)
@@ -680,11 +678,10 @@ func TestNewCreateOptionsFromUpdateOptions(t *testing.T) {
 
 		out := newCreateOptionsFromUpdateOptions(in)
 
-		// This sequence is intending to elide type information, but produce an
-		// intermediate structure (map) that can be manually patched up to make
-		// the comparison work as needed.
+		// 这一串操作意在抹掉类型信息，产出一个中间结构（map），
+		// 必要时可以手工修补它，让比较按需工作。
 
-		// Convert both structs to maps of primitives.
+		// 把两个 struct 都转换为基本类型的 map。
 		inBytes, err := json.Marshal(in)
 		if err != nil {
 			t.Fatalf("failed to json.Marshal(in): %v", err)
@@ -702,10 +699,10 @@ func TestNewCreateOptionsFromUpdateOptions(t *testing.T) {
 			t.Fatalf("failed to json.Unmarshal(out): %v", err)
 		}
 
-		// Patch the maps to handle any expected differences before we compare
-		// - none for now.
+		// 在比较之前修补 map 以处理任何预期中的差异
+		// ——目前没有。
 
-		// Compare the results.
+		// 比较结果。
 		inBytes, err = json.Marshal(inMap)
 		if err != nil {
 			t.Fatalf("failed to json.Marshal(in): %v", err)
@@ -725,8 +722,8 @@ func TestNewCreateOptionsFromUpdateOptions(t *testing.T) {
 func TestNewDeleteOptionsFromUpdateOptions(t *testing.T) {
 	f := randfill.New().NilChance(0.0).NumElements(1, 1)
 
-	// The goal here is to trigger when any changes are made to either
-	// DeleteOptions or UpdateOptions types, so we can update the converter.
+	// 这里的目的是：只要 DeleteOptions 或 UpdateOptions 类型发生任何改动，
+	// 本测试就会触发失败，以便我们同步更新转换器。
 	for i := 0; i < 20; i++ {
 		in := &metav1.UpdateOptions{}
 		f.Fill(in)
@@ -734,11 +731,10 @@ func TestNewDeleteOptionsFromUpdateOptions(t *testing.T) {
 
 		out := newDeleteOptionsFromUpdateOptions(in)
 
-		// This sequence is intending to elide type information, but produce an
-		// intermediate structure (map) that can be manually patched up to make
-		// the comparison work as needed.
+		// 这一串操作意在抹掉类型信息，产出一个中间结构（map），
+		// 必要时可以手工修补它，让比较按需工作。
 
-		// Convert both structs to maps of primitives.
+		// 把两个 struct 都转换为基本类型的 map。
 		inBytes, err := json.Marshal(in)
 		if err != nil {
 			t.Fatalf("failed to json.Marshal(in): %v", err)
@@ -756,19 +752,19 @@ func TestNewDeleteOptionsFromUpdateOptions(t *testing.T) {
 			t.Fatalf("failed to json.Unmarshal(out): %v", err)
 		}
 
-		// Patch the maps to handle any expected differences before we compare.
+		// 在比较之前修补 map 以处理任何预期中的差异。
 
-		// DeleteOptions does not have these fields.
+		// DeleteOptions 没有这些字段。
 		delete(inMap, "fieldManager")
 		delete(inMap, "fieldValidation")
 
-		// UpdateOptions does not have these fields.
+		// UpdateOptions 没有这些字段。
 		delete(outMap, "gracePeriodSeconds")
 		delete(outMap, "preconditions")
 		delete(outMap, "orphanDependents")
 		delete(outMap, "propagationPolicy")
 
-		// Compare the results.
+		// 比较结果。
 		inBytes, err = json.Marshal(inMap)
 		if err != nil {
 			t.Fatalf("failed to json.Marshal(in): %v", err)
@@ -787,8 +783,7 @@ func TestNewDeleteOptionsFromUpdateOptions(t *testing.T) {
 // BeginCreate → 存储写入 → FinishCreate(success) → AfterCreate →
 // Decorator。BeginCreate 失败时后续钩子都不得执行。
 func TestStoreCreateHooks(t *testing.T) {
-	// To track which hooks were called in what order.  Not all hooks can
-	// mutate the object.
+	// 用里程碑记录哪些钩子按什么顺序被调用。并非所有钩子都能修改对象。
 	var milestones []string
 
 	setAnn := func(obj runtime.Object, key string) {
@@ -807,11 +802,11 @@ func TestStoreCreateHooks(t *testing.T) {
 		decorator   func(runtime.Object)
 		beginCreate BeginCreateFunc
 		afterCreate AfterCreateFunc
-		// the TTLFunc is an easy hook to force a failure
+		// TTLFunc 是一个很方便的钩子，用来强制制造失败
 		ttl              func(obj runtime.Object, existing uint64, update bool) (uint64, error)
 		expectError      bool
-		expectAnnotation string   // to test object mutations
-		expectMilestones []string // to test sequence
+		expectAnnotation string   // 用于测试对象被修改
+		expectMilestones []string // 用于测试调用顺序
 	}{{
 		name: "no hooks",
 	}, {
@@ -901,7 +896,7 @@ func TestStoreCreateHooks(t *testing.T) {
 			registry.AfterCreate = tc.afterCreate
 			registry.TTLFunc = tc.ttl
 
-			// create the object
+			// 创建对象
 			milestones = nil
 			obj, err := registry.Create(testContext, pod, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 			if err != nil && !tc.expectError {
@@ -911,7 +906,7 @@ func TestStoreCreateHooks(t *testing.T) {
 				t.Fatalf("Unexpected success")
 			}
 
-			// verify the results
+			// 验证结果
 			if tc.expectAnnotation != "" {
 				out := obj.(*example.Pod)
 				if v, found := out.Annotations[tc.expectAnnotation]; !found {
@@ -981,62 +976,62 @@ func TestStoreUpdate(t *testing.T) {
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
 
-	// try to update a non-existing node with denying admission, should still return NotFound
+	// 尝试在准入拒绝的情况下更新不存在的对象，仍应返回 NotFound
 	_, _, err := registry.Update(testContext, podA.Name, rest.DefaultUpdatedObjectInfo(podA), denyCreateValidation, denyUpdateValidation, false, &metav1.UpdateOptions{})
 	if !errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// try to update a non-existing node
+	// 尝试更新不存在的对象
 	_, _, err = registry.Update(testContext, podA.Name, rest.DefaultUpdatedObjectInfo(podA), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 	if !errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// try to update a non-existing node that was created previously
+	// 尝试更新一个此前会被创建（create-on-update）的不存在对象
 	_, _, err = registry.Update(testContext, podA.Name, rest.DefaultUpdatedObjectInfo(podAWithResourceAndUID), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 	if !errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// allow creation
+	// 允许创建
 	registry.UpdateStrategy.(*testRESTStrategy).allowCreateOnUpdate = true
 
-	// createIfNotFound with denying create admission
+	// createIfNotFound 时创建准入被拒绝
 	_, _, err = registry.Update(testContext, podA.Name, rest.DefaultUpdatedObjectInfo(podA), denyCreateValidation, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 	if err == nil {
 		t.Errorf("expected admission error on create")
 	}
 
-	// createIfNotFound and verify
+	// createIfNotFound 并验证
 	if !updateAndVerify(t, testContext, registry, podA) {
 		t.Errorf("Unexpected error updating podA")
 	}
 
-	// forbid creation again
+	// 再次禁止创建
 	registry.UpdateStrategy.(*testRESTStrategy).allowCreateOnUpdate = false
 
-	// outofDate
+	// outofDate（版本过期）
 	_, _, err = registry.Update(testContext, podAWithResourceVersion.Name, rest.DefaultUpdatedObjectInfo(podAWithResourceVersion), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 	if !errors.IsConflict(err) {
 		t.Errorf("Unexpected error updating podAWithResourceVersion: %v", err)
 	}
 
-	// try to update with denying admission
+	// 尝试在准入拒绝的情况下更新
 	_, _, err = registry.Update(testContext, podA.Name, rest.DefaultUpdatedObjectInfo(podA), rest.ValidateAllObjectFunc, denyUpdateValidation, false, &metav1.UpdateOptions{})
 	if err == nil {
 		t.Errorf("expected admission error on update")
 	}
 
-	// normal update and verify
+	// 正常更新并验证
 	if !updateAndVerify(t, testContext, registry, podB) {
 		t.Errorf("Unexpected error updating podB")
 	}
 
-	// unconditional update
-	// NOTE: The logic for unconditional updates doesn't make sense to me, and imho should be removed.
+	// 无条件更新
+	// NOTE: 无条件更新的逻辑在我看来说不通，应当移除。
 	// doUnconditionalUpdate := resourceVersion == 0 && e.UpdateStrategy.AllowUnconditionalUpdate()
-	// ^^ That condition can *never be true due to the creation of root objects.
+	// ^^ 由于 root objects 的创建机制，该条件永远*不可能*成立。
 	//
 	// registry.UpdateStrategy.(*testRESTStrategy).allowUnconditionalUpdate = true
 	// updateAndVerify(t, testContext, registry, podAWithResourceVersion)
@@ -1077,7 +1072,7 @@ func TestNoOpUpdates(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// Check whether we do not return empty result on no-op update.
+	// 检查 no-op 更新时我们不会返回空结果。
 	if !reflect.DeepEqual(createResult, updateResult) {
 		t.Errorf("no-op update should return a correct value, got: %#v", updateResult)
 	}
@@ -1105,8 +1100,7 @@ func TestNoOpUpdates(t *testing.T) {
 // FinishUpdate(success) → AfterUpdate → Decorator；BeginUpdate 失败时
 // 后续钩子不执行。创建钩子在此场景中不得被触发。
 func TestStoreUpdateHooks(t *testing.T) {
-	// To track which hooks were called in what order.  Not all hooks can
-	// mutate the object.
+	// 用里程碑记录哪些钩子按什么顺序被调用。并非所有钩子都能修改对象。
 	var milestones []string
 
 	setAnn := func(obj runtime.Object, key string) {
@@ -1123,14 +1117,14 @@ func TestStoreUpdateHooks(t *testing.T) {
 	testCases := []struct {
 		name      string
 		decorator func(runtime.Object)
-		// create-on-update is tested elsewhere, but this proves non-use here
+		// create-on-update 已在别处测试过，这里附上钩子是为了证明本用例不会触发它
 		beginCreate      BeginCreateFunc
 		afterCreate      AfterCreateFunc
 		beginUpdate      BeginUpdateFunc
 		afterUpdate      AfterUpdateFunc
 		expectError      bool
-		expectAnnotation string   // to test object mutations
-		expectMilestones []string // to test sequence
+		expectAnnotation string   // 用于测试对象被修改
+		expectMilestones []string // 用于测试调用顺序
 	}{{
 		name: "no hooks",
 	}, {
@@ -1223,7 +1217,7 @@ func TestStoreUpdateHooks(t *testing.T) {
 				t.Fatalf("Unexpected success")
 			}
 
-			// verify the results
+			// 验证结果
 			if tc.expectAnnotation != "" {
 				out := obj.(*example.Pod)
 				if v, found := out.Annotations[tc.expectAnnotation]; !found {
@@ -1244,8 +1238,7 @@ func TestStoreUpdateHooks(t *testing.T) {
 // TestStoreCreateOnUpdateHooks 验证 create-on-update 走创建钩子而非更新
 // 钩子，顺序与普通创建一致；TTL 失败时 FinishCreate 必须收到 false。
 func TestStoreCreateOnUpdateHooks(t *testing.T) {
-	// To track which hooks were called in what order.  Not all hooks can
-	// mutate the object.
+	// 用里程碑记录哪些钩子按什么顺序被调用。并非所有钩子都能修改对象。
 	var milestones []string
 
 	mile := func(s string) {
@@ -1259,10 +1252,10 @@ func TestStoreCreateOnUpdateHooks(t *testing.T) {
 		afterCreate AfterCreateFunc
 		beginUpdate BeginUpdateFunc
 		afterUpdate AfterUpdateFunc
-		// the TTLFunc is an easy hook to force a failure
+		// TTLFunc 是一个很方便的钩子，用来强制制造失败
 		ttl              func(obj runtime.Object, existing uint64, update bool) (uint64, error)
 		expectError      bool
-		expectMilestones []string // to test sequence
+		expectMilestones []string // 用于测试调用顺序
 	}{{
 		name: "no hooks",
 	}, {
@@ -1363,7 +1356,7 @@ func TestStoreCreateOnUpdateHooks(t *testing.T) {
 			registry.AfterCreate = tc.afterCreate
 			registry.TTLFunc = tc.ttl
 
-			// NB: did not create it first.
+			// NB: 事先并没有创建该对象。
 			milestones = nil
 			_, _, err := registry.Update(testContext, pod.Name, rest.DefaultUpdatedObjectInfo(pod), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 			if err != nil && !tc.expectError {
@@ -1373,7 +1366,7 @@ func TestStoreCreateOnUpdateHooks(t *testing.T) {
 				t.Fatalf("Unexpected success")
 			}
 
-			// verify the results
+			// 验证结果
 			if tc.expectMilestones != nil {
 				if !reflect.DeepEqual(milestones, tc.expectMilestones) {
 					t.Errorf("Unexpected milestones: wanted %v, got %v", tc.expectMilestones, milestones)
@@ -1387,8 +1380,7 @@ func TestStoreCreateOnUpdateHooks(t *testing.T) {
 // GuaranteedUpdate 内部重试，验证每次重试都会重新执行 BeginUpdate/
 // FinishUpdate，且只有最后一次成功后才执行 AfterUpdate/Decorator。
 func TestStoreUpdateHooksInnerRetry(t *testing.T) {
-	// To track which hooks were called in what order.  Not all hooks can
-	// mutate the object.
+	// 用里程碑记录哪些钩子按什么顺序被调用。并非所有钩子都能修改对象。
 	var milestones []string
 
 	mile := func(s string) {
@@ -1414,10 +1406,10 @@ func TestStoreUpdateHooksInnerRetry(t *testing.T) {
 		decorator   func(runtime.Object)
 		beginUpdate func(context.Context, runtime.Object, runtime.Object, *metav1.UpdateOptions) (FinishFunc, error)
 		afterUpdate AfterUpdateFunc
-		// the TTLFunc is an easy hook to force an inner-loop retry
+		// TTLFunc 是一个很方便的钩子，用来强制触发内部循环重试
 		ttl              func(obj runtime.Object, existing uint64, update bool) (uint64, error)
 		expectError      bool
-		expectMilestones []string // to test sequence
+		expectMilestones []string // 用于测试调用顺序
 	}{{
 		name: "inner retry success",
 		decorator: func(obj runtime.Object) {
@@ -1474,7 +1466,7 @@ func TestStoreUpdateHooksInnerRetry(t *testing.T) {
 			registry.Decorator = tc.decorator
 			ttlFailDone = false
 			registry.TTLFunc = tc.ttl
-			// force storage to use a cached object with a non-matching resourceVersion to guarantee a live lookup + retry
+			// 迫使存储层使用 resourceVersion 不匹配的缓存对象，从而保证发生一次实时查询 + 重试
 			created.(*example.Pod).ResourceVersion += "0"
 			registry.Storage.Storage = &staleGuaranteedUpdateStorage{Interface: registry.Storage.Storage, cachedObj: created}
 			_, _, err = registry.Update(testContext, pod.Name, rest.DefaultUpdatedObjectInfo(pod), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
@@ -1485,7 +1477,7 @@ func TestStoreUpdateHooksInnerRetry(t *testing.T) {
 				t.Fatalf("Unexpected success")
 			}
 
-			// verify the results
+			// 验证结果
 			if tc.expectMilestones != nil {
 				if !reflect.DeepEqual(milestones, tc.expectMilestones) {
 					t.Errorf("Unexpected milestones: wanted %v, got %v", tc.expectMilestones, milestones)
@@ -1535,7 +1527,7 @@ func TestStoreDelete(t *testing.T) {
 		afterWasCalled = true
 	}
 
-	// test failure condition
+	// 测试失败场景
 	_, _, err := registry.Delete(testContext, podA.Name, rest.ValidateAllObjectFunc, nil)
 	if !errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
@@ -1544,13 +1536,13 @@ func TestStoreDelete(t *testing.T) {
 		t.Errorf("Unexpected call to AfterDelete")
 	}
 
-	// create pod
+	// 创建 pod
 	_, err = registry.Create(testContext, podA, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// delete object
+	// 删除对象
 	_, wasDeleted, err := registry.Delete(testContext, podA.Name, rest.ValidateAllObjectFunc, nil)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -1562,7 +1554,7 @@ func TestStoreDelete(t *testing.T) {
 		t.Errorf("Expected call to AfterDelete, but got none")
 	}
 
-	// try to get a item which should be deleted
+	// 尝试获取一个应当已被删除的对象
 	_, err = registry.Get(testContext, podA.Name, &metav1.GetOptions{})
 	if !errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
@@ -1584,19 +1576,19 @@ func TestStoreGracefulDeleteWithResourceVersion(t *testing.T) {
 	defaultDeleteStrategy := testRESTStrategy{scheme, names.SimpleNameGenerator, true, false, true}
 	registry.DeleteStrategy = testGracefulStrategy{defaultDeleteStrategy}
 
-	// test failure condition
+	// 测试失败场景
 	_, _, err := registry.Delete(testContext, podA.Name, rest.ValidateAllObjectFunc, nil)
 	if !errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// create pod
+	// 创建 pod
 	_, err = registry.Create(testContext, podA, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// try to get a item which should be deleted
+	// 尝试获取一个应当已被删除的对象
 	obj, err := registry.Get(testContext, podA.Name, &metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
@@ -1612,7 +1604,7 @@ func TestStoreGracefulDeleteWithResourceVersion(t *testing.T) {
 	options := metav1.NewDeleteOptions(0)
 	options.Preconditions = &metav1.Preconditions{ResourceVersion: &resourceVersion}
 
-	// delete object
+	// 删除对象
 	_, wasDeleted, err := registry.Delete(testContext, podA.Name, rest.ValidateAllObjectFunc, options)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -1621,7 +1613,7 @@ func TestStoreGracefulDeleteWithResourceVersion(t *testing.T) {
 		t.Errorf("unexpected, pod %s should have been deleted immediately", podA.Name)
 	}
 
-	// try to get a item which should be deleted
+	// 尝试获取一个应当已被删除的对象
 	_, err = registry.Get(testContext, podA.Name, &metav1.GetOptions{})
 	if !errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
@@ -1692,15 +1684,15 @@ func TestGracefulStoreHandleFinalizers(t *testing.T) {
 		t.Logf("garbage collection enabled: %t", gcEnabled)
 		registry.EnableGarbageCollection = gcEnabled
 
-		afterWasCalled = false // reset
+		afterWasCalled = false // 重置
 
-		// create pod
+		// 创建 pod
 		_, err := registry.Create(testContext, podWithFinalizer, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
 
-		// delete the pod with grace period=0, the pod should still exist because it has a finalizer
+		// 以 grace period=0 删除 pod。由于它还有 finalizer，pod 应当仍然存在
 		_, wasDeleted, err := registry.Delete(testContext, podWithFinalizer.Name, rest.ValidateAllObjectFunc, metav1.NewDeleteOptions(0))
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
@@ -1728,7 +1720,7 @@ func TestGracefulStoreHandleFinalizers(t *testing.T) {
 			t.Errorf("unexpected, AfterDelete() was called")
 		}
 
-		// the object should still exist, because it still has a finalizer
+		// 对象应当仍然存在，因为它还持有 finalizer
 		_, err = registry.Get(testContext, podWithFinalizer.Name, &metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
@@ -1745,7 +1737,7 @@ func TestGracefulStoreHandleFinalizers(t *testing.T) {
 		if !afterWasCalled {
 			t.Errorf("unexpected, AfterDelete() was not called")
 		}
-		// the pod should be removed, because its finalizer is removed
+		// pod 应当被移除，因为它的 finalizer 已被去掉
 		_, err = registry.Get(testContext, podWithFinalizer.Name, &metav1.GetOptions{})
 		if !errors.IsNotFound(err) {
 			t.Fatalf("Unexpected error: %v", err)
@@ -1777,15 +1769,15 @@ func TestNonGracefulStoreHandleFinalizers(t *testing.T) {
 		t.Logf("garbage collection enabled: %t", gcEnabled)
 		registry.EnableGarbageCollection = gcEnabled
 
-		afterWasCalled = false // reset
+		afterWasCalled = false // 重置
 
-		// create pod
+		// 创建 pod
 		_, err := registry.Create(testContext, podWithFinalizer, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
 
-		// delete object with nil delete options doesn't delete the object
+		// 用 nil delete options 删除对象并不会真正删除该对象
 		_, wasDeleted, err := registry.Delete(testContext, podWithFinalizer.Name, rest.ValidateAllObjectFunc, nil)
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
@@ -1797,7 +1789,7 @@ func TestNonGracefulStoreHandleFinalizers(t *testing.T) {
 			t.Errorf("unexpected, AfterDelete() was called")
 		}
 
-		// the object should still exist
+		// 对象应当仍然存在
 		obj, err := registry.Get(testContext, podWithFinalizer.Name, &metav1.GetOptions{})
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
@@ -1828,7 +1820,7 @@ func TestNonGracefulStoreHandleFinalizers(t *testing.T) {
 			t.Errorf("unexpected, AfterDelete() was called")
 		}
 
-		// the object should still exist, because it still has a finalizer
+		// 对象应当仍然存在，因为它还持有 finalizer
 		obj, err = registry.Get(testContext, podWithFinalizer.Name, &metav1.GetOptions{})
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
@@ -1849,7 +1841,7 @@ func TestNonGracefulStoreHandleFinalizers(t *testing.T) {
 		if !afterWasCalled {
 			t.Errorf("unexpected, AfterDelete() was not called")
 		}
-		// the pod should be removed, because its finalizer is removed
+		// pod 应当被移除，因为它的 finalizer 已被去掉
 		_, err = registry.Get(testContext, podWithFinalizer.Name, &metav1.GetOptions{})
 		if !errors.IsNotFound(err) {
 			t.Errorf("Unexpected error: %v", err)
@@ -1891,10 +1883,10 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 	nonOrphanOptions := &metav1.DeleteOptions{OrphanDependents: &falseVar}
 	nilOrphanOptions := &metav1.DeleteOptions{}
 
-	// defaultDeleteStrategy doesn't implement rest.GarbageCollectionDeleteStrategy.
+	// defaultDeleteStrategy 没有实现 rest.GarbageCollectionDeleteStrategy。
 	defaultDeleteStrategy := &testRESTStrategy{scheme, names.SimpleNameGenerator, true, false, true}
-	// orphanDeleteStrategy indicates the default garbage collection policy is
-	// to orphan dependentes.
+	// orphanDeleteStrategy 表示默认的垃圾回收策略是
+	// 将 dependent 资源置为孤儿（orphan）。
 	orphanDeleteStrategy := &testOrphanDeleteStrategy{defaultDeleteStrategy}
 
 	testcases := []struct {
@@ -1904,7 +1896,7 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 		expectNotFound    bool
 		updatedFinalizers []string
 	}{
-		// cases run with DeleteOptions.OrphanDedependents=true
+		// 以下用例在 DeleteOptions.OrphanDependents=true 下运行
 		{
 			podWithOrphanFinalizer("pod1"),
 			orphanOptions,
@@ -1933,9 +1925,9 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 			false,
 			[]string{metav1.FinalizerOrphanDependents},
 		},
-		// cases run with DeleteOptions.OrphanDedependents=false
-		// these cases all have oprhanDeleteStrategy, which should be ignored
-		// because DeleteOptions has the highest priority.
+		// 以下用例在 DeleteOptions.OrphanDependents=false 下运行
+		// 这些用例都带有 orphanDeleteStrategy，但 DeleteOptions 优先级最高，
+		// 因此该策略应当被忽略。
 		{
 			podWithOrphanFinalizer("pod5"),
 			nonOrphanOptions,
@@ -1964,10 +1956,9 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 			true,
 			[]string{},
 		},
-		// cases run with nil DeleteOptions.OrphanDependents. If the object
-		// already has the orphan finalizer, then the DeleteStrategy should be
-		// ignored. Otherwise the DeleteStrategy decides whether to add the
-		// orphan finalizer.
+		// 以下用例在 DeleteOptions.OrphanDependents 为 nil 时运行。
+		// 如果对象已经带有 orphan finalizer，则 DeleteStrategy 应当被忽略；
+		// 否则由 DeleteStrategy 决定是否添加 orphan finalizer。
 		{
 			podWithOrphanFinalizer("pod9"),
 			nilOrphanOptions,
@@ -2025,9 +2016,8 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 			[]string{metav1.FinalizerOrphanDependents},
 		},
 
-		// cases run with nil DeleteOptions should have exact same behavior.
-		// They should be exactly the same as above cases where
-		// DeleteOptions.OrphanDependents is nil.
+		// 以下用例在 DeleteOptions 为 nil 时运行，行为应当完全一致：
+		// 与上面 DeleteOptions.OrphanDependents 为 nil 的用例一模一样。
 		{
 			podWithOrphanFinalizer("pod17"),
 			nil,
@@ -2093,7 +2083,7 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 
 	for _, tc := range testcases {
 		registry.DeleteStrategy = tc.strategy
-		// create pod
+		// 创建 pod
 		_, err := registry.Create(testContext, tc.pod, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
@@ -2130,7 +2120,7 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 	}
 }
 
-// Test the DeleteOptions.PropagationPolicy is handled correctly
+// 验证 DeleteOptions.PropagationPolicy 被正确处理
 //
 // TestStoreDeletionPropagation 验证 PropagationPolicy（Foreground/
 // Background/Orphan/默认）与已有 finalizer 的组合如何决定最终 finalizer：
@@ -2139,10 +2129,10 @@ func TestStoreDeleteWithOrphanDependents(t *testing.T) {
 func TestStoreDeletionPropagation(t *testing.T) {
 	initialGeneration := int64(1)
 
-	// defaultDeleteStrategy doesn't implement rest.GarbageCollectionDeleteStrategy.
+	// defaultDeleteStrategy 没有实现 rest.GarbageCollectionDeleteStrategy。
 	defaultDeleteStrategy := &testRESTStrategy{scheme, names.SimpleNameGenerator, true, false, true}
-	// orphanDeleteStrategy indicates the default garbage collection policy is
-	// to orphan dependentes.
+	// orphanDeleteStrategy 表示默认的垃圾回收策略是
+	// 将 dependent 资源置为孤儿（orphan）。
 	orphanDeleteStrategy := &testOrphanDeleteStrategy{defaultDeleteStrategy}
 
 	foregroundPolicy := metav1.DeletePropagationForeground
@@ -2152,7 +2142,7 @@ func TestStoreDeletionPropagation(t *testing.T) {
 	testcases := map[string]struct {
 		options  *metav1.DeleteOptions
 		strategy rest.RESTDeleteStrategy
-		// finalizers that are already set in the object
+		// 对象上已经设置的 finalizers
 		existingFinalizers []string
 		expectedNotFound   bool
 		expectedFinalizers []string
@@ -2198,7 +2188,7 @@ func TestStoreDeletionPropagation(t *testing.T) {
 			expectedFinalizers: []string{metav1.FinalizerOrphanDependents},
 		},
 
-		// all cases in the following block have "existing orphan finalizer"
+		// 下面这一块的所有用例都带有 "existing orphan finalizer"
 		"existing orphan finalizer, PropagationPolicy=Foreground, defaultDeleteStrategy": {
 			options:            &metav1.DeleteOptions{PropagationPolicy: &foregroundPolicy},
 			strategy:           defaultDeleteStrategy,
@@ -2248,7 +2238,7 @@ func TestStoreDeletionPropagation(t *testing.T) {
 			expectedFinalizers: []string{metav1.FinalizerOrphanDependents},
 		},
 
-		// all cases in the following block have "existing deleteDependents finalizer"
+		// 下面这一块的所有用例都带有 "existing deleteDependents finalizer"
 		"existing deleteDependents finalizer, PropagationPolicy=Foreground, defaultDeleteStrategy": {
 			options:            &metav1.DeleteOptions{PropagationPolicy: &foregroundPolicy},
 			strategy:           defaultDeleteStrategy,
@@ -2317,7 +2307,7 @@ func TestStoreDeletionPropagation(t *testing.T) {
 		registry.DeleteStrategy = tc.strategy
 		i++
 		pod := createPod(i, tc.existingFinalizers)
-		// create pod
+		// 创建 pod
 		_, err := registry.Create(testContext, pod, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
@@ -2378,8 +2368,8 @@ func TestStoreDeleteCollection(t *testing.T) {
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
 
-	// Overwrite the underlying storage interface so that it counts GetList calls
-	// and reduce the default page size to 2.
+	// 覆盖底层 storage interface，使其统计 GetList 调用次数，
+	// 并把默认分页大小降为 2。
 	storeWithCounter := &storageWithCounter{Interface: registry.Storage.Storage}
 	registry.Storage.Storage = storeWithCounter
 	originalDeleteCollectionPageSize := deleteCollectionPageSize
@@ -2396,7 +2386,7 @@ func TestStoreDeleteCollection(t *testing.T) {
 		}
 	}
 
-	// Delete all pods.
+	// 删除所有 pod。
 	deleted, err := registry.DeleteCollection(testContext, rest.ValidateAllObjectFunc, nil, &metainternalversion.ListOptions{})
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -2438,7 +2428,7 @@ func TestStoreDeleteCollectionNoMutateOptions(t *testing.T) {
 	n := int64(50)
 	inputDeleteOptions := &metav1.DeleteOptions{GracePeriodSeconds: &n}
 	safeCopyOfDelete := inputDeleteOptions.DeepCopy()
-	// Delete all pods.
+	// 删除所有 pod。
 	_, err := registry.DeleteCollection(testContext, rest.ValidateAllObjectFunc, inputDeleteOptions, &metainternalversion.ListOptions{})
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -2461,7 +2451,7 @@ func TestStoreDeleteCollectionNotFound(t *testing.T) {
 	podB := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "bar"}}
 
 	for i := 0; i < 10; i++ {
-		// Setup
+		// 准备工作
 		if _, err := registry.Create(testContext, podA, rest.ValidateAllObjectFunc, &metav1.CreateOptions{}); err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -2469,7 +2459,7 @@ func TestStoreDeleteCollectionNotFound(t *testing.T) {
 			t.Errorf("Unexpected error: %v", err)
 		}
 
-		// Kick off multiple delete collection calls to test notfound behavior
+		// 并发发起多次 DeleteCollection 调用，以测试 notfound 行为
 		wg := &sync.WaitGroup{}
 		for j := 0; j < 2; j++ {
 			wg.Add(1)
@@ -2553,9 +2543,9 @@ func TestStoreDeleteCollectionWithContextCancellation(t *testing.T) {
 	lock := sync.Mutex{}
 	called := false
 
-	// We rely on the fact that there is exactly one worker, so it should exit after
-	// getting context canceled error on the first Delete call to etcd.
-	// With multiple workers, each of them would be calling Delete once.
+	// 我们依赖"恰好只有一个 worker"这一事实：它在第一次调用 etcd Delete 时
+	// 收到 context canceled 错误后就应当退出。
+	// 若有多个 worker，则它们各自都会调用一次 Delete。
 	_, err := registry.DeleteCollection(ctx, func(ctx context.Context, obj runtime.Object) error {
 		lock.Lock()
 		defer lock.Unlock()
@@ -2572,8 +2562,7 @@ func TestStoreDeleteCollectionWithContextCancellation(t *testing.T) {
 	}
 }
 
-// Test whether objects deleted with DeleteCollection are correctly delivered
-// to watchers.
+// 验证通过 DeleteCollection 删除的对象被正确地投递给了 watchers。
 //
 // TestStoreDeleteCollectionWithWatch 验证批量删除的每个对象都以 DELETED
 // 事件送达 watcher，避免批量路径绕过 watch 通知。
@@ -2711,9 +2700,9 @@ func newTestGenericStoreRegistry(t *testing.T, scheme *runtime.Scheme, hasCacheE
 		if err != nil {
 			t.Fatalf("Couldn't create cacher: %v", err)
 		}
-		// The tests assume that Get/GetList/Watch calls shouldn't fail.
-		// However, 429 error can now be returned if watchcache is under initialization.
-		// To avoid rewriting all tests, we wait for watchcache to initialize.
+		// 这些测试假设 Get/GetList/Watch 调用不应失败。
+		// 但如果 watchcache 尚在初始化，现在可能返回 429 错误。
+		// 为避免重写所有测试，我们先等待 watchcache 完成初始化。
 		if err := cacher.Wait(context.Background()); err != nil {
 			t.Fatal(err)
 		}
@@ -2765,7 +2754,7 @@ func newTestGenericStoreRegistry(t *testing.T, scheme *runtime.Scheme, hasCacheE
 // TestFinalizeDelete 验证删除完成时返回的 Status 包含名称、组、资源与
 // UID，客户端据此确认删除的是预期对象。
 func TestFinalizeDelete(t *testing.T) {
-	// Verify that it returns the expected Status.
+	// 验证它返回了预期的 Status。
 	destroyFunc, s := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
 	obj := &example.Pod{
@@ -2824,7 +2813,7 @@ func TestQualifiedResource(t *testing.T) {
 	destroyFunc, registry := NewTestGenericStoreRegistry(t)
 	defer destroyFunc()
 
-	// update a non-exist object
+	// 更新一个不存在的对象
 	_, _, err := registry.Update(testContext, podA.Name, rest.DefaultUpdatedObjectInfo(podA), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 	if !errors.IsNotFound(err) {
 		t.Fatalf("Unexpected error: %v", err)
@@ -2834,7 +2823,7 @@ func TestQualifiedResource(t *testing.T) {
 		t.Fatalf("Unexpected error: %#v", err)
 	}
 
-	// get a non-exist object
+	// 获取一个不存在的对象
 	_, err = registry.Get(testContext, podA.Name, &metav1.GetOptions{})
 
 	if !errors.IsNotFound(err) {
@@ -2845,7 +2834,7 @@ func TestQualifiedResource(t *testing.T) {
 		t.Fatalf("Unexpected error: %#v", err)
 	}
 
-	// delete a non-exist object
+	// 删除一个不存在的对象
 	_, _, err = registry.Delete(testContext, podA.Name, rest.ValidateAllObjectFunc, nil)
 
 	if !errors.IsNotFound(err) {
@@ -2856,13 +2845,13 @@ func TestQualifiedResource(t *testing.T) {
 		t.Fatalf("Unexpected error: %#v", err)
 	}
 
-	// create a non-exist object
+	// 创建一个尚不存在的对象
 	_, err = registry.Create(testContext, podA, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// create a exist object will fail
+	// 创建已存在的对象会失败
 	_, err = registry.Create(testContext, podA, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if !errors.IsAlreadyExists(err) {
 		t.Fatalf("Unexpected error: %v", err)
@@ -2899,7 +2888,7 @@ func (fakeStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.Gar
 		groupVersion := schema.GroupVersion{Group: requestInfo.APIGroup, Version: requestInfo.APIVersion}
 		switch groupVersion {
 		case appsv1beta1, appsv1beta2, extensionsv1beta1:
-			// for back compatibility
+			// 为了向后兼容
 			return rest.OrphanDependents
 		default:
 			return rest.DeleteDependents
@@ -3032,7 +3021,7 @@ type staleGuaranteedUpdateStorage struct {
 	cachedObj runtime.Object
 }
 
-// GuaranteedUpdate overwrites the method with one that always suggests the cachedObj.
+// GuaranteedUpdate 覆盖了原方法，使其总是把 cachedObj 作为建议传入。
 func (s *staleGuaranteedUpdateStorage) GuaranteedUpdate(
 	ctx context.Context, key string, destination runtime.Object, ignoreNotFound bool,
 	preconditions *storage.Preconditions, tryUpdate storage.UpdateFunc, _ runtime.Object) error {
@@ -3054,19 +3043,19 @@ func TestDeleteWithCachedObject(t *testing.T) {
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), "test")
 	destroyFunc, registry := newTestGenericStoreRegistry(t, scheme, false)
 	defer destroyFunc()
-	// cached object does not have any finalizer.
+	// 缓存对象没有任何 finalizer。
 	registry.Storage.Storage = &staleGuaranteedUpdateStorage{Interface: registry.Storage.Storage, cachedObj: podWithNoFinalizer}
-	// created object with pending finalizer.
+	// 创建带有 pending finalizer 的对象。
 	_, err := registry.Create(ctx, podWithFinalizer, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The object shouldn't be deleted, because the persisted object has pending finalizers.
+	// 该对象不应被删除，因为持久化对象上还留有 pending finalizers。
 	_, _, err = registry.Delete(ctx, podName, rest.ValidateAllObjectFunc, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The object should still be there
+	// 对象应当仍然存在
 	_, err = registry.Get(ctx, podName, &metav1.GetOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -3085,14 +3074,14 @@ func TestPreconditionalUpdateWithCachedObject(t *testing.T) {
 	destroyFunc, registry := newTestGenericStoreRegistry(t, scheme, false)
 	defer destroyFunc()
 
-	// cached object has old UID
+	// 缓存对象持有旧的 UID
 	oldPod, err := registry.Create(ctx, pod, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	registry.Storage.Storage = &staleGuaranteedUpdateStorage{Interface: registry.Storage.Storage, cachedObj: oldPod}
 
-	// delete and re-create the same object with new UID
+	// 删除该对象并以新的 UID 重新创建
 	_, _, err = registry.Delete(ctx, podName, rest.ValidateAllObjectFunc, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -3106,14 +3095,14 @@ func TestPreconditionalUpdateWithCachedObject(t *testing.T) {
 		t.Fatalf("unexpected object: %#v", obj)
 	}
 
-	// update the object should not fail precondition
+	// 更新该对象不应因前置条件失败
 	newPod.Spec.NodeName = "machine2"
 	res, _, err := registry.Update(ctx, podName, rest.DefaultUpdatedObjectInfo(newPod), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// the update should have succeeded
+	// 更新应当已经成功
 	r, ok := res.(*example.Pod)
 	if !ok {
 		t.Fatalf("unexpected update result: %#v", res)
@@ -3123,9 +3112,8 @@ func TestPreconditionalUpdateWithCachedObject(t *testing.T) {
 	}
 }
 
-// TestRetryDeleteValidation checks if the deleteValidation is called again if
-// the GuaranteedUpdate in the Delete handler conflicts with a simultaneous
-// Update.
+// TestRetryDeleteValidation 检查当 Delete 处理器中的 GuaranteedUpdate 与一次
+// 并发 Update 发生冲突时，deleteValidation 是否会再次被调用。
 //
 // TestRetryDeleteValidation 用并发 Update 制造冲突，验证删除在内部重试时
 // 会再次调用 deleteValidation（因此调用次数为 2），保证最终删除决定基于
@@ -3165,7 +3153,7 @@ func TestRetryDeleteValidation(t *testing.T) {
 			readyOnce.Do(func() {
 				close(ready)
 			})
-			// wait for the update completes
+			// 等待更新完成
 			<-updated
 			called++
 			return nil
@@ -3188,7 +3176,7 @@ func TestRetryDeleteValidation(t *testing.T) {
 		}
 
 		go func() {
-			// This update will cause the Delete to retry due to conflict.
+			// 这次 Update 会使 Delete 因冲突而重试。
 			_, _, err := registry.Update(testContext, test.pod.Name, rest.DefaultUpdatedObjectInfo(test.pod, transformer), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 			if err != nil {
 				t.Error(err)

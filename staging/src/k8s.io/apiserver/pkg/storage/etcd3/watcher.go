@@ -50,8 +50,7 @@ import (
 )
 
 const (
-	// We have set a buffer in order to reduce times of context switches.
-	//
+	// 设置缓冲是为了减少上下文切换次数。
 	// 两个 100 容量的缓冲把"读 etcd"与"解码/分发"解耦：短时抖动由缓冲吸收，
 	// 持续慢消费则由 blockLogger 记录告警。
 	incomingBufSize         = 100
@@ -62,26 +61,27 @@ const (
 	watchChanLogWarningThreshold = 100 * time.Millisecond
 )
 
-// defaultWatcherMaxLimit is used to facilitate construction tests
+// defaultWatcherMaxLimit 用于方便构造测试
 var defaultWatcherMaxLimit int64 = maxLimit
 
-// fatalOnDecodeError is used during testing to panic the server if watcher encounters a decoding error
+// fatalOnDecodeError 在测试期间使用：watcher 遇到解码错误时让进程 panic
 var fatalOnDecodeError atomic.Bool
 
 func init() {
-	// check to see if we are running in a test environment
+	// 检查是否运行在测试环境中
 	b, _ := strconv.ParseBool(os.Getenv("KUBE_PANIC_WATCH_DECODE_ERROR"))
 	fatalOnDecodeError.Store(b)
 }
 
-// TestingTB is the subset of testing.TB required by TestOnlySetFatalOnDecodeError. Avoids importing
-// the testing package.
+// TestingTB 是 TestOnlySetFatalOnDecodeError 所需要的 testing.TB 子集，
+// 以避免导入 testing 包。
 type TestingTB interface {
 	Helper()
 	Cleanup(func())
 }
 
-// TestOnlySetFatalOnDecodeError should only be used for cases where decode errors are expected and need to be tested. e.g. conversion webhooks.
+// TestOnlySetFatalOnDecodeError 只应当用于解码错误符合预期、需要被测试的场景，
+// 例如 conversion webhook。
 //
 // 临时切换全局开关并在测试结束时恢复，避免影响并行运行的其他测试。
 func TestOnlySetFatalOnDecodeError(tb TestingTB, b bool) {
@@ -106,7 +106,7 @@ type watcher struct {
 	getResourceSizeEstimator func() *resourceSizeEstimator
 }
 
-// watchChan implements watch.Interface.
+// watchChan 实现 watch.Interface。
 //
 // 内部有两条 goroutine 链：startWatching 从 etcd 拉事件写入 incomingEventChan，
 // processEvents 解码、过滤后写入 resultChan。run 负责在任一方退出时统一回收。
@@ -128,13 +128,12 @@ type watchChan struct {
 	resultLogger        *blockLogger
 }
 
-// Watch watches on a key and returns a watch.Interface that transfers relevant notifications.
-// If rev is zero, it will return the existing object(s) and then start watching from
-// the maximum revision+1 from returned objects.
-// If rev is non-zero, it will watch events happened after given revision.
-// If opts.Recursive is false, it watches on given key.
-// If opts.Recursive is true, it watches any children and directories under the key, excluding the root key itself.
-// pred must be non-nil. Only if opts.Predicate matches the change, it will be returned.
+// Watch 对某个 key 进行 watch，并返回传输相关通知的 watch.Interface。
+// 如果 rev 为零，会先返回已存在的对象，然后从返回对象的最大 revision+1 处开始 watch。
+// 如果 rev 非零，则 watch 给定 revision 之后发生的事件。
+// 如果 opts.Recursive 为 false，只 watch 给定的 key。
+// 如果 opts.Recursive 为 true，watch 该 key 下的所有子节点和目录，但不包含根 key 本身。
+// pred 必须非 nil。只有 opts.Predicate 匹配该变更时才会返回。
 //
 // 返回后立即调用 WatchInitialized：etcd 路径无法可靠判断"已追上最新 RV"，
 // 与其让流控误判，不如按已初始化处理（watch cache 默认已承担该职责）。
@@ -153,11 +152,9 @@ func (w *watcher) Watch(ctx context.Context, key string, rev int64, opts storage
 	wc := w.createWatchChan(ctx, key, startWatchRV, opts.Recursive, opts.ProgressNotify, opts.RecordTimestamps, opts.Predicate)
 	go wc.run(isInitialEventsEndBookmarkRequired(opts), areInitialEventsRequired(rev, opts))
 
-	// For etcd watch we don't have an easy way to answer whether the watch
-	// has already caught up. So in the initial version (given that watchcache
-	// is by default enabled for all resources but Events), we just deliver
-	// the initialization signal immediately. Improving this will be explored
-	// in the future.
+	// 对 etcd watch 而言，我们没有简单的方法判断 watch 是否已经追上最新进度。
+	// 所以在初版实现中（考虑到 watchcache 默认对除 Events 外的所有资源启用），
+	// 我们立即发出初始化信号。后续会探索改进方案。
 	utilflowcontrol.WatchInitialized(ctx)
 
 	return wc, nil
@@ -177,7 +174,7 @@ func (w *watcher) createWatchChan(ctx context.Context, key string, rev int64, re
 		getResourceSizeEstimator: w.getResourceSizeEstimator,
 	}
 	if pred.Empty() {
-		// The filter doesn't filter out any object.
+		// 该 filter 不会过滤掉任何对象。
 		// 用 Everything 而非 Empty，避免后续 filter 对每个对象都做无谓的判断。
 		wc.internalPred = storage.Everything
 	}
@@ -189,11 +186,10 @@ func (w *watcher) createWatchChan(ctx context.Context, key string, rev int64, re
 	return wc
 }
 
-// getStartWatchResourceVersion returns a ResourceVersion
-// the watch will be started from.
-// Depending on the input parameters the semantics of the returned ResourceVersion are:
-//   - start at Exact (return resourceVersion)
-//   - start at Most Recent (return an RV from etcd)
+// getStartWatchResourceVersion 返回 watch 将要启动的 ResourceVersion。
+// 根据输入参数，返回的 ResourceVersion 语义为：
+//   - 从 Exact 位置开始（返回 resourceVersion）
+//   - 从 Most Recent 位置开始（返回来自 etcd 的 RV）
 //
 // WatchList 关闭时返回 0，沿用旧语义：先列出现有对象再从最新 RV 开始 watch。
 func (w *watcher) getStartWatchResourceVersion(ctx context.Context, resourceVersion int64, opts storage.ListOptions) (int64, error) {
@@ -204,29 +200,24 @@ func (w *watcher) getStartWatchResourceVersion(ctx context.Context, resourceVers
 		return 0, nil
 	}
 	if opts.SendInitialEvents == nil || *opts.SendInitialEvents {
-		// note that when opts.SendInitialEvents=true
-		// we will be issuing a consistent LIST request
-		// against etcd followed by the special bookmark event
+		// 注意：当 opts.SendInitialEvents=true 时，我们会先对 etcd 发起一次
+		// 一致性 LIST 请求，随后跟上特殊的 bookmark 事件
 		return 0, nil
 	}
-	// at this point the clients is interested
-	// only in getting a stream of events
-	// starting at the MostRecent point in time (RV)
+	// 走到这里说明客户端只想要从 MostRecent 时间点（RV）开始的事件流
 	currentStorageRV, err := w.getCurrentStorageRV(ctx)
 	if err != nil {
 		return 0, err
 	}
-	// currentStorageRV is taken from resp.Header.Revision (int64)
-	// and cast to uint64, so it is safe to do reverse
-	// at some point we should unify the interface but that
-	// would require changing  Versioner.UpdateList
+	// currentStorageRV 取自 resp.Header.Revision（int64）再转换为 uint64，
+	// 因此在这里反向转换是安全的。
+	// 将来应当统一这个接口，但那需要修改 Versioner.UpdateList
 	return int64(currentStorageRV), nil
 }
 
-// isInitialEventsEndBookmarkRequired since there is no way to directly set
-// opts.ProgressNotify from the API and the etcd3 impl doesn't support
-// notification for external clients we simply return initialEventsEndBookmarkRequired
-// to only send the bookmark event after the initial list call.
+// isInitialEventsEndBookmarkRequired：由于无法从 API 直接设置 opts.ProgressNotify，
+// 且 etcd3 实现不支持对外部客户端的通知，我们返回 initialEventsEndBookmarkRequired，
+// 以便只在初始列表调用之后发送 bookmark 事件。
 //
 // see: https://github.com/kubernetes/kubernetes/issues/120348
 //
@@ -239,12 +230,12 @@ func isInitialEventsEndBookmarkRequired(opts storage.ListOptions) bool {
 	return opts.SendInitialEvents != nil && *opts.SendInitialEvents && opts.Predicate.AllowWatchBookmarks
 }
 
-// areInitialEventsRequired returns true if all events from the etcd should be returned.
+// areInitialEventsRequired 在需要返回 etcd 的全部事件时返回 true。
 //
 // SendInitialEvents 未显式设置且 RV 为 0 属于旧的 list-then-watch 语义，同样需要初始事件。
 func areInitialEventsRequired(resourceVersion int64, opts storage.ListOptions) bool {
 	if opts.SendInitialEvents == nil && resourceVersion == 0 {
-		return true // legacy case
+		return true // 旧的 list-then-watch 场景
 	}
 	if !utilfeature.DefaultFeatureGate.Enabled(features.WatchList) {
 		return false
@@ -295,14 +286,14 @@ func (wc *watchChan) run(initialEventsEndBookmarkRequired, forceInitialEvents bo
 
 	select {
 	case <-watchClosedCh:
-	case <-wc.ctx.Done(): // user cancel
+	case <-wc.ctx.Done(): // 用户取消
 	}
 
-	// We use wc.ctx to reap all goroutines. Under whatever condition, we should stop them all.
-	// It's fine to double cancel.
+	// 我们使用 wc.ctx 来回收所有 goroutine。无论在哪种情况下，都应当把它们全部停止。
+	// 重复 cancel 也没关系。
 	wc.cancel()
 
-	// we need to wait until resultChan wouldn't be used anymore
+	// 需要等到 resultChan 不再被使用之后才能关闭
 	resultChanWG.Wait()
 	close(wc.resultChan)
 }
@@ -322,9 +313,9 @@ func (wc *watchChan) RequestWatchProgress() error {
 	return wc.watcher.client.RequestProgress(wc.ctx)
 }
 
-// sync tries to retrieve existing data and send them to process.
-// The revision to watch will be set to the revision in response.
-// All events sent will have isCreated=true
+// sync 尝试获取已存在的数据并发送给处理流程。
+// watch 的 revision 将被设置为响应中的 revision。
+// 所有发送的事件都会带有 isCreated=true
 //
 // 优先使用 RangeStream（流式、内存占用低）；若 etcd 不支持则降级为分页 list，
 // 并记录该能力不支持，避免对每个 watch 反复尝试。
@@ -379,11 +370,11 @@ func (wc *watchChan) syncPaginated() error {
 			return fmt.Errorf("no results were found, but etcd indicated there were more values remaining")
 		}
 
-		// send items from the response until no more results
+		// 持续发送响应中的条目，直到没有更多结果
 		for i, kv := range getResp.Kvs {
 			lastKey = kv.Key
 			wc.queueEvent(parseKV(kv))
-			// free kv early. Long lists can take O(seconds) to decode.
+			// 尽早释放 kv。长列表的解码可能需要 O(秒) 级别的时间。
 			getResp.Kvs[i] = nil
 		}
 
@@ -391,7 +382,7 @@ func (wc *watchChan) syncPaginated() error {
 			wc.initialRev = getResp.Header.Revision
 		}
 
-		// no more results remain
+		// 已没有更多结果
 		if !getResp.More {
 			return nil
 		}
@@ -421,7 +412,7 @@ func (wc *watchChan) syncStreamRecursive() error {
 		return err
 	}
 	defer func() {
-		// Only record the listStream metric if streaming was actually exercised.
+		// 只有真正使用了流式读取时才记录 listStream 指标。
 		if grpcstatus.Code(err) == grpccodes.Unimplemented {
 			return
 		}
@@ -431,14 +422,14 @@ func (wc *watchChan) syncStreamRecursive() error {
 	var initialRev int64
 	for r := range streamResp {
 		if err = r.Err(); err != nil {
-			// paging=false: a compaction mid-stream can't be resumed with a
-			// continue token, so surface it as ResourceExpired for a relist.
+			// paging=false：流中途发生压缩时无法用 continue token 恢复，
+			// 因此按 ResourceExpired 上报，让客户端重新 list。
 			return interpretListError(err, false, wc.key, wc.key)
 		}
 		rangeResp := r.RangeResponse
 		for i, kv := range rangeResp.Kvs {
 			wc.queueEvent(parseKV(kv))
-			// free kv early. Long lists can take O(seconds) to decode.
+			// 尽早释放 kv。长列表的解码可能需要 O(秒) 级别的时间。
 			rangeResp.Kvs[i] = nil
 		}
 		if initialRev == 0 && rangeResp.Header != nil {
@@ -457,30 +448,28 @@ func (wc *watchChan) syncStreamRecursive() error {
 func logWatchChannelErr(err error) {
 	switch {
 	case strings.Contains(err.Error(), "mvcc: required revision has been compacted"):
-		// mvcc revision compaction which is regarded as warning, not error
+		// mvcc revision 被压缩，这被视为警告，不是错误
 		klog.Warningf("watch chan error: %v", err)
 	case isCancelError(err):
-		// expected when watches close, no need to log
+		// watch 关闭时属于预期情况，无需记录
 	default:
 		klog.Errorf("watch chan error: %v", err)
 	}
 }
 
-// startWatching does:
-// - get current objects if initialRev=0; set initialRev to current rev
-// - watch on given key and send events to process.
+// startWatching 做两件事：
+// - 若 initialRev=0，获取当前对象，并把 initialRev 设置为当前 revision
+// - 对给定 key 进行 watch，并把事件发送给处理流程。
 //
-// initialEventsEndBookmarkSent helps us keep track
-// of whether we have sent an annotated bookmark event.
+// initialEventsEndBookmarkSent 帮助我们跟踪
+// 是否已经发送过带标注的 bookmark 事件。
 //
-// it's important to note that we don't
-// need to track the actual RV because
-// we only send the bookmark event
-// after the initial list call.
+// 需要注意，我们不需要跟踪实际的 RV，
+// 因为我们只在初始列表调用之后
+// 发送 bookmark 事件。
 //
-// when this variable is set to false,
-// it means we don't have any specific
-// preferences for delivering bookmark events.
+// 当这个变量被设置为 false 时，
+// 表示我们对 bookmark 事件的投递没有特殊要求。
 //
 // 若请求的初始 RV 超前于 etcd 当前 RV，返回 TooLargeResourceVersion 让客户端
 // 等待后重试，而不是在 etcd 上等待一个永远到不了的 revision。
@@ -524,13 +513,12 @@ func (wc *watchChan) startWatching(watchClosedCh chan struct{}, initialEventsEnd
 	for wres := range wch {
 		if wres.Err() != nil {
 			err := wres.Err()
-			// If there is an error on server (e.g. compaction), the channel will return it before closed.
+			// 服务端出错时（例如压缩），通道会在关闭前先返回该错误。
 			logWatchChannelErr(err)
-			// sendError doesn't guarantee that no more items will be put into resultChan.
-			// However, by returning from startWatching here, we guarantee, that events
-			// with higher resourceVersion than the error will not be queue and thus also
-			// processed and send to the user.
-			// TODO(wojtek-t): Figure out if we can synchronously prevent more events.
+			// sendError 无法保证不再向 resultChan 放入条目。但在这里从
+			// startWatching 返回，可以保证不会入队比该错误 resourceVersion 更高的事件，
+			// 因此也不会再处理并发送给用户。
+			// TODO(wojtek-t): 弄清楚是否可以先同步阻止更多事件。
 			wc.sendError(err)
 			return
 		}
@@ -553,25 +541,24 @@ func (wc *watchChan) startWatching(watchClosedCh chan struct{}, initialEventsEnd
 			parsedEvent, err := parseEvent(e)
 			if err != nil {
 				logWatchChannelErr(err)
-				// sendError doesn't guarantee that no more items will be put into resultChan.
-				// However, by returning from startWatching here, we guarantee, that events
-				// with higher resourceVersion than the error will not be queue and thus also
-				// processed and send to the user.
-				// TODO(wojtek-t): Figure out if we can synchronously prevent more events.
+				// sendError 无法保证不再向 resultChan 放入条目。但在这里从
+				// startWatching 返回，可以保证不会入队比该错误 resourceVersion 更高的事件，
+				// 因此也不会再处理并发送给用户。
+				// TODO(wojtek-t): 弄清楚是否可以先同步阻止更多事件。
 				wc.sendError(err)
 				return
 			}
 			wc.queueEvent(parsedEvent)
 		}
 	}
-	// When we come to this point, it's only possible that client side ends the watch.
-	// e.g. cancel the context, close the client.
-	// If this watch chan is broken and context isn't cancelled, other goroutines will still hang.
-	// We should notify the main thread that this goroutine has exited.
+	// 走到这里时，只可能是客户端一侧结束了 watch，
+	// 例如取消 context、关闭 client。
+	// 如果这个 watch chan 断了而 context 没被取消，其他 goroutine 会一直挂住。
+	// 我们应当通知主线程这个 goroutine 已退出。
 	close(watchClosedCh)
 }
 
-// processEvents processes events from etcd watcher and sends results to resultChan.
+// processEvents 从 etcd watcher 处理事件并把结果发送到 resultChan。
 //
 // 并发解码可提升吞吐，但必须保序；关闭特性时退化为单 goroutine 串行处理。
 func (wc *watchChan) processEvents(wg *sync.WaitGroup) {
@@ -642,7 +629,7 @@ type concurrentOrderedEventProcessing struct {
 	wc *watchChan
 
 	processingQueue chan chan *processingResult
-	// Metadata for logging
+	// 用于日志的元数据
 	objectType    string
 	groupResource schema.GroupResource
 }
@@ -717,7 +704,7 @@ func (wc *watchChan) acceptAll() bool {
 	return wc.internalPred.Empty()
 }
 
-// transform transforms an event into a result for user if not filtered.
+// transform 在未命中过滤条件时把事件转换为用户侧结果。
 //
 // 关键语义：过滤条件变化会导致同一对象"进入/离开"结果集，因此修改事件
 // 需要比较新旧对象是否通过过滤，再映射为 Added/Modified/Deleted。
@@ -794,11 +781,10 @@ func (wc *watchChan) transform(e *event) (res *watch.Event, err error) {
 	return res, nil
 }
 
-// timedWatchEvent wraps a decoded watch object with the timestamp at which the
-// storage layer decoded it, so the watch cache can measure end-to-end dispatch
-// latency. It exists only on the watch cache's ingest path (opened with
-// ListOptions.RecordTimestamps) and MUST be unwrapped by the watch cache before
-// the object is stored or serialized.
+// timedWatchEvent 将解码后的 watch 对象与 storage 层完成解码的时间戳包装在一起，
+// 使 watch cache 能够测量端到端的分发延迟。它只存在于 watch cache 的摄入路径上
+// （以 ListOptions.RecordTimestamps 打开），并且在对象被存储或序列化之前，
+// 必须由 watch cache 解开这层包装。
 //
 // 只用于测量延迟，不能泄漏到对外事件中：一旦被序列化就会暴露内部包装类型。
 type timedWatchEvent struct {
@@ -843,14 +829,13 @@ func transformErrorToEvent(err error) *watch.Event {
 	}
 }
 
-// sendError synchronously puts an error event into resultChan and
-// trigger cancelling all goroutines.
+// sendError 同步把一个错误事件放入 resultChan，并触发取消所有 goroutine。
 //
 // 错误事件必须尽力送达（阻塞直到写入或被用户放弃），否则客户端只看到
 // 通道关闭而不知道失败原因。
 func (wc *watchChan) sendError(err error) {
-	// We use wc.ctx to reap all goroutines. Under whatever condition, we should stop them all.
-	// It's fine to double cancel.
+	// 我们使用 wc.ctx 来回收所有 goroutine。无论在哪种情况下，都应当把它们全部停止。
+	// 重复 cancel 也没关系。
 	defer wc.cancel()
 
 	if isCancelError(err) {
@@ -858,24 +843,24 @@ func (wc *watchChan) sendError(err error) {
 	}
 	errResult := transformErrorToEvent(err)
 	if errResult != nil {
-		// error result is guaranteed to be received by user before closing ResultChan.
+		// 保证用户在 ResultChan 关闭之前能收到这个错误结果。
 		select {
 		case wc.resultChan <- *errResult:
-		case <-wc.ctx.Done(): // user has given up all results
+		case <-wc.ctx.Done(): // 用户已经放弃接收所有结果
 		}
 	}
 }
 
-// sendEvent synchronously puts an event into resultChan.
-// Returns true if it was successful.
+// sendEvent 同步把一个事件放入 resultChan。
+// 成功写入时返回 true。
 //
 // 反压设计：消费者慢时这里会阻塞，从而阻塞整条处理链，而不是无限缓存事件。
 func (wc *watchChan) sendEvent(event *watch.Event) bool {
 	defer func(start time.Time) { wc.resultLogger.recordWait(time.Since(start)) }(time.Now())
 
-	// If user couldn't receive results fast enough, we also block incoming events from watcher.
-	// Because storing events in local will cause more memory usage.
-	// The worst case would be closing the fast watcher.
+	// 如果用户接收结果不够快，我们也会阻塞 watcher 发来的事件。
+	// 因为在本地缓存事件会造成更多内存占用。
+	// 最坏的情况就是关闭这个快速的 watcher。
 	select {
 	case wc.resultChan <- *event:
 		return true
@@ -899,7 +884,7 @@ func (wc *watchChan) queueEvent(e *event) {
 // 解码它纯属浪费。删除事件的对象使用删除时的 etcd revision。
 func (wc *watchChan) prepareObjs(e *event) (curObj runtime.Object, oldObj runtime.Object, err error) {
 	if e.isProgressNotify {
-		// progressNotify events doesn't contain neither current nor previous object version,
+		// progressNotify 事件既不包含当前对象版本也不包含先前对象版本，
 		return nil, nil, nil
 	}
 
@@ -913,18 +898,15 @@ func (wc *watchChan) prepareObjs(e *event) (curObj runtime.Object, oldObj runtim
 			return nil, nil, err
 		}
 	}
-	// We need to decode prevValue, only if this is deletion event or
-	// the underlying filter doesn't accept all objects (otherwise we
-	// know that the filter for previous object will return true and
-	// we need the object only to compute whether it was filtered out
-	// before).
+	// 只有在删除事件、或底层 filter 并非接受所有对象时才需要解码 prevValue
+	// （否则我们知道对先前对象的 filter 必然返回 true，而这个对象只用于计算
+	// 它此前是否被过滤掉）。
 	if len(e.prevValue) > 0 && (e.isDeleted || !wc.acceptAll()) {
 		data, _, err := wc.watcher.transformer.TransformFromStorage(wc.ctx, e.prevValue, authenticatedDataString(e.key))
 		if err != nil {
 			return nil, nil, wc.watcher.transformIfCorruptObjectError(e, err)
 		}
-		// Note that this sends the *old* object with the etcd revision for the time at
-		// which it gets deleted.
+		// 注意：这里发送的是*旧*对象，附带它被删除时刻的 etcd revision。
 		oldObj, err = decodeObj(wc.watcher.codec, wc.watcher.versioner, data, e.rev)
 		if err != nil {
 			return nil, nil, wc.watcher.transformIfCorruptObjectError(e, err)
@@ -955,10 +937,9 @@ func (w *watcher) transformIfCorruptObjectError(e *event, err error) error {
 		return err
 	}
 
-	// if we are here it means we received a DELETED event but the object
-	// associated with it is corrupt because we failed to transform or
-	// decode the data associated with the object.
-	// wrap the original error so we can send a proper watch Error event.
+	// 走到这里说明我们收到了一个 DELETED 事件，但其关联对象数据已损坏，
+	// 因为我们无法对该对象的数据执行 transform 或解码。
+	// 包装原始错误，以便发送一个合适的 watch Error 事件。
 	return &corruptObjectDeletedError{err: corruptObjErr}
 }
 
@@ -969,14 +950,13 @@ func decodeObj(codec runtime.Codec, versioner storage.Versioner, data []byte, re
 	obj, err := runtime.Decode(codec, []byte(data))
 	if err != nil {
 		if fatalOnDecodeError.Load() {
-			// we are running in a test environment and thus an
-			// error here is due to a coder mistake if the defer
-			// does not catch it
+			// 我们运行在测试环境中，如果 defer 没有捕获到这里，
+			// 说明这里的错误是编解码器的失误
 			panic(err)
 		}
 		return nil, err
 	}
-	// ensure resource version is set on the object we load from etcd
+	// 确保从 etcd 读出的对象设置了 resource version
 	if err := versioner.UpdateObject(obj, uint64(rev)); err != nil {
 		return nil, fmt.Errorf("failure to version api object (%d) %#v: %v", rev, obj, err)
 	}

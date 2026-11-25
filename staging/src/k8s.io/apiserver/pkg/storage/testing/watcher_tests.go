@@ -54,10 +54,10 @@ func RunTestWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	testWatch(ctx, t, store, true)
 }
 
-// It tests that
-// - first occurrence of objects should notify Add event
-// - update should trigger Modified event
-// - update that gets filtered should trigger Deleted event
+// 它验证以下行为：
+// - 对象首次出现时应当通知 Added 事件
+// - 更新应当触发 Modified 事件
+// - 被过滤条件筛掉的更新应当触发 Deleted 事件
 func testWatch(ctx context.Context, t *testing.T, store storage.Interface, recursive bool) {
 	basePod := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo"},
@@ -141,7 +141,7 @@ func testWatch(ctx context.Context, t *testing.T, store storage.Interface, recur
 				watchKey = key
 			}
 
-			// Get the current RV from which we can start watching.
+			// 获取当前 RV，从这里开始 watch。
 			out := &example.PodList{}
 			if err := store.GetList(ctx, watchKey, storage.ListOptions{ResourceVersion: "", Predicate: tt.pred, Recursive: recursive}, out); err != nil {
 				t.Fatalf("List failed: %v", err)
@@ -152,8 +152,8 @@ func testWatch(ctx context.Context, t *testing.T, store storage.Interface, recur
 				t.Fatalf("Watch failed: %v", err)
 			}
 
-			// Create a pod in a different namespace first to ensure
-			// that its corresponding event will not be propagated.
+			// 先在不同命名空间创建一个 pod，
+			// 确保其对应事件不会被传播过来。
 			badKey := fmt.Sprintf("/pods/%s-bad/foo", tt.namespace)
 			badOut := &example.Pod{}
 			err = store.GuaranteedUpdate(ctx, badKey, badOut, true, nil, storage.SimpleUpdate(
@@ -201,11 +201,10 @@ func testWatch(ctx context.Context, t *testing.T, store storage.Interface, recur
 	}
 }
 
-// RunTestWatchFromZero tests that
-//   - watch from 0 should sync up and grab the object added before
-//   - For testing with etcd, watch from 0 is able to return events for objects
-//     whose previous version has been compacted. If testing with cacher, we
-//     expect compaction to be nil.
+// RunTestWatchFromZero 验证以下行为：
+//   - 从 0 开始 watch 应当完成同步，并拿到此前添加的对象
+//   - 用 etcd 测试时，从 0 开始 watch 能够返回那些前一版本已被压缩的对象的事件。
+//     用 cacher 测试时，期望 compaction 为 nil。
 //
 // 该测试同时覆盖“从当前状态重建 watch”与压缩后 410 Gone 的行为。
 func RunTestWatchFromZero(ctx context.Context, t *testing.T, store storage.Interface, compaction Compaction) {
@@ -217,7 +216,7 @@ func RunTestWatchFromZero(ctx context.Context, t *testing.T, store storage.Inter
 	}
 	testCheckResult(t, w, watch.Event{Type: watch.Added, Object: storedObj})
 
-	// Update
+	// 更新
 	out := &example.Pod{}
 	err = store.GuaranteedUpdate(ctx, key, out, true, nil, storage.SimpleUpdate(
 		func(runtime.Object) (runtime.Object, error) {
@@ -227,15 +226,13 @@ func RunTestWatchFromZero(ctx context.Context, t *testing.T, store storage.Inter
 		t.Fatalf("GuaranteedUpdate failed: %v", err)
 	}
 
-	// Check that we receive a modified watch event. This check also
-	// indirectly ensures that the cache is synced. This is important
-	// when testing with the Cacher since we may have to allow for slow
-	// processing by allowing updates to propagate to the watch cache.
-	// This allows for that.
+	// 检查我们收到了 Modified watch 事件。该检查同时间接保证了缓存已同步。
+	// 这在用 Cacher 测试时很重要：更新传播到 watch cache 可能存在缓慢处理的情况，
+	// 这里为此留出了余地。
 	testCheckResult(t, w, watch.Event{Type: watch.Modified, Object: out})
 	w.Stop()
 
-	// Make sure when we watch from 0 we receive an ADDED event
+	// 确保从 0 开始 watch 时收到一个 ADDED 事件
 	w, err = store.Watch(ctx, key, storage.ListOptions{ResourceVersion: "0", Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("Watch failed: %v", err)
@@ -244,12 +241,12 @@ func RunTestWatchFromZero(ctx context.Context, t *testing.T, store storage.Inter
 	testCheckResult(t, w, watch.Event{Type: watch.Added, Object: out})
 	w.Stop()
 
-	// Compact previous versions
+	// 压缩之前的版本
 	if compaction == nil {
 		t.Skip("compaction callback not provided")
 	}
 
-	// Update again
+	// 再次更新
 	newOut := &example.Pod{}
 	err = store.GuaranteedUpdate(ctx, key, newOut, true, nil, storage.SimpleUpdate(
 		func(runtime.Object) (runtime.Object, error) {
@@ -259,10 +256,10 @@ func RunTestWatchFromZero(ctx context.Context, t *testing.T, store storage.Inter
 		t.Fatalf("GuaranteedUpdate failed: %v", err)
 	}
 
-	// Compact previous versions
+	// 压缩之前的版本
 	compaction(ctx, t, newOut.ResourceVersion)
 
-	// Make sure we can still watch from 0 and receive an ADDED event
+	// 确保从 0 开始 watch 时仍能收到一个 ADDED 事件
 	w, err = store.Watch(ctx, key, storage.ListOptions{ResourceVersion: "0", Predicate: storage.Everything})
 	defer w.Stop()
 	if err != nil {
@@ -270,16 +267,16 @@ func RunTestWatchFromZero(ctx context.Context, t *testing.T, store storage.Inter
 	}
 	testCheckResult(t, w, watch.Event{Type: watch.Added, Object: newOut})
 
-	// Make sure we can't watch from older resource versions anymoer and get a "Gone" error.
+	// 确保从更早的 resource version 开始 watch 已不可能，并得到 "Gone" 错误。
 	tooOldWatcher, err := store.Watch(ctx, key, storage.ListOptions{ResourceVersion: out.ResourceVersion, Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("Watch failed: %v", err)
 	}
 	defer tooOldWatcher.Stop()
 	expiredError := errors.NewResourceExpired("").ErrStatus
-	// TODO(wojtek-t): It seems that etcd is currently returning a different error,
-	// being an Internal error of "etcd event received with PrevKv=nil".
-	// We temporary allow both but we should unify here.
+	// TODO(wojtek-t): etcd 目前似乎会返回另一种错误，
+	// 即 Internal error "etcd event received with PrevKv=nil"。
+	// 我们临时同时允许两者，但此处应当统一。
 	internalError := metav1.Status{
 		Status: metav1.StatusFailure,
 		Code:   http.StatusInternalServerError,
@@ -335,11 +332,10 @@ func RunTestDelayedWatchDelivery(ctx context.Context, t *testing.T, store storag
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// Depending on the implementation, different number of events that
-	// should be delivered to the watcher can be created before it will
-	// block the implementation and as a result force the watcher to be
-	// closed (as otherwise events would have to be dropped).
-	// For now, this number is smallest for Cacher and it equals 21 for it.
+	// 取决于具体实现，在阻塞实现（进而迫使 watcher 被关闭，
+	// 否则事件就不得不被丢弃）之前，能够产生的、
+	// 本应投递给该 watcher 的事件数量各不相同。
+	// 就目前而言，Cacher 的该数值最小，为 21。
 	totalPods := 21
 	for i := 0; i < totalPods; i++ {
 		out := &example.Pod{}
@@ -369,17 +365,17 @@ func RunTestDelayedWatchDelivery(ctx context.Context, t *testing.T, store storag
 			t.Errorf("Unexpected object watched: %s, expected %s", a, e)
 		}
 		watched++
-		// Before stopping watcher wait for an event to arrive and give them some time to fill the queue.
+		// 在停止 watcher 之前，先等一个事件到达，并给它们一点时间填满队列。
 		if watched == 1 {
 			time.Sleep(time.Second)
-			// Stop the watcher to check if the consecutive events will be delivered.
+			// 停止 watcher，检查后续事件是否仍会投递。
 			watcher.Stop()
 		}
 	}
-	// We expect at least N events to be delivered, depending on the implementation.
-	// For now, this number is smallest for Cacher and it equals 10 (size of the out buffer).
+	// 取决于实现，我们期望至少投递 N 个事件。
+	// 就目前而言，该数值对 Cacher 最小，等于 10（out 缓冲区的大小）。
 	outBufferSize := 10
-	expectWatched := outBufferSize + 1 // initial event
+	expectWatched := outBufferSize + 1 // 初始事件
 	if watched < expectWatched {
 		t.Errorf("Unexpected number of events: %v, expected at least: %v", watched, expectWatched)
 	}
@@ -391,7 +387,7 @@ func RunTestWatchError(ctx context.Context, t *testing.T, store InterfaceWithPre
 	obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key := computePodKey(obj)
 
-	// Compute the initial resource version from which we can start watching later.
+	// 计算出初始 resource version，后续从它开始 watch。
 	list := &example.PodList{}
 	storageOpts := storage.ListOptions{
 		ResourceVersion: "0",
@@ -409,7 +405,7 @@ func RunTestWatchError(ctx context.Context, t *testing.T, store InterfaceWithPre
 		t.Fatalf("GuaranteedUpdate failed: %v", err)
 	}
 
-	// Now trigger watch error by injecting failing transformer.
+	// 现在注入一个失败的 transformer 来触发 watch 错误。
 	revertTransformer := store.UpdatePrefixTransformer(
 		func(previousTransformer *PrefixTransformer) value.Transformer {
 			return &failingTransformer{}
@@ -439,7 +435,7 @@ func RunTestWatchWithUnsafeDelete(ctx context.Context, t *testing.T, store Inter
 		t.Fatalf("failed to create object in the store: %v", err)
 	}
 
-	// Compute the initial resource version from which we can start watching later.
+	// 计算出初始 resource version，后续从它开始 watch。
 	list := &example.PodList{}
 	storageOpts := storage.ListOptions{
 		ResourceVersion: "0",
@@ -450,7 +446,7 @@ func RunTestWatchWithUnsafeDelete(ctx context.Context, t *testing.T, store Inter
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// Now trigger watch error by making the object fail to transform.
+	// 现在通过让对象 transform 失败来触发 watch 错误。
 	revertTransformer := store.UpdateTransformer(newErrInjectingModifier(func(string) error {
 		return corruptErr
 	}))
@@ -461,7 +457,7 @@ func RunTestWatchWithUnsafeDelete(ctx context.Context, t *testing.T, store Inter
 		t.Fatalf("Watch failed: %v", err)
 	}
 
-	// normal deletetion should fail
+	// 普通删除应当失败
 	if err := store.Delete(ctx, key, &example.Pod{}, nil, storage.ValidateAllObjectFunc, nil, storage.DeleteOptions{}); err == nil {
 		t.Fatalf("Expected normal Delete to fail")
 	}
@@ -491,8 +487,8 @@ func RunTestWatchWithUnsafeDelete(ctx context.Context, t *testing.T, store Inter
 func RunTestWatchContextCancel(ctx context.Context, t *testing.T, store storage.Interface) {
 	canceledCtx, cancel := context.WithCancel(ctx)
 	cancel()
-	// When we watch with a canceled context, we should detect that it's context canceled.
-	// We won't take it as error and also close the watcher.
+	// 当我们用已取消的 context 去 watch 时，应当检测到 context canceled。
+	// 我们不把它当作错误，同时会关闭 watcher。
 	w, err := store.Watch(canceledCtx, "/pods/not-existing", storage.ListOptions{
 		ResourceVersion: "0",
 		Predicate:       storage.Everything,
@@ -513,7 +509,7 @@ func RunTestWatchContextCancel(ctx context.Context, t *testing.T, store storage.
 
 // RunTestWatcherTimeout 验证不读取结果的 watcher 不会无限阻塞其他 watcher 或写入。
 func RunTestWatcherTimeout(ctx context.Context, t *testing.T, store storage.Interface) {
-	// initialRV is used to initate the watcher at the beginning of the world.
+	// initialRV 用于在世界之初（从头）初始化 watcher。
 	podList := example.PodList{}
 	options := storage.ListOptions{
 		Predicate: storage.Everything,
@@ -530,7 +526,7 @@ func RunTestWatcherTimeout(ctx context.Context, t *testing.T, store storage.Inte
 		Recursive:       true,
 	}
 
-	// Create a number of watchers that will not be reading any result.
+	// 创建一批从不读取结果的 watcher。
 	nonReadingWatchers := 50
 	for i := 0; i < nonReadingWatchers; i++ {
 		watcher, err := store.Watch(ctx, "/pods/test-ns", options)
@@ -540,21 +536,19 @@ func RunTestWatcherTimeout(ctx context.Context, t *testing.T, store storage.Inte
 		defer watcher.Stop()
 	}
 
-	// Create a second watcher that will be reading result.
+	// 再创建一个会读取结果的 watcher。
 	readingWatcher, err := store.Watch(ctx, "/pods/test-ns", options)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	defer readingWatcher.Stop()
 
-	// Depending on the implementation, different number of events that
-	// should be delivered to the watcher can be created before it will
-	// block the implementation and as a result force the watcher to be
-	// closed (as otherwise events would have to be dropped).
-	// For now, this number is smallest for Cacher and it equals 21 for it.
+	// 取决于具体实现，在阻塞实现（进而迫使 watcher 被关闭，
+	// 否则事件就不得不被丢弃）之前，能够产生的、
+	// 本应投递给该 watcher 的事件数量各不相同。
+	// 就目前而言，Cacher 的该数值最小，为 21。
 	//
-	// Create more events to ensure that we're not blocking other watchers
-	// forever.
+	// 制造更多事件，以确保我们不会永远阻塞其他 watcher。
 	startTime := time.Now()
 	for i := 0; i < 22; i++ {
 		out := &example.Pod{}
@@ -586,7 +580,7 @@ func RunTestWatchDeleteEventObjectHaveLatestRV(ctx context.Context, t *testing.T
 		t.Fatalf("Delete failed: %v", err)
 	}
 
-	// Verify that ResourceVersion has changed on deletion.
+	// 验证删除时 ResourceVersion 发生了变化。
 	if storedObj.ResourceVersion == deletedObj.ResourceVersion {
 		t.Fatalf("ResourceVersion didn't changed on deletion: %s", deletedObj.ResourceVersion)
 	}
@@ -611,10 +605,9 @@ func RunTestWatchInitializationSignal(ctx context.Context, t *testing.T, store s
 	initSignal.Wait()
 }
 
-// RunOptionalTestProgressNotify tests ProgressNotify feature of ListOptions.
-// Given this feature is currently not explicitly used by higher layers of Kubernetes
-// (it rather is used by wrappers of storage.Interface to implement its functionalities)
-// this test is currently considered optional.
+// RunOptionalTestProgressNotify 测试 ListOptions 的 ProgressNotify 特性。
+// 鉴于该特性目前并未被 Kubernetes 上层显式使用（更多是由 storage.Interface
+// 的包装层用它来实现自身功能），该测试目前被视为可选项。
 func RunOptionalTestProgressNotify(ctx context.Context, t *testing.T, store storage.Interface, increaseRV IncreaseRVFunc) {
 	input := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "name", Namespace: "test-ns"}}
 	key := computePodKey(input)
@@ -623,14 +616,13 @@ func RunOptionalTestProgressNotify(ctx context.Context, t *testing.T, store stor
 		t.Fatalf("Create failed: %v", err)
 	}
 	validateResourceVersion := resourceVersionNotOlderThan(out.ResourceVersion)
-	// Since etcd v3.6.2 we need to increase RV due to https://github.com/etcd-io/etcd/pull/20241.
-	// We must advance the resource version to ensure that etcd revision progresses past the watch we establish.
-	// As etcd does not send progress notifications for watches on future revisions.
+	// 自 etcd v3.6.2 起，由于 https://github.com/etcd-io/etcd/pull/20241，我们需要递增 RV。
+	// 必须推进 resource version，确保 etcd revision 越过我们建立的 watch 所在位置，
+	// 因为 etcd 不会为指向未来 revision 的 watch 发送进度通知。
 	//
-	// A Kubernetes watch is exclusive (first event received is after a given RV), which translates
-	// to an inclusive etcd watch at revision+1. Without this increment, if no other writes
-	// have occurred, the watch would be on a future revision, preventing progress
-	// notifications.
+	// Kubernetes 的 watch 是排他的（收到的首个事件在给定 RV 之后），这对应于
+	// etcd 上 revision+1 处的包含式 watch。若不做这个递增，在没有其他写入时，
+	// watch 将指向未来的 revision，导致进度通知无法送达。
 	increaseRV(ctx, t)
 
 	opts := storage.ListOptions{
@@ -643,11 +635,11 @@ func RunOptionalTestProgressNotify(ctx context.Context, t *testing.T, store stor
 		t.Fatalf("Watch failed: %v", err)
 	}
 
-	// when we send a bookmark event, the client expects the event to contain an
-	// object of the correct type, but with no fields set other than the resourceVersion
+	// 当我们发送 bookmark 事件时，客户端期望事件携带正确类型的对象，
+	// 但除 resourceVersion 外不设置任何字段
 	testCheckResultFunc(t, w, func(actualEvent watch.Event) {
 		expectNoDiff(t, "incorrect event type", watch.Bookmark, actualEvent.Type)
-		// first, check that we have the correct resource version
+		// 首先，检查 resource version 是否正确
 		obj, ok := actualEvent.Object.(metav1.Object)
 		if !ok {
 			t.Fatalf("got %T, not metav1.Object", actualEvent.Object)
@@ -656,7 +648,7 @@ func RunOptionalTestProgressNotify(ctx context.Context, t *testing.T, store stor
 			t.Fatal(err)
 		}
 
-		// then, check that we have the right type and content
+		// 然后，检查类型与内容是否正确
 		pod, ok := actualEvent.Object.(*example.Pod)
 		if !ok {
 			t.Fatalf("got %T, not *example.Pod", actualEvent.Object)
@@ -671,10 +663,10 @@ func RunOptionalTestProgressNotify(ctx context.Context, t *testing.T, store stor
 func RunTestClusterScopedWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	tests := []struct {
 		name string
-		// For watch request, the name of object is specified with field selector
-		// "metadata.name=objectName". So in this watch tests, we should set the
-		// requestedName and field selector "metadata.name=requestedName" at the
-		// same time or set neighter of them.
+		// 对 watch 请求而言，对象名称通过 field selector
+		// "metadata.name=objectName" 指定。因此在本 watch 测试中，
+		// 应当同时设置 requestedName 和 field selector
+		// "metadata.name=requestedName"，或者两者都不设置。
 		requestedName string
 		recursive     bool
 		fieldSelector fields.Selector
@@ -826,10 +818,10 @@ func RunTestClusterScopedWatch(ctx context.Context, t *testing.T, store storage.
 func RunTestNamespaceScopedWatch(ctx context.Context, t *testing.T, store storage.Interface) {
 	tests := []struct {
 		name string
-		// For watch request, the name of object is specified with field selector
-		// "metadata.name=objectName". So in this watch tests, we should set the
-		// requestedName and field selector "metadata.name=requestedName" at the
-		// same time or set neighter of them.
+		// 对 watch 请求而言，对象名称通过 field selector
+		// "metadata.name=objectName" 指定。因此在本 watch 测试中，
+		// 应当同时设置 requestedName 和 field selector
+		// "metadata.name=requestedName"，或者两者都不设置。
 		requestedName      string
 		requestedNamespace string
 		recursive          bool
@@ -1137,12 +1129,12 @@ func RunTestNamespaceScopedWatch(ctx context.Context, t *testing.T, store storag
 	}
 }
 
-// RunOptionalTestWatchDispatchBookmarkEvents tests whether bookmark events are sent.
-// This feature is currently implemented in watch cache layer, so this is optional.
+// RunOptionalTestWatchDispatchBookmarkEvents 测试是否发送 bookmark 事件。
+// 该特性目前实现在 watch cache 层，因此本测试是可选的。
 //
-// TODO(#109831): ProgressNotify feature is effectively implementing the same
+// TODO(#109831): ProgressNotify 特性实际上实现了相同的功能，
 //
-//	functionality, so we should refactor this functionality to share the same input.
+//	因此我们应当重构该功能，让两者共用同一输入。
 //
 // RunTestWatchDispatchBookmarkEvents 验证 ListOptions.SendInitialEvents 下
 // 是否按实现能力分发 Bookmark 事件（expectedWatchBookmarks 由实现声明）。
@@ -1156,7 +1148,7 @@ func RunTestWatchDispatchBookmarkEvents(ctx context.Context, t *testing.T, store
 		expected            bool
 		allowWatchBookmarks bool
 	}{
-		{ // test old client won't get Bookmark event
+		{ // 测试旧客户端不会收到 Bookmark 事件
 			name:                "allowWatchBookmarks=false",
 			timeout:             3 * time.Second,
 			expected:            false,
@@ -1183,7 +1175,7 @@ func RunTestWatchDispatchBookmarkEvents(ctx context.Context, t *testing.T, store
 			}
 			defer watcher.Stop()
 
-			// Create events of pods in a different namespace
+			// 在不同命名空间创建 pod 事件
 			out := &example.Pod{}
 			obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: fmt.Sprintf("other-ns-%d", i)}}
 			objKey := computePodKey(obj)
@@ -1192,7 +1184,7 @@ func RunTestWatchDispatchBookmarkEvents(ctx context.Context, t *testing.T, store
 				t.Fatalf("Create failed: %v", err)
 			}
 
-			// Now wait for Bookmark event
+			// 现在等待 Bookmark 事件
 			select {
 			case event, ok := <-watcher.ResultChan():
 				if !ok && tt.expected {
@@ -1210,18 +1202,18 @@ func RunTestWatchDispatchBookmarkEvents(ctx context.Context, t *testing.T, store
 	}
 }
 
-// RunOptionalTestWatchBookmarksWithCorrectResourceVersion tests whether bookmark events are
-// sent with correct resource versions.
-// This feature is currently implemented in watch cache layer, so this is optional.
+// RunOptionalTestWatchBookmarksWithCorrectResourceVersion 测试 bookmark 事件是否
+// 携带正确的 resource version 发送。
+// 该特性目前实现在 watch cache 层，因此本测试是可选的。
 //
-// TODO(#109831): ProgressNotify feature is effectively implementing the same
+// TODO(#109831): ProgressNotify 特性实际上实现了相同的功能，
 //
-//	functionality, so we should refactor this functionality to share the same input.
+//	因此我们应当重构该功能，让两者共用同一输入。
 //
 // RunTestOptionalWatchBookmarksWithCorrectResourceVersion 验证 bookmark 事件的 RV
 // 不小于此前已分发事件，保证客户端用其续 watch 时不会回退。
 func RunTestOptionalWatchBookmarksWithCorrectResourceVersion(ctx context.Context, t *testing.T, store storage.Interface) {
-	// Compute the initial resource version.
+	// 计算初始 resource version。
 	list := &example.PodList{}
 	storageOpts := storage.ListOptions{
 		Predicate: storage.Everything,
@@ -1249,9 +1241,9 @@ func RunTestOptionalWatchBookmarksWithCorrectResourceVersion(ctx context.Context
 	errc := make(chan error, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
-	// We must wait for the waitgroup to exit before we terminate the cache or the server in prior defers.
+	// 必须先等待 waitgroup 退出，之后才能在先前注册的 defer 中终止 cache 或 server。
 	defer wg.Wait()
-	// Call close first, so the goroutine knows to exit.
+	// 先调用 close，让 goroutine 知道应当退出。
 	defer close(done)
 
 	go func() {
@@ -1287,7 +1279,7 @@ func RunTestOptionalWatchBookmarksWithCorrectResourceVersion(ctx context.Context
 			t.Fatal(err)
 		case event, ok := <-watcher.ResultChan():
 			if !ok {
-				// Make sure we have received a bookmark event
+				// 确保我们已经收到过一个 bookmark 事件
 				if !bookmarkReceived {
 					t.Fatalf("Unpexected error, we did not received a bookmark event")
 				}
@@ -1299,12 +1291,12 @@ func RunTestOptionalWatchBookmarksWithCorrectResourceVersion(ctx context.Context
 			}
 			if event.Type == watch.Bookmark {
 				bookmarkReceived = true
-				// bookmark event has a RV greater than or equal to the before one
+				// bookmark 事件的 RV 必须大于或等于此前观察到的 RV
 				if rv < lastObservedResourceVersion {
 					t.Fatalf("Unexpected bookmark resourceVersion %v less than observed %v)", rv, lastObservedResourceVersion)
 				}
 			} else {
-				// non-bookmark event has a RV greater than anything before
+				// 非 bookmark 事件的 RV 必须大于此前所有的 RV
 				if rv <= lastObservedResourceVersion {
 					t.Fatalf("Unexpected event resourceVersion %v less than or equal to bookmark %v)", rv, lastObservedResourceVersion)
 				}
@@ -1327,7 +1319,7 @@ func RunSendInitialEventsBackwardCompatibility(ctx context.Context, t *testing.T
 	w.Stop()
 }
 
-// RunWatchSemantics test the following cases:
+// RunWatchSemantics 测试以下组合：
 //
 // +-----------------+---------------------+-------------------+
 // | ResourceVersion | AllowWatchBookmarks | SendInitialEvents |
@@ -1368,8 +1360,8 @@ func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interfac
 		allowWatchBookmarks bool
 		sendInitialEvents   *bool
 		resourceVersion     string
-		// useCurrentRV if set gets the current RV from the storage
-		// after adding the initial pods which is then used to establish a new watch request
+		// useCurrentRV 若被设置，则在添加初始 pod 之后从存储获取当前 RV，
+		// 并用它来建立新的 watch 请求
 		useCurrentRV bool
 
 		initialPods                []*example.Pod
@@ -1548,7 +1540,7 @@ func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interfac
 	for idx, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			t.Parallel()
-			// set up env
+			// 准备环境
 			if scenario.expectedInitialEvents == nil {
 				scenario.expectedInitialEvents = func(_ []*example.Pod) []watch.Event { return nil }
 			}
@@ -1567,8 +1559,8 @@ func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interfac
 			}
 
 			if len(createdPods) > 0 {
-				// this list call ensures that the cache has seen the created pods.
-				// this makes the watch request below deterministic.
+				// 这次 list 调用确保缓存已经看到所创建的 pod，
+				// 使下面的 watch 请求成为确定性行为。
 				listObject := &example.PodList{}
 				opts := storage.ListOptions{
 					Predicate:            storage.Everything,
@@ -1598,10 +1590,10 @@ func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interfac
 			require.NoError(t, err, "failed to create watch: %v")
 			defer w.Stop()
 
-			// make sure we only get initial events
+			// 确保我们只收到初始事件
 			TestCheckResultsInStrictOrder(t, w, scenario.expectedInitialEvents(createdPods))
 
-			// make sure that the actual bookmark has at least RV >= to the expected one
+			// 确保实际 bookmark 的 RV 至少 >= 期望值
 			if scenario.expectedInitialEventsBookmarkWithMinimalRV != nil {
 				testCheckResultFunc(t, w, func(actualEvent watch.Event) {
 					expectedBookmarkEventWithMinRV := scenario.expectedInitialEventsBookmarkWithMinimalRV(createdPods)
@@ -1617,15 +1609,15 @@ func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interfac
 
 					require.GreaterOrEqual(t, actualRV, expectedRV)
 
-					// once we know that the RV is at least >= the expected one
-					// rewrite it so that we can compare the objs
+					// 确认 RV 至少 >= 期望值之后，
+					// 改写它以便比较对象内容
 					expectedObj.SetResourceVersion(actualObj.GetResourceVersion())
 					expectNoDiff(t, "incorrect event", expectedBookmarkEventWithMinRV, actualEvent)
 				})
 			}
 
 			createdPods = []*example.Pod{}
-			// add a pod that is greater than the storage's RV when the watch was started
+			// 添加一个 RV 高于 watch 启动时存储 RV 的 pod
 			for _, obj := range scenario.podsAfterEstablishingWatch {
 				obj.Namespace = ns
 				out := &example.Pod{}
@@ -1640,8 +1632,8 @@ func RunWatchSemantics(ctx context.Context, t *testing.T, store storage.Interfac
 	}
 }
 
-// RunWatchSemanticInitialEventsExtended checks if the bookmark event
-// marking the end of the list stream contains the global RV.
+// RunWatchSemanticInitialEventsExtended 检查标记 list 流结束的 bookmark 事件
+// 是否携带全局 RV。
 //
 // 注意该场景与 RunWatchSemantics 的区别：把 Pod 添加到另一个命名空间以推进全局 RV。
 // RunWatchSemanticInitialEventsExtended 是 RunWatchSemantics 的扩展场景，
@@ -1673,7 +1665,7 @@ func RunWatchSemanticInitialEventsExtended(ctx context.Context, t *testing.T, st
 		initialPods = append(initialPods, out)
 	}
 
-	// add the pod to a different ns to advance the global RV
+	// 把 pod 添加到另一个命名空间，以推进全局 RV
 	pod := makePod("1")
 	pod.Namespace = "other-ns-foo"
 	otherNsPod := &example.Pod{}
@@ -1688,8 +1680,8 @@ func RunWatchSemanticInitialEventsExtended(ctx context.Context, t *testing.T, st
 	require.NoError(t, err, "failed to create watch: %v")
 	defer w.Stop()
 
-	// make sure we only get initial events from the first ns
-	// followed by the bookmark with the global RV
+	// 确保只收到来自第一个命名空间的初始事件，
+	// 随后是携带全局 RV 的 bookmark
 	TestCheckResultsInStrictOrder(t, w, expectedInitialEventsInStrictOrder(initialPods, otherNsPod.ResourceVersion))
 	TestCheckNoMoreResultsWithIgnoreFunc(t, w, nil)
 }
@@ -1710,7 +1702,7 @@ func RunWatchListMatchSingle(ctx context.Context, t *testing.T, store storage.In
 	}
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
 
-	// add the pod for which the field selector will be constructed
+	// 添加将用于构造 field selector 的 pod
 	ns := "ns-foo"
 	expectedPod := &example.Pod{}
 	initialPod := makePod("1")
@@ -1718,7 +1710,7 @@ func RunWatchListMatchSingle(ctx context.Context, t *testing.T, store storage.In
 	err := store.Create(ctx, computePodKey(initialPod), initialPod, expectedPod, 0)
 	require.NoError(t, err, "failed to add a pod: %v")
 
-	// add more pods that won't match the field selector
+	// 再添加若干不匹配该 field selector 的 pod
 	lastAddedPod := &example.Pod{}
 	for _, otherPod := range []*example.Pod{makePod("2"), makePod("3"), makePod("4"), makePod("5")} {
 		otherPod.Namespace = ns
@@ -1744,8 +1736,8 @@ func RunWatchListMatchSingle(ctx context.Context, t *testing.T, store storage.In
 	require.NoError(t, err, "failed to create watch: %v")
 	defer w.Stop()
 
-	// make sure we only get a single pod matching the field selector
-	// followed by the bookmark with the global RV
+	// 确保只收到一个匹配该 field selector 的 pod，
+	// 随后是携带全局 RV 的 bookmark
 	TestCheckResultsInStrictOrder(t, w, expectedInitialEventsInStrictOrder(expectedPod, lastAddedPod.ResourceVersion))
 	TestCheckNoMoreResultsWithIgnoreFunc(t, w, nil)
 }
@@ -1766,7 +1758,7 @@ func RunWatchErrorIsBlockingFurtherEvents(ctx context.Context, t *testing.T, sto
 		t.Errorf("failed to create object: %v", err)
 	}
 
-	// Update transformer to ensure that foo will become effectively corrupted.
+	// 更新 transformer，确保 foo 实际上变成"已损坏"。
 	revertTransformer := store.UpdatePrefixTransformer(
 		func(transformer *PrefixTransformer) value.Transformer {
 			transformer.prefix = []byte("other-prefix")
@@ -1787,8 +1779,8 @@ func RunWatchErrorIsBlockingFurtherEvents(ctx context.Context, t *testing.T, sto
 		Recursive:       true,
 	}
 
-	// Run N concurrent watches. Given the asynchronous nature, we increase the
-	// probability of hitting the race in at least one of those watches.
+	// 并发运行 N 个 watch。鉴于异步特性，这样做能提高
+	// 至少一个 watch 命中该竞态的概率。
 	concurrentWatches := 10
 	wg := sync.WaitGroup{}
 	for i := 0; i < concurrentWatches; i++ {
@@ -1801,10 +1793,10 @@ func RunWatchErrorIsBlockingFurtherEvents(ctx context.Context, t *testing.T, sto
 				return
 			}
 
-			// We issue the watch starting from object bar.
-			// The object fails TransformFromStorage and generates ERROR watch event.
-			// The further events (i.e. ADDED event for baz object) should not be
-			// emitted, so we verify no events other than ERROR type are emitted.
+			// 我们从对象 bar 的位置发起 watch。
+			// 该对象在 TransformFromStorage 阶段失败并产生 ERROR watch 事件。
+			// 其后的事件（即 baz 对象的 ADDED 事件）不应当再被发出，
+			// 因此我们验证除 ERROR 类型外没有任何事件被发出。
 			for {
 				event, ok := <-w.ResultChan()
 				if !ok {
