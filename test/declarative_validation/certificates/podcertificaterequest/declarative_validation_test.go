@@ -43,7 +43,7 @@ func (f *fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes)
 	return authorizer.DecisionAllow, "default accept", nil
 }
 
-// Helper function to create a baseline valid PodCertificateRequest with optional tweaks
+// 辅助函数：创建一个基线合法的 PodCertificateRequest，可按需调整
 func mkPodCertificateRequest(tweaks ...func(*certificates.PodCertificateRequest)) certificates.PodCertificateRequest {
 	obj := func() certificates.PodCertificateRequest {
 		expiration := int32(3600)
@@ -147,7 +147,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 
 			strategy := registry.NewStatusStrategy(registry.NewStrategy(), &fakeAuthorizer{}, nil)
 
-			// Custom conditions for PCR to avoid "Unsupported value" from handwritten validation
+			// 为 PCR 使用自定义 conditions，避免手写校验报 "Unsupported value"
 			testCases := []meta.ConditionTestCase{
 				{
 					Name: "valid single condition",
@@ -163,7 +163,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 					},
 					ExpectedErrs: field.ErrorList{
 						field.Required(field.NewPath("status", "conditions").Index(0).Child("type"), "").MarkAlpha(),
-						// handwritten validation doesn't support empty type and uses .[0] notation
+						// 手写校验不支持空 type，并使用 .[0] 表示法
 						field.NotSupported(field.NewPath("status", "conditions").Child("[0]", "type"), "", []string{"Issued", "Denied", "Failed"}).MarkFromImperative(),
 					},
 				},
@@ -175,7 +175,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 					},
 					ExpectedErrs: field.ErrorList{
 						field.Duplicate(field.NewPath("status", "conditions").Index(1), map[string]interface{}{"type": certificates.PodCertificateRequestConditionTypeDenied, "status": "True", "reason": "Foo", "message": "Bar"}).MarkAlpha(),
-						// handwritten validation doesn't allow multiple known conditions and uses .[1] notation
+						// 手写校验不允许多个已知 condition，并使用 .[1] 表示法
 						field.Invalid(field.NewPath("status", "conditions").Child("[1]", "type"), certificates.PodCertificateRequestConditionTypeDenied, `There may be at most one condition with type "Issued", "Denied", or "Failed"`).MarkFromImperative(),
 					},
 				},
@@ -261,7 +261,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 					},
 					ExpectedErrs: field.ErrorList{
 						field.Required(field.NewPath("status", "conditions").Index(0).Child("status"), "").MarkAlpha(),
-						// handwritten validation requires "True"
+						// 手写校验要求 "True"
 						field.NotSupported(field.NewPath("status", "conditions").Child("[0]", "status"), "", []string{"True"}).MarkFromImperative(),
 					},
 				},
@@ -279,7 +279,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 							metav1.ConditionStatus("Invalid"),
 							[]string{"False", "True", "Unknown"},
 						).MarkAlpha(),
-						// handwritten validation requires "True"
+						// 手写校验要求 "True"
 						field.NotSupported(field.NewPath("status", "conditions").Child("[0]", "status"), "Invalid", []string{"True"}).MarkFromImperative(),
 					},
 				},
@@ -292,7 +292,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 						),
 					},
 					ExpectedErrs: field.ErrorList{
-						// handwritten validation requires "True"
+						// 手写校验要求 "True"
 						field.NotSupported(field.NewPath("status", "conditions").Child("[0]", "status"), "Unknown", []string{"True"}).MarkFromImperative(),
 					},
 				},
@@ -305,7 +305,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 						),
 					},
 					ExpectedErrs: field.ErrorList{
-						// handwritten validation requires "True"
+						// 手写校验要求 "True"
 						field.NotSupported(field.NewPath("status", "conditions").Child("[0]", "status"), "False", []string{"True"}).MarkFromImperative(),
 					},
 				},

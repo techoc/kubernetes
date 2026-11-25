@@ -77,10 +77,10 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 	t.Run("baseline", func(t *testing.T) {
 		oldObj := mkValidEvent()
 		newObj := mkValidEvent()
-		newObj.EventTime = oldObj.EventTime // Make sure eventTime is identical to avoid immutability check failure
+		newObj.EventTime = oldObj.EventTime // 确保 eventTime 相同，避免不可变性检查失败
 		oldObj.SetResourceVersion("1")
 		newObj.SetResourceVersion("2")
-		// v1/events has different validations than events.k8s.io/v1/events.
+		// v1/events 与 events.k8s.io/v1/events 的校验规则不同。
 		apitesting.VerifyUpdateValidationEquivalence(t, ctx, &newObj, &oldObj, registry.Strategy, nil)
 	})
 

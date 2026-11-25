@@ -33,7 +33,7 @@ import (
 	registry "k8s.io/kubernetes/pkg/registry/scheduling/podgroup"
 	"k8s.io/kubernetes/test/declarative_validation/meta"
 
-	// Ensure all API groups are registered with the scheme
+	// 确保所有 API group 都已注册到 scheme
 	_ "k8s.io/kubernetes/pkg/apis/scheduling/install"
 )
 
@@ -70,8 +70,8 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 		"valid with basic policy": {
 			input: mkValidPodGroup(setBasicPolicy()),
 		},
-		// Declarative validation treats 0 as "missing" and returns Required error
-		// instead of checking minimum constraint and returning Invalid error.
+		// 声明式校验将 0 视为“缺失”并返回 Required 错误，
+		// 而不是检查 minimum 约束并返回 Invalid 错误。
 		"gang minCount zero": {
 			input:        mkValidPodGroup(setPodGroupMinCount(0)),
 			expectedErrs: field.ErrorList{field.Required(field.NewPath("spec", "schedulingPolicy", "gang", "minCount"), "")},
@@ -736,7 +736,7 @@ func testDeclarativeValidateStatusUpdate(t *testing.T, apiVersion string) {
 	})
 }
 
-// mkValidPodGroup produces a PodGroup which passes validation with no tweaks.
+// mkValidPodGroup 生成一个无需任何调整即可通过校验的 PodGroup。
 func mkValidPodGroup(tweaks ...func(pg *scheduling.PodGroup)) scheduling.PodGroup {
 	obj := scheduling.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{Name: "podgroup", Namespace: "ns"},

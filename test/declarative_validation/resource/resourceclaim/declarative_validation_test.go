@@ -66,8 +66,8 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 
 	opaqueDriverPath := field.NewPath("spec", "devices", "config").Index(0).Child("opaque", "driver")
 
-	// TODO: As we accumulate more and more test cases, consider breaking this
-	// up into smaller tests for maintainability.
+	// TODO: 随着测试用例越来越多，
+	// 考虑将其拆分为更小的测试以便于维护。
 	testCases := map[string]struct {
 		input        resource.ResourceClaim
 		expectedErrs field.ErrorList
@@ -99,7 +99,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 		"invalid requests, too many AND duplicate name (short-circuit check)": {
 			input: mkValidResourceClaim(tweakDevicesRequests(33), tweakAddDeviceRequest(mkDeviceRequest("req-0"))),
 			expectedErrs: field.ErrorList{
-				// We expect ONLY TooMany, suppressing the Duplicate error because of short-circuiting
+				// 由于短路，这里只预期 TooMany 错误，Duplicate 错误被抑制
 				field.TooMany(field.NewPath("spec", "devices", "requests"), 33, 32).WithOrigin("maxItems").MarkBeta(),
 			},
 		},
@@ -574,7 +574,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 		"valid firstAvailable derived attributes, max allowed": {
 			input: mkValidResourceClaim(tweakFirstAvailableDerivedAttributesCount(32)),
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 	for k, tc := range testCases {
 		t.Run(k, func(t *testing.T) {
@@ -604,7 +604,7 @@ func tweakDevicesConstraints(items int) func(*resource.ResourceClaim) {
 
 func tweakDevicesRequests(items int) func(*resource.ResourceClaim) {
 	return func(rc *resource.ResourceClaim) {
-		// The first request already exists in the valid template
+		// 第一个 request 已存在于合法模板中
 		for i := 1; i < items; i++ {
 			rc.Spec.Devices.Requests = append(rc.Spec.Devices.Requests, mkDeviceRequest(fmt.Sprintf("req-%d", i)))
 		}
@@ -736,7 +736,7 @@ func tweakExactlyAllocationMode(mode resource.DeviceAllocationMode, count int64)
 func tweakFirstAvailableAllocationMode(mode resource.DeviceAllocationMode, count int64) func(*resource.ResourceClaim) {
 	return func(rc *resource.ResourceClaim) {
 		if len(rc.Spec.Devices.Requests) > 0 {
-			// Clear Exactly and set FirstAvailable
+			// 清空 Exactly 并设置 FirstAvailable
 			rc.Spec.Devices.Requests[0].Exactly = nil
 			rc.Spec.Devices.Requests[0].FirstAvailable = []resource.DeviceSubRequest{
 				{
@@ -801,8 +801,8 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 	mockNSClient := fakeClient.CoreV1().Namespaces()
 	Strategy := registry.NewStrategy(mockNSClient, nil)
 	validClaim := mkValidResourceClaim()
-	// TODO: As we accumulate more and more test cases, consider breaking this
-	// up into smaller tests for maintainability.
+	// TODO: 随着测试用例越来越多，
+	// 考虑将其拆分为更小的测试以便于维护。
 	testCases := map[string]struct {
 		update       resource.ResourceClaim
 		old          resource.ResourceClaim
@@ -895,7 +895,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 				field.Invalid(field.NewPath("spec"), "field is immutable", "").WithOrigin("immutable").MarkBeta(),
 			},
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 	for k, tc := range testCases {
 		t.Run(k, func(t *testing.T) {
@@ -1089,7 +1089,7 @@ func testDeclarativeValidateStatusUpdate(t *testing.T, apiVersion string) {
 				field.Invalid(field.NewPath("status", "devices").Index(0).Child("shareID"), "invalid-uid", "must be a lowercase UUID in 8-4-4-4-12 format").WithOrigin("format=k8s-uuid").MarkBeta(),
 			},
 		},
-		// UID in status.ReservedFor
+		// status.ReservedFor 中的 UID
 		"duplicate uid in status.ReservedFor": {
 			old: mkValidResourceClaim(),
 			update: mkResourceClaimWithStatus(
@@ -1458,7 +1458,7 @@ func testDeclarativeValidateStatusUpdate(t *testing.T, apiVersion string) {
 						Pool:   "pool-0",
 						Device: "device-0",
 						NetworkData: &resource.NetworkDeviceData{
-							InterfaceName: strings.Repeat("𝄞", resource.NetworkDeviceDataInterfaceNameMaxLength/4), // the G clef unicode character is exactly 4 bytes so repeating this 256/4 times means that it is exactly 256 bytes worth of length and should be valid.
+							InterfaceName: strings.Repeat("𝄞", resource.NetworkDeviceDataInterfaceNameMaxLength/4), // 高音谱号 Unicode 字符恰好占 4 字节，重复 256/4 次即恰好为 256 字节长度，应当是合法的。
 						},
 					},
 				),
@@ -1491,9 +1491,9 @@ func testDeclarativeValidateStatusUpdate(t *testing.T, apiVersion string) {
 						Pool:   "pool-0",
 						Device: "device-0",
 						NetworkData: &resource.NetworkDeviceData{
-							// The G clef unicode character is exactly 4 bytes in length so repeating the character
-							// the same number of times as the maxBytes payload means that we are guaranteed to fail
-							// a byte-based length check, but not a character based check.
+							// 高音谱号 Unicode 字符恰好占 4 字节，因此重复该字符的次数与
+							// maxBytes 载荷的字节数相同时，基于字节的长度检查必然失败，
+							// 但基于字符的检查不会失败。
 							InterfaceName: strings.Repeat("𝄞", resource.NetworkDeviceDataInterfaceNameMaxLength),
 						},
 					},
@@ -1527,7 +1527,7 @@ func testDeclarativeValidateStatusUpdate(t *testing.T, apiVersion string) {
 						Pool:   "pool-0",
 						Device: "device-0",
 						NetworkData: &resource.NetworkDeviceData{
-							HardwareAddress: strings.Repeat("𝄞", resource.NetworkDeviceDataHardwareAddressMaxLength/4), // the G clef unicode character is exactly 4 bytes so repeating this 256/4 times means that it is exactly 256 bytes worth of length and should be valid.
+							HardwareAddress: strings.Repeat("𝄞", resource.NetworkDeviceDataHardwareAddressMaxLength/4), // 高音谱号 Unicode 字符恰好占 4 字节，重复 256/4 次即恰好为 256 字节长度，应当是合法的。
 						},
 					},
 				),
@@ -1560,9 +1560,9 @@ func testDeclarativeValidateStatusUpdate(t *testing.T, apiVersion string) {
 						Pool:   "pool-0",
 						Device: "device-0",
 						NetworkData: &resource.NetworkDeviceData{
-							// The G clef unicode character is exactly 4 bytes in length so repeating the character
-							// the same number of times as the maxBytes payload means that we are guaranteed to fail
-							// a byte-based length check, but not a character based check.
+							// 高音谱号 Unicode 字符恰好占 4 字节，因此重复该字符的次数与
+							// maxBytes 载荷的字节数相同时，基于字节的长度检查必然失败，
+							// 但基于字符的检查不会失败。
 							HardwareAddress: strings.Repeat("𝄞", resource.NetworkDeviceDataHardwareAddressMaxLength),
 						},
 					},

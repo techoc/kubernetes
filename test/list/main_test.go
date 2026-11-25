@@ -28,9 +28,9 @@ var collectCases = []struct {
 	code     string
 	output   []Test
 }{
-	// Empty: no tests
+	// 空：没有测试
 	{"e2e/util_test.go", "", []Test{}},
-	// Go unit test
+	// Go 单元测试
 	{"test/list/main_test.go", `
 var num = 3
 func Helper(x int) { return x / 0 }

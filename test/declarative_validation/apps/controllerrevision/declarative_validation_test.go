@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/test/declarative_validation/meta"
 )
 
-// Helper function to create a baseline valid ControllerRevision with optional tweaks
+// 辅助函数：创建一个基线合法的 ControllerRevision，可按需调整
 func mkControllerRevision(tweaks ...func(*apps.ControllerRevision)) apps.ControllerRevision {
 	obj := apps.ControllerRevision{
 		ObjectMeta: metav1.ObjectMeta{

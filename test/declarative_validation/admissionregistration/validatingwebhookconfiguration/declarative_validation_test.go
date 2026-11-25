@@ -27,7 +27,7 @@ import (
 	"k8s.io/kubernetes/test/declarative_validation/meta"
 )
 
-// Helper function to create a baseline valid ValidatingWebhookConfiguration with optional tweaks
+// 辅助函数：创建一个基线合法的 ValidatingWebhookConfiguration，可按需调整
 func mkValidatingWebhookConfiguration(tweaks ...func(*admissionregistration.ValidatingWebhookConfiguration)) admissionregistration.ValidatingWebhookConfiguration {
 	obj := admissionregistration.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{

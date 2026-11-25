@@ -102,7 +102,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 				field.Required(field.NewPath("subjects").Index(0).Child("name"), "name is required").MarkBeta(),
 			},
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 
 	for name, tc := range testCases {
@@ -161,7 +161,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 				field.NotSupported(field.NewPath("roleRef", "apiGroup"), "", []string{}).MarkFromImperative(),
 			},
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 	ctx := genericapirequest.WithRequestInfo(genericapirequest.NewDefaultContext(), &genericapirequest.RequestInfo{
 		APIPrefix:         "apis",

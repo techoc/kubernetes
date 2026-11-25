@@ -64,7 +64,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 				field.NotSupported(field.NewPath("spec", "taint", "effect"), resource.DeviceTaintEffect("BadEffect"), []resource.DeviceTaintEffect{}).MarkBeta(),
 			},
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 
 	for name, tc := range testCases {
@@ -125,7 +125,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 				field.NotSupported(field.NewPath("spec", "taint", "effect"), resource.DeviceTaintEffect("some-other-effect"), []resource.DeviceTaintEffect{resource.DeviceTaintEffectNoExecute, resource.DeviceTaintEffectNoSchedule, resource.DeviceTaintEffectNone}).MarkBeta(),
 			},
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 
 	for name, tc := range testCases {

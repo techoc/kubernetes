@@ -27,7 +27,7 @@ import (
 	"k8s.io/kubernetes/test/declarative_validation/meta"
 )
 
-// Helper function to create a baseline valid MutatingAdmissionPolicy with optional tweaks
+// 辅助函数：创建一个基线合法的 MutatingAdmissionPolicy，可按需调整
 func mkMutatingAdmissionPolicy(tweaks ...func(*admissionregistration.MutatingAdmissionPolicy)) admissionregistration.MutatingAdmissionPolicy {
 	fp := admissionregistration.Fail
 	rp := admissionregistration.NeverReinvocationPolicy

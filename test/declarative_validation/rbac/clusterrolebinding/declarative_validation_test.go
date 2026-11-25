@@ -60,7 +60,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 				field.Required(field.NewPath("subjects").Index(0).Child("name"), "").MarkBeta(),
 			},
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 	for k, tc := range testCases {
 		t.Run(k, func(t *testing.T) {
@@ -125,7 +125,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 				field.Required(field.NewPath("subjects").Index(0).Child("name"), "").MarkBeta(),
 			},
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 	for k, tc := range testCases {
 		t.Run(k, func(t *testing.T) {

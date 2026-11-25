@@ -60,14 +60,14 @@ type featureSpec struct {
 
 type featureInfo struct {
 	Name string `yaml:"name" json:"name"`
-	// FullName is the full name of the feature, including the package name,
-	// used for ensuring that features are grouped by their package prefix first,
-	// and then sorted alphabetically within that group.
+	// FullName 是特性的完整名称（含包名），
+	// 用于确保特性先按包前缀分组，
+	// 再在组内按字母顺序排序。
 	FullName       string        `yaml:"-" json:"-"`
 	VersionedSpecs []featureSpec `yaml:"versionedSpecs" json:"versionedSpecs"`
 }
 
-// NewFeatureGatesCommand returns the cobra command for "feature-gates".
+// NewFeatureGatesCommand 返回 "feature-gates" 对应的 cobra 命令。
 func NewFeatureGatesCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "feature-gates <subcommand>",
@@ -119,9 +119,9 @@ func updateFeatureListFunc(cmd *cobra.Command, args []string) {
 	}
 }
 
-// verifyOrUpdateFeatureList walks all the files under pkg/ and staging/ to find the list of all the features in
-// map[featuregate.Feature]featuregate.VersionedSpecs.
-// It will then update the feature list in featureListFile, or verifies there is no change from the existing list.
+// verifyOrUpdateFeatureList 遍历 pkg/ 和 staging/ 下的所有文件，找出
+// map[featuregate.Feature]featuregate.VersionedSpecs 中所有特性的列表。
+// 随后更新 featureListFile 中的特性列表，或验证其与现有列表相比没有变化。
 func verifyOrUpdateFeatureList(rootPath, featureListFile string, currentVersion *version.Version, update bool) error {
 	featureList := []featureInfo{}
 	features, err := searchPathForFeatures(filepath.Join(rootPath, "pkg"))
@@ -185,13 +185,13 @@ func dedupeFeatureList(featureList []featureInfo) ([]featureInfo, error) {
 		return featureList, nil
 	}
 	last := featureList[0]
-	// clean up FullName field for the final output
+	// 为最终输出清理 FullName 字段
 	last.FullName = ""
 	deduped := []featureInfo{last}
 	for i := 1; i < len(featureList); i++ {
 		f := featureList[i]
 		if f.Name == last.Name {
-			// if it is a duplicate feature, verify the lifecycles are the same
+			// 如果是重复的特性，则验证其生命周期一致
 			if !reflect.DeepEqual(last.VersionedSpecs, f.VersionedSpecs) {
 				return deduped, fmt.Errorf("multiple conflicting specs found for feature:%s, [\n%v, \n%v]", last.Name, last.VersionedSpecs, f.VersionedSpecs)
 			}
@@ -205,13 +205,13 @@ func dedupeFeatureList(featureList []featureInfo) ([]featureInfo, error) {
 	return deduped, nil
 }
 
-// verifyFeatureRemoval checks if removed features are allowed to be removed based on their lifecycle.
-// Alpha features can be removed anytime without error.
-// Returns error if:
-//   - Beta features are removed (not allowed)
-//   - GA/Deprecated features are removed without being locked to default
-//   - GA/Deprecated features are removed before 3 minor versions have passed
-//     since locking (required for emulation support)
+// verifyFeatureRemoval 根据特性的生命周期检查被删除的特性是否允许删除。
+// Alpha 特性可以随时删除，不会报错。
+// 以下情况返回错误：
+//   - 删除 Beta 特性（不允许）
+//   - 删除未锁定到默认值的 GA/Deprecated 特性
+//   - 自锁定以来未满 3 个小版本就删除 GA/Deprecated 特性
+//     （模拟支持所需）
 func verifyFeatureRemoval(featureList []featureInfo, baseFeatureList []featureInfo,
 	currentVersion *version.Version) error {
 	baseFeatures := make(map[string]featureInfo)
@@ -224,12 +224,12 @@ func verifyFeatureRemoval(featureList []featureInfo, baseFeatureList []featureIn
 	}
 
 	for name, baseFeature := range baseFeatures {
-		// Check if feature was removed
+		// 检查特性是否被删除
 		if _, found := currentFeatures[name]; found {
 			continue
 		}
 
-		// Feature was removed, check if allowed
+		// 特性已被删除，检查是否允许
 		specs := baseFeature.VersionedSpecs
 		if len(specs) == 0 {
 			return fmt.Errorf("feature %s has no version specs", name)
@@ -238,7 +238,7 @@ func verifyFeatureRemoval(featureList []featureInfo, baseFeatureList []featureIn
 		lastSpec := specs[len(specs)-1]
 		switch lastSpec.PreRelease {
 		case "Alpha":
-			continue // can remove alpha features anytime
+			continue // Alpha 特性随时可以删除
 		case "Beta":
 			return fmt.Errorf("feature %s cannot be removed while in beta", name)
 		case "GA", "Deprecated":
@@ -272,7 +272,7 @@ func verifyAlphaFeatures(featureList []featureInfo) error {
 
 func searchPathForFeatures(path string) ([]featureInfo, error) {
 	allFeatures := []featureInfo{}
-	// Create a FileSet to work with
+	// 创建一个 FileSet 供后续使用
 	fset := token.NewFileSet()
 	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 		if strings.HasPrefix(path, "vendor") || strings.HasPrefix(path, "_") {
@@ -284,7 +284,7 @@ func searchPathForFeatures(path string) ([]featureInfo, error) {
 		if strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		// exclude generated files
+		// 排除生成的文件
 		base := filepath.Base(path)
 		if strings.HasPrefix(base, "zz_generated") {
 			return nil
@@ -299,10 +299,10 @@ func searchPathForFeatures(path string) ([]featureInfo, error) {
 	return allFeatures, err
 }
 
-// extractFeatureInfoListFromFile extracts info of all the features from
-// map[featuregate.Feature]featuregate.VersionedSpecs in the given file.
+// extractFeatureInfoListFromFile 从给定文件的
+// map[featuregate.Feature]featuregate.VersionedSpecs 中提取所有特性的信息。
 func extractFeatureInfoListFromFile(fset *token.FileSet, filePath string) (allFeatures []featureInfo, err error) {
-	// Parse the file and create an AST
+	// 解析文件并创建 AST
 	absFilePath, err := filepath.Abs(filePath)
 	if err != nil {
 		return allFeatures, err
@@ -312,7 +312,7 @@ func extractFeatureInfoListFromFile(fset *token.FileSet, filePath string) (allFe
 		return allFeatures, err
 	}
 	aliasMap := importAliasMap(file.Imports)
-	// any file containing features should have imported the featuregate pkg.
+	// 任何包含特性的文件都应该导入 featuregate 包。
 	if _, ok := aliasMap[featureGatePkg]; !ok {
 		return allFeatures, err
 	}
@@ -381,8 +381,8 @@ func verifyAlphabeticOrder(keys []string, path string) error {
 	return nil
 }
 
-// extractFeatureInfoList extracts the info all the the features from
-// map[featuregate.Feature]featuregate.VersionedSpecs.
+// extractFeatureInfoList 从
+// map[featuregate.Feature]featuregate.VersionedSpecs 中提取所有特性的信息。
 func extractFeatureInfoList(filePath string, v ast.Expr, aliasMap map[string]string, variables map[string]ast.Expr) ([]featureInfo, error) {
 	keys := []string{}
 	features := []featureInfo{}
@@ -410,7 +410,7 @@ func extractFeatureInfoList(filePath string, v ast.Expr, aliasMap map[string]str
 		keys = append(keys, info.FullName)
 	}
 	if alphabeticalOrder {
-		// verifies the features are sorted in the map
+		// 验证 map 中的特性已排序
 		if err := verifyAlphabeticOrder(keys, filePath); err != nil {
 			return features, err
 		}
@@ -455,7 +455,7 @@ func parseFeatureInfo(variables map[string]ast.Expr, kv *ast.KeyValueExpr) (feat
 		}
 		info.VersionedSpecs = append(info.VersionedSpecs, spec)
 	}
-	// verify FeatureSpec in VersionedSpecs are ordered by version.
+	// 验证 VersionedSpecs 中的 FeatureSpec 按版本排序。
 	if len(info.VersionedSpecs) > 1 {
 		specsSorted := make([]featureSpec, len(info.VersionedSpecs))
 		copy(specsSorted, info.VersionedSpecs)

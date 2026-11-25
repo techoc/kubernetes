@@ -36,19 +36,19 @@ import (
 	yaml "go.yaml.in/yaml/v2"
 )
 
-// ConformanceData describes the structure of the conformance.yaml file
+// ConformanceData 描述 conformance.yaml 文件的结构
 type ConformanceData struct {
-	// A URL to the line of code in the kube src repo for the test. Omitted from the YAML to avoid exposing line number.
+	// 指向 kube 源码仓库中该测试对应代码行的 URL。为避免暴露行号，不从 YAML 中输出。
 	URL string `yaml:"-"`
-	// Extracted from the "Testname:" comment before the test
+	// 从测试前的 "Testname:" 注释中提取
 	TestName string
-	// CodeName is taken from the actual ginkgo descriptions, e.g. `[sig-apps] Foo should bar [Conformance]`
+	// CodeName 取自实际的 ginkgo 描述，例如 `[sig-apps] Foo should bar [Conformance]`
 	CodeName string
-	// Extracted from the "Description:" comment before the test
+	// 从测试前的 "Description:" 注释中提取
 	Description string
-	// Version when this test is added or modified ex: v1.12, v1.13
+	// 添加或修改该测试时的版本，例如 v1.12、v1.13
 	Release string
-	// File is the filename where the test is defined. We intentionally don't save the line here to avoid meaningless changes.
+	// File 是定义测试的文件名。我们有意不在此保存行号，以避免无意义的变更。
 	File string
 }
 
@@ -58,21 +58,21 @@ var (
 	confDoc = flag.Bool("docs", false, "write a conformance document")
 	version = flag.String("version", "v1.9", "version of this conformance document")
 
-	// If a test name contains any of these tags, it is ineligible for promotion to conformance
+	// 如果测试名称包含以下任一标签，则该测试没有资格晋升为一致性测试
 	regexIneligibleTags = regexp.MustCompile(`\[(Alpha|Feature:[^\]]+|Flaky)\]`)
 
-	// Conformance comments should be within this number of lines to the call itself.
-	// Allowing for more than one in case a spare comment or two is below it.
+	// 一致性注释与该调用本身的距离应在此行数范围内。
+	// 允许不止一行，以防其下方还有一两条多余注释。
 	conformanceCommentsLineWindow = 5
 
 	seenLines map[string]struct{}
 )
 
 type frame struct {
-	// File and Line are the file name and line number of the
-	// location in this frame. For non-leaf frames, this will be
-	// the location of a call. These may be the empty string and
-	// zero, respectively, if not known.
+	// File 和 Line 是该帧对应位置的
+	// 文件名和行号。对于非叶子帧，这是调用所在的位置。
+	// 若位置未知，File 和 Line 分别为空字符串和 0。
+	// 这两个字段用于定位对应的源码位置。
 	File string
 	Line int
 }
@@ -123,9 +123,9 @@ func isConformance(spec *types.SpecReport) bool {
 func getTestInfo(spec *types.SpecReport) *ConformanceData {
 	var c *ConformanceData
 	var err error
-	// The key to this working is that we don't need to parse every file or walk
-	// every types.CodeLocation. The LeafNodeLocation is going to be file:line which
-	// attached to the comment that we want.
+	// 这样做的关键在于无需解析每个文件
+	// 或遍历每个 types.CodeLocation。
+	// LeafNodeLocation 就是 file:line，它附着在我们想要的注释上。
 	leafNodeLocation := spec.LeafNodeLocation
 	frame := frame{
 		File: leafNodeLocation.FileName,
@@ -149,7 +149,7 @@ func getTestName(spec *types.SpecReport) string {
 
 func saveAllTestInfo(dataSet []*ConformanceData) {
 	if *confDoc {
-		// Note: this assumes that you're running from the root of the kube src repo
+		// 注意：这里假设从 kube 源码仓库的根目录运行
 		templ, err := template.ParseFiles("./test/conformance/cf_header.md")
 		if err != nil {
 			fmt.Printf("Error reading the Header file information: %s\n\n", err)
@@ -170,7 +170,7 @@ func saveAllTestInfo(dataSet []*ConformanceData) {
 		return
 	}
 
-	// Serialize the list as a whole. Generally meant to end up as conformance.txt which tracks the set of tests.
+	// 将整个列表序列化。通常用于生成 conformance.txt，以记录测试集合。
 	b, err := yaml.Marshal(dataSet)
 	if err != nil {
 		log.Printf("Error marshalling data into YAML: %v", err)
@@ -204,10 +204,10 @@ func getConformanceData(targetFrame frame) (*ConformanceData, error) {
 	return nil, nil
 }
 
-// scanFileForFrame will scan the target and look for a conformance comment attached to the function
-// described by the target frame. If the comment can't be found then nil, nil is returned.
+// scanFileForFrame 扫描目标，查找附着在目标帧所描述函数上的一致性注释。
+// 如果找不到该注释，则返回 nil, nil。
 func scanFileForFrame(filename string, src interface{}, targetFrame frame) (*ConformanceData, error) {
-	fset := token.NewFileSet() // positions are relative to fset
+	fset := token.NewFileSet() // 位置相对于 fset
 	f, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
 	if err != nil {
 		return nil, err
@@ -237,7 +237,7 @@ func tryCommentGroupAndFrame(fset *token.FileSet, cg *ast.CommentGroup, f frame)
 		return nil
 	}
 
-	// Each file/line will either be some helper function (not a conformance comment) or apply to just a single test. Don't revisit.
+	// 每个 file/line 要么是某个辅助函数（而非一致性注释），要么只对应单个测试。不要重复访问。
 	if seenLines != nil {
 		seenLines[fmt.Sprintf("%v:%v", f.File, f.Line)] = struct{}{}
 	}
@@ -282,7 +282,7 @@ func commentToConformanceData(comment string) *ConformanceData {
 			continue
 		}
 
-		// Line has no header
+		// 该行没有头部标记
 		if curLine == "Description" {
 			descLines = append(descLines, line)
 		}

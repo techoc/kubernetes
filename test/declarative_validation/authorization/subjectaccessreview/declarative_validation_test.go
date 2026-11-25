@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package subjectaccessreview exercises declarative validation for the
-// authorization.k8s.io SubjectAccessReview resource.
+// Package subjectaccessreview 对 authorization.k8s.io 的 SubjectAccessReview 资源
+// 执行声明式校验。
 package subjectaccessreview
 
 import (

@@ -89,7 +89,7 @@ func TestTar(t *testing.T) {
 			case err == nil && len(tc.expectErr) > 0:
 				t.Fatalf("Expected error %q but got nil", tc.expectErr)
 			default:
-				// No error
+				// 无错误
 			}
 
 			data, err := readAllTar(tc.outpath)
@@ -104,8 +104,8 @@ func TestTar(t *testing.T) {
 	}
 }
 
-// readAllTar walks all of the files in the archive. It returns a map
-// of filenames and their contents and any error encountered.
+// readAllTar 遍历归档中的所有文件，返回文件名到内容的映射以及
+// 遇到的任何错误。
 func readAllTar(tarPath string) (map[string]string, error) {
 	tarPath, err := filepath.Abs(tarPath)
 	if err != nil {
@@ -124,13 +124,13 @@ func readAllTar(tarPath string) (map[string]string, error) {
 	}
 	defer gzStream.Close()
 
-	// Open and iterate through the files in the archive.
+	// 打开并遍历归档中的文件。
 	tr := tar.NewReader(gzStream)
 	fileData := map[string]string{}
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			break // End of archive
+			break // 归档结束
 		}
 		if err != nil {
 

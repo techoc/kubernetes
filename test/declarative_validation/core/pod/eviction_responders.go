@@ -241,7 +241,7 @@ func RunDeclarativeValidateEvictionRespondersTestCases[T runtime.Object](t *test
 				field.Invalid(specPath.Child("evictionResponders").Index(0).Child("priority"), "", "priorities 0-999 are reserved for responders with *.k8s.io suffix"),
 			},
 		},
-		// Support for new k8s responders and a new priority slot must be explicitly added to the API and validation.
+		// 新增 k8s responder 和新的优先级档位必须显式添加到 API 和校验逻辑中。
 		"reserved priority triggers unknown k8s responders": {
 			input: []api.EvictionResponder{
 				{

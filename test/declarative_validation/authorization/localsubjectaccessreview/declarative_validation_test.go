@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package localsubjectaccessreview exercises declarative validation for the
-// authorization.k8s.io LocalSubjectAccessReview resource.
+// Package localsubjectaccessreview 对 authorization.k8s.io 的 LocalSubjectAccessReview 资源
+// 执行声明式校验。
 package localsubjectaccessreview
 
 import (

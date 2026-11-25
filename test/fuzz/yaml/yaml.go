@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package yaml implements fuzzers for yaml deserialization routines in
-// Kubernetes. These targets are compatible with the github.com/dvyukov/go-fuzz
-// fuzzing framework.
+// Package yaml 为 Kubernetes 中的 yaml 反序列化例程
+// 实现模糊测试。这些 target 兼容
+// github.com/dvyukov/go-fuzz 模糊测试框架。
 package yaml
 
 import (
@@ -28,9 +28,9 @@ import (
 	sigyaml "sigs.k8s.io/yaml"
 )
 
-// FuzzDurationStrict is a fuzz target for strict-unmarshaling Duration defined
-// in "k8s.io/apimachinery/pkg/apis/meta/v1". This target also checks that the
-// unmarshaled result can be marshaled back to the input.
+// FuzzDurationStrict 是针对 "k8s.io/apimachinery/pkg/apis/meta/v1" 中定义的
+// Duration 严格反序列化的模糊测试 target。该 target 还检查反序列化结果
+// 能否重新序列化回输入。
 func FuzzDurationStrict(b []byte) int {
 	var durationHolder struct {
 		D metav1.Duration `json:"d"`
@@ -42,8 +42,8 @@ func FuzzDurationStrict(b []byte) int {
 	if err != nil {
 		panic(err)
 	}
-	// Result is in the format "d: <duration>\n", so strip off the trailing
-	// newline and convert durationHolder.D to the expected format.
+	// 结果格式为 "d: <duration>\n"，因此去掉末尾换行，
+	// 并将 durationHolder.D 转换为期望的格式。
 	resultStr := strings.TrimSpace(string(result[:]))
 	inputStr := fmt.Sprintf("d: %s", durationHolder.D.Duration)
 	if resultStr != inputStr {
@@ -52,9 +52,9 @@ func FuzzDurationStrict(b []byte) int {
 	return 1
 }
 
-// FuzzMicroTimeStrict is a fuzz target for strict-unmarshaling MicroTime
-// defined in "k8s.io/apimachinery/pkg/apis/meta/v1". This target also checks
-// that the unmarshaled result can be marshaled back to the input.
+// FuzzMicroTimeStrict 是针对 "k8s.io/apimachinery/pkg/apis/meta/v1" 中定义的
+// MicroTime 严格反序列化的模糊测试 target。该 target 还检查
+// 反序列化结果能否重新序列化回输入。
 func FuzzMicroTimeStrict(b []byte) int {
 	var microTimeHolder struct {
 		T metav1.MicroTime `json:"t"`
@@ -66,9 +66,9 @@ func FuzzMicroTimeStrict(b []byte) int {
 	if err != nil {
 		panic(err)
 	}
-	// Result is in the format "t: <time>\n", so strip off the trailing
-	// newline and convert microTimeHolder.T to the expected format. If
-	// time is zero, the value is marshaled to "null".
+	// 结果格式为 "t: <time>\n"，因此去掉末尾换行，
+	// 并将 microTimeHolder.T 转换为期望的格式。若时间为零，
+	// 该值会被序列化为 "null"。
 	resultStr := strings.TrimSpace(string(result[:]))
 	var inputStr string
 	if microTimeHolder.T.Time.IsZero() {
@@ -82,7 +82,7 @@ func FuzzMicroTimeStrict(b []byte) int {
 	return 1
 }
 
-// FuzzSigYaml is a fuzz target for "sigs.k8s.io/yaml" unmarshaling.
+// FuzzSigYaml 是针对 "sigs.k8s.io/yaml" 反序列化的模糊测试 target。
 func FuzzSigYaml(b []byte) int {
 	t := struct{}{}
 	m := map[string]interface{}{}
@@ -96,9 +96,9 @@ func FuzzSigYaml(b []byte) int {
 	return out
 }
 
-// FuzzTimeStrict is a fuzz target for strict-unmarshaling Time defined in
-// "k8s.io/apimachinery/pkg/apis/meta/v1". This target also checks that the
-// unmarshaled result can be marshaled back to the input.
+// FuzzTimeStrict 是针对 "k8s.io/apimachinery/pkg/apis/meta/v1" 中定义的
+// Time 严格反序列化的模糊测试 target。该 target 还检查
+// 反序列化结果能否重新序列化回输入。
 func FuzzTimeStrict(b []byte) int {
 	var timeHolder struct {
 		T metav1.Time `json:"t"`
@@ -110,9 +110,9 @@ func FuzzTimeStrict(b []byte) int {
 	if err != nil {
 		panic(err)
 	}
-	// Result is in the format "t: <time>\n", so strip off the trailing
-	// newline and convert timeHolder.T to the expected format. If time is
-	// zero, the value is marshaled to "null".
+	// 结果格式为 "t: <time>\n"，因此去掉末尾换行，
+	// 并将 timeHolder.T 转换为期望的格式。若时间为零，
+	// 该值会被序列化为 "null"。
 	resultStr := strings.TrimSpace(string(result[:]))
 	var inputStr string
 	if timeHolder.T.Time.IsZero() {
@@ -126,7 +126,7 @@ func FuzzTimeStrict(b []byte) int {
 	return 1
 }
 
-// FuzzYamlV2 is a fuzz target for "go.yaml.in/yaml/v2" unmarshaling.
+// FuzzYamlV2 是针对 "go.yaml.in/yaml/v2" 反序列化的模糊测试 target。
 func FuzzYamlV2(b []byte) int {
 	t := struct{}{}
 	m := map[string]interface{}{}

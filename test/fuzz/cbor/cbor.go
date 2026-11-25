@@ -34,8 +34,8 @@ var (
 	}
 )
 
-// FuzzDecodeAllocations is a go-fuzz target that panics on inputs that cause an unreasonably large
-// number of bytes to be allocated at decode time.
+// FuzzDecodeAllocations 是一个 go-fuzz target，当输入导致解码时分配了
+// 不合理数量的字节时会 panic。
 func FuzzDecodeAllocations(data []byte) (result int) {
 	const (
 		MaxInputBytes     = 128
@@ -43,9 +43,9 @@ func FuzzDecodeAllocations(data []byte) (result int) {
 	)
 
 	if len(data) > MaxInputBytes {
-		// Longer inputs can require more allocations by unmarshaling to larger
-		// objects. Focus on identifying short inputs that allocate an unreasonable number
-		// of bytes to identify pathological cases.
+		// 较长的输入会反序列化为更大的对象，
+		// 可能需要更多分配。这里专注于寻找分配了不合理
+		// 字节数的短输入，以定位病态场景。
 		return -1
 	}
 
@@ -68,9 +68,9 @@ func FuzzDecodeAllocations(data []byte) (result int) {
 	}
 
 	for _, serializer := range serializers {
-		// The first pass pre-warms anything that is lazily initialized. Doing things like
-		// logging for the first time in a process can account for allocations on the order
-		// of tens of kB.
+		// 第一轮用于预热所有延迟初始化的内容。
+		// 例如进程中首次打印日志可能带来数十 kB
+		// 量级的分配。
 		decode(serializer, data)
 
 		var nBytesAllocated uint64
@@ -88,10 +88,10 @@ func FuzzDecodeAllocations(data []byte) (result int) {
 
 			}()
 
-			// The exact number of bytes allocated may vary due to allocations in
-			// concurrently-executing goroutines or implementation details of the
-			// runtime. Only panic on inputs that consistently exceed the allocation
-			// threshold to reduce the false positive rate.
+			// 确切的分配字节数可能因并发执行的
+			// goroutine 中的分配或运行时的实现细节
+			// 而变化。仅当输入持续超过分配阈值时才 panic，
+			// 以降低误报率。
 			if nBytesAllocated <= MaxAllocatedBytes {
 				break
 			}

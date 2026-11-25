@@ -35,7 +35,7 @@ import (
 type Option func(*runOptions)
 
 type runOptions struct {
-	// TODO: Remove this after ensuring consistency between ObjectMeta finalizer validations for all types.
+	// TODO: 在确认所有类型的 ObjectMeta finalizer 校验一致后移除此项。
 	stringentFinalizerValidation bool
 	validationConfigs            []apitesting.ValidationTestConfig
 }
@@ -61,7 +61,7 @@ func RunObjectMetaTestCases[T runtime.Object](t *testing.T, ctx context.Context,
 	fldPath := field.NewPath("metadata")
 	trueVar := true
 
-	// TODO: Remove MarkFromImperative from expected errors after adding corresponding declarative validation tags on ObjectMeta.
+	// TODO: 在 ObjectMeta 上添加相应的声明式校验标签后，从预期错误中移除 MarkFromImperative。
 	testCases := []struct {
 		Name         string
 		Modify       func(metav1.Object)
@@ -451,7 +451,7 @@ func RunObjectMetaUpdateTestCases[T runtime.Object](t *testing.T, ctx context.Co
 	t1 := metav1.NewTime(time.Unix(1000, 0).UTC())
 	t2 := metav1.NewTime(time.Unix(2000, 0).UTC())
 
-	// TODO: Remove MarkFromImperative from expected errors after adding corresponding declarative validation tags on ObjectMeta.
+	// TODO: 在 ObjectMeta 上添加相应的声明式校验标签后，从预期错误中移除 MarkFromImperative。
 	testCases := []struct {
 		Name         string
 		Modify       func(old, new metav1.Object)

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// list all unit and ginkgo test names that will be run
+// 列出所有将要运行的单元测试和 ginkgo 测试名称
 package main
 
 import (
@@ -37,19 +37,19 @@ var (
 	warn     = flag.Bool("warn", false, "print warnings")
 )
 
-// Test holds test locations, package names, and test names.
+// Test 保存测试位置、包名和测试名称。
 type Test struct {
 	Loc      string
 	Name     string
 	TestName string
 }
 
-// collect extracts test metadata from a file.
-// If src is nil, it reads filename for the code, otherwise it
-// uses src (which may be a string, byte[], or io.Reader).
+// collect 从文件中提取测试元数据。
+// 若 src 为 nil，则从 filename 读取代码，否则使用 src
+// （可以是 string、byte[] 或 io.Reader）。
 func collect(filename string, src interface{}) []Test {
-	// Create the AST by parsing src.
-	fset := token.NewFileSet() // positions are relative to fset
+	// 通过解析 src 创建 AST。
+	fset := token.NewFileSet() // 位置相对于 fset
 	f, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
 	if err != nil {
 		panic(err)
@@ -63,7 +63,7 @@ func collect(filename string, src interface{}) []Test {
 
 	ast.Walk(makeWalker("[k8s.io]", fset, &tests), f)
 
-	// Unit tests are much simpler to enumerate!
+	// 单元测试的枚举简单得多！
 	if strings.HasSuffix(filename, "_test.go") {
 		packageName := f.Name.Name
 		dirName, _ := filepath.Split(filename)
@@ -86,8 +86,8 @@ func collect(filename string, src interface{}) []Test {
 	return tests
 }
 
-// funcName converts a selectorExpr with two idents into a string,
-// x.y -> "x.y"
+// funcName 将带有两个标识符的 selectorExpr 转换为字符串，
+// 例如 x.y -> "x.y"
 func funcName(n ast.Expr) string {
 	if sel, ok := n.(*ast.SelectorExpr); ok {
 		if x, ok := sel.X.(*ast.Ident); ok {
@@ -97,7 +97,7 @@ func funcName(n ast.Expr) string {
 	return ""
 }
 
-// isSprintf returns whether the given node is a call to fmt.Sprintf
+// isSprintf 判断给定节点是否是对 fmt.Sprintf 的调用
 func isSprintf(n ast.Expr) bool {
 	call, ok := n.(*ast.CallExpr)
 	return ok && funcName(call.Fun) == "fmt.Sprintf" && len(call.Args) != 0
@@ -114,14 +114,14 @@ func makeWalker(path string, fset *token.FileSet, tests *[]Test) *walker {
 	return &walker{path, fset, tests, make(map[string]string)}
 }
 
-// clone creates a new walker with the given string extending the path.
+// clone 创建一个新的 walker，用给定字符串扩展其路径。
 func (w *walker) clone(ext string) *walker {
 	return &walker{w.path + " " + ext, w.fset, w.tests, w.vals}
 }
 
-// firstArg attempts to statically determine the value of the first
-// argument. It only handles strings, and converts any unknown values
-// (fmt.Sprintf interpolations) into *.
+// firstArg 尝试静态确定第一个参数的值。
+// 它只处理字符串，并将任何未知的值
+// （fmt.Sprintf 插值）转换为 *。
 func (w *walker) firstArg(n *ast.CallExpr) string {
 	if len(n.Args) == 0 {
 		return ""
@@ -154,9 +154,9 @@ func (w *walker) firstArg(n *ast.CallExpr) string {
 	return "*"
 }
 
-// describeName returns the first argument of a function if it's
-// a Ginkgo-relevant function (Describe/SIGDescribe/Context),
-// and the empty string otherwise.
+// describeName 若函数是 Ginkgo 相关的函数
+// （Describe/SIGDescribe/Context），则返回其第一个参数，
+// 否则返回空字符串。
 func (w *walker) describeName(n *ast.CallExpr) string {
 	switch x := n.Fun.(type) {
 	case *ast.Ident:
@@ -169,7 +169,7 @@ func (w *walker) describeName(n *ast.CallExpr) string {
 	return w.firstArg(n)
 }
 
-// itName returns the first argument if it's a call to It(), else "".
+// itName 若是对 It() 的调用则返回第一个参数，否则返回 ""。
 func (w *walker) itName(n *ast.CallExpr) string {
 	if fun, ok := n.Fun.(*ast.Ident); ok && fun.Name == "It" {
 		return w.firstArg(n)
@@ -177,32 +177,32 @@ func (w *walker) itName(n *ast.CallExpr) string {
 	return ""
 }
 
-// Visit walks the AST, following Ginkgo context and collecting tests.
-// See the documentation for ast.Walk for more details.
+// Visit 遍历 AST，跟踪 Ginkgo 上下文并收集测试。
+// 更多细节参见 ast.Walk 的文档。
 func (w *walker) Visit(n ast.Node) ast.Visitor {
 	switch x := n.(type) {
 	case *ast.CallExpr:
 		name := w.describeName(x)
 		if name != "" && len(x.Args) >= 2 {
-			// If calling (Kube)Describe/Context, make a new
-			// walker to recurse with the description added.
+			// 若调用 (Kube)Describe/Context，则创建一个新的
+			// walker，带上描述信息继续递归。
 			return w.clone(name)
 		}
 		name = w.itName(x)
 		if name != "" {
-			// We've found an It() call, the full test name
-			// can be determined now.
+			// 找到了 It() 调用，现在可以确定
+			// 完整的测试名称。
 			if w.path == "[k8s.io]" && *warn {
 				log.Printf("It without matching Describe: %s\n", w.fset.Position(n.Pos()))
 			}
 			*w.tests = append(*w.tests, Test{w.fset.Position(n.Pos()).String(), w.path, name})
-			return nil // Stop walking
+			return nil // 停止遍历
 		}
 	case *ast.AssignStmt:
-		// Attempt to track literals that might be used as
-		// arguments. This analysis is very unsound, and ignores
-		// both scope and program flow, but is sufficient for
-		// our minor use case.
+		// 尝试跟踪可能用作参数的字面量。
+		// 这种分析非常不严谨，既忽略作用域，
+		// 也忽略程序流程，但足以满足
+		// 我们这个小小的使用场景。
 		ident, ok := x.Lhs[0].(*ast.Ident)
 		if ok {
 			if isSprintf(x.Rhs[0]) {
@@ -219,16 +219,16 @@ func (w *walker) Visit(n ast.Node) ast.Visitor {
 			}
 		}
 	}
-	return w // Continue walking
+	return w // 继续遍历
 }
 
 type testList struct {
 	tests []Test
 }
 
-// handlePath walks the filesystem recursively, collecting tests
-// from files with paths *e2e*.go and *_test.go, ignoring third_party
-// and staging directories.
+// handlePath 递归遍历文件系统，从路径匹配
+// *e2e*.go 和 *_test.go 的文件中收集测试，
+// 并忽略 third_party 和 staging 目录。
 func (t *testList) handlePath(path string, info os.FileInfo, err error) error {
 	if err != nil {
 		return err

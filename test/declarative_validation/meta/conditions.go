@@ -29,16 +29,16 @@ import (
 	apitesting "k8s.io/kubernetes/pkg/api/testing"
 )
 
-// ConditionTestCase contains a conditions slice and the expected validation errors it should produce.
+// ConditionTestCase 包含 conditions 切片及其应产生的预期校验错误。
 type ConditionTestCase struct {
 	Name         string
 	Conditions   []metav1.Condition
 	ExpectedErrs field.ErrorList
 }
 
-// GenerateConditionTestCases returns a standard set of declarative validation test cases
-// for a field of type []metav1.Condition that is annotated with listType=map and listMapKey=type.
-// fldPath is the path to the conditions field in the object being validated.
+// GenerateConditionTestCases 针对标注了 listType=map 和 listMapKey=type 的
+// []metav1.Condition 类型字段，返回一组标准的声明式校验测试用例。
+// fldPath 是被校验对象中 conditions 字段的路径。
 func GenerateConditionTestCases(fldPath *field.Path) []ConditionTestCase {
 	return []ConditionTestCase{
 		{

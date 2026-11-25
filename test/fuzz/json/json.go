@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package json implements fuzzers for json deserialization routines in
-// Kubernetes. These targets are compatible with the github.com/dvyukov/go-fuzz
-// fuzzing framework.
+// Package json 为 Kubernetes 中的 json 反序列化例程
+// 实现模糊测试。这些 target 兼容
+// github.com/dvyukov/go-fuzz 模糊测试框架。
 package json
 
 import (
@@ -43,7 +43,7 @@ var (
 	pnsSer             = json.NewSerializerWithOptions(json.DefaultMetaFactory, scheme, scheme, nonstrictPrettyOpt)
 )
 
-// FuzzStrictDecode is a fuzz target for "k8s.io/apimachinery/pkg/runtime/serializer/json" strict decoding.
+// FuzzStrictDecode 是针对 "k8s.io/apimachinery/pkg/runtime/serializer/json" 严格解码的模糊测试 target。
 func FuzzStrictDecode(data []byte) int {
 	obj0, _, err0 := strictSer.Decode(data, gvk, nil)
 	obj1, _, err1 := nonstrictSer.Decode(data, gvk, nil)
@@ -113,7 +113,7 @@ func FuzzStrictDecode(data []byte) int {
 	return 1
 }
 
-// FuzzNonStrictDecode is a fuzz target for "k8s.io/apimachinery/pkg/runtime/serializer/json" non-strict decoding.
+// FuzzNonStrictDecode 是针对 "k8s.io/apimachinery/pkg/runtime/serializer/json" 非严格解码的模糊测试 target。
 func FuzzNonStrictDecode(data []byte) int {
 	obj0, _, err0 := nonstrictSer.Decode(data, gvk, nil)
 	if err0 != nil {

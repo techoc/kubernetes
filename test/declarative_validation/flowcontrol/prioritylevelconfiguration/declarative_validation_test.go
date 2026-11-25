@@ -76,7 +76,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 				},
 			})),
 			expectedErrs: field.ErrorList{
-				// Mandatory object check: spec of 'exempt' differs from bootstrap (HW-only)
+				// 必需的对象级检查：'exempt' 的 spec 与引导配置不同（仅手写校验）
 				field.Invalid(specPath, nil, "").MarkFromImperative(),
 				field.Forbidden(specPath.Child("limited"), "").MarkCoveredByDeclarative().MarkBeta(),
 			},
@@ -214,7 +214,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 	meta.RunObjectMetaUpdateTestCases(t, ctx, &updateObj, registry.Strategy, meta.WithStringentFinalizerValidation())
 }
 
-// mkPLC creates a valid Limited PriorityLevelConfiguration with Reject limit response.
+// mkPLC 创建一个合法的 Limited PriorityLevelConfiguration，LimitResponse 为 Reject。
 func mkPLC(tweaks ...func(*flowcontrol.PriorityLevelConfiguration)) flowcontrol.PriorityLevelConfiguration {
 	obj := flowcontrol.PriorityLevelConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -236,7 +236,7 @@ func mkPLC(tweaks ...func(*flowcontrol.PriorityLevelConfiguration)) flowcontrol.
 	return obj
 }
 
-// tweakExempt switches the PLC to Exempt type with the mandatory "exempt" name.
+// tweakExempt 将 PLC 切换为 Exempt 类型，并使用必需的 "exempt" 名称。
 func tweakExempt() func(*flowcontrol.PriorityLevelConfiguration) {
 	return func(obj *flowcontrol.PriorityLevelConfiguration) {
 		obj.Name = "exempt"
@@ -245,28 +245,28 @@ func tweakExempt() func(*flowcontrol.PriorityLevelConfiguration) {
 	}
 }
 
-// tweakLimited sets the Limited field directly.
+// tweakLimited 直接设置 Limited 字段。
 func tweakLimited(limited *flowcontrol.LimitedPriorityLevelConfiguration) func(*flowcontrol.PriorityLevelConfiguration) {
 	return func(obj *flowcontrol.PriorityLevelConfiguration) {
 		obj.Spec.Limited = limited
 	}
 }
 
-// tweakSpecType sets the Spec.Type field directly.
+// tweakSpecType 直接设置 Spec.Type 字段。
 func tweakSpecType(t flowcontrol.PriorityLevelEnablement) func(*flowcontrol.PriorityLevelConfiguration) {
 	return func(obj *flowcontrol.PriorityLevelConfiguration) {
 		obj.Spec.Type = t
 	}
 }
 
-// tweakExemptConfig sets the Exempt configuration field.
+// tweakExemptConfig 设置 Exempt 配置字段。
 func tweakExemptConfig(exempt *flowcontrol.ExemptPriorityLevelConfiguration) func(*flowcontrol.PriorityLevelConfiguration) {
 	return func(obj *flowcontrol.PriorityLevelConfiguration) {
 		obj.Spec.Exempt = exempt
 	}
 }
 
-// tweakLimitResponseType sets the LimitResponse type and auto-populates Queuing if Queue.
+// tweakLimitResponseType 设置 LimitResponse 类型，若为 Queue 则自动填充 Queuing。
 func tweakLimitResponseType(lrt flowcontrol.LimitResponseType) func(*flowcontrol.PriorityLevelConfiguration) {
 	return func(obj *flowcontrol.PriorityLevelConfiguration) {
 		if obj.Spec.Limited == nil {
@@ -285,7 +285,7 @@ func tweakLimitResponseType(lrt flowcontrol.LimitResponseType) func(*flowcontrol
 	}
 }
 
-// tweakQueuing sets the Queuing field directly, overriding auto-population.
+// tweakQueuing 直接设置 Queuing 字段，覆盖自动填充的值。
 func tweakQueuing(queuing *flowcontrol.QueuingConfiguration) func(*flowcontrol.PriorityLevelConfiguration) {
 	return func(obj *flowcontrol.PriorityLevelConfiguration) {
 		if obj.Spec.Limited == nil {

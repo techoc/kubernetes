@@ -33,14 +33,14 @@ import (
 	utilsclock "k8s.io/utils/clock"
 	testing2 "k8s.io/utils/clock/testing"
 
-	// Ensure all API groups are registered with the scheme
+	// 确保所有 API group 都已注册到 scheme
 	_ "k8s.io/kubernetes/pkg/apis/lifecycle/install"
 )
 
 const validUID = "a2ee91f4-e13c-44db-9edc-4240e7383ab9"
 
 func TestDeclarativeValidate(t *testing.T) {
-	apiVersions := []string{"v1alpha1"} // Eviction is currently only in v1alpha1
+	apiVersions := []string{"v1alpha1"} // Eviction 目前仅存在于 v1alpha1
 	for _, apiVersion := range apiVersions {
 		t.Run(apiVersion, func(t *testing.T) {
 			testDeclarativeValidate(t, apiVersion)
@@ -115,7 +115,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 }
 
 func TestDeclarativeValidateUpdate(t *testing.T) {
-	apiVersions := []string{"v1alpha1"} // Eviction is currently only in v1alpha1
+	apiVersions := []string{"v1alpha1"} // Eviction 目前仅存在于 v1alpha1
 	for _, apiVersion := range apiVersions {
 		t.Run(apiVersion, func(t *testing.T) {
 			testDeclarativeValidateUpdate(t, apiVersion)
@@ -180,7 +180,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 }
 
 func TestDeclarativeValidateStatusUpdate(t *testing.T) {
-	apiVersions := []string{"v1alpha1"} // Eviction is currently only in v1alpha1
+	apiVersions := []string{"v1alpha1"} // Eviction 目前仅存在于 v1alpha1
 	for _, apiVersion := range apiVersions {
 		t.Run(apiVersion, func(t *testing.T) {
 			testDeclarativeValidateStatusUpdate(t, apiVersion)
@@ -292,7 +292,7 @@ func testDeclarativeValidateStatusUpdate(t *testing.T, apiVersion string) {
 				field.NotSupported(field.NewPath("status", "requesters").Index(0).Child("intent"), "", []lifecycle.RequesterIntent{lifecycle.RequesterIntentEviction, lifecycle.RequesterIntentWithdrawn}),
 			},
 		},
-		// targetResponders and responders
+		// targetResponders 和 responders
 		"duplicate targetResponders and responders": {
 			oldInput: mkValidEvictionStatus(0),
 			input:    mkValidEvictionStatus(0, addTargetResponders("example.com/baz", "example.com/baz"), addStatusResponders("example.com/baz", "example.com/baz")),

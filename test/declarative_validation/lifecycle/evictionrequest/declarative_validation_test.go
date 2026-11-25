@@ -32,14 +32,14 @@ import (
 	utilsclock "k8s.io/utils/clock"
 	testing2 "k8s.io/utils/clock/testing"
 
-	// Ensure all API groups are registered with the scheme
+	// 确保所有 API group 都已注册到 scheme
 	_ "k8s.io/kubernetes/pkg/apis/lifecycle/install"
 )
 
 const validUID = "5477c2ff-f59f-4eb9-a0be-e54232323faa"
 
 func TestDeclarativeValidate(t *testing.T) {
-	apiVersions := []string{"v1alpha1"} // EvictionRequest is currently only in v1alpha1
+	apiVersions := []string{"v1alpha1"} // EvictionRequest 目前仅存在于 v1alpha1
 	for _, apiVersion := range apiVersions {
 		t.Run(apiVersion, func(t *testing.T) {
 			testDeclarativeValidate(t, apiVersion)
@@ -148,7 +148,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 }
 
 func TestDeclarativeValidateUpdate(t *testing.T) {
-	apiVersions := []string{"v1alpha1"} // EvictionRequest is currently only in v1alpha1
+	apiVersions := []string{"v1alpha1"} // EvictionRequest 目前仅存在于 v1alpha1
 	for _, apiVersion := range apiVersions {
 		t.Run(apiVersion, func(t *testing.T) {
 			testDeclarativeValidateUpdate(t, apiVersion)
@@ -231,7 +231,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 }
 
 func TestDeclarativeValidateStatusUpdate(t *testing.T) {
-	apiVersions := []string{"v1alpha1"} // EvictionRequest is currently only in v1alpha1
+	apiVersions := []string{"v1alpha1"} // EvictionRequest 目前仅存在于 v1alpha1
 	for _, apiVersion := range apiVersions {
 		t.Run(apiVersion, func(t *testing.T) {
 			testDeclarativeValidateStatusUpdate(t, apiVersion)

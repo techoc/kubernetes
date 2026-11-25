@@ -33,7 +33,7 @@ import (
 	registry "k8s.io/kubernetes/pkg/registry/scheduling/compositepodgroup"
 	"k8s.io/kubernetes/test/declarative_validation/meta"
 
-	// Ensure all API groups are registered with the scheme
+	// 确保所有 API group 都已注册到 scheme
 	_ "k8s.io/kubernetes/pkg/apis/scheduling/install"
 )
 
@@ -343,10 +343,10 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 	updateObj := mkValidCompositePodGroup(setResourceVersion("1"))
 	meta.RunObjectMetaUpdateTestCases(t, ctx, &updateObj, registry.NewStrategy(), meta.WithStringentFinalizerValidation())
 
-	// Disable checks that are currently impossible to test properly in isolation.
-	// FieldValueInvalid update rules for properties under spec.schedulingPolicy
-	// are impossible to hit because mutations inside the schedulingPolicy fail its top-level
-	// immutable check oldSelf == self, short-circuiting deeper validation.
+	// 禁用目前无法在隔离环境下妥善测试的检查。
+	// spec.schedulingPolicy 下各属性的 FieldValueInvalid 更新规则无法触达，
+	// 因为 schedulingPolicy 内的变更会先触发顶层不可变性检查 oldSelf == self 而失败，
+	// 从而使更深层的校验短路。
 	gvk := schema.GroupVersionKind{Group: "scheduling.k8s.io", Version: apiVersion, Kind: "CompositePodGroup"}
 	coverage.RecordObservedRules(gvk, field.ErrorList{
 		field.Invalid(field.NewPath("spec", "schedulingPolicy", "basic"), nil, "").WithOrigin("immutable"),

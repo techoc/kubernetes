@@ -20,39 +20,39 @@ import (
 	"os"
 )
 
-// Getenver is the interface we use to mock out the env for easier testing. OS env
-// vars can't be as easily tested since internally it uses sync.Once.
+// Getenver 是我们为方便测试而用于模拟环境的接口。OS 环境变量
+// 不容易测试，因为其内部使用了 sync.Once。
 type Getenver interface {
 	Getenv(string) string
 }
 
-// osEnv uses the actual os.Getenv methods to lookup values.
+// osEnv 使用真正的 os.Getenv 方法查找值。
 type osEnv struct{}
 
-// Getenv gets the value of the requested environment variable.
+// Getenv 获取所请求环境变量的值。
 func (*osEnv) Getenv(s string) string {
 	return os.Getenv(s)
 }
 
-// explicitEnv uses a map instead of os.Getenv methods to lookup values.
+// explicitEnv 使用 map 代替 os.Getenv 方法查找值。
 type explicitEnv struct {
 	vals map[string]string
 }
 
-// Getenv returns the value of the requested environment variable (in this
-// implementation, really just a map lookup).
+// Getenv 返回所请求环境变量的值
+// （在此实现中实际上就是一次 map 查找）。
 func (e *explicitEnv) Getenv(s string) string {
 	return e.vals[s]
 }
 
-// defaultOSEnv uses a Getenver to lookup values but if it does
-// not have that value, it falls back to its internal set of defaults.
+// defaultOSEnv 使用 Getenver 查找值，若找不到该值，
+// 则回退到其内部的默认集合。
 type defaultEnver struct {
 	firstChoice Getenver
 	defaults    map[string]string
 }
 
-// Getenv returns the value of the environment variable or its default if unset.
+// Getenv 返回环境变量的值；若未设置则返回其默认值。
 func (e *defaultEnver) Getenv(s string) string {
 	v := e.firstChoice.Getenv(s)
 	if len(v) == 0 {

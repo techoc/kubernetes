@@ -294,10 +294,10 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 			},
 		},
 		"switching policy from basic to gang is allowed for cronjob": {
-			// basic and gang policy variant immutability cannot be expressed via
-			// DV and is only enforced imperatively on the Job update path. A
-			// CronJob spawns a fresh Workload per Job, so its jobTemplate policy
-			// may change; future Jobs simply use the new policy.
+			// basic 和 gang 策略变体的不可变性无法通过 DV 表达，
+			// 只在 Job 更新路径上以命令式方式强制检查。CronJob 为每个 Job 创建
+			// 新的 Workload，因此其 jobTemplate 策略可以变更；
+			// 后续的 Job 直接使用新策略。
 			old:                   mkCronJob(tweakJobSchedulingBasic()),
 			update:                mkCronJob(tweakJobSchedulingGang(4)),
 			enableWorkloadWithJob: true,

@@ -15,9 +15,9 @@ limitations under the License.
 */
 
 /*
-This soak tests places a specified number of pods on each node and then
-repeatedly sends queries to a service running on these pods via
-a service
+该浸泡测试在每个节点上放置指定数量的 Pod，
+然后通过一个 service 反复向运行在这些 Pod 上的
+服务发送查询。
 */
 
 package main
@@ -115,7 +115,7 @@ func main() {
 
 	queries := *queriesAverage * len(nodes.Items) * *podsPerNode
 
-	// Create the namespace
+	// 创建命名空间
 	got, err := client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "serve-hostnames-"}}, metav1.CreateOptions{})
 	if err != nil {
 		klog.Fatalf("Failed to create namespace: %v", err)
@@ -125,7 +125,7 @@ func main() {
 		if err := client.CoreV1().Namespaces().Delete(context.TODO(), ns, metav1.DeleteOptions{}); err != nil {
 			klog.Warningf("Failed to delete namespace %s: %v", ns, err)
 		} else {
-			// wait until the namespace disappears
+			// 等待命名空间消失
 			for range int(namespaceDeleteTimeout / time.Second) {
 				if _, err := client.CoreV1().Namespaces().Get(context.TODO(), ns, metav1.GetOptions{}); err != nil {
 					if apierrors.IsNotFound(err) {
@@ -138,9 +138,9 @@ func main() {
 	}(ns)
 	klog.Infof("Created namespace %s", ns)
 
-	// Create a service for these pods.
+	// 为这些 Pod 创建一个 service。
 	klog.Infof("Creating service %s/serve-hostnames", ns)
-	// Make several attempts to create a service.
+	// 多次尝试创建 service。
 	var svc *v1.Service
 	for start := time.Now(); time.Since(start) < serviceCreateTimeout; time.Sleep(2 * time.Second) {
 		t := time.Now()
@@ -172,10 +172,10 @@ func main() {
 		klog.Warningf("Unable to create service %s/%s: %v", ns, svc.Name, err)
 		return
 	}
-	// Clean up service
+	// 清理 service
 	defer func() {
 		klog.Infof("Cleaning up service %s/serve-hostnames", ns)
-		// Make several attempts to delete the service.
+		// 多次尝试删除 service。
 		for start := time.Now(); time.Since(start) < deleteTimeout; time.Sleep(1 * time.Second) {
 			if err := client.CoreV1().Services(ns).Delete(context.TODO(), svc.Name, metav1.DeleteOptions{}); err == nil {
 				return
@@ -184,13 +184,13 @@ func main() {
 		}
 	}()
 
-	// Put serve-hostname pods on each node.
+	// 在每个节点上放置 serve-hostname Pod。
 	podNames := []string{}
 	for i, node := range nodes.Items {
 		for j := 0; j < *podsPerNode; j++ {
 			podName := fmt.Sprintf("serve-hostname-%d-%d", i, j)
 			podNames = append(podNames, podName)
-			// Make several attempts
+			// 多次尝试
 			for start := time.Now(); time.Since(start) < podCreateTimeout; time.Sleep(2 * time.Second) {
 				klog.Infof("Creating pod %s/%s on node %s", ns, podName, node.Name)
 				t := time.Now()
@@ -224,10 +224,10 @@ func main() {
 			}
 		}
 	}
-	// Clean up the pods
+	// 清理 Pod
 	defer func() {
 		klog.Info("Cleaning up pods")
-		// Make several attempts to delete the pods.
+		// 多次尝试删除 Pod。
 		for _, podName := range podNames {
 			for start := time.Now(); time.Since(start) < deleteTimeout; time.Sleep(1 * time.Second) {
 				if err = client.CoreV1().Pods(ns).Delete(context.TODO(), podName, metav1.DeleteOptions{}); err == nil {
@@ -269,7 +269,7 @@ func main() {
 		return
 	}
 
-	// Wait for the endpoints to propagate.
+	// 等待 endpoints 传播完成。
 	for start := time.Now(); time.Since(start) < endpointTimeout; time.Sleep(10 * time.Second) {
 		hostname, err := proxyRequest.
 			Namespace(ns).
@@ -290,11 +290,11 @@ func main() {
 		break
 	}
 
-	// Repeatedly make requests.
+	// 反复发起请求。
 	for iteration := 0; iteration != *upTo; iteration++ {
 		responseChan := make(chan string, queries)
-		// Use a channel of size *maxPar to throttle the number
-		// of in-flight requests to avoid overloading the service.
+		// 使用大小为 *maxPar 的 channel 限制并发请求数，
+		// 避免服务过载。
 		inFlight := make(chan struct{}, *maxPar)
 		start := time.Now()
 		for q := range queries {
@@ -308,8 +308,8 @@ func main() {
 				klog.V(4).Infof("Proxy call in namespace %s took %v", ns, time.Since(t))
 				if err != nil {
 					klog.Warningf("Call failed during iteration %d query %d : %v", i, query, err)
-					// If the query failed return a string which starts with a character
-					// that can't be part of a hostname.
+					// 若查询失败，返回一个以不能作为主机名一部分的字符
+					// 开头的字符串。
 					responseChan <- fmt.Sprintf("!failed in iteration %d to issue query %d: %v", i, query, err)
 				} else {
 					responseChan <- string(hostname)
@@ -323,8 +323,8 @@ func main() {
 			r := <-responseChan
 			klog.V(4).Infof("Got response from %s", r)
 			responses[r]++
-			// If the returned hostname starts with '!' then it indicates
-			// an error response.
+			// 若返回的主机名以 '!' 开头，则表示
+			// 这是一个错误响应。
 			if len(r) > 0 && r[0] == '!' {
 				klog.V(3).Infof("Got response %s", r)
 				missing++
@@ -333,7 +333,7 @@ func main() {
 		if missing > 0 {
 			klog.Warningf("Missing %d responses out of %d", missing, queries)
 		}
-		// Report any nodes that did not respond.
+		// 报告所有未响应的节点。
 		for n, node := range nodes.Items {
 			for i := 0; i < *podsPerNode; i++ {
 				name := fmt.Sprintf("serve-hostname-%d-%d", n, i)

@@ -474,7 +474,7 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 		"valid firstAvailable derived attributes, max allowed": {
 			input: mkValidResourceClaimTemplate(tweakFirstAvailableDerivedAttributesCount(32)),
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 
 	for name, tc := range testCases {
@@ -516,7 +516,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 			old:    mkValidResourceClaimTemplate(),
 			update: mkValidResourceClaimTemplate(),
 		},
-		// TODO: Add more test cases
+		// TODO: 添加更多测试用例
 	}
 
 	for name, tc := range testCases {
@@ -531,11 +531,11 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 	meta.RunObjectMetaUpdateTestCases(t, ctx, &updateObj, Strategy, meta.WithStringentFinalizerValidation())
 }
 
-// --- Builders & tweaks ---
+// --- 构建函数与调整函数 ---
 //
-// These mirror the ones in pkg/registry/resource/resourceclaim/declarative_validation_test.go,
-// adapted to operate on ResourceClaimTemplate.Spec.Spec.Devices instead of
-// ResourceClaim.Spec.Devices. The structural shape is identical.
+// 这些函数与 pkg/registry/resource/resourceclaim/declarative_validation_test.go 中的对应函数一致，
+// 只是改为操作 ResourceClaimTemplate.Spec.Spec.Devices 而非
+// ResourceClaim.Spec.Devices。结构形态完全相同。
 
 func mkValidResourceClaimTemplate(tweaks ...func(rct *resource.ResourceClaimTemplate)) resource.ResourceClaimTemplate {
 	rct := resource.ResourceClaimTemplate{
@@ -598,7 +598,7 @@ func tweakAddDeviceRequest(req resource.DeviceRequest) func(*resource.ResourceCl
 
 func tweakDevicesRequests(items int) func(*resource.ResourceClaimTemplate) {
 	return func(rct *resource.ResourceClaimTemplate) {
-		// The first request already exists in the valid template
+		// 第一个 request 已存在于合法模板中
 		for i := 1; i < items; i++ {
 			rct.Spec.Spec.Devices.Requests = append(rct.Spec.Spec.Devices.Requests, mkDeviceRequest(fmt.Sprintf("req-%d", i)))
 		}

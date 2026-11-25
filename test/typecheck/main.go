@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// do a fast type check of kubernetes code, for all platforms.
+// 对所有平台的 Kubernetes 代码执行快速类型检查。
 package main
 
 import (
@@ -43,8 +43,8 @@ var (
 	tags           = flag.String("tags", "", "comma-separated list of build tags to apply in addition to go's defaults")
 	ignorePatterns = flag.String("ignore", "", "comma-separated list of Go patterns to ignore")
 
-	// When processed in order, windows and darwin are early to make
-	// interesting OS-based errors happen earlier.
+	// 按顺序处理时，windows 和 darwin 排在前面，
+	// 以便尽早暴露与操作系统相关的有趣错误。
 	crossPlatforms = []string{
 		"linux/amd64", "windows/386",
 		"darwin/amd64", "darwin/arm64",
@@ -90,7 +90,7 @@ func verify(plat string, patterns []string, ignore map[string]bool) ([]string, e
 		return nil, err
 	}
 
-	// Recursively import all deps and flatten to one list.
+	// 递归导入所有依赖，并展平为一个列表。
 	allMap := map[string]*packages.Package{}
 	for _, pkg := range pkgs {
 		if ignore[pkg.PkgPath] {
@@ -179,7 +179,7 @@ func resolvePkgs(patterns ...string) (map[string]bool, error) {
 	}
 	paths := map[string]bool{}
 	for _, p := range pkgs {
-		// ignore list errors (e.g. doesn't exist)
+		// 忽略 list 错误（例如不存在）
 		if len(p.Errors) == 0 {
 			paths[p.PkgPath] = true
 		}
@@ -192,7 +192,7 @@ func main() {
 	args := flag.Args()
 
 	if *verbose {
-		*serial = true // to avoid confusing interleaved logs
+		*serial = true // 避免交错日志造成混淆
 	}
 
 	if len(args) == 0 {
@@ -229,10 +229,10 @@ func main() {
 	for _, plat := range plats {
 		wg.Add(1)
 		go func(plat string) {
-			// block until there's room for this task
+			// 阻塞直到该任务有空位
 			throttle <- 1
 			defer func() {
-				// indicate this task is done
+				// 标记该任务已完成
 				<-throttle
 			}()
 
@@ -244,8 +244,8 @@ func main() {
 				f = true
 			} else if len(errors) > 0 {
 				for _, e := range errors {
-					// Special case CGo errors which may depend on headers we
-					// don't have.
+					// 特殊处理 CGo 错误，它可能依赖我们没有的
+					// 头文件。
 					if !strings.HasSuffix(e, "could not import C (no metadata for C)") {
 						f = true
 						serialFprintf(os.Stderr, "ERROR(%s): %s\n", plat, e)

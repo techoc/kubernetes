@@ -135,15 +135,15 @@ func TestDeclarativeValidate(t *testing.T) {
 				},
 				"valid: device attribute list of strings at max bytes": {
 					input: mkResourceSliceWithDevices(tweakDeviceAttribute("test.io/list_of_strings", resource.DeviceAttribute{
-						// The tag literal is 64, which must stay aligned with DeviceAttributeMaxValueLength.
-						// "é" is two bytes in UTF-8, so repeating it max/2 times verifies the exact maxBytes boundary.
+						// tag 字面量为 64，必须与 DeviceAttributeMaxValueLength 保持一致。
+						// "é" 在 UTF-8 中占两个字节，重复 max/2 次可精确验证 maxBytes 边界。
 						StringValues: []string{strings.Repeat("é", resource.DeviceAttributeMaxValueLength/2)},
 					})),
 				},
 				"invalid: device attribute list of strings with too-long item": {
 					input: mkResourceSliceWithDevices(tweakDeviceAttribute("test.io/list_of_strings", resource.DeviceAttribute{
-						// The tag literal is 64, which must stay aligned with DeviceAttributeMaxValueLength.
-						// "é" is two bytes in UTF-8, so max/2+1 repeats exceeds the maxBytes boundary.
+						// tag 字面量为 64，必须与 DeviceAttributeMaxValueLength 保持一致。
+						// "é" 在 UTF-8 中占两个字节，重复 max/2+1 次会超出 maxBytes 边界。
 						StringValues: []string{strings.Repeat("é", resource.DeviceAttributeMaxValueLength/2+1)},
 					})),
 					expectedErrs: field.ErrorList{
@@ -277,9 +277,9 @@ func TestDeclarativeValidate(t *testing.T) {
 						field.Required(field.NewPath("spec", "devices").Index(0).Child("consumesCounters").Index(0).Child("counters"), "").MarkBeta(),
 					},
 				},
-				// spec.partitionTypeAttribute. The field is only permitted on a
-				// slice whose devices consume counters, and those devices must
-				// carry the named attribute as a string.
+				// spec.partitionTypeAttribute。该字段只允许出现在设备使用了
+				// counter 的 slice 上，且这些设备必须以字符串形式携带
+				// 指定的属性。
 				"valid: partitionTypeAttribute": {
 					input: mkResourceSliceWithDevices(
 						tweakDeviceCounter(counters("valid-key")),
@@ -298,8 +298,8 @@ func TestDeclarativeValidate(t *testing.T) {
 						field.Invalid(field.NewPath("spec", "partitionTypeAttribute"), nil, "").WithOrigin("format=k8s-resource-fully-qualified-name"),
 					},
 				},
-				// A bare name is a valid attribute key but not a valid reference:
-				// the domain is required so the attribute is unambiguous.
+				// 裸名称是合法的属性键，但不是合法的引用：
+				// 必须有域名，属性才不会有歧义。
 				"invalid: partitionTypeAttribute without domain": {
 					input: mkResourceSliceWithDevices(
 						tweakDeviceCounter(counters("valid-key")),
@@ -320,7 +320,7 @@ func TestDeclarativeValidate(t *testing.T) {
 						field.Forbidden(field.NewPath("spec", "partitionTypeAttribute"), ""),
 					},
 				},
-				// NodeAllocatableResources test cases
+				// NodeAllocatableResources 相关测试用例
 				"invalid: node allocatable resource name not native": {
 					input: mkResourceSliceWithDevices(tweakDeviceNodeAllocatableResources(map[v1.ResourceName]resource.NodeAllocatableResource{
 						"example.com/gpu": {
@@ -548,13 +548,13 @@ func TestDeclarativeValidate(t *testing.T) {
 						field.Invalid(field.NewPath("spec", "devices").Index(0).Child("consumesCounters").Index(0).Child("compatibilityGroups").Index(0), "InvalidKey", "").WithOrigin("format=k8s-short-name"),
 					},
 				},
-				// TODO: Add more test cases
+				// TODO: 添加更多测试用例
 			}
 
 			for k, tc := range testCases {
 				t.Run(k, func(t *testing.T) {
-					// DRAPartitionableDevicesType depends on DRAResourcePoolStatus,
-					// so it cannot be enabled on its own.
+					// DRAPartitionableDevicesType 依赖 DRAResourcePoolStatus，
+					// 因此不能单独启用。
 					featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAResourcePoolStatus, true)
 					featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAPartitionableDevicesType, tc.enablePartitionTypeAttr)
 					apitesting.VerifyValidationEquivalence(
@@ -664,16 +664,16 @@ func TestDeclarativeValidateUpdate(t *testing.T) {
 				"valid update: device attribute list of strings at max bytes": {
 					old: mkResourceSliceWithDevices(),
 					update: mkResourceSliceWithDevices(tweakDeviceAttribute("test.io/list_of_strings", resource.DeviceAttribute{
-						// The tag literal is 64, which must stay aligned with DeviceAttributeMaxValueLength.
-						// "é" is two bytes in UTF-8, so repeating it max/2 times verifies the exact maxBytes boundary.
+						// tag 字面量为 64，必须与 DeviceAttributeMaxValueLength 保持一致。
+						// "é" 在 UTF-8 中占两个字节，重复 max/2 次可精确验证 maxBytes 边界。
 						StringValues: []string{strings.Repeat("é", resource.DeviceAttributeMaxValueLength/2)},
 					})),
 				},
 				"invalid update: device attribute list of strings with too-long item": {
 					old: mkResourceSliceWithDevices(),
 					update: mkResourceSliceWithDevices(tweakDeviceAttribute("test.io/list_of_strings", resource.DeviceAttribute{
-						// The tag literal is 64, which must stay aligned with DeviceAttributeMaxValueLength.
-						// "é" is two bytes in UTF-8, so max/2+1 repeats exceeds the maxBytes boundary.
+						// tag 字面量为 64，必须与 DeviceAttributeMaxValueLength 保持一致。
+						// "é" 在 UTF-8 中占两个字节，重复 max/2+1 次会超出 maxBytes 边界。
 						StringValues: []string{strings.Repeat("é", resource.DeviceAttributeMaxValueLength/2+1)},
 					})),
 					expectedErrs: field.ErrorList{
@@ -1046,9 +1046,9 @@ func tweakDeviceConsumesCountersCompatibilityGroups(groups ...string) func(*reso
 	}
 }
 
-// compatibilityGroupNames returns count distinct, well-formed compatibility
-// group names for exercising the maxItems (DeviceCompatibilityGroupsMaxSize)
-// limit.
+// compatibilityGroupNames 返回 count 个互不相同
+// 且格式合法的兼容性组名，用于测试 maxItems
+// （DeviceCompatibilityGroupsMaxSize）限制。
 func compatibilityGroupNames(count int) []string {
 	groups := make([]string, count)
 	for i := range groups {

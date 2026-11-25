@@ -17,21 +17,21 @@ limitations under the License.
 package main
 
 const (
-	// resultsTarballName is the name of the tarball we create with all the results.
+	// resultsTarballName 是我们打包所有结果所用的 tarball 名称。
 	resultsTarballName = "e2e.tar.gz"
 
-	// doneFileName is the name of the file that signals to the Sonobuoy worker we are
-	// done. The file should contain the path to the results file.
+	// doneFileName 是用于通知 Sonobuoy worker 我们已完成的信号文件名称。
+	// 该文件应包含结果文件的路径。
 	doneFileName = "done"
 
-	// resultsDirEnvKey is the env var which stores which directory to put the donefile
-	// and results into. It is a shared, mounted volume between the plugin and Sonobuoy.
+	// resultsDirEnvKey 是存放 donefile 和结果的目录对应的环境变量。
+	// 它是插件与 Sonobuoy 之间共享的挂载卷。
 	resultsDirEnvKey = "RESULTS_DIR"
 
-	// logFileName is the name of the file which stdout is tee'd to.
+	// logFileName 是 stdout 通过 tee 写入的文件名称。
 	logFileName = "e2e.log"
 
-	// Misc env vars which were explicitly supported prior to the go runner.
+	// 在 go runner 之前就已明确支持的其他环境变量。
 	dryRunEnvKey     = "E2E_DRYRUN"
 	parallelEnvKey   = "E2E_PARALLEL"
 	focusEnvKey      = "E2E_FOCUS"
@@ -41,16 +41,16 @@ const (
 	ginkgoEnvKey     = "GINKGO_BIN"
 	testBinEnvKey    = "TEST_BIN"
 
-	// extraGinkgoArgsEnvKey, if set, will is a list of other arguments to pass to ginkgo.
-	// These are passed before the test binary and include things like `--afterSuiteHook`.
+	// extraGinkgoArgsEnvKey 若设置，是要传给 ginkgo 的其他参数列表。
+	// 这些参数位于测试二进制文件之前，例如 `--afterSuiteHook`。
 	extraGinkgoArgsEnvKey = "E2E_EXTRA_GINKGO_ARGS"
 
-	// extraArgsEnvKey, if set, will is a list of other arguments to pass to the tests.
-	// These are passed after the `--` and include things like `--provider`.
+	// extraArgsEnvKey 若设置，是要传给测试的其他参数列表。
+	// 这些参数位于 `--` 之后，例如 `--provider`。
 	extraArgsEnvKey = "E2E_EXTRA_ARGS"
 
-	// extraArgsSeparaterEnvKey specifies how to split the extra args values. If unset,
-	// it will default to splitting by spaces.
+	// extraArgsSeparaterEnvKey 指定如何拆分额外参数值。若未设置，
+	// 默认按空格拆分。
 	extraArgsSeparaterEnvKey = "E2E_EXTRA_ARGS_SEP"
 
 	defaultSkip         = ""
@@ -61,7 +61,7 @@ const (
 	defaultGinkgoBinary = "/usr/local/bin/ginkgo"
 	defaultTestBinary   = "/usr/local/bin/e2e.test"
 
-	// serialTestsRegexp is the default skip value if running in parallel. Will not
-	// override an explicit E2E_SKIP value.
+	// serialTestsRegexp 是并行运行时的默认 skip 值，不会覆盖
+	// 显式设置的 E2E_SKIP 值。
 	serialTestsRegexp = "\\[Serial\\]"
 )

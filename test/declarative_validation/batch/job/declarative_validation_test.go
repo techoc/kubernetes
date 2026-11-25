@@ -301,7 +301,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 			update:                mkJob(setResourceVersion("1"), setBasicPolicy()),
 			enableWorkloadWithJob: true,
 			expectedErrs: field.ErrorList{
-				// Declarative NoSet constraint on the field itself.
+				// 该字段本身的声明式 NoSet 约束。
 				field.Invalid(field.NewPath("spec", "scheduling"), nil, "").WithOrigin("update"),
 			},
 		},
@@ -310,7 +310,7 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 			update:                mkJob(setResourceVersion("1")),
 			enableWorkloadWithJob: true,
 			expectedErrs: field.ErrorList{
-				// Declarative NoUnset constraint on the field itself.
+				// 该字段本身的声明式 NoUnset 约束。
 				field.Invalid(field.NewPath("spec", "scheduling"), nil, "").WithOrigin("update"),
 			},
 		},

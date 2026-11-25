@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package scale exercises declarative validation for the autoscaling/v1.Scale
-// subresource. Unlike other directories under test/declarative_validation, the
-// Scale subresource has no RESTUpdateStrategy: each parent's ScaleREST.Update
-// composes ValidateScale + rest.DeclarativeValidation inline. The test mirrors
-// that composition through VerifyUpdateValidationEquivalenceFunc.
+// Package scale 对 autoscaling/v1.Scale 子资源执行声明式校验。
+// 与 test/declarative_validation 下的其他目录不同，Scale 子资源
+// 没有 RESTUpdateStrategy：每个父资源的 ScaleREST.Update 都在内部组合了
+// ValidateScale + rest.DeclarativeValidation。本测试通过
+// VerifyUpdateValidationEquivalenceFunc 模拟这种组合。
 package scale
 
 import (
@@ -68,12 +68,12 @@ func TestDeclarativeValidateUpdate(t *testing.T) {
 	}
 }
 
-// validateScale invokes the same ValidateScaleUpdate helper that every
-// ScaleREST.UpdatedObject calls in production (e.g.
-// pkg/registry/core/replicationcontroller/storage/storage.go), passing the
-// real type-specific GroupVersionKindProvider used by the
-// replicationcontroller ScaleREST so the test's GVK mapping matches
-// production.
+// validateScale 调用生产环境中每个 ScaleREST.UpdatedObject
+// 所使用的同一个 ValidateScaleUpdate 辅助函数（例如
+// pkg/registry/core/replicationcontroller/storage/storage.go），并传入
+// replicationcontroller ScaleREST 所使用的真实的类型专用
+// GroupVersionKindProvider，从而让测试中的 GVK 映射
+// 与生产环境一致。
 func validateScale(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	scale := obj.(*autoscaling.Scale)
 	var oldScale *autoscaling.Scale

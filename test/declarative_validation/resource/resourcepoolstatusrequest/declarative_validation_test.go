@@ -33,7 +33,7 @@ import (
 	"k8s.io/kubernetes/test/declarative_validation/meta"
 	"k8s.io/utils/ptr"
 
-	// Ensure all API groups are registered with the scheme
+	// 确保所有 API group 都已注册到 scheme
 	_ "k8s.io/kubernetes/pkg/apis/resource/install"
 )
 
@@ -90,8 +90,8 @@ func TestDeclarativeValidate(t *testing.T) {
 			expectedErrs:            field.ErrorList{field.Invalid(field.NewPath("spec", "defaultPartitionTypeAttribute"), nil, "").WithOrigin("format=k8s-resource-fully-qualified-name")},
 		},
 		"partitionTypeAttribute without domain": {
-			// A bare name is a valid attribute key but not a valid reference:
-			// the domain is required so the attribute is unambiguous.
+			// 裸名称是合法的属性键，但不是合法的引用：
+			// 必须有域名，属性才不会有歧义。
 			input: mkValidRPSR(func(r *resource.ResourcePoolStatusRequest) {
 				r.Spec.DefaultPartitionTypeAttribute = new("profile")
 			}),
@@ -121,7 +121,7 @@ func TestDeclarativeValidate(t *testing.T) {
 			expectedErrs: field.ErrorList{field.Invalid(field.NewPath("spec", "limit"), nil, "").WithOrigin("maximum")},
 		},
 		"pool name nil": {
-			// PoolName is optional, nil should be valid
+			// PoolName 是可选字段，nil 应当是合法的
 			input: mkValidRPSR(func(r *resource.ResourcePoolStatusRequest) {
 				r.Spec.PoolName = nil
 			}),
@@ -137,8 +137,8 @@ func TestDeclarativeValidate(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			// DRAPartitionableDevicesType depends on DRAResourcePoolStatus, so it
-			// cannot be enabled on its own.
+			// DRAPartitionableDevicesType 依赖 DRAResourcePoolStatus，
+			// 因此不能单独启用。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAResourcePoolStatus, true)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAPartitionableDevicesType, tc.enablePartitionTypeAttr)
 			apitesting.VerifyValidationEquivalence(t, ctx, &tc.input, registry.Strategy, tc.expectedErrs)
@@ -251,7 +251,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 			expectedErrs: field.ErrorList{field.Invalid(field.NewPath("status", "pools").Index(0).Child("poolName"), nil, "").WithOrigin("format=k8s-resource-pool-name")},
 		},
 		"pool nil optional fields valid": {
-			// Device count fields are optional (may be unset when validationError is set)
+			// 设备计数字段是可选的（设置 validationError 时可以不填）
 			oldObj: mkValidRPSRForUpdate(),
 			updateObj: mkValidRPSRForUpdate(withStatus(func(s *resource.ResourcePoolStatusRequestStatus) {
 				s.Pools = []resource.PoolStatus{
@@ -260,7 +260,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 						PoolName:           "pool-1",
 						ResourceSliceCount: ptr.To[int32](1),
 						Generation:         1,
-						// All optional pointer fields are nil - this is valid
+						// 所有可选的指针字段均为 nil —— 这是合法的
 					},
 				}
 			})),
@@ -612,7 +612,7 @@ func TestDeclarativeValidateStatusUpdate(t *testing.T) {
 	})
 }
 
-// mkValidRPSR creates a valid ResourcePoolStatusRequest with optional tweaks.
+// mkValidRPSR 创建一个合法的 ResourcePoolStatusRequest，可按需调整。
 func mkValidRPSR(tweaks ...func(*resource.ResourcePoolStatusRequest)) resource.ResourcePoolStatusRequest {
 	obj := resource.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -630,7 +630,7 @@ func mkValidRPSR(tweaks ...func(*resource.ResourcePoolStatusRequest)) resource.R
 	return obj
 }
 
-// mkValidRPSRForUpdate creates a valid ResourcePoolStatusRequest for update scenarios.
+// mkValidRPSRForUpdate 为更新场景创建一个合法的 ResourcePoolStatusRequest。
 func mkValidRPSRForUpdate(tweaks ...func(*resource.ResourcePoolStatusRequest)) resource.ResourcePoolStatusRequest {
 	obj := mkValidRPSR(tweaks...)
 	obj.ResourceVersion = "1"
@@ -684,7 +684,7 @@ func withValidStatus() func(*resource.ResourcePoolStatusRequest) {
 	})
 }
 
-// mkBaseStatus creates a status with all required fields populated.
+// mkBaseStatus 创建一个已填充所有必填字段的 status。
 func mkBaseStatus() *resource.ResourcePoolStatusRequestStatus {
 	return &resource.ResourcePoolStatusRequestStatus{
 		PoolCount: ptr.To[int32](0),

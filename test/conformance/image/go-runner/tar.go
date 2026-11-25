@@ -26,10 +26,10 @@ import (
 	"strings"
 )
 
-// tarDir takes a source and variable writers and walks 'source' writing each file
-// found to the tar writer.
+// tarDir 接受源目录和相应的 writer，遍历 'source' 并将找到的每个文件
+// 写入 tar writer。
 func tarDir(dir, outpath string) error {
-	// ensure the src actually exists before trying to tar it
+	// 打包之前先确保源目录确实存在
 	if _, err := os.Stat(dir); err != nil {
 		return fmt.Errorf("tar unable to stat directory %v: %w", dir, err)
 	}
@@ -47,29 +47,29 @@ func tarDir(dir, outpath string) error {
 	defer tw.Close()
 
 	return filepath.Walk(dir, func(file string, fi os.FileInfo, err error) error {
-		// Return on any error.
+		// 遇到任何错误都直接返回。
 		if err != nil {
 			return err
 		}
 
-		// Only write regular files and don't include the archive itself.
+		// 只写入普通文件，且不包含归档文件本身。
 		if !fi.Mode().IsRegular() || filepath.Join(dir, fi.Name()) == outpath {
 			return nil
 		}
 
-		// Create a new dir/file header.
+		// 创建新的目录/文件头。
 		header, err := tar.FileInfoHeader(fi, fi.Name())
 		if err != nil {
 			return fmt.Errorf("creating file info header %v: %w", fi.Name(), err)
 		}
 
-		// Update the name to correctly reflect the desired destination when untaring.
+		// 更新名称，使其正确反映解包时的目标路径。
 		header.Name = strings.TrimPrefix(strings.Replace(file, dir, "", -1), string(filepath.Separator))
 		if err := tw.WriteHeader(header); err != nil {
 			return fmt.Errorf("writing header for tarball %v: %w", header.Name, err)
 		}
 
-		// Open files, copy into tarfile, and close.
+		// 打开文件，复制到 tar 归档，然后关闭。
 		f, err := os.Open(file)
 		if err != nil {
 			return fmt.Errorf("opening file %v for writing into tarball: %w", file, err)

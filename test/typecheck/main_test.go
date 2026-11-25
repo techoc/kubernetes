@@ -25,12 +25,12 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// This exists because `go` is not always in the PATH when running CI.
+// 之所以存在这个文件，是因为在 CI 中运行时 `go` 不一定在 PATH 中。
 var goBinary = flag.String("go", "", "path to a `go` binary")
 
 func TestVerify(t *testing.T) {
-	// x/tools/packages is going to literally exec `go`, so it needs some
-	// setup.
+	// x/tools/packages 会直接执行 `go`，因此需要做一些
+	// 准备工作。
 	setEnvVars(t)
 
 	tcs := []struct {

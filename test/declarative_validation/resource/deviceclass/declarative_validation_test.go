@@ -165,7 +165,7 @@ func TestDeclarativeValidate(t *testing.T) {
 						field.Invalid(field.NewPath("spec", "extendedResourceName"), "example.com/"+strings.Repeat("a", 64), "").WithOrigin("format=k8s-extended-resource-name").MarkBeta(),
 					},
 				},
-				// TODO: Add more test cases
+				// TODO: 添加更多测试用例
 			}
 
 			for k, tc := range testCases {
@@ -273,7 +273,7 @@ func TestDeclarativeValidateUpdate(t *testing.T) {
 						field.Invalid(field.NewPath("spec", "extendedResourceName"), "example.com/"+strings.Repeat("a", 64), "").WithOrigin("format=k8s-extended-resource-name").MarkBeta(),
 					},
 				},
-				// TODO: Add more test cases
+				// TODO: 添加更多测试用例
 			}
 
 			for k, tc := range testCases {
@@ -290,7 +290,7 @@ func TestDeclarativeValidateUpdate(t *testing.T) {
 	}
 }
 
-// Helper function to create a DeviceClass with default values and optional mutators
+// 辅助函数：创建一个具有默认值的 DeviceClass，可按需调整
 func mkDeviceClass(mutators ...func(*resource.DeviceClass)) resource.DeviceClass {
 	dc := resource.DeviceClass{
 		ObjectMeta: metav1.ObjectMeta{

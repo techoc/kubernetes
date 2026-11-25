@@ -22,7 +22,7 @@ import (
 	"k8s.io/kubernetes/test/fuzz/cbor"
 )
 
-// FuzzDecodeAllocations wraps the FuzzDecodeAllocations go-fuzz target as a "go test" fuzz test.
+// FuzzDecodeAllocations 将 FuzzDecodeAllocations go-fuzz target 包装为 "go test" 模糊测试。
 func FuzzDecodeAllocations(f *testing.F) {
 	f.Add([]byte("\xa2\x4aapiVersion\x41x\x44kind\x41y")) // {'apiVersion': 'x', 'kind': 'y'}
 	f.Fuzz(func(t *testing.T, in []byte) {

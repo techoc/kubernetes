@@ -127,7 +127,7 @@ func TestDeclarativeValidate(t *testing.T) {
 				field.Invalid(field.NewPath("metadata.name"), nil, "").WithOrigin("format=k8s-long-name").MarkBeta(),
 			},
 		},
-		// metadata.generateName (note: it's is not really validated)
+		// metadata.generateName（注意：它其实并未真正被校验）
 		"generateName: valid with empty name": {
 			input: mkValidReplicationController(func(rc *api.ReplicationController) {
 				rc.Name = ""
@@ -256,8 +256,8 @@ func TestDeclarativeValidateUpdate(t *testing.T) {
 			update: mkValidReplicationController(func(rc *api.ReplicationController) {
 				rc.GenerateName += "x"
 			}),
-			// This is, oddly, mutable.  We should probably ratchet this off
-			// and make it immutable.
+			// 奇怪的是，这个字段是可变的。或许应该逐步收紧，
+			// 将其改为不可变。
 		},
 		// spec.replicas
 		"replicas: nil": {
@@ -312,8 +312,8 @@ func TestDeclarativeValidateUpdate(t *testing.T) {
 	meta.RunObjectMetaUpdateTestCases(t, ctx, &updateObj, registry.Strategy, meta.WithStringentFinalizerValidation())
 }
 
-// mkValidReplicationController produces a ReplicationController which passes
-// validation with no tweaks.
+// mkValidReplicationController 生成一个无需任何调整即可通过校验的
+// ReplicationController。
 func mkValidReplicationController(tweaks ...func(rc *api.ReplicationController)) api.ReplicationController {
 	rc := api.ReplicationController{
 		ObjectMeta: metav1.ObjectMeta{Name: "abc", Namespace: metav1.NamespaceDefault},

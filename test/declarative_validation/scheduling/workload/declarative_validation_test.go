@@ -35,7 +35,7 @@ import (
 	registry "k8s.io/kubernetes/pkg/registry/scheduling/workload"
 	"k8s.io/kubernetes/test/declarative_validation/meta"
 
-	// Ensure all API groups are registered with the scheme
+	// 确保所有 API group 都已注册到 scheme
 	_ "k8s.io/kubernetes/pkg/apis/scheduling/install"
 )
 
@@ -90,8 +90,8 @@ func testDeclarativeValidate(t *testing.T, apiVersion string) {
 			input:        mkValidWorkload(addPodGroupTemplate("main")),
 			expectedErrs: field.ErrorList{field.Duplicate(field.NewPath("spec", "podGroupTemplates").Index(1), nil)},
 		},
-		// Declarative validation treats 0 as "missing" and returns Required error
-		// instead of checking minimum constraint and returning Invalid error.
+		// 声明式校验将 0 视为“缺失”并返回 Required 错误，
+		// 而不是检查 minimum 约束并返回 Invalid 错误。
 		"gang minCount zero": {
 			input:        mkValidWorkload(setPodGroupMinCount(0, 0)),
 			expectedErrs: field.ErrorList{field.Required(field.NewPath("spec", "podGroupTemplates").Index(0).Child("schedulingPolicy", "gang", "minCount"), "")},
@@ -1409,9 +1409,9 @@ func testDeclarativeValidateUpdate(t *testing.T, apiVersion string) {
 	updateObj := mkValidWorkload(setResourceVersion("1"))
 	meta.RunObjectMetaUpdateTestCases(t, ctx, &updateObj, registry.Strategy, meta.WithStringentFinalizerValidation())
 
-	// The FieldValueForbidden rule on schedulingConstraints is impossible because it is only forbidden when the
-	// TopologyAwareWorkloadScheduling feature gate is disabled, but disabling that feature gate disables the parent
-	// CompositePodGroup structure entirely (causing a top-level error before children rules are evaluated).
+	// schedulingConstraints 上的 FieldValueForbidden 规则无法触达，因为它仅在
+	// TopologyAwareWorkloadScheduling feature gate 禁用时才会触发禁止，但禁用该 feature gate 会同时
+	// 彻底禁用父级 CompositePodGroup 结构（在子规则被求值前就产生顶层错误）。
 	gvk := schema.GroupVersionKind{Group: "scheduling.k8s.io", Version: apiVersion, Kind: "Workload"}
 	coverage.RecordObservedRules(gvk, field.ErrorList{
 		field.Forbidden(field.NewPath("spec", "compositePodGroupTemplates").Index(0).Child("podGroupTemplates").Index(0).Child("schedulingConstraints"), ""),

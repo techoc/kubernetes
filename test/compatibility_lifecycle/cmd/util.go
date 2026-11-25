@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	// env configs
+	// 环境配置
 	GOOS string = findGOOS()
 )
 
@@ -42,8 +42,8 @@ func findGOOS() string {
 	return string(out)
 }
 
-// identifierName returns the name of an identifier.
-// if ignorePkg, only return the last part of the identifierName.
+// identifierName 返回标识符的名称。
+// 如果 ignorePkg 为 true，只返回标识符名的最后一部分。
 func identifierName(v ast.Expr, ignorePkg bool) string {
 	if id, ok := v.(*ast.Ident); ok {
 		return id.Name
@@ -57,7 +57,7 @@ func identifierName(v ast.Expr, ignorePkg bool) string {
 	return ""
 }
 
-// importAliasMap returns the mapping from pkg path to import alias.
+// importAliasMap 返回包路径到导入别名的映射。
 func importAliasMap(imports []*ast.ImportSpec) map[string]string {
 	m := map[string]string{}
 	for _, im := range imports {

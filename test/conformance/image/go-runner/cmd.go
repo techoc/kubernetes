@@ -23,13 +23,13 @@ import (
 	"strings"
 )
 
-// getCmd uses the given environment to form the ginkgo command to run tests. It will
-// set the stdout/stderr to the given writer.
+// getCmd 使用给定的环境拼装用于运行测试的 ginkgo 命令，并将
+// stdout/stderr 设置为给定的 writer。
 func getCmd(env Getenver, w io.Writer) *exec.Cmd {
 	ginkgoArgs := []string{}
 
-	// The logic of the parallel env var impacting the skip value necessitates it
-	// being placed before the rest of the flag resolution.
+	// 并行环境变量影响 skip 值的逻辑决定了它必须放在
+	// 其余 flag 解析之前处理。
 	skip := env.Getenv(skipEnvKey)
 	switch env.Getenv(parallelEnvKey) {
 	case "y", "Y", "true":
@@ -53,7 +53,7 @@ func getCmd(env Getenver, w io.Writer) *exec.Cmd {
 		"--kubeconfig=" + env.Getenv(kubeconfigEnvKey),
 	}
 
-	// Extra args handling
+	// 处理额外参数
 	sep := " "
 	if len(env.Getenv(extraArgsSeparaterEnvKey)) > 0 {
 		sep = env.Getenv(extraArgsSeparaterEnvKey)
@@ -72,8 +72,8 @@ func getCmd(env Getenver, w io.Writer) *exec.Cmd {
 	if len(env.Getenv(dryRunEnvKey)) > 0 {
 		ginkgoArgs = append(ginkgoArgs, "--dry-run=true")
 	}
-	// NOTE: Ginkgo's default timeout has been reduced from 24h to 1h in V2, set it as "24h" for backward compatibility
-	// if this is not set by env of extraGinkgoArgsEnvKey.
+	// NOTE: Ginkgo V2 的默认超时已从 24h 缩短为 1h；若 extraGinkgoArgsEnvKey
+	// 对应的环境未设置该项，则将其设为 "24h" 以保持向后兼容。
 	exists := func(args []string) bool {
 		for _, arg := range args {
 			if strings.Contains(arg, "--timeout") {
@@ -99,7 +99,7 @@ func getCmd(env Getenver, w io.Writer) *exec.Cmd {
 	return cmd
 }
 
-// cmdInfo generates a useful look at what the command is for printing/debug.
+// cmdInfo 生成便于打印/调试的命令信息。
 func cmdInfo(cmd *exec.Cmd) string {
 	return fmt.Sprintf(
 		`Command env: %v

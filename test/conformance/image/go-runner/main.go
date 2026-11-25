@@ -45,20 +45,20 @@ func main() {
 	}
 }
 
-// configureAndRunWithEnv uses the given environment to configure and then start the test run.
-// It will handle TERM signals gracefully and kill the test process and will
-// save the logs/results to the location specified via the RESULTS_DIR environment
-// variable.
+// configureAndRunWithEnv 使用给定的环境进行配置，
+// 然后启动测试运行。它会优雅地处理 TERM 信号并终止测试进程，
+// 并将日志和结果保存到 RESULTS_DIR 环境变量指定的位置。
+// 该位置由用户通过环境变量提供。
 func configureAndRunWithEnv(env Getenver) error {
-	// Ensure we save results regardless of other errors. This helps any
-	// consumer who may be polling for the results.
+	// 无论是否发生其他错误，都要确保保存结果。这样可以帮助
+	// 可能正在轮询结果的使用方。
 	resultsDir := env.Getenv(resultsDirEnvKey)
 	defer saveResults(resultsDir)
 
-	// Print the output to stdout and a logfile which will be returned
-	// as part of the results tarball.
+	// 将输出同时打印到 stdout 和日志文件中，该日志文件将作为
+	// 结果 tarball 的一部分返回。
 	logFilePath := filepath.Join(resultsDir, logFileName)
-	// ensure the resultsDir actually exists
+	// 确保 resultsDir 确实存在
 	if _, err := os.Stat(resultsDir); os.IsNotExist(err) {
 		log.Printf("The resultsDir %v does not exist, will create it", resultsDir)
 		if mkdirErr := os.Mkdir(resultsDir, 0755); mkdirErr != nil {
@@ -78,7 +78,7 @@ func configureAndRunWithEnv(env Getenver) error {
 		return fmt.Errorf("starting command: %w", err)
 	}
 
-	// Handle signals and shutdown process gracefully.
+	// 优雅地处理信号并关闭进程。
 	go setupSigHandler(cmd.Process.Pid)
 
 	err = cmd.Wait()
@@ -89,13 +89,13 @@ func configureAndRunWithEnv(env Getenver) error {
 	return nil
 }
 
-// setupSigHandler will kill the process identified by the given PID if it
-// gets a TERM signal.
+// setupSigHandler 在收到 TERM 信号时
+// 终止给定 PID 对应的进程。
 func setupSigHandler(pid int) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
-	// Block until a signal is received.
+	// 阻塞直到收到信号。
 	log.Println("Now listening for interrupts")
 	s := <-c
 	log.Printf("Got signal: %v. Shutting down test process (PID: %v)\n", s, pid)
@@ -111,8 +111,8 @@ func setupSigHandler(pid int) {
 	log.Printf("Signalled process %v to terminate successfully.\n", pid)
 }
 
-// saveResults will tar the results directory and write the resulting tarball path
-// into the donefile.
+// saveResults 将结果目录打包，
+// 并把生成的 tarball 路径写入 donefile。
 func saveResults(resultsDir string) error {
 	log.Printf("Saving results at %v\n", resultsDir)
 
