@@ -40,21 +40,20 @@ import (
 // 注意：只有 API 中向 CEL 表达式提供了 'authorizer' 变量的字段才支持授权检查；
 // 具体哪些字段可用请查阅使用 CEL 的 API 字段文档。
 //
-// Authz provides a CEL function library extension for performing authorization checks.
-// Note that authorization checks are only supported for CEL expression fields in the API
-// where an 'authorizer' variable is provided to the CEL expression. See the
-// documentation of API fields where CEL expressions are used to learn if the 'authorizer'
-// variable is provided.
+// Authz 提供用于执行授权检查的 CEL 函数库扩展。
+// 注意：授权检查仅支持 API 中为 CEL 表达式提供 'authorizer' 变量的
+// CEL 表达式字段。请查阅使用 CEL 表达式的 API 字段文档，确认是否提供
+// 'authorizer' 变量。
 //
 // path
 //
-// Returns a PathCheck configured to check authorization for a non-resource request
-// path (e.g. /healthz). If path is an empty string, an error is returned.
-// Note that the leading '/' is not required.
+// 返回一个 PathCheck，用于检查对非资源请求路径（例如 /healthz）的授权。
+// 如果 path 是空字符串，则返回错误。
+// 注意：不强制要求以 '/' 开头。
 //
 //	<Authorizer>.path(<string>) <PathCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.path('/healthz') // returns a PathCheck for the '/healthz' API path
 //	authorizer.path('') // results in "path must not be empty" error
@@ -62,16 +61,14 @@ import (
 //
 // group
 //
-// Returns a GroupCheck configured to check authorization for the API resources for
-// a particular API group.
-// Note that authorization checks are only supported for CEL expression fields in the API
-// where an 'authorizer' variable is provided to the CEL expression. Check the
-// documentation of API fields where CEL expressions are used to learn if the 'authorizer'
-// variable is provided.
+// 返回一个 GroupCheck，用于检查对特定 API 组的 API 资源的授权。
+// 注意：授权检查仅支持 API 中为 CEL 表达式提供 'authorizer' 变量的
+// CEL 表达式字段。请查阅使用 CEL 表达式的 API 字段文档，确认是否提供
+// 'authorizer' 变量。
 //
 //	<Authorizer>.group(<string>) <GroupCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('apps') // returns a GroupCheck for the 'apps' API group
 //	authorizer.group('') // returns a GroupCheck for the core API group
@@ -79,13 +76,13 @@ import (
 //
 // serviceAccount
 //
-// Returns an Authorizer configured to check authorization for the provided service account namespace and name.
-// If the name is not a valid DNS subdomain string (as defined by RFC 1123), an error is returned.
-// If the namespace is not a valid DNS label (as defined by RFC 1123), an error is returned.
+// 返回一个 Authorizer，用于检查对给定服务账号命名空间和名称的授权。
+// 如果 name 不是合法的 DNS subdomain 字符串（按 RFC 1123 定义），则返回错误。
+// 如果 namespace 不是合法的 DNS label（按 RFC 1123 定义），则返回错误。
 //
 //	<Authorizer>.serviceAccount(<string>, <string>) <Authorizer>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.serviceAccount('default', 'myserviceaccount') // returns an Authorizer for the service account with namespace 'default' and name 'myserviceaccount'
 //	authorizer.serviceAccount('not@a#valid!namespace', 'validname') // returns an error
@@ -93,12 +90,12 @@ import (
 //
 // resource
 //
-// Returns a ResourceCheck configured to check authorization for a particular API resource.
-// Note that the provided resource string should be a lower case plural name of a Kubernetes API resource.
+// 返回一个 ResourceCheck，用于检查对特定 API 资源的授权。
+// 注意：提供的 resource 字符串应当是 Kubernetes API 资源的小写复数名称。
 //
 //	<GroupCheck>.resource(<string>) <ResourceCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('apps').resource('deployments') // returns a ResourceCheck for the 'deployments' resources in the 'apps' group.
 //	authorizer.group('').resource('pods') // returns a ResourceCheck for the 'pods' resources in the core group.
@@ -107,12 +104,12 @@ import (
 //
 // subresource
 //
-// Returns a ResourceCheck configured to check authorization for a particular subresource of an API resource.
-// If subresource is set to "", the subresource field of this ResourceCheck is considered unset.
+// 返回一个 ResourceCheck，用于检查对某个 API 资源特定子资源的授权。
+// 如果 subresource 设为 ""，则该 ResourceCheck 的 subresource 字段视为未设置。
 //
 //	<ResourceCheck>.subresource(<string>) <ResourceCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').subresource('status') // returns a ResourceCheck the 'status' subresource of 'pods'
 //	authorizer.group('apps').resource('deployments').subresource('scale') // returns a ResourceCheck the 'scale' subresource of 'deployments'
@@ -121,14 +118,14 @@ import (
 //
 // namespace
 //
-// Returns a ResourceCheck configured to check authorization for a particular namespace.
-// For cluster scoped resources, namespace() does not need to be called; namespace defaults
-// to "", which is the correct namespace value to use to check cluster scoped resources.
-// If namespace is set to "", the ResourceCheck will check authorization for the cluster scope.
+// 返回一个 ResourceCheck，用于检查对特定命名空间的授权。
+// 对集群级资源，不需要调用 namespace()；namespace 默认为 ""，
+// 而这正是检查集群级资源时应使用的正确命名空间值。
+// 如果 namespace 设为 ""，该 ResourceCheck 将检查集群级（cluster scope）授权。
 //
 //	<ResourceCheck>.namespace(<string>) <ResourceCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('apps').resource('deployments').namespace('test') // returns a ResourceCheck for 'deployments' in the 'test' namespace
 //	authorizer.group('').resource('pods').namespace('default') // returns a ResourceCheck for 'pods' in the 'default' namespace
@@ -136,93 +133,93 @@ import (
 //
 // name
 //
-// Returns a ResourceCheck configured to check authorization for a particular resource name.
-// If name is set to "", the name field of this ResourceCheck is considered unset.
+// 返回一个 ResourceCheck，用于检查对特定资源名称的授权。
+// 如果 name 设为 ""，则该 ResourceCheck 的 name 字段视为未设置。
 //
 //	<ResourceCheck>.name(<name>) <ResourceCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('apps').resource('deployments').namespace('test').name('backend') // returns a ResourceCheck for the 'backend' 'deployments' resource in the 'test' namespace
 //	authorizer.group('apps').resource('deployments').namespace('test').name('') // returns a ResourceCheck for the 'deployments' resource in the 'test' namespace
 //
 // check
 //
-// For PathCheck, checks if the principal (user or service account) that sent the request is authorized for the HTTP request verb of the path.
-// For ResourceCheck, checks if the principal (user or service account) that sent the request is authorized for the API verb and the configured authorization checks of the ResourceCheck.
-// The check operation can be expensive, particularly in clusters using the webhook authorization mode.
+// 对 PathCheck：检查发起请求的主体（用户或服务账号）是否被授权使用该路径的 HTTP 请求动词。
+// 对 ResourceCheck：检查发起请求的主体（用户或服务账号）是否被授权使用该 API 动词以及 ResourceCheck 配置的授权检查项。
+// check 操作可能开销很大，在使用 webhook 授权模式的集群中尤其如此。
 //
 //	<PathCheck>.check(<check>) <Decision>
 //	<ResourceCheck>.check(<check>) <Decision>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').namespace('default').check('create') // Checks if the principal (user or service account) is authorized create pods in the 'default' namespace.
 //	authorizer.path('/healthz').check('get') // Checks if the principal (user or service account) is authorized to make HTTP GET requests to the /healthz API path.
 //
 // allowed
 //
-// Returns true if the authorizer's decision for the check is "allow".  Note that if the authorizer's decision is
-// "no opinion", that the 'allowed' function will return false.
+// 如果授权器对该检查的决定是 "allow"，返回 true。注意：如果授权器的决定是
+// "no opinion"（不表态），'allowed' 函数将返回 false。
 //
 //	<Decision>.allowed() <bool>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').namespace('default').check('create').allowed() // Returns true if the principal (user or service account) is allowed create pods in the 'default' namespace.
 //	authorizer.path('/healthz').check('get').allowed()  // Returns true if the principal (user or service account) is allowed to make HTTP GET requests to the /healthz API path.
 //
 // reason
 //
-// Returns a string reason for the authorization decision
+// 返回授权决定的字符串原因
 //
 //	<Decision>.reason() <string>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.path('/healthz').check('GET').reason()
 //
 // errored
 //
-// Returns true if the authorization check resulted in an error.
+// 如果授权检查产生错误，返回 true。
 //
 //	<Decision>.errored() <bool>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').namespace('default').check('create').errored() // Returns true if the authorization check resulted in an error
 //
 // error
 //
-// If the authorization check resulted in an error, returns the error. Otherwise, returns the empty string.
+// 如果授权检查产生错误，返回该错误；否则返回空字符串。
 //
 //	<Decision>.error() <string>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').namespace('default').check('create').error()
 //
 // fieldSelector
 //
-// Takes a string field selector, parses it to field selector requirements, and includes it in the authorization check.
-// If the field selector does not parse successfully, no field selector requirements are included in the authorization check.
-// Added in Kubernetes 1.31+, Authz library version 1.
+// 接收字符串形式的 field selector，解析为字段选择器要求，并将其纳入授权检查。
+// 如果字段选择器解析失败，则授权检查中不包含任何字段选择器要求。
+// Kubernetes 1.31+ 引入，Authz 库版本 1。
 //
 //	<ResourceCheck>.fieldSelector(<string>) <ResourceCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').fieldSelector('spec.nodeName=mynode').check('list').allowed()
 //
-// labelSelector (added in v1, Kubernetes 1.31+)
+// labelSelector（v1 引入，Kubernetes 1.31+）
 //
-// Takes a string label selector, parses it to label selector requirements, and includes it in the authorization check.
-// If the label selector does not parse successfully, no label selector requirements are included in the authorization check.
-// Added in Kubernetes 1.31+, Authz library version 1.
+// 接收字符串形式的 label selector，解析为标签选择器要求，并将其纳入授权检查。
+// 如果标签选择器解析失败，则授权检查中不包含任何标签选择器要求。
+// Kubernetes 1.31+ 引入，Authz 库版本 1。
 //
 //	<ResourceCheck>.labelSelector(<string>) <ResourceCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').labelSelector('app=example').check('list').allowed()
 //
@@ -317,31 +314,31 @@ func (*authz) ProgramOptions() []cel.ProgramOption {
 // AuthzSelectors 为授权检查增加 fieldSelector 与 labelSelector 过滤能力，
 // 需要同时启用 Authz 库。使用方式与可用性参见 Authz 库文档。
 //
-// AuthzSelectors provides a CEL function library extension for adding fieldSelector and
-// labelSelector filters to authorization checks. This requires the Authz library.
-// See documentation of the Authz library for use and availability of the authorizer variable.
+// AuthzSelectors 提供一个 CEL 函数库扩展，用于给授权检查添加 fieldSelector 和
+// labelSelector 过滤器。它需要配合 Authz 库使用。
+// authorizer 变量的用法与可用范围见 Authz 库文档。
 //
 // fieldSelector
 //
-// Takes a string field selector, parses it to field selector requirements, and includes it in the authorization check.
-// If the field selector does not parse successfully, no field selector requirements are included in the authorization check.
-// Added in Kubernetes 1.31+.
+// 接收字符串形式的 field selector，解析为字段选择器要求，并将其纳入授权检查。
+// 如果字段选择器解析失败，则授权检查中不包含任何字段选择器要求。
+// Kubernetes 1.31+ 引入。
 //
 //	<ResourceCheck>.fieldSelector(<string>) <ResourceCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').fieldSelector('spec.nodeName=mynode').check('list').allowed()
 //
 // labelSelector
 //
-// Takes a string label selector, parses it to label selector requirements, and includes it in the authorization check.
-// If the label selector does not parse successfully, no label selector requirements are included in the authorization check.
-// Added in Kubernetes 1.31+.
+// 接收字符串形式的 label selector，解析为标签选择器要求，并将其纳入授权检查。
+// 如果标签选择器解析失败，则授权检查中不包含任何标签选择器要求。
+// Kubernetes 1.31+ 引入。
 //
 //	<ResourceCheck>.labelSelector(<string>) <ResourceCheck>
 //
-// Examples:
+// 示例：
 //
 //	authorizer.group('').resource('pods').labelSelector('app=example').check('list').allowed()
 //

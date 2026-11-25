@@ -139,7 +139,7 @@ func newApfServerWithSingleRequest(t *testing.T, decision mockDecision) *httptes
 		if decision == decisionCancelWait {
 			t.Errorf("execute should not be invoked")
 		}
-		// atomicReadOnlyExecuting can be either 0 or 1 as we test one request at a time.
+		// 由于每次只测试一个请求，atomicReadOnlyExecuting 可能是 0 或 1。
 		currentValue := atomicReadOnlyExecuting.Load()
 		if decision != decisionSkipFilter && currentValue != 1 {
 			t.Errorf("Wanted %d requests executing, got %d", 1, currentValue)
@@ -147,7 +147,7 @@ func newApfServerWithSingleRequest(t *testing.T, decision mockDecision) *httptes
 	}
 
 	postExecuteFunc := func() {}
-	// atomicReadOnlyWaiting can be either 0 or 1 as we test one request at a time.
+	// 由于每次只测试一个请求，atomicReadOnlyWaiting 可能是 0 或 1。
 	postEnqueueFunc := func() {
 		currentValue := atomicReadOnlyWaiting.Load()
 		if currentValue != 1 {
@@ -200,12 +200,12 @@ func newApfHandlerWithFilter(t *testing.T, flowControlFilter utilflowcontrol.Int
 			Groups: []string{user.AllUnauthenticated},
 		}))
 		func() {
-			// the APF handler completes its run, either normally or
-			// with a panic, in either case, all APF book keeping must
-			// be completed by now. Also, whether the request is
-			// executed or rejected, we expect the counter to be zero.
-			// TODO: all test(s) using this filter must run
-			// serially to each other
+			// APF 处理器结束运行，无论是正常返回还是
+			// panic，两种情况下所有 APF 记账此刻都必须
+			// 已完成。此外，无论请求是被执行还是被拒绝，
+			// 我们都期望该计数器的值为零。
+			// TODO: 使用此过滤器的所有测试必须
+			// 相互串行运行
 			defer func() {
 				currentValue := atomicReadOnlyExecuting.Load()
 				if currentValue != 0 {
@@ -230,9 +230,9 @@ func TestApfSkipLongRunningRequest(t *testing.T) {
 	defer cancel()
 	StartPriorityAndFairnessWatermarkMaintenance(ctx.Done())
 
-	// send a watch request to test skipping long running request
+	// 发送一个 watch 请求，用于测试长时请求被跳过
 	if err := expectHTTPGet(fmt.Sprintf("%s/api/v1/foos/foo/proxy", server.URL), http.StatusOK); err != nil {
-		// request should not be rejected
+		// 该请求不应被拒绝
 		t.Error(err)
 	}
 }
@@ -493,11 +493,10 @@ func TestApfExecuteWatchRequestsWithInitializationSignal(t *testing.T) {
 		newInitializationSignal = utilflowcontrol.NewInitializationSignal
 	}()
 
-	// We test if initialization after receiving initialization signal the
-	// new requests will be allowed to run by:
-	// - sending N requests that will occupy the whole capacity
-	// - sending initialiation signals for them
-	// - ensuring that number of inflight requests will get to zero
+	// 我们测试：收到初始化信号并完成初始化后，新请求是否会被允许运行。方法是：
+	// - 发送 N 个请求，占满全部容量
+	// - 为它们发送初始化信号
+	// - 确认在途（inflight）请求数量会归零
 	concurrentRequests := 5
 	firstRunning := sync.WaitGroup{}
 	firstRunning.Add(concurrentRequests)
@@ -647,12 +646,9 @@ func TestApfWatchHandlePanic(t *testing.T) {
 	}
 }
 
-// TestContextClosesOnRequestProcessed ensures that the request context is cancelled
-// automatically even if the server doesn't cancel is explicitly.
-// This is required to ensure we won't be leaking goroutines that wait for context
-// cancelling (e.g. in queueset::StartRequest method).
-// Even though in production we are not using httptest.Server, this logic is shared
-// across these two.
+// TestContextClosesOnRequestProcessed 确保即使服务器没有显式取消，请求上下文也会被自动取消。
+// 这是必需的，以确保不会泄漏等待上下文取消的 goroutine（例如 queueset::StartRequest 方法中的）。
+// 虽然生产环境中并不使用 httptest.Server，但这两种场景共享这段逻辑。
 func TestContextClosesOnRequestProcessed(t *testing.T) {
 	epmetrics.Register()
 	fcmetrics.Register()
@@ -660,7 +656,7 @@ func TestContextClosesOnRequestProcessed(t *testing.T) {
 	wg.Add(1)
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		// asynchronously wait for context being closed
+		// 异步等待上下文关闭
 		go func() {
 			<-ctx.Done()
 			wg.Done()
@@ -761,7 +757,7 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 		controller, controllerCompletedCh := startAPFController(t, stopCh, apfConfiguration, serverConcurrency, plName, plConcurrency)
 
 		headerMatcher := headerMatcher{}
-		// we will raise a panic for the first request.
+		// 我们将对第一个请求主动触发一次 panic。
 		firstRequestPathPanic, secondRequestPathShouldWork := "/request/panic-as-designed", "/request/should-succeed-as-expected"
 		firstHandlerDoneCh, secondHandlerDoneCh := make(chan struct{}), make(chan struct{})
 		requestHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -776,18 +772,18 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 			}
 		})
 
-		// NOTE: the server will enforce a 1m timeout on every incoming
-		//  request, and the client enforces a timeout of 2m.
+		// NOTE: 服务器将对每个传入请求强制 1m 超时，
+		//  而客户端的超时时间为 2m。
 		handler := newHandlerChain(t, requestHandler, controller, userName, time.Minute)
 		server, requestGetter := newHTTP2ServerWithClient(handler, 2*time.Minute)
 		defer server.Close()
 
-		// we send two requests synchronously, one at a time
-		//  - first request is expected to panic as designed
-		//  - second request is expected to succeed
+		// 我们同步发送两个请求，一次一个
+		//  - 第一个请求预期会按设计 panic
+		//  - 第二个请求预期会成功
 		_, err := requestGetter(firstRequestPathPanic)
 
-		// did the server handler panic, as expected?
+		// 服务器处理器是否如预期发生了 panic？
 		select {
 		case <-firstHandlerDoneCh:
 		case <-time.After(wait.ForeverTestTimeout):
@@ -798,7 +794,7 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 		}
 		expectResetStreamError(t, err)
 
-		// the second request should be served successfully.
+		// 第二个请求应当被成功处理。
 		response, err := requestGetter(secondRequestPathShouldWork)
 		if err != nil {
 			t.Fatalf("Expected request: %q to get a response, but got error: %#v", secondRequestPathShouldWork, err)
@@ -843,20 +839,19 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 			if r.URL.Path == rquestTimesOutPath {
 				defer close(reqHandlerCompletedCh)
 
-				// this will force the request to time out.
+				// 这将迫使请求超时。
 				<-callerRoundTripDoneCh
 			}
 		})
 
-		// NOTE: the server will enforce a 5s timeout on every
-		//  incoming request, and the client enforces a timeout of 1m.
+		// NOTE: 服务器将对每个
+		// 传入请求强制 5s 超时，而客户端的超时时间为 1m。
 		handler := newHandlerChain(t, requestHandler, controller, userName, 5*time.Second)
 		server, requestGetter := newHTTP2ServerWithClient(handler, time.Minute)
 		defer server.Close()
 
-		// send a request synchronously with a client timeout of 1m,  this minimizes the
-		// chance of a flake in ci, the cient waits long enough for the server to send a
-		// timeout response to the client.
+		// 以 1m 客户端超时同步发送请求，这可以把 CI 中 flake 的概率降到最低：
+		// 客户端会等待足够长的时间，让服务器向客户端发送超时响应。
 		var (
 			response *http.Response
 			err      error
@@ -916,8 +911,8 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 			if r.URL.Path == rquestTimesOutPath {
 				<-callerRoundTripDoneCh
 
-				// we expect the timeout handler to have timed out this request by now and any attempt
-				// to write to the response should return a http.ErrHandlerTimeout error.
+				// 此刻我们预期超时处理器已经让该请求超时，此后任何
+				// 对响应的写入都应返回 http.ErrHandlerTimeout 错误。
 				_, innerHandlerWriteErr := w.Write([]byte("foo"))
 				reqHandlerErrCh <- innerHandlerWriteErr
 
@@ -925,15 +920,14 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 			}
 		})
 
-		// NOTE: the server will enforce a 5s timeout on every
-		//  incoming request, and the client enforces a timeout of 1m.
+		// NOTE: 服务器将对每个
+		// 传入请求强制 5s 超时，而客户端的超时时间为 1m。
 		handler := newHandlerChain(t, requestHandler, controller, userName, 5*time.Second)
 		server, requestGetter := newHTTP2ServerWithClient(handler, time.Minute)
 		defer server.Close()
 
-		// send a request synchronously with a client timeout of 1m, this minimizes the
-		// chance of a flake in ci, the cient waits long enough for the server to send a
-		// timeout response to the client.
+		// 以 1m 客户端超时同步发送请求，这可以把 CI 中 flake 的概率降到最低：
+		// 客户端会等待足够长的时间，让服务器向客户端发送超时响应。
 		var (
 			response *http.Response
 			err      error
@@ -994,26 +988,25 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 
 			if r.URL.Path == rquestTimesOutPath {
 
-				// inner handler writes header and then let the request time out.
+				// 内层处理器先写入响应头，然后让请求超时。
 				w.WriteHeader(http.StatusBadRequest)
 				<-callerRoundTripDoneCh
 
-				// we expect the timeout handler to have timed out this request by now and any attempt
-				// to write to the response should return a http.ErrHandlerTimeout error.
+				// 此刻我们预期超时处理器已经让该请求超时，此后任何
+				// 对响应的写入都应返回 http.ErrHandlerTimeout 错误。
 				_, innerHandlerWriteErr := w.Write([]byte("foo"))
 				reqHandlerErrCh <- innerHandlerWriteErr
 			}
 		})
 
-		// NOTE: the server will enforce a 5s timeout on every
-		//  incoming request, and the client enforces a timeout of 1m.
+		// NOTE: 服务器将对每个
+		// 传入请求强制 5s 超时，而客户端的超时时间为 1m。
 		handler := newHandlerChain(t, requestHandler, controller, userName, 5*time.Second)
 		server, requestGetter := newHTTP2ServerWithClient(handler, time.Minute)
 		defer server.Close()
 
-		// send a request synchronously with a client timeout of 1m, this minimizes the
-		// chance of a flake in ci, the cient waits long enough for the server to send a
-		// timeout response to the client.
+		// 以 1m 客户端超时同步发送请求，这可以把 CI 中 flake 的概率降到最低：
+		// 客户端会等待足够长的时间，让服务器向客户端发送超时响应。
 		var err error
 		func() {
 			defer close(callerRoundTripDoneCh)
@@ -1075,47 +1068,45 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 				close(firstReqInProgressCh)
 				<-firstReqRoundTripDoneCh
 
-				// make sure we wait until the caller of the second request returns, this is to
-				// ensure that second request never has a chance to be executed (to avoid flakes)
+				// 确保我们等到第二个请求的调用方返回为止，这是为了
+				// 保证第二个请求永远没有机会被执行（避免 flake）
 				<-secondReqRoundTripDoneCh
 
-				// we expect the timeout handler to have timed out this request by now and any attempt
-				// to write to the response should return a http.ErrHandlerTimeout error.
+				// 此刻我们预期超时处理器已经让该请求超时，此后任何
+				// 对响应的写入都应返回 http.ErrHandlerTimeout 错误。
 				_, firstRequestInnerHandlerWriteErr := w.Write([]byte("foo"))
 				firstReqHandlerErrCh <- firstRequestInnerHandlerWriteErr
 
 			case r.URL.Path == secondRequestEnqueuedPath:
-				// we expect the concurrency to be set to 1 and so this request should never be executed.
+				// 我们预期并发数被设为 1，因此该请求永远不应被执行。
 				t.Errorf("Expected second request to be enqueued: %q", secondRequestEnqueuedPath)
 			}
 		})
 
-		// NOTE: the server will enforce a 5s timeout on every
-		//  incoming request, and the client enforces a timeout of 1m.
+		// NOTE: 服务器将对每个
+		// 传入请求强制 5s 超时，而客户端的超时时间为 1m。
 		handler := newHandlerChain(t, requestHandler, controller, userName, 5*time.Second)
 		server, requestGetter := newHTTP2ServerWithClient(handler, time.Minute)
 		defer server.Close()
 
-		// This test involves two requests sent to the same priority level, which has 1 queue and
-		// a concurrency limit of 1.  The handler chain include the timeout filter.
-		// Each request is sent from a separate goroutine, with a client-side timeout of 1m, on
-		// the other hand, the server enforces a timeout of 5s (via the timeout filter).
-		// The first request should get dispatched immediately; execution (a) starts with closing
-		// the channel that triggers the second client goroutine to send its request and then (b)
-		// waits for both client goroutines to have gotten a response (expected to be timeouts).
-		// The second request sits in the queue until the timeout filter does its thing, which
-		// it does concurrently to both requests.  For the first request this should make the client
-		// get a timeout response without directly affecting execution.  For the second request, the
-		// fact that the timeout filter closes the request's Context.Done() causes the request to be
-		// promptly ejected from its queue.  The goroutine doing the APF handling writes an HTTP
-		// response message with status 429.
-		// The timeout handler invokes its inner handler in one goroutine while reacting to the
-		// passage of time in its original goroutine.  That reaction to a time out consists of either
-		// (a) writing an HTTP response message with status 504 to indicate the timeout or (b) doing an
-		// HTTP/2 stream close; the latter is done if either the connection has been "hijacked" or some
-		// other goroutine (e.g., the one running the inner handler) has started to write a response.
-		// In the scenario tested here, there is thus a race between two goroutines to respond to
-		// the second request and any of their responses is allowed by the test.
+		// 本测试涉及发送到同一 priority level 的两个请求，该 priority level 有 1 个队列、
+		// 并发上限为 1。处理器链包含超时过滤器。
+		// 每个请求由独立 goroutine 发送，客户端侧超时为 1m；另一侧，
+		// 服务器强制 5s 超时（通过超时过滤器）。
+		// 第一个请求应当被立即派发；执行时 (a) 先关闭那个触发第二个客户端
+		// goroutine 发送其请求的通道，然后 (b) 等待两个客户端 goroutine 都拿到
+		// 响应（预期都是超时）。
+		// 第二个请求会停留在队列中，直到超时过滤器起作用，而过滤器对两个请求的
+		// 处理是并发的。对第一个请求，这应让客户端拿到超时响应，但不直接影响其执行。
+		// 对第二个请求，超时过滤器关闭其 Context.Done() 这一事实会使其被立刻
+		// 逐出队列。执行 APF 处理的 goroutine 会写出一个状态码为 429 的
+		// HTTP 响应消息。
+		// 超时处理器在一个 goroutine 中调用其内层处理器，同时在其原始 goroutine 中
+		// 对时间流逝作出反应。对超时的反应要么是 (a) 写出一个状态码为 504 的
+		// HTTP 响应消息以指示超时，要么是 (b) 关闭 HTTP/2 流；当连接已被
+		// "hijacked"（劫持）或其他某个 goroutine（例如运行内层处理器的）已开始写响应时，
+		// 采用后者。因此在本文所测场景中，两个 goroutine 会对第二个请求的
+		// 响应形成竞争，测试允许它们的任何一种响应结果。
 		firstReqResultCh, secondReqResultCh := make(chan result, 1), make(chan result, 1)
 		go func() {
 			defer close(firstReqRoundTripDoneCh)
@@ -1125,8 +1116,8 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 			firstReqResultCh <- result{err: err, response: resp}
 		}()
 		go func() {
-			// we must wait for the "first" request to start executing before
-			// we can initiate the "second".
+			// 必须等“第一个”请求开始执行后，
+			// 才能发起“第二个”。
 			defer close(secondReqRoundTripDoneCh)
 
 			<-firstReqInProgressCh
@@ -1150,22 +1141,22 @@ func TestPriorityAndFairnessWithPanicRecoveryAndTimeoutFilter(t *testing.T) {
 			t.Errorf("Expected the server handler to have completed: %q", firstRequestTimesOutPath)
 		}
 
-		// first request is expected to time out.
+		// 第一个请求预期会超时。
 		if isStreamReset(firstReqResult.err) || firstReqResult.response.StatusCode != http.StatusGatewayTimeout {
-			// got what was expected
+			// 结果符合预期
 		} else if firstReqResult.err != nil {
 			t.Fatalf("Expected request: %q to get a response or stream reset, but got error: %s", firstRequestTimesOutPath, fmtError(firstReqResult.err))
 		} else if firstReqResult.response.StatusCode != http.StatusGatewayTimeout {
 			t.Errorf("Expected HTTP status code: %d for request: %q, but got: %#+v", http.StatusGatewayTimeout, firstRequestTimesOutPath, firstReqResult.response)
 		}
 
-		// second request is expected to either be rejected (ideal behavior) or time out (current approximation of the ideal behavior)
+		// 第二个请求预期要么被拒绝（理想行为），要么超时（当前对理想行为的近似实现）
 		secondReqResult := <-secondReqResultCh
 		if isClientTimeout(secondReqResult.err) {
 			t.Fatalf("the client has unexpectedly timed out - request: %q error: %s", secondRequestEnqueuedPath, fmtError(secondReqResult.err))
 		}
 		if isStreamReset(secondReqResult.err) || secondReqResult.response.StatusCode == http.StatusTooManyRequests || secondReqResult.response.StatusCode == http.StatusGatewayTimeout {
-			// got what was expected
+			// 结果符合预期
 		} else if secondReqResult.err != nil {
 			t.Fatalf("Expected request: %q to get a response or stream reset, but got error: %s", secondRequestEnqueuedPath, fmtError(secondReqResult.err))
 		} else if !(secondReqResult.response.StatusCode == http.StatusTooManyRequests || secondReqResult.response.StatusCode == http.StatusGatewayTimeout) {
@@ -1192,13 +1183,13 @@ func fmtError(err error) string {
 func startAPFController(t *testing.T, stopCh <-chan struct{}, apfConfiguration []runtime.Object, serverConcurrency int,
 	plName string, plConcurrency int) (utilflowcontrol.Interface, <-chan error) {
 	clientset := newClientset(t, apfConfiguration...)
-	// this test does not rely on resync, so resync period is set to zero
+	// 本测试不依赖 resync，因此 resync 周期设为零
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 	controller := utilflowcontrol.New(factory, clientset.FlowcontrolV1(), serverConcurrency)
 
 	factory.Start(stopCh)
 
-	// wait for the informer cache to sync.
+	// 等待 informer 缓存完成同步。
 	timeout, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
 	defer cancel()
 	cacheSyncDone := factory.WaitForCacheSync(timeout.Done())
@@ -1213,8 +1204,8 @@ func startAPFController(t *testing.T, stopCh <-chan struct{}, apfConfiguration [
 		controllerCompletedCh <- controllerErr
 	}()
 
-	// make sure that apf controller syncs the priority level configuration object we are using in this test.
-	// read the metrics and ensure the concurrency limit for our priority level is set to the expected value.
+	// 确保 APF 控制器同步了本测试使用的 priority level 配置对象。
+	// 读取指标，确认该 priority level 的并发上限被设为期望值。
 	pollErr := wait.PollImmediate(100*time.Millisecond, 5*time.Second, func() (done bool, err error) {
 		if err := gaugeValueMatch("apiserver_flowcontrol_nominal_limit_seats", map[string]string{"priority_level": plName}, plConcurrency); err != nil {
 			t.Logf("polling retry - error: %s", err)
@@ -1246,7 +1237,7 @@ func newHTTP2ServerWithClient(handler http.Handler, clientTimeout time.Duration)
 // 写入了响应头，便于调用方观测自己落在哪个流控桶中。
 type headerMatcher struct{}
 
-// verifies that the expected flow schema and priority level UIDs are attached to the header.
+// 验证期望的 FlowSchema 和 PriorityLevelConfiguration UID 已附加到响应头上。
 func (m *headerMatcher) inspect(t *testing.T, w http.ResponseWriter, ctx context.Context, expectedFS, expectedPL string) {
 	t.Helper()
 
@@ -1261,7 +1252,7 @@ func (m *headerMatcher) inspect(t *testing.T, w http.ResponseWriter, ctx context
 			return
 		}
 
-		// Header writes are best-effort once the request context is canceled.
+		// 请求上下文被取消后，响应头的写入是尽力而为的。
 		if actual == "" {
 			select {
 			case <-ctx.Done():
@@ -1270,8 +1261,8 @@ func (m *headerMatcher) inspect(t *testing.T, w http.ResponseWriter, ctx context
 			default:
 			}
 
-			// The timeout filter may have already committed the response
-			// before APF had a chance to attach its headers.
+			// 超时过滤器可能早在 APF 有机会附加其响应头之前
+			// 就已提交了响应。
 			if ctx.Err() != nil {
 				t.Logf("Skipping APF header assertion for %s: response committed after timeout", key)
 				return
@@ -1285,7 +1276,7 @@ func (m *headerMatcher) inspect(t *testing.T, w http.ResponseWriter, ctx context
 	checkHeader(flowcontrol.ResponseHeaderMatchedPriorityLevelConfigurationUID, expectedPL)
 }
 
-// when a request panics, http2 resets the stream with an INTERNAL_ERROR message
+// 当请求 panic 时，http2 会以 INTERNAL_ERROR 消息重置该 stream
 func expectResetStreamError(t *testing.T, err error) {
 	if err == nil {
 		t.Fatalf("expected the server to send an error, but got nil")
@@ -1305,9 +1296,8 @@ func newClientset(t *testing.T, objects ...runtime.Object) clientset.Interface {
 	return clientset
 }
 
-// builds a chain of handlers that include the panic recovery and timeout filter, so we can simulate the behavior of
-// a real apiserver.
-// the specified user is added as the authenticated user to the request context.
+// 构建包含 panic 恢复与超时过滤器的处理器链，以便模拟真实 apiserver 的行为。
+// 指定用户会作为已认证用户加入请求上下文。
 //
 // 链的顺序即语义：AuditInit -> PanicRecovery -> RequestInfo -> Deadline -> Timeout -> 用户注入 -> APF。
 // 超时过滤器必须位于 APF 内层，这样 APF 的记账能观察到超时导致的取消。
@@ -1317,7 +1307,7 @@ func newHandlerChain(t *testing.T, handler http.Handler, filter utilflowcontrol.
 
 	apfHandler := WithPriorityAndFairness(handler, longRunningRequestCheck, filter, defaultRequestWorkEstimator, time.Minute/4)
 
-	// add the handler in the chain that adds the specified user to the request context
+	// 在链中加入把指定用户写入请求上下文的处理器
 	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(apirequest.WithUser(r.Context(), &user.DefaultInfo{
 			Name:   userName,
@@ -1328,7 +1318,7 @@ func newHandlerChain(t *testing.T, handler http.Handler, filter utilflowcontrol.
 	})
 
 	handler = WithTimeoutForNonLongRunningRequests(handler, longRunningRequestCheck)
-	// we don't have any request with invalid timeout, so leaving audit policy and sink nil.
+	// 我们没有超时值非法的请求，因此 audit policy 和 sink 保持为 nil。
 	handler = apifilters.WithRequestDeadline(handler, nil, nil, longRunningRequestCheck, nil, requestTimeout)
 	handler = apifilters.WithRequestInfo(handler, requestInfoFactory)
 	handler = WithPanicRecovery(handler, requestInfoFactory)
@@ -1420,7 +1410,7 @@ func newConfiguration(fsName, plName, user string, concurrency int32, queueLengt
 	return []runtime.Object{fs, pl}
 }
 
-// gathers and checks the metrics.
+// 收集并检查指标。
 func checkForExpectedMetrics(t *testing.T, expectedMetrics []string) {
 	metricsFamily, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {
@@ -1494,8 +1484,8 @@ func isStreamReset(err error) bool {
 		return false
 	}
 	if urlErr, ok := err.(*url.Error); ok {
-		// Sadly, the client does not receive a more specific indication
-		// of stream reset.
+		// 遗憾的是，客户端接收不到关于 stream reset 的
+		// 更具体的指示。
 		return strings.Contains(urlErr.Err.Error(), "INTERNAL_ERROR")
 	}
 	return false
@@ -1559,7 +1549,7 @@ func TestGetRequestWaitContext(t *testing.T) {
 		{
 			name: "context has a deadline, wait limit should not exceed the hard limit of 1m",
 			parent: func(now time.Time) (context.Context, context.CancelFunc) {
-				// let 1/4th of the remaining deadline exceed the hard limit
+				// 让剩余 deadline 的 1/4 超过硬上限
 				return context.WithDeadline(context.Background(), now.Add(8*time.Minute))
 			},
 			newReqWaitCtxExpected: true,

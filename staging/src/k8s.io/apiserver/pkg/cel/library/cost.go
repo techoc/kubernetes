@@ -30,8 +30,7 @@ import (
 	"k8s.io/apiserver/pkg/cel"
 )
 
-// panicOnUnknown makes cost estimate functions panic on unrecognized functions.
-// This is only set to true for unit tests.
+// panicOnUnknown 让成本估算函数在遇到未识别的函数时 panic，仅单元测试会置为 true。
 //
 // 生产环境遇到未建模的函数时静默回退，保证升级/扩展库不会直接打挂 apiserver；
 // 测试里开启 panic 是为了强制新增函数必须补上成本模型。
@@ -62,24 +61,24 @@ var knownUnhandledFunctions = map[string]bool{
 	"_-_":                 true,
 }
 
-// CostEstimator implements CEL's interpretable.ActualCostEstimator and checker.CostEstimator.
+// CostEstimator 实现 CEL 的 interpretable.ActualCostEstimator 和 checker.CostEstimator 接口。
 //
 // 两个接口合在一起意味着：同一套规则既用于编译期估算（决定表达式是否可写进
 // CRD/VAP），也用于运行期实际计费（决定表达式是否超预算）。
 type CostEstimator struct {
-	// SizeEstimator provides a CostEstimator.EstimateSize that this CostEstimator will delegate size estimation
-	// calculations to if the size is not well known (i.e. a constant).
+	// SizeEstimator 提供一个 CostEstimator.EstimateSize：当大小未知（即非常量）时，
+	// 本 CostEstimator 会把大小估算委托给它。
 	SizeEstimator checker.CostEstimator
 }
 
 const (
-	// shortest repeatable selector requirement that allocates a values slice is 2 characters: k,
+	// 能触发分配 values 切片的最短可重复选择器要求是 2 个字符：k，
 	selectorLengthToRequirementCount = float64(.5)
-	// the expensive parts to represent each requirement are a struct and a values slice
+	// 表示每个要求最昂贵的部分是结构体和 values 切片
 	costPerRequirement = float64(common.ListCreateBaseCost + common.StructCreateBaseCost)
 )
 
-// a selector consists of a list of requirements held in a slice
+// 一个选择器由存放在切片中的一组要求构成
 var baseSelectorCost = checker.CostEstimate{Min: common.ListCreateBaseCost, Max: common.ListCreateBaseCost}
 
 func selectorCostEstimate(selectorLength checker.SizeEstimate) checker.CostEstimate {
@@ -98,16 +97,16 @@ func selectorCostEstimate(selectorLength checker.SizeEstimate) checker.CostEstim
 func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, result ref.Val) *uint64 {
 	switch function {
 	case "check":
-		// An authorization check has a fixed cost
-		// This cost is set to allow for only two authorization checks per expression
+		// 授权检查的成本是固定的
+		// 该成本设定为每条表达式只允许两次授权检查
 		cost := uint64(350000)
 		return &cost
 	case "serviceAccount", "path", "group", "resource", "subresource", "namespace", "name", "allowed", "reason", "error", "errored":
-		// All authorization builder and accessor functions have a nominal cost
+		// 所有授权构建与访问函数都是名义成本
 		cost := uint64(1)
 		return &cost
 	case "fieldSelector", "labelSelector":
-		// field and label selector parse is a string parse into a structured set of requirements
+		// fieldSelector 和 labelSelector 解析是把字符串解析成一组结构化要求
 		if len(args) >= 2 {
 			selectorLength := actualSize(args[1])
 			cost := selectorCostEstimate(checker.SizeEstimate{Min: selectorLength, Max: selectorLength})
@@ -116,7 +115,7 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 	case "isSorted", "sum", "max", "min", "indexOf", "lastIndexOf", "includes":
 		var cost uint64
 		if len(args) > 0 {
-			cost += traversalCost(args[0]) // these O(n) operations all cost roughly the cost of a single traversal
+			cost += traversalCost(args[0]) // 这些 O(n) 操作的成本都约等于单次遍历的成本
 		}
 		return &cost
 	case "url", "lowerAscii", "upperAscii", "substring", "trim", "jsonpatch.escapeKey":
@@ -126,7 +125,7 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 		}
 	case "replace", "split":
 		if len(args) >= 1 {
-			// cost is the traversal plus the construction of the result
+			// 成本是遍历加上构造结果
 			cost := uint64(math.Ceil(float64(actualSize(args[0])) * 2 * common.StringTraversalCostFactor))
 			return &cost
 		}
@@ -138,27 +137,25 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 	case "find", "findAll":
 		if len(args) >= 2 {
 			strCost := uint64(math.Ceil((1.0 + float64(actualSize(args[0]))) * common.StringTraversalCostFactor))
-			// We don't know how many expressions are in the regex, just the string length (a huge
-			// improvement here would be to somehow get a count the number of expressions in the regex or
-			// how many states are in the regex state machine and use that to measure regex cost).
-			// For now, we're making a guess that each expression in a regex is typically at least 4 chars
-			// in length.
+			// 我们不知道正则里有多少个表达式，只知道字符串长度（这里有个巨大的
+			// 改进方向：想办法统计正则中表达式数量或正则状态机的状态数，并用它来度量正则成本）。
+			// 目前我们猜测正则中每个表达式通常至少 4 个字符长。
 			regexCost := uint64(math.Ceil(float64(actualSize(args[1])) * common.RegexStringLengthCostFactor))
 			cost := strCost * regexCost
 			return &cost
 		}
 	case "cidr", "isIP", "isCIDR":
-		// IP and CIDR parsing is a string traversal.
+		// IP 和 CIDR 解析是一次字符串遍历。
 		if len(args) >= 1 {
 			cost := uint64(math.Ceil(float64(actualSize(args[0])) * common.StringTraversalCostFactor))
 			return &cost
 		}
 	case "ip":
-		// IP and CIDR parsing is a string traversal.
+		// IP 和 CIDR 解析是一次字符串遍历。
 		if len(args) >= 1 {
 			if overloadId == "cidr_ip" {
-				// The IP member of the CIDR object is just accessing a field.
-				// Nominal cost.
+				// CIDR 对象的 IP 成员只是访问一个字段。
+				// 名义成本。
 				cost := uint64(1)
 				return &cost
 			}
@@ -168,13 +165,13 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 		}
 	case "ip.isCanonical":
 		if len(args) >= 1 {
-			// We have to parse the string and then compare the parsed string to the original string.
-			// So we double the cost of parsing the string.
+			// 我们必须先解析字符串，再把解析结果与原字符串比较。
+			// 因此解析字符串的成本翻倍。
 			cost := uint64(math.Ceil(float64(actualSize(args[0])) * 2 * common.StringTraversalCostFactor))
 			return &cost
 		}
 	case "masked", "prefixLength", "family", "isUnspecified", "isLoopback", "isLinkLocalMulticast", "isLinkLocalUnicast", "isGlobalUnicast":
-		// IP and CIDR accessors are nominal cost.
+		// IP 和 CIDR 访问器是名义成本。
 		cost := uint64(1)
 		return &cost
 	case "containsIP":
@@ -182,12 +179,12 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 			cidrSize := actualSize(args[0])
 			otherSize := actualSize(args[1])
 
-			// This is the base cost of comparing two byte lists.
-			// We will compare only up to the length of the CIDR prefix in bytes, so use the cidrSize twice.
+			// 这是比较两个字节列表的基础成本。
+			// 我们只比较到 CIDR 前缀长度的字节数，所以 cidrSize 计两次。
 			cost := uint64(math.Ceil(float64(cidrSize+cidrSize) * common.StringTraversalCostFactor))
 
 			if overloadId == "cidr_contains_ip_string" {
-				// If we are comparing a string, we must parse the string to into the right type, so add the cost of traversing the string again.
+				// 如果比较对象是字符串，必须先把字符串解析成正确的类型，因此再加一次字符串遍历成本。
 				cost += uint64(math.Ceil(float64(otherSize) * common.StringTraversalCostFactor))
 
 			}
@@ -199,17 +196,17 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 			cidrSize := actualSize(args[0])
 			otherSize := actualSize(args[1])
 
-			// This is the base cost of comparing two byte lists.
-			// We will compare only up to the length of the CIDR prefix in bytes, so use the cidrSize twice.
+			// 这是比较两个字节列表的基础成本。
+			// 我们只比较到 CIDR 前缀长度的字节数，所以 cidrSize 计两次。
 			cost := uint64(math.Ceil(float64(cidrSize+cidrSize) * common.StringTraversalCostFactor))
 
-			// As we are comparing if a CIDR is within another CIDR, we first mask the base CIDR and
-			// also compare the CIDR bits.
-			// This has an additional cost of the length of the IP being traversed again, plus 1.
+			// 由于是比较一个 CIDR 是否落在另一个 CIDR 内，我们会先对基础 CIDR 做掩码，
+			// 并比较 CIDR 位数。
+			// 这额外包含一次 IP 长度遍历的成本，再加 1。
 			cost += uint64(math.Ceil(float64(cidrSize)*common.StringTraversalCostFactor)) + 1
 
 			if overloadId == "cidr_contains_cidr_string" {
-				// If we are comparing a string, we must parse the string to into the right type, so add the cost of traversing the string again.
+				// 如果比较对象是字符串，必须先把字符串解析成正确的类型，因此再加一次字符串遍历成本。
 				cost += uint64(math.Ceil(float64(otherSize) * common.StringTraversalCostFactor))
 			}
 
@@ -226,34 +223,32 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 			if isFormat {
 				strSize := actualSize(args[1])
 
-				// Dont have access to underlying regex, estimate a long regexp
+				// 拿不到底层正则，按较长的正则估算
 				regexSize := format.MaxRegexSize
 
-				// Copied from CEL implementation for regex cost
+				// 以下复制自 CEL 实现的正则成本计算
 				//
-				// https://swtch.com/~rsc/regexp/regexp1.html applies to RE2 implementation supported by CEL
-				// Add one to string length for purposes of cost calculation to prevent product of string and regex to be 0
-				// in case where string is empty but regex is still expensive.
+				// https://swtch.com/~rsc/regexp/regexp1.html 适用于 CEL 支持的 RE2 实现
+				// 计算成本时给字符串长度加 1，避免字符串为空但正则仍然很昂贵时，
+				// 字符串与正则的乘积为 0。
 				strCost := uint64(math.Ceil((1.0 + float64(strSize)) * common.StringTraversalCostFactor))
-				// We don't know how many expressions are in the regex, just the string length (a huge
-				// improvement here would be to somehow get a count the number of expressions in the regex or
-				// how many states are in the regex state machine and use that to measure regex cost).
-				// For now, we're making a guess that each expression in a regex is typically at least 4 chars
-				// in length.
+				// 我们不知道正则里有多少个表达式，只知道字符串长度（这里有个巨大的
+				// 改进方向：想办法统计正则中表达式数量或正则状态机的状态数，并用它来度量正则成本）。
+				// 目前我们猜测正则中每个表达式通常至少 4 个字符长。
 				regexCost := uint64(math.Ceil(float64(regexSize) * common.RegexStringLengthCostFactor))
 				cost := strCost * regexCost
 				return &cost
 			}
 		}
 	case "format.named":
-		// Simply dictionary lookup
+		// 就是一次字典查找
 		cost := uint64(1)
 		return &cost
 	case "sign", "asInteger", "isInteger", "asApproximateFloat", "isGreaterThan", "isLessThan", "compareTo", "add", "sub", "major", "minor", "patch":
 		cost := uint64(1)
 		return &cost
 	case "getScheme", "getHostname", "getHost", "getPort", "getEscapedPath", "getQuery":
-		// url accessors
+		// url 访问器
 		cost := uint64(1)
 		return &cost
 	case "_==_":
@@ -286,30 +281,28 @@ func (l *CostEstimator) CallCost(function, overloadId string, args []ref.Val, re
 // EstimateCallCost 返回编译期对一次函数调用的成本上界。
 // 与 CallCost 不同，这里只有 AST（没有实参），因此只能依赖类型与大小估算。
 //
-// WARNING: Any changes to this code impact API compatibility! The estimated cost is used to determine which CEL rules may be written to a
-// CRD and any change (cost increases and cost decreases) are breaking.
+// 警告：任何改动这段代码都会影响 API 兼容性！估算成本用于决定哪些 CEL 规则可以写入 CRD，
+// 成本的任何变化（升高或降低）都是 breaking 变更，因此任何调整都必须视为 API 变更，需要走 KEP/版本化流程。
 func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *checker.AstNode, args []checker.AstNode) *checker.CallEstimate {
-	// WARNING: 任何改动这段代码都会影响 API 兼容性！估算成本用于决定哪些 CEL 规则可以写入 CRD，
-	// 成本的任何变化（升高或降低）都是 breaking 变更，因此任何调整都必须视为 API 变更，需要走 KEP/版本化流程。
 	switch function {
 	case "check":
-		// An authorization check has a fixed cost
-		// This cost is set to allow for only two authorization checks per expression
+		// 授权检查的成本是固定的
+		// 该成本设定为每条表达式只允许两次授权检查
 		return &checker.CallEstimate{CostEstimate: checker.CostEstimate{Min: 350000, Max: 350000}}
 	case "serviceAccount", "path", "group", "resource", "subresource", "namespace", "name", "allowed", "reason", "error", "errored":
-		// All authorization builder and accessor functions have a nominal cost
+		// 所有授权构建与访问函数都是名义成本
 		return &checker.CallEstimate{CostEstimate: checker.CostEstimate{Min: 1, Max: 1}}
 	case "fieldSelector", "labelSelector":
-		// field and label selector parse is a string parse into a structured set of requirements
+		// fieldSelector 和 labelSelector 解析是把字符串解析成一组结构化要求
 		if len(args) == 1 {
 			return &checker.CallEstimate{CostEstimate: selectorCostEstimate(l.sizeEstimate(args[0]))}
 		}
 	case "isSorted", "sum", "max", "min", "indexOf", "lastIndexOf", "includes":
 		if target != nil {
-			// Charge 1 cost for comparing each element in the list
+			// 列表中每个元素的比较计 1 成本
 			elCost := checker.CostEstimate{Min: 1, Max: 1}
-			// If the list contains strings or bytes, add the cost of traversing all the strings/bytes as a way
-			// of estimating the additional comparison cost.
+			// 如果列表包含字符串或字节，则加上遍历所有字符串/字节的成本，
+			// 以此估算额外的比较成本。
 			if elNode := l.listElementNode(*target); elNode != nil {
 				k := elNode.Type().Kind()
 				if k == types.StringKind || k == types.BytesKind {
@@ -318,11 +311,11 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 				}
 				return &checker.CallEstimate{CostEstimate: l.sizeEstimate(*target).MultiplyByCost(elCost)}
 			} else if function == "includes" {
-				// Since target can be a list under DynType, the worst case is a list comparison of size n,
-				// where each comparison costs 1.
+				// 由于在 DynType 下 target 可能是列表，最坏情况是大小为 n 的列表比较，
+				// 每次比较成本为 1。
 				return &checker.CallEstimate{CostEstimate: l.sizeEstimate(*target).MultiplyByCost(elCost)}
 			} else {
-				// the target is a string, which is supported by indexOf and lastIndexOf
+				// target 是字符串，indexOf 和 lastIndexOf 支持这种用法
 				return &checker.CallEstimate{CostEstimate: l.sizeEstimate(*target).MultiplyByCostFactor(common.StringTraversalCostFactor)}
 			}
 		}
@@ -343,55 +336,55 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 			replaceWithSz := l.sizeEstimate(args[1])
 
 			var replaceCount, retainedSz checker.SizeEstimate
-			// find the longest replacement:
+			// 找出最长的替换结果：
 			if toReplaceSz.Min == 0 {
-				// if the string being replaced is empty, replace surrounds all characters in the input string with the replacement.
+				// 如果被替换的字符串为空，replace 会用替换串包裹输入串中的每个字符。
 				if sz.Max < math.MaxUint64 {
 					replaceCount.Max = sz.Max + 1
 				} else {
 					replaceCount.Max = sz.Max
 				}
-				// Include the length of the longest possible original string length.
+				// 计入最长可能的原始字符串长度。
 				retainedSz.Max = sz.Max
 			} else if replaceWithSz.Max <= toReplaceSz.Min {
-				// If the replacement does not make the result longer, use the original string length.
+				// 如果替换不会让结果变长，就使用原字符串长度。
 				replaceCount.Max = 0
 				retainedSz.Max = sz.Max
 			} else {
-				// Replace the smallest possible substrings with the largest possible replacement
-				// as many times as possible.
+				// 用尽可能大的替换串替换尽可能小的子串，
+				// 并替换尽可能多次。
 				replaceCount.Max = uint64(math.Ceil(float64(sz.Max) / float64(toReplaceSz.Min)))
 			}
 
-			// find the shortest replacement:
+			// 找出最短的替换结果：
 			if toReplaceSz.Max == 0 {
-				// if the string being replaced is empty, replace surrounds all characters in the input string with the replacement.
+				// 如果被替换的字符串为空，replace 会用替换串包裹输入串中的每个字符。
 				if sz.Min < math.MaxUint64 {
 					replaceCount.Min = sz.Min + 1
 				} else {
 					replaceCount.Min = sz.Min
 				}
-				// Include the length of the shortest possible original string length.
+				// 计入最短可能的原始字符串长度。
 				retainedSz.Min = sz.Min
 			} else if toReplaceSz.Max <= replaceWithSz.Min {
-				// If the replacement does not make the result shorter, use the original string length.
+				// 如果替换不会让结果变短，就使用原字符串长度。
 				replaceCount.Min = 0
 				retainedSz.Min = sz.Min
 			} else {
-				// Replace the largest possible substrings being with the smallest possible replacement
-				// as many times as possible.
+				// 用尽可能小的替换串替换尽可能大的子串，
+				// 并替换尽可能多次。
 				replaceCount.Min = uint64(math.Ceil(float64(sz.Min) / float64(toReplaceSz.Max)))
 			}
 			size := replaceCount.Multiply(replaceWithSz).Add(retainedSz)
 
-			// cost is the traversal plus the construction of the result
+			// 成本是遍历加上构造结果
 			return &checker.CallEstimate{CostEstimate: sz.MultiplyByCostFactor(2 * common.StringTraversalCostFactor), ResultSize: &size}
 		}
 	case "split":
 		if target != nil {
 			sz := l.sizeEstimate(*target)
 
-			// Worst case size is where is that a separator of "" is used, and each char is returned as a list element.
+			// 最坏情况是使用分隔符 ""，每个字符都作为列表元素返回。
 			max := sz.Max
 			if len(args) > 1 {
 				if v := args[1].Expr().AsLiteral(); v != nil {
@@ -400,7 +393,7 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 					}
 				}
 			}
-			// Cost is the traversal plus the construction of the result.
+			// 成本是遍历加上构造结果。
 			return &checker.CallEstimate{CostEstimate: sz.MultiplyByCostFactor(2 * common.StringTraversalCostFactor), ResultSize: &checker.SizeEstimate{Min: 0, Max: max}}
 		}
 	case "join":
@@ -430,16 +423,14 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 	case "find", "findAll":
 		if target != nil && len(args) >= 1 {
 			sz := l.sizeEstimate(*target)
-			// Add one to string length for purposes of cost calculation to prevent product of string and regex to be 0
-			// in case where string is empty but regex is still expensive.
+			// 计算成本时给字符串长度加 1，避免字符串为空但正则仍然很昂贵时，
+			// 字符串与正则的乘积为 0。
 			strCost := sz.Add(checker.SizeEstimate{Min: 1, Max: 1}).MultiplyByCostFactor(common.StringTraversalCostFactor)
-			// We don't know how many expressions are in the regex, just the string length (a huge
-			// improvement here would be to somehow get a count the number of expressions in the regex or
-			// how many states are in the regex state machine and use that to measure regex cost).
-			// For now, we're making a guess that each expression in a regex is typically at least 4 chars
-			// in length.
+			// 我们不知道正则里有多少个表达式，只知道字符串长度（这里有个巨大的
+			// 改进方向：想办法统计正则中表达式数量或正则状态机的状态数，并用它来度量正则成本）。
+			// 目前我们猜测正则中每个表达式通常至少 4 个字符长。
 			regexCost := l.sizeEstimate(args[0]).MultiplyByCostFactor(common.RegexStringLengthCostFactor)
-			// worst case size of result is that every char is returned as separate find result.
+			// 结果的最坏情况是每个字符都作为单独的 find 结果返回。
 			return &checker.CallEstimate{CostEstimate: strCost.Multiply(regexCost), ResultSize: &checker.SizeEstimate{Min: 0, Max: sz.Max}}
 		}
 	case "cidr", "isIP", "isCIDR":
@@ -449,8 +440,8 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 		}
 	case "ip":
 		if overloadId == "cidr_ip" {
-			// The IP member of the CIDR object is just accessing a field.
-			// Nominal cost.
+			// CIDR 对象的 IP 成员只是访问一个字段。
+			// 名义成本。
 			return &checker.CallEstimate{CostEstimate: checker.CostEstimate{Min: 1, Max: 1}}
 		}
 		if len(args) >= 1 {
@@ -460,24 +451,24 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 	case "ip.isCanonical":
 		if len(args) >= 1 {
 			sz := l.sizeEstimate(args[0])
-			// We have to parse the string and then compare the parsed string to the original string.
-			// So we double the cost of parsing the string.
+			// 我们必须先解析字符串，再把解析结果与原字符串比较。
+			// 因此解析字符串的成本翻倍。
 			return &checker.CallEstimate{CostEstimate: sz.MultiplyByCostFactor(2 * common.StringTraversalCostFactor)}
 		}
 	case "masked", "prefixLength", "family", "isUnspecified", "isLoopback", "isLinkLocalMulticast", "isLinkLocalUnicast", "isGlobalUnicast":
-		// IP and CIDR accessors are nominal cost.
+		// IP 和 CIDR 访问器是名义成本。
 		return &checker.CallEstimate{CostEstimate: checker.CostEstimate{Min: 1, Max: 1}}
 	case "containsIP":
 		if len(args) >= 1 {
-			// The base cost of the function is the cost of comparing two byte lists.
-			// The byte lists will be either ipv4 or ipv6 so will have a length of 4, or 16 bytes.
+			// 该函数的基础成本是比较两个字节列表的成本。
+			// 字节列表要么是 ipv4 要么是 ipv6，所以长度为 4 或 16 字节。
 			sz := checker.SizeEstimate{Min: 4, Max: 16}
 
-			// We have to compare the two strings to determine if the CIDR/IP is in the other CIDR.
+			// 必须比较这两个字符串，才能判断 CIDR/IP 是否属于另一个 CIDR。
 			ipCompCost := sz.Add(sz).MultiplyByCostFactor(common.StringTraversalCostFactor)
 
 			if overloadId == "cidr_contains_ip_string" {
-				// If we are comparing a string, we must parse the string to into the right type, so add the cost of traversing the string again.
+				// 如果比较对象是字符串，必须先把字符串解析成正确的类型，因此再加一次字符串遍历成本。
 				ipCompCost = ipCompCost.Add(checker.CostEstimate(l.sizeEstimate(args[0])).MultiplyByCostFactor(common.StringTraversalCostFactor))
 			}
 
@@ -485,21 +476,21 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 		}
 	case "containsCIDR":
 		if len(args) >= 1 {
-			// The base cost of the function is the cost of comparing two byte lists.
-			// The byte lists will be either ipv4 or ipv6 so will have a length of 4, or 16 bytes.
+			// 该函数的基础成本是比较两个字节列表的成本。
+			// 字节列表要么是 ipv4 要么是 ipv6，所以长度为 4 或 16 字节。
 			sz := checker.SizeEstimate{Min: 4, Max: 16}
 
-			// We have to compare the two strings to determine if the CIDR/IP is in the other CIDR.
+			// 必须比较这两个字符串，才能判断 CIDR/IP 是否属于另一个 CIDR。
 			ipCompCost := sz.Add(sz).MultiplyByCostFactor(common.StringTraversalCostFactor)
 
-			// As we are comparing if a CIDR is within another CIDR, we first mask the base CIDR and
-			// also compare the CIDR bits.
-			// This has an additional cost of the length of the IP being traversed again, plus 1.
+			// 由于是比较一个 CIDR 是否落在另一个 CIDR 内，我们会先对基础 CIDR 做掩码，
+			// 并比较 CIDR 位数。
+			// 这额外包含一次 IP 长度遍历的成本，再加 1。
 			ipCompCost = ipCompCost.Add(sz.MultiplyByCostFactor(common.StringTraversalCostFactor))
 			ipCompCost = ipCompCost.Add(checker.CostEstimate{Min: 1, Max: 1})
 
 			if overloadId == "cidr_contains_cidr_string" {
-				// If we are comparing a string, we must parse the string to into the right type, so add the cost of traversing the string again.
+				// 如果比较对象是字符串，必须先把字符串解析成正确的类型，因此再加一次字符串遍历成本。
 				ipCompCost = ipCompCost.Add(checker.CostEstimate(l.sizeEstimate(args[0])).MultiplyByCostFactor(common.StringTraversalCostFactor))
 			}
 
@@ -520,7 +511,7 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 	case "sign", "asInteger", "isInteger", "asApproximateFloat", "isGreaterThan", "isLessThan", "compareTo", "add", "sub", "major", "minor", "patch":
 		return &checker.CallEstimate{CostEstimate: checker.CostEstimate{Min: 1, Max: 1}}
 	case "getScheme", "getHostname", "getHost", "getPort", "getEscapedPath", "getQuery":
-		// url accessors
+		// url 访问器
 		return &checker.CallEstimate{CostEstimate: checker.CostEstimate{Min: 1, Max: 1}}
 	case "_==_":
 		if len(args) == 2 {
@@ -536,7 +527,7 @@ func (l *CostEstimator) EstimateCallCost(function, overloadId string, target *ch
 				}
 				if t.Kind() == types.StructKind {
 					switch t {
-					case cel.QuantityType, AuthorizerType, PathCheckType, // O(1) cost equality checks
+					case cel.QuantityType, AuthorizerType, PathCheckType, // 成本为 O(1) 的相等性检查
 						GroupCheckType, ResourceCheckType, DecisionType, cel.SemverType:
 						return &checker.CallEstimate{CostEstimate: checker.CostEstimate{Min: 1, Max: 1}}
 					case cel.FormatType:
@@ -596,14 +587,14 @@ func (l *CostEstimator) listElementNode(list checker.AstNode) checker.AstNode {
 		lt := params[0]
 		nodePath := list.Path()
 		if nodePath != nil {
-			// Provide path if we have it so that a OpenAPIv3 maxLength validation can be looked up, if it exists
-			// for this node.
+			// 如果我们有路径就提供路径，这样就能查到该节点上（如果存在的）
+			// OpenAPIv3 maxLength 校验。
 			path := make([]string, len(nodePath)+1)
 			copy(path, nodePath)
 			path[len(nodePath)] = "@items"
 			return &itemsNode{path: path, t: lt, expr: nil}
 		} else {
-			// Provide just the type if no path is available so that worst case size can be looked up based on type.
+			// 没有路径时只提供类型，以便基于类型查出最坏情况大小。
 			return &itemsNode{t: lt, expr: nil}
 		}
 	}
@@ -644,12 +635,12 @@ func (i *itemsNode) ComputedSize() *checker.SizeEstimate {
 
 var _ checker.AstNode = (*itemsNode)(nil)
 
-// traversalCost computes the cost of traversing a ref.Val as a data tree.
+// traversalCost 计算把 ref.Val 作为数据树遍历一次的代价。
 //
 // 字符串/字节按长度计费；列表与映射递归累加，因此成本与嵌套数据量成正比，
 // 这正是限制表达式遍历整个对象的目的。
 func traversalCost(v ref.Val) uint64 {
-	// TODO: This could potentially be optimized by sampling maps and lists instead of traversing.
+	// TODO: 这里可以优化：对映射和列表做采样而不是完整遍历。
 	switch vt := v.(type) {
 	case types.String:
 		return uint64(float64(len(string(vt))) * common.StringTraversalCostFactor)
@@ -662,7 +653,7 @@ func traversalCost(v ref.Val) uint64 {
 			cost += traversalCost(i)
 		}
 		return cost
-	case traits.Mapper: // maps and objects
+	case traits.Mapper: // 映射与对象
 		cost := uint64(0)
 		for it := vt.Iterator(); it.HasNext() == types.True; {
 			k := it.Next()
