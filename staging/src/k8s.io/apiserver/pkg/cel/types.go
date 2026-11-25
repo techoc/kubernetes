@@ -34,7 +34,7 @@ const (
 	noMaxLength = math.MaxInt
 )
 
-// NewListType returns a parameterized list type with a specified element type.
+// NewListType 返回带有指定元素类型的参数化 list 类型。
 func NewListType(elem *DeclType, maxItems int64) *DeclType {
 	return &DeclType{
 		name:         "list",
@@ -42,13 +42,13 @@ func NewListType(elem *DeclType, maxItems int64) *DeclType {
 		MaxElements:  maxItems,
 		celType:      cel.ListType(elem.CelType()),
 		defaultValue: NewListValue(),
-		// a list can always be represented as [] in JSON, so hardcode the min size
-		// to 2
+		// list 在 JSON 中总可以表示为 []，因此最小序列化尺寸
+		// 硬编码为 2
 		MinSerializedSize: 2,
 	}
 }
 
-// NewMapType returns a parameterized map type with the given key and element types.
+// NewMapType 返回带有给定 key 类型和元素类型的参数化 map 类型。
 func NewMapType(key, elem *DeclType, maxProperties int64) *DeclType {
 	return &DeclType{
 		name:         "map",
@@ -57,22 +57,21 @@ func NewMapType(key, elem *DeclType, maxProperties int64) *DeclType {
 		MaxElements:  maxProperties,
 		celType:      cel.MapType(key.CelType(), elem.CelType()),
 		defaultValue: NewMapValue(),
-		// a map can always be represented as {} in JSON, so hardcode the min size
-		// to 2
+		// map 在 JSON 中总可以表示为 {}，因此最小序列化尺寸
+		// 硬编码为 2
 		MinSerializedSize: 2,
 	}
 }
 
-// NewObjectType creates an object type with a qualified name and a set of field declarations.
+// NewObjectType 创建一个对象类型，带限定名和一组字段声明。
 func NewObjectType(name string, fields map[string]*DeclField) *DeclType {
 	t := &DeclType{
 		name:      name,
 		Fields:    fields,
 		celType:   cel.ObjectType(name),
 		traitMask: traits.FieldTesterType | traits.IndexerType,
-		// an object could potentially be larger than the min size we default to here ({}),
-		// but we rely upon the caller to change MinSerializedSize accordingly if they add
-		// properties to the object
+		// 对象的实际尺寸可能大于此处默认的最小值（{}），但若调用方
+		// 往对象里添加属性，则依赖调用方自行相应地修改 MinSerializedSize
 		MinSerializedSize: 2,
 	}
 	t.defaultValue = NewObjectValue(t)
@@ -92,7 +91,7 @@ func NewSimpleTypeWithMinSize(name string, celType *cel.Type, zeroVal ref.Val, m
 	}
 }
 
-// DeclType represents the universal type descriptor for OpenAPIv3 types.
+// DeclType 是 OpenAPIv3 类型的通用类型描述符。
 //
 // 这是 schema 与 CEL 类型系统之间的桥梁：同时携带 CEL 类型、可访问字段、
 // 以及在 JSON 中的最小序列化尺寸（后者服务于运行时代价预算）。
@@ -100,15 +99,15 @@ type DeclType struct {
 	fmt.Stringer
 
 	name string
-	// Fields contains a map of escaped CEL identifier field names to field declarations.
+	// Fields 是一个 map：key 为转义后的 CEL 标识符字段名，value 为对应的字段声明。
 	Fields      map[string]*DeclField
 	KeyType     *DeclType
 	ElemType    *DeclType
 	TypeParam   bool
 	Metadata    map[string]string
 	MaxElements int64
-	// MinSerializedSize represents the smallest possible size in bytes that
-	// the DeclType could be serialized to in JSON.
+	// MinSerializedSize 表示该 DeclType 序列化到 JSON 时
+	// 可能的最小字节数。
 	MinSerializedSize int64
 
 	celType      *cel.Type
@@ -116,10 +115,9 @@ type DeclType struct {
 	defaultValue ref.Val
 }
 
-// MaybeAssignTypeName attempts to set the DeclType name to a fully qualified name, if the type
-// is of `object` type.
+// MaybeAssignTypeName 尝试在类型为 `object` 时把 DeclType 的 name 设为全限定名。
 //
-// The DeclType must return true for `IsObject` or this assignment will error.
+// DeclType 必须使 `IsObject` 返回 true，否则这次赋值会报错。
 //
 // 为匿名嵌套对象生成唯一限定名（如 spec.containers.@idx），否则不同位置的两个
 // 结构相同的对象会被 CEL 视为同一类型，字段解析可能串味。
@@ -191,19 +189,18 @@ func (t *DeclType) ExprType() (*exprpb.Type, error) {
 	return cel.TypeToExprType(t.celType)
 }
 
-// CelType returns the CEL type of this declaration.
+// CelType 返回该声明对应的 CEL 类型。
 func (t *DeclType) CelType() *cel.Type {
 	return t.celType
 }
 
-// FindField returns the DeclField with the given name if present.
+// FindField 返回给定名称的 DeclField（若存在）。
 func (t *DeclType) FindField(name string) (*DeclField, bool) {
 	f, found := t.Fields[name]
 	return f, found
 }
 
-// HasTrait implements the CEL ref.Type interface making this type declaration suitable for use
-// within the CEL evaluator.
+// HasTrait 实现 CEL ref.Type 接口，使该类型声明可用于 CEL 求值器。
 //
 // traitMask 显式声明对象支持字段访问/下标；对非 DeclType 的默认值再委托其自身，
 // 使标量类型也能正确回答是否可迭代等能力查询。
@@ -221,8 +218,8 @@ func (t *DeclType) HasTrait(trait int) bool {
 	return t.defaultValue.Type().HasTrait(trait)
 }
 
-// IsList returns whether the declaration is a `list` type which defines a parameterized element
-// type, but not a parameterized key type or fields.
+// IsList 返回该声明是否为 `list` 类型：定义了参数化的元素类型，
+// 但没有参数化的 key 类型或字段。
 //
 // 三个 Is* 方法是互斥且完备的分类依据：有 Fields 是对象，有 Key+Elem 是 map，
 // 仅 Elem 是 list。任何新形态都必须落进其中一类，否则类型提供者会静默忽略。
@@ -230,34 +227,33 @@ func (t *DeclType) IsList() bool {
 	return t.KeyType == nil && t.ElemType != nil && t.Fields == nil
 }
 
-// IsMap returns whether the declaration is a 'map' type which defines parameterized key and
-// element types, but not fields.
+// IsMap 返回该声明是否为 'map' 类型：定义了参数化的 key 类型和元素类型，
+// 但没有字段。
 func (t *DeclType) IsMap() bool {
 	return t.KeyType != nil && t.ElemType != nil && t.Fields == nil
 }
 
-// IsObject returns whether the declartion is an 'object' type which defined a set of typed fields.
+// IsObject 返回该声明是否为 'object' 类型：定义了一组带类型的字段。
 func (t *DeclType) IsObject() bool {
 	return t.KeyType == nil && t.ElemType == nil && t.Fields != nil
 }
 
-// String implements the fmt.Stringer interface method.
+// String 实现 fmt.Stringer 接口方法。
 func (t *DeclType) String() string {
 	return t.name
 }
 
-// TypeName returns the fully qualified type name for the DeclType.
+// TypeName 返回 DeclType 的全限定类型名。
 func (t *DeclType) TypeName() string {
 	return t.name
 }
 
-// DefaultValue returns the CEL ref.Val representing the default value for this object type,
-// if one exists.
+// DefaultValue 返回表示该对象类型默认值的 CEL ref.Val（若存在）。
 func (t *DeclType) DefaultValue() ref.Val {
 	return t.defaultValue
 }
 
-// FieldTypeMap constructs a map of the field and object types nested within a given type.
+// FieldTypeMap 构造给定类型内部嵌套的字段与对象类型的映射。
 //
 // 生成的映射同时用于类型注册与嵌套类型的查找，键是对象路径。
 func FieldTypeMap(path string, t *DeclType) map[string]*DeclType {
@@ -273,24 +269,23 @@ func FieldTypeMap(path string, t *DeclType) map[string]*DeclType {
 //
 // list 与 map 的元素用 "@idx"/"@elem" 后缀区分，防止与同路径的对象类型冲突。
 func buildDeclTypes(path string, t *DeclType, types map[string]*DeclType) {
-	// Ensure object types are properly named according to where they appear in the schema.
+	// 确保对象类型按其 schema 中出现的位置正确命名。
 	if t.IsObject() {
-		// Hack to ensure that names are uniquely qualified and work well with the type
-		// resolution steps which require fully qualified type names for field resolution
-		// to function properly.
+		// 一个取巧的做法：保证名字唯一限定，并与类型解析步骤良好配合——
+		// 字段解析要求使用全限定类型名才能正常工作。
 		types[t.TypeName()] = t
 		for name, field := range t.Fields {
 			fieldPath := fmt.Sprintf("%s.%s", path, name)
 			buildDeclTypes(fieldPath, field.Type, types)
 		}
 	}
-	// Map element properties to type names if needed.
+	// 必要时把 map 的元素属性映射到类型名。
 	if t.IsMap() {
 		mapElemPath := fmt.Sprintf("%s.@elem", path)
 		buildDeclTypes(mapElemPath, t.ElemType, types)
 		types[path] = t
 	}
-	// List element properties.
+	// list 的元素属性。
 	if t.IsList() {
 		listIdxPath := fmt.Sprintf("%s.@idx", path)
 		buildDeclTypes(listIdxPath, t.ElemType, types)
@@ -298,7 +293,7 @@ func buildDeclTypes(path string, t *DeclType, types map[string]*DeclType) {
 	}
 }
 
-// DeclField describes the name, ordinal, and optionality of a field declaration within a type.
+// DeclField 描述类型内部某个字段声明的名称、序号（ordinal）与是否必填。
 type DeclField struct {
 	Name         string
 	Type         *DeclType
@@ -318,7 +313,7 @@ func NewDeclField(name string, declType *DeclType, required bool, enumValues []i
 	}
 }
 
-// TypeName returns the string type name of the field.
+// TypeName 返回该字段的字符串类型名。
 func (f *DeclField) TypeName() string {
 	return f.Type.TypeName()
 }
@@ -361,20 +356,19 @@ func allTypesForDecl(declTypes []*DeclType) map[string]*DeclType {
 	return allTypes
 }
 
-// NewDeclTypeProvider returns an Open API Schema-based type-system which is CEL compatible.
+// NewDeclTypeProvider 返回一个基于 Open API Schema、与 CEL 兼容的类型系统。
 func NewDeclTypeProvider(rootTypes ...*DeclType) *DeclTypeProvider {
-	// Note, if the schema indicates that it's actually based on another proto
-	// then prefer the proto definition. For expressions in the proto, a new field
-	// annotation will be needed to indicate the expected environment and type of
-	// the expression.
+	// 注意：若 schema 表明其实际基于另一个 proto，则应优先采用 proto 定义。
+	// 对于 proto 中的表达式，将需要新增一个字段注解来标明该表达式期望的
+	// 环境与类型。
 	allTypes := allTypesForDecl(rootTypes)
 	return &DeclTypeProvider{
 		registeredTypes: allTypes,
 	}
 }
 
-// DeclTypeProvider extends the CEL ref.TypeProvider interface and provides an Open API Schema-based
-// type-system.
+// DeclTypeProvider 扩展了 CEL ref.TypeProvider 接口，提供基于 Open API Schema
+// 的类型系统。
 type DeclTypeProvider struct {
 	registeredTypes             map[string]*DeclType
 	typeProvider                types.Provider
@@ -396,10 +390,9 @@ func (rt *DeclTypeProvider) FindIdent(identName string) (ref.Val, bool) {
 	return rt.typeProvider.FindIdent(identName)
 }
 
-// EnvOptions returns a set of cel.EnvOption values which includes the declaration set
-// as well as a custom ref.TypeProvider.
+// EnvOptions 返回一组 cel.EnvOption，包含声明集以及自定义的 ref.TypeProvider。
 //
-// If the DeclTypeProvider value is nil, an empty []cel.EnvOption set is returned.
+// 若 DeclTypeProvider 为 nil，则返回空的 []cel.EnvOption 集合。
 func (rt *DeclTypeProvider) EnvOptions(tp types.Provider) ([]cel.EnvOption, error) {
 	if rt == nil {
 		return []cel.EnvOption{}, nil
@@ -414,8 +407,8 @@ func (rt *DeclTypeProvider) EnvOptions(tp types.Provider) ([]cel.EnvOption, erro
 	}, nil
 }
 
-// WithTypeProvider returns a new DeclTypeProvider that sets the given TypeProvider
-// If the original DeclTypeProvider is nil, the returned DeclTypeProvider is still nil.
+// WithTypeProvider 返回一个新的 DeclTypeProvider，其中设置了给定的 TypeProvider。
+// 若原 DeclTypeProvider 为 nil，返回的 DeclTypeProvider 仍然是 nil。
 //
 // 同时校验外部提供者中同名类型的定义是否与本 schema 一致：不一致意味着表达式在
 // 编译期与运行期看到不同结构，必须立即报错而不是取其一。
@@ -436,7 +429,7 @@ func (rt *DeclTypeProvider) WithTypeProvider(tp types.Provider) (*DeclTypeProvid
 	}
 	for name, declType := range rt.registeredTypes {
 		tpType, found := tp.FindStructType(name)
-		// cast celType to types.type
+		// 把 celType 转换为 types.type
 
 		expT := declType.CelType()
 		if found && !expT.IsExactType(tpType) {
@@ -448,13 +441,12 @@ func (rt *DeclTypeProvider) WithTypeProvider(tp types.Provider) (*DeclTypeProvid
 	return rtWithTypes, nil
 }
 
-// FindStructType attempts to resolve the typeName provided from the rule's rule-schema, or if not
-// from the embedded ref.TypeProvider.
+// FindStructType 尝试解析来自规则的 rule-schema 的 typeName，若解析不到，
+// 则回退到内嵌的 ref.TypeProvider。
 //
-// FindStructType overrides the default type-finding behavior of the embedded TypeProvider.
+// FindStructType 覆盖了内嵌 TypeProvider 默认的查找类型行为。
 //
-// Note, when the type name is based on the Open API Schema, the name will reflect the object path
-// where the type definition appears.
+// 注意：当类型名基于 Open API Schema 时，名字将反映该类型定义所在的对象路径。
 func (rt *DeclTypeProvider) FindStructType(typeName string) (*types.Type, bool) {
 	if rt == nil {
 		return nil, false
@@ -467,7 +459,7 @@ func (rt *DeclTypeProvider) FindStructType(typeName string) (*types.Type, bool) 
 	return rt.typeProvider.FindStructType(typeName)
 }
 
-// FindDeclType returns the CPT type description which can be mapped to a CEL type.
+// FindDeclType 返回可映射为 CEL 类型的 CPT 类型描述。
 func (rt *DeclTypeProvider) FindDeclType(typeName string) (*DeclType, bool) {
 	if rt == nil {
 		return nil, false
@@ -475,18 +467,16 @@ func (rt *DeclTypeProvider) FindDeclType(typeName string) (*DeclType, bool) {
 	return rt.findDeclType(typeName)
 }
 
-// FindStructFieldNames returns the field names associated with the type, if the type
-// is found.
+// FindStructFieldNames 返回该类型关联的字段名（若类型能找到）。
 func (rt *DeclTypeProvider) FindStructFieldNames(typeName string) ([]string, bool) {
 	return []string{}, false
 }
 
-// FindStructFieldType returns a field type given a type name and field name, if found.
+// FindStructFieldType 在找到时根据类型名与字段名返回字段类型。
 //
-// Note, the type name for an Open API Schema type is likely to be its qualified object path.
-// If, in the future an object instance rather than a type name were provided, the field
-// resolution might more accurately reflect the expected type model. However, in this case
-// concessions were made to align with the existing CEL interfaces.
+// 注意：Open API Schema 类型的类型名通常是其限定对象路径。
+// 假如未来传入的是对象实例而非类型名，字段解析会更准确地反映期望的类型模型。
+// 但在此处，为了与现有 CEL 接口对齐，做出了一些妥协。
 func (rt *DeclTypeProvider) FindStructFieldType(typeName, fieldName string) (*types.FieldType, bool) {
 	st, found := rt.findDeclType(typeName)
 	if !found {
@@ -506,7 +496,7 @@ func (rt *DeclTypeProvider) FindStructFieldType(typeName, fieldName string) (*ty
 			Type: expT,
 		}, true
 	}
-	// This could be a dynamic map.
+	// 这可能是一个动态 map。
 	if st.IsMap() {
 		et := st.ElemType
 		expT := et.CelType()
@@ -517,20 +507,20 @@ func (rt *DeclTypeProvider) FindStructFieldType(typeName, fieldName string) (*ty
 	return nil, false
 }
 
-// NativeToValue is an implementation of the ref.TypeAdapater interface which supports conversion
-// of rule values to CEL ref.Val instances.
+// NativeToValue 是 ref.TypeAdapater 接口的实现，支持把规则值转换为
+// CEL ref.Val 实例。
 func (rt *DeclTypeProvider) NativeToValue(val interface{}) ref.Val {
 	return rt.typeAdapter.NativeToValue(val)
 }
 
 // NewValue 目前委托给底层 typeProvider；对象实例化（变异准入需要）尚未实现。
 func (rt *DeclTypeProvider) NewValue(typeName string, fields map[string]ref.Val) ref.Val {
-	// TODO: implement for OpenAPI types to enable CEL object instantiation, which is needed
-	// for mutating admission.
+	// TODO: 为 OpenAPI 类型实现该功能以支持 CEL 对象实例化，
+	// 变异准入（mutating admission）需要此能力。
 	return rt.typeProvider.NewValue(typeName, fields)
 }
 
-// TypeNames returns the list of type names declared within the DeclTypeProvider object.
+// TypeNames 返回 DeclTypeProvider 对象中声明的类型名列表。
 func (rt *DeclTypeProvider) TypeNames() []string {
 	// 预先分配长度，避免返回的切片在调用方 append 时产生共享底层数组的意外。
 	typeNames := make([]string, len(rt.registeredTypes))
@@ -587,50 +577,49 @@ var (
 	// any/dyn 的最小尺寸取 1（JSON null），因为编译期无法确定实际类型。
 	AnyType = NewSimpleTypeWithMinSize("any", cel.AnyType, nil, 1)
 
-	// BoolType is equivalent to the CEL 'bool' type.
+	// BoolType 等价于 CEL 的 'bool' 类型。
 	BoolType = NewSimpleTypeWithMinSize("bool", cel.BoolType, types.False, MinBoolSize)
 
-	// BytesType is equivalent to the CEL 'bytes' type.
+	// BytesType 等价于 CEL 的 'bytes' 类型。
 	BytesType = NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), MinStringSize)
 
-	// DoubleType is equivalent to the CEL 'double' type which is a 64-bit floating point value.
+	// DoubleType 等价于 CEL 的 'double' 类型，即 64 位浮点值。
 	DoubleType = NewSimpleTypeWithMinSize("double", cel.DoubleType, types.Double(0), MinNumberSize)
 
-	// DurationType is equivalent to the CEL 'duration' type.
+	// DurationType 等价于 CEL 的 'duration' 类型。
 	DurationType = NewSimpleTypeWithMinSize("duration", cel.DurationType, types.Duration{Duration: time.Duration(0)}, MinDurationSizeJSON)
 
-	// DateType is equivalent to the CEL 'date' type.
+	// DateType 等价于 CEL 的 'date' 类型。
 	DateType = NewSimpleTypeWithMinSize("date", cel.TimestampType, types.Timestamp{Time: time.Time{}}, JSONDateSize)
 
-	// DynType is the equivalent of the CEL 'dyn' concept which indicates that the type will be
-	// determined at runtime rather than compile time.
+	// DynType 等价于 CEL 的 'dyn' 概念，表示类型将在运行时而非编译期确定。
 	DynType = NewSimpleTypeWithMinSize("dyn", cel.DynType, nil, 1)
 
-	// IntType is equivalent to the CEL 'int' type which is a 64-bit signed int.
+	// IntType 等价于 CEL 的 'int' 类型，即 64 位有符号整数。
 	IntType = NewSimpleTypeWithMinSize("int", cel.IntType, types.IntZero, MinNumberSize)
 
-	// NullType is equivalent to the CEL 'null_type'.
+	// NullType 等价于 CEL 的 'null_type'。
 	NullType = NewSimpleTypeWithMinSize("null_type", cel.NullType, types.NullValue, 4)
 
-	// StringType is equivalent to the CEL 'string' type which is expected to be a UTF-8 string.
-	// StringType values may either be string literals or expression strings.
+	// StringType 等价于 CEL 的 'string' 类型，预期为 UTF-8 字符串。
+	// StringType 的值可以是字符串字面量，也可以是表达式字符串。
 	StringType = NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), MinStringSize)
 
-	// TimestampType corresponds to the well-known protobuf.Timestamp type supported within CEL.
-	// Note that both the OpenAPI date and date-time types map onto TimestampType, so not all types
-	// labeled as Timestamp will necessarily have the same MinSerializedSize.
+	// TimestampType 对应 CEL 支持的知名类型 protobuf.Timestamp。
+	// 注意：OpenAPI 的 date 和 date-time 类型都映射到 TimestampType，
+	// 因此并非所有标记为 Timestamp 的类型的 MinSerializedSize 都相同。
 	TimestampType = NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, JSONDateSize)
 
-	// QuantityDeclType wraps a [QuantityType] and makes it usable with functions that expect
-	// a [DeclType].
+	// QuantityDeclType 包装了一个 [QuantityType]，使其可用于期望
+	// [DeclType] 的函数。
 	QuantityDeclType = NewSimpleTypeWithMinSize("quantity", QuantityType, Quantity{Quantity: resource.NewQuantity(0, resource.DecimalSI)}, 8)
 
-	// UintType is equivalent to the CEL 'uint' type.
+	// UintType 等价于 CEL 的 'uint' 类型。
 	UintType = NewSimpleTypeWithMinSize("uint", cel.UintType, types.Uint(0), 1)
 
-	// ListType is equivalent to the CEL 'list' type.
+	// ListType 等价于 CEL 的 'list' 类型。
 	ListType = NewListType(AnyType, noMaxLength)
 
-	// MapType is equivalent to the CEL 'map' type.
+	// MapType 等价于 CEL 的 'map' 类型。
 	MapType = NewMapType(AnyType, AnyType, noMaxLength)
 )

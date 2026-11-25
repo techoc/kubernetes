@@ -56,7 +56,7 @@ func TestStreamTranslator_LoopbackStdinToStdout(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
-	// Create upstream fake SPDY server which copies STDIN back onto STDOUT stream.
+	// 创建上游 fake SPDY 服务器，它把 STDIN 回环拷贝到 STDOUT stream。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx, err := createSPDYServerStreams(t, w, req, Options{
 			Stdin:  true,
@@ -67,7 +67,7 @@ func TestStreamTranslator_LoopbackStdinToStdout(t *testing.T) {
 			return
 		}
 		defer ctx.conn.Close()
-		// Loopback STDIN data onto STDOUT stream.
+		// 把 STDIN 数据回环到 STDOUT stream。
 		_, err = io.Copy(ctx.stdoutStream, ctx.stdinStream)
 		if err != nil {
 			t.Fatalf("error copying STDIN to STDOUT: %v", err)
@@ -75,8 +75,8 @@ func TestStreamTranslator_LoopbackStdinToStdout(t *testing.T) {
 
 	}))
 	defer spdyServer.Close()
-	// Create StreamTranslatorHandler, which points upstream to fake SPDY server with
-	// streams STDIN and STDOUT. Create test server from StreamTranslatorHandler.
+	// 创建 StreamTranslatorHandler，上游指向带 STDIN 和 STDOUT stream 的 fake SPDY 服务器。
+	// 再用 StreamTranslatorHandler 创建测试服务器。
 	spdyLocation, err := url.Parse(spdyServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse spdy server URL: %s", spdyServer.URL)
@@ -91,7 +91,7 @@ func TestStreamTranslator_LoopbackStdinToStdout(t *testing.T) {
 		streamTranslator.ServeHTTP(w, req)
 	}))
 	defer streamTranslatorServer.Close()
-	// Now create the websocket client (executor), and point it to the "streamTranslatorServer".
+	// 现在创建 websocket 客户端（executor），并把它指向 "streamTranslatorServer"。
 	streamTranslatorLocation, err := url.Parse(streamTranslatorServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse StreamTranslator server URL: %s", streamTranslatorServer.URL)
@@ -100,8 +100,7 @@ func TestStreamTranslator_LoopbackStdinToStdout(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT buffer.
+	// 生成随机数据，并设置从 STDIN 发送。这些数据会在 STDOUT buffer 返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -114,7 +113,7 @@ func TestStreamTranslator_LoopbackStdinToStdout(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 在 WebSocket "exec" 客户端上开始流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -131,11 +130,11 @@ func TestStreamTranslator_LoopbackStdinToStdout(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT.
+	// 检查在 STDIN 发送的随机数据与 STDOUT 返回的是否一致。
 	if !bytes.Equal(randomData, data) {
 		t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 	}
-	// Validate the streamtranslator metrics; should be one 200 success.
+	// 校验 streamtranslator 指标；应当有一条 200 成功记录。
 	metricNames := []string{"apiserver_stream_translator_requests_total"}
 	expected := `
 # HELP apiserver_stream_translator_requests_total [ALPHA] Total number of requests that were handled by the StreamTranslatorProxy, which processes streaming RemoteCommand/V5
@@ -153,7 +152,7 @@ func TestStreamTranslator_LoopbackStdinToStderr(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
-	// Create upstream fake SPDY server which copies STDIN back onto STDERR stream.
+	// 创建上游 fake SPDY 服务器，它把 STDIN 回环拷贝到 STDERR stream。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx, err := createSPDYServerStreams(t, w, req, Options{
 			Stdin:  true,
@@ -164,15 +163,15 @@ func TestStreamTranslator_LoopbackStdinToStderr(t *testing.T) {
 			return
 		}
 		defer ctx.conn.Close()
-		// Loopback STDIN data onto STDERR stream.
+		// 把 STDIN 数据回环到 STDERR stream。
 		_, err = io.Copy(ctx.stderrStream, ctx.stdinStream)
 		if err != nil {
 			t.Fatalf("error copying STDIN to STDERR: %v", err)
 		}
 	}))
 	defer spdyServer.Close()
-	// Create StreamTranslatorHandler, which points upstream to fake SPDY server with
-	// streams STDIN and STDERR. Create test server from StreamTranslatorHandler.
+	// 创建 StreamTranslatorHandler，上游指向带 STDIN 和 STDERR stream 的 fake SPDY 服务器。
+	// 再用 StreamTranslatorHandler 创建测试服务器。
 	spdyLocation, err := url.Parse(spdyServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse spdy server URL: %s", spdyServer.URL)
@@ -187,7 +186,7 @@ func TestStreamTranslator_LoopbackStdinToStderr(t *testing.T) {
 		streamTranslator.ServeHTTP(w, req)
 	}))
 	defer streamTranslatorServer.Close()
-	// Now create the websocket client (executor), and point it to the "streamTranslatorServer".
+	// 现在创建 websocket 客户端（executor），并把它指向 "streamTranslatorServer"。
 	streamTranslatorLocation, err := url.Parse(streamTranslatorServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse StreamTranslator server URL: %s", streamTranslatorServer.URL)
@@ -196,8 +195,7 @@ func TestStreamTranslator_LoopbackStdinToStderr(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDERR buffer.
+	// 生成随机数据，并设置从 STDIN 发送。这些数据会在 STDERR buffer 返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -210,7 +208,7 @@ func TestStreamTranslator_LoopbackStdinToStderr(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 在 WebSocket "exec" 客户端上开始流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -227,11 +225,11 @@ func TestStreamTranslator_LoopbackStdinToStderr(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDERR.
+	// 检查在 STDIN 发送的随机数据与 STDERR 返回的是否一致。
 	if !bytes.Equal(randomData, data) {
 		t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 	}
-	// Validate the streamtranslator metrics; should be one 200 success.
+	// 校验 streamtranslator 指标；应当有一条 200 成功记录。
 	metricNames := []string{"apiserver_stream_translator_requests_total"}
 	expected := `
 # HELP apiserver_stream_translator_requests_total [ALPHA] Total number of requests that were handled by the StreamTranslatorProxy, which processes streaming RemoteCommand/V5
@@ -245,8 +243,8 @@ apiserver_stream_translator_requests_total{code="200"} 1
 
 // 返回范围 (1-127) 内的随机退出码。非零退出码必须通过 error 流以结构化 Status 传回，测试用随机码避免偶然命中固定值而失去区分度。
 func randomExitCode() int {
-	errorCode := mrand.Intn(127) // Range: (0 - 126)
-	errorCode += 1               // Range: (1 - 127)
+	errorCode := mrand.Intn(127) // 范围：(0 - 126)
+	errorCode += 1               // 范围：(1 - 127)
 	return errorCode
 }
 
@@ -256,8 +254,8 @@ func TestStreamTranslator_ErrorStream(t *testing.T) {
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
 	expectedExitCode := randomExitCode()
-	// Create upstream fake SPDY server, returning a non-zero exit code
-	// on error stream within the structured error.
+	// 创建上游 fake SPDY 服务器，它在 error stream 的结构化错误内
+	// 返回一个非零退出码。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx, err := createSPDYServerStreams(t, w, req, Options{
 			Stdout: true,
@@ -267,12 +265,12 @@ func TestStreamTranslator_ErrorStream(t *testing.T) {
 			return
 		}
 		defer ctx.conn.Close()
-		// Read/discard STDIN data before returning error on error stream.
+		// 在 error stream 返回错误之前，先读取并丢弃 STDIN 数据。
 		_, err = io.Copy(io.Discard, ctx.stdinStream)
 		if err != nil {
 			t.Fatalf("error copying STDIN to DISCARD: %v", err)
 		}
-		// Force an non-zero exit code error returned on the error stream.
+		// 强制在 error stream 上返回一个非零退出码错误。
 		err = ctx.writeStatus(&apierrors.StatusError{ErrStatus: metav1.Status{
 			Status: metav1.StatusFailure,
 			Reason: rcconstants.NonZeroExitCodeReason,
@@ -290,8 +288,8 @@ func TestStreamTranslator_ErrorStream(t *testing.T) {
 		}
 	}))
 	defer spdyServer.Close()
-	// Create StreamTranslatorHandler, which points upstream to fake SPDY server, and
-	// create a test server using the  StreamTranslatorHandler.
+	// 创建 StreamTranslatorHandler，上游指向 fake SPDY 服务器，
+	// 并用 StreamTranslatorHandler 创建测试服务器。
 	spdyLocation, err := url.Parse(spdyServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse spdy server URL: %s", spdyServer.URL)
@@ -306,7 +304,7 @@ func TestStreamTranslator_ErrorStream(t *testing.T) {
 		streamTranslator.ServeHTTP(w, req)
 	}))
 	defer streamTranslatorServer.Close()
-	// Now create the websocket client (executor), and point it to the "streamTranslatorServer".
+	// 现在创建 websocket 客户端（executor），并把它指向 "streamTranslatorServer"。
 	streamTranslatorLocation, err := url.Parse(streamTranslatorServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse StreamTranslator server URL: %s", streamTranslatorServer.URL)
@@ -315,8 +313,7 @@ func TestStreamTranslator_ErrorStream(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate random data, and set it up to stream on STDIN. The data will be discarded at
-	// upstream SDPY server.
+	// 生成随机数据，并设置从 STDIN 发送。这些数据会在上游 SPDY 服务器被丢弃。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -327,7 +324,7 @@ func TestStreamTranslator_ErrorStream(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 在 WebSocket "exec" 客户端上开始流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -335,17 +332,17 @@ func TestStreamTranslator_ErrorStream(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expect stream to be closed after connection is closed.")
 	case err := <-errorChan:
-		// Expect exit code error on error stream.
+		// 预期在 error stream 上收到退出码错误。
 		if err == nil {
 			t.Errorf("expected error, but received none")
 		}
 		expectedError := fmt.Sprintf("command terminated with exit code %d", expectedExitCode)
-		// Compare expected error with exit code to actual error.
+		// 将带退出码的预期错误与实际错误比对。
 		if expectedError != err.Error() {
 			t.Errorf("expected error (%s), got (%s)", expectedError, err)
 		}
 	}
-	// Validate the streamtranslator metrics; an exit code error is considered 200 success.
+	// 校验 streamtranslator 指标；退出码错误仍算作 200 成功。
 	metricNames := []string{"apiserver_stream_translator_requests_total"}
 	expected := `
 # HELP apiserver_stream_translator_requests_total [ALPHA] Total number of requests that were handled by the StreamTranslatorProxy, which processes streaming RemoteCommand/V5
@@ -362,7 +359,7 @@ func TestStreamTranslator_MultipleReadChannels(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
-	// Create upstream fake SPDY server which copies STDIN back onto STDOUT and STDERR stream.
+	// 创建上游 fake SPDY 服务器，它把 STDIN 回环拷贝到 STDOUT 和 STDERR stream。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx, err := createSPDYServerStreams(t, w, req, Options{
 			Stdin:  true,
@@ -374,17 +371,17 @@ func TestStreamTranslator_MultipleReadChannels(t *testing.T) {
 			return
 		}
 		defer ctx.conn.Close()
-		// TeeReader copies data read on STDIN onto STDERR.
+		// TeeReader 把从 STDIN 读到的数据拷贝一份到 STDERR。
 		stdinReader := io.TeeReader(ctx.stdinStream, ctx.stderrStream)
-		// Also copy STDIN to STDOUT.
+		// 同时把 STDIN 拷贝到 STDOUT。
 		_, err = io.Copy(ctx.stdoutStream, stdinReader)
 		if err != nil {
 			t.Errorf("error copying STDIN to STDOUT: %v", err)
 		}
 	}))
 	defer spdyServer.Close()
-	// Create StreamTranslatorHandler, which points upstream to fake SPDY server with
-	// streams STDIN, STDOUT, and STDERR. Create test server from StreamTranslatorHandler.
+	// 创建 StreamTranslatorHandler，上游指向带 STDIN、STDOUT 和 STDERR stream 的 fake SPDY 服务器。
+	// 再用 StreamTranslatorHandler 创建测试服务器。
 	spdyLocation, err := url.Parse(spdyServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse spdy server URL: %s", spdyServer.URL)
@@ -399,7 +396,7 @@ func TestStreamTranslator_MultipleReadChannels(t *testing.T) {
 		streamTranslator.ServeHTTP(w, req)
 	}))
 	defer streamTranslatorServer.Close()
-	// Now create the websocket client (executor), and point it to the "streamTranslatorServer".
+	// 现在创建 websocket 客户端（executor），并把它指向 "streamTranslatorServer"。
 	streamTranslatorLocation, err := url.Parse(streamTranslatorServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse StreamTranslator server URL: %s", streamTranslatorServer.URL)
@@ -408,8 +405,7 @@ func TestStreamTranslator_MultipleReadChannels(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT and STDERR buffer.
+	// 生成随机数据，并设置从 STDIN 发送。这些数据会在 STDOUT 和 STDERR buffer 返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -423,7 +419,7 @@ func TestStreamTranslator_MultipleReadChannels(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 在 WebSocket "exec" 客户端上开始流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -440,7 +436,7 @@ func TestStreamTranslator_MultipleReadChannels(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT.
+	// 检查在 STDIN 发送的随机数据与 STDOUT 返回的是否一致。
 	if !bytes.Equal(stdoutBytes, randomData) {
 		t.Errorf("unexpected data received: %d sent: %d", len(stdoutBytes), len(randomData))
 	}
@@ -449,11 +445,11 @@ func TestStreamTranslator_MultipleReadChannels(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDERR.
+	// 检查在 STDIN 发送的随机数据与 STDERR 返回的是否一致。
 	if !bytes.Equal(stderrBytes, randomData) {
 		t.Errorf("unexpected data received: %d sent: %d", len(stderrBytes), len(randomData))
 	}
-	// Validate the streamtranslator metrics; should have one 200 success.
+	// 校验 streamtranslator 指标；应当有一条 200 成功记录。
 	metricNames := []string{"apiserver_stream_translator_requests_total"}
 	expected := `
 # HELP apiserver_stream_translator_requests_total [ALPHA] Total number of requests that were handled by the StreamTranslatorProxy, which processes streaming RemoteCommand/V5
@@ -467,7 +463,7 @@ apiserver_stream_translator_requests_total{code="200"} 1
 
 // TestStreamTranslator_ThrottleReadChannels 使用限速流测试两条流（STDOUT、STDERR）。限速值略低于待传数据量，确保节流路径真实生效而不仅是配置被接受；数据完整性仍需保持一致。
 func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
-	// Create upstream fake SPDY server which copies STDIN back onto STDOUT and STDERR stream.
+	// 创建上游 fake SPDY 服务器，它把 STDIN 回环拷贝到 STDOUT 和 STDERR stream。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx, err := createSPDYServerStreams(t, w, req, Options{
 			Stdin:  true,
@@ -479,17 +475,17 @@ func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
 			return
 		}
 		defer ctx.conn.Close()
-		// TeeReader copies data read on STDIN onto STDERR.
+		// TeeReader 把从 STDIN 读到的数据拷贝一份到 STDERR。
 		stdinReader := io.TeeReader(ctx.stdinStream, ctx.stderrStream)
-		// Also copy STDIN to STDOUT.
+		// 同时把 STDIN 拷贝到 STDOUT。
 		_, err = io.Copy(ctx.stdoutStream, stdinReader)
 		if err != nil {
 			t.Errorf("error copying STDIN to STDOUT: %v", err)
 		}
 	}))
 	defer spdyServer.Close()
-	// Create StreamTranslatorHandler, which points upstream to fake SPDY server with
-	// streams STDIN, STDOUT, and STDERR. Create test server from StreamTranslatorHandler.
+	// 创建 StreamTranslatorHandler，上游指向带 STDIN、STDOUT 和 STDERR stream 的 fake SPDY 服务器。
+	// 再用 StreamTranslatorHandler 创建测试服务器。
 	spdyLocation, err := url.Parse(spdyServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse spdy server URL: %s", spdyServer.URL)
@@ -499,13 +495,13 @@ func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
 		t.Fatalf("Unexpected error creating transport: %v", err)
 	}
 	streams := Options{Stdin: true, Stdout: true, Stderr: true}
-	maxBytesPerSec := 900 * 1024 // slightly less than the 1MB that is being transferred to exercise throttling.
+	maxBytesPerSec := 900 * 1024 // 略低于传输的 1MB 数据量，用于真正触发限速路径。
 	streamTranslator := NewStreamTranslatorHandler(spdyLocation, spdyTransport, int64(maxBytesPerSec), streams)
 	streamTranslatorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		streamTranslator.ServeHTTP(w, req)
 	}))
 	defer streamTranslatorServer.Close()
-	// Now create the websocket client (executor), and point it to the "streamTranslatorServer".
+	// 现在创建 websocket 客户端（executor），并把它指向 "streamTranslatorServer"。
 	streamTranslatorLocation, err := url.Parse(streamTranslatorServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse StreamTranslator server URL: %s", streamTranslatorServer.URL)
@@ -514,8 +510,7 @@ func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT and STDERR buffer.
+	// 生成随机数据，并设置从 STDIN 发送。这些数据会在 STDOUT 和 STDERR buffer 返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -529,7 +524,7 @@ func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 在 WebSocket "exec" 客户端上开始流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -546,7 +541,7 @@ func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT.
+	// 检查在 STDIN 发送的随机数据与 STDOUT 返回的是否一致。
 	if !bytes.Equal(stdoutBytes, randomData) {
 		t.Errorf("unexpected data received: %d sent: %d", len(stdoutBytes), len(randomData))
 	}
@@ -555,7 +550,7 @@ func TestStreamTranslator_ThrottleReadChannels(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDERR.
+	// 检查在 STDIN 发送的随机数据与 STDERR 返回的是否一致。
 	if !bytes.Equal(stderrBytes, randomData) {
 		t.Errorf("unexpected data received: %d sent: %d", len(stderrBytes), len(randomData))
 	}
@@ -576,9 +571,9 @@ func newTerminalSizeQueue(max int) *fakeTerminalSizeQueue {
 	}
 }
 
-// Next returns a pointer to the next random TerminalSize, or nil if we have
-// already returned "maxSizes" TerminalSizes already. Stores the randomly
-// created TerminalSize in "terminalSizes" field for later validation.
+// Next 返回下一个随机 TerminalSize 的指针；若已返回过 "maxSizes" 个
+// TerminalSize 则返回 nil。返回的随机 TerminalSize 会存入 "terminalSizes"
+// 字段，供后续校验比对。
 func (f *fakeTerminalSizeQueue) Next() *remotecommand.TerminalSize {
 	if len(f.terminalSizes) >= f.maxSizes {
 		return nil
@@ -588,8 +583,8 @@ func (f *fakeTerminalSizeQueue) Next() *remotecommand.TerminalSize {
 	return &size
 }
 
-// randomTerminalSize returns a TerminalSize with random values in the
-// range (0-65535) for the fields Width and Height.
+// randomTerminalSize 返回一个 TerminalSize，其 Width 和 Height 字段为
+// 范围 (0-65535) 内的随机值。
 func randomTerminalSize() remotecommand.TerminalSize {
 	randWidth := uint16(mrand.Intn(int(math.Pow(2, 16))))
 	randHeight := uint16(mrand.Intn(int(math.Pow(2, 16))))
@@ -605,12 +600,12 @@ func TestStreamTranslator_TTYResizeChannel(t *testing.T) {
 	metrics.Register()
 	metrics.ResetForTest()
 	t.Cleanup(metrics.ResetForTest)
-	// Create the fake terminal size queue and the actualTerminalSizes which
-	// will be received at the opposite websocket endpoint.
+	// 创建 fake terminal size 队列，以及将在 websocket 对端接收到的
+	// actualTerminalSizes。
 	numSizeQueue := 10000
 	sizeQueue := newTerminalSizeQueue(numSizeQueue)
 	actualTerminalSizes := make([]remotecommand.TerminalSize, 0, numSizeQueue)
-	// Create upstream fake SPDY server which copies STDIN back onto STDERR stream.
+	// 创建上游 fake SPDY 服务器，它把 STDIN 回环拷贝到 STDERR stream。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx, err := createSPDYServerStreams(t, w, req, Options{
 			Tty: true,
@@ -620,15 +615,15 @@ func TestStreamTranslator_TTYResizeChannel(t *testing.T) {
 			return
 		}
 		defer ctx.conn.Close()
-		// Read the terminal resize requests, storing them in actualTerminalSizes
+		// 读取终端 resize 请求，并存入 actualTerminalSizes。
 		for i := 0; i < numSizeQueue; i++ {
 			actualTerminalSize := <-ctx.resizeChan
 			actualTerminalSizes = append(actualTerminalSizes, actualTerminalSize)
 		}
 	}))
 	defer spdyServer.Close()
-	// Create StreamTranslatorHandler, which points upstream to fake SPDY server with
-	// resize (TTY resize) stream. Create test server from StreamTranslatorHandler.
+	// 创建 StreamTranslatorHandler，上游指向带 resize（TTY resize）stream 的 fake SPDY 服务器。
+	// 再用 StreamTranslatorHandler 创建测试服务器。
 	spdyLocation, err := url.Parse(spdyServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse spdy server URL: %s", spdyServer.URL)
@@ -643,7 +638,7 @@ func TestStreamTranslator_TTYResizeChannel(t *testing.T) {
 		streamTranslator.ServeHTTP(w, req)
 	}))
 	defer streamTranslatorServer.Close()
-	// Now create the websocket client (executor), and point it to the "streamTranslatorServer".
+	// 现在创建 websocket 客户端（executor），并把它指向 "streamTranslatorServer"。
 	streamTranslatorLocation, err := url.Parse(streamTranslatorServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse StreamTranslator server URL: %s", streamTranslatorServer.URL)
@@ -658,7 +653,7 @@ func TestStreamTranslator_TTYResizeChannel(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 在 WebSocket "exec" 客户端上开始流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -670,8 +665,8 @@ func TestStreamTranslator_TTYResizeChannel(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	}
-	// Validate the random TerminalSizes sent on the resize stream are the same
-	// as the actual TerminalSizes received at the websocket server.
+	// 校验 resize stream 上发送的随机 TerminalSizes 与 websocket 服务器
+	// 实际收到的 TerminalSizes 完全一致。
 	if len(actualTerminalSizes) != numSizeQueue {
 		t.Fatalf("expected to receive num terminal resizes (%d), got (%d)",
 			numSizeQueue, len(actualTerminalSizes))
@@ -682,7 +677,7 @@ func TestStreamTranslator_TTYResizeChannel(t *testing.T) {
 			t.Errorf("expected terminal resize window %v, got %v", expected, actual)
 		}
 	}
-	// Validate the streamtranslator metrics; should have one 200 success.
+	// 校验 streamtranslator 指标；应当有一条 200 成功记录。
 	metricNames := []string{"apiserver_stream_translator_requests_total"}
 	expected := `
 # HELP apiserver_stream_translator_requests_total [ALPHA] Total number of requests that were handled by the StreamTranslatorProxy, which processes streaming RemoteCommand/V5
@@ -712,7 +707,7 @@ func TestStreamTranslator_WebSocketServerErrors(t *testing.T) {
 		streamTranslator.ServeHTTP(w, req)
 	}))
 	defer streamTranslatorServer.Close()
-	// Now create the websocket client (executor), and point it to the "streamTranslatorServer".
+	// 现在创建 websocket 客户端（executor），并把它指向 "streamTranslatorServer"。
 	streamTranslatorLocation, err := url.Parse(streamTranslatorServer.URL)
 	if err != nil {
 		t.Fatalf("Unable to parse StreamTranslator server URL: %s", streamTranslatorServer.URL)
@@ -721,15 +716,15 @@ func TestStreamTranslator_WebSocketServerErrors(t *testing.T) {
 		&rest.Config{Host: streamTranslatorLocation.Host},
 		"GET",
 		streamTranslatorServer.URL,
-		rcconstants.StreamProtocolV4Name, // RemoteCommand V4 protocol is unsupported
+		rcconstants.StreamProtocolV4Name, // RemoteCommand V4 协议不受支持
 	)
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client. The WebSocket server within the
-		// StreamTranslator propagates an error here because the V4 protocol is not supported.
+		// 在 WebSocket "exec" 客户端上开始流式传输。由于 V4 协议不受支持，
+		// StreamTranslator 内部的 WebSocket 服务器会在此处传播一个错误。
 		errorChan <- exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{})
 	}()
 
@@ -737,7 +732,7 @@ func TestStreamTranslator_WebSocketServerErrors(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expect stream to be closed after connection is closed.")
 	case err := <-errorChan:
-		// Must return "websocket unable to upgrade" (bad handshake) error.
+		// 必须返回 "websocket unable to upgrade"（握手失败）错误。
 		if err == nil {
 			t.Fatalf("expected error, but received none")
 		}
@@ -745,8 +740,8 @@ func TestStreamTranslator_WebSocketServerErrors(t *testing.T) {
 			t.Errorf("expected websocket bad handshake error, got (%s)", err)
 		}
 	}
-	// Validate the streamtranslator metrics; should have one 400 failure.
-	// Use polling to wait for the metric to be updated asynchronously.
+	// 校验 streamtranslator 指标；应当有一条 400 失败记录。
+	// 用轮询等待该指标被异步更新。
 	metricNames := []string{"apiserver_stream_translator_requests_total"}
 	expected := `
 # HELP apiserver_stream_translator_requests_total [ALPHA] Total number of requests that were handled by the StreamTranslatorProxy, which processes streaming RemoteCommand/V5
@@ -778,7 +773,7 @@ func TestStreamTranslator_BlockRedirects(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("statusCode=%d", statusCode), func(t *testing.T) {
 			metrics.ResetForTest()
-			// Create upstream fake SPDY server which returns a redirect.
+			// 创建上游 fake SPDY 服务器，它会返回一个重定向。
 			spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.Header().Set("Location", "/")
 				w.WriteHeader(statusCode)
@@ -798,7 +793,7 @@ func TestStreamTranslator_BlockRedirects(t *testing.T) {
 				streamTranslator.ServeHTTP(w, req)
 			}))
 			defer streamTranslatorServer.Close()
-			// Now create the websocket client (executor), and point it to the "streamTranslatorServer".
+			// 现在创建 websocket 客户端（executor），并把它指向 "streamTranslatorServer"。
 			streamTranslatorLocation, err := url.Parse(streamTranslatorServer.URL)
 			if err != nil {
 				t.Fatalf("Unable to parse StreamTranslator server URL: %s", streamTranslatorServer.URL)
@@ -809,8 +804,8 @@ func TestStreamTranslator_BlockRedirects(t *testing.T) {
 			}
 			errorChan := make(chan error)
 			go func() {
-				// Start the streaming on the WebSocket "exec" client.
-				// Should return "redirect not allowed" error.
+				// 在 WebSocket "exec" 客户端上开始流式传输。
+				// 应当返回 "redirect not allowed" 错误。
 				errorChan <- exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{})
 			}()
 
@@ -818,7 +813,7 @@ func TestStreamTranslator_BlockRedirects(t *testing.T) {
 			case <-time.After(wait.ForeverTestTimeout):
 				t.Fatalf("expect stream to be closed after connection is closed.")
 			case err := <-errorChan:
-				// Must return "redirect now allowed" error.
+				// 必须返回 "redirect not allowed" 错误。
 				if err == nil {
 					t.Fatalf("expected error, but received none")
 				}
@@ -826,7 +821,7 @@ func TestStreamTranslator_BlockRedirects(t *testing.T) {
 					t.Errorf("expected redirect not allowed error, got (%s)", err)
 				}
 			}
-			// Validate the streamtranslator metrics; should have one 500 failure each loop.
+			// 校验 streamtranslator 指标；每轮循环都应有一条 500 失败记录。
 			metricNames := []string{"apiserver_stream_translator_requests_total"}
 			expected := `
 # HELP apiserver_stream_translator_requests_total [ALPHA] Total number of requests that were handled by the StreamTranslatorProxy, which processes streaming RemoteCommand/V5
@@ -869,8 +864,8 @@ func createSPDYServerStreams(t *testing.T, w http.ResponseWriter, req *http.Requ
 		t.Logf("URL:           %s", req.URL.String())
 		t.Logf("Proto:         %s", req.Proto)
 		t.Logf("Header Count:  %d", len(req.Header))
-		t.Logf("ContentLength: %d", req.ContentLength) // Should be zero for upgrade request
-		// Dump the request in its entirety.
+		t.Logf("ContentLength: %d", req.ContentLength) // 升级请求的 ContentLength 应当为零
+		// 完整转储该请求。
 		dump, err := httputil.DumpRequest(req, true)
 		if err != nil {
 			t.Logf("DumpRequest failed: %v", err)
@@ -891,11 +886,11 @@ func createSPDYServerStreams(t *testing.T, w http.ResponseWriter, req *http.Requ
 		conn: conn,
 	}
 
-	// wait for stream
+	// 等待 stream 建立
 	replyChan := make(chan struct{}, 5)
 	defer close(replyChan)
 	receivedStreams := 0
-	expectedStreams := 1 // expect at least the error stream
+	expectedStreams := 1 // 至少要预期 error stream 这一条
 	if opts.Stdout {
 		expectedStreams++
 	}
@@ -930,7 +925,7 @@ WaitForStreams:
 				replyChan <- struct{}{}
 				ctx.resizeStream = stream
 			default:
-				// add other stream ...
+				// 其他 stream 类型尚未支持……
 				return nil, errors.New("unimplemented stream type")
 			}
 		case <-replyChan:

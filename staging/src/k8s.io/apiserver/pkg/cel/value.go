@@ -31,39 +31,38 @@ import (
 type EncodeStyle int
 
 const (
-	// BlockValueStyle is the default string encoding which preserves whitespace and newlines.
+	// BlockValueStyle 是默认的字符串编码风格，保留空白字符和换行。
 	BlockValueStyle EncodeStyle = iota
 
-	// FlowValueStyle indicates that the string is an inline representation of complex types.
+	// FlowValueStyle 表示该字符串是复杂类型的行内（inline）表示形式。
 	FlowValueStyle
 
-	// FoldedValueStyle is a multiline string with whitespace and newlines trimmed to a single
-	// a whitespace. Repeated newlines are replaced with a single newline rather than a single
-	// whitespace.
+	// FoldedValueStyle 是多行字符串，其空白字符与换行会被裁剪为单个
+	// 空白字符；但连续的换行只会被替换为单个换行，而不是单个空白字符。
 	FoldedValueStyle
 
-	// LiteralStyle is a multiline string that preserves newlines, but trims all other whitespace
-	// to a single character.
+	// LiteralStyle 是多行字符串，保留换行，但把其他所有空白字符
+	// 裁剪为单个字符。
 	LiteralStyle
 )
 
-// NewEmptyDynValue returns the zero-valued DynValue.
+// NewEmptyDynValue 返回零值 DynValue。
 func NewEmptyDynValue() *DynValue {
-	// note: 0 is not a valid parse node identifier.
+	// 注意：0 不是合法的 parse node identifier。
 	dv, _ := NewDynValue(0, nil)
 	return dv
 }
 
-// NewDynValue returns a DynValue that corresponds to a parse node id and value.
+// NewDynValue 返回与某个 parse node id 和值对应的 DynValue。
 func NewDynValue(id int64, val interface{}) (*DynValue, error) {
 	dv := &DynValue{ID: id}
 	err := dv.SetValue(val)
 	return dv, err
 }
 
-// DynValue is a dynamically typed value used to describe unstructured content.
-// Whether the value has the desired type is determined by where it is used within the Instance or
-// Template, and whether there are schemas which might enforce a more rigid type definition.
+// DynValue 是动态类型值，用于描述非结构化内容。
+// 值是否符合期望的类型，取决于它在 Instance 或 Template 中被使用的位置，
+// 以及是否存在施加更严格类型定义的 schema。
 //
 // value 保存 Go 原生值，exprValue 是其 CEL 表示，declType 是声明类型。
 // 三者由 SetValue 同步更新，避免出现类型与值不一致的中间状态。
@@ -75,16 +74,16 @@ type DynValue struct {
 	declType    *DeclType
 }
 
-// DeclType returns the policy model type of the dyn value.
+// DeclType 返回该 dyn 值对应的策略模型类型。
 func (dv *DynValue) DeclType() *DeclType {
 	return dv.declType
 }
 
-// ConvertToNative is an implementation of the CEL ref.Val method used to adapt between CEL types
-// and Go-native types.
+// ConvertToNative 是 CEL ref.Val 方法的实现，用于在 CEL 类型与
+// Go 原生类型之间做适配。
 //
-// The default behavior of this method is to first convert to a CEL type which has a well-defined
-// set of conversion behaviors and proxy to the CEL ConvertToNative method for the type.
+// 该方法的默认行为是先转换为 CEL 类型（CEL 类型有一套明确定义的
+// 转换规则），再代理调用该类型的 CEL ConvertToNative 方法。
 func (dv *DynValue) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	ev := dv.ExprValue()
 	// 求值阶段的错误优先返回，避免在错误值上继续做类型转换。
@@ -94,7 +93,7 @@ func (dv *DynValue) ConvertToNative(typeDesc reflect.Type) (interface{}, error) 
 	return ev.ConvertToNative(typeDesc)
 }
 
-// Equal returns whether the dyn value is equal to a given CEL value.
+// Equal 返回该 dyn 值是否与给定的 CEL 值相等。
 func (dv *DynValue) Equal(other ref.Val) ref.Val {
 	dvType := dv.Type()
 	otherType := other.Type()
@@ -121,12 +120,12 @@ func (dv *DynValue) Equal(other ref.Val) ref.Val {
 	}
 }
 
-// ExprValue converts the DynValue into a CEL value.
+// ExprValue 将 DynValue 转换为 CEL 值。
 func (dv *DynValue) ExprValue() ref.Val {
 	return dv.exprValue
 }
 
-// Value returns the underlying value held by this reference.
+// Value 返回该引用持有的底层值。
 func (dv *DynValue) Value() interface{} {
 	return dv.value
 }
@@ -139,7 +138,7 @@ func (dv *DynValue) SetValue(value interface{}) error {
 	return err
 }
 
-// Type returns the CEL type for the given value.
+// Type 返回给定值对应的 CEL 类型。
 func (dv *DynValue) Type() ref.Type {
 	return dv.ExprValue().Type()
 }
@@ -180,8 +179,8 @@ func exprValue(value interface{}) (ref.Val, *DeclType, error) {
 // PlainTextValue 是纯文本字符串字面量，不得当作表达式处理：与普通 string 区分，避免被误当作 CEL 表达式再次求值。
 type PlainTextValue string
 
-// MultilineStringValue is a multiline string value which has been parsed in a way which omits
-// whitespace as well as a raw form which preserves whitespace.
+// MultilineStringValue 是多行字符串值：Value 是按省略空白的方式解析后的形式，
+// Raw 则是保留空白的原始形式。
 type MultilineStringValue struct {
 	Value string
 	Raw   string
@@ -207,7 +206,7 @@ func (sv *structValue) AddField(field *Field) {
 	sv.fieldMap[field.Name] = field
 }
 
-// ConvertToNative converts the MapValue type to a native go types.
+// ConvertToNative 把 MapValue 类型转换为 Go 原生类型。
 func (sv *structValue) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
 	if typeDesc.Kind() != reflect.Map &&
 		typeDesc.Kind() != reflect.Struct &&
@@ -269,13 +268,13 @@ func (sv *structValue) ConvertToNative(typeDesc reflect.Type) (interface{}, erro
 	return nil, fmt.Errorf("type conversion error from object to '%v'", typeDesc)
 }
 
-// GetField returns a MapField by name if one exists.
+// GetField 按名称返回 MapField（若存在）。
 func (sv *structValue) GetField(name string) (*Field, bool) {
 	field, found := sv.fieldMap[name]
 	return field, found
 }
 
-// IsSet returns whether the given field, which is defined, has also been set.
+// IsSet 返回某个已定义的字段是否也已被赋值。
 func (sv *structValue) IsSet(key ref.Val) ref.Val {
 	k, ok := key.(types.String)
 	if !ok {
@@ -286,7 +285,7 @@ func (sv *structValue) IsSet(key ref.Val) ref.Val {
 	return celBool(found)
 }
 
-// NewObjectValue creates a struct value with a schema type and returns the empty ObjectValue.
+// NewObjectValue 创建一个带 schema 类型的 struct 值，并返回空的 ObjectValue。
 func NewObjectValue(sType *DeclType) *ObjectValue {
 	return &ObjectValue{
 		structValue: newStructValue(),
@@ -294,14 +293,14 @@ func NewObjectValue(sType *DeclType) *ObjectValue {
 	}
 }
 
-// ObjectValue is a struct with a custom schema type which indicates the fields and types
-// associated with the structure.
+// ObjectValue 是一个 struct，带有自定义 schema 类型，用于说明该结构
+// 关联的字段及其类型。
 type ObjectValue struct {
 	*structValue
 	objectType *DeclType
 }
 
-// ConvertToType is an implementation of the CEL ref.Val interface method.
+// ConvertToType 是 CEL ref.Val 接口方法的实现。
 func (o *ObjectValue) ConvertToType(t ref.Type) ref.Val {
 	if t == types.TypeType {
 		return types.NewObjectTypeValue(o.objectType.TypeName())
@@ -312,9 +311,9 @@ func (o *ObjectValue) ConvertToType(t ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", o.Type(), t)
 }
 
-// Equal returns true if the two object types are equal and their field values are equal.
+// Equal 当且仅当两个对象类型相同且各字段值相等时返回 true。
 func (o *ObjectValue) Equal(other ref.Val) ref.Val {
-	// Preserve CEL's homogeneous equality semantics.
+	// 保持 CEL 的同类（homogeneous）相等语义。
 	if o.objectType.TypeName() != other.Type().TypeName() {
 		return types.MaybeNoSuchOverloadErr(other)
 	}
@@ -332,11 +331,11 @@ func (o *ObjectValue) Equal(other ref.Val) ref.Val {
 	return types.True
 }
 
-// Get returns the value of the specified field.
+// Get 返回指定字段的值。
 //
-// If the field is set, its value is returned. If the field is not set, the default value for the
-// field is returned thus allowing for safe-traversal and preserving proto-like field traversal
-// semantics for Open API Schema backed types.
+// 若字段已设置，返回其值；若字段未设置，则返回该字段的默认值，
+// 从而支持安全遍历（safe-traversal），并为基于 Open API Schema 的类型
+// 保留类 proto 的字段访问语义。
 func (o *ObjectValue) Get(name ref.Val) ref.Val {
 	n, ok := name.(types.String)
 	if !ok {
@@ -359,32 +358,32 @@ func (o *ObjectValue) Get(name ref.Val) ref.Val {
 	return types.NewErr("no default for type: %s", fieldDef.TypeName())
 }
 
-// Type returns the CEL type value of the object.
+// Type 返回该对象的 CEL 类型值。
 func (o *ObjectValue) Type() ref.Type {
 	return o.objectType
 }
 
-// Value returns the Go-native representation of the object.
+// Value 返回该对象的 Go 原生表示。
 func (o *ObjectValue) Value() interface{} {
 	return o
 }
 
-// NewMapValue returns an empty MapValue.
+// NewMapValue 返回一个空的 MapValue。
 func NewMapValue() *MapValue {
 	return &MapValue{
 		structValue: newStructValue(),
 	}
 }
 
-// MapValue declares an object with a set of named fields whose values are dynamically typed.
+// MapValue 声明一个对象，其一组具名字段的值是动态类型的。
 type MapValue struct {
 	*structValue
 }
 
-// ConvertToObject produces an ObjectValue from the MapValue with the associated schema type.
+// ConvertToObject 由 MapValue 生成带有关联 schema 类型的 ObjectValue。
 //
-// The conversion is shallow and the memory shared between the Object and Map as all references
-// to the map are expected to be replaced with the Object reference.
+// 该转换是浅拷贝，Object 与 Map 共享内存，因为对 map 的所有引用
+// 预期都会被替换为对该 Object 的引用。
 func (m *MapValue) ConvertToObject(declType *DeclType) *ObjectValue {
 	return &ObjectValue{
 		structValue: m.structValue,
@@ -392,7 +391,7 @@ func (m *MapValue) ConvertToObject(declType *DeclType) *ObjectValue {
 	}
 }
 
-// Contains returns whether the given key is contained in the MapValue.
+// Contains 返回给定 key 是否存在于 MapValue 中。
 func (m *MapValue) Contains(key ref.Val) ref.Val {
 	v, found := m.Find(key)
 	if v != nil && types.IsUnknownOrError(v) {
@@ -401,7 +400,7 @@ func (m *MapValue) Contains(key ref.Val) ref.Val {
 	return celBool(found)
 }
 
-// ConvertToType converts the MapValue to another CEL type, if possible.
+// ConvertToType 在可能的前提下把 MapValue 转换为其他 CEL 类型。
 func (m *MapValue) ConvertToType(t ref.Type) ref.Val {
 	switch t {
 	case types.MapType:
@@ -412,8 +411,8 @@ func (m *MapValue) ConvertToType(t ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", m.Type(), t)
 }
 
-// Equal returns true if the maps are of the same size, have the same keys, and the key-values
-// from each map are equal.
+// Equal 当且仅当两个 map 大小相同、key 集合相同，且每个 map 的
+// key-value 都相等时返回 true。
 func (m *MapValue) Equal(other ref.Val) ref.Val {
 	oMap, isMap := other.(traits.Mapper)
 	if !isMap {
@@ -437,10 +436,10 @@ func (m *MapValue) Equal(other ref.Val) ref.Val {
 	return types.True
 }
 
-// Find returns the value for the key in the map, if found.
+// Find 返回 map 中该 key 对应的值（若找到）。
 func (m *MapValue) Find(name ref.Val) (ref.Val, bool) {
-	// Currently only maps with string keys are supported as this is best aligned with JSON,
-	// and also much simpler to support.
+	// 目前仅支持字符串 key 的 map：这与 JSON 最为契合，
+	// 实现起来也简单得多。
 	n, ok := name.(types.String)
 	if !ok {
 		// 非字符串 key 返回错误且 found=true，使调用方区分“类型错误”与“不存在”。
@@ -454,7 +453,7 @@ func (m *MapValue) Find(name ref.Val) (ref.Val, bool) {
 	return nil, false
 }
 
-// Get returns the value for the key in the map, or error if not found.
+// Get 返回 map 中该 key 对应的值；若未找到则返回错误。
 func (m *MapValue) Get(key ref.Val) ref.Val {
 	v, found := m.Find(key)
 	if found {
@@ -463,9 +462,9 @@ func (m *MapValue) Get(key ref.Val) ref.Val {
 	return types.ValOrErr(key, "no such key: %v", key)
 }
 
-// Iterator produces a traits.Iterator which walks over the map keys.
+// Iterator 生成一个遍历 map key 的 traits.Iterator。
 //
-// The Iterator is frequently used within comprehensions.
+// 该 Iterator 常在 comprehension（推导式）中使用。
 func (m *MapValue) Iterator() traits.Iterator {
 	// 先快照 key 列表，避免迭代期间 map 变更导致结果不确定。
 	keys := make([]ref.Val, len(m.fieldMap))
@@ -480,17 +479,17 @@ func (m *MapValue) Iterator() traits.Iterator {
 	}
 }
 
-// Size returns the number of keys in the map.
+// Size 返回 map 中 key 的数量。
 func (m *MapValue) Size() ref.Val {
 	return types.Int(len(m.Fields))
 }
 
-// Type returns the CEL ref.Type for the map.
+// Type 返回该 map 的 CEL ref.Type。
 func (m *MapValue) Type() ref.Type {
 	return types.MapType
 }
 
-// Value returns the Go-native representation of the MapValue.
+// Value 返回 MapValue 的 Go 原生表示。
 func (m *MapValue) Value() interface{} {
 	return m
 }
@@ -502,7 +501,7 @@ type baseMapIterator struct {
 	idx  int
 }
 
-// HasNext implements the traits.Iterator interface method.
+// HasNext 实现 traits.Iterator 接口方法。
 func (it *baseMapIterator) HasNext() ref.Val {
 	if it.idx < len(it.keys) {
 		return types.True
@@ -510,20 +509,20 @@ func (it *baseMapIterator) HasNext() ref.Val {
 	return types.False
 }
 
-// Next implements the traits.Iterator interface method.
+// Next 实现 traits.Iterator 接口方法。
 func (it *baseMapIterator) Next() ref.Val {
 	key := it.keys[it.idx]
 	it.idx++
 	return key
 }
 
-// Type implements the CEL ref.Val interface metohd.
+// Type 实现 CEL ref.Val 接口方法。
 func (it *baseMapIterator) Type() ref.Type {
 	return types.IteratorType
 }
 
-// NewField returns a MapField instance with an empty DynValue that refers to the
-// specified parse node id and field name.
+// NewField 返回一个 MapField 实例，其 DynValue 为空，指向指定的
+// parse node id 与字段名。
 func NewField(id int64, name string) *Field {
 	return &Field{
 		ID:   id,
@@ -532,14 +531,14 @@ func NewField(id int64, name string) *Field {
 	}
 }
 
-// Field specifies a field name and a reference to a dynamic value.
+// Field 指定一个字段名，以及一个指向动态值的引用。
 type Field struct {
 	ID   int64
 	Name string
 	Ref  *DynValue
 }
 
-// NewListValue returns an empty ListValue instance.
+// NewListValue 返回一个空的 ListValue 实例。
 func NewListValue() *ListValue {
 	return &ListValue{
 		Entries: []*DynValue{},
@@ -554,7 +553,7 @@ type ListValue struct {
 	valueSet     map[ref.Val]struct{}
 }
 
-// Add concatenates two lists together to produce a new CEL list value.
+// Add 把两个 list 拼接起来，生成一个新的 CEL list 值。
 func (lv *ListValue) Add(other ref.Val) ref.Val {
 	oArr, isArr := other.(traits.Lister)
 	if !isArr {
@@ -573,17 +572,17 @@ func (lv *ListValue) Add(other ref.Val) ref.Val {
 	return types.DefaultTypeAdapter.NativeToValue(combo)
 }
 
-// Append adds another entry into the ListValue.
+// Append 向 ListValue 追加一个条目。
 func (lv *ListValue) Append(entry *DynValue) {
 	lv.Entries = append(lv.Entries, entry)
 	// 追加会重置所有已建立的索引：sync.Once 无法复位，只能整体替换为零值以允许下次重建。
 	lv.initValueSet = sync.Once{}
 }
 
-// Contains returns whether the input `val` is equal to an element in the list.
+// Contains 返回输入的 `val` 是否等于 list 中的某个元素。
 //
-// If any pair-wise comparison between the input value and the list element is an error, the
-// operation will return an error.
+// 若输入值与某个列表元素之间的任意一次逐对比较产生错误，
+// 该操作将返回错误。
 func (lv *ListValue) Contains(val ref.Val) ref.Val {
 	if types.IsUnknownOrError(val) {
 		return val
@@ -595,8 +594,8 @@ func (lv *ListValue) Contains(val ref.Val) ref.Val {
 		if found {
 			return types.True
 		}
-		// Instead of returning false, ensure that CEL's heterogeneous equality constraint
-		// is satisfied by allowing pair-wise equality behavior to determine the outcome.
+		// 这里不直接返回 false，而是继续走逐对相等比较，
+		// 让 CEL 的异构（heterogeneous）相等约束由比较结果决定。
 	}
 	var err ref.Val
 	sz := len(lv.Entries)
@@ -618,25 +617,25 @@ func (lv *ListValue) Contains(val ref.Val) ref.Val {
 	return types.False
 }
 
-// ConvertToNative is an implementation of the CEL ref.Val method used to adapt between CEL types
-// and Go-native array-like types.
+// ConvertToNative 是 CEL ref.Val 方法的实现，用于在 CEL 类型与
+// Go 原生的数组类类型之间做适配。
 func (lv *ListValue) ConvertToNative(typeDesc reflect.Type) (interface{}, error) {
-	// Non-list conversion.
+	// 非 list 的转换请求。
 	if typeDesc.Kind() != reflect.Slice &&
 		typeDesc.Kind() != reflect.Array &&
 		typeDesc.Kind() != reflect.Interface {
 		return nil, fmt.Errorf("type conversion error from list to '%v'", typeDesc)
 	}
 
-	// If the list is already assignable to the desired type return it.
+	// 若该 list 已可赋值给目标类型，直接返回。
 	if reflect.TypeOf(lv).AssignableTo(typeDesc) {
 		return lv, nil
 	}
 
-	// List conversion.
+	// list 的转换。
 	otherElem := typeDesc.Elem()
 
-	// Allow the element ConvertToNative() function to determine whether conversion is possible.
+	// 由元素的 ConvertToNative() 函数决定转换是否可行。
 	sz := len(lv.Entries)
 	nativeList := reflect.MakeSlice(typeDesc, int(sz), int(sz))
 	for i := 0; i < sz; i++ {
@@ -650,7 +649,7 @@ func (lv *ListValue) ConvertToNative(typeDesc reflect.Type) (interface{}, error)
 	return nativeList.Interface(), nil
 }
 
-// ConvertToType converts the ListValue to another CEL type.
+// ConvertToType 把 ListValue 转换为另一个 CEL 类型。
 func (lv *ListValue) ConvertToType(t ref.Type) ref.Val {
 	switch t {
 	case types.ListType:
@@ -661,8 +660,8 @@ func (lv *ListValue) ConvertToType(t ref.Type) ref.Val {
 	return types.NewErr("type conversion error from '%s' to '%s'", ListType, t)
 }
 
-// Equal returns true if two lists are of the same size, and the values at each index are also
-// equal.
+// Equal 当且仅当两个 list 大小相同、且每个下标处的值也相等时
+// 返回 true。
 func (lv *ListValue) Equal(other ref.Val) ref.Val {
 	oArr, isArr := other.(traits.Lister)
 	if !isArr {
@@ -681,9 +680,9 @@ func (lv *ListValue) Equal(other ref.Val) ref.Val {
 	return types.True
 }
 
-// Get returns the value at the given index.
+// Get 返回给定下标处的值。
 //
-// If the index is negative or greater than the size of the list, an error is returned.
+// 若下标为负数或大于等于 list 的大小，则返回错误。
 func (lv *ListValue) Get(idx ref.Val) ref.Val {
 	iv, isInt := idx.(types.Int)
 	if !isInt {
@@ -696,7 +695,7 @@ func (lv *ListValue) Get(idx ref.Val) ref.Val {
 	return lv.Entries[i].ExprValue()
 }
 
-// Iterator produces a traits.Iterator suitable for use in CEL comprehension macros.
+// Iterator 生成适用于 CEL comprehension 宏的 traits.Iterator。
 func (lv *ListValue) Iterator() traits.Iterator {
 	return &baseListIterator{
 		getter: lv.Get,
@@ -704,17 +703,17 @@ func (lv *ListValue) Iterator() traits.Iterator {
 	}
 }
 
-// Size returns the number of elements in the list.
+// Size 返回 list 中元素的数量。
 func (lv *ListValue) Size() ref.Val {
 	return types.Int(len(lv.Entries))
 }
 
-// Type returns the CEL ref.Type for the list.
+// Type 返回该 list 的 CEL ref.Type。
 func (lv *ListValue) Type() ref.Type {
 	return types.ListType
 }
 
-// Value returns the Go-native value.
+// Value 返回 Go 原生值。
 func (lv *ListValue) Value() interface{} {
 	return lv
 }
