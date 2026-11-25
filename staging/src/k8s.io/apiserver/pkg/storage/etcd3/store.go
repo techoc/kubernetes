@@ -55,19 +55,17 @@ import (
 )
 
 const (
-	// maxLimit is a maximum page limit increase used when fetching objects from etcd.
-	// This limit is used only for increasing page size by kube-apiserver. If request
-	// specifies larger limit initially, it won't be changed.
+	// maxLimit 是从 etcd 拉取对象时页大小上限的最大增长值。该上限仅用于
+	// kube-apiserver 自行增大页大小；若请求最初就指定了更大的 limit，
+	// 则不会更改。
 	maxLimit = 10000
 )
 
-// authenticatedDataString satisfies the value.Context interface. It uses the key to
-// authenticate the stored data. This does not defend against reuse of previously
-// encrypted values under the same key, but will prevent an attacker from using an
-// encrypted value from a different key. A stronger authenticated data segment would
-// include the etcd3 Version field (which is incremented on each write to a key and
-// reset when the key is deleted), but an attacker with write access to etcd can
-// force deletion and recreation of keys to weaken that angle.
+// authenticatedDataString 满足 value.Context 接口，使用 key 对存储的数据做
+// 认证。它不能防御同一 key 下历史加密值的重用，但可以阻止攻击者把来自
+// 其他 key 的加密值搬过来用。更强的认证数据段应当包含 etcd3 的 Version
+// 字段（每次写 key 时自增、key 删除时重置），但对 etcd 有写权限的攻击者
+// 可以强制删除并重建 key 来削弱这一手段。
 type authenticatedDataString string
 
 // AuthenticatedData 实现 value.Context 接口。
@@ -107,8 +105,9 @@ var _ storage.Interface = (*store)(nil)
 // RequestWatchProgress 向 etcd 请求一次进度通知，使 watch 能确认已收到当前最新事件。
 // 使用 watchContext 是因为无法从 watchCache 取回原始 watch 上下文。
 func (s *store) RequestWatchProgress(ctx context.Context) error {
-	// Use watchContext to match ctx metadata provided when creating the watch.
-	// In best case scenario we would use the same context that watch was created, but there is no way access it from watchCache.
+	// 使用 watchContext 是为了与创建 watch 时提供的 ctx 元数据保持一致。
+	// 最理想的情况是复用 watch 创建时的同一个 context，但无法从 watchCache
+	// 访问到它。
 	return s.client.RequestProgress(s.watchContext(ctx))
 }
 
@@ -121,26 +120,23 @@ type objState struct {
 	stale bool
 }
 
-// listItemErrors stores a slice of item storage errors during LIST operations.
-// They are iteratively added, and eventually returned as an aggregated error. On
-// each Append, it signals whether it considers itself full or the error to be fatal.
-// In either case, the caller is supposed to not keep collecting, but return the
-// collection.
+// listItemErrors 在 LIST 操作期间累积保存一组单条对象的存储错误，最终作为
+// 聚合错误返回。每次 Append 时，它会示意自己是否已满、或该错误是否为致命
+// 错误。无论哪种情况，调用方都不应继续收集，而应直接返回该集合。
 type listItemErrors interface {
-	// Append adds an item storage error for the given storage key during a LIST operation.
-	// The caller is expected to stop appending as soon as true is returned.
+	// Append 记录 LIST 操作中给定存储 key 的单条对象存储错误。
+	// 一旦返回 true，调用方就应立即停止继续追加。
 	Append(key string, err error) bool
 
-	// Aggregate returns the aggregated error
+	// Aggregate 返回聚合后的错误。
 	Aggregate() error
 }
 
-// defaultListErrorAggregatorFactory returns the default list error
-// aggregator that maintains backward compatibility, which is abort
-// the list operation as soon as it encounters the first error
+// defaultListErrorAggregatorFactory 返回默认的 LIST 错误聚合器，以保持
+// 向后兼容：一旦遇到第一个错误就中止 LIST 操作。
 func defaultListErrorAggregatorFactory() listItemErrors { return &abortOnFirstError{} }
 
-// LIST aborts on the first error it encounters (backward compatible)
+// abortOnFirstError 在遇到第一个错误时即中止 LIST（向后兼容行为）。
 type abortOnFirstError struct {
 	err error
 }
@@ -154,17 +150,16 @@ func (a *abortOnFirstError) Append(key string, err error) bool {
 // Aggregate 返回已记录的错误（未出错时为 nil）。
 func (a *abortOnFirstError) Aggregate() error { return a.err }
 
-// New returns an etcd3 implementation of storage.Interface.
+// New 返回 storage.Interface 的 etcd3 实现。
 //
 // prefix 是 etcd 全局前缀（通常是 /registry），resourcePrefix 是资源在其中的根路径；
 // 两者拼接后才是最终 key，因此路径规范化必须在构造期完成，避免运行期反复处理。
 func New(c *kubernetes.Client, compactor Compactor, codec runtime.Codec, newFunc, newListFunc func() runtime.Object, prefix, resourcePrefix string, groupResource schema.GroupResource, transformer value.Transformer, leaseManagerConfig LeaseManagerConfig, decoder Decoder, versioner storage.Versioner) (*store, error) {
-	// for compatibility with etcd2 impl.
-	// no-op for default prefix of '/registry'.
-	// keeps compatibility with etcd2 impl for custom prefixes that don't start with '/'
+	// 为兼容 etcd2 实现；默认前缀 '/registry' 时为空操作；
+	// 对不以 '/' 开头的自定义前缀同样保持与 etcd2 实现的兼容。
 	pathPrefix := path.Join("/", prefix)
 	if !strings.HasSuffix(pathPrefix, "/") {
-		// Ensure the pathPrefix ends in "/" here to simplify key concatenation later.
+		// 此处确保 pathPrefix 以 "/" 结尾，简化后续的 key 拼接。
 		pathPrefix += "/"
 	}
 	if resourcePrefix == "" {
@@ -230,7 +225,7 @@ func (s *store) CompactRevision() int64 {
 	return s.compactor.CompactRevision()
 }
 
-// Versioner implements storage.Interface.Versioner.
+// Versioner 实现 storage.Interface.Versioner。
 func (s *store) Versioner() storage.Versioner {
 	return s.versioner
 }
@@ -250,7 +245,7 @@ func (s *store) getResourceSizeEstimator() *resourceSizeEstimator {
 	return s.resourceSizeEstimator
 }
 
-// Get implements storage.Interface.Get.
+// Get 实现 storage.Interface.Get。
 func (s *store) Get(ctx context.Context, key string, opts storage.GetOptions, out runtime.Object) error {
 	preparedKey, err := s.prepareKey(key, false)
 	if err != nil {
@@ -301,7 +296,7 @@ func (s *store) Get(ctx context.Context, key string, opts storage.GetOptions, ou
 	return nil
 }
 
-// Create implements storage.Interface.Create.
+// Create 实现 storage.Interface.Create。
 //
 // 创建用"预期 revision 为 0"的 OptimisticPut 实现：etcd 仅在 key 不存在时成功，
 // 因此无需先读取即可保证唯一性。
@@ -374,7 +369,7 @@ func (s *store) Create(ctx context.Context, key string, obj, out runtime.Object,
 	return nil
 }
 
-// Delete implements storage.Interface.Delete.
+// Delete 实现 storage.Interface.Delete。
 func (s *store) Delete(
 	ctx context.Context, key string, out runtime.Object, preconditions *storage.Preconditions,
 	validateDeletion storage.ValidateObjectFunc, cachedExistingObject runtime.Object, opts storage.DeleteOptions) error {
@@ -425,24 +420,24 @@ func (s *store) conditionalDelete(
 					return err
 				}
 
-				// It's possible we're working with stale data.
-				// Remember the revision of the potentially stale data and the resulting update error
+				// 我们手中的数据可能已过期。记住这份可能过期数据的 revision
+				// 以及由此产生的更新错误
 				cachedRev := origState.rev
 				cachedUpdateErr := err
 
-				// Actually fetch
+				// 真正执行一次读取
 				origState, err = getCurrentState()
 				if err != nil {
 					return err
 				}
 				origStateIsCurrent = true
 
-				// it turns out our cached data was not stale, return the error
+				// 结果发现缓存数据并未过期，直接返回该错误
 				if cachedRev == origState.rev {
 					return cachedUpdateErr
 				}
 
-				// Retry
+				// 重试
 				continue
 			}
 		}
@@ -451,24 +446,24 @@ func (s *store) conditionalDelete(
 				return err
 			}
 
-			// It's possible we're working with stale data.
-			// Remember the revision of the potentially stale data and the resulting update error
+			// 我们手中的数据可能已过期。记住这份可能过期数据的 revision
+			// 以及由此产生的更新错误
 			cachedRev := origState.rev
 			cachedUpdateErr := err
 
-			// Actually fetch
+			// 真正执行一次读取
 			origState, err = getCurrentState()
 			if err != nil {
 				return err
 			}
 			origStateIsCurrent = true
 
-			// it turns out our cached data was not stale, return the error
+			// 结果发现缓存数据并未过期，直接返回该错误
 			if cachedRev == origState.rev {
 				return cachedUpdateErr
 			}
 
-			// Retry
+			// 重试
 			continue
 		}
 
@@ -501,7 +496,7 @@ func (s *store) conditionalDelete(
 	}
 }
 
-// GuaranteedUpdate implements storage.Interface.GuaranteedUpdate.
+// GuaranteedUpdate 实现 storage.Interface.GuaranteedUpdate。
 //
 // "保证"的含义：tryUpdate 可能被执行多次（冲突重试），因此它必须是幂等的，
 // 且只能依据传入的旧对象与元数据计算新值，不能依赖外部可变状态。
@@ -543,47 +538,47 @@ func (s *store) GuaranteedUpdate(
 	transformContext := authenticatedDataString(preparedKey)
 	for {
 		if err := preconditions.Check(preparedKey, origState.obj); err != nil {
-			// If our data is already up to date, return the error
+			// 若我们的数据已是最新，直接返回该错误
 			if origStateIsCurrent {
 				return err
 			}
 
-			// It's possible we were working with stale data
-			// Actually fetch
+			// 我们此前使用的数据可能已过期
+			// 真正执行一次读取
 			origState, err = getCurrentState()
 			if err != nil {
 				return err
 			}
 			origStateIsCurrent = true
-			// Retry
+			// 重试
 			continue
 		}
 
 		ret, ttl, err := s.updateState(origState, tryUpdate)
 		if err != nil {
-			// If our data is already up to date, return the error
+			// 若我们的数据已是最新，直接返回该错误
 			if origStateIsCurrent {
 				return err
 			}
 
-			// It's possible we were working with stale data
-			// Remember the revision of the potentially stale data and the resulting update error
+			// 我们此前使用的数据可能已过期
+			// 记住这份可能过期数据的 revision 以及由此产生的更新错误
 			cachedRev := origState.rev
 			cachedUpdateErr := err
 
-			// Actually fetch
+			// 真正执行一次读取
 			origState, err = getCurrentState()
 			if err != nil {
 				return err
 			}
 			origStateIsCurrent = true
 
-			// it turns out our cached data was not stale, return the error
+			// 结果发现缓存数据并未过期，直接返回该错误
 			if cachedRev == origState.rev {
 				return cachedUpdateErr
 			}
 
-			// Retry
+			// 重试
 			continue
 		}
 
@@ -595,9 +590,8 @@ func (s *store) GuaranteedUpdate(
 		}
 		span.AddEvent("Encode succeeded", attribute.Int("len", len(data)))
 		if !origState.stale && bytes.Equal(data, origState.data) {
-			// if we skipped the original Get in this loop, we must refresh from
-			// etcd in order to be sure the data in the store is equivalent to
-			// our desired serialization
+			// 如果本轮循环跳过了最初的 Get，就必须从 etcd 重新刷新一次，
+			// 以确保存储中的数据与我们期望的序列化结果一致
 			//
 			// 短路径：序列化结果未变就跳过写入。但若数据来自外部缓存，
 			// 必须先确认 etcd 中确实是同一份内容，否则会漏掉必要写入。
@@ -608,11 +602,11 @@ func (s *store) GuaranteedUpdate(
 				}
 				origStateIsCurrent = true
 				if !bytes.Equal(data, origState.data) {
-					// original data changed, restart loop
+					// 原始数据已变化，重新开始循环
 					continue
 				}
 			}
-			// recheck that the data from etcd is not stale before short-circuiting a write
+			// 在短路跳过写入之前，再次确认来自 etcd 的数据并未过期
 			if !origState.stale {
 				err = s.decoder.Decode(origState.data, destination, origState.rev)
 				if err != nil {
@@ -686,7 +680,7 @@ func getNewItemFunc(listObj runtime.Object, v reflect.Value) func() runtime.Obje
 		}
 	}
 
-	// Otherwise just instantiate an empty item
+	// 否则直接实例化一个空对象
 	elem := v.Type().Elem()
 	return func() runtime.Object {
 		return reflect.New(elem).Interface().(runtime.Object)
@@ -698,7 +692,7 @@ func (s *store) Stats(ctx context.Context) (storage.Stats, error) {
 	if collector := s.getResourceSizeEstimator(); collector != nil {
 		return collector.Stats(ctx)
 	}
-	// returning stats without resource size
+	// 返回不含资源大小信息的统计值
 
 	startTime := time.Now()
 	prefix, err := s.prepareKey(s.resourcePrefix, true)
@@ -730,8 +724,8 @@ func (s *store) EnableResourceSizeEstimation(getKeys storage.KeysFunc) error {
 	return nil
 }
 
-// TestOnlyResetResourceSizeEstimator clears the resource size estimator so a
-// subsequent EnableResourceSizeEstimation call succeeds.
+// TestOnlyResetResourceSizeEstimator 清除资源大小估算器，使后续调用
+// EnableResourceSizeEstimation 能够成功。仅供测试使用。
 func TestOnlyResetResourceSizeEstimator(s storage.Interface) {
 	st, ok := s.(*store)
 	if !ok {
@@ -764,7 +758,7 @@ func (s *store) getKeys(ctx context.Context) ([]string, error) {
 	return keys, nil
 }
 
-// ReadinessCheck implements storage.Interface.
+// ReadinessCheck 实现 storage.Interface。
 func (s *store) ReadinessCheck() error {
 	return nil
 }
@@ -793,12 +787,12 @@ func (s *store) GetCurrentResourceVersion(ctx context.Context) (uint64, error) {
 // shouldStream 决定一次 list 请求是否使用 etcd RangeStream。
 // 运行时探测服务端能力：老版本 etcd 不支持流式 Range，需回退到分页。
 func shouldStream(opts storage.ListOptions) bool {
-	// Only recursive lists stream, a non-recursive request reads a single object.
+	// 只有递归列表才走流式路径，非递归请求只读取单个对象。
 	if !opts.Recursive {
 		return false
 	}
-	// etcd is unaware of selector matches, so a filtered page can't carry a proper limit.
-	// Stream only unfiltered pages.
+	// etcd 不了解 selector 的匹配情况，带过滤的页无法携带正确的 limit。
+	// 因此只对未过滤的分页使用流式读取。
 	if opts.Predicate.Limit > 0 && !opts.Predicate.Empty() {
 		return false
 	}
@@ -806,7 +800,7 @@ func shouldStream(opts storage.ListOptions) bool {
 		etcdfeature.DefaultFeatureSupportChecker.Supports(storage.RangeStream)
 }
 
-// GetList implements storage.Interface.
+// GetList 实现 storage.Interface。
 //
 // 分页与分块两条路径产出同构的 listChunk 序列，外层循环因此无需关心底层是
 // Range 分页还是 RangeStream；这种抽象让流式优化可以独立开关与回退。
@@ -832,7 +826,7 @@ func (s *store) GetList(ctx context.Context, key string, opts storage.ListOption
 		return fmt.Errorf("need ptr to slice: %v", err)
 	}
 
-	// set the appropriate clientv3 options to filter the returned data set
+	// 设置合适的 clientv3 选项以过滤返回的数据集
 	limit := opts.Predicate.Limit
 	paging := opts.Predicate.Limit > 0
 	newItemFunc := getNewItemFunc(listObj, v)
@@ -842,7 +836,7 @@ func (s *store) GetList(ctx context.Context, key string, opts storage.ListOption
 		return err
 	}
 
-	// loop until we have filled the requested limit from etcd or there are no more results
+	// 循环直到从 etcd 取满请求的 limit，或已无更多结果
 	var lastKey []byte
 	var hasMore bool
 	var count int64
@@ -906,11 +900,11 @@ func (s *store) GetList(ctx context.Context, key string, opts storage.ListOption
 		}
 		hasMore = chunk.hasMore || limitReached
 
-		// the limit was reached mid-chunk or no results remain
+		// 在块中途达到了 limit，或已无剩余结果
 		if limitReached || !chunk.hasMore {
 			break
 		}
-		// we're paging but we have filled our bucket
+		// 正在分页且结果桶已经装满
 		if paging && int64(v.Len()) >= opts.Predicate.Limit {
 			break
 		}
@@ -923,15 +917,15 @@ func (s *store) GetList(ctx context.Context, key string, opts storage.ListOption
 	return s.finalizeList(listObj, opts.Predicate, uint64(withRev), continueValue, remainingItemCount, aggregator, v)
 }
 
-// listChunk is one batch of kvs from a list read: a page of a paginated Range, or a
-// chunk of a RangeStream.
+// listChunk 表示一次列表读取中的一批 kv：分页 Range 中的一页，
+// 或 RangeStream 中的一个块。
 //
 // revision 为 nil 表示该块尚未携带修订信息（流式响应首块可能如此）；
 // count 是 etcd 给出的剩余 key 数，用于计算 remainingItemCount。
 type listChunk struct {
 	kvs      []*mvccpb.KeyValue
 	revision *int64
-	count    int64 // etcd's count of keys remaining in the range, including this batch
+	count    int64 // etcd 统计的该范围内剩余 key 数，含本批次
 	hasMore  bool
 }
 
@@ -952,11 +946,11 @@ func (s *store) pagedChunks(ctx context.Context, keyPrefix string, opts storage.
 				return
 			}
 			hasMore := int64(len(getResp.Kvs)) < getResp.Count
-			// use the same resource version for subsequent requests
+			// 后续请求沿用同一个 resource version
 			if withRev == 0 {
 				withRev = getResp.Revision
 			}
-			// capture the next continue key before yielding, the consumer nils out kvs as it decodes them
+			// 在 yield 之前先记录下一个 continue key，因为消费方解码后会逐个把 kv 置为 nil
 			if len(getResp.Kvs) > 0 {
 				continueKey = string(getResp.Kvs[len(getResp.Kvs)-1].Key) + "\x00"
 			}
@@ -968,8 +962,8 @@ func (s *store) pagedChunks(ctx context.Context, keyPrefix string, opts storage.
 				return
 			}
 			if limit < maxLimit {
-				// We got incomplete result due to field/label selector dropping the object.
-				// Double page size to reduce total number of calls to etcd.
+				// 结果不满一页是因为 field/label selector 过滤掉了部分对象。
+				// 将页大小翻倍，减少访问 etcd 的总次数。
 				limit *= 2
 				if limit > maxLimit {
 					limit = maxLimit
@@ -986,7 +980,7 @@ func (s *store) listReadError(ctx context.Context, err error, withRev int64, pag
 	if errors.Is(err, etcdrpc.ErrFutureRev) {
 		currentRV, getRVErr := s.GetCurrentResourceVersion(ctx)
 		if getRVErr != nil {
-			// If we can't get the current RV, use 0 as a fallback.
+			// 若无法获取当前 RV，则回退使用 0。
 			currentRV = 0
 		}
 		return storage.NewTooLargeResourceVersionError(uint64(withRev), currentRV, 0)
@@ -994,9 +988,9 @@ func (s *store) listReadError(ctx context.Context, err error, withRev int64, pag
 	return interpretListError(err, paging, continueKey, keyPrefix)
 }
 
-// streamChunks reads the list as a single etcd RangeStream, pinned to withRev when
-// nonzero, capped at limit keys and resumed from continueKey when set.
-// supported is false when the etcd server does not implement RangeStream.
+// streamChunks 把整个列表作为单个 etcd RangeStream 读取：withRev 非零时
+// 固定在该修订号上，最多读取 limit 个 key，若设置了 continueKey 则从其处续读。
+// 当 etcd 服务端未实现 RangeStream 时，supported 为 false。
 //
 // 通过首个响应判断 Unimplemented：即使是支持流式的客户端库，连到旧服务端也会失败，
 // 因此能力判定必须在拿到第一个块之后才能确定。
@@ -1055,8 +1049,8 @@ func (s *store) streamChunks(ctx context.Context, keyPrefix string, withRev, lim
 				revision = &rangeResp.Header.Revision
 			}
 			next, nextOk := <-stream
-			// On the final chunk, More means the limit truncated the range, so there
-			// is a next page even though the stream ended.
+			// 在最后一个块上，More 为真表示范围被 limit 截断，因此即使流已结束
+			// 仍存在下一页。
 			if !yield(listChunk{kvs: rangeResp.Kvs, revision: revision, count: rangeResp.Count, hasMore: nextOk || rangeResp.More}, nil) {
 				return
 			}
@@ -1075,7 +1069,7 @@ func (s *store) finalizeList(listObj runtime.Object, pred storage.SelectionPredi
 		return err
 	}
 	if v.IsNil() {
-		// Ensure that we never return a nil Items pointer in the result for consistency.
+		// 为保证一致性，结果中绝不返回 nil 的 Items 指针。
 		v.Set(reflect.MakeSlice(v.Type(), 0, 0))
 	}
 	if err := s.versioner.UpdateList(listObj, rev, continueValue, remainingItemCount); err != nil {
@@ -1096,10 +1090,10 @@ func (s *store) processListItem(ctx context.Context, kv *mvccpb.KeyValue, pred s
 		return false, nil
 	}
 
-	// Check if the request has already timed out before decode object
+	// 在解码对象之前先检查请求是否已经超时
 	select {
 	case <-ctx.Done():
-		// parent context is canceled or timed out, no point in continuing
+		// 父上下文已被取消或超时，继续下去没有意义
 		return false, storage.NewTimeoutError(string(kv.Key), "request did not complete within requested timeout")
 	default:
 	}
@@ -1113,7 +1107,7 @@ func (s *store) processListItem(ctx context.Context, kv *mvccpb.KeyValue, pred s
 		return false, nil
 	}
 
-	// being unable to set the version does not prevent the object from being extracted
+	// 无法设置版本并不妨碍该对象被提取出来
 	if matched, err := pred.Matches(obj); err == nil && matched {
 		v.Set(reflect.Append(v, reflect.ValueOf(obj).Elem()))
 	}
@@ -1121,13 +1115,13 @@ func (s *store) processListItem(ctx context.Context, kv *mvccpb.KeyValue, pred s
 	return true, nil
 }
 
-// appendChunk appends the kvs matching pred to v.
+// appendChunk 把所有匹配 pred 的 kv 追加到 v 中。
 //
 // lastKey 是已处理到的最后一个 key，用于生成 continue token；
 // 超过 limit 时提前返回 limitReached，让分页在此处截断。
 func (s *store) appendChunk(ctx context.Context, kvs []*mvccpb.KeyValue, pred storage.SelectionPredicate, newItemFunc func() runtime.Object, aggregator listItemErrors, v reflect.Value, paging bool) (lastKey []byte, evaluated int, limitReached bool, err error) {
-	// avoid small allocations for the result slice, since this can be called in many
-	// different contexts and we don't know how significantly the result will be filtered
+	// 避免为结果切片做小容量分配：此函数会在很多不同场景下被调用，
+	// 而我们并不知道结果会被过滤掉多少
 	if pred.Empty() {
 		growSlice(v, len(kvs))
 	} else {
@@ -1145,7 +1139,7 @@ func (s *store) appendChunk(ctx context.Context, kvs []*mvccpb.KeyValue, pred st
 		if ok {
 			evaluated++
 		}
-		// free kv early. Long lists can take O(seconds) to decode.
+		// 尽早释放 kv。长列表的解码可能耗时数秒。
 		kvs[i] = nil
 	}
 	return lastKey, evaluated, false, nil
@@ -1181,13 +1175,10 @@ func (s *store) getList(ctx context.Context, keyPrefix string, recursive bool, o
 	return resp, err
 }
 
-// growSlice takes a slice value and grows its capacity up
-// to the maximum of the passed sizes or maxCapacity, whichever
-// is smaller. Above maxCapacity decisions about allocation are left
-// to the Go runtime on append. This allows a caller to make an
-// educated guess about the potential size of the total list while
-// still avoiding overly aggressive initial allocation. If sizes
-// is empty maxCapacity will be used as the size to grow.
+// growSlice 接收一个切片值，把它的容量增长到"传入各尺寸中的最大值"
+// 与 maxCapacity 二者中较小的那个。超过 maxCapacity 之后，追加时的分配
+// 决策交给 Go 运行时。这让调用方可以对整个列表的潜在大小做出合理预估，
+// 同时避免初始分配过于激进。若 sizes 为空，则直接增长到 maxCapacity。
 func growSlice(v reflect.Value, maxCapacity int, sizes ...int) {
 	cap := v.Cap()
 	max := cap
@@ -1212,7 +1203,7 @@ func growSlice(v reflect.Value, maxCapacity int, sizes ...int) {
 	}
 }
 
-// Watch implements storage.Interface.Watch.
+// Watch 实现 storage.Interface.Watch。
 func (s *store) Watch(ctx context.Context, key string, opts storage.ListOptions) (watch.Interface, error) {
 	preparedKey, err := s.prepareKey(key, opts.Recursive)
 	if err != nil {
@@ -1228,13 +1219,11 @@ func (s *store) Watch(ctx context.Context, key string, opts storage.ListOptions)
 // watchContext 要求 etcd 在失去 leader 后主动终止 watch 流。
 // 否则流会在没有 leader 的情况下静默挂住，watch cache 无法感知数据停滞。
 func (s *store) watchContext(ctx context.Context) context.Context {
-	// The etcd server waits until it cannot find a leader for 3 election
-	// timeouts to cancel existing streams. 3 is currently a hard coded
-	// constant. The election timeout defaults to 1000ms. If the cluster is
-	// healthy, when the leader is stopped, the leadership transfer should be
-	// smooth. (leader transfers its leadership before stopping). If leader is
-	// hard killed, other servers will take an election timeout to realize
-	// leader lost and start campaign.
+	// etcd 服务端会在连续 3 个选举超时找不到 leader 后才取消现有流。
+	// 3 目前是硬编码常量，选举超时默认为 1000ms。若集群健康，停止 leader
+	// 时应当发生平滑的领导者移交（leader 停止前会主动移交领导权）。若
+	// leader 被强制杀死，其他服务器需要一个选举超时的时间才能发现 leader
+	// 丢失并发起新一轮选举（campaign）。
 	return clientv3.WithRequireLeader(ctx)
 }
 
@@ -1252,10 +1241,10 @@ func (s *store) getCurrentState(ctx context.Context, key string, v reflect.Value
 	}
 }
 
-// getState constructs a new objState from the given response from the storage. If
-// expectTransformOrDecodeError is true and neither transformation nor decode fails, returns an
-// InvalidObj error; if either fails, the returned error and the 'obj' field of the returned
-// objState will both be nil.
+// getState 根据存储返回的响应构造一个新的 objState。若
+// expectTransformOrDecodeError 为 true 而转换与解码都未失败，则返回
+// InvalidObj 错误；若二者之一失败，返回的错误与 objState 的 'obj' 字段
+// 都将为 nil。
 //
 // 后一种语义是"不安全删除"专用的：只有确认对象确实无法解密/解码时，才允许绕过
 // 正常校验删除它，否则必须走常规路径。
@@ -1290,7 +1279,7 @@ func (s *store) getState(ctx context.Context, kv *mvccpb.KeyValue, key string, v
 			return nil, storage.NewInternalError(err)
 		}
 
-		// be explicit that we don't have the object
+		// 明确表示我们没有拿到该对象
 		state.obj = nil
 		state.stale = true // this seems a more sane value here
 		return state, nil
@@ -1305,7 +1294,7 @@ func (s *store) getState(ctx context.Context, kv *mvccpb.KeyValue, key string, v
 			return nil, err
 		}
 
-		// be explicit that we don't have the object
+		// 明确表示我们没有拿到该对象
 		state.obj = nil
 		return state, nil
 	}
@@ -1332,8 +1321,8 @@ func (s *store) getStateFromObject(obj runtime.Object) (*objState, error) {
 	state.rev = int64(rv)
 	state.meta.ResourceVersion = uint64(state.rev)
 
-	// Compute the serialized form - for that we need to temporarily clean
-	// its resource version field (those are not stored in etcd).
+	// 计算序列化形式——为此需要暂时清空对象的 resourceVersion 字段
+	// （该字段不会存入 etcd）。
 	if err := s.versioner.PrepareObjectForStorage(obj); err != nil {
 		return nil, fmt.Errorf("PrepareObjectForStorage failed: %v", err)
 	}
@@ -1365,8 +1354,8 @@ func (s *store) updateState(st *objState, userUpdate storage.UpdateFunc) (runtim
 	return ret, ttl, nil
 }
 
-// validateMinimumResourceVersion returns a 'too large resource' version error when the provided minimumResourceVersion is
-// greater than the most recent actualRevision available from storage.
+// validateMinimumResourceVersion 当给定的 minimumResourceVersion 大于存储可
+// 提供的最新 actualRevision 时，返回"too large resource version"错误。
 func (s *store) validateMinimumResourceVersion(minimumResourceVersion string, actualRevision uint64) error {
 	if minimumResourceVersion == "" {
 		return nil
@@ -1375,8 +1364,8 @@ func (s *store) validateMinimumResourceVersion(minimumResourceVersion string, ac
 	if err != nil {
 		return apierrors.NewBadRequest(fmt.Sprintf("invalid resource version: %v", err))
 	}
-	// Enforce the storage.Interface guarantee that the resource version of the returned data
-	// "will be at least 'resourceVersion'".
+	// 强制满足 storage.Interface 的保证：返回数据的 resource version
+	// "至少为 resourceVersion"。
 	if minimumRV > actualRevision {
 		return storage.NewTooLargeResourceVersionError(minimumRV, actualRevision, 0)
 	}
@@ -1388,7 +1377,7 @@ func (s *store) prepareKey(key string, recursive bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// We ensured that pathPrefix ends in '/' in construction, so skip any leading '/' in the key now.
+	// 构造阶段已确保 pathPrefix 以 '/' 结尾，所以现在跳过 key 的前导 '/'。
 	startIndex := 0
 	if key[0] == '/' {
 		startIndex = 1
@@ -1396,13 +1385,13 @@ func (s *store) prepareKey(key string, recursive bool) (string, error) {
 	return s.pathPrefix + key[startIndex:], nil
 }
 
-// recordDecodeError record decode error split by object type.
+// recordDecodeError 按对象类型分类记录解码错误。
 func recordDecodeError(groupResource schema.GroupResource, key string) {
 	metrics.RecordDecodeError(groupResource)
 	klog.V(4).Infof("Decoding %s \"%s\" failed", groupResource, key)
 }
 
-// getTypeName returns type name of an object for reporting purposes.
+// getTypeName 返回对象的类型名称，用于上报信息。
 func getTypeName(obj interface{}) string {
 	return reflect.TypeOf(obj).String()
 }

@@ -57,7 +57,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// doer sends a request to the server
+// doer 向服务端发送一个请求。
 // 把“发请求并等待结果”封装成可调用对象，便于在不同连接策略下复用。
 type doer func(client *http.Client, gci func(httptrace.GotConnInfo), path string, timeout time.Duration) result
 
@@ -72,7 +72,7 @@ type result struct {
 	response *http.Response
 }
 
-// wrap a lifecycleSignal so the test can inject its own callback
+// wrappedLifecycleSignal 对 lifecycleSignal 做一层包装，使测试可以注入自己的回调。
 type wrappedLifecycleSignal struct {
 	lifecycleSignal
 	before func(lifecycleSignal)
@@ -93,9 +93,8 @@ func (w *wrappedLifecycleSignal) Signal() {
 // wrapLifecycleSignalsWithRecorder 为所有生命周期信号安装记录回调，
 // 以便最终校验信号顺序。
 func wrapLifecycleSignalsWithRecorder(t *testing.T, signals *lifecycleSignals, before func(lifecycleSignal)) {
-	// it's important to record the signal being fired on a 'before' callback
-	// to avoid flakes, since on the server the signaling of events are
-	// an asynchronous process.
+	// 必须在 'before' 回调中记录正在触发的信号，以避免用例抖动（flake），
+	// 因为服务端触发事件是一个异步过程。
 	signals.AfterShutdownDelayDuration = wrapLifecycleSignal(t, signals.AfterShutdownDelayDuration, before, nil)
 	signals.PreShutdownHooksStopped = wrapLifecycleSignal(t, signals.PreShutdownHooksStopped, before, nil)
 	signals.NotAcceptingNewRequest = wrapLifecycleSignal(t, signals.NotAcceptingNewRequest, before, nil)
@@ -113,10 +112,8 @@ func wrapLifecycleSignal(t *testing.T, delegated lifecycleSignal, before, after 
 	}
 }
 
-// the server may not wait enough time between firing two events for
-// the test to execute its steps, this allows us to intercept the
-// signal and execute verification steps inside the goroutine that
-// is executing the test.
+// 服务端在触发两个事件之间停留的时间，可能不足以让测试执行自己的步骤；
+// 该结构允许我们拦截信号，并在执行测试的 goroutine 内运行验证步骤。
 //
 // 通过让信号发送方阻塞在 doneCh 上，测试可以在两个信号之间插入
 // 任意验证逻辑，而无需依赖脆弱的 sleep。
@@ -142,12 +139,10 @@ func newSignalInterceptingTestStep() *signalInterceptingTestStep {
 	}
 }
 
-//	 This test exercises the graceful termination scenario
-//	 described in the following diagram
-//	   - every vertical line is an independent timeline
-//	   - the leftmost vertical line represents the go routine that
-//	     is executing GenericAPIServer.Run method
-//	   - (signal name) indicates that the given lifecycle signal has been fired
+//	 本用例验证下图所描述的优雅停机（graceful termination）场景：
+//	   - 每条竖线都是一条独立的时间线
+//	   - 最左侧的竖线代表执行 GenericAPIServer.Run 方法的 goroutine
+//	   - （signal name）表示对应的生命周期信号已被触发
 //
 //	                                 stopCh
 //	                                   |
@@ -202,29 +197,28 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 	connReusingClient := newClient(false)
 	doer := setupDoer(t, s.SecureServingInfo)
 
-	// handler for a non long-running and a watch request that
-	// we want to keep in flight through to the end.
+	// 处理非长运行请求与 watch 请求的 handler：我们想让这两类请求
+	// 一直保持 in-flight 直到最后。
 	inflightNonLongRunning := setupInFlightNonLongRunningRequestHandler(s)
 	inflightWatch := setupInFlightWatchRequestHandler(s)
 
-	// API calls from the pre-shutdown hook(s) must succeed up to
-	// the point where the HTTP server is shut down.
+	// 来自 pre-shutdown hook 的 API 调用必须成功，直到 HTTP server
+	// 关闭为止。
 	preShutdownHook := setupPreShutdownHookHandler(t, s, doer, newClient(true))
 
 	signals := &s.lifecycleSignals
 	recorder := &signalRecorder{}
 	wrapLifecycleSignalsWithRecorder(t, signals, recorder.before)
 
-	// before the AfterShutdownDelayDuration signal is fired, we want
-	// the test to execute a verification step.
+	// 在 AfterShutdownDelayDuration 信号触发之前，我们希望测试先执行
+	// 一个验证步骤。
 	beforeShutdownDelayDurationStep := newSignalInterceptingTestStep()
 	signals.AfterShutdownDelayDuration = wrapLifecycleSignal(t, signals.AfterShutdownDelayDuration, func(_ lifecycleSignal) {
-		// wait for the test to execute verification steps before
-		// the server signals the next steps
+		// 等待测试执行完验证步骤后，服务端再继续触发后续信号
 		<-beforeShutdownDelayDurationStep.done()
 	}, nil)
 
-	// start the API server
+	// 启动 API server
 	_, ctx := ktesting.NewTestContext(t)
 	stopCtx, stop := context.WithCancelCause(ctx)
 	defer stop(errors.New("test has completed"))
@@ -237,28 +231,27 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 	}()
 	waitForAPIServerStarted(t, doer)
 
-	// fire the non long-running and the watch request so it is
-	// in-flight on the server now, and we will unblock them
-	// after ShutdownDelayDuration elapses.
+	// 发出非长运行请求和 watch 请求，让它们此刻在服务端处于 in-flight
+	// 状态；我们会在 ShutdownDelayDuration 到期后再放行它们。
 	inflightNonLongRunning.launch(doer, connReusingClient)
 	waitForeverUntil(t, inflightNonLongRunning.startedCh, "in-flight non long-running request did not reach the server")
 	inflightWatch.launch(doer, connReusingClient)
 	waitForeverUntil(t, inflightWatch.startedCh, "in-flight watch request did not reach the server")
 
-	// /readyz should return OK
+	// /readyz 应当返回 OK
 	resultGot := doer.Do(newClient(true), func(httptrace.GotConnInfo) {}, "/readyz", time.Second)
 	if err := assertResponseStatusCode(resultGot, http.StatusOK); err != nil {
 		t.Errorf("%s", err.Error())
 	}
 
-	// signal termination event: initiate a shutdown
+	// 触发停机事件：发起 shutdown
 	stop(errors.New("shutting down"))
 	waitForeverUntilSignaled(t, signals.ShutdownInitiated)
 
-	// /readyz must return an error, but we need to give it some time
+	// /readyz 必须返回错误，但需要给它一点时间
 	err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (done bool, err error) {
 		resultGot := doer.Do(newClient(true), func(httptrace.GotConnInfo) {}, "/readyz", time.Second)
-		// wait until we have a non 200 response
+		// 轮询直到出现非 200 响应
 		if resultGot.response != nil && resultGot.response.StatusCode == http.StatusOK {
 			return false, nil
 		}
@@ -272,7 +265,7 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 		t.Errorf("Expected /readyz to return 500 status code, but got: %v", err)
 	}
 
-	// before ShutdownDelayDuration elapses new request(s) should be served successfully.
+	// 在 ShutdownDelayDuration 到期之前，新请求应当被成功处理。
 	beforeShutdownDelayDurationStep.execute(func() {
 		t.Log("Before ShutdownDelayDuration elapses new request(s) should be served")
 		resultGot := doer.Do(connReusingClient, shouldReuseConnection(t), "/echo?message=request-on-an-existing-connection-should-succeed", time.Second)
@@ -287,14 +280,13 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 
 	waitForeverUntilSignaled(t, signals.AfterShutdownDelayDuration)
 
-	// preshutdown hook has not completed yet, new incomng request should succeed
+	// preshutdown hook 尚未执行完毕，新进入的请求应当成功
 	resultGot = doer.Do(newClient(true), shouldUseNewConnection(t), "/echo?message=request-on-a-new-tcp-connection-should-succeed", time.Second)
 	if err := assertResponseStatusCode(resultGot, http.StatusOK); err != nil {
 		t.Errorf("%s", err.Error())
 	}
 
-	// let the preshutdown hook issue an API call now, and then
-	// let's wait for it to return the result.
+	// 让 preshutdown hook 现在发起一次 API 调用，然后等待它返回结果。
 	close(preShutdownHook.blockedCh)
 	preShutdownHookResult := <-preShutdownHook.resultCh
 	waitForeverUntilSignaled(t, signals.PreShutdownHooksStopped)
@@ -303,8 +295,8 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 	}
 
 	waitForeverUntilSignaled(t, signals.PreShutdownHooksStopped)
-	// both AfterShutdownDelayDuration and PreShutdownHooksCompleted
-	// have been signaled, we should not be accepting new request
+	// AfterShutdownDelayDuration 与 PreShutdownHooksCompleted 都已触发，
+	// 此时我们不应再接纳新请求
 	waitForeverUntilSignaled(t, signals.NotAcceptingNewRequest)
 	waitForeverUntilSignaled(t, signals.HTTPServerStoppedListening)
 
@@ -313,9 +305,8 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 		t.Errorf("Expected error %v, but got: %v %v", syscall.ECONNREFUSED, resultGot.err, resultGot.response)
 	}
 
-	// even though Server.Serve() has returned, an existing connection on
-	// the server may take some time to be in "closing" state, the following
-	// poll eliminates any flake due to that delay.
+	// 尽管 Server.Serve() 已经返回，服务端上的既有连接仍可能需要一些时间
+	// 才进入 "closing" 状态；下面的轮询用于消除该延迟带来的用例抖动。
 	if err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (done bool, err error) {
 		result := doer.Do(connReusingClient, shouldReuseConnection(t), "/echo?message=waiting-for-the-existing-connection-to-reject-incoming-request", time.Second)
 		if result.response != nil {
@@ -327,18 +318,16 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 		t.Errorf("Expected no error, but got: %v", err)
 	}
 
-	// TODO: our original intention was for any incoming request to receive a 503
-	// via the WithWaitGroup filter, but, at this point, any incoming requests
-	// will get a 'connection refused' error since the net/http server has
-	// stopped listening.
+	// TODO: 我们原本的意图是让任何进入的请求经由 WithWaitGroup 过滤器收到 503，
+	// 但走到这一步时，由于 net/http server 已停止监听，任何进入的请求都会得到
+	// 'connection refused' 错误。
 	resultGot = doer.Do(connReusingClient, shouldReuseConnection(t), "/echo?message=request-on-an-existing-connection-should-fail-with-error", time.Second)
 	if !utilnet.IsConnectionRefused(resultGot.err) {
 		t.Errorf("Expected error %v, but got: %v %v", syscall.ECONNREFUSED, resultGot.err, resultGot.response)
 	}
 
-	// the server has stopped listening but we still have a non long-running,
-	// and a watch request in flight, unblock both of these, and we expect
-	// the requests to return appropriate response to the caller.
+	// 服务端已停止监听，但我们仍有一个非长运行请求和一个 watch 请求处于
+	// in-flight 状态；放行这两个请求，期望它们向调用方返回恰当的响应。
 	inflightNonLongRunningResultGot := inflightNonLongRunning.unblockAndWaitForResult(t)
 	if err := assertResponseStatusCode(inflightNonLongRunningResultGot, http.StatusOK); err != nil {
 		t.Errorf("%s", err.Error())
@@ -354,7 +343,7 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 		t.Errorf("%s", err.Error())
 	}
 
-	// all requests in flight have drained
+	// 所有 in-flight 请求都已排空
 	waitForeverUntilSignaled(t, signals.InFlightRequestsDrained)
 
 	t.Log("Waiting for the apiserver Run method to return")
@@ -376,15 +365,13 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationDisabled(t
 	}
 }
 
-// This test exercises the graceful termination scenario
-// described in the following diagram
+// 本用例验证下图所描述的优雅停机（graceful termination）场景：
 //
-//   - every vertical line is an independent timeline
+//   - 每条竖线都是一条独立的时间线
 //
-//   - the leftmost vertical line represents the go routine that
-//     is executing GenericAPIServer.Run method
+//   - 最左侧的竖线代表执行 GenericAPIServer.Run 方法的 goroutine
 //
-//   - (signal) indicates that the given lifecycle signal has been fired
+//   - （signal）表示对应的生命周期信号已被触发
 //
 //     stopCh
 //     |
@@ -433,29 +420,29 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 	connReusingClient := newClient(false)
 	doer := setupDoer(t, s.SecureServingInfo)
 
-	// handler for a non long-running and a watch request that
-	// we want to keep in flight through to the end.
+	// 处理非长运行请求与 watch 请求的 handler：我们想让这两类请求
+	// 一直保持 in-flight 直到最后。
 	inflightNonLongRunning := setupInFlightNonLongRunningRequestHandler(s)
 	inflightWatch := setupInFlightWatchRequestHandler(s)
 
-	// API calls from the pre-shutdown hook(s) must succeed up to
-	// the point where the HTTP server is shut down.
+	// 来自 pre-shutdown hook 的 API 调用必须成功，直到 HTTP server
+	// 关闭为止。
 	preShutdownHook := setupPreShutdownHookHandler(t, s, doer, newClient(true))
 
 	signals := &s.lifecycleSignals
 	recorder := &signalRecorder{}
 	wrapLifecycleSignalsWithRecorder(t, signals, recorder.before)
 
-	// before the AfterShutdownDelayDuration signal is fired, we want
-	// the test to execute a verification step.
+	// 在 AfterShutdownDelayDuration 信号触发之前，我们希望测试先执行
+	// 一个验证步骤。
 	beforeShutdownDelayDurationStep := newSignalInterceptingTestStep()
 	signals.AfterShutdownDelayDuration = wrapLifecycleSignal(t, signals.AfterShutdownDelayDuration, func(_ lifecycleSignal) {
-		// Before AfterShutdownDelayDuration event is signaled, the test
-		// will send request(s) to assert on expected behavior.
+		// 在 AfterShutdownDelayDuration 事件触发之前，测试会发送请求，
+		// 对预期行为进行断言。
 		<-beforeShutdownDelayDurationStep.done()
 	}, nil)
 
-	// start the API server
+	// 启动 API server
 	_, ctx := ktesting.NewTestContext(t)
 	stopCtx, stop := context.WithCancelCause(ctx)
 	defer stop(errors.New("test has completed"))
@@ -468,28 +455,27 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 	}()
 	waitForAPIServerStarted(t, doer)
 
-	// fire the non long-running and the watch request so it is
-	// in-flight on the server now, and we will unblock them
-	// after ShutdownDelayDuration elapses.
+	// 发出非长运行请求和 watch 请求，让它们此刻在服务端处于 in-flight
+	// 状态；我们会在 ShutdownDelayDuration 到期后再放行它们。
 	inflightNonLongRunning.launch(doer, connReusingClient)
 	waitForeverUntil(t, inflightNonLongRunning.startedCh, "in-flight request did not reach the server")
 	inflightWatch.launch(doer, connReusingClient)
 	waitForeverUntil(t, inflightWatch.startedCh, "in-flight watch request did not reach the server")
 
-	// /readyz should return OK
+	// /readyz 应当返回 OK
 	resultGot := doer.Do(newClient(true), func(httptrace.GotConnInfo) {}, "/readyz", time.Second)
 	if err := assertResponseStatusCode(resultGot, http.StatusOK); err != nil {
 		t.Errorf("%s", err.Error())
 	}
 
-	// signal termination event: initiate a shutdown
+	// 触发停机事件：发起 shutdown
 	stop(errors.New("shutting down"))
 	waitForeverUntilSignaled(t, signals.ShutdownInitiated)
 
-	// /readyz must return an error, but we need to give it some time
+	// /readyz 必须返回错误，但需要给它一点时间
 	err := wait.PollImmediate(100*time.Millisecond, wait.ForeverTestTimeout, func() (done bool, err error) {
 		resultGot := doer.Do(newClient(true), func(httptrace.GotConnInfo) {}, "/readyz", time.Second)
-		// wait until we have a non 200 response
+		// 轮询直到出现非 200 响应
 		if resultGot.response != nil && resultGot.response.StatusCode == http.StatusOK {
 			return false, nil
 		}
@@ -503,7 +489,7 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 		t.Errorf("Expected /readyz to return 500 status code, but got: %v", err)
 	}
 
-	// before ShutdownDelayDuration elapses new request(s) should be served successfully.
+	// 在 ShutdownDelayDuration 到期之前，新请求应当被成功处理。
 	beforeShutdownDelayDurationStep.execute(func() {
 		t.Log("Before ShutdownDelayDuration elapses new request(s) should be served")
 		resultGot := doer.Do(connReusingClient, shouldReuseConnection(t), "/echo?message=request-on-an-existing-connection-should-succeed", time.Second)
@@ -518,14 +504,14 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 
 	waitForeverUntilSignaled(t, signals.AfterShutdownDelayDuration)
 
-	// preshutdown hook has not completed yet, new incomng request should succeed
+	// preshutdown hook 尚未执行完毕，新进入的请求应当成功
 	resultGot = doer.Do(newClient(true), shouldUseNewConnection(t), "/echo?message=request-on-a-new-tcp-connection-should-succeed", time.Second)
 	if err := assertResponseStatusCode(resultGot, http.StatusOK); err != nil {
 		t.Errorf("%s", err.Error())
 	}
 
-	// let the preshutdown hook issue an API call now, and then let's wait
-	// for it to return the result, it should succeed.
+	// 让 preshutdown hook 现在发起一次 API 调用，然后等待它返回结果，
+	// 该调用应当成功。
 	close(preShutdownHook.blockedCh)
 	preShutdownHookResult := <-preShutdownHook.resultCh
 	waitForeverUntilSignaled(t, signals.PreShutdownHooksStopped)
@@ -535,8 +521,8 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 
 	waitForeverUntilSignaled(t, signals.NotAcceptingNewRequest)
 
-	// both AfterShutdownDelayDuration and PreShutdownHooksCompleted
-	// have been signaled, any incoming request should receive 429
+	// AfterShutdownDelayDuration 与 PreShutdownHooksCompleted 都已触发，
+	// 任何进入的请求都应收到 429
 	resultGot = doer.Do(newClient(true), shouldUseNewConnection(t), "/echo?message=request-on-a-new-tcp-connection-should-fail-with-429", time.Second)
 	if err := requestMustFailWithRetryHeader(resultGot, http.StatusTooManyRequests); err != nil {
 		t.Errorf("%s", err.Error())
@@ -546,9 +532,8 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 		t.Errorf("%s", err.Error())
 	}
 
-	// we still have a non long-running, and a watch request in flight,
-	// unblock both of these, and we expect the requests
-	// to return appropriate response to the caller.
+	// 我们仍有一个非长运行请求和一个 watch 请求处于 in-flight 状态；
+	// 放行这两个请求，期望它们向调用方返回恰当的响应。
 	inflightNonLongRunningResultGot := inflightNonLongRunning.unblockAndWaitForResult(t)
 	if err := assertResponseStatusCode(inflightNonLongRunningResultGot, http.StatusOK); err != nil {
 		t.Errorf("%s", err.Error())
@@ -564,7 +549,7 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 		t.Errorf("%s", err.Error())
 	}
 
-	// all requests in flight have drained
+	// 所有 in-flight 请求都已排空
 	waitForeverUntilSignaled(t, signals.InFlightRequestsDrained)
 	waitForeverUntilSignaled(t, signals.HTTPServerStoppedListening)
 
@@ -590,7 +575,7 @@ func TestGracefulTerminationWithKeepListeningDuringGracefulTerminationEnabled(t 
 // TestMuxAndDiscoveryComplete 验证 MuxAndDiscoveryComplete 信号只在所有
 // 注册的 mux/discovery 子信号完成后才触发。
 func TestMuxAndDiscoveryComplete(t *testing.T) {
-	// setup
+	// 准备阶段
 	testSignal1 := make(chan struct{})
 	testSignal2 := make(chan struct{})
 	s := newGenericAPIServer(t, &fakeAudit{}, true)
@@ -607,7 +592,7 @@ func TestMuxAndDiscoveryComplete(t *testing.T) {
 		}
 	}
 
-	// start the API server
+	// 启动 API server
 	_, ctx := ktesting.NewTestContext(t)
 	stopCtx, stop := context.WithCancelCause(ctx)
 	defer stop(errors.New("test has completed"))
@@ -620,7 +605,7 @@ func TestMuxAndDiscoveryComplete(t *testing.T) {
 	}()
 	waitForAPIServerStarted(t, doer)
 
-	// act
+	// 执行阶段
 	if isChanClosed(s.lifecycleSignals.MuxAndDiscoveryComplete.Signaled(), 1*time.Second) {
 		t.Fatalf("%s is closed whereas the TestSignal is still open", s.lifecycleSignals.MuxAndDiscoveryComplete.Name())
 	}
@@ -666,15 +651,14 @@ func TestPreShutdownHooks(t *testing.T) {
 			s := test.server()
 			doer := setupDoer(t, s.SecureServingInfo)
 
-			// preshutdown hook should not block when sending to the error channel
+			// preshutdown hook 向错误通道发送数据时不应发生阻塞
 			preShutdownHookErrCh := make(chan error, 1)
 			err := s.AddPreShutdownHook("test-backend", func() error {
-				// this pre-shutdown hook waits for the shutdown duration to elapse,
-				// and then send a series of requests to the apiserver, and
-				// we expect these series of requests to be completed successfully
+				// 该 pre-shutdown hook 会等待 shutdown duration 到期，然后向
+				// apiserver 发送一系列请求；我们期望这一系列请求全部成功完成。
 				<-s.lifecycleSignals.AfterShutdownDelayDuration.Signaled()
 
-				// we send 5 requests, one every second
+				// 我们发送 5 个请求，每秒一个
 				var err error
 				client := newClient(true)
 				for i := 0; i < 5; i++ {
@@ -693,7 +677,7 @@ func TestPreShutdownHooks(t *testing.T) {
 				t.Fatalf("Failed to add pre-shutdown hook - %v", err)
 			}
 
-			// start the API server
+			// 启动 API server
 			runCompletedCh := make(chan struct{})
 			go func() {
 				defer close(runCompletedCh)
@@ -761,7 +745,7 @@ func setupInFlightNonLongRunningRequestHandler(s *GenericAPIServer) *inFlightReq
 	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		close(inflight.startedCh)
-		// this request handler blocks until we deliberately unblock it.
+		// 该请求处理器会一直阻塞，直到我们主动放行它。
 		<-inflight.blockedCh
 		w.WriteHeader(http.StatusOK)
 	})
@@ -781,10 +765,10 @@ func setupInFlightWatchRequestHandler(s *GenericAPIServer) *inFlightRequest {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		close(inflight.startedCh)
-		// this request handler blocks until we deliberately unblock it.
+		// 该请求处理器会一直阻塞，直到我们主动放行它。
 		<-inflight.blockedCh
 
-		// this simulates a watch well enough for our test
+		// 对本测试而言，这样模拟 watch 已经足够
 		signals := apirequest.ServerShutdownSignalFrom(req.Context())
 		if signals == nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -833,8 +817,7 @@ func setupPreShutdownHookHandler(t *testing.T, s *GenericAPIServer, doer doer, c
 		resultCh:  make(chan result),
 	}
 	if err := s.AddPreShutdownHook("test-preshutdown-hook", func() error {
-		// wait until the test commands this pre shutdown
-		// hook to invoke an API call.
+		// 等待测试下达指令，让该 pre-shutdown hook 发起一次 API 调用。
 		<-hook.blockedCh
 
 		resultGot := doer.Do(client, func(httptrace.GotConnInfo) {}, "/echo?message=request-from-pre-shutdown-hook-should-succeed", time.Second)
@@ -1033,7 +1016,7 @@ func setupDoer(t *testing.T, info *SecureServingInfo) doer {
 			return result{response: nil, err: err}
 		}
 
-		// setup request timeout
+		// 设置请求超时
 		// timeout 为 0 表示不设超时（用于需要长期保持的 in-flight 请求）。
 		var ctx context.Context
 		if timeout > 0 {
@@ -1044,7 +1027,7 @@ func setupDoer(t *testing.T, info *SecureServingInfo) doer {
 			req = req.WithContext(ctx)
 		}
 
-		// setup trace
+		// 设置 trace
 		trace := &httptrace.ClientTrace{
 			GotConn: func(connInfo httptrace.GotConnInfo) {
 				callback(connInfo)
@@ -1053,8 +1036,8 @@ func setupDoer(t *testing.T, info *SecureServingInfo) doer {
 		req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 
 		response, err := client.Do(req)
-		// in this test, we don't depend on the body of the response, so we can
-		// close the Body here to ensure the underlying transport can be reused
+		// 在本测试中我们不依赖响应体内容，因此可以在此关闭 Body，
+		// 以确保底层传输连接能够被复用
 		if response != nil {
 			io.ReadAll(response.Body)
 			response.Body.Close()
@@ -1104,7 +1087,7 @@ func newGenericAPIServer(t *testing.T, fAudit *fakeAudit, keepListening bool) *G
 	config, _ := setUp(t)
 	config.ShutdownDelayDuration = 100 * time.Millisecond
 	config.ShutdownSendRetryAfter = keepListening
-	// we enable watch draining, any positive value will do that
+	// 我们启用 watch 排空（draining），任何正值都会启用它
 	config.ShutdownWatchTerminationGracePeriod = 2 * time.Second
 	config.AuditPolicyRuleEvaluator = fAudit
 	config.AuditBackend = fAudit
@@ -1130,7 +1113,7 @@ func newGenericAPIServer(t *testing.T, fAudit *fakeAudit, keepListening bool) *G
 	}
 	s.SecureServingInfo.Cert = cert
 
-	// we use this handler to send a test request to the server.
+	// 我们用这个 handler 向服务端发送测试请求。
 	s.Handler.NonGoRestfulMux.Handle("/echo", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		t.Logf("[server] received a request, proto: %s, url: %s", req.Proto, req.RequestURI)
 

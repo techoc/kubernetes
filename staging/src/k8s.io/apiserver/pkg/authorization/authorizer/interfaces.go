@@ -32,63 +32,63 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-// Attributes is an interface used by an Authorizer to get information about a
-// request's metadata, that is used to compute an unconditional or conditional
-// authorization decision.
+// Attributes 是 Authorizer 用来获取请求元数据的接口，这些元数据用于
+// 计算无条件或有条件的授权决策。
 //
 // Attributes 必须被视为只读快照：授权器可以并发调用这些方法，且不得
 // 修改返回的选择器或其中的对象。
 type Attributes interface {
-	// GetUser returns the user.Info object to authorize
+	// GetUser 返回用于授权判断的 user.Info 对象。
 	GetUser() user.Info
 
-	// GetVerb returns the kube verb associated with API requests (this includes get, list, watch, create, update, patch, delete, deletecollection, and proxy),
-	// or the lowercased HTTP verb associated with non-API requests (this includes get, put, post, patch, and delete)
+	// GetVerb 返回与 API 请求关联的 kube 动词（包括 get、list、watch、
+	// create、update、patch、delete、deletecollection 和 proxy），
+	// 或非 API 请求对应的小写 HTTP 动词（包括 get、put、post、patch、delete）。
 	GetVerb() string
 
-	// When IsReadOnly() == true, the request has no side effects, other than
-	// caching, logging, and other incidentals.
+	// 当 IsReadOnly() == true 时，请求没有副作用，缓存、日志记录及其他
+	// 附带行为除外。
 	IsReadOnly() bool
 
-	// The namespace of the object, if a request is for a REST object.
+	// GetNamespace 返回对象的命名空间，仅当请求针对 REST 对象时存在。
 	GetNamespace() string
 
-	// The kind of object, if a request is for a REST object.
+	// GetResource 返回对象的资源类型，仅当请求针对 REST 对象时存在。
 	GetResource() string
 
-	// GetSubresource returns the subresource being requested, if present
+	// GetSubresource 返回所请求的子资源，如果存在的话。
 	GetSubresource() string
 
-	// GetName returns the name of the object as parsed off the request.  This will not be present for all request types, but
-	// will be present for: get, update, delete
+	// GetName 返回从请求中解析出的对象名称。并非所有请求类型都会带有
+	// 该名称，但 get、update、delete 请求一定会有。
 	GetName() string
 
-	// The group of the resource, if a request is for a REST object.
+	// GetAPIGroup 返回资源所属的组，仅当请求针对 REST 对象时存在。
 	GetAPIGroup() string
 
-	// GetAPIVersion returns the version of the group requested, if a request is for a REST object.
+	// GetAPIVersion 返回所请求的组的版本，仅当请求针对 REST 对象时存在。
 	GetAPIVersion() string
 
-	// IsResourceRequest returns true for requests to API resources, like /api/v1/nodes,
-	// and false for non-resource endpoints like /api, /healthz
+	// IsResourceRequest 对指向 API 资源的请求（如 /api/v1/nodes）返回 true，
+	// 对非资源端点（如 /api、/healthz）返回 false。
 	IsResourceRequest() bool
 
-	// GetPath returns the path of the request
+	// GetPath 返回请求的路径。
 	GetPath() string
 
-	// ParseFieldSelector is lazy, thread-safe, and stores the parsed result and error.
-	// It returns an error if the field selector cannot be parsed.
-	// The returned requirements must be treated as readonly and not modified.
+	// GetFieldSelector 是惰性求值且线程安全的，会缓存解析结果与错误。
+	// 若字段选择器无法解析则返回错误。
+	// 返回的 requirements 必须视为只读，不得修改。
 	GetFieldSelector() (fields.Requirements, error)
 
-	// ParseLabelSelector is lazy, thread-safe, and stores the parsed result and error.
-	// It returns an error if the label selector cannot be parsed.
-	// The returned requirements must be treated as readonly and not modified.
+	// GetLabelSelector 是惰性求值且线程安全的，会缓存解析结果与错误。
+	// 若标签选择器无法解析则返回错误。
+	// 返回的 requirements 必须视为只读，不得修改。
 	GetLabelSelector() (labels.Requirements, error)
 }
 
-// UnconditionalAuthorizer is a downscoped variant of Authorizer, which only gives the
-// caller the ability to call the conditions-unaware Authorize method.
+// UnconditionalAuthorizer 是 Authorizer 的缩减权限变体，只赋予调用方
+// 调用不感知条件的 Authorize 方法的能力。
 //
 // 当调用方不需要条件授权时，应传入该接口而非完整 Authorizer，以限制
 // 其能力面。
@@ -96,50 +96,48 @@ type UnconditionalAuthorizer interface {
 	Authorize(ctx context.Context, a Attributes) (authorized Decision, reason string, err error)
 }
 
-// Authorizer makes an authorization decision based on information gained by making
-// zero or more calls to methods of the Attributes interface. It might return
-// an error together with any decision. It is up to the caller to decide whether
-// that error is critical or not.
+// Authorizer 基于对 Attributes 接口方法进行零次或多次调用所获得的信息
+// 做出授权决策。它可能在返回任意决策的同时返回一个错误，该错误是否关键
+// 由调用方决定。
 //
-// The kube-apiserver WithAuthorization filter ignores errors when the decision is
-// Allow, but returns response code 500 if an error is returned with a Deny or
-// NoOpinion (instead of the usual 403).
+// kube-apiserver 的 WithAuthorization 过滤器在决策为 Allow 时会忽略错误；
+// 但当错误伴随 Deny 或 NoOpinion 返回时，会响应状态码 500（而不是通常
+// 的 403）。
 //
-// Any authorizer must implement this interface, but when passing a handle to an
-// authorizer, one might choose whether to pass the Authorizer or smaller UnconditionalAuthorizer
-// interface, depending on whether the receiver should be able to perform conditional
-// authorization or not.
+// 任何授权器都必须实现此接口；但在传递授权器句柄时，可以根据接收方是否
+// 应当执行条件授权，选择传递 Authorizer 还是更小的 UnconditionalAuthorizer
+// 接口。
 type Authorizer interface {
 	UnconditionalAuthorizer
 
-	// ConditionsAwareAuthorize returns an unconditional, conditional, or unioned
-	// decision, where the error and reason is part of the Decision struct.
+	// ConditionsAwareAuthorize 返回无条件、有条件或合并后的决策，其中
+	// 错误和原因都是 Decision 结构的一部分。
 	//
-	// An authorizer who is not conditions-aware MUST implement this function as
-	// "return authorizer.ConditionsAwareDecisionFromParts(self.Authorize(ctx, a))",
-	// such that conditions-aware callers to this authorizer get the same output
-	// as if they called Authorize. Callers are only expected to call one of
-	// Authorize or ConditionsAwareAuthorize, not both.
+	// 不感知条件的授权器必须以如下方式实现此函数：
+	// "return authorizer.ConditionsAwareDecisionFromParts(self.Authorize(ctx, a))"，
+	// 从而使感知条件的调用方得到与直接调用 Authorize 相同的输出。
+	// 调用方只应调用 Authorize 或 ConditionsAwareAuthorize 其中之一，
+	// 而不是两者都调用。
 	ConditionsAwareAuthorize(ctx context.Context, a Attributes) ConditionsAwareDecision
 
-	// EvaluateConditions evaluates a conditional or unioned ConditionsAwareDecision against previously-unknown data.
+	// EvaluateConditions 针对此前未知的数据评估一个有条件或合并后的
+	// ConditionsAwareDecision。
 	//
-	// An authorizer who does not support conditions should fail closed and
-	// return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
+	// 不支持条件的授权器应当 fail closed，返回
+	// authorizer.DecisionDeny、""、authorizer.ErrorConditionEvaluationNotSupported。
 	//
-	// The context should only be used for timeouts/cancellation/tracing, and should not influence the
-	// evaluation outcome. Only the given decision and data may infuence the outcome. data must be non-nil.
+	// context 只应用于超时/取消/链路追踪，不得影响评估结果。只有给定的
+	// decision 和 data 可以影响结果，且 data 必须非 nil。
 	EvaluateConditions(ctx context.Context, decision ConditionsAwareDecision, data ConditionsData) (authorized Decision, reason string, err error)
 }
 
-// ErrorConditionEvaluationNotSupported is returned by authorizer implementations
-// that do not support condition evaluation.
+// ErrorConditionEvaluationNotSupported 由不支持条件评估的授权器实现返回。
 //
 // 不支持条件的授权器必须 fail closed：返回 Deny 而不是 NoOpinion，
 // 否则条件化请求可能被后续授权器意外放行。
 var ErrorConditionEvaluationNotSupported = errors.New("condition evaluation not supported")
 
-// AuthorizerFunc implements Authorizer
+// AuthorizerFunc 实现了 Authorizer 接口。
 //
 // 函数式适配器：默认不提供条件能力，EvaluateConditions 固定 fail closed。
 var _ Authorizer = AuthorizerFunc(nil)
@@ -163,18 +161,20 @@ func (f AuthorizerFunc) EvaluateConditions(_ context.Context, _ ConditionsAwareD
 	return DecisionDeny, "", ErrorConditionEvaluationNotSupported
 }
 
-// RuleResolver provides a mechanism for resolving the list of rules that apply to a given user within a namespace.
+// RuleResolver 提供某种机制，用于解析在某个命名空间内适用于给定用户的
+// 规则列表。
 type RuleResolver interface {
-	// RulesFor get the list of cluster wide rules, the list of rules in the specific namespace, incomplete status and errors.
+	// RulesFor 返回集群级规则列表、指定命名空间内的规则列表、不完整状态
+	// 以及错误。
 	RulesFor(ctx context.Context, user user.Info, namespace string) ([]ResourceRuleInfo, []NonResourceRuleInfo, bool, error)
 }
 
-// RequestAttributesGetter provides a function that extracts Attributes from an http.Request
+// RequestAttributesGetter 提供从 http.Request 中提取 Attributes 的函数。
 type RequestAttributesGetter interface {
 	GetRequestAttributes(user.Info, *http.Request) Attributes
 }
 
-// AttributesRecord implements Attributes interface.
+// AttributesRecord 实现了 Attributes 接口。
 //
 // 字段全部导出是为了让各 filter 能低成本构造；调用方应把实例当作
 // 不可变值传递，不要在使用期间修改字段。
@@ -251,20 +251,20 @@ func (a AttributesRecord) GetLabelSelector() (labels.Requirements, error) {
 	return a.LabelSelectorRequirements, a.LabelSelectorParsingErr
 }
 
-// Decision represents an final, unconditional authorization decision.
-// The zero value (0) of Decision is DecisionDeny.
+// Decision 表示最终的、无条件的授权决策。Decision 的零值（0）是
+// DecisionDeny。
 //
 // 零值即 Deny 是刻意的 fail-closed 设计：忘记赋值的决策不会误放行。
 type Decision int
 
 const (
-	// DecisionDeny means that an authorizer decided to deny the action.
+	// DecisionDeny 表示授权器决定拒绝该操作。
 	DecisionDeny Decision = iota
-	// DecisionAllow means that an authorizer decided to allow the action.
+	// DecisionAllow 表示授权器决定放行该操作。
 	DecisionAllow
-	// DecisionNoOpinion means that an authorizer has no opinion on whether
-	// to allow or deny an action. If there are multiple unioned authorizers,
-	// this means that the request can thus get allowed by some later authorizer.
+	// DecisionNoOpinion 表示授权器对是否放行或拒绝该操作不表态。若存在
+	// 多个联合（unioned）授权器，这意味着该请求仍可能被后续的某个授权器
+	// 放行。
 	DecisionNoOpinion
 )
 
@@ -282,98 +282,94 @@ func (d Decision) String() string {
 	}
 }
 
-// Condition represents one authorization condition that is part of a ConditionsMap.
-// The effect of a condition is defined by whether it is part of the Deny/NoOpinion/Allow
-// conditions list in the ConditionsMap.
+// Condition 表示单个授权条件，它是 ConditionsMap 的一部分。条件的效果
+// 取决于它位于 ConditionsMap 的 Deny/NoOpinion/Allow 条件列表中的哪一类。
 //
-// A Condition must be immutable and thread-safe.
+// Condition 必须是不可变且线程安全的。
 //
 // 条件化授权的核心：授权器先给出“若满足某条件则放行/拒绝”的决策，
 // 由调用方在拿到真实数据（如资源内容）后再求值，从而避免授权器直接
 // 读取对象存储。
 type Condition interface {
-	// GetID uniquely identifies this condition within the scope of the authorizer
-	// that authored it. Validated as a Kubernetes label key.
-	// Any domain of form *.k8s.io or *.kubernetes.io is reserved for Kubernetes use.
-	// Required.
+	// GetID 在创建该条件的授权器范围内唯一标识此条件，按 Kubernetes
+	// label key 规则校验。形如 *.k8s.io 或 *.kubernetes.io 的域名一律
+	// 保留给 Kubernetes 使用。必填。
 	GetID() string
 
-	// GetType describes the type of the condition, if there are multiple possibilities.
-	// Should be formatted as a Kubernetes label key.
-	// Any domain of form *.k8s.io or *.kubernetes.io is reserved for Kubernetes use.
-	// Optional. Can be omitted if the authorizer already knows how to evaluate the condition.
+	// GetType 描述条件的类型（当存在多种可能类型时），应当按 Kubernetes
+	// label key 格式书写。形如 *.k8s.io 或 *.kubernetes.io 的域名一律
+	// 保留给 Kubernetes 使用。可选，若授权器已知如何评估该条件，
+	// 可以省略。
 	GetType() string
 
-	// GetCondition returns a string encoding of the condition to be evaluated.
-	// It is a pure, deterministic function from ConditionsData to a boolean (or error).
-	// Might or might not be human-readable.
-	// Optional, if the ID alone is enough for the authorizer to know how to evaluate the condition.
+	// GetCondition 返回待评估条件的字符串编码形式。它是由 ConditionsData
+	// 到布尔值（或错误）的纯函数、确定性函数，不一定人类可读。
+	// 若仅凭 ID 授权器已知如何评估该条件，则此项可选。
 	GetCondition() string
 
-	// GetDescription is an optional human-friendly description that can be shown
-	// as an error message or for debugging. Optional.
+	// GetDescription 是可选的、面向用户的描述，可作为错误消息展示或用于
+	// 调试。可选。
 	GetDescription() string
 
-	// Evaluate evaluates the condition to a boolean, returns an error, or returns "unevaluatable".
-	// If an authorizer already has a pre-compiled condition, this avoids one serialization roundtrip,
-	// with potentially expensive deserialization/parsing. However, if the condition underwent a
-	// serialize/deserialize roundtrip (e.g. when the caller is an aggregated API server), the authorizer
-	// might have to evaluate the condition from its serialized form using evaluateFunc in
-	// ConditionsMap.Evaluate.
-	// Evaluate must be safe to call repeatedly and concurrently.
+	// Evaluate 将条件求值为布尔值、返回错误，或返回"unevaluatable"
+	// （无法求值）。若授权器已持有预编译的条件，可直接借此省去一次序列化
+	// 往返（其反序列化/解析开销可能很高）。但若条件经历过序列化/反序列化
+	// 往返（例如调用方是聚合 API server），授权器可能需要借助
+	// ConditionsMap.Evaluate 中的 evaluateFunc，从序列化形式求值该条件。
+	// Evaluate 必须可以安全地重复且并发调用。
 	//
-	// The context should only be used for timeouts/cancellation/tracing, and should not influence the
-	// evaluation outcome. Only the condition itself and data can infuence the outcome.
+	// context 只应用于超时/取消/链路追踪，不得影响评估结果。只有条件本身
+	// 和 data 可以影响结果。
 	Evaluate(ctx context.Context, data ConditionsData) ConditionEvaluationResult
 }
 
-// EvaluateConditionFunc is a function that is able to concretely evaluate a condition to a boolean or error.
+// EvaluateConditionFunc 是能够将条件具体求值为布尔值或错误的函数。
 // 返回错误表示条件无法判定，调用方应据此 fail closed。
 type EvaluateConditionFunc func(ctx context.Context, condition Condition, data ConditionsData) (bool, error)
 
-// MaybeEvaluateConditionFunc allows potentially evaluating a condition, returning Unevaluatable if a truth value or error cannot be assigned.
+// MaybeEvaluateConditionFunc 用于尝试评估条件：当既无法给出真值也无法
+// 给出错误时，返回 Unevaluatable。
 type MaybeEvaluateConditionFunc func(ctx context.Context, condition Condition, data ConditionsData) ConditionEvaluationResult
 
-// AdmissionOperation represents the admission operation,
-// for example CREATE, UPDATE, DELETE. The constants are
-// defined in k8s.io/apiserver/pkg/admission, but the
-// type is defined here, because this package is more generic
-// than the admission package (thus avoiding import cycles)
+// AdmissionOperation 表示准入操作，例如 CREATE、UPDATE、DELETE。相关
+// 常量定义在 k8s.io/apiserver/pkg/admission 中，但类型定义在此处，
+// 因为本包比 admission 包更通用（从而避免循环导入）。
 type AdmissionOperation string
 
-// ConditionsData represents the data available for conditions
-// to evaluate against. This is by design a subset of admission.Attributes.
+// ConditionsData 表示可供条件求值的数据，按设计它是 admission.Attributes
+// 的子集。
 //
 // 之所以是子集：授权层不应依赖 admission 包（会形成循环），同时限制
 // 条件能看到的输入，降低信息泄露面。
 type ConditionsData interface {
-	// GetName returns the name of the object as presented in the request. On a CREATE operation, the client
-	// may omit name and rely on the server to generate the name. If that is the case, this method will return
-	// the empty string
+	// GetName 返回请求中给出的对象名称。在 CREATE 操作中，客户端可以省略
+	// 名称、依赖服务端生成名称；若如此，此方法将返回空字符串。
 	GetName() string
-	// GetNamespace is the namespace associated with the request (if any)
+	// GetNamespace 返回与请求关联的命名空间（如有）。
 	GetNamespace() string
-	// GetResource is the name of the resource being requested. This is not the kind. For example: pods
+	// GetResource 返回所请求资源的名称，不是 kind。例如：pods。
 	GetResource() schema.GroupVersionResource
-	// GetSubresource is the name of the subresource being requested. This is a different resource, scoped to the parent resource, but it may have a different kind.
-	// For instance, /pods has the resource "pods" and the kind "Pod", while /pods/foo/status has the resource "pods", the sub resource "status", and the kind "Pod"
-	// (because status operates on pods). The binding resource for a pod though may be /pods/foo/binding, which has resource "pods", subresource "binding", and kind "Binding".
+	// GetSubresource 返回所请求子资源的名称。子资源是独立于父资源作用域
+	// 内的另一种资源，且可能具有不同的 kind。例如 /pods 的资源为 "pods"、
+	// kind 为 "Pod"；/pods/foo/status 的资源为 "pods"、子资源为 "status"、
+	// kind 为 "Pod"（因为 status 作用于 pod）。而 pod 的 binding 资源位于
+	// /pods/foo/binding，其资源为 "pods"、子资源为 "binding"、
+	// kind 为 "Binding"。
 	GetSubresource() string
-	// GetOperation is the operation being performed
+	// GetOperation 返回正在执行的操作。
 	GetOperation() AdmissionOperation
-	// GetOperationOptions is the options for the operation being performed
+	// GetOperationOptions 返回当前操作的操作选项。
 	GetOperationOptions() runtime.Object
-	// IsDryRun indicates that modifications will definitely not be persisted for this request. This is to prevent
-	// admission controllers with side effects and a method of reconciliation from being overwhelmed.
-	// However, a value of false for this does not mean that the modification will be persisted, because it
-	// could still be rejected by a subsequent validation step.
+	// IsDryRun 表示本次请求的修改绝对不会被持久化。这是为了防止带有副作用
+	// 且依赖调谐机制的准入控制器被压垮。但取值为 false 并不意味着修改一定会
+	// 被持久化，因为后续校验步骤仍可能拒绝该请求。
 	IsDryRun() bool
-	// GetObject is the object from the incoming request. Only populated for CREATE and UPDATE requests.
+	// GetObject 返回来自入站请求的对象，仅在 CREATE 和 UPDATE 请求中有值。
 	GetObject() runtime.Object
-	// GetOldObject is the existing object in storage. Only populated for UPDATE and DELETE requests.
+	// GetOldObject 返回存储中已存在的对象，仅在 UPDATE 和 DELETE 请求中有值。
 	GetOldObject() runtime.Object
-	// GetKind is the type of object being manipulated. For example: Pod
+	// GetKind 返回被操作对象的类型，例如：Pod。
 	GetKind() schema.GroupVersionKind
-	// GetUserInfo is information about the requesting user
+	// GetUserInfo 返回发起请求的用户的信息。
 	GetUserInfo() user.Info
 }
