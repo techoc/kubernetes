@@ -52,17 +52,15 @@ const (
 	// OrderedReadyPodManagement 在扩容时按严格递增顺序创建 Pod，在缩容时按严格递减顺序删除，
 	// 且仅在前一个 Pod 就绪或终止后才继续。任意时刻最多只变更一个 Pod。
 	OrderedReadyPodManagement PodManagementPolicyType = "OrderedReady"
-	// ParallelPodManagement will create and delete pods as soon as the stateful set
-	// replica count is changed, and will not wait for pods to be ready or complete
-	// termination.
+	// ParallelPodManagement 会在 StatefulSet 副本数变更时立即创建和删除 Pod，
+	// 不会等待 Pod 就绪或完成终止。
 	ParallelPodManagement PodManagementPolicyType = "Parallel"
 )
 
-// StatefulSetUpdateStrategy indicates the strategy that the StatefulSet
-// controller will use to perform updates. It includes any additional parameters
-// necessary to perform the update for the indicated strategy.
+// StatefulSetUpdateStrategy 表示 StatefulSet 控制器执行更新时所采用的
+// 策略，包含按指定策略执行更新所需的附加参数。
 type StatefulSetUpdateStrategy struct {
-	// Type indicates the type of the StatefulSetUpdateStrategy.
+	// Type 表示 StatefulSetUpdateStrategy 的类型。
 	Type StatefulSetUpdateStrategyType
 	// 当 Type 为 RollingUpdateStatefulSetStrategyType 时，用 RollingUpdate 传递相关参数。
 	RollingUpdate *RollingUpdateStatefulSetStrategy
@@ -110,9 +108,8 @@ type RollingUpdateStatefulSetStrategy struct {
 	MaxUnavailable *intstr.IntOrString
 }
 
-// PersistentVolumeClaimRetentionPolicyType is a string enumeration of the policies that will determine
-// when volumes from the VolumeClaimTemplates will be deleted when the controlling StatefulSet is
-// deleted or scaled down.
+// PersistentVolumeClaimRetentionPolicyType 是一个字符串枚举，用于决定当所属
+// StatefulSet 被删除或缩容时，VolumeClaimTemplates 中的卷何时被删除。
 type PersistentVolumeClaimRetentionPolicyType string
 
 const (
@@ -129,21 +126,17 @@ const (
 // StatefulSetPersistentVolumeClaimRetentionPolicy 描述由
 // StatefulSet VolumeClaimTemplates 创建的 PVC 使用的保留策略。
 type StatefulSetPersistentVolumeClaimRetentionPolicy struct {
-	// WhenDeleted specifies what happens to PVCs created from StatefulSet
-	// VolumeClaimTemplates when the StatefulSet is deleted. The default policy
-	// of `Retain` causes PVCs to not be affected by StatefulSet deletion. The
-	// `Delete` policy causes those PVCs to be deleted.
+	// WhenDeleted 指定当 StatefulSet 被删除时，由其 VolumeClaimTemplates
+	// 创建的 PVC 如何处理。默认的 `Retain` 策略使 PVC 不受 StatefulSet 删除
+	// 的影响。`Delete` 策略会导致这些 PVC 被删除。
 	WhenDeleted PersistentVolumeClaimRetentionPolicyType
-	// WhenScaled specifies what happens to PVCs created from StatefulSet
-	// VolumeClaimTemplates when the StatefulSet is scaled down. The default
-	// policy of `Retain` causes PVCs to not be affected by a scaledown. The
-	// `Delete` policy causes the associated PVCs for any excess pods above
-	// the replica count to be deleted.
+	// WhenScaled 指定当 StatefulSet 缩容时，由其 VolumeClaimTemplates
+	// 创建的 PVC 如何处理。默认的 `Retain` 策略使 PVC 不受缩容的影响。
+	// `Delete` 策略会导致超出副本数的多余 Pod 所关联的 PVC 被删除。
 	WhenScaled PersistentVolumeClaimRetentionPolicyType
 }
 
-// StatefulSetOrdinals describes the policy used for replica ordinal assignment
-// in this StatefulSet.
+// StatefulSetOrdinals 描述本 StatefulSet 中副本序号分配所采用的策略。
 type StatefulSetOrdinals struct {
 	// start 表示第一个副本的起始序号。可用于从其他序号（例如从 1 开始）为副本编号，
 	// 以替代默认的从 0 开始命名，也可用于协调副本从一个 StatefulSet 逐步迁移到另一个。
@@ -178,32 +171,27 @@ type StatefulSetSpec struct {
 	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	Template api.PodTemplateSpec
 
-	// VolumeClaimTemplates is a list of claims that pods are allowed to reference.
-	// The StatefulSet controller is responsible for mapping network identities to
-	// claims in a way that maintains the identity of a pod. Every claim in
-	// this list must have at least one matching (by name) volumeMount in one
-	// container in the template. A claim in this list takes precedence over
-	// any volumes in the template, with the same name.
-	// TODO: Define the behavior if a claim already exists with the same name.
+	// VolumeClaimTemplates 是 Pod 可以引用的声明（claim）列表。
+	// StatefulSet 控制器负责将网络身份映射到声明，且映射方式保持 Pod 的身份不变。
+	// 该列表中的每个声明都必须在模板的某个容器中至少有一个按名称匹配的
+	// volumeMount。列表中的声明优先于模板中同名的卷。
+	// TODO: 定义已存在同名声明时的行为。
 	// +optional
 	VolumeClaimTemplates []api.PersistentVolumeClaim
 
-	// ServiceName is the name of the service that governs this StatefulSet.
-	// This service must exist before the StatefulSet, and is responsible for
-	// the network identity of the set. Pods get DNS/hostnames that follow the
-	// pattern: pod-specific-string.serviceName.default.svc.cluster.local
-	// where "pod-specific-string" is managed by the StatefulSet controller.
+	// ServiceName 是管理该 StatefulSet 的 Service 名称。
+	// 该 Service 必须在 StatefulSet 之前存在，并负责该集合的网络身份。
+	// Pod 获得的 DNS/主机名遵循如下模式：
+	// pod-specific-string.serviceName.default.svc.cluster.local，
+	// 其中 "pod-specific-string" 由 StatefulSet 控制器管理。
 	// +optional
 	ServiceName string
 
-	// PodManagementPolicy controls how pods are created during initial scale up,
-	// when replacing pods on nodes, or when scaling down. The default policy is
-	// `OrderedReady`, where pods are created in increasing order (pod-0, then
-	// pod-1, etc) and the controller will wait until each pod is ready before
-	// continuing. When scaling down, the pods are removed in the opposite order.
-	// The alternative policy is `Parallel` which will create pods in parallel
-	// to match the desired scale without waiting, and on scale down will delete
-	// all pods at once.
+	// PodManagementPolicy 控制在初次扩容、替换节点上的 Pod 或缩容时如何创建 Pod。
+	// 默认策略是 `OrderedReady`：Pod 按序号递增顺序创建（先 pod-0，再 pod-1，依此类推），
+	// 控制器会等待每个 Pod 就绪后才继续。缩容时按相反顺序删除 Pod。
+	// 另一种策略是 `Parallel`：并行创建 Pod 以尽快达到期望规模且不等待，
+	// 缩容时则一次性删除所有 Pod。
 	// +optional
 	PodManagementPolicy PodManagementPolicyType
 
@@ -222,12 +210,10 @@ type StatefulSetSpec struct {
 	// +optional
 	MinReadySeconds int32
 
-	// persistentVolumeClaimRetentionPolicy describes the lifecycle of persistent
-	// volume claims created from volumeClaimTemplates. By default, all persistent
-	// volume claims are created as needed and retained until manually deleted. This
-	// policy allows the lifecycle to be altered, for example by deleting persistent
-	// volume claims when their stateful set is deleted, or when their pod is scaled
-	// down.
+	// persistentVolumeClaimRetentionPolicy 描述由 volumeClaimTemplates 创建的
+	// 持久卷声明（PVC）的生命周期。默认情况下，所有持久卷声明按需创建，
+	// 并一直保留到手动删除。该策略允许改变此生命周期，例如在其 StatefulSet
+	// 被删除时、或其 Pod 被缩容时删除相应的持久卷声明。
 	// +optional
 	PersistentVolumeClaimRetentionPolicy *StatefulSetPersistentVolumeClaimRetentionPolicy
 
@@ -247,7 +233,7 @@ type StatefulSetStatus struct {
 	// replicas 是 StatefulSet 控制器创建的 Pod 数。
 	Replicas int32
 
-	// readyReplicas is the number of Pods created by the StatefulSet controller that have a Ready Condition.
+	// readyReplicas 是 StatefulSet 控制器创建的、处于 Ready 条件的 Pod 数。
 	ReadyReplicas int32
 
 	// currentReplicas 是 StatefulSet 控制器依据 currentRevision 所指版本
@@ -273,12 +259,12 @@ type StatefulSetStatus struct {
 	// 表示对 statefulset 当前状态的最新可用观测。
 	Conditions []StatefulSetCondition
 
-	// Total number of available pods (ready for at least minReadySeconds) targeted by this statefulset.
+	// 该 StatefulSet 面向的可用 Pod（就绪至少 minReadySeconds）总数。
 	// +optional
 	AvailableReplicas int32
 }
 
-// StatefulSetConditionType describes the condition types of StatefulSets.
+// StatefulSetConditionType 描述 StatefulSet 的条件类型。
 type StatefulSetConditionType string
 
 const (
@@ -287,7 +273,7 @@ const (
 	StatefulSetProgressing StatefulSetConditionType = "Progressing"
 )
 
-// TODO: Add valid condition types for Statefulsets.
+// TODO: 补充 Statefulset 的有效条件类型。
 
 // StatefulSetCondition 描述某个时刻 statefulset 的状态。
 type StatefulSetCondition struct {
@@ -315,12 +301,11 @@ type StatefulSetList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ControllerRevision implements an immutable snapshot of state data. Clients
-// are responsible for serializing and deserializing the objects that contain
-// their internal state.
-// Once a ControllerRevision has been successfully created, it can not be updated.
-// The API Server will fail validation of all requests that attempt to mutate
-// the Data field. ControllerRevisions may, however, be deleted.
+// ControllerRevision 实现状态数据的不可变快照。客户端负责序列化与反序列化
+// 包含其内部状态的对象。
+// ControllerRevision 一旦成功创建，就不能再更新。
+// API Server 会使所有试图修改 Data 字段的请求校验失败。
+// 不过，ControllerRevision 可以被删除。
 type ControllerRevision struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
@@ -328,7 +313,7 @@ type ControllerRevision struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Data is the Object representing the state.
+	// Data 是表示该状态的对象。
 	Data runtime.RawExtension
 
 	// revision 表示 Data 所代表状态的修订号。
@@ -343,34 +328,34 @@ type ControllerRevisionList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of ControllerRevision objects.
+	// Items 是 ControllerRevision 对象的列表。
 	Items []ControllerRevision
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Deployment provides declarative updates for Pods and ReplicaSets.
+// Deployment 为 Pod 和 ReplicaSet 提供声明式更新。
 type Deployment struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Specification of the desired behavior of the Deployment.
+	// Deployment 期望行为的规格定义。
 	// +optional
 	Spec DeploymentSpec
 
-	// Most recently observed status of the Deployment.
+	// Deployment 最近一次观测到的状态。
 	// +optional
 	Status DeploymentStatus
 }
 
-// DeploymentSpec specifies the state of a Deployment.
+// DeploymentSpec 指定 Deployment 的状态。
 type DeploymentSpec struct {
-	// Number of desired pods.
+	// 期望的 Pod 数量。
 	Replicas int32
 
-	// Label selector for pods. Existing ReplicaSets whose pods are
-	// selected by this will be the ones affected by this deployment.
+	// Pod 的标签选择器。被其选中的现有 ReplicaSet 中的 Pod
+	// 将是本次 Deployment 所影响的对象。
 	// +optional
 	Selector *metav1.LabelSelector
 
@@ -394,8 +379,7 @@ type DeploymentSpec struct {
 	// +optional
 	RevisionHistoryLimit *int32
 
-	// Indicates that the deployment is paused and will not be processed by the
-	// deployment controller.
+	// 表示 Deployment 已暂停，不会被 Deployment 控制器处理。
 	// +optional
 	Paused bool
 
@@ -404,12 +388,11 @@ type DeploymentSpec struct {
 	// +optional
 	RollbackTo *RollbackConfig
 
-	// The maximum time in seconds for a deployment to make progress before it
-	// is considered to be failed. The deployment controller will continue to
-	// process failed deployments and a condition with a ProgressDeadlineExceeded
-	// reason will be surfaced in the deployment status. Note that progress will
-	// not be estimated during the time a deployment is paused. This is set to
-	// the max value of int32 (i.e. 2147483647) by default, which means "no deadline".
+	// Deployment 在被视为失败之前能够取得进展的最长时间（秒）。
+	// Deployment 控制器会继续处理失败的 Deployment，并在 Deployment 状态中
+	// 呈现一个带 ProgressDeadlineExceeded 原因的条件。注意，在 Deployment
+	// 暂停期间不会估算进展。默认设置为 int32 最大值（即 2147483647），
+	// 表示“无截止时间”。
 	// +optional
 	ProgressDeadlineSeconds *int32
 }
@@ -420,32 +403,31 @@ type DeploymentSpec struct {
 // 已弃用。
 type DeploymentRollback struct {
 	metav1.TypeMeta
-	// Required: This must match the Name of a deployment.
+	// 必填：必须与某个 Deployment 的 Name 一致。
 	Name string
 	// 要更新到 Deployment 上的注解。
 	// +optional
 	UpdatedAnnotations map[string]string
-	// The config of this deployment rollback.
+	// 本次 Deployment 回滚的配置。
 	RollbackTo RollbackConfig
 }
 
 // RollbackConfig 描述要回滚到的某个修订版本的状态。
 // 已弃用。
 type RollbackConfig struct {
-	// The revision to rollback to. If set to 0, rollback to the last revision.
+	// 要回滚到的修订号。若设置为 0，则回滚到上一个修订。
 	// +optional
 	Revision int64
 }
 
 const (
-	// DefaultDeploymentUniqueLabelKey is the default key of the selector that is added
-	// to existing RCs (and label key that is added to its pods) to prevent the existing RCs
-	// to select new pods (and old pods being select by new RC).
+	// DefaultDeploymentUniqueLabelKey 是添加到现有 RC（以及添加到其 Pod 上的标签键）
+	// 上的选择器的默认键，用于防止现有 RC 选择新的 Pod
+	// （以及新 RC 选择旧的 Pod）。
 	DefaultDeploymentUniqueLabelKey string = "pod-template-hash"
 )
 
-// DeploymentStrategy stores information about the strategy and rolling-update
-// behavior of a deployment.
+// DeploymentStrategy 保存 Deployment 的更新策略与滚动更新行为的相关信息。
 type DeploymentStrategy struct {
 	// Deployment 的类型。可取 "Recreate" 或 "RollingUpdate"。默认为 RollingUpdate。
 	// +optional
@@ -458,18 +440,19 @@ type DeploymentStrategy struct {
 	RollingUpdate *RollingUpdateDeployment
 }
 
-// DeploymentStrategyType defines strategies with a deployment.
+// DeploymentStrategyType 定义 Deployment 的更新策略类型。
 type DeploymentStrategyType string
 
 const (
 	// RecreateDeploymentStrategyType 在创建新 Pod 前杀掉所有现有 Pod。
 	RecreateDeploymentStrategyType DeploymentStrategyType = "Recreate"
 
-	// RollingUpdateDeploymentStrategyType - Replace the old RCs by new one using rolling update i.e gradually scale down the old RCs and scale up the new one.
+	// RollingUpdateDeploymentStrategyType 使用滚动更新以新 RC 替换旧 RC，
+	// 即逐步缩容旧 RC 并扩容新 RC。
 	RollingUpdateDeploymentStrategyType DeploymentStrategyType = "RollingUpdate"
 )
 
-// RollingUpdateDeployment is the spec to control the desired behavior of rolling update.
+// RollingUpdateDeployment 是控制滚动更新期望行为的规格。
 type RollingUpdateDeployment struct {
 	// 更新期间允许不可用的 Pod 最大数量。
 	// 值可以是绝对数量（如 5）或更新开始时 Pod 总数的百分比（如 10%）。
@@ -482,21 +465,19 @@ type RollingUpdateDeployment struct {
 	// +optional
 	MaxUnavailable intstr.IntOrString
 
-	// The maximum number of pods that can be scheduled above the original number of
-	// pods.
-	// Value can be an absolute number (ex: 5) or a percentage of total pods at
-	// the start of the update (ex: 10%). This can not be 0 if MaxUnavailable is 0.
-	// Absolute number is calculated from percentage by rounding up.
-	// By default, a value of 1 is used.
-	// Example: when this is set to 30%, the new RC can be scaled up by 30%
-	// immediately when the rolling update starts. Once old pods have been killed,
-	// new RC can be scaled up further, ensuring that total number of pods running
-	// at any time during the update is at most 130% of original pods.
+	// 可以调度到超出原始 Pod 数量的最大 Pod 数。
+	// 值可以是绝对数量（如 5）或更新开始时 Pod 总数的百分比（如 10%）。
+	// 若 MaxUnavailable 为 0，则此值不能为 0。
+	// 绝对数量由百分比向上取整计算得出。
+	// 默认使用固定值 1。
+	// 示例：设为 30% 时，滚动更新一开始，新 RC 就可以立即扩容 30%。
+	// 一旦旧 Pod 被杀掉，新 RC 可进一步扩容，
+	// 确保更新期间任意时刻运行的 Pod 总数最多为原始 Pod 数的 130%。
 	// +optional
 	MaxSurge intstr.IntOrString
 }
 
-// DeploymentStatus holds information about the observed status of a deployment.
+// DeploymentStatus 保存 Deployment 观测状态的相关信息。
 type DeploymentStatus struct {
 	// 部署控制器观测到的 generation。
 	// +optional
@@ -539,17 +520,17 @@ type DeploymentStatus struct {
 	CollisionCount *int32
 }
 
-// DeploymentConditionType defines conditions of a deployment.
+// DeploymentConditionType 定义 Deployment 的条件类型。
 type DeploymentConditionType string
 
 // 以下是 deployment 的有效条件。
 const (
 	// Available 表示 Deployment 可用，即至少所需的最小可用副本数已运行至少 minReadySeconds。
 	DeploymentAvailable DeploymentConditionType = "Available"
-	// Progressing means the deployment is progressing. Progress for a deployment is
-	// considered when a new replica set is created or adopted, and when new pods scale
-	// up or old pods scale down. Progress is not estimated for paused deployments or
-	// when progressDeadlineSeconds is not specified.
+	// Progressing 表示 Deployment 正在推进。当创建或收养新的 ReplicaSet、
+	// 扩容新 Pod 或缩容旧 Pod 时，视为 Deployment 取得了进展。
+	// 对于暂停的 Deployment，或未指定 progressDeadlineSeconds 时，
+	// 不估算进展。
 	DeploymentProgressing DeploymentConditionType = "Progressing"
 	// ReplicaFailure 在 Deployment 的某个 Pod 创建或删除失败时添加。
 	DeploymentReplicaFailure DeploymentConditionType = "ReplicaFailure"
@@ -573,7 +554,7 @@ type DeploymentCondition struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DeploymentList defines multiple deployments.
+// DeploymentList 定义多个 Deployment。
 type DeploymentList struct {
 	metav1.TypeMeta
 	// +optional
@@ -583,9 +564,9 @@ type DeploymentList struct {
 	Items []Deployment
 }
 
-// DaemonSetUpdateStrategy defines a strategy to update a daemon set.
+// DaemonSetUpdateStrategy 定义 DaemonSet 的更新策略。
 type DaemonSetUpdateStrategy struct {
-	// Type of daemon set update. Can be "RollingUpdate" or "OnDelete".
+	// DaemonSet 更新的类型。可取 "RollingUpdate" 或 "OnDelete"。
 	// +optional
 	Type DaemonSetUpdateStrategyType
 
@@ -598,19 +579,19 @@ type DaemonSetUpdateStrategy struct {
 	RollingUpdate *RollingUpdateDaemonSet
 }
 
-// DaemonSetUpdateStrategyType is a strategy according to which a daemon set
-// gets updated.
+// DaemonSetUpdateStrategyType 是 DaemonSet 更新所采用的策略类型。
 type DaemonSetUpdateStrategyType string
 
 const (
-	// RollingUpdateDaemonSetStrategyType - Replace the old daemons by new ones using rolling update i.e replace them on each node one after the other.
+	// RollingUpdateDaemonSetStrategyType 使用滚动更新以新 daemon 替换旧 daemon，
+	// 即在每个节点上逐一替换。
 	RollingUpdateDaemonSetStrategyType DaemonSetUpdateStrategyType = "RollingUpdate"
 
 	// OnDeleteDaemonSetStrategyType 仅在旧 daemon 被杀掉后才替换它。
 	OnDeleteDaemonSetStrategyType DaemonSetUpdateStrategyType = "OnDelete"
 )
 
-// RollingUpdateDaemonSet is the spec to control the desired behavior of daemon set rolling update.
+// RollingUpdateDaemonSet 是控制 DaemonSet 滚动更新期望行为的规格。
 type RollingUpdateDaemonSet struct {
 	// 更新期间允许不可用的 DaemonSet Pod 最大数量。
 	// 值可以是绝对数量（如 5）或更新开始时 DaemonSet Pod 总数的百分比（如 10%）。
@@ -659,7 +640,7 @@ type DaemonSetSpec struct {
 	// 更多信息参见: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template
 	Template api.PodTemplateSpec
 
-	// An update strategy to replace existing DaemonSet pods with new pods.
+	// 用新 Pod 替换现有 DaemonSet Pod 的更新策略。
 	// +optional
 	UpdateStrategy DaemonSetUpdateStrategy
 
@@ -691,8 +672,7 @@ type DaemonSetStatus struct {
 	// 本应运行 daemon Pod 的节点总数（包括正确运行 daemon Pod 的节点）。
 	DesiredNumberScheduled int32
 
-	// The number of nodes that should be running the daemon pod and have one
-	// or more of the daemon pod running and ready.
+	// 应当运行 daemon Pod 且有一个或多个 daemon Pod 正在运行并就绪的节点数。
 	NumberReady int32
 
 	// daemon set 控制器最近观察到的 generation。
@@ -722,7 +702,7 @@ type DaemonSetStatus struct {
 	Conditions []DaemonSetCondition
 }
 
-// DaemonSetConditionType defines a daemon set condition.
+// DaemonSetConditionType 定义 DaemonSet 的条件类型。
 type DaemonSetConditionType string
 
 // TODO: 补充 DaemonSet 的有效条件类型。
@@ -765,10 +745,9 @@ type DaemonSet struct {
 }
 
 const (
-	// DaemonSetTemplateGenerationKey is the key of the labels that is added
-	// to daemon set pods to distinguish between old and new pod templates
-	// during DaemonSet template update.
-	// DEPRECATED: DefaultDaemonSetUniqueLabelKey is used instead.
+	// DaemonSetTemplateGenerationKey 是在 DaemonSet 模板更新期间，
+	// 添加到 daemon set Pod 上用于区分新旧 Pod 模板的标签键。
+	// DEPRECATED: 请改用 DefaultDaemonSetUniqueLabelKey。
 	DaemonSetTemplateGenerationKey string = "pod-template-generation"
 )
 
@@ -818,7 +797,7 @@ type ReplicaSetList struct {
 // ReplicaSetSpec 是 ReplicaSet 的 spec。
 // 作为 ReplicaSet 的内部表示，必须设置 Template。
 type ReplicaSetSpec struct {
-	// Replicas is the number of desired replicas.
+	// Replicas 是期望的副本数量。
 	Replicas int32
 
 	// 新建 Pod 必须保持 Ready 状态的最短秒数。
@@ -874,7 +853,7 @@ type ReplicaSetStatus struct {
 	Conditions []ReplicaSetCondition
 }
 
-// ReplicaSetConditionType is a condition of a replica set.
+// ReplicaSetConditionType 是 replica set 的条件类型。
 type ReplicaSetConditionType string
 
 // 以下是 replica set 的有效条件。
@@ -891,7 +870,7 @@ type ReplicaSetCondition struct {
 	Type ReplicaSetConditionType
 	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus
-	// The last time the condition transitioned from one status to another.
+	// 该条件最近一次从一种状态变为另一种状态的时间。
 	// +optional
 	LastTransitionTime metav1.Time
 	// 条件最近一次状态变化的原因。

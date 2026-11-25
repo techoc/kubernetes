@@ -46,9 +46,8 @@ import (
 // 设置该上限是为了限制 .status.completedIndexes 的长度，避免 status 体积失控。
 const maxParallelismForIndexedJob = 100000
 
-// maxFailedIndexesForIndexedJob is the maximum number of failed indexes that
-// an Indexed Job is allowed to have. This threshold allows to cap the length of
-// .status.completedIndexes and .status.failedIndexes.
+// maxFailedIndexesForIndexedJob 是 Indexed Job 允许的最大失败索引数。
+// 该阈值用于限制 .status.completedIndexes 和 .status.failedIndexes 的长度。
 const maxFailedIndexesForIndexedJob = 100_000
 
 const (
@@ -56,21 +55,21 @@ const (
 	parallelismLimitForHighCompletions      = 10_000
 	maxFailedIndexesLimitForHighCompletions = 10_000
 
-	// maximum number of rules in pod failure policy
+	// pod failure policy 中规则的最大数量
 	maxPodFailurePolicyRules = 20
 
-	// maximum number of values for a OnExitCodes requirement in pod failure policy
+	// pod failure policy 中 OnExitCodes 需求项里值的最大数量
 	maxPodFailurePolicyOnExitCodesValues = 255
 
-	// maximum number of patterns for a OnPodConditions requirement in pod failure policy
+	// pod failure policy 中 OnPodConditions 需求项里模式的最大数量
 	maxPodFailurePolicyOnPodConditionsPatterns = 20
 
-	// maximum length of the value of the managedBy field
+	// managedBy 字段值的最大长度
 	maxManagedByLength = 63
 
-	// maximum length of succeededIndexes in JobSuccessPolicy.
+	// JobSuccessPolicy 中 succeededIndexes 的最大长度。
 	maxJobSuccessPolicySucceededIndexesLimit = 64 * 1024
-	// maximum number of rules in successPolicy.
+	// successPolicy 中规则的最大数量。
 	maxSuccessPolicyRule = 20
 )
 
@@ -95,11 +94,11 @@ var (
 		batch.TerminatingOrFailed)
 )
 
-// validateGeneratedSelector validates that the generated selector on a controller object match the controller object
-// metadata, and the labels on the pod template are as generated.
+// validateGeneratedSelector 校验控制器对象上自动生成的选择器与控制器对象的
+// 元数据相匹配，且 Pod 模板上的标签与生成的标签一致。
 //
-// TODO: generalize for other controller objects that will follow the same pattern, such as ReplicaSet and DaemonSet, and
-// move to new location.  Replace batch.Job with an interface.
+// TODO: 将其泛化以支持其他遵循相同模式的控制器对象（如 ReplicaSet 和 DaemonSet），
+// 并迁移到新的位置。将 batch.Job 替换为一个接口。
 func validateGeneratedSelector(obj *batch.Job, validateBatchLabels bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if obj.Spec.ManualSelector != nil && *obj.Spec.ManualSelector {
@@ -107,24 +106,21 @@ func validateGeneratedSelector(obj *batch.Job, validateBatchLabels bool) field.E
 	}
 
 	if obj.Spec.Selector == nil {
-		return allErrs // This case should already have been checked in caller.  No need for more errors.
+		return allErrs // 该情形调用方本应已经检查过，无需再叠加错误。
 	}
 
-	// If somehow uid was unset then we would get "controller-uid=" as the selector
-	// which is bad.
+	// 如果 uid 意外未设置，选择器会变成 "controller-uid="，
+	// 这是不可接受的。
 	if obj.ObjectMeta.UID == "" {
 		allErrs = append(allErrs, field.Required(field.NewPath("metadata").Child("uid"), ""))
 	}
 
-	// If selector generation was requested, then expected labels must be
-	// present on pod template, and must match job's uid and name.  The
-	// generated (not-manual) selectors/labels ensure no overlap with other
-	// controllers.  The manual mode allows orphaning, adoption,
-	// backward-compatibility, and experimentation with new
-	// labeling/selection schemes.  Automatic selector generation should
-	// have placed certain labels on the pod, but this could have failed if
-	// the user added conflicting labels.  Validate that the expected
-	// generated ones are there.
+	// 如果请求了选择器自动生成，则 Pod 模板上必须存在预期的标签，
+	// 且必须与 Job 的 uid 和名称匹配。自动生成（非手动）的选择器/标签
+	// 可确保与其他控制器互不重叠。手动模式则允许 Pod 成为孤儿、被收养、
+	// 保持向后兼容，并允许试验新的标签/选择方案。
+	// 自动选择器生成本应在 Pod 上放置某些标签，但如果用户添加了
+	// 冲突的标签，这一步可能失败。此处校验预期生成的标签确实存在。
 	allErrs = append(allErrs, apivalidation.ValidateHasLabel(obj.Spec.Template.ObjectMeta, field.NewPath("spec").Child("template").Child("metadata"), batch.LegacyControllerUidLabel, string(obj.UID))...)
 	allErrs = append(allErrs, apivalidation.ValidateHasLabel(obj.Spec.Template.ObjectMeta, field.NewPath("spec").Child("template").Child("metadata"), batch.LegacyJobNameLabel, string(obj.Name))...)
 	expectedLabels := make(map[string]string)
@@ -134,12 +130,12 @@ func validateGeneratedSelector(obj *batch.Job, validateBatchLabels bool) field.E
 		expectedLabels[batch.ControllerUidLabel] = string(obj.UID)
 		expectedLabels[batch.JobNameLabel] = string(obj.Name)
 	}
-	// Labels created by the Kubernetes project should have a Kubernetes prefix.
-	// These labels are set due to legacy reasons.
+	// Kubernetes 项目创建的标签应带有 Kubernetes 前缀。
+	// 这些标签因历史遗留原因而被设置。
 
 	expectedLabels[batch.LegacyControllerUidLabel] = string(obj.UID)
 	expectedLabels[batch.LegacyJobNameLabel] = string(obj.Name)
-	// Whether manually or automatically generated, the selector of the job must match the pods it will produce.
+	// 无论是手动指定还是自动生成，Job 的选择器都必须与其将产生的 Pod 匹配。
 	if selector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector); err == nil {
 		if !selector.Matches(labels.Set(expectedLabels)) {
 			allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("selector"), obj.Spec.Selector, "`selector` not auto-generated"))
@@ -149,9 +145,9 @@ func validateGeneratedSelector(obj *batch.Job, validateBatchLabels bool) field.E
 	return allErrs
 }
 
-// ValidateJobCreate validates a Job and returns an ErrorList with any errors.
+// ValidateJobCreate 校验 Job，并返回包含所有错误的 ErrorList。
 func ValidateJobCreate(job *batch.Job, opts JobValidationOptions) field.ErrorList {
-	// Jobs and rcs have the same name validation
+	// Job 和 RC 使用相同的名称校验规则
 	allErrs := apivalidation.ValidateObjectMeta(&job.ObjectMeta, true, apimachineryapivalidation.NameIsDNSSubdomain, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateGeneratedSelector(job, opts.RequirePrefixedLabels)...)
 	allErrs = append(allErrs, ValidateJobSpec(&job.Spec, nil, field.NewPath("spec"), opts.PodValidationOptions)...)
@@ -161,10 +157,10 @@ func ValidateJobCreate(job *batch.Job, opts JobValidationOptions) field.ErrorLis
 func validateNameAllowsCompletions(job *batch.Job, opts JobValidationOptions) field.ErrorList {
 	var allErrs field.ErrorList
 	if job.Spec.CompletionMode != nil && *job.Spec.CompletionMode == batch.IndexedCompletion && job.Spec.Completions != nil && *job.Spec.Completions > 0 {
-		// For indexed job, the job controller appends a suffix (`-$INDEX`)
-		// to the pod hostname when indexed job create pods.
-		// The index could be maximum `.spec.completions-1`
-		// If we don't validate this here, the indexed job will fail to create pods later.
+		// 对于 Indexed Job，Job 控制器在创建 Pod 时会在 Pod 主机名后
+		// 追加一个后缀（`-$INDEX`）。
+		// 该索引最大为 `.spec.completions-1`。
+		// 如果此处不校验，Indexed Job 稍后将无法创建 Pod。
 		maximumPodHostname := fmt.Sprintf("%s-%d", job.ObjectMeta.Name, *job.Spec.Completions-1)
 		if errs := apimachineryvalidation.IsDNS1123Label(maximumPodHostname); len(errs) > 0 {
 			allErrs = append(allErrs, field.Invalid(field.NewPath("metadata").Child("name"), job.ObjectMeta.Name, fmt.Sprintf("will not able to create pod with invalid DNS label: %s", maximumPodHostname)))
@@ -173,8 +169,8 @@ func validateNameAllowsCompletions(job *batch.Job, opts JobValidationOptions) fi
 	return allErrs
 }
 
-// ValidateJobSpec validates a JobSpec and returns an ErrorList with any errors.
-// oldSpec is nil on create, non-nil on update.
+// ValidateJobSpec 校验 JobSpec，并返回包含所有错误的 ErrorList。
+// oldSpec 在创建时为 nil，在更新时非 nil。
 func ValidateJobSpec(spec, oldSpec *batch.JobSpec, fldPath *field.Path, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := validateJobSpec(spec, oldSpec, fldPath, opts)
 	if spec.Selector == nil {
@@ -186,7 +182,7 @@ func ValidateJobSpec(spec, oldSpec *batch.JobSpec, fldPath *field.Path, opts api
 		allErrs = append(allErrs, unversionedvalidation.ValidateLabelSelector(spec.Selector, labelSelectorValidationOpts, fldPath.Child("selector"))...)
 	}
 
-	// Whether manually or automatically generated, the selector of the job must match the pods it will produce.
+	// 无论是手动指定还是自动生成，Job 的选择器都必须与其将产生的 Pod 匹配。
 	if selector, err := metav1.LabelSelectorAsSelector(spec.Selector); err == nil {
 		labels := labels.Set(spec.Template.Labels)
 		if !selector.Matches(labels) {
@@ -196,7 +192,7 @@ func ValidateJobSpec(spec, oldSpec *batch.JobSpec, fldPath *field.Path, opts api
 	return allErrs
 }
 
-// oldSpec is nil on create, non-nil on update.
+// oldSpec 在创建时为 nil，在更新时非 nil。
 func validateJobSpec(spec, oldSpec *batch.JobSpec, fldPath *field.Path, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -282,22 +278,22 @@ func validateJobSpec(spec, oldSpec *batch.JobSpec, fldPath *field.Path, opts api
 
 	allErrs = append(allErrs, validatePodReplacementPolicy(spec, fldPath.Child("podReplacementPolicy"))...)
 
-	// The scheduling gang minCount must not exceed parallelism. This runs on both
-	// create and update, and for Jobs embedded in a CronJob jobTemplate. It is a
-	// no-op when spec.scheduling is unset.
+	// 调度 gang 的 minCount 不得超过 parallelism。该校验在创建和更新时都会执行，
+	// 也适用于嵌入 CronJob jobTemplate 中的 Job。
+	// 当 spec.scheduling 未设置时，此校验为空操作。
 	allErrs = append(allErrs, validateGangMinCount(spec, fldPath.Child("scheduling"))...)
 
-	// Controller-policy checks that declarative validation cannot express:
-	// the resolved scheduling policy and disruption mode must be in the Job's
-	// allow-lists, and the Basic policy cannot be combined with All disruption.
-	// Structural building-block constraints are enforced by DV.
+	// 声明式校验无法表达的控制器策略检查：
+	// 解析出的调度策略和中断模式必须在 Job 的允许列表内，
+	// 且 Basic 策略不能与 All 中断模式组合使用。
+	// 结构性的构建块约束由 DV 负责强制执行。
 	allErrs = append(allErrs, validateJobScheduling(spec, oldSpec, fldPath.Child("scheduling"))...)
 
 	allErrs = append(allErrs, apivalidation.ValidatePodTemplateSpec(&spec.Template, fldPath.Child("template"), opts)...)
 
-	// spec.Template.Spec.RestartPolicy can be defaulted as RestartPolicyAlways
-	// by SetDefaults_PodSpec function when the user does not explicitly specify a value for it,
-	// so we check both empty and RestartPolicyAlways cases here
+	// 当用户未显式指定 spec.Template.Spec.RestartPolicy 时，
+	// SetDefaults_PodSpec 函数可能将其默认设置为 RestartPolicyAlways，
+	// 因此这里要同时检查空值和 RestartPolicyAlways 两种情形
 	if spec.Template.Spec.RestartPolicy == api.RestartPolicyAlways || spec.Template.Spec.RestartPolicy == "" {
 		allErrs = append(allErrs, field.Required(fldPath.Child("template", "spec", "restartPolicy"),
 			fmt.Sprintf("valid values: %q, %q", api.RestartPolicyOnFailure, api.RestartPolicyNever)))
@@ -333,12 +329,12 @@ func validatePodFailurePolicy(spec *batch.JobSpec, fldPath *field.Path) field.Er
 func validatePodReplacementPolicy(spec *batch.JobSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if spec.PodReplacementPolicy != nil {
-		// If PodFailurePolicy is specified then we only allow Failed.
+		// 如果指定了 PodFailurePolicy，则仅允许 Failed。
 		if spec.PodFailurePolicy != nil {
 			if *spec.PodReplacementPolicy != batch.Failed {
 				allErrs = append(allErrs, field.NotSupported(fldPath, *spec.PodReplacementPolicy, []batch.PodReplacementPolicy{batch.Failed}))
 			}
-			// If PodFailurePolicy not specified we allow values in supportedPodReplacementPolicy.
+			// 如果未指定 PodFailurePolicy，则允许 supportedPodReplacementPolicy 中的取值。
 		} else if !supportedPodReplacementPolicy.Has(*spec.PodReplacementPolicy) {
 			allErrs = append(allErrs, field.NotSupported(fldPath, *spec.PodReplacementPolicy, sets.List(supportedPodReplacementPolicy)))
 		}
@@ -475,7 +471,7 @@ func validateSuccessPolicyRule(spec *batch.JobSpec, rule *batch.SuccessPolicyRul
 	return allErrs
 }
 
-// validateJobStatus validates a JobStatus and returns an ErrorList with any errors.
+// validateJobStatus 校验 JobStatus，并返回包含所有错误的 ErrorList。
 func validateJobStatus(job *batch.Job, fldPath *field.Path, opts JobStatusValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	status := job.Status
@@ -584,8 +580,8 @@ func validateJobStatus(job *batch.Job, fldPath *field.Path, opts JobStatusValida
 		}
 	}
 	if opts.RejectFailedIndexesForNoBackoffLimitPerIndex {
-		// Note that this check also verifies that FailedIndexes are not used for
-		// regular (non-indexed) jobs, because regular jobs have backoffLimitPerIndex = nil.
+		// 注意，此检查同时确保 FailedIndexes 不会用于普通（非 indexed）Job，
+		// 因为普通 Job 的 backoffLimitPerIndex = nil。
 		if job.Spec.BackoffLimitPerIndex == nil && status.FailedIndexes != nil {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("failedIndexes"), *status.FailedIndexes, "cannot set non-null failedIndexes when backoffLimitPerIndex is null"))
 		}
@@ -619,7 +615,7 @@ func validateJobStatus(job *batch.Job, fldPath *field.Path, opts JobStatusValida
 	return allErrs
 }
 
-// ValidateJobUpdate validates an update to a Job and returns an ErrorList with any errors.
+// ValidateJobUpdate 校验对 Job 的更新，并返回包含所有错误的 ErrorList。
 func ValidateJobUpdate(job, oldJob *batch.Job, opts JobValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&job.ObjectMeta, &oldJob.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateJobSpecUpdate(job.Spec, oldJob.Spec, field.NewPath("spec"), opts)...)
@@ -627,14 +623,14 @@ func ValidateJobUpdate(job, oldJob *batch.Job, opts JobValidationOptions) field.
 	return allErrs
 }
 
-// ValidateJobUpdateStatus validates an update to the status of a Job and returns an ErrorList with any errors.
+// ValidateJobUpdateStatus 校验对 Job 状态的更新，并返回包含所有错误的 ErrorList。
 func ValidateJobUpdateStatus(job, oldJob *batch.Job, opts JobStatusValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&job.ObjectMeta, &oldJob.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateJobStatusUpdate(job, oldJob, opts)...)
 	return allErrs
 }
 
-// ValidateJobSpecUpdate validates an update to a JobSpec and returns an ErrorList with any errors.
+// ValidateJobSpecUpdate 校验对 JobSpec 的更新，并返回包含所有错误的 ErrorList。
 func ValidateJobSpecUpdate(spec, oldSpec batch.JobSpec, fldPath *field.Path, opts JobValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateJobSpec(&spec, &oldSpec, fldPath, opts.PodValidationOptions)...)
@@ -650,8 +646,8 @@ func ValidateJobSpecUpdate(spec, oldSpec batch.JobSpec, fldPath *field.Path, opt
 	return allErrs
 }
 
-// gangMinCountExceedsParallelism reports whether spec sets an explicit gang
-// minCount greater than parallelism.
+// gangMinCountExceedsParallelism 判断 spec 是否设置了显式的 gang minCount
+// 且其值大于 parallelism。
 func gangMinCountExceedsParallelism(spec *batch.JobSpec) bool {
 	if spec == nil || spec.Scheduling == nil ||
 		spec.Scheduling.SchedulingPolicy == nil ||
@@ -669,7 +665,7 @@ func gangMinCountExceedsParallelism(spec *batch.JobSpec) bool {
 	return *minCount > parallelism
 }
 
-// validateGangMinCount rejects a gang minCount that exceeds the Job's parallelism.
+// validateGangMinCount 拒绝超过 Job parallelism 的 gang minCount。
 func validateGangMinCount(spec *batch.JobSpec, fldPath *field.Path) field.ErrorList {
 	if !gangMinCountExceedsParallelism(spec) {
 		return nil
@@ -684,11 +680,11 @@ func validateGangMinCount(spec *batch.JobSpec, fldPath *field.Path) field.ErrorL
 		fmt.Sprintf("must not be greater than parallelism (%d)", parallelism))}
 }
 
-// validateJobSchedulingUpdate enforces the spec.scheduling immutability
-// constraint that declarative validation cannot express: the basic/gang policy
-// variant is frozen after creation. Only schedulingPolicy.gang.minCount may change.
-// Adding or removing the scheduling or schedulingPolicy fields themselves is handled by
-// declarative validation, so this only guards an in-place variant switch.
+// validateJobSchedulingUpdate 强制执行声明式校验无法表达的 spec.scheduling
+// 不可变约束：basic/gang 策略变体在创建后固定不变。只有
+// schedulingPolicy.gang.minCount 可以修改。
+// scheduling 或 schedulingPolicy 字段本身的新增与删除由声明式校验处理，
+// 因此这里仅防止原地切换变体。
 func validateJobSchedulingUpdate(spec, oldSpec batch.JobSpec, fldPath *field.Path) field.ErrorList {
 	if spec.Scheduling == nil || oldSpec.Scheduling == nil {
 		return nil
@@ -705,35 +701,34 @@ func validateJobSchedulingUpdate(spec, oldSpec batch.JobSpec, fldPath *field.Pat
 	return nil
 }
 
-// validateJobScheduling runs the controller-policy checks that declarative
-// validation cannot express via the shared workloadbuilder library.
-// Structural building-block constraints come from DV, so they are not
-// repeated here. It is a no-op when spec.scheduling is unset.
-// oldSpec is nil on create, non-nil on update.
+// validateJobScheduling 通过共享的 workloadbuilder 库执行声明式校验
+// 无法表达的控制器策略检查。
+// 结构性构建块约束来自 DV，因此不在此重复。
+// 当 spec.scheduling 未设置时为空操作。
+// oldSpec 在创建时为 nil，在更新时非 nil。
 func validateJobScheduling(spec, oldSpec *batch.JobSpec, fldPath *field.Path) field.ErrorList {
 	if spec.Scheduling == nil {
 		return nil
 	}
-	// Build the same logical workload tree the Job controller compiles, so
-	// validation and the controller never drift.
+	// 构建与 Job 控制器编译出的完全相同的逻辑工作负载树，
+	// 确保校验与控制器永不漂移。
 	input := jobutil.WorkloadInputForJobInternal(spec.Scheduling)
 	item := jobutil.WorkloadItemForJob("job", spec.Template.Spec.PriorityClassName, spec.Parallelism, input, fldPath)
 
 	var oldItem *workloadbuilder.WorkloadItem
 	if oldSpec != nil {
 		oldInput := jobutil.WorkloadInputForJobInternal(oldSpec.Scheduling)
-		// The old item's Path is unused: Validate reports errors at the new item's
-		// Path, so it is left nil here.
+		// 旧条目的 Path 不会被使用：Validate 会在新条目的
+		// Path 上报错，因此这里保持为 nil。
 		oldItem = jobutil.WorkloadItemForJob("job", oldSpec.Template.Spec.PriorityClassName, oldSpec.Parallelism, oldInput, nil) // +k8s:verify-mutation:reason=clone
 	}
 
 	return workloadbuilder.NewBuilder(item, workloadbuilder.BuildOptions{
 		AllowedPolicies:        []workloadbuilder.SchedulingPolicyOption{workloadbuilder.BasicPolicy, workloadbuilder.GangPolicy},
 		AllowedDisruptionModes: []workloadbuilder.DisruptionModeOption{workloadbuilder.SingleMode, workloadbuilder.AllMode},
-		// The apiserver already runs declarative validation on the versioned
-		// building blocks, so Validate here only runs the controller-policy
-		// checks against the resolved config; it neither compiles the Workload
-		// nor needs an owner.
+		// apiserver 已经对版本化的构建块运行了声明式校验，因此这里的
+		// Validate 只针对解析后的配置执行控制器策略检查；
+		// 它既不编译 Workload，也不需要 owner。
 		DisableDeclarativeValidation: true,
 	}).Validate(context.Background(), workloadbuilder.ValidationInput{OldRoot: oldItem})
 }
@@ -746,16 +741,16 @@ func validatePodTemplateUpdate(spec, oldSpec batch.JobSpec, fldPath *field.Path,
 		oldTemplate = oldSpec.Template.DeepCopy() // +k8s:verify-mutation:reason=clone
 		switch {
 		case template.Spec.Affinity == nil && oldTemplate.Spec.Affinity != nil:
-			// allow the Affinity field to be cleared if the old template had no affinity directives other than NodeAffinity
+			// 如果旧模板除 NodeAffinity 外没有其他亲和性指令，则允许清空 Affinity 字段
 			oldTemplate.Spec.Affinity.NodeAffinity = nil // +k8s:verify-mutation:reason=clone
 			if (*oldTemplate.Spec.Affinity) == (api.Affinity{}) {
 				oldTemplate.Spec.Affinity = nil // +k8s:verify-mutation:reason=clone
 			}
 		case template.Spec.Affinity != nil && oldTemplate.Spec.Affinity == nil:
-			// allow the NodeAffinity field to skip immutability checking
+			// 允许 NodeAffinity 字段跳过不可变性检查
 			oldTemplate.Spec.Affinity = &api.Affinity{NodeAffinity: template.Spec.Affinity.NodeAffinity} // +k8s:verify-mutation:reason=clone
 		case template.Spec.Affinity != nil && oldTemplate.Spec.Affinity != nil:
-			// allow the NodeAffinity field to skip immutability checking
+			// 允许 NodeAffinity 字段跳过不可变性检查
 			oldTemplate.Spec.Affinity.NodeAffinity = template.Spec.Affinity.NodeAffinity // +k8s:verify-mutation:reason=clone
 		}
 		oldTemplate.Spec.NodeSelector = template.Spec.NodeSelector       // +k8s:verify-mutation:reason=clone
@@ -766,26 +761,26 @@ func validatePodTemplateUpdate(spec, oldSpec batch.JobSpec, fldPath *field.Path,
 	}
 	suspended := oldSpec.Suspend != nil && *oldSpec.Suspend
 	if !suspended {
-		// if the job isn't suspended, then we cannot allow any mutation of the template
+		// 如果 Job 未处于挂起状态，则不允许对模板做任何修改
 		allErrs = append(allErrs, apivalidation.ValidateImmutableField(template, oldTemplate, fldPath.Child("template"))...)
 	} else {
 		if !opts.AllowMutablePodResources {
 			allErrs = append(allErrs, apivalidation.ValidateImmutableField(template, oldTemplate, fldPath.Child("template"))...)
 		} else {
-			// Only allow container resource updates when AllowMutablePodResources is true
+			// 仅当 AllowMutablePodResources 为 true 时允许更新容器资源
 			allErrs = append(allErrs, validatePodResourceUpdatesOnly(template.Spec, oldTemplate.Spec, fldPath.Child("template.spec"))...)
 		}
 	}
 	return allErrs
 }
 
-// validatePodResourceUpdatesOnly will validate that only container resources are updated.
+// validatePodResourceUpdatesOnly 校验是否仅更新了容器资源。
 func validatePodResourceUpdatesOnly(newPod api.PodSpec, oldPod api.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	// Create a deep copy of the old pod spec to modify
+	// 创建旧 Pod spec 的深拷贝以便修改
 	oldPodCopy := oldPod.DeepCopy()
-	// Update container resources in the copy to match the new pod spec
+	// 在拷贝中更新容器资源，使其与新 Pod spec 一致
 	if len(newPod.Containers) == len(oldPodCopy.Containers) {
 		for i := range newPod.Containers {
 			if oldPodCopy.Containers[i].Name == newPod.Containers[i].Name {
@@ -794,7 +789,7 @@ func validatePodResourceUpdatesOnly(newPod api.PodSpec, oldPod api.PodSpec, fldP
 		}
 	}
 
-	// Update init container resources in the copy to match the new pod spec
+	// 在拷贝中更新 init 容器资源，使其与新 Pod spec 一致
 	if len(newPod.InitContainers) == len(oldPodCopy.InitContainers) {
 		for i := range newPod.InitContainers {
 			if oldPodCopy.InitContainers[i].Name == newPod.InitContainers[i].Name {
@@ -803,14 +798,14 @@ func validatePodResourceUpdatesOnly(newPod api.PodSpec, oldPod api.PodSpec, fldP
 		}
 	}
 
-	// Validate that the modified copy is identical to the new pod spec
-	// This ensures only container resources were changed
+	// 校验修改后的拷贝与新 Pod spec 完全一致，
+	// 以确保只有容器资源发生了变化
 	allErrs = append(allErrs, apivalidation.ValidateImmutableField(newPod, *oldPodCopy, fldPath)...)
 
 	return allErrs
 }
 
-// ValidateJobStatusUpdate validates an update to a JobStatus and returns an ErrorList with any errors.
+// ValidateJobStatusUpdate 校验对 JobStatus 的更新，并返回包含所有错误的 ErrorList。
 func ValidateJobStatusUpdate(job, oldJob *batch.Job, opts JobStatusValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	statusFld := field.NewPath("status")
@@ -834,16 +829,18 @@ func ValidateJobStatusUpdate(job, oldJob *batch.Job, opts JobStatusValidationOpt
 		}
 	}
 	if opts.RejectMutatingCompletionTime {
-		// Note that we check the condition only when `job.Status.CompletionTime != nil`, this is because
-		// we don't want to block transitions to completionTime = nil when the job is not finished yet.
-		// Setting completionTime = nil for finished jobs is prevented in RejectCompleteJobWithoutCompletionTime.
+		// 注意，仅当 `job.Status.CompletionTime != nil` 时才检查该条件，
+		// 这是因为我们不想在 Job 尚未结束的情况下阻止
+		// 向 completionTime = nil 的转换。
+		// 对已结束的 Job 设置 completionTime = nil 的情形由
+		// RejectCompleteJobWithoutCompletionTime 负责阻止。
 		if job.Status.CompletionTime != nil && oldJob.Status.CompletionTime != nil && !ptr.Equal(job.Status.CompletionTime, oldJob.Status.CompletionTime) {
 			allErrs = append(allErrs, field.Invalid(statusFld.Child("completionTime"), job.Status.CompletionTime, "field is immutable"))
 		}
 	}
 	if opts.RejectStartTimeUpdateForUnsuspendedJob {
-		// Note that we check `oldJob.Status.StartTime != nil` to allow transitioning from
-		// startTime = nil to startTime != nil for unsuspended jobs, which is a desired transition.
+		// 注意，这里检查 `oldJob.Status.StartTime != nil`，是为了允许未挂起的 Job
+		// 从 startTime = nil 转换到 startTime != nil，这是期望的转换。
 		if oldJob.Status.StartTime != nil && !ptr.Equal(oldJob.Status.StartTime, job.Status.StartTime) && !ptr.Deref(job.Spec.Suspend, false) {
 			allErrs = append(allErrs, field.Invalid(statusFld.Child("startTime"), job.Status.StartTime, "field is immutable for unsuspended job once set"))
 		}
@@ -857,32 +854,32 @@ func ValidateJobStatusUpdate(job, oldJob *batch.Job, opts JobStatusValidationOpt
 	return allErrs
 }
 
-// ValidateCronJobCreate validates a CronJob on creation and returns an ErrorList with any errors.
+// ValidateCronJobCreate 校验新创建的 CronJob，并返回包含所有错误的 ErrorList。
 func ValidateCronJobCreate(cronJob *batch.CronJob, opts apivalidation.PodValidationOptions) field.ErrorList {
-	// CronJobs and rcs have the same name validation
+	// CronJob 和 RC 使用相同的名称校验规则
 	allErrs := apivalidation.ValidateObjectMeta(&cronJob.ObjectMeta, true, apimachineryapivalidation.NameIsDNSSubdomain, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateCronJobSpec(&cronJob.Spec, nil, field.NewPath("spec"), opts)...)
 	if len(cronJob.ObjectMeta.Name) > apimachineryvalidation.DNS1035LabelMaxLength-11 {
-		// The cronjob controller appends a 11-character suffix to the cronjob (`-$TIMESTAMP`) when
-		// creating a job. The job name length limit is 63 characters.
-		// Therefore cronjob names must have length <= 63-11=52. If we don't validate this here,
-		// then job creation will fail later.
+		// CronJob 控制器在创建 Job 时会在 cronjob 名称后追加 11 个字符的后缀
+		// （`-$TIMESTAMP`）。Job 名称长度上限为 63 个字符。
+		// 因此 cronjob 名称长度必须 <= 63-11=52。如果此处不校验，
+		// Job 的创建稍后会失败。
 		allErrs = append(allErrs, field.Invalid(field.NewPath("metadata").Child("name"), cronJob.ObjectMeta.Name, "must be no more than 52 characters"))
 	}
 	return allErrs
 }
 
-// ValidateCronJobUpdate validates an update to a CronJob and returns an ErrorList with any errors.
+// ValidateCronJobUpdate 校验对 CronJob 的更新，并返回包含所有错误的 ErrorList。
 func ValidateCronJobUpdate(job, oldJob *batch.CronJob, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&job.ObjectMeta, &oldJob.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateCronJobSpec(&job.Spec, &oldJob.Spec, field.NewPath("spec"), opts)...)
 
-	// skip the 52-character name validation limit on update validation
-	// to allow old cronjobs with names > 52 chars to be updated/deleted
+	// 更新校验时跳过 52 字符的名称长度限制，
+	// 以便名称超过 52 个字符的旧 cronjob 也能被更新/删除
 	return allErrs
 }
 
-// validateCronJobSpec validates a CronJobSpec and returns an ErrorList with any errors.
+// validateCronJobSpec 校验 CronJobSpec，并返回包含所有错误的 ErrorList。
 func validateCronJobSpec(spec, oldSpec *batch.CronJobSpec, fldPath *field.Path, opts apivalidation.PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -912,11 +909,11 @@ func validateCronJobSpec(spec, oldSpec *batch.CronJobSpec, fldPath *field.Path, 
 	allErrs = append(allErrs, ValidateJobTemplateSpec(&spec.JobTemplate, oldTemplateSpec, fldPath.Child("jobTemplate"), opts)...)
 
 	if spec.SuccessfulJobsHistoryLimit != nil {
-		// zero is a valid SuccessfulJobsHistoryLimit
+		// 0 是合法的 SuccessfulJobsHistoryLimit
 		allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(int64(*spec.SuccessfulJobsHistoryLimit), fldPath.Child("successfulJobsHistoryLimit"))...)
 	}
 	if spec.FailedJobsHistoryLimit != nil {
-		// zero is a valid SuccessfulJobsHistoryLimit
+		// 0 是合法的 SuccessfulJobsHistoryLimit
 		allErrs = append(allErrs, apivalidation.ValidateNonnegativeField(int64(*spec.FailedJobsHistoryLimit), fldPath.Child("failedJobsHistoryLimit"))...)
 	}
 
@@ -955,13 +952,13 @@ func validateScheduleFormat(schedule string, allowTZInSchedule bool, timeZone *s
 }
 
 // https://data.iana.org/time-zones/theory.html#naming
-// * A name must not be empty, or contain '//', or start or end with '/'.
-// * Do not use the file name components '.' and '..'.
-// * Within a file name component, use only ASCII letters, '.', '-' and '_'.
-// * Do not use digits, as that might create an ambiguity with POSIX TZ strings.
-// * A file name component must not exceed 14 characters or start with '-'
+// * 名称不能为空，不能包含 '//'，也不能以 '/' 开头或结尾。
+// * 不要使用文件名组件 '.' 和 '..'。
+// * 在文件名组件内，只能使用 ASCII 字母、'.'、'-' 和 '_'。
+// * 不要使用数字，因为这可能与 POSIX TZ 字符串产生歧义。
+// * 文件名组件长度不得超过 14 个字符，也不得以 '-' 开头
 //
-// 0-9 and + characters are tolerated to accommodate legacy compatibility names
+// 为兼容历史遗留名称，容忍使用 0-9 和 + 字符
 var validTimeZoneCharacters = regexp.MustCompile(`^[A-Za-z\.\-_0-9+]{1,14}$`)
 
 func validateTimeZone(timeZone *string, fldPath *field.Path) field.ErrorList {
@@ -993,8 +990,8 @@ func validateTimeZone(timeZone *string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateJobTemplateSpec validates a JobTemplateSpec and returns an ErrorList with any errors.
-// oldSpec is nil on create, non-nil on update.
+// ValidateJobTemplateSpec 校验 JobTemplateSpec，并返回包含所有错误的 ErrorList。
+// oldSpec 在创建时为 nil，在更新时非 nil。
 func ValidateJobTemplateSpec(spec, oldSpec *batch.JobTemplateSpec, fldPath *field.Path, opts apivalidation.PodValidationOptions) field.ErrorList {
 	var oldJobSpec *batch.JobSpec
 	if oldSpec != nil {
@@ -1002,7 +999,7 @@ func ValidateJobTemplateSpec(spec, oldSpec *batch.JobTemplateSpec, fldPath *fiel
 	}
 	allErrs := validateJobSpec(&spec.Spec, oldJobSpec, fldPath.Child("spec"), opts)
 
-	// jobtemplate will always have the selector automatically generated
+	// jobTemplate 的选择器将始终自动生成
 	if spec.Spec.Selector != nil {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("spec", "selector"), spec.Spec.Selector, "`selector` will be auto-generated"))
 	}
@@ -1013,7 +1010,7 @@ func ValidateJobTemplateSpec(spec, oldSpec *batch.JobTemplateSpec, fldPath *fiel
 }
 
 func validateCompletions(spec, oldSpec batch.JobSpec, fldPath *field.Path, opts JobValidationOptions) field.ErrorList {
-	// Completions is immutable for non-indexed jobs, but mutable for Indexed Jobs.
+	// 对于非 Indexed 的 Job，Completions 不可变；对于 Indexed Job，则可变。
 	isIndexedJob := spec.CompletionMode != nil && *spec.CompletionMode == batch.IndexedCompletion
 	if !isIndexedJob {
 		return apivalidation.ValidateImmutableField(spec.Completions, oldSpec.Completions, fldPath)
@@ -1023,8 +1020,8 @@ func validateCompletions(spec, oldSpec batch.JobSpec, fldPath *field.Path, opts 
 	if apiequality.Semantic.DeepEqual(spec.Completions, oldSpec.Completions) {
 		return allErrs
 	}
-	// Indexed Jobs cannot set completions to nil. The nil check
-	// is already performed in validateJobSpec, no need to add another error.
+	// Indexed Job 不能将 completions 设为 nil。
+	// validateJobSpec 中已经做了 nil 检查，无需再叠加错误。
 	if spec.Completions == nil {
 		return allErrs
 	}
@@ -1089,25 +1086,25 @@ func validateFailedIndexesNotOverlapCompleted(completedIndexesStr string, failed
 	fX, fY, fErr := parseIndexInterval(failedIndexesIntervals[failedPos], completions)
 	for completedPos < len(completedIndexesIntervals) && failedPos < len(failedIndexesIntervals) {
 		if cErr != nil {
-			// Failure to parse "completed" interval. We go to the next interval,
-			// the error will be reported to the user when validating the format.
+			// 解析 "completed" 区间失败。我们继续处理下一个区间，
+			// 该错误会在校验格式时报告给用户。
 			completedPos++
 			if completedPos < len(completedIndexesIntervals) {
 				cX, cY, cErr = parseIndexInterval(completedIndexesIntervals[completedPos], completions)
 			}
 		} else if fErr != nil {
-			// Failure to parse "failed" interval. We go to the next interval,
-			// the error will be reported to the user when validating the format.
+			// 解析 "failed" 区间失败。我们继续处理下一个区间，
+			// 该错误会在校验格式时报告给用户。
 			failedPos++
 			if failedPos < len(failedIndexesIntervals) {
 				fX, fY, fErr = parseIndexInterval(failedIndexesIntervals[failedPos], completions)
 			}
 		} else {
-			// We have one failed and one completed interval parsed.
+			// 已解析出一个 failed 区间和一个 completed 区间。
 			if cX <= fY && fX <= cY {
 				return fmt.Errorf("failedIndexes and completedIndexes overlap at index: %d", max(cX, fX))
 			}
-			// No overlap, let's move to the next one.
+			// 无重叠，继续处理下一个区间。
 			if cX <= fX {
 				completedPos++
 				if completedPos < len(completedIndexesIntervals) {
@@ -1174,11 +1171,11 @@ func parseIndexInterval(intervalStr string, completions int32) (int32, int32, er
 
 type JobValidationOptions struct {
 	apivalidation.PodValidationOptions
-	// Allow mutable node affinity, selector and tolerations of the template
+	// 允许模板的节点亲和性、选择器和容忍度可变
 	AllowMutableSchedulingDirectives bool
-	// Require Job to have the label on batch.kubernetes.io/job-name and batch.kubernetes.io/controller-uid
+	// 要求 Job 带有 batch.kubernetes.io/job-name 和 batch.kubernetes.io/controller-uid 标签
 	RequirePrefixedLabels bool
-	// Allow mutable pod resources
+	// 允许 Pod 资源可变
 	AllowMutablePodResources bool
 }
 

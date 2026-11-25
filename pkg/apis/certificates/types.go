@@ -24,76 +24,77 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Describes a certificate signing request
+// 描述一个证书签名请求
 type CertificateSigningRequest struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// The certificate request itself and any additional information.
+	// 证书请求本身及任何附加信息。
 	// +optional
 	Spec CertificateSigningRequestSpec
 
-	// Derived information about the request.
+	// 关于该请求的派生信息。
 	// +optional
 	Status CertificateSigningRequestStatus
 }
 
-// This information is immutable after the request is created. Only the Request
-// and Usages fields can be set on creation, other fields are derived by
-// Kubernetes and cannot be modified by users.
+// 请求创建后这些信息不可变。创建时只能设置 Request 和 Usages
+// 字段，其余字段由 Kubernetes 派生生成，用户无法修改。
 type CertificateSigningRequestSpec struct {
-	// Base64-encoded PKCS#10 CSR data
+	// Base64 编码的 PKCS#10 CSR 数据
 	Request []byte
 
-	// signerName indicates the requested signer, and is a qualified name.
+	// signerName 指示所请求的签名者（signer），是一个限定名称。
 	//
-	// List/watch requests for CertificateSigningRequests can filter on this field using a "spec.signerName=NAME" fieldSelector.
+	// 可以使用 "spec.signerName=NAME" fieldSelector 按该字段过滤
+	// CertificateSigningRequest 的 list/watch 请求。
 	//
-	// Well-known Kubernetes signers are:
-	//  1. "kubernetes.io/kube-apiserver-client": issues client certificates that can be used to authenticate to kube-apiserver.
-	//   Requests for this signer are never auto-approved by kube-controller-manager, can be issued by the "csrsigning" controller in kube-controller-manager.
-	//  2. "kubernetes.io/kube-apiserver-client-kubelet": issues client certificates that kubelets use to authenticate to kube-apiserver.
-	//   Requests for this signer can be auto-approved by the "csrapproving" controller in kube-controller-manager, and can be issued by the "csrsigning" controller in kube-controller-manager.
-	//  3. "kubernetes.io/kubelet-serving" issues serving certificates that kubelets use to serve TLS endpoints, which kube-apiserver can connect to securely.
-	//   Requests for this signer are never auto-approved by kube-controller-manager, and can be issued by the "csrsigning" controller in kube-controller-manager.
+	// 众所周知的 Kubernetes 签名者有：
+	//  1. "kubernetes.io/kube-apiserver-client"：签发可用于向 kube-apiserver
+	//   认证的客户端证书。该签名者的请求永远不会被 kube-controller-manager
+	//   自动批准，可由 kube-controller-manager 中的 "csrsigning" 控制器签发。
+	//  2. "kubernetes.io/kube-apiserver-client-kubelet"：签发 kubelet 用于向
+	//   kube-apiserver 认证的客户端证书。该签名者的请求可以被 kube-controller-manager
+	//   中的 "csrapproving" 控制器自动批准，也可由 "csrsigning" 控制器签发。
+	//  3. "kubernetes.io/kubelet-serving"：签发 kubelet 用于提供 TLS 端点、
+	//   供 kube-apiserver 安全连接的服务端证书。该签名者的请求永远不会被
+	//   kube-controller-manager 自动批准，可由 kube-controller-manager 中的
+	//   "csrsigning" 控制器签发。
 	//
-	// More details are available at https://k8s.io/docs/reference/access-authn-authz/certificate-signing-requests/#kubernetes-signers
+	// 更多细节参见 https://k8s.io/docs/reference/access-authn-authz/certificate-signing-requests/#kubernetes-signers
 	//
-	// Custom signerNames can also be specified. The signer defines:
-	//  1. Trust distribution: how trust (CA bundles) are distributed.
-	//  2. Permitted subjects: and behavior when a disallowed subject is requested.
-	//  3. Required, permitted, or forbidden x509 extensions in the request (including whether subjectAltNames are allowed, which types, restrictions on allowed values) and behavior when a disallowed extension is requested.
-	//  4. Required, permitted, or forbidden key usages / extended key usages.
-	//  5. Expiration/certificate lifetime: whether it is fixed by the signer, configurable by the admin.
-	//  6. Whether or not requests for CA certificates are allowed.
+	// 也可以指定自定义 signerName。签名者需定义：
+	//  1. 信任分发方式：如何分发信任（CA bundle）。
+	//  2. 允许的 subject：以及请求不被允许的 subject 时的行为。
+	//  3. 请求中必需、允许或禁止的 x509 扩展（包括是否允许 subjectAltName、
+	//   允许哪些类型、对允许值的限制），以及请求不被允许的扩展时的行为。
+	//  4. 必需、允许或禁止的密钥用途/增强密钥用途。
+	//  5. 过期时间/证书有效期：由签名者固定还是可由管理员配置。
+	//  6. 是否允许签发 CA 证书的请求。
 	SignerName string
 
-	// expirationSeconds is the requested duration of validity of the issued
-	// certificate. The certificate signer may issue a certificate with a different
-	// validity duration so a client must check the delta between the notBefore and
-	// and notAfter fields in the issued certificate to determine the actual duration.
+	// expirationSeconds 是所签发证书有效期的请求时长。证书签名者签发的
+	// 证书有效期可能与此不同，因此客户端必须检查所签发证书中 notBefore
+	// 与 notAfter 字段之间的差值，以确定实际有效期。
 	//
-	// The v1.22+ in-tree implementations of the well-known Kubernetes signers will
-	// honor this field as long as the requested duration is not greater than the
-	// maximum duration they will honor per the --cluster-signing-duration CLI
-	// flag to the Kubernetes controller manager.
+	// 只要请求的时长不超过 Kubernetes controller manager 的
+	// --cluster-signing-duration CLI 旗标所规定的、各实现愿意接受的最大时长，
+	// v1.22+ 的内置实现（in-tree）就会遵循该字段。
 	//
-	// Certificate signers may not honor this field for various reasons:
+	// 证书签名者可能因以下各种原因不遵循该字段：
 	//
-	//   1. Old signer that is unaware of the field (such as the in-tree
-	//      implementations prior to v1.22)
-	//   2. Signer whose configured maximum is shorter than the requested duration
-	//   3. Signer whose configured minimum is longer than the requested duration
+	//   1. 旧签名者不了解该字段（如 v1.22 之前的内置实现）
+	//   2. 签名者配置的最大值短于请求的时长
+	//   3. 签名者配置的最小值长于请求的时长
 	//
-	// The minimum valid value for expirationSeconds is 600, i.e. 10 minutes.
+	// expirationSeconds 的最小合法值为 600，即 10 分钟。
 	//
 	// +optional
 	ExpirationSeconds *int32
 
-	// usages specifies a set of usage contexts the key will be
-	// valid for.
-	// See:
+	// usages 指定密钥有效的用途上下文集合。
+	// 参见:
 	//	https://tools.ietf.org/html/rfc5280#section-4.2.1.3
 	//	https://tools.ietf.org/html/rfc5280#section-4.2.1.12
 	Usages []KeyUsage
@@ -116,9 +117,9 @@ type CertificateSigningRequestSpec struct {
 	Extra map[string]ExtraValue
 }
 
-// Built in signerName values that are honoured by kube-controller-manager.
-// None of these usages are related to ServiceAccount token secrets
-// `.data[ca.crt]` in any way.
+// kube-controller-manager 内置支持的 signerName 取值。
+// 这些用途均与 ServiceAccount token secret 的
+// `.data[ca.crt]` 无任何关联。
 const (
 	// 签发会被 kube-apiserver 认可为客户端证书的证书。
 	// 从不会被 kube-controller-manager 自动批准。
@@ -166,16 +167,16 @@ type CertificateSigningRequestCondition struct {
 	// 若未设置，应视为 "True"。
 	// +optional
 	Status api.ConditionStatus
-	// brief reason for the request state
+	// 请求状态的简要原因。
 	// +optional
 	Reason string
-	// human readable message with details about the request state
+	// 关于请求状态详情的可读消息。
 	// +optional
 	Message string
-	// timestamp for the last update to this condition
+	// 该条件最近一次更新的时间戳。
 	// +optional
 	LastUpdateTime metav1.Time
-	// lastTransitionTime is the time the condition last transitioned from one status to another.
+	// lastTransitionTime 是该条件最近一次从一种状态转变为另一种状态的时间。
 	// +optional
 	LastTransitionTime metav1.Time
 }
@@ -226,16 +227,14 @@ const (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterTrustBundle is a cluster-scoped container for X.509 trust anchors
-// (root certificates).
+// ClusterTrustBundle 是一个集群级别的容器，用于存放 X.509 信任锚
+// （根证书）。
 //
-// ClusterTrustBundle objects are considered to be readable by any authenticated
-// user in the cluster.
+// 集群中任何通过认证的用户都被认为可以读取 ClusterTrustBundle 对象。
 //
-// It can be optionally associated with a particular signer, in which case it
-// contains one valid set of trust anchors for that signer. Signers may have
-// multiple associated ClusterTrustBundles; each is an independent set of trust
-// anchors for that signer.
+// 它可以可选地与特定签名者关联；此时它包含该签名者的一组有效信任锚。
+// 一个签名者可以关联多个 ClusterTrustBundle；每个都是该签名者独立的一组
+// 信任锚。
 type ClusterTrustBundle struct {
 	metav1.TypeMeta
 	// +optional
@@ -248,26 +247,24 @@ type ClusterTrustBundle struct {
 
 // ClusterTrustBundleSpec 包含签名者和信任锚。
 type ClusterTrustBundleSpec struct {
-	// SignerName indicates the associated signer, if any.
+	// SignerName 指示关联的签名者（如有）。
 	SignerName string
 
-	// TrustBundle contains the individual X.509 trust anchors for this
-	// bundle, as PEM bundle of PEM-wrapped, DER-formatted X.509 certificates.
+	// TrustBundle 包含此 bundle 的各个 X.509 信任锚，
+	// 形式为 PEM bundle，其中每项是 PEM 包裹、DER 编码的 X.509 证书。
 	//
-	// The data must consist only of PEM certificate blocks that parse as valid
-	// X.509 certificates.  Each certificate must include a basic constraints
-	// extension with the CA bit set.  The API server will reject objects that
-	// contain duplicate certificates, or that use PEM block headers.
+	// 数据必须仅由可解析为合法 X.509 证书的 PEM 证书块组成。
+	// 每个证书必须包含一个 basic constraints 扩展且 CA 位已置位。
+	// 若对象包含重复证书，或使用了 PEM 块头部，API server 将拒绝该对象。
 	//
-	// Users of ClusterTrustBundles, including Kubelet, are free to reorder and
-	// deduplicate certificate blocks in this file according to their own logic,
-	// as well as to drop PEM block headers and inter-block data.
+	// ClusterTrustBundle 的使用者（包括 Kubelet）可以按自己的逻辑
+	// 对文件中的证书块重新排序和去重，也可以丢弃 PEM 块头部及块间数据。
 	TrustBundle string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ClusterTrustBundleList is a collection of ClusterTrustBundle objects
+// ClusterTrustBundleList 是 ClusterTrustBundle 对象的集合
 type ClusterTrustBundleList struct {
 	metav1.TypeMeta
 	// +optional
@@ -277,7 +274,7 @@ type ClusterTrustBundleList struct {
 	Items []ClusterTrustBundle
 }
 
-// MaxTrustBundleSize is the maximimum size of a single trust bundle field.
+// MaxTrustBundleSize 是单个 trust bundle 字段的最大允许大小。
 const MaxTrustBundleSize = 1 * 1024 * 1024
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -298,32 +295,29 @@ type PodCertificateRequest struct {
 	Status PodCertificateRequestStatus
 }
 
-// PodCertificateRequestSpec describes the certificate request.  All fields are
-// immutable after creation.
+// PodCertificateRequestSpec 描述该证书请求。所有字段在创建后均不可变。
 type PodCertificateRequestSpec struct {
-	// SignerName indicates the requested signer.
+	// SignerName 指示所请求的签名者。
 	//
-	// All signer names beginning with `kubernetes.io` are reserved for use by
-	// the Kubernetes project.  There is currently one well-known signer
-	// documented by the Kubernetes project,
-	// `kubernetes.io/kube-apiserver-client-pod`, which will issue client
-	// certificates understood by kube-apiserver.  It is currently
-	// unimplemented.
+	// 所有以 `kubernetes.io` 开头的 signer 名称均保留给 Kubernetes 项目使用。
+	// 目前 Kubernetes 项目记录了一个广为人知的签名者
+	// `kubernetes.io/kube-apiserver-client-pod`，它将签发可被 kube-apiserver
+	// 识别的客户端证书。该签名者目前尚未实现。
 	SignerName string
 
-	// PodName is the name of the pod into which the certificate will be mounted.
+	// PodName 是将挂载该证书的 Pod 的名称。
 	PodName string
-	// PodUID is the UID of the pod into which the certificate will be mounted.
+	// PodUID 是将挂载该证书的 Pod 的 UID。
 	PodUID types.UID
 
-	// ServiceAccountname is the name of the service account the pod is running as.
+	// ServiceAccountname 是该 Pod 运行时所使用的服务账号的名称。
 	ServiceAccountName string
-	// ServiceAccountUID is the UID of the service account the pod is running as.
+	// ServiceAccountUID 是该 Pod 运行时所使用的服务账号的 UID。
 	ServiceAccountUID types.UID
 
-	// NodeName is the name of the node the pod is assigned to.
+	// NodeName 是该 Pod 被分配到的节点名称。
 	NodeName types.NodeName
-	// NodeUID is the UID of the node the pod is assigned to.
+	// NodeUID 是该 Pod 被分配到的节点的 UID。
 	NodeUID types.UID
 
 	// maxExpirationSeconds 是证书允许的最大有效期。
@@ -422,9 +416,8 @@ type PodCertificateRequestStatus struct {
 	// +optional
 	CertificateChain string
 
-	// notBefore is the time at which the certificate becomes valid.  This field
-	// is set via the /status subresource.  Once populated, it is immutable.
-	// The signer must set this field at the same time it sets certificateChain.
+	// notBefore 是证书开始生效的时间。该字段通过 /status 子资源设置，
+	// 填充后不可修改。签名者必须在设置 certificateChain 的同时设置该字段。
 	//
 	// +optional
 	NotBefore *metav1.Time
@@ -435,15 +428,14 @@ type PodCertificateRequestStatus struct {
 	// +optional
 	BeginRefreshAt *metav1.Time
 
-	// notAfter is the time at which the certificate expires.  This field is set
-	// via the /status subresource.  Once populated, it is immutable.  The
-	// signer must set this field at the same time it sets certificateChain.
+	// notAfter 是证书过期的时间。该字段通过 /status 子资源设置，
+	// 填充后不可修改。签名者必须在设置 certificateChain 的同时设置该字段。
 	//
 	// +optional
 	NotAfter *metav1.Time
 }
 
-// Well-known condition types for PodCertificateRequests
+// PodCertificateRequest 的已知条件类型
 const (
 	// Denied 表示请求被签名者拒绝。
 	PodCertificateRequestConditionTypeDenied string = "Denied"
@@ -453,7 +445,7 @@ const (
 	PodCertificateRequestConditionTypeIssued string = "Issued"
 )
 
-// Well-known condition reasons for PodCertificateRequests
+// PodCertificateRequest 的已知条件原因
 const (
 	// UnsupportedKeyType 应在签名者不支持 publicKey 的密钥类型时，
 	// 设置到 "Denied" 状况上。
@@ -465,35 +457,30 @@ const (
 )
 
 const (
-	// MaxPKIXPublicKeySize is the maximimum size permitted for the
-	// PKIXPublicKey field.  Size is chosen based on the size of an RSA 4096 key
-	// plus some margin.
+	// MaxPKIXPublicKeySize 是 PKIXPublicKey 字段允许的最大大小。
+	// 该大小基于 RSA 4096 密钥的大小并留有一定余量。
 	MaxPKIXPublicKeySize = 10 * 1024
-	// MaxProofOfPossessionSize is the maximum size permitted for the
-	// ProofOfPossession field.
+	// MaxProofOfPossessionSize 是 ProofOfPossession 字段允许的最大大小。
 	MaxProofOfPossessionSize = 10 * 1024
-	// MaxStubPKCS10RequestSize is the maximum size permitted for the
-	// UnverifiedPKCS10Request field.
+	// MaxStubPKCS10RequestSize 是 UnverifiedPKCS10Request 字段允许的最大大小。
 	MaxStubPKCS10RequestSize = 10 * 1024
-	// MaxCertificateChainSize is the maximum size permitted for the
-	// CertificateChain field.
+	// MaxCertificateChainSize 是 CertificateChain 字段允许的最大大小。
 	//
-	// Size should be more than sufficient to store 10 RSA 4096 certificates,
-	// each with a bunch of embedded extensions.
+	// 该大小应足以存储 10 张各自嵌入大量扩展的 RSA 4096 证书。
 	MaxCertificateChainSize = 100 * 1024
-	// MinMaxExpirationSeconds is the minimum value permitted for the MaxExpirationSeconds field.
+	// MinMaxExpirationSeconds 是 MaxExpirationSeconds 字段允许的最小值。
 	MinMaxExpirationSeconds = 60 * 60
-	// MaxMaxExpirationSeconds is the maximum value permitted for the
-	// MaxExpirationSeconds field for non-Kubernetes signers.
+	// MaxMaxExpirationSeconds 是非 Kubernetes 签名者的
+	// MaxExpirationSeconds 字段允许的最大值。
 	MaxMaxExpirationSeconds = 91 * 24 * 60 * 60
-	// KubernetesMaxMaxExpirationSeconds is the maximum value permitted for the
-	// MaxExpirationSeconds field for Kubernetes signers.
+	// KubernetesMaxMaxExpirationSeconds 是 Kubernetes 签名者的
+	// MaxExpirationSeconds 字段允许的最大值。
 	KubernetesMaxMaxExpirationSeconds = 24 * 60 * 60
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodCertificateRequestList is a collection of PodCertificateRequest objects.
+// PodCertificateRequestList 是 PodCertificateRequest 对象的集合。
 type PodCertificateRequestList struct {
 	metav1.TypeMeta
 	// +optional
