@@ -34,7 +34,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// Tests that the apiserver retries patches
+// 测试 apiserver 会重试 patch 请求
 func TestPatchConflicts(t *testing.T) {
 	ctx, clientSet, _, tearDownFn := setup(t)
 	defer tearDownFn()
@@ -64,7 +64,7 @@ func TestPatchConflicts(t *testing.T) {
 		},
 	}
 
-	// Create the object we're going to conflict on
+	// 创建将用于制造冲突的对象
 	_, err := clientSet.CoreV1().Secrets(ns.Name).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -73,8 +73,8 @@ func TestPatchConflicts(t *testing.T) {
 
 	var successes atomic.Int32
 
-	// Run a lot of simultaneous patch operations to exercise internal API server retry of application of patches that do not specify resourceVersion.
-	// They should all succeed.
+	// 运行大量并发 patch 操作，以检验 API server 内部对未指定 resourceVersion 的 patch 的重试机制。
+	// 这些操作都应该成功。
 	wg := sync.WaitGroup{}
 	for i := range numOfConcurrentPatches {
 		wg.Add(1)
@@ -105,12 +105,12 @@ func TestPatchConflicts(t *testing.T) {
 				t.Errorf("error getting object from %s: %v", "secrets", err)
 				return
 			}
-			// make sure the label we wanted was effective
+			// 确认我们期望的 label 生效了
 			if accessor.GetLabels()[labelName] != value {
 				t.Errorf("patch of %s was ineffective, expected %s=%s, got labels %#v", "secrets", labelName, value, accessor.GetLabels())
 				return
 			}
-			// make sure the patch directive didn't get lost, and that an entry in the ownerReference list was deleted.
+			// 确认 patch 指令没有丢失，且 ownerReference 列表中的一项已被删除。
 			found := findOwnerRefByUID(accessor.GetOwnerReferences(), UIDs[i])
 			if found {
 				t.Errorf("patch of %s with $patch directive was ineffective, didn't delete the entry in the ownerReference slice: %#v", "secrets", UIDs[i])
@@ -138,8 +138,8 @@ func findOwnerRefByUID(ownerRefs []metav1.OwnerReference, uid types.UID) bool {
 	return false
 }
 
-// Shows that a strategic merge patch with a nested patch which is merged
-// with an empty slice is handled property
+// 展示带有嵌套 patch 的 strategic merge patch 在与空 slice 合并时
+// 能被正确处理
 // https://github.com/kubernetes/kubernetes/issues/117470
 func TestNestedStrategicMergePatchWithEmpty(t *testing.T) {
 	ctx, clientSet, _, tearDownFn := setup(t)
@@ -192,7 +192,7 @@ func TestNestedStrategicMergePatchWithEmpty(t *testing.T) {
 		)
 	require.NoError(t, err)
 
-	// Try to apply a patch to the webhook
+	// 尝试对该 webhook 应用 patch
 	_, err = clientSet.
 		AdmissionregistrationV1().
 		ValidatingWebhookConfigurations().

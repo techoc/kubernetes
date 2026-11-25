@@ -52,7 +52,7 @@ func test_UpgradePVC(t *testing.T, featureEnabled bool) {
 		t.Fatal(err)
 	}
 
-	// Create a pvc and store it in etcd with missing fields representing an old version
+	// 创建一个 PVC，并将其以缺少某些字段（表示旧版本）的形式存入 etcd
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              pvcName,
@@ -84,7 +84,7 @@ func test_UpgradePVC(t *testing.T, featureEnabled bool) {
 	}
 	t.Logf("PVC stored in etcd %v", string(pvcJSON))
 
-	// Try to update the pvc as a no-op write of the original content
+	// 尝试以原始内容进行无操作写入来更新 PVC
 	{
 		_, err := kubeclient.CoreV1().PersistentVolumeClaims(ns).Update(context.TODO(), pvc, metav1.UpdateOptions{DryRun: []string{"All"}})
 		if err != nil {
@@ -92,7 +92,7 @@ func test_UpgradePVC(t *testing.T, featureEnabled bool) {
 		}
 	}
 
-	// Try to update the pvc as an internal server no-op patch of the original content
+	// 尝试通过服务端内部的无操作 patch 对原始内容进行 PVC 更新
 	{
 		_, err := kubeclient.CoreV1().PersistentVolumeClaims(ns).Patch(context.TODO(), pvc.Name, types.MergePatchType, []byte(`{}`), metav1.PatchOptions{DryRun: []string{"All"}})
 		if err != nil {
@@ -100,7 +100,7 @@ func test_UpgradePVC(t *testing.T, featureEnabled bool) {
 		}
 	}
 
-	// Try to update the pvc as a no-op get/update
+	// 尝试通过无操作的 get/update 来更新 PVC
 	{
 		getPVC, err := kubeclient.CoreV1().PersistentVolumeClaims(ns).Get(context.TODO(), pvc.Name, metav1.GetOptions{})
 		if err != nil {

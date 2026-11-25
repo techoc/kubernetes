@@ -111,7 +111,7 @@ func newMatchingPod(podName, namespace string) *v1.Pod {
 
 func rmSetup(t *testing.T) (context.Context, kubeapiservertesting.TearDownFunc, *replication.ReplicationManager, informers.SharedInformerFactory, clientset.Interface) {
 	tCtx := ktesting.Init(t)
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 
 	config := restclient.CopyConfig(server.ClientConfig)
@@ -137,7 +137,7 @@ func rmSetup(t *testing.T) (context.Context, kubeapiservertesting.TearDownFunc, 
 	return tCtx, newTeardown, rm, informers, clientSet
 }
 
-// Run RC controller and informers
+// 启动 RC controller 和 informer
 func runControllerAndInformers(t *testing.T, rm *replication.ReplicationManager, informers informers.SharedInformerFactory, podNum int) func() {
 	ctx, cancelFn := context.WithCancel(context.Background())
 	informers.Start(ctx.Done())
@@ -146,9 +146,8 @@ func runControllerAndInformers(t *testing.T, rm *replication.ReplicationManager,
 	return cancelFn
 }
 
-// wait for the podInformer to observe the pods. Call this function before
-// running the RC controller to prevent the rc manager from creating new pods
-// rather than adopting the existing ones.
+// 等待 podInformer 观测到 Pod。在启动 RC controller 之前调用此函数，
+// 以避免 rc manager 创建新的 Pod，而不是接管已有的 Pod。
 func waitToObservePods(t *testing.T, podInformer cache.SharedIndexInformer, podNum int) {
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
 		objects := podInformer.GetIndexer().List()
@@ -179,7 +178,7 @@ func createRCsPods(t *testing.T, clientSet clientset.Interface, rcs []*v1.Replic
 	return createdRCs, createdPods
 }
 
-// Verify .Status.Replicas is equal to .Spec.Replicas
+// 验证 .Status.Replicas 等于 .Spec.Replicas
 func waitRCStable(t *testing.T, clientSet clientset.Interface, rc *v1.ReplicationController) {
 	rcClient := clientSet.CoreV1().ReplicationControllers(rc.Namespace)
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
@@ -193,7 +192,7 @@ func waitRCStable(t *testing.T, clientSet clientset.Interface, rc *v1.Replicatio
 	}
 }
 
-// Update .Spec.Replicas to replicas and verify .Status.Replicas is changed accordingly
+// 将 .Spec.Replicas 更新为 replicas，并验证 .Status.Replicas 相应变化
 func scaleRC(t *testing.T, c clientset.Interface, rc *v1.ReplicationController, replicas int32) {
 	rcClient := c.CoreV1().ReplicationControllers(rc.Namespace)
 	rc = updateRC(t, rcClient, rc.Name, func(rc *v1.ReplicationController) {
@@ -258,7 +257,7 @@ func updateRC(t *testing.T, rcClient typedv1.ReplicationControllerInterface, rcN
 	return rc
 }
 
-// Verify ControllerRef of a RC pod that has incorrect attributes is automatically patched by the RC
+// 验证属性不正确的 RC Pod 的 ControllerRef 会被 RC 自动修补
 func testPodControllerRefPatch(t *testing.T, c clientset.Interface, pod *v1.Pod, ownerReference *metav1.OwnerReference, rc *v1.ReplicationController, expectedOwnerReferenceNum int) {
 	ns := rc.Namespace
 	podClient := c.CoreV1().Pods(ns)
@@ -316,7 +315,7 @@ func setPodsReadyCondition(t *testing.T, clientSet clientset.Interface, pods *v1
 			}
 			_, err := clientSet.CoreV1().Pods(pod.Namespace).UpdateStatus(context.TODO(), pod, metav1.UpdateOptions{})
 			if err != nil {
-				// When status fails to be updated, we continue to next pod
+				// 状态更新失败时，继续处理下一个 Pod
 				continue
 			}
 			readyPods++
@@ -470,13 +469,13 @@ func TestSpecReplicasChange(t *testing.T) {
 	rc = rcs[0]
 	waitRCStable(t, c, rc)
 
-	// Update .Spec.Replicas and verify .Status.Replicas is changed accordingly
+	// 将 .Spec.Replicas 更新为 replicas，并验证 .Status.Replicas 相应变化
 	scaleRC(t, c, rc, 3)
 	scaleRC(t, c, rc, 0)
 	scaleRC(t, c, rc, 2)
 
-	// Add a template annotation change to test RC's status does update
-	// without .Spec.Replicas change
+	// 修改 template 上的注解，以验证 RC 的 status 会更新
+	// 且 .Spec.Replicas 不变
 	rcClient := c.CoreV1().ReplicationControllers(ns.Name)
 	var oldGeneration int64
 	newRC := updateRC(t, rcClient, rc.Name, func(rc *v1.ReplicationController) {
@@ -512,18 +511,18 @@ func TestLogarithmicScaleDown(t *testing.T) {
 	rc = rcs[0]
 	waitRCStable(t, c, rc)
 
-	// get list of pods in the cluster
+	// 获取集群中的 Pod 列表
 	pods, err := c.CoreV1().Pods(ns.Name).List(tCtx, metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("failed to get pods in namespace %s: %+v", ns.Name, err)
 	}
 
-	// Wait 10 seconds and scale up, the new pod should be in a new logarithmic rank from the first 2
+	// 等待 10 秒后扩容；新 Pod 的 logarithmic rank 应与前两个不同
 	time.Sleep(10 * time.Second)
 	scaleRC(t, c, rc, 3)
 
-	// scale back down, and confirm that the pods left in the namespace are the original ones
-	// (meaning the 3rd one was deleted)
+	// 再缩容回去，并确认命名空间中剩下的仍是原来的 Pod，
+	// 即第三个已被删除
 	scaleRC(t, c, rc, 2)
 
 	newPods, err := c.CoreV1().Pods(ns.Name).List(tCtx, metav1.ListOptions{})
@@ -549,15 +548,15 @@ func TestDeletingAndFailedPods(t *testing.T) {
 	rc = rcs[0]
 	waitRCStable(t, c, rc)
 
-	// Verify RC creates 2 pods
+	// 验证 RC 创建了 2 个 Pod
 	podClient := c.CoreV1().Pods(ns.Name)
 	pods := getPods(t, podClient, labelMap())
 	if len(pods.Items) != 2 {
 		t.Fatalf("len(pods) = %d, want 2", len(pods.Items))
 	}
 
-	// Set first pod as deleting pod
-	// Set finalizers for the pod to simulate pending deletion status
+	// 将第一个 Pod 设为待删除的 Pod
+	// 为该 Pod 设置 finalizer，以模拟删除中的状态
 	deletingPod := &pods.Items[0]
 	updatePod(t, podClient, deletingPod.Name, func(pod *v1.Pod) {
 		pod.Finalizers = []string{"fake.example.com/blockDeletion"}
@@ -566,13 +565,13 @@ func TestDeletingAndFailedPods(t *testing.T) {
 		t.Fatalf("Error deleting pod %s: %v", deletingPod.Name, err)
 	}
 
-	// Set second pod as failed pod
+	// 将第二个 Pod 设为失败 Pod
 	failedPod := &pods.Items[1]
 	updatePodStatus(t, podClient, failedPod, func(pod *v1.Pod) {
 		pod.Status.Phase = v1.PodFailed
 	})
 
-	// Pool until 2 new pods have been created to replace deleting and failed pods
+	// 轮询等待创建 2 个新 Pod，以替换待删除和失败的 Pod
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
 		pods = getPods(t, podClient, labelMap())
 		return len(pods.Items) == 4, nil
@@ -580,7 +579,7 @@ func TestDeletingAndFailedPods(t *testing.T) {
 		t.Fatalf("Failed to verify 2 new pods have been created (expected 4 pods): %v", err)
 	}
 
-	// Verify deleting and failed pods are among the four pods
+	// 验证这四个 Pod 中包含待删除和失败的 Pod
 	foundDeletingPod := false
 	foundFailedPod := false
 	for _, pod := range pods.Items {
@@ -591,11 +590,11 @@ func TestDeletingAndFailedPods(t *testing.T) {
 			foundFailedPod = true
 		}
 	}
-	// Verify deleting pod exists
+	// 验证待删除的 Pod 存在
 	if !foundDeletingPod {
 		t.Fatalf("expected deleting pod %s exists, but it is not found", deletingPod.Name)
 	}
-	// Verify failed pod exists
+	// 验证失败的 Pod 存在
 	if !foundFailedPod {
 		t.Fatalf("expected failed pod %s exists, but it is not found", failedPod.Name)
 	}
@@ -609,22 +608,22 @@ func TestOverlappingRCs(t *testing.T) {
 	stopControllers := runControllerAndInformers(t, rm, informers, 0)
 	defer stopControllers()
 
-	// Create 2 RCs with identical selectors
+	// 创建 2 个 selector 完全相同的 RC
 	for i := range 2 {
-		// One RC has 1 replica, and another has 2 replicas
+		// 一个 RC 有 1 个副本，另一个有 2 个
 		rc := newRC(fmt.Sprintf("rc-%d", i+1), ns.Name, i+1)
 		rcs, _ := createRCsPods(t, c, []*v1.ReplicationController{rc}, []*v1.Pod{})
 		waitRCStable(t, c, rcs[0])
 	}
 
-	// Expect 3 total Pods to be created
+	// 预期共创建 3 个 Pod
 	podClient := c.CoreV1().Pods(ns.Name)
 	pods := getPods(t, podClient, labelMap())
 	if len(pods.Items) != 3 {
 		t.Errorf("len(pods) = %d, want 3", len(pods.Items))
 	}
 
-	// Expect both RCs have .status.replicas = .spec.replicas
+	// 预期两个 RC 的 .status.replicas 均等于 .spec.replicas
 	for i := range 2 {
 		newRC, err := c.CoreV1().ReplicationControllers(ns.Name).Get(tCtx, fmt.Sprintf("rc-%d", i+1), metav1.GetOptions{})
 		if err != nil {
@@ -649,7 +648,7 @@ func TestPodOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 	rc = rcs[0]
 	waitRCStable(t, c, rc)
 
-	// Orphaning: RC should remove OwnerReference from a pod when the pod's labels change to not match its labels
+	// 孤立：当 Pod 的标签不再匹配 RC 的 selector 时，RC 应移除其 OwnerReference
 	podClient := c.CoreV1().Pods(ns.Name)
 	pods := getPods(t, podClient, labelMap())
 	if len(pods.Items) != 1 {
@@ -657,7 +656,7 @@ func TestPodOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 	}
 	pod := &pods.Items[0]
 
-	// Start by verifying ControllerRef for the pod is not nil
+	// 先验证该 Pod 的 ControllerRef 非空
 	if metav1.GetControllerOf(pod) == nil {
 		t.Fatalf("ControllerRef of pod %s is nil", pod.Name)
 	}
@@ -676,15 +675,15 @@ func TestPodOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 		t.Fatalf("Failed to verify ControllerRef for the pod %s is nil: %v", pod.Name, err)
 	}
 
-	// Adoption: RC should add ControllerRef to a pod when the pod's labels change to match its labels
+	// 接管：当 Pod 的标签变得匹配 RC 的 selector 时，RC 应为其添加 ControllerRef
 	updatePod(t, podClient, pod.Name, func(pod *v1.Pod) {
 		pod.Labels = labelMap()
 	})
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
 		newPod, err := podClient.Get(tCtx, pod.Name, metav1.GetOptions{})
 		if err != nil {
-			// If the pod is not found, it means the RC picks the pod for deletion (it is extra)
-			// Verify there is only one pod in namespace and it has ControllerRef to the RC
+			// 如果找不到该 Pod，说明 RC 选中它进行删除（它是多余的）
+			// 验证命名空间中只剩一个 Pod，且其 ControllerRef 指向该 RC
 			if !apierrors.IsNotFound(err) {
 				return false, err
 			}
@@ -693,19 +692,19 @@ func TestPodOrphaningAndAdoptionWhenLabelsChange(t *testing.T) {
 			if len(pods.Items) != 1 {
 				return false, fmt.Errorf("Expected 1 pod in current namespace, got %d", len(pods.Items))
 			}
-			// Set the pod accordingly
+			// 相应地修改该 Pod
 			pod = &pods.Items[0]
 			return true, nil
 		}
-		// Always update the pod so that we can save a GET call to API server later
+		// 始终更新 Pod，这样后面可以少调用一次 API server 的 GET
 		pod = newPod
-		// If the pod is found, verify the pod has a ControllerRef
+		// 如果找到了该 Pod，验证其带有 ControllerRef
 		return metav1.GetControllerOf(newPod) != nil, nil
 	}); err != nil {
 		t.Fatalf("Failed to verify ControllerRef for pod %s is not nil: %v", pod.Name, err)
 	}
-	// Verify the pod has a ControllerRef to the RC
-	// Do nothing if the pod is nil (i.e., has been picked for deletion)
+	// 验证该 Pod 的 ControllerRef 指向该 RC
+	// 若 Pod 为 nil（即已被选中删除），则不做任何操作
 	if pod != nil {
 		controllerRef := metav1.GetControllerOf(pod)
 		if controllerRef.UID != rc.UID {
@@ -735,13 +734,13 @@ func TestGeneralPodAdoption(t *testing.T) {
 	pod := &pods.Items[0]
 	var falseVar = false
 
-	// When the only OwnerReference of the pod points to another type of API object such as statefulset
-	// with Controller=false, the RC should add a second OwnerReference (ControllerRef) pointing to itself
-	// with Controller=true
+	// 当 Pod 唯一的 OwnerReference 指向其他类型的 API 对象（如 statefulset）
+	// 且 Controller=false 时，RC 应添加第二个指向自身的 OwnerReference（ControllerRef）
+	// 且 Controller=true。
 	ownerReference := metav1.OwnerReference{UID: uuid.NewUUID(), APIVersion: "apps/v1beta1", Kind: "StatefulSet", Name: rc.Name, Controller: &falseVar}
 	testPodControllerRefPatch(t, c, pod, &ownerReference, rc, 2)
 
-	// When the only OwnerReference of the pod points to the RC, but Controller=false
+	// 当 Pod 唯一的 OwnerReference 指向 RC，但 Controller=false 时
 	ownerReference = metav1.OwnerReference{UID: rc.UID, APIVersion: "v1", Kind: "ReplicationController", Name: rc.Name, Controller: &falseVar}
 	testPodControllerRefPatch(t, c, pod, &ownerReference, rc, 1)
 }
@@ -760,7 +759,7 @@ func TestReadyAndAvailableReplicas(t *testing.T) {
 	rc = rcs[0]
 	waitRCStable(t, c, rc)
 
-	// First verify no pod is available
+	// 先验证没有 Pod 处于 Available 状态
 	if rc.Status.AvailableReplicas != 0 {
 		t.Fatalf("Unexpected .Status.AvailableReplicas: Expected 0, saw %d", rc.Status.AvailableReplicas)
 	}
@@ -771,18 +770,18 @@ func TestReadyAndAvailableReplicas(t *testing.T) {
 		t.Fatalf("len(pods) = %d, want 3", len(pods.Items))
 	}
 
-	// Separate 3 pods into their own list
+	// 将 3 个 Pod 分成各自的列表
 	firstPodList := &v1.PodList{Items: pods.Items[:1]}
 	secondPodList := &v1.PodList{Items: pods.Items[1:2]}
 	thirdPodList := &v1.PodList{Items: pods.Items[2:]}
-	// First pod: Running, but not Ready
-	// by setting the Ready condition to false with LastTransitionTime to be now
+	// 第一个 Pod：Running，但未 Ready
+	// 将 Ready condition 设为 false，LastTransitionTime 设为当前时间
 	setPodsReadyCondition(t, c, firstPodList, v1.ConditionFalse, time.Now())
-	// Second pod: Running and Ready, but not Available
-	// by setting LastTransitionTime to now
+	// 第二个 Pod：Running 且 Ready，但并非 Available
+	// 将 LastTransitionTime 设为当前时间
 	setPodsReadyCondition(t, c, secondPodList, v1.ConditionTrue, time.Now())
-	// Third pod: Running, Ready, and Available
-	// by setting LastTransitionTime to more than 3600 seconds ago
+	// 第三个 Pod：Running、Ready 且 Available
+	// 将 LastTransitionTime 设为 3600 秒之前
 	setPodsReadyCondition(t, c, thirdPodList, v1.ConditionTrue, time.Now().Add(-120*time.Minute))
 
 	rcClient := c.CoreV1().ReplicationControllers(ns.Name)
@@ -791,7 +790,7 @@ func TestReadyAndAvailableReplicas(t *testing.T) {
 		if err != nil {
 			return false, err
 		}
-		// Verify 3 pods exist, 2 pods are Ready, and 1 pod is Available
+		// 验证存在 3 个 Pod：2 个 Ready，1 个 Available
 		return newRC.Status.Replicas == 3 && newRC.Status.ReadyReplicas == 2 && newRC.Status.AvailableReplicas == 1, nil
 	}); err != nil {
 		t.Fatalf("Failed to verify number of Replicas, ReadyReplicas and AvailableReplicas of rc %s to be as expected: %v", rc.Name, err)
@@ -811,9 +810,9 @@ func TestRCScaleSubresource(t *testing.T) {
 	rc = rcs[0]
 	waitRCStable(t, c, rc)
 
-	// Use scale subresource to scale up .Spec.Replicas to 3
+	// 使用 scale 子资源将 .Spec.Replicas 扩容到 3
 	testScalingUsingScaleSubresource(t, c, rc, 3)
-	// Use the scale subresource to scale down .Spec.Replicas to 0
+	// 使用 scale 子资源将 .Spec.Replicas 缩容到 0
 	testScalingUsingScaleSubresource(t, c, rc, 0)
 }
 
@@ -824,7 +823,7 @@ func TestExtraPodsAdoptionAndDeletion(t *testing.T) {
 	defer framework.DeleteNamespaceOrDie(c, ns, t)
 
 	rc := newRC("rc", ns.Name, 2)
-	// Create 3 pods, RC should adopt only 2 of them
+	// 创建 3 个 Pod，RC 应只接管其中 2 个
 	podList := []*v1.Pod{}
 	for i := range 3 {
 		pod := newMatchingPod(fmt.Sprintf("pod-%d", i+1), ns.Name)
@@ -837,11 +836,11 @@ func TestExtraPodsAdoptionAndDeletion(t *testing.T) {
 	defer stopControllers()
 	waitRCStable(t, c, rc)
 
-	// Verify the extra pod is deleted eventually by determining whether number of
-	// all pods within namespace matches .spec.replicas of the RC (2 in this case)
+	// 通过判断命名空间内 Pod 总数是否等于 RC 的 .spec.replicas（本例为 2），
+	// 验证多余的 Pod 最终被删除
 	podClient := c.CoreV1().Pods(ns.Name)
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
-		// All pods have labelMap as their labels
+		// 所有 Pod 的标签均为 labelMap
 		pods := getPods(t, podClient, labelMap())
 		return int32(len(pods.Items)) == *rc.Spec.Replicas, nil
 	}); err != nil {
@@ -863,13 +862,13 @@ func TestFullyLabeledReplicas(t *testing.T) {
 	rc = rcs[0]
 	waitRCStable(t, c, rc)
 
-	// Change RC's template labels to have extra labels, but not its selector
+	// 给 RC 的 template 增加额外标签，但不改其 selector
 	rcClient := c.CoreV1().ReplicationControllers(ns.Name)
 	updateRC(t, rcClient, rc.Name, func(rc *v1.ReplicationController) {
 		rc.Spec.Template.Labels = extraLabelMap
 	})
 
-	// Set one of the pods to have extra labels
+	// 给其中一个 Pod 设置额外标签
 	podClient := c.CoreV1().Pods(ns.Name)
 	pods := getPods(t, podClient, labelMap())
 	if len(pods.Items) != 2 {
@@ -880,7 +879,7 @@ func TestFullyLabeledReplicas(t *testing.T) {
 		pod.Labels = extraLabelMap
 	})
 
-	// Verify only one pod is fully labeled
+	// 验证只有一个 Pod 带有完整标签
 	if err := wait.PollImmediate(interval, timeout, func() (bool, error) {
 		newRC, err := rcClient.Get(tCtx, rc.Name, metav1.GetOptions{})
 		if err != nil {

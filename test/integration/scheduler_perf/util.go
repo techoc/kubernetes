@@ -83,15 +83,15 @@ func newDefaultComponentConfig() (*config.KubeSchedulerConfiguration, error) {
 	return &cfg, nil
 }
 
-// mustSetupCluster starts the following components:
+// mustSetupCluster 启动以下组件：
 // - k8s api server
 // - scheduler
-// - some of the kube-controller-manager controllers
+// - 部分 kube-controller-manager 控制器
 //
-// It returns regular and dynamic clients, and destroyFunc which should be used to
-// remove resources after finished.
-// Notes on rate limiter:
-//   - client rate limit is set to 5000.
+// 它返回常规客户端和动态客户端，以及 destroyFunc，
+// 测试结束后应使用 destroyFunc 删除资源。
+// 关于限速器的说明：
+//   - client rate limit 设置为 5000。
 func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfiguration, enabledFeatures map[featuregate.Feature]bool, opts *schedulerPerfOptions) (*scheduler.Scheduler, informers.SharedInformerFactory, <-chan struct{}, ktesting.TContext) {
 	var runtimeConfig []string
 	if enabledFeatures[features.DynamicResourceAllocation] {
@@ -104,32 +104,32 @@ func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfig
 		runtimeConfig = append(runtimeConfig, fmt.Sprintf("%s=true", schedulingapi.SchemeGroupVersion))
 	}
 	customFlags := []string{
-		// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+		// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 		"--disable-admission-plugins=ServiceAccount,TaintNodesByCondition,Priority",
 		"--runtime-config=" + strings.Join(runtimeConfig, ","),
 	}
 	serverOpts := apiservertesting.NewDefaultTestServerOptions()
-	// Timeout sufficiently long to handle deleting pods of the largest test cases.
+	// 超时时间设置得足够长，以便处理最大测试用例中的 Pod 删除操作。
 	serverOpts.RequestTimeout = 10 * time.Minute
 	server, err := apiservertesting.StartTestServer(tCtx, serverOpts, customFlags, framework.SharedEtcd())
 	if err != nil {
 		tCtx.Fatalf("start apiserver: %v", err)
 	}
-	// Cleanup will be in reverse order: first the clients by canceling the
-	// child context, then the server.
+	// 清理顺序与创建顺序相反：先通过取消子 context 清理客户端，
+	// 再清理 server。
 	tCtx.Cleanup(server.TearDownFn)
 	tCtx = tCtx.WithCancel()
 	tCtx.Cleanup(func() {
 		tCtx.Cancel("test is done")
 	})
 
-	// TODO: client connection configuration, such as QPS or Burst is configurable in theory, this could be derived from the `config`, need to
-	// support this when there is any testcase that depends on such configuration.
+	// TODO: 客户端连接配置（例如 QPS 或 Burst）理论上是可以配置的，这些值可以从 `config` 推导出来，
+	// 当出现依赖这类配置的测试用例时，需要支持这一功能。
 	cfg := restclient.CopyConfig(server.ClientConfig)
 	cfg.QPS = 5000.0
 	cfg.Burst = 5000
 
-	// use default component config if config here is nil
+	// 如果此处传入的 config 为 nil，则使用默认的组件配置。
 	if config == nil {
 		var err error
 		config, err = newDefaultComponentConfig()
@@ -140,16 +140,16 @@ func mustSetupCluster(tCtx ktesting.TContext, config *config.KubeSchedulerConfig
 
 	tCtx = tCtx.WithRESTConfig(cfg)
 
-	// Not all config options will be effective but only those mostly related with scheduler performance will
-	// be applied to start a scheduler, most of them are defined in `scheduler.schedulerOptions`.
+	// 并非所有配置项都会生效；启动 Scheduler 时只会应用那些主要与
+	// 调度性能相关的配置，其中大部分定义在 `scheduler.schedulerOptions` 中。
 	scheduler, informerFactory, done := util.StartSchedulerWithDone(tCtx, config, opts.outOfTreePluginRegistry)
 	util.StartFakePVController(tCtx, tCtx.Client(), informerFactory)
 	runGC := util.CreateGCController(tCtx, tCtx, *cfg, informerFactory)
 	runNS := util.CreateNamespaceController(tCtx, tCtx, *cfg, informerFactory)
 	runResourceClaimController := func() {}
 	if enabledFeatures[features.DynamicResourceAllocation] {
-		// Testing of DRA with inline resource claims depends on this
-		// controller for creating and removing ResourceClaims.
+		// 使用 inline resource claim 的 DRA 测试依赖此控制器
+		// 来创建和删除 ResourceClaim。
 		runResourceClaimController = util.CreateResourceClaimController(tCtx, tCtx, tCtx.Client(), informerFactory)
 	}
 
@@ -171,10 +171,10 @@ func isAttempted(pod *v1.Pod) bool {
 	return false
 }
 
-// getScheduledPods returns the list of scheduled, attempted but unschedulable
-// and unattempted pods in the specified namespaces.
-// Label selector can be used to filter the pods.
-// Note that no namespaces specified matches all namespaces.
+// getScheduledPods 返回指定 namespace 中已调度、已尝试调度但不可调度
+// 以及尚未尝试调度的 Pod 列表。
+// 可以使用 label selector 来过滤 Pod。
+// 注意，未指定任何 namespace 时会匹配所有 namespace。
 func getScheduledPods(podInformer coreinformers.PodInformer, labelSelector map[string]string, namespaces ...string) ([]*v1.Pod, []*v1.Pod, []*v1.Pod, error) {
 	pods, err := podInformer.Lister().List(labels.Everything())
 	if err != nil {
@@ -200,23 +200,23 @@ func getScheduledPods(podInformer coreinformers.PodInformer, labelSelector map[s
 	return scheduled, attempted, unattempted, nil
 }
 
-// DataItem is the data point.
+// DataItem 表示一个数据点。
 type DataItem struct {
-	// Data is a map from bucket to real data point (e.g. "Perc90" -> 23.5). Notice
-	// that all data items with the same label combination should have the same buckets.
+	// Data 是从 bucket 到实际数据点的映射（例如 "Perc90" -> 23.5）。注意，
+	// 所有具有相同 label 组合的 data item 应该具有相同的 bucket。
 	Data map[string]float64 `json:"data"`
-	// Unit is the data unit. Notice that all data items with the same label combination
-	// should have the same unit.
+	// Unit 是数据的单位。注意，所有具有相同 label 组合的 data item
+	// 应该具有相同的单位。
 	Unit string `json:"unit"`
-	// Labels is the labels of the data item.
+	// Labels 是该 data item 的 label。
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// progress contains number of scheduled pods over time.
+	// progress 包含随时间变化的已调度 Pod 数量。
 	progress []podScheduling
 	start    time.Time
 }
 
-// DataItems is the data point set. It is the struct that perf dashboard expects.
+// DataItems 是数据点的集合。它是 perf dashboard 所期望的结构体。
 type DataItems struct {
 	Version   string     `json:"version"`
 	DataItems []DataItem `json:"dataItems"`
@@ -234,7 +234,7 @@ type podScheduling struct {
 	gatedPods     int
 }
 
-// makeBasePod creates a Pod object to be used as a template.
+// makeBasePod 创建一个用作模板的 Pod 对象。
 func makeBasePod() *v1.Pod {
 	basePod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -245,7 +245,7 @@ func makeBasePod() *v1.Pod {
 	return basePod
 }
 
-// makeBaseNode creates a Node object with given nodeNamePrefix to be used as a template.
+// makeBaseNode 使用给定的 nodeNamePrefix 创建一个用作模板的 Node 对象。
 func makeBaseNode(nodeNamePrefix string) *v1.Node {
 	return &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -272,13 +272,12 @@ func makeBaseNode(nodeNamePrefix string) *v1.Node {
 }
 
 func dataItems2JSONFile(dataItems DataItems, namePrefix string) error {
-	// perfdash expects all data items to have the same set of labels.  It
-	// then renders drop-down buttons for each label with all values found
-	// for each label. If we were to store data items that don't have a
-	// certain label, then perfdash will never show those data items
-	// because it will only show data items that have the currently
-	// selected label value. To avoid that, we collect all labels used
-	// anywhere and then add missing labels with "not applicable" as value.
+	// perfdash 要求所有 data item 具有相同的一组 label。
+	// 然后它会为每个 label 渲染下拉按钮，列出为该 label 找到的所有值。
+	// 如果我们存储了缺少某个 label 的 data item，perfdash 将永远不会显示这些
+	// data item，因为它只显示具有当前所选 label 值的 data item。
+	// 为避免这种情况，我们收集所有曾用到的 label，
+	// 并为缺失的 label 添加值为 "not applicable" 的项。
 	labels := sets.New[string]()
 	for _, item := range dataItems.DataItems {
 		for label := range item.Labels {
@@ -300,7 +299,7 @@ func dataItems2JSONFile(dataItems DataItems, namePrefix string) error {
 
 	destFile := fmt.Sprintf("%v_%v.json", namePrefix, time.Now().Format(dateFormat))
 	if *dataItemsDir != "" {
-		// Ensure the "dataItemsDir" path to be valid.
+		// 确保 "dataItemsDir" 路径有效。
 		if err := os.MkdirAll(*dataItemsDir, 0750); err != nil {
 			return fmt.Errorf("dataItemsDir path %v does not exist and cannot be created: %v", *dataItemsDir, err)
 		}
@@ -334,14 +333,14 @@ type labelValues struct {
 	Values []string
 }
 
-// metricsCollectorConfig is the config to be marshalled to YAML config file.
-// NOTE: The mapping here means only one filter is supported, either value in the list of `values` is able to be collected.
+// metricsCollectorConfig 是要序列化为 YAML 配置文件的配置。
+// 注意：这里的映射方式意味着只支持一个过滤器，即只能收集 `values` 列表中的值。
 type metricsCollectorConfig struct {
 	Metrics map[string][]*labelValues
 }
 
-// metricsCollector collects metrics from legacyregistry.DefaultGatherer.Gather() endpoint.
-// Currently only Histogram metrics are supported.
+// metricsCollector 从 legacyregistry.DefaultGatherer.Gather() 端点收集指标。
+// 目前只支持 Histogram 类型的指标。
 type metricsCollector struct {
 	*metricsCollectorConfig
 	labels map[string]string
@@ -355,13 +354,13 @@ func newMetricsCollector(config *metricsCollectorConfig, labels map[string]strin
 }
 
 func (mc *metricsCollector) init() error {
-	// Reset the metrics so that the measurements do not interfere with those collected during the previous steps.
+	// 重置这些指标，以免本次测量受到之前步骤中收集结果的影响。
 	m, err := legacyregistry.DefaultGatherer.Gather()
 	if err != nil {
 		return fmt.Errorf("failed to gather metrics to reset: %w", err)
 	}
 	for _, mFamily := range m {
-		// Reset only metrics defined in the collector.
+		// 只重置该 collector 中定义的指标。
 		if _, ok := mc.Metrics[mFamily.GetName()]; ok {
 			mFamily.Reset()
 		}
@@ -370,7 +369,7 @@ func (mc *metricsCollector) init() error {
 }
 
 func (*metricsCollector) run(tCtx ktesting.TContext) {
-	// metricCollector doesn't need to start before the tests, so nothing to do here.
+	// metricCollector 不需要在测试前启动，因此这里无需做任何事。
 }
 
 func (mc *metricsCollector) collect() []DataItem {
@@ -382,7 +381,7 @@ func (mc *metricsCollector) collect() []DataItem {
 
 	var dataItems []DataItem
 	for metric, labelValsSlice := range mc.Metrics {
-		// no filter is specified, aggregate all the metrics within the same metricFamily.
+		// 未指定过滤器时，聚合同一 metricFamily 中的所有指标。
 		if labelValsSlice == nil {
 			dataItem := collectHistogramVec(gm, metric, mc.labels, nil)
 			if dataItem != nil {
@@ -400,9 +399,9 @@ func (mc *metricsCollector) collect() []DataItem {
 	return dataItems
 }
 
-// uniqueLVCombos lists up all possible label values combinations.
-// e.g., if there are 3 labelValues, each of which has 2 values,
-// the result would be {A: a1, B: b1, C: c1}, {A: a2, B: b1, C: c1}, {A: a1, B: b2, C: c1}, ... (2^3 = 8 combinations).
+// uniqueLVCombos 列出所有可能的 label 值组合。
+// 例如，如果有 3 个 labelValues，每个包含 2 个值，
+// 结果将是 {A: a1, B: b1, C: c1}、{A: a2, B: b1, C: c1}、{A: a1, B: b2, C: c1} 等（2^3 = 8 种组合）。
 func uniqueLVCombos(lvs []*labelValues) []map[string]string {
 	if len(lvs) == 0 {
 		return []map[string]string{{}}
@@ -429,7 +428,7 @@ func uniqueLVCombos(lvs []*labelValues) []map[string]string {
 func collectHistogramVec(gm *testutil.GatheredMetrics, metric string, labels map[string]string, lvMap map[string]string) *DataItem {
 	vec, err := gm.GetHistogramVec(metric, lvMap)
 	if err != nil {
-		// "metric ... not found" is pretty normal. Don't spam the output with it!
+		// "metric ... not found" 很常见，不要在输出中反复打印它！
 		if !strings.HasSuffix(err.Error(), "not found") {
 			klog.Error(err)
 		}
@@ -453,7 +452,7 @@ func collectHistogramVec(gm *testutil.GatheredMetrics, metric string, labels map
 
 	msFactor := float64(time.Second) / float64(time.Millisecond)
 
-	// Copy labels and add "Metric" label for this metric.
+	// 复制 label，并为该指标添加 "Metric" label。
 	labelMap := map[string]string{"Metric": metric}
 	for k, v := range labels {
 		labelMap[k] = v
@@ -501,16 +500,16 @@ func (tc *throughputCollector) init() error {
 }
 
 func (tc *throughputCollector) run(tCtx ktesting.TContext) {
-	// The collector is based on informer cache events instead of periodically listing pods because:
-	// - polling causes more overhead
-	// - it does not work when pods get created, scheduled and deleted quickly
+	// 该 collector 基于 informer 缓存事件，而不是定期 list Pod，原因是：
+	// - 轮询会带来更多开销
+	// - 当 Pod 被快速创建、调度并删除时，轮询无法正常工作
 	//
-	// Normally, informers cannot be used to observe state changes reliably.
-	// They only guarantee that the *some* updates get reported, but not *all*.
-	// But in scheduler_perf, the scheduler and the test share the same informer,
-	// therefore we are guaranteed to see a new pod without NodeName (because
-	// that is what the scheduler needs to see to schedule it) and then the updated
-	// pod with NodeName (because nothing makes further changes to it).
+	// 通常情况下，informer 不能可靠地用于观察状态变化。
+	// 它只能保证报告*部分*更新，而不是*全部*。
+	// 但在 scheduler_perf 中，Scheduler 和测试共享同一个 informer，
+	// 因此我们一定能看到没有 NodeName 的新 Pod（因为
+	// Scheduler 调度时需要看到这样的 Pod），
+	// 然后看到带有 NodeName 的更新后 Pod（因为之后不会再修改它）。
 	var mutex sync.Mutex
 	scheduledPods := 0
 	getScheduledPods := func() int {
@@ -532,7 +531,7 @@ func (tc *throughputCollector) run(tCtx ktesting.TContext) {
 		mutex.Lock()
 		defer mutex.Unlock()
 		if (oldPod == nil || oldPod.Spec.NodeName == "") && newPod.Spec.NodeName != "" {
-			// Got scheduled.
+			// 已完成调度。
 			scheduledPods++
 		}
 	}
@@ -551,9 +550,9 @@ func (tc *throughputCollector) run(tCtx ktesting.TContext) {
 		tCtx.ExpectNoError(tc.podInformer.Informer().RemoveEventHandler(handle), "remove event handler")
 	}()
 
-	// Waiting for the initial sync didn't work, `handle.HasSynced` always returned
-	// false - perhaps because the event handlers get added to a running informer.
-	// That's okay(ish), throughput is typically measured within an empty namespace.
+	// 等待初始同步没有奏效，`handle.HasSynced` 始终返回
+	// false —— 可能是因为事件处理程序被添加到一个已经运行的 informer 上。
+	// 这基本可以接受，因为吞吐量通常是在空 namespace 中测量的。
 	//
 	// syncTicker := time.NewTicker(time.Millisecond)
 	// defer syncTicker.Stop()
@@ -589,14 +588,14 @@ func (tc *throughputCollector) run(tCtx ktesting.TContext) {
 			now := time.Now()
 
 			scheduled := getScheduledPods()
-			// Only do sampling if number of scheduled pods is greater than zero.
+			// 只有在已调度 Pod 数量大于零时才进行采样。
 			if scheduled == 0 {
 				continue
 			}
 			if !started {
 				started = true
-				// Skip the initial sample. It's likely to be an outlier because
-				// sampling and creating pods get started independently.
+				// 跳过第一个样本。由于采样和创建 Pod 是独立启动的，
+				// 该样本很可能是异常值。
 				lastScheduledCount = scheduled
 				lastSampleTime = now
 				tc.start = now
@@ -605,35 +604,34 @@ func (tc *throughputCollector) run(tCtx ktesting.TContext) {
 
 			newScheduled := scheduled - lastScheduledCount
 			if newScheduled == 0 {
-				// Throughput would be zero for the interval.
-				// Instead of recording 0 pods/s, keep waiting
-				// until we see at least one additional pod
-				// being scheduled.
+				// 该时间间隔内的吞吐量将为零。
+				// 与其记录 0 pods/s，不如继续等待，
+				// 直到看到至少又有一个 Pod 完成调度。
 				skipped++
 				continue
 			}
 
-			// This should be roughly equal to
-			// throughputSampleInterval * (skipped + 1), but we
-			// don't count on that because the goroutine might not
-			// be scheduled immediately when the timer
-			// triggers. Instead we track the actual time stamps.
+			// 该值大致应等于
+			// throughputSampleInterval * (skipped + 1)，但我们
+			// 不能依赖这一点，因为定时器触发时
+			// goroutine 可能不会立即被调度。
+			// 因此我们记录实际的时间戳。
 			duration := now.Sub(lastSampleTime)
 			expectedDuration := throughputSampleInterval * time.Duration(skipped+1)
 			errorMargin := (duration - expectedDuration).Seconds() / expectedDuration.Seconds() * 100
 			if tc.errorMargin > 0 && math.Abs(errorMargin) > tc.errorMargin {
-				// This might affect the result, report it.
+				// 这可能会影响结果，需要报告。
 				klog.Infof("WARNING: Expected throughput collector to sample at regular time intervals. The %d most recent intervals took %s instead of %s, a difference of %0.1f%%.", skipped+1, duration, expectedDuration, errorMargin)
 			}
 
-			// To keep percentiles accurate, we have to record multiple samples with the same
-			// throughput value if we skipped some intervals.
+			// 为保证百分位数准确，如果跳过了某些时间间隔，
+			// 我们就必须记录多个具有相同吞吐量值的样本。
 			throughput := float64(newScheduled) / duration.Seconds()
 			for i := 0; i <= skipped; i++ {
 				tc.schedulingThroughputs = append(tc.schedulingThroughputs, throughput)
 			}
 
-			// Record the metric sample.
+			// 记录指标样本。
 			counters, err := testutil.GetCounterValuesFromGatherer(legacyregistry.DefaultGatherer, "scheduler_schedule_attempts_total", map[string]string{"profile": "default-scheduler"}, "result")
 			if err != nil {
 				klog.Error(err)
@@ -669,8 +667,8 @@ func (tc *throughputCollector) collect() []DataItem {
 		start:    tc.start,
 	}
 
-	// tc.schedulingThroughputs can be empty if the scenario doesn't have
-	// enough number of pods and nodes to take more than throughputSampleInterval (i.e. 1 second).
+	// 如果场景中的 Pod 和 Node 数量不足，调度耗时没有超过
+	// throughputSampleInterval（即 1 秒），tc.schedulingThroughputs 可能为空。
 	length := len(tc.schedulingThroughputs)
 	if length == 0 {
 		klog.Warningf("Failed to measure SchedulingThroughput for %s. Increase pods and/or nodes to make scheduling take longer", tc.resultLabels["Name"])
@@ -696,7 +694,7 @@ func (tc *throughputCollector) collect() []DataItem {
 	return []DataItem{throughputSummary}
 }
 
-// memoryCollector collects memory usage metrics during the test
+// memoryCollector 在测试期间收集内存使用指标。
 type memoryCollector struct {
 	samples      []memorySample
 	resultLabels map[string]string
@@ -813,7 +811,7 @@ func (mc *memoryCollector) collect() []DataItem {
 	}
 }
 
-// schedulingDurationCollector calculates the total duration of the scheduling phase, including pod creation.
+// schedulingDurationCollector 计算调度阶段的总时长，包括 Pod 创建时间。
 type schedulingDurationCollector struct {
 	resultLabels map[string]string
 	duration     time.Duration
@@ -831,7 +829,7 @@ func (sdc *schedulingDurationCollector) init() error {
 
 func (sdc *schedulingDurationCollector) run(tCtx ktesting.TContext) {
 	start := time.Now()
-	// Wait for the scheduling to finish
+	// 等待调度完成。
 	<-tCtx.Done()
 	sdc.duration = time.Since(start)
 }

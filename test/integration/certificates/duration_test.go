@@ -60,8 +60,8 @@ func TestCSRDuration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	t.Cleanup(cancel)
 
-	// assert that the metrics we collect during the test run match expectations
-	// we have 7 valid test cases below that request a duration of which 6 should have their duration honored
+	// 断言测试运行期间收集的指标符合预期
+	// 下面有 7 个请求了 duration 的有效测试用例，其中 6 个的 duration 应被采纳
 	wantMetricStrings := []string{
 		`apiserver_certificates_registry_csr_honored_duration_total{signerName="kubernetes.io/kube-apiserver-client"} 6`,
 		`apiserver_certificates_registry_csr_requested_duration_total{signerName="kubernetes.io/kube-apiserver-client"} 7`,
@@ -253,7 +253,7 @@ func TestCSRDuration(t *testing.T) {
 
 			switch l := len(certs); l {
 			case 1:
-				// good
+				// 正常
 			default:
 				t.Errorf("expected 1 cert, got %d", l)
 				for i, certificate := range certs {

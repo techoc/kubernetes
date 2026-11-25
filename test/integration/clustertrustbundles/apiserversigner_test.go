@@ -80,15 +80,15 @@ func TestClusterTrustBundlesPublisherController(t *testing.T) {
 
 	kcm := kubecontrollermanagertesting.StartTestServerOrDie(t, ctx, []string{
 		"--kubeconfig=" + kubeConfigFile,
-		"--controllers=kube-apiserver-serving-clustertrustbundle-publisher-controller", // these are the only controllers needed for this test
-		"--use-service-account-credentials=true",                                       // exercise RBAC of kube-apiserver-serving-clustertrustbundle-publisher controller
-		"--leader-elect=false",                                                         // KCM leader election calls os.Exit when it ends, so it is easier to just turn it off altogether
+		"--controllers=kube-apiserver-serving-clustertrustbundle-publisher-controller", // 这些是本测试所需的全部 controller
+		"--use-service-account-credentials=true",                                       // 验证 kube-apiserver-serving-clustertrustbundle-publisher controller 的 RBAC
+		"--leader-elect=false",                                                         // KCM leader election 结束时会调用 os.Exit，因此直接将其关闭更简单
 		"--root-ca-file=" + cacertPath,
 		"--feature-gates=ClusterTrustBundle=true",
 	})
 	defer kcm.TearDownFn()
 
-	// setup finished, tests follow
+	// 设置完成，以下开始测试
 	clientSet, err := clientset.NewForConfig(server.ClientConfig)
 	if err != nil {
 		t.Fatalf("error in create clientset: %v", err)
@@ -103,8 +103,8 @@ func TestClusterTrustBundlesPublisherController(t *testing.T) {
 		BasicConstraintsValid: true,
 	})
 	unrelatedPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: unrelatedSigner})
-	// set up a signer that's completely unrelated to the controller to check
-	// it's not anyhow handled by it
+	// 设置一个与 controller 完全无关的 signer，以检查
+	// 它不会被该 controller 以任何方式处理
 	unrelatedCTB, err := clientSet.CertificatesV1().ClusterTrustBundles().Create(ctx,
 		&certsv1.ClusterTrustBundle{
 			ObjectMeta: metav1.ObjectMeta{

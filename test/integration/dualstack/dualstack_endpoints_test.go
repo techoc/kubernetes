@@ -36,7 +36,7 @@ import (
 )
 
 func TestDualStackEndpoints(t *testing.T) {
-	// Create an IPv4IPv6 dual stack control-plane
+	// 创建 IPv4IPv6 双栈控制平面
 	serviceCIDR := "10.0.0.0/16"
 	secondaryServiceCIDR := "2001:db8:1::/112"
 	labelMap := func() map[string]string {
@@ -48,13 +48,13 @@ func TestDualStackEndpoints(t *testing.T) {
 	client, _, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
 			opts.ServiceClusterIPRanges = fmt.Sprintf("%s,%s", serviceCIDR, secondaryServiceCIDR)
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 		},
 	})
 	defer tearDownFn()
 
-	// Wait until the default "kubernetes" service is created.
+	// 等待默认的 "kubernetes" Service 创建完成。
 	if err := wait.Poll(250*time.Millisecond, time.Minute, func() (bool, error) {
 		_, err := client.CoreV1().Services(metav1.NamespaceDefault).Get(tCtx, "kubernetes", metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -68,7 +68,7 @@ func TestDualStackEndpoints(t *testing.T) {
 	resyncPeriod := 0 * time.Hour
 	informers := informers.NewSharedInformerFactory(client, resyncPeriod)
 
-	// Create fake node
+	// 创建伪造节点
 	testNode := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "fakenode",
@@ -107,9 +107,9 @@ func TestDualStackEndpoints(t *testing.T) {
 		client,
 		1*time.Second)
 
-	// Start informer and controllers
+	// 启动 informer 和 controller
 	informers.Start(tCtx.Done())
-	// use only one worker to serialize the updates
+	// 只使用一个 worker，使更新串行化
 	go epController.Run(tCtx, 1)
 	go epsController.Run(tCtx, 1)
 
@@ -150,7 +150,7 @@ func TestDualStackEndpoints(t *testing.T) {
 			ns := framework.CreateNamespaceOrDie(client, fmt.Sprintf("test-endpointslice-dualstack-%d", i), t)
 			defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-			// Create a pod with labels
+			// 创建一个带标签的 Pod
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
@@ -173,7 +173,7 @@ func TestDualStackEndpoints(t *testing.T) {
 				t.Fatalf("Failed to create pod %s: %v", pod.Name, err)
 			}
 
-			// Set pod IPs
+			// 设置 Pod IP
 			podIPbyFamily := map[v1.IPFamily]string{v1.IPv4Protocol: "1.1.1.1", v1.IPv6Protocol: "2001:db2::65"}
 			createdPod.Status = v1.PodStatus{
 				Phase:  v1.PodRunning,
@@ -186,7 +186,7 @@ func TestDualStackEndpoints(t *testing.T) {
 
 			svc := &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("svc-test-%d", i), // use different services for each test
+					Name:      fmt.Sprintf("svc-test-%d", i), // 每个测试使用不同的 Service
 					Namespace: ns.Name,
 					Labels:    labelMap(),
 				},
@@ -206,23 +206,23 @@ func TestDualStackEndpoints(t *testing.T) {
 				},
 			}
 
-			// create a service
+			// 创建 Service
 			_, err = client.CoreV1().Services(ns.Name).Create(tCtx, svc, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("Error creating service: %v", err)
 			}
 
-			// wait until endpoints are created
-			// legacy endpoints are not dual stack
-			// and use the address of the first IP family
+			// 等待 Endpoints 创建完成
+			// 旧版 Endpoints 不支持双栈，
+			// 使用第一个 IP 地址族的地址
 			if err := wait.PollImmediate(1*time.Second, wait.ForeverTestTimeout, func() (bool, error) {
 				e, err := client.CoreV1().Endpoints(ns.Name).Get(tCtx, svc.Name, metav1.GetOptions{})
 				if err != nil {
 					t.Logf("Error fetching endpoints: %v", err)
 					return false, nil
 				}
-				// check if the endpoint addresses match the pod IP of the first IPFamily of the service
-				// since this is an integration test PodIPs are not "ready"
+				// 检查 Endpoints 地址是否与 Service 第一个 IPFamily 的 Pod IP 匹配
+				// 由于这是集成测试，PodIP 并非处于 "ready" 状态
 				if len(e.Subsets) > 0 && len(e.Subsets[0].NotReadyAddresses) > 0 {
 					if e.Subsets[0].NotReadyAddresses[0].IP == podIPbyFamily[tc.ipFamilies[0]] {
 						return true, nil
@@ -235,7 +235,7 @@ func TestDualStackEndpoints(t *testing.T) {
 				t.Fatalf("Endpoints not found: %v", err)
 			}
 
-			// wait until the endpoint slices are created
+			// 等待 EndpointSlice 创建完成
 			err = wait.PollImmediate(1*time.Second, wait.ForeverTestTimeout, func() (bool, error) {
 				lSelector := discovery.LabelServiceName + "=" + svc.Name
 				esList, err := client.DiscoveryV1().EndpointSlices(ns.Name).List(tCtx, metav1.ListOptions{LabelSelector: lSelector})
@@ -243,16 +243,16 @@ func TestDualStackEndpoints(t *testing.T) {
 					t.Logf("Error listing EndpointSlices: %v", err)
 					return false, nil
 				}
-				// there must be an endpoint slice per ipFamily
+				// 每个 ipFamily 必须有一个 EndpointSlice
 				if len(esList.Items) != len(tc.ipFamilies) {
 					t.Logf("Waiting for EndpointSlice to be created %v", esList)
 					return false, nil
 				}
-				// there must be an endpoint address per each IP family
+				// 每个 IP 地址族必须有一个 endpoint 地址
 				for _, ipFamily := range tc.ipFamilies {
 					found := false
 					for _, slice := range esList.Items {
-						// check if the endpoint addresses match the pod IPs
+						// 检查 endpoint 地址是否与 Pod IP 匹配
 						if len(slice.Endpoints) > 0 && len(slice.Endpoints[0].Addresses) > 0 {
 							if string(ipFamily) == string(slice.AddressType) &&
 								slice.Endpoints[0].Addresses[0] == podIPbyFamily[ipFamily] {

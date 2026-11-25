@@ -27,8 +27,8 @@ import (
 	"k8s.io/client-go/transport"
 )
 
-// AssertRequestResponseAsCBOR returns a transport.WrapperFunc that will report a test error if a
-// non-empty request or response body contains data that does not appear to be CBOR-encoded.
+// AssertRequestResponseAsCBOR 返回一个 transport.WrapperFunc，当非空的请求或响应体中包含看似
+// 非 CBOR 编码的数据时，它会报告测试错误。
 func AssertRequestResponseAsCBOR(t testing.TB) transport.WrapperFunc {
 	unsupportedPatchContentTypes := sets.New(
 		"application/json-patch+json",
@@ -57,8 +57,8 @@ func AssertRequestResponseAsCBOR(t testing.TB) transport.WrapperFunc {
 				return response, rterr
 			}
 
-			// We can't synchronously inspect streaming responses, so tee to a buffer
-			// and inspect it at the end of the test.
+			// 无法同步检查流式响应，因此将其复制到缓冲区，
+			// 并在测试结束时检查。
 			var buf bytes.Buffer
 			response.Body = struct {
 				io.Reader

@@ -57,7 +57,7 @@ const (
 	recordSeparator = `###$$$###`
 )
 
-// Policy registration helpers
+// 策略注册辅助代码
 var testSpec admissionregistration.ValidatingAdmissionPolicy = admissionregistration.ValidatingAdmissionPolicy{
 	Spec: admissionregistration.ValidatingAdmissionPolicySpec{
 		ParamKind: &admissionregistration.ParamKind{
@@ -146,13 +146,13 @@ var testSpec admissionregistration.ValidatingAdmissionPolicy = admissionregistra
 				Expression: `params.data.convert`,
 			},
 		},
-		// Would be nice to use CEL to create a single map
-		// and stringify it. Unfortunately those library functions
-		// are not yet available, so we must create a map
-		// like so
+		// 理想情况下可以用 CEL 创建单个 map
+		// 并将其字符串化。可惜这些库函数
+		// 目前尚不可用，因此只能按如下方式
+		// 创建 map。
 		Validations: []admissionregistration.Validation{
 			{
-				// newlines forbidden so use recordSeparator
+				// 不允许换行，因此使用 recordSeparator
 				Expression:        "!variables.shouldFail",
 				MessageExpression: `"` + beginSentinel + `resourceGroup,resourceVersion,resourceResource,subresource,operation,name,namespace,objectExists,objectKind,objectAPIVersion,oldObjectExists,oldObjectKind,oldObjectAPIVersion,optionsExists,optionsKind,optionsAPIVersion,paramsPhase,paramsVersion,paramsConvert` + recordSeparator + `"+variables.resourceGroup + "," + variables.resourceVersion + "," + variables.resourceResource + "," + variables.subresource + "," + variables.operation + "," + variables.name + "," + variables.namespaceName + "," + variables.objectExists + "," + variables.objectKind + "," + variables.objectAPIVersion + "," + variables.oldObjectExists + "," + variables.oldObjectKind + "," + variables.oldObjectAPIVersion + "," + variables.optionsExists + "," + variables.optionsKind + "," + variables.optionsAPIVersion + "," + variables.paramsPhase + "," + variables.paramsVersion + "," + variables.paramsConvert`,
 			},
@@ -212,7 +212,7 @@ func createV1beta1ValidatingPolicyAndBinding(ctx ktesting.TContext, client clien
 		return err
 	}
 
-	// Create a param that holds the options for this
+	// 创建一个用于保存选项的 param
 	configuration, err := client.CoreV1().ConfigMaps("default").Create(ctx, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-policy-v1beta1-param",
@@ -329,7 +329,7 @@ func createV1ValidatingPolicyAndBinding(ctx ktesting.TContext, client clientset.
 		return err
 	}
 
-	// Create a param that holds the options for this
+	// 创建一个用于保存选项的 param
 	configuration, err := client.CoreV1().ConfigMaps("default").Create(ctx, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-policy-v1-param",
@@ -404,22 +404,20 @@ func createV1ValidatingPolicyAndBinding(ctx ktesting.TContext, client clientset.
 	return nil
 }
 
-// This test shows that policy intercepts all requests for all resources,
-// subresources, verbs, and input versions of policy/binding.
-// The test emulates v1.33 as that was the last version before v1beta1 resource was removed.
-// Remove this test once v1.33 cannot be emulated in v1.37.
+// 该测试表明策略会拦截所有资源、子资源、动词以及 policy/binding 输入版本的全部请求。
+// 测试模拟 v1.33，因为那是 v1beta1 资源被移除前的最后一个版本。
+// 当 v1.37 中无法再模拟 v1.33 时，请删除该测试。
 //
-// This test tries to mirror very closely the same test for webhook admission
+// 该测试尽量贴近 webhook 准入的同类测试
 // test/integration/apiserver/admissionwebhook/admission_test.go testWebhookAdmission
 func TestPolicyAdmissionV1beta1(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse(vapV1beta1LastEmulatableVersion))
 	testPolicyAdmission(t, true)
 }
 
-// This test shows that policy intercepts all requests for all resources,
-// subresources, verbs, and input versions of policy/binding.
+// 该测试表明策略会拦截所有资源、子资源、动词以及 policy/binding 输入版本的全部请求。
 //
-// This test tries to mirror very closely the same test for webhook admission
+// 该测试尽量贴近 webhook 准入的同类测试
 // test/integration/apiserver/admissionwebhook/admission_test.go testWebhookAdmission
 func TestPolicyAdmission(t *testing.T) {
 	testPolicyAdmission(t, false)
@@ -446,14 +444,14 @@ func testPolicyAdmission(t *testing.T, supportV1Beta1 bool) {
 
 	server := apiservertesting.StartTestServerOrDie(t, nil, []string{
 		"--enable-admission-plugins", "ValidatingAdmissionPolicy",
-		// turn off admission plugins that add finalizers
+		// 关闭会添加 finalizer 的准入插件
 		"--disable-admission-plugins=ServiceAccount,StorageObjectInUseProtection",
-		// force enable all resources so we can check storage.
+		// 强制启用所有资源，以便检查存储。
 		"--runtime-config=api/all=true",
 	}, framework.SharedEtcd())
 	defer server.TearDownFn()
 
-	// Create admission policy & binding that match everything
+	// 创建匹配所有对象的准入策略及其绑定
 	clientConfig := server.ClientConfig
 	clientConfig.Impersonate.UserName = testClientUsername
 	clientConfig.Impersonate.Groups = []string{"system:masters", "system:authenticated"}
@@ -463,14 +461,14 @@ func testPolicyAdmission(t *testing.T, supportV1Beta1 bool) {
 		t.Fatal(err)
 	}
 
-	// create CRDs
+	// 创建 CRD
 	etcd.CreateTestCRDs(t, apiextensionsclientset.NewForConfigOrDie(server.ClientConfig), false, etcd.GetCustomResourceDefinitionData()...)
 
 	if _, err := client.CoreV1().Namespaces().Create(tCtx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// gather resources to test
+	// 收集待测试的资源
 	dynamicClient, err := dynamic.NewForConfig(clientConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -527,10 +525,10 @@ func testPolicyAdmission(t *testing.T, supportV1Beta1 bool) {
 		return true
 	})
 
-	// map unqualified resource names to the fully qualified resource we will expect to be converted to
-	// Note: this only works because there are no overlapping resource names in-process that are not co-located
+	// 将非限定资源名映射到预期会被转换成的完整限定资源
+	// 注意：这之所以可行，是因为同一进程中不存在未共置的重叠资源名
 	convertedResources := map[string]schema.GroupVersionResource{}
-	// build the webhook rules enumerating the specific group/version/resources we want
+	// 构建列举所需特定 group/version/resources 的 webhook 规则
 	convertedV1beta1Rules := []admissionregistrationv1beta1.NamedRuleWithOperations{}
 	convertedV1Rules := []admissionregistrationv1.NamedRuleWithOperations{}
 	for _, gvr := range gvrsToTest {
@@ -538,11 +536,11 @@ func testPolicyAdmission(t *testing.T, supportV1Beta1 bool) {
 
 		convertedGVR, ok := convertedResources[gvr.Resource]
 		if !ok {
-			// this is the first time we've seen this resource
-			// record the fully qualified resource we expect
+			// 这是首次见到该资源
+			// 记录我们期望的完整限定资源
 			convertedGVR = gvr
 			convertedResources[gvr.Resource] = gvr
-			// add an admission rule indicating we can receive this version
+			// 添加一条准入规则，表明我们可以接收该版本
 			convertedV1beta1Rules = append(convertedV1beta1Rules, admissionregistrationv1beta1.NamedRuleWithOperations{
 				RuleWithOperations: admissionregistrationv1.RuleWithOperations{
 					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
@@ -557,7 +555,7 @@ func testPolicyAdmission(t *testing.T, supportV1Beta1 bool) {
 			})
 		}
 
-		// record the expected resource and kind
+		// 记录预期的资源和 kind
 		holder.gvrToConvertedGVR[metaGVR] = metav1.GroupVersionResource{Group: convertedGVR.Group, Version: convertedGVR.Version, Resource: convertedGVR.Resource}
 		holder.gvrToConvertedGVK[metaGVR] = schema.GroupVersionKind{Group: resourcesByGVR[convertedGVR].Group, Version: resourcesByGVR[convertedGVR].Version, Kind: resourcesByGVR[convertedGVR].Kind}
 	}
@@ -582,7 +580,7 @@ func testPolicyAdmission(t *testing.T, supportV1Beta1 bool) {
 		t.Fatal(err)
 	}
 
-	// Try to patch the configmap and look for the warning message.
+	// 尝试 patch ConfigMap 并查找警告消息。
 	if err := wait.PollUntilContextTimeout(tCtx, time.Millisecond*100, time.Second*5, false, func(ctx context.Context) (bool, error) {
 		holder.reset(t)
 		_, err = client.CoreV1().ConfigMaps(testNamespace).Patch(ctx, testConfigmap.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
@@ -607,7 +605,7 @@ func testPolicyAdmission(t *testing.T, supportV1Beta1 bool) {
 	start := time.Now()
 	count := 0
 
-	// Test admission on all resources, subresources, and verbs
+	// 测试所有资源、子资源和动词上的准入
 	for _, gvr := range gvrsToTest {
 		resource := resourcesByGVR[gvr]
 		t.Run(gvr.Group+"."+gvr.Version+"."+strings.ReplaceAll(resource.Name, "/", "."), func(t *testing.T) {
@@ -644,7 +642,7 @@ func testPolicyAdmission(t *testing.T, supportV1Beta1 bool) {
 	}
 }
 
-// Policy admission holder for test framework
+// 测试框架使用的策略准入持有器
 
 type policyExpectationHolder struct {
 	holder
@@ -666,7 +664,7 @@ func (p *policyExpectationHolder) expect(gvr schema.GroupVersionResource, gvk, o
 
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	// Set up the recorded map with nil records for all combinations
+	// 用 nil 记录初始化 recorded map，覆盖所有组合
 	p.recorded = map[webhookOptions]*admissionRequest{}
 	for _, phase := range []string{validation} {
 		for _, converted := range []bool{true, false} {
@@ -681,7 +679,7 @@ func (p *policyExpectationHolder) verify(t *testing.T) {
 	p.warningLock.Lock()
 	defer p.warningLock.Unlock()
 
-	// Process all detected warnings and record in the nested handler
+	// 处理所有检测到的警告，并记录到嵌套的 handler 中
 	for _, w := range p.warnings {
 		var currentRequest *admissionRequest
 		var currentParams webhookOptions

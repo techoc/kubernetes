@@ -63,21 +63,21 @@ func TestResourcePoolStatusRequest(t *testing.T) {
 				tCtx.Run("ValidationErrors", testValidationErrors)
 				tCtx.Run("PartitionSummary", testPartitionSummary)
 				tCtx.Run("ShareableSummary", testShareableSummary)
-				// Note: RBAC enforcement is standard Kubernetes behavior tested in
-				// test/integration/auth/. The test API server uses AlwaysAllow authorizer.
+				// 注：RBAC 强制检查是标准 Kubernetes 行为，在
+				// test/integration/auth/ 中测试。本测试 API server 使用 AlwaysAllow 授权器。
 			},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			tCtx := ktesting.Init(t)
 
-			// Enable required feature gates
+			// 启用所需的特性开关
 			featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, tc.features)
 
 			etcdOptions := framework.SharedEtcd()
 			apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
 			apiServerFlags := framework.DefaultTestServerFlags()
-			// Enable the v1alpha3 API for ResourcePoolStatusRequest
+			// 为 ResourcePoolStatusRequest 启用 v1alpha3 API
 			apiServerFlags = append(apiServerFlags, "--runtime-config=resource.k8s.io/v1alpha3=true")
 			server := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions, apiServerFlags, etcdOptions)
 			tCtx.CleanupCtx(func(tCtx ktesting.TContext) {
@@ -93,7 +93,7 @@ func TestResourcePoolStatusRequest(t *testing.T) {
 	}
 }
 
-// prepareResourcePoolStatusRequestController prepares the context for the controller.
+// prepareResourcePoolStatusRequestController 为 controller 准备上下文。
 func prepareResourcePoolStatusRequestController(tCtx ktesting.TContext) ktesting.TContext {
 	controller := &resourcePoolStatusRequestControllerSingleton{
 		rootCtx: tCtx,
@@ -188,7 +188,7 @@ func testProcessResourcePoolStatusRequest(tCtx ktesting.TContext) {
 	poolName := "test-pool"
 	nodeName := "test-node"
 
-	// Create a ResourceSlice
+	// 创建 ResourceSlice
 	slice := &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-slice",
@@ -210,7 +210,7 @@ func testProcessResourcePoolStatusRequest(tCtx ktesting.TContext) {
 		deleteAndWait(tCtx, tCtx.Client().ResourceV1().ResourceSlices().Delete, tCtx.Client().ResourceV1().ResourceSlices().Get, slice.Name)
 	})
 
-	// Create a ResourcePoolStatusRequest
+	// 创建 ResourcePoolStatusRequest
 	request := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-request",
@@ -225,7 +225,7 @@ func testProcessResourcePoolStatusRequest(tCtx ktesting.TContext) {
 		deleteAndWait(tCtx, tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Delete, tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get, request.Name)
 	})
 
-	// Wait for the controller to process the request
+	// 等待 controller 处理请求
 	tCtx.Eventually(func(tCtx ktesting.TContext) (*resourcev1alpha3.ResourcePoolStatusRequest, error) {
 		return tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get(tCtx, request.Name, metav1.GetOptions{})
 	}).WithTimeout(30*time.Second).Should(
@@ -236,7 +236,7 @@ func testProcessResourcePoolStatusRequest(tCtx ktesting.TContext) {
 		"ResourcePoolStatusRequest should have been processed",
 	)
 
-	// Verify the pool status details
+	// 校验资源池状态详情
 	request, err := tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get(tCtx, request.Name, metav1.GetOptions{})
 	tCtx.ExpectNoError(err, "get processed request")
 
@@ -268,10 +268,10 @@ func testProcessResourcePoolStatusRequest(tCtx ktesting.TContext) {
 	}
 }
 
-// testPartitionSummary verifies a two-slice partitionable pool (a counter slice
-// and a device slice, only the device slice declaring the PartitionTypeAttribute
-// since the counter slice carries no counter-consuming devices) yields a typed
-// partitionSummary and no counterSets.
+// testPartitionSummary 验证由两个 slice 组成的可分区资源池（一个 counter slice
+// 和一个 device slice；由于 counter slice 不包含消耗 counter 的设备，
+// 只有 device slice 声明 PartitionTypeAttribute）会产生类型化的
+// partitionSummary，且不产生 counterSets。
 func testPartitionSummary(tCtx ktesting.TContext) {
 	startResourcePoolStatusRequestController(tCtx)
 
@@ -357,8 +357,8 @@ func testPartitionSummary(tCtx ktesting.TContext) {
 	}
 }
 
-// testShareableSummary verifies a pool of shareable devices yields a
-// shareableSummary with the aggregate capacity and device counts.
+// testShareableSummary 验证由可共享设备组成的资源池会产生
+// 包含聚合容量和设备数量的 shareableSummary。
 func testShareableSummary(tCtx ktesting.TContext) {
 	startResourcePoolStatusRequestController(tCtx)
 
@@ -422,7 +422,7 @@ func testOneTimeProcessing(tCtx ktesting.TContext) {
 
 	driverName := "test.example.com"
 
-	// Create a ResourceSlice
+	// 创建 ResourceSlice
 	slice := &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-slice-one-time",
@@ -441,7 +441,7 @@ func testOneTimeProcessing(tCtx ktesting.TContext) {
 		deleteAndWait(tCtx, tCtx.Client().ResourceV1().ResourceSlices().Delete, tCtx.Client().ResourceV1().ResourceSlices().Get, slice.Name)
 	})
 
-	// Create a ResourcePoolStatusRequest
+	// 创建 ResourcePoolStatusRequest
 	request := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-request-one-time",
@@ -455,7 +455,7 @@ func testOneTimeProcessing(tCtx ktesting.TContext) {
 		deleteAndWait(tCtx, tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Delete, tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get, request.Name)
 	})
 
-	// Wait for the controller to process the request
+	// 等待 controller 处理请求
 	tCtx.Eventually(func(tCtx ktesting.TContext) (*resourcev1alpha3.ResourcePoolStatusRequest, error) {
 		return tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get(tCtx, request.Name, metav1.GetOptions{})
 	}).WithTimeout(30*time.Second).Should(
@@ -463,12 +463,12 @@ func testOneTimeProcessing(tCtx ktesting.TContext) {
 		"ResourcePoolStatusRequest should have been processed",
 	)
 
-	// Get the processed request
+	// 获取已处理的请求
 	processedRequest, err := tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get(tCtx, request.Name, metav1.GetOptions{})
 	tCtx.ExpectNoError(err, "get processed request")
 	originalResourceVersion := processedRequest.ResourceVersion
 
-	// Add a new slice - the request should NOT be reprocessed
+	// 新增一个 slice —— 请求不应被重新处理
 	slice2 := &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-slice-one-time-2",
@@ -487,7 +487,7 @@ func testOneTimeProcessing(tCtx ktesting.TContext) {
 		deleteAndWait(tCtx, tCtx.Client().ResourceV1().ResourceSlices().Delete, tCtx.Client().ResourceV1().ResourceSlices().Get, slice2.Name)
 	})
 
-	// Wait a bit and verify the request was NOT reprocessed
+	// 稍等片刻，验证请求未被重新处理
 	time.Sleep(2 * time.Second)
 
 	finalRequest, err := tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get(tCtx, request.Name, metav1.GetOptions{})
@@ -497,7 +497,7 @@ func testOneTimeProcessing(tCtx ktesting.TContext) {
 		tCtx.Errorf("request was reprocessed: original resource version %v, final %v",
 			originalResourceVersion, finalRequest.ResourceVersion)
 	}
-	// Should still show only 1 pool (the original one)
+	// 仍应只显示 1 个资源池（原来的那个）
 	if finalRequest.Status.PoolCount == nil || *finalRequest.Status.PoolCount != 1 {
 		tCtx.Errorf("expected 1 total matching pool (from original processing), got %v", finalRequest.Status.PoolCount)
 	}
@@ -508,7 +508,7 @@ func testLimitTruncation(tCtx ktesting.TContext) {
 
 	driverName := "test-limit.example.com"
 
-	// Create multiple ResourceSlices with different pools
+	// 创建多个具有不同资源池的 ResourceSlice
 	for i := range 5 {
 		sliceName := fmt.Sprintf("test-slice-limit-%d", i)
 		poolName := fmt.Sprintf("pool-%d", i)
@@ -532,7 +532,7 @@ func testLimitTruncation(tCtx ktesting.TContext) {
 		})
 	}
 
-	// Create a ResourcePoolStatusRequest with limit=2
+	// 创建 limit=2 的 ResourcePoolStatusRequest
 	request := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-request-limit",
@@ -547,14 +547,14 @@ func testLimitTruncation(tCtx ktesting.TContext) {
 		deleteAndWait(tCtx, tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Delete, tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get, request.Name)
 	})
 
-	// Wait for the controller to process the request
+	// 等待 controller 处理请求
 	tCtx.Eventually(func(tCtx ktesting.TContext) (*resourcev1alpha3.ResourcePoolStatusRequest, error) {
 		return tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get(tCtx, request.Name, metav1.GetOptions{})
 	}).WithTimeout(30*time.Second).Should(
 		gomega.And(
-			// PoolCount should be 5 (all pools match)
+			// PoolCount 应为 5（所有资源池均匹配）
 			gomega.HaveField("Status.PoolCount", gomega.Equal(ptr.To(int32(5)))),
-			// But Pools should only contain 2 (due to limit)
+			// 但 Pools 应只包含 2 个（受 limit 限制）
 			gomega.HaveField("Status.Pools", gomega.HaveLen(2)),
 		),
 		"ResourcePoolStatusRequest should have been processed with limit truncation",
@@ -567,7 +567,7 @@ func testFilterByPoolName(tCtx ktesting.TContext) {
 	driverName := "test-filter.example.com"
 	targetPoolName := "target-pool"
 
-	// Create multiple ResourceSlices - one with the target pool, others with different pools
+	// 创建多个 ResourceSlice —— 一个使用目标资源池，其余使用不同资源池
 	sliceTarget := &resourceapi.ResourceSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-slice-filter-target",
@@ -605,7 +605,7 @@ func testFilterByPoolName(tCtx ktesting.TContext) {
 		deleteAndWait(tCtx, tCtx.Client().ResourceV1().ResourceSlices().Delete, tCtx.Client().ResourceV1().ResourceSlices().Get, sliceOther.Name)
 	})
 
-	// Create a ResourcePoolStatusRequest filtered by pool name
+	// 创建一个按资源池名称过滤的 ResourcePoolStatusRequest
 	request := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-request-filter",
@@ -620,19 +620,19 @@ func testFilterByPoolName(tCtx ktesting.TContext) {
 		deleteAndWait(tCtx, tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Delete, tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get, request.Name)
 	})
 
-	// Wait for the controller to process the request
+	// 等待 controller 处理请求
 	tCtx.Eventually(func(tCtx ktesting.TContext) (*resourcev1alpha3.ResourcePoolStatusRequest, error) {
 		return tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get(tCtx, request.Name, metav1.GetOptions{})
 	}).WithTimeout(30*time.Second).Should(
 		gomega.And(
-			// Should match only 1 pool (the target pool)
+			// 应只匹配 1 个资源池（目标资源池）
 			gomega.HaveField("Status.PoolCount", gomega.Equal(ptr.To(int32(1)))),
 			gomega.HaveField("Status.Pools", gomega.HaveLen(1)),
 		),
 		"ResourcePoolStatusRequest should have been processed with pool name filter",
 	)
 
-	// Verify the pool status details
+	// 校验资源池状态详情
 	processedRequest, err := tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Get(tCtx, request.Name, metav1.GetOptions{})
 	tCtx.ExpectNoError(err, "get processed request")
 
@@ -650,16 +650,16 @@ func testFilterByPoolName(tCtx ktesting.TContext) {
 }
 
 func testValidationErrors(tCtx ktesting.TContext) {
-	// Test that validation errors are properly detected and reported by the API server.
-	// This doesn't require the controller to be running since validation happens at admission.
+	// 测试校验错误能被 API server 正确检测并报告。
+	// 由于校验发生在 admission 阶段，这不需要 controller 运行。
 
-	// Test 1: Missing driver field (required)
+	// 测试 1：缺少 driver 字段（必填）
 	invalidRequest := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-invalid-no-driver",
 		},
 		Spec: resourcev1alpha3.ResourcePoolStatusRequestSpec{
-			// Driver is missing - should fail validation
+			// 缺少 Driver —— 应校验失败
 		},
 	}
 	_, err := tCtx.Client().ResourceV1alpha3().ResourcePoolStatusRequests().Create(tCtx, invalidRequest, metav1.CreateOptions{})
@@ -670,7 +670,7 @@ func testValidationErrors(tCtx ktesting.TContext) {
 		tCtx.Errorf("expected Invalid error, got: %v", err)
 	}
 
-	// Test 2: Invalid limit (0 is not allowed, must be >= 1)
+	// 测试 2：无效的 limit（不允许为 0，必须 >= 1）
 	invalidLimitRequest := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-invalid-limit-zero",
@@ -688,7 +688,7 @@ func testValidationErrors(tCtx ktesting.TContext) {
 		tCtx.Errorf("expected Invalid error for limit=0, got: %v", err)
 	}
 
-	// Test 3: Limit exceeds maximum (1000)
+	// 测试 3：limit 超过最大值（1000）
 	invalidLimitMaxRequest := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-invalid-limit-max",
@@ -706,7 +706,7 @@ func testValidationErrors(tCtx ktesting.TContext) {
 		tCtx.Errorf("expected Invalid error for limit>1000, got: %v", err)
 	}
 
-	// Test 4: Invalid driver name format
+	// 测试 4：driver 名称格式无效
 	invalidDriverRequest := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-invalid-driver-name",

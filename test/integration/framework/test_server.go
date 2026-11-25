@@ -56,25 +56,25 @@ import (
 	"k8s.io/kubernetes/test/utils"
 )
 
-// This key is for testing purposes only and is not considered secure.
+// 此密钥仅用于测试，不视为安全密钥。
 const ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIEZmTmUhuanLjPA2CLquXivuwBDHTt5XYwgIr/kA1LtRoAoGCCqGSM49
 AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
 /IR3qCXyThP/dbCiHrF3v1cuhBOHY8CLVg==
 -----END EC PRIVATE KEY-----`
 
-// TestServerSetup holds configuration information for a kube-apiserver test server.
+// TestServerSetup 保存 kube-apiserver 测试服务器的配置信息。
 type TestServerSetup struct {
 	ModifyServerRunOptions func(*options.ServerRunOptions)
 	ModifyServerConfig     func(*controlplane.Config)
-	// DisableInvariantChecks skips the invariant checks at the end of the test.
+	// DisableInvariantChecks 跳过测试结束时的不变量检查。
 	DisableInvariantChecks bool
 }
 
 type TearDownFunc func()
 
-// StartTestServer runs a kube-apiserver, optionally calling out to the setup.ModifyServerRunOptions and setup.ModifyServerConfig functions
-// TODO (pohly): convert to ktesting contexts
+// StartTestServer 运行一个 kube-apiserver，并可选择调用 setup.ModifyServerRunOptions 和 setup.ModifyServerConfig 函数
+// TODO (pohly): 改用 ktesting contexts
 func StartTestServer(ctx context.Context, t testing.TB, setup TestServerSetup) (client.Interface, *rest.Config, TearDownFunc) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -126,11 +126,11 @@ func StartTestServer(ctx context.Context, t testing.TB, setup TestServerSetup) (
 	}
 
 	opts := options.NewServerRunOptions()
-	// If EmulationVersion of DefaultFeatureGate is set during test, we need to propagate it to the apiserver ComponentGlobalsRegistry.
+	// 如果测试期间设置了 DefaultFeatureGate 的 EmulationVersion，需要将其传播到 apiserver 的 ComponentGlobalsRegistry。
 	featureGate := utilfeature.DefaultMutableFeatureGate.DeepCopy()
 	effectiveVersion := compatibility.DefaultKubeEffectiveVersionForTest()
 	effectiveVersion.SetEmulationVersion(featureGate.EmulationVersion())
-	// set up new instance of ComponentGlobalsRegistry instead of using the DefaultComponentGlobalsRegistry to avoid contention in parallel tests.
+	// 创建新的 ComponentGlobalsRegistry 实例，而非使用 DefaultComponentGlobalsRegistry，以避免并行测试中的争用。
 	componentGlobalsRegistry := basecompatibility.NewComponentGlobalsRegistry()
 	if err := componentGlobalsRegistry.Register(basecompatibility.DefaultKubeComponent, effectiveVersion, featureGate); err != nil {
 		t.Fatal(err)
@@ -159,8 +159,8 @@ func StartTestServer(ctx context.Context, t testing.TB, setup TestServerSetup) (
 		setup.ModifyServerRunOptions(opts)
 	}
 
-	// If the local ComponentGlobalsRegistry is changed by ModifyServerRunOptions,
-	// we need to copy the new feature values back to the DefaultFeatureGate because most feature checks still use the DefaultFeatureGate.
+	// 如果 ModifyServerRunOptions 修改了本地的 ComponentGlobalsRegistry，
+	// 需要将新的 feature 值拷贝回 DefaultFeatureGate，因为大多数 feature 检查仍在使用 DefaultFeatureGate。
 	if !featureGate.EmulationVersion().EqualTo(utilfeature.DefaultMutableFeatureGate.EmulationVersion()) || !featureGate.MinCompatibilityVersion().EqualTo(utilfeature.DefaultMutableFeatureGate.MinCompatibilityVersion()) {
 		featuregatetesting.SetFeatureGateVersionsDuringTest(t, utilfeature.DefaultMutableFeatureGate, effectiveVersion.EmulationVersion(), effectiveVersion.MinCompatibilityVersion())
 	}
@@ -216,13 +216,13 @@ func StartTestServer(ctx context.Context, t testing.TB, setup TestServerSetup) (
 		}
 	}()
 
-	// Adjust the loopback config for external use (external server name and CA)
+	// 调整 loopback 配置以供外部使用（外部服务器名称和 CA）
 	kubeAPIServerClientConfig := rest.CopyConfig(kubeAPIServerConfig.ControlPlane.Generic.LoopbackClientConfig)
 	kubeAPIServerClientConfig.CAFile = path.Join(certDir, "apiserver.crt")
 	kubeAPIServerClientConfig.CAData = nil
 	kubeAPIServerClientConfig.ServerName = ""
 
-	// wait for health
+	// 等待健康检查通过
 	err = wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		select {
 		case err := <-errCh:
@@ -235,7 +235,7 @@ func StartTestServer(ctx context.Context, t testing.TB, setup TestServerSetup) (
 		healthzConfig.AcceptContentTypes = ""
 		kubeClient, err := client.NewForConfig(healthzConfig)
 		if err != nil {
-			// this happens because we race the API server start
+			// 这是因为我们与 API server 的启动过程存在竞争
 			t.Log(err)
 			return false, nil
 		}
@@ -265,7 +265,7 @@ func StartTestServer(ctx context.Context, t testing.TB, setup TestServerSetup) (
 	}
 
 	tearDownFn := func() {
-		// Scrape metrics before stopping
+		// 在停止前抓取指标
 		if !setup.DisableInvariantChecks {
 			if ctx.Err() != nil {
 				t.Logf("Skipping metrics scrape because context is already canceled: %v", ctx.Err())
@@ -275,12 +275,12 @@ func StartTestServer(ctx context.Context, t testing.TB, setup TestServerSetup) (
 				}
 			}
 		}
-		// Calling cancel function is stopping apiserver and cleaning up
-		// after itself, including shutting down its storage layer.
+		// 调用 cancel 函数会停止 apiserver 并进行自我清理，
+		// 包括关闭其存储层。
 		cancel()
 
-		// If the apiserver was started, let's wait for it to
-		// shutdown clearly.
+		// 如果 apiserver 已启动，等待其
+		// 完全关闭。
 		if errCh != nil {
 			err, ok := <-errCh
 			if ok && err != nil {

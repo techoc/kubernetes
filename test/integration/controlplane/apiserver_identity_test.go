@@ -117,13 +117,13 @@ func TestLeaseGarbageCollection(t *testing.T) {
 	oldIdentityLeaseGCPeriod := controlplaneapiserver.IdentityLeaseGCPeriod
 	oldIdentityLeaseRenewIntervalPeriod := controlplaneapiserver.IdentityLeaseRenewIntervalPeriod
 	defer func() {
-		// reset the default values for leases after this test
+		// 在本测试结束后重置 lease 的默认值
 		controlplaneapiserver.IdentityLeaseDurationSeconds = oldIdentityLeaseDurationSeconds
 		controlplaneapiserver.IdentityLeaseGCPeriod = oldIdentityLeaseGCPeriod
 		controlplaneapiserver.IdentityLeaseRenewIntervalPeriod = oldIdentityLeaseRenewIntervalPeriod
 	}()
 
-	// Shorten lease parameters so GC behavior can be exercised in integration tests
+	// 缩短 lease 参数，以便可以在集成测试中验证 GC 行为
 	controlplaneapiserver.IdentityLeaseDurationSeconds = 1
 	controlplaneapiserver.IdentityLeaseGCPeriod = time.Second
 	controlplaneapiserver.IdentityLeaseRenewIntervalPeriod = time.Second
@@ -148,7 +148,7 @@ func TestLeaseGarbageCollection(t *testing.T) {
 	t.Run("expired non-identity lease should not be garbage collected",
 		testLeaseNotGarbageCollected(t, kubeclient, expiredLease))
 
-	// identity leases (with apiserver.kubernetes.io/identity label) created in user namespaces should not be GC'ed
+	// 在用户命名空间中创建的 identity lease（带有 apiserver.kubernetes.io/identity 标签）不应被 GC
 	expiredNonKubeSystemLease := newTestLease(time.Now().Add(-2*time.Hour), metav1.NamespaceDefault)
 	t.Run("expired non-system identity lease should not be garbage collected",
 		testLeaseNotGarbageCollected(t, kubeclient, expiredNonKubeSystemLease))

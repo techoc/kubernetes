@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TODO: remove --emulated-version and --feature-gates in 1.37
+// TODO: 在 1.37 中移除 --emulated-version 和 --feature-gates
 func TestEnableDisableServiceCIDR(t *testing.T) {
 	svc := func(i int) *v1.Service {
 		return &v1.Service{
@@ -44,9 +44,9 @@ func TestEnableDisableServiceCIDR(t *testing.T) {
 			},
 		}
 	}
-	// start etcd instance
+	// 启动 etcd 实例
 	etcdOptions := framework.SharedEtcd()
-	// apiserver with the feature disabled
+	// 禁用该 feature 的 apiserver
 	apiServerOptions := kubeapiservertesting.NewDefaultTestServerOptions()
 	s1 := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions,
 		[]string{
@@ -62,7 +62,7 @@ func TestEnableDisableServiceCIDR(t *testing.T) {
 	}
 
 	ns := framework.CreateNamespaceOrDie(client1, "test-enable-disable-service-cidr", t)
-	// make 2 services , there will be 3 services counting the kubernetes.default
+	// 创建 2 个 Service，算上 kubernetes.default 一共会有 3 个 Service
 	for i := range 2 {
 		if _, err := client1.CoreV1().Services(ns.Name).Create(context.TODO(), svc(i), metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
@@ -77,10 +77,10 @@ func TestEnableDisableServiceCIDR(t *testing.T) {
 		t.Fatalf("expected 3 Services got %d", len(services.Items))
 	}
 
-	// shutdown s1
+	// 关闭 s1
 	s1.TearDownFn()
 
-	// apiserver with the feature enabled
+	// 启用该 feature 的 apiserver
 	s2 := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions,
 		[]string{
 			"--service-cluster-ip-range=10.0.0.0/24",
@@ -92,7 +92,7 @@ func TestEnableDisableServiceCIDR(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// make 2 services , there will be 5 services now
+	// 创建 2 个 Service，现在一共会有 5 个 Service
 	for i := 2; i < 4; i++ {
 		if _, err := client2.CoreV1().Services(ns.Name).Create(context.TODO(), svc(i), metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)
@@ -107,9 +107,9 @@ func TestEnableDisableServiceCIDR(t *testing.T) {
 		t.Fatalf("expected 5 Services got %d", len(services.Items))
 	}
 
-	// shutdown apiserver with the feature enabled
+	// 关闭启用了该 feature 的 apiserver
 	s2.TearDownFn()
-	// start an apiserver with the feature disabled
+	// 启动一个禁用了该 feature 的 apiserver
 	s3 := kubeapiservertesting.StartTestServerOrDie(t, apiServerOptions,
 		[]string{
 			"--service-cluster-ip-range=10.0.0.0/24",
@@ -123,7 +123,7 @@ func TestEnableDisableServiceCIDR(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	// make 2 services , there will be 7 services now
+	// 创建 2 个 Service，现在一共会有 7 个 Service
 	for i := 4; i < 6; i++ {
 		if _, err := client3.CoreV1().Services(ns.Name).Create(context.TODO(), svc(i), metav1.CreateOptions{}); err != nil {
 			t.Fatal(err)

@@ -23,6 +23,6 @@ import (
 )
 
 func TestDRA(t *testing.T) {
-	// Various special configurations with few tests.
+	// 各种特殊配置，仅有少量测试。
 	dra.Run(t, "^(disabled|v1beta1|v1beta2|slice-taints|GA-opt-out|GA-1.*|compatibility-groups-without-consumable-capacity)$")
 }

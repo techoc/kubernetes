@@ -41,28 +41,28 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// createAny defines an op where some object gets created from a YAML file.
-// The namespace can be specified.
-// Go templating is supported with some additional methods (see getTemplateFuncs)
-// and parameters:
-// .Index: start index for counting
-// .Count: number of items to create
-// .<template param>: a member of the operation's templateParams
+// createAny 定义一个操作：从 YAML 文件创建某个对象。
+// 可以指定 Namespace。
+// 支持 Go 模板，并提供了一些额外的方法（参见 getTemplateFuncs）
+// 以及参数：
+// .Index：计数的起始索引
+// .Count：要创建的对象数量
+// .<template param>：该操作的 templateParams 中的一个成员
 type createAny struct {
-	// Must match createAnyOpcode.
+	// 必须与 createAnyOpcode 一致。
 	Opcode operationCode
-	// Namespace the object should be created in. Must be empty for cluster-scoped objects.
+	// 对象所在的 Namespace。对于集群作用域的对象，必须为空。
 	Namespace string
-	// Path to spec file describing the object to create.
-	// This will be processed with text/template.
-	// .Index will be in the range [0, Count-1] when creating
-	// more than one object. .Count is the total number of objects.
+	// 描述待创建对象的 spec 文件路径。
+	// 该文件将由 text/template 处理。
+	// 创建多个对象时，.Index 的取值范围为 [0, Count-1]，
+	// .Count 为对象总数。
 	TemplatePath string
-	// Count determines how many objects get created. Defaults to 1 if unset.
+	// Count 决定创建多少个对象。未设置时默认为 1。
 	Count      *int
 	CountParam string
-	// Params to be passed to the template.
-	// Values with `$` prefix will be resolved to the workload parameters.
+	// 传递给模板的参数。
+	// 以 `$` 开头的值将解析为工作负载参数。
 	TemplateParams map[string]any
 }
 
@@ -72,8 +72,8 @@ func (c *createAny) isValid(allowParameterization bool) error {
 	if c.TemplatePath == "" {
 		return fmt.Errorf("TemplatePath must be set")
 	}
-	// The namespace can only be checked during later because we don't know yet
-	// whether the object is namespaced or cluster-scoped.
+	// Namespace 只能稍后检查，因为目前还不知道
+	// 该对象是命名空间作用域还是集群作用域。
 	return nil
 }
 
@@ -118,14 +118,14 @@ func (c *createAny) run(tCtx ktesting.TContext) {
 		env["Index"] = index
 		env["Count"] = count
 		item := c.create(tCtx, env)
-		// Keep first and last item for reporting.
+		// 仅保留第一个和最后一个对象用于报告。
 		if index == 0 {
 			items = []string{strings.TrimSpace(item)}
 			continue
 		}
 		if index == count-1 {
 			if index > 1 {
-				// We skipped some intermediate item(s).
+				// 我们跳过了一些中间对象。
 				items = append(items, "\n\n...\n\n")
 			}
 			items = append(items, strings.TrimSpace(item))
@@ -150,8 +150,8 @@ func (c *createAny) create(tCtx ktesting.TContext, env map[string]any) string {
 		tCtx.Fatalf("%s: parsing failed: %v\n%s", c.TemplatePath, err, objData)
 	}
 
-	// Not caching the discovery result isn't very efficient, but good enough when
-	// createAny isn't done often.
+	// 不缓存 discovery 结果效率不高，但在 createAny 不频繁执行时
+	// 已经足够用了。
 	mapping, err := restMappingFromUnstructuredObj(tCtx, obj)
 	if err != nil {
 		tCtx.Fatalf("%s: %v", c.TemplatePath, err)
@@ -160,10 +160,10 @@ func (c *createAny) create(tCtx ktesting.TContext, env map[string]any) string {
 
 	create := func() error {
 		options := metav1.CreateOptions{
-			// If the YAML input is invalid, then we want the
-			// apiserver to tell us via an error. This can
-			// happen because decoding into an unstructured object
-			// doesn't validate.
+			// 如果输入的 YAML 无效，我们希望
+			// apiserver 通过报错告知我们。之所以会这样，
+			// 是因为解码为 unstructured 对象时
+			// 不会做校验。
 			FieldValidation: "Strict",
 		}
 		if c.Namespace != "" {
@@ -179,7 +179,7 @@ func (c *createAny) create(tCtx ktesting.TContext, env map[string]any) string {
 		}
 		return err
 	}
-	// Retry, some errors (like CRD just created and type not ready for use yet) are temporary.
+	// 需要重试：有些错误（例如刚创建 CRD、类型尚未就绪）是暂时的。
 	ctx, cancel := context.WithTimeout(tCtx, 20*time.Second)
 	defer cancel()
 	for {
@@ -223,32 +223,32 @@ func restMappingFromUnstructuredObj(tCtx ktesting.TContext, obj *unstructured.Un
 
 	mapping, err := restMapper.RESTMapping(gk, gv.Version)
 	if err != nil {
-		// Cached mapping might be stale, refresh on next try.
+		// 缓存的映射可能已过期，下次尝试时刷新。
 		restMapper.Reset()
 		return nil, fmt.Errorf("failed mapping %q to resource: %w", gk, err)
 	}
 	return mapping, nil
 }
 
-// createNodesOp defines an op where nodes are created as a part of a workload.
+// createNodesOp 定义一个操作：作为工作负载的一部分创建 Node。
 type createNodesOp struct {
-	// Must be "createNodes".
+	// 必须是 "createNodes"。
 	Opcode operationCode
-	// Number of nodes to create. Parameterizable through CountParam.
+	// 要创建的 Node 数量。可通过 CountParam 参数化。
 	Count int
-	// Template parameter for Count.
+	// Count 的模板参数。
 	CountParam string
-	// Path to spec file describing the nodes to create.
-	// Optional
+	// 描述待创建 Node 的 spec 文件路径。
+	// 可选
 	NodeTemplatePath *string
-	// At most one of the following strategies can be defined. Defaults
-	// to TrivialNodePrepareStrategy if unspecified.
-	// Optional
+	// 以下策略最多只能定义一种。未指定时
+	// 默认为 TrivialNodePrepareStrategy。
+	// 可选
 	NodeAllocatableStrategy  *NodeAllocatableStrategy
 	LabelNodePrepareStrategy *LabelNodePrepareStrategy
 	UniqueNodeLabelStrategy  *UniqueNodeLabelStrategy
-	// Params to be passed to the template.
-	// Values with `$` prefix will be resolved to the workload parameters.
+	// 传递给模板的参数。
+	// 以 `$` 开头的值将解析为工作负载参数。
 	TemplateParams map[string]any
 }
 
@@ -280,19 +280,19 @@ func (cno createNodesOp) patchParams(w *Workload) (realOp, error) {
 	return &cno, (&cno).isValid(false)
 }
 
-// createNamespacesOp defines an op for creating namespaces
+// createNamespacesOp 定义用于创建 Namespace 的操作
 type createNamespacesOp struct {
-	// Must be "createNamespaces".
+	// 必须是 "createNamespaces"。
 	Opcode operationCode
-	// Name prefix of the Namespace. The format is "<prefix>-<number>", where number is
-	// between 0 and count-1.
+	// Namespace 的名称前缀。格式为 "<prefix>-<number>"，其中 number
+	// 的取值范围为 0 到 count-1。
 	Prefix string
-	// Number of namespaces to create. Parameterizable through CountParam.
+	// 要创建的 Namespace 数量。可通过 CountParam 参数化。
 	Count int
-	// Template parameter for Count. Takes precedence over Count if both set.
+	// Count 的模板参数。若与 Count 同时设置，以本项为准。
 	CountParam string
-	// Path to spec file describing the Namespaces to create.
-	// Optional
+	// 描述待创建 Namespace 的 spec 文件路径。
+	// 可选
 	NamespaceTemplatePath *string
 }
 
@@ -318,72 +318,72 @@ func (cmo createNamespacesOp) patchParams(w *Workload) (realOp, error) {
 	return &cmo, (&cmo).isValid(false)
 }
 
-// createPodsOp defines an op where pods are scheduled as a part of a workload.
-// The test can block on the completion of this op before moving forward or
-// continue asynchronously.
+// createPodsOp 定义一个操作：作为工作负载的一部分调度 Pod。
+// 测试可以等待该操作完成后再继续，
+// 也可以异步继续执行。
 type createPodsOp struct {
-	// Must be "createPods".
+	// 必须是 "createPods"。
 	Opcode operationCode
-	// Number of pods to schedule. Parameterizable through CountParam.
+	// 要调度的 Pod 数量。可通过 CountParam 参数化。
 	Count int
-	// Template parameter for Count.
+	// Count 的模板参数。
 	CountParam string
-	// Template parameter for multiplying CountParam. It is used when total number of pods
-	// is defined by number of pods per podgroup for multiple podgroups.
-	// Optional.
+	// 用于乘以 CountParam 的模板参数。当 Pod 总数
+	// 由多个 podgroup 中每个 podgroup 的 Pod 数量决定时使用。
+	// 可选。
 	CountMultiplierParam string
-	// If false, Count pods get created rapidly. This can be used to
-	// measure how quickly the scheduler can fill up a cluster.
+	// 为 false 时，会快速创建 Count 个 Pod。这可用于
+	// 测量调度器填满集群的速度。
 	//
-	// If true, Count pods get created, the operation waits for
-	// a pod to get scheduled, deletes it and then creates another.
-	// This continues until the configured Duration is over.
-	// Metrics collection, if enabled, runs in parallel.
+	// 为 true 时，会创建 Count 个 Pod，操作会等待
+	// 一个 Pod 完成调度，将其删除，然后再创建下一个。
+	// 如此持续，直到配置的 Duration 结束。
+	// 如果启用了指标收集，它将并行运行。
 	//
-	// This mode can be used to measure how the scheduler behaves
-	// in a steady state where the cluster is always at roughly the
-	// same level of utilization. Pods can be created in a separate,
-	// earlier operation to simulate non-empty clusters.
+	// 该模式可用于测量调度器在稳态下的表现，
+	// 此时集群的利用率大致保持在
+	// 同一水平。可以在更早的独立操作中创建 Pod，
+	// 以模拟非空集群。
 	//
-	// Note that the operation will delete any scheduled pod in
-	// the namespace, so use different namespaces for pods that
-	// are supposed to be kept running.
+	// 注意，该操作会删除 Namespace 中任何已调度的 Pod，
+	// 因此对于需要保持运行的 Pod，请使用不同的
+	// Namespace。
 	SteadyState bool
-	// Template parameter for SteadyState.
+	// SteadyState 的模板参数。
 	SteadyStateParam string
-	// How long to keep the cluster in a steady state.
+	// 保持集群处于稳态的时长。
 	Duration metav1.Duration
-	// Template parameter for Duration.
+	// Duration 的模板参数。
 	DurationParam string
-	// Whether to enable metrics collection for this createPodsOp.
-	// Optional. Both CollectMetrics and SkipWaitToCompletion cannot be true at
-	// the same time for a particular createPodsOp.
+	// 是否为该 createPodsOp 启用指标收集。
+	// 可选。对于同一个 createPodsOp，CollectMetrics 和 SkipWaitToCompletion
+	// 不能同时为 true。
 	CollectMetrics bool
-	// Namespace the pods should be created in. Defaults to a unique
-	// namespace of the format "namespace-<number>".
-	// Optional
+	// Pod 所在的 Namespace。默认为形如
+	// "namespace-<number>" 的唯一 Namespace。
+	// 可选
 	Namespace *string
-	// Path to spec file describing the pods to schedule.
-	// If nil, DefaultPodTemplatePath will be used.
-	// Optional
+	// 描述待调度 Pod 的 spec 文件路径。
+	// 若为 nil，则使用 DefaultPodTemplatePath。
+	// 可选
 	PodTemplatePath *string
-	// Whether to wait for all pods in this op to get scheduled.
-	// Defaults to false if not specified.
-	// Optional
+	// 是否等待该操作中的所有 Pod 完成调度。
+	// 未指定时默认为 false。
+	// 可选
 	SkipWaitToCompletion bool
-	// Persistent volume settings for the pods to be scheduled.
-	// Optional
+	// 待调度 Pod 的持久化卷设置。
+	// 可选
 	PersistentVolumeTemplatePath      *string
 	PersistentVolumeClaimTemplatePath *string
-	// Params to be passed to the template.
-	// Values with `$` prefix will be resolved to the workload parameters.
+	// 传递给模板的参数。
+	// 以 `$` 开头的值将解析为工作负载参数。
 	TemplateParams map[string]any
-	// SignatureBatchSize defines how many subsequent pods have the same "signature" label.
-	// If positive, every SignatureBatchSize pods will have a "signature" label with value "signature-label-<index/batchSize>".
-	// If not specified, it defaults to 1 (each pod has a unique signature).
-	// Optional
+	// SignatureBatchSize 定义连续多少个 Pod 使用相同的 "signature" 标签。
+	// 若为正数，则每 SignatureBatchSize 个 Pod 会带有一个值为 "signature-label-<index/batchSize>" 的 "signature" 标签。
+	// 未指定时默认为 1（每个 Pod 都有唯一的签名）。
+	// 可选
 	SignatureBatchSize int
-	// Template parameter for SignatureBatchSize.
+	// SignatureBatchSize 的模板参数。
 	SignatureBatchSizeParam string
 }
 
@@ -398,9 +398,9 @@ func (cpo *createPodsOp) isValid(allowParameterization bool) error {
 		return fmt.Errorf("invalid CountMultiplierParam=%q", cpo.CountMultiplierParam)
 	}
 	if cpo.CollectMetrics && cpo.SkipWaitToCompletion {
-		// While it's technically possible to achieve this, the additional
-		// complexity is not worth it, especially given that we don't have any
-		// use-cases right now.
+		// 虽然技术上可以做到这一点，但额外的
+		// 复杂性并不值得，尤其是考虑到目前我们没有任何
+		// 相关用例。
 		return fmt.Errorf("collectMetrics and skipWaitToCompletion cannot be true at the same time")
 	}
 	if cpo.SkipWaitToCompletion && cpo.SteadyState {
@@ -466,18 +466,18 @@ func (cpo createPodsOp) patchParams(w *Workload) (realOp, error) {
 	return &cpo, (&cpo).isValid(false)
 }
 
-// createPodSetsOp defines an op where a set of createPodsOps is created in each unique namespace.
+// createPodSetsOp 定义一个操作：在每个不同的 Namespace 中创建一组 createPodsOp。
 type createPodSetsOp struct {
-	// Must be "createPodSets".
+	// 必须是 "createPodSets"。
 	Opcode operationCode
-	// Number of sets to create.
+	// 要创建的集合数量。
 	Count int
-	// Template parameter for Count.
+	// Count 的模板参数。
 	CountParam string
-	// Each set of pods will be created in a namespace of the form namespacePrefix-<number>,
-	// where number is from 0 to count-1
+	// 每组 Pod 将创建在形如 namespacePrefix-<number> 的 Namespace 中，
+	// 其中 number 的取值范围为 0 到 count-1
 	NamespacePrefix string
-	// The template of a createPodsOp.
+	// createPodsOp 的模板。
 	CreatePodsOp createPodsOp
 }
 
@@ -503,25 +503,25 @@ func (cpso createPodSetsOp) patchParams(w *Workload) (realOp, error) {
 	return &cpso, (&cpso).isValid(true)
 }
 
-// deletePodsOp defines an op where previously created pods are deleted.
-// The test can block on the completion of this op before moving forward or
-// continue asynchronously.
+// deletePodsOp 定义一个操作：删除之前创建的 Pod。
+// 测试可以等待该操作完成后再继续，
+// 也可以异步继续执行。
 type deletePodsOp struct {
-	// Must be "deletePods".
+	// 必须是 "deletePods"。
 	Opcode operationCode
-	// Namespace the pods should be deleted from.
+	// 要从中删除 Pod 的 Namespace。
 	Namespace string
-	// Labels used to filter the pods to delete.
-	// If empty, it will delete all Pods in the namespace.
-	// Optional.
+	// 用于筛选待删除 Pod 的标签。
+	// 若为空，将删除该 Namespace 中的所有 Pod。
+	// 可选。
 	LabelSelector map[string]string
-	// Whether to wait for all pods in this op to be deleted.
-	// Defaults to false if not specified.
-	// Optional
+	// 是否等待该操作中的所有 Pod 被删除。
+	// 未指定时默认为 false。
+	// 可选
 	SkipWaitToCompletion bool
-	// Number of pods to be deleted per second.
-	// If zero, all pods are deleted at once.
-	// Optional
+	// 每秒删除的 Pod 数量。
+	// 若为 0，则一次性删除所有 Pod。
+	// 可选
 	DeletePodsPerSecond int
 }
 
@@ -543,26 +543,26 @@ func (dpo deletePodsOp) patchParams(w *Workload) (realOp, error) {
 	return &dpo, nil
 }
 
-// churnOp defines an op where services are created as a part of a workload.
+// churnOp 定义一个操作：作为工作负载的一部分创建服务。
 type churnOp struct {
-	// Must be "churnOp".
+	// 必须是 "churnOp"。
 	Opcode operationCode
-	// Value must be one of the followings:
-	// - recreate. In this mode, API objects will be created for N cycles, and then
-	//   deleted in the next N cycles. N is specified by the "Number" field.
-	// - create. In this mode, API objects will be created (without deletion) until
-	//   reaching a threshold - which is specified by the "Number" field.
+	// 取值必须是以下之一：
+	// - recreate。在此模式下，API 对象会创建 N 个周期，然后
+	//   在接下来的 N 个周期中删除。N 由 "Number" 字段指定。
+	// - create。在此模式下，API 对象会持续创建（不删除），直到
+	//   达到由 "Number" 字段指定的阈值。
 	Mode string
-	// Maximum number of API objects to be created.
-	// Defaults to 0, which means unlimited.
+	// 要创建的 API 对象数量上限。
+	// 默认为 0，表示不限制。
 	Number int
-	// Intervals of churning. Defaults to 500 millisecond.
+	// churn 的时间间隔。默认为 500 毫秒。
 	IntervalMilliseconds int64
-	// Namespace the churning objects should be created in. Defaults to a unique
-	// namespace of the format "namespace-<number>".
-	// Optional
+	// churn 对象所在的 Namespace。默认为形如
+	// "namespace-<number>" 的唯一 Namespace。
+	// 可选
 	Namespace *string
-	// Path of API spec files.
+	// API spec 文件的路径。
 	TemplatePaths []string
 }
 
@@ -597,22 +597,22 @@ const (
 	Attempted SchedulingStage = "Attempted"
 )
 
-// barrierOp defines an op that can be used to wait until all scheduled pods of
-// one or many namespaces have been bound to nodes. This is useful when pods
-// were scheduled with SkipWaitToCompletion set to true.
+// barrierOp 定义一个操作，可用于等待一个或多个 Namespace 中所有已调度的 Pod
+// 都绑定到 Node。当 Pod 是在
+// SkipWaitToCompletion 设为 true 的情况下调度时，这个操作很有用。
 type barrierOp struct {
-	// Must be "barrier".
+	// 必须是 "barrier"。
 	Opcode operationCode
-	// Namespaces to block on. Empty array or not specifying this field signifies
-	// that the barrier should block on all namespaces.
+	// 要等待的 Namespace。空数组或未指定该字段表示
+	// barrier 应等待所有 Namespace。
 	Namespaces []string
-	// Labels used to filter the pods to block on.
-	// If empty, it won't filter the labels.
-	// Optional.
+	// 用于筛选要等待的 Pod 的标签。
+	// 若为空，则不按标签筛选。
+	// 可选。
 	LabelSelector map[string]string
-	// Determines what stage of pods scheduling the barrier should wait for.
-	// If empty, it is interpreted as "Scheduled".
-	// Optional
+	// 决定 barrier 应等待 Pod 调度的哪个阶段。
+	// 若为空，则视为 "Scheduled"。
+	// 可选
 	StageRequirement SchedulingStage
 }
 
@@ -634,14 +634,14 @@ func (bo barrierOp) patchParams(w *Workload) (realOp, error) {
 	return &bo, nil
 }
 
-// sleepOp defines an op that can be used to sleep for a specified amount of time.
-// This is useful in simulating workloads that require some sort of time-based synchronisation.
+// sleepOp 定义一个操作，可用于睡眠指定的时长。
+// 这在模拟需要某种基于时间同步的工作负载时很有用。
 type sleepOp struct {
-	// Must be "sleep".
+	// 必须是 "sleep"。
 	Opcode operationCode
-	// Duration of sleep.
+	// 睡眠时长。
 	Duration metav1.Duration
-	// Template parameter for Duration.
+	// Duration 的模板参数。
 	DurationParam string
 }
 
@@ -666,20 +666,20 @@ func (so sleepOp) patchParams(w *Workload) (realOp, error) {
 	return &so, nil
 }
 
-// createPodGroups defines an op where PodGroups get created from a YAML template
-// then waits for them to be visible in the scheduler's informer cache.
+// createPodGroups 定义一个操作：从 YAML 模板创建 PodGroup，
+// 然后等待它们在调度器的 informer 缓存中可见。
 type createPodGroups struct {
-	// Must match createPodGroupsOpcode.
+	// 必须与 createPodGroupsOpcode 一致。
 	Opcode operationCode
-	// Namespace the objects should be created in.
+	// 对象所在的 Namespace。
 	Namespace string
-	// Path to spec file describing the PodGroup to create.
+	// 描述待创建 PodGroup 的 spec 文件路径。
 	TemplatePath string
-	// Params to be passed to the template.
+	// 传递给模板的参数。
 	TemplateParams map[string]any
-	// Count determines how many PodGroups get created.
+	// Count 决定创建多少个 PodGroup。
 	Count int
-	// CountParam is the name of the parameter that determines the count.
+	// CountParam 是决定该数量的参数名。
 	CountParam string
 }
 
@@ -721,18 +721,18 @@ func (cpg createPodGroups) patchParams(w *Workload) (realOp, error) {
 	return &cpg, cpg.isValid(false)
 }
 
-// startCollectingMetricsOp defines an op that starts metrics collectors.
-// stopCollectingMetricsOp has to be used after this op to finish collecting.
+// startCollectingMetricsOp 定义一个启动指标收集器的操作。
+// 必须在该操作之后使用 stopCollectingMetricsOp 来完成收集。
 type startCollectingMetricsOp struct {
-	// Must be "startCollectingMetrics".
+	// 必须是 "startCollectingMetrics"。
 	Opcode operationCode
-	// Name appended to workload's name in results.
+	// 在结果中追加到工作负载名称后面的名称。
 	Name string
-	// Namespaces for which the scheduling throughput metric is calculated.
+	// 计算调度吞吐量指标所针对的 Namespace。
 	Namespaces []string
-	// Labels used to filter the pods for which the scheduling throughput metric is collected.
-	// If empty, it will collect the metric for all pods in the selected namespaces.
-	// Optional.
+	// 用于筛选要收集调度吞吐量指标的 Pod 的标签。
+	// 若为空，则收集所选 Namespace 中所有 Pod 的指标。
+	// 可选。
 	LabelSelector map[string]string
 }
 
@@ -751,11 +751,11 @@ func (scm startCollectingMetricsOp) patchParams(_ *Workload) (realOp, error) {
 	return &scm, nil
 }
 
-// stopCollectingMetricsOp defines an op that stops collecting the metrics
-// and writes them into the result slice.
-// startCollectingMetricsOp has be used before this op to begin collecting.
+// stopCollectingMetricsOp 定义一个操作：停止收集指标
+// 并将其写入结果切片。
+// 必须在该操作之前使用 startCollectingMetricsOp 开始收集。
 type stopCollectingMetricsOp struct {
-	// Must be "stopCollectingMetrics".
+	// 必须是 "stopCollectingMetrics"。
 	Opcode operationCode
 }
 
@@ -771,15 +771,15 @@ func (scm stopCollectingMetricsOp) patchParams(_ *Workload) (realOp, error) {
 	return &scm, nil
 }
 
-// startCollectingProfileOp defines an op that starts profile collection.
-// stopCollectingProfileOp has to be used after this op to finish collecting.
+// startCollectingProfileOp 定义一个开始收集性能剖析数据的操作。
+// 必须在该操作之后使用 stopCollectingProfileOp 来完成收集。
 type startCollectingProfileOp struct {
-	// Must be "startCollectingProfile".
+	// 必须是 "startCollectingProfile"。
 	Opcode operationCode
-	// Type is the profile type to collect (currently only "CPU" is supported).
+	// Type 是要收集的 profile 类型（目前仅支持 "CPU"）。
 	Type string
-	// FilePath is the path to the output profile file. If dataItemsDir is set,
-	// the file will be created relative to dataItemsDir.
+	// FilePath 是输出 profile 文件的路径。如果设置了 dataItemsDir，
+	// 该文件将相对于 dataItemsDir 创建。
 	FilePath string
 }
 
@@ -801,11 +801,11 @@ func (scp startCollectingProfileOp) patchParams(_ *Workload) (realOp, error) {
 	return &scp, nil
 }
 
-// stopCollectingProfileOp defines an op that stops profile collection.
+// stopCollectingProfileOp 定义一个停止收集性能剖析数据的操作。
 type stopCollectingProfileOp struct {
-	// Must be "stopCollectingProfile".
+	// 必须是 "stopCollectingProfile"。
 	Opcode operationCode
-	// Type is the profile type to stop (currently only "CPU" is supported).
+	// Type 是要停止的 profile 类型（目前仅支持 "CPU"）。
 	Type string
 }
 
@@ -824,10 +824,10 @@ func (scp stopCollectingProfileOp) patchParams(_ *Workload) (realOp, error) {
 	return &scp, nil
 }
 
-// resolveTemplateParams resolves the template parameters using the workload parameters.
-// Values starting with $ are references to workload parameters.
-// The string after an optional | is the default value, using YAML encoding
-// (in particular, a plain string without quotation marks is valid).
+// resolveTemplateParams 使用工作负载参数解析模板参数。
+// 以 $ 开头的值是对工作负载参数的引用。
+// 可选的 | 后面的字符串是默认值，采用 YAML 编码
+// （特别是，不带引号的纯字符串也是有效的）。
 func resolveTemplateParams(templateParams map[string]any, w *Workload) (map[string]any, error) {
 	if len(templateParams) == 0 {
 		return templateParams, nil
@@ -848,8 +848,8 @@ func resolveTemplateParams(templateParams map[string]any, w *Workload) (map[stri
 				continue
 			}
 			if def != nil {
-				// Must convert string into actual value first,
-				// otherwise only string values could have defaults.
+				// 必须先将其转换为实际的值，
+				// 否则只有字符串类型的值才能有默认值。
 				var val any
 				if err := yaml.Unmarshal([]byte(*def), &val); err != nil {
 					return nil, fmt.Errorf("decoding parameter %q default %q as YAML: %w", paramKey, *def, err)

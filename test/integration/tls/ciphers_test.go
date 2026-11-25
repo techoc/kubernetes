@@ -44,12 +44,12 @@ func TestAPICiphers(t *testing.T) {
 		expectedError bool
 	}{
 		{
-			// Not supported cipher
+			// 不支持的 cipher
 			clientCiphers: []uint16{tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA},
 			expectedError: true,
 		},
 		{
-			// Supported cipher
+			// 支持的 cipher
 			clientCiphers: []uint16{tls.TLS_RSA_WITH_AES_256_CBC_SHA},
 			expectedError: false,
 		},
@@ -64,7 +64,7 @@ func runTestAPICiphers(t *testing.T, testID int, kubePort int, clientCiphers []u
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			MaxVersion:         tls.VersionTLS12, // Limit to TLS1.2 to allow cipher configuration
+			MaxVersion:         tls.VersionTLS12, // 限制为 TLS1.2 以允许配置 cipher
 			InsecureSkipVerify: true,
 			CipherSuites:       clientCiphers,
 		},

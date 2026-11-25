@@ -548,7 +548,7 @@ func TestFieldValidation(t *testing.T) {
 	config := server.ClientConfig
 	defer server.TearDownFn()
 
-	// don't log warnings, tests inspect them in the responses directly
+	// 不记录警告日志，测试会直接检查响应中的警告
 	config.WarningHandler = rest.NoWarnings{}
 
 	schemaCRD := setupCRD(t, config, "schema.example.com", false)
@@ -601,8 +601,8 @@ func TestFieldValidation(t *testing.T) {
 	})
 }
 
-// testFieldValidationPost tests POST requests containing unknown fields with
-// strict and non-strict field validation.
+// testFieldValidationPost 测试包含未知字段的 POST 请求，
+// 分别采用严格和非严格字段校验。
 func testFieldValidationPost(t *testing.T, client clientset.Interface) {
 	var testcases = []struct {
 		name                   string
@@ -632,9 +632,8 @@ func testFieldValidationPost(t *testing.T, client clientset.Interface) {
 				`unknown field "spec.unknown1"`,
 				`unknown field "spec.unknownDupe"`,
 				`duplicate field "spec.paused"`,
-				// note: fields that are both unknown
-				// and duplicated will only be detected
-				// as unknown for typed resources.
+				// 注意：对于带类型的资源，既未知又重复的字段只会被
+				// 检测为未知字段。
 				`unknown field "spec.template.spec.containers[0].unknownNested"`,
 				`duplicate field "spec.template.spec.containers[0].imagePullPolicy"`,
 			},
@@ -655,9 +654,8 @@ func testFieldValidationPost(t *testing.T, client clientset.Interface) {
 				`unknown field "spec.unknown1"`,
 				`unknown field "spec.unknownDupe"`,
 				`duplicate field "spec.paused"`,
-				// note: fields that are both unknown
-				// and duplicated will only be detected
-				// as unknown for typed resources.
+				// 注意：对于带类型的资源，既未知又重复的字段只会被
+				// 检测为未知字段。
 				`unknown field "spec.template.spec.containers[0].unknownNested"`,
 				`duplicate field "spec.template.spec.containers[0].imagePullPolicy"`,
 			},
@@ -749,9 +747,8 @@ func testFieldValidationPost(t *testing.T, client clientset.Interface) {
 	}
 }
 
-// testFieldValidationPut tests PUT requests
-// that update existing objects with unknown fields
-// for both strict and non-strict field validation.
+// testFieldValidationPut 测试用包含未知字段的 PUT 请求更新已有对象时，
+// 分别采用严格和非严格字段校验的表现。
 func testFieldValidationPut(t *testing.T, client clientset.Interface) {
 	deployName := "test-deployment-put"
 	postBody := []byte(fmt.Sprintf(string(validBodyJSON), deployName))
@@ -793,9 +790,8 @@ func testFieldValidationPut(t *testing.T, client clientset.Interface) {
 				`unknown field "spec.unknown1"`,
 				`unknown field "spec.unknownDupe"`,
 				`duplicate field "spec.paused"`,
-				// note: fields that are both unknown
-				// and duplicated will only be detected
-				// as unknown for typed resources.
+				// 注意：对于带类型的资源，既未知又重复的字段只会被
+				// 检测为未知字段。
 				`unknown field "spec.template.spec.containers[0].unknownNested"`,
 				`duplicate field "spec.template.spec.containers[0].imagePullPolicy"`,
 			},
@@ -816,9 +812,8 @@ func testFieldValidationPut(t *testing.T, client clientset.Interface) {
 				`unknown field "spec.unknown1"`,
 				`unknown field "spec.unknownDupe"`,
 				`duplicate field "spec.paused"`,
-				// note: fields that are both unknown
-				// and duplicated will only be detected
-				// as unknown for typed resources.
+				// 注意：对于带类型的资源，既未知又重复的字段只会被
+				// 检测为未知字段。
 				`unknown field "spec.template.spec.containers[0].unknownNested"`,
 				`duplicate field "spec.template.spec.containers[0].imagePullPolicy"`,
 			},
@@ -910,8 +905,8 @@ func testFieldValidationPut(t *testing.T, client clientset.Interface) {
 	}
 }
 
-// testFieldValidationPatchTyped tests merge-patch and json-patch requests containing unknown fields with
-// strict and non-strict field validation for typed objects.
+// testFieldValidationPatchTyped 测试包含未知字段的 merge-patch 和 json-patch 请求，
+// 对带类型对象分别采用严格和非严格字段校验的表现。
 func testFieldValidationPatchTyped(t *testing.T, client clientset.Interface) {
 	deployName := "test-deployment-patch-typed"
 	postBody := []byte(fmt.Sprintf(string(validBodyJSON), deployName))
@@ -960,8 +955,8 @@ func testFieldValidationPatchTyped(t *testing.T, client clientset.Interface) {
 				{"op": "add", "path": "/spec/template/spec/containers/0/imagePullPolicy", "value": "Never"}
 			]
 			`
-	// non-conflicting mergePatch has issues with the patch (duplicate fields),
-	// but doesn't conflict with the existing object it's being patched to
+	// 非冲突的 mergePatch 本身存在问题（重复字段），
+	// 但与被 patch 的已有对象并不冲突
 	nonconflictingMergePatchBody := `
 {
 	"spec": {
@@ -1051,11 +1046,10 @@ func testFieldValidationPatchTyped(t *testing.T, client clientset.Interface) {
 			},
 			body: jsonPatchBody,
 			strictDecodingWarnings: []string{
-				// note: duplicate fields in the patch itself
-				// are dropped by the
-				// evanphx/json-patch library and is expected.
-				// Duplicate fields in the json patch ops
-				// themselves can be detected though
+				// 注意：patch 自身的重复字段会被
+				// evanphx/json-patch 库丢弃，这是预期行为。
+				// 不过 json patch 操作中的重复字段
+				// 仍可被检测到
 				`json patch unknown field "[0].foo"`,
 				`json patch duplicate field "[1].path"`,
 				`unknown field "spec.template.spec.containers[0].unknownNested"`,
@@ -1077,11 +1071,10 @@ func testFieldValidationPatchTyped(t *testing.T, client clientset.Interface) {
 			patchType: types.JSONPatchType,
 			body:      jsonPatchBody,
 			strictDecodingWarnings: []string{
-				// note: duplicate fields in the patch itself
-				// are dropped by the
-				// evanphx/json-patch library and is expected.
-				// Duplicate fields in the json patch ops
-				// themselves can be detected though
+				// 注意：patch 自身的重复字段会被
+				// evanphx/json-patch 库丢弃，这是预期行为。
+				// 不过 json patch 操作中的重复字段
+				// 仍可被检测到
 				`json patch unknown field "[0].foo"`,
 				`json patch duplicate field "[1].path"`,
 				`unknown field "spec.template.spec.containers[0].unknownNested"`,
@@ -1159,12 +1152,11 @@ func testFieldValidationPatchTyped(t *testing.T, client clientset.Interface) {
 	}
 }
 
-// testFieldValidationSMP tests that attempting a strategic-merge-patch
-// with unknown fields errors out when fieldValidation is strict,
-// but succeeds when fieldValidation is ignored.
+// testFieldValidationSMP 测试含未知字段的 strategic-merge-patch 在 fieldValidation 为 strict 时
+// 会报错，而在 fieldValidation 被忽略时会成功。
 func testFieldValidationSMP(t *testing.T, client clientset.Interface) {
-	// non-conflicting SMP has issues with the patch (duplicate fields),
-	// but doesn't conflict with the existing object it's being patched to
+	// 非冲突的 SMP 本身存在问题（重复字段），
+	// 但与被 patch 的已有对象并不冲突
 	nonconflictingSMPBody := `
 	{
 		"spec": {
@@ -1353,8 +1345,8 @@ func testFieldValidationSMP(t *testing.T, client clientset.Interface) {
 	}
 }
 
-// testFieldValidationApplyCreate tests apply patch requests containing unknown fields
-// on newly created objects, with strict and non-strict field validation.
+// testFieldValidationApplyCreate 测试对新创建对象 apply 含未知字段的 patch 请求时，
+// 分别采用严格和非严格字段校验的表现。
 func testFieldValidationApplyCreate(t *testing.T, client clientset.Interface) {
 	var testcases = []struct {
 		name                   string
@@ -1433,8 +1425,8 @@ func testFieldValidationApplyCreate(t *testing.T, client clientset.Interface) {
 	}
 }
 
-// testFieldValidationApplyUpdate tests apply patch requests containing unknown fields
-// on apply requests to existing objects, with strict and non-strict field validation.
+// testFieldValidationApplyUpdate 测试对已有对象 apply 含未知字段的 patch 请求时，
+// 分别采用严格和非严格字段校验的表现。
 func testFieldValidationApplyUpdate(t *testing.T, client clientset.Interface) {
 	var testcases = []struct {
 		name                   string
@@ -1525,8 +1517,8 @@ func testFieldValidationApplyUpdate(t *testing.T, client clientset.Interface) {
 	}
 }
 
-// testFieldValidationPostCRD tests that server-side schema validation
-// works for CRD create requests for CRDs with schemas
+// testFieldValidationPostCRD 测试服务端 schema 校验对带 schema 的 CRD
+// 创建请求是否生效
 func testFieldValidationPostCRD(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	var testcases = []struct {
 		name                   string
@@ -1647,7 +1639,7 @@ func testFieldValidationPostCRD(t *testing.T, rest rest.Interface, gvk schema.Gr
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			jsonBody := []byte(fmt.Sprintf(tc.body, apiVersion, kind, tc.name))
 			req := rest.Post().
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -1675,9 +1667,8 @@ func testFieldValidationPostCRD(t *testing.T, rest rest.Interface, gvk schema.Gr
 	}
 }
 
-// testFieldValidationPostCRDSchemaless tests that server-side schema validation
-// works for CRD create requests for CRDs that have schemas
-// with x-kubernetes-preserve-unknown-field set
+// testFieldValidationPostCRDSchemaless 测试服务端 schema 校验对带有
+// x-kubernetes-preserve-unknown-field 设置的 schema 的 CRD 创建请求是否生效
 func testFieldValidationPostCRDSchemaless(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	var testcases = []struct {
 		name                   string
@@ -1790,7 +1781,7 @@ func testFieldValidationPostCRDSchemaless(t *testing.T, rest rest.Interface, gvk
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			jsonBody := []byte(fmt.Sprintf(tc.body, apiVersion, kind, tc.name))
 			req := rest.Post().
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -1826,8 +1817,8 @@ func testFieldValidationPostCRDSchemaless(t *testing.T, rest rest.Interface, gvk
 	}
 }
 
-// testFieldValidationPutCRD tests that server-side schema validation
-// works for CRD update requests for CRDs with schemas.
+// testFieldValidationPutCRD 测试服务端 schema 校验对带 schema 的 CRD
+// 更新请求是否生效。
 func testFieldValidationPutCRD(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	var testcases = []struct {
 		name                   string
@@ -1947,7 +1938,7 @@ func testFieldValidationPutCRD(t *testing.T, rest rest.Interface, gvk schema.Gro
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			jsonPostBody := []byte(fmt.Sprintf(crdValidBody, apiVersion, kind, tc.name))
 			postReq := rest.Post().
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -1961,7 +1952,7 @@ func testFieldValidationPutCRD(t *testing.T, rest rest.Interface, gvk schema.Gro
 				t.Fatalf("unexpeted error unmarshalling created CR: %v", err)
 			}
 
-			// update the CR as specified by the test case
+			// 按测试用例的规定更新 CR
 			putBody := []byte(fmt.Sprintf(tc.putBody, apiVersion, kind, tc.name, postUnstructured.GetResourceVersion()))
 			putReq := rest.Put().
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -1990,9 +1981,8 @@ func testFieldValidationPutCRD(t *testing.T, rest rest.Interface, gvk schema.Gro
 	}
 }
 
-// testFieldValidationPutCRDSchemaless tests that server-side schema validation
-// works for CRD update requests for CRDs that have schemas
-// with x-kubernetes-preserve-unknown-field set
+// testFieldValidationPutCRDSchemaless 测试服务端 schema 校验对带有
+// x-kubernetes-preserve-unknown-field 设置的 schema 的 CRD 更新请求是否生效
 func testFieldValidationPutCRDSchemaless(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	var testcases = []struct {
 		name                   string
@@ -2104,7 +2094,7 @@ func testFieldValidationPutCRDSchemaless(t *testing.T, rest rest.Interface, gvk 
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			jsonPostBody := []byte(fmt.Sprintf(crdValidBody, apiVersion, kind, tc.name))
 			postReq := rest.Post().
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -2118,7 +2108,7 @@ func testFieldValidationPutCRDSchemaless(t *testing.T, rest rest.Interface, gvk 
 				t.Fatalf("unexpeted error unmarshalling created CR: %v", err)
 			}
 
-			// update the CR as specified by the test case
+			// 按测试用例的规定更新 CR
 			putBody := []byte(fmt.Sprintf(tc.putBody, apiVersion, kind, tc.name, postUnstructured.GetResourceVersion()))
 			putReq := rest.Put().
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -2155,9 +2145,8 @@ func testFieldValidationPutCRDSchemaless(t *testing.T, rest rest.Interface, gvk 
 	}
 }
 
-// testFieldValidationPatchCRD tests that server-side schema validation
-// works for jsonpatch and mergepatch requests
-// for custom resources that have schemas.
+// testFieldValidationPatchCRD 测试服务端 schema 校验对带 schema 的
+// 自定义资源的 jsonpatch 和 mergepatch 请求是否生效。
 func testFieldValidationPatchCRD(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	patchYAMLBody := `
 apiVersion: %s
@@ -2269,11 +2258,10 @@ spec:
 				FieldValidation: "Strict",
 			},
 			body: jsonPatchBody,
-			// note: duplicate fields in the patch itself
-			// are dropped by the
-			// evanphx/json-patch library and is expected.
-			// Duplicate fields in the json patch ops
-			// themselves can be detected though
+			// 注意：patch 自身的重复字段会被
+			// evanphx/json-patch 库丢弃，这是预期行为。
+			// 不过 json patch 操作中的重复字段
+			// 仍可被检测到
 			strictDecodingError: `strict decoding error: json patch unknown field "[0].foo", json patch duplicate field "[1].path", unknown field "spec.ports[0].unknownNested", unknown field "spec.unknown1", unknown field "spec.unknown3", unknown field "spec.unknownDupe"`,
 		},
 		{
@@ -2284,11 +2272,10 @@ spec:
 			},
 			body: jsonPatchBody,
 			strictDecodingWarnings: []string{
-				// note: duplicate fields in the patch itself
-				// are dropped by the
-				// evanphx/json-patch library and is expected.
-				// Duplicate fields in the json patch ops
-				// themselves can be detected though
+				// 注意：patch 自身的重复字段会被
+				// evanphx/json-patch 库丢弃，这是预期行为。
+				// 不过 json patch 操作中的重复字段
+				// 仍可被检测到
 				`json patch unknown field "[0].foo"`,
 				`json patch duplicate field "[1].path"`,
 				`unknown field "spec.ports[0].unknownNested"`,
@@ -2310,11 +2297,10 @@ spec:
 			patchType: types.JSONPatchType,
 			body:      jsonPatchBody,
 			strictDecodingWarnings: []string{
-				// note: duplicate fields in the patch itself
-				// are dropped by the
-				// evanphx/json-patch library and is expected.
-				// Duplicate fields in the json patch ops
-				// themselves can be detected though
+				// 注意：patch 自身的重复字段会被
+				// evanphx/json-patch 库丢弃，这是预期行为。
+				// 不过 json patch 操作中的重复字段
+				// 仍可被检测到
 				`json patch unknown field "[0].foo"`,
 				`json patch duplicate field "[1].path"`,
 				`unknown field "spec.ports[0].unknownNested"`,
@@ -2328,7 +2314,7 @@ spec:
 		t.Run(tc.name, func(t *testing.T) {
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
-			// create a CR
+			// 创建一个 CR
 			yamlBody := []byte(fmt.Sprintf(string(patchYAMLBody), apiVersion, kind, tc.name))
 			createResult, err := rest.Patch(types.ApplyPatchType).
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -2340,7 +2326,7 @@ spec:
 				t.Fatalf("failed to create custom resource with apply: %v:\n%v", err, string(createResult))
 			}
 
-			// patch the CR as specified by the test case
+			// 按测试用例的规定 patch CR
 			req := rest.Patch(tc.patchType).
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
 				Name(tc.name).
@@ -2367,10 +2353,9 @@ spec:
 	}
 }
 
-// testFieldValidationPatchCRDSchemaless tests that server-side schema validation
-// works for jsonpatch and mergepatch requests
-// for custom resources that have schemas
-// with x-kubernetes-preserve-unknown-field set
+// testFieldValidationPatchCRDSchemaless 测试服务端 schema 校验对带有
+// x-kubernetes-preserve-unknown-field 设置的 schema 的自定义资源的
+// jsonpatch 和 mergepatch 请求是否生效
 func testFieldValidationPatchCRDSchemaless(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	mergePatchBody := `
 {
@@ -2464,11 +2449,10 @@ func testFieldValidationPatchCRDSchemaless(t *testing.T, rest rest.Interface, gv
 				FieldValidation: "Strict",
 			},
 			body: jsonPatchBody,
-			// note: duplicate fields in the patch itself
-			// are dropped by the
-			// evanphx/json-patch library and is expected.
-			// Duplicate fields in the json patch ops
-			// themselves can be detected though
+			// 注意：patch 自身的重复字段会被
+			// evanphx/json-patch 库丢弃，这是预期行为。
+			// 不过 json patch 操作中的重复字段
+			// 仍可被检测到
 			strictDecodingError: `strict decoding error: json patch unknown field "[0].foo", json patch duplicate field "[1].path", unknown field "spec.ports[0].unknownNested"`,
 		},
 		{
@@ -2479,11 +2463,10 @@ func testFieldValidationPatchCRDSchemaless(t *testing.T, rest rest.Interface, gv
 			},
 			body: jsonPatchBody,
 			strictDecodingWarnings: []string{
-				// note: duplicate fields in the patch itself
-				// are dropped by the
-				// evanphx/json-patch library and is expected.
-				// Duplicate fields in the json patch ops
-				// themselves can be detected though
+				// 注意：patch 自身的重复字段会被
+				// evanphx/json-patch 库丢弃，这是预期行为。
+				// 不过 json patch 操作中的重复字段
+				// 仍可被检测到
 				`json patch unknown field "[0].foo"`,
 				`json patch duplicate field "[1].path"`,
 				`unknown field "spec.ports[0].unknownNested"`,
@@ -2502,11 +2485,10 @@ func testFieldValidationPatchCRDSchemaless(t *testing.T, rest rest.Interface, gv
 			patchType: types.JSONPatchType,
 			body:      jsonPatchBody,
 			strictDecodingWarnings: []string{
-				// note: duplicate fields in the patch itself
-				// are dropped by the
-				// evanphx/json-patch library and is expected.
-				// Duplicate fields in the json patch ops
-				// themselves can be detected though
+				// 注意：patch 自身的重复字段会被
+				// evanphx/json-patch 库丢弃，这是预期行为。
+				// 不过 json patch 操作中的重复字段
+				// 仍可被检测到
 				`json patch unknown field "[0].foo"`,
 				`json patch duplicate field "[1].path"`,
 				`unknown field "spec.ports[0].unknownNested"`,
@@ -2517,7 +2499,7 @@ func testFieldValidationPatchCRDSchemaless(t *testing.T, rest rest.Interface, gv
 		t.Run(tc.name, func(t *testing.T) {
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
-			// create a CR
+			// 创建一个 CR
 			yamlBody := []byte(fmt.Sprintf(string(patchYAMLBody), apiVersion, kind, tc.name))
 			createResult, err := rest.Patch(types.ApplyPatchType).
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -2529,7 +2511,7 @@ func testFieldValidationPatchCRDSchemaless(t *testing.T, rest rest.Interface, gv
 				t.Fatalf("failed to create custom resource with apply: %v:\n%v", err, string(createResult))
 			}
 
-			// patch the CR as specified by the test case
+			// 按测试用例的规定 patch CR
 			req := rest.Patch(tc.patchType).
 				AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
 				Name(tc.name).
@@ -2556,10 +2538,11 @@ func testFieldValidationPatchCRDSchemaless(t *testing.T, rest rest.Interface, gv
 	}
 }
 
-// testFieldValidationApplyCreateCRD tests apply patch requests containing duplicate fields
-// on newly created objects, for CRDs that have schemas
-// Note that even prior to server-side validation, unknown fields were treated as
-// errors in apply-patch and are not tested here.
+// testFieldValidationApplyCreateCRD 测试对带 schema 的 CRD，向新创建对象
+// apply 含重复字段的 patch 请求。
+//
+// 注意，即使在服务端校验出现之前，未知字段在 apply-patch 中也被视为错误，
+// 此处不作测试。
 func testFieldValidationApplyCreateCRD(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	var testcases = []struct {
 		name                   string
@@ -2612,7 +2595,7 @@ func testFieldValidationApplyCreateCRD(t *testing.T, rest rest.Interface, gvk sc
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			name := fmt.Sprintf("apply-create-crd-%s", tc.name)
 			applyCreateBody := []byte(fmt.Sprintf(crdApplyInvalidBody, apiVersion, kind, name))
 
@@ -2641,11 +2624,12 @@ func testFieldValidationApplyCreateCRD(t *testing.T, rest rest.Interface, gvk sc
 	}
 }
 
-// testFieldValidationApplyCreateCRDSchemaless tests apply patch requests containing duplicate fields
-// on newly created objects, for CRDs that have schemas
-// with x-kubernetes-preserve-unknown-field set
-// Note that even prior to server-side validation, unknown fields were treated as
-// errors in apply-patch and are not tested here.
+// testFieldValidationApplyCreateCRDSchemaless 测试对带有
+// x-kubernetes-preserve-unknown-field 设置的 schema 的 CRD，向新创建对象
+// apply 含重复字段的 patch 请求。
+//
+// 注意，即使在服务端校验出现之前，未知字段在 apply-patch 中也被视为错误，
+// 此处不作测试。
 func testFieldValidationApplyCreateCRDSchemaless(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	var testcases = []struct {
 		name                   string
@@ -2698,7 +2682,7 @@ func testFieldValidationApplyCreateCRDSchemaless(t *testing.T, rest rest.Interfa
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			name := fmt.Sprintf("apply-create-crd-schemaless-%s", tc.name)
 			applyCreateBody := []byte(fmt.Sprintf(crdApplyInvalidBody, apiVersion, kind, name))
 
@@ -2727,10 +2711,11 @@ func testFieldValidationApplyCreateCRDSchemaless(t *testing.T, rest rest.Interfa
 	}
 }
 
-// testFieldValidationApplyUpdateCRD tests apply patch requests containing duplicate fields
-// on existing objects, for CRDs with schemas
-// Note that even prior to server-side validation, unknown fields were treated as
-// errors in apply-patch and are not tested here.
+// testFieldValidationApplyUpdateCRD 测试对带 schema 的 CRD，向已有对象
+// apply 含重复字段的 patch 请求。
+//
+// 注意，即使在服务端校验出现之前，未知字段在 apply-patch 中也被视为错误，
+// 此处不作测试。
 func testFieldValidationApplyUpdateCRD(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	var testcases = []struct {
 		name                   string
@@ -2783,7 +2768,7 @@ func testFieldValidationApplyUpdateCRD(t *testing.T, rest rest.Interface, gvk sc
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			name := fmt.Sprintf("apply-update-crd-%s", tc.name)
 			applyCreateBody := []byte(fmt.Sprintf(crdApplyValidBody, apiVersion, kind, name))
 			createReq := rest.Patch(types.ApplyPatchType).
@@ -2821,11 +2806,12 @@ func testFieldValidationApplyUpdateCRD(t *testing.T, rest rest.Interface, gvk sc
 	}
 }
 
-// testFieldValidationApplyUpdateCRDSchemaless tests apply patch requests containing duplicate fields
-// on existing objects, for CRDs with schemas
-// with x-kubernetes-preserve-unknown-field set
-// Note that even prior to server-side validation, unknown fields were treated as
-// errors in apply-patch and are not tested here.
+// testFieldValidationApplyUpdateCRDSchemaless 测试对带有
+// x-kubernetes-preserve-unknown-field 设置的 schema 的 CRD，向已有对象
+// apply 含重复字段的 patch 请求。
+//
+// 注意，即使在服务端校验出现之前，未知字段在 apply-patch 中也被视为错误，
+// 此处不作测试。
 func testFieldValidationApplyUpdateCRDSchemaless(t *testing.T, rest rest.Interface, gvk schema.GroupVersionKind, gvr schema.GroupVersionResource) {
 	var testcases = []struct {
 		name                   string
@@ -2878,7 +2864,7 @@ func testFieldValidationApplyUpdateCRDSchemaless(t *testing.T, rest rest.Interfa
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			name := fmt.Sprintf("apply-update-crd-schemaless-%s", tc.name)
 			applyCreateBody := []byte(fmt.Sprintf(crdApplyValidBody, apiVersion, kind, name))
 			createReq := rest.Patch(types.ApplyPatchType).
@@ -2975,7 +2961,7 @@ func testFinalizerValidationApplyCreateAndUpdateCRD(t *testing.T, rest rest.Inte
 			kind := gvk.Kind
 			apiVersion := gvk.Group + "/" + gvk.Version
 
-			// create the CR as specified by the test case
+			// 按测试用例的规定创建 CR
 			name := fmt.Sprintf("apply-create-crd-%s", tc.name)
 			finalizerVal, _ := json.Marshal(tc.finalizer)
 			applyCreateBody := []byte(fmt.Sprintf(crdApplyFinalizerBody, apiVersion, kind, name, finalizerVal))
@@ -3045,10 +3031,10 @@ func setupCRD(t testing.TB, config *rest.Config, apiGroup string, schemaless boo
 	}
 	crdSchema := fmt.Sprintf(crdSchemaBase, preserveUnknownFields)
 
-	// create the CRD
+	// 创建 CRD
 	crd := fixtures.NewNoxuV1CustomResourceDefinition(apiextensionsv1.ClusterScoped)
 
-	// adjust the API group
+	// 调整 API group
 	crd.Name = crd.Spec.Names.Plural + "." + apiGroup
 	crd.Spec.Group = apiGroup
 
@@ -3061,7 +3047,7 @@ func setupCRD(t testing.TB, config *rest.Config, apiGroup string, schemaless boo
 	for i := range crd.Spec.Versions {
 		crd.Spec.Versions[i].Schema = &c
 	}
-	// install the CRD
+	// 安装 CRD
 	crd, err = fixtures.CreateNewV1CustomResourceDefinition(crd, apiExtensionClient, dynamicClient)
 	if err != nil {
 		t.Fatal(err)
@@ -3079,7 +3065,7 @@ func BenchmarkFieldValidation(b *testing.B) {
 	config := server.ClientConfig
 	defer server.TearDownFn()
 
-	// don't log warnings, tests inspect them in the responses directly
+	// 不记录警告日志，测试会直接检查响应中的警告
 	config.WarningHandler = rest.NoWarnings{}
 
 	client := clientset.NewForConfigOrDie(config)
@@ -3700,7 +3686,7 @@ func benchFieldValidationPostCRD(b *testing.B, rest rest.Interface, gvk schema.G
 				kind := gvk.Kind
 				apiVersion := gvk.Group + "/" + gvk.Version
 
-				// create the CR as specified by the test case
+				// 按测试用例的规定创建 CR
 				jsonBody := []byte(fmt.Sprintf(tc.body, apiVersion, kind, fmt.Sprintf("test-dep-%s-%d-%d-%d", tc.name, n, b.N, time.Now().UnixNano())))
 				req := rest.Post().
 					AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -3788,7 +3774,7 @@ func benchFieldValidationPutCRD(b *testing.B, rest rest.Interface, gvk schema.Gr
 				deployName := fmt.Sprintf("test-dep-%s-%d-%d-%d", tc.name, n, b.N, time.Now().UnixNano())
 				names[n] = deployName
 
-				// create the CR as specified by the test case
+				// 按测试用例的规定创建 CR
 				jsonPostBody := []byte(fmt.Sprintf(crdValidBody, apiVersion, kind, deployName))
 				postReq := rest.Post().
 					AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -3806,7 +3792,7 @@ func benchFieldValidationPutCRD(b *testing.B, rest rest.Interface, gvk schema.Gr
 			b.ResetTimer()
 			b.ReportAllocs()
 			for n := 0; n < b.N; n++ {
-				// update the CR as specified by the test case
+				// 按测试用例的规定更新 CR
 				putBody := []byte(fmt.Sprintf(tc.putBody, apiVersion, kind, names[n], resourceVersions[n]))
 				putReq := rest.Put().
 					AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -3933,7 +3919,7 @@ spec:
 				deployName := fmt.Sprintf("test-dep-%s-%d-%d-%d", tc.name, n, b.N, time.Now().UnixNano())
 				names[n] = deployName
 
-				// create a CR
+				// 创建一个 CR
 				yamlBody := []byte(fmt.Sprintf(string(patchYAMLBody), apiVersion, kind, deployName))
 				createResult, err := rest.Patch(types.ApplyPatchType).
 					AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
@@ -3948,7 +3934,7 @@ spec:
 			b.ResetTimer()
 			b.ReportAllocs()
 			for n := 0; n < b.N; n++ {
-				// patch the CR as specified by the test case
+				// 按测试用例的规定 patch CR
 				req := rest.Patch(tc.patchType).
 					AbsPath("/apis", gvr.Group, gvr.Version, gvr.Resource).
 					Name(names[n]).
@@ -4006,7 +3992,7 @@ func benchFieldValidationApplyCreateCRD(b *testing.B, rest rest.Interface, gvk s
 				apiVersion := gvk.Group + "/" + gvk.Version
 				name := fmt.Sprintf("test-dep-%s-%d-%d-%d", tc.name, n, b.N, time.Now().UnixNano())
 
-				// create the CR as specified by the test case
+				// 按测试用例的规定创建 CR
 				applyCreateBody := []byte(fmt.Sprintf(crdApplyValidBody, apiVersion, kind, name))
 
 				req := rest.Patch(types.ApplyPatchType).

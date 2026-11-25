@@ -73,10 +73,9 @@ const waitInterval = time.Second
 const fastPodFailureBackoff = 100 * time.Millisecond
 const fastSyncJobBatchPeriod = 100 * time.Millisecond
 
-// Time duration used to account for controller latency in tests in which it is
-// expected the Job controller does not make a change. In that cases we wait a
-// little bit (more than the typical time for a couple of controller syncs) and
-// verify there is no change.
+// 用于补偿控制器延迟的等待时长，适用于预期 Job 控制器不会做出变更的测试。
+// 这类测试会稍等片刻（略长于两次控制器同步的典型耗时），
+// 然后确认确实没有发生变化。
 const sleepDurationForControllerLatency = 100 * time.Millisecond
 
 const restConfigQPS = 10_000
@@ -121,14 +120,13 @@ func validateTerminatedPodsTrackingFinalizerMetric(ctx context.Context, t *testi
 	})
 }
 
-// TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart verifies that the job is properly marked as Failed
-// in a scenario when the job controller crashes between removing pod finalizers and marking the job as Failed (based on
-// the pod failure policy). After the finalizer for the failed pod is removed we remove the failed pod. This step is
-// done to simulate what PodGC would do. Then, the test spawns the second instance of the controller to check that it
-// will pick up the job state properly and will mark it as Failed, even if th pod triggering the pod failure policy is
-// already deleted.
-// Note: this scenario requires the use of finalizers. Without finalizers there is no guarantee a failed pod would be
-// checked against the pod failure policy rules before its removal by PodGC.
+// TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart 验证在以下场景中 Job 能被正确标记为 Failed：
+// Job 控制器在移除 pod finalizer 之后、基于 pod failure policy 将 Job 标记为 Failed 之前崩溃。
+// 移除失败 pod 的 finalizer 后，我们删除该失败 pod，以模拟 PodGC 的行为。
+// 随后测试启动第二个控制器实例，检查它能否正确接手 Job 状态并将其标记为 Failed，
+// 即使触发 pod failure policy 的 pod 已被删除。
+// 注意：此场景需要使用 finalizer。没有 finalizer 时，无法保证失败的 pod 在被 PodGC 移除之前
+// 会先经过 pod failure policy 规则的检查。
 func TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart(t *testing.T) {
 	count := int32(3)
 	job := batchv1.Job{
@@ -176,7 +174,7 @@ func TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart(t *testi
 	closeFn, restConfig, cs, ns := setup(t, "simple")
 	t.Cleanup(closeFn)
 
-	// Make the job controller significantly slower to trigger race condition.
+	// 让 Job 控制器显著变慢，以触发竞态条件。
 	restConfig.QPS = 1
 	restConfig.Burst = 1
 	ctx, cancel := startJobControllerAndWaitForCaches(t, restConfig)
@@ -187,7 +185,7 @@ func TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart(t *testi
 	restConfig.QPS = restConfigQPS
 	restConfig.Burst = restConfigBurst
 
-	// create a job with a failed pod matching the exit code rule and a couple of successful pods
+	// 创建一个 Job，其中包含一个匹配 exit code 规则的失败 pod 和几个成功的 pod
 	jobObj, err := createJobWithDefaults(ctx, cs, ns.Name, &job)
 	if err != nil {
 		t.Fatalf("Failed to create Job: %v", err)
@@ -209,10 +207,9 @@ func TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart(t *testi
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	// Await for the failed pod (with index failedIndex) to have its finalizer
-	// removed. The finalizer will be removed by the job controller just after
-	// appending the FailureTarget condition to the job to mark it as targeted
-	// for failure.
+	// 等待失败的 pod（索引为 failedIndex）的 finalizer 被移除。
+	// Job 控制器会在向 Job 添加 FailureTarget condition（将其标记为待失败）之后
+	// 立即移除该 finalizer。
 	go func(ctx context.Context) {
 		err := wait.PollUntilContextTimeout(ctx, 10*time.Millisecond, time.Minute, true, func(ctx context.Context) (bool, error) {
 			failedPodUpdated, err := cs.CoreV1().Pods(jobObj.Namespace).Get(ctx, jobPods[failedIndex].Name, metav1.GetOptions{})
@@ -230,8 +227,8 @@ func TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart(t *testi
 		wg.Done()
 	}(ctx)
 
-	// We update one pod as failed with state matching the pod failure policy rule. This results in removal
-	// of the pod finalizer from the pod by the job controller.
+	// 我们将一个 pod 更新为匹配 pod failure policy 规则的失败状态。
+	// 这会促使 Job 控制器移除该 pod 的 finalizer。
 	failedPod := jobPods[failedIndex]
 	updatedPod := failedPod.DeepCopy()
 	updatedPod.Status = podStatusMatchingOnExitCodesTerminateRule
@@ -242,11 +239,11 @@ func TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart(t *testi
 	wg.Wait()
 
 	t.Logf("Finalizer is removed for the failed pod %q. Shutting down the controller.", klog.KObj(failedPod))
-	// shut down the first job controller as soon as it removed the finalizer for the failed pod. This will
-	// likely happen before the first controller is able to mark the job as Failed.
+	// 在第一个 Job 控制器移除失败 pod 的 finalizer 后立即将其关闭。
+	// 这很可能发生在第一个控制器来得及把 Job 标记为 Failed 之前。
 	cancel()
 
-	// Delete the failed pod to make sure it is not used by the second instance of the controller
+	// 删除失败的 pod，确保第二个控制器实例不会用到它
 	_, ctx = ktesting.NewTestContext(t)
 	ctx, cancel = context.WithCancel(ctx)
 	err = cs.CoreV1().Pods(failedPod.Namespace).Delete(ctx, failedPod.Name, metav1.DeleteOptions{GracePeriodSeconds: ptr.To[int64](0)})
@@ -256,15 +253,14 @@ func TestJobPodFailurePolicyWithFailedPodDeletedDuringControllerRestart(t *testi
 	t.Logf("The failed pod %q is deleted", klog.KObj(failedPod))
 	cancel()
 
-	// start the second controller to promote the interim FailureTarget job condition as Failed
+	// 启动第二个控制器，将临时的 FailureTarget Job condition 升级为 Failed
 	ctx, cancel = startJobControllerAndWaitForCaches(t, restConfig)
-	// verify the job is correctly marked as Failed
+	// 验证 Job 被正确标记为 Failed
 	validateJobFailed(ctx, t, cs, jobObj)
 	validateNoOrphanPodsWithFinalizers(ctx, t, cs, jobObj)
 }
 
-// TestJobPodFailurePolicy tests handling of pod failures with respect to the
-// configured pod failure policy rules
+// TestJobPodFailurePolicy 测试根据配置的 pod failure policy 规则处理 pod 失败的行为
 func TestJobPodFailurePolicy(t *testing.T) {
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, fastPodFailureBackoff))
 	job := batchv1.Job{
@@ -548,8 +544,7 @@ func TestJobPodFailurePolicy(t *testing.T) {
 	}
 }
 
-// TestSuccessPolicy tests handling of job and its pods when
-// successPolicy is used.
+// TestSuccessPolicy 测试使用 successPolicy 时 Job 及其 pod 的处理行为。
 func TestSuccessPolicy(t *testing.T) {
 	type podTerminationWithExpectations struct {
 		index                int
@@ -830,9 +825,9 @@ func TestSuccessPolicy(t *testing.T) {
 	}
 }
 
-// TestBackoffLimitPerIndex_DelayedPodDeletion tests the pod deletion is delayed
-// until the replacement pod is created, so that the replacement pod has the
-// index-failure-count annotation bumped, when BackoffLimitPerIndex is used.
+// TestBackoffLimitPerIndex_DelayedPodDeletion 测试在使用 BackoffLimitPerIndex 时，
+// pod 的删除会延迟到替代 pod 创建之后，从而使替代 pod 的 index-failure-count
+// annotation 递增。
 func TestBackoffLimitPerIndex_DelayedPodDeletion(t *testing.T) {
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, fastPodFailureBackoff))
 
@@ -859,11 +854,11 @@ func TestBackoffLimitPerIndex_DelayedPodDeletion(t *testing.T) {
 	})
 	validateIndexedJobPods(ctx, t, clientSet, jobObj, sets.New(0), "", ptr.To(""))
 
-	// First pod from index 0 failed.
+	// 索引 0 的第一个 pod 失败。
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodFailed, 0); err != nil {
 		t.Fatal("Failed trying to fail pod with index 0")
 	}
-	// Delete the failed pod
+	// 删除失败的 pod
 	pod, err := getJobPodForIndex(ctx, clientSet, jobObj, 0, func(_ *v1.Pod) bool { return true })
 	if err != nil {
 		t.Fatalf("failed to get terminal pod for index: %v", 0)
@@ -880,8 +875,7 @@ func TestBackoffLimitPerIndex_DelayedPodDeletion(t *testing.T) {
 	})
 	validateIndexedJobPods(ctx, t, clientSet, jobObj, sets.New(0), "", ptr.To(""))
 
-	// Verify the replacement pod is created and has the index-failure-count
-	// annotation bumped.
+	// 验证替代 pod 已创建，且其 index-failure-count annotation 已递增。
 	replacement, err := getActivePodForIndex(ctx, clientSet, jobObj, 0)
 	if err != nil {
 		t.Fatalf("Failed to get active replacement pod for index: %v, error: %v", 0, err)
@@ -906,15 +900,14 @@ func TestBackoffLimitPerIndex_DelayedPodDeletion(t *testing.T) {
 	validateJobComplete(ctx, t, clientSet, jobObj)
 }
 
-// TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff tests that the
-// pods are recreated with expotential backoff delay computed independently
-// per index. Scenario:
-// - fail index 0
-// - fail index 0
-// - fail index 1
-// - succeed index 0
-// - fail index 1
-// - succeed index 1
+// TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff 测试 pod 会按每个索引独立计算的
+// 指数退避延迟重建。场景：
+// - 索引 0 失败
+// - 索引 0 失败
+// - 索引 1 失败
+// - 索引 0 成功
+// - 索引 1 失败
+// - 索引 1 成功
 func TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff(t *testing.T) {
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, 2*time.Second))
 
@@ -941,7 +934,7 @@ func TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff(t *testing.T)
 	})
 	validateIndexedJobPods(ctx, t, clientSet, jobObj, sets.New(0, 1), "", ptr.To(""))
 
-	// Fail the first pod for index 0
+	// 让索引 0 的第一个 pod 失败
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodFailed, 0); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodFailed, err)
 	}
@@ -953,7 +946,7 @@ func TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff(t *testing.T)
 	})
 	validateIndexedJobPods(ctx, t, clientSet, jobObj, sets.New(0, 1), "", ptr.To(""))
 
-	// Fail the second pod for index 0
+	// 让索引 0 的第二个 pod 失败
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodFailed, 0); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodFailed, err)
 	}
@@ -965,7 +958,7 @@ func TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff(t *testing.T)
 	})
 	validateIndexedJobPods(ctx, t, clientSet, jobObj, sets.New(0, 1), "", ptr.To(""))
 
-	// Fail the first pod for index 1
+	// 让索引 1 的第一个 pod 失败
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodFailed, 1); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodFailed, err)
 	}
@@ -977,7 +970,7 @@ func TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff(t *testing.T)
 	})
 	validateIndexedJobPods(ctx, t, clientSet, jobObj, sets.New(0, 1), "", ptr.To(""))
 
-	// Succeed the third pod for index 0
+	// 让索引 0 的第三个 pod 成功
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodSucceeded, 0); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodSucceeded, err)
 	}
@@ -990,7 +983,7 @@ func TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff(t *testing.T)
 	})
 	validateIndexedJobPods(ctx, t, clientSet, jobObj, sets.New(1), "0", ptr.To(""))
 
-	// Fail the second pod for index 1
+	// 让索引 1 的第二个 pod 失败
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodFailed, 1); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodFailed, err)
 	}
@@ -1003,7 +996,7 @@ func TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff(t *testing.T)
 	})
 	validateIndexedJobPods(ctx, t, clientSet, jobObj, sets.New(1), "0", ptr.To(""))
 
-	// Succeed the third pod for index 1
+	// 让索引 1 的第三个 pod 成功
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodSucceeded, 1); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodSucceeded, err)
 	}
@@ -1026,10 +1019,9 @@ func TestBackoffLimitPerIndex_JobPodsCreatedWithExponentialBackoff(t *testing.T)
 	}
 }
 
-// TestDelayTerminalPhaseCondition tests the fix for Job controller to delay
-// setting the terminal phase conditions (Failed and Complete) until all Pods
-// are terminal. The fate of the Job is indicated by the interim Job conditions:
-// FailureTarget, or SuccessCriteriaMet.
+// TestDelayTerminalPhaseCondition 测试 Job 控制器的修复：直到所有 Pod 都进入终止状态后，
+// 才设置终止阶段的 condition（Failed 和 Complete）。Job 的最终命运由临时的 Job condition
+// FailureTarget 或 SuccessCriteriaMet 指示。
 func TestDelayTerminalPhaseCondition(t *testing.T) {
 	const blockDeletionFinalizerForTest string = "fake.example.com/blockDeletion"
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, fastPodFailureBackoff))
@@ -1055,7 +1047,7 @@ func TestDelayTerminalPhaseCondition(t *testing.T) {
 		}
 	}
 	succeedOnePodAndScaleDown := func(ctx context.Context, clientSet clientset.Interface, jobObj *batchv1.Job) {
-		// mark one pod as succeeded
+		// 将一个 pod 标记为成功
 		if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodSucceeded, 0); err != nil {
 			t.Fatalf("Failed setting phase %q on Job Pod: %v", v1.PodSucceeded, err)
 		}
@@ -1256,7 +1248,7 @@ func TestDelayTerminalPhaseCondition(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			resetMetrics()
 			if !test.enableJobManagedBy {
-				// TODO: this will be removed in 1.38.
+				// TODO: 将在 1.38 中移除。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 			}
 			featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -1283,8 +1275,8 @@ func TestDelayTerminalPhaseCondition(t *testing.T) {
 			if test.wantInterimStatus != nil {
 				validateJobStatus(ctx, t, clientSet, jobObj, "Interim", *test.wantInterimStatus)
 
-				// Set terminal phase to all the remaining pods to simulate
-				// Kubelet (or other components like PodGC).
+				// 将所有剩余 pod 设为终止阶段，以模拟 Kubelet
+				// （或 PodGC 等其他组件）的行为。
 				jobPods, err := getJobPods(ctx, t, clientSet, jobObj, func(s v1.PodStatus) bool {
 					return (s.Phase == v1.PodPending || s.Phase == v1.PodRunning)
 				})
@@ -1300,8 +1292,7 @@ func TestDelayTerminalPhaseCondition(t *testing.T) {
 	}
 }
 
-// TestBackoffLimitPerIndex tests handling of job and its pods when
-// backoff limit per index is used.
+// TestBackoffLimitPerIndex 测试使用 backoff limit per index 时 Job 及其 pod 的处理行为。
 func TestBackoffLimitPerIndex(t *testing.T) {
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, fastPodFailureBackoff))
 
@@ -1709,9 +1700,8 @@ func TestBackoffLimitPerIndex(t *testing.T) {
 	}
 }
 
-// TestManagedBy verifies the Job controller correctly makes a decision to
-// reconcile or skip reconciliation of the Job depending on the Job's managedBy
-// field, and the enablement of the JobManagedBy feature gate.
+// TestManagedBy 验证 Job 控制器会根据 Job 的 managedBy 字段以及 JobManagedBy feature gate
+// 的启用状态，正确地决定是协调（reconcile）还是跳过协调该 Job。
 func TestManagedBy(t *testing.T) {
 	const blockDeletionFinalizerForTest string = "fake.example.com/blockDeletion"
 	customControllerName := "example.com/custom-job-controller"
@@ -1740,9 +1730,8 @@ func TestManagedBy(t *testing.T) {
 			},
 			wantReconciledByBuiltInController: true,
 			wantJobByExternalControllerTotalMetric: metricLabelsWithValue{
-				// There is no good label value choice to check here, since the
-				// values wasn't specified. Let's go with checking for the reserved
-				// value just so that all test cases verify the metric.
+				// 由于未指定 label 值，这里没有好的选择可以检查。
+				// 就使用保留值吧，这样所有测试用例都能验证该指标。
 				Labels: []string{batchv1.JobControllerName},
 				Value:  0,
 			},
@@ -1811,15 +1800,14 @@ func TestManagedBy(t *testing.T) {
 	t.Cleanup(closeFn)
 	for name, test := range testCases {
 		t.Run(name, func(t *testing.T) {
-			// TODO: this will be removed in 1.38.
+			// TODO: 将在 1.38 中移除。
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 			featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.JobManagedBy, test.enableJobManagedBy)
 
 			ctx, cancel := startJobControllerAndWaitForCaches(t, restConfig)
 			t.Cleanup(cancel)
 
-			// reset metrics after starting controller to ensure clean state
-			// as done in other tests as well
+			// 与其他测试一样，在启动控制器后重置指标以确保状态干净
 			resetMetrics()
 
 			jobObj, err := createJobWithDefaults(ctx, clientSet, ns.Name, &test.job)
@@ -1828,7 +1816,7 @@ func TestManagedBy(t *testing.T) {
 			}
 
 			t.Cleanup(func() {
-				// Wait for cleanup to finish to prevent this job from affecting metrics
+				// 等待清理完成，防止该 Job 影响指标
 				if err := cleanUp(ctx, clientSet, jobObj, []string{blockDeletionFinalizerForTest, batchv1.JobTrackingFinalizer}); err != nil {
 					t.Fatalf("Failed cleanup: %v", err)
 				}
@@ -1857,14 +1845,12 @@ func TestManagedBy(t *testing.T) {
 	}
 }
 
-// TestManagedBy_Reenabling verifies handling a Job with a custom value of the
-// managedBy field by the Job controller, as the JobManagedBy feature gate is
-// disabled and reenabled again. First, when the feature gate is enabled, the
-// synchronization is skipped, when it is disabled the synchronization is starts,
-// and is disabled again with re-enabling of the feature gate.
+// TestManagedBy_Reenabling 验证当 JobManagedBy feature gate 被禁用再重新启用时，
+// Job 控制器如何处理 managedBy 字段为自定义值的 Job。首先，feature gate 启用时跳过同步；
+// 禁用时开始同步；再次启用 feature gate 时又停止同步。
 func TestManagedBy_Reenabling(t *testing.T) {
 	customControllerName := "example.com/custom-job-controller"
-	// TODO: this will be removed in 1.38.
+	// TODO: 将在 1.38 中移除。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.JobManagedBy, true)
 
@@ -1917,13 +1903,13 @@ func TestManagedBy_Reenabling(t *testing.T) {
 		t.Fatalf("Unexpected status (-want/+got): %s", diff)
 	}
 
-	// Disable the feature gate and restart the controller
+	// 禁用 feature gate 并重启控制器
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.JobManagedBy, false)
 	cancel()
 	resetMetrics()
 	ctx, cancel = startJobControllerAndWaitForCaches(t, restConfig)
 
-	// Verify the built-in controller reconciles the Job
+	// 验证内置控制器会协调该 Job
 	validateJobsPodsStatusOnly(ctx, t, clientSet, jobObj, "", podsByStatus{
 		Active:      1,
 		Ready:       ptr.To[int32](0),
@@ -1935,13 +1921,13 @@ func TestManagedBy_Reenabling(t *testing.T) {
 		Value:  0,
 	})
 
-	// Reenable the feature gate and restart the controller
+	// 重新启用 feature gate 并重启控制器
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.JobManagedBy, true)
 	cancel()
 	resetMetrics()
 	ctx, cancel = startJobControllerAndWaitForCaches(t, restConfig)
 
-	// Marking the pod as finished, but it does not result in updating of the Job status.
+	// 将 pod 标记为已完成，但这不会导致 Job 状态被更新。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 1); err != nil {
 		t.Fatalf("Error %v when setting phase %s on the pod of job %v", err, v1.PodSucceeded, klog.KObj(jobObj))
 	}
@@ -1959,10 +1945,10 @@ func TestManagedBy_Reenabling(t *testing.T) {
 	})
 }
 
-// TestImmediateJobRecreation verifies that the replacement Job creates the Pods
-// quickly after re-creation, see https://github.com/kubernetes/kubernetes/issues/132042.
+// TestImmediateJobRecreation 验证替代 Job 在重建后会迅速创建 Pod，
+// 参见 https://github.com/kubernetes/kubernetes/issues/132042。
 func TestImmediateJobRecreation(t *testing.T) {
-	// set the backoff delay very high to make sure the test does not pass waiting long on asserts
+	// 将退避延迟设置得非常高，确保测试不会因断言长时间等待而通过
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, 2*wait.ForeverTestTimeout))
 	closeFn, restConfig, clientSet, ns := setup(t, "recreate-job-immediately")
 	t.Cleanup(closeFn)
@@ -1995,10 +1981,8 @@ func TestImmediateJobRecreation(t *testing.T) {
 	}
 
 	var jobObjs []*batchv1.Job
-	// We create multiple Jobs to make the repro more likely. In particular, we need
-	// more Jobs than the number of Job controller workers to make it very unlikely
-	// that syncJob executes (and cleans the in-memory state) before the corresponding
-	// replacement Jobs are created.
+	// 我们创建多个 Job 以提高复现概率。特别是，Job 数量要多于 Job 控制器的 worker 数量，
+	// 这样在对应的替代 Job 创建之前，syncJob 极不可能执行（并清理内存状态）。
 	for i := range 3 {
 		jobObj, err := createJobWithDefaults(ctx, clientSet, ns.Name, ptr.To(jobSpec(i)))
 		if err != nil {
@@ -2018,7 +2002,7 @@ func TestImmediateJobRecreation(t *testing.T) {
 			t.Fatalf("Error %v when setting phase %s on the pod of job %v", err, v1.PodFailed, klog.KObj(jobObj))
 		}
 
-		// Await to account for the failed Pod
+		// 等待失败 Pod 被计入统计
 		validateJobsPodsStatusOnly(ctx, t, clientSet, jobObj, "", podsByStatus{
 			Failed:      1,
 			Ready:       ptr.To[int32](0),
@@ -2030,13 +2014,13 @@ func TestImmediateJobRecreation(t *testing.T) {
 		jobObj := jobObjs[i]
 		jobClient := clientSet.BatchV1().Jobs(jobObj.Namespace)
 		if err := jobClient.Delete(ctx, jobObj.Name, metav1.DeleteOptions{
-			// Use propagationPolicy=background so that we don't need to wait for the job object to be gone.
+			// 使用 propagationPolicy=background，这样无需等待 Job 对象被删除。
 			PropagationPolicy: ptr.To(metav1.DeletePropagationBackground),
 		}); err != nil {
 			t.Fatalf("Error %v when deleting the job %v", err, klog.KObj(jobObj))
 		}
 
-		// re-create the job immediately
+		// 立即重建 Job
 		jobObj, err := createJobWithDefaults(ctx, clientSet, ns.Name, ptr.To(jobSpec(i)))
 		if err != nil {
 			t.Fatalf("Error %q while creating the job %q", err, klog.KObj(jobObj))
@@ -2044,10 +2028,10 @@ func TestImmediateJobRecreation(t *testing.T) {
 		jobObjs[i] = jobObj
 	}
 
-	// total timeout (3*5s) is less than 2*ForeverTestTimeout.
+	// 总超时时间（3*5s）小于 2*ForeverTestTimeout。
 	for _, jobObj := range jobObjs {
-		// wait maks 5s for the Active=1. This assert verifies that the backoff
-		// delay is not applied to the replacement instance of the Job.
+		// 最多等待 5s 直到 Active=1。该断言验证退避延迟没有被应用到
+		// 替代的 Job 实例上。
 		validateJobsPodsStatusOnlyWithTimeout(ctx, t, clientSet, jobObj, "", podsByStatus{
 			Active:      1,
 			Ready:       ptr.To[int32](0),
@@ -2056,10 +2040,9 @@ func TestImmediateJobRecreation(t *testing.T) {
 	}
 }
 
-// TestJobRecreationClearsPodExpectations verifies that a replacement Job is
-// reconciled after the old Job leaves a pending Pod creation expectation. The
-// test blocks the old Pod POST, replaces the Job, waits for the informer to
-// observe the replacement UID, releases the POST, and verifies reconciliation.
+// TestJobRecreationClearsPodExpectations 验证当旧 Job 留下一个未完成的 Pod 创建 expectation 时，
+// 替代 Job 仍能被协调。测试会阻塞旧的 Pod POST，替换 Job，等待 informer 观察到替代 Job 的 UID，
+// 然后释放 POST 并验证协调是否发生。
 func TestJobRecreationClearsPodExpectations(t *testing.T) {
 	baseJob := batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
@@ -2108,7 +2091,7 @@ func testJobRecreationClearsPodExpectations(t *testing.T, baseJob, replacementJo
 	closeFn, restConfig, clientSet, ns := setup(t, "recreate-job-expectations")
 	t.Cleanup(closeFn)
 
-	// Phase 1: Block the old Job's Pod POST after its expectation is recorded.
+	// 阶段 1：在旧 Job 的 expectation 被记录后，阻塞其 Pod POST。
 	podCreateStarted := make(chan struct{})
 	allowPodCreate := make(chan struct{})
 	var blockOnce sync.Once
@@ -2150,7 +2133,7 @@ func testJobRecreationClearsPodExpectations(t *testing.T, baseJob, replacementJo
 		t.Fatal("Timed out waiting for the old Job's Pod creation to start")
 	}
 
-	// Phase 2: Replace the Job and wait for the informer to observe its new UID.
+	// 阶段 2：替换 Job，并等待 informer 观察到它的新 UID。
 	jobClient := clientSet.BatchV1().Jobs(ns.Name)
 	if err := jobClient.Delete(ctx, oldJob.Name, metav1.DeleteOptions{PropagationPolicy: ptr.To(metav1.DeletePropagationBackground)}); err != nil {
 		t.Fatalf("Failed to delete old Job: %v", err)
@@ -2170,7 +2153,7 @@ func testJobRecreationClearsPodExpectations(t *testing.T, baseJob, replacementJo
 	}
 	close(allowPodCreate)
 
-	// Phase 3: Verify the replacement is reconciled after the old POST completes.
+	// 阶段 3：验证旧的 POST 完成后，替代 Job 能被协调。
 	for _, conditionType := range wantConditionTypes {
 		validateJobCondition(ctx, t, clientSet, newJob, conditionType)
 	}
@@ -2183,14 +2166,11 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-// TestManagedBy_RecreatedJob verifies that the Job controller skips
-// reconciliation of a job with managedBy field, when this is a recreated job,
-// and there is still a pending sync queued for the previous job.
-// In this scenario we first create a job without managedBy field, and we mark
-// its pod as succeeded. This queues the Job object sync with 1s delay. Then,
-// without waiting for the Job status update we delete and recreate the job under
-// the same name, but with managedBy field. The queued update starts to execute
-// on the new job, but is skipped.
+// TestManagedBy_RecreatedJob 验证当 Job 是重建的、且前一个 Job 仍有待处理的同步排队时，
+// Job 控制器会跳过对带 managedBy 字段的 Job 的协调。
+// 此场景中，我们先创建一个不带 managedBy 字段的 Job，并将其 pod 标记为成功。
+// 这会将 Job 对象的同步以 1s 延迟排队。随后，不等 Job 状态更新，我们就删除同名 Job
+// 并以带 managedBy 字段的配置重建它。排队的更新开始在新 Job 上执行，但会被跳过。
 func TestManagedBy_RecreatedJob(t *testing.T) {
 	customControllerName := "example.com/custom-job-controller"
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.JobManagedBy, true)
@@ -2231,7 +2211,7 @@ func TestManagedBy_RecreatedJob(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	})
 
-	// Marking the pod as complete queues the job reconciliation
+	// 将 pod 标记为完成会将 Job 的协调操作排队
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 1); err != nil {
 		t.Fatalf("Error %v when setting phase %s on the pod of job %v", err, v1.PodSucceeded, klog.KObj(jobObj))
 	}
@@ -2266,12 +2246,10 @@ func TestManagedBy_RecreatedJob(t *testing.T) {
 	}
 }
 
-// TestManagedBy_UsingReservedJobFinalizers documents the behavior of the Job
-// controller when there is a job with custom value of the managedBy field, creating
-// pods with the batch.kubernetes.io/job-tracking finalizer. The built-in controller
-// should not remove the finalizer. Note that, the use of the finalizer in jobs
-// managed by external controllers is discouraged, but may potentially happen
-// when one forks the controller and does not rename the finalizer.
+// TestManagedBy_UsingReservedJobFinalizers 记录以下情况下 Job 控制器的行为：
+// 一个 managedBy 字段为自定义值的 Job 创建了带有 batch.kubernetes.io/job-tracking finalizer 的 pod。
+// 内置控制器不应移除该 finalizer。注意，虽然不鼓励在由外部控制器管理的 Job 中使用该 finalizer，
+// 但如果有人 fork 了控制器却没有重命名 finalizer，就可能出现这种情况。
 func TestManagedBy_UsingReservedJobFinalizers(t *testing.T) {
 	customControllerName := "example.com/custom-job-controller"
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.JobManagedBy, true)
@@ -2307,7 +2285,7 @@ func TestManagedBy_UsingReservedJobFinalizers(t *testing.T) {
 			ManagedBy: ptr.To(customControllerName),
 		},
 	}
-	// Create a job with custom managedBy
+	// 创建一个 managedBy 为自定义值的 Job
 	jobObj, err := createJobWithDefaults(ctx, clientSet, ns.Name, &jobSpec)
 	if err != nil {
 		t.Fatalf("Error %v when creating the job %q", err, klog.KObj(jobObj))
@@ -2318,9 +2296,8 @@ func TestManagedBy_UsingReservedJobFinalizers(t *testing.T) {
 		Recorder:   &record.FakeRecorder{},
 	}
 
-	// Create the pod manually simulating the behavior of the external controller
-	// indicated by the managedBy field. We create the pod with the built-in
-	// finalizer.
+	// 手动创建 pod，模拟 managedBy 字段所指的外部控制器的行为。
+	// 创建 pod 时带上内置 finalizer。
 	podTemplate := jobObj.Spec.Template.DeepCopy()
 	podTemplate.Finalizers = append(podTemplate.Finalizers, batchv1.JobTrackingFinalizer)
 	err = podControl.CreatePodsWithGenerateName(ctx, jobObj.Namespace, podTemplate, jobObj, metav1.NewControllerRef(jobObj, batchv1.SchemeGroupVersion.WithKind("Job")), "pod1")
@@ -2328,7 +2305,7 @@ func TestManagedBy_UsingReservedJobFinalizers(t *testing.T) {
 		t.Fatalf("Error %v when creating a pod for job %q", err, klog.KObj(jobObj))
 	}
 
-	// Getting the list of pods for the Jobs to obtain the reference to the created pod.
+	// 获取 Job 的 pod 列表，以取得对已创建 pod 的引用。
 	jobPods, err := getJobPods(ctx, t, clientSet, jobObj, func(ps v1.PodStatus) bool { return true })
 	if err != nil {
 		t.Fatalf("Error %v getting the list of pods for job %q", err, klog.KObj(jobObj))
@@ -2337,7 +2314,7 @@ func TestManagedBy_UsingReservedJobFinalizers(t *testing.T) {
 		t.Fatalf("Unexpected number (%d) of pods for job: %v", len(jobPods), klog.KObj(jobObj))
 	}
 
-	// Marking the pod as finished (succeeded), before marking the parent job as complete.
+	// 在将父 Job 标记为完成之前，先把 pod 标记为已完成（成功）。
 	podObj := jobPods[0]
 	podObj.Status.Phase = v1.PodSucceeded
 	podObj, err = clientSet.CoreV1().Pods(ns.Name).UpdateStatus(ctx, podObj, metav1.UpdateOptions{})
@@ -2345,9 +2322,8 @@ func TestManagedBy_UsingReservedJobFinalizers(t *testing.T) {
 		t.Fatalf("Error %v when marking the %q pod as succeeded", err, klog.KObj(podObj))
 	}
 
-	// Trigger termination for the Job so that the built-in controller receives the
-	// UpdateJob event in reaction to each it would remove the pod's finalizer,
-	// if not for the custom managedBy field.
+	// 触发 Job 终止，使内置控制器收到 UpdateJob 事件；若不是因为 managedBy 为自定义值，
+	// 控制器在收到该事件时会移除 pod 的 finalizer。
 	jobObj.Status.Conditions = append(jobObj.Status.Conditions, batchv1.JobCondition{
 		Type:   batchv1.JobSuccessCriteriaMet,
 		Status: v1.ConditionTrue,
@@ -2362,9 +2338,8 @@ func TestManagedBy_UsingReservedJobFinalizers(t *testing.T) {
 		t.Fatalf("Error %v when getting the latest version of the pod %v", err, klog.KObj(podObj))
 	}
 
-	// Update the pod so that the built-in controller receives the UpdatePod event
-	// in reaction to each it would remove the pod's finalizer, if not for the
-	// custom value of the managedBy field on the job.
+	// 更新 pod，使内置控制器收到 UpdatePod 事件；若不是因为 Job 上 managedBy 为自定义值，
+	// 控制器在收到该事件时会移除 pod 的 finalizer。
 	podObj.Status.Conditions = append(podObj.Status.Conditions, v1.PodCondition{
 		Type:   v1.PodConditionType("CustomCondition"),
 		Status: v1.ConditionTrue,
@@ -2400,9 +2375,8 @@ func completionModePtr(cm batchv1.CompletionMode) *batchv1.CompletionMode {
 	return &cm
 }
 
-// TestNonParallelJob tests that a Job that only executes one Pod. The test
-// recreates the Job controller at some points to make sure a new controller
-// is able to pickup.
+// TestNonParallelJob 测试只执行一个 Pod 的 Job。
+// 测试会在某些时刻重建 Job 控制器，以确保新控制器能够接手。
 func TestNonParallelJob(t *testing.T) {
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, fastPodFailureBackoff))
 	closeFn, restConfig, clientSet, ns := setup(t, "simple")
@@ -2423,11 +2397,11 @@ func TestNonParallelJob(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	})
 
-	// Restarting controller.
+	// 重启控制器。
 	cancel()
 	ctx, cancel = startJobControllerAndWaitForCaches(t, restConfig)
 
-	// Failed Pod is replaced.
+	// 失败的 Pod 会被替换。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodFailed, 1); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodFailed, err)
 	}
@@ -2442,11 +2416,11 @@ func TestNonParallelJob(t *testing.T) {
 		Value:  1,
 	})
 
-	// Restarting controller.
+	// 重启控制器。
 	cancel()
 	ctx, cancel = startJobControllerAndWaitForCaches(t, restConfig)
 
-	// No more Pods are created after the Pod succeeds.
+	// Pod 成功后不再创建新的 Pod。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 1); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodSucceeded, err)
 	}
@@ -2491,14 +2465,14 @@ func TestParallelJob(t *testing.T) {
 	}
 	validateJobPodsStatus(ctx, t, clientSet, jobObj, "", want)
 
-	// Tracks ready pods, if enabled.
+	// 如果启用了，则跟踪 ready 的 pod。
 	if _, err := setJobPodsReady(ctx, clientSet, jobObj, 2); err != nil {
 		t.Fatalf("Failed Marking Pods as ready: %v", err)
 	}
 	want.Ready = ptr.To[int32](2)
 	validateJobPodsStatus(ctx, t, clientSet, jobObj, "", want)
 
-	// Failed Pods are replaced.
+	// 失败的 Pod 会被替换。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodFailed, 2); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pods: %v", v1.PodFailed, err)
 	}
@@ -2509,7 +2483,7 @@ func TestParallelJob(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	}
 	validateJobPodsStatus(ctx, t, clientSet, jobObj, "", want)
-	// Once one Pod succeeds, no more Pods are created, even if some fail.
+	// 一旦有一个 Pod 成功，即使其他 Pod 失败，也不再创建新的 Pod。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 1); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodSucceeded, err)
 	}
@@ -2532,7 +2506,7 @@ func TestParallelJob(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	}
 	validateJobPodsStatus(ctx, t, clientSet, jobObj, "", want)
-	// No more Pods are created after remaining Pods succeed.
+	// 剩余 Pod 成功后不再创建新的 Pod。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 2); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pods: %v", v1.PodSucceeded, err)
 	}
@@ -2581,7 +2555,7 @@ func TestParallelJobChangingParallelism(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	})
 
-	// Reduce parallelism by a number greater than backoffLimit.
+	// 将 parallelism 减少一个大于 backoffLimit 的数值。
 	patch := []byte(`{"spec":{"parallelism":2}}`)
 	jobObj, err = clientSet.BatchV1().Jobs(ns.Name).Patch(ctx, jobObj.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
@@ -2593,7 +2567,7 @@ func TestParallelJobChangingParallelism(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	})
 
-	// Increase parallelism again.
+	// 再次增加 parallelism。
 	patch = []byte(`{"spec":{"parallelism":4}}`)
 	jobObj, err = clientSet.BatchV1().Jobs(ns.Name).Patch(ctx, jobObj.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
@@ -2605,7 +2579,7 @@ func TestParallelJobChangingParallelism(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	})
 
-	// Succeed Job
+	// 让 Job 成功
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 4); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pods: %v", v1.PodSucceeded, err)
 	}
@@ -2619,8 +2593,7 @@ func TestParallelJobChangingParallelism(t *testing.T) {
 }
 
 func TestParallelJobWithCompletions(t *testing.T) {
-	// Lower limits for a job sync so that we can test partial updates with a low
-	// number of pods.
+	// 降低 Job 单次同步的限制，以便用较少的 pod 测试部分更新。
 	t.Cleanup(setDuringTest(&jobcontroller.MaxUncountedPods, 10))
 	t.Cleanup(setDuringTest(&jobcontroller.MaxPodCreateDeletePerSync, 10))
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, fastPodFailureBackoff))
@@ -2645,14 +2618,14 @@ func TestParallelJobWithCompletions(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	}
 	validateJobPodsStatus(ctx, t, clientSet, jobObj, "", want)
-	// Tracks ready pods, if enabled.
+	// 如果启用了，则跟踪 ready 的 pod。
 	if _, err := setJobPodsReady(ctx, clientSet, jobObj, 52); err != nil {
 		t.Fatalf("Failed Marking Pods as ready: %v", err)
 	}
 	want.Ready = ptr.To[int32](52)
 	validateJobPodsStatus(ctx, t, clientSet, jobObj, "", want)
 
-	// Failed Pods are replaced.
+	// 失败的 Pod 会被替换。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodFailed, 2); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pods: %v", v1.PodFailed, err)
 	}
@@ -2663,7 +2636,7 @@ func TestParallelJobWithCompletions(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	}
 	validateJobPodsStatus(ctx, t, clientSet, jobObj, "", want)
-	// Pods are created until the number of succeeded Pods equals completions.
+	// 持续创建 Pod，直到成功的 Pod 数量达到 completions。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 53); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodSucceeded, err)
 	}
@@ -2675,7 +2648,7 @@ func TestParallelJobWithCompletions(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	}
 	validateJobPodsStatus(ctx, t, clientSet, jobObj, "", want)
-	// No more Pods are created after the Job completes.
+	// Job 完成后不再创建新的 Pod。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 3); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pods: %v", v1.PodSucceeded, err)
 	}
@@ -2732,7 +2705,7 @@ func TestIndexedJob(t *testing.T) {
 		Value:  0,
 	})
 
-	// One Pod succeeds.
+	// 一个 Pod 成功。
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodSucceeded, 1); err != nil {
 		t.Fatal("Failed trying to succeed pod with index 1")
 	}
@@ -2748,7 +2721,7 @@ func TestIndexedJob(t *testing.T) {
 		Value:  1,
 	})
 
-	// One Pod fails, which should be recreated.
+	// 一个 Pod 失败，它应该被重建。
 	if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodFailed, 2); err != nil {
 		t.Fatal("Failed trying to succeed pod with index 2")
 	}
@@ -2765,7 +2738,7 @@ func TestIndexedJob(t *testing.T) {
 		Value:  1,
 	})
 
-	// Remaining Pods succeed.
+	// 剩余的 Pod 成功。
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodSucceeded, 3); err != nil {
 		t.Fatal("Failed trying to succeed remaining pods")
 	}
@@ -3039,7 +3012,7 @@ func TestElasticIndexedJob(t *testing.T) {
 		"scale up": {
 			jobUpdates: []jobUpdate{
 				{
-					// Scale up completions 3->4 then succeed indexes 0-3
+					// 将 completions 从 3 扩容到 4，然后让索引 0-3 成功
 					completions:          ptr.To[int32](4),
 					succeedIndexes:       []int{0, 1, 2, 3},
 					wantSucceededIndexes: "0-3",
@@ -3049,7 +3022,7 @@ func TestElasticIndexedJob(t *testing.T) {
 		},
 		"scale down": {
 			jobUpdates: []jobUpdate{
-				// First succeed index 1 and fail index 2 while completions is still original value (3).
+				// 在 completions 仍为原值 (3) 时，先让索引 1 成功、索引 2 失败。
 				{
 					succeedIndexes:       []int{1},
 					failIndexes:          []int{2},
@@ -3059,8 +3032,8 @@ func TestElasticIndexedJob(t *testing.T) {
 					wantActivePods:       2,
 					wantTerminating:      ptr.To[int32](0),
 				},
-				// Scale down completions 3->1, verify prev failure out of range still counts
-				// but succeeded out of range does not.
+				// 将 completions 从 3 缩容到 1，验证之前超出范围的失败仍会被计数，
+				// 但超出范围的成功不会被计数。
 				{
 					completions:          ptr.To[int32](1),
 					succeedIndexes:       []int{0},
@@ -3072,7 +3045,7 @@ func TestElasticIndexedJob(t *testing.T) {
 		},
 		"index finishes successfully, scale down, scale up": {
 			jobUpdates: []jobUpdate{
-				// First succeed index 2 while completions is still original value (3).
+				// 在 completions 仍为原值 (3) 时，先让索引 2 成功。
 				{
 					succeedIndexes:       []int{2},
 					wantSucceededIndexes: "2",
@@ -3080,14 +3053,14 @@ func TestElasticIndexedJob(t *testing.T) {
 					wantActivePods:       2,
 					wantTerminating:      ptr.To[int32](0),
 				},
-				// Scale completions down 3->2 to exclude previously succeeded index.
+				// 将 completions 从 3 缩容到 2，以排除之前成功的索引。
 				{
 					completions:          ptr.To[int32](2),
 					wantRemainingIndexes: sets.New(0, 1),
 					wantActivePods:       2,
 					wantTerminating:      ptr.To[int32](0),
 				},
-				// Scale completions back up to include previously succeeded index that was temporarily out of range.
+				// 将 completions 扩容回去，以包含之前暂时超出范围的成功索引。
 				{
 					completions:          ptr.To[int32](3),
 					succeedIndexes:       []int{0, 1, 2},
@@ -3114,7 +3087,7 @@ func TestElasticIndexedJob(t *testing.T) {
 			t.Cleanup(cancel)
 			resetMetrics()
 
-			// Set up initial Job in Indexed completion mode.
+			// 以 Indexed completion 模式创建初始 Job。
 			mode := batchv1.IndexedCompletion
 			jobObj, err := createJobWithDefaults(ctx, clientSet, ns.Name, &batchv1.Job{
 				Spec: batchv1.JobSpec{
@@ -3128,7 +3101,7 @@ func TestElasticIndexedJob(t *testing.T) {
 			}
 			jobClient := clientSet.BatchV1().Jobs(jobObj.Namespace)
 
-			// Wait for pods to start up.
+			// 等待 pod 启动。
 			err = wait.PollUntilContextTimeout(ctx, 5*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (done bool, err error) {
 				job, err := jobClient.Get(ctx, jobObj.Name, metav1.GetOptions{})
 				if err != nil {
@@ -3144,7 +3117,7 @@ func TestElasticIndexedJob(t *testing.T) {
 			}
 
 			for _, update := range tc.jobUpdates {
-				// Update Job spec if necessary.
+				// 如有必要，更新 Job spec。
 				if update.completions != nil {
 					if jobObj, err = updateJob(ctx, jobClient, jobObj.Name, func(j *batchv1.Job) {
 						j.Spec.Completions = update.completions
@@ -3157,14 +3130,14 @@ func TestElasticIndexedJob(t *testing.T) {
 					}
 				}
 
-				// Succeed specified indexes.
+				// 让指定的索引成功。
 				for _, idx := range update.succeedIndexes {
 					if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodSucceeded, idx); err != nil {
 						t.Fatalf("Failed trying to succeed pod with index %d: %v", idx, err)
 					}
 				}
 
-				// Fail specified indexes.
+				// 让指定的索引失败。
 				for _, idx := range update.failIndexes {
 					if err := setJobPhaseForIndex(ctx, clientSet, jobObj, v1.PodFailed, idx); err != nil {
 						t.Fatalf("Failed trying to fail pod with index %d: %v", idx, err)
@@ -3186,13 +3159,13 @@ func TestElasticIndexedJob(t *testing.T) {
 	}
 }
 
-// BenchmarkLargeIndexedJob benchmarks the completion of an Indexed Job.
-// We expect that large jobs are more commonly used as Indexed. And they are
-// also faster to track, as they need less API calls.
+// BenchmarkLargeIndexedJob 对 Indexed Job 的完成过程进行基准测试。
+// 我们认为大型 Job 更常以 Indexed 方式使用，而且它们跟踪起来也更快，
+// 因为所需的 API 调用更少。
 func BenchmarkLargeIndexedJob(b *testing.B) {
 	closeFn, restConfig, clientSet, ns := setup(b, "indexed")
-	// During the benchmark, we restrict the client QPS and Burst to ensure that
-	// the job-controller performance is fast enough in the limited QPS and Burst situations.
+	// 在基准测试期间，我们限制客户端的 QPS 和 Burst，以确保 Job 控制器
+	// 在受限的 QPS 和 Burst 条件下仍有足够好的性能。
 	restConfig.QPS = 100
 	restConfig.Burst = 100
 	b.Cleanup(closeFn)
@@ -3267,16 +3240,15 @@ func BenchmarkLargeIndexedJob(b *testing.B) {
 	}
 }
 
-// BenchmarkLargeFailureHandling benchmarks the handling of numerous pod failures
-// of an Indexed Job. We set minimal backoff delay to make the job controller
-// performance comparable for indexed jobs with global backoffLimit, and those
-// with backoffLimit per-index, despite different patterns of handling failures.
+// BenchmarkLargeFailureHandling 对 Indexed Job 处理大量 pod 失败的情况进行基准测试。
+// 我们设置了最小的退避延迟，使 Job 控制器在处理使用全局 backoffLimit 的 Indexed Job
+// 与使用 per-index backoffLimit 的 Indexed Job 时，尽管失败处理模式不同，性能仍具有可比性。
 func BenchmarkLargeFailureHandling(b *testing.B) {
 	b.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, fastPodFailureBackoff))
 	b.Cleanup(setDurationDuringTest(&jobcontroller.MaxJobPodFailureBackOff, fastPodFailureBackoff))
 	closeFn, restConfig, clientSet, ns := setup(b, "indexed")
-	// During the benchmark, we restrict the client QPS and Burst to ensure that
-	// the job-controller performance is fast enough in the limited QPS and Burst situations.
+	// 在基准测试期间，我们限制客户端的 QPS 和 Burst，以确保 Job 控制器
+	// 在受限的 QPS 和 Burst 条件下仍有足够好的性能。
 	restConfig.QPS = 100
 	restConfig.Burst = 100
 	b.Cleanup(closeFn)
@@ -3366,12 +3338,12 @@ func BenchmarkLargeFailureHandling(b *testing.B) {
 	}
 }
 
-// cleanUp removes the specified pod finalizers, then deletes all pods and the job.
+// cleanUp 移除指定的 pod finalizer，然后删除所有 pod 和 Job。
 func cleanUp(ctx context.Context, clientSet clientset.Interface, jobObj *batchv1.Job, podFinalizersToRemove []string) error {
 	if err := removePodsFinalizers(ctx, clientSet, jobObj.Namespace, podFinalizersToRemove); err != nil {
 		return err
 	}
-	// Clean up pods in pages, because DeleteCollection might timeout.
+	// 分页清理 pod，因为 DeleteCollection 可能会超时。
 	// #90743
 	for {
 		pods, err := clientSet.CoreV1().Pods(jobObj.Namespace).List(ctx, metav1.ListOptions{Limit: 1})
@@ -3391,7 +3363,7 @@ func cleanUp(ctx context.Context, clientSet clientset.Interface, jobObj *batchv1
 		}
 	}
 
-	// Set the propagation policy to background to ensure that the job doesn't receive any finalizer at deletion time
+	// 将传播策略设为 background，确保 Job 在删除时不会收到任何 finalizer
 	return clientSet.BatchV1().Jobs(jobObj.Namespace).Delete(ctx, jobObj.Name, metav1.DeleteOptions{
 		PropagationPolicy: ptr.To(metav1.DeletePropagationBackground),
 	})
@@ -3403,7 +3375,7 @@ func TestOrphanPodsFinalizersClearedWithGC(t *testing.T) {
 	for _, policy := range []metav1.DeletionPropagation{metav1.DeletePropagationOrphan, metav1.DeletePropagationBackground, metav1.DeletePropagationForeground} {
 		t.Run(string(policy), func(t *testing.T) {
 			informerSet := informers.NewSharedInformerFactory(clientset.NewForConfigOrDie(restclient.AddUserAgent(restConfig, "controller-informers")), 0)
-			// Make the job controller significantly slower to trigger race condition.
+			// 让 Job 控制器显著变慢，以触发竞态条件。
 			restConfig.QPS = 1
 			restConfig.Burst = 1
 			jc, ctx, cancel := createJobControllerWithSharedInformers(t, restConfig, informerSet)
@@ -3430,7 +3402,7 @@ func TestOrphanPodsFinalizersClearedWithGC(t *testing.T) {
 				Terminating: ptr.To[int32](0),
 			})
 
-			// Delete Job. The GC should delete the pods in cascade.
+			// 删除 Job。GC 应级联删除这些 pod。
 			err = clientSet.BatchV1().Jobs(jobObj.Namespace).Delete(ctx, jobObj.Name, metav1.DeleteOptions{
 				PropagationPolicy: &policy,
 			})
@@ -3438,24 +3410,23 @@ func TestOrphanPodsFinalizersClearedWithGC(t *testing.T) {
 				t.Fatalf("Failed to delete job: %v", err)
 			}
 			validateNoOrphanPodsWithFinalizers(ctx, t, clientSet, jobObj)
-			// Pods never finished, so they are not counted in the metric.
+			// pod 从未结束，因此不会被计入该指标。
 			validateTerminatedPodsTrackingFinalizerMetric(ctx, t, 0)
 		})
 	}
 }
 
 func TestFinalizersClearedWhenBackoffLimitExceeded(t *testing.T) {
-	// Set a maximum number of uncounted pods below parallelism, to ensure it
-	// doesn't affect the termination of pods.
+	// 将未计数 pod 的最大数量设为小于 parallelism 的值，
+	// 以确保它不会影响 pod 的终止。
 	t.Cleanup(setDuringTest(&jobcontroller.MaxUncountedPods, 50))
 	closeFn, restConfig, clientSet, ns := setup(t, "simple")
 	t.Cleanup(closeFn)
 	ctx, cancel := startJobControllerAndWaitForCaches(t, restConfig)
 	t.Cleanup(cancel)
 
-	// Job tracking with finalizers requires less calls in Indexed mode,
-	// so it's more likely to process all finalizers before all the pods
-	// are visible.
+	// 在 Indexed 模式下，使用 finalizer 的 Job 跟踪所需调用更少，
+	// 因此更有可能在所有 pod 都可见之前处理完所有 finalizer。
 	mode := batchv1.IndexedCompletion
 	jobObj, err := createJobWithDefaults(ctx, clientSet, ns.Name, &batchv1.Job{
 		Spec: batchv1.JobSpec{
@@ -3469,7 +3440,7 @@ func TestFinalizersClearedWhenBackoffLimitExceeded(t *testing.T) {
 		t.Fatalf("Could not create job: %v", err)
 	}
 
-	// Fail a pod ASAP.
+	// 尽快让一个 pod 失败。
 	err = wait.PollUntilContextTimeout(ctx, time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (done bool, err error) {
 		if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodFailed, 1); err != nil {
 			return false, nil
@@ -3506,7 +3477,7 @@ func TestJobPodsCreatedWithExponentialBackoff(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	})
 
-	// Fail the first pod
+	// 让第一个 pod 失败
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodFailed, 1); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodFailed, err)
 	}
@@ -3517,7 +3488,7 @@ func TestJobPodsCreatedWithExponentialBackoff(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	})
 
-	// Fail the second pod
+	// 让第二个 pod 失败
 	if _, err := setJobPodsPhase(ctx, clientSet, jobObj, v1.PodFailed, 1); err != nil {
 		t.Fatalf("Failed setting phase %s on Job Pod: %v", v1.PodFailed, err)
 	}
@@ -3577,8 +3548,8 @@ func validateExpotentialBackoffDelay(t *testing.T, defaultPodFailureBackoff time
 	}
 }
 
-// TestJobFailedWithInterrupts tests that a job were one pod fails and the rest
-// succeed is marked as Failed, even if the controller fails in the middle.
+// TestJobFailedWithInterrupts 测试即使控制器在中途失败，
+// 一个 pod 失败而其余 pod 成功的 Job 仍会被标记为 Failed。
 func TestJobFailedWithInterrupts(t *testing.T) {
 	closeFn, restConfig, clientSet, ns := setup(t, "simple")
 	t.Cleanup(closeFn)
@@ -3593,7 +3564,7 @@ func TestJobFailedWithInterrupts(t *testing.T) {
 			BackoffLimit: ptr.To[int32](0),
 			Template: v1.PodTemplateSpec{
 				Spec: v1.PodSpec{
-					NodeName: "foo", // Scheduled pods are not deleted immediately.
+					NodeName: "foo", // 已调度的 pod 不会被立即删除。
 				},
 			},
 		},
@@ -3651,7 +3622,7 @@ func validateNoOrphanPodsWithFinalizers(ctx context.Context, t *testing.T, clien
 }
 
 func TestOrphanPodsFinalizersClearedOnRestart(t *testing.T) {
-	// Step 0: create job.
+	// 步骤 0：创建 Job。
 	closeFn, restConfig, clientSet, ns := setup(t, "simple")
 	t.Cleanup(closeFn)
 	ctx, cancel := startJobControllerAndWaitForCaches(t, restConfig)
@@ -3673,7 +3644,7 @@ func TestOrphanPodsFinalizersClearedOnRestart(t *testing.T) {
 		Terminating: ptr.To[int32](0),
 	})
 
-	// Step 2: Delete the Job while the controller is stopped.
+	// 步骤 2：在控制器停止期间删除该 Job。
 	cancel()
 
 	_, ctx = ktesting.NewTestContext(t)
@@ -3682,7 +3653,7 @@ func TestOrphanPodsFinalizersClearedOnRestart(t *testing.T) {
 		t.Fatalf("Failed to delete job: %v", err)
 	}
 
-	// Step 3: Restart controller.
+	// 步骤 3：重启控制器。
 	ctx, cancel = startJobControllerAndWaitForCaches(t, restConfig)
 	validateNoOrphanPodsWithFinalizers(ctx, t, clientSet, jobObj)
 }
@@ -3699,8 +3670,7 @@ func TestSuspendJob(t *testing.T) {
 		create      step
 		update      step
 	}{
-		// Exhaustively test all combinations other than trivial true->true and
-		// false->false cases.
+		// 穷举测试除平凡的 true->true 和 false->false 之外的所有组合。
 		{
 			create: step{flag: false, wantActive: 2},
 			update: step{flag: true, wantActive: 0, wantStatus: v1.ConditionTrue, wantReason: "Suspended"},
@@ -3765,8 +3735,8 @@ func TestSuspendJob(t *testing.T) {
 	}
 }
 
-// TestStartTimeUpdateOnResume verifies that the job controller can update startTime
-// when resuming a suspended job (https://github.com/kubernetes/kubernetes/issues/134521).
+// TestStartTimeUpdateOnResume 验证 Job 控制器在恢复挂起的 Job 时能更新 startTime
+// （https://github.com/kubernetes/kubernetes/issues/134521）。
 func TestStartTimeUpdateOnResume(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.JobManagedBy, true)
 
@@ -3844,8 +3814,7 @@ func TestStartTimeUpdateOnResume(t *testing.T) {
 	}
 }
 
-// TestSuspendJobWithZeroCompletions verifies the suspended Job with
-// completions=0 is marked as Complete.
+// TestSuspendJobWithZeroCompletions 验证 completions=0 的挂起 Job 会被标记为 Complete。
 func TestSuspendJobWithZeroCompletions(t *testing.T) {
 	closeFn, restConfig, clientSet, ns := setup(t, "suspended-with-zero-completions")
 	t.Cleanup(closeFn)
@@ -3908,13 +3877,12 @@ func TestNodeSelectorUpdate(t *testing.T) {
 	jobNamespace := job.Namespace
 	jobClient := clientSet.BatchV1().Jobs(jobNamespace)
 
-	// Since MutableSchedulingDirectives is set to true, one needs
-	// to wait for the suspend condition to be set reflecting that the
-	// job is actually suspended.
+	// 由于 MutableSchedulingDirectives 设置为 true，需要等待 suspend condition 被设置，
+	// 以表明 Job 确实已被挂起。
 	waitForPodsToBeActive(ctx, t, jobClient, 0, job)
 	validateJobCondition(ctx, t, clientSet, job, batchv1.JobSuspended)
 
-	// (1) set node selector in the same update.
+	// (1) 在同一次更新中设置 node selector。
 
 	nodeSelector := map[string]string{"foo": "bar"}
 	if _, err := updateJob(ctx, jobClient, jobName, func(j *batchv1.Job) {
@@ -3924,7 +3892,7 @@ func TestNodeSelectorUpdate(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// (2) Check that the pod was created using the expected node selector.
+	// (2) 检查 pod 是否使用预期的 node selector 创建。
 
 	var pod *v1.Pod
 	if err := wait.PollUntilContextTimeout(ctx, waitInterval, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
@@ -3941,13 +3909,12 @@ func TestNodeSelectorUpdate(t *testing.T) {
 		t.Fatalf("pod not found: %v", err)
 	}
 
-	// if the feature gate is enabled, then the job should now be unsuspended and
-	// the pod has the node selector.
+	// 如果 feature gate 已启用，则 Job 现在应已恢复，且 pod 带有该 node selector。
 	if diff := cmp.Diff(nodeSelector, pod.Spec.NodeSelector); diff != "" {
 		t.Errorf("Unexpected nodeSelector (-want,+got):\n%s", diff)
 	}
 
-	// (3) Update node selector again. It should fail since the job is unsuspended.
+	// (3) 再次更新 node selector。由于 Job 已恢复，此操作应失败。
 	_, err = updateJob(ctx, jobClient, jobName, func(j *batchv1.Job) {
 		j.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
 	})
@@ -4051,11 +4018,11 @@ func TestUpdateJobPodResources(t *testing.T) {
 
 			jobClient := cs.BatchV1().Jobs(ns.Name)
 
-			// Handle start-then-suspend case
+			// 处理先启动后挂起的场景
 			if tc.startThenSuspend {
 				t.Logf("Waiting for pods to be active on starting job")
 				waitForPodsToBeActive(ctx, t, jobClient, 1, job)
-				// Suspend the job
+				// 挂起 Job
 				_, err = updateJob(ctx, jobClient, job.Name, func(j *batchv1.Job) {
 					j.Spec.Suspend = ptr.To(true)
 				})
@@ -4064,7 +4031,7 @@ func TestUpdateJobPodResources(t *testing.T) {
 				}
 			}
 			if tc.suspend || tc.startThenSuspend {
-				// Wait for the job to be suspended
+				// 等待 Job 被挂起
 				waitForPodsToBeActive(ctx, t, jobClient, 0, job)
 				validateJobCondition(ctx, t, cs, job, batchv1.JobSuspended)
 				t.Logf("job is suspended")
@@ -4090,7 +4057,7 @@ func TestUpdateJobPodResources(t *testing.T) {
 				}
 			}
 
-			// Unsuspend the job if it was suspended or if it's the start-then-suspend case
+			// 如果 Job 已被挂起，或属于先启动后挂起的场景，则恢复它
 			if tc.suspend || tc.startThenSuspend {
 				_, err = updateJob(ctx, jobClient, job.Name, func(j *batchv1.Job) {
 					j.Spec.Suspend = ptr.To(false)
@@ -4136,22 +4103,20 @@ func TestUpdateJobPodResources(t *testing.T) {
 	}
 }
 
-// TestDelayedJobUpdateEvent tests that a Job only creates one Pod even when
-// the job events are delayed. This test verfies the finishedJobStore is working
-// correctly and preventing from job controller creating a new pod if the job success
-// or fail event is delayed.
+// TestDelayedJobUpdateEvent 测试即使 Job 事件被延迟，Job 也只会创建一个 Pod。
+// 此测试验证 finishedJobStore 工作正常，在 Job 成功或失败事件被延迟时，
+// 能阻止 Job 控制器创建新的 pod。
 func TestDelayedJobUpdateEvent(t *testing.T) {
 	t.Cleanup(setDurationDuringTest(&jobcontroller.DefaultJobPodFailureBackOff, fastPodFailureBackoff))
 	t.Cleanup(setDurationDuringTest(&jobcontroller.SyncJobBatchPeriod, fastSyncJobBatchPeriod))
 	closeFn, restConfig, clientSet, ns := setup(t, "simple")
 	t.Cleanup(closeFn)
-	// the transform is used to introduce a delay for the job events. Since all the object have to go through
-	// transform func first before being added to the informer cache, this would serve as an indirect way to
-	// introduce watch event delay.
+	// 该 transform 用于为 Job 事件引入延迟。由于所有对象在加入 informer 缓存前
+	// 都必须先经过 transform 函数，这便成了一种间接引入 watch 事件延迟的方式。
 	transformOpt := informers.WithTransform(cache.TransformFunc(func(obj interface{}) (interface{}, error) {
 		_, ok := obj.(*batchv1.Job)
 		if ok {
-			// This will make sure pod events are processed before the job events occur.
+			// 这将确保 pod 事件在 Job 事件之前被处理。
 			time.Sleep(2 * fastSyncJobBatchPeriod)
 		}
 		return obj, nil
@@ -4274,8 +4239,8 @@ func TestDelayedJobUpdateEvent(t *testing.T) {
 
 }
 
-// TestMutableSchedulingDirectivesForSuspendedJobs verifies that scheduling directives
-// can be mutated when the feature is enabled for a suspended JOb.
+// TestMutableSchedulingDirectivesForSuspendedJobs 验证当该功能对挂起的 Job 启用时，
+// 可以修改 scheduling directives。
 func TestMutableSchedulingDirectivesForSuspendedJobs(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.MutableSchedulingDirectivesForSuspendedJobs, true)
 
@@ -4295,7 +4260,7 @@ func TestMutableSchedulingDirectivesForSuspendedJobs(t *testing.T) {
 		t.Fatalf("Failed to create Job: %v", err)
 	}
 
-	// await for the Job to be running and the status.startTime set
+	// 等待 Job 开始运行并设置 status.startTime
 	validateJobsPodsStatusOnly(ctx, t, clientSet, job, "", podsByStatus{
 		Active:      1,
 		Ready:       ptr.To[int32](0),
@@ -4310,7 +4275,7 @@ func TestMutableSchedulingDirectivesForSuspendedJobs(t *testing.T) {
 		t.Fatalf("Job startTime was not set")
 	}
 
-	// verify an update to an unsuspended Job would fail
+	// 验证对未挂起的 Job 的更新会失败
 	jobCopy := job.DeepCopy()
 	jobCopy.Spec.Template.Spec.NodeSelector = map[string]string{
 		"key": "value",
@@ -4321,14 +4286,14 @@ func TestMutableSchedulingDirectivesForSuspendedJobs(t *testing.T) {
 		t.Fatalf("update of scheduling directives succeeded for unsuspended job %s", klog.KObj(jobCopy))
 	}
 
-	// suspend the Job
+	// 挂起 Job
 	job.Spec.Suspend = ptr.To(true)
 	job, err = clientSet.BatchV1().Jobs(ns.Name).Update(ctx, job, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to suspend Job: %v", err)
 	}
 
-	// await for the Job to have no active Pods and have the JobSuspended condition
+	// 等待 Job 没有 active Pod 且具有 JobSuspended condition
 	validateJobsPodsStatusOnly(ctx, t, clientSet, job, "", podsByStatus{
 		Active:      0,
 		Ready:       ptr.To[int32](0),
@@ -4348,7 +4313,7 @@ func TestMutableSchedulingDirectivesForSuspendedJobs(t *testing.T) {
 		t.Fatalf("JobSuspended condition was not set to True")
 	}
 
-	// since the Job is suspended the update is now accepted
+	// 由于 Job 已挂起，现在该更新会被接受
 	job.Spec.Template.Spec.NodeSelector = map[string]string{
 		"key": "value",
 	}
@@ -4358,14 +4323,14 @@ func TestMutableSchedulingDirectivesForSuspendedJobs(t *testing.T) {
 		t.Fatalf("update of scheduling directives failed for suspended job %s", klog.KObj(job))
 	}
 
-	// resume the Job again and the Pods get created
+	// 再次恢复 Job，pod 会被创建
 	job.Spec.Suspend = ptr.To(false)
 	job, err = clientSet.BatchV1().Jobs(ns.Name).Update(ctx, job, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to resume Job: %v", err)
 	}
 
-	// await for the Job to be running again and assert on the status
+	// 等待 Job 再次运行，并对状态进行断言
 	validateJobsPodsStatusOnly(ctx, t, clientSet, job, "", podsByStatus{
 		Active:      1,
 		Ready:       ptr.To[int32](0),
@@ -4386,9 +4351,8 @@ func TestMutableSchedulingDirectivesForSuspendedJobs(t *testing.T) {
 	}
 }
 
-// TestMutableSchedulingDirectivesForSuspendedJobsNotYetStarted verifies that
-// scheduling directives can be mutated on a suspended Job that has never started,
-// even before the JobSuspended condition is set by the job controller.
+// TestMutableSchedulingDirectivesForSuspendedJobsNotYetStarted 验证对于从未启动过的挂起 Job，
+// 即使在 Job 控制器设置 JobSuspended condition 之前，也可以修改 scheduling directives。
 func TestMutableSchedulingDirectivesForSuspendedJobsNotYetStarted(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.MutableSchedulingDirectivesForSuspendedJobs, true)
 
@@ -4397,7 +4361,7 @@ func TestMutableSchedulingDirectivesForSuspendedJobsNotYetStarted(t *testing.T) 
 	ctx, cancel := startJobControllerAndWaitForCaches(t, restConfig)
 	t.Cleanup(cancel)
 
-	// Create a suspended Job.
+	// 创建一个挂起的 Job。
 	job, err := createJobWithDefaults(ctx, clientSet, ns.Name, &batchv1.Job{
 		Spec: batchv1.JobSpec{
 			Parallelism: ptr.To[int32](1),
@@ -4409,9 +4373,8 @@ func TestMutableSchedulingDirectivesForSuspendedJobsNotYetStarted(t *testing.T) 
 		t.Fatalf("Failed to create Job: %v", err)
 	}
 
-	// Immediately update the nodeSelector without waiting for the JobSuspended
-	// condition to be set. This simulates external controllers (e.g. MultiKueue)
-	// that inject scheduling directives right after creating a suspended Job.
+	// 不等待 JobSuspended condition 被设置，立即更新 nodeSelector。
+	// 这模拟了在创建挂起 Job 后立即注入 scheduling directives 的外部控制器（例如 MultiKueue）。
 	nodeSelector := map[string]string{"foo": "bar"}
 	job.Spec.Template.Spec.NodeSelector = nodeSelector
 	_, err = clientSet.BatchV1().Jobs(ns.Name).Update(ctx, job, metav1.UpdateOptions{})
@@ -4420,9 +4383,8 @@ func TestMutableSchedulingDirectivesForSuspendedJobsNotYetStarted(t *testing.T) 
 	}
 }
 
-// TestMutablePodResourcesForSuspendedJobsNotYetStarted verifies that
-// pod resources can be mutated on a suspended Job that has never started,
-// even before the JobSuspended condition is set by the job controller.
+// TestMutablePodResourcesForSuspendedJobsNotYetStarted 验证对于从未启动过的挂起 Job，
+// 即使在 Job 控制器设置 JobSuspended condition 之前，也可以修改 pod 资源。
 func TestMutablePodResourcesForSuspendedJobsNotYetStarted(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.MutablePodResourcesForSuspendedJobs, true)
 
@@ -4431,7 +4393,7 @@ func TestMutablePodResourcesForSuspendedJobsNotYetStarted(t *testing.T) {
 	ctx, cancel := startJobControllerAndWaitForCaches(t, restConfig)
 	t.Cleanup(cancel)
 
-	// Create a suspended Job.
+	// 创建一个挂起的 Job。
 	job, err := createJobWithDefaults(ctx, clientSet, ns.Name, &batchv1.Job{
 		Spec: batchv1.JobSpec{
 			Parallelism: ptr.To[int32](1),
@@ -4443,9 +4405,8 @@ func TestMutablePodResourcesForSuspendedJobsNotYetStarted(t *testing.T) {
 		t.Fatalf("Failed to create Job: %v", err)
 	}
 
-	// Immediately update the pod resources without waiting for the JobSuspended
-	// condition to be set. This simulates external controllers (e.g. MultiKueue)
-	// that inject resource requirements right after creating a suspended Job.
+	// 不等待 JobSuspended condition 被设置，立即更新 pod 资源。
+	// 这模拟了在创建挂起 Job 后立即注入资源需求的外部控制器（例如 MultiKueue）。
 	wantResources := v1.ResourceRequirements{
 		Requests: v1.ResourceList{
 			v1.ResourceCPU:    resource.MustParse("200m"),
@@ -4574,9 +4535,8 @@ func validateFinishedPodsNoFinalizer(ctx context.Context, t *testing.T, clientSe
 	}
 }
 
-// validateIndexedJobPods validates indexes and hostname of
-// active and completed Pods of an Indexed Job.
-// Call after validateJobPodsStatus
+// validateIndexedJobPods 验证 Indexed Job 中 active 和已完成 Pod 的 index 与 hostname。
+// 请在 validateJobPodsStatus 之后调用。
 func validateIndexedJobPods(ctx context.Context, t *testing.T, clientSet clientset.Interface, jobObj *batchv1.Job, wantActive sets.Set[int], gotCompleted string, wantFailed *string) {
 	t.Helper()
 	updatedJob, err := clientSet.BatchV1().Jobs(jobObj.Namespace).Get(ctx, jobObj.Name, metav1.GetOptions{})
@@ -4858,7 +4818,7 @@ func createJobWithDefaults(ctx context.Context, clientSet clientset.Interface, n
 }
 
 func setup(t testing.TB, nsBaseName string) (framework.TearDownFunc, *restclient.Config, clientset.Interface, *v1.Namespace) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount 控制器。
 	flags := framework.DefaultTestServerFlags()
 	if feature.DefaultFeatureGate.Enabled(features.GenericWorkload) {
 		flags = append(flags, "--runtime-config=scheduling.k8s.io/v1beta1=true")
@@ -4889,10 +4849,9 @@ func startJobControllerAndWaitForCaches(tb testing.TB, restConfig *restclient.Co
 	informerSet.Start(ctx.Done())
 	go jc.Run(ctx, 1)
 
-	// since this method starts the controller in a separate goroutine
-	// and the tests don't check /readyz there is no way
-	// the tests can tell it is safe to call the server and requests won't be rejected
-	// thus we wait until caches have synced
+	// 由于此方法会在单独的 goroutine 中启动控制器，
+	// 而测试不会检查 /readyz，因此测试无法判断何时可以安全地调用服务器、
+	// 确定请求不会被拒绝。所以我们等待缓存同步完成。
 	informerSet.WaitForCacheSync(ctx.Done())
 	return ctx, cancel
 }
@@ -4981,8 +4940,8 @@ func waitForPodsToBeActive(ctx context.Context, t *testing.T, jobClient typedv1.
 	}
 }
 
-// waitForWorkload waits for a Workload owned by the given Job to appear
-// (expectAbsent=false) or to not exist (expectAbsent=true).
+// waitForWorkload 等待由给定 Job 拥有的 Workload 出现（expectAbsent=false）
+// 或不存在（expectAbsent=true）。
 func waitForWorkload(ctx context.Context, t *testing.T, clientSet clientset.Interface, job *batchv1.Job, expectAbsent bool, timeout time.Duration) *schedulingv1beta1.Workload {
 	t.Helper()
 	var workload *schedulingv1beta1.Workload
@@ -5010,8 +4969,8 @@ func waitForWorkload(ctx context.Context, t *testing.T, clientSet clientset.Inte
 	return workload
 }
 
-// waitForPodGroup waits for a PodGroup owned by the given Job to appear
-// (expectAbsent=false) or to not exist (expectAbsent=true).
+// waitForPodGroup 等待由给定 Job 拥有的 PodGroup 出现（expectAbsent=false）
+// 或不存在（expectAbsent=true）。
 func waitForPodGroup(ctx context.Context, t *testing.T, clientSet clientset.Interface, job *batchv1.Job, expectAbsent bool, timeout time.Duration) *schedulingv1beta1.PodGroup {
 	t.Helper()
 	var podGroup *schedulingv1beta1.PodGroup
@@ -5105,14 +5064,13 @@ func failTerminatingPods(ctx context.Context, t *testing.T, clientSet clientset.
 	}
 }
 
-// TestMutablePodResourcesWithPodReplacementPolicyFailed tests that when a job with
-// PodReplacementPolicy=Failed is suspended and pods are terminating, resource updates
-// can be made to the job but new pods are only created after terminating pods are removed.
-// The new pods should have the updated resources.
+// TestMutablePodResourcesWithPodReplacementPolicyFailed 测试当 PodReplacementPolicy=Failed 的 Job
+// 被挂起且 pod 正在终止时，可以更新 Job 的资源，但新 pod 只会在终止中的 pod 被移除之后才创建。
+// 新 pod 应使用更新后的资源。
 func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 	const blockDeletionFinalizerForTest string = "fake.example.com/blockDeletion"
 
-	// Enable MutablePodResourcesForSuspendedJobs feature gate
+	// 启用 MutablePodResourcesForSuspendedJobs feature gate
 	featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.MutablePodResourcesForSuspendedJobs, true)
 
 	closeFn, restConfig, cs, ns := setup(t, "mutable-resources-pod-replacement")
@@ -5121,7 +5079,7 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 	ctx, cancel := startJobControllerAndWaitForCaches(t, restConfig)
 	defer cancel()
 
-	// Create a job with PodReplacementPolicy=Failed and a finalizer to block pod deletion
+	// 创建一个 PodReplacementPolicy=Failed 的 Job，并添加 finalizer 以阻塞 pod 删除
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-job",
@@ -5163,11 +5121,11 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 
 	jobClient := cs.BatchV1().Jobs(ns.Name)
 
-	// Wait for pods to be active
+	// 等待 pod 进入 active 状态
 	t.Log("Waiting for 2 pods to be active")
 	waitForPodsToBeActive(ctx, t, jobClient, 2, job)
 
-	// Suspend the job
+	// 挂起 Job
 	t.Log("Suspending the job")
 	_, err = updateJob(ctx, jobClient, job.Name, func(j *batchv1.Job) {
 		j.Spec.Suspend = ptr.To(true)
@@ -5176,7 +5134,7 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 		t.Fatalf("Failed to suspend Job: %v", err)
 	}
 
-	// Wait for the job to be suspended
+	// 等待 Job 被挂起
 	err = wait.PollUntilContextTimeout(ctx, time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		j, err := jobClient.Get(ctx, job.Name, metav1.GetOptions{})
 		if err != nil {
@@ -5189,11 +5147,11 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 	}
 	t.Log("Job is suspended")
 
-	// Delete the pods to make them go to Terminating state
+	// 删除 pod，使其进入 Terminating 状态
 	t.Log("Deleting pods to make them go to Terminating state")
 	deletePods(ctx, t, cs, ns.Name)
 
-	// Verify pods are in Terminating state (because of the finalizer)
+	// 验证 pod 处于 Terminating 状态（因为 finalizer）
 	validateJobsPodsStatusOnly(ctx, t, cs, job, "", podsByStatus{
 		Terminating: ptr.To[int32](2),
 		Active:      0,
@@ -5201,7 +5159,7 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 	})
 	t.Log("Pods are in Terminating state")
 
-	// Update the job's pod template with new resources
+	// 用新的资源更新 Job 的 pod template
 	t.Log("Updating job resources")
 	_, err = updateJob(ctx, jobClient, job.Name, func(j *batchv1.Job) {
 		for i := range j.Spec.Template.Spec.Containers {
@@ -5222,11 +5180,11 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 	}
 	t.Log("Job resources updated")
 
-	// Wait a bit to ensure the controller has time to process the update
-	// With PodReplacementPolicy=Failed, no new pods should be created while old pods are terminating
+	// 稍等片刻，确保控制器有时间处理该更新。
+	// 在 PodReplacementPolicy=Failed 下，旧 pod 处于终止状态时不应创建新 pod
 	time.Sleep(sleepDurationForControllerLatency)
 
-	// Verify that no new pods are created while old pods are terminating
+	// 验证旧 pod 处于终止状态时没有创建新 pod
 	validateJobsPodsStatusOnly(ctx, t, cs, job, "", podsByStatus{
 		Terminating: ptr.To[int32](2),
 		Active:      0,
@@ -5234,14 +5192,14 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 	})
 	t.Log("Verified: No new pods created while old pods are terminating")
 
-	// Remove the finalizers to allow pods to finish terminating
+	// 移除 finalizer，使 pod 能够完成终止
 	t.Log("Removing finalizers from terminating pods")
 	err = removePodsFinalizers(ctx, cs, ns.Name, []string{blockDeletionFinalizerForTest})
 	if err != nil {
 		t.Fatalf("Failed to remove finalizers: %v", err)
 	}
 
-	// Wait for pods to be deleted and verify terminating count drops to 0
+	// 等待 pod 被删除，并验证 terminating 计数降为 0
 	err = wait.PollUntilContextTimeout(ctx, time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		updatedJob, err := jobClient.Get(ctx, job.Name, metav1.GetOptions{})
 		if err != nil {
@@ -5254,7 +5212,7 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 	}
 	t.Log("Terminating pods have been removed")
 
-	// Unsuspend the job
+	// 恢复 Job
 	t.Log("Unsuspending the job")
 	_, err = updateJob(ctx, jobClient, job.Name, func(j *batchv1.Job) {
 		j.Spec.Suspend = ptr.To(false)
@@ -5263,11 +5221,11 @@ func TestMutablePodResourcesWithPodReplacementPolicyFailed(t *testing.T) {
 		t.Fatalf("Failed to unsuspend Job: %v", err)
 	}
 
-	// Wait for new pods to be created
+	// 等待新 pod 被创建
 	waitForPodsToBeActive(ctx, t, jobClient, 2, job)
 	t.Log("New pods are active")
 
-	// Verify that the new pods have the updated resources
+	// 验证新 pod 使用了更新后的资源
 	pods, err := getJobPods(ctx, t, cs, job, func(s v1.PodStatus) bool { return true })
 	if err != nil {
 		t.Fatalf("Failed to get Job pods: %v", err)
@@ -5310,8 +5268,8 @@ func TestJobGangScheduling(t *testing.T) {
 		expectPodGroup bool
 		wantActivePods int32
 		suspend        bool
-		// restarts the controller after the Workload is created
-		// and verifies the Workload UID is preserved.
+		// 在 Workload 创建后重启控制器，
+		// 并验证 Workload 的 UID 被保留。
 		simulateRestart   bool
 		wantGangMinCount  *int32
 		wantDisruptionAll bool
@@ -5475,7 +5433,7 @@ func TestJobGangScheduling(t *testing.T) {
 				t.Fatalf("Failed to create Job: %v", err)
 			}
 
-			// verify scheduling objects exist before pods, then unsuspend.
+			// 验证在 pod 之前已存在调度对象，然后恢复 Job。
 			if tc.suspend {
 				if tc.expectWorkload {
 					waitForWorkload(ctx, t, clientSet, jobObj, false, wait.ForeverTestTimeout)
@@ -5495,7 +5453,7 @@ func TestJobGangScheduling(t *testing.T) {
 				}
 			}
 
-			// Handle controller restart, verify Workload UID is preserved.
+			// 模拟控制器重启，验证 Workload 的 UID 被保留。
 			if tc.simulateRestart {
 				originalWorkloadUID := waitForWorkload(ctx, t, clientSet, jobObj, false, wait.ForeverTestTimeout).UID
 
@@ -5519,7 +5477,7 @@ func TestJobGangScheduling(t *testing.T) {
 				}
 			}
 
-			// Wait for Workload and PodGroup (present or absent).
+			// 等待 Workload 和 PodGroup 出现（或确认其不存在）。
 			absentTimeout := 10 * time.Second
 			var workload *schedulingv1beta1.Workload
 			var podGroup *schedulingv1beta1.PodGroup
@@ -5534,14 +5492,14 @@ func TestJobGangScheduling(t *testing.T) {
 				waitForPodGroup(ctx, t, clientSet, jobObj, true, absentTimeout)
 			}
 
-			// Validate pod status.
+			// 验证 pod 状态。
 			validateJobsPodsStatusOnly(ctx, t, clientSet, jobObj, "", podsByStatus{
 				Active:      int(tc.wantActivePods),
 				Ready:       ptr.To[int32](0),
 				Terminating: ptr.To[int32](0),
 			})
 
-			// Validate PodGroup ownerRefs and pod schedulingGroup.
+			// 验证 PodGroup 的 ownerRef 以及 pod 的 schedulingGroup。
 			if workload != nil && podGroup != nil {
 				expectedOwnerRefs := map[types.UID]string{
 					jobObj.UID:   "Job",
@@ -5639,7 +5597,7 @@ func TestJobGangSchedulingElasticScaling(t *testing.T) {
 	workload := waitForWorkload(ctx, t, clientSet, jobObj, false, wait.ForeverTestTimeout)
 	podGroup := waitForPodGroup(ctx, t, clientSet, jobObj, false, wait.ForeverTestTimeout)
 
-	// The compiled objects carry the requested gang minCount.
+	// 编译生成的对象应带有请求的 gang minCount。
 	if len(workload.Spec.PodGroupTemplates) != 1 || workload.Spec.PodGroupTemplates[0].SchedulingPolicy.Gang == nil {
 		t.Fatalf("expected a single gang PodGroupTemplate, got %+v", workload.Spec.PodGroupTemplates)
 	}
@@ -5650,7 +5608,7 @@ func TestJobGangSchedulingElasticScaling(t *testing.T) {
 		t.Errorf("PodGroup gang minCount = %+v, want 4", podGroup.Spec.SchedulingPolicy.Gang)
 	}
 
-	// Elastic scaling: bump minCount and verify it propagates to both objects.
+	// 弹性扩缩容：提高 minCount，并验证它会传播到两个对象。
 	if _, err := updateJob(ctx, clientSet.BatchV1().Jobs(ns.Name), jobObj.Name, func(j *batchv1.Job) {
 		j.Spec.Scheduling.SchedulingPolicy.Gang.MinCount = ptr.To[int32](6)
 	}); err != nil {
@@ -5685,7 +5643,7 @@ func TestJobGangSchedulingSuspendResume(t *testing.T) {
 	ctx, cancel := startJobControllerAndWaitForCaches(t, restConfig)
 	t.Cleanup(cancel)
 
-	// Create suspended: the Workload/PodGroup must exist before any pods.
+	// 以挂起状态创建：Workload/PodGroup 必须在任何 pod 之前存在。
 	jobObj, err := createJobWithDefaults(ctx, clientSet, ns.Name, &batchv1.Job{
 		Spec: batchv1.JobSpec{
 			Parallelism:    new(int32(4)),
@@ -5730,14 +5688,14 @@ func TestJobGangSchedulingSuspendResume(t *testing.T) {
 		}
 	}
 
-	// Resume: pods are created and wired to the existing PodGroup.
+	// 恢复：pod 被创建并连接到现有的 PodGroup。
 	setSuspend(false)
 	validateJobsPodsStatusOnly(ctx, t, clientSet, jobObj, "", podsByStatus{
 		Active: 4, Ready: new(int32(0)), Terminating: new(int32(0)),
 	})
 	verifyPodsInPodGroup("after resume")
 
-	// Suspend: pods are removed, but the scheduling objects persist unchanged.
+	// 挂起：pod 被移除，但调度对象保持不变。
 	setSuspend(true)
 	validateJobsPodsStatusOnly(ctx, t, clientSet, jobObj, "", podsByStatus{
 		Active: 0, Ready: new(int32(0)), Terminating: new(int32(0)),
@@ -5749,7 +5707,7 @@ func TestJobGangSchedulingSuspendResume(t *testing.T) {
 		t.Errorf("PodGroup was recreated across suspend: UID %v, want %v", pg.UID, podGroupUID)
 	}
 
-	// Resume again: the same objects are reused and pods are rewired to them.
+	// 再次恢复：复用相同的对象，并将 pod 重新连接到它们。
 	setSuspend(false)
 	validateJobsPodsStatusOnly(ctx, t, clientSet, jobObj, "", podsByStatus{
 		Active: 4, Ready: new(int32(0)), Terminating: new(int32(0)),

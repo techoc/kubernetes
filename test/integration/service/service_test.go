@@ -51,10 +51,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Test_ExternalNameServiceStopsDefaultingInternalTrafficPolicy tests that Services no longer default
-// the internalTrafficPolicy field when Type is ExternalName. This test exists due to historic reasons where
-// the internalTrafficPolicy field was being defaulted in older versions. New versions stop defaulting the
-// field and drop on read, but for compatibility reasons we still accept the field.
+// Test_ExternalNameServiceStopsDefaultingInternalTrafficPolicy 测试当 Type 为 ExternalName 时，
+// Service 不再对 internalTrafficPolicy 字段执行默认值填充。保留该测试是出于历史原因：
+// 旧版本会对 internalTrafficPolicy 字段填充默认值。新版本停止填充该字段，并在读取时丢弃它，
+// 但出于兼容性考虑，我们仍然接受该字段。
 func Test_ExternalNameServiceStopsDefaultingInternalTrafficPolicy(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -96,9 +96,9 @@ func Test_ExternalNameServiceStopsDefaultingInternalTrafficPolicy(t *testing.T) 
 	}
 }
 
-// Test_ExternalNameServiceDropsInternalTrafficPolicy tests that Services accepts the internalTrafficPolicy field on Create,
-// but drops the field on read. This test exists due to historic reasons where the internalTrafficPolicy field was being defaulted
-// in older versions. New versions stop defaulting the field and drop on read, but for compatibility reasons we still accept the field.
+// Test_ExternalNameServiceDropsInternalTrafficPolicy 测试 Service 在创建时接受 internalTrafficPolicy 字段，
+// 但在读取时丢弃该字段。保留该测试是出于历史原因：旧版本会对 internalTrafficPolicy 字段填充默认值。
+// 新版本停止填充该字段，并在读取时丢弃它，但出于兼容性考虑，我们仍然接受该字段。
 func Test_ExternalNameServiceDropsInternalTrafficPolicy(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -142,10 +142,9 @@ func Test_ExternalNameServiceDropsInternalTrafficPolicy(t *testing.T) {
 	}
 }
 
-// Test_ConvertingToExternalNameServiceDropsInternalTrafficPolicy tests that converting a Service to Type=ExternalName
-// results in the internalTrafficPolicy field being dropped.This test exists due to historic reasons where the internalTrafficPolicy
-// field was being defaulted in older versions. New versions stop defaulting the field and drop on read, but for compatibility reasons
-// we still accept the field.
+// Test_ConvertingToExternalNameServiceDropsInternalTrafficPolicy 测试将 Service 转换为 Type=ExternalName
+// 会导致 internalTrafficPolicy 字段被丢弃。保留该测试是出于历史原因：旧版本会对 internalTrafficPolicy
+// 字段填充默认值。新版本停止填充该字段，并在读取时丢弃它，但出于兼容性考虑，我们仍然接受该字段。
 func Test_ConvertingToExternalNameServiceDropsInternalTrafficPolicy(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -205,8 +204,8 @@ func Test_ConvertingToExternalNameServiceDropsInternalTrafficPolicy(t *testing.T
 	}
 }
 
-// Test_RemovingExternalIPsFromClusterIPServiceDropsExternalTrafficPolicy tests that removing externalIPs from a
-// ClusterIP Service results in the externalTrafficPolicy field being dropped.
+// Test_RemovingExternalIPsFromClusterIPServiceDropsExternalTrafficPolicy 测试从 ClusterIP Service 中
+// 移除 externalIPs 会导致 externalTrafficPolicy 字段被丢弃。
 func Test_RemovingExternalIPsFromClusterIPServiceDropsExternalTrafficPolicy(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -244,7 +243,7 @@ func Test_RemovingExternalIPsFromClusterIPServiceDropsExternalTrafficPolicy(t *t
 		t.Error("service externalTrafficPolicy was not set for clusterIP Service with externalIPs")
 	}
 
-	// externalTrafficPolicy should be dropped after removing externalIPs.
+	// 移除 externalIPs 后，externalTrafficPolicy 应该被丢弃。
 	newService := service.DeepCopy()
 	newService.Spec.ExternalIPs = []string{}
 
@@ -266,7 +265,7 @@ func Test_RemovingExternalIPsFromClusterIPServiceDropsExternalTrafficPolicy(t *t
 		t.Errorf("service externalTrafficPolicy should be droppped but is set: %v", service.Spec.ExternalTrafficPolicy)
 	}
 
-	// externalTrafficPolicy should be set after adding externalIPs again.
+	// 再次添加 externalIPs 后，externalTrafficPolicy 应该被设置。
 	newService = service.DeepCopy()
 	newService.Spec.ExternalIPs = []string{"1.1.1.1"}
 
@@ -354,14 +353,14 @@ func assertEndpointSliceHints(t *testing.T, ctx context.Context, client *clients
 	}
 }
 
-// Test transitions involving the `trafficDistribution` field in Service spec.
+// 测试涉及 Service spec 中 `trafficDistribution` 字段的状态转换。
 func Test_TransitionsForTrafficDistribution(t *testing.T) {
 
 	////////////////////////////////////////////////////////////////////////////
-	// Setup components, like kube-apiserver and EndpointSlice controller.
+	// 设置各类组件，例如 kube-apiserver 和 EndpointSlice controller。
 	////////////////////////////////////////////////////////////////////////////
 
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -390,7 +389,7 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	go epsController.Run(ctx, 1)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Create a namespace, node, pod in the node, and a service exposing the pod.
+	// 创建 namespace、Node、该 Node 上的 Pod，以及一个暴露该 Pod 的 Service。
 	////////////////////////////////////////////////////////////////////////////
 
 	ns := framework.CreateNamespaceOrDie(client, "test-service-traffic-distribution", t)
@@ -478,17 +477,17 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	}
 
 	////////////////////////////////////////////////////////////////////////////
-	// Assert that without the presence of `trafficDistribution` field and the
-	// service.kubernetes.io/topology-mode=Auto annotation, there are no zone
-	// hints in EndpointSlice.
+	// 断言在既没有 `trafficDistribution` 字段，也没有
+	// service.kubernetes.io/topology-mode=Auto 注解的情况下，
+	// EndpointSlice 中不存在 zone hint。
 	////////////////////////////////////////////////////////////////////////////
 
 	assertEndpointSliceHints(t, ctx, client, ns.GetName(), svc.GetName(), false, false)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Update the service by setting the `trafficDistribution: PreferClose` field
+	// 通过设置 `trafficDistribution: PreferClose` 字段来更新 Service。
 	//
-	// Assert that the respective EndpointSlices get the same-zone hints.
+	// 断言相应的 EndpointSlice 获得同 zone 的 hint。
 	////////////////////////////////////////////////////////////////////////////
 
 	trafficDist := corev1.ServiceTrafficDistributionPreferClose
@@ -501,12 +500,11 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	assertEndpointSliceHints(t, ctx, client, ns.GetName(), svc.GetName(), true, false)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Update the service with the service.kubernetes.io/topology-mode=Auto
-	// annotation.
+	// 使用 service.kubernetes.io/topology-mode=Auto 注解更新 Service。
 	//
-	// Assert that the EndpointSlice for service have no hints once
-	// service.kubernetes.io/topology-mode=Auto takes affect, since topology
-	// annotation would not work with only one service pod.
+	// 断言 service.kubernetes.io/topology-mode=Auto 生效后，
+	// Service 对应的 EndpointSlice 不再有 hint，因为
+	// 只有一个 Service Pod 时 topology 注解不起作用。
 	////////////////////////////////////////////////////////////////////////////
 
 	svc.Annotations = map[string]string{corev1.AnnotationTopologyMode: "Auto"}
@@ -518,11 +516,10 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	assertEndpointSliceHints(t, ctx, client, ns.GetName(), svc.GetName(), false, false)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Remove the annotation service.kubernetes.io/topology-mode=Auto from the
-	// service.
+	// 从 Service 中移除 service.kubernetes.io/topology-mode=Auto 注解。
 	//
-	// Assert that EndpointSlice for service again has the correct same-zone
-	// hints because of the `trafficDistribution: PreferClose` field.
+	// 断言由于存在 `trafficDistribution: PreferClose` 字段，
+	// Service 对应的 EndpointSlice 再次具有正确的同 zone hint。
 	////////////////////////////////////////////////////////////////////////////
 
 	svc.Annotations = map[string]string{}
@@ -534,9 +531,9 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	assertEndpointSliceHints(t, ctx, client, ns.GetName(), svc.GetName(), true, false)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Remove the field `trafficDistribution: PreferClose` from the service.
+	// 从 Service 中移除 `trafficDistribution: PreferClose` 字段。
 	//
-	// Assert that EndpointSlice for service again has no zone hints.
+	// 断言 Service 对应的 EndpointSlice 再次没有 zone hint。
 	////////////////////////////////////////////////////////////////////////////
 
 	svc.Spec.TrafficDistribution = nil
@@ -548,9 +545,9 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	assertEndpointSliceHints(t, ctx, client, ns.GetName(), svc.GetName(), false, false)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Update the service by setting `trafficDistribution: PreferSameZone`
+	// 通过设置 `trafficDistribution: PreferSameZone` 来更新 Service。
 	//
-	// Assert that the respective EndpointSlices get the same-zone hints.
+	// 断言相应的 EndpointSlice 获得同 zone 的 hint。
 	////////////////////////////////////////////////////////////////////////////
 
 	trafficDist = corev1.ServiceTrafficDistributionPreferSameZone
@@ -563,10 +560,9 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	assertEndpointSliceHints(t, ctx, client, ns.GetName(), svc.GetName(), true, false)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Change `trafficDistribution` to `PreferSameNode`.
+	// 将 `trafficDistribution` 改为 `PreferSameNode`。
 	//
-	// Assert that the respective EndpointSlices have both same-zone and
-	// same-node hints.
+	// 断言相应的 EndpointSlice 同时具有同 zone 和同 Node 的 hint。
 	////////////////////////////////////////////////////////////////////////////
 
 	trafficDist = corev1.ServiceTrafficDistributionPreferSameNode
@@ -579,9 +575,9 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	assertEndpointSliceHints(t, ctx, client, ns.GetName(), svc.GetName(), true, true)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Remove the field `trafficDistribution` from the service.
+	// 从 Service 中移除 `trafficDistribution` 字段。
 	//
-	// Assert that EndpointSlice for service again has no zone hints.
+	// 断言 Service 对应的 EndpointSlice 再次没有 zone hint。
 	////////////////////////////////////////////////////////////////////////////
 
 	svc.Spec.TrafficDistribution = nil
@@ -593,11 +589,9 @@ func Test_TransitionsForTrafficDistribution(t *testing.T) {
 	assertEndpointSliceHints(t, ctx, client, ns.GetName(), svc.GetName(), false, false)
 
 	////////////////////////////////////////////////////////////////////////////
-	// Update the Node to no longer have a zone label, and re-enable
-	// `PreferSameNode`.
+	// 更新 Node 使其不再具有 zone label，并重新启用 `PreferSameNode`。
 	//
-	// Assert that the respective EndpointSlices have same-node hints but not
-	// same-zone.
+	// 断言相应的 EndpointSlice 具有同 Node 的 hint，但没有同 zone 的 hint。
 	////////////////////////////////////////////////////////////////////////////
 
 	delete(node.Labels, corev1.LabelTopologyZone)
@@ -631,7 +625,7 @@ func Test_ServiceClusterIPSelector(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(client, "test-external-name-drops-internal-traffic-policy", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// create headless service
+	// 创建 headless Service。
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-headless",
@@ -654,7 +648,7 @@ func Test_ServiceClusterIPSelector(t *testing.T) {
 		t.Fatalf("Error creating test service: %v", err)
 	}
 
-	// informer to watch only non-headless services
+	// 只监听非 headless Service 的 informer。
 	kubeInformers := informers.NewSharedInformerFactoryWithOptions(client, 0, informers.WithTweakListOptions(func(options *metav1.ListOptions) {
 		options.FieldSelector = fields.OneTermNotEqualSelector("spec.clusterIP", corev1.ClusterIPNone).String()
 	}))
@@ -687,12 +681,12 @@ func Test_ServiceClusterIPSelector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error listing services: %v", err)
 	}
-	// only the kubernetes.default service expected
+	// 预期只存在 kubernetes.default Service。
 	if len(svcs) != 1 || svcs[0].Name != "kubernetes" {
 		t.Fatalf("expected 1 services, got %d", len(svcs))
 	}
 
-	// create a new service with ClusterIP
+	// 创建一个带 ClusterIP 的新 Service。
 	service2 := service.DeepCopy()
 	service2.Spec.ClusterIP = ""
 	service2.Name = "test-clusterip"
@@ -712,7 +706,7 @@ func Test_ServiceClusterIPSelector(t *testing.T) {
 		t.Fatalf("Error waiting for test service test-clusterip: %v", err)
 	}
 
-	// mutate the Service to drop the ClusterIP, theoretically ClusterIP is inmutable but ...
+	// 修改 Service 以移除 ClusterIP；理论上 ClusterIP 是不可变的，但……
 	service.Spec.ExternalName = "test"
 	service.Spec.Type = corev1.ServiceTypeExternalName
 	_, err = client.CoreV1().Services(ns.Name).Update(ctx, service, metav1.UpdateOptions{})
@@ -731,7 +725,7 @@ func Test_ServiceClusterIPSelector(t *testing.T) {
 		t.Fatalf("Error waiting for test service without ClusterIP: %v", err)
 	}
 
-	// mutate the Service to get the ClusterIP again
+	// 修改 Service 以重新获得 ClusterIP。
 	service.Spec.ExternalName = ""
 	service.Spec.ClusterIP = ""
 	service.Spec.Type = corev1.ServiceTypeClusterIP
@@ -752,7 +746,7 @@ func Test_ServiceClusterIPSelector(t *testing.T) {
 	}
 }
 
-// Repro https://github.com/kubernetes/kubernetes/issues/123853
+// 复现 https://github.com/kubernetes/kubernetes/issues/123853
 func Test_ServiceWatchUntil(t *testing.T) {
 	svcReadyTimeout := 30 * time.Second
 
@@ -785,7 +779,7 @@ func Test_ServiceWatchUntil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to list Services: %v", err)
 	}
-	// create  service
+	// 创建 Service。
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   testSvcName,
@@ -998,8 +992,8 @@ func Test_ServiceWatchUntil(t *testing.T) {
 func Test_ServiceValidation_FeatureGateEnableDisable(t *testing.T) {
 
 	////////////////////////////////////////////////////////////////////////////
-	// Start kube-apiserver with RelaxedServiceNameValidation feature-gate
-	// enabled.
+	// 在启用 RelaxedServiceNameValidation feature gate 的情况下
+	// 启动 kube-apiserver。
 	////////////////////////////////////////////////////////////////////////////
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RelaxedServiceNameValidation, true)
@@ -1013,9 +1007,9 @@ func Test_ServiceValidation_FeatureGateEnableDisable(t *testing.T) {
 	}
 
 	////////////////////////////////////////////////////////////////////////////
-	// Create services with names that start with a digit and a letter.
+	// 创建名称分别以数字和字母开头的 Service。
 	//
-	// Assert that the services are created successfully with the feature gate enabled
+	// 断言在 feature gate 启用时这些 Service 均能创建成功。
 	////////////////////////////////////////////////////////////////////////////
 
 	ns := framework.CreateNamespaceOrDie(client1, "test-service-traffic-distribution", t)
@@ -1031,23 +1025,23 @@ func Test_ServiceValidation_FeatureGateEnableDisable(t *testing.T) {
 		}
 	}
 
-	// Expected to pass, as the feature gate is enabled
+	// 预期成功，因为 feature gate 已启用。
 	_, err = client1.CoreV1().Services(ns.Name).Create(t.Context(), makeService("test-service-1"), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
 
-	// Expected to pass, as the feature gate is enabled
+	// 预期成功，因为 feature gate 已启用。
 	_, err = client1.CoreV1().Services(ns.Name).Create(t.Context(), makeService("9-test-service-1"), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Successfully created service, but shouldn't have: %v", err)
 	}
 
 	////////////////////////////////////////////////////////////////////////////
-	// Restart the kube-apiserver with RelaxedServiceNameValidation feature-gate
-	// disabled.
+	// 在禁用 RelaxedServiceNameValidation feature gate 的情况下
+	// 重启 kube-apiserver。
 	//
-	// Assert that the services are created using previous validation only
+	// 断言这些 Service 只能按照旧的校验规则创建。
 	////////////////////////////////////////////////////////////////////////////
 
 	server1.TearDownFn()
@@ -1060,24 +1054,24 @@ func Test_ServiceValidation_FeatureGateEnableDisable(t *testing.T) {
 		t.Fatalf("Error creating clientset: %v", err)
 	}
 
-	// Expected to pass, as the feature gate is disabled
+	// 预期成功，因为 feature gate 已禁用。
 	_, err = client2.CoreV1().Services(ns.Name).Create(t.Context(), makeService("test-service-2"), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
 
-	// Expected to fail, as the feature gate is disabled and this name requires relaxed validation
+	// 预期失败，因为 feature gate 已禁用，而该名称需要宽松校验。
 	_, err = client2.CoreV1().Services(ns.Name).Create(t.Context(), makeService("9-test-service-2"), metav1.CreateOptions{})
 	if err == nil {
 		t.Fatalf("Successfully created service, but shouldn't have: %v", err)
 	}
 
 	////////////////////////////////////////////////////////////////////////////
-	// Assert that the services created prior to the feature gate being disabled
-	// can still be patched successfully even though it requires relaxed validation.
+	// 断言在 feature gate 被禁用之前创建的 Service 仍然可以成功 patch，
+	// 即使该操作需要宽松校验。
 	////////////////////////////////////////////////////////////////////////////
 
-	// Expected to pass as the service was created before the feature gate was disabled
+	// 预期成功，因为该 Service 是在 feature gate 被禁用之前创建的。
 	patch := []byte(`{"spec":{"selector":{"foo":"baz"}}}`)
 	_, err = client2.CoreV1().Services(ns.Name).Patch(t.Context(), "9-test-service-1", types.StrategicMergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {

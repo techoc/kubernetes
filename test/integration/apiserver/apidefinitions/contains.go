@@ -20,9 +20,9 @@ import (
 	"reflect"
 )
 
-// containsAll tests is a Kubernetes unstructured value is a strict subset of another
-// unstructured value. containsAll returns true if subset equals value, or if all
-// map and slices values in subset also exist in value.
+// containsAll 用于测试一个 Kubernetes unstructured 值是否为另一个 unstructured
+// 值的严格子集。如果 subset 与 value 相等，或者 subset 中所有的 map 和 slice
+// 值也都存在于 value 中，containsAll 返回 true。
 func containsAll(subset, value any) bool {
 	if subset == nil {
 		return value == nil

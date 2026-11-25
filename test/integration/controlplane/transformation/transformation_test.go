@@ -58,7 +58,7 @@ import (
 
 const (
 	secretKey                = "api_key"
-	secretVal                = "086a7ffc-0225-11e8-ba89-0ed5f89f718b" // Fake value for testing.
+	secretVal                = "086a7ffc-0225-11e8-ba89-0ed5f89f718b" // 用于测试的假值。
 	encryptionConfigFileName = "encryption.conf"
 	testNamespace            = "secret-encryption-test"
 	testSecret               = "test-secret"
@@ -67,8 +67,8 @@ const (
 	configMapKey             = "foo"
 	configMapVal             = "bar"
 
-	// precomputed key and secret for use with AES CBC
-	// this looks exactly the same as the AES GCM secret but with a different value
+	// 预先计算好的密钥和 secret，供 AES CBC 使用
+	// 它与 AES GCM 的 secret 形式完全相同，只是值不同
 	oldAESCBCKey = "e0/+tts8FS254BZimFZWtUsOCOUDSkvzB72PyimMlkY="
 	oldSecret    = "azhzAAoMCgJ2MRIGU2VjcmV0En4KXwoLdGVzdC1zZWNyZXQSABoWc2VjcmV0LWVuY3J5cHRpb24tdGVzdCIAKiQ3MmRmZTVjNC0xNDU2LTQyMzktYjFlZC1hZGZmYTJmMWY3YmEyADgAQggI5Jy/7wUQAHoAEhMKB2FwaV9rZXkSCPCfpJfwn5C8GgZPcGFxdWUaACIA"
 	oldSecretVal = "\xf0\x9f\xa4\x97\xf0\x9f\x90\xbc"
@@ -107,14 +107,14 @@ func newTransformTest(tb testing.TB, config transformTestConfig) (*transformTest
 	}
 
 	var err error
-	// create config dir with provided config yaml
+	// 使用提供的配置 YAML 创建配置目录
 	if config.transformerConfigYAML != "" && config.configDir == "" {
 		if e.configDir, err = e.createEncryptionConfig(); err != nil {
 			e.cleanUp()
 			return nil, fmt.Errorf("error while creating KubeAPIServer encryption config: %w", err)
 		}
 	} else {
-		// configDir already exists. api-server must be restarting with existing encryption config
+		// configDir 已存在，api-server 必然是使用现有加密配置重启
 		e.configDir = config.configDir
 	}
 	configFile := filepath.Join(e.configDir, encryptionConfigFileName)
@@ -147,11 +147,11 @@ func newTransformTest(tb testing.TB, config transformTestConfig) (*transformTest
 	}
 
 	if config.transformerConfigYAML != "" && config.reload {
-		// when reloading is enabled, this healthz endpoint is always present
+		// 启用重新加载时，该 healthz 端点始终存在
 		mustBeHealthy(tCtx, "/kms-providers", "ok", e.kubeAPIServer.ClientConfig)
 		mustNotHaveLivez(tCtx, "/kms-providers", "404 page not found", e.kubeAPIServer.ClientConfig)
 
-		// excluding healthz endpoints even if they do not exist should work
+		// 即使 healthz 端点不存在，排除它们也应能正常工作
 		mustBeHealthy(tCtx, "", `warn: some health checks cannot be excluded: no matches for "kms-provider-0","kms-provider-1","kms-provider-2","kms-provider-3"`,
 			e.kubeAPIServer.ClientConfig, "kms-provider-0", "kms-provider-1", "kms-provider-2", "kms-provider-3")
 	}
@@ -192,10 +192,10 @@ func (e *transformTest) runResource(l kubeapiservertesting.Logger, unSealSecretF
 		return
 	}
 
-	// etcd path of the key is used as the authenticated context - need to pass it to decrypt
+	// 键的 etcd 路径被用作认证上下文——解密时需要传入该路径
 	ctx := context.Background()
 	dataCtx := value.DefaultContext(e.getETCDPathForResource(e.storageConfig.Prefix, group, resource, name, namespaceName))
-	// Envelope header precedes the cipherTextPayload
+	// 封套头部位于 cipherTextPayload 之前
 	sealedData := response.Kvs[0].Value[len(expectedEnvelopePrefix):]
 	transformerConfig, err := e.getEncryptionConfig()
 	if err != nil {
@@ -220,7 +220,7 @@ func (e *transformTest) runResource(l kubeapiservertesting.Logger, unSealSecretF
 		}
 	}
 
-	// Data should be un-enveloped on direct reads from Kube API Server.
+	// 直接从 Kube API Server 读取时，数据应已解除封套。
 	if resource == "secrets" {
 		s, err := e.restClient.CoreV1().Secrets(testNamespace).Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
@@ -381,7 +381,7 @@ func (e *transformTest) createConfigMap(name, namespace string) (*corev1.ConfigM
 	return cm, nil
 }
 
-// create jobs
+// 创建 Job
 func (e *transformTest) createJob(name, namespace string) (*batchv1.Job, error) {
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -409,7 +409,7 @@ func (e *transformTest) createJob(name, namespace string) (*batchv1.Job, error) 
 	return job, nil
 }
 
-// create deployment
+// 创建 Deployment
 func (e *transformTest) createDeployment(name, namespace string) (*appsv1.Deployment, error) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -518,8 +518,8 @@ func (e *transformTest) readRawRecordFromETCD(path string) (*clientv3.GetRespons
 	if err != nil {
 		return nil, fmt.Errorf("failed to create etcd client: %v", err)
 	}
-	// kvClient is a wrapper around rawClient and to avoid leaking goroutines we need to
-	// close the client (which we can do by closing rawClient).
+	// kvClient 是 rawClient 的包装器，为避免 goroutine 泄漏，
+	// 我们需要关闭客户端（可通过关闭 rawClient 实现）。
 	defer rawClient.Close()
 
 	response, err := etcdClient.Get(context.Background(), path, clientv3.WithPrefix())
@@ -535,8 +535,8 @@ func (e *transformTest) writeRawRecordToETCD(path string, data []byte) (*clientv
 	if err != nil {
 		return nil, fmt.Errorf("failed to create etcd client: %v", err)
 	}
-	// kvClient is a wrapper around rawClient and to avoid leaking goroutines we need to
-	// close the client (which we can do by closing rawClient).
+	// kvClient 是 rawClient 的包装器，为避免 goroutine 泄漏，
+	// 我们需要关闭客户端（可通过关闭 rawClient 实现）。
 	defer rawClient.Close()
 
 	response, err := etcdClient.Put(context.Background(), path, string(data))
@@ -639,7 +639,7 @@ func getHealthz(checkName string, clientConfig *rest.Config, excludes ...string)
 	for _, exclude := range excludes {
 		req.Param("exclude", exclude)
 	}
-	body, err := req.DoRaw(context.TODO()) // we can still have a response body during an error case
+	body, err := req.DoRaw(context.TODO()) // 即使出现错误也可能获得响应体
 	return string(body), err == nil, nil
 }
 
@@ -653,6 +653,6 @@ func getLivez(checkName string, clientConfig *rest.Config, excludes ...string) (
 	for _, exclude := range excludes {
 		req.Param("exclude", exclude)
 	}
-	body, err := req.DoRaw(context.TODO()) // we can still have a response body during an error case
+	body, err := req.DoRaw(context.TODO()) // 即使出现错误也可能获得响应体
 	return string(body), err == nil, nil
 }

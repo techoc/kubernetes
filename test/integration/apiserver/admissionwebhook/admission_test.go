@@ -96,8 +96,8 @@ type testContext struct {
 type testFunc func(*testContext)
 
 var (
-	// defaultResourceFuncs holds the default test functions.
-	// may be overridden for specific resources by customTestFuncs.
+	// defaultResourceFuncs 存放默认的测试函数。
+	// 特定资源可以通过 customTestFuncs 覆盖。
 	defaultResourceFuncs = map[string]testFunc{
 		"create":           testResourceCreate,
 		"update":           testResourceUpdate,
@@ -106,14 +106,14 @@ var (
 		"deletecollection": testResourceDeletecollection,
 	}
 
-	// defaultSubresourceFuncs holds default subresource test functions.
-	// may be overridden for specific resources by customTestFuncs.
+	// defaultSubresourceFuncs 存放默认的子资源测试函数。
+	// 特定资源可以通过 customTestFuncs 覆盖。
 	defaultSubresourceFuncs = map[string]testFunc{
 		"update": testSubresourceUpdate,
 		"patch":  testSubresourcePatch,
 	}
 
-	// customTestFuncs holds custom test functions by resource and verb.
+	// customTestFuncs 按资源和操作存放自定义的测试函数。
 	customTestFuncs = map[schema.GroupVersionResource]map[string]testFunc{
 		gvr("", "v1", "namespaces"): {"delete": testNamespaceDelete},
 
@@ -138,8 +138,8 @@ var (
 		gvr("custom.fancy.com", "v2", "pants"):      {"create": testNoPruningCustomFancy},
 	}
 
-	// admissionExemptResources lists objects which are exempt from admission validation/mutation,
-	// only resources exempted from admission processing by API server should be listed here.
+	// admissionExemptResources 列出无需进行 admission 校验/变更的对象，
+	// 这里只应列出被 API server 免除 admission 处理的资源。
 	admissionExemptResources = map[schema.GroupVersionResource]bool{
 		gvr("admissionregistration.k8s.io", "v1beta1", "mutatingwebhookconfigurations"):       true,
 		gvr("admissionregistration.k8s.io", "v1beta1", "validatingwebhookconfigurations"):     true,
@@ -162,17 +162,17 @@ var (
 		gvr("admissionregistration.k8s.io", "v1", "mutatingadmissionpolicybindings"):          true,
 	}
 
-	// webhookExcludedResources are the virtual resources admission webhooks skip when
-	// ExcludeAdmissionWebhookVirtualResources is enabled (the same set as VAP/MAP).
+	// webhookExcludedResources 是启用 ExcludeAdmissionWebhookVirtualResources 时
+	// admission webhook 会跳过的虚拟资源（与 VAP/MAP 的集合相同）。
 	webhookExcludedResources = sets.New(exclusion.Excluded()...)
 
 	parentResources = map[schema.GroupVersionResource]schema.GroupVersionResource{
 		gvr("extensions", "v1beta1", "replicationcontrollers/scale"): gvr("", "v1", "replicationcontrollers"),
 	}
 
-	// stubDataOverrides holds either non persistent resources' definitions or resources where default stub needs to be overridden.
+	// stubDataOverrides 存放非持久化资源的定义，或需要覆盖默认 stub 的资源。
 	stubDataOverrides = map[schema.GroupVersionResource]string{
-		// Non persistent Reviews resource
+		// 非持久化的 Reviews 资源
 		gvr("authentication.k8s.io", "v1", "tokenreviews"):                  `{"metadata": {"name": "tokenreview"}, "spec": {"token": "token", "audience": ["audience1","audience2"]}}`,
 		gvr("authentication.k8s.io", "v1beta1", "tokenreviews"):             `{"metadata": {"name": "tokenreview"}, "spec": {"token": "token", "audience": ["audience1","audience2"]}}`,
 		gvr("authentication.k8s.io", "v1alpha1", "selfsubjectreviews"):      `{"metadata": {"name": "SelfSubjectReview"},"status":{"userInfo":{}}}`,
@@ -187,18 +187,18 @@ var (
 		gvr("authorization.k8s.io", "v1beta1", "selfsubjectaccessreviews"):  `{"metadata": {"name": "", "namespace":""}, "spec": {"resourceAttributes": {"name":"name1", "namespace":""}}}`,
 		gvr("authorization.k8s.io", "v1beta1", "selfsubjectrulesreviews"):   `{"metadata": {"name": "", "namespace":"` + testNamespace + `"}, "spec": {"namespace":"` + testNamespace + `"}}`,
 
-		// Other Non persistent resources
+		// 其他非持久化资源
 	}
 )
 
 type webhookOptions struct {
 	version string
 
-	// phase indicates whether this is a mutating or validating webhook
+	// phase 表示这是 mutating webhook 还是 validating webhook
 	phase string
-	// converted indicates if this webhook makes use of matchPolicy:equivalent and expects conversion.
-	// if true, recordGVR and expectGVK are mapped through gvrToConvertedGVR/gvrToConvertedGVK.
-	// if false, recordGVR and expectGVK are compared directly to the admission review.
+	// converted 表示该 webhook 是否使用 matchPolicy:equivalent 并期望发生转换。
+	// 为 true 时，recordGVR 和 expectGVK 通过 gvrToConvertedGVR/gvrToConvertedGVK 映射。
+	// 为 false 时，recordGVR 和 expectGVK 直接与 admission review 比较。
 	converted bool
 }
 
@@ -220,11 +220,11 @@ type holder struct {
 	expectOptionsGVK schema.GroupVersionKind
 	expectOptions    bool
 
-	// gvrToConvertedGVR maps the GVR submitted to the API server to the expected GVR when converted to the webhook-recognized resource.
-	// When a converted request is recorded, gvrToConvertedGVR[recordGVR] is compared to the GVR seen by the webhook.
+	// gvrToConvertedGVR 把提交给 API server 的 GVR 映射到转换为 webhook 可识别资源后期望的 GVR。
+	// 记录转换后的请求时，会把 gvrToConvertedGVR[recordGVR] 与 webhook 看到的 GVR 比较。
 	gvrToConvertedGVR map[metav1.GroupVersionResource]metav1.GroupVersionResource
-	// gvrToConvertedGVR maps the GVR submitted to the API server to the expected GVK when converted to the webhook-recognized resource.
-	// When a converted request is recorded, gvrToConvertedGVR[expectGVK] is compared to the GVK seen by the webhook.
+	// gvrToConvertedGVR 把提交给 API server 的 GVR 映射到转换为 webhook 可识别资源后期望的 GVK。
+	// 记录转换后的请求时，会把 gvrToConvertedGVR[expectGVK] 与 webhook 看到的 GVK 比较。
 	gvrToConvertedGVK map[metav1.GroupVersionResource]schema.GroupVersionKind
 
 	recorded map[webhookOptions]*admissionRequest
@@ -245,7 +245,7 @@ func (h *holder) reset(t *testing.T) {
 	h.expectOptions = false
 	h.warningHandler.reset()
 
-	// Set up the recorded map with nil records for all combinations
+	// 为所有组合初始化 recorded map，记录值置为 nil
 	h.recorded = map[webhookOptions]*admissionRequest{}
 	for _, phase := range []string{mutation, validation} {
 		for _, converted := range []bool{true, false} {
@@ -256,7 +256,7 @@ func (h *holder) reset(t *testing.T) {
 	}
 }
 func (h *holder) expect(gvr schema.GroupVersionResource, gvk, optionsGVK schema.GroupVersionKind, operation v1beta1.Operation, name, namespace string, object, oldObject, options bool) {
-	// Special-case namespaces, since the object name shows up in request attributes
+	// 对 namespace 做特殊处理，因为对象名称会出现在 request attributes 中
 	if len(namespace) == 0 && gvk.Group == "" && gvk.Version == "v1" && gvk.Kind == "Namespace" {
 		namespace = name
 	}
@@ -274,7 +274,7 @@ func (h *holder) expect(gvr schema.GroupVersionResource, gvk, optionsGVK schema.
 	h.expectOptions = options
 	h.warningHandler.reset()
 
-	// Set up the recorded map with nil records for all combinations
+	// 为所有组合初始化 recorded map，记录值置为 nil
 	h.recorded = map[webhookOptions]*admissionRequest{}
 	for _, phase := range []string{mutation, validation} {
 		for _, converted := range []bool{true, false} {
@@ -300,7 +300,7 @@ func (h *holder) record(version string, phase string, converted bool, request *a
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
-	// this is useful to turn on if items aren't getting recorded and you need to figure out why
+	// 当记录没有生效、需要排查原因时，可以打开这个开关
 	debug := false
 	if debug {
 		h.t.Logf("%s %#v %v", request.Operation, request.Resource, request.SubResource)
@@ -311,10 +311,10 @@ func (h *holder) record(version string, phase string, converted bool, request *a
 		resource.Resource += "/" + request.SubResource
 	}
 
-	// See if we should record this
+	// 判断是否需要记录这条请求
 	gvrToRecord := h.recordGVR
 	if converted {
-		// If this is a converted webhook, map to the GVR we expect the webhook to see
+		// 如果是转换型 webhook，映射到我们期望 webhook 看到的 GVR
 		gvrToRecord = h.gvrToConvertedGVR[h.recordGVR]
 	}
 	if resource != gvrToRecord {
@@ -365,7 +365,7 @@ func (h *holder) verify(t *testing.T) {
 func (h *holder) verifyRequest(webhookOptions webhookOptions, request *admissionRequest) error {
 	converted := webhookOptions.converted
 
-	// Check if current resource should be exempted from Admission processing
+	// 检查当前资源是否应免除 Admission 处理
 	gvrKey := gvr(h.recordGVR.Group, h.recordGVR.Version, h.recordGVR.Resource)
 	isExempt := admissionExemptResources[gvrKey]
 	if !isExempt && utilfeature.DefaultFeatureGate.Enabled(features.ExcludeAdmissionWebhookVirtualResources) &&
@@ -466,12 +466,12 @@ func (w *warningHandler) HandleWarningHeader(code int, agent string, message str
 	w.warnings[message] = true
 }
 
-// TestWebhookAdmissionWithWatchCache tests communication between API server and webhook process.
+// TestWebhookAdmissionWithWatchCache 测试启用 watch cache 时 API server 与 webhook 进程之间的通信。
 func TestWebhookAdmissionWithWatchCache(t *testing.T) {
 	testWebhookAdmission(t, true, func(testing.TB, *rest.Config) {})
 }
 
-// TestWebhookAdmissionWithoutWatchCache tests communication between API server and webhook process.
+// TestWebhookAdmissionWithoutWatchCache 测试不启用 watch cache 时 API server 与 webhook 进程之间的通信。
 func TestWebhookAdmissionWithoutWatchCache(t *testing.T) {
 	testWebhookAdmission(t, false, func(testing.TB, *rest.Config) {})
 }
@@ -485,10 +485,10 @@ func TestWebhookAdmissionWithCBOR(t *testing.T) {
 	})
 }
 
-// testWebhookAdmission tests communication between API server and webhook process.
+// testWebhookAdmission 测试 API server 与 webhook 进程之间的通信。
 func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(testing.TB, *rest.Config)) {
 
-	// holder communicates expectations to webhooks, and results from webhooks
+	// holder 负责把期望传给 webhook，并记录 webhook 返回的结果
 	holder := &holder{
 		t:                 t,
 		warningHandler:    &warningHandler{warnings: map[string]bool{}},
@@ -496,7 +496,7 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 		gvrToConvertedGVK: map[metav1.GroupVersionResource]schema.GroupVersionKind{},
 	}
 
-	// set up webhook server
+	// 启动 webhook server
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {
 		t.Fatal("Failed to append Cert from PEM")
@@ -526,23 +526,21 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 	webhookServer.StartTLS()
 	defer webhookServer.Close()
 
-	// start API server
+	// 启动 API server
 	etcdConfig := framework.SharedEtcd()
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{
 		fmt.Sprintf("--watch-cache=%v", watchCache),
-		// turn off admission plugins that add finalizers
+		// 关闭会添加 finalizer 的 admission 插件
 		"--disable-admission-plugins=ServiceAccount,StorageObjectInUseProtection",
-		// force enable all resources so we can check storage.
+		// 强制启用所有资源，以便检查存储。
 		"--runtime-config=api/all=true",
-		// enable feature-gates that protect resources to check their storage, too.
-		// e.g. "--feature-gates=EphemeralContainers=true",
+		// 同时启用保护资源的 feature gate，以检查其存储。
+		// 例如 "--feature-gates=EphemeralContainers=true",
 	}, etcdConfig)
 	defer server.TearDownFn()
 
-	// Configure a client with a distinct user name so that it is easy to distinguish requests
-	// made by the client from requests made by controllers. We use this to filter out requests
-	// before recording them to ensure we don't accidentally mistake requests from controllers
-	// as requests made by the client.
+	// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求和控制器发起的请求。
+	// 我们据此在记录之前过滤请求，确保不会把控制器的请求误当成该客户端的请求。
 	clientConfig := rest.CopyConfig(server.ClientConfig)
 	clientConfig.Impersonate.UserName = testClientUsername
 	clientConfig.Impersonate.Groups = []string{"system:masters", "system:authenticated"}
@@ -552,14 +550,14 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// create CRDs
+	// 创建 CRD
 	etcd.CreateTestCRDs(t, apiextensionsclientset.NewForConfigOrDie(server.ClientConfig), false, etcd.GetCustomResourceDefinitionData()...)
 
 	if _, err := client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// gather resources to test
+	// 收集待测资源
 	_, resources, err := client.Discovery().ServerGroupsAndResources()
 	if err != nil {
 		t.Fatalf("Failed to get ServerGroupsAndResources with error: %+v", err)
@@ -611,10 +609,10 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 		return true
 	})
 
-	// map unqualified resource names to the fully qualified resource we will expect to be converted to
-	// Note: this only works because there are no overlapping resource names in-process that are not co-located
+	// 把非全限定资源名映射到期望转换后的全限定资源
+	// 注意：这只在进程内不存在未并置的同名重叠资源时才成立
 	convertedResources := map[string]schema.GroupVersionResource{}
-	// build the webhook rules enumerating the specific group/version/resources we want
+	// 构建 webhook 规则，枚举我们关心的 group/version/resource
 	convertedV1beta1Rules := []admissionregistrationv1beta1.RuleWithOperations{}
 	convertedV1Rules := []admissionregistrationv1.RuleWithOperations{}
 	for _, gvr := range gvrsToTest {
@@ -622,11 +620,11 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 
 		convertedGVR, ok := convertedResources[gvr.Resource]
 		if !ok {
-			// this is the first time we've seen this resource
-			// record the fully qualified resource we expect
+			// 第一次遇到该资源
+			// 记录我们期望的全限定资源
 			convertedGVR = gvr
 			convertedResources[gvr.Resource] = gvr
-			// add an admission rule indicating we can receive this version
+			// 添加一条 admission 规则，表明我们可以接收这个版本
 			convertedV1beta1Rules = append(convertedV1beta1Rules, admissionregistrationv1beta1.RuleWithOperations{
 				Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.OperationAll},
 				Rule:       admissionregistrationv1beta1.Rule{APIGroups: []string{gvr.Group}, APIVersions: []string{gvr.Version}, Resources: []string{gvr.Resource}},
@@ -637,7 +635,7 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 			})
 		}
 
-		// record the expected resource and kind
+		// 记录期望的 resource 和 kind
 		holder.gvrToConvertedGVR[metaGVR] = metav1.GroupVersionResource{Group: convertedGVR.Group, Version: convertedGVR.Version, Resource: convertedGVR.Resource}
 		holder.gvrToConvertedGVK[metaGVR] = schema.GroupVersionKind{Group: resourcesByGVR[convertedGVR].Group, Version: resourcesByGVR[convertedGVR].Version, Kind: resourcesByGVR[convertedGVR].Kind}
 	}
@@ -655,13 +653,13 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 		t.Fatal(err)
 	}
 
-	// Allow the webhook to establish
+	// 等待 webhook 建立连接
 	time.Sleep(time.Second)
 
 	start := time.Now()
 	count := 0
 
-	// Test admission on all resources, subresources, and verbs
+	// 对所有资源、子资源和操作测试 admission
 	for _, gvr := range gvrsToTest {
 		resource := resourcesByGVR[gvr]
 		t.Run(gvr.Group+"."+gvr.Version+"."+strings.ReplaceAll(resource.Name, "/", "."), func(t *testing.T) {
@@ -703,7 +701,7 @@ func testWebhookAdmission(t *testing.T, watchCache bool, reconfigureClient func(
 }
 
 //
-// generic resource testing
+// 通用资源测试
 //
 
 func testResourceCreate(c *testContext) {
@@ -760,7 +758,7 @@ func testResourcePatch(c *testContext) {
 }
 
 func testResourceDelete(c *testContext) {
-	// Verify that an immediate delete triggers the webhook and populates the admisssionRequest.oldObject.
+	// 验证立即删除会触发 webhook 并填充 admissionRequest.oldObject。
 	obj, err := createOrGetResource(c.client, c.gvr, c.resource)
 	if err != nil {
 		c.t.Error(err)
@@ -776,7 +774,7 @@ func testResourceDelete(c *testContext) {
 	}
 	c.admissionHolder.verify(c.t)
 
-	// wait for the item to be gone
+	// 等待对象被删除
 	err = wait.PollImmediate(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 		obj, err := c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Get(context.TODO(), obj.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -793,16 +791,15 @@ func testResourceDelete(c *testContext) {
 		return
 	}
 
-	// Verify that an update-on-delete triggers the webhook and populates the admisssionRequest.oldObject.
+	// 验证删除时的更新操作会触发 webhook 并填充 admissionRequest.oldObject。
 	obj, err = createOrGetResource(c.client, c.gvr, c.resource)
 	if err != nil {
 		c.t.Error(err)
 		return
 	}
-	// Adding finalizer to the object, then deleting it.
-	// We don't add finalizers by setting DeleteOptions.PropagationPolicy
-	// because some resource (e.g., events) do not support garbage
-	// collector finalizers.
+	// 先给对象添加 finalizer，再删除它。
+	// 我们不通过设置 DeleteOptions.PropagationPolicy 来添加 finalizer，
+	// 因为某些资源（例如 events）不支持垃圾回收器的 finalizer。
 	_, err = c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Patch(
 		context.TODO(),
 		obj.GetName(),
@@ -821,7 +818,7 @@ func testResourceDelete(c *testContext) {
 	}
 	c.admissionHolder.verify(c.t)
 
-	// wait other finalizers (e.g., crd's customresourcecleanup finalizer) to be removed.
+	// 等待其他 finalizer（例如 CRD 的 customresourcecleanup finalizer）被移除。
 	err = wait.PollImmediate(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 		obj, err := c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Get(context.TODO(), obj.GetName(), metav1.GetOptions{})
 		if err != nil {
@@ -842,7 +839,7 @@ func testResourceDelete(c *testContext) {
 		return
 	}
 
-	// remove the finalizer
+	// 移除 finalizer
 	_, err = c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Patch(
 		context.TODO(),
 		obj.GetName(),
@@ -853,7 +850,7 @@ func testResourceDelete(c *testContext) {
 		c.t.Error(err)
 		return
 	}
-	// wait for the item to be gone
+	// 等待对象被删除
 	err = wait.PollImmediate(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 		obj, err := c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Get(context.TODO(), obj.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -880,7 +877,7 @@ func testResourceDeletecollection(c *testContext) {
 	background := metav1.DeletePropagationBackground
 	zero := int64(0)
 
-	// update the object with a label that matches our selector
+	// 用匹配选择器的标签更新对象
 	_, err = c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Patch(
 		context.TODO(),
 		obj.GetName(),
@@ -892,17 +889,17 @@ func testResourceDeletecollection(c *testContext) {
 		return
 	}
 
-	// set expectations
+	// 设置期望
 	c.admissionHolder.expect(c.gvr, gvk(c.resource.Group, c.resource.Version, c.resource.Kind), gvkDeleteOptions, v1beta1.Delete, "", obj.GetNamespace(), false, true, true)
 
-	// delete
+	// 删除
 	err = c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).DeleteCollection(context.TODO(), metav1.DeleteOptions{GracePeriodSeconds: &zero, PropagationPolicy: &background}, metav1.ListOptions{LabelSelector: "webhooktest=true"})
 	if err != nil {
 		c.t.Error(err)
 		return
 	}
 
-	// wait for the item to be gone
+	// 等待对象被删除
 	err = wait.PollImmediate(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 		obj, err := c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Get(context.TODO(), obj.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -922,7 +919,7 @@ func testResourceDeletecollection(c *testContext) {
 
 func getParentGVR(gvr schema.GroupVersionResource) schema.GroupVersionResource {
 	parentGVR, found := parentResources[gvr]
-	// if no special override is found, just drop the subresource
+	// 若没有特殊覆盖，则直接去掉子资源部分
 	if !found {
 		parentGVR = gvr
 		parentGVR.Resource = strings.Split(parentGVR.Resource, "/")[0]
@@ -960,14 +957,14 @@ func testSubresourceUpdate(c *testContext) {
 			return err
 		}
 
-		// Save the parent object as what we submit
+		// 先把父对象保存为待提交的对象
 		submitObj := obj
 
 		gvrWithoutSubresources := c.gvr
 		gvrWithoutSubresources.Resource = strings.Split(gvrWithoutSubresources.Resource, "/")[0]
 		subresources := strings.Split(c.gvr.Resource, "/")[1:]
 
-		// If the subresource supports get, fetch that as the object to submit (namespaces/finalize, */scale, etc)
+		// 如果子资源支持 get，则获取它作为待提交对象（namespaces/finalize、*/scale 等）
 		if sets.NewString(c.resource.Verbs...).Has("get") {
 			submitObj, err = c.client.Resource(gvrWithoutSubresources).Namespace(obj.GetNamespace()).Get(context.TODO(), obj.GetName(), metav1.GetOptions{}, subresources...)
 			if err != nil {
@@ -975,10 +972,10 @@ func testSubresourceUpdate(c *testContext) {
 			}
 		}
 
-		// Modify the object
+		// 修改对象
 		submitObj.SetAnnotations(map[string]string{"subresourceupdate": "true"})
 
-		// set expectations
+		// 设置期望
 		c.admissionHolder.expect(c.gvr, gvk(c.resource.Group, c.resource.Version, c.resource.Kind), gvkUpdateOptions, v1beta1.Update, obj.GetName(), obj.GetNamespace(), true, true, true)
 
 		_, err = c.client.Resource(gvrWithoutSubresources).Namespace(obj.GetNamespace()).Update(
@@ -1006,7 +1003,7 @@ func testSubresourcePatch(c *testContext) {
 	gvrWithoutSubresources.Resource = strings.Split(gvrWithoutSubresources.Resource, "/")[0]
 	subresources := strings.Split(c.gvr.Resource, "/")[1:]
 
-	// set expectations
+	// 设置期望
 	c.admissionHolder.expect(c.gvr, gvk(c.resource.Group, c.resource.Version, c.resource.Kind), gvkUpdateOptions, v1beta1.Update, obj.GetName(), obj.GetNamespace(), true, true, true)
 
 	_, err = c.client.Resource(gvrWithoutSubresources).Namespace(obj.GetNamespace()).Patch(
@@ -1028,13 +1025,13 @@ func unimplemented(c *testContext) {
 }
 
 //
-// custom methods
+// 自定义方法
 //
 
-// testNamespaceDelete verifies namespace-specific delete behavior:
-// - ensures admission is called on first delete (which only sets deletionTimestamp and terminating state)
-// - removes finalizer from namespace
-// - ensures admission is called on final delete once finalizers are removed
+// testNamespaceDelete 验证 namespace 特有的删除行为：
+// - 确保第一次删除时会调用 admission（此时只设置 deletionTimestamp 和 terminating 状态）
+// - 移除 namespace 上的 finalizer
+// - 确保 finalizer 移除后的最终删除也会调用 admission
 func testNamespaceDelete(c *testContext) {
 	obj, err := createOrGetResource(c.client, c.gvr, c.resource)
 	if err != nil {
@@ -1052,7 +1049,7 @@ func testNamespaceDelete(c *testContext) {
 	}
 	c.admissionHolder.verify(c.t)
 
-	// do the finalization so the namespace can be deleted
+	// 完成 finalization，以便删除 namespace
 	obj, err = c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Get(context.TODO(), obj.GetName(), metav1.GetOptions{})
 	if err != nil {
 		c.t.Error(err)
@@ -1068,16 +1065,16 @@ func testNamespaceDelete(c *testContext) {
 		c.t.Error(err)
 		return
 	}
-	// verify namespace is gone
+	// 验证 namespace 已被删除
 	obj, err = c.client.Resource(c.gvr).Namespace(obj.GetNamespace()).Get(context.TODO(), obj.GetName(), metav1.GetOptions{})
 	if err == nil || !apierrors.IsNotFound(err) {
 		c.t.Errorf("expected namespace to be gone, got %#v, %v", obj, err)
 	}
 }
 
-// testDeploymentRollback verifies rollback-specific behavior:
-// - creates a parent deployment
-// - creates a rollback object and posts it
+// testDeploymentRollback 验证 rollback 特有的行为：
+// - 创建父 deployment
+// - 创建 rollback 对象并提交
 func testDeploymentRollback(c *testContext) {
 	deploymentGVR := gvr("apps", "v1", "deployments")
 	obj, err := createOrGetResource(c.client, deploymentGVR, c.resources[deploymentGVR])
@@ -1126,7 +1123,7 @@ func testDeploymentRollback(c *testContext) {
 	}
 }
 
-// testPodConnectSubresource verifies connect subresources
+// testPodConnectSubresource 验证 connect 子资源
 func testPodConnectSubresource(c *testContext) {
 	podGVR := gvr("", "v1", "pods")
 	pod, err := createOrGetResource(c.client, podGVR, c.resources[podGVR])
@@ -1135,7 +1132,7 @@ func testPodConnectSubresource(c *testContext) {
 		return
 	}
 
-	// check all upgradeable verbs
+	// 检查所有可升级的动词
 	for _, httpMethod := range []string{"GET", "POST"} {
 		c.t.Logf("verifying %v", httpMethod)
 
@@ -1161,7 +1158,7 @@ func testPodConnectSubresource(c *testContext) {
 	}
 }
 
-// testPodBindingEviction verifies pod binding and eviction admission
+// testPodBindingEviction 验证 pod binding 和 eviction 的 admission
 func testPodBindingEviction(c *testContext) {
 	podGVR := gvr("", "v1", "pods")
 	pod, err := createOrGetResource(c.client, podGVR, c.resources[podGVR])
@@ -1213,7 +1210,7 @@ func testPodBindingEviction(c *testContext) {
 	}
 }
 
-// testSubresourceProxy verifies proxy subresources
+// testSubresourceProxy 验证 proxy 子资源
 func testSubresourceProxy(c *testContext) {
 	parentGVR := getParentGVR(c.gvr)
 	parentResource := c.resources[parentGVR]
@@ -1228,7 +1225,7 @@ func testSubresourceProxy(c *testContext) {
 	subresources := strings.Split(c.gvr.Resource, "/")[1:]
 
 	verbToHTTPMethods := map[string][]string{
-		"create": {"POST", "GET", "HEAD", "OPTIONS"}, // also test read-only verbs map to Connect admission
+		"create": {"POST", "GET", "HEAD", "OPTIONS"}, // 也测试只读动词映射到 Connect admission
 		"update": {"PUT"},
 		"patch":  {"PATCH"},
 		"delete": {"DELETE"},
@@ -1243,19 +1240,19 @@ func testSubresourceProxy(c *testContext) {
 		c.t.Logf("testing %v", httpMethod)
 		request := c.clientset.CoreV1().RESTClient().Verb(httpMethod)
 
-		// add the namespace if required
+		// 如需要则添加 namespace
 		if len(obj.GetNamespace()) > 0 {
 			request = request.Namespace(obj.GetNamespace())
 		}
 
-		// set expectations
+		// 设置期望
 		c.admissionHolder.expect(c.gvr, gvk(c.resource.Group, c.resource.Version, c.resource.Kind), schema.GroupVersionKind{}, v1beta1.Connect, obj.GetName(), obj.GetNamespace(), true, false, false)
-		// run the request. we don't actually care if the request is successful, just that admission gets called as expected
+		// 发起请求。我们并不关心请求是否成功，只关心 admission 是否按预期被调用
 		err = request.Resource(gvrWithoutSubresources.Resource).Name(obj.GetName()).SubResource(subresources...).Do(context.TODO()).Error()
 		if err != nil {
 			c.t.Logf("debug: result of subresource proxy (error expected): %v", err)
 		}
-		// verify the result
+		// 验证结果
 		c.admissionHolder.verify(c.t)
 	}
 }
@@ -1294,14 +1291,14 @@ func testNoPruningCustomFancy(c *testContext) {
 		return
 	}
 
-	// check that no pruning took place
+	// 检查没有发生字段裁剪（pruning）
 	if expected, got := "test", foo; expected != got {
 		c.t.Errorf("expected /foo to be %q, got: %q", expected, got)
 	}
 }
 
 //
-// utility methods
+// 工具方法
 //
 
 func newV1beta1WebhookHandler(t *testing.T, holder *holder, phase string, converted bool) http.Handler {
@@ -1361,7 +1358,7 @@ func newV1beta1WebhookHandler(t *testing.T, holder *holder, phase string, conver
 		}
 
 		if review.Request.UserInfo.Username == testClientUsername {
-			// only record requests originating from this integration test's client
+			// 只记录来自本集成测试客户端的请求
 			reviewRequest := &admissionRequest{
 				Operation:   string(review.Request.Operation),
 				Resource:    review.Request.Resource,
@@ -1380,15 +1377,15 @@ func newV1beta1WebhookHandler(t *testing.T, holder *holder, phase string, conver
 			Result:  &metav1.Status{Message: "admitted"},
 		}
 
-		// v1beta1 webhook handler tolerated these not being set. verify the server continues to accept these as unset.
+		// v1beta1 webhook handler 允许这些字段不设置，验证服务端继续接受未设置的情况。
 		review.APIVersion = ""
 		review.Kind = ""
 		review.Response.UID = ""
 
-		// test plumbing warnings back to the client
+		// 测试把 warnings 回传给客户端
 		review.Response.Warnings = []string{makeWarning("v1beta1", phase, converted)}
 
-		// If we're mutating, and have an object, return a patch to exercise conversion
+		// 如果是 mutating 且有对象，则返回一个 patch 以触发转换
 		if phase == mutation && len(review.Request.Object.Raw) > 0 {
 			review.Response.Patch = []byte(`[{"op":"add","path":"/foo","value":"test"}]`)
 			jsonPatch := v1beta1.PatchTypeJSONPatch
@@ -1460,7 +1457,7 @@ func newV1WebhookHandler(t *testing.T, holder *holder, phase string, converted b
 		}
 
 		if review.Request.UserInfo.Username == testClientUsername {
-			// only record requests originating from this integration test's client
+			// 只记录来自本集成测试客户端的请求
 			reviewRequest := &admissionRequest{
 				Operation:   string(review.Request.Operation),
 				Resource:    review.Request.Resource,
@@ -1479,10 +1476,10 @@ func newV1WebhookHandler(t *testing.T, holder *holder, phase string, converted b
 			UID:     review.Request.UID,
 			Result:  &metav1.Status{Message: "admitted"},
 
-			// test plumbing warnings back
+			// 测试 warnings 的回传
 			Warnings: []string{makeWarning("v1", phase, converted)},
 		}
-		// If we're mutating, and have an object, return a patch to exercise conversion
+		// 如果是 mutating 且有对象，则返回一个 patch 以触发转换
 		if phase == mutation && len(review.Request.Object.Raw) > 0 {
 			review.Response.Patch = []byte(`[{"op":"add","path":"/bar","value":"test"}]`)
 			jsonPatch := admissionreviewv1.PatchTypeJSONPatch
@@ -1575,7 +1572,7 @@ func shouldTestResourceVerb(gvr schema.GroupVersionResource, resource metav1.API
 }
 
 //
-// webhook registration helpers
+// webhook 注册辅助函数
 //
 
 func createV1beta1ValidationWebhook(etcdClient *clientv3.Client, etcdStoragePrefix string, client clientset.Interface, endpoint, convertedEndpoint string, convertedRules []admissionregistrationv1beta1.RuleWithOperations) error {
@@ -1610,12 +1607,12 @@ func createV1beta1ValidationWebhook(etcdClient *clientv3.Client, etcdStoragePref
 			},
 		},
 	}
-	// run through to get defaulting
+	// 走一遍默认值设置逻辑
 	apisv1beta1.SetObjectDefaults_ValidatingWebhookConfiguration(webhookConfig)
 	webhookConfig.TypeMeta.Kind = "ValidatingWebhookConfiguration"
 	webhookConfig.TypeMeta.APIVersion = "admissionregistration.k8s.io/v1beta1"
 
-	// Attaching Mutation webhook to API server
+	// 将 Mutation webhook 挂到 API server
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), metav1.NamespaceNone)
 	key := path.Join("/", etcdStoragePrefix, "validatingwebhookconfigurations", webhookConfig.Name)
 	val, _ := json.Marshal(webhookConfig)
@@ -1623,7 +1620,7 @@ func createV1beta1ValidationWebhook(etcdClient *clientv3.Client, etcdStoragePref
 		return err
 	}
 
-	// make sure we can get the webhook
+	// 确保能够获取到该 webhook
 	if _, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(context.TODO(), webhookConfig.Name, metav1.GetOptions{}); err != nil {
 		return err
 	}
@@ -1663,12 +1660,12 @@ func createV1beta1MutationWebhook(etcdClient *clientv3.Client, etcdStoragePrefix
 			},
 		},
 	}
-	// run through to get defaulting
+	// 走一遍默认值设置逻辑
 	apisv1beta1.SetObjectDefaults_MutatingWebhookConfiguration(webhookConfig)
 	webhookConfig.TypeMeta.Kind = "MutatingWebhookConfiguration"
 	webhookConfig.TypeMeta.APIVersion = "admissionregistration.k8s.io/v1beta1"
 
-	// Attaching Mutation webhook to API server
+	// 将 Mutation webhook 挂到 API server
 	ctx := genericapirequest.WithNamespace(genericapirequest.NewContext(), metav1.NamespaceNone)
 	key := path.Join("/", etcdStoragePrefix, "mutatingwebhookconfigurations", webhookConfig.Name)
 	val, _ := json.Marshal(webhookConfig)
@@ -1676,7 +1673,7 @@ func createV1beta1MutationWebhook(etcdClient *clientv3.Client, etcdStoragePrefix
 		return err
 	}
 
-	// make sure we can get the webhook
+	// 确保能够获取到该 webhook
 	if _, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(context.TODO(), webhookConfig.Name, metav1.GetOptions{}); err != nil {
 		return err
 	}
@@ -1688,7 +1685,7 @@ func createV1ValidationWebhook(client clientset.Interface, endpoint, convertedEn
 	fail := admissionregistrationv1.Fail
 	equivalent := admissionregistrationv1.Equivalent
 	none := admissionregistrationv1.SideEffectClassNone
-	// Attaching Admission webhook to API server
+	// 将 Admission webhook 挂到 API server
 	_, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Create(context.TODO(), &admissionregistrationv1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: "admissionregistrationv1.integration.test"},
 		Webhooks: []admissionregistrationv1.ValidatingWebhook{
@@ -1727,7 +1724,7 @@ func createV1MutationWebhook(client clientset.Interface, endpoint, convertedEndp
 	fail := admissionregistrationv1.Fail
 	equivalent := admissionregistrationv1.Equivalent
 	none := admissionregistrationv1.SideEffectClassNone
-	// Attaching Mutation webhook to API server
+	// 将 Mutation webhook 挂到 API server
 	_, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Create(context.TODO(), &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: "mutationv1.integration.test"},
 		Webhooks: []admissionregistrationv1.MutatingWebhook{
@@ -1762,7 +1759,7 @@ func createV1MutationWebhook(client clientset.Interface, endpoint, convertedEndp
 	return err
 }
 
-// localhostCert was generated from crypto/tls/generate_cert.go with the following command:
+// localhostCert 是使用以下命令由 crypto/tls/generate_cert.go 生成的：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host 127.0.0.1,::1,example.com,webhook.test.svc --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var localhostCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -1786,7 +1783,7 @@ vpCEETNAOP2hbLnPwBXUEN8KBs94UdufOFIhArNgKonY/oZoZnZYWVyRtkex+b+r
 MarmcIKMrgoYweSQiCa+XVWofz2ZSOvzxta6Y9iDI74=
 -----END CERTIFICATE-----`)
 
-// localhostKey is the private key for localhostCert.
+// localhostKey 是 localhostCert 对应的私钥。
 var localhostKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDgskP9nvUlWd0E
 ltcsXvTqGXsl+zfI0UckZFpUi/zohCMRrAyRyhnA6xjjTpvRXijO93r0ojV/uwGR

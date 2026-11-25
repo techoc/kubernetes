@@ -16,11 +16,11 @@ limitations under the License.
 
 package benchmark
 
-// enabled checks a label filter that works as in GitHub:
-// - empty string means enabled
-// - individual labels are comma-separated
-// - [+]<label> means the workload must have that label
-// - -<label> means the workload must not have that label
+// enabled 检查标签过滤器，其行为与 GitHub 中的一致：
+// - 空字符串表示启用
+// - 各个标签以逗号分隔
+// - [+]<label> 表示工作负载必须带有该标签
+// - -<label> 表示工作负载不得带有该标签
 func enabled(labelFilters []string, labels ...string) bool {
 	for _, label := range labelFilters {
 		if label == "" {

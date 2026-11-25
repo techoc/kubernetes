@@ -48,12 +48,12 @@ const (
 	testTimeoutClientUsername = "webhook-timeout-integration-client"
 )
 
-// TestWebhookTimeoutWithWatchCache ensures that the admission webhook timeout policy is applied correctly with the watch cache enabled.
+// TestWebhookTimeoutWithWatchCache 确保在启用 watch cache 时正确应用 admission webhook 的超时策略。
 func TestWebhookTimeoutWithWatchCache(t *testing.T) {
 	testWebhookTimeout(t, true)
 }
 
-// TestWebhookTimeoutWithoutWatchCache ensures that the admission webhook timeout policy is applied correctly without the watch cache enabled.
+// TestWebhookTimeoutWithoutWatchCache 确保在不启用 watch cache 时正确应用 admission webhook 的超时策略。
 func TestWebhookTimeoutWithoutWatchCache(t *testing.T) {
 	testWebhookTimeout(t, false)
 }
@@ -63,7 +63,7 @@ type invocation struct {
 	timeoutSeconds int
 }
 
-// testWebhookTimeout ensures that the admission webhook timeout policy is applied correctly.
+// testWebhookTimeout 确保正确应用 admission webhook 的超时策略。
 func testWebhookTimeout(t *testing.T, watchCache bool) {
 	type testWebhook struct {
 		path           string
@@ -93,10 +93,10 @@ func testWebhookTimeout(t *testing.T, watchCache bool) {
 				{path: "/validating/4/0s", policy: admissionregistrationv1.Fail, timeoutSeconds: 5},
 			},
 			expectInvocations: []invocation{
-				{path: "/mutating/1/0s", timeoutSeconds: 10},   // from request
-				{path: "/mutating/2/0s", timeoutSeconds: 5},    // from webhook config
-				{path: "/validating/3/0s", timeoutSeconds: 10}, // from request
-				{path: "/validating/4/0s", timeoutSeconds: 5},  // from webhook config
+				{path: "/mutating/1/0s", timeoutSeconds: 10},   // 来自 request
+				{path: "/mutating/2/0s", timeoutSeconds: 5},    // 来自 webhook 配置
+				{path: "/validating/3/0s", timeoutSeconds: 10}, // 来自 request
+				{path: "/validating/4/0s", timeoutSeconds: 5},  // 来自 webhook 配置
 			},
 		},
 		{
@@ -113,12 +113,12 @@ func testWebhookTimeout(t *testing.T, watchCache bool) {
 				{path: "/validating/6/1s", policy: admissionregistrationv1.Fail, timeoutSeconds: 20},
 			},
 			expectInvocations: []invocation{
-				{path: "/mutating/1/1s", timeoutSeconds: 10},  // from request
-				{path: "/mutating/2/1s", timeoutSeconds: 5},   // from webhook config (less than request - 1s consumed)
-				{path: "/mutating/3/1s", timeoutSeconds: 8},   // from request - 2s consumed
-				{path: "/validating/4/1s", timeoutSeconds: 5}, // from webhook config (less than request - 3s consumed by mutating)
-				{path: "/validating/5/1s", timeoutSeconds: 7}, // from request - 3s consumed by mutating
-				{path: "/validating/6/1s", timeoutSeconds: 7}, // from request - 3s consumed by mutating
+				{path: "/mutating/1/1s", timeoutSeconds: 10},  // 来自 request
+				{path: "/mutating/2/1s", timeoutSeconds: 5},   // 来自 webhook 配置（小于 request 剩余时间 - 已消耗 1s）
+				{path: "/mutating/3/1s", timeoutSeconds: 8},   // 来自 request - 已消耗 2s
+				{path: "/validating/4/1s", timeoutSeconds: 5}, // 来自 webhook 配置（小于 request 剩余时间 - mutating 已消耗 3s）
+				{path: "/validating/5/1s", timeoutSeconds: 7}, // 来自 request - mutating 已消耗 3s
+				{path: "/validating/6/1s", timeoutSeconds: 7}, // 来自 request - mutating 已消耗 3s
 			},
 		},
 		{
@@ -130,12 +130,12 @@ func testWebhookTimeout(t *testing.T, watchCache bool) {
 				{path: "/mutating/3/1s", policy: admissionregistrationv1.Ignore, timeoutSeconds: 5},
 			},
 			expectInvocations: []invocation{
-				{path: "/mutating/1/5s", timeoutSeconds: 3}, // from request
+				{path: "/mutating/1/5s", timeoutSeconds: 3}, // 来自 request
 			},
 			expectError: true,
 			errorContainsAnyOf: []string{
-				// refer to https://github.com/kubernetes/kubernetes/issues/98606#issuecomment-774832633
-				// for the reason for triggering this scenario
+				// 关于触发该场景的原因，参见
+				// https://github.com/kubernetes/kubernetes/issues/98606#issuecomment-774832633
 				"stream error",
 				"the server was unable to return a response in the time allotted",
 			},
@@ -167,12 +167,10 @@ func testWebhookTimeout(t *testing.T, watchCache bool) {
 	}, framework.SharedEtcd())
 	defer s.TearDownFn()
 
-	// Configure a client with a distinct user name so that it is easy to distinguish requests
-	// made by the client from requests made by controllers. We use this to filter out requests
-	// before recording them to ensure we don't accidentally mistake requests from controllers
-	// as requests made by the client.
+	// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求和控制器发起的请求。
+	// 我们据此在记录之前过滤请求，确保不会把控制器的请求误当成该客户端的请求。
 	clientConfig := rest.CopyConfig(s.ClientConfig)
-	clientConfig.Timeout = 0 // no timeout, we want to set this manually
+	clientConfig.Timeout = 0 // 不设置客户端超时，我们想手动控制
 	clientConfig.Impersonate.UserName = testTimeoutClientUsername
 	clientConfig.Impersonate.Groups = []string{"system:masters", "system:authenticated"}
 	client, err := clientset.NewForConfig(clientConfig)
@@ -264,7 +262,7 @@ func testWebhookTimeout(t *testing.T, watchCache bool) {
 				}
 			}()
 
-			// wait until new webhook is called the first time
+			// 等待新 webhook 第一次被调用
 			if err := wait.PollImmediate(time.Millisecond*5, wait.ForeverTestTimeout, func() (bool, error) {
 				_, err = client.CoreV1().Pods("default").Patch(context.TODO(), timeoutMarkerFixture.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 				received := recorder.MarkerReceived()
@@ -301,7 +299,7 @@ func testWebhookTimeout(t *testing.T, watchCache bool) {
 				t.Fatal(err)
 			}
 
-			// set the timeout parameter manually so we don't actually cut off the request client-side, and wait for the server response
+			// 手动设置 timeout 参数，这样客户端不会真的中断请求，我们只需要等待服务端响应
 			err = client.CoreV1().RESTClient().Post().Resource("pods").Namespace(ns).Body(body).Param("timeout", fmt.Sprintf("%ds", tt.timeoutSeconds)).Do(context.TODO()).Error()
 			// _, err = testClient.CoreV1().Pods(ns).Create(pod)
 
@@ -362,7 +360,7 @@ type timeoutRecorder struct {
 	invocations []invocation
 }
 
-// Reset zeros out all counts
+// Reset 将所有计数清零
 func (i *timeoutRecorder) Reset() {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -370,7 +368,7 @@ func (i *timeoutRecorder) Reset() {
 	i.markers = sets.NewString()
 }
 
-// MarkerReceived records the specified markers were received and returns the set of received markers
+// MarkerReceived 记录收到指定的 marker，并返回已收到的 marker 集合
 func (i *timeoutRecorder) MarkerReceived(markers ...string) sets.String {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -387,13 +385,13 @@ func (i *timeoutRecorder) RecordInvocation(call invocation) {
 		bValidating := strings.Contains(i.invocations[b].path, "validating")
 		switch {
 		case aValidating && bValidating:
-			// sort validating by path
+			// validating 按 path 排序
 			return strings.Compare(i.invocations[a].path, i.invocations[b].path) < 0
 		case !aValidating && !bValidating:
-			// keep mutating in original order
+			// mutating 保持原有顺序
 			return a < b
 		case aValidating && !bValidating:
-			// put validating last
+			// validating 排在后面
 			return false
 		default:
 			return true
@@ -421,7 +419,7 @@ func newTimeoutWebhookHandler(recorder *timeoutRecorder) http.Handler {
 			http.Error(w, err.Error(), 400)
 		}
 		if review.Request.UserInfo.Username != testTimeoutClientUsername {
-			// skip requests not originating from this integration test's client
+			// 跳过并非来自本集成测试客户端的请求
 			allow(w)
 			return
 		}
@@ -434,8 +432,8 @@ func newTimeoutWebhookHandler(recorder *timeoutRecorder) http.Handler {
 			http.Error(w, err.Error(), 400)
 		}
 
-		// When resetting between tests, a marker object is patched until this webhook
-		// observes it, at which point it is considered ready.
+		// 测试之间重置时，会不断 patch marker 对象，直到该 webhook 观察到它，
+		// 此时即认为 webhook 已就绪。
 		if pod.Namespace == timeoutMarkerFixture.Namespace && pod.Name == timeoutMarkerFixture.Name {
 			if strings.HasPrefix(r.URL.Path, "/mutating/") {
 				recorder.MarkerReceived("mutating")

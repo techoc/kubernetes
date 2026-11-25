@@ -32,9 +32,9 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// testWorkloadResourceClaims creates a PodGroup with resource claims and a
-// Pod referencing those claims and then checks whether those claims getting
-// dropped when the DRAWorkloadResourceClaims feature is enabled.
+// testWorkloadResourceClaims 创建一个带有 resource claim 的 PodGroup，
+// 以及一个引用这些 claim 的 Pod，然后检查在启用
+// DRAWorkloadResourceClaims 特性时这些 claim 是否会被丢弃。
 func testWorkloadResourceClaims(tCtx ktesting.TContext, workloadAPIEnabled, workloadResourceClaimsEnabled bool) {
 	tCtx.Parallel()
 
@@ -43,8 +43,8 @@ func testWorkloadResourceClaims(tCtx ktesting.TContext, workloadAPIEnabled, work
 	startScheduler(tCtx)
 	startClaimController(tCtx)
 
-	// controllerTimeout is the longest the ResourceClaim controller is expected
-	// to take to respond.
+	// controllerTimeout 是预期 ResourceClaim controller
+	// 响应所需的最长时间。
 	controllerTimeout := 15 * time.Second
 
 	class, driverName := createTestClass(tCtx, namespace)
@@ -195,8 +195,8 @@ func testWorkloadResourceClaims(tCtx ktesting.TContext, workloadAPIEnabled, work
 			)
 
 		tCtx.Log("Deleting the PodGroup")
-		// Remove the finalizer. The podgroupprotection controller isn't running
-		// to remove it.
+		// 移除 finalizer。podgroupprotection controller 未运行，
+		// 无法代为移除。
 		patch := []byte(`{"metadata": {"finalizers": null}}`)
 		podGroup, err = tCtx.Client().SchedulingV1beta1().PodGroups(namespace).Patch(tCtx, podGroup.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
 		tCtx.ExpectNoError(err)

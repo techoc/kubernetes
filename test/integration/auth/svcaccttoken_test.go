@@ -66,7 +66,7 @@ import (
 )
 
 const (
-	// This key is for testing purposes only and is not considered secure.
+	// 此密钥仅用于测试，不被认为是安全的。
 	ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIEZmTmUhuanLjPA2CLquXivuwBDHTt5XYwgIr/kA1LtRoAoGCCqGSM49
 AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
@@ -78,7 +78,7 @@ AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
 
 func TestServiceAccountAnnotationDeprecation(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	// Start the server
+	// 启动 server
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{})
 	defer tearDownFn()
 
@@ -114,14 +114,14 @@ func TestServiceAccountAnnotationDeprecation(t *testing.T) {
 
 	t.Run("service account with deprecated annotation", func(t *testing.T) {
 		warningHandler.clear()
-		// test warning is emitted when the service account has this deprecated annotation
+		// 测试当 service account 带有该弃用注解时会发出警告
 		saWithAnnotation.Annotations = map[string]string{svcacct.EnforceMountableSecretsAnnotation: "true"}
 		_, delSvcAcct := createDeleteSvcAcct(t, cs, saWithAnnotation)
 		defer delSvcAcct()
 		warningHandler.assertEqual(t, []string{fmt.Sprintf("metadata.annotations[%s]: deprecated in v1.32+; prefer separate namespaces to isolate access to mounted secrets", svcacct.EnforceMountableSecretsAnnotation)})
 
 		warningHandler.clear()
-		// no warning when a pod is created with a service account that has this deprecated annotation
+		// 当使用带有该弃用注解的 service account 创建 pod 时，不应发出警告
 		_, delPod := createDeletePod(t, cs, pod)
 		defer delPod()
 		warningHandler.assertEqual(t, nil)
@@ -142,23 +142,23 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 
 	tCtx := ktesting.Init(t)
 
-	// Start the server
+	// 启动 server
 	var serverAddress string
 	kubeClient, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+			// 禁用 ServiceAccount admission plugin，因为没有运行 serviceaccount controller。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount"}
 			opts.Authorization.Modes = []string{"AlwaysAllow"}
-			// Disable token cache so we can check reaction to service account deletion quickly
+			// 禁用 token 缓存，以便快速检查对 service account 删除的反应
 			opts.Authentication.TokenSuccessCacheTTL = 0
 			opts.Authentication.TokenFailureCacheTTL = 0
-			// Pin to fixed URLs for easier testing
+			// 固定为特定的 URL，便于测试
 			opts.Authentication.ServiceAccounts.JWKSURI = "https:///openid/v1/jwks"
 			opts.Authentication.ServiceAccounts.Issuers = []string{iss}
 			opts.Authentication.APIAudiences = aud
 		},
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// extract token generator
+			// 提取 token generator
 			tokenGenerator = config.ControlPlane.Extra.ServiceAccountIssuer
 
 			config.ControlPlane.Extra.ServiceAccountMaxExpiration = maxExpirationDuration
@@ -290,7 +290,7 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		checkPayload(t, treq.Status.Token, `"test-svcacct"`, "kubernetes.io", "serviceaccount", "name")
 
 		info := doTokenReview(t, cs, treq, false)
-		// we are not testing the credential-id feature, so delete this value from the returned extra info map
+		// 我们不测试 credential-id 功能，因此从返回的 extra info map 中删除该值
 		if info.Extra != nil {
 			delete(info.Extra, user.CredentialIDKey)
 		}
@@ -307,10 +307,10 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		sa, delSvcAcct := createDeleteSvcAcct(t, cs, sa)
 		defer delSvcAcct()
 
-		// Test case 1: Valid UID should succeed
+		// 测试用例 1：有效的 UID 应该成功
 		treqWithCorrectUID := &authenticationv1.TokenRequest{
 			ObjectMeta: metav1.ObjectMeta{
-				UID: sa.UID, // Use the correct UID
+				UID: sa.UID, // 使用正确的 UID
 			},
 			Spec: authenticationv1.TokenRequestSpec{
 				Audiences: []string{"api"},
@@ -324,10 +324,10 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		}
 		warningHandler.assertEqual(t, nil)
 
-		// Test case 2: Invalid UID should fail with feature gate enabled
+		// 测试用例 2：启用 feature gate 时，无效的 UID 应该失败
 		treqWithBadUID := &authenticationv1.TokenRequest{
 			ObjectMeta: metav1.ObjectMeta{
-				UID: "wrong-uid-12345", // Wrong UID
+				UID: "wrong-uid-12345", // 错误的 UID
 			},
 			Spec: authenticationv1.TokenRequestSpec{
 				Audiences: []string{"api"},
@@ -344,10 +344,10 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		}
 		warningHandler.assertEqual(t, nil)
 
-		// Test case 3: Empty UID should succeed (allows existing clients to continue working)
+		// 测试用例 3：空 UID 应该成功（允许现有客户端继续工作）
 		treqWithEmptyUID := &authenticationv1.TokenRequest{
 			ObjectMeta: metav1.ObjectMeta{
-				UID: "", // Empty UID
+				UID: "", // 空 UID
 			},
 			Spec: authenticationv1.TokenRequestSpec{
 				Audiences: []string{"api"},
@@ -371,10 +371,10 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		sa, delSvcAcct := createDeleteSvcAcct(t, cs, sa)
 		defer delSvcAcct()
 
-		// Test case: Invalid UID should succeed with feature gate disabled (only warning)
+		// 测试用例：禁用 feature gate 时，无效的 UID 应该成功（仅发出警告）
 		treqWithBadUID := &authenticationv1.TokenRequest{
 			ObjectMeta: metav1.ObjectMeta{
-				UID: "wrong-uid-12345", // Wrong UID
+				UID: "wrong-uid-12345", // 错误的 UID
 			},
 			Spec: authenticationv1.TokenRequestSpec{
 				Audiences: []string{"api"},
@@ -386,7 +386,7 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		if err != nil {
 			t.Errorf("Expected token creation with wrong UID to succeed when feature gate disabled, got error: %v", err)
 		}
-		// Should get a warning about UID mismatch
+		// 应该收到关于 UID 不匹配的警告
 		expectedWarning := fmt.Sprintf("the UID in the token request (%s) does not match the UID of the service account (%s) but TokenRequestServiceAccountUIDValidation is not enabled. In the future, this will return a conflict error", treqWithBadUID.UID, sa.UID)
 		warningHandler.assertEqual(t, []string{expectedWarning})
 	})
@@ -419,21 +419,21 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		pod, delPod := createDeletePod(t, cs, pod)
 		defer delPod()
 
-		// right uid
+		// 正确的 uid
 		treq.Spec.BoundObjectRef.UID = pod.UID
 		warningHandler.clear()
 		if _, err := cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("err: %v", err)
 		}
 		warningHandler.assertEqual(t, nil)
-		// wrong uid
+		// 错误的 uid
 		treq.Spec.BoundObjectRef.UID = wrongUID
 		warningHandler.clear()
 		if resp, err := cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{}); err == nil {
 			t.Fatalf("expected err creating token bound to pod with wrong uid but got: %#v", resp)
 		}
 		warningHandler.assertEqual(t, nil)
-		// no uid
+		// 无 uid
 		treq.Spec.BoundObjectRef.UID = noUID
 		warningHandler.clear()
 		treq, err = cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{})
@@ -451,7 +451,7 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		checkPayload(t, treq.Status.Token, "null", "kubernetes.io", "node")
 
 		info := doTokenReview(t, cs, treq, false)
-		// we are not testing the credential-id feature, so delete this value from the returned extra info map
+		// 我们不测试 credential-id 功能，因此从返回的 extra info map 中删除该值
 		delete(info.Extra, user.CredentialIDKey)
 		if len(info.Extra) != 2 {
 			t.Fatalf("expected Extra have length of 2 but was length %d: %#v", len(info.Extra), info.Extra)
@@ -501,21 +501,21 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 				defer delNode()
 			}
 
-			// right uid
+			// 正确的 uid
 			treq.Spec.BoundObjectRef.UID = pod.UID
 			warningHandler.clear()
 			if _, err := cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("err: %v", err)
 			}
 			warningHandler.assertEqual(t, nil)
-			// wrong uid
+			// 错误的 uid
 			treq.Spec.BoundObjectRef.UID = wrongUID
 			warningHandler.clear()
 			if resp, err := cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{}); err == nil {
 				t.Fatalf("expected err creating token bound to pod with wrong uid but got: %#v", resp)
 			}
 			warningHandler.assertEqual(t, nil)
-			// no uid
+			// 无 uid
 			treq.Spec.BoundObjectRef.UID = noUID
 			warningHandler.clear()
 			treq, err = cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{})
@@ -535,19 +535,19 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 				"authentication.kubernetes.io/pod-name": {pod.ObjectMeta.Name},
 				"authentication.kubernetes.io/pod-uid":  {string(pod.ObjectMeta.UID)},
 			}
-			// If the NodeName is set at all, expect it to be included in the claims
+			// 如果设置了 NodeName，则期望它出现在 claim 中
 			if pod.Spec.NodeName != "" {
 				checkPayload(t, treq.Status.Token, fmt.Sprintf(`"%s"`, pod.Spec.NodeName), "kubernetes.io", "node", "name")
 				expectedExtraValues["authentication.kubernetes.io/node-name"] = authenticationv1.ExtraValue{pod.Spec.NodeName}
 			}
-			// If the node is non-nil, we expect the UID to be set too
+			// 如果 node 非 nil，则期望 UID 也被设置
 			if node != nil {
 				checkPayload(t, treq.Status.Token, fmt.Sprintf(`"%s"`, node.UID), "kubernetes.io", "node", "uid")
 				expectedExtraValues["authentication.kubernetes.io/node-uid"] = authenticationv1.ExtraValue{string(node.ObjectMeta.UID)}
 			}
 
 			info := doTokenReview(t, cs, treq, false)
-			// we are not testing the credential-id feature, so delete this value from the returned extra info map
+			// 我们不测试 credential-id 功能，因此从返回的 extra info map 中删除该值
 			delete(info.Extra, user.CredentialIDKey)
 			if len(info.Extra) != len(expectedExtraValues) {
 				t.Fatalf("expected Extra have length of %d but was length %d: %#v", len(expectedExtraValues), len(info.Extra), info.Extra)
@@ -565,11 +565,11 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 	t.Run("bound to service account and a pod with an assigned nodeName", testPodWithAssignedNode(node))
 
 	t.Run("fails to bind to a Node if the feature gate is disabled", func(t *testing.T) {
-		// Disable node binding, emulating 1.32
+		// 禁用 node binding，模拟 1.32
 		featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParseMajorMinor("1.32"))
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ServiceAccountTokenNodeBinding, false)
 
-		// Create ServiceAccount and Node objects
+		// 创建 ServiceAccount 和 Node 对象
 		sa, del := createDeleteSvcAcct(t, cs, sa)
 		defer del()
 		node, delNode := createDeleteNode(t, cs, node)
@@ -624,21 +624,21 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		node, delNode := createDeleteNode(t, cs, node)
 		defer delNode()
 
-		// right uid
+		// 正确的 uid
 		treq.Spec.BoundObjectRef.UID = node.UID
 		warningHandler.clear()
 		if _, err := cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("err: %v", err)
 		}
 		warningHandler.assertEqual(t, nil)
-		// wrong uid
+		// 错误的 uid
 		treq.Spec.BoundObjectRef.UID = wrongUID
 		warningHandler.clear()
 		if resp, err := cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{}); err == nil {
 			t.Fatalf("expected err creating token bound to node with wrong uid but got: %#v", resp)
 		}
 		warningHandler.assertEqual(t, nil)
-		// no uid
+		// 无 uid
 		treq.Spec.BoundObjectRef.UID = noUID
 		warningHandler.clear()
 		treq, err = cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{})
@@ -688,21 +688,21 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		secret, delSecret := createDeleteSecret(t, cs, secret)
 		defer delSecret()
 
-		// right uid
+		// 正确的 uid
 		treq.Spec.BoundObjectRef.UID = secret.UID
 		warningHandler.clear()
 		if _, err := cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("err: %v", err)
 		}
 		warningHandler.assertEqual(t, nil)
-		// wrong uid
+		// 错误的 uid
 		treq.Spec.BoundObjectRef.UID = wrongUID
 		warningHandler.clear()
 		if resp, err := cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{}); err == nil {
 			t.Fatalf("expected err creating token bound to secret with wrong uid but got: %#v", resp)
 		}
 		warningHandler.assertEqual(t, nil)
-		// no uid
+		// 无 uid
 		treq.Spec.BoundObjectRef.UID = noUID
 		warningHandler.clear()
 		treq, err = cs.CoreV1().ServiceAccounts(sa.Namespace).CreateToken(tCtx, sa.Name, treq, metav1.CreateOptions{})
@@ -766,7 +766,7 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 
 		doTokenReview(t, cs, treq, false)
 
-		// backdate the token
+		// 将 token 的时间往前调
 		then := time.Now().Add(-2 * time.Hour)
 		sc := &jwt.Claims{
 			Subject:   apiserverserviceaccount.MakeUsername(sa.Namespace, sa.Name),
@@ -820,7 +820,7 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 
 		doTokenReview(t, cs, treq, false)
 
-		// Give some tolerance to avoid flakiness since we are using real time.
+		// 由于使用的是真实时间，留出一些余量以避免不稳定。
 		var leeway int64 = 2
 		actualExpiry := *jwt.NewNumericDate(time.Now().Add(time.Duration(24*365) * time.Hour))
 		assumedExpiry := *jwt.NewNumericDate(time.Now().Add(time.Duration(requestExp) * time.Second))
@@ -874,7 +874,7 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 		}
 		warningHandler.assertEqual(t, nil)
 
-		// Give some tolerance to avoid flakiness since we are using real time.
+		// 由于使用的是真实时间，留出一些余量以避免不稳定。
 		var leeway int64 = 10
 		actualExpiry := *jwt.NewNumericDate(time.Now().Add(time.Duration(60*60) * time.Second))
 		assumedExpiry := *jwt.NewNumericDate(time.Now().Add(time.Duration(requestExp) * time.Second))
@@ -1142,9 +1142,9 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 			JWKS   string `json:"jwks_uri"`
 		}{}
 
-		// A little convoluted, but the base path is hidden inside the RESTClient.
-		// We can't just use the RESTClient, because it throws away the headers
-		// before returning a result, and we need to check the headers.
+		// 有点绕，因为 base path 隐藏在 RESTClient 内部。
+		// 我们不能直接使用 RESTClient，因为它在返回结果前会丢掉 header，
+		// 而我们需要检查 header。
 		discoveryURL := rc.Get().AbsPath("/.well-known/openid-configuration").URL().String()
 		resp, err := rc.Client.Get(discoveryURL)
 		if err != nil {
@@ -1189,9 +1189,9 @@ func TestServiceAccountTokenCreate(t *testing.T) {
 				discoveryDoc.JWKS, expectJWKSURI)
 		}
 
-		// Since the test framework hardcodes the host, we combine our client's
-		// scheme and host with serviceaccount.JWKSPath. We know that this is what was
-		// in the discovery doc because we checked that it matched above.
+		// 由于测试框架硬编码了 host，我们将客户端的 scheme 和 host
+		// 与 serviceaccount.JWKSPath 组合。上面已经检查过二者匹配，
+		// 因此我们知道 discovery 文档中就是这样的。
 		jwksURI := rc.Get().AbsPath(serviceaccount.JWKSPath).URL().String()
 		t.Log("get jwks from", jwksURI)
 		resp, err = rc.Client.Get(jwksURI)
@@ -1747,9 +1747,9 @@ func TestServiceAccountTokenAttestations(t *testing.T) {
 				checkPayload(t, treq.Status.Token, `"system:serviceaccount:myns:test-svcacct"`, "sub")
 				checkPayload(t, treq.Status.Token, fmt.Sprintf(`["%s"]`, wk.audience), "aud")
 
-				// Verify the entire kubernetes.io payload to ensure no unexpected fields.
-				// Build the expected JSON with the dynamic UIDs and webhook kind, then
-				// compare as parsed objects to avoid key-ordering sensitivity.
+				// 校验整个 kubernetes.io payload，确保没有多余的字段。
+				// 用动态的 UID 和 webhook kind 构造期望的 JSON，然后
+				// 按解析后的对象比较，以避免受 key 顺序影响。
 				gotKubernetesIO := getSubObject(t, getPayload(t, treq.Status.Token), "kubernetes.io")
 				wantKubernetesIO := fmt.Sprintf(
 					`{"namespace":"myns","serviceaccount":{"name":"test-svcacct","uid":"%s"},"%s":{"name":"%s","uid":"%s"},"attestations":{"admissionReviewAPIGroups":["apps"]}}`,
@@ -1968,14 +1968,14 @@ func TestServiceAccountTokenAttestations(t *testing.T) {
 			}
 		}
 
-		// Wait for RBAC denial to propagate
+		// 等待 RBAC 拒绝生效
 		authutil.WaitForNamedAuthorizationUpdate(t, tCtx, cs.AuthorizationV1(),
 			"system:serviceaccount:"+ns.Name+":"+saRevoke.Name, "",
 			"attest", "apps",
 			schema.GroupResource{Group: "authentication.k8s.io", Resource: "admissionReviewAPIGroups"},
 			false)
 
-		// Token creation should now fail
+		// 现在 token 创建应该失败
 		_, err = cs.CoreV1().ServiceAccounts(ns.Name).CreateToken(tCtx, saRevoke.Name, treq, metav1.CreateOptions{})
 		if err == nil {
 			t.Fatal("expected token creation to fail after revoking attest permission, got success")
@@ -2181,8 +2181,8 @@ func doTokenReviewWithAudiences(t *testing.T, cs clientset.Interface, treq *auth
 			t.Fatalf("expected no error but got: %v", trev.Status.Error)
 		}
 		if (trev.Status.Error == "") && expectErr {
-			// if we expected an error and didn't get one, retry
-			// to let changes that invalidate the token percolate through informers
+			// 如果预期有错误却没有得到，则重试，
+			// 让使 token 失效的更改通过 informer 传播开来
 			if tries < 10 {
 				tries++
 				time.Sleep(100 * time.Millisecond)

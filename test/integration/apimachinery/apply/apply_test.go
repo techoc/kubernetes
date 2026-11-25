@@ -53,9 +53,9 @@ func TestApply(t *testing.T) {
 	runtimeConfigs := []string{"testapigroup.apimachinery.k8s.io/v1=true"}
 	apiServerFlags = append(apiServerFlags, "--runtime-config="+strings.Join(runtimeConfigs, ","))
 
-	// Sanity check. Not protected against concurrent access, but that's
-	// okay: integration tests are also run with race detection, so that
-	// would catch it.
+	// 健全性检查。此处未针对并发访问做保护，
+	// 但没关系：集成测试也会在竞态检测下运行，
+	// 届时会捕获这类问题。
 	if controlplane.AdditionalStorageProvidersForTests != nil {
 		t.Fatal("cannot set AdditionalStorageProvidersForTests, already set")
 	}
@@ -75,7 +75,7 @@ func TestApply(t *testing.T) {
 	})
 	tCtx = tCtx.WithRESTConfig(server.ClientConfig)
 
-	// More sub-tests could be added here. Currently there's only one.
+	// 这里可以添加更多子测试，目前只有一个。
 	tCtx.Run("optional-list-map-key", testOptionalListMapKey)
 }
 
@@ -86,14 +86,14 @@ func testOptionalListMapKey(tCtx ktesting.TContext) {
 		if actualManagedFields != nil {
 			managers := actualManagedFields.([]any)
 			for i := range managers {
-				// Strip non-deterministic time.
+				// 去掉不确定的 time 字段。
 				unstructured.RemoveNestedField(managers[i].(map[string]any), "time")
 			}
-			// Sort by manager. There should be at most one entry per manager, so
-			// no need for a tie breaker. Semantically the order is irrelevant,
-			// so we don't need to expect a specific one here.
+			// 按 manager 排序。每个 manager 最多只有一个条目，
+			// 因此无需额外的排序依据。顺序在语义上无关紧要，
+			// 所以这里不需要指定某个特定的顺序。
 			//
-			// The order turned out to be non-deterministic (test flake!) without this.
+			// 没有这一步的话，顺序会变得不确定（导致测试不稳定！）。
 			slices.SortFunc(managers, func(a, b any) int {
 				return strings.Compare(a.(map[string]any)["manager"].(string), b.(map[string]any)["manager"].(string))
 			})
@@ -104,7 +104,7 @@ func testOptionalListMapKey(tCtx ktesting.TContext) {
 	requireInfos := func(what string, obj *unstructured.Unstructured, expectedInfos []testapigroupv1.CarpInfo) {
 		tCtx.Helper()
 		actualInfos, _, _ := unstructured.NestedFieldCopy(obj.Object, "status", "infos")
-		// Order of list entries may vary. Sort by manager.
+		// 列表条目的顺序可能变化，按 manager 排序。
 		if actualInfos, ok := actualInfos.([]map[string]any); ok {
 			slices.SortFunc(actualInfos, func(a, b map[string]any) int {
 				managerA, _, _ := unstructured.NestedString(a, "manager")
@@ -122,7 +122,7 @@ func testOptionalListMapKey(tCtx ktesting.TContext) {
 	carp.SetNamespace(namespace)
 	client := tCtx.Dynamic().Resource(testapigroupv1.SchemeGroupVersion.WithResource("carps")).Namespace(namespace)
 
-	// Create with no fields in spec -> managed fields still empty.
+	// 创建时不设置 spec 中的任何字段，此时 managedFields 仍为空。
 	carp, err := client.Create(tCtx, carp, metav1.CreateOptions{FieldManager: "creator"})
 	tCtx.ExpectNoError(err, "create carp")
 	requireManagedFields("after creation", carp, nil)
@@ -136,7 +136,7 @@ func testOptionalListMapKey(tCtx ktesting.TContext) {
 		requireInfos(what, carp, expectedInfos)
 	}
 
-	// Set infos with "A: 1, B: x" and "A: 2, B: x".
+	// 设置 "A: 1, B: x" 和 "A: 2, B: x" 的 infos。
 	apply("add status #1", "status1", `
 kind: Carp
 apiVersion: testapigroup.apimachinery.k8s.io/v1
@@ -172,7 +172,7 @@ status:
 		[]testapigroupv1.CarpInfo{{A: 1, B: "x", Data: "status1_a1_bx"}, {A: 2, B: "x", Data: "status1_a2_bx"}},
 	)
 
-	// Second status infos with "A: 1, B: y" and "A: 2, B: y".
+	// 第二个状态，包含 "A: 1, B: y" 和 "A: 2, B: y" 的 infos。
 	apply("add status #2", "status2", `
 kind: Carp
 apiVersion: testapigroup.apimachinery.k8s.io/v1
@@ -225,7 +225,7 @@ status:
 		[]testapigroupv1.CarpInfo{{A: 1, B: "x", Data: "status1_a1_bx"}, {A: 2, B: "x", Data: "status1_a2_bx"}, {A: 1, B: "y", Data: "status2_a1_by"}, {A: 2, B: "y", Data: "status2_a2_by"}},
 	)
 
-	// Remove one entry of first field manager.
+	// 删除第一个 field manager 的一个条目。
 	apply("remove status #1", "status1", `
 kind: Carp
 apiVersion: testapigroup.apimachinery.k8s.io/v1
@@ -270,7 +270,7 @@ status:
 		[]testapigroupv1.CarpInfo{{A: 1, B: "x", Data: "status1_a1_bx"}, {A: 1, B: "y", Data: "status2_a1_by"}, {A: 2, B: "y", Data: "status2_a2_by"}},
 	)
 
-	// Update one entry of second field manager.
+	// 更新第二个 field manager 的一个条目。
 	apply("update status #2", "status2", `
 kind: Carp
 apiVersion: testapigroup.apimachinery.k8s.io/v1
@@ -317,7 +317,7 @@ status:
 `, []testapigroupv1.CarpInfo{{A: 1, B: "x", Data: "status1_a1_bx"}, {A: 1, B: "y", Data: "status2_a1_by"}, {A: 2, B: "y", Data: "status2_a2_by_updated"}},
 	)
 
-	// Add entries with empty and non-empty C.
+	// 添加 C 为空和非空的条目。
 	apply("add with C", "status1", `
 kind: Carp
 apiVersion: testapigroup.apimachinery.k8s.io/v1
@@ -381,7 +381,7 @@ status:
 `, []testapigroupv1.CarpInfo{{A: 1, B: "x", Data: "status1_a1_bx"}, {A: 1, B: "y", Data: "status2_a1_by"}, {A: 2, B: "y", Data: "status2_a2_by_updated"}, {A: 1, B: "x", C: ptr.To(""), Data: "status1_a1_bx_c"}, {A: 1, B: "x", C: ptr.To("z"), Data: "status1_a1_bx_cz"}},
 	)
 
-	// Wipe entries of second manager.
+	// 清除第二个 manager 的所有条目。
 	apply("remove second manager", "status2", `
 kind: Carp
 apiVersion: testapigroup.apimachinery.k8s.io/v1
@@ -414,7 +414,7 @@ apiVersion: testapigroup.apimachinery.k8s.io/v1
 `, []testapigroupv1.CarpInfo{{A: 1, B: "x", Data: "status1_a1_bx"}, {A: 1, B: "x", C: ptr.To(""), Data: "status1_a1_bx_c"}, {A: 1, B: "x", C: ptr.To("z"), Data: "status1_a1_bx_cz"}},
 	)
 
-	// Wipe entries of first manager.
+	// 清除第一个 manager 的所有条目。
 	apply("remove first manager", "status1", `
 kind: Carp
 apiVersion: testapigroup.apimachinery.k8s.io/v1
@@ -423,11 +423,11 @@ apiVersion: testapigroup.apimachinery.k8s.io/v1
 	)
 }
 
-// createTestNamespace creates a namespace with a name that is derived from the
-// current test name:
-// - Non-alpha-numeric characters replaced by hyphen.
-// - Truncated in the middle to make it short enough for GenerateName.
-// - Hyphen plus random suffix added by the apiserver.
+// createTestNamespace 创建的命名空间名称派生自
+// 当前的测试名称：
+// - 非字母数字字符替换为连字符。
+// - 在中间截断，使其足够短以适用于 GenerateName。
+// - 由 apiserver 添加连字符和随机后缀。
 func createTestNamespace(tCtx ktesting.TContext, labels map[string]string) string {
 	tCtx.Helper()
 	name := regexp.MustCompile(`[^[:alnum:]_-]`).ReplaceAllString(tCtx.Name(), "-")

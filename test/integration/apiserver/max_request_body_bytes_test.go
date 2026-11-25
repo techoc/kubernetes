@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// Tests that the apiserver limits the resource size in write operations.
+// 测试 apiserver 在写操作中限制资源大小。
 func TestMaxResourceSize(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	clientSet, _, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{})
@@ -51,7 +51,7 @@ func TestMaxResourceSize(t *testing.T) {
 		}
 	})
 
-	// Create a secret so we can update/patch/delete it.
+	// 创建一个 Secret，以便后续更新/patch/删除它。
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -184,7 +184,7 @@ func TestMaxResourceSize(t *testing.T) {
 		}
 	})
 
-	// Create YAML over 3MB limit
+	// 创建超过 3MB 限制的 YAML
 	t.Run("create should limit yaml parsing", func(t *testing.T) {
 		yamlBody := []byte(`
 apiVersion: v1
@@ -204,7 +204,7 @@ values: ` + strings.Repeat("[", 3*1024*1024))
 		}
 	})
 
-	// Create YAML just under 3MB limit, nested
+	// 创建刚好低于 3MB 限制、嵌套的 YAML
 	t.Run("create should handle a yaml document just under the maximum size with correct nesting", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("skipping expensive test")
@@ -227,7 +227,7 @@ values: ` + strings.Repeat("[", 3*1024*1024/2-500) + strings.Repeat("]", 3*1024*
 		}
 	})
 
-	// Create YAML just under 3MB limit, not nested
+	// 创建刚好低于 3MB 限制、非嵌套的 YAML
 	t.Run("create should handle a yaml document just under the maximum size with unbalanced nesting", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("skipping expensive test")
@@ -250,7 +250,7 @@ values: ` + strings.Repeat("[", 3*1024*1024-1000))
 		}
 	})
 
-	// Create JSON over 3MB limit
+	// 创建超过 3MB 限制的 JSON
 	t.Run("create should limit json parsing", func(t *testing.T) {
 		jsonBody := []byte(`{
 	"apiVersion": "v1",
@@ -271,7 +271,7 @@ values: ` + strings.Repeat("[", 3*1024*1024-1000))
 		}
 	})
 
-	// Create JSON just under 3MB limit, nested
+	// 创建刚好低于 3MB 限制、嵌套的 JSON
 	t.Run("create should handle a json document just under the maximum size with correct nesting", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("skipping expensive test")
@@ -290,13 +290,13 @@ values: ` + strings.Repeat("[", 3*1024*1024-1000))
 			AbsPath("/api/v1/namespaces/default/configmaps").
 			Body(jsonBody).
 			DoRaw(tCtx)
-		// TODO(liggitt): expect bad request on deep nesting, rather than success on dropped unknown field data
+		// TODO(liggitt): 深度嵌套时应返回 bad request，而不是丢弃未知字段数据后成功
 		if err != nil && !apierrors.IsBadRequest(err) {
 			t.Errorf("expected bad request, got %v", err)
 		}
 	})
 
-	// Create JSON just under 3MB limit, not nested
+	// 创建刚好低于 3MB 限制、非嵌套的 JSON
 	t.Run("create should handle a json document just under the maximum size with unbalanced nesting", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("skipping expensive test")

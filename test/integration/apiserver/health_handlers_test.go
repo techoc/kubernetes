@@ -25,23 +25,23 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// TestHealthHandler tests /health?verbose with etcd overrides servers.
+// TestHealthHandler 测试带有 etcd 覆盖服务器的 /health?verbose。
 func TestHealthHandler(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	// Setup multi etcd servers which is using `--etcd-servers-overrides`
+	// 搭建使用 `--etcd-servers-overrides` 的多 etcd 服务器
 	c, closeFn := multiEtcdSetup(tCtx, t)
 	defer closeFn()
 
-	// Test /healthz
+	// 测试 /healthz
 	raw := readinessCheck(t, c, "/healthz", "")
-	// assert the raw contains `[+]etcd-override-0 ok`
+	// 断言 raw 包含 `[+]etcd-override-0 ok`
 	if !strings.Contains(string(raw), "[+]etcd-override-0 ok") {
 		t.Errorf("Health check result should contain etcd-override-0 ok. Raw: %v", string(raw))
 	}
 
-	// Test /healthz?exclude=etcd group exclude
+	// 测试 /healthz?exclude=etcd 的分组排除
 	raw = readinessCheck(t, c, "/healthz", "etcd")
-	// assert the raw does not contain `[+]etcd-override-0 ok`
+	// 断言 raw 不包含 `[+]etcd-override-0 ok`
 	if strings.Contains(string(raw), "[+]etcd-override-0 ok") {
 		t.Errorf("Health check result should not contain etcd-override-0 ok. Raw: %v", string(raw))
 	}
@@ -49,7 +49,7 @@ func TestHealthHandler(t *testing.T) {
 		t.Errorf("Health check result should not contain etcd ok. Raw: %v", string(raw))
 	}
 
-	// Test /healthz?exclude=etcd-override-0 group exclude
+	// 测试 /healthz?exclude=etcd-override-0 的分组排除
 	raw = readinessCheck(t, c, "/healthz", "etcd-override-0")
 	if strings.Contains(string(raw), "[+]etcd-override-0 ok") {
 		t.Errorf("Health check result should not contain etcd-override-0 ok. Raw: %v", string(raw))

@@ -35,7 +35,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TestPodGcOrphanedPodsWithFinalizer tests deletion of orphaned pods
+// TestPodGcOrphanedPodsWithFinalizer 测试带有 finalizer 的孤儿 Pod 的删除
 func TestPodGcOrphanedPodsWithFinalizer(t *testing.T) {
 	tests := map[string]struct {
 		phase                v1.PodPhase
@@ -112,7 +112,7 @@ func TestPodGcOrphanedPodsWithFinalizer(t *testing.T) {
 				t.Fatalf("Error %v, while setting phase %v for pod: %v", err, test.phase, klog.KObj(pod))
 			}
 
-			// we delete the node to orphan the pod
+			// 删除 node，使 Pod 成为孤儿
 			err = cs.CoreV1().Nodes().Delete(testCtx.Ctx, pod.Spec.NodeName, metav1.DeleteOptions{})
 			if err != nil {
 				t.Fatalf("Failed to delete node: %v, err: %v", pod.Spec.NodeName, err)
@@ -136,7 +136,7 @@ func TestPodGcOrphanedPodsWithFinalizer(t *testing.T) {
 	}
 }
 
-// TestTerminatingOnOutOfServiceNode tests deletion pods terminating on out-of-service nodes
+// TestTerminatingOnOutOfServiceNode 测试在 out-of-service node 上处于终止中 Pod 的删除
 func TestTerminatingOnOutOfServiceNode(t *testing.T) {
 	tests := map[string]struct {
 		withFinalizer bool
@@ -206,23 +206,23 @@ func TestTerminatingOnOutOfServiceNode(t *testing.T) {
 				defer testutils.RemovePodFinalizers(testCtx.Ctx, testCtx.ClientSet, t, *pod)
 			}
 
-			// trigger termination of the pod, but with long grace period so that it is not removed immediately
+			// 触发 Pod 终止，但设置较长的优雅期，使其不会立即被移除
 			err = cs.CoreV1().Pods(testCtx.NS.Name).Delete(testCtx.Ctx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: ptr.To[int64](300)})
 			if err != nil {
 				t.Fatalf("Error: '%v' while deleting pod: '%v'", err, klog.KObj(pod))
 			}
-			// wait until the pod is terminating
+			// 等待 Pod 进入终止中状态
 			err = wait.PollUntilContextTimeout(testCtx.Ctx, time.Second, time.Second*15, true, testutils.PodIsGettingEvicted(cs, pod.Namespace, pod.Name))
 			if err != nil {
 				t.Fatalf("Error '%v' while waiting for the pod '%v' to be terminating", err, klog.KObj(pod))
 			}
-			// taint the node with the out-of-service taint
+			// 给 node 打上 out-of-service 污点
 			err = testutils.AddTaintToNode(cs, pod.Spec.NodeName, v1.Taint{Key: v1.TaintNodeOutOfService, Value: "", Effect: v1.TaintEffectNoExecute})
 			if err != nil {
 				t.Fatalf("Failed to taint node: %v, err: %v", pod.Spec.NodeName, err)
 			}
 			if test.withFinalizer {
-				// wait until the pod phase is set as expected
+				// 等待 Pod 的 phase 被设置为预期值
 				err = wait.Poll(time.Second, time.Second*15, func() (bool, error) {
 					var e error
 					pod, e = cs.CoreV1().Pods(pod.Namespace).Get(testCtx.Ctx, pod.Name, metav1.GetOptions{})
@@ -239,14 +239,14 @@ func TestTerminatingOnOutOfServiceNode(t *testing.T) {
 					t.Errorf("Pod %q has an unexpected condition: %q", klog.KObj(pod), v1.DisruptionTarget)
 				}
 			} else {
-				// wait until the pod is deleted
+				// 等待 Pod 被删除
 				err = wait.PollImmediate(time.Second, time.Second*15, func() (bool, error) {
 					var e error
 					pod, e = cs.CoreV1().Pods(pod.Namespace).Get(testCtx.Ctx, pod.Name, metav1.GetOptions{})
 					if e == nil {
 						return pod == nil, nil
 					}
-					// there was an error
+					// 出现了错误
 					if apierrors.IsNotFound(e) {
 						return true, nil
 					}
@@ -260,7 +260,7 @@ func TestTerminatingOnOutOfServiceNode(t *testing.T) {
 	}
 }
 
-// TestPodGcForPodsWithDuplicatedFieldKeys regression test for https://issues.k8s.io/118261
+// TestPodGcForPodsWithDuplicatedFieldKeys 是针对 https://issues.k8s.io/118261 的回归测试
 func TestPodGcForPodsWithDuplicatedFieldKeys(t *testing.T) {
 	tests := map[string]struct {
 		pod                  *v1.Pod
@@ -349,7 +349,7 @@ func TestPodGcForPodsWithDuplicatedFieldKeys(t *testing.T) {
 			}
 			defer testutils.RemovePodFinalizers(testCtx.Ctx, testCtx.ClientSet, t, *pod)
 
-			// getting evicted due to NodeName being "non-existing-node"
+			// 因 NodeName 为 "non-existing-node" 而被驱逐
 			err = wait.PollUntilContextTimeout(testCtx.Ctx, time.Second, time.Second*15, true, testutils.PodIsGettingEvicted(cs, pod.Namespace, pod.Name))
 			if err != nil {
 				t.Fatalf("Error '%v' while waiting for the pod '%v' to be terminating", err, klog.KObj(pod))
@@ -384,7 +384,7 @@ func setup(t *testing.T, name string) *testutils.TestContext {
 		500*time.Millisecond,
 		time.Second)
 
-	// Waiting for all controllers to sync
+	// 等待所有控制器完成同步
 	externalInformers.Start(testCtx.Ctx.Done())
 	externalInformers.WaitForCacheSync(testCtx.Ctx.Done())
 

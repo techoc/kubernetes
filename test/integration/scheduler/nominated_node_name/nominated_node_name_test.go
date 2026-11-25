@@ -72,12 +72,12 @@ func (bp *NoNNNPostBindPlugin) PostBind(ctx context.Context, state fwk.CycleStat
 	}
 }
 
-// Name returns name of the plugin.
+// Name 返回插件的名称。
 func (pp *FakePermitPlugin) Name() string {
 	return "FakePermitPlugin"
 }
 
-// Permit implements the permit test plugin.
+// Permit 实现 permit 测试插件。
 func (pp *FakePermitPlugin) Permit(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (*fwk.Status, time.Duration) {
 	if pp.code == fwk.Wait {
 		return fwk.NewStatus(pp.code, ""), 10 * time.Minute
@@ -85,17 +85,17 @@ func (pp *FakePermitPlugin) Permit(ctx context.Context, state fwk.CycleState, po
 	return fwk.NewStatus(pp.code, ""), 0
 }
 
-// Name returns name of the plugin.
+// Name 返回插件的名称。
 func (pp *RunForeverPreBindPlugin) Name() string {
 	return "RunForeverPreBindPlugin"
 }
 
-// PreBindPreFlight is a test function that returns nil for testing.
+// PreBindPreFlight 是一个用于测试的测试函数，返回 nil。
 func (pp *RunForeverPreBindPlugin) PreBindPreFlight(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) (*fwk.PreBindPreFlightResult, *fwk.Status) {
 	return &fwk.PreBindPreFlightResult{AllowParallel: false}, nil
 }
 
-// PreBind is a test function that returns (true, nil) or errors for testing.
+// PreBind 是一个用于测试的测试函数，返回 (true, nil) 或错误。
 func (pp *RunForeverPreBindPlugin) PreBind(ctx context.Context, state fwk.CycleState, pod *v1.Pod, nodeName string) *fwk.Status {
 	select {
 	case <-ctx.Done():
@@ -105,8 +105,8 @@ func (pp *RunForeverPreBindPlugin) PreBind(ctx context.Context, state fwk.CycleS
 	}
 }
 
-// TestNominatedNodeNameIsSetBeforePreBindAndWaitOnPermit makes sure that nominatedNodeName is set in the binding cycle
-// when the PreBind or Permit plugin (WaitOnPermit) is going to work.
+// TestNominatedNodeNameIsSetBeforePreBindAndWaitOnPermit 确保当 PreBind 或 Permit 插件（WaitOnPermit）即将工作时，
+// 在绑定周期中会设置 nominatedNodeName。
 func TestNominatedNodeNameIsSetBeforePreBindAndWaitOnPermit(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -154,7 +154,7 @@ func TestNominatedNodeNameIsSetBeforePreBindAndWaitOnPermit(t *testing.T) {
 
 				plugins := []fwk.Plugin{&NoNNNPostBindPlugin{cancel: testContext.Ctx.Done(), t: t}}
 				if test.plugin != nil {
-					// This code makes sure that each test case (for each value of feature gate) uses a separate cancel channel.
+					// 这段代码确保每个测试用例（针对特性门的每个取值）都使用独立的 cancel channel。
 					runForeverPlugin, ok := test.plugin.(*RunForeverPreBindPlugin)
 					if ok {
 						cancel := make(chan struct{})
@@ -187,7 +187,7 @@ func TestNominatedNodeNameIsSetBeforePreBindAndWaitOnPermit(t *testing.T) {
 							t.Errorf(".status.nominatedNodeName was not set in pod %v/%v: %v", pod.Namespace, pod.Name, err)
 						}
 					} else {
-						// If the feature is disabled, the expectation is that pod will be pending but NNN won't be set.
+						// 如果该特性被禁用，预期 Pod 将处于 pending 状态，但不会设置 NNN。
 						if err == nil {
 							t.Errorf("expected .status.nominatedNodeName not to be set in pod %v/%v: %v", pod.Namespace, pod.Name, err)
 						}
@@ -202,14 +202,14 @@ func TestNominatedNodeNameIsSetBeforePreBindAndWaitOnPermit(t *testing.T) {
 	}
 }
 
-// TestPreemptionAndNominatedNodeNameScenarios tests setting/clearing NominatedNodeName in scenarios with preemption.
+// TestPreemptionAndNominatedNodeNameScenarios 测试在抢占场景中设置/清除 NominatedNodeName。
 func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 	type createPod struct {
 		pod               *v1.Pod
 		nominatedNodeName string
-		// count is the number of times the pod should be created by this action.
-		// i.e., if you use it, you have to use GenerateName.
-		// By default, it's 1.
+		// count 是该操作创建 Pod 的次数。
+		// 也就是说，如果使用它，就必须使用 GenerateName。
+		// 默认为 1。
 		count *int
 	}
 
@@ -226,28 +226,28 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 	}
 
 	type scenario struct {
-		// name is this step's name, just for the debugging purpose.
+		// name 是该步骤的名称，仅用于调试。
 		name string
 
-		// Only one of the following actions should be set.
+		// 以下操作只能设置其中一个。
 
-		// createPod creates a Pod.
+		// createPod 创建一个 Pod。
 		createPod *createPod
-		// createNode creates an additional Node.
+		// createNode 创建一个额外的 Node。
 		createNode string
-		// schedulePod schedules one Pod that is at the top of the activeQ.
-		// You should give a Pod name that is supposed to be scheduled.
+		// schedulePod 调度 activeQ 顶部的那个 Pod。
+		// 应给出预期会被调度的 Pod 名称。
 		schedulePod *schedulePod
-		// completePreemption completes the preemption that is currently on-going.
-		// You should give a Pod name.
+		// completePreemption 完成当前正在进行的抢占。
+		// 应给出一个 Pod 名称。
 		completePreemption string
-		// checkNNN checks that NominatedNodeName is set as expected.
+		// checkNNN 检查 NominatedNodeName 是否按预期设置。
 		checkNNN *checkNNN
 	}
 
 	tests := []struct {
 		name string
-		// scenarios after the first attempt of scheduling the pod.
+		// 首次尝试调度 Pod 之后的各个场景。
 		scenarios []scenario
 	}{
 		{
@@ -447,7 +447,7 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 			},
 		},
 	}
-	// All test cases run on the same node.
+	// 所有测试用例都在同一个 Node 上运行。
 	node := st.MakeNode().Name("node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj()
 
 	for _, nnnForExpectationEnabled := range []bool{true, false} {
@@ -461,10 +461,10 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 						features.SchedulerAsyncPreemption:              true,
 					})
 
-					// We need to use a custom preemption plugin to test async preemption behavior
+					// 需要使用自定义抢占插件来测试异步抢占行为
 					delayedPreemptionPluginName := "delay-preemption"
 					var lock sync.Mutex
-					// keyed by the pod name
+					// 以 Pod 名称为键
 					preemptionDoneChannels := make(map[string]chan struct{})
 					defer func() {
 						lock.Lock()
@@ -477,7 +477,7 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 					var preemptionPlugin *defaultpreemption.DefaultPreemption
 					err := registry.Register(delayedPreemptionPluginName, func(c context.Context, r runtime.Object, fh fwk.Handle) (fwk.Plugin, error) {
 						p, err := frameworkruntime.FactoryAdapter(plfeature.Features{EnableAsyncPreemption: true}, defaultpreemption.New)(c, &config.DefaultPreemptionArgs{
-							// Set default values to pass the validation at the initialization, not related to the test.
+							// 设置默认值以通过初始化时的校验，与测试无关。
 							MinCandidateNodesPercentage: 10,
 							MinCandidateNodesAbsolute:   100,
 						}, fh)
@@ -493,7 +493,7 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 
 						preemptPodFn := preemptionPlugin.Executor.PreemptPod
 						preemptionPlugin.Executor.PreemptPod = func(ctx context.Context, c preemption.Candidate, preemptor preemption.ExecutorPreemptor, victim *v1.Pod, pluginName string) (bool, error) {
-							// block the preemption goroutine to complete until the test case allows it to proceed.
+							// 阻塞抢占 goroutine，直到测试用例允许其继续才完成。
 							lock.Lock()
 							ch, ok := preemptionDoneChannels[preemptor.GetName()]
 							lock.Unlock()
@@ -525,14 +525,14 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 						}},
 					})
 
-					// It initializes the scheduler, but doesn't start.
-					// We manually trigger the scheduling cycle.
+					// 这里初始化调度器，但不启动它。
+					// 由我们手动触发调度周期。
 					testCtx := testutils.InitTestSchedulerWithOptions(t,
 						testutils.InitTestAPIServer(t, "preemption", nil),
 						0,
 						scheduler.WithProfiles(cfg.Profiles...),
 						scheduler.WithFrameworkOutOfTreeRegistry(registry),
-						// disable backoff
+						// 禁用 backoff
 						scheduler.WithPodMaxBackoffSeconds(0),
 						scheduler.WithPodInitialBackoffSeconds(0),
 					)
@@ -598,7 +598,7 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 									if err != nil {
 										t.Fatalf("update pod %s status with NNN: %v", scenario.createPod.pod.Name, err)
 									}
-									// Wait until the scheduler picks up the NNN set on the pod.
+									// 等待调度器感知到 Pod 上设置的 NNN。
 									if err := wait.PollUntilContextTimeout(testCtx.Ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 										nominatedPods := testCtx.Scheduler.SchedulingQueue.NominatedPodsForNode(scenario.createPod.nominatedNodeName)
 										if contains(nominatedPods, pod.Name) {
@@ -620,7 +620,7 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 								}
 
 								if testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()[0].Name != scenario.schedulePod.podName {
-									// need to wait more because maybe the queue will get another Pod that higher priority than the current top pod.
+									// 需要继续等待，因为队列中可能会出现优先级高于当前顶部 Pod 的另一个 Pod。
 									lastFailure = fmt.Sprintf("The pod %s is expected to be scheduled, but the top Pod is %s", scenario.schedulePod.podName, testCtx.Scheduler.SchedulingQueue.PodsInActiveQ()[0].Name)
 									return false, nil
 								}
@@ -640,11 +640,11 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 								if err := wait.PollUntilContextTimeout(testCtx.Ctx, time.Millisecond*200, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 									pod, err2 := cs.CoreV1().Pods(testCtx.NS.Name).Get(ctx, scenario.schedulePod.podName, metav1.GetOptions{})
 									if err2 != nil {
-										// This could be a connection error so we want to retry.
+										// 这可能是连接错误，因此需要重试。
 										return false, nil
 									}
 									if pod.Spec.NodeName == "" {
-										// Pod is not scheduled yet.
+										// Pod 尚未被调度。
 										return false, nil
 									}
 									if scenario.schedulePod.expectedScheduledNode != pod.Spec.NodeName {
@@ -661,7 +661,7 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 								}
 
 							} else if scenario.schedulePod.expectUnschedulable {
-								// Wait some time for the scheduling operation to finish and move the pod to unschedulable or backoff.
+								// 等待一段时间，让调度操作完成并将 Pod 移入 unschedulable 队列或 backoff。
 								if err := wait.PollUntilContextTimeout(testCtx.Ctx, time.Millisecond*200, 2*time.Second, false, func(ctx context.Context) (bool, error) {
 									if podInUnschedulablePodPool(t, testCtx.Scheduler.SchedulingQueue, scenario.schedulePod.podName) {
 										return true, nil
@@ -708,7 +708,7 @@ func TestPreemptionAndNominatedNodeNameScenarios(t *testing.T) {
 
 func podInUnschedulablePodPool(t *testing.T, queue queue.SchedulingQueue, podName string) bool {
 	t.Helper()
-	// First, look for the pod in the activeQ.
+	// 首先在 activeQ 中查找该 Pod。
 	for _, pod := range queue.PodsInActiveQ() {
 		if pod.Name == podName {
 			return false
@@ -789,7 +789,7 @@ func (p *mockQueueSortPlugin) Less(entity1, entity2 fwk.QueuedEntityInfo) bool {
 	return o1 < o2
 }
 
-// TestSchedulerRestartWithNominatedNode checks that NNN properly reserves the pod's node despite scheduler restart during binding cycle.
+// TestSchedulerRestartWithNominatedNode 检查在绑定周期中调度器重启时，NNN 仍能正确为 Pod 预留节点。
 func TestSchedulerRestartWithNominatedNode(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NominatedNodeNameForExpectation, true)
 	testContext := testutils.InitTestAPIServer(t, "nnn-test", nil)
@@ -797,9 +797,9 @@ func TestSchedulerRestartWithNominatedNode(t *testing.T) {
 	cs := testContext.ClientSet
 	defer cancel()
 
-	// nodePreferred can only hold a single pod
+	// nodePreferred 只能容纳一个 Pod
 	nodePreferred := st.MakeNode().Name("node-preferred").Capacity(map[v1.ResourceName]string{v1.ResourcePods: "1"}).Obj()
-	// nodeOther has taint with PreferNoSchedule
+	// nodeOther 带有 PreferNoSchedule 污点
 	nodeOther := st.MakeNode().Name("node-other").Taints([]v1.Taint{{Key: "foo", Effect: v1.TaintEffectPreferNoSchedule}}).Obj()
 
 	for _, n := range []*v1.Node{nodePreferred, nodeOther} {
@@ -820,9 +820,9 @@ func TestSchedulerRestartWithNominatedNode(t *testing.T) {
 
 	podA := createPod("pod-a")
 
-	// Ensures desired pod order without affecting priorities, which could impact NNN logic.
+	// 确保 Pod 的顺序符合预期，同时不影响可能影响 NNN 逻辑的优先级。
 	mockQueueSort := &mockQueueSortPlugin{t: t, order: map[string]int{}}
-	// Ensures NNN is set
+	// 确保设置了 NNN
 	mockPreBind := &mockPreBindPlugin{}
 
 	initSched := func(additionalPlugins ...fwk.Plugin) (*testutils.TestContext, testutils.ShutdownFunc) {
@@ -831,34 +831,34 @@ func TestSchedulerRestartWithNominatedNode(t *testing.T) {
 		pls = append(pls, additionalPlugins...)
 		registry, prof := schedulerutils.InitRegistryAndConfig(t, nil, pls...)
 		testCtx, teardown := schedulerutils.InitTestSchedulerForFrameworkTest(t, testContext, 0,
-			false, /* do not run scheduler immediately after init */
+			false, /* 初始化后不立即运行调度器 */
 			scheduler.WithProfiles(prof),
 			scheduler.WithFrameworkOutOfTreeRegistry(registry),
 		)
-		// Ensure both nodes are in the cache before proceeding
+		// 确保继续之前两个 Node 都已进入缓存
 		if err := testutils.WaitForNodesInCache(testCtx.Ctx, testCtx.Scheduler, 2); err != nil {
 			t.Fatalf("Failed to wait for nodes in cache: %v", err)
 		}
 		return testCtx, teardown
 	}
 
-	// To allow triggering scheduler restart in binding phase, we need to initialize the scheduler
-	// and pass the testCtx.SchedulerCloseFn to the bind plugin before calling Scheduler.Run.
+	// 为了能在绑定阶段触发调度器重启，需要在调用 Scheduler.Run 之前初始化调度器，
+	// 并将 testCtx.SchedulerCloseFn 传给 bind 插件。
 	mockBind := &mockBindPlugin{}
 	testCtx, _ := initSched(mockBind)
 
-	// This will fail the binding cycle and stop the scheduler
-	// Scheduler should set NNN for podA before this step.
+	// 这将使绑定周期失败并停止调度器。
+	// 在此之前，调度器应为 podA 设置 NNN。
 	mockBind.bindFn = func() *fwk.Status {
 		testCtx.SchedulerCloseFn()
 		return fwk.NewStatus(fwk.Error, "simulated bind failure")
 	}
 	mockQueueSort.order[podA.Name] = 1
 
-	// Start scheduler
+	// 启动调度器
 	go testCtx.Scheduler.Run(testCtx.SchedulerCtx)
 
-	// We expect the scheduler will stop due to SchedulerCloseFn being called in bind
+	// 预期调度器会因为 bind 中调用了 SchedulerCloseFn 而停止
 	<-testCtx.SchedulerCtx.Done()
 
 	podA, err := testutils.GetPod(cs, podA.Name, podA.Namespace)
@@ -874,15 +874,15 @@ func TestSchedulerRestartWithNominatedNode(t *testing.T) {
 
 	podB := createPod("pod-b")
 
-	// Make sure podB is evaluated before podA after scheduler restart
-	// The scheduler should see podA's nominated node and schedule podB elsewhere
+	// 确保调度器重启后先评估 podB，再评估 podA。
+	// 调度器应看到 podA 的 nominated node，并将 podB 调度到其他地方。
 	mockQueueSort.order[podB.Name] = mockQueueSort.order[podA.Name] - 1
 
-	// This time use the default bind plugin
+	// 这次使用默认的 bind 插件
 	testCtx, teardown := initSched()
 	defer teardown()
 
-	// Start scheduler again
+	// 再次启动调度器
 	go testCtx.Scheduler.Run(testCtx.SchedulerCtx)
 
 	for _, pod := range []*v1.Pod{podA, podB} {

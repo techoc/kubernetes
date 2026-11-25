@@ -61,8 +61,8 @@ const (
 	numOfEvictions = 10
 )
 
-// TestConcurrentEvictionRequests is to make sure pod disruption budgets (PDB) controller is able to
-// handle concurrent eviction requests. Original issue:#37605
+// TestConcurrentEvictionRequests 用于确保 pod disruption budgets (PDB) 控制器能够
+// 处理并发驱逐请求。原始 issue：#37605
 func TestConcurrentEvictionRequests(t *testing.T) {
 	podNameFormat := "test-pod-%d"
 
@@ -82,7 +82,7 @@ func TestConcurrentEvictionRequests(t *testing.T) {
 		GracePeriodSeconds: &gracePeriodSeconds,
 	}
 
-	// Generate numOfEvictions pods to evict
+	// 生成 numOfEvictions 个待驱逐的 pod
 	for i := range numOfEvictions {
 		podName := fmt.Sprintf(podNameFormat, i)
 		pod := newPod(podName)
@@ -109,7 +109,7 @@ func TestConcurrentEvictionRequests(t *testing.T) {
 	var numberPodsEvicted atomic.Uint32
 	errCh := make(chan error, 3*numOfEvictions)
 	var wg sync.WaitGroup
-	// spawn numOfEvictions goroutines to concurrently evict the pods
+	// 启动 numOfEvictions 个 goroutine 并发驱逐这些 pod
 	for i := range numOfEvictions {
 		wg.Add(1)
 		go func(id int, errCh chan error) {
@@ -133,23 +133,23 @@ func TestConcurrentEvictionRequests(t *testing.T) {
 
 			if err != nil {
 				errCh <- err
-				// should not return here otherwise we would leak the pod
+				// 不能在此返回，否则会泄漏该 pod
 			}
 
 			_, err = clientSet.CoreV1().Pods(ns.Name).Get(context.TODO(), podName, metav1.GetOptions{})
 			switch {
 			case apierrors.IsNotFound(err):
 				numberPodsEvicted.Add(1)
-				// pod was evicted and deleted so return from goroutine immediately
+				// pod 已被驱逐并删除，立即从 goroutine 返回
 				return
 			case err == nil:
-				// this shouldn't happen if the pod was evicted successfully
+				// 如果 pod 驱逐成功，不应发生这种情况
 				errCh <- fmt.Errorf("Pod %q is expected to be evicted", podName)
 			default:
 				errCh <- err
 			}
 
-			// delete pod which still exists due to error
+			// 删除因出错而仍然存在的 pod
 			e := clientSet.CoreV1().Pods(ns.Name).Delete(context.TODO(), podName, deleteOption)
 			if e != nil {
 				errCh <- e
@@ -177,7 +177,7 @@ func TestConcurrentEvictionRequests(t *testing.T) {
 	}
 }
 
-// TestTerminalPodEviction ensures that PDB is not checked for terminal pods.
+// TestTerminalPodEviction 确保对处于终止状态的 pod 不检查 PDB。
 func TestTerminalPodEviction(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	closeFn, rm, informers, _, clientSet := rmSetup(tCtx, t)
@@ -241,7 +241,7 @@ func TestTerminalPodEviction(t *testing.T) {
 		t.Fatalf("Error while listing pod disruption budget")
 	}
 	newPdb := pdbList.Items[0]
-	// We shouldn't see an update in pod disruption budget status' generation number as we are evicting terminal pods without checking for pod disruption.
+	// 由于驱逐终止状态的 pod 时不会检查 pod disruption，因此 pod disruption budget 状态的 generation 编号不应更新。
 	if !reflect.DeepEqual(newPdb.Status.ObservedGeneration, oldPdb.Status.ObservedGeneration) {
 		t.Fatalf("Expected the pdb generation to be of same value %v but got %v", newPdb.Status.ObservedGeneration, oldPdb.Status.ObservedGeneration)
 	}
@@ -251,7 +251,7 @@ func TestTerminalPodEviction(t *testing.T) {
 	}
 }
 
-// TestEvictionVersions ensures the eviction endpoint accepts and returns the correct API versions
+// TestEvictionVersions 确保 eviction 端点接受并返回正确的 API 版本
 func TestEvictionVersions(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	closeFn, rm, informers, config, clientSet := rmSetup(tCtx, t)
@@ -275,12 +275,12 @@ func TestEvictionVersions(t *testing.T) {
 
 	podClient := dynamicClient.Resource(schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}).Namespace(ns)
 
-	// get should not be supported
+	// 不应支持 get
 	if _, err := podClient.Get(context.TODO(), pod.Name, metav1.GetOptions{}, subresource); !apierrors.IsMethodNotSupported(err) {
 		t.Fatalf("expected MethodNotSupported for GET, got %v", err)
 	}
 
-	// patch should not be supported
+	// 不应支持 patch
 	for _, patchType := range []types.PatchType{types.JSONPatchType, types.MergePatchType, types.StrategicMergePatchType, types.ApplyPatchType} {
 		if _, err := podClient.Patch(context.TODO(), pod.Name, patchType, []byte{}, metav1.PatchOptions{}, subresource); !apierrors.IsMethodNotSupported(err) {
 			t.Fatalf("expected MethodNotSupported for GET, got %v", err)
@@ -288,25 +288,25 @@ func TestEvictionVersions(t *testing.T) {
 	}
 
 	allowedEvictions := []runtime.Object{
-		// v1beta1, no apiVersion/kind
+		// v1beta1，无 apiVersion/kind
 		&policyv1beta1.Eviction{
 			TypeMeta:      metav1.TypeMeta{},
 			ObjectMeta:    metav1.ObjectMeta{Name: pod.Name},
 			DeleteOptions: &metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}},
 		},
-		// v1beta1, apiVersion/kind
+		// v1beta1，带 apiVersion/kind
 		&policyv1beta1.Eviction{
 			TypeMeta:      metav1.TypeMeta{APIVersion: "policy/v1beta1", Kind: "Eviction"},
 			ObjectMeta:    metav1.ObjectMeta{Name: pod.Name},
 			DeleteOptions: &metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}},
 		},
-		// v1, no apiVersion/kind
+		// v1，无 apiVersion/kind
 		&policyv1.Eviction{
 			TypeMeta:      metav1.TypeMeta{},
 			ObjectMeta:    metav1.ObjectMeta{Name: pod.Name},
 			DeleteOptions: &metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}},
 		},
-		// v1, apiVersion/kind
+		// v1，带 apiVersion/kind
 		&policyv1.Eviction{
 			TypeMeta:      metav1.TypeMeta{APIVersion: "policy/v1", Kind: "Eviction"},
 			ObjectMeta:    metav1.ObjectMeta{Name: pod.Name},
@@ -327,7 +327,7 @@ func TestEvictionVersions(t *testing.T) {
 		}
 	}
 
-	// create unknown eviction version with apiVersion/kind should fail
+	// 使用带 apiVersion/kind 的未知 eviction 版本创建应失败
 	u := &unstructured.Unstructured{Object: map[string]interface{}{
 		"metadata":   map[string]interface{}{"name": pod.Name},
 		"apiVersion": "policy/v2",
@@ -340,7 +340,7 @@ func TestEvictionVersions(t *testing.T) {
 	}
 }
 
-// TestEvictionWithFinalizers tests eviction with the use of finalizers
+// TestEvictionWithFinalizers 测试使用 finalizer 时的驱逐行为
 func TestEvictionWithFinalizers(t *testing.T) {
 	cases := map[string]struct {
 		phase                    v1.PodPhase
@@ -413,7 +413,7 @@ func TestEvictionWithFinalizers(t *testing.T) {
 	}
 }
 
-// TestEvictionWithUnhealthyPodEvictionPolicy tests eviction with a PDB that has a UnhealthyPodEvictionPolicy
+// TestEvictionWithUnhealthyPodEvictionPolicy 测试 PDB 设置了 UnhealthyPodEvictionPolicy 时的驱逐行为
 func TestEvictionWithUnhealthyPodEvictionPolicy(t *testing.T) {
 	cases := map[string]struct {
 		unhealthyPodEvictionPolicy *policyv1.UnhealthyPodEvictionPolicyType
@@ -478,8 +478,8 @@ func TestEvictionWithUnhealthyPodEvictionPolicy(t *testing.T) {
 					return pdb.Status.ExpectedPods == 1
 				})
 			}
-			// Eviction API can potentially return http.StatusTooManyRequests (429) or http.StatusGatewayTimeout (504) with retryAfterSeconds == 10s
-			// Do not retry - we want to test that the first request succeeds and make sure it doesn't unnecessarily block the test for 10s
+			// Eviction API 可能返回 http.StatusTooManyRequests (429) 或 http.StatusGatewayTimeout (504)，并带 retryAfterSeconds == 10s
+			// 不要重试——我们要测试首次请求就能成功，并确保它不会无谓地阻塞测试 10 秒
 			policyV1NoRetriesRESTClient := &noRetriesRESTClient{Interface: clientSet.PolicyV1().RESTClient()}
 			policyV1NoRetriesClient := policyv1client.New(policyV1NoRetriesRESTClient)
 
@@ -499,7 +499,7 @@ func TestEvictionWithUnhealthyPodEvictionPolicy(t *testing.T) {
 	}
 }
 
-// TestEvictionWithPrecondition tests eviction with delete preconditions
+// TestEvictionWithPrecondition 测试带删除前置条件的驱逐
 func TestEvictionWithPrecondition(t *testing.T) {
 	cases := map[string]struct {
 		enforceResourceVersion     bool
@@ -551,7 +551,7 @@ func TestEvictionWithPrecondition(t *testing.T) {
 			pod.Status.Phase = v1.PodRunning
 			addPodConditionReady(pod)
 
-			// generate a new resource version
+			// 生成一个新的 resource version
 			updatedPod, err := clientSet.CoreV1().Pods(ns.Name).UpdateStatus(tCtx, pod, metav1.UpdateOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -582,8 +582,8 @@ func TestEvictionWithPrecondition(t *testing.T) {
 				}
 			}
 
-			// Eviction API can potentially return http.StatusTooManyRequests (429) or http.StatusGatewayTimeout (504) with retryAfterSeconds == 10s
-			// Do not retry - we want to test that the first request succeeds and make sure it doesn't unnecessarily block the test for 10s
+			// Eviction API 可能返回 http.StatusTooManyRequests (429) 或 http.StatusGatewayTimeout (504)，并带 retryAfterSeconds == 10s
+			// 不要重试——我们要测试首次请求就能成功，并确保它不会无谓地阻塞测试 10 秒
 			policyV1NoRetriesRESTClient := &noRetriesRESTClient{Interface: clientSet.PolicyV1().RESTClient()}
 			policyV1NoRetriesClient := policyv1client.New(policyV1NoRetriesRESTClient)
 
@@ -658,7 +658,7 @@ func newV1Eviction(ns, evictionName string, deleteOption metav1.DeleteOptions) *
 }
 
 func rmSetup(ctx context.Context, t *testing.T) (kubeapiservertesting.TearDownFunc, *disruption.DisruptionController, informers.SharedInformerFactory, *restclient.Config, clientset.Interface) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount 控制器。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 
 	config := restclient.CopyConfig(server.ClientConfig)
@@ -696,9 +696,8 @@ func rmSetup(ctx context.Context, t *testing.T) (kubeapiservertesting.TearDownFu
 	return server.TearDownFn, rm, informers, config, clientSet
 }
 
-// wait for the podInformer to observe the pods. Call this function before
-// running the RS controller to prevent the rc manager from creating new pods
-// rather than adopting the existing ones.
+// 等待 podInformer 观察到这些 pod。在运行 RS 控制器之前调用此函数，
+// 以防止 rc manager 创建新 pod 而非接管已有 pod。
 func waitToObservePods(t *testing.T, podInformer cache.SharedIndexInformer, podNum int, phase v1.PodPhase) {
 	if err := wait.PollImmediate(2*time.Second, 60*time.Second, func() (bool, error) {
 		objects := podInformer.GetIndexer().List()

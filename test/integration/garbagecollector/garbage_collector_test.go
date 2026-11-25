@@ -81,7 +81,7 @@ const oneValidOwnerPodName = "test.pod.3"
 const toBeDeletedRCName = "test.rc.1"
 const remainingRCName = "test.rc.2"
 
-// testCert was generated from crypto/tls/generate_cert.go with the following command:
+// testCert 由 crypto/tls/generate_cert.go 通过以下命令生成：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host 127.0.0.1,::1,example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var testCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -206,8 +206,7 @@ func createRandomCustomResourceDefinition(
 	dynamicClient dynamic.Interface,
 	namespace string,
 ) (*apiextensionsv1.CustomResourceDefinition, dynamic.ResourceInterface) {
-	// Create a random custom resource definition and ensure it's available for
-	// use.
+	// 创建一个随机的 custom resource definition，并确保其可用。
 	definition := apiextensionstestserver.NewRandomNameV1CustomResourceDefinition(apiextensionsv1.NamespaceScoped)
 
 	definition, err := apiextensionstestserver.CreateNewV1CustomResourceDefinition(definition, apiExtensionClient, dynamicClient)
@@ -215,7 +214,7 @@ func createRandomCustomResourceDefinition(
 		t.Fatalf("failed to create CustomResourceDefinition: %v", err)
 	}
 
-	// Get a client for the custom resource.
+	// 获取该自定义资源的客户端。
 	gvr := schema.GroupVersionResource{Group: definition.Spec.Group, Version: definition.Spec.Versions[0].Name, Resource: definition.Spec.Names.Plural}
 
 	resourceClient := dynamicClient.Resource(gvr).Namespace(namespace)
@@ -232,11 +231,11 @@ type testContext struct {
 	dynamicClient      dynamic.Interface
 	metadataClient     metadata.Interface
 	startGC            func(workers int)
-	// syncPeriod is how often the GC started with startGC will be resynced.
+	// syncPeriod 是由 startGC 启动的 GC 重新同步的频率。
 	syncPeriod time.Duration
 }
 
-// if workerCount > 0, will start the GC, otherwise it's up to the caller to Run() the GC.
+// 如果 workerCount > 0，将启动 GC；否则由调用方自行 Run() GC。
 func setup(t *testing.T, workerCount int) *testContext {
 	return setupWithServer(t, kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd()), workerCount)
 }
@@ -247,13 +246,13 @@ func setupWithServer(t *testing.T, result *kubeapiservertesting.TestServer, work
 		t.Fatalf("error creating clientset: %v", err)
 	}
 
-	// Helpful stuff for testing CRD.
+	// 测试 CRD 所需的辅助设置。
 	apiExtensionClient, err := apiextensionsclientset.NewForConfig(result.ClientConfig)
 	if err != nil {
 		t.Fatalf("error creating extension clientset: %v", err)
 	}
-	// CreateCRDUsingRemovedAPI wants to use this namespace for verifying
-	// namespace-scoped CRD creation.
+	// CreateCRDUsingRemovedAPI 需要使用这个 namespace 来验证
+	// namespace 作用域的 CRD 创建。
 	createNamespaceOrDie("aval", clientSet, t)
 
 	discoveryClient := cacheddiscovery.NewMemCacheClient(clientSet.Discovery())
@@ -296,9 +295,9 @@ func setupWithServer(t *testing.T, result *kubeapiservertesting.TestServer, work
 	syncPeriod := 5 * time.Second
 	startGC := func(workers int) {
 		go wait.Until(func() {
-			// Resetting the REST mapper will also invalidate the underlying discovery
-			// client. This is a leaky abstraction and assumes behavior about the REST
-			// mapper, but we'll deal with it for now.
+			// 重置 REST mapper 也会使底层的 discovery 客户端失效。
+			// 这是一个有漏洞的抽象，依赖于 REST mapper 的特定行为，
+			// 但目前只能先这样处理。
 			restMapper.Reset()
 		}, syncPeriod, tCtx.Done())
 		go gc.Run(tCtx, workers, syncPeriod)
@@ -362,7 +361,7 @@ func testCrossNamespaceReferences(t *testing.T, watchCache bool) {
 		namespaceA         = "a"
 	)
 
-	// Start the server
+	// 启动服务器
 	testServer := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{fmt.Sprintf("--watch-cache=%v", watchCache)}, framework.SharedEtcd())
 	defer func() {
 		if testServer != nil {
@@ -390,7 +389,7 @@ func testCrossNamespaceReferences(t *testing.T, watchCache bool) {
 
 	createNamespaceOrDie(namespaceA, clientSet, t)
 
-	// Construct invalid owner references:
+	// 构造无效的 owner reference：
 	invalidOwnerReferences := []metav1.OwnerReference{}
 	for i := range 25 {
 		invalidOwnerReferences = append(invalidOwnerReferences, metav1.OwnerReference{Name: "invalid", UID: types.UID(fmt.Sprintf("invalid-%d", i)), APIVersion: "test/v1", Kind: fmt.Sprintf("invalid%d", i)})
@@ -418,12 +417,12 @@ func testCrossNamespaceReferences(t *testing.T, watchCache bool) {
 		}
 	}
 
-	// start GC with existing objects in place to simulate controller-manager restart
+	// 在已有对象就位的情况下启动 GC，以模拟 controller-manager 重启
 	ctx := setupWithServer(t, testServer, workers)
 	defer ctx.tearDown()
 	testServer = nil
 
-	// Wait for the invalid children to be garbage collected
+	// 等待无效的 child 被垃圾回收
 	if err := wait.PollImmediate(time.Second, 10*time.Second, func() (bool, error) {
 		children, err := clientSet.CoreV1().Secrets(namespaceA).List(context.TODO(), metav1.ListOptions{LabelSelector: "single-bad-reference=true"})
 		if err != nil {
@@ -438,7 +437,7 @@ func testCrossNamespaceReferences(t *testing.T, watchCache bool) {
 		t.Error(err)
 	}
 
-	// Wait for a little while to make sure they didn't trigger deletion of the valid children
+	// 稍等片刻，确认它们没有触发有效 child 的删除
 	if err := wait.Poll(time.Second, 5*time.Second, func() (bool, error) {
 		children, err := clientSet.CoreV1().Secrets(namespaceB).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
@@ -456,7 +455,7 @@ func testCrossNamespaceReferences(t *testing.T, watchCache bool) {
 		t.Errorf("valid parent UID no longer exists in the graph")
 	}
 
-	// Now that our graph has correct data in it, add a new invalid child and see if it gets deleted
+	// 现在图中已有正确数据，添加一个新的无效 child，观察它是否会被删除
 	invalidChild, err := clientSet.CoreV1().Secrets(namespaceA).Create(context.TODO(), &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName:    "invalid-child-c-",
@@ -466,7 +465,7 @@ func testCrossNamespaceReferences(t *testing.T, watchCache bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Wait for the invalid child to be garbage collected
+	// 等待该无效 child 被垃圾回收
 	if err := wait.PollImmediate(time.Second, 10*time.Second, func() (bool, error) {
 		_, err := clientSet.CoreV1().Secrets(namespaceA).Get(context.TODO(), invalidChild.Name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -482,7 +481,7 @@ func testCrossNamespaceReferences(t *testing.T, watchCache bool) {
 	}
 }
 
-// This test simulates the cascading deletion.
+// 此测试模拟级联删除。
 func TestCascadingDeletion(t *testing.T) {
 	ctx := setup(t, 5)
 	defer ctx.tearDown()
@@ -512,14 +511,14 @@ func TestCascadingDeletion(t *testing.T) {
 		t.Fatalf("Expect only 2 replication controller")
 	}
 
-	// this pod should be cascadingly deleted.
+	// 此 pod 应被级联删除。
 	pod := newPod(garbageCollectedPodName, ns.Name, []metav1.OwnerReference{{UID: toBeDeletedRC.ObjectMeta.UID, Name: toBeDeletedRCName}})
 	_, err = podClient.Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create Pod: %v", err)
 	}
 
-	// this pod shouldn't be cascadingly deleted, because it has a valid reference.
+	// 此 pod 不应被级联删除，因为它有一个有效的引用。
 	pod = newPod(oneValidOwnerPodName, ns.Name, []metav1.OwnerReference{
 		{UID: toBeDeletedRC.ObjectMeta.UID, Name: toBeDeletedRCName},
 		{UID: remainingRC.ObjectMeta.UID, Name: remainingRCName},
@@ -529,14 +528,14 @@ func TestCascadingDeletion(t *testing.T) {
 		t.Fatalf("Failed to create Pod: %v", err)
 	}
 
-	// this pod shouldn't be cascadingly deleted, because it doesn't have an owner.
+	// 此 pod 不应被级联删除，因为它没有 owner。
 	pod = newPod(independentPodName, ns.Name, []metav1.OwnerReference{})
 	_, err = podClient.Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create Pod: %v", err)
 	}
 
-	// set up watch
+	// 设置 watch
 	pods, err := podClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list pods: %v", err)
@@ -544,13 +543,13 @@ func TestCascadingDeletion(t *testing.T) {
 	if len(pods.Items) != 3 {
 		t.Fatalf("Expect only 3 pods")
 	}
-	// delete one of the replication controller
+	// 删除其中一个 replication controller
 	if err := rcClient.Delete(context.TODO(), toBeDeletedRCName, getNonOrphanOptions()); err != nil {
 		t.Fatalf("failed to delete replication controller: %v", err)
 	}
-	// sometimes the deletion of the RC takes long time to be observed by
-	// the gc, so wait for the garbage collector to observe the deletion of
-	// the toBeDeletedRC
+	// GC 有时需要较长时间才能观察到 RC 的删除，
+	// 因此等待垃圾回收器观察到 toBeDeletedRC
+	// 的删除事件
 	if err := wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 		return !gc.GraphHasUID(toBeDeletedRC.ObjectMeta.UID), nil
 	}); err != nil {
@@ -559,7 +558,7 @@ func TestCascadingDeletion(t *testing.T) {
 	if err := integration.WaitForPodToDisappear(podClient, garbageCollectedPodName, 1*time.Second, 30*time.Second); err != nil {
 		t.Fatalf("expect pod %s to be garbage collected, got err= %v", garbageCollectedPodName, err)
 	}
-	// checks the garbage collect doesn't delete pods it shouldn't delete.
+	// 检查垃圾回收器没有删除不该删除的 pod。
 	if _, err := podClient.Get(context.TODO(), independentPodName, metav1.GetOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -568,8 +567,8 @@ func TestCascadingDeletion(t *testing.T) {
 	}
 }
 
-// This test simulates the case where an object is created with an owner that
-// doesn't exist. It verifies the GC will delete such an object.
+// 此测试模拟对象创建时其 owner 不存在的场景，
+// 用于验证 GC 会删除这样的对象。
 func TestCreateWithNonExistentOwner(t *testing.T) {
 	ctx := setup(t, 5)
 	defer ctx.tearDown()
@@ -587,7 +586,7 @@ func TestCreateWithNonExistentOwner(t *testing.T) {
 		t.Fatalf("Failed to create Pod: %v", err)
 	}
 
-	// set up watch
+	// 设置 watch
 	pods, err := podClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list pods: %v", err)
@@ -595,7 +594,7 @@ func TestCreateWithNonExistentOwner(t *testing.T) {
 	if len(pods.Items) > 1 {
 		t.Fatalf("Unexpected pod list: %v", pods.Items)
 	}
-	// wait for the garbage collector to delete the pod
+	// 等待垃圾回收器删除该 pod
 	if err := integration.WaitForPodToDisappear(podClient, garbageCollectedPodName, 1*time.Second, 30*time.Second); err != nil {
 		t.Fatalf("expect pod %s to be garbage collected, got err= %v", garbageCollectedPodName, err)
 	}
@@ -605,7 +604,7 @@ func setupRCsPods(t *testing.T, gc *garbagecollector.GarbageCollector, clientSet
 	defer wg.Done()
 	rcClient := clientSet.CoreV1().ReplicationControllers(namespace)
 	podClient := clientSet.CoreV1().Pods(namespace)
-	// create rc.
+	// 创建 rc。
 	rcName := "test.rc." + nameSuffix
 	rc := newOwnerRC(rcName, namespace)
 	rc.ObjectMeta.Finalizers = initialFinalizers
@@ -615,7 +614,7 @@ func setupRCsPods(t *testing.T, gc *garbagecollector.GarbageCollector, clientSet
 		return
 	}
 	rcUIDs <- rc.ObjectMeta.UID
-	// create pods.
+	// 创建 pod。
 	var podUIDs []types.UID
 	for j := range 3 {
 		podName := "test.pod." + nameSuffix + "-" + strconv.Itoa(j)
@@ -630,21 +629,20 @@ func setupRCsPods(t *testing.T, gc *garbagecollector.GarbageCollector, clientSet
 	orphan := false
 	switch {
 	case options.OrphanDependents == nil && options.PropagationPolicy == nil && len(initialFinalizers) == 0: //nolint:staticcheck // SA1019 Keep testing deprecated OrphanDependents option until it's being removed
-		// if there are no deletion options, the default policy for replication controllers is orphan
+		// 若未指定删除选项，replication controller 的默认策略是 orphan
 		orphan = true
 	case options.OrphanDependents != nil: //nolint:staticcheck // SA1019 Keep testing deprecated OrphanDependents option until it's being removed
-		// if the deletion options explicitly specify whether to orphan, that controls
+		// 若删除选项明确指出是否 orphan，则以该选项为准
 		orphan = *options.OrphanDependents //nolint:staticcheck // SA1019 Keep testing deprecated OrphanDependents option until it's being removed
 	case options.PropagationPolicy != nil:
-		// if the deletion options explicitly specify whether to orphan, that controls
+		// 若删除选项明确指出是否 orphan，则以该选项为准
 		orphan = *options.PropagationPolicy == metav1.DeletePropagationOrphan
 	case len(initialFinalizers) != 0 && initialFinalizers[0] == metav1.FinalizerOrphanDependents:
-		// if the orphan finalizer is explicitly added, we orphan
+		// 若显式添加了 orphan finalizer，则执行 orphan
 		orphan = true
 	}
-	// if we intend to orphan the pods, we need wait for the gc to observe the
-	// creation of the pods, otherwise if the deletion of RC is observed before
-	// the creation of the pods, the pods will not be orphaned.
+	// 如果要 orphan 这些 pod，需要等待 GC 观察到 pod 的创建，
+	// 否则若在 pod 创建之前观察到 RC 的删除，这些 pod 就不会被 orphan。
 	if orphan {
 		err := wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 			for _, u := range podUIDs {
@@ -659,7 +657,7 @@ func setupRCsPods(t *testing.T, gc *garbagecollector.GarbageCollector, clientSet
 			return
 		}
 	}
-	// delete the rc
+	// 删除 rc
 	if err := rcClient.Delete(context.TODO(), rc.ObjectMeta.Name, options); err != nil {
 		errs <- fmt.Sprintf("failed to delete replication controller: %v", err)
 		return
@@ -689,9 +687,8 @@ func verifyRemainingObjects(t *testing.T, clientSet clientset.Interface, namespa
 	return ret, nil
 }
 
-// The stress test is not very stressful, because we need to control the running
-// time of our pre-submit tests to increase submit-queue throughput. We'll add
-// e2e tests that put more stress.
+// 这个压力测试其实压力不大，因为我们需要控制 pre-submit 测试的运行时间，
+// 以提高 submit-queue 的吞吐量。后续会添加压力更大的 e2e 测试。
 func TestStressingCascadingDeletion(t *testing.T) {
 	ctx := setup(t, 5)
 	defer ctx.tearDown()
@@ -707,15 +704,15 @@ func TestStressingCascadingDeletion(t *testing.T) {
 	rcUIDs := make(chan types.UID, collections*5)
 	errs := make(chan string, 5)
 	for i := range collections {
-		// rc is created with empty finalizers, deleted with nil delete options, pods will remain.
+		// rc 创建时没有 finalizer，删除时不带删除选项，pod 将保留。
 		go setupRCsPods(t, gc, clientSet, "collection1-"+strconv.Itoa(i), ns.Name, []string{}, metav1.DeleteOptions{}, &wg, rcUIDs, errs)
-		// rc is created with the orphan finalizer, deleted with nil options, pods will remain.
+		// rc 创建时带有 orphan finalizer，删除时不带选项，pod 将保留。
 		go setupRCsPods(t, gc, clientSet, "collection2-"+strconv.Itoa(i), ns.Name, []string{metav1.FinalizerOrphanDependents}, metav1.DeleteOptions{}, &wg, rcUIDs, errs)
-		// rc is created with the orphan finalizer, deleted with DeleteOptions.OrphanDependents=false, pods will be deleted.
+		// rc 创建时带有 orphan finalizer，删除时指定 DeleteOptions.OrphanDependents=false，pod 将被删除。
 		go setupRCsPods(t, gc, clientSet, "collection3-"+strconv.Itoa(i), ns.Name, []string{metav1.FinalizerOrphanDependents}, getNonOrphanOptions(), &wg, rcUIDs, errs)
-		// rc is created with empty finalizers, deleted with DeleteOptions.OrphanDependents=true, pods will remain.
+		// rc 创建时没有 finalizer，删除时指定 DeleteOptions.OrphanDependents=true，pod 将保留。
 		go setupRCsPods(t, gc, clientSet, "collection4-"+strconv.Itoa(i), ns.Name, []string{}, getOrphanOptions(), &wg, rcUIDs, errs)
-		// rc is created with empty finalizers, deleted with DeleteOptions.PropagationPolicy=Orphan, pods will remain.
+		// rc 创建时没有 finalizer，删除时指定 DeleteOptions.PropagationPolicy=Orphan，pod 将保留。
 		go setupRCsPods(t, gc, clientSet, "collection5-"+strconv.Itoa(i), ns.Name, []string{}, getPropagateOrphanOptions(), &wg, rcUIDs, errs)
 	}
 	wg.Wait()
@@ -724,10 +721,10 @@ func TestStressingCascadingDeletion(t *testing.T) {
 		t.Fatal(errString)
 	}
 	t.Logf("all pods are created, all replications controllers are created then deleted")
-	// wait for the RCs and Pods to reach the expected numbers.
+	// 等待 RC 和 Pod 数量达到预期值。
 	if err := wait.Poll(1*time.Second, 300*time.Second, func() (bool, error) {
 		podsInEachCollection := 3
-		// see the comments on the calls to setupRCsPods for details
+		// 详情参见对 setupRCsPods 调用处的注释
 		remainingGroups := 4
 		return verifyRemainingObjects(t, clientSet, ns.Name, 0, collections*podsInEachCollection*remainingGroups)
 	}); err != nil {
@@ -735,7 +732,7 @@ func TestStressingCascadingDeletion(t *testing.T) {
 	}
 	t.Logf("number of remaining replication controllers and pods are as expected")
 
-	// verify the remaining pods all have "orphan" in their names.
+	// 验证剩余的 pod 名称中都包含 "orphan"。
 	podClient := clientSet.CoreV1().Pods(ns.Name)
 	pods, err := podClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -747,7 +744,7 @@ func TestStressingCascadingDeletion(t *testing.T) {
 		}
 	}
 
-	// verify there is no node representing replication controllers in the gc's graph
+	// 验证 GC 图中不存在表示 replication controller 的节点
 	for range collections {
 		uid := <-rcUIDs
 		if gc.GraphHasUID(uid) {
@@ -767,14 +764,14 @@ func TestOrphaning(t *testing.T) {
 
 	podClient := clientSet.CoreV1().Pods(ns.Name)
 	rcClient := clientSet.CoreV1().ReplicationControllers(ns.Name)
-	// create the RC with the orphan finalizer set
+	// 创建带有 orphan finalizer 的 RC
 	toBeDeletedRC := newOwnerRC(toBeDeletedRCName, ns.Name)
 	toBeDeletedRC, err := rcClient.Create(context.TODO(), toBeDeletedRC, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create replication controller: %v", err)
 	}
 
-	// these pods should be orphaned.
+	// 这些 pod 应该被 orphan。
 	var podUIDs []types.UID
 	podsNum := 3
 	for i := range podsNum {
@@ -787,9 +784,8 @@ func TestOrphaning(t *testing.T) {
 		podUIDs = append(podUIDs, createdPod.ObjectMeta.UID)
 	}
 
-	// we need wait for the gc to observe the creation of the pods, otherwise if
-	// the deletion of RC is observed before the creation of the pods, the pods
-	// will not be orphaned.
+	// 需要等待 GC 观察到 pod 的创建，否则若在 pod 创建之前观察到 RC 的删除，
+	// 这些 pod 就不会被 orphan。
 	err = wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 		for _, u := range podUIDs {
 			if !gc.GraphHasUID(u) {
@@ -806,7 +802,7 @@ func TestOrphaning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to gracefully delete the rc: %v", err)
 	}
-	// verify the toBeDeleteRC is deleted
+	// 验证 toBeDeleteRC 已被删除
 	if err := wait.PollImmediate(1*time.Second, 30*time.Second, func() (bool, error) {
 		rcs, err := rcClient.List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
@@ -821,7 +817,7 @@ func TestOrphaning(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// verify pods don't have the ownerPod as an owner anymore
+	// 验证 pod 不再将 ownerPod 作为 owner
 	pods, err := podClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list pods: %v", err)
@@ -847,7 +843,7 @@ func TestSolidOwnerDoesNotBlockWaitingOwner(t *testing.T) {
 
 	podClient := clientSet.CoreV1().Pods(ns.Name)
 	rcClient := clientSet.CoreV1().ReplicationControllers(ns.Name)
-	// create the RC with the orphan finalizer set
+	// 创建带有 orphan finalizer 的 RC
 	toBeDeletedRC, err := rcClient.Create(context.TODO(), newOwnerRC(toBeDeletedRCName, ns.Name), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create replication controller: %v", err)
@@ -870,7 +866,7 @@ func TestSolidOwnerDoesNotBlockWaitingOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to delete the rc: %v", err)
 	}
-	// verify the toBeDeleteRC is deleted
+	// 验证 toBeDeleteRC 已被删除
 	if err := wait.PollImmediate(1*time.Second, 30*time.Second, func() (bool, error) {
 		_, err := rcClient.Get(context.TODO(), toBeDeletedRC.Name, metav1.GetOptions{})
 		if err != nil {
@@ -884,7 +880,7 @@ func TestSolidOwnerDoesNotBlockWaitingOwner(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// verify pods don't have the toBeDeleteRC as an owner anymore
+	// 验证 pod 不再将 toBeDeleteRC 作为 owner
 	pod, err = podClient.Get(context.TODO(), "pod", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list pods: %v", err)
@@ -907,23 +903,23 @@ func TestNonBlockingOwnerRefDoesNotBlock(t *testing.T) {
 
 	podClient := clientSet.CoreV1().Pods(ns.Name)
 	rcClient := clientSet.CoreV1().ReplicationControllers(ns.Name)
-	// create the RC with the orphan finalizer set
+	// 创建带有 orphan finalizer 的 RC
 	toBeDeletedRC, err := rcClient.Create(context.TODO(), newOwnerRC(toBeDeletedRCName, ns.Name), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create replication controller: %v", err)
 	}
-	// BlockingOwnerDeletion is not set
+	// 未设置 BlockingOwnerDeletion
 	pod1 := newPod("pod1", ns.Name, []metav1.OwnerReference{
 		{UID: toBeDeletedRC.ObjectMeta.UID, Name: toBeDeletedRC.Name},
 	})
-	// adding finalizer that no controller handles, so that the pod won't be deleted
+	// 添加一个没有控制器处理的 finalizer，使该 pod 不会被删除
 	pod1.ObjectMeta.Finalizers = []string{"x/y"}
-	// BlockingOwnerDeletion is false
+	// BlockingOwnerDeletion 为 false
 	falseVar := false
 	pod2 := newPod("pod2", ns.Name, []metav1.OwnerReference{
 		{UID: toBeDeletedRC.ObjectMeta.UID, Name: toBeDeletedRC.Name, BlockOwnerDeletion: &falseVar},
 	})
-	// adding finalizer that no controller handles, so that the pod won't be deleted
+	// 添加一个没有控制器处理的 finalizer，使该 pod 不会被删除
 	pod2.ObjectMeta.Finalizers = []string{"x/y"}
 	_, err = podClient.Create(context.TODO(), pod1, metav1.CreateOptions{})
 	if err != nil {
@@ -938,7 +934,7 @@ func TestNonBlockingOwnerRefDoesNotBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to delete the rc: %v", err)
 	}
-	// verify the toBeDeleteRC is deleted
+	// 验证 toBeDeleteRC 已被删除
 	if err := wait.PollImmediate(1*time.Second, 30*time.Second, func() (bool, error) {
 		_, err := rcClient.Get(context.TODO(), toBeDeletedRC.Name, metav1.GetOptions{})
 		if err != nil {
@@ -952,7 +948,7 @@ func TestNonBlockingOwnerRefDoesNotBlock(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// verify pods are still there
+	// 验证 pod 仍然存在
 	pods, err := podClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list pods: %v", err)
@@ -963,14 +959,14 @@ func TestNonBlockingOwnerRefDoesNotBlock(t *testing.T) {
 }
 
 func TestDoubleDeletionWithFinalizer(t *testing.T) {
-	// test setup
+	// 测试设置
 	ctx := setup(t, 5)
 	defer ctx.tearDown()
 	clientSet := ctx.clientSet
 	ns := createNamespaceOrDie("gc-double-foreground", clientSet, t)
 	defer deleteNamespaceOrDie(ns.Name, clientSet, t)
 
-	// step 1: creates a pod with a custom finalizer and deletes it, then waits until gc removes its finalizer
+	// 步骤 1：创建一个带自定义 finalizer 的 pod 并删除它，然后等待 GC 移除其 finalizer
 	podClient := clientSet.CoreV1().Pods(ns.Name)
 	pod := newPod("lucy", ns.Name, nil)
 	pod.ObjectMeta.Finalizers = []string{"x/y"}
@@ -994,7 +990,7 @@ func TestDoubleDeletionWithFinalizer(t *testing.T) {
 		t.Fatalf("Failed waiting for pod to have only one filanizer at step 1, error: %v", err)
 	}
 
-	// step 2: deletes the pod one more time and checks if there's only the custom finalizer left
+	// 步骤 2：再次删除该 pod，并检查是否只剩下自定义 finalizer
 	if err := podClient.Delete(context.TODO(), pod.Name, getForegroundOptions()); err != nil {
 		t.Fatalf("Failed to delete pod: %v", err)
 	}
@@ -1012,7 +1008,7 @@ func TestDoubleDeletionWithFinalizer(t *testing.T) {
 		t.Fatalf("Failed waiting for pod to have only one finalizer at step 2, gc hasn't removed its finalzier?, error: %v", err)
 	}
 
-	// step 3: removes the custom finalizer and checks if the pod was removed
+	// 步骤 3：移除自定义 finalizer，并检查该 pod 是否被删除
 	patch := []byte(`[{"op":"remove","path":"/metadata/finalizers"}]`)
 	if _, err := podClient.Patch(context.TODO(), pod.Name, types.JSONPatchType, patch, metav1.PatchOptions{}); err != nil {
 		t.Fatalf("Failed to update pod: %v", err)
@@ -1035,7 +1031,7 @@ func TestBlockingOwnerRefDoesBlock(t *testing.T) {
 
 	podClient := clientSet.CoreV1().Pods(ns.Name)
 	rcClient := clientSet.CoreV1().ReplicationControllers(ns.Name)
-	// create the RC with the orphan finalizer set
+	// 创建带有 orphan finalizer 的 RC
 	toBeDeletedRC, err := rcClient.Create(context.TODO(), newOwnerRC(toBeDeletedRCName, ns.Name), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create replication controller: %v", err)
@@ -1044,15 +1040,15 @@ func TestBlockingOwnerRefDoesBlock(t *testing.T) {
 	pod := newPod("pod", ns.Name, []metav1.OwnerReference{
 		{UID: toBeDeletedRC.ObjectMeta.UID, Name: toBeDeletedRC.Name, BlockOwnerDeletion: &trueVar},
 	})
-	// adding finalizer that no controller handles, so that the pod won't be deleted
+	// 添加一个没有控制器处理的 finalizer，使该 pod 不会被删除
 	pod.ObjectMeta.Finalizers = []string{"x/y"}
 	_, err = podClient.Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create Pod: %v", err)
 	}
 
-	// this makes sure the garbage collector will have added the pod to its
-	// dependency graph before handling the foreground deletion of the rc.
+	// 这可以确保垃圾回收器在处理 rc 的 foreground 删除之前，
+	// 已经将该 pod 加入其依赖图。
 	ctx.startGC(5)
 	timeout := make(chan struct{})
 	time.AfterFunc(5*time.Second, func() { close(timeout) })
@@ -1067,13 +1063,13 @@ func TestBlockingOwnerRefDoesBlock(t *testing.T) {
 		t.Fatalf("Failed to delete the rc: %v", err)
 	}
 	time.Sleep(15 * time.Second)
-	// verify the toBeDeleteRC is NOT deleted
+	// 验证 toBeDeleteRC 未被删除
 	_, err = rcClient.Get(context.TODO(), toBeDeletedRC.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// verify pods are still there
+	// 验证 pod 仍然存在
 	pods, err := podClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list pods: %v", err)
@@ -1083,8 +1079,7 @@ func TestBlockingOwnerRefDoesBlock(t *testing.T) {
 	}
 }
 
-// TestCustomResourceCascadingDeletion ensures the basic cascading delete
-// behavior supports custom resources.
+// TestCustomResourceCascadingDeletion 确保基本的级联删除行为支持自定义资源。
 func TestCustomResourceCascadingDeletion(t *testing.T) {
 	ctx := setup(t, 5)
 	defer ctx.tearDown()
@@ -1095,7 +1090,7 @@ func TestCustomResourceCascadingDeletion(t *testing.T) {
 
 	definition, resourceClient := createRandomCustomResourceDefinition(t, apiExtensionClient, dynamicClient, ns.Name)
 
-	// Create a custom owner resource.
+	// 创建一个自定义 owner 资源。
 	owner := newCRDInstance(definition, ns.Name, names.SimpleNameGenerator.GenerateName("owner"))
 	owner, err := resourceClient.Create(context.TODO(), owner, metav1.CreateOptions{})
 	if err != nil {
@@ -1103,7 +1098,7 @@ func TestCustomResourceCascadingDeletion(t *testing.T) {
 	}
 	t.Logf("created owner resource %q", owner.GetName())
 
-	// Create a custom dependent resource.
+	// 创建一个自定义 dependent 资源。
 	dependent := newCRDInstance(definition, ns.Name, names.SimpleNameGenerator.GenerateName("dependent"))
 	link(t, owner, dependent)
 
@@ -1113,14 +1108,14 @@ func TestCustomResourceCascadingDeletion(t *testing.T) {
 	}
 	t.Logf("created dependent resource %q", dependent.GetName())
 
-	// Delete the owner.
+	// 删除 owner。
 	foreground := metav1.DeletePropagationForeground
 	err = resourceClient.Delete(context.TODO(), owner.GetName(), metav1.DeleteOptions{PropagationPolicy: &foreground})
 	if err != nil {
 		t.Fatalf("failed to delete owner resource %q: %v", owner.GetName(), err)
 	}
 
-	// Ensure the owner is deleted.
+	// 确保 owner 已被删除。
 	if err := wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 		_, err := resourceClient.Get(context.TODO(), owner.GetName(), metav1.GetOptions{})
 		return apierrors.IsNotFound(err), nil
@@ -1128,7 +1123,7 @@ func TestCustomResourceCascadingDeletion(t *testing.T) {
 		t.Fatalf("failed waiting for owner resource %q to be deleted", owner.GetName())
 	}
 
-	// Ensure the dependent is deleted.
+	// 确保 dependent 已被删除。
 	_, err = resourceClient.Get(context.TODO(), dependent.GetName(), metav1.GetOptions{})
 	if err == nil {
 		t.Fatalf("expected dependent %q to be deleted", dependent.GetName())
@@ -1139,12 +1134,10 @@ func TestCustomResourceCascadingDeletion(t *testing.T) {
 	}
 }
 
-// TestMixedRelationships ensures that owner/dependent relationships work
-// between core and custom resources.
+// TestMixedRelationships 确保 core 资源与自定义资源之间的 owner/dependent 关系正常工作。
 //
-// TODO: Consider how this could be represented with table-style tests (e.g. a
-// before/after expected object graph given a delete operation targeting a
-// specific node in the before graph with certain delete options).
+// TODO: 考虑如何用表驱动测试来表达（例如，给定针对 before 图中某个节点、
+// 带特定删除选项的删除操作，给出 before/after 的预期对象图）。
 func TestMixedRelationships(t *testing.T) {
 	ctx := setup(t, 5)
 	defer ctx.tearDown()
@@ -1157,14 +1150,14 @@ func TestMixedRelationships(t *testing.T) {
 
 	definition, resourceClient := createRandomCustomResourceDefinition(t, apiExtensionClient, dynamicClient, ns.Name)
 
-	// Create a custom owner resource.
+	// 创建一个自定义 owner 资源。
 	customOwner, err := resourceClient.Create(context.TODO(), newCRDInstance(definition, ns.Name, names.SimpleNameGenerator.GenerateName("owner")), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create owner: %v", err)
 	}
 	t.Logf("created custom owner %q", customOwner.GetName())
 
-	// Create a core dependent resource.
+	// 创建一个 core dependent 资源。
 	coreDependent := newConfigMap(ns.Name, names.SimpleNameGenerator.GenerateName("dependent"))
 	link(t, customOwner, coreDependent)
 	coreDependent, err = configMapClient.Create(context.TODO(), coreDependent, metav1.CreateOptions{})
@@ -1173,14 +1166,14 @@ func TestMixedRelationships(t *testing.T) {
 	}
 	t.Logf("created core dependent %q", coreDependent.GetName())
 
-	// Create a core owner resource.
+	// 创建一个 core owner 资源。
 	coreOwner, err := configMapClient.Create(context.TODO(), newConfigMap(ns.Name, names.SimpleNameGenerator.GenerateName("owner")), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create owner: %v", err)
 	}
 	t.Logf("created core owner %q: %#v", coreOwner.GetName(), coreOwner)
 
-	// Create a custom dependent resource.
+	// 创建一个自定义 dependent 资源。
 	customDependent := newCRDInstance(definition, ns.Name, names.SimpleNameGenerator.GenerateName("dependent"))
 	coreOwner.TypeMeta.Kind = "ConfigMap"
 	coreOwner.TypeMeta.APIVersion = "v1"
@@ -1191,14 +1184,14 @@ func TestMixedRelationships(t *testing.T) {
 	}
 	t.Logf("created custom dependent %q", customDependent.GetName())
 
-	// Delete the custom owner.
+	// 删除自定义 owner。
 	foreground := metav1.DeletePropagationForeground
 	err = resourceClient.Delete(context.TODO(), customOwner.GetName(), metav1.DeleteOptions{PropagationPolicy: &foreground})
 	if err != nil {
 		t.Fatalf("failed to delete owner resource %q: %v", customOwner.GetName(), err)
 	}
 
-	// Ensure the owner is deleted.
+	// 确保 owner 已被删除。
 	if err := wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 		_, err := resourceClient.Get(context.TODO(), customOwner.GetName(), metav1.GetOptions{})
 		return apierrors.IsNotFound(err), nil
@@ -1206,7 +1199,7 @@ func TestMixedRelationships(t *testing.T) {
 		t.Fatalf("failed waiting for owner resource %q to be deleted", customOwner.GetName())
 	}
 
-	// Ensure the dependent is deleted.
+	// 确保 dependent 已被删除。
 	_, err = resourceClient.Get(context.TODO(), coreDependent.GetName(), metav1.GetOptions{})
 	if err == nil {
 		t.Fatalf("expected dependent %q to be deleted", coreDependent.GetName())
@@ -1216,13 +1209,13 @@ func TestMixedRelationships(t *testing.T) {
 		}
 	}
 
-	// Delete the core owner.
+	// 删除 core owner。
 	err = configMapClient.Delete(context.TODO(), coreOwner.GetName(), metav1.DeleteOptions{PropagationPolicy: &foreground})
 	if err != nil {
 		t.Fatalf("failed to delete owner resource %q: %v", coreOwner.GetName(), err)
 	}
 
-	// Ensure the owner is deleted.
+	// 确保 owner 已被删除。
 	if err := wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 		_, err := configMapClient.Get(context.TODO(), coreOwner.GetName(), metav1.GetOptions{})
 		return apierrors.IsNotFound(err), nil
@@ -1230,7 +1223,7 @@ func TestMixedRelationships(t *testing.T) {
 		t.Fatalf("failed waiting for owner resource %q to be deleted", coreOwner.GetName())
 	}
 
-	// Ensure the dependent is deleted.
+	// 确保 dependent 已被删除。
 	_, err = resourceClient.Get(context.TODO(), customDependent.GetName(), metav1.GetOptions{})
 	if err == nil {
 		t.Fatalf("expected dependent %q to be deleted", customDependent.GetName())
@@ -1241,8 +1234,8 @@ func TestMixedRelationships(t *testing.T) {
 	}
 }
 
-// TestCRDDeletionCascading ensures propagating deletion of a custom resource
-// definition with an instance that owns a core resource.
+// TestCRDDeletionCascading 确保删除 custom resource definition 时，
+// 其拥有 core 资源的实例也会被级联删除。
 func TestCRDDeletionCascading(t *testing.T) {
 	ctx := setup(t, 5)
 	defer ctx.tearDown()
@@ -1270,14 +1263,14 @@ func testCRDDeletion(t *testing.T, ctx *testContext, ns *v1.Namespace, definitio
 
 	configMapClient := clientSet.CoreV1().ConfigMaps(ns.Name)
 
-	// Create a custom owner resource.
+	// 创建一个自定义 owner 资源。
 	owner, err := resourceClient.Create(context.TODO(), newCRDInstance(definition, ns.Name, names.SimpleNameGenerator.GenerateName("owner")), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create owner: %v", err)
 	}
 	t.Logf("created owner %q", owner.GetName())
 
-	// Create a core dependent resource.
+	// 创建一个 core dependent 资源。
 	dependent := newConfigMap(ns.Name, names.SimpleNameGenerator.GenerateName("dependent"))
 	link(t, owner, dependent)
 	dependent, err = configMapClient.Create(context.TODO(), dependent, metav1.CreateOptions{})
@@ -1288,12 +1281,12 @@ func testCRDDeletion(t *testing.T, ctx *testContext, ns *v1.Namespace, definitio
 
 	time.Sleep(ctx.syncPeriod + 5*time.Second)
 
-	// Delete the definition, which should cascade to the owner and ultimately its dependents.
+	// 删除 definition，它应级联删除 owner，并最终删除其 dependent。
 	if err := apiextensionstestserver.DeleteV1CustomResourceDefinition(definition, apiExtensionClient); err != nil {
 		t.Fatalf("failed to delete %q: %v", definition.Name, err)
 	}
 
-	// Ensure the owner is deleted.
+	// 确保 owner 已被删除。
 	if err := wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 		_, err := resourceClient.Get(context.TODO(), owner.GetName(), metav1.GetOptions{})
 		return apierrors.IsNotFound(err), nil
@@ -1301,7 +1294,7 @@ func testCRDDeletion(t *testing.T, ctx *testContext, ns *v1.Namespace, definitio
 		t.Fatalf("failed waiting for owner %q to be deleted", owner.GetName())
 	}
 
-	// Ensure the dependent is deleted.
+	// 确保 dependent 已被删除。
 	if err := wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 		_, err := configMapClient.Get(context.TODO(), dependent.GetName(), metav1.GetOptions{})
 		return apierrors.IsNotFound(err), nil
@@ -1310,9 +1303,9 @@ func testCRDDeletion(t *testing.T, ctx *testContext, ns *v1.Namespace, definitio
 	}
 }
 
-// TestCascadingDeleteOnCRDConversionFailure tests that a bad conversion webhook cannot block the entire GC controller.
-// Historically, a cache sync failure from a single resource prevented GC controller from running. This test creates
-// a CRD, updates the storage version with a bad conversion webhook and then runs a simple cascading delete test.
+// TestCascadingDeleteOnCRDConversionFailure 测试损坏的 conversion webhook 不会阻塞整个 GC 控制器。
+// 从历史上看，单个资源的缓存同步失败会阻止 GC 控制器运行。此测试创建一个 CRD，
+// 用一个损坏的 conversion webhook 更新其 storage version，然后运行一个简单的级联删除测试。
 func TestCascadingDeleteOnCRDConversionFailure(t *testing.T) {
 	ctx := setup(t, 0)
 	defer ctx.tearDown()
@@ -1321,8 +1314,8 @@ func TestCascadingDeleteOnCRDConversionFailure(t *testing.T) {
 	ns := createNamespaceOrDie("gc-cache-sync-fail", clientSet, t)
 	defer deleteNamespaceOrDie(ns.Name, clientSet, t)
 
-	// Create a CRD with storage/serving version v1beta2. Then update the CRD with v1 as the storage version
-	// and an invalid conversion webhook. This should result in cache sync failures for the CRD from the GC controller.
+	// 创建一个 storage/serving 版本为 v1beta2 的 CRD。然后将其更新为以 v1 作为 storage 版本，
+	// 并配置一个无效的 conversion webhook。这应导致 GC 控制器对该 CRD 的缓存同步失败。
 	def, dc := createRandomCustomResourceDefinition(t, apiExtensionClient, dynamicClient, ns.Name)
 	_, err := dc.Create(context.TODO(), newCRDInstance(def, ns.Name, names.SimpleNameGenerator.GenerateName("test")), metav1.CreateOptions{})
 	if err != nil {
@@ -1371,7 +1364,7 @@ func TestCascadingDeleteOnCRDConversionFailure(t *testing.T) {
 	}
 
 	ctx.startGC(5)
-	// make sure gc.Sync finds the new CRD and starts monitoring it
+	// 确保 gc.Sync 发现新的 CRD 并开始监控它
 	time.Sleep(ctx.syncPeriod + 1*time.Second)
 
 	rcClient := clientSet.CoreV1().ReplicationControllers(ns.Name)
@@ -1408,9 +1401,9 @@ func TestCascadingDeleteOnCRDConversionFailure(t *testing.T) {
 		t.Fatalf("failed to delete replication controller: %v", err)
 	}
 
-	// sometimes the deletion of the RC takes long time to be observed by
-	// the gc, so wait for the garbage collector to observe the deletion of
-	// the toBeDeletedRC
+	// GC 有时需要较长时间才能观察到 RC 的删除，
+	// 因此等待垃圾回收器观察到 toBeDeletedRC
+	// 的删除事件
 	if err := wait.PollUntilContextTimeout(context.Background(), 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
 		return !gc.GraphHasUID(toBeDeletedRC.ObjectMeta.UID), nil
 	}); err != nil {
@@ -1420,9 +1413,9 @@ func TestCascadingDeleteOnCRDConversionFailure(t *testing.T) {
 		t.Fatalf("expect pod %s to be garbage collected, got err= %v", garbageCollectedPodName, err)
 	}
 
-	// Check that the cache is still not synced after cascading delete succeeded
-	// If this check passes, check that the conversion webhook is correctly misconfigured
-	// to prevent watch cache from listing the CRD.
+	// 检查级联删除成功后缓存仍未同步。
+	// 若该检查通过，则说明 conversion webhook 确实配置错误，
+	// 导致 watch cache 无法列出该 CRD。
 	if ctx.gc.IsSynced(ctx.logger) {
 		t.Fatal("cache is not expected to be synced due to bad conversion webhook")
 	}

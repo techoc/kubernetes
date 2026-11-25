@@ -56,7 +56,7 @@ func (u staticURLServiceResolver) ResolveEndpoint(namespace, name string, port i
 	return url.Parse(string(u))
 }
 
-// TestWebhookLoadBalance ensures that the admission webhook opens multiple connections to backends to satisfy concurrent requests
+// TestWebhookLoadBalance 确保 admission webhook 会向后端建立多个连接以满足并发请求
 func TestWebhookLoadBalance(t *testing.T) {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {
@@ -118,10 +118,8 @@ func TestWebhookLoadBalance(t *testing.T) {
 			}, framework.SharedEtcd())
 			defer s.TearDownFn()
 
-			// Configure a client with a distinct user name so that it is easy to distinguish requests
-			// made by the client from requests made by controllers. We use this to filter out requests
-			// before recording them to ensure we don't accidentally mistake requests from controllers
-			// as requests made by the client.
+			// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求和控制器发起的请求。
+			// 我们据此在记录之前过滤请求，确保不会把控制器的请求误当成该客户端的请求。
 			clientConfig := rest.CopyConfig(s.ClientConfig)
 			clientConfig.QPS = 100
 			clientConfig.Burst = 200
@@ -180,7 +178,7 @@ func TestWebhookLoadBalance(t *testing.T) {
 				}
 			}()
 
-			// wait until new webhook is called the first time
+			// 等待新 webhook 第一次被调用
 			if err := wait.PollUntilContextTimeout(context.TODO(), time.Millisecond*5, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 				_, err = client.CoreV1().Pods("default").Patch(ctx, loadBalanceMarkerFixture.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 				select {
@@ -209,7 +207,7 @@ func TestWebhookLoadBalance(t *testing.T) {
 				}
 			}
 
-			// Submit 10 parallel requests
+			// 提交 10 个并发请求
 			wg := &sync.WaitGroup{}
 			for range 10 {
 				wg.Add(1)
@@ -232,7 +230,7 @@ func TestWebhookLoadBalance(t *testing.T) {
 			}
 			trackingListener.Reset()
 
-			// Submit 10 more parallel requests
+			// 再提交 10 个并发请求
 			wg = &sync.WaitGroup{}
 			for range 10 {
 				wg.Add(1)
@@ -260,8 +258,7 @@ type connectionRecorder struct {
 	upOnce sync.Once
 }
 
-// Reset zeros out all counts and returns a channel that is closed when the first admission of the
-// marker object is received.
+// Reset 将所有计数清零，并返回一个 channel：当收到第一个针对 marker 对象的准入请求时该 channel 被关闭。
 func (i *connectionRecorder) Reset() chan struct{} {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -299,7 +296,7 @@ func newLoadBalanceWebhookHandler(recorder *connectionRecorder) http.Handler {
 			http.Error(w, err.Error(), 400)
 		}
 		if review.Request.UserInfo.Username != testLoadBalanceClientUsername {
-			// skip requests not originating from this integration test's client
+			// 跳过并非来自本集成测试客户端的请求
 			allow(w)
 			return
 		}
@@ -312,15 +309,15 @@ func newLoadBalanceWebhookHandler(recorder *connectionRecorder) http.Handler {
 			http.Error(w, err.Error(), 400)
 		}
 
-		// When resetting between tests, a marker object is patched until this webhook
-		// observes it, at which point it is considered ready.
+		// 测试之间重置时，会不断 patch marker 对象，直到该 webhook 观察到它，
+		// 此时即认为 webhook 已就绪。
 		if pod.Namespace == loadBalanceMarkerFixture.Namespace && pod.Name == loadBalanceMarkerFixture.Name {
 			recorder.MarkerReceived()
 			allow(w)
 			return
 		}
 
-		// simulate a loaded backend
+		// 模拟负载较高的后端
 		time.Sleep(2 * time.Second)
 		allow(w)
 	})
@@ -362,10 +359,9 @@ func (c *connectionTrackingListener) Addr() net.Addr {
 	return c.delegate.Addr()
 }
 
-// TestWebhookLoadBalanceAcrossEndpoints ensures that the webhook client distributes sequential requests
-// across different endpoint IPs behind a service when using a ServiceReference.
-// Prior to the host-rewrite pool isolation fix, all sequential requests would reuse the first established
-// TCP connection from the single shared pool, completely starving other endpoints.
+// TestWebhookLoadBalanceAcrossEndpoints 确保使用 ServiceReference 时，webhook 客户端会把连续请求
+// 分发到 service 后面不同的 endpoint IP 上。在 host-rewrite 连接池隔离修复之前，所有连续请求都会
+// 复用单个共享池中第一条已建立的 TCP 连接，导致其他 endpoint 完全得不到请求。
 func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {
@@ -376,7 +372,7 @@ func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 		t.Fatalf("Failed to build cert with error: %+v", err)
 	}
 
-	// 1. Start Server A
+	// 1. 启动 Server A
 	var serverACalls int64
 	serverAListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -421,7 +417,7 @@ func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 	}()
 	defer func() { _ = serverA.Close() }()
 
-	// 2. Start Server B
+	// 2. 启动 Server B
 	var serverBCalls int64
 	serverBListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -466,11 +462,11 @@ func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 	}()
 	defer func() { _ = serverB.Close() }()
 
-	// Parse URLs to extract target hosts (IP:Port)
+	// 解析 URL 以提取目标主机（IP:Port）
 	urlA, _ := url.Parse("https://" + serverAListener.Addr().String())
 	urlB, _ := url.Parse("https://" + serverBListener.Addr().String())
 
-	// Set up a round-robin service resolver that returns alternate endpoints for each resolve call
+	// 设置一个轮询 service resolver，每次解析时返回不同的 endpoint
 	var resolveIndex int64
 	resolver := funcServiceResolver(func(namespace, name string, port int32) (*url.URL, error) {
 		idx := atomic.AddInt64(&resolveIndex, 1)
@@ -482,7 +478,7 @@ func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 
 	t.Cleanup(app.SetServiceResolverForTests(resolver))
 
-	// 3. Start Test API Server
+	// 3. 启动测试 API Server
 	s := kubeapiservertesting.StartTestServerOrDie(t, kubeapiservertesting.NewDefaultTestServerOptions(), []string{
 		"--disable-admission-plugins=ServiceAccount",
 	}, framework.SharedEtcd())
@@ -494,7 +490,7 @@ func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 		t.Fatalf("Unexpected error creating client: %v", err)
 	}
 
-	// 4. Register a Validating Webhook with ServiceReference
+	// 4. 使用 ServiceReference 注册一个 Validating Webhook
 	fail := admissionregistrationv1.Fail
 	sideEffectsNone := admissionregistrationv1.SideEffectClassNone
 	webhookConfig, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Create(context.TODO(), &admissionregistrationv1.ValidatingWebhookConfiguration{
@@ -529,7 +525,7 @@ func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 		_ = client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Delete(context.TODO(), webhookConfig.Name, metav1.DeleteOptions{})
 	}()
 
-	// 5. Warm up the webhook until it is ready/active
+	// 5. 预热 webhook，直到它就绪/生效
 	podFixture := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "warmup-pod", Namespace: "default"},
 		Spec: corev1.PodSpec{
@@ -548,11 +544,11 @@ func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 		t.Fatalf("Webhook failed to become active: %v", err)
 	}
 
-	// Reset counts
+	// 重置计数
 	atomic.StoreInt64(&serverACalls, 0)
 	atomic.StoreInt64(&serverBCalls, 0)
 
-	// 6. Send 100 sequential requests to trigger validating webhook
+	// 6. 连续发送 100 个请求以触发 validating webhook
 	for i := range 100 {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("test-pod-%d", i), Namespace: "default"},
@@ -567,14 +563,14 @@ func TestWebhookLoadBalanceAcrossEndpoints(t *testing.T) {
 		_ = client.CoreV1().Pods("default").Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
 	}
 
-	// 7. Assertions
+	// 7. 断言
 	callsA := atomic.LoadInt64(&serverACalls)
 	callsB := atomic.LoadInt64(&serverBCalls)
 
 	t.Logf("Sequential requests distribution: ServerA = %d calls, ServerB = %d calls", callsA, callsB)
 
-	// Both servers MUST receive a balanced portion of calls under the pool isolation fix.
-	// We assert a minimum 70-30 distribution split to verify dynamic load-balancing.
+	// 在连接池隔离修复下，两个服务端都必须分到一定比例的调用。
+	// 我们按最低 70-30 的分布比例断言，以验证动态的负载均衡。
 	if callsA < 30 || callsB < 30 {
 		t.Errorf("Expected balanced load-balancing across both servers (minimum 70-30 split), but got ServerA = %d calls, ServerB = %d calls. Stale connection pool reuse or starvation detected!", callsA, callsB)
 	}

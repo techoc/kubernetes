@@ -24,8 +24,8 @@ import (
 )
 
 func TestNoNewBetaAPIsByDefault(t *testing.T) {
-	// if you found this because you want to create an integration test for your new beta API, the method you're looking for
-	// is this setupWithResources method and you need to pass the resource you want to enable into it.
+	// 如果你是因为想为新 beta API 创建集成测试而找到这里，那么你要找的方法
+	// 就是 setupWithResources，你需要把想要启用的资源传给它。
 	_, kubeClient, _, tearDownFn := setupWithResources(t,
 		[]schema.GroupVersion{},
 		[]schema.GroupVersionResource{},
@@ -40,10 +40,10 @@ func TestNoNewBetaAPIsByDefault(t *testing.T) {
 	for _, currResourceList := range allResourceLists {
 		for _, currResource := range currResourceList.APIResources {
 			if !strings.Contains(currResource.Version, "beta") {
-				continue // skip non-beta apis
+				continue // 跳过非 beta 的 API
 			}
 			if strings.Contains(currResource.Name, "/") {
-				continue // skip subresources
+				continue // 跳过子资源
 			}
 			enabledGVR := schema.GroupVersionResource{
 				Group:    currResource.Group,

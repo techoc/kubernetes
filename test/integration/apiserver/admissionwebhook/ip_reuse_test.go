@@ -61,10 +61,9 @@ func (r *dynamicServiceResolver) ResolveEndpoint(namespace, name string, port in
 	return url.Parse(r.targetURL)
 }
 
-// TestWebhookConnectionPoolIPReuse asserts that the API Server's webhook client
-// isolates its HTTP connection pool by the resolved backend IP address.
-// If a service's resolved endpoint changes to a new IP, requests must not
-// be routed to the old connection in the pool, preventing IP-reuse security bypasses.
+// TestWebhookConnectionPoolIPReuse 断言 API Server 的 webhook 客户端会按解析出的
+// 后端 IP 地址隔离其 HTTP 连接池。如果 service 解析出的 endpoint 变成了新 IP，
+// 请求不得被路由到池中旧的连接上，从而防止利用 IP 复用绕过安全限制。
 func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {
@@ -75,7 +74,7 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 		t.Fatalf("Failed to build cert: %v", err)
 	}
 
-	// Start Server A
+	// 启动 Server A
 	var serverACalls int32
 	serverAListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -119,7 +118,7 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 	}()
 	defer func() { _ = serverA.Close() }()
 
-	// Start Server B
+	// 启动 Server B
 	var serverBCalls int32
 	serverBListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -166,11 +165,11 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 	urlA := "https://" + serverAListener.Addr().String()
 	urlB := "https://" + serverBListener.Addr().String()
 
-	// Set up dynamic service resolver starting with Server A
+	// 设置动态 service resolver，初始指向 Server A
 	resolver := &dynamicServiceResolver{targetURL: urlA}
 	t.Cleanup(app.SetServiceResolverForTests(resolver))
 
-	// Start Test API Server
+	// 启动测试 API Server
 	s := kubeapiservertesting.StartTestServerOrDie(t, kubeapiservertesting.NewDefaultTestServerOptions(), []string{
 		"--disable-admission-plugins=ServiceAccount",
 	}, framework.SharedEtcd())
@@ -182,7 +181,7 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 		t.Fatalf("Unexpected error creating client: %v", err)
 	}
 
-	// Register Validating Webhook Configuration using a ServiceReference
+	// 使用 ServiceReference 注册 Validating Webhook 配置
 	fail := admissionregistrationv1.Fail
 	sideEffectsNone := admissionregistrationv1.SideEffectClassNone
 	webhookConfig, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Create(context.TODO(), &admissionregistrationv1.ValidatingWebhookConfiguration{
@@ -217,7 +216,7 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 		_ = client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Delete(context.TODO(), webhookConfig.Name, metav1.DeleteOptions{})
 	}()
 
-	// Request 1: Resolves to Server A. Trigger hook.
+	// 请求 1：解析到 Server A，触发 webhook。
 	podFixture := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pod-1", Namespace: "default"},
 		Spec: corev1.PodSpec{
@@ -225,7 +224,7 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 		},
 	}
 
-	// Wait for webhook to become ready/active
+	// 等待 webhook 就绪/生效
 	err = wait.PollUntilContextTimeout(context.TODO(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, err = client.CoreV1().Pods("default").Create(ctx, podFixture, metav1.CreateOptions{})
 		if err == nil {
@@ -238,11 +237,11 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 		t.Fatalf("Webhook failed to become active: %v", err)
 	}
 
-	// Reset call counts after warm-up
+	// 预热后重置调用计数
 	atomic.StoreInt32(&serverACalls, 0)
 	atomic.StoreInt32(&serverBCalls, 0)
 
-	// Execute Request 1 (Must go to Server A)
+	// 执行请求 1（必须发往 Server A）
 	pod1 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default"},
 		Spec: corev1.PodSpec{
@@ -259,10 +258,10 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 		t.Fatalf("Expected 1 call to Server A, got %d", serverACalls)
 	}
 
-	// Update Endpoint Resolution to Server B (simulating Pod upgrade/IP change)
+	// 将 endpoint 解析结果更新为 Server B（模拟 Pod 升级/IP 变化）
 	resolver.SetTarget(urlB)
 
-	// Execute Request 2 (Must go to Server B)
+	// 执行请求 2（必须发往 Server B）
 	pod2 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "default"},
 		Spec: corev1.PodSpec{
@@ -275,10 +274,9 @@ func TestWebhookConnectionPoolIPReuse(t *testing.T) {
 	}
 	_ = client.CoreV1().Pods("default").Delete(context.TODO(), pod2.Name, metav1.DeleteOptions{})
 
-	// Assertions
-	// If the connection pool was NOT isolated by IP, the second request would reuse
-	// the idle connection to Server A.
-	// With the fix, it must correctly connect to Server B.
+	// 断言
+	// 如果连接池没有按 IP 隔离，第二个请求会复用与 Server A 的空闲连接。
+	// 有了修复后，它必须正确连接到 Server B。
 	if atomic.LoadInt32(&serverBCalls) != 1 {
 		t.Errorf("Expected 1 call to Server B (New Pod), got %d. The request was incorrectly routed/stuck!", serverBCalls)
 	}

@@ -58,7 +58,7 @@ func makePodWithPriority(podName, podGroupName string, priority int32) *v1.Pod {
 		PodGroupName(podGroupName).Priority(priority).ZeroTerminationGracePeriod().Obj()
 }
 
-// makeAssignedPod creates a pre-existing pod assigned to a node in the cluster
+// makeAssignedPod 创建一个已分配到集群中某个节点的既有 Pod
 func makeAssignedPod(podName, nodeName, consumedCPU string) *v1.Pod {
 	return st.MakePod().Name(podName).Node(nodeName).Req(map[v1.ResourceName]string{v1.ResourceCPU: consumedCPU}).Container("image").Priority(100).ZeroTerminationGracePeriod().Obj()
 }
@@ -67,13 +67,13 @@ func makeAssignedPodWithPriority(podName, nodeName, consumedCPU string, priority
 	return st.MakePod().Name(podName).Node(nodeName).Req(map[v1.ResourceName]string{v1.ResourceCPU: consumedCPU}).Container("image").Priority(priority).ZeroTerminationGracePeriod().Obj()
 }
 
-// makeLargePod creates a pod that consumes all resources of a single node
+// makeLargePod 创建一个消耗单个节点全部资源的 Pod
 func makeLargePod(podName, podGroupName string) *v1.Pod {
 	return st.MakePod().Name(podName).Req(map[v1.ResourceName]string{v1.ResourceCPU: "2"}).Container("image").
 		PodGroupName(podGroupName).Priority(100).Obj()
 }
 
-// makeUnfittablePod creates a pod that requests more resources than available on a single node
+// makeUnfittablePod 创建一个请求资源超过单个节点可用资源的 Pod
 func makeUnfittablePod(podName, podGroupName string) *v1.Pod {
 	return st.MakePod().Name(podName).Req(map[v1.ResourceName]string{v1.ResourceCPU: "3"}).Container("image").
 		PodGroupName(podGroupName).Priority(100).Obj()
@@ -288,8 +288,8 @@ func TestTopologyAwareSchedulingWithGangPolicy(t *testing.T) {
 					WaitForPodsRemoved: []string{"low1-rack1"},
 				},
 				{
-					// Scoring results: PodGroupPodsCount will score the same for rack1 and rack2,
-					// and NodeResourcesFit with default strategy MostAllocated will score higher on rack1 (3/4 = 75% vs 3/6 = 50%).
+					// 打分结果：PodGroupPodsCount 对 rack1 和 rack2 的评分相同，
+					// 而使用默认策略 MostAllocated 的 NodeResourcesFit 在 rack1 上评分更高（3/4 = 75% vs 3/6 = 50%）。
 					Name: "Verify all pods scheduled on rack1",
 					VerifyAssignments: &stepsframework.VerifyAssignments{
 						Pods:  []string{"p1", "p2", "p3"},
@@ -346,11 +346,11 @@ func TestTopologyAwareSchedulingWithGangPolicy(t *testing.T) {
 					Name:               "Verify that low prio victim pod on rack2 is removed",
 					WaitForPodsRemoved: []string{"low1-rack2"},
 				},
-				// Allocation fractions in racks after preemption (max allocation for MostAllocated strategy):
+				// 抢占后各机架的分配比例（MostAllocated 策略取最大分配值）：
 				// - rack1: (0 + 3)/4 = 0.75
 				// - rack2: (2 + 3)/6 = 0.833
 				// - rack3: (1 + 3)/6 = 0.667
-				// - rack4: unfeasible (only 2 CPUs total)
+				// - rack4：不可行（总共只有 2 个 CPU）
 				{
 					Name: "Verify all pods scheduled on rack2",
 					VerifyAssignments: &stepsframework.VerifyAssignments{
@@ -391,8 +391,8 @@ func TestTopologyAwareSchedulingWithGangPolicy(t *testing.T) {
 					WaitForPodsScheduled: []string{"p1", "p2", "p3"},
 				},
 				{
-					// Scoring results: PodGroupPodsCount will score the same for rack1 and rack2,
-					// and NodeResourcesFit with default strategy MostAllocated will score higher on rack1.
+					// 打分结果：PodGroupPodsCount 对 rack1 和 rack2 的评分相同，
+					// 而使用默认策略 MostAllocated 的 NodeResourcesFit 在 rack1 上评分更高。
 					Name: "Verify all pods scheduled on rack1",
 					VerifyAssignments: &stepsframework.VerifyAssignments{
 						Pods:  []string{"p1", "p2", "p3"},
@@ -441,13 +441,13 @@ func TestTopologyAwareSchedulingWithGangPolicy(t *testing.T) {
 					Name:                 "Verify the entire gang is now scheduled",
 					WaitForPodsScheduled: []string{"p1", "p2", "p3"},
 				},
-				// Each node has 2 CPUs, each of gang pods requests 1 CPU.
-				// The PodGroupPods count scoring plugin will score racks 1-3 the same, as they will all fit the entire podgroup.
-				// Allocation fractions in racks (for the default "most allocated" strategy the max allocation is picked):
+				// 每个节点有 2 个 CPU，gang 中每个 Pod 请求 1 个 CPU。
+				// PodGroupPodsCount 打分插件对机架 1-3 的评分相同，因为它们都能容纳整个 podgroup。
+				// 各机架的分配比例（默认的 "most allocated" 策略取最大分配值）：
 				// - rack1: (0 + 3)/4 = 0.75
 				// - rack2: (2 + 3)/6 = 0.83
 				// - rack3: (1 + 3)/6 = 0.67
-				// - rack4: unfeasible
+				// - rack4：不可行
 				{
 					Name: "Verify all pods scheduled on rack2",
 					VerifyAssignments: &stepsframework.VerifyAssignments{
@@ -726,7 +726,7 @@ func TestTopologyAwareSchedulingWithGangPolicy(t *testing.T) {
 			},
 		},
 		{
-			// TODO: Add a test scenario where minCount < pod count and when entering the scheduling cycle, scheduler sees more than minCount pods in queue.
+			// TODO: 添加一个测试场景：minCount < pod count，且进入调度周期时调度器在队列中看到多于 minCount 的 Pod。
 			name: "gang with minCount < pod count schedules on a single rack, choosing smaller rack",
 			steps: []stepsframework.Step{
 				{
@@ -768,9 +768,9 @@ func TestTopologyAwareSchedulingWithGangPolicy(t *testing.T) {
 				},
 				{
 					Name: "Verify all pods in pg1 scheduled on rack2, which scored higher in the default placement scoring algorithm",
-					// Scoring details:
-					// At the time of scoring pg1 contained 3 pods. Racks 1 and 2 both fit all 3 pods, and were scored equally by PodGroupPodsCount.
-					// NodeResourcesFit with the default mostAllocated strategy scored rack2 higher than rack1.
+					// 打分细节：
+					// 打分时 pg1 包含 3 个 Pod。机架 1 和 2 都能容纳全部 3 个 Pod，因此 PodGroupPodsCount 给它们的评分相同。
+					// 使用默认 mostAllocated 策略的 NodeResourcesFit 给 rack2 的评分高于 rack1。
 					VerifyAssignments: &stepsframework.VerifyAssignments{
 						Pods:  []string{"p1", "p2", "p3", "p4"},
 						Nodes: sets.New("node4-rack2", "node5-rack2"),
@@ -1118,10 +1118,10 @@ func TestTopologyAwareSchedulingWithBasicPolicy(t *testing.T) {
 					Name:                 "Verify the entire podgroup is now scheduled",
 					WaitForPodsScheduled: []string{"p1", "p2", "p3"},
 				},
-				// Each node has 2 CPUs, each of gang pods requests 1 CPU.
-				// Scores are first calculated when scheduling the first pod, without the knowledge how many pods would be in the podgroup.
-				// PodGroupPodsCount will score the same for each rack (because both racks can fit the first pod).
-				// NodeResourcesFit will compute allocation fractions in racks (for the default "most allocated" strategy the highest allocation is picked):
+				// 每个节点有 2 个 CPU，gang 中每个 Pod 请求 1 个 CPU。
+				// 分数是在调度第一个 Pod 时计算的，此时并不知道 podgroup 中会有多少个 Pod。
+				// PodGroupPodsCount 对每个机架的评分相同（因为两个机架都能容纳第一个 Pod）。
+				// NodeResourcesFit 会计算机架中的分配比例（默认的 "most allocated" 策略取最高分配值）：
 				// - rack1: 1/4 = 0.25
 				// - rack2: 1/6 = 0.17
 				{
@@ -1175,10 +1175,10 @@ func TestTopologyAwareSchedulingWithBasicPolicy(t *testing.T) {
 					Name:                 "Verify the entire podgroup is now scheduled",
 					WaitForPodsScheduled: []string{"p1", "p2", "p3"},
 				},
-				// Each node has 2 CPUs, each of podgroup pods requests 1 CPU.
-				// Scores are first calculated when scheduling the first pod, without the knowledge how many pods would be in the podgroup.
-				// PodGroupPodsCount will score the same for each rack (because both racks can fit the first pod).
-				// NodeResourcesFit will compute allocation fractions in racks (for the default "most allocated" strategy the highest allocation is picked):
+				// 每个节点有 2 个 CPU，podgroup 中每个 Pod 请求 1 个 CPU。
+				// 分数是在调度第一个 Pod 时计算的，此时并不知道 podgroup 中会有多少个 Pod。
+				// PodGroupPodsCount 对每个机架的评分相同（因为两个机架都能容纳第一个 Pod）。
+				// NodeResourcesFit 会计算机架中的分配比例（默认的 "most allocated" 策略取最高分配值）：
 				// - rack1: 2/6 = 0.33
 				// - rack2: 3/6 = 0.5
 				// - rack3: 1/8 = 0.125
@@ -1215,9 +1215,9 @@ func TestTopologyAwareSchedulingWithBasicPolicy(t *testing.T) {
 					CreatePodGroup: makeBasicPodGroup("pg1", "rack"),
 				},
 				{
-					// Fixing test flakiness:
-					// To make the test behave deterministically, first create 1 pod, based on which scores will be
-					// calculated, and only add more pods once the first is scheduled.
+					// 修复测试的不稳定性：
+					// 为使测试行为确定，先创建 1 个 Pod，并基于它计算分数，
+					// 待第一个 Pod 调度完成后再添加更多 Pod。
 					Name: "Create the first pod belonging to the podgroup",
 					CreatePods: []*v1.Pod{
 						makePod("p1", "pg1"),
@@ -1234,10 +1234,10 @@ func TestTopologyAwareSchedulingWithBasicPolicy(t *testing.T) {
 						makePod("p3", "pg1"),
 					},
 				},
-				// Each node has 2 CPUs, podgroup pods request 1 or 2 CPUs.
-				// Scores are first calculated when scheduling the first pod, without the knowledge how many pods would be in the podgroup.
-				// PodGroupPodsCount will score the same for each rack (because both racks can fit the first pod).
-				// NodeResourcesFit will compute allocation fractions in racks (for the default "most allocated" strategy the highest allocation is picked):
+				// 每个节点有 2 个 CPU，podgroup 的 Pod 请求 1 或 2 个 CPU。
+				// 分数是在调度第一个 Pod 时计算的，此时并不知道 podgroup 中会有多少个 Pod。
+				// PodGroupPodsCount 对每个机架的评分相同（因为两个机架都能容纳第一个 Pod）。
+				// NodeResourcesFit 会计算机架中的分配比例（默认的 "most allocated" 策略取最高分配值）：
 				// - rack1: 3/8 = 0.375
 				// - rack2: 1/2 = 0.5
 				{
@@ -1295,10 +1295,10 @@ func TestTopologyAwareSchedulingWithBasicPolicy(t *testing.T) {
 					Name:                 "Verify the entire podgroup pg1 is now scheduled",
 					WaitForPodsScheduled: []string{"p1", "p2"},
 				},
-				// Each node has 2 CPUs, podgroup pods request 1 or 2 CPUs.
-				// Scores are first calculated when scheduling the first pod, without the knowledge how many pods would be in the podgroup.
-				// PodGroupPodsCount will score the same for each rack (because both racks can fit the first pod).
-				// Allocation fractions in racks (for the default "most allocated" strategy the highest allocation is picked):
+				// 每个节点有 2 个 CPU，podgroup 的 Pod 请求 1 或 2 个 CPU。
+				// 分数是在调度第一个 Pod 时计算的，此时并不知道 podgroup 中会有多少个 Pod。
+				// PodGroupPodsCount 对每个机架的评分相同（因为两个机架都能容纳第一个 Pod）。
+				// 各机架的分配比例（默认的 "most allocated" 策略取最高分配值）：
 				// - rack1: 1/6 = 0.17
 				// - rack2: 1/2 = 0.5
 				{
@@ -1433,9 +1433,9 @@ func TestTopologyAwareSchedulingWithBasicPolicy(t *testing.T) {
 					CreatePodGroup: makeBasicPodGroup("pg1", "rack"),
 				},
 				{
-					// Fixing test flakiness:
-					// To make the test behave deterministically, first create 1 pod, based on which scores will be
-					// calculated, and only add more pods once the first is scheduled.
+					// 修复测试的不稳定性：
+					// 为使测试行为确定，先创建 1 个 Pod，并基于它计算分数，
+					// 待第一个 Pod 调度完成后再添加更多 Pod。
 					Name: "Create the first pod belonging to the podgroup",
 					CreatePods: []*v1.Pod{
 						makePod("p1", "pg1"),
@@ -1460,10 +1460,10 @@ func TestTopologyAwareSchedulingWithBasicPolicy(t *testing.T) {
 					Name:                     "Verify the last pod becomes unschedulable due to insufficient resources",
 					WaitForPodsUnschedulable: []string{"p3"},
 				},
-				// Each node has 2 CPUs, each of gang pods requests 1 CPU.
-				// Scores are first calculated when scheduling the first pod, without the knowledge how many pods would be in the podgroup.
-				// PodGroupPodsCount will score the same for each rack (because both racks can fit the first pod).
-				// Allocation fractions in racks (for the default "most allocated" strategy the highest allocation is picked):
+				// 每个节点有 2 个 CPU，gang 中每个 Pod 请求 1 个 CPU。
+				// 分数是在调度第一个 Pod 时计算的，此时并不知道 podgroup 中会有多少个 Pod。
+				// PodGroupPodsCount 对每个机架的评分相同（因为两个机架都能容纳第一个 Pod）。
+				// 各机架的分配比例（默认的 "most allocated" 策略取最高分配值）：
 				// - rack1: 1/4 = 0.25
 				// - rack2: 1/2 = 0.5
 				{
@@ -1523,9 +1523,9 @@ func TestTopologyAwareSchedulingWithBasicPolicy(t *testing.T) {
 					CreatePodGroup: makeBasicPodGroup("pg1", "rack"),
 				},
 				{
-					// Fixing test flakiness:
-					// To make the test behave deterministically, first create 1 pod, based on which scores will be
-					// calculated, and only add more pods once the first is scheduled.
+					// 修复测试的不稳定性：
+					// 为使测试行为确定，先创建 1 个 Pod，并基于它计算分数，
+					// 待第一个 Pod 调度完成后再添加更多 Pod。
 					Name: "Create the first pod belonging to the podgroup",
 					CreatePods: []*v1.Pod{
 						makePod("p1", "pg1"),

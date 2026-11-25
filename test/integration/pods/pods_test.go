@@ -94,7 +94,7 @@ func TestPodTopologyLabels(t *testing.T) {
 			targetNodeLabels: map[string]string{
 				"topology.kubernetes.io/zone":   "zone",
 				"topology.kubernetes.io/region": "region",
-				"topology.kubernetes.io/abc":    "456", // this label isn't in (zone, region) so isn't copied
+				"topology.kubernetes.io/abc":    "456", // 该标签不属于 (zone, region)，因此不会被复制
 			},
 			expectedPodLabels: map[string]string{
 				"topology.kubernetes.io/zone":   "zone",
@@ -103,8 +103,8 @@ func TestPodTopologyLabels(t *testing.T) {
 			},
 		},
 	}
-	// Enable the feature BEFORE starting the test server, as the admission plugin only checks feature gates
-	// on start up and not on each invocation at runtime.
+	// 在启动测试服务器之前启用该特性，因为准入插件只在启动时检查 feature gate，
+	// 而不会在运行时每次调用时检查。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodTopologyLabelsAdmission, true)
 	testPodTopologyLabels(t, tests)
@@ -123,16 +123,16 @@ func TestPodTopologyLabels_FeatureDisabled(t *testing.T) {
 			expectedPodLabels: map[string]string{},
 		},
 	}
-	// Disable the feature BEFORE starting the test server, as the admission plugin only checks feature gates
-	// on start up and not on each invocation at runtime.
+	// 在启动测试服务器之前禁用该特性，因为准入插件只在启动时检查 feature gate，
+	// 而不会在运行时每次调用时检查。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodTopologyLabelsAdmission, false)
 	testPodTopologyLabels(t, tests)
 }
 
-// podTopologyTestCase is defined outside of TestPodTopologyLabels to allow us to re-use the test implementation logic
-// between the feature enabled and feature disabled tests.
-// This will no longer be required once the feature gate graduates to GA/locked to being enabled.
+// podTopologyTestCase 定义在 TestPodTopologyLabels 之外，以便我们在特性启用和
+// 禁用的测试之间复用测试实现逻辑。
+// 当 feature gate 进阶到 GA/锁定为启用后，就不再需要这样做了。
 type podTopologyTestCase struct {
 	name              string
 	targetNodeLabels  map[string]string
@@ -172,9 +172,9 @@ func testPodTopologyLabels(t *testing.T, tests []podTopologyTestCase) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Create the Node we are going to bind to.
+			// 创建要绑定到的 Node。
 			node := prototypeNode()
-			// Set the labels on the Node we are going to create.
+			// 设置要创建的 Node 上的标签。
 			node.Labels = test.targetNodeLabels
 			ctx := context.Background()
 
@@ -212,7 +212,7 @@ func testPodTopologyLabels(t *testing.T, tests []podTopologyTestCase) {
 }
 
 func TestPodUpdateActiveDeadlineSeconds(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -292,7 +292,7 @@ func TestPodUpdateActiveDeadlineSeconds(t *testing.T) {
 			update:   &iNeg,
 			valid:    false,
 		},
-		// zero is not allowed, must be a positive integer
+		// 不允许为零，必须是正整数
 		{
 			name:     "change to zero from positive",
 			original: &i30,
@@ -330,7 +330,7 @@ func TestPodUpdateActiveDeadlineSeconds(t *testing.T) {
 }
 
 func TestPodReadOnlyFilesystem(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -365,7 +365,7 @@ func TestPodReadOnlyFilesystem(t *testing.T) {
 }
 
 func TestPodCreateEphemeralContainers(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -408,8 +408,8 @@ func TestPodCreateEphemeralContainers(t *testing.T) {
 	}
 }
 
-// setUpEphemeralContainers creates a pod that has Ephemeral Containers. This is a two step
-// process because Ephemeral Containers are not allowed during pod creation.
+// setUpEphemeralContainers 创建一个带有 Ephemeral Container 的 Pod。由于
+// 在 Pod 创建时不允许设置 Ephemeral Container，因此需要分两步完成。
 func setUpEphemeralContainers(podsClient typedv1.PodInterface, pod *v1.Pod, containers []v1.EphemeralContainer) (*v1.Pod, error) {
 	result, err := podsClient.Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
@@ -434,7 +434,7 @@ func setUpEphemeralContainers(podsClient typedv1.PodInterface, pod *v1.Pod, cont
 }
 
 func TestPodPatchEphemeralContainers(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -504,8 +504,8 @@ func TestPodPatchEphemeralContainers(t *testing.T) {
 			name:      "create single container (JSON)",
 			original:  nil,
 			patchType: types.JSONPatchType,
-			// Because ephemeralContainers is optional, a JSON patch of an empty ephemeralContainers must add the
-			// list rather than simply appending to it.
+			// 由于 ephemeralContainers 是可选字段，对空的 ephemeralContainers 执行 JSON patch
+			// 时必须添加整个列表，而不能只是向其中追加。
 			patchBody: []byte(`[{
 				"op":"add",
 				"path":"/spec/ephemeralContainers",
@@ -628,7 +628,7 @@ func TestPodPatchEphemeralContainers(t *testing.T) {
 			},
 			patchType: types.JSONPatchType,
 			patchBody: []byte(`[{"op":"remove","path":"/spec/ephemeralContainers/0"}]`),
-			valid:     false, // disallowed by policy rather than patch semantics
+			valid:     false, // 由于策略而非 patch 语义被禁止
 		},
 		{
 			name: "remove all containers (JSON)",
@@ -644,7 +644,7 @@ func TestPodPatchEphemeralContainers(t *testing.T) {
 			},
 			patchType: types.JSONPatchType,
 			patchBody: []byte(`[{"op":"remove","path":"/spec/ephemeralContainers"}]`),
-			valid:     false, // disallowed by policy rather than patch semantics
+			valid:     false, // 由于策略而非 patch 语义被禁止
 		},
 	}
 
@@ -665,7 +665,7 @@ func TestPodPatchEphemeralContainers(t *testing.T) {
 }
 
 func TestPodUpdateEphemeralContainers(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -910,7 +910,7 @@ func TestPodResizeRBAC(t *testing.T) {
 
 	for i, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			// 1. Create a test pod.
+			// 1. 创建测试 Pod。
 			pod := testPod(fmt.Sprintf("resize-%d", i))
 			resp, err := adminClient.CoreV1().Pods(ns.Name).Create(context.TODO(), pod, metav1.CreateOptions{})
 			if err != nil {
@@ -918,10 +918,10 @@ func TestPodResizeRBAC(t *testing.T) {
 				integration.DeletePodOrErrorf(t, adminClient, ns.Name, pod.Name)
 			}
 
-			// 2. Create a service account and fetch its client.
+			// 2. 创建 service account 并获取其客户端。
 			saClient := tc.serviceAccountFn(t, adminClient, server.ClientConfig, []rbacv1.PolicyRule{tc.serviceAccountRBAC})
 
-			// 3. Update pod and check whether it should be allowed.
+			// 3. 更新 Pod，检查是否应当被允许。
 			resp.Spec.Containers[0].Image = "updated-image"
 			if _, err := saClient.CoreV1().Pods(ns.Name).Update(context.TODO(), resp, metav1.UpdateOptions{}); err == nil && !tc.allowUpdate {
 				t.Fatalf("Unexpected allowed pod update")
@@ -931,7 +931,7 @@ func TestPodResizeRBAC(t *testing.T) {
 				integration.DeletePodOrErrorf(t, adminClient, ns.Name, pod.Name)
 			}
 
-			// 4. Resize pod container resource and check whether it should be allowed.
+			// 4. 调整 Pod 容器资源，检查是否应当被允许。
 			resp, err = adminClient.CoreV1().Pods(ns.Name).Get(context.TODO(), resp.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("Unexpected error when fetching the pod: %v", err)
@@ -952,7 +952,7 @@ func TestPodResizeRBAC(t *testing.T) {
 				integration.DeletePodOrErrorf(t, adminClient, ns.Name, pod.Name)
 			}
 
-			// 5. Delete the test pod.
+			// 5. 删除测试 Pod。
 			integration.DeletePodOrErrorf(t, adminClient, ns.Name, pod.Name)
 		})
 	}
@@ -960,7 +960,7 @@ func TestPodResizeRBAC(t *testing.T) {
 
 func TestPodResize(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScaling, true)
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -1044,7 +1044,7 @@ func TestPodResize(t *testing.T) {
 			integration.DeletePodOrErrorf(t, client, ns.Name, pod.Name)
 		}
 
-		// Part 1. Resize
+		// 第 1 部分：扩容调整
 		resp.Spec.Containers[0].Resources = tc.resize
 		if _, err := client.CoreV1().Pods(ns.Name).Update(context.TODO(), resp, metav1.UpdateOptions{}); err == nil {
 			t.Fatalf("Unexpected allowed pod update")
@@ -1064,7 +1064,7 @@ func TestPodResize(t *testing.T) {
 			integration.DeletePodOrErrorf(t, client, ns.Name, pod.Name)
 		}
 
-		// Part 2. Rollback
+		// 第 2 部分：回滚
 		if !tc.valid {
 			integration.DeletePodOrErrorf(t, client, ns.Name, pod.Name)
 			continue
@@ -1206,7 +1206,7 @@ func TestPodResize(t *testing.T) {
 }
 
 func TestMutablePodSchedulingDirectives(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -1302,7 +1302,7 @@ func TestMutablePodSchedulingDirectives(t *testing.T) {
 					Affinity: &v1.Affinity{
 						NodeAffinity: &v1.NodeAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								// Add 1 MatchExpression and 1 MatchField.
+								// 增加 1 个 MatchExpression 和 1 个 MatchField。
 								NodeSelectorTerms: []v1.NodeSelectorTerm{
 									{
 										MatchExpressions: []v1.NodeSelectorRequirement{
@@ -1363,7 +1363,7 @@ func TestMutablePodSchedulingDirectives(t *testing.T) {
 					Affinity: &v1.Affinity{
 						NodeAffinity: &v1.NodeAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								// Add 1 MatchExpression and 1 MatchField.
+								// 增加 1 个 MatchExpression 和 1 个 MatchField。
 								NodeSelectorTerms: []v1.NodeSelectorTerm{
 									{
 										MatchExpressions: []v1.NodeSelectorRequirement{
@@ -1404,7 +1404,7 @@ func TestMutablePodSchedulingDirectives(t *testing.T) {
 }
 
 func TestDNSSearchValidation(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -1603,7 +1603,7 @@ func TestNodeDeclaredFeatureAdmission(t *testing.T) {
 				limit200 := resource.MustParse("200Mi")
 				pod.Spec.Volumes[1].EmptyDir.SizeLimit = &limit200
 			},
-			// Regular validation will throw an error for this case, but NDF should not.
+			// 常规校验在这种情况下会报错，但 NDF 不应报错。
 			expectError: "Forbidden: sizeLimit is only mutable for memory-backed emptyDir volumes",
 		},
 	}
@@ -1750,7 +1750,7 @@ func TestPodResizeValidation(t *testing.T) {
 		{
 			name:            "fail resize exceeding node allocatable",
 			targetNode:      "linux-node-small",
-			resizeCPU:       "4", // Node only has 2
+			resizeCPU:       "4", // Node 只有 2
 			expectError:     "node didn't have enough allocatable resources: cpu",
 			expectCauseType: "NodeCapacity",
 		},
@@ -1808,7 +1808,7 @@ func TestPodResizeValidation(t *testing.T) {
 func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, true)
 
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -1826,10 +1826,10 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 	pReq := cpu("3")
 	pLim := cpu("4")
 
-	aggReq := cpu("2") // aggregated request for the 2 container cases
-	aggLim := cpu("4") // aggregated limit for the 2 containers cases
+	aggReq := cpu("2") // 2 容器用例的聚合 request
+	aggLim := cpu("4") // 2 容器用例的聚合 limit
 
-	// For generating test case names.
+	// 用于生成测试用例名称。
 	quantityName := func(q v1.ResourceList) string {
 		switch {
 		case len(q) == 0:
@@ -1854,7 +1854,7 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			return "none"
 		}
 		summary := quantityName(reqs) + "+" + quantityName(lims)
-		return strings.Trim(summary, "+") // Remove + if either reqs or lims is nil
+		return strings.Trim(summary, "+") // 当 reqs 或 lims 为空时移除 +
 	}
 
 	type resources struct {
@@ -1890,13 +1890,13 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			expected: resources{pLim, pLim, nil, nil},
 		}, {
 			initial:  resources{nil, pLim, nil, cLim},
-			expected: resources{cLim, pLim, cLim, cLim}, // Pod requests default to container requests
+			expected: resources{cLim, pLim, cLim, cLim}, // Pod request 默认为容器 request
 		}, {
 			initial:  resources{nil, pLim, cReq, nil},
-			expected: resources{cReq, pLim, cReq, nil}, // Pod requests default to container requests
+			expected: resources{cReq, pLim, cReq, nil}, // Pod request 默认为容器 request
 		}, {
 			initial:  resources{nil, pLim, cReq, cLim},
-			expected: resources{cReq, pLim, cReq, cLim}, // Pod requests default to container requests
+			expected: resources{cReq, pLim, cReq, cLim}, // Pod request 默认为容器 request
 		}, {
 			initial:  resources{pReq, nil, nil, nil},
 			expected: resources{pReq, nil, nil, nil},
@@ -1936,7 +1936,7 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			initial:  resources{pReq, pLim, cReq, cLim},
 			expected: resources{pReq, pLim, cReq, cLim},
 		},
-		// 2 Container cases
+		// 2 容器用例
 		{
 			secondContainer: true,
 			initial:         resources{nil, nil, nil, nil},
@@ -2019,22 +2019,22 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			initial:         resources{pReq, pLim, cReq, cLim},
 			expected:        resources{pReq, pLim, cReq, cLim},
 		},
-		// The following test cases invert the container & pod values to test error conditions.
+		// 以下测试用例交换容器与 Pod 的值，以测试错误情况。
 		{
 			initial:     resources{nil, cLim, nil, pLim},
 			expectError: true, // cLim < pLim
 		}, {
 			initial:     resources{nil, cLim, pReq, nil},
-			expectError: true, // Pod defaulted reqs to pReq > cLim
+			expectError: true, // Pod request 默认为 pReq，大于 cLim
 		}, {
 			initial:     resources{nil, cLim, pReq, pLim},
-			expectError: true, // Pod defaulted reqs to pReq > cLim
+			expectError: true, // Pod request 默认为 pReq，大于 cLim
 		}, {
 			initial:     resources{nil, cLim, cReq, pLim},
-			expectError: true, // Individual container limits must be <= pod limits
+			expectError: true, // 单个容器 limit 必须 <= Pod limit
 		}, {
 			initial:     resources{cReq, nil, nil, pLim},
-			expectError: true, // Container defaulted reqs to pLim > cReq
+			expectError: true, // 容器 request 默认为 pLim，大于 cReq
 		}, {
 			initial:     resources{cReq, nil, pReq, nil},
 			expectError: true, // cReq < pReq
@@ -2044,7 +2044,7 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 		}, {
 			secondContainer: true,
 			initial:         resources{nil, cLim, nil, cLim},
-			expectError:     true, // pod req defaults to 2x cLim
+			expectError:     true, // Pod request 默认为 2 倍 cLim
 		}, {
 			secondContainer: true,
 			initial:         resources{nil, cLim, cReq, cLim},
@@ -2366,10 +2366,10 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			expectError: true,
 		},
 		// ---------------------------------------------------------------------
-		// Feature Gate Comparison Test Cases (Disabled vs. Enabled Side-by-Side)
+		// Feature Gate 对比测试用例（禁用与启用并列）
 		// ---------------------------------------------------------------------
 
-		// 1. PR #137150: Empty pod resources QoS determination (BestEffort vs Guaranteed)
+		// 1. PR #137150：空 Pod 资源的 QoS 判定（BestEffort 与 Guaranteed）
 		{
 			name:             "Empty pod resources QoS determination (fix disabled)",
 			featureOverrides: featuregatetesting.FeatureOverrides{features.PodLevelResourcesFixKubeletQOSClass: false},
@@ -2429,7 +2429,7 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			expectedQOS: v1.PodQOSGuaranteed,
 		},
 
-		// 2. PR #140514: Pod limits defaulted from container aggregate limits
+		// 2. PR #140514：Pod limit 默认取自容器聚合 limit
 		{
 			name:             "PodLevelResourcesFixDefaulting disabled: pod limits not defaulted from container limits",
 			featureOverrides: featuregatetesting.FeatureOverrides{features.PodLevelResourcesFixDefaulting: false},
@@ -2445,7 +2445,7 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			expected:         resources{aggLim, aggLim, cLim, cLim},
 		},
 
-		// 3. PR #140514: Pod requests defaulted from containers when pod limits empty
+		// 3. PR #140514：当 Pod limit 为空时，Pod request 默认取自容器
 		{
 			name:             "PodLevelResourcesFixDefaulting disabled: pod requests not defaulted from containers when pod limits empty",
 			featureOverrides: featuregatetesting.FeatureOverrides{features.PodLevelResourcesFixDefaulting: false},
@@ -2459,7 +2459,7 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			expected:         resources{nil, nil, cReq, nil},
 		},
 
-		// 4. PR #140514: Pod limits raised to pod request when aggregate container limit < pod request
+		// 4. PR #140514：当容器聚合 limit 小于 Pod request 时，Pod limit 被提升到 Pod request
 		{
 			name:             "PodLevelResourcesFixDefaulting disabled: pod limit not defaulted when aggregate limit less than pod request",
 			featureOverrides: featuregatetesting.FeatureOverrides{features.PodLevelResourcesFixDefaulting: false},
@@ -2475,7 +2475,7 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 			expected:         resources{pReq, pReq, cReq, cReq},
 		},
 
-		// 5. PR #140514: Pod requests and limits defaulted from 2 containers when pod limits empty
+		// 5. PR #140514：当 Pod limit 为空时，Pod request 和 limit 默认取自 2 个容器
 		{
 			name:             "PodLevelResourcesFixDefaulting disabled: pod requests and limits not defaulted from 2 containers when pod limits empty",
 			featureOverrides: featuregatetesting.FeatureOverrides{features.PodLevelResourcesFixDefaulting: false},
@@ -2599,9 +2599,9 @@ func TestPodLevelResourcesValidationAndDefaulting(t *testing.T) {
 	}
 }
 
-// TestDRAStatusPreservedOnStatusUpdate verifies that the apiserver preserves
-// ResourceClaimStatuses when a DRA-unaware client overwrites the status of a
-// running pod and omits fields that it does not know about.
+// TestDRAStatusPreservedOnStatusUpdate 验证当不了解 DRA 的客户端覆盖运行中 Pod
+// 的 status 并省略其不认识的字段时，apiserver 会保留
+// ResourceClaimStatuses。
 func TestDRAStatusPreservedOnStatusUpdate(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DynamicResourceAllocation, true)
 
@@ -2634,7 +2634,7 @@ func TestDRAStatusPreservedOnStatusUpdate(t *testing.T) {
 		t.Fatalf("create pod: %v", err)
 	}
 
-	// Simulate DRA controller writing resourceClaimStatuses.
+	// 模拟 DRA 控制器写入 resourceClaimStatuses。
 	wantStatuses := []v1.PodResourceClaimStatus{
 		{Name: "gpu", ResourceClaimName: new("dra-pod-gpu")},
 	}
@@ -2647,9 +2647,9 @@ func TestDRAStatusPreservedOnStatusUpdate(t *testing.T) {
 		t.Fatal("ResourceClaimStatuses not persisted after initial UpdateStatus")
 	}
 
-	// Simulate an old DRA-unaware client (e.g. Multus using k8s.io/client-go v0.29)
-	// calling UpdateStatus to write annotations. The round-tripped pod omits
-	// ResourceClaimStatuses because the old client does not know the field.
+	// 模拟一个不了解 DRA 的旧客户端（例如使用 k8s.io/client-go v0.29 的 Multus）
+	// 调用 UpdateStatus 写入 annotation。由于旧客户端不认识该字段，
+	// 往返后的 Pod 会省略 ResourceClaimStatuses。
 	oldClientPod := pod.DeepCopy()
 	oldClientPod.Status.ResourceClaimStatuses = nil
 
@@ -2662,8 +2662,7 @@ func TestDRAStatusPreservedOnStatusUpdate(t *testing.T) {
 		t.Errorf("ResourceClaimStatuses changed after old-client UpdateStatus (-want,+got):\n%s", diff)
 	}
 
-	// An explicit empty list remains a valid way for a field-aware client to
-	// clear a slice field.
+	// 对于认识该字段的客户端，显式传入空列表仍然是清空 slice 字段的有效方式。
 	clearPatch := []byte(`{"status":{"resourceClaimStatuses":[]}}`)
 	cleared, err := client.CoreV1().Pods(ns.Name).Patch(ctx, pod.Name, types.MergePatchType, clearPatch, metav1.PatchOptions{}, "status")
 	if err != nil {

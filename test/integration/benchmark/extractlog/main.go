@@ -31,14 +31,14 @@ func main() {
 	}
 }
 
-// A json log entry contains keys such as "Time", "Action", "Package" and "Output".
-// We are only interested in "Output", which is the raw log.
+// json 日志条目包含 "Time"、"Action"、"Package" 和 "Output" 等键。
+// 我们只关心 "Output"，即原始日志。
 type jsonLog struct {
 	Output string `json:"output,omitempty"`
 }
 
-// jsonToRawLog converts a single line of json formatted log to raw log.
-// If there is an error, it returns the original input.
+// jsonToRawLog 将单行 json 格式的日志转换为原始日志。
+// 如果出现错误，则返回原始输入。
 func jsonToRawLog(line string) (string, error) {
 	var log jsonLog
 	if err := json.Unmarshal([]byte(line), &log); err != nil {
@@ -51,7 +51,7 @@ func extractRawLog(r io.Reader) error {
 	scan := bufio.NewScanner(r)
 	for scan.Scan() {
 		l, _ := jsonToRawLog(scan.Text())
-		// Print the raw log to stdout.
+		// 将原始日志打印到标准输出。
 		fmt.Println(l)
 	}
 	if err := scan.Err(); err != nil {

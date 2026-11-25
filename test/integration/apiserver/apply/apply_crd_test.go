@@ -44,8 +44,8 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestApplyCRDStructuralSchema tests that when a CRD has a structural schema in its validation field,
-// it will be used to construct the CR schema used by apply.
+// TestApplyCRDStructuralSchema 测试当 CRD 的 validation 字段中包含结构化 schema 时，
+// 该 schema 会被用于构造 apply 所使用的 CR schema。
 func TestApplyCRDStructuralSchema(t *testing.T) {
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), nil, framework.SharedEtcd())
 	if err != nil {
@@ -162,7 +162,7 @@ spec:
 	verifyReplicas(t, result, 1)
 	verifyNumPorts(t, result, 1)
 
-	// Patch object to add another finalizer to the finalizers list
+	// Patch 对象，向 finalizers 列表添加另一个 finalizer
 	result, err = rest.Patch(types.MergePatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -175,7 +175,7 @@ spec:
 	verifyFinalizersIncludes(t, result, "test-finalizer")
 	verifyFinalizersIncludes(t, result, "another-one")
 
-	// Re-apply the same config, should work fine, since finalizers should have the list-type extension 'set'.
+	// 重新 apply 相同的配置应能正常进行，因为 finalizers 应带有 list-type 扩展 'set'。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -190,7 +190,7 @@ spec:
 	verifyFinalizersIncludes(t, result, "test-finalizer")
 	verifyFinalizersIncludes(t, result, "another-one")
 
-	// Patch object to change the number of replicas
+	// Patch 对象以修改副本数
 	result, err = rest.Patch(types.MergePatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -201,7 +201,7 @@ spec:
 	}
 	verifyReplicas(t, result, 5)
 
-	// Re-apply, we should get conflicts now, since the number of replicas was changed.
+	// 再次 apply 时应当出现冲突，因为副本数已被修改。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -219,7 +219,7 @@ spec:
 		t.Fatalf("Expecting to get one conflict when applying object after updating replicas, got: %v", status.Status().Details.Causes)
 	}
 
-	// Re-apply with force, should work fine.
+	// 使用 force 重新 apply 应能正常进行。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -232,7 +232,7 @@ spec:
 	}
 	verifyReplicas(t, result, 1)
 
-	// New applier tries to edit an existing list item, we should get conflicts.
+	// 新的 applier 尝试修改已有列表项时应当出现冲突。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -259,7 +259,7 @@ spec:
 		t.Fatalf("Expecting to get one conflict when a different applier updates existing list item, got: %v", status.Status().Details.Causes)
 	}
 
-	// New applier tries to add a new list item, should work fine.
+	// 新的 applier 尝试添加新的列表项应能正常进行。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -315,7 +315,7 @@ spec:
 	}
 }
 
-// verifyNumFinalizers checks that len(.metadata.finalizers) == n
+// verifyNumFinalizers 检查 len(.metadata.finalizers) == n
 func verifyNumFinalizers(t *testing.T, b []byte, n int) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)
@@ -327,7 +327,7 @@ func verifyNumFinalizers(t *testing.T, b []byte, n int) {
 	}
 }
 
-// verifyFinalizersIncludes checks that .metadata.finalizers includes e
+// verifyFinalizersIncludes 检查 .metadata.finalizers 是否包含 e
 func verifyFinalizersIncludes(t *testing.T, b []byte, e string) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)
@@ -342,7 +342,7 @@ func verifyFinalizersIncludes(t *testing.T, b []byte, e string) {
 	t.Fatalf("expected finalizers to include %q but got: %v", e, obj.GetFinalizers())
 }
 
-// verifyReplicas checks that .spec.replicas == r
+// verifyReplicas 检查 .spec.replicas == r
 func verifyReplicas(t *testing.T, b []byte, r int) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)
@@ -370,7 +370,7 @@ func verifyReplicas(t *testing.T, b []byte, r int) {
 	}
 }
 
-// verifyNumPorts checks that len(.spec.ports) == n
+// verifyNumPorts 检查 len(.spec.ports) == n
 func verifyNumPorts(t *testing.T, b []byte, n int) {
 	obj := unstructured.Unstructured{}
 	err := obj.UnmarshalJSON(b)
@@ -408,8 +408,8 @@ func findCRDCondition(crd *apiextensionsv1.CustomResourceDefinition, conditionTy
 	return nil
 }
 
-// TestApplyCRDUnhandledSchema tests that when a CRD has a schema that kube-openapi ToProtoModels cannot handle correctly,
-// apply falls back to non-schema behavior
+// TestApplyCRDUnhandledSchema 测试当 CRD 的 schema 无法被 kube-openapi ToProtoModels 正确处理时，
+// apply 会回退到非 schema 行为
 func TestApplyCRDUnhandledSchema(t *testing.T) {
 	storageConfig := framework.SharedEtcd()
 	server, err := apiservertesting.StartTestServer(t, apiservertesting.NewDefaultTestServerOptions(), nil, storageConfig)
@@ -425,7 +425,7 @@ func TestApplyCRDUnhandledSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// this has to be v1beta1, so we can have an item with validation that does not match.  v1 validation prevents this.
+	// 这里必须使用 v1beta1，这样才能存在一个校验不匹配的 item；v1 的校验会阻止这种情况。
 
 	noxuBetaDefinition := &apiextensionsv1beta1.CustomResourceDefinition{
 		TypeMeta: metav1.TypeMeta{
@@ -452,7 +452,7 @@ func TestApplyCRDUnhandledSchema(t *testing.T) {
 		},
 	}
 
-	// This is a schema that kube-openapi ToProtoModels does not handle correctly.
+	// 这是一个 kube-openapi ToProtoModels 无法正确处理的 schema。
 	// https://github.com/kubernetes/kubernetes/blob/38752f7f99869ed65fb44378360a517649dc2f83/vendor/k8s.io/kube-openapi/pkg/util/proto/document.go#L184
 	var c apiextensionsv1beta1.CustomResourceValidation
 	err = json.Unmarshal([]byte(`{
@@ -484,7 +484,7 @@ func TestApplyCRDUnhandledSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// wait until the CRD is established
+	// 等待 CRD 进入 established 状态
 	err = wait.Poll(100*time.Millisecond, 10*time.Second, func() (bool, error) {
 		localCrd, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), noxuBetaDefinition.Name, metav1.GetOptions{})
 		if err != nil {
@@ -526,7 +526,7 @@ spec:
 	}
 	verifyReplicas(t, result, 1)
 
-	// Patch object to change the number of replicas
+	// Patch 对象以修改副本数
 	result, err = rest.Patch(types.MergePatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -537,7 +537,7 @@ spec:
 	}
 	verifyReplicas(t, result, 5)
 
-	// Re-apply, we should get conflicts now, since the number of replicas was changed.
+	// 再次 apply 时应当出现冲突，因为副本数已被修改。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -555,7 +555,7 @@ spec:
 		t.Fatalf("Expecting to get one conflict when applying object after updating replicas, got: %v", status.Status().Details.Causes)
 	}
 
-	// Re-apply with force, should work fine.
+	// 使用 force 重新 apply 应能正常进行。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -682,7 +682,7 @@ spec:
 		t.Fatalf("failed to create custom resource with apply: %v:\n%v", err, string(result))
 	}
 
-	// New applier tries to edit an existing list item, we should get conflicts.
+	// 新的 applier 尝试修改已有列表项时应当出现冲突。
 	result, err = rest.Patch(types.ApplyPatchType).
 		AbsPath("/apis", noxuDefinition.Spec.Group, noxuDefinition.Spec.Versions[0].Name, noxuDefinition.Spec.Names.Plural).
 		Name(name).
@@ -770,7 +770,7 @@ func TestNoOpApplyWithDefaultsSameResourceVersionCRD(t *testing.T) {
 	gvr := schema.GroupVersionResource{Group: group, Version: version, Resource: resource}
 	name := "mytest"
 
-	// fieldWithDefault will be defaulted
+	// fieldWithDefault 将被填充默认值
 	applyConfiguration := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": apiVersion,
@@ -793,7 +793,7 @@ func TestNoOpApplyWithDefaultsSameResourceVersionCRD(t *testing.T) {
 		t.Fatalf("Failed to get meta accessor for updated object: %v", err)
 	}
 
-	// Sleep for one second to make sure that the times of each update operation is different.
+	// 休眠一秒，确保每次更新操作的时间不同。
 	time.Sleep(1 * time.Second)
 
 	updated, err := dynamicClient.Resource(gvr).Apply(context.TODO(), name, applyConfiguration, metav1.ApplyOptions{FieldManager: "apply_test"})

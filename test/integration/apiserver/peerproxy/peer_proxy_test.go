@@ -53,21 +53,21 @@ import (
 func TestPeerProxiedRequest(t *testing.T) {
 	ktesting.SetDefaultVerbosity(1)
 
-	// enable feature flags
+	// 启用 feature flag
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.APIServerIdentity:                   true,
 		features.UnknownVersionInteroperabilityProxy: true,
 	})
 
-	// create sharedetcd
+	// 创建共享 etcd
 	etcd := framework.SharedEtcd()
 
-	// create certificates for aggregation and client-cert auth
+	// 为 aggregation 和 client-cert 认证创建证书
 	proxyCA, err := createProxyCertContent()
 	require.NoError(t, err)
 
-	// start test server with all APIs enabled
-	// override hostname to ensure unique ips
+	// 启动启用了所有 API 的测试 server
+	// 覆盖 hostname 以确保 IP 唯一
 	server.SetHostnameFuncForTests("test-server-a")
 	serverA := kastesting.StartTestServerOrDie(t, &kastesting.TestServerInstanceOptions{
 		EnableCertAuth: true,
@@ -75,8 +75,8 @@ func TestPeerProxiedRequest(t *testing.T) {
 		[]string{"--runtime-config=api/all=true"}, etcd)
 	t.Cleanup(serverA.TearDownFn)
 
-	// start another test server with some api disabled
-	// override hostname to ensure unique ips
+	// 启动另一个禁用部分 API 的测试 server
+	// 覆盖 hostname 以确保 IP 唯一
 	server.SetHostnameFuncForTests("test-server-b")
 	serverB := kastesting.StartTestServerOrDie(t, &kastesting.TestServerInstanceOptions{
 		EnableCertAuth: true,
@@ -90,15 +90,15 @@ func TestPeerProxiedRequest(t *testing.T) {
 	kubeClientSetB, err := kubernetes.NewForConfig(serverB.ClientConfig)
 	require.NoError(t, err)
 
-	// create jobs resource using serverA
+	// 使用 serverA 创建 job 资源
 	job := createJobResource()
 	_, err = kubeClientSetA.BatchV1().Jobs("default").Create(context.Background(), job, metav1.CreateOptions{})
 	require.NoError(t, err)
 
 	klog.Infof("\nServerA has created jobs\n")
 
-	// List jobs using ServerB
-	// This request should be proxied to ServerA since ServerB does not have batch API enabled
+	// 使用 ServerB 列出 job
+	// 由于 ServerB 未启用 batch API，该请求应被代理到 ServerA
 	jobsB, err := kubeClientSetB.BatchV1().Jobs("default").List(context.Background(), metav1.ListOptions{})
 	klog.Infof("\nServerB has retrieved jobs list of length %v \n\n", len(jobsB.Items))
 	require.NoError(t, err)
@@ -109,38 +109,38 @@ func TestPeerProxiedRequest(t *testing.T) {
 func TestPeerProxiedRequestToThirdServerAfterFirstDies(t *testing.T) {
 	ktesting.SetDefaultVerbosity(1)
 
-	// enable feature flags
+	// 启用 feature flag
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.APIServerIdentity:                   true,
 		features.UnknownVersionInteroperabilityProxy: true,
 	})
 
-	// create sharedetcd
+	// 创建共享 etcd
 	etcd := framework.SharedEtcd()
 
-	// create certificates for aggregation and client-cert auth
+	// 为 aggregation 和 client-cert 认证创建证书
 	proxyCA, err := createProxyCertContent()
 	require.NoError(t, err)
 
-	// modify lease parameters so that they are garbage collected timely.
+	// 修改 lease 参数，以便及时回收。
 	controlplaneapiserver.IdentityLeaseDurationSeconds = 10
 	controlplaneapiserver.IdentityLeaseGCPeriod = 2 * time.Second
 	controlplaneapiserver.IdentityLeaseRenewIntervalPeriod = time.Second
 
-	// start serverA with all APIs enabled
-	// override hostname to ensure unique ips
+	// 启动启用了所有 API 的 serverA
+	// 覆盖 hostname 以确保 IP 唯一
 	server.SetHostnameFuncForTests("test-server-a")
 	t.Log("starting apiserver for ServerA")
 	serverA := kastesting.StartTestServerOrDie(t, &kastesting.TestServerInstanceOptions{EnableCertAuth: true, ProxyCA: &proxyCA}, []string{"--runtime-config=api/all=true"}, etcd)
 	kubeClientSetA, err := kubernetes.NewForConfig(serverA.ClientConfig)
 	require.NoError(t, err)
 
-	// reset lease duration to default value for serverB and serverC since we will not be
-	// shutting these down
+	// 将 serverB 和 serverC 的 lease duration 重置为默认值，因为我们不会
+	// 关闭它们
 	controlplaneapiserver.IdentityLeaseDurationSeconds = 3600
 
-	// start serverB with some api disabled
-	// override hostname to ensure unique ips
+	// 启动禁用了部分 API 的 serverB
+	// 覆盖 hostname 以确保 IP 唯一
 	server.SetHostnameFuncForTests("test-server-b")
 	t.Log("starting apiserver for ServerB")
 	serverB := kastesting.StartTestServerOrDie(t, &kastesting.TestServerInstanceOptions{EnableCertAuth: true, ProxyCA: &proxyCA}, []string{
@@ -149,24 +149,24 @@ func TestPeerProxiedRequestToThirdServerAfterFirstDies(t *testing.T) {
 	kubeClientSetB, err := kubernetes.NewForConfig(serverB.ClientConfig)
 	require.NoError(t, err)
 
-	// start serverC with all APIs enabled
-	// override hostname to ensure unique ips
+	// 启动启用了所有 API 的 serverC
+	// 覆盖 hostname 以确保 IP 唯一
 	server.SetHostnameFuncForTests("test-server-c")
 	t.Log("starting apiserver for ServerC")
 	serverC := kastesting.StartTestServerOrDie(t, &kastesting.TestServerInstanceOptions{EnableCertAuth: true, ProxyCA: &proxyCA}, []string{"--runtime-config=api/all=true"}, etcd)
 	t.Cleanup(serverC.TearDownFn)
 
-	// create jobs resource using serverA
+	// 使用 serverA 创建 job 资源
 	job := createJobResource()
 	_, err = kubeClientSetA.BatchV1().Jobs("default").Create(context.Background(), job, metav1.CreateOptions{})
 	require.NoError(t, err)
 	klog.Infof("\nServerA has created jobs\n")
 
-	// shutdown serverA
+	// 关闭 serverA
 	serverA.TearDownFn()
 
 	var jobsB *v1.JobList
-	// list jobs using ServerB which it should proxy to ServerC and get back valid response
+	// 使用 ServerB 列出 job，它应被代理到 ServerC 并返回有效响应
 	err = wait.PollUntilContextTimeout(t.Context(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		select {
 		case <-ctx.Done():
@@ -196,10 +196,10 @@ func TestPeerProxiedRequestToThirdServerAfterFirstDies(t *testing.T) {
 func TestPeerProxy_EgressDialerIsUsed(t *testing.T) {
 	ktesting.SetDefaultVerbosity(1)
 
-	// Start a HTTP CONNECT proxy to act as a fake egress dialer over UDS
+	// 启动一个 HTTP CONNECT proxy，作为基于 UDS 的伪 egress dialer
 	dialerHit, udsName := runMockEgressProxy(t)
 
-	// Write a temporary egress selector config file pointing to our proxy
+	// 写一个指向我们 proxy 的临时 egress selector 配置文件
 	egressSelectorConfigFile, err := os.CreateTemp("", "egress_selector_configuration.yaml")
 	require.NoError(t, err)
 	defer func() { _ = os.Remove(egressSelectorConfigFile.Name()) }()
@@ -227,7 +227,7 @@ egressSelections:
 	proxyCA, err := createProxyCertContent()
 	require.NoError(t, err)
 
-	// Start two apiservers, one with batch/v1 disabled
+	// 启动两个 apiserver，其中一个禁用 batch/v1
 	server.SetHostnameFuncForTests("test-server-egress-a")
 	serverA := kastesting.StartTestServerOrDie(t, &kastesting.TestServerInstanceOptions{
 		EnableCertAuth: true,
@@ -247,18 +247,18 @@ egressSelections:
 	kubeClientSetB, err := kubernetes.NewForConfig(serverB.ClientConfig)
 	require.NoError(t, err)
 
-	// create jobs resource using serverA
+	// 使用 serverA 创建 job 资源
 	job := createJobResource()
 	_, err = kubeClientSetA.BatchV1().Jobs("default").Create(context.Background(), job, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	// List jobs using ServerB (should be proxied to ServerA, hitting our dialer)
+	// 使用 ServerB 列出 job（应被代理到 ServerA，从而命中我们的 dialer）
 	jobsB, err := kubeClientSetB.BatchV1().Jobs("default").List(context.Background(), metav1.ListOptions{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, jobsB)
 	assert.Equal(t, job.Name, jobsB.Items[0].Name)
 
-	// Assert that our dialer was hit at least once
+	// 断言我们的 dialer 至少被命中一次
 	if atomic.LoadInt32(dialerHit) == 0 {
 		t.Errorf("expected egress dialer to be used, but it was not hit")
 	}
@@ -310,7 +310,7 @@ func runMockEgressProxy(t *testing.T) (*int32, string) {
 	require.NoError(t, err)
 	udsName := udsFile.Name()
 	_ = udsFile.Close()
-	_ = os.Remove(udsName) // Must remove so we can bind
+	_ = os.Remove(udsName) // 必须先删除，才能进行 bind
 
 	listener, err := net.Listen("unix", udsName)
 	require.NoError(t, err)
@@ -323,20 +323,20 @@ func runMockEgressProxy(t *testing.T) (*int32, string) {
 	proxy := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		atomic.AddInt32(dialerHit, 1)
 
-		// A standard HTTP CONNECT proxy proxies opaque TCP streams.
+		// 标准的 HTTP CONNECT proxy 代理的是不透明的 TCP 流。
 		if req.Method == http.MethodConnect {
-			// Actively establish a TCP connection to the destination API server
+			// 主动建立到目标 API server 的 TCP 连接
 			destConn, err := net.DialTimeout("tcp", req.Host, 5*time.Second)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				return
 			}
 
-			// Acknowledge the connection stream has opened successfully
+			// 确认连接流已成功建立
 			w.WriteHeader(http.StatusOK)
 
-			// 'Hijack' the underlying network connection away from Go's
-			// generic HTTP Server so we can use it as a raw TCP proxy socket.
+			// 通过 Hijack 劫持底层网络连接，使其脱离 Go 的
+			// 通用 HTTP Server，这样就能把它当作原始 TCP proxy socket 使用。
 			hijacker, ok := w.(http.Hijacker)
 			if !ok {
 				http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
@@ -348,8 +348,8 @@ func runMockEgressProxy(t *testing.T) (*int32, string) {
 				return
 			}
 
-			// Spin up two concurrent forwarding pipes to pass traffic between
-			// the client and the destination over our UDS socket.
+			// 启动两个并发的转发管道，通过我们的 UDS socket 在
+			// 客户端和目标之间传递流量。
 			go func() {
 				_, _ = io.Copy(destConn, clientConn)
 				_ = destConn.Close()

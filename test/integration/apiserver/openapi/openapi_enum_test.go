@@ -60,7 +60,7 @@ func TestEnablingOpenAPIEnumTypes(t *testing.T) {
 			getDefinitionsFn := openapi.GetOpenAPIDefinitionsWithoutDisabledFeatures(func(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 				defs := generated.GetOpenAPIDefinitions(ref)
 				def := defs[typeToCheckEnum]
-				// replace protocol to add the would-be enum field.
+				// 替换 protocol，加入本应存在的 enum 字段。
 				def.Schema.Properties["protocol"] = spec.Schema{
 					SchemaProps: spec.SchemaProps{
 						Description: "Protocol for port. Must be UDP, TCP, or SCTP. Defaults to \\\"TCP\\\".\\n\\nPossible enum values:\\n - `SCTP`: is the SCTP protocol.\\n - `TCP`: is the TCP protocol.\\n - `UDP`: is the UDP protocol.",

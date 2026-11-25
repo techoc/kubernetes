@@ -26,8 +26,8 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Speed up encryption config reload from the default 1 minute to 1 second.
-	// This variable is exported specifically for integration tests.
+	// 将加密配置重新加载的间隔从默认的 1 分钟缩短到 1 秒，以加快测试速度。
+	// 该变量是专门为集成测试导出的。
 	encryptionconfigcontroller.EncryptionConfigFileChangePollDuration = time.Second
 	framework.EtcdMain(m.Run)
 }

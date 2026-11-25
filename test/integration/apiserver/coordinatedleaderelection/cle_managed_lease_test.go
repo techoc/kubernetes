@@ -86,11 +86,9 @@ func TestSingleLeaseCandidateUsingThirdPartyStrategy(t *testing.T) {
 		{
 			name:              "third party strategy, no holder identity",
 			preferredStrategy: v1.CoordinatedLeaseStrategy("foo.com/bar"),
-			// Because a third-party CoordinatedLeaseStrategy is in use,
-			// the coordinated leader election controller doesn't manage
-			// the lease's leader election and does not set the holder identity,
-			// and leave it to some other controller. The lease will be created
-			// with the strategy set but holderIdentity set to nil.
+			// 由于使用了第三方 CoordinatedLeaseStrategy，协调式 leader election 控制器
+			// 不会管理该 Lease 的 leader election，也不会设置 holder identity，
+			// 而是交由其他控制器处理。创建 Lease 时会设置 strategy，但 holderIdentity 为 nil。
 			expectedHolderIdentity: nil,
 		},
 	}
@@ -125,9 +123,8 @@ func TestMultipleLeaseCandidate(t *testing.T) {
 		{
 			name:              "default strategy, has lease identity",
 			preferredStrategy: v1.OldestEmulationVersion,
-			// Because the OldestEmulationVersion strategy is used here, the
-			// the coordinated leader election controller will pick the candidate
-			// with OldestEmulationVersion and OldestBinaryVersion.
+			// 由于此处使用 OldestEmulationVersion 策略，协调式 leader election 控制器
+			// 将选出具有最旧 EmulationVersion 和 BinaryVersion 的候选者。
 			expectedHolderIdentity: ptr.To("baz3"),
 		},
 	}
@@ -166,11 +163,9 @@ func TestMultipleLeaseCandidateUsingThirdPartyStrategy(t *testing.T) {
 		{
 			name:              "third party strategy, no holder identity",
 			preferredStrategy: v1.CoordinatedLeaseStrategy("foo.com/bar"),
-			// Because a third-party CoordinatedLeaseStrategy is in use,
-			// the coordinated leader election controller doesn't manage
-			// the lease's leader election and does not set the holder identity,
-			// and leave it to some other controller. The lease will be created
-			// with the strategy set but holderIdentity set to nil.
+			// 由于使用了第三方 CoordinatedLeaseStrategy，协调式 leader election 控制器
+			// 不会管理该 Lease 的 leader election，也不会设置 holder identity，
+			// 而是交由其他控制器处理。创建 Lease 时会设置 strategy，但 holderIdentity 为 nil。
 			expectedHolderIdentity: nil,
 		},
 	}
@@ -223,7 +218,7 @@ func TestLeaseSwapIfBetterAvailable(t *testing.T) {
 	cletest.pollForLease(ctx, "bar", "default", ptr.To("bar2"))
 }
 
-// TestUpgradeSkew tests that a legacy client and a CLE aware client operating on the same lease do not cause errors
+// TestUpgradeSkew 测试旧版客户端与支持 CLE 的客户端操作同一 Lease 时不会引发错误
 func TestUpgradeSkew(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, genericfeatures.CoordinatedLeaderElection, true)
 
@@ -243,7 +238,7 @@ func TestUpgradeSkew(t *testing.T) {
 	go cletest.createAndRunFakeLegacyController("foo1-130", "default", "foobar")
 	cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-130"))
 	go cletest.createAndRunFakeController("foo1-131", "default", "foobar", "1.31.0", "1.31.0", v1.OldestEmulationVersion)
-	// running a new controller should not kick off old leader
+	// 运行新控制器不应踢掉旧的 leader
 	cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-130"))
 	cletest.cancelController("foo1-130", "default")
 	cletest.pollForLease(ctx, "foobar", "default", ptr.To("foo1-131"))

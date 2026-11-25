@@ -16,7 +16,7 @@ limitations under the License.
 
 package secrets
 
-// This file tests use of the secrets API resource.
+// 本文件测试 secrets API 资源的使用。
 
 import (
 	"context"
@@ -39,9 +39,9 @@ func deleteSecretOrErrorf(t *testing.T, c clientset.Interface, ns, name string) 
 	}
 }
 
-// TestSecrets tests apiserver-side behavior of creation of secret objects and their use by pods.
+// TestSecrets 测试 apiserver 侧创建 secret 对象以及 Pod 使用 secret 的行为。
 func TestSecrets(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission 插件，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -54,12 +54,12 @@ func TestSecrets(t *testing.T) {
 	DoTestSecretsImmutableWithEmptyValue(t, client, ns)
 }
 
-// DoTestSecretsImmutableWithEmptyValue Test whether apiserver will judge the secret data inconsistency
-// if the value of map in secret data is the empty string when patch secret,
-// and if the Immutable value of secret is true, the patch request is rejected.
+// DoTestSecretsImmutableWithEmptyValue 测试当 patch secret 时，
+// secret data 中 map 的值为空字符串的情况下，apiserver 是否会判定 secret 数据不一致，
+// 以及当 secret 的 Immutable 为 true 时，patch 请求是否会被拒绝。
 func DoTestSecretsImmutableWithEmptyValue(t *testing.T, client clientset.Interface, ns *v1.Namespace) {
-	// Make a secret object. Make a secret object. the map in the secret data contains the value of the empty string
-	// make Immutable true, so that if the apiserver judge that the patch secret is inconsistent, it will refuse the patch
+	// 创建一个 secret 对象。secret data 中的 map 包含空字符串值，
+	// 并将 Immutable 设为 true，这样如果 apiserver 判定 patch secret 不一致，就会拒绝该 patch。
 	trueVal := true
 	s := v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -77,7 +77,7 @@ func DoTestSecretsImmutableWithEmptyValue(t *testing.T, client clientset.Interfa
 	}
 	defer deleteSecretOrErrorf(t, client, s.Namespace, s.Name)
 
-	// Make a patch secret object
+	// 创建一个用于 patch 的 secret 对象。
 	patchSecret := v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "secret",
@@ -97,16 +97,16 @@ func DoTestSecretsImmutableWithEmptyValue(t *testing.T, client clientset.Interfa
 		t.Errorf("unable to marshal test secret: %v", err)
 	}
 
-	// Patch secret object, expect patch to succeed,
-	// more detailed discussion is at #119229
+	// patch secret 对象，预期 patch 成功，
+	// 更详细的讨论见 #119229。
 	if _, err := client.CoreV1().Secrets(s.Namespace).Patch(context.TODO(), patchSecret.Name, types.StrategicMergePatchType, secretPatch, metav1.PatchOptions{}); err != nil {
 		t.Errorf("unable to patch test secret: %v", err)
 	}
 }
 
-// DoTestSecrets test secrets for one api version.
+// DoTestSecrets 针对某一个 api 版本测试 secret。
 func DoTestSecrets(t *testing.T, client clientset.Interface, ns *v1.Namespace) {
-	// Make a secret object.
+	// 创建一个 secret 对象。
 	s := v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "secret",
@@ -122,7 +122,7 @@ func DoTestSecrets(t *testing.T, client clientset.Interface, ns *v1.Namespace) {
 	}
 	defer deleteSecretOrErrorf(t, client, s.Namespace, s.Name)
 
-	// Template for pods that use a secret.
+	// 使用 secret 的 Pod 模板。
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "XXX",
@@ -155,22 +155,22 @@ func DoTestSecrets(t *testing.T, client clientset.Interface, ns *v1.Namespace) {
 		},
 	}
 
-	// Create a pod to consume secret.
+	// 创建一个使用该 secret 的 Pod。
 	pod.ObjectMeta.Name = "uses-secret"
 	if _, err := client.CoreV1().Pods(ns.Name).Create(context.TODO(), pod, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Failed to create pod: %v", err)
 	}
 	defer integration.DeletePodOrErrorf(t, client, ns.Name, pod.Name)
 
-	// Create a pod that consumes non-existent secret.
+	// 创建一个使用不存在 secret 的 Pod。
 	pod.ObjectMeta.Name = "uses-non-existent-secret"
 	if _, err := client.CoreV1().Pods(ns.Name).Create(context.TODO(), pod, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Failed to create pod: %v", err)
 	}
 	defer integration.DeletePodOrErrorf(t, client, ns.Name, pod.Name)
-	// This pod may fail to run, but we don't currently prevent this, and this
-	// test can't check whether the kubelet actually pulls the secret.
+	// 该 Pod 可能无法运行，但目前我们不会阻止这种情况，
+	// 并且本测试也无法检查 kubelet 是否真的拉取了 secret。
 
-	// Verifying contents of the volumes is out of scope for a
-	// apiserver<->kubelet integration test.  It is covered by an e2e test.
+	// 校验 volume 的内容不属于 apiserver<->kubelet 集成测试的范畴。
+	// 这部分由 e2e 测试覆盖。
 }

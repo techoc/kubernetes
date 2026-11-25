@@ -82,7 +82,7 @@ Bgqc+dJN9xS9Ah5gLiGQJ6C4niUA11piCpvMsy+j/LQ1Erx47KMar5fuMXYk7iPq
 	clientSet, _, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
 			opts.GenericServerRunOptions.MaxRequestBodyBytes = 1024 * 1024
-			// I have no idea what this cert is, but it doesn't matter, we just want something that always fails validation
+			// 我不知道这个证书是什么，但没关系，我们只需要一个始终无法通过校验的东西
 			opts.KubeletConfig.TLSClientConfig.CAFile = badCA
 		},
 	})
@@ -202,12 +202,12 @@ func TestPodLogsKubeletClientCertReload(t *testing.T) {
 	t.Cleanup(cancel)
 
 	origCertCallbackRefreshDuration := transport.CertCallbackRefreshDuration
-	transport.CertCallbackRefreshDuration = time.Second // make client cert reloading fast
+	transport.CertCallbackRefreshDuration = time.Second // 加快 client cert 的重新加载
 	t.Cleanup(func() {
 		transport.CertCallbackRefreshDuration = origCertCallbackRefreshDuration
 	})
 
-	// create a CA to sign the API server's kubelet client cert
+	// 创建一个 CA，用于签发 API server 的 kubelet client cert
 	startingCerts := generateClientCert(t)
 
 	dynamicCAContentFromFile, err := dynamiccertificates.NewDynamicCAContentFromFile("client-ca-bundle", startingCerts.caFile)
@@ -226,7 +226,7 @@ func TestPodLogsKubeletClientCertReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// this fake kubelet will perform per request authentication using the configured CA (which is dynamically reloaded)
+	// 这个伪 kubelet 将使用配置的 CA（会动态重新加载）对每个请求进行认证
 	fakeKubeletServer := httptest.NewUnstartedServer(
 		filters.WithAuthentication(
 			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -261,7 +261,7 @@ func TestPodLogsKubeletClientCertReload(t *testing.T) {
 
 	pod := prepareFakeNodeAndPod(ctx, t, clientSet, fakeKubeletServer)
 
-	// verify that the starting state works as expected
+	// 验证初始状态符合预期
 	podLogs, err := clientSet.CoreV1().Pods("ns").GetLogs(pod.Name, &corev1.PodLogOptions{}).DoRaw(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -270,13 +270,13 @@ func TestPodLogsKubeletClientCertReload(t *testing.T) {
 		t.Fatalf("unexpected pod logs: %s", l)
 	}
 
-	// generate a new CA and overwrite the existing CA that the kubelet is using for request authentication
+	// 生成一个新的 CA，并覆盖 kubelet 当前用于请求认证的 CA
 	newCerts := generateClientCert(t)
 	if err := os.Rename(newCerts.caFile, startingCerts.caFile); err != nil {
 		t.Fatal(err)
 	}
 
-	// wait until the kubelet observes the new CA
+	// 等待 kubelet 感知到新的 CA
 	if err := wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
 		_, errLog := clientSet.CoreV1().Pods("ns").GetLogs(pod.Name, &corev1.PodLogOptions{}).DoRaw(ctx)
 		if errors.IsUnauthorized(errLog) {
@@ -287,7 +287,7 @@ func TestPodLogsKubeletClientCertReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// now update the API server's kubelet client cert to use the new cert
+	// 现在更新 API server 的 kubelet client cert，使其使用新证书
 	if err := os.Rename(newCerts.clientCertFile, startingCerts.clientCertFile); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestPodLogsKubeletClientCertReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// confirm that the API server observes the new client cert and closes existing connections to use it
+	// 确认 API server 感知到新的 client cert，并关闭已有连接以使用它
 	if err := wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
 		fixedPodLogs, errLog := clientSet.CoreV1().Pods("ns").GetLogs(pod.Name, &corev1.PodLogOptions{}).DoRaw(ctx)
 		if errors.IsUnauthorized(errLog) {
@@ -340,7 +340,7 @@ func generateClientCert(t *testing.T) testCerts {
 		t.Fatal(err)
 	}
 
-	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 返回 [0, max-1) 范围内的均匀随机值，然后给 serial 加 1，使其成为 [1, max) 范围内的均匀随机值。
 	serial, err := rand.Int(rand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
 		t.Fatal(err)

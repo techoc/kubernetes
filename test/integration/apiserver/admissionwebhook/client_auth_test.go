@@ -49,12 +49,12 @@ const (
 	testClientAuthClientUsername = "webhook-client-auth-integration-client"
 )
 
-// TestWebhookClientAuthWithAggregatorRouting ensures client auth is used for requests to URL backends
+// TestWebhookClientAuthWithAggregatorRouting 确保对 URL 后端的请求使用客户端认证
 func TestWebhookClientAuthWithAggregatorRouting(t *testing.T) {
 	testWebhookClientAuth(t, true)
 }
 
-// TestWebhookClientAuthWithoutAggregatorRouting ensures client auth is used for requests to URL backends
+// TestWebhookClientAuthWithoutAggregatorRouting 确保对 URL 后端的请求使用客户端认证
 func TestWebhookClientAuthWithoutAggregatorRouting(t *testing.T) {
 	testWebhookClientAuth(t, false)
 }
@@ -142,10 +142,9 @@ plugins:
 	}, framework.SharedEtcd())
 	defer s.TearDownFn()
 
-	// Configure a client with a distinct user name so that it is easy to distinguish requests
-	// made by the client from requests made by controllers. We use this to filter out requests
-	// before recording them to ensure we don't accidentally mistake requests from controllers
-	// as requests made by the client.
+	// 使用一个不同的用户名配置客户端，便于区分该客户端发起的请求
+	// 和控制器发起的请求。我们据此在记录之前过滤请求，
+	// 确保不会把控制器的请求误当成该客户端的请求。
 	clientConfig := rest.CopyConfig(s.ClientConfig)
 	clientConfig.Impersonate.UserName = testClientAuthClientUsername
 	clientConfig.Impersonate.Groups = []string{"system:masters", "system:authenticated"}
@@ -194,7 +193,7 @@ plugins:
 		}
 	}()
 
-	// wait until new webhook is called
+	// 等待新 webhook 被调用
 	if err := wait.PollImmediate(time.Millisecond*5, wait.ForeverTestTimeout, func() (bool, error) {
 		_, err = client.CoreV1().Pods("default").Patch(context.TODO(), clientAuthMarkerFixture.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 		if t.Failed() {
@@ -219,8 +218,8 @@ type clientAuthRecorder struct {
 	upOnce sync.Once
 }
 
-// Reset zeros out all counts and returns a channel that is closed when the first admission of the
-// marker object is received.
+// Reset 将所有计数清零，并返回一个 channel：
+// 当收到第一个针对 marker 对象的准入请求时该 channel 被关闭。
 func (i *clientAuthRecorder) Reset() chan struct{} {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -257,7 +256,7 @@ func newClientAuthWebhookHandler(t *testing.T, recorder *clientAuthRecorder) htt
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 		if review.Request.UserInfo.Username != testClientAuthClientUsername {
-			// skip requests not originating from this integration test's client
+			// 跳过并非来自本集成测试客户端的请求
 			allow(w)
 			return
 		}
@@ -278,8 +277,8 @@ func newClientAuthWebhookHandler(t *testing.T, recorder *clientAuthRecorder) htt
 			return
 		}
 
-		// When resetting between tests, a marker object is patched until this webhook
-		// observes it, at which point it is considered ready.
+		// 测试之间重置时，会不断 patch marker 对象，直到该 webhook 观察到它，
+		// 此时即认为 webhook 已就绪。
 		if pod.Namespace == clientAuthMarkerFixture.Namespace && pod.Name == clientAuthMarkerFixture.Name {
 			recorder.MarkerReceived()
 			allow(w)

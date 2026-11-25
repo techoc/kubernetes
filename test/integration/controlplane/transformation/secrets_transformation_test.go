@@ -92,10 +92,10 @@ resources:
 `
 )
 
-// TestSecretsShouldBeEnveloped is an integration test between KubeAPI and etcd that checks:
-// 1. Secrets are encrypted on write
-// 2. Secrets are decrypted on read
-// when EncryptionConfiguration is passed to KubeAPI server.
+// TestSecretsShouldBeEnveloped 是 KubeAPI 与 etcd 之间的集成测试，用于检查在向
+// KubeAPI server 传入 EncryptionConfiguration 时：
+// 1. 写入时 Secret 会被加密
+// 2. 读取时 Secret 会被解密
 func TestSecretsShouldBeTransformed(t *testing.T) {
 	testCases := []struct {
 		transformerConfigContent string
@@ -104,7 +104,7 @@ func TestSecretsShouldBeTransformed(t *testing.T) {
 	}{
 		{aesGCMConfigYAML, aesGCMPrefix, unSealWithGCMTransformer},
 		{aesCBCConfigYAML, aesCBCPrefix, unSealWithCBCTransformer},
-		// TODO: add secretbox
+		// TODO: 添加 secretbox
 	}
 	for _, tt := range testCases {
 		test, err := newTransformTest(t, transformTestConfig{transformerConfigYAML: tt.transformerConfigContent})
@@ -125,37 +125,37 @@ type verifier interface {
 	verify(t *testing.T, err error)
 }
 
-// TestAllowUnsafeMalformedObjectDeletionFeature is an integration test that verifies:
-// 1) if the feature AllowUnsafeMalformedObjectDeletion is enabled, a corrupt
-// object can be deleted by enabling the delete option
-// 'ignoreStoreReadErrorWithClusterBreakingPotential', it triggers the unsafe
-// deletion flow that bypasses any precondition checks or finalizer constraints.
-// 2) if the feature AllowUnsafeMalformedObjectDeletion is disabled, the delete
-// option 'ignoreStoreReadErrorWithClusterBreakingPotential' has no
-// impact (normal deletion flow is used)
+// TestAllowUnsafeMalformedObjectDeletionFeature 是一个集成测试，用于验证：
+// 1) 如果启用了特性 AllowUnsafeMalformedObjectDeletion，则可以通过启用删除选项
+// 'ignoreStoreReadErrorWithClusterBreakingPotential' 来删除损坏的对象；该选项会触发
+// 不安全删除流程，
+// 绕过所有前置条件检查或 finalizer 约束。
+// 2) 如果禁用了特性 AllowUnsafeMalformedObjectDeletion，则删除选项
+// 'ignoreStoreReadErrorWithClusterBreakingPotential' 不起
+// 作用（使用正常的删除流程）
 func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 	tests := []struct {
-		// whether the feature is enabled
+		// 特性是否已启用
 		featureEnabled bool
-		// whether encryption broke after the change
+		// 变更之后加密是否已失效
 		encryptionBrokenFn func(t *testing.T, got apierrors.APIStatus) bool
-		// what we expect for GET on the corrupt object, after encryption has
-		// broken but before the deletion
+		// 在加密已失效但尚未删除时，
+		// 对损坏对象执行 GET 的预期结果
 		corruptObjGetPreDelete verifier
-		// what we expect for DELETE on the corrupt object, after encryption has
-		// broken, but without setting the option to ignore store read error
+		// 在加密已失效、但未设置忽略存储读取错误选项时，
+		// 对损坏对象执行 DELETE 的预期结果
 		corrupObjDeletWithoutOption verifier
-		// what we expect for DELETE on the corrupt object, after encryption has
-		// broken, with the option to ignore store read error enabled
+		// 在加密已失效、且启用了忽略存储读取错误选项时，
+		// 对损坏对象执行 DELETE 的预期结果
 		corrupObjDeleteWithOption verifier
-		// what we expect for DELETE on the corrupt object, after encryption has
-		// broken, with the option to ignore store read error enabled, and
-		// the user has the permission to do unsafe delete
+		// 在加密已失效、启用了忽略存储读取错误选项，且
+		// 用户拥有不安全删除权限时，
+		// 对损坏对象执行 DELETE 的预期结果
 		corrupObjDeleteWithOptionAndPrivilege verifier
-		// what we expect for GET on the corrupt object (post deletion)
+		// 删除之后对损坏对象执行 GET 的预期结果
 		corrupObjGetPostDelete verifier
-		// what we expect for GET on the corrupt object ( via the
-		// informer cache post deletion)
+		// 删除之后通过 informer 缓存
+		// 对损坏对象执行 GET 的预期结果
 		corrupObjGetFromListerCachePostDelete verifier
 	}{
 		{
@@ -173,7 +173,7 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 			},
 			corrupObjDeleteWithOptionAndPrivilege: wantNoError{},
 			corrupObjGetPostDelete:                wantAPIStatusError{reason: metav1.StatusReasonNotFound},
-			// after the unsafe delete, we expect the deleted object to be removed from the cache
+			// 不安全删除之后，预期已删除的对象会从缓存中移除
 			corrupObjGetFromListerCachePostDelete: wantAPIStatusError{reason: metav1.StatusReasonNotFound},
 		},
 		{
@@ -187,8 +187,8 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 			corrupObjDeleteWithOption:             wantAPIStatusError{reason: metav1.StatusReasonInternalError},
 			corrupObjDeleteWithOptionAndPrivilege: wantAPIStatusError{reason: metav1.StatusReasonInternalError},
 			corrupObjGetPostDelete:                wantAPIStatusError{reason: metav1.StatusReasonInternalError},
-			// although the object is corrupt and unreadable from the underlying
-			// storage, the cache continues to serve the object
+			// 尽管对象已损坏且无法从底层存储读取，
+			// 缓存仍会继续提供该对象
 			corrupObjGetFromListerCachePostDelete: wantNoError{},
 		},
 	}
@@ -202,27 +202,27 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 			}
 			defer test.cleanUp()
 
-			// a) set up a distinct client for the test user with the least
-			// privileges, we will grant permission as we progress through the test
+			// a) 为测试用户创建一个权限最小的独立客户端，
+			// 随着测试的推进逐步授予权限
 			testUser := "croc"
 			testUserConfig := restclient.CopyConfig(test.kubeAPIServer.ClientConfig)
 			testUserConfig.Impersonate.UserName = testUser
 			testUserClient := clientset.NewForConfigOrDie(testUserConfig)
 			adminClient := test.restClient
 
-			// b) use the admin client to grant the the test user initial permissions,
-			// we are not going to grant 'delete-ignore-read-errors' just yet
+			// b) 使用 admin 客户端为测试用户授予初始权限，
+			// 暂时不授予 'delete-ignore-read-errors'
 			permitUserToDoVerbOnSecret(t, adminClient, testUser, testNamespace, []string{"create", "get", "delete", "update"})
 
-			// the test should not use the admin client going forward
+			// 后续测试不应再使用 admin 客户端
 			test.restClient = testUserClient
 			defer func() {
-				// for any cleanup that requires admin privileges
+				// 用于任何需要 admin 权限的清理操作
 				test.restClient = adminClient
 			}()
 
 			secretCorrupt := "foo-with-unsafe-delete"
-			// c) create and delete the secret, we don't expect any error
+			// c) 创建并删除 Secret，预期不会出现错误
 			_, err = test.createSecret(secretCorrupt, testNamespace)
 			if err != nil {
 				t.Fatalf("'%s/%s' failed to create, got error: %v", err, testNamespace, secretCorrupt)
@@ -232,13 +232,13 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 				t.Fatalf("'%s/%s' failed to delete, got error: %v", err, testNamespace, secretCorrupt)
 			}
 
-			// d) re-create the secret
+			// d) 重新创建 Secret
 			test.secret, err = test.createSecret(secretCorrupt, testNamespace)
 			if err != nil {
 				t.Fatalf("Failed to create test secret, error: %v", err)
 			}
 
-			// e) update the secret with a finalizer
+			// e) 为 Secret 添加 finalizer
 			withFinalizer := test.secret.DeepCopy()
 			withFinalizer.Finalizers = append(withFinalizer.Finalizers, "tes.k8s.io/fake")
 			test.secret, err = test.restClient.CoreV1().Secrets(testNamespace).Update(context.Background(), withFinalizer, metav1.UpdateOptions{})
@@ -251,8 +251,8 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 			factory := informers.NewSharedInformerFactoryWithOptions(adminClient, time.Minute, informers.WithNamespace(testNamespace))
 			informer := factory.Core().V1().Secrets()
 
-			// the test adds a secret named "final-secret" after the unsafe delete
-			// so we can use it as an marker that the informer has caught up
+			// 测试会在不安全删除之后添加一个名为 "final-secret" 的 Secret，
+			// 以便用它作为 informer 已追进度的标记
 			finalEvent := make(chan struct{})
 			finalSecretName := "final-secret"
 			_, err = informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -276,28 +276,28 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 				t.Fatalf("caches failed to sync")
 			}
 
-			// g) the secret should be readable from the cache
+			// g) Secret 应能从缓存中读取
 			if _, err := lister.Secrets(testNamespace).Get(secretCorrupt); err != nil {
 				t.Errorf("unexpected failure getting the secret from lister cache: %v", err)
 			}
 
-			// h) override the config and break decryption of the old resources,
-			// the secret created in step b will be undecryptable
+			// h) 覆盖配置并破坏对旧资源的解密，
+			// 步骤 b 中创建的 Secret 将无法解密
 			now := time.Now()
 			encryptionConf := filepath.Join(test.configDir, encryptionConfigFileName)
 			body, _ := os.ReadFile(encryptionConf)
 			t.Logf("file before write: %s", body)
-			// we replace the existing key with a new key from a different provider
+			// 用来自其他 provider 的新密钥替换现有密钥
 			if err := os.WriteFile(encryptionConf, []byte(aesCBCConfigYAML), 0o644); err != nil {
 				t.Fatalf("failed to write encryption config that's going to make decryption fail")
 			}
 			body, _ = os.ReadFile(encryptionConf)
 			t.Logf("file after write: %s", body)
 
-			// i) wait for the breaking changes to take effect
+			// i) 等待破坏性变更生效
 			testCtx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			// dynamic encryption config reload takes about 1m, so can't use wait.ForeverTestTimeout
+			// 动态重新加载加密配置大约需要 1 分钟，因此不能使用 wait.ForeverTestTimeout
 			err = wait.PollUntilContextTimeout(testCtx, 1*time.Second, 2*time.Minute, true, func(ctx context.Context) (done bool, err error) {
 				_, err = test.restClient.CoreV1().Secrets(testNamespace).Get(ctx, secretCorrupt, metav1.GetOptions{})
 				var got apierrors.APIStatus
@@ -314,7 +314,7 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 			}
 			t.Logf("it took %s for the apiserver to reload the encryption config", time.Since(now))
 
-			// j) create a new secret, and then delete it, it should work
+			// j) 创建一个新 Secret，然后删除它，操作应成功
 			secretNormal := "bar-with-normal-delete"
 			_, err = test.createSecret(secretNormal, testNamespace)
 			if err != nil {
@@ -325,9 +325,9 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 				t.Fatalf("'%s/%s' failed to create, got error: %v", err, testNamespace, secretNormal)
 			}
 
-			// k) let's try to get the broken secret created in step b, we expect it
-			// to fail, the error will vary depending on whether the feature is enabled.
-			// but the cache still serves the object
+			// k) 尝试获取步骤 b 中创建的已损坏 Secret，预期会
+			// 失败；具体错误取决于特性是否启用。
+			// 但缓存仍会提供该对象
 			_, err = test.restClient.CoreV1().Secrets(testNamespace).Get(context.Background(), secretCorrupt, metav1.GetOptions{})
 			tc.corruptObjGetPreDelete.verify(t, err)
 			if _, err := lister.Secrets(testNamespace).Get(secretCorrupt); err != nil {
@@ -340,15 +340,15 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 				return opts
 			}
 
-			// l) let's try the normal deletion flow with/without dry run, we expect an error
+			// l) 尝试带/不带 dry-run 的正常删除流程，预期都会返回错误
 			err = test.restClient.CoreV1().Secrets(testNamespace).Delete(context.Background(), secretCorrupt, withDryRun(metav1.DeleteOptions{}))
 			tc.corrupObjDeletWithoutOption.verify(t, err)
 			err = test.restClient.CoreV1().Secrets(testNamespace).Delete(context.Background(), secretCorrupt, metav1.DeleteOptions{})
 			tc.corrupObjDeletWithoutOption.verify(t, err)
 
-			// m) make an attempt to delete the corrupt object by enabling the option,
-			// on the other hand, we have not granted the 'delete-ignore-read-errors'
-			// verb to the user yet, so we expect admission to deny the delete request
+			// m) 尝试通过启用该选项来删除损坏对象；
+			// 另一方面，我们尚未向用户授予 'delete-ignore-read-errors'
+			// 动词，因此预期 admission 会拒绝删除请求
 			options := metav1.DeleteOptions{
 				IgnoreStoreReadErrorWithClusterBreakingPotential: ptr.To(true),
 			}
@@ -358,25 +358,25 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 			err = test.restClient.CoreV1().Secrets(testNamespace).Delete(context.Background(), secretCorrupt, options)
 			tc.corrupObjDeleteWithOption.verify(t, err)
 
-			// n) grant the test user to do 'unsafe-delete-ignore-read-errors' on secrets
+			// n) 授予测试用户对 Secrets 执行 'unsafe-delete-ignore-read-errors' 的权限
 			permitUserToDoVerbOnSecret(t, adminClient, testUser, testNamespace, []string{"unsafe-delete-ignore-read-errors"})
 
-			// o) let's try to do unsafe delete again
+			// o) 再次尝试不安全删除
 			err = test.restClient.CoreV1().Secrets(testNamespace).Delete(context.Background(), secretCorrupt, dryRunOptions)
 			tc.corrupObjDeleteWithOptionAndPrivilege.verify(t, err)
-			// the dry run must not delete the object, the GET should fail
-			// with the same error as before any delete attempt
+			// dry-run 不得删除对象，GET 应仍然失败，
+			// 且错误与任何删除尝试之前相同
 			_, err = test.restClient.CoreV1().Secrets(testNamespace).Get(context.Background(), secretCorrupt, metav1.GetOptions{})
 			tc.corruptObjGetPreDelete.verify(t, err)
 			err = test.restClient.CoreV1().Secrets(testNamespace).Delete(context.Background(), secretCorrupt, options)
 			tc.corrupObjDeleteWithOptionAndPrivilege.verify(t, err)
 
-			// p) final get should return a NotFound error after the secret has been deleted
+			// p) Secret 删除之后，最终 GET 应返回 NotFound 错误
 			_, err = test.restClient.CoreV1().Secrets(testNamespace).Get(context.Background(), secretCorrupt, metav1.GetOptions{})
 			tc.corrupObjGetPostDelete.verify(t, err)
 
-			// q) create the final secret, and wait for the informer
-			// to catch up on the ADDED event.
+			// q) 创建最后一个 Secret，并等待 informer
+			// 追上 ADDED 事件。
 			_, err = test.createSecret(finalSecretName, testNamespace)
 			if err != nil {
 				t.Fatalf("'%s/%s' failed to create, got error: %v", err, testNamespace, finalSecretName)
@@ -387,7 +387,7 @@ func TestAllowUnsafeMalformedObjectDeletionFeature(t *testing.T) {
 				t.Fatalf("timed out waiting for the informer to catch up")
 			}
 
-			// r) read the object from the cache
+			// r) 从缓存中读取对象
 			_, err = lister.Secrets(testNamespace).Get(secretCorrupt)
 			tc.corrupObjGetFromListerCachePostDelete.verify(t, err)
 		})
@@ -434,24 +434,24 @@ func (wantError wantAPIStatusError) verify(t *testing.T, err error) {
 	}
 }
 
-// TestListCorruptObjects is an integration test that verifies:
-// 1) if the feature AllowUnsafeMalformedObjectDeletion is enabled, LIST operation,
-// in its error response, should include information that identifies the objects
-// that it failed to read from the storage
-// 2) if the feature AllowUnsafeMalformedObjectDeletion is disabled, LIST should
-// abort as soon as it encounters the first error, to be backward compatible
+// TestListCorruptObjects 是一个集成测试，用于验证：
+// 1) 如果启用了特性 AllowUnsafeMalformedObjectDeletion，LIST 操作
+// 在其错误响应中应包含可识别那些
+// 未能从存储读取的对象的信息
+// 2) 如果禁用了特性 AllowUnsafeMalformedObjectDeletion，LIST 应在
+// 遇到第一个错误时立即中止，以保持向后兼容
 func TestListCorruptObjects(t *testing.T) {
-	// these are the secrets that the test will initially create, and
-	// are expected to become unreadable/corrupt after encryption breaks
+	// 这些是测试初始创建的 Secret，
+	// 预期在加密失效后会变得不可读/损坏
 	secrets := []string{"corrupt-a", "corrupt-b", "corrupt-c"}
 
 	tests := []struct {
 		featureEnabled bool
-		// secrets that are created before encryption breaks
+		// 在加密失效之前创建的 Secret
 		secrets []string
-		// whether encryption broke after the config change
+		// 配置变更之后加密是否已失效
 		encryptionBrokenFn func(t *testing.T, got apierrors.APIStatus)
-		// what we expect for LIST on the corrupt objects after encryption has broken
+		// 加密失效后对损坏对象执行 LIST 的预期结果
 		listAfter verifier
 	}{
 		{
@@ -535,7 +535,7 @@ func TestListCorruptObjects(t *testing.T) {
 			defer test.cleanUp()
 			ctx := context.Background()
 
-			// a) create a number of secrets in the test namespace
+			// a) 在测试命名空间中创建多个 Secret
 			for _, name := range tc.secrets {
 				_, err = test.createSecret(name, testNamespace)
 				if err != nil {
@@ -543,7 +543,7 @@ func TestListCorruptObjects(t *testing.T) {
 				}
 			}
 
-			// b) list the secrets before we break encryption
+			// b) 在破坏加密之前列出所有 Secret
 			result, err := test.restClient.CoreV1().Secrets(testNamespace).List(context.Background(), metav1.ListOptions{})
 			if err != nil {
 				t.Fatalf("listing secrets failed unexpectedly with: %v", err)
@@ -552,8 +552,8 @@ func TestListCorruptObjects(t *testing.T) {
 				t.Fatalf("expected at least %d secrets, but got: %d", want, got)
 			}
 
-			// c) override the config and break decryption of the old resources,
-			// the secret created in step a will be undecryptable
+			// c) 覆盖配置并破坏对旧资源的解密，
+			// 步骤 a 中创建的 Secret 将无法解密
 			client, err := clientv3.New(clientv3.Config{Endpoints: storageConfig.Transport.ServerList})
 			if err != nil {
 				t.Fatal(err)
@@ -572,7 +572,7 @@ func TestListCorruptObjects(t *testing.T) {
 				t.Fatalf("Expected %d number of keys, got: %d", len(tc.secrets), len(resp.Kvs))
 			}
 			for _, kv := range resp.Kvs {
-				// Remove last byte
+				// 移除最后一个字节
 				_, err = client.Put(ctx, string(kv.Key), string(kv.Value)[:len(kv.Value)-1])
 				if err != nil {
 					t.Fatal(err)
@@ -590,7 +590,7 @@ func TestListCorruptObjects(t *testing.T) {
 			}
 			tc.encryptionBrokenFn(t, got)
 
-			// e) list should return expected error
+			// e) LIST 应返回预期错误
 			_, err = test.restClient.CoreV1().Secrets(testNamespace).List(ctx, metav1.ListOptions{})
 			tc.listAfter.verify(t, err)
 		})
@@ -602,8 +602,8 @@ func permitUserToDoVerbOnSecret(t *testing.T, client *clientset.Clientset, user,
 	grantUserVerbsOnResource(t, client, user, namespace, verbs, "", "secrets")
 }
 
-// grantUserVerbsOnResource creates an RBAC Role and RoleBinding that grant the
-// given user the specified verbs on a resource in the given namespace.
+// grantUserVerbsOnResource 创建一个 RBAC Role 和 RoleBinding，
+// 授予指定用户在给定命名空间中对某资源执行指定动词的权限。
 func grantUserVerbsOnResource(t *testing.T, client *clientset.Clientset, user, namespace string, verbs []string, apiGroup, resource string) {
 	t.Helper()
 
@@ -650,12 +650,12 @@ func grantUserVerbsOnResource(t *testing.T, client *clientset.Clientset, user, n
 		user, namespace, verbs[0], "", schema.GroupResource{Group: apiGroup, Resource: resource}, true)
 }
 
-// Baseline (no enveloping) - use to contrast with enveloping benchmarks.
+// 基线（无封套加密）——用于与封套加密的基准测试结果对比。
 func BenchmarkBase(b *testing.B) {
 	runBenchmark(b, "")
 }
 
-// Identity transformer is a NOOP (crypto-wise) - use to contrast with AESGCM and AESCBC benchmark results.
+// Identity transformer 是一个空操作（加密层面）——用于与 AESGCM 和 AESCBC 的基准测试结果对比。
 func BenchmarkIdentityWrite(b *testing.B) {
 	runBenchmark(b, identityConfigYAML)
 }

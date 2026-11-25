@@ -39,15 +39,15 @@ import (
 )
 
 type PrepareNodeStrategy interface {
-	// Modify pre-created Node objects before the test starts.
+	// 在测试开始前修改预先创建的 Node 对象。
 	PreparePatch(node *v1.Node) []byte
-	// Create or modify any objects that depend on the node before the test starts.
-	// Caller will re-try when http.StatusConflict error is returned.
+	// 在测试开始前创建或修改任何依赖于该节点的对象。
+	// 返回 http.StatusConflict 错误时，调用方会重试。
 	PrepareDependentObjects(ctx context.Context, node *v1.Node, client clientset.Interface) error
-	// Clean up any node modifications after the test finishes.
+	// 在测试结束后清理对节点所做的任何修改。
 	CleanupNode(ctx context.Context, node *v1.Node) *v1.Node
-	// Clean up any objects that depend on the node after the test finishes.
-	// Caller will re-try when http.StatusConflict error is returned.
+	// 在测试结束后清理任何依赖于该节点的对象。
+	// 返回 http.StatusConflict 错误时，调用方会重试。
 	CleanupDependentObjects(ctx context.Context, nodeName string, client clientset.Interface) error
 }
 
@@ -113,15 +113,15 @@ func (*LabelNodePrepareStrategy) CleanupDependentObjects(ctx context.Context, no
 	return nil
 }
 
-// NodeAllocatableStrategy fills node.status.allocatable and csiNode.spec.drivers[*].allocatable.
-// csiNode is created if it does not exist. On cleanup, any csiNode.spec.drivers[*].allocatable is
-// set to nil.
+// NodeAllocatableStrategy 填充 node.status.allocatable 和 csiNode.spec.drivers[*].allocatable。
+// 如果 csiNode 不存在则会创建它。清理时，所有 csiNode.spec.drivers[*].allocatable 都会被
+// 设为 nil。
 type NodeAllocatableStrategy struct {
-	// Node.status.allocatable to fill to all nodes.
+	// 要填充到所有节点的 Node.status.allocatable。
 	NodeAllocatable map[v1.ResourceName]string
-	// Map <driver_name> -> VolumeNodeResources to fill into csiNode.spec.drivers[<driver_name>].
+	// 映射 <driver_name> -> VolumeNodeResources，用于填充 csiNode.spec.drivers[<driver_name>]。
 	CsiNodeAllocatable map[string]*storagev1.VolumeNodeResources
-	// List of in-tree volume plugins migrated to CSI.
+	// 已迁移到 CSI 的 in-tree 卷插件列表。
 	MigratedPlugins []string
 }
 
@@ -189,8 +189,8 @@ func (s *NodeAllocatableStrategy) createCSINode(ctx context.Context, nodeName st
 
 	_, err := client.StorageV1().CSINodes().Create(ctx, csiNode, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
-		// Something created CSINode instance after we checked it did not exist.
-		// Make the caller to re-try PrepareDependentObjects by returning Conflict error
+		// 在我们检查确认 CSINode 不存在之后，又有其他对象创建了 CSINode 实例。
+		// 通过返回 Conflict 错误，让调用方重试 PrepareDependentObjects。
 		err = apierrors.NewConflict(storagev1.Resource("csinodes"), nodeName, err)
 	}
 	return err
@@ -251,7 +251,7 @@ func (s *NodeAllocatableStrategy) CleanupDependentObjects(ctx context.Context, n
 	return s.updateCSINode(ctx, csiNode, client)
 }
 
-// UniqueNodeLabelStrategy sets a unique label for each node.
+// UniqueNodeLabelStrategy 为每个节点设置一个唯一的 label。
 type UniqueNodeLabelStrategy struct {
 	LabelKey string
 }
@@ -414,9 +414,9 @@ func CreatePod(ctx context.Context, client clientset.Interface, namespace string
 			return
 		}
 		pod = pod.DeepCopy()
-		// client-go writes into the object that is passed to Create,
-		// causing a data race unless we create a new copy for each
-		// parallel call.
+		// client-go 会写入传给 Create 的对象，
+		// 如果不为每次并行调用都创建一个新副本，
+		// 就会造成数据竞争。
 		if err := makeCreatePod(client, namespace, pod); err != nil {
 			lock.Lock()
 			defer lock.Unlock()
@@ -442,15 +442,15 @@ func CreatePodWithPersistentVolume(ctx context.Context, client clientset.Interfa
 		pvc.Name = pvcName
 		// pv
 		pv := factory(i)
-		// PVs are cluster-wide resources.
-		// Prepend a namespace to make the name globally unique.
+		// PV 是集群级别的资源。
+		// 在名称前加上 namespace 前缀，使其在全局范围内唯一。
 		pv.Name = fmt.Sprintf("%s-%s", namespace, pv.Name)
 		pvs := pv.Spec.PersistentVolumeSource
 		if pvs.CSI != nil {
 			pvs.CSI.VolumeHandle = pv.Name
 		}
 		if bindVolume {
-			// bind pv to "pvc-$i"
+			// 将 pv 绑定到 "pvc-$i"
 			pv.Spec.ClaimRef = &v1.ObjectReference{
 				Kind:       "PersistentVolumeClaim",
 				Namespace:  namespace,
@@ -459,14 +459,14 @@ func CreatePodWithPersistentVolume(ctx context.Context, client clientset.Interfa
 			}
 			pv.Status.Phase = v1.VolumeBound
 
-			// bind pvc to "pv-$i"
+			// 将 pvc 绑定到 "pv-$i"
 			pvc.Spec.VolumeName = pv.Name
 			pvc.Status.Phase = v1.ClaimBound
 		} else {
 			pv.Status.Phase = v1.VolumeAvailable
 		}
 
-		// Create PVC first as it's referenced by the PV when the `bindVolume` is true.
+		// 先创建 PVC，因为当 `bindVolume` 为 true 时，PV 会引用它。
 		if err := testutils.CreatePersistentVolumeClaimWithRetries(client, namespace, pvc); err != nil {
 			lock.Lock()
 			defer lock.Unlock()
@@ -474,7 +474,7 @@ func CreatePodWithPersistentVolume(ctx context.Context, client clientset.Interfa
 			return
 		}
 
-		// We need to update statuses separately, as creating pv/pvc resets status to the default one.
+		// 我们需要单独更新 status，因为创建 pv/pvc 会把 status 重置为默认值。
 		if _, err := client.CoreV1().PersistentVolumeClaims(namespace).UpdateStatus(ctx, pvc, metav1.UpdateOptions{}); err != nil {
 			lock.Lock()
 			defer lock.Unlock()
@@ -488,7 +488,7 @@ func CreatePodWithPersistentVolume(ctx context.Context, client clientset.Interfa
 			createError = fmt.Errorf("error creating PV: %s", err)
 			return
 		}
-		// We need to update statuses separately, as creating pv/pvc resets status to the default one.
+		// 我们需要单独更新 status，因为创建 pv/pvc 会把 status 重置为默认值。
 		if _, err := client.CoreV1().PersistentVolumes().UpdateStatus(ctx, pv, metav1.UpdateOptions{}); err != nil {
 			lock.Lock()
 			defer lock.Unlock()
@@ -537,30 +537,30 @@ func NewCustomCreatePodStrategy(podTemplate PodTemplate) TestPodCreateStrategy {
 	}
 }
 
-// volumeFactory creates an unique PersistentVolume for given integer.
+// volumeFactory 为给定的整数创建一个唯一的 PersistentVolume。
 type volumeFactory func(uniqueID int) *v1.PersistentVolume
 
-// PodTemplate is responsible for creating a v1.Pod instance that is ready
-// to be sent to the API server.
+// PodTemplate 负责创建一个 v1.Pod 实例，
+// 该实例可以直接发送给 API server。
 type PodTemplate interface {
-	// GetPodTemplate returns a pod template for one out of many different pods.
-	// Pods with numbers in the range [index, index+count-1] will be created
-	// based on what GetPodTemplate returns. It gets called multiple times
-	// with a fixed index and increasing count parameters. This number can,
-	// but doesn't have to be, used to modify parts of the pod spec like
-	// for example a named reference to some other object.
+	// GetPodTemplate 返回众多不同 Pod 中某一个的 Pod 模板。
+	// 编号在 [index, index+count-1] 范围内的 Pod 将基于
+	// GetPodTemplate 的返回值创建。该方法会被多次调用，
+	// 调用时 index 固定，count 参数递增。这个数字可以用于修改
+	// Pod spec 的部分内容，也可以不用；例如修改指向某个其他对象的
+	// 命名引用。
 	GetPodTemplate(index, count int) (*v1.Pod, error)
 }
 
-// StaticPodTemplate returns an implementation of PodTemplate for a fixed pod that is the same regardless of the index.
+// StaticPodTemplate 返回 PodTemplate 的一个实现，它对应一个固定的 Pod，无论 index 如何变化都返回相同的 Pod。
 func StaticPodTemplate(pod *v1.Pod) PodTemplate {
 	return (*staticPodTemplate)(pod)
 }
 
 type staticPodTemplate v1.Pod
 
-// GetPodTemplate implements [PodTemplate.GetPodTemplate] by returning the same pod
-// for each call.
+// GetPodTemplate 实现了 [PodTemplate.GetPodTemplate]，
+// 每次调用都返回相同的 Pod。
 func (s *staticPodTemplate) GetPodTemplate(index, count int) (*v1.Pod, error) {
 	return (*v1.Pod)(s), nil
 }

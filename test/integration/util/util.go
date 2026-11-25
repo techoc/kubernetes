@@ -80,21 +80,20 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// ShutdownFunc represents the function handle to be called, typically in a defer handler, to shutdown a running module
+// ShutdownFunc 表示要调用的函数句柄，通常在 defer 中调用，用于关闭正在运行的模块
 type ShutdownFunc func()
 
-// StartScheduler is a wrapper around StartSchedulerWithDone for backward compatibility.
+// StartScheduler 是 StartSchedulerWithDone 的包装器，用于向后兼容。
 func StartScheduler(tCtx ktesting.TContext, cfg *kubeschedulerconfig.KubeSchedulerConfiguration, outOfTreePluginRegistry frameworkruntime.Registry) (*scheduler.Scheduler, informers.SharedInformerFactory) {
 	sched, informerFactory, _ := StartSchedulerWithDone(tCtx, cfg, outOfTreePluginRegistry)
 	return sched, informerFactory
 }
 
-// StartSchedulerWithDone configures and starts a scheduler. Background goroutines
-// will keep running until the context is canceled. It returns the running scheduler,
-// the informer factory, and a channel that is closed when the scheduler goroutine
-// actually exits. Callers can use this channel to ensure the scheduler has fully
-// stopped before performing operations that might race with it (e.g., resetting
-// global metrics).
+// StartSchedulerWithDone 配置并启动 scheduler。后台 goroutine
+// 会一直运行，直到 context 被取消。它返回正在运行的 scheduler、
+// informer factory，以及一个在 scheduler goroutine 实际退出时关闭的 channel。
+// 调用方可以使用该 channel 确保 scheduler 已完全停止，
+// 再执行可能与其竞争的操作（例如重置全局 metrics）。
 func StartSchedulerWithDone(tCtx ktesting.TContext, cfg *kubeschedulerconfig.KubeSchedulerConfiguration, outOfTreePluginRegistry frameworkruntime.Registry) (*scheduler.Scheduler, informers.SharedInformerFactory, <-chan struct{}) {
 	clientSet := tCtx.Client()
 	informerFactory := scheduler.NewInformerFactory(clientSet, 0, nil)
@@ -140,8 +139,8 @@ func StartSchedulerWithDone(tCtx ktesting.TContext, cfg *kubeschedulerconfig.Kub
 	return sched, informerFactory, done
 }
 
-// CreateResourceClaimController creates a ResourceClaim controller and returns a blocking run function.
-// The caller is responsible for the management of the goroutine where that method is invoked.
+// CreateResourceClaimController 创建一个 ResourceClaim controller，并返回一个阻塞式的 run 函数。
+// 调用方负责管理调用该方法的 goroutine。
 func CreateResourceClaimController(ctx context.Context, tb ktesting.TB, clientSet clientset.Interface, informerFactory informers.SharedInformerFactory) func() {
 	podInformer := informerFactory.Core().V1().Pods()
 	podGroupInformer := informerFactory.Scheduling().V1beta1().PodGroups()
@@ -156,8 +155,8 @@ func CreateResourceClaimController(ctx context.Context, tb ktesting.TB, clientSe
 	}
 }
 
-// StartFakePVController is a simplified pv controller logic that sets PVC VolumeName and annotation for each PV binding.
-// TODO(mborsz): Use a real PV controller here.
+// StartFakePVController 是简化版的 pv controller 逻辑，为每个 PV 绑定设置 PVC 的 VolumeName 和 annotation。
+// TODO(mborsz): 这里改用真正的 PV controller。
 func StartFakePVController(ctx context.Context, clientSet clientset.Interface, informerFactory informers.SharedInformerFactory) {
 	pvInformer := informerFactory.Core().V1().PersistentVolumes()
 
@@ -166,10 +165,9 @@ func StartFakePVController(ctx context.Context, clientSet clientset.Interface, i
 			claimRef := obj.Spec.ClaimRef
 			pvc, err := clientSet.CoreV1().PersistentVolumeClaims(claimRef.Namespace).Get(ctx, claimRef.Name, metav1.GetOptions{})
 			if err != nil {
-				// Note that the error can be anything, because components like
-				// apiserver are also shutting down at the same time, but this
-				// check is conservative and only ignores the "context canceled"
-				// error while shutting down.
+				// 注意，error 可能是任意值，因为 apiserver 等组件
+				// 此时也在关闭，但这里的判断比较保守，
+				// 只忽略关闭过程中的 "context canceled" error。
 				if ctx.Err() == nil || !errors.Is(err, context.Canceled) {
 					klog.Errorf("error while getting %v/%v: %v", claimRef.Namespace, claimRef.Name, err)
 				}
@@ -182,7 +180,7 @@ func StartFakePVController(ctx context.Context, clientSet clientset.Interface, i
 				_, err := clientSet.CoreV1().PersistentVolumeClaims(claimRef.Namespace).Update(ctx, pvc, metav1.UpdateOptions{})
 				if err != nil {
 					if ctx.Err() == nil || !errors.Is(err, context.Canceled) {
-						// Shutting down, no need to record this.
+						// 正在关闭，无需记录。
 						klog.Errorf("error while updating %v/%v: %v", claimRef.Namespace, claimRef.Name, err)
 					}
 					return
@@ -201,9 +199,8 @@ func StartFakePVController(ctx context.Context, clientSet clientset.Interface, i
 	})
 }
 
-// CreateGCController creates a garbage controller and returns a run function
-// for it. The informer factory needs to be started before invoking that
-// function.
+// CreateGCController 创建一个 garbage controller 并返回对应的 run 函数。
+// 调用该函数前需要先启动 informer factory。
 func CreateGCController(ctx context.Context, tb ktesting.TB, restConfig restclient.Config, informerSet informers.SharedInformerFactory) func() {
 	restclient.AddUserAgent(&restConfig, "gc-controller")
 	clientSet := clientset.NewForConfigOrDie(&restConfig)
@@ -239,9 +236,8 @@ func CreateGCController(ctx context.Context, tb ktesting.TB, restConfig restclie
 	return startGC
 }
 
-// CreateNamespaceController creates a namespace controller and returns a run
-// function for it. The informer factory needs to be started before invoking
-// that function.
+// CreateNamespaceController 创建一个 namespace controller 并返回对应的 run 函数。
+// 调用该函数前需要先启动 informer factory。
 func CreateNamespaceController(ctx context.Context, tb ktesting.TB, restConfig restclient.Config, informerSet informers.SharedInformerFactory) func() {
 	restclient.AddUserAgent(&restConfig, "namespace-controller")
 	clientSet := clientset.NewForConfigOrDie(&restConfig)
@@ -263,13 +259,13 @@ func CreateNamespaceController(ctx context.Context, tb ktesting.TB, restConfig r
 	}
 }
 
-// TestContext store necessary context info.
-// It also contains some optional parameters for InitTestScheduler.
+// TestContext 存储必要的 context 信息。
+// 它还包含一些供 InitTestScheduler 使用的可选参数。
 type TestContext struct {
-	// DisableEventSink, if set to true before calling InitTestScheduler,
-	// will skip the eventBroadcaster.StartRecordingToSink and thus
-	// some extra goroutines which are tricky to get rid of after
-	// a test.
+	// DisableEventSink 如果在调用 InitTestScheduler 前设置为 true，
+	// 将跳过 eventBroadcaster.StartRecordingToSink，
+	// 从而避免测试结束后那些难以清理的
+	// 额外 goroutine。
 	DisableEventSink bool
 
 	NS                 *v1.Namespace
@@ -278,19 +274,19 @@ type TestContext struct {
 	InformerFactory    informers.SharedInformerFactory
 	DynInformerFactory dynamicinformer.DynamicSharedInformerFactory
 	Scheduler          *scheduler.Scheduler
-	// This is the top context when initializing the test environment.
+	// 这是初始化测试环境时的顶层 context。
 	Ctx context.Context
-	// CloseFn will stop the apiserver and clean up the resources
-	// after itself, including shutting down its storage layer.
+	// CloseFn 会停止 apiserver 并清理其自身资源，
+	// 包括关闭其存储层。
 	CloseFn framework.TearDownFunc
-	// This is the context when initializing scheduler.
+	// 这是初始化 scheduler 时的 context。
 	SchedulerCtx context.Context
-	// SchedulerCloseFn will tear down the resources in creating scheduler,
-	// including the scheduler itself.
+	// SchedulerCloseFn 会清理创建 scheduler 时产生的资源，
+	// 包括 scheduler 本身。
 	SchedulerCloseFn framework.TearDownFunc
 
-	// RoundTrip, if set, will be called for every HTTP request going to the apiserver.
-	// It can be used for error injection.
+	// RoundTrip 如果设置，将在每个发往 apiserver 的 HTTP 请求上调用。
+	// 它可用于错误注入。
 	RoundTrip atomic.Pointer[RoundTripWrapper]
 }
 
@@ -311,7 +307,7 @@ func (r roundTripWrapper) RoundTrip(req *http.Request) (*http.Response, error) {
 
 var _ http.RoundTripper = roundTripWrapper{}
 
-// CleanupNodes cleans all nodes which were created during integration test
+// CleanupNodes 清理集成测试期间创建的所有 Node
 func CleanupNodes(cs clientset.Interface, t *testing.T) {
 	err := cs.CoreV1().Nodes().DeleteCollection(context.TODO(), *metav1.NewDeleteOptions(0), metav1.ListOptions{})
 	if err != nil {
@@ -319,7 +315,7 @@ func CleanupNodes(cs clientset.Interface, t *testing.T) {
 	}
 }
 
-// PodDeleted returns true if a pod is not found in the given namespace.
+// PodDeleted 在给定 namespace 中找不到 Pod 时返回 true。
 func PodDeleted(ctx context.Context, c clientset.Interface, podNamespace, podName string) wait.ConditionWithContextFunc {
 	return func(context.Context) (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(ctx, podName, metav1.GetOptions{})
@@ -333,7 +329,7 @@ func PodDeleted(ctx context.Context, c clientset.Interface, podNamespace, podNam
 	}
 }
 
-// PodsCleanedUp returns true if all pods are deleted in the specific namespace.
+// PodsCleanedUp 在指定 namespace 中所有 Pod 都被删除时返回 true。
 func PodsCleanedUp(ctx context.Context, c clientset.Interface, namespace string) wait.ConditionWithContextFunc {
 	return func(context.Context) (bool, error) {
 		list, err := c.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
@@ -344,7 +340,7 @@ func PodsCleanedUp(ctx context.Context, c clientset.Interface, namespace string)
 	}
 }
 
-// SyncSchedulerInformerFactory starts informer and waits for caches to be synced
+// SyncSchedulerInformerFactory 启动 informer 并等待缓存同步完成
 func SyncSchedulerInformerFactory(testCtx *TestContext) {
 	testCtx.InformerFactory.Start(testCtx.SchedulerCtx.Done())
 	if testCtx.DynInformerFactory != nil {
@@ -356,14 +352,14 @@ func SyncSchedulerInformerFactory(testCtx *TestContext) {
 	}
 }
 
-// CleanupTest cleans related resources which were created during integration test
+// CleanupTest 清理集成测试期间创建的相关资源
 func CleanupTest(t *testing.T, testCtx *TestContext) {
-	// Cleanup nodes and namespaces.
+	// 清理 Node 和 Namespace。
 	if err := testCtx.ClientSet.CoreV1().Nodes().DeleteCollection(testCtx.Ctx, *metav1.NewDeleteOptions(0), metav1.ListOptions{}); err != nil {
 		t.Errorf("error while cleaning up nodes, error: %v", err)
 	}
 	framework.DeleteNamespaceOrDie(testCtx.ClientSet, testCtx.NS, t)
-	// Terminate the scheduler and apiserver.
+	// 终止 scheduler 和 apiserver。
 	testCtx.CloseFn()
 }
 
@@ -376,7 +372,7 @@ func RemovePodFinalizersInNamespace(ctx context.Context, cs clientset.Interface,
 	RemovePodFinalizers(ctx, cs, t, pods.Items...)
 }
 
-// RemovePodFinalizers removes pod finalizers for the pods
+// RemovePodFinalizers 移除给定 Pod 的 finalizer
 func RemovePodFinalizers(ctx context.Context, cs clientset.Interface, t *testing.T, pods ...v1.Pod) {
 	t.Helper()
 	for _, p := range pods {
@@ -384,8 +380,8 @@ func RemovePodFinalizers(ctx context.Context, cs clientset.Interface, t *testing
 		if err != nil && !apierrors.IsNotFound(err) {
 			t.Errorf("error while removing pod finalizers for %v: %v", klog.KObj(&p), err)
 		} else if pod != nil && len(pod.Finalizers) > 0 {
-			// Use Patch to remove finalizer, instead of Update, to avoid transient
-			// conflicts.
+			// 使用 Patch 而非 Update 移除 finalizer，
+			// 以避免瞬态冲突。
 			patchBytes, _ := json.Marshal(map[string]interface{}{
 				"metadata": map[string]interface{}{
 					"$deleteFromPrimitiveList/finalizers": pod.Finalizers,
@@ -399,7 +395,7 @@ func RemovePodFinalizers(ctx context.Context, cs clientset.Interface, t *testing
 	}
 }
 
-// CleanupPods deletes the given pods and waits for them to be actually deleted.
+// CleanupPods 删除给定的 Pod，并等待它们真正被删除。
 func CleanupPods(ctx context.Context, cs clientset.Interface, t *testing.T, pods []*v1.Pod) {
 	for _, p := range pods {
 		err := cs.CoreV1().Pods(p.Namespace).Delete(ctx, p.Name, *metav1.NewDeleteOptions(0))
@@ -415,7 +411,7 @@ func CleanupPods(ctx context.Context, cs clientset.Interface, t *testing.T, pods
 	}
 }
 
-// AddTaintToNode add taints to specific node
+// AddTaintToNode 给指定 Node 添加 taint
 func AddTaintToNode(cs clientset.Interface, nodeName string, taint v1.Taint) error {
 	node, err := cs.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -426,7 +422,7 @@ func AddTaintToNode(cs clientset.Interface, nodeName string, taint v1.Taint) err
 	return err
 }
 
-// RemoveTaintOffNode removes a specific taint from a node
+// RemoveTaintOffNode 从 Node 上移除指定的 taint
 func RemoveTaintOffNode(cs clientset.Interface, nodeName string, taint v1.Taint) error {
 	node, err := cs.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -443,14 +439,14 @@ func RemoveTaintOffNode(cs clientset.Interface, nodeName string, taint v1.Taint)
 	return err
 }
 
-// WaitForNodeTaints waits for a node to have the target taints and returns
-// an error if it does not have taints within the given timeout.
+// WaitForNodeTaints 等待 Node 具有目标 taint，
+// 如果在给定超时时间内没有这些 taint，则返回 error。
 func WaitForNodeTaints(ctx context.Context, cs clientset.Interface, node *v1.Node, taints []v1.Taint) error {
 	return wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 30*time.Second, false, NodeTainted(ctx, cs, node.Name, taints))
 }
 
-// NodeTainted return a condition function that returns true if the given node contains
-// the taints.
+// NodeTainted 返回一个条件函数，当给定 Node 包含
+// 这些 taint 时返回 true。
 func NodeTainted(ctx context.Context, cs clientset.Interface, nodeName string, taints []v1.Taint) wait.ConditionWithContextFunc {
 	return func(context.Context) (bool, error) {
 		node, err := cs.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
@@ -458,7 +454,7 @@ func NodeTainted(ctx context.Context, cs clientset.Interface, nodeName string, t
 			return false, err
 		}
 
-		// node.Spec.Taints may have more taints
+		// node.Spec.Taints 可能包含更多 taint
 		if len(taints) > len(node.Spec.Taints) {
 			return false, nil
 		}
@@ -473,20 +469,20 @@ func NodeTainted(ctx context.Context, cs clientset.Interface, nodeName string, t
 	}
 }
 
-// NodeReadyStatus returns the status of first condition with type NodeReady.
-// If none of the condition is of type NodeReady, returns an error.
+// NodeReadyStatus 返回第一个类型为 NodeReady 的 condition 的 status。
+// 如果没有类型为 NodeReady 的 condition，则返回 error。
 func NodeReadyStatus(conditions []v1.NodeCondition) (v1.ConditionStatus, error) {
 	for _, c := range conditions {
 		if c.Type != v1.NodeReady {
 			continue
 		}
-		// Just return the first condition with type NodeReady
+		// 直接返回第一个类型为 NodeReady 的 condition
 		return c.Status, nil
 	}
 	return v1.ConditionFalse, errors.New("None of the conditions is of type NodeReady")
 }
 
-// GetTolerationSeconds gets the period of time the toleration
+// GetTolerationSeconds 获取 toleration 的时间段
 func GetTolerationSeconds(tolerations []v1.Toleration) (int64, error) {
 	for _, t := range tolerations {
 		if t.Key == v1.TaintNodeNotReady && t.Effect == v1.TaintEffectNoExecute && t.Operator == v1.TolerationOpExists {
@@ -496,7 +492,7 @@ func GetTolerationSeconds(tolerations []v1.Toleration) (int64, error) {
 	return 0, fmt.Errorf("cannot find toleration")
 }
 
-// NodeCopyWithConditions duplicates the ode object with conditions
+// NodeCopyWithConditions 复制 Node 对象并设置 conditions
 func NodeCopyWithConditions(node *v1.Node, conditions []v1.NodeCondition) *v1.Node {
 	copy := node.DeepCopy()
 	copy.ResourceVersion = "0"
@@ -507,16 +503,16 @@ func NodeCopyWithConditions(node *v1.Node, conditions []v1.NodeCondition) *v1.No
 	return copy
 }
 
-// UpdateNodeStatus updates the status of node.
+// UpdateNodeStatus 更新 Node 的 status。
 func UpdateNodeStatus(cs clientset.Interface, node *v1.Node) error {
 	_, err := cs.CoreV1().Nodes().UpdateStatus(context.TODO(), node, metav1.UpdateOptions{})
 	return err
 }
 
-// InitTestAPIServer initializes a test environment and creates an API server with default
-// configuration.
-// It registers cleanup functions to t.Cleanup(), they will be called when the test completes,
-// no need to do this again.
+// InitTestAPIServer 初始化测试环境，并使用默认配置
+// 创建一个 API server。
+// 它会将清理函数注册到 t.Cleanup()，测试结束时会被调用，
+// 无需重复执行此操作。
 func InitTestAPIServer(t *testing.T, nsPrefix string, admission admission.Interface) *TestContext {
 	tCtx := ktesting.Init(t)
 	testCtx := &TestContext{Ctx: tCtx}
@@ -530,8 +526,8 @@ func InitTestAPIServer(t *testing.T, nsPrefix string, admission admission.Interf
 			if utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) {
 				options.APIEnablement.RuntimeConfig[resourceapi.SchemeGroupVersion.String()] = "true"
 				if utilfeature.DefaultMutableFeatureGate.EmulationVersion().LessThan(version.MustParse("v1.34.0")) {
-					// Cannot enable the resourceapi.SchemeGroupVersion when emulating < 1.34 unless
-					// we enable --runtime-config-emulation-forward-compatible.
+					// 在 emulating < 1.34 时无法启用 resourceapi.SchemeGroupVersion，
+					// 除非启用 --runtime-config-emulation-forward-compatible。
 					options.GenericServerRunOptions.RuntimeConfigEmulationForwardCompatible = true
 				}
 			}
@@ -549,7 +545,7 @@ func InitTestAPIServer(t *testing.T, nsPrefix string, admission admission.Interf
 		},
 	})
 
-	// Support wrapping HTTP requests.
+	// 支持包装 HTTP 请求。
 	testCtx.KubeConfig.Wrap(func(transport http.RoundTripper) http.RoundTripper {
 		return roundTripWrapper{tc: testCtx, transport: transport}
 	})
@@ -578,17 +574,17 @@ func InitTestAPIServer(t *testing.T, nsPrefix string, admission admission.Interf
 	return testCtx
 }
 
-// WithNewNamespace creates a child TestContext that shares the API server from
-// parent but gets a fresh namespace. Only the namespace is deleted on t.Cleanup;
-// the API server lifecycle is managed by the caller. This is useful when
-// multiple subtests share one API server to avoid the per-subtest startup cost.
+// WithNewNamespace 创建一个子 TestContext，它与父 TestContext 共享 API server，
+// 但获得一个新的 namespace。t.Cleanup 时只删除该 namespace；
+// API server 的生命周期由调用方管理。当多个子测试共享一个 API server 时，
+// 这可以避免每个子测试的启动开销。
 func WithNewNamespace(t *testing.T, parent *TestContext, nsPrefix string) *TestContext {
 	t.Helper()
 	child := &TestContext{
 		ClientSet:  parent.ClientSet,
 		KubeConfig: parent.KubeConfig,
 		Ctx:        parent.Ctx,
-		CloseFn:    func() {}, // API server is owned by parent; do not tear it down here.
+		CloseFn:    func() {}, // API server 由父级拥有，不要在此处销毁它。
 	}
 	child.NS = framework.CreateNamespaceOrDie(child.ClientSet, nsPrefix+string(uuid.NewUUID()), t)
 	t.Cleanup(func() {
@@ -597,7 +593,7 @@ func WithNewNamespace(t *testing.T, parent *TestContext, nsPrefix string) *TestC
 	return child
 }
 
-// WaitForSchedulerCacheCleanup waits for cleanup of scheduler's cache to complete
+// WaitForSchedulerCacheCleanup 等待 scheduler 缓存清理完成
 func WaitForSchedulerCacheCleanup(ctx context.Context, sched *scheduler.Scheduler, t *testing.T) {
 	schedulerCacheIsEmpty := func(context.Context) (bool, error) {
 		dump := sched.Cache.Dump()
@@ -610,18 +606,18 @@ func WaitForSchedulerCacheCleanup(ctx context.Context, sched *scheduler.Schedule
 	}
 }
 
-// InitTestScheduler initializes a test environment and creates a scheduler with default
-// configuration.
+// InitTestScheduler 初始化测试环境，并使用默认配置
+// 创建 scheduler。
 func InitTestScheduler(
 	t *testing.T,
 	testCtx *TestContext,
 ) *TestContext {
-	// Pod preemption is enabled by default scheduler configuration.
+	// 默认 scheduler 配置会启用 Pod 抢占。
 	return InitTestSchedulerWithOptions(t, testCtx, 0)
 }
 
-// InitTestSchedulerWithOptions initializes a test environment and creates a scheduler with default
-// configuration and other options.
+// InitTestSchedulerWithOptions 初始化测试环境，并使用默认配置
+// 和其他选项创建 scheduler。
 func InitTestSchedulerWithOptions(
 	t *testing.T,
 	testCtx *TestContext,
@@ -631,7 +627,7 @@ func InitTestSchedulerWithOptions(
 	ctx, cancel := context.WithCancel(testCtx.Ctx)
 	testCtx.SchedulerCtx = ctx
 
-	// 1. Create scheduler
+	// 1. 创建 scheduler
 	testCtx.InformerFactory = scheduler.NewInformerFactory(testCtx.ClientSet, resyncPeriod, nil)
 	if testCtx.KubeConfig != nil {
 		dynClient := dynamic.NewForConfigOrDie(testCtx.KubeConfig)
@@ -675,24 +671,24 @@ func InitTestSchedulerWithOptions(
 	return testCtx
 }
 
-// WaitForPodToScheduleWithTimeout waits for a pod to get scheduled and returns
-// an error if it does not scheduled within the given timeout.
+// WaitForPodToScheduleWithTimeout 等待 Pod 被调度，
+// 如果在给定超时时间内未被调度，则返回 error。
 func WaitForPodToScheduleWithTimeout(ctx context.Context, cs clientset.Interface, pod *v1.Pod, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, timeout, false, PodScheduled(cs, pod.Namespace, pod.Name))
 }
 
-// WaitForPodToSchedule waits for a pod to get scheduled and returns an error if
-// it does not get scheduled within the timeout duration (30 seconds).
+// WaitForPodToSchedule 等待 Pod 被调度，如果在
+// 超时时间（30 秒）内未被调度，则返回 error。
 func WaitForPodToSchedule(ctx context.Context, cs clientset.Interface, pod *v1.Pod) error {
 	return WaitForPodToScheduleWithTimeout(ctx, cs, pod, 30*time.Second)
 }
 
-// PodScheduled checks if the pod has been scheduled
+// PodScheduled 检查 Pod 是否已被调度
 func PodScheduled(c clientset.Interface, podNamespace, podName string) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
-			// This could be a connection error so we want to retry.
+			// 可能是连接错误，所以重试。
 			return false, nil
 		}
 		if pod.Spec.NodeName == "" {
@@ -702,8 +698,8 @@ func PodScheduled(c clientset.Interface, podNamespace, podName string) wait.Cond
 	}
 }
 
-// InitDisruptionController initializes and runs a Disruption Controller to properly
-// update PodDisuptionBudget objects.
+// InitDisruptionController 初始化并运行 Disruption Controller，
+// 以正确更新 PodDisruptionBudget 对象。
 func InitDisruptionController(t *testing.T, testCtx *TestContext) *disruption.DisruptionController {
 	informers := informers.NewSharedInformerFactory(testCtx.ClientSet, 12*time.Hour)
 
@@ -736,8 +732,8 @@ func InitDisruptionController(t *testing.T, testCtx *TestContext) *disruption.Di
 	return dc
 }
 
-// InitTestSchedulerWithNS initializes a test environment and creates API server and scheduler with default
-// configuration.
+// InitTestSchedulerWithNS 初始化测试环境，并使用默认配置
+// 创建 API server 和 scheduler。
 func InitTestSchedulerWithNS(t *testing.T, nsPrefix string, opts ...scheduler.Option) *TestContext {
 	testCtx := InitTestSchedulerWithOptions(t, InitTestAPIServer(t, nsPrefix, nil), 0, opts...)
 	SyncSchedulerInformerFactory(testCtx)
@@ -745,8 +741,8 @@ func InitTestSchedulerWithNS(t *testing.T, nsPrefix string, opts ...scheduler.Op
 	return testCtx
 }
 
-// InitTestDisablePreemption initializes a test environment and creates API server and scheduler with default
-// configuration but with pod preemption disabled.
+// InitTestDisablePreemption 初始化测试环境，并使用默认配置创建
+// API server 和 scheduler，但禁用 Pod 抢占。
 func InitTestDisablePreemption(t *testing.T, nsPrefix string) *TestContext {
 	cfg := configtesting.V1ToInternalWithDefaults(t, kubeschedulerconfigv1.KubeSchedulerConfiguration{
 		Profiles: []kubeschedulerconfigv1.KubeSchedulerProfile{{
@@ -769,8 +765,8 @@ func InitTestDisablePreemption(t *testing.T, nsPrefix string) *TestContext {
 	return testCtx
 }
 
-// WaitForReflection waits till the passFunc confirms that the object it expects
-// to see is in the store. Used to observe reflected events.
+// WaitForReflection 等待 passFunc 确认其期望看到的
+// 对象已在 store 中。用于观察反射事件。
 func WaitForReflection(ctx context.Context, t *testing.T, nodeLister corelisters.NodeLister, key string,
 	passFunc func(n interface{}) bool) error {
 	var nodes []*v1.Node
@@ -820,8 +816,8 @@ func createNodes(cs clientset.Interface, prefix string, wrapper *st.NodeWrapper,
 	return nodes[:], nil
 }
 
-// CreateAndWaitForNodesInCache calls createNodes(), and wait for the created
-// nodes to be present in scheduler cache.
+// CreateAndWaitForNodesInCache 调用 createNodes()，并等待创建的
+// Node 出现在 scheduler 缓存中。
 func CreateAndWaitForNodesInCache(testCtx *TestContext, prefix string, wrapper *st.NodeWrapper, numNodes int) ([]*v1.Node, error) {
 	existingNodes := testCtx.Scheduler.Cache.NodeCount()
 	nodes, err := createNodes(testCtx.ClientSet, prefix, wrapper, numNodes)
@@ -831,8 +827,8 @@ func CreateAndWaitForNodesInCache(testCtx *TestContext, prefix string, wrapper *
 	return nodes, WaitForNodesInCache(testCtx.Ctx, testCtx.Scheduler, numNodes+existingNodes)
 }
 
-// WaitForNodesInCache ensures at least <nodeCount> nodes are present in scheduler cache
-// within 30 seconds; otherwise returns false.
+// WaitForNodesInCache 确保 30 秒内 scheduler 缓存中至少存在
+// <nodeCount> 个 Node；否则返回 false。
 func WaitForNodesInCache(ctx context.Context, sched *scheduler.Scheduler, nodeCount int) error {
 	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, wait.ForeverTestTimeout, false, func(context.Context) (bool, error) {
 		return sched.Cache.NodeCount() >= nodeCount, nil
@@ -862,8 +858,8 @@ type PausePodConfig struct {
 	NonRestartableInitContainerPorts  []v1.ContainerPort
 }
 
-// InitPausePod initializes a pod API object from the given config. It is used
-// mainly in pod creation process.
+// InitPausePod 根据给定配置初始化 Pod API 对象。它主要
+// 用于 Pod 创建流程。
 func InitPausePod(conf *PausePodConfig) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -922,15 +918,15 @@ func InitPausePod(conf *PausePodConfig) *v1.Pod {
 	return pod
 }
 
-// CreatePausePod creates a pod with "Pause" image and the given config and
-// return its pointer and error status.
+// CreatePausePod 使用 "Pause" 镜像和给定配置创建 Pod，
+// 返回其指针和 error 状态。
 func CreatePausePod(cs clientset.Interface, p *v1.Pod) (*v1.Pod, error) {
 	return cs.CoreV1().Pods(p.Namespace).Create(context.TODO(), p, metav1.CreateOptions{})
 }
 
-// CreatePausePodWithResource creates a pod with "Pause" image and the given
-// resources and returns its pointer and error status. The resource list can be
-// nil.
+// CreatePausePodWithResource 使用 "Pause" 镜像和给定资源创建 Pod，
+// 返回其指针和 error 状态。资源列表可以为
+// nil。
 func CreatePausePodWithResource(cs clientset.Interface, podName string,
 	nsName string, res *v1.ResourceList) (*v1.Pod, error) {
 	var conf PausePodConfig
@@ -951,30 +947,30 @@ func CreatePausePodWithResource(cs clientset.Interface, podName string,
 	return CreatePausePod(cs, InitPausePod(&conf))
 }
 
-// CreatePVC creates a PersistentVolumeClaim with the given config and returns
-// its pointer and error status.
+// CreatePVC 使用给定配置创建 PersistentVolumeClaim，并返回
+// 其指针和 error 状态。
 func CreatePVC(cs clientset.Interface, pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
 	return cs.CoreV1().PersistentVolumeClaims(pvc.Namespace).Create(context.TODO(), pvc, metav1.CreateOptions{})
 }
 
-// CreatePV creates a PersistentVolume with the given config and returns its
-// pointer and error status.
+// CreatePV 使用给定配置创建 PersistentVolume，并返回其
+// 指针和 error 状态。
 func CreatePV(cs clientset.Interface, pv *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	return cs.CoreV1().PersistentVolumes().Create(context.TODO(), pv, metav1.CreateOptions{})
 }
 
-// DeletePVC deletes the given PVC in the given namespace.
+// DeletePVC 删除给定 namespace 中的 PVC。
 func DeletePVC(cs clientset.Interface, pvcName string, nsName string) error {
 	return cs.CoreV1().PersistentVolumeClaims(nsName).Delete(context.TODO(), pvcName, *metav1.NewDeleteOptions(0))
 }
 
-// DeletePV deletes the given PV in the given namespace.
+// DeletePV 删除给定 namespace 中的 PV。
 func DeletePV(cs clientset.Interface, pvName string) error {
 	return cs.CoreV1().PersistentVolumes().Delete(context.TODO(), pvName, *metav1.NewDeleteOptions(0))
 }
 
-// RunPausePod creates a pod with "Pause" image and the given config and waits
-// until it is scheduled. It returns its pointer and error status.
+// RunPausePod 使用 "Pause" 镜像和给定配置创建 Pod，并等待
+// 其被调度。它返回其指针和 error 状态。
 func RunPausePod(cs clientset.Interface, pod *v1.Pod) (*v1.Pod, error) {
 	pod, err := cs.CoreV1().Pods(pod.Namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
@@ -995,8 +991,8 @@ type PodWithContainersConfig struct {
 	Containers []v1.Container
 }
 
-// InitPodWithContainers initializes a pod API object from the given config. This is used primarily for generating
-// pods with containers each having a specific image.
+// InitPodWithContainers 根据给定配置初始化 Pod API 对象。主要用于生成
+// 每个容器使用特定镜像的 Pod。
 func InitPodWithContainers(cs clientset.Interface, conf *PodWithContainersConfig) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1010,8 +1006,8 @@ func InitPodWithContainers(cs clientset.Interface, conf *PodWithContainersConfig
 	return pod
 }
 
-// RunPodWithContainers creates a pod with given config and containers and waits
-// until it is scheduled. It returns its pointer and error status.
+// RunPodWithContainers 使用给定配置和容器创建 Pod，并等待
+// 其被调度。它返回其指针和 error 状态。
 func RunPodWithContainers(cs clientset.Interface, pod *v1.Pod) (*v1.Pod, error) {
 	pod, err := cs.CoreV1().Pods(pod.Namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
@@ -1026,7 +1022,7 @@ func RunPodWithContainers(cs clientset.Interface, pod *v1.Pod) (*v1.Pod, error) 
 	return pod, nil
 }
 
-// PodIsGettingEvicted returns true if the pod's deletion timestamp is set.
+// PodIsGettingEvicted 在 Pod 设置了 deletion timestamp 时返回 true。
 func PodIsGettingEvicted(c clientset.Interface, podNamespace, podName string) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(ctx, podName, metav1.GetOptions{})
@@ -1040,12 +1036,12 @@ func PodIsGettingEvicted(c clientset.Interface, podNamespace, podName string) wa
 	}
 }
 
-// PodScheduledIn returns true if a given pod is placed onto one of the expected nodes.
+// PodScheduledIn 在给定 Pod 被放到预期 Node 之一上时返回 true。
 func PodScheduledIn(c clientset.Interface, podNamespace, podName string, nodeNames []string) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
-			// This could be a connection error so we want to retry.
+			// 可能是连接错误，所以重试。
 			return false, nil
 		}
 		if pod.Spec.NodeName == "" {
@@ -1060,13 +1056,13 @@ func PodScheduledIn(c clientset.Interface, podNamespace, podName string, nodeNam
 	}
 }
 
-// PodUnschedulable returns a condition function that returns true if the given pod
-// gets unschedulable status of reason 'Unschedulable'.
+// PodUnschedulable 返回一个条件函数，当给定 Pod 进入
+// 原因为 'Unschedulable' 的 unschedulable 状态时返回 true。
 func PodUnschedulable(c clientset.Interface, podNamespace, podName string) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
-			// This could be a connection error so we want to retry.
+			// 可能是连接错误，所以重试。
 			return false, nil
 		}
 		_, cond := podutil.GetPodCondition(&pod.Status, v1.PodScheduled)
@@ -1075,14 +1071,14 @@ func PodUnschedulable(c clientset.Interface, podNamespace, podName string) wait.
 	}
 }
 
-// PodSchedulingError returns a condition function that returns true if the given pod
-// gets unschedulable status for reasons other than "Unschedulable". The scheduler
-// records such reasons in case of error.
+// PodSchedulingError 返回一个条件函数，当给定 Pod 因
+// "Unschedulable" 之外的原因进入 unschedulable 状态时返回 true。scheduler
+// 会在出错时记录这类原因。
 func PodSchedulingError(c clientset.Interface, podNamespace, podName string) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
-			// This could be a connection error so we want to retry.
+			// 可能是连接错误，所以重试。
 			return false, nil
 		}
 		_, cond := podutil.GetPodCondition(&pod.Status, v1.PodScheduled)
@@ -1091,13 +1087,13 @@ func PodSchedulingError(c clientset.Interface, podNamespace, podName string) wai
 	}
 }
 
-// PodSchedulingGated returns a condition function that returns true if the given pod
-// gets unschedulable status of reason 'SchedulingGated'.
+// PodSchedulingGated 返回一个条件函数，当给定 Pod 进入
+// 原因为 'SchedulingGated' 的 unschedulable 状态时返回 true。
 func PodSchedulingGated(ctx context.Context, c clientset.Interface, podNamespace, podName string) wait.ConditionWithContextFunc {
 	return func(context.Context) (bool, error) {
 		pod, err := c.CoreV1().Pods(podNamespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
-			// This could be a connection error so we want to retry.
+			// 可能是连接错误，所以重试。
 			return false, nil
 		}
 		_, cond := podutil.GetPodCondition(&pod.Status, v1.PodScheduled)
@@ -1106,26 +1102,26 @@ func PodSchedulingGated(ctx context.Context, c clientset.Interface, podNamespace
 	}
 }
 
-// WaitForPodUnschedulableWithTimeout waits for a pod to fail scheduling and returns
-// an error if it does not become unschedulable within the given timeout.
+// WaitForPodUnschedulableWithTimeout 等待 Pod 调度失败，
+// 如果在给定超时时间内未变为 unschedulable，则返回 error。
 func WaitForPodUnschedulableWithTimeout(ctx context.Context, cs clientset.Interface, pod *v1.Pod, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, timeout, false, PodUnschedulable(cs, pod.Namespace, pod.Name))
 }
 
-// WaitForPodUnschedulable waits for a pod to fail scheduling and returns
-// an error if it does not become unschedulable within the timeout duration (30 seconds).
+// WaitForPodUnschedulable 等待 Pod 调度失败，
+// 如果在超时时间（30 秒）内未变为 unschedulable，则返回 error。
 func WaitForPodUnschedulable(ctx context.Context, cs clientset.Interface, pod *v1.Pod) error {
 	return WaitForPodUnschedulableWithTimeout(ctx, cs, pod, 30*time.Second)
 }
 
-// WaitForPodSchedulingGated waits for a pod to be in scheduling gated state
-// and returns an error if it does not fall into this state within the given timeout.
+// WaitForPodSchedulingGated 等待 Pod 进入 scheduling gated 状态，
+// 如果在给定超时时间内未进入该状态，则返回 error。
 func WaitForPodSchedulingGated(ctx context.Context, cs clientset.Interface, pod *v1.Pod, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, timeout, false, PodSchedulingGated(ctx, cs, pod.Namespace, pod.Name))
 }
 
-// WaitForPDBsStable waits for PDBs to have "CurrentHealthy" status equal to
-// the expected values.
+// WaitForPDBsStable 等待 PDB 的 "CurrentHealthy" status
+// 等于预期值。
 func WaitForPDBsStable(testCtx *TestContext, pdbs []*policy.PodDisruptionBudget, pdbPodNum []int32) error {
 	return wait.PollUntilContextTimeout(testCtx.Ctx, time.Second, 60*time.Second, false, func(context.Context) (bool, error) {
 		pdbList, err := testCtx.ClientSet.PolicyV1().PodDisruptionBudgets(testCtx.NS.Name).List(testCtx.Ctx, metav1.ListOptions{})
@@ -1153,7 +1149,7 @@ func WaitForPDBsStable(testCtx *TestContext, pdbs []*policy.PodDisruptionBudget,
 	})
 }
 
-// WaitCachedPodsStable waits until scheduler cache has the given pods.
+// WaitCachedPodsStable 等待 scheduler 缓存包含给定的 Pod。
 func WaitCachedPodsStable(testCtx *TestContext, pods []*v1.Pod) error {
 	return wait.PollUntilContextTimeout(testCtx.Ctx, time.Second, 30*time.Second, false, func(context.Context) (bool, error) {
 		cachedPods, err := testCtx.Scheduler.Cache.PodCount()
@@ -1177,7 +1173,7 @@ func WaitCachedPodsStable(testCtx *TestContext, pods []*v1.Pod) error {
 	})
 }
 
-// DeletePod deletes the given pod in the given namespace.
+// DeletePod 删除给定 namespace 中的 Pod。
 func DeletePod(cs clientset.Interface, podName string, nsName string) error {
 	return cs.CoreV1().Pods(nsName).Delete(context.TODO(), podName, *metav1.NewDeleteOptions(0))
 }
@@ -1196,8 +1192,8 @@ func CreateNamespacesWithLabels(cs clientset.Interface, namespaces []string, lab
 	return nil
 }
 
-// timeout returns a timeout error if the given `f` function doesn't
-// complete within `d` duration; otherwise it returns nil.
+// timeout 如果给定的 `f` 函数未在 `d` 时间内完成，则返回超时 error；
+// 否则返回 nil。
 func timeout(ctx context.Context, d time.Duration, f func()) error {
 	ctx, cancel := context.WithTimeout(ctx, d)
 	defer cancel()
@@ -1216,15 +1212,15 @@ func timeout(ctx context.Context, d time.Duration, f func()) error {
 	}
 }
 
-// NextEntityOrDie returns the next entity (either Pod or PodGroup) in the scheduler queue.
-// The operation needs to be completed within 5 seconds; otherwise the test gets aborted.
+// NextEntityOrDie 返回 scheduler 队列中的下一个 entity（Pod 或 PodGroup）。
+// 该操作必须在 5 秒内完成，否则测试将中止。
 func NextEntityOrDie(t *testing.T, testCtx *TestContext) schedulerframework.QueuedEntityInfo {
 	t.Helper()
 
 	var entity schedulerframework.QueuedEntityInfo
 	logger := klog.FromContext(testCtx.Ctx)
-	// NextEntity() is a blocking operation. Wrap it in timeout() to avoid relying on
-	// default go testing timeout (10m) to abort.
+	// NextEntity() 是阻塞操作。用 timeout() 包装它，避免依赖
+	// Go 默认的测试超时（10m）来中止。
 	if err := timeout(testCtx.Ctx, time.Second*5, func() {
 		entity, _ = testCtx.Scheduler.NextEntity(logger)
 	}); err != nil {

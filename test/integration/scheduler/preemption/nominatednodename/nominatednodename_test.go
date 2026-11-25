@@ -44,7 +44,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// imported from testutils
+// 从 testutils 导入
 var (
 	initPausePod   = testutils.InitPausePod
 	createNode     = testutils.CreateNode
@@ -61,8 +61,8 @@ const (
 	doNotFailMe      = "do-not-fail-me"
 )
 
-// A fake plugin implements PreBind extension point.
-// It always fails with an Unschedulable status, unless the pod contains a `doNotFailMe` string.
+// 这个假插件实现了 PreBind 扩展点。
+// 除非 Pod 包含 `doNotFailMe` 字符串，否则它总是以 Unschedulable 状态失败。
 type alwaysFail struct{}
 
 func (af *alwaysFail) Name() string {
@@ -84,24 +84,24 @@ func newAlwaysFail(_ context.Context, _ runtime.Object, _ fwk.Handle) (fwk.Plugi
 	return &alwaysFail{}, nil
 }
 
-// TestNominatedNode verifies if a pod's nominatedNodeName is set and unset
-// properly in different scenarios.
+// TestNominatedNode 验证在不同场景下，Pod 的 nominatedNodeName 是否被正确设置
+// 和清除。
 func TestNominatedNode(t *testing.T) {
 	tests := []struct {
 		name string
-		// Initial nodes to simulate special conditions.
+		// 用于模拟特殊条件的初始节点。
 		initNodes    []*v1.Node
 		nodeCapacity map[v1.ResourceName]string
-		// A slice of pods to be created in batch.
+		// 要批量创建的 Pod 切片。
 		podsToCreate [][]*v1.Pod
-		// Each postCheck function is run after creating the corresponding batch of pods. The check is run for each pod in the batch.
+		// 每个 postCheck 函数在创建对应的 Pod 批次后运行，并对批次中的每个 Pod 执行一次检查。
 		postChecks []func(ctx context.Context, cs clientset.Interface, pod *v1.Pod) error
-		// Delete the fake node or not. Optional.
+		// 是否删除假节点。可选。
 		deleteFakeNode bool
-		// Pods to be deleted. Optional.
+		// 要删除的 Pod。可选。
 		podNamesToDelete []string
 
-		// Register dummy plugin to simulate particular scheduling failures. Optional.
+		// 注册用于模拟特定调度失败的虚拟插件。可选。
 		customPlugins     *configv1.Plugins
 		outOfTreeRegistry frameworkruntime.Registry
 	}{
@@ -124,9 +124,9 @@ func TestNominatedNode(t *testing.T) {
 			},
 			postChecks: []func(ctx context.Context, cs clientset.Interface, pod *v1.Pod) error{
 				testutils.WaitForPodToSchedule,
-				// Expect NNN to be set on "medium" pod after starting preemption.
+				// 预期开始抢占后会在 "medium" Pod 上设置 NNN。
 				testutils.WaitForNominatedNodeName,
-				// Expect NNN to be set on "high" pod after starting preemption.
+				// 预期开始抢占后会在 "high" Pod 上设置 NNN。
 				testutils.WaitForNominatedNodeName,
 			},
 			podNamesToDelete: []string{"low-1", "low-2", "low-3", "low-4"},
@@ -147,9 +147,9 @@ func TestNominatedNode(t *testing.T) {
 			},
 			postChecks: []func(ctx context.Context, cs clientset.Interface, pod *v1.Pod) error{
 				testutils.WaitForPodToSchedule,
-				// Expect NNN to be set on "medium" pod after starting preemption.
+				// 预期开始抢占后会在 "medium" Pod 上设置 NNN。
 				testutils.WaitForNominatedNodeName,
-				// Expect "high" pod to get scheduled before "medium" re-enters the scheduling cycle.
+				// 预期 "high" Pod 在 "medium" 重新进入调度周期之前完成调度。
 				testutils.WaitForPodToSchedule,
 			},
 			podNamesToDelete: []string{"low"},
@@ -169,13 +169,13 @@ func TestNominatedNode(t *testing.T) {
 				testutils.WaitForPodToSchedule,
 				testutils.WaitForNominatedNodeName,
 			},
-			// Delete the fake node to simulate an ErrNoNodesAvailable error.
+			// 删除假节点以模拟 ErrNoNodesAvailable 错误。
 			deleteFakeNode:   true,
 			podNamesToDelete: []string{"low"},
 		},
 		{
 			name: "mid-priority pod preempts low-priority pod at the beginning, but could not find candidates after the nominated node is deleted",
-			// Create a taint node to simulate the `UnschedulableAndUnresolvable` condition in `findCandidates` during preemption.
+			// 创建一个带污点的节点，以模拟抢占期间 `findCandidates` 中的 `UnschedulableAndUnresolvable` 情况。
 			initNodes: []*v1.Node{
 				st.MakeNode().Name("taint-node").Capacity(map[v1.ResourceName]string{v1.ResourceCPU: "1"}).
 					Taints([]v1.Taint{
@@ -200,7 +200,7 @@ func TestNominatedNode(t *testing.T) {
 				testutils.WaitForPodToSchedule,
 				testutils.WaitForNominatedNodeName,
 			},
-			// Delete the fake node to trigger the `UnschedulableAndUnresolvable` condition in `findCandidates`.
+			// 删除假节点以触发 `findCandidates` 中的 `UnschedulableAndUnresolvable` 情况。
 			deleteFakeNode:   true,
 			podNamesToDelete: []string{"low"},
 		},
@@ -262,13 +262,13 @@ func TestNominatedNode(t *testing.T) {
 							}
 						}
 
-						// Create a node with the specified capacity.
+						// 创建一个具有指定容量的节点。
 						nodeName := "fake-node"
 						if _, err := createNode(cs, st.MakeNode().Name(nodeName).Capacity(tt.nodeCapacity).Obj()); err != nil {
 							t.Fatalf("Error creating node %v: %v", nodeName, err)
 						}
 
-						// Create pods and run post check if necessary.
+						// 创建 Pod，并在需要时执行后置检查。
 						for i, pods := range tt.podsToCreate {
 							for _, p := range pods {
 								p.Namespace = ns
@@ -276,7 +276,7 @@ func TestNominatedNode(t *testing.T) {
 									t.Fatalf("Error creating pod %v: %v", p.Name, err)
 								}
 							}
-							// If necessary, run the post check function.
+							// 如有必要，执行后置检查函数。
 							if len(tt.postChecks) > i && tt.postChecks[i] != nil {
 								for _, p := range pods {
 									if err := tt.postChecks[i](testCtx.Ctx, cs, p); err != nil {
@@ -286,22 +286,22 @@ func TestNominatedNode(t *testing.T) {
 							}
 						}
 
-						// Delete the fake node if necessary.
+						// 如有必要，删除假节点。
 						if tt.deleteFakeNode {
 							if err := cs.CoreV1().Nodes().Delete(testCtx.Ctx, nodeName, *metav1.NewDeleteOptions(0)); err != nil {
 								t.Fatalf("Node %v cannot be deleted: %v", nodeName, err)
 							}
 						}
 
-						// Force deleting the terminating pods if necessary.
-						// This is required if we demand to delete terminating Pods physically.
+						// 如有必要，强制删除处于 terminating 状态的 Pod。
+						// 如果需要物理删除 terminating 的 Pod，就必须这样做。
 						for _, podName := range tt.podNamesToDelete {
 							if err := deletePod(cs, podName, ns); err != nil {
 								t.Fatalf("Pod %v cannot be deleted: %v", podName, err)
 							}
 						}
 
-						// Verify if .status.nominatedNodeName is cleared.
+						// 验证 .status.nominatedNodeName 是否已被清除。
 						if err := wait.PollUntilContextTimeout(testCtx.Ctx, 100*time.Millisecond, wait.ForeverTestTimeout, false, func(ctx context.Context) (bool, error) {
 							pod, err := cs.CoreV1().Pods(ns).Get(ctx, "medium", metav1.GetOptions{})
 							if err != nil {
@@ -324,11 +324,11 @@ func TestNominatedNode(t *testing.T) {
 func initTestPreferNominatedNode(t *testing.T, nsPrefix string, opts ...scheduler.Option) *testutils.TestContext {
 	testCtx := testutils.InitTestSchedulerWithOptions(t, testutils.InitTestAPIServer(t, nsPrefix, nil), 0, opts...)
 	testutils.SyncSchedulerInformerFactory(testCtx)
-	// wraps the NextEntity() method to make it appear the preemption has been done already and the nominated node has been set.
+	// 包装 NextEntity() 方法，使其表现为抢占已经完成且 nominated node 已经设置好。
 	f := testCtx.Scheduler.NextEntity
 	testCtx.Scheduler.NextEntity = func(logger klog.Logger) (framework.QueuedEntityInfo, error) {
 		entity, _ := f(klog.FromContext(testCtx.Ctx))
-		// Scheduler.NextEntity() may return nil when scheduler is shutting down.
+		// 调度器关闭时，Scheduler.NextEntity() 可能返回 nil。
 		if entity != nil {
 			entity.ForEachPodInfo(func(pInfo *framework.QueuedPodInfo) bool {
 				pInfo.Pod.Status.NominatedNodeName = "node-1"
@@ -341,8 +341,8 @@ func initTestPreferNominatedNode(t *testing.T, nsPrefix string, opts ...schedule
 	return testCtx
 }
 
-// TestPreferNominatedNode test that if the nominated node pass all the filters, then preemptor pod will run on the nominated node,
-// otherwise, it will be scheduled to another node in the cluster that ables to pass all the filters.
+// TestPreferNominatedNode 测试：如果 nominated node 通过所有过滤器，则抢占者 Pod 将运行在该 nominated node 上，
+// 否则，它将被调度到集群中另一个能通过所有过滤器的节点上。
 func TestPreferNominatedNode(t *testing.T) {
 	defaultNodeRes := map[v1.ResourceName]string{
 		v1.ResourcePods:   "32",
@@ -422,7 +422,7 @@ func TestPreferNominatedNode(t *testing.T) {
 				}
 
 				pods := make([]*v1.Pod, len(test.existingPods))
-				// Create and run existingPods.
+				// 创建并运行 existingPods。
 				for i, p := range test.existingPods {
 					p.Namespace = nsName
 					pods[i], err = runPausePod(cs, p)
@@ -448,7 +448,7 @@ func TestPreferNominatedNode(t *testing.T) {
 				if err != nil {
 					t.Errorf("Cannot schedule Pod %v/%v, error: %v", test.pod.Namespace, test.pod.Name, err)
 				}
-				// Make sure the pod has been scheduled to the right node.
+				// 确保 Pod 已被调度到正确的节点。
 				if preemptor.Spec.NodeName != test.runningNode {
 					t.Errorf("Expect pod running on %v, got %v.", test.runningNode, preemptor.Spec.NodeName)
 				}

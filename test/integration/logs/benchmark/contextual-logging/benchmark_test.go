@@ -31,8 +31,8 @@ func init() {
 	klog.InitFlags(nil)
 }
 
-// BenchmarkRecursion measures the overhead of adding calling a function
-// recursively with just the depth parameter.
+// BenchmarkRecursion 测量仅使用 depth 参数递归调用函数
+// 所带来的开销。
 func BenchmarkRecursion(b *testing.B) {
 	for depth := 10; depth <= 100000; depth *= 10 {
 		b.Run(fmt.Sprintf("%d", depth), func(b *testing.B) {
@@ -52,8 +52,8 @@ func recurse(depth int) {
 	recurse(depth - 1)
 }
 
-// BenchmarkRecursionWithLogger measures the overhead of adding a logr.Logger
-// parameter.
+// BenchmarkRecursionWithLogger 测量增加 logr.Logger 参数
+// 所带来的开销。
 func BenchmarkRecursionWithLogger(b *testing.B) {
 	logger := logr.Discard()
 
@@ -74,8 +74,8 @@ func recurseWithLogger(logger logr.Logger, depth int) {
 	recurseWithLogger(logger, depth-1)
 }
 
-// BenchmarkRecursionWithContext measures the overhead of adding a context
-// parameter.
+// BenchmarkRecursionWithContext 测量增加 context 参数
+// 所带来的开销。
 func BenchmarkRecursionWithContext(b *testing.B) {
 	logger := logr.Discard()
 	// nolint:logcheck // Intentionally using NewContext unconditionally here.
@@ -98,8 +98,8 @@ func recurseWithContext(ctx context.Context, depth int) {
 	recurseWithContext(ctx, depth-1)
 }
 
-// BenchmarkRecursionWithLogger measures the overhead of adding a logr.Logger
-// parameter and using it once.
+// BenchmarkRecursionWithLoggerAndLog 测量增加 logr.Logger 参数
+// 并使用它一次所带来的开销。
 func BenchmarkRecursionWithLoggerAndLog(b *testing.B) {
 	logger := logr.Discard()
 
@@ -121,8 +121,8 @@ func recurseWithLoggerAndLog(logger logr.Logger, depth int) {
 	recurseWithLoggerAndLog(logger, depth-1)
 }
 
-// BenchmarkRecursionWithContext measures the overhead of adding a context
-// parameter and using it once to retrieve and call a logger.
+// BenchmarkRecursionWithContextAndLog 测量增加 context 参数
+// 并用它获取及调用一次 logger 所带来的开销。
 func BenchmarkRecursionWithContextAndLog(b *testing.B) {
 	logger := logr.Discard()
 	// nolint:logcheck // Intentionally using NewContext unconditionally here.
@@ -147,8 +147,8 @@ func recurseWithContextAndLog(ctx context.Context, depth int) {
 	recurseWithContextAndLog(ctx, depth-1)
 }
 
-// BenchmarkNestedContextWithTimeouts benchmarks how quickly a function can be
-// called that creates a new context at each call with context.WithTimeout.
+// BenchmarkNestedContextWithTimeouts 测量调用一个在每次调用时
+// 都用 context.WithTimeout 创建新 context 的函数的速度。
 func BenchmarkNestedContextWithTimeouts(b *testing.B) {
 	ctx := context.Background()
 
@@ -171,9 +171,9 @@ func nestedContextWithTimeout(ctx context.Context, depth int) {
 	nestedContextWithTimeout(ctx, depth-1)
 }
 
-// BenchmarkNestedContextWithTimeouts benchmarks how quickly a function can be
-// called that creates a new context at each call with context.WithTimeout
-// and then looks up a logger.
+// BenchmarkNestedContextWithTimeoutsAndLookup 测量调用一个在每次调用时
+// 都用 context.WithTimeout 创建新 context、随后再查找 logger 的
+// 函数的速度。
 func BenchmarkNestedContextWithTimeoutsAndLookup(b *testing.B) {
 	// nolint:logcheck // Intentionally using NewContext unconditionally here.
 	ctx := logr.NewContext(context.Background(), logr.Discard())
@@ -200,9 +200,8 @@ func nestedContextWithTimeoutAndLookup(ctx context.Context, depth int) {
 
 var logger logr.Logger
 
-// BenchmarkNestedContextWithTimeouts benchmarks how quickly FromContextOrDiscard
-// can look up a logger in nested contexts where WithTimeouts is used to
-// created those nested contexts.
+// BenchmarkLookupWithTimeouts 测量 FromContextOrDiscard 在使用
+// WithTimeout 创建的嵌套 context 中查找 logger 的速度。
 func BenchmarkLookupWithTimeouts(b *testing.B) {
 	for depth := 1; depth <= 10000; depth *= 10 {
 		b.Run(fmt.Sprintf("%d", depth), func(b *testing.B) {
@@ -225,9 +224,8 @@ type keyT struct{}
 
 var key keyT
 
-// BenchmarkNestedContextWithTimeouts benchmarks how quickly FromContextOrDiscard
-// can look up a logger in nested contexts where WithValue is used to
-// created those nested contexts.
+// BenchmarkLookupWithValues 测量 FromContextOrDiscard 在使用
+// WithValue 创建的嵌套 context 中查找 logger 的速度。
 func BenchmarkLookupWithValues(b *testing.B) {
 	for depth := 1; depth <= 10000; depth *= 10 {
 		b.Run(fmt.Sprintf("%d", depth), func(b *testing.B) {

@@ -134,7 +134,7 @@ func verifyPodNodeAllocatableStatus(tCtx ktesting.TContext, namespace, podName s
 
 func createPodWithNodeAllocatableClaim(tCtx ktesting.TContext, env *testEnv, claimName, podName string, numContainers int) (*v1.Pod, *resourceapi.ResourceClaim) {
 	tCtx.Helper()
-	// Create a ResourceClaim for the node allocatable resource class
+	// 为 node allocatable 资源类创建一个 ResourceClaim
 	claim := st.MakeResourceClaim().
 		Name(claimName).
 		Namespace(env.namespace).
@@ -142,7 +142,7 @@ func createPodWithNodeAllocatableClaim(tCtx ktesting.TContext, env *testEnv, cla
 		Obj()
 	claim = createClaim(tCtx, env.namespace, "", env.class, claim)
 
-	// Create a Pod that uses the node allocatable claim
+	// 创建一个使用 node allocatable claim 的 Pod
 	pod := st.MakePod().Name(podName).Namespace(env.namespace).Obj()
 
 	containers := make([]v1.Container, 0, numContainers)
@@ -160,7 +160,7 @@ func createPodWithNodeAllocatableClaim(tCtx ktesting.TContext, env *testEnv, cla
 	pod.Spec.Containers = containers
 	pod.Spec.NodeSelector = map[string]string{"kubernetes.io/hostname": env.nodeName}
 
-	// createPod will generate the pod.Spec.ResourceClaims entry
+	// createPod 会生成 pod.Spec.ResourceClaims 条目
 	pod = createPod(tCtx, env.namespace, "", pod, claim)
 	return pod, claim
 }
@@ -187,7 +187,7 @@ func testNodeAllocatableResourcesConsumablePool(tCtx ktesting.TContext) {
 		},
 	}
 	slice := makeSlice(env, devices)
-	env.poolName = env.namespace + "-node-allocatable-pool" // Override poolName for this test
+	env.poolName = env.namespace + "-node-allocatable-pool" // 为本测试覆盖 poolName
 	slice.Spec.Pool.Name = env.poolName
 	createSliceAndStartScheduler(tCtx, slice)
 
@@ -315,7 +315,7 @@ func testNodeAllocatableResourceClaimSharing(tCtx ktesting.TContext) {
 			Name: "dev-sharetest",
 			NodeAllocatableResources: map[v1.ResourceName]resourceapi.NodeAllocatableResource{
 				v1.ResourceCPU: {
-					// both mapping and overhead specified for the same resource.
+					// 同一资源同时指定了 mapping 和 overhead。
 					Mapping: &resourceapi.NodeAllocatableMapping{DeviceMultiplier: &cpuMultiplier},
 					Overhead: &resourceapi.NodeAllocatableOverhead{
 						PerPod: new(resource.MustParse("1")),
@@ -330,20 +330,20 @@ func testNodeAllocatableResourceClaimSharing(tCtx ktesting.TContext) {
 	waitForPodScheduled(tCtx, env.namespace, pod1.Name)
 	_ = waitForClaimAllocatedToDevice(tCtx, env.namespace, claim.Name, schedulingTimeout)
 
-	// Pod 2 - Should NOT schedule as the claim is already used on this node and cannot be shared
+	// Pod 2 —— 不应被调度，因为 claim 已在该节点上使用且无法共享
 	pod2 := st.MakePod().Name("pod2").Namespace(env.namespace).Obj()
 	container1 := v1.Container{
 		Name:  "c1",
 		Image: "test-image",
 		Resources: v1.ResourceRequirements{
 			Claims: []v1.ResourceClaim{
-				{Name: claim.Name}, // USE EXISTING CLAIM
+				{Name: claim.Name}, // 使用现有 claim
 			},
 		},
 	}
 	pod2.Spec.Containers = []v1.Container{container1}
 	pod2.Spec.NodeSelector = map[string]string{"kubernetes.io/hostname": env.nodeName}
-	pod2 = createPod(tCtx, env.namespace, "", pod2, claim) // Pass the existing claim
+	pod2 = createPod(tCtx, env.namespace, "", pod2, claim) // 传入现有 claim
 	expectPodUnschedulable(tCtx, pod2, "has a mapped device and cannot be shared across pods")
 }
 
@@ -381,7 +381,7 @@ func testPodLevelResourceValidation(tCtx ktesting.TContext) {
 		pod := st.MakePod().Name(podName).Namespace(env.namespace).Obj()
 		pod.Spec.Resources = &v1.ResourceRequirements{
 			Requests: v1.ResourceList{
-				v1.ResourceCPU: resource.MustParse("10"), // 2 (container) + 4 (DRA) < 10
+				v1.ResourceCPU: resource.MustParse("10"), // 2（容器）+ 4（DRA）< 10
 			},
 		}
 		container1 := v1.Container{
@@ -416,7 +416,7 @@ func testPodLevelResourceValidation(tCtx ktesting.TContext) {
 		pod := st.MakePod().Name(podName).Namespace(env.namespace).Obj()
 		pod.Spec.Resources = &v1.ResourceRequirements{
 			Requests: v1.ResourceList{
-				v1.ResourceCPU: resource.MustParse("5"), // 2 (container) + 4 (DRA) > 5
+				v1.ResourceCPU: resource.MustParse("5"), // 2（容器）+ 4（DRA）> 5
 			},
 		}
 		container1 := v1.Container{
@@ -485,7 +485,7 @@ func testInsufficientNodeResources(tCtx ktesting.TContext) {
 	})
 
 	tCtx.Run("StandardPodFailsDueToInsufficientResourcesAfterDRAConsumption", func(tCtx ktesting.TContext) {
-		cpuMultiplier := resource.MustParse("98") // Consume most of the CPU
+		cpuMultiplier := resource.MustParse("98") // 消耗大部分 CPU
 		devices := []resourceapi.Device{
 			{
 				Name: "dev-consume-most",
@@ -518,7 +518,7 @@ func testInsufficientNodeResources(tCtx ktesting.TContext) {
 	})
 
 	tCtx.Run("StandardPodSucceedsAfterDRA", func(tCtx ktesting.TContext) {
-		cpuMultiplier := resource.MustParse("50") // Consume half of the CPU
+		cpuMultiplier := resource.MustParse("50") // 消耗一半 CPU
 		devices := []resourceapi.Device{
 			{
 				Name: "dev-consume-half",
@@ -553,7 +553,7 @@ func testInsufficientNodeResources(tCtx ktesting.TContext) {
 
 func testNodeAllocatableResourcesWithClaimTemplate(tCtx ktesting.TContext) {
 	tCtx.Parallel()
-	env := setupTestEnv(tCtx, 5) // Use a different node index
+	env := setupTestEnv(tCtx, 5) // 使用不同的节点索引
 
 	cpuCapacityKey := resourceapi.QualifiedName("dra.example.com/cpu")
 	memCapacityKey := resourceapi.QualifiedName("dra.example.com/memory")
@@ -625,7 +625,7 @@ func testNodeAllocatableResourcesWithClaimTemplate(tCtx ktesting.TContext) {
 	waitForPodScheduled(tCtx, env.namespace, pod.Name)
 
 	expectedStatus := []v1.NodeAllocatableResourceClaimStatus{{
-		ResourceClaimName: podName, // The genereate claim based on template contains pod name
+		ResourceClaimName: podName, // 基于模板生成的 claim 名称包含 Pod 名称
 		Containers:        []string{"c1"},
 		Mapping: []v1.NodeAllocatableMappedResources{
 			{Name: v1.ResourceCPU, Quantity: new(resource.MustParse("10"))},
@@ -637,7 +637,7 @@ func testNodeAllocatableResourcesWithClaimTemplate(tCtx ktesting.TContext) {
 
 func testNodeAllocatableUnreferencedClaimInPod(tCtx ktesting.TContext) {
 	tCtx.Parallel()
-	env := setupTestEnv(tCtx, 6) // Use a different node index
+	env := setupTestEnv(tCtx, 6) // 使用不同的节点索引
 
 	cpuCapacityKey := resourceapi.QualifiedName("dra.example.com/cpu")
 	devices := []resourceapi.Device{
@@ -661,7 +661,7 @@ func testNodeAllocatableUnreferencedClaimInPod(tCtx ktesting.TContext) {
 	claimName := "unused-claim"
 	podName := "pod-with-unused-claim"
 
-	// Create a ResourceClaim for the node allocatable resource class
+	// 为 node allocatable 资源类创建一个 ResourceClaim
 	claim := st.MakeResourceClaim().
 		Name(claimName).
 		Namespace(env.namespace).
@@ -669,16 +669,16 @@ func testNodeAllocatableUnreferencedClaimInPod(tCtx ktesting.TContext) {
 		Obj()
 	claim = createClaim(tCtx, env.namespace, "", env.class, claim)
 
-	// Create a Pod that has the node allocatable claim in spec.ResourceClaims, but no container uses it.
+	// 创建一个 Pod，其在 spec.ResourceClaims 中声明了 node allocatable claim，但没有任何容器使用它。
 	pod := st.MakePod().Name(podName).Namespace(env.namespace).
 		Containers([]v1.Container{{Name: "c1", Image: "test"}}).
 		NodeSelector(map[string]string{"kubernetes.io/hostname": env.nodeName}).
 		Obj()
 	pod = createPod(tCtx, env.namespace, "", pod, claim)
 
-	// Verify that a pod specifying a node-allocatable resource claim in its spec,
-	// but not referencing it in any container, can still be scheduled successfully,
-	// and that the pod status correctly lists the allocated claim with an empty container list.
+	// 验证在 spec 中指定 node-allocatable resource claim、
+	// 但未在任何容器中引用它的 Pod 仍能成功调度，
+	// 且 Pod 状态能正确列出该已分配的 claim，其容器列表为空。
 	waitForPodScheduled(tCtx, env.namespace, pod.Name)
 
 	expectedStatus := []v1.NodeAllocatableResourceClaimStatus{{
@@ -694,7 +694,7 @@ func testNodeAllocatableUnreferencedClaimInPod(tCtx ktesting.TContext) {
 
 func testNodeAllocatableResourcesWithOverheadPerPod(tCtx ktesting.TContext) {
 	tCtx.Parallel()
-	env := setupTestEnv(tCtx, 7) // Use a different node index
+	env := setupTestEnv(tCtx, 7) // 使用不同的节点索引
 
 	devices := []resourceapi.Device{
 		{
@@ -716,7 +716,7 @@ func testNodeAllocatableResourcesWithOverheadPerPod(tCtx ktesting.TContext) {
 	podName := "pod-with-overhead-perpod"
 	claimName := "claim-with-overhead-perpod"
 
-	// Create a Pod that has the node allocatable claim used by 2 containers
+	// 创建一个 Pod，其中有 2 个容器使用 node allocatable claim
 	pod, claim := createPodWithNodeAllocatableClaim(tCtx, env, claimName, podName, 2)
 
 	waitForPodScheduled(tCtx, env.namespace, pod.Name)
@@ -777,7 +777,7 @@ func testNodeAllocatableResourcesWithOverheadPerContainer(tCtx ktesting.TContext
 	podName := "pod-with-overhead-percontainer"
 	claimName := "claim-with-overhead-percontainer"
 
-	// Create a Pod that has the node allocatable claim used by 2 containers
+	// 创建一个 Pod，其中有 2 个容器使用 node allocatable claim
 	pod, claim := createPodWithNodeAllocatableClaim(tCtx, env, claimName, podName, 2)
 
 	waitForPodScheduled(tCtx, env.namespace, pod.Name)
@@ -839,7 +839,7 @@ func testNodeAllocatableResourcesWithOverheadBoth(tCtx ktesting.TContext) {
 	podName := "pod-with-overhead-both"
 	claimName := "claim-with-overhead-both"
 
-	// Create a Pod that has the node allocatable claim used by 2 containers
+	// 创建一个 Pod，其中有 2 个容器使用 node allocatable claim
 	pod, claim := createPodWithNodeAllocatableClaim(tCtx, env, claimName, podName, 2)
 
 	waitForPodScheduled(tCtx, env.namespace, pod.Name)
@@ -887,7 +887,7 @@ func testNodeAllocatableResourcesWithOverheadInsufficient(tCtx ktesting.TContext
 			NodeAllocatableResources: map[v1.ResourceName]resourceapi.NodeAllocatableResource{
 				v1.ResourceMemory: {
 					Overhead: &resourceapi.NodeAllocatableOverhead{
-						PerPod: new(resource.MustParse("2000")), // Exceeds nodeMemoryCapacity (1k / 1024)
+						PerPod: new(resource.MustParse("2000")), // 超过 nodeMemoryCapacity（1k / 1024）
 					},
 				},
 			},
@@ -928,7 +928,7 @@ func testNodeAllocatableResourceClaimSharingOverhead(tCtx ktesting.TContext) {
 	waitForPodScheduled(tCtx, env.namespace, pod1.Name)
 	_ = waitForClaimAllocatedToDevice(tCtx, env.namespace, claim.Name, schedulingTimeout)
 
-	// Pod 2 - Should schedule successfully as the claim is overhead-only (allowed to be shared)
+	// Pod 2 —— 应能成功调度，因为该 claim 只有 overhead（允许共享）
 	pod2 := st.MakePod().Name("pod2").Namespace(env.namespace).Obj()
 	container1 := v1.Container{
 		Name:  "c1",
@@ -941,6 +941,6 @@ func testNodeAllocatableResourceClaimSharingOverhead(tCtx ktesting.TContext) {
 	}
 	pod2.Spec.Containers = []v1.Container{container1}
 	pod2.Spec.NodeSelector = map[string]string{"kubernetes.io/hostname": env.nodeName}
-	pod2 = createPod(tCtx, env.namespace, "", pod2, claim) // Pass the existing claim
+	pod2 = createPod(tCtx, env.namespace, "", pod2, claim) // 传入现有 claim
 	waitForPodScheduled(tCtx, env.namespace, pod2.Name)
 }

@@ -127,7 +127,7 @@ func newRBACAuthorizer(t *testing.T, config *controlplane.Config) (authorizer.Au
 	return rbac.New(roleRegistry, roleBindingRegistry, clusterRoleRegistry, clusterRoleBindingRegistry), tearDownFn
 }
 
-// bootstrapRoles are a set of RBAC roles which will be populated before the test.
+// bootstrapRoles 是一组 RBAC 角色，将在测试前创建。
 type bootstrapRoles struct {
 	roles               []rbacapi.Role
 	roleBindings        []rbacapi.RoleBinding
@@ -135,9 +135,9 @@ type bootstrapRoles struct {
 	clusterRoleBindings []rbacapi.ClusterRoleBinding
 }
 
-// bootstrap uses the provided client to create the bootstrap roles and role bindings.
+// bootstrap 使用提供的 client 创建初始角色和角色绑定。
 //
-// client should be authenticated as the RBAC super user.
+// client 应以 RBAC 超级用户身份通过认证。
 func (b bootstrapRoles) bootstrap(client clientset.Interface) error {
 	ctx := context.TODO()
 	for _, r := range b.clusterRoles {
@@ -168,22 +168,22 @@ func (b bootstrapRoles) bootstrap(client clientset.Interface) error {
 	return nil
 }
 
-// request is a test case which can.
+// request 是一个测试用例。
 type request struct {
-	// The bearer token sent as part of the request
+	// 随请求发送的 bearer token
 	token string
 
-	// Resource metadata
+	// 资源元数据
 	verb      string
 	apiGroup  string
 	resource  string
 	namespace string
 	name      string
 
-	// The actual resource.
+	// 实际的资源。
 	body string
 
-	// The expected return status of this request.
+	// 该请求预期的返回状态。
 	expectedStatus int
 }
 
@@ -197,7 +197,7 @@ func (s statusCode) String() string {
 	return fmt.Sprintf("%d %s", int(s), http.StatusText(int(s)))
 }
 
-// Declare a set of raw objects to use.
+// 声明一组要使用的原始对象。
 var (
 	writeJobsRoleBinding = `
 {
@@ -299,7 +299,7 @@ var (
 `
 )
 
-// Declare some PolicyRules beforehand.
+// 预先声明一些 PolicyRule。
 var (
 	ruleAllowAll  = rbachelper.NewRule("*").Groups("*").Resources("*").RuleOrDie()
 	ruleReadPods  = rbachelper.NewRule("list", "get", "watch").Groups("").Resources("pods").RuleOrDie()
@@ -337,7 +337,7 @@ func TestRBAC(t *testing.T) {
 				},
 			},
 			requests: []request{
-				// Create the namespace used later in the test
+				// 创建测试后面用到的 namespace
 				{superUser, "POST", "", "namespaces", "", "", podNamespace, http.StatusCreated},
 
 				{superUser, "GET", "", "pods", "", "", "", http.StatusOK},
@@ -415,20 +415,20 @@ func TestRBAC(t *testing.T) {
 				},
 			},
 			requests: []request{
-				// Create the namespace used later in the test
+				// 创建测试后面用到的 namespace
 				{superUser, "POST", "", "namespaces", "", "", jobNamespace, http.StatusCreated},
 				{superUser, "POST", "", "namespaces", "", "", forbiddenNamespace, http.StatusCreated},
 
 				{"user-with-no-permissions", "POST", "batch", "jobs", "job-namespace", "", aJob, http.StatusForbidden},
 				{"user-with-no-permissions", "GET", "batch", "jobs", "job-namespace", "pi", "", http.StatusForbidden},
 
-				// job-writer-namespace cannot write to the "forbidden-namespace"
+				// job-writer-namespace 不能向 "forbidden-namespace" 写入
 				{"job-writer-namespace", "GET", "batch", "jobs", "forbidden-namespace", "", "", http.StatusForbidden},
 				{"job-writer-namespace", "GET", "batch", "jobs", "forbidden-namespace", "pi", "", http.StatusForbidden},
 				{"job-writer-namespace", "POST", "batch", "jobs", "forbidden-namespace", "", aJob, http.StatusForbidden},
 				{"job-writer-namespace", "GET", "batch", "jobs", "forbidden-namespace", "pi", "", http.StatusForbidden},
 
-				// job-writer can write to any namespace
+				// job-writer 可以向任意 namespace 写入
 				{"job-writer", "GET", "batch", "jobs", "forbidden-namespace", "", "", http.StatusOK},
 				{"job-writer", "GET", "batch", "jobs", "forbidden-namespace", "pi", "", http.StatusNotFound},
 				{"job-writer", "POST", "batch", "jobs", "forbidden-namespace", "", aJob, http.StatusCreated},
@@ -439,20 +439,20 @@ func TestRBAC(t *testing.T) {
 				{"job-writer-namespace", "POST", "batch", "jobs", "job-namespace", "", aJob, http.StatusCreated},
 				{"job-writer-namespace", "GET", "batch", "jobs", "job-namespace", "pi", "", http.StatusOK},
 
-				// cannot bind role anywhere
+				// 无法在任何地方绑定角色
 				{"user-with-no-permissions", "POST", "rbac.authorization.k8s.io", "rolebindings", "job-namespace", "", writeJobsRoleBinding, http.StatusForbidden},
-				// can only bind role in namespace where they have explicit bind permission
+				// 只能在拥有显式 bind 权限的 namespace 中绑定角色
 				{"any-rolebinding-writer-namespace", "POST", "rbac.authorization.k8s.io", "rolebindings", "forbidden-namespace", "", writeJobsRoleBinding, http.StatusForbidden},
-				// can only bind role in namespace where they have covering permissions
+				// 只能在拥有覆盖权限的 namespace 中绑定角色
 				{"job-writer-namespace", "POST", "rbac.authorization.k8s.io", "rolebindings", "forbidden-namespace", "", writeJobsRoleBinding, http.StatusForbidden},
 				{"job-writer-namespace", "POST", "rbac.authorization.k8s.io", "rolebindings", "job-namespace", "", writeJobsRoleBinding, http.StatusCreated},
 				{superUser, "DELETE", "rbac.authorization.k8s.io", "rolebindings", "job-namespace", "pi", "", http.StatusOK},
-				// can bind role in any namespace where they have covering permissions
+				// 可以在任何拥有覆盖权限的 namespace 中绑定角色
 				{"job-writer", "POST", "rbac.authorization.k8s.io", "rolebindings", "forbidden-namespace", "", writeJobsRoleBinding, http.StatusCreated},
 				{superUser, "DELETE", "rbac.authorization.k8s.io", "rolebindings", "forbidden-namespace", "pi", "", http.StatusOK},
-				// cannot bind role because they don't have covering permissions
+				// 因为没有覆盖权限，所以无法绑定角色
 				{"nonescalating-rolebinding-writer", "POST", "rbac.authorization.k8s.io", "rolebindings", "job-namespace", "", writeJobsRoleBinding, http.StatusForbidden},
-				// can bind role because they have explicit bind permission
+				// 因为有显式 bind 权限，所以可以绑定角色
 				{"any-rolebinding-writer", "POST", "rbac.authorization.k8s.io", "rolebindings", "job-namespace", "", writeJobsRoleBinding, http.StatusCreated},
 				{superUser, "DELETE", "rbac.authorization.k8s.io", "rolebindings", "job-namespace", "pi", "", http.StatusOK},
 				{"any-rolebinding-writer-namespace", "POST", "rbac.authorization.k8s.io", "rolebindings", "job-namespace", "", writeJobsRoleBinding, http.StatusCreated},
@@ -484,7 +484,7 @@ func TestRBAC(t *testing.T) {
 				},
 			},
 			requests: []request{
-				// Create the namespace used later in the test
+				// 创建测试后面用到的 namespace
 				{superUser, "POST", "", "namespaces", "", "", limitRangeNamespace, http.StatusCreated},
 
 				{"limitrange-updater", "PUT", "", "limitranges", "limitrange-namespace", "a", aLimitRange, http.StatusForbidden},
@@ -518,7 +518,7 @@ func TestRBAC(t *testing.T) {
 				},
 			},
 			requests: []request{
-				// Create the namespace used later in the test
+				// 创建测试后面用到的 namespace
 				{superUser, "POST", "", "namespaces", "", "", limitRangeNamespace, http.StatusCreated},
 
 				{"limitrange-patcher", "PATCH", "", "limitranges", "limitrange-namespace", "a", aLimitRange, http.StatusForbidden},
@@ -555,17 +555,17 @@ func TestRBAC(t *testing.T) {
 
 			_, kubeConfig, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 				ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-					// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
-					// Also disable namespace lifecycle to workaroung the test limitation that first creates
-					// roles/rolebindings and only then creates corresponding namespaces.
+					// 禁用 ServiceAccount admission plugin，因为没有运行 serviceaccount controller。
+					// 同时禁用 namespace lifecycle，以绕开测试的限制：先创建
+					// role/rolebinding，之后才创建对应的 namespace。
 					opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount", "NamespaceLifecycle"}
-					// Disable built-in authorizers
+					// 禁用内置 authorizer
 					opts.Authorization.Modes = []string{"AlwaysDeny"}
 				},
 				ModifyServerConfig: func(config *controlplane.Config) {
-					// Append our custom test authenticator
+					// 追加我们自定义的测试 authenticator
 					config.ControlPlane.Generic.Authentication.Authenticator = unionauthn.New(config.ControlPlane.Generic.Authentication.Authenticator, authenticator)
-					// Append our custom test authorizer
+					// 追加我们自定义的测试 authorizer
 					var rbacAuthz authorizer.Authorizer
 					rbacAuthz, tearDownAuthorizerFn = newRBACAuthorizer(t, config)
 					authz, err := unionauthz.New(
@@ -585,7 +585,7 @@ func TestRBAC(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Bootstrap the API Server with the test case's initial roles.
+			// 用测试用例的初始角色初始化 API Server。
 			superuserClient, _ := clientsetForToken(superUser, kubeConfig)
 			if err := tc.bootstrapRoles.bootstrap(superuserClient); err != nil {
 				t.Errorf("case %d: failed to apply initial roles: %v", i, err)
@@ -594,8 +594,8 @@ func TestRBAC(t *testing.T) {
 			previousResourceVersion := make(map[string]float64)
 
 			for j, r := range tc.requests {
-				// This is a URL-path, not a local path, so we use the "path"
-				// package (aliased as "gopath") instead of "path/filepath".
+				// 这是 URL 路径，不是本地路径，所以我们使用 "path"
+				// 包（别名为 "gopath"），而不是 "path/filepath"。
 				urlPath := "/"
 				if r.apiGroup == "" {
 					urlPath = gopath.Join(urlPath, "api/v1")
@@ -616,7 +616,7 @@ func TestRBAC(t *testing.T) {
 				if r.body != "" {
 					sub := ""
 					if r.verb == "PUT" {
-						// For update operations, insert previous resource version
+						// 对于更新操作，插入之前的 resource version
 						if resVersion := previousResourceVersion[getPreviousResourceVersionKey(urlPath, "")]; resVersion != 0 {
 							sub += fmt.Sprintf(",\"resourceVersion\": \"%v\"", resVersion)
 						}
@@ -626,7 +626,7 @@ func TestRBAC(t *testing.T) {
 
 				req, err := http.NewRequest(r.verb, kubeConfig.Host+urlPath, body)
 				if r.verb == "PATCH" {
-					// For patch operations, use the apply content type
+					// 对于 patch 操作，使用 apply content type
 					req.Header.Add("Content-Type", string(types.ApplyPatchType))
 					q := req.URL.Query()
 					q.Add("fieldManager", "rbac_test")
@@ -658,10 +658,10 @@ func TestRBAC(t *testing.T) {
 					}
 
 					if resp.StatusCode != r.expectedStatus {
-						// When debugging is on, dump the entire request and response. Very helpful for
-						// debugging malformed test cases.
+						// 开启调试后，会 dump 完整的请求和响应。这对调试
+						// 格式错误的测试用例非常有帮助。
 						//
-						// To turn on debugging, use the '-args' flag.
+						// 要开启调试，请使用 '-args' flag。
 						//
 						//    go test -v -tags integration -run RBAC -args -v 10
 						//
@@ -672,7 +672,7 @@ func TestRBAC(t *testing.T) {
 					b, _ := io.ReadAll(resp.Body)
 
 					if r.verb == "POST" && (resp.StatusCode/100) == 2 {
-						// For successful create operations, extract resourceVersion
+						// 对于成功的创建操作，提取 resourceVersion
 						id, currentResourceVersion, err := parseResourceVersion(b)
 						if err == nil {
 							key := getPreviousResourceVersionKey(urlPath, id)
@@ -734,8 +734,8 @@ func TestBootstrapping(t *testing.T) {
 	t.Errorf("error bootstrapping roles: %s", string(healthBytes))
 }
 
-// TestDiscoveryUpgradeBootstrapping is primarily meant to test the behavior of
-// primePublicInfoClusterRoleBinding in storage_rbac.go during cluster upgrades.
+// TestDiscoveryUpgradeBootstrapping 主要用于测试集群升级期间
+// storage_rbac.go 中 primePublicInfoClusterRoleBinding 的行为。
 func TestDiscoveryUpgradeBootstrapping(t *testing.T) {
 	var tearDownFn func()
 	defer func() {
@@ -749,14 +749,14 @@ func TestDiscoveryUpgradeBootstrapping(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	client, _, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Ensure we're using the same etcd across apiserver restarts.
+			// 确保 apiserver 重启时使用同一个 etcd。
 			opts.Etcd.StorageConfig = *etcdConfig
 			opts.Authorization.Modes = []string{"RBAC"}
 		},
 	})
 
-	// Modify the default RBAC discovery ClusterRoleBidnings to look more like the defaults that
-	// existed prior to v1.14, but with user modifications.
+	// 修改默认的 RBAC discovery ClusterRoleBinding，使其更接近
+	// v1.14 之前的默认配置，但带有用户修改。
 	t.Logf("Modifying default `system:discovery` ClusterRoleBinding")
 	discRoleBinding, err := client.RbacV1().ClusterRoleBindings().Get(tCtx, "system:discovery", metav1.GetOptions{})
 	if err != nil {
@@ -789,15 +789,15 @@ func TestDiscoveryUpgradeBootstrapping(t *testing.T) {
 		t.Fatalf("Failed to delete `system:public-info-viewer` ClusterRoleBinding: %v", err)
 	}
 
-	// Stop the first API server.
+	// 停止第一个 API server。
 	tearDownFn()
 	tearDownFn = nil
 
-	// Check that upgraded API servers inherit `system:public-info-viewer` settings from
-	// `system:discovery`, and respect auto-reconciliation annotations.
+	// 检查升级后的 API server 是否从 `system:discovery` 继承了
+	// `system:public-info-viewer` 的设置，并遵守自动协调注解。
 	client, _, tearDownFn = framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Ensure we're using the same etcd across apiserver restarts.
+			// 确保 apiserver 重启时使用同一个 etcd。
 			opts.Etcd.StorageConfig = *etcdConfig
 			opts.Authorization.Modes = []string{"RBAC"}
 		},
@@ -837,9 +837,9 @@ type authorizeRequest struct {
 	expected authorizer.Decision
 }
 
-// For 1.31 ctx was wired into the authorizers. This tests check that context values
-// are not used inside the code to resolve namespaces or users with the goal of
-// preventing regressions in the future.
+// 从 1.31 开始，ctx 被接入 authorizer。本测试检查代码内部是否会使用 context 中的值
+// 来解析 namespace 或 user，目的是
+// 防止未来出现回归。
 func TestRBACContextContamination(t *testing.T) {
 	superUser := "admin/system:masters"
 	validNamespace := "pod-namespace"
@@ -848,13 +848,13 @@ func TestRBACContextContamination(t *testing.T) {
 	roles := bootstrapRoles{}
 	testcases := []authorizeRequest{}
 
-	// Tests itself is bit oververbose and each case creates its own objects.
-	// This makes readability bit easier over trying to overoptimize test case.
+	// 测试本身略显冗长，每个 case 都会创建自己的对象。
+	// 相比过度优化测试用例，这样可读性更好。
 
-	// Case 1: clusterrole+clusterbinding
-	// should allow cluster-scoped request
-	// should allow namespace-scoped request in any namespace
-	// should disallow request for resource not in rules
+	// case 1：clusterrole + clusterbinding
+	// 应允许 cluster 作用域的请求
+	// 应允许任意 namespace 中 namespace 作用域的请求
+	// 应拒绝针对规则中未包含资源的请求
 	{
 		roles.clusterRoles = append(roles.clusterRoles, rbacapi.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{Name: "c1-clusterrole"},
@@ -884,11 +884,11 @@ func TestRBACContextContamination(t *testing.T) {
 		)
 	}
 
-	// case 2: clusterrole+rolebinding
-	// should disallow cluster-scoped request
-	// should allow namespace-scoped request in rolebinding namespace
-	// should disallow namespace-scoped request in other namespace
-	// should disallow request for resource not in rules
+	// case 2：clusterrole + rolebinding
+	// 应拒绝 cluster 作用域的请求
+	// 应允许 rolebinding 所在 namespace 中 namespace 作用域的请求
+	// 应拒绝其他 namespace 中 namespace 作用域的请求
+	// 应拒绝针对规则中未包含资源的请求
 	{
 		roles.clusterRoles = append(roles.clusterRoles, rbacapi.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{Name: "c2-clusterrole"},
@@ -925,11 +925,11 @@ func TestRBACContextContamination(t *testing.T) {
 		)
 	}
 
-	// case 3: role+rolebinding
-	// should disallow cluster-scoped request
-	// should allow namespace-scoped request in rolebinding namespace
-	// should disallow namespace-scoped request in other namespace
-	// should disallow request for resource not in rules
+	// case 3：role + rolebinding
+	// 应拒绝 cluster 作用域的请求
+	// 应允许 rolebinding 所在 namespace 中 namespace 作用域的请求
+	// 应拒绝其他 namespace 中 namespace 作用域的请求
+	// 应拒绝针对规则中未包含资源的请求
 	{
 		roles.roles = append(roles.roles, rbacapi.Role{
 			ObjectMeta: metav1.ObjectMeta{
@@ -982,17 +982,17 @@ func TestRBACContextContamination(t *testing.T) {
 	var rbacAuthz authorizer.Authorizer
 	_, kubeConfig, tearDownFn := framework.StartTestServer(context.Background(), t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
-			// Also disable namespace lifecycle to workaroung the test limitation that first creates
-			// roles/rolebindings and only then creates corresponding namespaces.
+			// 禁用 ServiceAccount admission plugin，因为没有运行 serviceaccount controller。
+			// 同时禁用 namespace lifecycle，以绕开测试的限制：先创建
+			// role/rolebinding，之后才创建对应的 namespace。
 			opts.Admission.GenericAdmission.DisablePlugins = []string{"ServiceAccount", "NamespaceLifecycle"}
-			// Disable built-in authorizers
+			// 禁用内置 authorizer
 			opts.Authorization.Modes = []string{"AlwaysDeny"}
 		},
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Append our custom test authenticator
+			// 追加我们自定义的测试 authenticator
 			config.ControlPlane.Generic.Authentication.Authenticator = unionauthn.New(config.ControlPlane.Generic.Authentication.Authenticator, authenticator)
-			// Append our custom test authorizer
+			// 追加我们自定义的测试 authorizer
 			rbacAuthz, tearDownAuthorizerFn = newRBACAuthorizer(t, config)
 			authz, err := unionauthz.New(
 				unionauthz.NamedAuthorizer{AuthorizerName: "default", Authorizer: config.ControlPlane.Generic.Authorization.Authorizer},
@@ -1006,7 +1006,7 @@ func TestRBACContextContamination(t *testing.T) {
 	})
 	defer tearDownFn()
 
-	// Bootstrap the API Server with the test case's initial roles.
+	// 用测试用例的初始角色初始化 API Server。
 	superuserClient, _ := clientsetForToken(superUser, kubeConfig)
 	if err := roles.bootstrap(superuserClient); err != nil {
 		t.Errorf("failed to apply initial roles: %v", err)
@@ -1025,27 +1025,27 @@ func TestRBACContextContamination(t *testing.T) {
 		}
 	}
 
-	// 3 cases shared for all test cases:
-	// 1. Default context
-	// 2. Empty namespace
-	// 3. Invalid namespace in the context
+	// 所有测试用例共用的 3 种情况：
+	// 1. 默认 context
+	// 2. 空 namespace
+	// 3. context 中带有无效 namespace
 	for j, r := range testcases {
 		ctx := context.Background()
-		// 1. Default context
+		// 1. 默认 context
 		if decision, _, err := rbacAuthz.Authorize(ctx, &r.ar); err != nil {
 			t.Errorf("req %d: unexpected error: %v", j, err)
 			return
 		} else if decision != r.expected {
 			t.Errorf("req %d: expected %v, got %v", j, r.expected, decision)
 		}
-		// 2. Empty namespace
+		// 2. 空 namespace
 		if decision, _, err := rbacAuthz.Authorize(genericapirequest.WithNamespace(ctx, ""), &r.ar); err != nil {
 			t.Errorf("req %d: unexpected error: %v", j, err)
 			return
 		} else if decision != r.expected {
 			t.Errorf("req %d: expected %v, got %v", j, r.expected, decision)
 		}
-		// 3. Invalid namespace in the context
+		// 3. context 中带有无效 namespace
 		if decision, _, err := rbacAuthz.Authorize(genericapirequest.WithNamespace(ctx, invalidNamespace), &r.ar); err != nil {
 			t.Errorf("req %d: unexpected error: %v", j, err)
 			return
@@ -1102,7 +1102,7 @@ func TestMonitoringURLs(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, zpagesfeatures.ComponentStatusz, true)
 			tCtx := ktesting.Init(t)
 
-			// Create a user with the system:monitoring role
+			// 创建一个具有 system:monitoring 角色的用户
 			monitoringUser := "monitoring-user"
 			authenticator := group.NewAuthenticatedGroupAdder(bearertoken.New(tokenfile.New(map[string]*user.DefaultInfo{
 				monitoringUser: {Name: monitoringUser, Groups: []string{"system:monitoring"}},

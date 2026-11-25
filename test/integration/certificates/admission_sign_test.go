@@ -31,8 +31,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// Verifies that the CSR approval admission plugin correctly enforces that a
-// user has permission to sign CSRs for the named signer
+// 验证 CSR 审批准入插件能正确强制要求用户对指定 signer 具有签署 CSRs 的权限
 func TestCSRSignerNameSigningPlugin(t *testing.T) {
 	tests := map[string]struct {
 		allowedSignerName string
@@ -55,29 +54,29 @@ func TestCSRSignerNameSigningPlugin(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Run an apiserver with the default configuration options.
+			// 使用默认配置选项启动 apiserver。
 			s := kubeapiservertesting.StartTestServerOrDie(t, kubeapiservertesting.NewDefaultTestServerOptions(), []string{"--authorization-mode=RBAC"}, framework.SharedEtcd())
 			defer s.TearDownFn()
 			client := clientset.NewForConfigOrDie(s.ClientConfig)
 
-			// Drop the default RBAC superuser permissions to rely on the internal superuser authorizer
+			// 移除默认的 RBAC 超级用户权限，以依赖内部的超级用户授权器
 			if err := client.RbacV1().ClusterRoleBindings().Delete(context.TODO(), "cluster-admin", metav1.DeleteOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
-			// Grant 'test-user' permission to sign CertificateSigningRequests with the specified signerName.
+			// 授予 'test-user' 使用指定 signerName 签署 CertificateSigningRequests 的权限。
 			const username = "test-user"
 			grantUserPermissionToSignFor(t, client, username, test.allowedSignerName)
-			// Create a CSR to attempt to sign.
+			// 创建一个 CSR 以尝试签署。
 			csr := createTestingCSR(t, client.CertificatesV1().CertificateSigningRequests(), "csr", test.signerName, "")
 
-			// Create a second client, impersonating the 'test-user' for us to test with.
+			// 创建第二个客户端，模拟 'test-user' 以用于测试。
 			testuserConfig := restclient.CopyConfig(s.ClientConfig)
 			testuserConfig.Impersonate = restclient.ImpersonationConfig{UserName: username}
 			testuserClient := clientset.NewForConfigOrDie(testuserConfig)
 
-			// Attempt to 'sign' the certificate.
-			// random valid pem
+			// 尝试“签署”证书。
+			// 随机的有效 pem
 			csr.Status.Certificate = []byte(`
 Leading non-PEM content
 -----BEGIN CERTIFICATE-----
@@ -106,7 +105,7 @@ dgA7Fe4tMAoGCCqGSM49BAMCA0gAMEUCIQCTT1YWQZaAqfQ2oBxzOkJE2BqLFxhz
 Trailing non-PEM content
 `)
 
-			// superuser should always have permission to sign; dry-run so we don't actually modify the CSR so the non-superuser can attempt as well
+			// 超级用户应当始终拥有签署权限；此处使用 dry-run，以免实际修改 CSR，从而让非超级用户也能尝试
 			if _, err := client.CertificatesV1().CertificateSigningRequests().UpdateStatus(context.TODO(), csr, metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}}); err != nil {
 				t.Errorf("expected no superuser error but got: %v", err)
 			}
@@ -144,8 +143,8 @@ func buildSigningClusterRoleForSigners(name string, signerNames ...string) *rbac
 			Name: name,
 		},
 		Rules: []rbacv1.PolicyRule{
-			// must have permission to 'approve' the 'certificatesigners' named
-			// 'signerName' to approve CSRs with the given signerName.
+			// 必须具有对名为 'signerName' 的 'certificatesigners' 的 'approve' 权限，
+			// 才能批准具有给定 signerName 的 CSR。
 			{
 				Verbs:         []string{"sign"},
 				APIGroups:     []string{certv1.SchemeGroupVersion.Group},

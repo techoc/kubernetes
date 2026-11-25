@@ -29,15 +29,15 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// testResourceClaimDeviceStatus creates a ResourceClaim with an invalid device (not allocated device)
-// and checks that the object is not validated (feature enabled) resp. accepted without the field (disabled).
+// testResourceClaimDeviceStatus 创建一个带有无效设备（未分配的设备）的 ResourceClaim，
+// 并检查该对象是否未被校验（特性启用时），或在禁用时被接受但丢弃该字段。
 //
-// When enabled, it tries server-side-apply (SSA) with different clients. This is what DRA drivers should be using.
+// 启用时，它会尝试使用不同客户端执行 server-side-apply (SSA)，这是 DRA 驱动应当使用的方式。
 func testResourceClaimDeviceStatus(tCtx ktesting.TContext, enabled bool) {
 	tCtx.Parallel()
 
-	// Create a unique namespace and derive strings which should better be globally
-	// unique from it.
+	// 创建一个唯一的命名空间，
+	// 并从中派生出全局唯一的字符串。
 	namespace := createTestNamespace(tCtx, nil)
 	driverNamePrefix := "driver-" + namespace + "-"
 	driverName1 := driverNamePrefix + "one"
@@ -90,13 +90,13 @@ func testResourceClaimDeviceStatus(tCtx ktesting.TContext, enabled bool) {
 		return
 	}
 
-	// Tests for enabled feature follow.
+	// 以下测试针对已启用的特性。
 
 	if err == nil {
 		tCtx.Fatal("updating the status with an invalid AllocatedDeviceStatus should have failed and didn't")
 	}
 
-	// Add an allocation result.
+	// 添加分配结果。
 	claim.Status.Allocation = &resourceapi.AllocationResult{
 		Devices: resourceapi.DeviceAllocationResult{
 			Results: []resourceapi.DeviceRequestAllocationResult{
@@ -124,20 +124,20 @@ func testResourceClaimDeviceStatus(tCtx ktesting.TContext, enabled bool) {
 	claim, err = tCtx.Client().ResourceV1().ResourceClaims(namespace).UpdateStatus(tCtx, claim, metav1.UpdateOptions{})
 	tCtx.ExpectNoError(err, "add allocation result")
 
-	// Now adding the device status should work.
+	// 现在添加设备状态应当可以成功。
 	claim.Status.Devices = deviceStatus
 	claim, err = tCtx.Client().ResourceV1().ResourceClaims(namespace).UpdateStatus(tCtx, claim, metav1.UpdateOptions{})
 	tCtx.ExpectNoError(err, "add device status")
 	require.Equal(tCtx, deviceStatus, claim.Status.Devices, "after adding device status")
 
-	// Strip the RawExtension. SSA re-encodes it, which causes negligble differences that nonetheless break assert.Equal.
+	// 去除 RawExtension。SSA 会重新编码它，产生细微差异，仍会导致 assert.Equal 失败。
 	claim.Status.Devices[0].Data = nil
 	deviceStatus[0].Data = nil
 	claim, err = tCtx.Client().ResourceV1().ResourceClaims(namespace).UpdateStatus(tCtx, claim, metav1.UpdateOptions{})
 	tCtx.ExpectNoError(err, "add device status")
 	require.Equal(tCtx, deviceStatus, claim.Status.Devices, "after stripping RawExtension")
 
-	// Exercise SSA.
+	// 测试 SSA。
 	deviceStatusAC := resourceapiac.AllocatedDeviceStatus().
 		WithDriver(driverName2).
 		WithPool("global").
@@ -187,7 +187,7 @@ func testResourceClaimDeviceStatus(tCtx ktesting.TContext, enabled bool) {
 	tCtx.ExpectNoError(encoder.Encode(claim))
 	tCtx.Logf("Final ResourceClaim:\n%s", buffer.String())
 
-	// Update one entry, remove the other.
+	// 更新一个条目，删除另一个。
 	deviceStatusAC = resourceapiac.AllocatedDeviceStatus().
 		WithDriver(driverName2).
 		WithPool("global").

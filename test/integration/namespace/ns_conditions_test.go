@@ -54,7 +54,7 @@ func TestNamespaceCondition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Start informer and controllers
+	// 启动 informer 和控制器
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -119,19 +119,19 @@ func TestNamespaceCondition(t *testing.T) {
 	}
 }
 
-// TestNamespaceLabels tests for default labels added in https://github.com/kubernetes/kubernetes/pull/96968
+// TestNamespaceLabels 测试在 https://github.com/kubernetes/kubernetes/pull/96968 中添加的默认标签
 func TestNamespaceLabels(t *testing.T) {
 	ctx, closeFn, nsController, _, kubeClient, _ := namespaceLifecycleSetup(t)
 	defer closeFn()
 
-	// Even though nscontroller isn't used in this test, its creation is already
-	// spawning some goroutines. So we need to run it to ensure they won't leak.
+	// 虽然本测试没有使用 nscontroller，但创建它时已经启动了一些 goroutine，
+	// 因此需要运行它以确保这些 goroutine 不会泄漏。
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go nsController.Run(ctx, 5)
 
 	nsName := "test-namespace-labels-generated"
-	// Create a new namespace w/ no name
+	// 创建一个不指定名称的新命名空间
 	ns, err := kubeClient.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: nsName,
@@ -159,10 +159,9 @@ func TestNamespaceLabels(t *testing.T) {
 	}
 }
 
-// TestUpdateResourceInDeletedNamespace verifies that when a namespace has been
-// fully deleted from storage but child objects remain (orphaned), Update
-// operations on those objects succeed through the full API server admission
-// chain, while Create operations are correctly rejected.
+// TestUpdateResourceInDeletedNamespace 验证当命名空间已从存储中完全删除、
+// 但子对象仍然存在（成为孤儿对象）时，对这些对象的 Update 操作
+// 能通过完整的 API server 准入链，而 Create 操作会被正确拒绝。
 func TestUpdateResourceInDeletedNamespace(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -175,7 +174,7 @@ func TestUpdateResourceInDeletedNamespace(t *testing.T) {
 	nsName := "test-orphaned-ns"
 	ctx := context.Background()
 
-	// Create a namespace and a configmap inside it.
+	// 创建一个命名空间以及其中的一个 configmap。
 	_, err = kubeClient.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: nsName},
 	}, metav1.CreateOptions{})
@@ -191,31 +190,30 @@ func TestUpdateResourceInDeletedNamespace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Delete the namespace object directly from etcd, bypassing the API
-	// server and namespace controller. This leaves the configmap orphaned
-	// in storage with no parent namespace.
+	// 直接从 etcd 删除命名空间对象，绕过 API server 和命名空间控制器。
+	// 这会使 configmap 在存储中成为没有父命名空间的孤儿对象。
 	nsKey := "/" + server.EtcdStoragePrefix + "/namespaces/" + nsName
 	_, err = server.EtcdClient.Delete(ctx, nsKey)
 	if err != nil {
 		t.Fatalf("failed to delete namespace from etcd: %v", err)
 	}
 
-	// Verify the namespace is gone from the API.
+	// 确认该命名空间已从 API 中消失。
 	_, err = kubeClient.CoreV1().Namespaces().Get(ctx, nsName, metav1.GetOptions{})
 	if err == nil {
 		t.Fatal("expected namespace to be gone from API after etcd deletion")
 	}
 
-	// Update the orphaned configmap. This should succeed because
-	// NamespaceLifecycle allows updates regardless of namespace state.
+	// 更新这个孤儿 configmap。这应当成功，因为 NamespaceLifecycle
+	// 允许更新，而不管命名空间的状态如何。
 	cm.Data["key"] = "updated"
 	_, err = kubeClient.CoreV1().ConfigMaps(nsName).Update(ctx, cm, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("expected update of orphaned configmap to succeed, got: %v", err)
 	}
 
-	// Create a new configmap in the deleted namespace. This should fail
-	// because NamespaceLifecycle rejects creates in non-existent namespaces.
+	// 在已删除的命名空间中新建一个 configmap。这应当失败，因为
+	// NamespaceLifecycle 会拒绝在不存在的命名空间中创建对象。
 	_, err = kubeClient.CoreV1().ConfigMaps(nsName).Create(ctx, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "new-cm"},
 		Data:       map[string]string{"key": "value"},
@@ -224,23 +222,23 @@ func TestUpdateResourceInDeletedNamespace(t *testing.T) {
 		t.Fatal("expected create of new configmap in deleted namespace to be rejected")
 	}
 
-	// Delete the orphaned configmap. This should succeed because
-	// NamespaceLifecycle allows deletes regardless of namespace state.
+	// 删除这个孤儿 configmap。这应当成功，因为 NamespaceLifecycle
+	// 允许删除，而不管命名空间的状态如何。
 	err = kubeClient.CoreV1().ConfigMaps(nsName).Delete(ctx, "orphaned-cm", metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("expected delete of orphaned configmap to succeed, got: %v", err)
 	}
 }
 
-// JSONToUnstructured converts a JSON stub to unstructured.Unstructured and
-// returns a dynamic resource client that can be used to interact with it
+// JSONToUnstructured 将 JSON stub 转换为 unstructured.Unstructured
+// 并返回一个可用于与其交互的 dynamic resource client
 func jsonToUnstructured(stub, version, kind string) (*unstructured.Unstructured, error) {
 	typeMetaAdder := map[string]interface{}{}
 	if err := json.Unmarshal([]byte(stub), &typeMetaAdder); err != nil {
 		return nil, err
 	}
 
-	// we don't require GVK on the data we provide, so we fill it in here.  We could, but that seems extraneous.
+	// 我们不要求所提供的数据带有 GVK，所以在这里补全。也可以要求，但那显得多余。
 	typeMetaAdder["apiVersion"] = version
 	typeMetaAdder["kind"] = kind
 
@@ -248,7 +246,7 @@ func jsonToUnstructured(stub, version, kind string) (*unstructured.Unstructured,
 }
 
 func namespaceLifecycleSetup(t *testing.T) (context.Context, kubeapiservertesting.TearDownFunc, *namespace.NamespaceController, informers.SharedInformerFactory, clientset.Interface, dynamic.Interface) {
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 
 	config := restclient.CopyConfig(server.ClientConfig)

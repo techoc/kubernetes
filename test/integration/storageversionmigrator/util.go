@@ -75,7 +75,7 @@ import (
 
 const (
 	secretKey                = "api_key"
-	secretVal                = "086a7ffc-0225-11e8-ba89-0ed5f89f718b" // Fake value for testing.
+	secretVal                = "086a7ffc-0225-11e8-ba89-0ed5f89f718b" // 用于测试的假值。
 	secretName               = "test-secret"
 	triggerSecretName        = "trigger-for-svm"
 	svmName                  = "test-svm"
@@ -284,9 +284,9 @@ func svmSetup(ctx context.Context, t *testing.T, allowedCodes ...int32) *svmTest
 
 	kcm := kubecontrollermanagertesting.StartTestServerOrDie(t, ctx, []string{
 		"--kubeconfig=" + kubeConfigFile,
-		"--controllers=garbagecollector,svm",     // these are the only controllers needed for this test
-		"--use-service-account-credentials=true", // exercise RBAC of SVM controller
-		"--leader-elect=false",                   // KCM leader election calls os.Exit when it ends, so it is easier to just turn it off altogether
+		"--controllers=garbagecollector,svm",     // 本测试只需要这些 controller
+		"--use-service-account-credentials=true", // 检验 SVM controller 的 RBAC
+		"--leader-elect=false",                   // KCM leader election 结束时会调用 os.Exit，所以干脆直接关掉更简单
 	})
 
 	clientSet, err := clientset.NewForConfig(server.ClientConfig)
@@ -341,8 +341,8 @@ func createKubeConfigFileForRestConfig(t *testing.T, restConfig *rest.Config) st
 	return kubeConfigFile
 }
 
-// assertNoInvalidSVMControllerResponses checks that the SVM controller only received
-// expected HTTP response codes. Pass allowedCodes to permit codes beyond OK and Conflict.
+// assertNoInvalidSVMControllerResponses 检查 SVM controller 只收到预期的 HTTP 响应码。
+// 传入 allowedCodes 可以允许 OK 和 Conflict 之外的响应码。
 func (svm *svmTest) assertNoInvalidSVMControllerResponses(t *testing.T, allowedCodes ...int32) {
 	t.Helper()
 	validCodes := sets.New[int32](http.StatusOK, http.StatusConflict)
@@ -425,8 +425,8 @@ func (svm *svmTest) readRawRecordFromETCD(t *testing.T, path string) (*clientv3.
 	if err != nil {
 		return nil, fmt.Errorf("failed to create etcd client: %w", err)
 	}
-	// kvClient is a wrapper around rawClient and to avoid leaking goroutines we need to
-	// close the client (which we can do by closing rawClient).
+	// kvClient 是 rawClient 的包装器，为避免 goroutine 泄漏，我们需要
+	// 关闭该 client（可以通过关闭 rawClient 实现）。
 	defer func() {
 		if err := rawClient.Close(); err != nil {
 			t.Errorf("error closing rawClient: %v", err)
@@ -453,7 +453,7 @@ func (svm *svmTest) getRawCRFromETCD(t *testing.T, crdGroup, crdName, namespace,
 
 func (svm *svmTest) updateFile(t *testing.T, configDir, filename string, newContent []byte) {
 	t.Helper()
-	// Create a temporary file
+	// 创建临时文件
 	tempFile, err := os.CreateTemp(configDir, "tempfile")
 	if err != nil {
 		t.Fatal(err)
@@ -464,13 +464,13 @@ func (svm *svmTest) updateFile(t *testing.T, configDir, filename string, newCont
 		}
 	}()
 
-	// Write the new content to the temporary file
+	// 将新内容写入临时文件
 	_, err = tempFile.Write(newContent)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Atomically replace the original file with the temporary file
+	// 用临时文件原子替换原文件
 	err = os.Rename(tempFile.Name(), filepath.Join(configDir, filename))
 	if err != nil {
 		t.Fatal(err)
@@ -514,7 +514,7 @@ func setupAudit(t *testing.T) (
 	logFile *os.File,
 ) {
 	t.Helper()
-	// prepare audit policy file
+	// 准备 audit policy 文件
 	policyFile, err := os.CreateTemp("", auditPolicyFileName)
 	if err != nil {
 		t.Fatalf("Failed to create audit policy file: %v", err)
@@ -523,7 +523,7 @@ func setupAudit(t *testing.T) (
 		t.Fatalf("Failed to write audit policy file: %v", err)
 	}
 
-	// prepare audit log file
+	// 准备 audit log 文件
 	logFile, err = os.CreateTemp("", auditLogFileName)
 	if err != nil {
 		t.Fatalf("Failed to create audit log file: %v", err)
@@ -582,9 +582,9 @@ func (svm *svmTest) isEncryptionConfigFileUpdated(ctx context.Context, t *testin
 	return err == nil
 }
 
-// waitForResourceMigration checks following conditions:
-// 1. The svm resource has SuccessfullyMigrated condition.
-// 2. The audit log contains patch events for the given secret.
+// waitForResourceMigration 检查以下条件：
+// 1. svm 资源具有 SuccessfullyMigrated condition。
+// 2. audit 日志包含针对给定 secret 的 patch 事件。
 func (svm *svmTest) waitForResourceMigration(
 	ctx context.Context,
 	t *testing.T,
@@ -629,12 +629,12 @@ func (svm *svmTest) waitForResourceMigration(
 
 			t.Logf("%q SVM has not started migration, %#v", svmName, svmConditions)
 
-			// We utilize the LastSyncResourceVersion of the Garbage Collector (GC) to ensure that the cache is up-to-date before proceeding with the migration.
-			// However, in a quiet cluster, the GC may not be updated unless there is some activity or the watch receives a bookmark event after every 10 minutes.
-			// To expedite the update of the GC cache, we create a dummy secret and then promptly delete it.
-			// This action forces the GC to refresh its cache, enabling us to proceed with the migration.
-			// At this point we know that the RV has been set on the SVM resource, so the trigger will always have a higher RV.
-			// We only need to do this once.
+			// 我们利用 Garbage Collector (GC) 的 LastSyncResourceVersion 来确保缓存是最新的，然后再继续迁移。
+			// 但在安静的集群中，除非有活动或 watch 每 10 分钟收到一次 bookmark 事件，否则 GC 可能不会更新。
+			// 为加快 GC 缓存更新，我们创建一个 dummy secret 然后立即删除它。
+			// 这会强制 GC 刷新缓存，使我们能够继续迁移。
+			// 此时我们知道 SVM 资源上已经设置了 RV，因此触发器始终会有更高的 RV。
+			// 只需执行一次。
 			triggerOnce.Do(func() {
 				_, err = svm.createSecret(ctx, t, triggerSecretName, defaultNamespace)
 				if err != nil {
@@ -826,7 +826,7 @@ func (svm *svmTest) waitForCRDUpdate(
 				}
 				sort.Strings(servingVersions)
 
-				// Check if the serving versions are as expected
+				// 检查 serving 版本是否符合预期
 				if !reflect.DeepEqual(expectedServingVersions, servingVersions) {
 					continue
 				}
@@ -837,7 +837,7 @@ func (svm *svmTest) waitForCRDUpdate(
 					return false, fmt.Errorf("failed to get server resources for group version: %w", err)
 				}
 
-				// Check if the storage version is as expected
+				// 检查 storage version 是否符合预期
 				for _, resource := range resourceList.APIResources {
 					if resource.Kind == crdKind && resource.StorageVersionHash == expectedHash {
 						return true, nil
@@ -967,8 +967,8 @@ func (svm *svmTest) createConversionWebhook(ctx context.Context, t *testing.T, c
 	}
 
 	go func() {
-		// skipping error handling here because this always returns a non-nil error.
-		// after Server.Shutdown, the returned error is ErrServerClosed.
+		// 这里跳过错误处理，因为它总是返回一个非 nil error。
+		// Server.Shutdown 之后，返回的 error 是 ErrServerClosed。
 		_ = server.ListenAndServeTLS("", "")
 
 	}()
@@ -976,7 +976,7 @@ func (svm *svmTest) createConversionWebhook(ctx context.Context, t *testing.T, c
 	serverCtx, cancel := context.WithCancel(ctx)
 	go func(ctx context.Context, t *testing.T) {
 		<-ctx.Done()
-		// Context was cancelled, shutdown the server
+		// Context 已取消，关闭 server
 		if err := server.Shutdown(context.Background()); err != nil {
 			t.Logf("Failed to shutdown server: %v", err)
 		}
@@ -1089,7 +1089,7 @@ func (svm *svmTest) isCRStoredAtVersion(t *testing.T, version, crName string) bo
 		t.Fatalf("Failed to get CR from etcd: %v", err)
 	}
 
-	// parse data to unstructured.Unstructured
+	// 将数据解析为 unstructured.Unstructured
 	obj := &unstructured.Unstructured{}
 	err = obj.UnmarshalJSON(data)
 	if err != nil {
@@ -1138,10 +1138,10 @@ func (svm *svmTest) isCRDMigrated(ctx context.Context, t *testing.T, crdSVMName,
 
 			t.Logf("%q SVM has not started migration, %#v", crdSVMName, svmConditions)
 
-			// at this point we know that the RV has been set on the SVM resource,
-			// and we need to make sure that the GC list RV has caught up to that without waiting for a watch bookmark.
-			// we cannot trigger this any earlier as the rest mapper of the RV controller can be delayed
-			// and thus may not have observed the new CRD yet.  we only need to do this once.
+			// 此时我们知道 SVM 资源上已设置 RV，
+			// 需要确保 GC list RV 已追上它，而不必等待 watch bookmark。
+			// 不能更早触发，因为 RV controller 的 rest mapper 可能有延迟，
+			// 从而尚未观察到新的 CRD。只需执行一次。
 			triggerOnce.Do(func() {
 				triggerCR := svm.createCR(ctx, t, triggerCRName, "v1")
 				svm.deleteCR(ctx, t, triggerCR.GetName(), "v1")
@@ -1163,20 +1163,20 @@ func (svm *svmTest) validateRVAndGeneration(ctx context.Context, t *testing.T, c
 	t.Helper()
 
 	for crName, version := range crVersions {
-		// get CR from etcd
+		// 从 etcd 获取 CR
 		data, err := svm.getRawCRFromETCD(t, crdGroup, crdName+"s", defaultNamespace, crName)
 		if err != nil {
 			t.Fatalf("Failed to get CR from etcd: %v", err)
 		}
 
-		// parse data to unstructured.Unstructured
+		// 将数据解析为 unstructured.Unstructured
 		obj := &unstructured.Unstructured{}
 		err = obj.UnmarshalJSON(data)
 		if err != nil {
 			t.Fatalf("Failed to unmarshal data to unstructured: %v", err)
 		}
 
-		// validate resourceVersion and generation
+		// 验证 resourceVersion 和 generation
 		crVersion := svm.getCR(ctx, t, crName, getCRVersion).GetResourceVersion()
 		isRVUnchanged := crVersion == version.rv
 		if version.isRVUpdated && isRVUnchanged {
@@ -1195,7 +1195,7 @@ func (svm *svmTest) createChaos(ctx context.Context, t *testing.T) {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
 
-	noFailT := ignoreFailures{} // these create and delete requests are not coordinated with the rest of the test and can fail
+	noFailT := ignoreFailures{} // 这些创建和删除请求与测试其余部分不协调，可能失败
 
 	const workers = 5
 	wg.Add(workers)

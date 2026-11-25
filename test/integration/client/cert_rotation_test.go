@@ -78,7 +78,7 @@ func TestCertRotation(t *testing.T) {
 
 	time.Sleep(10 * time.Second)
 
-	// Should have had a rotation; connections will have been closed
+	// 此时应当已经发生了证书轮换；连接应已被关闭
 	select {
 	case _, ok := <-w.ResultChan():
 		assert.False(t, ok)
@@ -86,10 +86,10 @@ func TestCertRotation(t *testing.T) {
 		t.Fatal("Watch wasn't closed despite rotation")
 	}
 
-	// Wait for old cert to expire (30s)
+	// 等待旧证书过期（30 秒）
 	time.Sleep(30 * time.Second)
 
-	// Ensure we make requests with the new cert
+	// 确保我们使用新证书发起请求
 	_, err = client.CoreV1().ServiceAccounts("default").List(ctx, v1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestCertRotationContinuousRequests(t *testing.T) {
 
 		writeCerts(t, clientSigningCert, clientSigningKey, certDir, 5*time.Minute)
 
-		// Wait for old cert to expire (30s)
+		// 等待旧证书过期（30 秒）
 		time.Sleep(30 * time.Second)
 		cancel()
 	}()
@@ -131,8 +131,8 @@ func TestCertRotationContinuousRequests(t *testing.T) {
 	for range time.Tick(time.Second) {
 		_, err := client.CoreV1().ServiceAccounts("default").List(ctx, v1.ListOptions{})
 		if err != nil {
-			// client may wrap the context.Canceled error, so we can't
-			// do 'err == ctx.Err()', instead use 'errors.Is'.
+			// 客户端可能会包装 context.Canceled 错误，因此不能
+			// 使用 'err == ctx.Err()'，而应使用 'errors.Is'。
 			if errors.Is(err, context.Canceled) {
 				return
 			}
@@ -176,7 +176,7 @@ func writeCerts(t *testing.T, clientSigningCert *x509.Certificate, clientSigning
 		t.Fatal(err)
 	}
 
-	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 返回 [0, max-1) 范围内的均匀随机值，然后加 1，使 serial 成为 [1, max) 范围内的均匀随机值。
 	serial, err := rand.Int(rand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
 		t.Fatal(err)

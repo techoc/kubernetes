@@ -57,8 +57,8 @@ import (
 )
 
 const (
-	// testApiextensionsOverlapProbeString is a probe string which identifies whether
-	// a CRD change triggers an OpenAPI spec change
+	// testApiextensionsOverlapProbeString 是一个探针字符串，用于标识
+	// CRD 的变更是否触发 OpenAPI spec 的变更
 	testApiextensionsOverlapProbeString = "testApiextensionsOverlapProbeField"
 )
 
@@ -71,7 +71,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// test whether the server is really healthy after /healthz told us so
+	// 在 /healthz 告诉我们 server 健康之后，测试它是否真的健康
 	t.Logf("Creating Deployment directly after being healthy")
 	var replicas int32 = 1
 	_, err = client.AppsV1().Deployments("default").Create(context.TODO(), &appsv1.Deployment{
@@ -179,8 +179,8 @@ func TestFlagz(t *testing.T) {
 		name                  string
 		acceptHeader          string
 		wantStatus            int
-		wantBodyText          string      // for text/plain
-		wantBodyStructured    interface{} // for structured responses (JSON/YAML/CBOR)
+		wantBodyText          string      // 用于 text/plain
+		wantBodyStructured    interface{} // 用于结构化响应（JSON/YAML/CBOR）
 		wantDeprecationHeader bool
 	}{
 		{
@@ -299,9 +299,9 @@ func TestStatusz(t *testing.T) {
 
 	wantBodyString := "statusz\nWarning: This endpoint is not meant to be machine parseable"
 	wantBodyAlpha := &statuszv1alpha1.Statusz{
-		// StartTime, UptimeSeconds, GoVersion, BinaryVersion,
-		// EmulationVersion, Paths are dynamic, so we only check
-		// static fields
+		// StartTime、UptimeSeconds、GoVersion、BinaryVersion、
+		// EmulationVersion、Paths 都是动态的，因此我们只检查
+		// 静态字段
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Statusz",
 			APIVersion: "config.k8s.io/v1alpha1",
@@ -432,10 +432,9 @@ func TestStatusz(t *testing.T) {
 	}
 }
 
-// TestOpenAPIDelegationChainPlumbing is a smoke test that checks for
-// the existence of some representative paths from the
-// apiextensions-server and the kube-aggregator server, both part of
-// the delegation chain in kube-apiserver.
+// TestOpenAPIDelegationChainPlumbing 是一个冒烟测试，用于检查
+// apiextensions-server 和 kube-aggregator server 中一些代表性路径是否存在，
+// 这两者都是 kube-apiserver 中 delegation chain 的一部分。
 func TestOpenAPIDelegationChainPlumbing(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -509,7 +508,7 @@ func TestOpenAPIApiextensionsOverlapProtection(t *testing.T) {
 		t.Fatalf("unexpected error: apiextensions OpenAPI path doesn't exist")
 	}
 
-	// Create a CRD that overlaps OpenAPI path with the CRD API
+	// 创建一个与 CRD API 的 OpenAPI 路径重叠的 CRD
 	crd := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "customresourcedefinitions.apiextensions.k8s.io",
@@ -543,12 +542,12 @@ func TestOpenAPIApiextensionsOverlapProtection(t *testing.T) {
 	}
 	etcd.CreateTestCRDs(t, apiextensionsclient, false, crd)
 
-	// Create a probe CRD foo that triggers an OpenAPI spec change
+	// 创建一个会触发 OpenAPI spec 变更的探针 CRD foo
 	if err := triggerSpecUpdateWithProbeCRD(t, apiextensionsclient, "foo"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Expect the CRD path to not change
+	// 期望 CRD 路径不发生变化
 	path, _, err := getOpenAPIPath(apiextensionsclient, `/apis/apiextensions.k8s.io/v1/customresourcedefinitions/{name}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -565,7 +564,7 @@ func TestOpenAPIApiextensionsOverlapProtection(t *testing.T) {
 		t.Fatalf("expected CRD OpenAPI path to not change, but got different results: want %q, got %q", string(crdPathBytes), string(pathBytes))
 	}
 
-	// Expect the orphan definition to be pruned from the spec
+	// 期望孤立的定义会从 spec 中被清除
 	exist, err = specHasProbe(apiextensionsclient, testApiextensionsOverlapProbeString)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -574,7 +573,7 @@ func TestOpenAPIApiextensionsOverlapProtection(t *testing.T) {
 		t.Fatalf("unexpected error: orphan definition isn't pruned")
 	}
 
-	// Create a CRD that overlaps OpenAPI definition with the CRD API
+	// 创建一个与 CRD API 的 OpenAPI 定义重叠的 CRD
 	crd = &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "customresourcedefinitions.apiextensions.apis.pkg.apiextensions-apiserver.k8s.io",
@@ -608,12 +607,12 @@ func TestOpenAPIApiextensionsOverlapProtection(t *testing.T) {
 	}
 	etcd.CreateTestCRDs(t, apiextensionsclient, false, crd)
 
-	// Create a probe CRD bar that triggers an OpenAPI spec change
+	// 创建一个会触发 OpenAPI spec 变更的探针 CRD bar
 	if err := triggerSpecUpdateWithProbeCRD(t, apiextensionsclient, "bar"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Expect the apiextensions definition to not change, since the overlapping definition will get renamed.
+	// 期望 apiextensions 定义不发生变化，因为重叠的定义会被重命名。
 	apiextensionsDefinition, exist, err := getOpenAPIDefinition(apiextensionsclient, `io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.CustomResourceDefinition`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -630,10 +629,10 @@ func TestOpenAPIApiextensionsOverlapProtection(t *testing.T) {
 	}
 }
 
-// triggerSpecUpdateWithProbeCRD creates a probe CRD with suffix in name, and waits until
-// the path and definition for the probe CRD show up in the OpenAPI spec
+// triggerSpecUpdateWithProbeCRD 创建一个名称中带有后缀的探针 CRD，并等待
+// 该探针 CRD 的路径和定义出现在 OpenAPI spec 中
 func triggerSpecUpdateWithProbeCRD(t *testing.T, apiextensionsclient *apiextensionsclientset.Clientset, suffix string) error {
-	// Create a probe CRD that triggers OpenAPI spec change
+	// 创建一个会触发 OpenAPI spec 变更的探针 CRD
 	name := fmt.Sprintf("integration-test-%s-crd", suffix)
 	kind := fmt.Sprintf("Integration-test-%s-crd", suffix)
 	group := "probe.test.com"
@@ -660,8 +659,8 @@ func triggerSpecUpdateWithProbeCRD(t *testing.T, apiextensionsclient *apiextensi
 	}
 	etcd.CreateTestCRDs(t, apiextensionsclient, false, crd)
 
-	// Expect the probe CRD path to show up in the OpenAPI spec
-	// TODO(roycaihw): expose response header in rest client and utilize etag here
+	// 期望探针 CRD 的路径出现在 OpenAPI spec 中
+	// TODO(roycaihw): 在 rest client 中暴露 response header，以便在此处使用 etag
 	if err := wait.Poll(1*time.Second, wait.ForeverTestTimeout, func() (bool, error) {
 		_, exist, err := getOpenAPIPath(apiextensionsclient, fmt.Sprintf(`/apis/%s/v1/%ss/{name}`, group, name))
 		if err != nil {
@@ -714,7 +713,7 @@ func getOpenAPIDefinition(clientset *apiextensionsclientset.Clientset, definitio
 	return value, ok, nil
 }
 
-// return the unique endpoint IPs
+// 返回去重后的 endpoint IP
 func getEndpointIPs(endpoints *corev1.Endpoints) []string {
 	endpointMap := make(map[string]bool)
 	ips := make([]string, 0)
@@ -744,9 +743,9 @@ func testReconcilersAPIServerLease(t *testing.T, leaseCount int, apiServerCount 
 
 	instanceOptions := kubeapiservertesting.NewDefaultTestServerOptions()
 
-	// 1. start apiServerCount api servers
+	// 1. 启动 apiServerCount 个 api server
 	for i := range apiServerCount {
-		// start count api server
+		// 启动 count 类型的 api server
 		server := kubeapiservertesting.StartTestServerOrDie(t, instanceOptions, []string{
 			"--endpoint-reconciler-type", "master-count",
 			"--advertise-address", fmt.Sprintf("10.0.1.%v", i+1),
@@ -755,7 +754,7 @@ func testReconcilersAPIServerLease(t *testing.T, leaseCount int, apiServerCount 
 		apiServerCountServers[i] = server
 	}
 
-	// 2. verify API Server count servers have registered
+	// 2. 验证 API Server count 类型的 server 已注册
 	if err := wait.PollImmediate(3*time.Second, 2*time.Minute, func() (bool, error) {
 		client, err := kubernetes.NewForConfig(apiServerCountServers[0].ClientConfig)
 		if err != nil {
@@ -772,7 +771,7 @@ func testReconcilersAPIServerLease(t *testing.T, leaseCount int, apiServerCount 
 		t.Fatalf("API Server count endpoints failed to register: %v", err)
 	}
 
-	// 3. start lease api servers
+	// 3. 启动 lease 类型的 api server
 	for i := range leaseCount {
 		options := []string{
 			"--endpoint-reconciler-type", "lease",
@@ -790,12 +789,12 @@ func testReconcilersAPIServerLease(t *testing.T, leaseCount int, apiServerCount 
 
 	time.Sleep(3 * time.Second)
 
-	// 4. Shutdown the apiServerCount server
+	// 4. 关闭 apiServerCount 类型的 server
 	for _, server := range apiServerCountServers {
 		server.TearDownFn()
 	}
 
-	// 5. verify only leaseEndpoint servers left
+	// 5. 验证只剩 leaseEndpoint 类型的 server
 	if err := wait.PollImmediate(3*time.Second, 2*time.Minute, func() (bool, error) {
 		client, err := kubernetes.NewForConfig(leaseServers[0].ClientConfig)
 		if err != nil {
@@ -832,16 +831,16 @@ func TestMultiAPIServerNodePortAllocation(t *testing.T) {
 
 	instanceOptions := kubeapiservertesting.NewDefaultTestServerOptions()
 
-	// create 2 api servers and 2 clients
+	// 创建 2 个 api server 和 2 个 client
 	for i := range 2 {
-		// start count api server
+		// 启动 count 类型的 api server
 		t.Logf("starting api server: %d", i)
 		server := kubeapiservertesting.StartTestServerOrDie(t, instanceOptions, []string{
 			"--advertise-address", fmt.Sprintf("10.0.1.%v", i+1),
 		}, etcd)
 		kubeAPIServers = append(kubeAPIServers, server)
 
-		// verify kube API servers have registered and create a client
+		// 验证 kube API server 已注册并创建一个 client
 		if err := wait.PollImmediate(3*time.Second, 2*time.Minute, func() (bool, error) {
 			client, err := kubernetes.NewForConfig(kubeAPIServers[i].ClientConfig)
 			if err != nil {
@@ -880,21 +879,21 @@ func TestMultiAPIServerNodePortAllocation(t *testing.T) {
 		},
 	}
 
-	// create and delete the same nodePortservice using different APIservers
-	// to check that API servers are using the same port allocation bitmap
+	// 使用不同的 API server 创建并删除同一个 nodePort service，
+	// 以检查这些 API server 是否使用相同的端口分配 bitmap
 	for range 2 {
-		// Create the service using the first API server
+		// 使用第一个 API server 创建 service
 		_, err := clientAPIServers[0].CoreV1().Services(metav1.NamespaceDefault).Create(context.TODO(), serviceObject, metav1.CreateOptions{})
 		if err != nil {
 			t.Fatalf("unable to create service: %v", err)
 		}
-		// Delete the service using the second API server
+		// 使用第二个 API server 删除 service
 		if err := clientAPIServers[1].CoreV1().Services(metav1.NamespaceDefault).Delete(context.TODO(), serviceObject.ObjectMeta.Name, metav1.DeleteOptions{}); err != nil {
 			t.Fatalf("got unexpected error: %v", err)
 		}
 	}
 
-	// shutdown the api servers
+	// 关闭 api server
 	for _, server := range kubeAPIServers {
 		server.TearDownFn()
 	}

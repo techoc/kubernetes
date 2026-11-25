@@ -106,7 +106,7 @@ func newMatchConditionHandler(recorder *admissionRecorder) http.Handler {
 	})
 }
 
-// TestMatchConditions tests ValidatingWebhookConfigurations and MutatingWebhookConfigurations that validates different cases of matchCondition fields
+// TestMatchConditions 测试 ValidatingWebhookConfigurations 和 MutatingWebhookConfigurations 对 matchCondition 字段各种情形的校验
 func TestMatchConditions(t *testing.T) {
 	fail := admissionregistrationv1.Fail
 	ignore := admissionregistrationv1.Ignore
@@ -329,14 +329,14 @@ func TestMatchConditions(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Write markers to a separate namespace to avoid cross-talk
+			// 将 marker 写入单独的命名空间，避免相互干扰
 			markerNs := "marker"
 			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: markerNs}}, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// Create a marker object to use to check for the webhook configurations to be ready.
+			// 创建一个 marker 对象，用于检查 webhook 配置是否已就绪。
 			marker, err := client.CoreV1().Pods(markerNs).Create(context.TODO(), newMarkerPod(markerNs), metav1.CreateOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -363,7 +363,7 @@ func TestMatchConditions(t *testing.T) {
 							URL:      &endpoint,
 							CABundle: localhostCert,
 						},
-						// ignore pods in the marker namespace
+						// 忽略 marker 命名空间中的 Pod
 						NamespaceSelector: &metav1.LabelSelector{
 							MatchExpressions: []metav1.LabelSelectorRequirement{
 								{
@@ -413,7 +413,7 @@ func TestMatchConditions(t *testing.T) {
 				}
 			}()
 
-			// wait until new webhook is called the first time
+			// 等待新 webhook 第一次被调用
 			if err := wait.PollUntilContextTimeout(context.Background(), time.Millisecond*5, wait.ForeverTestTimeout, true, func(_ context.Context) (bool, error) {
 				_, err = client.CoreV1().Pods(markerNs).Patch(context.TODO(), marker.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 				select {
@@ -451,8 +451,8 @@ func TestMatchConditions(t *testing.T) {
 				}
 			}
 
-			// Reset and rerun against mutating webhook configuration
-			// TODO: private helper function for validation after creating vwh or mwh
+			// 重置并重跑 mutating webhook 配置的测试
+			// TODO: 创建一个私有辅助函数，用于在创建 vwh 或 mwh 后进行校验
 			upCh = recorder.Reset()
 			err = client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Delete(context.TODO(), validatingcfg.GetName(), metav1.DeleteOptions{})
 			if err != nil {
@@ -480,7 +480,7 @@ func TestMatchConditions(t *testing.T) {
 							URL:      &endpoint,
 							CABundle: localhostCert,
 						},
-						// ignore pods in the marker namespace
+						// 忽略 marker 命名空间中的 Pod
 						NamespaceSelector: &metav1.LabelSelector{
 							MatchExpressions: []metav1.LabelSelectorRequirement{
 								{
@@ -526,7 +526,7 @@ func TestMatchConditions(t *testing.T) {
 				}
 			}()
 
-			// wait until new webhook is called the first time
+			// 等待新 webhook 第一次被调用
 			if err := wait.PollUntilContextTimeout(context.Background(), time.Millisecond*5, wait.ForeverTestTimeout, true, func(_ context.Context) (bool, error) {
 				_, err = client.CoreV1().Pods(markerNs).Patch(context.TODO(), marker.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 				select {
@@ -643,14 +643,14 @@ func TestMatchConditionsWithStrictCostEnforcement(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Write markers to a separate namespace to avoid cross-talk
+			// 将 marker 写入单独的命名空间，避免相互干扰
 			markerNs := "marker"
 			_, err = client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: markerNs}}, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// Create a marker object to use to check for the webhook configurations to be ready.
+			// 创建一个 marker 对象，用于检查 webhook 配置是否已就绪。
 			marker, err := client.CoreV1().Pods(markerNs).Create(context.TODO(), newMarkerPod(markerNs), metav1.CreateOptions{})
 			if err != nil {
 				t.Fatal(err)
@@ -677,7 +677,7 @@ func TestMatchConditionsWithStrictCostEnforcement(t *testing.T) {
 							URL:      &endpoint,
 							CABundle: localhostCert,
 						},
-						// ignore pods in the marker namespace
+						// 忽略 marker 命名空间中的 Pod
 						NamespaceSelector: &metav1.LabelSelector{
 							MatchExpressions: []metav1.LabelSelectorRequirement{
 								{
@@ -727,7 +727,7 @@ func TestMatchConditionsWithStrictCostEnforcement(t *testing.T) {
 				}
 			}()
 
-			// wait until new webhook is called the first time
+			// 等待新 webhook 第一次被调用
 			if err := wait.PollUntilContextTimeout(context.Background(), time.Millisecond*5, wait.ForeverTestTimeout, true, func(_ context.Context) (bool, error) {
 				_, err = client.CoreV1().Pods(markerNs).Patch(context.TODO(), marker.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 				select {
@@ -765,8 +765,8 @@ func TestMatchConditionsWithStrictCostEnforcement(t *testing.T) {
 				}
 			}
 
-			// Reset and rerun against mutating webhook configuration
-			// TODO: private helper function for validation after creating vwh or mwh
+			// 重置并重跑 mutating webhook 配置的测试
+			// TODO: 创建一个私有辅助函数，用于在创建 vwh 或 mwh 后进行校验
 			upCh = recorder.Reset()
 			err = client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Delete(context.TODO(), validatingcfg.GetName(), metav1.DeleteOptions{})
 			if err != nil {
@@ -794,7 +794,7 @@ func TestMatchConditionsWithStrictCostEnforcement(t *testing.T) {
 							URL:      &endpoint,
 							CABundle: localhostCert,
 						},
-						// ignore pods in the marker namespace
+						// 忽略 marker 命名空间中的 Pod
 						NamespaceSelector: &metav1.LabelSelector{
 							MatchExpressions: []metav1.LabelSelectorRequirement{
 								{
@@ -840,7 +840,7 @@ func TestMatchConditionsWithStrictCostEnforcement(t *testing.T) {
 				}
 			}()
 
-			// wait until new webhook is called the first time
+			// 等待新 webhook 第一次被调用
 			if err := wait.PollUntilContextTimeout(context.Background(), time.Millisecond*5, wait.ForeverTestTimeout, true, func(_ context.Context) (bool, error) {
 				_, err = client.CoreV1().Pods(markerNs).Patch(context.TODO(), marker.Name, types.JSONPatchType, []byte("[]"), metav1.PatchOptions{})
 				select {
@@ -1095,7 +1095,7 @@ func repeatedMatchConditions(size int) []admissionregistrationv1.MatchCondition 
 	return matchConditions
 }
 
-// generate n matchConditions with provided expression
+// 使用给定表达式生成 n 个 matchCondition
 func generateMatchConditionsWithAuthzCheck(num int, exp string) []admissionregistrationv1.MatchCondition {
 	var conditions = make([]admissionregistrationv1.MatchCondition, num)
 	for i := range num {

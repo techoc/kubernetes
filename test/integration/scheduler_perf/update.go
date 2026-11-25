@@ -139,10 +139,10 @@ func (c *updateAny) update(tCtx ktesting.TContext, env map[string]any) error {
 	resourceClient := tCtx.Dynamic().Resource(c.cachedMapping.Resource)
 
 	options := metav1.UpdateOptions{
-		// If the YAML input is invalid, then we want the
-		// apiserver to tell us via an error. This can
-		// happen because decoding into an unstructured object
-		// doesn't validate.
+		// 如果 YAML 输入无效，
+		// 我们希望 apiserver 通过错误告知我们。
+		// 之所以会这样，是因为解码到 unstructured 对象时
+		// 不会进行校验。
 		FieldValidation: "Strict",
 	}
 	if c.Namespace != "" {

@@ -107,7 +107,7 @@ func TestAdmission(t *testing.T) {
 	}
 }
 
-// newHandlerForTest returns a handler configured for testing.
+// newHandlerForTest 返回一个为测试配置好的 handler。
 func newHandlerForTest() (*defaulttolerationseconds.Plugin, error) {
 	handler := defaulttolerationseconds.NewDefaultTolerationSeconds()
 	pluginInitializer := initializer.New(nil, nil, nil, nil, nil, nil, nil, nil)

@@ -138,8 +138,8 @@ func createTestStorageVersion(t *testing.T, client kubernetes.Interface, ids ...
 		}
 		sv.Status.StorageVersions = append(sv.Status.StorageVersions, v)
 	}
-	// every id is unique and creates a different version. We know we have a common encoding
-	// version when there is only one id. Pick it
+	// 每个 id 都是唯一的，会创建不同的版本。当只有一个 id 时，我们就知道
+	// 存在统一的 encoding 版本。取该版本。
 	if len(ids) == 1 {
 		sv.Status.CommonEncodingVersion = ptr.To(sv.Status.StorageVersions[0].EncodingVersion)
 	}
@@ -148,7 +148,7 @@ func createTestStorageVersion(t *testing.T, client kubernetes.Interface, ids ...
 	if err != nil {
 		t.Fatalf("failed to create storage version %s: %v", svName, err)
 	}
-	// update the created sv with intended status
+	// 用预期的 status 更新已创建的 sv
 	createdSV.Status = sv.Status
 	if _, err := client.InternalV1alpha1().StorageVersions().UpdateStatus(
 		context.TODO(), createdSV, metav1.UpdateOptions{}); err != nil {
@@ -184,7 +184,7 @@ func createTestAPIServerIdentityLease(t *testing.T, client kubernetes.Interface,
 		Spec: coordinationv1.LeaseSpec{
 			HolderIdentity:       ptr.To(name),
 			LeaseDurationSeconds: ptr.To[int32](3600),
-			// create fresh leases
+			// 创建全新的 lease
 			AcquireTime: &metav1.MicroTime{Time: time.Now()},
 			RenewTime:   &metav1.MicroTime{Time: time.Now()},
 		},
@@ -245,7 +245,7 @@ func assertCommonEncodingVersion(t *testing.T, client kubernetes.Interface, e *s
 }
 
 func idToVersion(t *testing.T, id string) string {
-	// TODO(roycaihw): rewrite the test, use a id-version table
+	// TODO(roycaihw): 重写该测试，改用 id-version 表
 	if !strings.HasPrefix(id, "id-") {
 		t.Fatalf("should not happen: test using id without id- prefix: %s", id)
 	}

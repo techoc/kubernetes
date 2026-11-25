@@ -35,8 +35,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// Inject into control plane an authorizer that uses user info.
-// TODO(etune): remove this test once a more comprehensive built-in authorizer is implemented.
+// 向 control plane 注入一个使用 user info 的 authorizer。
+// TODO(etune): 当实现了更完善的内置 authorizer 后，移除这个测试。
 type sarAuthorizer struct{}
 
 func (sarAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
@@ -47,12 +47,12 @@ func (sarAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (au
 	return authorizer.DecisionAllow, "you're not dave", nil
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 并不感知 conditions，只是转换 Authorize 的判定结果。
 func (s sarAuthorizer) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(s.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// 该 authorizer 不支持 EvaluateConditions。
 func (sarAuthorizer) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
@@ -71,7 +71,7 @@ func TestSubjectAccessReview(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	clientset, _, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Unset BearerToken to disable BearerToken authenticator.
+			// 清空 BearerToken 以禁用 BearerToken 认证器。
 			config.ControlPlane.Generic.LoopbackClientConfig.BearerToken = ""
 			config.ControlPlane.Generic.Authentication.Authenticator = authenticator.RequestFunc(alwaysAlice)
 			config.ControlPlane.Generic.Authorization.Authorizer = sarAuthorizer{}
@@ -181,14 +181,14 @@ func TestSelfSubjectAccessReview(t *testing.T) {
 
 	clientset, _, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Unset BearerToken to disable BearerToken authenticator.
+			// 清空 BearerToken 以禁用 BearerToken 认证器。
 			config.ControlPlane.Generic.LoopbackClientConfig.BearerToken = ""
 			config.ControlPlane.Generic.Authentication.Authenticator = authenticator.RequestFunc(authenticatorFunc)
 			config.ControlPlane.Generic.Authorization.Authorizer = sarAuthorizer{}
 		},
 	})
 	defer tearDownFn()
-	// Switch back to a working authorizer so that tests in tear down work as expected.
+	// 切换回可用的 authorizer，以便 tear down 中的测试按预期工作。
 	defer func() {
 		mutex.Lock()
 		defer mutex.Unlock()
@@ -271,7 +271,7 @@ func TestLocalSubjectAccessReview(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	clientset, _, tearDownFn := framework.StartTestServer(tCtx, t, framework.TestServerSetup{
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Unset BearerToken to disable BearerToken authenticator.
+			// 清空 BearerToken 以禁用 BearerToken 认证器。
 			config.ControlPlane.Generic.LoopbackClientConfig.BearerToken = ""
 			config.ControlPlane.Generic.Authentication.Authenticator = authenticator.RequestFunc(alwaysAlice)
 			config.ControlPlane.Generic.Authorization.Authorizer = sarAuthorizer{}

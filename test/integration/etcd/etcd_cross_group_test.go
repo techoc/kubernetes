@@ -33,7 +33,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// TestCrossGroupStorage tests to make sure that all objects stored in an expected location in etcd can be converted/read.
+// TestCrossGroupStorage 测试存储在 etcd 预期位置的所有对象是否都能被转换/读取。
 func TestCrossGroupStorage(t *testing.T) {
 	apiServer := StartRealAPIServerOrDie(t)
 	defer apiServer.Cleanup()
@@ -44,7 +44,7 @@ func TestCrossGroupStorage(t *testing.T) {
 
 	apiServer.Client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}, metav1.CreateOptions{})
 
-	// Group by persisted GVK
+	// 按持久化时的 GVK 分组
 	for _, resourceToPersist := range apiServer.Resources {
 		gvk := resourceToPersist.Mapping.GroupVersionKind
 		data, exists := etcdStorageData[resourceToPersist.Mapping.Resource]
@@ -58,7 +58,7 @@ func TestCrossGroupStorage(t *testing.T) {
 		crossGroupResources[storageGVK] = append(crossGroupResources[storageGVK], resourceToPersist)
 	}
 
-	// Clear any without cross-group sources
+	// 清除那些没有跨 group 来源的项
 	for gvk, resources := range crossGroupResources {
 		groups := sets.NewString()
 		for _, resource := range resources {
@@ -70,24 +70,24 @@ func TestCrossGroupStorage(t *testing.T) {
 	}
 
 	if len(crossGroupResources) == 0 {
-		// Sanity check
+		// 健全性检查
 		t.Fatal("no cross-group resources found")
 	}
 
-	// Test all potential cross-group sources can be watched and fetched from all other sources
+	// 测试所有潜在的跨 group 来源都能被其他来源 watch 和获取
 	for gvk, resources := range crossGroupResources {
 		t.Run(gvk.String(), func(t *testing.T) {
-			// use the first one to create the initial object
+			// 使用第一个资源创建初始对象
 			resource := resources[0]
 
-			// compute namespace
+			// 计算 namespace
 			ns := ""
 			if resource.Mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 				ns = testNamespace
 			}
 
 			data := etcdStorageData[resource.Mapping.Resource]
-			// create object
+			// 创建对象
 			resourceClient, obj, err := JSONToUnstructured(data.Stub, ns, resource.Mapping, apiServer.Dynamic)
 			if err != nil {
 				t.Fatal(err)
@@ -98,7 +98,7 @@ func TestCrossGroupStorage(t *testing.T) {
 			}
 			name := actual.GetName()
 
-			// Set up clients, versioned data, and watches for all versions
+			// 为所有版本设置客户端、带版本的数据和 watch
 			var (
 				clients       = map[schema.GroupVersionResource]dynamic.ResourceInterface{}
 				versionedData = map[schema.GroupVersionResource]*unstructured.Unstructured{}
@@ -118,7 +118,7 @@ func TestCrossGroupStorage(t *testing.T) {
 
 			versioner := storage.APIObjectVersioner{}
 			for _, resource := range resources {
-				// clear out the things cleared in etcd
+				// 清除那些在 etcd 中会被清除的字段
 				versioned := versionedData[resource.Mapping.Resource]
 				if err := versioner.PrepareObjectForStorage(versioned); err != nil {
 					t.Error(err)
@@ -130,14 +130,14 @@ func TestCrossGroupStorage(t *testing.T) {
 					continue
 				}
 
-				// Update in etcd
+				// 在 etcd 中更新
 				if _, err := apiServer.KV.Put(context.Background(), data.ExpectedEtcdPath, string(versionedJSON)); err != nil {
 					t.Error(err)
 					continue
 				}
 				t.Logf("wrote %s to etcd", resource.Mapping.Resource.GroupVersion().String())
 
-				// Ensure everyone gets a watch event with the right version
+				// 确保每个 watch 都能收到版本正确的事件
 				for watchResource, watcher := range watches {
 					select {
 					case event, ok := <-watcher.ResultChan():
@@ -160,7 +160,7 @@ func TestCrossGroupStorage(t *testing.T) {
 					}
 				}
 
-				// Ensure everyone can do a direct get and gets the right version
+				// 确保每个客户端都能直接 get 并拿到正确的版本
 				for clientResource, client := range clients {
 					obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 					if err != nil {

@@ -16,7 +16,7 @@ limitations under the License.
 
 package taint
 
-// This file tests the Taint feature.
+// 本文件测试 Taint 特性。
 
 import (
 	"fmt"
@@ -59,14 +59,14 @@ func newPod(nsName, name string, req, limit v1.ResourceList) *v1.Pod {
 	}
 }
 
-// TestTaintNodeByCondition tests related cases for TaintNodeByCondition feature.
+// TestTaintNodeByCondition 测试 TaintNodeByCondition 特性的相关用例。
 func TestTaintNodeByCondition(t *testing.T) {
-	// Build PodToleration Admission.
+	// 构建 PodToleration 准入插件。
 	admission := podtolerationrestriction.NewPodTolerationsPlugin(&pluginapi.Configuration{})
 
 	testCtx := testutils.InitTestAPIServer(t, "taint-node-by-condition", admission)
 
-	// Build clientset and informers for controllers.
+	// 为控制器构建 clientset 和 informer。
 	externalClientConfig := restclient.CopyConfig(testCtx.KubeConfig)
 	externalClientConfig.QPS = -1
 	externalClientset := kubernetes.NewForConfigOrDie(externalClientConfig)
@@ -78,7 +78,7 @@ func TestTaintNodeByCondition(t *testing.T) {
 	cs := testCtx.ClientSet
 	nsName := testCtx.NS.Name
 
-	// Start NodeLifecycleController for taint.
+	// 启动用于打污点的 NodeLifecycleController。
 	nc, err := nodelifecycle.NewNodeLifecycleController(
 		testCtx.Ctx,
 		externalInformers.Coordination().V1().Leases(),
@@ -86,28 +86,28 @@ func TestTaintNodeByCondition(t *testing.T) {
 		externalInformers.Core().V1().Nodes(),
 		externalInformers.Apps().V1().DaemonSets(),
 		cs,
-		time.Hour,   // Node monitor grace period
-		time.Second, // Node startup grace period
-		time.Second, // Node monitor period
-		100,         // Eviction limiter QPS
-		100,         // Secondary eviction limiter QPS
-		100,         // Large cluster threshold
-		100,         // Unhealthy zone threshold
+		time.Hour,   // 节点监控宽限期
+		time.Second, // 节点启动宽限期
+		time.Second, // 节点监控周期
+		100,         // 驱逐限流器 QPS
+		100,         // 次级驱逐限流器 QPS
+		100,         // 大型集群阈值
+		100,         // 不健康可用区阈值
 	)
 	if err != nil {
 		t.Errorf("Failed to create node controller: %v", err)
 		return
 	}
 
-	// Waiting for all controllers to sync
+	// 等待所有控制器完成同步
 	externalInformers.Start(testCtx.Ctx.Done())
 	externalInformers.WaitForCacheSync(testCtx.Ctx.Done())
 
-	// Run node lifecycle controller
+	// 运行节点生命周期控制器
 	go nc.Run(testCtx.Ctx)
 
 	// -------------------------------------------
-	// Test TaintNodeByCondition feature.
+	// 测试 TaintNodeByCondition 特性。
 	// -------------------------------------------
 	nodeRes := v1.ResourceList{
 		v1.ResourceCPU:    resource.MustParse("4000m"),
@@ -213,7 +213,7 @@ func TestTaintNodeByCondition(t *testing.T) {
 		fits        bool
 	}
 
-	// switch to table driven testings
+	// 改为表驱动测试
 	tests := []struct {
 		name                                       string
 		existingTaints                             []v1.Taint
@@ -310,8 +310,8 @@ func TestTaintNodeByCondition(t *testing.T) {
 					Effect: v1.TaintEffectNoSchedule,
 				},
 			},
-			// In MemoryPressure condition, both Burstable and Guarantee pods are scheduled;
-			// BestEffort pod with toleration are also scheduled.
+			// 在 MemoryPressure 状态下，Burstable 和 Guarantee Pod 都会被调度；
+			// 带有容忍的 BestEffort Pod 也会被调度。
 			pods: []podCase{
 				{
 					pod:  bestEffortPod,
@@ -355,7 +355,7 @@ func TestTaintNodeByCondition(t *testing.T) {
 					Effect: v1.TaintEffectNoSchedule,
 				},
 			},
-			// In DiskPressure condition, only pods with toleration can be scheduled.
+			// 在 DiskPressure 状态下，只有带容忍的 Pod 才能被调度。
 			pods: []podCase{
 				{
 					pod:  bestEffortPod,
@@ -754,7 +754,7 @@ func TestTaintNodeByCondition(t *testing.T) {
 				testutils.CleanupNodes(cs, t)
 				testutils.WaitForSchedulerCacheCleanup(testCtx.Ctx, testCtx.Scheduler, t)
 
-				// Clean up scheduler context
+				// 清理调度器上下文
 				if testCtx.SchedulerCloseFn != nil {
 					testCtx.SchedulerCloseFn()
 				}

@@ -320,8 +320,8 @@ func TestCPGTopologyAwareScheduling(t *testing.T) {
 				{
 					Name: "Create nodes across zones and racks",
 					CreateNodes: []*v1.Node{
-						// In order for the whole group to fit, pg1 must choose node1.
-						// To prevent other pgs from taking its place, we add a taint.
+						// 为了让整个组能够容纳下，pg1 必须选择 node1。
+						// 为防止其他 pg 抢占它的位置，我们添加了一个污点。
 						addTaint(makeNode("node1-z1-r1", "rack-1", "zone-1"), "taint"),
 						makeNode("node2-z1-r2", "rack-2", "zone-1"),
 						makeNode("node3-z1-r3", "rack-3", "zone-1"),
@@ -357,10 +357,10 @@ func TestCPGTopologyAwareScheduling(t *testing.T) {
 				{
 					Name: "Create all pods belonging to pg1 and pg2",
 					CreatePods: []*v1.Pod{
-						// Since we want pg1 pods to schedule on the tainted node, we need to add a toleration.
+						// 由于我们希望 pg1 的 Pod 调度到带污点的节点上，因此需要添加容忍。
 						addToleration(makePod("p1", "pg1"), "taint"),
 						addToleration(makePod("p2", "pg1"), "taint"),
-						// Preferred node is in zone-2, which cannot fit both groups and is therefore ineligible.
+						// 首选节点位于 zone-2，它无法同时容纳两个组，因此不符合条件。
 						addPreferredNode(makePod("p3", "pg2"), "node4-z2-r1"),
 						addPreferredNode(makePod("p4", "pg2"), "node4-z2-r1"),
 					},
@@ -1069,7 +1069,7 @@ func TestCPGTopologyAwareSchedulingWorkloadAwarePreemption(t *testing.T) {
 						makePod("p5", "pg1"),
 					},
 				},
-				// There is a space on rack2 available (2CPU), but pod cannot be scheduled because of parent PG topology
+				// rack2 上还有可用空间（2CPU），但由于父 PG 的拓扑约束，Pod 无法被调度
 				{
 					Name:                     "Verify the new pod is unschedulable",
 					WaitForPodsUnschedulable: []string{"p5"},
@@ -1292,7 +1292,7 @@ func TestCPGTopologyAwareSchedulingWorkloadAwarePreemption(t *testing.T) {
 				},
 				{
 					Name: "Create all pods belonging to pg1 and pg2",
-					// Those should fit on zone-1, without preemption
+					// 这些 Pod 无需抢占即可容纳在 zone-1 中
 					CreatePods: []*v1.Pod{
 						makePod("p1", "pg1"),
 						makePod("p2", "pg1"),
@@ -1357,7 +1357,7 @@ func TestCPGTopologyAwareSchedulingWorkloadAwarePreemption(t *testing.T) {
 				},
 				{
 					Name: "Verify all pods in the pg4 are unschedulable",
-					// Even though preemption can free up space in zone-2/rack-1, this PG cannot be scheduled there.
+					// 即使抢占可以在 zone-2/rack-1 腾出空间，这个 PG 也无法调度到那里。
 					WaitForPodsUnschedulable: []string{"p7", "p8"},
 				},
 			},

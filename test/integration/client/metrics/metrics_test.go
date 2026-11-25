@@ -34,22 +34,21 @@ import (
 	kubeapiservertesting "k8s.io/kubernetes/cmd/kube-apiserver/app/testing"
 	"k8s.io/kubernetes/test/integration/framework"
 
-	// the metrics are loaded on cmd/kube-apiserver/apiserver.go
-	// so we need to load them here to be available for the test
+	// 指标是在 cmd/kube-apiserver/apiserver.go 中加载的，
+	// 因此我们需要在此处加载它们以供测试使用
 	_ "k8s.io/component-base/metrics/prometheus/restclient"
 )
 
-// IMPORTANT: metrics are stored globally so all the test must run serially
-// and reset the metrics.
+// 重要：指标是全局存储的，因此所有测试必须串行运行并重置指标。
 
-// regression test for https://issues.k8s.io/117258
+// 针对 https://issues.k8s.io/117258 的回归测试
 func TestAPIServerTransportMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		"AllAlpha": true,
 		"AllBeta":  true,
 	})
 
-	// reset default registry metrics
+	// 重置默认 registry 中的指标
 	legacyregistry.Reset()
 
 	flags := framework.DefaultTestServerFlags()
@@ -59,12 +58,12 @@ func TestAPIServerTransportMetrics(t *testing.T) {
 
 	client := clientset.NewForConfigOrDie(result.ClientConfig)
 
-	// IMPORTANT: reflect the current values if the test changes
+	// 重要：如果测试发生变化，请反映当前值
 	//     client_test.go:1407: metric rest_client_transport_cache_entries 3
 	//     client_test.go:1407: metric rest_client_transport_create_calls_total{result="hit"} 20
 	//     client_test.go:1407: metric rest_client_transport_create_calls_total{result="miss"} 3
 	hits1, misses1, entries1 := checkTransportMetrics(t, client)
-	// hit ratio at startup depends on multiple factors
+	// 启动时的命中率取决于多种因素
 	if (hits1*100)/(hits1+misses1) < 85 {
 		t.Fatalf("transport cache hit ratio %d lower than 90 percent", (hits1*100)/(hits1+misses1))
 	}
@@ -95,7 +94,7 @@ func TestAPIServerTransportMetrics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// mutate the object
+		// 修改对象
 		apiService.Labels = map[string]string{"key": fmt.Sprintf("val%d", i)}
 		_, err = aggregatorClient.ApiregistrationV1().APIServices().Update(context.Background(), apiService, metav1.UpdateOptions{})
 		if err != nil && !apierrors.IsConflict(err) {
@@ -108,7 +107,7 @@ func TestAPIServerTransportMetrics(t *testing.T) {
 		t.Fatalf("high number of errors during the test %d out of %d", errors, requests)
 	}
 
-	// IMPORTANT: reflect the current values if the test changes
+	// 重要：如果测试发生变化，请反映当前值
 	//     client_test.go:1407: metric rest_client_transport_cache_entries 4
 	//     client_test.go:1407: metric rest_client_transport_create_calls_total{result="hit"} 120
 	//     client_test.go:1407: metric rest_client_transport_create_calls_total{result="miss"} 4
@@ -117,7 +116,7 @@ func TestAPIServerTransportMetrics(t *testing.T) {
 		t.Fatalf("possible transport leak, number of new cache entries increased by %d", entries2-entries1)
 	}
 
-	// hit ratio after startup should grow since no new transports are expected
+	// 启动后的命中率应当上升，因为预期不会再创建新的 transport
 	if (hits2*100)/(hits2+misses2) < 85 {
 		t.Fatalf("transport cache hit ratio %d lower than 95 percent", (hits2*100)/(hits2+misses2))
 	}
@@ -130,10 +129,9 @@ func checkTransportMetrics(t *testing.T, client *clientset.Clientset) (hits int,
 		t.Fatal(err)
 	}
 
-	// TODO: this can be much better if there is some library that parse prometheus metrics
-	// the existing one in "k8s.io/component-base/metrics/testutil" uses the global variable
-	// but we want to parse the ones returned by the endpoint to be sure the metrics are
-	// exposed correctly
+	// TODO: 如果有能够解析 prometheus 指标的库，这里可以做得更好
+	// "k8s.io/component-base/metrics/testutil" 中现有的库使用全局变量，
+	// 但我们希望解析 endpoint 返回的指标，以确保指标被正确暴露
 	for _, line := range strings.Split(string(body), "\n") {
 		if !strings.HasPrefix(line, "rest_client_transport") {
 			continue

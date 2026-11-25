@@ -55,13 +55,13 @@ func Test_RemoveExternalCloudProviderTaint(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(client, "config-map", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// Create fake node
+	// 创建 fake node
 	_, err := client.CoreV1().Nodes().Create(ctx, makeNode("node0"), metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create Node %v", err)
 	}
 
-	// start cloud-controller-manager
+	// 启动 cloud-controller-manager
 	kubeconfig := createKubeconfigFileForRestConfig(server.ClientConfig)
 	// nolint:errcheck // Ignore the error trying to delete the kubeconfig file used for the test
 	defer os.Remove(kubeconfig)
@@ -110,7 +110,7 @@ func Test_RemoveExternalCloudProviderTaint(t *testing.T) {
 		Err:             nil,
 	}
 
-	// register fake GCE cloud provider
+	// 注册 fake GCE cloud provider
 	cloudprovider.RegisterCloudProvider(
 		"fakeCloudTaints",
 		func(config io.Reader) (cloudprovider.Interface, error) {
@@ -120,7 +120,7 @@ func Test_RemoveExternalCloudProviderTaint(t *testing.T) {
 	ccm := ccmservertesting.StartTestServerOrDie(t, ctx, args)
 	defer ccm.TearDownFn()
 
-	// There should be only the taint TaintNodeNotReady, added by the admission plugin TaintNodesByCondition
+	// 应当只有准入插件 TaintNodesByCondition 添加的污点 TaintNodeNotReady
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 50*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		n, err := client.CoreV1().Nodes().Get(ctx, "node0", metav1.GetOptions{})
 		if err != nil {
@@ -143,13 +143,12 @@ func Test_RemoveExternalCloudProviderTaint(t *testing.T) {
 	}
 }
 
-// Test the behavior of the alpha.kubernetes.io/provided-node-ip annotation
-// and the external cloud provider.
+// 测试 alpha.kubernetes.io/provided-node-ip 注解与外部 cloud provider 的行为。
 func Test_ExternalCloudProviderNodeAddresses(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -158,7 +157,7 @@ func Test_ExternalCloudProviderNodeAddresses(t *testing.T) {
 	ns := framework.CreateNamespaceOrDie(client, "config-map", t)
 	defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-	// start cloud-controller-manager
+	// 启动 cloud-controller-manager
 	kubeconfig := createKubeconfigFileForRestConfig(server.ClientConfig)
 	// nolint:errcheck // Ignore the error trying to delete the kubeconfig file used for the test
 	defer os.Remove(kubeconfig)
@@ -217,7 +216,7 @@ func Test_ExternalCloudProviderNodeAddresses(t *testing.T) {
 		ErrByProviderID: nil,
 		Err:             nil,
 	}
-	// register fake GCE cloud provider
+	// 注册 fake GCE cloud provider
 	cloudprovider.RegisterCloudProvider(
 		"fakeCloud",
 		func(config io.Reader) (cloudprovider.Interface, error) {
@@ -252,7 +251,7 @@ func Test_ExternalCloudProviderNodeAddresses(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			nodeName := fmt.Sprintf("node-%d", d)
 
-			// Create fake node
+			// 创建 fake node
 			node := makeNode(nodeName)
 			node.Annotations = map[string]string{cloudproviderapi.AnnotationAlphaProvidedIPAddr: tc.nodeIPs}
 			_, err := client.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
@@ -265,7 +264,7 @@ func Test_ExternalCloudProviderNodeAddresses(t *testing.T) {
 					t.Fatalf("Failed to delete Node %v", err)
 				}
 			}()
-			// There should be only the taint TaintNodeNotReady, added by the admission plugin TaintNodesByCondition
+			// 应当只有准入插件 TaintNodesByCondition 添加的污点 TaintNodeNotReady
 			err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 50*time.Second, true, func(ctx context.Context) (done bool, err error) {
 				n, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 				if err != nil {
@@ -285,7 +284,7 @@ func Test_ExternalCloudProviderNodeAddresses(t *testing.T) {
 					}
 				}
 				nodeIPs := strings.Split(tc.nodeIPs, ",")
-				// validate only the passed IP as annotation is present
+				// 由于注解已存在，只验证传入的 IP
 				if !reflect.DeepEqual(gotInternalIPs, nodeIPs) {
 					t.Logf("got node InternalIPs: %v expected node InternalIPs: %v", gotInternalIPs, nodeIPs)
 					return false, nil

@@ -84,7 +84,7 @@ func doBench(b *testing.B, useUnstructured bool, shortCircuit bool) {
 	actualSmall = expectedSmall.DeepCopyObject()
 
 	if shortCircuit {
-		// Modify managed fields of the compared objects to induce a short circuit
+		// 修改被比较对象的 managed fields，以触发短路
 		now := metav1.Now()
 		extraEntry := &metav1.ManagedFieldsEntry{
 			Manager:    "sidecar_controller",

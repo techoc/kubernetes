@@ -25,31 +25,31 @@ import (
 	benchparse "golang.org/x/tools/benchmark/parse"
 )
 
-// TODO(random-liu): Replace this with prometheus' data model.
+// TODO(random-liu): 将其替换为 prometheus 的数据模型。
 
-// The following performance data structures are generalized and well-formatted.
-// They can be pretty printed in json format and be analyzed by other performance
-// analyzing tools, such as Perfdash (k8s.io/contrib/perfdash).
+// 以下性能数据结构是通用且格式规范的。
+// 它们可以漂亮地打印为 json 格式，并被其他性能分析工具（如
+// Perfdash (k8s.io/contrib/perfdash)）分析。
 
-// DataItem is the data point.
+// DataItem 表示数据点。
 type DataItem struct {
-	// Data is a map from bucket to real data point (e.g. "Perc90" -> 23.5). Notice
-	// that all data items with the same label combination should have the same buckets.
+	// Data 是从 bucket 到实际数据点的映射（例如 "Perc90" -> 23.5）。注意，
+	// 所有具有相同标签组合的数据项都应具有相同的 bucket。
 	Data map[string]float64 `json:"data"`
-	// Unit is the data unit. Notice that all data items with the same label combination
-	// should have the same unit.
+	// Unit 是数据的单位。注意，所有具有相同标签组合的数据项
+	// 都应具有相同的单位。
 	Unit string `json:"unit"`
-	// Labels is the labels of the data item.
+	// Labels 是数据项的标签。
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
-// PerfData contains all data items generated in current test.
+// PerfData 包含当前测试中生成的所有数据项。
 type PerfData struct {
-	// Version is the version of the metrics. The metrics consumer could use the version
-	// to detect metrics version change and decide what version to support.
+	// Version 是指标的版本。指标消费者可以使用该版本
+	// 检测指标版本变化，并决定支持哪个版本。
 	Version   string     `json:"version"`
 	DataItems []DataItem `json:"dataItems"`
-	// Labels is the labels of the dataset.
+	// Labels 是数据集的标签。
 	Labels map[string]string `json:"labels,omitempty"`
 }
 

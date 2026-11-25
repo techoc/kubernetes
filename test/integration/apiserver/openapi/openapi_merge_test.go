@@ -171,7 +171,7 @@ func TestOpenAPIV3MultipleCRDsSameGV(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// It takes a second for CRD specs to propagate to the aggregator
+	// CRD spec 传播到 aggregator 需要一点时间
 	time.Sleep(4 * time.Second)
 
 	jsonData, err := clientset.RESTClient().Get().AbsPath("/openapi/v3/apis/cr.bar.com/v1").Do(context.TODO()).Raw()
@@ -185,8 +185,8 @@ func TestOpenAPIV3MultipleCRDsSameGV(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Ensure both CRD schemas are present in the OpenAPI
-	// Scale, status, and metadata dependencies must also be present
+	// 确保两个 CRD schema 都出现在 OpenAPI 中
+	// Scale、status 和 metadata 依赖项也必须存在
 	assert.Contains(t, openAPISpec.Components.Schemas, scaleSchemaName)
 	assert.Contains(t, openAPISpec.Components.Schemas, statusSchemaName)
 	assert.Contains(t, openAPISpec.Components.Schemas, objectMetaSchemaName)

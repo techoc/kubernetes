@@ -35,8 +35,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// setup create kube-apiserver backed up by two separate etcds,
-// with one of them containing events and the other all other objects.
+// setup 创建一个由两个独立 etcd 支撑的 kube-apiserver，
+// 其中一个存放 events，另一个存放其他所有对象。
 func multiEtcdSetup(ctx context.Context, t *testing.T) (clientset.Interface, framework.TearDownFunc) {
 	etcdArgs := []string{"--watch-progress-notify-interval", "1s"}
 	etcd0URL, stopEtcd0, err := framework.RunCustomEtcd(klog.FromContext(ctx).WithName("etcd0"), "etcd_watchcache0", etcdArgs)
@@ -50,18 +50,18 @@ func multiEtcdSetup(ctx context.Context, t *testing.T) (clientset.Interface, fra
 	}
 
 	etcdOptions := framework.DefaultEtcdOptions()
-	// Overwrite etcd setup to our custom etcd instances.
+	// 将 etcd 配置覆盖为我们的自定义 etcd 实例。
 	etcdOptions.StorageConfig.Transport.ServerList = []string{etcd0URL}
 	etcdOptions.EtcdServersOverrides = []string{fmt.Sprintf("/events#%s", etcd1URL)}
 	etcdOptions.EnableWatchCache = true
 
 	clientSet, _, tearDownFn := framework.StartTestServer(ctx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opts *options.ServerRunOptions) {
-			// Ensure we're using the same etcd across apiserver restarts.
+			// 确保 apiserver 重启时使用同一个 etcd。
 			opts.Etcd = etcdOptions
 		},
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Switch off endpoints reconciler to avoid unnecessary operations.
+			// 关闭 endpoints reconciler，避免不必要的操作。
 			config.Extra.EndpointReconcilerType = reconcilers.NoneEndpointReconcilerType
 		},
 	})
@@ -72,10 +72,10 @@ func multiEtcdSetup(ctx context.Context, t *testing.T) (clientset.Interface, fra
 		stopEtcd0()
 	}
 
-	// Wait for apiserver to be stabilized.
-	// Everything but default service creation is checked in StartTestServer above by
-	// waiting for post start hooks, so we just wait for default service to exist.
-	// TODO(wojtek-t): Figure out less fragile way.
+	// 等待 apiserver 稳定。
+	// 除了默认 service 的创建之外，其他部分已在上面的 StartTestServer 中通过
+	// 等待 post start hook 检查过了，因此这里只需等待默认 service 存在。
+	// TODO(wojtek-t): 找出一种不那么脆弱的方式。
 	if err := wait.Poll(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		_, err := clientSet.CoreV1().Services("default").Get(ctx, "kubernetes", metav1.GetOptions{})
 		return err == nil, nil
@@ -114,8 +114,8 @@ func TestWatchCacheUpdatedByEtcd(t *testing.T) {
 		ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan,
 	}
 
-	// Wait until listing from cache returns resource version of corresponding
-	// resources (being the last updates).
+	// 等待从缓存中列出资源时返回相应资源的 resource version
+	// （即最后一次更新的版本）。
 	t.Logf("Waiting for configmaps watchcache synced to %s", cm.ResourceVersion)
 	if err := wait.Poll(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		res, err := c.CoreV1().ConfigMaps("default").List(tCtx, listOptions)
@@ -137,8 +137,8 @@ func TestWatchCacheUpdatedByEtcd(t *testing.T) {
 		t.Errorf("Failed to wait for events watchcache synced: %v", err)
 	}
 
-	// Create a secret, that is stored in the same etcd as configmap, but
-	// different than events.
+	// 创建一个 secret，它与 configmap 存放在同一个 etcd 中，
+	// 但与 events 不同。
 	se, err := c.CoreV1().Secrets("default").Create(tCtx, makeSecret("name"), metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Couldn't create secret: %v", err)
@@ -170,7 +170,7 @@ func BenchmarkListFromWatchCache(b *testing.B) {
 	tCtx := ktesting.Init(b)
 	c, _, tearDownFn := framework.StartTestServer(tCtx, b, framework.TestServerSetup{
 		ModifyServerConfig: func(config *controlplane.Config) {
-			// Switch off endpoints reconciler to avoid unnecessary operations.
+			// 关闭 endpoints reconciler，避免不必要的操作。
 			config.Extra.EndpointReconcilerType = reconcilers.NoneEndpointReconcilerType
 		},
 	})

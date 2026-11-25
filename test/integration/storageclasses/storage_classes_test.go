@@ -16,7 +16,7 @@ limitations under the License.
 
 package storageclasses
 
-// This file contains tests for the storage classes API resource.
+// 本文件包含 storage classes API 资源的测试。
 
 import (
 	"context"
@@ -33,7 +33,7 @@ import (
 
 const provisionerPluginName = "kubernetes.io/mock-provisioner"
 
-// TestStorageClasses tests apiserver-side behavior of creation of storage class objects and their use by pvcs.
+// TestStorageClasses 测试 apiserver 侧创建 storage class 对象以及 PVC 使用它们的行为。
 func TestStorageClasses(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, []string{"--disable-admission-plugins=StorageObjectInUseProtection"}, framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -46,9 +46,9 @@ func TestStorageClasses(t *testing.T) {
 	DoTestStorageClasses(t, client, ns)
 }
 
-// DoTestStorageClasses tests storage classes for one api version.
+// DoTestStorageClasses 测试某个 API 版本的 storage classes。
 func DoTestStorageClasses(t *testing.T, client clientset.Interface, ns *v1.Namespace) {
-	// Make a storage class object.
+	// 创建一个 storage class 对象。
 	s := storage.StorageClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "StorageClass",
@@ -64,7 +64,7 @@ func DoTestStorageClasses(t *testing.T, client clientset.Interface, ns *v1.Names
 	}
 	defer deleteStorageClassOrErrorf(t, client, s.Namespace, s.Name)
 
-	// Template for pvcs that specify a storage class
+	// 用于指定 storage class 的 PVC 模板
 	classGold := "gold"
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{

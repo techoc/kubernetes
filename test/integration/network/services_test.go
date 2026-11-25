@@ -35,9 +35,9 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// TestServicesFinalizersRepairLoop tests that Services participate in the object
-// deletion when using finalizers, and that the Services Repair controller doesn't,
-// mistakenly, repair the ClusterIP assigned to the Service that is being deleted.
+// TestServicesFinalizersRepairLoop 测试 Service 在使用 finalizer 时参与对象删除，
+// 并且 Services Repair 控制器不会错误地修复正在删除的 Service
+// 所分配的 ClusterIP。
 // https://issues.k8s.io/87603
 func TestServicesFinalizersRepairLoop(t *testing.T) {
 	serviceCIDR := "10.0.0.0/16"
@@ -55,7 +55,7 @@ func TestServicesFinalizersRepairLoop(t *testing.T) {
 	})
 	defer tearDownFn()
 
-	// verify client is working
+	// 确认客户端正常工作
 	if err := wait.PollImmediate(5*time.Second, 2*time.Minute, func() (bool, error) {
 		_, err := client.CoreV1().Endpoints(metav1.NamespaceDefault).Get(tCtx, "kubernetes", metav1.GetOptions{})
 		if err != nil {
@@ -67,7 +67,7 @@ func TestServicesFinalizersRepairLoop(t *testing.T) {
 		t.Errorf("server without enabled endpoints failed to register: %v", err)
 	}
 
-	// Create a NodePort service with one finalizer
+	// 创建一个带有一个 finalizer 的 NodePort Service
 	svcNodePort := v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "svc",
@@ -85,48 +85,48 @@ func TestServicesFinalizersRepairLoop(t *testing.T) {
 		},
 	}
 
-	// Create service
+	// 创建 Service
 	if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(tCtx, &svcNodePort, metav1.CreateOptions{}); err != nil {
 		t.Errorf("unexpected error creating service: %v", err)
 	}
 	t.Logf("Created service: %s", svcNodePort.Name)
 
-	// Check the service has been created correctly
+	// 检查 Service 是否正确创建
 	svc, err := client.CoreV1().Services(metav1.NamespaceDefault).Get(tCtx, svcNodePort.Name, metav1.GetOptions{})
 	if err != nil || svc.Spec.ClusterIP != clusterIP {
 		t.Errorf("created service is not correct: %v", err)
 	}
 	t.Logf("Service created successfully: %v", svc)
 
-	// Delete service
+	// 删除 Service
 	if err := client.CoreV1().Services(metav1.NamespaceDefault).Delete(tCtx, svcNodePort.Name, metav1.DeleteOptions{}); err != nil {
 		t.Errorf("unexpected error deleting service: %v", err)
 	}
 	t.Logf("Deleted service: %s", svcNodePort.Name)
 
-	// wait for the repair loop to recover the deleted resources
+	// 等待修复循环恢复被删除的资源
 	time.Sleep(interval + 1)
 
-	// Check that the service was not deleted and the IP is already allocated
+	// 检查 Service 没有被删除，且 IP 已经分配
 	svc, err = client.CoreV1().Services(metav1.NamespaceDefault).Get(tCtx, svcNodePort.Name, metav1.GetOptions{})
 	if err != nil || svc.Spec.ClusterIP != clusterIP {
 		t.Errorf("created service is not correct: %v", err)
 	}
 	t.Logf("Service after Delete: %v", svc)
 
-	// Remove the finalizer
+	// 移除 finalizer
 	if _, err = client.CoreV1().Services(metav1.NamespaceDefault).Patch(tCtx, svcNodePort.Name, types.JSONPatchType, []byte(`[{"op":"remove","path":"/metadata/finalizers"}]`), metav1.PatchOptions{}); err != nil {
 		t.Errorf("unexpected error removing finalizer: %v", err)
 	}
 	t.Logf("Removed service finalizer: %s", svcNodePort.Name)
 
-	// Check that the service was deleted
+	// 检查 Service 已被删除
 	_, err = client.CoreV1().Services(metav1.NamespaceDefault).Get(tCtx, svcNodePort.Name, metav1.GetOptions{})
 	if err == nil {
 		t.Errorf("service was not delete: %v", err)
 	}
 
-	// Try to create service again
+	// 再次尝试创建 Service
 	if _, err := client.CoreV1().Services(metav1.NamespaceDefault).Create(tCtx, &svcNodePort, metav1.CreateOptions{}); err != nil {
 		t.Errorf("unexpected error creating service: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestServicesFinalizersPatchStatus(t *testing.T) {
 
 	for _, testcase := range []string{"spec", "status"} {
 		t.Run(testcase, func(t *testing.T) {
-			// Create a NodePort service with one finalizer
+			// 创建一个带有一个 finalizer 的 NodePort Service
 			svcNodePort := v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "svc" + testcase,
@@ -168,26 +168,26 @@ func TestServicesFinalizersPatchStatus(t *testing.T) {
 			ns := framework.CreateNamespaceOrDie(client, "test-service-finalizers-"+testcase, t)
 			defer framework.DeleteNamespaceOrDie(client, ns, t)
 
-			// Create service
+			// 创建 Service
 			if _, err := client.CoreV1().Services(ns.Name).Create(tCtx, &svcNodePort, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("unexpected error creating service: %v", err)
 			}
 			t.Logf("Created service: %s", svcNodePort.Name)
 
-			// Check the service has been created correctly
+			// 检查 Service 是否正确创建
 			svc, err := client.CoreV1().Services(ns.Name).Get(tCtx, svcNodePort.Name, metav1.GetOptions{})
 			if err != nil || svc.Spec.ClusterIP != clusterIP {
 				t.Fatalf("created service is not correct: %v", err)
 			}
 			t.Logf("Service created successfully: %+v", svc)
 
-			// Delete service
+			// 删除 Service
 			if err := client.CoreV1().Services(ns.Name).Delete(tCtx, svcNodePort.Name, metav1.DeleteOptions{}); err != nil {
 				t.Fatalf("unexpected error deleting service: %v", err)
 			}
 			t.Logf("Deleted service: %s", svcNodePort.Name)
 
-			// Check that the service was not deleted and the IP is already allocated
+			// 检查 Service 没有被删除，且 IP 已经分配
 			svc, err = client.CoreV1().Services(ns.Name).Get(tCtx, svcNodePort.Name, metav1.GetOptions{})
 			if err != nil ||
 				svc.Spec.ClusterIP != clusterIP ||
@@ -198,7 +198,7 @@ func TestServicesFinalizersPatchStatus(t *testing.T) {
 			}
 			t.Logf("Service after Delete: %+v", svc)
 
-			// Remove the finalizer
+			// 移除 finalizer
 			updated := svc.DeepCopy()
 			updated.ObjectMeta.Finalizers = []string{}
 			patchBytes, err := getPatchBytes(svc, updated)
@@ -217,19 +217,19 @@ func TestServicesFinalizersPatchStatus(t *testing.T) {
 			}
 			t.Logf("Removed service finalizer: %s", svcNodePort.Name)
 
-			// Check that the service was deleted
+			// 检查 Service 已被删除
 			_, err = client.CoreV1().Services(ns.Name).Get(tCtx, svcNodePort.Name, metav1.GetOptions{})
 			if err == nil {
 				t.Fatalf("service was not delete: %v", err)
 			}
 
-			// Try to create service again without the finalizer to check the ClusterIP and NodePort are deallocated
+			// 不带 finalizer 再次创建 Service，以检查 ClusterIP 和 NodePort 是否被释放
 			svc = svcNodePort.DeepCopy()
 			svc.Finalizers = []string{}
 			if _, err := client.CoreV1().Services(ns.Name).Create(tCtx, svc, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("unexpected error creating service: %v", err)
 			}
-			// Delete service
+			// 删除 Service
 			if err := client.CoreV1().Services(ns.Name).Delete(tCtx, svc.Name, metav1.DeleteOptions{}); err != nil {
 				t.Fatalf("unexpected error deleting service: %v", err)
 			}
@@ -237,7 +237,7 @@ func TestServicesFinalizersPatchStatus(t *testing.T) {
 	}
 }
 
-// Regresion test for https://issues.k8s.io/115316
+// 针对 https://issues.k8s.io/115316 的回归测试
 func TestServiceCIDR28bits(t *testing.T) {
 	serviceCIDR := "10.0.0.0/28"
 
@@ -249,7 +249,7 @@ func TestServiceCIDR28bits(t *testing.T) {
 	})
 	defer tearDownFn()
 
-	// Wait until the default "kubernetes" service is created.
+	// 等待默认的 "kubernetes" Service 创建完成。
 	if err := wait.Poll(250*time.Millisecond, time.Minute, func() (bool, error) {
 		_, err := client.CoreV1().Services(metav1.NamespaceDefault).Get(tCtx, "kubernetes", metav1.GetOptions{})
 		if err != nil {

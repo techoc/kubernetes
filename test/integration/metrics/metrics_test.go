@@ -115,7 +115,7 @@ func TestAPIServerStorageMetrics(t *testing.T) {
 }
 
 func TestAPIServerMetrics(t *testing.T) {
-	// KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE allows for APIs pending removal to not block tests
+	// KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE 允许待移除的 API 不阻塞测试
 	t.Setenv("KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE", "true")
 
 	flags := framework.DefaultTestServerFlags()
@@ -123,14 +123,14 @@ func TestAPIServerMetrics(t *testing.T) {
 	s := kubeapiservertesting.StartTestServerOrDie(t, nil, flags, framework.SharedEtcd())
 	defer s.TearDownFn()
 
-	// Make a request to the apiserver to ensure there's at least one data point
-	// for the metrics we're expecting -- otherwise, they won't be exported.
+	// 向 apiserver 发起请求，确保所期望的指标至少有一个数据点，
+	// 否则这些指标不会被导出。
 	client := clientset.NewForConfigOrDie(s.ClientConfig)
 	if _, err := client.CoreV1().Pods(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{}); err != nil {
 		t.Fatalf("unexpected error getting pods: %v", err)
 	}
 
-	// Make a request to a deprecated API to ensure there's at least one data point
+	// 向一个已废弃的 API 发起请求，确保至少有一个数据点
 	if _, err := client.NetworkingV1beta1().ServiceCIDRs().List(context.TODO(), metav1.ListOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestAPIServerMetrics(t *testing.T) {
 }
 
 func TestAPIServerMetricsLabels(t *testing.T) {
-	// Disable ServiceAccount admission plugin as we don't have service account controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 service account controller。
 	s := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer s.TearDownFn()
 
@@ -182,9 +182,9 @@ func TestAPIServerMetricsLabels(t *testing.T) {
 		expectedMetrics = append(expectedMetrics, metric)
 	}
 
-	// Call appropriate endpoints to ensure particular metrics will be exposed
+	// 调用相应的端点，确保特定指标会被暴露
 
-	// Namespace-scoped resource
+	// 命名空间级资源
 	c := client.CoreV1().Pods(metav1.NamespaceDefault)
 	makePod := func(labelValue string) *v1.Pod {
 		return &v1.Pod{
@@ -215,11 +215,11 @@ func TestAPIServerMetricsLabels(t *testing.T) {
 	appendExpectedMetric(metricLabels("", "v1", "pods", "", "namespace", "LIST"))
 	callOrDie(nil, c.Delete(context.TODO(), "foo", metav1.DeleteOptions{}))
 	appendExpectedMetric(metricLabels("", "v1", "pods", "", "resource", "DELETE"))
-	// cluster-scoped LIST of namespace-scoped resources
+	// 对命名空间级资源进行集群级 LIST
 	callOrDie(client.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{}))
 	appendExpectedMetric(metricLabels("", "v1", "pods", "", "cluster", "LIST"))
 
-	// Cluster-scoped resource
+	// 集群级资源
 	cn := client.CoreV1().Namespaces()
 	makeNamespace := func(labelValue string) *v1.Namespace {
 		return &v1.Namespace{
@@ -243,7 +243,7 @@ func TestAPIServerMetricsLabels(t *testing.T) {
 	callOrDie(nil, cn.Delete(context.TODO(), "foo", metav1.DeleteOptions{}))
 	appendExpectedMetric(metricLabels("", "v1", "namespaces", "", "resource", "DELETE"))
 
-	// Verify if all metrics were properly exported.
+	// 确认所有指标都已正确导出。
 	metrics, err := scrapeMetrics(s)
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +306,7 @@ func TestAPIServerMetricsLabelsWithAllowList(t *testing.T) {
 		},
 	}
 
-	// Assemble the allow-metric-labels flag.
+	// 组装 allow-metric-labels 标志。
 	var allowMetricLabelFlagStrs []string
 	for _, tc := range testCases {
 		var allowValuesStr []string
@@ -320,14 +320,14 @@ func TestAPIServerMetricsLabelsWithAllowList(t *testing.T) {
 	testServerFlags := framework.DefaultTestServerFlags()
 	testServerFlags = append(testServerFlags, allowMetricLabelsFlag)
 
-	// TODO: have a better way to setup and teardown for all the other tests.
+	// TODO: 为其他所有测试找到更好的设置和清理方式。
 	metrics.Reset()
 	defer metrics.Reset()
 	metrics.ResetLabelAllowLists()
 	defer metrics.ResetLabelAllowLists()
 	defer compbasemetrics.ResetLabelValueAllowLists()
 
-	// KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE allows for APIs pending removal to not block tests
+	// KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE 允许待移除的 API 不阻塞测试
 	t.Setenv("KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE", "true")
 	s := kubeapiservertesting.StartTestServerOrDie(t, nil, testServerFlags, framework.SharedEtcd())
 	defer s.TearDownFn()
@@ -396,7 +396,7 @@ func TestAPIServerMetricsPods(t *testing.T) {
 		}
 	}
 
-	// Disable ServiceAccount admission plugin as we don't have service account controller running.
+	// 禁用 ServiceAccount 准入插件，因为我们没有运行 service account controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
 
@@ -645,7 +645,7 @@ func TestWatchCacheConsistencyCheckMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// wait 3 periods to for 2 scrape cycles (takes 1-1.5 period) and require 2 successes
+	// 等待 3 个周期，以覆盖 2 次抓取（每次耗时 1~1.5 个周期），并要求出现 2 次成功
 	delay := 3 * period
 	time.Sleep(delay)
 	resp, err := rt.RoundTrip(req)

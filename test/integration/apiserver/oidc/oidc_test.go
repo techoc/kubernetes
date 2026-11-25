@@ -115,7 +115,7 @@ var (
 	}
 )
 
-// authenticationConfigFunc is a function that returns a string representation of an authentication config.
+// authenticationConfigFunc 是一个返回认证配置字符串表示的函数。
 type authenticationConfigFunc func(t *testing.T, issuerURL, caCert string) string
 
 type apiServerOIDCConfig struct {
@@ -187,8 +187,8 @@ jwt:
 				oidcServer.TokenHandler().EXPECT().Token().RunAndReturn(utilsoidc.TokenHandlerBehaviorReturningPredefinedJWT(
 					t,
 					signingPrivateKey,
-					// This asserts the minimum valid claims for an ID token required by the authenticator.
-					// "iss", "aud", "exp" and a claim for the username.
+					// 这里断言认证器所要求的 ID token 的最小有效 claim 集合。
+					// 即 "iss"、"aud"、"exp" 以及一个表示用户名的 claim。
 					map[string]interface{}{
 						"iss":  oidcServer.URL(),
 						"user": defaultOIDCClaimedUsername,
@@ -395,10 +395,10 @@ jwt:
 			},
 			configureClient: configureClientFetchingOIDCCredentials,
 			assertErrFn: func(t *testing.T, errorToCheck error) {
-				if useAuthenticationConfig { // since the config uses a CEL expression
+				if useAuthenticationConfig { // 因为配置使用了 CEL 表达式
 					assert.True(t, apierrors.IsUnauthorized(errorToCheck), errorToCheck)
 				} else {
-					// the claim based approach is still allowed to use empty usernames
+					// 基于 claim 的方式仍然允许使用空用户名
 					_ = assert.True(t, apierrors.IsForbidden(errorToCheck), errorToCheck) &&
 						assert.Equal(
 							t,
@@ -644,7 +644,7 @@ jwt:
 				Username: "k8s-john_doe",
 				Groups:   []string{"system:authenticated"},
 				Extra: map[string]authenticationv1.ExtraValue{
-					// validates credential id is set correctly when jti claim is present
+					// 验证当存在 jti claim 时，credential id 被正确设置
 					"authentication.kubernetes.io/credential-id": {"JTI=0123456789"},
 				},
 			},
@@ -797,7 +797,7 @@ jwt:
 				Username: "k8s-john_doe",
 				Groups:   []string{"system:authenticated"},
 				Extra: map[string]authenticationv1.ExtraValue{
-					// validates credential id is set correctly and other extra fields are set
+					// 验证 credential id 被正确设置，且其他 extra 字段也已设置
 					"authentication.kubernetes.io/credential-id": {"JTI=0123456789"},
 					"example.org/foo": {"bar"},
 					"example.org/baz": {"qux"},
@@ -1080,7 +1080,7 @@ func TestStructuredAuthenticationConfigReload(t *testing.T) {
 
 	origUpdateAuthenticationConfigTimeout := options.UpdateAuthenticationConfigTimeout
 	t.Cleanup(func() { options.UpdateAuthenticationConfigTimeout = origUpdateAuthenticationConfigTimeout })
-	options.UpdateAuthenticationConfigTimeout = 2 * hardCodedTokenCacheTTLAndPollInterval // needs to be large enough for polling to run multiple times
+	options.UpdateAuthenticationConfigTimeout = 2 * hardCodedTokenCacheTTLAndPollInterval // 需要足够大，以便轮询能够运行多次
 
 	tests := []struct {
 		name                          string
@@ -1156,7 +1156,7 @@ jwt:
 			},
 		},
 		{
-			name: "old to new config with egress", // both configs are valid, but need to keep the test name short otherwise the UDS name can get too long on macOS
+			name: "old to new config with egress", // 两个配置都是有效的，但需要保持测试名称简短，否则在 macOS 上 UDS 名称可能过长
 			authConfigFn: func(t *testing.T, issuerURL, caCert string) string {
 				return fmt.Sprintf(`
 apiVersion: apiserver.config.k8s.io/v1
@@ -1534,7 +1534,7 @@ jwt:
 			_, err = client.CoreV1().Pods(defaultNamespace).List(ctx, metav1.ListOptions{})
 			tt.assertErrFn(t, err)
 
-			// Create a temporary file
+			// 创建一个临时文件
 			tempFile, err := os.CreateTemp("", "tempfile")
 			require.NoError(t, err)
 			defer func() {
@@ -1542,16 +1542,16 @@ jwt:
 			}()
 
 			newAuthConfig := tt.newAuthConfigFn(t, oidcServer.URL(), string(caCert))
-			// Write the new content to the temporary file
+			// 将新内容写入临时文件
 			_, err = tempFile.Write([]byte(newAuthConfig))
 			require.NoError(t, err)
 
-			// Atomically replace the original file with the temporary file
+			// 用临时文件原子替换原文件
 			err = os.Rename(tempFile.Name(), apiServer.ServerOpts.Authentication.AuthenticationConfigFile)
 			require.NoError(t, err)
 
 			if tt.waitAfterConfigSwap {
-				time.Sleep(options.UpdateAuthenticationConfigTimeout + hardCodedTokenCacheTTLAndPollInterval) // has to be longer than UpdateAuthenticationConfigTimeout
+				time.Sleep(options.UpdateAuthenticationConfigTimeout + hardCodedTokenCacheTTLAndPollInterval) // 必须长于 UpdateAuthenticationConfigTimeout
 			}
 
 			if tt.newWantUser != nil {
@@ -1638,8 +1638,8 @@ func configureBasicTestInfrastructure[K utilsoidc.JosePrivateKey, L utilsoidc.Jo
 	return oidcServer, apiServer, caCertContent, caFilePath
 }
 
-// TestStructuredAuthenticationDiscoveryURL tests that the discovery URL configured in jwt.issuer.discoveryURL is used to
-// fetch the discovery document and the issuer in jwt.issuer.url is used to validate the ID token.
+// TestStructuredAuthenticationDiscoveryURL 测试 jwt.issuer.discoveryURL 中配置的 discovery URL 会用于
+// 获取 discovery 文档，而 jwt.issuer.url 中的 issuer 会用于校验 ID token。
 func TestStructuredAuthenticationDiscoveryURL(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1675,9 +1675,9 @@ func TestStructuredAuthenticationDiscoveryURL(t *testing.T) {
 			t.Parallel()
 			caCertContent, _, caFilePath, caKeyFilePath := generateCert(t)
 			signingPrivateKey, publicKey := rsaGenerateKey(t)
-			// set the issuer in the discovery document to issuer url (different from the discovery URL) to assert
-			// 1. discovery URL is used to fetch the discovery document and
-			// 2. issuer in the discovery document is used to validate the ID token
+			// 将 discovery 文档中的 issuer 设为 issuer url（与 discovery URL 不同），以断言
+			// 1. discovery URL 被用于获取 discovery 文档，且
+			// 2. discovery 文档中的 issuer 被用于校验 ID token
 			oidcServer := utilsoidc.BuildAndRunTestServer(t, caFilePath, caKeyFilePath, tt.issuerURL)
 			discoveryURL := strings.TrimSuffix(tt.discoveryURL(oidcServer.URL()), "/") + "/.well-known/openid-configuration"
 
@@ -1710,7 +1710,7 @@ jwt:
 				t,
 				signingPrivateKey,
 				map[string]interface{}{
-					"iss": tt.issuerURL, // issuer in the discovery document is used to validate the ID token
+					"iss": tt.issuerURL, // discovery 文档中的 issuer 被用于校验 ID token
 					"sub": defaultOIDCClaimedUsername,
 					"aud": "foo",
 					"exp": time.Now().Add(idTokenLifetime).Unix(),
@@ -1866,9 +1866,9 @@ jwt:
 	}
 }
 
-// TestJWKSMetricsCleanupOnIssuerRemoval tests that metrics are cleaned up when an issuer is removed.
-// 1. Start with two issuers configured and verify that metrics for both issuers exist.
-// 2. Remove one issuer from the config and verify that metrics for the removed issuer are deleted.
+// TestJWKSMetricsCleanupOnIssuerRemoval 测试当某个 issuer 被移除时，相关指标会被清理。
+// 1. 首先配置两个 issuer，并确认两个 issuer 的指标都存在。
+// 2. 从配置中移除一个 issuer，并确认被移除 issuer 的指标被删除。
 func TestJWKSMetricsCleanupOnIssuerRemoval(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StructuredAuthenticationConfigurationJWKSMetrics, true)
 
@@ -1971,7 +1971,7 @@ jwt:
 
 	adminClient := kubernetes.NewForConfigOrDie(apiServer.ClientConfig)
 
-	// Check that metrics exist for both the issuers with correct jwt_issuer_hash + hash combos
+	// 检查两个 issuer 的指标都存在，且 jwt_issuer_hash + hash 组合正确
 	wantMetricStrings := []string{
 		fmt.Sprintf(`apiserver_authentication_jwt_authenticator_jwks_fetch_last_key_set_info{apiserver_id_hash="sha256:3c607df3b2bf22c9d9f01d5314b4bbf411c48ef43ff44ff29b1d55b41367c795",hash="%s",jwt_issuer_hash="%s"} 1`, keySetHash1, jwtIssuerHash1),
 		fmt.Sprintf(`apiserver_authentication_jwt_authenticator_jwks_fetch_last_key_set_info{apiserver_id_hash="sha256:3c607df3b2bf22c9d9f01d5314b4bbf411c48ef43ff44ff29b1d55b41367c795",hash="%s",jwt_issuer_hash="%s"} 1`, keySetHash2, jwtIssuerHash2),
@@ -1985,7 +1985,7 @@ jwt:
 		t.Errorf("unexpected metrics before reload diff (-want +got): %s", diff)
 	}
 
-	// Now update the config to only have ONE issuer (remove issuer 2)
+	// 现在将配置更新为只有一个 issuer（移除 issuer 2）
 	newAuthenticationConfig := fmt.Sprintf(`
 apiVersion: apiserver.config.k8s.io/v1
 kind: AuthenticationConfiguration
@@ -2016,7 +2016,7 @@ jwt:
 
 	newAuthConfigHash := getHash(newAuthenticationConfig)
 
-	// Wait for config reload by polling for the new config hash
+	// 通过轮询新的配置 hash 来等待配置重新加载
 	err = wait.PollUntilContextTimeout(ctx, time.Second, 3*hardCodedTokenCacheTTLAndPollInterval, true, func(ctx context.Context) (done bool, err error) {
 		body, err := adminClient.RESTClient().Get().AbsPath("/metrics").DoRaw(ctx)
 		if err != nil {
@@ -2029,7 +2029,7 @@ jwt:
 	})
 	require.NoError(t, err, "config reload not detected")
 
-	// Wait for metric cleanup by polling until issuer 2 metrics are removed
+	// 通过轮询等待 issuer 2 的指标被移除，以确认指标清理完成
 	wantMetricStringsAfterReload := []string{
 		fmt.Sprintf(`apiserver_authentication_jwt_authenticator_jwks_fetch_last_key_set_info{apiserver_id_hash="sha256:3c607df3b2bf22c9d9f01d5314b4bbf411c48ef43ff44ff29b1d55b41367c795",hash="%s",jwt_issuer_hash="%s"} 1`, keySetHash1, jwtIssuerHash1),
 		fmt.Sprintf(`apiserver_authentication_jwt_authenticator_jwks_fetch_last_timestamp_seconds{apiserver_id_hash="sha256:3c607df3b2bf22c9d9f01d5314b4bbf411c48ef43ff44ff29b1d55b41367c795",jwt_issuer_hash="%s",result="success"} FP`, jwtIssuerHash1),
@@ -2044,8 +2044,8 @@ jwt:
 	require.NoError(t, err, "metrics cleanup not completed - issuer 2 metrics still present")
 }
 
-// fetchJWKSAndComputeHash fetches the JWKS from the given server URL using the provided CA certificate,
-// and returns the hash of the keyset bytes (computed the same way as the authenticator does).
+// fetchJWKSAndComputeHash 使用提供的 CA 证书从给定的服务器 URL 获取 JWKS，
+// 并返回 keyset 字节的 hash（计算方式与认证器相同）。
 func fetchJWKSAndComputeHash(t *testing.T, serverURL string, caCertContent []byte) string {
 	t.Helper()
 
@@ -2069,9 +2069,9 @@ func fetchJWKSAndComputeHash(t *testing.T, serverURL string, caCertContent []byt
 	return getHash(string(keySetBytes))
 }
 
-// getMetrics fetches metrics from the API server and returns only metrics matching the given prefixes.
-// Floating point values in metrics ending with "_seconds" are normalized to "FP" for consistent comparison.
-// Results are sorted alphabetically.
+// getMetrics 从 API server 获取指标，只返回匹配给定前缀的指标。
+// 以 "_seconds" 结尾的指标中的浮点值会被规范化为 "FP"，以便进行一致的比较。
+// 结果按字母顺序排序。
 func getMetrics(t *testing.T, ctx context.Context, adminClient *kubernetes.Clientset, prefixes ...string) []string {
 	t.Helper()
 
@@ -2090,7 +2090,7 @@ func getMetrics(t *testing.T, ctx context.Context, adminClient *kubernetes.Clien
 		}
 		if matched {
 			if strings.Contains(line, "_seconds") {
-				line = trimFP.ReplaceAllString(line, `$1`) + "} FP" // ignore floating point metric values
+				line = trimFP.ReplaceAllString(line, `$1`) + "} FP" // 忽略浮点指标值
 			}
 			gotMetricStrings = append(gotMetricStrings, line)
 		}
@@ -2226,7 +2226,7 @@ func startTestAPIServerForOIDC[L utilsoidc.JosePublicKey](t *testing.T, c apiSer
 			go runEgressProxy(t, udsName, ready)
 			select {
 			case <-ready:
-				// egress proxy is ready
+				// egress proxy 已就绪
 			case <-time.After(time.Minute):
 				t.Fatalf("timeout waiting for uds server to start")
 			}
@@ -2273,10 +2273,10 @@ egressSelections:
 func maybeSetSigningAlgs[K utilsoidc.JoseKey](key K) []string {
 	alg := utilsoidc.GetSignatureAlgorithm(key)
 	if alg == jose.RS256 && randomBool() {
-		return nil // check the default case of RS256 by not always setting the flag
+		return nil // 不总是设置该 flag，以检查 RS256 的默认情况
 	}
 	return []string{
-		fmt.Sprintf("--oidc-signing-algs=%s", alg), // all other algs need to be manually set
+		fmt.Sprintf("--oidc-signing-algs=%s", alg), // 其他所有算法都需要手动设置
 	}
 }
 

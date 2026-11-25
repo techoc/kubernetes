@@ -42,30 +42,30 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// TestStorageVersionMigration is an integration test that verifies storage version migration works.
-// This test asserts following scenarios:
-// 1. Start API server with encryption at rest and hot reload of encryption config enabled
-// 2. Create a secret
-// 3. Update encryption config file to add a new key as write key
-// 4. Perform Storage Version Migration for secrets
-// 5. Verify that the secret is migrated to use the new key
-// 6. Verify that the secret is updated with a new resource version
-// 7. Perform another Storage Version Migration for secrets
-// 8. Verify that the resource version of the secret is not updated. i.e. it was a no-op update
+// TestStorageVersionMigration 是验证 storage version migration 正常工作的集成测试。
+// 该测试断言以下场景：
+// 1. 启动 API server，开启 encryption at rest 和 encryption config 热重载
+// 2. 创建一个 secret
+// 3. 更新 encryption config 文件，添加一个新密钥作为 write key
+// 4. 对 secrets 执行 Storage Version Migration
+// 5. 验证 secret 已迁移为使用新密钥
+// 6. 验证 secret 以新的 resource version 更新
+// 7. 再次对 secrets 执行 Storage Version Migration
+// 8. 验证 secret 的 resource version 未更新，即这是一次 no-op 更新
 func TestStorageVersionMigration(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.StorageVersionMigrator:                                  true,
 		featuregate.Feature(clientgofeaturegate.InformerResourceVersion): true,
 	})
 
-	// this makes the test super responsive. It's set to a default of 1 minute.
+	// 这让测试响应更快。默认值是 1 分钟。
 	encryptionconfigcontroller.EncryptionConfigFileChangePollDuration = time.Second
 
 	ctx := ktesting.Init(t)
 
 	svmTest := svmSetup(ctx, t)
 
-	// ToDo: try to test with 1000 secrets
+	// ToDo: 尝试用 1000 个 secret 进行测试
 	secret, err := svmTest.createSecret(ctx, t, secretName, defaultNamespace)
 	if err != nil {
 		t.Fatalf("Failed to create secret: %v", err)
@@ -98,7 +98,7 @@ func TestStorageVersionMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get secret from etcd: %v", err)
 	}
-	// assert that secret is prefixed with the new key
+	// 断言 secret 以新密钥为前缀
 	if !bytes.HasPrefix(etcdSecret, []byte(wantPrefix)) {
 		t.Fatalf("expected secret to be prefixed with %s, but got %s", wantPrefix, etcdSecret)
 	}
@@ -107,8 +107,8 @@ func TestStorageVersionMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get secret: %v", err)
 	}
-	// assert that RV is different
-	// rv is expected to be different as the secret was re-written to etcd with the new key
+	// 断言 RV 不同
+	// secret 用新密钥重新写入 etcd，因此 rv 预期会不同
 	if secret.ResourceVersion == secretAfterMigration.ResourceVersion {
 		t.Fatalf("Expected resource version to be different, but got the same, rv before: %s, rv after: %s", secret.ResourceVersion, secretAfterMigration.ResourceVersion)
 	}
@@ -133,34 +133,34 @@ func TestStorageVersionMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get secret: %v", err)
 	}
-	// assert that RV is same
+	// 断言 RV 相同
 	if secretAfterMigration.ResourceVersion != secretAfterSecondMigration.ResourceVersion {
 		t.Fatalf("Expected resource version to be same, but got different, rv before: %s, rv after: %s", secretAfterMigration.ResourceVersion, secretAfterSecondMigration.ResourceVersion)
 	}
 }
 
-// TestStorageVersionMigrationWithCRD is an integration test that verifies storage version migration works with CRD.
-// This test asserts following scenarios:
-// 1. CRD is created with version v1 (serving and storage)
-// 2. Verify that CRs are written and stored as v1
-// 3. Update CRD to introduce v2 (for serving only), and a conversion webhook is added
-// 4. Verify that CRs are written to v2 but are stored as v1
-// 5. CRD storage version is changed from v1 to v2
-// 6. Verify that CR written as either v1 or v2 version are stored as v2
-// 7. Perform Storage Version Migration to migrate all v1 CRs to v2
-// 8. CRD is updated to no longer serve v1
-// 9. Shutdown conversion webhook
-// 10. Verify RV and Generations of CRs
-// 11. Verify the list of CRs at v2 works
+// TestStorageVersionMigrationWithCRD 是验证 storage version migration 可与 CRD 一起工作的集成测试。
+// 该测试断言以下场景：
+// 1. 创建版本为 v1 的 CRD（serving 和 storage）
+// 2. 验证 CR 以 v1 写入并按 v1 存储
+// 3. 更新 CRD 引入 v2（仅用于 serving），并添加 conversion webhook
+// 4. 验证 CR 以 v2 写入但仍按 v1 存储
+// 5. 将 CRD 的 storage version 从 v1 改为 v2
+// 6. 验证以 v1 或 v2 版本写入的 CR 都按 v2 存储
+// 7. 执行 Storage Version Migration，将所有 v1 CR 迁移到 v2
+// 8. 更新 CRD，使其不再 serve v1
+// 9. 关闭 conversion webhook
+// 10. 验证 CR 的 RV 和 Generation
+// 11. 验证以 v2 列出 CR 正常
 func TestStorageVersionMigrationWithCRD(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.StorageVersionMigrator:                                  true,
 		featuregate.Feature(clientgofeaturegate.InformerResourceVersion): true,
 		extensionfeatures.CRDObservedGenerationTracking:                  true,
 	})
-	// decode errors are expected when using conversation webhooks
+	// 使用 conversion webhook 时预期会出现 decode error
 	etcd3watcher.TestOnlySetFatalOnDecodeError(t, false)
-	framework.GoleakCheck(t, // block test clean up and let any lingering watches complete before making decode errors fatal again
+	framework.GoleakCheck(t, // 阻止测试清理，让残留的 watch 完成后再让 decode error 重新变为致命错误
 		goleak.IgnoreTopFunction("k8s.io/kubernetes/vendor/gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		goleak.IgnoreTopFunction("github.com/moby/spdystream.(*Connection).shutdown"),
@@ -170,17 +170,17 @@ func TestStorageVersionMigrationWithCRD(t *testing.T) {
 
 	crVersions := make(map[string]versions)
 
-	// chaos goroutines delete objects mid-migration, producing expected 404s on patch
+	// chaos goroutine 在迁移过程中删除对象，patch 时产生预期的 404
 	svmTest := svmSetup(ctx, t, http.StatusNotFound)
 	certCtx := svmTest.setupServerCert(t)
 
-	// simulate monkeys creating and deleting CRs
+	// 模拟猴子创建和删除 CR
 	svmTest.createChaos(ctx, t)
 
-	// create CRD with v1 serving and storage
+	// 创建 v1 为 serving 和 storage 版本的 CRD
 	crd := svmTest.createCRD(t, crdName, crdGroup, certCtx, v1CRDVersion)
 
-	// create CR
+	// 创建 CR
 	cr1 := svmTest.createCR(ctx, t, "cr1", "v1")
 	if ok := svmTest.isCRStoredAtVersion(t, "v1", cr1.GetName()); !ok {
 		t.Fatalf("CR not stored at version v1")
@@ -191,13 +191,13 @@ func TestStorageVersionMigrationWithCRD(t *testing.T) {
 		isRVUpdated: true,
 	}
 
-	// add conversion webhook
+	// 添加 conversion webhook
 	shutdownServer := svmTest.createConversionWebhook(ctx, t, certCtx)
 
-	// add v2 for serving only
+	// 添加仅用于 serving 的 v2
 	svmTest.updateCRD(ctx, t, crd.Name, v2CRDVersion, []string{"v1", "v2"}, "v1")
 
-	// create another CR
+	// 创建另一个 CR
 	cr2 := svmTest.createCR(ctx, t, "cr2", "v2")
 	if ok := svmTest.isCRStoredAtVersion(t, "v1", cr2.GetName()); !ok {
 		t.Fatalf("CR not stored at version v1")
@@ -208,15 +208,14 @@ func TestStorageVersionMigrationWithCRD(t *testing.T) {
 		isRVUpdated: true,
 	}
 
-	// add v2 as storage version
+	// 将 v2 添加为 storage version
 	svmTest.updateCRD(ctx, t, crd.Name, v2StorageCRDVersion, []string{"v1", "v2"}, "v2")
 
-	// create CR with v1
+	// 用 v1 创建 CR
 	var cr3 *unstructured.Unstructured
-	// updateCRD checks discovery returns storageVersionHash matching storage version v2
-	// to make sure the API server uses v2 but CRD controllers may race and the resource
-	// might still get stored in v1.
-	// Attempt to recreate the CR until it gets stored as v2.
+	// updateCRD 检查 discovery 返回的 storageVersionHash 与 storage version v2 匹配，
+	// 以确保 API server 使用 v2，但 CRD controller 可能存在竞争，资源仍可能按 v1 存储。
+	// 尝试重建 CR，直到它按 v2 存储。
 	// https://github.com/kubernetes/kubernetes/issues/130235
 	err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 10*time.Second, true, func(waitCtx context.Context) (done bool, err error) {
 		cr3 = svmTest.createCR(waitCtx, t, "cr3", "v1")
@@ -236,7 +235,7 @@ func TestStorageVersionMigrationWithCRD(t *testing.T) {
 		isRVUpdated: false,
 	}
 
-	// create CR with v2
+	// 用 v2 创建 CR
 	cr4 := svmTest.createCR(ctx, t, "cr4", "v2")
 	if ok := svmTest.isCRStoredAtVersion(t, "v2", cr4.GetName()); !ok {
 		t.Fatalf("CR not stored at version v2")
@@ -247,7 +246,7 @@ func TestStorageVersionMigrationWithCRD(t *testing.T) {
 		isRVUpdated: false,
 	}
 
-	// verify cr1 ans cr2 are still stored at v1
+	// 验证 cr1 和 cr2 仍按 v1 存储
 	if ok := svmTest.isCRStoredAtVersion(t, "v1", cr1.GetName()); !ok {
 		t.Fatalf("CR not stored at version v1")
 	}
@@ -255,7 +254,7 @@ func TestStorageVersionMigrationWithCRD(t *testing.T) {
 		t.Fatalf("CR not stored at version v1")
 	}
 
-	// migrate CRs from v1 to v2
+	// 将 CR 从 v1 迁移到 v2
 	svm, err := svmTest.createSVMResource(
 		ctx, t, "crdsvm",
 		metav1.GroupResource{
@@ -269,7 +268,7 @@ func TestStorageVersionMigrationWithCRD(t *testing.T) {
 		t.Fatalf("CRD not migrated")
 	}
 
-	// assert all the CRs are stored in the etcd at correct version
+	// 断言所有 CR 在 etcd 中都按正确的版本存储
 	if ok := svmTest.isCRStoredAtVersion(t, "v2", cr1.GetName()); !ok {
 		t.Fatalf("CR not stored at version v2")
 	}
@@ -283,25 +282,24 @@ func TestStorageVersionMigrationWithCRD(t *testing.T) {
 		t.Fatalf("CR not stored at version v2")
 	}
 
-	// update CRD to v1 not serving and storage followed by webhook shutdown
+	// 更新 CRD，使 v1 不再 serving 和 storage，然后关闭 webhook
 	svmTest.updateCRD(ctx, t, crd.Name, v1NotServingCRDVersion, []string{"v2"}, "v2")
 	shutdownServer()
 
-	// assert RV and Generations of CRs
+	// 断言 CR 的 RV 和 Generation
 	svmTest.validateRVAndGeneration(ctx, t, crVersions, "v2")
 
-	// assert v2 CRs can be listed
+	// 断言 v2 CR 可以被列出
 	if err := svmTest.listCR(ctx, t, "v2"); err != nil {
 		t.Fatalf("Failed to list CRs at version v2: %v", err)
 	}
 }
 
-// TestStorageVersionMigrationDuringChaos serves as a stress test for the SVM controller.
-// It creates a CRD and a reasonable number of static instances for that resource.
-// It also continuously creates and deletes instances of that resource.
-// During all of this, it attempts to perform multiple parallel migrations of the resource.
-// It asserts that all migrations are successful and that none of the static instances
-// were changed after they were initially created (as the migrations must be a no-op).
+// TestStorageVersionMigrationDuringChaos 用作 SVM controller 的压力测试。
+// 它创建一个 CRD 以及该资源合理数量的静态实例。
+// 同时它会持续创建和删除该资源的实例。
+// 在此期间，它尝试对该资源执行多次并行迁移。
+// 它断言所有迁移都成功，且所有静态实例在初次创建后都没有变化（因为迁移必须是 no-op）。
 func TestStorageVersionMigrationDuringChaos(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.StorageVersionMigrator:                                  true,
@@ -311,7 +309,7 @@ func TestStorageVersionMigrationDuringChaos(t *testing.T) {
 
 	ctx := ktesting.Init(t)
 
-	// chaos goroutines delete objects mid-migration, producing expected 404s on patch
+	// chaos goroutine 在迁移过程中删除对象，patch 时产生预期的 404
 	svmTest := svmSetup(ctx, t, http.StatusNotFound)
 
 	svmTest.createChaos(ctx, t)
@@ -320,17 +318,17 @@ func TestStorageVersionMigrationDuringChaos(t *testing.T) {
 
 	crVersions := make(map[string]versions)
 
-	for i := range 50 { // a more realistic number of total resources
+	for i := range 50 { // 更贴近实际的资源总数
 		cr := svmTest.createCR(ctx, t, "created-cr-"+strconv.Itoa(i), "v1")
 		crVersions[cr.GetName()] = versions{
 			generation:  cr.GetGeneration(),
 			rv:          cr.GetResourceVersion(),
-			isRVUpdated: false, // none of these CRs should change due to migrations
+			isRVUpdated: false, // 这些 CR 不应因迁移而改变
 		}
 	}
 
 	var wg sync.WaitGroup
-	const migrations = 10 // more than the total workers of SVM
+	const migrations = 10 // 大于 SVM 的 worker 总数
 	wg.Add(migrations)
 	for i := range migrations {
 		go func() {

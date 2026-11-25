@@ -44,10 +44,10 @@ import (
 )
 
 func TestExternalJWTSigningAndAuth(t *testing.T) {
-	// Enable feature gate for external JWT signer.
+	// 为 external JWT signer 启用 feature gate。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ExternalServiceAccountTokenSigner, true)
 
-	// Prep some keys to use with test.
+	// 准备测试要用的密钥。
 	key1, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		panic("Error while generating first RSA key")
@@ -61,13 +61,13 @@ func TestExternalJWTSigningAndAuth(t *testing.T) {
 	ctx, cancel := context.WithCancel(tCtx)
 	defer cancel()
 
-	// create and start mock signer.
+	// 创建并启动 mock signer。
 	socketPath := utilnettesting.MakeSocketNameForTest(t, fmt.Sprintf("mock-external-jwt-signer-%d.sock", time.Now().Nanosecond()))
 	t.Cleanup(func() { _ = os.Remove(socketPath) })
 	mockSigner := v1testing.NewMockSigner(t, socketPath)
 	defer mockSigner.CleanUp()
 
-	// Start Api server configured with external signer.
+	// 启动配置了 external signer 的 API server。
 	client, clientConfig, tearDownFn := framework.StartTestServer(ctx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opt *options.ServerRunOptions) {
 			opt.ServiceAccountSigningEndpoint = socketPath
@@ -77,7 +77,7 @@ func TestExternalJWTSigningAndAuth(t *testing.T) {
 	})
 	defer tearDownFn()
 
-	// Validate that OIDC discovery doc and keys are available.
+	// 验证 OIDC discovery 文档和密钥可用。
 	for _, p := range []string{
 		"/.well-known/openid-configuration",
 		"/openid/v1/jwks",
@@ -87,7 +87,7 @@ func TestExternalJWTSigningAndAuth(t *testing.T) {
 		}
 	}
 
-	// Create Namesapce (ns-1) to work with.
+	// 创建要使用的 Namespace (ns-1)。
 	if _, err := client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "ns-1",
@@ -96,7 +96,7 @@ func TestExternalJWTSigningAndAuth(t *testing.T) {
 		t.Fatalf("Error when creating namespace: %v", err)
 	}
 
-	// Create ServiceAccount (sa-1) to work with.
+	// 创建要使用的 ServiceAccount (sa-1)。
 	if _, err := client.CoreV1().ServiceAccounts("ns-1").Create(ctx, &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "sa-1",
@@ -201,17 +201,17 @@ func TestExternalJWTSigningAndAuth(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			// Start fresh
+			// 重新开始
 			err := mockSigner.Reset()
 			if err != nil {
 				t.Fatalf("failed to reset signer for the test %q: %v", tc.desc, err)
 			}
 			mockSigner.WaitForSupportedKeysFetch()
 
-			// Adjust parameters on mock signer for the test.
+			// 为测试调整 mock signer 的参数。
 			tc.preTestSignerUpdate(t)
 
-			// Request a token for ns-1:sa-1.
+			// 为 ns-1:sa-1 请求 token。
 			tokenExpirationSec := int64(2 * 60 * 60) // 2h
 			tokenRequest, err := client.CoreV1().ServiceAccounts("ns-1").CreateToken(ctx, "sa-1", &authv1.TokenRequest{
 				Spec: authv1.TokenRequestSpec{
@@ -227,10 +227,10 @@ func TestExternalJWTSigningAndAuth(t *testing.T) {
 				t.Fatalf("Error when creating token: %v", err)
 			}
 
-			// Adjust parameters on mock signer for the test.
+			// 为测试调整 mock signer 的参数。
 			tc.preValidationSignerUpdate(t)
 
-			// Try Validating the token.
+			// 尝试验证 token。
 			tokenReviewResult, err := client.AuthenticationV1().TokenReviews().Create(ctx, &authv1.TokenReview{
 				Spec: authv1.TokenReviewSpec{
 					Token: tokenRequest.Status.Token,
@@ -246,7 +246,7 @@ func TestExternalJWTSigningAndAuth(t *testing.T) {
 				t.Fatal("Expected Authentication to fail")
 			}
 
-			// Perform SSAR
+			// 执行 SSAR
 			if tc.shouldPassAuth {
 				config := *clientConfig
 				config.BearerToken = tokenRequest.Status.Token
@@ -305,14 +305,14 @@ func waitForDataTimestamp(t *testing.T, client kubernetes.Interface, minimumData
 }
 
 func TestDelayedStartForSigner(t *testing.T) {
-	// Enable feature gate for external JWT signer.
+	// 为 external JWT signer 启用 feature gate。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ExternalServiceAccountTokenSigner, true)
 
 	tCtx := ktesting.Init(t)
 	ctx, cancel := context.WithCancel(tCtx)
 	defer cancel()
 
-	// Schedule signer to start on socket after 20 sec
+	// 安排在 20 秒后在 socket 上启动 signer
 	socketPath := utilnettesting.MakeSocketNameForTest(t, "mock-external-jwt-signer.sock")
 	t.Cleanup(func() { _ = os.Remove(socketPath) })
 	go func() {
@@ -320,7 +320,7 @@ func TestDelayedStartForSigner(t *testing.T) {
 		v1testing.NewMockSigner(t, socketPath)
 	}()
 
-	// Start Api server configured with external signer.
+	// 启动配置了 external signer 的 API server。
 	client, _, tearDownFn := framework.StartTestServer(ctx, t, framework.TestServerSetup{
 		ModifyServerRunOptions: func(opt *options.ServerRunOptions) {
 			opt.ServiceAccountSigningEndpoint = socketPath
@@ -330,7 +330,7 @@ func TestDelayedStartForSigner(t *testing.T) {
 	})
 	defer tearDownFn()
 
-	// Create Namesapce (ns-1) to work with.
+	// 创建要使用的 Namespace (ns-1)。
 	if _, err := client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "ns-1",
@@ -339,7 +339,7 @@ func TestDelayedStartForSigner(t *testing.T) {
 		t.Fatalf("Error when creating namespace: %v", err)
 	}
 
-	// Create ServiceAccount (sa-1) to work with.
+	// 创建要使用的 ServiceAccount (sa-1)。
 	if _, err := client.CoreV1().ServiceAccounts("ns-1").Create(ctx, &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "sa-1",
@@ -348,7 +348,7 @@ func TestDelayedStartForSigner(t *testing.T) {
 		t.Fatalf("Error when creating service-account: %v", err)
 	}
 
-	// Request a token for ns-1:sa-1.
+	// 为 ns-1:sa-1 请求 token。
 	tokenExpirationSec := int64(2 * 60 * 60) // 2h
 	tokenRequest, err := client.CoreV1().ServiceAccounts("ns-1").CreateToken(ctx, "sa-1", &authv1.TokenRequest{
 		Spec: authv1.TokenRequestSpec{
@@ -359,7 +359,7 @@ func TestDelayedStartForSigner(t *testing.T) {
 		t.Fatalf("Error when creating token: %v", err)
 	}
 
-	// Try Validating the token.
+	// 尝试验证 token。
 	tokenReviewResult, err := client.AuthenticationV1().TokenReviews().Create(ctx, &authv1.TokenReview{
 		Spec: authv1.TokenReviewSpec{
 			Token: tokenRequest.Status.Token,

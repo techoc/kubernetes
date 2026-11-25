@@ -44,9 +44,8 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// TestMutatingWebhookDuplicateOwnerReferences ensures that the API server
-// handler correctly deduplicates owner references if a mutating webhook
-// patches create/update requests with duplicate owner references.
+// TestMutatingWebhookDuplicateOwnerReferences 确保当 mutating webhook 在 create/update
+// 请求中打上重复的 ownerReferences 时，API server 的处理程序能正确去重。
 func TestMutatingWebhookDuplicateOwnerReferences(t *testing.T) {
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {
@@ -109,10 +108,10 @@ func TestMutatingWebhookDuplicateOwnerReferences(t *testing.T) {
 		}
 	}()
 
-	// Make sure dedup happens in patch requests
+	// 确保 patch 请求中发生了去重
 	var pod *corev1.Pod
 	var lastErr string
-	// wait until new webhook is called
+	// 等待新 webhook 被调用
 	expectedWarning := fmt.Sprintf(handlers.DuplicateOwnerReferencesAfterMutatingAdmissionWarningFormat,
 		duplicateOwnerReferencesMarkerFixture.OwnerReferences[0].UID)
 	if err := wait.PollImmediate(time.Millisecond*5, wait.ForeverTestTimeout, func() (bool, error) {
@@ -146,7 +145,7 @@ func TestMutatingWebhookDuplicateOwnerReferences(t *testing.T) {
 	}
 	b.Reset()
 
-	// Make sure dedup happens in update requests
+	// 确保 update 请求中发生了去重
 	pod, err = client.CoreV1().Pods("default").Update(context.TODO(), pod, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +165,7 @@ func TestMutatingWebhookDuplicateOwnerReferences(t *testing.T) {
 	if err := client.CoreV1().Pods("default").Delete(context.TODO(), duplicateOwnerReferencesMarkerFixture.Name, metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("failed to delete marker pod: %v", err)
 	}
-	// expect no more warning
+	// 不应再出现新的 warning
 	if warningWriter.WarningCount() != 2 {
 		t.Errorf("expected two warnings, got: %v", warningWriter.WarningCount())
 	}

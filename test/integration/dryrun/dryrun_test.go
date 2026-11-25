@@ -36,11 +36,11 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// Only add kinds to this list when this a virtual resource with get and create verbs that doesn't actually
-// store into it's kind.  We've used this downstream for mappings before.
+// 仅当某个 Kind 是带有 get 和 create 动词、但并不会实际存储到该 Kind 中的虚拟资源时，
+// 才将其加入此列表。我们之前曾在下游将其用于映射。
 var kindAllowList = sets.NewString()
 
-// namespace used for all tests, do not change this
+// 所有测试使用的命名空间，请勿修改
 const testNamespace = "dryrunnamespace"
 
 func DryRunCreateTest(t *testing.T, rsc dynamic.ResourceInterface, obj *unstructured.Unstructured, gvResource schema.GroupVersionResource) {
@@ -206,10 +206,10 @@ func DryRunDeleteTest(t *testing.T, rsc dynamic.ResourceInterface, name string) 
 	}
 }
 
-// TestDryRun tests dry-run on all types.
+// TestDryRun 对所有类型测试 dry-run。
 func TestDryRun(t *testing.T) {
 
-	// start API server
+	// 启动 API server
 	s, err := kubeapiservertesting.StartTestServer(t, kubeapiservertesting.NewDefaultTestServerOptions(), []string{
 		"--disable-admission-plugins=ServiceAccount,StorageObjectInUseProtection",
 		"--runtime-config=api/all=true",
@@ -228,7 +228,7 @@ func TestDryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// create CRDs so we can make sure that custom resources do not get lost
+	// 创建 CRD，以确保自定义资源不会丢失
 	etcd.CreateTestCRDs(t, apiextensionsclientset.NewForConfigOrDie(s.ClientConfig), false, etcd.GetCustomResourceDefinitionData()...)
 
 	if _, err := client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}, metav1.CreateOptions{}); err != nil {
@@ -237,9 +237,9 @@ func TestDryRun(t *testing.T) {
 
 	dryrunData := etcd.GetEtcdStorageData()
 
-	// dry run specific stub overrides
+	// dry-run 专用的 stub 覆盖
 	for resource, stub := range map[schema.GroupVersionResource]string{
-		// need to change event's namespace field to match dry run test
+		// 需要修改 event 的 namespace 字段以匹配 dry-run 测试
 		gvr("", "v1", "events"): `{"involvedObject": {"namespace": "dryrunnamespace"}, "message": "some data here", "metadata": {"name": "event1"}}`,
 	} {
 		data := dryrunData[resource]
@@ -247,7 +247,7 @@ func TestDryRun(t *testing.T) {
 		dryrunData[resource] = data
 	}
 
-	// gather resources to test
+	// 收集要测试的资源
 	_, resources, err := client.Discovery().ServerGroupsAndResources()
 	if err != nil {
 		t.Fatalf("Failed to get ServerGroupsAndResources with error: %+v", err)

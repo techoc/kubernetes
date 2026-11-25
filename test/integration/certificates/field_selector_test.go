@@ -34,7 +34,7 @@ import (
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
-// Verifies that the 'spec.signerName' field can be correctly used as a field selector on LIST requests
+// 验证 'spec.signerName' 字段可以正确地用作 LIST 请求的字段选择器
 func TestCSRSignerNameFieldSelector(t *testing.T) {
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer server.TearDownFn()
@@ -43,8 +43,8 @@ func TestCSRSignerNameFieldSelector(t *testing.T) {
 	csrClient := client.CertificatesV1().CertificateSigningRequests()
 	csr1 := createTestingCSR(t, csrClient, "csr-1", "example.com/signer-name-1", "")
 	csr2 := createTestingCSR(t, csrClient, "csr-2", "example.com/signer-name-2", "")
-	// csr3 has the same signerName as csr2 so we can ensure multiple items are returned when running a filtered
-	// LIST call.
+	// csr3 与 csr2 具有相同的 signerName，因此可以确保执行带过滤条件的
+	// LIST 调用时会返回多个条目。
 	csr3 := createTestingCSR(t, csrClient, "csr-3", "example.com/signer-name-2", "")
 
 	signerOneList, err := client.CertificatesV1().CertificateSigningRequests().List(context.TODO(), metav1.ListOptions{FieldSelector: "spec.signerName=example.com/signer-name-1"})
@@ -88,7 +88,7 @@ func buildTestingCSR(name, signerName, groupName string) *certv1.CertificateSign
 		Spec: certv1.CertificateSigningRequestSpec{
 			SignerName: signerName,
 			Request:    pemWithGroup(groupName),
-			// this is the old defaulting for usages
+			// 这是 usages 的旧默认值设置
 			Usages: []certv1.KeyUsage{certv1.UsageDigitalSignature, certv1.UsageKeyEncipherment},
 		},
 	}

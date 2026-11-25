@@ -51,13 +51,12 @@ You can use 'hack/install-etcd.sh' to install a copy in third_party/.
 
 `
 
-// getEtcdPath returns a path to an etcd executable.
+// getEtcdPath 返回 etcd 可执行文件的路径。
 func getEtcdPath() (string, error) {
 	return exec.LookPath("etcd")
 }
 
-// startEtcd executes an etcd instance. The returned function will signal the
-// etcd process and wait for it to exit.
+// startEtcd 启动一个 etcd 实例。返回的函数会向 etcd 进程发信号并等待其退出。
 func startEtcd(logger klog.Logger, forceCreate bool) (func(), error) {
 	if !forceCreate {
 		etcdURL := env.GetEnvAsStringOrFallback("KUBE_INTEGRATION_ETCD_URL", "http://127.0.0.1:2379")
@@ -81,25 +80,24 @@ func startEtcd(logger klog.Logger, forceCreate bool) (func(), error) {
 }
 
 func init() {
-	// Quiet etcd logs for integration tests
-	// Comment out to get verbose logs if desired.
-	// This has to be done before there are any goroutines
-	// active which use gRPC. During init is safe, albeit
-	// then also affects tests which don't use RunCustomEtcd
-	// (the place this was done before).
+	// 为集成测试关闭 etcd 日志。
+	// 如需详细日志，可将其注释掉。
+	// 这必须在任何使用 gRPC 的 goroutine 活跃之前完成。在 init 中执行是安全的，
+	// 不过这也会影响不使用 RunCustomEtcd 的测试
+	// （以前正是在那里执行此操作）。
 	grpclog.SetLoggerV2(grpclog.NewLoggerV2(io.Discard, io.Discard, os.Stderr))
 }
 
-// hiddenEtcdMessages contains all messages that occur due to the way we run
-// etcd and don't need to be logged in all tests.
+// hiddenEtcdMessages 包含因我们运行 etcd 的方式而产生的、
+// 无需记录到所有测试日志中的消息。
 var hiddenEtcdMessages = sets.New(
 	"simple token is not cryptographically signed",
 	"Running http and grpc server on single port. This is not recommended for production.",
 )
 
-// RunCustomEtcd starts a custom etcd instance for test purposes.
+// RunCustomEtcd 为测试目的启动一个自定义的 etcd 实例。
 func RunCustomEtcd(logger klog.Logger, dataDir string, customFlags []string) (url string, stopFn func(), err error) {
-	// TODO: Check for valid etcd version.
+	// TODO: 检查 etcd 版本是否有效。
 	etcdPath, err := getEtcdPath()
 	if err != nil {
 		fmt.Fprint(os.Stderr, installEtcd)
@@ -119,28 +117,28 @@ func RunCustomEtcd(logger klog.Logger, dataDir string, customFlags []string) (ur
 		etcdDataDir,
 		"--listen-client-urls",
 		customURL,
-		// This should be how clients connect to etcd, but https://github.com/etcd-io/etcd/pull/12469
-		// apparently was incomplete: trying to pass a Unix Domain URL here is rejected by ectd 3.15.13 with
+		// 客户端本应通过此地址连接 etcd，但 https://github.com/etcd-io/etcd/pull/12469
+		// 看来并不完整：在此传入 Unix 域 URL 会被 ectd 3.15.13 拒绝，报错为
 		//    --advertise-client-urls "unix:///tmp/etcd.sock" must be "host:port" (missing port in address)
 		//
-		// We don't need to advertise the correct address. To prevent connecting to the default URL
-		// in the unlikely case that something does use this URL after all, an invalid URL is set here.
+		// 我们并不需要公布正确地址。为防万一真有组件使用该 URL 而连接到默认地址，
+		// 这里设置了一个无效的 URL。
 		"--advertise-client-urls",
 		"http://127.0.0.111:0",
-		// With :0 we let the kernel pick a unique port. We don't care which port this will be,
-		// no other peer is going to connect.
+		// 使用 :0 让内核选择一个唯一端口。我们不关心具体是哪个端口，
+		// 因为不会有其他 peer 来连接。
 		"--listen-peer-urls",
 		"http://127.0.0.1:0",
 		"-log-level",
-		"warn", // set to info or debug for more logs
+		"warn", // 设置为 info 或 debug 可获得更多日志
 		"--quota-backend-bytes",
 		strconv.FormatInt(8*1024*1024*1024, 10),
 	}
 	args = append(args, customFlags...)
 	cmd := exec.CommandContext(ctx, etcdPath, args...)
 
-	// Always filter the etcd output. This allows us to get rid of known harmless messages
-	// and includes the etcd log messages in the normal test log.
+	// 始终过滤 etcd 的输出。这样既能去掉已知的无害消息，
+	// 又能将 etcd 日志纳入常规测试日志。
 	reader, err := cmd.StderrPipe()
 	if err != nil {
 		cancel()
@@ -154,8 +152,8 @@ func RunCustomEtcd(logger klog.Logger, dataDir string, customFlags []string) (ur
 	reading:
 		for {
 			n, err := reader.Read(buffer)
-			// Unfortunately in practice we get an untyped errors.errorString wrapped in an os.Path error,
-			// so we have to fall back to text matching.
+			// 实际中我们会拿到包裹在 os.Path 错误里的无类型 errors.errorString，
+			// 因此只能退而求其次使用文本匹配。
 			if errors.Is(err, io.EOF) || err != nil && err.Error() == "read |0: file already closed" {
 				return
 			}
@@ -168,11 +166,11 @@ func RunCustomEtcd(logger klog.Logger, dataDir string, customFlags []string) (ur
 			}
 			dec := json.NewDecoder(bytes.NewBuffer(buffer[0:n]))
 			for {
-				// Try to parse as JSON object. If we get anything that isn't JSON or an object, we just dump the remaining output.
+				// 尝试按 JSON 对象解析。如果拿到的不是 JSON 或不是对象，就直接输出剩余内容。
 				var msg map[string]any
 				err := dec.Decode(&msg)
 				if err == io.EOF {
-					// all done
+					// 全部处理完毕
 					break
 				}
 				if err != nil {
@@ -183,13 +181,13 @@ func RunCustomEtcd(logger klog.Logger, dataDir string, customFlags []string) (ur
 					continue reading
 				}
 
-				// Skip harmless messages.
+				// 跳过无害消息。
 				msgStr, _ := msg["msg"].(string)
 				if hiddenEtcdMessages.Has(msgStr) {
 					continue
 				}
 
-				// Log it using structured logging.
+				// 使用结构化日志记录。
 				kvs := make([]any, 0, 2*len(msg))
 				for key, value := range msg {
 					kvs = append(kvs, key, value)
@@ -200,7 +198,7 @@ func RunCustomEtcd(logger klog.Logger, dataDir string, customFlags []string) (ur
 	}()
 
 	stop := func() {
-		// try to exit etcd gracefully
+		// 尝试让 etcd 优雅退出
 		defer cancel()
 		cmd.Process.Signal(syscall.SIGTERM)
 		wg.Add(1)
@@ -216,7 +214,7 @@ func RunCustomEtcd(logger klog.Logger, dataDir string, customFlags []string) (ur
 		}()
 		err := cmd.Wait()
 		logger.V(2).Info("etcd exited", "err", err)
-		// Tell goroutine that we are done.
+		// 通知 goroutine 我们已完成。
 		cancel()
 		wg.Wait()
 		err = os.RemoveAll(etcdDataDir)
@@ -251,33 +249,31 @@ func RunCustomEtcd(logger klog.Logger, dataDir string, customFlags []string) (ur
 	return customURL, stop, nil
 }
 
-// EtcdMain starts an etcd instance before running tests.
+// EtcdMain 在运行测试前启动一个 etcd 实例。
 func EtcdMain(tests func() int) {
-	// Bail out early when -help was given as parameter.
+	// 如果指定了 -help 参数，则尽早退出。
 	flag.Parse()
 
-	// Must be called *before* creating new goroutines.
+	// 必须在创建新 goroutine *之前* 调用。
 	goleakOpts := IgnoreBackgroundGoroutines()
 
 	goleakOpts = append(goleakOpts,
-		// lumberjack leaks a goroutine:
-		// https://github.com/natefinch/lumberjack/issues/56 This affects tests
-		// using --audit-log-path (like
-		// ./test/integration/apiserver/admissionwebhook/reinvocation_test.go).
-		// In normal production that should be harmless. We don't know here
-		// whether the test is using that, so we have to suppress reporting
-		// this leak for all tests.
+		// lumberjack 会泄漏一个 goroutine：
+		// https://github.com/natefinch/lumberjack/issues/56 这会影响使用
+		// --audit-log-path 的测试（例如
+		// ./test/integration/apiserver/admissionwebhook/reinvocation_test.go）。
+		// 在正常生产环境中这应该是无害的。这里无法判断测试是否使用了该路径，
+		// 因此只能对所有测试都抑制这一泄漏报告。
 		//
-		// Both names occurred in practice.
+		// 实践中两种名字都出现过。
 		goleak.IgnoreTopFunction("k8s.io/kubernetes/vendor/gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		// If there is an error during connection shutdown, SPDY keeps a
-		// goroutine around for ten minutes, which gets reported as a leak
-		// (the goroutine is cleaned up after the ten minutes).
+		// 如果连接关闭过程中出错，SPDY 会保留一个 goroutine 十分钟，
+		// 这会被报告为泄漏（十分钟后该 goroutine 会被清理）。
 		//
 		// https://github.com/kubernetes/kubernetes/blob/master/vendor/github.com/moby/spdystream/connection.go#L732-L744
 		//
-		// Ignore this reported leak.
+		// 忽略这一泄漏报告。
 		goleak.IgnoreTopFunction("github.com/moby/spdystream.(*Connection).shutdown"),
 	)
 
@@ -286,7 +282,7 @@ func EtcdMain(tests func() int) {
 		klog.Fatalf("cannot run integration tests: unable to start etcd: %v", err)
 	}
 	result := tests()
-	stop() // Don't defer this. See os.Exit documentation.
+	stop() // 不要使用 defer。参见 os.Exit 文档。
 	klog.StopFlushDaemon()
 
 	if err := goleakFindRetry(goleakOpts...); err != nil {
@@ -297,21 +293,20 @@ func EtcdMain(tests func() int) {
 	os.Exit(result)
 }
 
-// GetEtcdURL returns the URL of the etcd instance started by EtcdMain or StartEtcd.
+// GetEtcdURL 返回由 EtcdMain 或 StartEtcd 启动的 etcd 实例的 URL。
 func GetEtcdURL() string {
 	return env.GetEnvAsStringOrFallback("KUBE_INTEGRATION_ETCD_URL", "http://127.0.0.1:2379")
 }
 
-// StartEtcd starts an etcd instance inside a test. It will abort the test if
-// startup fails and clean up after the test automatically. Stdout and stderr
-// of the etcd binary and all log output of the etcd helper code go to the
-// provided logger.
+// StartEtcd 在测试内部启动一个 etcd 实例。若启动失败会中止测试，并在测试结束后自动清理。
+// etcd 二进制文件的 stdout 和 stderr，以及 etcd 辅助代码的所有日志输出，
+// 都会输出到提供的 logger。
 //
-// In contrast to EtcdMain, StartEtcd will not do automatic leak checking.
-// Tests can decide if and where they want to do that.
+// 与 EtcdMain 不同，StartEtcd 不会自动进行泄漏检查。
+// 测试可以自行决定是否以及在哪里进行泄漏检查。
 //
-// Starting etcd multiple times per test run instead of once with EtcdMain
-// provides better separation between different tests.
+// 每次测试运行多次启动 etcd，而不是像 EtcdMain 那样只启动一次，
+// 可以更好地隔离不同测试。
 func StartEtcd(logger klog.Logger, tb testing.TB, forceCreate bool) {
 	stop, err := startEtcd(logger, forceCreate)
 	if err != nil {

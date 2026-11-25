@@ -55,7 +55,7 @@ func labelMap() map[string]string {
 	return map[string]string{"foo": "bar"}
 }
 
-// newService returns a service with a fake name for StatefulSet to be created soon
+// newService 返回一个带有假名称的 Service，供稍后创建的 StatefulSet 使用
 func newHeadlessService(namespace string) *v1.Service {
 	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -76,7 +76,7 @@ func newHeadlessService(namespace string) *v1.Service {
 	}
 }
 
-// newSTS returns a StatefulSet with a fake container image
+// newSTS 返回一个使用假容器镜像的 StatefulSet
 func newSTS(name, namespace string, replicas int) *appsv1.StatefulSet {
 	replicasCopy := int32(replicas)
 	return &appsv1.StatefulSet{
@@ -134,7 +134,7 @@ func newSTS(name, namespace string, replicas int) *appsv1.StatefulSet {
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
 			},
 			VolumeClaimTemplates: []v1.PersistentVolumeClaim{
-				// for volume mount "datadir"
+				// 用于卷挂载 "datadir"
 				newStatefulSetPVC("fake-pvc-name"),
 			},
 		},
@@ -162,10 +162,10 @@ func newStatefulSetPVC(name string) v1.PersistentVolumeClaim {
 	}
 }
 
-// scSetup sets up necessities for Statefulset integration test, including control plane, apiserver, informers, and clientset
+// scSetup 为 StatefulSet 集成测试准备必要的组件，包括 control plane、apiserver、informers 和 clientset
 func scSetup(t *testing.T) (context.Context, kubeapiservertesting.TearDownFunc, *statefulset.StatefulSetController, informers.SharedInformerFactory, clientset.Interface) {
 	tCtx := ktesting.Init(t)
-	// Disable ServiceAccount admission plugin as we don't have serviceaccount controller running.
+	// 禁用 ServiceAccount admission plugin，因为没有运行 serviceaccount controller。
 	server := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 
 	config := restclient.CopyConfig(server.ClientConfig)
@@ -192,7 +192,7 @@ func scSetup(t *testing.T) (context.Context, kubeapiservertesting.TearDownFunc, 
 	return tCtx, teardown, sc, informers, clientSet
 }
 
-// Run STS controller and informers
+// 运行 STS controller 和 informers
 func runControllerAndInformers(ctx context.Context, sc *statefulset.StatefulSetController, informers informers.SharedInformerFactory) context.CancelFunc {
 	ctx, cancel := context.WithCancel(ctx)
 	informers.Start(ctx.Done())
@@ -236,7 +236,7 @@ func createSTSsPods(t *testing.T, clientSet clientset.Interface, stss []*appsv1.
 	return createSTSs(t, clientSet, stss), createPods(t, clientSet, pods)
 }
 
-// Verify .Status.Replicas is equal to .Spec.Replicas
+// 验证 .Status.Replicas 等于 .Spec.Replicas
 func waitSTSStable(t *testing.T, clientSet clientset.Interface, sts *appsv1.StatefulSet) {
 	stsClient := clientSet.AppsV1().StatefulSets(sts.Namespace)
 	desiredGeneration := sts.Generation
@@ -341,7 +341,7 @@ func updateSTS(t *testing.T, stsClient typedappsv1.StatefulSetInterface, stsName
 	return sts
 }
 
-// Update .Spec.Replicas to replicas and verify .Status.Replicas is changed accordingly
+// 将 .Spec.Replicas 更新为 replicas 并验证 .Status.Replicas 相应变化
 func scaleSTS(t *testing.T, c clientset.Interface, sts *appsv1.StatefulSet, replicas int32) {
 	stsClient := c.AppsV1().StatefulSets(sts.Namespace)
 	if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {

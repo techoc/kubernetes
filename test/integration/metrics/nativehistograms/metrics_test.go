@@ -72,7 +72,7 @@ func TestAPIServerNativeHistogramMetrics(t *testing.T) {
 	s := kubeapiservertesting.StartTestServerOrDie(t, nil, framework.DefaultTestServerFlags(), framework.SharedEtcd())
 	defer s.TearDownFn()
 
-	// Make a request to ensure histogram metrics have data
+	// 发起请求，确保 histogram 指标有数据
 	client := clientset.NewForConfigOrDie(s.ClientConfig)
 	if _, err := client.CoreV1().Pods(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{}); err != nil {
 		t.Fatalf("unexpected error getting pods: %v", err)
@@ -84,7 +84,7 @@ func TestAPIServerNativeHistogramMetrics(t *testing.T) {
 	}
 	httpClient := &http.Client{Transport: transport}
 
-	// Scrape metrics in protobuf format to get native histogram data
+	// 以 protobuf 格式抓取指标，以获取 native histogram 数据
 	histogramMetric := "apiserver_request_duration_seconds"
 	metrics, err := testutil.ScrapeMetricsProto(s.ClientConfig.Host+"/metrics", httpClient)
 	if err != nil {
@@ -96,10 +96,10 @@ func TestAPIServerNativeHistogramMetrics(t *testing.T) {
 		t.Fatalf("metric %q not found", histogramMetric)
 	}
 
-	// Verify native histogram data is present
+	// 确认存在 native histogram 数据
 	testutil.AssertHasNativeHistogram(t, mf, nil)
 
-	// Verify classic histogram buckets are still exposed
+	// 确认传统的 histogram bucket 仍然暴露
 	textMetrics, err := scrapeMetrics(s)
 	if err != nil {
 		t.Fatalf("failed to scrape text metrics: %v", err)

@@ -74,10 +74,10 @@ func createResources(t *testing.T, test *transformTest,
 }
 
 func TestEncryptSupportedForAllResourceTypes(t *testing.T) {
-	// check resources provided by the three servers that we have wired together
-	// - pods and configmaps from KAS
-	// - CRDs and CRs from API extensions
-	// - API services from aggregator
+	// 检查我们连接在一起的三个 server 所提供的资源
+	// - 来自 KAS 的 pod 和 configmap
+	// - 来自 API extensions 的 CRD 和 CR
+	// - 来自 aggregator 的 API service
 	encryptionConfig := `
 kind: EncryptionConfiguration
 apiVersion: apiserver.config.k8s.io/v1
@@ -100,7 +100,7 @@ resources:
 	}
 	t.Cleanup(test.cleanUp)
 
-	// the storage registry for CRs is dynamic so create one to exercise the wiring
+	// CR 的 storage registry 是动态的，因此创建一个 CR 来验证连接配置
 	etcd.CreateTestCRDs(t, apiextensionsclientset.NewForConfigOrDie(test.kubeAPIServer.ClientConfig), false, etcd.GetCustomResourceDefinitionData()...)
 
 	for _, tt := range []struct {

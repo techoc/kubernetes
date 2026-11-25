@@ -34,19 +34,18 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-// TestAllowCreateOnUpdate verifies that APIs prefer AllowCreateOnUpdate() = false.
+// TestAllowCreateOnUpdate 验证 API 是否倾向于设置 AllowCreateOnUpdate() = false。
 //
-// Rationale: POST is exclusively for creation, and PUT is strictly for updating existing
-// resources to ensure safe and predictable lifecycles. Allowing PUT to create objects
-// can lead to accidental object creation.
+// 理由：POST 专用于创建，PUT 严格用于更新已有资源，以确保生命周期安全且可预测。
+// 允许 PUT 创建对象可能导致意外的对象创建。
 func TestAllowCreateOnUpdate(t *testing.T) {
 	exempt := sets.New(
-		// Leases are maintained exclusively via PUT requests.
+		// Lease 仅通过 PUT 请求维护。
 		"leasecandidates.v1alpha2.coordination.k8s.io",
 		"leasecandidates.v1beta1.coordination.k8s.io",
 		"leases.v1.coordination.k8s.io",
 
-		// Grandfathered APIs with no clear rationale:
+		// 沿用旧例、无明确理由的 API：
 		"clusterrolebindings.v1.rbac.authorization.k8s.io",
 		"clusterroles.v1.rbac.authorization.k8s.io",
 		"endpoints.v1",
@@ -74,13 +73,12 @@ func TestAllowCreateOnUpdate(t *testing.T) {
 	})
 }
 
-// TestGenerateName verifies that APIs honor metadata.generateName.
+// TestGenerateName 验证 API 是否支持 metadata.generateName。
 //
-// Rationale: generateName should be provided by APIs unless new resources of that API require the name to be derived
-// from particular field values.
+// 理由：除非该 API 的新资源名称必须从特定字段值派生，否则 API 应提供 generateName。
 func TestGenerateName(t *testing.T) {
 	exempt := sets.New(
-		// APIs with specific naming requirements that to not support generateName:
+		// 因命名有特殊要求而不支持 generateName 的 API：
 		"apiservices.v1.apiregistration.k8s.io",
 		"clustertrustbundles.v1alpha1.certificates.k8s.io",
 		"clustertrustbundles.v1beta1.certificates.k8s.io",
@@ -108,13 +106,12 @@ func TestGenerateName(t *testing.T) {
 	})
 }
 
-// TestAllowUnconditionalUpdate verifies that APIs prefer AllowUnconditionalUpdate() = false.
+// TestAllowUnconditionalUpdate 验证 API 是否倾向于设置 AllowUnconditionalUpdate() = false。
 //
-// Rationale: Unconditional updates can result in accidental overwrites. APIs should encourage
-// users to either use conditional updates or patch operations.
+// 理由：无条件更新可能导致意外覆盖。API 应鼓励用户使用条件更新或 patch 操作。
 func TestAllowUnconditionalUpdate(t *testing.T) {
 	exempt := sets.New(
-		// Grandfathered APIs:
+		// 沿用旧例的 API：
 		"certificatesigningrequests.v1.certificates.k8s.io",
 		"clusterrolebindings.v1.rbac.authorization.k8s.io",
 		"clusterroles.v1.rbac.authorization.k8s.io",
@@ -198,27 +195,26 @@ func TestAllowUnconditionalUpdate(t *testing.T) {
 	})
 }
 
-// TestDefaultGarbageCollectionPolicy verifies that resources prefer the default
-// GarbageCollectionPolicy strategy of background deletion.
+// TestDefaultGarbageCollectionPolicy 验证资源是否倾向于采用默认后台删除的
+// GarbageCollectionPolicy 策略。
 //
-// Rationale: Orphaning dependents by default proved to be confusing to
-// controller authors and users and prone to resource leaks. Foreground deletion
-// allows dependents to block resource deletion.
+// 理由：默认孤立（orphan）依赖对象会让控制器作者和用户感到困惑，且容易导致资源泄漏。前台删除
+// 则允许依赖对象阻塞资源的删除。
 func TestDefaultGarbageCollectionPolicy(t *testing.T) {
-	// APIs that use OrphanDependents garbage collection policy
+	// 使用 OrphanDependents 垃圾回收策略的 API
 	orphanDependentsExempt := sets.New(
-		// Grandfathered APIs that use OrphanDependants for backward compatibility
+		// 为向后兼容而沿用 OrphanDependants 的旧有 API
 		"jobs.v1.batch",
 		"replicationcontrollers.v1",
 
-		// non-GA APIs that use OrphanDependants, such as cronjobs, exist but is no longer served
+		// 也存在使用 OrphanDependants 的非 GA API（如 cronjobs），但其已不再被提供
 	)
-	// APIs that use DeleteDependents garbage collection policy
+	// 使用 DeleteDependents 垃圾回收策略的 API
 	foregroundExempt := sets.New[string]()
 
-	// APIs that use Unsupported garbage collection policy
+	// 使用 Unsupported 垃圾回收策略的 API
 	unsupportedExempt := sets.New(
-		// Events are intended to be high-volume leaf nodes.
+		// Event 被设计用于高吞吐量的叶子节点。
 		"events.v1",
 		"events.v1.events.k8s.io",
 		"customresourcedefinitions.v1.apiextensions.k8s.io",
@@ -234,8 +230,8 @@ func TestDefaultGarbageCollectionPolicy(t *testing.T) {
 		if _, err := client.Create(context.TODO(), obj, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create: %v", err)
 		}
-		// A blocking finalizer is added first, so the object is not removed
-		// before we can observe the result of each delete.
+		// 先添加一个阻塞用的 finalizer，确保在我们观察到每次删除的结果之前
+		// 对象不会被移除。
 		if err := addBlockingFinalizer(client, name); err != nil {
 			t.Fatalf("Could not set test finalizer: %v", err)
 		}
@@ -275,13 +271,13 @@ func TestDefaultGarbageCollectionPolicy(t *testing.T) {
 		if _, err := client.Create(context.TODO(), obj, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("Failed to create: %v", err)
 		}
-		// A blocking finalizer is added first, so the object is not removed
-		// before we can observe the result of each delete.
+		// 先添加一个阻塞用的 finalizer，确保在我们观察到每次删除的结果之前
+		// 对象不会被移除。
 		if err := addBlockingFinalizer(client, name); err != nil {
 			t.Fatalf("Could not set test finalizer: %v", err)
 		}
 
-		// Also check for APIs using Unsupported garbage collection policy
+		// 同时检查使用 Unsupported 垃圾回收策略的 API
 		foreground := metav1.DeletePropagationForeground
 		if err := client.Delete(context.TODO(), name, metav1.DeleteOptions{PropagationPolicy: &foreground}); err != nil {
 			t.Fatalf("Failed to delete with foreground propagation: %v", err)
@@ -295,13 +291,13 @@ func TestDefaultGarbageCollectionPolicy(t *testing.T) {
 	})
 }
 
-// TestCheckGracefulDelete verifies that APIs do not implement deletion grace period support.
+// TestCheckGracefulDelete 验证 API 未实现删除宽限期支持。
 //
-// Rationale: The use of finalizers followed by immediate deletion is more predictable to clients.
+// 理由：使用 finalizer 后立即删除对客户端而言更可预测。
 func TestCheckGracefulDelete(t *testing.T) {
 	exempt := sets.New(
-		// Pods support a grace period window to send SIGTERM and let containers shut down
-		// cleanly before the object is removed.
+		// Pod 支持宽限期窗口，以便发送 SIGTERM 并让容器在对象被移除前
+		// 干净地关闭。
 		"pods.v1",
 	)
 	TestAllDefinitions(t, "check-graceful-delete", func(t *testing.T, api Definition) {
@@ -339,13 +335,13 @@ func TestCheckGracefulDelete(t *testing.T) {
 	})
 }
 
-// TestReturnDeletedObject verifies that APIs prefer ReturnDeletedObject = false.
+// TestReturnDeletedObject 验证 API 是否倾向于设置 ReturnDeletedObject = false。
 //
-// Rationale: Returning the entire object on deletion is expensive, almost never needed
-// by clients, and the status returned when ReturnDeletedObject = false is preferred.
+// 理由：删除时返回整个对象开销高昂，客户端几乎从不需要，而更偏向返回
+// ReturnDeletedObject = false 时的状态信息。
 func TestReturnDeletedObject(t *testing.T) {
 	exempt := sets.New(
-		// Grandfathered legacy APIs that historically returned the full object on deletion:
+		// 历史上删除时会返回完整对象的旧有 API：
 		"namespaces.v1",
 		"persistentvolumeclaims.v1",
 		"persistentvolumes.v1",
@@ -376,7 +372,7 @@ func TestReturnDeletedObject(t *testing.T) {
 		"resourceslices.v1beta1.resource.k8s.io",
 		"resourceslices.v1beta2.resource.k8s.io",
 
-		// APIs with mandatory asynchronous cleanup finalizers that cannot be stripped:
+		// 带有无法移除的强制异步清理 finalizer 的 API：
 		"customresourcedefinitions.v1.apiextensions.k8s.io",
 	)
 	TestAllDefinitions(t, "return-deleted-object", func(t *testing.T, api Definition) {
@@ -449,7 +445,7 @@ func TestReturnDeletedObject(t *testing.T) {
 	})
 }
 
-// addBlockingFinalizer appends a test finalizer to name, retrying on conflict.
+// addBlockingFinalizer 为 name 追加一个测试用 finalizer，冲突时重试。
 func addBlockingFinalizer(client dynamic.ResourceInterface, name string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest, err := client.Get(context.TODO(), name, metav1.GetOptions{})
@@ -462,7 +458,7 @@ func addBlockingFinalizer(client dynamic.ResourceInterface, name string) error {
 	})
 }
 
-// isInvalidResourceVersion reports whether err is an Invalid status error caused by metadata.resourceVersion.
+// isInvalidResourceVersion 判断 err 是否是由 metadata.resourceVersion 引起的 Invalid 状态错误。
 func isInvalidResourceVersion(err error) bool {
 	if !apierrors.IsInvalid(err) {
 		return false
@@ -479,8 +475,8 @@ func isInvalidResourceVersion(err error) bool {
 	return false
 }
 
-// assertDefault checks that expected behavior conforms, unless the gvr is in the allow list, in which the behavor is
-// expected to continue to not confirm.
+// assertDefault 检查预期行为是否符合要求，除非该 gvr 在允许列表中——这种情况下
+// 预期该行为继续不符合要求。
 func assertDefault(t *testing.T, gvr schema.GroupVersionResource, msg string, conforms bool, allowed sets.Set[string]) {
 	t.Helper()
 	name := ResourceString(gvr)

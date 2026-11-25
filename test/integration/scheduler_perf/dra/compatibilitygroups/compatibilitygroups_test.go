@@ -36,8 +36,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestSchedulerPerf(t *testing.T) {
-	// Compatibility-group enforcement lives only in the experimental allocator,
-	// so pin it to make sure the compatibility check is actually exercised.
+	// 兼容性组的强制检查仅存在于 experimental 分配器中，
+	// 因此固定使用该分配器，以确保确实执行了兼容性检查。
 	structured.EnableAllocators("experimental")
 	defer structured.EnableAllocators()
 

@@ -32,8 +32,8 @@ import (
 )
 
 func TestCTBSignerNameFieldSelector(t *testing.T) {
-	// KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE allows for APIs pending removal to not block tests
-	// TODO: Remove this line once certificates v1alpha1 types to be removed in 1.32 are fully removed
+	// KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE 允许待移除的 API 不阻塞测试
+	// TODO: 待 1.32 中将要移除的 certificates v1alpha1 类型完全移除后，删除此行
 	t.Setenv("KUBE_APISERVER_SERVE_REMOVED_APIS_FOR_ONE_RELEASE", "true")
 
 	ctx := context.Background()
