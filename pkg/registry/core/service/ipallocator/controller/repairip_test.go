@@ -41,7 +41,7 @@ var (
 	serviceCIDRv4 = "10.0.0.0/16"
 	serviceCIDRv6 = "2001:db8::/64"
 
-	// testTimeNow is used to lock the fake clocks view of the current time.
+	// testTimeNow 用于固定伪造时钟看到的当前时间。
 	testTimeNow = time.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
@@ -99,7 +99,7 @@ func TestRepairServiceIP(t *testing.T) {
 		cidrs       []*networkingv1.ServiceCIDR
 		testTime    time.Time
 		expectedIPs []string
-		actions     [][]string // verb and resource
+		actions     [][]string // verb 与 resource
 		events      []string
 	}{
 		{
@@ -153,7 +153,7 @@ func TestRepairServiceIP(t *testing.T) {
 			actions:     [][]string{},
 			events:      []string{},
 		},
-		// these two cases simulate migrating from bitmaps to IPAddress objects
+		// 这两个用例模拟从位图迁移到 IPAddress 对象的过程
 		{
 			name: "create IPAddress single stack",
 			svcs: []*v1.Service{
@@ -266,8 +266,8 @@ func TestRepairServiceIP(t *testing.T) {
 			cidrs: []*networkingv1.ServiceCIDR{
 				newServiceCIDR("kubernetes", serviceCIDRv4, serviceCIDRv6),
 			},
-			// we update the fake clock here simulating the IPAddress was created more than 70 seconds ago,
-			// this simulates grace period that prevents ip address cleanup is over.
+			// 这里推进伪造时钟，模拟 IPAddress 创建于 70 多秒之前，
+			// 也就是阻止清理 IPAddress 的宽限期已经结束。
 			testTime: testTimeNow.Add(70 * time.Second),
 			actions:  [][]string{{"delete", "ipaddresses"}},
 			events:   []string{"Warning IPAddressNotAllocated IPAddress: 10.0.1.1 for Service bar/test-svc appears to have leaked: cleaning up"},
@@ -347,8 +347,8 @@ func TestRepairServiceIP(t *testing.T) {
 		{
 			name: "one IP orphan matching the broadcast address after grace period",
 			ipAddresses: []*networkingv1.IPAddress{
-				// we update the fake clock here simulating the IPAddress was created more than 90 seconds ago,
-				// this simulates grace period that prevents ip address cleanup is over.
+				// 这里推进伪造时钟，模拟 IPAddress 创建于 90 多秒之前，
+				// 也就是阻止清理 IPAddress 的宽限期已经结束。
 				newIPAddressWithCreationTimestamp("10.0.255.255", newService("test-svc", []string{"10.0.255.255"}), testTimeNow),
 			},
 			cidrs: []*networkingv1.ServiceCIDR{
@@ -381,13 +381,13 @@ func TestRepairServiceIP(t *testing.T) {
 			},
 			ipAddresses: []*networkingv1.IPAddress{
 				newIPAddressWithCreationTimestamp("10.0.1.1", newService("test-svc", []string{"10.0.1.1"}), testTimeNow),
-				// ensure the second IPAddress object has a creation timestamp greater than service creation timestamp
+				// 确保第二个 IPAddress 对象的创建时间晚于 Service 的创建时间
 				newIPAddressWithCreationTimestamp("10.0.1.2", newService("test-svc", []string{"10.0.1.1"}), testTimeNow.Add(2*time.Second)),
 			},
 			cidrs: []*networkingv1.ServiceCIDR{
 				newServiceCIDR("kubernetes", serviceCIDRv4, serviceCIDRv6),
 			},
-			// update the test time, ensuring 5 seconds have not passed after creation of the second IPAddress Object
+			// 调整测试时间，确保第二个 IPAddress 对象创建后不足 5 秒
 			testTime: testTimeNow.Add(3 * time.Second),
 		},
 		{
@@ -397,13 +397,13 @@ func TestRepairServiceIP(t *testing.T) {
 			},
 			ipAddresses: []*networkingv1.IPAddress{
 				newIPAddressWithCreationTimestamp("10.0.1.1", newService("test-svc", []string{"10.0.1.1"}), testTimeNow),
-				// ensure the second IPAddress object has a creation timestamp greater than service creation timestamp
+				// 确保第二个 IPAddress 对象的创建时间晚于 Service 的创建时间
 				newIPAddressWithCreationTimestamp("10.0.1.2", newService("test-svc", []string{"10.0.1.1"}), testTimeNow.Add(2*time.Second)),
 			},
 			cidrs: []*networkingv1.ServiceCIDR{
 				newServiceCIDR("kubernetes", serviceCIDRv4, serviceCIDRv6),
 			},
-			// update the test time, ensuring 5 seconds have passed after creation of the second IPAddress Object
+			// 调整测试时间，确保第二个 IPAddress 对象创建已超过 5 秒
 			testTime: testTimeNow.Add(10 * time.Second),
 			actions:  [][]string{{"delete", "ipaddresses"}},
 			events:   []string{"Warning IPAddressWrongReference IPAddress: 10.0.1.2 for Service bar/test-svc has a wrong reference; cleaning up"},
@@ -429,7 +429,7 @@ func TestRepairServiceIP(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 
 			c, r := newFakeRepair(test.testTime)
-			// add cidrs
+			// 添加 CIDR
 			for _, cidr := range test.cidrs {
 				err := r.serviceCIDRStore.Add(cidr)
 				if err != nil {
@@ -437,7 +437,7 @@ func TestRepairServiceIP(t *testing.T) {
 				}
 			}
 
-			// override for testing
+			// 为测试覆盖默认取值
 			r.servicesSynced = func() bool { return true }
 			r.ipAddressSynced = func() bool { return true }
 			r.serviceCIDRSynced = func() bool { return true }
@@ -481,7 +481,7 @@ func TestRepairIPAddress_syncIPAddress(t *testing.T) {
 		ip       *networkingv1.IPAddress
 		svc      *v1.Service
 		testTime time.Time
-		actions  [][]string // verb and resource
+		actions  [][]string // verb 与 resource
 		wantErr  bool
 	}{
 		{
@@ -639,8 +639,8 @@ func TestRepairIPAddress_syncIPAddress(t *testing.T) {
 					},
 				},
 			},
-			// we update the fake clock here simulating the IPAddress was created more than 90 seconds ago,
-			// this simulates grace period that prevents ip address cleanup is over.
+			// 这里推进伪造时钟，模拟 IPAddress 创建于 90 多秒之前，
+			// 也就是阻止清理 IPAddress 的宽限期已经结束。
 			testTime: testTimeNow.Add(90 * time.Second),
 			actions:  [][]string{{"delete", "ipaddresses"}},
 		},
@@ -661,7 +661,7 @@ func TestRepairIPAddress_syncIPAddress(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// override for testing
+			// 为测试覆盖默认取值
 			r.servicesSynced = func() bool { return true }
 			r.ipAddressSynced = func() bool { return true }
 			recorder := events.NewFakeRecorder(100)
@@ -763,7 +763,7 @@ func expectEvents(t *testing.T, actual <-chan string, expected []string) {
 			}
 		case <-c:
 			t.Errorf("Expected event %q, got nothing", e)
-			// continue iterating to print all expected events
+			// 继续遍历，打印全部预期事件
 		}
 	}
 	for {
@@ -771,7 +771,7 @@ func expectEvents(t *testing.T, actual <-chan string, expected []string) {
 		case a := <-actual:
 			t.Errorf("Unexpected event: %q", a)
 		default:
-			return // No more events, as expected.
+			return // 如预期，没有更多事件。
 		}
 	}
 }
@@ -805,7 +805,7 @@ func TestRepairIPAddress_runOnce(t *testing.T) {
 		},
 		{
 			name:          "No Retry on InternalError",
-			conflictCount: 1, // It will fail once and stop
+			conflictCount: 1, // 它会失败一次后停止
 			errorType: func(name string) error {
 				return apierrors.NewInternalError(fmt.Errorf("internal error"))
 			},
@@ -817,7 +817,7 @@ func TestRepairIPAddress_runOnce(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client, r := newFakeRepair(testTimeNow)
-			// Add a service that needs repair (missing IPAddress)
+			// 加入一个需要修复（缺少 IPAddress）的 Service
 			svc := newService("test-svc", []string{"10.0.1.1"})
 			err := r.serviceStore.Add(svc)
 			if err != nil {
@@ -827,21 +827,21 @@ func TestRepairIPAddress_runOnce(t *testing.T) {
 			r.ipAddressSynced = func() bool { return true }
 			r.serviceCIDRSynced = func() bool { return true }
 
-			// Add a default ServiceCIDR
+			// 加入一个默认 ServiceCIDR
 			cidr := newServiceCIDR("kubernetes", serviceCIDRv4, serviceCIDRv6)
 			err = r.serviceCIDRStore.Add(cidr)
 			if err != nil {
 				t.Fatalf("Unexpected error adding ServiceCIDR: %v", err)
 			}
 
-			// Track how many times create is called
+			// 统计 create 被调用的次数
 			createCalls := 0
 			client.PrependReactor("create", "ipaddresses", func(action k8stesting.Action) (bool, runtime.Object, error) {
 				createCalls++
 				if createCalls <= tt.conflictCount {
 					return true, nil, tt.errorType("10.0.1.1")
 				}
-				// Pass through to the default reactor (which creates the object)
+				// 透传给默认的 reactor（由它真正创建对象）
 				return false, nil, nil
 			})
 

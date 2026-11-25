@@ -46,8 +46,8 @@ func TestAllocate(t *testing.T) {
 			released: "192.168.1.5",
 			outOfRange: []string{
 				"192.168.0.1",   // not in 192.168.1.0/24
-				"192.168.1.0",   // reserved (base address)
-				"192.168.1.255", // reserved (broadcast address)
+				"192.168.1.0",   // 保留地址（网络地址）
+				"192.168.1.255", // 保留地址（广播地址）
 				"192.168.2.2",   // not in 192.168.1.0/24
 			},
 			alreadyAllocated: "192.168.1.1",
@@ -59,9 +59,9 @@ func TestAllocate(t *testing.T) {
 			free:     131070,
 			released: "10.0.0.5",
 			outOfRange: []string{
-				"10.0.0.0",      // reserved (base address)
-				"10.15.255.255", // reserved (broadcast address)
-				"10.255.255.2",  // not in range
+				"10.0.0.0",      // 保留地址（网络地址）
+				"10.15.255.255", // 保留地址（广播地址）
+				"10.255.255.2",  // 不在范围内
 			},
 			alreadyAllocated: "10.0.0.1",
 		},
@@ -73,8 +73,8 @@ func TestAllocate(t *testing.T) {
 			released: "2001:db8:1::5",
 			outOfRange: []string{
 				"2001:db8::1",     // not in 2001:db8:1::/48
-				"2001:db8:1::",    // reserved (base address)
-				"2001:db8:1::1:0", // not in the low 16 bits of 2001:db8:1::/48
+				"2001:db8:1::",    // 保留地址（网络地址）
+				"2001:db8:1::1:0", // 不在 2001:db8:1::/48 的低 16 位内
 				"2001:db8:2::2",   // not in 2001:db8:1::/48
 			},
 			alreadyAllocated: "2001:db8:1::1",
@@ -201,8 +201,8 @@ func TestAllocateReserved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// allocate all addresses on the dynamic block
-	// subnet /25 = 128 ; dynamic block size is min(max(16,128/16),256) = 16
+	// 把动态块中的地址全部分配掉
+	// /25 子网共 128 个地址；动态块大小为 min(max(16,128/16),256) = 16
 	dynamicOffset := calculateRangeOffset(cidr)
 	dynamicBlockSize := r.max - dynamicOffset
 	for i := 0; i < dynamicBlockSize; i++ {
@@ -219,7 +219,7 @@ func TestAllocateReserved(t *testing.T) {
 	if f := r.Free(); f != dynamicOffset {
 		t.Errorf("expected %d free addresses, got %d", dynamicOffset, f)
 	}
-	// allocate all addresses on the static block
+	// 把静态块中的地址全部分配掉
 	for i := 0; i < dynamicOffset; i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i+1)
 		if err := r.Allocate(netutils.ParseIPSloppy(ip)); err != nil {
@@ -229,7 +229,7 @@ func TestAllocateReserved(t *testing.T) {
 	if f := r.Free(); f != 0 {
 		t.Errorf("expected free equal to 0 got: %d", f)
 	}
-	// release one address in the allocated block and another a new one randomly
+	// 释放已分配块中的一个地址，再随机分配一个新地址
 	if err := r.Release(netutils.ParseIPSloppy("192.168.1.10")); err != nil {
 		t.Fatalf("Unexpected error trying to release ip 192.168.1.10: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestNewFromSnapshot(t *testing.T) {
 
 func TestClusterIPMetrics(t *testing.T) {
 	clearMetrics()
-	// create IPv4 allocator
+	// 创建 IPv4 分配器
 	cidrIPv4 := "10.0.0.0/24"
 	_, clusterCIDRv4, _ := netutils.ParseCIDRSloppy(cidrIPv4)
 	a, err := NewInMemory(clusterCIDRv4)
@@ -442,7 +442,7 @@ func TestClusterIPMetrics(t *testing.T) {
 		t.Fatalf("unexpected error creating CidrSet: %v", err)
 	}
 	a.EnableMetrics()
-	// create IPv6 allocator
+	// 创建 IPv6 分配器
 	cidrIPv6 := "2001:db8::/112"
 	_, clusterCIDRv6, _ := netutils.ParseCIDRSloppy(cidrIPv6)
 	b, err := NewInMemory(clusterCIDRv6)
@@ -451,7 +451,7 @@ func TestClusterIPMetrics(t *testing.T) {
 		t.Fatalf("unexpected error creating CidrSet: %v", err)
 	}
 
-	// Check initial state
+	// 检查初始状态
 	em := testMetrics{
 		free:      0,
 		used:      0,
@@ -467,7 +467,7 @@ func TestClusterIPMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv6, em)
 
-	// allocate 2 IPv4 addresses
+	// 分配 2 个 IPv4 地址
 	found := sets.New[string]()
 	for i := 0; i < 2; i++ {
 		ip, err := a.AllocateNext()
@@ -488,7 +488,7 @@ func TestClusterIPMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// try to allocate the same IP addresses
+	// 尝试再次分配相同的 IP
 	for s := range found {
 		if !a.Has(netutils.ParseIPSloppy(s)) {
 			t.Fatalf("missing: %s", s)
@@ -505,7 +505,7 @@ func TestClusterIPMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// release the addresses allocated
+	// 释放已分配的地址
 	for s := range found {
 		if !a.Has(netutils.ParseIPSloppy(s)) {
 			t.Fatalf("missing: %s", s)
@@ -522,8 +522,8 @@ func TestClusterIPMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// allocate 264 addresses for each allocator
-	// the full range and 10 more (254 + 10 = 264) for IPv4
+	// 每个分配器分配 264 个地址
+	// 即整个地址段再加 10 个（IPv4 为 254 + 10 = 264）
 	for i := 0; i < 264; i++ {
 		a.AllocateNext()
 		b.AllocateNext()
@@ -531,12 +531,12 @@ func TestClusterIPMetrics(t *testing.T) {
 	em = testMetrics{
 		free:      0,
 		used:      254,
-		allocated: 256, // this is a counter, we already had 2 allocations and we did 254 more
+		allocated: 256, // 这是计数器：之前已有 2 次分配，这里又做了 254 次
 		errors:    12,
 	}
 	expectMetrics(t, cidrIPv4, em)
 	em = testMetrics{
-		free:      65271, // IPv6 clusterIP range is capped to 2^16 and consider the broadcast address as valid
+		free:      65271, // IPv6 的 clusterIP 地址段上限为 2^16，且把广播地址视为可用地址
 		used:      264,
 		allocated: 264,
 		errors:    0,
@@ -546,7 +546,7 @@ func TestClusterIPMetrics(t *testing.T) {
 
 func TestClusterIPAllocatedMetrics(t *testing.T) {
 	clearMetrics()
-	// create IPv4 allocator
+	// 创建 IPv4 分配器
 	cidrIPv4 := "10.0.0.0/25"
 	_, clusterCIDRv4, _ := netutils.ParseCIDRSloppy(cidrIPv4)
 	a, err := NewInMemory(clusterCIDRv4)
@@ -563,7 +563,7 @@ func TestClusterIPAllocatedMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// allocate 2 dynamic IPv4 addresses
+	// 分配 2 个动态 IPv4 地址
 	found := sets.New[string]()
 	for i := 0; i < 2; i++ {
 		ip, err := a.AllocateNext()
@@ -584,7 +584,7 @@ func TestClusterIPAllocatedMetrics(t *testing.T) {
 		t.Fatalf("Expected 2 received %f", dynamic_allocated)
 	}
 
-	// try to allocate the same IP addresses
+	// 尝试再次分配相同的 IP
 	for s := range found {
 		if !a.Has(netutils.ParseIPSloppy(s)) {
 			t.Fatalf("missing: %s", s)
@@ -604,7 +604,7 @@ func TestClusterIPAllocatedMetrics(t *testing.T) {
 }
 
 func TestMetricsDisabled(t *testing.T) {
-	// create metrics enabled allocator
+	// 创建启用指标的分配器
 	cidrIPv4 := "10.0.0.0/24"
 	_, clusterCIDRv4, _ := netutils.ParseCIDRSloppy(cidrIPv4)
 	a, err := NewInMemory(clusterCIDRv4)
@@ -613,14 +613,14 @@ func TestMetricsDisabled(t *testing.T) {
 	}
 	a.EnableMetrics()
 
-	// create metrics disabled allocator with same CIDR
-	// this metrics should be ignored
+	// 用相同的 CIDR 创建一个未启用指标的分配器，
+	// 它的指标应当被忽略
 	b, err := NewInMemory(clusterCIDRv4)
 	if err != nil {
 		t.Fatalf("unexpected error creating CidrSet: %v", err)
 	}
 
-	// Check initial state
+	// 检查初始状态
 	em := testMetrics{
 		free:      0,
 		used:      0,
@@ -629,7 +629,7 @@ func TestMetricsDisabled(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// allocate in metrics enabled allocator
+	// 在启用指标的分配器中分配
 	for i := 0; i < 100; i++ {
 		_, err := a.AllocateNext()
 		if err != nil {
@@ -644,18 +644,18 @@ func TestMetricsDisabled(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// allocate in metrics disabled allocator
+	// 在未启用指标的分配器中分配
 	for i := 0; i < 200; i++ {
 		_, err := b.AllocateNext()
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	// the metrics should not be changed
+	// 指标不应发生变化
 	expectMetrics(t, cidrIPv4, em)
 }
 
-// Metrics helpers
+// 指标相关的辅助函数
 func clearMetrics() {
 	clusterIPAllocated.Reset()
 	clusterIPAvailable.Reset()
@@ -771,7 +771,7 @@ func TestDryRun(t *testing.T) {
 }
 
 func Test_calculateRangeOffset(t *testing.T) {
-	// default $min = 16, $max = 256 and $step = 16.
+	// 默认 $min = 16、$max = 256、$step = 16。
 	tests := []struct {
 		name string
 		cidr string
@@ -869,7 +869,7 @@ func BenchmarkAllocateNextIPv4Size1048574(b *testing.B) {
 	}
 }
 
-// This is capped to 65535
+// 该大小会被限制在 65535 以内
 // cpu: Intel(R) Xeon(R) CPU E5-2678 v3 @ 2.50GHz
 // BenchmarkAllocateNextIPv6
 // BenchmarkAllocateNextIPv6-24    	 5779431	       194.0 ns/op	      18 B/op	       2 allocs/op

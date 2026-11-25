@@ -33,7 +33,6 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST 创建并返回用于访问 ConfigMap 资源的 RESTStorage。
 // NewREST 注册 ConfigMap 对象构造器、Label/Field 筛选器、读写策略和表格转换器，再由 RESTOptions 完成后端初始化。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{

@@ -54,7 +54,7 @@ func newTokenStorage(t *testing.T, issuer token.TokenGenerator, auds authenticat
 		DeleteCollectionWorkers: 1,
 		ResourcePrefix:          "serviceaccounts",
 	}
-	// set issuer, podStore and secretStore to allow the token endpoint to be initialised
+	// 设置 issuer、podStore 和 secretStore，以启用 Token 端点。
 	rest, err := NewREST(restOptions, issuer, auds, nil, 0, podStorage, secretStorage, nodeStorage, nil, nil, false, time.Hour*9999)
 	if err != nil {
 		t.Fatalf("unexpected error from REST storage: %v", err)
@@ -62,7 +62,7 @@ func newTokenStorage(t *testing.T, issuer token.TokenGenerator, auds authenticat
 	return rest, server
 }
 
-// A basic fake token generator which always returns a static string
+// fakeTokenGenerator 是一个始终返回固定字符串的基础测试 Token 生成器。
 type fakeTokenGenerator struct {
 	staticToken string
 }
@@ -73,8 +73,8 @@ func (f fakeTokenGenerator) GenerateToken(ctx context.Context, claims *jwt.Claim
 
 var _ token.TokenGenerator = fakeTokenGenerator{}
 
-// Currently this getter only panics as the only test case doesn't actually need the getters to function.
-// When more test cases are added, this getter will need extending/replacing to have a real test implementation.
+// 当前 getter 只会 panic，因为现有唯一用例不需要它实际工作。
+// 新增用例时，需要扩展或替换此 getter，提供真实的测试实现。
 type panicGetter struct{}
 
 func (f panicGetter) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
@@ -102,9 +102,9 @@ func TestCreate(t *testing.T) {
 	serviceAccount := validNewServiceAccount("foo")
 	serviceAccount.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo-"}
 	test.TestCreate(
-		// valid
+		// 有效输入
 		serviceAccount,
-		// invalid
+		// 无效输入
 		&api.ServiceAccount{},
 		&api.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: "name with spaces"},
@@ -118,7 +118,7 @@ func TestCreate_Token_SetsCredentialIDAuditAnnotation(t *testing.T) {
 	defer server.Terminate(t)
 	defer storage.Store.DestroyFunc()
 
-	// Enable JTI feature
+	// 启用 JTI 特性。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ServiceAccountTokenJTI, true)
 
 	serviceAccount := validNewServiceAccount("foo")
@@ -128,7 +128,7 @@ func TestCreate_Token_SetsCredentialIDAuditAnnotation(t *testing.T) {
 		t.Fatalf("failed creating test service account: %v", err)
 	}
 
-	// create an audit context to allow recording audit information
+	// 创建审计上下文，以记录审计信息。
 	ctx = audit.WithAuditContext(ctx)
 	_, err = storage.Token.Create(ctx, serviceAccount.Name, &authenticationapi.TokenRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -154,9 +154,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 有效输入
 		validNewServiceAccount("foo"),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*api.ServiceAccount)
 			object.Secrets = []api.ObjectReference{{}}
@@ -196,17 +196,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewServiceAccount("foo"),
-		// matching labels
+		// 匹配的标签
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": "foo"},

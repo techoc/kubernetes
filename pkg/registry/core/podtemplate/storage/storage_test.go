@@ -71,9 +71,9 @@ func TestCreate(t *testing.T) {
 	pod := validNewPodTemplate("foo")
 	pod.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法
 		pod,
-		// invalid
+		// 非法
 		&api.PodTemplate{
 			Template: api.PodTemplateSpec{},
 		},
@@ -87,7 +87,7 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		//valid
+		// 合法
 		validNewPodTemplate("foo"),
 		// updateFunc
 		func(obj runtime.Object) runtime.Object {
@@ -130,15 +130,15 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewPodTemplate("foo"),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": "foo"},

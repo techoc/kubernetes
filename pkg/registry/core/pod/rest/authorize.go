@@ -30,13 +30,7 @@ import (
 
 // Exec/Attach/PortForward 的授权动词会受 SPDY 与 WebSocket 协议影响：SPDY POST 映射为 create，WebSocket GET 映射为 get。
 // 为兼容既有 RBAC 策略，在特性启用时额外检查 create 权限。
-// Pod subresources differs on the REST verbs depending on the protocol used
-// SPDY uses POST that at the authz layer is translated to "create".
-// Websockets uses GET that is translated to "get".
-// Since the defaulting to websocket for kubectl in KEP-4006 this caused an
-// unexpected side effect and in order to keep existing policies backwards
-// compatible we always check that the "create" verb is allowed.
-// Ref: https://issues.k8s.io/133515
+// 参考：https://issues.k8s.io/133515
 // ensureAuthorizedForVerb 在原始 HTTP 动词授权之外，再用指定 verb 构造一份授权属性并请求授权器判断。
 func ensureAuthorizedForVerb(ctx context.Context, a authorizer.UnconditionalAuthorizer, verb string) error {
 	// 请求上下文缺少 RequestInfo 时无法确定资源和名称，按 API Server 内部错误处理。
@@ -46,7 +40,6 @@ func ensureAuthorizedForVerb(ctx context.Context, a authorizer.UnconditionalAuth
 	}
 	// 原始请求动词已经等于目标动词，外层过滤器刚完成授权，无需重复发起检查。
 	if requestInfo.Verb == verb {
-		// already authorized
 		return nil
 	}
 

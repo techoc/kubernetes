@@ -141,7 +141,7 @@ func TestServiceStatusStrategy(t *testing.T) {
 		t.Errorf("Unexpected warnings %v", errs)
 	}
 
-	// Bad IP warning (leading zeros)
+	// 无效 IP 警告（含前导零）。
 	newService.Status.LoadBalancer.Ingress[0].IP = "127.000.000.002"
 	warnings = StatusStrategy.WarningsOnUpdate(ctx, newService, oldService)
 	if len(warnings) != 1 {
@@ -178,7 +178,7 @@ func TestDropDisabledField(t *testing.T) {
 		oldSvc     *api.Service
 		compareSvc *api.Service
 	}{
-		/* svc.Status.Conditions */
+		// svc.Status.Conditions
 		{
 			name:       "mixed protocol enabled, field not used in old, not used in new",
 			svc:        makeServiceWithConditions(nil),
@@ -203,7 +203,7 @@ func TestDropDisabledField(t *testing.T) {
 			oldSvc:     makeServiceWithConditions([]metav1.Condition{}),
 			compareSvc: makeServiceWithConditions(nil),
 		},
-		/* svc.Status.LoadBalancer.Ingress.Ports */
+		// svc.Status.LoadBalancer.Ingress.Ports
 		{
 			name:       "mixed protocol enabled, field not used in old, not used in new",
 			svc:        makeServiceWithPorts(nil),
@@ -228,16 +228,16 @@ func TestDropDisabledField(t *testing.T) {
 			oldSvc:     makeServiceWithPorts([]api.PortStatus{}),
 			compareSvc: makeServiceWithPorts(nil),
 		},
-		/* add more tests for other dropped fields as needed */
+		// 按需继续为其他被清理的字段添加测试。
 	}
 	for _, tc := range testCases {
 		func() {
 			old := tc.oldSvc.DeepCopy()
 
-			// to test against user using IPFamily not set on cluster
+			// 模拟集群未设置 IPFamily 时用户提交的 Service。
 			dropServiceDisabledFields(tc.svc, tc.oldSvc)
 
-			// old node should never be changed
+			// 旧对象不应被修改。
 			if !reflect.DeepEqual(tc.oldSvc, old) {
 				t.Errorf("%v: old svc changed: %v", tc.name, cmp.Diff(tc.oldSvc, old))
 			}
@@ -252,7 +252,7 @@ func TestDropDisabledField(t *testing.T) {
 
 // TestDropTypeDependentFields 覆盖 Service Type 切换时 ClusterIP、NodePort、LoadBalancer 等依赖字段的保留与清理规则。
 func TestDropTypeDependentFields(t *testing.T) {
-	// Tweaks used below.
+	// 下文使用的对象调整函数。
 	setTypeExternalName := func(svc *api.Service) {
 		svc.Spec.Type = api.ServiceTypeExternalName
 	}
@@ -357,7 +357,7 @@ func TestDropTypeDependentFields(t *testing.T) {
 		patch  func(svc *api.Service)
 		expect *api.Service
 	}{
-		{ // clusterIP cases
+		{ // ClusterIP 相关用例
 			name:   "don't clear clusterIP et al",
 			svc:    makeValidService(),
 			patch:  nil,
@@ -382,7 +382,7 @@ func TestDropTypeDependentFields(t *testing.T) {
 			svc:    makeValidService(),
 			patch:  patches(setTypeExternalName, changeIPFamilyPolicy),
 			expect: makeValidServiceCustom(setTypeExternalName, clearClusterIPs, clearIPFamilies, changeIPFamilyPolicy),
-		}, { // nodePort cases
+		}, { // NodePort 相关用例
 			name:   "don't clear nodePorts for type=NodePort",
 			svc:    makeValidServiceCustom(setTypeNodePort, setNodePorts),
 			patch:  nil,
@@ -422,7 +422,7 @@ func TestDropTypeDependentFields(t *testing.T) {
 			svc:    makeValidServiceCustom(setTypeLoadBalancer, setNodePorts),
 			patch:  patches(setTypeClusterIP, changePort),
 			expect: makeValidServiceCustom(changePort),
-		}, { // healthCheckNodePort cases
+		}, { // HealthCheckNodePort 相关用例
 			name:   "don't clear healthCheckNodePort for type=LoadBalancer",
 			svc:    makeValidServiceCustom(setTypeLoadBalancer, setHCNodePort),
 			patch:  nil,
@@ -437,7 +437,7 @@ func TestDropTypeDependentFields(t *testing.T) {
 			svc:    makeValidServiceCustom(setTypeLoadBalancer, setHCNodePort),
 			patch:  patches(setTypeClusterIP, changeHCNodePort),
 			expect: makeValidServiceCustom(setHCNodePort, changeHCNodePort, clearExternalTrafficPolicy),
-		}, { // allocatedLoadBalancerNodePorts cases
+		}, { // AllocateLoadBalancerNodePorts 相关用例
 			name:   "clear allocatedLoadBalancerNodePorts true -> true",
 			svc:    makeValidServiceCustom(setTypeLoadBalancer, setAllocateLoadBalancerNodePortsTrue),
 			patch:  setTypeNodePort,
@@ -477,7 +477,7 @@ func TestDropTypeDependentFields(t *testing.T) {
 			svc:    makeValidServiceCustom(setTypeLoadBalancer, setAllocateLoadBalancerNodePortsFalse),
 			patch:  patches(setTypeNodePort, setAllocateLoadBalancerNodePortsTrue),
 			expect: makeValidServiceCustom(setTypeNodePort, setAllocateLoadBalancerNodePortsTrue),
-		}, { // loadBalancerClass cases
+		}, { // LoadBalancerClass 相关用例
 			name:   "clear loadBalancerClass when set Service type LoadBalancer -> non LoadBalancer",
 			svc:    makeValidServiceCustom(setTypeLoadBalancer, setLoadBalancerClass),
 			patch:  setTypeClusterIP,

@@ -15,5 +15,4 @@ limitations under the License.
 */
 
 // Package service 提供 Service 资源的 REST 策略、存储实现、代理入口以及 ClusterIP/NodePort 分配管理。
-// 本包提供 Service API 对象的存储实现。
 package service

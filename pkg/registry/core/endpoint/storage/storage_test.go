@@ -68,9 +68,9 @@ func TestCreate(t *testing.T) {
 	endpoints := validNewEndpoints()
 	endpoints.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法
 		endpoints,
-		// invalid
+		// 非法
 		&api.Endpoints{
 			ObjectMeta: metav1.ObjectMeta{Name: "_-a123-a_"},
 		},
@@ -84,7 +84,7 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).AllowCreateOnUpdate()
 	test.TestUpdate(
-		// valid
+		// 合法
 		validNewEndpoints(),
 		// updateFunc
 		func(obj runtime.Object) runtime.Object {
@@ -130,17 +130,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewEndpoints(),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": "foo"},

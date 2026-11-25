@@ -14,7 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resourcequota provides Registry interface and it's REST
-// implementation for storing ResourceQuota api objects.
 // Package resourcequota 提供 ResourceQuota 主资源与 status 子资源的 REST 策略、校验和持久化实现。
 package resourcequota

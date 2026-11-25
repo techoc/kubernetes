@@ -35,26 +35,24 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// Allocators 聚合 Service 使用的各 IP Family ClusterIP 池与统一 NodePort 池，并负责把它们组织成可提交/回滚的事务。
-// Allocators encapsulates the various allocators (IPs, ports) used in
-// Services.
+// Allocators 聚合 Service 使用的各 IP Family ClusterIP 池与统一 NodePort 池，并负责组织可提交或回滚的事务。
 type Allocators struct {
 	serviceIPAllocatorsByFamily map[api.IPFamily]ipallocator.Interface
-	defaultServiceIPFamily      api.IPFamily // --service-cluster-ip-range[0]
+	defaultServiceIPFamily      api.IPFamily // 对应 --service-cluster-ip-range[0]
 	serviceNodePorts            portallocator.Interface
 }
 
-// ServiceNodePort includes protocol and port number of a service NodePort.
+// ServiceNodePort 记录 Service NodePort 的协议和端口号。
 type ServiceNodePort struct {
-	// The IP protocol for this port. Supports "TCP" and "UDP".
+	// 此端口使用的 IP 协议，支持 "TCP" 和 "UDP"。
 	Protocol api.Protocol
 
-	// The port on each node on which this service is exposed.
-	// Default is to auto-allocate a port if the ServiceType of this Service requires one.
+	// Service 在每个节点上暴露的端口。
+	// 若 Service 类型需要 NodePort 而未指定值，则自动分配。
 	NodePort int32
 }
 
-// This is a trasitionary function to facilitate service REST flattening.
+// 此过渡函数用于兼容 Service REST 存储结构的扁平化改造。
 func makeAlloc(defaultFamily api.IPFamily, ipAllocs map[api.IPFamily]ipallocator.Interface, portAlloc portallocator.Interface) Allocators {
 	return Allocators{
 		defaultServiceIPFamily:      defaultFamily,
@@ -74,23 +72,20 @@ func (al *Allocators) allocateCreate(service *api.Service, dryRun bool) (transac
 		}
 	}()
 
-	// Ensure IP family fields are correctly initialized.  We do it here, since
-	// we want this to be visible even when dryRun == true.
+	// 在此初始化 IP 地址族字段，确保 dryRun == true 时也能看到初始化结果。
 	if err := al.initIPFamilyFields(After{service}, Before{nil}); err != nil {
 		return nil, err
 	}
 
-	// Allocate ClusterIPs
-	//TODO(thockin): validation should not pass with empty clusterIP, but it
-	//does (and is tested!).  Fixing that all is a big PR and will have to
-	//happen later.
+	// 分配 ClusterIP。
+	//TODO(thockin): 校验本不应允许空 clusterIP，但当前会放行且已有测试覆盖。彻底修复改动较大，留待后续处理。
 	if txn, err := al.txnAllocClusterIPs(service, dryRun); err != nil {
 		return nil, err
 	} else {
 		result = append(result, txn)
 	}
 
-	// Allocate ports
+	// 分配端口。
 	if txn, err := al.txnAllocNodePorts(service, dryRun); err != nil {
 		return nil, err
 	} else {
@@ -101,73 +96,60 @@ func (al *Allocators) allocateCreate(service *api.Service, dryRun bool) (transac
 	return result, nil
 }
 
-// attempts to default service ip families according to cluster configuration
-// while ensuring that provided families are configured on cluster.
-// initIPFamilyFields 根据旧对象、IPFamilyPolicy 和集群双栈配置补全 IPFamilies/ClusterIPs，并在触及地址池前完成相关字段预校验。
+// initIPFamilyFields 根据旧对象、IPFamilyPolicy 和集群双栈配置补全 IPFamilies/ClusterIPs，并在访问地址池前完成字段预校验。
 func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 	oldService, service := before.Service, after.Service
 
-	// can not do anything here
+	// ExternalName 类型无需处理地址族。
 	if service.Spec.Type == api.ServiceTypeExternalName {
 		return nil
 	}
 
-	// We don't want to auto-upgrade (add an IP) or downgrade (remove an IP)
-	// PreferDualStack services following a cluster change to/from
-	// dual-stackness.
+	// 我们不希望因为集群在双栈与非双栈之间切换，就自动给 PreferDualStack 的 Service
+	// 升配（添加 IP）或降配（移除 IP）。
+	// 也就是说，只有同时满足下面两个条件时才会升配或降配：
 	//
-	// That means a PreferDualStack service will only be upgraded/downgraded
-	// when:
-	// - changing ipFamilyPolicy to "RequireDualStack" or "SingleStack" AND
-	// - adding or removing a secondary clusterIP or ipFamily
+	// - 把 ipFamilyPolicy 改成 "RequireDualStack" 或 "SingleStack"；
+	// - 并且新增或移除了次要的 clusterIP 或 ipFamily。
 	if isMatchingPreferDualStackClusterIPFields(after, before) {
-		return nil // nothing more to do.
+		return nil // 无需继续处理。
 	}
 
-	// If the user didn't specify ipFamilyPolicy, we can infer a default.  We
-	// don't want a static default because we want to make sure that we never
-	// change between single- and dual-stack modes with explicit direction, as
-	// provided by ipFamilyPolicy.  Consider these cases:
-	//   * Create (POST): If they didn't specify a policy we can assume it's
-	//     always SingleStack.
-	//   * Update (PUT): If they didn't specify a policy we need to adopt the
-	//     policy from before.  This is better than always assuming SingleStack
-	//     because a PUT that changes clusterIPs from 2 to 1 value but doesn't
-	//     specify ipFamily would work.
-	//   * Update (PATCH): If they didn't specify a policy it will adopt the
-	//     policy from before.
+	// 用户未指定 ipFamilyPolicy 时推断默认值。不设固定默认值，是为了在 ipFamilyPolicy
+	// 明确指示时避免意外切换单栈和双栈。分情况处理：
+	//   * 创建（POST）：未指定策略时视为 SingleStack。
+	//   * 更新（PUT）：未指定策略时沿用旧策略。相比一律假定 SingleStack，
+	//     这样允许不指定 ipFamily 的 PUT 将 clusterIPs 从两个值改为一个。
+	//   * 更新（PATCH）：未指定策略时沿用旧策略。
 	if service.Spec.IPFamilyPolicy == nil {
 		if oldService != nil && oldService.Spec.IPFamilyPolicy != nil {
-			// Update from an object with policy, use the old policy
+			// 从带策略的旧对象更新时沿用旧策略。
 			service.Spec.IPFamilyPolicy = oldService.Spec.IPFamilyPolicy
 		} else if service.Spec.ClusterIP == api.ClusterIPNone && len(service.Spec.Selector) == 0 {
-			// Special-case: headless + selectorless defaults to dual.
+			// 特例：无 Selector 的 Headless Service 默认采用双栈。
 			requireDualStack := api.IPFamilyPolicyRequireDualStack
 			service.Spec.IPFamilyPolicy = &requireDualStack
 		} else {
-			// create or update from an object without policy (e.g.
-			// ExternalName) to one that needs policy
+			// 从未指定策略的旧对象更新为需要策略的类型（如 ExternalName）。
 			singleStack := api.IPFamilyPolicySingleStack
 			service.Spec.IPFamilyPolicy = &singleStack
 		}
 	}
-	// Henceforth we can assume ipFamilyPolicy is set.
+	// 至此可以假定 ipFamilyPolicy 已设置。
 
-	// Do some loose pre-validation of the input.  This makes it easier in the
-	// rest of allocation code to not have to consider corner cases.
+	// 先做宽松预校验，使后续分配代码无需反复处理边界情况。
 	if el := validation.ValidateServiceClusterIPsRelatedFields(service, oldService); len(el) != 0 {
 		return apierrors.NewInvalid(api.Kind("Service"), service.Name, el)
 	}
 
-	//TODO(thockin): Move this logic to validation?
+	//TODO(thockin): 是否应将这部分逻辑移入校验流程？
 	el := make(field.ErrorList, 0)
 
-	// Update-only prep work.
+	// 仅更新时需要完成的预处理。
 	if oldService != nil {
 		if getIPFamilyPolicy(service) == api.IPFamilyPolicySingleStack {
-			// As long as ClusterIPs and IPFamilies have not changed, setting
-			// the policy to single-stack is clear intent.
-			// ClusterIPs[0] is immutable, so it is safe to keep.
+			// 只要 ClusterIPs 和 IPFamilies 未变，将策略设为单栈就表示用户明确意图如此。
+			// ClusterIPs[0] 不可变，因此可以安全保留。
 			if sameClusterIPs(oldService, service) && len(service.Spec.ClusterIPs) > 1 {
 				service.Spec.ClusterIPs = service.Spec.ClusterIPs[0:1]
 			}
@@ -175,8 +157,7 @@ func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 				service.Spec.IPFamilies = service.Spec.IPFamilies[0:1]
 			}
 		} else {
-			// If the policy is anything but single-stack AND they reduced these
-			// fields, it's an error.  They need to specify policy.
+			// 策略不是单栈却减少了这些字段时属于错误，用户必须明确指定策略。
 			if reducedClusterIPs(After{service}, Before{oldService}) {
 				el = append(el, field.Invalid(field.NewPath("spec", "ipFamilyPolicy"), service.Spec.IPFamilyPolicy,
 					"must be 'SingleStack' to release the secondary cluster IP"))
@@ -188,8 +169,7 @@ func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 		}
 	}
 
-	// Make sure ipFamilyPolicy makes sense for the provided ipFamilies and
-	// clusterIPs.  Further checks happen below - after the special cases.
+	// 确认 ipFamilyPolicy 与给定的 ipFamilies、clusterIPs 相符；特殊场景处理后还会继续校验。
 	if getIPFamilyPolicy(service) == api.IPFamilyPolicySingleStack {
 		if len(service.Spec.ClusterIPs) == 2 {
 			el = append(el, field.Invalid(field.NewPath("spec", "ipFamilyPolicy"), service.Spec.IPFamilyPolicy,
@@ -201,53 +181,44 @@ func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 		}
 	}
 
-	// Infer IPFamilies[] from ClusterIPs[].  Further checks happen below,
-	// after the special cases.
+	// 从 ClusterIPs 推导 IPFamilies；特殊场景处理后会继续校验。
 	for i, ip := range service.Spec.ClusterIPs {
 		if ip == api.ClusterIPNone {
 			break
 		}
 
-		// We previously validated that IPs are well-formed and that if an
-		// ipFamilies[] entry exists it matches the IP.
+		// 前面已校验 IP 格式正确，且已有的 ipFamilies 条目与该 IP 相符。
 		fam := familyOf(ip)
 
-		// If the corresponding family is not specified, add it.
+		// 未指定对应地址族时补充该族。
 		if i >= len(service.Spec.IPFamilies) {
-			// Families are checked more later, but this is a better error in
-			// this specific case (indicating the user-provided IP, rather
-			// than than the auto-assigned family).
+			// 地址族稍后会继续校验，但此处报错能明确指出是用户指定的 IP 不支持，而非自动分配的地址族不支持。
 			if _, found := al.serviceIPAllocatorsByFamily[fam]; !found {
 				el = append(el, field.Invalid(field.NewPath("spec", "clusterIPs").Index(i), service.Spec.ClusterIPs,
 					fmt.Sprintf("%s is not configured on this cluster", fam)))
 			} else {
-				// OK to infer.
+				// 可以安全推导。
 				service.Spec.IPFamilies = append(service.Spec.IPFamilies, fam)
 			}
 		}
 	}
 
-	// If we have validation errors, bail out now so we don't make them worse.
+	// 存在校验错误时立即返回，避免继续处理而扩大错误范围。
 	if len(el) > 0 {
 		return apierrors.NewInvalid(api.Kind("Service"), service.Name, el)
 	}
 
-	// Special-case: headless + selectorless.  This has to happen before other
-	// checks because it explicitly allows combinations of inputs that would
-	// otherwise be errors.
+	// 特例：无 Selector 的 Headless Service。必须先于其他校验处理，因为它允许一些通常会被拒绝的输入组合。
 	if service.Spec.ClusterIP == api.ClusterIPNone && len(service.Spec.Selector) == 0 {
-		// If IPFamilies was not set by the user, start with the default
-		// family.
+		// 用户未设置 IPFamilies 时，从默认地址族开始。
 		if len(service.Spec.IPFamilies) == 0 {
 			service.Spec.IPFamilies = []api.IPFamily{al.defaultServiceIPFamily}
 		}
 
-		// this follows headful services. With one exception on a single stack
-		// cluster the user is allowed to create headless services that has multi families
-		// the validation allows it
+		// 这里沿用普通 Service 的双栈行为；单栈集群是例外，校验允许用户创建多地址族的 Headless Service。
 		if len(service.Spec.IPFamilies) < 2 {
 			if *(service.Spec.IPFamilyPolicy) != api.IPFamilyPolicySingleStack {
-				// add the alt ipfamily
+				// 补充另一地址族。
 				if service.Spec.IPFamilies[0] == api.IPv4Protocol {
 					service.Spec.IPFamilies = append(service.Spec.IPFamilies, api.IPv6Protocol)
 				} else {
@@ -256,15 +227,13 @@ func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 			}
 		}
 
-		// nothing more needed here
+		// 此处无需继续处理。
 		return nil
 	}
 
-	//
-	// Everything below this MUST happen *after* the above special cases.
-	//
+	// 以下所有处理必须位于上述特殊场景之后。
 
-	// Demanding dual-stack on a non dual-stack cluster.
+	// 非双栈集群不能要求双栈。
 	if getIPFamilyPolicy(service) == api.IPFamilyPolicyRequireDualStack {
 		if len(al.serviceIPAllocatorsByFamily) < 2 {
 			el = append(el, field.Invalid(field.NewPath("spec", "ipFamilyPolicy"), service.Spec.IPFamilyPolicy,
@@ -272,25 +241,24 @@ func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 		}
 	}
 
-	// If there is a family requested then it has to be configured on cluster.
+	// 用户请求的地址族必须已在集群中配置。
 	for i, ipFamily := range service.Spec.IPFamilies {
 		if _, found := al.serviceIPAllocatorsByFamily[ipFamily]; !found {
 			el = append(el, field.Invalid(field.NewPath("spec", "ipFamilies").Index(i), ipFamily, "not configured on this cluster"))
 		}
 	}
 
-	// If we have validation errors, don't bother with the rest.
+	// 存在校验错误时无需继续处理。
 	if len(el) > 0 {
 		return apierrors.NewInvalid(api.Kind("Service"), service.Name, el)
 	}
 
-	// nil families, gets cluster default
+	// 地址族为空时使用集群默认值。
 	if len(service.Spec.IPFamilies) == 0 {
 		service.Spec.IPFamilies = []api.IPFamily{al.defaultServiceIPFamily}
 	}
 
-	// If this service is looking for dual-stack and this cluster does have two
-	// families, append the missing family.
+	// Service 需要双栈且集群配置了两个地址族时，补充缺失的地址族。
 	if *(service.Spec.IPFamilyPolicy) != api.IPFamilyPolicySingleStack &&
 		len(service.Spec.IPFamilies) == 1 &&
 		len(al.serviceIPAllocatorsByFamily) == 2 {
@@ -307,8 +275,7 @@ func (al *Allocators) initIPFamilyFields(after After, before Before) error {
 
 // txnAllocClusterIPs 记录本次新分配的 ClusterIP：提交时保留并记录日志，回滚时释放刚分配的地址。
 func (al *Allocators) txnAllocClusterIPs(service *api.Service, dryRun bool) (transaction, error) {
-	// clusterIPs that were allocated may need to be released in case of
-	// failure at a higher level.
+	// 本次新分配的 ClusterIP 可能在更高层失败，需要释放。
 	allocated, err := al.allocClusterIPs(service, dryRun)
 	if err != nil {
 		return nil, err
@@ -340,52 +307,46 @@ func (al *Allocators) txnAllocClusterIPs(service *api.Service, dryRun bool) (tra
 	return txn, nil
 }
 
-// allocates ClusterIPs for a service
-// allocClusterIPs 按 IPFamilies 逐个申请或保留 ClusterIP，并同时维护兼容字段 ClusterIP 与新字段 ClusterIPs。
+// allocClusterIPs 按 IPFamilies 逐个申请或保留 ClusterIP，并同步兼容字段 ClusterIP 与新字段 ClusterIPs。
 func (al *Allocators) allocClusterIPs(service *api.Service, dryRun bool) (map[api.IPFamily]string, error) {
-	// external name don't get ClusterIPs
+	// ExternalName 类型的 Service 不会分配 ClusterIP
 	if service.Spec.Type == api.ServiceTypeExternalName {
 		return nil, nil
 	}
 
-	// headless don't get ClusterIPs
+	// headless Service 不会分配 ClusterIP
 	if len(service.Spec.ClusterIPs) > 0 && service.Spec.ClusterIPs[0] == api.ClusterIPNone {
 		return nil, nil
 	}
 
 	toAlloc := make(map[api.IPFamily]string)
-	// at this stage, the only fact we know is that service has correct ip families
-	// assigned to it. It may have partial assigned ClusterIPs (Upgrade to dual stack)
-	// may have no ips at all. The below loop is meant to fix this
-	// (we also know that this cluster has these families)
+	// 此时只确定 Service 的 IP 地址族正确；ClusterIPs 可能部分分配（如升级双栈时），也可能全未分配。
+	// 下面循环负责补齐这些值；同时已知集群配置了这些地址族。
 
-	// if there is no slice to work with
+	// 切片为空时先按地址族数量初始化容量。
 	if service.Spec.ClusterIPs == nil {
 		service.Spec.ClusterIPs = make([]string, 0, len(service.Spec.IPFamilies))
 	}
 
 	for i, ipFamily := range service.Spec.IPFamilies {
 		if i > (len(service.Spec.ClusterIPs) - 1) {
-			service.Spec.ClusterIPs = append(service.Spec.ClusterIPs, "" /* just a marker */)
+			service.Spec.ClusterIPs = append(service.Spec.ClusterIPs, "" /* 仅作占位 */)
 		}
 
 		toAlloc[ipFamily] = service.Spec.ClusterIPs[i]
 	}
 
-	// allocate
+	// 执行分配
 	allocated, err := al.allocIPs(service, toAlloc, dryRun)
 
-	// set if successful
+	// 分配成功则写入 Service
 	if err == nil {
 		for family, ip := range allocated {
 			for i, check := range service.Spec.IPFamilies {
 				if family == check {
 					service.Spec.ClusterIPs[i] = ip
-					// while we technically don't need to do that testing rest does not
-					// go through conversion logic but goes through validation *sigh*.
-					// so we set ClusterIP here as well
-					// because the testing code expects valid (as they are output-ed from conversion)
-					// as it patches fields
+					// 严格说无需设置 ClusterIP，但测试 REST 不经过对象转换，而直接校验字段；
+					// 因此这里同步设置，满足转换后对象应满足的有效性假设。
 					if i == 0 {
 						service.Spec.ClusterIP = ip
 					}
@@ -402,7 +363,7 @@ func (al *Allocators) allocIPs(service *api.Service, toAlloc map[api.IPFamily]st
 	allocated := make(map[api.IPFamily]string)
 
 	for family, ip := range toAlloc {
-		allocator := al.serviceIPAllocatorsByFamily[family] // should always be there, as we pre validate
+		allocator := al.serviceIPAllocatorsByFamily[family] // 预校验后必然存在
 		if dryRun {
 			allocator = allocator.DryRun()
 		}
@@ -410,7 +371,7 @@ func (al *Allocators) allocIPs(service *api.Service, toAlloc map[api.IPFamily]st
 			var allocatedIP net.IP
 			var err error
 			if utilfeature.DefaultFeatureGate.Enabled(features.MultiCIDRServiceAllocator) {
-				// TODO: simplify this and avoid all this duplicate code
+				// TODO: 简化这段重复的类型分支逻辑。
 				svcAllocator, ok := allocator.(*ipallocator.MetaAllocator)
 				if ok {
 					allocatedIP, err = svcAllocator.AllocateNextService(service)
@@ -435,7 +396,7 @@ func (al *Allocators) allocIPs(service *api.Service, toAlloc map[api.IPFamily]st
 			}
 			var err error
 			if utilfeature.DefaultFeatureGate.Enabled(features.MultiCIDRServiceAllocator) {
-				// TODO: simplify this and avoid all this duplicate code
+				// TODO: 简化这段重复的类型分支逻辑。
 				svcAllocator, ok := allocator.(*ipallocator.MetaAllocator)
 				if ok {
 					err = svcAllocator.AllocateService(service, parsedIP)
@@ -455,8 +416,7 @@ func (al *Allocators) allocIPs(service *api.Service, toAlloc map[api.IPFamily]st
 	return allocated, nil
 }
 
-// releases clusterIPs per family
-// releaseIPs 按地址族释放 ClusterIP；若原地址族已从集群配置移除，则记录跳过而不是调用不存在的分配器。
+// releaseIPs 按地址族释放 ClusterIP；地址族已从集群配置移除时记录跳过，不调用不存在的分配器。
 func (al *Allocators) releaseIPs(toRelease map[api.IPFamily]string) (map[api.IPFamily]string, error) {
 	if toRelease == nil {
 		return nil, nil
@@ -466,8 +426,7 @@ func (al *Allocators) releaseIPs(toRelease map[api.IPFamily]string) (map[api.IPF
 	for family, ip := range toRelease {
 		allocator, ok := al.serviceIPAllocatorsByFamily[family]
 		if !ok {
-			// Maybe the cluster was previously configured for dual-stack,
-			// then switched to single-stack?
+			// 集群可能曾配置双栈，后来切换为单栈。
 			klog.InfoS("Not releasing ClusterIP because related family is not enabled", "clusterIP", ip, "family", family)
 			continue
 		}
@@ -487,23 +446,22 @@ func (al *Allocators) releaseIPs(toRelease map[api.IPFamily]string) (map[api.IPF
 
 // txnAllocNodePorts 用 PortAllocationOperation 立即预留新端口、延迟释放旧端口：Service 写入成功才提交释放，失败则撤销新预留。
 func (al *Allocators) txnAllocNodePorts(service *api.Service, dryRun bool) (transaction, error) {
-	// The allocator tracks dry-run-ness internally.
+	// 分配器内部自行跟踪 dry-run 状态。
 	nodePortOp := portallocator.StartOperation(al.serviceNodePorts, dryRun)
 
 	txn := callbackTransaction{
 		commit: func() {
 			nodePortOp.Commit()
-			// We don't NEED to call Finish() here, but for that package says
-			// to, so for future-safety, we will.
+			// 这里并非必须调用 Finish()，但分配器包要求调用；为保持后续兼容仍执行。
 			nodePortOp.Finish()
 		},
 		revert: func() {
-			// Weirdly named but this will revert if commit wasn't called
+			// 名字有些奇怪，但没有调用 commit 时它会回滚本次分配
 			nodePortOp.Finish()
 		},
 	}
 
-	// Allocate NodePorts, if needed.
+	// 如有需要，分配 NodePort。
 	if service.Spec.Type == api.ServiceTypeNodePort || service.Spec.Type == api.ServiceTypeLoadBalancer {
 		if err := initNodePorts(service, nodePortOp); err != nil {
 			txn.Revert()
@@ -511,7 +469,7 @@ func (al *Allocators) txnAllocNodePorts(service *api.Service, dryRun bool) (tran
 		}
 	}
 
-	// Handle ExternalTraffic related fields during service creation.
+	// 处理 Service 创建时与 ExternalTraffic 相关的字段。
 	if apiservice.NeedsHealthCheck(service) {
 		if err := al.allocHealthCheckNodePort(service, nodePortOp); err != nil {
 			txn.Revert()
@@ -527,19 +485,19 @@ func initNodePorts(service *api.Service, nodePortOp *portallocator.PortAllocatio
 	for i := range service.Spec.Ports {
 		servicePort := &service.Spec.Ports[i]
 		if servicePort.NodePort == 0 && !shouldAllocateNodePorts(service) {
-			// Don't allocate new ports, but do respect specific requests.
+			// 不分配新的端口，但会尊重用户显式指定的端口。
 			continue
 		}
 		allocatedNodePort := svcPortToNodePort[int(servicePort.Port)]
 		if allocatedNodePort == 0 {
-			// This will only scan forward in the service.Spec.Ports list because any matches
-			// before the current port would have been found in svcPortToNodePort. This is really
-			// looking for any user provided values.
+			// 只在 service.Spec.Ports 列表向后扫描，因为靠前的匹配已经在
+			// svcPortToNodePort 中找过了。这里实际上只是想找出
+			// 用户自行指定的取值。
 			np := findRequestedNodePort(int(servicePort.Port), service.Spec.Ports)
 			if np != 0 {
 				err := nodePortOp.Allocate(np)
 				if err != nil {
-					// TODO: when validation becomes versioned, this gets more complicated.
+					// TODO: 等校验逻辑按版本区分后，这里会变得更复杂。
 					el := field.ErrorList{field.Invalid(field.NewPath("spec", "ports").Index(i).Child("nodePort"), np, err.Error())}
 					return apierrors.NewInvalid(api.Kind("Service"), service.Name, el)
 				}
@@ -548,23 +506,23 @@ func initNodePorts(service *api.Service, nodePortOp *portallocator.PortAllocatio
 			} else {
 				nodePort, err := nodePortOp.AllocateNext()
 				if err != nil {
-					// TODO: what error should be returned here?  It's not a
-					// field-level validation failure (the field is valid), and it's
-					// not really an internal error.
+					// TODO: 这里该返回什么错误？它既不是
+					// 字段级校验失败（字段本身合法），
+					// 也不算真正的内部错误。
 					return apierrors.NewInternalError(fmt.Errorf("failed to allocate a nodePort: %w", err))
 				}
 				servicePort.NodePort = int32(nodePort)
 				svcPortToNodePort[int(servicePort.Port)] = nodePort
 			}
 		} else if int(servicePort.NodePort) != allocatedNodePort {
-			// TODO(xiangpengzhao): do we need to allocate a new NodePort in this case?
-			// Note: the current implementation is better, because it saves a NodePort.
+			// TODO(xiangpengzhao): 这种情况下需要分配新的 NodePort 吗？
+			// 注意：当前实现更好，因为它省下了一个 NodePort。
 			if servicePort.NodePort == 0 {
 				servicePort.NodePort = int32(allocatedNodePort)
 			} else {
 				err := nodePortOp.Allocate(int(servicePort.NodePort))
 				if err != nil {
-					// TODO: when validation becomes versioned, this gets more complicated.
+					// TODO: 等校验逻辑按版本区分后，这里会变得更复杂。
 					el := field.ErrorList{field.Invalid(field.NewPath("spec", "ports").Index(i).Child("nodePort"), servicePort.NodePort, err.Error())}
 					return apierrors.NewInvalid(api.Kind("Service"), service.Name, el)
 				}
@@ -575,18 +533,18 @@ func initNodePorts(service *api.Service, nodePortOp *portallocator.PortAllocatio
 	return nil
 }
 
-// allocHealthCheckNodePort allocates health check node port to service.
+// allocHealthCheckNodePort 为 Service 分配健康检查节点端口。
 func (al *Allocators) allocHealthCheckNodePort(service *api.Service, nodePortOp *portallocator.PortAllocationOperation) error {
 	healthCheckNodePort := service.Spec.HealthCheckNodePort
 	if healthCheckNodePort != 0 {
-		// If the request has a health check nodePort in mind, attempt to reserve it.
+		// 如果请求指定了健康检查节点端口，尝试预留该端口。
 		err := nodePortOp.Allocate(int(healthCheckNodePort))
 		if err != nil {
 			return fmt.Errorf("failed to allocate requested HealthCheck NodePort %v: %v",
 				healthCheckNodePort, err)
 		}
 	} else {
-		// If the request has no health check nodePort specified, allocate any.
+		// 如果请求没有指定健康检查节点端口，则分配任意可用端口。
 		healthCheckNodePort, err := nodePortOp.AllocateNext()
 		if err != nil {
 			return fmt.Errorf("failed to allocate a HealthCheck NodePort %v: %v", healthCheckNodePort, err)
@@ -607,23 +565,20 @@ func (al *Allocators) allocateUpdate(after After, before Before, dryRun bool) (t
 		}
 	}()
 
-	// Ensure IP family fields are correctly initialized.  We do it here, since
-	// we want this to be visible even when dryRun == true.
+	// 在此初始化 IP 地址族字段，确保 dryRun == true 时也能看到初始化结果。
 	if err := al.initIPFamilyFields(after, before); err != nil {
 		return nil, err
 	}
 
-	// Allocate ClusterIPs
-	//TODO(thockin): validation should not pass with empty clusterIP, but it
-	//does (and is tested!).  Fixing that all is a big PR and will have to
-	//happen later.
+	// 分配 ClusterIP。
+	//TODO(thockin): 校验本不应允许空 clusterIP，但当前会放行且已有测试覆盖。彻底修复改动较大，留待后续处理。
 	if txn, err := al.txnUpdateClusterIPs(after, before, dryRun); err != nil {
 		return nil, err
 	} else {
 		result = append(result, txn)
 	}
 
-	// Allocate ports
+	// 分配端口。
 	if txn, err := al.txnUpdateNodePorts(after, before, dryRun); err != nil {
 		return nil, err
 	} else {
@@ -642,11 +597,11 @@ func (al *Allocators) txnUpdateClusterIPs(after After, before Before, dryRun boo
 		return nil, err
 	}
 
-	// on failure: Any newly allocated IP must be released back
-	// on failure: Any previously allocated IP that would have been released,
-	//             must *not* be released
-	// on success: Any previously allocated IP that should be released, will be
-	//             released
+	// 失败时：新分配的 IP 必须释放回去
+	// 失败时：原本将要释放的已分配 IP
+	//             绝不能被释放
+	// 成功时：应当释放的已分配 IP 会被释放
+	//             掉
 	txn := callbackTransaction{
 		commit: func() {
 			if dryRun {
@@ -679,45 +634,43 @@ func (al *Allocators) txnUpdateClusterIPs(after After, before Before, dryRun boo
 	return txn, nil
 }
 
-// handles type change/upgrade/downgrade change type for an update service
-// this func does not perform actual release of clusterIPs. it returns
-// a map[family]ip for the caller to release when everything else has
-// executed successfully
+// 处理更新 Service 时的类型切换、双栈升配与降配。
+// 本函数不会真正释放 clusterIP，而是返回一个
+// map[family]ip，由调用方在其余操作全部成功
+// 完成后再执行释放。
 func (al *Allocators) updateClusterIPs(after After, before Before, dryRun bool) (allocated map[api.IPFamily]string, toRelease map[api.IPFamily]string, err error) {
 	oldService, service := before.Service, after.Service
 
-	// We don't want to auto-upgrade (add an IP) or downgrade (remove an IP)
-	// PreferDualStack services following a cluster change to/from
-	// dual-stackness.
+	// 我们不希望因为集群在双栈与非双栈之间切换，就自动给 PreferDualStack 的 Service
+	// 升配（添加 IP）或降配（移除 IP）。
+	// 也就是说，只有同时满足下面两个条件时才会升配或降配：
 	//
-	// That means a PreferDualStack service will only be upgraded/downgraded
-	// when:
-	// - changing ipFamilyPolicy to "RequireDualStack" or "SingleStack" AND
-	// - adding or removing a secondary clusterIP or ipFamily
+	// - 把 ipFamilyPolicy 改成 "RequireDualStack" 或 "SingleStack"；
+	// - 并且新增或移除了次要的 clusterIP 或 ipFamily。
 	if isMatchingPreferDualStackClusterIPFields(after, before) {
-		return allocated, toRelease, nil // nothing more to do.
+		return allocated, toRelease, nil // 无需继续处理。
 	}
 
-	// use cases:
-	// A: service changing types from ExternalName TO ClusterIP types ==> allocate all new
-	// B: service changing types from ClusterIP types TO ExternalName ==> release all allocated
-	// C: Service upgrading to dual stack  ==> partial allocation
-	// D: service downgrading from dual stack ==> partial release
+	// 使用场景：
+	// A：Service 从 ExternalName 变为 ClusterIP 类型 ==> 全部分配新 IP
+	// B：Service 从 ClusterIP 类型变为 ExternalName ==> 释放全部分配的 IP
+	// C：Service 升配为双栈 ==> 部分分配
+	// D：Service 从双栈降配 ==> 部分释放
 
-	// CASE A:
-	// Update service from ExternalName to non-ExternalName, should initialize ClusterIP.
+	// 场景 A：
+	// Service 从 ExternalName 变为非 ExternalName，需要初始化 ClusterIP。
 	if oldService.Spec.Type == api.ServiceTypeExternalName && service.Spec.Type != api.ServiceTypeExternalName {
 		allocated, err := al.allocClusterIPs(service, dryRun)
 		return allocated, nil, err
 	}
 
-	// if headless service then we bail out early (no clusterIPs management needed)
+	// headless Service 提前返回，无需管理 clusterIPs
 	if len(oldService.Spec.ClusterIPs) > 0 && oldService.Spec.ClusterIPs[0] == api.ClusterIPNone {
 		return nil, nil, nil
 	}
 
-	// CASE B:
-	// Update service from non-ExternalName to ExternalName, should release ClusterIP if exists.
+	// 场景 B：
+	// Service 从非 ExternalName 变为 ExternalName，若已有 ClusterIP 则需要释放。
 	if oldService.Spec.Type != api.ServiceTypeExternalName && service.Spec.Type == api.ServiceTypeExternalName {
 		toRelease = make(map[api.IPFamily]string)
 		for i, family := range oldService.Spec.IPFamilies {
@@ -729,19 +682,19 @@ func (al *Allocators) updateClusterIPs(after After, before Before, dryRun bool) 
 	upgraded := len(oldService.Spec.IPFamilies) == 1 && len(service.Spec.IPFamilies) == 2
 	downgraded := len(oldService.Spec.IPFamilies) == 2 && len(service.Spec.IPFamilies) == 1
 
-	// CASE C:
+	// 场景 C：
 	if upgraded {
 		toAllocate := make(map[api.IPFamily]string)
-		// if secondary ip was named, just get it. if not add a marker
+		// 如果次要 IP 有名称就直接取用，否则加一个占位标记
 		if len(service.Spec.ClusterIPs) < 2 {
 			service.Spec.ClusterIPs = append(service.Spec.ClusterIPs, "" /* marker */)
 		}
 
 		toAllocate[service.Spec.IPFamilies[1]] = service.Spec.ClusterIPs[1]
 
-		// allocate
+		// 执行分配
 		allocated, err := al.allocIPs(service, toAllocate, dryRun)
-		// set if successful
+		// 分配成功则写入 Service
 		if err == nil {
 			service.Spec.ClusterIPs[1] = allocated[service.Spec.IPFamilies[1]]
 		}
@@ -749,43 +702,42 @@ func (al *Allocators) updateClusterIPs(after After, before Before, dryRun bool) 
 		return allocated, nil, err
 	}
 
-	// CASE D:
+	// 场景 D：
 	if downgraded {
 		toRelease = make(map[api.IPFamily]string)
 		toRelease[oldService.Spec.IPFamilies[1]] = oldService.Spec.ClusterIPs[1]
-		// note: we don't release clusterIP, this is left to clean up in the action itself
+		// 注意：这里不释放 clusterIP，交由 action 自身的清理逻辑处理
 		return nil, toRelease, err
 	}
-	// it was not an upgrade nor downgrade
+	// 既不是升配也不是降配
 	return nil, nil, nil
 }
 
 func (al *Allocators) txnUpdateNodePorts(after After, before Before, dryRun bool) (transaction, error) {
 	oldService, service := before.Service, after.Service
 
-	// The allocator tracks dry-run-ness internally.
+	// 分配器内部自行跟踪 dry-run 状态。
 	nodePortOp := portallocator.StartOperation(al.serviceNodePorts, dryRun)
 
 	txn := callbackTransaction{
 		commit: func() {
 			nodePortOp.Commit()
-			// We don't NEED to call Finish() here, but for that package says
-			// to, so for future-safety, we will.
+			// 这里并非必须调用 Finish()，但分配器包要求调用；为保持后续兼容仍执行。
 			nodePortOp.Finish()
 		},
 		revert: func() {
-			// Weirdly named but this will revert if commit wasn't called
+			// 名字有些奇怪，但没有调用 commit 时它会回滚本次分配
 			nodePortOp.Finish()
 		},
 	}
 
-	// Update service from NodePort or LoadBalancer to ExternalName or ClusterIP, should release NodePort if exists.
+	// Service 从 NodePort/LoadBalancer 变为 ExternalName/ClusterIP，若已有 NodePort 则需要释放。
 	if (oldService.Spec.Type == api.ServiceTypeNodePort || oldService.Spec.Type == api.ServiceTypeLoadBalancer) &&
 		(service.Spec.Type == api.ServiceTypeExternalName || service.Spec.Type == api.ServiceTypeClusterIP) {
 		al.releaseNodePorts(oldService, nodePortOp)
 	}
 
-	// Update service from any type to NodePort or LoadBalancer, should update NodePort.
+	// Service 从任意类型变为 NodePort/LoadBalancer 时，需要更新 NodePort。
 	if service.Spec.Type == api.ServiceTypeNodePort || service.Spec.Type == api.ServiceTypeLoadBalancer {
 		if err := al.updateNodePorts(After{service}, Before{oldService}, nodePortOp); err != nil {
 			txn.Revert()
@@ -793,7 +745,7 @@ func (al *Allocators) txnUpdateNodePorts(after After, before Before, dryRun bool
 		}
 	}
 
-	// Handle ExternalTraffic related updates.
+	// 处理与 ExternalTraffic 相关的更新。
 	success, err := al.updateHealthCheckNodePort(After{service}, Before{oldService}, nodePortOp)
 	if !success || err != nil {
 		txn.Revert()
@@ -821,7 +773,7 @@ func (al *Allocators) updateNodePorts(after After, before Before, nodePortOp *po
 	for i := range newService.Spec.Ports {
 		servicePort := &newService.Spec.Ports[i]
 		if servicePort.NodePort == 0 && !shouldAllocateNodePorts(newService) {
-			// Don't allocate new ports, but do respect specific requests.
+			// 不分配新的端口，但会尊重用户显式指定的端口。
 			continue
 		}
 		nodePort := ServiceNodePort{Protocol: servicePort.Protocol, NodePort: servicePort.NodePort}
@@ -837,9 +789,9 @@ func (al *Allocators) updateNodePorts(after After, before Before, nodePortOp *po
 		} else {
 			nodePortNumber, err := nodePortOp.AllocateNext()
 			if err != nil {
-				// TODO: what error should be returned here?  It's not a
-				// field-level validation failure (the field is valid), and it's
-				// not really an internal error.
+				// TODO: 这里该返回什么错误？它既不是
+				// 字段级校验失败（字段本身合法），
+				// 也不算真正的内部错误。
 				return apierrors.NewInternalError(fmt.Errorf("failed to allocate a nodePort: %w", err))
 			}
 			servicePort.NodePort = int32(nodePortNumber)
@@ -853,8 +805,8 @@ func (al *Allocators) updateNodePorts(after After, before Before, nodePortOp *po
 
 	newNodePortsNumbers := collectServiceNodePorts(newService)
 
-	// The comparison loops are O(N^2), but we don't expect N to be huge
-	// (there's a hard-limit at 2^16, because they're ports; and even 4 ports would be a lot)
+	// 下面的比较循环是 O(N^2)，但 N 不会很大
+	// （端口数硬上限是 2^16，实际哪怕 4 个端口也算多了）
 	for _, oldNodePortNumber := range oldNodePortsNumbers {
 		if containsNumber(newNodePortsNumbers, oldNodePortNumber) {
 			continue
@@ -865,8 +817,8 @@ func (al *Allocators) updateNodePorts(after After, before Before, nodePortOp *po
 	return nil
 }
 
-// updateHealthCheckNodePort handles HealthCheckNodePort allocation/release
-// and adjusts HealthCheckNodePort during service update if needed.
+// updateHealthCheckNodePort 负责 HealthCheckNodePort 的分配与释放，
+// 并在 Service 更新时按需调整 HealthCheckNodePort。
 func (al *Allocators) updateHealthCheckNodePort(after After, before Before, nodePortOp *portallocator.PortAllocationOperation) (bool, error) {
 	oldService, service := before.Service, after.Service
 
@@ -876,16 +828,16 @@ func (al *Allocators) updateHealthCheckNodePort(after After, before Before, node
 	needsHealthCheckNodePort := apiservice.NeedsHealthCheck(service)
 
 	switch {
-	// Case 1: Transition from don't need HealthCheckNodePort to needs HealthCheckNodePort.
-	// Allocate a health check node port or attempt to reserve the user-specified one if provided.
-	// Insert health check node port into the service's HealthCheckNodePort field if needed.
+	// 情况 1：从不需要 HealthCheckNodePort 变为需要。
+	// 分配一个健康检查节点端口；若用户指定了端口，则尝试预留它。
+	// 如有需要，把健康检查节点端口写入 Service 的 HealthCheckNodePort 字段。
 	case !neededHealthCheckNodePort && needsHealthCheckNodePort:
 		if err := al.allocHealthCheckNodePort(service, nodePortOp); err != nil {
 			return false, apierrors.NewInternalError(err)
 		}
 
-	// Case 2: Transition from needs HealthCheckNodePort to don't need HealthCheckNodePort.
-	// Free the existing healthCheckNodePort and clear the HealthCheckNodePort field.
+	// 情况 2：从需要 HealthCheckNodePort 变为不需要。
+	// 释放已有的 healthCheckNodePort，并清空 HealthCheckNodePort 字段。
 	case neededHealthCheckNodePort && !needsHealthCheckNodePort:
 		nodePortOp.ReleaseDeferred(int(oldHealthCheckNodePort))
 	}
@@ -898,7 +850,7 @@ func (al *Allocators) releaseAllocatedResources(svc *api.Service) {
 	for _, nodePort := range collectServiceNodePorts(svc) {
 		err := al.serviceNodePorts.Release(nodePort)
 		if err != nil {
-			// these should be caught by an eventual reconciliation / restart
+			// 这些情况最终会被对账（reconciliation）或重启流程发现
 			utilruntime.HandleError(fmt.Errorf("Error releasing service %s node port %d: %v", svc.Name, nodePort, err))
 		}
 	}
@@ -908,21 +860,21 @@ func (al *Allocators) releaseAllocatedResources(svc *api.Service) {
 		if nodePort > 0 {
 			err := al.serviceNodePorts.Release(int(nodePort))
 			if err != nil {
-				// these should be caught by an eventual reconciliation / restart
+				// 这些情况最终会被对账（reconciliation）或重启流程发现
 				utilruntime.HandleError(fmt.Errorf("Error releasing service %s health check node port %d: %v", svc.Name, nodePort, err))
 			}
 		}
 	}
 }
 
-// releases allocated ClusterIPs for service that is about to be deleted
+// 释放即将删除的 Service 已分配的 ClusterIP
 func (al *Allocators) releaseClusterIPs(service *api.Service) (released map[api.IPFamily]string, err error) {
-	// external name don't get ClusterIPs
+	// ExternalName 类型的 Service 不会分配 ClusterIP
 	if service.Spec.Type == api.ServiceTypeExternalName {
 		return nil, nil
 	}
 
-	// headless don't get ClusterIPs
+	// headless Service 不会分配 ClusterIP
 	if len(service.Spec.ClusterIPs) > 0 && service.Spec.ClusterIPs[0] == api.ClusterIPNone {
 		return nil, nil
 	}
@@ -945,8 +897,8 @@ func (al *Allocators) Destroy() {
 	}
 }
 
-// This is O(N), but we expect haystack to be small;
-// so small that we expect a linear search to be faster
+// 这里是 O(N)，但预期 haystack 规模很小，
+// 小到线性查找反而更快
 func containsNumber(haystack []int, needle int) bool {
 	for _, v := range haystack {
 		if v == needle {
@@ -956,8 +908,8 @@ func containsNumber(haystack []int, needle int) bool {
 	return false
 }
 
-// This is O(N), but we expect serviceNodePorts to be small;
-// so small that we expect a linear search to be faster
+// 这里是 O(N)，但预期 serviceNodePorts 规模很小，
+// 小到线性查找反而更快
 func containsNodePort(serviceNodePorts []ServiceNodePort, serviceNodePort ServiceNodePort) bool {
 	for _, snp := range serviceNodePorts {
 		if snp == serviceNodePort {
@@ -967,8 +919,8 @@ func containsNodePort(serviceNodePorts []ServiceNodePort, serviceNodePort Servic
 	return false
 }
 
-// Loop through the service ports list, find one with the same port number and
-// NodePort specified, return this NodePort otherwise return 0.
+// 遍历 Service 端口列表，找到端口号相同且
+// NodePort 已指定的那一项并返回其 NodePort，否则返回 0。
 func findRequestedNodePort(port int, servicePorts []api.ServicePort) int {
 	for i := range servicePorts {
 		servicePort := servicePorts[i]
@@ -1000,8 +952,8 @@ func collectServiceNodePorts(service *api.Service) []int {
 	return servicePorts
 }
 
-// tests if two preferred dual-stack service have matching ClusterIPFields
-// assumption: old service is a valid, default service (e.g., loaded from store)
+// 判断两个 PreferDualStack 的 Service 的 ClusterIP 字段是否一致
+// 前提：old service 是一个合法、已完成默认化处理的 Service（例如从存储中读出）
 func isMatchingPreferDualStackClusterIPFields(after After, before Before) bool {
 	oldService, service := before.Service, after.Service
 
@@ -1013,19 +965,19 @@ func isMatchingPreferDualStackClusterIPFields(after After, before Before) bool {
 		return false
 	}
 
-	// if type mutated then it is an update
-	// that needs to run through the entire process.
+	// 如果类型发生了变化，就说明这是一次需要
+	// 走完整流程的更新。
 	if oldService.Spec.Type != service.Spec.Type {
 		return false
 	}
-	// both must be type that gets an IP assigned
+	// 两者都必须是会分配 IP 的类型
 	if service.Spec.Type != api.ServiceTypeClusterIP &&
 		service.Spec.Type != api.ServiceTypeNodePort &&
 		service.Spec.Type != api.ServiceTypeLoadBalancer {
 		return false
 	}
 
-	// both must be of IPFamilyPolicy==PreferDualStack
+	// 两者的 IPFamilyPolicy 都必须是 PreferDualStack
 	if service.Spec.IPFamilyPolicy != nil && *(service.Spec.IPFamilyPolicy) != api.IPFamilyPolicyPreferDualStack {
 		return false
 	}
@@ -1042,18 +994,18 @@ func isMatchingPreferDualStackClusterIPFields(after After, before Before) bool {
 		return false
 	}
 
-	// they match on
-	// Policy: preferDualStack
+	// 需要在以下方面保持一致：
+	// 策略：PreferDualStack
 	// ClusterIPs
 	// IPFamilies
 	return true
 }
 
-// Helper to avoid nil-checks all over.  Callers of this need to be checking
-// for an exact value.
+// 辅助函数，避免各处都做 nil 检查。调用方需要自行
+// 校验取到的值是否符合预期。
 func getIPFamilyPolicy(svc *api.Service) api.IPFamilyPolicy {
 	if svc.Spec.IPFamilyPolicy == nil {
-		return "" // callers need to handle this
+		return "" // 调用方需要自行处理该情况
 	}
 	return *svc.Spec.IPFamilyPolicy
 }
@@ -1075,7 +1027,7 @@ func sameClusterIPs(lhs, rhs *api.Service) bool {
 func reducedClusterIPs(after After, before Before) bool {
 	oldSvc, newSvc := before.Service, after.Service
 
-	if len(newSvc.Spec.ClusterIPs) == 0 { // Not specified
+	if len(newSvc.Spec.ClusterIPs) == 0 { // 未指定
 		return false
 	}
 	return len(newSvc.Spec.ClusterIPs) < len(oldSvc.Spec.ClusterIPs)
@@ -1098,13 +1050,13 @@ func sameIPFamilies(lhs, rhs *api.Service) bool {
 func reducedIPFamilies(after After, before Before) bool {
 	oldSvc, newSvc := before.Service, after.Service
 
-	if len(newSvc.Spec.IPFamilies) == 0 { // Not specified
+	if len(newSvc.Spec.IPFamilies) == 0 { // 未指定
 		return false
 	}
 	return len(newSvc.Spec.IPFamilies) < len(oldSvc.Spec.IPFamilies)
 }
 
-// Helper to get the IP family of a given IP.
+// 辅助函数：获取给定 IP 的 IP 族。
 func familyOf(ip string) api.IPFamily {
 	if netutils.IsIPv4String(ip) {
 		return api.IPv4Protocol

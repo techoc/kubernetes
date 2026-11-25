@@ -14,7 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package rangeallocation provides the Registry interface for storing RangeAllocation
-// api objects.
 // Package rangeallocation 定义 IP/端口等区间资源分配快照在持久化层的统一读取与写入接口。
 package rangeallocation

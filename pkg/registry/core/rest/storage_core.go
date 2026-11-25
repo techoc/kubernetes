@@ -429,7 +429,7 @@ func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryCl
 			secondaryClusterIPAllocator, err = ipallocator.New(&c.Services.SecondaryClusterIPRange, func(max int, rangeSpec string, offset int) (allocator.Interface, error) {
 				var mem allocator.Snapshottable
 				mem = allocator.NewAllocationMapWithOffset(max, rangeSpec, offset)
-				// TODO etcdallocator package to return a storage interface via the storageFactory
+				// TODO: 让 etcdallocator 包通过 storageFactory 返回 storage 接口
 				etcd, err := serviceallocator.NewEtcd(mem, "/ranges/secondaryserviceips", serviceStorageConfig.ForResource(api.Resource("serviceipallocations")))
 				if err != nil {
 					return nil, err
@@ -495,7 +495,7 @@ func (c *Config) newServiceIPAllocators() (registries rangeRegistries, primaryCl
 
 	nodePortAllocator, err = portallocator.New(c.Services.NodePortRange, func(max int, rangeSpec string, offset int) (allocator.Interface, error) {
 		mem := allocator.NewAllocationMapWithOffset(max, rangeSpec, offset)
-		// TODO etcdallocator package to return a storage interface via the storageFactory
+		// TODO: 让 etcdallocator 包通过 storageFactory 返回 storage 接口
 		etcd, err := serviceallocator.NewEtcd(mem, "/ranges/servicenodeports", serviceStorageConfig.ForResource(api.Resource("servicenodeportallocations")))
 		if err != nil {
 			return nil, err

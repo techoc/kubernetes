@@ -242,7 +242,7 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 			}
 			// 未指定策略时默认按 IfHealthyBudget 处理。
 			if pdb.Status.CurrentHealthy >= pdb.Status.DesiredHealthy && pdb.Status.DesiredHealthy > 0 {
-				// Delete the unhealthy pod, it doesn't count towards currentHealthy and desiredHealthy and we should not decrement disruptionsAllowed.
+				// 删除不健康的 Pod：它不计入 currentHealthy 与 desiredHealthy，因此不应再扣减 disruptionsAllowed，
 				// PDB 保护的应用当前没有受到实际中断，删除未 Ready 的 Pod 不会进一步影响应用可用性。
 				updateDeletionOptions = true
 				return nil
@@ -306,7 +306,7 @@ func (r *EvictionREST) Create(ctx context.Context, name string, obj runtime.Obje
 		return nil, err
 	}
 
-	// Success!
+	// 驱逐成功。
 	return &metav1.Status{Status: metav1.StatusSuccess}, nil
 }
 
@@ -348,7 +348,7 @@ func addConditionAndDeletePod(r *EvictionREST, ctx context.Context, name string,
 			return podObj, nil
 		}
 
-		podUpdatedObjectInfo := rest.DefaultUpdatedObjectInfo(nil, getLatestPod, conditionAppender) // order important
+		podUpdatedObjectInfo := rest.DefaultUpdatedObjectInfo(nil, getLatestPod, conditionAppender) // 顺序很重要
 
 		updatedPodObject, _, err := r.store.Update(ctx, name, podUpdatedObjectInfo, rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
 		if err != nil {

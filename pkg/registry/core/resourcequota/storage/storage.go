@@ -32,12 +32,11 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// REST 实现 ResourceQuota 主资源 CRUD；StatusREST 使用独立策略限制配额状态写入。
+// ResourceQuotaStorage 聚合主资源 REST 与 StatusREST：两者共享后端，但字段写权限不同。
 type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against resource quotas.
 // NewREST 构造主资源 Store，并复制配置创建 StatusStrategy Store，两个端点共享后端但具有不同字段写权限。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
@@ -66,44 +65,42 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	return &REST{store}, &StatusREST{store: &statusStore}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider 接口，返回该资源的一组简称。
 func (r *REST) ShortNames() []string {
 	return []string{"quota"}
 }
 
-// StatusREST implements the REST endpoint for changing the status of a resourcequota.
+// StatusREST 实现了修改 resourcequota 状态的 REST 端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
 
-// New creates a new ResourceQuota object.
+// New 创建一个新的 ResourceQuota 对象。
 func (r *StatusREST) New() runtime.Object {
 	return &api.ResourceQuota{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 store 与 REST 共享，因此这里不显式销毁它。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从存储中读取对象，这是支持 Patch 所必需的。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
 // Update 委托给 StatusStrategy 更新 Used/Conditions 等状态，并禁止通过 status 子资源隐式创建新配额。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 在调用底层存储时我们显式把 forceAllowCreate 设为 false，因为
+	// 子资源永远不应允许在更新时创建。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }

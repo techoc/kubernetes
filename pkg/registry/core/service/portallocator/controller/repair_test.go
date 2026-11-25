@@ -123,7 +123,7 @@ func TestRepairLeak(t *testing.T) {
 	}
 
 	r := NewRepair(0, fakeClient.CoreV1(), fakeClient.EventsV1(), *pr, registry)
-	// Run through the "leak detection holdoff" loops.
+	// 走完"泄漏检测等待"的若干轮循环。
 	for i := 0; i < (numRepairsBeforeLeakCleanup - 1); i++ {
 		if err := r.runOnce(); err != nil {
 			t.Fatal(err)
@@ -136,7 +136,7 @@ func TestRepairLeak(t *testing.T) {
 			t.Errorf("expected portallocator to still have leaked port")
 		}
 	}
-	// Run one more time to actually remove the leak.
+	// 再运行一次，真正清理掉该泄漏。
 	if err := r.runOnce(); err != nil {
 		t.Fatal(err)
 	}
@@ -184,19 +184,19 @@ func TestRepairWithExisting(t *testing.T) {
 				Ports: []corev1.ServicePort{{NodePort: 122}, {NodePort: 133}},
 			},
 		},
-		&corev1.Service{ // outside range, will be dropped
+		&corev1.Service{ // 超出范围，会被丢弃
 			ObjectMeta: metav1.ObjectMeta{Namespace: "three", Name: "three"},
 			Spec: corev1.ServiceSpec{
 				Ports: []corev1.ServicePort{{NodePort: 201}},
 			},
 		},
-		&corev1.Service{ // empty, ignored
+		&corev1.Service{ // 为空，被忽略
 			ObjectMeta: metav1.ObjectMeta{Namespace: "four", Name: "four"},
 			Spec: corev1.ServiceSpec{
 				Ports: []corev1.ServicePort{{}},
 			},
 		},
-		&corev1.Service{ // duplicate, dropped
+		&corev1.Service{ // 重复，被丢弃
 			ObjectMeta: metav1.ObjectMeta{Namespace: "five", Name: "five"},
 			Spec: corev1.ServiceSpec{
 				Ports: []corev1.ServicePort{{NodePort: 111}},
@@ -341,7 +341,7 @@ func TestCollectServiceNodePorts(t *testing.T) {
 	}
 }
 
-// Metrics helpers
+// 指标相关的辅助函数
 func clearMetrics() {
 	nodePortRepairPortErrors.Reset()
 	nodePortRepairReconcileErrors.Reset()

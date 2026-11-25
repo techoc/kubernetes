@@ -28,7 +28,7 @@ import (
 	apitesting "k8s.io/kubernetes/pkg/api/testing"
 	api "k8s.io/kubernetes/pkg/apis/core"
 
-	// ensure types are installed
+	// 确保类型已注册
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 

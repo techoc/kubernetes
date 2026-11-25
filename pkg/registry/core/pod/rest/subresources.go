@@ -83,7 +83,7 @@ func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object,
 		return nil, err
 	}
 	location.Path = net.JoinPreservingTrailingSlash(location.Path, proxyOpts.Path)
-	// Return a proxy handler that uses the desired transport, wrapped with additional proxy handling (to get URL rewriting, X-Forwarded-* headers, etc)
+	// 返回使用指定 Transport 的代理 Handler，并由代理层处理 URL 重写、X-Forwarded-* 请求头等逻辑。
 	return newThrottledUpgradeAwareProxyHandler(location, transport, true, false, responder), nil
 }
 
@@ -97,7 +97,7 @@ type AttachREST struct {
 	Authorizer  authorizer.UnconditionalAuthorizer
 }
 
-// Implement Connecter
+// 实现 rest.Connecter 接口。
 var _ = rest.Connecter(&AttachREST{})
 
 // New 返回一个空的 PodAttachOptions 对象。
@@ -105,10 +105,9 @@ func (r *AttachREST) New() runtime.Object {
 	return &api.PodAttachOptions{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 子资源拥有的资源。
 func (r *AttachREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与 Pod 主资源 REST 共享，因此不在此处显式销毁。
 }
 
 // Connect 返回处理 Pod Exec 请求的代理 Handler。
@@ -172,7 +171,7 @@ type ExecREST struct {
 	Authorizer  authorizer.UnconditionalAuthorizer
 }
 
-// Implement Connecter
+// 实现 rest.Connecter 接口。
 var _ = rest.Connecter(&ExecREST{})
 
 // New 返回一个空的 PodExecOptions 对象。
@@ -180,17 +179,15 @@ func (r *ExecREST) New() runtime.Object {
 	return &api.PodExecOptions{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 子资源拥有的资源。
 func (r *ExecREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与 Pod 主资源 REST 共享，因此不在此处显式销毁。
 }
 
-// Connect returns a handler for the pod exec proxy
 // Connect 校验 ExecOptions、授权和节点连接信息；必要时将 WebSocket stream-close 协议转换为 Kubelet 支持的内部流。
 func (r *ExecREST) Connect(ctx context.Context, name string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
-	// Forces a authz check for "create", if feature gate enabled.
-	// See: https://github.com/kubernetes/kubernetes/issues/133515
+	// Feature Gate 启用时，强制执行 "create" 动词的额外授权检查。
+	// 参见：https://github.com/kubernetes/kubernetes/issues/133515
 	if utilfeature.DefaultFeatureGate.Enabled(features.AuthorizePodWebsocketUpgradeCreatePermission) {
 		if err := ensureAuthorizedForVerb(ctx, r.Authorizer, "create"); err != nil {
 			return nil, err
@@ -210,14 +207,13 @@ func (r *ExecREST) Connect(ctx context.Context, name string, opts runtime.Object
 	nodeSupportsWebsockets := checkNodeSupportsWebsockets(connInfo.NodeFeatures)
 	handler := newThrottledUpgradeAwareProxyHandler(location, transport, false, true, responder)
 	if utilfeature.DefaultFeatureGate.Enabled(features.TranslateStreamCloseWebsocketRequests) {
-		// If the node supports websocket translation, revert to legacy proxy, and let kubelet handle it.
+		// 如果 Node 支持 WebSocket 协议转换，则回退到旧式代理，由 Kubelet 自行处理协议。
 		if utilfeature.DefaultFeatureGate.Enabled(features.ExtendWebSocketsToKubelet) && nodeSupportsWebsockets {
 			proxymetrics.IncWebSocketStreamingRequest(ctx, "exec", "proxied_to_kubelet")
 			return handler, nil
 		}
 		proxymetrics.IncWebSocketStreamingRequest(ctx, "exec", "translated_at_apiserver")
-		// Wrap the upgrade aware handler to implement stream translation
-		// for WebSocket/V5 upgrade requests.
+		// 使用支持 Upgrade 的 Handler 包装请求，为 WebSocket/V5 Upgrade 请求执行流协议转换。
 		streamOptions := translator.Options{
 			Stdin:  execOpts.Stdin,
 			Stdout: execOpts.Stdout,
@@ -231,12 +227,12 @@ func (r *ExecREST) Connect(ctx context.Context, name string, opts runtime.Object
 	return handler, nil
 }
 
-// NewConnectOptions returns the versioned object that represents exec parameters
+// NewConnectOptions 返回承载 Exec 参数的版本化 API 对象。
 func (r *ExecREST) NewConnectOptions() (runtime.Object, bool, string) {
 	return &api.PodExecOptions{}, false, ""
 }
 
-// ConnectMethods returns the methods supported by exec
+// ConnectMethods 返回 Exec 子资源支持的 HTTP 方法。
 func (r *ExecREST) ConnectMethods() []string {
 	return upgradeableMethods
 }
@@ -248,7 +244,7 @@ type PortForwardREST struct {
 	Authorizer  authorizer.UnconditionalAuthorizer
 }
 
-// Implement Connecter
+// 实现 rest.Connecter 接口。
 var _ = rest.Connecter(&PortForwardREST{})
 
 // New 返回一个空的 PodPortForwardOptions 对象。
@@ -256,10 +252,9 @@ func (r *PortForwardREST) New() runtime.Object {
 	return &api.PodPortForwardOptions{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在 API Server 关闭时清理该 REST 子资源拥有的资源。
 func (r *PortForwardREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 Store 与 Pod 主资源 REST 共享，因此不在此处显式销毁。
 }
 
 // NewConnectOptions 返回承载 PortForward 参数的版本化 API 对象。
@@ -275,8 +270,8 @@ func (r *PortForwardREST) ConnectMethods() []string {
 // Connect 返回处理 Pod PortForward 请求的代理 Handler。
 // Connect 根据 Node 能力选择旧式 Kubelet 代理或 API Server WebSocket 隧道转换，并记录对应请求指标。
 func (r *PortForwardREST) Connect(ctx context.Context, name string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
-	// Forces a authz check for "create", if feature gate enabled.
-	// See: https://github.com/kubernetes/kubernetes/issues/133515
+	// Feature Gate 启用时，强制执行 "create" 动词的额外授权检查。
+	// 参见：https://github.com/kubernetes/kubernetes/issues/133515
 	if utilfeature.DefaultFeatureGate.Enabled(features.AuthorizePodWebsocketUpgradeCreatePermission) {
 		if err := ensureAuthorizedForVerb(ctx, r.Authorizer, "create"); err != nil {
 			return nil, err
@@ -295,7 +290,7 @@ func (r *PortForwardREST) Connect(ctx context.Context, name string, opts runtime
 	nodeSupportsWebsockets := checkNodeSupportsWebsockets(connInfo.NodeFeatures)
 	handler := newThrottledUpgradeAwareProxyHandler(location, transport, false, true, responder)
 	if utilfeature.DefaultFeatureGate.Enabled(features.PortForwardWebsockets) {
-		// If the node supports websocket tunneling, revert to legacy proxy, and let kubelet handle it.
+		// 如果 Node 支持 WebSocket 隧道，则回退到旧式代理，由 Kubelet 自行处理协议。
 		if utilfeature.DefaultFeatureGate.Enabled(features.ExtendWebSocketsToKubelet) && nodeSupportsWebsockets {
 			proxymetrics.IncWebSocketStreamingRequest(ctx, "portforward", "proxied_to_kubelet")
 			return handler, nil
@@ -314,8 +309,7 @@ func newThrottledUpgradeAwareProxyHandler(location *url.URL, transport http.Roun
 	return handler
 }
 
-// 根据 NodeFeatures 判断目标 Kubelet 是否声明支持 WebSocket 扩展；这决定流式请求由 Kubelet 还是 API Server 做协议转换。
-// translation/tunneling, false otherwise.
+// checkNodeSupportsWebsockets 根据 NodeFeatures 判断目标 Kubelet 是否声明支持 WebSocket 扩展；这决定流式请求由 Kubelet 还是 API Server 做协议转换。
 func checkNodeSupportsWebsockets(nodeFeatures []string) bool {
 	nodeSupportsWebsockets := slices.Contains(nodeFeatures, string(features.ExtendWebSocketsToKubelet))
 	return nodeSupportsWebsockets

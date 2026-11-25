@@ -57,7 +57,7 @@ type Etcd struct {
 	destroyFn func()
 }
 
-// Etcd implements allocator.Interface and rangeallocation.RangeRegistry
+// Etcd 实现了 allocator.Interface 和 rangeallocation.RangeRegistry
 var _ allocator.Interface = &Etcd{}
 var _ rangeallocation.RangeRegistry = &Etcd{}
 
@@ -149,7 +149,6 @@ func (e *Etcd) ForEach(fn func(int)) {
 	e.alloc.ForEach(fn)
 }
 
-// tryUpdate performs a read-update to persist the latest snapshot state of allocation.
 // tryUpdate 在 etcd 的 GuaranteedUpdate 回调内先检查快照 ResourceVersion；本地版本过期时先 Restore，再执行分配并写回新快照。
 func (e *Etcd) tryUpdate(fn func() error) error {
 	err := e.storage.GuaranteedUpdate(context.TODO(), e.baseKey, &api.RangeAllocation{}, true, nil,

@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/net"
 )
 
-// TestDryRunAllocate tests the Allocate function in dry run mode
 // TestDryRunAllocate 确认 DryRun 操作只在事务本地记录指定端口，不修改真实 allocator 的占用状态。
 func TestDryRunAllocate(t *testing.T) {
 	pr, err := net.ParsePortRange("10000-10200")
@@ -30,7 +29,7 @@ func TestDryRunAllocate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Allocate some ports before calling
+	// 调用之前先分配若干端口
 	previouslyAllocated := []int{10000, 10010, 10020}
 	r, err := NewInMemory(*pr)
 	if err != nil {
@@ -41,7 +40,7 @@ func TestDryRunAllocate(t *testing.T) {
 	}
 	freeAtStart := r.Free()
 
-	// Do some allocations with a dry run operation
+	// 用 dry-run 操作再做若干次分配
 	toAllocate := []int{
 		10000,
 		10030,
@@ -62,14 +61,13 @@ func TestDryRunAllocate(t *testing.T) {
 		}
 	}
 
-	// Make sure no port allocations were actually made by the dry run
+	// 确认 dry-run 没有真正分配任何端口
 	freeAtEnd := r.Free()
 	if freeAtStart != freeAtEnd {
 		t.Errorf("expected %v free ports but got %v", freeAtStart, freeAtEnd)
 	}
 }
 
-// TestDryRunAllocateNext tests the AllocateNext function in dry run mode
 // TestDryRunAllocateNext 验证自动分配 DryRun 会生成可用于校验的候选端口，但不会消耗真实端口池。
 func TestDryRunAllocateNext(t *testing.T) {
 	pr, err := net.ParsePortRange("10000-10200")
@@ -77,7 +75,7 @@ func TestDryRunAllocateNext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Allocate some ports before calling
+	// 调用之前先分配若干端口
 	previouslyAllocated := []int{10000, 10010, 10020}
 	r, err := NewInMemory(*pr)
 	if err != nil {
@@ -88,7 +86,7 @@ func TestDryRunAllocateNext(t *testing.T) {
 	}
 	freeAtStart := r.Free()
 
-	// AllocateNext without a previously unused dry run operation
+	// 在一个全新（未被使用过）的 dry-run 操作上调用 AllocateNext
 	op := StartOperation(r, true)
 	port, err := op.AllocateNext()
 	if port == 0 {
@@ -98,12 +96,12 @@ func TestDryRunAllocateNext(t *testing.T) {
 		t.Errorf("expected no error but got: %v", err)
 	}
 
-	// Try to allocate the returned port using the same operation
+	// 用同一个操作尝试分配刚才返回的端口
 	if e, a := ErrAllocated, op.Allocate(port); e != a {
 		t.Errorf("expected %v but got: %v", e, a)
 	}
 
-	// AllocateNext with a previously used dry run operation
+	// 在已经被使用过的 dry-run 操作上调用 AllocateNext
 	op = StartOperation(r, true)
 	_ = op.Allocate(12345)
 	port, err = op.AllocateNext()
@@ -117,7 +115,7 @@ func TestDryRunAllocateNext(t *testing.T) {
 		t.Errorf("expected no error but got: %v", err)
 	}
 
-	// Make sure no port allocations were actually made by the dry run
+	// 确认 dry-run 没有真正分配任何端口
 	freeAtEnd := r.Free()
 	if freeAtStart != freeAtEnd {
 		t.Errorf("expected %v free ports but got %v", freeAtStart, freeAtEnd)

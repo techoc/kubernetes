@@ -58,7 +58,7 @@ func TestStrategy(t *testing.T) {
 		t.Errorf("Unexpected error validating %v", errs)
 	}
 
-	// ensure we do not change generation for non-spec updates
+	// 确认非 spec 更新不会改变 generation
 	updatedLabel := podTemplate.DeepCopy()
 	updatedLabel.Labels = map[string]string{"a": "true"}
 	Strategy.PrepareForUpdate(ctx, updatedLabel, podTemplate)
@@ -71,7 +71,7 @@ func TestStrategy(t *testing.T) {
 	updatedTemplate.Generation = 999
 	updatedTemplate.Template.Spec.RestartPolicy = api.RestartPolicyNever
 
-	// ensure generation is updated for spec changes
+	// 确认 spec 变化会更新 generation
 	Strategy.PrepareForUpdate(ctx, updatedTemplate, podTemplate)
 	if updatedTemplate.Generation != 2 {
 		t.Errorf("expected Generation=2, got %d", updatedTemplate.Generation)

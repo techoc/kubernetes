@@ -36,33 +36,32 @@ type ProxyREST struct {
 	ProxyTransport http.RoundTripper
 }
 
-// Implement Connecter
+// 实现 Connecter 接口。
 var _ = rest.Connecter(&ProxyREST{})
 
 var proxyMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 
-// New returns an empty service resource
+// New 返回空的 Service 代理资源。
 func (r *ProxyREST) New() runtime.Object {
 	return &api.ServiceProxyOptions{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源；当前没有底层 Store 需要显式销毁。
 func (r *ProxyREST) Destroy() {
-	// Given no underlying store, we don't destroy anything
-	// here explicitly.
+	// 当前没有底层 Store，无需在此显式销毁资源。
 }
 
-// ConnectMethods returns the list of HTTP methods that can be proxied
+// ConnectMethods 返回允许代理的 HTTP 方法列表。
 func (r *ProxyREST) ConnectMethods() []string {
 	return proxyMethods
 }
 
-// NewConnectOptions returns versioned resource that represents proxy parameters
+// NewConnectOptions 返回表示代理参数的资源，并指定从请求路径解析参数。
 func (r *ProxyREST) NewConnectOptions() (runtime.Object, bool, string) {
 	return &api.ServiceProxyOptions{}, true, "path"
 }
 
-// Connect returns a handler for the service proxy
+// Connect 返回 Service 代理 Handler。
 // Connect 校验代理选项，解析 Service 对应的可用后端地址并拼接路径，最终返回支持 HTTP Upgrade 的限速代理 Handler。
 func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	proxyOpts, ok := opts.(*api.ServiceProxyOptions)
@@ -74,7 +73,7 @@ func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object,
 		return nil, err
 	}
 	location.Path = net.JoinPreservingTrailingSlash(location.Path, proxyOpts.Path)
-	// Return a proxy handler that uses the desired transport, wrapped with additional proxy handling (to get URL rewriting, X-Forwarded-* headers, etc)
+	// 使用指定的 Transport，并叠加 URL 重写、X-Forwarded-* 请求头等代理处理。
 	return newThrottledUpgradeAwareProxyHandler(location, transport, true, false, responder), nil
 }
 

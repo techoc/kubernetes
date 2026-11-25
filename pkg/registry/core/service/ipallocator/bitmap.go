@@ -26,11 +26,9 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// Range 表示可原子分配的一段连续 IP 地址范围。内部将 CIDR 地址映射为偏移位图。
+// Range 将一段连续 IP 地址范围映射为偏移位图，可原子地完成分配。
 // 例如 10.0.0.0/24 共包含 256 个地址，排除网络地址和广播地址后，可分配地址数为 254（即 r.max）。
 // 位图偏移量从可分配地址起点开始编号：偏移量 0 对应首个可用地址，最后一位对应末尾可用地址。
-//
-// Range 将 IP CIDR 映射成偏移位图，负责排除不可分配地址、持久化快照并提供并发安全的分配操作。
 type Range struct {
 	net *net.IPNet
 	// base 缓存 CIDR 起始 IP 的 big.Int 表示。
@@ -47,8 +45,7 @@ type Range struct {
 
 var _ Interface = (*Range)(nil)
 
-// New 根据 net.IPNet 创建 IP 地址范围，并调用 allocatorFactory 构建底层分配存储。
-// New 根据 CIDR 计算可分配主机数量及动态/保留区边界，并创建底层位图分配器。
+// New 根据 CIDR 计算可分配主机数量及动态/保留区边界，并调用 allocatorFactory 创建底层分配存储。
 func New(cidr *net.IPNet, allocatorFactory allocator.AllocatorWithOffsetFactory) (*Range, error) {
 	max := netutils.RangeSize(cidr)
 	base := netutils.BigForIP(cidr.IP)
@@ -83,7 +80,7 @@ func New(cidr *net.IPNet, allocatorFactory allocator.AllocatorWithOffsetFactory)
 		base:    base,
 		max:     maximum(0, int(max)),
 		family:  family,
-		metrics: &emptyMetricsRecorder{}, // disabled by default
+		metrics: &emptyMetricsRecorder{}, // 默认禁用指标记录。
 	}
 
 	offset := calculateRangeOffset(cidr)
@@ -167,8 +164,7 @@ func (r *Range) allocate(ip net.IP, dryRun bool) error {
 		return &ErrNotInRange{ip, r.net.String()}
 	}
 	if dryRun {
-		// Don't bother to check whether the IP is actually free. It's racy and
-		// not worth the effort to plumb any further.
+		// 不必额外检查 IP 是否空闲：该检查存在竞争窗口，进一步传递状态也无法保证后续分配成功。
 		return nil
 	}
 
@@ -253,7 +249,7 @@ func (r *Range) release(ip net.IP, dryRun bool) error {
 // ForEach 对每个已分配的 IP 调用指定回调函数。
 func (r *Range) ForEach(fn func(net.IP)) {
 	r.alloc.ForEach(func(offset int) {
-		ip, _ := netutils.GetIndexedIP(r.net, offset+1) // +1 because Range doesn't store IP 0
+		ip, _ := netutils.GetIndexedIP(r.net, offset+1) // 加 1 是因为 Range 不存储索引为 0 的 IP。
 		fn(ip)
 	})
 }
@@ -325,17 +321,15 @@ func (r *Range) EnableMetrics() {
 	r.metrics = &metricsRecorder{}
 }
 
-// calculateIPOffset 计算 IP 相对于 base 的整数偏移量，使 base + offset = ip；要求 ip 不小于 base。
-// calculateIPOffset 将 IP 地址映射成相对于 CIDR 起始地址的位图偏移量。
+// calculateIPOffset 将 IP 地址映射成相对于 base 的整数偏移量，使 base + offset = ip；要求 ip 不小于 base。
 func calculateIPOffset(base *big.Int, ip net.IP) int {
 	return int(big.NewInt(0).Sub(netutils.BigForIP(ip), base).Int64())
 }
 
-// calculateRangeOffset 根据 CIDR 大小估算静态分配预留区的长度，计算公式为 min(max(min, cidrSize/step), max)。
-// 结果不会小于 min 或大于 max，并在两者之间随 CIDR 大小阶梯式变化；任一参数无效时返回 0。
 // calculateRangeOffset 根据 CIDR 地址总量计算静态预留区大小，自动分配优先使用动态区。
+// 预留区长度按 min(max(min, cidrSize/step), max) 计算，并随 CIDR 大小阶梯式变化。
 func calculateRangeOffset(cidr *net.IPNet) int {
-	// default values for min(max($min, cidrSize/$step), $max)
+	// min(max($min, cidrSize/$step), $max) 的默认参数。
 	const (
 		min  = 16
 		max  = 256
@@ -359,7 +353,7 @@ func calculateRangeOffset(cidr *net.IPNet) int {
 	return int(offset)
 }
 
-// dryRunRange is a shim to satisfy Interface without persisting state.
+// dryRunRange 是 Interface 的试运行适配层，不持久化实际状态。
 type dryRunRange struct {
 	real *Range
 }

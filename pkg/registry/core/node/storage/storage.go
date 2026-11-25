@@ -81,7 +81,7 @@ func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.Updat
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
@@ -91,7 +91,6 @@ func (r *StatusREST) ConvertToTable(ctx context.Context, object runtime.Object, 
 }
 
 // NewStorage 创建集群级 Node REST 存储，并构造从 Node 地址/端口推导 Kubelet 连接信息的 Getter。
-// NewStorage returns a NodeStorage object that will work against nodes.
 func NewStorage(optsGetter generic.RESTOptionsGetter, kubeletClientConfig client.KubeletClientConfig, proxyTransport http.RoundTripper) (*NodeStorage, error) {
 	// genericregistry.Store 提供通用 CRUD；Node 特有的对象类型、字段选择器和写入策略在这里注入。
 	store := &genericregistry.Store{

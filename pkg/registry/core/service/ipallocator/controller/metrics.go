@@ -29,9 +29,8 @@ const (
 )
 
 var (
-	// clusterIPRepairIPErrors indicates the number of errors found by the repair loop
-	// divided by the type of error:
-	// leak, repair, full, outOfRange, duplicate, invalid, unknown
+	// clusterIPRepairIPErrors 记录修复循环发现的错误数量，按错误类型区分：
+	// leak、repair、full、outOfRange、duplicate、invalid、unknown。
 	clusterIPRepairIPErrors = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -42,8 +41,7 @@ var (
 		},
 		[]string{"type"},
 	)
-	// clusterIPRepairReconcileErrors indicates the number of times the repair loop has failed to repair
-	// the errors it detected.
+	// clusterIPRepairReconcileErrors 记录修复循环未能修复其所发现错误的次数。
 	clusterIPRepairReconcileErrors = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Namespace:      namespace,

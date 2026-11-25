@@ -40,34 +40,32 @@ type ProxyREST struct {
 	ProxyTransport http.RoundTripper
 }
 
-// Implement Connecter
+// 实现 Connecter
 var _ = rest.Connecter(&ProxyREST{})
 
 var proxyMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 
-// New returns an empty nodeProxyOptions object.
+// New 返回一个空的 nodeProxyOptions 对象。
 func (r *ProxyREST) New() runtime.Object {
 	return &api.NodeProxyOptions{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *ProxyREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 store 与 REST 共享，因此这里不显式销毁它。
 }
 
-// ConnectMethods returns the list of HTTP methods that can be proxied
+// ConnectMethods 返回可以被代理的 HTTP 方法列表。
 func (r *ProxyREST) ConnectMethods() []string {
 	return proxyMethods
 }
 
-// NewConnectOptions returns versioned resource that represents proxy parameters
+// NewConnectOptions 返回表示代理参数的版本化资源。
 func (r *ProxyREST) NewConnectOptions() (runtime.Object, bool, string) {
 	return &api.NodeProxyOptions{}, true, "path"
 }
 
-// Connect returns a handler for the node proxy
-// Connect 校验代理选项，解析 Node 的 Kubelet 地址并拼接相对路径，最后返回带带宽限制的升级感知代理。
+// Connect 校验代理选项，解析 Node 的 Kubelet 地址并拼接相对路径，返回带带宽限制的升级感知代理。
 func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object, responder rest.Responder) (http.Handler, error) {
 	proxyOpts, ok := opts.(*api.NodeProxyOptions)
 	if !ok {
@@ -80,7 +78,7 @@ func (r *ProxyREST) Connect(ctx context.Context, id string, opts runtime.Object,
 	}
 	// 保留末尾斜杠语义拼接用户指定路径，避免代理到 Kubelet 时改变相对路径解析结果。
 	location.Path = net.JoinPreservingTrailingSlash(location.Path, proxyOpts.Path)
-	// Return a proxy handler that uses the desired transport, wrapped with additional proxy handling (to get URL rewriting, X-Forwarded-* headers, etc)
+	// 返回使用指定 transport 的代理处理函数，外面再包一层代理处理逻辑（用于 URL 重写、X-Forwarded-* 头部等）
 	return newThrottledUpgradeAwareProxyHandler(location, transport, true, false, responder), nil
 }
 

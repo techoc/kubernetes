@@ -52,12 +52,11 @@ type rcStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating Replication Controller objects.
+// Strategy 是创建和更新 Replication Controller 对象时应用的默认逻辑。
 var Strategy = rcStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// DefaultGarbageCollectionPolicy returns OrphanDependents for v1 for backwards compatibility,
-// and DeleteDependents for all other versions.
-// core/v1 为兼容旧客户端默认孤儿化删除；其他 API 版本默认级联删除受该 Controller 管理的 Pod。
+// DefaultGarbageCollectionPolicy 为 core/v1 返回 OrphanDependents 以兼容旧客户端，
+// 其他 API 版本返回 DeleteDependents，默认级联删除受该 Controller 管理的 Pod。
 func (rcStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.GarbageCollectionPolicy {
 	var groupVersion schema.GroupVersion
 	if requestInfo, found := genericapirequest.RequestInfoFrom(ctx); found {
@@ -65,20 +64,19 @@ func (rcStrategy) DefaultGarbageCollectionPolicy(ctx context.Context) rest.Garba
 	}
 	switch groupVersion {
 	case corev1.SchemeGroupVersion:
-		// for back compatibility
+		// 兼容旧行为
 		return rest.OrphanDependents
 	default:
 		return rest.DeleteDependents
 	}
 }
 
-// NamespaceScoped returns true because all Replication Controllers need to be within a namespace.
+// NamespaceScoped 返回 true，因为所有 Replication Controller 都必须属于某个命名空间。
 func (rcStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回由策略重置、且用户不应修改的字段集合。
 func (rcStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -89,8 +87,7 @@ func (rcStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return fields
 }
 
-// PrepareForCreate clears the status of a replication controller before creation.
-// 创建时由 API Server 清空控制器 Status、初始化 Generation，并按 Feature Gate 清理 PodTemplate 中不可用的字段。
+// PrepareForCreate 在创建前清空控制器的 Status：由 API Server 初始化 Generation，并按 Feature Gate 清理 PodTemplate 中不可用的字段。
 func (rcStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	controller := obj.(*api.ReplicationController)
 	controller.Status = api.ReplicationControllerStatus{}
@@ -100,39 +97,36 @@ func (rcStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	pod.DropDisabledTemplateFields(controller.Spec.Template, nil)
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
-// 普通更新不能改写控制器 Status；同时清理禁用的模板字段，并仅在 Spec 发生语义变化时递增 Generation。
+// PrepareForUpdate 清理最终用户不允许在更新时设置的字段：普通更新不能改写控制器 Status，同时清理禁用的模板字段，并仅在 Spec 发生语义变化时递增 Generation。
 func (rcStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newController := obj.(*api.ReplicationController)
 	oldController := old.(*api.ReplicationController)
-	// update is not allowed to set status
+	// 更新时不允许设置 status
 	newController.Status = oldController.Status
 
 	pod.DropDisabledTemplateFields(newController.Spec.Template, oldController.Spec.Template)
 
-	// Any changes to the spec increment the generation number, any changes to the
-	// status should reflect the generation number of the corresponding object. We push
-	// the burden of managing the status onto the clients because we can't (in general)
-	// know here what version of spec the writer of the status has seen. It may seem like
-	// we can at first -- since obj contains spec -- but in the future we will probably make
-	// status its own object, and even if we don't, writes may be the result of a
-	// read-update-write loop, so the contents of spec may not actually be the spec that
-	// the controller has *seen*.
+	// 对 spec 的任何修改都会递增 generation 号，对 status 的修改则应反映对应对象的
+	// generation 号。我们把管理 status 的负担交给客户端，因为在这里通常无法得知
+	// 中包含 spec —— 但未来我们很可能会把 status 独立成单独的对象；即便不这么做，
+	// status 的写入者看到的是哪个版本的 spec。乍看之下似乎可以做到 —— 因为 obj
+	// 写入也可能来自读取-修改-写入的循环，此时 spec 的内容未必是控制器真正
+	// *看到* 的那个 spec。
 	if !apiequality.Semantic.DeepEqual(oldController.Spec, newController.Spec) {
 		newController.Generation = oldController.Generation + 1
 	}
 }
 
-// Validate validates a new replication controller.
+// Validate 校验新建的 replication controller。
 func (rcStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	controller := obj.(*api.ReplicationController)
 	opts := pod.GetValidationOptionsFromPodTemplate(controller.Spec.Template, nil)
 
-	// Run imperative validation
+	// 执行命令式校验
 	return corevalidation.ValidateReplicationController(controller, opts)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建给定对象时的警告信息。
 func (rcStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newRC := obj.(*api.ReplicationController)
 	var warnings []string
@@ -143,18 +137,16 @@ func (rcStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []st
 	return warnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验之后规范化对象。
 func (rcStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for replication controllers; this means a POST is
-// needed to create one.
+// AllowCreateOnUpdate 对 replication controllers 为 false，也就是说必须用 POST 创建。
 func (rcStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
-// 更新校验结合新旧 PodTemplate 判断兼容特性；历史转换失败注解中标记的不可转换 Selector 不允许被意外改写。
+// ValidateUpdate 是面向最终用户的默认更新校验：结合新旧 PodTemplate 判断兼容特性，历史转换失败注解中标记的不可转换 Selector 不允许被意外改写。
 func (rcStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	oldRc := old.(*api.ReplicationController)
 	newRc := obj.(*api.ReplicationController)
@@ -182,7 +174,7 @@ func (rcStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) f
 	return errs
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新的警告信息。
 func (rcStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	oldRc := old.(*api.ReplicationController)
@@ -197,7 +189,6 @@ func (rcStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
 
-// ControllerToSelectableFields returns a field set that represents the object.
 // ControllerToSelectableFields 暴露标准 ObjectMeta 字段和 status.replicas，供 FieldSelector 按副本状态过滤。
 func ControllerToSelectableFields(controller *api.ReplicationController) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&controller.ObjectMeta, true)
@@ -207,7 +198,7 @@ func ControllerToSelectableFields(controller *api.ReplicationController) fields.
 	return generic.MergeFieldsSets(objectMetaFieldsSet, controllerSpecificFieldsSet)
 }
 
-// GetAttrs returns labels and fields of a given object for filtering purposes.
+// GetAttrs 返回给定对象用于过滤的 labels 和 fields。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	rc, ok := obj.(*api.ReplicationController)
 	if !ok {
@@ -216,9 +207,6 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(rc.ObjectMeta.Labels), ControllerToSelectableFields(rc), nil
 }
 
-// MatchController is the filter used by the generic etcd backend to route
-// watch events from etcd to clients of the apiserver only interested in specific
-// labels/fields.
 // MatchController 将 LabelSelector/FieldSelector 与属性提取函数组合成 etcd LIST/WATCH 的筛选谓词。
 func MatchController(label labels.Selector, field fields.Selector) apistorage.SelectionPredicate {
 	return apistorage.SelectionPredicate{
@@ -232,11 +220,10 @@ type rcStatusStrategy struct {
 	rcStrategy
 }
 
-// StatusStrategy is the default logic invoked when updating object status.
+// StatusStrategy 是更新对象 status 时调用的默认逻辑。
 var StatusStrategy = rcStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回由策略重置、且用户不应修改的字段集合。
 func (rcStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -245,11 +232,11 @@ func (rcStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set
 	}
 }
 
-// /status 只允许控制器回写 Status；Spec 从旧对象恢复，避免状态更新夹带副本数或 PodTemplate 修改。
+// PrepareForUpdate 针对 /status 只允许控制器回写 Status：Spec 从旧对象恢复，避免状态更新夹带副本数或 PodTemplate 修改。
 func (rcStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newRc := obj.(*api.ReplicationController)
 	oldRc := old.(*api.ReplicationController)
-	// update is not allowed to set spec
+	// 更新时不允许设置 spec
 	newRc.Spec = oldRc.Spec
 }
 
@@ -257,7 +244,7 @@ func (rcStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Obj
 	return corevalidation.ValidateReplicationControllerStatusUpdate(obj.(*api.ReplicationController), old.(*api.ReplicationController))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回状态更新的警告信息，这里不做任何警告。
 func (rcStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

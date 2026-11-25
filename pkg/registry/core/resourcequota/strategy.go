@@ -36,17 +36,15 @@ type resourcequotaStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating ResourceQuota
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 ResourceQuota 对象时应用的默认逻辑。
 var Strategy = resourcequotaStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped is true for resourcequotas.
+// resourcequotas 是命名空间级资源，NamespaceScoped 返回 true。
 func (resourcequotaStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回由策略重置、且用户不应修改的字段集合。
 func (resourcequotaStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -57,29 +55,26 @@ func (resourcequotaStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpat
 	return fields
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users on creation.
-// 创建时重置 Status；Used/Hard 的实际使用量由 ResourceQuota Controller 计算，不能由用户在创建请求中伪造。
+// PrepareForCreate 清理最终用户不允许在创建时设置的字段：
 func (resourcequotaStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	resourcequota := obj.(*api.ResourceQuota)
 	resourcequota.Status = api.ResourceQuotaStatus{}
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
-// 普通配额更新保留旧 Status，只允许修改 Spec.Hard、ScopeSelector 等期望配置。
+// PrepareForUpdate 清理最终用户不允许在更新时设置的字段：
 func (resourcequotaStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newResourcequota := obj.(*api.ResourceQuota)
 	oldResourcequota := old.(*api.ResourceQuota)
 	newResourcequota.Status = oldResourcequota.Status
 }
 
-// Validate validates a new resourcequota.
+// Validate 校验新建的 resourcequota。
 func (resourcequotaStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	resourcequota := obj.(*api.ResourceQuota)
 	return validation.ValidateResourceQuota(resourcequota)
 }
 
-// all known resource names that we want to check for request <= limit
-// 这些常见资源同时检查 requests.* 与 limits.*，在请求配额高于限制配额时给出可操作的 Warning。
+// knownResourceNames 列出需要校验 requests.* <= limits.* 的常见资源名。
 var knownResourceNames = []api.ResourceName{
 	api.ResourceCPU,
 	api.ResourceMemory,
@@ -87,8 +82,7 @@ var knownResourceNames = []api.ResourceName{
 	api.ResourceEphemeralStorage,
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
-// WarningsOnCreate 提醒 requests 额度大于 limits 额度的可疑配置；它是警告，不替代 ResourceQuota 语义校验。
+// WarningsOnCreate 提醒 requests 额度大于 limits 额度的可疑配置。
 func (resourcequotaStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	resourcequota := obj.(*api.ResourceQuota)
 	var allWarnings []string
@@ -96,7 +90,7 @@ func (resourcequotaStrategy) WarningsOnCreate(ctx context.Context, obj runtime.O
 		requestResourceName := api.ResourceName(fmt.Sprintf("requests.%s", resourceName))
 		request, requestOK := resourcequota.Spec.Hard[requestResourceName]
 		if !requestOK && (resourceName == api.ResourceCPU || resourceName == api.ResourceMemory) {
-			// try the bare name for cpu and memory
+			// cpu 和 memory 还需要尝试不带前缀的裸名称
 			request, requestOK = resourcequota.Spec.Hard[resourceName]
 			if requestOK {
 				requestResourceName = resourceName
@@ -112,22 +106,22 @@ func (resourcequotaStrategy) WarningsOnCreate(ctx context.Context, obj runtime.O
 	return allWarnings
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验之后规范化对象。
 func (resourcequotaStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for resourcequotas.
+// resourcequotas 的 AllowCreateOnUpdate 为 false。
 func (resourcequotaStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// ValidateUpdate is the default update validation for an end user.
+// ValidateUpdate 是面向最终用户的默认更新校验。
 func (resourcequotaStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	newObj, oldObj := obj.(*api.ResourceQuota), old.(*api.ResourceQuota)
 	return validation.ValidateResourceQuotaUpdate(newObj, oldObj)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新的警告信息。
 func (resourcequotaStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -140,11 +134,10 @@ type resourcequotaStatusStrategy struct {
 	resourcequotaStrategy
 }
 
-// StatusStrategy is the default logic invoked when updating object status.
+// StatusStrategy 是更新对象 status 时调用的默认逻辑。
 var StatusStrategy = resourcequotaStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回由策略重置、且用户不应修改的字段集合。
 func (resourcequotaStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -155,7 +148,7 @@ func (resourcequotaStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fi
 	return fields
 }
 
-// /status 只接受 ResourceQuota.Status 变化，Spec 始终从旧对象恢复。
+// PrepareForUpdate 针对 /status 只接受 ResourceQuota.Status 变化，Spec 始终从旧对象恢复。
 func (resourcequotaStatusStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newResourcequota := obj.(*api.ResourceQuota)
 	oldResourcequota := old.(*api.ResourceQuota)
@@ -166,7 +159,7 @@ func (resourcequotaStatusStrategy) ValidateUpdate(ctx context.Context, obj, old 
 	return validation.ValidateResourceQuotaStatusUpdate(obj.(*api.ResourceQuota), old.(*api.ResourceQuota))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回状态更新的警告信息，这里不做任何警告。
 func (resourcequotaStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }

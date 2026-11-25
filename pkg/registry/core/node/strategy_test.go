@@ -34,7 +34,7 @@ import (
 	apitesting "k8s.io/kubernetes/pkg/api/testing"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/features"
-	// ensure types are installed
+	// 确保类型已注册
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
@@ -70,7 +70,7 @@ func TestSelectableFieldLabelConversions(t *testing.T) {
 	)
 }
 
-// helper creates a NodeNode with a set of PodCIDRs, Spec.ConfigSource, Status.Config
+// helper 构造一个带有 PodCIDRs、Spec.ConfigSource、Status.Config 的 Node 对象
 func makeNode(podCIDRs []string, addSpecDynamicConfig bool, addStatusDynamicConfig bool) *api.Node {
 	node := &api.Node{
 		Spec: api.NodeSpec{
@@ -172,7 +172,7 @@ func TestDropFields(t *testing.T) {
 			dropDisabledFields(tc.node, tc.oldNode)
 
 			old := tc.oldNode.DeepCopy()
-			// old node  should never be changed
+			// 旧 node 不应该被修改
 			if !reflect.DeepEqual(tc.oldNode, old) {
 				t.Errorf("%v: old node changed: %v", tc.name, cmp.Diff(tc.oldNode, old))
 			}

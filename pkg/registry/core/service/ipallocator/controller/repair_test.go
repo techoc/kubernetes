@@ -107,7 +107,7 @@ func TestRepairLeak(t *testing.T) {
 	}
 
 	r := NewRepair(0, fakeClient.CoreV1(), fakeClient.EventsV1(), cidr, ipregistry, nil, nil)
-	// Run through the "leak detection holdoff" loops.
+	// 走完"泄漏检测等待"的若干轮循环。
 	for i := 0; i < (numRepairsBeforeLeakCleanup - 1); i++ {
 		if err := r.runOnce(); err != nil {
 			t.Fatal(err)
@@ -120,7 +120,7 @@ func TestRepairLeak(t *testing.T) {
 			t.Errorf("expected ipallocator to still have leaked IP")
 		}
 	}
-	// Run one more time to actually remove the leak.
+	// 再运行一次，真正清理掉该泄漏。
 	if err := r.runOnce(); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestRepairWithExisting(t *testing.T) {
 				IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
 			},
 		},
-		&corev1.Service{ // outside CIDR, will be dropped
+		&corev1.Service{ // 不在 CIDR 内，会被丢弃
 			ObjectMeta: metav1.ObjectMeta{Namespace: "three", Name: "three"},
 			Spec: corev1.ServiceSpec{
 				ClusterIP:  "192.168.0.1",
@@ -183,14 +183,14 @@ func TestRepairWithExisting(t *testing.T) {
 				IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
 			},
 		},
-		&corev1.Service{ // empty, ignored
+		&corev1.Service{ // 为空，被忽略
 			ObjectMeta: metav1.ObjectMeta{Namespace: "four", Name: "four"},
 			Spec: corev1.ServiceSpec{
 				ClusterIP:  "",
 				ClusterIPs: []string{""},
 			},
 		},
-		&corev1.Service{ // duplicate, dropped
+		&corev1.Service{ // 重复，被丢弃
 			ObjectMeta: metav1.ObjectMeta{Namespace: "five", Name: "five"},
 			Spec: corev1.ServiceSpec{
 				ClusterIP:  "192.168.1.1",
@@ -455,7 +455,7 @@ func TestRepairLeakDualStack(t *testing.T) {
 	}
 
 	r := NewRepair(0, fakeClient.CoreV1(), fakeClient.EventsV1(), cidr, ipregistry, secondaryCIDR, secondaryIPRegistry)
-	// Run through the "leak detection holdoff" loops.
+	// 走完"泄漏检测等待"的若干轮循环。
 	for i := 0; i < (numRepairsBeforeLeakCleanup - 1); i++ {
 		if err := r.runOnce(); err != nil {
 			t.Fatal(err)
@@ -475,7 +475,7 @@ func TestRepairLeakDualStack(t *testing.T) {
 			t.Errorf("expected ipallocator to still have leaked IP")
 		}
 	}
-	// Run one more time to actually remove the leak.
+	// 再运行一次，真正清理掉该泄漏。
 	if err := r.runOnce(); err != nil {
 		t.Fatal(err)
 	}
@@ -510,10 +510,10 @@ func TestRepairLeakDualStack(t *testing.T) {
 
 func TestRepairWithExistingDualStack(t *testing.T) {
 	clearMetrics()
-	// because anything (other than allocator) depends
-	// on families assigned to service (not the value of IPFamilyPolicy)
-	// we can saftly create tests that has ipFamilyPolicy:nil
-	// this will work every where except alloc & validation
+	// 因为除了分配器之外，其他逻辑都依赖 Service 的 IPFamilies，
+	// 而不是 IPFamilyPolicy 的取值，
+	// 因此可以安全地构造 ipFamilyPolicy 为 nil 的用例。
+	// 这在分配与校验之外的场景都成立。
 
 	_, cidr, _ := netutils.ParseCIDRSloppy("192.168.1.0/24")
 	previous, err := ipallocator.NewInMemory(cidr)
@@ -572,7 +572,7 @@ func TestRepairWithExistingDualStack(t *testing.T) {
 				IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
 			},
 		},
-		// outside CIDR, will be dropped
+		// 不在 CIDR 内，会被忽略
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "x5", Name: "out-v4"},
 			Spec: corev1.ServiceSpec{
@@ -581,7 +581,7 @@ func TestRepairWithExistingDualStack(t *testing.T) {
 				IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
 			},
 		},
-		&corev1.Service{ // outside CIDR, will be dropped
+		&corev1.Service{ // 不在 CIDR 内，会被丢弃
 			ObjectMeta: metav1.ObjectMeta{Namespace: "x6", Name: "out-v6"},
 			Spec: corev1.ServiceSpec{
 				ClusterIP:  "3000::1",
@@ -606,11 +606,11 @@ func TestRepairWithExistingDualStack(t *testing.T) {
 			},
 		},
 
-		&corev1.Service{ // empty, ignored
+		&corev1.Service{ // 为空，被忽略
 			ObjectMeta: metav1.ObjectMeta{Namespace: "x7", Name: "out-empty"},
 			Spec:       corev1.ServiceSpec{ClusterIP: ""},
 		},
-		&corev1.Service{ // duplicate, dropped
+		&corev1.Service{ // 重复，被丢弃
 			ObjectMeta: metav1.ObjectMeta{Namespace: "x8", Name: "duplicate"},
 			Spec: corev1.ServiceSpec{
 				ClusterIP:  "192.168.1.1",
@@ -618,7 +618,7 @@ func TestRepairWithExistingDualStack(t *testing.T) {
 				IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
 			},
 		},
-		&corev1.Service{ // duplicate, dropped
+		&corev1.Service{ // 重复，被丢弃
 			ObjectMeta: metav1.ObjectMeta{Namespace: "x9", Name: "duplicate-v6"},
 			Spec: corev1.ServiceSpec{
 				ClusterIP:  "2000::2",
@@ -691,7 +691,7 @@ func TestRepairWithExistingDualStack(t *testing.T) {
 	expectMetrics(t, em)
 }
 
-// Metrics helpers
+// 指标相关的辅助函数
 func clearMetrics() {
 	clusterIPRepairIPErrors.Reset()
 	clusterIPRepairReconcileErrors.Reset()

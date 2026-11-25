@@ -443,14 +443,14 @@ func TestSnapshotAndRestore(t *testing.T) {
 
 }
 
-// TestAllocateMaxReserved should allocate first values greater or equal than the reserved values
+// TestAllocateMaxReserved 验证自动分配优先选择大于或等于预留边界的偏移量。
 func TestAllocateMax_BitmapReserved(t *testing.T) {
 	max := 128
 	dynamicOffset := 16
 
-	// just to double check off by one errors
+	// 额外检查是否存在差一错误。
 	allocated := 0
-	// modify if necessary
+	// 必要时修改该值。
 	m := NewAllocationMapWithOffset(max, "test", dynamicOffset)
 	for i := 0; i < max-dynamicOffset; i++ {
 		if _, ok, _ := m.AllocateNext(); !ok {
@@ -468,7 +468,7 @@ func TestAllocateMax_BitmapReserved(t *testing.T) {
 			t.Errorf("unexpected allocated value %d", i)
 		}
 	}
-	// it should allocate one value of the reserved block
+	// 动态区耗尽后，应从预留区分配一个值。
 	if _, ok, _ := m.AllocateNext(); !ok {
 		t.Fatalf("unexpected error")
 	}
@@ -488,10 +488,10 @@ func TestAllocateMax_BitmapReserved(t *testing.T) {
 func TestPreAllocateReservedFull_BitmapReserved(t *testing.T) {
 	max := 128
 	dynamicOffset := 16
-	// just to double check off by one errors
+	// 额外检查是否存在差一错误。
 	allocated := 0
 	m := NewAllocationMapWithOffset(max, "test", dynamicOffset)
-	// Allocate all possible values except the reserved
+	// 分配预留区之外的所有值。
 	for i := dynamicOffset; i < max; i++ {
 		if ok, _ := m.Allocate(i); !ok {
 			t.Errorf("error allocate i %v", i)
@@ -499,7 +499,7 @@ func TestPreAllocateReservedFull_BitmapReserved(t *testing.T) {
 			allocated++
 		}
 	}
-	// Allocate all the values of the reserved block except one
+	// 分配预留区中除一个值以外的所有值。
 	for i := 0; i < dynamicOffset-1; i++ {
 		if ok, _ := m.Allocate(i); !ok {
 			t.Errorf("error allocate i %v", i)
@@ -508,11 +508,11 @@ func TestPreAllocateReservedFull_BitmapReserved(t *testing.T) {
 		}
 	}
 
-	// there should be only one free value
+	// 此时应仅剩一个空闲值。
 	if f := m.Free(); f != 1 {
 		t.Errorf("expect to get %d, but got %d", 1, f)
 	}
-	// check if the last free value is in the lower band
+	// 检查最后一个空闲值是否位于下方预留区。
 	count := 0
 	for i := 0; i < dynamicOffset; i++ {
 		if !m.Has(i) {
@@ -549,7 +549,7 @@ func TestAllocateUniqueness(t *testing.T) {
 	uniqueAllocated := map[int]bool{}
 	m := NewAllocationMapWithOffset(max, "test", dynamicOffset)
 
-	// Allocate all the values in both the dynamic and reserved blocks
+	// 分配动态区和预留区中的全部值。
 	for i := 0; i < max; i++ {
 		alloc, ok, _ := m.AllocateNext()
 		if !ok {

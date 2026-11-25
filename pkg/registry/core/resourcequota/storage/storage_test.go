@@ -76,9 +76,9 @@ func TestCreate(t *testing.T) {
 	resourcequota := validNewResourceQuota()
 	resourcequota.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法
 		resourcequota,
-		// invalid
+		// 非法
 		&api.ResourceQuota{
 			ObjectMeta: metav1.ObjectMeta{Name: "_-a123-a_"},
 		},
@@ -140,17 +140,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewResourceQuota(),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -206,7 +206,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	rqOut := obj.(*api.ResourceQuota)
-	// only compare the meaningful update b/c we can't compare due to metadata
+	// 由于 metadata 无法比较，这里只比较有意义的更新
 	if !apiequality.Semantic.DeepEqual(resourcequotaIn.Status, rqOut.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(resourcequotaIn, rqOut))
 	}

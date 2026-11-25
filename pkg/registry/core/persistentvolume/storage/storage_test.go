@@ -94,9 +94,9 @@ func TestCreate(t *testing.T) {
 	pv := validNewPersistentVolume("foo")
 	pv.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo"}
 	test.TestCreate(
-		// valid
+		// 有效对象
 		pv,
-		// invalid
+		// 无效对象
 		&api.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 		},
@@ -109,9 +109,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestUpdate(
-		// valid
+		// 有效对象
 		validNewPersistentVolume("foo"),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*api.PersistentVolume)
 			object.Spec.Capacity = api.ResourceList{
@@ -153,18 +153,18 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		validNewPersistentVolume("foo"),
-		// matching labels
+		// 匹配的标签
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配的标签
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配的字段
 		[]fields.Set{
 			{"metadata.name": "foo"},
 			{"name": "foo"},
 		},
-		// not matching fields
+		// 不匹配的字段
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -190,8 +190,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// We need to set custom timestamp which is not the same as the one on existing PV
-	// - doing so will prevent timestamp update on phase change and custom one is used instead.
+	// 需要设置一个与现有 PV 不同的自定义时间戳，这样阶段变化时不会更新该时间戳，而是保留自定义值。
 	pvStartTimestamp = &metav1.Time{Time: pvStartTimestamp.Time.Add(time.Second)}
 
 	pvIn := &api.PersistentVolume{
@@ -213,7 +212,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	pvOut := obj.(*api.PersistentVolume)
-	// only compare the relevant change b/c metadata will differ
+	// 元数据会不同，只比较相关状态变更。
 	if !apiequality.Semantic.DeepEqual(pvIn.Status, pvOut.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(pvIn.Status, pvOut.Status))
 	}

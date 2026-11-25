@@ -62,7 +62,7 @@ func newStorage(t *testing.T) (ControllerStorage, *etcd3testing.EtcdTestServer) 
 	return storage, server
 }
 
-// createController is a helper function that returns a controller with the updated resource version.
+// createController 是一个辅助函数，返回带有已更新 resourceVersion 的 controller。
 func createController(storage *REST, rc api.ReplicationController, t *testing.T) (api.ReplicationController, error) {
 	ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, rc.Namespace)
 	obj, err := storage.Create(ctx, &rc, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
@@ -102,9 +102,9 @@ func TestCreate(t *testing.T) {
 	controller := validNewController()
 	controller.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法
 		controller,
-		// invalid (invalid selector)
+		// 非法（selector 不合法）
 		&api.ReplicationController{
 			Spec: api.ReplicationControllerSpec{
 				Replicas: ptr.To[int32](2),
@@ -121,15 +121,15 @@ func TestUpdate(t *testing.T) {
 	defer storage.Controller.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Controller.Store)
 	test.TestUpdate(
-		// valid
+		// 合法
 		validNewController(),
-		// valid updateFunc
+		// 合法的 updateFunc
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*api.ReplicationController)
 			object.Spec.Replicas = ptr.To[int32](*object.Spec.Replicas + 1)
 			return object
 		},
-		// invalid updateFunc
+		// 非法的 updateFunc
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*api.ReplicationController)
 			object.Name = ""
@@ -170,12 +170,12 @@ func TestGenerationNumber(t *testing.T) {
 	}
 	controller, _ := ctrl.(*api.ReplicationController)
 
-	// Generation initialization
+	// Generation 初始化
 	if controller.Generation != 1 || controller.Status.ObservedGeneration != 0 {
 		t.Fatalf("Unexpected generation number %v, status generation %v", controller.Generation, controller.Status.ObservedGeneration)
 	}
 
-	// Updates to spec should increment the generation number
+	// 对 spec 的更新应递增 generation 号
 	(*controller.Spec.Replicas)++
 	if _, _, err := storage.Controller.Update(ctx, controller.Name, rest.DefaultUpdatedObjectInfo(controller), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -189,7 +189,7 @@ func TestGenerationNumber(t *testing.T) {
 		t.Fatalf("Unexpected generation, spec: %v, status: %v", controller.Generation, controller.Status.ObservedGeneration)
 	}
 
-	// Updates to status should not increment either spec or status generation numbers
+	// 对 status 的更新不应递增 spec 或 status 的 generation 号
 	controller.Status.Replicas++
 	if _, _, err := storage.Controller.Update(ctx, controller.Name, rest.DefaultUpdatedObjectInfo(controller), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -227,22 +227,22 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Controller.Store)
 	test.TestWatch(
 		validController,
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{
 			{"a": "b"},
 		},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"a": "c"},
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"status.replicas": "0"},
 			{"metadata.name": "foo"},
 			{"status.replicas": "0", "metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"status.replicas": "10"},
 			{"metadata.name": "bar"},
@@ -276,7 +276,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	rcGot := obj.(*api.ReplicationController)
-	// only compare relevant changes b/c of difference in metadata
+	// 由于 metadata 存在差异，只比较相关的变更
 	if !apiequality.Semantic.DeepEqual(rc.Status, rcGot.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(rc.Status, rcGot.Status))
 	}
@@ -454,7 +454,7 @@ func TestScalePatchConflicts(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// continuously submits a patch that updates a label and verifies the label update was effective
+		// 持续提交一个更新 label 的 patch，并验证 label 更新已生效
 		labelName := "timestamp"
 		for i := 0; ; i++ {
 			select {
@@ -476,7 +476,7 @@ func TestScalePatchConflicts(t *testing.T) {
 		}
 	}()
 
-	// continuously submits a scale patch of replicas for a monotonically increasing replica value
+	// 持续提交 replicas 的 scale patch，使副本数单调递增
 	applyReplicaPatch := func(replicas int) rest.TransformFunc {
 		return func(_ context.Context, _, currentObject runtime.Object) (objToUpdate runtime.Object, patchErr error) {
 			currentObject.(*autoscaling.Scale).Spec.Replicas = int32(replicas)

@@ -72,7 +72,7 @@ func TestEvictionWithETCD(t *testing.T) {
 			expectError: "Cannot evict pod as it would violate the pod's disruption budget.: TooManyRequests: The disruption budget foo needs 0 healthy pods and has 0 currently",
 			podPhase:    api.PodRunning,
 			podName:     "t1",
-			policies:    []*policyv1.UnhealthyPodEvictionPolicyType{nil, unhealthyPolicyPtr(policyv1.IfHealthyBudget)}, // AlwaysAllow would terminate the pod since Running pods are not guarded by this policy
+			policies:    []*policyv1.UnhealthyPodEvictionPolicyType{nil, unhealthyPolicyPtr(policyv1.IfHealthyBudget)}, // Running 状态的 Pod 不受该策略保护，因此 AlwaysAllow 会直接终止它
 		},
 		{
 			name: "matching pdbs with no disruptions allowed, pod pending",
@@ -158,18 +158,18 @@ func TestEvictionWithETCD(t *testing.T) {
 			expectError: "Cannot evict pod as it would violate the pod's disruption budget.: TooManyRequests: The disruption budget foo needs 0 healthy pods and has 0 currently",
 			podPhase:    api.PodRunning,
 			podName:     "t8",
-			policies:    []*policyv1.UnhealthyPodEvictionPolicyType{nil, unhealthyPolicyPtr(policyv1.IfHealthyBudget)}, // AlwaysAllow would terminate the pod since Running pods are not guarded by this policy
+			policies:    []*policyv1.UnhealthyPodEvictionPolicyType{nil, unhealthyPolicyPtr(policyv1.IfHealthyBudget)}, // Running 状态的 Pod 不受该策略保护，因此 AlwaysAllow 会直接终止它
 		},
 	}
 
 	for _, unhealthyPodEvictionPolicy := range []*policyv1.UnhealthyPodEvictionPolicyType{nil, unhealthyPolicyPtr(policyv1.IfHealthyBudget), unhealthyPolicyPtr(policyv1.AlwaysAllow)} {
 		for _, tc := range testcases {
 			if len(tc.policies) > 0 && !hasUnhealthyPolicy(tc.policies, unhealthyPodEvictionPolicy) {
-				// unhealthyPodEvictionPolicy is not covered by this test
+				// 本测试未覆盖 unhealthyPodEvictionPolicy
 				continue
 			}
 			t.Run(fmt.Sprintf("%v with %v policy", tc.name, unhealthyPolicyStr(unhealthyPodEvictionPolicy)), func(t *testing.T) {
-				// same test runs multiple times, make copy of objects to have unique ones
+				// 同一个测试会跑多次，拷贝一份对象以保证唯一
 				evictionCopy := tc.eviction.DeepCopy()
 				var pdbsCopy []runtime.Object
 				for _, pdb := range tc.pdbs {
@@ -279,9 +279,9 @@ func TestEviction(t *testing.T) {
 			podName:             "t1",
 			expectedDeleteCount: 3,
 		},
-		// This test case is critical. If it is removed or broken we may
-		// regress and allow a pod to be deleted without checking PDBs when the
-		// pod should not be deleted.
+		// 这个用例很关键。如果被删除或改坏，我们可能在
+		// 本应校验 PDB 的情况下回归成直接允许删除 pod，
+		// 从而让不该被删除的 pod 遭到删除。
 		{
 			name: "pdbs No disruptions allowed, pod pending, first delete conflict, pod becomes running, continueToPDBs",
 			pdbs: []runtime.Object{&policyv1.PodDisruptionBudget{
@@ -313,7 +313,7 @@ func TestEviction(t *testing.T) {
 				Type:   api.PodReady,
 				Status: api.ConditionFalse,
 			},
-			policies: []*policyv1.UnhealthyPodEvictionPolicyType{unhealthyPolicyPtr(policyv1.AlwaysAllow)}, // nil, IfHealthyBudget continueToPDBs
+			policies: []*policyv1.UnhealthyPodEvictionPolicyType{unhealthyPolicyPtr(policyv1.AlwaysAllow)}, // nil、IfHealthyBudget 会继续走 PDB 检查
 		},
 		{
 			name: "pdbs disruptions allowed, pod pending, first delete conflict, pod becomes running, continueToPDBs",
@@ -327,7 +327,7 @@ func TestEviction(t *testing.T) {
 			podPhase:            api.PodPending,
 			podName:             "t3",
 			expectedDeleteCount: 2,
-			policies:            []*policyv1.UnhealthyPodEvictionPolicyType{nil, unhealthyPolicyPtr(policyv1.IfHealthyBudget)}, // AlwaysAllow does not continueToPDBs, but straight to deletion if pod not healthy (ready)
+			policies:            []*policyv1.UnhealthyPodEvictionPolicyType{nil, unhealthyPolicyPtr(policyv1.IfHealthyBudget)}, // AlwaysAllow 不会继续走 PDB 检查，Pod 不健康（未 Ready）时直接删除
 		},
 		{
 			name: "pod pending, always conflict on delete",
@@ -374,7 +374,7 @@ func TestEviction(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"},
 				Spec:       policyv1.PodDisruptionBudgetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"a": "true"}}},
 				Status: policyv1.PodDisruptionBudgetStatus{
-					// This simulates 3 pods expected, our pod healthy, unhealthy pod is not ours.
+					// 模拟期望副本数为 3、我们的 pod 健康、不健康的 pod 不属于我们的场景。
 					DisruptionsAllowed: 0,
 					CurrentHealthy:     2,
 					DesiredHealthy:     2,
@@ -419,7 +419,7 @@ func TestEviction(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"},
 				Spec:       policyv1.PodDisruptionBudgetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"a": "true"}}},
 				Status: policyv1.PodDisruptionBudgetStatus{
-					// This simulates 3 pods expected, our pod unhealthy
+					// 模拟期望副本数为 3、我们的 pod 不健康的场景
 					DisruptionsAllowed: 0,
 					CurrentHealthy:     2,
 					DesiredHealthy:     2,
@@ -453,16 +453,16 @@ func TestEviction(t *testing.T) {
 				Type:   api.PodReady,
 				Status: api.ConditionFalse,
 			},
-			policies: []*policyv1.UnhealthyPodEvictionPolicyType{unhealthyPolicyPtr(policyv1.AlwaysAllow)}, // nil, IfHealthyBudget would not skip the PDB check
+			policies: []*policyv1.UnhealthyPodEvictionPolicyType{unhealthyPolicyPtr(policyv1.AlwaysAllow)}, // nil、IfHealthyBudget 不会跳过 PDB 检查
 		},
 		{
-			// This case should return the 529 retry error.
+			// 该用例应返回 529 重试错误。
 			name: "matching pdbs with no disruptions allowed, pod running, pod unhealthy, unhealthy pod ours, resource version conflict",
 			pdbs: []runtime.Object{&policyv1.PodDisruptionBudget{
 				ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"},
 				Spec:       policyv1.PodDisruptionBudgetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"a": "true"}}},
 				Status: policyv1.PodDisruptionBudgetStatus{
-					// This simulates 3 pods expected, our pod unhealthy
+					// 模拟期望副本数为 3、我们的 pod 不健康的场景
 					DisruptionsAllowed: 0,
 					CurrentHealthy:     2,
 					DesiredHealthy:     2,
@@ -480,13 +480,13 @@ func TestEviction(t *testing.T) {
 			},
 		},
 		{
-			// This case should return the 529 retry error.
+			// 该用例应返回 529 重试错误。
 			name: "matching pdbs with no disruptions allowed, pod running, pod unhealthy, unhealthy pod ours, other error on delete",
 			pdbs: []runtime.Object{&policyv1.PodDisruptionBudget{
 				ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"},
 				Spec:       policyv1.PodDisruptionBudgetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"a": "true"}}},
 				Status: policyv1.PodDisruptionBudgetStatus{
-					// This simulates 3 pods expected, our pod unhealthy
+					// 模拟期望副本数为 3、我们的 pod 不健康的场景
 					DisruptionsAllowed: 0,
 					CurrentHealthy:     2,
 					DesiredHealthy:     2,
@@ -621,11 +621,11 @@ func TestEviction(t *testing.T) {
 	for _, unhealthyPodEvictionPolicy := range []*policyv1.UnhealthyPodEvictionPolicyType{unhealthyPolicyPtr(policyv1.AlwaysAllow), nil, unhealthyPolicyPtr(policyv1.IfHealthyBudget)} {
 		for _, tc := range testcases {
 			if len(tc.policies) > 0 && !hasUnhealthyPolicy(tc.policies, unhealthyPodEvictionPolicy) {
-				// unhealthyPodEvictionPolicy is not covered by this test
+				// 本测试未覆盖 unhealthyPodEvictionPolicy
 				continue
 			}
 			t.Run(fmt.Sprintf("%v with %v policy", tc.name, unhealthyPolicyStr(unhealthyPodEvictionPolicy)), func(t *testing.T) {
-				// same test runs 3 times, make copy of objects to have unique ones
+				// 同一个测试会跑 3 次，拷贝一份对象以保证唯一
 				evictionCopy := tc.eviction.DeepCopy()
 				prcCopy := tc.prc.DeepCopy()
 				var pdbsCopy []runtime.Object
@@ -655,7 +655,7 @@ func TestEviction(t *testing.T) {
 					pod.ObjectMeta.DeletionTimestamp = &currentTime
 				}
 
-				// Setup pod condition
+				// 设置 pod 的 condition
 				if tc.prc != nil {
 					if !podapi.UpdatePodCondition(&pod.Status, prcCopy) {
 						t.Fatalf("Unable to update pod ready condition")
@@ -970,35 +970,35 @@ type mockStore struct {
 
 func (ms *mockStore) mutatorDeleteFunc(count int, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	if ms.pod.Name == "t4" {
-		// Always return error for this pod
+		// 该 pod 始终返回错误
 		return nil, false, apierrors.NewConflict(resource("tests"), "2", errors.New("message"))
 	}
 	if ms.pod.Name == "t6" || ms.pod.Name == "t8" {
-		// t6: This pod has a deletionTimestamp and should not raise conflict on delete
-		// t8: This pod should not have a resource conflict.
+		// t6：该 pod 带有 deletionTimestamp，删除时不应产生冲突
+		// t8：该 pod 不应出现 resource 冲突。
 		return nil, true, nil
 	}
 	if ms.pod.Name == "t10" {
 		return nil, false, apierrors.NewBadRequest("test designed to error")
 	}
 	if count == 1 {
-		// This is a hack to ensure that some test pods don't change phase
-		// but do change resource version
+		// 这里用一个小技巧，让部分测试 pod 的 phase 不变，
+		// 但 resourceVersion 会发生变化
 		if ms.pod.Name != "t1" && ms.pod.Name != "t5" {
 			ms.pod.Status.Phase = api.PodRunning
 		}
 		ms.pod.ResourceVersion = "999"
-		// Always return conflict on the first attempt
+		// 第一次尝试时始终返回冲突
 		return nil, false, apierrors.NewConflict(resource("tests"), "2", errors.New("message"))
 	}
-	// Compare enforce deletionOptions
+	// 比较强制生效的 deletionOptions
 	if options == nil || options.Preconditions == nil || options.Preconditions.ResourceVersion == nil {
 		return nil, true, nil
 	} else if *options.Preconditions.ResourceVersion != "1000" {
-		// Here we're simulating that the pod has changed resource version again
-		// pod "t4" should make it here, this validates we're getting the latest
-		// resourceVersion of the pod and successfully delete on the next deletion
-		// attempt after this one.
+		// 这里模拟 pod 的 resourceVersion 再次发生变化：
+		// pod "t4" 应当走到这里，用来验证我们拿到的是最新的
+		// resourceVersion，并能在下一次删除请求中
+		// 成功删除该 pod。
 		ms.pod.ResourceVersion = "1000"
 		return nil, false, apierrors.NewConflict(resource("tests"), "2", errors.New("message"))
 	}

@@ -28,7 +28,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/utils/ptr"
 
-	// ensure types are installed
+	// 确保类型已注册
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
@@ -182,22 +182,22 @@ func TestValidateUpdate(t *testing.T) {
 			ObservedGeneration: int64(10),
 		},
 	}
-	// Conversion sets this annotation
+	// 转换过程会设置该注解
 	oldController.Annotations[api.NonConvertibleAnnotationPrefix+"/"+"spec.selector"] = "no way"
 
-	// Deep-copy so we won't mutate both selectors.
+	// 深拷贝，避免同时修改两个 selector。
 	newController := oldController.DeepCopy()
 
-	// Irrelevant (to the selector) update for the replication controller.
+	// 对 replication controller 做一次与 selector 无关的更新。
 	newController.Spec.Replicas = ptr.To[int32](5)
 
-	// If they didn't try to update the selector then we should not return any error.
+	// 如果没有尝试更新 selector，就不应返回任何错误。
 	errs := Strategy.ValidateUpdate(ctx, newController, oldController)
 	if len(errs) > 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
 
-	// Update the selector - validation should return an error.
+	// 更新 selector —— 校验应返回错误。
 	newController.Spec.Selector["shiny"] = "newlabel"
 	newController.Spec.Template.Labels["shiny"] = "newlabel"
 

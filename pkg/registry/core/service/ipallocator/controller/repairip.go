@@ -56,32 +56,32 @@ const (
 	workers    = 5
 )
 
-// Repair is a controller loop that examines all service ClusterIP allocations and logs any errors,
-// and then creates the accurate list of IPAddresses objects with all allocated ClusterIPs.
+// Repair 是一个控制器循环，它会检查所有 Service 的 ClusterIP 分配情况并记录错误，
+// 然后根据当前已分配的 ClusterIP 重建准确的 IPAddress 对象列表。
 //
-// Handles:
-// * Duplicate ClusterIP assignments caused by operator action or undetected race conditions
-// * Allocations to services that were not actually created due to a crash or powerloss
-// * Migrates old versions of Kubernetes services into the new ipallocator automatically
-//   creating the corresponding IPAddress objects
-// * IPAddress objects with wrong references or labels
+// 处理以下问题：
+// * 由运维操作或未被检测到的竞态导致的 ClusterIP 重复分配
+// * 因宕机或断电而未真正创建成功、但仍保留了分配的 Service
+// * 自动把旧版本 Kubernetes 创建的 Service 迁移到新的 ipallocator，
+//   并创建对应的 IPAddress 对象
+// * 引用（reference）或标签（labels）错误的 IPAddress 对象
 //
-// Logs about:
-// * ClusterIPs that do not match the currently configured range
+// 仅记录日志的情况：
+// * ClusterIP 不在当前配置的地址段范围内
 //
-// There is a one-to-one relation between Service ClusterIPs and IPAddresses.
-// The bidirectional relation is achieved using the following fields:
+// Service 的 ClusterIP 与 IPAddress 之间是一对一关系，
+// 双向关系通过以下字段建立：
 // Service.Spec.Cluster == IPAddress.Name AND IPAddress.ParentRef == Service
 //
-// The controller use two reconcile loops, one for Services and other for IPAddress.
-// The Service reconcile loop verifies the bidirectional relation exists and is correct.
+// 控制器使用两个调和（reconcile）循环，一个处理 Service，另一个处理 IPAddress。
+// Service 循环校验双向关系是否存在且正确。
 // 1. Service_X [ClusterIP_X]  <------>  IPAddress_X [Ref:Service_X]   ok
 // 2. Service_Y [ClusterIP_Y]  <------>  IPAddress_Y [Ref:GatewayA]    !ok, wrong reference
 // 3. Service_Z [ClusterIP_Z]  <------>  							   !ok, missing IPAddress
 // 4. Service_A [ClusterIP_A]  <------>  IPAddress_A [Ref:Service_B]   !ok, duplicate IPAddress
 //    Service_B [ClusterIP_A]  <------> 								only one service can verify the relation
-// The IPAddress reconcile loop checks there are no orphan IPAddresses, the rest of the
-// cases are covered by the Services loop
+// IPAddress 循环检查是否存在游离（orphan）的 IPAddress，其余情况
+// 都由 Service 循环覆盖。
 // 1.                          <------>  IPAddress_Z [Ref:Service_C]   !ok, orphan IPAddress
 
 // RepairIPAddress 使用 Service/IPAddress Informer 双向核对 ClusterIP 所有权，修复缺失对象并清理孤立或错误引用对象。
@@ -107,8 +107,6 @@ type RepairIPAddress struct {
 	clock       clock.Clock
 }
 
-// NewRepairIPAddress creates a controller that periodically ensures that all clusterIPs are uniquely allocated across the cluster
-// and generates informational warnings for a cluster that is not in sync.
 // NewRepairIPAddress 创建 IPAddress 修复控制器，监听 Service、ServiceCIDR 和 IPAddress 变化并构建带限速重试的队列。
 func NewRepairIPAddress(interval time.Duration,
 	client kubernetes.Interface,
@@ -118,7 +116,7 @@ func NewRepairIPAddress(interval time.Duration,
 	return newRepairIPAddress(interval, client, serviceInformer, serviceCIDRInformer, ipAddressInformer, clock.RealClock{})
 }
 
-// newRepairIPAddress implements NewRepairIPAddress by additionally consuming clock.Clock.
+// newRepairIPAddress 实现 NewRepairIPAddress，额外接收一个 clock.Clock 参数。
 func newRepairIPAddress(interval time.Duration,
 	client kubernetes.Interface,
 	serviceInformer coreinformers.ServiceInformer,
@@ -165,8 +163,8 @@ func newRepairIPAddress(interval time.Duration,
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			// IndexerInformer uses a delta queue, therefore for deletes we have to use this
-			// key function.
+			// IndexerInformer 使用 delta 队列，因此删除时必须用这个
+			// key 函数。
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			if err == nil {
 				r.svcQueue.Add(key)
@@ -188,8 +186,8 @@ func newRepairIPAddress(interval time.Duration,
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			// IndexerInformer uses a delta queue, therefore for deletes we have to use this
-			// key function.
+			// IndexerInformer 使用 delta 队列，因此删除时必须用这个
+			// key 函数。
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			if err == nil {
 				r.ipQueue.Add(key)
@@ -200,7 +198,6 @@ func newRepairIPAddress(interval time.Duration,
 	return r
 }
 
-// RunUntil starts the controller until the provided ch is closed.
 // RunUntil 等待相关缓存与默认 ServiceCIDR 就绪，先完成一次全量核对，再启动 Service/IPAddress 两组增量 worker。
 func (r *RepairIPAddress) RunUntil(onFirstSuccess func(), stopCh chan struct{}) {
 	defer r.ipQueue.ShutDown()
@@ -215,7 +212,7 @@ func (r *RepairIPAddress) RunUntil(onFirstSuccess func(), stopCh chan struct{}) 
 		return
 	}
 
-	// wait for the default ServiceCIDR
+	// 等待默认 ServiceCIDR 就绪
 	ctx := wait.ContextForChannel(stopCh)
 	err := wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(context.Context) (bool, error) {
 		_, err := r.serviceCIDRLister.Get(defaultservicecidr.DefaultServiceCIDRName)
@@ -229,9 +226,9 @@ func (r *RepairIPAddress) RunUntil(onFirstSuccess func(), stopCh chan struct{}) 
 		return
 	}
 
-	// First sync goes through all the Services and IPAddresses in the cache,
-	// once synced, it signals the main loop and works using the handlers, since
-	// it's less expensive and more optimal.
+	// 首次同步会遍历缓存中所有的 Service 和 IPAddress，
+	// 同步完成后通知主循环，此后由事件处理器继续工作，
+	// 这样开销更小、也更高效。
 	if err := r.runOnce(); err != nil {
 		runtime.HandleError(err)
 		return
@@ -246,12 +243,11 @@ func (r *RepairIPAddress) RunUntil(onFirstSuccess func(), stopCh chan struct{}) 
 	<-stopCh
 }
 
-// runOnce verifies the state of the ClusterIP allocations and returns an error if an unrecoverable problem occurs.
+// runOnce 检查 ClusterIP 分配的状态，若出现无法恢复的问题则返回错误。
 func (r *RepairIPAddress) runOnce() error {
 	return retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		// When trying to repair the ClusterIP allocations, we may get a conflict or forbidden error.
-		// IsForbidden depends on the admission chain to be ready that may depend on the
-		// Namespace informer to be ready.
+		// 修复 ClusterIP 分配时可能收到 conflict 或 forbidden 错误。
+		// IsForbidden 依赖 admission 链就绪，而它又可能依赖 Namespace informer 就绪。
 		// Ref: https://issues.k8s.io/136288
 		if apierrors.IsConflict(err) || apierrors.IsForbidden(err) {
 			klog.ErrorS(err, "Running ipallocator repair failed ... retrying")
@@ -262,7 +258,6 @@ func (r *RepairIPAddress) runOnce() error {
 	}, r.doRunOnce)
 }
 
-// doRunOnce verifies the state of the ClusterIP allocations and returns an error if an unrecoverable problem occurs.
 // doRunOnce 先遍历 Service 确保每个 ClusterIP 有正确 IPAddress，再反向检查控制器管理的 IPAddress 是否仍有有效 Service 所有者。
 func (r *RepairIPAddress) doRunOnce() error {
 	services, err := r.serviceLister.List(labels.Everything())
@@ -270,7 +265,7 @@ func (r *RepairIPAddress) doRunOnce() error {
 		return fmt.Errorf("unable to refresh the service IP block: %v", err)
 	}
 
-	// Check every Service's ClusterIP, and rebuild the state as we think it should be.
+	// 检查每个 Service 的 ClusterIP，并按预期重建状态。
 	for _, svc := range services {
 		key, err := cache.MetaNamespaceKeyFunc(svc)
 		if err != nil {
@@ -282,9 +277,8 @@ func (r *RepairIPAddress) doRunOnce() error {
 		}
 	}
 
-	// We have checked that every Service has its corresponding IP.
-	// Check that there is no IP created by the allocator without
-	// a Service associated.
+	// 上面已确认每个 Service 都有对应的 IP，
+	// 这里再检查分配器创建的 IP 中，没有缺失对应 Service 的情况。
 	ipLabelSelector := labels.Set(map[string]string{
 		networkingv1.LabelManagedBy: ipallocator.ControllerName,
 	}).AsSelectorPreValidated()
@@ -292,7 +286,7 @@ func (r *RepairIPAddress) doRunOnce() error {
 	if err != nil {
 		return fmt.Errorf("unable to refresh the IPAddress block: %v", err)
 	}
-	// Check every IPAddress matches the corresponding Service, and rebuild the state as we think it should be.
+	// 检查每个 IPAddress 与其对应的 Service 是否匹配，并按预期重建状态。
 	for _, ipAddress := range ipAddresses {
 		key, err := cache.MetaNamespaceKeyFunc(ipAddress)
 		if err != nil {
@@ -342,7 +336,6 @@ func (r *RepairIPAddress) handleSvcErr(err error, key string) {
 	runtime.HandleError(err)
 }
 
-// syncServices reconcile the Service ClusterIPs to verify that each one has the corresponding IPAddress object associated
 // syncService 逐个校验 Service.ClusterIPs：缺少 IPAddress 时创建，引用/标签错误时重建，并拒绝越界或重复地址。
 func (r *RepairIPAddress) syncService(key string) error {
 	var syncError error
@@ -352,36 +345,36 @@ func (r *RepairIPAddress) syncService(key string) error {
 	}
 	svc, err := r.serviceLister.Services(namespace).Get(name)
 	if err != nil {
-		// nothing to do
+		// 无需处理
 		return nil
 	}
 	if !helper.IsServiceIPSet(svc) {
-		// didn't need a ClusterIP
+		// 该 Service 不需要 ClusterIP
 		return nil
 	}
 
 	for _, clusterIP := range svc.Spec.ClusterIPs {
 		ip := netutils.ParseIPSloppy(clusterIP)
 		if ip == nil {
-			// ClusterIP is corrupt, ClusterIPs are already validated, but double checking here
-			// in case there are some inconsistencies with the parsers
+			// ClusterIP 已损坏。ClusterIP 本来在校验阶段就已检查过，
+			// 这里再确认一次，以防解析逻辑存在不一致。
 			r.recorder.Eventf(svc, nil, v1.EventTypeWarning, "ClusterIPNotValid", "ClusterIPValidation", "Cluster IP %s is not a valid IP; please recreate Service", ip)
 			runtime.HandleError(fmt.Errorf("the ClusterIP %s for Service %s/%s is not a valid IP; please recreate Service", ip, svc.Namespace, svc.Name))
 			continue
 		}
-		// TODO(aojea) Refactor to abstract the IPs checks
+		// TODO(aojea) 重构这部分，把 IP 检查抽象出来
 		family := getFamilyByIP(ip)
 		if r.isIPOutOfRange(ip) {
-			// ClusterIP is out of range
+			// ClusterIP 超出地址段范围
 			r.recorder.Eventf(svc, nil, v1.EventTypeWarning, "ClusterIPOutOfRange", "ClusterIPAllocation", "Cluster IP [%v]: %s is not within any configured Service CIDR; please recreate service", family, ip)
 			runtime.HandleError(fmt.Errorf("the ClusterIP [%v]: %s for Service %s/%s is not within any service CIDR; please recreate", family, ip, svc.Namespace, svc.Name))
 			continue
 		}
 
-		// Get the IPAddress object associated to the ClusterIP
+		// 取出与该 ClusterIP 关联的 IPAddress 对象
 		ipAddress, err := r.ipAddressLister.Get(ip.String())
 		if apierrors.IsNotFound(err) {
-			// ClusterIP doesn't seem to be allocated, create it.
+			// 该 ClusterIP 似乎没有被分配，创建对应的对象。
 			r.recorder.Eventf(svc, nil, v1.EventTypeWarning, "ClusterIPNotAllocated", "ClusterIPAllocation", "Cluster IP [%v]: %s is not allocated; repairing", family, ip)
 			runtime.HandleError(fmt.Errorf("the ClusterIP [%v]: %s for Service %s/%s is not allocated; repairing", family, ip, svc.Namespace, svc.Name))
 			_, err := r.client.NetworkingV1().IPAddresses().Create(context.Background(), newIPAddress(ip.String(), svc), metav1.CreateOptions{})
@@ -395,7 +388,7 @@ func (r *RepairIPAddress) syncService(key string) error {
 			return fmt.Errorf("unable to allocate ClusterIP [%v]: %s for Service %s/%s due to an unknown error, will retry later: %v", family, ip, svc.Namespace, svc.Name, err)
 		}
 
-		// IPAddress that belongs to a Service must reference a Service
+		// 属于某个 Service 的 IPAddress 必须引用一个 Service
 		if ipAddress.Spec.ParentRef.Group != "" ||
 			ipAddress.Spec.ParentRef.Resource != "services" {
 			r.recorder.Eventf(svc, nil, v1.EventTypeWarning, "ClusterIPNotAllocated", "ClusterIPAllocation", "the ClusterIP [%v]: %s for Service %s/%s has a wrong reference; repairing", family, ip, svc.Namespace, svc.Name)
@@ -405,11 +398,11 @@ func (r *RepairIPAddress) syncService(key string) error {
 			continue
 		}
 
-		// IPAddress that belongs to a Service must reference the current Service
+		// 属于某个 Service 的 IPAddress 必须引用当前这个 Service
 		if ipAddress.Spec.ParentRef.Namespace != svc.Namespace ||
 			ipAddress.Spec.ParentRef.Name != svc.Name {
-			// verify that there are no two Services with the same IP, otherwise
-			// it will keep deleting and recreating the same IPAddress changing the reference
+			// 确认不存在两个 Service 使用同一个 IP，否则
+			// 会不断删除并重建同一个 IPAddress、反复修改其引用。
 			refService, err := r.serviceLister.Services(ipAddress.Spec.ParentRef.Namespace).Get(ipAddress.Spec.ParentRef.Name)
 			if err != nil {
 				r.recorder.Eventf(svc, nil, v1.EventTypeWarning, "ClusterIPNotAllocated", "ClusterIPAllocation", "the ClusterIP [%v]: %s for Service %s/%s has a wrong reference; repairing", family, ip, svc.Namespace, svc.Name)
@@ -418,7 +411,7 @@ func (r *RepairIPAddress) syncService(key string) error {
 				}
 				continue
 			}
-			// the IPAddress is duplicate but current Service is not the referenced, it has to be recreated
+			// 该 IPAddress 重复，且当前 Service 并非其引用的对象，需要重新创建
 			for _, clusterIP := range refService.Spec.ClusterIPs {
 				if ipAddress.Name == clusterIP {
 					r.recorder.Eventf(svc, nil, v1.EventTypeWarning, "ClusterIPAlreadyAllocated", "ClusterIPAllocation", "Cluster IP [%v]:%s was assigned to multiple services; please recreate service", family, ip)
@@ -428,7 +421,7 @@ func (r *RepairIPAddress) syncService(key string) error {
 			}
 		}
 
-		// IPAddress must have the corresponding labels assigned by the allocator
+		// IPAddress 必须带有分配器写入的对应 labels
 		if !verifyIPAddressLabels(ipAddress) {
 			if err := r.recreateIPAddress(ipAddress.Name, svc); err != nil {
 				return err
@@ -487,23 +480,22 @@ func (r *RepairIPAddress) handleIPErr(err error, key string) {
 	runtime.HandleError(err)
 }
 
-// syncIPAddress verify that the IPAddress that are owned by the ipallocator controller reference an existing Service
-// to avoid leaking IPAddresses. IPAddresses that are owned by other controllers are not processed to avoid hotloops.
-// IPAddress that reference Services and are part of the ClusterIP are validated in the syncService loop.
+// 本函数反向核验 IPAddress 的 Service ParentRef：由 ipallocator 控制器拥有的 IPAddress
+// 必须引用一个已存在的 Service，以避免 IPAddress 泄漏；由其他控制器拥有的 IPAddress
 // syncIPAddress 反向核验 IPAddress 的 Service ParentRef；对创建事务中的短暂孤儿对象使用宽限期，超时后才清理。
 func (r *RepairIPAddress) syncIPAddress(key string) error {
 	ipAddress, err := r.ipAddressLister.Get(key)
 	if err != nil {
-		// nothing to do
+		// 无需处理
 		return nil
 	}
 
-	// not mananged by this controller
+	// 不由本控制器管理
 	if !managedByController(ipAddress) {
 		return nil
 	}
 
-	// does not reference a Service but created by the service allocator, something else have changed it, delete it
+	// 由 service allocator 创建但没有引用 Service，说明被其他组件改过，删除它
 	if ipAddress.Spec.ParentRef.Group != "" || ipAddress.Spec.ParentRef.Resource != "services" {
 		runtime.HandleError(fmt.Errorf("IPAddress %s appears to have been modified, not referencing a Service %v: cleaning up", ipAddress.Name, ipAddress.Spec.ParentRef))
 		r.recorder.Eventf(ipAddress, nil, v1.EventTypeWarning, "IPAddressNotAllocated", "IPAddressAllocation", "IPAddress %s appears to have been modified, not referencing a Service %v: cleaning up", ipAddress.Name, ipAddress.Spec.ParentRef)
@@ -514,15 +506,15 @@ func (r *RepairIPAddress) syncIPAddress(key string) error {
 		return nil
 	}
 
-	// When a Service is created, the IP allocator creates an IPAddress object for it, and
-	// at that moment the Service object is not created yet, so we have to wait for it to be created.
-	// In addition, if the apiserver "dies" in the middle of the creation of the Service, the IPAddress object will be orphaned.
-	// If the time since it was created is greater than 60 seconds (default timeout value on the kube-apiserver), the IPAddress is deleted.
+	// 创建 Service 时，IP 分配器会先为它创建 IPAddress 对象，
+	// 此时 Service 对象尚未创建成功，因此需要等待它出现。
+	// 另外，如果 apiserver 在创建 Service 的过程中崩溃，IPAddress 就会变成游离对象。
+	// 如果它的创建时间超过 60 秒（kube-apiserver 的默认超时时间），就删除该 IPAddress。
 	svc, err := r.serviceLister.Services(ipAddress.Spec.ParentRef.Namespace).Get(ipAddress.Spec.ParentRef.Name)
 	if apierrors.IsNotFound(err) {
-		// cleaning all IPAddress without an owner reference IF the time since it was created is greater than 60 seconds (default timeout value on the kube-apiserver)
-		// This is required because during the Service creation there is a time that the IPAddress object exists but the Service is still being created
-		// Assume that CreationTimestamp exists.
+		// 清理所有没有 ownerReference、且创建时间超过 60 秒（kube-apiserver 默认超时）的 IPAddress。
+		// 之所以要这样做，是因为在 Service 创建过程中，会存在 IPAddress 已创建、Service 仍在创建的窗口期。
+		// 这里假定 CreationTimestamp 一定存在。
 		ipLifetime := r.clock.Now().Sub(ipAddress.CreationTimestamp.Time)
 		gracePeriod := 60 * time.Second
 		if ipLifetime > gracePeriod {
@@ -533,7 +525,7 @@ func (r *RepairIPAddress) syncIPAddress(key string) error {
 				return err
 			}
 		}
-		// requeue after the grace period
+		// 宽限期结束后重新入队
 		r.ipQueue.AddAfter(key, gracePeriod-ipLifetime)
 		return nil
 	}
@@ -542,42 +534,40 @@ func (r *RepairIPAddress) syncIPAddress(key string) error {
 		r.recorder.Eventf(ipAddress, nil, v1.EventTypeWarning, "UnknownError", "IPAddressAllocation", "Unable to get parent Service for IPAddress %s due to an unknown error", ipAddress)
 		return err
 	}
-	// The service exists, we have checked in previous loop that all Service to IPAddress are correct
-	// but we also have to check the reverse, that the IPAddress to Service relation is correct
+	// Service 已存在。前面的循环已确认所有 Service → IPAddress 的关系是正确的，
+	// 但还必须反过来检查 IPAddress → Service 的关系是否正确。
 	for _, clusterIP := range svc.Spec.ClusterIPs {
 		if ipAddress.Name == clusterIP {
 			return nil
 		}
 	}
 
-	// There is a special case when we "break the immutability" of the Service ClusterIPs,
-	// and we allocate IP addresses on Update. This is when a Service is mutated from Type ExternalName
-	// to any of the Types that require ClusterIP creation. Similar to the same logic we use to handle
-	// the case when the Service is created after the IPAddress, we delay the processing of the new
-	// IPAddress object by the 60 seconds timeout of the kube-apiserver.
+	// 有一个特殊情况：我们会"打破" Service ClusterIP 的不可变性，
+	// 在 Update 时分配 IP —— 即 Service 的类型从 ExternalName
+	// 变更为需要创建 ClusterIP 的类型。和处理"Service 晚于 IPAddress 创建"
+	// 所用的逻辑类似，这里也把新建 IPAddress 对象的延迟处理时间
+	// 设为 kube-apiserver 的 60 秒超时。
 	if svc.Spec.Type == v1.ServiceTypeExternalName {
 		ipLifetime := r.clock.Now().Sub(ipAddress.CreationTimestamp.Time)
 		gracePeriod := 60 * time.Second
 		if ipLifetime < gracePeriod {
-			// requeue after the grace period
+			// 宽限期结束后重新入队
 			r.ipQueue.AddAfter(key, gracePeriod-ipLifetime)
 			return nil
 		}
 	}
 
-	// Service storage implements transactions. It creates an IPAddress object first and then creates
-	// the Service object, and if the Service object already exists the complete transaction is
-	// reverted. There can be race conditions when the repair loop picks up the new IPAddress object
-	// for reconciliation before the transaction is reverted. This leads to spurious
-	// IPAddressWrongReference warnings, to suppress these warnings we delay the processing of the new
-	// IPAddress object by 5 seconds. The service allocation creates the IPAddress object before creating
-	// the Service object, we easily identify this scenario when the IPAddress object creation timestamp
-	// is after the Service creation timestamp. We do this only when the IPAddress object is created
-	// recently in order to avoid indefinitely requeue/delay in IPAddress cleanup if for some reason
-	// the service transaction revert fails.
+	// Service 存储实现了事务：先创建 IPAddress 对象，再创建 Service 对象，
+	// 如果 Service 对象已存在，整个事务会被回滚。当调和循环在事务回滚之前
+	// 就拿到了新的 IPAddress 对象时，就可能发生竞态，
+	// 产生虚假的 IPAddressWrongReference 告警。为了抑制这类告警，
+	// 我们把新 IPAddress 对象的处理延迟 5 秒。Service 分配流程会先创建 IPAddress
+	// 再创建 Service，因此当 IPAddress 的创建时间晚于 Service 的创建时间时，
+	// 就能识别出这种场景。我们只在 IPAddress 是最近创建时才这样做，
+	// 以免 Service 事务回滚失败时，IPAddress 的清理被无限期推迟。
 	if ipAddress.CreationTimestamp.After(svc.CreationTimestamp.Time) &&
 		r.clock.Now().Sub(ipAddress.CreationTimestamp.Time) < 5*time.Second {
-		// requeue after the grace period
+		// 宽限期结束后重新入队
 		r.ipQueue.AddAfter(key, 5*time.Second)
 		return nil
 	}
@@ -591,7 +581,7 @@ func (r *RepairIPAddress) syncIPAddress(key string) error {
 
 }
 
-// isIPOutOfRange returns true if the IP is not contained in any of the ServiceCIDRs
+// 如果该 IP 不在任何 ServiceCIDR 范围内，isIPOutOfRange 返回 true。
 func (r *RepairIPAddress) isIPOutOfRange(ip net.IP) bool {
 	return len(servicecidr.ContainsIP(r.serviceCIDRLister, ip)) == 0
 }
@@ -636,8 +626,8 @@ func getFamilyByIP(ip net.IP) v1.IPFamily {
 	return v1.IPv4Protocol
 }
 
-// managedByController returns true if the controller of the provided
-// EndpointSlices is the EndpointSlice controller.
+// managedByController 返回给定 IPAddress 的 manager 标签是否为
+// ipallocator 控制器名。
 func managedByController(ip *networkingv1.IPAddress) bool {
 	managedBy, ok := ip.Labels[networkingv1.LabelManagedBy]
 	if !ok {

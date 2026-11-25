@@ -104,9 +104,9 @@ func TestCreate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestCreate(
-		// valid
+		// 合法
 		newNode("foo"),
-		// invalid
+		// 非法
 		newNode("_-a123-a_"),
 	)
 }
@@ -118,7 +118,7 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestUpdate(
-		// valid
+		// 合法
 		newNode("foo"),
 		// updateFunc
 		func(obj runtime.Object) runtime.Object {
@@ -164,20 +164,20 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store).ClusterScope()
 	test.TestWatch(
 		newNode("foo"),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{
 			{"name": "foo"},
 		},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"name": "bar"},
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},

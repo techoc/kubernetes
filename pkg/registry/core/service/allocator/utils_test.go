@@ -23,7 +23,7 @@ import (
 
 // TestCountBits 覆盖不同长度大整数的置位统计，确保快照恢复后的 allocated count 与位图一致。
 func TestCountBits(t *testing.T) {
-	// bigN is an integer that occupies more than one big.Word.
+	// bigN 是占用多个 big.Word 的大整数。
 	bigN, ok := big.NewInt(0).SetString("10000000000000000000000000000000000000000000000000000000000000000", 16)
 	if !ok {
 		t.Fatal("Failed to set bigN")

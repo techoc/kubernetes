@@ -106,6 +106,7 @@ func (svcStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return true
 }
 
+// ValidateUpdate 校验 Service 更新，并比较新旧对象以验证字段变更是否合法。
 func (strategy svcStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	allErrs := validation.ValidateServiceUpdate(obj.(*api.Service), old.(*api.Service))
 	return allErrs
@@ -116,6 +117,7 @@ func (svcStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object
 	return serviceapi.GetWarningsForService(obj.(*api.Service), old.(*api.Service))
 }
 
+// AllowUnconditionalUpdate 返回 true：更新请求无需提供 resourceVersion。
 func (svcStrategy) AllowUnconditionalUpdate(ctx context.Context) bool {
 	return true
 }
@@ -131,8 +133,7 @@ type serviceStatusStrategy struct {
 // StatusStrategy 将 Service 状态更新策略导出给 storage 包使用。
 var StatusStrategy = serviceStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回状态子资源更新时由策略重置、用户不能修改的字段集合。
 func (serviceStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -159,7 +160,7 @@ func (serviceStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtim
 	return validation.ValidateServiceStatusUpdate(obj.(*api.Service), old.(*api.Service))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回给定 Service 状态更新产生的非阻断性警告。
 func (serviceStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	svc := obj.(*api.Service)
 	var warnings []string
@@ -176,8 +177,7 @@ func (serviceStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runt
 	return warnings
 }
 
-// GetAttrs 提取 Service 的 Labels 和可筛选字段，供 LIST/WATCH 过滤使用。
-// GetAttrs 提取 Service 标签和可选择字段，供 LIST/WATCH 的 LabelSelector 与 FieldSelector 过滤使用。
+// GetAttrs 提取 Service 标签和可选择字段，供 LIST/WATCH 的标签与字段选择器过滤使用。
 func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	service, ok := obj.(*api.Service)
 	if !ok {
@@ -195,8 +195,7 @@ func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionP
 	}
 }
 
-// SelectableFields 返回 Service 支持 FieldSelector 查询的字段集合。
-// SelectableFields 暴露 metadata 字段及 spec.clusterIP/spec.type 两个 Service 专属字段选择器。
+// SelectableFields 返回 metadata 字段以及 spec.clusterIP 和 spec.type 两个 Service 专属字段。
 func SelectableFields(service *api.Service) fields.Set {
 	objectMetaFieldsSet := generic.ObjectMetaFieldsSet(&service.ObjectMeta, true)
 	serviceSpecificFieldsSet := fields.Set{
@@ -221,12 +220,9 @@ func sameStringSlice(a []string, b []string) bool {
 	return true
 }
 
-// Service 是由 Type 决定字段适用范围的联合结构；切换类型时要谨慎清理自动分配字段，避免释放用户刚提交的值。
-// 这是一个特殊处理：Service 包含多个相互关联的字段，为避免破坏客户端行为，类型切换时需要谨慎推断用户意图。
-// Service 本质上是以 Spec.Type 为判别字段的联合结构；某些字段只适用于特定类型，切换到不适用的类型后必须清理。
-// 通常情况下，API Server 尽量不修改用户输入。但对于从有限资源池分配、需要释放的字段，API 演进时必须处理其依赖关系。
-// 这套模式具有较强特殊性，新增类似逻辑前应优先考虑其他设计。
-// dropTypeDependentFields 只在字段不再适用于新 Type、原值看起来由系统分配且用户未同时改动它时才清空，以便后续分配器释放资源。
+// dropTypeDependentFields 清理切换 Service 类型后不再适用的自动分配字段，以便分配器释放资源。
+// 仅在字段对新类型不再适用、原值可能由系统分配且用户未主动修改时清空。
+// Service 以 Spec.Type 为判别字段构成联合结构，处理这类依赖字段的方式较为特殊，新增类似逻辑前应优先考虑其他设计。
 func dropTypeDependentFields(newSvc *api.Service, oldSvc *api.Service) {
 	// 当前只在更新时清理字段，以降低行为变化带来的困惑；这里处理的场景都比较特殊。
 	if oldSvc == nil {
@@ -283,9 +279,7 @@ func dropTypeDependentFields(newSvc *api.Service, oldSvc *api.Service) {
 
 	// 注意：Selector 等其他字段理论上也可以清理，但历史行为一直保留它们，而且它们不来自有限资源池，因此当前继续保持原值。
 
-	// Clear the load-balancer status if it is no longer appropriate.  Although
-	// LB de-provisioning is actually asynchronous, we don't need to expose the
-	// user to that complexity.
+	// 类型不再需要负载均衡器时清空其状态。负载均衡器实际异步回收，但无需向用户暴露这一复杂性。
 	if newSvc.Spec.Type != api.ServiceTypeLoadBalancer {
 		newSvc.Status.LoadBalancer = api.LoadBalancerStatus{}
 	}
@@ -329,7 +323,7 @@ func needsNodePort(svc *api.Service) bool {
 }
 
 func sameNodePorts(oldSvc, newSvc *api.Service) bool {
-	// Helper to make a set of NodePort values.
+	// 将 NodePort 值转换为集合。
 	allNodePorts := func(svc *api.Service) sets.Int {
 		out := sets.NewInt()
 		for i := range svc.Spec.Ports {
@@ -343,8 +337,7 @@ func sameNodePorts(oldSvc, newSvc *api.Service) bool {
 	oldPorts := allNodePorts(oldSvc)
 	newPorts := allNodePorts(newSvc)
 
-	// Users can add, remove, or modify ports, as long as they don't add any
-	// net-new NodePorts.
+	// 用户可以增删或修改端口，只要没有新增任何 NodePort。
 	return oldPorts.IsSuperset(newPorts)
 }
 
@@ -372,7 +365,7 @@ func sameLoadBalancerClass(oldSvc, newSvc *api.Service) bool {
 		return false
 	}
 	if oldSvc.Spec.LoadBalancerClass == nil {
-		return true // both are nil
+		return true // 两者均为 nil
 	}
 	return *oldSvc.Spec.LoadBalancerClass == *newSvc.Spec.LoadBalancerClass
 }

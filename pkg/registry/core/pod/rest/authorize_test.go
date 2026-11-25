@@ -27,7 +27,7 @@ import (
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 )
 
-// mockAuthorizer provides a mock implementation of the authorizer.Interface.
+// mockAuthorizer 提供 authorizer.Interface 的模拟实现。
 type mockAuthorizer struct {
 	decision authorizer.Decision
 	reason   string

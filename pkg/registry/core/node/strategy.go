@@ -187,8 +187,7 @@ type nodeStatusStrategy struct {
 
 var StatusStrategy = nodeStatusStrategy{Strategy}
 
-// GetResetFields returns the set of fields that get reset by the strategy
-// and should not be modified by the user.
+// GetResetFields 返回由策略重置、且用户不应修改的字段集合。
 func (nodeStatusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	fields := map[fieldpath.APIVersion]*fieldpath.Set{
 		"v1": fieldpath.NewSet(
@@ -232,16 +231,16 @@ func (nodeStatusStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.O
 	return validation.ValidateNodeUpdate(obj.(*api.Node), old.(*api.Node))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新的警告信息。
 func (nodeStatusStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验之后规范化对象。
 func (nodeStatusStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// ResourceGetter is an interface for retrieving resources by ResourceLocation.
+// ResourceGetter 是按 ResourceLocation 读取资源的接口。
 type ResourceGetter interface {
 	Get(context.Context, string, *metav1.GetOptions) (runtime.Object, error)
 }
@@ -333,7 +332,7 @@ func nodeWarnings(obj runtime.Object) []string {
 	newNode := obj.(*api.Node)
 	var warnings []string
 	if newNode.Spec.ConfigSource != nil {
-		// KEP https://github.com/kubernetes/enhancements/issues/281
+		// 该特性已移除，详见 KEP：https://github.com/kubernetes/enhancements/issues/281
 		warnings = append(warnings, "spec.configSource: the feature is removed")
 	}
 	if len(newNode.Spec.DoNotUseExternalID) > 0 {

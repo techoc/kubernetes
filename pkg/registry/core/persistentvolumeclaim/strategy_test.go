@@ -29,7 +29,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/features"
 
-	// ensure types are installed
+	// 确保类型已注册
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
@@ -85,19 +85,19 @@ func TestDropConditions(t *testing.T) {
 			t.Run(fmt.Sprintf("old pvc %s, new pvc %s", oldPvcInfo.description, newPvcInfo.description), func(t *testing.T) {
 				StatusStrategy.PrepareForUpdate(ctx, newPvc, oldPvc)
 
-				// old pvc should never be changed
+				// 旧 pvc 不应该被修改
 				if !reflect.DeepEqual(oldPvc, oldPvcInfo.pvc()) {
 					t.Errorf("old pvc changed: %v", cmp.Diff(oldPvc, oldPvcInfo.pvc()))
 				}
 
 				switch {
 				case oldPvcHasConditins || newPvcHasConditions:
-					// new pvc should not be changed if the feature is enabled, or if the old pvc had Conditions
+					// 如果特性门控已开启，或旧 pvc 已带有 Conditions，则新 pvc 保持不变
 					if !reflect.DeepEqual(newPvc, newPvcInfo.pvc()) {
 						t.Errorf("new pvc changed: %v", cmp.Diff(newPvc, newPvcInfo.pvc()))
 					}
 				default:
-					// new pvc should not need to be changed
+					// 新 pvc 无需改动
 					if !reflect.DeepEqual(newPvc, newPvcInfo.pvc()) {
 						t.Errorf("new pvc changed: %v", cmp.Diff(newPvc, newPvcInfo.pvc()))
 					}
@@ -295,7 +295,7 @@ func TestPrepareForCreate(t *testing.T) {
 				},
 			}
 
-			// Method under test
+			// 被测方法
 			Strategy.PrepareForCreate(ctx, &pvc)
 
 			if !reflect.DeepEqual(pvc.Spec.DataSource, test.want) {

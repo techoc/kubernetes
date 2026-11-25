@@ -80,9 +80,9 @@ func TestCreate(t *testing.T) {
 	pv := validNewPersistentVolumeClaim("foo", metav1.NamespaceDefault)
 	pv.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 有效对象
 		pv,
-		// invalid
+		// 无效对象
 		&api.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: "*BadName!"},
 		},
@@ -95,9 +95,9 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 有效对象
 		validNewPersistentVolumeClaim("foo", metav1.NamespaceDefault),
-		// updateFunc
+		// 更新函数
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*api.PersistentVolumeClaim)
 			object.Spec.VolumeName = "onlyVolumeNameUpdateAllowed"
@@ -137,18 +137,18 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewPersistentVolumeClaim("foo", metav1.NamespaceDefault),
-		// matching labels
+		// 匹配的标签
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配的标签
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配的字段
 		[]fields.Set{
 			{"metadata.name": "foo"},
 			{"name": "foo"},
 		},
-		// not matching fields
+		// 不匹配的字段
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -197,7 +197,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	pvcOut := obj.(*api.PersistentVolumeClaim)
-	// only compare relevant changes b/c of difference in metadata
+	// 元数据存在差异，只比较相关状态变更。
 	if !apiequality.Semantic.DeepEqual(pvc.Status, pvcOut.Status) {
 		t.Errorf("unexpected object: %s", cmp.Diff(pvc.Status, pvcOut.Status))
 	}
@@ -268,7 +268,7 @@ func TestDefaultOnReadPvc(t *testing.T) {
 				expectDataSourceRef = &dataSourceRef
 			}
 
-			// Method under test
+			// 被测方法
 			storage.defaultOnReadPvc(pvc)
 
 			if !reflect.DeepEqual(pvc.Spec.DataSource, expectDataSource) {

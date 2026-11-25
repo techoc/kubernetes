@@ -109,7 +109,7 @@ func NewREST(
 	statusStore.ResetFieldsStrategy = svcreg.StatusStrategy
 
 	var primaryIPFamily api.IPFamily = serviceIPFamily
-	var secondaryIPFamily api.IPFamily = "" // sentinel value
+	var secondaryIPFamily api.IPFamily = "" // 哨兵值
 	if len(ipAllocs) > 1 {
 		secondaryIPFamily = otherFamily(serviceIPFamily)
 	}
@@ -356,8 +356,8 @@ func (r *REST) beginUpdate(ctx context.Context, obj, oldObj runtime.Object, opti
 	// 补回客户端可能省略的系统分配值，使重复提交相同配置具备幂等性。
 	patchAllocatedValues(After{newSvc}, Before{oldSvc})
 
-	// Make sure ClusterIP and ClusterIPs are in sync.  This has to happen
-	// early, before anyone looks at them.
+	// 确保 ClusterIP 与 ClusterIPs 保持同步，这一步必须尽早完成，
+	// 在任何代码读取它们之前就做好。
 	normalizeClusterIPs(After{newSvc}, Before{oldSvc})
 
 	// 根据新旧 Service 的差异分配或初始化网络字段。
@@ -366,7 +366,7 @@ func (r *REST) beginUpdate(ctx context.Context, obj, oldObj runtime.Object, opti
 		return nil, err
 	}
 
-	// Our cleanup callback
+	// 清理回调
 	finish := func(_ context.Context, success bool) {
 		if success {
 			txn.Commit()
@@ -554,8 +554,8 @@ func patchAllocatedValues(after After, before Before) {
 			np[p.Name] = p.NodePort
 		}
 
-		// If newSvc is missing values, try to patch them in when we know them and
-		// they haven't been used for another port.
+		// 如果 newSvc 缺少这些取值，就在我们已知取值、且它没有被其他端口占用时补回去，
+		// 以保证重复提交相同配置是幂等的。
 
 		for i := range newSvc.Spec.Ports {
 			p := &newSvc.Spec.Ports[i]

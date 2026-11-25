@@ -52,7 +52,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubelet/client"
 
-	// ensure types are installed
+	// 确保类型已注册
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
@@ -323,7 +323,7 @@ func TestGetPodQOS(t *testing.T) {
 	}
 }
 
-// TestApplyPodLevelResourceDefaults tests all pod-level resource defaulting logic during creation.
+// TestApplyPodLevelResourceDefaults 测试创建阶段所有 Pod 级资源的默认值逻辑。
 func TestApplyPodLevelResourceDefaults(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -857,7 +857,7 @@ func TestApplyPodLevelResourceDefaults(t *testing.T) {
 	}
 }
 
-// TestPrepareForUpdatePodLevelResources tests update and resize strategy PrepareForUpdate behaviors.
+// TestPrepareForUpdatePodLevelResources 测试更新与 resize 策略的 PrepareForUpdate 行为。
 func TestPrepareForUpdatePodLevelResources(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1491,22 +1491,22 @@ func TestExecLocation(t *testing.T) {
 		expectedConnInfo *client.ConnectionInfo
 	}{
 		{
-			// Container validation runs before the host check, so the pod must have
-			// a matching container. The "no host assigned" error uses the name
-			// argument ("test"), not pod.Name.
+			// 容器校验先于主机检查执行，因此 pod 必须包含
+			// 匹配的容器。"no host assigned" 错误使用的是 name
+			// 参数（"test"），而不是 pod.Name。
 			name: "pod without host returns error",
 			in: &api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pod1"},
 				Spec: api.PodSpec{
 					Containers: []api.Container{{Name: "c1"}},
-					// NodeName intentionally absent
+					// 故意不设置 NodeName
 				},
 			},
 			opts:        &api.PodExecOptions{Container: "c1"},
 			expectedErr: errors.NewBadRequest("pod test does not have a host assigned"),
 		},
 		{
-			// validateContainer uses pod.Name ("pod1") in its error, not the name argument.
+			// validateContainer 的错误信息里用的是 pod.Name（"pod1"），而不是 name 参数。
 			name: "invalid container returns error",
 			in: &api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pod1"},
@@ -1569,22 +1569,22 @@ func TestAttachLocation(t *testing.T) {
 		expectedConnInfo *client.ConnectionInfo
 	}{
 		{
-			// Container validation runs before the host check, so the pod must have
-			// a matching container. The "no host assigned" error uses the name
-			// argument ("test"), not pod.Name.
+			// 容器校验先于主机检查执行，因此 pod 必须包含
+			// 匹配的容器。"no host assigned" 错误使用的是 name
+			// 参数（"test"），而不是 pod.Name。
 			name: "pod without host returns error",
 			in: &api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pod1"},
 				Spec: api.PodSpec{
 					Containers: []api.Container{{Name: "c1"}},
-					// NodeName intentionally absent
+					// 故意不设置 NodeName
 				},
 			},
 			opts:        &api.PodAttachOptions{Container: "c1"},
 			expectedErr: errors.NewBadRequest("pod test does not have a host assigned"),
 		},
 		{
-			// validateContainer uses pod.Name ("pod1") in its error, not the name argument.
+			// validateContainer 的错误信息里用的是 pod.Name（"pod1"），而不是 name 参数。
 			name: "invalid container returns error",
 			in: &api.Pod{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pod1"},
@@ -1898,7 +1898,7 @@ func TestEphemeralContainerStrategyValidateUpdate(t *testing.T) {
 		},
 	}
 
-	// expect no errors
+	// 预期没有错误
 	for _, tc := range test {
 		t.Run(tc.name, func(t *testing.T) {
 			if errs := EphemeralContainersStrategy.ValidateUpdate(genericapirequest.NewContext(), tc.newPod, tc.oldPod); len(errs) != 0 {
@@ -1975,7 +1975,7 @@ func TestEphemeralContainerStrategyValidateUpdate(t *testing.T) {
 		},
 	}
 
-	// expect one error
+	// 预期有一个错误
 	for _, tc := range test {
 		t.Run(tc.name, func(t *testing.T) {
 			errs := EphemeralContainersStrategy.ValidateUpdate(genericapirequest.NewContext(), tc.newPod, tc.oldPod)
@@ -2279,7 +2279,7 @@ func TestNodeInclusionPolicyEnablementInCreating(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			if !tc.enableNodeInclusionPolicy {
-				// TODO: this will be removed in 1.36
+				// TODO: 这段逻辑将在 1.36 移除
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.32"))
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeInclusionPolicyInPodTopologySpread, tc.enableNodeInclusionPolicy)
 			}
@@ -2308,7 +2308,7 @@ func TestNodeInclusionPolicyEnablementInUpdating(t *testing.T) {
 		ignore = api.NodeInclusionPolicyIgnore
 	)
 
-	// Enable the Feature Gate during the first rule creation
+	// 在创建第一条规则时开启该特性门控
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeInclusionPolicyInPodTopologySpread, true)
 	ctx := genericapirequest.NewDefaultContext()
 
@@ -2337,7 +2337,7 @@ func TestNodeInclusionPolicyEnablementInUpdating(t *testing.T) {
 	}
 
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.32"))
-	// Disable the Feature Gate and expect these fields still exist after updating.
+	// 关闭特性门控，并期望更新后这些字段仍然存在。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeInclusionPolicyInPodTopologySpread, false)
 
 	updatedPod := createdPod.DeepCopy()
@@ -2357,7 +2357,7 @@ func TestNodeInclusionPolicyEnablementInUpdating(t *testing.T) {
 		t.Error("NodeInclusionPolicy updated with unexpected result")
 	}
 
-	// Enable the Feature Gate again to check whether configured fields still exist after updating.
+	// 再次开启特性门控，检查更新后已配置的字段是否仍然存在。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeInclusionPolicyInPodTopologySpread, true)
 
 	updatedPod2 := updatedPod.DeepCopy()
@@ -2609,7 +2609,7 @@ func Test_mutatePodAffinity(t *testing.T) {
 											"region": "Asia",
 										},
 										MatchExpressions: []metav1.LabelSelectorRequirement{
-											// "city" should be added correctly even if matchLabelKey has "not-found" key.
+											// 即使 matchLabelKeys 中含有 "not-found" 这样的 key，"city" 也应被正确添加。
 											{
 												Key:      "city",
 												Operator: metav1.LabelSelectorOpIn,
@@ -3516,7 +3516,7 @@ func TestApplyAppArmorVersionSkew(t *testing.T) {
 				api.DeprecatedAppArmorAnnotationKeyPrefix + "ctr": api.DeprecatedAppArmorAnnotationValueRuntimeDefault,
 			}, pod.Annotations)
 			assert.Equal(t, api.AppArmorProfileTypeRuntimeDefault, pod.Spec.SecurityContext.AppArmorProfile.Type)
-			// Annotation shouldn't be synced to container security context
+			// 该 annotation 不应被同步到容器的 securityContext 中
 			assert.Nil(t, pod.Spec.Containers[0].SecurityContext)
 		},
 	}, {
@@ -3936,7 +3936,7 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
 								api.ResourceCPU:    resource.MustParse("100m"),
-								api.ResourceMemory: resource.MustParse("2Gi"), // Updated resource
+								api.ResourceMemory: resource.MustParse("2Gi"), // 更新后的资源
 							},
 						}),
 					),
@@ -3965,7 +3965,7 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
 								api.ResourceCPU:    resource.MustParse("100m"),
-								api.ResourceMemory: resource.MustParse("2Gi"), // Updated resource
+								api.ResourceMemory: resource.MustParse("2Gi"), // 更新后的资源
 							},
 						}),
 					),
@@ -4029,19 +4029,19 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 			newPod: podtest.MakePod("test-pod",
 				podtest.SetResourceVersion("2"),
 				podtest.SetContainers(
-					podtest.MakeContainer("container2", // Order changed
+					podtest.MakeContainer("container2", // 顺序发生变化
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
-								api.ResourceCPU:    resource.MustParse("200m"), // Updated resource
-								api.ResourceMemory: resource.MustParse("2Gi"),  // Updated resource
+								api.ResourceCPU:    resource.MustParse("200m"), // 更新后的资源
+								api.ResourceMemory: resource.MustParse("2Gi"),  // 更新后的资源
 							},
 						}),
 					),
-					podtest.MakeContainer("container1", // Order changed
+					podtest.MakeContainer("container1", // 顺序发生变化
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
-								api.ResourceCPU:    resource.MustParse("200m"), // Updated resource
-								api.ResourceMemory: resource.MustParse("4Gi"),  // Updated resource
+								api.ResourceCPU:    resource.MustParse("200m"), // 更新后的资源
+								api.ResourceMemory: resource.MustParse("4Gi"),  // 更新后的资源
 							},
 						}),
 					),
@@ -4065,19 +4065,19 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 			expected: podtest.MakePod("test-pod",
 				podtest.SetResourceVersion("2"),
 				podtest.SetContainers(
-					podtest.MakeContainer("container2", // Order changed
+					podtest.MakeContainer("container2", // 顺序发生变化
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
-								api.ResourceCPU:    resource.MustParse("200m"), // Updated resource
-								api.ResourceMemory: resource.MustParse("2Gi"),  // Updated resource
+								api.ResourceCPU:    resource.MustParse("200m"), // 更新后的资源
+								api.ResourceMemory: resource.MustParse("2Gi"),  // 更新后的资源
 							},
 						}),
 					),
-					podtest.MakeContainer("container1", // Order changed
+					podtest.MakeContainer("container1", // 顺序发生变化
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
-								api.ResourceCPU:    resource.MustParse("200m"), // Updated resource
-								api.ResourceMemory: resource.MustParse("4Gi"),  // Updated resource
+								api.ResourceCPU:    resource.MustParse("200m"), // 更新后的资源
+								api.ResourceMemory: resource.MustParse("4Gi"),  // 更新后的资源
 							},
 						}),
 					),
@@ -4207,8 +4207,8 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 						podtest.SetContainerRestartPolicy(containerRestartPolicyAlways),
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
-								api.ResourceCPU:    resource.MustParse("200m"), // Updated resource
-								api.ResourceMemory: resource.MustParse("4Gi"),  // Updated resource
+								api.ResourceCPU:    resource.MustParse("200m"), // 更新后的资源
+								api.ResourceMemory: resource.MustParse("4Gi"),  // 更新后的资源
 							},
 						}),
 					),
@@ -4231,8 +4231,8 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 						podtest.SetContainerRestartPolicy(containerRestartPolicyAlways),
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
-								api.ResourceCPU:    resource.MustParse("200m"), // Updated resource
-								api.ResourceMemory: resource.MustParse("4Gi"),  // Updated resource
+								api.ResourceCPU:    resource.MustParse("200m"), // 更新后的资源
+								api.ResourceMemory: resource.MustParse("4Gi"),  // 更新后的资源
 							},
 						}),
 					),
@@ -4279,8 +4279,8 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 					podtest.MakeContainer("init-container1",
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
-								api.ResourceCPU:    resource.MustParse("200m"), // Updated resource
-								api.ResourceMemory: resource.MustParse("4Gi"),  // Updated resource
+								api.ResourceCPU:    resource.MustParse("200m"), // 更新后的资源
+								api.ResourceMemory: resource.MustParse("4Gi"),  // 更新后的资源
 							},
 						}),
 					),
@@ -4301,8 +4301,8 @@ func TestPodResizePrepareForUpdate(t *testing.T) {
 					podtest.MakeContainer("init-container1",
 						podtest.SetContainerResources(api.ResourceRequirements{
 							Requests: api.ResourceList{
-								api.ResourceCPU:    resource.MustParse("200m"), // Updated resource
-								api.ResourceMemory: resource.MustParse("4Gi"),  // Updated resource
+								api.ResourceCPU:    resource.MustParse("200m"), // 更新后的资源
+								api.ResourceMemory: resource.MustParse("4Gi"),  // 更新后的资源
 							},
 						}),
 					),
@@ -4893,7 +4893,7 @@ func TestSchedulingGroupEnablement(t *testing.T) {
 		)
 	)
 
-	// Enable the Feature Gate during the Pod creation.
+	// 在创建 Pod 期间开启该特性门控。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 
 	errs := Strategy.Validate(ctx, pod)
@@ -4908,7 +4908,7 @@ func TestSchedulingGroupEnablement(t *testing.T) {
 		t.Error("SchedulingGroup created with unexpected result")
 	}
 
-	// Disable the Feature Gate and check that the SchedulingGroup field still exists after updating.
+	// 关闭特性门控，并检查更新后 SchedulingGroup 字段仍然存在。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, false)
 
 	updatedPod := createdPod.DeepCopy()
@@ -4926,7 +4926,7 @@ func TestSchedulingGroupEnablement(t *testing.T) {
 		t.Error("SchedulingGroup updated with unexpected result")
 	}
 
-	// Enable the Feature Gate again to check that the SchedulingGroup field still exist after updating.
+	// 再次开启特性门控，检查更新后 SchedulingGroup 字段仍然存在。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, true)
 
 	updatedPod2 := updatedPod.DeepCopy()

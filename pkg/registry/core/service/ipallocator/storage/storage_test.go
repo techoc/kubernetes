@@ -125,8 +125,8 @@ func TestAllocateReserved(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// allocate all addresses on the dynamic block
-	// subnet /24 = 256 ; dynamic block size is min(max(16,256/16),256) = 16
+	// 把动态块中的地址全部分配掉
+	// /24 子网共 256 个地址；动态块大小为 min(max(16,256/16),256) = 16
 	dynamicOffset := 16
 	max := 254
 	dynamicBlockSize := max - dynamicOffset
@@ -142,7 +142,7 @@ func TestAllocateReserved(t *testing.T) {
 		}
 	}
 
-	// allocate all addresses on the static block
+	// 把静态块中的地址全部分配掉
 	for i := 0; i < dynamicOffset; i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i+1)
 		if err := storage.Allocate(netutils.ParseIPSloppy(ip)); err != nil {
@@ -152,7 +152,7 @@ func TestAllocateReserved(t *testing.T) {
 	if _, err := storage.AllocateNext(); err == nil {
 		t.Error("Allocator expected to be full")
 	}
-	// release one address in the allocated block and another a new one randomly
+	// 释放已分配块中的一个地址，再随机分配一个新地址
 	if err := storage.Release(netutils.ParseIPSloppy("192.168.1.10")); err != nil {
 		t.Fatalf("Unexpected error trying to release ip 192.168.1.10: %v", err)
 	}
@@ -171,9 +171,9 @@ func TestAllocateReservedDynamicBlockExhausted(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// allocate all addresses both on the dynamic and reserved blocks
-	// once the dynamic block has been exhausted
-	// the dynamic allocator will use the reserved block
+	// 把动态块和保留块中的地址全部分配掉：
+	// 动态块耗尽之后，
+	// 动态分配会继续使用保留块中的地址
 	max := 254
 
 	for i := 0; i < max; i++ {

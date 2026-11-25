@@ -32,7 +32,6 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against pod templates.
 // NewREST 注册 PodTemplate 对象构造器、资源名、Strategy 与表格输出器，并初始化底层持久化 Store。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, error) {
 	store := &genericregistry.Store{

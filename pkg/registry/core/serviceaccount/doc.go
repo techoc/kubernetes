@@ -14,7 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package serviceaccount provides a Registry interface and a strategy
-// implementation for storing ServiceAccount API objects.
 // Package serviceaccount 提供 ServiceAccount REST 策略、Secret 引用清理以及服务账号资源存储接口。
 package serviceaccount

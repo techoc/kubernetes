@@ -113,7 +113,6 @@ func GetAttrs(obj runtime.Object) (labels.Set, fields.Set, error) {
 	return labels.Set(configMap.Labels), SelectableFields(configMap), nil
 }
 
-// Matcher 根据 LabelSelector 和 FieldSelector 创建存储层选择谓词。
 // Matcher 将请求中的 LabelSelector/FieldSelector 与 ConfigMap GetAttrs 绑定为存储层过滤谓词。
 func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionPredicate {
 	return pkgstorage.SelectionPredicate{
@@ -123,7 +122,6 @@ func Matcher(label labels.Selector, field fields.Selector) pkgstorage.SelectionP
 	}
 }
 
-// SelectableFields 返回 ConfigMap 支持 FieldSelector 查询的字段集合。
 // ConfigMap 当前只暴露标准 ObjectMeta 字段选择器，不把 Data 内容开放为 FieldSelector。
 func SelectableFields(obj *api.ConfigMap) fields.Set {
 	return generic.ObjectMetaFieldsSet(&obj.ObjectMeta, true)

@@ -142,10 +142,10 @@ func TestExecRESTConnect(t *testing.T) {
 		enableTranslateWebSockets bool
 		expectProxy               bool
 		expectErr                 bool
-		expectedProxyType         string // empty means no metric expected
+		expectedProxyType         string // 为空表示预期没有指标
 	}{
-		// Scenario 1: Both feature gates disabled, node does not support websockets.
-		// Expect UpgradeAwareHandler as no translation or extension is active.
+		// 场景 1：两个 Feature Gate 均关闭，且 Node 不支持 WebSocket。
+		// 未启用转换或扩展，因此预期使用 UpgradeAwareHandler。
 		{
 			name:                      "Kubelet disabled, Translate disabled, Node no websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -154,8 +154,8 @@ func TestExecRESTConnect(t *testing.T) {
 			enableTranslateWebSockets: false,
 			expectProxy:               true,
 		},
-		// Scenario 2: ExtendWebSocketsToKubelet enabled, TranslateStreamCloseWebsocketRequests disabled,
-		// node supports websockets. Expect UpgradeAwareHandler as translation is disabled.
+		// 场景 2：ExtendWebSocketsToKubelet 开启、TranslateStreamCloseWebsocketRequests 关闭，
+		// 且 Node 支持 WebSocket。转换功能未启用，因此预期使用 UpgradeAwareHandler。
 		{
 			name:                      "Kubelet enabled, Translate disabled, Node with websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -164,8 +164,8 @@ func TestExecRESTConnect(t *testing.T) {
 			enableTranslateWebSockets: false,
 			expectProxy:               true,
 		},
-		// Scenario 3: ExtendWebSocketsToKubelet disabled, TranslateStreamCloseWebsocketRequests enabled,
-		// node does not support websockets. Expect translatingHandler as translation is active but extension is not.
+		// 场景 3：ExtendWebSocketsToKubelet 关闭、TranslateStreamCloseWebsocketRequests 开启，
+		// 且 Node 不支持 WebSocket。转换启用但扩展未启用，因此预期使用 translatingHandler。
 		{
 			name:                      "Kubelet disabled, Translate enabled, Node no websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -175,8 +175,8 @@ func TestExecRESTConnect(t *testing.T) {
 			expectProxy:               false,
 			expectedProxyType:         "translated_at_apiserver",
 		},
-		// Scenario 4: ExtendWebSocketsToKubelet enabled, TranslateStreamCloseWebsocketRequests enabled,
-		// node supports websockets. Expect UpgradeAwareHandler as extension is active and node supports it.
+		// 场景 4：ExtendWebSocketsToKubelet 和 TranslateStreamCloseWebsocketRequests 均开启，
+		// 且 Node 支持 WebSocket。扩展启用且 Node 支持，因此预期使用 UpgradeAwareHandler。
 		{
 			name:                      "Kubelet enabled, Translate enabled, Node with websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -186,8 +186,8 @@ func TestExecRESTConnect(t *testing.T) {
 			expectProxy:               true,
 			expectedProxyType:         "proxied_to_kubelet",
 		},
-		// Scenario 5: ExtendWebSocketsToKubelet enabled, TranslateStreamCloseWebsocketRequests enabled,
-		// node does not support websockets. Expect translatingHandler as extension is active but node does not support it.
+		// 场景 5：ExtendWebSocketsToKubelet 和 TranslateStreamCloseWebsocketRequests 均开启，
+		// 但 Node 不支持 WebSocket。扩展启用而 Node 不支持，因此预期使用 translatingHandler。
 		{
 			name:                      "Kubelet enabled, Translate enabled, Node no websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -197,13 +197,13 @@ func TestExecRESTConnect(t *testing.T) {
 			expectProxy:               false,
 			expectedProxyType:         "translated_at_apiserver",
 		},
-		// Scenario 6: Pod getter returns error; Connect must propagate it.
+		// 场景 6：Pod 获取器返回错误；Connect 必须原样传播该错误。
 		{
 			name:      "pod getter error",
 			store:     &fakePodGetter{err: fmt.Errorf("pod not found")},
 			expectErr: true,
 		},
-		// Scenario 7: ConnectionInfo getter returns error; Connect must propagate it.
+		// 场景 7：连接信息获取器返回错误；Connect 必须原样传播该错误。
 		{
 			name:        "connection info getter error",
 			store:       &fakePodGetter{pod: testPod},
@@ -292,10 +292,10 @@ func TestAttachRESTConnect(t *testing.T) {
 		enableTranslateWebSockets bool
 		expectProxy               bool
 		expectErr                 bool
-		expectedProxyType         string // empty means no metric expected
+		expectedProxyType         string // 为空表示预期没有指标
 	}{
-		// Scenario 1: Both feature gates disabled, node does not support websockets.
-		// Expect UpgradeAwareHandler as no translation or extension is active.
+		// 场景 1：两个 Feature Gate 均关闭，且 Node 不支持 WebSocket。
+		// 未启用转换或扩展，因此预期使用 UpgradeAwareHandler。
 		{
 			name:                      "Kubelet disabled, Translate disabled, Node no websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -304,8 +304,8 @@ func TestAttachRESTConnect(t *testing.T) {
 			enableTranslateWebSockets: false,
 			expectProxy:               true,
 		},
-		// Scenario 2: ExtendWebSocketsToKubelet enabled, TranslateStreamCloseWebsocketRequests disabled,
-		// node supports websockets. Expect UpgradeAwareHandler as translation is disabled.
+		// 场景 2：ExtendWebSocketsToKubelet 开启、TranslateStreamCloseWebsocketRequests 关闭，
+		// 且 Node 支持 WebSocket。转换功能未启用，因此预期使用 UpgradeAwareHandler。
 		{
 			name:                      "Kubelet enabled, Translate disabled, Node with websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -314,8 +314,8 @@ func TestAttachRESTConnect(t *testing.T) {
 			enableTranslateWebSockets: false,
 			expectProxy:               true,
 		},
-		// Scenario 3: ExtendWebSocketsToKubelet disabled, TranslateStreamCloseWebsocketRequests enabled,
-		// node does not support websockets. Expect translatingHandler as translation is active but extension is not.
+		// 场景 3：ExtendWebSocketsToKubelet 关闭、TranslateStreamCloseWebsocketRequests 开启，
+		// 且 Node 不支持 WebSocket。转换启用但扩展未启用，因此预期使用 translatingHandler。
 		{
 			name:                      "Kubelet disabled, Translate enabled, Node no websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -325,8 +325,8 @@ func TestAttachRESTConnect(t *testing.T) {
 			expectProxy:               false,
 			expectedProxyType:         "translated_at_apiserver",
 		},
-		// Scenario 4: ExtendWebSocketsToKubelet enabled, TranslateStreamCloseWebsocketRequests enabled,
-		// node supports websockets. Expect UpgradeAwareHandler as extension is active and node supports it.
+		// 场景 4：ExtendWebSocketsToKubelet 和 TranslateStreamCloseWebsocketRequests 均开启，
+		// 且 Node 支持 WebSocket。扩展启用且 Node 支持，因此预期使用 UpgradeAwareHandler。
 		{
 			name:                      "Kubelet enabled, Translate enabled, Node with websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -336,8 +336,8 @@ func TestAttachRESTConnect(t *testing.T) {
 			expectProxy:               true,
 			expectedProxyType:         "proxied_to_kubelet",
 		},
-		// Scenario 5: ExtendWebSocketsToKubelet enabled, TranslateStreamCloseWebsocketRequests enabled,
-		// node does not support websockets. Expect translatingHandler as extension is active but node does not support it.
+		// 场景 5：ExtendWebSocketsToKubelet 和 TranslateStreamCloseWebsocketRequests 均开启，
+		// 但 Node 不支持 WebSocket。扩展启用而 Node 不支持，因此预期使用 translatingHandler。
 		{
 			name:                      "Kubelet enabled, Translate enabled, Node no websocket",
 			store:                     &fakePodGetter{pod: testPod},
@@ -347,13 +347,13 @@ func TestAttachRESTConnect(t *testing.T) {
 			expectProxy:               false,
 			expectedProxyType:         "translated_at_apiserver",
 		},
-		// Scenario 6: Pod getter returns error; Connect must propagate it.
+		// 场景 6：Pod 获取器返回错误；Connect 必须原样传播该错误。
 		{
 			name:      "pod getter error",
 			store:     &fakePodGetter{err: fmt.Errorf("pod not found")},
 			expectErr: true,
 		},
-		// Scenario 7: ConnectionInfo getter returns error; Connect must propagate it.
+		// 场景 7：连接信息获取器返回错误；Connect 必须原样传播该错误。
 		{
 			name:        "connection info getter error",
 			store:       &fakePodGetter{pod: testPod},
@@ -442,10 +442,10 @@ func TestPortForwardRESTConnect(t *testing.T) {
 		enablePortForward       bool
 		expectProxy             bool
 		expectErr               bool
-		expectedProxyType       string // empty means no metric expected
+		expectedProxyType       string // 为空表示预期没有指标
 	}{
-		// Scenario 1: Both feature gates disabled, node does not support websockets.
-		// Expect UpgradeAwareHandler as no tunneling or extension is active.
+		// 场景 1：两个 Feature Gate 均关闭，且 Node 不支持 WebSocket。
+		// 未启用隧道或扩展，因此预期使用 UpgradeAwareHandler。
 		{
 			name:                    "Kubelet disabled, PortForward disabled, Node no websocket",
 			store:                   &fakePodGetter{pod: testPod},
@@ -454,8 +454,8 @@ func TestPortForwardRESTConnect(t *testing.T) {
 			enablePortForward:       false,
 			expectProxy:             true,
 		},
-		// Scenario 2: ExtendWebSocketsToKubelet enabled, PortForwardWebsockets disabled,
-		// node supports websockets. Expect UpgradeAwareHandler as tunneling is disabled.
+		// 场景 2：开启 ExtendWebSocketsToKubelet、关闭 PortForwardWebsockets，
+		// 且节点支持 websockets。由于未启用隧道转发，预期使用 UpgradeAwareHandler。
 		{
 			name:                    "Kubelet enabled, PortForward disabled, Node with websocket",
 			store:                   &fakePodGetter{pod: testPod},
@@ -464,8 +464,8 @@ func TestPortForwardRESTConnect(t *testing.T) {
 			enablePortForward:       false,
 			expectProxy:             true,
 		},
-		// Scenario 3: ExtendWebSocketsToKubelet disabled, PortForwardWebsockets enabled,
-		// node does not support websockets. Expect translatingHandler as tunneling is active but extension is not.
+		// 场景 3：关闭 ExtendWebSocketsToKubelet、开启 PortForwardWebsockets，
+		// 且节点不支持 websockets。隧道转发已启用但未启用扩展，预期使用 translatingHandler。
 		{
 			name:                    "Kubelet disabled, PortForward enabled, Node no websocket",
 			store:                   &fakePodGetter{pod: testPod},
@@ -475,8 +475,8 @@ func TestPortForwardRESTConnect(t *testing.T) {
 			expectProxy:             false,
 			expectedProxyType:       "translated_at_apiserver",
 		},
-		// Scenario 4: ExtendWebSocketsToKubelet enabled, PortForwardWebsockets enabled,
-		// node supports websockets. Expect UpgradeAwareHandler as extension is active and node supports it.
+		// 场景 4：两个特性门控都开启，且节点支持 websockets。
+		// 扩展已生效且节点支持，预期使用 UpgradeAwareHandler。
 		{
 			name:                    "Kubelet enabled, PortForward enabled, Node with websocket",
 			store:                   &fakePodGetter{pod: testPod},
@@ -486,8 +486,8 @@ func TestPortForwardRESTConnect(t *testing.T) {
 			expectProxy:             true,
 			expectedProxyType:       "proxied_to_kubelet",
 		},
-		// Scenario 5: ExtendWebSocketsToKubelet enabled, PortForwardWebsockets enabled,
-		// node does not support websockets. Expect translatingHandler as extension is active but node does not support it.
+		// 场景 5：两个特性门控都开启，但节点不支持 websockets。
+		// 扩展已生效但节点不支持，预期使用 translatingHandler。
 		{
 			name:                    "Kubelet enabled, PortForward enabled, Node no websocket",
 			store:                   &fakePodGetter{pod: testPod},
@@ -497,13 +497,13 @@ func TestPortForwardRESTConnect(t *testing.T) {
 			expectProxy:             false,
 			expectedProxyType:       "translated_at_apiserver",
 		},
-		// Scenario 6: Pod getter returns error; Connect must propagate it.
+		// 场景 6：Pod 获取器返回错误；Connect 必须原样传播该错误。
 		{
 			name:      "pod getter error",
 			store:     &fakePodGetter{err: fmt.Errorf("pod not found")},
 			expectErr: true,
 		},
-		// Scenario 7: ConnectionInfo getter returns error; Connect must propagate it.
+		// 场景 7：连接信息获取器返回错误；Connect 必须原样传播该错误。
 		{
 			name:        "connection info getter error",
 			store:       &fakePodGetter{pod: testPod},

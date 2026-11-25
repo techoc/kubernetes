@@ -105,9 +105,9 @@ func TestStore(t *testing.T) {
 	}
 }
 
-// Test that one item is allocated in storage but is not allocated locally
-// When try to allocate it, it should fail despite it's free in the local bitmap
-// bot not in the storage
+// 验证某个取值在存储中已被分配、但本地位图中尚未分配的情况：
+// 尝试分配它应当失败，尽管本地位图里它是空闲的，
+// 但存储中并非如此。
 func TestAllocatedStorageButReleasedLocally(t *testing.T) {
 	storage, server, backing, _ := newStorage(t)
 	defer server.Terminate(t)
@@ -115,20 +115,20 @@ func TestAllocatedStorageButReleasedLocally(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Allocate an item in the storage
+	// 在存储中分配一个取值
 	if _, err := storage.Allocate(2); err != nil {
 		t.Fatal(err)
 	}
 
-	// Release the item in the local bitmap
-	// emulating it's out of sync with the storage
+	// 在本地位图中释放该取值，
+	// 模拟本地与存储不同步的状态
 	err := backing.Release(2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// It should fail trying to allocate it deespite it's free
-	// in the local bitmap because it's not in the storage
+	// 尽管它在本地位图中是空闲的，但分配仍应失败，
+	// 因为存储中并不空闲
 	ok, err := storage.Allocate(2)
 	if ok || err != nil {
 		t.Fatal(err)
@@ -136,9 +136,9 @@ func TestAllocatedStorageButReleasedLocally(t *testing.T) {
 
 }
 
-// Test that one item is free in storage but is  allocated locally
-// When try to allocate it, it should succeed despite it's allocated
-// in the local bitmap bot not in the storage
+// 验证某个取值在存储中空闲、但本地已分配的情况：
+// 尝试分配它应当成功，尽管本地位图中已标记为已分配，
+// 但存储中并没有被占用。
 func TestAllocatedLocallyButReleasedStorage(t *testing.T) {
 	storage, server, backing, _ := newStorage(t)
 	defer server.Terminate(t)
@@ -146,14 +146,14 @@ func TestAllocatedLocallyButReleasedStorage(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Allocate an item in the local bitmap only but not in the storage
-	// emulating it's out of sync with the storage
+	// 只在本地位图中分配该取值，存储中不分配，
+	// 模拟本地与存储不同步的状态
 	if _, err := backing.Allocate(2); err != nil {
 		t.Fatal(err)
 	}
 
-	// It should be able to allocate it
-	// because it's free in the storage
+	// 此时应当能成功分配，
+	// 因为它在存储中是空闲的
 	ok, err := storage.Allocate(2)
 	if !ok || err != nil {
 		t.Fatal(err)

@@ -50,8 +50,6 @@ import (
 )
 
 // GenericConfig 负责装配不依赖额外控制器的 Core v1 资源 Store，例如 Namespace、Secret、ConfigMap、Event 和 ServiceAccount。
-// GenericConfig provides information needed to build RESTStorage
-// for generic resources in core. It implements the "normal" RESTStorageProvider interface.
 type GenericConfig struct {
 	StorageFactory serverstorage.StorageFactory
 	EventTTL       time.Duration

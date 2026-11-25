@@ -43,7 +43,6 @@ type REST struct {
 	rest.TableConvertor
 }
 
-// NewStorage returns a new REST.
 // NewStorage 接收组件探测器提供函数，延迟获取实际需要检查的服务列表。
 func NewStorage(serverRetriever func() map[string]Server) *REST {
 	return &REST{
@@ -66,18 +65,14 @@ func (rs *REST) GetSingularName() string {
 	return "componentstatus"
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 无需清理资源，因为 REST 没有底层存储。
 func (r *REST) Destroy() {
-	// Given no underlying store, we don't destroy anything
-	// here explicitly.
 }
 
 func (rs *REST) NewList() runtime.Object {
 	return &api.ComponentStatusList{}
 }
 
-// Returns the list of component status. Note that the label and field are both ignored.
-// Note that this call doesn't support labels or selectors.
 // List 并发探测所有组件，等待全部结果后再根据请求中的 Label/Field Selector 过滤并返回列表。
 func (rs *REST) List(ctx context.Context, options *metainternalversion.ListOptions) (runtime.Object, error) {
 	servers := rs.GetServersToValidate()
@@ -100,9 +95,7 @@ func (rs *REST) List(ctx context.Context, options *metainternalversion.ListOptio
 
 	reply := []api.ComponentStatus{}
 	for status := range statuses {
-		// ComponentStatus resources currently (v1.14) do not support labeling, however the filtering is executed
-		// nonetheless in case the request contains Label or Field selectors (which will effectively filter out
-		// all of the results and return an empty response).
+		// ComponentStatus 自 v1.14 起不支持标签，但仍执行过滤；携带 Label/Field Selector 的请求会过滤掉全部结果。
 		if matched := matchesPredicate(status, &pred); matched {
 			reply = append(reply, status)
 		}
@@ -130,7 +123,6 @@ func componentStatusPredicate(options *metainternalversion.ListOptions) storage.
 
 // matchesPredicate 目前只提供通用 ObjectMeta 字段，组件自身的 Conditions 尚不能作为选择器字段。
 func matchesPredicate(status api.ComponentStatus, pred *storage.SelectionPredicate) bool {
-	// currently no fields except the generic meta fields are supported for predicate matching
 	fieldsSet := generic.AddObjectMetaFieldsSet(make(fields.Set, 2), &status.ObjectMeta, true)
 	return pred.MatchesObjectAttributes(
 		status.ObjectMeta.Labels,
@@ -183,10 +175,10 @@ func (rs *REST) getComponentStatus(name string, server Server) *api.ComponentSta
 	return retVal
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider 接口，返回资源的短名称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"cs"}
 }

@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	// clusterIPAllocated indicates the amount of cluster IP allocated by Service CIDR.
+	// clusterIPAllocated 记录各 Service CIDR 中已分配的 ClusterIP 数量。
 	clusterIPAllocated = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Namespace:      namespace,
@@ -41,7 +41,7 @@ var (
 		},
 		[]string{"cidr"},
 	)
-	// clusterIPAvailable indicates the amount of cluster IP available by Service CIDR.
+	// clusterIPAvailable 记录各 Service CIDR 中可分配的 ClusterIP 数量。
 	clusterIPAvailable = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Namespace:      namespace,
@@ -52,7 +52,7 @@ var (
 		},
 		[]string{"cidr"},
 	)
-	// clusterIPAllocation counts the total number of ClusterIP allocation and allocation mode: static or dynamic.
+	// clusterIPAllocations 按静态或动态分配模式统计 ClusterIP 分配总次数。
 	clusterIPAllocations = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -63,7 +63,7 @@ var (
 		},
 		[]string{"cidr", "scope"},
 	)
-	// clusterIPAllocationErrors counts the number of error trying to allocate a ClusterIP and allocation mode: static or dynamic.
+	// clusterIPAllocationErrors 按静态或动态分配模式统计 ClusterIP 分配失败次数。
 	clusterIPAllocationErrors = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -100,7 +100,7 @@ func registerMetrics() {
 	})
 }
 
-// metricsRecorderInterface is the interface to record metrics.
+// metricsRecorderInterface 定义 ClusterIP 分配器指标记录接口。
 type metricsRecorderInterface interface {
 	setAllocated(cidr string, allocated int)
 	setAvailable(cidr string, available int)
@@ -109,7 +109,7 @@ type metricsRecorderInterface interface {
 	incrementAllocationErrors(cidr, scope string)
 }
 
-// metricsRecorder implements metricsRecorderInterface.
+// metricsRecorder 实现 metricsRecorderInterface。
 type metricsRecorder struct{}
 
 func (m *metricsRecorder) setAllocated(cidr string, allocated int) {
@@ -132,7 +132,7 @@ func (m *metricsRecorder) incrementAllocationErrors(cidr, scope string) {
 	clusterIPAllocationErrors.WithLabelValues(cidr, scope).Inc()
 }
 
-// emptyMetricsRecorder is a null object implements metricsRecorderInterface.
+// emptyMetricsRecorder 是 metricsRecorderInterface 的空实现，用于禁用指标记录。
 type emptyMetricsRecorder struct{}
 
 func (*emptyMetricsRecorder) setAllocated(cidr string, allocated int)       {}

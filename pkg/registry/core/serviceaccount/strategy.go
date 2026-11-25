@@ -36,8 +36,7 @@ type strategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating ServiceAccount
-// objects via the REST API.
+// Strategy 定义通过 REST API 创建和更新 ServiceAccount 对象时采用的默认策略。
 var Strategy = strategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
 func (strategy) NamespaceScoped() bool {
@@ -53,12 +52,12 @@ func (strategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorLis
 	return validation.ValidateServiceAccount(obj.(*api.ServiceAccount))
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建给定对象时需要展示的警告。
 func (strategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	return warnIfHasEnforceMountableSecretsAnnotation(obj.(*api.ServiceAccount), nil)
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在对象通过校验后进行规范化；当前策略无需额外调整。
 func (strategy) Canonicalize(obj runtime.Object) {
 }
 
@@ -81,7 +80,7 @@ func (strategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) fie
 	return validation.ValidateServiceAccountUpdate(obj.(*api.ServiceAccount), old.(*api.ServiceAccount))
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回更新给定对象时需要展示的警告。
 func (strategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return warnIfHasEnforceMountableSecretsAnnotation(obj.(*api.ServiceAccount), old.(*api.ServiceAccount))
 }
@@ -95,7 +94,7 @@ func warnIfHasEnforceMountableSecretsAnnotation(serviceAccount, oldServiceAccoun
 	if oldServiceAccount != nil {
 		_, ok := oldServiceAccount.Annotations[sa.EnforceMountableSecretsAnnotation]
 		if ok {
-			// skip warning if request isn't newly setting the annotation
+			// 请求没有新设置该注解时跳过警告。
 			return nil
 		}
 	}

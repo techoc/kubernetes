@@ -25,8 +25,7 @@ import (
 	"time"
 )
 
-// AllocationBitmap 使用 big.Int 的每一位表示一个资源偏移量；锁保护位图与 count，使并发分配和释放保持原子性。
-// AllocationBitmap is a contiguous block of resources that can be allocated atomically.
+// AllocationBitmap 使用 big.Int 的每一位表示一个连续资源块中的资源偏移量，并可原子地完成分配。
 //
 // 每个资源都对应一个偏移量；内部使用位图表示，每个偏移量对应一位。
 //
@@ -64,10 +63,8 @@ func NewAllocationMap(max int, rangeSpec string) *AllocationBitmap {
 	return NewAllocationMapWithOffset(max, rangeSpec, 0)
 }
 
-// NewAllocationMapWithOffset 使用随机扫描策略创建分配位图，并通过 offset 将位图划分为两个区间。
-// AllocateNext 会优先从第二个区间分配；只有该区间耗尽后，才会使用第一个区间。
-// offset 必须小于位图的总大小。
-// NewAllocationMapWithOffset 创建带分段优先级的资源池：自动分配优先从 offset 之后的动态区选择，耗尽后才使用前面的保留区。
+// NewAllocationMapWithOffset 创建带分段优先级的资源池，并通过 offset 将位图划分为两个区间。
+// 自动分配优先从 offset 之后的动态区选择，耗尽后才使用前面的保留区；offset 必须小于位图的总大小。
 func NewAllocationMapWithOffset(max int, rangeSpec string, offset int) *AllocationBitmap {
 	a := AllocationBitmap{
 		strategy: randomScanStrategyWithOffset{
@@ -83,8 +80,8 @@ func NewAllocationMapWithOffset(max int, rangeSpec string, offset int) *Allocati
 	return &a
 }
 
-// Allocate 尝试预留指定偏移量。若本次成功分配则返回 true；若该资源已被占用则返回 false。
-// Allocate 预留调用方指定的偏移量；所有越界检查、位图写入和计数更新都在同一把锁内完成。
+// Allocate 预留调用方指定的偏移量，并在同一把锁内完成越界检查、位图写入和计数更新。
+// 本次成功分配时返回 true；资源已被占用时返回 false。
 func (r *AllocationBitmap) Allocate(offset int) (bool, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -101,8 +98,8 @@ func (r *AllocationBitmap) Allocate(offset int) (bool, error) {
 	return true, nil
 }
 
-// AllocateNext 从资源池中自动分配一个资源。资源池耗尽时返回 (0, false, nil)。
 // AllocateNext 委托 bitAllocator 选择空闲位，再在锁保护下置位并递增已分配计数。
+// 资源池耗尽时返回 (0, false, nil)。
 func (r *AllocationBitmap) AllocateNext() (int, bool, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -171,7 +168,6 @@ func (r *AllocationBitmap) Free() int {
 	return r.max - r.count
 }
 
-// Snapshot 导出资源池当前状态。
 // Snapshot 导出资源范围描述和位图字节；count 可在恢复时通过 countBits 重新计算。
 func (r *AllocationBitmap) Snapshot() (string, []byte) {
 	r.lock.Lock()
@@ -180,8 +176,7 @@ func (r *AllocationBitmap) Snapshot() (string, []byte) {
 	return r.rangeSpec, r.allocated.Bytes()
 }
 
-// Restore 将资源池恢复到之前捕获的状态。
-// Restore 仅允许恢复到同一 rangeSpec，避免把其他容量/范围的位图错误加载到当前资源池。
+// Restore 将资源池恢复到之前捕获的状态，仅接受相同的 rangeSpec，避免误加载其他资源范围的位图。
 func (r *AllocationBitmap) Restore(rangeSpec string, data []byte) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()

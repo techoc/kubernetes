@@ -41,7 +41,7 @@ func TestWarningsOnCreate(t *testing.T) {
 	}
 }
 
-// TestWarningsOnUpdate 验证只有首次添加弃用注解时产生 Warning，旧对象已存在时不重复提示。
+// TestWarningsOnUpdate 验证只有首次添加弃用注解时才返回警告，旧对象已包含该注解时不重复提示。
 func TestWarningsOnUpdate(t *testing.T) {
 	ctx := context.TODO()
 	serviceAccount := &api.ServiceAccount{}

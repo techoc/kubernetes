@@ -56,8 +56,8 @@ import (
 
 type cleanupFunc func()
 
-// storageEndpointSliceGetter wraps a discovery REST storage and converts its unversioned
-// EndpointSlices to discoveryv1.EndpointSlice.
+// storageEndpointSliceGetter 包装了一个 discovery REST storage，并把其中未版本的
+// EndpointSlice 转换为 discoveryv1.EndpointSlice。
 type storageEndpointSliceGetter struct {
 	rest *endpointslicestore.REST
 }
@@ -69,9 +69,9 @@ func (sg *storageEndpointSliceGetter) GetEndpointSlices(namespaceName, serviceNa
 	}
 	unversioned := obj.(*discovery.EndpointSliceList)
 
-	// (Using Convert_discovery_EndpointSliceList_To_v1_EndpointSliceList() would give
-	// us a []discoveryv1.EndpointSlice rather than a []*discoveryv1.EndpointSlice, so
-	// we'd still have to iterate over the result and build a new array anyway.)
+	// （用 Convert_discovery_EndpointSliceList_To_v1_EndpointSliceList() 会得到
+	// []discoveryv1.EndpointSlice 而不是 []*discoveryv1.EndpointSlice，
+	// 所以终究还要遍历结果再构造一个新数组。）
 	v1Slices := make([]*discoveryv1.EndpointSlice, len(unversioned.Items))
 	for i := range unversioned.Items {
 		v1Slices[i] = new(discoveryv1.EndpointSlice)
@@ -82,7 +82,7 @@ func (sg *storageEndpointSliceGetter) GetEndpointSlices(namespaceName, serviceNa
 	return v1Slices, nil
 }
 
-// Most tests will use this to create a registry to run tests against.
+// 大多数测试都用它来创建被测的 registry。
 func newStorage(t *testing.T, ipFamilies []api.IPFamily) (*wrapperRESTForTests, *StatusREST, cleanupFunc) {
 	return newStorageWithPods(t, ipFamilies, nil, nil)
 }
@@ -112,7 +112,7 @@ func newStorageWithPods(t *testing.T, ipFamilies []api.IPFamily, pods []api.Pod,
 
 	portAlloc := makePortAllocator(*(machineryutilnet.ParsePortRangeOrDie("30000-32767")))
 
-	// Not all tests will specify pods and endpoints.
+	// 并非所有测试都会指定 pods 和 endpoints。
 	podStorage, err := podstore.NewStorage(generic.RESTOptions{
 		StorageConfig:           etcdStorage,
 		Decorator:               generic.UndecoratedStorage,
@@ -184,25 +184,25 @@ func makePortAllocator(ports machineryutilnet.PortRange) portallocator.Interface
 	return al
 }
 
-// wrapperRESTForTests is a *trivial* wrapper for the real REST, which allows us to do
-// things that are specifically to enhance test safety.
+// wrapperRESTForTests 是真实 REST 的一个*极简*包装，便于我们做一些
+// 专门用于提升测试安全性的事情。
 type wrapperRESTForTests struct {
 	*REST
 }
 
 func (f *wrapperRESTForTests) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
-	// Making a DeepCopy here ensures that any in-place mutations of the input
-	// are not going to propagate to verification code, which used to happen
-	// resulting in tests that passed when they shouldn't have.
+	// 这里做一次 DeepCopy，确保对输入的就地修改不会传播到校验逻辑，
+	// 以前就发生过这种情况，
+	// 导致本该失败的测试却通过了。
 	obj = obj.DeepCopyObject()
 	return f.REST.Create(ctx, obj, createValidation, options)
 }
 
 //
-// Generic registry tests
+// 通用 registry 测试
 //
 
-// This is used in generic registry tests.
+// 通用 registry 测试会用到这里。
 func validService() *api.Service {
 	return svctest.MakeService("foo",
 		svctest.SetClusterIPs(api.ClusterIPNone),
@@ -216,11 +216,11 @@ func TestGenericCreate(t *testing.T) {
 	defer cleanup()
 	test := genericregistrytest.New(t, storage.Store)
 	svc := validService()
-	svc.ObjectMeta = metav1.ObjectMeta{} // because genericregistrytest
+	svc.ObjectMeta = metav1.ObjectMeta{} // 因为 genericregistrytest
 	test.TestCreate(
-		// valid
+		// 合法
 		svc,
-		// invalid
+		// 非法
 		&api.Service{
 			Spec: api.ServiceSpec{},
 		},
@@ -235,7 +235,7 @@ func TestGenericUpdate(t *testing.T) {
 	defer cleanup()
 	test := genericregistrytest.New(t, storage.Store).AllowCreateOnUpdate()
 	test.TestUpdate(
-		// valid
+		// 合法
 		validService(),
 		// updateFunc
 		func(obj runtime.Object) runtime.Object {
@@ -285,17 +285,17 @@ func TestGenericWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validService(),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -317,7 +317,7 @@ func TestGenericCategories(t *testing.T) {
 }
 
 //
-// Tests of internal functions
+// 内部函数测试
 //
 
 // TestNormalizeClusterIPs 覆盖旧 ClusterIP 与新 ClusterIPs 字段在创建/更新时的同步和兼容逻辑。
@@ -347,7 +347,7 @@ func TestNormalizeClusterIPs(t *testing.T) {
 		name:               "new - only clusterips used",
 		oldService:         nil,
 		newService:         makeServiceWithClusterIp("", []string{"10.0.0.10"}),
-		expectedClusterIP:  "", // this is a validation issue, and validation will catch it
+		expectedClusterIP:  "", // 这属于校验问题，校验环节会发现它
 		expectedClusterIPs: []string{"10.0.0.10"},
 	}, {
 		name:               "new - both used",
@@ -392,7 +392,7 @@ func TestNormalizeClusterIPs(t *testing.T) {
 		expectedClusterIP:  "",
 		expectedClusterIPs: nil,
 	}, {
-		name:               "update - user cleared clusterIPs", // *MUST* REMAIN FOR OLD CLIENTS
+		name:               "update - user cleared clusterIPs", // 为兼容旧客户端必须保留
 		oldService:         makeServiceWithClusterIp("10.0.0.10", []string{"10.0.0.10"}),
 		newService:         makeServiceWithClusterIp("10.0.0.10", nil),
 		expectedClusterIP:  "10.0.0.10",
@@ -490,7 +490,7 @@ func TestPatchAllocatedValues(t *testing.T) {
 		before: svctest.MakeService("foo",
 			svctest.SetTypeClusterIP,
 			svctest.SetClusterIPs("10.0.0.93", "2000::76"),
-			// these are not valid, but prove the test
+			// 这些取值并不合法，但足以验证测试逻辑
 			svctest.SetUniqueNodePorts,
 			svctest.SetHealthCheckNodePort(31234)),
 		update: svctest.MakeService("foo",
@@ -502,7 +502,7 @@ func TestPatchAllocatedValues(t *testing.T) {
 			svctest.SetTypeNodePort,
 			svctest.SetClusterIPs("10.0.0.93", "2000::76"),
 			svctest.SetUniqueNodePorts,
-			// this is not valid, but proves the test
+			// 该取值并不合法，但足以验证测试逻辑
 			svctest.SetHealthCheckNodePort(31234)),
 		update: svctest.MakeService("foo",
 			svctest.SetTypeNodePort,
@@ -529,7 +529,7 @@ func TestPatchAllocatedValues(t *testing.T) {
 		name: "nothing_patched",
 		before: svctest.MakeService("foo",
 			svctest.SetTypeExternalName,
-			// these are not valid, but prove the test
+			// 这些取值并不合法，但足以验证测试逻辑
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal),
 			svctest.SetClusterIPs("10.0.0.93", "2000::76"),
 			svctest.SetUniqueNodePorts,
@@ -647,7 +647,7 @@ func TestPatchAllocatedValues(t *testing.T) {
 }
 
 func TestServiceDefaultOnRead(t *testing.T) {
-	// Helper makes a mostly-valid ServiceList.  Test-cases can tweak it as needed.
+	// Helper 构造一个基本合法的 ServiceList，测试用例可按需调整。
 	makeServiceList := func(tweaks ...svctest.Tweak) *api.ServiceList {
 		svc := svctest.MakeService("foo", tweaks...)
 		list := &api.ServiceList{
@@ -765,7 +765,7 @@ func TestServiceDefaultOnRead(t *testing.T) {
 				exp = &list.Items[0]
 			}
 
-			// Verify fields we know are affected
+			// 校验我们已知会受影响的字段
 			if want, got := exp.Spec.ClusterIP, svc.Spec.ClusterIP; want != got {
 				t.Errorf("clusterIP: expected %v, got %v", want, got)
 			}
@@ -786,13 +786,13 @@ func TestServiceDefaultOnRead(t *testing.T) {
 }
 
 //
-// Scaffolding for create-update-delete tests.  Many tests can and should be
-// written in terms of this.
+// 创建-更新-删除测试的脚手架，很多测试可以、也应该
+// 基于它来编写。
 //
 
 type cudTestCase struct {
 	name         string
-	line         string // if not empty, will be logged with errors, use line() to set
+	line         string // 非空时会随错误一起打印，用 line() 设置
 	create       svcTestCase
 	beforeUpdate func(t *testing.T, storage *wrapperRESTForTests)
 	update       svcTestCase
@@ -802,30 +802,30 @@ type svcTestCase struct {
 	svc         *api.Service
 	expectError bool
 
-	// We could calculate these by looking at the Service, but that's a
-	// vector for test bugs and more importantly it makes the test cases less
-	// self-documenting.
+	// 这些值本可以通过 Service 推算出来，但那样容易引入测试 bug，
+	// 更重要的是会让用例变得
+	// 不够自解释。
 	expectClusterIPs          bool
 	expectStackDowngrade      bool
 	expectHeadless            bool
 	expectNodePorts           bool
 	expectHealthCheckNodePort bool
 
-	// Additional proofs, provided by the tests which use this.
+	// 额外的校验点，由使用该脚手架的测试提供。
 	prove []svcTestProof
 }
 
 type svcTestProof func(t *testing.T, storage *wrapperRESTForTests, before, after *api.Service)
 
-// Most tests will call this.
+// 大多数测试都会调用它。
 func helpTestCreateUpdateDelete(t *testing.T, testCases []cudTestCase) {
 	t.Helper()
 	helpTestCreateUpdateDeleteWithFamilies(t, testCases, []api.IPFamily{api.IPv4Protocol, api.IPv6Protocol})
 }
 
 func helpTestCreateUpdateDeleteWithFamilies(t *testing.T, testCases []cudTestCase, ipFamilies []api.IPFamily) {
-	// NOTE: do not call t.Helper() here.  It's more useful for errors to be
-	// attributed to lines in this function than the caller of it.
+	// 注意：这里不要调用 t.Helper()。把错误定位到本函数的行上
+	// 比定位到调用方更有用。
 
 	storage, _, cleanup := newStorage(t, ipFamilies)
 	defer cleanup()
@@ -838,7 +838,7 @@ func helpTestCreateUpdateDeleteWithFamilies(t *testing.T, testCases []cudTestCas
 		t.Run(name, func(t *testing.T) {
 			ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, metav1.NamespaceDefault)
 
-			// Create the object as specified and check the results.
+			// 按指定内容创建对象并检查结果。
 			obj, err := storage.Create(ctx, tc.create.svc, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 			if tc.create.expectError && err != nil {
 				return
@@ -857,14 +857,14 @@ func helpTestCreateUpdateDeleteWithFamilies(t *testing.T, testCases []cudTestCas
 			verifyExpectations(t, storage, tc.create, tc.create.svc, createdSvc)
 			lastSvc := createdSvc
 
-			// The update phase is optional.
+			// 更新阶段是可选的。
 			if tc.update.svc != nil {
-				// Allow callers to do something between create and update.
+				// 允许调用方在创建与更新之间做点别的。
 				if tc.beforeUpdate != nil {
 					tc.beforeUpdate(t, storage)
 				}
 
-				// Update the object to the new state and check the results.
+				// 将对象更新为新状态并检查结果。
 				obj, created, err := storage.Update(ctx, tc.update.svc.Name,
 					rest.DefaultUpdatedObjectInfo(tc.update.svc), rest.ValidateAllObjectFunc,
 					rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
@@ -888,7 +888,7 @@ func helpTestCreateUpdateDeleteWithFamilies(t *testing.T, testCases []cudTestCas
 				lastSvc = updatedSvc
 			}
 
-			// Delete the object and check the results.
+			// 删除对象并检查结果。
 			_, _, err = storage.Delete(ctx, tc.create.svc.Name, rest.ValidateAllObjectFunc, &metav1.DeleteOptions{})
 			if err != nil {
 				t.Fatalf("unexpected error deleting service: %v", err)
@@ -898,9 +898,9 @@ func helpTestCreateUpdateDeleteWithFamilies(t *testing.T, testCases []cudTestCas
 	}
 }
 
-// line returns the line number of the caller, if possible.  This is useful in
-// tests with a large number of cases - when something goes wrong you can find
-// which case more easily.
+// line 尽可能返回调用方的行号。在用例数量很多的测试里，
+// 这很有用 —— 出问题时能更快定位
+// 到是哪个用例。
 func line() string {
 	_, _, line, ok := stdruntime.Caller(1)
 	var s string
@@ -912,7 +912,7 @@ func line() string {
 	return s
 }
 
-// This makes the test-helpers testable.
+// 这样做可以让测试辅助函数本身也可被测试。
 type testingTInterface interface {
 	Helper()
 	Errorf(format string, args ...interface{})
@@ -929,16 +929,16 @@ func (f fakeTestingT) Errorf(format string, args ...interface{}) {}
 func verifyEquiv(t testingTInterface, call string, tc *svcTestCase, got *api.Service) bool {
 	t.Helper()
 
-	// For when we compare objects.
+	// 用于对象比较时。
 	options := []cmp.Option{
-		// These are system-assigned values, we don't need to compare them.
+		// 这些是系统赋的值，不需要比较。
 		cmpopts.IgnoreFields(api.Service{}, "UID", "ResourceVersion", "CreationTimestamp"),
-		// Treat nil slices and empty slices as the same (e.g. clusterIPs).
+		// 把 nil 切片和空切片视为相同（例如 clusterIPs）。
 		cmpopts.EquateEmpty(),
 	}
 
-	// For allocated fields, we want to be able to compare cleanly whether the
-	// input specified values or not.
+	// 对于分配类字段，我们希望能清晰区分输入是否指定了取值，
+	// 而不是拿零值去对比。
 	want := tc.svc.DeepCopy()
 	if tc.expectClusterIPs || tc.expectHeadless {
 		if want.Spec.ClusterIP == "" {
@@ -980,7 +980,7 @@ func verifyEquiv(t testingTInterface, call string, tc *svcTestCase, got *api.Ser
 	return true
 }
 
-// Quis custodiet ipsos custodes?
+// 谁来监督监督者本身？（用于测试辅助函数自身的测试）
 func TestVerifyEquiv(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -1334,7 +1334,7 @@ func proveHealthCheckNodePortDeallocated(t *testing.T, storage *wrapperRESTForTe
 }
 
 //
-// functional tests of the registry
+// registry 的功能测试
 //
 
 func fmtIPFamilyPolicy(pol *api.IPFamilyPolicy) string {
@@ -1358,15 +1358,15 @@ func fmtIPFamilies(fams []api.IPFamily) string {
 	return fmt.Sprintf("%v", fams)
 }
 
-// Prove that create ignores IP and IPFamily stuff when type is ExternalName.
+// 验证当类型为 ExternalName 时，create 会忽略 IP 与 IPFamily 相关字段。
 func TestCreateIgnoresIPsForExternalName(t *testing.T) {
 	type testCase struct {
 		name        string
 		svc         *api.Service
 		expectError bool
 	}
-	// These cases were chosen from the full gamut to ensure all "interesting"
-	// cases are covered.
+	// 这些用例从全部组合中挑选出来，
+	// 以覆盖所有"有意思"的场景。
 	testCases := []struct {
 		name            string
 		clusterFamilies []api.IPFamily
@@ -1430,7 +1430,7 @@ func TestCreateIgnoresIPsForExternalName(t *testing.T) {
 
 			for _, itc := range otc.cases {
 				t.Run(itc.name, func(t *testing.T) {
-					// This test is ONLY ExternalName services.
+					// 本测试只涉及 ExternalName 类型的 Service。
 					itc.svc.Spec.Type = api.ServiceTypeExternalName
 					itc.svc.Spec.ExternalName = "example.com"
 
@@ -1466,8 +1466,8 @@ func TestCreateIgnoresIPsForExternalName(t *testing.T) {
 	}
 }
 
-// Prove that create initializes clusterIPs from clusterIP.  This simplifies
-// later tests to not need to re-prove this.
+// 验证 create 会用 clusterIP 初始化 clusterIPs，这样后面的测试
+// 就不必再重复验证这一点。
 func TestCreateInitClusterIPsFromClusterIP(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -1542,7 +1542,7 @@ func TestCreateInitClusterIPsFromClusterIP(t *testing.T) {
 	}
 }
 
-// Prove that create initializes IPFamily fields correctly.
+// 验证 create 能正确初始化 IPFamily 相关字段。
 func TestCreateInitIPFields(t *testing.T) {
 	type testCase struct {
 		name           string
@@ -1553,8 +1553,8 @@ func TestCreateInitIPFields(t *testing.T) {
 		expectFamilies []api.IPFamily
 		expectHeadless bool
 	}
-	// These cases were chosen from the full gamut to ensure all "interesting"
-	// cases are covered.
+	// 这些用例从全部组合中挑选出来，
+	// 以覆盖所有"有意思"的场景。
 	testCases := []struct {
 		name            string
 		clusterFamilies []api.IPFamily
@@ -5968,7 +5968,7 @@ func TestCreateInitIPFields(t *testing.T) {
 	for _, otc := range testCases {
 		t.Run(otc.name, func(t *testing.T) {
 
-			// Do this in the outer loop for performance.
+			// 为提升性能，把该操作放到外层循环。
 			storage, _, cleanup := newStorage(t, otc.clusterFamilies)
 			defer cleanup()
 
@@ -6005,8 +6005,8 @@ func TestCreateInitIPFields(t *testing.T) {
 	}
 }
 
-// There are enough corner-cases that it's useful to have a test that asserts
-// the errors.  Some of these are in other tests, but this is clearer.
+// 边界情况足够多，因此专门写一个断言报错的测试是有价值的。
+// 其中一些在其他测试里也覆盖了，但集中在这里更清晰。
 func TestCreateInvalidClusterIPInputs(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -6163,41 +6163,41 @@ func TestCreateDeleteReuse(t *testing.T) {
 
 			ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, metav1.NamespaceDefault)
 
-			// Create it
+			// 创建它
 			createdObj, err := storage.Create(ctx, tc.svc, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("unexpected error creating service: %v", err)
 			}
 			createdSvc := createdObj.(*api.Service)
 
-			// Ensure IPs and ports were allocated
+			// 确认 IP 和端口已被分配
 			proveClusterIPsAllocated(t, storage, tc.svc, createdSvc)
 			proveNodePortsAllocated(t, storage, tc.svc, createdSvc)
 
-			// Delete it
+			// 删除它
 			_, _, err = storage.Delete(ctx, tc.svc.Name, rest.ValidateAllObjectFunc, &metav1.DeleteOptions{})
 			if err != nil {
 				t.Fatalf("unexpected error creating service: %v", err)
 			}
 
-			// Ensure IPs and ports were deallocated
+			// 确认 IP 和端口已被释放
 			proveClusterIPsDeallocated(t, storage, createdSvc, nil)
 			proveNodePortsDeallocated(t, storage, createdSvc, nil)
 
-			// Force the same IPs and ports
+			// 强制使用相同的 IP 和端口
 			svc2 := tc.svc.DeepCopy()
 			svc2.Name += "2"
 			svc2.Spec.ClusterIP = createdSvc.Spec.ClusterIP
 			svc2.Spec.ClusterIPs = createdSvc.Spec.ClusterIPs
 			svc2.Spec.Ports = createdSvc.Spec.Ports
 
-			// Create again
+			// 再次创建
 			_, err = storage.Create(ctx, svc2, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("unexpected error creating service: %v", err)
 			}
 
-			// Ensure IPs and ports were allocated
+			// 确认 IP 和端口已被分配
 			proveClusterIPsAllocated(t, storage, svc2, createdSvc)
 			proveNodePortsAllocated(t, storage, svc2, createdSvc)
 		})
@@ -6409,7 +6409,7 @@ func TestCreateInitNodePorts(t *testing.T) {
 		expectError: true,
 	}}
 
-	// Do this in the outer scope for performance.
+	// 为提升性能，把该操作放到外层作用域。
 	storage, _, cleanup := newStorage(t, []api.IPFamily{api.IPv4Protocol})
 	defer cleanup()
 
@@ -6429,7 +6429,7 @@ func TestCreateInitNodePorts(t *testing.T) {
 			}
 			createdSvc := createdObj.(*api.Service)
 
-			// Produce a map of port index to nodeport value, excluding zero.
+			// 构造端口下标到 nodePort 取值的映射，排除零值。
 			ports := map[int]*api.ServicePort{}
 			for i := range createdSvc.Spec.Ports {
 				p := &createdSvc.Spec.Ports[i]
@@ -6448,34 +6448,34 @@ func TestCreateInitNodePorts(t *testing.T) {
 				return
 			}
 
-			// Make sure we got the right number of allocations
+			// 确认分配数量正确
 			if want, got := len(ports), len(tc.svc.Spec.Ports); want != got {
 				t.Fatalf("expected %d NodePorts, found %d", want, got)
 			}
 
-			// Make sure they are all allocated
+			// 确认它们都处于已分配状态
 			for _, p := range ports {
 				if !portIsAllocated(t, storage.alloc.serviceNodePorts, p.NodePort) {
 					t.Errorf("expected port to be allocated: %v", p)
 				}
 			}
 
-			// Make sure we got any specific allocations
+			// 确认指定的取值都已正确分配
 			for i, p := range tc.svc.Spec.Ports {
 				if p.NodePort != 0 {
 					if ports[i].NodePort != p.NodePort {
 						t.Errorf("expected Ports[%d].NodePort to be %d, got %d", i, p.NodePort, ports[i].NodePort)
 					}
-					// Remove requested ports from the set
+					// 从集合中移除已请求的端口
 					delete(ports, i)
 				}
 			}
 
-			// Make sure any allocated ports are unique
+			// 确认分配到的端口互不重复
 			seen := map[int32]int32{}
 			for i, p := range ports {
-				// We allow the same NodePort for different protocols of the
-				// same Port.
+				// 同一个 Port 的不同协议允许复用相同的 NodePort，
+				// 因此这里不做限制。
 				if prev, found := seen[p.NodePort]; found && prev != p.Port {
 					t.Errorf("found non-unique allocation in Ports[%d].NodePort: %d -> %d", i, p.NodePort, p.Port)
 				}
@@ -6485,7 +6485,7 @@ func TestCreateInitNodePorts(t *testing.T) {
 	}
 }
 
-// Prove that create skips allocations for Headless services.
+// 验证 Headless Service 在创建时跳过分配。
 func TestCreateSkipsAllocationsForHeadless(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -6525,7 +6525,7 @@ func TestCreateSkipsAllocationsForHeadless(t *testing.T) {
 			storage, _, cleanup := newStorage(t, tc.clusterFamilies)
 			defer cleanup()
 
-			// This test is ONLY headless services.
+			// 本测试只涉及 headless Service。
 			tc.svc.Spec.ClusterIP = api.ClusterIPNone
 
 			ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, metav1.NamespaceDefault)
@@ -6551,7 +6551,7 @@ func TestCreateSkipsAllocationsForHeadless(t *testing.T) {
 	}
 }
 
-// Prove that a dry-run create doesn't actually allocate IPs or ports.
+// 验证 dry-run 创建不会真正分配 IP 或端口。
 func TestCreateDryRun(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -6603,7 +6603,7 @@ func TestCreateDryRun(t *testing.T) {
 			}
 			createdSvc := createdObj.(*api.Service)
 
-			// Ensure IPs were assigned
+			// 确认 IP 已被赋值
 			if netutils.ParseIPSloppy(createdSvc.Spec.ClusterIP) == nil {
 				t.Errorf("expected valid clusterIP: %q", createdSvc.Spec.ClusterIP)
 			}
@@ -6613,7 +6613,7 @@ func TestCreateDryRun(t *testing.T) {
 				}
 			}
 
-			// Ensure the allocators are clean.
+			// 确认分配器中没有残留分配。
 			proveClusterIPsDeallocated(t, storage, createdSvc, nil)
 			if tc.svc.Spec.Type != api.ServiceTypeClusterIP {
 				proveNodePortsDeallocated(t, storage, createdSvc, nil)
@@ -6628,7 +6628,7 @@ func TestDeleteWithFinalizer(t *testing.T) {
 	storage, _, cleanup := newStorage(t, []api.IPFamily{api.IPv4Protocol, api.IPv6Protocol})
 	defer cleanup()
 
-	// This will allocate cluster IPs, NodePort, and HealthCheckNodePort.
+	// 这次会分配 cluster IP、NodePort 和 HealthCheckNodePort。
 	svc := svctest.MakeService(svcName, svctest.SetTypeLoadBalancer,
 		svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal),
 		func(s *api.Service) {
@@ -6637,14 +6637,14 @@ func TestDeleteWithFinalizer(t *testing.T) {
 
 	ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, metav1.NamespaceDefault)
 
-	// Create it with finalizer.
+	// 带 finalizer 创建它。
 	obj, err := storage.Create(ctx, svc, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error creating service: %v", err)
 	}
 	createdSvc := obj.(*api.Service)
 
-	// Prove everything was allocated.
+	// 验证所有资源都已分配。
 	obj, err = storage.Get(ctx, svcName, &metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error getting service: %v", err)
@@ -6656,7 +6656,7 @@ func TestDeleteWithFinalizer(t *testing.T) {
 	proveNodePortsAllocated(t, storage, svc, createdSvc)
 	proveHealthCheckNodePortAllocated(t, storage, svc, createdSvc)
 
-	// Try to delete it, but it should be blocked by the finalizer.
+	// 尝试删除，但应被 finalizer 阻塞。
 	obj, deleted, err := storage.Delete(ctx, svcName, rest.ValidateAllObjectFunc, &metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error deleting service: %v", err)
@@ -6666,7 +6666,7 @@ func TestDeleteWithFinalizer(t *testing.T) {
 	}
 	deletedSvc := obj.(*api.Service)
 
-	// Prove everything is still allocated.
+	// 验证所有资源仍然处于已分配状态。
 	_, err = storage.Get(ctx, svcName, &metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error getting service: %v", err)
@@ -6675,7 +6675,7 @@ func TestDeleteWithFinalizer(t *testing.T) {
 	proveNodePortsAllocated(t, storage, svc, createdSvc)
 	proveHealthCheckNodePortAllocated(t, storage, svc, createdSvc)
 
-	// Clear the finalizer - should delete.
+	// 清除 finalizer —— 此时应能删除。
 	deletedSvc.Finalizers = nil
 	_, _, err = storage.Update(ctx, svcName,
 		rest.DefaultUpdatedObjectInfo(deletedSvc), rest.ValidateAllObjectFunc,
@@ -6684,7 +6684,7 @@ func TestDeleteWithFinalizer(t *testing.T) {
 		t.Fatalf("unexpected error updating service: %v", err)
 	}
 
-	// Prove everything is deallocated.
+	// 验证所有资源都已释放。
 	_, err = storage.Get(ctx, svcName, &metav1.GetOptions{})
 	if err == nil {
 		t.Fatalf("unexpected success getting service")
@@ -6694,7 +6694,7 @@ func TestDeleteWithFinalizer(t *testing.T) {
 	proveHealthCheckNodePortDeallocated(t, storage, createdSvc, nil)
 }
 
-// Prove that a dry-run delete doesn't actually deallocate IPs or ports.
+// 验证 dry-run 删除不会真正释放 IP 或端口。
 func TestDeleteDryRun(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -6729,7 +6729,7 @@ func TestDeleteDryRun(t *testing.T) {
 			}
 			createdSvc := createdObj.(*api.Service)
 
-			// Ensure IPs and ports were allocated
+			// 确认 IP 和端口已被分配
 			proveClusterIPsAllocated(t, storage, tc.svc, createdSvc)
 			proveNodePortsAllocated(t, storage, tc.svc, createdSvc)
 			proveHealthCheckNodePortAllocated(t, storage, tc.svc, createdSvc)
@@ -6739,7 +6739,7 @@ func TestDeleteDryRun(t *testing.T) {
 				t.Fatalf("unexpected error deleting service: %v", err)
 			}
 
-			// Ensure they are still allocated.
+			// 确认它们仍处于已分配状态。
 			proveClusterIPsAllocated(t, storage, tc.svc, createdSvc)
 			proveNodePortsAllocated(t, storage, tc.svc, createdSvc)
 			proveHealthCheckNodePortAllocated(t, storage, tc.svc, createdSvc)
@@ -6747,7 +6747,7 @@ func TestDeleteDryRun(t *testing.T) {
 	}
 }
 
-// Prove that a dry-run update doesn't actually allocate or deallocate IPs or ports.
+// 验证 dry-run 更新不会真正分配或释放 IP 与端口。
 func TestUpdateDryRun(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -6761,56 +6761,56 @@ func TestUpdateDryRun(t *testing.T) {
 		svc:             svctest.MakeService("foo", svctest.SetTypeExternalName),
 		update: svctest.MakeService("foo", svctest.SetTypeLoadBalancer,
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal)),
-		verifyDryAllocs: true, // make sure values were not allocated.
+		verifyDryAllocs: true, // 确认这些取值未被真正分配。
 	}, {
 		name:            "singlestack:v4_Allocs-NoAllocs",
 		clusterFamilies: []api.IPFamily{api.IPv4Protocol},
 		svc: svctest.MakeService("foo", svctest.SetTypeLoadBalancer,
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal)),
 		update:          svctest.MakeService("foo", svctest.SetTypeExternalName),
-		verifyDryAllocs: false, // make sure values were not released.
+		verifyDryAllocs: false, // 确认这些取值未被真正释放。
 	}, {
 		name:            "singlestack:v6_NoAllocs-Allocs",
 		clusterFamilies: []api.IPFamily{api.IPv6Protocol},
 		svc:             svctest.MakeService("foo", svctest.SetTypeExternalName),
 		update: svctest.MakeService("foo", svctest.SetTypeLoadBalancer,
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal)),
-		verifyDryAllocs: true, // make sure values were not allocated.
+		verifyDryAllocs: true, // 确认这些取值未被真正分配。
 	}, {
 		name:            "singlestack:v6_Allocs-NoAllocs",
 		clusterFamilies: []api.IPFamily{api.IPv6Protocol},
 		svc: svctest.MakeService("foo", svctest.SetTypeLoadBalancer,
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal)),
 		update:          svctest.MakeService("foo", svctest.SetTypeExternalName),
-		verifyDryAllocs: false, // make sure values were not released.
+		verifyDryAllocs: false, // 确认这些取值未被真正释放。
 	}, {
 		name:            "dualstack:v4v6_NoAllocs-Allocs",
 		clusterFamilies: []api.IPFamily{api.IPv4Protocol, api.IPv6Protocol},
 		svc:             svctest.MakeService("foo", svctest.SetTypeExternalName),
 		update: svctest.MakeService("foo", svctest.SetTypeLoadBalancer,
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal)),
-		verifyDryAllocs: true, // make sure values were not allocated.
+		verifyDryAllocs: true, // 确认这些取值未被真正分配。
 	}, {
 		name:            "dualstack:v4v6_Allocs-NoAllocs",
 		clusterFamilies: []api.IPFamily{api.IPv4Protocol, api.IPv6Protocol},
 		svc: svctest.MakeService("foo", svctest.SetTypeLoadBalancer,
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal)),
 		update:          svctest.MakeService("foo", svctest.SetTypeExternalName),
-		verifyDryAllocs: false, // make sure values were not released.
+		verifyDryAllocs: false, // 确认这些取值未被真正释放。
 	}, {
 		name:            "dualstack:v6v4_NoAllocs-Allocs",
 		clusterFamilies: []api.IPFamily{api.IPv6Protocol, api.IPv4Protocol},
 		svc:             svctest.MakeService("foo", svctest.SetTypeExternalName),
 		update: svctest.MakeService("foo", svctest.SetTypeLoadBalancer,
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal)),
-		verifyDryAllocs: true, // make sure values were not allocated.
+		verifyDryAllocs: true, // 确认这些取值未被真正分配。
 	}, {
 		name:            "dualstack:v6v4_Allocs-NoAllocs",
 		clusterFamilies: []api.IPFamily{api.IPv6Protocol, api.IPv4Protocol},
 		svc: svctest.MakeService("foo", svctest.SetTypeLoadBalancer,
 			svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal)),
 		update:          svctest.MakeService("foo", svctest.SetTypeExternalName),
-		verifyDryAllocs: false, // make sure values were not released.
+		verifyDryAllocs: false, // 确认这些取值未被真正释放。
 	}}
 
 	for _, tc := range testCases {
@@ -6826,15 +6826,15 @@ func TestUpdateDryRun(t *testing.T) {
 			createdSvc := obj.(*api.Service)
 
 			if tc.verifyDryAllocs {
-				// Dry allocs means no allocs on create.  Ensure values were
-				// NOT allocated.
+				// dry alloc 意味着创建时不做真实分配，确认这些取值
+				// 并未真正被分配。
 				proveClusterIPsDeallocated(t, storage, nil, createdSvc)
 			} else {
-				// Ensure IPs were allocated
+				// 确认 IP 已被赋值
 				proveClusterIPsAllocated(t, storage, nil, createdSvc)
 			}
 
-			// Update the object to the new state and check the results.
+			// 将对象更新为新状态并检查结果。
 			obj, _, err = storage.Update(ctx, tc.update.Name,
 				rest.DefaultUpdatedObjectInfo(tc.update), rest.ValidateAllObjectFunc,
 				rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}})
@@ -6844,8 +6844,8 @@ func TestUpdateDryRun(t *testing.T) {
 			updatedSvc := obj.(*api.Service)
 
 			if tc.verifyDryAllocs {
-				// Dry allocs means the values are assigned but not
-				// allocated.
+				// dry alloc 表示取值已赋上但尚未
+				// 真正分配。
 				if netutils.ParseIPSloppy(updatedSvc.Spec.ClusterIP) == nil {
 					t.Errorf("expected valid clusterIP: %q", updatedSvc.Spec.ClusterIP)
 				}
@@ -6876,7 +6876,7 @@ func TestUpdateDryRun(t *testing.T) {
 					t.Errorf("expected HCNP to not be allocated: %d", updatedSvc.Spec.HealthCheckNodePort)
 				}
 			} else {
-				// Ensure IPs were unassigned but not deallocated.
+				// 确认 IP 已被清空但未被释放。
 				if updatedSvc.Spec.ClusterIP != "" {
 					t.Errorf("expected clusterIP to be unset: %q", updatedSvc.Spec.ClusterIP)
 				}
@@ -6943,8 +6943,8 @@ func TestUpdatePatchAllocatedValues(t *testing.T) {
 		}
 	}
 
-	// each create needs clusterIP, NodePort, and HealthCheckNodePort allocated
-	// each update needs clusterIP, NodePort, and/or HealthCheckNodePort blank
+	// 每次 create 都需要已分配的 clusterIP、NodePort 和 HealthCheckNodePort
+	// 每次 update 都需要空白的 clusterIP、NodePort 和/或 HealthCheckNodePort
 	testCases := []cudTestCase{{
 		name: "single-ip_single-port",
 		create: svcTestCase{
@@ -7050,7 +7050,7 @@ func TestUpdatePatchAllocatedValues(t *testing.T) {
 				svctest.SetPorts(
 					svctest.MakeServicePort("p", 867, intstr.FromInt32(867), api.ProtocolTCP),
 					svctest.MakeServicePort("q", 5309, intstr.FromInt32(5309), api.ProtocolTCP)),
-				svctest.SetNodePorts(30093, 0)), // provide just 1 value
+				svctest.SetNodePorts(30093, 0)), // 只提供 1 个取值
 			expectClusterIPs:          true,
 			expectNodePorts:           true,
 			expectHealthCheckNodePort: true,
@@ -7079,7 +7079,7 @@ func TestUpdatePatchAllocatedValues(t *testing.T) {
 				svctest.SetTypeLoadBalancer,
 				svctest.SetExternalTrafficPolicy(api.ServiceExternalTrafficPolicyLocal),
 				svctest.SetPorts(
-					// swapped from above
+					// 与上面的取值互换
 					svctest.MakeServicePort("q", 5309, intstr.FromInt32(5309), api.ProtocolTCP),
 					svctest.MakeServicePort("p", 867, intstr.FromInt32(867), api.ProtocolTCP))),
 			expectClusterIPs:          true,
@@ -7112,7 +7112,7 @@ func TestUpdatePatchAllocatedValues(t *testing.T) {
 				svctest.SetPorts(
 					svctest.MakeServicePort("p", 867, intstr.FromInt32(867), api.ProtocolTCP),
 					svctest.MakeServicePort("q", 5309, intstr.FromInt32(5309), api.ProtocolTCP)),
-				svctest.SetNodePorts(30076, 0), // set [0] to [1]'s value, omit [1]
+				svctest.SetNodePorts(30076, 0), // 把 [0] 设为 [1] 的取值，并省略 [1]
 				svctest.SetHealthCheckNodePort(30118)),
 			expectClusterIPs:          true,
 			expectNodePorts:           true,
@@ -7144,7 +7144,7 @@ func TestUpdatePatchAllocatedValues(t *testing.T) {
 				svctest.SetPorts(
 					svctest.MakeServicePort("p", 867, intstr.FromInt32(867), api.ProtocolTCP),
 					svctest.MakeServicePort("q", 5309, intstr.FromInt32(5309), api.ProtocolTCP)),
-				svctest.SetNodePorts(30076, 30118)), // set [0] to HCNP's value
+				svctest.SetNodePorts(30076, 30118)), // 把 [0] 设为 HCNP 的取值
 			expectError: true,
 		},
 	}, {
@@ -7169,7 +7169,7 @@ func TestUpdatePatchAllocatedValues(t *testing.T) {
 				svctest.SetPorts(
 					svctest.MakeServicePort("p", 867, intstr.FromInt32(867), api.ProtocolTCP),
 					svctest.MakeServicePort("q", 5309, intstr.FromInt32(5309), api.ProtocolTCP)),
-				svctest.SetNodePorts(30118, 0)), // set [0] to HCNP's value, omit [1]
+				svctest.SetNodePorts(30118, 0)), // 把 [0] 设为 HCNP 的取值，并省略 [1]
 			expectError: true,
 		},
 	}, {
@@ -7203,7 +7203,7 @@ func TestUpdatePatchAllocatedValues(t *testing.T) {
 	helpTestCreateUpdateDelete(t, testCases)
 }
 
-// Proves that updates from single-stack work.
+// 验证从单栈发起的更新可以正常工作。
 func TestUpdateIPsFromSingleStack(t *testing.T) {
 	prove := func(proofs ...svcTestProof) []svcTestProof {
 		return proofs
@@ -7217,7 +7217,7 @@ func TestUpdateIPsFromSingleStack(t *testing.T) {
 		}
 	}
 
-	// Single-stack cases as control.
+	// 以单栈用例作为对照。
 	testCasesV4 := []cudTestCase{{
 		name: "single-single",
 		line: line(),
@@ -7283,7 +7283,7 @@ func TestUpdateIPsFromSingleStack(t *testing.T) {
 		helpTestCreateUpdateDeleteWithFamilies(t, testCasesV4, []api.IPFamily{api.IPv4Protocol})
 	})
 
-	// Dual-stack v4,v6 cases: Covers the full matrix of:
+	// 双栈 v4,v6 用例：覆盖如下完整组合：
 	//    policy={nil, single, prefer, require}
 	//    families={nil, single, dual}
 	//    ips={nil, single, dual}
@@ -7990,7 +7990,7 @@ func TestUpdateIPsFromSingleStack(t *testing.T) {
 		helpTestCreateUpdateDeleteWithFamilies(t, testCasesV4V6, []api.IPFamily{api.IPv4Protocol, api.IPv6Protocol})
 	})
 
-	// Dual-stack v6,v4 cases: Covers the full matrix of:
+	// 双栈 v6,v4 用例：覆盖如下完整组合：
 	//    policy={nil, single, prefer, require}
 	//    families={nil, single, dual}
 	//    ips={nil, single, dual}
@@ -8698,7 +8698,7 @@ func TestUpdateIPsFromSingleStack(t *testing.T) {
 		helpTestCreateUpdateDeleteWithFamilies(t, testCasesV6V4, []api.IPFamily{api.IPv6Protocol, api.IPv4Protocol})
 	})
 
-	// Headless cases: Covers the full matrix of:
+	// Headless 用例：覆盖如下完整组合：
 	//    policy={nil, single, prefer, require}
 	//    families={nil, single, dual}
 	testCasesHeadless := []cudTestCase{{
@@ -8915,7 +8915,7 @@ func TestUpdateIPsFromSingleStack(t *testing.T) {
 	})
 }
 
-// Proves that updates from dual-stack.
+// 验证来自双栈的更新。
 func TestUpdateIPsFromDualStack(t *testing.T) {
 	prove := func(proofs ...svcTestProof) []svcTestProof {
 		return proofs
@@ -8929,7 +8929,7 @@ func TestUpdateIPsFromDualStack(t *testing.T) {
 		}
 	}
 
-	// Dual-stack v4,v6 cases: Covers the full matrix of:
+	// 双栈 v4,v6 用例：覆盖如下完整组合：
 	//    policy={nil, single, prefer, require}
 	//    families={nil, single, dual}
 	//    ips={nil, single, dual}
@@ -9612,7 +9612,7 @@ func TestUpdateIPsFromDualStack(t *testing.T) {
 		helpTestCreateUpdateDeleteWithFamilies(t, testCasesV4V6, []api.IPFamily{api.IPv4Protocol, api.IPv6Protocol})
 	})
 
-	// Dual-stack v6,v4 cases: Covers the full matrix of:
+	// 双栈 v6,v4 用例：覆盖如下完整组合：
 	//    policy={nil, single, prefer, require}
 	//    families={nil, single, dual}
 	//    ips={nil, single, dual}
@@ -10295,7 +10295,7 @@ func TestUpdateIPsFromDualStack(t *testing.T) {
 		helpTestCreateUpdateDeleteWithFamilies(t, testCasesV6V4, []api.IPFamily{api.IPv6Protocol, api.IPv4Protocol})
 	})
 
-	// Headless cases: Covers the full matrix of:
+	// Headless 用例：覆盖如下完整组合：
 	//    policy={nil, single, prefer, require}
 	//    families={nil, single, dual}
 	testCasesHeadless := []cudTestCase{{
@@ -10877,7 +10877,7 @@ func TestFeatureSessionAffinity(t *testing.T) {
 		update: svcTestCase{
 			svc: svctest.MakeService("foo", svctest.SetTypeClusterIP,
 				func(s *api.Service) {
-					// Set it without setting the config
+					// 不设置 config 就写入该字段
 					s.Spec.SessionAffinity = api.ServiceAffinityClientIP
 				}),
 			expectError: true,
@@ -10905,7 +10905,7 @@ func TestFeatureSessionAffinity(t *testing.T) {
 			svc: svctest.MakeService("foo", svctest.SetTypeClusterIP,
 				svctest.SetSessionAffinity(api.ServiceAffinityClientIP),
 				func(s *api.Service) {
-					// Set it without wiping the config
+					// 写入该字段但不清空 config
 					s.Spec.SessionAffinity = api.ServiceAffinityNone
 				}),
 			expectError: true,
@@ -11611,10 +11611,10 @@ func TestFeatureInternalTrafficPolicy(t *testing.T) {
 	helpTestCreateUpdateDelete(t, testCases)
 }
 
-// TODO(thockin): We need to look at feature-tests for:
+// TODO(thockin): 还需要补充以下特性的功能测试：
 //   externalIPs, lbip, lbsourceranges, externalname, PublishNotReadyAddresses, AllocateLoadBalancerNodePorts, LoadBalancerClass, status
 
-// this is local because it's not fully fleshed out enough for general use.
+// 该函数仅在本文件内使用，因为还不够完善，无法普遍使用。
 func makePod(name string, ips ...string) api.Pod {
 	p := api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -11642,7 +11642,7 @@ func TestServiceRegistryResourceLocation(t *testing.T) {
 	pods := []api.Pod{
 		makePod("unnamed", "1.2.3.4", "1.2.3.5"),
 		makePod("named", "1.2.3.6", "1.2.3.7"),
-		makePod("no-endpoints", "9.9.9.9"), // to prove this does not get chosen
+		makePod("no-endpoints", "9.9.9.9"), // 用于证明该项不会被选中
 	}
 
 	endpoints := []*discovery.EndpointSlice{
@@ -11712,7 +11712,7 @@ func TestServiceRegistryResourceLocation(t *testing.T) {
 				Port: ptr.To[int32](81),
 			}},
 		},
-		// to prove this does not get chosen
+		// 用于证明该取值不会被选中
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "no-endpoints-ep",
@@ -11924,7 +11924,7 @@ func TestUpdateServiceLoadBalancerStatus(t *testing.T) {
 			}
 			defer storage.Delete(ctx, svc.Name, rest.ValidateAllObjectFunc, &metav1.DeleteOptions{})
 
-			// prepare status
+			// 准备 status
 			oldSvc := obj.(*api.Service).DeepCopy()
 			oldSvc.Status = tc.statusBeforeUpdate
 			obj, _, err = statusStorage.Update(ctx, oldSvc.Name, rest.DefaultUpdatedObjectInfo(oldSvc), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})

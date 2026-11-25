@@ -46,7 +46,7 @@ type Repair struct {
 	serviceClient corev1client.ServicesGetter
 	portRange     net.PortRange
 	alloc         rangeallocation.RangeRegistry
-	leaks         map[int]int // counter per leaked port
+	leaks         map[int]int // 按泄漏端口计数的计数器
 
 	broadcaster events.EventBroadcaster
 	recorder    events.EventRecorder
@@ -163,7 +163,7 @@ func (c *Repair) doRunOnce() error {
 					c.recorder.Eventf(svc, nil, corev1.EventTypeWarning, "PortNotAllocated", "PortAllocation", "Port %d is not allocated; repairing", port)
 					runtime.HandleError(fmt.Errorf("the node port %d for service %s/%s is not allocated; repairing", port, svc.Name, svc.Namespace))
 				}
-				delete(c.leaks, port) // it is used, so it can't be leaked
+				delete(c.leaks, port) // 它正在被使用，因此不可能是泄漏
 			case portallocator.ErrAllocated:
 				// 端口发生重复分配，需要重新分配。
 				nodePortRepairPortErrors.WithLabelValues("duplicate").Inc()
@@ -224,11 +224,9 @@ func (c *Repair) doRunOnce() error {
 	return nil
 }
 
-// collectServiceNodePorts 收集 Service 中声明的 NodePort。注意：
+// collectServiceNodePorts 汇总 ServicePorts.NodePort 与 HealthCheckNodePort，供端口池修复控制器重建占用集合。注意：
 // 1. 相同端口且协议相同的条目会保留重复项；
 // 2. 相同端口但协议不同的条目会去重。
-//
-// collectServiceNodePorts 汇总 ServicePorts.NodePort 与 HealthCheckNodePort，供端口池修复控制器重建占用集合。
 func collectServiceNodePorts(service *corev1.Service) []int {
 	var servicePorts []int
 	// 记录 NodePort 到协议集合的映射。
@@ -240,12 +238,12 @@ func collectServiceNodePorts(service *corev1.Service) []int {
 		}
 		proto := string(port.Protocol)
 		s := seen[nodePort]
-		if s == nil { // have not seen this nodePort before
+		if s == nil { // 此前未见过该 nodePort
 			s = sets.New[string](proto)
 			servicePorts = append(servicePorts, nodePort)
-		} else if s.Has(proto) { // same nodePort with same protocol
+		} else if s.Has(proto) { // 相同 nodePort 且协议相同
 			servicePorts = append(servicePorts, nodePort)
-		} else { // same nodePort with different protocol
+		} else { // 相同 nodePort 但协议不同
 			s.Insert(proto)
 		}
 		seen[nodePort] = s

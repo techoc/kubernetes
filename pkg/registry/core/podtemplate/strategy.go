@@ -36,24 +36,21 @@ type podTemplateStrategy struct {
 	names.NameGenerator
 }
 
-// Strategy is the default logic that applies when creating and updating PodTemplate
-// objects via the REST API.
+// Strategy 是通过 REST API 创建和更新 PodTemplate 对象时应用的默认逻辑。
 var Strategy = podTemplateStrategy{rest.DeclarativeValidation{Scheme: legacyscheme.Scheme}, names.SimpleNameGenerator}
 
-// NamespaceScoped is true for pod templates.
+// pod templates 是命名空间级资源，NamespaceScoped 返回 true。
 func (podTemplateStrategy) NamespaceScoped() bool {
 	return true
 }
 
-// PrepareForCreate clears fields that are not allowed to be set by end users on creation.
-// 创建时将 Generation 初始化为 1，并根据 Feature Gate 清理当前集群不支持的 PodSpec 字段。
+// PrepareForCreate 清理最终用户不允许在创建时设置的字段：将 Generation 初始化为 1，并根据特性门控清理当前集群不支持的 PodSpec 字段。
 func (podTemplateStrategy) PrepareForCreate(ctx context.Context, obj runtime.Object) {
 	template := obj.(*api.PodTemplate)
 	template.Generation = 1
 	pod.DropDisabledTemplateFields(&template.Template, nil)
 }
 
-// Validate validates a new pod template.
 // Validate 以 PodTemplate.Template 为校验主体，复用 Pod 模板专用的默认值和特性兼容选项。
 func (podTemplateStrategy) Validate(ctx context.Context, obj runtime.Object) field.ErrorList {
 	template := obj.(*api.PodTemplate)
@@ -61,50 +58,47 @@ func (podTemplateStrategy) Validate(ctx context.Context, obj runtime.Object) fie
 	return corevalidation.ValidatePodTemplate(template, opts)
 }
 
-// WarningsOnCreate returns warnings for the creation of the given object.
+// WarningsOnCreate 返回创建给定对象时的警告信息。
 func (podTemplateStrategy) WarningsOnCreate(ctx context.Context, obj runtime.Object) []string {
 	newPodTemplate := obj.(*api.PodTemplate)
 	return pod.GetWarningsForPodTemplate(ctx, field.NewPath("template"), &newPodTemplate.Template, nil)
 }
 
-// Canonicalize normalizes the object after validation.
+// Canonicalize 在校验之后规范化对象。
 func (podTemplateStrategy) Canonicalize(obj runtime.Object) {
 }
 
-// AllowCreateOnUpdate is false for pod templates.
+// pod templates 的 AllowCreateOnUpdate 为 false。
 func (podTemplateStrategy) AllowCreateOnUpdate(ctx context.Context) bool {
 	return false
 }
 
-// PrepareForUpdate clears fields that are not allowed to be set by end users on update.
-// 更新时先清理不可用模板字段；只有内嵌 PodTemplate 语义变化时才增加对象 Generation。
+// PrepareForUpdate 清理最终用户不允许在更新时设置的字段：只有内嵌 PodTemplate 语义变化时才递增 Generation。
 func (podTemplateStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Object) {
 	newTemplate := obj.(*api.PodTemplate)
 	oldTemplate := old.(*api.PodTemplate)
 
 	pod.DropDisabledTemplateFields(&newTemplate.Template, &oldTemplate.Template)
 
-	// Any changes to the template increment the generation number.
-	// See metav1.ObjectMeta description for more information on Generation.
+	// 对模板的任何修改都会递增 generation 号，
+	// 关于 Generation 的更多信息见 metav1.ObjectMeta 的说明。
 	if !apiequality.Semantic.DeepEqual(newTemplate.Template, oldTemplate.Template) {
 		newTemplate.Generation = oldTemplate.Generation + 1
 	}
 
 }
 
-// ValidateUpdate is the default update validation for an end user.
 // ValidateUpdate 将新旧 PodTemplate 一起交给验证器，以支持依赖旧字段值的向后兼容更新规则。
 func (podTemplateStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Object) field.ErrorList {
 	template := obj.(*api.PodTemplate)
 	oldTemplate := old.(*api.PodTemplate)
 
-	// Allow downward api usage of hugepages on pod update if feature is enabled or if the old pod already had used them.
+	// 如果特性门控已开启，或旧 Pod 已经使用过，则在 Pod 更新时允许以向下兼容的方式使用 hugepages。
 	opts := pod.GetValidationOptionsFromPodTemplate(&template.Template, &oldTemplate.Template)
 	return corevalidation.ValidatePodTemplateUpdate(template, oldTemplate, opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
-// 只有模板发生变化时才计算 Pod 模板告警，避免单纯修改 metadata 时重复评估容器配置。
+// WarningsOnUpdate 只在模板发生变化时才计算 Pod 模板告警，避免单纯修改 metadata 时重复评估容器配置。
 func (podTemplateStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	var warnings []string
 	newTemplate := obj.(*api.PodTemplate)

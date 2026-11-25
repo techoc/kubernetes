@@ -14,8 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package configmap provides Registry interface
-// and its REST implementation for storing
-// ConfigMap API objects.
 // 本包提供 ConfigMap 的 REST 写入策略、字段选择器和通用存储接口。
 package configmap

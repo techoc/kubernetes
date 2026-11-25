@@ -59,10 +59,9 @@ func (r *TokenREST) New() runtime.Object {
 	return &authenticationapi.TokenRequest{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *TokenREST) Destroy() {
-	// Given no underlying store, we don't destroy anything
-	// here explicitly.
+	// 由于没有底层 store，这里不需要显式销毁任何东西。
 }
 
 // TokenREST 实现 serviceaccounts/{name}/token：验证请求者与绑定对象，构造 JWT Claims 并通过 TokenGenerator 签发短期凭据。
@@ -96,13 +95,13 @@ var gvk = schema.GroupVersionKind{
 func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	req := obj.(*authenticationapi.TokenRequest)
 
-	// Get the namespace from the context (populated from the URL).
+	// 从 context 中取出 namespace（由 URL 解析写入）。
 	namespace, ok := genericapirequest.NamespaceFrom(ctx)
 	if !ok {
 		return nil, errors.NewBadRequest("namespace is required")
 	}
 
-	// require name/namespace in the body to match URL if specified
+	// 如果请求体里指定了 name/namespace，必须与 URL 中的保持一致
 	if len(req.Name) > 0 && req.Name != name {
 		errs := field.ErrorList{field.Invalid(field.NewPath("metadata").Child("name"), req.Name, "must match the service account name if specified")}
 		return nil, errors.NewInvalid(gvk.GroupKind(), name, errs)
@@ -113,7 +112,6 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 	}
 
 	// 先读取目标 ServiceAccount；后续 token subject、UID 和绑定对象校验都以这份服务端对象为准。
-	// Lookup service account
 	svcacctObj, err := r.svcaccts.Get(ctx, name, &metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -132,11 +130,10 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 	}
 
 	// 未指定 Audience 时采用 API Server 配置；显式指定时后续会与服务器受众及绑定 Webhook 配置共同校验。
-	// Default unset spec audiences to API server audiences based on server config
 	if len(req.Spec.Audiences) == 0 {
 		req.Spec.Audiences = r.auds
 	}
-	// Populate metadata fields if not set
+	// 元数据字段未设置时补全
 	if len(req.Name) == 0 {
 		req.Name = svcacct.Name
 	}
@@ -150,16 +147,13 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 	}
 
 	// 在生成 Claims 前固定当前时间，保证 Token 中 exp 与响应里的 ExpirationTimestamp 使用同一个时间基准。
-	// Save current time before building the token, to make sure the expiration
-	// returned in TokenRequestStatus would be <= the exp field in token.
 	nowTime := time.Now()
 	req.CreationTimestamp = metav1.NewTime(nowTime)
 
-	// Clear status
+	// 清空 status
 	req.Status = authenticationapi.TokenRequestStatus{}
 
 	// 先执行 TokenRequest 静态字段校验，再运行 API Server 的 Admission 校验链。
-	// call static validation, then validating admission
 	if errs := authenticationvalidation.ValidateTokenRequest(req); len(errs) != 0 {
 		return nil, errors.NewInvalid(gvk.GroupKind(), "", errs)
 	}
@@ -198,16 +192,16 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 			if utilfeature.DefaultFeatureGate.Enabled(features.ServiceAccountTokenPodNodeInfo) {
 				if nodeName := pod.Spec.NodeName; nodeName != "" {
 					newCtx := newContext(ctx, "nodes", nodeName, "", api.SchemeGroupVersion.WithKind("Node"))
-					// set ResourceVersion=0 to allow this to be read/served from the apiservers watch cache
+					// 设置 ResourceVersion=0，使该对象可以从 apiserver 的 watch 缓存中读取并提供
 					nodeObj, err := r.nodes.Get(newCtx, nodeName, &metav1.GetOptions{ResourceVersion: "0"})
 					if err != nil {
-						nodeObj, err = r.nodes.Get(newCtx, nodeName, &metav1.GetOptions{}) // fallback to a live lookup on any error
+						nodeObj, err = r.nodes.Get(newCtx, nodeName, &metav1.GetOptions{}) // 任何错误都回退为实时查询
 					}
 					switch {
 					case errors.IsNotFound(err):
-						// if the referenced Node object does not exist, we still embed just the pod name into the
-						// claims so that clients still have some indication of what node a pod is assigned to when
-						// inspecting a token (even if the UID is not present).
+						// 如果被引用的 Node 对象不存在，仍然把 Pod 名称写入 claims，
+						// 这样客户端在检查 token 时至少能知道 Pod 被调度到了哪个节点，
+						// 即使其中没有 UID。
 						klog.V(4).ErrorS(err, "failed fetching node for pod", "pod", klog.KObj(pod), "podUID", pod.UID, "nodeName", nodeName)
 						node = &api.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}
 					case err != nil:
@@ -236,7 +230,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 			}
 			secret = secretObj.(*api.Secret)
 			uid = secret.UID
-		case gvk.GroupVersion() == admissionregistrationv1.SchemeGroupVersion && (gvk.Kind == "ValidatingWebhookConfiguration" || gvk.Kind == "MutatingWebhookConfiguration"): // TODO(enj): we seem to have ignored the version for the other refs which is questionable ...
+		case gvk.GroupVersion() == admissionregistrationv1.SchemeGroupVersion && (gvk.Kind == "ValidatingWebhookConfiguration" || gvk.Kind == "MutatingWebhookConfiguration"): // TODO(enj): 其他引用的 version 似乎被忽略了，这一点值得商榷……
 			if !utilfeature.DefaultFeatureGate.Enabled(genericfeatures.APIServerWebhookAuthenticationToken) {
 				return nil, errors.NewBadRequest(fmt.Sprintf("cannot bind token to object of type %s (feature gate %s is disabled)", gvk.String(), genericfeatures.APIServerWebhookAuthenticationToken))
 			}
@@ -250,7 +244,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 				return nil, errors.NewInternalError(err)
 			}
 
-			// validation guarantees the presence of both of these and their single value
+			// 校验已保证这两个取值都存在且只有一个值
 			admissionReviewAPIGroup := attestations[authenticationapi.AttestationAdmissionReviewAPIGroups][0]
 			audience := req.Spec.Audiences[0]
 
@@ -282,15 +276,15 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 
 	// 把请求时长限制在服务器最大值内；后续还会处理 Pod 绑定 Token 的安全过渡期延长策略。
 	if r.maxExpirationSeconds > 0 && req.Spec.ExpirationSeconds > r.maxExpirationSeconds {
-		// only positive value is valid
+		// 只有正数才合法
 		warning.AddWarning(ctx, "", fmt.Sprintf("requested expiration of %d seconds shortened to %d seconds", req.Spec.ExpirationSeconds, r.maxExpirationSeconds))
 		req.Spec.ExpirationSeconds = r.maxExpirationSeconds
 	}
 
-	// Tweak expiration for safe transition of projected service account token.
-	// Warn (instead of fail) after requested expiration time.
-	// Fail after hard-coded extended expiration time.
-	// Only perform the extension when token is pod-bound.
+	// 为了让投影的 ServiceAccount token 平滑过渡，对过期时间做调整：
+	// 超过请求的过期时间只告警而不失败；
+	// 超过硬编码的延长过期时间则失败；
+	// 且只对绑定到 Pod 的 token 做延长。
 	var warnAfter int64
 	exp := req.Spec.ExpirationSeconds
 	if r.extendExpiration && pod != nil && req.Spec.ExpirationSeconds == token.WarnOnlyBoundTokenExpirationSeconds && r.isKubeAudiences(req.Spec.Audiences) {
@@ -308,7 +302,7 @@ func (r *TokenREST) Create(ctx context.Context, name string, obj runtime.Object,
 		return nil, errors.NewInternalError(fmt.Errorf("failed to generate token: %v", err))
 	}
 
-	// populate status
+	// 填充 status
 	out := req.DeepCopy()
 	out.Status = authenticationapi.TokenRequestStatus{
 		Token:               tokdata,
@@ -369,7 +363,7 @@ func getNewWebhookCtx(ctx context.Context, gvk schema.GroupVersionKind, refName 
 	return newCtx, nil
 }
 
-// newContext return a copy of ctx in which new RequestInfo is set
+// newContext 返回 ctx 的副本，其中写入了新的 RequestInfo。
 func newContext(ctx context.Context, resource, name, namespace string, gvk schema.GroupVersionKind) context.Context {
 	newInfo := genericapirequest.RequestInfo{
 		IsResourceRequest: true,
@@ -384,19 +378,19 @@ func newContext(ctx context.Context, resource, name, namespace string, gvk schem
 	return genericapirequest.WithRequestInfo(ctx, &newInfo)
 }
 
-// isKubeAudiences returns true if the tokenaudiences is a strict subset of apiserver audiences.
+// 如果 tokenAudiences 是 apiserver audiences 的真子集，isKubeAudiences 返回 true。
 func (r *TokenREST) isKubeAudiences(tokenAudience []string) bool {
-	// tokenAudiences must be a strict subset of apiserver audiences
+	// tokenAudiences 必须是 apiserver audiences 的真子集
 	return r.audsSet.HasAll(tokenAudience...)
 }
 
-// hasAnyKubeAudiences returns true if the tokenaudiences has any apiserver audiences.
+// 如果 tokenAudiences 中包含任意 apiserver audience，hasAnyKubeAudiences 返回 true。
 func (r *TokenREST) hasAnyKubeAudiences(tokenAudience []string) bool {
 	return r.audsSet.HasAny(tokenAudience...)
 }
 
-// PreserveRequestObjectMetaSystemFieldsOnSubresourceCreate indicates that the
-// TokenRequest's UID should be preserved when creating subresources
+// PreserveRequestObjectMetaSystemFieldsOnSubresourceCreate 表示在创建子资源时，
+// 需要保留 TokenRequest 的 UID。
 func (r *TokenREST) PreserveRequestObjectMetaSystemFieldsOnSubresourceCreate() bool {
 	return true
 }
@@ -462,13 +456,13 @@ func getAndValidateWebhookConfig[T webhook](ctx context.Context, name, audience,
 		return nil, "", err
 	}
 
-	// "*" means the token is valid for all API groups; skip the check. We
-	// expect only kube-apiserver to ever be authorized to ask for this.
+	// "*" 表示该 token 对所有 API 组有效，跳过检查。
+	// 我们预期只有 kube-apiserver 会被授权请求该取值。
 	if admissionReviewAPIGroup == "*" {
 		return obj, obj.GetUID(), nil
 	}
 
-	// check if any webhook in the config both matches the requested admissionReviewAPIGroup and audience (at the same time)
+	// 检查配置中是否存在同时匹配所请求的 admissionReviewAPIGroup 与 audience 的 Webhook
 	for wh := range whs {
 		if validateAttestationAPIGroup(wh, admissionReviewAPIGroup) && validateWebhookAudience(wh, audience) {
 			return obj, obj.GetUID(), nil
@@ -478,13 +472,10 @@ func getAndValidateWebhookConfig[T webhook](ctx context.Context, name, audience,
 	return nil, "", fmt.Errorf("no matching webhook found in config %q", name)
 }
 
-// validateWebhookAudience checks whether the requested audience matches at
-// least the provided webhook's client config. For URL-configured webhooks the
-// audience must be the URL verbatim. For service-configured webhooks the
-// audience must be https://$name.$namespace.svc:$port[/$path] . Note that the
-// trailing slash must match between the webhook's expected audience and the
-// service's configuration.
-// URL Webhook 的 Audience 必须与 URL 完全相同；Service Webhook 则按 https://name.namespace.svc:port/path 精确匹配。
+// validateWebhookAudience 检查请求的 audience 是否至少与所匹配 Webhook 的 client config 一致：
+// 用 URL 配置的 Webhook，audience 必须与 URL 完全相同；
+// 用 Service 配置的 Webhook，audience 必须是 https://$name.$namespace.svc:$port[/$path]。
+// 注意 Webhook 期望的 audience 与 Service 配置之间，结尾斜杠也要保持一致。
 func validateWebhookAudience(hook *webhookFields, audience string) bool {
 	cc := hook.config
 	if cc.URL != nil && audience == *cc.URL {
@@ -511,13 +502,10 @@ func validateWebhookAudience(hook *webhookFields, audience string) bool {
 	return false
 }
 
-// validateAttestationAPIGroup checks whether the attested API group matches at
-// least one Rule in the provided webhook. A "*" admissionReviewAPIGroup
-// attestation value skips this check since it represents all API groups. A "*"
-// in a Rule's APIGroups matches any attested value. It is assumed that the cel
-// expressions in the matchConditions properly match the AdmissionReview request
-// for which the TokenRequest is being made.
-// validateAttestationAPIGroup 检查 webhook Rule.APIGroups 是否包含请求声明的 API Group；Rule 中的 * 可匹配任意 Group。
+// validateAttestationAPIGroup 检查所声明的 API Group 是否与 Webhook 中至少一条 Rule 匹配。
+// attestation 值为 "*" 的 admissionReviewAPIGroup 会跳过该检查，因为它代表所有 API Group；
+// Rule 的 APIGroups 中的 "*" 可以匹配任意声明值。这里假定 matchConditions 中的 CEL 表达式
+// 能够正确匹配本次 TokenRequest 对应的 AdmissionReview 请求。
 func validateAttestationAPIGroup(hook *webhookFields, attestedGroup string) bool {
 	for _, rule := range hook.rules {
 		for _, group := range rule.APIGroups {
@@ -527,11 +515,11 @@ func validateAttestationAPIGroup(hook *webhookFields, attestedGroup string) bool
 		}
 	}
 
-	// An aggregated API Server will never need a cross-group equivalent, so we
-	// do not check equivalents here.
+	// 聚合 API Server 永远不需要跨组的等价 audience，因此这里
+	// 不检查 equivalents。
 
-	// If this point is reached, there are either a) no rules or b) rules but
-	// none matched. If there are no rules, the invocation will never match and
-	// the request should be denied.
+	// 走到这里说明：a）没有任何 rules，或 b）有 rules 但没有一条匹配。
+	// 如果没有 rules，该调用永远无法匹配，
+	// 因此应当拒绝该请求。
 	return false
 }

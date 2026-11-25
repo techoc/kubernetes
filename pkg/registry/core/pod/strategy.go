@@ -366,7 +366,7 @@ func (podEphemeralContainersStrategy) ValidateUpdate(ctx context.Context, obj, o
 	return corevalidation.ValidatePodEphemeralContainersUpdate(newPod, oldPod, opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新的警告信息。
 func (podEphemeralContainersStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -470,7 +470,7 @@ func (podResizeStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.
 	// 通过 resize 设置或更新 Pod 级资源后执行默认值补全，确保未显式管理的资源（例如只设置 CPU 时的内存）也完整且一致。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourcesFixDefaulting) {
 		if newPod.Spec.Resources == nil && oldPod.Spec.Resources != nil {
-			// preserve existing PLR for requests from potentially PLR-unaware clients that completely dropped the field
+			// 对于可能不认识 PodLevelResources 字段、从而完全丢弃该字段的客户端，保留其已有的 PLR
 			newPod.Spec.Resources = oldPod.Spec.Resources.DeepCopy()
 		}
 
@@ -491,7 +491,7 @@ func (podResizeStrategy) ValidateUpdate(ctx context.Context, obj, old runtime.Ob
 	return corevalidation.ValidatePodResize(newPod, oldPod, opts)
 }
 
-// WarningsOnUpdate returns warnings for the given update.
+// WarningsOnUpdate 返回本次更新的警告信息。
 func (podResizeStrategy) WarningsOnUpdate(ctx context.Context, obj, old runtime.Object) []string {
 	return nil
 }
@@ -597,7 +597,6 @@ func getPodIP(pod *api.Pod) string {
 	return ""
 }
 
-// ResourceLocation returns a URL to which one can send traffic for the specified pod.
 // ResourceLocation 将 Pod 名称/端口解析为 Pod IP URL；用于 /proxy 子资源把请求转发到 Pod 网络地址。
 func ResourceLocation(ctx context.Context, getter ResourceGetter, rt http.RoundTripper, id string) (*url.URL, http.RoundTripper, error) {
 	// 先解析 scheme、Pod 名称和可选端口；缺省端口时从 Pod 容器声明中选择第一个端口。
@@ -805,8 +804,8 @@ func streamLocation(
 		return nil, nil, err
 	}
 
-	// Try to figure out a container
-	// If a container was provided, it must be valid
+	// 尝试确定要使用哪个容器
+	// 如果指定了 container，那它必须是合法的
 	container, err = validateContainer(container, pod)
 	if err != nil {
 		return nil, nil, err
@@ -814,7 +813,7 @@ func streamLocation(
 
 	nodeName := types.NodeName(pod.Spec.NodeName)
 	if len(nodeName) == 0 {
-		// If pod has not been assigned a host, return an empty location
+		// 如果 Pod 尚未分配到主机，返回空地址
 		return nil, nil, errors.NewBadRequest(fmt.Sprintf("pod %s does not have a host assigned", name))
 	}
 	nodeInfo, err := connInfo.GetConnectionInfo(ctx, nodeName)
@@ -834,8 +833,7 @@ func streamLocation(
 	return loc, nodeInfo, nil
 }
 
-// PortForwardLocation 返回 Pod 对应节点的 PortForward URL。
-// PortForwardLocation 获取 Pod 对应节点的连接信息，并构造 /portForward/{namespace}/{pod} 请求地址。
+// PortForwardLocation 获取 Pod 所在节点的连接信息，构造 /portForward/{namespace}/{pod} 请求地址。
 func PortForwardLocation(
 	ctx context.Context,
 	getter ResourceGetter,
@@ -850,7 +848,7 @@ func PortForwardLocation(
 
 	nodeName := types.NodeName(pod.Spec.NodeName)
 	if len(nodeName) == 0 {
-		// If pod has not been assigned a host, return an empty location
+		// 如果 Pod 尚未分配到主机，返回空地址
 		return nil, nil, errors.NewBadRequest(fmt.Sprintf("pod %s does not have a host assigned", name))
 	}
 	nodeInfo, err := connInfo.GetConnectionInfo(ctx, nodeName)
@@ -897,8 +895,7 @@ func validateContainer(container string, pod *api.Pod) (string, error) {
 	return container, nil
 }
 
-// applyLabelKeysToLabelSelector 根据 labelKeys 从给定 Labels 中读取对应值，并将其应用到 LabelSelector。
-// and merge to LabelSelector with the given operator:
+// applyLabelKeysToLabelSelector 根据 labelKeys 从给定 Labels 中读取对应的值，并按指定的 operator 合并到 LabelSelector。
 func applyLabelKeysToLabelSelector(labelSelector *metav1.LabelSelector, labelKeys []string, operator metav1.LabelSelectorOperator, podLabels map[string]string) {
 	for _, key := range labelKeys {
 		if value, ok := podLabels[key]; ok {
@@ -911,13 +908,13 @@ func applyLabelKeysToLabelSelector(labelSelector *metav1.LabelSelector, labelKey
 	}
 }
 
-// applyMatchLabelKeysAndMismatchLabelKeys obtains the labels from the pod labels by the key in matchLabelKeys or mismatchLabelKeys,
-// and merge to LabelSelector of PodAffinityTerm depending on field:
-// - If matchLabelKeys, key in (value) is merged with LabelSelector.
-// - If mismatchLabelKeys, key notin (value) is merged with LabelSelector.
+// applyMatchLabelKeysAndMismatchLabelKeys 用 matchLabelKeys 或 mismatchLabelKeys 中的 key，
+// 从 Pod 的 labels 中取出对应的值，并按字段含义合并到 PodAffinityTerm 的 LabelSelector：
+// - matchLabelKeys 合并为 key in (value)；
+// - mismatchLabelKeys 合并为 key notin (value)。
 func applyMatchLabelKeysAndMismatchLabelKeys(term *api.PodAffinityTerm, label map[string]string) {
 	if (len(term.MatchLabelKeys) == 0 && len(term.MismatchLabelKeys) == 0) || term.LabelSelector == nil {
-		// If LabelSelector is nil, we don't need to apply label keys to it because nil-LabelSelector is match none.
+		// LabelSelector 为 nil 时无需应用 label keys，因为 nil LabelSelector 匹配不到任何对象。
 		return
 	}
 
@@ -950,7 +947,7 @@ func mutatePodAffinity(pod *api.Pod) {
 
 func applyMatchLabelKeys(constraint *api.TopologySpreadConstraint, labels map[string]string) {
 	if len(constraint.MatchLabelKeys) == 0 || constraint.LabelSelector == nil {
-		// If LabelSelector is nil, we don't need to apply label keys to it because nil-LabelSelector is match none.
+		// LabelSelector 为 nil 时无需应用 label keys，因为 nil LabelSelector 匹配不到任何对象。
 		return
 	}
 
@@ -968,15 +965,13 @@ func mutateTopologySpreadConstraints(pod *api.Pod) {
 	}
 }
 
-// applySchedulingGatedCondition adds a {type:PodScheduled, reason:SchedulingGated} condition
-// to a new-created Pod if necessary.
-// applySchedulingGatedCondition 为带 schedulingGates 的新 Pod 设置 PodScheduled=False，明确说明暂不可调度。
+// applySchedulingGatedCondition 必要时为新建的 Pod 添加 {type:PodScheduled, reason:SchedulingGated} 条件，
 func applySchedulingGatedCondition(pod *api.Pod) {
 	if len(pod.Spec.SchedulingGates) == 0 {
 		return
 	}
 
-	// If found a condition with type PodScheduled, return.
+	// 如果已存在类型为 PodScheduled 的条件，直接返回。
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == api.PodScheduled {
 			return
@@ -991,9 +986,9 @@ func applySchedulingGatedCondition(pod *api.Pod) {
 	})
 }
 
-// applyAppArmorVersionSkew implements the version skew behavior described in:
+// applyAppArmorVersionSkew 实现如下 KEP 中描述的版本偏差（version skew）行为：
 // https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/24-apparmor#version-skew-strategy
-// applyAppArmorVersionSkew 在升级兼容期把旧 AppArmor Annotation 同步到结构化字段，并对需要迁移的用法发出弃用警告。
+// 该函数在升级兼容期把旧的 AppArmor Annotation 同步到结构化字段，并对需要迁移的用法发出弃用警告。
 func applyAppArmorVersionSkew(ctx context.Context, pod *api.Pod) {
 	// Windows 容器不使用 Linux AppArmor 配置，直接跳过这段字段迁移逻辑。
 	if pod.Spec.OS != nil && pod.Spec.OS.Name == api.Windows {
@@ -1005,10 +1000,10 @@ func applyAppArmorVersionSkew(ctx context.Context, pod *api.Pod) {
 		podProfile = pod.Spec.SecurityContext.AppArmorProfile
 	}
 
-	// Handle the containers of the pod
+	// 处理 Pod 中的各个容器
 	podutil.VisitContainers(&pod.Spec, podutil.AllFeatureEnabledContainers(),
 		func(ctr *api.Container, _ podutil.ContainerType) bool {
-			// get possible annotation and field
+			// 取出可能存在的 annotation 和字段
 			key := api.DeprecatedAppArmorAnnotationKeyPrefix + ctr.Name
 			annotation, hasAnnotation := pod.Annotations[key]
 
@@ -1017,31 +1012,30 @@ func applyAppArmorVersionSkew(ctx context.Context, pod *api.Pod) {
 				containerProfile = ctr.SecurityContext.AppArmorProfile
 			}
 
-			// Sync deprecated AppArmor annotations to fields
+			// 把已弃用的 AppArmor annotations 同步到结构化字段
 			if hasAnnotation && containerProfile == nil {
 				newField := podutil.ApparmorFieldForAnnotation(annotation)
 				if errs := corevalidation.ValidateAppArmorProfileField(newField, &field.Path{}); len(errs) > 0 {
-					// Skip copying invalid value.
+					// 跳过非法值，不做拷贝。
 					newField = nil
 				}
 
-				// warn if we had an annotation that we couldn't derive a valid field from
+				// 如果某个 annotation 无法推导出合法的字段，则发出警告
 				deprecationWarning := newField == nil
 
-				// Only copy the annotation to the field if it is different from the pod-level profile.
+				// 仅当 annotation 与 Pod 级别的 profile 不同时，才把它拷贝到字段上。
 				if newField != nil && !apiequality.Semantic.DeepEqual(newField, podProfile) {
 					if ctr.SecurityContext == nil {
 						ctr.SecurityContext = &api.SecurityContext{}
 					}
 					ctr.SecurityContext.AppArmorProfile = newField
-					// warn if there was an annotation without a corresponding field
+					// 如果存在没有对应字段的 annotation，则发出警告
 					deprecationWarning = true
 				}
 
 				if deprecationWarning {
-					// Note: annotation deprecation warning must be added here rather than the
-					// typical WarningsOnCreate path to emit the warning before syncing the
-					// annotations & fields.
+					// 注意：annotation 的弃用警告必须加在这里，而不是常见的 WarningsOnCreate 路径，
+					// 以便在同步 annotations 与字段之前就发出警告。
 					fldPath := field.NewPath("metadata", "annotations").Key(key)
 					warning.AddWarning(ctx, "", fmt.Sprintf(`%s: deprecated since v1.30; use the "appArmorProfile" field instead`, fldPath))
 				}
@@ -1051,9 +1045,7 @@ func applyAppArmorVersionSkew(ctx context.Context, pod *api.Pod) {
 		})
 }
 
-// updatePodGeneration bumps metadata.generation if needed for any updates
-// to the podspec.
-// updatePodGeneration 仅在 Pod 期望状态 Spec 改变时递增 Generation，元数据或 Status 更新不会增加版本。
+// updatePodGeneration 在 PodSpec 发生变化时递增 metadata.generation：
 func updatePodGeneration(newPod, oldPod *api.Pod) {
 	if !apiequality.Semantic.DeepEqual(newPod.Spec, oldPod.Spec) {
 		newPod.Generation++

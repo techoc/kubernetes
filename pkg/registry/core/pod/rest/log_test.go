@@ -47,7 +47,7 @@ func TestPodLogValidates(t *testing.T) {
 	}
 	logRest := &LogREST{Store: store, KubeletConn: nil}
 
-	// This test will panic if you don't have a validation failure.
+	// 如果未触发校验失败，本测试会因后续断言而 panic。
 	negativeOne := int64(-1)
 	testCases := []struct {
 		name               string

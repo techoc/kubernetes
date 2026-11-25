@@ -79,9 +79,9 @@ func TestCreate(t *testing.T) {
 	event := validNewEvent(test.TestNamespace())
 	event.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法
 		event,
-		// invalid
+		// 非法
 		&api.Event{},
 	)
 }
@@ -93,15 +93,15 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).AllowCreateOnUpdate()
 	test.TestUpdate(
-		// valid
+		// 合法
 		validNewEvent(test.TestNamespace()),
-		// valid updateFunc
+		// 合法的 updateFunc
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*api.Event)
 			object.Series.Count = 100
 			return object
 		},
-		// invalid updateFunc
+		// 非法的 updateFunc
 		func(obj runtime.Object) runtime.Object {
 			object := obj.(*api.Event)
 			object.ReportingController = ""

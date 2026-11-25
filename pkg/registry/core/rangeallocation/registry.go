@@ -22,10 +22,10 @@ import (
 
 // RangeRegistry 定义 RangeAllocation 快照存储契约；ClusterIP、NodePort 等分配器通过它读取最新位图并以资源版本冲突保护写入。
 type RangeRegistry interface {
-	// Get returns the latest allocation, an empty object if no allocation has been made,
-	// or an error if the allocation could not be retrieved.
+	// Get 返回最新的分配结果；若尚未做过分配则返回空对象；
+	// 若无法读取分配结果则返回错误。
 	Get() (*api.RangeAllocation, error)
-	// CreateOrUpdate should create or update the provide allocation, unless a conflict
-	// has occurred since the item was last created.
+	// CreateOrUpdate 创建或更新给定的分配结果，除非自上次读取以来
+	// 发生了冲突。
 	CreateOrUpdate(*api.RangeAllocation) error
 }

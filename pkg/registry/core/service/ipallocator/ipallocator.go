@@ -44,18 +44,17 @@ import (
 
 const ControllerName = "ipallocator.k8s.io"
 
-// Allocator 使用 IPAddress API 对象记录地址分配关系，并通过 Informer 缓存提供查询能力，实现当前 IP 分配接口。
-// Allocator 管理单个 CIDR 内的 IP 地址；底层位图记录占用状态，IPAddress API 对象保存地址所有权与 Service 引用。
+// Allocator 管理单个 CIDR 内的 IP 地址，使用 IPAddress API 对象记录地址分配关系，并通过 Informer 缓存提供查询能力。
 type Allocator struct {
 	cidr          *net.IPNet
 	prefix        netip.Prefix
-	firstAddress  netip.Addr   // first IP address within the range
-	offsetAddress netip.Addr   // IP address that delimits the upper and lower subranges
-	lastAddress   netip.Addr   // last IP address within the range
-	family        api.IPFamily // family is the IP family of this range
+	firstAddress  netip.Addr   // 地址范围内的首个 IP 地址。
+	offsetAddress netip.Addr   // 分隔上方动态区和下方预留区的 IP 地址。
+	lastAddress   netip.Addr   // 地址范围内的最后一个 IP 地址。
+	family        api.IPFamily // 该地址范围所属的 IP 协议族。
 
-	rangeOffset int    // subdivides the assigned IP range to prefer dynamic allocation from the upper range
-	size        uint64 // cap the total number of IPs available to maxInt64
+	rangeOffset int    // 划分地址范围，使动态分配优先使用上方区间。
+	size        uint64 // 将可分配 IP 总数限制在 maxInt64 以内。
 
 	client          networkingv1client.NetworkingV1Interface
 	ipAddressLister networkingv1listers.IPAddressLister
@@ -72,8 +71,7 @@ type Allocator struct {
 
 var _ Interface = &Allocator{}
 
-// NewIPAllocator 创建与指定网络范围关联的 IP 分配器，使用 IPAddress 对象跟踪已分配地址，并通过 Informer 缓存读取状态。
-// NewIPAllocator 创建单一 CIDR 的 ClusterIP 分配器，并可通过 IPAddress Informer 缓存查询已占用地址。
+// NewIPAllocator 创建单一 CIDR 的 ClusterIP 分配器，使用 IPAddress 对象跟踪已分配地址，并通过 Informer 缓存查询占用状态。
 func NewIPAllocator(
 	cidr *net.IPNet,
 	client networkingv1client.NetworkingV1Interface,
@@ -128,7 +126,7 @@ func NewIPAllocator(
 		client:          client,
 		ipAddressLister: ipAddressInformer.Lister(),
 		ipAddressSynced: ipAddressInformer.Informer().HasSynced,
-		metrics:         &emptyMetricsRecorder{}, // disabled by default
+		metrics:         &emptyMetricsRecorder{}, // 默认禁用指标记录。
 		metricLabel:     cidr.String(),
 		rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
@@ -151,34 +149,28 @@ func (a *Allocator) createIPAddress(name string, svc *api.Service, scope string)
 	}
 	_, err := a.client.IPAddresses().Create(context.Background(), &ipAddress, metav1.CreateOptions{})
 	if err != nil {
-		// update metrics
+		// 更新指标
 		a.metrics.incrementAllocationErrors(a.metricLabel, scope)
 		if apierrors.IsAlreadyExists(err) {
 			return ErrAllocated
 		}
 		return err
 	}
-	// update metrics
+	// 更新指标
 	a.metrics.incrementAllocations(a.metricLabel, scope)
 	a.metrics.setAllocated(a.metricLabel, a.Used())
 	a.metrics.setAvailable(a.metricLabel, a.Free())
 	return nil
 }
 
-// Allocate attempts to reserve the provided IP. ErrNotInRange or
-// ErrAllocated will be returned if the IP is not valid for this range
-// or has already been reserved.  ErrFull will be returned if there
-// are no addresses left.
-// Only for testing, it will fail to create the IPAddress object because
-// the Service reference is required.
+// Allocate 尝试预留指定 IP。IP 不在范围内时返回 ErrNotInRange，已被占用时返回 ErrAllocated，地址池耗尽时返回 ErrFull。
+// 该方法仅供测试使用；由于创建 IPAddress 对象需要 Service 引用，未提供引用时可能创建失败。
 func (a *Allocator) Allocate(ip net.IP) error {
 	return a.AllocateService(nil, ip)
 }
 
-// AllocateService attempts to reserve the provided IP. ErrNotInRange or
-// ErrAllocated will be returned if the IP is not valid for this range
-// or has already been reserved.  ErrFull will be returned if there
-// are no addresses left.
+// AllocateService 尝试为 Service 预留指定 IP，并创建记录所有权关系的 IPAddress 对象。
+// IP 不在范围内时返回 ErrNotInRange，已被占用时返回 ErrAllocated，地址池耗尽时返回 ErrFull。
 func (a *Allocator) AllocateService(svc *api.Service, ip net.IP) error {
 	return a.allocateService(svc, ip, dryRunFalse)
 }
@@ -193,11 +185,11 @@ func (a *Allocator) allocateService(svc *api.Service, ip net.IP, dryRun bool) er
 		return err
 	}
 
-	// check address is within the range of available addresses
-	if addr.Less(a.firstAddress) || // requested address is lower than the first address in the subnet
-		a.lastAddress.Less(addr) { // the last address in the subnet is lower than the requested address
+	// 检查地址是否位于可分配范围内。
+	if addr.Less(a.firstAddress) || // 请求地址小于子网的首个可分配地址。
+		a.lastAddress.Less(addr) { // 子网最后一个可分配地址小于请求地址。
 		if !dryRun {
-			// update metrics
+			// 更新指标
 			a.metrics.incrementAllocationErrors(a.metricLabel, "static")
 		}
 		return &ErrNotInRange{ip, a.prefix.String()}
@@ -214,32 +206,24 @@ func (a *Allocator) allocateService(svc *api.Service, ip net.IP, dryRun bool) er
 	return nil
 }
 
-// AllocateNext return an IP address that wasn't allocated yet.
-// Only for testing, it will fail to create the IPAddress object because
-// the Service reference is required.
+// AllocateNext 返回一个尚未分配的 IP。该方法仅供测试使用；由于创建 IPAddress 对象需要 Service 引用，未提供引用时可能创建失败。
 func (a *Allocator) AllocateNext() (net.IP, error) {
 	return a.AllocateNextService(nil)
 }
 
-// AllocateNext return an IP address that wasn't allocated yet.
+// AllocateNextService 为 Service 自动分配一个尚未占用的 IP，并创建对应的 IPAddress 对象。
 func (a *Allocator) AllocateNextService(svc *api.Service) (net.IP, error) {
 	return a.allocateNextService(svc, dryRunFalse)
 }
 
-// allocateNextService tries to allocate a free IP address within the subnet.
-// If the subnet is big enough, it partitions the subnet into two subranges,
-// delimited by a.rangeOffset.
-// It tries to allocate a free IP address from the upper subnet first and
-// falls back to the lower subnet.
-// It starts allocating from a random IP within each range.
 // allocateNextService 从 CIDR 中选择下一个可用地址，跳过网络/广播/保留地址，并按需要创建 IPAddress 对象。
+// 较大的子网会按 a.rangeOffset 划分为两个区间：先从上方区间随机起点搜索，耗尽后再回退到下方区间。
 func (a *Allocator) allocateNextService(svc *api.Service, dryRun bool) (net.IP, error) {
 	if !a.ready.Load() || !a.ipAddressSynced() {
 		return nil, ErrNotReady
 	}
 	if dryRun {
-		// Don't bother finding a free value. It's racy and not worth the
-		// effort to plumb any further.
+		// 不必额外查找空闲地址：该检查存在竞争窗口，进一步传递状态也无法保证后续分配成功。
 		return a.CIDR().IP, nil
 	}
 
@@ -247,14 +231,13 @@ func (a *Allocator) allocateNextService(svc *api.Service, dryRun bool) (net.IP, 
 	defer trace.LogIfLong(500 * time.Millisecond)
 	start := time.Now()
 
-	// rand.Int63n panics for n <= 0 so we need to avoid problems when
-	// converting from uint64 to int64
+	// rand.Int63n 在 n <= 0 时会 panic，因此从 uint64 转为 int64 前必须避免该情况。
 	rangeSize := a.size - uint64(a.rangeOffset)
 	var offset uint64
 	switch {
 	case rangeSize >= math.MaxInt64:
 		offset = a.rand.Uint64()
-		// a.offsetAddress + offset should not overflow a 64 bit CIDR.
+		// a.offsetAddress + offset 不应超出 64 位 CIDR 的地址范围。
 		if math.MaxUint64-offset < uint64(a.rangeOffset) {
 			offset -= uint64(a.rangeOffset)
 		}
@@ -269,7 +252,7 @@ func (a *Allocator) allocateNextService(svc *api.Service, dryRun bool) (net.IP, 
 		a.metrics.setLatency(a.metricLabel, time.Since(start))
 		return ip, nil
 	}
-	// if the upper range is full, try to allocate from the lower range
+	// 上方区间已满时，尝试从下方区间分配。
 	if errors.Is(err, ErrFull) && a.rangeOffset != 0 {
 		offset = uint64(a.rand.Intn(a.rangeOffset))
 		iterator = ipIterator(a.firstAddress, a.offsetAddress.Prev(), offset)
@@ -279,7 +262,7 @@ func (a *Allocator) allocateNextService(svc *api.Service, dryRun bool) (net.IP, 
 			return ip, nil
 		}
 	}
-	// no IP available
+	// 没有可用 IP。
 	if err == nil {
 		klog.Info("[SHOULD NOT HAPPEN] - No IP Allocated and no error")
 		err = ErrFull
@@ -288,13 +271,10 @@ func (a *Allocator) allocateNextService(svc *api.Service, dryRun bool) (net.IP, 
 	return net.IP{}, err
 }
 
-// IP iterator allows to iterate over all the IP addresses
-// in a range defined by the start and last address.
-// It starts iterating at the address position defined by the offset.
-// It returns an invalid address to indicate it hasfinished.
 // ipIterator 按指定 offset 在首尾地址之间迭代，支持随机起点并在遍历到末尾时回绕。
+// 遍历结束时返回无效地址。
 func ipIterator(first netip.Addr, last netip.Addr, offset uint64) func() netip.Addr {
-	// There are no modulo operations for IP addresses
+	// IP 地址不支持取模运算，需要手动回绕。
 	modulo := func(addr netip.Addr) netip.Addr {
 		if addr.Compare(last) == 1 {
 			return first
@@ -313,7 +293,7 @@ func ipIterator(first netip.Addr, last netip.Addr, offset uint64) func() netip.A
 	seen := false
 	return func() netip.Addr {
 		value := ip
-		// is the last or the first iteration
+		// 判断是首次还是最后一次迭代。
 		if value == start {
 			if seen {
 				return netip.Addr{}
@@ -326,11 +306,8 @@ func ipIterator(first netip.Addr, last netip.Addr, offset uint64) func() netip.A
 
 }
 
-// allocateFromRange allocates an empty IP address from the range of
-// IPs between the first and last address (both included), starting
-// from the start address.
-// TODO: this is a linear search, it can be optimized.
-// allocateFromRange 遍历候选地址，遇到已占用地址继续尝试；仅在分配成功或遇到不可恢复错误时停止。
+// allocateFromRange 从包含首尾地址的区间内分配空闲 IP。
+// TODO：当前采用线性搜索，仍有优化空间。
 func (a *Allocator) allocateFromRange(iterator func() netip.Addr, svc *api.Service) (net.IP, error) {
 	for {
 		ip := iterator()
@@ -339,7 +316,7 @@ func (a *Allocator) allocateFromRange(iterator func() netip.Addr, svc *api.Servi
 		}
 		name := ip.String()
 		_, err := a.ipAddressLister.Get(name)
-		// continue if ip already exist
+		// IP 已存在时继续尝试下一个地址。
 		if err == nil {
 			continue
 		}
@@ -347,12 +324,10 @@ func (a *Allocator) allocateFromRange(iterator func() netip.Addr, svc *api.Servi
 			klog.Infof("unexpected error: %v", err)
 			continue
 		}
-		// address is not present on the cache, try to allocate it
+		// 缓存中不存在该地址，尝试分配。
 		err = a.createIPAddress(name, svc, "dynamic")
-		// an error can happen if there is a TOCTOU race and the IP address
-		// was allocated by another instance, in that case, swallow the error
-		// and try with the next IP address, but abort on other errors.
-		// Ref: https://issues.k8s.io/135333
+		// TOCTOU 竞争可能导致其他实例先分配该地址；此时忽略冲突并尝试下一个 IP，其他错误则终止分配。
+		// 参考：https://issues.k8s.io/135333
 		if err != nil {
 			if errors.Is(err, ErrAllocated) {
 				klog.Infof("mid-air collision trying to allocate IP %s that already exists, retrying ...", name)
@@ -366,9 +341,7 @@ func (a *Allocator) allocateFromRange(iterator func() netip.Addr, svc *api.Servi
 	return net.IP{}, ErrFull
 }
 
-// Release releases the IP back to the pool. Releasing an
-// unallocated IP or an IP out of the range is a no-op and
-// returns no error.
+// Release 将 IP 归还地址池。释放未分配或超出范围的 IP 时不执行任何操作，也不会返回错误。
 func (a *Allocator) Release(ip net.IP) error {
 	return a.release(ip, dryRunFalse)
 }
@@ -379,11 +352,10 @@ func (a *Allocator) release(ip net.IP, dryRun bool) error {
 		return nil
 	}
 	name := ip.String()
-	// Try to Delete the IPAddress independently of the cache state.
-	// The error is ignored for compatibility reasons.
+	// 不依赖缓存状态直接删除 IPAddress；为保持兼容性忽略删除错误。
 	err := a.client.IPAddresses().Delete(context.Background(), name, metav1.DeleteOptions{})
 	if err == nil {
-		// update metrics
+		// 更新指标
 		a.metrics.setAllocated(a.metricLabel, a.Used())
 		a.metrics.setAvailable(a.metricLabel, a.Free())
 		return nil
@@ -392,8 +364,7 @@ func (a *Allocator) release(ip net.IP, dryRun bool) error {
 	return nil
 }
 
-// ForEach executes the function on each allocated IP
-// This is required to satisfy the Allocator Interface only
+// ForEach 对每个已分配的 IP 执行指定函数，仅为满足 Allocator 接口而实现。
 func (a *Allocator) ForEach(f func(net.IP)) {
 	ipLabelSelector := labels.Set(map[string]string{
 		networkingv1.LabelIPAddressFamily: string(a.IPFamily()),
@@ -412,9 +383,9 @@ func (a *Allocator) CIDR() net.IPNet {
 	return *a.cidr
 }
 
-// for testing
+// 该方法仅供测试使用。
 func (a *Allocator) Has(ip net.IP) bool {
-	// convert IP to name
+	// 将 IP 转换为 IPAddress 对象名称。
 	name := ip.String()
 	ipAddress, err := a.client.IPAddresses().Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil || len(ipAddress.Name) == 0 {
@@ -427,7 +398,7 @@ func (a *Allocator) IPFamily() api.IPFamily {
 	return a.family
 }
 
-// for testing, it assumes this is the allocator is unique for the ipFamily
+// 该统计方法仅供测试使用，并假设该 IP 协议族只对应一个分配器。
 func (a *Allocator) Used() int {
 	ipLabelSelector := labels.Set(map[string]string{
 		networkingv1.LabelIPAddressFamily: string(a.IPFamily()),
@@ -438,15 +409,15 @@ func (a *Allocator) Used() int {
 		return 0
 	}
 
-	// Count only IPs that belong to this allocator's CIDR
+	// 只统计属于当前分配器 CIDR 的 IP。
 	count := 0
 	for _, ipAddress := range ips {
-		// Parse the IP address string to netip.Addr type
+		// 将 IP 地址字符串解析为 netip.Addr。
 		ip, err := netip.ParseAddr(ipAddress.Name)
 		if err != nil {
 			continue
 		}
-		// Only count valid IPs that fall within this allocator's CIDR range
+		// 只统计可解析且位于当前分配器 CIDR 范围内的 IP。
 		if a.prefix.Contains(ip) {
 			count++
 		}
@@ -454,21 +425,21 @@ func (a *Allocator) Used() int {
 	return count
 }
 
-// for testing, it assumes this is the allocator is unique for the ipFamily
+// 该统计方法仅供测试使用，并假设该 IP 协议族只对应一个分配器。
 func (a *Allocator) Free() int {
 	used := a.Used()
 
-	// Prevent integer overflow: if a.size exceeds int max value, use MaxInt
+	// 防止整数溢出：a.size 超过 int 最大值时改用 MaxInt。
 	if a.size > math.MaxInt {
-		// In this case, used is definitely less than MaxInt, so no negative values
+		// 此时 used 必然小于 MaxInt，不会返回负值。
 		return math.MaxInt - used
 	}
 
 	size := int(a.size)
 
-	// Prevent negative return values due to data inconsistency
+	// 数据不一致时避免返回负值。
 	if used > size {
-		// This usually indicates data inconsistency, log a warning and return 0
+		// 通常表示数据不一致，记录警告并返回 0。
 		klog.Warningf("IP allocator inconsistency detected: used (%d) > size (%d) for CIDR %s",
 			used, size, a.cidr.String())
 		return 0
@@ -477,22 +448,21 @@ func (a *Allocator) Free() int {
 	return size - used
 }
 
-// Destroy
+// Destroy 释放分配器资源；当前实现无需额外清理。
 func (a *Allocator) Destroy() {
 }
 
-// DryRun
+// DryRun 返回不持久化修改的试运行分配器。
 func (a *Allocator) DryRun() Interface {
 	return dryRunAllocator{a}
 }
 
-// EnableMetrics
+// EnableMetrics 启用指标记录。
 func (a *Allocator) EnableMetrics() {
 	registerMetrics()
 	a.metrics = &metricsRecorder{}
 }
 
-// dryRunRange is a shim to satisfy Interface without persisting state.
 // dryRunAllocator 包装真实分配器但不持久化修改，供 Service dry-run 流程验证地址是否可用。
 type dryRunAllocator struct {
 	real *Allocator
@@ -537,17 +507,14 @@ func (dry dryRunAllocator) Destroy() {
 func (dry dryRunAllocator) EnableMetrics() {
 }
 
-// addOffsetAddress returns the address at the provided offset within the subnet
-// TODO: move it to k8s.io/utils/net, this is the same as current AddIPOffset()
-// but using netip.Addr instead of net.IP
 // addOffsetAddress 在 IPv4/IPv6 地址的整数表示上加偏移，并检测地址位宽溢出。
+// TODO：迁移到 k8s.io/utils/net；功能与当前 AddIPOffset() 相同，但使用 netip.Addr 而非 net.IP。
 func addOffsetAddress(address netip.Addr, offset uint64) (netip.Addr, error) {
 	addressBytes := address.AsSlice()
 	addressBig := big.NewInt(0).SetBytes(addressBytes)
 	r := big.NewInt(0).Add(addressBig, big.NewInt(0).SetUint64(offset)).Bytes()
-	// r must be 4 or 16 bytes depending of the ip family
-	// bigInt conversion to bytes will not take this into consideration
-	// and drop the leading zeros, so we have to take this into account.
+	// r 的长度必须为 4 或 16 字节，具体取决于 IP 协议族。
+	// big.Int 转字节数组时会丢弃前导零，因此需要手动补齐。
 	lenDiff := len(addressBytes) - len(r)
 	if lenDiff > 0 {
 		r = append(make([]byte, lenDiff), r...)
@@ -561,26 +528,26 @@ func addOffsetAddress(address netip.Addr, offset uint64) (netip.Addr, error) {
 	return addr, nil
 }
 
-// hostsPerNetwork returns the number of available hosts in a subnet.
-// The max number is limited by the size of an uint64.
-// Number of hosts is calculated with the formula:
-// IPv4: 2^x – 2, not consider network and broadcast address
-// IPv6: 2^x - 1, not consider network address
-// where x is the number of host bits in the subnet.
+// hostsPerNetwork 返回一个子网中可用的主机数量。
+// 上限受 uint64 位宽限制。
+// 主机数按如下公式计算：
+// IPv4：2^x – 2，不含网络地址和广播地址；
+// IPv6：2^x - 1，不含网络地址。
+// 其中 x 为子网中主机位的位数。
 func hostsPerNetwork(subnet *net.IPNet) uint64 {
 	ones, bits := subnet.Mask.Size()
-	// this checks that we are not overflowing an int64
+	// 这里检查是否超出 int64 的范围
 	if bits-ones >= 64 {
 		return math.MaxUint64
 	}
 	max := uint64(1) << uint(bits-ones)
-	// Don't use the network's ".0" address,
+	// 不使用网络的 ".0" 地址，
 	if max == 0 {
 		return 0
 	}
 	max--
 	if netutils.IsIPv4CIDR(subnet) {
-		// Don't use the IPv4 network's broadcast address
+		// 也不使用 IPv4 网络的广播地址
 		if max == 0 {
 			return 0
 		}
@@ -589,17 +556,16 @@ func hostsPerNetwork(subnet *net.IPNet) uint64 {
 	return max
 }
 
-// broadcastAddress returns the broadcast address of the subnet
-// The broadcast address is obtained by setting all the host bits
-// in a subnet to 1.
-// network 192.168.0.0/24 : subnet bits 24 host bits 32 - 24 = 8
-// broadcast address 192.168.0.255
+// broadcastAddress 返回子网的广播地址。
+// 求法是把子网中所有主机位置为 1，例如：
+// 网络 192.168.0.0/24：网络位 24，主机位 32 - 24 = 8
+// 广播地址 192.168.0.255
 func broadcastAddress(subnet netip.Prefix) (netip.Addr, error) {
 	base := subnet.Masked().Addr()
 	bytes := base.AsSlice()
-	// get all the host bits from the subnet
+	// 取出子网的主机位
 	n := 8*len(bytes) - subnet.Bits()
-	// set all the host bits to 1
+	// 把所有主机位置为 1
 	for i := len(bytes) - 1; i >= 0 && n > 0; i-- {
 		if n >= 8 {
 			bytes[i] = 0xff
@@ -618,7 +584,7 @@ func broadcastAddress(subnet netip.Prefix) (netip.Addr, error) {
 	return addr, nil
 }
 
-// serviceToRef obtain the Service Parent Reference
+// serviceToRef 构造 Service 的 ParentRef
 func serviceToRef(svc *api.Service) *networkingv1.ParentReference {
 	if svc == nil {
 		return nil

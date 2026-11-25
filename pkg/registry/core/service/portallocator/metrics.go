@@ -29,7 +29,7 @@ const (
 )
 
 var (
-	// nodePortAllocated indicates the amount of ports allocated by NodePort Service.
+	// nodePortAllocated 记录 NodePort Service 已分配的端口数量。
 	nodePortAllocated = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Namespace:      namespace,
@@ -39,7 +39,7 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
-	// nodePortAvailable indicates the amount of ports available by NodePort Service.
+	// nodePortAvailable 记录 NodePort Service 可分配的端口数量。
 	nodePortAvailable = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Namespace:      namespace,
@@ -49,7 +49,7 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
-	// nodePortAllocation counts the total number of ports allocation and allocation mode: static or dynamic.
+	// nodePortAllocations 按静态或动态分配模式统计端口分配总次数。
 	nodePortAllocations = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -60,7 +60,7 @@ var (
 		},
 		[]string{"scope"},
 	)
-	// nodePortAllocationErrors counts the number of error trying to allocate a nodePort and allocation mode: static or dynamic.
+	// nodePortAllocationErrors 按静态或动态分配模式统计端口分配失败次数。
 	nodePortAllocationErrors = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Namespace:      namespace,
@@ -85,7 +85,7 @@ func registerMetrics() {
 	})
 }
 
-// metricsRecorderInterface is the interface to record metrics.
+// metricsRecorderInterface 定义 NodePort 分配器指标记录接口。
 type metricsRecorderInterface interface {
 	setAllocated(allocated int)
 	setAvailable(available int)
@@ -93,7 +93,7 @@ type metricsRecorderInterface interface {
 	incrementAllocationErrors(scope string)
 }
 
-// metricsRecorder implements metricsRecorderInterface.
+// metricsRecorder 实现 metricsRecorderInterface。
 type metricsRecorder struct{}
 
 func (m *metricsRecorder) setAllocated(allocated int) {
@@ -112,7 +112,7 @@ func (m *metricsRecorder) incrementAllocationErrors(scope string) {
 	nodePortAllocationErrors.WithLabelValues(scope).Inc()
 }
 
-// emptyMetricsRecorder is a null object implements metricsRecorderInterface.
+// emptyMetricsRecorder 是 metricsRecorderInterface 的空实现，用于禁用指标记录。
 type emptyMetricsRecorder struct{}
 
 func (*emptyMetricsRecorder) setAllocated(allocated int)             {}

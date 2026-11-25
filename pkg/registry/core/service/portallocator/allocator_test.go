@@ -129,8 +129,8 @@ func TestAllocateReserved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// allocate all ports on the dynamic block
-	// dynamic block size is min(max(16,128/32),128) = 16
+	// 把动态块中的端口全部分配掉
+	// 动态块大小为 min(max(16,128/32),128) = 16
 	dynamicOffset := calculateRangeOffset(*pr)
 	dynamicBlockSize := pr.Size - dynamicOffset
 	for i := 0; i < dynamicBlockSize; i++ {
@@ -147,7 +147,7 @@ func TestAllocateReserved(t *testing.T) {
 	if f := r.Free(); f != dynamicOffset {
 		t.Errorf("expected %d free ports, got %d", dynamicOffset, f)
 	}
-	// allocate all ports on the static block
+	// 把静态块中的端口全部分配掉
 	for i := 0; i < dynamicOffset; i++ {
 		port := i + pr.Base
 		if err := r.Allocate(port); err != nil {
@@ -157,7 +157,7 @@ func TestAllocateReserved(t *testing.T) {
 	if f := r.Free(); f != 0 {
 		t.Errorf("expected free equal to 0 got: %d", f)
 	}
-	// release one port in the allocated block and another a new one randomly
+	// 释放已分配块中的一个端口，再随机分配一个端口
 	if err := r.Release(30053); err != nil {
 		t.Fatalf("Unexpected error trying to release port 30053: %v", err)
 	}
@@ -406,7 +406,7 @@ func Test_calculateRangeOffset(t *testing.T) {
 
 func TestNodePortMetrics(t *testing.T) {
 	clearMetrics()
-	// create node port allocator
+	// 创建 NodePort 分配器
 	portRange := "30000-32767"
 	pr, err := net.ParsePortRange(portRange)
 	if err != nil {
@@ -419,7 +419,7 @@ func TestNodePortMetrics(t *testing.T) {
 	}
 	a.EnableMetrics()
 
-	// Check initial state
+	// 检查初始状态
 	em := testMetrics{
 		free:      0,
 		used:      0,
@@ -428,7 +428,7 @@ func TestNodePortMetrics(t *testing.T) {
 	}
 	expectMetrics(t, em)
 
-	// allocate 2 ports
+	// 分配 2 个端口
 	found := sets.New[int]()
 	for i := 0; i < 2; i++ {
 		port, err := a.AllocateNext()
@@ -449,7 +449,7 @@ func TestNodePortMetrics(t *testing.T) {
 	}
 	expectMetrics(t, em)
 
-	// try to allocate the same ports
+	// 尝试再次分配相同的端口
 	for s := range found {
 		if !a.Has(s) {
 			t.Fatalf("missing: %d", s)
@@ -466,7 +466,7 @@ func TestNodePortMetrics(t *testing.T) {
 	}
 	expectMetrics(t, em)
 
-	// release the ports allocated
+	// 释放已分配的端口
 	for s := range found {
 		if !a.Has(s) {
 			t.Fatalf("missing: %d", s)
@@ -483,16 +483,16 @@ func TestNodePortMetrics(t *testing.T) {
 	}
 	expectMetrics(t, em)
 
-	// allocate 3000 ports for each allocator
-	// the full range and 232 more (2768 + 232 = 3000)
+	// 每个分配器分配 3000 个端口
+	// 即整个地址段再加 232 个（2768 + 232 = 3000）
 	for i := 0; i < 3000; i++ {
 		a.AllocateNext()
 	}
 	em = testMetrics{
 		free:      0,
 		used:      2768,
-		allocated: 2768 + 2, // this is a counter, we already had 2 allocations and we did 2768 more
-		errors:    232 + 2,  // this is a counter, we already had 2 errors and we did 232 more
+		allocated: 2768 + 2, // 这是计数器：之前已有 2 次分配，这里又做了 2768 次
+		errors:    232 + 2,  // 这是计数器：之前已有 2 个错误，这里又增加了 232 个
 	}
 	expectMetrics(t, em)
 }
@@ -500,7 +500,7 @@ func TestNodePortMetrics(t *testing.T) {
 func TestNodePortAllocatedMetrics(t *testing.T) {
 	clearMetrics()
 
-	// create NodePort allocator
+	// 创建 NodePort 分配器
 	portRange := "30000-32767"
 	pr, err := net.ParsePortRange(portRange)
 	if err != nil {
@@ -521,7 +521,7 @@ func TestNodePortAllocatedMetrics(t *testing.T) {
 	}
 	expectMetrics(t, em)
 
-	// allocate 2 dynamic port
+	// 分配 2 个动态端口
 	found := sets.New[int]()
 	for i := 0; i < 2; i++ {
 		port, err := a.AllocateNext()
@@ -542,7 +542,7 @@ func TestNodePortAllocatedMetrics(t *testing.T) {
 		t.Fatalf("Expected 2 received %f", dynamicAllocated)
 	}
 
-	// try to allocate the same ports
+	// 尝试再次分配相同的端口
 	for s := range found {
 		if !a.Has(s) {
 			t.Fatalf("missing: %d", s)
@@ -564,7 +564,7 @@ func TestNodePortAllocatedMetrics(t *testing.T) {
 func TestMetricsDisabled(t *testing.T) {
 	clearMetrics()
 
-	// create NodePort allocator
+	// 创建 NodePort 分配器
 	portRange := "30000-32766"
 	pr, err := net.ParsePortRange(portRange)
 	if err != nil {
@@ -577,14 +577,14 @@ func TestMetricsDisabled(t *testing.T) {
 	}
 	a.EnableMetrics()
 
-	// create metrics disabled allocator with same port range
-	// this metrics should be ignored
+	// 用相同的端口范围创建一个未启用指标的分配器，
+	// 它的指标应当被忽略
 	b, err := NewInMemory(*pr)
 	if err != nil {
 		t.Fatalf("unexpected error creating nodeport allocator: %v", err)
 	}
 
-	// Check initial state
+	// 检查初始状态
 	em := testMetrics{
 		free:      0,
 		used:      0,
@@ -593,7 +593,7 @@ func TestMetricsDisabled(t *testing.T) {
 	}
 	expectMetrics(t, em)
 
-	// allocate in metrics enabled allocator
+	// 在启用指标的分配器中分配
 	for i := 0; i < 100; i++ {
 		_, err := a.AllocateNext()
 		if err != nil {
@@ -608,18 +608,18 @@ func TestMetricsDisabled(t *testing.T) {
 	}
 	expectMetrics(t, em)
 
-	// allocate in metrics disabled allocator
+	// 在未启用指标的分配器中分配
 	for i := 0; i < 200; i++ {
 		_, err := b.AllocateNext()
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	// the metrics should not be changed
+	// 指标不应发生变化
 	expectMetrics(t, em)
 }
 
-// Metrics helpers
+// 指标相关的辅助函数
 func clearMetrics() {
 	nodePortAllocated.Set(0)
 	nodePortAvailable.Set(0)

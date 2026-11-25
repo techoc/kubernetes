@@ -60,9 +60,9 @@ func TestCreate(t *testing.T) {
 	namespace := validNewNamespace()
 	namespace.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo"}
 	test.TestCreate(
-		// valid
+		// 合法
 		namespace,
-		// invalid
+		// 非法
 		&api.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "bad value"},
 		},
@@ -111,7 +111,7 @@ func TestGet(t *testing.T) {
 	defer storage.store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.store).ClusterScope()
 
-	// note that this ultimately may call validation
+	// 注意：这里最终可能会触发校验
 	test.TestGet(validNewNamespace())
 }
 
@@ -130,18 +130,18 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.store).ClusterScope()
 	test.TestWatch(
 		validNewNamespace(),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"metadata.name": "foo"},
 			{"name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -180,7 +180,7 @@ func TestDeleteNamespaceWithIncompleteFinalizers(t *testing.T) {
 	if ns, ok := obj.(*api.Namespace); !ok || obj == nil || ns == nil || ns.Name != namespace.Name {
 		t.Fatalf("object not returned by delete")
 	}
-	// should still exist
+	// 对象应当仍然存在
 	if _, err := storage.Get(ctx, "foo", &metav1.GetOptions{}); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestUpdateDeletingNamespaceWithIncompleteMetadataFinalizers(t *testing.T) {
 	if _, _, err = storage.Update(ctx, "foo", rest.DefaultUpdatedObjectInfo(ns), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// should still exist
+	// 对象应当仍然存在
 	_, err = storage.Get(ctx, "foo", &metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -250,7 +250,7 @@ func TestUpdateDeletingNamespaceWithIncompleteSpecFinalizers(t *testing.T) {
 	if _, _, err = storage.Update(ctx, "foo", rest.DefaultUpdatedObjectInfo(ns), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// should still exist
+	// 对象应当仍然存在
 	_, err = storage.Get(ctx, "foo", &metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -284,7 +284,7 @@ func TestUpdateDeletingNamespaceWithCompleteFinalizers(t *testing.T) {
 	if _, _, err = storage.Update(ctx, "foo", rest.DefaultUpdatedObjectInfo(ns), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// should not exist
+	// 对象应当已不存在
 	_, err = storage.Get(ctx, "foo", &metav1.GetOptions{})
 	if !apierrors.IsNotFound(err) {
 		t.Errorf("expected NotFound, got %v", err)
@@ -293,7 +293,7 @@ func TestUpdateDeletingNamespaceWithCompleteFinalizers(t *testing.T) {
 
 // TestFinalizeDeletingNamespaceWithCompleteFinalizers 验证最后一个 Finalizer 移除后，Namespace 能完成最终删除。
 func TestFinalizeDeletingNamespaceWithCompleteFinalizers(t *testing.T) {
-	// get finalize storage
+	// 获取 finalize 存储
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{StorageConfig: etcdStorage, Decorator: generic.UndecoratedStorage, DeleteCollectionWorkers: 1, ResourcePrefix: "namespaces"}
 	storage, _, finalizeStorage, err := NewREST(restOptions)
@@ -329,7 +329,7 @@ func TestFinalizeDeletingNamespaceWithCompleteFinalizers(t *testing.T) {
 	if _, _, err = finalizeStorage.Update(ctx, "foo", rest.DefaultUpdatedObjectInfo(ns), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// should not exist
+	// 对象应当已不存在
 	_, err = storage.Get(ctx, "foo", &metav1.GetOptions{})
 	if !apierrors.IsNotFound(err) {
 		t.Errorf("expected NotFound, got %v", err)
@@ -337,7 +337,7 @@ func TestFinalizeDeletingNamespaceWithCompleteFinalizers(t *testing.T) {
 }
 
 func TestFinalizeDeletingNamespaceWithIncompleteMetadataFinalizers(t *testing.T) {
-	// get finalize storage
+	// 获取 finalize 存储
 	etcdStorage, server := registrytest.NewEtcdStorage(t, "")
 	restOptions := generic.RESTOptions{StorageConfig: etcdStorage, Decorator: generic.UndecoratedStorage, DeleteCollectionWorkers: 1, ResourcePrefix: "namespaces"}
 	storage, _, finalizeStorage, err := NewREST(restOptions)
@@ -374,7 +374,7 @@ func TestFinalizeDeletingNamespaceWithIncompleteMetadataFinalizers(t *testing.T)
 	if _, _, err = finalizeStorage.Update(ctx, "foo", rest.DefaultUpdatedObjectInfo(ns), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// should still exist
+	// 对象应当仍然存在
 	_, err = storage.Get(ctx, "foo", &metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -405,7 +405,7 @@ func TestDeleteNamespaceWithCompleteFinalizers(t *testing.T) {
 	if _, _, err := storage.Delete(ctx, "foo", rest.ValidateAllObjectFunc, nil); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	// should not exist
+	// 对象应当已不存在
 	_, err := storage.Get(ctx, "foo", &metav1.GetOptions{})
 	if !apierrors.IsNotFound(err) {
 		t.Errorf("expected NotFound, got %v", err)

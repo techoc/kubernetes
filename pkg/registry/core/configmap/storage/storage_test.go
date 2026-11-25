@@ -98,15 +98,15 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 有效更新。
 		validNewConfigMap(),
-		// updateFunc
+		// 更新函数。
 		func(obj runtime.Object) runtime.Object {
 			cfg := obj.(*api.ConfigMap)
 			cfg.Data["update-test"] = "value"
 			return cfg
 		},
-		// invalid updateFunc
+		// 无效更新函数。
 		func(obj runtime.Object) runtime.Object {
 			cfg := obj.(*api.ConfigMap)
 			cfg.Data["bad*Key"] = "value"
@@ -147,21 +147,21 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewConfigMap(),
-		// matching labels
+		// 匹配标签。
 		[]labels.Set{
 			{"label-1": "value-1"},
 			{"label-2": "value-2"},
 		},
-		// not matching labels
+		// 不匹配标签。
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"metadata.namespace": "default"},
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": "foo"},

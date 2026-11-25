@@ -26,7 +26,7 @@ import (
 	apitesting "k8s.io/kubernetes/pkg/api/testing"
 	api "k8s.io/kubernetes/pkg/apis/core"
 
-	// ensure types are installed
+	// 确保类型已注册
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
@@ -57,7 +57,7 @@ func TestNamespaceStrategy(t *testing.T) {
 	invalidNamespace := &api.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "bar", ResourceVersion: "4"},
 	}
-	// ensure we copy spec.finalizers from old to new
+	// 确认 spec.finalizers 从旧对象拷贝到了新对象
 	Strategy.PrepareForUpdate(ctx, invalidNamespace, namespace)
 	if len(invalidNamespace.Spec.Finalizers) != 1 || invalidNamespace.Spec.Finalizers[0] != api.FinalizerKubernetes {
 		t.Errorf("PrepareForUpdate should have preserved old.spec.finalizers")

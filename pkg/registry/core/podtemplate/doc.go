@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package podtemplate provides RESTStorage implementations for storing PodTemplate API objects.
 // Package podtemplate 提供 PodTemplate 的 REST 策略、Pod 模板字段校验和通用持久化入口。
 package podtemplate

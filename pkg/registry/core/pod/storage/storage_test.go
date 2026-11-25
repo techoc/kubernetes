@@ -101,22 +101,22 @@ func TestCreate(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	pod := validNewPod()
 	pod.ObjectMeta = metav1.ObjectMeta{}
-	// Make an invalid pod with an incorrect label.
+	// 构造一个带错误 label 的非法 pod。
 	invalidPod := validNewPod()
 	invalidPod.Namespace = test.TestNamespace()
 	invalidPod.Labels = map[string]string{
 		"invalid/label/to/cause/validation/failure": "bar",
 	}
 	test.TestCreate(
-		// valid
+		// 合法
 		pod,
-		// invalid (empty contains list)
+		// 非法（contains 列表为空）
 		&api.Pod{
 			Spec: api.PodSpec{
 				Containers: []api.Container{},
 			},
 		},
-		// invalid (invalid labels)
+		// 非法（labels 不合法）
 		invalidPod,
 	)
 }
@@ -128,7 +128,7 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 合法
 		validNewPod(),
 		// updateFunc
 		func(obj runtime.Object) runtime.Object {
@@ -186,20 +186,20 @@ func TestIgnoreDeleteNotFound(t *testing.T) {
 	defer registry.Store.DestroyFunc()
 	testContext := genericregistrytest.NewNamespaceScopeContext(registry.Store, metav1.NamespaceDefault)
 
-	// should fail if pod A is not created yet.
+	// 如果 pod A 尚未创建，应当失败。
 	_, _, err := registry.Delete(testContext, pod.Name, rest.ValidateAllObjectFunc, nil)
 	if !errors.IsNotFound(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// create pod
+	// 创建 pod
 	_, err = registry.Create(testContext, pod, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// delete object with grace period 0, storage will return NotFound, but the
-	// registry shouldn't get any error since we ignore the NotFound error.
+	// 以 gracePeriod=0 删除对象时，storage 会返回 NotFound，但
+	// 由于我们忽略了 NotFound 错误，registry 不应收到任何错误。
 	zero := int64(0)
 	opt := &metav1.DeleteOptions{GracePeriodSeconds: &zero}
 	obj, _, err := registry.Delete(testContext, pod.Name, rest.ValidateAllObjectFunc, opt)
@@ -386,7 +386,7 @@ func TestResourceLocation(t *testing.T) {
 	storage, _, _, server := newStorage(t)
 	defer server.Terminate(t)
 	for i, tc := range testCases {
-		// unique namespace/storage location per test
+		// 每个测试使用独立的 namespace/storage 路径
 		ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, fmt.Sprintf("namespace-%d", i))
 		key, _ := storage.KeyFunc(ctx, tc.pod.Name)
 		if err := storage.Storage.Create(ctx, key, &tc.pod, nil, 0, false); err != nil {
@@ -438,17 +438,17 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewPod(),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{
 			{"metadata.name": "foo"},
 		},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 		},
@@ -617,7 +617,7 @@ func TestEtcdCreate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Suddenly, a wild scheduler appears:
+	// 这时，野生调度器出现了：
 	_, err = bindingStorage.Create(ctx, "foo", &api.Binding{
 		ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceDefault, Name: "foo"},
 		Target:     api.ObjectReference{Name: "machine"},
@@ -649,7 +649,7 @@ func TestEtcdCreateClearsNominatedNodeName(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Set NominatedNodeName via status update
+			// 通过 status 更新设置 NominatedNodeName
 			createdPod := created.(*api.Pod)
 			createdPod.Status.NominatedNodeName = "nominated-node"
 			_, _, err = statusStorage.Update(ctx, createdPod.Name, rest.DefaultUpdatedObjectInfo(createdPod),
@@ -658,7 +658,7 @@ func TestEtcdCreateClearsNominatedNodeName(t *testing.T) {
 				t.Fatalf("unexpected error updating pod status: %v", err)
 			}
 
-			// Bind the pod
+			// 绑定该 pod
 			_, err = bindingStorage.Create(ctx, "foo", &api.Binding{
 				ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceDefault, Name: "foo"},
 				Target:     api.ObjectReference{Name: "machine"},
@@ -667,7 +667,7 @@ func TestEtcdCreateClearsNominatedNodeName(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Verify NominatedNodeName
+			// 校验 NominatedNodeName
 			obj, err := storage.Get(ctx, "foo", &metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("Unexpected error %v", err)
@@ -689,18 +689,18 @@ func TestEtcdCreateClearsNominatedNodeName(t *testing.T) {
 	}
 }
 
-// Ensure that when scheduler creates a binding for a pod that has already been deleted
-// by the API server, API server returns not-found error.
+// 验证：对于 API Server 已经删除的 pod，调度器再为它创建 binding 时，
+// API Server 会返回 not-found 错误。
 func TestEtcdCreateBindingNoPod(t *testing.T) {
 	storage, bindingStorage, _, server := newStorage(t)
 	defer server.Terminate(t)
 	defer storage.Store.DestroyFunc()
 	ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, metav1.NamespaceDefault)
 
-	// Assume that a pod has undergone the following:
-	// - Create (apiserver)
-	// - Schedule (scheduler)
-	// - Delete (apiserver)
+	// 假设某个 pod 经历了以下过程：
+	// - 创建（apiserver）
+	// - 调度（scheduler）
+	// - 删除（apiserver）
 	_, err := bindingStorage.Create(ctx, "foo", &api.Binding{
 		ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceDefault, Name: "foo"},
 		Target:     api.ObjectReference{Name: "machine"},
@@ -728,7 +728,7 @@ func TestEtcdCreateFailsWithoutNamespace(t *testing.T) {
 	pod := validNewPod()
 	pod.Namespace = ""
 	_, err := storage.Create(genericapirequest.NewContext(), pod, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
-	// Accept "namespace" or "Namespace".
+	// 同时接受 "namespace" 和 "Namespace"。
 	if err == nil || !strings.Contains(err.Error(), "amespace") {
 		t.Fatalf("expected error that namespace was missing from context, got: %v", err)
 	}
@@ -745,7 +745,7 @@ func TestEtcdCreateWithContainersNotFound(t *testing.T) {
 	}
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodTopologyLabelsAdmission, true)
-	// Suddenly, a wild scheduler appears:
+	// 这时，野生调度器出现了：
 	_, err = bindingStorage.Create(ctx, "foo", &api.Binding{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   metav1.NamespaceDefault,
@@ -784,7 +784,7 @@ func TestEtcdCreateWithConflict(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Suddenly, a wild scheduler appears:
+	// 这时，野生调度器出现了：
 	binding := api.Binding{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   metav1.NamespaceDefault,
@@ -993,7 +993,7 @@ func TestEtcdCreateWithExistingContainers(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Suddenly, a wild scheduler appears:
+	// 这时，野生调度器出现了：
 	_, err = bindingStorage.Create(ctx, "foo", &api.Binding{
 		ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceDefault, Name: "foo"},
 		Target:     api.ObjectReference{Name: "machine"},
@@ -1070,7 +1070,7 @@ func TestEtcdCreateBinding(t *testing.T) {
 		if _, err := bindingStorage.Create(ctx, name, &test.binding, rest.ValidateAllObjectFunc, &metav1.CreateOptions{}); !test.errOK(err) {
 			t.Errorf("%s: unexpected error: %v", k, err)
 		} else if err == nil {
-			// If bind succeeded, verify Host field in pod's Spec.
+			// 如果绑定成功，校验 pod Spec 中的 Host 字段。
 			pod, err := storage.Get(ctx, pod.ObjectMeta.Name, &metav1.GetOptions{})
 			if err != nil {
 				t.Errorf("%s: unexpected error: %v", k, err)
@@ -1101,7 +1101,7 @@ func TestEtcdUpdateNotScheduled(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	podOut := obj.(*api.Pod)
-	// validChangedPod only changes the Labels, so were checking the update was valid
+	// validChangedPod 只改动了 Labels，因此这里检查该更新是合法的
 	if !apiequality.Semantic.DeepEqual(podIn.Labels, podOut.Labels) {
 		t.Errorf("objects differ: %v", cmp.Diff(podOut, podIn))
 	}
@@ -1174,7 +1174,7 @@ func TestEtcdUpdateScheduled(t *testing.T) {
 		t.Errorf("Unexpected error: %v", err)
 	}
 	podOut := obj.(*api.Pod)
-	// Check to verify the Spec and Label updates match from change above.  Those are the fields changed.
+	// 检查上面的改动是否体现在 Spec 和 Labels 上，这两处才是被修改的字段。
 	if !apiequality.Semantic.DeepEqual(podOut.Spec, podIn.Spec) || !apiequality.Semantic.DeepEqual(podOut.Labels, podIn.Labels) {
 		t.Errorf("objects differ: %v", cmp.Diff(podOut, podIn))
 	}
@@ -1277,7 +1277,7 @@ func TestEtcdUpdateStatus(t *testing.T) {
 		expected.Spec.Containers[0].ImagePullPolicy = api.PullIfNotPresent
 		expected.Spec.Containers[0].TerminationMessagePath = api.TerminationMessagePathDefault
 		expected.Spec.Containers[0].TerminationMessagePolicy = api.TerminationMessageReadFile
-		// status updates are defaulted (podIP synced from podIPs) before reaching
+		// status 更新在到达策略之前会先执行默认值填充（podIP 由 podIPs 同步而来），
 		podIn.Status.PodIP = podIn.Status.PodIPs[0].IP
 		expected.Labels = podIn.Labels
 		expected.Status = podIn.Status
@@ -1291,7 +1291,7 @@ func TestEtcdUpdateStatus(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 		podOut := obj.(*api.Pod)
-		// Check to verify the Label, and Status updates match from change above.  Those are the fields changed.
+		// 检查上面的改动是否体现在 Labels 和 Status 上，这两处才是被修改的字段。
 		if !apiequality.Semantic.DeepEqual(podOut.Spec, expected.Spec) ||
 			!apiequality.Semantic.DeepEqual(podOut.Labels, expected.Labels) ||
 			!apiequality.Semantic.DeepEqual(podOut.Status, expected.Status) {
@@ -1379,10 +1379,10 @@ func TestEtcdPodIPsReadCompatibility(t *testing.T) {
 	}
 }
 
-// TestEtcdCreateBindingScrubsLegacyAnnotations pins that binding annotations
-// receive the same legacy init-container annotation scrub Pod defaulting
-// applies, since the binding write path merges them into the pod without
-// passing through defaulting.
+// TestEtcdCreateBindingScrubsLegacyAnnotations 固定如下行为：binding 上的 annotations
+// 会和 Pod 默认化流程一样被清理掉遗留的 init-container annotation，
+// 因为 binding 的写入路径会直接把它们合并进 pod，
+// 而不经过默认化流程。
 func TestEtcdCreateBindingScrubsLegacyAnnotations(t *testing.T) {
 	storage, bindingStorage, _, server := newStorage(t)
 	defer server.Terminate(t)
@@ -1445,7 +1445,7 @@ func TestBindingValidation(t *testing.T) {
 			name: "invalid annotations size when combined",
 			tweakPod: func(p *api.Pod) {
 				p.Annotations = map[string]string{
-					// one byte for the key, remaining bytes for the value
+					// key 占一个字节，剩余字节留给 value
 					"a": strings.Repeat("a", apivalidation.TotalAnnotationSizeLimitB-1),
 				}
 			},

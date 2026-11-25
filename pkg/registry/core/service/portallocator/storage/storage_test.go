@@ -80,7 +80,7 @@ func key() string {
 	return "/ranges/servicenodeports"
 }
 
-// TestEmpty fails to allocate ports if the storage wasn't initialized with a servicenodeport range
+// TestEmpty：存储未用 ServiceNodePort 地址段初始化时，分配端口应当失败
 func TestEmpty(t *testing.T) {
 	_, storage, _, _, destroyFunc := newStorage(t)
 	defer destroyFunc()
@@ -89,8 +89,7 @@ func TestEmpty(t *testing.T) {
 	}
 }
 
-// TestAllocate fails to allocate ports out of the valid port range
-// TestAllocate 验证 NodePort 分配器的指定端口/自动端口分配会持久化到共享 RangeAllocation 快照。
+// TestAllocate 验证分配超出合法端口范围时应当失败，并确认指定端口/自动端口分配会持久化到共享 RangeAllocation 快照。
 func TestAllocate(t *testing.T) {
 	_, storage, _, si, destroyFunc := newStorage(t)
 	defer destroyFunc()
@@ -143,8 +142,7 @@ func TestAllocate(t *testing.T) {
 
 }
 
-// TestReallocate test that we can not allocate a port already allocated until it is released
-// TestReallocate 验证本地端口池与 etcd 快照版本不一致时，会先恢复快照再执行下一次分配。
+// TestReallocate 验证端口在释放之前不能被重复分配；本地端口池与 etcd 快照版本不一致时，会先恢复快照再执行下一次分配。
 func TestReallocate(t *testing.T) {
 	_, storage, backing, si, destroyFunc := newStorage(t)
 	defer destroyFunc()
@@ -152,33 +150,33 @@ func TestReallocate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Allocate a port inside the valid port range
+	// 在合法端口范围内分配一个端口
 	if err := storage.Allocate(30100); err != nil {
 		t.Fatal(err)
 	}
 
-	// Try to allocate the same port in the local bitmap
-	// The local bitmap stores the offset of the port
-	// offset = port - base (30100 - 30000 = 100)
+	// 尝试在本地位图中再次分配同一端口，
+	// 本地位图保存的是端口的偏移量：
+	// offset = port - base（30100 - 30000 = 100）
 	ok, err := backing.Allocate(100)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// It should not allocate the port because it was already allocated
+	// 由于端口已被分配，这次分配不应成功
 	if ok {
 		t.Fatal("Expected allocation to fail")
 	}
-	// Try to allocate the port again should fail
+	// 再次分配该端口同样应当失败
 	if err := storage.Allocate(30100); err != portallocator.ErrAllocated {
 		t.Fatal(err)
 	}
 
-	// Release the port
+	// 释放该端口
 	if err := storage.Release(30100); err != nil {
 		t.Fatal(err)
 	}
 
-	// Try to allocate the port again should succeed because we've released it
+	// 因为已经释放，再次分配该端口应当成功
 	if err := storage.Allocate(30100); err != nil {
 		t.Fatal(err)
 	}
@@ -192,8 +190,8 @@ func TestAllocateReserved(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// allocate all ports on the dynamic block
-	// default range size is 2768, and dynamic block size is min(max(16,2768/32),128) = 86
+	// 把动态块中的端口全部分配掉
+	// 默认地址段大小为 2768，动态块为 min(max(16,2768/32),128) = 86
 	dynamicOffset := 86
 	dynamicBlockSize := sizePortRange - dynamicOffset
 	for i := 0; i < dynamicBlockSize; i++ {
@@ -208,7 +206,7 @@ func TestAllocateReserved(t *testing.T) {
 		}
 	}
 
-	// allocate all ports on the static block
+	// 把静态块中的端口全部分配掉
 	for i := 0; i < dynamicOffset; i++ {
 		port := i + basePortRange
 		if err := storage.Allocate(port); err != nil {
@@ -218,7 +216,7 @@ func TestAllocateReserved(t *testing.T) {
 	if _, err := storage.AllocateNext(); err == nil {
 		t.Error("Allocator expected to be full")
 	}
-	// release one port in the allocated block and another a new one randomly
+	// 释放已分配块中的一个端口，再随机分配一个端口
 	if err := storage.Release(basePortRange + 53); err != nil {
 		t.Fatalf("Unexpected error trying to release port 30053: %v", err)
 	}
@@ -237,9 +235,9 @@ func TestAllocateReservedDynamicBlockExhausted(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// allocate all ports both on the dynamic and reserved blocks
-	// once the dynamic block has been exhausted
-	// the dynamic allocator will use the reserved block
+	// 把动态块和保留块中的端口全部分配掉：
+	// 动态块耗尽之后，
+	// 动态分配会继续使用保留块中的端口
 	for i := 0; i < sizePortRange; i++ {
 		if _, err := storage.AllocateNext(); err != nil {
 			t.Errorf("Unexpected error trying to allocate: %v", err)

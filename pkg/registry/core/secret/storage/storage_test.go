@@ -67,9 +67,9 @@ func TestCreate(t *testing.T) {
 	secret := validNewSecret("foo")
 	secret.ObjectMeta = metav1.ObjectMeta{GenerateName: "foo-"}
 	test.TestCreate(
-		// valid
+		// 合法
 		secret,
-		// invalid
+		// 非法
 		&api.Secret{},
 		&api.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: "name"},
@@ -89,7 +89,7 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestUpdate(
-		// valid
+		// 合法
 		validNewSecret("foo"),
 		// updateFunc
 		func(obj runtime.Object) runtime.Object {
@@ -132,15 +132,15 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewSecret("foo"),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": "foo"},

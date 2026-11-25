@@ -92,8 +92,8 @@ func TestAllocateIPAllocator(t *testing.T) {
 			released: "192.168.1.5",
 			outOfRange: []string{
 				"192.168.0.1",   // not in 192.168.1.0/24
-				"192.168.1.0",   // reserved (base address)
-				"192.168.1.255", // reserved (broadcast address)
+				"192.168.1.0",   // 保留地址（网络地址）
+				"192.168.1.255", // 保留地址（广播地址）
 				"192.168.2.2",   // not in 192.168.1.0/24
 			},
 			alreadyAllocated: "192.168.1.1",
@@ -105,7 +105,7 @@ func TestAllocateIPAllocator(t *testing.T) {
 			released: "2001:db8:1::5",
 			outOfRange: []string{
 				"2001:db8::1",   // not in 2001:db8:1::/48
-				"2001:db8:1::",  // reserved (base address)
+				"2001:db8:1::",  // 保留地址（网络地址）
 				"2001:db8:2::2", // not in 2001:db8:1::/48
 			},
 			alreadyAllocated: "2001:db8:1::1",
@@ -283,8 +283,8 @@ func TestAllocateReservedIPAllocator(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer r.Destroy()
-	// allocate all addresses on the dynamic block
-	// subnet /25 = 128 ; dynamic block size is min(max(16,128/16),256) = 16
+	// 把动态块中的地址全部分配掉
+	// /25 子网共 128 个地址；动态块大小为 min(max(16,128/16),256) = 16
 	dynamicOffset := calculateRangeOffset(cidr)
 	dynamicBlockSize := int(r.size) - dynamicOffset
 	for i := 0; i < dynamicBlockSize; i++ {
@@ -302,7 +302,7 @@ func TestAllocateReservedIPAllocator(t *testing.T) {
 	if f := r.Free(); f != dynamicOffset {
 		t.Errorf("expected %d free addresses, got %d", dynamicOffset, f)
 	}
-	// allocate all addresses on the static block
+	// 把静态块中的地址全部分配掉
 	for i := 0; i < dynamicOffset; i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i+1)
 		if err := r.Allocate(netutils.ParseIPSloppy(ip)); err != nil {
@@ -312,7 +312,7 @@ func TestAllocateReservedIPAllocator(t *testing.T) {
 	if f := r.Free(); f != 0 {
 		t.Errorf("expected free equal to 0 got: %d", f)
 	}
-	// release one address in the allocated block and another a new one randomly
+	// 释放已分配块中的一个地址，再随机分配一个新地址
 	if err := r.Release(netutils.ParseIPSloppy("192.168.1.10")); err != nil {
 		t.Fatalf("Unexpected error trying to release ip 192.168.1.10: %v", err)
 	}
@@ -412,7 +412,7 @@ func TestForEachIPAllocator(t *testing.T) {
 
 func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 	clearMetrics()
-	// create IPv4 allocator
+	// 创建 IPv4 分配器
 	cidrIPv4 := "10.0.0.0/24"
 	_, clusterCIDRv4, _ := netutils.ParseCIDRSloppy(cidrIPv4)
 	a, err := newTestAllocator(clusterCIDRv4)
@@ -420,7 +420,7 @@ func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.EnableMetrics()
-	// create IPv6 allocator
+	// 创建 IPv6 分配器
 	cidrIPv6 := "2001:db8::/112"
 	_, clusterCIDRv6, _ := netutils.ParseCIDRSloppy(cidrIPv6)
 	b, err := newTestAllocator(clusterCIDRv6)
@@ -429,7 +429,7 @@ func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 	}
 	b.EnableMetrics()
 
-	// Check initial state
+	// 检查初始状态
 	em := testMetrics{
 		free:      0,
 		used:      0,
@@ -445,7 +445,7 @@ func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv6, em)
 
-	// allocate 2 IPv4 addresses
+	// 分配 2 个 IPv4 地址
 	found := sets.New[string]()
 	for i := 0; i < 2; i++ {
 		ip, err := a.AllocateNext()
@@ -466,7 +466,7 @@ func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// try to allocate the same IP addresses
+	// 尝试再次分配相同的 IP
 	for s := range found {
 		if !a.Has(netutils.ParseIPSloppy(s)) {
 			t.Fatalf("missing: %s", s)
@@ -483,7 +483,7 @@ func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// release the addresses allocated
+	// 释放已分配的地址
 	for s := range found {
 		if !a.Has(netutils.ParseIPSloppy(s)) {
 			t.Fatalf("missing: %s", s)
@@ -500,8 +500,8 @@ func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// allocate 264 addresses for each allocator
-	// the full range and 10 more (254 + 10 = 264) for IPv4
+	// 每个分配器分配 264 个地址
+	// 即整个地址段再加 10 个（IPv4 为 254 + 10 = 264）
 	for i := 0; i < 264; i++ {
 		a.AllocateNext()
 		b.AllocateNext()
@@ -509,12 +509,12 @@ func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 	em = testMetrics{
 		free:      0,
 		used:      254,
-		allocated: 256, // this is a counter, we already had 2 allocations and we did 254 more
+		allocated: 256, // 这是计数器：之前已有 2 次分配，这里又做了 254 次
 		errors:    12,
 	}
 	expectMetrics(t, cidrIPv4, em)
 	em = testMetrics{
-		free:      65271, // IPv6 clusterIP range is capped to 2^16 and consider the broadcast address as valid
+		free:      65271, // IPv6 的 clusterIP 地址段上限为 2^16，且把广播地址视为可用地址
 		used:      264,
 		allocated: 264,
 		errors:    0,
@@ -524,7 +524,7 @@ func TestIPAllocatorClusterIPMetrics(t *testing.T) {
 
 func TestIPAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 	clearMetrics()
-	// create IPv4 allocator
+	// 创建 IPv4 分配器
 	cidrIPv4 := "10.0.0.0/25"
 	_, clusterCIDRv4, _ := netutils.ParseCIDRSloppy(cidrIPv4)
 	a, err := newTestAllocator(clusterCIDRv4)
@@ -541,7 +541,7 @@ func TestIPAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// allocate 2 dynamic IPv4 addresses
+	// 分配 2 个动态 IPv4 地址
 	found := sets.New[string]()
 	for i := 0; i < 2; i++ {
 		ip, err := a.AllocateNext()
@@ -562,7 +562,7 @@ func TestIPAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		t.Fatalf("Expected 2 received %f", dynamic_allocated)
 	}
 
-	// try to allocate the same IP addresses
+	// 尝试再次分配相同的 IP
 	for s := range found {
 		if !a.Has(netutils.ParseIPSloppy(s)) {
 			t.Fatalf("missing: %s", s)
@@ -673,8 +673,8 @@ func Test_addOffsetAddress(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) || err != nil {
 				t.Errorf("offsetAddress() = %v, want %v", got, tt.want)
 			}
-			// double check to avoid mistakes on the hardcoded values
-			// avoid large numbers or it will timeout the test
+			// 再检查一次，避免硬编码取值写错
+			// 不要用太大规模，否则测试会超时
 			if tt.offset < 2048 {
 				want := tt.address
 				var i uint64
@@ -867,7 +867,7 @@ func Test_ipIterator(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ipIterator() = %v, want %v", got, tt.want)
 			}
-			// check the iterator is fully stopped
+			// 检查迭代器已完全停止
 			for i := 0; i < 5; i++ {
 				if ip := iterator(); ip.IsValid() {
 					t.Errorf("iterator should not return more addresses: %v", ip)
@@ -956,7 +956,7 @@ func Test_ipIterator_Number(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("ipIterator() = %d, want %d", got, tt.want)
 			}
-			// check the iterator is fully stopped
+			// 检查迭代器已完全停止
 			for i := 0; i < 5; i++ {
 				if ip := iterator(); ip.IsValid() {
 					t.Errorf("iterator should not return more addresses: %v", ip)
@@ -1017,15 +1017,15 @@ func BenchmarkIPAllocatorAllocateNextIPv6Size65535(b *testing.B) {
 	}
 }
 
-// TestUsedWithCIDRFiltering tests that Used() method only counts IPs within the allocator's CIDR
+// TestUsedWithCIDRFiltering 验证 Used() 只统计分配器 CIDR 范围内的 IP
 func TestUsedWithCIDRFiltering(t *testing.T) {
-	// Create an allocator for 192.168.1.0/24
+	// 为 192.168.1.0/24 创建一个分配器
 	_, cidr, err := netutils.ParseCIDRSloppy("192.168.1.0/24")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Create test components
+	// 构造测试所需的组件
 	client := fake.NewClientset()
 	informerFactory := informers.NewSharedInformerFactory(client, 0*time.Second)
 	ipInformer := informerFactory.Networking().V1().IPAddresses()
@@ -1038,7 +1038,7 @@ func TestUsedWithCIDRFiltering(t *testing.T) {
 	r.ipAddressSynced = func() bool { return true }
 	defer r.Destroy()
 
-	// Add valid IPs (within CIDR) with correct labels
+	// 加入位于 CIDR 内、且带正确 labels 的合法 IP
 	validIPAddr1 := &networkingv1.IPAddress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "192.168.1.10",
@@ -1064,10 +1064,10 @@ func TestUsedWithCIDRFiltering(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Add invalid IPs (outside CIDR) with correct labels - these should not be counted
+	// 加入位于 CIDR 之外、但带正确 labels 的非法 IP —— 它们不应被统计
 	invalidIP1 := &networkingv1.IPAddress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "192.168.2.10", // different subnet
+			Name: "192.168.2.10", // 不同的子网
 			Labels: map[string]string{
 				networkingv1.LabelIPAddressFamily: string(r.IPFamily()),
 				networkingv1.LabelManagedBy:       ControllerName,
@@ -1076,7 +1076,7 @@ func TestUsedWithCIDRFiltering(t *testing.T) {
 	}
 	invalidIP2 := &networkingv1.IPAddress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "10.0.0.1", // completely different network
+			Name: "10.0.0.1", // 完全不同的网段
 			Labels: map[string]string{
 				networkingv1.LabelIPAddressFamily: string(r.IPFamily()),
 				networkingv1.LabelManagedBy:       ControllerName,
@@ -1090,14 +1090,14 @@ func TestUsedWithCIDRFiltering(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Used() should only count valid IPs (2), not all IPs (4)
+	// Used() 只应统计合法 IP（2 个），而不是全部 IP（4 个）
 	used := r.Used()
 	if used != 2 {
 		t.Errorf("Expected Used() to return 2 (only IPs in CIDR), got %d", used)
 	}
 }
 
-// TestFreeWithOverflowProtection tests the overflow protection in Free() method
+// TestFreeWithOverflowProtection 验证 Free() 方法中的溢出保护
 func TestFreeWithOverflowProtection(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -1108,7 +1108,7 @@ func TestFreeWithOverflowProtection(t *testing.T) {
 	}{
 		{
 			name:         "normal case",
-			cidr:         "192.168.1.0/30", // size = 2 (4 total - 2 reserved)
+			cidr:         "192.168.1.0/30", // size = 2（共 4 个 - 2 个保留地址）
 			simulateSize: 2,
 			simulateUsed: 1,
 			expectedFree: 1,
@@ -1124,7 +1124,7 @@ func TestFreeWithOverflowProtection(t *testing.T) {
 			name:         "used exceeds size (data inconsistency)",
 			cidr:         "192.168.1.0/30",
 			simulateSize: 2,
-			simulateUsed: 5, // More than size
+			simulateUsed: 5, // 大于 size
 			expectedFree: 0,
 		},
 	}
@@ -1136,7 +1136,7 @@ func TestFreeWithOverflowProtection(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Create test components
+			// 构造测试所需的组件
 			client := fake.NewClientset()
 			informerFactory := informers.NewSharedInformerFactory(client, 0*time.Second)
 			ipInformer := informerFactory.Networking().V1().IPAddresses()
@@ -1149,12 +1149,12 @@ func TestFreeWithOverflowProtection(t *testing.T) {
 			r.ipAddressSynced = func() bool { return true }
 			defer r.Destroy()
 
-			// Override the size for testing overflow scenarios
+			// 覆盖 size 取值，用于测试溢出场景
 			r.size = tc.simulateSize
 
-			// Mock the Used() method by adding IP addresses to simulate usage
+			// 通过加入若干 IP 来模拟 Used() 的返回值
 			for i := 0; i < tc.simulateUsed; i++ {
-				// Add valid IPs within the CIDR with correct labels
+				// 加入 CIDR 内、带正确 labels 的合法 IP
 				ip := &networkingv1.IPAddress{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: fmt.Sprintf("192.168.1.%d", i+1),
@@ -1177,14 +1177,14 @@ func TestFreeWithOverflowProtection(t *testing.T) {
 	}
 }
 
-// TestUsedWithInvalidIPs tests that Used() handles invalid IP addresses gracefully
+// TestUsedWithInvalidIPs 验证 Used() 能妥善处理非法 IP 地址
 func TestUsedWithInvalidIPs(t *testing.T) {
 	_, cidr, err := netutils.ParseCIDRSloppy("192.168.1.0/24")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Create test components
+	// 构造测试所需的组件
 	client := fake.NewClientset()
 	informerFactory := informers.NewSharedInformerFactory(client, 0*time.Second)
 	ipInformer := informerFactory.Networking().V1().IPAddresses()
@@ -1197,7 +1197,7 @@ func TestUsedWithInvalidIPs(t *testing.T) {
 	r.ipAddressSynced = func() bool { return true }
 	defer r.Destroy()
 
-	// Add valid IP with correct labels
+	// 加入一个带正确 labels 的合法 IP
 	validIP := &networkingv1.IPAddress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "192.168.1.10",
@@ -1211,7 +1211,7 @@ func TestUsedWithInvalidIPs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Add invalid IP address (malformed) with correct labels
+	// 加入一个格式非法但 labels 正确的 IP
 	invalidIP := &networkingv1.IPAddress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "invalid-ip-address",
@@ -1225,7 +1225,7 @@ func TestUsedWithInvalidIPs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Used() should only count the valid IP
+	// Used() 只应统计那个合法 IP
 	used := r.Used()
 	if used != 1 {
 		t.Errorf("Expected Used() to return 1 (only valid IPs), got %d", used)
@@ -1277,15 +1277,15 @@ func TestAllocateNext_Collision(t *testing.T) {
 	ipInformer := informerFactory.Networking().V1().IPAddresses()
 	ipStore := ipInformer.Informer().GetIndexer()
 
-	// Inject collision reactor FIRST
-	// We want to simulate that the first IP tried is already allocated in the underlying storage
-	// but NOT in the cache (so it passes the cache check in allocateFromRange).
-	// The allocator picks a random IP. To make it deterministic or easier to hit,
+	// 先注入模拟冲突的 reactor：
+	// 我们要模拟第一次尝试的 IP 在底层存储中已被分配，
+	// 但缓存中并没有（因此能通过 allocateFromRange 的缓存检查）。
+	// 分配器会随机挑选 IP，为了让结果可复现、更容易命中冲突，
 	collisionCount := 0
 	client.PrependReactor("create", "ipaddresses", k8stesting.ReactionFunc(func(action k8stesting.Action) (bool, runtime.Object, error) {
 		if collisionCount == 0 {
 			collisionCount++
-			// Simulate ErrAllocated (AlreadyExists)
+			// 模拟 ErrAllocated（AlreadyExists）
 			return true, nil, apierrors.NewAlreadyExists(networkingv1.Resource("ipaddresses"), action.(k8stesting.CreateAction).GetObject().(*networkingv1.IPAddress).Name)
 		}
 		ip := action.(k8stesting.CreateAction).GetObject().(*networkingv1.IPAddress)
@@ -1308,7 +1308,7 @@ func TestAllocateNext_Collision(t *testing.T) {
 	a.ipAddressSynced = func() bool { return true }
 	defer a.Destroy()
 
-	// AllocateNext should succeed even if the first attempt hits a collision
+	// 即使首次尝试遇到冲突，AllocateNext 也应当成功
 	ip, err := a.AllocateNext()
 	if err != nil {
 		t.Fatalf("AllocateNext failed: %v", err)

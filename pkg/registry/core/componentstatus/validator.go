@@ -66,7 +66,6 @@ type ServerStatus struct {
 
 // DoServerCheck 初始化 HTTP Prober（只初始化一次），访问组件 healthz/自定义路径，并按需校验响应体。
 func (server *HttpServer) DoServerCheck() (probe.Result, string, error) {
-	// setup the prober
 	// Prober 可能持有 TLS 配置和连接复用状态，因此使用 sync.Once 保证并发探测只创建一次。
 	server.Once.Do(func() {
 		if server.Prober != nil {

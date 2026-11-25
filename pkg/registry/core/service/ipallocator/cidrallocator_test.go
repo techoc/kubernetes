@@ -126,7 +126,7 @@ func TestCIDRAllocateMultiple(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr)
-	// wait for the cidr to be processed and set the informer synced
+	// 等待该 CIDR 被处理完成，并设置 informer 已同步
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -165,7 +165,7 @@ func TestCIDRAllocateMultiple(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr2)
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("10.0.0.11"), true)
 		if err != nil {
@@ -177,7 +177,7 @@ func TestCIDRAllocateMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// allocate one IP from the new allocator
+	// 从新的分配器分配一个 IP
 	err = r.Allocate(netutils.ParseIPSloppy("10.0.0.11"))
 	if err != nil {
 		t.Fatalf("error allocating IP 10.0.0.11 from new allocator: %v", err)
@@ -224,7 +224,7 @@ func TestCIDRAllocateShadow(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr)
-	// wait for the cidr to be processed and set the informer synced
+	// 等待该 CIDR 被处理完成，并设置 informer 已同步
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.1.1"), true)
 		if err != nil {
@@ -236,7 +236,7 @@ func TestCIDRAllocateShadow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// can not allocate the subnet IP from the new allocator
+	// 不能从新的分配器分配子网地址
 	err = r.Allocate(netutils.ParseIPSloppy("192.168.1.0"))
 	if err == nil {
 		t.Fatalf("unexpected allocation for IP 192.168.1.0")
@@ -252,7 +252,7 @@ func TestCIDRAllocateShadow(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr2)
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -264,7 +264,7 @@ func TestCIDRAllocateShadow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// allocate one IP from the new allocator
+	// 从新的分配器分配一个 IP
 	err = r.Allocate(netutils.ParseIPSloppy("192.168.1.0"))
 	if err != nil {
 		t.Fatalf("error allocating IP 192.168.1.0 from new allocator: %v", err)
@@ -297,7 +297,7 @@ func TestCIDRAllocateGrow(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr)
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -335,7 +335,7 @@ func TestCIDRAllocateGrow(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr2)
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.253"), true)
 		if err != nil {
@@ -389,7 +389,7 @@ func TestCIDRAllocateShrink(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr)
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -441,7 +441,7 @@ func TestCIDRAllocateShrink(t *testing.T) {
 	}
 	r.deleteServiceCIDR(cidr)
 
-	// wait for the cidr to be processed (delete ServiceCIDR)
+	// 等待该 CIDR 被处理完成（删除 ServiceCIDR）
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.253"), true)
 		if err != nil {
@@ -453,7 +453,7 @@ func TestCIDRAllocateShrink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// wait for the cidr to be processed (create ServiceCIDR)
+	// 等待该 CIDR 被处理完成（创建 ServiceCIDR）
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -502,7 +502,7 @@ func TestCIDRAllocateDualWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr)
-	// wait for the cidr to be processed and set the informer synced
+	// 等待该 CIDR 被处理完成，并设置 informer 已同步
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -516,7 +516,7 @@ func TestCIDRAllocateDualWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a bitmap allocator that will mirror the ip allocator
+	// 创建一个位图分配器，用来镜像 IP 分配器的行为
 	_, ipnet, err := netutils.ParseCIDRSloppy(cidr.Spec.CIDRs[0])
 	if err != nil {
 		t.Fatalf("unexpected failure: %v", err)
@@ -570,7 +570,7 @@ func TestCIDRAllocateDualWriteCollision(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr)
-	// wait for the cidr to be processed and set the informer synced
+	// 等待该 CIDR 被处理完成，并设置 informer 已同步
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -584,7 +584,7 @@ func TestCIDRAllocateDualWriteCollision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a bitmap allocator that will mirror the ip allocator
+	// 创建一个位图分配器，用来镜像 IP 分配器的行为
 	_, ipnet, err := netutils.ParseCIDRSloppy(cidr.Spec.CIDRs[0])
 	if err != nil {
 		t.Fatalf("unexpected failure: %v", err)
@@ -595,12 +595,12 @@ func TestCIDRAllocateDualWriteCollision(t *testing.T) {
 	}
 	r.bitmapAllocator = bitmapAllocator
 
-	// preallocate one IP in the bitmap allocator
+	// 先在位图分配器中预分配一个 IP
 	err = bitmapAllocator.Allocate(netutils.ParseIPSloppy("192.168.0.5"))
 	if err != nil {
 		t.Fatalf("unexpected error allocating an IP on the bitmap allocator: %v", err)
 	}
-	// the ipallocator must not be able to allocate
+	// 此时 ipallocator 应当无法再分配
 	err = r.Allocate(netutils.ParseIPSloppy("192.168.0.5"))
 	if err == nil {
 		t.Fatalf("unexpected allocation: %v", err)
@@ -621,15 +621,15 @@ func TestCIDRAllocateIPv6(t *testing.T) {
 		t.Error(err)
 	}
 
-	// An IPv6 /120 network has 2^8 - 1 = 255 allocatable addresses: the network
-	// address is reserved and, unlike IPv4, IPv6 has no broadcast address.
+	// IPv6 /120 网络有 2^8 - 1 = 255 个可分配地址：网络地址被保留，
+	// 并且与 IPv4 不同，IPv6 没有广播地址。
 	cidr := newServiceCIDR("test", "fd00:1:2:3::/120")
 	_, err = r.client.ServiceCIDRs().Create(context.Background(), cidr, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr)
-	// wait for the cidr to be processed and set the informer synced
+	// 等待该 CIDR 被处理完成，并设置 informer 已同步
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("fd00:1:2:3::1"), true)
 		if err != nil {
@@ -666,7 +666,7 @@ func TestCIDRAllocateIPv6(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// releasing every address must make the whole range available again
+	// 释放全部地址后，整个地址段应重新可用
 	for _, ip := range sets.List(found) {
 		if err := r.Release(netutils.ParseIPSloppy(ip)); err != nil {
 			t.Fatalf("unexpected error releasing ip %s: %v", ip, err)
@@ -678,9 +678,9 @@ func TestCIDRAllocateIPv6(t *testing.T) {
 }
 
 func TestCIDRAllocateDualStack(t *testing.T) {
-	// A dual-stack ServiceCIDR carries both an IPv4 and an IPv6 range. A
-	// family-specific MetaAllocator must only consume the range that matches its
-	// own family and ignore the other one.
+	// 双栈 ServiceCIDR 同时包含一个 IPv4 地址段和一个 IPv6 地址段。
+	// 按地址族划分的 MetaAllocator 只能消耗与自己地址族匹配的那个地址段，
+	// 另一个必须忽略。
 	r, err := newTestMetaAllocatorWithFamily(true)
 	if err != nil {
 		t.Fatal(err)
@@ -693,7 +693,7 @@ func TestCIDRAllocateDualStack(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr)
-	// wait for the IPv6 range of the dual-stack ServiceCIDR to be processed
+	// 等待双栈 ServiceCIDR 中的 IPv6 地址段被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("fd00:1:2:3::1"), true)
 		if err != nil {
@@ -706,13 +706,13 @@ func TestCIDRAllocateDualStack(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// the IPv4 range of the dual-stack ServiceCIDR must be ignored by an IPv6
-	// allocator, so no allocator should exist for it
+	// IPv6 分配器必须忽略双栈 ServiceCIDR 中的 IPv4 地址段，
+	// 因此不应存在针对它的分配器
 	if _, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), false); !errors.Is(err, ErrMismatchedNetwork) {
 		t.Fatalf("expected ErrMismatchedNetwork for the IPv4 range, got %v", err)
 	}
 
-	// allocations must come from the IPv6 range only
+	// 分配出的地址必须全部来自 IPv6 地址段
 	_, ipv6Net, err := netutils.ParseCIDRSloppy("fd00:1:2:3::/120")
 	if err != nil {
 		t.Fatal(err)
@@ -796,10 +796,10 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 	}
 	defer r.Destroy()
 
-	// Enable metrics for the meta allocator
+	// 为 meta allocator 启用指标
 	r.EnableMetrics()
 
-	// Create first CIDR - small /30 network (only 2 usable IPs)
+	// 创建第一个 CIDR —— 较小的 /30 网段（只有 2 个可用 IP）
 	cidr1 := newServiceCIDR("test1", "192.168.1.0/30")
 	_, err = r.client.ServiceCIDRs().Create(context.Background(), cidr1, metav1.CreateOptions{})
 	if err != nil {
@@ -807,7 +807,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 	}
 	r.enqueueServiceCIDR(cidr1)
 
-	// Wait for the first CIDR to be processed
+	// 等待第一个 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.1.1"), true)
 		if err != nil {
@@ -821,7 +821,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check initial metrics for first CIDR
+	// 检查第一个 CIDR 的初始指标
 	em1 := testMetrics{
 		free:      0,
 		used:      0,
@@ -830,7 +830,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 	}
 	expectMetrics(t, "192.168.1.0/30", em1)
 
-	// Allocate all IPs from first CIDR (should be 2 usable IPs: .1 and .2)
+	// 分配第一个 CIDR 中的全部 IP（应为 .1 和 .2 这两个可用 IP）
 	found := sets.New[string]()
 	allocatedFromCIDR1 := 0
 	for r.Free() > 0 && allocatedFromCIDR1 < 2 {
@@ -845,12 +845,12 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		found.Insert(ip.String())
 	}
 
-	// Verify we allocated 2 IPs from first CIDR
+	// 确认从第一个 CIDR 分配到了 2 个 IP
 	if allocatedFromCIDR1 != 2 {
 		t.Fatalf("expected 2 IPs from first CIDR, got %d", allocatedFromCIDR1)
 	}
 
-	// Check metrics after filling first CIDR
+	// 检查第一个 CIDR 占满后的指标
 	dynamicAllocatedCidr1, err := testutil.GetCounterMetricValue(clusterIPAllocations.WithLabelValues("192.168.1.0/30", "dynamic"))
 	if err != nil {
 		t.Errorf("failed to get %s value, err: %v", clusterIPAllocations.Name, err)
@@ -859,7 +859,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		t.Fatalf("Expected 2 dynamic allocations from first CIDR, received %f", dynamicAllocatedCidr1)
 	}
 
-	// Create second CIDR - small /29 network (6 usable IPs)
+	// 创建第二个 CIDR —— 较小的 /29 网段（6 个可用 IP）
 	cidr2 := newServiceCIDR("test2", "10.0.0.0/29")
 	_, err = r.client.ServiceCIDRs().Create(context.Background(), cidr2, metav1.CreateOptions{})
 	if err != nil {
@@ -867,7 +867,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 	}
 	r.enqueueServiceCIDR(cidr2)
 
-	// Wait for the second CIDR to be processed
+	// 等待第二个 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("10.0.0.1"), true)
 		if err != nil {
@@ -880,7 +880,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check initial metrics for second CIDR
+	// 检查第二个 CIDR 的初始指标
 	em2 := testMetrics{
 		free:      0,
 		used:      0,
@@ -889,7 +889,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 	}
 	expectMetrics(t, "10.0.0.0/29", em2)
 
-	// Allocate all remaining IPs from second CIDR (should be 6 usable IPs)
+	// 分配第二个 CIDR 中剩余的全部 IP（应为 6 个可用 IP）
 	allocatedFromCIDR2 := 0
 	for r.Free() > 0 && allocatedFromCIDR2 < 6 {
 		ip, err := r.AllocateNext()
@@ -903,18 +903,18 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		found.Insert(ip.String())
 	}
 
-	// Verify we allocated 6 IPs from second CIDR
+	// 确认从第二个 CIDR 分配到了 6 个 IP
 	if allocatedFromCIDR2 != 6 {
 		t.Fatalf("expected 6 IPs from second CIDR, got %d", allocatedFromCIDR2)
 	}
 
-	// Check total allocated IPs
+	// 检查已分配 IP 总数
 	totalAllocated := allocatedFromCIDR1 + allocatedFromCIDR2
 	if totalAllocated != 8 {
 		t.Fatalf("expected 8 total IPs allocated, got %d", totalAllocated)
 	}
 
-	// Check metrics after filling second CIDR
+	// 检查第二个 CIDR 占满后的指标
 	dynamicAllocatedCidr2, err := testutil.GetCounterMetricValue(clusterIPAllocations.WithLabelValues("10.0.0.0/29", "dynamic"))
 	if err != nil {
 		t.Errorf("failed to get %s value, err: %v", clusterIPAllocations.Name, err)
@@ -923,12 +923,12 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		t.Fatalf("Expected 6 dynamic allocations from second CIDR, received %f", dynamicAllocatedCidr2)
 	}
 
-	// Try to allocate more IPs - should fail since both CIDRs are exhausted
+	// 继续尝试分配 IP —— 两个 CIDR 都已耗尽，应当失败
 	if _, err := r.AllocateNext(); err == nil {
 		t.Fatal("expected error when trying to allocate from exhausted CIDRs")
 	}
 
-	// Parse the CIDRs for proper IP containment checking
+	// 解析 CIDR，以便正确判断 IP 归属
 	_, cidr1Net, err := netutils.ParseCIDRSloppy("192.168.1.0/30")
 	if err != nil {
 		t.Fatalf("failed to parse CIDR1: %v", err)
@@ -938,7 +938,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		t.Fatalf("failed to parse CIDR2: %v", err)
 	}
 
-	// Try to allocate the same IP addresses to generate static allocation errors
+	// 重复分配同样的 IP，以触发静态分配错误
 	errorCount1 := 0
 	errorCount2 := 0
 	for s := range found {
@@ -946,7 +946,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		if err := r.Allocate(ip); !errors.Is(err, ErrAllocated) {
 			t.Fatalf("expected ErrAllocated when trying to allocate existing IP %s, got: %v", s, err)
 		}
-		// Count which CIDR the error belongs to using proper CIDR containment
+		// 依据 CIDR 包含关系统计每个错误属于哪个 CIDR
 		if cidr1Net.Contains(ip) {
 			errorCount1++
 		} else if cidr2Net.Contains(ip) {
@@ -956,7 +956,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		}
 	}
 
-	// Check static allocation errors for first CIDR
+	// 检查第一个 CIDR 的静态分配错误
 	staticErrorsCidr1, err := testutil.GetCounterMetricValue(clusterIPAllocationErrors.WithLabelValues("192.168.1.0/30", "static"))
 	if err != nil {
 		t.Errorf("failed to get %s value, err: %v", clusterIPAllocationErrors.Name, err)
@@ -965,7 +965,7 @@ func TestCIDRAllocatorClusterIPAllocatedMetrics(t *testing.T) {
 		t.Fatalf("Expected %d static allocation errors from first CIDR, received %f", errorCount1, staticErrorsCidr1)
 	}
 
-	// Check static allocation errors for second CIDR
+	// 检查第二个 CIDR 的静态分配错误
 	staticErrorsCidr2, err := testutil.GetCounterMetricValue(clusterIPAllocationErrors.WithLabelValues("10.0.0.0/29", "static"))
 	if err != nil {
 		t.Errorf("failed to get %s value, err: %v", clusterIPAllocationErrors.Name, err)
@@ -982,14 +982,14 @@ func TestCIDRAllocateNextStopOnError(t *testing.T) {
 	}
 	defer r.Destroy()
 
-	// add a CIDR
+	// 添加一个 CIDR
 	cidr1 := newServiceCIDR("test1", "192.168.0.0/24")
 	_, err = r.client.ServiceCIDRs().Create(context.Background(), cidr1, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr1)
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -1002,7 +1002,7 @@ func TestCIDRAllocateNextStopOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// add a second CIDR
+	// 添加第二个 CIDR
 	cidr2 := newServiceCIDR("test2", "192.168.1.0/24")
 	_, err = r.client.ServiceCIDRs().Create(context.Background(), cidr2, metav1.CreateOptions{})
 	if err != nil {
@@ -1010,7 +1010,7 @@ func TestCIDRAllocateNextStopOnError(t *testing.T) {
 	}
 	r.enqueueServiceCIDR(cidr2)
 
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.1.1"), true)
 		if err != nil {
@@ -1024,7 +1024,7 @@ func TestCIDRAllocateNextStopOnError(t *testing.T) {
 	}
 
 	calls := 0
-	// override the client to inject the reactor to fail the allocation
+	// 替换 client，注入 reactor 让分配失败
 	fakeclient, ok := r.client.(*networkingv1fake.FakeNetworkingV1)
 	if !ok {
 		t.Fatal("invalid client")
@@ -1053,14 +1053,14 @@ func TestCIDRAllocateNextDontStopOnNot(t *testing.T) {
 	}
 	defer r.Destroy()
 
-	// add a CIDR
+	// 添加一个 CIDR
 	cidr1 := newServiceCIDR("test1", "192.168.0.0/24")
 	_, err = r.client.ServiceCIDRs().Create(context.Background(), cidr1, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.enqueueServiceCIDR(cidr1)
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.0.1"), true)
 		if err != nil {
@@ -1073,7 +1073,7 @@ func TestCIDRAllocateNextDontStopOnNot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// add a second CIDR
+	// 添加第二个 CIDR
 	cidr2 := newServiceCIDR("test2", "192.168.1.0/24")
 	_, err = r.client.ServiceCIDRs().Create(context.Background(), cidr2, metav1.CreateOptions{})
 	if err != nil {
@@ -1081,7 +1081,7 @@ func TestCIDRAllocateNextDontStopOnNot(t *testing.T) {
 	}
 	r.enqueueServiceCIDR(cidr2)
 
-	// wait for the cidr to be processed
+	// 等待该 CIDR 被处理完成
 	err = wait.PollUntilContextTimeout(context.Background(), 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		allocator, err := r.getAllocator(netutils.ParseIPSloppy("192.168.1.1"), true)
 		if err != nil {
@@ -1094,7 +1094,7 @@ func TestCIDRAllocateNextDontStopOnNot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// make the first allocator not ready
+	// 让第一个分配器处于未就绪状态
 	r.allocators["192.168.0.0/24"].allocator.ready.Store(false)
 	_, secondSubnet, err := netutils.ParseCIDRSloppy("192.168.1.0/24")
 	if err != nil {

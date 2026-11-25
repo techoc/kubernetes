@@ -103,10 +103,10 @@ func TestCreate_Token_WithExpiryCap(t *testing.T) {
 		},
 	}
 
-	// Create a test service account
+	// 创建用于测试的 service account
 	serviceAccount := validNewServiceAccount("foo")
 
-	// Create a new pod
+	// 创建一个新的 pod
 	pod := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -130,16 +130,16 @@ func TestCreate_Token_WithExpiryCap(t *testing.T) {
 
 			ctx := genericregistrytest.NewNamespaceScopeContext(storage.Store, serviceAccount.Namespace)
 
-			// Enable ExternalServiceAccountTokenSigner feature
+			// 开启 ExternalServiceAccountTokenSigner 特性门控
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ExternalServiceAccountTokenSigner, true)
 
-			// record namespace in the store.
+			// 在存储中记录 namespace。
 			_, err := storage.Store.Create(ctx, serviceAccount, rest.ValidateAllObjectFunc, &metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("failed creating test service account: %v", err)
 			}
 
-			// add the namespace to the context as it is required
+			// 把 namespace 加入 context，后续流程需要用到
 			ctx = request.WithNamespace(ctx, serviceAccount.Namespace)
 			storage.Token.extendExpiration = tc.extendExpiration
 			storage.Token.maxExpirationSeconds = int64(tc.maxExpirationSeconds)
@@ -181,7 +181,7 @@ func TestCreate_Token_WithExpiryCap(t *testing.T) {
 			upperBound := tokenReqTimeStamp.Add(time.Duration(tc.expectedTokenAgeSec+confidenceInterval) * time.Second)
 			lowerBound := tokenReqTimeStamp.Add(time.Duration(tc.expectedTokenAgeSec-confidenceInterval) * time.Second)
 
-			// check for token expiration with a toleration of +/-10s after tokenReqTimeStamp to make for latencies.
+			// 校验 token 是否过期，相对 tokenReqTimeStamp 允许 ±10 秒容差以抵消延迟。
 			if structuredClaim.Expiry.Time().After(upperBound) ||
 				structuredClaim.Expiry.Time().Before(lowerBound) {
 				expiryDiff := structuredClaim.Expiry.Time().Sub(tokenReqTimeStamp)
@@ -224,7 +224,7 @@ func TestTokenRequest_ServiceAccountUIDValidation(t *testing.T) {
 			featureGateEnabled:      false,
 			serviceAccountUID:       "correct-sa-uid-123",
 			requestUID:              "wrong-sa-uid-456",
-			expectedResultUID:       "wrong-sa-uid-456", // No validation, so request UID is used as-is (backwards compatibility)
+			expectedResultUID:       "wrong-sa-uid-456", // 不做校验，因此直接使用请求中的 UID（向后兼容）
 			expectedRecordedWarning: "the UID in the token request (wrong-sa-uid-456) does not match the UID of the service account (correct-sa-uid-123) but TokenRequestServiceAccountUIDValidation is not enabled. In the future, this will return a conflict error",
 			expectAuditAnnotations: map[string]string{
 				"authentication.k8s.io/token-request-uid-mismatch": "the UID in the token request (wrong-sa-uid-456) does not match the UID of the service account (correct-sa-uid-123)",
@@ -258,7 +258,7 @@ func TestTokenRequest_ServiceAccountUIDValidation(t *testing.T) {
 			dc := dummyRecorder{agent: "", text: ""}
 			ctx := context.Background()
 			ctx = request.WithNamespace(warning.WithWarningRecorder(ctx, &dc), serviceAccount.Namespace)
-			// create an audit context to allow recording audit information
+			// 创建 audit context，以便记录审计信息
 			ctx = audit.WithAuditContext(ctx)
 
 			tokenReq := &authenticationapi.TokenRequest{
@@ -318,7 +318,7 @@ func (f objectGetter) Get(ctx context.Context, name string, options *metav1.GetO
 
 var _ rest.Getter = objectGetter{}
 
-// A basic fake token generator which always returns a static string
+// 一个简单的伪造 token 生成器，始终返回固定字符串
 type testTokenGenerator struct {
 	staticToken string
 }
@@ -503,7 +503,7 @@ func TestValidateAttestationAPIGroup(t *testing.T) {
 	}
 }
 
-// recordingAuthorizer records all Authorize calls and returns a configurable decision.
+// recordingAuthorizer 记录所有 Authorize 调用，并返回可配置的判定结果。
 type recordingAuthorizer struct {
 	decision authorizer.Decision
 	calls    []authorizer.Attributes
@@ -615,7 +615,7 @@ func TestTokenRESTCreateWebhookAuthenticationFlow(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Verify authorizer was called with correct attributes
+		// 验证 authorizer 是用正确的属性被调用的
 		if len(authz.calls) != 1 {
 			t.Fatalf("expected 1 authorizer call, got %d", len(authz.calls))
 		}
@@ -633,7 +633,7 @@ func TestTokenRESTCreateWebhookAuthenticationFlow(t *testing.T) {
 			t.Errorf("expected name 'apps', got %q", call.GetName())
 		}
 
-		// Verify the fake client was called to get the webhook config
+		// 验证确实通过伪造 client 读取了 webhook 配置
 		actions := fakeClient.Actions()
 		if len(actions) != 1 {
 			t.Fatalf("expected 1 client action, got %d: %v", len(actions), actions)
@@ -661,11 +661,11 @@ func TestTokenRESTCreateWebhookAuthenticationFlow(t *testing.T) {
 			t.Fatalf("expected error:\n\t%s\ngot:\n\t%s", wantErr, got)
 		}
 
-		// Authorizer should have been called
+		// authorizer 应当被调用过
 		if len(authz.calls) != 1 {
 			t.Fatalf("expected 1 authorizer call, got %d", len(authz.calls))
 		}
-		// Webhook getter should NOT have been called (authz denied before reaching it)
+		// webhook getter 不应被调用（鉴权在到达它之前就被拒绝）
 		if len(fakeClient.Actions()) != 0 {
 			t.Fatalf("expected 0 client actions, got %d", len(fakeClient.Actions()))
 		}
@@ -688,7 +688,7 @@ func TestTokenRESTCreateWebhookAuthenticationFlow(t *testing.T) {
 			t.Fatalf("expected error:\n\t%s\ngot:\n\t%s", wantErr, got)
 		}
 
-		// Webhook getter should have been called (audience check happens after fetch)
+		// webhook getter 应当被调用（audience 校验发生在读取之后）
 		if len(fakeClient.Actions()) != 1 {
 			t.Fatalf("expected 1 client action, got %d", len(fakeClient.Actions()))
 		}
@@ -770,7 +770,7 @@ func TestTokenRESTCreateWebhookAuthenticationFlow(t *testing.T) {
 			t.Fatalf("expected error:\n\t%s\ngot:\n\t%s", wantErr, got)
 		}
 
-		// Neither authorizer nor webhook getter should be called
+		// authorizer 与 webhook getter 都不应被调用
 		if len(authz.calls) != 0 {
 			t.Fatalf("expected 0 authorizer calls, got %d", len(authz.calls))
 		}
@@ -889,7 +889,7 @@ func TestTokenRESTCreateWebhookDeletionTimestamp(t *testing.T) {
 
 	t.Run("nil deletion timestamp succeeds", func(t *testing.T) {
 		cfg := baseWebhook()
-		// DeletionTimestamp is nil by default
+		// DeletionTimestamp 默认为 nil
 		authz := &recordingAuthorizer{decision: authorizer.DecisionAllow}
 		fakeClient := fake.NewClientset(cfg)
 		r := newTestTokenREST(t, authz, fakeClient)

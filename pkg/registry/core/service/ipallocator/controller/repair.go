@@ -136,24 +136,23 @@ func (c *Repair) runOnce() error {
 	})
 }
 
-// doRunOnce verifies the state of the cluster IP allocations and returns an error if an unrecoverable problem occurs.
 // doRunOnce 分别读取旧快照和当前 Service 列表，重建每个地址族的真实占用集合，再处理泄漏并持久化快照。
 func (c *Repair) doRunOnce() error {
-	// TODO: (per smarterclayton) if Get() or ListServices() is a weak consistency read,
-	// or if they are executed against different leaders,
-	// the ordering guarantee required to ensure no IP is allocated twice is violated.
-	// ListServices must return a ResourceVersion higher than the etcd index Get triggers,
-	// and the release code must not release services that have had IPs allocated but not yet been created
-	// See #8295
+	// TODO:（来自 smarterclayton）如果 Get() 或 ListServices() 是弱一致性读取，
+	// 或者它们请求了不同的 leader，
+	// 那么"同一个 IP 不会被分配两次"所需的顺序保证就会被破坏。
+	// ListServices 必须返回比 Get 触发的 etcd index 更高的 ResourceVersion，
+	// 且释放逻辑不能释放那些已分配 IP 但尚未创建成功的 Service。
+	// 参见 #8295。
 
-	// If etcd server is not running we should wait for some time and fail only then. This is particularly
-	// important when we start apiserver and etcd at the same time.
+	// 如果 etcd 尚未运行，应当先等待一段时间再失败。这一点在 apiserver 和 etcd
+	// 同时启动时尤为重要。
 	snapshotByFamily := make(map[v1.IPFamily]*api.RangeAllocation)
 	storedByFamily := make(map[v1.IPFamily]ipallocator.Interface)
 
 	err := wait.PollUntilContextTimeout(context.Background(), time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		for family, allocator := range c.allocatorByFamily {
-			// get snapshot if it is not there
+			// 若不存在快照则读取一份
 			if _, ok := snapshotByFamily[family]; !ok {
 				snapshot, err := allocator.Get()
 				if err != nil {
@@ -171,14 +170,14 @@ func (c *Repair) doRunOnce() error {
 		return fmt.Errorf("unable to refresh the service IP block: %w", err)
 	}
 
-	// ensure that ranges are assigned
+	// 确保地址段已分配
 	for family, snapshot := range snapshotByFamily {
 		if snapshot.Range == "" {
 			snapshot.Range = c.networkByFamily[family].String()
 		}
 	}
 
-	// Create an allocator because it is easy to use.
+	// 创建一个分配器，用起来更方便。
 	for family, snapshot := range snapshotByFamily {
 		stored, err := ipallocator.NewFromSnapshot(snapshot)
 		if err != nil {
@@ -198,11 +197,10 @@ func (c *Repair) doRunOnce() error {
 
 		rebuiltByFamily[family] = rebuilt
 	}
-	// We explicitly send no resource version, since the resource version
-	// of 'snapshot' is from a different collection, it's not comparable to
-	// the service collection. The caching layer keeps per-collection RVs,
-	// and this is proper, since in theory the collections could be hosted
-	// in separate etcd (or even non-etcd) instances.
+	// 我们显式不传 resourceVersion，因为 snapshot 的 resourceVersion 来自另一个集合，
+	// 与 service 集合的不具可比性。缓存层按集合分别维护 RV，
+	// 这是合理的，因为理论上这些集合可能存放在不同的 etcd
+	//（甚至非 etcd）实例中。
 	list, err := c.serviceClient.Services(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("unable to refresh the service IP block: %v", err)
@@ -215,17 +213,17 @@ func (c *Repair) doRunOnce() error {
 		return v1.IPv4Protocol
 	}
 
-	// Check every Service's ClusterIP, and rebuild the state as we think it should be.
+	// 检查每个 Service 的 ClusterIP，并按预期重建状态。
 	for _, svc := range list.Items {
 		if !helper.IsServiceIPSet(&svc) {
-			// didn't need a cluster IP
+			// 不需要 cluster IP
 			continue
 		}
 
 		for _, ip := range svc.Spec.ClusterIPs {
 			ip := netutils.ParseIPSloppy(ip)
 			if ip == nil {
-				// cluster IP is corrupt
+				// cluster IP 已损坏
 				clusterIPRepairIPErrors.WithLabelValues("invalid").Inc()
 				c.recorder.Eventf(&svc, nil, v1.EventTypeWarning, "ClusterIPNotValid", "ClusterIPValidation", "Cluster IP %s is not a valid IP; please recreate service", ip)
 				runtime.HandleError(fmt.Errorf("the cluster IP %s for service %s/%s is not a valid IP; please recreate", ip, svc.Name, svc.Namespace))
@@ -234,40 +232,40 @@ func (c *Repair) doRunOnce() error {
 
 			family := getFamilyByIP(ip)
 			if _, ok := rebuiltByFamily[family]; !ok {
-				// this service is using an IPFamily no longer configured on cluster
+				// 该 Service 使用的 IPFamily 已不在集群配置中
 				clusterIPRepairIPErrors.WithLabelValues("invalid").Inc()
 				c.recorder.Eventf(&svc, nil, v1.EventTypeWarning, "ClusterIPNotValid", "ClusterIPValidation", "Cluster IP %s(%s) is of ip family that is no longer configured on cluster; please recreate service", ip, family)
 				runtime.HandleError(fmt.Errorf("the cluster IP %s(%s) for service %s/%s is of ip family that is no longer configured on cluster; please recreate", ip, family, svc.Name, svc.Namespace))
 				continue
 			}
 
-			// mark it as in-use
+			// 标记为已占用
 			actualAlloc := rebuiltByFamily[family]
 			switch err := actualAlloc.Allocate(ip); err {
 			case nil:
 				actualStored := storedByFamily[family]
 				if actualStored.Has(ip) {
-					// remove it from the old set, so we can find leaks
+					// 从旧集合中移除，以便后续发现泄漏
 					actualStored.Release(ip)
 				} else {
-					// cluster IP doesn't seem to be allocated
+					// 该 cluster IP 似乎并未被分配
 					clusterIPRepairIPErrors.WithLabelValues("repair").Inc()
 					c.recorder.Eventf(&svc, nil, v1.EventTypeWarning, "ClusterIPNotAllocated", "ClusterIPAllocation", "Cluster IP [%v]:%s is not allocated; repairing", family, ip)
 					runtime.HandleError(fmt.Errorf("the cluster IP [%v]:%s for service %s/%s is not allocated; repairing", family, ip, svc.Name, svc.Namespace))
 				}
-				delete(c.leaksByFamily[family], ip.String()) // it is used, so it can't be leaked
+				delete(c.leaksByFamily[family], ip.String()) // 它正在被使用，因此不可能是泄漏
 			case ipallocator.ErrAllocated:
-				// cluster IP is duplicate
+				// cluster IP 重复
 				clusterIPRepairIPErrors.WithLabelValues("duplicate").Inc()
 				c.recorder.Eventf(&svc, nil, v1.EventTypeWarning, "ClusterIPAlreadyAllocated", "ClusterIPAllocation", "Cluster IP [%v]:%s was assigned to multiple services; please recreate service", family, ip)
 				runtime.HandleError(fmt.Errorf("the cluster IP [%v]:%s for service %s/%s was assigned to multiple services; please recreate", family, ip, svc.Name, svc.Namespace))
 			case err.(*ipallocator.ErrNotInRange):
-				// cluster IP is out of range
+				// cluster IP 超出地址段范围
 				clusterIPRepairIPErrors.WithLabelValues("outOfRange").Inc()
 				c.recorder.Eventf(&svc, nil, v1.EventTypeWarning, "ClusterIPOutOfRange", "ClusterIPAllocation", "Cluster IP [%v]:%s is not within the service CIDR %s; please recreate service", family, ip, c.networkByFamily[family])
 				runtime.HandleError(fmt.Errorf("the cluster IP [%v]:%s for service %s/%s is not within the service CIDR %s; please recreate", family, ip, svc.Name, svc.Namespace, c.networkByFamily[family]))
 			case ipallocator.ErrFull:
-				// somehow we are out of IPs
+				// 不知为何 IP 已耗尽
 				clusterIPRepairIPErrors.WithLabelValues("full").Inc()
 				cidr := actualAlloc.CIDR()
 				c.recorder.Eventf(&svc, nil, v1.EventTypeWarning, "ServiceCIDRFull", "ClusterIPAllocation", "Service CIDR %v is full; you must widen the CIDR in order to create new services for Cluster IP [%v]:%s", cidr, family, ip)
@@ -280,13 +278,13 @@ func (c *Repair) doRunOnce() error {
 		}
 	}
 
-	// leak check
+	// 泄漏检查
 	for family, leaks := range c.leaksByFamily {
 		c.checkLeaked(leaks, storedByFamily[family], rebuiltByFamily[family])
 	}
 
-	// save logic
-	// Blast the rebuilt state into storage.
+	// 保存逻辑
+	// 把重建出来的状态写回存储。
 	for family, rebuilt := range rebuiltByFamily {
 		err = c.saveSnapShot(rebuilt, c.allocatorByFamily[family], snapshotByFamily[family])
 		if err != nil {
@@ -314,25 +312,25 @@ func (c *Repair) saveSnapShot(rebuilt *ipallocator.Range, alloc rangeallocation.
 
 // checkLeaked 对连续多轮未被 Service 使用的旧分配做延迟回收，给并发创建/写入留下竞态缓冲。
 func (c *Repair) checkLeaked(leaks map[string]int, stored ipallocator.Interface, rebuilt *ipallocator.Range) {
-	// Check for IPs that are left in the old set.  They appear to have been leaked.
+	// 检查旧集合中剩余的 IP，它们看起来是被泄漏了。
 	stored.ForEach(func(ip net.IP) {
 		count, found := leaks[ip.String()]
 		switch {
 		case !found:
-			// flag it to be cleaned up after any races (hopefully) are gone
+			// 打上标记，等竞态（希望如此）消失后再清理
 			runtime.HandleError(fmt.Errorf("the cluster IP %s may have leaked: flagging for later clean up", ip))
 			count = numRepairsBeforeLeakCleanup - 1
 			fallthrough
 		case count > 0:
-			// pretend it is still in use until count expires
+			// 在计数耗尽之前假装它仍被占用
 			leaks[ip.String()] = count - 1
 			if err := rebuilt.Allocate(ip); err != nil {
-				// do not increment the metric here, if it is a leak it will be detected once the counter gets to 0
+				// 这里不要递增指标：如果确实是泄漏，计数器归零时会检测到
 				runtime.HandleError(fmt.Errorf("the cluster IP %s may have leaked, but can not be allocated: %v", ip, err))
 			}
 		default:
 			clusterIPRepairIPErrors.WithLabelValues("leak").Inc()
-			// do not add it to the rebuilt set, which means it will be available for reuse
+			// 不要把它加入重建的集合，也就是说它可以被重新复用
 			runtime.HandleError(fmt.Errorf("the cluster IP %s appears to have leaked: cleaning up", ip))
 		}
 	})

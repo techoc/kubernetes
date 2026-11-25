@@ -82,9 +82,9 @@ func Test_endpointsWarning(t *testing.T) {
 			},
 		},
 		{
-			// We don't actually want to let bad IPs through in this case; the
-			// point here is that we trust the Endpoints controller to not do
-			// that, and we're testing that the checks correctly get skipped.
+			// 这种情况并非真的要放行非法 IP；这里的重点是：
+			// 我们信任 Endpoints controller 不会产生这种取值，
+			// 而要测试的是相关检查被正确地跳过。
 			name: "bad Endpoints ignored because of label",
 			endpoints: &api.Endpoints{
 				ObjectMeta: metav1.ObjectMeta{

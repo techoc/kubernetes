@@ -53,13 +53,12 @@ type ControllerStorage struct {
 	Scale      *ScaleREST
 }
 
-// ReplicasPathMappings returns the mappings between each group version and a replicas path
 // ReplicasPathMappings 告诉 ManagedFields：core/v1 Scale 子资源的 replicas 字段映射回父对象 spec.replicas。
 func ReplicasPathMappings() managedfields.ResourcePathMappings {
 	return replicasPathInReplicationController
 }
 
-// maps a group version to the replicas path in a deployment object
+// 将 group version 映射到 deployment 对象中的 replicas 路径
 var replicasPathInReplicationController = managedfields.ResourcePathMappings{
 	schema.GroupVersion{Group: "", Version: "v1"}.String(): fieldpath.MakePathOrDie("spec", "replicas"),
 }
@@ -82,7 +81,6 @@ type REST struct {
 	*genericregistry.Store
 }
 
-// NewREST returns a RESTStorage object that will work against replication controllers.
 // NewREST 配置 ReplicationController 的对象类型、字段筛选器和主资源策略，再复制 Store 并替换 StatusStrategy。
 func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	store := &genericregistry.Store{
@@ -111,23 +109,23 @@ func NewREST(optsGetter generic.RESTOptionsGetter) (*REST, *StatusREST, error) {
 	return &REST{store}, &StatusREST{store: &statusStore}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider 接口，返回该资源的一组简称。
 func (r *REST) ShortNames() []string {
 	return []string{"rc"}
 }
 
-// Implement CategoriesProvider
+// 实现 CategoriesProvider
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider 接口，返回该资源所属的分类列表。
 func (r *REST) Categories() []string {
 	return []string{"all"}
 }
 
-// StatusREST implements the REST endpoint for changing the status of a replication controller
+// StatusREST 实现了用于修改 replication controller 状态的 REST 端点。
 type StatusREST struct {
 	store *genericregistry.Store
 }
@@ -136,26 +134,24 @@ func (r *StatusREST) New() runtime.Object {
 	return &api.ReplicationController{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 由于底层 store 与 REST 共享，这里不显式销毁它。
 }
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从存储中读取对象，这是支持 Patch 所必需的。
 func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// Update alters the status subset of an object.
 // Status 子资源禁止 update-on-create；其更新由独立 StatusStrategy 限制只能回写控制器状态。
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 在调用底层存储时我们显式把 forceAllowCreate 设为 false，因为
+	// 子资源永远不应允许在更新时创建。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
-// GetResetFields implements rest.ResetFieldsStrategy
+// GetResetFields 实现 rest.ResetFieldsStrategy
 func (r *StatusREST) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 	return r.store.GetResetFields()
 }
@@ -168,7 +164,7 @@ type ScaleREST struct {
 	store *genericregistry.Store
 }
 
-// ScaleREST implements Patcher
+// ScaleREST 实现 Patcher
 var _ = rest.Patcher(&ScaleREST{})
 var _ = rest.GroupVersionKindProvider(&ScaleREST{})
 
@@ -182,15 +178,14 @@ func (r *ScaleREST) GroupVersionKind(containingGV schema.GroupVersion) schema.Gr
 	}
 }
 
-// New creates a new Scale object
+// New 创建一个新的 Scale 对象
 func (r *ScaleREST) New() runtime.Object {
 	return &autoscaling.Scale{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *ScaleREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 由于底层 store 与 REST 共享，这里不显式销毁它。
 }
 
 // Get 先读取父 ReplicationController，再把 Spec.Replicas、Status.Replicas 和 Selector 投影成标准 autoscaling.Scale。
@@ -241,7 +236,6 @@ func toScaleUpdateValidation(f rest.ValidateObjectUpdateFunc) rest.ValidateObjec
 	}
 }
 
-// scaleFromRC returns a scale subresource for a replication controller.
 // scaleFromRC 将父对象元数据、副本期望值/当前值和 Selector 映射为 autoscaling.Scale。
 func scaleFromRC(rc *api.ReplicationController) *autoscaling.Scale {
 	return &autoscaling.Scale{
@@ -279,7 +273,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 	if !ok {
 		return nil, errors.NewBadRequest(fmt.Sprintf("expected existing object type to be ReplicationController, got %T", replicationcontroller))
 	}
-	// if zero-value, the existing object does not exist
+	// 若为零值，说明现存对象不存在
 	if len(replicationcontroller.ResourceVersion) == 0 {
 		return nil, errors.NewNotFound(api.Resource("replicationcontrollers/scale"), i.name)
 	}
@@ -327,7 +321,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 		return nil, errors.NewInvalid(autoscaling.Kind("Scale"), replicationcontroller.Name, errs)
 	}
 
-	// validate precondition if specified (resourceVersion matching is handled by storage)
+	// 若指定了前置条件则进行校验（resourceVersion 匹配由 storage 处理）
 	if len(scale.UID) > 0 && scale.UID != replicationcontroller.UID {
 		return nil, errors.NewConflict(
 			api.Resource("replicationcontrollers/scale"),
@@ -336,7 +330,7 @@ func (i *scaleUpdatedObjectInfo) UpdatedObject(ctx context.Context, oldObj runti
 		)
 	}
 
-	// move replicas/resourceVersion fields to object and return
+	// 将 replicas/resourceVersion 字段写回对象并返回
 	replicationcontroller.Spec.Replicas = &scale.Spec.Replicas
 	replicationcontroller.ResourceVersion = scale.ResourceVersion
 

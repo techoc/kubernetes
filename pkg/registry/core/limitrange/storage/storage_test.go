@@ -81,9 +81,9 @@ func TestCreate(t *testing.T) {
 	validLimitRange := validNewLimitRange()
 	validLimitRange.ObjectMeta = metav1.ObjectMeta{}
 	test.TestCreate(
-		// valid
+		// 合法
 		validLimitRange,
-		// invalid
+		// 非法
 		&api.LimitRange{
 			ObjectMeta: metav1.ObjectMeta{Name: "_-a123-a_"},
 		},
@@ -97,7 +97,7 @@ func TestUpdate(t *testing.T) {
 	defer storage.Store.DestroyFunc()
 	test := genericregistrytest.New(t, storage.Store).AllowCreateOnUpdate()
 	test.TestUpdate(
-		// valid
+		// 合法
 		validNewLimitRange(),
 		// updateFunc
 		func(obj runtime.Object) runtime.Object {
@@ -152,15 +152,15 @@ func TestWatch(t *testing.T) {
 	test := genericregistrytest.New(t, storage.Store)
 	test.TestWatch(
 		validNewLimitRange(),
-		// matching labels
+		// 匹配 labels
 		[]labels.Set{},
-		// not matching labels
+		// 不匹配 labels
 		[]labels.Set{
 			{"foo": "bar"},
 		},
-		// matching fields
+		// 匹配 fields
 		[]fields.Set{},
-		// not matching fields
+		// 不匹配 fields
 		[]fields.Set{
 			{"metadata.name": "bar"},
 			{"name": "foo"},

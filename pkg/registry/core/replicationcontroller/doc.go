@@ -14,7 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package replicationcontroller provides Registry interface and it's RESTStorage
-// implementation for storing ReplicationController api objects.
 // Package replicationcontroller 提供传统 ReplicationController 的 REST 写入策略、Status/Scale 子资源和存储实现。
 package replicationcontroller

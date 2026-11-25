@@ -52,7 +52,6 @@ type webhookGetter[T webhook] interface {
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (T, error)
 }
 
-// NewREST returns a RESTStorage object that will work against service accounts.
 // NewREST 创建 ServiceAccount Store；只有签发器及 Pod/Secret 查询依赖齐备时才启用 TokenREST。
 func NewREST(optsGetter generic.RESTOptionsGetter, issuer token.TokenGenerator, auds authenticator.Audiences, authorizer authorizer.Authorizer, max time.Duration, podStorage, secretStorage, nodeStorage rest.Getter,
 	validatingWebhooks webhookGetter[*admissionregistrationv1.ValidatingWebhookConfiguration], mutatingWebhooks webhookGetter[*admissionregistrationv1.MutatingWebhookConfiguration], extendExpiration bool, maxExtendedExpiration time.Duration) (*REST, error) {
@@ -100,10 +99,10 @@ func NewREST(optsGetter generic.RESTOptionsGetter, issuer token.TokenGenerator, 
 	}, nil
 }
 
-// Implement ShortNamesProvider
+// 实现 ShortNamesProvider 接口。
 var _ rest.ShortNamesProvider = &REST{}
 
-// ShortNames implements the ShortNamesProvider interface. Returns a list of short names for a resource.
+// ShortNames 实现 ShortNamesProvider 接口，返回资源的短名称列表。
 func (r *REST) ShortNames() []string {
 	return []string{"sa"}
 }

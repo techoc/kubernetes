@@ -174,8 +174,7 @@ func (r *BindingREST) New() runtime.Object {
 
 // Destroy 在 API Server 关闭时清理该 REST 存储拥有的资源。
 func (r *BindingREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 store 与 REST 共享，因此这里不显式销毁它。
 }
 
 var _ = rest.NamedCreater(&BindingREST{})
@@ -340,23 +339,22 @@ type LegacyBindingREST struct {
 	bindingRest *BindingREST
 }
 
-// NamespaceScoped fulfill rest.Scoper
+// NamespaceScoped 满足 rest.Scoper
 func (r *LegacyBindingREST) NamespaceScoped() bool {
 	return r.bindingRest.NamespaceScoped()
 }
 
-// New creates a new binding resource
+// New 创建一个新的 binding 资源
 func (r *LegacyBindingREST) New() runtime.Object {
 	return r.bindingRest.New()
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *LegacyBindingREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 store 与 REST 共享，因此这里不显式销毁它。
 }
 
-// Create ensures a pod is bound to a specific host.
+// Create 确保 Pod 被绑定到指定的节点。
 func (r *LegacyBindingREST) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (out runtime.Object, err error) {
 	metadata, err := meta.Accessor(obj)
 	if err != nil {
@@ -379,10 +377,9 @@ func (r *StatusREST) New() runtime.Object {
 	return &api.Pod{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *StatusREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 store 与 REST 共享，因此这里不显式销毁它。
 }
 
 // Get 从底层存储读取 Pod；子资源需要实现该方法以支持 Patch。
@@ -413,27 +410,26 @@ type EphemeralContainersREST struct {
 
 var _ = rest.Patcher(&EphemeralContainersREST{})
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从存储中读取对象，这是支持 Patch 所必需的。
 func (r *EphemeralContainersREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// New creates a new pod resource
+// New 创建一个新的 pod 资源
 func (r *EphemeralContainersREST) New() runtime.Object {
 	return &api.Pod{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *EphemeralContainersREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 store 与 REST 共享，因此这里不显式销毁它。
 }
 
 // Update 只修改 Pod.Spec.EphemeralContainers，并由专用策略过滤其他字段变更。
 // EphemeralContainersREST.Update 复用独立的临时容器策略，并禁止 update 请求退化为 create。
 func (r *EphemeralContainersREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 在调用底层存储时我们显式把 forceAllowCreate 设为 false，因为
+	// 子资源永远不应允许在更新时创建。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }
 
@@ -444,26 +440,25 @@ type ResizeREST struct {
 
 var _ = rest.Patcher(&ResizeREST{})
 
-// Get retrieves the object from the storage. It is required to support Patch.
+// Get 从存储中读取对象，这是支持 Patch 所必需的。
 func (r *ResizeREST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
 	return r.store.Get(ctx, name, options)
 }
 
-// New creates a new pod resource
+// New 创建一个新的 pod 资源
 func (r *ResizeREST) New() runtime.Object {
 	return &api.Pod{}
 }
 
-// Destroy cleans up resources on shutdown.
+// Destroy 在关闭时清理资源。
 func (r *ResizeREST) Destroy() {
-	// Given that underlying store is shared with REST,
-	// we don't destroy it here explicitly.
+	// 底层 store 与 REST 共享，因此这里不显式销毁它。
 }
 
 // Update 只修改 PodSpec 中允许原地调整的资源字段。
 // ResizeREST.Update 只开放策略允许的资源/扩缩容字段，并禁止通过该子资源创建 Pod。
 func (r *ResizeREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 在调用底层存储时我们显式把 forceAllowCreate 设为 false，因为
+	// 子资源永远不应允许在更新时创建。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)
 }

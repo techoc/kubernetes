@@ -66,7 +66,7 @@ type MetaAllocator struct {
 	allocators map[string]*item
 
 	ipFamily api.IPFamily
-	metrics  bool // enable the metrics collection
+	metrics  bool // 启用指标采集
 
 	// TODO(aojea)：DisableAllocatorDualWrite 特性门控完成迁移后，移除此旧位图分配器兼容字段。
 	bitmapAllocator Interface
@@ -74,7 +74,7 @@ type MetaAllocator struct {
 
 type item struct {
 	allocator    *Allocator
-	serviceCIDRs sets.Set[string] // reference of the serviceCIDRs using this Allocator
+	serviceCIDRs sets.Set[string] // 引用正在使用该 Allocator 的 serviceCIDRs
 }
 
 var _ Interface = &MetaAllocator{}
@@ -273,7 +273,7 @@ func (c *MetaAllocator) syncAllocators() error {
 			}
 
 			// 为该 ServiceCIDR 创建新的分配器。
-			_, ipnet, err := netutils.ParseCIDRSloppy(cidr) // this was already validated
+			_, ipnet, err := netutils.ParseCIDRSloppy(cidr) // 此前已经校验过
 			if err != nil {
 				klog.Infof("error parsing cidr %s: %v", cidr, err)
 				continue
@@ -497,7 +497,7 @@ func (c *MetaAllocator) EnableMetrics() {
 	}
 }
 
-// DryRun returns a random allocator
+// DryRun 返回一个随机的分配器
 func (c *MetaAllocator) DryRun() Interface {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -534,8 +534,8 @@ func convertToV1IPFamily(ipFamily netutils.IPFamily) v1.IPFamily {
 	return v1.IPFamilyUnknown
 }
 
-// isNotContained returns true if the prefix is not contained in any
-// of the passed prefixes.
+// 如果该前缀不被任何一个传入的前缀包含，
+// isNotContained 返回 true。
 func isNotContained(prefix netip.Prefix, prefixes []netip.Prefix) bool {
 	for _, p := range prefixes {
 		// 跳过与目标前缀完全相同的前缀。

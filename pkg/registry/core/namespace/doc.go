@@ -14,7 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package namespace provides Registry interface and it's REST
-// implementation for storing Namespace api objects.
 // Package namespace 提供 Namespace 主资源、status/finalize 子资源策略，以及带 Finalizer 的终止与删除存储实现。
 package namespace
