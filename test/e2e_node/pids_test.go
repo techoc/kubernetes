@@ -35,9 +35,9 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// makePodToVerifyPids returns a pod that verifies specified cgroup with pids
+// makePodToVerifyPids 返回一个用 pids 校验指定 cgroup 的 Pod
 func makePodToVerifyPids(baseName string, pidsLimit resource.Quantity) *v1.Pod {
-	// convert the cgroup name to its literal form
+	// 将 cgroup 名称转换为字面形式
 	cgroupFsName := ""
 	cgroupName := cm.NewCgroupName(cm.RootCgroupName, defaultNodeAllocatableCgroup, baseName)
 	if kubeletCfg.CgroupDriver == "systemd" {
@@ -46,7 +46,7 @@ func makePodToVerifyPids(baseName string, pidsLimit resource.Quantity) *v1.Pod {
 		cgroupFsName = cgroupName.ToCgroupfs()
 	}
 
-	// this command takes the expected value and compares it against the actual value for the pod cgroup pids.max
+	// 该命令取期望值并与 Pod cgroup 的 pids.max 实际值比较
 	command := ""
 	if IsCgroup2UnifiedMode() {
 		command = fmt.Sprintf("expected=%v; actual=$(cat /tmp/%v/pids.max); if [ \"$expected\" -ne \"$actual\" ]; then exit 1; fi; ", pidsLimit.Value(), cgroupFsName)
@@ -119,7 +119,7 @@ func runPodPidsLimitTests(f *framework.Framework) {
 	})
 }
 
-// Serial because the test updates kubelet configuration.
+// 标记为 Serial，因为该测试会更新 kubelet 配置。
 var _ = SIGDescribe("PodPidsLimit", framework.WithSerial(), func() {
 	f := framework.NewDefaultFramework("pids-limit-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged

@@ -65,32 +65,32 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 		uid = string(uuid.NewUUID())
 		name = "node-problem-detector-" + uid
 		configName = "node-problem-detector-config-" + uid
-		// There is no namespace for Node, event recorder will set default namespace for node events.
+		// Node 没有 namespace，event recorder 会为 node event 设置默认 namespace。
 		eventNamespace = metav1.NamespaceDefault
 		image = getNodeProblemDetectorImage()
 		ginkgo.By(fmt.Sprintf("Using node-problem-detector image: %s", image))
 	})
 
-	// Test system log monitor. We may add other tests if we have more problem daemons in the future.
+	// 测试 system log monitor。将来如果有更多 problem daemon，可以在这里添加其他测试。
 	ginkgo.Describe("SystemLogMonitor", func() {
 		const (
-			// Use test condition to avoid changing the real node condition in use.
-			// TODO(random-liu): Now node condition could be arbitrary string, consider whether we need to
-			// add TestCondition when switching to predefined condition list.
+			// 使用测试用的 condition，避免修改实际正在使用的 node condition。
+			// TODO(random-liu): 现在 node condition 可以是任意字符串，等切换到预定义的 condition 列表时，
+			// 考虑是否需要添加 TestCondition。
 			condition = v1.NodeConditionType("TestCondition")
 
-			// File paths used in the test.
+			// 测试中使用的文件路径。
 			logFile        = "/log/test.log"
 			configFile     = "/config/testconfig.json"
 			kubeConfigFile = "/config/kubeconfig"
 			etcLocaltime   = "/etc/localtime"
 
-			// Volumes used in the test.
+			// 测试中使用的 volume。
 			configVolume    = "config"
 			logVolume       = "log"
 			localtimeVolume = "localtime"
 
-			// Reasons and messages used in the test.
+			// 测试中使用的 reason 和 message。
 			defaultReason  = "Default"
 			defaultMessage = "default message"
 			tempReason     = "Temporary"
@@ -112,11 +112,11 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 			bootTime, err = util.GetBootTime(klog.FromContext(ctx))
 			framework.ExpectNoError(err)
 
-			// Set lookback duration longer than node up time.
-			// Assume the test won't take more than 1 hour, in fact it usually only takes 90 seconds.
+			// 将 lookback 时长设置为大于节点已运行时间。
+			// 假设测试不会超过 1 小时，实际上通常只需要 90 秒。
 			lookback = nodeTime.Sub(bootTime) + time.Hour
 
-			// Randomize the source name
+			// 随机化 source 名称
 			source = "kernel-monitor-" + uid
 			config = `
 			{
@@ -158,8 +158,8 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 				]
 			}`
 
-			// This token is known to apiserver and its group is `system:masters`.
-			// See also the function `generateTokenFile` in `test/e2e_node/services/apiserver.go`.
+			// apiserver 已知这个 token，它属于 `system:masters` 组。
+			// 另见 `test/e2e_node/services/apiserver.go` 中的 `generateTokenFile` 函数。
 			kubeConfig := fmt.Sprintf(`
 apiVersion: v1
 kind: Config
@@ -264,8 +264,8 @@ current-context: local-context
 							Args: []string{
 								"--logtostderr",
 								fmt.Sprintf("--system-log-monitors=%s", configFile),
-								// `ServiceAccount` admission controller is disabled in node e2e tests, so we could not use
-								// inClusterConfig here.
+								// node e2e 测试中禁用了 `ServiceAccount` admission controller，
+								// 因此这里不能使用 inClusterConfig。
 								fmt.Sprintf("--apiserver-override=%s?inClusterConfig=false&auth=%s", framework.TestContext.Host, kubeConfigFile),
 							},
 							Env: []v1.EnvVar{
@@ -306,8 +306,8 @@ current-context: local-context
 				timestamp        time.Time
 				message          string
 				messageNum       int
-				tempEvents       int // Events for temp errors
-				totalEvents      int // Events for both temp errors and condition changes
+				tempEvents       int // 临时错误产生的 event
+				totalEvents      int // 临时错误和 condition 变化产生的 event 总数
 				conditionReason  string
 				conditionMessage string
 				conditionType    v1.ConditionStatus
@@ -352,8 +352,8 @@ current-context: local-context
 					timestamp:        nodeTime,
 					message:          permMessage1,
 					messageNum:       1,
-					tempEvents:       3, // event number for temp errors should not change
-					totalEvents:      4, // add 1 event for condition change
+					tempEvents:       3, // 临时错误的 event 数量不应改变
+					totalEvents:      4, // condition 变化新增 1 个 event
 					conditionReason:  permReason1,
 					conditionMessage: permMessage1,
 					conditionType:    v1.ConditionTrue,
@@ -363,8 +363,8 @@ current-context: local-context
 					timestamp:        nodeTime.Add(5 * time.Minute),
 					message:          tempMessage,
 					messageNum:       3,
-					tempEvents:       6, // add 3 events for temp errors
-					totalEvents:      7, // add 3 events for temp errors
+					tempEvents:       6, // 临时错误新增 3 个 event
+					totalEvents:      7, // 临时错误新增 3 个 event
 					conditionReason:  permReason1,
 					conditionMessage: permMessage1,
 					conditionType:    v1.ConditionTrue,
@@ -374,8 +374,8 @@ current-context: local-context
 					timestamp:        nodeTime.Add(5 * time.Minute),
 					message:          permMessage1 + "different message",
 					messageNum:       1,
-					tempEvents:       6, // event number should not change
-					totalEvents:      7, // event number should not change
+					tempEvents:       6, // event 数量不应改变
+					totalEvents:      7, // event 数量不应改变
 					conditionReason:  permReason1,
 					conditionMessage: permMessage1,
 					conditionType:    v1.ConditionTrue,
@@ -385,8 +385,8 @@ current-context: local-context
 					timestamp:        nodeTime.Add(5 * time.Minute),
 					message:          permMessage2,
 					messageNum:       1,
-					tempEvents:       6, // event number for temp errors should not change
-					totalEvents:      8, // add 1 event for condition change
+					tempEvents:       6, // 临时错误的 event 数量不应改变
+					totalEvents:      8, // condition 变化新增 1 个 event
 					conditionReason:  permReason2,
 					conditionMessage: permMessage2,
 					conditionType:    v1.ConditionTrue,
@@ -445,7 +445,7 @@ current-context: local-context
 	})
 })
 
-// injectLog injects kernel log into specified file.
+// injectLog 将 kernel log 注入指定文件。
 func injectLog(file string, timestamp time.Time, log string, num int) error {
 	f, err := os.OpenFile(file, os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
@@ -461,7 +461,7 @@ func injectLog(file string, timestamp time.Time, log string, num int) error {
 	return nil
 }
 
-// verifyEvents verifies there are num specific events generated with given reason and message.
+// verifyEvents 验证是否生成了 num 个具有指定 reason 和 message 的 event。
 func verifyEvents(ctx context.Context, e coreclientset.EventInterface, options metav1.ListOptions, num int, reason, message string) error {
 	events, err := e.List(ctx, options)
 	if err != nil {
@@ -480,7 +480,7 @@ func verifyEvents(ctx context.Context, e coreclientset.EventInterface, options m
 	return nil
 }
 
-// verifyTotalEvents verifies there are num events in total.
+// verifyTotalEvents 验证 event 总数是否为 num。
 func verifyTotalEvents(ctx context.Context, e coreclientset.EventInterface, options metav1.ListOptions, num int) error {
 	events, err := e.List(ctx, options)
 	if err != nil {
@@ -496,7 +496,7 @@ func verifyTotalEvents(ctx context.Context, e coreclientset.EventInterface, opti
 	return nil
 }
 
-// verifyNodeCondition verifies specific node condition is generated, if reason and message are empty, they will not be checked
+// verifyNodeCondition 验证是否生成了指定的 node condition；如果 reason 和 message 为空，则不检查它们
 func verifyNodeCondition(ctx context.Context, n coreclientset.NodeInterface, condition v1.NodeConditionType, status v1.ConditionStatus, reason, message string) error {
 	node, err := n.Get(ctx, framework.TestContext.NodeName, metav1.GetOptions{})
 	if err != nil {

@@ -39,7 +39,7 @@ func preparePod(name string, node *v1.Node, propagation *v1.MountPropagationMode
 	const containerName = "cntr"
 	bTrue := true
 	var oneSecond int64 = 1
-	// The pod prepares /mnt/test/<podname> and sleeps.
+	// Pod 准备 /mnt/test/<podname> 后进入休眠。
 	cmd := fmt.Sprintf("mkdir /mnt/test/%[1]s; sleep 3600", name)
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -74,7 +74,7 @@ func preparePod(name string, node *v1.Node, propagation *v1.MountPropagationMode
 					},
 				},
 			},
-			// speed up termination of the pod
+			// 加速 Pod 终止
 			TerminationGracePeriodSeconds: &oneSecond,
 		},
 	}
@@ -86,28 +86,25 @@ var _ = SIGDescribe("Mount propagation", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.It("should propagate mounts within defined scopes", func(ctx context.Context) {
-		// This test runs two pods: master and slave with respective mount
-		// propagation on common /var/lib/kubelet/XXXX directory. Both mount a
-		// tmpfs to a subdirectory there. We check that these mounts are
-		// propagated to the right places.
+		// 该测试运行两个 Pod：master 和 slave，在共享的 /var/lib/kubelet/XXXX 目录上
+		// 分别设置各自的挂载传播。两者都在其子目录挂载 tmpfs，
+		// 测试检查这些挂载是否传播到了正确位置。
 
 		hostExec := utils.NewHostExec(f)
 		ginkgo.DeferCleanup(hostExec.Cleanup)
 
-		// Pick a node where all pods will run.
+		// 选择一个运行所有 Pod 的节点。
 		node, err := e2enode.GetRandomReadySchedulableNode(ctx, f.ClientSet)
 		framework.ExpectNoError(err)
 
-		// Fail the test if the namespace is not set. We expect that the
-		// namespace is unique and we might delete user data if it's not.
+		// 未设置命名空间时测试失败。命名空间应当唯一，否则可能误删用户数据。
 		if len(f.Namespace.Name) == 0 {
 			gomega.Expect(f.Namespace.Name).NotTo(gomega.BeEmpty())
 			return
 		}
 
-		// hostDir is the directory that's shared via HostPath among all pods.
-		// Make sure it's random enough so we don't clash with another test
-		// running in parallel.
+		// hostDir 是通过 HostPath 在所有 Pod 间共享的目录。
+		// 要足够随机，避免与并行运行的其他测试冲突。
 		hostDir := "/var/lib/kubelet/" + f.Namespace.Name
 		ginkgo.DeferCleanup(func(ctx context.Context) error {
 			cleanCmd := fmt.Sprintf("rm -rf %q", hostDir)
@@ -125,8 +122,7 @@ var _ = SIGDescribe("Mount propagation", func() {
 		private := podClient.CreateSync(ctx, preparePod("private", node, &none, hostDir))
 		defaultPropagation := podClient.CreateSync(ctx, preparePod("default", node, nil, hostDir))
 
-		// Check that the pods sees directories of each other. This just checks
-		// that they have the same HostPath, not the mount propagation.
+		// 检查各 Pod 能否看到彼此的目录；这里只校验 HostPath 相同，不校验挂载传播。
 		podNames := []string{master.Name, slave.Name, private.Name, defaultPropagation.Name}
 		for _, podName := range podNames {
 			for _, dirName := range podNames {
@@ -135,18 +131,18 @@ var _ = SIGDescribe("Mount propagation", func() {
 			}
 		}
 
-		// Each pod mounts one tmpfs to /mnt/test/<podname> and puts a file there.
+		// 每个 Pod 都在 /mnt/test/<podname> 挂载一个 tmpfs 并放入一个文件。
 		for _, podName := range podNames {
 			cmd := fmt.Sprintf("mount -t tmpfs e2e-mount-propagation-%[1]s /mnt/test/%[1]s; echo %[1]s > /mnt/test/%[1]s/file", podName)
 			e2epod.ExecShellInPod(ctx, f, podName, cmd)
 
-			// unmount tmpfs when the test finishes
+			// 测试结束时卸载 tmpfs
 			cmd = fmt.Sprintf("umount /mnt/test/%s", podName)
 			ginkgo.DeferCleanup(e2epod.ExecShellInPod, f, podName, cmd)
 		}
 
-		// The host mounts one tmpfs to testdir/host and puts a file there so we
-		// can check mount propagation from the host to pods.
+		// 宿主机在 testdir/host 挂载一个 tmpfs 并放入文件，
+		// 用于检查从宿主机到 Pod 的挂载传播。
 		cmd := fmt.Sprintf("mkdir %[1]q/host; mount -t tmpfs e2e-mount-propagation-host %[1]q/host; echo host > %[1]q/host/file", hostDir)
 		err = hostExec.IssueCommand(ctx, cmd, node)
 		framework.ExpectNoError(err)
@@ -156,17 +152,16 @@ var _ = SIGDescribe("Mount propagation", func() {
 			return hostExec.IssueCommand(ctx, cmd, node)
 		})
 
-		// Now check that mounts are propagated to the right containers.
-		// expectedMounts is map of pod name -> expected mounts visible in the
-		// pod.
+		// 现在检查挂载是否传播到了正确的容器。
+		// expectedMounts 是 Pod 名 -> 该 Pod 中应可见挂载的映射。
 		expectedMounts := map[string]sets.String{
-			// Master sees only its own mount and not the slave's one.
+			// master 只能看到自己的挂载，看不到 slave 的。
 			"master": sets.NewString("master", "host"),
-			// Slave sees master's mount + itself.
+			// slave 能看到 master 的挂载和自己的挂载。
 			"slave": sets.NewString("master", "slave", "host"),
-			// Private sees only its own mount
+			// private 只能看到自己的挂载
 			"private": sets.NewString("private"),
-			// Default (=private) sees only its own mount
+			// default（等同 private）只能看到自己的挂载
 			"default": sets.NewString("default"),
 		}
 		dirNames := append(podNames, "host")
@@ -181,17 +176,17 @@ var _ = SIGDescribe("Mount propagation", func() {
 					framework.ExpectNoError(err, "%s: failed to run %q", msg, cmd)
 					gomega.Expect(stdout).To(gomega.Equal(mountName), msg)
 				} else {
-					// We *expect* cat to return error here
+					// 这里*期望* cat 返回错误
 					gomega.Expect(err).To(gomega.HaveOccurred(), msg)
 				}
 			}
 		}
 
-		// Find the kubelet PID to ensure we're working with the kubelet's mount namespace
+		// 查找 kubelet PID，确保操作的是 kubelet 的 mount namespace
 		kubeletPid := pidOfKubelet(ctx, hostExec, node)
 		enterKubeletMountNS := fmt.Sprintf("nsenter -t %d -m", kubeletPid)
 
-		// Check that the master and host mounts are propagated to the container runtime's mount namespace
+		// 检查 master 和宿主机的挂载是否传播到了容器运行时的 mount namespace
 		for _, mountName := range []string{"host", master.Name} {
 			cmd := fmt.Sprintf("%s cat \"%s/%s/file\"", enterKubeletMountNS, hostDir, mountName)
 			framework.Logf("running command '%s' on node '%s'", cmd, node.Name)
@@ -201,7 +196,7 @@ var _ = SIGDescribe("Mount propagation", func() {
 			gomega.Expect(output).To(gomega.Equal(mountName), "host container namespace should see mount contents from %s", mountName)
 		}
 
-		// Check that the slave, private, and default mounts are not propagated to the container runtime's mount namespace
+		// 检查 slave、private 和 default 的挂载没有传播到容器运行时的 mount namespace
 		for _, podName := range []string{slave.Name, private.Name, defaultPropagation.Name} {
 			cmd := fmt.Sprintf("%s test ! -e \"%s/%s/file\"", enterKubeletMountNS, hostDir, podName)
 			framework.Logf("running command '%s' on node '%s'", cmd, node.Name)

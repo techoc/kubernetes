@@ -37,7 +37,7 @@ var _ = utils.SIGDescribe("CSI Mock volume fsgroup policies", func() {
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 	m := newMockDriverSetup(f)
 
-	// These tests *only* work on a cluster which has the CSIVolumeFSGroupPolicy feature enabled.
+	// 这些测试*仅*适用于启用了 CSIVolumeFSGroupPolicy 特性的集群。
 	ginkgo.Context("CSI FSGroupPolicy [LinuxOnly]", func() {
 		tests := []struct {
 			name          string
@@ -74,8 +74,7 @@ var _ = utils.SIGDescribe("CSI Mock volume fsgroup policies", func() {
 
 				waitUtilFSGroupInPod(ctx, m, test.modified)
 
-				// The created resources will be removed by the cleanup() function,
-				// so need to delete anything here.
+				// 创建的资源会由 cleanup() 函数清理，因此这里无需删除任何内容。
 			})
 		}
 	})
@@ -133,8 +132,7 @@ var _ = utils.SIGDescribe("CSI Mock volume fsgroup policies", func() {
 				m.update(utils.PatchCSIOptions{FSGroupPolicy: &test.newFSGroupPolicy})
 				waitUtilFSGroupInPod(ctx, m, test.newFSGroupPolicy != storagev1.NoneFSGroupPolicy)
 
-				// The created resources will be removed by the cleanup() function,
-				// so need to delete anything here.
+				// 创建的资源会由 cleanup() 函数清理，因此这里无需删除任何内容。
 			})
 		}
 	})
@@ -161,25 +159,24 @@ func waitUtilFSGroupInPod(ctx context.Context, m *mockDriverSetup, modified bool
 			err = e2epod.WaitForPodNameRunningInNamespace(ctx, m.cs, pod.Name, pod.Namespace)
 			framework.ExpectNoError(err, "failed to start pod")
 
-			// Create the subdirectory to ensure that fsGroup propagates
+			// 创建子目录以验证 fsGroup 是否被传递下去。
 			createDirectory := fmt.Sprintf("mkdir %s", dirName)
 			_, _, err = e2epod.ExecShellInPodWithFullOutput(ctx, m.f, pod.Name, createDirectory)
 			framework.ExpectNoError(err, "failed: creating the directory: %s", err)
 
-			// Inject the contents onto the mount
+			// 向挂载点写入内容。
 			createFile := fmt.Sprintf("echo '%s' > '%s'; sync", "filecontents", fileName)
 			_, _, err = e2epod.ExecShellInPodWithFullOutput(ctx, m.f, pod.Name, createFile)
 			framework.ExpectNoError(err, "failed: writing the contents: %s", err)
 
-			// Delete the created file. This step is mandatory, as the mock driver
-			// won't clean up the contents automatically.
+			// 删除创建的文件。这一步是必需的，因为 mock 驱动不会自动清理内容。
 			defer func() {
 				deleteDir := fmt.Sprintf("rm -fr %s", dirName)
 				_, _, err = e2epod.ExecShellInPodWithFullOutput(ctx, m.f, pod.Name, deleteDir)
 				framework.ExpectNoError(err, "failed: deleting the directory: %s", err)
 			}()
 
-			// Ensure that the fsGroup matches what we expect
+			// 验证 fsGroup 与预期一致。
 			if modified {
 				utils.VerifyFSGroupInPod(ctx, m.f, fileName, strconv.FormatInt(*fsGroup, 10), pod)
 			} else {

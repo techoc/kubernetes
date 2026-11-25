@@ -15,8 +15,7 @@ limitations under the License.
 */
 
 /*
- * This test checks that the plugin VolumeSources are working when pseudo-streaming
- * various write sizes to mounted files.
+ * 本测试以不同写入大小对已挂载文件做伪流式写入，检查插件的 VolumeSource 是否正常工作。
  */
 
 package testsuites
@@ -44,9 +43,9 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// sha256 hashes of the test file corresponding to each file size.
-// Test files are generated in testVolumeIO()
-// If test file generation algorithm changes, these must be recomputed.
+// 各文件大小对应测试文件的 SHA256 哈希值。
+// 测试文件在 testVolumeIO() 中生成。
+// 若文件生成算法发生变化，必须重新计算这些值。
 var sha256sum = map[int64]string{
 	storageframework.FileSizeSmall:  "aa39c2cbd49a28425c977d229b43e1ff9579ecd98cea7b466982bab04753f2ab",
 	storageframework.FileSizeMedium: "5f718f3b7788352e1450c6c14c6051f0298d49ac6af18c5a1ce3cd3b5947de24",
@@ -59,8 +58,8 @@ type volumeIOTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitCustomVolumeIOTestSuite returns volumeIOTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumeIOTestSuite 使用自定义的测试模式创建 volumeIOTestSuite，
+// 该类型实现了 TestSuite 接口。
 func InitCustomVolumeIOTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumeIOTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -73,8 +72,8 @@ func InitCustomVolumeIOTestSuite(patterns []storageframework.TestPattern) storag
 	}
 }
 
-// InitVolumeIOTestSuite returns volumeIOTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumeIOTestSuite 使用测试套件的默认模式创建 volumeIOTestSuite，
+// 该类型实现了 TestSuite 接口。
 func InitVolumeIOTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsInlineVolume,
@@ -108,15 +107,15 @@ func (t *volumeIOTestSuite) DefineTests(driver storageframework.TestDriver, patt
 		l     local
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册 AfterEach，使 f 在之后不可用。所有使用 f 的代码
+	// 都必须放在 It 或 Context 的回调中执行。
 	f := framework.NewFrameworkWithCustomTimeouts("volumeio", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	init := func(ctx context.Context) {
 		l = local{}
 
-		// Now do the more expensive test initialization.
+		// 接下来执行开销较大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		l.migrationCheck = newMigrationOpCheck(ctx, f.ClientSet, f.ClientConfig(), dInfo.InTreePluginName)
 
@@ -176,7 +175,7 @@ func createFileSizes(maxFileSize int64) []int64 {
 	return fileSizes
 }
 
-// Return the plugin's client pod spec. Use an InitContainer to setup the file i/o test env.
+// 返回插件的客户端 Pod spec，使用 InitContainer 准备文件 I/O 测试环境。
 func makePodSpec(config e2evolume.TestConfig, initCmd string, volsrc v1.VolumeSource, podSecContext *v1.PodSecurityContext) *v1.Pod {
 	var gracePeriod int64 = 1
 	volName := fmt.Sprintf("io-volume-%s", config.Namespace)
@@ -216,7 +215,7 @@ func makePodSpec(config e2evolume.TestConfig, initCmd string, volsrc v1.VolumeSo
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"sleep 3600", // keep pod alive until explicitly deleted
+						"sleep 3600", // 保持 Pod 存活，直到被显式删除
 					},
 					VolumeMounts: []v1.VolumeMount{
 						{
@@ -234,7 +233,7 @@ func makePodSpec(config e2evolume.TestConfig, initCmd string, volsrc v1.VolumeSo
 					VolumeSource: volsrc,
 				},
 			},
-			RestartPolicy: v1.RestartPolicyNever, // want pod to fail if init container fails
+			RestartPolicy: v1.RestartPolicyNever, // init container 失败时应让 Pod 也失败
 		},
 	}
 
@@ -242,7 +241,7 @@ func makePodSpec(config e2evolume.TestConfig, initCmd string, volsrc v1.VolumeSo
 	return pod
 }
 
-// Write `fsize` bytes to `fpath` in the pod, using dd and the `ddInput` file.
+// 在 Pod 中用 dd 和 `ddInput` 文件向 `fpath` 写入 `fsize` 字节。
 func writeToFile(ctx context.Context, f *framework.Framework, pod *v1.Pod, fpath, ddInput string, fsize int64) error {
 	ginkgo.By(fmt.Sprintf("writing %d bytes to test file %s", fsize, fpath))
 	loopCnt := fsize / storageframework.MinFileSize
@@ -254,7 +253,7 @@ func writeToFile(ctx context.Context, f *framework.Framework, pod *v1.Pod, fpath
 	return err
 }
 
-// Verify that the test file is the expected size and contains the expected content.
+// 验证测试文件大小和内容均符合预期。
 func verifyFile(ctx context.Context, f *framework.Framework, pod *v1.Pod, fpath string, expectSize int64, ddInput string) error {
 	ginkgo.By("verifying file size")
 	rtnstr, stderr, err := e2epod.ExecShellInPodWithFullOutput(ctx, f, pod.Name, fmt.Sprintf("stat -c %%s %s", fpath))
@@ -288,30 +287,28 @@ func verifyFile(ctx context.Context, f *framework.Framework, pod *v1.Pod, fpath 
 	return nil
 }
 
-// Delete `fpath` to save some disk space on host. Delete errors are logged but ignored.
+// 删除 `fpath` 以节省宿主机磁盘空间；删除错误仅记录，不视为失败。
 func deleteFile(ctx context.Context, f *framework.Framework, pod *v1.Pod, fpath string) {
 	ginkgo.By(fmt.Sprintf("deleting test file %s...", fpath))
 	stdout, stderr, err := e2epod.ExecShellInPodWithFullOutput(ctx, f, pod.Name, fmt.Sprintf("rm -f %s", fpath))
 	if err != nil {
-		// keep going, the test dir will be deleted when the volume is unmounted
+		// 继续即可，卷卸载时测试目录会被删除
 		framework.Logf("unable to delete test file %s: %v\nerror ignored, continuing test\nstdout: %s\nstderr: %s", fpath, err, stdout, stderr)
 	}
 }
 
-// Create the client pod and create files of the sizes passed in by the `fsizes` parameter. Delete the
-// client pod and the new files when done.
-// Note: the file name is appended to "/opt/<Prefix>/<namespace>", eg. "/opt/nfs/e2e-.../<file>".
-// Note: nil can be passed for the podSecContext parm, in which case it is ignored.
-// Note: `fsizes` values are enforced to each be at least `MinFileSize` and a multiple of `MinFileSize`
+// 创建客户端 Pod，并按 `fsizes` 参数指定的大小创建文件，结束后删除客户端 Pod 和新文件。
+// 注意：文件名会追加到 "/opt/<Prefix>/<namespace>" 之后，例如 "/opt/nfs/e2e-.../<file>"。
+// 注意：podSecContext 参数可传 nil，此时忽略该参数。
+// 注意：`fsizes` 中的每个值都会被强制为不小于 `MinFileSize` 且是其整数倍
 //
 //	bytes.
 func testVolumeIO(ctx context.Context, f *framework.Framework, cs clientset.Interface, config e2evolume.TestConfig, volsrc v1.VolumeSource, podSecContext *v1.PodSecurityContext, file string, fsizes []int64) (err error) {
 	ddInput := filepath.Join(mountPath, fmt.Sprintf("%s-%s-dd_if", config.Prefix, config.Namespace))
 	writeBlk := strings.Repeat("abcdefghijklmnopqrstuvwxyz123456", 32) // 1KiB value
 	loopCnt := storageframework.MinFileSize / int64(len(writeBlk))
-	// initContainer cmd to create and fill dd's input file. The initContainer is used to create
-	// the `dd` input file which is currently 1MiB. Rather than store a 1MiB go value, a loop is
-	// used to create a 1MiB file in the target directory.
+	// initContainer 的命令，用于创建并填充 dd 的输入文件。目前输入文件为 1MiB；
+	// 为避免在 Go 代码中存放 1MiB 的值，改用循环在目标目录中生成该文件。
 	initCmd := fmt.Sprintf("i=0; while [ $i -lt %d ]; do echo -n %s >>%s; let i+=1; done", loopCnt, writeBlk, ddInput)
 
 	clientPod := makePodSpec(config, initCmd, volsrc, podSecContext)
@@ -342,9 +339,9 @@ func testVolumeIO(ctx context.Context, f *framework.Framework, cs clientset.Inte
 		return fmt.Errorf("client pod %q not running: %w", clientPod.Name, err)
 	}
 
-	// create files of the passed-in file sizes and verify test file size and content
+	// 按传入的大小创建文件，并校验文件大小和内容
 	for _, fsize := range fsizes {
-		// file sizes must be a multiple of `MinFileSize`
+		// 文件大小必须是 `MinFileSize` 的整数倍
 		if math.Mod(float64(fsize), float64(storageframework.MinFileSize)) != 0 {
 			fsize = fsize/storageframework.MinFileSize + storageframework.MinFileSize
 		}

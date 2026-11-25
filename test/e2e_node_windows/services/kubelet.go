@@ -43,23 +43,23 @@ import (
 	"k8s.io/kubernetes/test/e2e_node_windows/builder"
 )
 
-// args is the type used to accumulate args from the flags with the same name.
+// args 用于累积同名 flag 的参数值。
 type args []string
 
-// String function of flag.Value
+// flag.Value 的 String 方法
 func (a *args) String() string {
 	return fmt.Sprint(*a)
 }
 
-// Set function of flag.Value
+// flag.Value 的 Set 方法
 func (a *args) Set(value string) error {
-	// Note that we assume all white space in flag string is separating fields
+	// 这里假设 flag 字符串中的所有空白都用于分隔字段
 	na := strings.Fields(value)
 	*a = append(*a, na...)
 	return nil
 }
 
-// kubeletArgs is the override kubelet args specified by the test runner.
+// kubeletArgs 是测试运行器指定的 kubelet 参数覆盖值。
 var kubeletArgs args
 var kubeletConfigFile = "./kubeletconfig.yaml"
 
@@ -70,28 +70,26 @@ func init() {
 	}
 }
 
-// RunKubelet starts kubelet and waits for termination signal. Once receives the
-// termination signal, it will stop the kubelet gracefully.
+// RunKubelet 启动 kubelet 并等待终止信号；收到终止信号后优雅地停止 kubelet。
 func RunKubelet(ctx context.Context, featureGates map[string]bool) {
 	var err error
-	// Enable monitorParent to make sure kubelet will receive termination signal
-	// when test process exits.
+	// 启用 monitorParent，确保测试进程退出时 kubelet 能收到终止信号。
 	e := NewE2EServices(true /* monitorParent */)
 	defer e.Stop()
 	e.kubelet, err = e.startKubelet(ctx, featureGates)
 	if err != nil {
 		klog.Fatalf("Failed to start kubelet: %v", err)
 	}
-	// Wait until receiving a termination signal.
+	// 等待终止信号。
 	waitForTerminationSignal()
 }
 
 const (
-	// KubeletRootDirectory specifies the directory where the kubelet runtime information is stored.
+	// KubeletRootDirectory 指定存放 kubelet 运行时信息的目录。
 	KubeletRootDirectory = "/var/lib/kubelet"
 )
 
-// Health check url of kubelet
+// kubelet 的健康检查 URL
 var kubeletHealthCheckURL = fmt.Sprintf("http://127.0.0.1:%d/healthz", ports.KubeletHealthzPort)
 
 func baseKubeConfiguration(ctx context.Context, cfgPath string) (*kubeletconfig.KubeletConfiguration, error) {
@@ -106,7 +104,7 @@ func baseKubeConfiguration(ctx context.Context, cfgPath string) (*kubeletconfig.
 			return nil, err
 		}
 
-		// If the kubeletconfig file doesn't exist, use a default configuration.
+		// kubeletconfig 文件不存在时使用默认配置。
 		kc, err := options.NewKubeletConfiguration()
 		if err != nil {
 			return nil, err
@@ -140,8 +138,7 @@ func baseKubeConfiguration(ctx context.Context, cfgPath string) (*kubeletconfig.
 	return loader.Load(ctx)
 }
 
-// startKubelet starts the Kubelet in a separate process or returns an error
-// if the Kubelet fails to start.
+// startKubelet 在独立进程中启动 Kubelet；启动失败时返回错误。
 func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]bool) (*server, error) {
 	klog.Info("Starting kubelet")
 
@@ -254,7 +251,7 @@ func (e *E2EServices) startKubelet(ctx context.Context, featureGates map[string]
 	return server, server.start()
 }
 
-// WriteKubeletConfigFile writes the kubelet config file based on the args and returns the filename.
+// WriteKubeletConfigFile 根据参数写入 kubelet 配置文件。
 func WriteKubeletConfigFile(internal *kubeletconfig.KubeletConfiguration, path string) error {
 	data, err := kubeletconfigcodec.EncodeKubeletConfig(internal, kubeletconfigv1beta1.SchemeGroupVersion)
 	if err != nil {
@@ -270,7 +267,7 @@ func WriteKubeletConfigFile(internal *kubeletconfig.KubeletConfiguration, path s
 	return nil
 }
 
-// createPodDirectory creates pod directory.
+// createPodDirectory 创建 Pod 目录。
 func createPodDirectory() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -283,7 +280,7 @@ func createPodDirectory() (string, error) {
 	return path, nil
 }
 
-// createKubeconfig creates a kubeconfig file at the fully qualified `path`. The parent dirs must exist.
+// createKubeconfig 在绝对路径 `path` 处创建 kubeconfig 文件，父目录必须已存在。
 func createKubeconfig(path string) error {
 	kubeconfig := []byte(fmt.Sprintf(`apiVersion: v1
 kind: Config
@@ -335,7 +332,7 @@ func kubeletConfigCWDPath() (string, error) {
 	return filepath.Join(cwd, "kubelet-config"), nil
 }
 
-// KubeletConfigDirCWDDir returns the path to the kubelet config drop-in directory.
+// KubeletConfigDirCWDDir 返回 kubelet 配置 drop-in 目录的路径。
 func KubeletConfigDirCWDDir() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -348,7 +345,7 @@ func KubeletConfigDirCWDDir() (string, error) {
 	return dir, nil
 }
 
-// createKubeconfigCWD creates kubeconfig at current-working-directory/kubeconfig.
+// createKubeconfigCWD 在当前工作目录下创建 kubeconfig 文件。
 func createKubeconfigCWD() (string, error) {
 	kubeconfigPath, err := kubeconfigCWDPath()
 	if err != nil {

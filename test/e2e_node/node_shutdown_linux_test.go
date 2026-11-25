@@ -64,7 +64,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 	ginkgo.BeforeEach(func() {
 		if _, err := exec.LookPath("systemd-run"); err == nil {
 			if version, verr := exec.Command("systemd-run", "--version").Output(); verr == nil {
-				// sample output from $ systemd-run --version
+				// $ systemd-run --version 的输出示例
 				// systemd 245 (245.4-4ubuntu3.13)
 				re := regexp.MustCompile(`systemd (\d+)`)
 				if match := re.FindSubmatch(version); len(match) > 1 {
@@ -72,7 +72,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 					if err != nil {
 						framework.Logf("failed to parse systemd version with error %v, 'systemd-run --version' output was [%s]", err, version)
 					} else {
-						// See comments in issue 107043, this is a known problem for a long time that this feature does not work on older systemd
+						// 见 issue 107043 的讨论：旧版 systemd 上该功能长期不可用，属于已知问题
 						// https://github.com/kubernetes/kubernetes/issues/107043#issuecomment-997546598
 						if systemdVersion < 245 {
 							e2eskipper.Skipf("skipping GracefulNodeShutdown tests as we are running on an old version of systemd : %d", systemdVersion)
@@ -118,7 +118,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 				"spec.nodeName": nodeName,
 			}.AsSelector().String()
 
-			// Define test pods
+			// 定义测试用 Pod
 			pods := []*v1.Pod{
 				getGracePeriodOverrideTestPod("pod-to-evict-"+string(uuid.NewUUID()), nodeName, 5, ""),
 			}
@@ -160,7 +160,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 			framework.ExpectNoError(err)
 
 			ginkgo.By("Verifying that all pods are shutdown")
-			// All pod should be shutdown
+			// 所有 Pod 都应已关停
 			gomega.Eventually(func() error {
 				list, err = e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{
 					FieldSelector: nodeSelector,
@@ -224,7 +224,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 				"spec.nodeName": nodeName,
 			}.AsSelector().String()
 
-			// Define test pods
+			// 定义测试用 Pod
 			pods := []*v1.Pod{
 				getGracePeriodOverrideTestPod("period-120-"+string(uuid.NewUUID()), nodeName, 120, ""),
 				getGracePeriodOverrideTestPod("period-5-"+string(uuid.NewUUID()), nodeName, 5, ""),
@@ -251,19 +251,19 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 					},
 				}
 
-				// Setup watch to continuously monitor any pod events and detect invalid pod status updates
+				// 持续监听 Pod 事件，以便发现非法的状态更新
 				_, err = watchtools.Until(ctx, list.ResourceVersion, w, func(event watch.Event) (bool, error) {
 					if pod, ok := event.Object.(*v1.Pod); ok {
 						if isPodStatusAffectedByIssue108594(pod) {
 							return false, fmt.Errorf("failing test due to detecting invalid pod status")
 						}
-						// Watch will never terminate (only when the test ends due to context cancellation)
+						// Watch 不会自行结束（只有测试因 context 取消而结束时才终止）
 						return false, nil
 					}
 					return false, nil
 				})
 
-				// Ignore timeout error since the context will be explicitly cancelled and the watch will never return true
+				// context 会被显式取消，Watch 永远不会返回 true，因此忽略超时错误
 				if err != nil && !wait.Interrupted(err) {
 					framework.Failf("watch for invalid pod status failed: %v", err.Error())
 				}
@@ -281,7 +281,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 			framework.ExpectNoError(err)
 
 			ginkgo.By("Verifying that non-critical pods are shutdown")
-			// Not critical pod should be shutdown
+			// 非关键 Pod 应已关停
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				list, err = e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{
 					FieldSelector: nodeSelector,
@@ -308,7 +308,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 			}, podStatusUpdateTimeout, pollInterval).Should(gomega.Succeed())
 
 			ginkgo.By("Verifying that all pods are shutdown")
-			// All pod should be shutdown
+			// 所有 Pod 都应已关停
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				list, err = e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{
 					FieldSelector: nodeSelector,
@@ -326,12 +326,12 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 				}
 				return nil
 			},
-				// Critical pod starts shutdown after (nodeShutdownGracePeriod-nodeShutdownGracePeriodCriticalPods)
+				// 关键 Pod 在 (nodeShutdownGracePeriod-nodeShutdownGracePeriodCriticalPods) 之后才开始关停
 				podStatusUpdateTimeout+(nodeShutdownGracePeriod-nodeShutdownGracePeriodCriticalPods),
 				pollInterval).Should(gomega.Succeed())
 
 			ginkgo.By("Verify that all pod ready to start condition are set to false after terminating")
-			// All pod ready to start condition should set to false
+			// 所有 Pod 的 ready to start 条件都应置为 false
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				list, err = e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{
 					FieldSelector: nodeSelector,
@@ -395,7 +395,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 			initialConfig.FeatureGates[string(features.GracefulNodeShutdownBasedOnPodPriority)] = false
 			initialConfig.ShutdownGracePeriod = metav1.Duration{Duration: nodeShutdownGracePeriod}
 			initialConfig.ShutdownGracePeriodCriticalPods = metav1.Duration{Duration: 0}
-			// Fix the lease cadence so the test can observe multiple renewals within the shutdown window.
+			// 固定 lease 续约节奏，确保测试能在关停窗口内观察到多次续约。
 			initialConfig.NodeLeaseDurationSeconds = nodeLeaseDuration
 		})
 
@@ -416,7 +416,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 
 			ginkgo.By("Waiting for the node lease to exist")
 			var lease *coordinationv1.Lease
-			// Wait long enough for kubelet startup on slower test machines to publish the node lease.
+			// 慢速测试机上 kubelet 启动并发布 node lease 需要较长时间，等待要足够久。
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				var err error
 				lease, err = leaseClient.Get(ctx, nodeName, metav1.GetOptions{})
@@ -561,7 +561,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 				periodCritical5Name = "period-critical-5-" + string(uuid.NewUUID())
 			)
 
-			// Define test pods
+			// 定义测试用 Pod
 			pods := []*v1.Pod{
 				getGracePeriodOverrideTestPod(period5Name, nodeName, 5, ""),
 				getGracePeriodOverrideTestPod(periodC5Name, nodeName, 5, customClassC.Name),
@@ -570,7 +570,7 @@ var _ = SIGDescribe("GracefulNodeShutdown", framework.WithSerial(), feature.Grac
 				getGracePeriodOverrideTestPod(periodCritical5Name, nodeName, 5, scheduling.SystemNodeCritical),
 			}
 
-			// Expected down steps
+			// 预期的关停顺序
 			downSteps := [][]string{
 				{
 					period5Name,
@@ -680,10 +680,9 @@ func getPriorityClass(name string, value int32) *schedulingv1.PriorityClass {
 	return priority
 }
 
-// getGracePeriodOverrideTestPod returns a new Pod object containing a container
-// runs a shell script, hangs the process until a SIGTERM signal is received.
-// The script waits for $PID to ensure that the process does not exist.
-// If priorityClassName is scheduling.SystemNodeCritical, the Pod is marked as critical and a comment is added.
+// getGracePeriodOverrideTestPod 构造一个 Pod，其容器运行 shell 脚本并挂起进程直到收到 SIGTERM。
+// 脚本等待 $PID 消失，以确认进程确实退出。
+// 当 priorityClassName 为 scheduling.SystemNodeCritical 时，将该 Pod 标记为关键 Pod 并添加注解。
 func getGracePeriodOverrideTestPod(name string, node string, gracePeriod int64, priorityClassName string) *v1.Pod {
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -733,7 +732,7 @@ func getGracePeriodOverrideTestPod(name string, node string, gracePeriod int64, 
 	return pod
 }
 
-// Emits a fake PrepareForShutdown dbus message on system dbus. Will cause kubelet to react to an active shutdown event.
+// 在系统 dbus 上发送伪造的 PrepareForShutdown 消息，使 kubelet 认为发生了关停事件并作出响应。
 func emitSignalPrepareForShutdown(b bool) error {
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
@@ -764,7 +763,7 @@ func isPodShutdown(pod *v1.Pod) bool {
 	return pod.Status.Message == podShutdownMessage && pod.Status.Reason == podShutdownReason && hasContainersNotReadyCondition && pod.Status.Phase == v1.PodFailed
 }
 
-// Pods should never report failed phase and have ready condition = true (https://github.com/kubernetes/kubernetes/issues/108594)
+// Pod 不应同时处于 Failed 阶段且 ready 条件为 true（https://github.com/kubernetes/kubernetes/issues/108594）
 func isPodStatusAffectedByIssue108594(pod *v1.Pod) bool {
 	return pod.Status.Phase == v1.PodFailed && podutils.IsPodReady(pod)
 }
@@ -793,8 +792,7 @@ func expectNodeLease(lease *coordinationv1.Lease, nodeName string) error {
 	if lease.Spec.RenewTime == nil {
 		return fmt.Errorf("Spec.RenewTime should not be nil")
 	}
-	// Node e2e runs against a single-node test environment, so the lease holder should
-	// always match the only node under test.
+	// Node e2e 运行在单节点环境中，因此 lease 持有者应始终是被测试的唯一节点。
 	if *lease.Spec.HolderIdentity != nodeName {
 		return fmt.Errorf("Spec.HolderIdentity (%v) should match the node name (%v)", *lease.Spec.HolderIdentity, nodeName)
 	}

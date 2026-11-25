@@ -22,13 +22,13 @@ import (
 )
 
 const (
-	// SRIOVDevicePluginCMYAML is the path of the config map to configure the sriov device plugin.
+	// SRIOVDevicePluginCMYAML 是用于配置 SR-IOV 设备插件的 ConfigMap 路径。
 	SRIOVDevicePluginCMYAML = "test/e2e_node/testing-manifests/sriovdp-cm.yaml"
-	// SRIOVDevicePluginDSYAML is the path of the daemonset template of the sriov device plugin. // TODO: Parametrize it by making it a feature in TestFramework.
+	// SRIOVDevicePluginDSYAML 是 SR-IOV 设备插件的 DaemonSet 模板路径。// TODO: 将其作为 TestFramework 的特性参数化。
 	SRIOVDevicePluginDSYAML = "test/e2e_node/testing-manifests/sriovdp-ds.yaml"
-	// SRIOVDevicePluginSAYAML is the path of the service account needed by the sriov device plugin to run.
+	// SRIOVDevicePluginSAYAML 是 SR-IOV 设备插件运行所需 ServiceAccount 的路径。
 	SRIOVDevicePluginSAYAML = "test/e2e_node/testing-manifests/sriovdp-sa.yaml"
-	// SRIOVDevicePluginName is the name of the device plugin pod
+	// SRIOVDevicePluginName 是设备插件 Pod 的名称
 	SRIOVDevicePluginName = "sriov-device-plugin"
 )
 

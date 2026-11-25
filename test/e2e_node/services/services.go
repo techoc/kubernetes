@@ -29,11 +29,10 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// E2EServices starts and stops e2e services in a separate process. The test
-// uses it to start and stop all e2e services.
+// E2EServices 在独立进程中启动和停止 e2e 服务。
+// 测试用它来启动和停止所有 e2e 服务。
 type E2EServices struct {
-	// monitorParent determines whether the sub-processes should watch and die with the current
-	// process.
+	// monitorParent 决定子进程是否应监视当前进程并随之退出。
 	rmDirs        []string
 	monitorParent bool
 	services      *server
@@ -41,37 +40,36 @@ type E2EServices struct {
 	logs          logFiles
 }
 
-// NewE2EServices returns a new E2EServices instance.
+// NewE2EServices 返回一个新的 E2EServices 实例。
 func NewE2EServices(monitorParent bool) *E2EServices {
 	return &E2EServices{
 		monitorParent: monitorParent,
-		// Special log files that need to be collected for additional debugging.
+		// 为便于进一步调试而需要收集的特殊日志文件。
 		logs: getLogFiles(),
 	}
 }
 
-// Start starts the e2e services in another process by calling back into the
-// test binary.  Returns when all e2e services are ready or an error.
+// Start 通过回调测试二进制文件，在另一个进程中启动 e2e 服务。
+// 当所有 e2e 服务就绪或发生错误时返回。
 //
-// We want to statically link e2e services into the test binary, but we don't
-// want their glog output to pollute the test result. So we run the binary in
-// run-services-mode to start e2e services in another process.
-// The function starts 2 processes:
-// * internal e2e services: services which statically linked in the test binary - apiserver, etcd and
-// namespace controller.
-// * kubelet: kubelet binary is outside. (We plan to move main kubelet start logic out when we have
-// standard kubelet launcher)
+// 我们希望把 e2e 服务静态链接进测试二进制文件，但不希望它们的 glog 输出
+// 污染测试结果。因此以 run-services-mode 运行该二进制文件，
+// 在另一个进程中启动 e2e 服务。
+// 该函数启动 2 个进程：
+//   - 内部 e2e 服务：静态链接在测试二进制文件中的服务——apiserver、etcd 和 namespace controller。
+//   - kubelet：kubelet 二进制文件在外部。（我们计划在有标准的 kubelet 启动器后，
+//     将主要的 kubelet 启动逻辑移出。）
 func (e *E2EServices) Start(ctx context.Context, featureGates map[string]bool) error {
 	var err error
 	if e.services, err = e.startInternalServices(); err != nil {
 		return fmt.Errorf("failed to start internal services: %w", err)
 	}
 	klog.Infof("Node services started.")
-	// running the kubelet depends on whether we are running conformance test-suite
+	// 是否运行 kubelet 取决于当前是否在执行 conformance 测试套件。
 	if framework.TestContext.NodeConformance {
 		klog.Info("nothing to do in node-e2e-services, running conformance suite")
 	} else {
-		// Start kubelet
+		// 启动 kubelet。
 		e.kubelet, err = e.startKubelet(ctx, featureGates)
 		if err != nil {
 			return fmt.Errorf("failed to start kubelet: %w", err)
@@ -81,11 +79,11 @@ func (e *E2EServices) Start(ctx context.Context, featureGates map[string]bool) e
 	return nil
 }
 
-// Stop stops the e2e services.
+// Stop 停止 e2e 服务。
 func (e *E2EServices) Stop() {
 	defer func() {
 		if !framework.TestContext.NodeConformance {
-			// Collect log files.
+			// 收集日志文件。
 			e.collectLogFiles()
 		}
 	}()
@@ -98,7 +96,7 @@ func (e *E2EServices) Stop() {
 		if err := e.kubelet.kill(); err != nil {
 			klog.Errorf("Failed to kill kubelet: %v", err)
 		}
-		// Stop the kubelet systemd unit which will delete the kubelet transient unit.
+		// 停止 kubelet systemd unit，这会删除 kubelet 的临时 unit。
 		if err := e.kubelet.stopUnit(); err != nil {
 			klog.Errorf("Failed to stop kubelet systemd unit: %v", err)
 		}
@@ -111,8 +109,8 @@ func (e *E2EServices) Stop() {
 	}
 }
 
-// RunE2EServices actually start the e2e services. This function is used to
-// start e2e services in current process. This is only used in run-services-mode.
+// RunE2EServices 实际启动 e2e 服务。
+// 该函数用于在当前进程中启动 e2e 服务，只在 run-services-mode 下使用。
 func RunE2EServices(t *testing.T) {
 	e := newE2EServices()
 	if err := e.run(t); err != nil {
@@ -121,19 +119,19 @@ func RunE2EServices(t *testing.T) {
 }
 
 const (
-	// services.log is the combined log of all services
+	// services.log 是所有服务日志的汇总。
 	servicesLogFile = "services.log"
-	// LogVerbosityLevel is consistent with the level used in a cluster e2e test.
+	// LogVerbosityLevel 与集群 e2e 测试中使用的日志级别保持一致。
 	LogVerbosityLevel = "4"
 )
 
-// startInternalServices starts the internal services in a separate process.
+// startInternalServices 在独立进程中启动内部服务。
 func (e *E2EServices) startInternalServices() (*server, error) {
 	testBin, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("can't get current binary: %w", err)
 	}
-	// Pass all flags into the child process, so that it will see the same flag set.
+	// 把所有 flag 传给子进程，使其看到相同的 flag 集合。
 	startCmd := exec.Command(testBin,
 		append(
 			[]string{"--run-services-mode", fmt.Sprintf("--bearer-token=%s", framework.TestContext.BearerToken)},
@@ -143,11 +141,11 @@ func (e *E2EServices) startInternalServices() (*server, error) {
 	return server, server.start()
 }
 
-// collectLogFiles collects logs of interest either via journalctl or by creating sym
-// links. Since we scp files from the remote directory, symlinks will be
-// treated as normal files and file contents will be copied over.
+// collectLogFiles 通过 journalctl 或创建符号链接收集需要的日志。
+// 由于通过 scp 从远程目录复制文件，符号链接会被当作普通文件处理，
+// 其内容会被复制过去。
 func (e *E2EServices) collectLogFiles() {
-	// Nothing to do if report dir is not specified.
+	// 如果未指定报告目录，则无需处理。
 	if framework.TestContext.ReportDir == "" {
 		return
 	}
@@ -156,7 +154,7 @@ func (e *E2EServices) collectLogFiles() {
 	for targetFileName, log := range e.logs {
 		targetLink := path.Join(framework.TestContext.ReportDir, targetFileName)
 		if journaldFound {
-			// Skip log files that do not have an equivalent in journald-based machines.
+			// 跳过在使用 journald 的系统上没有对应项的日志文件。
 			if len(log.JournalctlCommand) == 0 {
 				continue
 			}
@@ -173,7 +171,7 @@ func (e *E2EServices) collectLogFiles() {
 		}
 		for _, file := range log.Files {
 			if _, err := os.Stat(file); err != nil {
-				// Expected file not found on this distro.
+				// 该发行版中没有此文件属于预期情况。
 				continue
 			}
 			if err := copyLogFile(file, targetLink); err != nil {
@@ -185,15 +183,14 @@ func (e *E2EServices) collectLogFiles() {
 	}
 }
 
-// isJournaldAvailable returns whether the system executing the tests uses
-// journald.
+// isJournaldAvailable 返回执行测试的系统是否使用 journald。
 func isJournaldAvailable() bool {
 	_, err := exec.LookPath("journalctl")
 	return err == nil
 }
 
 func copyLogFile(src, target string) error {
-	// If not a journald based distro, then just symlink files.
+	// 对于非 journald 系统，直接复制文件。
 	if out, err := exec.Command("cp", src, target).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to copy %q to %q: %v, %v", src, target, out, err)
 	}

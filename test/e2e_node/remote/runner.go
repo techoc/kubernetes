@@ -36,7 +36,7 @@ type Config struct {
 	Hosts              []string
 }
 
-// TestResult contains some information about the test results.
+// TestResult 包含测试结果的相关信息。
 type TestResult struct {
 	Output string
 	Err    error

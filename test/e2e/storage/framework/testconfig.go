@@ -23,48 +23,40 @@ import (
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 )
 
-// PerTestConfig represents parameters that control test execution.
-// One instance gets allocated for each test and is then passed
-// via pointer to functions involved in the test.
+// PerTestConfig 表示控制测试执行的参数。每个测试都会分配一个实例，
+// 并以指针形式传给测试涉及的函数。
 type PerTestConfig struct {
-	// The test driver for the test.
+	// 该测试使用的测试驱动。
 	Driver TestDriver
 
-	// Some short word that gets inserted into dynamically
-	// generated entities (pods, paths) as first part of the name
-	// to make debugging easier. Can be the same for different
-	// tests inside the test suite.
+	// 一个简短字符串，作为动态生成的实体（Pod、路径）名称的第一部分，
+	// 便于调试。同一测试套件中的不同测试可以使用相同值。
 	Prefix string
 
-	// The framework instance allocated for the current test.
+	// 为当前测试分配的 framework 实例。
 	Framework *framework.Framework
 
-	// If non-empty, Pods using a volume will be scheduled
-	// according to the NodeSelection. Otherwise Kubernetes will
-	// pick a node.
+	// 非空时，使用卷的 Pod 将按 NodeSelection 调度；否则由 Kubernetes 选择节点。
 	ClientNodeSelection e2epod.NodeSelection
 
-	// Some test drivers initialize a storage server. This is
-	// the configuration that then has to be used to run tests.
-	// The values above are ignored for such tests.
+	// 某些测试驱动会初始化存储服务器，此时必须用这里的配置运行测试；
+	// 这类测试会忽略上面的取值。
 	ServerConfig *e2evolume.TestConfig
 
-	// Some drivers run in their own namespace
+	// 某些驱动运行在自己的命名空间中
 	DriverNamespace *v1.Namespace
 }
 
-// GetUniqueDriverName returns unique driver name that can be used parallelly in tests
+// GetUniqueDriverName 返回可在测试中并行使用的唯一驱动名
 func (config *PerTestConfig) GetUniqueDriverName() string {
 	return config.Driver.GetDriverInfo().Name + "-" + config.Framework.UniqueName
 }
 
-// ConvertTestConfig returns a framework test config with the
-// parameters specified for the testsuite or (if available) the
-// dynamically created config for the volume server.
+// ConvertTestConfig 返回一个 framework 测试配置，取值来自测试套件指定的参数，
+// 或（若可用）为卷服务器动态创建的配置。
 //
-// This is done because TestConfig is the public API for
-// the testsuites package whereas volume.TestConfig is merely
-// an implementation detail. It contains fields that have no effect.
+// 之所以这样转换，是因为 TestConfig 是 testsuites 包的公共 API，
+// 而 volume.TestConfig 只是实现细节，其中包含不起作用的字段。
 func ConvertTestConfig(in *PerTestConfig) e2evolume.TestConfig {
 	if in.ServerConfig != nil {
 		return *in.ServerConfig

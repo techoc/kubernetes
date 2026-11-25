@@ -68,9 +68,9 @@ var (
 	}
 )
 
-// makePodToVerifyHugePages returns a pod that verifies specified cgroup with hugetlb
+// makePodToVerifyHugePages 返回一个 Pod，用于验证指定 cgroup 的 hugetlb 配置。
 func makePodToVerifyHugePages(baseName string, hugePagesLimit resource.Quantity, hugepagesCgroup string) *v1.Pod {
-	// convert the cgroup name to its literal form
+	// 将 cgroup 名称转换为其字面形式。
 	cgroupName := cm.NewCgroupName(cm.RootCgroupName, defaultNodeAllocatableCgroup, baseName)
 	cgroupFsName := ""
 	if kubeletCfg.CgroupDriver == "systemd" {
@@ -80,7 +80,7 @@ func makePodToVerifyHugePages(baseName string, hugePagesLimit resource.Quantity,
 	}
 
 	hugetlbLimitFile := ""
-	// this command takes the expected value and compares it against the actual value for the pod cgroup hugetlb.2MB.<LIMIT>
+	// 该命令将预期值与 Pod cgroup 中 hugetlb.2MB.<LIMIT> 的实际值进行比较。
 	if IsCgroup2UnifiedMode() {
 		hugetlbLimitFile = fmt.Sprintf("/tmp/%s/%s.max", cgroupFsName, hugepagesCgroup)
 	} else {
@@ -121,10 +121,9 @@ func makePodToVerifyHugePages(baseName string, hugePagesLimit resource.Quantity,
 	return pod
 }
 
-// configureHugePages attempts to allocate hugepages of the specified size
+// configureHugePages 尝试分配指定大小的 hugepage。
 func configureHugePages(hugepagesSize int, hugepagesCount int, numaNodeID *int) error {
-	// Compact memory to make bigger contiguous blocks of memory available
-	// before allocating huge pages.
+	// 在分配 huge page 前整理内存，以获得更大的连续内存块。
 	// https://www.kernel.org/doc/Documentation/sysctl/vm.txt
 	if _, err := os.Stat("/proc/sys/vm/compact_memory"); err == nil {
 		if err := exec.Command("/bin/sh", "-c", "echo 1 > /proc/sys/vm/compact_memory").Run(); err != nil {
@@ -132,25 +131,25 @@ func configureHugePages(hugepagesSize int, hugepagesCount int, numaNodeID *int) 
 		}
 	}
 
-	// e.g. hugepages/hugepages-2048kB/nr_hugepages
+	// 例如 hugepages/hugepages-2048kB/nr_hugepages
 	hugepagesSuffix := fmt.Sprintf("hugepages/hugepages-%dkB/%s", hugepagesSize, hugepagesCapacityFile)
 
-	// e.g. /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+	// 例如 /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
 	hugepagesFile := fmt.Sprintf("/sys/kernel/mm/%s", hugepagesSuffix)
 	if numaNodeID != nil {
-		// e.g. /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
+		// 例如 /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
 		hugepagesFile = fmt.Sprintf("/sys/devices/system/node/node%d/%s", *numaNodeID, hugepagesSuffix)
 	}
 
-	// Reserve number of hugepages
-	// e.g. /bin/sh -c "echo 5 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
+	// 预留指定数量的 hugepage。
+	// 例如 /bin/sh -c "echo 5 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages"
 	command := fmt.Sprintf("echo %d > %s", hugepagesCount, hugepagesFile)
 	if err := exec.Command("/bin/sh", "-c", command).Run(); err != nil {
 		return err
 	}
 
-	// verify that the number of hugepages was updated
-	// e.g. /bin/sh -c "cat /sys/kernel/mm/hugepages/hugepages-2048kB/vm.nr_hugepages"
+	// 验证 hugepage 数量已更新。
+	// 例如 /bin/sh -c "cat /sys/kernel/mm/hugepages/hugepages-2048kB/vm.nr_hugepages"
 	command = fmt.Sprintf("cat %s", hugepagesFile)
 	outData, err := exec.Command("/bin/sh", "-c", command).Output()
 	if err != nil {
@@ -170,7 +169,7 @@ func configureHugePages(hugepagesSize int, hugepagesCount int, numaNodeID *int) 
 	return fmt.Errorf("expected hugepages %v, but found %v", hugepagesCount, numHugePages)
 }
 
-// isHugePageAvailable returns true if hugepages of the specified size is available on the host
+// isHugePageAvailable 在主机支持指定大小的 hugepage 时返回 true。
 func isHugePageAvailable(hugepagesSize int) bool {
 	path := fmt.Sprintf("%s-%dkB/%s", hugepagesDirPrefix, hugepagesSize, hugepagesCapacityFile)
 	if _, err := os.Stat(path); err != nil {
@@ -296,7 +295,7 @@ func runHugePagesTests(f *framework.Framework, ctx context.Context, testpod *v1.
 	}
 }
 
-// Serial because the test updates kubelet configuration.
+// 串行执行，因为测试会更新 kubelet 配置。
 var _ = SIGDescribe("HugePages", framework.WithSerial(), feature.HugePages, func() {
 	f := framework.NewDefaultFramework("hugepages-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -359,7 +358,7 @@ var _ = SIGDescribe("HugePages", framework.WithSerial(), feature.HugePages, func
 			hugepages              map[string]int
 		)
 
-		// setup
+		// 准备环境。
 		ginkgo.JustBeforeEach(func(ctx context.Context) {
 			setHugepages(ctx, hugepages)
 
@@ -374,7 +373,7 @@ var _ = SIGDescribe("HugePages", framework.WithSerial(), feature.HugePages, func
 			testpod = e2epod.NewPodClient(f).CreateSync(ctx, pod)
 		})
 
-		// we should use JustAfterEach because framework will teardown the client under the AfterEach method
+		// 必须使用 JustAfterEach，因为 framework 会在 AfterEach 中销毁 client。
 		ginkgo.JustAfterEach(func(ctx context.Context) {
 			ginkgo.By(fmt.Sprintf("deleting test pod %s", testpod.Name))
 			e2epod.NewPodClient(f).DeleteSync(ctx, testpod.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
@@ -416,7 +415,7 @@ var _ = SIGDescribe("HugePages", framework.WithSerial(), feature.HugePages, func
 					}
 					hugepages = map[string]int{hugepagesResourceName2Mi: 5}
 				})
-				// run tests
+				// 运行测试。
 				ginkgo.It("should set correct hugetlb mount and limit under the container cgroup", func(ctx context.Context) {
 					runHugePagesTests(f, ctx, testpod, expectedHugepageLimits, mounts, hugepages)
 				})
@@ -521,7 +520,7 @@ var _ = SIGDescribe("HugePages", framework.WithSerial(), feature.HugePages, func
 	})
 })
 
-// Serial because the test updates kubelet configuration.
+// 串行执行，因为测试会更新 kubelet 配置。
 var _ = SIGDescribe("Pod Level HugePages Resources", framework.WithSerial(), feature.PodLevelResources, framework.WithFeatureGate(features.PodLevelResources), func() {
 	f := framework.NewDefaultFramework("pod-level-hugepages-resources")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -537,7 +536,7 @@ var _ = SIGDescribe("Pod Level HugePages Resources", framework.WithSerial(), fea
 			hugepages              map[string]int
 		)
 
-		// setup
+		// 准备环境。
 		ginkgo.JustBeforeEach(func(ctx context.Context) {
 			e2eskipper.SkipUnlessFeatureGateEnabled(features.PodLevelResources)
 
@@ -550,7 +549,7 @@ var _ = SIGDescribe("Pod Level HugePages Resources", framework.WithSerial(), fea
 
 			pod := getHugepagesTestPod(f, podResources, containerLimits, mounts, volumes)
 
-			// Capture the initial containers spec resources before deployment
+			// 在部署前记录容器初始的 spec resources。
 			initialContainerResources := make(map[string]*v1.ResourceRequirements)
 			for _, container := range pod.Spec.Containers {
 				initialContainerResources[container.Name] = container.Resources.DeepCopy()
@@ -560,27 +559,26 @@ var _ = SIGDescribe("Pod Level HugePages Resources", framework.WithSerial(), fea
 
 			testpod = e2epod.NewPodClient(f).CreateSync(ctx, pod)
 
-			// Verify that the testpod container spec resources were not modified after being deployed
-			// This has the objective to explicitly show that the the pod level hugepage
-			// resources are not propagated to the containers, only pod level cgroup values
-			// are propagated to the containers when they do not specify hugepage resources.
+			// 验证部署后 testpod 容器的 spec resources 未被修改。
+			// 目的是明确说明 Pod 级别的 hugepage resources 不会传播到容器；
+			// 当容器未指定 hugepage resources 时，只传播 Pod 级别的 cgroup 值。
 			ginkgo.By("Verifying that the testpod spec resources were not modified after being deployed")
 			retrievedPod, err := e2epod.NewPodClient(f).Get(ctx, testpod.Name, metav1.GetOptions{})
 			gomega.Expect(err).To(gomega.Succeed(), "Failed to get the deployed pod")
 
-			// Iterate over the containers and check that the resources are equal to the initial spec before deploying
+			// 遍历容器，检查 resources 是否与部署前的初始 spec 一致。
 			for _, container := range retrievedPod.Spec.Containers {
 				initialResources, ok := initialContainerResources[container.Name]
 				gomega.Expect(ok).To(gomega.BeTrueBecause("Container %s not found in initialContainerResources", container.Name))
 
-				// The container limits must be maintained equally to the initial spec
+				// 容器 limits 必须与初始 spec 保持一致。
 				for resourceName, resourceValue := range initialResources.Limits {
 					if corev1helper.IsHugePageResourceName(resourceName) {
 						gomega.Expect(container.Resources.Limits[resourceName]).To(gomega.Equal(resourceValue), fmt.Sprintf("Pod.Spec.Containers.Resources.Limits.%s should remain unchanged after deployment", resourceName))
 					}
 				}
 
-				// Since container requests were not specified, they are defaulted to the limits
+				// 由于未指定容器 requests，它们会被默认设为 limits
 				for resourceName, resourceValue := range initialResources.Limits {
 					if corev1helper.IsHugePageResourceName(resourceName) {
 						gomega.Expect(container.Resources.Requests[resourceName]).To(gomega.Equal(resourceValue), fmt.Sprintf("Pod.Spec.Containers.Resources.Requests.%s should default to limits after deployment", resourceName))
@@ -591,7 +589,7 @@ var _ = SIGDescribe("Pod Level HugePages Resources", framework.WithSerial(), fea
 			framework.Logf("Test pod name: %s", testpod.Name)
 		})
 
-		// we should use JustAfterEach because framework will teardown the client under the AfterEach method
+		// 必须使用 JustAfterEach，因为 framework 会在 AfterEach 中销毁 client。
 		ginkgo.JustAfterEach(func(ctx context.Context) {
 			ginkgo.By(fmt.Sprintf("deleting test pod %s", testpod.Name))
 			e2epod.NewPodClient(f).DeleteSync(ctx, testpod.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)

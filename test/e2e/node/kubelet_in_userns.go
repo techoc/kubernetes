@@ -40,7 +40,7 @@ var _ = SIGDescribe("Kubelet running in user namespace", "[LinuxOnly]", feature.
 		/*
 			Release: v1.37
 			Testname: Kubelet, running in user namespace
-			Description: When the kubelet is running in a user namespace, the Node's status.nodeInfo.runningInUserNamespace MUST be true.
+			Description: 当 kubelet 运行在 user namespace 中时，Node 的 status.nodeInfo.runningInUserNamespace MUST 为 true。
 		*/
 		framework.It("should report RunningInUserNamespace", func(ctx context.Context) {
 			hostExec := utils.NewHostExec(f)
@@ -57,7 +57,7 @@ var _ = SIGDescribe("Kubelet running in user namespace", "[LinuxOnly]", feature.
 			kubeletUserNS = strings.TrimSpace(kubeletUserNS)
 			gomega.Expect(kubeletUserNS).To(gomega.MatchRegexp(`^user:\[\d+\]$`), "expected user namespace link to match format")
 
-			// The magic number is defined as USER_NS_INIT_INO in kernel.
+			// 内核中将该 magic number 定义为 USER_NS_INIT_INO。
 			// https://github.com/torvalds/linux/blob/v6.17/include/uapi/linux/nsfs.h#L48
 			const initUserNSMagic = "user:[4026531837]"
 			kubeletRunningInUserNS := kubeletUserNS != initUserNSMagic

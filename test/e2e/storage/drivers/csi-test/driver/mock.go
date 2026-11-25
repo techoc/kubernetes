@@ -34,7 +34,7 @@ type MockCSIDriver struct {
 	interceptor grpc.UnaryServerInterceptor
 }
 
-// StartOnAddress starts a new gRPC server listening on given address.
+// StartOnAddress 启动一个新的 gRPC server，监听指定地址。
 func (m *MockCSIDriver) StartOnAddress(network, address string) error {
 	l, err := net.Listen(network, address)
 	if err != nil {
@@ -49,9 +49,9 @@ func (m *MockCSIDriver) StartOnAddress(network, address string) error {
 	return nil
 }
 
-// Start starts a new gRPC server listening on a random TCP loopback port.
+// Start 启动一个新的 gRPC server，监听一个随机的 TCP 回环端口。
 func (m *MockCSIDriver) Start() error {
-	// Listen on a port assigned by the net package
+	// 监听由 net 包分配的端口
 	return m.StartOnAddress("tcp", "127.0.0.1:0")
 }
 

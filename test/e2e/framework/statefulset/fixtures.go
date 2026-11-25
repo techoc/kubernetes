@@ -36,9 +36,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// NewStatefulSet creates a new Webserver StatefulSet for testing. The StatefulSet is named name, is in namespace ns,
-// statefulPodsMounts are the mounts that will be backed by PVs. podsMounts are the mounts that are mounted directly
-// to the Pod. labels are the labels that will be usd for the StatefulSet selector.
+// NewStatefulSet 创建一个用于测试的 Webserver StatefulSet，名称为 name，位于命名空间 ns。
+// statefulPodsMounts 是由 PV 支撑的挂载点，podsMounts 是直接挂载到 Pod 的挂载点，
+// labels 是 StatefulSet selector 使用的标签。
 func NewStatefulSet(name, ns, governingSvcName string, replicas int32, statefulPodMounts []v1.VolumeMount, podMounts []v1.VolumeMount, labels map[string]string) *appsv1.StatefulSet {
 	mounts := append(statefulPodMounts, podMounts...)
 	claims := []v1.PersistentVolumeClaim{}
@@ -96,7 +96,7 @@ func NewStatefulSet(name, ns, governingSvcName string, replicas int32, statefulP
 	}
 }
 
-// NewStatefulSetPVC returns a PersistentVolumeClaim named name, for testing StatefulSets.
+// NewStatefulSetPVC 返回名为 name 的 PVC，供 StatefulSet 测试使用。
 func NewStatefulSetPVC(name string) v1.PersistentVolumeClaim {
 	return v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -143,19 +143,16 @@ func (sp statefulPodsByOrdinal) Less(i, j int) bool {
 	return getStatefulPodOrdinal(&sp[i]) < getStatefulPodOrdinal(&sp[j])
 }
 
-// PauseNewPods adds an always-failing ReadinessProbe to the StatefulSet PodTemplate.
-// This causes all newly-created Pods to stay Unready until they are manually resumed
-// with ResumeNextPod().
-// Note that this cannot be used together with SetHTTPProbe().
+// PauseNewPods 向 StatefulSet PodTemplate 添加一个必然失败的 ReadinessProbe，
+// 使所有新建 Pod 保持未 Ready，直到通过 ResumeNextPod() 手动恢复。
+// 注意它不能与 SetHTTPProbe() 同时使用。
 func PauseNewPods(ss *appsv1.StatefulSet) {
 	ss.Spec.Template.Spec.Containers[0].ReadinessProbe = pauseProbe
 }
 
-// ResumeNextPod allows the next Pod in the StatefulSet to continue by removing the ReadinessProbe
-// added by PauseNewPods(), if it's still there.
-// It fails the test if it finds any pods that are not in phase Running,
-// or if it finds more than one paused Pod existing at the same time.
-// This is a no-op if there are no paused pods.
+// ResumeNextPod 移除 PauseNewPods() 添加的 ReadinessProbe（若仍存在），让 StatefulSet 中的下一个 Pod 继续。
+// 若发现非 Running 的 Pod，或同时存在多个暂停的 Pod，则测试失败。
+// 没有暂停的 Pod 时该操作为空操作。
 func ResumeNextPod(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet) {
 	podList, err := GetPodList(ctx, c, ss)
 	framework.ExpectNoError(err)
@@ -178,7 +175,7 @@ func ResumeNextPod(ctx context.Context, c clientset.Interface, ss *appsv1.Statef
 	}
 }
 
-// SortStatefulPods sorts pods by their ordinals
+// SortStatefulPods 按序号对 Pod 排序
 func SortStatefulPods(pods *v1.PodList) {
 	sort.Sort(statefulPodsByOrdinal(pods.Items))
 }

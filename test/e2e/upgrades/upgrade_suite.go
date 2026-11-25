@@ -74,7 +74,7 @@ func CreateUpgradeFrameworks(tests []Test) map[string]*framework.Framework {
 	return testFrameworks
 }
 
-// RunUpgradeSuite runs the actual upgrade tests.
+// RunUpgradeSuite 运行实际的升级测试。
 func RunUpgradeSuite(
 	ctx context.Context,
 	upgCtx *UpgradeContext,

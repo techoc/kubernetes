@@ -34,14 +34,14 @@ const (
 	waitTimeout  = 30 * time.Second
 )
 
-// prettyPrint a networkPolicy
+// prettyPrint 格式化输出一个 NetworkPolicy
 func prettyPrint(policy *networkingv1.NetworkPolicy) string {
 	raw, err := yaml.Marshal(policy)
 	framework.ExpectNoError(err, "marshal network policy to yaml")
 	return string(raw)
 }
 
-// CreatePolicy creates a policy in the given namespace
+// CreatePolicy 在指定命名空间中创建策略
 func CreatePolicy(ctx context.Context, k8s *kubeManager, policy *networkingv1.NetworkPolicy, namespace string) {
 	if isVerbose {
 		framework.Logf("****************************************************************")
@@ -53,7 +53,7 @@ func CreatePolicy(ctx context.Context, k8s *kubeManager, policy *networkingv1.Ne
 	framework.ExpectNoError(err, "Unable to create netpol %s/%s", namespace, policy.Name)
 }
 
-// UpdatePolicy updates a networkpolicy
+// UpdatePolicy 更新 NetworkPolicy
 func UpdatePolicy(ctx context.Context, k8s *kubeManager, policy *networkingv1.NetworkPolicy, namespace string) {
 	if isVerbose {
 		framework.Logf("****************************************************************")
@@ -65,14 +65,14 @@ func UpdatePolicy(ctx context.Context, k8s *kubeManager, policy *networkingv1.Ne
 	framework.ExpectNoError(err, "Unable to update netpol %s/%s", namespace, policy.Name)
 }
 
-// waitForHTTPServers waits for all webservers to be up, on all protocols sent in the input,  and then validates them using the same probe logic as the rest of the suite.
+// waitForHTTPServers 等待所有协议上的 webserver 启动，然后用与套件其他部分相同的探测逻辑进行校验。
 func waitForHTTPServers(k *kubeManager, model *Model) error {
 	const maxTries = 10
 	framework.Logf("waiting for HTTP servers (ports 80 and/or 81) to become ready")
 
 	testCases := map[string]*TestCase{}
 	for _, port := range model.Ports {
-		// Protocols is provided as input so that we can skip udp polling for windows
+		// 通过入参指定协议，以便在 Windows 上跳过 UDP 轮询
 		for _, protocol := range model.Protocols {
 			fromPort := 81
 			desc := fmt.Sprintf("%d->%d,%s", fromPort, port, protocol)
@@ -107,23 +107,23 @@ func waitForHTTPServers(k *kubeManager, model *Model) error {
 	return fmt.Errorf("after %d tries, %d HTTP servers are not ready", maxTries, len(notReady))
 }
 
-// ValidateOrFail validates connectivity
+// ValidateOrFail 校验连通性
 func ValidateOrFail(k8s *kubeManager, testCase *TestCase) {
 	ginkgo.By("Validating reachability matrix...")
 
-	// 1st try, exponential backoff (starting at 1s) will happen for every probe to accommodate infra that might be
-	// network-congested, as is common in some GH actions or other heavily oversubscribed CI systems.
+	// 第一次尝试时，每次探测都会采用指数退避（从 1s 起），以适应网络拥塞的基础设施，
+	// 这在 GH actions 或其他过度订阅的 CI 系统中很常见。
 	ginkgo.By("Validating reachability matrix... (FIRST TRY)")
 	ProbePodToPodConnectivity(k8s, k8s.AllPods(), k8s.DNSDomain(), testCase)
 
-	// the aforementioned individual probe's exponential retries (introduced in january 2023) might be able to obviate
-	//  this step, let's investigate removing this massive secondary polling of the matrix some day.
+	// 上述单次探测的指数重试（2023 年 1 月引入）或许能取代这一步，
+	// 择机研究移除对矩阵的大规模二次轮询。
 	if _, wrong, _, _ := testCase.Reachability.Summary(ignoreLoopback); wrong != 0 {
 		framework.Logf("failed first probe %d wrong results ... retrying (SECOND TRY)", wrong)
 		ProbePodToPodConnectivity(k8s, k8s.AllPods(), k8s.DNSDomain(), testCase)
 	}
 
-	// at this point we know if we passed or failed, print final matrix and pass/fail the test.
+	// 此时已知通过或失败，打印最终矩阵并据此判定测试结果。
 	if _, wrong, _, _ := testCase.Reachability.Summary(ignoreLoopback); wrong != 0 {
 		testCase.Reachability.PrintSummary(true, true, true)
 		framework.Failf("Had %d wrong results in reachability matrix", wrong)
@@ -134,7 +134,7 @@ func ValidateOrFail(k8s *kubeManager, testCase *TestCase) {
 	framework.Logf("VALIDATION SUCCESSFUL")
 }
 
-// AddNamespaceLabels adds a new label to a namespace
+// AddNamespaceLabels 为命名空间添加新标签
 func AddNamespaceLabel(ctx context.Context, k8s *kubeManager, name string, key string, val string) {
 	ns, err := k8s.getNamespace(ctx, name)
 	framework.ExpectNoError(err, "Unable to get namespace %s", name)
@@ -143,12 +143,12 @@ func AddNamespaceLabel(ctx context.Context, k8s *kubeManager, name string, key s
 	framework.ExpectNoError(err, "Unable to update namespace %s", name)
 }
 
-// DeleteNamespaceLabel deletes a label from a namespace (if present)
+// DeleteNamespaceLabel 删除命名空间上的标签（若存在）
 func DeleteNamespaceLabel(ctx context.Context, k8s *kubeManager, name string, key string) {
 	ns, err := k8s.getNamespace(ctx, name)
 	framework.ExpectNoError(err, "Unable to get namespace %s", name)
 	if _, ok := ns.Labels[key]; !ok {
-		// nothing to do if the label is not present
+		// 标签不存在时无需处理
 		return
 	}
 	delete(ns.Labels, key)
@@ -156,7 +156,7 @@ func DeleteNamespaceLabel(ctx context.Context, k8s *kubeManager, name string, ke
 	framework.ExpectNoError(err, "Unable to update namespace %s", name)
 }
 
-// AddPodLabels adds new labels to a running pod
+// AddPodLabels 为运行中的 Pod 添加新标签
 func AddPodLabels(ctx context.Context, k8s *kubeManager, namespace string, name string, newPodLabels map[string]string) {
 	kubePod, err := k8s.clientSet.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	framework.ExpectNoError(err, "Unable to get pod %s/%s", namespace, name)
@@ -184,7 +184,7 @@ func AddPodLabels(ctx context.Context, k8s *kubeManager, namespace string, name 
 	framework.ExpectNoError(err, "Unable to wait for pod %s/%s to update labels", namespace, name)
 }
 
-// ResetPodLabels resets the labels for a deployment's template
+// ResetPodLabels 重置 Deployment 模板的标签
 func ResetPodLabels(ctx context.Context, k8s *kubeManager, namespace string, name string) {
 	kubePod, err := k8s.clientSet.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	framework.ExpectNoError(err, "Unable to get pod %s/%s", namespace, name)

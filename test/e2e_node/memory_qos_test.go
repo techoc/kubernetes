@@ -48,7 +48,7 @@ const (
 	cgroupMemoryEvents = "memory.events"
 )
 
-// memqosReadCgroupFile reads a cgroup file and returns its content as a string.
+// memqosReadCgroupFile 读取 cgroup 文件并以字符串返回其内容。
 func memqosReadCgroupFile(cgroupPath, fileName string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(cgroupPath, fileName))
 	if err != nil {
@@ -57,8 +57,8 @@ func memqosReadCgroupFile(cgroupPath, fileName string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-// memqosReadCgroupInt64 reads a cgroup file and returns its content as int64.
-// Returns -1 for "max".
+// memqosReadCgroupInt64 读取 cgroup 文件并以 int64 返回其内容。
+// 内容为 "max" 时返回 -1。
 func memqosReadCgroupInt64(cgroupPath, fileName string) (int64, error) {
 	val, err := memqosReadCgroupFile(cgroupPath, fileName)
 	if err != nil {
@@ -70,7 +70,7 @@ func memqosReadCgroupInt64(cgroupPath, fileName string) (int64, error) {
 	return strconv.ParseInt(val, 10, 64)
 }
 
-// memqosReadMemoryEvents reads memory.events and returns a map of counter names to values.
+// memqosReadMemoryEvents 读取 memory.events，返回计数器名称到数值的映射。
 func memqosReadMemoryEvents(cgroupPath string) (map[string]int64, error) {
 	data, err := memqosReadCgroupFile(cgroupPath, cgroupMemoryEvents)
 	if err != nil {
@@ -89,7 +89,7 @@ func memqosReadMemoryEvents(cgroupPath string) (map[string]int64, error) {
 	return events, nil
 }
 
-// memqosGetPodCgroupPath returns the cgroup path for a pod.
+// memqosGetPodCgroupPath 返回 Pod 的 cgroup 路径。
 func memqosGetPodCgroupPath(pod *v1.Pod, cgroupDriver string) string {
 	uid := string(pod.UID)
 	qosClass := pod.Status.QOSClass
@@ -109,7 +109,7 @@ func memqosGetPodCgroupPath(pod *v1.Pod, cgroupDriver string) string {
 		}
 	}
 
-	// cgroupfs driver
+	// cgroupfs 驱动
 	switch qosClass {
 	case v1.PodQOSGuaranteed:
 		return filepath.Join(cgroupRoot, "kubepods", fmt.Sprintf("pod%s", uid))
@@ -121,9 +121,9 @@ func memqosGetPodCgroupPath(pod *v1.Pod, cgroupDriver string) string {
 	return ""
 }
 
-// memqosGetContainerCgroupPath returns the cgroup path for a container within a pod.
+// memqosGetContainerCgroupPath 返回 Pod 内某个容器的 cgroup 路径。
 func memqosGetContainerCgroupPath(podCgroupPath, containerID, cgroupDriver string) string {
-	// containerID format: "containerd://abc123" or "cri-o://abc123"
+	// containerID 格式为 "containerd://abc123" 或 "cri-o://abc123"
 	parts := strings.SplitN(containerID, "://", 2)
 	if len(parts) != 2 {
 		return ""
@@ -140,18 +140,18 @@ func memqosGetContainerCgroupPath(podCgroupPath, containerID, cgroupDriver strin
 		}
 	}
 
-	// cgroupfs driver
+	// cgroupfs 驱动
 	return filepath.Join(podCgroupPath, id)
 }
 
-// memqosExpectedMemoryHigh calculates the expected memory.high value.
+// memqosExpectedMemoryHigh 计算预期的 memory.high 值。
 func memqosExpectedMemoryHigh(requestBytes, limitBytes int64, throttlingFactor float64) int64 {
 	pageSize := int64(os.Getpagesize())
 	raw := float64(requestBytes) + throttlingFactor*float64(limitBytes-requestBytes)
 	return int64(math.Floor(raw/float64(pageSize))) * pageSize
 }
 
-// memqosMakePod creates a test pod with specified resources.
+// memqosMakePod 创建带有指定资源的测试 Pod。
 func memqosMakePod(name, namespace string, requests, limits v1.ResourceList) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -196,7 +196,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 		cgroupDriver = oldCfg.CgroupDriver
 	})
 
-	// configureMemoryQoS restarts kubelet with MemoryQoS enabled and specified settings.
+	// configureMemoryQoS 以启用 MemoryQoS 和指定配置的方式重启 kubelet。
 	configureMemoryQoS := func(ctx context.Context, throttlingFactor float64) {
 		newCfg := oldCfg.DeepCopy()
 		if newCfg.FeatureGates == nil {
@@ -212,7 +212,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 		waitForKubeletToStart(ctx, f)
 	}
 
-	// configureMemoryQoSWithPolicy restarts kubelet with MemoryQoS and a specific memoryReservationPolicy.
+	// configureMemoryQoSWithPolicy 以启用 MemoryQoS 和指定 memoryReservationPolicy 的方式重启 kubelet。
 	configureMemoryQoSWithPolicy := func(ctx context.Context, throttlingFactor float64, policy kubeletconfig.MemoryReservationPolicy) {
 		newCfg := oldCfg.DeepCopy()
 		if newCfg.FeatureGates == nil {
@@ -521,7 +521,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 				expected := memqosExpectedMemoryHigh(requestsMem.Value(), limitsMem.Value(), 1.0)
 				framework.Logf("Container %s memory.high with factor=1.0: got=%d, expected=%d (limit=%d)",
 					cs.Name, containerMemHigh, expected, limitsMem.Value())
-				// With factor=1.0: high = floor[(req + 1.0*(limit-req))/pageSize]*pageSize = limit (page-aligned)
+				// factor=1.0 时：high = floor[(req + 1.0*(limit-req))/pageSize]*pageSize = limit（按页对齐）
 				gomega.Expect(containerMemHigh).To(gomega.Equal(expected),
 					"memory.high should equal limit when factor=1.0")
 			}
@@ -548,7 +548,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 				framework.ExpectNoError(err)
 
 				framework.Logf("Container %s memory.high (no limit): got=%d", cs.Name, containerMemHigh)
-				// memory.high should be set using node allocatable instead of limit
+				// memory.high 应基于节点可分配资源而非 limit 设置
 				gomega.Expect(containerMemHigh).To(gomega.BeNumerically(">", requestsMem.Value()),
 					"memory.high without limit should use node allocatable and be > requests")
 				gomega.Expect(containerMemHigh).NotTo(gomega.Equal(int64(-1)),
@@ -614,7 +614,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 				events, err := memqosReadMemoryEvents(containerCgroupPath)
 				framework.ExpectNoError(err, "reading memory.events")
 
-				// Verify expected counters exist
+				// 验证预期的计数器存在
 				expectedCounters := []string{"low", "high", "max", "oom", "oom_kill"}
 				for _, counter := range expectedCounters {
 					_, exists := events[counter]
@@ -623,7 +623,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 					gomega.Expect(exists).To(gomega.BeTrueBecause("memory.events should contain %q counter", counter))
 				}
 
-				// Initially all counters should be 0
+				// 初始时所有计数器都应为 0
 				gomega.Expect(events["high"]).To(gomega.Equal(int64(0)),
 					"high counter should be 0 initially")
 			}
@@ -658,7 +658,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 			newCfg.MemoryReservationPolicy = kubeletconfig.NoneMemoryReservationPolicy
 			updateKubeletConfig(ctx, f, newCfg, true)
 
-			// Stale QoS-class cgroup memory.low is cleared at kubelet startup.
+			// kubelet 启动时会清除过时的 QoS 类 cgroup memory.low。
 			var burstableCgroupPath string
 			if cgroupDriver == "systemd" {
 				burstableCgroupPath = filepath.Join(cgroupRoot, "kubepods.slice", "kubepods-burstable.slice")
@@ -671,8 +671,8 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 			}).WithTimeout(2*time.Minute).WithPolling(5*time.Second).Should(gomega.Equal(int64(0)),
 				"burstable QoS memory.low should reset to 0 when MemoryQoS is disabled")
 
-			// Pod and container memory.low values persist but have no effect
-			// since cgroup v2 memory protection is hierarchical (parent=0 wins).
+			// Pod 和容器级别的 memory.low 会保留但不生效，
+			// 因为 cgroup v2 的内存保护是层级式的（父级为 0 时优先）。
 		})
 
 		ginkgo.It("should clear stale memory.high when MemoryQoS is disabled and container is resized", func(ctx context.Context) {
@@ -914,7 +914,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 					framework.ExpectNoError(err)
 
 					if reqMem.Value() == limMem.Value() {
-						// Guaranteed pod - memory.high should be max
+						// Guaranteed Pod 的 memory.high 应为 max
 						framework.Logf("[%s] Guaranteed: memory.high=%d (expect max), memory.low=%d",
 							tc.name, containerMemHigh, containerMemMin)
 						gomega.Expect(containerMemHigh).To(gomega.Equal(int64(-1)))
@@ -926,7 +926,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 					}
 				}
 
-				// Cleanup
+				// 清理
 				e2epod.NewPodClient(f).DeleteSync(ctx, pod.Name, metav1.DeleteOptions{}, 2*time.Minute)
 			}
 		})
@@ -1033,7 +1033,7 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 			ginkgo.By("Switching memoryReservationPolicy to None")
 			configureMemoryQoSWithPolicy(ctx, 0.9, kubeletconfig.NoneMemoryReservationPolicy)
 
-			// Wait for periodic QoS cgroup update (periodicQOSCgroupUpdateInterval = 1 minute)
+			// 等待周期性 QoS cgroup 更新（periodicQOSCgroupUpdateInterval = 1 分钟）
 			gomega.Eventually(ctx, func() int64 {
 				val, _ := memqosReadCgroupInt64(burstableCgroupPath, cgroupMemoryLow)
 				return val
@@ -1062,8 +1062,8 @@ var _ = SIGDescribe("MemoryQoS", framework.WithSerial(), func() {
 						{
 							Name:  "mem-eater",
 							Image: "registry.k8s.io/e2e-test-images/busybox:1.36.1-1",
-							// memory.high = 64 + 0.9*(256-64) = 236.8Mi, memory.max = 256Mi
-							// dd allocates 240Mi which exceeds memory.high but leaves ~16Mi headroom to memory.max.
+							// memory.high = 64 + 0.9*(256-64) = 236.8Mi，memory.max = 256Mi
+							// dd 分配 240Mi，超过 memory.high，但距离 memory.max 仍有约 16Mi 余量。
 							Command: []string{"sh", "-c", "while true; do dd if=/dev/zero of=/dev/null bs=240M 2>/dev/null; done"},
 							Resources: v1.ResourceRequirements{
 								Requests: v1.ResourceList{v1.ResourceMemory: requestsMem},

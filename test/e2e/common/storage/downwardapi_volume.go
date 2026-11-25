@@ -38,7 +38,7 @@ import (
 )
 
 var _ = SIGDescribe("Downward API volume", func() {
-	// How long to wait for a log pod to be displayed
+	// 等待日志 Pod 输出内容的时长
 	const podLogTimeout = 3 * time.Minute
 	f := framework.NewDefaultFramework("downward-api")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
@@ -50,7 +50,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, pod name
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains a item for the Pod name. The container runtime MUST be able to access Pod name from the specified path on the mounted volume.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，其中 DownwardAPIVolumeFiles 包含一个 Pod 名称条目。容器运行时 MUST 能从挂载卷的指定路径读取 Pod 名称。
 	*/
 	framework.ConformanceIt("should provide podname only", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -64,8 +64,8 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, volume mode 0400
-		Description: A Pod is configured with DownwardAPIVolumeSource with the volumesource mode set to -r-------- and DownwardAPIVolumeFiles contains a item for the Pod name. The container runtime MUST be able to access Pod name from the specified path on the mounted volume.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，volumesource 的 mode 设为 -r--------，DownwardAPIVolumeFiles 包含一个 Pod 名称条目。容器运行时 MUST 能从挂载卷的指定路径读取 Pod 名称。
+		由于 Windows 不支持设置具体的文件权限，此测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should set DefaultMode on files [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -90,8 +90,8 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, file mode 0400
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains a item for the Pod name with the file mode set to -r--------. The container runtime MUST be able to access Pod name from the specified path on the mounted volume.
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 中包含一个 Pod 名称条目，其文件 mode 设为 -r--------。容器运行时 MUST 能从挂载卷的指定路径读取 Pod 名称。
+		由于 Windows 不支持设置具体的文件权限，此测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should set mode on item file [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -114,7 +114,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	})
 
 	f.It("should provide podname as non-root with fsgroup [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options.
+		// Windows 不支持 RunAsUser / FSGroup 等 SecurityContext 选项。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		podName := "metadata-volume-" + string(uuid.NewUUID())
 		gid := int64(1234)
@@ -129,11 +129,11 @@ var _ = SIGDescribe("Downward API volume", func() {
 	})
 
 	f.It("should provide podname as non-root with fsgroup and defaultMode [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options, and it does not support setting file permissions.
+		// Windows 不支持 RunAsUser / FSGroup 等 SecurityContext 选项，也不支持设置文件权限。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		podName := "metadata-volume-" + string(uuid.NewUUID())
 		gid := int64(1234)
-		mode := int32(0440) /* setting fsGroup sets mode to at least 440 */
+		mode := int32(0440) /* 设置 fsGroup 会将 mode 提升至至少 440 */
 		pod := downwardAPIVolumePodForModeTest(podName, "/etc/podinfo/podname", &mode, nil)
 		pod.Spec.SecurityContext = &v1.PodSecurityContext{
 			FSGroup: &gid,
@@ -147,7 +147,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, update label
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains list of items for each of the Pod labels. The container runtime MUST be able to access Pod labels from the specified path on the mounted volume. Update the labels by adding a new label to the running Pod. The new label MUST be available from the mounted volume.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 包含 Pod 的每个 label 对应的条目。容器运行时 MUST 能从挂载卷的指定路径读取 Pod labels。向运行中的 Pod 添加新 label 进行更新后，新 label MUST 能从挂载卷中读取到。
 	*/
 	framework.ConformanceIt("should update labels on modification", f.WithNodeConformance(), func(ctx context.Context) {
 		labels := map[string]string{}
@@ -165,7 +165,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 		},
 			podLogTimeout, framework.Poll).Should(gomega.ContainSubstring("key1=\"value1\"\n"))
 
-		//modify labels
+		// 修改 labels
 		podClient.Update(ctx, podName, func(pod *v1.Pod) {
 			pod.Labels["key3"] = "value3"
 		})
@@ -179,7 +179,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, update annotations
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains list of items for each of the Pod annotations. The container runtime MUST be able to access Pod annotations from the specified path on the mounted volume. Update the annotations by adding a new annotation to the running Pod. The new annotation MUST be available from the mounted volume.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 包含 Pod 的每个 annotation 对应的条目。容器运行时 MUST 能从挂载卷的指定路径读取 Pod annotations。向运行中的 Pod 添加新 annotation 进行更新后，新 annotation MUST 能从挂载卷中读取到。
 	*/
 	framework.ConformanceIt("should update annotations on modification", f.WithNodeConformance(), func(ctx context.Context) {
 		annotations := map[string]string{}
@@ -196,7 +196,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 		},
 			podLogTimeout, framework.Poll).Should(gomega.ContainSubstring("builder=\"bar\"\n"))
 
-		//modify annotations
+		// 修改 annotations
 		podClient.Update(ctx, podName, func(pod *v1.Pod) {
 			pod.Annotations["builder"] = "foo"
 		})
@@ -210,7 +210,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, CPU limits
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains a item for the CPU limits. The container runtime MUST be able to access CPU limits from the specified path on the mounted volume.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 包含一个 CPU limits 条目。容器运行时 MUST 能从挂载卷的指定路径读取 CPU limits。
 	*/
 	framework.ConformanceIt("should provide container's cpu limit", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -224,7 +224,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, memory limits
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains a item for the memory limits. The container runtime MUST be able to access memory limits from the specified path on the mounted volume.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 包含一个 memory limits 条目。容器运行时 MUST 能从挂载卷的指定路径读取 memory limits。
 	*/
 	framework.ConformanceIt("should provide container's memory limit", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -238,7 +238,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, CPU request
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains a item for the CPU request. The container runtime MUST be able to access CPU request from the specified path on the mounted volume.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 包含一个 CPU request 条目。容器运行时 MUST 能从挂载卷的指定路径读取 CPU request。
 	*/
 	framework.ConformanceIt("should provide container's cpu request", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -252,7 +252,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, memory request
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains a item for the memory request. The container runtime MUST be able to access memory request from the specified path on the mounted volume.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 包含一个 memory request 条目。容器运行时 MUST 能从挂载卷的指定路径读取 memory request。
 	*/
 	framework.ConformanceIt("should provide container's memory request", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -266,7 +266,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, CPU limit, default node allocatable
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains a item for the CPU limits. CPU limits is not specified for the container. The container runtime MUST be able to access CPU limits from the specified path on the mounted volume and the value MUST be default node allocatable.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 包含一个 CPU limits 条目，但未为容器指定 CPU limits。容器运行时 MUST 能从挂载卷的指定路径读取 CPU limits，且值 MUST 为默认的 node allocatable。
 	*/
 	framework.ConformanceIt("should provide node allocatable (cpu) as default cpu limit if the limit is not set", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -278,7 +278,7 @@ var _ = SIGDescribe("Downward API volume", func() {
 	/*
 		Release: v1.9
 		Testname: DownwardAPI volume, memory limit, default node allocatable
-		Description: A Pod is configured with DownwardAPIVolumeSource and DownwardAPIVolumeFiles contains a item for the memory limits. memory limits is not specified for the container. The container runtime MUST be able to access memory limits from the specified path on the mounted volume and the value MUST be default node allocatable.
+		Description: 为一个 Pod 配置 DownwardAPIVolumeSource，DownwardAPIVolumeFiles 包含一个 memory limits 条目，但未为容器指定 memory limits。容器运行时 MUST 能从挂载卷的指定路径读取 memory limits，且值 MUST 为默认的 node allocatable。
 	*/
 	framework.ConformanceIt("should provide node allocatable (memory) as default memory limit if the limit is not set", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downwardapi-volume-" + string(uuid.NewUUID())
@@ -528,4 +528,4 @@ func applyLabelsAndAnnotationsToDownwardAPIPod(labels, annotations map[string]st
 	}
 }
 
-// TODO: add test-webserver example as pointed out in https://github.com/kubernetes/kubernetes/pull/5093#discussion-diff-37606771
+// TODO: 按 https://github.com/kubernetes/kubernetes/pull/5093#discussion-diff-37606771 中的建议补充 test-webserver 示例

@@ -29,10 +29,9 @@ import (
 	e2estatefulset "k8s.io/kubernetes/test/e2e/framework/statefulset"
 )
 
-// waitForPartitionedRollingUpdate waits for all Pods in set to exist and have the correct revision. set must have
-// a RollingUpdateStatefulSetStrategyType with a non-nil RollingUpdate and Partition. All Pods with ordinals less
-// than or equal to the Partition are expected to be at set's current revision. All other Pods are expected to be
-// at its update revision.
+// waitForPartitionedRollingUpdate 等待 set 中所有 Pod 存在且版本正确。set 必须使用
+// RollingUpdateStatefulSetStrategyType，且 RollingUpdate 和 Partition 非 nil。序号小于等于 Partition 的 Pod
+// 应处于当前版本，其余 Pod 应处于更新版本。
 func waitForPartitionedRollingUpdate(ctx context.Context, c clientset.Interface, set *appsv1.StatefulSet) (*appsv1.StatefulSet, *v1.PodList) {
 	var pods *v1.PodList
 	if set.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType {
@@ -85,8 +84,8 @@ func waitForPartitionedRollingUpdate(ctx context.Context, c clientset.Interface,
 	return set, pods
 }
 
-// waitForStatus waits for the StatefulSetStatus's ObservedGeneration to be greater than or equal to set's Generation.
-// The returned StatefulSet contains such a StatefulSetStatus
+// waitForStatus 等待 StatefulSetStatus 的 ObservedGeneration 不小于 set 的 Generation。
+// 返回的 StatefulSet 包含满足该条件的 StatefulSetStatus
 func waitForStatus(ctx context.Context, c clientset.Interface, set *appsv1.StatefulSet) *appsv1.StatefulSet {
 	e2estatefulset.WaitForState(ctx, c, set, e2estatefulset.StatefulSetPoll, func(set2 *appsv1.StatefulSet, pods *v1.PodList) (bool, error) {
 		if set2.Status.ObservedGeneration >= set.Generation {
@@ -98,7 +97,7 @@ func waitForStatus(ctx context.Context, c clientset.Interface, set *appsv1.State
 	return set
 }
 
-// waitForPodNames waits for the StatefulSet's pods to match expected names.
+// waitForPodNames 等待 StatefulSet 的 Pod 名称与预期一致。
 func waitForPodNames(ctx context.Context, c clientset.Interface, set *appsv1.StatefulSet, expectedPodNames []string) {
 	e2estatefulset.WaitForState(ctx, c, set, e2estatefulset.StatefulSetPoll,
 		func(intSet *appsv1.StatefulSet, pods *v1.PodList) (bool, error) {
@@ -110,8 +109,8 @@ func waitForPodNames(ctx context.Context, c clientset.Interface, set *appsv1.Sta
 		})
 }
 
-// waitForStatus waits for the StatefulSetStatus's CurrentReplicas to be equal to expectedReplicas
-// The returned StatefulSet contains such a StatefulSetStatus
+// waitForStatus 等待 StatefulSetStatus 的 CurrentReplicas 等于 expectedReplicas。
+// 返回的 StatefulSet 包含满足该条件的 StatefulSetStatus
 func waitForStatusCurrentReplicas(ctx context.Context, c clientset.Interface, set *appsv1.StatefulSet, expectedReplicas int32) *appsv1.StatefulSet {
 	e2estatefulset.WaitForState(ctx, c, set, e2estatefulset.StatefulSetPoll, func(set2 *appsv1.StatefulSet, pods *v1.PodList) (bool, error) {
 		if set2.Status.ObservedGeneration >= set.Generation && set2.Status.CurrentReplicas == expectedReplicas {
@@ -123,7 +122,7 @@ func waitForStatusCurrentReplicas(ctx context.Context, c clientset.Interface, se
 	return set
 }
 
-// waitForPodNotReady waits for the Pod named podName in set to exist and to not have a Ready condition.
+// waitForPodNotReady 等待 set 中名为 podName 的 Pod 存在且没有 Ready 条件。
 func waitForPodNotReady(ctx context.Context, c clientset.Interface, set *appsv1.StatefulSet, podName string) (*appsv1.StatefulSet, *v1.PodList) {
 	var pods *v1.PodList
 	e2estatefulset.WaitForState(ctx, c, set, e2estatefulset.StatefulSetPoll, func(set2 *appsv1.StatefulSet, pods2 *v1.PodList) (bool, error) {
@@ -139,8 +138,8 @@ func waitForPodNotReady(ctx context.Context, c clientset.Interface, set *appsv1.
 	return set, pods
 }
 
-// waitForRollingUpdate waits for all Pods in set to exist and have the correct revision and for the RollingUpdate to
-// complete. set must have a RollingUpdateStatefulSetStrategyType.
+// waitForRollingUpdate 等待 set 中所有 Pod 存在且版本正确，并等待 RollingUpdate 完成。
+// set 必须使用 RollingUpdateStatefulSetStrategyType。
 func waitForRollingUpdate(ctx context.Context, c clientset.Interface, set *appsv1.StatefulSet) (*appsv1.StatefulSet, *v1.PodList) {
 	var pods *v1.PodList
 	if set.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType {
@@ -177,9 +176,9 @@ func waitForRollingUpdate(ctx context.Context, c clientset.Interface, set *appsv
 	return set, pods
 }
 
-// waitForMaxUnavailableRollingUpdate waits for all Pods in set to exist and have the correct revision and for the
-// RollingUpdate to complete while enforcing maxUnavailable constraints. set must have a RollingUpdateStatefulSetStrategyType
-// with MaxUnavailable configured.
+// waitForMaxUnavailableRollingUpdate 等待 set 中所有 Pod 存在且版本正确，并在遵守 maxUnavailable
+// 约束的前提下完成 RollingUpdate。set 必须使用配置了 MaxUnavailable 的
+// RollingUpdateStatefulSetStrategyType。
 func waitForMaxUnavailableRollingUpdate(ctx context.Context, c clientset.Interface, set *appsv1.StatefulSet, maxUnavailable int) (*appsv1.StatefulSet, *v1.PodList) {
 	var pods *v1.PodList
 	if set.Spec.UpdateStrategy.Type != appsv1.RollingUpdateStatefulSetStrategyType {
@@ -195,7 +194,7 @@ func waitForMaxUnavailableRollingUpdate(ctx context.Context, c clientset.Interfa
 			return false, nil
 		}
 
-		// Count unavailable pods
+		// 统计不可用的 Pod
 		unavailablePods := 0
 		e2estatefulset.SortStatefulPods(pods)
 		for i := range pods.Items {
@@ -204,7 +203,7 @@ func waitForMaxUnavailableRollingUpdate(ctx context.Context, c clientset.Interfa
 			}
 		}
 
-		// Validate maxUnavailable constraint is never violated
+		// 验证从未违反 maxUnavailable 约束
 		if unavailablePods > maxUnavailable {
 			framework.Failf("StatefulSet %s/%s rolling update violated maxUnavailable constraint: %d unavailable pods > %d maxUnavailable",
 				set.Namespace, set.Name, unavailablePods, maxUnavailable)
@@ -233,7 +232,7 @@ func waitForMaxUnavailableRollingUpdate(ctx context.Context, c clientset.Interfa
 	return set, pods
 }
 
-// waitForRunningAndNotReady waits for numStatefulPods in ss to be Running and not Ready.
+// waitForRunningAndNotReady 等待 ss 中 numStatefulPods 个 Pod 处于 Running 但未 Ready。
 func waitForRunningAndNotReady(ctx context.Context, c clientset.Interface, numStatefulPods int32, ss *appsv1.StatefulSet) {
 	e2estatefulset.WaitForRunning(ctx, c, numStatefulPods, 0, ss)
 }

@@ -39,12 +39,12 @@ import (
 )
 
 const (
-	// Minimal number of nodes for the cluster to be considered large.
+	// 判定集群为"大规模"所需的最少节点数。
 	largeClusterThreshold = 100
 )
 
-// WaitForAllNodesSchedulable waits up to timeout for all
-// (but TestContext.AllowedNotReadyNodes) to become schedulable.
+// WaitForAllNodesSchedulable 最多等待 timeout，直到所有节点
+// （TestContext.AllowedNotReadyNodes 指定的数量除外）都变为可调度。
 func WaitForAllNodesSchedulable(ctx context.Context, c clientset.Interface, timeout time.Duration) error {
 	if framework.TestContext.AllowedNotReadyNodes == -1 {
 		return nil
@@ -60,12 +60,12 @@ func WaitForAllNodesSchedulable(ctx context.Context, c clientset.Interface, time
 	)
 }
 
-// AddOrUpdateLabelOnNode adds the given label key and value to the given node or updates value.
+// AddOrUpdateLabelOnNode 给指定节点添加给定的 label 键值对，若已存在则更新其值。
 func AddOrUpdateLabelOnNode(c clientset.Interface, nodeName string, labelKey, labelValue string) {
 	framework.ExpectNoError(testutils.AddLabelsToNode(c, nodeName, map[string]string{labelKey: labelValue}))
 }
 
-// ExpectNodeHasLabel expects that the given node has the given label pair.
+// ExpectNodeHasLabel 断言指定节点具有给定的 label 键值对。
 func ExpectNodeHasLabel(ctx context.Context, c clientset.Interface, nodeName string, labelKey string, labelValue string) {
 	ginkgo.By("verifying the node has the label " + labelKey + " " + labelValue)
 	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
@@ -73,8 +73,8 @@ func ExpectNodeHasLabel(ctx context.Context, c clientset.Interface, nodeName str
 	gomega.Expect(node.Labels).To(gomega.HaveKeyWithValue(labelKey, labelValue))
 }
 
-// RemoveLabelOffNode is for cleaning up labels temporarily added to node,
-// won't fail if target label doesn't exist or has been removed.
+// RemoveLabelOffNode 用于清理临时添加到节点上的 label；
+// 目标 label 不存在或已被移除时不会报错。
 func RemoveLabelOffNode(c clientset.Interface, nodeName string, labelKey string) {
 	ginkgo.By("removing the label " + labelKey + " off the node " + nodeName)
 	framework.ExpectNoError(testutils.RemoveLabelOffNode(c, nodeName, []string{labelKey}))
@@ -83,7 +83,7 @@ func RemoveLabelOffNode(c clientset.Interface, nodeName string, labelKey string)
 	framework.ExpectNoError(testutils.VerifyLabelsRemoved(c, nodeName, []string{labelKey}))
 }
 
-// ExpectNodeHasTaint expects that the node has the given taint.
+// ExpectNodeHasTaint 断言节点具有给定的 taint。
 func ExpectNodeHasTaint(ctx context.Context, c clientset.Interface, nodeName string, taint *v1.Taint) {
 	ginkgo.By("verifying the node has the taint " + taint.ToString())
 	if has, err := NodeHasTaint(ctx, c, nodeName, taint); !has {
@@ -92,7 +92,7 @@ func ExpectNodeHasTaint(ctx context.Context, c clientset.Interface, nodeName str
 	}
 }
 
-// NodeHasTaint returns true if the node has the given taint, else returns false.
+// NodeHasTaint 在节点具有给定 taint 时返回 true，否则返回 false。
 func NodeHasTaint(ctx context.Context, c clientset.Interface, nodeName string, taint *v1.Taint) (bool, error) {
 	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -107,11 +107,10 @@ func NodeHasTaint(ctx context.Context, c clientset.Interface, nodeName string, t
 	return true, nil
 }
 
-// AllNodesReady checks whether all registered nodes are ready. Setting -1 on
-// framework.TestContext.AllowedNotReadyNodes will bypass the post test node readiness check.
-// TODO: we should change the AllNodesReady call in AfterEach to WaitForAllNodesHealthy,
-// and figure out how to do it in a configurable way, as we can't expect all setups to run
-// default test add-ons.
+// AllNodesReady 检查所有已注册节点是否就绪。将
+// framework.TestContext.AllowedNotReadyNodes 设为 -1 会跳过测试后的节点就绪检查。
+// TODO: 应把 AfterEach 中的 AllNodesReady 调用改为 WaitForAllNodesHealthy，
+// 并找到可配置的办法，因为不能期望所有测试环境都运行默认的测试插件。
 func AllNodesReady(ctx context.Context, c clientset.Interface, timeout time.Duration) error {
 	if err := allNodesReady(ctx, c, timeout); err != nil {
 		return fmt.Errorf("checking for ready nodes: %w", err)
@@ -129,7 +128,7 @@ func allNodesReady(ctx context.Context, c clientset.Interface, timeout time.Dura
 	var notReady []*v1.Node
 	err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, func(ctx context.Context) (bool, error) {
 		notReady = nil
-		// It should be OK to list unschedulable Nodes here.
+		// 这里列出不可调度的节点也是可以的。
 		nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return false, err
@@ -140,11 +139,10 @@ func allNodesReady(ctx context.Context, c clientset.Interface, timeout time.Dura
 				notReady = append(notReady, node)
 			}
 		}
-		// Framework allows for <TestContext.AllowedNotReadyNodes> nodes to be non-ready,
-		// to make it possible e.g. for incorrect deployment of some small percentage
-		// of nodes (which we allow in cluster validation). Some nodes that are not
-		// provisioned correctly at startup will never become ready (e.g. when something
-		// won't install correctly), so we can't expect them to be ready at any point.
+		// framework 允许最多 <TestContext.AllowedNotReadyNodes> 个节点未就绪，
+		// 以容忍少量节点配置错误的情况（集群校验中也允许这种情况）。
+		// 某些启动时未正确部署的节点永远不会就绪（例如安装失败），
+		// 因此不能指望它们在任意时刻都处于就绪状态。
 		return len(notReady) <= framework.TestContext.AllowedNotReadyNodes, nil
 	})
 
@@ -162,7 +160,7 @@ func allNodesReady(ctx context.Context, c clientset.Interface, timeout time.Dura
 	return nil
 }
 
-// taintExists checks if the given taint exists in list of taints. Returns true if exists false otherwise.
+// taintExists 检查给定 taint 是否存在于 taint 列表中，存在返回 true，否则返回 false。
 func taintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
 	for _, taint := range taints {
 		if taint.MatchTaint(taintToFind) {
@@ -172,7 +170,7 @@ func taintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
 	return false
 }
 
-// IsARM64 checks whether the k8s Node has arm64 arch.
+// IsARM64 检查该 k8s Node 是否为 arm64 架构。
 func IsARM64(node *v1.Node) bool {
 	arch, ok := node.Labels["kubernetes.io/arch"]
 	if ok {
@@ -182,7 +180,7 @@ func IsARM64(node *v1.Node) bool {
 	return false
 }
 
-// AddExtendedResource adds a fake resource to the Node.
+// AddExtendedResource 向 Node 添加一项伪造的扩展资源。
 func AddExtendedResource(ctx context.Context, clientSet clientset.Interface, nodeName string, extendedResourceName v1.ResourceName, extendedResourceQuantity resource.Quantity) {
 	extendedResource := v1.ResourceName(extendedResourceName)
 
@@ -191,10 +189,9 @@ func AddExtendedResource(ctx context.Context, clientSet clientset.Interface, nod
 		extendedResource: extendedResourceQuantity,
 	}
 
-	// This is a workaround for the fact that we shouldn't marshal a Node struct to JSON
-	// because it wipes out some fields from node status like the daemonEndpoints and
-	// nodeInfo which should not be changed at this time. We need to use a map instead.
-	// See https://github.com/kubernetes/kubernetes/issues/131229
+	// 不能直接把 Node 结构体序列化为 JSON：那样会清掉 node status 中此时不应改动的
+	// daemonEndpoints、nodeInfo 等字段。这里用 map 绕开该问题。
+	// 参见 https://github.com/kubernetes/kubernetes/issues/131229
 	patchPayload, err := json.Marshal(map[string]any{
 		"status": map[string]any{
 			"capacity":    extendedResourceList,
@@ -207,7 +204,7 @@ func AddExtendedResource(ctx context.Context, clientSet clientset.Interface, nod
 	framework.ExpectNoError(err)
 }
 
-// RemoveExtendedResource removes a fake resource from the Node.
+// RemoveExtendedResource 从 Node 移除一项伪造的扩展资源。
 func RemoveExtendedResource(ctx context.Context, clientSet clientset.Interface, nodeName string, extendedResourceName v1.ResourceName) {
 	extendedResource := v1.ResourceName(extendedResourceName)
 

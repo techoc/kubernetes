@@ -40,7 +40,7 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Run this single test locally using a running CRI-O instance by:
+// 使用已运行的 CRI-O 实例在本地单独运行此测试：
 // make test-e2e-node CONTAINER_RUNTIME_ENDPOINT="unix:///var/run/crio/crio.sock" TEST_ARGS='--ginkgo.focus="ImageVolume" --kubelet-flags="--cgroup-root=/ --runtime-cgroups=/system.slice/crio.service --kubelet-cgroups=/system.slice/kubelet.service --fail-swap-on=false"'
 var _ = SIGDescribe("ImageVolume", feature.ImageVolume, func() {
 	f := framework.NewDefaultFramework("image-volume-test")
@@ -60,7 +60,7 @@ var _ = SIGDescribe("ImageVolume", feature.ImageVolume, func() {
 		defaultSELinuxLevel = "s0:c1,c5"
 	)
 
-	// TODO: remove when containerd 2.2 is available on all node e2e test platforms.
+	// TODO: 待 containerd 2.2 在所有 node e2e 测试平台上可用后移除。
 	requireContainerdVersion := func(ctx context.Context, givenVersion string) {
 		runtime, _, err := getCRIClient(ctx)
 		framework.ExpectNoError(err, "Failed to get CRI client")
@@ -68,12 +68,12 @@ var _ = SIGDescribe("ImageVolume", feature.ImageVolume, func() {
 		resp, err := runtime.Version(ctx, "")
 		framework.ExpectNoError(err, "Failed to get runtime version")
 
-		// Other runtimes like CRI-O do not need to enforce any version requirement.
+		// CRI-O 等其他 runtime 无需强制版本要求。
 		if resp.GetRuntimeName() != "containerd" {
 			return
 		}
 
-		// Throw away any version suffix which just causes semver parsing issues.
+		// 去掉版本后缀，它只会导致 semver 解析问题。
 		version, _, _ := strings.Cut(resp.GetRuntimeVersion(), "-")
 
 		parsedVersion, err := semver.ParseTolerant(version)
@@ -330,7 +330,7 @@ var _ = SIGDescribe("ImageVolume", feature.ImageVolume, func() {
 			err := e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, podName, f.Namespace.Name)
 			framework.ExpectNoError(err, "Failed to await for the pod to be running: (%s/%s)", f.Namespace.Name, podName)
 
-			// Using this file is intentional because it's generally available on Linux and will not expose any secret information.
+			// 特意选用该文件，因为它在 Linux 上普遍存在且不会暴露任何敏感信息。
 			fileContent := e2epod.ExecCommandInContainer(f, podName, containerName, "/bin/cat", filepath.Join(volumePathPrefix, "passwd"))
 			gomega.Expect(fileContent).To(gomega.ContainSubstring("root:"))
 		})

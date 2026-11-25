@@ -22,14 +22,14 @@ import (
 	"sync"
 )
 
-// FlakeReport is a struct for managing the flake report.
+// FlakeReport 用于管理 flaky 测试报告。
 type FlakeReport struct {
 	lock       sync.RWMutex
 	Flakes     []string `json:"flakes"`
 	FlakeCount int      `json:"flakeCount"`
 }
 
-// NewFlakeReport returns a new flake report.
+// NewFlakeReport 返回一个新的 flaky 测试报告。
 func NewFlakeReport() *FlakeReport {
 	return &FlakeReport{
 		Flakes: []string{},
@@ -45,9 +45,8 @@ func buildDescription(optionalDescription ...interface{}) string {
 	}
 }
 
-// RecordFlakeIfError records the error (if non-nil) as a flake along with an optional description.
-// This can be used as a replacement of framework.ExpectNoError() for non-critical errors that can
-// be considered as 'flakes' to avoid causing failures in tests.
+// RecordFlakeIfError 将非 nil 的错误连同可选描述记录为一次 flaky 事件。
+// 对于可视为 flake 的非关键错误，可用它替代 framework.ExpectNoError()，避免导致测试失败。
 func (f *FlakeReport) RecordFlakeIfError(err error, optionalDescription ...interface{}) {
 	if err == nil {
 		return
@@ -64,14 +63,14 @@ func (f *FlakeReport) RecordFlakeIfError(err error, optionalDescription ...inter
 	f.FlakeCount++
 }
 
-// GetFlakeCount returns the flake count.
+// GetFlakeCount 返回 flaky 事件的数量。
 func (f *FlakeReport) GetFlakeCount() int {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	return f.FlakeCount
 }
 
-// PrintHumanReadable returns string of flake report.
+// PrintHumanReadable 返回 flaky 测试报告的可读字符串形式。
 func (f *FlakeReport) PrintHumanReadable() string {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
@@ -84,14 +83,14 @@ func (f *FlakeReport) PrintHumanReadable() string {
 	return buf.String()
 }
 
-// PrintJSON returns the summary of frake report with JSON format.
+// PrintJSON 以 JSON 格式返回 flaky 测试报告的摘要。
 func (f *FlakeReport) PrintJSON() string {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 	return PrettyPrintJSON(f)
 }
 
-// SummaryKind returns the summary of flake report.
+// SummaryKind 返回 flaky 测试报告的摘要类型。
 func (f *FlakeReport) SummaryKind() string {
 	return "FlakeReport"
 }

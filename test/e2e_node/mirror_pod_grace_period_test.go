@@ -138,8 +138,8 @@ var _ = SIGDescribe("MirrorPodWithGracePeriod", func() {
 
 		f.Context("and the container runtime is temporarily down during pod termination", f.WithNodeConformance(), f.WithSerial(), f.WithDisruptive(), func() {
 			ginkgo.BeforeEach(func(ctx context.Context) {
-				// Ensure that prior to the test starting, no other pods are running or in the process of being terminated other than the mirror pod.
-				// This is necessary as the test verifies metrics that assume that there is only one pod (the static pod) being run, and all other pods have been terminated.
+				// 测试开始前，除 mirror Pod 外不应有其他 Pod 在运行或正在终止。
+				// 这是必要的：测试所校验的指标假定只有 static Pod 在运行，其余 Pod 均已终止。
 				gomega.Eventually(ctx, func(ctx context.Context) error {
 					podList, err := e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{})
 					if err != nil {
@@ -148,7 +148,7 @@ var _ = SIGDescribe("MirrorPodWithGracePeriod", func() {
 					var remainingPods []string
 
 					for _, pod := range podList.Items {
-						// The mirror pod is the only expected pod to be running
+						// mirror Pod 是唯一预期仍在运行的 Pod。
 						if pod.Name == mirrorPodName && pod.Namespace == ns {
 							continue
 						}
@@ -198,8 +198,8 @@ var _ = SIGDescribe("MirrorPodWithGracePeriod", func() {
 				err := deleteStaticPod(podPath, staticPodName, ns)
 				framework.ExpectNoError(err)
 
-				// Note it is important we have a small delay here as we would like to reproduce https://issues.k8s.io/113091 which requires a failure in syncTerminatingPod()
-				// This requires waiting a small period between the static pod being deleted so that syncTerminatingPod() will attempt to run
+				// 这里必须有短暂延迟，因为要复现 https://issues.k8s.io/113091，该问题需要 syncTerminatingPod() 失败。
+				// 因此在删除 static Pod 后需要等待一小段时间，让 syncTerminatingPod() 有机会执行。
 				ginkgo.By("sleeping before stopping the container runtime")
 				time.Sleep(2 * time.Second)
 
@@ -241,9 +241,9 @@ var _ = SIGDescribe("MirrorPodWithGracePeriod", func() {
 					}),
 					"kubelet_active_pods": gstruct.MatchElements(sampleLabelID, 0, gstruct.Elements{
 						`kubelet_active_pods{static=""}`: timelessSample(0),
-						// TODO: the pod is still running and consuming resources, it should be considered in
-						// admission https://github.com/kubernetes/kubernetes/issues/104824 for static pods at
-						// least, which means it should be 1
+						// TODO: 该 Pod 仍在运行并占用资源，至少对于 static Pod，
+						// 应在 admission 中计入它（https://github.com/kubernetes/kubernetes/issues/104824），
+						// 也就是说这里应为 1。
 						`kubelet_active_pods{static="true"}`: timelessSample(0),
 					}),
 					"kubelet_desired_pods": gstruct.MatchElements(sampleLabelID, 0, gstruct.Elements{
@@ -269,11 +269,11 @@ var _ = SIGDescribe("MirrorPodWithGracePeriod", func() {
 				}, 2*time.Minute, time.Second*5).Should(gomega.Succeed())
 
 				ginkgo.By(fmt.Sprintf("verifying that the mirror pod (%s/%s) stops running after about 30s", ns, mirrorPodName))
-				// from the time the container runtime starts, it should take a maximum of:
-				// 20s (grace period) + 2 sync transitions * 1s + 2s between housekeeping + 3s to detect CRI up +
-				//   2s overhead
-				// which we calculate here as "about 30s", so we try a bit longer than that but verify that it is
-				// tightly bounded by not waiting longer (we want to catch regressions to shutdown)
+				// 从 container runtime 启动算起，最长需要：
+				// 20s（grace period）+ 2 次 sync 转换 * 1s + housekeeping 间隔 2s + 检测 CRI 就绪 3s
+				// 再加 2s 额外开销。
+				// 这里估算为“约 30s”，因此等待时间略长于此，但通过不再延长等待来验证其上界
+				// （以便发现 shutdown 方面的回退）。
 				time.Sleep(30 * time.Second)
 				gomega.Eventually(ctx, func(ctx context.Context) error {
 					return checkMirrorPodDisappear(ctx, f.ClientSet, mirrorPodName, ns)

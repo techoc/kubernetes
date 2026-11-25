@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* This test check that setHostnameAsFQDN PodSpec field works as
- * expected.
+/* 本测试检查 setHostnameAsFQDN PodSpec 字段是否按预期工作。
  */
 
 package e2enode
@@ -79,120 +78,112 @@ var _ = SIGDescribe("Hostname of Pod", framework.WithNodeConformance(), func() {
 	/*
 	   Release: v1.19
 	   Testname: Create Pod without fully qualified domain name (FQDN)
-	   Description: A Pod that does not define the subdomain field in it spec, does not have FQDN.
+	   Description: spec 中未定义 subdomain 字段的 Pod 没有 FQDN。
 	*/
 	ginkgo.It("a pod without subdomain field does not have FQDN", func(ctx context.Context) {
 		pod := testPod("hostfqdn")
 		pod.Spec.Containers[0].Command = []string{"sh", "-c", "echo $(hostname)';'$(hostname -f)';'"}
 		output := []string{fmt.Sprintf("%s;%s;", pod.ObjectMeta.Name, pod.ObjectMeta.Name)}
-		// Create Pod
+		// 创建 Pod。
 		e2eoutput.TestContainerOutput(ctx, f, "shortname only", pod, 0, output)
 	})
 
 	/*
 	   Release: v1.19
 	   Testname: Create Pod without FQDN, setHostnameAsFQDN field set to true
-	   Description: A Pod that does not define the subdomain field in it spec, does not have FQDN.
-	                Hence, setHostnameAsFQDN field has no effect.
+	   Description: spec 中未定义 subdomain 字段的 Pod 没有 FQDN，因此 setHostnameAsFQDN 字段不起作用。
 	*/
 	ginkgo.It("a pod without FQDN is not affected by SetHostnameAsFQDN field", func(ctx context.Context) {
 		pod := testPod("hostfqdn")
-		// Setting setHostnameAsFQDN field to true should have no effect.
+		// 将 setHostnameAsFQDN 设置为 true 不应产生任何效果。
 		setHostnameAsFQDN := true
 		pod.Spec.SetHostnameAsFQDN = &setHostnameAsFQDN
 		pod.Spec.Containers[0].Command = []string{"sh", "-c", "echo $(hostname)';'$(hostname -f)';'"}
 		output := []string{fmt.Sprintf("%s;%s;", pod.ObjectMeta.Name, pod.ObjectMeta.Name)}
-		// Create Pod
+		// 创建 Pod。
 		e2eoutput.TestContainerOutput(ctx, f, "shortname only", pod, 0, output)
 	})
 
 	/*
 	   Release: v1.19
 	   Testname: Create Pod with FQDN, setHostnameAsFQDN field not defined.
-	   Description: A Pod that defines the subdomain field in it spec has FQDN.
-	                hostname command returns shortname (pod name in this case), and hostname -f returns FQDN.
+	   Description: spec 中定义了 subdomain 字段的 Pod 具有 FQDN。hostname 命令返回短名称（此处为 Pod 名称），hostname -f 返回 FQDN。
 	*/
 	ginkgo.It("a pod with subdomain field has FQDN, hostname is shortname", func(ctx context.Context) {
 		pod := testPod("hostfqdn")
 		pod.Spec.Containers[0].Command = []string{"sh", "-c", "echo $(hostname)';'$(hostname -f)';'"}
 		subdomain := "t"
-		// Set PodSpec subdomain field to generate FQDN for pod
+		// 设置 PodSpec 的 subdomain 字段，为 Pod 生成 FQDN。
 		pod.Spec.Subdomain = subdomain
-		// Expected Pod FQDN
+		// 预期的 Pod FQDN。
 		hostFQDN := fmt.Sprintf("%s.%s.%s.svc.%s", pod.ObjectMeta.Name, subdomain, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		output := []string{fmt.Sprintf("%s;%s;", pod.ObjectMeta.Name, hostFQDN)}
-		// Create Pod
+		// 创建 Pod。
 		e2eoutput.TestContainerOutput(ctx, f, "shortname and fqdn", pod, 0, output)
 	})
 
 	/*
 	   Release: v1.19
 	   Testname: Create Pod with FQDN, setHostnameAsFQDN field set to true.
-	   Description: A Pod that defines the subdomain field in it spec has FQDN. When setHostnameAsFQDN: true, the
-	                hostname is set to be the FQDN. In this case, both commands hostname and hostname -f return the FQDN of the Pod.
+	   Description: spec 中定义了 subdomain 字段的 Pod 具有 FQDN。当 setHostnameAsFQDN: true 时，hostname 被设置为 FQDN，此时 hostname 和 hostname -f 两个命令都返回 Pod 的 FQDN。
 	*/
 	ginkgo.It("a pod with subdomain field has FQDN, when setHostnameAsFQDN is set to true, the FQDN is set as hostname", func(ctx context.Context) {
 		pod := testPod("hostfqdn")
 		pod.Spec.Containers[0].Command = []string{"sh", "-c", "echo $(hostname)';'$(hostname -f)';'"}
 		subdomain := "t"
-		// Set PodSpec subdomain field to generate FQDN for pod
+		// 设置 PodSpec 的 subdomain 字段，为 Pod 生成 FQDN。
 		pod.Spec.Subdomain = subdomain
-		// Set PodSpec setHostnameAsFQDN to set FQDN as hostname
+		// 设置 PodSpec 的 setHostnameAsFQDN，将 FQDN 用作 hostname。
 		setHostnameAsFQDN := true
 		pod.Spec.SetHostnameAsFQDN = &setHostnameAsFQDN
-		// Expected Pod FQDN
+		// 预期的 Pod FQDN。
 		hostFQDN := fmt.Sprintf("%s.%s.%s.svc.%s", pod.ObjectMeta.Name, subdomain, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
-		// Fail if FQDN is longer than 64 characters, otherwise the Pod will remain pending until test timeout.
-		// In Linux, 64 characters is the limit of the hostname kernel field, which this test sets to the pod FQDN.
+		// FQDN 超过 64 个字符时直接失败，否则 Pod 会一直处于 Pending 直到测试超时。
+		// Linux 中内核 hostname 字段上限为 64 个字符，本测试将其设置为 Pod 的 FQDN。
 		gomega.Expect(len(hostFQDN)).Should(gomega.BeNumerically("<=", 64), "The FQDN of the Pod cannot be longer than 64 characters, requested %s which is %d characters long.", hostFQDN, len(hostFQDN))
 		output := []string{fmt.Sprintf("%s;%s;", hostFQDN, hostFQDN)}
-		// Create Pod
+		// 创建 Pod。
 		e2eoutput.TestContainerOutput(ctx, f, "fqdn and fqdn", pod, 0, output)
 	})
 
 	/*
 	   Release: v1.20
 	   Testname: Fail to Create Pod with longer than 64 bytes FQDN when setHostnameAsFQDN field set to true.
-	   Description: A Pod that defines the subdomain field in it spec has FQDN.
-	                 When setHostnameAsFQDN: true, the hostname is set to be
-	                 the FQDN. Since kernel limit is 64 bytes for hostname field,
-	                 if pod FQDN is longer than 64 bytes it will generate events
-	                 regarding FailedCreatePodSandBox.
+	   Description: spec 中定义了 subdomain 字段的 Pod 具有 FQDN。当 setHostnameAsFQDN: true 时，hostname 被设置为 FQDN。由于内核 hostname 字段上限为 64 字节，若 Pod FQDN 超过 64 字节，将产生与 FailedCreatePodSandBox 相关的事件。
 	*/
 
 	ginkgo.It("a pod configured to set FQDN as hostname will remain in Pending "+
 		"state generating FailedCreatePodSandBox events when the FQDN is "+
 		"longer than 64 bytes", func(ctx context.Context) {
-		// 55 characters for name plus -<int>.t.svc.cluster.local is way more than 64 bytes
+		// 55 个字符的名称加上 -<int>.t.svc.cluster.local 会远超 64 字节。
 		pod := testPod("hostfqdnveryveryveryverylongforfqdntobemorethan64bytes")
 		pod.Spec.Containers[0].Command = []string{"sh", "-c", "echo $(hostname)';'$(hostname -f)';'"}
 		subdomain := "t"
-		// Set PodSpec subdomain field to generate FQDN for pod
+		// 设置 PodSpec 的 subdomain 字段，为 Pod 生成 FQDN。
 		pod.Spec.Subdomain = subdomain
-		// Set PodSpec setHostnameAsFQDN to set FQDN as hostname
+		// 设置 PodSpec 的 setHostnameAsFQDN，将 FQDN 用作 hostname。
 		setHostnameAsFQDN := true
 		pod.Spec.SetHostnameAsFQDN = &setHostnameAsFQDN
-		// Create Pod
+		// 创建 Pod。
 		launchedPod := e2epod.NewPodClient(f).Create(ctx, pod)
-		// Ensure we delete pod
+		// 确保删除 Pod。
 		ginkgo.DeferCleanup(e2epod.NewPodClient(f).DeleteSync, launchedPod.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 
-		// Pod should remain in the pending state generating events with reason FailedCreatePodSandBox
-		// Expected Message Error Event
+		// Pod 应保持 Pending 状态，并产生原因为 FailedCreatePodSandBox 的事件。
+		// 预期错误消息。
 		expectedMessage := "Failed to create pod sandbox: failed " +
 			"to construct FQDN from pod hostname and cluster domain, FQDN "
 		framework.Logf("Waiting for Pod to generate FailedCreatePodSandBox event.")
-		// Wait for event with reason FailedCreatePodSandBox
+		// 等待原因为 FailedCreatePodSandBox 的事件。
 		expectSandboxFailureEvent(ctx, f, launchedPod, expectedMessage)
-		// Check Pod is in Pending Phase
+		// 检查 Pod 处于 Pending 阶段。
 		err := checkPodIsPending(ctx, f, launchedPod.ObjectMeta.Name, launchedPod.ObjectMeta.Namespace)
 		framework.ExpectNoError(err)
 
 	})
 })
 
-// expectSandboxFailureEvent polls for an event with reason "FailedCreatePodSandBox" containing the
-// expected message string.
+// expectSandboxFailureEvent 轮询原因为 "FailedCreatePodSandBox" 且包含预期消息的字符串的事件。
 func expectSandboxFailureEvent(ctx context.Context, f *framework.Framework, pod *v1.Pod, msg string) {
 	eventSelector := fields.Set{
 		"involvedObject.kind":      "Pod",
@@ -206,13 +197,11 @@ func expectSandboxFailureEvent(ctx context.Context, f *framework.Framework, pod 
 
 func checkPodIsPending(ctx context.Context, f *framework.Framework, podName, namespace string) error {
 	c := f.ClientSet
-	// we call this function after we saw event failing to create Pod, hence
-	// pod has already been created and it should be in Pending status. Giving
-	// 30 seconds to fetch the pod to avoid failing for transient issues getting
-	// pods.
+	// 在看到创建 Pod 失败的事件后调用本函数，此时 Pod 已创建，应处于 Pending 状态。
+	// 给 30 秒时间获取 Pod，避免因获取 Pod 时的瞬时问题而失败。
 	fetchPodTimeout := 30 * time.Second
 	return e2epod.WaitForPodCondition(ctx, c, namespace, podName, "Failed to Create Pod", fetchPodTimeout, func(pod *v1.Pod) (bool, error) {
-		// We are looking for the pod to be scheduled and in Pending state
+		// 期望 Pod 已被调度且处于 Pending 状态。
 		if pod.Status.Phase == v1.PodPending {
 			for _, cond := range pod.Status.Conditions {
 				if cond.Type == v1.PodScheduled && cond.Status == v1.ConditionTrue {
@@ -220,7 +209,7 @@ func checkPodIsPending(ctx context.Context, f *framework.Framework, podName, nam
 				}
 			}
 		}
-		// If pod gets to this status, it is likely that FQDN is shorter than 64bytes.
+		// 如果 Pod 进入这些状态，说明 FQDN 很可能短于 64 字节。
 		if pod.Status.Phase == v1.PodRunning || pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed {
 			return true, fmt.Errorf("Expected pod %q in namespace %q to be in phase Pending, but got phase: %v", podName, namespace, pod.Status.Phase)
 		}

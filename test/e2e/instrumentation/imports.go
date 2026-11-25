@@ -17,7 +17,7 @@ limitations under the License.
 package instrumentation
 
 import (
-	// ensure libs have a chance to perform initialization
+	// 空导入，确保相关库有机会执行初始化
 	_ "k8s.io/kubernetes/test/e2e/instrumentation/logging"
 	_ "k8s.io/kubernetes/test/e2e/instrumentation/monitoring"
 )

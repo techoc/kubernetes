@@ -24,7 +24,7 @@ import (
 	"k8s.io/kubernetes/test/e2e_node/criproxy"
 )
 
-// addCRIProxyInjector registers an injector function for the CRIProxy.
+// addCRIProxyInjector 为 CRIProxy 注册一个 injector 函数。
 func addCRIProxyInjector(proxy *criproxy.RemoteRuntime, injector func(apiName string) error) error {
 	if proxy == nil {
 		return fmt.Errorf("failed to add injector because the CRI Proxy is undefined")
@@ -33,7 +33,7 @@ func addCRIProxyInjector(proxy *criproxy.RemoteRuntime, injector func(apiName st
 	return nil
 }
 
-// resetCRIProxyInjector resets all injector functions for the CRIProxy.
+// resetCRIProxyInjector 清除 CRIProxy 的所有 injector 函数。
 func resetCRIProxyInjector(proxy *criproxy.RemoteRuntime) error {
 	if proxy == nil {
 		return fmt.Errorf("failed to reset injector because the CRI Proxy is undefined")

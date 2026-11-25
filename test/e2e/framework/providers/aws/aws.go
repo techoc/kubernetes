@@ -28,10 +28,9 @@ func newProvider() (framework.ProviderInterface, error) {
 	return &Provider{}, nil
 }
 
-// Provider is a structure to handle AWS clouds for e2e testing
-// It does not do anything useful, it's there only to provide valid
-// --provider=aws cmdline option to allow testing of CSI migration
-// tests of kubernetes.io/aws-ebs volume plugin.
+// Provider 用于处理 e2e 测试中的 AWS 云环境。
+// 它并不做实际工作，只是为了让 --provider=aws 命令行选项合法，
+// 以便运行 kubernetes.io/aws-ebs 卷插件的 CSI 迁移测试。
 type Provider struct {
 	framework.NullProvider
 }

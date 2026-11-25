@@ -37,18 +37,17 @@ const (
 	scaleNum = 2
 )
 
-// TODO: Test that the replicaset stays available during master (and maybe
-// node and cluster upgrades).
+// TODO: 验证 replicaset 在 master（以及可能的 node 和 cluster）升级期间保持可用。
 
-// ReplicaSetUpgradeTest tests that a replicaset survives upgrade.
+// ReplicaSetUpgradeTest 用于验证 replicaset 在升级后仍然存在。
 type ReplicaSetUpgradeTest struct {
 	UID types.UID
 }
 
-// Name returns the tracking name of the test.
+// Name 返回该测试的跟踪名称。
 func (ReplicaSetUpgradeTest) Name() string { return "[sig-apps] replicaset-upgrade" }
 
-// Setup creates a ReplicaSet and makes sure it's replicas ready.
+// Setup 创建 ReplicaSet 并确保其副本全部就绪。
 func (r *ReplicaSetUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	c := f.ClientSet
 	ns := f.Namespace.Name
@@ -65,17 +64,17 @@ func (r *ReplicaSetUpgradeTest) Setup(ctx context.Context, f *framework.Framewor
 	r.UID = rs.UID
 }
 
-// Test checks whether the replicasets are the same after an upgrade.
+// Test 检查升级后 replicaset 是否保持不变。
 func (r *ReplicaSetUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	c := f.ClientSet
 	ns := f.Namespace.Name
 	rsClient := c.AppsV1().ReplicaSets(ns)
 
-	// Block until upgrade is done
+	// 阻塞等待升级完成
 	ginkgo.By(fmt.Sprintf("Waiting for upgrade to finish before checking replicaset %s", rsName))
 	<-done
 
-	// Verify the RS is the same (survives) after the upgrade
+	// 验证升级后 RS 保持不变（未被重建）
 	ginkgo.By(fmt.Sprintf("Checking UID to verify replicaset %s survives upgrade", rsName))
 	upgradedRS, err := rsClient.Get(ctx, rsName, metav1.GetOptions{})
 	framework.ExpectNoError(err)
@@ -86,7 +85,7 @@ func (r *ReplicaSetUpgradeTest) Test(ctx context.Context, f *framework.Framework
 	ginkgo.By(fmt.Sprintf("Waiting for replicaset %s to have all of its replicas ready after upgrade", rsName))
 	framework.ExpectNoError(e2ereplicaset.WaitForReadyReplicaSet(ctx, c, ns, rsName))
 
-	// Verify the upgraded RS is active by scaling up the RS to scaleNum and ensuring all pods are Ready
+	// 将 RS 扩缩到 scaleNum 并确认所有 Pod 均为 Ready，以验证升级后的 RS 仍可正常工作
 	ginkgo.By(fmt.Sprintf("Scaling up replicaset %s to %d", rsName, scaleNum))
 	_, err = e2ereplicaset.UpdateReplicaSetWithRetries(c, ns, rsName, func(rs *appsv1.ReplicaSet) {
 		*rs.Spec.Replicas = scaleNum
@@ -97,12 +96,12 @@ func (r *ReplicaSetUpgradeTest) Test(ctx context.Context, f *framework.Framework
 	framework.ExpectNoError(e2ereplicaset.WaitForReadyReplicaSet(ctx, c, ns, rsName))
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (r *ReplicaSetUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依赖命名空间删除来清理所有资源
 }
 
-// newReplicaSet returns a new ReplicaSet.
+// newReplicaSet 返回一个新的 ReplicaSet。
 func newReplicaSet(name, namespace string, replicas int32, podLabels map[string]string, imageName, image string) *appsv1.ReplicaSet {
 	return &appsv1.ReplicaSet{
 		TypeMeta: metav1.TypeMeta{

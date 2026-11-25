@@ -39,12 +39,12 @@ const (
 	scaleUpTimeout = 5 * time.Minute
 )
 
-// WaitForClusterSizeFunc waits until the cluster size matches the given function.
+// WaitForClusterSizeFunc 等待集群规模满足给定函数。
 func WaitForClusterSizeFunc(ctx context.Context, c clientset.Interface, sizeFunc func(int) bool, timeout time.Duration) error {
 	return WaitForClusterSizeFuncWithUnready(ctx, c, sizeFunc, timeout, 0)
 }
 
-// WaitForClusterSizeFuncWithUnready waits until the cluster size matches the given function and assumes some unready nodes.
+// WaitForClusterSizeFuncWithUnready 等待集群规模满足给定函数，并允许存在一定数量的未就绪 node。
 func WaitForClusterSizeFuncWithUnready(ctx context.Context, c clientset.Interface, sizeFunc func(int) bool, timeout time.Duration, expectedUnready int) error {
 	for start := time.Now(); time.Since(start) < timeout && ctx.Err() == nil; time.Sleep(20 * time.Second) {
 		nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{FieldSelector: fields.Set{
@@ -56,7 +56,7 @@ func WaitForClusterSizeFuncWithUnready(ctx context.Context, c clientset.Interfac
 		}
 		numNodes := len(nodes.Items)
 
-		// Filter out not-ready nodes.
+		// 过滤掉未就绪的 node。
 		e2enode.Filter(nodes, func(node v1.Node) bool {
 			return e2enode.IsConditionSetAsExpected(&node, v1.NodeReady, true)
 		})
@@ -86,8 +86,8 @@ func waitForCaPodsReadyInNamespace(ctx context.Context, f *framework.Framework, 
 					ready = true
 				}
 			}
-			// Failed pods in this context generally mean that they have been
-			// double scheduled onto a node, but then failed a constraint check.
+			// 此处的 Failed pod 通常意味着它们被重复调度到某个 node 上，
+			// 但随后未通过约束检查。
 			if pod.Status.Phase == v1.PodFailed {
 				klog.Warningf("Pod has failed: %v", pod)
 			}
@@ -105,7 +105,7 @@ func waitForCaPodsReadyInNamespace(ctx context.Context, f *framework.Framework, 
 	klog.Info(e2ekubectl.RunKubectlOrDie(f.Namespace.Name, "get", "pods", "-o", "json", "--all-namespaces"))
 	klog.Info(e2ekubectl.RunKubectlOrDie(f.Namespace.Name, "get", "nodes", "-o", "json"))
 
-	// Some pods are still not running.
+	// 仍有部分 pod 未处于 Running 状态。
 	return fmt.Errorf("too many pods are still not running: %v", notready)
 }
 
@@ -113,7 +113,7 @@ func waitForAllCaPodsReadyInNamespace(ctx context.Context, f *framework.Framewor
 	return waitForCaPodsReadyInNamespace(ctx, f, c, 0)
 }
 
-// Create an RC running a given number of pods with anti-affinity
+// 创建一个运行指定数量 pod 且带反亲和性的 RC
 func runAntiAffinityPods(ctx context.Context, f *framework.Framework, namespace string, pods int, id string, podLabels, antiAffinityLabels map[string]string) error {
 	config := &testutils.RCConfig{
 		Affinity:  buildAntiAffinity(antiAffinityLabels),
@@ -151,9 +151,9 @@ func buildAntiAffinity(labels map[string]string) *v1.Affinity {
 	}
 }
 
-// Increase cluster size by creating pods with anti-affinity.
-// Returns a function that removes the pods.
-// Adds the same to deferred cleanup in case the function was not called.
+// 通过创建带反亲和性的 pod 来扩大集群规模。
+// 返回一个移除这些 pod 的函数。
+// 同时将其加入延迟清理，以防该函数未被调用。
 func increaseClusterSizeWithTimeout(ctx context.Context, f *framework.Framework, c clientset.Interface, targetNodeCount int, timeout time.Duration) func() error {
 	labels := map[string]string{
 		"anti-affinity": "yes",
@@ -169,7 +169,7 @@ func increaseClusterSizeWithTimeout(ctx context.Context, f *framework.Framework,
 		klog.Infof("Error during cleanup: %v", err)
 	})
 
-	// Verify that cluster size is increased
+	// 验证集群规模已扩大
 	framework.ExpectNoError(WaitForClusterSizeFuncWithUnready(ctx, f.ClientSet,
 		func(size int) bool { return size >= targetNodeCount }, timeout, 0))
 	framework.ExpectNoError(waitForAllCaPodsReadyInNamespace(ctx, f, c))

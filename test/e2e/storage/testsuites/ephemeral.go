@@ -42,8 +42,8 @@ type ephemeralTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitCustomEphemeralTestSuite returns ephemeralTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomEphemeralTestSuite 使用自定义的测试模式创建 ephemeralTestSuite，
+// 该类型实现了 TestSuite 接口。
 func InitCustomEphemeralTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &ephemeralTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -53,8 +53,7 @@ func InitCustomEphemeralTestSuite(patterns []storageframework.TestPattern) stora
 	}
 }
 
-// GenericEphemeralTestPatterns returns the test patterns for
-// generic ephemeral inline volumes.
+// GenericEphemeralTestPatterns 返回 generic ephemeral inline volume 的测试模式。
 func GenericEphemeralTestPatterns() []storageframework.TestPattern {
 	genericLateBinding := storageframework.DefaultFsGenericEphemeralVolume
 	genericLateBinding.Name += " (late-binding)"
@@ -71,22 +70,20 @@ func GenericEphemeralTestPatterns() []storageframework.TestPattern {
 	}
 }
 
-// CSIEphemeralTestPatterns returns the test patterns for
-// CSI ephemeral inline volumes.
+// CSIEphemeralTestPatterns 返回 CSI ephemeral inline volume 的测试模式。
 func CSIEphemeralTestPatterns() []storageframework.TestPattern {
 	return []storageframework.TestPattern{
 		storageframework.DefaultFsCSIEphemeralVolume,
 	}
 }
 
-// AllEphemeralTestPatterns returns all pre-defined test patterns for
-// generic and CSI ephemeral inline volumes.
+// AllEphemeralTestPatterns 返回 generic 与 CSI ephemeral inline volume 的所有预定义测试模式。
 func AllEphemeralTestPatterns() []storageframework.TestPattern {
 	return append(GenericEphemeralTestPatterns(), CSIEphemeralTestPatterns()...)
 }
 
-// InitEphemeralTestSuite returns ephemeralTestSuite that implements TestSuite interface
-// using test suite default patterns
+// InitEphemeralTestSuite 使用测试套件的默认模式创建 ephemeralTestSuite，
+// 该类型实现了 TestSuite 接口。
 func InitEphemeralTestSuite() storageframework.TestSuite {
 	return InitCustomEphemeralTestSuite(AllEphemeralTestPatterns())
 }
@@ -115,8 +112,8 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 		l       local
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册 AfterEach，使 f 在之后不可用。所有使用 f 的代码
+	// 都必须放在 It 或 Context 的回调中执行。
 	f := framework.NewFrameworkWithCustomTimeouts("ephemeral", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -125,17 +122,16 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 			eDriver, _ = driver.(storageframework.EphemeralTestDriver)
 		}
 		if pattern.VolType == storageframework.GenericEphemeralVolume {
-			// The GenericEphemeralVolume feature is GA, but
-			// perhaps this test is run against an older Kubernetes
-			// where the feature might be disabled.
+			// GenericEphemeralVolume 已 GA，但测试也可能跑在
+			// 尚未启用该特性的旧版本 Kubernetes 上。
 			enabled, err := GenericEphemeralVolumesEnabled(ctx, f.ClientSet, f.Timeouts, f.Namespace.Name)
 			framework.ExpectNoError(err, "check GenericEphemeralVolume feature")
 			if !enabled {
 				e2eskipper.Skipf("Cluster doesn't support %q volumes -- skipping", pattern.VolType)
 			}
 		}
-		// A driver might support the Topology capability which is incompatible with the VolumeBindingMode immediate because
-		// volumes might be provisioned immediately in a different zone to where the workload is located.
+		// driver 可能支持 Topology 能力，这与 VolumeBindingMode immediate 不兼容：
+		// 卷可能被立即创建在与工作负载不同的 zone 中。
 		if pattern.BindingMode == storagev1.VolumeBindingImmediate && len(dInfo.TopologyKeys) > 0 {
 			e2eskipper.Skipf("VolumeBindingMode immediate is not compatible with a multi-topology environment.")
 		}
@@ -146,7 +142,7 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 			pattern.AllowExpansion = false
 		}
 
-		// Now do the more expensive test initialization.
+		// 接下来执行开销较大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		l.resource = storageframework.CreateVolumeResource(ctx, driver, l.config, pattern, e2evolume.SizeRange{})
 
@@ -192,7 +188,7 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 		l.testCase.RunningPodCheck = func(ctx context.Context, pod *v1.Pod) interface{} {
 			command := "mount | grep /mnt/test | grep ro,"
 			if framework.NodeOSDistroIs("windows") {
-				// attempt to create a dummy file and expect for it not to be created
+				// 尝试创建临时文件，并期望创建失败。
 				command = "ls /mnt/test* && (touch /mnt/test-0/hello-world || true) && [ ! -f /mnt/test-0/hello-world ]"
 			}
 			err := e2epod.VerifyExecInPodSucceed(ctx, f, pod, command)
@@ -210,7 +206,7 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 		l.testCase.RunningPodCheck = func(ctx context.Context, pod *v1.Pod) interface{} {
 			command := "mount | grep /mnt/test | grep rw,"
 			if framework.NodeOSDistroIs("windows") {
-				// attempt to create a dummy file and expect for it to be created
+				// 尝试创建临时文件，并期望创建成功。
 				command = "ls /mnt/test* && touch /mnt/test-0/hello-world && [ -f /mnt/test-0/hello-world ]"
 			}
 			if pattern.VolMode == v1.PersistentVolumeBlock {
@@ -288,8 +284,8 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// We test in read-only mode if that is all that the driver supports,
-		// otherwise read/write. For PVC, both are assumed to be false.
+		// 如果 driver 只支持只读，就以只读模式测试，否则使用读写模式。
+		// 对于 PVC，默认两者均为 false。
 		shared := false
 		readOnly := false
 		if eDriver != nil {
@@ -297,18 +293,15 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 		}
 
 		l.testCase.RunningPodCheck = func(ctx context.Context, pod *v1.Pod) interface{} {
-			// Create another pod with the same inline volume attributes.
+			// 再创建一个使用相同 inline volume 属性的 Pod。
 			pod2 := StartInPodWithInlineVolume(ctx, f.ClientSet, f.Namespace.Name, "inline-volume-tester2", e2epod.InfiniteSleepCommand,
 				[]v1.VolumeSource{pod.Spec.Volumes[0].VolumeSource},
 				readOnly,
 				l.testCase.Node)
 			framework.ExpectNoError(e2epod.WaitTimeoutForPodRunningInNamespace(ctx, f.ClientSet, pod2.Name, pod2.Namespace, f.Timeouts.PodStartSlow), "waiting for second pod with inline volume")
 
-			// If (and only if) we were able to mount
-			// read/write and volume data is not shared
-			// between pods, then we can check whether
-			// data written in one pod is really not
-			// visible in the other.
+			// 只有在成功以读写方式挂载、且 Pod 之间不共享卷数据时，
+			// 才能验证一个 Pod 中写入的数据确实在另一个 Pod 中不可见。
 			if pattern.VolMode != v1.PersistentVolumeBlock && !readOnly && !shared {
 				ginkgo.By("writing data in one pod and checking the second does not see it (it should get its own volume)")
 				err := e2epod.VerifyExecInPodSucceed(ctx, f, pod, "touch /mnt/test-0/hello-world")
@@ -317,9 +310,8 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 				framework.ExpectNoError(err, "while checking data in second pod")
 			}
 
-			// TestEphemeral expects the pod to be fully deleted
-			// when this function returns, so don't delay this
-			// cleanup.
+			// TestEphemeral 要求此函数返回时 Pod 已完全删除，
+			// 因此不能延迟这里的清理。
 			StopPodAndDependents(ctx, f.ClientSet, f.Timeouts, pod2)
 
 			return nil
@@ -342,8 +334,8 @@ func (p *ephemeralTestSuite) DefineTests(driver storageframework.TestDriver, pat
 	})
 }
 
-// EphemeralTest represents parameters to be used by tests for inline volumes.
-// Not all parameters are used by all tests.
+// EphemeralTest 表示 inline volume 测试所用的参数。
+// 并非所有测试都会用到全部参数。
 type EphemeralTest struct {
 	Client     clientset.Interface
 	Timeouts   *framework.TimeoutContext
@@ -352,41 +344,34 @@ type EphemeralTest struct {
 	VolSource  *v1.VolumeSource
 	Node       e2epod.NodeSelection
 
-	// GetVolume returns the volume attributes for a
-	// certain inline ephemeral volume, enumerated starting with
-	// #0. Some tests might require more than one volume. They can
-	// all be the same or different, depending what the driver supports
-	// and/or wants to test.
+	// GetVolume 返回指定 inline ephemeral volume 的属性，编号从 #0 开始。
+	// 某些测试可能需要多个卷；它们可以相同也可以不同，取决于 driver
+	// 支持什么以及想要测试什么。
 	//
-	// For each volume, the test driver can specify the
-	// attributes, whether two pods using those attributes will
-	// end up sharing the same backend storage (i.e. changes made
-	// in one pod will be visible in the other), and whether
-	// the volume can be mounted read/write or only read-only.
+	// 对每个卷，测试 driver 可以指定其属性、使用相同属性的两个 Pod
+	// 是否会共享同一后端存储（即一个 Pod 中的改动在另一个 Pod 中可见），
+	// 以及该卷能否以读写方式挂载，还是只能只读挂载。
 	GetVolume func(volumeNumber int) (attributes map[string]string, shared bool, readOnly bool)
 
-	// RunningPodCheck is invoked while a pod using an inline volume is running.
-	// It can execute additional checks on the pod and its volume(s). Any data
-	// returned by it is passed to StoppedPodCheck.
+	// RunningPodCheck 在带有 inline volume 的 Pod 运行期间调用。
+	// 可对 Pod 及其卷执行额外检查；返回的数据会传给 StoppedPodCheck。
 	RunningPodCheck func(ctx context.Context, pod *v1.Pod) interface{}
 
-	// StoppedPodCheck is invoked after ensuring that the pod is gone.
-	// It is passed the data gather by RunningPodCheck or nil if that
-	// isn't defined and then can do additional checks on the node,
-	// like for example verifying that the ephemeral volume was really
-	// removed. How to do such a check is driver-specific and not
-	// covered by the generic storage test suite.
+	// StoppedPodCheck 在确认 Pod 已消失后调用。
+	// 它接收 RunningPodCheck 收集的数据（未定义时为 nil），
+	// 可在节点上做进一步检查，例如验证 ephemeral volume 确实已被移除。
+	// 具体如何检查取决于 driver，不在通用存储测试套件覆盖范围内。
 	StoppedPodCheck func(ctx context.Context, nodeName string, runningPodData interface{})
 
-	// NumInlineVolumes sets the number of ephemeral inline volumes per pod.
-	// Unset (= zero) is the same as one.
+	// NumInlineVolumes 设置每个 Pod 中 ephemeral inline volume 的数量。
+	// 未设置（即零）等同于 1。
 	NumInlineVolumes int
 
-	// ReadOnly limits mounting to read-only.
+	// ReadOnly 限制只能以只读方式挂载。
 	ReadOnly bool
 }
 
-// TestEphemeral tests pod creation with one ephemeral volume.
+// TestEphemeral 测试创建带有一个 ephemeral volume 的 Pod。
 func (t EphemeralTest) TestEphemeral(ctx context.Context) {
 	client := t.Client
 	gomega.Expect(client).NotTo(gomega.BeNil(), "EphemeralTest.Client is required")
@@ -421,7 +406,7 @@ func (t EphemeralTest) TestEphemeral(ctx context.Context) {
 	}
 	pod := StartInPodWithInlineVolume(ctx, client, t.Namespace, "inline-volume-tester", e2epod.InfiniteSleepCommand, volumes, t.ReadOnly, t.Node)
 	defer func() {
-		// pod might be nil now.
+		// 此时 pod 可能已经为 nil。
 		StopPodAndDependents(ctx, client, t.Timeouts, pod)
 	}()
 	framework.ExpectNoError(e2epod.WaitTimeoutForPodRunningInNamespace(ctx, client, pod.Name, pod.Namespace, t.Timeouts.PodStartSlow), "waiting for pod with inline volume")
@@ -429,17 +414,17 @@ func (t EphemeralTest) TestEphemeral(ctx context.Context) {
 	framework.ExpectNoError(err, "get pod")
 	actualNodeName := runningPod.Spec.NodeName
 
-	// Run the checker of the running pod.
+	// 对运行中的 Pod 执行检查。
 	var runningPodData interface{}
 	if t.RunningPodCheck != nil {
 		runningPodData = t.RunningPodCheck(ctx, pod)
 	}
 
 	StopPodAndDependents(ctx, client, t.Timeouts, pod)
-	pod = nil // Don't stop twice.
+	pod = nil // 避免重复停止。
 
-	// There should be no dangling PVCs in the namespace now. There might be for
-	// generic ephemeral volumes, if something went wrong...
+	// 此时 namespace 中不应残留 PVC。对于 generic ephemeral volume，
+	// 一旦出错则可能出现残留。
 	pvcs, err := client.CoreV1().PersistentVolumeClaims(t.Namespace).List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err, "list PVCs")
 	gomega.Expect(pvcs.Items).Should(gomega.BeEmpty(), "no dangling PVCs")
@@ -449,8 +434,8 @@ func (t EphemeralTest) TestEphemeral(ctx context.Context) {
 	}
 }
 
-// StartInPodWithInlineVolume starts a command in a pod with given volume(s) mounted to /mnt/test-<number> directory.
-// The caller is responsible for checking the pod and deleting it.
+// StartInPodWithInlineVolume 在一个 Pod 中启动命令，并将给定的卷挂载到 /mnt/test-<number> 目录。
+// 调用方负责检查该 Pod 并在结束后删除它。
 func StartInPodWithInlineVolume(ctx context.Context, c clientset.Interface, ns, podName, command string, volumes []v1.VolumeSource, readOnly bool, node e2epod.NodeSelection) *v1.Pod {
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -468,7 +453,7 @@ func StartInPodWithInlineVolume(ctx context.Context, c clientset.Interface, ns, 
 				{
 					Name:  "csi-volume-tester",
 					Image: e2epod.GetDefaultTestImage(),
-					// NOTE: /bin/sh works on both agnhost and busybox
+					// 注意：/bin/sh 在 agnhost 和 busybox 上都可用。
 					Command: []string{"/bin/sh", "-c", command},
 				},
 			},
@@ -507,8 +492,8 @@ func StartInPodWithInlineVolume(ctx context.Context, c clientset.Interface, ns, 
 	return pod
 }
 
-// CSIInlineVolumesEnabled checks whether the running cluster has the CSIInlineVolumes feature gate enabled.
-// It does that by trying to create a pod that uses that feature.
+// CSIInlineVolumesEnabled 检查当前集群是否启用了 CSIInlineVolumes feature gate。
+// 它尝试创建一个使用该特性的 Pod 来进行判断。
 func CSIInlineVolumesEnabled(ctx context.Context, c clientset.Interface, t *framework.TimeoutContext, ns string) (bool, error) {
 	return VolumeSourceEnabled(ctx, c, t, ns, v1.VolumeSource{
 		CSI: &v1.CSIVolumeSource{
@@ -517,8 +502,8 @@ func CSIInlineVolumesEnabled(ctx context.Context, c clientset.Interface, t *fram
 	})
 }
 
-// GenericEphemeralVolumesEnabled checks whether the running cluster has the GenericEphemeralVolume feature gate enabled.
-// It does that by trying to create a pod that uses that feature.
+// GenericEphemeralVolumesEnabled 检查当前集群是否启用了 GenericEphemeralVolume feature gate。
+// 它尝试创建一个使用该特性的 Pod 来进行判断。
 func GenericEphemeralVolumesEnabled(ctx context.Context, c clientset.Interface, t *framework.TimeoutContext, ns string) (bool, error) {
 	storageClassName := "no-such-storage-class"
 	return VolumeSourceEnabled(ctx, c, t, ns, v1.VolumeSource{
@@ -538,8 +523,8 @@ func GenericEphemeralVolumesEnabled(ctx context.Context, c clientset.Interface, 
 	})
 }
 
-// VolumeSourceEnabled checks whether a certain kind of volume source is enabled by trying
-// to create a pod that uses it.
+// VolumeSourceEnabled 通过尝试创建使用某种 volumeSource 的 Pod，
+// 来检查该类型是否已启用。
 func VolumeSourceEnabled(ctx context.Context, c clientset.Interface, t *framework.TimeoutContext, ns string, volume v1.VolumeSource) (bool, error) {
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -576,14 +561,14 @@ func VolumeSourceEnabled(ctx context.Context, c clientset.Interface, t *framewor
 
 	switch {
 	case err == nil:
-		// Pod was created, feature supported.
+		// Pod 创建成功，说明该特性受支持。
 		StopPodAndDependents(ctx, c, t, pod)
 		return true, nil
 	case apierrors.IsInvalid(err):
-		// "Invalid" because it uses a feature that isn't supported.
+		// 报 "Invalid" 是因为用到了不支持的特性。
 		return false, nil
 	default:
-		// Unexpected error.
+		// 非预期错误。
 		return false, err
 	}
 }

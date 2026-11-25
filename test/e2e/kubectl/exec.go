@@ -67,7 +67,7 @@ var _ = SIGDescribe("Kubectl exec", func() {
 		pod := e2epod.NewAgnhostPod(ns, podName, nil, nil, nil)
 		pod = e2epod.NewPodClient(f).CreateSync(ctx, pod)
 
-		// 10 workers for 1000 executions
+		// 10 个 worker 执行 1000 次
 		ginkgo.By("Starting workers to exec on pod")
 		for w := range 10 {
 			framework.Logf("Starting worker %d", w)
@@ -88,7 +88,7 @@ var _ = SIGDescribe("Kubectl exec", func() {
 				errors = append(errors, err)
 			}
 		}
-		// Accept a 99% success rate to be able to handle infrastructure errors
+		// 接受 99% 的成功率，以容忍基础设施错误
 		if len(errors) > (size*1)/100 {
 			framework.Failf("Exec failed %d times with following errors : %v", len(errors), errors)
 		}

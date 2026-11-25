@@ -57,7 +57,7 @@ var _ = SIGDescribe("Kubectl rollout", func() {
 		})
 		ginkgo.It("undo should rollback and update deployment env", func(ctx context.Context) {
 			var err error
-			// create deployment
+			// 创建 Deployment
 			e2ekubectl.RunKubectlOrDieInput(ns, deploymentYaml, "apply", "-f", "-")
 
 			if err = e2edeployment.WaitForDeploymentRevisionAndImage(c, ns, "agnhost-deployment", "1", imageutils.GetE2EImage(imageutils.Agnhost)); err != nil {
@@ -86,11 +86,11 @@ var _ = SIGDescribe("Kubectl rollout", func() {
 				framework.Failf("original annotations should not be empty in kubectl rollout test")
 			}
 
-			// do a small update
+			// 做一次小幅更新
 			if _, err = e2ekubectl.RunKubectl(ns, "set", "env", "deployment/agnhost-deployment", "foo=bar"); err != nil {
 				framework.Failf("kubectl failed set env for deployment")
 			}
-			// wait for env to be set
+			// 等待环境变量生效
 			if err = e2edeployment.WaitForDeploymentComplete(c, d); err != nil {
 				framework.Failf("update deployment failed")
 			}
@@ -110,11 +110,11 @@ var _ = SIGDescribe("Kubectl rollout", func() {
 				framework.Failf("update deployment's env failed")
 			}
 
-			// rollback
+			// 回滚
 			if _, err = e2ekubectl.RunKubectl(ns, "rollout", "undo", "deployment/agnhost-deployment"); err != nil {
 				framework.Failf("kubectl failed to rollback deployment")
 			}
-			// wait for rollback finished
+			// 等待回滚完成
 			if err = e2edeployment.WaitForDeploymentComplete(c, d); err != nil {
 				framework.Failf("rollback deployment failed")
 			}

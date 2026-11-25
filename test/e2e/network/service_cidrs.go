@@ -67,16 +67,16 @@ var _ = common.SIGDescribe("Service CIDRs", func() {
 	})
 
 	ginkgo.It("should create Services and serve on different Service CIDRs", func(ctx context.Context) {
-		// use a ServiceCIDR that does not have risk to overlap with other ranges
-		serviceCIDR := netip.MustParsePrefix("203.0.113.0/24") // RFC 5737 (TEST-NET-3) is provided for use in documentation.
-		// use a random IP inside the range
+		// 选用不太可能与其他网段重叠的 ServiceCIDR
+		serviceCIDR := netip.MustParsePrefix("203.0.113.0/24") // RFC 5737（TEST-NET-3）保留用于文档示例。
+		// 在该网段内选一个 IP
 		serviceIP := netip.MustParseAddr("203.0.113.10")
 		if framework.TestContext.ClusterIsIPv6() {
-			serviceCIDR = netip.MustParsePrefix("2001:db8:cb00::/64") // RFC 3849 IPv6 Address Prefix Reserved for Documentation.
+			serviceCIDR = netip.MustParsePrefix("2001:db8:cb00::/64") // RFC 3849 保留用于文档的 IPv6 地址前缀。
 			serviceIP = netip.MustParseAddr("2001:db8:cb00::a")
 		}
 
-		// create a new service CIDR
+		// 新建一个 service CIDR
 		svcCIDR := &networkingv1.ServiceCIDR{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-svc-cidr",
@@ -103,9 +103,8 @@ var _ = common.SIGDescribe("Service CIDRs", func() {
 		jig := e2eservice.NewTestJig(cs, ns, serviceName)
 
 		ginkgo.By("creating service " + serviceName + " with type=NodePort in namespace " + ns)
-		// Because this test run in parallel with other test there is a chance that the ClusterIP
-		// gets allocated, we also need to ensure the ClusterIP belongs to the new Service range
-		// so we need to explicitly set it. Try several times before giving up.
+		// 该测试与其他测试并行运行，ClusterIP 可能已被分配；需要确保它落在新 Service 网段内，
+		// 因此显式指定。失败时重试几次再放弃。
 		var nodePortService *v1.Service
 		for range 5 {
 			nodePortService, err = jig.CreateTCPService(ctx, func(svc *v1.Service) {
@@ -156,11 +155,11 @@ var _ = common.SIGDescribe("ServiceCIDR and IPAddress API", func() {
 		Release: v1.34
 		Testname: ServiceCIDR API
 		Description:
-		The networking.k8s.io API group MUST exist in the /apis discovery document.
-		The networking.k8s.io/v1 API group/version MUST exist in the /apis/networking.k8s.io discovery document.
-		The servicecidrs resources MUST exist in the /apis/networking.k8s.io/v1 discovery document.
-		The servicecidrs resource must support create, get, list, watch, update, patch, delete, and deletecollection.
-		The servicecidrs/status resource must support update and patch
+		/apis discovery 文档中 MUST 包含 networking.k8s.io API group。
+		/apis/networking.k8s.io discovery 文档中 MUST 包含 networking.k8s.io/v1 API group/version。
+		/apis/networking.k8s.io/v1 discovery 文档中 MUST 包含 servicecidrs 资源。
+		servicecidrs 资源必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
+		servicecidrs/status 资源必须支持 update 和 patch。
 	*/
 
 	framework.ConformanceIt("should support ServiceCIDR API operations", func(ctx context.Context) {
@@ -204,10 +203,10 @@ var _ = common.SIGDescribe("ServiceCIDR and IPAddress API", func() {
 		Release: v1.34
 		Testname: IPAddress API
 		Description:
-		The networking.k8s.io API group MUST exist in the /apis discovery document.
-		The networking.k8s.io/v1 API group/version MUST exist in the /apis/networking.k8s.io discovery document.
-		The ipaddresses resources MUST exist in the /apis/networking.k8s.io/v1 discovery document.
-		The ipaddresses resource must support create, get, list, watch, update, patch, delete, and deletecollection.
+		/apis discovery 文档中 MUST 包含 networking.k8s.io API group。
+		/apis/networking.k8s.io discovery 文档中 MUST 包含 networking.k8s.io/v1 API group/version。
+		/apis/networking.k8s.io/v1 discovery 文档中 MUST 包含 ipaddresses 资源。
+		ipaddresses 资源必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support IPAddress API operations", func(ctx context.Context) {
 		ip := &networkingv1.IPAddress{

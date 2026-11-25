@@ -24,23 +24,23 @@ import (
 	"fmt"
 )
 
-// LogFileData holds data about logfiles to fetch with a journalctl command or
-// file from a node's file system.
+// LogFileData 保存日志文件的信息：通过 journalctl 命令获取，
+// 或直接读取节点文件系统中的文件。
 type LogFileData struct {
 	Name              string   `json:"name"`
 	Files             []string `json:"files"`
 	JournalctlCommand []string `json:"journalctl"`
 }
 
-// logFiles are the type used to collect all log files.
+// logFiles 是用于收集所有日志文件的类型。
 type logFiles map[string]LogFileData
 
-// String function of flag.Value
+// String 实现 flag.Value 的 String 方法。
 func (l *logFiles) String() string {
 	return fmt.Sprint(*l)
 }
 
-// Set function of flag.Value
+// Set 实现 flag.Value 的 Set 方法。
 func (l *logFiles) Set(value string) error {
 	var log LogFileData
 	if err := json.Unmarshal([]byte(value), &log); err != nil {
@@ -57,8 +57,8 @@ func init() {
 	flag.Var(&extraLogs, "extra-log", "Extra log to collect after test in the json format of LogFile.")
 }
 
-// getLogFiles returns the log files to collect. Windows has no journald or
-// standard Linux log paths, so only extra logs specified via flags are returned.
+// getLogFiles 返回要收集的日志文件。Windows 既没有 journald，
+// 也没有标准的 Linux 日志路径，因此只返回通过 flag 指定的额外日志。
 func getLogFiles() logFiles {
 	logs := make(logFiles)
 	for _, l := range extraLogs {

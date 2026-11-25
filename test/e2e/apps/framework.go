@@ -18,5 +18,5 @@ package apps
 
 import "k8s.io/kubernetes/test/e2e/framework"
 
-// SIGDescribe annotates the test with the SIG label.
+// SIGDescribe 为测试标注所属的 SIG。
 var SIGDescribe = framework.SIGDescribe("apps")

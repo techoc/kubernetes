@@ -84,16 +84,12 @@ var _ = SIGWindowsDescribe(feature.TopologyManager, feature.Windows, framework.W
 		})
 
 		ginkgo.It("should report zero admission counters after a fresh restart", func(ctx context.Context) {
-			// Note: the kubelet_container_aligned_compute_resources_* series with
-			// boundary="numa_node" are created lazily. The topology manager's
-			// metric initialization runs during container-manager construction,
-			// which happens before the kubelet registers its metrics
-			// (metrics.Register in initializeModules). component-base counters
-			// return a no-op for WithLabelValues before registration, so those
-			// numa_node series only appear after the first real admission. On a
-			// truly fresh restart with no pods they are legitimately absent, so we
-			// only assert the admission counters here (plain counters that read 0
-			// immediately after registration).
+			// 注意：boundary="numa_node" 的 kubelet_container_aligned_compute_resources_* 指标是惰性创建的。
+			// topology manager 的指标初始化发生在 container manager 构造期间，早于 kubelet 注册指标
+			// （initializeModules 中的 metrics.Register）。component-base 计数器在注册前对
+			// WithLabelValues 是空操作，因此这些 numa_node 指标只在首次真实准入后出现。
+			// 在完全没有 Pod 的全新重启中它们确实不存在，因此这里只校验准入计数器
+			// （注册后立即读为 0 的普通计数器）。
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
 				"kubelet_topology_manager_admission_requests_total": gstruct.MatchAllElements(nodeID, gstruct.Elements{
 					"": timelessSample(0),
@@ -116,10 +112,9 @@ var _ = SIGWindowsDescribe(feature.TopologyManager, feature.Windows, framework.W
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusivePausePodWindows("topology-affinity-err", cpuRequest))
 
 			idFn := makeCustomPairID("scope", "boundary")
-			// TopologyManagerScope is "pod", so only the pod-scope numa_node series is
-			// touched at admission time. The container-scope numa_node series is never
-			// created here (and the startup zero-init is a no-op because it runs before
-			// metrics.Register), so we only assert the pod-scope failure series.
+			// TopologyManagerScope 为 "pod"，因此准入时只会触及 pod 级别的 numa_node 指标。
+			// 这里不会创建容器级别的 numa_node 指标（启动时的零值初始化也因早于 metrics.Register
+			// 而成为空操作），所以只校验 pod 级别的失败指标。
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
 				"kubelet_topology_manager_admission_requests_total": gstruct.MatchAllElements(nodeID, gstruct.Elements{
 					"": timelessSample(1),
@@ -140,18 +135,15 @@ var _ = SIGWindowsDescribe(feature.TopologyManager, feature.Windows, framework.W
 		})
 
 		ginkgo.It("should not report any admission failures when the topology manager alignment is expected to succeed", func(ctx context.Context) {
-			// Request one fewer than minCPUsPerNUMA so the guaranteed pod always
-			// fits within a single NUMA node's allocatable CPUs. On a single-NUMA
-			// host minCPUsPerNUMA equals the whole node, and one CPU is reserved
-			// (reservedSystemCPUs), so requesting minCPUsPerNUMA would exceed
-			// allocatable and never be admitted.
+			// 请求比 minCPUsPerNUMA 少 1 个 CPU，确保 guaranteed Pod 始终能放入单个 NUMA 节点的可分配 CPU。
+			// 在单 NUMA 主机上 minCPUsPerNUMA 等于整台机器的 CPU 数，但还有一个 CPU 被保留
+			// （reservedSystemCPUs），因此请求 minCPUsPerNUMA 会超过可分配量而永远无法准入。
 			testPod = e2epod.NewPodClient(f).Create(ctx, makeGuaranteedCPUExclusivePausePodWindows("topology-alignment-ok", minCPUsPerNUMA-1))
 
 			idFn := makeCustomPairID("scope", "boundary")
-			// Pod scope: a successful admission increments the pod-scope numa_node
-			// aligned count. The failure series are not created on the success path
-			// (and the startup zero-init no-ops before registration), so assert the
-			// admission counters plus the pod-scope aligned count.
+			// Pod 级别：准入成功会增加 pod 级别 numa_node 的对齐计数。
+			// 成功路径不会创建失败指标（启动时的零值初始化在注册前也是空操作），
+			// 因此校验准入计数器以及 pod 级别的对齐计数。
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{
 				"kubelet_topology_manager_admission_requests_total": gstruct.MatchAllElements(nodeID, gstruct.Elements{
 					"": timelessSample(1),

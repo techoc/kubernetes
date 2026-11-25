@@ -14,11 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package framework contains provider-independent helper code for
-// building and running E2E tests with Ginkgo. The actual Ginkgo test
-// suites gets assembled by combining this framework, the optional
-// provider support code and specific tests via a separate .go file
-// like Kubernetes' test/e2e.go.
+// Package framework 提供与 provider 无关的辅助代码，用于通过 Ginkgo 构建和运行 E2E 测试。
+// 实际的 Ginkgo 测试套件由该框架、可选的 provider 支持代码以及具体测试组合而成，
+// 组合过程在单独的 .go 文件中完成，例如 Kubernetes 的 test/e2e.go。
 package framework
 
 import (
@@ -29,10 +27,8 @@ import (
 	gtypes "github.com/onsi/gomega/types"
 )
 
-// GomegaObject returns a matcher which appends a full dump of the actual value
-// to the failure of the matcher that it wraps. This is useful e.g. for
-// gomega.HaveField which otherwise only generates a message containing
-// the field that it is checking, but not the object in which that field occurs.
+// GomegaObject 返回一个 matcher，它在所包装 matcher 的失败信息后追加实际值的完整转储。
+// 例如 gomega.HaveField 默认只显示被检查的字段，不显示该字段所属的对象，此时它很有用。
 func GomegaObject(shouldMatch gtypes.GomegaMatcher) gtypes.GomegaMatcher {
 	return &gomegaObjectMatcher{
 		shouldMatch: shouldMatch,

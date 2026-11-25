@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This suite tests volumes under stress conditions
+// 该 suite 测试压力条件下的 volume
 
 package testsuites
 
@@ -47,7 +47,7 @@ type volumeStressTest struct {
 
 	volumes []*storageframework.VolumeResource
 	pods    []*v1.Pod
-	// stop and wait for any async routines
+	// 停止并等待所有异步例程
 	wg sync.WaitGroup
 
 	testOptions storageframework.StressTestOptions
@@ -55,8 +55,7 @@ type volumeStressTest struct {
 
 var _ storageframework.TestSuite = &volumeStressTestSuite{}
 
-// InitCustomVolumeStressTestSuite returns volumeStressTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomVolumeStressTestSuite 返回使用自定义 test pattern、实现 TestSuite 接口的 volumeStressTestSuite
 func InitCustomVolumeStressTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &volumeStressTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -66,8 +65,7 @@ func InitCustomVolumeStressTestSuite(patterns []storageframework.TestPattern) st
 	}
 }
 
-// InitVolumeStressTestSuite returns volumeStressTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitVolumeStressTestSuite 返回使用 testsuite 默认 pattern、实现 TestSuite 接口的 volumeStressTestSuite
 func InitVolumeStressTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsDynamicPV,
@@ -108,8 +106,8 @@ func (t *volumeStressTestSuite) DefineTests(driver storageframework.TestDriver, 
 		l     *volumeStressTest
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 失效。任何使用 f 的代码
+	// 都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("stress", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -117,7 +115,7 @@ func (t *volumeStressTestSuite) DefineTests(driver storageframework.TestDriver, 
 		cs = f.ClientSet
 		l = &volumeStressTest{}
 
-		// Now do the more expensive test initialization.
+		// 现在进行开销较大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		l.migrationCheck = newMigrationOpCheck(ctx, f.ClientSet, f.ClientConfig(), dInfo.InTreePluginName)
 		l.volumes = []*storageframework.VolumeResource{}
@@ -190,7 +188,7 @@ func (t *volumeStressTestSuite) DefineTests(driver storageframework.TestDriver, 
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 		createPodsAndVolumes(ctx)
-		// Restart pod repeatedly
+		// 反复重启 pod
 		for podIndex := 0; podIndex < l.testOptions.NumPods; podIndex++ {
 			l.wg.Add(1)
 			go func() {
@@ -199,14 +197,10 @@ func (t *volumeStressTestSuite) DefineTests(driver storageframework.TestDriver, 
 				for j := 0; j < l.testOptions.NumRestarts; j++ {
 					select {
 					case <-ctx.Done():
-						// This looks like a in the
-						// original test
-						// (https://github.com/kubernetes/kubernetes/blob/21049c2a1234ae3eea57357ed4329ed567a2dab3/test/e2e/storage/testsuites/volume_stress.go#L212):
-						// This early return will never
-						// get reached even if some
-						// other goroutine fails
-						// because the context doesn't
-						// get cancelled.
+						// 这看起来像原始测试中的写法
+						// (https://github.com/kubernetes/kubernetes/blob/21049c2a1234ae3eea57357ed4329ed567a2dab3/test/e2e/storage/testsuites/volume_stress.go#L212)：
+						// 即使其他 goroutine 失败，这个提前返回也永远不会
+						// 执行，因为 context 不会被取消。
 						return
 					default:
 						pod := l.pods[podIndex]
@@ -221,7 +215,7 @@ func (t *volumeStressTestSuite) DefineTests(driver storageframework.TestDriver, 
 							framework.Failf("Failed to wait for pod-%v [%+v] turn into running status. Error: %v", podIndex, pod, err)
 						}
 
-						// TODO: write data per pod and validate it every time
+						// TODO: 为每个 pod 写入数据并在每次重启后校验
 
 						err = e2epod.DeletePodWithWait(ctx, f.ClientSet, pod)
 						if err != nil {

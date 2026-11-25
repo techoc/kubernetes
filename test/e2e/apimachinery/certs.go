@@ -35,8 +35,7 @@ type certContext struct {
 	signingCert []byte
 }
 
-// Setup the server cert. For example, user apiservers and admission webhooks
-// can use the cert to prove their identify to the kube-apiserver
+// 生成服务端证书。用户部署的 apiserver 和准入 webhook 需要用它向 kube-apiserver 证明身份。
 func setupServerCert(namespaceName, serviceName string) *certContext {
 	certDir, err := os.MkdirTemp("", "test-e2e-server-cert")
 	if err != nil {

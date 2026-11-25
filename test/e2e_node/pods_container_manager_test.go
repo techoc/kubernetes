@@ -34,8 +34,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// getResourceList returns a ResourceList with the
-// specified cpu and memory resource values
+// getResourceList 返回带有指定 CPU 和内存资源值的 ResourceList。
 func getResourceList(cpu, memory string) v1.ResourceList {
 	res := v1.ResourceList{}
 	if cpu != "" {
@@ -47,7 +46,7 @@ func getResourceList(cpu, memory string) v1.ResourceList {
 	return res
 }
 
-// getResourceRequirements returns a ResourceRequirements object
+// getResourceRequirements 返回 ResourceRequirements 对象
 func getResourceRequirements(requests, limits v1.ResourceList) v1.ResourceRequirements {
 	res := v1.ResourceRequirements{}
 	res.Requests = requests
@@ -56,25 +55,25 @@ func getResourceRequirements(requests, limits v1.ResourceList) v1.ResourceRequir
 }
 
 const (
-	// Kubelet internal cgroup name for burstable tier
+	// kubelet 内部用于 burstable 层级的 cgroup 名称
 	burstableCgroup = "burstable"
-	// Kubelet internal cgroup name for besteffort tier
+	// kubelet 内部用于 besteffort 层级的 cgroup 名称
 	bestEffortCgroup = "besteffort"
 )
 
-// makePodToVerifyCgroups returns a pod that verifies the existence of the specified cgroups.
+// makePodToVerifyCgroups 返回一个用于校验指定 cgroup 是否存在的 Pod。
 func makePodToVerifyCgroups(cgroupNames []string) *v1.Pod {
-	// convert the names to their literal cgroupfs forms...
+	// 将名称转换为 cgroupfs 的字面形式……
 	cgroupFsNames := []string{}
 	rootCgroupName := cm.NewCgroupName(cm.RootCgroupName, defaultNodeAllocatableCgroup)
 	for _, baseName := range cgroupNames {
-		// Add top level cgroup used to enforce node allocatable.
+		// 添加用于强制节点可分配资源的顶层 cgroup。
 		cgroupComponents := strings.Split(baseName, "/")
 		cgroupName := cm.NewCgroupName(rootCgroupName, cgroupComponents...)
 		cgroupFsNames = append(cgroupFsNames, toCgroupFsName(cgroupName))
 	}
 	klog.Infof("expecting %v cgroups to be found", cgroupFsNames)
-	// build the pod command to either verify cgroups exist
+	// 构建 Pod 命令，用于校验 cgroup 是否存在
 	command := ""
 
 	for _, cgroupFsName := range cgroupFsNames {
@@ -119,7 +118,7 @@ func makePodToVerifyCgroups(cgroupNames []string) *v1.Pod {
 	return pod
 }
 
-// makePodToVerifyCgroupRemoved verfies the specified cgroup does not exist.
+// makePodToVerifyCgroupRemoved 校验指定 cgroup 不存在。
 func makePodToVerifyCgroupRemoved(baseName string) *v1.Pod {
 	components := strings.Split(baseName, "/")
 	cgroupName := cm.NewCgroupName(cm.RootCgroupName, components...)

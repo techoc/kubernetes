@@ -54,9 +54,8 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 		/*
 			Release: v1.9
 			Testname: Custom Resource Definition, create
-			Description: Create a API extension client and define a random custom resource definition.
-			Create the custom resource definition and then delete it. The creation and deletion MUST
-			be successful.
+			Description: 创建一个 API extension client 并定义一个随机的 CustomResourceDefinition。
+			创建该 CustomResourceDefinition，然后删除它。创建和删除 MUST 成功。
 		*/
 		framework.ConformanceIt("creating/deleting custom resource definition objects works", func(ctx context.Context) {
 
@@ -67,7 +66,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 
 			randomDefinition := fixtures.NewRandomNameV1CustomResourceDefinition(v1.ClusterScoped)
 
-			// Create CRD and waits for the resource to be recognized and available.
+			// 创建 CRD，并等待该资源被识别且可用。
 			randomDefinition, err = fixtures.CreateNewV1CustomResourceDefinitionWatchUnsafe(randomDefinition, apiExtensionClient)
 			framework.ExpectNoError(err, "creating CustomResourceDefinition")
 
@@ -80,10 +79,9 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 		/*
 			Release: v1.16
 			Testname: Custom Resource Definition, list
-			Description: Create a API extension client, define 10 labeled custom resource definitions and list them using
-			a label selector; the list result MUST contain only the labeled custom resource definitions. Delete the labeled
-			custom resource definitions via delete collection; the delete MUST be successful and MUST delete only the
-			labeled custom resource definitions.
+			Description: 创建一个 API extension client，定义 10 个带标签的 CustomResourceDefinition，并使用 label selector
+			列出它们；list 结果 MUST 只包含带标签的 CustomResourceDefinition。通过 delete collection 删除带标签的
+			CustomResourceDefinition；删除 MUST 成功，并且 MUST 只删除带标签的 CustomResourceDefinition。
 		*/
 		framework.ConformanceIt("listing custom resource definition objects works", func(ctx context.Context) {
 			testListSize := 10
@@ -92,10 +90,10 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 			apiExtensionClient, err := clientset.NewForConfig(config)
 			framework.ExpectNoError(err, "initializing apiExtensionClient")
 
-			// Label the CRDs we create so we can list only them even though they are cluster scoped
+			// 给创建的 CRD 打上标签，这样即使它们是 cluster scoped，也只列出这些 CRD
 			testUUID := string(uuid.NewUUID())
 
-			// Create CRD and wait for the resource to be recognized and available.
+			// 创建 CRD，并等待该资源被识别且可用。
 			crds := make([]*v1.CustomResourceDefinition, testListSize)
 			for i := range testListSize {
 				crd := fixtures.NewRandomNameV1CustomResourceDefinition(v1.ClusterScoped)
@@ -105,7 +103,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 				crds[i] = crd
 			}
 
-			// Create a crd w/o the label to ensure the label selector matching works correctly
+			// 创建一个不带标签的 CRD，以验证 label selector 的匹配是否正确
 			crd := fixtures.NewRandomNameV1CustomResourceDefinition(v1.ClusterScoped)
 			crd, err = fixtures.CreateNewV1CustomResourceDefinitionWatchUnsafe(crd, apiExtensionClient)
 			framework.ExpectNoError(err, "creating CustomResourceDefinition")
@@ -132,7 +130,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 				}
 			}
 
-			// Use delete collection to remove the CRDs
+			// 用 delete collection 删除这些 CRD
 			err = fixtures.DeleteV1CustomResourceDefinitions(selectorListOpts, apiExtensionClient)
 			framework.ExpectNoError(err, "deleting CustomResourceDefinitions")
 			_, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crd.Name, metav1.GetOptions{})
@@ -142,8 +140,8 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 		/*
 			Release: v1.16
 			Testname: Custom Resource Definition, status sub-resource
-			Description: Create a custom resource definition. Attempt to read, update and patch its status sub-resource;
-			all mutating sub-resource operations MUST be visible to subsequent reads.
+			Description: 创建一个 CustomResourceDefinition。尝试读取、更新和 patch 它的 status sub-resource；
+			所有修改 sub-resource 的操作 MUST 能在后续读取中看到。
 		*/
 		framework.ConformanceIt("getting/updating/patching custom resource definition status sub-resource works", func(ctx context.Context) {
 			config, err := framework.LoadConfig()
@@ -155,7 +153,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 			gvr := v1.SchemeGroupVersion.WithResource("customresourcedefinitions")
 			resourceClient := dynamicClient.Resource(gvr)
 
-			// Create CRD and waits for the resource to be recognized and available.
+			// 创建 CRD，并等待该资源被识别且可用。
 			crd := fixtures.NewRandomNameV1CustomResourceDefinition(v1.ClusterScoped)
 			crd, err = fixtures.CreateNewV1CustomResourceDefinitionWatchUnsafe(crd, apiExtensionClient)
 			framework.ExpectNoError(err, "creating CustomResourceDefinition")
@@ -167,7 +165,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 			var updated *v1.CustomResourceDefinition
 			updateCondition := v1.CustomResourceDefinitionCondition{Message: "updated"}
 			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				// Use dynamic client to read the status sub-resource since typed client does not expose it.
+				// 用 dynamic client 读取 status sub-resource，因为 typed client 没有暴露它。
 				u, err := resourceClient.Get(ctx, crd.GetName(), metav1.GetOptions{}, "status")
 				framework.ExpectNoError(err, "getting CustomResourceDefinition status")
 				status := unstructuredToCRD(u)
@@ -195,8 +193,8 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 	/*
 		Release: v1.16
 		Testname: Custom Resource Definition, discovery
-		Description: Fetch /apis, /apis/apiextensions.k8s.io, and /apis/apiextensions.k8s.io/v1 discovery documents,
-		and ensure they indicate CustomResourceDefinition apiextensions.k8s.io/v1 resources are available.
+		Description: 获取 /apis、/apis/apiextensions.k8s.io 和 /apis/apiextensions.k8s.io/v1 discovery 文档，
+		并确认它们表明 CustomResourceDefinition apiextensions.k8s.io/v1 资源可用。
 	*/
 	framework.ConformanceIt("should include custom resource definition resources in discovery documents", func(ctx context.Context) {
 		{
@@ -265,9 +263,8 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 	/*
 		Release: v1.17
 		Testname: Custom Resource Definition, defaulting
-		Description: Create a custom resource definition without default. Create CR. Add default and read CR until
-		the default is applied. Create another CR. Remove default, add default for another field and read CR until
-		new field is defaulted, but old default stays.
+		Description: 创建一个没有默认值的 CustomResourceDefinition，然后创建一个 CR。添加默认值并读取 CR，直到默认值生效。
+		再创建另一个 CR。移除原有默认值，为另一个字段添加默认值并读取 CR，直到新字段被默认值填充，而旧字段的默认值仍然保留。
 	*/
 	framework.ConformanceIt("custom resource defaulting for requests and from storage works", func(ctx context.Context) {
 		config, err := framework.LoadConfig()
@@ -277,7 +274,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 		dynamicClient, err := dynamic.NewForConfig(config)
 		framework.ExpectNoError(err, "initializing dynamic client")
 
-		// Create CRD without default and waits for the resource to be recognized and available.
+		// 创建没有默认值的 CRD，并等待该资源被识别且可用。
 		crd := fixtures.NewRandomNameV1CustomResourceDefinition(v1.ClusterScoped)
 		if crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties == nil {
 			crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties = map[string]v1.JSONSchemaProps{}
@@ -291,7 +288,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 			framework.ExpectNoError(err, "deleting CustomResourceDefinition")
 		}()
 
-		// create CR without default in storage
+		// 在 storage 中没有默认值时创建 CR
 		name1 := names.SimpleNameGenerator.GenerateName("cr-1")
 		gvr := schema.GroupVersionResource{
 			Group:    crd.Spec.Group,
@@ -308,7 +305,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 		}}, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "creating CR")
 		gomega.Expect(u1).To(apimachineryutils.HaveValidResourceVersion())
-		// Setting default for a to "A" and waiting for the CR to get defaulted on read
+		// 将 a 的默认值设为 "A"，等待读取 CR 时默认值被填充
 		crd, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Patch(ctx, crd.Name, types.JSONPatchType, []byte(`[
 			{"op":"add","path":"/spec/versions/0/schema/openAPIV3Schema/properties/a/default", "value": "A"}
 		]`), metav1.PatchOptions{})
@@ -333,7 +330,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 		})
 		framework.ExpectNoError(err, "waiting for CR to be defaulted on read")
 
-		// create CR with default in storage
+		// 在 storage 中有默认值时创建 CR
 		name2 := names.SimpleNameGenerator.GenerateName("cr-2")
 		u2, err := crClient.Create(ctx, &unstructured.Unstructured{Object: map[string]interface{}{
 			"apiVersion": gvr.Group + "/" + gvr.Version,
@@ -349,7 +346,7 @@ var _ = SIGDescribe("CustomResourceDefinition resources [Privileged:ClusterAdmin
 		}
 		gomega.Expect(v).To(gomega.Equal("A"), "\"a\" is defaulted to \"A\"")
 
-		// Deleting default for a, adding default "B" for b and waiting for the CR to get defaulted on read for b
+		// 删除 a 的默认值，为 b 添加默认值 "B"，等待读取 CR 时 b 的默认值被填充
 		crd, err = apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Patch(ctx, crd.Name, types.JSONPatchType, []byte(`[
 			{"op":"remove","path":"/spec/versions/0/schema/openAPIV3Schema/properties/a/default"},
 			{"op":"add","path":"/spec/versions/0/schema/openAPIV3Schema/properties/b/default", "value": "B"}

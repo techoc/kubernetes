@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// This test is sensitive to line numbering.
-// The following lines can be removed to compensate for import changes.
+// 此测试对行号敏感。
+// 可以删除以下空行来抵消 import 变动带来的行号偏移。
 //
 //
 //
@@ -37,7 +37,7 @@ import (
 //
 //
 //
-// This must be line #40.
+// 此处必须是第 40 行。
 
 func TestNewGomega(t *testing.T) {
 	if err := Gomega().Expect("hello").To(gomega.Equal("hello")); err != nil {

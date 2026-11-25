@@ -31,7 +31,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/upgrades"
 )
 
-// createStatefulSetService creates a Headless Service with Name name and Selector set to match labels.
+// createStatefulSetService 创建名为 name 的 Headless Service，selector 按给定标签匹配。
 func createStatefulSetService(name string, labels map[string]string) *v1.Service {
 	headlessService := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -48,16 +48,16 @@ func createStatefulSetService(name string, labels map[string]string) *v1.Service
 	return headlessService
 }
 
-// StatefulSetUpgradeTest implements an upgrade test harness for StatefulSet upgrade testing.
+// StatefulSetUpgradeTest 实现 StatefulSet 升级测试的测试框架。
 type StatefulSetUpgradeTest struct {
 	service *v1.Service
 	set     *appsv1.StatefulSet
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (StatefulSetUpgradeTest) Name() string { return "[sig-apps] statefulset-upgrade" }
 
-// Skip returns true when this test can be skipped.
+// Skip 在可以跳过该测试时返回 true。
 func (StatefulSetUpgradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	minVersion := version.MustParseSemantic("1.5.0")
 
@@ -69,7 +69,7 @@ func (StatefulSetUpgradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	return false
 }
 
-// Setup creates a StatefulSet and a HeadlessService. It verifies the basic SatefulSet properties
+// Setup 创建 StatefulSet 和 HeadlessService，并验证 StatefulSet 的基本属性
 func (t *StatefulSetUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	ssName := "ss"
 	labels := map[string]string{
@@ -101,13 +101,13 @@ func (t *StatefulSetUpgradeTest) Setup(ctx context.Context, f *framework.Framewo
 	t.verify(ctx, f)
 }
 
-// Test waits for the upgrade to complete and verifies the StatefulSet basic functionality
+// Test 等待升级完成并验证 StatefulSet 的基本功能
 func (t *StatefulSetUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	<-done
 	t.verify(ctx, f)
 }
 
-// Teardown deletes all StatefulSets
+// Teardown 删除所有 StatefulSet
 func (t *StatefulSetUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
 	e2estatefulset.DeleteAllStatefulSets(ctx, f.ClientSet, t.set.Name)
 }

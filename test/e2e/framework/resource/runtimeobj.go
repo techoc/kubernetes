@@ -42,8 +42,7 @@ var (
 	kindBatchJob              = schema.GroupKind{Group: "batch", Kind: "Job"}
 )
 
-// GetRuntimeObjectForKind returns a runtime.Object based on its GroupKind,
-// namespace and name.
+// GetRuntimeObjectForKind 根据 GroupKind、namespace 和 name 返回对应的 runtime.Object。
 func GetRuntimeObjectForKind(ctx context.Context, c clientset.Interface, kind schema.GroupKind, ns, name string) (runtime.Object, error) {
 	switch kind {
 	case kindReplicationController:
@@ -61,7 +60,7 @@ func GetRuntimeObjectForKind(ctx context.Context, c clientset.Interface, kind sc
 	}
 }
 
-// GetSelectorFromRuntimeObject returns the labels for the given object.
+// GetSelectorFromRuntimeObject 返回给定对象的标签选择器。
 func GetSelectorFromRuntimeObject(obj runtime.Object) (labels.Selector, error) {
 	switch typed := obj.(type) {
 	case *v1.ReplicationController:
@@ -91,8 +90,7 @@ func GetSelectorFromRuntimeObject(obj runtime.Object) (labels.Selector, error) {
 	}
 }
 
-// GetReplicasFromRuntimeObject returns the number of replicas for the given
-// object.
+// GetReplicasFromRuntimeObject 返回给定对象的副本数。
 func GetReplicasFromRuntimeObject(obj runtime.Object) (int32, error) {
 	switch typed := obj.(type) {
 	case *v1.ReplicationController:
@@ -125,8 +123,8 @@ func GetReplicasFromRuntimeObject(obj runtime.Object) (int32, error) {
 	case *appsv1.DaemonSet:
 		return 0, nil
 	case *batchv1.Job:
-		// TODO: currently we use pause pods so that's OK. When we'll want to switch to Pods
-		// that actually finish we need a better way to do this.
+		// TODO: 目前使用 pause Pod，这样处理没问题。若改为使用会自行结束的 Pod，
+		// 就需要更好的方式来计算副本数。
 		if typed.Spec.Parallelism != nil {
 			return *typed.Spec.Parallelism, nil
 		}

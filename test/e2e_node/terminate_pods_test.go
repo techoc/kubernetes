@@ -82,8 +82,8 @@ var _ = SIGDescribe("Terminate Pods", framework.WithNodeConformance(), func() {
 
 		err := client.Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
 
-		// Wait for the pod to disappear from the API server up to 10 seconds, this shouldn't hang for minutes due to
-		// non-existent secret being mounted.
+		// 最多等待 10 秒，Pod 应从 API server 中消失；
+		// 不能因为挂载了不存在的 Secret 而挂起数分钟。
 		gomega.Eventually(ctx, func() bool {
 			_, err := client.Get(context.TODO(), pod.Name, metav1.GetOptions{})
 			return apierrors.IsNotFound(err)

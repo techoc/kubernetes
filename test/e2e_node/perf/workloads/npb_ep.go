@@ -29,11 +29,11 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// npbEPWorkload defines a workload to run the Embarrassingly Parallel (EP) workload
-// from NAS parallel benchmark (NPB) suite.
+// npbEPWorkload 定义用于运行 NAS parallel benchmark (NPB) 套件中
+// Embarrassingly Parallel (EP) 工作负载的 workload。
 type npbEPWorkload struct{}
 
-// Ensure npbEPWorkload implements NodePerfWorkload interface.
+// 确保 npbEPWorkload 实现 NodePerfWorkload interface。
 var _ NodePerfWorkload = &npbEPWorkload{}
 
 func (w npbEPWorkload) Name() string {
@@ -71,16 +71,15 @@ func (w npbEPWorkload) Timeout() time.Duration {
 }
 
 func (w npbEPWorkload) KubeletConfig(oldCfg *kubeletconfig.KubeletConfiguration) (newCfg *kubeletconfig.KubeletConfiguration, err error) {
-	// Enable CPU Manager in Kubelet with static policy.
+	// 在 Kubelet 中以 static 策略启用 CPU Manager。
 	newCfg = oldCfg.DeepCopy()
-	// Set the CPU Manager policy to static.
+	// 将 CPU Manager 策略设为 static。
 	newCfg.CPUManagerPolicy = string(cpumanager.PolicyStatic)
-	// Set the CPU Manager reconcile period to 10 second.
+	// 将 CPU Manager 的 reconcile 周期设为 10 秒。
 	newCfg.CPUManagerReconcilePeriod = metav1.Duration{Duration: 10 * time.Second}
 
-	// The Kubelet panics if either kube-reserved or system-reserved is not set
-	// when static CPU Manager is enabled. Set cpu in kube-reserved > 0 so that
-	// kubelet doesn't panic.
+	// 启用 static CPU Manager 时，若未设置 kube-reserved 或 system-reserved，
+	// Kubelet 会 panic。将 kube-reserved 中的 cpu 设为大于 0，避免 kubelet 崩溃。
 	if newCfg.KubeReserved == nil {
 		newCfg.KubeReserved = map[string]string{}
 	}

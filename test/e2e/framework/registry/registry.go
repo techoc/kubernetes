@@ -42,27 +42,27 @@ const (
 		}
 	}
 }`
-	user1creds = "dXNlcjpwYXNzd29yZA==" // user:password
+	user1creds = "dXNlcjpwYXNzd29yZA==" // 用户名:密码
 )
 
-// SetupRegistry runs the `fake-registry-server --private` from the agnhost image.
-// The registry is run with HostPort 5000 exposed in order to allow locally-scheduled
-// pods to query the registry via kubelet.
-// The registry only runs in HTTP (no TLS) mode, and so this hack-path is used as
-// localhost is typically allowed by CRIs and so no CRI-specific configuration is needed
+// SetupRegistry 运行 agnhost 镜像中的 `fake-registry-server --private`。
+// registry 通过 HostPort 5000 暴露，这样调度到本地的 pod 就能经由 kubelet
+// 查询该 registry。
+// registry 只以 HTTP（无 TLS）模式运行，因此采用这种取巧做法：CRI 通常
+// 允许 localhost，无需针对 CRI 做额外配置。
 //
-// By default, the function runs the registry as a DaemonSet on all nodes, but it supports running
-// it in just a `pod` for cases where kube-controller-manager is not running (like in
-// the Node Conformance test suite).
+// 默认情况下，本函数以 DaemonSet 形式在所有节点上运行 registry；
+// 但也可以只在单个 `pod` 中运行，用于 kube-controller-manager 未运行的场景
+// （例如 Node Conformance 测试套件）。
 //
-// This function returns:
-// - the node-local address of the registry
-// - set of node names that the registry runs on, mostly useful only in the podOnly case
-// - an error
+// 本函数返回：
+// - registry 的节点本地地址
+// - 运行 registry 的节点名集合，主要仅在 podOnly 场景下有用
+// - error
 //
-// TODO: once https://github.com/kubernetes/kubernetes/issues/132955 is
-// addressed, we might be able to proxy a single endpoint from the cluster to each
-// node's localhost port instead of using DaemonSets.
+// TODO: 等 https://github.com/kubernetes/kubernetes/issues/132955 处理完，
+// 也许可以把集群中的单个 endpoint 代理到每个节点的 localhost 端口，
+// 而不必使用 DaemonSet。
 func SetupRegistry(ctx context.Context, f *framework.Framework, podOnly bool) (string, []string, error) {
 	podTestLabel := "test-registry-pod-" + f.UniqueName
 	pod, err := podManifest(podTestLabel)
@@ -131,15 +131,15 @@ func podManifest(podTestLabel string) (*v1.Pod, error) {
 		RunAsUserName: ptr.To("NT AUTHORITY\\SYSTEM"),
 		HostProcess:   ptr.To(true),
 	}
-	// setting HostNetwork to true so that the registry is accessible on localhost:<hostport>
-	// and we don't have to deal with any CNI quirks.
+	// 设置 HostNetwork 为 true，这样 registry 可以通过 localhost:<hostport>
+	// 访问，避开 CNI 的各种怪异行为。
 	pod.Spec.HostNetwork = true
 
 	return pod, nil
 }
 
-// User1DockerSecret creates a secret containing the docker credentials for pulling from
-// the agnhost fake-registry-server.
+// User1DockerSecret 创建一个 secret，其中包含从 agnhost fake-registry-server
+// 拉取镜像所需的 docker 凭据。
 func User1DockerSecret(registryAddress string) *v1.Secret {
 	return &v1.Secret{
 		Type: v1.SecretTypeDockerConfigJson,

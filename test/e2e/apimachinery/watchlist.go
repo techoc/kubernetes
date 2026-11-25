@@ -227,8 +227,7 @@ var _ = SIGDescribe("API Streaming (aka. WatchList)", framework.WithFeatureGate(
 			actualSecret, err := dynamicClient.Resource(v1.SchemeGroupVersion.WithResource("secrets")).Namespace(f.Namespace.Name).Get(ctx, wellKnownSecret.GetName(), metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			if i != 0 {
-				// only the first obj has
-				// the column definition
+				// 只有第一个对象带有列定义
 				actualSecret = removeColumnDefinitionsFromTable(actualSecret)
 			}
 			expectedSecrets = append(expectedSecrets, actualSecret)
@@ -242,8 +241,8 @@ var _ = SIGDescribe("API Streaming (aka. WatchList)", framework.WithFeatureGate(
 		var ageColIndex int
 		for i, expectedSecret := range expectedSecrets {
 			actualSecret := retrieveObjFromEventOfType(w, watch.Added)
-			// clean the Age column value because it's dynamic
-			// and causes flakes in equality checks.
+			// 清理 Age 列的值，因为它会动态变化，
+			// 会导致相等性检查不稳定。
 			if i == 0 {
 				ageColIndex = getAgeColumnIndex(expectedSecret)
 			}
@@ -279,8 +278,8 @@ var _ = SIGDescribe("API Streaming (aka. WatchList)", framework.WithFeatureGate(
 				return dynamicClient.Resource(v1.SchemeGroupVersion.WithResource("secrets")).Namespace(f.Namespace.Name).List(ctx, options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				// a dummy error triggers the fallback logic
-				// which uses a standard LIST call
+				// 用假错误触发回退逻辑，
+				// 该逻辑使用标准的 LIST 调用
 				return nil, fmt.Errorf("dummy error")
 			},
 		}
@@ -403,8 +402,8 @@ func addWellKnownSecrets(ctx context.Context, f *framework.Framework) []*v1.Secr
 	return secrets
 }
 
-// addWellKnownUnstructuredSecrets exists because secrets from addWellKnownSecrets
-// don't have type info and cannot be converted.
+// addWellKnownUnstructuredSecrets 存在的原因是 addWellKnownSecrets 创建的 secret
+// 没有类型信息，无法完成转换。
 func addWellKnownUnstructuredSecrets(ctx context.Context, f *framework.Framework) []*unstructured.Unstructured {
 	var secrets []*unstructured.Unstructured
 	for i := 1; i <= 5; i++ {
@@ -512,10 +511,10 @@ var (
 	_ metav1beta1.Table = metav1.Table{}
 )
 
-// extractMetadataFromTableRowObject retrieves the metav1.Object
-// from a single TableRow. It handles two scenarios:
-//  1. If row.Object.Object is already populated, it simply returns its metadata.
-//  2. Otherwise, it decodes row.Object.Raw into a runtime.Object and then returns its metadata.
+// extractMetadataFromTableRowObject 从单个 TableRow 中取出 metav1.Object。
+// 它处理两种情况：
+//  1. 如果 row.Object.Object 已填充，直接返回其 metadata。
+//  2. 否则，将 row.Object.Raw 解码为 runtime.Object，再返回其 metadata。
 func extractMetadataFromTableRowObject(row metav1.TableRow) (metav1.Object, error) {
 	if row.Object.Raw == nil && row.Object.Object == nil {
 		return nil, fmt.Errorf("no object was found in the table")
@@ -529,7 +528,7 @@ func extractMetadataFromTableRowObject(row metav1.TableRow) (metav1.Object, erro
 	return meta.Accessor(internalObj)
 }
 
-// decodeIntoTable converts a runtime.Object into a *metav1.Table.
+// decodeIntoTable 将 runtime.Object 转换为 *metav1.Table。
 func decodeIntoTable(rawObject runtime.Object) (*metav1.Table, error) {
 	unstructuredObj, ok := rawObject.(*unstructured.Unstructured)
 	if !ok {

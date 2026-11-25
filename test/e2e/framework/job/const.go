@@ -19,9 +19,9 @@ package job
 import "time"
 
 const (
-	// JobTimeout is how long to wait for a job to finish.
+	// JobTimeout 是等待 Job 完成的最长时间。
 	JobTimeout = 15 * time.Minute
 
-	// JobSelectorKey is a job selector name
+	// JobSelectorKey 是 Job selector 的名称
 	JobSelectorKey = "job"
 )

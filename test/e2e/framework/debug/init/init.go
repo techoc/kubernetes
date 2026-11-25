@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package init sets debug.DumpAllNamespaceInfo as implementation in the framework
-// and enables log size verification and resource gathering.
+// Package init 将 debug.DumpAllNamespaceInfo 设为 framework 中的实现，
+// 并启用日志大小校验与资源采集。
 package init
 
 import (
@@ -84,9 +84,9 @@ func init() {
 					ginkgo.DeferCleanup(func() {
 						ginkgo.By("Collecting resource usage data", func() {
 							summary, resourceViolationError := gatherer.StopAndSummarize([]int{90, 99, 100}, nil /* no constraints */)
-							// Always record the summary, even if there was an error.
+							// 即使出错也要记录摘要。
 							f.TestSummaries = append(f.TestSummaries, summary)
-							// Now fail if there was an error.
+							// 记录完毕后再处理错误。
 							framework.ExpectNoError(resourceViolationError)
 						})
 					})

@@ -40,11 +40,12 @@ import (
 )
 
 const (
-	// claimDeletingTimeout is How long claims have to become deleted.
+	// claimDeletingTimeout 是等待 claim 被删除的最长时间。
 	claimDeletingTimeout = 3 * time.Minute
 )
 
-// waitForPersistentVolumeClaimDeleted waits for a PersistentVolumeClaim to be removed from the system until timeout occurs, whichever comes first.
+// waitForPersistentVolumeClaimDeleted 等待 PersistentVolumeClaim 从系统中移除，
+// 直到超时或移除完成，以先发生者为准。
 func waitForPersistentVolumeClaimDeleted(ctx context.Context, c clientset.Interface, ns string, pvcName string, Poll, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for PersistentVolumeClaim %s to be removed", timeout, pvcName)
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(Poll) {

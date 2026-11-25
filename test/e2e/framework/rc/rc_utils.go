@@ -34,7 +34,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// ByNameContainer returns a ReplicationController with specified name and container
+// ByNameContainer 返回具有指定名称和容器的 ReplicationController
 func ByNameContainer(name string, replicas int32, labels map[string]string, c v1.Container,
 	gracePeriod *int64) *v1.ReplicationController {
 
@@ -67,19 +67,19 @@ func ByNameContainer(name string, replicas int32, labels map[string]string, c v1
 	}
 }
 
-// DeleteRCAndWaitForGC deletes only the Replication Controller and waits for GC to delete the pods.
+// DeleteRCAndWaitForGC 只删除 Replication Controller，并等待 GC 删除其 Pod。
 func DeleteRCAndWaitForGC(ctx context.Context, c clientset.Interface, ns, name string) error {
-	// TODO (pohly): context support
+	// TODO (pohly): 支持 context
 	return e2eresource.DeleteResourceAndWaitForGC(ctx, c, schema.GroupKind{Kind: "ReplicationController"}, ns, name)
 }
 
-// ScaleRC scales Replication Controller to be desired size.
+// ScaleRC 将 Replication Controller 扩缩容到期望的大小。
 func ScaleRC(ctx context.Context, clientset clientset.Interface, scalesGetter scaleclient.ScalesGetter, ns, name string, size uint, wait bool) error {
 	return e2eresource.ScaleResource(ctx, clientset, scalesGetter, ns, name, size, wait, schema.GroupKind{Kind: "ReplicationController"}, v1.SchemeGroupVersion.WithResource("replicationcontrollers"))
 }
 
-// RunRC Launches (and verifies correctness) of a Replication Controller
-// and will wait for all pods it spawns to become "Running".
+// RunRC 启动 Replication Controller（并验证其正确性），
+// 然后等待它创建的所有 Pod 都进入 "Running" 状态。
 func RunRC(ctx context.Context, config testutils.RCConfig) error {
 	ginkgo.By(fmt.Sprintf("creating replication controller %s in namespace %s", config.Name, config.Namespace))
 	config.NodeDumpFunc = e2edebug.DumpNodeDebugInfo

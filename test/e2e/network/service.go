@@ -78,21 +78,19 @@ const (
 	defaultServeHostnameServicePort = 80
 	defaultServeHostnameServiceName = "svc-hostname"
 
-	// AffinityTimeout is the maximum time that CheckAffinity is allowed to take; this
-	// needs to be more than long enough for AffinityConfirmCount HTTP requests to
-	// complete in a busy CI cluster, but shouldn't be too long since we will end up
-	// waiting the entire time in the tests where affinity is not expected.
+	// AffinityTimeout 是 CheckAffinity 允许的最长耗时；既要足够长，
+	// 让繁忙 CI 集群中 AffinityConfirmCount 次 HTTP 请求能够完成，
+	// 又不能太长，因为在预期无 affinity 的测试中必须一直等到超时。
 	AffinityTimeout = 2 * time.Minute
 
-	// AffinityConfirmCount is the number of needed continuous requests to confirm that
-	// affinity is enabled.
+	// AffinityConfirmCount 是确认 affinity 生效所需的连续请求次数。
 	AffinityConfirmCount = 15
 
-	// SessionAffinityTimeout is the number of seconds to wait between requests for
-	// session affinity to timeout before trying a load-balancer request again
+	// SessionAffinityTimeout 是两次请求之间等待 session affinity 超时的秒数，
+	// 超时后再尝试一次 load-balancer 请求。
 	SessionAffinityTimeout = 125
 
-	// label define which is used to find kube-proxy and kube-apiserver pod
+	// 用于查找 kube-proxy 和 kube-apiserver pod 的 label
 	kubeProxyLabelName     = "kube-proxy"
 	clusterAddonLabelKey   = "k8s-app"
 	kubeAPIServerLabelName = "kube-apiserver"
@@ -119,11 +117,10 @@ var (
 	}
 )
 
-// affinityCheckFromPod returns interval, timeout and function pinging the service and
-// returning pinged hosts for pinging the service from execPod.
+// affinityCheckFromPod 返回轮询间隔、超时时间，以及从 execPod 访问 Service 并收集响应 host 的函数。
 func affinityCheckFromPod(execPod *v1.Pod, serviceIP string, servicePort int) (time.Duration, time.Duration, func() []string) {
 	timeout := AffinityTimeout
-	// interval considering a maximum of 2 seconds per connection
+	// 按每次连接最多 2 秒计算间隔
 	interval := 2 * AffinityConfirmCount * time.Second
 
 	serviceIPPort := net.JoinHostPort(serviceIP, strconv.Itoa(servicePort))
@@ -141,8 +138,7 @@ func affinityCheckFromPod(execPod *v1.Pod, serviceIP string, servicePort int) (t
 	return interval, timeout, getHosts
 }
 
-// affinityCheckFromTest returns interval, timeout and function pinging the service and
-// returning pinged hosts for pinging the service from the test itself.
+// affinityCheckFromTest 返回轮询间隔、超时时间，以及从测试进程自身访问 Service 并收集响应 host 的函数。
 func affinityCheckFromTest(ctx context.Context, cs clientset.Interface, serviceIP string, servicePort int) (time.Duration, time.Duration, func() []string) {
 	interval := 2 * time.Second
 	timeout := e2eservice.GetServiceLoadBalancerPropagationTimeout(ctx, cs)
@@ -162,11 +158,10 @@ func affinityCheckFromTest(ctx context.Context, cs clientset.Interface, serviceI
 	return interval, timeout, getHosts
 }
 
-// CheckAffinity function tests whether the service affinity works as expected.
-// If affinity is expected, the test will return true once affinityConfirmCount
-// number of same response observed in a row. If affinity is not expected, the
-// test will keep observe until different responses observed. The function will
-// return false only in case of unexpected errors.
+// checkAffinity 检查 Service 的 affinity 是否按预期工作。
+// 预期有 affinity 时，连续观察到 affinityConfirmCount 次相同响应即返回 true；
+// 预期无 affinity 时，则持续观察直到出现不同的响应。
+// 只有发生意外错误时才会返回 false。
 func checkAffinity(ctx context.Context, cs clientset.Interface, execPod *v1.Pod, serviceIP string, servicePort int, shouldHold bool) bool {
 	var interval, timeout time.Duration
 	var getHosts func() []string
@@ -216,18 +211,18 @@ func checkAffinity(ctx context.Context, cs clientset.Interface, execPod *v1.Pod,
 	return true
 }
 
-// affinityTracker tracks the destination of a request for the affinity tests.
+// affinityTracker 在 affinity 测试中记录请求到达的目标。
 type affinityTracker struct {
 	hostTrace []string
 }
 
-// Record the response going to a given host.
+// 记录来自指定 host 的响应。
 func (at *affinityTracker) recordHost(host string) {
 	at.hostTrace = append(at.hostTrace, host)
 	framework.Logf("Received response from host: %s", host)
 }
 
-// Check that we got a constant count requests going to the same host.
+// 检查最近count次请求是否都落到同一个 host。
 func (at *affinityTracker) checkHostTrace(count int) (fulfilled, affinityHolds bool) {
 	fulfilled = (len(at.hostTrace) >= count)
 	if len(at.hostTrace) == 0 {
@@ -251,8 +246,8 @@ func checkAffinityFailed(tracker affinityTracker, err string) {
 	framework.Fail(err)
 }
 
-// StartServeHostnameService creates a deployment that serves its
-// hostname and a service on top of it.
+// StartServeHostnameService 创建一个返回自身 hostname 的 Deployment，
+// 并在其上创建对应的 Service。
 func StartServeHostnameService(ctx context.Context, c clientset.Interface, svc *v1.Service, ns string, replicas int) ([]string, string, error) {
 	podNames := make([]string, replicas)
 	name := svc.ObjectMeta.Name
@@ -298,7 +293,7 @@ func StartServeHostnameService(ctx context.Context, c clientset.Interface, svc *
 	return podNames, serviceIP, nil
 }
 
-// StopServeHostnameService stops the given service.
+// StopServeHostnameService 删除指定的 Service 及其 Deployment。
 func StopServeHostnameService(ctx context.Context, clientset clientset.Interface, ns, name string) error {
 	if err := clientset.AppsV1().Deployments(ns).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 		return err
@@ -309,25 +304,24 @@ func StopServeHostnameService(ctx context.Context, clientset clientset.Interface
 	return nil
 }
 
-// verifyServeHostnameServiceUp wgets the given serviceIP:servicePort from the
-// host exec pod of host network type and from the exec pod of container network type.
-// Each pod in the service is expected to echo its name. These names are compared with the
-// given expectedPods list after a sort | uniq.
+// verifyServeHostnameServiceUp 分别从 hostNetwork 的 host exec pod 和普通容器网络的 exec pod
+// 访问指定的 serviceIP:servicePort。Service 中的每个 pod 都应返回自身名称，
+// 去重排序后与 expectedPods 列表比对。
 func verifyServeHostnameServiceUp(ctx context.Context, c clientset.Interface, ns string, expectedPods []string, serviceIP string, servicePort int) error {
-	// to verify from host network
+	// 从宿主机网络验证
 	hostExecPod := launchHostExecPod(ctx, c, ns, "verify-service-up-host-exec-pod", nil)
 
-	// to verify from container's network
+	// 从容器网络验证
 	execPod := e2epod.CreateExecPodOrFail(ctx, c, ns, "verify-service-up-exec-pod-", nil)
 	defer func() {
 		e2epod.DeletePodOrFail(ctx, c, ns, hostExecPod.Name)
 		e2epod.DeletePodOrFail(ctx, c, ns, execPod.Name)
 	}()
 
-	// verify service from pod
+	// 从 pod 内部验证 Service
 	cmdFunc := func(podName string) string {
 		wgetCmd := "wget -q -O -"
-		// Command 'wget' in Windows image may not support option 'T'
+		// Windows 镜像中的 wget 可能不支持 -T 选项
 		if !framework.NodeOSDistroIs("windows") {
 			wgetCmd += " -T 1"
 		}
@@ -335,7 +329,7 @@ func verifyServeHostnameServiceUp(ctx context.Context, c clientset.Interface, ns
 		cmd := fmt.Sprintf("for i in $(seq 1 %d); do %s http://%s 2>&1 || true; echo; done",
 			50*len(expectedPods), wgetCmd, serviceIPPort)
 		framework.Logf("Executing cmd %q in pod %v/%v", cmd, ns, podName)
-		// TODO: Use exec-over-http via the netexec pod instead of kubectl exec.
+		// TODO: 改为通过 netexec pod 的 exec-over-http，替代 kubectl exec。
 		output, err := e2eoutput.RunHostCmd(ns, podName, cmd)
 		if err != nil {
 			framework.Logf("error while kubectl execing %q in pod %v/%v: %v\nOutput: %v", cmd, ns, podName, err, output)
@@ -349,7 +343,7 @@ func verifyServeHostnameServiceUp(ctx context.Context, c clientset.Interface, ns
 		passed := false
 		gotEndpoints := sets.NewString()
 
-		// Retry cmdFunc for a while
+		// 在一段时间内重试 cmdFunc
 		for start := time.Now(); time.Since(start) < e2eservice.KubeProxyLagTimeout; time.Sleep(5 * time.Second) {
 			for _, endpoint := range strings.Split(cmdFunc(podName), "\n") {
 				trimmedEp := strings.TrimSpace(endpoint)
@@ -357,10 +351,9 @@ func verifyServeHostnameServiceUp(ctx context.Context, c clientset.Interface, ns
 					gotEndpoints.Insert(trimmedEp)
 				}
 			}
-			// TODO: simply checking that the retrieved endpoints is a superset
-			// of the expected allows us to ignore intermitten network flakes that
-			// result in output like "wget timed out", but these should be rare
-			// and we need a better way to track how often it occurs.
+			// TODO: 只检查实际 endpoint 是否为期望集合的超集，可以忽略
+			// "wget timed out" 之类的偶发网络抖动，但这种情况本应很少，
+			// 需要有更好的方式统计其发生频率。
 			if gotEndpoints.IsSuperset(expectedEndpoints) {
 				if !gotEndpoints.Equal(expectedEndpoints) {
 					framework.Logf("Ignoring unexpected output wgetting endpoints of service %s: %v", serviceIP, gotEndpoints.Difference(expectedEndpoints))
@@ -371,7 +364,7 @@ func verifyServeHostnameServiceUp(ctx context.Context, c clientset.Interface, ns
 			framework.Logf("Unable to reach the following endpoints of service %s: %v", serviceIP, expectedEndpoints.Difference(gotEndpoints))
 		}
 		if !passed {
-			// Sort the lists so they're easier to visually diff.
+			// 排序后更容易肉眼比对差异。
 			exp := expectedEndpoints.List()
 			got := gotEndpoints.List()
 			sort.StringSlice(exp).Sort()
@@ -382,18 +375,17 @@ func verifyServeHostnameServiceUp(ctx context.Context, c clientset.Interface, ns
 	return nil
 }
 
-// verifyServeHostnameServiceDown verifies that the given service isn't served.
+// verifyServeHostnameServiceDown 验证指定 Service 已不再提供服务。
 func verifyServeHostnameServiceDown(ctx context.Context, c clientset.Interface, ns string, serviceIP string, servicePort int) error {
-	// verify from host network
+	// 从宿主机网络验证
 	hostExecPod := launchHostExecPod(ctx, c, ns, "verify-service-down-host-exec-pod", nil)
 	defer func() {
 		e2epod.DeletePodOrFail(ctx, c, ns, hostExecPod.Name)
 	}()
 
 	ipPort := net.JoinHostPort(serviceIP, strconv.Itoa(servicePort))
-	// The current versions of curl included in CentOS and RHEL distros
-	// misinterpret square brackets around IPv6 as globbing, so use the -g
-	// argument to disable globbing to handle the IPv6 case.
+	// CentOS 和 RHEL 发行版自带的 curl 会把 IPv6 地址外的方括号误当作 glob 模式，
+	// 因此用 -g 关闭 globbing 以正确处理 IPv6。
 	command := fmt.Sprintf(
 		"curl -g -s --connect-timeout 2 http://%s && echo service-down-failed", ipPort)
 
@@ -411,14 +403,14 @@ func verifyServeHostnameServiceDown(ctx context.Context, c clientset.Interface, 
 	return fmt.Errorf("waiting for service to be down timed out")
 }
 
-// testNotReachableHTTP tests that a HTTP request doesn't connect to the given host and port.
+// testNotReachableHTTP 检查发往给定 host 和 port 的 HTTP 请求无法建立连接。
 func testNotReachableHTTP(ctx context.Context, host string, port int, timeout time.Duration) {
 	pollfn := func(ctx context.Context) (bool, error) {
 		result := e2enetwork.PokeHTTP(host, port, "/", nil)
 		if result.Code == 0 {
 			return true, nil
 		}
-		return false, nil // caller can retry
+		return false, nil // 调用方可以重试
 	}
 
 	if err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, pollfn); err != nil {
@@ -426,54 +418,51 @@ func testNotReachableHTTP(ctx context.Context, host string, port int, timeout ti
 	}
 }
 
-// UDPPokeParams is a struct for UDP poke parameters.
+// UDPPokeParams 定义 UDP 探测的参数。
 type UDPPokeParams struct {
 	Timeout  time.Duration
 	Response string
 }
 
-// UDPPokeResult is a struct for UDP poke result.
+// UDPPokeResult 保存 UDP 探测的结果。
 type UDPPokeResult struct {
 	Status   UDPPokeStatus
-	Error    error  // if there was any error
-	Response []byte // if code != 0
+	Error    error  // 发生错误时填写
+	Response []byte // code != 0 时填写
 }
 
-// UDPPokeStatus is string for representing UDP poke status.
+// UDPPokeStatus 表示 UDP 探测的状态。
 type UDPPokeStatus string
 
 const (
-	// UDPSuccess is UDP poke status which is success.
+	// UDPSuccess 表示探测成功。
 	UDPSuccess UDPPokeStatus = "Success"
-	// UDPError is UDP poke status which is error.
+	// UDPError 表示探测发生错误。
 	UDPError UDPPokeStatus = "UnknownError"
-	// UDPTimeout is UDP poke status which is timeout.
+	// UDPTimeout 表示探测超时。
 	UDPTimeout UDPPokeStatus = "TimedOut"
-	// UDPRefused is UDP poke status which is connection refused.
+	// UDPRefused 表示连接被拒绝。
 	UDPRefused UDPPokeStatus = "ConnectionRefused"
-	// UDPBadResponse is UDP poke status which is bad response.
+	// UDPBadResponse 表示收到异常响应。
 	UDPBadResponse UDPPokeStatus = "BadResponse"
-	// Any time we add new errors, we should audit all callers of this.
+	// 新增错误状态时，必须检查所有调用方是否需要同步处理。
 )
 
-// PokeUDP tries to connect to a host on a port and send the given request. Callers
-// can specify additional success parameters, if desired.
+// PokeUDP 尝试连接指定 host 的 port 并发送请求，调用方可按需指定额外的成功判定参数。
 //
-// The result status will be characterized as precisely as possible, given the
-// known users of this.
+// 状态会结合已知调用方的需要，尽可能精确地分类。
 //
-// The result error will be populated for any status other than Success.
+// 除 Success 之外的状态都会填写 error。
 //
-// The result response will be populated if the UDP transaction was completed, even
-// if the other test params make this a failure).
+// 只要 UDP 交互完成，就会填写 response，即使其他判定参数使本次探测被视为失败。
 func PokeUDP(host string, port int, request string, params *UDPPokeParams) UDPPokeResult {
 	hostPort := net.JoinHostPort(host, strconv.Itoa(port))
 	url := fmt.Sprintf("udp://%s", hostPort)
 
 	ret := UDPPokeResult{}
 
-	// Sanity check inputs, because it has happened.  These are the only things
-	// that should hard fail the test - they are basically ASSERT()s.
+	// 输入确实出现过非法的情况，这里必须先校验。
+	// 只有这些情况会直接让测试失败，相当于 ASSERT()。
 	if host == "" {
 		framework.Failf("Got empty host for UDP poke (%s)", url)
 		return ret
@@ -483,7 +472,7 @@ func PokeUDP(host string, port int, request string, params *UDPPokeParams) UDPPo
 		return ret
 	}
 
-	// Set default params.
+	// 设置默认参数。
 	if params == nil {
 		params = &UDPPokeParams{}
 	}
@@ -556,7 +545,7 @@ func PokeUDP(host string, port int, request string, params *UDPPokeParams) UDPPo
 	return ret
 }
 
-// testReachableUDP tests that the given host serves UDP on the given port.
+// testReachableUDP 检查给定 host 在指定 port 上提供 UDP 服务。
 func testReachableUDP(ctx context.Context, host string, port int, timeout time.Duration) {
 	pollfn := func(ctx context.Context) (bool, error) {
 		result := PokeUDP(host, port, "echo hello", &UDPPokeParams{
@@ -566,7 +555,7 @@ func testReachableUDP(ctx context.Context, host string, port int, timeout time.D
 		if result.Status == UDPSuccess {
 			return true, nil
 		}
-		return false, nil // caller can retry
+		return false, nil // 调用方可以重试
 	}
 
 	if err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, pollfn); err != nil {
@@ -574,21 +563,21 @@ func testReachableUDP(ctx context.Context, host string, port int, timeout time.D
 	}
 }
 
-// testNotReachableUDP tests that the given host doesn't serve UDP on the given port.
+// testNotReachableUDP 检查给定 host 在指定 port 上不提供 UDP 服务。
 func testNotReachableUDP(ctx context.Context, host string, port int, timeout time.Duration) {
 	pollfn := func(ctx context.Context) (bool, error) {
 		result := PokeUDP(host, port, "echo hello", &UDPPokeParams{Timeout: 3 * time.Second})
 		if result.Status != UDPSuccess && result.Status != UDPError {
 			return true, nil
 		}
-		return false, nil // caller can retry
+		return false, nil // 调用方可以重试
 	}
 	if err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, pollfn); err != nil {
 		framework.Failf("UDP service %v:%v reachable after %v: %v", host, port, timeout, err)
 	}
 }
 
-// TestHTTPHealthCheckNodePort tests a HTTP connection by the given request to the given host and port.
+// TestHTTPHealthCheckNodePort 用指定请求测试到给定 host 和 port 的 HTTP 连接。
 func TestHTTPHealthCheckNodePort(ctx context.Context, host string, port int, request string, timeout time.Duration, expectSucceed bool, threshold int) error {
 	count := 0
 	condition := func(ctx context.Context) (bool, error) {
@@ -627,11 +616,11 @@ func testHTTPHealthCheckNodePort(ip string, port int, request string) (bool, err
 		framework.Logf("Got error reading response from %s: %v", url, err)
 		return false, err
 	}
-	// HealthCheck responder returns 503 for no local endpoints
+	// HealthCheck responder 在没有本地 endpoint 时返回 503
 	if resp.StatusCode == 503 {
 		return false, nil
 	}
-	// HealthCheck responder returns 200 for non-zero local endpoints
+	// HealthCheck responder 在有本地 endpoint 时返回 200
 	if resp.StatusCode == 200 {
 		return true, nil
 	}
@@ -664,8 +653,8 @@ func testHTTPHealthCheckNodePortFromTestContainer(ctx context.Context, config *e
 	return nil
 }
 
-// Does an HTTP GET, but does not reuse TCP connections
-// This masks problems where the iptables rule has changed, but we don't see it
+// 执行 HTTP GET，但不复用 TCP 连接。
+// 复用连接会掩盖 iptables 规则已变化但未被观察到的问题。
 func httpGetNoConnectionPoolTimeout(url string, timeout time.Duration) (*http.Response, error) {
 	tr := utilnet.SetTransportDefaults(&http.Transport{
 		DisableKeepAlives: true,
@@ -684,7 +673,7 @@ func getServeHostnameService(name string) *v1.Service {
 	return svc
 }
 
-// waitForAPIServerUp waits for the kube-apiserver to be up.
+// waitForAPIServerUp 等待 kube-apiserver 启动完成。
 func waitForAPIServerUp(ctx context.Context, c clientset.Interface) error {
 	for start := time.Now(); time.Since(start) < time.Minute; time.Sleep(5 * time.Second) {
 		body, err := c.CoreV1().RESTClient().Get().AbsPath("/healthz").Do(ctx).Raw()
@@ -695,8 +684,7 @@ func waitForAPIServerUp(ctx context.Context, c clientset.Interface) error {
 	return fmt.Errorf("waiting for apiserver timed out")
 }
 
-// getEndpointNodesWithInternalIP returns a map of nodenames:internal-ip on which the
-// endpoints of the Service are running.
+// getEndpointNodesWithInternalIP 返回 Service endpoint 所在节点的 nodename:internal-ip 映射。
 func getEndpointNodesWithInternalIP(ctx context.Context, jig *e2eservice.TestJig) (map[string]string, error) {
 	nodes, err := jig.ListNodesWithEndpoint(ctx)
 	if err != nil {
@@ -723,12 +711,12 @@ var _ = common.SIGDescribe("Services", func() {
 		cs = f.ClientSet
 	})
 
-	// TODO: We get coverage of TCP/UDP and multi-port services through the DNS test. We should have a simpler test for multi-port TCP here.
+	// TODO: TCP/UDP 和多端口 Service 已通过 DNS 测试覆盖，这里应该补一个更简单的多端口 TCP 测试。
 
 	/*
 		Release: v1.9
 		Testname: Service, endpoints
-		Description: Create a service with a endpoint without any Pods, the service MUST run and show empty endpoints. Add a pod to the service and the service MUST validate to show all the endpoints for the ports exposed by the Pod. Add another Pod then the list of all Ports exposed by both the Pods MUST be valid and have corresponding service endpoint. Once the second Pod is deleted then set of endpoint MUST be validated to show only ports from the first container that are exposed. Once both pods are deleted the endpoints from the service MUST be empty.
+		Description: 创建一个没有 Pod 的 Service，该 Service MUST 正常运行且 endpoint 为空。向 Service 添加一个 Pod，Service MUST 展示该 Pod 暴露端口对应的所有 endpoint。再添加第二个 Pod，两个 Pod 暴露的所有端口列表 MUST 有效且有对应的 Service endpoint。删除第二个 Pod 后，endpoint 集合 MUST 只展示第一个容器暴露的端口。两个 Pod 都删除后，Service 的 endpoint MUST 为空。
 	*/
 	framework.ConformanceIt("should serve a basic endpoint from pods", func(ctx context.Context) {
 		serviceName := "endpoint-test2"
@@ -798,10 +786,10 @@ var _ = common.SIGDescribe("Services", func() {
 	/*
 		Release: v1.9
 		Testname: Service, endpoints with multiple ports
-		Description: Create a service with two ports but no Pods are added to the service yet.  The service MUST run and show empty set of endpoints. Add a Pod to the first port, service MUST list one endpoint for the Pod on that port. Add another Pod to the second port, service MUST list both the endpoints. Delete the first Pod and the service MUST list only the endpoint to the second Pod. Delete the second Pod and the service must now have empty set of endpoints.
+		Description: 创建有两个端口但尚无 Pod 的 Service，该 Service MUST 正常运行且 endpoint 为空。为第一个端口添加 Pod，Service MUST 列出该 Pod 在此端口上的一个 endpoint。为第二个端口再添加 Pod，Service MUST 列出两个 endpoint。删除第一个 Pod 后，Service MUST 只列出第二个 Pod 的 endpoint。删除第二个 Pod 后，Service 的 endpoint MUST 为空。
 	*/
 	framework.ConformanceIt("should serve multiport endpoints from pods", func(ctx context.Context) {
-		// repacking functionality is intentionally not tested here - it's better to test it in an integration test.
+		// 这里刻意不测试端口重打包（repacking）功能，放在集成测试中验证更合适。
 		serviceName := "multi-endpoint-test"
 		ns := f.Namespace.Name
 		jig := e2eservice.NewTestJig(cs, ns, serviceName)
@@ -1014,11 +1002,10 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 	})
 
-	// NOTE: base on fundamental requirement of the kubernetes networking model(https://kubernetes.io/docs/concepts/services-networking/)
-	// pods can communicate with all other pods on any other node without NAT
-	// we should avoid masquerading the internal Pod traffic, detail see #126089
+	// NOTE: 根据 Kubernetes 网络模型的基本要求（https://kubernetes.io/docs/concepts/services-networking/），
+	// Pod 无需 NAT 即可与其他节点上的 Pod 通信，因此不应伪装（masquerade）内部 Pod 流量，详见 #126089。
 	ginkgo.It("should preserve source pod IP for traffic thru service cluster IP [LinuxOnly]", func(ctx context.Context) {
-		// this test is creating a pod with HostNetwork=true, which is not supported on Windows.
+		// 该测试会创建 HostNetwork=true 的 Pod，Windows 不支持这种配置。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		serviceName := "sourceip-test"
@@ -1143,7 +1130,7 @@ var _ = common.SIGDescribe("Services", func() {
 		ginkgo.By("verifying service " + svc2 + " is up")
 		framework.ExpectNoError(verifyServeHostnameServiceUp(ctx, cs, ns, podNames2, svc2IP, servicePort))
 
-		// Stop service 1 and make sure it is gone.
+		// 停止 Service 1 并确认它已消失。
 		ginkgo.By("stopping service " + svc1)
 		framework.ExpectNoError(StopServeHostnameService(ctx, f.ClientSet, ns, svc1))
 
@@ -1152,7 +1139,7 @@ var _ = common.SIGDescribe("Services", func() {
 		ginkgo.By("verifying service " + svc2 + " is still up")
 		framework.ExpectNoError(verifyServeHostnameServiceUp(ctx, cs, ns, podNames2, svc2IP, servicePort))
 
-		// Start another service and verify both are up.
+		// 启动另一个 Service 并确认两者都可用。
 		ginkgo.By("creating service " + svc3 + " in namespace " + ns)
 		podNames3, svc3IP, err := StartServeHostnameService(ctx, cs, getServeHostnameService(svc3), ns, numPods)
 		framework.ExpectNoError(err, "failed to create deployment with service: %s in the namespace: %s", svc3, ns)
@@ -1208,7 +1195,7 @@ var _ = common.SIGDescribe("Services", func() {
 		kubeProxyLabelSet := map[string]string{clusterAddonLabelKey: kubeProxyLabelName}
 		e2eskipper.SkipUnlessComponentRunsAsPodsAndClientCanDeleteThem(ctx, kubeProxyLabelName, cs, metav1.NamespaceSystem, kubeProxyLabelSet)
 
-		// TODO: use the ServiceTestJig here
+		// TODO: 这里改用 ServiceTestJig
 		ns := f.Namespace.Name
 		numPods, servicePort := 3, defaultServeHostnameServicePort
 
@@ -1241,7 +1228,7 @@ var _ = common.SIGDescribe("Services", func() {
 
 		e2eskipper.SkipUnlessComponentRunsAsPodsAndClientCanDeleteThem(ctx, kubeAPIServerLabelName, cs, metav1.NamespaceSystem, map[string]string{clusterComponentKey: kubeAPIServerLabelName})
 
-		// TODO: use the ServiceTestJig here
+		// TODO: 这里改用 ServiceTestJig
 		ns := f.Namespace.Name
 		numPods, servicePort := 3, defaultServeHostnameServicePort
 
@@ -1254,7 +1241,7 @@ var _ = common.SIGDescribe("Services", func() {
 
 		framework.ExpectNoError(verifyServeHostnameServiceUp(ctx, cs, ns, podNames1, svc1IP, servicePort))
 
-		// Restart apiserver
+		// 重启 apiserver
 		ginkgo.By("Restarting apiserver")
 		if err := restartApiserver(ctx, ns, cs); err != nil {
 			framework.Failf("error restarting apiserver: %v", err)
@@ -1265,7 +1252,7 @@ var _ = common.SIGDescribe("Services", func() {
 		}
 		framework.ExpectNoError(verifyServeHostnameServiceUp(ctx, cs, ns, podNames1, svc1IP, servicePort))
 
-		// Create a new service and check if it's not reusing IP.
+		// 新建一个 Service，检查它不会复用之前的 IP。
 		ginkgo.DeferCleanup(StopServeHostnameService, f.ClientSet, ns, svc2)
 		podNames2, svc2IP, err := StartServeHostnameService(ctx, cs, getServeHostnameService(svc2), ns, numPods)
 		framework.ExpectNoError(err, "failed to create deployment with service: %s in the namespace: %s", svc2, ns)
@@ -1280,9 +1267,9 @@ var _ = common.SIGDescribe("Services", func() {
 	/*
 		Release: v1.16
 		Testname: Service, NodePort Service
-		Description: Create a TCP NodePort service, and test reachability from a client Pod.
-		The client Pod MUST be able to access the NodePort service by service name and cluster
-		IP on the service port, and on nodes' internal and external IPs on the NodePort.
+		Description: 创建 TCP NodePort Service，并从客户端 Pod 测试可达性。
+		客户端 Pod MUST 能通过 Service 名称和 ClusterIP 在 Service 端口上访问该 NodePort Service，
+		也 MUST 能通过节点的 internal IP 和 external IP 在 NodePort 上访问。
 	*/
 	framework.ConformanceIt("should be able to create a functioning NodePort service", func(ctx context.Context) {
 		serviceName := "nodeport-test"
@@ -1306,9 +1293,9 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	/*
-		Create a ClusterIP service with an External IP that is not assigned to an interface.
-		The IP ranges here are reserved for documentation according to
-		[RFC 5737](https://tools.ietf.org/html/rfc5737) Section 3 and should not be used by any host.
+		创建一个 External IP 未分配给任何网络接口的 ClusterIP Service。
+		这里使用的 IP 段依据 [RFC 5737](https://tools.ietf.org/html/rfc5737) 第 3 节保留用于文档，
+		任何主机都不应使用。
 	*/
 	ginkgo.It("should be possible to connect to a service via ExternalIP when the external IP is not assigned to a node", func(ctx context.Context) {
 		serviceName := "externalip-test"
@@ -1342,10 +1329,10 @@ var _ = common.SIGDescribe("Services", func() {
 
 	/*
 		Testname: Service, update NodePort, same port different protocol
-		Description: Create a service to accept TCP requests. By default, created service MUST be of type ClusterIP and an ClusterIP MUST be assigned to the service.
-		When service type is updated to NodePort supporting TCP protocol, it MUST be reachable on nodeIP over allocated NodePort to serve TCP requests.
-		When this NodePort service is updated to use two protocols i.e. TCP and UDP for same assigned service port 80, service update MUST be successful by allocating two NodePorts to the service and
-		service MUST be able to serve both TCP and UDP requests over same service port 80.
+		Description: 创建接受 TCP 请求的 Service。默认情况下，创建的 Service MUST 是 ClusterIP 类型且 MUST 分配 ClusterIP。
+		将 Service 类型更新为支持 TCP 协议的 NodePort 后，MUST 能通过 nodeIP 和分配的 NodePort 访问以处理 TCP 请求。
+		再将此 NodePort Service 更新为在同一 Service 端口 80 上同时使用 TCP 和 UDP 两种协议，Service 更新 MUST 成功，
+		为 Service 分配两个 NodePort，且 Service MUST 能在同一端口 80 上同时处理 TCP 和 UDP 请求。
 	*/
 	ginkgo.It("should be able to update service type to NodePort listening on same port number but different protocols", func(ctx context.Context) {
 		serviceName := "nodeport-update-service"
@@ -1416,9 +1403,9 @@ var _ = common.SIGDescribe("Services", func() {
 	/*
 		Release: v1.16
 		Testname: Service, change type, ExternalName to ClusterIP
-		Description: Create a service of type ExternalName, pointing to external DNS. ClusterIP MUST not be assigned to the service.
-		Update the service from ExternalName to ClusterIP by removing ExternalName entry, assigning port 80 as service port and TCP as protocol.
-		Service update MUST be successful by assigning ClusterIP to the service and it MUST be reachable over serviceName and ClusterIP on provided service port.
+		Description: 创建指向外部 DNS 的 ExternalName 类型 Service，该 Service MUST 不被分配 ClusterIP。
+		移除 ExternalName 字段、将 80 设为 Service 端口、TCP 设为协议，把 Service 从 ExternalName 更新为 ClusterIP。
+		Service 更新 MUST 成功并分配 ClusterIP，且 MUST 能通过 serviceName 和 ClusterIP 在指定 Service 端口上访问。
 	*/
 	framework.ConformanceIt("should be able to change the type from ExternalName to ClusterIP", func(ctx context.Context) {
 		serviceName := "externalname-service"
@@ -1454,10 +1441,10 @@ var _ = common.SIGDescribe("Services", func() {
 	/*
 		Release: v1.16
 		Testname: Service, change type, ExternalName to NodePort
-		Description: Create a service of type ExternalName, pointing to external DNS. ClusterIP MUST not be assigned to the service.
-		Update the service from ExternalName to NodePort, assigning port 80 as service port and, TCP as protocol.
-		service update MUST be successful by exposing service on every node's IP on dynamically assigned NodePort and, ClusterIP MUST be assigned to route service requests.
-		Service MUST be reachable over serviceName and the ClusterIP on servicePort. Service MUST also be reachable over node's IP on NodePort.
+		Description: 创建指向外部 DNS 的 ExternalName 类型 Service，该 Service MUST 不被分配 ClusterIP。
+		将 Service 从 ExternalName 更新为 NodePort，指定 80 为 Service 端口、TCP 为协议。
+		Service 更新 MUST 成功：在每个节点的 IP 上通过动态分配的 NodePort 暴露 Service，并 MUST 分配 ClusterIP 用于路由请求。
+		Service MUST 能通过 serviceName 和 ClusterIP 在 servicePort 上访问，也 MUST 能通过节点 IP 和 NodePort 访问。
 	*/
 	framework.ConformanceIt("should be able to change the type from ExternalName to NodePort", func(ctx context.Context) {
 		serviceName := "externalname-service"
@@ -1493,9 +1480,9 @@ var _ = common.SIGDescribe("Services", func() {
 	/*
 		Release: v1.16
 		Testname: Service, change type, ClusterIP to ExternalName
-		Description: Create a service of type ClusterIP. Service creation MUST be successful by assigning ClusterIP to the service.
-		Update service type from ClusterIP to ExternalName by setting CNAME entry as externalName. Service update MUST be successful and service MUST not has associated ClusterIP.
-		Service MUST be able to resolve to IP address by returning A records ensuring service is pointing to provided externalName.
+		Description: 创建 ClusterIP 类型的 Service，创建 MUST 成功并分配 ClusterIP。
+		通过将 CNAME 记录设为 externalName，把 Service 类型从 ClusterIP 更新为 ExternalName。Service 更新 MUST 成功且 MUST 不再关联 ClusterIP。
+		Service MUST 能解析为 IP 地址（返回 A 记录），确保指向指定的 externalName。
 	*/
 	framework.ConformanceIt("should be able to change the type from ClusterIP to ExternalName", func(ctx context.Context) {
 		serviceName := "clusterip-service"
@@ -1533,9 +1520,9 @@ var _ = common.SIGDescribe("Services", func() {
 	/*
 		Release: v1.16
 		Testname: Service, change type, NodePort to ExternalName
-		Description: Create a service of type NodePort. Service creation MUST be successful by exposing service on every node's IP on dynamically assigned NodePort and, ClusterIP MUST be assigned to route service requests.
-		Update the service type from NodePort to ExternalName by setting CNAME entry as externalName. Service update MUST be successful and, MUST not has ClusterIP associated with the service and, allocated NodePort MUST be released.
-		Service MUST be able to resolve to IP address by returning A records ensuring service is pointing to provided externalName.
+		Description: 创建 NodePort 类型的 Service，创建 MUST 成功：在每个节点的 IP 上通过动态分配的 NodePort 暴露 Service，并 MUST 分配 ClusterIP 用于路由请求。
+		通过将 CNAME 记录设为 externalName，把 Service 类型从 NodePort 更新为 ExternalName。Service 更新 MUST 成功，MUST 不再关联 ClusterIP，且分配的 NodePort MUST 被释放。
+		Service MUST 能解析为 IP 地址（返回 A 记录），确保指向指定的 externalName。
 	*/
 	framework.ConformanceIt("should be able to change the type from NodePort to ExternalName", func(ctx context.Context) {
 		serviceName := "nodeport-service"
@@ -1573,7 +1560,7 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should prevent NodePort collisions", func(ctx context.Context) {
-		// TODO: use the ServiceTestJig here
+		// TODO: 这里改用 ServiceTestJig
 		baseName := "nodeport-collision-"
 		serviceName1 := baseName + "1"
 		serviceName2 := baseName + "2"
@@ -1627,7 +1614,7 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should check NodePort out-of-range", func(ctx context.Context) {
-		// TODO: use the ServiceTestJig here
+		// TODO: 这里改用 ServiceTestJig
 		serviceName := "nodeport-range-test"
 		ns := f.Namespace.Name
 
@@ -1694,7 +1681,7 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should release NodePorts on delete", func(ctx context.Context) {
-		// TODO: use the ServiceTestJig here
+		// TODO: 这里改用 ServiceTestJig
 		serviceName := "nodeport-reuse"
 		ns := f.Namespace.Name
 
@@ -1718,15 +1705,14 @@ var _ = common.SIGDescribe("Services", func() {
 			framework.ExpectNoError(err, "Static node port allocator was not able to find a free nodeport.")
 			baseService.Spec.Ports[0].NodePort = port
 			service, err = t.CreateService(baseService)
-			// We will later delete this service and then recreate it with same nodeport. We need to ensure that
-			// another e2e test doesn't start listening on our old nodeport and conflicts re-creation of service
-			// hence we use ReserveStaticNodePort.
+			// 稍后会删除该 Service 并用同一个 nodeport 重建，需防止其他 e2e 测试
+			// 占用旧的 nodeport 导致重建冲突，因此使用 ReserveStaticNodePort 预留。
 			if err == nil {
 				nodePort := service.Spec.Ports[0].NodePort
 				ok := e2eservice.ReserveStaticNodePort(nodePort)
 				if !ok {
-					// We could not reserve the allocated port which means the port was either invalid or was reserved by another test.
-					// This indicates a problem in code and we have a log message to debug it.
+					// 无法预留已分配的端口，说明该端口无效或已被其他测试预留。
+					// 这表明代码存在问题，已有日志信息可用于排查。
 					framework.Failf("Static node port allocator was not able to reserve nodeport: %d", nodePort)
 				}
 				break
@@ -2037,26 +2023,26 @@ var _ = common.SIGDescribe("Services", func() {
 			framework.Failf("error waiting for pod %s to be ready %v", pausePod1.Name, err)
 		}
 
-		// webserver should continue to serve traffic through the Service after delete since:
-		//  - it has a 100s termination grace period
-		//  - it is unready but PublishNotReadyAddresses is true
+		// webserver 删除后仍应继续通过 Service 提供服务，因为：
+		//  - 它有 100 秒的 termination grace period
+		//  - 它处于 unready 状态，但 PublishNotReadyAddresses 为 true
 		err = cs.CoreV1().Pods(ns).Delete(ctx, webserverPod0.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// Wait until the pod becomes unready
+		// 等待 Pod 变为 unready
 		err = e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, webserverPod0.Name, "pod not ready", framework.PodStartTimeout, func(pod *v1.Pod) (bool, error) {
 			return !podutil.IsPodReady(pod), nil
 		})
 		if err != nil {
 			framework.Failf("error waiting for pod %s to be unready %v", webserverPod0.Name, err)
 		}
-		// assert 5 times that the pause pod can connect to the Service
+		// 断言 5 次 pause pod 都能连接该 Service
 		nodeIPs0 := e2enode.GetAddresses(&node0, v1.NodeInternalIP)
 		nodeIPs1 := e2enode.GetAddresses(&node1, v1.NodeInternalIP)
 		clusterIPAddress := net.JoinHostPort(svc.Spec.ClusterIP, strconv.Itoa(servicePort))
 		nodePortAddress0 := net.JoinHostPort(nodeIPs0[0], strconv.Itoa(int(svc.Spec.Ports[0].NodePort)))
 		nodePortAddress1 := net.JoinHostPort(nodeIPs1[0], strconv.Itoa(int(svc.Spec.Ports[0].NodePort)))
-		// connect 3 times every 5 seconds to the Service with the unready and terminating endpoint
+		// 每 5 秒连接该 Service（endpoint 处于 unready 且 terminating）共 3 次
 		for range 5 {
 			execHostnameTest(*pausePod1, clusterIPAddress, webserverPod0.Name)
 			execHostnameTest(*pausePod1, nodePortAddress0, webserverPod0.Name)
@@ -2157,13 +2143,13 @@ var _ = common.SIGDescribe("Services", func() {
 			framework.Failf("error waiting for pod %s to be ready %v", pausePod1.Name, err)
 		}
 
-		// webserver should stop to serve traffic through the Service after delete since:
-		//  - it has a 100s termination grace period
-		//  - it is unready but PublishNotReadyAddresses is false
+		// webserver 删除后应停止通过 Service 提供服务，因为：
+		//  - 它有 100 秒的 termination grace period
+		//  - 它处于 unready 状态，且 PublishNotReadyAddresses 为 false
 		err = cs.CoreV1().Pods(ns).Delete(ctx, webserverPod0.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// Wait until the pod becomes unready
+		// 等待 Pod 变为 unready
 		err = e2epod.WaitForPodCondition(ctx, f.ClientSet, f.Namespace.Name, webserverPod0.Name, "pod not ready", framework.PodStartTimeout, func(pod *v1.Pod) (bool, error) {
 			return !podutil.IsPodReady(pod), nil
 		})
@@ -2176,7 +2162,7 @@ var _ = common.SIGDescribe("Services", func() {
 		nodePortAddress0 := net.JoinHostPort(nodeIPs0[0], strconv.Itoa(int(svc.Spec.Ports[0].NodePort)))
 		nodePortAddress1 := net.JoinHostPort(nodeIPs1[0], strconv.Itoa(int(svc.Spec.Ports[0].NodePort)))
 
-		// Wait until the change has been propagated to both nodes.
+		// 等待变更传播到两个节点。
 		cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, nodePortAddress0)
 		if pollErr := wait.PollUntilContextTimeout(ctx, framework.Poll, e2eservice.KubeProxyEndpointLagTimeout, true, func(_ context.Context) (bool, error) {
 			_, err := e2eoutput.RunHostCmd(pausePod1.Namespace, pausePod1.Name, cmd)
@@ -2199,7 +2185,7 @@ var _ = common.SIGDescribe("Services", func() {
 		}
 
 		clusterIPAddress := net.JoinHostPort(svc.Spec.ClusterIP, strconv.Itoa(servicePort))
-		// connect 3 times every 5 seconds to the Service and expect a failure
+		// 每 5 秒连接该 Service 共 3 次，预期连接失败
 		for range 5 {
 			cmd = fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, clusterIPAddress)
 			_, err := e2eoutput.RunHostCmd(pausePod1.Namespace, pausePod1.Name, cmd)
@@ -2296,10 +2282,9 @@ var _ = common.SIGDescribe("Services", func() {
 		numPods, servicePort := 3, defaultServeHostnameServicePort
 		serviceProxyNameLabels := map[string]string{"service.kubernetes.io/service-proxy-name": "foo-bar"}
 
-		// We will create 2 services to test creating services in both states and also dynamic updates
-		// svcDisabled: Created with the label, will always be disabled. We create this early and
-		//              test again late to make sure it never becomes available.
-		// svcToggled: Created without the label then the label is toggled verifying reachability at each step.
+		// 创建两个 Service，分别覆盖两种初始状态以及动态更新：
+		// svcDisabled：创建时带标签，始终禁用；提前创建并在后期再次校验，确保它从未可用。
+		// svcToggled：创建时不带标签，随后切换标签，并在每一步验证连通性。
 
 		ginkgo.By("creating service-disabled in namespace " + ns)
 		svcDisabled := getServeHostnameService("service-proxy-disabled")
@@ -2399,7 +2384,7 @@ var _ = common.SIGDescribe("Services", func() {
 		eps, err = f.ClientSet.DiscoveryV1().EndpointSlices(ns).Create(ctx, eps, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		// connect to the service must work
+		// 必须能够连接到该 Service
 		ginkgo.By("Creating a client pod that will try to connect to the webserver")
 		clientPod := e2epod.NewAgnhostPod(ns, "client-pod", nil, nil, nil)
 		e2epod.NewPodClient(f).CreateSync(ctx, clientPod)
@@ -2460,7 +2445,7 @@ var _ = common.SIGDescribe("Services", func() {
 		}
 	})
 
-	// regression test for https://issues.k8s.io/109414 and https://issues.k8s.io/109718
+	// 针对 https://issues.k8s.io/109414 和 https://issues.k8s.io/109718 的回归测试
 	ginkgo.It("should be rejected for evicted pods (no endpoints exist)", func(ctx context.Context) {
 		namespace := f.Namespace.Name
 		serviceName := "evicted-pods"
@@ -2473,15 +2458,15 @@ var _ = common.SIGDescribe("Services", func() {
 
 		ginkgo.By("creating a service with no endpoints")
 		_, err = jig.CreateTCPServiceWithPort(ctx, func(s *v1.Service) {
-			// set publish not ready addresses to cover edge cases too
+			// 同时设置 publishNotReadyAddresses 以覆盖边界场景
 			s.Spec.PublishNotReadyAddresses = true
 		}, int32(port))
 		framework.ExpectNoError(err)
 
-		// Create a pod in one node to get evicted
+		// 在某个节点上创建用于驱逐的 Pod
 		ginkgo.By("creating a client pod that is going to be evicted for the service " + serviceName)
 		evictedPod := e2epod.NewAgnhostPod(namespace, "evicted-pod", nil, nil, nil)
-		// Use /dev/urandom rather than /dev/zero so the write isn't collapsed by filesystems with inline compression.
+		// 使用 /dev/urandom 而非 /dev/zero，避免写入被带内联压缩的文件系统折叠掉。
 		evictedPod.Spec.Containers[0].Command = []string{"/bin/sh", "-c", "sleep 10; dd if=/dev/urandom of=file bs=1M count=10; sleep 10000"}
 		evictedPod.Spec.Containers[0].Name = "evicted-pod"
 		evictedPod.Spec.Containers[0].Resources = v1.ResourceRequirements{
@@ -2527,8 +2512,8 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should respect internalTrafficPolicy=Local Pod to Pod", func(ctx context.Context) {
-		// windows kube-proxy does not support this feature yet
-		// TODO: remove this skip when windows-based proxies implement internalTrafficPolicy
+		// windows kube-proxy 尚未支持此特性
+		// TODO: 当基于 Windows 的代理实现 internalTrafficPolicy 后移除此跳过逻辑
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -2582,13 +2567,13 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, pausePod1.Name, f.Namespace.Name, framework.PodStartTimeout))
 
-		// assert 5 times that the first pause pod can connect to the Service locally and the second one errors with a timeout
+		// 连续 5 次验证第一个 pause Pod 可以在本地连接到 Service，第二个则超时报错
 		serviceAddress := net.JoinHostPort(svc.Spec.ClusterIP, strconv.Itoa(servicePort))
 		for range 5 {
-			// the first pause pod should be on the same node as the webserver, so it can connect to the local pod using clusterIP
+			// 第一个 pause Pod 应与 webserver 位于同一节点，因此能通过 clusterIP 连接本地 Pod
 			execHostnameTest(*pausePod0, serviceAddress, webserverPod0.Name)
 
-			// the second pause pod is on a different node, so it should see a connection error every time
+			// 第二个 pause Pod 位于不同节点，因此每次都应遇到连接错误
 			cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, serviceAddress)
 			_, err := e2eoutput.RunHostCmd(pausePod1.Namespace, pausePod1.Name, cmd)
 			gomega.Expect(err).To(gomega.HaveOccurred(), "expected error when trying to connect to cluster IP")
@@ -2596,8 +2581,8 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should respect internalTrafficPolicy=Local Pod (hostNetwork: true) to Pod", func(ctx context.Context) {
-		// windows kube-proxy does not support this feature yet
-		// TODO: remove this skip when windows-based proxies implement internalTrafficPolicy
+		// windows kube-proxy 尚未支持此特性
+		// TODO: 当基于 Windows 的代理实现 internalTrafficPolicy 后移除此跳过逻辑
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -2653,13 +2638,13 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, pausePod1.Name, f.Namespace.Name, framework.PodStartTimeout))
 
-		// assert 5 times that the first pause pod can connect to the Service locally and the second one errors with a timeout
+		// 连续 5 次验证第一个 pause Pod 可以在本地连接到 Service，第二个则超时报错
 		serviceAddress := net.JoinHostPort(svc.Spec.ClusterIP, strconv.Itoa(servicePort))
 		for range 5 {
-			// the first pause pod should be on the same node as the webserver, so it can connect to the local pod using clusterIP
+			// 第一个 pause Pod 应与 webserver 位于同一节点，因此能通过 clusterIP 连接本地 Pod
 			execHostnameTest(*pausePod0, serviceAddress, webserverPod0.Name)
 
-			// the second pause pod is on a different node, so it should see a connection error every time
+			// 第二个 pause Pod 位于不同节点，因此每次都应遇到连接错误
 			cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, serviceAddress)
 			_, err := e2eoutput.RunHostCmd(pausePod1.Namespace, pausePod1.Name, cmd)
 			gomega.Expect(err).To(gomega.HaveOccurred(), "expected error when trying to connect to cluster IP")
@@ -2667,8 +2652,8 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should respect internalTrafficPolicy=Local Pod and Node, to Pod (hostNetwork: true)", func(ctx context.Context) {
-		// windows kube-proxy does not support this feature yet
-		// TODO: remove this skip when windows-based proxies implement internalTrafficPolicy
+		// windows kube-proxy 尚未支持此特性
+		// TODO: 当基于 Windows 的代理实现 internalTrafficPolicy 后移除此跳过逻辑
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -2683,8 +2668,8 @@ var _ = common.SIGDescribe("Services", func() {
 		serviceName := "svc-itp"
 		ns := f.Namespace.Name
 		servicePort := 80
-		// If the pod can't bind to this port, it will fail to start, and it will fail the test,
-		// because is using hostNetwork. Using a not common port will reduce this possibility.
+		// 若 Pod 无法绑定该端口，会因使用 hostNetwork 而启动失败，进而导致测试失败；
+		// 选用不常见端口可降低这种概率。
 		endpointPort := 10180
 
 		ginkgo.By("creating a TCP service " + serviceName + " with type=ClusterIP and internalTrafficPolicy=Local in namespace " + ns)
@@ -2732,14 +2717,14 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, pausePod1.Name, f.Namespace.Name, framework.PodStartTimeout))
 
-		// assert 5 times that the first pause pod can connect to the Service locally and the second one errors with a timeout
+		// 连续 5 次验证第一个 pause Pod 可以在本地连接到 Service，第二个则超时报错
 		serviceAddress := net.JoinHostPort(svc.Spec.ClusterIP, strconv.Itoa(servicePort))
 		for range 5 {
-			// the first pause pod should be on the same node as the webserver, so it can connect to the local pod using clusterIP
-			// note that the expected value is the node name because the backend pod is on host network
+			// 第一个 pause Pod 应与 webserver 位于同一节点，因此能通过 clusterIP 连接本地 Pod
+			// 后端 Pod 使用 hostNetwork，因此期望值是节点名
 			execNodenameTest(*pausePod0, serviceAddress, node0.Name)
 
-			// the second pause pod is on a different node, so it should see a connection error every time
+			// 第二个 pause Pod 位于不同节点，因此每次都应遇到连接错误
 			cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, serviceAddress)
 			_, err := e2eoutput.RunHostCmd(pausePod1.Namespace, pausePod1.Name, cmd)
 			gomega.Expect(err).To(gomega.HaveOccurred(), "expected error when trying to connect to cluster IP")
@@ -2762,13 +2747,13 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, pausePod3.Name, f.Namespace.Name, framework.PodStartTimeout))
 
-		// assert 5 times that the first pause pod can connect to the Service locally and the second one errors with a timeout
+		// 连续 5 次验证第一个 pause Pod 可以在本地连接到 Service，第二个则超时报错
 		for range 5 {
-			// the first pause pod should be on the same node as the webserver, so it can connect to the local pod using clusterIP
-			// note that the expected value is the node name because the backend pod is on host network
+			// 第一个 pause Pod 应与 webserver 位于同一节点，因此能通过 clusterIP 连接本地 Pod
+			// 后端 Pod 使用 hostNetwork，因此期望值是节点名
 			execNodenameTest(*pausePod2, serviceAddress, node0.Name)
 
-			// the second pause pod is on a different node, so it should see a connection error every time
+			// 第二个 pause Pod 位于不同节点，因此每次都应遇到连接错误
 			cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, serviceAddress)
 			_, err := e2eoutput.RunHostCmd(pausePod3.Namespace, pausePod3.Name, cmd)
 			gomega.Expect(err).To(gomega.HaveOccurred(), "expected error when trying to connect to cluster IP")
@@ -2789,7 +2774,7 @@ var _ = common.SIGDescribe("Services", func() {
 		nodePortStr := fmt.Sprintf("%d", tcpNodePort)
 		framework.Logf("NodePort is %s", nodePortStr)
 
-		// Get the (single) endpoint's node name and IP
+		// 获取（唯一的）endpoint 所在节点名和 IP
 		var endpointNodeName, endpointNodeIP string
 		endpointsNodeMap, err := getEndpointNodesWithInternalIP(ctx, jig)
 		framework.ExpectNoError(err, "fetching endpoint node IPs")
@@ -2800,10 +2785,8 @@ var _ = common.SIGDescribe("Services", func() {
 			break
 		}
 
-		// We need to ensure the endpoint is on a different node from the exec
-		// pod, to ensure that the source IP of the traffic is the node's "public"
-		// IP. For node-to-pod-on-same-node traffic, it might end up using the
-		// "docker0" IP or something like that.
+		// 需确保 endpoint 与执行 exec 的 Pod 不在同一节点，这样流量的源 IP 才是节点的“公网” IP；
+		// 同节点 Pod 间流量可能会使用 "docker0" 之类的地址。
 		ginkgo.By("creating a HostNetwork exec pod on a different node")
 		execPod := launchHostExecPod(ctx, cs, namespace, "hostexec", &endpointNodeName)
 		framework.Logf("execPod IP is %q", execPod.Status.PodIP)
@@ -2828,7 +2811,7 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should fail health check node port if there are only terminating endpoints", func(ctx context.Context) {
-		// windows kube-proxy does not support this feature yet
+		// windows kube-proxy 尚未支持此特性
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -2875,7 +2858,7 @@ var _ = common.SIGDescribe("Services", func() {
 
 		nodeIPs := e2enode.GetAddresses(&node0, v1.NodeInternalIP)
 		healthCheckNodePortAddr := net.JoinHostPort(nodeIPs[0], strconv.Itoa(int(svc.Spec.HealthCheckNodePort)))
-		// validate that the health check node port from kube-proxy returns 200 when there are ready endpoints
+		// 验证存在就绪 endpoint 时，kube-proxy 的 health check node port 返回 200
 		err = wait.PollImmediate(time.Second, time.Minute, func() (bool, error) {
 			cmd := fmt.Sprintf(`curl -s -o /dev/null -w "%%{http_code}" --max-time 5 http://%s/healthz`,
 				healthCheckNodePortAddr)
@@ -2896,12 +2879,12 @@ var _ = common.SIGDescribe("Services", func() {
 		})
 		framework.ExpectNoError(err)
 
-		// webserver should continue to serve traffic through the Service after deletion, even though the health check node port should return 503
+		// 删除后 webserver 仍应通过 Service 提供流量，尽管 health check node port 应返回 503
 		ginkgo.By("Terminating the webserver pod")
 		err = cs.CoreV1().Pods(ns).Delete(ctx, webserverPod0.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// validate that the health check node port from kube-proxy returns 503 when there are no ready endpoints
+		// 验证没有就绪 endpoint 时，kube-proxy 的 health check node port 返回 503
 		err = wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, true, func(ctx context.Context) (bool, error) {
 			cmd := fmt.Sprintf(`curl -s -o /dev/null -w "%%{http_code}" --max-time 5 http://%s/healthz`, healthCheckNodePortAddr)
 			out, err := e2eoutput.RunHostCmd(pausePod0.Namespace, pausePod0.Name, cmd)
@@ -2919,13 +2902,13 @@ var _ = common.SIGDescribe("Services", func() {
 		})
 		framework.ExpectNoError(err)
 
-		// also verify that while health check node port indicates 0 endpoints and returns 503, the endpoint still serves traffic.
+		// 同时验证 health check node port 显示 0 个 endpoint 并返回 503 期间，该 endpoint 仍能承载流量。
 		nodePortAddress := net.JoinHostPort(nodeIPs[0], strconv.Itoa(int(svc.Spec.Ports[0].NodePort)))
 		execHostnameTest(*pausePod0, nodePortAddress, webserverPod0.Name)
 	})
 
 	ginkgo.It("should fallback to terminating endpoints when there are no ready endpoints with internalTrafficPolicy=Cluster", func(ctx context.Context) {
-		// windows kube-proxy does not support this feature yet
+		// windows kube-proxy 尚未支持此特性
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -2977,20 +2960,19 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, pausePod1.Name, f.Namespace.Name, framework.PodStartTimeout))
 
-		// webserver should continue to serve traffic through the Service after delete since:
-		//  - it has a 100s termination grace period
-		//  - it is the only ready endpoint
+		// 删除后 webserver 仍应通过 Service 提供流量，因为：
+		//  - 它有 100 秒的终止宽限期
+		//  - 它是唯一的就绪 endpoint
 		err = cs.CoreV1().Pods(ns).Delete(ctx, webserverPod0.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// assert 5 times that both the local and remote pod can connect to the Service while all endpoints are terminating
+		// 连续 5 次验证所有 endpoint 都在终止时，本地和远端 Pod 仍能连接到 Service
 		serviceAddress := net.JoinHostPort(svc.Spec.ClusterIP, strconv.Itoa(servicePort))
 		for range 5 {
-			// There's a Service with internalTrafficPolicy=Cluster,
-			// with a single endpoint (which is terminating) called webserver0 running on node0.
-			// pausePod0 and pausePod1 are on node0 and node1 respectively.
-			// pausePod0 -> Service clusterIP succeeds because traffic policy is "Cluster"
-			// pausePod1 -> Service clusterIP succeeds because traffic policy is "Cluster"
+			// 存在一个 internalTrafficPolicy=Cluster 的 Service，唯一 endpoint webserver0 位于 node0 且正在终止。
+			// pausePod0 和 pausePod1 分别位于 node0 和 node1。
+			// pausePod0 -> Service clusterIP 成功，因为流量策略为 "Cluster"
+			// pausePod1 -> Service clusterIP 成功，因为流量策略为 "Cluster"
 			execHostnameTest(*pausePod0, serviceAddress, webserverPod0.Name)
 			execHostnameTest(*pausePod1, serviceAddress, webserverPod0.Name)
 
@@ -2999,7 +2981,7 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should fallback to local terminating endpoints when there are no ready endpoints with internalTrafficPolicy=Local", func(ctx context.Context) {
-		// windows kube-proxy does not support this feature yet
+		// windows kube-proxy 尚未支持此特性
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -3053,20 +3035,19 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, pausePod1.Name, f.Namespace.Name, framework.PodStartTimeout))
 
-		// webserver should continue to serve traffic through the Service after delete since:
-		//  - it has a 100s termination grace period
-		//  - it is the only ready endpoint
+		// 删除后 webserver 仍应通过 Service 提供流量，因为：
+		//  - 它有 100 秒的终止宽限期
+		//  - 它是唯一的就绪 endpoint
 		err = cs.CoreV1().Pods(ns).Delete(ctx, webserverPod0.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// assert 5 times that the first pause pod can connect to the Service locally and the second one errors with a timeout
+		// 连续 5 次验证第一个 pause Pod 可以在本地连接到 Service，第二个则超时报错
 		serviceAddress := net.JoinHostPort(svc.Spec.ClusterIP, strconv.Itoa(servicePort))
 		for range 5 {
-			// There's a Service with internalTrafficPolicy=Local,
-			// with a single endpoint (which is terminating) called webserver0 running on node0.
-			// pausePod0 and pausePod1 are on node0 and node1 respectively.
-			// pausePod0 -> Service clusterIP succeeds because webserver0 is running on node0 and traffic policy is "Local"
-			// pausePod1 -> Service clusterIP fails because webserver0 is on a different node and traffic policy is "Local"
+			// 存在一个 internalTrafficPolicy=Local 的 Service，唯一 endpoint webserver0 位于 node0 且正在终止。
+			// pausePod0 和 pausePod1 分别位于 node0 和 node1。
+			// pausePod0 -> Service clusterIP 成功，因为 webserver0 在 node0 且流量策略为 "Local"
+			// pausePod1 -> Service clusterIP 失败，因为 webserver0 在另一节点且流量策略为 "Local"
 			execHostnameTest(*pausePod0, serviceAddress, webserverPod0.Name)
 
 			cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, serviceAddress)
@@ -3078,7 +3059,7 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should fallback to terminating endpoints when there are no ready endpoints with externallTrafficPolicy=Cluster", func(ctx context.Context) {
-		// windows kube-proxy does not support this feature yet
+		// windows kube-proxy 尚未支持此特性
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -3131,21 +3112,20 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, pausePod1.Name, f.Namespace.Name, framework.PodStartTimeout))
 
-		// webserver should continue to serve traffic through the Service after delete since:
-		//  - it has a 100s termination grace period
-		//  - it is the only ready endpoint
+		// 删除后 webserver 仍应通过 Service 提供流量，因为：
+		//  - 它有 100 秒的终止宽限期
+		//  - 它是唯一的就绪 endpoint
 		err = cs.CoreV1().Pods(ns).Delete(ctx, webserverPod0.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// assert 5 times that both the local and remote pod can connect to the Service NodePort while all endpoints are terminating
+		// 连续 5 次验证所有 endpoint 都在终止时，本地和远端 Pod 仍能连接到 Service 的 NodePort
 		nodeIPs := e2enode.GetAddresses(&node0, v1.NodeInternalIP)
 		nodePortAddress := net.JoinHostPort(nodeIPs[0], strconv.Itoa(int(svc.Spec.Ports[0].NodePort)))
 		for range 5 {
-			// There's a Service Type=NodePort with externalTrafficPolicy=Cluster,
-			// with a single endpoint (which is terminating) called webserver0 running on node0.
-			// pausePod0 and pausePod1 are on node0 and node1 respectively.
-			// pausePod0 -> node0 node port succeeds because webserver0 is running on node0 and traffic policy is "Cluster"
-			// pausePod1 -> node0 node port succeeds because webserver0 is running on node0 and traffic policy is "Cluster"
+			// 存在一个 Type=NodePort、externalTrafficPolicy=Cluster 的 Service，唯一 endpoint webserver0 位于 node0 且正在终止。
+			// pausePod0 和 pausePod1 分别位于 node0 和 node1。
+			// pausePod0 -> node0 node port 成功，因为 webserver0 在 node0 且流量策略为 "Cluster"
+			// pausePod1 -> node0 node port 成功，因为 webserver0 在 node0 且流量策略为 "Cluster"
 			execHostnameTest(*pausePod0, nodePortAddress, webserverPod0.Name)
 			execHostnameTest(*pausePod1, nodePortAddress, webserverPod0.Name)
 
@@ -3154,7 +3134,7 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should fallback to local terminating endpoints when there are no ready endpoints with externalTrafficPolicy=Local", func(ctx context.Context) {
-		// windows kube-proxy does not support this feature yet
+		// windows kube-proxy 尚未支持此特性
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 
 		nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, cs, 2)
@@ -3208,29 +3188,28 @@ var _ = common.SIGDescribe("Services", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodReadyInNamespace(ctx, f.ClientSet, pausePod1.Name, f.Namespace.Name, framework.PodStartTimeout))
 
-		// webserver should continue to serve traffic through the Service after delete since:
-		//  - it has a 100s termination grace period
-		//  - it is the only ready endpoint
+		// 删除后 webserver 仍应通过 Service 提供流量，因为：
+		//  - 它有 100 秒的终止宽限期
+		//  - 它是唯一的就绪 endpoint
 		err = cs.CoreV1().Pods(ns).Delete(ctx, webserverPod0.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
 
-		// assert 5 times that the first pause pod can connect to the Service locally and the second one errors with a timeout
+		// 连续 5 次验证第一个 pause Pod 可以在本地连接到 Service，第二个则超时报错
 		nodeIPs0 := e2enode.GetAddresses(&node0, v1.NodeInternalIP)
 		nodeIPs1 := e2enode.GetAddresses(&node1, v1.NodeInternalIP)
 		nodePortAddress0 := net.JoinHostPort(nodeIPs0[0], strconv.Itoa(int(svc.Spec.Ports[0].NodePort)))
 		nodePortAddress1 := net.JoinHostPort(nodeIPs1[0], strconv.Itoa(int(svc.Spec.Ports[0].NodePort)))
 		for range 5 {
-			// There's a Service Type=NodePort with externalTrafficPolicy=Local,
-			// with a single endpoint (which is terminating) called webserver0 running on node0.
-			// pausePod0 and pausePod1 are on node0 and node1 respectively.
-			// pausePod0 -> node1 node port fails because it's "external" and there are no local endpoints
-			// pausePod1 -> node0 node port succeeds because webserver0 is running on node0
-			// pausePod0 -> node0 node port succeeds because webserver0 is running on node0
+			// 存在一个 Type=NodePort、externalTrafficPolicy=Local 的 Service，唯一 endpoint webserver0 位于 node0 且正在终止。
+			// pausePod0 和 pausePod1 分别位于 node0 和 node1。
+			// pausePod0 -> node1 node port 失败，因为该连接属于“外部”且没有本地 endpoint
+			// pausePod1 -> node0 node port 成功，因为 webserver0 在 node0
+			// pausePod0 -> node0 node port 成功，因为 webserver0 在 node0
 			//
-			// NOTE: pausePod1 -> node1 will succeed for kube-proxy because kube-proxy considers pod-to-same-node-NodePort
-			// connections as neither internal nor external and always get Cluster traffic policy. However, we do not test
-			// this here because not all Network implementations follow kube-proxy's interpretation of "destination"
-			// traffic policy. See: https://github.com/kubernetes/kubernetes/pull/123622
+			// 注意：对 kube-proxy 而言 pausePod1 -> node1 会成功，因为 kube-proxy 将 Pod 到同节点 NodePort
+			// 的连接既不算内部也不算外部，总是使用 Cluster 流量策略。但此处不测该场景，
+			// 因为并非所有网络实现都遵循 kube-proxy 对“目标”流量策略的解释。
+			// See: https://github.com/kubernetes/kubernetes/pull/123622
 			cmd := fmt.Sprintf(`curl -q -s --connect-timeout 5 %s/hostname`, nodePortAddress1)
 			_, err := e2eoutput.RunHostCmd(pausePod0.Namespace, pausePod0.Name, cmd)
 			gomega.Expect(err).To(gomega.HaveOccurred(), "expected error when trying to connect to node port for pausePod0")
@@ -3669,9 +3648,9 @@ var _ = common.SIGDescribe("Services", func() {
 		if err != nil {
 			framework.Failf("Failed to connect to Service TCP port: %v", err)
 		}
-		// take into account the NetworkProgrammingLatency
+		// 需要把 NetworkProgrammingLatency 考虑在内
 		// testEndpointReachability tries 3 times every 3 second
-		// we retry again during 30 seconds to check if the port stops forwarding
+		// 在 30 秒内重试，检查端口是否停止转发
 		gomega.Eventually(ctx, func() error {
 			return testEndpointReachability(ctx, service.Spec.ClusterIP, 80, v1.ProtocolUDP, execPod, 6*time.Second)
 		}).WithTimeout(30 * time.Second).WithPolling(5 * time.Second).ShouldNot(gomega.BeNil())
@@ -3692,9 +3671,9 @@ var _ = common.SIGDescribe("Services", func() {
 		if err != nil {
 			framework.Failf("Failed to connect to Service UDP port: %v", err)
 		}
-		// take into account the NetworkProgrammingLatency
+		// 需要把 NetworkProgrammingLatency 考虑在内
 		// testEndpointReachability tries 3 times every 3 second
-		// we retry again during 30 seconds to check if the port stops forwarding
+		// 在 30 秒内重试，检查端口是否停止转发
 		gomega.Eventually(ctx, func() error {
 			return testEndpointReachability(ctx, service.Spec.ClusterIP, 80, v1.ProtocolTCP, execPod, 6*time.Second)
 		}).WithTimeout(30 * time.Second).WithPolling(5 * time.Second).ShouldNot(gomega.BeNil())
@@ -3778,8 +3757,8 @@ var _ = common.SIGDescribe("Services", func() {
 		e2epod.DeletePodOrFail(ctx, cs, ns, podname1)
 	})
 
-	// These is [Serial] because it can't run at the same time as the
-	// [Feature:SCTPConnectivity] tests, since they may cause sctp.ko to be loaded.
+	// 标记为 [Serial]，因为不能与 [Feature:SCTPConnectivity] 测试同时运行，
+	// 后者可能导致 sctp.ko 被加载。
 	f.It("should allow creating a basic SCTP service with pod and endpoints [LinuxOnly]", f.WithSerial(), func(ctx context.Context) {
 		serviceName := "sctp-endpoint-test"
 		ns := f.Namespace.Name
@@ -3838,9 +3817,8 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 
 	ginkgo.It("should implement NodePort and HealthCheckNodePort correctly when ExternalTrafficPolicy changes", func(ctx context.Context) {
-		// This uses a LoadBalancer service but only tests the parts of it that are
-		// managed by the service proxy; there is another test in loadbalancer.go
-		// to test the load balancer parts.
+		// 这里使用 LoadBalancer Service，但只测试由 service proxy 管理的部分；
+		// loadbalancer.go 中有另一个测试负责负载均衡器部分。
 
 		namespace := f.Namespace.Name
 		serviceName := "external-local-update"
@@ -3862,15 +3840,14 @@ var _ = common.SIGDescribe("Services", func() {
 				svc.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyLocal
 				svc.Spec.HealthCheckNodePort = port
 			})
-			// We will later convert this service to Cluster traffic policy, but we need to ensure that
-			// another e2e test doesn't start listening on our old HealthCheckNodePort when we
-			// do that, so we use ReserveStaticNodePort.
+			// 稍后会把该 Service 切换为 Cluster 流量策略，但切换时不能让其他 e2e 测试占用旧的
+			// HealthCheckNodePort，因此这里使用 ReserveStaticNodePort。
 			if err == nil {
 				staticHealthCheckPort := svc.Spec.HealthCheckNodePort
 				ok := e2eservice.ReserveStaticNodePort(staticHealthCheckPort)
 				if !ok {
-					// We could not reserve the allocated port which means the port was either invalid or was reserved by another test.
-					// This indicates a problem in code and we have a log message to debug it.
+					// 无法预留已分配的端口，说明该端口无效或已被其他测试预留。
+					// 这表明代码存在问题，已有日志信息可用于排查。
 					framework.Failf("Static node port allocator was not able to reserve healthcheck nodeport: %d", staticHealthCheckPort)
 				}
 				break
@@ -3927,8 +3904,8 @@ var _ = common.SIGDescribe("Services", func() {
 		gomega.Expect(thirdNodeIP).NotTo(gomega.Equal(""), "cluster has at least 3 nodes but could not find a third node IP?")
 
 		checkOneNodePort := func(nodeIP string, expectResponse bool, trafficPolicy v1.ServiceExternalTrafficPolicy, deadline time.Time) {
-			// hostExecPod is a hostNetwork Pod, in order to choose the source ip for the connection we need to bind the application or
-			// "the kernel will choose the first address configured on the interface which falls in the same network as the destination address or the nexthop route"
+			// hostExecPod 是 hostNetwork Pod。为选择连接的源 IP，需要绑定应用，
+			// 否则“内核会选择网卡上与目标地址或下一跳路由同网的第一个地址”。
 			// Ref: http://linux-ip.net/html/routing-saddr-selection.html
 			cmd := fmt.Sprintf("curl -g -s --interface %s --connect-timeout 3 http://%s/clientip", hostExecPodNodeIP, net.JoinHostPort(nodeIP, nodePortStr))
 			var clientIP string
@@ -3953,7 +3930,7 @@ var _ = common.SIGDescribe("Services", func() {
 		}
 
 		checkOneHealthCheck := func(nodeIP string, expectResponse bool, expectStatus string, deadline time.Time) {
-			// "-i" means to return the HTTP headers in the response
+			// "-i" 表示在响应中返回 HTTP 头
 			cmd := fmt.Sprintf("curl -g -i -s --connect-timeout 3 http://%s/", net.JoinHostPort(nodeIP, hcNodePortStr))
 			err := wait.PollUntilContextTimeout(ctx, framework.Poll, time.Until(deadline), true, func(ctx context.Context) (bool, error) {
 				out, err := e2eoutput.RunHostCmd(namespace, execPod.Name, cmd)
@@ -3970,9 +3947,9 @@ var _ = common.SIGDescribe("Services", func() {
 			framework.ExpectNoError(err, "expected response containing %s", expectStatus)
 		}
 
-		// (In each round of checks, all nodes must be correct within a single
-		// KubeProxyEndpointLagTimeout; we don't want to allow a full
-		// KubeProxyEndpointLagTimeout interval for each checkOneNodePort call.)
+		// （每一轮检查中，所有节点都必须在单次
+		// KubeProxyEndpointLagTimeout；不希望每次 checkOneNodePort 都等待完整的
+		// KubeProxyEndpointLagTimeout 间隔。
 		deadline := time.Now().Add(e2eservice.KubeProxyEndpointLagTimeout)
 
 		ginkgo.By("ensuring that the HealthCheckNodePort reports healthy on the endpoint node when ExternalTrafficPolicy is Local")
@@ -4017,13 +3994,13 @@ var _ = common.SIGDescribe("Services", func() {
 		ginkgo.By("changing ExternalTrafficPolicy back to Local")
 		_, err = jig.UpdateService(ctx, func(svc *v1.Service) {
 			svc.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyLocal
-			// Request the same healthCheckNodePort as before, to test the user-requested allocation path
+			// 请求与之前相同的 healthCheckNodePort，以覆盖用户指定分配路径
 			svc.Spec.HealthCheckNodePort = oldHealthCheckNodePort
 		})
 		if err != nil {
-			// We added a global static nodeport allocator to synchronize across tests and avoid other tests stealing the NodePort of this test and make it flake.
-			// Log the offending Service so we identify easily the problematic test.
-			// Dump all the IPs and look for the ones we want.
+			// 引入全局静态 NodePort 分配器来跨测试同步，避免其他测试抢占本测试的 NodePort 造成不稳定。
+			// 记录有问题的 Service，便于定位出问题的测试。
+			// 打印所有 IP，从中查找期望的 IP。
 			list, _ := cs.CoreV1().Services(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 			for _, svc := range list.Items {
 				if svc.Spec.HealthCheckNodePort == oldHealthCheckNodePort {
@@ -4191,16 +4168,14 @@ var _ = common.SIGDescribe("Services", func() {
 	})
 })
 
-// execAffinityTestForSessionAffinityTimeout is a helper function that wrap the logic of
-// affinity test for non-load-balancer services. Session affinity will be
-// enabled when the service is created and a short timeout will be configured so
-// session affinity must change after the timeout expirese.
+// execAffinityTestForSessionAffinityTimeout 封装非 LoadBalancer Service 的会话亲和性测试逻辑。
+// 创建 Service 时启用会话亲和性并配置较短的超时，以便验证超时后亲和性必须发生变化。
 func execAffinityTestForSessionAffinityTimeout(ctx context.Context, f *framework.Framework, cs clientset.Interface, svc *v1.Service) {
 	ns := f.Namespace.Name
 	numPods, servicePort, serviceName := 3, defaultServeHostnameServicePort, svc.ObjectMeta.Name
 	ginkgo.By("creating service in namespace " + ns)
 	serviceType := svc.Spec.Type
-	// set an affinity timeout equal to the number of connection requests
+	// 将亲和性超时设为与连接请求数相等
 	svcSessionAffinityTimeout := int32(SessionAffinityTimeout)
 	svc.Spec.SessionAffinity = v1.ServiceAffinityClientIP
 	svc.Spec.SessionAffinityConfig = &v1.SessionAffinityConfig{
@@ -4216,7 +4191,7 @@ func execAffinityTestForSessionAffinityTimeout(ctx context.Context, f *framework
 	if serviceType == v1.ServiceTypeNodePort {
 		nodes, err := e2enode.GetReadySchedulableNodes(ctx, cs)
 		framework.ExpectNoError(err)
-		// The node addresses must have the same IP family as the ClusterIP
+		// 节点地址必须与 ClusterIP 属于同一 IP 族
 		family := svc.Spec.IPFamilies[0]
 		svcIP = e2enode.FirstAddressByTypeAndFamily(nodes, v1.NodeInternalIP, family)
 		if svcIP == "" {
@@ -4237,12 +4212,12 @@ func execAffinityTestForSessionAffinityTimeout(ctx context.Context, f *framework
 	err = jig.CheckServiceReachability(ctx, svc, execPod)
 	framework.ExpectNoError(err)
 
-	// the service should be sticky until the timeout expires
+	// 超时前 Service 应保持会话粘滞
 	if !checkAffinity(ctx, cs, execPod, svcIP, servicePort, true) {
 		framework.Failf("the service %s (%s:%d) should be sticky until the timeout expires", svc.Name, svcIP, servicePort)
 	}
-	// but it should return different hostnames after the timeout expires
-	// try several times to avoid the probability that we hit the same pod twice
+	// 但超时后应返回不同的 hostname
+	// 多次尝试，避免碰巧两次命中同一个 Pod
 	hosts := sets.NewString()
 	cmd := fmt.Sprintf(`curl -q -s --connect-timeout 2 http://%s/`, net.JoinHostPort(svcIP, strconv.Itoa(servicePort)))
 	for range 10 {
@@ -4252,8 +4227,7 @@ func execAffinityTestForSessionAffinityTimeout(ctx context.Context, f *framework
 			if hosts.Len() > 1 {
 				return
 			}
-			// In some case, ipvs didn't deleted the persistent connection after timeout expired,
-			// use 'ipvsadm -lnc' command can found the expire time become '13171233:02' after '00:00'
+			// 某些情况下 ipvs 在超时后未删除持久连接；用 'ipvsadm -lnc' 可以看到过期时间从 '00:00' 变成 '13171233:02'
 			//
 			// pro expire state       source             virtual            destination
 			// TCP 00:00  NONE        10.105.253.160:0   10.105.253.160:80  10.244.1.25:9376
@@ -4261,9 +4235,8 @@ func execAffinityTestForSessionAffinityTimeout(ctx context.Context, f *framework
 			// pro expire state       source             virtual            destination
 			// TCP 13171233:02 NONE        10.105.253.160:0   10.105.253.160:80  10.244.1.25:9376
 			//
-			// And 2 seconds later, the connection will be ensure deleted,
-			// so we sleep 'svcSessionAffinityTimeout+5' seconds to avoid this issue.
-			// TODO: figure out why the expired connection didn't be deleted and fix this issue in ipvs side.
+			// 再过 2 秒连接才会确保被删除，因此这里等待 'svcSessionAffinityTimeout+5' 秒规避该问题。
+			// TODO: 查明过期连接未被删除的原因，并在 ipvs 侧修复。
 			time.Sleep(time.Duration(svcSessionAffinityTimeout+5) * time.Second)
 		}
 	}
@@ -4278,11 +4251,9 @@ func execAffinityTestForNonLBService(ctx context.Context, f *framework.Framework
 	execAffinityTestForNonLBServiceWithOptionalTransition(ctx, f, cs, svc, false)
 }
 
-// execAffinityTestForNonLBServiceWithOptionalTransition is a helper function that wrap the logic of
-// affinity test for non-load-balancer services. Session affinity will be
-// enabled when the service is created. If parameter isTransitionTest is true,
-// session affinity will be switched off/on and test if the service converges
-// to a stable affinity state.
+// execAffinityTestForNonLBServiceWithOptionalTransition 封装非 LoadBalancer Service 的会话亲和性测试逻辑。
+// 创建 Service 时启用会话亲和性。若 isTransitionTest 为 true，则会关闭/重新开启会话亲和性，
+// 并验证 Service 能否收敛到稳定的亲和状态。
 func execAffinityTestForNonLBServiceWithOptionalTransition(ctx context.Context, f *framework.Framework, cs clientset.Interface, svc *v1.Service, isTransitionTest bool) {
 	ns := f.Namespace.Name
 	numPods, servicePort, serviceName := 3, defaultServeHostnameServicePort, svc.ObjectMeta.Name
@@ -4299,7 +4270,7 @@ func execAffinityTestForNonLBServiceWithOptionalTransition(ctx context.Context, 
 	if serviceType == v1.ServiceTypeNodePort {
 		nodes, err := e2enode.GetReadySchedulableNodes(ctx, cs)
 		framework.ExpectNoError(err)
-		// The node addresses must have the same IP family as the ClusterIP
+		// 节点地址必须与 ClusterIP 属于同一 IP 族
 		family := svc.Spec.IPFamilies[0]
 		svcIP = e2enode.FirstAddressByTypeAndFamily(nodes, v1.NodeInternalIP, family)
 		if svcIP == "" {
@@ -4351,9 +4322,8 @@ func execAffinityTestForLBService(ctx context.Context, f *framework.Framework, c
 	execAffinityTestForLBServiceWithOptionalTransition(ctx, f, cs, svc, false)
 }
 
-// execAffinityTestForLBServiceWithOptionalTransition is a helper function that wrap the logic of
-// affinity test for load balancer services, similar to
-// execAffinityTestForNonLBServiceWithOptionalTransition.
+// execAffinityTestForLBServiceWithOptionalTransition 封装 LoadBalancer Service 的会话亲和性测试逻辑，
+// 与 execAffinityTestForNonLBServiceWithOptionalTransition 类似。
 func execAffinityTestForLBServiceWithOptionalTransition(ctx context.Context, f *framework.Framework, cs clientset.Interface, svc *v1.Service, isTransitionTest bool) {
 	numPods, ns, serviceName := 3, f.Namespace.Name, svc.ObjectMeta.Name
 
@@ -4427,18 +4397,18 @@ func createPausePodDeployment(ctx context.Context, cs clientset.Interface, name,
 	return deployment
 }
 
-// createPodOrFail creates a pod with the specified containerPorts.
+// createPodOrFail 创建带有指定 containerPorts 的 Pod。
 func createPodOrFail(ctx context.Context, f *framework.Framework, ns, name string, labels map[string]string, containerPorts []v1.ContainerPort, args ...string) {
 	ginkgo.By(fmt.Sprintf("Creating pod %s in namespace %s", name, ns))
 	pod := e2epod.NewAgnhostPod(ns, name, nil, nil, containerPorts, args...)
 	pod.ObjectMeta.Labels = labels
-	// Add a dummy environment variable to work around a docker issue.
+	// 添加一个无用环境变量，绕过 docker 的问题。
 	// https://github.com/docker/docker/issues/14203
 	pod.Spec.Containers[0].Env = []v1.EnvVar{{Name: "FOO", Value: " "}}
 	e2epod.NewPodClient(f).CreateSync(ctx, pod)
 }
 
-// createPodWithRestartableInitContainerOrFail creates a pod with restartable init containers using the specified containerPorts.
+// createPodWithRestartableInitContainerOrFail 创建带有可重启 init container 及指定 containerPorts 的 Pod。
 func createPodWithRestartableInitContainerOrFail(ctx context.Context, f *framework.Framework, ns, name string, labels map[string]string, containerPorts []v1.ContainerPort, args ...string) {
 	ginkgo.By(fmt.Sprintf("Creating pod %s with restartable init containers in namespace %s", name, ns))
 	pod := e2epod.NewAgnhostPod(ns, name, nil, nil, nil, "pause")
@@ -4450,9 +4420,8 @@ func createPodWithRestartableInitContainerOrFail(ctx context.Context, f *framewo
 	e2epod.NewPodClient(f).CreateSync(ctx, pod)
 }
 
-// launchHostExecPod launches a hostexec pod in the given namespace and waits
-// until it's Running. If avoidNode is non-nil, it will ensure that the pod doesn't
-// land on that node.
+// launchHostExecPod 在指定命名空间启动 hostexec Pod 并等待其进入 Running。
+// 若 avoidNode 非 nil，则确保 Pod 不会被调度到该节点。
 func launchHostExecPod(ctx context.Context, client clientset.Interface, ns, name string, avoidNode *string) *v1.Pod {
 	framework.Logf("Creating new host exec pod")
 	hostExecPod := e2epod.NewExecPodSpec(ns, name, true)
@@ -4475,13 +4444,13 @@ func launchHostExecPod(ctx context.Context, client clientset.Interface, ns, name
 	framework.ExpectNoError(err, "creating host exec pod")
 	err = e2epod.WaitTimeoutForPodReadyInNamespace(ctx, client, name, ns, framework.PodStartTimeout)
 	framework.ExpectNoError(err, "waiting for host exec pod")
-	// re-fetch to get PodIP, etc
+	// 重新获取 PodIP 等信息
 	pod, err := client.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
 	framework.ExpectNoError(err, "getting podIP of host exec pod")
 	return pod
 }
 
-// checkReachabilityFromPod checks reachability from the specified pod.
+// checkReachabilityFromPod 检查从指定 Pod 出发的连通性。
 func checkReachabilityFromPod(ctx context.Context, expectToBeReachable bool, timeout time.Duration, namespace, pod, target string) {
 	cmd := fmt.Sprintf("wget -T 5 -qO- %q", target)
 	err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, func(ctx context.Context) (bool, error) {
@@ -4500,11 +4469,9 @@ func checkReachabilityFromPod(ctx context.Context, expectToBeReachable bool, tim
 	framework.ExpectNoError(err)
 }
 
-// checkServiceReachabilityFromExecPod creates a dedicated client pod, executes into it,
-// and checks reachability to the specified target host and port.
+// checkServiceReachabilityFromExecPod 创建专用客户端 Pod，进入其中检查到指定目标主机和端口的连通性。
 func checkServiceReachabilityFromExecPod(ctx context.Context, client clientset.Interface, namespace, name, clusterIP string, port int32) {
-	// We avoid relying on DNS lookup with the service name here because
-	// we only want to test whether the named port is accessible from the service.
+	// 这里不依赖通过 Service 名称进行 DNS 查询，因为只想测试命名端口能否从该 Service 访问。
 	serverHost := net.JoinHostPort(clusterIP, strconv.Itoa(int(port)))
 	ginkgo.By("creating a dedicated client to send request to the http server " + serverHost)
 	execPod := e2epod.CreateExecPodOrFail(ctx, client, namespace, "execpod-", nil)
@@ -4528,7 +4495,7 @@ func restartApiserver(ctx context.Context, namespace string, cs clientset.Interf
 	return restartComponent(ctx, cs, kubeAPIServerLabelName, metav1.NamespaceSystem, map[string]string{clusterComponentKey: kubeAPIServerLabelName})
 }
 
-// restartComponent restarts component static pod
+// restartComponent 重启组件对应的 static Pod
 func restartComponent(ctx context.Context, cs clientset.Interface, cName, ns string, matchLabels map[string]string) error {
 	pods, err := e2epod.GetPods(ctx, cs, ns, matchLabels)
 	if err != nil {

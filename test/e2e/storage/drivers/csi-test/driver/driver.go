@@ -34,26 +34,24 @@ import (
 )
 
 var (
-	// ErrNoCredentials is the error when a secret is enabled but not passed in the request.
+	// ErrNoCredentials 表示启用了 secret 但请求中未携带时返回的错误。
 	ErrNoCredentials = errors.New("secret must be provided")
-	// ErrAuthFailed is the error when the secret is incorrect.
+	// ErrAuthFailed 表示 secret 不正确时返回的错误。
 	ErrAuthFailed = errors.New("authentication failed")
 )
 
-// CSIDriverServers is a unified driver component with both Controller and Node
-// services.
+// CSIDriverServers 是同时包含 Controller 和 Node 服务的统一 driver 组件。
 type CSIDriverServers struct {
 	Controller csi.ControllerServer
 	Identity   csi.IdentityServer
 	Node       csi.NodeServer
 }
 
-// This is the key name in all the CSI secret objects.
+// 这是所有 CSI secret 对象中的 key 名称。
 const secretField = "secretKey"
 
-// CSICreds is a driver specific secret type. Drivers can have a key-val pair of
-// secrets. This mock driver has a single string secret with secretField as the
-// key.
+// CSICreds 是 driver 特定的 secret 类型。driver 可以持有键值形式的 secret。
+// 该 mock driver 只有一个 string 类型的 secret，以 secretField 为 key。
 type CSICreds struct {
 	CreateVolumeSecret                         string
 	DeleteVolumeSecret                         string
@@ -93,24 +91,23 @@ func (c *CSIDriver) Address() string {
 	return c.listener.Addr().String()
 }
 
-// Start runs a gRPC server with all enabled services. If an interceptor
-// is give, then it will be used. Otherwise, an interceptor which
-// handles simple credential checks and logs gRPC calls in JSON format
-// will be used.
+// Start 启动一个启用所有服务的 gRPC server。若提供了 interceptor，
+// 则使用它；否则使用一个处理简单凭据检查并以 JSON 格式记录 gRPC 调用的
+// interceptor。
 func (c *CSIDriver) Start(l net.Listener, interceptor grpc.UnaryServerInterceptor) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	// Set listener
+	// 设置 listener
 	c.listener = l
 
-	// Create a new grpc server
+	// 创建新的 grpc server
 	if interceptor == nil {
 		interceptor = c.callInterceptor
 	}
 	c.server = grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 
-	// Register Mock servers
+	// 注册 Mock server
 	if c.servers.Controller != nil {
 		csi.RegisterControllerServer(c.server, c.servers.Controller)
 	}
@@ -121,7 +118,7 @@ func (c *CSIDriver) Start(l net.Listener, interceptor grpc.UnaryServerIntercepto
 		csi.RegisterNodeServer(c.server, c.servers.Node)
 	}
 
-	// Start listening for requests
+	// 开始监听请求
 	waitForServer := make(chan bool)
 	c.goServe(waitForServer)
 	<-waitForServer
@@ -144,12 +141,12 @@ func (c *CSIDriver) IsRunning() bool {
 	return c.running
 }
 
-// SetDefaultCreds sets the default secrets for CSI creds.
+// SetDefaultCreds 设置 CSI creds 的默认 secret。
 func (c *CSIDriver) SetDefaultCreds() {
 	setDefaultCreds(c.creds)
 }
 
-// goServe starts a grpc server.
+// goServe 启动一个 grpc server。
 func goServe(server *grpc.Server, wg *sync.WaitGroup, listener net.Listener, started chan<- bool) {
 	wg.Add(1)
 	go func() {
@@ -162,7 +159,7 @@ func goServe(server *grpc.Server, wg *sync.WaitGroup, listener net.Listener, sta
 	}()
 }
 
-// stop stops a grpc server.
+// stop 停止 grpc server。
 func stop(lock *sync.Mutex, wg *sync.WaitGroup, server *grpc.Server, running bool) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -175,7 +172,7 @@ func stop(lock *sync.Mutex, wg *sync.WaitGroup, server *grpc.Server, running boo
 	wg.Wait()
 }
 
-// setDefaultCreds sets the default credentials, given a CSICreds instance.
+// setDefaultCreds 为给定的 CSICreds 实例设置默认凭据。
 func setDefaultCreds(creds *CSICreds) {
 	*creds = CSICreds{
 		CreateVolumeSecret:                         "secretval1",
@@ -220,15 +217,15 @@ func authInterceptor(creds *CSICreds, req interface{}) error {
 }
 
 func logGRPC(method string, request, reply interface{}, err error) {
-	// Log JSON with the request and response for easier parsing
+	// 以 JSON 格式记录请求和响应，便于解析
 	logMessage := struct {
 		Method   string
 		Request  interface{}
 		Response interface{}
-		// Error as string, for backward compatibility.
-		// "" on no error.
+		// 以字符串形式记录 Error，保持向后兼容。
+		// 无错误时为 ""。
 		Error string
-		// Full error dump, to be able to parse out full gRPC error code and message separately in a test.
+		// 完整的 error dump，以便在测试中分别解析出完整的 gRPC 错误码和消息。
 		FullError error
 	}{
 		Method:    method,

@@ -55,34 +55,30 @@ var _ = common.SIGDescribe("Service endpoints latency", func() {
 	/*
 		Release: v1.9
 		Testname: Service endpoint latency, thresholds
-		Description: Run 100 iterations of create service with the Pod running the pause image, measure the time it takes for creating the service and the endpoint with the service name is available. These durations are captured for 100 iterations, then the durations are sorted to compute 50th, 90th and 99th percentile. The single server latency MUST not exceed liberally set thresholds of 20s for 50th percentile and 50s for the 90th percentile.
+		Description: 运行 100 次创建 Service（Pod 运行 pause 镜像），测量从创建 Service 到该 Service 名称对应的 endpoint 可用所需的时间。记录 100 次耗时后排序，计算第 50、90 和 99 百分位数。单次延迟 MUST 不超过宽松设定的阈值：第 50 百分位数 20s，第 90 百分位数 50s。
 	*/
 	framework.ConformanceIt("should not be very high", func(ctx context.Context) {
 		const (
-			// These are very generous criteria. Ideally we will
-			// get this much lower in the future. See
-			// https://issues.k8s.io/10436.
+			// 这些阈值非常宽松，理想情况下未来应大幅收紧。参见
+			// https://issues.k8s.io/10436。
 			limitMedian = time.Second * 20
 			limitTail   = time.Second * 50
 
-			// Numbers chosen to make the test complete in a short amount
-			// of time. This sample size is not actually large enough to
-			// reliably measure tails (it may give false positives, but not
-			// false negatives), but it should catch low hanging fruit.
+			// 这些数值的选取是为了让测试尽快完成。样本量实际上不足以
+			// 可靠测量尾部延迟（可能出现误报，但不会漏报），
+			// 不过足以发现显而易见的问题。
 			//
-			// Note that these are fixed and do not depend on the
-			// size of the cluster. Setting parallelTrials larger
-			// distorts the measurements. Perhaps this wouldn't be
-			// true on HA clusters.
+			// 注意这些都是固定值，与集群规模无关。把 parallelTrials 调大
+			// 会使测量结果失真；HA 集群中或许并非如此。
 			totalTrials    = 200
 			parallelTrials = 15
 			minSampleSize  = 100
 
-			// Acceptable failure ratio for getting service latencies.
+			// 获取 Service 延迟时可接受的失败比例。
 			acceptableFailureRatio = .05
 		)
 
-		// Turn off rate limiting--it interferes with our measurements.
+		// 关闭速率限制，它会干扰测量。
 		cfg, err := framework.LoadConfig()
 		if err != nil {
 			framework.Failf("Unable to load config: %v", err)
@@ -143,22 +139,18 @@ func runServiceLatencies(ctx context.Context, f *framework.Framework, inParallel
 
 	err = e2edeployment.WaitForDeploymentComplete(f.ClientSet, deployment)
 	framework.ExpectNoError(err)
-	// Run a single watcher, to reduce the number of API calls we have to
-	// make; this is to minimize the timing error. It's how kube-proxy
-	// consumes the endpoint data, so it seems like the right thing to
-	// test.
+	// 只运行一个 watcher，减少 API 调用次数，以尽量降低计时误差。
+	// kube-proxy 正是这样消费 endpoint 数据的，因此这样测试更贴近实际。
 	endpointQueries := newQuerier()
 	startEndpointWatcher(ctx, f, endpointQueries)
 	defer close(endpointQueries.stop)
 
-	// run one test and throw it away-- this is to make sure that the pod's
-	// ready status has propagated.
+	// 先跑一次并丢弃结果，确保 Pod 的 ready 状态已经传播开。
 	_, err = singleServiceLatency(ctx, f, name, endpointQueries)
 	framework.ExpectNoError(err)
 
-	// These channels are never closed, and each attempt sends on exactly
-	// one of these channels, so the sum of the things sent over them will
-	// be exactly total.
+	// 这些 channel 不会关闭，且每次尝试只会向其中一个发送数据，
+	// 因此两者收到的总数恰好等于 total。
 	errs := make(chan error, total)
 	durations := make(chan time.Duration, total)
 
@@ -222,17 +214,15 @@ func newQuerier() *endpointQueries {
 	return eq
 }
 
-// join merges the incoming streams of requests and added endpoints. It has
-// nice properties like:
-//   - remembering an endpoint if it happens to arrive before it is requested.
-//   - closing all outstanding requests (returning nil) if it is stopped.
+// join 合并进入的 request 流与新增 endpoint 流。它具有以下有用特性：
+//   - 如果 endpoint 先于 request 到达，会记住该 endpoint。
+//   - 停止时会关闭所有未完成的 request（返回 nil）。
 //
-// Note that this test case uses a single-stack Service with a single endpoint. Thus, it's
-// guaranteed it will have only a single endpoint IP and thus a single EndpointSlice.
+// 注意本测试用例使用单栈 Service 且只有一个 endpoint，因此可以确定
+// 它只有一个 endpoint IP，也就只有一个 EndpointSlice。
 func (eq *endpointQueries) join() {
 	defer func() {
-		// Terminate all pending requests, so that no goroutine will
-		// block indefinitely.
+		// 终止所有待处理的 request，避免 goroutine 永久阻塞。
 		for _, req := range eq.requests {
 			if req.result != nil {
 				close(req.result)
@@ -246,30 +236,26 @@ func (eq *endpointQueries) join() {
 			return
 		case req := <-eq.requestChan:
 			if cur, ok := eq.requests[req.serviceName]; ok && cur.slice != nil {
-				// We've already gotten the result, so we can
-				// immediately satisfy this request.
+				// 结果已经拿到，可以立即满足该 request。
 				delete(eq.requests, req.serviceName)
 				req.slice = cur.slice
 				close(req.result)
 			} else {
-				// Save this request.
+				// 保存该 request。
 				eq.requests[req.serviceName] = req
 			}
 		case got := <-eq.seenChan:
 			serviceName := got.Labels[discoveryv1.LabelServiceName]
 			if req, ok := eq.requests[serviceName]; ok {
 				if req.result != nil {
-					// Satisfy a request.
+					// 满足一个 request。
 					delete(eq.requests, serviceName)
 					req.slice = got
 					close(req.result)
 				}
-				// We've already recorded a result, but
-				// haven't gotten the request yet. Only
-				// keep the first result.
+				// 已记录结果但还没收到对应 request，只保留第一个结果。
 			} else {
-				// We haven't gotten the corresponding request
-				// yet, save this result.
+				// 还没收到对应的 request，先保存该结果。
 				eq.requests[serviceName] = &endpointQuery{
 					slice: got,
 				}
@@ -278,7 +264,7 @@ func (eq *endpointQueries) join() {
 	}
 }
 
-// request blocks until the requested endpoint is seen.
+// request 会阻塞，直到看到所请求的 endpoint。
 func (eq *endpointQueries) request(serviceName string) *discoveryv1.EndpointSlice {
 	result := make(chan struct{})
 	req := &endpointQuery{
@@ -290,12 +276,12 @@ func (eq *endpointQueries) request(serviceName string) *discoveryv1.EndpointSlic
 	return req.slice
 }
 
-// marks e as added; does not block.
+// added 将 e 标记为已添加；不会阻塞。
 func (eq *endpointQueries) added(e *discoveryv1.EndpointSlice) {
 	eq.seenChan <- e
 }
 
-// blocks until it has finished syncing.
+// startEndpointWatcher 会阻塞，直到同步完成。
 func startEndpointWatcher(ctx context.Context, f *framework.Framework, q *endpointQueries) {
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
@@ -329,14 +315,14 @@ func startEndpointWatcher(ctx context.Context, f *framework.Framework, q *endpoi
 
 	go controller.Run(q.stop)
 
-	// Wait for the controller to sync, so that we don't count any warm-up time.
+	// 等待 controller 完成同步，避免把预热时间计入测量。
 	for !controller.HasSynced() {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
 func singleServiceLatency(ctx context.Context, f *framework.Framework, name string, q *endpointQueries) (time.Duration, error) {
-	// Make a service that points to that pod.
+	// 创建一个指向该 Pod 的 Service。
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "latency-svc-",

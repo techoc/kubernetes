@@ -37,7 +37,7 @@ var _ = SIGDescribe("Containers", func() {
 	/*
 		Release: v1.9
 		Testname: Containers, without command and arguments
-		Description: Default command and arguments from the container image entrypoint MUST be used when Pod does not specify the container command
+		Description: Pod 未指定容器命令时，MUST 使用镜像 entrypoint 中的默认命令和参数
 	*/
 	framework.ConformanceIt("should use the image defaults if command and args are blank", f.WithNodeConformance(), func(ctx context.Context) {
 		pod := entrypointTestPod(f.Namespace.Name)
@@ -49,15 +49,14 @@ var _ = SIGDescribe("Containers", func() {
 			return e2epod.GetPodLogs(ctx, f.ClientSet, f.Namespace.Name, pod.Name, pod.Spec.Containers[0].Name)
 		}
 
-		// The agnhost's image default entrypoint / args are: "/agnhost pause"
-		// which will print out "Paused".
+		// agnhost 镜像默认 entrypoint / args 为 "/agnhost pause"，会打印 "Paused"。
 		gomega.Eventually(ctx, pollLogs, time.Minute, framework.Poll).Should(gomega.ContainSubstring("Paused"))
 	})
 
 	/*
 		Release: v1.9
 		Testname: Containers, with arguments
-		Description: Default command and  from the container image entrypoint MUST be used when Pod does not specify the container command but the arguments from Pod spec MUST override when specified.
+		Description: Pod 未指定容器命令时，MUST 使用镜像 entrypoint 中的默认命令；但 Pod spec 中指定的参数 MUST 覆盖镜像参数。
 	*/
 	framework.ConformanceIt("should be able to override the image's default arguments (container cmd)", f.WithNodeConformance(), func(ctx context.Context) {
 		pod := entrypointTestPod(f.Namespace.Name, "entrypoint-tester", "override", "arguments")
@@ -66,12 +65,11 @@ var _ = SIGDescribe("Containers", func() {
 		})
 	})
 
-	// Note: when you override the entrypoint, the image's arguments (container cmd)
-	// are ignored.
+	// 注意：覆盖 entrypoint 时，镜像的参数（container cmd）会被忽略。
 	/*
 		Release: v1.9
 		Testname: Containers, with command
-		Description: Default command from the container image entrypoint MUST NOT be used when Pod specifies the container command.  Command from Pod spec MUST override the command in the image.
+		Description: Pod 指定容器命令时，MUST NOT 使用镜像 entrypoint 中的默认命令；Pod spec 中的命令 MUST 覆盖镜像命令。
 	*/
 	framework.ConformanceIt("should be able to override the image's default command (container entrypoint)", f.WithNodeConformance(), func(ctx context.Context) {
 		pod := entrypointTestPod(f.Namespace.Name, "entrypoint-tester")
@@ -85,7 +83,7 @@ var _ = SIGDescribe("Containers", func() {
 	/*
 		Release: v1.9
 		Testname: Containers, with command and arguments
-		Description: Default command and arguments from the container image entrypoint MUST NOT be used when Pod specifies the container command and arguments.  Command and arguments from Pod spec MUST override the command and arguments in the image.
+		Description: Pod 指定容器命令和参数时，MUST NOT 使用镜像 entrypoint 中的默认命令和参数；Pod spec 中的命令和参数 MUST 覆盖镜像中的对应内容。
 	*/
 	framework.ConformanceIt("should be able to override the image's default command and arguments", f.WithNodeConformance(), func(ctx context.Context) {
 		pod := entrypointTestPod(f.Namespace.Name, "entrypoint-tester", "override", "arguments")
@@ -97,7 +95,7 @@ var _ = SIGDescribe("Containers", func() {
 	})
 })
 
-// Return a prototypical entrypoint test pod
+// 返回一个典型的 entrypoint 测试 Pod
 func entrypointTestPod(namespace string, entrypointArgs ...string) *v1.Pod {
 	podName := "client-containers-" + string(uuid.NewUUID())
 	pod := e2epod.NewAgnhostPod(namespace, podName, nil, nil, nil, entrypointArgs...)

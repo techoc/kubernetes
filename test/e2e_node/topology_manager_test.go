@@ -58,10 +58,10 @@ const (
 	minNumaNodes                  = 2
 	minNumaNodesPreferClosestNUMA = 4
 	minCoreCount                  = 4
-	minSriovResource              = 7 // This is the min number of SRIOV VFs needed on the system under test.
+	minSriovResource              = 7 // 被测系统上所需的最少 SRIOV VF 数量。
 )
 
-// Helper for makeTopologyManagerPod().
+// makeTopologyManagerPod() 的辅助类型。
 type tmCtnAttribute struct {
 	ctnName       string
 	cpuRequest    string
@@ -112,7 +112,7 @@ func detectThreadPerCore() int {
 	return threadCount
 }
 
-// for now we only look for pairs of nodes with minimum distance, we also assume that distance table is symmetric.
+// 目前只查找距离最小的节点对，并假设距离表是对称的。
 func getMinRemoteDistanceForNode(nodeToDistances map[int][]int) int {
 	var minDistance int = 99
 	for myID, distances := range nodeToDistances {
@@ -120,7 +120,7 @@ func getMinRemoteDistanceForNode(nodeToDistances map[int][]int) int {
 			continue
 		}
 		for nodeID, distance := range distances {
-			// it'll always equal 10, which means local access.
+			// 自身距离恒为 10，表示本地访问。
 			if myID == nodeID {
 				continue
 			}
@@ -254,17 +254,17 @@ func findNUMANodeWithoutSRIOVDevicesFromSysfs(numaNodes int) (int, bool) {
 }
 
 func findNUMANodeWithoutSRIOVDevices(configMap *v1.ConfigMap, numaNodes int) (int, bool) {
-	// if someone annotated the configMap, let's use this information
+	// 如果有人为 configMap 添加了注解，就使用其中的信息。
 	if nodeNum, found := findNUMANodeWithoutSRIOVDevicesFromConfigMap(configMap, numaNodes); found {
 		return nodeNum, found
 	}
-	// no annotations, try to autodetect
-	// NOTE: this assumes all the VFs in the box can be used for the tests.
+	// 没有注解时尝试自动探测。
+	// 注意：这里假设机器上的所有 VF 都可用于测试。
 	return findNUMANodeWithoutSRIOVDevicesFromSysfs(numaNodes)
 }
 
 func configureTopologyManagerInKubelet(oldCfg *kubeletconfig.KubeletConfiguration, policy, scope string, topologyOptions map[string]string, configMap *v1.ConfigMap, numaNodes int) (*kubeletconfig.KubeletConfiguration, string) {
-	// Configure Topology Manager in Kubelet with policy.
+	// 按指定 policy 配置 kubelet 中的 Topology Manager。
 	newCfg := oldCfg.DeepCopy()
 	if newCfg.FeatureGates == nil {
 		newCfg.FeatureGates = make(map[string]bool)
@@ -274,15 +274,15 @@ func configureTopologyManagerInKubelet(oldCfg *kubeletconfig.KubeletConfiguratio
 		newCfg.TopologyManagerPolicyOptions = topologyOptions
 	}
 
-	// Set the Topology Manager policy
+	// 设置 Topology Manager policy。
 	newCfg.TopologyManagerPolicy = policy
 
 	newCfg.TopologyManagerScope = scope
 
-	// Set the CPU Manager policy to static.
+	// 将 CPU Manager policy 设为 static。
 	newCfg.CPUManagerPolicy = string(cpumanager.PolicyStatic)
 
-	// Set the CPU Manager reconcile period to 1 second.
+	// 将 CPU Manager 的 reconcile 周期设为 1 秒。
 	newCfg.CPUManagerReconcilePeriod = metav1.Duration{Duration: 1 * time.Second}
 
 	if nodeNum, ok := findNUMANodeWithoutSRIOVDevices(configMap, numaNodes); ok {
@@ -291,9 +291,8 @@ func configureTopologyManagerInKubelet(oldCfg *kubeletconfig.KubeletConfiguratio
 		framework.ExpectNoError(err)
 		newCfg.ReservedSystemCPUs = fmt.Sprintf("%d", cpus[len(cpus)-1])
 	} else {
-		// The Kubelet panics if either kube-reserved or system-reserved is not set
-		// when CPU Manager is enabled. Set cpu in kube-reserved > 0 so that
-		// kubelet doesn't panic.
+		// 启用 CPU Manager 时，如果没有设置 kube-reserved 或 system-reserved，
+		// kubelet 会 panic。将 kube-reserved 中的 cpu 设为大于 0 以避免 panic。
 		if newCfg.KubeReserved == nil {
 			newCfg.KubeReserved = map[string]string{}
 		}
@@ -302,13 +301,13 @@ func configureTopologyManagerInKubelet(oldCfg *kubeletconfig.KubeletConfiguratio
 			newCfg.KubeReserved["cpu"] = "200m"
 		}
 	}
-	// Dump the config -- debug
+	// 打印配置，便于调试。
 	framework.Logf("New kubelet config is %s", newCfg.String())
 
 	return newCfg, newCfg.ReservedSystemCPUs
 }
 
-// getSRIOVDevicePluginPod returns the Device Plugin pod for sriov resources in e2e tests.
+// getSRIOVDevicePluginPod 返回 e2e 测试中用于 sriov 资源的 Device Plugin Pod。
 func getSRIOVDevicePluginPod() *v1.Pod {
 	data, err := e2etestfiles.Read(SRIOVDevicePluginDSYAML)
 	if err != nil {
@@ -363,7 +362,7 @@ func findSRIOVResource(node *v1.Node) (string, int64) {
 
 func validatePodAlignment(ctx context.Context, f *framework.Framework, pod *v1.Pod, envInfo *testEnvInfo) {
 	for _, cnt := range pod.Spec.InitContainers {
-		// only check restartable init containers, skip regular init containers
+		// 只检查可重启的 init container，跳过普通 init container。
 		if cnt.RestartPolicy == nil || *cnt.RestartPolicy != v1.ContainerRestartPolicyAlways {
 			continue
 		}
@@ -396,14 +395,14 @@ func validatePodAlignment(ctx context.Context, f *framework.Framework, pod *v1.P
 	}
 }
 
-// validatePodAligmentWithPodScope validates whether all pod's CPUs are affined to the same NUMA node.
+// validatePodAligmentWithPodScope 验证 Pod 的所有 CPU 是否都亲和到同一个 NUMA 节点。
 func validatePodAlignmentWithPodScope(ctx context.Context, f *framework.Framework, pod *v1.Pod, envInfo *testEnvInfo) error {
-	// Mapping between CPU IDs and NUMA node IDs.
+	// CPU ID 到 NUMA 节点 ID 的映射。
 	podsNUMA := make(map[int]int)
 
 	ginkgo.By(fmt.Sprintf("validate pod scope alignment for %s pod", pod.Name))
 	for _, cnt := range pod.Spec.InitContainers {
-		// only check restartable init containers, skip regular init containers
+		// 只检查可重启的 init container，跳过普通 init container。
 		if cnt.RestartPolicy == nil || *cnt.RestartPolicy != v1.ContainerRestartPolicyAlways {
 			continue
 		}
@@ -449,8 +448,8 @@ func runTopologyManagerPolicySuiteTests(ctx context.Context, f *framework.Framew
 	cpuCap, cpuAlloc, _ = getLocalNodeCPUDetails(ctx, f)
 	ginkgo.By(fmt.Sprintf("checking node CPU capacity (%d) and allocatable CPUs (%d)", cpuCap, cpuAlloc))
 
-	// Albeit even the weakest CI machines usually have 2 cpus, let's be extra careful and
-	// check explicitly. We prefer to skip than a false negative (and a failed test).
+	// 即使最弱的 CI 机器通常也有 2 个 CPU，这里仍显式检查以示谨慎。
+	// 宁可跳过测试，也不愿出现误报（测试失败）。
 	if cpuAlloc < 1 {
 		e2eskipper.Skipf("Skipping basic CPU Manager tests since CPU capacity < 2")
 	}
@@ -461,7 +460,7 @@ func runTopologyManagerPolicySuiteTests(ctx context.Context, f *framework.Framew
 	ginkgo.By("running a Gu pod")
 	runGuPodTest(ctx, f, 1, cpuset.New())
 
-	// Skip rest of the tests if CPU allocatable < 3.
+	// 如果可分配的 CPU 少于 3 个，跳过其余测试。
 	if cpuAlloc < 3 {
 		e2eskipper.Skipf("Skipping rest of the CPU Manager tests since CPU capacity < 3")
 	}
@@ -491,8 +490,8 @@ func runTopologyManagerPositiveTest(ctx context.Context, f *framework.Framework,
 		podMap[podName] = pod
 	}
 
-	// per https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/693-topology-manager/README.md#multi-numa-systems-tests
-	// we can do a meaningful validation only when using the single-numa node policy
+	// 根据 https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/693-topology-manager/README.md#multi-numa-systems-tests
+	// 只有使用 single-numa node policy 时才能做有意义的校验。
 	if envInfo.policy == topologymanager.PolicySingleNumaNode {
 		for _, pod := range podMap {
 			validatePodAlignment(ctx, f, pod, envInfo)
@@ -545,7 +544,7 @@ func getSRIOVDevicePluginConfigMap(cmFile string) *v1.ConfigMap {
 		framework.Fail(err.Error())
 	}
 
-	// the SRIOVDP configuration is hw-dependent, so we allow per-test-host customization.
+	// SRIOVDP 配置依赖硬件，因此允许针对每台测试主机单独定制。
 	framework.Logf("host-local SRIOV Device Plugin Config Map %q", cmFile)
 	if cmFile != "" {
 		data, err = os.ReadFile(cmFile)
@@ -617,8 +616,8 @@ func createSRIOVPodOrFail(ctx context.Context, f *framework.Framework) *v1.Pod {
 	return dpPod
 }
 
-// waitForSRIOVResources waits until enough SRIOV resources are available, expecting to complete within the timeout.
-// if exits successfully, updates the sriovData with the resources which were found.
+// waitForSRIOVResources 等待足够的 SRIOV 资源可用，预期在超时时间内完成。
+// 成功退出时会将找到的资源写入 sriovData。
 func waitForSRIOVResources(ctx context.Context, f *framework.Framework, sd *sriovData) {
 	sriovResourceName := ""
 	var sriovResourceAmount int64
@@ -725,11 +724,11 @@ func runTMScopeResourceAlignmentTestSuite(ctx context.Context, f *framework.Fram
 	}
 	runTopologyManagerNegativeTest(ctx, f, ctnAttrs, initCtnAttrs, envInfo)
 
-	// The Topology Manager with pod scope should calculate how many CPUs it needs to admit a pod basing on two requests:
-	// the maximum of init containers' demand for CPU and sum of app containers' requests for CPU.
-	// The Topology Manager should use higher value of these. Therefore, both pods from below test case should get number of CPUs
-	// requested by init-container of highest demand for it. Since demand for CPU of each pod is slightly higher than half of resources
-	// available on one node, both pods should be placed on distinct NUMA nodes.
+	// pod scope 下的 Topology Manager 应根据两项请求计算准入 Pod 所需的 CPU 数：
+	// init container 的 CPU 需求最大值，以及应用 container 的 CPU 请求总和。
+	// Topology Manager 应取两者中较大的值。因此，下面测试用例中的两个 Pod 都应获得
+	// 需求最大的 init container 所请求的 CPU 数量。由于每个 Pod 的 CPU 需求略高于
+	// 单个节点可用资源的一半，两个 Pod 应被放置在不同的 NUMA 节点上。
 	coresReq = fmt.Sprintf("%dm", (numCores/2+1)*1000)
 	ginkgo.By(fmt.Sprintf("Admit two guaranteed pods, each pod requests %d cores - the pods should be placed on different NUMA nodes", numCores/2+1))
 	initCtnAttrs = []tmCtnAttribute{
@@ -866,10 +865,10 @@ func runTopologyManagerNodeAlignmentSuiteTests(ctx context.Context, f *framework
 		policy:            policy,
 	}
 
-	// could have been a loop, we unroll it to explain the testcases
+	// 本来可以用循环，这里将其展开以便说明各个测试用例。
 	var ctnAttrs, initCtnAttrs []tmCtnAttribute
 
-	// simplest case
+	// 最简单的情况。
 	ginkgo.By(fmt.Sprintf("Successfully admit one guaranteed pod with 1 core, 1 %s device", sd.resourceName))
 	ctnAttrs = []tmCtnAttribute{
 		{
@@ -897,8 +896,8 @@ func runTopologyManagerNodeAlignmentSuiteTests(ctx context.Context, f *framework
 	runTopologyManagerPositiveTest(ctx, f, 1, ctnAttrs, initCtnAttrs, envInfo)
 
 	if reservedSystemCPUs != "" {
-		// to avoid false negatives, we have put reserved CPUs in such a way there is at least a NUMA node
-		// with 1+ SRIOV devices and not reserved CPUs.
+		// 为避免误判，保留 CPU 的选择方式是：至少保证有一个 NUMA 节点
+		// 拥有 1 个以上 SRIOV 设备且没有保留 CPU。
 		numCores := smtLevel * coreCount
 		allCoresReq := fmt.Sprintf("%dm", numCores*1000)
 		ginkgo.By(fmt.Sprintf("Successfully admit an entire socket (%d cores), 1 %s device", numCores, sd.resourceName))
@@ -916,8 +915,8 @@ func runTopologyManagerNodeAlignmentSuiteTests(ctx context.Context, f *framework
 	}
 
 	if sd.resourceAmount > 1 {
-		// no matter how busses are connected to NUMA nodes and SRIOV devices are installed, this function
-		// preconditions must ensure the following can be fulfilled
+		// 无论总线如何连接到 NUMA 节点、SRIOV 设备如何安装，
+		// 本函数的前置条件必须保证下列场景可以成立。
 		ginkgo.By(fmt.Sprintf("Successfully admit two guaranteed pods, each with 1 core, 1 %s device", sd.resourceName))
 		ctnAttrs = []tmCtnAttribute{
 			{
@@ -968,10 +967,10 @@ func runTopologyManagerNodeAlignmentSuiteTests(ctx context.Context, f *framework
 		}
 		runTopologyManagerPositiveTest(ctx, f, 1, ctnAttrs, initCtnAttrs, envInfo)
 
-		// testing more complex conditions require knowledge about the system cpu+bus topology
+		// 测试更复杂的条件需要了解系统的 CPU 与总线拓扑。
 	}
 
-	// multi-container tests
+	// 多 container 测试。
 	if sd.resourceAmount >= 4 {
 		ginkgo.By(fmt.Sprintf("Successfully admit a guaranteed pod requesting for two containers, each with 2 cores, 1 %s device", sd.resourceName))
 		ctnAttrs = []tmCtnAttribute{
@@ -1067,9 +1066,9 @@ func runTopologyManagerNodeAlignmentSuiteTests(ctx context.Context, f *framework
 		runTopologyManagerPositiveTest(ctx, f, 1, ctnAttrs, initCtnAttrs, envInfo)
 	}
 
-	// this is the only policy that can guarantee reliable rejects
+	// 这是唯一能够可靠保证拒绝请求的 policy。
 	if policy == topologymanager.PolicySingleNumaNode {
-		// overflow NUMA node capacity: cores
+		// 超出 NUMA 节点容量：核心数。
 		numCores := 1 + (smtLevel * coreCount)
 		excessCoresReq := fmt.Sprintf("%dm", numCores*1000)
 		ginkgo.By(fmt.Sprintf("Trying to admit a guaranteed pods, with %d cores, 1 %s device - and it should be rejected", numCores, sd.resourceName))
@@ -1159,7 +1158,7 @@ func runPreferClosestNUMAOptimalAllocationTest(ctx context.Context, f *framework
 		for nodeNum := 0 + 2*podID; nodeNum <= 1+2*podID; nodeNum++ {
 			cpus, err := getCPUsPerNUMANode(nodeNum)
 			framework.ExpectNoError(err)
-			// subtract one to accommodate reservedCPUs. It'll only work if more than 2 cpus per NUMA node.
+			// 预留一个 CPU 给 reservedCPUs。只有在每个 NUMA 节点超过 2 个 CPU 时才成立。
 			cpusPerNUMA := len(cpus)
 			if cpusPerNUMA < 3 {
 				e2eskipper.Skipf("Less than 3 cpus per NUMA node on this system. Skipping test.")
@@ -1191,7 +1190,7 @@ func runPreferClosestNUMASubOptimalAllocationTest(ctx context.Context, f *framew
 	ginkgo.By("Admit two guaranteed pods. Both consist of 1 containers, each pod asks for cpus from 2 NUMA nodes. CPUs should be assigned from closest NUMA")
 	cntName := "ps-container-0"
 
-	// expect same amount of cpus per NUMA
+	// 假设每个 NUMA 节点的 CPU 数量相同。
 	cpusPerNUMA, err := getCPUsPerNUMANode(0)
 	framework.ExpectNoError(err)
 	if len(cpusPerNUMA) < 5 {
@@ -1199,8 +1198,8 @@ func runPreferClosestNUMASubOptimalAllocationTest(ctx context.Context, f *framew
 	}
 	podMap := make(map[string]*v1.Pod)
 	for podID := range 2 {
-		// asks for all but one cpus from one less than half NUMA nodes, and half from the other
-		// plus add one less than half NUMA nodes, to accommodate for reserved cpus
+		// 从不足一半数量的 NUMA 节点中申请除一个之外的所有 CPU，另一半节点各申请一半，
+		// 再加上不足一半的节点数，以容纳 reserved CPU。
 		numCores := ((numaNodes/2)-1)*(len(cpusPerNUMA)-1) + (len(cpusPerNUMA) / 2) + (numaNodes/2 - 1)
 		framework.ExpectNoError(err)
 
@@ -1223,7 +1222,7 @@ func runPreferClosestNUMASubOptimalAllocationTest(ctx context.Context, f *framew
 	valiidatePreferClosestNUMAOptimalAllocation(ctx, f, podMap, numaNodes, distances)
 
 	ginkgo.By("Admit one guaranteed pod. Asks for cpus from 2 NUMA nodes. CPUs should be assigned from non closest NUMA")
-	// ask for remaining cpus, it should only fit on sub-optimal NUMA placement.
+	// 申请剩余的 CPU，此时只能采用次优的 NUMA 放置。
 	coresReq := fmt.Sprintf("%dm", 2*(len(cpusPerNUMA)/2)*1000)
 	ctnAttrs := []tmCtnAttribute{
 		{
@@ -1310,13 +1309,13 @@ func runTopologyManagerTests(f *framework.Framework, topologyOptions map[string]
 
 		scope := containerScopeTopology
 		for _, policy := range policies {
-			// Configure Topology Manager
+			// 配置 Topology Manager。
 			ginkgo.By(fmt.Sprintf("by configuring Topology Manager policy to %s", policy))
 			framework.Logf("Configuring topology Manager policy to %s", policy)
 
 			newCfg, _ := configureTopologyManagerInKubelet(oldCfg, policy, scope, topologyOptions, nil, 0)
 			updateKubeletConfig(ctx, f, newCfg, true)
-			// Run the tests
+			// 运行测试。
 			runTopologyManagerPolicySuiteTests(ctx, f)
 		}
 	})
@@ -1334,7 +1333,7 @@ func runTopologyManagerTests(f *framework.Framework, topologyOptions map[string]
 
 		scope := containerScopeTopology
 		for _, policy := range policies {
-			// Configure Topology Manager
+			// 配置 Topology Manager。
 			ginkgo.By(fmt.Sprintf("by configuring Topology Manager policy to %s", policy))
 			framework.Logf("Configuring topology Manager policy to %s", policy)
 
@@ -1364,7 +1363,7 @@ func runTopologyManagerTests(f *framework.Framework, topologyOptions map[string]
 
 	ginkgo.AfterEach(func(ctx context.Context) {
 		if oldCfg != nil {
-			// restore kubelet config
+			// 恢复 kubelet 配置。
 			updateKubeletConfig(ctx, f, oldCfg, true)
 		}
 	})
@@ -1397,15 +1396,15 @@ func runPreferClosestNUMATests(f *framework.Framework) {
 
 	ginkgo.AfterEach(func(ctx context.Context) {
 		if oldCfg != nil {
-			// restore kubelet config
+			// 恢复 kubelet 配置。
 			updateKubeletConfig(ctx, f, oldCfg, true)
 		}
 	})
 }
 
 func hostPrecheck() (int, int) {
-	// this is a very rough check. We just want to rule out system that does NOT have
-	// any SRIOV device. A more proper check will be done in runTopologyManagerPositiveTest
+	// 这是一个粗略检查，只想排除完全没有 SRIOV 设备的系统。
+	// 更严格的检查会在 runTopologyManagerPositiveTest 中进行。
 
 	numaNodes := detectNUMANodes()
 	if numaNodes < minNumaNodes {
@@ -1422,7 +1421,7 @@ func hostPrecheck() (int, int) {
 	return numaNodes, coreCount
 }
 
-// Serial because the test updates kubelet configuration.
+// 标记为 Serial，因为该测试会修改 kubelet 配置。
 var _ = SIGDescribe("Topology Manager", framework.WithSerial(), feature.TopologyManager, func() {
 	f := framework.NewDefaultFramework("topology-manager-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -1431,9 +1430,9 @@ var _ = SIGDescribe("Topology Manager", framework.WithSerial(), feature.Topology
 		runTopologyManagerTests(f, nil)
 	})
 	ginkgo.Context("With kubeconfig's topologyOptions updated to static CPU Manager policy run the Topology Manager tests", ginkgo.Label("MaxAllowableNUMANodes"), func() {
-		// At present, the default value of defaultMaxAllowableNUMANode is 8, we run
-		// the same tests with  2 * defaultMaxAllowableNUMANode(16). This is the
-		// most basic verification that the changed setting is not breaking stuff.
+		// 目前 defaultMaxAllowableNUMANode 的默认值为 8，这里用
+		// 2 * defaultMaxAllowableNUMANode（16）运行相同的测试。
+		// 这是验证改动后的设置不会破坏功能的最基本检查。
 		doubleDefaultMaxAllowableNUMANodes := strconv.Itoa(8 * 2)
 		runTopologyManagerTests(f, map[string]string{topologymanager.MaxAllowableNUMANodes: doubleDefaultMaxAllowableNUMANodes})
 	})
@@ -1456,7 +1455,7 @@ func runGuPodTest(ctx context.Context, f *framework.Framework, cpuCount int, str
 	pod = e2epod.NewPodClient(f).CreateSync(ctx, pod)
 
 	ginkgo.By("checking if the expected cpuset was assigned")
-	// any full CPU is fine - we cannot nor we should predict which one, though
+	// 任何一个完整 CPU 都可以，无法也不应预测具体是哪一个。
 	for _, cnt := range pod.Spec.Containers {
 		ginkgo.By(fmt.Sprintf("validating the container %s on Gu pod %s", cnt.Name, pod.Name))
 

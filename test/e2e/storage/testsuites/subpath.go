@@ -60,8 +60,8 @@ type subPathTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitCustomSubPathTestSuite returns subPathTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomSubPathTestSuite 返回一个使用自定义测试模式的 subPathTestSuite，
+// 它实现了 TestSuite 接口。
 func InitCustomSubPathTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &subPathTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -74,8 +74,8 @@ func InitCustomSubPathTestSuite(patterns []storageframework.TestPattern) storage
 	}
 }
 
-// InitSubPathTestSuite returns subPathTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitSubPathTestSuite 返回一个使用默认测试模式的 subPathTestSuite，
+// 它实现了 TestSuite 接口。
 func InitSubPathTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsInlineVolume,
@@ -113,22 +113,21 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 	}
 	var l local
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 失效；所有使用 f 的代码都必须放在 It 或 Context 回调内。
 	f := framework.NewFrameworkWithCustomTimeouts("provisioning", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	init := func(ctx context.Context) {
 		l = local{}
 
-		// Now do the more expensive test initialization.
+		// 现在执行开销较大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		l.migrationCheck = newMigrationOpCheck(ctx, f.ClientSet, f.ClientConfig(), driver.GetDriverInfo().InTreePluginName)
 		testVolumeSizeRange := s.GetTestSuiteInfo().SupportedSizeRange
 		l.resource = storageframework.CreateVolumeResource(ctx, driver, l.config, pattern, testVolumeSizeRange)
 		l.hostExec = storageutils.NewHostExec(f)
 
-		// Setup subPath test dependent resource
+		// 准备 subPath 测试依赖的资源
 		volType := pattern.VolType
 		switch volType {
 		case storageframework.InlineVolume:
@@ -194,10 +193,10 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Write the file in the subPath from init container 1
+		// 由 init container 1 在 subPath 内写文件
 		setWriteCommand(l.filePathInSubpath, &l.pod.Spec.InitContainers[1])
 
-		// Read it from outside the subPath from container 1
+		// 由 container 1 在 subPath 外读取该文件
 		testReadFile(ctx, f, l.filePathInVolume, l.pod, 1)
 	})
 
@@ -205,13 +204,13 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the directory
+		// 创建目录
 		setInitCommand(l.pod, fmt.Sprintf("mkdir -p %s", l.subPathDir))
 
-		// Write the file in the subPath from init container 1
+		// 由 init container 1 在 subPath 内写文件
 		setWriteCommand(l.filePathInSubpath, &l.pod.Spec.InitContainers[1])
 
-		// Read it from outside the subPath from container 1
+		// 由 container 1 在 subPath 外读取该文件
 		testReadFile(ctx, f, l.filePathInVolume, l.pod, 1)
 	})
 
@@ -219,10 +218,10 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the file in the init container
+		// 在 init container 中创建文件
 		setInitCommand(l.pod, fmt.Sprintf("mkdir -p %s; echo \"mount-tester new file\" > %s", l.subPathDir, l.filePathInVolume))
 
-		// Read it from inside the subPath from container 0
+		// 由 container 0 在 subPath 内读取该文件
 		testReadFile(ctx, f, l.filePathInSubpath, l.pod, 0)
 	})
 
@@ -230,7 +229,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the file in the init container
+		// 在 init container 中创建文件
 		setInitCommand(l.pod, fmt.Sprintf("echo %s > %s", f.Namespace.Name, l.subPathDir))
 
 		TestBasicSubpath(ctx, f, f.Namespace.Name, l.pod)
@@ -240,7 +239,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the subpath outside the volume
+		// 在卷之外创建 subpath
 		var command string
 		if framework.NodeOSDistroIs("windows") {
 			command = fmt.Sprintf("New-Item -ItemType SymbolicLink -Path %s -value \\Windows", l.subPathDir)
@@ -248,7 +247,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 			command = fmt.Sprintf("ln -s /bin %s", l.subPathDir)
 		}
 		setInitCommand(l.pod, command)
-		// Pod should fail
+		// Pod 应当失败
 		testPodFailSubpath(ctx, f, l.pod, false)
 	})
 
@@ -256,10 +255,10 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the subpath outside the volume
+		// 在卷之外创建 subpath
 		setInitCommand(l.pod, fmt.Sprintf("ln -s /bin/sh %s", l.subPathDir))
 
-		// Pod should fail
+		// Pod 应当失败
 		testPodFailSubpath(ctx, f, l.pod, false)
 	})
 
@@ -267,10 +266,10 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the subpath outside the volume
+		// 在卷之外创建 subpath
 		setInitCommand(l.pod, fmt.Sprintf("ln -s /bin/notanexistingpath %s", l.subPathDir))
 
-		// Pod should fail
+		// Pod 应当失败
 		testPodFailSubpath(ctx, f, l.pod, false)
 	})
 
@@ -278,7 +277,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the subpath outside the volume
+		// 在卷之外创建 subpath
 		var command string
 		if framework.NodeOSDistroIs("windows") {
 			command = fmt.Sprintf("New-Item -ItemType SymbolicLink -Path %s -value ..\\", l.subPathDir)
@@ -286,7 +285,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 			command = fmt.Sprintf("ln -s ../ %s", l.subPathDir)
 		}
 		setInitCommand(l.pod, command)
-		// Pod should fail
+		// Pod 应当失败
 		testPodFailSubpath(ctx, f, l.pod, false)
 	})
 
@@ -311,7 +310,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 			SubPath:   "subpath2",
 		})
 
-		// Write the files from container 0 and instantly read them back
+		// 由 container 0 写入文件并立即读回
 		addMultipleWrites(&l.pod.Spec.Containers[0], filepath1, filepath2)
 		testMultipleReads(ctx, f, l.pod, 0, filepath1, filepath2)
 	})
@@ -320,7 +319,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the directory
+		// 创建目录
 		var command string
 		command = fmt.Sprintf("mkdir -p %v; touch %v", l.subPathDir, probeFilePath)
 		setInitCommand(l.pod, command)
@@ -331,7 +330,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the file
+		// 创建文件
 		setInitCommand(l.pod, fmt.Sprintf("touch %v; touch %v", l.subPathDir, probeFilePath))
 
 		testPodContainerRestart(ctx, f, l.pod)
@@ -343,7 +342,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		ginkgo.DeferCleanup(cleanup)
 
 		if strings.HasPrefix(driverName, "hostPath") {
-			// TODO: This skip should be removed once #61446 is fixed
+			// TODO: #61446 修复后应移除此跳过逻辑
 			e2eskipper.Skipf("Driver %s does not support reconstruction, skipping", driverName)
 		}
 
@@ -356,7 +355,7 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		ginkgo.DeferCleanup(cleanup)
 
 		if strings.HasPrefix(driverName, "hostPath") {
-			// TODO: This skip should be removed once #61446 is fixed
+			// TODO: #61446 修复后应移除此跳过逻辑
 			e2eskipper.Skipf("Driver %s does not support reconstruction, skipping", driverName)
 		}
 
@@ -379,13 +378,13 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the directory
+		// 创建目录
 		setInitCommand(l.pod, fmt.Sprintf("mkdir -p %s", l.subPathDir))
 
-		// Write the file in the volume from init container 2
+		// 由 init container 2 在卷中写文件
 		setWriteCommand(l.filePathInVolume, &l.pod.Spec.InitContainers[2])
 
-		// Read it from inside the subPath from container 0
+		// 由 container 0 在 subPath 内读取该文件
 		l.pod.Spec.Containers[0].VolumeMounts[0].ReadOnly = true
 		testReadFile(ctx, f, l.filePathInSubpath, l.pod, 0)
 	})
@@ -394,13 +393,13 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Create the file
+		// 创建文件
 		setInitCommand(l.pod, fmt.Sprintf("touch %s", l.subPathDir))
 
-		// Write the file in the volume from init container 2
+		// 由 init container 2 在卷中写文件
 		setWriteCommand(l.subPathDir, &l.pod.Spec.InitContainers[2])
 
-		// Read it from inside the subPath from container 0
+		// 由 container 0 在 subPath 内读取该文件
 		l.pod.Spec.Containers[0].VolumeMounts[0].ReadOnly = true
 		testReadFile(ctx, f, volumePath, l.pod, 0)
 	})
@@ -414,22 +413,22 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 
 		origpod := l.pod.DeepCopy()
 
-		// Create the directory
+		// 创建目录
 		setInitCommand(l.pod, fmt.Sprintf("mkdir -p %s", l.subPathDir))
 
-		// Write the file in the subPath from init container 1
+		// 由 init container 1 在 subPath 内写文件
 		setWriteCommand(l.filePathInSubpath, &l.pod.Spec.InitContainers[1])
 
-		// Read it from inside the subPath from container 0
+		// 由 container 0 在 subPath 内读取该文件
 		testReadFile(ctx, f, l.filePathInSubpath, l.pod, 0)
 
-		// Reset the pod
+		// 重置 Pod
 		l.pod = origpod
 
-		// Set volume source to read only
+		// 将卷源设置为只读
 		l.pod.Spec.Volumes[0].VolumeSource = *l.roVolSource
 
-		// Read it from inside the subPath from container 0
+		// 由 container 0 在 subPath 内读取该文件
 		testReadFile(ctx, f, l.filePathInSubpath, l.pod, 0)
 	})
 
@@ -440,26 +439,25 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 			e2eskipper.Skipf("Driver %s on volume type %s doesn't support readOnly source", driverName, pattern.VolType)
 		}
 
-		// Format the volume while it's writable
+		// 在卷仍可写时格式化它
 		formatVolume(ctx, f, l.formatPod)
 
-		// Set volume source to read only
+		// 将卷源设置为只读
 		l.pod.Spec.Volumes[0].VolumeSource = *l.roVolSource
 
-		// Write the file in the volume from container 0
+		// 由 container 0 在卷中写文件
 		setWriteCommand(l.subPathDir, &l.pod.Spec.Containers[0])
 
-		// Pod should fail
+		// Pod 应当失败
 		testPodFailSubpath(ctx, f, l.pod, true)
 	})
 
-	// Set this test linux-only because the test will fail in Windows when
-	// deleting a dir from one container while another container still use it.
+	// 此测试仅限 Linux：在 Windows 上，一个容器删除目录而另一容器仍在使用时会失败。
 	ginkgo.It("should be able to unmount after the subpath directory is deleted [LinuxOnly]", func(ctx context.Context) {
 		init(ctx)
 		ginkgo.DeferCleanup(cleanup)
 
-		// Change volume container to busybox so we can exec later
+		// 将卷所在容器改为 busybox，以便后续 exec
 		l.pod.Spec.Containers[1].Image = e2epod.GetDefaultTestImage()
 		l.pod.Spec.Containers[1].Command = e2epod.GenerateScriptCmd(e2epod.InfiniteSleepCommand)
 		l.pod.Spec.Containers[1].Args = nil
@@ -473,27 +471,27 @@ func (s *subPathTestSuite) DefineTests(driver storageframework.TestDriver, patte
 			return e2epod.DeletePodWithWait(ctx, f.ClientSet, pod)
 		})
 
-		// Wait for pod to be running
+		// 等待 Pod 进入 Running 状态
 		err = e2epod.WaitTimeoutForPodRunningInNamespace(ctx, f.ClientSet, l.pod.Name, l.pod.Namespace, f.Timeouts.PodStart)
 		framework.ExpectNoError(err, "while waiting for pod to be running")
 
-		// Exec into container that mounted the volume, delete subpath directory
+		// 进入挂载卷的容器，删除 subpath 目录
 		rmCmd := fmt.Sprintf("rm -r %s", l.subPathDir)
 		_, err = podContainerExec(l.pod, 1, rmCmd)
 		framework.ExpectNoError(err, "while removing subpath directory")
 
-		// Delete pod (from defer) and wait for it to be successfully deleted
+		// 通过 defer 删除 Pod，并等待其被成功删除
 	})
 
-	// TODO: add a test case for the same disk with two partitions
+	// TODO: 补充同一磁盘上有两个分区的测试用例
 }
 
-// TestBasicSubpath runs basic subpath test
+// TestBasicSubpath 运行基础的 subpath 测试
 func TestBasicSubpath(ctx context.Context, f *framework.Framework, contents string, pod *v1.Pod) {
 	TestBasicSubpathFile(ctx, f, contents, pod, volumePath)
 }
 
-// TestBasicSubpathFile runs basic subpath file test
+// TestBasicSubpathFile 运行基础的 subpath 文件测试
 func TestBasicSubpathFile(ctx context.Context, f *framework.Framework, contents string, pod *v1.Pod, filepath string) {
 	setReadCommand(filepath, &pod.Spec.Containers[0])
 
@@ -507,19 +505,19 @@ func TestBasicSubpathFile(ctx context.Context, f *framework.Framework, contents 
 }
 
 func generateSuffixForPodName(s string) string {
-	// Pod name must:
-	//   1. consist of lower case alphanumeric characters or '-',
-	//   2. start and end with an alphanumeric character.
-	// (e.g. 'my-name',  or '123-abc', regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?')
-	// Therefore, suffix is generated by following steps:
-	//   1. all strings other than [A-Za-z0-9] is replaced with "-",
-	//   2. add lower case alphanumeric characters at the end ('-[a-z0-9]{4}' is added),
-	//   3. convert the entire strings to lower case.
+	// Pod 名称必须：
+	//   1. 仅由小写字母、数字和 '-' 组成，
+	//   2. 首尾均为字母或数字。
+	// （例如 'my-name' 或 '123-abc'；校验正则为 '[a-z0-9]([-a-z0-9]*[a-z0-9])?'）
+	// 因此后缀按以下步骤生成：
+	//   1. 将 [A-Za-z0-9] 之外的字符替换为 "-"，
+	//   2. 在末尾追加小写字母或数字（追加 '-[a-z0-9]{4}'），
+	//   3. 将整个字符串转为小写。
 	re := regexp.MustCompile("[^A-Za-z0-9]")
 	return strings.ToLower(fmt.Sprintf("%s-%s", re.ReplaceAllString(s, "-"), rand.String(4)))
 }
 
-// SubpathTestPod returns a pod spec for subpath tests
+// SubpathTestPod 返回供 subpath 测试使用的 Pod 规格
 func SubpathTestPod(f *framework.Framework, subpath, volumeType string, source *v1.VolumeSource, securityLevel admissionapi.Level) *v1.Pod {
 	var (
 		suffix          = generateSuffixForPodName(volumeType)
@@ -589,14 +587,13 @@ func SubpathTestPod(f *framework.Framework, subpath, volumeType string, source *
 }
 
 func containerIsUnused(container *v1.Container) bool {
-	// agnhost image with nil command and nil Args or with just "mounttest" as Args does nothing. Leave everything else
+	// agnhost 镜像在 command 和 Args 均为 nil，或 Args 仅为 "mounttest" 时不会做任何事；其余配置保持不变
 	return container.Image == imageutils.GetE2EImage(imageutils.Agnhost) && container.Command == nil &&
 		(container.Args == nil || (len(container.Args) == 1 && container.Args[0] == "mounttest"))
 }
 
-// removeUnusedContainers removes containers from a SubpathTestPod that aren't
-// needed for a test. e.g. to test for subpath mount failure, only one
-// container needs to run and get its status checked.
+// removeUnusedContainers 从 SubpathTestPod 中删除测试不需要的容器。
+// 例如测试 subpath 挂载失败时，只需运行一个容器并检查其状态。
 func removeUnusedContainers(pod *v1.Pod) {
 	initContainers := []v1.Container{}
 	containers := []v1.Container{}
@@ -616,8 +613,7 @@ func removeUnusedContainers(pod *v1.Pod) {
 	pod.Spec.Containers = containers
 }
 
-// volumeFormatPod returns a Pod that does nothing but will cause the plugin to format a filesystem
-// on first use
+// volumeFormatPod 返回一个不做任何实际工作的 Pod，但会促使插件在首次使用时格式化文件系统
 func volumeFormatPod(f *framework.Framework, volumeSource *v1.VolumeSource) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -657,9 +653,8 @@ func setWriteCommand(file string, container *v1.Container) {
 		"mounttest",
 		fmt.Sprintf("--new_file_0644=%v", file),
 	}
-	// See issue https://github.com/kubernetes/kubernetes/issues/94237 about file_mode
-	// not working well on Windows
-	// TODO: remove this check after issue is resolved
+	// 关于 file_mode 在 Windows 上表现异常，见 issue https://github.com/kubernetes/kubernetes/issues/94237
+	// TODO: 问题解决后移除此检查
 	if !framework.NodeOSDistroIs("windows") {
 		container.Args = append(container.Args, fmt.Sprintf("--file_mode=%v", file))
 	}
@@ -748,7 +743,7 @@ func waitForPodSubpathError(ctx context.Context, f *framework.Framework, pod *v1
 			return false, err
 		}
 		for _, status := range pod.Status.ContainerStatuses {
-			// 0 is the container that uses subpath
+			// 0 号容器是使用 subpath 的容器
 			if status.Name == subpathContainerName {
 				switch {
 				case status.State.Terminated != nil:
@@ -799,8 +794,8 @@ func (h *podContainerRestartHooks) FixLivenessProbe(pod *v1.Pod, probeFilePath s
 	}
 }
 
-// testPodContainerRestartWithHooks tests that container restarts to stabilize.
-// hooks wrap functions between container restarts.
+// testPodContainerRestartWithHooks 验证容器重启后会趋于稳定。
+// hooks 在容器重启之间包装各步骤函数。
 func testPodContainerRestartWithHooks(ctx context.Context, f *framework.Framework, pod *v1.Pod, hooks *podContainerRestartHooks) {
 	pod.Spec.RestartPolicy = v1.RestartPolicyOnFailure
 
@@ -812,7 +807,7 @@ func testPodContainerRestartWithHooks(ctx context.Context, f *framework.Framewor
 	pod.Spec.Containers[1].Args = nil
 	hooks.AddLivenessProbe(pod, probeFilePath)
 
-	// Start pod
+	// 启动 Pod
 	ginkgo.By(fmt.Sprintf("Creating pod %s", pod.Name))
 	removeUnusedContainers(pod)
 	pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod, metav1.CreateOptions{})
@@ -824,9 +819,7 @@ func testPodContainerRestartWithHooks(ctx context.Context, f *framework.Framewor
 	ginkgo.By("Failing liveness probe")
 	hooks.FailLivenessProbe(pod, probeFilePath)
 
-	// Check that container has restarted. The time that this
-	// might take is estimated to be lower than for "delete pod"
-	// and "start pod".
+	// 检查容器是否已重启。所需时间预计短于“删除 Pod 并重新启动 Pod”。
 	ginkgo.By("Waiting for container to restart")
 	restarts := int32(0)
 	err = wait.PollImmediate(10*time.Second, f.Timeouts.PodDelete+f.Timeouts.PodStart, func() (bool, error) {
@@ -848,15 +841,13 @@ func testPodContainerRestartWithHooks(ctx context.Context, f *framework.Framewor
 	})
 	framework.ExpectNoError(err, "while waiting for container to restart")
 
-	// Fix liveness probe
+	// 修正 liveness probe
 	ginkgo.By("Fix liveness probe")
 	hooks.FixLivenessProbe(pod, probeFilePath)
 
-	// Wait for container restarts to stabilize. Estimating the
-	// time for this is harder. In practice,
-	// framework.PodStartTimeout = f.Timeouts.PodStart = 5min
-	// turned out to be too low, therefore
-	// f.Timeouts.PodStartSlow = 15min is used now.
+	// 等待容器重启趋于稳定。这个时间较难估算；实践中
+	// framework.PodStartTimeout = f.Timeouts.PodStart = 5min 太短，
+	// 因此现在改用 f.Timeouts.PodStartSlow = 15min。
 	ginkgo.By("Waiting for container to stop restarting")
 	stableCount := int(0)
 	stableThreshold := int(time.Minute / framework.Poll)
@@ -886,7 +877,7 @@ func testPodContainerRestartWithHooks(ctx context.Context, f *framework.Framewor
 	framework.ExpectNoError(err, "while waiting for container to stabilize")
 }
 
-// testPodContainerRestart tests that the existing subpath mount is detected when a container restarts
+// testPodContainerRestart 验证容器重启时能够检测到已有的 subpath 挂载
 func testPodContainerRestart(ctx context.Context, f *framework.Framework, pod *v1.Pod) {
 	testPodContainerRestartWithHooks(ctx, f, pod, &podContainerRestartHooks{
 		AddLivenessProbeFunc: func(p *v1.Pod, probeFilePath string) {
@@ -921,11 +912,11 @@ func testPodContainerRestart(ctx context.Context, f *framework.Framework, pod *v
 	})
 }
 
-// TestPodContainerRestartWithConfigmapModified tests that container can restart to stabilize when configmap has been modified.
-// 1. valid container running
-// 2. update configmap
-// 3. container restarts
-// 4. container becomes stable after configmap mounted file has been modified
+// TestPodContainerRestartWithConfigmapModified 验证 ConfigMap 被修改后容器能重启并趋于稳定。
+// 1. 容器正常运行
+// 2. 更新 ConfigMap
+// 3. 容器重启
+// 4. ConfigMap 挂载文件被修改后容器恢复稳定
 func TestPodContainerRestartWithConfigmapModified(ctx context.Context, f *framework.Framework, original, modified *v1.ConfigMap) {
 	ginkgo.By("Create configmap")
 	_, err := f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Create(ctx, original, metav1.CreateOptions{})
@@ -947,7 +938,7 @@ func TestPodContainerRestartWithConfigmapModified(ctx context.Context, f *framew
 			p.Spec.Containers[0].LivenessProbe = &v1.Probe{
 				ProbeHandler: v1.ProbeHandler{
 					Exec: &v1.ExecAction{
-						// Expect probe file exist or configmap mounted file has been modified.
+						// 期望 probe 文件存在，或 ConfigMap 挂载文件已被修改。
 						Command: []string{"sh", "-c", fmt.Sprintf("cat %s || test `cat %s` = '%s'", probeFilePath, volumePath, modifiedValue)},
 					},
 				},
@@ -970,10 +961,9 @@ func TestPodContainerRestartWithConfigmapModified(ctx context.Context, f *framew
 }
 
 func testSubpathReconstruction(ctx context.Context, f *framework.Framework, hostExec storageutils.HostExec, pod *v1.Pod, forceDelete bool) {
-	// This is mostly copied from TestVolumeUnmountsFromDeletedPodWithForceOption()
+	// 大体复制自 TestVolumeUnmountsFromDeletedPodWithForceOption()。
 
-	// Disruptive test run serially, we can cache all voluem global mount
-	// points and verify after the test that we do not leak any global mount point.
+	// 该破坏性测试串行运行，因此可缓存所有卷的全局挂载点，并在测试后确认没有泄漏。
 	nodeList, err := e2enode.GetReadySchedulableNodes(ctx, f.ClientSet)
 	framework.ExpectNoError(err, "while listing schedulable nodes")
 	globalMountPointsByNode := make(map[string]sets.String, len(nodeList.Items))
@@ -981,15 +971,14 @@ func testSubpathReconstruction(ctx context.Context, f *framework.Framework, host
 		globalMountPointsByNode[node.Name] = storageutils.FindVolumeGlobalMountPoints(ctx, hostExec, &node)
 	}
 
-	// Change to busybox
+	// 切换为 busybox
 	pod.Spec.Containers[0].Image = e2epod.GetDefaultTestImage()
 	pod.Spec.Containers[0].Command = e2epod.GenerateScriptCmd(e2epod.InfiniteSleepCommand)
 	pod.Spec.Containers[0].Args = nil
 	pod.Spec.Containers[1].Image = e2epod.GetDefaultTestImage()
 	pod.Spec.Containers[1].Command = e2epod.GenerateScriptCmd(e2epod.InfiniteSleepCommand)
 	pod.Spec.Containers[1].Args = nil
-	// If grace period is too short, then there is not enough time for the volume
-	// manager to cleanup the volumes
+	// grace period 过短会导致卷管理器来不及清理卷
 	gracePeriod := int64(30)
 	pod.Spec.TerminationGracePeriodSeconds = &gracePeriod
 
@@ -1051,12 +1040,11 @@ func podContainerExec(pod *v1.Pod, containerIndex int, command string) (string, 
 	return e2ekubectl.RunKubectl(pod.Namespace, "exec", pod.Name, "--container", pod.Spec.Containers[containerIndex].Name, "--", shell, option, command)
 }
 
-// testSubpathStaleBindMountRemount exercises the recovery path for stale
-// subPath bind mounts.
+// testSubpathStaleBindMountRemount 验证残留 subPath bind mount 的恢复路径。
 func testSubpathStaleBindMountRemount(ctx context.Context, f *framework.Framework, pod *v1.Pod) {
 	pod.Spec.Containers[0].Image = e2epod.GetDefaultTestImage()
-	// ls /data verifies the subPath mount is working. and sleep keeps the container
-	// alive so we can observe when it crashes and restarts.
+	// ls /data 用于验证 subPath 挂载可用；sleep 让容器保持存活，
+	// 以便观察容器崩溃和重启。
 	pod.Spec.Containers[0].Command = []string{"sh", "-c",
 		fmt.Sprintf("ls %s && trap exit TERM; while true; do sleep 1; done", volumePath)}
 	pod.Spec.Containers[0].Args = nil
@@ -1093,7 +1081,7 @@ func testSubpathStaleBindMountRemount(ctx context.Context, f *framework.Framewor
 	subpathGlob := fmt.Sprintf("/var/lib/kubelet/pods/%s/volume-subpaths/*/*/*", pod.UID)
 	ginkgo.By(fmt.Sprintf("Waiting for and then lazy-unmounting subPath bind mounts: %s", subpathGlob))
 
-	// wait for bind-mount targets to exist.
+	// 等待 bind mount 目标出现。
 	var bindTargets string
 	gomega.Eventually(ctx, func() string {
 		out, _ := hostExec.IssueCommandWithResult(ctx,
@@ -1104,8 +1092,8 @@ func testSubpathStaleBindMountRemount(ctx context.Context, f *framework.Framewor
 		"subPath bind-mount target must exist within 60s of pod Running")
 	framework.Logf("Found subPath bind target: %s", bindTargets)
 
-	// lazy-unmount the subPath bind-mount targets while the pod is running.
-	// the container will crash because its subPath mount disappears.
+	// 在 Pod 运行时惰性卸载 subPath bind mount 目标；
+	// 容器会因 subPath 挂载消失而崩溃。
 	umountCmd := fmt.Sprintf(
 		`for mp in $(ls -d %s 2>/dev/null); do umount --lazy "$mp" && echo "unmounted $mp" || true; done`,
 		subpathGlob,
@@ -1114,8 +1102,8 @@ func testSubpathStaleBindMountRemount(ctx context.Context, f *framework.Framewor
 	framework.ExpectNoError(err, "lazy-unmounting subPath bind mounts: %s", result)
 	framework.Logf("umount result: %s", result)
 
-	// stop the container via crictl so kubelet restarts it and calls
-	// prepareSubpathTarget on the stale bind mount.
+	// 通过 crictl 停止容器，使 kubelet 重启它并对残留 bind mount
+	// 调用 prepareSubpathTarget。
 	ginkgo.By("Stopping app container via crictl to trigger restart through stale bind-mount path")
 	containerName := pod.Spec.Containers[0].Name
 	stopCmd := fmt.Sprintf(
@@ -1124,11 +1112,9 @@ func testSubpathStaleBindMountRemount(ctx context.Context, f *framework.Framewor
 			`crictl stop "$cid" && echo "stopped $cid"`,
 		pod.UID, containerName,
 	)
-	// crictl stop occasionally fails at the containerd gRPC client with
-	// RST_STREAM / DEADLINE_EXCEEDED. crictl stop is idempotent, so retry.
-	// If kubelet already restarted the container (RestartCount >= 1), the stop
-	// took effect even though our RPC reply was lost — treat as success and
-	// stop retrying instead of looping until timeout.
+	// crictl stop 偶尔会因 containerd gRPC 客户端的 RST_STREAM / DEADLINE_EXCEEDED 失败。
+	// crictl stop 是幂等的，因此可以重试。若 kubelet 已重启容器（RestartCount >= 1），
+	// 说明即使 RPC 响应丢失，停止操作实际已生效：此时视为成功并停止重试，避免一直循环到超时。
 	var stopResult string
 	stopErr := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true,
 		func(ctx context.Context) (bool, error) {
@@ -1154,7 +1140,7 @@ func testSubpathStaleBindMountRemount(ctx context.Context, f *framework.Framewor
 	framework.ExpectNoError(stopErr, "stopping container via crictl for pod %s: %s", pod.UID, stopResult)
 	framework.Logf("crictl stop result: %s", stopResult)
 
-	// wait for the container to restart and reach Running with restarts >= 1.
+	// 等待容器重启并返回 Running 状态，且重启次数 >= 1。
 	ginkgo.By("Waiting for container to restart with a fresh bind mount")
 	err = wait.PollUntilContextTimeout(ctx, 3*time.Second, f.Timeouts.PodStart, true,
 		func(ctx context.Context) (bool, error) {

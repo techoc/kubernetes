@@ -19,19 +19,18 @@ package app
 import "context"
 
 type options struct {
-	// cancelMainContext is used to cancel upper level
-	// context when a background error occurs.
-	// It's called by HandleError if set.
+	// cancelMainContext 用于在后台发生错误时取消上层
+	// context。
+	// 如果设置了它，HandleError 会调用它。
 	cancelMainContext context.CancelCauseFunc
 }
 
-// TestOption implements the functional options pattern
-// dedicated for usage in testing code.
+// TestOption 实现了函数式选项模式，
+// 专供测试代码使用。
 type TestOption func(o *options) error
 
-// CancelMainContext sets a context cancellation function for
-// the plugin. This function is called by HandleError
-// when an error occurs in the background.
+// CancelMainContext 为插件设置 context 取消函数。
+// 当后台发生错误时，HandleError 会调用该函数。
 func CancelMainContext(cancel context.CancelCauseFunc) TestOption {
 	return func(o *options) error {
 		o.cancelMainContext = cancel

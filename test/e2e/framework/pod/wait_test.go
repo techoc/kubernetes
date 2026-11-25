@@ -37,17 +37,16 @@ import (
 	_ "k8s.io/kubernetes/test/utils/ktesting/format" // activate YAML object dumps
 )
 
-// The line number of the following code is checked in TestFailureOutput below.
-// Be careful when moving it around or changing the import statements above.
-// Here are some intentionally blank lines that can be removed to compensate
-// for future additional import statements.
+// 以下代码的行号会在下面的 TestFailureOutput 中被校验。
+// 移动这段代码或修改上面的 import 时要格外小心。
+// 以下空行是刻意保留的，将来新增 import 时可以删除它们以保持行号。
 //
 //
 //
 //
 //
 //
-// This must be line #50.
+// 此处必须是第 50 行。
 
 var _ = ginkgo.Describe("pod", func() {
 	ginkgo.It("not found, must exist", func(ctx context.Context) {

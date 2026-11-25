@@ -27,19 +27,14 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// TestWithProvider runs a small suite of specs tagged with
-// framework.WithProvider and checks that:
-//   - specs whose provider list doesn't match TestContext.Provider get
-//     skipped at runtime instead of running,
-//   - specs whose provider list does match run normally,
-//   - the "[Provider:...]" tag shows up in the spec text (for visibility in
-//     e.g. --list-tests output) but is not registered as a real, filterable
-//     Ginkgo label (unlike other tags such as [Slow]),
-//   - this works regardless of whether the It body takes no arguments,
-//     a context.Context or a ginkgo.SpecContext,
-//   - this also works when framework.WithProvider is passed to a Context
-//     instead of directly to the It's below it (the check is then injected
-//     as a BeforeEach instead of running directly in the It).
+// TestWithProvider 运行一组带有 framework.WithProvider 标记的 spec，并检查：
+//   - provider 列表与 TestContext.Provider 不匹配的 spec 在运行时被跳过而非执行，
+//   - provider 列表匹配的 spec 正常运行，
+//   - "[Provider:...]" 标记出现在 spec 文本中（便于 --list-tests 等输出可见），但不会注册为
+//     真正可过滤的 Ginkgo label（不像 [Slow] 等其他标记），
+//   - 无论 It 主体不接收参数、接收 context.Context 还是 ginkgo.SpecContext，行为都一致，
+//   - framework.WithProvider 传给外层 Context 而非直接传给其下的 It 时同样有效
+//     （此时检查会作为 BeforeEach 注入，而不是直接在 It 中运行）。
 func TestWithProvider(t *testing.T) {
 	oldProvider := framework.TestContext.Provider
 	framework.TestContext.Provider = "gce"
@@ -119,8 +114,8 @@ func TestWithProvider(t *testing.T) {
 	assert.Equal(t, types.SpecStateSkipped, states["wrap aws context [Provider:aws] inner two"])
 	assert.Equal(t, types.SpecStatePassed, states["wrap gce context [Provider:gce] inner"])
 
-	// The provider constraint must be visible in the text, but not usable as
-	// a "--label-filter" label like [Slow] or [Serial] are.
+	// provider 约束必须体现在 spec 文本中，但不能像 [Slow]、[Serial] 那样作为
+	// "--label-filter" 的 label 使用。
 	assert.NotContains(t, labels["wrap aws only [Provider:aws]"], "Provider:aws")
 	assert.NotContains(t, labels["wrap aws context [Provider:aws] inner one"], "Provider:aws")
 }

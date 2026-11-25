@@ -70,8 +70,8 @@ func doPodResizeResourceQuotaTests(f *framework.Framework) {
 		ginkgo.By("Creating a ResourceQuota")
 		_, rqErr := f.ClientSet.CoreV1().ResourceQuotas(f.Namespace.Name).Create(ctx, &resourceQuota, metav1.CreateOptions{})
 		framework.ExpectNoError(rqErr, "failed to create resource quota")
-		// pod creation using this quota will fail until the quota status is populated, so we need to wait to
-		// prevent races with the resourcequota controller
+		// 在 quota status 填充完成前，使用该 quota 创建 Pod 会失败；
+		// 因此需要等待，避免与 resourcequota controller 产生竞态。
 		ginkgo.By("Waiting for ResourceQuota status to populate")
 		quotaStatusErr := waitForResourceQuota(ctx, f.ClientSet, f.Namespace.Name, resourceQuota.Name)
 		framework.ExpectNoError(quotaStatusErr, "resource quota status failed to populate")
@@ -114,7 +114,7 @@ func doPodResizeResourceQuotaTests(f *framework.Framework) {
 			} else {
 				var patchedPod *v1.Pod
 				framework.ExpectNoError(framework.Gomega().
-					// Use Eventually because we need to wait for the resource-quota controller to sync.
+					// 使用 Eventually，等待 resource-quota controller 完成同步。
 					Eventually(ctx, func(ctx context.Context) error {
 						var pErr error
 						patchedPod, pErr = f.ClientSet.CoreV1().Pods(newPods[0].Namespace).Patch(ctx,
@@ -309,7 +309,7 @@ func doPodResizeLimitRangerTests(f *framework.Framework) {
 				}
 
 				framework.ExpectNoError(framework.Gomega().
-					// Use Eventually because we need to wait for the limit-ranger controller to sync.
+					// 使用 Eventually，等待 limit-ranger controller 完成同步。
 					Eventually(ctx, func(ctx context.Context) error {
 						var pErr error
 						patchedPod, pErr = f.ClientSet.CoreV1().Pods(newPods[0].Namespace).Patch(ctx,
@@ -508,10 +508,10 @@ func doPodResizeSchedulerTests(f *framework.Framework) {
 			node.Name, nodeAllocatableCPU.MilliValue(), nodeAvailableCPU.MilliValue())
 
 		//
-		// Scheduler focused pod resize E2E test case #1:
-		//     1. Create pod1 and pod2 on node such that pod1 has enough CPU to be scheduled, but pod2 does not.
-		//     2. Resize pod2 down so that it fits on the node and can be scheduled.
-		//     3. Verify that pod2 gets scheduled and comes up and running.
+		// 面向调度器的 Pod resize E2E 测试用例 #1：
+		//     1. 在节点上创建 pod1 和 pod2：pod1 有足够 CPU 可调度，pod2 则没有。
+		//     2. 调小 pod2，使其能放进该节点并被调度。
+		//     3. 验证 pod2 完成调度并进入 Running 状态。
 		//
 		testPod1CPUQuantity := resource.NewMilliQuantity(nodeAvailableCPU.MilliValue()/2, resource.DecimalSI)
 		testPod2CPUQuantity := resource.NewMilliQuantity(nodeAvailableCPU.MilliValue(), resource.DecimalSI)
@@ -572,10 +572,10 @@ func doPodResizeSchedulerTests(f *framework.Framework) {
 		ginkgo.By(fmt.Sprintf("TEST1: Verify that pod '%s' is running after resize", testPod2.Name))
 		framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, testPod2))
 
-		// Scheduler focused pod resize E2E test case #2
-		//     1. With pod1 + pod2 running on node above, create pod3 that requests more CPU than available, verify pending.
-		//     2. Resize pod1 down so that pod3 gets room to be scheduled.
-		//     3. Verify that pod3 is scheduled and running.
+		// 面向调度器的 Pod resize E2E 测试用例 #2
+		//     1. 在上述节点上已有 pod1 + pod2 运行的情况下，创建一个请求 CPU 超过可用量的 pod3，验证其为 Pending。
+		//     2. 调小 pod1，为 pod3 腾出可调度的空间。
+		//     3. 验证 pod3 被调度并进入 Running 状态。
 		//
 		nodeAllocatableCPU2, nodeAvailableCPU2, err := e2enode.GetNodeAllocatableAndAvailableQuantities(ctx, f.ClientSet, &node, v1.ResourceCPU)
 		framework.ExpectNoError(err, "failed to get CPU resources available for allocation")
@@ -626,11 +626,11 @@ func doPodResizeSchedulerTests(f *framework.Framework) {
 		framework.Logf("TEST2: Pod '%s' CPU requests '%dm'", testPod3.Name, testPod3.Spec.Containers[0].Resources.Requests.Cpu().MilliValue())
 		framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, testPod3))
 
-		// Scheduler focused pod resize E2E test case #3
-		//     1. With pod1 + pod2 + pod3 running on node above, attempt to scale up pod1 to requests more CPU than available, verify deferred.
-		//     2. Delete pod2 + pod3 to make room for pod3.
-		//     3. Verify that pod1 resize has completed.
-		//     4. Attempt to scale up pod1 to request more cpu than the node has, verify infeasible.
+		// 面向调度器的 Pod resize E2E 测试用例 #3
+		//     1. 在上述节点上已有 pod1 + pod2 + pod3 运行的情况下，尝试调大 pod1 使请求 CPU 超过可用量，验证 resize 被延迟。
+		//     2. 删除 pod2 + pod3，腾出空间。
+		//     3. 验证 pod1 的 resize 已完成。
+		//     4. 尝试将 pod1 调大到超过节点容量，验证该请求不可行。
 		patchTestpod1ExceedNodeAvailable := fmt.Sprintf(`{
 			"spec": {
 				"containers": [
@@ -696,13 +696,13 @@ func doPodResizeSchedulerTests(f *framework.Framework) {
 
 func doPodResizeRetryDeferredTests(f *framework.Framework) {
 	ginkgo.It("pod-resize-retry-deferred-test-1", func(ctx context.Context) {
-		// Deferred resize E2E test case #1 (2-Pod Scenario):
-		//     1. Assume Node CPU is divided into 10 "parts".
-		//     2. Create Pod A (5 parts) and Pod B (3 parts).
-		//     3. Verify remaining free CPU is < 3 parts (cannot fit Pod B's requested increase).
-		//     4. Resize Pod B to 6 parts. Verify the resize is deferred.
-		//     5. Resize Pod A down to 2 parts (frees up exactly 3 parts).
-		//     6. Verify Pod B's deferred resize has now completed successfully.
+		// 延迟 resize E2E 测试用例 #1（双 Pod 场景）：
+		//     1. 假设节点 CPU 被分成 10 “份”。
+		//     2. 创建 Pod A（5 份）和 Pod B（3 份）。
+		//     3. 验证剩余空闲 CPU 不足 3 份（放不下 Pod B 请求增加的量）。
+		//     4. 将 Pod B 调整为 6 份，验证 resize 被延迟。
+		//     5. 将 Pod A 调小到 2 份（恰好释放 3 份）。
+		//     6. 验证 Pod B 先前被延迟的 resize 现已成功完成。
 
 		podClient := e2epod.NewPodClient(f)
 		nodes, err := e2enode.GetReadySchedulableNodes(ctx, f.ClientSet)
@@ -717,11 +717,11 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		framework.Logf("Node '%s': NodeAllocatable MilliCPUs = %dm. MilliCPUs currently available to allocate = %dm.",
 			node.Name, nodeAllocatableCPU.MilliValue(), nodeAvailableCPU.MilliValue())
 
-		// Conceptually divide the available CPU into 10 parts.
+		// 将可用 CPU 在概念上分为 10 份。
 		onePartCPU := nodeAvailableCPU.MilliValue() / 10
 		framework.Logf("Node '%s' currently available MilliCPUs = %dm (1 part = %dm)", node.Name, nodeAvailableCPU.MilliValue(), onePartCPU)
 
-		// Pod A: 5 parts, Pod B: 3 parts
+		// Pod A：5 份，Pod B：3 份
 		podACPU := resource.NewMilliQuantity(onePartCPU*5, resource.DecimalSI)
 		podBCPU := resource.NewMilliQuantity(onePartCPU*3, resource.DecimalSI)
 
@@ -764,10 +764,10 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		gomega.Expect(nodeAvailableCPU2.MilliValue()).To(gomega.BeNumerically("<", threePartsCPU),
 			"Available CPU should be strictly less than 3 parts to ensure Pod B's resize is deferred")
 
-		// Calculations for Resizing
-		// Pod B: Resize to 6 parts (needs 3 more parts)
+		// resize 计算：
+		// Pod B：调整为 6 份（还需 3 份）
 		podBResizedCPU := resource.NewMilliQuantity(onePartCPU*6, resource.DecimalSI)
-		// Pod A: Resize to 2 parts (drops 3 parts, freeing them up)
+		// Pod A：调整为 2 份（减少 3 份，将其释放出来）
 		podAResizedCPU := resource.NewMilliQuantity(onePartCPU*2, resource.DecimalSI)
 
 		patchPodBToDeferred := fmt.Sprintf(`{
@@ -819,12 +819,12 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 	})
 
 	ginkgo.It("pod-resize-retry-deferred-test-2", func(ctx context.Context) {
-		// Deferred resize E2E test case #2:
-		//	   1. Create 5 pods on the node, where the first one has 2/3 of the node allocatable CPU,
-		//        and the remaining ones each have 1/16 of the node allocatable CPU.
-		//     2. Resize all remaining pods to request 2/3 of the node allocatable CPU, verify deferred.
-		//     3. Delete the first pod, verify the pod with the highest priority has its resize accepted.
-		//     4. Repeat step 3 until all but the last pod has been deleted.
+		// 延迟 resize E2E 测试用例 #2：
+		//	   1. 在节点上创建 5 个 Pod：第一个占用节点可分配 CPU 的 2/3，
+		//        其余每个各占 1/16。
+		//     2. 将其他 Pod 都调整为请求节点可分配 CPU 的 2/3，验证 resize 被延迟。
+		//     3. 删除第一个 Pod，验证优先级最高的 Pod 的 resize 被接受。
+		//     4. 重复步骤 3，直到只剩最后一个 Pod。
 
 		podClient := e2epod.NewPodClient(f)
 		nodes, err := e2enode.GetReadySchedulableNodes(ctx, f.ClientSet)
@@ -875,7 +875,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		testPod1 = podClient.CreateSync(ctx, testPod1)
 		gomega.Expect(testPod1.Status.Phase).To(gomega.Equal(v1.PodRunning))
 
-		// Create pod2 with 1/16 of the node allocatable CPU, with high priority based on priority class.
+		// 创建 pod2，占用节点可分配 CPU 的 1/16，并通过 priority class 赋予高优先级。
 		testPod2 := podresize.MakePodWithResizableContainers(f.Namespace.Name, "testpod2", tStamp, containerWithLittleCPU, nil)
 		testPod2 = e2epod.MustMixinRestrictedPodSecurity(testPod2)
 		pc, err := f.ClientSet.SchedulingV1().PriorityClasses().Create(ctx, &schedulingv1.PriorityClass{
@@ -896,7 +896,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		testPod2 = podClient.CreateSync(ctx, testPod2)
 		gomega.Expect(testPod2.Status.Phase).To(gomega.Equal(v1.PodRunning))
 
-		// Create pod3 with 1/16 of the node allocatable CPU, that is a "guaranteed" pod (all others should be "burstable").
+		// 创建 pod3，占用节点可分配 CPU 的 1/16，且为 “guaranteed” Pod（其他均为 “burstable”）。
 		testPod3 := podresize.MakePodWithResizableContainers(f.Namespace.Name, "testpod3", tStamp, containerWithLittleCPUGuaranteedQoS, nil)
 		testPod3 = e2epod.MustMixinRestrictedPodSecurity(testPod3)
 		e2epod.SetNodeAffinity(&testPod3.Spec, node.Name)
@@ -905,7 +905,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		testPod3 = podClient.CreateSync(ctx, testPod3)
 		gomega.Expect(testPod3.Status.Phase).To(gomega.Equal(v1.PodRunning))
 
-		// Create pod4 with 1/16 of the node allocatable CPU.
+		// 创建 pod4，占用节点可分配 CPU 的 1/16。
 		testPod4 := podresize.MakePodWithResizableContainers(f.Namespace.Name, "testpod4", tStamp, containerWithLittleCPU, nil)
 		testPod4 = e2epod.MustMixinRestrictedPodSecurity(testPod4)
 		e2epod.SetNodeAffinity(&testPod4.Spec, node.Name)
@@ -914,7 +914,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		testPod4 = podClient.CreateSync(ctx, testPod4)
 		gomega.Expect(testPod4.Status.Phase).To(gomega.Equal(v1.PodRunning))
 
-		// Create pod5 with 1/16 of the node allocatable CPU.
+		// 创建 pod5，占用节点可分配 CPU 的 1/16。
 		testPod5 := podresize.MakePodWithResizableContainers(f.Namespace.Name, "testpod5", tStamp, containerWithLittleCPU, nil)
 		testPod5 = e2epod.MustMixinRestrictedPodSecurity(testPod5)
 		e2epod.SetNodeAffinity(&testPod5.Spec, node.Name)
@@ -934,38 +934,38 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 			}
 		}`, majorityCPUQuantity.MilliValue(), majorityCPUQuantity.MilliValue())
 
-		// Resize requests are done in an arbitrary order, to verify that the priority based on priority class
-		// or qos class takes precedent over the order of the requests.
+		// 刻意按任意顺序提交 resize 请求，以验证基于 priority class 或 QoS class 的优先级
+		// 优先于请求提交的先后顺序。
 
-		// Attempt pod4 resize request to 2/3 of the node allocatable CPU, verify deferred.
+		// 尝试将 pod4 调整为请求节点可分配 CPU 的 2/3，验证 resize 被延迟。
 		ginkgo.By(fmt.Sprintf("Resize pod '%s'", testPod4.Name))
 		testPod4, err = f.ClientSet.CoreV1().Pods(testPod4.Namespace).Patch(ctx,
 			testPod4.Name, types.StrategicMergePatchType, []byte(patchTestPod), metav1.PatchOptions{}, "resize")
 		framework.ExpectNoError(err, "failed to patch pod for resize")
 		waitForPodDeferred(ctx, f, testPod4)
 
-		// Attempt pod3 resize request to 2/3 of the node allocatable CPU, verify deferred.
+		// 尝试将 pod3 调整为请求节点可分配 CPU 的 2/3，验证 resize 被延迟。
 		ginkgo.By(fmt.Sprintf("Resize pod '%s'", testPod3.Name))
 		testPod3, err = f.ClientSet.CoreV1().Pods(testPod3.Namespace).Patch(ctx,
 			testPod3.Name, types.StrategicMergePatchType, []byte(patchTestPod), metav1.PatchOptions{}, "resize")
 		framework.ExpectNoError(err, "failed to patch pod for resize")
 		waitForPodDeferred(ctx, f, testPod3)
 
-		// Attempt pod2 resize request to 2/3 of the node allocatable CPU, verify deferred.
+		// 尝试将 pod2 调整为请求节点可分配 CPU 的 2/3，验证 resize 被延迟。
 		ginkgo.By(fmt.Sprintf("Resize pod '%s'", testPod2.Name))
 		testPod2, err = f.ClientSet.CoreV1().Pods(testPod2.Namespace).Patch(ctx,
 			testPod2.Name, types.StrategicMergePatchType, []byte(patchTestPod), metav1.PatchOptions{}, "resize")
 		framework.ExpectNoError(err, "failed to patch pod for resize")
 		waitForPodDeferred(ctx, f, testPod2)
 
-		// Attempt pod5 resize request to 2/3 of the node allocatable CPU, verify deferred.
+		// 尝试将 pod5 调整为请求节点可分配 CPU 的 2/3，验证 resize 被延迟。
 		ginkgo.By(fmt.Sprintf("Resize pod '%s'", testPod5.Name))
 		testPod5, err = f.ClientSet.CoreV1().Pods(testPod5.Namespace).Patch(ctx,
 			testPod5.Name, types.StrategicMergePatchType, []byte(patchTestPod), metav1.PatchOptions{}, "resize")
 		framework.ExpectNoError(err, "failed to patch pod for resize")
 		waitForPodDeferred(ctx, f, testPod5)
 
-		// Delete pod1. Verify pod2's resize has completed, while the others are still deferred.
+		// 删除 pod1。验证 pod2 的 resize 已完成，其余仍被延迟。
 		ginkgo.By("deleting pod1")
 		delErr1 := e2epod.DeletePodWithWait(ctx, f.ClientSet, testPod1)
 		framework.ExpectNoError(delErr1, "failed to delete pod %s", testPod1.Name)
@@ -983,7 +983,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		waitForPodDeferred(ctx, f, testPod4)
 		waitForPodDeferred(ctx, f, testPod5)
 
-		// Delete pod2. Verify pod3's resize has completed, while the others are still deferred.
+		// 删除 pod2。验证 pod3 的 resize 已完成，其余仍被延迟。
 		ginkgo.By("deleting pod2")
 		delErr2 := e2epod.DeletePodWithWait(ctx, f.ClientSet, testPod2)
 		framework.ExpectNoError(delErr2, "failed to delete pod %s", testPod2.Name)
@@ -1005,7 +1005,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		waitForPodDeferred(ctx, f, testPod4)
 		waitForPodDeferred(ctx, f, testPod5)
 
-		// Delete pod3. Verify pod4's resize has completed, while the others are still deferred.
+		// 删除 pod3。验证 pod4 的 resize 已完成，其余仍被延迟。
 		ginkgo.By("deleting pod3")
 		delErr3 := e2epod.DeletePodWithWait(ctx, f.ClientSet, testPod3)
 		framework.ExpectNoError(delErr3, "failed to delete pod %s", testPod3.Name)
@@ -1021,7 +1021,7 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 		podresize.ExpectPodResized(ctx, f, resizedPod, expected)
 		waitForPodDeferred(ctx, f, testPod5)
 
-		// Delete pod4. Verify pod5's resize has completed.
+		// 删除 pod4。验证 pod5 的 resize 已完成。
 		ginkgo.By("deleting pod4")
 		delErr4 := e2epod.DeletePodWithWait(ctx, f.ClientSet, testPod4)
 		framework.ExpectNoError(delErr4, "failed to delete pod %s", testPod4.Name)
@@ -1042,16 +1042,16 @@ func doPodResizeRetryDeferredTests(f *framework.Framework) {
 	})
 
 	ginkgo.It("pod-resize-retry-deferred-test-3", func(ctx context.Context) {
-		// Deferred resize E2E test case #3:
-		// 	   1. Create pod1, pod2, pod3, and pod4 on node, each starting with 1/4 of the node's allocatable CPU and and 1/5 the memory.
-		// 	   2. Resize pod2 to request more CPU than available (1/3), along with a decrease in memory (1/24), verify the resize is deferred.
-		//	   3. Resize pod3 to request more memory than available (2/3), along with a decrease in CPU (1/24), verify the resize is deferred.
-		// 	   4. Resize pod4 to request more CPU than available (5/8), verify the resize is deferred.
-		//	   5. The deferred resizes above are chosen carefully such that:
-		//	      - deletion of pod1 should make room for pod2's resize (but not pod3 or pod4).
-		//	      - pod2's resize should make room for pod3's resize (but not pod4).
-		//	      - pod3's resize should make room for pod4's resize.
-		//     6. Delete pod1, verify the chain of deferred resizes is actuated.
+		// 延迟 resize E2E 测试用例 #3：
+		// 	   1. 在节点上创建 pod1、pod2、pod3 和 pod4，初始各占节点可分配 CPU 的 1/4 和内存的 1/5。
+		// 	   2. 将 pod2 调整为请求超过可用量的 CPU（1/3），同时减少内存（1/24），验证 resize 被延迟。
+		//	   3. 将 pod3 调整为请求超过可用量的内存（2/3），同时减少 CPU（1/24），验证 resize 被延迟。
+		// 	   4. 将 pod4 调整为请求超过可用量的 CPU（5/8），验证 resize 被延迟。
+		//	   5. 上述被延迟的 resize 经过精心设计，满足：
+		//	      - 删除 pod1 应为 pod2 的 resize 腾出空间（但不足以容纳 pod3 或 pod4）。
+		//	      - pod2 的 resize 应为 pod3 的 resize 腾出空间（但不足以容纳 pod4）。
+		//	      - pod3 的 resize 应为 pod4 的 resize 腾出空间。
+		//     6. 删除 pod1，验证整条延迟 resize 链依次得到执行。
 
 		podClient := e2epod.NewPodClient(f)
 		nodes, err := e2enode.GetReadySchedulableNodes(ctx, f.ClientSet)
@@ -1196,11 +1196,11 @@ func doPodResizeDeferredPreemptionTests(f *framework.Framework) {
 		availableMillis := nodeAvailableCPU.MilliValue()
 		framework.Logf("Node '%s' available CPU = %dm", node.Name, availableMillis)
 
-		// Victim pod: 50% of available CPU, low priority
+		// 牺牲 Pod（victim）：占可用 CPU 的 50%，低优先级
 		victimCPU := resource.NewMilliQuantity(int64(float64(availableMillis)*0.5), resource.DecimalSI)
-		// Mid-priority pod: 20% of available CPU, mid priority
+		// 中优先级 Pod：占可用 CPU 的 20%，中优先级
 		midPriCPU := resource.NewMilliQuantity(int64(float64(availableMillis)*0.2), resource.DecimalSI)
-		// Preemptor pod: 20% of available CPU, high priority
+		// 抢占 Pod（preemptor）：占可用 CPU 的 20%，高优先级
 		preemptorCPU := resource.NewMilliQuantity(int64(float64(availableMillis)*0.2), resource.DecimalSI)
 
 		victimContainers := []podresize.ResizableContainerInfo{
@@ -1226,7 +1226,7 @@ func doPodResizeDeferredPreemptionTests(f *framework.Framework) {
 		preemptor = e2epod.MustMixinRestrictedPodSecurity(preemptor)
 		e2epod.SetNodeAffinity(&preemptor.Spec, node.Name)
 
-		// Create Priority Classes
+		// 创建 PriorityClass
 		pcPreemptor, err := f.ClientSet.SchedulingV1().PriorityClasses().Create(ctx, &schedulingv1.PriorityClass{
 			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("preemptor-priority-%s", f.Namespace.Name)},
 			Value:      1000,
@@ -1273,8 +1273,8 @@ func doPodResizeDeferredPreemptionTests(f *framework.Framework) {
 		midPriPod = createdPods[1]
 		preemptor = createdPods[2]
 
-		// Resize midPriPod to 45% CPU and preemptor to 50% CPU
-		// midPriPod target (45%) + preemptor target (50%) = 95% <= 100% node capacity (midPriPod is NOT evicted)
+		// 将 midPriPod 调整为 45% CPU，preemptor 调整为 50% CPU
+		// midPriPod 目标（45%）+ preemptor 目标（50%）= 95% <= 节点容量的 100%（midPriPod 不会被驱逐）
 		midPriTargetCPU := resource.NewMilliQuantity(int64(float64(availableMillis)*0.45), resource.DecimalSI)
 		preemptorTargetCPU := resource.NewMilliQuantity(int64(float64(availableMillis)*0.50), resource.DecimalSI)
 
@@ -1442,13 +1442,13 @@ func doPodResizeMemoryVolumeDeferredTests(f *framework.Framework) {
 		_, nodeAvailableCPU, err := e2enode.GetNodeAllocatableAndAvailableQuantities(ctx, f.ClientSet, &node, v1.ResourceCPU)
 		framework.ExpectNoError(err, "failed to get available CPU")
 
-		// Conceptually divide the available CPU into 10 parts.
+		// 将可用 CPU 在概念上分为 10 份。
 		onePartCPU := nodeAvailableCPU.MilliValue() / 10
 		framework.Logf("Node '%s' currently available MilliCPUs = %dm (1 part = %dm)", node.Name, nodeAvailableCPU.MilliValue(), onePartCPU)
 
-		// Pod A (filler pod): 5 parts
+		// Pod A（填充 Pod）：5 份
 		podACPU := resource.NewMilliQuantity(onePartCPU*5, resource.DecimalSI)
-		// Pod B (test pod): 3 parts
+		// Pod B（测试 Pod）：3 份
 		podBCPU := resource.NewMilliQuantity(onePartCPU*3, resource.DecimalSI)
 
 		cA := []podresize.ResizableContainerInfo{
@@ -1501,7 +1501,7 @@ func doPodResizeMemoryVolumeDeferredTests(f *framework.Framework) {
 
 		initialRestarts := podB.Status.ContainerStatuses[0].RestartCount
 
-		// Pod B: Resize request to 6 parts (needs 3 more parts, which exceeds remaining available CPU)
+		// Pod B：请求调整为 6 份（还需 3 份，超过当前可用 CPU）
 		podBResizedCPU := resource.NewMilliQuantity(onePartCPU*6, resource.DecimalSI)
 
 		ginkgo.By(fmt.Sprintf("patching Pod B CPU request to %dm (exceeds remaining available, will be deferred) and sizeLimit to %s", podBResizedCPU.MilliValue(), qty128Mi.String()))

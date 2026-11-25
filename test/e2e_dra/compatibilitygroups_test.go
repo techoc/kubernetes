@@ -29,16 +29,15 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
-// compatibilityGroupsSharedCounters is one counter set with room for four devices
-// (each consumes one unit): enough for the gate-cycle's long-lived two-device
-// claim plus a fresh single-device claim allocated after re-enable, with headroom.
+// compatibilityGroupsSharedCounters 是一个可容纳 4 个设备的计数器集（每个设备消耗 1 个单位），
+// 足够容纳开关周期中长期存在的双设备 claim，以及重新启用后新分配的单设备 claim，并留有余量。
 var compatibilityGroupsSharedCounters = []resourceapi.CounterSet{{
 	Name:     "gpu",
 	Counters: map[string]resourceapi.Counter{"mem": {Value: resource.MustParse("4")}},
 }}
 
-// compatibilityGroupsDeviceList holds four devices declaring the same group, so
-// grouped claims co-allocate on the shared counter set with the group check.
+// compatibilityGroupsDeviceList 包含 4 个声明同一 group 的设备，使分组 claim 在共享
+// 计数器集上经过 group 校验后共同分配。
 var compatibilityGroupsDeviceList = []resourceapi.Device{
 	compatibilityGroupsDevice("device-0"),
 	compatibilityGroupsDevice("device-1"),
@@ -64,7 +63,7 @@ func compatibilityGroupsDriverResources(nodes *drautils.Nodes) map[string]resour
 			Pools: map[string]resourceslice.Pool{
 				"compatibility-groups-pool": {
 					Slices: []resourceslice.Slice{
-						// Devices and SharedCounters must be exclusive per design.
+						// 按设计，Devices 和 SharedCounters 必须互斥。
 						{SharedCounters: compatibilityGroupsSharedCounters},
 						{Devices: compatibilityGroupsDeviceList},
 					},
@@ -74,9 +73,8 @@ func compatibilityGroupsDriverResources(nodes *drautils.Nodes) map[string]resour
 	}
 }
 
-// compatibilityGroupsCreatePod creates a pod whose claim requests count devices
-// of the grouped device class; count>1 forces the allocator to co-allocate them
-// on the shared counter set and run the compatibility-group intersection.
+// compatibilityGroupsCreatePod 创建一个 Pod，其 claim 请求分组设备类的 count 个设备；
+// count>1 会迫使分配器在共享计数器集上共同分配，并执行兼容性 group 交集校验。
 func compatibilityGroupsCreatePod(tCtx ktesting.TContext, b *drautils.Builder, count int64) (*v1.Pod, string) {
 	claim := b.ExternalClaim()
 	claim.Spec.Devices.Requests = []resourceapi.DeviceRequest{{
@@ -99,20 +97,18 @@ func verifyCompatibilityGroupsPodAllocated(tCtx ktesting.TContext, pod *v1.Pod, 
 	tCtx.Expect(claim.Status.Allocation).ToNot(gomega.BeNil(), "claim %s must be allocated", claimName)
 }
 
-// compatibilityGroupsGateCycle implements the DRADeviceCompatibilityGroups
-// ON→OFF→ON cycle test (KEP integration test #4: upgrade → downgrade → upgrade):
+// compatibilityGroupsGateCycle 实现 DRADeviceCompatibilityGroups 特性门的 ON→OFF→ON 周期测试
+// （KEP 集成测试 #4：升级 → 降级 → 再升级）：
 //
-//   - Phase 0 (gate ON): a claim co-allocates two devices sharing a group; the
-//     compatibility check runs and the pod is scheduled.
-//   - Phase 1 (gate OFF, downgrade): the existing allocation remains valid.
-//   - Phase 2 (gate ON again, re-upgrade): re-enabling enforcement does not
-//     re-evaluate or evict the existing allocation, and a fresh grouped
-//     allocation works.
+//   - 阶段 0（门开启）：一个 claim 共同分配两个共享 group 的设备，执行兼容性校验并调度 Pod。
+//   - 阶段 1（门关闭，降级）：已有的分配仍然有效。
+//   - 阶段 2（再次开启门，重新升级）：重新启用强制校验不会重新评估或驱逐已有分配，
+//     且新的分组分配仍能正常工作。
 func compatibilityGroupsGateCycle(tCtx ktesting.TContext, b *drautils.Builder) gateOffFunc {
 	var survivor *v1.Pod
 	var survivorClaim string
 	tCtx.Run("grouped-pod-running", func(tCtx ktesting.TContext) {
-		// Two devices sharing a group, co-allocated on one counter set.
+		// 两个共享同一 group 的设备在同一个计数器集上共同分配。
 		survivor, survivorClaim = compatibilityGroupsCreatePod(tCtx, b, 2)
 		verifyCompatibilityGroupsPodAllocated(tCtx, survivor, survivorClaim)
 	})
@@ -127,7 +123,7 @@ func compatibilityGroupsGateCycle(tCtx ktesting.TContext, b *drautils.Builder) g
 				verifyCompatibilityGroupsPodAllocated(tCtx, survivor, survivorClaim)
 			})
 			tCtx.Run("fresh-grouped-pod-allocates", func(tCtx ktesting.TContext) {
-				// A fresh grouped device allocates end-to-end after re-enable.
+				// 重新启用后，新的分组设备分配端到端成功。
 				fresh, freshClaim := compatibilityGroupsCreatePod(tCtx, b, 1)
 				verifyCompatibilityGroupsPodAllocated(tCtx, fresh, freshClaim)
 			})

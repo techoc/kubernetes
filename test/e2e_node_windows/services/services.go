@@ -30,8 +30,8 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// E2EServices starts and stops e2e services in a separate process. The test
-// uses it to start and stop all e2e services.
+// E2EServices 在独立进程中启动和停止 e2e 服务。
+// 测试通过它来启动和停止所有 e2e 服务。
 type E2EServices struct {
 	rmDirs        []string
 	monitorParent bool
@@ -40,7 +40,7 @@ type E2EServices struct {
 	logs          logFiles
 }
 
-// NewE2EServices returns a new E2EServices instance.
+// NewE2EServices 返回一个新的 E2EServices 实例。
 func NewE2EServices(monitorParent bool) *E2EServices {
 	return &E2EServices{
 		monitorParent: monitorParent,
@@ -48,8 +48,8 @@ func NewE2EServices(monitorParent bool) *E2EServices {
 	}
 }
 
-// Start starts the e2e services in another process by calling back into the
-// test binary. Returns when all e2e services are ready or an error.
+// Start 通过回调测试二进制文件在另一个进程中启动 e2e 服务。
+// 当所有 e2e 服务就绪或发生错误时返回。
 func (e *E2EServices) Start(ctx context.Context, featureGates map[string]bool) error {
 	var err error
 	if e.services, err = e.startInternalServices(); err != nil {
@@ -68,7 +68,7 @@ func (e *E2EServices) Start(ctx context.Context, featureGates map[string]bool) e
 	return nil
 }
 
-// Stop stops the e2e services.
+// Stop 停止 e2e 服务。
 func (e *E2EServices) Stop() {
 	defer func() {
 		if !framework.TestContext.NodeConformance {
@@ -96,8 +96,8 @@ func (e *E2EServices) Stop() {
 	}
 }
 
-// RunE2EServices actually starts the e2e services. This function is used to
-// start e2e services in current process. This is only used in run-services-mode.
+// RunE2EServices 实际启动 e2e 服务。该函数用于在当前进程中启动 e2e 服务，
+// 仅在 run-services-mode 下使用。
 func RunE2EServices(t *testing.T) {
 	e := newE2EServices()
 	if err := e.run(t); err != nil {
@@ -106,13 +106,13 @@ func RunE2EServices(t *testing.T) {
 }
 
 const (
-	// servicesLogFile is the combined log of all services
+	// servicesLogFile 是所有服务日志的汇总
 	servicesLogFile = "services.log"
-	// LogVerbosityLevel is consistent with the level used in a cluster e2e test.
+	// LogVerbosityLevel 与集群 e2e 测试中使用的日志级别保持一致。
 	LogVerbosityLevel = "4"
 )
 
-// startInternalServices starts the internal services in a separate process.
+// startInternalServices 在独立进程中启动内部服务。
 func (e *E2EServices) startInternalServices() (*server, error) {
 	testBin, err := os.Executable()
 	if err != nil {
@@ -127,7 +127,7 @@ func (e *E2EServices) startInternalServices() (*server, error) {
 	return server, server.start()
 }
 
-// collectLogFiles is a no-op on Windows (no journald or Linux log paths).
+// collectLogFiles 在 Windows 上是空操作（没有 journald 或 Linux 日志路径）。
 func (e *E2EServices) collectLogFiles() {
 	klog.Info("Log collection is not supported on Windows.")
 }

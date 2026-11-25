@@ -41,10 +41,9 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// checkConnectivityToHost launches a pod to test connectivity to the specified
-// host. An error will be returned if the host is not reachable from the pod.
+// checkConnectivityToHost 启动一个 Pod 测试到指定主机的连通性；若从 Pod 无法访问该主机则返回错误。
 //
-// An empty nodeName will use the schedule to choose where the pod is executed.
+// nodeName 为空时由调度器决定 Pod 运行在哪个节点。
 func checkConnectivityToHost(ctx context.Context, f *framework.Framework, nodeName, podName, host string, port, timeout int) error {
 	command := []string{
 		"nc",
@@ -92,7 +91,7 @@ var _ = common.SIGDescribe("Networking", func() {
 	})
 
 	f.It("should provide Internet connection for containers", feature.NetworkingIPv6, "[Experimental][LinuxOnly]", func(ctx context.Context) {
-		// IPv6 is not supported on Windows.
+		// Windows 不支持 IPv6。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		ginkgo.By("Running container which tries to connect to 2001:4860:4860::8888")
 		framework.ExpectNoError(
@@ -105,7 +104,7 @@ var _ = common.SIGDescribe("Networking", func() {
 			checkConnectivityToHost(ctx, f, "", "connectivity-test", "google.com", 80, 30))
 	})
 
-	// First test because it has no dependencies on variables created later on.
+	// 先运行此测试，因为它不依赖后面创建的变量。
 	ginkgo.It("should provide unchanging, static URL paths for kubernetes api services", func(ctx context.Context) {
 		tests := []struct {
 			path string
@@ -116,7 +115,7 @@ var _ = common.SIGDescribe("Networking", func() {
 			{path: "/metrics"},
 			{path: "/openapi/v2"},
 			{path: "/version"},
-			// TODO: test proxy links here
+			// TODO: 在此测试 proxy links
 		}
 		for _, test := range tests {
 			ginkgo.By(fmt.Sprintf("testing: %s", test.path))
@@ -130,15 +129,14 @@ var _ = common.SIGDescribe("Networking", func() {
 	})
 
 	ginkgo.It("should check kube-proxy urls", func(ctx context.Context) {
-		// TODO: this is overkill we just need the host networking pod
-		// to hit kube-proxy urls.
+		// TODO: 这里有些过度设计；只需一个 hostNetwork Pod 访问 kube-proxy 的 URL 即可。
 		config := e2enetwork.NewNetworkingTestConfig(ctx, f, e2enetwork.UseHostNetwork)
 
 		ginkgo.By("checking kube-proxy URLs")
 		config.GetSelfURL(ctx, ports.ProxyHealthzPort, "/healthz", "200 OK")
-		// Verify /healthz returns the proper content.
+		// 验证 /healthz 返回正确内容。
 		config.GetSelfURL(ctx, ports.ProxyHealthzPort, "/healthz", "lastUpdated")
-		// Verify /proxyMode returns http status code 200.
+		// 验证 /proxyMode 返回 HTTP 状态码 200。
 		config.GetSelfURLStatusCode(ctx, ports.ProxyStatusPort, "/proxyMode", "200")
 	})
 
@@ -275,14 +273,14 @@ var _ = common.SIGDescribe("Networking", func() {
 			}
 		})
 
-		// This test ensures that in a situation where multiple services exist with the same selector,
-		// deleting one of the services does not affect the connectivity of the remaining service
+		// 该测试确保在多个 Service 使用相同 selector 的情况下，
+		// 删除其中一个不会影响其余 Service 的连通性
 		ginkgo.It("should function for multiple endpoint-Services with same selector", func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f)
 			ginkgo.By("creating a second service with same selector")
 			svc2, httpPort := createSecondNodePortService(ctx, f, config)
 
-			// original service should work
+			// 原 Service 应正常工作
 			ginkgo.By(fmt.Sprintf("dialing(http) %v (endpoint) --> %v:%v (config.clusterIP)", config.EndpointPods[0].Name, config.ClusterIP, e2enetwork.ClusterHTTPPort))
 			err := config.DialFromEndpointContainer(ctx, "http", config.ClusterIP, e2enetwork.ClusterHTTPPort, config.MaxTries, 0, config.EndpointHostnames())
 			if err != nil {
@@ -293,7 +291,7 @@ var _ = common.SIGDescribe("Networking", func() {
 			if err != nil {
 				framework.Failf("failed dialing endpoint, %v", err)
 			}
-			// Dial second service
+			// 连接第二个 Service
 			ginkgo.By(fmt.Sprintf("dialing(http) %v (endpoint) --> %v:%v (svc2.clusterIP)", config.EndpointPods[0].Name, svc2.Spec.ClusterIP, e2enetwork.ClusterHTTPPort))
 			err = config.DialFromEndpointContainer(ctx, "http", svc2.Spec.ClusterIP, e2enetwork.ClusterHTTPPort, config.MaxTries, 0, config.EndpointHostnames())
 			if err != nil {
@@ -309,7 +307,7 @@ var _ = common.SIGDescribe("Networking", func() {
 			ginkgo.By("deleting the original node port service")
 			config.DeleteNodePortService(ctx)
 
-			// Second service should continue to function unaffected
+			// 第二个 Service 应继续正常工作
 			ginkgo.By(fmt.Sprintf("dialing(http) %v (endpoint) --> %v:%v (svc2.clusterIP)", config.EndpointPods[0].Name, svc2.Spec.ClusterIP, e2enetwork.ClusterHTTPPort))
 			err = config.DialFromEndpointContainer(ctx, "http", svc2.Spec.ClusterIP, e2enetwork.ClusterHTTPPort, config.MaxTries, 0, config.EndpointHostnames())
 			if err != nil {
@@ -356,7 +354,7 @@ var _ = common.SIGDescribe("Networking", func() {
 			}
 		})
 
-		// Slow because we confirm that the nodePort doesn't serve traffic, which requires a period of polling.
+		// 较慢，因为要确认 nodePort 不再承载流量，需要持续轮询。
 		f.It("should update nodePort: http", f.WithSlow(), func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f, e2enetwork.UseHostNetwork)
 			ginkgo.By(fmt.Sprintf("dialing(http) %v (node) --> %v:%v (ctx, nodeIP) and getting ALL host endpoints", config.NodeIP, config.NodeIP, config.NodeHTTPPort))
@@ -368,16 +366,15 @@ var _ = common.SIGDescribe("Networking", func() {
 			config.DeleteNodePortService(ctx)
 
 			ginkgo.By(fmt.Sprintf("dialing(http) %v (node) --> %v:%v (nodeIP) and getting ZERO host endpoints", config.NodeIP, config.NodeIP, config.NodeHTTPPort))
-			// #106770 MaxTries can be very large on large clusters, with the risk that a new NodePort is created by another test and start to answer traffic.
-			// Since we only want to assert that traffic is not being forwarded anymore and the retry timeout is 2 seconds, consider the test is correct
-			// if the service doesn't answer after 10 tries.
+			// #106770 大集群中 MaxTries 可能很大，存在其他测试新建 NodePort 并开始响应流量的风险。
+			// 由于只需断言流量不再被转发，且重试超时为 2 秒，10 次尝试后 Service 无响应即可认为测试通过。
 			err = config.DialFromNode(ctx, "http", config.NodeIP, config.NodeHTTPPort, 10, 10, sets.NewString())
 			if err != nil {
 				framework.Failf("Failure validating that node port service STOPPED removed properly: %v", err)
 			}
 		})
 
-		// quick validation of udp, next test confirms that this services update as well after endpoints are removed, but is slower.
+		// 快速校验 UDP；下一个测试会确认 endpoint 移除后 Service 也会更新，但耗时更长。
 		ginkgo.It("should support basic nodePort: udp functionality", func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f, e2enetwork.UseHostNetwork)
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v (node) --> %v:%v (nodeIP) and getting ALL host endpoints", config.NodeIP, config.NodeIP, config.NodeUDPPort))
@@ -387,7 +384,7 @@ var _ = common.SIGDescribe("Networking", func() {
 			}
 		})
 
-		// Slow because we confirm that the nodePort doesn't serve traffic, which requires a period of polling.
+		// 较慢，因为要确认 nodePort 不再承载流量，需要持续轮询。
 		f.It("should update nodePort: udp", f.WithSlow(), func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f, e2enetwork.UseHostNetwork)
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v (node) --> %v:%v (nodeIP) and getting ALL host endpoints", config.NodeIP, config.NodeIP, config.NodeUDPPort))
@@ -400,21 +397,20 @@ var _ = common.SIGDescribe("Networking", func() {
 			config.DeleteNodePortService(ctx)
 
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v (node) --> %v:%v (nodeIP) and getting ZERO host endpoints", config.NodeIP, config.NodeIP, config.NodeUDPPort))
-			// #106770 MaxTries can be very large on large clusters, with the risk that a new NodePort is created by another test and start to answer traffic.
-			// Since we only want to assert that traffic is not being forwarded anymore and the retry timeout is 2 seconds, consider the test is correct
-			// if the service doesn't answer after 10 tries.
+			// #106770 大集群中 MaxTries 可能很大，存在其他测试新建 NodePort 并开始响应流量的风险。
+			// 由于只需断言流量不再被转发，且重试超时为 2 秒，10 次尝试后 Service 无响应即可认为测试通过。
 			err = config.DialFromNode(ctx, "udp", config.NodeIP, config.NodeUDPPort, 10, 10, sets.NewString())
 			if err != nil {
 				framework.Failf("Failure validating that node port service STOPPED removed properly: %v", err)
 			}
 		})
 
-		// [LinuxOnly]: Windows does not support session affinity.
+		// [LinuxOnly]: Windows 不支持会话亲和性。
 		ginkgo.It("should function for client IP based session affinity: http [LinuxOnly]", func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f)
 			ginkgo.By(fmt.Sprintf("dialing(http) %v --> %v:%v", config.TestContainerPod.Name, config.SessionAffinityService.Spec.ClusterIP, e2enetwork.ClusterHTTPPort))
 
-			// Check if number of endpoints returned are exactly one.
+			// 检查返回的 endpoint 数量是否恰好为 1。
 			eps, err := config.GetEndpointsFromTestContainer(ctx, "http", config.SessionAffinityService.Spec.ClusterIP, e2enetwork.ClusterHTTPPort, e2enetwork.SessionAffinityChecks)
 			if err != nil {
 				framework.Failf("ginkgo.Failed to get endpoints from test container, error: %v", err)
@@ -427,12 +423,12 @@ var _ = common.SIGDescribe("Networking", func() {
 			}
 		})
 
-		// [LinuxOnly]: Windows does not support session affinity.
+		// [LinuxOnly]: Windows 不支持会话亲和性。
 		ginkgo.It("should function for client IP based session affinity: udp [LinuxOnly]", func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f)
 			ginkgo.By(fmt.Sprintf("dialing(udp) %v --> %v:%v", config.TestContainerPod.Name, config.SessionAffinityService.Spec.ClusterIP, e2enetwork.ClusterUDPPort))
 
-			// Check if number of endpoints returned are exactly one.
+			// 检查返回的 endpoint 数量是否恰好为 1。
 			eps, err := config.GetEndpointsFromTestContainer(ctx, "udp", config.SessionAffinityService.Spec.ClusterIP, e2enetwork.ClusterUDPPort, e2enetwork.SessionAffinityChecks)
 			if err != nil {
 				framework.Failf("ginkgo.Failed to get endpoints from test container, error: %v", err)
@@ -465,9 +461,8 @@ var _ = common.SIGDescribe("Networking", func() {
 			}
 		})
 
-		// if the endpoints pods use hostNetwork, several tests can't run in parallel
-		// because the pods will try to acquire the same port in the host.
-		// We run the test in serial, to avoid port conflicts.
+		// 若 endpoint Pod 使用 hostNetwork，多个测试无法并行运行，
+		// 因为它们会尝试占用宿主机上的相同端口；因此串行运行以避免端口冲突。
 		ginkgo.It("should function for service endpoints using hostNetwork", func(ctx context.Context) {
 			config := e2enetwork.NewNetworkingTestConfig(ctx, f, e2enetwork.UseHostNetwork, e2enetwork.EndpointsUseHostNetwork)
 
@@ -563,10 +558,9 @@ var _ = common.SIGDescribe("Networking", func() {
 		podNames, svcIP, err := StartServeHostnameService(ctx, f.ClientSet, getServeHostnameService(svc), ns, numPods)
 		framework.ExpectNoError(err, "failed to create replication controller with service: %s in the namespace: %s", svc, ns)
 
-		// Ideally we want to reload the system firewall, but we don't necessarily
-		// know how to do that on this system ("firewall-cmd --reload"? "systemctl
-		// restart iptables"?). So instead we just manually delete all "KUBE-"
-		// chains.
+		// 理想情况下应重载系统防火墙，但不一定知道在本系统上该怎么做
+		// （"firewall-cmd --reload"？"systemctl restart iptables"？），
+		// 因此这里手动删除所有 "KUBE-" 链。
 
 		ginkgo.By("dumping iptables rules on node " + host)
 		result, err := e2essh.SSH(ctx, "sudo iptables-save", host, framework.TestContext.Provider)
@@ -575,9 +569,7 @@ var _ = common.SIGDescribe("Networking", func() {
 			framework.Failf("couldn't dump iptable rules: %v", err)
 		}
 
-		// All the commands that delete rules have to come before all the commands
-		// that delete chains, since the chains can't be deleted while there are
-		// still rules referencing them.
+		// 所有删除规则的命令必须放在删除链的命令之前，因为仍有规则引用时无法删除链。
 		var deleteRuleCmds, deleteChainCmds []string
 		table := ""
 		for _, line := range strings.Split(result.Stdout, "\n") {
@@ -587,11 +579,11 @@ var _ = common.SIGDescribe("Networking", func() {
 				continue
 			}
 
-			// Delete jumps from non-KUBE chains to KUBE chains
+			// 删除从非 KUBE 链跳转到 KUBE 链的规则
 			if !strings.HasPrefix(line, "-A KUBE-") && strings.Contains(line, "-j KUBE-") {
 				deleteRuleCmds = append(deleteRuleCmds, fmt.Sprintf("sudo iptables -t %s -D %s || true", table, line[3:]))
 			}
-			// Flush and delete all KUBE chains
+			// 清空并删除所有 KUBE 链
 			if strings.HasPrefix(line, ":KUBE-") {
 				chain := strings.Split(line, " ")[0][1:]
 				deleteRuleCmds = append(deleteRuleCmds, fmt.Sprintf("sudo iptables -t %s -F %s || true", table, chain))
@@ -629,8 +621,8 @@ var _ = common.SIGDescribe("Networking", func() {
 		framework.ExpectNoError(err, "kubelet did not recreate its iptables rules")
 	})
 
-	// This is [Serial] because it can't run at the same time as the
-	// [Feature:SCTPConnectivity] tests, since they may cause sctp.ko to be loaded.
+	// 标记为 [Serial]，因为不能与 [Feature:SCTPConnectivity] 测试同时运行，
+	// 后者可能导致 sctp.ko 被加载。
 	f.It("should allow creating a Pod with an SCTP HostPort [LinuxOnly]", f.WithSerial(), func(ctx context.Context) {
 		node, err := e2enode.GetRandomReadySchedulableNode(ctx, f.ClientSet)
 		framework.ExpectNoError(err)

@@ -45,7 +45,7 @@ var _ = sigDescribe("Services", skipUnlessWindows(func() {
 	var cs clientset.Interface
 
 	ginkgo.BeforeEach(func() {
-		//Only for Windows containers
+		// 仅适用于 Windows 容器
 		e2eskipper.SkipUnlessNodeOSDistroIs("windows")
 		cs = f.ClientSet
 	})
@@ -69,7 +69,7 @@ var _ = sigDescribe("Services", skipUnlessWindows(func() {
 		nodePort := int(svc.Spec.Ports[0].NodePort)
 
 		ginkgo.By("creating Pod to be part of service " + serviceName)
-		// tweak the Jig to use windows...
+		// 调整 Jig 使其使用 Windows……
 		windowsNodeSelectorTweak := func(rc *appsv1.Deployment) {
 			rc.Spec.Template.Spec.NodeSelector = map[string]string{
 				"kubernetes.io/os": "windows",
@@ -78,13 +78,13 @@ var _ = sigDescribe("Services", skipUnlessWindows(func() {
 		_, err = jig.Run(ctx, windowsNodeSelectorTweak)
 		framework.ExpectNoError(err)
 
-		//using hybrid_network methods
+		// 使用 hybrid_network 的方法
 		ginkgo.By("creating Windows testing Pod")
 		testPod := createTestPod(f, imageutils.GetE2EImage(imageutils.Agnhost), windowsOS)
 		testPod = e2epod.NewPodClient(f).CreateSync(ctx, testPod)
 
 		ginkgo.By("verifying that pod has the correct nodeSelector")
-		// Admission controllers may sometimes do the wrong thing
+		// admission controller 有时会做出错误判断
 		gomega.Expect(testPod.Spec.NodeSelector).To(gomega.HaveKeyWithValue("kubernetes.io/os", "windows"), "pod.spec.nodeSelector")
 		ginkgo.By(fmt.Sprintf("checking connectivity Pod to curl http://%s:%d", nodeIP, nodePort))
 		assertConsistentConnectivity(ctx, f, testPod.ObjectMeta.Name, windowsOS, windowsCheck(fmt.Sprintf("http://%s", net.JoinHostPort(nodeIP, strconv.Itoa(nodePort)))), internalMaxTries)

@@ -67,11 +67,10 @@ func (p PodDirIO) Mkdir(path string) error {
 }
 
 func (p PodDirIO) CreateFile(path string, content io.Reader) error {
-	// Piping the content into dd via stdin turned out to be unreliable.
-	// Sometimes dd would stop after writing zero bytes, without an error
-	// from Exec (reported as https://github.com/kubernetes/kubernetes/issues/112834).
+	// 通过 stdin 将内容管道给 dd 并不可靠：有时 dd 写入零字节后就停止，而 Exec
+	// 不会报错（见 https://github.com/kubernetes/kubernetes/issues/112834）。
 	//
-	// Therefore the content is now encoded inside the command itself.
+	// 因此现在将内容编码后直接嵌入命令本身。
 	data, err := io.ReadAll(content)
 	if err != nil {
 		return fmt.Errorf("read content: %w", err)

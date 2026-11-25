@@ -34,8 +34,7 @@ import (
 )
 
 const (
-	// Kubelet GC's on a frequency of once every 5 minutes
-	// Add a little leeway to give it time.
+	// kubelet 的 GC 每 5 分钟执行一次，这里多留一点余量。
 	checkGCUntil time.Duration = 6 * time.Minute
 	checkGCFreq  time.Duration = 30 * time.Second
 )
@@ -69,8 +68,8 @@ var _ = SIGDescribe("ImageGarbageCollect", framework.WithSerial(), framework.Wit
 
 			e2epod.NewPodClient(f).DeleteSync(ctx, pod.ObjectMeta.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 
-			// Even though the image gc max timing is less, we are bound by the kubelet's
-			// ImageGCPeriod, which is hardcoded to 5 minutes.
+			// 即使镜像 GC 的最长时限较短，实际仍受 kubelet 的 ImageGCPeriod 限制，
+			// 该值硬编码为 5 分钟。
 			gomega.Eventually(ctx, func() int {
 				gcdImageList, err := is.ListImages(context.Background(), &runtimeapi.ImageFilter{})
 				framework.ExpectNoError(err)
@@ -91,16 +90,15 @@ var _ = SIGDescribe("ImageGarbageCollect", framework.WithSerial(), framework.Wit
 
 			restartKubelet(ctx, true)
 
-			// Wait until the maxAge of the image after the kubelet is restarted to ensure it doesn't
-			// GC too early.
+			// kubelet 重启后等待镜像达到 maxAge，确认不会过早 GC。
 			gomega.Consistently(ctx, func() int {
 				gcdImageList, err := is.ListImages(context.Background(), &runtimeapi.ImageFilter{})
 				framework.ExpectNoError(err)
 				return len(gcdImageList)
 			}, 50*time.Second, 10*time.Second).Should(gomega.Equal(len(allImages)))
 
-			// Even though the image gc max timing is less, we are bound by the kubelet's
-			// ImageGCPeriod, which is hardcoded to 5 minutes.
+			// 即使镜像 GC 的最长时限较短，实际仍受 kubelet 的 ImageGCPeriod 限制，
+			// 该值硬编码为 5 分钟。
 			gomega.Eventually(ctx, func() int {
 				gcdImageList, err := is.ListImages(context.Background(), &runtimeapi.ImageFilter{})
 				framework.ExpectNoError(err)

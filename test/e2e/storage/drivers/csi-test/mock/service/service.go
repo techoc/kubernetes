@@ -32,20 +32,20 @@ import (
 )
 
 const (
-	// Name is the name of the CSI plug-in.
+	// Name 是 CSI plug-in 的名称。
 	Name = "io.kubernetes.storage.mock"
 
-	// VendorVersion is the version returned by GetPluginInfo.
+	// VendorVersion 是 GetPluginInfo 返回的版本号。
 	VendorVersion = "0.3.0"
 
-	// TopologyKey simulates a per-node topology.
+	// TopologyKey 模拟按节点划分的 topology。
 	TopologyKey = Name + "/node"
 
-	// TopologyValue is the one, fixed node on which the driver runs.
+	// TopologyValue 是 driver 运行所在的那个固定节点。
 	TopologyValue = "some-mock-node"
 )
 
-// Manifest is the SP's manifest.
+// Manifest 是 SP 的 manifest。
 var Manifest = map[string]string{
 	"url": "https://github.com/kubernetes/kubernetes/tree/master/test/e2e/storage/drivers/csi-test/mock",
 }
@@ -65,16 +65,15 @@ type Config struct {
 	IO                          DirIO
 }
 
-// DirIO is an abstraction over direct os calls.
+// DirIO 是对直接 os 调用的抽象。
 type DirIO interface {
-	// DirExists returns false if the path doesn't exist, true if it exists and is a directory, an error otherwise.
+	// DirExists 在路径不存在时返回 false，存在且为目录时返回 true，其他情况返回 error。
 	DirExists(path string) (bool, error)
-	// Mkdir creates the directory, but not its parents, with 0755 permissions.
+	// Mkdir 以 0755 权限创建目录，但不创建其父目录。
 	Mkdir(path string) error
-	// RemoveAll removes the path and everything contained inside it. It's not an error if the path does not exist.
+	// RemoveAll 删除路径及其包含的所有内容。路径不存在时不算错误。
 	RemoveAll(path string) error
-	// Rename changes the name of a file or directory. The parent directory
-	// of newPath must exist.
+	// Rename 修改文件或目录的名称。newPath 的父目录必须存在。
 	Rename(oldPath, newPath string) error
 }
 
@@ -106,7 +105,7 @@ func (o OSDirIO) Rename(oldPath, newPath string) error {
 	return os.Rename(oldPath, newPath)
 }
 
-// Service is the CSI Mock service provider.
+// Service 是 CSI Mock 的 service provider。
 type Service interface {
 	csi.ControllerServer
 	csi.IdentityServer
@@ -140,7 +139,7 @@ type Volume struct {
 
 var MockVolumes map[string]Volume
 
-// New returns a new Service.
+// New 返回一个新的 Service。
 func New(config Config) Service {
 	s := &service{
 		nodeID: config.DriverName,
@@ -272,7 +271,7 @@ func (s *service) newSnapshot(name, sourceVolumeID string, parameters map[string
 	}
 }
 
-// getAttachCount returns the number of attached volumes on the node.
+// getAttachCount 返回该节点上已 attach 的 volume 数量。
 func (s *service) getAttachCount(devPathKey string) int64 {
 	var count int64
 	for _, v := range s.vols {

@@ -43,14 +43,14 @@ var _ = common.SIGDescribe("Netpol API", func() {
 		Release: v1.20
 		Testname: NetworkPolicies API
 		Description:
-		- The networking.k8s.io API group MUST exist in the /apis discovery document.
-		- The networking.k8s.io/v1 API group/version MUST exist in the /apis/networking.k8s.io discovery document.
-		- The NetworkPolicies resources MUST exist in the /apis/networking.k8s.io/v1 discovery document.
-		- The NetworkPolicies resource must support create, get, list, watch, update, patch, delete, and deletecollection.
+		- /apis discovery 文档中 MUST 存在 networking.k8s.io API 组。
+		- /apis/networking.k8s.io discovery 文档中 MUST 存在 networking.k8s.io/v1 API 组/版本。
+		- /apis/networking.k8s.io/v1 discovery 文档中 MUST 存在 NetworkPolicies 资源。
+		- NetworkPolicies 资源必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
 	*/
 
 	ginkgo.It("should support creating NetworkPolicy API operations", func(ctx context.Context) {
-		// Setup
+		// 准备环境
 		ns := f.Namespace.Name
 		npVersion := "v1"
 		npClient := f.ClientSet.NetworkingV1().NetworkPolicies(ns)
@@ -72,7 +72,7 @@ var _ = common.SIGDescribe("Netpol API", func() {
 			SetSpecPodSelectorMatchLabels(map[string]string{"pod-name": "test-pod"}),
 			SetSpecIngressRules(ingressRule))
 
-		// Discovery
+		// 服务发现
 		ginkgo.By("getting /apis")
 		{
 			discoveryGroups, err := f.ClientSet.Discovery().ServerGroups()
@@ -123,7 +123,7 @@ var _ = common.SIGDescribe("Netpol API", func() {
 				framework.Failf("expected networkpolicies, got %#v", resources.APIResources)
 			}
 		}
-		// NetPol resource create/read/update/watch verbs
+		// NetPol 资源的 create/read/update/watch 操作
 		ginkgo.By("creating")
 		_, err := npClient.Create(ctx, npTemplate, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
@@ -146,7 +146,7 @@ var _ = common.SIGDescribe("Netpol API", func() {
 		framework.Logf("starting watch")
 		npWatch, err := npClient.Watch(ctx, metav1.ListOptions{ResourceVersion: nps.ResourceVersion, LabelSelector: "special-label=" + f.UniqueName})
 		framework.ExpectNoError(err)
-		// Test cluster-wide list and watch
+		// 测试集群范围的 list 和 watch
 		clusterNPClient := f.ClientSet.NetworkingV1().NetworkPolicies("")
 		ginkgo.By("cluster-wide listing")
 		clusterNPs, err := clusterNPClient.List(ctx, metav1.ListOptions{LabelSelector: "special-label=" + f.UniqueName})
@@ -193,7 +193,7 @@ var _ = common.SIGDescribe("Netpol API", func() {
 				framework.Fail("timed out waiting for watch event")
 			}
 		}
-		// NetPol resource delete operations
+		// NetPol 资源的删除操作
 		ginkgo.By("deleting")
 		err = npClient.Delete(ctx, createdNetPol.Name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err)
@@ -235,9 +235,9 @@ var _ = common.SIGDescribe("Netpol API", func() {
 		Release: v1.21
 		Testname: NetworkPolicy support EndPort Field
 		Description:
-		- EndPort field cannot be defined if the Port field is not defined
-		- EndPort field cannot be defined if the Port field is defined as a named (string) port.
-		- EndPort field must be equal or greater than port.
+		- 未定义 Port 字段时不能定义 EndPort 字段
+		- Port 字段为命名（字符串）端口时不能定义 EndPort 字段
+		- EndPort 字段必须大于或等于 port
 	*/
 	ginkgo.It("should support creating NetworkPolicy API with endport field", func(ctx context.Context) {
 		ns := f.Namespace.Name

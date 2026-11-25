@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package init installs GrabBeforeEach and GrabAfterEach as callbacks
-// for gathering data before and after a test.
+// Package init 注册 GrabBeforeEach 和 GrabAfterEach 作为回调，
+// 在测试前后采集数据。
 package init
 
 import (

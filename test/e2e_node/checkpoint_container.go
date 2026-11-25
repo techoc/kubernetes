@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	// timeout for proxy requests.
+	// 代理请求的超时时间。
 	proxyTimeout = 2 * time.Minute
 )
 
@@ -53,9 +53,9 @@ type checkpointResult struct {
 	Items []string `json:"items"`
 }
 
-// proxyPostRequest performs a post on a node proxy endpoint given the nodename and rest client.
+// proxyPostRequest 根据节点名和 rest client 对节点代理端点执行 POST 请求。
 func proxyPostRequest(ctx context.Context, c clientset.Interface, node, endpoint string, port int) (restclient.Result, error) {
-	// proxy tends to hang in some cases when Node is not ready. Add an artificial timeout for this call. #22165
+	// Node 未就绪时代理请求有时会挂起，因此为该调用加上人为的超时限制。#22165
 	var result restclient.Result
 	finished := make(chan struct{}, 1)
 	go func() {
@@ -91,7 +91,7 @@ func getCheckpointContainerMetric(ctx context.Context, f *framework.Framework, p
 
 	runtimeOperationsTotal, ok := ms["runtime_operations_total"]
 	if !ok {
-		// If the metric was not found it was probably not written to, yet.
+		// 找不到该指标，说明可能还没有写入过数据。
 		return 0, nil
 	}
 
@@ -100,7 +100,7 @@ func getCheckpointContainerMetric(ctx context.Context, f *framework.Framework, p
 			return int(item.Value), nil
 		}
 	}
-	// If the metric was not found it was probably not written to, yet.
+	// 找不到指标通常意味着它还没被写入。
 	return 0, nil
 }
 
@@ -117,7 +117,7 @@ func getCheckpointContainerErrorMetric(ctx context.Context, f *framework.Framewo
 
 	runtimeOperationsErrorsTotal, ok := ms["runtime_operations_errors_total"]
 	if !ok {
-		// If the metric was not found it was probably not written to, yet.
+		// 找不到该指标，说明可能还没有写入过数据。
 		return 0, nil
 	}
 
@@ -126,7 +126,7 @@ func getCheckpointContainerErrorMetric(ctx context.Context, f *framework.Framewo
 			return int(item.Value), nil
 		}
 	}
-	// If the metric was not found it was probably not written to, yet.
+	// 找不到指标通常意味着它还没被写入。
 	return 0, nil
 }
 
@@ -166,11 +166,11 @@ var _ = SIGDescribe("Checkpoint Container", feature.CheckpointContainer, func() 
 			framework.Failf("pod %q should be ready", p.Name)
 		}
 
-		// No checkpoint operation should have been logged
+		// 此时不应记录任何 checkpoint 操作。
 		checkpointContainerMetric, err := getCheckpointContainerMetric(ctx, f, pod)
 		framework.ExpectNoError(err)
 		gomega.Expect(checkpointContainerMetric).To(gomega.Equal(0))
-		// No error should have been logged
+		// 此时不应记录任何错误。
 		checkpointContainerErrorMetric, err := getCheckpointContainerErrorMetric(ctx, f, pod)
 		framework.ExpectNoError(err)
 		gomega.Expect(checkpointContainerErrorMetric).To(gomega.Equal(0))
@@ -201,32 +201,31 @@ var _ = SIGDescribe("Checkpoint Container", feature.CheckpointContainer, func() 
 			if !ok {
 				framework.Failf("got error %#v, expected StatusError", err)
 			}
-			// If we are testing against a kubelet with ContainerCheckpoint == false
-			// we should get a 404. So a 404 is (also) a good sign.
+			// 若测试的 kubelet 将 ContainerCheckpoint 设为 false，应返回 404；
+			// 因此 404 也属于可接受的结果。
 			if (int(statusError.ErrStatus.Code)) == http.StatusNotFound {
 				ginkgo.Skip("Feature 'ContainerCheckpoint' is not enabled and not available")
 				return
 			}
 
-			// If the container engine has not implemented the Checkpoint CRI API
-			// we will get 500 and a message with
+			// 若容器引擎未实现 Checkpoint CRI API，会返回 500 以及如下消息：
 			// '(rpc error: code = Unimplemented desc = unknown method CheckpointContainer'
-			// or
+			// 或
 			// '(rpc error: code = Unimplemented desc = method CheckpointContainer not implemented)'
-			// if the container engine returns that it explicitly has disabled support for it.
-			// or
+			// ——当容器引擎明确返回其未启用该特性时。
+			// 或
 			// '(rpc error: code = Unknown desc = checkpoint/restore support not available)'
-			// if the container engine explicitly disabled the checkpoint/restore support
-			// or
+			// ——当容器引擎明确禁用了 checkpoint/restore 支持时。
+			// 或
 			// '(rpc error: code = Unknown desc = failed to checkpoint container "...": criu support is disabled by configuration)'
-			// if containerd explicitly disabled CRIU support
-			// or
+			// ——当 containerd 明确禁用了 CRIU 支持时。
+			// 或
 			// '(rpc error: code = Unknown desc = CRIU binary not found or too old (<31600). Failed to checkpoint container'
-			// if the CRIU binary was not found or is too old
-			// or
+			// ——当 CRIU 二进制文件不存在或版本过旧时。
+			// 或
 			// '(rpc error: code = Unknown desc = failed to checkpoint container "...": criu binary not found in shim path or system PATH)'
 			// '(rpc error: code = Unknown desc = failed to checkpoint container "...": checkpoint/restore requires at least CRIU 31600, current version is ...)'
-			// for newer containerd CRIU preflight checks
+			// ——新版 containerd 的 CRIU 预检会返回这些消息。
 			if (int(statusError.ErrStatus.Code)) == http.StatusInternalServerError {
 				if strings.Contains(
 					statusError.ErrStatus.Message,
@@ -279,8 +278,7 @@ var _ = SIGDescribe("Checkpoint Container", feature.CheckpointContainer, func() 
 
 		framework.ExpectNoError(err)
 
-		// Checkpointing actually worked. Verify that the checkpoint exists and that
-		// it is a checkpoint.
+		// checkpoint 已成功生成。接下来验证文件存在，且内容确实是一个 checkpoint。
 
 		raw, err := result.Raw()
 		framework.ExpectNoError(err)
@@ -289,16 +287,14 @@ var _ = SIGDescribe("Checkpoint Container", feature.CheckpointContainer, func() 
 		framework.ExpectNoError(err)
 
 		for _, item := range answer.Items {
-			// Check that the file exists
+			// 检查文件是否存在。
 			_, err := os.Stat(item)
 			framework.ExpectNoError(err)
-			// Check the content of the tar file
-			// At least looking for the following files
+			// 检查 tar 包内容，至少应包含以下文件：
 			//  * spec.dump
 			//  * config.dump
 			//  * checkpoint/inventory.img
-			// If these files exist in the checkpoint archive it is
-			// probably a complete checkpoint.
+			// checkpoint 归档中若包含这些文件，通常就是一个完整的 checkpoint。
 			checkForFiles := map[string]bool{
 				"spec.dump":                false,
 				"config.dump":              false,
@@ -310,7 +306,7 @@ var _ = SIGDescribe("Checkpoint Container", feature.CheckpointContainer, func() 
 			for {
 				hdr, err := tr.Next()
 				if err == io.EOF {
-					// End of archive
+					// 归档已读完。
 					break
 				}
 				framework.ExpectNoError(err)
@@ -323,14 +319,14 @@ var _ = SIGDescribe("Checkpoint Container", feature.CheckpointContainer, func() 
 					framework.Failf("File %q not found in checkpoint archive %q", fileName, item)
 				}
 			}
-			// cleanup checkpoint archive
+			// 清理 checkpoint 归档。
 			os.RemoveAll(item)
 		}
-		// Exactly one checkpoint operation should have happened
+		// 应当恰好发生了一次 checkpoint 操作。
 		checkpointContainerMetric, err = getCheckpointContainerMetric(ctx, f, pod)
 		framework.ExpectNoError(err)
 		gomega.Expect(checkpointContainerMetric).To(gomega.Equal(1))
-		// No error should have been logged
+		// 不应记录任何错误。
 		checkpointContainerErrorMetric, err = getCheckpointContainerErrorMetric(ctx, f, pod)
 		framework.ExpectNoError(err)
 		gomega.Expect(checkpointContainerErrorMetric).To(gomega.Equal(0))

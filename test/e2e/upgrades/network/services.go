@@ -28,9 +28,8 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// ServiceUpgradeTest tests that a service is available before and
-// after a cluster upgrade. During a master-only upgrade, it will test
-// that a service remains available during the upgrade.
+// ServiceUpgradeTest 检查 Service 在集群升级前后均可用。
+// 仅升级 master 时，还会检查升级过程中 Service 是否保持可用。
 type ServiceUpgradeTest struct {
 	jig          *e2eservice.TestJig
 	tcpService   *v1.Service
@@ -38,10 +37,10 @@ type ServiceUpgradeTest struct {
 	svcPort      int
 }
 
-// Name returns the tracking name of the test.
+// Name 返回该测试的跟踪名称。
 func (ServiceUpgradeTest) Name() string { return "service-upgrade" }
 
-// Setup creates a service with a load balancer and makes sure it's reachable.
+// Setup 创建带负载均衡器的 Service，并确认其可访问。
 func (t *ServiceUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	serviceName := "service-test"
 	jig := e2eservice.NewTestJig(f.ClientSet, f.Namespace.Name, serviceName)
@@ -57,7 +56,7 @@ func (t *ServiceUpgradeTest) Setup(ctx context.Context, f *framework.Framework) 
 	tcpService, err := jig.WaitForLoadBalancer(ctx, e2eservice.GetServiceLoadBalancerCreationTimeout(ctx, cs))
 	framework.ExpectNoError(err)
 
-	// Get info to hit it with
+	// 获取访问所需的信息
 	tcpIngressIP := e2eservice.GetIngressPoint(&tcpService.Status.LoadBalancer.Ingress[0])
 	svcPort := int(tcpService.Spec.Ports[0].Port)
 
@@ -69,7 +68,7 @@ func (t *ServiceUpgradeTest) Setup(ctx context.Context, f *framework.Framework) 
 	_, err = jig.CreatePDB(ctx, deployment)
 	framework.ExpectNoError(err)
 
-	// Hit it once before considering ourselves ready
+	// 先访问一次，确认准备就绪
 	ginkgo.By("hitting the pod through the service's LoadBalancer")
 	timeout := e2eservice.LoadBalancerLagTimeoutDefault
 	if framework.ProviderIs("aws") {
@@ -83,7 +82,7 @@ func (t *ServiceUpgradeTest) Setup(ctx context.Context, f *framework.Framework) 
 	t.svcPort = svcPort
 }
 
-// Test runs a connectivity check to the service.
+// Test 对该 Service 执行连通性检查。
 func (t *ServiceUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	switch upgrade {
 	case upgrades.MasterUpgrade, upgrades.ClusterUpgrade:
@@ -95,26 +94,26 @@ func (t *ServiceUpgradeTest) Test(ctx context.Context, f *framework.Framework, d
 	}
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理剩余资源。
 func (t *ServiceUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依赖删除 namespace 来清理所有资源
 }
 
 func (t *ServiceUpgradeTest) test(ctx context.Context, f *framework.Framework, done <-chan struct{}, testDuringDisruption, testFinalizer bool) {
 	if testDuringDisruption {
-		// Continuous validation
+		// 持续验证
 		ginkgo.By("continuously hitting the pod through the service's LoadBalancer")
-		// TODO (pohly): add context support
+		// TODO (pohly): 增加 context 支持
 		wait.Until(func() {
 			e2eservice.TestReachableHTTP(ctx, t.tcpIngressIP, t.svcPort, e2eservice.LoadBalancerLagTimeoutDefault)
 		}, framework.Poll, done)
 	} else {
-		// Block until upgrade is done
+		// 阻塞等待升级完成
 		ginkgo.By("waiting for upgrade to finish without checking if service remains up")
 		<-done
 	}
 
-	// Hit it once more
+	// 再访问一次
 	ginkgo.By("hitting the pod through the service's LoadBalancer")
 	e2eservice.TestReachableHTTP(ctx, t.tcpIngressIP, t.svcPort, e2eservice.LoadBalancerLagTimeoutDefault)
 	if testFinalizer {

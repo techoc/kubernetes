@@ -18,10 +18,10 @@ package metrics
 
 import "k8s.io/component-base/metrics/testutil"
 
-// SchedulerMetrics is metrics for scheduler
+// SchedulerMetrics 是 scheduler 的指标集合
 type SchedulerMetrics testutil.Metrics
 
-// Equal returns true if all metrics are the same as the arguments.
+// Equal 在所有指标与参数一致时返回 true。
 func (m *SchedulerMetrics) Equal(o SchedulerMetrics) bool {
 	return (*testutil.Metrics)(m).Equal(testutil.Metrics(o))
 }

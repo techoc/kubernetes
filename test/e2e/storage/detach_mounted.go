@@ -47,7 +47,7 @@ var _ = utils.SIGDescribe(feature.Flexvolumes, "Detaching volumes", framework.Wi
 	f := framework.NewDefaultFramework("flexvolume")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// note that namespace deletion is handled by delete-namespace flag
+	// 注意命名空间删除由 delete-namespace 标志负责
 
 	var cs clientset.Interface
 	var ns *v1.Namespace
@@ -105,15 +105,14 @@ var _ = utils.SIGDescribe(feature.Flexvolumes, "Detaching volumes", framework.Wi
 		err = e2epod.DeletePodWithWait(ctx, cs, pod)
 		framework.ExpectNoError(err, "in deleting the pod")
 
-		// Wait a bit for node to sync the volume status
+		// 稍等片刻，让节点同步卷状态
 		time.Sleep(30 * time.Second)
 
 		ginkgo.By("waiting for volume-in-use on the node after pod deletion")
 		err = waitForVolumesInUse(ctx, cs, node.Name, uniqueVolumeName)
 		framework.ExpectNoError(err, "while waiting for volume in use")
 
-		// Wait for 110s because mount device operation has a sleep of 120 seconds
-		// we previously already waited for 30s.
+		// 等待 110 秒：mount device 操作会休眠 120 秒，之前已经等过 30 秒。
 		time.Sleep(durationForStuckMount)
 
 		ginkgo.By("waiting for volume to disappear from node in-use")
@@ -210,9 +209,8 @@ func getFlexVolumePod(volumeSource v1.VolumeSource, nodeName string) *v1.Pod {
 					Name:       "flexvolume-detach-test" + "-client",
 					Image:      imageutils.GetE2EImage(imageutils.BusyBox),
 					WorkingDir: "/opt",
-					// An imperative and easily debuggable container which reads vol contents for
-					// us to scan in the tests or by eye.
-					// We expect that /opt is empty in the minimal containers which we use in this test.
+					// 使用一个命令式且易于调试的容器读取卷内容，供测试扫描或人工查看。
+					// 本测试使用的最小容器中，/opt 应为空。
 					Command: []string{
 						"/bin/sh",
 						"-c",

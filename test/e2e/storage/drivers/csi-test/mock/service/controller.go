@@ -47,10 +47,9 @@ func (s *service) CreateVolume(
 		return nil, status.Error(codes.InvalidArgument, "Volume Capabilities cannot be empty")
 	}
 
-	// Check to see if the volume already exists.
+	// 检查 volume 是否已存在。
 	if i, v := s.findVolByName(ctx, req.Name); i >= 0 {
-		// Requested volume name already exists, need to check if the existing volume's
-		// capacity is more or equal to new request's capacity.
+		// 请求的 volume 名称已存在，需检查现有 volume 的容量是否不小于新请求的容量。
 		if v.GetCapacityBytes() < req.GetCapacityRange().GetRequiredBytes() {
 			return nil, status.Error(codes.AlreadyExists,
 				fmt.Sprintf("Volume with name %s already exists", req.GetName()))
@@ -58,7 +57,7 @@ func (s *service) CreateVolume(
 		return &csi.CreateVolumeResponse{Volume: v}, nil
 	}
 
-	// If no capacity is specified then use 100GiB
+	// 未指定容量时使用 100GiB
 	capacity := gib100
 	if cr := req.CapacityRange; cr != nil {
 		if rb := cr.RequiredBytes; rb > 0 {
@@ -68,18 +67,18 @@ func (s *service) CreateVolume(
 			capacity = lb
 		}
 	}
-	// Check for maximum available capacity
+	// 检查是否超过最大可用容量
 	if capacity >= MaxStorageCapacity {
 		return nil, status.Errorf(codes.OutOfRange, "Requested capacity %d exceeds maximum allowed %d", capacity, MaxStorageCapacity)
 	}
 
 	var v *csi.Volume
-	// Create volume from content source if provided.
+	// 如果提供了 content source，则从它创建 volume。
 	if req.GetVolumeContentSource() != nil {
 		switch req.GetVolumeContentSource().GetType().(type) {
 		case *csi.VolumeContentSource_Snapshot:
 			sid := req.GetVolumeContentSource().GetSnapshot().GetSnapshotId()
-			// Check if the source snapshot exists.
+			// 检查 source snapshot 是否存在。
 			if snapID, _ := s.snapshots.FindSnapshot("id", sid); snapID >= 0 {
 				v = s.newVolumeFromSnapshot(req.Name, capacity, snapID)
 			} else {
@@ -87,7 +86,7 @@ func (s *service) CreateVolume(
 			}
 		case *csi.VolumeContentSource_Volume:
 			vid := req.GetVolumeContentSource().GetVolume().GetVolumeId()
-			// Check if the source volume exists.
+			// 检查 source volume 是否存在。
 			if volID, _ := s.findVolNoLock("id", vid); volID >= 0 {
 				v = s.newVolumeFromVolume(req.Name, capacity, volID)
 			} else {
@@ -98,7 +97,7 @@ func (s *service) CreateVolume(
 		v = s.newVolume(req.Name, capacity)
 	}
 
-	// Add the created volume to the service's in-mem volume slice.
+	// 将创建的 volume 加入 service 的内存 volume 切片。
 	s.volsRWL.Lock()
 	defer s.volsRWL.Unlock()
 	s.vols = append(s.vols, v)
@@ -126,7 +125,7 @@ func (s *service) DeleteVolume(
 	s.volsRWL.Lock()
 	defer s.volsRWL.Unlock()
 
-	//  If the volume is not specified, return error
+	//  未指定 volume 时返回错误
 	if len(req.VolumeId) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID cannot be empty")
 	}
@@ -135,15 +134,14 @@ func (s *service) DeleteVolume(
 		return nil, status.Error(hookVal, hookMsg)
 	}
 
-	// If the volume does not exist then return an idempotent response.
+	// volume 不存在时返回幂等响应。
 	i, _ := s.findVolNoLock("id", req.VolumeId)
 	if i < 0 {
 		return &csi.DeleteVolumeResponse{}, nil
 	}
 
-	// This delete logic preserves order and prevents potential memory
-	// leaks. The slice's elements may not be pointers, but the structs
-	// themselves have fields that are.
+	// 这种删除方式保留元素顺序，并避免潜在的内存泄漏。
+	// 切片元素本身可能不是指针，但结构体中的字段是指针。
 	copy(s.vols[i:], s.vols[i+1:])
 	s.vols[len(s.vols)-1] = nil
 	s.vols = s.vols[:len(s.vols)-1]
@@ -190,12 +188,11 @@ func (s *service) ControllerPublishVolume(
 		return nil, status.Error(codes.NotFound, req.VolumeId)
 	}
 
-	// devPathKey is the key in the volume's attributes that is set to a
-	// mock device path if the volume has been published by the controller
-	// to the specified node.
+	// devPathKey 是 volume attributes 中的键；当 volume 被 controller
+	// publish 到指定节点时，其值会被设为 mock 设备路径。
 	devPathKey := path.Join(req.NodeId, "dev")
 
-	// Check to see if the volume is already published.
+	// 检查 volume 是否已 publish。
 	if device := v.VolumeContext[devPathKey]; device != "" {
 		var volRo bool
 		var roVal string
@@ -209,7 +206,7 @@ func (s *service) ControllerPublishVolume(
 			volRo = false
 		}
 
-		// Check if readonly flag is compatible with the publish request.
+		// 检查 readonly 标志与 publish 请求是否兼容。
 		if req.GetReadonly() != volRo {
 			return nil, status.Error(codes.AlreadyExists, "Volume published but has incompatible readonly flag")
 		}
@@ -222,7 +219,7 @@ func (s *service) ControllerPublishVolume(
 		}, nil
 	}
 
-	// Check attach limit before publishing only if attach limit is set.
+	// 仅在设置了 attach 上限时，publish 前检查该上限。
 	if s.config.AttachLimit > 0 && s.getAttachCount(devPathKey) >= s.config.AttachLimit {
 		return nil, status.Errorf(codes.ResourceExhausted, "Cannot attach any more volumes to this node")
 	}
@@ -234,7 +231,7 @@ func (s *service) ControllerPublishVolume(
 		roVal = "false"
 	}
 
-	// Publish the volume.
+	// publish 该 volume。
 	device := "/dev/mock"
 	v.VolumeContext[devPathKey] = device
 	v.VolumeContext[ReadOnlyKey] = roVal
@@ -271,7 +268,7 @@ func (s *service) ControllerUnpublishVolume(
 	}
 	nodeID := req.NodeId
 	if len(nodeID) == 0 {
-		// If node id is empty, no failure as per Spec
+		// 按 Spec，node id 为空不算错误
 		nodeID = s.nodeID
 	}
 
@@ -288,22 +285,21 @@ func (s *service) ControllerUnpublishVolume(
 
 	i, v := s.findVolNoLock("id", req.VolumeId)
 	if i < 0 {
-		// Not an error: a non-existent volume is not published.
-		// See also https://github.com/kubernetes-csi/external-attacher/pull/165
+		// 不算错误：不存在的 volume 自然未被 publish。
+		// 另见 https://github.com/kubernetes-csi/external-attacher/pull/165
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
-	// devPathKey is the key in the volume's attributes that is set to a
-	// mock device path if the volume has been published by the controller
-	// to the specified node.
+	// devPathKey 是 volume attributes 中的键；当 volume 被 controller
+	// publish 到指定节点时，其值会被设为 mock 设备路径。
 	devPathKey := path.Join(nodeID, "dev")
 
-	// Check to see if the volume is already unpublished.
+	// 检查 volume 是否已 unpublish。
 	if v.VolumeContext[devPathKey] == "" {
 		return &csi.ControllerUnpublishVolumeResponse{}, nil
 	}
 
-	// Unpublish the volume.
+	// unpublish 该 volume。
 	delete(v.VolumeContext, devPathKey)
 	delete(v.VolumeContext, ReadOnlyKey)
 	s.vols[i] = v
@@ -384,9 +380,8 @@ func (s *service) ListVolumes(
 		return nil, status.Error(hookVal, hookMsg)
 	}
 
-	// Copy the mock volumes into a new slice in order to avoid
-	// locking the service's volume slice for the duration of the
-	// ListVolumes RPC.
+	// 将 mock volume 复制到新切片，避免在整个 ListVolumes RPC 期间
+	// 一直持有 service 的 volume 切片锁。
 	var vols []*csi.Volume
 	func() {
 		s.volsRWL.RLock()
@@ -419,11 +414,10 @@ func (s *service) ListVolumes(
 			startingToken, ulenVols)
 	}
 
-	// Discern the number of remaining entries.
+	// 计算剩余条目数。
 	rem := ulenVols - startingToken
 
-	// If maxEntries is 0 or greater than the number of remaining entries then
-	// set maxEntries to the number of remaining entries.
+	// 若 maxEntries 为 0 或大于剩余条目数，则将其设为剩余条目数。
 	if maxEntries == 0 || maxEntries > rem {
 		maxEntries = rem
 	}
@@ -601,7 +595,7 @@ func (s *service) ControllerGetCapabilities(
 
 func (s *service) CreateSnapshot(ctx context.Context,
 	req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
-	// Check arguments
+	// 检查参数
 	if len(req.GetName()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Snapshot Name cannot be empty")
 	}
@@ -609,9 +603,9 @@ func (s *service) CreateSnapshot(ctx context.Context,
 		return nil, status.Error(codes.InvalidArgument, "Snapshot SourceVolumeId cannot be empty")
 	}
 
-	// Check to see if the snapshot already exists.
+	// 检查 snapshot 是否已存在。
 	if i, v := s.snapshots.FindSnapshot("name", req.GetName()); i >= 0 {
-		// Requested snapshot name already exists
+		// 请求的 snapshot 名称已存在
 		if v.SnapshotCSI.GetSourceVolumeId() != req.GetSourceVolumeId() || !reflect.DeepEqual(v.Parameters, req.GetParameters()) {
 			return nil, status.Error(codes.AlreadyExists,
 				fmt.Sprintf("Snapshot with name %s already exists", req.GetName()))
@@ -619,7 +613,7 @@ func (s *service) CreateSnapshot(ctx context.Context,
 		return &csi.CreateSnapshotResponse{Snapshot: v.SnapshotCSI}, nil
 	}
 
-	// Create the snapshot and add it to the service's in-mem snapshot slice.
+	// 创建 snapshot 并加入 service 的内存 snapshot 切片。
 	snapshot := s.newSnapshot(req.GetName(), req.GetSourceVolumeId(), req.GetParameters())
 	s.snapshots.Add(snapshot)
 
@@ -633,7 +627,7 @@ func (s *service) CreateSnapshot(ctx context.Context,
 func (s *service) DeleteSnapshot(ctx context.Context,
 	req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
 
-	//  If the snapshot is not specified, return error
+	//  未指定 snapshot 时返回错误
 	if len(req.SnapshotId) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Snapshot ID cannot be empty")
 	}
@@ -642,15 +636,14 @@ func (s *service) DeleteSnapshot(ctx context.Context,
 		return nil, status.Error(hookVal, hookMsg)
 	}
 
-	// If the snapshot does not exist then return an idempotent response.
+	// snapshot 不存在时返回幂等响应。
 	i, _ := s.snapshots.FindSnapshot("id", req.SnapshotId)
 	if i < 0 {
 		return &csi.DeleteSnapshotResponse{}, nil
 	}
 
-	// This delete logic preserves order and prevents potential memory
-	// leaks. The slice's elements may not be pointers, but the structs
-	// themselves have fields that are.
+	// 这种删除方式保留元素顺序，并避免潜在的内存泄漏。
+	// 切片元素本身可能不是指针，但结构体中的字段是指针。
 	s.snapshots.Delete(i)
 	klog.V(5).InfoS("mock delete snapshot", "snapshotId", req.SnapshotId)
 
@@ -668,17 +661,17 @@ func (s *service) ListSnapshots(ctx context.Context,
 		return nil, status.Error(hookVal, hookMsg)
 	}
 
-	// case 1: SnapshotId is not empty, return snapshots that match the snapshot id.
+	// 情况 1：SnapshotId 非空，返回与该 snapshot id 匹配的 snapshot。
 	if len(req.GetSnapshotId()) != 0 {
 		return getSnapshotById(s, req)
 	}
 
-	// case 2: SourceVolumeId is not empty, return snapshots that match the source volume id.
+	// 情况 2：SourceVolumeId 非空，返回与该 source volume id 匹配的 snapshot。
 	if len(req.GetSourceVolumeId()) != 0 {
 		return getSnapshotByVolumeId(s, req)
 	}
 
-	// case 3: no parameter is set, so we return all the snapshots.
+	// 情况 3：未设置任何参数，返回所有 snapshot。
 	return getAllSnapshots(s, req)
 }
 
@@ -720,13 +713,13 @@ func (s *service) ControllerExpandVolume(
 		NodeExpansionRequired: s.config.NodeExpansionRequired,
 	}
 
-	// Check to see if the volume already satisfied request size.
+	// 检查 volume 当前容量是否已满足请求大小。
 	if v.CapacityBytes == requestBytes {
 		klog.V(5).InfoS("volume capacity sufficient, no need to expand", "requested", requestBytes, "current", v.CapacityBytes, "volumeID", v.VolumeId)
 		return resp, nil
 	}
 
-	// Update volume's capacity to the requested size.
+	// 将 volume 容量更新为请求的大小。
 	v.CapacityBytes = requestBytes
 	s.vols[i] = v
 
@@ -740,7 +733,7 @@ func (s *service) ControllerExpandVolume(
 func (s *service) ControllerModifyVolume(
 	ctx context.Context,
 	req *csi.ControllerModifyVolumeRequest) (*csi.ControllerModifyVolumeResponse, error) {
-	// todo: implement the functionality while we add the modifyVolume test
+	// todo: 添加 modifyVolume 测试时实现该功能
 	resp := &csi.ControllerModifyVolumeResponse{}
 	return resp, nil
 }
@@ -787,9 +780,8 @@ func getSnapshotByVolumeId(s *service, req *csi.ListSnapshotsRequest) (*csi.List
 }
 
 func getAllSnapshots(s *service, req *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
-	// Copy the mock snapshots into a new slice in order to avoid
-	// locking the service's snapshot slice for the duration of the
-	// ListSnapshots RPC.
+	// 将 mock snapshot 复制到新切片，避免在整个 ListSnapshots RPC 期间
+	// 一直持有 service 的 snapshot 切片锁。
 	readyToUse := true
 	snapshots := s.snapshots.List(readyToUse)
 
@@ -817,11 +809,10 @@ func getAllSnapshots(s *service, req *csi.ListSnapshotsRequest) (*csi.ListSnapsh
 			startingToken, ulenSnapshots)
 	}
 
-	// Discern the number of remaining entries.
+	// 计算剩余条目数。
 	rem := ulenSnapshots - startingToken
 
-	// If maxEntries is 0 or greater than the number of remaining entries then
-	// set maxEntries to the number of remaining entries.
+	// 若 maxEntries 为 0 或大于剩余条目数，则将其设为剩余条目数。
 	if maxEntries == 0 || maxEntries > rem {
 		maxEntries = rem
 	}

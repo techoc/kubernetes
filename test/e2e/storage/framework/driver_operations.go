@@ -26,8 +26,8 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// GetDriverNameWithFeatureTags returns parameters that can be passed to framework.Context.
-// For example:
+// GetDriverNameWithFeatureTags 返回可传给 framework.Context 的参数。
+// 例如：
 //   - [Driver: nfs]
 //   - [Driver: rbd], feature.Volumes
 func GetDriverNameWithFeatureTags(driver TestDriver) []interface{} {
@@ -36,7 +36,7 @@ func GetDriverNameWithFeatureTags(driver TestDriver) []interface{} {
 	return append([]interface{}{framework.WithLabel("Driver: " + dInfo.Name)}, dInfo.TestTags...)
 }
 
-// CreateVolume creates volume for test unless dynamicPV or CSI ephemeral inline volume test
+// CreateVolume 为测试创建 volume，dynamicPV 或 CSI ephemeral inline volume 测试除外
 func CreateVolume(ctx context.Context, driver TestDriver, config *PerTestConfig, volType TestVolType) TestVolume {
 	switch volType {
 	case InlineVolume, PreprovisionedPV:
@@ -44,30 +44,29 @@ func CreateVolume(ctx context.Context, driver TestDriver, config *PerTestConfig,
 			return pDriver.CreateVolume(ctx, config, volType)
 		}
 	case CSIInlineVolume, GenericEphemeralVolume, DynamicPV:
-		// No need to create volume
+		// 无需创建 volume
 	default:
 		framework.Failf("Invalid volType specified: %v", volType)
 	}
 	return nil
 }
 
-// CopyStorageClass constructs a new StorageClass instance
-// with a unique name that is based on namespace + suffix
-// using the same storageclass setting from the parameter
+// CopyStorageClass 使用参数中传入的 StorageClass 配置构造一个新的 StorageClass 实例，
+// 其唯一名称由 namespace + suffix 生成
 func CopyStorageClass(sc *storagev1.StorageClass, ns string, suffix string) *storagev1.StorageClass {
 	copy := sc.DeepCopy()
 	copy.ObjectMeta.Name = names.SimpleNameGenerator.GenerateName(ns + "-" + suffix)
 	copy.ResourceVersion = ""
 
-	// Remove the default annotation from the storage class if they exists.
-	// Multiple storage classes with this annotation will result in failure.
+	// 如果存在，删除 StorageClass 上的默认注解。
+	// 多个 StorageClass 带有该注解会导致失败。
 	delete(copy.Annotations, util.BetaIsDefaultStorageClassAnnotation)
 	delete(copy.Annotations, util.IsDefaultStorageClassAnnotation)
 	return copy
 }
 
-// GetStorageClass constructs a new StorageClass instance
-// with a unique name that is based on namespace + suffix.
+// GetStorageClass 构造一个新的 StorageClass 实例，
+// 其唯一名称由 namespace + suffix 生成。
 func GetStorageClass(
 	provisioner string,
 	parameters map[string]string,
@@ -83,7 +82,7 @@ func GetStorageClass(
 			Kind: "StorageClass",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			// Name must be unique, so let's base it on namespace name and use GenerateName
+			// 名称必须唯一，因此基于 namespace 名称使用 GenerateName 生成
 			Name: names.SimpleNameGenerator.GenerateName(ns),
 		},
 		Provisioner:       provisioner,
@@ -92,9 +91,8 @@ func GetStorageClass(
 	}
 }
 
-// CopyVolumeAttributesClass constructs a new VolumeAttributesClass instance
-// with a unique name that is based on namespace + suffix
-// using the VolumeAttributesClass passed in as a parameter
+// CopyVolumeAttributesClass 使用传入的 VolumeAttributesClass 构造一个新的 VolumeAttributesClass 实例，
+// 其唯一名称由 namespace + suffix 生成
 func CopyVolumeAttributesClass(vac *storagev1.VolumeAttributesClass, ns string, suffix string) *storagev1.VolumeAttributesClass {
 	copy := vac.DeepCopy()
 	copy.ObjectMeta.Name = names.SimpleNameGenerator.GenerateName(ns + "-" + suffix)

@@ -32,26 +32,26 @@ import (
 )
 
 const (
-	// ncName is the name of namespace controller
+	// ncName 是 namespace controller 的名称
 	ncName = "namespace-controller"
-	// ncResyncPeriod is resync period of the namespace controller
+	// ncResyncPeriod 是 namespace controller 的重同步周期
 	ncResyncPeriod = 5 * time.Minute
-	// ncConcurrency is concurrency of the namespace controller
+	// ncConcurrency 是 namespace controller 的并发度
 	ncConcurrency = 2
 )
 
-// NamespaceController is a server which manages namespace controller.
+// NamespaceController 是管理 namespace controller 的服务。
 type NamespaceController struct {
 	host   string
 	stopCh chan struct{}
 }
 
-// NewNamespaceController creates a new namespace controller.
+// NewNamespaceController 创建一个新的 namespace controller。
 func NewNamespaceController(host string) *NamespaceController {
 	return &NamespaceController{host: host, stopCh: make(chan struct{})}
 }
 
-// Start starts the namespace controller.
+// Start 启动 namespace controller。
 func (n *NamespaceController) Start(ctx context.Context) error {
 	config := restclient.AddUserAgent(&restclient.Config{
 		Host:        n.host,
@@ -61,7 +61,7 @@ func (n *NamespaceController) Start(ctx context.Context) error {
 		},
 	}, ncName)
 
-	// the namespace cleanup controller is very chatty.  It makes lots of discovery calls and then it makes lots of delete calls.
+	// namespace 清理控制器非常“话多”：会发起大量 discovery 调用，随后又发起大量 delete 调用。
 	config.QPS = 50
 	config.Burst = 200
 
@@ -89,13 +89,13 @@ func (n *NamespaceController) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the namespace controller.
+// Stop 停止 namespace controller。
 func (n *NamespaceController) Stop() error {
 	close(n.stopCh)
 	return nil
 }
 
-// Name returns the name of namespace controller.
+// Name 返回 namespace controller 的名称。
 func (n *NamespaceController) Name() string {
 	return ncName
 }

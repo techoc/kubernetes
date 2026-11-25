@@ -447,7 +447,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				regularContainerFailedStartupImageUpdateTest(ctx)
 			})
 
-			// Nothing to do when restartPolicy is Never
+			// restartPolicy 为 Never 时无需处理
 		})
 
 		ginkgo.When("The regular container has its image updated after a failed liveness probe", func() {
@@ -530,7 +530,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				regularContainerFailedLivenessImageUpdateTest(ctx)
 			})
 
-			// Nothing to do when restartPolicy is Never
+			// restartPolicy 为 Never 时无需处理
 		})
 
 		ginkgo.When("The regular container has its image updated during termination", func() {
@@ -599,13 +599,13 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 						}
 						return true
 					}, time.Duration(containerTerminationSeconds-10)*time.Second, f.Timeouts.Poll).Should(gomega.BeTrueBecause("container should not be restarted"))
-					// Buffer for restartPolicy=Always or OnFailure
+					// 为 restartPolicy=Always 或 OnFailure 留出缓冲
 				})
 
 				ginkgo.By("Waiting for the pod to terminate gracefully before its terminationGracePeriodSeconds", func() {
 					err := e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace,
 						time.Duration(60)*time.Second)
-					// Buffer for pod termination
+					// 为 pod 终止留出缓冲
 					framework.ExpectNoError(err, "the pod should be deleted before its terminationGracePeriodSeconds if the restartable init containers get termination signal correctly")
 				})
 			}
@@ -728,7 +728,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				framework.ExpectNoError(err)
 				results := parseOutput(ctx, f, podSpec)
 
-				// which we then use to make assertions regarding container ordering
+				// 据此判断容器的启动与退出顺序
 				ginkgo.By("Analyzing results")
 				framework.ExpectNoError(results.StartsBefore(init1, init2))
 				framework.ExpectNoError(results.ExitsBefore(init1, init2))
@@ -790,7 +790,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				results := parseOutput(ctx, f, podSpec)
 
 				ginkgo.By("Analyzing results")
-				// init container should start and exit with an error, and the regular container should never start
+				// init container 应启动并以错误退出，regular container 不应启动
 				framework.ExpectNoError(results.Starts(init1))
 				framework.ExpectNoError(results.Exits(init1))
 
@@ -824,10 +824,9 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 								Name:  regular1,
 								Image: defaultImage,
 								Command: ExecCommand(regular1, execCommand{
-									// Allocate sufficient time for its postStart hook
-									// to complete.
-									// Note that we've observed approximately a 2s
-									// delay before the postStart hook is called.
+									// 为 postStart hook 留出充足时间
+									// 使其执行完成。
+									// 注意我们观察到 postStart hook 被调用前大约有 2 秒延迟。
 									// 10s > 1s + 2s(estimated maximum delay) + other possible delays
 									Delay:    10,
 									ExitCode: 0,
@@ -862,7 +861,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				results := parseOutput(ctx, f, podSpec)
 
 				ginkgo.By("Analyzing results")
-				// init container should start and exit with an error, and the regular container should never start
+				// init container 应启动并以错误退出，regular container 不应启动
 				framework.ExpectNoError(results.StartsBefore(init1, prefixedName(PostStartPrefix, regular1)))
 				framework.ExpectNoError(results.ExitsBefore(init1, prefixedName(PostStartPrefix, regular1)))
 
@@ -908,7 +907,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				results := parseOutput(ctx, f, podSpec)
 
 				ginkgo.By("Analyzing results")
-				// container must be restarted
+				// 容器必须被重启
 				framework.ExpectNoError(results.Starts(regular1))
 				framework.ExpectNoError(results.StartsBefore(regular1, regular1))
 				framework.ExpectNoError(results.ExitsBefore(regular1, regular1))
@@ -932,10 +931,9 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 								Name:  regular1,
 								Image: defaultImage,
 								Command: ExecCommand(regular1, execCommand{
-									// Allocate sufficient time for its postStart hook
-									// to complete.
-									// Note that we've observed approximately a 2s
-									// delay before the postStart hook is called.
+									// 为 postStart hook 留出充足时间
+									// 使其执行完成。
+									// 注意我们观察到 postStart hook 被调用前大约有 2 秒延迟。
 									// 10s > 1s + 2s(estimated maximum delay) + other possible delays
 									Delay:    10,
 									ExitCode: 0,
@@ -978,7 +976,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				results := parseOutput(ctx, f, podSpec)
 
 				ginkgo.By("Analyzing results")
-				// second container should not start before the PostStart of a first container completed
+				// 第一个容器的 PostStart 完成前，第二个容器不应启动
 				framework.ExpectNoError(results.StartsBefore(prefixedName(PostStartPrefix, regular1), regular2))
 				framework.ExpectNoError(results.ExitsBefore(prefixedName(PostStartPrefix, regular1), regular2))
 			})
@@ -1117,11 +1115,11 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				framework.ExpectNoError(results.StartsBefore(init3, regular1))
 				framework.ExpectNoError(results.ExitsBefore(init3, regular1))
 
-				// ensure that the init containers never restarted
+				// 确认 init container 从未重启
 				framework.ExpectNoError(results.HasNotRestarted(init1))
 				framework.ExpectNoError(results.HasNotRestarted(init2))
 				framework.ExpectNoError(results.HasNotRestarted(init3))
-				// while the regular container did
+				// 而 regular container 重启过
 				framework.ExpectNoError(results.HasRestarted(regular1))
 			})
 		})
@@ -1148,8 +1146,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				}
 			}
 
-			// To account for the time it takes to delete the pod, we add a buffer. Its sized
-			// so that we allow up to 2x the grace time to delete the pod. Its extra large to
+			// 考虑到删除 Pod 所需时间，这里加了缓冲：最多允许 2 倍宽限期用于删除 Pod。
+			// 缓冲设得较大，是为了
 			// reduce test flakes.
 			bufferSeconds := int64(30)
 
@@ -1426,9 +1424,9 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 						results := parseOutput(ctx, f, podSpec)
 
 						ginkgo.By("Analyzing results")
-						// readiness probes are called during pod termination
+						// pod 终止期间会调用 readiness probe
 						framework.ExpectNoError(results.RunTogetherLhsFirst(prefixedName(PreStopPrefix, regular1), prefixedName(ReadinessPrefix, regular1)))
-						// liveness probes are not called during pod termination
+						// pod 终止期间不会调用 liveness probe
 						err = results.RunTogetherLhsFirst(prefixedName(PreStopPrefix, regular1), prefixedName(LivenessPrefix, regular1))
 						gomega.Expect(err).To(gomega.HaveOccurred())
 					})
@@ -1466,7 +1464,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 							PreStop: &v1.LifecycleHandler{
 								Exec: &v1.ExecAction{
 									Command: ExecCommand(prefixedName(PreStopPrefix, regular1), execCommand{
-										// Delay 10 secs not to make a race condition.
+										// 延迟 10 秒以避免竞态。
 										StartDelay:    10,
 										Delay:         40,
 										ExitCode:      0,
@@ -1490,13 +1488,13 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 						results := parseOutput(ctx, f, podSpec)
 
 						ginkgo.By("Analyzing results")
-						// FIXME ExpectNoError: this will be implemented in KEP 4438
-						// liveness probes are called for restartable init containers during pod termination
+						// FIXME ExpectNoError: 将在 KEP 4438 中实现
+						// pod 终止期间会为 restartable init container 调用 liveness probe
 						err = results.StartsBefore(prefixedName(PreStopPrefix, regular1), prefixedName(LivenessPrefix, restartableInit1))
 						gomega.Expect(err).To(gomega.HaveOccurred(),
 							"%s should not start before %s", prefixedName(PreStopPrefix, regular1), prefixedName(LivenessPrefix, restartableInit1))
-						// FIXME ExpectNoError: this will be implemented in KEP 4438
-						// restartable init containers are restarted during pod termination
+						// FIXME ExpectNoError: 将在 KEP 4438 中实现
+						// pod 终止期间会重启 restartable init container
 						err = results.RunTogetherLhsFirst(prefixedName(PreStopPrefix, regular1), restartableInit1)
 						gomega.Expect(err).To(gomega.HaveOccurred())
 					})
@@ -1688,7 +1686,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 					podSpec, err := client.Get(ctx, podSpec.Name, metav1.GetOptions{})
 					framework.ExpectNoError(err)
 
-					// subtract a buffer so that the pod still exists
+					// 预留缓冲时间，确保检查时 pod 仍然存在
 					gomega.Consistently(ctx, func() bool {
 						podSpec, err = client.Get(ctx, podSpec.Name, metav1.GetOptions{})
 						framework.ExpectNoError(err)
@@ -1994,8 +1992,8 @@ var _ = SIGDescribe(framework.WithSerial(), "Containers Lifecycle", func() {
 				}, 1*time.Minute, f.Timeouts.Poll).Should(gomega.BeTrueBecause("no completed init container should be restarted"))
 
 				ginkgo.By("Analyzing results")
-				// Cannot analyze the results with the container logs as the
-				// container statuses have been removed from container runtime.
+				// 无法通过容器日志分析结果，因为容器状态已从
+				// container runtime 中移除。
 				gomega.Expect(pod.Status.InitContainerStatuses[0].RestartCount).To(gomega.Equal(int32(0)))
 				gomega.Expect(pod.Status.InitContainerStatuses[1].RestartCount).To(gomega.Equal(int32(0)))
 				gomega.Expect(pod.Status.InitContainerStatuses[2].RestartCount).To(gomega.Equal(int32(0)))
@@ -2157,8 +2155,8 @@ var _ = SIGDescribe(framework.WithSerial(), "Containers Lifecycle", func() {
 				}, 1*time.Minute, f.Timeouts.Poll).Should(gomega.BeTrueBecause("no completed init container should be restarted"))
 
 				ginkgo.By("Analyzing results")
-				// Cannot analyze the results with the container logs as the
-				// container statuses have been removed from container runtime.
+				// 无法通过容器日志分析结果，因为容器状态已从
+				// container runtime 中移除。
 				gomega.Expect(pod.Status.InitContainerStatuses[0].RestartCount).To(gomega.Equal(int32(0)))
 				gomega.Expect(pod.Status.InitContainerStatuses[1].RestartCount).To(gomega.Equal(int32(0)))
 			})
@@ -2256,7 +2254,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			podSpec, err := client.Get(context.Background(), podSpec.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 
-			// pod should exit successfully
+			// pod 应成功退出
 			gomega.Expect(podSpec.Status.Phase).To(gomega.Equal(v1.PodSucceeded))
 
 			results = parseOutput(ctx, f, podSpec)
@@ -2435,7 +2433,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			})
 		})
 
-		// Same as restartPolicy=Always
+		// 与 restartPolicy=Always 相同
 		ginkgo.It("Should begin initializing the pod, restartPolicy=OnFailure", func(ctx context.Context) {
 			originalPodSpec.Spec.RestartPolicy = v1.RestartPolicyOnFailure
 			originalPodSpec.Name = "restartable-init-container-initialization-imgupdate-onfailure"
@@ -2539,7 +2537,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				framework.ExpectNoError(err)
 			})
 
-			// Init containers don't restart when restartPolicy=Never
+			// restartPolicy 为 Never 时 init container 不会重启
 			ginkgo.By("Waiting for the pod to fail", func() {
 				err := e2epod.WaitForPodTerminatedInNamespace(ctx, f.ClientSet, pod.Name, "", pod.Namespace)
 				framework.ExpectNoError(err)
@@ -2628,7 +2626,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				podSpec, err := client.Get(ctx, podSpec.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// pod should exit successfully
+				// pod 应成功退出
 				gomega.Expect(podSpec.Status.Phase).To(gomega.Equal(v1.PodSucceeded))
 
 				results = parseOutput(ctx, f, podSpec)
@@ -2768,7 +2766,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				client := e2epod.NewPodClient(f)
 				podSpec = client.Create(ctx, podSpec)
 
-				// restartable init container should be in image pull backoff
+				// restartable init container 应处于 image pull backoff 状态
 				err := WaitForPodInitContainerToFail(ctx, f.ClientSet, podSpec.Namespace, podSpec.Name, 0, "ImagePullBackOff", f.Timeouts.PodStart)
 				framework.ExpectNoError(err)
 
@@ -2841,7 +2839,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				podSpec, err := client.Get(ctx, podSpec.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// pod should exit successfully
+				// pod 应成功退出
 				gomega.Expect(podSpec.Status.Phase).To(gomega.Equal(v1.PodSucceeded))
 				results = parseOutput(ctx, f, podSpec)
 			})
@@ -2912,7 +2910,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				podSpec, err := client.Get(ctx, podSpec.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// pod should exit successfully
+				// pod 应成功退出
 				gomega.Expect(podSpec.Status.Phase).To(gomega.Equal(v1.PodSucceeded))
 
 				results = parseOutput(ctx, f, podSpec)
@@ -3055,8 +3053,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			ginkgo.It("should mark an Init container as failed", func() {
 				framework.ExpectNoError(results.Exits(init1))
 			})
-			// TODO: how will we be able to test it if restartable init container
-			// will never fail and there will be no termination log? Or will be?
+			// TODO: 如果 restartable init container 永远不会失败、
+			// 也就没有 termination log，该如何测试？还是会有？
 			ginkgo.It("should be running restartable init container and a failed Init container in parallel", func() {
 				framework.ExpectNoError(results.RunTogether(restartableInit1, init1))
 			})
@@ -3065,7 +3063,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 	})
 
 	ginkgo.When("using a restartable init container in a Pod with restartPolicy=OnFailure", ginkgo.Ordered, func() {
-		// this test case the same as for restartPolicy=Never
+		// 该测试用例与 restartPolicy=Never 相同
 		ginkgo.When("a restartable init container runs continuously", func() {
 
 			restartableInit1 := "restartable-init-1"
@@ -3114,7 +3112,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				podSpec, err := client.Get(ctx, podSpec.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// pod should exit successfully
+				// pod 应成功退出
 				gomega.Expect(podSpec.Status.Phase).To(gomega.Equal(v1.PodSucceeded))
 
 				results = parseOutput(ctx, f, podSpec)
@@ -3256,7 +3254,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				client := e2epod.NewPodClient(f)
 				podSpec = client.Create(ctx, podSpec)
 
-				// restartable init container should be in image pull backoff
+				// restartable init container 应处于 image pull backoff 状态
 				err := WaitForPodInitContainerToFail(ctx, f.ClientSet, podSpec.Namespace, podSpec.Name, 0, "ImagePullBackOff", f.Timeouts.PodStart)
 				framework.ExpectNoError(err)
 
@@ -3272,7 +3270,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			})
 		})
 
-		// this test case the same as for restartPolicy=Never
+		// 该测试用例与 restartPolicy=Never 相同
 		ginkgo.When("a restartable init container starts and exits with exit code 0 continuously", ginkgo.Ordered, func() {
 
 			restartableInit1 := "restartable-init-1"
@@ -3330,7 +3328,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				podSpec, err := client.Get(ctx, podSpec.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// pod should exit successfully
+				// pod 应成功退出
 				gomega.Expect(podSpec.Status.Phase).To(gomega.Equal(v1.PodSucceeded))
 
 				results = parseOutput(ctx, f, podSpec)
@@ -3346,7 +3344,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			})
 		})
 
-		// this test case the same as for restartPolicy=Never
+		// 该测试用例与 restartPolicy=Never 相同
 		ginkgo.When("a restartable init container starts and exits with exit code 1 continuously", ginkgo.Ordered, func() {
 
 			restartableInit1 := "restartable-init-1"
@@ -3404,7 +3402,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				podSpec, err := client.Get(ctx, podSpec.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// pod should exit successfully
+				// pod 应成功退出
 				gomega.Expect(podSpec.Status.Phase).To(gomega.Equal(v1.PodSucceeded))
 
 				results = parseOutput(ctx, f, podSpec)
@@ -3565,7 +3563,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			ginkgo.It("should have Init container restartCount greater than 0", func() {
 				framework.ExpectNoError(results.HasRestarted(init1))
 			})
-			// TODO: how will we be able to test it if restartable init container will never fail and there will be no termination log? Or will be?
+			// TODO: 如果 restartable init container 永远不会失败、也就没有 termination log，该如何测试？还是会有？
 			ginkgo.It("should be running restartable init container and a failed Init container in parallel", func() {
 				framework.ExpectNoError(results.RunTogether(restartableInit1, init1))
 			})
@@ -3611,8 +3609,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			preparePod(podSpec)
 			var results containerOutputList
 
-			// regular container should exit at least once so we can get it's termination log
-			// this test case is different from restartPolicy=Never
+			// regular container 至少退出一次，才能拿到它的 termination log
+			// 该测试用例与 restartPolicy=Never 不同
 			ginkgo.It("should keep running a Pod continuously and produce log", func(ctx context.Context) { /* check the regular container restartCount > 0 */
 				client := e2epod.NewPodClient(f)
 				podSpec = client.Create(ctx, podSpec)
@@ -3628,7 +3626,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			ginkgo.It("should not restart a restartable init container", func() {
 				framework.ExpectNoError(results.HasNotRestarted(restartableInit1))
 			})
-			// this test case is different from restartPolicy=Never
+			// 该测试用例与 restartPolicy=Never 不同
 			ginkgo.It("should start a regular container", func() {
 				framework.ExpectNoError(results.HasRestarted(regular1))
 			})
@@ -3761,7 +3759,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				client := e2epod.NewPodClient(f)
 				podSpec = client.Create(ctx, podSpec)
 
-				// restartable init container should be in image pull backoff
+				// restartable init container 应处于 image pull backoff 状态
 				err := WaitForPodInitContainerToFail(ctx, f.ClientSet, podSpec.Namespace, podSpec.Name, 0, "ImagePullBackOff", f.Timeouts.PodStart)
 				framework.ExpectNoError(err)
 
@@ -3846,7 +3844,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			})
 		})
 
-		// this test case the same as for restartPolicy=Never
+		// 该测试用例与 restartPolicy=Never 相同
 		ginkgo.When("a restartable init container starts and exits with exit code 1 continuously", ginkgo.Ordered, func() {
 
 			restartableInit1 := "restartable-init-1"
@@ -4061,7 +4059,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 			ginkgo.It("should have Init container restartCount greater than 0", func() {
 				framework.ExpectNoError(results.HasRestarted(init1))
 			})
-			// TODO: how will we be able to test it if restartable init container will never fail and there will be no termination log? Or will be?
+			// TODO: 如果 restartable init container 永远不会失败、也就没有 termination log，该如何测试？还是会有？
 			ginkgo.It("should be running restartable init container and a failed Init container in parallel", func() {
 				framework.ExpectNoError(results.RunTogether(restartableInit1, init1))
 			})
@@ -4688,11 +4686,11 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				framework.ExpectNoError(results.StartsBefore(restartableInit2, regular1))
 				framework.ExpectNoError(results.StartsBefore(restartableInit3, regular1))
 
-				// main containers exit first
+				// 普通容器先退出
 				framework.ExpectNoError(results.ExitsBefore(regular1, restartableInit1))
 				framework.ExpectNoError(results.ExitsBefore(regular1, restartableInit2))
 				framework.ExpectNoError(results.ExitsBefore(regular1, restartableInit3))
-				// followed by sidecars in reverse order
+				// 然后 sidecar 按相反顺序退出
 				framework.ExpectNoError(results.ExitsBefore(restartableInit3, restartableInit2))
 				framework.ExpectNoError(results.ExitsBefore(restartableInit2, restartableInit1))
 			})
@@ -4783,8 +4781,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 						pod.Spec.InitContainers[1].Image = updatedImage
 					})
 
-					// FIXME Consistently: this will be implemented in KEP 4438
-					// During termination of the regular and last restartable init container
+					// FIXME Consistently: 将在 KEP 4438 中实现
+					// 在普通 init container 和最后一个可重启 init container 终止期间
 					ginkgo.By("ensuring the restartable init container does not restart during termination", func() {
 						gomega.Consistently(ctx, func() bool {
 							pod, err = client.Get(ctx, pod.Name, metav1.GetOptions{})
@@ -4804,9 +4802,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 
 					ginkgo.By("Waiting for the pod to terminate gracefully before its terminationGracePeriodSeconds")
 					err = e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace,
-						// The duration should be less than the remaining
-						// container termination seconds plus a 60s buffer
-						// to account for the time it takes to delete the pod.
+						// 该时长应小于剩余容器终止时间加 60 秒缓冲，
+						// 缓冲用于覆盖删除 Pod 所需时间。
 						time.Duration(1*containerTerminationSeconds+60)*time.Second)
 					framework.ExpectNoError(err, "the pod should be deleted before its terminationGracePeriodSeconds if the restartable init containers get termination signal correctly")
 				}
@@ -4923,7 +4920,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				pod, err = client.Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err)
 
-				// all restartable init containers are sigkilled with exit code 137
+				// 所有 restartable init container 均以退出码 137 被 SIGKILL
 				expectPodTerminationContainerStatuses(pod.Status.InitContainerStatuses, map[string]podTerminationContainerStatus{
 					restartableInit1: {exitCode: int32(137), reason: "Error"},
 					restartableInit2: {exitCode: int32(137), reason: "Error"},
@@ -4955,7 +4952,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				framework.ExpectNoError(err)
 
 				const simulToleration = 1000 // milliseconds
-				// should all end together since they loop infinitely and exceed their grace period
+				// 它们无限循环且超过宽限期，应同时结束
 				gomega.Expect(ps1Last-ps2Last).To(gomega.BeNumerically("~", 0, simulToleration),
 					fmt.Sprintf("expected PreStop 1 & PreStop 2 to be killed at the same time, got %s", results))
 				gomega.Expect(ps1Last-ps3Last).To(gomega.BeNumerically("~", 0, simulToleration),
@@ -4963,7 +4960,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				gomega.Expect(ps2Last-ps3Last).To(gomega.BeNumerically("~", 0, simulToleration),
 					fmt.Sprintf("expected PreStop 2 & PreStop 3 to be killed at the same time, got %s", results))
 
-				// 30 seconds + 2 second minimum grace for the SIGKILL
+				// 30 秒加上 SIGKILL 前最少 2 秒的宽限
 				const lifetimeToleration = 1500 // milliseconds
 				gomega.Expect(ps1Last-ps1).To(gomega.BeNumerically("~", 32000, lifetimeToleration),
 					fmt.Sprintf("expected PreStop 1 to live for ~32 seconds, got %s", results))
@@ -5085,16 +5082,16 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				framework.ExpectNoError(results.StartsBefore(restartableInit2, regular1))
 				framework.ExpectNoError(results.StartsBefore(restartableInit3, regular1))
 
-				// main containers exit first
+				// 普通容器先退出
 				framework.ExpectNoError(results.ExitsBefore(regular1, restartableInit1))
 				framework.ExpectNoError(results.ExitsBefore(regular1, restartableInit2))
 				framework.ExpectNoError(results.ExitsBefore(regular1, restartableInit3))
 
-				// followed by sidecars in reverse order
+				// 然后 sidecar 按相反顺序退出
 				framework.ExpectNoError(results.ExitsBefore(restartableInit3, restartableInit2))
 				framework.ExpectNoError(results.ExitsBefore(restartableInit2, restartableInit1))
 
-				// and the pre-stop hooks should have been called simultaneously
+				// pre-stop hook 应被同时调用
 				ps1, err := results.TimeOfStart(prefixedName(PreStopPrefix, restartableInit1))
 				framework.ExpectNoError(err)
 				ps2, err := results.TimeOfStart(prefixedName(PreStopPrefix, restartableInit2))
@@ -5214,7 +5211,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				})
 				framework.ExpectNoError(err)
 
-				// the init container is running, so we stop the pod before the sidecars even start
+				// init container 仍在运行，因此在 sidecar 启动前就停止 pod
 				start := time.Now()
 				grace := int64(3)
 				ginkgo.By("deleting the pod")
@@ -5232,7 +5229,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 
 				buffer := int64(2)
 				deleteTime := time.Since(start).Seconds()
-				// should delete quickly and not try to start/wait on any sidecars since they never started
+				// 应快速删除，且不会尝试启动或等待从未启动过的 sidecar
 				gomega.Expect(deleteTime).To(gomega.BeNumerically("<", grace+buffer), fmt.Sprintf("should delete in < %d seconds, took %f", grace+buffer, deleteTime))
 			})
 		})
@@ -5331,10 +5328,8 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 
 				ginkgo.By("Waiting for the pod to terminate gracefully before its terminationGracePeriodSeconds")
 				err = e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, pod.Name, pod.Namespace,
-					// The duration should be less than the pod's
-					// terminationGracePeriodSeconds while adding a buffer(60s) to the
-					// container termination seconds(1s) to account for the time it
-					// takes to delete the pod.
+					// 该时长应小于 Pod 的 terminationGracePeriodSeconds，同时在容器终止时间（1 秒）
+					// 之外增加 60 秒缓冲，以覆盖删除 Pod 所需时间。
 					time.Duration(containerTerminationSeconds+60)*time.Second)
 				framework.ExpectNoError(err, "the pod should be deleted before its terminationGracePeriodSeconds if the restartalbe init containers get termination signal correctly")
 			})
@@ -5426,12 +5421,12 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				pod, err = client.Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to fetch the end state of the pod: %q", pod.Name)
 
-				// regular container is gracefully terminated
+				// regular container 被优雅终止
 				expectPodTerminationContainerStatuses(pod.Status.ContainerStatuses, map[string]podTerminationContainerStatus{
 					regular1: {exitCode: int32(0), reason: "Completed"},
 				})
 
-				// restartable-init-2 that terminated with non-zero exit code is marked as error
+				// 以非零退出码终止的 restartable-init-2 被标记为 error
 				expectPodTerminationContainerStatuses(pod.Status.InitContainerStatuses, map[string]podTerminationContainerStatus{
 					restartableInit1: {exitCode: int32(0), reason: "Completed"},
 					restartableInit2: {exitCode: int32(1), reason: "Error"},
@@ -5542,12 +5537,12 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				pod, err = client.Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to fetch the end state of the pod: %q", pod.Name)
 
-				// regular container is gracefully terminated
+				// regular container 被优雅终止
 				expectPodTerminationContainerStatuses(pod.Status.ContainerStatuses, map[string]podTerminationContainerStatus{
 					regular1: {exitCode: int32(0), reason: "Completed"},
 				})
 
-				// restartable init containers are marked as completed if their prestop hooks are failed
+				// prestop hook 失败时，restartable init container 仍被标记为 completed
 				expectPodTerminationContainerStatuses(pod.Status.InitContainerStatuses, map[string]podTerminationContainerStatus{
 					restartableInit1: {exitCode: int32(0), reason: "Completed"},
 					restartableInit2: {exitCode: int32(0), reason: "Completed"},
@@ -5590,7 +5585,7 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 								RestartPolicy: &containerRestartPolicyAlways,
 								Command: ExecCommand(restartableInit2, execCommand{
 									Delay: 600,
-									// SIGKILL won't be sent because it only gets triggered 2 seconds after SIGTERM.
+									// 不会发送 SIGKILL，因为它只在 SIGTERM 后 2 秒才触发。
 									TerminationSeconds: 1,
 									ExitCode:           0,
 								}),
@@ -5643,13 +5638,13 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				pod, err = client.Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to fetch the end state of the pod: %q", pod.Name)
 
-				// regular container that exceeds its termination grace period seconds is sigkilled with exit code 137
+				// 超过 termination grace period 的 regular container 以退出码 137 被 SIGKILL
 				expectPodTerminationContainerStatuses(pod.Status.ContainerStatuses, map[string]podTerminationContainerStatus{
 					regular1: {exitCode: int32(137), reason: "Error"},
 				})
 
-				// restartable-init-2 is gracefully terminated within 2 seconds after receiving SIGTERM.
-				// The other containers that exceed 2 seconds after receiving SIGTERM are sigkilled with exit code 137.
+				// restartable-init-2 在收到 SIGTERM 后 2 秒内被优雅终止。
+				// 收到 SIGTERM 后超过 2 秒仍未退出的其他容器以退出码 137 被 SIGKILL。
 				expectPodTerminationContainerStatuses(pod.Status.InitContainerStatuses, map[string]podTerminationContainerStatus{
 					restartableInit1: {exitCode: int32(137), reason: "Error"},
 					restartableInit2: {exitCode: int32(0), reason: "Completed"},
@@ -5753,13 +5748,13 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				pod, err = client.Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to fetch the end state of the pod: %q", pod.Name)
 
-				// regular container is gracefully terminated
+				// regular container 被优雅终止
 				expectPodTerminationContainerStatuses(pod.Status.ContainerStatuses, map[string]podTerminationContainerStatus{
 					regular1: {exitCode: int32(0), reason: "Completed"},
 				})
 
-				// restartable-init-2 that exceeds its termination grace period seconds is sigkilled with exit code 137.
-				// The other containers are gracefully terminated within 2 seconds after receiving SIGTERM
+				// 超过 termination grace period 的 restartable-init-2 以退出码 137 被 SIGKILL。
+				// 其他容器在收到 SIGTERM 后 2 秒内被优雅终止
 				expectPodTerminationContainerStatuses(pod.Status.InitContainerStatuses, map[string]podTerminationContainerStatus{
 					restartableInit1: {exitCode: int32(0), reason: "Completed"},
 					restartableInit2: {exitCode: int32(137), reason: "Error"},
@@ -5873,13 +5868,13 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				pod, err = client.Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to fetch the end state of the pod: %q", pod.Name)
 
-				// regular container that exceeds its termination grace period seconds is sigkilled with exit code 137
+				// 超过 termination grace period 的 regular container 以退出码 137 被 SIGKILL
 				expectPodTerminationContainerStatuses(pod.Status.ContainerStatuses, map[string]podTerminationContainerStatus{
 					regular1: {exitCode: int32(137), reason: "Error"},
 				})
 
-				// restartable-init-2 that exceed 2 seconds after receiving SIGTERM is sigkilled with exit code 137.
-				// The other containers are gracefully terminated within 2 seconds after receiving SIGTERM
+				// 收到 SIGTERM 后超过 2 秒的 restartable-init-2 以退出码 137 被 SIGKILL。
+				// 其他容器在收到 SIGTERM 后 2 秒内被优雅终止
 				expectPodTerminationContainerStatuses(pod.Status.InitContainerStatuses, map[string]podTerminationContainerStatus{
 					restartableInit1: {exitCode: int32(0), reason: "Completed"},
 					restartableInit2: {exitCode: int32(137), reason: "Error"},
@@ -5990,14 +5985,14 @@ var _ = SIGDescribe(framework.WithNodeConformance(), "Containers Lifecycle", fun
 				pod, err = client.Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to fetch the end state of the pod: %q", pod.Name)
 
-				// regular container is gracefully terminated
+				// regular container 被优雅终止
 				expectPodTerminationContainerStatuses(pod.Status.ContainerStatuses, map[string]podTerminationContainerStatus{
 					regular1: {exitCode: int32(0), reason: "Completed"},
 				})
 
-				// restartable-init-2 that exceed its termination grace period seconds by prestop hook is sigkilled
-				// with exit code 137.
-				// The other containers are gracefully terminated within their termination grace period seconds
+				// 因 prestop hook 而超过 termination grace period 的 restartable-init-2 被 SIGKILL，
+				// 退出码为 137。
+				// 其他容器在其 termination grace period 内被优雅终止
 				expectPodTerminationContainerStatuses(pod.Status.InitContainerStatuses, map[string]podTerminationContainerStatus{
 					restartableInit1: {exitCode: int32(0), reason: "Completed"},
 					restartableInit2: {exitCode: int32(137), reason: "Error"},
@@ -6422,7 +6417,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 				})
 			framework.ExpectNoError(err)
 
-			// Double check the initial state before starting the concurrent check
+			// 开始并发检查前再次确认初始状态
 			p, err := client.Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			gomega.Expect(p.Status.ContainerStatuses).ToNot(gomega.BeEmpty())
@@ -6433,7 +6428,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 				gomega.Expect(status.Ready).To(gomega.BeTrueBecause("The Ready field should be set to true when a pod enters the Ready condition."))
 			}
 
-			// The grace period for kubelet startup is 10 seconds, so we wait here for 11 seconds.
+			// kubelet 启动的宽限期为 10 秒，因此此处等待 11 秒。
 			time.Sleep(time.Second * 11)
 
 			stopCh := make(chan struct{})
@@ -6459,13 +6454,11 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 			restartKubelet := mustStopKubelet(ctx, f)
 			restartKubelet(ctx)
 
-			// We need to wait for a period of time to allow the kubelet to take over management
-			// of this pod, and ensure that after the kubelet manages the pod,
-			// the pod's status has not changed unexpectedly.
+			// 需要等待一段时间让 kubelet 接管该 Pod，并确认 kubelet 接管后 Pod 状态没有意外变化。
 			time.Sleep(5 * time.Second)
 			close(stopCh)
 
-			// Check for errors from the goroutine
+			// 检查 goroutine 是否报错
 			for err := range errCh {
 				framework.ExpectNoError(err, "pod status check failed during kubelet restart")
 			}
@@ -6764,7 +6757,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 				})
 			framework.ExpectNoError(err)
 
-			// Double check the initial state before starting the concurrent check
+			// 开始并发检查前再次确认初始状态
 			p, err := client.Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			gomega.Expect(p.Status.InitContainerStatuses).ToNot(gomega.BeEmpty())
@@ -6773,7 +6766,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 			gomega.Expect(*p.Status.InitContainerStatuses[0].Started).To(gomega.BeTrueBecause("The Started field should be set to true when a pod enters the Ready condition."))
 			gomega.Expect(p.Status.InitContainerStatuses[0].Ready).To(gomega.BeTrueBecause("The Ready field should be set to true when a pod enters the Ready condition."))
 
-			// The grace period for kubelet startup is 10 seconds, so we wait here for 11 seconds.
+			// kubelet 启动的宽限期为 10 秒，因此此处等待 11 秒。
 			time.Sleep(time.Second * 11)
 
 			stopCh := make(chan struct{})
@@ -6798,13 +6791,11 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 			restartKubelet := mustStopKubelet(ctx, f)
 			restartKubelet(ctx)
 
-			// We need to wait for a period of time to allow the kubelet to take over management
-			// of this pod, and ensure that after the kubelet manages the pod,
-			// the pod's status has not changed unexpectedly.
+			// 需要等待一段时间让 kubelet 接管该 Pod，并确认 kubelet 接管后 Pod 状态没有意外变化。
 			time.Sleep(5 * time.Second)
 			close(stopCh)
 
-			// Check for errors from the goroutine
+			// 检查 goroutine 是否报错
 			for err := range errCh {
 				framework.ExpectNoError(err, "pod status check failed during kubelet restart")
 			}
@@ -6985,7 +6976,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 				})
 			framework.ExpectNoError(err)
 
-			// Double check the initial state before starting the concurrent check
+			// 开始并发检查前再次确认初始状态
 			p, err := client.Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			gomega.Expect(p.Status.ContainerStatuses).ToNot(gomega.BeEmpty())
@@ -6996,7 +6987,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 				gomega.Expect(status.Ready).To(gomega.BeFalseBecause("The Ready field should be false because the readiness probe fails."))
 			}
 
-			// The grace period for kubelet startup is 10 seconds, so we wait here for 11 seconds.
+			// kubelet 启动的宽限期为 10 秒，因此此处等待 11 秒。
 			time.Sleep(time.Second * 11)
 
 			stopCh := make(chan struct{})
@@ -7022,13 +7013,11 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 			restartKubelet := mustStopKubelet(ctx, f)
 			restartKubelet(ctx)
 
-			// We need to wait for a period of time to allow the kubelet to take over management
-			// of this pod, and ensure that after the kubelet manages the pod,
-			// the pod's status has not changed unexpectedly.
+			// 需要等待一段时间让 kubelet 接管该 Pod，并确认 kubelet 接管后 Pod 状态没有意外变化。
 			time.Sleep(5 * time.Second)
 			close(stopCh)
 
-			// Check for errors from the goroutine
+			// 检查 goroutine 是否报错
 			for err := range errCh {
 				framework.ExpectNoError(err, "pod status check failed during kubelet restart")
 			}
@@ -7234,7 +7223,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 				})
 			framework.ExpectNoError(err)
 
-			// Double check the initial state before starting the concurrent check
+			// 开始并发检查前再次确认初始状态
 			p, err := client.Get(ctx, pod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			gomega.Expect(p.Status.InitContainerStatuses).ToNot(gomega.BeEmpty())
@@ -7243,7 +7232,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 			gomega.Expect(*p.Status.InitContainerStatuses[0].Started).To(gomega.BeTrueBecause("The Started field should be set to true when the init container is started."))
 			gomega.Expect(p.Status.InitContainerStatuses[0].Ready).To(gomega.BeFalseBecause("The Ready field should be false because the readiness probe fails."))
 
-			// The grace period for kubelet startup is 10 seconds, so we wait here for 11 seconds.
+			// kubelet 启动的宽限期为 10 秒，因此此处等待 11 秒。
 			time.Sleep(time.Second * 11)
 
 			stopCh := make(chan struct{})
@@ -7268,13 +7257,11 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 			restartKubelet := mustStopKubelet(ctx, f)
 			restartKubelet(ctx)
 
-			// We need to wait for a period of time to allow the kubelet to take over management
-			// of this pod, and ensure that after the kubelet manages the pod,
-			// the pod's status has not changed unexpectedly.
+			// 需要等待一段时间让 kubelet 接管该 Pod，并确认 kubelet 接管后 Pod 状态没有意外变化。
 			time.Sleep(5 * time.Second)
 			close(stopCh)
 
-			// Check for errors from the goroutine
+			// 检查 goroutine 是否报错
 			for err := range errCh {
 				framework.ExpectNoError(err, "pod status check failed during kubelet restart")
 			}
@@ -7358,7 +7345,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 		})
 	})
 
-	// Regression test for https://github.com/kubernetes/kubernetes/issues/136910
+	// 针对 https://github.com/kubernetes/kubernetes/issues/136910 的回归测试
 	var _ = SIGDescribe(framework.WithSerial(), "Sidecar container restart after kubelet restart", framework.WithFeatureGate(features.ChangeContainerStatusOnKubeletRestart), func() {
 		f := framework.NewDefaultFramework("sidecar-container-restart-test-serial")
 		addAfterEachForCleaningUpPods(f)
@@ -7417,7 +7404,7 @@ var _ = SIGDescribe(framework.WithSerial(), "Not Change Container Status", frame
 				})
 			framework.ExpectNoError(err)
 
-			// The grace period for kubelet startup is 10 seconds, so we wait here for 11 seconds.
+			// kubelet 启动的宽限期为 10 秒，因此此处等待 11 秒。
 			time.Sleep(time.Second * 11)
 
 			ginkgo.By("restarting the kubelet")

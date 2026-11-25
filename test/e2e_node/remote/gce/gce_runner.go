@@ -42,16 +42,15 @@ func init() {
 	remote.RegisterRunner("gce", NewGCERunner)
 }
 
-// envs is the type used to collect all node envs. The key is the env name,
-// and the value is the env value
+// envs 用于收集所有节点环境变量，key 是变量名，value 是变量值
 type envs map[string]string
 
-// String function of flag.Value
+// flag.Value 的 String 实现
 func (e *envs) String() string {
 	return fmt.Sprint(*e)
 }
 
-// Set function of flag.Value
+// flag.Value 的 Set 实现
 func (e *envs) Set(value string) error {
 	if value == "" {
 		return nil
@@ -65,7 +64,7 @@ func (e *envs) Set(value string) error {
 	return nil
 }
 
-// nodeEnvs is the node envs from the flag `node-env`.
+// nodeEnvs 是来自 `node-env` 标志的节点环境变量。
 var nodeEnvs = make(envs)
 
 var project = remote.CommandLine.String("project", "", "gce project the hosts live in (gce)")
@@ -125,22 +124,21 @@ func (g *GCERunner) StartTests(suite remote.TestSuite, archivePath string, resul
 	return
 }
 
-// Accelerator contains type and count about resource.
+// Accelerator 描述资源的类型和数量。
 type Accelerator struct {
 	Type  string `json:"type,omitempty"`
 	Count int64  `json:"count,omitempty"`
 }
 
-// Resources contains accelerators array.
+// Resources 包含 accelerator 数组。
 type Resources struct {
 	Accelerators []Accelerator `json:"accelerators,omitempty"`
 }
 
-// internalGCEImage is an internal GCE image representation for E2E node.
+// internalGCEImage 是 E2E node 测试内部使用的 GCE 镜像表示。
 type internalGCEImage struct {
 	image string
-	// imageDesc is the description of the image. If empty, the value in the
-	// 'image' will be used.
+	// imageDesc 是镜像的描述。为空时将使用 'image' 的值。
 	imageDesc       string
 	kernelArguments []string
 	project         string
@@ -153,29 +151,28 @@ type internalGCEImageConfig struct {
 	images map[string]internalGCEImage
 }
 
-// GCEImageConfig specifies what images should be run and how for these tests.
-// It can be created via the `--images` and `--image-project` flags, or by
-// specifying the `--image-config-file` flag, pointing to a json or yaml file
-// of the form:
+// GCEImageConfig 指定这些测试要运行哪些镜像以及如何运行。
+// 可通过 `--images` 和 `--image-project` 标志创建，也可通过
+// `--image-config-file` 标志指定一个如下格式的 json 或 yaml 文件：
 //
 //	images:
 //	  short-name:
 //	    image: gce-image-name
 //	    project: gce-image-project
-//	    machine: for benchmark only, the machine type (GCE instance) to run test
-//	    tests: for benchmark only, a list of ginkgo focus strings to match tests
+//	    machine: 仅用于基准测试，指定运行测试的机器类型（GCE 实例）
+//	    tests: 仅用于基准测试，指定匹配测试的 ginkgo focus 字符串列表
 //
-// TODO(coufon): replace 'image' with 'node' in configurations
-// and we plan to support testing custom machines other than GCE by specifying Host
+// TODO(coufon): 在配置中将 'image' 替换为 'node'，
+// 并计划通过指定 Host 支持测试 GCE 之外的自定义机器
 type GCEImageConfig struct {
 	Images map[string]GCEImage `json:"images"`
 }
 
-// GCEImage contains some information about GCE Image.
+// GCEImage 包含 GCE 镜像的相关信息。
 type GCEImage struct {
 	Image      string `json:"image,omitempty"`
 	ImageRegex string `json:"image_regex,omitempty"`
-	// ImageFamily is the image family to use. The latest image from the image family will be used, e.g cos-81-lts.
+	// ImageFamily 是要使用的镜像家族，将使用其中最新的镜像，例如 cos-81-lts。
 	ImageFamily     string    `json:"image_family,omitempty"`
 	ImageDesc       string    `json:"image_description,omitempty"`
 	KernelArguments []string  `json:"kernel_arguments,omitempty"`
@@ -185,7 +182,7 @@ type GCEImage struct {
 	Resources       Resources `json:"resources,omitempty"`
 }
 
-// Returns an image name based on regex and given GCE project.
+// 根据正则表达式和给定的 GCE project 返回镜像名称。
 func (g *GCERunner) getGCEImage(imageRegex, imageFamily string, project string) (string, error) {
 	data, err := runGCPCommandNoProject("compute", "images", "list",
 		"--format=json", "--project="+project)
@@ -218,7 +215,7 @@ func (g *GCERunner) getGCEImage(imageRegex, imageFamily string, project string) 
 		imageObjs = append(imageObjs, io)
 	}
 
-	// Pick the latest image after sorting.
+	// 排序后选取最新的镜像。
 	sort.Sort(byCreationTime(imageObjs))
 	if len(imageObjs) > 0 {
 		klog.V(4).Infof("found images %+v based on regex %q and family %q in project %q", imageObjs, imageRegex, imageFamily, project)
@@ -232,7 +229,7 @@ func (g *GCERunner) prepareGceImages() (*internalGCEImageConfig, error) {
 		images: make(map[string]internalGCEImage),
 	}
 
-	// Parse images from given config file and convert them to internalGCEImage.
+	// 从给定配置文件解析镜像并转换为 internalGCEImage。
 	if g.cfg.ImageConfigFile != "" {
 		configPath := g.cfg.ImageConfigFile
 		if g.cfg.ImageConfigDir != "" {
@@ -243,8 +240,8 @@ func (g *GCERunner) prepareGceImages() (*internalGCEImageConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Could not read image config file provided: %w", err)
 		}
-		// Unmarshal the given image config file. All images for this test run will be organized into a map.
-		// shortName->GCEImage, e.g cos-stable->cos-stable-81-12871-103-0.
+		// 反序列化给定的镜像配置文件，本次测试运行的所有镜像将组织到一个 map 中：
+		// shortName->GCEImage，例如 cos-stable->cos-stable-81-12871-103-0。
 		externalImageConfig := GCEImageConfig{Images: make(map[string]GCEImage)}
 		err = yaml.Unmarshal(imageConfigData, &externalImageConfig)
 		if err != nil {
@@ -262,7 +259,7 @@ func (g *GCERunner) prepareGceImages() (*internalGCEImageConfig, error) {
 			} else {
 				image = imageConfig.Image
 			}
-			// Convert the given image into an internalGCEImage.
+			// 将给定镜像转换为 internalGCEImage。
 			metadata := imageConfig.Metadata
 			if len(strings.TrimSpace(*instanceMetadata)) > 0 {
 				metadata += "," + *instanceMetadata
@@ -283,8 +280,7 @@ func (g *GCERunner) prepareGceImages() (*internalGCEImageConfig, error) {
 		}
 	}
 
-	// Allow users to specify additional images via cli flags for local testing
-	// convenience; merge in with config file
+	// 为方便本地测试，允许用户通过命令行标志指定额外镜像，并与配置文件合并
 	if len(g.cfg.Images) > 0 {
 		if *imageProject == "" {
 			klog.Fatal("Must specify --image-project if you specify --images")
@@ -302,7 +298,7 @@ func (g *GCERunner) prepareGceImages() (*internalGCEImageConfig, error) {
 	if len(gceImages.images) != 0 && *zone == "" {
 		return nil, errors.New("must specify --zone flag")
 	}
-	// Make sure GCP project is set. Without a project, images can't be retrieved..
+	// 确认已设置 GCP project；没有 project 就无法获取镜像。
 	for shortName, imageConfig := range gceImages.images {
 		if imageConfig.project == "" {
 			return nil, fmt.Errorf("invalid config for %v; must specify a project", shortName)
@@ -385,12 +381,9 @@ func (g *GCERunner) parseInstanceMetadata(str string) map[string]string {
 	return metadata
 }
 
-// ignitionInjectGCEPublicKey tries to inject the GCE SSH public key into the
-// provided ignition file path.
-//
-// This will only being done if the job has the
-// IGNITION_INJECT_GCE_SSH_PUBLIC_KEY_FILE environment variable set, while it
-// tried to replace the GCE_SSH_PUBLIC_KEY_FILE_CONTENT placeholder.
+// ignitionInjectGCEPublicKey 尝试将 GCE SSH 公钥注入指定的 ignition 文件路径。
+// 仅当任务设置了 IGNITION_INJECT_GCE_SSH_PUBLIC_KEY_FILE 环境变量时才会执行，
+// 并尝试替换 GCE_SSH_PUBLIC_KEY_FILE_CONTENT 占位符。
 func ignitionInjectGCEPublicKey(content string) string {
 	if os.Getenv("IGNITION_INJECT_GCE_SSH_PUBLIC_KEY_FILE") == "" {
 		return content
@@ -421,8 +414,7 @@ func ignitionInjectGCEPublicKey(content string) string {
 	return replacer.Replace(content)
 }
 
-// Provision a gce instance using image and run the tests in archive against the instance.
-// Delete the instance afterward.
+// 使用镜像创建 GCE 实例并在该实例上运行归档中的测试，之后删除该实例。
 func (g *GCERunner) testGCEImage(suite remote.TestSuite, archivePath string, imageConfig *internalGCEImage, junitFileName string) *remote.TestResult {
 	ginkgoFlagsStr := g.cfg.GinkgoFlags
 
@@ -436,8 +428,7 @@ func (g *GCERunner) testGCEImage(suite remote.TestSuite, archivePath string, ima
 		}
 	}
 
-	// Only delete the files if we are keeping the instance and want it cleaned up.
-	// If we are going to delete the instance, don't bother with cleaning up the files
+	// 仅当保留实例且需要清理时才删除文件；若要删除实例，就无需清理这些文件
 	deleteFiles := !g.cfg.DeleteInstances && g.cfg.Cleanup
 
 	if err = g.registerGceHostIP(host); err != nil {
@@ -468,8 +459,8 @@ func (g *GCERunner) testGCEImage(suite remote.TestSuite, archivePath string, ima
 		ExitOK: exitOk,
 	}
 
-	// This is a temporary solution to collect serial node serial log. Only port 1 contains useful information.
-	// TODO(random-liu): Extract out and unify log collection logic with cluste e2e.
+	// 这是收集节点串口日志的临时方案，只有端口 1 包含有用信息。
+	// TODO(random-liu): 抽取并与 cluster e2e 的日志收集逻辑统一。
 	contents, err := g.getSerialOutput(host)
 	if err != nil {
 		klog.Errorf("Failed to get serial Output from node %q : %v", host, err)
@@ -605,11 +596,11 @@ func (g *GCERunner) createGCEInstance(imageConfig *internalGCEImage) (string, er
 		}
 		instanceRunning = true
 	}
-	// If instance didn't reach running state in time, return with error now.
+	// 若实例未及时进入 running 状态，立即返回错误。
 	if err != nil {
 		return name, err
 	}
-	// Instance reached running state in time, make sure that cloud-init is complete
+	// 实例已及时进入 running 状态，确认 cloud-init 已完成
 	if g.isCloudInitUsed(imageConfig.metadata) {
 		cloudInitFinished := false
 		for i := 0; i < 60 && !cloudInitFinished; i++ {
@@ -626,7 +617,7 @@ func (g *GCERunner) createGCEInstance(imageConfig *internalGCEImage) (string, er
 		}
 	}
 
-	// apply additional kernel arguments to the instance
+	// 向实例追加额外的内核参数
 	if len(imageConfig.kernelArguments) > 0 {
 		klog.Info("Update kernel arguments")
 		if err := g.updateKernelArguments(instance, imageConfig.image, imageConfig.kernelArguments); err != nil {
@@ -653,10 +644,9 @@ func (g *GCERunner) imageToInstanceName(imageConfig *internalGCEImage) string {
 	if imageConfig.machine == "" {
 		return g.cfg.InstanceNamePrefix + "-" + imageConfig.image
 	}
-	// For benchmark test, node name has the format 'machine-image-uuid' to run
-	// different machine types with the same image in parallel
+	// 基准测试的节点名格式为 'machine-image-uuid'，以便用同一镜像并行运行不同机器类型
 	name := imageConfig.machine + "-" + imageConfig.image + "-" + uuid.New().String()[:8]
-	// Sometimes the image is too long, we need instance names to have a max length of 63
+	// 有时镜像名过长，而实例名长度最多为 63
 	if len(name) > 63 {
 		return name[:63]
 	}
@@ -743,7 +733,7 @@ func (g *GCERunner) machineType(machine string) string {
 }
 
 func (g *GCERunner) rebootInstance(instance *gceInstance) error {
-	// wait until the instance will not response to SSH
+	// 等待实例不再响应 SSH
 	klog.Info("Reboot the node and wait for instance not to be available via SSH")
 	if waitErr := wait.PollImmediate(5*time.Second, 5*time.Minute, func() (bool, error) {
 		if _, err := remote.SSH(instance.Name, "reboot"); err != nil {
@@ -755,7 +745,7 @@ func (g *GCERunner) rebootInstance(instance *gceInstance) error {
 		return fmt.Errorf("the instance %s still response to SSH: %v", instance.Name, waitErr)
 	}
 
-	// wait until the instance will response again to SSH
+	// 等待实例重新响应 SSH
 	klog.Info("Wait for instance to be available via SSH")
 	if waitErr := wait.PollImmediate(30*time.Second, 5*time.Minute, func() (bool, error) {
 		if _, err := remote.SSH(instance.Name, "sh", "-c", "date"); err != nil {

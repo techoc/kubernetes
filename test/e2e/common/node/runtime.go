@@ -48,7 +48,7 @@ var _ = SIGDescribe("Container Runtime", func() {
 			/*
 				Release: v1.13
 				Testname: Container Runtime, Restart Policy, Pod Phases
-				Description: If the restart policy is set to 'Always', Pod MUST be restarted when terminated, If restart policy is 'OnFailure', Pod MUST be started only if it is terminated with non-zero exit code. If the restart policy is 'Never', Pod MUST never be restarted. All these three test cases MUST verify the restart counts accordingly.
+				Description: restart policy 为 'Always' 时，Pod 终止后 MUST 重启；为 'OnFailure' 时，仅当以非零退出码终止才 MUST 重启；为 'Never' 时 MUST 永不重启。三个测试用例都 MUST 校验重启次数。
 			*/
 			framework.ConformanceIt("should run with the expected status", f.WithNodeConformance(), func(ctx context.Context) {
 				restartCountVolumeName := "restart-count"
@@ -84,7 +84,7 @@ var _ = SIGDescribe("Container Runtime", func() {
 				}
 				for _, testCase := range testCases {
 
-					// It failed at the 1st run, then succeeded at 2nd run, then run forever
+					// 第一次运行失败，第二次成功，之后一直运行
 					cmdScripts := `
 f=%s
 count=$(echo 'hello' >> $f ; wc -l $f | awk {'print $1'})
@@ -141,7 +141,7 @@ while true; do sleep 1; done
 			adminUserName := "ContainerAdministrator"
 			nonAdminUserName := "ContainerUser"
 
-			// Create and then terminate the container under defined PodPhase to verify if termination message matches the expected output. Lastly delete the created container.
+			// 在指定 PodPhase 下创建并终止容器，验证终止消息是否与预期输出一致，最后删除该容器。
 			matchTerminationMessage := func(ctx context.Context, container v1.Container, expectedPhase v1.PodPhase, expectedMsg gomegatypes.GomegaMatcher) {
 				container.Name = "termination-message-container"
 				c := ConformanceContainer{
@@ -191,7 +191,7 @@ while true; do sleep 1; done
 			/*
 				Release: v1.15
 				Testname: Container Runtime, TerminationMessagePath, non-root user and non-default path
-				Description: Create a pod with a container to run it as a non-root user with a custom TerminationMessagePath set. Pod redirects the output to the provided path successfully. When the container is terminated, the termination message MUST match the expected output logged in the provided custom path.
+				Description: 创建一个带容器的 Pod，以非 root 用户运行并设置自定义 TerminationMessagePath。Pod 成功将输出重定向到指定路径；容器终止时，终止消息 MUST 与该自定义路径中记录的预期输出一致。
 			*/
 			framework.ConformanceIt("should report termination message if TerminationMessagePath is set as non-root user and at a non-default path", f.WithNodeConformance(), func(ctx context.Context) {
 				container := v1.Container{
@@ -212,7 +212,7 @@ while true; do sleep 1; done
 			/*
 				Release: v1.15
 				Testname: Container Runtime, TerminationMessage, from container's log output of failing container
-				Description: Create a pod with an container. Container's output is recorded in log and container exits with an error. When container is terminated, termination message MUST match the expected output recorded from container's log.
+				Description: 创建带容器的 Pod，容器输出被记录到日志且以错误退出。容器终止时，终止消息 MUST 与容器日志中记录的预期输出一致。
 			*/
 			framework.ConformanceIt("should report termination message from log output if TerminationMessagePolicy FallbackToLogsOnError is set", f.WithNodeConformance(), func(ctx context.Context) {
 				container := v1.Container{
@@ -228,7 +228,7 @@ while true; do sleep 1; done
 			/*
 				Release: v1.15
 				Testname: Container Runtime, TerminationMessage, from log output of succeeding container
-				Description: Create a pod with an container. Container's output is recorded in log and container exits successfully without an error. When container is terminated, terminationMessage MUST have no content as container succeed.
+				Description: 创建带容器的 Pod，容器输出被记录到日志且成功退出。容器终止时，因容器执行成功，terminationMessage MUST 为空。
 			*/
 			framework.ConformanceIt("should report termination message as empty when pod succeeds and TerminationMessagePolicy FallbackToLogsOnError is set", f.WithNodeConformance(), func(ctx context.Context) {
 				container := v1.Container{
@@ -244,7 +244,7 @@ while true; do sleep 1; done
 			/*
 				Release: v1.15
 				Testname: Container Runtime, TerminationMessage, from file of succeeding container
-				Description: Create a pod with an container. Container's output is recorded in a file and the container exits successfully without an error. When container is terminated, terminationMessage MUST match with the content from file.
+				Description: 创建带容器的 Pod，容器输出被记录到文件中且成功退出。容器终止时，terminationMessage MUST 与文件内容一致。
 			*/
 			framework.ConformanceIt("should report termination message from file when pod succeeds and TerminationMessagePolicy FallbackToLogsOnError is set", f.WithNodeConformance(), func(ctx context.Context) {
 				container := v1.Container{
@@ -268,14 +268,14 @@ while true; do sleep 1; done
 				registryAddress, registryNodeNames, err = e2eregistry.SetupRegistry(ctx, f, true)
 				framework.ExpectNoError(err)
 				gomega.Expect(registryNodeNames).ToNot(gomega.BeEmpty())
-				// we need to wait for the registry to be removed and so we need to delete the whole NS ourselves
+				// 需要等待 registry 被移除，因此必须自行删除整个命名空间
 				ginkgo.DeferCleanup(func(ctx context.Context) {
 					f.DeleteNamespace(ctx, f.Namespace.Name)
 				})
 
 				secret := e2eregistry.User1DockerSecret(registryAddress)
 				secret.Name = "image-pull-secret-" + string(uuid.NewUUID())
-				// we might be told to use a different docker config JSON.
+				// 可能会要求使用不同的 docker config JSON。
 				if framework.TestContext.DockerConfigFile != "" {
 					contents, err := os.ReadFile(framework.TestContext.DockerConfigFile)
 					framework.ExpectNoError(err)
@@ -309,9 +309,8 @@ while true; do sleep 1; done
 	})
 })
 
-// Images used by imagePullTest are not added to NodePrePullImageList because this test is
-// specifically testing image pulling behavior. The containers use ImagePullPolicy values other
-// than PullNever, so the framework allows them to be pulled during the test.
+// imagePullTest 使用的镜像不加入 NodePrePullImageList，因为该测试专门验证镜像拉取行为。
+// 容器使用的 ImagePullPolicy 不是 PullNever，因此框架允许在测试期间拉取这些镜像。
 func ImagePullTest(ctx context.Context, f *framework.Framework, image string, imagePullPolicy v1.PullPolicy, pullSecret *v1.Secret, nodeName string, expectedPhase v1.PodPhase, expectedPullStatus bool) *v1.Pod {
 	container := ConformanceContainer{
 		PodClient: e2epod.NewPodClient(f),
@@ -326,15 +325,15 @@ func ImagePullTest(ctx context.Context, f *framework.Framework, image string, im
 	if pullSecret != nil {
 		container.ImagePullSecrets = []string{pullSecret.Name}
 	}
-	// checkContainerStatus checks whether the container status matches expectation.
+	// checkContainerStatus 检查容器状态是否符合预期。
 	checkContainerStatus := func(ctx context.Context) error {
 		status, err := container.GetStatus(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get container status: %w", err)
 		}
-		// We need to check container state first. The default pod status is pending, If we check pod phase first,
-		// and the expected pod phase is Pending, the container status may not even show up when we check it.
-		// Check container state
+		// 必须先检查容器状态。Pod 默认状态是 Pending，若先检查 Pod 阶段且期望值也是 Pending，
+		// 检查时容器状态可能还没出现。
+		// 检查容器状态
 		if !expectedPullStatus {
 			if status.State.Running == nil {
 				return fmt.Errorf("expected container state: Running, got: %q",
@@ -354,7 +353,7 @@ func ImagePullTest(ctx context.Context, f *framework.Framework, image string, im
 				return fmt.Errorf("unexpected waiting reason: %q", reason)
 			}
 		}
-		// Check pod phase
+		// 检查 Pod 阶段
 		phase, err := container.GetPhase(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get pod phase: %w", err)

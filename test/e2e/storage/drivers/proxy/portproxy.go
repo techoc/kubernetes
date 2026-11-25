@@ -38,48 +38,37 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
-// Maximum number of forwarded connections. In practice we don't
-// need more than one per sidecar and kubelet. Keeping this reasonably
-// small ensures that we don't establish connections through the apiserver
-// and the remote kernel which then aren't needed.
+// 转发连接数的上限。实际上每个 sidecar 和 kubelet 不需要超过一个连接。
+// 把这个数值控制在较小的范围内，可以避免通过 apiserver 和远端内核建立
+// 后续并不需要的连接。
 //
-// The proxy code below establishes this many connections in advance,
-// without waiting for a client on the remote side. On the local side
-// a gRPC server will accept the same number of connections and then wait
-// for data from a future client.
+// 下面的代理代码会预先建立这个数量的连接，而不等待远端有客户端接入。
+// 在本地侧，gRPC server 会接受相同数量的连接，然后等待未来客户端发来的数据。
 //
-// This approach has the advantage that a client on the remote side can
-// immediately start communicating, without the delay caused by establishing
-// the connection. That delay is large enough that clients like the
-// node-driver-registrar with a very small timeout for gRPC did indeed
-// time out unnecessarily.
+// 这样做的好处是远端客户端可以立即开始通信，不会因建立连接而产生延迟。
+// 这个延迟足够大，以至于像 node-driver-registrar 这样 gRPC 超时时间很短的
+// 客户端确实曾因此不必要地超时。
 const maxConcurrentConnections = 10
 
-// This delay determines how quickly we notice when someone has
-// connected inside the cluster. With socat, we cannot make this too small
-// because otherwise we get many rejected connections. With the mock
-// driver as proxy that doesn't happen as long as we don't
-// ask for too many concurrent connections because the mock driver
-// keeps the listening port open at all times and the Linux
-// kernel automatically accepts our connection requests.
+// 这个延迟决定了我们多快能察觉到集群内有人建立了连接。
+// 使用 socat 时不能把它设得太小，否则会产生大量被拒绝的连接。
+// 使用 mock driver 作为代理时，只要不请求过多并发连接就不会出现这个问题，
+// 因为 mock driver 始终保持着监听端口，Linux 内核会自动接受我们的连接请求。
 const connectionPollInterval = 100 * time.Millisecond
 
-// Listen creates a listener which returns new connections whenever someone connects
-// to a socat or mock driver proxy instance running inside the given pod.
+// Listen 创建一个 listener，当有人连接到指定 Pod 内运行的 socat 或 mock driver 代理实例时，
+// 它会返回新的连接。
 //
-// socat must by started with "<listen>,fork TCP-LISTEN:<port>,reuseport"
-// for this to work. "<listen>" can be anything that accepts connections,
-// for example "UNIX-LISTEN:/csi/csi.sock". In this mode, socat will
-// accept exactly one connection on the given port for each connection
-// that socat itself accepted.
+// 要让这个机制工作，socat 必须以 "<listen>,fork TCP-LISTEN:<port>,reuseport" 启动。
+// "<listen>" 可以是任何能接受连接的形式，例如 "UNIX-LISTEN:/csi/csi.sock"。
+// 在这个模式下，socat 自身每接受一个连接，就会在指定端口上恰好接受一个连接。
 //
-// Listening stops when the context is done or Close() is called.
+// 当 context 结束或调用 Close() 时，监听会停止。
 func Listen(ctx context.Context, clientset kubernetes.Interface, restConfig *rest.Config, addr Addr) (net.Listener, error) {
-	// We connect through port forwarding. Strictly
-	// speaking this is overkill because we don't need a local
-	// port. But this way we can reuse client-go/tools/portforward
-	// instead of having to replicate handleConnection
-	// in our own code.
+	// 我们通过端口转发建立连接。严格来说，
+	// 因为我们并不需要本地端口，这样做有些多余。
+	// 但这样可以复用 client-go/tools/portforward，
+	// 而不必在自己的代码中重新实现 handleConnection。
 	restClient := clientset.CoreV1().RESTClient()
 	if restConfig.GroupVersion == nil {
 		restConfig.GroupVersion = &schema.GroupVersion{}
@@ -88,7 +77,7 @@ func Listen(ctx context.Context, clientset kubernetes.Interface, restConfig *res
 		restConfig.NegotiatedSerializer = scheme.Codecs
 	}
 
-	// The setup code around the actual portforward is from
+	// 实际 portforward 周围的搭建代码来自
 	// https://github.com/kubernetes/kubernetes/blob/c652ffbe4a29143623a1aaec39f745575f7e43ad/staging/src/k8s.io/kubectl/pkg/cmd/portforward/portforward.go
 	req := restClient.Post().
 		Resource("pods").
@@ -128,14 +117,14 @@ func Listen(ctx context.Context, clientset kubernetes.Interface, restConfig *res
 
 					for i, c := range l.connections {
 						if c == nil {
-							// This can fail repeatedly while the apiserver is down. This is nothing to worry about.
+							// apiserver 停机期间可能会反复失败，这无需担心。
 							klog.V(7).Infof("%s: trying to create a new connection #%d", prefix, connectionsCreated)
 							stream, err := dial(ctx, fmt.Sprintf("%s #%d", prefix, connectionsCreated), dialer, addr.Port)
 							if err != nil {
 								klog.V(7).Infof("%s: no connection: %v", prefix, err)
 								return
 							}
-							// Make the connection available to Accept below.
+							// 让下面的 Accept 能够拿到这个连接。
 							klog.V(5).Infof("%s: created a new connection #%d", prefix, connectionsCreated)
 							c := &connection{
 								l:       l,
@@ -153,7 +142,7 @@ func Listen(ctx context.Context, clientset kubernetes.Interface, restConfig *res
 		}
 	}
 
-	// Portforwarding and polling for connections run in the background.
+	// 端口转发和连接轮询在后台运行。
 	go func() {
 		for {
 			running := false
@@ -177,9 +166,7 @@ func Listen(ctx context.Context, clientset kubernetes.Interface, restConfig *res
 			select {
 			case <-ctx.Done():
 				return
-			// Sleep a bit before restarting. This is
-			// where we potentially wait for the pod to
-			// start.
+			// 重启前稍作等待。这里是等待 Pod 启动的地方。
 			case <-time.After(1 * time.Second):
 			}
 		}
@@ -188,8 +175,8 @@ func Listen(ctx context.Context, clientset kubernetes.Interface, restConfig *res
 	return l, nil
 }
 
-// Addr contains all relevant parameters for a certain port in a pod.
-// The container must be running before connections are attempted.
+// Addr 包含 Pod 中某个端口的所有相关参数。
+// 尝试建立连接前，容器必须已经运行。
 type Addr struct {
 	Namespace, PodName, ContainerName string
 	Port                              int
@@ -222,14 +209,14 @@ func dial(ctx context.Context, prefix string, dialer httpstream.Dialer, port int
 		}
 	}()
 
-	// create error stream
+	// 创建 error stream
 	headers := http.Header{}
 	headers.Set(v1.StreamType, v1.StreamTypeError)
 	headers.Set(v1.PortHeader, fmt.Sprintf("%d", port))
 	headers.Set(v1.PortForwardRequestIDHeader, requestID)
 
-	// We're not writing to this stream, just reading an error message from it.
-	// This happens asynchronously.
+	// 我们不往这个 stream 写数据，只是从中读取错误消息。
+	// 这是异步进行的。
 	errorStream, err := streamConn.CreateStream(headers)
 	if err != nil {
 		return nil, fmt.Errorf("error creating error stream: %w", err)
@@ -245,7 +232,7 @@ func dial(ctx context.Context, prefix string, dialer httpstream.Dialer, port int
 		}
 	}()
 
-	// create data stream
+	// 创建 data stream
 	headers.Set(v1.StreamType, v1.StreamTypeData)
 	dataStream, err := streamConn.CreateStream(headers)
 	if err != nil {
@@ -368,7 +355,7 @@ func (c *connection) Close() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if !c.closed {
-		// Do the logging and book-keeping only once. The function itself may be called more than once.
+		// 日志和簿记只做一次。这个函数本身可能被多次调用。
 		klog.V(5).Infof("forward connection #%d for %s: closing our side", c.counter, c.addr)
 
 		c.l.mutex.Lock()

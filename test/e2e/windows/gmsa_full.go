@@ -14,29 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This test ensures that the whole GMSA process works as intended.
-// However, it does require a pretty heavy weight set up to run correctly;
-// in particular, it does make a number of assumptions about the cluster it
-// runs against:
-//  * there exists a Windows worker node with the agentpool=windowsgmsa label on it
-//  * that node is joined to a working Active Directory domain.
-//  * a GMSA account has been created in that AD domain, and then installed on that
-//    same worker.
-//  * a valid k8s manifest file containing a single CRD definition has been generated using
+// 本测试确保整个 GMSA 流程按预期工作。
+// 但正确运行它需要相当繁重的准备，尤其是对所运行的集群有如下假设：
+//  * 存在一个带 agentpool=windowsgmsa 标签的 Windows worker 节点。
+//  * 该节点已加入一个可正常工作的 Active Directory 域。
+//  * 已在该 AD 域中创建 GMSA 账户，并在同一 worker 上安装。
+//  * 已使用
 //    https://github.com/kubernetes-sigs/windows-gmsa/blob/master/scripts/GenerateCredentialSpecResource.ps1
-//    with the credential specs of that GMSA account, or type GMSACredentialSpec and named gmsa-e2e;
-//    and that manifest file has been written to C:\gmsa\gmsa-cred-spec-gmsa-e2e.yml
-//    on that same worker node.
-//  * the API has both MutatingAdmissionWebhook and ValidatingAdmissionWebhook
-//    admission controllers enabled.
-//  * the cluster comprises at least one Linux node that accepts workloads - it
-//    can be the master, but any other Linux node is fine too. This is needed for
-//    the webhook's pod.
-//  * in order to run "can read and write file to remote folder" test case, a folder (e.g. "write_test") need to be created
-//    in that AD domain and it should be shared with that GMSA account.
-// All these assumptions are fulfilled by an AKS extension when setting up the AKS
-// cluster we run daily e2e tests against, but they do make running this test
-// outside of that very specific context pretty hard.
+//    根据该 GMSA 账户的 credential spec 生成一个有效的 k8s manifest 文件，
+//    其中包含单个 CRD 定义，类型为 GMSACredentialSpec、名称为 gmsa-e2e；
+//    并且该 manifest 文件已写入同一 worker 节点的 C:\gmsa\gmsa-cred-spec-gmsa-e2e.yml。
+//  * API 已启用 MutatingAdmissionWebhook 和 ValidatingAdmissionWebhook admission controller。
+//  * 集群中至少有一个可承载工作负载的 Linux 节点，可以是 master，也可以是其他 Linux 节点，
+//    用于运行 webhook 的 Pod。
+//  * 为运行 "can read and write file to remote folder" 测试用例，需要在该 AD 域中
+//    创建一个文件夹（如 "write_test"）并共享给该 GMSA 账户。
+// 我们每日运行 e2e 测试的 AKS 集群在搭建时会通过 AKS 扩展满足以上全部假设，
+// 但这也使得在该特定环境之外运行此测试非常困难。
 
 package windows
 
@@ -66,28 +60,26 @@ import (
 )
 
 const (
-	// gmsaFullNodeLabel is the label we expect to find on at least one node
-	// that is then expected to fulfill all the expectations explained above.
+	// gmsaFullNodeLabel 是我们期望在至少一个节点上找到的标签，
+	// 该节点应满足上述全部条件。
 	gmsaFullNodeLabel = "agentpool=windowsgmsa"
 
-	// gmsaCrdManifestPath is where we expect to find the manifest file for
-	// the GMSA cred spec on that node - see explanations above.
+	// gmsaCrdManifestPath 是该节点上 GMSA cred spec manifest 文件的预期位置，见上文说明。
 	gmsaCrdManifestPath = `C:\gmsa\gmsa-cred-spec-gmsa-e2e.yml`
 
-	// gmsaCustomResourceName is the expected name of the GMSA custom resource
-	// defined at gmsaCrdManifestPath
+	// gmsaCustomResourceName 是 gmsaCrdManifestPath 中定义的 GMSA custom resource 的预期名称。
 	gmsaCustomResourceName = "gmsa-e2e"
 
-	// gmsaWebhookDeployScriptURL is the URL of the deploy script for the GMSA webook
+	// gmsaWebhookDeployScriptURL 是 GMSA webhook 部署脚本的 URL。
 	gmsaWebhookDeployScriptURL = "https://raw.githubusercontent.com/kubernetes-sigs/windows-gmsa/master/admission-webhook/deploy/deploy-gmsa-webhook.sh"
 
-	// output from the nltest /query command should have this in it
+	// nltest /query 命令的输出中应包含此内容。
 	expectedQueryOutput = "The command completed successfully"
 
-	// The name of the expected domain
+	// 预期域名。
 	gmsaDomain = "k8sgmsa.lan"
 
-	// The shared folder on the expected domain for file-writing test
+	// 预期域中用于文件写入测试的共享文件夹。
 	gmsaSharedFolder = "write_test"
 )
 
@@ -136,9 +128,8 @@ var _ = sigDescribe(feature.Windows, "GMSA Full", framework.WithSerial(), framew
 			ginkgo.By("creating a pod using the GMSA cred spec")
 			podName := createPodWithGmsa(ctx, f, serviceAccountName)
 
-			// nltest /QUERY will only return successfully if there is a GMSA
-			// identity configured, _and_ it succeeds in contacting the AD controller
-			// and authenticating with it.
+			// nltest /QUERY 只有在已配置 GMSA 身份，且成功联系 AD controller
+			// 并通过其认证时才会成功返回。
 			ginkgo.By("checking that nltest /QUERY returns successfully")
 			var output string
 			gomega.Eventually(ctx, func() error {
@@ -148,7 +139,7 @@ var _ = sigDescribe(feature.Windows, "GMSA Full", framework.WithSerial(), framew
 				}
 
 				if !isValidOutput(output) {
-					// try repairing the secure channel by running reset command
+					// 尝试运行 reset 命令修复安全通道。
 					// https://kubernetes.io/docs/tasks/configure-pod-container/configure-gmsa/#troubleshooting
 					output, err = runKubectlExecInNamespace(f.Namespace.Name, podName, "--", "nltest", fmt.Sprintf("/sc_reset:%s", gmsaDomain))
 					if err != nil {
@@ -207,7 +198,7 @@ var _ = sigDescribe(feature.Windows, "GMSA Full", framework.WithSerial(), framew
 			filePath := fmt.Sprintf("\\\\%s\\%s\\write-test-%s.txt", gmsaDomainIP, gmsaSharedFolder, string(uuid.NewUUID())[0:4])
 
 			gomega.Eventually(ctx, func() error {
-				// The filePath is a remote folder, do not change the format of it
+				// filePath 指向远程文件夹，不要改变其格式。
 				_, _ = runKubectlExecInNamespace(f.Namespace.Name, podName, "--", "powershell.exe", "-Command", "echo 'This is a test file.' > "+filePath)
 				_, err := runKubectlExecInNamespace(f.Namespace.Name, podName, "powershell.exe", "--", "cat", filePath)
 				if err != nil {
@@ -226,7 +217,7 @@ func isValidOutput(output string) bool {
 		!strings.Contains(output, "RPC_S_SERVER_UNAVAILABLE")
 }
 
-// findPreconfiguredGmsaNode finds node with the gmsaFullNodeLabel label on it.
+// findPreconfiguredGmsaNodes 查找带有 gmsaFullNodeLabel 标签的节点。
 func findPreconfiguredGmsaNodes(ctx context.Context, c clientset.Interface) []v1.Node {
 	nodeOpts := metav1.ListOptions{
 		LabelSelector: gmsaFullNodeLabel,
@@ -238,14 +229,12 @@ func findPreconfiguredGmsaNodes(ctx context.Context, c clientset.Interface) []v1
 	return nodes.Items
 }
 
-// retrieveCRDManifestFileContents retrieves the contents of the file
-// at gmsaCrdManifestPath on node; it does so by scheduling a single pod
-// on nodes with the gmsaFullNodeLabel label with that file's directory
-// mounted on it, and then exec-ing into that pod to retrieve the file's
-// contents.
+// retrieveCRDManifestFileContents 获取节点上 gmsaCrdManifestPath 处的文件内容。
+// 做法是在带有 gmsaFullNodeLabel 标签的节点上调度一个 Pod，挂载该文件所在目录，
+// 然后 exec 进入该 Pod 读取文件内容。
 func retrieveCRDManifestFileContents(ctx context.Context, f *framework.Framework, node v1.Node) string {
 	podName := "retrieve-gmsa-crd-contents"
-	// we can't use filepath.Dir here since the test itself runs on a Linux machine
+	// 测试自身运行在 Linux 机器上，因此这里不能使用 filepath.Dir。
 	splitPath := strings.Split(gmsaCrdManifestPath, `\`)
 	dirPath := strings.Join(splitPath[:len(splitPath)-1], `\`)
 	volumeName := "retrieve-gmsa-crd-contents-volume"
@@ -288,20 +277,19 @@ func retrieveCRDManifestFileContents(ctx context.Context, f *framework.Framework
 		framework.Failf("failed to retrieve the contents of %q on node %q: %v", gmsaCrdManifestPath, node.Name, err)
 	}
 
-	// Windows to linux new lines
+	// 将 Windows 换行转换为 Linux 换行。
 	return strings.ReplaceAll(output, "\r\n", "\n")
 }
 
-// deployGmsaWebhook deploys the GMSA webhook, and returns a cleanup function
-// to be called when done with testing, that removes the temp files it's created
-// on disks as well as the API resources it's created.
+// deployGmsaWebhook 部署 GMSA webhook，返回一个在测试结束后调用的清理函数，
+// 用于删除它创建的临时文件和 API 资源。
 func deployGmsaWebhook(ctx context.Context, f *framework.Framework) error {
 	deployerName := "webhook-deployer"
 	deployerNamespace := f.Namespace.Name
 	webHookName := "gmsa-webhook"
 	webHookNamespace := deployerNamespace + "-webhook"
 
-	// regardless of whether the deployment succeeded, let's do a best effort at cleanup
+	// 无论部署是否成功，都尽力清理。
 	ginkgo.DeferCleanup(func() {
 		framework.Logf("Best effort clean up of the webhook:\n")
 		stdout, err := e2ekubectl.RunKubectl("", "delete", "CustomResourceDefinition", "gmsacredentialspecs.windows.k8s.io")
@@ -314,7 +302,7 @@ func deployGmsaWebhook(ctx context.Context, f *framework.Framework) error {
 		framework.Logf("stdout:%s\nerror:%s", stdout, err)
 	})
 
-	// ensure the deployer has ability to approve certificatesigningrequests to install the webhook
+	// 确保 deployer 有权限批准 certificatesigningrequest 以安装 webhook。
 	s := createServiceAccount(ctx, f)
 	bindClusterRBACRoleToServiceAccount(ctx, f, s, "cluster-admin")
 
@@ -357,7 +345,7 @@ func deployGmsaWebhook(ctx context.Context, f *framework.Framework) error {
 	}
 	e2epod.NewPodClient(f).CreateSync(ctx, pod)
 
-	// Wait for the Webhook deployment to become ready. The deployer pod takes a few seconds to initialize and create resources
+	// 等待 webhook Deployment 就绪。deployer Pod 需要几秒钟来初始化并创建资源。
 	err := waitForDeployment(func() (*appsv1.Deployment, error) {
 		return f.ClientSet.AppsV1().Deployments(webHookNamespace).Get(ctx, webHookName, metav1.GetOptions{})
 	}, 10*time.Second, f.Timeouts.PodStart)
@@ -367,17 +355,15 @@ func deployGmsaWebhook(ctx context.Context, f *framework.Framework) error {
 		err = fmt.Errorf("GMSA webhook did not become ready: %w", err)
 	}
 
-	// Dump deployer logs
+	// 输出 deployer 日志。
 	logs, _ := e2epod.GetPodLogs(ctx, f.ClientSet, deployerNamespace, deployerName, deployerName)
 	framework.Logf("GMSA deployment logs:\n%s", logs)
 
 	return err
 }
 
-// createGmsaCustomResource creates the GMSA API object from the contents
-// of the manifest file retrieved from the worker node.
-// It returns a function to clean up both the temp file it creates and
-// the API object it creates when done with testing.
+// createGmsaCustomResource 根据从 worker 节点获取的 manifest 文件内容创建 GMSA API 对象。
+// 它返回一个清理函数，测试结束后删除创建的临时文件和 API 对象。
 func createGmsaCustomResource(ns string, crdManifestContents string) error {
 	tempFile, err := os.CreateTemp("", "")
 	if err != nil {
@@ -404,9 +390,8 @@ func createGmsaCustomResource(ns string, crdManifestContents string) error {
 	return err
 }
 
-// createRBACRoleForGmsa creates an RBAC cluster role to grant use
-// access to our test credential spec.
-// It returns the role's name, as well as a function to delete it when done.
+// createRBACRoleForGmsa 创建一个 RBAC ClusterRole，授予对测试 credential spec 的 use 权限。
+// 返回角色名，以及测试结束后删除它的函数。
 func createRBACRoleForGmsa(ctx context.Context, f *framework.Framework) (string, error) {
 	roleName := f.Namespace.Name + "-rbac-role"
 
@@ -433,7 +418,7 @@ func createRBACRoleForGmsa(ctx context.Context, f *framework.Framework) (string,
 	return roleName, err
 }
 
-// createServiceAccount creates a service account, and returns its name.
+// createServiceAccount 创建一个 ServiceAccount 并返回其名称。
 func createServiceAccount(ctx context.Context, f *framework.Framework) string {
 	accountName := f.Namespace.Name + "-sa-" + string(uuid.NewUUID())
 	account := &v1.ServiceAccount{
@@ -448,7 +433,7 @@ func createServiceAccount(ctx context.Context, f *framework.Framework) string {
 	return accountName
 }
 
-// bindRBACRoleToServiceAccount binds the given RBAC cluster role to the given service account.
+// bindRBACRoleToServiceAccount 将给定的 RBAC ClusterRole 绑定到给定的 ServiceAccount。
 func bindRBACRoleToServiceAccount(ctx context.Context, f *framework.Framework, serviceAccountName, rbacRoleName string) {
 	binding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
@@ -495,7 +480,7 @@ func bindClusterRBACRoleToServiceAccount(ctx context.Context, f *framework.Frame
 	framework.ExpectNoError(err)
 }
 
-// createPodWithGmsa creates a pod using the test GMSA cred spec, and returns its name.
+// createPodWithGmsa 使用测试 GMSA cred spec 创建一个 Pod，并返回其名称。
 func createPodWithGmsa(ctx context.Context, f *framework.Framework, serviceAccountName string) string {
 	podName := "pod-with-gmsa"
 	credSpecName := gmsaCustomResourceName

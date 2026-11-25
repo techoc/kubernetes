@@ -40,20 +40,19 @@ import (
 )
 
 /*
-This test assumes the following:
-- The infra is GCP.
+测试前提：
+- 基础设施为 GCP。
 
-This test performs the following:
-- Deploys a gce-pd csi driver
-- Creates a gce-pd csi storage class
-- Creates a pvc using the created gce-pd storage class
-- Creates an app deployment with replica count 1 and uses the created pvc for volume
-- Shutdowns the kubelet of node on which the app pod is scheduled.
-  This shutdown is a non graceful shutdown as by default the grace period is 0 on Kubelet.
-- Adds `out-of-service` taint on the node which is shut down.
-- Verifies that pod gets immediately scheduled to a different node and gets into running and ready state.
-- Starts the kubelet back.
-- Removes the `out-of-service` taint from the node.
+测试步骤：
+- 部署 gce-pd csi 驱动
+- 创建 gce-pd csi storage class
+- 用该 storage class 创建 PVC
+- 创建副本数为 1 的应用 Deployment，并使用该 PVC 作为卷
+- 关闭应用 Pod 所在节点的 kubelet。由于 kubelet 默认优雅关闭宽限期为 0，此处属于非优雅关闭。
+- 给已关闭的节点添加 `out-of-service` 污点
+- 验证 Pod 立即被调度到其他节点并进入 Running 和 Ready 状态
+- 重新启动 kubelet
+- 移除节点上的 `out-of-service` 污点
 */
 
 var _ = utils.SIGDescribe(framework.WithDisruptive(), framework.WithProvider("gce"), "[LinuxOnly] NonGracefulNodeShutdown", func() {
@@ -78,7 +77,7 @@ var _ = utils.SIGDescribe(framework.WithDisruptive(), framework.WithProvider("gc
 
 	ginkgo.Describe("[NonGracefulNodeShutdown] pod that uses a persistent volume via gce pd driver", func() {
 		ginkgo.It("should get immediately rescheduled to a different node after non graceful node shutdown", func(ctx context.Context) {
-			// Install gce pd csi driver
+			// 安装 gce-pd CSI 驱动
 			ginkgo.By("deploying csi gce-pd driver")
 			driver := drivers.InitGcePDCSIDriver()
 			config := driver.PrepareTest(ctx, f)
@@ -102,7 +101,7 @@ var _ = utils.SIGDescribe(framework.WithDisruptive(), framework.WithProvider("gc
 			ginkgo.DeferCleanup(utils.KubeletCommand, utils.KStart, c, pod)
 
 			ginkgo.By("Adding out of service taint on node " + oldNodeName)
-			// taint this node as out-of-service node
+			// 给该节点打上 out-of-service 污点
 			taint := v1.Taint{
 				Key:    v1.TaintNodeOutOfService,
 				Effect: v1.TaintEffectNoExecute,
@@ -119,12 +118,11 @@ var _ = utils.SIGDescribe(framework.WithDisruptive(), framework.WithProvider("gc
 			_, err = e2epod.WaitForPods(ctx, c, ns, podListOpts, e2epod.Range{MinMatching: 1}, framework.PodStartTimeout, "be running and ready", e2epod.RunningReady)
 			framework.ExpectNoError(err)
 
-			// Bring the node back online and remove the taint
+			// 让节点重新上线并移除污点
 			utils.KubeletCommand(ctx, utils.KStart, c, pod)
 			e2enode.RemoveTaintOffNode(ctx, c, oldNodeName, taint)
 
-			// Verify that a pod gets scheduled to the older node that was terminated non gracefully and now
-			// is back online
+			// 验证 Pod 被调度到之前非优雅终止、现已重新上线的旧节点
 			newDeploymentName := "sts-pod-gcepd-new"
 			newPodLabels := map[string]string{"app": newDeploymentName}
 			createAndVerifyStatefulDeployment(ctx, scName, newDeploymentName, ns, newPodLabels, c)
@@ -132,10 +130,10 @@ var _ = utils.SIGDescribe(framework.WithDisruptive(), framework.WithProvider("gc
 	})
 })
 
-// createAndVerifyStatefulDeployment creates:
-// i) a pvc using the provided storage class
-// ii) creates a deployment with replica count 1 using the created pvc
-// iii) finally verifies if the pod is running and ready and returns the pod object
+// createAndVerifyStatefulDeployment 依次：
+// i) 用给定的 storage class 创建 PVC
+// ii) 用该 PVC 创建副本数为 1 的 Deployment
+// iii) 最后验证 Pod 处于 Running 且 Ready，并返回该 Pod 对象
 func createAndVerifyStatefulDeployment(ctx context.Context, scName *string, name, ns string, podLabels map[string]string,
 	c clientset.Interface) *v1.Pod {
 	ginkgo.By("Creating a pvc using the storage class " + *scName)

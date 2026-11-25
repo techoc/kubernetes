@@ -35,8 +35,7 @@ func (rt *extractRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{}, nil
 }
 
-// OpenWebSocketForURL constructs a websocket connection to the provided URL, using the client
-// config, with the specified protocols.
+// OpenWebSocketForURL 使用 client 配置和指定的协议与给定 URL 建立 websocket 连接。
 func OpenWebSocketForURL(url *url.URL, config *restclient.Config, protocols []string) (*websocket.Conn, error) {
 	tlsConfig, err := restclient.TLSConfigFor(config)
 	if err != nil {
@@ -61,8 +60,7 @@ func OpenWebSocketForURL(url *url.URL, config *restclient.Config, protocols []st
 	return websocket.DialConfig(cfg)
 }
 
-// headersForConfig extracts any http client logic necessary for the provided
-// config.
+// headersForConfig 提取给定配置所需的 http client 逻辑。
 func headersForConfig(c *restclient.Config, url *url.URL) (http.Header, error) {
 	extract := &extractRT{}
 	rt, err := restclient.HTTPWrappersForConfig(c, extract)

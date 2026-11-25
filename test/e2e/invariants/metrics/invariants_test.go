@@ -21,7 +21,7 @@ import (
 )
 
 func TestApiServerMetricInvariantsFieldsAreSet(t *testing.T) {
-	// enforce that all fields are set for all registered metrics
+	// 强制要求所有已注册指标都填写全部字段
 	for i, inv := range apiServerInvariants {
 		if inv.metricName == "" {
 			t.Errorf("apiServerInvariants[%d].metricName is not set", i)

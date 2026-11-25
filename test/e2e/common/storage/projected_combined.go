@@ -35,11 +35,12 @@ var _ = SIGDescribe("Projected combined", func() {
 	f := framework.NewDefaultFramework("projected")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
-	// Test multiple projections
+	// 测试多个 projection
 	/*
 	   Release: v1.9
 	   Testname: Projected Volume, multiple projections
-	   Description: A Pod is created with a projected volume source for secrets, configMap and downwardAPI with pod name, cpu and memory limits and cpu and memory requests. Pod MUST be able to read the secrets, configMap values and the cpu and memory limits as well as cpu and memory requests from the mounted DownwardAPIVolumeFiles.
+	   Description: 创建一个 Pod，其 projected volume source 包含 secrets、configMap 以及带 Pod 名称、CPU 和内存 limits/requests 的 downwardAPI。
+	   Pod MUST 能从挂载的 DownwardAPIVolumeFiles 中读取 secrets、configMap 的值以及 CPU 和内存的 limits 与 requests。
 	*/
 	framework.ConformanceIt("should project all components that make up the projection API [Projection]", f.WithNodeConformance(), func(ctx context.Context) {
 		var err error

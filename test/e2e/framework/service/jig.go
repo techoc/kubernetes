@@ -49,13 +49,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// NodePortRange should match whatever the default/configured range is
+// NodePortRange 必须与默认/配置的端口范围保持一致
 var NodePortRange = utilnet.PortRange{Base: 30000, Size: 2768}
 
-// It is copied from "k8s.io/kubernetes/pkg/registry/core/service/portallocator"
+// 从 "k8s.io/kubernetes/pkg/registry/core/service/portallocator" 复制而来
 var errAllocated = errors.New("provided port is already allocated")
 
-// staticPortRange implements port allocation model described here
+// staticPortRange 实现了此处描述的端口分配模型
 // https://github.com/kubernetes/enhancements/tree/master/keps/sig-network/3668-reserved-service-nodeport-range
 type staticPortRange struct {
 	sync.Mutex
@@ -73,7 +73,7 @@ func calculateRange(size int32) int32 {
 
 var staticPortAllocator *staticPortRange
 
-// Initialize only once per test
+// 每个测试只初始化一次
 func init() {
 	staticPortAllocator = &staticPortRange{
 		baseport:      int32(NodePortRange.Base),
@@ -82,19 +82,19 @@ func init() {
 	}
 }
 
-// TestJig is a test jig to help service testing.
+// TestJig 是辅助 service 测试的夹具。
 type TestJig struct {
 	Client    clientset.Interface
 	Namespace string
 	Name      string
 	ID        string
 	Labels    map[string]string
-	// ExternalIPs should be false for Conformance test
-	// Don't check nodeport on external addrs in conformance test, but in e2e test.
+	// Conformance 测试中 ExternalIPs 应为 false
+	// Conformance 测试不检查外部地址上的 nodeport，e2e 测试才检查。
 	ExternalIPs bool
 }
 
-// NewTestJig allocates and inits a new TestJig.
+// NewTestJig 分配并初始化一个新的 TestJig。
 func NewTestJig(client clientset.Interface, namespace, name string) *TestJig {
 	j := &TestJig{}
 	j.Client = client
@@ -106,8 +106,8 @@ func NewTestJig(client clientset.Interface, namespace, name string) *TestJig {
 	return j
 }
 
-// reservePort reserves the port provided as input.
-// If an invalid port was provided or if the port is already reserved, it returns false
+// reservePort 预留传入的端口。
+// 端口无效或已被预留时返回 false
 func (s *staticPortRange) reservePort(port int32) bool {
 	s.Lock()
 	defer s.Unlock()
@@ -118,13 +118,13 @@ func (s *staticPortRange) reservePort(port int32) bool {
 	return true
 }
 
-// getUnusedPort returns a free port from the range and returns its number and nil value
-// the port is not allocated so the consumer should allocate it explicitly calling allocatePort()
-// if none is available then it returns -1 and error
+// getUnusedPort 从范围内返回一个空闲端口及其编号，错误值为 nil。
+// 该端口尚未分配，调用方需显式调用 allocatePort() 完成分配。
+// 若无可用端口，则返回 -1 和错误。
 func (s *staticPortRange) getUnusedPort() (int32, error) {
 	s.Lock()
 	defer s.Unlock()
-	// start in a random offset
+	// 从一个随机偏移开始查找
 	start := rand.Int31n(s.length)
 	for i := int32(0); i < s.length; i++ {
 		port := s.baseport + (start+i)%(s.length)
@@ -135,41 +135,36 @@ func (s *staticPortRange) getUnusedPort() (int32, error) {
 	return -1, fmt.Errorf("no free ports were found")
 }
 
-// releasePort releases the port passed as an argument
+// releasePort 释放作为实参传入的端口
 func (s *staticPortRange) releasePort(port int32) {
 	s.Lock()
 	defer s.Unlock()
 	s.reservedPorts.Delete(port)
 }
 
-// GetUnusedStaticNodePort returns a free port in static range and a nil value
-// If no port in static range is available it returns -1 and an error value
-// Note that it is not guaranteed that the returned port is actually available on the apiserver;
-// You must allocate a port, then attempt to create the service, then call
-// ReserveStaticNodePort.
+// GetUnusedStaticNodePort 返回静态范围内的一个空闲端口，错误值为 nil。
+// 若静态范围内无可用端口，则返回 -1 和一个错误值。
+// 注意：不能保证返回的端口在 apiserver 上确实可用。
+// 必须先分配端口，再尝试创建 Service，然后调用 ReserveStaticNodePort。
 func GetUnusedStaticNodePort() (int32, error) {
 	return staticPortAllocator.getUnusedPort()
 }
 
-// ReserveStaticNodePort reserves the port provided as input. It is guaranteed
-// that no other test will receive this port from GetUnusedStaticNodePort until
-// after you call ReleaseStaticNodePort.
+// ReserveStaticNodePort 预留传入的端口。可以保证在你调用
+// ReleaseStaticNodePort 之前，其他测试不会从 GetUnusedStaticNodePort 拿到该端口。
 //
-// port must have been previously allocated by GetUnusedStaticNodePort, and
-// then successfully used as a NodePort or HealthCheckNodePort when creating
-// a service. Trying to reserve a port that was not allocated by
-// GetUnusedStaticNodePort, or reserving it before creating the associated service
-// may cause other e2e tests to fail.
+// port 必须先前由 GetUnusedStaticNodePort 分配，并在创建 Service 时
+// 成功用作 NodePort 或 HealthCheckNodePort。预留未经 GetUnusedStaticNodePort
+// 分配的端口，或在创建对应 Service 之前就预留，都可能导致其他 e2e 测试失败。
 //
-// If an invalid port was provided or if the port is already reserved, it returns false
+// 端口无效或已被预留时返回 false
 func ReserveStaticNodePort(port int32) bool {
 	return staticPortAllocator.reservePort(port)
 }
 
-// ReleaseStaticNodePort releases the specified port.
-// The corresponding service should have already been deleted, to ensure that the
-// port allocator doesn't try to reuse it before the apiserver considers it available.
-// The caller should do it like below:
+// ReleaseStaticNodePort 释放指定端口。
+// 对应的 Service 应已删除，以免端口分配器在 apiserver 认为该端口可用之前就复用它。
+// 调用方应按下述方式处理：
 //
 //	ginkgo.DeferCleanup(func(ctx context.Context) {
 //		err := cs.CoreV1().Services(ns).Delete(ctx, serviceName, metav1.DeleteOptions{})
@@ -182,9 +177,8 @@ func ReleaseStaticNodePort(port int32) {
 	staticPortAllocator.releasePort(port)
 }
 
-// newServiceTemplate returns the default v1.Service template for this j, but
-// does not actually create the Service.  The default Service has the same name
-// as the j and exposes the given port.
+// newServiceTemplate 返回此 j 的默认 v1.Service 模板，但并不实际创建 Service。
+// 默认 Service 与 j 同名，并暴露指定端口。
 func (j *TestJig) newServiceTemplate(proto v1.Protocol, port int32) *v1.Service {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -205,9 +199,8 @@ func (j *TestJig) newServiceTemplate(proto v1.Protocol, port int32) *v1.Service 
 	return service
 }
 
-// CreateTCPServiceWithPort creates a new TCP Service with given port based on the
-// j's defaults. Callers can provide a function to tweak the Service object before
-// it is created.
+// CreateTCPServiceWithPort 基于 j 的默认配置创建一个使用指定端口的新 TCP Service。
+// 调用方可提供一个函数，在创建前调整 Service 对象。
 func (j *TestJig) CreateTCPServiceWithPort(ctx context.Context, tweak func(svc *v1.Service), port int32) (*v1.Service, error) {
 	svc := j.newServiceTemplate(v1.ProtocolTCP, port)
 	if tweak != nil {
@@ -220,16 +213,14 @@ func (j *TestJig) CreateTCPServiceWithPort(ctx context.Context, tweak func(svc *
 	return j.sanityCheckService(result, svc.Spec.Type)
 }
 
-// CreateTCPService creates a new TCP Service based on the j's
-// defaults.  Callers can provide a function to tweak the Service object before
-// it is created.
+// CreateTCPService 基于 j 的默认配置创建一个新的 TCP Service。
+// 调用方可提供一个函数，在创建前调整 Service 对象。
 func (j *TestJig) CreateTCPService(ctx context.Context, tweak func(svc *v1.Service)) (*v1.Service, error) {
 	return j.CreateTCPServiceWithPort(ctx, tweak, 80)
 }
 
-// CreateUDPService creates a new UDP Service based on the j's
-// defaults.  Callers can provide a function to tweak the Service object before
-// it is created.
+// CreateUDPService 基于 j 的默认配置创建一个新的 UDP Service。
+// 调用方可提供一个函数，在创建前调整 Service 对象。
 func (j *TestJig) CreateUDPService(ctx context.Context, tweak func(svc *v1.Service)) (*v1.Service, error) {
 	svc := j.newServiceTemplate(v1.ProtocolUDP, 80)
 	if tweak != nil {
@@ -242,8 +233,8 @@ func (j *TestJig) CreateUDPService(ctx context.Context, tweak func(svc *v1.Servi
 	return j.sanityCheckService(result, svc.Spec.Type)
 }
 
-// CreateExternalNameService creates a new ExternalName type Service based on the j's defaults.
-// Callers can provide a function to tweak the Service object before it is created.
+// CreateExternalNameService 基于 j 的默认配置创建一个新的 ExternalName 类型 Service。
+// 调用方可提供一个函数，在创建前调整 Service 对象。
 func (j *TestJig) CreateExternalNameService(ctx context.Context, tweak func(svc *v1.Service)) (*v1.Service, error) {
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -267,7 +258,7 @@ func (j *TestJig) CreateExternalNameService(ctx context.Context, tweak func(svc 
 	return j.sanityCheckService(result, svc.Spec.Type)
 }
 
-// ChangeServiceType updates the given service's ServiceType to the given newType.
+// ChangeServiceType 将给定 Service 的 ServiceType 更新为 newType。
 func (j *TestJig) ChangeServiceType(ctx context.Context, newType v1.ServiceType, timeout time.Duration) error {
 	ingressIP := ""
 	svc, err := j.UpdateService(ctx, func(s *v1.Service) {
@@ -288,10 +279,9 @@ func (j *TestJig) ChangeServiceType(ctx context.Context, newType v1.ServiceType,
 	return err
 }
 
-// CreateOnlyLocalNodePortService creates a NodePort service with
-// ExternalTrafficPolicy set to Local and sanity checks its nodePort.
-// If createPod is true, it also creates an RC with 1 replica of
-// the standard netexec container used everywhere in this test.
+// CreateOnlyLocalNodePortService 创建一个 ExternalTrafficPolicy 为 Local 的
+// NodePort Service，并对其 nodePort 做基本校验。
+// createPod 为 true 时，还会创建一个使用本测试通用 netexec 容器、副本数为 1 的 RC。
 func (j *TestJig) CreateOnlyLocalNodePortService(ctx context.Context, createPod bool) (*v1.Service, error) {
 	ginkgo.By("creating a service " + j.Namespace + "/" + j.Name + " with type=NodePort and ExternalTrafficPolicy=Local")
 	svc, err := j.CreateTCPService(ctx, func(svc *v1.Service) {
@@ -313,10 +303,9 @@ func (j *TestJig) CreateOnlyLocalNodePortService(ctx context.Context, createPod 
 	return svc, nil
 }
 
-// CreateOnlyLocalLoadBalancerService creates a loadbalancer service with
-// ExternalTrafficPolicy set to Local and waits for it to acquire an ingress IP.
-// If createPod is true, it also creates an RC with 1 replica of
-// the standard netexec container used everywhere in this test.
+// CreateOnlyLocalLoadBalancerService 创建一个 ExternalTrafficPolicy 为 Local 的
+// LoadBalancer Service，并等待其获得 ingress IP。
+// createPod 为 true 时，还会创建一个使用本测试通用 netexec 容器、副本数为 1 的 RC。
 func (j *TestJig) CreateOnlyLocalLoadBalancerService(ctx context.Context, timeout time.Duration, createPod bool,
 	tweak func(svc *v1.Service)) (*v1.Service, error) {
 	_, err := j.CreateLoadBalancerService(ctx, timeout, func(svc *v1.Service) {
@@ -341,13 +330,12 @@ func (j *TestJig) CreateOnlyLocalLoadBalancerService(ctx context.Context, timeou
 	return j.WaitForLoadBalancer(ctx, timeout)
 }
 
-// CreateLoadBalancerService creates a loadbalancer service and waits
-// for it to acquire an ingress IP.
+// CreateLoadBalancerService 创建一个 LoadBalancer Service，并等待其获得 ingress IP。
 func (j *TestJig) CreateLoadBalancerService(ctx context.Context, timeout time.Duration, tweak func(svc *v1.Service)) (*v1.Service, error) {
 	ginkgo.By("creating a service " + j.Namespace + "/" + j.Name + " with type=LoadBalancer")
 	svc := j.newServiceTemplate(v1.ProtocolTCP, 80)
 	svc.Spec.Type = v1.ServiceTypeLoadBalancer
-	// We need to turn affinity off for our LB distribution tests
+	// LB 分发测试需要关闭会话亲和性
 	svc.Spec.SessionAffinity = v1.ServiceAffinityNone
 	if tweak != nil {
 		tweak(svc)
@@ -361,8 +349,7 @@ func (j *TestJig) CreateLoadBalancerService(ctx context.Context, timeout time.Du
 	return j.WaitForLoadBalancer(ctx, timeout)
 }
 
-// ListNodesWithEndpoint returns a list of nodes on which the
-// endpoints of the given Service are running.
+// ListNodesWithEndpoint 返回运行给定 Service 的 endpoint 的节点列表。
 func (j *TestJig) ListNodesWithEndpoint(ctx context.Context) ([]v1.Node, error) {
 	nodeNames, err := j.GetEndpointNodeNames(ctx)
 	if err != nil {
@@ -381,8 +368,7 @@ func (j *TestJig) ListNodesWithEndpoint(ctx context.Context) ([]v1.Node, error) 
 	return epNodes, nil
 }
 
-// GetEndpointNodeNames returns a string set of node names on which the
-// endpoints of the given Service are running.
+// GetEndpointNodeNames 返回运行给定 Service 的 endpoint 的节点名称集合。
 func (j *TestJig) GetEndpointNodeNames(ctx context.Context) (sets.String, error) {
 	err := j.waitForAvailableEndpoint(ctx, ServiceEndpointsTimeout)
 	if err != nil {
@@ -406,7 +392,7 @@ func (j *TestJig) GetEndpointNodeNames(ctx context.Context) (sets.String, error)
 	return epNodes, nil
 }
 
-// WaitForEndpointOnNode waits for a service endpoint on the given node (which must be the service's only endpoint).
+// WaitForEndpointOnNode 等待给定节点上出现 service endpoint（该节点必须是 Service 唯一的 endpoint 所在节点）。
 func (j *TestJig) WaitForEndpointOnNode(ctx context.Context, nodeName string) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, KubeProxyLagTimeout, true, func(ctx context.Context) (bool, error) {
 		slices, err := j.Client.DiscoveryV1().EndpointSlices(j.Namespace).List(ctx, metav1.ListOptions{LabelSelector: "kubernetes.io/service-name=" + j.Name})
@@ -438,12 +424,12 @@ func (j *TestJig) WaitForEndpointOnNode(ctx context.Context, nodeName string) er
 	})
 }
 
-// waitForAvailableEndpoint waits for at least 1 endpoint to be available till timeout
+// waitForAvailableEndpoint 等待至少一个 endpoint 可用，直到超时
 func (j *TestJig) waitForAvailableEndpoint(ctx context.Context, timeout time.Duration) error {
 	err := wait.PollUntilContextTimeout(ctx, framework.Poll, timeout, true, func(ctx context.Context) (bool, error) {
 		slices, err := j.Client.DiscoveryV1().EndpointSlices(j.Namespace).List(ctx, metav1.ListOptions{LabelSelector: "kubernetes.io/service-name=" + j.Name})
 		if err != nil || len(slices.Items) == 0 {
-			// Retry
+			// 重试
 			return false, nil
 		}
 		for _, es := range slices.Items {
@@ -459,9 +445,8 @@ func (j *TestJig) waitForAvailableEndpoint(ctx context.Context, timeout time.Dur
 	return nil
 }
 
-// sanityCheckService performs sanity checks on the given service; in particular, ensuring
-// that creating/updating a service allocates IPs, ports, etc, as needed. It does not
-// check for ingress assignment as that happens asynchronously after the Service is created.
+// sanityCheckService 对给定 Service 做基本校验，重点确认创建/更新 Service 时
+// 按需分配了 IP、端口等。它不检查 ingress 分配，因为那是在 Service 创建后异步完成的。
 func (j *TestJig) sanityCheckService(svc *v1.Service, svcType v1.ServiceType) (*v1.Service, error) {
 	if svcType == "" {
 		svcType = v1.ServiceTypeClusterIP
@@ -496,7 +481,7 @@ func (j *TestJig) sanityCheckService(svc *v1.Service, svcType v1.ServiceType) (*
 		}
 	}
 
-	// FIXME: this fails for tests that were changed from LoadBalancer to ClusterIP.
+	// FIXME: 对于从 LoadBalancer 改为 ClusterIP 的测试，这里会失败。
 	// if svcType != v1.ServiceTypeLoadBalancer {
 	// 	if len(svc.Status.LoadBalancer.Ingress) != 0 {
 	// 		return nil, fmt.Errorf("unexpected Status.LoadBalancer.Ingress on non-LoadBalancer service")
@@ -510,23 +495,22 @@ func needsNodePorts(svc *v1.Service) bool {
 	if svc == nil {
 		return false
 	}
-	// Type NodePort
+	// NodePort 类型
 	if svc.Spec.Type == v1.ServiceTypeNodePort {
 		return true
 	}
 	if svc.Spec.Type != v1.ServiceTypeLoadBalancer {
 		return false
 	}
-	// Type LoadBalancer
+	// LoadBalancer 类型
 	if svc.Spec.AllocateLoadBalancerNodePorts == nil {
-		return true //back-compat
+		return true // 向后兼容
 	}
 	return *svc.Spec.AllocateLoadBalancerNodePorts
 }
 
-// UpdateService fetches a service, calls the update function on it, and
-// then attempts to send the updated service. It tries up to 3 times in the
-// face of timeouts and conflicts.
+// UpdateService 获取 Service，对其调用 update 函数，然后尝试提交更新后的 Service。
+// 遇到超时或冲突时最多重试 3 次。
 func (j *TestJig) UpdateService(ctx context.Context, update func(*v1.Service)) (*v1.Service, error) {
 	for range 3 {
 		service, err := j.Client.CoreV1().Services(j.Namespace).Get(ctx, j.Name, metav1.GetOptions{})
@@ -545,7 +529,7 @@ func (j *TestJig) UpdateService(ctx context.Context, update func(*v1.Service)) (
 	return nil, fmt.Errorf("too many retries updating Service %q", j.Name)
 }
 
-// WaitForNewIngressIP waits for the given service to get a new ingress IP, or returns an error after the given timeout
+// WaitForNewIngressIP 等待给定 Service 获得新的 ingress IP，超时则返回错误
 func (j *TestJig) WaitForNewIngressIP(ctx context.Context, existingIP string, timeout time.Duration) (*v1.Service, error) {
 	framework.Logf("Waiting up to %v for service %q to get a new ingress IP", timeout, j.Name)
 	service, err := j.waitForCondition(ctx, timeout, "have a new ingress IP", func(svc *v1.Service) bool {
@@ -564,7 +548,7 @@ func (j *TestJig) WaitForNewIngressIP(ctx context.Context, existingIP string, ti
 	return j.sanityCheckService(service, v1.ServiceTypeLoadBalancer)
 }
 
-// ChangeServiceNodePort changes node ports of the given service.
+// ChangeServiceNodePort 修改给定 Service 的 nodePort。
 func (j *TestJig) ChangeServiceNodePort(ctx context.Context, initial int) (*v1.Service, error) {
 	var err error
 	var service *v1.Service
@@ -579,13 +563,13 @@ func (j *TestJig) ChangeServiceNodePort(ctx context.Context, initial int) (*v1.S
 			framework.Logf("tried nodePort %d, but it is in use, will try another", newPort)
 			continue
 		}
-		// Otherwise err was nil or err was a real error
+		// 否则 err 为 nil，或者是真正的错误
 		break
 	}
 	return service, err
 }
 
-// WaitForLoadBalancer waits the given service to have a LoadBalancer, or returns an error after the given timeout
+// WaitForLoadBalancer 等待给定 Service 拥有 LoadBalancer，超时则返回错误
 func (j *TestJig) WaitForLoadBalancer(ctx context.Context, timeout time.Duration) (*v1.Service, error) {
 	framework.Logf("Waiting up to %v for service %q to have a LoadBalancer", timeout, j.Name)
 	service, err := j.waitForCondition(ctx, timeout, "have a load balancer", func(svc *v1.Service) bool {
@@ -604,9 +588,9 @@ func (j *TestJig) WaitForLoadBalancer(ctx context.Context, timeout time.Duration
 	return j.sanityCheckService(service, v1.ServiceTypeLoadBalancer)
 }
 
-// WaitForLoadBalancerDestroy waits the given service to destroy a LoadBalancer, or returns an error after the given timeout
+// WaitForLoadBalancerDestroy 等待给定 Service 销毁 LoadBalancer，超时则返回错误
 func (j *TestJig) WaitForLoadBalancerDestroy(ctx context.Context, ip string, port int, timeout time.Duration) (*v1.Service, error) {
-	// TODO: once support ticket 21807001 is resolved, reduce this timeout back to something reasonable
+	// TODO: 工单 21807001 解决后，将此超时恢复为合理值
 	defer func() {
 		if err := framework.EnsureLoadBalancerResourcesDeleted(ctx, ip, strconv.Itoa(port)); err != nil {
 			framework.Logf("Failed to delete cloud resources for service: %s %d (%v)", ip, port, err)
@@ -643,12 +627,11 @@ func (j *TestJig) waitForCondition(ctx context.Context, timeout time.Duration, m
 	return service, nil
 }
 
-// newDeploymentTemplate returns the default appsv1.Deployment object for
-// this j, but does not actually create the Deployment. The default Deployment has the same
-// name as the j and runs the "netexec" container.
+// newDeploymentTemplate 返回此 j 的默认 appsv1.Deployment 对象，但并不实际创建 Deployment。
+// 默认 Deployment 与 j 同名，并运行 "netexec" 容器。
 func (j *TestJig) newDeploymentTemplate() *appsv1.Deployment {
 	var replicas int32 = 1
-	var grace int64 = 3 // so we don't race with kube-proxy when scaling up/down
+	var grace int64 = 3 // 避免扩缩容时与 kube-proxy 产生竞态
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -690,7 +673,7 @@ func (j *TestJig) newDeploymentTemplate() *appsv1.Deployment {
 	return deployment
 }
 
-// AddDeploymentAntiAffinity adds AntiAffinity to the given Deployment.
+// AddDeploymentAntiAffinity 为给定 Deployment 添加反亲和性配置。
 func (j *TestJig) AddDeploymentAntiAffinity(deployment *appsv1.Deployment) {
 	var replicas int32 = 2
 
@@ -710,7 +693,7 @@ func (j *TestJig) AddDeploymentAntiAffinity(deployment *appsv1.Deployment) {
 		})
 }
 
-// CreatePDB returns a PodDisruptionBudget for the given Deployment, or returns an error if a PodDisruptionBudget isn't ready
+// CreatePDB 为给定 Deployment 创建 PodDisruptionBudget，若 PDB 未就绪则返回错误
 func (j *TestJig) CreatePDB(ctx context.Context, deployment *appsv1.Deployment) (*policyv1.PodDisruptionBudget, error) {
 	pdb := j.newPDBTemplate(deployment)
 	newPdb, err := j.Client.PolicyV1().PodDisruptionBudgets(j.Namespace).Create(ctx, pdb, metav1.CreateOptions{})
@@ -724,9 +707,8 @@ func (j *TestJig) CreatePDB(ctx context.Context, deployment *appsv1.Deployment) 
 	return newPdb, nil
 }
 
-// newPDBTemplate returns the default policyv1.PodDisruptionBudget object for
-// this j, but does not actually create the PDB.  The default PDB specifies a
-// MinAvailable of N-1 and matches the pods created by the Deployment.
+// newPDBTemplate 返回此 j 的默认 policyv1.PodDisruptionBudget 对象，但并不实际创建 PDB。
+// 默认 PDB 的 MinAvailable 为 N-1，并匹配该 Deployment 创建的 Pod。
 func (j *TestJig) newPDBTemplate(rc *appsv1.Deployment) *policyv1.PodDisruptionBudget {
 	minAvailable := intstr.FromInt32(*rc.Spec.Replicas - 1)
 
@@ -745,9 +727,8 @@ func (j *TestJig) newPDBTemplate(rc *appsv1.Deployment) *policyv1.PodDisruptionB
 	return pdb
 }
 
-// Run creates a Deployment and Pod(s) and waits for the
-// Pod(s) to be running. Callers can provide a function to tweak the Deployment object
-// before it is created.
+// Run 创建 Deployment 与 Pod，并等待 Pod 进入 Running 状态。
+// 调用方可提供一个函数，在创建前调整 Deployment 对象。
 func (j *TestJig) Run(ctx context.Context, tweak func(rc *appsv1.Deployment)) (*appsv1.Deployment, error) {
 	deployment := j.newDeploymentTemplate()
 	if tweak != nil {
@@ -767,7 +748,7 @@ func (j *TestJig) Run(ctx context.Context, tweak func(rc *appsv1.Deployment)) (*
 	return result, nil
 }
 
-// Scale scales pods to the given replicas
+// Scale 将 Pod 扩缩容到指定副本数
 func (j *TestJig) Scale(replicas int) error {
 	deployment, err := e2edeployment.UpdateDeploymentWithRetries(j.Client, j.Namespace, j.Name, func(deployment *appsv1.Deployment) {
 		deployment.Spec.Replicas = ptr.To(int32(replicas))
@@ -805,7 +786,7 @@ func testReachabilityOverServiceName(ctx context.Context, serviceName string, sp
 }
 
 func testReachabilityOverClusterIP(ctx context.Context, clusterIP string, sp v1.ServicePort, execPod *v1.Pod) error {
-	// If .spec.clusterIP is set to "" or "None" for service, ClusterIP is not created, so reachability can not be tested over clusterIP:servicePort
+	// Service 的 .spec.clusterIP 为 "" 或 "None" 时不会创建 ClusterIP，因此无法通过 clusterIP:servicePort 测试可达性
 	if netutils.ParseIPSloppy(clusterIP) == nil {
 		return fmt.Errorf("unable to parse ClusterIP: %s", clusterIP)
 	}
@@ -821,13 +802,12 @@ func testReachabilityOverNodePorts(ctx context.Context, nodes *v1.NodeList, sp v
 	isClusterIPV4 := netutils.IsIPv4String(clusterIP)
 
 	for _, internalAddr := range internalAddrs {
-		// If the node's internal address points to localhost, then we are not
-		// able to test the service reachability via that address
+		// 节点内部地址指向 localhost 时，无法通过该地址测试 Service 可达性
 		if isInvalidOrLocalhostAddress(internalAddr) {
 			framework.Logf("skipping testEndpointReachability() for internal address %s", internalAddr)
 			continue
 		}
-		// Check service reachability on the node internalIP which is same family as clusterIP
+		// 在与 clusterIP 同地址族的节点 internalIP 上检查 Service 可达性
 		if isClusterIPV4 != netutils.IsIPv4String(internalAddr) {
 			framework.Logf("skipping testEndpointReachability() for internal address %s as it does not match clusterIP (%s) family", internalAddr, clusterIP)
 			continue
@@ -854,8 +834,8 @@ func testReachabilityOverNodePorts(ctx context.Context, nodes *v1.NodeList, sp v
 	return nil
 }
 
-// isInvalidOrLocalhostAddress returns `true` if the provided `ip` is either not
-// parsable or the loopback address. Otherwise it will return `false`.
+// isInvalidOrLocalhostAddress 在传入的 `ip` 无法解析或为回环地址时返回 `true`，
+// 否则返回 `false`。
 func isInvalidOrLocalhostAddress(ip string) bool {
 	parsedIP := netutils.ParseIPSloppy(ip)
 	if parsedIP == nil || parsedIP.IsLoopback() {
@@ -864,9 +844,9 @@ func isInvalidOrLocalhostAddress(ip string) bool {
 	return false
 }
 
-// testEndpointReachability tests reachability to endpoints (i.e. IP, ServiceName) and ports. Test request is initiated from specified execPod.
-// TCP and UDP protocol based service are supported at this moment
-// TODO: add support to test SCTP Protocol based services.
+// testEndpointReachability 测试到 endpoint（即 IP、ServiceName）和端口的可达性，
+// 测试请求从指定的 execPod 发起。目前支持基于 TCP 和 UDP 协议的 Service。
+// TODO: 增加对基于 SCTP 协议的 Service 的测试支持。
 func testEndpointReachability(ctx context.Context, endpoint string, port int32, protocol v1.Protocol, execPod *v1.Pod) error {
 	ep := net.JoinHostPort(endpoint, strconv.Itoa(int(port)))
 	cmd := ""
@@ -897,8 +877,8 @@ func testEndpointReachability(ctx context.Context, endpoint string, port int32, 
 	return nil
 }
 
-// checkClusterIPServiceReachability ensures that service of type ClusterIP is reachable over
-// - ServiceName:ServicePort, ClusterIP:ServicePort
+// checkClusterIPServiceReachability 确认 ClusterIP 类型的 Service 可通过
+// ServiceName:ServicePort 和 ClusterIP:ServicePort 访问
 func (j *TestJig) checkClusterIPServiceReachability(ctx context.Context, svc *v1.Service, pod *v1.Pod) error {
 	clusterIP := svc.Spec.ClusterIP
 	servicePorts := svc.Spec.Ports
@@ -930,16 +910,15 @@ func (j *TestJig) checkClusterIPServiceReachability(ctx context.Context, svc *v1
 	return nil
 }
 
-// checkNodePortServiceReachability ensures that service of type nodePort are reachable
-//   - Internal clients should be reachable to service over -
-//     ServiceName:ServicePort, ClusterIP:ServicePort and NodeInternalIPs:NodePort
-//   - External clients should be reachable to service over -
-//     NodePublicIPs:NodePort
+// checkNodePortServiceReachability 确认 NodePort 类型的 Service 可达：
+//   - 内部客户端可通过 ServiceName:ServicePort、ClusterIP:ServicePort 和
+//     NodeInternalIPs:NodePort 访问 Service
+//   - 外部客户端可通过 NodePublicIPs:NodePort 访问 Service
 func (j *TestJig) checkNodePortServiceReachability(ctx context.Context, svc *v1.Service, pod *v1.Pod) error {
 	clusterIP := svc.Spec.ClusterIP
 	servicePorts := svc.Spec.Ports
 
-	// Consider only 2 nodes for testing
+	// 测试只考虑 2 个节点
 	nodes, err := e2enode.GetBoundedReadySchedulableNodes(ctx, j.Client, 2)
 	if err != nil {
 		return err
@@ -968,17 +947,17 @@ func (j *TestJig) checkNodePortServiceReachability(ctx context.Context, svc *v1.
 	return nil
 }
 
-// checkExternalServiceReachability ensures service of type externalName resolves to IP address and no fake externalName is set
-// FQDN of kubernetes is used as externalName(for air tight platforms).
+// checkExternalServiceReachability 确认 ExternalName 类型的 Service 能解析为 IP 地址，
+// 且没有使用伪造的 externalName。这里使用 kubernetes 的 FQDN 作为 externalName（适配网络隔离平台）。
 func (j *TestJig) checkExternalServiceReachability(ctx context.Context, svc *v1.Service, pod *v1.Pod) error {
-	// NOTE(claudiub): Windows does not support PQDN.
+	// NOTE(claudiub): Windows 不支持 PQDN。
 	svcName := fmt.Sprintf("%s.%s.svc.%s", svc.Name, svc.Namespace, framework.TestContext.ClusterDNSDomain)
-	// Service must resolve to IP
+	// Service 必须解析为 IP
 	cmd := fmt.Sprintf("nslookup %s", svcName)
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, ServiceReachabilityShortPollTimeout, true, func(ctx context.Context) (done bool, err error) {
 		_, stderr, err := e2epodoutput.RunHostCmdWithFullOutput(pod.Namespace, pod.Name, cmd)
-		// NOTE(claudiub): nslookup may return 0 on Windows, even though the DNS name was not found. In this case,
-		// we can check stderr for the error.
+		// NOTE(claudiub): Windows 上即使未找到 DNS 名称，nslookup 也可能返回 0。
+		// 此时可通过检查 stderr 来发现错误。
 		if err != nil || (framework.NodeOSDistroIs("windows") && strings.Contains(stderr, fmt.Sprintf("can't find %s", svcName))) {
 			framework.Logf("ExternalName service %q failed to resolve to IP", pod.Namespace+"/"+pod.Name)
 			return false, nil
@@ -987,7 +966,7 @@ func (j *TestJig) checkExternalServiceReachability(ctx context.Context, svc *v1.
 	})
 }
 
-// CheckServiceReachability ensures that request are served by the services. Only supports Services with type ClusterIP, NodePort and ExternalName.
+// CheckServiceReachability 确认请求能被 Service 正常处理，仅支持 ClusterIP、NodePort 和 ExternalName 类型的 Service。
 func (j *TestJig) CheckServiceReachability(ctx context.Context, svc *v1.Service, pod *v1.Pod) error {
 	svcType := svc.Spec.Type
 
@@ -1010,7 +989,7 @@ func (j *TestJig) CheckServiceReachability(ctx context.Context, svc *v1.Service,
 	}
 }
 
-// CreateServicePods creates a replication controller with the label same as service. Service listens to TCP and UDP.
+// CreateServicePods 创建一个与 Service 使用相同标签的副本控制器，Service 监听 TCP 和 UDP。
 func (j *TestJig) CreateServicePods(ctx context.Context, replica int) error {
 	deploymentConfig := e2edeployment.NewDeployment(j.Name,
 		int32(replica),
@@ -1028,9 +1007,8 @@ func (j *TestJig) CreateServicePods(ctx context.Context, replica int) error {
 	return e2edeployment.WaitForDeploymentComplete(j.Client, deployment)
 }
 
-// CreateSCTPServiceWithPort creates a new SCTP Service with given port based on the
-// j's defaults. Callers can provide a function to tweak the Service object before
-// it is created.
+// CreateSCTPServiceWithPort 基于 j 的默认配置创建一个使用指定端口的新 SCTP Service。
+// 调用方可提供一个函数，在创建前调整 Service 对象。
 func (j *TestJig) CreateSCTPServiceWithPort(ctx context.Context, tweak func(svc *v1.Service), port int32) (*v1.Service, error) {
 	svc := j.newServiceTemplate(v1.ProtocolSCTP, port)
 	if tweak != nil {
@@ -1043,13 +1021,12 @@ func (j *TestJig) CreateSCTPServiceWithPort(ctx context.Context, tweak func(svc 
 	return j.sanityCheckService(result, svc.Spec.Type)
 }
 
-// CreateLoadBalancerServiceWaitForClusterIPOnly creates a loadbalancer service and waits
-// for it to acquire a cluster IP
+// CreateLoadBalancerServiceWaitForClusterIPOnly 创建一个 LoadBalancer Service，并等待其获得 ClusterIP
 func (j *TestJig) CreateLoadBalancerServiceWaitForClusterIPOnly(tweak func(svc *v1.Service)) (*v1.Service, error) {
 	ginkgo.By("creating a service " + j.Namespace + "/" + j.Name + " with type=LoadBalancer")
 	svc := j.newServiceTemplate(v1.ProtocolTCP, 80)
 	svc.Spec.Type = v1.ServiceTypeLoadBalancer
-	// We need to turn affinity off for our LB distribution tests
+	// LB 分发测试需要关闭会话亲和性
 	svc.Spec.SessionAffinity = v1.ServiceAffinityNone
 	if tweak != nil {
 		tweak(svc)

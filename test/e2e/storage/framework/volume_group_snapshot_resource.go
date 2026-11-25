@@ -34,9 +34,8 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 )
 
-// GetVolumeGroupSnapshot constructs a VolumeGroupSnapshot object with a label selector.
-// vgsclassName is optional; if empty, the cluster's default VolumeGroupSnapshotClass
-// will be used by the controller.
+// GetVolumeGroupSnapshot 构造一个带标签选择器的 VolumeGroupSnapshot 对象。
+// vgsclassName 可选；为空时控制器会使用集群默认的 VolumeGroupSnapshotClass。
 func GetVolumeGroupSnapshot(ns string, matchLabels map[string]interface{}, vgsclassName string) *unstructured.Unstructured {
 	spec := map[string]interface{}{
 		"source": map[string]interface{}{
@@ -61,7 +60,7 @@ func GetVolumeGroupSnapshot(ns string, matchLabels map[string]interface{}, vgscl
 	}
 }
 
-// VolumeGroupSnapshotResource represents a volumegroupsnapshot class, a volumegroupsnapshot and its bound contents for a specific test case
+// VolumeGroupSnapshotResource 表示某个测试用例对应的 VolumeGroupSnapshotClass、VolumeGroupSnapshot 及其绑定内容
 type VolumeGroupSnapshotResource struct {
 	Config  *PerTestConfig
 	Pattern TestPattern
@@ -70,15 +69,14 @@ type VolumeGroupSnapshotResource struct {
 	VGSContent *unstructured.Unstructured
 	VGSClass   *unstructured.Unstructured
 
-	// SnapshotHandleToPVCName maps snapshot handle to source PVC name
-	// This is populated during conversion to pre-provisioned snapshots
-	// to preserve the PVC name information that is lost in pre-provisioned resources
+	// SnapshotHandleToPVCName 将快照句柄映射到源 PVC 名称。
+	// 在转换为预制备快照时填充此映射，以保留预制备资源中丢失的 PVC 名称信息。
 	SnapshotHandleToPVCName map[string]string
 }
 
-// CreateVolumeGroupSnapshot creates a VolumeGroupSnapshotClass with given SnapshotDeletionPolicy and a VolumeGroupSnapshot
-// from the VolumeGroupSnapshotClass using a dynamic client.
-// Returns the unstructured VolumeGroupSnapshotClass and VolumeGroupSnapshot objects.
+// CreateVolumeGroupSnapshot 使用动态客户端创建具有指定 SnapshotDeletionPolicy 的 VolumeGroupSnapshotClass，
+// 并基于该 Class 创建 VolumeGroupSnapshot。
+// 返回非结构化的 VolumeGroupSnapshotClass 和 VolumeGroupSnapshot 对象。
 func CreateVolumeGroupSnapshot(ctx context.Context, sDriver VolumeGroupSnapshottableTestDriver, config *PerTestConfig, pattern TestPattern, groupName string, pvcNamespace string, timeouts *framework.TimeoutContext, parameters map[string]string) (*unstructured.Unstructured, *unstructured.Unstructured, *unstructured.Unstructured) {
 	defer ginkgo.GinkgoRecover()
 	var err error
@@ -101,7 +99,7 @@ func CreateVolumeGroupSnapshot(ctx context.Context, sDriver VolumeGroupSnapshott
 	framework.ExpectNoError(err, "Failed to get volume group snapshot class")
 
 	ginkgo.By("creating a dynamic VolumeGroupSnapshot")
-	// Prepare a dynamically provisioned group volume snapshot with certain data
+	// 准备一个包含特定数据的动态制备组卷快照
 	volumeGroupSnapshot := GetVolumeGroupSnapshot(pvcNamespace, map[string]interface{}{
 		"group": groupName,
 	}, gsclass.GetName())
@@ -125,7 +123,7 @@ func CreateVolumeGroupSnapshot(ctx context.Context, sDriver VolumeGroupSnapshott
 	return gsclass, volumeGroupSnapshot, vgsc
 }
 
-// patchVGSCDeletionPolicy patches the deletion policy of a single VolumeGroupSnapshotContent
+// patchVGSCDeletionPolicy 修改单个 VolumeGroupSnapshotContent 的删除策略
 func patchVGSCDeletionPolicy(ctx context.Context, dc dynamic.Interface, vgscName string, deletionPolicy string) error {
 	patchData := fmt.Appendf(nil, `{"spec":{"deletionPolicy":"%s"}}`, deletionPolicy)
 	_, err := dc.Resource(utils.VolumeGroupSnapshotContentGVR).Patch(ctx, vgscName, types.MergePatchType, patchData, metav1.PatchOptions{})
@@ -135,7 +133,7 @@ func patchVGSCDeletionPolicy(ctx context.Context, dc dynamic.Interface, vgscName
 	return nil
 }
 
-// patchVSCDeletionPolicy patches the deletion policy of a single VolumeSnapshotContent
+// patchVSCDeletionPolicy 修改单个 VolumeSnapshotContent 的删除策略
 func patchVSCDeletionPolicy(ctx context.Context, dc dynamic.Interface, vscName string, deletionPolicy string) error {
 	patchData := fmt.Appendf(nil, `{"spec":{"deletionPolicy":"%s"}}`, deletionPolicy)
 	_, err := dc.Resource(utils.SnapshotContentGVR).Patch(ctx, vscName, types.MergePatchType, patchData, metav1.PatchOptions{})
@@ -145,15 +143,15 @@ func patchVSCDeletionPolicy(ctx context.Context, dc dynamic.Interface, vscName s
 	return nil
 }
 
-// patchVSCsDeletionPolicy patches deletion policy for all VolumeSnapshotContents owned by the given VGS
+// patchVSCsDeletionPolicy 修改给定 VGS 拥有的所有 VolumeSnapshotContent 的删除策略
 func (r *VolumeGroupSnapshotResource) patchVSCsDeletionPolicy(ctx context.Context, dc dynamic.Interface, vgsNamespace string, vgsUID types.UID, deletionPolicy string) error {
-	// Get all VolumeSnapshotContent names owned by this VGS
+	// 获取该 VGS 拥有的所有 VolumeSnapshotContent 名称
 	contentNamesSet, err := r.getVolumeSnapshotContentNames(ctx, dc, vgsNamespace, vgsUID)
 	if err != nil {
 		return fmt.Errorf("failed to get VolumeSnapshotContent names: %w", err)
 	}
 
-	// Patch all VolumeSnapshotContents deletion policy
+	// 修改所有 VolumeSnapshotContent 的删除策略
 	for _, contentName := range contentNamesSet.UnsortedList() {
 		if err := patchVSCDeletionPolicy(ctx, dc, contentName, deletionPolicy); err != nil {
 			return err
@@ -163,20 +161,20 @@ func (r *VolumeGroupSnapshotResource) patchVSCsDeletionPolicy(ctx context.Contex
 	return nil
 }
 
-// patchVGSAndVSCsDeletionPolicy patches the deletion policy of the VGSC and all its associated VSCs
+// patchVGSAndVSCsDeletionPolicy 修改 VGSC 及其关联的所有 VSC 的删除策略
 func (r *VolumeGroupSnapshotResource) patchVGSAndVSCsDeletionPolicy(ctx context.Context, dc dynamic.Interface, vgsc *unstructured.Unstructured, vgsNamespace string, vgsUID types.UID, deletionPolicy string) (*unstructured.Unstructured, error) {
-	// Patch VGSC deletion policy
+	// 修改 VGSC 的删除策略
 	if err := patchVGSCDeletionPolicy(ctx, dc, vgsc.GetName(), deletionPolicy); err != nil {
 		return nil, err
 	}
 
-	// Get the updated VGSC
+	// 获取更新后的 VGSC
 	updatedVGSC, err := dc.Resource(utils.VolumeGroupSnapshotContentGVR).Get(ctx, vgsc.GetName(), metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get updated VGSC %q: %w", vgsc.GetName(), err)
 	}
 
-	// Patch all VolumeSnapshotContents deletion policy
+	// 修改所有 VolumeSnapshotContent 的删除策略
 	if err := r.patchVSCsDeletionPolicy(ctx, dc, vgsNamespace, vgsUID, deletionPolicy); err != nil {
 		return nil, err
 	}
@@ -184,17 +182,17 @@ func (r *VolumeGroupSnapshotResource) patchVGSAndVSCsDeletionPolicy(ctx context.
 	return updatedVGSC, nil
 }
 
-// getVolumeSnapshotContentNames returns the set of VolumeSnapshotContent names bound to VolumeSnapshots owned by the given VGS
+// getVolumeSnapshotContentNames 返回绑定到给定 VGS 所拥有的 VolumeSnapshot 的 VolumeSnapshotContent 名称集合
 func (r *VolumeGroupSnapshotResource) getVolumeSnapshotContentNames(ctx context.Context, dc dynamic.Interface, vgsNamespace string, vgsUID types.UID) (sets.Set[string], error) {
 	vss, err := dc.Resource(utils.SnapshotGVR).Namespace(vgsNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter to VolumeSnapshots owned by this VGS
+	// 过滤出该 VGS 拥有的 VolumeSnapshot
 	ownedSnapshots := utils.FilterResourcesByOwner(vss.Items, "VolumeGroupSnapshot", vgsUID)
 
-	// Extract VolumeSnapshotContent names from owned snapshots
+	// 从拥有的快照中提取 VolumeSnapshotContent 名称
 	contentNamesSet := sets.New[string]()
 	for _, vs := range ownedSnapshots {
 		if status, ok := vs.Object["status"].(map[string]interface{}); ok {
@@ -206,17 +204,17 @@ func (r *VolumeGroupSnapshotResource) getVolumeSnapshotContentNames(ctx context.
 	return contentNamesSet, nil
 }
 
-// cleanupRetainedVolumeSnapshotContents forcibly deletes VolumeSnapshotContents with Retain policy
+// cleanupRetainedVolumeSnapshotContents 强制删除采用 Retain 策略的 VolumeSnapshotContent
 func (r *VolumeGroupSnapshotResource) cleanupRetainedVolumeSnapshotContents(ctx context.Context, dc dynamic.Interface, contentNames sets.Set[string], timeouts *framework.TimeoutContext) {
-	// Update deletion policy and delete each VolumeSnapshotContent
+	// 更新删除策略并删除每个 VolumeSnapshotContent
 	for _, contentName := range contentNames.UnsortedList() {
-		// Patch deletion policy to Delete
+		// 将删除策略改为 Delete
 		if err := patchVSCDeletionPolicy(ctx, dc, contentName, "Delete"); err != nil {
 			framework.Failf("Failed to patch VolumeSnapshotContent %q deletion policy: %v", contentName, err)
 			return
 		}
 
-		// Delete VolumeSnapshotContent
+		// 删除 VolumeSnapshotContent
 		err := dc.Resource(utils.SnapshotContentGVR).Delete(ctx, contentName, metav1.DeleteOptions{})
 		if err != nil {
 			framework.Failf("Failed to delete VolumeSnapshotContent %q: %v", contentName, err)
@@ -224,7 +222,7 @@ func (r *VolumeGroupSnapshotResource) cleanupRetainedVolumeSnapshotContents(ctx 
 		}
 	}
 
-	// Wait for all VolumeSnapshotContents to be deleted
+	// 等待所有 VolumeSnapshotContent 被删除
 	framework.Logf("Waiting for VolumeSnapshotContents to be deleted")
 	for _, contentName := range contentNames.UnsortedList() {
 		if err := utils.WaitForGVRDeletion(ctx, dc, utils.SnapshotContentGVR, contentName, framework.Poll, timeouts.SnapshotDelete); err != nil {
@@ -234,24 +232,24 @@ func (r *VolumeGroupSnapshotResource) cleanupRetainedVolumeSnapshotContents(ctx 
 	}
 }
 
-// cleanupRetainedVGSContent forcibly deletes VolumeGroupSnapshotContent with Retain policy
+// cleanupRetainedVGSContent 强制删除采用 Retain 策略的 VolumeGroupSnapshotContent
 func (r *VolumeGroupSnapshotResource) cleanupRetainedVGSContent(ctx context.Context, dc dynamic.Interface, vgscName string, timeouts *framework.TimeoutContext) {
 	framework.Logf("Deleting VGSContent %q", vgscName)
 
-	// Patch deletion policy to Delete
+	// 将删除策略改为 Delete
 	if err := patchVGSCDeletionPolicy(ctx, dc, vgscName, "Delete"); err != nil {
 		framework.Failf("Failed to patch VGSContent %q deletion policy: %v", vgscName, err)
 		return
 	}
 
-	// Delete VGSContent
+	// 删除 VGSContent
 	err := dc.Resource(utils.VolumeGroupSnapshotContentGVR).Delete(ctx, vgscName, metav1.DeleteOptions{})
 	if err != nil {
 		framework.Failf("Failed to delete VGSContent %q: %v", vgscName, err)
 		return
 	}
 
-	// Wait for VGSContent to be deleted
+	// 等待 VGSContent 被删除
 	framework.Logf("Waiting for VGSContent %q to be deleted", vgscName)
 	err = utils.WaitForGVRDeletion(ctx, dc, utils.VolumeGroupSnapshotContentGVR, vgscName, framework.Poll, timeouts.SnapshotDelete)
 	if err != nil {
@@ -260,7 +258,7 @@ func (r *VolumeGroupSnapshotResource) cleanupRetainedVGSContent(ctx context.Cont
 	}
 }
 
-// verifyVolumeSnapshotContentsDeletion verifies that all VolumeSnapshotContents have been deleted
+// verifyVolumeSnapshotContentsDeletion 验证所有 VolumeSnapshotContent 已被删除
 func (r *VolumeGroupSnapshotResource) verifyVolumeSnapshotContentsDeletion(ctx context.Context, dc dynamic.Interface, contentNames sets.Set[string], timeouts *framework.TimeoutContext) {
 	ginkgo.By("Verifying all VolumeSnapshotContents have been deleted")
 	var verifyErrs []error
@@ -275,9 +273,9 @@ func (r *VolumeGroupSnapshotResource) verifyVolumeSnapshotContentsDeletion(ctx c
 	}
 }
 
-// CleanupVGS deletes the VolumeGroupSnapshot and ensures the bound VolumeGroupSnapshotContent has Delete policy.
-// It waits for the VolumeGroupSnapshot, its owned VolumeSnapshots, VolumeSnapshotContents, and the bound
-// VolumeGroupSnapshotContent to be fully deleted to prevent resource leaks.
+// CleanupVGS 删除 VolumeGroupSnapshot，并确保绑定的 VolumeGroupSnapshotContent 采用 Delete 策略。
+// 它会等待 VolumeGroupSnapshot、其拥有的 VolumeSnapshot 和 VolumeSnapshotContent
+// 以及绑定的 VolumeGroupSnapshotContent 全部删除，以防资源泄漏。
 func (r *VolumeGroupSnapshotResource) CleanupVGS(ctx context.Context, timeouts *framework.TimeoutContext) error {
 	if r.VGS == nil {
 		return nil
@@ -289,7 +287,7 @@ func (r *VolumeGroupSnapshotResource) CleanupVGS(ctx context.Context, timeouts *
 	vgsUID := r.VGS.GetUID()
 	framework.Logf("deleting groupSnapshot %q/%q and ensuring content has Delete policy", vgsNamespace, vgsName)
 
-	// Get the VGS to ensure it exists
+	// 获取 VGS 以确认其存在
 	vgs, err := dc.Resource(utils.VolumeGroupSnapshotGVR).Namespace(vgsNamespace).Get(ctx, vgsName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -299,13 +297,13 @@ func (r *VolumeGroupSnapshotResource) CleanupVGS(ctx context.Context, timeouts *
 	}
 	r.VGS = vgs
 
-	// Get all VolumeSnapshotContent names owned by this VGS
+	// 获取该 VGS 拥有的所有 VolumeSnapshotContent 名称
 	contentNamesSet, err := r.getVolumeSnapshotContentNames(ctx, dc, vgsNamespace, vgsUID)
 	if err != nil {
 		return err
 	}
 
-	// Get the bound VolumeGroupSnapshotContent
+	// 获取绑定的 VolumeGroupSnapshotContent
 	groupSnapshotStatus := r.VGS.Object["status"].(map[string]interface{})
 	groupSnapshotContentName := groupSnapshotStatus["boundVolumeGroupSnapshotContentName"].(string)
 	framework.Logf("received groupSnapshotStatus %v", groupSnapshotStatus)
@@ -316,8 +314,8 @@ func (r *VolumeGroupSnapshotResource) CleanupVGS(ctx context.Context, timeouts *
 		return fmt.Errorf("failed to get bound VGSContent %q: %w", groupSnapshotContentName, err)
 	}
 
-	// For Delete policy, ensure deletion policy is set to Delete to prevent leaks
-	// For Retain policy, we'll update it after verifying retention behavior
+	// 对于 Delete 策略，确认删除策略已设为 Delete，防止泄漏
+	// 对于 Retain 策略，将在验证保留行为后再更新它
 	if boundVGSContent != nil && r.Pattern.SnapshotDeletionPolicy == DeleteSnapshot {
 		spec := boundVGSContent.Object["spec"].(map[string]interface{})
 		if spec["deletionPolicy"] != "Delete" {
@@ -329,25 +327,25 @@ func (r *VolumeGroupSnapshotResource) CleanupVGS(ctx context.Context, timeouts *
 	}
 	r.VGSContent = boundVGSContent
 
-	// Delete the VolumeGroupSnapshot
+	// 删除 VolumeGroupSnapshot
 	if err := dc.Resource(utils.VolumeGroupSnapshotGVR).Namespace(vgsNamespace).Delete(ctx, vgsName, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete VGS %q: %w", vgsName, err)
 	}
 
-	// Wait for VolumeGroupSnapshot deleted
+	// 等待 VolumeGroupSnapshot 被删除
 	if err := utils.WaitForNamespacedGVRDeletion(ctx, dc, utils.VolumeGroupSnapshotGVR, vgsNamespace, vgsName, framework.Poll, timeouts.SnapshotDelete); err != nil {
 		return fmt.Errorf("failed waiting for VGS %q deletion: %w", vgsName, err)
 	}
 
-	// Wait for VolumeSnapshots owned by this VGS to be cascade-deleted
-	// This happens regardless of deletion policy because VGS owns VolumeSnapshots via owner references
+	// 等待该 VGS 拥有的 VolumeSnapshot 被级联删除
+	// 无论删除策略如何都会发生，因为 VGS 通过 owner reference 拥有这些 VolumeSnapshot
 	if vgsUID != "" {
 		if err := utils.WaitForOwnedResourcesDeleted(ctx, dc, utils.SnapshotGVR, vgsNamespace, vgsUID, framework.Poll, timeouts.SnapshotDelete); err != nil {
 			return fmt.Errorf("failed waiting for owned snapshots deletion of VGS %q: %w", vgsName, err)
 		}
 	}
 
-	// Verify deletion policy behavior for VolumeGroupSnapshotContent
+	// 验证 VolumeGroupSnapshotContent 的删除策略行为
 	if boundVGSContent != nil {
 		vgscName := boundVGSContent.GetName()
 
@@ -362,10 +360,10 @@ func (r *VolumeGroupSnapshotResource) CleanupVGS(ctx context.Context, timeouts *
 			err = utils.EnsureNoGVRDeletion(ctx, dc, utils.VolumeGroupSnapshotContentGVR, vgscName, framework.Poll, 20*framework.Poll, "")
 			framework.ExpectNoError(err, "VolumeGroupSnapshotContent should be retained with Retain policy")
 
-			// Force cleanup to prevent leaks
-			// Cleanup order:
-			// 1. VolumeSnapshotContents (update policy + delete + wait)
-			// 2. VGSContent (update policy + delete + wait)
+			// 强制清理以防泄漏
+			// 清理顺序：
+			// 1. VolumeSnapshotContent（更新策略 + 删除 + 等待）
+			// 2. VGSContent（更新策略 + 删除 + 等待）
 			framework.Logf("Retain policy verified, now forcing cleanup to prevent leaks")
 			r.cleanupRetainedVolumeSnapshotContents(ctx, dc, contentNamesSet, timeouts)
 			r.cleanupRetainedVGSContent(ctx, dc, vgscName, timeouts)
@@ -373,13 +371,13 @@ func (r *VolumeGroupSnapshotResource) CleanupVGS(ctx context.Context, timeouts *
 		}
 	}
 
-	// Verify all VolumeSnapshotContents have been deleted
+	// 验证所有 VolumeSnapshotContent 已被删除
 	r.verifyVolumeSnapshotContentsDeletion(ctx, dc, contentNamesSet, timeouts)
 
 	return nil
 }
 
-// CleanupVGSClass deletes the VolumeGroupSnapshotClass.
+// CleanupVGSClass 删除 VolumeGroupSnapshotClass。
 func (r *VolumeGroupSnapshotResource) CleanupVGSClass(ctx context.Context, timeouts *framework.TimeoutContext) error {
 	if r.VGSClass == nil {
 		framework.Logf("VGSClass is nil, skipping cleanup")
@@ -404,8 +402,8 @@ func (r *VolumeGroupSnapshotResource) CleanupVGSClass(ctx context.Context, timeo
 	return nil
 }
 
-// CleanupResource deletes the VolumeGroupSnapshotClass and VolumeGroupSnapshot objects using a dynamic client,
-// and ignores not found errors.
+// CleanupResource 使用动态客户端删除 VolumeGroupSnapshotClass 和 VolumeGroupSnapshot 对象，
+// 并忽略 not found 错误。
 func (r *VolumeGroupSnapshotResource) CleanupResource(ctx context.Context, timeouts *framework.TimeoutContext) error {
 	var cleanupErrs []error
 
@@ -420,7 +418,7 @@ func (r *VolumeGroupSnapshotResource) CleanupResource(ctx context.Context, timeo
 	return utilerrors.NewAggregate(cleanupErrs)
 }
 
-// CreateVolumeGroupSnapshotResource creates a VolumeGroupSnapshotResource object with the given parameters.
+// CreateVolumeGroupSnapshotResource 使用给定参数创建 VolumeGroupSnapshotResource 对象。
 func CreateVolumeGroupSnapshotResource(ctx context.Context, sDriver VolumeGroupSnapshottableTestDriver, config *PerTestConfig, pattern TestPattern, pvcName string, pvcNamespace string, timeouts *framework.TimeoutContext, parameters map[string]string) *VolumeGroupSnapshotResource {
 	vgsClass, snapshot, vgsc := CreateVolumeGroupSnapshot(ctx, sDriver, config, pattern, pvcName, pvcNamespace, timeouts, parameters)
 	r := &VolumeGroupSnapshotResource{
@@ -440,17 +438,17 @@ func CreateVolumeGroupSnapshotResource(ctx context.Context, sDriver VolumeGroupS
 	return r
 }
 
-// convertToPreprovisioned converts a dynamic VolumeGroupSnapshot to a pre-provisioned one.
-// This is done by:
-// 1. Recording the snapshot handles from the dynamic snapshot
-// 2. Deleting the dynamic snapshot resources (with Retain policy to keep backend snapshots)
-// 3. Creating new pre-provisioned resources that reference the same backend snapshots
+// convertToPreprovisioned 将动态制备的 VolumeGroupSnapshot 转换为预制备版本。
+// 步骤如下：
+// 1. 记录动态快照中的快照句柄
+// 2. 删除动态快照资源（采用 Retain 策略以保留后端快照）
+// 3. 创建引用同一批后端快照的预制备资源
 func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Context, dc dynamic.Interface, snapshot, vgsc, vgsClass *unstructured.Unstructured, pvcNamespace string, timeouts *framework.TimeoutContext) {
 	var err error
 	vgsUID := snapshot.GetUID()
 
-	// Only update to Retain if the pattern specifies Delete policy
-	// This preserves the backend snapshots when we delete the dynamic resources
+	// 仅当模式指定 Delete 策略时才改为 Retain，
+	// 这样删除动态资源时后端快照会被保留
 	if r.Pattern.SnapshotDeletionPolicy == DeleteSnapshot {
 		ginkgo.By("updating VGSC and VSC deletion policies to Retain")
 		vgsc, err = r.patchVGSAndVSCsDeletionPolicy(ctx, dc, vgsc, pvcNamespace, vgsUID, "Retain")
@@ -462,7 +460,7 @@ func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Contex
 	groupSnapshotHandle := vgscStatus["volumeGroupSnapshotHandle"].(string)
 	framework.Logf("Recording group snapshot content handle: %s", groupSnapshotHandle)
 
-	// Extract individual volume snapshot handles from volumeSnapshotInfoList
+	// 从 volumeSnapshotInfoList 中提取各个卷快照句柄
 	volumeSnapshotInfoList := vgscStatus["volumeSnapshotInfoList"].([]interface{})
 	volumeSnapshotHandles := make([]string, 0, len(volumeSnapshotInfoList))
 	for _, info := range volumeSnapshotInfoList {
@@ -475,33 +473,33 @@ func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Contex
 	csiDriverName := vgsClass.Object["driver"].(string)
 	framework.Logf("Recording snapshot driver: %s", csiDriverName)
 
-	// Get all VolumeSnapshotContent names owned by this VGS before deletion
+	// 获取该 VGS 拥有的所有 VolumeSnapshotContent 名称 before deletion
 	contentNamesSet, err := r.getVolumeSnapshotContentNames(ctx, dc, pvcNamespace, vgsUID)
 	framework.ExpectNoError(err, "failed to get VolumeSnapshotContent names owned by VGS %s", vgsUID)
 
-	// Capture the mapping of snapshot handle to source PVC name before deleting dynamic snapshots
-	// This is needed because pre-provisioned snapshots don't have spec.source.persistentVolumeClaimName
+	// 删除动态快照前记录快照句柄到源 PVC 名称的映射。
+	// 预制备快照没有 spec.source.persistentVolumeClaimName，因此需要这一步。
 	ginkgo.By("capturing source PVC names from dynamic VolumeSnapshots")
 	vsList, err := dc.Resource(utils.SnapshotGVR).Namespace(pvcNamespace).List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err, "failed to list VolumeSnapshots")
 
-	// Filter to VolumeSnapshots owned by this VGS
+	// 过滤出该 VGS 拥有的 VolumeSnapshot
 	ownedSnapshots := utils.FilterResourcesByOwner(vsList.Items, "VolumeGroupSnapshot", vgsUID)
 
-	// Map snapshotHandle to source PVC name and store in the resource struct
+	// 将 snapshotHandle 映射到源 PVC 名称并存入资源结构体
 	r.SnapshotHandleToPVCName = make(map[string]string)
 	for _, vs := range ownedSnapshots {
-		// Get the source PVC name from the dynamic VolumeSnapshot
-		// Since we waited for VGS to be ready, the VS should be bound and have source PVC name
+		// 从动态 VolumeSnapshot 获取源 PVC 名称。
+		// 由于已等待 VGS 就绪，VS 应已绑定并带有源 PVC 名称。
 		spec := vs.Object["spec"].(map[string]interface{})
 		source := spec["source"].(map[string]interface{})
 		sourcePVCName := source["persistentVolumeClaimName"].(string)
 
-		// Get the VSC name from status (VS is bound since VGS is ready)
+		// 从 status 获取 VSC 名称（VGS 已就绪，因此 VS 已绑定）
 		status := vs.Object["status"].(map[string]interface{})
 		vscName := status["boundVolumeSnapshotContentName"].(string)
 
-		// Get the VSC to find the snapshot handle (should exist since VS is bound)
+		// 获取 VSC 以找到快照句柄（VS 已绑定，因此它应存在）
 		vsc, err := dc.Resource(utils.SnapshotContentGVR).Get(ctx, vscName, metav1.GetOptions{})
 		framework.ExpectNoError(err, "failed to get VolumeSnapshotContent %s for bound VolumeSnapshot %s", vscName, vs.GetName())
 
@@ -511,10 +509,9 @@ func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Contex
 		framework.Logf("Mapped snapshot handle %s to PVC %s", snapshotHandle, sourcePVCName)
 	}
 
-	// If the deletion policy is retain on vgsc:
-	// when vgs is deleted vgsc will not be deleted
-	// when the vgsc is manually deleted then the underlying group snapshot resource will not be deleted.
-	// We exploit this to create a group snapshot resource from which we can create a preprovisioned snapshot
+	// 当 VGSC 的删除策略为 Retain 时：
+	// 删除 VGS 不会删除 VGSC；手动删除 VGSC 也不会删除底层组快照资源。
+	// 我们利用这一点创建组快照资源，再基于它创建预制备快照。
 	ginkgo.By("deleting the group snapshot")
 	err = dc.Resource(utils.VolumeGroupSnapshotGVR).Namespace(snapshot.GetNamespace()).Delete(ctx, snapshot.GetName(), metav1.DeleteOptions{})
 	framework.ExpectNoError(err, "failed to delete VolumeGroupSnapshot %s/%s", snapshot.GetNamespace(), snapshot.GetName())
@@ -523,12 +520,12 @@ func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Contex
 	err = utils.WaitForNamespacedGVRDeletion(ctx, dc, utils.VolumeGroupSnapshotGVR, snapshot.GetNamespace(), snapshot.GetName(), framework.Poll, timeouts.SnapshotDelete)
 	framework.ExpectNoError(err, "VolumeGroupSnapshot %s/%s was not deleted within timeout", snapshot.GetNamespace(), snapshot.GetName())
 
-	// Wait for VolumeSnapshots owned by this VGS to be cascade-deleted
+	// 等待该 VGS 拥有的 VolumeSnapshot 被级联删除
 	ginkgo.By("waiting for owned VolumeSnapshots to be deleted")
 	err = utils.WaitForOwnedResourcesDeleted(ctx, dc, utils.SnapshotGVR, pvcNamespace, vgsUID, framework.Poll, timeouts.SnapshotDelete)
 	framework.ExpectNoError(err, "VolumeSnapshots owned by VGS %s were not deleted within timeout", vgsUID)
 
-	// Delete the VolumeSnapshotContents (with Retain policy, so physical snapshots remain)
+	// 删除 VolumeSnapshotContent（采用 Retain 策略，因此物理快照仍保留）
 	ginkgo.By("deleting VolumeSnapshotContents")
 	for _, contentName := range contentNamesSet.UnsortedList() {
 		err := dc.Resource(utils.SnapshotContentGVR).Delete(ctx, contentName, metav1.DeleteOptions{})
@@ -537,13 +534,13 @@ func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Contex
 		}
 	}
 
-	// Wait for VolumeSnapshotContents to be deleted
+	// 等待 VolumeSnapshotContent 被删除
 	for _, contentName := range contentNamesSet.UnsortedList() {
 		err := utils.WaitForGVRDeletion(ctx, dc, utils.SnapshotContentGVR, contentName, framework.Poll, timeouts.SnapshotDelete)
 		framework.ExpectNoError(err, "VolumeSnapshotContent %s was not deleted within timeout", contentName)
 	}
 
-	// Delete the VolumeGroupSnapshotContent (with Retain policy, so physical group snapshot remains)
+	// 删除 VolumeGroupSnapshotContent (with Retain policy, so physical group snapshot remains)
 	err = dc.Resource(utils.VolumeGroupSnapshotContentGVR).Delete(ctx, vgsc.GetName(), metav1.DeleteOptions{})
 	framework.ExpectNoError(err, "failed to delete VolumeGroupSnapshotContent %s", vgsc.GetName())
 
@@ -551,7 +548,7 @@ func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Contex
 	err = utils.WaitForGVRDeletion(ctx, dc, utils.VolumeGroupSnapshotContentGVR, vgsc.GetName(), framework.Poll, timeouts.SnapshotDelete)
 	framework.ExpectNoError(err, "VolumeGroupSnapshotContent %s was not deleted within timeout", vgsc.GetName())
 
-	// Create new pre-provisioned VGSContent with the extracted group snapshot handle
+	// 使用提取出的组快照句柄创建新的预制备 VGSContent
 	ginkgo.By("creating a new pre-provisioned VolumeGroupSnapshotContent with the group snapshot handle")
 	vgsUUID := uuid.NewUUID()
 
@@ -570,35 +567,35 @@ func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Contex
 	err = utils.WaitForVolumeGroupSnapshotReady(ctx, dc, r.VGS.GetNamespace(), r.VGS.GetName(), framework.Poll, timeouts.SnapshotCreate*10)
 	framework.ExpectNoError(err, "pre-provisioned VolumeGroupSnapshot %s/%s did not become ready within timeout", r.VGS.GetNamespace(), r.VGS.GetName())
 
-	// Get the new VGS UID for owner references
+	// 获取新 VGS 的 UID 用于 owner reference
 	r.VGS, err = dc.Resource(utils.VolumeGroupSnapshotGVR).Namespace(r.VGS.GetNamespace()).Get(ctx, r.VGS.GetName(), metav1.GetOptions{})
 	framework.ExpectNoError(err, "failed to get VolumeGroupSnapshot %s/%s for UID", r.VGS.GetNamespace(), r.VGS.GetName())
 	newVgsUID := r.VGS.GetUID()
 	vgsAPIVersion := r.VGS.GetAPIVersion()
 	vgsKind := r.VGS.GetKind()
 
-	// Create new pre-provisioned VolumeSnapshotContents and VolumeSnapshots
-	// The VolumeSnapshots need to be owned by the VGS so the controller can discover them
+	// 创建新的预制备 VolumeSnapshotContent 和 VolumeSnapshot
+	// VolumeSnapshot 必须由 VGS 拥有，控制器才能发现它们
 	ginkgo.By("creating pre-provisioned VolumeSnapshotContents and VolumeSnapshots owned by the VGS")
 
 	for i, snapshotHandle := range volumeSnapshotHandles {
-		// Generate unique names for the pre-provisioned VolumeSnapshotContent and VolumeSnapshot
-		// Using VGS UUID + index to make names predictable and associated with parent VGS
+		// 为预制备的 VolumeSnapshotContent 和 VolumeSnapshot 生成唯一名称，
+		// 使用 VGS UUID + 索引，使名称可预测且与父 VGS 关联
 		snapName := fmt.Sprintf("pre-provisioned-vs-%s-%d", string(vgsUUID), i)
 		snapContentName := fmt.Sprintf("pre-provisioned-vsc-%s-%d", string(vgsUUID), i)
 
-		// Create pre-provisioned VolumeSnapshotContent first
-		// Note: volumeSnapshotClassName is not required for pre-provisioned VolumeSnapshotContent
+		// 先创建预制备的 VolumeSnapshotContent
+		// 注意：预制备的 VolumeSnapshotContent 不需要 volumeSnapshotClassName
 		vsc := getPreProvisionedVolumeSnapshotContent(snapContentName, snapName, pvcNamespace, snapshotHandle, r.Pattern.SnapshotDeletionPolicy.String(), csiDriverName)
 		_, err := dc.Resource(utils.SnapshotContentGVR).Create(ctx, vsc, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create pre-provisioned VolumeSnapshotContent %s", snapContentName)
 
-		// Get the source PVC name mapping for this snapshot handle
+		// 获取该快照句柄对应的源 PVC 名称映射
 		sourcePVCName := r.SnapshotHandleToPVCName[snapshotHandle]
 		gomega.Expect(sourcePVCName).NotTo(gomega.BeEmpty(), "no source PVC name mapping found for snapshot handle %s", snapshotHandle)
 		framework.Logf("Creating pre-provisioned snapshot %s for PVC %s (handle: %s)", snapName, sourcePVCName, snapshotHandle)
 
-		// Create pre-provisioned VolumeSnapshot
+		// 创建预制备的 VolumeSnapshot
 		preProvisionedVS := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"kind":       "VolumeSnapshot",
@@ -626,7 +623,7 @@ func (r *VolumeGroupSnapshotResource) convertToPreprovisioned(ctx context.Contex
 		_, err = dc.Resource(utils.SnapshotGVR).Namespace(pvcNamespace).Create(ctx, preProvisionedVS, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create pre-provisioned VolumeSnapshot %s/%s", pvcNamespace, snapName)
 
-		// Wait for the VolumeSnapshot to be ready
+		// 等待 VolumeSnapshot 就绪
 		err = utils.WaitForSnapshotReady(ctx, dc, pvcNamespace, snapName, framework.Poll, timeouts.SnapshotCreate)
 		framework.ExpectNoError(err, "pre-provisioned VolumeSnapshot %s/%s did not become ready within timeout", pvcNamespace, snapName)
 

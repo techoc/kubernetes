@@ -14,12 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package gcpcredentialsprovider is a temporary copy of the
-// gcp-credentials-provider command for use in the e2e_node binary itself. If
-// that approach works out, the command will be refactored to remove the code
-// duplication, otherwise this will get reverted.
+// Package gcpcredentialsprovider 是 gcp-credentials-provider 命令的临时副本，
+// 供 e2e_node 二进制自身使用。若该方案可行，后续会重构该命令以消除重复代码，
+// 否则将回退此改动。
 //
-// Originally copied from pkg/credentialproviders/gcp
+// 最初复制自 pkg/credentialproviders/gcp
 package gcpcredentialsprovider
 
 import (
@@ -38,7 +37,7 @@ const (
 
 var containerRegistryUrls = []string{"container.cloud.google.com", "gcr.io", "*.gcr.io", "*.pkg.dev"}
 
-// HTTPError wraps a non-StatusOK error code as an error.
+// HTTPError 将非 StatusOK 的 HTTP 错误码包装为 error。
 type HTTPError struct {
 	StatusCode int
 	URL        string
@@ -46,14 +45,13 @@ type HTTPError struct {
 
 var _ error = &HTTPError{}
 
-// Error implements error
+// Error 实现 error 接口
 func (h *HTTPError) Error() string {
 	return fmt.Sprintf("http status code: %d while fetching url %s",
 		h.StatusCode, h.URL)
 }
 
-// TokenBlob is used to decode the JSON blob containing an access token
-// that is returned by GCE metadata.
+// TokenBlob 用于解码 GCE metadata 返回的、包含 access token 的 JSON 数据块。
 type TokenBlob struct {
 	AccessToken string `json:"access_token"`
 }
@@ -81,7 +79,7 @@ func (p *provider) Provide(image string) (map[string]credentialproviderv1.AuthCo
 		Password: parsedBlob.AccessToken,
 	}
 
-	// Add our entry for each of the supported container registry URLs
+	// 为每个受支持的容器仓库 URL 添加对应条目
 	for _, k := range containerRegistryUrls {
 		cfg[k] = authConfig
 	}

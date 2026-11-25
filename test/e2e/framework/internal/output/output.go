@@ -34,13 +34,11 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/internal/junit"
 )
 
-// TestGinkgoOutput runs the current suite and verifies that the generated
-// JUnit file matches the expected result.
+// TestGinkgoOutput 运行当前 suite 并验证生成的 JUnit 文件与预期结果一致。
 //
-// The Ginkgo output on the console (aka the test suite log) does not get
-// checked. It is usually less important for the CI and more relevant when
-// using test suite interactively. To see what that Ginkgo output looks like,
-// run tests with "go test -v".
+// 控制台上的 Ginkgo 输出（即测试套件日志）不在检查范围内。它对 CI 通常没那么重要，
+// 在交互式使用测试套件时更有意义。想查看 Ginkgo 输出的样貌，
+// 可用 "go test -v" 运行测试。
 func TestGinkgoOutput(t *testing.T, expected TestResult, runSpecsArgs ...interface{}) {
 	tmpdir := t.TempDir()
 	junitFile := path.Join(tmpdir, "junit.xml")
@@ -61,10 +59,10 @@ func TestGinkgoOutput(t *testing.T, expected TestResult, runSpecsArgs ...interfa
 		t.Fatalf("expected one test suite, got %d, JUnit content:\n%s", len(actual.TestSuites), string(data))
 	}
 	diff := cmp.Diff(expected.Suite, actual.TestSuites[0],
-		// Time varies.
-		// Name and Classname are "Logging Suite".
-		// Package includes a varying path, not interesting.
-		// Properties also too complicated to compare.
+		// Time 每次都在变。
+		// Name 和 Classname 固定为 "Logging Suite"。
+		// Package 包含变化的路径，无需比较。
+		// Properties 也过于复杂，不便比较。
 		cmpopts.IgnoreFields(reporters.JUnitTestSuite{}, "Time", "Timestamp", "Name", "Package", "Properties"),
 		cmpopts.IgnoreFields(reporters.JUnitTestCase{}, "Time", "Classname"),
 		cmpopts.SortSlices(func(tc1, tc2 reporters.JUnitTestCase) bool {
@@ -72,18 +70,17 @@ func TestGinkgoOutput(t *testing.T, expected TestResult, runSpecsArgs ...interfa
 		}),
 		cmpopts.AcyclicTransformer("simplify", func(in string) any {
 			out := simplify(in, expected)
-			// Sometimes cmp.Diff does not print the full string when it is long.
-			// Uncommenting this here may help debug differences.
+			// 字符串过长时 cmp.Diff 有时不会完整打印。
+			// 取消这里的注释有助于排查差异。
 			// if len(out) > 100 {
 			// 	t.Logf("%s\n---------------------------------------\n%s\n", in, out)
 			// }
 
-			// Same idea as in
+			// 思路与
 			// https://github.com/google/go-cmp/issues/192#issuecomment-605346277:
-			// it forces cmp.Diff to diff strings line-by-line,
-			// even when it normally wouldn't.  The downside is
-			// that the output is harder to turn back into the
-			// expected reference string.
+			// 相同：强制 cmp.Diff 逐行比较字符串，
+			// 即使它通常不会这么做。代价是输出更难还原成
+			// 预期的参考字符串。
 			// if len(out) > 50 {
 			// 	return strings.Split(out, "\n")
 			// }
@@ -96,13 +93,12 @@ func TestGinkgoOutput(t *testing.T, expected TestResult, runSpecsArgs ...interfa
 	}
 }
 
-// TestResult is the expected outcome of the suite, with additional parameters that
-// determine equality.
+// TestResult 是测试套件的预期结果，附带决定相等性的额外参数。
 type TestResult struct {
-	// Called to normalize all output strings before comparison if non-nil.
+	// 非 nil 时，在比较前调用以规范化所有输出字符串。
 	NormalizeOutput func(string) string
 
-	// All test cases and overall suite results.
+	// 所有测试用例及整个 suite 的结果。
 	Suite reporters.JUnitTestSuite
 }
 
@@ -117,16 +113,16 @@ func simplify(in string, expected TestResult) string {
 	return out
 }
 
-// timePrefix matches "Jul 17 08:08:25.950: " at the beginning of each line.
+// timePrefix 匹配每行开头的 "Jul 17 08:08:25.950: "。
 var timePrefix = regexp.MustCompile(`(?m)^[[:alpha:]]{3} +[[:digit:]]{1,2} +[[:digit:]]{2}:[[:digit:]]{2}:[[:digit:]]{2}.[[:digit:]]{3}: `)
 
-// elapsedSuffix matches "Elapsed: 16.189µs"
+// elapsedSuffix 匹配 "Elapsed: 16.189µs"
 var elapsedSuffix = regexp.MustCompile(`Elapsed: [[:digit:]]+(\.[[:digit:]]+)?(µs|ns|ms|s|m)`)
 
-// afterSuffix matches "after 5.001s."
+// afterSuffix 匹配 "after 5.001s."
 var afterSuffix = regexp.MustCompile(`after [[:digit:]]+(\.[[:digit:]]+)?(µs|ns|ms|s|m).`)
 
-// timeSuffix matches "@ 09/06/22 15:36:43.44 (5.001s)" as printed by Ginkgo v2 for log output, with the duration being optional.
+// timeSuffix 匹配 Ginkgo v2 为日志输出打印的 "@ 09/06/22 15:36:43.44 (5.001s)"，其中时长部分可选。
 var timeSuffix = regexp.MustCompile(`(?m)@[[:space:]][[:digit:]]{2}/[[:digit:]]{2}/[[:digit:]]{2} [[:digit:]]{2}:[[:digit:]]{2}:[[:digit:]]{2}(\.[[:digit:]]{1,3})?( \([[:digit:]]+(\.[[:digit:]]+)?(µs|ns|ms|s|m)\))?$`)
 
 func stripTimes(in string) string {
@@ -137,24 +133,24 @@ func stripTimes(in string) string {
 	return out
 }
 
-// instanceAddr matches " | 0xc0003dec60>"
+// instanceAddr 匹配 " | 0xc0003dec60>"
 var instanceAddr = regexp.MustCompile(` \| 0x[0-9a-fA-F]+>`)
 
 func stripAddresses(in string) string {
 	return instanceAddr.ReplaceAllString(in, ">")
 }
 
-// stackLocation matches "<some path>/<file>.go:75 +0x1f1" after a slash (built
-// locally) or one of a few relative paths (built in the Kubernetes CI).
+// stackLocation 匹配斜杠之后的 "<some path>/<file>.go:75 +0x1f1"（本地构建）
+// 或少数几个相对路径之一（Kubernetes CI 构建）。
 var stackLocation = regexp.MustCompile(`(?:/|vendor/|test/|GOROOT/).*/([[:^space:]]+.go:[[:digit:]]+)( \+0x[0-9a-fA-F]+)?`)
 
-// functionArgs matches "<function name>(...)" where <function name> may be an anonymous function (e.g. "pod_test.glob..func1.1")
+// functionArgs 匹配 "<function name>(...)"，其中 <function name> 可能是匿名函数（例如 "pod_test.glob..func1.1"）。
 var functionArgs = regexp.MustCompile(`([[:alpha:][:digit:].]+)\(.*\)`)
 
-// klogPrefix matches "I0822 16:10:39.343790  989127 "
+// klogPrefix 匹配 "I0822 16:10:39.343790  989127 "
 var klogPrefix = regexp.MustCompile(`(?m)^[IEF][[:digit:]]{4} [[:digit:]]{2}:[[:digit:]]{2}:[[:digit:]]{2}\.[[:digit:]]{6}[[:space:]]+[[:digit:]]+ `)
 
-// testFailureOutput matches TestFailureOutput() and its source followed by additional stack entries:
+// testFailureOutput 匹配 TestFailureOutput() 及其源码位置，后跟其他堆栈条目：
 //
 // k8s.io/kubernetes/test/e2e/framework/pod/pod_test.TestFailureOutput(0xc000558800)
 //
@@ -164,13 +160,12 @@ var klogPrefix = regexp.MustCompile(`(?m)^[IEF][[:digit:]]{4} [[:digit:]]{2}:[[:
 //
 //	/nvme/gopath/go/src/testing/testing.go:865 +0xc0
 //
-// created by testing.(*T).Run
+// 由 testing.(*T).Run 创建
 //
 //	/nvme/gopath/go/src/testing/testing.go:916 +0x35a
 var testFailureOutput = regexp.MustCompile(`(?m)^k8s.io/kubernetes/test/e2e/framework/internal/output\.TestGinkgoOutput\(.*\n\t.*(\n.*\n\t.*)*`)
 
-// normalizeLocation removes path prefix and function parameters and certain stack entries
-// that we don't care about.
+// normalizeLocation 移除路径前缀、函数参数以及我们不关心的某些堆栈条目。
 func normalizeLocation(in string) string {
 	out := in
 	out = stackLocation.ReplaceAllString(out, "$1")
@@ -182,8 +177,8 @@ func normalizeLocation(in string) string {
 
 var initFunc = regexp.MustCompile(`(init\.+func|glob\.+func)`)
 
-// normalizeInitFunctions maps both init.func (used by Go >= 1.22) and
-// glob..func (used by Go < 1.22) to <init.func>.
+// normalizeInitFunctions 将 init.func（Go >= 1.22 使用）和
+// glob..func（Go < 1.22 使用）都映射为 <init.func>。
 func normalizeInitFunctions(in string) string {
 	out := initFunc.ReplaceAllString(in, "<init.func>")
 	return out

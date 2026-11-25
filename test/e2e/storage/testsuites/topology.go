@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This suite tests volume topology
+// 该测试套件验证卷拓扑
 
 package testsuites
 
@@ -54,8 +54,8 @@ type topologyTest struct {
 
 type topology map[string]string
 
-// InitCustomTopologyTestSuite returns topologyTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomTopologyTestSuite 返回一个使用自定义测试模式的 topologyTestSuite，
+// 它实现了 TestSuite 接口
 func InitCustomTopologyTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &topologyTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -65,8 +65,8 @@ func InitCustomTopologyTestSuite(patterns []storageframework.TestPattern) storag
 	}
 }
 
-// InitTopologyTestSuite returns topologyTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitTopologyTestSuite 返回一个使用默认测试模式的 topologyTestSuite，
+// 它实现了 TestSuite 接口
 func InitTopologyTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.TopologyImmediate,
@@ -101,8 +101,7 @@ func (t *topologyTestSuite) DefineTests(driver storageframework.TestDriver, patt
 		err     error
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意它还会注册一个 AfterEach，使 f 失效；所有使用 f 的代码都必须放在 It 或 Context 回调内。
 	f := framework.NewFrameworkWithCustomTimeouts("topology", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -110,7 +109,7 @@ func (t *topologyTestSuite) DefineTests(driver storageframework.TestDriver, patt
 		dDriver, _ = driver.(storageframework.DynamicPVTestDriver)
 		l := &topologyTest{}
 
-		// Now do the more expensive test initialization.
+		// 现在执行开销较大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 
 		l.resource = storageframework.VolumeResource{
@@ -118,7 +117,7 @@ func (t *topologyTestSuite) DefineTests(driver storageframework.TestDriver, patt
 			Pattern: pattern,
 		}
 
-		// After driver is installed, check driver topologies on nodes
+		// 驱动安装完成后，检查各节点上的驱动拓扑
 		cs = f.ClientSet
 		keys := dInfo.TopologyKeys
 		if len(keys) == 0 {
@@ -128,11 +127,10 @@ func (t *topologyTestSuite) DefineTests(driver storageframework.TestDriver, patt
 		ginkgo.DeferCleanup(t.CleanupResources, cs, l)
 
 		if dInfo.NumAllowedTopologies == 0 {
-			// Any plugin that supports topology defaults to 1 topology
+			// 任何支持拓扑的插件默认都至少有 1 个拓扑
 			dInfo.NumAllowedTopologies = 1
 		}
-		// We collect 1 additional topology, if possible, for the conflicting topology test
-		// case, but it's not needed for the positive test
+		// 如条件允许，再收集 1 个拓扑用于冲突拓扑测试场景；正向测试不需要它
 		l.allTopologies, err = t.getCurrentTopologies(ctx, cs, keys, dInfo.NumAllowedTopologies+1)
 		framework.ExpectNoError(err, "failed to get current driver topologies")
 		if len(l.allTopologies) < dInfo.NumAllowedTopologies {
@@ -161,7 +159,7 @@ func (t *topologyTestSuite) DefineTests(driver storageframework.TestDriver, patt
 	ginkgo.It("should provision a volume and schedule a pod with AllowedTopologies", func(ctx context.Context) {
 		l := init(ctx)
 
-		// If possible, exclude one topology, otherwise allow them all
+		// 如条件允许则排除一个拓扑，否则全部允许
 		excludedIndex := -1
 		if len(l.allTopologies) > dInfo.NumAllowedTopologies {
 			excludedIndex = rand.Intn(len(l.allTopologies))
@@ -190,11 +188,11 @@ func (t *topologyTestSuite) DefineTests(driver storageframework.TestDriver, patt
 			e2eskipper.Skipf("Not enough topologies in cluster -- skipping")
 		}
 
-		// Exclude one topology
+		// 排除一个拓扑
 		excludedIndex := rand.Intn(len(l.allTopologies))
 		t.setAllowedTopologies(l.resource.Sc, l.allTopologies, excludedIndex)
 
-		// Set pod nodeSelector to the excluded topology
+		// 将 Pod 的 nodeSelector 设为被排除的拓扑
 		exprs := []v1.NodeSelectorRequirement{}
 		for k, v := range l.allTopologies[excludedIndex] {
 			exprs = append(exprs, v1.NodeSelectorRequirement{
@@ -217,15 +215,15 @@ func (t *topologyTestSuite) DefineTests(driver storageframework.TestDriver, patt
 		}
 		t.createResources(ctx, cs, l, affinity)
 
-		// Wait for pod to fail scheduling
-		// With delayed binding, the scheduler errors before provisioning
-		// With immediate binding, the volume gets provisioned but cannot be scheduled
+		// 等待 Pod 调度失败
+		// 延迟绑定时，调度器在卷制备之前就会报错
+		// 立即绑定时，卷会被制备但 Pod 无法被调度
 		err = e2epod.WaitForPodNameUnschedulableInNamespace(ctx, cs, l.pod.Name, l.pod.Namespace)
 		framework.ExpectNoError(err)
 	})
 }
 
-// getCurrentTopologies() goes through all Nodes and returns up to maxCount unique driver topologies
+// getCurrentTopologies() 遍历所有节点，返回最多 maxCount 个不同的驱动拓扑
 func (t *topologyTestSuite) getCurrentTopologies(ctx context.Context, cs clientset.Interface, keys []string, maxCount int) ([]topology, error) {
 	nodes, err := e2enode.GetReadySchedulableNodes(ctx, cs)
 	if err != nil {
@@ -234,7 +232,7 @@ func (t *topologyTestSuite) getCurrentTopologies(ctx context.Context, cs clients
 
 	topos := []topology{}
 
-	// TODO: scale?
+	// TODO: 是否需要测试扩缩容？
 	for _, n := range nodes.Items {
 		topo := map[string]string{}
 		for _, k := range keys {
@@ -263,7 +261,7 @@ func (t *topologyTestSuite) getCurrentTopologies(ctx context.Context, cs clients
 	return topos, nil
 }
 
-// reflect.DeepEqual doesn't seem to work
+// reflect.DeepEqual 在这里似乎不起作用
 func topologyEqual(t1, t2 topology) bool {
 	if len(t1) != len(t2) {
 		return false
@@ -276,9 +274,9 @@ func topologyEqual(t1, t2 topology) bool {
 	return true
 }
 
-// Set StorageClass.Allowed topologies from topos while excluding the topology at excludedIndex.
-// excludedIndex can be -1 to specify nothing should be excluded.
-// Return the list of allowed topologies generated.
+// 根据 topos 设置 StorageClass 的 AllowedTopologies，并排除 excludedIndex 处的拓扑。
+// excludedIndex 为 -1 表示不排除任何拓扑。
+// 返回生成的允许拓扑列表。
 func (t *topologyTestSuite) setAllowedTopologies(sc *storagev1.StorageClass, topos []topology, excludedIndex int) []topology {
 	allowedTopologies := []topology{}
 	sc.AllowedTopologies = []v1.TopologySelectorTerm{}

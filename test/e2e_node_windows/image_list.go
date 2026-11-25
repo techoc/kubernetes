@@ -35,33 +35,32 @@ import (
 )
 
 const (
-	// Number of attempts to pull an image.
+	// 拉取镜像的尝试次数。
 	maxImagePullRetries = 5
-	// Sleep duration between image pull retry attempts.
+	// 两次拉取重试之间的等待时长。
 	imagePullRetryDelay = time.Second
-	// Number of parallel count to pull images.
+	// 并行拉取镜像的数量。
 	maxParallelImagePullCount = 5
 )
 
-// NodePrePullImageList is a list of images used in Windows node e2e tests.
-// These images will be prepulled before test running so that the image pulling
-// won't fail in actual test.
+// NodePrePullImageList 是 Windows 节点 e2e 测试所用镜像的列表。
+// 这些镜像会在测试运行前预拉取，避免正式测试中拉取镜像失败。
 var NodePrePullImageList = sets.NewString(
 	imageutils.GetE2EImage(imageutils.Agnhost),
 	busyboxImage,
 	imageutils.GetPauseImageName(),
 )
 
-// updateImageAllowList updates the e2epod.ImagePrePullList with the Windows test images.
+// updateImageAllowList 用 Windows 测试镜像更新 e2epod.ImagePrePullList。
 func updateImageAllowList(ctx context.Context) {
 	e2epod.ImagePrePullList = NodePrePullImageList.Union(commontest.PrePulledImages)
 }
 
-// puller represents a generic image puller
+// puller 表示通用的镜像拉取器
 type puller interface {
-	// Pull pulls an image by name
+	// Pull 按名称拉取镜像
 	Pull(ctx context.Context, image string) ([]byte, error)
-	// Name returns the name of the specific puller implementation
+	// Name 返回具体拉取器实现的名称
 	Name() string
 }
 
@@ -92,7 +91,7 @@ func getPuller(ctx context.Context) (puller, error) {
 	}, nil
 }
 
-// PrePullAllImages pre-fetches all images tests depend on so that we don't fail in an actual test.
+// PrePullAllImages 预先拉取测试依赖的所有镜像，避免正式测试时失败。
 func PrePullAllImages(ctx context.Context) error {
 	puller, err := getPuller(ctx)
 	if err != nil {

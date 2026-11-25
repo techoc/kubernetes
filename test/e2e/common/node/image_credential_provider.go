@@ -46,18 +46,17 @@ var _ = SIGDescribe("ImageCredentialProvider", feature.KubeletCredentialProvider
 	/*
 		Release: v1.24
 		Testname: Test kubelet image pull with external credential provider plugins
-		Description: Create Pod with an image from a private registry. This test assumes that the kubelet credential provider plugin is enabled for the registry hosting imageutils.AgnhostPrivate.
+		Description: 使用私有仓库中的镜像创建 Pod。测试假设托管 imageutils.AgnhostPrivate 的仓库已启用 kubelet credential provider 插件。
 	*/
 	ginkgo.It("should be able to create pod with image credentials fetched from external credential provider", func(ctx context.Context) {
 		privateimage := imageutils.GetConfig(imageutils.AgnhostPrivate)
 		name := "pod-auth-image-" + string(uuid.NewUUID())
 
-		// The service account is required to exist for the credential provider plugin that's configured to use service account token.
+		// 配置为使用 service account token 的 credential provider 插件要求该 service account 存在。
 		serviceAccount := &v1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-service-account",
-				// these annotations are validated by the test gcp-credential-provider-with-sa plugin
-				// that runs in service account token mode.
+				// 这些注解由以 service account token 模式运行的测试插件 gcp-credential-provider-with-sa 校验。
 				Annotations: map[string]string{
 					"domain.io/identity-id":   "123456",
 					"domain.io/identity-type": "serviceaccount",
@@ -83,7 +82,7 @@ var _ = SIGDescribe("ImageCredentialProvider", feature.KubeletCredentialProvider
 			},
 		}
 
-		// CreateSync tests that the Pod is running and ready
+		// CreateSync 验证 Pod 处于 Running 且 Ready
 		podClient.CreateSync(ctx, pod)
 	})
 })

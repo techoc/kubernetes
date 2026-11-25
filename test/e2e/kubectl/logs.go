@@ -134,8 +134,8 @@ var _ = SIGDescribe("Kubectl logs", func() {
 		ns = f.Namespace.Name
 	})
 
-	// Split("something\n", "\n") returns ["something", ""], so
-	// strip trailing newline first
+	// Split("something\n", "\n") 会返回 ["something", ""]（末尾为空串），
+	// 因此先去掉结尾的换行符
 	lines := func(out string) []string {
 		return strings.Split(strings.TrimRight(out, "\n"), "\n")
 	}
@@ -146,7 +146,7 @@ var _ = SIGDescribe("Kubectl logs", func() {
 		containerName := "logs-generator"
 		ginkgo.BeforeEach(func() {
 			ginkgo.By("creating a pod")
-			// Agnhost image generates logs for a total of 100 lines over 20s.
+			// agnhost 镜像会在 20 秒内共生成 100 行日志。
 			e2ekubectl.RunKubectlOrDie(ns, "run", podName, "--image="+imageutils.GetE2EImage(imageutils.Agnhost), "--restart=Never", podRunningTimeoutArg, "--", "logs-generator", "--log-lines-total", "100", "--run-duration", "20s")
 		})
 		ginkgo.AfterEach(func() {
@@ -156,13 +156,13 @@ var _ = SIGDescribe("Kubectl logs", func() {
 		/*
 			Release: v1.9
 			Testname: Kubectl, logs
-			Description: When a Pod is running then it MUST generate logs.
-			Starting a Pod should have a expected log line. Also log command options MUST work as expected and described below.
-				'kubectl logs -tail=1' should generate a output of one line, the last line in the log.
-				'kubectl --limit-bytes=1' should generate a single byte output.
-				'kubectl --tail=1 --timestamp should generate one line with timestamp in RFC3339 format
-				'kubectl --since=1s' should output logs that are only 1 second older from now
-				'kubectl --since=24h' should output logs that are only 1 day older from now
+			Description: Pod 运行时 MUST 生成日志。
+			启动 Pod 后应产生预期的日志行。日志命令选项 MUST 按如下所述正常工作。
+				'kubectl logs -tail=1' 应输出一行，即日志的最后一行。
+				'kubectl --limit-bytes=1' 应只输出一个字节。
+				'kubectl --tail=1 --timestamp' 应输出一行，时间戳为 RFC3339 格式。
+				'kubectl --since=1s' 应只输出最近 1 秒内的日志。
+				'kubectl --since=24h' 应只输出最近 1 天内的日志。
 		*/
 		framework.ConformanceIt("should be able to retrieve and filter logs", func(ctx context.Context) {
 
@@ -201,9 +201,8 @@ var _ = SIGDescribe("Kubectl logs", func() {
 			}
 
 			ginkgo.By("restricting to a time range")
-			// Note: we must wait at least two seconds,
-			// because the granularity is only 1 second and
-			// it could end up rounding the wrong way.
+			// 注意：必须等待至少两秒，因为时间粒度只有 1 秒，
+			// 否则可能因四舍五入而得到错误结果。
 			time.Sleep(2500 * time.Millisecond) // ensure that startup logs on the node are seen as older than 1s
 			recentOut := e2ekubectl.RunKubectlOrDie(ns, "logs", podName, containerName, "--since=1s")
 			recent := len(strings.Split(recentOut, "\n"))
@@ -236,7 +235,7 @@ var _ = SIGDescribe("Kubectl logs", func() {
 
 			ginkgo.It("should log default container if not specified", func(ctx context.Context) {
 				ginkgo.By("Waiting for log generator to start.")
-				// we need to wait for pod completion, to check the generated number of lines
+				// 需要等待 Pod 结束，以便检查生成的日志行数
 				if err := e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, c, podName, ns, framework.PodStartTimeout); err != nil {
 					framework.Failf("Pod %s did not finish: %v", podName, err)
 				}

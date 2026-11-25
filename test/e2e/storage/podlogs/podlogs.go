@@ -14,12 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package podlogs enables live capturing of all events and log
-// messages for some or all pods in a namespace as they get generated.
-// This helps debugging both a running test (what is currently going
-// on?) and the output of a CI run (events appear in chronological
-// order and output that normally isn't available like the command
-// stdout messages are available).
+// Package podlogs 实时捕获 namespace 中部分或全部 Pod 产生的事件和日志消息。
+// 既便于调试正在运行的测试（了解当前发生了什么），也便于分析 CI 运行输出
+// （事件按时间顺序排列，还能看到通常无法获取的输出，如命令的 stdout 消息）。
 package podlogs
 
 import (
@@ -40,67 +37,56 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 )
 
-// LogOutput determines where output from CopyAllLogs goes.
+// LogOutput 决定 CopyAllLogs 的输出去向。
 //
-// Error messages about receiving log output is kept
-// separate from the log output and optionally goes to StatusWriter
+// 与接收日志输出相关的错误消息单独存放，可选地写入 StatusWriter。
 //
-// The log output can go to one or more possible destinations.
+// 日志输出可以发送到一个或多个目标。
 type LogOutput struct {
-	// If not nil, errors encountered will be logged here.
+	// 非 nil 时，遇到的错误会记录到这里。
 	StatusWriter io.Writer
 
-	// If not nil, all container output goes to this writer with "<pod>/<container>:" as prefix.
+	// 非 nil 时，所有容器输出都以 "<pod>/<container>:" 为前缀写入此 writer。
 	LogWriter io.Writer
 
-	// Base directory for one log file per container.
-	// The full path of each log file will be <log path prefix><pod>-<container>.log,
-	// if not empty.
+	// 每个容器一个日志文件的基础目录。
+	// 非空时，每个日志文件的完整路径为 <log path prefix><pod>-<container>.log。
 	LogPathPrefix string
 
-	// LogOpen, if not nil, gets called whenever log output watching starts for
-	// a certain container. Returning nil means that the output can be discarded
-	// unless it gets written elsewhere.
+	// LogOpen 非 nil 时，每当开始监听某个容器的日志输出就会调用它。
+	// 返回 nil 表示输出可以丢弃，除非它被写到别处。
 	//
-	// The container's stdout and stderr output get written to the returned writer.
-	// The writer gets closed once all output is processed if the writer implements io.Closer.
-	// Each write is a single line, including a newline.
-	// Write errors are ignored.
+	// 容器的 stdout 和 stderr 输出会写入返回的 writer。
+	// 若该 writer 实现了 io.Closer，则所有输出处理完毕后会将其关闭。
+	// 每次写入都是单行，包含换行符。
+	// 写入错误会被忽略。
 	LogOpen func(podName, containerName string) io.Writer
 }
 
-// Matches harmless errors from pkg/kubelet/kubelet_pods.go.
+// 匹配来自 pkg/kubelet/kubelet_pods.go 的无害错误。
 var expectedErrors = regexp.MustCompile(`container .* in pod .* is (terminated|waiting to start|not available)|the server could not find the requested resource|context canceled`)
 
-// CopyPodLogs is basically CopyPodLogs for all current or future pods in the given namespace ns
+// CopyAllLogs 相当于对给定 namespace ns 中所有当前及未来的 Pod 调用 CopyPodLogs。
 func CopyAllLogs(ctx context.Context, cs clientset.Interface, ns string, to LogOutput) error {
 	return CopyPodLogs(ctx, cs, ns, "", to)
 }
 
-// CopyPodLogs follows the logs of all containers in pod with the given podName,
-// including those that get created in the future, and writes each log
-// line as configured in the output options. It does that until the
-// context is done or until an error occurs.
+// CopyPodLogs 跟踪给定 podName 的 Pod 中所有容器的日志（包括将来创建的容器），
+// 并按输出选项的配置写入每一行日志，直到 context 结束或发生错误。
 //
-// If podName is empty, it will follow all pods in the given namespace ns.
+// podName 为空时，会跟踪给定 namespace ns 中的所有 Pod。
 //
-// Beware that there is currently no way to force log collection
-// before removing pods, which means that there is a known race
-// between "stop pod" and "collecting log entries". The alternative
-// would be a blocking function with collects logs from all currently
-// running pods, but that then would have the disadvantage that
-// already deleted pods aren't covered.
+// 注意，目前无法在删除 Pod 之前强制完成日志收集，因此 "停止 Pod" 与
+// "收集日志条目" 之间存在已知的竞态。另一种方案是采用阻塞式函数，
+// 收集所有当前运行中 Pod 的日志，但那样就无法覆盖已被删除的 Pod。
 //
-// Another race occurs is when a pod shuts down. Logging stops, but if
-// then the pod is not removed from the apiserver quickly enough, logging
-// resumes and dumps the old log again. Previously, this was allowed based
-// on the assumption that it is better to log twice than miss log messages
-// of pods that started and immediately terminated or when logging temporarily
-// stopped.
+// 还有一种竞态出现在 Pod 关闭时：日志记录停止，但如果 Pod 没有足够快地从
+// apiserver 删除，日志记录就会恢复并重复输出旧日志。过去允许这种行为，
+// 基于的假设是：重复记录总比漏掉那些启动后立即终止的 Pod 的日志、或
+// 日志临时中断期间的日志要好。
 //
-// But it turned out to be rather confusing, so now a heuristic is used: if
-// log output of a container was already captured, then capturing does not
-// resume if the pod is marked for deletion.
+// 但事实证明这很容易引起混淆，所以现在采用一种启发式策略：如果某个容器的
+// 日志已经被捕获过，那么当 Pod 被标记为删除时，就不再恢复捕获。
 func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string, to LogOutput) error {
 	options := meta.ListOptions{}
 	if podName != "" {
@@ -116,11 +102,11 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 
 	go func() {
 		var m sync.Mutex
-		// Key is pod/container name, true if currently logging it.
+		// key 为 pod/container 名称，value 表示当前是否正在记录该容器的日志。
 		active := map[string]bool{}
-		// Key is pod/container/container-id, true if we have ever started to capture its output.
+		// key 为 pod/container/container-id，value 表示是否曾经开始捕获其输出。
 		started := map[string]bool{}
-		// Key is pod/container/container-id, value the time stamp of the last log line that has been seen.
+		// key 为 pod/container/container-id，value 为已看到最后一行日志的时间戳。
 		latest := map[string]*meta.Time{}
 
 		check := func() {
@@ -137,30 +123,27 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 
 			for _, pod := range pods.Items {
 				for i, c := range pod.Spec.Containers {
-					// sanity check, array should have entry for each container
+					// 防御性检查：数组应为每个容器都包含一项。
 					if len(pod.Status.ContainerStatuses) <= i {
 						continue
 					}
 					name := pod.ObjectMeta.Name + "/" + c.Name
 					id := name + "/" + pod.Status.ContainerStatuses[i].ContainerID
 					if active[name] ||
-						// If we have worked on a container before and it has now terminated, then
-						// there cannot be any new output and we can ignore it.
+						// 如果之前已处理过某个容器而现在它已终止，则不会再有新输出，可以忽略。
 						(pod.Status.ContainerStatuses[i].State.Terminated != nil &&
 							started[id]) ||
-						// State.Terminated might not have been updated although the container already
-						// stopped running. Also check whether the pod is deleted.
+						// 容器可能已停止运行但 State.Terminated 尚未更新，因此还要检查 Pod 是否被删除。
 						(pod.DeletionTimestamp != nil && started[id]) ||
-						// Don't attempt to get logs for a container unless it is running or has terminated.
-						// Trying to get a log would just end up with an error that we would have to suppress.
+						// 容器只有处于 Running 或 Terminated 状态时才获取日志；
+						// 其他状态获取日志只会得到不得不抑制的错误。
 						(pod.Status.ContainerStatuses[i].State.Running == nil &&
 							pod.Status.ContainerStatuses[i].State.Terminated == nil) {
 						continue
 					}
 
-					// Determine where we write. If this fails, we intentionally return without clearing
-					// the active[name] flag, which prevents trying over and over again to
-					// create the output file.
+					// 确定输出目标。若失败，故意不清除 active[name] 标记就返回，
+					// 避免反复尝试创建输出文件。
 					var logWithPrefix, logWithoutPrefix, output io.Writer
 					var prefix string
 					podHandled := false
@@ -182,8 +165,7 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 							}
 							return
 						}
-						// The test suite might run the same test multiple times,
-						// so we have to append here.
+						// 测试套件可能多次运行同一测试，因此这里必须追加写入。
 						file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 						if err != nil {
 							if to.StatusWriter != nil {
@@ -201,12 +183,12 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 					}
 
 					if !podHandled {
-						// No-one is interested in this pod, don't bother...
+						// 没有输出目标对这个 Pod 感兴趣，跳过。
 						continue
 					}
 
 					closeOutput := func() {
-						// Execute all of these, even if one one of them panics.
+						// 全部执行，即使其中一个发生 panic。
 						defer maybeClose(logWithPrefix)
 						defer maybeClose(logWithoutPrefix)
 						defer maybeClose(output)
@@ -223,8 +205,7 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 					if err != nil {
 						closeOutput()
 
-						// We do get "normal" errors here, like trying to read too early.
-						// We can ignore those.
+						// 这里确实会出现一些"正常"错误，比如读取过早，可以忽略。
 						if to.StatusWriter != nil &&
 							expectedErrors.FindStringIndex(err.Error()) == nil {
 							_, _ = fmt.Fprintf(to.StatusWriter, "WARNING: pod log: %s: %s\n", name, err)
@@ -240,7 +221,7 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 						first := true
 						defer func() {
 							m.Lock()
-							// If we never printed anything, then also skip the final message.
+							// 如果从未输出过任何内容，也跳过结束消息。
 							if !first {
 								if logWithPrefix != nil {
 									_, _ = fmt.Fprintf(logWithPrefix, "%s==== end of pod log at %s ====\n", prefix, latest[id])
@@ -257,17 +238,14 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 						var latestTS time.Time
 						for scanner.Scan() {
 							line := scanner.Text()
-							// Filter out the expected "end of stream" error message,
-							// it would just confuse developers who don't know about it.
-							// Same for attempts to read logs from a container that
-							// isn't ready (yet?!).
+							// 过滤预期的 "end of stream" 错误消息，它只会让不知情的开发者困惑。
+							// 同样过滤从尚未就绪的容器读取日志的尝试。
 							if !strings.HasPrefix(line, "rpc error: code = Unknown desc = Error: No such container:") &&
 								!strings.HasPrefix(line, "unable to retrieve container logs for ") &&
 								!strings.HasPrefix(line, "Unable to retrieve container logs for ") {
 								if first {
-									// Because the same log might be written to multiple times
-									// in different test instances, log an extra line to separate them.
-									// Also provides some useful extra information.
+									// 同一日志可能被不同测试实例多次写入，额外输出一行以分隔它们，
+									// 同时提供一些有用的附加信息。
 									since := "(initial part)"
 									if sinceTime != nil {
 										since = fmt.Sprintf("since %s", sinceTime)
@@ -285,8 +263,7 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 									ts, err := time.Parse(time.RFC3339, line[:index])
 									if err == nil {
 										latestTS = ts
-										// Log output typically has it's own log header with a time stamp,
-										// so let's strip the PodLogOptions time stamp.
+										// 日志输出通常自带带时间戳的头部，因此去掉 PodLogOptions 添加的时间戳。
 										line = line[index+1:]
 									}
 								}
@@ -312,10 +289,8 @@ func CopyPodLogs(ctx context.Context, cs clientset.Interface, ns, podName string
 			}
 		}
 
-		// Watch events to see whether we can start logging
-		// and log interesting ones. Also check periodically,
-		// in case of failures which are not followed by
-		// some pod change.
+		// 通过 watch 事件判断是否可开始记录日志并记录有意义的事件；
+		// 同时定期检查，以防失败之后没有后续 Pod 变更事件。
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		check()
@@ -339,20 +314,17 @@ func maybeClose(writer io.Writer) {
 	}
 }
 
-// logsForPod starts reading the logs for a certain pod. If the pod has more than one
-// container, opts.Container must be set. Reading stops when the context is done.
-// The stream includes formatted error messages and ends with
+// logsForPod 开始读取指定 Pod 的日志。若 Pod 有多个容器，必须设置 opts.Container。
+// context 结束时会停止读取。
+// 若 Pod 在流式读取期间被删除，流中会包含格式化错误消息，并以如下内容结束：
 //
 //	rpc error: code = Unknown desc = Error: No such container: 41a...
-//
-// when the pod gets deleted while streaming.
 func logsForPod(ctx context.Context, cs clientset.Interface, ns, pod string, opts *v1.PodLogOptions) (io.ReadCloser, error) {
 	return cs.CoreV1().Pods(ns).GetLogs(pod, opts).Stream(ctx)
 }
 
-// WatchPods prints pod status events for a certain namespace or all namespaces
-// when namespace name is empty. The closer can be nil if the caller doesn't want
-// the file to be closed when watching stops.
+// WatchPods 打印指定 namespace 的 Pod 状态事件；namespace 为空时打印所有 namespace 的事件。
+// 若调用方不希望在停止 watch 时关闭文件，closer 可以为 nil。
 func WatchPods(ctx context.Context, cs clientset.Interface, ns string, to io.Writer, toCloser io.Closer) (finalErr error) {
 	defer func() {
 		if finalErr != nil && toCloser != nil {

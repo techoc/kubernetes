@@ -41,14 +41,13 @@ type seLinuxMountTestSuite struct {
 }
 
 var (
-	// Pod SELinux label used in the test pods.
+	// 测试 Pod 使用的 SELinux label。
 	seLinuxLabel = &v1.SELinuxOptions{Level: "s0:c0,c1"}
-	// The expected SELinux mount option, matching both Debian (system_u:object_r:svirt_lxc_net_t) and Fedore based distros (system_u:object_r:container_file_t)
+	// 期望的 SELinux mount option，同时匹配 Debian（system_u:object_r:svirt_lxc_net_t）和基于 Fedora 的发行版（system_u:object_r:container_file_t）
 	seLinuxMountOptionRE = "context=\"system_u:object_r:[^:]*:s0:c0,c1\""
 )
 
-// InitCustomSELinuxMountTestSuite returns seLinuxMountTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomSELinuxMountTestSuite 返回使用自定义 test pattern 实现 TestSuite 接口的 seLinuxMountTestSuite
 func InitCustomSELinuxMountTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &seLinuxMountTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -66,8 +65,7 @@ func InitCustomSELinuxMountTestSuite(patterns []storageframework.TestPattern) st
 	}
 }
 
-// InitSELinuxMountTestSuite returns seLinuxMountTestSuite that implements TestSuite interface
-// using testsuite default patterns
+// InitSELinuxMountTestSuite 返回使用 testsuite 默认 pattern 实现 TestSuite 接口的 seLinuxMountTestSuite
 func InitSELinuxMountTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsDynamicPV,
@@ -95,8 +93,8 @@ func (s *seLinuxMountTestSuite) DefineTests(driver storageframework.TestDriver, 
 	}
 	var l local
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意，它还会注册一个 AfterEach，使 f 变得不可用。
+	// 任何使用 f 的代码都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("selinux-mount", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -134,7 +132,7 @@ func (s *seLinuxMountTestSuite) DefineTests(driver storageframework.TestDriver, 
 		{
 			name:                     "Pod with RWOP volume and the default policy",
 			accessMode:               v1.ReadWriteOncePod,
-			seLinuxChangePolicy:      nil, // implies mount option
+			seLinuxChangePolicy:      nil, // 意味着使用 mount option
 			expectSELinuxMountOption: true,
 		},
 		{
@@ -159,19 +157,19 @@ func (s *seLinuxMountTestSuite) DefineTests(driver storageframework.TestDriver, 
 	}
 	for _, test := range tests {
 		framework.Context(test.name, func() {
-			// Compose framework.It arguments dynamically, because the feature gates are dynamic
+			// 动态拼装 framework.It 的参数，因为 feature gate 是动态变化的
 			var args []interface{}
-			// Test name
+			// 测试名称
 			if test.expectSELinuxMountOption {
 				args = append(args, "should mount volumes with SELinux mount option")
 			} else {
 				args = append(args, "should mount volumes without SELinux mount option")
 			}
-			// Feature gates
+			// feature gate
 			for _, fg := range test.featureGates {
 				args = append(args, framework.WithFeatureGate(fg))
 			}
-			// The test body
+			// 测试主体
 			args = append(args, func(ctx context.Context) {
 				init(ctx, test.accessMode)
 				ginkgo.DeferCleanup(cleanup)
@@ -211,7 +209,7 @@ func getVolumeMountOptions(f *framework.Framework, podName string, containerName
 	cmd := []string{"cat", "/proc/mounts"}
 	stdout, stderr, err := e2epod.ExecCommandInContainerWithFullOutput(f, podName, containerName, cmd...)
 	if err != nil {
-		// Log all details about the call, except the error that will be logged by the caller
+		// 记录这次调用的所有细节，但不记录会由调用方记录的错误
 		framework.Logf("Executed: %s", strings.Join(cmd, " "))
 		framework.Logf("stdout: %s", stdout)
 		framework.Logf("stderr: %s", stderr)

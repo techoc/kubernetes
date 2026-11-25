@@ -44,140 +44,118 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// DriverDefinition needs to be filled in via a .yaml or .json
-// file. Its methods then implement the TestDriver interface, using
-// nothing but the information in this struct.
+// DriverDefinition 需要通过 .yaml 或 .json 文件填写。
+// 其方法仅依据该结构体中的信息实现 TestDriver 接口。
 type driverDefinition struct {
-	// DriverInfo is the static information that the storage testsuite
-	// expects from a test driver. See test/e2e/storage/testsuites/testdriver.go
-	// for details. The only field with a non-zero default is the list of
-	// supported file systems (SupportedFsType): it is set so that tests using
-	// the default file system are enabled.
+	// DriverInfo 是 storage testsuite 期望测试驱动提供的静态信息。
+	// 详见 test/e2e/storage/testsuites/testdriver.go。
+	// 唯一带非零默认值的是支持的文件系统列表（SupportedFsType）：
+	// 设置它是为了启用使用默认文件系统的测试。
 	DriverInfo storageframework.DriverInfo
 
-	// StorageClass must be set to enable dynamic provisioning tests.
-	// The default is to not run those tests.
+	// 必须设置 StorageClass 才会启用动态制备（dynamic provisioning）测试。
+	// 默认不运行这些测试。
 	StorageClass struct {
-		// FromName set to true enables the usage of a storage
-		// class with DriverInfo.Name as provisioner and no
-		// parameters.
+		// FromName 设为 true 时，使用以 DriverInfo.Name 为 provisioner、
+		// 不带任何参数的 storage class。
 		FromName bool
 
-		// FromFile is used only when FromName is false.  It
-		// loads a storage class from the given .yaml or .json
-		// file. File names are resolved by the
-		// framework.testfiles package, which typically means
-		// that they can be absolute or relative to the test
-		// suite's --repo-root parameter.
+		// FromFile 仅在 FromName 为 false 时使用。
+		// 它从给定的 .yaml 或 .json 文件加载 storage class。
+		// 文件名由 framework.testfiles 包解析，通常可以是绝对路径，
+		// 或相对于测试套件的 --repo-root 参数的路径。
 		//
-		// This can be used when the storage class is meant to have
-		// additional parameters.
+		// 当 storage class 需要附带额外参数时使用此方式。
 		FromFile string
 
-		// FromExistingClassName specifies the name of a pre-installed
-		// StorageClass that will be copied and used for the tests.
+		// FromExistingClassName 指定一个预先安装的 StorageClass 的名称，
+		// 它会被复制并用于测试。
 		FromExistingClassName string
 	}
 
-	// VolumeAttributesClass must be set to enable volume modification tests.
-	// The default is to not run those tests.
+	// 必须设置 VolumeAttributesClass 才会启用卷修改（volume modification）测试。
+	// 默认不运行这些测试。
 	VolumeAttributesClass struct {
-		// FromFile is used only when FromName is false.  It
-		// loads a VolumeAttributesClass from the given .yaml or .json
-		// file. File names are resolved by the
-		// framework.testfiles package, which typically means
-		// that they can be absolute or relative to the test
-		// suite's --repo-root parameter.
+		// FromFile 仅在 FromName 为 false 时使用。
+		// 它从给定的 .yaml 或 .json 文件加载 VolumeAttributesClass。
+		// 文件名由 framework.testfiles 包解析，通常可以是绝对路径，
+		// 或相对于测试套件的 --repo-root 参数的路径。
 		//
-		// This can be used when the VolumeAttributesClass
-		// is meant to have additional parameters.
+		// 当 VolumeAttributesClass 需要附带额外参数时使用此方式。
 		FromFile string
 
-		// FromExistingClassName specifies the name of a pre-installed
-		// VolumeAttributesClass that will be copied and used for the tests.
+		// FromExistingClassName 指定一个预先安装的 VolumeAttributesClass 的名称，
+		// 它会被复制并用于测试。
 		FromExistingClassName string
 	}
 
-	// SnapshotClass must be set to enable snapshotting tests.
-	// The default is to not run those tests.
+	// 必须设置 SnapshotClass 才会启用快照（snapshotting）测试。
+	// 默认不运行这些测试。
 	SnapshotClass struct {
-		// FromName set to true enables the usage of a
-		// snapshotter class with DriverInfo.Name as provisioner.
+		// FromName 设为 true 时，使用以 DriverInfo.Name 为 provisioner 的
+		// snapshotter class。
 		FromName bool
 
-		// FromFile is used only when FromName is false.  It
-		// loads a snapshot class from the given .yaml or .json
-		// file. File names are resolved by the
-		// framework.testfiles package, which typically means
-		// that they can be absolute or relative to the test
-		// suite's --repo-root parameter.
+		// FromFile 仅在 FromName 为 false 时使用。
+		// 它从给定的 .yaml 或 .json 文件加载 snapshot class。
+		// 文件名由 framework.testfiles 包解析，通常可以是绝对路径，
+		// 或相对于测试套件的 --repo-root 参数的路径。
 		//
-		// This can be used when the snapshot class is meant to have
-		// additional parameters.
+		// 当 snapshot class 需要附带额外参数时使用此方式。
 		FromFile string
 
-		// FromExistingClassName specifies the name of a pre-installed
-		// SnapshotClass that will be copied and used for the tests.
+		// FromExistingClassName 指定一个预先安装的 SnapshotClass 的名称，
+		// 它会被复制并用于测试。
 		FromExistingClassName string
 	}
 
-	// GroupSnapshotClass must be set to enable groupsnapshotting tests.
-	// The default is to not run those tests.
+	// 必须设置 GroupSnapshotClass 才会启用组快照（groupsnapshotting）测试。
+	// 默认不运行这些测试。
 	GroupSnapshotClass struct {
-		// FromName set to true enables the usage of a
-		// groupsnapshotter class with DriverInfo.Name as provisioner.
+		// FromName 设为 true 时，使用以 DriverInfo.Name 为 provisioner 的
+		// groupsnapshotter class。
 		FromName bool
 
-		// FromFile is used only when FromName is false.  It
-		// loads a groupsnapshot class from the given .yaml or .json
-		// file. File names are resolved by the
-		// framework.testfiles package, which typically means
-		// that they can be absolute or relative to the test
-		// suite's --repo-root parameter.
+		// FromFile 仅在 FromName 为 false 时使用。
+		// 它从给定的 .yaml 或 .json 文件加载 groupsnapshot class。
+		// 文件名由 framework.testfiles 包解析，通常可以是绝对路径，
+		// 或相对于测试套件的 --repo-root 参数的路径。
 		//
-		// This can be used when the groupsnapshot class is meant to have
-		// additional parameters.
+		// 当 groupsnapshot class 需要附带额外参数时使用此方式。
 		FromFile string
 
-		// FromExistingClassName specifies the name of a pre-installed
-		// GroupSnapshotClass that will be copied and used for the tests.
+		// FromExistingClassName 指定一个预先安装的 GroupSnapshotClass 的名称，
+		// 它会被复制并用于测试。
 		FromExistingClassName string
 	}
 
-	// InlineVolumes defines one or more volumes for use as inline
-	// ephemeral volumes. At least one such volume has to be
-	// defined to enable testing of inline ephemeral volumes.  If
-	// a test needs more volumes than defined, some of the defined
-	// volumes will be used multiple times.
+	// InlineVolumes 定义一个或多个用作 inline ephemeral volume 的卷。
+	// 至少要定义一个此类卷才会启用 inline ephemeral volume 测试。
+	// 如果测试需要的卷多于已定义的卷，部分已定义的卷会被重复使用。
 	//
-	// DriverInfo.Name is used as name of the driver in the inline volume.
+	// inline volume 中以 DriverInfo.Name 作为驱动名称。
 	InlineVolumes []struct {
-		// Attributes are passed as NodePublishVolumeReq.volume_context.
-		// Can be empty.
+		// Attributes 会作为 NodePublishVolumeReq.volume_context 传入。
+		// 可以为空。
 		Attributes map[string]string
-		// Shared defines whether the resulting volume is
-		// shared between different pods (i.e.  changes made
-		// in one pod are visible in another)
+		// Shared 定义生成的卷是否在不同 Pod 之间共享
+		// （即在一个 Pod 中的修改对另一个 Pod 可见）。
 		Shared bool
-		// ReadOnly must be set to true if the driver does not
-		// support mounting as read/write.
+		// 如果驱动不支持以读/写方式挂载，ReadOnly 必须设为 true。
 		ReadOnly bool
 	}
 
-	// ClientNodeName selects a specific node for scheduling test pods.
-	// Can be left empty. Most drivers should not need this and instead
-	// use topology to ensure that pods land on the right node(s).
+	// ClientNodeName 指定用于调度测试 Pod 的节点。
+	// 可以留空。多数驱动不需要它，而应通过 topology 确保 Pod 落在正确的节点上。
 	ClientNodeName string
 
-	// NodeSelectors is used to specify nodeSelector information for pod deployment
-	// during the tests.  This is beneficial when needing to control placement
-	// for specialized environments.  Most drivers should not need this and
-	// instead can use topolgy to ensure that pods land on the right node(s).
+	// NodeSelectors 用于指定测试期间 Pod 部署的 nodeSelector 信息。
+	// 在需要控制特殊环境中的应用位置时很有用。多数驱动不需要它，
+	// 而应通过 topology 确保 Pod 落在正确的节点上。
 	NodeSelectors map[string]string
 
-	// Timeouts contains the custom timeouts used during the test execution.
-	// The values specified here will override the default values specified in
-	// the framework.TimeoutContext struct.
+	// Timeouts 包含测试执行期间使用的自定义超时。
+	// 此处指定的值会覆盖 framework.TimeoutContext 结构体中的默认值。
 	Timeouts map[string]string
 }
 
@@ -185,12 +163,9 @@ func init() {
 	e2econfig.Flags.Var(testDriverParameter{}, "storage.testdriver", "name of a .yaml or .json file that defines a driver for storage testing, can be used more than once")
 }
 
-// testDriverParameter is used to hook loading of the driver
-// definition file and test instantiation into argument parsing: for
-// each of potentially many parameters, Set is called and then does
-// both immediately. There is no other code location between argument
-// parsing and starting of the test suite where those test could be
-// defined.
+// testDriverParameter 用于把驱动定义文件的加载和测试实例化挂接到参数解析中：
+// 对于可能存在的多个参数，每个都会调用 Set，并立即完成这两件事。
+// 在参数解析与测试套件启动之间，没有其他位置可以定义这些测试。
 type testDriverParameter struct {
 }
 
@@ -204,9 +179,9 @@ func (t testDriverParameter) Set(filename string) error {
 	return AddDriverDefinition(filename)
 }
 
-// AddDriverDefinition defines ginkgo tests for CSI driver definition file.
-// Either --storage.testdriver cmdline argument or AddDriverDefinition can be used
-// to define the tests.
+// AddDriverDefinition 为 CSI 驱动定义文件定义 Ginkgo 测试。
+// 可以通过 --storage.testdriver 命令行参数或直接调用 AddDriverDefinition
+// 来定义测试。
 func AddDriverDefinition(filename string) error {
 	driver, err := loadDriverDefinition(filename)
 	framework.Logf("Driver loaded from path [%s]: %+v", filename, driver)
@@ -235,25 +210,25 @@ func loadDriverDefinition(filename string) (*driverDefinition, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Some reasonable defaults follow.
+	// 下面设置一些合理的默认值。
 	driver := &driverDefinition{
 		DriverInfo: storageframework.DriverInfo{
 			SupportedFsType: sets.NewString(
-				"", // Default fsType
+				"", // 默认 fsType
 			),
 			SupportedSizeRange: e2evolume.SizeRange{
 				Min: "5Gi",
 			},
 		},
 	}
-	// TODO: strict checking of the file content once https://github.com/kubernetes/kubernetes/pull/71589
-	// or something similar is merged.
+	// TODO: 等 https://github.com/kubernetes/kubernetes/pull/71589 或类似的改动合并后，
+	// 再对文件内容做严格检查。
 	if err := runtime.DecodeInto(scheme.Codecs.UniversalDecoder(), data, driver); err != nil {
 		return nil, fmt.Errorf("%s: %w", filename, err)
 	}
 
-	// To ensure backward compatibility: if controller expansion is enabled,
-	// then set both online and offline expansion to true
+	// 为保持向后兼容：如果启用了 controller expansion，
+	// 就同时启用 online 和 offline expansion。
 	if _, ok := driver.GetDriverInfo().Capabilities[storageframework.CapOnlineExpansion]; !ok &&
 		driver.GetDriverInfo().Capabilities[storageframework.CapControllerExpansion] {
 		caps := driver.DriverInfo.Capabilities
@@ -271,22 +246,20 @@ func loadDriverDefinition(filename string) (*driverDefinition, error) {
 
 var _ storageframework.TestDriver = &driverDefinition{}
 
-// We have to implement the interface because dynamic PV may or may
-// not be supported. driverDefinition.SkipUnsupportedTest checks that
-// based on the actual driver definition.
+// 必须实现该接口，因为 dynamic PV 可能支持也可能不支持。
+// driverDefinition.SkipUnsupportedTest 会根据实际的驱动定义进行检查。
 var _ storageframework.DynamicPVTestDriver = &driverDefinition{}
 
-// Same for snapshotting.
+// 快照接口同理。
 var _ storageframework.SnapshottableTestDriver = &driverDefinition{}
 
-// And for ephemeral volumes.
+// ephemeral volume 接口亦然。
 var _ storageframework.EphemeralTestDriver = &driverDefinition{}
 
 var _ storageframework.CustomTimeoutsTestDriver = &driverDefinition{}
 
-// runtime.DecodeInto needs a runtime.Object but doesn't do any
-// deserialization of it and therefore none of the methods below need
-// an implementation.
+// runtime.DecodeInto 需要一个 runtime.Object，但不会对它做反序列化，
+// 因此下面的方法都无需实现。
 var _ runtime.Object = &driverDefinition{}
 
 func (d *driverDefinition) DeepCopyObject() runtime.Object {
@@ -303,7 +276,7 @@ func (d *driverDefinition) GetDriverInfo() *storageframework.DriverInfo {
 
 func (d *driverDefinition) SkipUnsupportedTest(pattern storageframework.TestPattern) string {
 	supported := false
-	// TODO (?): add support for more volume types
+	// TODO (?): 支持更多卷类型
 	switch pattern.VolType {
 	case "":
 		supported = true
@@ -353,8 +326,8 @@ func (d *driverDefinition) GetDynamicProvisionStorageClass(ctx context.Context, 
 		if sc.Parameters == nil {
 			sc.Parameters = map[string]string{}
 		}
-		// This limits the external storage test suite to only CSI drivers, which may need to be
-		// reconsidered if we eventually need to move in-tree storage tests out.
+		// 这使 external storage 测试套件仅适用于 CSI 驱动。
+		// 如果将来要把 in-tree 存储测试移出，可能需要重新考虑这一点。
 		sc.Parameters["csi.storage.k8s.io/fstype"] = fsType
 	}
 	return storageframework.CopyStorageClass(sc, f.Namespace.Name, "e2e-sc")
@@ -366,27 +339,27 @@ func (d *driverDefinition) GetTimeouts() *framework.TimeoutContext {
 		return timeouts
 	}
 
-	// Use a temporary map to hold the timeouts specified in the manifest file
+	// 用临时 map 保存 manifest 文件中指定的超时设置。
 	c := make(map[string]time.Duration)
 	for k, v := range d.Timeouts {
 		duration, err := time.ParseDuration(v)
 		if err != nil {
-			// We can't use ExpectNoError() because his method can be called out of an It(),
-			// so we simply log the error and return the default timeouts.
+			// 这里不能用 ExpectNoError()：该方法可能在 It() 之外被调用，
+			// 因此只记录错误并返回默认超时。
 			klog.Errorf("Could not parse duration for key %s, will use default values: %v", k, err)
 			return timeouts
 		}
 		c[k] = duration
 	}
 
-	// Convert the temporary map holding the custom timeouts to JSON
+	// 将保存自定义超时的临时 map 转换为 JSON。
 	t, err := json.Marshal(c)
 	if err != nil {
 		klog.Errorf("Could not marshal custom timeouts, will use default values: %v", err)
 		return timeouts
 	}
 
-	// Override the default timeouts with the custom ones
+	// 用自定义超时覆盖默认值。
 	err = json.Unmarshal(t, &timeouts)
 	if err != nil {
 		klog.Errorf("Could not unmarshal custom timeouts, will use default values: %v", err)
@@ -435,7 +408,7 @@ func (d *driverDefinition) GetSnapshotClass(ctx context.Context, e2econfig *stor
 
 	switch {
 	case d.SnapshotClass.FromName:
-		// Do nothing (just use empty parameters)
+		// 不做任何事（只使用空参数）。
 	case d.SnapshotClass.FromExistingClassName != "":
 		snapshotClass, err := f.DynamicClient.Resource(utils.SnapshotClassGVR).Get(ctx, d.SnapshotClass.FromExistingClassName, metav1.GetOptions{})
 		framework.ExpectNoError(err, "getting snapshot class %s", d.SnapshotClass.FromExistingClassName)
@@ -478,7 +451,7 @@ func (d *driverDefinition) GetVolumeGroupSnapshotClass(ctx context.Context, e2ec
 
 	switch {
 	case d.GroupSnapshotClass.FromName:
-		// Do nothing (just use empty parameters)
+		// 不做任何事（只使用空参数）。
 	case d.GroupSnapshotClass.FromExistingClassName != "":
 		groupSnapshotClass, err := f.DynamicClient.Resource(utils.VolumeGroupSnapshotClassGVR).Get(ctx, d.GroupSnapshotClass.FromExistingClassName, metav1.GetOptions{})
 		framework.ExpectNoError(err, "getting snapshot class %s", d.SnapshotClass.FromExistingClassName)
@@ -571,7 +544,7 @@ func (d *driverDefinition) PrepareTest(ctx context.Context, f *framework.Framewo
 		e2econfig.ClientNodeSelection.Selector = map[string]string{"kubernetes.io/os": "linux"}
 	}
 
-	// Add all provided nodeSelector settings
+	// 加入所有提供的 nodeSelector 设置。
 	for key, value := range d.NodeSelectors {
 		e2econfig.ClientNodeSelection.Selector[key] = value
 	}

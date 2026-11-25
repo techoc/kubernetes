@@ -39,23 +39,23 @@ import (
 )
 
 const (
-	// timeout for proxy requests.
+	// 代理请求的超时时间。
 	proxyTimeout = 2 * time.Minute
 
-	// dockerOperationsKey is the key for docker operation metrics.
-	// copied from k8s.io/kubernetes/pkg/kubelet/dockershim/metrics
+	// dockerOperationsKey 是 docker 操作指标的键。
+	// 复制自 k8s.io/kubernetes/pkg/kubelet/dockershim/metrics
 	dockerOperationsKey = "docker_operations_total"
 
-	// dockerOperationsErrorsKey is the key for the operation error metrics.
-	// copied from k8s.io/kubernetes/pkg/kubelet/dockershim/metrics
+	// dockerOperationsErrorsKey 是操作错误指标的键。
+	// 复制自 k8s.io/kubernetes/pkg/kubelet/dockershim/metrics
 	dockerOperationsErrorsKey = "docker_operations_errors_total"
 
-	// dockerOperationsTimeoutKey is the key for the operation timeout metrics.
-	// copied from k8s.io/kubernetes/pkg/kubelet/dockershim/metrics
+	// dockerOperationsTimeoutKey 是操作超时指标的键。
+	// 复制自 k8s.io/kubernetes/pkg/kubelet/dockershim/metrics
 	dockerOperationsTimeoutKey = "docker_operations_timeout_total"
 )
 
-// ContainerResourceUsage is a structure for gathering container resource usage.
+// ContainerResourceUsage 用于收集容器资源使用情况。
 type ContainerResourceUsage struct {
 	Name                    string
 	Timestamp               time.Time
@@ -63,43 +63,43 @@ type ContainerResourceUsage struct {
 	MemoryUsageInBytes      uint64
 	MemoryWorkingSetInBytes uint64
 	MemoryRSSInBytes        uint64
-	// The interval used to calculate CPUUsageInCores.
+	// 计算 CPUUsageInCores 时采用的时间间隔。
 	CPUInterval time.Duration
 }
 
-// ResourceUsagePerContainer is map of ContainerResourceUsage
+// ResourceUsagePerContainer 是以 ContainerResourceUsage 为值的映射。
 type ResourceUsagePerContainer map[string]*ContainerResourceUsage
 
-// ResourceUsagePerNode is map of ResourceUsagePerContainer.
+// ResourceUsagePerNode 是以 ResourceUsagePerContainer 为值的映射。
 type ResourceUsagePerNode map[string]ResourceUsagePerContainer
 
-// ContainersCPUSummary is indexed by the container name with each entry a
-// (percentile, value) map.
+// ContainersCPUSummary 以容器名为索引，每项是一个
+// （百分位，值）映射。
 type ContainersCPUSummary map[string]map[float64]float64
 
-// NodesCPUSummary is indexed by the node name with each entry a
-// ContainersCPUSummary map.
+// NodesCPUSummary 以节点名为索引，每项是一个
+// ContainersCPUSummary 映射。
 type NodesCPUSummary map[string]ContainersCPUSummary
 
-// RuntimeOperationMonitor is the tool getting and parsing docker operation metrics.
+// RuntimeOperationMonitor 用于获取并解析 docker 操作指标。
 type RuntimeOperationMonitor struct {
 	client          clientset.Interface
 	nodesRuntimeOps map[string]NodeRuntimeOperationErrorRate
 }
 
-// NodeRuntimeOperationErrorRate is the runtime operation error rate on one node.
+// NodeRuntimeOperationErrorRate 表示单个节点上的 runtime 操作错误率。
 type NodeRuntimeOperationErrorRate map[string]*RuntimeOperationErrorRate
 
-// RuntimeOperationErrorRate is the error rate of a specified runtime operation.
+// RuntimeOperationErrorRate 表示指定 runtime 操作的错误率。
 type RuntimeOperationErrorRate struct {
 	TotalNumber float64
 	ErrorRate   float64
 	TimeoutRate float64
 }
 
-// ProxyRequest performs a get on a node proxy endpoint given the nodename and rest client.
+// ProxyRequest 根据节点名和 rest client 对节点代理端点执行 GET 请求。
 func ProxyRequest(ctx context.Context, c clientset.Interface, node, endpoint string, port int) (restclient.Result, error) {
-	// proxy tends to hang in some cases when Node is not ready. Add an artificial timeout for this call. #22165
+	// Node 未就绪时代理请求有时会挂起，因此为该调用加上人为的超时限制。#22165
 	var result restclient.Result
 	finished := make(chan struct{}, 1)
 	go func() {
@@ -120,7 +120,7 @@ func ProxyRequest(ctx context.Context, c clientset.Interface, node, endpoint str
 	}
 }
 
-// NewRuntimeOperationMonitor returns a new RuntimeOperationMonitor.
+// NewRuntimeOperationMonitor 返回一个新的 RuntimeOperationMonitor。
 func NewRuntimeOperationMonitor(ctx context.Context, c clientset.Interface) *RuntimeOperationMonitor {
 	m := &RuntimeOperationMonitor{
 		client:          c,
@@ -133,13 +133,13 @@ func NewRuntimeOperationMonitor(ctx context.Context, c clientset.Interface) *Run
 	for _, node := range nodes.Items {
 		m.nodesRuntimeOps[node.Name] = make(NodeRuntimeOperationErrorRate)
 	}
-	// Initialize the runtime operation error rate
+	// 初始化 runtime 操作错误率。
 	m.GetRuntimeOperationErrorRate(ctx)
 	return m
 }
 
-// GetRuntimeOperationErrorRate gets runtime operation records from kubelet metrics and calculate
-// error rates of all runtime operations.
+// GetRuntimeOperationErrorRate 从 kubelet 指标中获取 runtime 操作记录，并计算
+// 所有 runtime 操作的错误率。
 func (m *RuntimeOperationMonitor) GetRuntimeOperationErrorRate(ctx context.Context) map[string]NodeRuntimeOperationErrorRate {
 	for node := range m.nodesRuntimeOps {
 		nodeResult, err := getNodeRuntimeOperationErrorRate(ctx, m.client, node)
@@ -152,7 +152,7 @@ func (m *RuntimeOperationMonitor) GetRuntimeOperationErrorRate(ctx context.Conte
 	return m.nodesRuntimeOps
 }
 
-// GetLatestRuntimeOperationErrorRate gets latest error rate and timeout rate from last observed RuntimeOperationErrorRate.
+// GetLatestRuntimeOperationErrorRate 根据上一次观测到的 RuntimeOperationErrorRate 计算最新的错误率和超时率。
 func (m *RuntimeOperationMonitor) GetLatestRuntimeOperationErrorRate(ctx context.Context) map[string]NodeRuntimeOperationErrorRate {
 	result := make(map[string]NodeRuntimeOperationErrorRate)
 	for node := range m.nodesRuntimeOps {
@@ -177,7 +177,7 @@ func (m *RuntimeOperationMonitor) GetLatestRuntimeOperationErrorRate(ctx context
 	return result
 }
 
-// FormatRuntimeOperationErrorRate formats the runtime operation error rate to string.
+// FormatRuntimeOperationErrorRate 将 runtime 操作错误率格式化为字符串。
 func FormatRuntimeOperationErrorRate(nodesResult map[string]NodeRuntimeOperationErrorRate) string {
 	lines := []string{}
 	for node, nodeResult := range nodesResult {
@@ -192,15 +192,14 @@ func FormatRuntimeOperationErrorRate(nodesResult map[string]NodeRuntimeOperation
 	return strings.Join(lines, "\n")
 }
 
-// getNodeRuntimeOperationErrorRate gets runtime operation error rate from specified node.
+// getNodeRuntimeOperationErrorRate 从指定节点获取 runtime 操作错误率。
 func getNodeRuntimeOperationErrorRate(ctx context.Context, c clientset.Interface, node string) (NodeRuntimeOperationErrorRate, error) {
 	result := make(NodeRuntimeOperationErrorRate)
 	ms, err := e2emetrics.GetKubeletMetrics(ctx, c, node)
 	if err != nil {
 		return result, err
 	}
-	// If no corresponding metrics are found, the returned samples will be empty. Then the following
-	// loop will be skipped automatically.
+	// 若找不到相应的指标，返回的样本将为空，后续循环自然会被跳过。
 	allOps := ms[dockerOperationsKey]
 	errOps := ms[dockerOperationsErrorsKey]
 	timeoutOps := ms[dockerOperationsTimeoutKey]
@@ -210,7 +209,7 @@ func getNodeRuntimeOperationErrorRate(ctx context.Context, c clientset.Interface
 	}
 	for _, sample := range errOps {
 		operation := string(sample.Metric["operation_type"])
-		// Should always find the corresponding item, just in case
+		// 理论上总能找到对应项，这里仅作兜底。
 		if _, found := result[operation]; found {
 			result[operation].ErrorRate = float64(sample.Value) / result[operation].TotalNumber
 		}
@@ -224,7 +223,7 @@ func getNodeRuntimeOperationErrorRate(ctx context.Context, c clientset.Interface
 	return result, nil
 }
 
-// GetStatsSummary contacts kubelet for the container information.
+// GetStatsSummary 向 kubelet 请求容器信息。
 func GetStatsSummary(ctx context.Context, c clientset.Interface, nodeName string) (*kubeletstatsv1alpha1.Summary, error) {
 	ctx, cancel := context.WithTimeout(ctx, framework.SingleCallTimeout)
 	defer cancel()
@@ -276,8 +275,8 @@ func getSystemContainerStats(summary *kubeletstatsv1alpha1.Summary) map[string]*
 		statsMap[statsList[i].Name] = &statsList[i]
 	}
 
-	// Create a root container stats using information available in
-	// stats.NodeStats. This is necessary since it is a different type.
+	// 用 stats.NodeStats 中的数据构造 root 容器的统计信息，
+	// 因为二者的类型不同，必须单独构造。
 	statsMap[rootContainerName] = &kubeletstatsv1alpha1.ContainerStats{
 		CPU:    summary.Node.CPU,
 		Memory: summary.Node.Memory,
@@ -289,7 +288,7 @@ const (
 	rootContainerName = "/"
 )
 
-// TargetContainers returns a list of containers for which we want to collect resource usage.
+// TargetContainers 返回需要收集资源使用情况的容器列表。
 func TargetContainers() []string {
 	return []string{
 		rootContainerName,
@@ -299,9 +298,9 @@ func TargetContainers() []string {
 }
 
 func formatResourceUsageStats(nodeName string, containerStats ResourceUsagePerContainer) string {
-	// Example output:
+	// 输出示例：
 	//
-	// Resource usage for node "e2e-test-foo-node-abcde":
+	// 节点 "e2e-test-foo-node-abcde" 的资源用量：
 	// container        cpu(cores)  memory(MB)
 	// "/"              0.363       2942.09
 	// "/docker-daemon" 0.088       521.80
@@ -317,7 +316,7 @@ func formatResourceUsageStats(nodeName string, containerStats ResourceUsagePerCo
 	return fmt.Sprintf("Resource usage on node %q:\n%s", nodeName, buf.String())
 }
 
-// GetKubeletHeapStats returns stats of kubelet heap.
+// GetKubeletHeapStats 返回 kubelet 堆的统计信息。
 func GetKubeletHeapStats(ctx context.Context, c clientset.Interface, nodeName string) (string, error) {
 	client, err := ProxyRequest(ctx, c, nodeName, "debug/pprof/heap", framework.KubeletPort)
 	if err != nil {
@@ -328,7 +327,7 @@ func GetKubeletHeapStats(ctx context.Context, c clientset.Interface, nodeName st
 		return "", errRaw
 	}
 	kubeletstatsv1alpha1 := string(raw)
-	// Only dumping the runtime.MemStats numbers to avoid polluting the log.
+	// 只输出 runtime.MemStats 的数值，避免污染日志。
 	numLines := 23
 	lines := strings.Split(kubeletstatsv1alpha1, "\n")
 	return strings.Join(lines[len(lines)-numLines:], "\n"), nil
@@ -346,9 +345,8 @@ func computeContainerResourceUsage(name string, oldStats, newStats *kubeletstats
 	}
 }
 
-// resourceCollector periodically polls the node, collect stats for a given
-// list of containers, computes and cache resource usage up to
-// maxEntriesPerContainer for each container.
+// resourceCollector 定期轮询节点，收集指定容器的统计信息，
+// 并计算、缓存每个容器的资源使用情况（最多 maxEntriesPerContainer 条）。
 type resourceCollector struct {
 	lock            sync.RWMutex
 	node            string
@@ -370,22 +368,22 @@ func newResourceCollector(c clientset.Interface, nodeName string, containerNames
 	}
 }
 
-// Start starts a goroutine to Poll the node every pollingInterval.
+// Start 启动一个 goroutine，按 pollingInterval 定期轮询节点。
 func (r *resourceCollector) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	r.stop = cancel
-	// Keep the last observed stats for comparison.
+	// 保留最近一次观测的统计信息，用于后续比较。
 	oldStats := make(map[string]*kubeletstatsv1alpha1.ContainerStats)
 	go wait.UntilWithContext(ctx, func(ctx context.Context) { r.collectStats(ctx, oldStats) }, r.pollingInterval)
 }
 
-// Stop sends a signal to terminate the stats collecting goroutine.
+// Stop 发出信号，终止收集统计信息的 goroutine。
 func (r *resourceCollector) Stop() {
 	r.stop()
 }
 
-// collectStats gets the latest stats from kubelet stats summary API, computes
-// the resource usage, and pushes it to the buffer.
+// collectStats 从 kubelet stats summary API 获取最新统计信息，
+// 计算资源使用情况并写入缓冲区。
 func (r *resourceCollector) collectStats(ctx context.Context, oldStatsMap map[string]*kubeletstatsv1alpha1.ContainerStats) {
 	summary, err := getNodeStatsSummary(ctx, r.client, r.node)
 	if err != nil {
@@ -407,12 +405,12 @@ func (r *resourceCollector) collectStats(ctx context.Context, oldStatsMap map[st
 				continue
 			}
 			if oldStats.CPU.Time.Equal(&cStats.CPU.Time) {
-				// No change -> skip this stat.
+				// 数据未更新，跳过本次统计。
 				continue
 			}
 			r.buffers[name] = append(r.buffers[name], computeContainerResourceUsage(name, oldStats, cStats))
 		}
-		// Update the old stats.
+		// 更新上一次的统计信息。
 		oldStatsMap[name] = cStats
 	}
 }
@@ -431,7 +429,7 @@ func (r *resourceCollector) GetLatest() (ResourceUsagePerContainer, error) {
 	return kubeletstatsv1alpha1, nil
 }
 
-// Reset frees the stats and start over.
+// Reset 清空统计数据，重新开始收集。
 func (r *resourceCollector) Reset() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -446,11 +444,11 @@ func (r resourceUsageByCPU) Len() int           { return len(r) }
 func (r resourceUsageByCPU) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r resourceUsageByCPU) Less(i, j int) bool { return r[i].CPUUsageInCores < r[j].CPUUsageInCores }
 
-// The percentiles to report.
+// 需要报告的百分位。
 var percentiles = [...]float64{0.05, 0.20, 0.50, 0.70, 0.90, 0.95, 0.99}
 
-// GetBasicCPUStats returns the percentiles the cpu usage in cores for
-// containerName. This method examines all data currently in the buffer.
+// GetBasicCPUStats 返回 containerName 的 CPU 使用量（单位：核）的各个百分位。
+// 该方法会检查缓冲区中当前的所有数据。
 func (r *resourceCollector) GetBasicCPUStats(containerName string) map[float64]float64 {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
@@ -460,7 +458,7 @@ func (r *resourceCollector) GetBasicCPUStats(containerName string) map[float64]f
 	for _, q := range percentiles {
 		index := int(float64(len(usages))*q) - 1
 		if index < 0 {
-			// We don't have enough data.
+			// 数据量不足。
 			result[q] = 0
 			continue
 		}
@@ -469,7 +467,7 @@ func (r *resourceCollector) GetBasicCPUStats(containerName string) map[float64]f
 	return result
 }
 
-// ResourceMonitor manages a resourceCollector per node.
+// ResourceMonitor 为每个节点管理一个 resourceCollector。
 type ResourceMonitor struct {
 	client          clientset.Interface
 	containers      []string
@@ -477,7 +475,7 @@ type ResourceMonitor struct {
 	collectors      map[string]*resourceCollector
 }
 
-// NewResourceMonitor returns a new ResourceMonitor.
+// NewResourceMonitor 返回一个新的 ResourceMonitor。
 func NewResourceMonitor(c clientset.Interface, containerNames []string, pollingInterval time.Duration) *ResourceMonitor {
 	return &ResourceMonitor{
 		containers:      containerNames,
@@ -486,9 +484,9 @@ func NewResourceMonitor(c clientset.Interface, containerNames []string, pollingI
 	}
 }
 
-// Start starts collectors.
+// Start 启动所有收集器。
 func (r *ResourceMonitor) Start(ctx context.Context) {
-	// It should be OK to monitor unschedulable Nodes
+	// 监控不可调度的 Node 应该也没有问题。
 	nodes, err := r.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		framework.Failf("ResourceMonitor: unable to get list of nodes: %v", err)
@@ -501,21 +499,21 @@ func (r *ResourceMonitor) Start(ctx context.Context) {
 	}
 }
 
-// Stop stops collectors.
+// Stop 停止所有收集器。
 func (r *ResourceMonitor) Stop() {
 	for _, collector := range r.collectors {
 		collector.Stop()
 	}
 }
 
-// Reset resets collectors.
+// Reset 重置所有收集器。
 func (r *ResourceMonitor) Reset() {
 	for _, collector := range r.collectors {
 		collector.Reset()
 	}
 }
 
-// LogLatest outputs the latest resource usage into log.
+// LogLatest 将最新的资源使用情况输出到日志。
 func (r *ResourceMonitor) LogLatest() {
 	summary, err := r.GetLatest()
 	if err != nil {
@@ -524,8 +522,8 @@ func (r *ResourceMonitor) LogLatest() {
 	framework.Logf("%s", r.FormatResourceUsage(summary))
 }
 
-// FormatResourceUsage returns the formatted string for LogLatest().
-// TODO(oomichi): This can be made to local function after making test/e2e/node/kubelet_perf.go use LogLatest directly instead.
+// FormatResourceUsage 为 LogLatest() 返回格式化后的字符串。
+// TODO(oomichi): 待 test/e2e/node/kubelet_perf.go 改为直接使用 LogLatest 后，可将其改为局部函数。
 func (r *ResourceMonitor) FormatResourceUsage(s ResourceUsagePerNode) string {
 	summary := []string{}
 	for node, usage := range s {
@@ -534,7 +532,7 @@ func (r *ResourceMonitor) FormatResourceUsage(s ResourceUsagePerNode) string {
 	return strings.Join(summary, "\n")
 }
 
-// GetLatest returns the latest resource usage.
+// GetLatest 返回最新的资源使用情况。
 func (r *ResourceMonitor) GetLatest() (ResourceUsagePerNode, error) {
 	result := make(ResourceUsagePerNode)
 	errs := []error{}
@@ -549,7 +547,7 @@ func (r *ResourceMonitor) GetLatest() (ResourceUsagePerNode, error) {
 	return result, utilerrors.NewAggregate(errs)
 }
 
-// GetMasterNodeLatest returns the latest resource usage of master and node.
+// GetMasterNodeLatest 返回 master 与 node 的最新资源使用情况。
 func (r *ResourceMonitor) GetMasterNodeLatest(usagePerNode ResourceUsagePerNode) ResourceUsagePerNode {
 	result := make(ResourceUsagePerNode)
 	var masterUsage ResourceUsagePerContainer
@@ -584,10 +582,10 @@ func (r *ResourceMonitor) GetMasterNodeLatest(usagePerNode ResourceUsagePerNode)
 	return result
 }
 
-// FormatCPUSummary returns the string of human-readable CPU summary from the specified summary data.
+// FormatCPUSummary 根据指定的汇总数据生成便于阅读的 CPU 汇总字符串。
 func (r *ResourceMonitor) FormatCPUSummary(summary NodesCPUSummary) string {
-	// Example output for a node (the percentiles may differ):
-	// CPU usage of containers on node "e2e-test-foo-node-0vj7":
+	// 单个节点的输出示例（百分位可能不同）：
+	// 节点 "e2e-test-foo-node-0vj7" 上各容器的 CPU 用量：
 	// container        5th%  50th% 90th% 95th%
 	// "/"              0.051 0.159 0.387 0.455
 	// "/runtime        0.000 0.000 0.146 0.166
@@ -622,13 +620,13 @@ func (r *ResourceMonitor) FormatCPUSummary(summary NodesCPUSummary) string {
 	return strings.Join(summaryStrings, "\n")
 }
 
-// LogCPUSummary outputs summary of CPU into log.
+// LogCPUSummary 将 CPU 汇总信息输出到日志。
 func (r *ResourceMonitor) LogCPUSummary() {
 	summary := r.GetCPUSummary()
 	framework.Logf("%s", r.FormatCPUSummary(summary))
 }
 
-// GetCPUSummary returns summary of CPU.
+// GetCPUSummary 返回 CPU 汇总信息。
 func (r *ResourceMonitor) GetCPUSummary() NodesCPUSummary {
 	result := make(NodesCPUSummary)
 	for nodeName, collector := range r.collectors {
@@ -641,7 +639,7 @@ func (r *ResourceMonitor) GetCPUSummary() NodesCPUSummary {
 	return result
 }
 
-// GetMasterNodeCPUSummary returns summary of master node CPUs.
+// GetMasterNodeCPUSummary 返回 master 节点的 CPU 汇总信息。
 func (r *ResourceMonitor) GetMasterNodeCPUSummary(summaryPerNode NodesCPUSummary) NodesCPUSummary {
 	result := make(NodesCPUSummary)
 	var masterSummary ContainersCPUSummary

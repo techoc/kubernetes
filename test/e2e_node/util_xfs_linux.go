@@ -50,16 +50,16 @@ const (
 	xfsMagic = 0x58465342
 )
 
-// XFS over-allocates and then eventually removes that excess allocation.
-// That can lead to a file growing beyond its eventual size, causing
-// an unnecessary eviction:
+// XFS 会先过度分配，随后再逐步回收多余的分配空间。
+// 这可能导致文件暂时增长到超过其最终大小，从而触发
+// 不必要的驱逐：
 //
 // % ls -ls
 // total 32704
 // 32704 -rw-r--r-- 1 rkrawitz rkrawitz 20971520 Jan 15 13:16 foo.bin
 //
-// This issue can be hit regardless of the means used to count storage.
-// It is not present in ext4fs.
+// 无论采用何种方式统计存储用量，都可能遇到这个问题。
+// ext4fs 没有这个行为。
 func isXfs(dir string) bool {
 	mountpoint := detectMountpoint(mount.New(""), dir)
 	if mountpoint == "" {

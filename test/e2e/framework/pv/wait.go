@@ -29,23 +29,21 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// WaitForPersistentVolumeClaimModified waits the given timeout duration for the specified claim to become bound with the
-// desired volume attributes class.
-// Returns an error if timeout occurs first.
+// WaitForPersistentVolumeClaimModified 在给定超时时间内等待指定 PVC 绑定到期望的卷属性类。
+// 若先超时则返回错误。
 func WaitForPersistentVolumeClaimModified(ctx context.Context, c clientset.Interface, claim *v1.PersistentVolumeClaim, timeout time.Duration) error {
 	desiredClass := ptr.Deref(claim.Spec.VolumeAttributesClassName, "")
 
 	var match = func(claim *v1.PersistentVolumeClaim) bool {
 		for _, condition := range claim.Status.Conditions {
-			// conditions that indicate the claim is being modified
-			// or has an error when modifying the volume
+			// 表明 PVC 正在被修改或修改卷时出错的条件
 			if condition.Type == v1.PersistentVolumeClaimVolumeModifyVolumeError ||
 				condition.Type == v1.PersistentVolumeClaimVolumeModifyingVolume {
 				return false
 			}
 		}
 
-		// check if claim is bound with the desired volume attributes class
+		// 检查 PVC 是否已绑定到期望的卷属性类
 		currentClass := ptr.Deref(claim.Status.CurrentVolumeAttributesClassName, "")
 		return claim.Status.Phase == v1.ClaimBound &&
 			desiredClass == currentClass && claim.Status.ModifyVolumeStatus == nil
@@ -69,9 +67,8 @@ func WaitForPersistentVolumeClaimModified(ctx context.Context, c clientset.Inter
 		}))
 }
 
-// WaitForPersistentVolumeClaimModificationFailure waits the given timeout duration for the specified claim to have
-// failed to bind to the invalid volume attributes class.
-// Returns an error if timeout occurs first.
+// WaitForPersistentVolumeClaimModificationFailure 在给定超时时间内等待指定 PVC 绑定到无效卷属性类失败。
+// 若先超时则返回错误。
 func WaitForPersistentVolumeClaimModificationFailure(ctx context.Context, c clientset.Interface, claim *v1.PersistentVolumeClaim, timeout time.Duration) error {
 	desiredClass := ptr.Deref(claim.Spec.VolumeAttributesClassName, "")
 
@@ -82,12 +79,12 @@ func WaitForPersistentVolumeClaimModificationFailure(ctx context.Context, c clie
 				foundErrorCondition = true
 			}
 		}
-		// if no error found it must be an error
+		// 若没有找到错误，那本身就是错误
 		if !foundErrorCondition {
 			return false
 		}
 
-		// check if claim's current volume attributes class is NOT desired one, and has appropriate ModifyVolumeStatus
+		// 检查 PVC 当前的卷属性类是否不是期望的那个，且带有相应的 ModifyVolumeStatus
 		currentClass := ptr.Deref(claim.Status.CurrentVolumeAttributesClassName, "")
 		return claim.Status.Phase == v1.ClaimBound &&
 			desiredClass != currentClass && claim.Status.ModifyVolumeStatus != nil &&

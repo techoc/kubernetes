@@ -90,7 +90,7 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (scale resource: CP
 		})
 	})
 
-	// These tests take ~20 minutes each.
+	// 这些测试每个约耗时 20 分钟。
 	f.Describe("ReplicaSet", framework.WithSlow(), func() {
 		ginkgo.It(titleUp+" and verify decision stability", func(ctx context.Context) {
 			scaleUp(ctx, "rs", e2eautoscaling.KindReplicaSet, cpuResource, utilizationMetricType, true, f)
@@ -132,12 +132,12 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (scale resource: CP
 	})
 
 	f.Describe("ReplicaSet with idle sidecar (ContainerResource use case)", func() {
-		// ContainerResource CPU autoscaling on idle sidecar
+		// 空闲 sidecar 上的 ContainerResource CPU 自动伸缩
 		ginkgo.It(titleUp+" on a busy application with an idle sidecar container", func(ctx context.Context) {
 			scaleOnIdleSideCar(ctx, "rs", e2eautoscaling.KindReplicaSet, cpuResource, utilizationMetricType, false, f)
 		})
 
-		// ContainerResource CPU autoscaling on busy sidecar
+		// 繁忙 sidecar 上的 ContainerResource CPU 自动伸缩
 		ginkgo.It("Should not scale up on a busy sidecar with an idle application", func(ctx context.Context) {
 			doNotScaleOnBusySidecar(ctx, "rs", e2eautoscaling.KindReplicaSet, cpuResource, utilizationMetricType, true, f)
 		})
@@ -184,7 +184,7 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (scale resource: Me
 	})
 })
 
-// HPAScaleTest struct is used by the scale(...) function.
+// HPAScaleTest 结构体供 scale(...) 函数使用。
 type HPAScaleTest struct {
 	initPods         int
 	initCPUTotal     int
@@ -204,11 +204,10 @@ type HPAScaleTest struct {
 	perPodCPULoad    bool
 }
 
-// run is a method which runs an HPA lifecycle, from a starting state, to an expected
-// The initial state is defined by the initPods parameter.
-// The first state change is due to the CPU being consumed initially, which HPA responds to by changing pod counts.
-// The second state change (optional) is due to the CPU burst parameter, which HPA again responds to.
-// TODO The use of 3 states is arbitrary, we could eventually make this test handle "n" states once this test stabilizes.
+// run 方法运行一个 HPA 生命周期：从起始状态到预期状态。
+// 初始状态由 initPods 参数定义。第一次状态变化源于初始 CPU 消耗，HPA 通过调整 Pod 数量响应；
+// 第二次状态变化（可选）源于 CPU burst 参数，HPA 同样会响应。
+// TODO: 使用 3 个状态是随意的；待测试稳定后可支持“n”个状态。
 func (st *HPAScaleTest) run(ctx context.Context, name string, kind schema.GroupVersionKind, f *framework.Framework) {
 	const timeToWait = 15 * time.Minute
 	initCPUTotal, initMemTotal := 0, 0
@@ -223,12 +222,11 @@ func (st *HPAScaleTest) run(ctx context.Context, name string, kind schema.GroupV
 	hpa := e2eautoscaling.CreateResourceHorizontalPodAutoscaler(ctx, rc, st.resourceType, st.metricTargetType, st.targetValue, st.minPods, st.maxPods)
 	ginkgo.DeferCleanup(e2eautoscaling.DeleteHorizontalPodAutoscaler, rc, hpa.Name)
 
-	// TODO: the nested ifs to choose the consume mechanism should be refactored in a more generic way
-	// it should be passed as a parameter in e2eautoscaling.NewDynamicResourceConsumer()
+	// TODO: 选择消耗机制的嵌套 if 应重构为更通用的方式，
+	// 应作为参数传给 e2eautoscaling.NewDynamicResourceConsumer()。
 
-	// Pick the CPU load helper. perPodCPULoad addresses each pod
-	// directly via pod proxy (total/N millicores per pod), bypassing the
-	// random kube-proxy LB used by ConsumeCPU.
+	// 选择 CPU 负载辅助函数。perPodCPULoad 通过 Pod 代理直接访问每个 Pod
+	// （每个 Pod total/N 毫核），绕过 ConsumeCPU 使用的随机 kube-proxy 负载均衡。
 	consumeCPU := rc.ConsumeCPU
 	if st.perPodCPULoad {
 		consumeCPU = rc.ConsumeCPUPerPod
@@ -397,7 +395,7 @@ func scaleUpContainerResource(ctx context.Context, name string, kind schema.Grou
 }
 
 func scaleOnIdleSideCar(ctx context.Context, name string, kind schema.GroupVersionKind, resourceType v1.ResourceName, metricTargetType autoscalingv2.MetricTargetType, checkStability bool, f *framework.Framework) {
-	// Scale up on a busy application with an idle sidecar container
+	// 应用繁忙、sidecar 空闲时扩容
 	stasis := 0 * time.Minute
 	if checkStability {
 		stasis = 10 * time.Minute
@@ -422,7 +420,7 @@ func scaleOnIdleSideCar(ctx context.Context, name string, kind schema.GroupVersi
 }
 
 func doNotScaleOnBusySidecar(ctx context.Context, name string, kind schema.GroupVersionKind, resourceType v1.ResourceName, metricTargetType autoscalingv2.MetricTargetType, checkStability bool, f *framework.Framework) {
-	// Do not scale up on a busy sidecar with an idle application
+	// 应用空闲、sidecar 繁忙时不应扩容
 	stasis := 0 * time.Minute
 	if checkStability {
 		stasis = 1 * time.Minute
@@ -445,8 +443,8 @@ func doNotScaleOnBusySidecar(ctx context.Context, name string, kind schema.Group
 	st.run(ctx, name, kind, f)
 }
 
-// HPAPodResourceScaleTest is a struct that defines the parameters for
-// a pod-level resource scaling test.
+// HPAPodResourceScaleTest 定义 Pod 级别资源伸缩测试的参数。
+// 用于 Pod 级别资源伸缩测试。
 type HPAPodResourceScaleTest struct {
 	initPods               int
 	initCPUTotal           int
@@ -462,11 +460,10 @@ type HPAPodResourceScaleTest struct {
 	secondScale            int32
 }
 
-// run executes the HPA pod-level resource scaling test.
-// It creates a resource consumer and an HPA, then verifies that the number of
-// replicas scales up to the expected number of pods based on the initial CPU
+// run 执行 HPA Pod 级别资源伸缩测试。它创建资源消费者和 HPA，
+// 然后基于初始 CPU 用量验证副本数是否扩容到预期的 Pod 数量。
 // consumption.
-// It also optionally verifies a second scaling event based on a CPU burst.
+// 它还可选择基于 CPU 突发验证第二次伸缩事件。
 func (st *HPAPodResourceScaleTest) run(ctx context.Context, name string, kind schema.GroupVersionKind, f *framework.Framework) {
 	const timeToWait = 15 * time.Minute
 	resourceType := cpuResource
@@ -492,10 +489,10 @@ func (st *HPAPodResourceScaleTest) run(ctx context.Context, name string, kind sc
 	}
 }
 
-// scaleUpPodLevelResources configures and runs a test that scales up a workload
-// that has pod-level resources set based on a Utilization metric type HPA.
-// It also handles the case where the metric source is ContainerResource,
-// adjusting the parameters accordingly.
+// scaleUpPodLevelResources 配置并运行一个测试：使用 Utilization 指标类型的 HPA
+// 对设置了 Pod 级别资源的工作负载进行扩容。
+// 同时处理指标来源为 ContainerResource 的情况
+// 相应调整参数。
 func scaleUpPodLevelResources(ctx context.Context, name string, kind schema.GroupVersionKind, metricSourceType autoscalingv2.MetricSourceType, f *framework.Framework) {
 	st := &HPAPodResourceScaleTest{
 		metricSourceType:       metricSourceType,
@@ -513,13 +510,12 @@ func scaleUpPodLevelResources(ctx context.Context, name string, kind schema.Grou
 	}
 
 	if metricSourceType == autoscalingv2.ContainerResourceMetricSourceType {
-		// When pod-level resources are set and the HPA is configured on
-		// ContainerResource metric type, HPA considers the target container
-		// resource requests, instead of the pod-level resources during
+		// 当设置了 Pod 级别资源且 HPA 配置为
+		// ContainerResource 指标类型下，HPA 会考虑目标容器
+		// 容器级别的 resource requests，而非此处的 Pod 级别资源
 		// calculations.
-		// The values below make sure that HPA is autoscaling based on
-		// perContainerCPURequest instead of perPodRequests (HPA would not scale
-		// up if it was considering perPodRequests).
+		// 以下取值用于确保 HPA 基于这些指标进行自动伸缩
+		// perContainerCPURequest 而非 perPodRequests（若 HPA 考虑 perPodRequests 就不会扩容）。
 		st.perContainerCPURequest = 250
 		st.perContainerMemRequest = 250
 		st.initCPUTotal = 125

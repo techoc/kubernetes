@@ -23,31 +23,25 @@ import (
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
-// NodePerfWorkload provides the necessary information to run a workload for
-// node performance testing.
+// NodePerfWorkload 提供运行节点性能测试工作负载所需的全部信息。
 type NodePerfWorkload interface {
-	// Name of the workload.
+	// Name 返回工作负载名称。
 	Name() string
-	// PodSpec used to run this workload.
+	// PodSpec 返回运行该工作负载所用的 PodSpec。
 	PodSpec() v1.PodSpec
-	// Timeout provides the expected time to completion
-	// for this workload.
+	// Timeout 返回该工作负载预期完成所需的时间。
 	Timeout() time.Duration
-	// KubeletConfig specifies the Kubelet configuration
-	// required for this workload.
+	// KubeletConfig 返回该工作负载所需的 Kubelet 配置。
 	KubeletConfig(old *kubeletconfig.KubeletConfiguration) (new *kubeletconfig.KubeletConfiguration, err error)
-	// PreTestExec is used for defining logic that needs
-	// to be run before restarting the Kubelet with the new Kubelet
-	// configuration required for the workload.
+	// PreTestExec 定义在以工作负载所需的新 Kubelet 配置重启 Kubelet 之前
+	// 需要执行的逻辑。
 	PreTestExec() error
-	// PostTestExec is used for defining logic that needs
-	// to be run after the workload has completed.
+	// PostTestExec 定义在工作负载完成后需要执行的逻辑。
 	PostTestExec() error
-	// ExtractPerformanceFromLogs is used get the performance of the workload
-	// from pod logs. Currently, we support only performance reported in
-	// time.Duration format.
+	// ExtractPerformanceFromLogs 从 Pod 日志中提取工作负载的性能数据。
+	// 目前只支持以 time.Duration 格式报告的性能数据。
 	ExtractPerformanceFromLogs(logs string) (perf time.Duration, err error)
 }
 
-// NodePerfWorkloads is the collection of all node performance testing workloads.
+// NodePerfWorkloads 是所有节点性能测试工作负载的集合。
 var NodePerfWorkloads = []NodePerfWorkload{npbISWorkload{}, npbEPWorkload{}, pytorchWideDeepWorkload{}}

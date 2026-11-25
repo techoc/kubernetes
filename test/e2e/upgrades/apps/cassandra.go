@@ -44,17 +44,16 @@ import (
 
 const cassandraManifestPath = "test/e2e/testing-manifests/statefulset/cassandra"
 
-// CassandraUpgradeTest ups and verifies that a Cassandra StatefulSet behaves
-// well across upgrades.
+// CassandraUpgradeTest 启动 Cassandra StatefulSet，并验证其在升级过程中表现正常。
 type CassandraUpgradeTest struct {
 	ip               string
 	successfulWrites int
 }
 
-// Name returns the tracking name of the test.
+// Name 返回该测试用于跟踪的名称。
 func (CassandraUpgradeTest) Name() string { return "cassandra-upgrade" }
 
-// Skip returns true when this test can be skipped.
+// Skip 在该测试可以跳过时返回 true。
 func (CassandraUpgradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	minVersion := version.MustParseSemantic("1.6.0")
 	for _, vCtx := range upgCtx.Versions {
@@ -74,11 +73,9 @@ func cassandraKubectlCreate(ns, file string) {
 	e2ekubectl.RunKubectlOrDieInput(ns, input, "create", "-f", "-")
 }
 
-// Setup creates a Cassandra StatefulSet and a PDB. It also brings up a tester
-// ReplicaSet and associated service and PDB to guarantee availability during
-// the upgrade.
-// It waits for the system to stabilize before adding two users to verify
-// connectivity.
+// Setup 创建 Cassandra StatefulSet 和 PDB，同时启动测试用 ReplicaSet、
+// 关联的 Service 和 PDB，以保证升级期间的可用性。
+// 它会等待系统稳定，然后添加两个用户以验证连通性。
 func (t *CassandraUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	statefulsetPoll := 30 * time.Second
@@ -120,7 +117,7 @@ func (t *CassandraUpgradeTest) Setup(ctx context.Context, f *framework.Framework
 	gomega.Expect(users).To(gomega.HaveLen(2))
 }
 
-// listUsers gets a list of users from the db via the tester service.
+// listUsers 通过 tester Service 从数据库获取用户列表。
 func (t *CassandraUpgradeTest) listUsers() ([]string, error) {
 	r, err := http.Get(fmt.Sprintf("http://%s/list", net.JoinHostPort(t.ip, "8080")))
 	if err != nil {
@@ -142,7 +139,7 @@ func (t *CassandraUpgradeTest) listUsers() ([]string, error) {
 
 }
 
-// addUser adds a user to the db via the tester services.
+// addUser 通过 tester Service 向数据库添加用户。
 func (t *CassandraUpgradeTest) addUser(name string) error {
 	val := map[string][]string{"name": {name}}
 	r, err := http.PostForm(fmt.Sprintf("http://%s/add", net.JoinHostPort(t.ip, "8080")), val)
@@ -160,7 +157,7 @@ func (t *CassandraUpgradeTest) addUser(name string) error {
 	return nil
 }
 
-// getServiceIP is a helper method to extract the Ingress IP from the service.
+// getServiceIP 是从 Service 中提取 Ingress IP 的辅助方法。
 func (t *CassandraUpgradeTest) getServiceIP(ctx context.Context, f *framework.Framework, ns, svcName string) string {
 	svc, err := f.ClientSet.CoreV1().Services(ns).Get(ctx, svcName, metav1.GetOptions{})
 	framework.ExpectNoError(err)
@@ -171,11 +168,10 @@ func (t *CassandraUpgradeTest) getServiceIP(ctx context.Context, f *framework.Fr
 	return ingress[0].IP
 }
 
-// Test is called during the upgrade.
-// It launches two goroutines, one continuously writes to the db and one reads
-// from the db. Each attempt is tallied and at the end we verify if the success
-// ratio is over a certain threshold (0.75). We also verify that we get
-// at least the same number of rows back as we successfully wrote.
+// Test 在升级期间调用。
+// 它启动两个 goroutine：一个持续向数据库写入，另一个持续从数据库读取。
+// 每次尝试都会计数，最后验证成功率是否超过阈值（0.75），
+// 同时验证读回的记录数不少于成功写入的数量。
 func (t *CassandraUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	ginkgo.By("Continuously polling the database during upgrade.")
 	var (
@@ -183,7 +179,7 @@ func (t *CassandraUpgradeTest) Test(ctx context.Context, f *framework.Framework,
 		mu                                              sync.Mutex
 		errors                                          = map[string]int{}
 	)
-	// Write loop.
+	// 写入循环。
 	go wait.Until(func() {
 		writeAttempts++
 		if err := t.addUser(fmt.Sprintf("user-%d", writeAttempts)); err != nil {
@@ -195,7 +191,7 @@ func (t *CassandraUpgradeTest) Test(ctx context.Context, f *framework.Framework,
 		}
 		t.successfulWrites++
 	}, 10*time.Millisecond, done)
-	// Read loop.
+	// 读取循环。
 	wait.Until(func() {
 		users, err := t.listUsers()
 		if err != nil {
@@ -216,11 +212,11 @@ func (t *CassandraUpgradeTest) Test(ctx context.Context, f *framework.Framework,
 	ratio = float64(t.successfulWrites) / float64(writeAttempts)
 	framework.Logf("Successful writes %d/%d=%v", t.successfulWrites, writeAttempts, ratio)
 	framework.Logf("Errors: %v", errors)
-	// TODO(maisem): tweak this value once we have a few test runs.
+	// TODO(maisem): 积累几次测试运行后再调整该值。
 	gomega.Expect(ratio).To(gomega.BeNumerically(">", 0.75), "ratio too small")
 }
 
-// Teardown does one final check of the data's availability.
+// Teardown 对数据可用性做最后一次检查。
 func (t *CassandraUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
 	users, err := t.listUsers()
 	framework.ExpectNoError(err)

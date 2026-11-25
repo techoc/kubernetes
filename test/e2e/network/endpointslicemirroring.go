@@ -47,10 +47,10 @@ var _ = common.SIGDescribe("EndpointSliceMirroring", func() {
 	/*
 		Release: v1.21
 		Testname: EndpointSlice Mirroring
-		Description: The discovery.k8s.io API group MUST exist in the /apis discovery document.
-		The discovery.k8s.io/v1 API group/version MUST exist in the /apis/discovery.k8s.io discovery document.
-		The endpointslices resource MUST exist in the /apis/discovery.k8s.io/v1 discovery document.
-		The endpointslices mirrorowing must mirror endpoint create, update, and delete actions.
+		Description: /apis discovery 文档中 MUST 存在 discovery.k8s.io API 组。
+		/apis/discovery.k8s.io discovery 文档中 MUST 存在 discovery.k8s.io/v1 API 组/版本。
+		/apis/discovery.k8s.io/v1 discovery 文档中 MUST 存在 endpointslices 资源。
+		endpointslices 镜像机制必须镜像 endpoint 的创建、更新和删除操作。
 	*/
 	framework.ConformanceIt("should mirror a custom Endpoints resource through create update and delete", func(ctx context.Context) {
 		svc := &v1.Service{
@@ -99,10 +99,8 @@ var _ = common.SIGDescribe("EndpointSliceMirroring", func() {
 					return false, nil
 				}
 
-				// Due to informer caching, it's possible for the controller
-				// to create a second EndpointSlice if it does not see the
-				// first EndpointSlice that was created during a sync. All
-				// EndpointSlices created should be valid though.
+				// 由于 informer 缓存，控制器若在同步期间没看到已创建的第一个 EndpointSlice，
+				// 可能会再创建一个。不过创建出的所有 EndpointSlice 都应有效。
 				for _, epSlice := range esList.Items {
 					if len(epSlice.Ports) != 1 {
 						return false, fmt.Errorf("Expected EndpointSlice to have 1 Port, got %d", len(epSlice.Ports))
@@ -137,7 +135,7 @@ var _ = common.SIGDescribe("EndpointSliceMirroring", func() {
 			_, err := cs.CoreV1().Endpoints(f.Namespace.Name).Update(ctx, endpoints, metav1.UpdateOptions{})
 			framework.ExpectNoError(err, "Unexpected error updating Endpoints")
 
-			// Expect mirrored EndpointSlice resource to be updated.
+			// 期望镜像生成的 EndpointSlice 资源被更新。
 			if err := wait.PollImmediate(2*time.Second, 12*time.Second, func() (bool, error) {
 				esList, err := cs.DiscoveryV1().EndpointSlices(f.Namespace.Name).List(ctx, metav1.ListOptions{
 					LabelSelector: discoveryv1.LabelServiceName + "=" + svc.Name,
@@ -184,7 +182,7 @@ var _ = common.SIGDescribe("EndpointSliceMirroring", func() {
 			err := cs.CoreV1().Endpoints(f.Namespace.Name).Delete(ctx, endpoints.Name, metav1.DeleteOptions{})
 			framework.ExpectNoError(err, "Unexpected error deleting Endpoints")
 
-			// Expect mirrored EndpointSlice resource to be updated.
+			// 期望镜像生成的 EndpointSlice 资源被更新。
 			if err := wait.PollImmediate(2*time.Second, 12*time.Second, func() (bool, error) {
 				esList, err := cs.DiscoveryV1().EndpointSlices(f.Namespace.Name).List(ctx, metav1.ListOptions{
 					LabelSelector: discoveryv1.LabelServiceName + "=" + svc.Name,
@@ -228,7 +226,7 @@ var _ = common.SIGDescribe("EndpointSliceMirroring", func() {
 		svc, err := cs.CoreV1().Services(f.Namespace.Name).Create(ctx, svc, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "error creating Service")
 
-		// Add a backend pod to the service in the other node
+		// 在另一节点上为该 Service 添加后端 Pod
 		port8080 := []v1.ContainerPort{
 			{
 				ContainerPort: 8090,
@@ -254,7 +252,7 @@ var _ = common.SIGDescribe("EndpointSliceMirroring", func() {
 			framework.Failf("PodIP not assigned for pod %s", pod.Name)
 		}
 
-		// create custom endpoints
+		// 创建自定义 endpoints
 		endpoints := &v1.Endpoints{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: svc.Name,
@@ -303,7 +301,7 @@ var _ = common.SIGDescribe("EndpointSliceMirroring", func() {
 			}
 		})
 
-		// connect to the service must work
+		// 必须能连接到该 Service
 		ginkgo.By("Creating a pause pods that will try to connect to the webservers")
 		pausePod := e2epod.NewAgnhostPod(ns, "pause-pod-0", nil, nil, nil)
 		e2epod.NewPodClient(f).CreateSync(ctx, pausePod)
@@ -312,12 +310,12 @@ var _ = common.SIGDescribe("EndpointSliceMirroring", func() {
 		execHostnameTest(*pausePod, dest1, pod.Name)
 		execHostnameTest(*pausePod, dest2, pod.Name)
 
-		// delete custom endpoints and wait until the endpoint slices are deleted too
+		// 删除自定义 endpoints，并等待对应的 EndpointSlice 也被删除
 		ginkgo.By("mirroring deletion of a custom Endpoint", func() {
 			err := cs.CoreV1().Endpoints(f.Namespace.Name).Delete(context.TODO(), endpoints.Name, metav1.DeleteOptions{})
 			framework.ExpectNoError(err, "Unexpected error deleting Endpoints")
 
-			// Expect mirrored EndpointSlice resource to be updated.
+			// 期望镜像生成的 EndpointSlice 资源被更新。
 			if err := wait.PollImmediate(2*time.Second, 12*time.Second, func() (bool, error) {
 				esList, err := cs.DiscoveryV1().EndpointSlices(f.Namespace.Name).List(context.TODO(), metav1.ListOptions{
 					LabelSelector: discoveryv1.LabelServiceName + "=" + svc.Name,

@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 )
 
-// List of testDrivers to be executed in below loop
+// 下面循环中要执行的 testDriver 列表
 var testDrivers = []func() storageframework.TestDriver{
 	drivers.InitNFSDriver(drivers.NFSv3),
 	drivers.InitNFSDriver(drivers.NFSv4),
@@ -48,7 +48,7 @@ var testDrivers = []func() storageframework.TestDriver{
 	drivers.InitLocalDriverWithVolumeType(utils.LocalVolumeGCELocalSSD),
 }
 
-// This executes testSuites for in-tree volumes.
+// 为 in-tree 卷执行相应的 testSuite。
 var _ = utils.SIGDescribe("In-tree Volumes", func() {
 	gceEnabled := false
 	for _, driver := range framework.TestContext.EnabledVolumeDrivers {
@@ -65,7 +65,7 @@ var _ = utils.SIGDescribe("In-tree Volumes", func() {
 		}
 	}
 
-	// Support the legacy env var for gcepd.
+	// 兼容 gcepd 的历史环境变量。
 	if enableGcePD := os.Getenv("ENABLE_STORAGE_GCE_PD_DRIVER"); enableGcePD == "yes" && !gceEnabled {
 		framework.Logf("Warning: deprecated ENABLE_STORAGE_GCE_PD_DRIVER used. This will be removed in a future release. Use --enabled-volume-drivers=gcepd instead")
 		testDrivers = append(testDrivers, drivers.InitGcePdDriver)

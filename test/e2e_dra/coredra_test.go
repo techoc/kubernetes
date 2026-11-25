@@ -41,12 +41,12 @@ func coreDRA(tCtx ktesting.TContext, b *drautils.Builder) upgradedTestFunc {
 	b.TestPod(tCtx, pod)
 
 	return func(tCtx ktesting.TContext) downgradedTestFunc {
-		// Remove pod prepared in step 1.
+		// 删除步骤 1 中准备的 Pod。
 		tCtx.ExpectNoError(tCtx.Client().ResourceV1beta1().ResourceClaims(namespace).Delete(tCtx, claim.Name, metav1.DeleteOptions{}))
 		tCtx.ExpectNoError(tCtx.Client().CoreV1().Pods(namespace).Delete(tCtx, pod.Name, metav1.DeleteOptions{}))
 		tCtx.ExpectNoError(e2epod.WaitForPodNotFoundInNamespace(tCtx, tCtx.Client(), pod.Name, namespace, 3*time.Minute))
 
-		// Create another claim and pod, this time using the latest Kubernetes.
+		// 再创建一个 claim 和 Pod，这次使用最新的 Kubernetes。
 		claim = b.ExternalClaim()
 		pod = b.PodExternal(claim.Name)
 		pod.Spec.ResourceClaims[0].ResourceClaimName = &claim.Name
@@ -54,12 +54,10 @@ func coreDRA(tCtx ktesting.TContext, b *drautils.Builder) upgradedTestFunc {
 		b.TestPod(tCtx, pod)
 
 		return func(tCtx ktesting.TContext) {
-			// We need to clean up explicitly because the normal
-			// cleanup doesn't work (driver shuts down first).
+			// 必须显式清理，因为常规清理不会生效（driver 会先关停）。
 			//
-			// The retry loops are necessary because of a stale connection
-			// to the restarted apiserver. Sometimes, attempts fail with "EOF" as error
-			// or (even weirder) with
+			// 由于到重启后 apiserver 的连接可能已失效，需要重试：有时请求会报 "EOF"，
+			// 或者（更奇怪地）报：
 			//     getting *v1.Pod: pods "tester-2" is forbidden: User "kubernetes-admin" cannot get resource "pods" in API group "" in the namespace "dra-9021"
 			tCtx.Eventually(func(tCtx ktesting.TContext) error {
 				return tCtx.Client().ResourceV1beta1().ResourceClaims(namespace).Delete(tCtx, claim.Name, metav1.DeleteOptions{})

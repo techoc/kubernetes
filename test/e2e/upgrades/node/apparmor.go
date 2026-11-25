@@ -33,15 +33,15 @@ import (
 	"github.com/onsi/gomega/gstruct"
 )
 
-// AppArmorUpgradeTest tests that AppArmor profiles are enforced & usable across upgrades.
+// AppArmorUpgradeTest 测试 AppArmor profile 在升级过程中是否持续生效且可用。
 type AppArmorUpgradeTest struct {
 	pod *v1.Pod
 }
 
-// Name returns the tracking name of the test.
+// Name 返回该测试的跟踪名称。
 func (AppArmorUpgradeTest) Name() string { return "apparmor-upgrade" }
 
-// Skip returns true when this test can be skipped.
+// Skip 在可以跳过该测试时返回 true。
 func (AppArmorUpgradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	supportedImages := make(map[string]bool)
 	for _, d := range e2eskipper.AppArmorDistros {
@@ -56,23 +56,22 @@ func (AppArmorUpgradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	return false
 }
 
-// Setup creates a secret and then verifies that a pod can consume it.
+// Setup 创建 secret，然后验证 pod 可以使用它。
 func (t *AppArmorUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	ginkgo.By("Loading AppArmor profiles to nodes")
 	e2esecurity.LoadAppArmorProfiles(ctx, f.Namespace.Name, f.ClientSet)
 
-	// Create the initial test pod.
+	// 创建初始测试 pod。
 	ginkgo.By("Creating a long-running AppArmor enabled pod.")
 	pod := e2esecurity.AppArmorTestPod(f.Namespace.Name, false, false)
 	t.pod = e2esecurity.RunAppArmorTestPod(ctx, pod, f.ClientSet, e2epod.NewPodClient(f), false)
 
-	// Verify initial state.
+	// 验证初始状态。
 	t.verifyNodesAppArmorEnabled(ctx, f)
 	t.verifyNewPodSucceeds(ctx, f)
 }
 
-// Test waits for the upgrade to complete, and then verifies that a
-// pod can still consume the secret.
+// Test 等待升级完成，然后验证 pod 仍能使用该 secret。
 func (t *AppArmorUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	<-done
 	if upgrade == upgrades.MasterUpgrade {
@@ -82,9 +81,9 @@ func (t *AppArmorUpgradeTest) Test(ctx context.Context, f *framework.Framework, 
 	t.verifyNewPodSucceeds(ctx, f)
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理剩余资源。
 func (t *AppArmorUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依赖删除 namespace 来清理所有资源
 	ginkgo.By("Logging container failures")
 	e2ekubectl.LogFailedContainers(ctx, f.ClientSet, f.Namespace.Name, framework.Logf)
 }

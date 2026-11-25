@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// To run the node e2e tests remotely against one or more hosts on gce:
+// 在 GCE 上针对一台或多台主机远程运行 node e2e 测试：
 // $ go run run_remote.go --v 2 --ssh-env gce --hosts <comma separated hosts>
-// To run the node e2e tests remotely against one or more images on gce and provision them:
+// 在 GCE 上基于一个或多个镜像远程运行 node e2e 测试并制备主机：
 // $ go run run_remote.go --v 2 --project <project> --zone <zone> --ssh-env gce --images <comma separated images>
 package main
 
@@ -34,7 +34,7 @@ import (
 
 var testSuite = remote.CommandLine.String("test-suite", "default", "Test suite the runner initializes with. Currently support default|cadvisor|conformance")
 
-// Unused, preserved for backward compatibility? `kubetest2 noop -test=node` passes at least `-runtime-config`.
+// 未使用，为向后兼容而保留？`kubetest2 noop -test=node` 至少会传入 `-runtime-config`。
 var _ = remote.CommandLine.String("system-spec-name", "", fmt.Sprintf("The name of the system spec used for validating the image in the node conformance test. The specs are at %s. If unspecified, the default built-in spec (system.DefaultSpec) will be used.", system.SystemSpecPath))
 var _ = remote.CommandLine.String("extra-envs", "", "The extra environment variables needed for node e2e tests. Format: a list of key=value pairs, e.g., env1=val1,env2=val2")
 var _ = remote.CommandLine.String("runtime-config", "", "The runtime configuration for the API server on the node e2e tests.. Format: a list of key=value pairs, e.g., env1=val1,env2=val2")

@@ -50,12 +50,11 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 			expectPodRunning bool
 			expectedCalls    []csiCall
 
-			// Called for each NodeStateVolume calls, with counter incremented atomically before
-			// the invocation (i.e. first value will be 1).
+			// 每次调用 NodeStageVolume 时触发，调用前计数器已原子递增（即首次值为 1）。
 			nodeStageHook func(counter int64) error
 		}{
 			{
-				// This is already tested elsewhere, adding simple good case here to test the test framework.
+				// 别处已覆盖该场景，这里加一个简单正常用例以验证测试框架本身。
 				name:             "should call NodeUnstage after NodeStage success",
 				expectPodRunning: true,
 				expectedCalls: []csiCall{
@@ -64,11 +63,11 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 				},
 			},
 			{
-				// Kubelet should repeat NodeStage as long as the pod exists
+				// 只要 Pod 存在，kubelet 就应重复调用 NodeStage
 				name:             "should retry NodeStage after NodeStage final error",
 				expectPodRunning: true,
 				expectedCalls: []csiCall{
-					// This matches all 3 NodeStage calls with InvalidArgument error
+					// 匹配全部 3 次返回 InvalidArgument 错误的 NodeStage 调用
 					{expectedMethod: "NodeStageVolume", expectedError: codes.InvalidArgument},
 					{expectedMethod: "NodeStageVolume", expectedError: codes.OK, deletePod: true},
 					{expectedMethod: "NodeUnstageVolume", expectedError: codes.OK},
@@ -82,11 +81,11 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 				},
 			},
 			{
-				// Kubelet should repeat NodeStage as long as the pod exists
+				// 只要 Pod 存在，kubelet 就应重复调用 NodeStage
 				name:             "should retry NodeStage after NodeStage ephemeral error",
 				expectPodRunning: true,
 				expectedCalls: []csiCall{
-					// This matches all 3 NodeStage calls with DeadlineExceeded error
+					// 匹配全部 3 次返回 DeadlineExceeded 错误的 NodeStage 调用
 					{expectedMethod: "NodeStageVolume", expectedError: codes.DeadlineExceeded},
 					{expectedMethod: "NodeStageVolume", expectedError: codes.OK, deletePod: true},
 					{expectedMethod: "NodeUnstageVolume", expectedError: codes.OK},
@@ -100,14 +99,13 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 				},
 			},
 			{
-				// After NodeUnstage with ephemeral error, the driver may continue staging the volume.
-				// Kubelet should call NodeUnstage to make sure the volume is really unstaged after
-				// the pod is deleted.
+				// NodeUnstage 返回临时错误后，驱动可能仍在继续暂存卷；
+				// Pod 删除后 kubelet 应再次调用 NodeUnstage，确保卷确实已取消暂存。
 				name:             "should call NodeUnstage after NodeStage ephemeral error",
 				expectPodRunning: false,
 				expectedCalls: []csiCall{
-					// Delete the pod before NodeStage succeeds - it should get "uncertain" because of ephemeral error
-					// This matches all repeated NodeStage calls with DeadlineExceeded error (due to exp. backoff).
+					// 在 NodeStage 成功前删除 Pod —— 因临时错误，结果应为 "uncertain"。
+					// 匹配所有因指数退避而重复、返回 DeadlineExceeded 的 NodeStage 调用。
 					{expectedMethod: "NodeStageVolume", expectedError: codes.DeadlineExceeded, deletePod: true},
 					{expectedMethod: "NodeUnstageVolume", expectedError: codes.OK},
 				},
@@ -116,13 +114,13 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 				},
 			},
 			{
-				// After NodeUnstage with final error, kubelet can be sure the volume is not staged.
-				// The test checks that NodeUnstage is *not* called.
+				// NodeUnstage 返回最终错误后，kubelet 可确定卷未被暂存；
+				// 测试校验 NodeUnstage 不会被调用。
 				name:             "should not call NodeUnstage after NodeStage final error",
 				expectPodRunning: false,
 				expectedCalls: []csiCall{
-					// Delete the pod before NodeStage succeeds - it should get "globally unmounted" because of final error.
-					// This matches all repeated NodeStage calls with InvalidArgument error (due to exp. backoff).
+					// 在 NodeStage 成功前删除 Pod —— 因最终错误，结果应为 "globally unmounted"。
+					// 匹配所有因指数退避而重复、返回 InvalidArgument 的 NodeStage 调用。
 					{expectedMethod: "NodeStageVolume", expectedError: codes.InvalidArgument, deletePod: true},
 				},
 				// nodeStageScript: `INVALIDARGUMENT;`,
@@ -148,12 +146,12 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 				if pod == nil {
 					return
 				}
-				// Wait for PVC to get bound to make sure the CSI driver is fully started.
+				// 等待 PVC 绑定，确保 CSI 驱动已完全启动。
 				err := e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, f.ClientSet, f.Namespace.Name, claim.Name, time.Second, framework.ClaimProvisionTimeout)
 				framework.ExpectNoError(err, "while waiting for PVC to get provisioned")
 
 				ginkgo.By("Waiting for expected CSI calls")
-				// Watch for all calls up to deletePod = true
+				// 监听 deletePod = true 之前的所有调用
 				timeoutCtx, cancel := context.WithTimeout(ctx, csiPodRunningTimeout)
 				defer cancel()
 				for {
@@ -167,7 +165,7 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 						// No CSI call received yet
 						continue
 					}
-					// Check the last *received* call wanted the pod to be deleted
+					// 检查最后*收到*的调用是否要求删除 Pod
 					if test.expectedCalls[index-1].deletePod {
 						break
 					}
@@ -210,20 +208,19 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 			"NodeUnstageVolume",
 		}
 
-		// Each test starts two pods in sequence.
-		// The first pod always runs successfully, but NodeUnstage hook can set various error conditions.
-		// The test then checks how NodeStage of the second pod is called.
+		// 每个测试依次启动两个 Pod。第一个 Pod 总是成功运行，但 NodeUnstage hook 可注入各种错误；
+		// 随后测试检查第二个 Pod 的 NodeStage 是如何被调用的。
 		tests := []struct {
 			name          string
 			expectedCalls []csiCall
 
-			// Called for each NodeStageVolume calls, with counter incremented atomically before
-			// the invocation (i.e. first value will be 1) and index of deleted pod (the first pod
+			// 每次 NodeStageVolume 调用时触发；计数器在调用前原子递增（即首个值为 1），
+			// 参数还包括被删除 Pod（第一个 Pod）的索引
 			// has index 1)
 			nodeUnstageHook func(counter, pod int64) error
 		}{
 			{
-				// This is already tested elsewhere, adding simple good case here to test the test framework.
+				// 别处已覆盖该场景，这里加一个简单正常用例以验证测试框架本身。
 				name: "should call NodeStage after NodeUnstage success",
 				expectedCalls: []csiCall{
 					{expectedMethod: "NodeStageVolume", expectedError: codes.OK},
@@ -265,7 +262,7 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 		}
 		for _, test := range tests {
 			ginkgo.It(test.name, func(ctx context.Context) {
-				// Index of the last deleted pod. NodeUnstage calls are then related to this pod.
+				// 最近删除的 Pod 的索引；后续的 NodeUnstage 调用都与它相关。
 				var deletedPodNumber atomic.Int64
 				deletedPodNumber.Store(1)
 				var hooks *drivers.Hooks
@@ -286,7 +283,7 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 				if pod == nil {
 					return
 				}
-				// Wait for PVC to get bound to make sure the CSI driver is fully started.
+				// 等待 PVC 绑定，确保 CSI 驱动已完全启动。
 				err := e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, f.ClientSet, f.Namespace.Name, claim.Name, time.Second, framework.ClaimProvisionTimeout)
 				framework.ExpectNoError(err, "while waiting for PVC to get provisioned")
 				err = e2epod.WaitForPodNameRunningInNamespace(ctx, m.cs, pod.Name, pod.Namespace)
@@ -294,13 +291,13 @@ var _ = utils.SIGDescribe("CSI Mock volume node stage", func() {
 				err = e2epod.DeletePodWithWait(ctx, m.cs, pod)
 				framework.ExpectNoError(err, "while deleting the first pod")
 
-				// Create the second pod
+				// 创建第二个 Pod
 				pod, err = m.createPodWithPVC(claim)
 				framework.ExpectNoError(err, "while creating the second pod")
 				err = e2epod.WaitForPodNameRunningInNamespace(ctx, m.cs, pod.Name, pod.Namespace)
 				framework.ExpectNoError(err, "while waiting for the second pod to start")
-				// The second pod is running and kubelet can't call NodeUnstage of the first one.
-				// Therefore incrementing the pod counter is safe here.
+				// 第二个 Pod 正在运行，kubelet 无法再调用第一个 Pod 的 NodeUnstage，
+				// 因此此处递增 Pod 计数器是安全的。
 				deletedPodNumber.Add(1)
 				err = e2epod.DeletePodWithWait(ctx, m.cs, pod)
 				framework.ExpectNoError(err, "while deleting the second pod")

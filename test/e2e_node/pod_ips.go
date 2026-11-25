@@ -69,7 +69,7 @@ var _ = common.SIGDescribe("Pod IPs", framework.WithNodeConformance(), func() {
 					gomega.Expect(pod.Status.PodIP).NotTo(gomega.BeEmpty(), fmt.Sprintf("PodIP not set for pod (%s/%s) in phase %v", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, pod.Status.Phase))
 					gomega.Expect(pod.Status.PodIPs).NotTo(gomega.BeEmpty(), fmt.Sprintf("PodIPs not set for pod (%s/%s) in phase %v", pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, pod.Status.Phase))
 				}
-				// end the watch if the pod reached terminal phase
+				// Pod 进入终态后结束 watch
 				return podutil.IsPodPhaseTerminal(pod.Status.Phase), nil
 			}
 			ginkgo.By(fmt.Sprintf("Observed event: %+v", event.Object))

@@ -23,33 +23,29 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// Disruption is the type to construct a Chaosmonkey with; see Do for more information.
+// Disruption 是构造 Chaosmonkey 时使用的类型；详情见 Do。
 type Disruption func(ctx context.Context)
 
-// Test is the type to register with a Chaosmonkey.  A test will run asynchronously across the
-// Chaosmonkey's Disruption.  A Test takes a Semaphore as an argument.  It should call sem.Ready()
-// once it's ready for the disruption to start and should then wait until sem.StopCh (which is a
-// <-chan struct{}) is closed, which signals that the disruption is over.  It should then clean up
-// and return.  See Do and Semaphore for more information.
+// Test 是注册到 Chaosmonkey 的类型。测试会在 Chaosmonkey 执行 Disruption 期间异步运行。
+// Test 接收一个 Semaphore 参数：准备好开始故障注入时调用 sem.Ready()，然后等待 sem.StopCh
+// （类型为 <-chan struct{}）关闭，表示故障注入结束；随后清理并返回。详情见 Do 和 Semaphore。
 type Test func(ctx context.Context, sem *Semaphore)
 
-// Interface can be implemented if you prefer to define tests without dealing with a Semaphore.  You
-// may define a struct that implements Interface's three methods (Setup, Test, and Teardown) and
-// RegisterInterface.  See RegisterInterface for more information.
+// 若不想直接处理 Semaphore，可以实现 Interface：定义包含 Setup、Test、Teardown 三个方法的
+// 结构体并通过 RegisterInterface 注册。详情见 RegisterInterface。
 type Interface interface {
 	Setup()
 	Test(stopCh <-chan struct{})
 	Teardown()
 }
 
-// Chaosmonkey is the type that holds the necessary content for chaosmonkey test
+// Chaosmonkey 保存 chaosmonkey 测试所需的内容
 type Chaosmonkey struct {
 	disruption Disruption
 	tests      []Test
 }
 
-// New creates and returns a Chaosmonkey, with which the caller should register Tests and call Do.
-// See Do for more information.
+// New 创建并返回一个 Chaosmonkey，调用方应通过它注册 Test 并调用 Do。详情见 Do。
 func New(disruption Disruption) *Chaosmonkey {
 	return &Chaosmonkey{
 		disruption,
@@ -57,15 +53,13 @@ func New(disruption Disruption) *Chaosmonkey {
 	}
 }
 
-// Register registers the given Test with the Chaosmonkey, so that the test will run over the
-// Disruption.
+// Register 将给定的 Test 注册到 Chaosmonkey，使其在执行 Disruption 期间运行。
 func (cm *Chaosmonkey) Register(test Test) {
 	cm.tests = append(cm.tests, test)
 }
 
-// RegisterInterface registers the given Interface with the Chaosmonkey, so the Chaosmonkey will
-// call Setup, Test, and Teardown properly.  Test can tell that the Disruption is finished when
-// stopCh is closed.
+// RegisterInterface 将给定的 Interface 注册到 Chaosmonkey，Chaosmonkey 会依次调用
+// Setup、Test 和 Teardown。Test 可通过 stopCh 关闭判断 Disruption 已结束。
 func (cm *Chaosmonkey) RegisterInterface(in Interface) {
 	cm.Register(func(ctx context.Context, sem *Semaphore) {
 		in.Setup()
@@ -75,14 +69,12 @@ func (cm *Chaosmonkey) RegisterInterface(in Interface) {
 	})
 }
 
-// Do performs the Disruption while testing the registered Tests.  Once the caller has registered
-// all Tests with the Chaosmonkey, they call Do.  Do starts each registered test asynchronously and
-// waits for each test to signal that it is ready by calling sem.Ready().  Do will then do the
-// Disruption, and when it's complete, close sem.StopCh to signal to the registered Tests that the
-// Disruption is over, and wait for all Tests to return.
+// Do 在执行 Disruption 的同时运行所有已注册的 Test。调用方注册完所有 Test 后调用 Do。
+// Do 异步启动每个 Test，等待它们通过 sem.Ready() 报告就绪，然后执行 Disruption；完成后关闭
+// sem.StopCh 通知各 Test 故障注入已结束，并等待所有 Test 返回。
 func (cm *Chaosmonkey) Do(ctx context.Context) {
 	sems := []*Semaphore{}
-	// All semaphores have the same StopCh.
+	// 所有 semaphore 共享同一个 StopCh。
 	stopCh := make(chan struct{})
 
 	for _, test := range cm.tests {
@@ -97,9 +89,8 @@ func (cm *Chaosmonkey) Do(ctx context.Context) {
 
 	fmt.Println("Waiting for all async tests to be ready")
 	for _, sem := range sems {
-		// Wait for test to be ready.  We have to wait for ready *or done* because a test
-		// may panic before signaling that its ready, and we shouldn't block.  Since we
-		// deferred sem.done() above, if a test panics, it's marked as done.
+		// 等待测试就绪。必须同时等待 ready 或 done，因为测试可能在报告就绪前 panic，
+		// 此时不能一直阻塞。上面已 defer sem.done()，因此测试 panic 时也会被标记为 done。
 		sem.waitForReadyOrDone()
 	}
 
@@ -116,9 +107,8 @@ func (cm *Chaosmonkey) Do(ctx context.Context) {
 	fmt.Println("Disruption complete; stopping async validations")
 }
 
-// Semaphore is taken by a Test and provides: Ready(), for the Test to call when it's ready for the
-// disruption to start; and StopCh, the closure of which signals to the Test that the disruption is
-// finished.
+// Semaphore 由 Test 使用，提供 Ready()（测试准备好开始故障注入时调用）和 StopCh
+// （关闭时表示故障注入已结束）。
 type Semaphore struct {
 	readyCh chan struct{}
 	StopCh  <-chan struct{}
@@ -126,7 +116,7 @@ type Semaphore struct {
 }
 
 func newSemaphore(stopCh <-chan struct{}) *Semaphore {
-	// We don't want to block on Ready() or done()
+	// 避免在 Ready() 或 done() 上阻塞
 	return &Semaphore{
 		make(chan struct{}, 1),
 		stopCh,
@@ -134,20 +124,19 @@ func newSemaphore(stopCh <-chan struct{}) *Semaphore {
 	}
 }
 
-// Ready is called by the Test to signal that the Test is ready for the disruption to start.
+// Test 调用 Ready 表示已准备好开始故障注入。
 func (sem *Semaphore) Ready() {
 	close(sem.readyCh)
 }
 
-// done is an internal method for Go to defer, both to wait for all tests to return, but also to
-// sense if a test panicked before calling Ready.  See waitForReadyOrDone.
+// done 是供 defer 调用的内部方法，既用于等待所有测试返回，也用于感知测试在调用
+// Ready 之前是否 panic。见 waitForReadyOrDone。
 func (sem *Semaphore) done() {
 	close(sem.doneCh)
 }
 
-// We would like to just check if all tests are ready, but if they fail (which Ginkgo implements as
-// a panic), they may not have called Ready().  We check done as well to see if the function has
-// already returned; if it has, we don't care if it's ready, and just continue.
+// 理想情况下只需检查所有测试是否就绪，但测试失败时（Ginkgo 以 panic 实现）可能未调用
+// Ready()。因此同时检查 done：若函数已返回，就不必关心是否就绪，直接继续。
 func (sem *Semaphore) waitForReadyOrDone() {
 	select {
 	case <-sem.readyCh:
@@ -155,7 +144,7 @@ func (sem *Semaphore) waitForReadyOrDone() {
 	}
 }
 
-// waitForDone is an internal method for Go to wait on all Tests returning.
+// waitForDone 是用于等待所有 Test 返回的内部方法。
 func (sem *Semaphore) waitForDone() {
 	<-sem.doneCh
 }

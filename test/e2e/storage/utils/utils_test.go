@@ -22,13 +22,12 @@ import (
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 )
 
-// getSizeRangesIntersection takes two instances of storage size ranges and determines the
-// intersection of the intervals (if it exists) and return the minimum of the intersection
-// to be used as the claim size for the test.
-// if value not set, that means there's no minimum or maximum size limitation and we set default size for it.
-// Considerate all corner case as followed:
-// first: A,B is regular value and ? means unspecified
-// second: C,D is regular value and ? means unspecified
+// getSizeRangesIntersection 接收两个存储大小范围，求其交集（若存在），
+// 并返回交集的最小值作为测试用的 PVC 申请大小。
+// 未设置的值表示没有最小或最大限制，此时使用默认值。
+// 需考虑如下所有边界情况：
+// 第一个范围：A、B 为常规值，? 表示未指定
+// 第二个范围：C、D 为常规值，? 表示未指定
 // ----------------------------------------------------------------
 // |    \second| min=C,max=?| min=C,max=D| min=?,max=D| min=?,max=?|
 // |first\     |            |            |            |            |

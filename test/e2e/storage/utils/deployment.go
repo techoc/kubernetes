@@ -28,27 +28,22 @@ import (
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 )
 
-// PatchCSIDeployment modifies the CSI driver deployment:
-// - replaces the provisioner name
-// - forces pods onto a specific host
+// PatchCSIDeployment 修改 CSI driver 的 Deployment：
+//   - 替换 provisioner 名称
+//   - 强制 Pod 运行在指定节点上
 //
-// All of that is optional, see PatchCSIOptions. Just beware
-// that not renaming the CSI driver deployment can be problematic:
-//   - when multiple tests deploy the driver, they need
-//     to run sequentially
-//   - might conflict with manual deployments
+// 这些都是可选项，参见 PatchCSIOptions。但要注意，不重命名 CSI driver 的 Deployment 可能引发问题：
+//   - 多个测试部署同一 driver 时，必须串行运行
+//   - 可能与手动部署冲突
 //
-// This function is written so that it works for CSI driver deployments
-// that follow these conventions:
-//   - driver and provisioner names are identical
-//   - the driver binary accepts a --drivername parameter
-//   - the paths inside the container are either fixed
-//     and don't need to be patch (for example, --csi-address=/csi/csi.sock is
-//     okay) or are specified directly in a parameter (for example,
-//     --kubelet-registration-path=/var/lib/kubelet/plugins/csi-hostpath/csi.sock)
+// 本函数适用于遵循以下约定的 CSI driver Deployment：
+//   - driver 名称与 provisioner 名称相同
+//   - driver 二进制接受 --drivername 参数
+//   - 容器内的路径要么固定且无需 patch（例如 --csi-address=/csi/csi.sock），
+//     要么直接在参数中指定（例如
+//     --kubelet-registration-path=/var/lib/kubelet/plugins/csi-hostpath/csi.sock）
 //
-// Driver deployments that are different will have to do the patching
-// without this function, or skip patching entirely.
+// 不符合这些约定的 driver Deployment 只能自行 patch，或完全跳过 patch。
 func PatchCSIDeployment(f *e2eframework.Framework, o PatchCSIOptions, object interface{}) error {
 	rename := o.OldDriverName != "" && o.NewDriverName != "" &&
 		o.OldDriverName != o.NewDriverName
@@ -64,13 +59,13 @@ func PatchCSIDeployment(f *e2eframework.Framework, o PatchCSIOptions, object int
 		for i := range volumes {
 			volume := &volumes[i]
 			if volume.HostPath != nil {
-				// Update paths like /var/lib/kubelet/plugins/<provisioner>.
+				// 更新形如 /var/lib/kubelet/plugins/<provisioner> 的路径。
 				p := &volume.HostPath.Path
 				dir, file := path.Split(*p)
 				if file == o.OldDriverName {
 					*p = path.Join(dir, o.NewDriverName)
 				}
-				// Inject non-standard kubelet path.
+				// 注入非标准的 kubelet 路径。
 				*p = substKubeletRootDir(*p)
 			}
 		}
@@ -81,13 +76,13 @@ func PatchCSIDeployment(f *e2eframework.Framework, o PatchCSIOptions, object int
 			container := &containers[i]
 			if rename {
 				for e := range container.Args {
-					// Inject test-specific provider name into paths like this one:
+					// 将测试专用的 provider 名称注入如下路径：
 					// --kubelet-registration-path=/var/lib/kubelet/plugins/csi-hostpath/csi.sock
 					container.Args[e] = strings.Replace(container.Args[e], "/"+o.OldDriverName+"/", "/"+o.NewDriverName+"/", 1)
 				}
 			}
 
-			// Modify --kubelet-registration-path.
+			// 修改 --kubelet-registration-path。
 			for e := range container.Args {
 				container.Args[e] = substKubeletRootDir(container.Args[e])
 			}
@@ -100,9 +95,7 @@ func PatchCSIDeployment(f *e2eframework.Framework, o PatchCSIOptions, object int
 				container.Args = append(container.Args, fmt.Sprintf("--feature-gates=%s", featuregateString))
 			}
 
-			// Overwrite driver name resp. provider name
-			// by appending a parameter with the right
-			// value.
+			// 通过追加带有正确值的参数，覆盖 driver 名称或 provider 名称。
 			switch container.Name {
 			case o.DriverContainerName:
 				container.Args = append(container.Args, o.DriverContainerArguments...)
@@ -129,8 +122,7 @@ func PatchCSIDeployment(f *e2eframework.Framework, o PatchCSIOptions, object int
 		patchPodSpec(&object.Spec.Template.Spec)
 	case *storagev1.StorageClass:
 		if o.NewDriverName != "" {
-			// Driver name is expected to be the same
-			// as the provisioner name here.
+			// 这里假定 driver 名称与 provisioner 名称相同。
 			object.Provisioner = o.NewDriverName
 		}
 	case *storagev1.CSIDriver:
@@ -169,71 +161,56 @@ func PatchCSIDeployment(f *e2eframework.Framework, o PatchCSIOptions, object int
 	return nil
 }
 
-// PatchCSIOptions controls how PatchCSIDeployment patches the objects.
+// PatchCSIOptions 控制 PatchCSIDeployment 如何修改对象。
 type PatchCSIOptions struct {
-	// The original driver name.
+	// 原始的 driver 名称。
 	OldDriverName string
-	// The driver name that replaces the original name.
-	// Can be empty (not used at all) or equal to OldDriverName
-	// (then it will be added were appropriate without renaming
-	// in existing fields).
+	// 替换原始名称的 driver 名称。
+	// 可以为空（完全不使用），或等于 OldDriverName
+	// （此时会在合适的位置补上该名称，而不改写已有字段）。
 	NewDriverName string
-	// The name of the container which has the CSI driver binary.
-	// If non-empty, DriverContainerArguments are added to argument
-	// list in container with that name.
+	// 包含 CSI driver 二进制文件的容器名称。
+	// 非空时，会将 DriverContainerArguments 追加到该容器的参数列表中。
 	DriverContainerName string
-	// List of arguments to add to container with
-	// DriverContainerName.
+	// 要追加到 DriverContainerName 对应容器的参数列表。
 	DriverContainerArguments []string
-	// The name of the container which has the provisioner binary.
-	// If non-empty, --provisioner with new name will be appended
-	// to the argument list.
+	// 包含 provisioner 二进制文件的容器名称。
+	// 非空时，会将带新名称的 --provisioner 追加到参数列表中。
 	ProvisionerContainerName string
-	// The name of the container which has the snapshotter binary.
-	// If non-empty, --snapshotter with new name will be appended
-	// to the argument list.
+	// 包含 snapshotter 二进制文件的容器名称。
+	// 非空时，会将带新名称的 --snapshotter 追加到参数列表中。
 	SnapshotterContainerName string
-	// If non-empty, all pods are forced to run on this node.
+	// 非空时，强制所有 Pod 运行在该节点上。
 	NodeName string
-	// If not nil, the value to use for the CSIDriver.Spec.PodInfo
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.PodInfo 字段；否则忽略。
 	PodInfo *bool
-	// If not nil, the value to use for the CSIDriver.Spec.CanAttach
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.CanAttach 字段；否则忽略。
 	CanAttach *bool
-	// If not nil, the value to use for the CSIDriver.Spec.StorageCapacity
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.StorageCapacity 字段；否则忽略。
 	StorageCapacity *bool
-	// If not nil, the value to use for the CSIDriver.Spec.VolumeLifecycleModes
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.VolumeLifecycleModes 字段；否则忽略。
 	VolumeLifecycleModes *[]storagev1.VolumeLifecycleMode
-	// If not nil, the value to use for the CSIDriver.Spec.TokenRequests
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.TokenRequests 字段；否则忽略。
 	TokenRequests []storagev1.TokenRequest
-	// If not nil, the value to use for the CSIDriver.Spec.RequiresRepublish
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.RequiresRepublish 字段；否则忽略。
 	RequiresRepublish *bool
-	// If not nil, the value to use for the CSIDriver.Spec.ServiceAccountTokenInSecrets
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.ServiceAccountTokenInSecrets 字段；否则忽略。
 	ServiceAccountTokenInSecrets *bool
-	// If not nil, the value to use for the CSIDriver.Spec.FSGroupPolicy
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.FSGroupPolicy 字段；否则忽略。
 	FSGroupPolicy *storagev1.FSGroupPolicy
-	// If not nil, the value to use for the CSIDriver.Spec.SELinuxMount
-	// field *if* the driver deploys a CSIDriver object. Ignored
-	// otherwise.
+	// 非 nil 时，*如果* driver 部署了 CSIDriver 对象，该值将用于
+	// CSIDriver.Spec.SELinuxMount 字段；否则忽略。
 	SELinuxMount *bool
-	// If not nil, the values will be used for setting feature arguments to
-	// specific sidecar.
-	// Feature is a map - where key is sidecar name such as:
+	// 非 nil 时，这些值用于为特定 sidecar 设置 feature 参数。
+	// Feature 是一个 map，key 是 sidecar 名称，例如：
 	//	-- key: resizer
 	//	-- value: []string{feature-gates}
 	Features map[string][]string

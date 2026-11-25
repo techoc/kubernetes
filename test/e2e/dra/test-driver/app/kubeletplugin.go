@@ -49,11 +49,9 @@ import (
 type Options struct {
 	EnableHealthService bool
 
-	// DisableHealthV1 and DisableHealthV1alpha1 restrict which
-	// DRAResourceHealth gRPC API versions the driver advertises and serves,
-	// to test a kubelet against plugins which only support one version.
-	// The zero values keep both enabled, matching the kubeletplugin helper
-	// defaults.
+	// DisableHealthV1 和 DisableHealthV1alpha1 限制 driver 对外声明并提供的
+	// DRAResourceHealth gRPC API 版本，用于测试 kubelet 面对仅支持单一版本的插件时的行为。
+	// 零值保持两者都启用，与 kubeletplugin helper 的默认行为一致。
 	DisableHealthV1       bool
 	DisableHealthV1alpha1 bool
 }
@@ -81,9 +79,8 @@ type ExamplePlugin struct {
 	driverName string
 	nodeName   string
 
-	// The mutex is needed because there are other goroutines checking the state.
-	// Serializing in the gRPC server alone is not enough because writing would
-	// race with reading.
+	// 需要互斥锁是因为其他 goroutine 也会检查这些状态。
+	// 仅在 gRPC server 中串行化并不够，写入仍可能与读取竞争。
 	mutex     sync.Mutex
 	prepared  map[ClaimID][]kubeletplugin.Device // prepared claims -> result of nodePrepareResource
 	gRPCCalls []GRPCCall
@@ -101,30 +98,29 @@ type ExamplePlugin struct {
 	unprepareResourcesFailure   error
 	failUnprepareResourcesMutex sync.Mutex
 
-	// cancelMainContext is used to cancel an upper-level context.
-	// It's called from HandleError if set.
+	// cancelMainContext 用于取消上层 context。
+	// 如果已设置，HandleError 会调用它。
 	cancelMainContext context.CancelCauseFunc
 }
 
 var _ kubeletplugin.DRAPlugin = &ExamplePlugin{}
 
 type GRPCCall struct {
-	// FullMethod is the fully qualified, e.g. /package.service/method.
+	// FullMethod 是完全限定的方法名，例如 /package.service/method。
 	FullMethod string
 
-	// Request contains the parameters of the call.
+	// Request 保存调用的参数。
 	Request interface{}
 
-	// Response contains the reply of the plugin. It is nil for calls that are in progress.
+	// Response 保存插件的回复。对于进行中的调用为 nil。
 	Response interface{}
 
-	// Err contains the error return value of the plugin. It is nil for calls that are in progress or succeeded.
+	// Err 保存插件返回的错误。对于进行中或成功的调用为 nil。
 	Err error
 }
 
-// ClaimID contains both claim name and UID to simplify debugging. The
-// namespace is not included because it is random in E2E tests and the UID is
-// sufficient to make the ClaimID unique.
+// ClaimID 同时包含 claim 名称和 UID，便于调试。
+// 不包含 namespace，因为 E2E 测试中它是随机的，而 UID 足以确保 ClaimID 唯一。
 type ClaimID struct {
 	Name string
 	UID  types.UID
@@ -139,31 +135,28 @@ type Device struct {
 
 var _ kubeletplugin.DRAPlugin = &ExamplePlugin{}
 
-// getJSONFilePath returns the absolute path where CDI file is/should be.
+// getJSONFilePath 返回 CDI 文件当前或应当所在的绝对路径。
 func (ex *ExamplePlugin) getJSONFilePath(claimUID types.UID, requestName string) string {
 	baseRequestRef := resourceclaim.BaseRequestRef(requestName)
 	return filepath.Join(ex.cdiDir, fmt.Sprintf("%s-%s-%s.json", ex.driverName, claimUID, baseRequestRef))
 }
 
-// FileOperations defines optional callbacks for handling CDI files
-// and some other configuration.
+// FileOperations 定义处理 CDI 文件及其他配置的可选回调。
 type FileOperations struct {
-	// Create must overwrite the file.
+	// Create 必须覆盖已有文件。
 	Create func(name string, content []byte) error
 
-	// Remove must remove the file. It must not return an error when the
-	// file does not exist.
+	// Remove 必须删除文件。文件不存在时不应返回错误。
 	Remove func(name string) error
 
-	// HandleError is an optional callback for ResourceSlice publishing problems.
+	// HandleError 是处理 ResourceSlice 发布问题的可选回调。
 	HandleError func(ctx context.Context, err error, msg string)
 
-	// DriverResources provides the information that the driver will use to
-	// construct the ResourceSlices that it will publish.
+	// DriverResources 提供 driver 构造并发布 ResourceSlices 所需的信息。
 	DriverResources *resourceslice.DriverResources
 }
 
-// StartPlugin sets up the servers that are necessary for a DRA kubelet plugin.
+// StartPlugin 启动 DRA kubelet plugin 所需的各个 server。
 func StartPlugin(ctx context.Context, cdiDir, driverName string, kubeClient kubernetes.Interface, nodeName string, fileOps FileOperations, opts ...any) (*ExamplePlugin, error) {
 	logger := klog.FromContext(ctx)
 
@@ -221,9 +214,8 @@ func StartPlugin(ctx context.Context, cdiDir, driverName string, kubeClient kube
 	publicOpts = append(publicOpts,
 		kubeletplugin.GRPCInterceptor(ex.recordGRPCCall),
 		kubeletplugin.GRPCStreamInterceptor(ex.recordGRPCStream),
-		// ExamplePlugin always implements WatchHealthStatus; whether device
-		// health is actually advertised and served, and in which API
-		// versions, is controlled here.
+		// ExamplePlugin 始终实现 WatchHealthStatus；是否真正对外声明并提供设备健康状态，
+		// 以及支持哪些 API 版本，由这里控制。
 		kubeletplugin.HealthService(pluginOpts.EnableHealthService),
 		kubeletplugin.HealthV1(!pluginOpts.DisableHealthV1),
 		kubeletplugin.HealthV1alpha1(!pluginOpts.DisableHealthV1alpha1),
@@ -243,17 +235,15 @@ func StartPlugin(ctx context.Context, cdiDir, driverName string, kubeClient kube
 	return ex, nil
 }
 
-// PublishResources re-publishes the driver's resources, replacing any set that
-// was published before. This resets the resourceslice controller's desired
-// state: if the apiserver previously dropped fields (e.g. because a feature
-// gate was disabled), the controller latches its desired state to what could be
-// stored to avoid a hot update loop. Re-publishing restores the original
-// resources once the apiserver accepts them again.
+// PublishResources 重新发布 driver 的资源，替换此前发布的集合。
+// 这会重置 resourceslice controller 的期望状态：如果 apiserver 之前丢弃了某些字段
+// （例如因为某个 feature gate 被禁用），controller 会将期望状态锁定为实际能存储的内容，
+// 以避免陷入高频更新循环。当 apiserver 再次接受原始资源时，重新发布即可恢复它们。
 func (ex *ExamplePlugin) PublishResources(ctx context.Context, resources resourceslice.DriverResources) error {
 	return ex.d.PublishResources(ctx, resources)
 }
 
-// Stop ensures that all servers are stopped and resources freed.
+// Stop 确保所有 server 都已停止并释放资源。
 func (ex *ExamplePlugin) Stop() {
 	ex.d.Stop()
 }
@@ -277,7 +267,7 @@ func (ex *ExamplePlugin) HandleError(ctx context.Context, err error, msg string)
 	}
 }
 
-// BlockNodePrepareResources locks blockPrepareResourcesMutex and returns unlocking function for it
+// BlockNodePrepareResources 锁定 blockPrepareResourcesMutex，并返回用于解锁的函数
 func (ex *ExamplePlugin) BlockNodePrepareResources() func() {
 	ex.blockPrepareResourcesMutex.Lock()
 	return func() {
@@ -285,7 +275,7 @@ func (ex *ExamplePlugin) BlockNodePrepareResources() func() {
 	}
 }
 
-// BlockNodeUnprepareResources locks blockUnprepareResourcesMutex and returns unlocking function for it
+// BlockNodeUnprepareResources 锁定 blockUnprepareResourcesMutex，并返回用于解锁的函数
 func (ex *ExamplePlugin) BlockNodeUnprepareResources() func() {
 	ex.blockUnprepareResourcesMutex.Lock()
 	return func() {
@@ -293,8 +283,8 @@ func (ex *ExamplePlugin) BlockNodeUnprepareResources() func() {
 	}
 }
 
-// SetNodePrepareResourcesFailureMode sets the failure mode for NodePrepareResources call
-// and returns a function to unset the failure mode
+// SetNodePrepareResourcesFailureMode 为 NodePrepareResources 调用设置失败模式，
+// 并返回用于清除该失败模式的函数
 func (ex *ExamplePlugin) SetNodePrepareResourcesFailureMode() func() {
 	ex.failPrepareResourcesMutex.Lock()
 	ex.prepareResourcesFailure = errors.New("simulated PrepareResources failure")
@@ -313,8 +303,8 @@ func (ex *ExamplePlugin) getPrepareResourcesFailure() error {
 	return ex.prepareResourcesFailure
 }
 
-// SetNodeUnprepareResourcesFailureMode sets the failure mode for NodeUnprepareResources call
-// and returns a function to unset the failure mode
+// SetNodeUnprepareResourcesFailureMode 为 NodeUnprepareResources 调用设置失败模式，
+// 并返回用于清除该失败模式的函数
 func (ex *ExamplePlugin) SetNodeUnprepareResourcesFailureMode() func() {
 	ex.failUnprepareResourcesMutex.Lock()
 	ex.unprepareResourcesFailure = errors.New("simulated UnprepareResources failure")
@@ -333,10 +323,9 @@ func (ex *ExamplePlugin) getUnprepareResourcesFailure() error {
 	return ex.unprepareResourcesFailure
 }
 
-// NodePrepareResource ensures that the CDI file(s) (one per request) for the claim exists. It uses
-// a deterministic name to simplify NodeUnprepareResource (no need to remember
-// or discover the name) and idempotency (when called again, the file simply
-// gets written again).
+// NodePrepareResource 确保该 claim 的 CDI 文件（每个 request 一个）存在。
+// 它使用确定性的文件名，既简化了 NodeUnprepareResource（无需记住或查找文件名），
+// 也保证了幂等性（再次调用时只需重写文件）。
 func (ex *ExamplePlugin) nodePrepareResource(ctx context.Context, claim *resourceapi.ResourceClaim) ([]kubeletplugin.Device, error) {
 	logger := klog.FromContext(ctx)
 
@@ -347,25 +336,24 @@ func (ex *ExamplePlugin) nodePrepareResource(ctx context.Context, claim *resourc
 
 	claimID := ClaimID{Name: claim.Name, UID: claim.UID}
 	if result, ok := ex.prepared[claimID]; ok {
-		// Idempotent call, nothing to do.
+		// 幂等调用，无需处理。
 		return result, nil
 	}
 
 	var devices []kubeletplugin.Device
 	for _, result := range claim.Status.Allocation.Devices.Results {
-		// Only handle allocations for the current driver.
+		// 只处理分配给当前 driver 的结果。
 		if ex.driverName != result.Driver {
 			continue
 		}
 
 		baseRequestName := resourceclaim.BaseRequestRef(result.Request)
 
-		// The driver joins all env variables in the order in which
-		// they appear in results (last one wins).
+		// driver 按变量在 results 中出现的顺序合并所有环境变量（后者覆盖前者）。
 		configs := resourceclaim.ConfigForResult(claim.Status.Allocation.Devices.Config, result)
 		env := make(map[string]string)
 		for i, config := range configs {
-			// Only use configs for the current driver.
+			// 只使用属于当前 driver 的配置。
 			if config.Opaque.Driver != ex.driverName {
 				continue
 			}
@@ -374,8 +362,8 @@ func (ex *ExamplePlugin) nodePrepareResource(ctx context.Context, claim *resourc
 			}
 		}
 
-		// It also sets a claim_<claim name>_<request name>=true env variable.
-		// This can be used to identify which devices where mapped into a container.
+		// 同时设置 claim_<claim name>_<request name>=true 环境变量，
+		// 用于识别哪些设备被映射进了容器。
 		claimReqName := "claim_" + claim.Name + "_" + baseRequestName
 		claimReqName = regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(claimReqName, "_")
 		env[claimReqName] = "true"
@@ -385,7 +373,7 @@ func (ex *ExamplePlugin) nodePrepareResource(ctx context.Context, claim *resourc
 		class := "test"
 		cdiDeviceID := vendor + "/" + class + "=" + deviceName
 
-		// CDI wants env variables as set of strings.
+		// CDI 要求环境变量以字符串集合的形式提供。
 		envs := []string{}
 		for key, val := range env {
 			envs = append(envs, key+"="+val)
@@ -393,11 +381,10 @@ func (ex *ExamplePlugin) nodePrepareResource(ctx context.Context, claim *resourc
 		sort.Strings(envs)
 
 		if len(envs) == 0 {
-			// CDI does not support empty ContainerEdits. For example,
-			// kubelet+crio then fail with:
+			// CDI 不支持空的 ContainerEdits。例如 kubelet+crio 会报：
 			//    CDI device injection failed: unresolvable CDI devices ...
 			//
-			// Inject nothing instead, which is supported by DRA.
+			// 此时不注入任何内容，DRA 支持这种做法。
 			continue
 		}
 
@@ -429,7 +416,7 @@ func (ex *ExamplePlugin) nodePrepareResource(ctx context.Context, claim *resourc
 			PoolName:     result.Pool,
 			DeviceName:   result.Device,
 			ShareID:      result.ShareID,
-			Requests:     []string{result.Request}, // May also return baseRequestName here.
+			Requests:     []string{result.Request}, // 这里也可以返回 baseRequestName。
 			CDIDeviceIDs: []string{cdiDeviceID},
 			Metadata: &kubeletplugin.DeviceMetadata{
 				Attributes: map[string]resourceapi.DeviceAttribute{
@@ -487,9 +474,8 @@ func (ex *ExamplePlugin) PrepareResourceClaims(ctx context.Context, claims []*re
 	return result, nil
 }
 
-// NodeUnprepareResource removes the CDI file created by
-// NodePrepareResource. It's idempotent, therefore it is not an error when that
-// file is already gone.
+// NodeUnprepareResource 删除 NodePrepareResource 创建的 CDI 文件。
+// 它是幂等的，因此文件已被删除时不会报错。
 func (ex *ExamplePlugin) nodeUnprepareResource(ctx context.Context, claimRef kubeletplugin.NamespacedObject) error {
 	ex.blockUnprepareResourcesMutex.Lock()
 	defer ex.blockUnprepareResourcesMutex.Unlock()
@@ -501,12 +487,12 @@ func (ex *ExamplePlugin) nodeUnprepareResource(ctx context.Context, claimRef kub
 	claimID := ClaimID{Name: claimRef.Name, UID: claimRef.UID}
 	devices, ok := ex.prepared[claimID]
 	if !ok {
-		// Idempotent call, nothing to do.
+		// 幂等调用，无需处理。
 		return nil
 	}
 
 	for _, device := range devices {
-		// In practice we only prepare one, but let's not assume that here.
+		// 实际上通常只 prepare 一个，但这里不做此假设。
 		for _, request := range device.Requests {
 			filePath := ex.getJSONFilePath(claimRef.UID, request)
 			if err := ex.fileOps.Remove(filePath); err != nil {
@@ -535,9 +521,9 @@ func (ex *ExamplePlugin) UnprepareResourceClaims(ctx context.Context, claims []k
 	return result, nil
 }
 
-// UnprepareClaim manually unprepares a single resource claim on the plugin.
-// This is required in tests where kubelet intentionally bypasses unprepare (e.g. SkipNodeOperationNodeUnprepareResources)
-// so that test cleanup assertions on prepared resources can succeed.
+// UnprepareClaim 在 plugin 上手动 unprepare 单个 resource claim。
+// 当测试中 kubelet 有意跳过 unprepare（例如 SkipNodeOperationNodeUnprepareResources）时，
+// 需要用它来保证对已 prepare 资源的清理断言能够通过。
 func (ex *ExamplePlugin) UnprepareClaim(ctx context.Context, claim *resourceapi.ResourceClaim) error {
 	return ex.nodeUnprepareResource(ctx, kubeletplugin.NamespacedObject{
 		NamespacedName: types.NamespacedName{Namespace: claim.Namespace, Name: claim.Name},
@@ -565,7 +551,7 @@ func (ex *ExamplePlugin) recordGRPCCall(ctx context.Context, req interface{}, in
 	index := len(ex.gRPCCalls) - 1
 	ex.mutex.Unlock()
 
-	// We don't hold the mutex here to allow concurrent calls.
+	// 此处不持有互斥锁，以允许并发调用。
 	call.Response, call.Err = handler(ctx, req)
 
 	ex.mutex.Lock()
@@ -577,7 +563,7 @@ func (ex *ExamplePlugin) recordGRPCCall(ctx context.Context, req interface{}, in
 
 func (ex *ExamplePlugin) recordGRPCStream(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 	ex.mutex.Lock()
-	// Append a new empty GRPCCall struct to get its index.
+	// 先追加一个空的 GRPCCall 结构体，以获取其索引。
 	ex.gRPCCalls = append(ex.gRPCCalls, GRPCCall{})
 
 	pCall := &ex.gRPCCalls[len(ex.gRPCCalls)-1]
@@ -599,24 +585,22 @@ func (ex *ExamplePlugin) GetGRPCCalls() []GRPCCall {
 	ex.mutex.Lock()
 	defer ex.mutex.Unlock()
 
-	// We must return a new slice, otherwise adding new calls would become
-	// visible to the caller. We also need to copy the entries because
-	// they get mutated by recordGRPCCall.
+	// 必须返回新的 slice，否则新增的调用会对调用方可见。
+	// 还要复制其中的元素，因为 recordGRPCCall 会修改它们。
 	calls := make([]GRPCCall, 0, len(ex.gRPCCalls))
 	calls = append(calls, ex.gRPCCalls...)
 	return calls
 }
 
-// ResetGRPCCalls clears the internal tracking of GRPC calls made to the plugin.
-// This is useful in tests to start with a clean slate when verifying plugin
-// registration behavior, particularly when testing registration retry scenarios.
+// ResetGRPCCalls 清除内部记录的插件 GRPC 调用。
+// 在测试中验证插件注册行为（尤其是注册重试场景）时，可借此从干净状态开始。
 func (ex *ExamplePlugin) ResetGRPCCalls() {
 	ex.mutex.Lock()
 	defer ex.mutex.Unlock()
 	ex.gRPCCalls = nil
 }
 
-// CountCalls counts GRPC calls with the given method suffix.
+// CountCalls 统计方法名以给定后缀结尾的 GRPC 调用次数。
 func (ex *ExamplePlugin) CountCalls(methodSuffix string) int {
 	count := 0
 	for _, call := range ex.GetGRPCCalls() {
@@ -631,31 +615,25 @@ func (ex *ExamplePlugin) UpdateStatus(ctx context.Context, resourceClaim *resour
 	return ex.resourceClient.ResourceClaims(resourceClaim.Namespace).UpdateStatus(ctx, resourceClaim, metav1.UpdateOptions{})
 }
 
-// SetGetInfoError sets an error to be returned by the plugin's GetInfo call.
-// This can be used in tests to simulate a registration failure scenario,
-// allowing verification that the kubelet plugin manager retries registration
-// when GetInfo fails.
+// SetGetInfoError 设置插件 GetInfo 调用返回的错误。
+// 测试中可用它模拟注册失败场景，验证 kubelet plugin manager 在 GetInfo 失败时会重试注册。
 //
-// To restore normal GetInfo behavior, call SetGetInfoError(nil).
+// 调用 SetGetInfoError(nil) 可恢复 GetInfo 的正常行为。
 func (ex *ExamplePlugin) SetGetInfoError(err error) {
 	ex.d.SetGetInfoError(err)
 }
 
-// SetNotifyRegistrationStatusError sets an error to be returned by the
-// plugin's NotifyRegistrationStatus call.
-// This can be used in tests to simulate a registration failure scenario,
-// allowing verification that the kubelet plugin manager retries registration
-// when NotifyRegistrationStatus fails.
+// SetNotifyRegistrationStatusError 设置插件 NotifyRegistrationStatus 调用返回的错误。
+// 测试中可用它模拟注册失败场景，验证 kubelet plugin manager 在 NotifyRegistrationStatus 失败时会重试注册。
 //
-// To restore normal NotifyRegistrationStatus behavior, call SetNotifyRegistrationStatusError(nil).
+// 调用 SetNotifyRegistrationStatusError(nil) 可恢复 NotifyRegistrationStatus 的正常行为。
 func (ex *ExamplePlugin) SetNotifyRegistrationStatusError(err error) {
 	ex.d.SetNotifyRegistrationStatusError(err)
 }
 
-// WatchHealthStatus implements [kubeletplugin.DRAPlugin] by streaming device
-// health reports using the version-neutral helper API. The helper translates
-// the reports into whichever DRAResourceHealth gRPC version the kubelet
-// supports.
+// WatchHealthStatus 通过版本无关的 helper API 流式发送设备健康报告，
+// 实现 [kubeletplugin.DRAPlugin]。helper 会将报告转换为 kubelet 支持的
+// DRAResourceHealth gRPC 版本。
 func (ex *ExamplePlugin) WatchHealthStatus(ctx context.Context, reports chan<- kubeletplugin.DeviceHealthReport) error {
 	logger := klog.FromContext(ctx)
 	logger.V(3).Info("Starting dynamic WatchHealthStatus stream")
@@ -663,8 +641,8 @@ func (ex *ExamplePlugin) WatchHealthStatus(ctx context.Context, reports chan<- k
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	// send builds the current report and delivers it, respecting cancellation.
-	// It returns false once the stream is done so the caller can stop.
+	// send 构造当前报告并发送，同时响应取消信号。
+	// 流结束后返回 false，调用方据此停止。
 	send := func() bool {
 		report := ex.buildHealthReport()
 		logger.V(5).Info("Test driver sending health update", "report", report)
@@ -676,7 +654,7 @@ func (ex *ExamplePlugin) WatchHealthStatus(ctx context.Context, reports chan<- k
 		}
 	}
 
-	// Send an initial update immediately to report on pre-configured devices.
+	// 立即发送一次初始更新，汇报预先配置好的设备状态。
 	if !send() {
 		logger.V(3).Info("WatchHealthStatus stream canceled by kubelet")
 		return nil
@@ -712,8 +690,7 @@ func (ex *ExamplePlugin) WatchHealthStatus(ctx context.Context, reports chan<- k
 	}
 }
 
-// buildHealthReport dynamically builds the health report from the current state
-// of the deviceHealth map.
+// buildHealthReport 根据 deviceHealth map 的当前状态动态构造健康报告。
 func (ex *ExamplePlugin) buildHealthReport() kubeletplugin.DeviceHealthReport {
 	devices := []kubeletplugin.DeviceHealth{}
 
@@ -744,7 +721,7 @@ func (ex *ExamplePlugin) buildHealthReport() kubeletplugin.DeviceHealthReport {
 	}
 	ex.healthMutex.Unlock()
 
-	// Sort to ensure consistent ordering in tests.
+	// 排序以保证测试中的顺序稳定。
 	sort.Slice(devices, func(i, j int) bool {
 		if devices[i].PoolName != devices[j].PoolName {
 			return devices[i].PoolName < devices[j].PoolName

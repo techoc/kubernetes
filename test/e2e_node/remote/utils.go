@@ -25,7 +25,7 @@ import (
 	"k8s.io/kubernetes/test/e2e_node/builder"
 )
 
-// utils.go contains functions used across test suites.
+// utils.go 包含跨测试套件使用的函数。
 
 const (
 	cniVersion       = "v1.9.1"
@@ -103,8 +103,7 @@ func getCNIURL() string {
 
 }
 
-// Install the cni plugin and add basic bridge configuration to the
-// configuration directory.
+// 安装 CNI 插件，并向配置目录添加基本的网桥配置。
 func setupCNI(host, workspace string) error {
 	klog.V(2).Infof("Install CNI on %q", host)
 	cniPath := filepath.Join(workspace, cniDirectory)
@@ -117,9 +116,8 @@ func setupCNI(host, workspace string) error {
 		return fmt.Errorf("failed to install cni plugin on %q: %v output: %q", host, err, output)
 	}
 
-	// The added CNI network config is not needed for kubenet. It is only
-	// used when testing the CNI network plugin, but is added in both cases
-	// for consistency and simplicity.
+	// 新增的 CNI 网络配置对 kubenet 并非必需，只在测试 CNI 网络插件时使用；
+	// 但为保持一致和简单，两种情况下都会添加。
 	klog.V(2).Infof("Adding CNI configuration on %q", host)
 	cniConfigPath := filepath.Join(workspace, cniConfDirectory)
 	cmd = getSSHCommand(" ; ",
@@ -174,12 +172,11 @@ func configureCredentialProvider(host, workspace string) error {
 	return nil
 }
 
-// configureFirewall configures iptable firewall rules.
+// configureFirewall 配置 iptables 防火墙规则。
 func configureFirewall(host string) error {
 	klog.V(2).Infof("Configure iptables firewall rules on %q", host)
 
-	// Since the goal is to enable connectivity without taking into account current rule,
-	// we can just prepend the accept rules directly without any check
+	// 目标是在不考虑现有规则的情况下打通连通性，因此可直接前置 accept 规则，无需检查
 	cmd := getSSHCommand("&&",
 		"iptables -I INPUT 1 -w -p tcp -j ACCEPT",
 		"iptables -I INPUT 1 -w -p udp -j ACCEPT",
@@ -195,7 +192,7 @@ func configureFirewall(host string) error {
 	return nil
 }
 
-// cleanupNodeProcesses kills all running node processes may conflict with the test.
+// cleanupNodeProcesses 杀掉所有可能与测试冲突的运行中节点进程。
 func cleanupNodeProcesses(host string) {
 	klog.V(2).Infof("Killing any existing node processes on %q", host)
 	cmd := getSSHCommand(" ; ",
@@ -204,13 +201,12 @@ func cleanupNodeProcesses(host string) {
 		"pkill etcd",
 		"pkill e2e_node.test",
 	)
-	// No need to log an error if pkill fails since pkill will fail if the commands are not running.
-	// If we are unable to stop existing running k8s processes, we should see messages in the kubelet/apiserver/etcd
-	// logs about failing to bind the required ports.
+	// pkill 失败无需记录错误，因为命令未运行时 pkill 本就会失败。
+	// 若无法停止已有的 k8s 进程，会在 kubelet/apiserver/etcd 日志中看到端口绑定失败的信息。
 	SSH(host, "sh", "-c", cmd)
 }
 
-// Quotes a shell literal so it can be nested within another shell scope.
+// 为 shell 字面量加引号，使其能嵌套在另一层 shell 作用域中。
 func quote(s string) string {
 	return fmt.Sprintf("'\"'\"'%s'\"'\"'", s)
 }

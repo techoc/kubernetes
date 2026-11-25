@@ -44,17 +44,17 @@ import (
 
 const mysqlManifestPath = "test/e2e/testing-manifests/statefulset/mysql-upgrade"
 
-// MySQLUpgradeTest implements an upgrade test harness that polls a replicated sql database.
+// MySQLUpgradeTest 实现一个升级测试框架，通过轮询复制的 SQL 数据库来验证升级。
 type MySQLUpgradeTest struct {
 	ip               string
 	successfulWrites int
 	nextWrite        int
 }
 
-// Name returns the tracking name of the test.
+// Name 返回该测试的跟踪名称。
 func (MySQLUpgradeTest) Name() string { return "mysql-upgrade" }
 
-// Skip returns true when this test can be skipped.
+// Skip 在可以跳过该测试时返回 true。
 func (MySQLUpgradeTest) Skip(upgCtx upgrades.UpgradeContext) bool {
 	minVersion := version.MustParseSemantic("1.5.0")
 
@@ -85,10 +85,9 @@ func (t *MySQLUpgradeTest) getServiceIP(ctx context.Context, f *framework.Framew
 	return ingress[0].IP
 }
 
-// Setup creates a StatefulSet, HeadlessService, a Service to write to the db, and a Service to read
-// from the db. It then connects to the db with the write Service and populates the db with a table
-// and a few entries. Finally, it connects to the db with the read Service, and confirms the data is
-// available. The db connections are left open to be used later in the test.
+// Setup 创建 StatefulSet、HeadlessService、一个写 Service 和一个读 Service。
+// 然后通过写 Service 连接数据库，建表并写入若干条数据；最后通过读 Service
+// 连接数据库，确认数据可读。数据库连接会保持打开，供测试后续使用。
 func (t *MySQLUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	statefulsetPoll := 30 * time.Second
@@ -129,8 +128,8 @@ func (t *MySQLUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	gomega.Expect(count).To(gomega.Equal(2))
 }
 
-// Test continually polls the db using the read and write connections, inserting data, and checking
-// that all the data is readable.
+// Test 在升级期间持续通过读写连接轮询数据库，一边插入数据，一边检查
+// 已写入的数据是否都可读取。
 func (t *MySQLUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	var writeSuccess, readSuccess, writeFailure, readFailure int
 	ginkgo.By("Continuously polling the database during upgrade.")
@@ -160,9 +159,8 @@ func (t *MySQLUpgradeTest) Test(ctx context.Context, f *framework.Framework, don
 	framework.Logf("Failed reads: %d", readFailure)
 	framework.Logf("Failed writes: %d", writeFailure)
 
-	// TODO: Not sure what the ratio defining a successful test run should be. At time of writing the
-	// test, failures only seem to happen when a race condition occurs (read/write starts, doesn't
-	// finish before upgrade interferes).
+	// TODO: 不确定成功率达到多少才算测试通过。编写本测试时，失败似乎只在
+	// 竞态条件下发生：读写操作开始后，在升级介入之前没能完成。
 
 	readRatio := float64(readSuccess) / float64(readSuccess+readFailure)
 	writeRatio := float64(writeSuccess) / float64(writeSuccess+writeFailure)
@@ -174,14 +172,14 @@ func (t *MySQLUpgradeTest) Test(ctx context.Context, f *framework.Framework, don
 	}
 }
 
-// Teardown performs one final check of the data's availability.
+// Teardown 最后再检查一次数据的可用性。
 func (t *MySQLUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
 	count, err := t.countNames()
 	framework.ExpectNoError(err)
 	gomega.Expect(count).To(gomega.BeNumerically(">=", t.successfulWrites), "count is too small")
 }
 
-// addName adds a new value to the db.
+// addName 向数据库添加一条新值。
 func (t *MySQLUpgradeTest) addName(name string) error {
 	val := map[string][]string{"name": {name}}
 	t.nextWrite++
@@ -200,8 +198,7 @@ func (t *MySQLUpgradeTest) addName(name string) error {
 	return nil
 }
 
-// countNames checks to make sure the values in testing.users are available, and returns
-// the count of them.
+// countNames 检查 testing.users 中的数据是否可读，并返回其条数。
 func (t *MySQLUpgradeTest) countNames() (int, error) {
 	r, err := http.Get(fmt.Sprintf("http://%s/countNames", net.JoinHostPort(t.ip, "8080")))
 	if err != nil {

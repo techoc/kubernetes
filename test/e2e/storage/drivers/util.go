@@ -46,14 +46,14 @@ func shredFile(filePath string) {
 		framework.Logf("File %v successfully shredded", filePath)
 		return
 	}
-	// Shred failed Try to remove the file for good measure
+	// shred 失败，作为兜底再尝试删除文件
 	err = os.Remove(filePath)
 	framework.ExpectNoError(err, "Failed to remove service account file %s", filePath)
 
 }
 
-// createGCESecrets downloads the GCP IAM Key for the default compute service account
-// and puts it in a secret for the GCE PD CSI Driver to consume
+// createGCESecrets 下载默认 compute service account 的 GCP IAM Key，
+// 并将其放入 Secret 供 GCE PD CSI 驱动使用
 func createGCESecrets(client clientset.Interface, ns string) {
 	saEnv := "E2E_GOOGLE_APPLICATION_CREDENTIALS"
 	saFile := fmt.Sprintf("/tmp/%s/cloud-sa.json", string(uuid.NewUUID()))
@@ -70,11 +70,11 @@ func createGCESecrets(client clientset.Interface, ns string) {
 	}
 
 	framework.Logf("Found CI service account key at %v", premadeSAFile)
-	// Need to copy it saFile
+	// 需要将其复制到 saFile
 	stdout, stderr, err := framework.RunCmd("cp", premadeSAFile, saFile)
 	framework.ExpectNoError(err, "error copying service account key: %s\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	defer shredFile(saFile)
-	// Create Secret with this Service Account
+	// 使用该 Service Account 创建 Secret
 	fileBytes, err := os.ReadFile(saFile)
 	framework.ExpectNoError(err, "Failed to read file %v", saFile)
 

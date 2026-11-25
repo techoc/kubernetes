@@ -48,8 +48,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// expandIPv6ForConntrack expands an IPv6 address to the format used in /proc/net/nf_conntrack.
-// e.g., "fc00:f853:ccd:e793::3" -> "fc00:f853:0ccd:e793:0000:0000:0000:0003"
+// expandIPv6ForConntrack 将 IPv6 地址展开为 /proc/net/nf_conntrack 使用的格式。
+// 例如 "fc00:f853:ccd:e793::3" -> "fc00:f853:0ccd:e793:0000:0000:0000:0003"
 func expandIPv6ForConntrack(ipStr string) string {
 	ip := netutils.ParseIPSloppy(ipStr)
 	if !netutils.IsIPv6(ip) {
@@ -111,7 +111,7 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 			nodeIP: ips[0],
 		}
 
-		// Create a pod to check the conntrack entries on the host node
+		// 创建一个 Pod 来检查宿主机节点上的 conntrack 条目。
 		privileged := true
 
 		hostExecPod := &v1.Pod{
@@ -138,7 +138,7 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 		}
 		e2epod.NewPodClient(fr).CreateSync(ctx, hostExecPod)
 
-		// Create the client and server pods
+		// 创建客户端和服务端 Pod。
 		clientPodSpec := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "e2e-net-client",
@@ -206,11 +206,11 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 			kubeProxyE2eImage))
 		e2epod.NewPodClient(fr).CreateSync(ctx, serverPodSpec)
 
-		// The server should be listening before spawning the client pod
+		// 创建客户端 Pod 之前，服务端应先开始监听。
 		if readyErr := e2epod.WaitTimeoutForPodReadyInNamespace(ctx, fr.ClientSet, serverPodSpec.Name, fr.Namespace.Name, framework.PodStartTimeout); readyErr != nil {
 			framework.Failf("error waiting for server pod %s to be ready: %v", serverPodSpec.Name, readyErr)
 		}
-		// Connect to the server and leak the connection
+		// 连接到服务端并保持连接不关闭（leak connection）。
 		ginkgo.By(fmt.Sprintf(
 			"Launching a client connection on node %v (node ip: %v, image: %v)",
 			clientNodeInfo.name,
@@ -222,7 +222,7 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 		const epsilonSeconds = 60
 		const expectedTimeoutSeconds = 60 * 60
 
-		// Detect conntrack method and build command
+		// 探测可用的 conntrack 方式并构造命令。
 		ip := serverNodeInfo.nodeIP
 		ipFamily := "ipv4"
 		if netutils.IsIPv6String(ip) {
@@ -243,6 +243,7 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 			cmd = fmt.Sprintf("conntrack -L -f %s -d %s 2>/dev/null | grep -m 1 'CLOSE_WAIT.*dport=%d'", ipFamily, ip, testDaemonTCPPort)
 			dumpCmd = "conntrack -L 2>/dev/null"
 			timeoutIdx = 2 // tcp 6 <timeout> CLOSE_WAIT ...
+
 		} else {
 			e2eskipper.Skipf("Neither /proc/net/nf_conntrack nor conntrack binary available")
 		}
@@ -294,21 +295,21 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 		metricsGrabber, err := e2emetrics.NewMetricsGrabber(ctx, fr.ClientSet, nil, fr.ClientConfig(), false, false, false, false, false, false)
 		framework.ExpectNoError(err)
 
-		// create a pod with host-network for execing
+		// 创建使用 host-network 的 Pod，以便执行命令。
 		hostExecPodName := "host-exec-pod"
 		hostExecPod := e2epod.NewExecPodSpec(fr.Namespace.Name, hostExecPodName, true)
 		nodeSelection := e2epod.NodeSelection{Name: nodeName}
 		e2epod.SetNodeSelection(&hostExecPod.Spec, nodeSelection)
 		e2epod.NewPodClient(fr).CreateSync(ctx, hostExecPod)
 
-		// get proxyMode
+		// 获取 proxyMode。
 		stdout, err := e2epodoutput.RunHostCmd(fr.Namespace.Name, hostExecPodName, fmt.Sprintf("curl --silent 127.0.0.1:%d/proxyMode", ports.ProxyStatusPort))
 		if err != nil {
 			framework.Failf("failed to get proxy mode: err: %v; stdout: %s", stdout, err)
 		}
 		proxyMode := strings.TrimSpace(stdout)
 
-		// get value of route_localnet
+		// 获取 route_localnet 的值。
 		stdout, err = e2epodoutput.RunHostCmd(fr.Namespace.Name, hostExecPodName, "cat /proc/sys/net/ipv4/conf/all/route_localnet")
 		framework.ExpectNoError(err)
 		routeLocalnet := strings.TrimSpace(stdout)
@@ -317,13 +318,13 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 			e2eskipper.Skipf("test requires iptables proxy mode with route_localnet set")
 		}
 
-		// get value of target metric before accessing localhost nodeports
+		// 在访问 localhost nodeport 之前，先获取目标指标的当前值。
 		metrics, err := metricsGrabber.GrabFromKubeProxy(ctx, nodeName)
 		framework.ExpectNoError(err)
 		targetMetricBefore, err := metrics.GetCounterMetricValue(metricName)
 		framework.ExpectNoError(err)
 
-		// create pod
+		// 创建 Pod。
 		ginkgo.By("creating test pod")
 		label := map[string]string{
 			"app": "agnhost-localhost-nodeports",
@@ -338,7 +339,7 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 		pod.Labels = label
 		e2epod.NewPodClient(fr).CreateSync(ctx, pod)
 
-		// create nodeport service
+		// 创建 NodePort Service。
 		ginkgo.By("creating test nodeport service")
 		svc := &v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
@@ -359,7 +360,7 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 		svc, err = fr.ClientSet.CoreV1().Services(fr.Namespace.Name).Create(ctx, svc, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		// wait for endpoints update
+		// 等待 endpoints 更新。
 		ginkgo.By("waiting for endpoints to be updated")
 		err = e2eendpointslice.WaitForEndpointCount(ctx, fr.ClientSet, ns, svc.Name, 1)
 		framework.ExpectNoError(err)
@@ -377,7 +378,7 @@ var _ = common.SIGDescribe("KubeProxy", func() {
 			}
 		}
 
-		// our target metric should be updated by now
+		// 此时目标指标应该已被更新。
 		if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 2*time.Minute, true, func(_ context.Context) (bool, error) {
 			metrics, err := metricsGrabber.GrabFromKubeProxy(ctx, nodeName)
 			if err != nil {

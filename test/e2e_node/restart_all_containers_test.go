@@ -92,7 +92,7 @@ var _ = SIGDescribe("RestartAllContainersWithKubeletRestarts",
 					},
 				},
 			}
-			// Setting up extra containers so the cleanup takes more time to coordinate with kubelet restart.
+			// 额外创建容器，使清理耗时更长，便于与 kubelet 重启配合。
 			for i := range containerCount {
 				pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
 					Name:    fmt.Sprintf("container-%d", i),
@@ -165,7 +165,7 @@ var _ = SIGDescribe("RestartAllContainersWithKubeletRestarts",
 						{
 							Name:  "init",
 							Image: imageutils.GetE2EImage(imageutils.BusyBox),
-							// Let init container sleep 20s before succeeding to coordinate with kubelet restart
+							// 让 init container 先休眠 20 秒再成功退出，以便与 kubelet 重启配合
 							Command: []string{"/bin/sh", "-c", "sleep 20; exit 0"},
 						},
 					},
@@ -194,7 +194,7 @@ var _ = SIGDescribe("RestartAllContainersWithKubeletRestarts",
 					},
 				},
 			}
-			// Setting up extra containers so the cleanup takes more time to coordinate with kubelet restart.
+			// 额外创建容器，使清理耗时更长，便于与 kubelet 重启配合。
 			for i := range containerCount {
 				pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
 					Name:    fmt.Sprintf("container-%d", i),
