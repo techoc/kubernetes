@@ -19,7 +19,7 @@ package framework
 import "time"
 
 var defaultTimeouts = TimeoutContext{
-	Poll:                      2 * time.Second, // from the former e2e/framework/pod poll interval
+	Poll:                      2 * time.Second, // 来自原先的 e2e/framework/pod poll interval
 	PodStart:                  5 * time.Minute,
 	PodStartShort:             2 * time.Minute,
 	PodStartSlow:              15 * time.Minute,
@@ -43,93 +43,93 @@ var defaultTimeouts = TimeoutContext{
 	ClaimUnusedCondition:      3 * time.Minute,
 }
 
-// TimeoutContext contains timeout settings for several actions.
+// TimeoutContext 包含若干操作的超时设置。
 type TimeoutContext struct {
-	// Poll is how long to wait between API calls when waiting for some condition.
+	// Poll 是等待某个 condition 时两次 API 调用之间的间隔。
 	Poll time.Duration
 
-	// PodStart is how long to wait for the pod to be started.
-	// This value is the default for gomega.Eventually.
+	// PodStart 是等待 Pod 启动的时长。
+	// 此值是 gomega.Eventually 的默认值。
 	PodStart time.Duration
 
-	// PodStartShort is same as `PodStart`, but shorter.
-	// Use it in a case-by-case basis, mostly when you are sure pod start will not be delayed.
-	// This value is the default for gomega.Consistently.
+	// PodStartShort 与 `PodStart` 相同，但更短。
+	// 视情况使用，主要在确信 Pod 启动不会延迟时使用。
+	// 此值是 gomega.Consistently 的默认值。
 	PodStartShort time.Duration
 
-	// PodStartSlow is same as `PodStart`, but longer.
-	// Use it in a case-by-case basis, mostly when you are sure pod start will take longer than usual.
+	// PodStartSlow 与 `PodStart` 相同，但更长。
+	// 视情况使用，主要在确信 Pod 启动会比平时更慢时使用。
 	PodStartSlow time.Duration
 
-	// PodDelete is how long to wait for the pod to be deleted.
+	// PodDelete 是等待 Pod 被删除的时长。
 	PodDelete time.Duration
 
-	// ClaimProvision is how long claims have to become dynamically provisioned.
+	// ClaimProvision 是等待 claim 完成动态供给的时长。
 	ClaimProvision time.Duration
 
-	// DataSourceProvision is how long claims have to become dynamically provisioned from source claim.
+	// DataSourceProvision 是等待 claim 从源 claim 完成动态供给的时长。
 	DataSourceProvision time.Duration
 
-	// ClaimProvisionShort is the same as `ClaimProvision`, but shorter.
+	// ClaimProvisionShort 与 `ClaimProvision` 相同，但更短。
 	ClaimProvisionShort time.Duration
 
-	// ClaimBound is how long claims have to become bound.
+	// ClaimBound 是等待 claim 绑定的时长。
 	ClaimBound time.Duration
 
-	// PVReclaim is how long PVs have to become reclaimed.
+	// PVReclaim 是等待 PV 被回收的时长。
 	PVReclaim time.Duration
 
-	// PVBound is how long PVs have to become bound.
+	// PVBound 是等待 PV 绑定的时长。
 	PVBound time.Duration
 
-	// PVCreate is how long PVs have to be created.
+	// PVCreate 是等待 PV 被创建的时长。
 	PVCreate time.Duration
 
-	// PVDelete is how long PVs have to become deleted.
+	// PVDelete 是等待 PV 被删除的时长。
 	PVDelete time.Duration
 
-	// PVDeleteSlow is the same as PVDelete, but slower.
+	// PVDeleteSlow 与 PVDelete 相同，但更长。
 	PVDeleteSlow time.Duration
 
-	// SnapshotCreate is how long for snapshot to create snapshotContent.
+	// SnapshotCreate 是等待 snapshot 创建 snapshotContent 的时长。
 	SnapshotCreate time.Duration
 
-	// SnapshotDelete is how long for snapshot to delete snapshotContent.
+	// SnapshotDelete 是等待 snapshot 删除 snapshotContent 的时长。
 	SnapshotDelete time.Duration
 
-	// SnapshotControllerMetrics is how long to wait for snapshot controller metrics.
+	// SnapshotControllerMetrics 是等待 snapshot controller metrics 的时长。
 	SnapshotControllerMetrics time.Duration
 
-	// SystemPodsStartup is how long to wait for system pods to be running.
+	// SystemPodsStartup 是等待系统 Pod 进入运行态的时长。
 	SystemPodsStartup time.Duration
 
-	// NodeSchedulable is how long to wait for all nodes to be schedulable.
+	// NodeSchedulable 是等待所有节点变为可调度的时长。
 	NodeSchedulable time.Duration
 
-	// SystemDaemonsetStartup is how long to wait for all system daemonsets to be ready.
+	// SystemDaemonsetStartup 是等待所有系统 daemonset 就绪的时长。
 	SystemDaemonsetStartup time.Duration
 
-	// NodeNotReady is how long to wait for a node to be not ready.
+	// NodeNotReady 是等待节点变为 NotReady 的时长。
 	NodeNotReady time.Duration
 
-	// ClaimUnusedCondition is how long to wait for the Unused condition to appear or change on a PVC.
+	// ClaimUnusedCondition 是等待 PVC 上出现或改变 Unused condition 的时长。
 	ClaimUnusedCondition time.Duration
 }
 
-// NewTimeoutContext returns a TimeoutContext with all values set either to
-// hard-coded defaults or a value that was configured when running the E2E
-// suite. Should be called after command line parsing.
+// NewTimeoutContext 返回一个 TimeoutContext，所有值要么设为
+// 硬编码默认值，要么设为运行 E2E 套件时配置的值。
+// 套件。应在命令行解析之后调用。
 func NewTimeoutContext() *TimeoutContext {
-	// Make a copy, otherwise the caller would have the ability to modify
-	// the original values.
+	// 复制一份，否则调用方就有可能修改
+	// 原始值。
 	copy := TestContext.timeouts
 	return &copy
 }
 
-// PollInterval defines how long to wait between API server queries while
-// waiting for some condition.
+// PollInterval 定义等待某个 condition 时
+// 等待某个 condition 时。
 //
-// This value is the default for gomega.Eventually and gomega.Consistently.
+// 此值是 gomega.Eventually 和 gomega.Consistently 的默认值。
 func PollInterval() time.Duration {
 	return TestContext.timeouts.Poll
 }

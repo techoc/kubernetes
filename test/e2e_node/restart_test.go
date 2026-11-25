@@ -45,8 +45,8 @@ import (
 
 type podCondition func(pod *v1.Pod) (bool, error)
 
-// waitForPodsCondition waits for `podCount` number of pods to match a specific pod condition within a timeout duration.
-// If the timeout is hit, it returns the list of currently running pods.
+// waitForPodsCondition 在超时时长内等待 `podCount` 个 Pod 匹配特定 pod condition。
+// 如果超时，返回当前运行的 Pod 列表。
 func waitForPodsCondition(ctx context.Context, f *framework.Framework, podCount int, timeout time.Duration, condition podCondition) (runningPods []*v1.Pod) {
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(10 * time.Second) {
 		podList, err := e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{})
@@ -73,17 +73,17 @@ func waitForPodsCondition(ctx context.Context, f *framework.Framework, podCount 
 
 var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), framework.WithDisruptive(), func() {
 	const (
-		// Saturate the node. It's not necessary that all these pods enter
-		// Running/Ready, because we don't know the number of cores in the
-		// test node or default limits applied (if any). It's is essential
-		// that no containers end up in terminated. 100 was chosen because
-		// it's the max pods per node.
+		// 让节点饱和。并非所有这些 Pod 都必须进入
+		// Running/Ready，因为我们不知道测试节点的内核数，
+		// 也不知道是否应用了默认限制。关键是
+		// 不能有任何容器进入 terminated。选择 100 是因为
+		// 这是每个节点的最大 Pod 数。
 		podCount            = 100
 		podCreationInterval = 100 * time.Millisecond
 		recoverTimeout      = 5 * time.Minute
 		startTimeout        = 3 * time.Minute
-		// restartCount is chosen so even with minPods we exhaust the default
-		// allocation of a /24.
+		// restartCount 的取值确保即使使用 minPods，也会耗尽
+		// 一个 /24 网段的默认分配。
 		minPods      = 50
 		restartCount = 6
 	)
@@ -98,8 +98,8 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 				createBatchPodWithRateControl(ctx, f, pods, podCreationInterval)
 				ginkgo.DeferCleanup(deletePodsSync, f, pods)
 
-				// Give the node some time to stabilize, assume pods that enter RunningReady within
-				// startTimeout fit on the node and the node is now saturated.
+				// 给节点一些时间稳定，假定在 startTimeout 内进入 RunningReady 的 Pod
+				// 适合该节点，且节点现已饱和。
 				runningPods := waitForPodsCondition(ctx, f, podCount, startTimeout, testutils.PodRunningReadyOrSucceeded)
 				if len(runningPods) < minPods {
 					framework.Failf("Failed to start %d pods, cannot test that restarting container runtime doesn't leak IPs", minPods)
@@ -107,7 +107,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 
 				for i := range restartCount {
 					ginkgo.By(fmt.Sprintf("Killing container runtime iteration %d", i))
-					// Wait for container runtime to be running
+					// 等待容器运行时进入运行态
 					var pid int
 					gomega.Eventually(ctx, func() error {
 						runtimePids, err := getPidsForProcess(framework.TestContext.ContainerRuntimeProcessName, framework.TestContext.ContainerRuntimePidFile)
@@ -117,7 +117,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 						if len(runtimePids) != 1 {
 							return fmt.Errorf("unexpected container runtime pid list: %+v", runtimePids)
 						}
-						// Make sure the container runtime is running, pid got from pid file may not be running.
+						// 确保容器运行时正在运行，从 pid 文件获取的 pid 可能并未运行。
 						pid = runtimePids[0]
 						if _, err := exec.Command("sudo", "ps", "-p", fmt.Sprintf("%d", pid)).CombinedOutput(); err != nil {
 							return err
@@ -127,7 +127,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 					if stdout, err := exec.Command("sudo", "kill", "-SIGKILL", fmt.Sprintf("%d", pid)).CombinedOutput(); err != nil {
 						framework.Failf("Failed to kill container runtime (pid=%d): %v, stdout: %q", pid, err, string(stdout))
 					}
-					// Assume that container runtime will be restarted by systemd/supervisord etc.
+					// 假定容器运行时会由 systemd/supervisord 等重启。
 					time.Sleep(20 * time.Second)
 				}
 
@@ -155,13 +155,13 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 				e2eskipper.Skipf("insufficient CPU available for kubelet restart test")
 			}
 			if numCpus > 18 {
-				// 950m * 19 = 1805 CPUs -> not enough to block the scheduling of another 950m pod
+				// 950m * 19 = 1805 CPUs -> 不足以阻止另一个 950m Pod 的调度
 				e2eskipper.Skipf("test will return false positives on a machine with >18 cores")
 			}
 
-			// create as many restartNever pods as there are allocatable CPU
-			// nodes; if they are not correctly accounted for as terminated
-			// later, this will fill up all node capacity
+			// 创建与可分配 CPU 数量相同的 restartNever Pod
+			// 节点；如果它们未被正确计入 terminated，
+			// 之后将占满所有节点容量
 			podCountRestartNever := numCpus
 			ginkgo.By(fmt.Sprintf("creating %d RestartNever pods on node", podCountRestartNever))
 			restartNeverPods := newTestPods(podCountRestartNever, false, imageutils.GetE2EImage(imageutils.BusyBox), "restart-kubelet-test")
@@ -169,7 +169,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 				pod.Spec.RestartPolicy = "Never"
 				pod.Spec.Containers[0].Command = []string{"echo", "hi"}
 				pod.Spec.Containers[0].Resources.Limits = v1.ResourceList{
-					v1.ResourceCPU: resource.MustParse("950m"), // leave a little room for other workloads
+					v1.ResourceCPU: resource.MustParse("950m"), // 为其他工作负载留一点空间
 				}
 			}
 			createBatchPodWithRateControl(ctx, f, restartNeverPods, podCreationInterval)
@@ -198,14 +198,14 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 			}
 
 			ginkgo.By("killing and restarting kubelet")
-			// We want to kill the kubelet rather than a graceful restart
+			// 我们希望杀死 kubelet，而不是优雅重启
 			restartKubelet := mustStopKubelet(ctx, f)
 			restartKubelet(ctx)
 
-			// If this test works correctly, each of these pods will exit
-			// with no issue. But if accounting breaks, pods scheduled after
-			// restart may think these old pods are consuming CPU and we
-			// will get an OutOfCpu error.
+			// 如果此测试正常工作，每个 Pod 都会正常
+			// 退出。但如果计数失效，重启后调度的 Pod
+			// 可能认为这些旧 Pod 仍在消耗 CPU，从而
+			// 导致 OutOfCpu 错误。
 			ginkgo.By("verifying restartNever pods succeed and restartAlways pods stay running")
 			for start := time.Now(); time.Since(start) < startTimeout && ctx.Err() == nil; time.Sleep(10 * time.Second) {
 				postRestartRunningPods := waitForPodsCondition(ctx, f, numAllPods, recoverTimeout, testutils.PodRunningReadyOrSucceeded)
@@ -214,7 +214,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 				}
 			}
 		})
-		// Regression test for https://issues.k8s.io/116925
+		// 针对 https://issues.k8s.io/116925 的回归测试
 		ginkgo.It("should delete pods which are marked as terminal and have a deletion timestamp set after restart", func(ctx context.Context) {
 			podName := "terminal-restart-pod" + string(uuid.NewUUID())
 			gracePeriod := int64(30)
@@ -305,15 +305,15 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 			ginkgo.By("Ended watch for pod entering succeeded phase")
 			framework.ExpectNoError(err, "failed to see event that pod (%s/%s) enter succeeded phase: %v", pod.Namespace, pod.Name, err)
 
-			// As soon as the pod enters succeeded phase (detected by the watch above); kill the kubelet.
-			// This is a bit racy, but the goal is to stop the kubelet before the kubelet is able to delete the pod from the API-sever in order to repro https://issues.k8s.io/116925
+			// Pod 一进入 succeeded 阶段（由上面的 watch 检测到），就杀死 kubelet。
+			// 这有些竞争，但目标是在 kubelet 从 API server 删除 Pod 之前停止它，以复现 https://issues.k8s.io/116925
 			ginkgo.By("Stopping the kubelet")
 			restartKubelet := mustStopKubelet(ctx, f)
 
 			ginkgo.By("Restarting the kubelet")
 			restartKubelet(ctx)
 
-			// Wait for the Kubelet to be ready.
+			// 等待 Kubelet 就绪。
 			gomega.Eventually(ctx, func(ctx context.Context) bool {
 				nodes, err := e2enode.TotalReady(ctx, f.ClientSet)
 				framework.ExpectNoError(err)
@@ -325,7 +325,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 				return checkMirrorPodDisappear(ctx, f.ClientSet, pod.Name, pod.Namespace)
 			}, f.Timeouts.PodDelete, f.Timeouts.Poll).Should(gomega.BeNil())
 		})
-		// Regression test for https://issues.k8s.io/118472
+		// 针对 https://issues.k8s.io/118472 的回归测试
 		ginkgo.It("should force-delete non-admissible pods created and deleted during kubelet restart", func(ctx context.Context) {
 			podName := "rejected-deleted-pod" + string(uuid.NewUUID())
 			gracePeriod := int64(30)
@@ -353,8 +353,8 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 			ginkgo.By("Stopping the kubelet")
 			restartKubelet := mustStopKubelet(ctx, f)
 
-			// Create the pod bound to the node. It will remain in the Pending
-			// phase as Kubelet is down.
+			// 创建绑定到该节点的 Pod。由于 kubelet 停机，
+			// 它将保持在 Pending 阶段。
 			ginkgo.By(fmt.Sprintf("Creating a pod (%v/%v)", f.Namespace.Name, podName))
 			pod := e2epod.NewPodClient(f).Create(ctx, podSpec)
 
@@ -362,7 +362,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 			err := e2epod.NewPodClient(f).Delete(ctx, pod.Name, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod})
 			framework.ExpectNoError(err, "Failed to delete the pod: %q", pod.Name)
 
-			// Restart Kubelet so that it proceeds with deletion
+			// 重启 Kubelet，使其继续执行删除
 			ginkgo.By("Starting the kubelet")
 			restartKubelet(ctx)
 
@@ -371,7 +371,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 				return checkMirrorPodDisappear(ctx, f.ClientSet, pod.Name, pod.Namespace)
 			}, f.Timeouts.PodDelete, f.Timeouts.Poll).Should(gomega.BeNil())
 		})
-		// Regression test for an extended scenario for https://issues.k8s.io/118472
+		// 针对 https://issues.k8s.io/118472 扩展场景的回归测试
 		ginkgo.It("should force-delete non-admissible pods that was admitted and running before kubelet restart", func(ctx context.Context) {
 			nodeLabelKey := "custom-label-key-required"
 			nodeLabelValueRequired := "custom-label-value-required-for-admission"
@@ -403,7 +403,7 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 			e2enode.AddOrUpdateLabelOnNode(f.ClientSet, nodeName, nodeLabelKey, nodeLabelValueRequired)
 			ginkgo.DeferCleanup(func() { e2enode.RemoveLabelOffNode(f.ClientSet, nodeName, nodeLabelKey) })
 
-			// Create the pod bound to the node. It will start, but will be rejected after kubelet restart.
+			// 创建绑定到该节点的 Pod。它会启动，但 kubelet 重启后会被拒绝。
 			ginkgo.By(fmt.Sprintf("Creating a pod (%v/%v)", f.Namespace.Name, podName))
 			pod = e2epod.NewPodClient(f).Create(ctx, pod)
 
@@ -421,11 +421,11 @@ var _ = SIGDescribe("Restart", framework.WithSerial(), framework.WithSlow(), fra
 			ginkgo.By(fmt.Sprintf("Removing node label for node (%v) to ensure the pod (%v/%v) is rejected after kubelet restart", nodeName, f.Namespace.Name, podName))
 			e2enode.RemoveLabelOffNode(f.ClientSet, nodeName, nodeLabelKey)
 
-			// Restart Kubelet so that it proceeds with deletion
+			// 重启 Kubelet，使其继续执行删除
 			ginkgo.By("Restarting the kubelet")
 			restartKubelet(ctx)
 
-			// Wait for the Kubelet to be ready.
+			// 等待 Kubelet 就绪。
 			gomega.Eventually(ctx, func(ctx context.Context) bool {
 				nodes, err := e2enode.TotalReady(ctx, f.ClientSet)
 				framework.ExpectNoError(err)

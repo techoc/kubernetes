@@ -15,22 +15,20 @@ limitations under the License.
 */
 
 /*
- * This file defines various in-tree volume test drivers for TestSuites.
+ * 此文件定义了供 TestSuites 使用的各种 in-tree volume 测试 driver。
  *
- * There are two ways, how to prepare test drivers:
- * 1) With containerized server (NFS, Ceph, iSCSI, ...)
- * It creates a server pod which defines one volume for the tests.
- * These tests work only when privileged containers are allowed, exporting
- * various filesystems (like NFS) usually needs some mounting or
- * other privileged magic in the server pod.
+ * 准备测试 driver 有两种方式：
+ * 1) 使用容器化服务器（NFS、Ceph、iSCSI 等）。
+ * 它会创建一个 server Pod，为测试定义一个 volume。
+ * 这些测试只有在允许特权容器时才有效，因为导出
+ * 各种文件系统（如 NFS）通常需要在 server Pod 中进行挂载或其他特权操作。
  *
- * Note that the server containers are for testing purposes only and should not
- * be used in production.
+ * 注意，这些 server 容器仅用于测试，不应
+ * 用于生产环境。
  *
- * 2) With server or cloud provider outside of Kubernetes (Cinder, GCE, AWS, Azure, ...)
- * Appropriate server or cloud provider must exist somewhere outside
- * the tested Kubernetes cluster. CreateVolume will create a new volume to be
- * used in the TestSuites for inlineVolume or DynamicPV tests.
+ * 2) 使用 Kubernetes 外部的服务器或云提供商（Cinder、GCE、AWS、Azure 等）。
+ * 相应的服务器或云提供商必须存在于被测试的 Kubernetes 集群之外。
+ * CreateVolume 将创建一个新 volume，供 TestSuites 中的 inlineVolume 或 DynamicPV 测试使用。
  */
 
 package drivers
@@ -65,7 +63,7 @@ import (
 )
 
 const (
-	// Template for iSCSI IQN.
+	// iSCSI IQN 的模板。
 	iSCSIIQNTemplate = "iqn.2003-01.io.k8s:e2e.%s"
 )
 
@@ -81,7 +79,7 @@ type nfsDriver struct {
 	externalProvisionerPod *v1.Pod
 	externalPluginName     string
 
-	// path that is exported by the NFS server.
+	// NFS server 导出的路径。
 	path       string
 	driverInfo storageframework.DriverInfo
 }
@@ -98,7 +96,7 @@ var _ storageframework.InlineVolumeTestDriver = &nfsDriver{}
 var _ storageframework.PreprovisionedPVTestDriver = &nfsDriver{}
 var _ storageframework.DynamicPVTestDriver = &nfsDriver{}
 
-// InitNFSDriver returns nfsDriver that implements TestDriver interface
+// InitNFSDriver 返回实现 TestDriver 接口的 nfsDriver
 func InitNFSDriver(version NFSProtocalVersion) func() storageframework.TestDriver {
 	var driverName, path, mountOption string
 	switch version {
@@ -189,8 +187,8 @@ func (n *nfsDriver) PrepareTest(ctx context.Context, f *framework.Framework) *st
 	ns := f.Namespace
 	n.externalPluginName = fmt.Sprintf("example.com/nfs-%s", ns.Name)
 
-	// TODO(mkimuram): cluster-admin gives too much right but system:persistent-volume-provisioner
-	// is not enough. We should create new clusterrole for testing.
+	// TODO(mkimuram): cluster-admin 权限过大，而 system:persistent-volume-provisioner
+	// 权限不足。我们应为测试创建新的 clusterrole。
 	cleanupFunc, err := e2eauth.BindClusterRole(ctx, cs.RbacV1(), "cluster-admin", ns.Name,
 		rbacv1.Subject{Kind: rbacv1.ServiceAccountKind, Namespace: ns.Name, Name: "default"})
 	framework.ExpectNoError(err)
@@ -217,9 +215,9 @@ func (n *nfsDriver) CreateVolume(ctx context.Context, config *storageframework.P
 	cs := f.ClientSet
 	ns := f.Namespace
 
-	// NewNFSServer creates a pod for InlineVolume and PreprovisionedPV,
-	// and startExternalProvisioner creates a pod for DynamicPV.
-	// Therefore, we need a different PrepareTest logic for volType.
+	// NewNFSServer 为 InlineVolume 和 PreprovisionedPV 创建 Pod，
+	// startExternalProvisioner 为 DynamicPV 创建 Pod。
+	// 因此需要针对 volType 使用不同的 PrepareTest 逻辑。
 	switch volType {
 	case storageframework.InlineVolume:
 		fallthrough
@@ -232,7 +230,7 @@ func (n *nfsDriver) CreateVolume(ctx context.Context, config *storageframework.P
 			f:          f,
 		}
 	case storageframework.DynamicPV:
-		// Do nothing
+		// 不做任何操作
 	default:
 		framework.Failf("Unsupported volType:%v is specified", volType)
 	}
@@ -244,7 +242,7 @@ func (v *nfsVolume) DeleteVolume(ctx context.Context) {
 }
 
 // iSCSI
-// The iscsiadm utility and iscsi target kernel modules must be installed on all nodes.
+// 所有节点上都必须安装 iscsiadm 工具和 iscsi target 内核模块。
 type iSCSIDriver struct {
 	driverInfo storageframework.DriverInfo
 }
@@ -260,7 +258,7 @@ var _ storageframework.PreprovisionedVolumeTestDriver = &iSCSIDriver{}
 var _ storageframework.InlineVolumeTestDriver = &iSCSIDriver{}
 var _ storageframework.PreprovisionedPVTestDriver = &iSCSIDriver{}
 
-// InitISCSIDriver returns iSCSIDriver that implements TestDriver interface
+// InitISCSIDriver 返回实现 TestDriver 接口的 iSCSIDriver
 func InitISCSIDriver() storageframework.TestDriver {
 	return &iSCSIDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -358,9 +356,9 @@ func (i *iSCSIDriver) CreateVolume(ctx context.Context, config *storageframework
 	}
 }
 
-// newISCSIServer is an iSCSI-specific wrapper for CreateStorageServer.
+// newISCSIServer 是 CreateStorageServer 的 iSCSI 专用包装器。
 func newISCSIServer(ctx context.Context, cs clientset.Interface, namespace string) (config e2evolume.TestConfig, pod *v1.Pod, ip, iqn string) {
-	// Generate cluster-wide unique IQN
+	// 生成集群范围内唯一的 IQN
 	iqn = fmt.Sprintf(iSCSIIQNTemplate, namespace)
 	config = e2evolume.TestConfig{
 		Namespace:   namespace,
@@ -368,20 +366,20 @@ func newISCSIServer(ctx context.Context, cs clientset.Interface, namespace strin
 		ServerImage: imageutils.GetE2EImage(imageutils.VolumeISCSIServer),
 		ServerArgs:  []string{iqn},
 		ServerVolumes: map[string]string{
-			// iSCSI container needs to insert modules from the host
+			// iSCSI 容器需要从宿主机插入内核模块
 			"/lib/modules": "/lib/modules",
-			// iSCSI container needs to configure kernel
+			// iSCSI 容器需要配置内核
 			"/sys/kernel": "/sys/kernel",
-			// iSCSI source "block devices" must be available on the host
+			// iSCSI 源 "block devices" 必须在宿主机上可用
 			"/srv/iscsi": "/srv/iscsi",
-			// targetcli uses dbus
+			// targetcli 使用 dbus
 			"/run/dbus": "/run/dbus",
 		},
 		ServerReadyMessage: "iscsi target started",
 		ServerHostNetwork:  true,
 	}
 	pod, ip = e2evolume.CreateStorageServer(ctx, cs, config)
-	// Make sure the client runs on the same node as server so we don't need to open any firewalls.
+	// 确保 client 与 server 运行在同一节点，这样就不需要开放防火墙。
 	config.ClientNodeSelection = e2epod.NodeSelection{Name: pod.Spec.NodeName}
 	return config, pod, ip, iqn
 }
@@ -405,7 +403,7 @@ var _ storageframework.TestDriver = &hostPathDriver{}
 var _ storageframework.PreprovisionedVolumeTestDriver = &hostPathDriver{}
 var _ storageframework.InlineVolumeTestDriver = &hostPathDriver{}
 
-// InitHostPathDriver returns hostPathDriver that implements TestDriver interface
+// InitHostPathDriver 返回实现 TestDriver 接口的 hostPathDriver
 func InitHostPathDriver() storageframework.TestDriver {
 	return &hostPathDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -441,7 +439,7 @@ func (h *hostPathDriver) GetVolumeSource(readOnly bool, fsType string, e2evolume
 		framework.Failf("Failed to cast test volume of type %T to the Hostpath test volume", e2evolume)
 	}
 
-	// hostPath doesn't support readOnly volume
+	// hostPath 不支持 readOnly volume
 	if readOnly {
 		return nil
 	}
@@ -467,7 +465,7 @@ func (h *hostPathDriver) CreateVolume(ctx context.Context, config *storageframew
 	targetPath := fmt.Sprintf("/tmp/%v", f.Namespace.Name)
 	volumeName := "test-volume"
 
-	// pods should be scheduled on the node
+	// Pod 应被调度到该节点
 	node, err := e2enode.GetRandomReadySchedulableNode(ctx, cs)
 	framework.ExpectNoError(err)
 	config.ClientNodeSelection = e2epod.NodeSelection{Name: node.Name}
@@ -475,7 +473,7 @@ func (h *hostPathDriver) CreateVolume(ctx context.Context, config *storageframew
 	cmd := fmt.Sprintf("mkdir %v -m 777", targetPath)
 	privileged := true
 
-	// Launch pod to initialize hostPath directory
+	// 启动 Pod 以初始化 hostPath 目录
 	prepPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("hostpath-prep-%s", f.Namespace.Name),
@@ -511,7 +509,7 @@ func (h *hostPathDriver) CreateVolume(ctx context.Context, config *storageframew
 			NodeName: node.Name,
 		},
 	}
-	// h.prepPod will be reused in cleanupDriver.
+	// h.prepPod 将在 cleanupDriver 中复用。
 	pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, prepPod, metav1.CreateOptions{})
 	framework.ExpectNoError(err, "while creating hostPath init pod")
 
@@ -529,7 +527,7 @@ func (h *hostPathDriver) CreateVolume(ctx context.Context, config *storageframew
 
 var _ storageframework.TestVolume = &hostPathVolume{}
 
-// DeleteVolume implements the storageframework.TestVolume interface method
+// DeleteVolume 实现 storageframework.TestVolume 接口方法
 func (v *hostPathVolume) DeleteVolume(ctx context.Context) {
 	f := v.f
 
@@ -562,7 +560,7 @@ var _ storageframework.TestDriver = &hostPathSymlinkDriver{}
 var _ storageframework.PreprovisionedVolumeTestDriver = &hostPathSymlinkDriver{}
 var _ storageframework.InlineVolumeTestDriver = &hostPathSymlinkDriver{}
 
-// InitHostPathSymlinkDriver returns hostPathSymlinkDriver that implements TestDriver interface
+// InitHostPathSymlinkDriver 返回实现 TestDriver 接口的 hostPathSymlinkDriver
 func InitHostPathSymlinkDriver() storageframework.TestDriver {
 	return &hostPathSymlinkDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -598,7 +596,7 @@ func (h *hostPathSymlinkDriver) GetVolumeSource(readOnly bool, fsType string, e2
 		framework.Failf("Failed to cast test volume of type %T to the Hostpath Symlink test volume", e2evolume)
 	}
 
-	// hostPathSymlink doesn't support readOnly volume
+	// hostPathSymlink 不支持 readOnly volume
 	if readOnly {
 		return nil
 	}
@@ -625,7 +623,7 @@ func (h *hostPathSymlinkDriver) CreateVolume(ctx context.Context, config *storag
 	targetPath := fmt.Sprintf("/tmp/%v-link", f.Namespace.Name)
 	volumeName := "test-volume"
 
-	// pods should be scheduled on the node
+	// Pod 应被调度到该节点
 	node, err := e2enode.GetRandomReadySchedulableNode(ctx, cs)
 	framework.ExpectNoError(err)
 	config.ClientNodeSelection = e2epod.NodeSelection{Name: node.Name}
@@ -633,7 +631,7 @@ func (h *hostPathSymlinkDriver) CreateVolume(ctx context.Context, config *storag
 	cmd := fmt.Sprintf("mkdir %v -m 777 && ln -s %v %v", sourcePath, sourcePath, targetPath)
 	privileged := true
 
-	// Launch pod to initialize hostPath directory and symlink
+	// 启动 Pod 以初始化 hostPath 目录和符号链接
 	prepPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("hostpath-symlink-prep-%s", f.Namespace.Name),
@@ -669,7 +667,7 @@ func (h *hostPathSymlinkDriver) CreateVolume(ctx context.Context, config *storag
 			NodeName: node.Name,
 		},
 	}
-	// h.prepPod will be reused in cleanupDriver.
+	// h.prepPod 将在 cleanupDriver 中复用。
 	pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Create(ctx, prepPod, metav1.CreateOptions{})
 	framework.ExpectNoError(err, "while creating hostPath init pod")
 
@@ -688,7 +686,7 @@ func (h *hostPathSymlinkDriver) CreateVolume(ctx context.Context, config *storag
 
 var _ storageframework.TestVolume = &hostPathSymlinkVolume{}
 
-// DeleteVolume implements the storageframework.TestVolume interface method
+// DeleteVolume 实现 storageframework.TestVolume 接口方法
 func (v *hostPathSymlinkVolume) DeleteVolume(ctx context.Context) {
 	f := v.f
 
@@ -714,7 +712,7 @@ var _ storageframework.TestDriver = &emptydirDriver{}
 var _ storageframework.PreprovisionedVolumeTestDriver = &emptydirDriver{}
 var _ storageframework.InlineVolumeTestDriver = &emptydirDriver{}
 
-// InitEmptydirDriver returns emptydirDriver that implements TestDriver interface
+// InitEmptydirDriver 返回实现 TestDriver 接口的 emptydirDriver
 func InitEmptydirDriver() storageframework.TestDriver {
 	return &emptydirDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -741,7 +739,7 @@ func (e *emptydirDriver) SkipUnsupportedTest(pattern storageframework.TestPatter
 }
 
 func (e *emptydirDriver) GetVolumeSource(readOnly bool, fsType string, e2evolume storageframework.TestVolume) *v1.VolumeSource {
-	// emptydir doesn't support readOnly volume
+	// emptydir 不支持 readOnly volume
 	if readOnly {
 		return nil
 	}
@@ -763,7 +761,7 @@ func (e *emptydirDriver) PrepareTest(ctx context.Context, f *framework.Framework
 }
 
 // Cinder
-// This tests only CSI migration with dynamically provisioned volumes.
+// 此测试只覆盖动态供给 volume 的 CSI 迁移。
 type cinderDriver struct {
 	driverInfo storageframework.DriverInfo
 }
@@ -771,7 +769,7 @@ type cinderDriver struct {
 var _ storageframework.TestDriver = &cinderDriver{}
 var _ storageframework.DynamicPVTestDriver = &cinderDriver{}
 
-// InitCinderDriver returns cinderDriver that implements TestDriver interface
+// InitCinderDriver 返回实现 TestDriver 接口的 cinderDriver
 func InitCinderDriver() storageframework.TestDriver {
 	return &cinderDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -791,8 +789,8 @@ func InitCinderDriver() storageframework.TestDriver {
 				storageframework.CapFsGroup:     true,
 				storageframework.CapExec:        true,
 				storageframework.CapBlock:       true,
-				// Cinder supports volume limits, but the test creates large
-				// number of volumes and times out test suites.
+				// Cinder 支持 volume 数量限制，但该测试创建了大量
+				// volume，导致测试套件超时。
 				storageframework.CapVolumeLimits: false,
 				storageframework.CapTopology:     true,
 			},
@@ -835,7 +833,7 @@ type gcePdDriver struct {
 var _ storageframework.TestDriver = &gcePdDriver{}
 var _ storageframework.DynamicPVTestDriver = &gcePdDriver{}
 
-// InitGcePdDriver returns gcePdDriver that implements TestDriver interface
+// InitGcePdDriver 返回实现 TestDriver 接口的 gcePdDriver
 func InitGcePdDriver() storageframework.TestDriver {
 	supportedTypes := sets.NewString(
 		"", // Default fsType
@@ -866,8 +864,8 @@ func InitGcePdDriver() storageframework.TestDriver {
 				storageframework.CapOfflineExpansion:    true,
 				storageframework.CapOnlineExpansion:     true,
 				storageframework.CapNodeExpansion:       true,
-				// GCE supports volume limits, but the test creates large
-				// number of volumes and times out test suites.
+				// GCE 支持 volume 数量限制，但该测试创建了大量
+				// volume，导致测试套件超时。
 				storageframework.CapVolumeLimits:      false,
 				storageframework.CapTopology:          true,
 				storageframework.CapMultiplePVsSameID: true,
@@ -876,10 +874,10 @@ func InitGcePdDriver() storageframework.TestDriver {
 	}
 }
 
-// InitWindowsGcePdDriver returns gcePdDriver running on Windows cluster that implements TestDriver interface
-// In current test structure, it first initialize the driver and then set up
-// the new framework, so we cannot get the correct OS here and select which file system is supported.
-// So here uses a separate Windows in-tree gce pd driver
+// InitWindowsGcePdDriver 返回在 Windows 集群上运行、实现 TestDriver 接口的 gcePdDriver
+// 在当前测试结构中，先初始化 driver，再设置
+// 新的 framework，因此这里无法获取正确的 OS 并选择支持的文件系统。
+// 因此这里使用一个单独的 Windows in-tree gce pd driver
 func InitWindowsGcePdDriver() storageframework.TestDriver {
 	supportedTypes := sets.NewString(
 		"ntfs",
@@ -900,8 +898,8 @@ func InitWindowsGcePdDriver() storageframework.TestDriver {
 				storageframework.CapPersistence:         true,
 				storageframework.CapExec:                true,
 				storageframework.CapMultiPODs:           true,
-				// GCE supports volume limits, but the test creates large
-				// number of volumes and times out test suites.
+				// GCE 支持 volume 数量限制，但该测试创建了大量
+				// volume，导致测试套件超时。
 				storageframework.CapVolumeLimits:      false,
 				storageframework.CapTopology:          true,
 				storageframework.CapMultiplePVsSameID: true,
@@ -963,7 +961,7 @@ type vSphereDriver struct {
 var _ storageframework.TestDriver = &vSphereDriver{}
 var _ storageframework.DynamicPVTestDriver = &vSphereDriver{}
 
-// InitVSphereDriver returns vSphereDriver that implements TestDriver interface
+// InitVSphereDriver 返回实现 TestDriver 接口的 vSphereDriver
 func InitVSphereDriver() storageframework.TestDriver {
 	return &vSphereDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -1029,7 +1027,7 @@ var _ storageframework.TestDriver = &azureDiskDriver{}
 var _ storageframework.DynamicPVTestDriver = &azureDiskDriver{}
 var _ storageframework.CustomTimeoutsTestDriver = &azureDiskDriver{}
 
-// InitAzureDiskDriver returns azureDiskDriver that implements TestDriver interface
+// InitAzureDiskDriver 返回实现 TestDriver 接口的 azureDiskDriver
 func InitAzureDiskDriver() storageframework.TestDriver {
 	return &azureDiskDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -1052,8 +1050,8 @@ func InitAzureDiskDriver() storageframework.TestDriver {
 				storageframework.CapBlock:       true,
 				storageframework.CapExec:        true,
 				storageframework.CapMultiPODs:   true,
-				// Azure supports volume limits, but the test creates large
-				// number of volumes and times out test suites.
+				// Azure 支持 volume 数量限制，但该测试创建了大量
+				// volume，导致测试套件超时。
 				storageframework.CapVolumeLimits:      false,
 				storageframework.CapTopology:          true,
 				storageframework.CapMultiplePVsSameID: true,
@@ -1106,7 +1104,7 @@ type awsDriver struct {
 var _ storageframework.TestDriver = &awsDriver{}
 var _ storageframework.DynamicPVTestDriver = &awsDriver{}
 
-// InitAwsDriver returns awsDriver that implements TestDriver interface
+// InitAwsDriver 返回实现 TestDriver 接口的 awsDriver
 func InitAwsDriver() storageframework.TestDriver {
 	return &awsDriver{
 		driverInfo: storageframework.DriverInfo{
@@ -1135,8 +1133,8 @@ func InitAwsDriver() storageframework.TestDriver {
 				storageframework.CapNodeExpansion:       true,
 				storageframework.CapOfflineExpansion:    true,
 				storageframework.CapOnlineExpansion:     true,
-				// AWS supports volume limits, but the test creates large
-				// number of volumes and times out test suites.
+				// AWS 支持 volume 数量限制，但该测试创建了大量
+				// volume，导致测试套件超时。
 				storageframework.CapVolumeLimits:      false,
 				storageframework.CapTopology:          true,
 				storageframework.CapMultiplePVsSameID: true,
@@ -1187,8 +1185,8 @@ type localDriver struct {
 	driverInfo storageframework.DriverInfo
 	node       *v1.Node
 	hostExec   utils.HostExec
-	// volumeType represents local volume type we are testing, e.g.  tmpfs,
-	// directory, block device.
+	// volumeType 表示我们正在测试的本地 volume 类型，例如 tmpfs、
+	// directory、block device。
 	volumeType utils.LocalVolumeType
 	ltrMgr     utils.LocalTestResourceManager
 }
@@ -1204,14 +1202,14 @@ var (
 		storageframework.CapPersistence: true,
 		storageframework.CapFsGroup:     true,
 		storageframework.CapBlock:       false,
-		// To test CapExec, we need a volume with a filesystem.
-		// During end-to-end (e2e) testing, we utilize the `/tmp` directory for volume creation.
-		// However, best practices recommend mounting `/tmp` with the `noexec`, `nodev`, and `nosuid` parameters.
-		// This security measure prevents the execution of scripts and binaries within the `/tmp` directory.
-		// This practice, while promoting security, creates a dependency on the infrastructure configuration during e2e tests.
-		// This can result in "Permission Denied" errors when attempting to execute files from `/tmp`.
-		// To address this, we intentionally skip exec tests for certain types of LocalVolumes, such as `dir` or `dir-link`.
-		// This allows us to conduct comprehensive testing without relying on potentially restrictive security configurations.
+		// 要测试 CapExec，需要有文件系统的 volume。
+		// 在端到端（e2e）测试中，我们使用 `/tmp` 目录创建 volume。
+		// 然而，最佳实践建议使用 `noexec`、`nodev` 和 `nosuid` 参数挂载 `/tmp`。
+		// 该安全措施可防止在 `/tmp` 目录内执行脚本和二进制文件。
+		// 这种做法提升了安全性，但也让 e2e 测试依赖于基础设施配置。
+		// 当尝试执行 `/tmp` 中的文件时，可能导致 "Permission Denied" 错误。
+		// 为此，我们有意跳过某些类型 LocalVolume（如 `dir` 或 `dir-link`）的 exec 测试。
+		// 这样可以在不依赖可能严格的安全配置的情况下进行全面测试。
 		storageframework.CapExec:              false,
 		storageframework.CapMultiPODs:         true,
 		storageframework.CapSingleNodeVolume:  true,
@@ -1261,10 +1259,10 @@ var (
 		utils.LocalVolumeBlock: sets.NewString(
 			"", // Default fsType
 			"ext4",
-			//"xfs", disabled see issue https://github.com/kubernetes/kubernetes/issues/74095
+			// "xfs"，已禁用，参见 issue https://github.com/kubernetes/kubernetes/issues/74095
 		),
 	}
-	// max file size
+	// 最大文件大小
 	defaultLocalVolumeMaxFileSize = storageframework.FileSizeSmall
 	localVolumeMaxFileSizes       = map[utils.LocalVolumeType]int64{}
 )
@@ -1273,7 +1271,7 @@ var _ storageframework.TestDriver = &localDriver{}
 var _ storageframework.PreprovisionedVolumeTestDriver = &localDriver{}
 var _ storageframework.PreprovisionedPVTestDriver = &localDriver{}
 
-// InitLocalDriverWithVolumeType initializes the local driver based on the volume type.
+// InitLocalDriverWithVolumeType 根据 volume 类型初始化 local driver。
 func InitLocalDriverWithVolumeType(volumeType utils.LocalVolumeType) func() storageframework.TestDriver {
 	maxFileSize := defaultLocalVolumeMaxFileSize
 	if maxFileSizeByVolType, ok := localVolumeMaxFileSizes[volumeType]; ok {
@@ -1288,9 +1286,9 @@ func InitLocalDriverWithVolumeType(volumeType utils.LocalVolumeType) func() stor
 		capabilities = capabilitiesByType
 	}
 	return func() storageframework.TestDriver {
-		// custom tag to distinguish from tests of other volume types
+		// 自定义标签，用于与其他 volume 类型的测试区分
 		testTags := []interface{}{framework.WithLabel("LocalVolumeType: " + string(volumeType))}
-		// For GCE Local SSD volumes, we must run serially
+		// 对于 GCE Local SSD volume，必须串行运行
 		if volumeType == utils.LocalVolumeGCELocalSSD {
 			testTags = append(testTags, framework.WithSerial())
 		}
@@ -1324,7 +1322,7 @@ func (l *localDriver) PrepareTest(ctx context.Context, f *framework.Framework) *
 	l.hostExec = utils.NewHostExec(f)
 	l.ltrMgr = utils.NewLocalResourceManager("local-driver", l.hostExec, "/tmp")
 
-	// This can't be done in SkipUnsupportedTest because the test framework is not initialized yet
+	// 这无法在 SkipUnsupportedTest 中完成，因为测试框架尚未初始化
 	if l.volumeType == utils.LocalVolumeGCELocalSSD {
 		ssdInterface := "scsi"
 		filesystemType := "fs"
@@ -1351,7 +1349,7 @@ func (l *localDriver) CreateVolume(ctx context.Context, config *storageframework
 	switch volType {
 	case storageframework.PreprovisionedPV:
 		node := l.node
-		// assign this to schedule pod on this node
+		// 设置此项以将 Pod 调度到该节点
 		config.ClientNodeSelection = e2epod.NodeSelection{Name: node.Name}
 		return &localVolume{
 			ltrMgr: l.ltrMgr,
@@ -1406,7 +1404,7 @@ func (l *localDriver) GetPersistentVolumeSource(readOnly bool, fsType string, e2
 	}, l.nodeAffinityForNode(lv.ltr.Node)
 }
 
-// cleanUpVolumeServer is a wrapper of cleanup function for volume server.
+// cleanUpVolumeServer 是 volume server 清理函数的包装器。
 func cleanUpVolumeServer(ctx context.Context, f *framework.Framework, serverPod *v1.Pod) {
 	framework.Logf("Deleting server pod %q...", serverPod.Name)
 	err := e2epod.DeletePodWithWait(ctx, f.ClientSet, serverPod)
@@ -1423,7 +1421,7 @@ type azureFileDriver struct {
 var _ storageframework.TestDriver = &azureFileDriver{}
 var _ storageframework.DynamicPVTestDriver = &azureFileDriver{}
 
-// InitAzureFileDriver returns azureFileDriver that implements TestDriver interface
+// InitAzureFileDriver 返回实现 TestDriver 接口的 azureFileDriver
 func InitAzureFileDriver() storageframework.TestDriver {
 	return &azureFileDriver{
 		driverInfo: storageframework.DriverInfo{

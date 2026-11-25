@@ -18,5 +18,5 @@ package kubectl
 
 import "k8s.io/kubernetes/test/e2e/framework"
 
-// SIGDescribe annotates the test with the SIG label.
+// SIGDescribe 为测试添加 SIG 标签注解。
 var SIGDescribe = framework.SIGDescribe("cli")

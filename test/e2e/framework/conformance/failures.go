@@ -31,15 +31,15 @@ type gomegaFailures struct {
 
 var _ gtypes.GomegaTestingT = &gomegaFailures{}
 
-// Helper implements [gtyppes.GomegaTestingT].
+// Helper 实现 [gtyppes.GomegaTestingT]。
 func (g *gomegaFailures) Helper() {}
 
-// Fatalf implements [gtypes.GomegaTestingT].
+// 记录一次失败。
 func (g *gomegaFailures) Fatalf(format string, args ...any) {
 	g.Add(fmt.Sprintf(format, args...))
 }
 
-// Adds one failure.
+// 如果有任何失败，Check 通过 [ginkgo.Fail] 判失败。
 func (g *gomegaFailures) Add(failure string) {
 	if !strings.HasSuffix(failure, "\n") {
 		failure += "\n"
@@ -47,7 +47,7 @@ func (g *gomegaFailures) Add(failure string) {
 	g.failures = append(g.failures, failure)
 }
 
-// Check fails via [ginkgo.Fail] if there were any failures.
+// eventRecorder 通过记录所有事件实现 [cache.ResourceEventHandler]。
 func (g *gomegaFailures) Check() {
 	if len(g.failures) > 0 {
 		ginkgo.GinkgoHelper()

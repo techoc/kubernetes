@@ -39,7 +39,7 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// PodReadyToStartContainers condition timing tests with CRI Proxy delays (Linux only)
+// 通过 CRI Proxy 延迟测试 PodReadyToStartContainers condition 的时序（仅 Linux）
 var _ = SIGDescribe("Pod conditions managed by Kubelet", func() {
 	f := framework.NewDefaultFramework("pod-conditions")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
@@ -72,7 +72,7 @@ var _ = SIGDescribe("Pod conditions managed by Kubelet", func() {
 	})
 })
 
-// newPullImageAlwaysPodWithInitContainer creates a pod with init container and ImagePullPolicy: Always
+// newPullImageAlwaysPodWithInitContainer 创建一个带 init container 且 ImagePullPolicy 为 Always 的 Pod
 func newPullImageAlwaysPodWithInitContainer() *v1.Pod {
 	podName := "cri-proxy-test-" + string(uuid.NewUUID())
 	pod := &v1.Pod{

@@ -49,7 +49,7 @@ type fsGroupChangePolicyTestSuite struct {
 
 var _ storageframework.TestSuite = &fsGroupChangePolicyTestSuite{}
 
-// InitCustomFsGroupChangePolicyTestSuite returns fsGroupChangePolicyTestSuite that implements TestSuite interface
+// InitCustomFsGroupChangePolicyTestSuite 返回实现 TestSuite 接口的 fsGroupChangePolicyTestSuite
 func InitCustomFsGroupChangePolicyTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &fsGroupChangePolicyTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -62,7 +62,7 @@ func InitCustomFsGroupChangePolicyTestSuite(patterns []storageframework.TestPatt
 	}
 }
 
-// InitFsGroupChangePolicyTestSuite returns fsGroupChangePolicyTestSuite that implements TestSuite interface
+// InitFsGroupChangePolicyTestSuite 返回实现 TestSuite 接口的 fsGroupChangePolicyTestSuite
 func InitFsGroupChangePolicyTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsDynamicPV,
@@ -106,8 +106,8 @@ func (s *fsGroupChangePolicyTestSuite) DefineTests(driver storageframework.TestD
 	}
 	var l local
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意，它还会注册一个 AfterEach，使 f 失效。任何使用 f 的代码
+	// 都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("fsgroupchangepolicy", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
@@ -133,22 +133,22 @@ func (s *fsGroupChangePolicyTestSuite) DefineTests(driver storageframework.TestD
 	rwopAccessMode := v1.ReadWriteOncePod
 
 	tests := []struct {
-		name                              string // Test case name
-		podfsGroupChangePolicy            string // 'Always' or 'OnRootMismatch'
-		initialPodFsGroup                 int    // FsGroup of the initial pod
-		changedRootDirFileOwnership       int    // Change the ownership of the file in the root directory (/mnt/volume1/file1), as part of the initial pod
-		changedSubDirFileOwnership        int    // Change the ownership of the file in the sub directory (/mnt/volume1/subdir/file2), as part of the initial pod
-		secondPodFsGroup                  int    // FsGroup of the second pod
-		finalExpectedRootDirFileOwnership int    // Final expected ownership of the file in the root directory (/mnt/volume1/file1), as part of the second pod
-		finalExpectedSubDirFileOwnership  int    // Final expected ownership of the file in the sub directory (/mnt/volume1/subdir/file2), as part of the second pod
-		// Whether the test can run for drivers that support volumeMountGroup capability.
-		// For CSI drivers that support volumeMountGroup:
-		// * OnRootMismatch policy is not supported.
-		// * It may not be possible to chgrp after mounting a volume.
+		name                              string // 测试用例名称
+		podfsGroupChangePolicy            string // 'Always' 或 'OnRootMismatch'
+		initialPodFsGroup                 int    // 初始 Pod 的 FsGroup
+		changedRootDirFileOwnership       int    // 作为初始 Pod 的一部分，更改根目录文件（/mnt/volume1/file1）的属主
+		changedSubDirFileOwnership        int    // 作为初始 Pod 的一部分，更改子目录文件（/mnt/volume1/subdir/file2）的属主
+		secondPodFsGroup                  int    // 第二个 Pod 的 FsGroup
+		finalExpectedRootDirFileOwnership int    // 作为第二个 Pod 的一部分，根目录文件（/mnt/volume1/file1）的最终期望属主
+		finalExpectedSubDirFileOwnership  int    // 作为第二个 Pod 的一部分，子目录文件（/mnt/volume1/subdir/file2）的最终期望属主
+		// 测试是否可在支持 volumeMountGroup 能力的 driver 上运行。
+		// 对于支持 volumeMountGroup 的 CSI driver：
+		// * 不支持 OnRootMismatch 策略。
+		// * 挂载 volume 后可能无法 chgrp。
 		supportsVolumeMountGroup bool
 		volumeAccessMode         *v1.PersistentVolumeAccessMode
 	}{
-		// Test cases for 'Always' policy
+		// 'Always' 策略的测试用例
 		{
 			name:                              "pod created with an initial fsgroup, new pod fsgroup applied to volume contents",
 			podfsGroupChangePolicy:            "Always",
@@ -188,7 +188,7 @@ func (s *fsGroupChangePolicyTestSuite) DefineTests(driver storageframework.TestD
 			finalExpectedRootDirFileOwnership: 4000,
 			finalExpectedSubDirFileOwnership:  4000,
 		},
-		// Test cases for 'OnRootMismatch' policy
+		// 'OnRootMismatch' 策略的测试用例
 		{
 			name:                              "pod created with an initial fsgroup, new pod fsgroup applied to volume contents",
 			podfsGroupChangePolicy:            "OnRootMismatch",
@@ -246,10 +246,10 @@ func (s *fsGroupChangePolicyTestSuite) DefineTests(driver storageframework.TestD
 				FsGroup:                ptr.To[int64](int64(test.initialPodFsGroup)),
 				PodFSGroupChangePolicy: &policy,
 			}
-			// Create initial pod and create files in root and sub-directory and verify ownership.
+			// 创建初始 Pod，在根目录和子目录创建文件并验证属主。
 			pod := createPodAndVerifyContentGid(ctx, l.config.Framework, &podConfig, true /* createInitialFiles */, "" /* expectedRootDirFileOwnership */, "" /* expectedSubDirFileOwnership */)
 
-			// Change the ownership of files in the initial pod.
+			// 更改初始 Pod 中文件的属主。
 			if test.changedRootDirFileOwnership != 0 {
 				ginkgo.By(fmt.Sprintf("Changing the root directory file ownership to %s", strconv.Itoa(test.changedRootDirFileOwnership)))
 				storageutils.ChangeFilePathGIDInPod(ctx, f, rootDirFilePath, strconv.Itoa(test.changedRootDirFileOwnership), pod)
@@ -263,7 +263,7 @@ func (s *fsGroupChangePolicyTestSuite) DefineTests(driver storageframework.TestD
 			ginkgo.By(fmt.Sprintf("Deleting Pod %s/%s", pod.Namespace, pod.Name))
 			framework.ExpectNoError(e2epod.DeletePodWithWait(ctx, f.ClientSet, pod))
 
-			// Create a second pod with existing volume and verify the contents ownership.
+			// 创建使用现有 volume 的第二个 Pod，并验证内容的属主。
 			podConfig.FsGroup = ptr.To[int64](int64(test.secondPodFsGroup))
 			pod = createPodAndVerifyContentGid(ctx, l.config.Framework, &podConfig, false /* createInitialFiles */, strconv.Itoa(test.finalExpectedRootDirFileOwnership), strconv.Itoa(test.finalExpectedSubDirFileOwnership))
 			ginkgo.By(fmt.Sprintf("Deleting Pod %s/%s", pod.Namespace, pod.Name))
@@ -297,7 +297,7 @@ func createPodAndVerifyContentGid(ctx context.Context, f *framework.Framework, p
 		return pod
 	}
 
-	// Verify existing contents of the volume
+	// 验证 volume 中已有的内容
 	ginkgo.By(fmt.Sprintf("Verifying the ownership of root directory file is %s", expectedRootDirFileOwnership))
 	storageutils.VerifyFilePathGIDInPod(ctx, f, rootDirFilePath, expectedRootDirFileOwnership, pod)
 	ginkgo.By(fmt.Sprintf("Verifying the ownership of sub directory file is %s", expectedSubDirFileOwnership))

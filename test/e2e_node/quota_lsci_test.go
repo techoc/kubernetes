@@ -60,11 +60,11 @@ func runOneQuotaTest(f *framework.Framework, quotasRequested bool, userNamespace
 				e2eskipper.Skipf("runtime does not support user namespaces")
 			}
 			if quotasRequested && !supportsQuotas(framework.TestContext.KubeletRootDir, userNamespacesEnabled) {
-				// No point in running this as a positive test if quotas are not
-				// enabled on the underlying filesystem.
+				// 如果底层文件系统未启用配额，将该测试作为正向测试就没有意义。
+				// 如果底层文件系统未启用配额，将该测试作为正向测试就没有意义。
 				e2eskipper.Skipf("Cannot run LocalStorageCapacityIsolationFSQuotaMonitoring on filesystem without project quota enabled")
 			}
-			// setting a threshold to 0% disables; non-empty map overrides default value (necessary due to omitempty)
+			// 将阈值设为 0% 会禁用；非空 map 会覆盖默认值（因 omitempty 而必需）
 			initialConfig.EvictionHard = map[string]string{"memory.available": "0%"}
 
 			if initialConfig.FeatureGates == nil {
@@ -74,18 +74,18 @@ func runOneQuotaTest(f *framework.Framework, quotasRequested bool, userNamespace
 		})
 		runEvictionTest(f, evictionTestTimeout, noPressure, noStarvedResource, logDiskMetrics, []podEvictSpec{
 			{
-				evictionPriority: priority, // This pod should be evicted because of emptyDir violation only if quotas are enabled
+				evictionPriority: priority, // 只有启用配额时，此 Pod 才应因 emptyDir 违规被驱逐
 				pod: diskConcealingPod(fmt.Sprintf("emptydir-concealed-disk-over-sizelimit-quotas-%v", quotasRequested), useOverLimit, &v1.VolumeSource{
 					EmptyDir: &v1.EmptyDirVolumeSource{SizeLimit: &sizeLimit},
 				}, v1.ResourceRequirements{}),
 			},
 			{
-				evictionPriority: 0, // This pod should not be evicted because it uses less than its limit (test for quotas)
+				evictionPriority: 0, // 此 Pod 不应被驱逐，因为用量低于限制（配额测试）
 				pod: diskConcealingPod(fmt.Sprintf("emptydir-concealed-disk-under-sizelimit-quotas-%v", quotasRequested), useUnderLimit, &v1.VolumeSource{
 					EmptyDir: &v1.EmptyDirVolumeSource{SizeLimit: &sizeLimit},
 				}, v1.ResourceRequirements{}),
 				prePodCreationModificationFunc: func(ctx context.Context, pod *v1.Pod) {
-					// XFS speculative preallocation can inflate apparent usage (see isXfs).
+					// XFS 的推测性预分配可能导致表观用量虚高（参见 isXfs）。
 					if isXfs(framework.TestContext.KubeletRootDir) {
 						pod.Spec.Containers[0].Command = []string{
 							"perl",
@@ -99,11 +99,11 @@ func runOneQuotaTest(f *framework.Framework, quotasRequested bool, userNamespace
 	})
 }
 
-// LocalStorageCapacityIsolationFSQuotaMonitoring tests that quotas are
-// used for monitoring rather than du.  The mechanism is to create a
-// pod that creates a file, deletes it, and writes data to it.  If
-// quotas are used to monitor, it will detect this deleted-but-in-use
-// file; if du is used to monitor, it will not detect this.
+// LocalStorageCapacityIsolationFSQuotaMonitoring 测试是否使用配额
+// 而非 du 来监控。方法是创建一个
+// Pod，它创建文件、删除文件，然后继续写入数据。如果
+// 使用配额监控，就能检测到这个已删除但仍在使用的文件；
+// 如果用 du 监控，则检测不到。
 var _ = SIGDescribe("LocalStorageCapacityIsolationFSQuotaMonitoring", framework.WithSlow(), framework.WithSerial(), framework.WithDisruptive(), feature.LocalStorageCapacityIsolationQuota, feature.LSCIQuotaMonitoring, feature.UserNamespacesSupport, func() {
 	f := framework.NewDefaultFramework("localstorage-quota-monitoring-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -124,8 +124,8 @@ foreach (1..%d) { syswrite(OUT, $a); }
 sleep 999999;`
 )
 
-// This is needed for testing eviction of pods using disk space in concealed files; the shell has no convenient
-// way of performing I/O to a concealed file, and the busybox image doesn't contain Perl.
+// 这是测试因隐藏文件中的磁盘空间使用而驱逐 Pod 所需的；shell 没有便捷
+// 的方法对隐藏文件执行 I/O，而 busybox 镜像中不含 Perl。
 func diskConcealingPod(name string, diskConsumedMB int, volumeSource *v1.VolumeSource, resources v1.ResourceRequirements) *v1.Pod {
 	path := ""
 	volumeMounts := []v1.VolumeMount{}
@@ -158,8 +158,8 @@ func diskConcealingPod(name string, diskConsumedMB int, volumeSource *v1.VolumeS
 	}
 }
 
-// Don't bother returning an error; if something goes wrong,
-// simply treat it as "no".
+// 不必费心返回错误；如果出问题，
+// 直接当作 "no" 处理。
 func supportsQuotas(dir string, userNamespacesEnabled bool) bool {
 	supportsQuota, err := fsquota.SupportsQuotas(mount.New(""), dir, userNamespacesEnabled)
 	return supportsQuota && err == nil

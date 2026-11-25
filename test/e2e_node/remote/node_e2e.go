@@ -32,10 +32,10 @@ import (
 	"k8s.io/kubernetes/test/utils"
 )
 
-// NodeE2ERemote contains the specific functions in the node e2e test suite.
+// NodeE2ERemote 包含 node e2e 测试套件中的特定函数。
 type NodeE2ERemote struct{}
 
-// init initializes the node e2e test suite.
+// init 初始化 node e2e 测试套件。
 func init() {
 	RegisterTestSuite("default", &NodeE2ERemote{})
 }
@@ -44,7 +44,7 @@ var ginkgoBin = CommandLine.String("ginkgo-binary", "", "Existing Ginkgo binary 
 var kubeletBin = CommandLine.String("kubelet-binary", "", "Existing kubelet binary to be used on the target instead of building from source")
 var e2eNodeBin = CommandLine.String("e2e-node-binary", "", "Existing e2e-node.test binary to be used on the target instead of building from source")
 
-// SetupTestPackage sets up the test package with binaries k8s required for node e2e tests
+// SetupTestPackage 为测试包准备 node e2e 测试所需的 k8s 二进制文件
 func (n *NodeE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 	requiredBins := map[string]struct {
 		file   string
@@ -55,7 +55,7 @@ func (n *NodeE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 		"e2e_node.test": {*e2eNodeBin, "test/e2e_node/e2e_node.test"},
 	}
 
-	// Build only targets for which we don't have a binary already.
+	// 只构建尚无二进制文件的目标。
 	var targets []string
 	for _, entry := range requiredBins {
 		if entry.file == "" {
@@ -63,12 +63,12 @@ func (n *NodeE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 		}
 	}
 	if len(targets) > 0 {
-		// Build the missing executables required below.
+		// 构建下面所需的缺失可执行文件。
 		if err := builder.BuildTargets(targets...); err != nil {
 			return fmt.Errorf("failed to build the dependencies: %w", err)
 		}
 
-		// Make sure we can find the newly built binaries
+		// 确保能找到新构建的二进制文件
 		buildOutputDir, err := utils.GetK8sBuildOutputDir(builder.IsDockerizedBuild(), builder.GetTargetBuildArch())
 		if err != nil {
 			return fmt.Errorf("failed to locate kubernetes build output directory: %w", err)
@@ -86,7 +86,7 @@ func (n *NodeE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 		return fmt.Errorf("failed to locate kubernetes root directory: %w", err)
 	}
 
-	// Copy binaries
+	// 复制二进制文件
 	for bin, entry := range requiredBins {
 		source := entry.file
 		klog.V(2).Infof("Copying binaries from %s", source)
@@ -99,8 +99,8 @@ func (n *NodeE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 		}
 	}
 
-	// When e2e_node.test is invoked through these symlinks, it behaves like these
-	// separate binaries.
+	// 通过这些符号链接调用 e2e_node.test 时，它的行为类似
+	// 这些独立的二进制文件。
 	e2eNodeBinary := "e2e_node.test"
 	for _, alias := range []string{"mounter", "gcp-credential-provider"} {
 		symlink := filepath.Join(tardir, alias)
@@ -110,10 +110,10 @@ func (n *NodeE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 		}
 	}
 
-	// create a symlink of gcp-credential-provider binary to use for testing
-	// service account token for credential providers.
+	// 创建 gcp-credential-provider 二进制文件的符号链接以用于测试
+	// 供 credential provider 使用的 service account token。
 	// feature-gate: KubeletServiceAccountTokenForCredentialProviders=true
-	binary := "gcp-credential-provider" // Use relative path instead of full path
+	binary := "gcp-credential-provider" // 使用相对路径而非完整路径
 	symlink := filepath.Join(tardir, "gcp-credential-provider-with-sa")
 	if _, err := os.Lstat(symlink); err == nil {
 		if err := os.Remove(symlink); err != nil {
@@ -126,7 +126,7 @@ func (n *NodeE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 	}
 
 	if systemSpecName != "" {
-		// Copy system spec file
+		// 复制系统规格文件
 		source := filepath.Join(rootDir, system.SystemSpecPath, systemSpecName+".yaml")
 		if _, err := os.Stat(source); err != nil {
 			return fmt.Errorf("failed to locate system spec %q: %w", source, err)
@@ -140,14 +140,14 @@ func (n *NodeE2ERemote) SetupTestPackage(tardir, systemSpecName string) error {
 	return nil
 }
 
-// prependMemcgNotificationFlag prepends the flag for enabling memcg
-// notification to args and returns the result.
+// prependMemcgNotificationFlag 将启用 memcg 通知的 flag
+// 前置到 args 并返回结果。
 func prependMemcgNotificationFlag(args string) string {
 	return "--kubelet-flags=--kernel-memcg-notification=true " + args
 }
 
-// prependCredentialProviderFlag prepends the flags for enabling
-// a credential provider plugin.
+// prependCredentialProviderFlag 将启用 credential provider 插件的
+// flag 前置。
 func prependCredentialProviderFlag(args, workspace string) string {
 	credentialProviderConfig := filepath.Join(workspace, "credential-provider.yaml")
 	featureGateFlag := "--kubelet-flags=--feature-gates=KubeletServiceAccountTokenForCredentialProviders=true,KubeletEnsureSecretPulledImages=true"
@@ -156,7 +156,7 @@ func prependCredentialProviderFlag(args, workspace string) string {
 	return fmt.Sprintf("%s %s %s %s", featureGateFlag, configFlag, binFlag, args)
 }
 
-// osSpecificActions takes OS specific actions required for the node tests
+// osSpecificActions 执行节点测试所需的特定于 OS 的操作
 func osSpecificActions(args, host, workspace string) (string, error) {
 	output, err := getOSDistribution(host)
 	if err != nil {
@@ -179,8 +179,8 @@ func osSpecificActions(args, host, workspace string) (string, error) {
 	return args, nil
 }
 
-// setKubeletSELinuxLabels set the appropriate SELinux labels for the
-// kubelet on Fedora CoreOS distribution
+// setKubeletSELinuxLabels 为 Fedora CoreOS 发行版上的 kubelet
+// 设置适当的 SELinux 标签
 func setKubeletSELinuxLabels(host, workspace string) error {
 	cmd := getSSHCommand(" && ",
 		fmt.Sprintf("/usr/bin/chcon -u system_u -r object_r -t kubelet_exec_t %s", filepath.Join(workspace, "kubelet")),
@@ -211,25 +211,25 @@ func getOSDistribution(host string) (string, error) {
 	return "", fmt.Errorf("Unable to parse os-release for the host, %s", host)
 }
 
-// RunTest runs test on the node.
+// RunTest 在节点上运行测试。
 func (n *NodeE2ERemote) RunTest(host, workspace, results, imageDesc, junitFilePrefix, testArgs, ginkgoArgs, systemSpecName, extraEnvs, runtimeConfig string, timeout time.Duration) (string, error) {
-	// Install the cni plugins and add a basic CNI configuration.
-	// TODO(random-liu): Do this in cloud init after we remove containervm test.
+	// 安装 CNI 插件并添加基本的 CNI 配置。
+	// TODO(random-liu): 移除 containervm 测试后，在 cloud init 中执行此操作。
 	if err := setupCNI(host, workspace); err != nil {
 		return "", err
 	}
 
-	// Configure iptables firewall rules
+	// 配置 iptables 防火墙规则
 	if err := configureFirewall(host); err != nil {
 		return "", err
 	}
 
-	// Install the kubelet credential provider plugin
+	// 安装 kubelet credential provider 插件
 	if err := configureCredentialProvider(host, workspace); err != nil {
 		return "", err
 	}
 
-	// Kill any running node processes
+	// 终止所有正在运行的节点进程
 	cleanupNodeProcesses(host)
 
 	testArgs, err := osSpecificActions(testArgs, host, workspace)
@@ -244,11 +244,11 @@ func (n *NodeE2ERemote) RunTest(host, workspace, results, imageDesc, junitFilePr
 
 	outputGinkgoFile := filepath.Join(results, fmt.Sprintf("%s-ginkgo.log", host))
 
-	// Run the tests
+	// 运行测试
 	klog.V(2).Infof("Starting tests on %q", host)
 	cmd := getSSHCommand(" && ",
 		fmt.Sprintf("cd %s", workspace),
-		// Note, we need to have set -o pipefail here to ensure we return the appriorate exit code from ginkgo; not tee
+		// 注意，这里需要 set -o pipefail，以确保返回 ginkgo 的正确退出码，而非 tee 的
 		fmt.Sprintf("set -o pipefail; timeout -k 30s %fs ./ginkgo %s ./e2e_node.test -- --system-spec-name=%s --system-spec-file=%s --extra-envs=%s --runtime-config=%s --v 4 --node-name=%s --report-dir=%s --report-prefix=%s --image-description=\"%s\" %s 2>&1 | tee -i %s",
 			timeout.Seconds(), ginkgoArgs, systemSpecName, systemSpecFile, extraEnvs, runtimeConfig, host, results, junitFilePrefix, imageDesc, testArgs, outputGinkgoFile),
 	)

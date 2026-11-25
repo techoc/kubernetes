@@ -39,15 +39,15 @@ import (
 )
 
 const (
-	// These numbers are obtained empirically.
-	// If you make them too low, you'll get flaky
-	// tests instead of failing ones if the race bug reappears.
-	// If you make volume counts or pod counts too high,
-	// the tests may fail because mounting configmap/git_repo
-	// volumes is not very fast and the tests may time out
-	// waiting for pods to become Running.
-	// And of course the higher are the numbers, the
-	// slower are the tests.
+	// 这些数值是通过经验得出的。
+	// 如果设置得太低，当竞争 bug 再现时，
+	// 测试会变得不稳定而非明确失败。
+	// 如果 volume 数或 Pod 数设置得太高，
+	// 测试可能失败，因为挂载 configmap/git_repo
+	// volume 速度不快，测试可能在等待 Pod 进入 Running 时
+	// 超时。
+	// 当然，数值越高，
+	// 测试越慢。
 	wrappedVolumeRaceConfigMapVolumeCount    = 50
 	wrappedVolumeRaceConfigMapPodCount       = 5
 	wrappedVolumeRaceConfigMapIterationCount = 3
@@ -64,7 +64,7 @@ var _ = utils.SIGDescribe("EmptyDir wrapper volumes", func() {
 	/*
 		Release: v1.13
 		Testname: EmptyDir Wrapper Volume, Secret and ConfigMap volumes, no conflict
-		Description: Secret volume and ConfigMap volume is created with data. Pod MUST be able to start with Secret and ConfigMap volumes mounted into the container.
+		Description: 创建带数据的 Secret volume 和 ConfigMap volume。Pod MUST 能在挂载 Secret 和 ConfigMap volume 到容器的情况下启动。
 	*/
 	framework.ConformanceIt("should not conflict", func(ctx context.Context) {
 		name := "emptydir-wrapper-test-" + string(uuid.NewUUID())
@@ -165,27 +165,27 @@ var _ = utils.SIGDescribe("EmptyDir wrapper volumes", func() {
 		})
 	})
 
-	// The following two tests check for the problem fixed in #29641.
-	// In order to reproduce it you need to revert the fix, e.g. via
+	// 以下两个测试检查 #29641 修复的问题。
+	// 要复现该问题，需要撤销修复，例如：
 	// git revert -n df1e925143daf34199b55ffb91d0598244888cce
 	// or
 	// curl -sL https://github.com/kubernetes/kubernetes/pull/29641.patch | patch -p1 -R
 	//
-	// After that these tests will fail because some of the pods
-	// they create never enter Running state.
+	// 之后这些测试将失败，因为它们创建的部分 Pod
+	// 永远不会进入 Running 状态。
 	//
-	// They need to be [Serial] and [Slow] because they try to induce
-	// the race by creating pods with many volumes and container volume mounts,
-	// which takes considerable time and may interfere with other tests.
+	// 它们需要标记为 [Serial] 和 [Slow]，因为它们试图通过创建
+	// 带大量 volume 和容器挂载的 Pod 来诱发竞争，
+	// 这需要相当长的时间，且可能干扰其他测试。
 	//
-	// Probably should also try making tests for secrets and downwardapi,
-	// but these cases are harder because tmpfs-based emptyDir
-	// appears to be less prone to the race problem.
+	// 或许也应为 secrets 和 downwardapi 编写测试，
+	// 但这些情况更难，因为基于 tmpfs 的 emptyDir
+	// 似乎较少受该竞争问题影响。
 
 	/*
 		Release: v1.13
 		Testname: EmptyDir Wrapper Volume, ConfigMap volumes, no race
-		Description: Create 50 ConfigMaps Volumes and 5 replicas of pod with these ConfigMapvolumes mounted. Pod MUST NOT fail waiting for Volumes.
+		Description: 创建 50 个 ConfigMap volume 和 5 个挂载这些 ConfigMap volume 的 Pod 副本。Pod MUST NOT 因等待 volume 而失败。
 	*/
 	framework.ConformanceIt("should not cause race condition when used for configmaps", f.WithSerial(), func(ctx context.Context) {
 		configMapNames := createConfigmapsForRace(ctx, f)
@@ -196,10 +196,10 @@ var _ = utils.SIGDescribe("EmptyDir wrapper volumes", func() {
 		}
 	})
 
-	// Slow by design [~150 Seconds].
-	// This test uses deprecated GitRepo VolumeSource so it MUST not be promoted to Conformance.
-	// To provision a container with a git repo, mount an EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir into the Pod's container.
-	// This projected volume maps approach can also be tested with secrets and downwardapi VolumeSource but are less prone to the race problem.
+	// 设计上较慢[约 150 秒]。
+	// 此测试使用已弃用的 GitRepo VolumeSource，因此 MUST NOT 被提升为 Conformance 测试。
+	// 要为容器提供 git 仓库，可将 EmptyDir 挂载到用 git 克隆仓库的 InitContainer，然后再将该 EmptyDir 挂载到 Pod 的容器中。
+	// 这种 projected volume 映射方法也可用于 secrets 和 downwardapi VolumeSource 的测试，但它们较少受竞争问题影响。
 	f.It("should not cause race condition when used for git_repo", f.WithFeatureGate(features.GitRepoVolumeDriver), f.WithSerial(), f.WithSlow(), func(ctx context.Context) {
 		gitURL, gitRepo, cleanup := createGitServer(ctx, f)
 		defer cleanup()
@@ -221,7 +221,7 @@ func createGitServer(ctx context.Context, f *framework.Framework) (gitURL string
 	gitServerPod.ObjectMeta.Labels = labels
 	e2epod.NewPodClient(f).CreateSync(ctx, gitServerPod)
 
-	// Portal IP and port
+	// Portal IP 和端口
 	httpPort := 2345
 
 	gitServerSvc := &v1.Service{
@@ -396,8 +396,8 @@ func testNoWrappedVolumeRace(ctx context.Context, f *framework.Framework, volume
 
 	ginkgo.By("Ensuring each pod is running")
 
-	// Wait for the pods to enter the running state. Waiting loops until the pods
-	// are running so non-running pods cause a timeout for this test.
+	// 等待 Pod 进入运行态。循环等待直到 Pod 运行，
+	// 验证有服务在监听。
 	for _, pod := range pods.Items {
 		if pod.DeletionTimestamp != nil {
 			continue

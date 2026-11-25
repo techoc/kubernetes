@@ -14,46 +14,46 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package logcheck extends a Ginkgo test suite with optional monitoring
-// of system log files. Right now it can detect DATA RACE problems.
+// Package logcheck 通过可选的系统日志文件监控
+// 扩展 Ginkgo 测试套件。目前它可以检测 DATA RACE 问题。
 //
-// This may get expanded in the future, for example to check also
-// for unhandled and potentially unexpected errors (https://github.com/kubernetes/kubernetes/issues/122005)
-// or log spam (https://github.com/kubernetes/kubernetes/issues/109297).
+// 未来可能扩展，例如还检查
+// 未处理和潜在意外错误（https://github.com/kubernetes/kubernetes/issues/122005）
+// 或日志刷屏（https://github.com/kubernetes/kubernetes/issues/109297）。
 //
-// Because it grabs log output as it is produced, it is possible to dump *all*
-// data into $ARTIFACTS/system-logs, in contrast to other approaches which
-// potentially only capture the tail of the output (log rotation).
+// 由于它在日志产生时抓取输出，因此可以将*全部*数据 dump 到
+// $ARTIFACTS/system-logs，而其他方法
+// 可能只捕获输出的尾部（日志轮转）。
 //
-// The additional check(s) must be opt-in because they are not portable.
-// The package registers additional command line flags for that.
-// Dedicated jobs are necessary which enable them.
+// 额外的检查必须选择启用，因为它们不可移植。
+// 该包为此注册了额外的命令行 flag。
+// 需要有专门的 job 来启用它们。
 //
-// For DATA RACE, the binaries in the cluster must be compiled with race
-// detection (https://github.com/kubernetes/kubernetes/pull/133834/files).
-// It's also necessary to specify which containers to check. Other output
-// (e.g. kubelet in a kind cluster) currently cannot be checked.
+// 对于 DATA RACE，集群中的二进制文件必须使用 race 编译
+// 检测（https://github.com/kubernetes/kubernetes/pull/133834/files）。
+// 还需要指定要检查哪些容器。其他输出
+// （例如 kind 集群中的 kubelet）目前无法检查。
 //
-// In ginkgo.ReportBeforeSuite, the main Ginkgo worker process starts
-// monitoring log output:
+// 在 ginkgo.ReportBeforeSuite 中，Ginkgo 主 worker 进程开始
+// 监控日志输出：
 //
-//   - The podlogs package watches pods in namespaces of interest (by default,
-//     any that have "system" in their name). For each container in those pods,
-//     a logOutputChecker instance is created and is passed log output lines
-//     via Write. podlogs streams output, similar to "kubectl logs -f".
+//   - podlogs 包监听感兴趣的命名空间中的 Pod（默认是
+//     名称中包含 "system" 的命名空间）。这些 Pod 中的每个容器都会
+//     创建一个 logOutputChecker 实例，并通过 Write 向其传入日志输出行。
+//     podlogs 会流式输出，类似 "kubectl logs -f"。
 //
-//   - Kubelet log output is retrieved periodically via the node log query
-//     feature. Start and end times of each chunk are chosen so that there
-//     are no gaps. The output is stripped of additional journald line
-//     headers and then passed to one logOutputChecker per node.
+//   - 通过 node log query 特性定期获取 kubelet 日志输出。
+//     每个分段的起止时间经过选择，确保
+//     没有间隙。输出会去掉 journald 额外的行
+//     头，然后传给每个节点对应的一个 logOutputChecker。
 //
-//   - logOutputChecker detects DATA RACE reports based on their prefix and suffix lines.
+//   - logOutputChecker 根据前缀和后缀行检测 DATA RACE 报告。
 //
-//   - Log entries emitted during monitoring are buffered.
+//   - 监控期间产生的日志条目会被缓冲。
 //
-// In ginkgo.ReportAfterSuite, the log output is emitted as stdout of the check
-// together with a summary of what was checked without detecting problems.
-// DATA RACEs and unexpected log errors are turned into a failure.
+// 在 ginkgo.ReportAfterSuite 中，日志输出会作为检查的 stdout 输出，
+// 并附上未发现问题的检查摘要。
+// DATA RACE 和意外的日志错误会转为测试失败。
 package logcheck
 
 import (
@@ -85,16 +85,16 @@ import (
 )
 
 const (
-	// defaultNamespacesRE is the default regular expression for which namespaces need to be checked,
-	// if checking is enabled: anything which contains the word "system".
+	// defaultNamespacesRE 是默认情况下需要检查哪些命名空间的正则表达式，
+	// 即启用检查时：任何包含 "system" 字样的命名空间。
 	//
-	// If we had an API for identifying "system" namespaces, we could use that, but we
-	// don't have that yet (https://github.com/kubernetes/enhancements/issues/5708).
+	// 如果有识别 "system" 命名空间的 API，我们就会用它，但目前
+	// 还没有（https://github.com/kubernetes/enhancements/issues/5708）。
 	defaultNamespacesRE = `system`
 
-	// defaultNodesRE is the default regular expression for which nodes
-	// should have their kubelet log output checked via the log query
-	// feature (https://kubernetes.io/docs/concepts/cluster-administration/system-logs/#log-query).
+	// defaultNodesRE 是默认正则表达式，用于确定哪些节点
+	// 需要借助 log query 特性检查其 kubelet 日志输出
+	//（https://kubernetes.io/docs/concepts/cluster-administration/system-logs/#log-query）。
 	defaultNodesRE = `.*`
 
 	dataRaceStart     = "WARNING: DATA RACE\n"
@@ -116,29 +116,29 @@ var (
 	lcLogger klog.Logger
 )
 
-// logCheck determines what gets checked in log output.
+// logCheck 决定检查日志输出中的哪些内容。
 type logCheck struct {
-	// namespaces contains a regular expression which determines which namespaces need to be checked.
-	// All containers in those namespaces are checked.
-	// If the regular expression is nil, the default is used.
+	// namespaces 包含一个正则表达式，用于确定需要检查哪些命名空间。
+	// 这些命名空间中的所有容器都会被检查。
+	// 如果正则表达式为 nil，则使用默认值。
 	namespaces regexpValue
 
-	// namespaces contains a regular expression which determines which nodes need to be checked
-	// by retrieving the kubelet log via the log query feature (https://kubernetes.io/docs/concepts/cluster-administration/system-logs/#log-query).
+	// namespaces 包含一个正则表达式，用于确定哪些节点需要被检查
+	// 通过 log query 特性获取 kubelet 日志进行检查（https://kubernetes.io/docs/concepts/cluster-administration/system-logs/#log-query）。
 	nodes regexpValue
 
-	// dataRaces enables checking for "DATA RACE" reports.
+	// dataRaces 启用对 "DATA RACE" 报告的检查。
 	dataRaces bool
-	// More checks may get added in the future.
+	// 未来可能会添加更多检查。
 }
 
-// any returns true if any log output check is enabled.
+// 如果启用了任何日志输出检查，any 返回 true。
 func (c logCheck) any() bool {
-	// Needs to be extended when adding new checks.
+	// 添加新检查时需要扩展此函数。
 	return c.dataRaces
 }
 
-// regexpValue implements flag.Value for a regular expression.
+// regexpValue 为正则表达式实现 flag.Value。
 type regexpValue struct {
 	re *regexp.Regexp
 }
@@ -149,17 +149,17 @@ func (r *regexpValue) String() string { return r.re.String() }
 func (r *regexpValue) Set(expr string) error {
 	re, err := regexp.Compile(expr)
 	if err != nil {
-		// This already starts with "error parsing regexp" and
-		// the caller adds the expression string,
-		// so no need to wrap the error here.
+		// 它已以 "error parsing regexp" 开头，
+		// 调用方会追加表达式字符串，
+		// 因此这里不需要包装错误。
 		return err
 	}
 	r.re = re
 	return nil
 }
 
-// RegisterFlags adds command line flags for configuring the package to the given flag set.
-// They have "logcheck" as prefix.
+// RegisterFlags 向给定 flag set 添加用于配置本包的命令行 flag。
+// 它们以 "logcheck" 为前缀。
 func RegisterFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&enabledLogChecks.dataRaces, "logcheck-data-races", false, "enables checking logs for DATA RACE warnings")
 	fs.Var(&enabledLogChecks.namespaces, "logcheck-namespaces-regexp", "all namespaces matching this regular expressions get checked")
@@ -171,22 +171,22 @@ var _ = ginkgo.ReportBeforeSuite(func(ctx ginkgo.SpecContext, report ginkgo.Repo
 		return
 	}
 
-	// This is only reached in the main process.
+	// 这只在主进程中执行。
 	initialize()
 })
 
-// SIG Testing runs this as a service for the SIGs which own the code.
+// SIG Testing 将其作为服务运行，服务于拥有这些代码的 SIG。
 var _ = ginkgo.ReportAfterSuite("[sig-testing] Log Check", func(ctx ginkgo.SpecContext, report ginkgo.Report) {
 	if report.SuiteConfig.DryRun {
 		return
 	}
 
-	// This is reached only in the main process after the test run has completed.
+	// 这只在主进程中测试运行完成后执行。
 	finalize()
 })
 
-// initialize gets called once before tests start to run.
-// It sets up monitoring of system component log output, if requested.
+// initialize 在测试开始运行前调用一次。
+// 如果请求，它会设置对系统组件日志输出的监控。
 func initialize() {
 	if !enabledLogChecks.any() {
 		return
@@ -205,7 +205,7 @@ func initialize() {
 	lc.start(ctx, podlogs.CopyAllLogs, kubeletLogQuery)
 }
 
-// finalize gets called once after tests have run, in the process where initialize was also called.
+// finalize 在测试运行后调用一次，且在与 initialize 相同的进程中调用。
 func finalize() {
 	if lc == nil {
 		return
@@ -214,7 +214,7 @@ func finalize() {
 	failure, stdout := lc.stop(lcLogger)
 	_, _ = ginkgo.GinkgoWriter.Write([]byte(stdout))
 	if failure != "" {
-		// Reports as post-suite failure.
+		// 作为套件后失败报告。
 		ginkgo.Fail(failure)
 	}
 }
@@ -223,14 +223,14 @@ func newLogChecker(ctx context.Context, client kubernetes.Interface, check logCh
 	var logFile string
 
 	if logDir != "" {
-		// Redirect log output. Also, check for errors when we stop, those mustn't go unnoticed in a CI job.
+		// 重定向日志输出。同时检查停止时的错误，这些错误在 CI job 中不能被忽略。
 		logFile = path.Join(logDir, "system-logs.log")
 		output, err := os.Create(logFile)
 		if err != nil {
 			return ctx, nil, fmt.Errorf("create log file: %w", err)
 		}
-		// Allow increasing verbosity via the command line, but always use at
-		// least 4 when writing into a file - we can afford that.
+		// 允许通过命令行提高详细程度，但写入文件时始终至少使用
+		// 4 —— 我们承受得起。
 		vflag := flag.CommandLine.Lookup("v")
 		v, _ := strconv.Atoi(vflag.Value.String())
 		if v < 5 {
@@ -266,31 +266,31 @@ type logChecker struct {
 	logDir  string
 	logFile string
 
-	// wg tracks background activity.
+	// wg 跟踪后台活动。
 	wg *waitGroup
 
-	// mutex protects all following fields.
+	// mutex 保护以下所有字段。
 	mutex sync.Mutex
 
-	// All data races detected so far, indexed by "<namespace>/<pod name>/<container name>"
-	// or "kubelet/<node name>".
+	// 到目前为止检测到的所有数据竞争，以 "<namespace>/<pod name>/<container name>"
+	// 或 "kubelet/<node name>" 为索引。
 	//
-	// The last entry is initially empty while waiting for the next data race.
+	// 最后一个条目在等待下一个数据竞争时初始为空。
 	//
-	// Only entities for which at least some output was received get added here,
-	// therefore also the "<entity>: okay" part of the report only appears for those.
+	// 只有至少收到部分输出的实体才会加入这里，
+	// 因此报告中的 "<entity>: okay" 部分也只针对这些实体出现。
 	dataRaces map[string][][]string
 }
 
-// stop cancels pod monitoring, waits until that is shut down, and then produces text for a failure message (ideally empty) and stdout.
+// stop 取消 Pod 监控，等待其关闭，然后生成失败消息文本（理想情况下为空）和 stdout。
 func (l *logChecker) stop(logger klog.Logger) (failure, stdout string) {
 	logger.V(4).Info("Asking log monitors to stop")
 	l.cancel(errors.New("asked to stop"))
 
-	// Wait for completion.
+	// 等待完成。
 	l.wg.wait()
 
-	// Now we can proceed and produce the report.
+	// 现在可以继续生成报告。
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -304,13 +304,13 @@ func (l *logChecker) stop(logger klog.Logger) (failure, stdout string) {
 			stdoutBuffer.Write(logData)
 		}
 
-		// Find all error log lines. A bit crude (doesn't handle multi-line outout), but good enough
-		// because the full log is available.
+		// 找出所有错误日志行。有点粗糙（不处理多行输出），但足够用，
+		// 因为有完整日志可用。
 		errorLogs := regexp.MustCompile(`(?m)^E.*\n`).FindAllString(string(logData), -1)
 		if len(errorLogs) > 0 {
 			failureBuffer.WriteString("Unexpected errors during log data collection (see stdout for full log):\n\n")
 			for _, errorLog := range errorLogs {
-				// Indented to make it a verbatim block in Markdown.
+				// 缩进以使其成为 Markdown 中的逐字块。
 				failureBuffer.WriteString("    ")
 				failureBuffer.WriteString(errorLog)
 			}
@@ -337,16 +337,16 @@ func (l *logChecker) stop(logger klog.Logger) (failure, stdout string) {
 			indent := "    "
 			buffer.WriteString("\n")
 			if len(races) > 1 {
-				// Format as bullet-point list.
+				// 格式化为项目符号列表。
 				buffer.WriteString("- DATA RACE:\n  \n")
-				// This also shifts the text block to the right.
+				// 这也会将文本块向右移动。
 				indent += "  "
 			} else {
-				// Single line of intro text, then the text block.
+				// 单行介绍文本，然后是文本块。
 				buffer.WriteString("DATA RACE:\n\n")
 			}
-			// Indented lines are stack backtraces. Those can be long,
-			// so collect them as we iterate over lines and truncate in the middle.
+			// 缩进的行是栈回溯，可能很长，
+			// 因此遍历行时收集它们，并在中间截断。
 			var backtrace []string
 			dumpBacktrace := func() {
 				if len(backtrace) == 0 {
@@ -371,7 +371,7 @@ func (l *logChecker) stop(logger klog.Logger) (failure, stdout string) {
 			}
 			for _, line := range race {
 				if !strings.HasPrefix(line, " ") {
-					// Non-backtrace line => flush and write the line.
+					// 非回溯行 => 清空缓冲并写入该行。
 					dumpBacktrace()
 					buffer.WriteString(indent)
 					buffer.WriteString(line)
@@ -393,14 +393,14 @@ func (l *logChecker) start(ctx context.Context, startCopyAllLogs func(ctx contex
 
 	logger := klog.FromContext(ctx)
 
-	// Figure out which namespace(s) to watch.
+	// 确定要监控哪些命名空间。
 	namespaces, err := l.client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		logger.Error(err, "Failed to list namespaces")
 		return
 	}
 
-	// Same for nodes.
+	// 节点同理。
 	nodes, err := l.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		logger.Error(err, "Failed to list nodes")
@@ -440,12 +440,12 @@ func (l *logChecker) start(ctx context.Context, startCopyAllLogs func(ctx contex
 				l:      l,
 			}
 			for scanner.Scan() {
-				// We need to strip whatever headers might have been added by the log storage
-				// that was queried the log query feature. We don't exactly know what that might be,
-				// so let's use a regexp that matches all known line headers.
+				// 需要去掉查询日志特性时日志存储可能添加的任何
+				// 头信息。我们并不确切知道会是什么，
+				// 因此使用匹配所有已知行头的正则。
 				//
-				// Unknown lines are passed through, which is okayish (they get treated like
-				// unknown, raw output from the kubelet).
+				// 未知行会原样传递，可以接受（它们会被当作
+				// 来自 kubelet 的未知原始输出）。
 				line := scanner.Text()
 				line = logQueryLineHeaderRE.ReplaceAllString(line, "")
 				_, _ = writer.Write([]byte(line + "\n"))
@@ -457,17 +457,17 @@ func (l *logChecker) start(ctx context.Context, startCopyAllLogs func(ctx contex
 	}
 }
 
-// journaldHeader matches journald lines containing output from the kubelet:
+// journaldHeader 匹配包含 kubelet 输出的 journald 行：
 //
 //	Jan 06 15:20:26.641748 kind-worker2 kubelet[311]: I0106 15:20:26.641743     311 labels.go:289] ...
 //
-// We also get messages from systemd itself. Those are not matched:
+// 还会收到 systemd 自身的消息。这些不会被匹配：
 //
 //	Jan 07 08:35:52.139136 kind-worker3 systemd[1]: Started kubelet.service - kubelet: The Kubernetes Node Agent.
 const journaldHeader = `... .. ..:..:......... \S+ kubelet\[\d+\]: `
 
-// logQueryLineHeaderRE combines all supported log query data formats.
-// Currently only journald is supported.
+// logQueryLineHeaderRE 合并所有支持的 log query 数据格式。
+// 目前仅支持 journald。
 var logQueryLineHeaderRE = regexp.MustCompile(`^(?:` + journaldHeader + `)`)
 
 func (l *logChecker) logOpen(logger klog.Logger, names ...string) io.Writer {
@@ -489,14 +489,14 @@ type statusWriter struct {
 	namespace *v1.Namespace
 }
 
-// Write gets called with text that describes problems encountered while monitoring pods and their output.
+// Write 接收描述监控 Pod 及其输出时遇到的问题的文本。
 func (s *statusWriter) Write(data []byte) (int, error) {
 	msg := string(data)
 	msg = strings.TrimRight(msg, "\n")
 	if strings.HasPrefix(msg, "WARNING:") {
-		// Warnings are informational, podlogs recovers from problems (like "connection refused"
-		// under load, "pod not found" when a pod terminates while trying to read log output).
-		// They don't need to be treated as a logcheck failure when looking at logs later.
+		// 警告仅供参考，podlogs 能从问题中恢复（例如高负载下的 "connection refused"，
+		// 或读取日志输出时 Pod 终止导致的 "pod not found"）。
+		// 之后查看日志时无需将它们视为 logcheck 失败。
 		s.logger.Info("PodLogs status", "namespace", klog.KObj(s.namespace), "msg", msg)
 	} else {
 		s.logger.Error(nil, "PodLogs status", "namespace", klog.KObj(s.namespace), "msg", msg)
@@ -504,7 +504,7 @@ func (s *statusWriter) Write(data []byte) (int, error) {
 	return len(msg), nil
 }
 
-// logOutputChecker receives log output for one component and detects embedded DATA RACE reports.
+// logOutputChecker 接收某个组件的日志输出，并检测其中嵌入的 DATA RACE 报告。
 type logOutputChecker struct {
 	logger     klog.Logger
 	k          string
@@ -517,8 +517,8 @@ var (
 	_ io.Closer = &logOutputChecker{}
 )
 
-// Write gets called for each line of output received from a container or kubelet instance.
-// The line ends with a newline.
+// 每收到容器或 kubelet 实例的一行输出，都会调用 Write。
+// 该行以换行符结尾。
 func (p *logOutputChecker) Write(l []byte) (int, error) {
 	line := string(l)
 
@@ -530,38 +530,38 @@ func (p *logOutputChecker) Write(l []byte) (int, error) {
 	case p.inDataRace && line != dataRaceEnd:
 		races[len(races)-1] = append(races[len(races)-1], line)
 	case p.inDataRace && line == dataRaceEnd:
-		// Stop collecting data race lines.
+		// 停止收集数据竞争行。
 		p.inDataRace = false
 		p.logger.Info("Completed data race", "container", p.k, "count", len(races), "dataRace", strings.Join(races[len(races)-1], ""))
 	case !p.inDataRace && line == dataRaceStart:
-		// Start collecting data race lines.
+		// 开始收集数据竞争行。
 		p.inDataRace = true
 		races = append(races, nil)
 		p.logger.Info("Started new data race", "container", p.k, "count", len(races))
 	default:
-		// Some other log output.
+		// 其他日志输出。
 	}
 	p.l.dataRaces[p.k] = races
 
 	return len(l), nil
 }
 
-// Close gets called once all output is processed.
+// 所有输出处理完毕后调用 Close。
 func (p *logOutputChecker) Close() error {
 	p.logger.Info("Done checking for data races", "container", p.k)
 	p.l.wg.done()
 	return nil
 }
 
-// kubeletLogQuery sets up repeatedly querying the log of kubelet on the given node
-// via the log query feature.
+// kubeletLogQuery 设置通过 log query 特性反复查询给定节点上
+// 通过 log query 特性查询。
 //
-// All background goroutines stop when the context gets canceled and are added
-// to the given WaitGroup before kubeletLogQuery returns. The reader will
-// stop providing data when that happens.
+// 当 context 取消时，所有后台 goroutine 停止，并在 kubeletLogQuery 返回前
+// 加入给定的 WaitGroup。届时 reader 将
+// 停止提供数据。
 //
-// The lines in the data written to the reader may contain journald headers or other,
-// platform specific headers (this is not specified for the log query feature).
+// 写入 reader 的数据中的行可能包含 journald 头或其他
+// 平台特定的头（log query 特性未对此作出规定）。
 func kubeletLogQuery(ctx context.Context, cs kubernetes.Interface, wg *waitGroup, nodeName string) io.Reader {
 	logger := klog.FromContext(ctx)
 	logger = klog.LoggerWithName(logger, "KubeletLogQuery")
@@ -576,14 +576,14 @@ func kubeletLogQuery(ctx context.Context, cs kubernetes.Interface, wg *waitGroup
 			logger.V(4).Info("Stopped", "reason", context.Cause(ctx))
 		}()
 
-		// How long to wait between queries is a compromise between "too long" (= too much data)
-		// and "too short" (= too much overhead because of frequent queries). It's not clear
-		// where the sweet spot is. With the current default, there were 12 calls for one worker node
-		// during a ~1h pull-kubernetes-e2e-kind-alpha-beta-features run, with an average result
-		// size of ~16MB.
+		// 查询间隔是"太长"（数据过多）与
+		// "太短"（频繁查询导致开销过大）之间的折中。目前尚不清楚
+		// 最佳点在哪里。使用当前默认值时，在一次约 1 小时的
+		// pull-kubernetes-e2e-kind-alpha-beta-features 运行中，一个 worker 节点有 12 次调用，
+		// 平均结果大小约 16MB。
 		//
-		// All log checking activities share the same client instance. It's created specifically
-		// for that purpose, so client-side throttling does not affect other tests.
+		// 所有日志检查活动共享同一个 client 实例。它专门为
+		// 此目的创建，因此客户端限流不会影响其他测试。
 		ticker := time.NewTicker(300 * time.Second)
 		defer ticker.Stop()
 
@@ -596,8 +596,8 @@ func kubeletLogQuery(ctx context.Context, cs kubernetes.Interface, wg *waitGroup
 				logger.V(6).Info("Starting periodic log query")
 			}
 
-			// Query once also when asked to stop via cancelation, to get the tail of the output.
-			// We use a timeout to prevent blocking forever here.
+			// 收到取消停止的请求时也查询一次，以获取输出的尾部。
+			// 这里使用超时防止永久阻塞。
 			err := func() error {
 				ctx := context.WithoutCancel(ctx)
 				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -609,12 +609,12 @@ func kubeletLogQuery(ctx context.Context, cs kubernetes.Interface, wg *waitGroup
 				if !since.IsZero() {
 					sinceTime = since.Format(time.RFC3339)
 				}
-				// The next query will use the current end time as start time. Both start and end
-				// are inclusive, so unfortunately there is a risk that we get the same log
-				// output for that time stamp twice. There's no good way to avoid that.
-				// Let's hope it's rare and doesn't matter when it occurs. Missing
-				// output would be worse because then the end marker of a DATA RACE
-				// report could be missed.
+				// 下一次查询将使用当前的结束时间作为开始时间。开始和结束
+				// 都是闭区间，因此很遗憾有风险重复获取同一时间戳的
+				// 日志输出。没有好的办法避免这一点。
+				// 希望这很少发生且无关紧要。遗漏
+				// 输出更糟，因为那样可能错过 DATA RACE 报告的
+				// 结束标记。
 				since = now
 				req := cs.CoreV1().RESTClient().Get().
 					Resource("nodes").
@@ -636,17 +636,17 @@ func kubeletLogQuery(ctx context.Context, cs kubernetes.Interface, wg *waitGroup
 					loggerV.Info("Queried log", "sinceTime", sinceTime, "endTime", now, "len", len(data), "data", head, "err", err)
 				}
 
-				// Let's process whatever data we have. The exact result of the query is a bit
-				// underspecified. This is based on observed behavior in Kubernetes 1.35.
+				// 先处理现有的数据。查询结果的确切格式有点
+				// 未明确定义。这是基于 Kubernetes 1.35 中观察到的行为。
 
-				// HTML seems to be what the kubelet responds when the feature is disabled?!
-				// May or may not be intentional according to a Slack discussion,
-				// to be clarified in https://github.com/kubernetes/kubernetes/issues/136275.
+				// 特性禁用时 kubelet 似乎返回 HTML？！
+				// 根据 Slack 讨论，这可能是也可能不是有意为之，
+				// 将在 https://github.com/kubernetes/kubernetes/issues/136275 中澄清。
 				if strings.HasPrefix(string(data), "<!doctype html>") {
 					return fmt.Errorf("unexpected result of log query (feature disabled?): %q", string(data))
 				}
 
-				// Skip the special string that is used for "no data available".
+				// 跳过用于表示"无可用数据"的特殊字符串。
 				if string(data) != "-- No entries --\n" {
 					_, _ = writer.Write(data)
 				}

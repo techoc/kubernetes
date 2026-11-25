@@ -55,7 +55,7 @@ var _ = SIGDescribe("Pod Level Resources", framework.WithSerial(), feature.PodLe
 			e2eskipper.Skipf("not supported on windows -- skipping")
 		}
 
-		// skip the test on nodes with cgroupv2 not enabled.
+		// 在未启用 cgroupv2 的节点上跳过该测试。
 		if !isCgroupv2Node(f, ctx) {
 			e2eskipper.Skipf("not supported on cgroupv1 -- skipping")
 		}
@@ -63,10 +63,10 @@ var _ = SIGDescribe("Pod Level Resources", framework.WithSerial(), feature.PodLe
 	podLevelResourcesTests(f)
 })
 
-// isCgroupv2Node creates a small pod and check if it is running on a node
-// with cgroupv2 enabled.
-// TODO: refactor to mark this test with cgroupv2 label, and rather check
-// the label in the test job, to tun this test on a node with cgroupv2.
+// isCgroupv2Node 创建一个小 Pod，并检查它是否运行在
+// 启用了 cgroupv2 的节点上。
+// TODO: 重构为用 cgroupv2 标签标记此测试，改为在
+// 测试任务中检查标签，以便在启用了 cgroupv2 的节点上运行该测试。
 func isCgroupv2Node(f *framework.Framework, ctx context.Context) bool {
 	podClient := e2epod.NewPodClient(f)
 	containerResources := cgroups.ContainerResources{CPULim: "1m", MemReq: "1Mi"}
@@ -133,8 +133,8 @@ func makePod(metadata *metav1.ObjectMeta, podResources *cgroups.ContainerResourc
 func verifyPodResources(gotPod v1.Pod, inputInfo, expectedInfo *cgroups.ContainerResources) {
 	ginkgo.GinkgoHelper()
 	var expectedResources *v1.ResourceRequirements
-	// expectedResources will be nil if pod-level resources are not set in the test
-	// case input.
+	// 如果测试用例输入中未设置 pod 级资源，expectedResources 将为 nil。
+	//
 	if inputInfo != nil {
 		expectedResources = expectedInfo.ResourceRequirements()
 	}
@@ -149,11 +149,11 @@ func verifyQoS(gotPod v1.Pod, expectedQoS v1.PodQOSClass) {
 func podLevelResourcesTests(f *framework.Framework) {
 	type expectedPodConfig struct {
 		qos v1.PodQOSClass
-		// totalPodResources represents the aggregate resource requests
-		// and limits for the pod. If pod-level resource specifications
-		// are specified, totalPodResources is equal to pod-level resources.
-		// Otherwise, it is calculated by aggregating resource requests and
-		// limits from all containers within the pod.
+		// totalPodResources 表示 Pod 聚合的资源 request
+		// 和 limit。如果指定了 pod 级资源规格，
+		// totalPodResources 就等于 pod 级资源。
+		// 否则，通过聚合 Pod 内所有容器的资源 request 和
+		// limit 计算得出。
 		totalPodResources *cgroups.ContainerResources
 	}
 
@@ -162,13 +162,13 @@ func podLevelResourcesTests(f *framework.Framework) {
 		podResources *cgroups.ContainerResources
 		containers   []containerInfo
 		expected     expectedPodConfig
-		// If expectedPodLevelResourcesOverride is not specified,
-		// we check the PodSpec to verify whether the API server correctly injected default values
-		// by comparing it with expected.totalPodResources. In most cases, this comparison works fine.
-		// However, if pod-level limits are not specified and all containers have their limits set,
-		// the cgroup for the pod will be configured with the aggregated container-level limits.
-		// Still, the pod-level limits field itself will not have default values set.
-		// To cover this pattern, we allow overriding the values when comparing against the PodSpec.
+		// 如果未指定 expectedPodLevelResourcesOverride，
+		// 我们通过将其与 expected.totalPodResources 比较，检查 PodSpec，
+		// 以验证 API server 是否正确注入了默认值。多数情况下这种比较可行。
+		// 但是，如果未指定 pod 级 limit 且所有容器都设置了 limit，
+		// Pod 的 cgroup 将使用聚合后的容器级 limit 配置。
+		// 不过 pod 级 limit 字段本身不会被设置默认值。
+		// 为覆盖这种模式，我们允许比较 PodSpec 时覆盖这些值。
 		expectedPodLevelResourcesOverride *cgroups.ContainerResources
 	}
 
@@ -307,8 +307,8 @@ func podLevelResourcesTests(f *framework.Framework) {
 			},
 			expected: expectedPodConfig{
 				qos: v1.PodQOSBurstable,
-				// If container-level limits are not specified for all containers,
-				// cpu.max and memory.max will not be set.
+				// 如果并非所有容器都指定了容器级 limit，
+				// cpu.max 和 memory.max 将不会被设置。
 				totalPodResources: &cgroups.ContainerResources{CPUReq: "100m", MemReq: "100Mi"},
 			},
 			expectedPodLevelResourcesOverride: &cgroups.ContainerResources{CPUReq: "100m", MemReq: "100Mi"},
@@ -466,12 +466,12 @@ func verifyContainersCgroupLimits(ctx context.Context, f *framework.Framework, p
 	return utilerrors.NewAggregate(errs)
 }
 
-// podLevelResourcesFixDefaultingTests contains tests that require both
-// PodLevelResources and PodLevelResourcesFixDefaulting feature gates.
+// podLevelResourcesFixDefaultingTests 包含同时需要
+// PodLevelResources 和 PodLevelResourcesFixDefaulting feature gate 的测试。
 func podLevelResourcesFixDefaultingTests(f *framework.Framework) {
-	// When pod-level requests are set and all containers define limits, pod-level
-	// limits are auto-defaulted to the aggregated container limits. Since req==lim
-	// after defaulting, the pod gets Guaranteed QoS.
+	// 当设置了 pod 级 request 且所有容器都定义了 limit 时，pod 级
+	// limit 会自动默认为聚合后的容器 limit。由于默认值处理后 req==lim，
+	// Pod 会获得 Guaranteed QoS。
 	ginkgo.It("Guaranteed QoS pod, pod resources requests, container resources limits auto-defaulted", func(ctx context.Context) {
 		containers := []containerInfo{
 			{Name: "c1", Resources: &cgroups.ContainerResources{CPULim: "50m", MemLim: "50Mi"}},
@@ -506,17 +506,17 @@ func podLevelResourcesFixDefaultingTests(f *framework.Framework) {
 		framework.ExpectNoError(delErr, "failed to delete pod %s", delErr)
 	})
 
-	// When only a CPU request is set at pod level (no memory request or limits), defaulting
-	// populates missing pod-level requests from aggregated container requests and missing
-	// pod-level limits from container limits to maintain complete pod-level accounting.
-	// Furthermore, subsequent updates preserve these defaulted values.
+	// 当 pod 级只设置了 CPU request（无 memory request 或 limit）时，默认值处理
+	// 会从聚合的容器 request 中补全缺失的 pod 级 request，并从容器 limit 中补全缺失的
+	// pod 级 limit，以维持完整的 pod 级资源统计。
+	// 此外，后续更新会保留这些默认值。
 	ginkgo.It("partial pod-level request: all missing pod requests and limits defaulted from containers, stable across updates", func(ctx context.Context) {
 		containers := []containerInfo{
 			{Name: "c1", Resources: &cgroups.ContainerResources{CPUReq: "50m", CPULim: "50m", MemReq: "50Mi", MemLim: "50Mi"}},
 		}
-		// Only CPU request set at pod level — no memory request or limits.
+		// pod 级只设置 CPU request —— 无 memory request 或 limit。
 		podResources := &cgroups.ContainerResources{CPUReq: "50m"}
-		// Expected: memory request defaulted from container, CPU and memory limits defaulted from container limits.
+		// 预期：memory request 从容器默认补全，CPU 和 memory limit 从容器 limit 默认补全。
 		expectedResources := &cgroups.ContainerResources{CPUReq: "50m", CPULim: "50m", MemReq: "50Mi", MemLim: "50Mi"}
 
 		podMetadata := makeObjectMetadata("testpod-partial-req", f.Namespace.Name)

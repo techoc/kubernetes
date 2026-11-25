@@ -30,8 +30,8 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// WaitForRunning waits for numPodsRunning in ss to be Running and for the first
-// numPodsReady ordinals to be Ready.
+// WaitForRunning 等待 ss 中 numPodsRunning 个 Pod 处于 Running，且前
+// numPodsReady 个序号的 Pod 处于 Ready。
 func WaitForRunning(ctx context.Context, c clientset.Interface, numPodsRunning, numPodsReady int32, ss *appsv1.StatefulSet) {
 	pollErr := wait.PollUntilContextTimeout(ctx, StatefulSetPoll, StatefulSetTimeout, true,
 		func(ctx context.Context) (bool, error) {
@@ -64,7 +64,7 @@ func WaitForRunning(ctx context.Context, c clientset.Interface, numPodsRunning, 
 	}
 }
 
-// WaitForState periodically polls for the ss and its pods until the until function returns either true or an error.
+// WaitForState 定期轮询 ss 及其 Pod，直到 until 函数返回 true 或错误。
 func WaitForState(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, pollInterval time.Duration, until func(*appsv1.StatefulSet, *v1.PodList) (bool, error)) {
 	pollErr := wait.PollUntilContextTimeout(ctx, pollInterval, StatefulSetTimeout, true,
 		func(ctx context.Context) (bool, error) {
@@ -84,12 +84,12 @@ func WaitForState(ctx context.Context, c clientset.Interface, ss *appsv1.Statefu
 	}
 }
 
-// WaitForRunningAndReady waits for numStatefulPods in ss to be Running and Ready.
+// WaitForRunningAndReady 等待 ss 中 numStatefulPods 个 Pod 处于 Running 和 Ready。
 func WaitForRunningAndReady(ctx context.Context, c clientset.Interface, numStatefulPods int32, ss *appsv1.StatefulSet) {
 	WaitForRunning(ctx, c, numStatefulPods, numStatefulPods, ss)
 }
 
-// WaitForPodReady waits for the Pod named podName in set to exist and have a Ready condition.
+// WaitForPodReady 等待 set 中名为 podName 的 Pod 存在且具有 Ready condition。
 func WaitForPodReady(ctx context.Context, c clientset.Interface, set *appsv1.StatefulSet, podName string) (*appsv1.StatefulSet, *v1.PodList) {
 	var pods *v1.PodList
 	WaitForState(ctx, c, set, StatefulSetPoll, func(set2 *appsv1.StatefulSet, pods2 *v1.PodList) (bool, error) {
@@ -105,7 +105,7 @@ func WaitForPodReady(ctx context.Context, c clientset.Interface, set *appsv1.Sta
 	return set, pods
 }
 
-// WaitForStatusReadyReplicas waits for the ss.Status.ReadyReplicas to be equal to expectedReplicas
+// WaitForStatusReadyReplicas 等待 ss.Status.ReadyReplicas 等于 expectedReplicas
 func WaitForStatusReadyReplicas(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, expectedReplicas int32) {
 	framework.Logf("Waiting for statefulset status.readyReplicas updated to %d", expectedReplicas)
 
@@ -130,7 +130,7 @@ func WaitForStatusReadyReplicas(ctx context.Context, c clientset.Interface, ss *
 	}
 }
 
-// WaitForStatusAvailableReplicas waits for the ss.Status.Available to be equal to expectedReplicas
+// WaitForStatusAvailableReplicas 等待 ss.Status.Available 等于 expectedReplicas
 func WaitForStatusAvailableReplicas(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, expectedReplicas int32) {
 	framework.Logf("Waiting for statefulset status.AvailableReplicas updated to %d", expectedReplicas)
 
@@ -155,7 +155,7 @@ func WaitForStatusAvailableReplicas(ctx context.Context, c clientset.Interface, 
 	}
 }
 
-// WaitForStatusReplicas waits for the ss.Status.Replicas to be equal to expectedReplicas
+// WaitForStatusReplicas 等待 ss.Status.Replicas 等于 expectedReplicas
 func WaitForStatusReplicas(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet, expectedReplicas int32) {
 	framework.Logf("Waiting for statefulset status.replicas updated to %d", expectedReplicas)
 
@@ -180,7 +180,7 @@ func WaitForStatusReplicas(ctx context.Context, c clientset.Interface, ss *appsv
 	}
 }
 
-// Saturate waits for all Pods in ss to become Running and Ready.
+// Saturate 等待 ss 中所有 Pod 进入 Running 和 Ready。
 func Saturate(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet) {
 	var i int32
 	for i = 0; i < *(ss.Spec.Replicas); i++ {
@@ -191,7 +191,7 @@ func Saturate(ctx context.Context, c clientset.Interface, ss *appsv1.StatefulSet
 	}
 }
 
-// WaitForFailedWithImagePullErr waits for numPodsFailed in ss to be Failed with ImagePullBackError or ImagePullErr
+// WaitForFailedWithImagePullErr 等待 ss 中 numPodsFailed 个 Pod 因 ImagePullBackError 或 ImagePullErr 进入 Failed。
 func WaitForFailedWithImagePullErr(ctx context.Context, c clientset.Interface, numPodsFailed int32, ss *appsv1.StatefulSet) {
 	pollErr := wait.PollUntilContextTimeout(ctx, StatefulSetPoll, StatefulSetTimeout, true,
 		func(ctx context.Context) (bool, error) {

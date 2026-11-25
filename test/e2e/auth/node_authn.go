@@ -58,7 +58,7 @@ var _ = SIGDescribe("NodeAuthenticator", func() {
 	ginkgo.It("The kubelet's main port 10250 should reject requests with no credentials", func(ctx context.Context) {
 		pod := createNodeAuthTestPod(ctx, f)
 
-		// Anonymous authentication is disabled by default
+		// 匿名认证默认禁用
 		host := net.JoinHostPort(nodeIP, strconv.Itoa(ports.KubeletPort))
 		result := e2eoutput.RunHostCmdOrDie(ns, pod.Name, fmt.Sprintf("curl -sIk -o /dev/null -w '%s' https://%s/metrics", "%{http_code}", host))
 		gomega.Expect(result).To(gomega.Or(gomega.Equal("401"), gomega.Equal("403")), "the kubelet's main port 10250 should reject requests with no credentials")

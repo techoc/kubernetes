@@ -71,13 +71,12 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 	})
 
 	/*
-	   Release: v1.9
-	   Testname: Service Account Tokens Must AutoMount
-	   Description: Ensure that Service Account keys are mounted into the Container. Pod
-	                contains three containers each will read Service Account token,
-	                root CA and default namespace respectively from the default API
-	                Token Mount path. All these three files MUST exist and the Service
-	                Account mount path MUST be auto mounted to the Container.
+		   Release: v1.9
+		   Testname: Service Account Tokens Must AutoMount
+		   Description: 确保 Service Account 的密钥被挂载到容器中。Pod
+			包含三个容器，分别从默认 API Token 挂载路径读取 Service Account token、
+			root CA 和默认命名空间。这三个文件 MUST 存在，并且 Service Account
+			挂载路径 MUST 自动挂载到容器中。
 	*/
 	framework.ConformanceIt("should mount an API token into pods", func(ctx context.Context) {
 		sa, err := f.ClientSet.CoreV1().ServiceAccounts(f.Namespace.Name).Create(ctx, &v1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "mount-test"}}, metav1.CreateOptions{})
@@ -102,7 +101,7 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 		framework.ExpectNoError(err)
 		framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod))
 
-		// Read the running pod to get the current node name
+		// 读取正在运行的 Pod 以获取当前的节点名
 		pod, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		node, err := f.ClientSet.CoreV1().Nodes().Get(ctx, pod.Spec.NodeName, metav1.GetOptions{})
@@ -116,13 +115,13 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 		mountedNamespace, err := tk.ReadFileViaContainer(pod.Name, pod.Spec.Containers[0].Name, path.Join(serviceaccount.DefaultAPITokenMountPath, v1.ServiceAccountNamespaceKey))
 		framework.ExpectNoError(err)
 
-		// CA and namespace should be identical
+		// CA 和命名空间应相同
 		rootCA, err := f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Get(ctx, rootCAConfigMapName, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		framework.Logf("Got root ca configmap in namespace %q", f.Namespace.Name)
 		gomega.Expect(mountedCA).To(gomega.Equal(rootCA.Data["ca.crt"]))
 		gomega.Expect(mountedNamespace).To(gomega.Equal(f.Namespace.Name))
-		// Token should be a valid credential that identifies the pod's service account
+		// Token 应是标识该 Pod 的 Service Account 的有效凭据
 		tokenReview := &authenticationv1.TokenReview{Spec: authenticationv1.TokenReviewSpec{Token: mountedToken}}
 		tokenReview, err = f.ClientSet.AuthenticationV1().TokenReviews().Create(ctx, tokenReview, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
@@ -169,27 +168,22 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 	/*
 	   Release: v1.9
 	   Testname: Service account tokens auto mount optionally
-	   Description: Ensure that Service Account keys are mounted into the Pod only
-	                when AutoMountServiceToken is not set to false. We test the
-	                following scenarios here.
-	   1. Create Pod, Pod Spec has AutomountServiceAccountToken set to nil
-	      a) Service Account with default value,
-	      b) Service Account is an configured AutomountServiceAccountToken set to true,
-	      c) Service Account is an configured AutomountServiceAccountToken set to false
-	   2. Create Pod, Pod Spec has AutomountServiceAccountToken set to true
-	      a) Service Account with default value,
-	      b) Service Account is configured with AutomountServiceAccountToken set to true,
-	      c) Service Account is configured with AutomountServiceAccountToken set to false
-	   3. Create Pod, Pod Spec has AutomountServiceAccountToken set to false
-	      a) Service Account with default value,
-	      b) Service Account is configured with AutomountServiceAccountToken set to true,
-	      c) Service Account is configured with AutomountServiceAccountToken set to false
+	   Description: 确保只有当 AutoMountServiceToken 未设为 false 时，Service Account 密钥才会挂载到 Pod 中。这里测试以下场景。
+	   1. 创建 Pod，Pod Spec 中 AutomountServiceAccountToken 为 nil
+	      a) Service Account 为默认值，
+	      b) Service Account 将 AutomountServiceAccountToken 设为 true，
+	      c) Service Account 将 AutomountServiceAccountToken 设为 false
+	   2. 创建 Pod，Pod Spec 中 AutomountServiceAccountToken 为 true
+	      a) Service Account 为默认值，
+	      b) Service Account 将 AutomountServiceAccountToken 设为 true，
+	      c) Service Account 将 AutomountServiceAccountToken 设为 false
+	   3. 创建 Pod，Pod Spec 中 AutomountServiceAccountToken 为 false
+	      a) Service Account 为默认值，
+	      b) Service Account 将 AutomountServiceAccountToken 设为 true，
+	      c) Service Account 将 AutomountServiceAccountToken 设为 false
 
-	   The Containers running in these pods MUST verify that the ServiceTokenVolume path is
-	   auto mounted only when Pod Spec has AutomountServiceAccountToken not set to false
-	   and ServiceAccount object has AutomountServiceAccountToken not set to false, this
-	   include test cases 1a,1b,2a,2b and 2c.
-	   In the test cases 1c,3a,3b and 3c the ServiceTokenVolume MUST not be auto mounted.
+	   这些 Pod 中的容器 MUST 验证：只有当 Pod Spec 和 ServiceAccount 对象中的 AutomountServiceAccountToken 都不为 false 时，ServiceTokenVolume 路径才会自动挂载，即测试用例 1a、1b、2a、2b 和 2c。
+	   在测试用例 1c、3a、3b 和 3c 中，ServiceTokenVolume MUST 不会自动挂载。
 	*/
 	framework.ConformanceIt("should allow opting out of API token automount", func(ctx context.Context) {
 
@@ -213,7 +207,7 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 				PodName:            "pod-service-account-defaultsa",
 				ServiceAccountName: "default",
 				AutomountPodSpec:   nil,
-				ExpectTokenVolume:  true, // default is true
+				ExpectTokenVolume:  true, // 默认为 true
 			},
 			{
 				PodName:            "pod-service-account-mountsa",
@@ -228,7 +222,7 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 				ExpectTokenVolume:  false,
 			},
 
-			// Make sure pod spec trumps when opting in
+			// 确保选择加入时 pod spec 优先
 			{
 				PodName:            "pod-service-account-defaultsa-mountspec",
 				ServiceAccountName: "default",
@@ -245,27 +239,27 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 				PodName:            "pod-service-account-nomountsa-mountspec",
 				ServiceAccountName: nomountSA.Name,
 				AutomountPodSpec:   &trueValue,
-				ExpectTokenVolume:  true, // pod spec trumps
+				ExpectTokenVolume:  true, // pod spec 优先
 			},
 
-			// Make sure pod spec trumps when opting out
+			// 确保选择退出时 pod spec 优先
 			{
 				PodName:            "pod-service-account-defaultsa-nomountspec",
 				ServiceAccountName: "default",
 				AutomountPodSpec:   &falseValue,
-				ExpectTokenVolume:  false, // pod spec trumps
+				ExpectTokenVolume:  false, // pod spec 优先
 			},
 			{
 				PodName:            "pod-service-account-mountsa-nomountspec",
 				ServiceAccountName: mountSA.Name,
 				AutomountPodSpec:   &falseValue,
-				ExpectTokenVolume:  false, // pod spec trumps
+				ExpectTokenVolume:  false, // pod spec 优先
 			},
 			{
 				PodName:            "pod-service-account-nomountsa-nomountspec",
 				ServiceAccountName: nomountSA.Name,
 				AutomountPodSpec:   &falseValue,
-				ExpectTokenVolume:  false, // pod spec trumps
+				ExpectTokenVolume:  false, // pod spec 优先
 			},
 		}
 
@@ -303,7 +297,7 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 	/*
 	  Release : v1.20
 	  Testname: TokenRequestProjection should mount a projected volume with token using TokenRequest API.
-	  Description: Ensure that projected service account token is mounted.
+	  Description: 确保 projected service account token 被挂载。
 	*/
 	framework.ConformanceIt("should mount projected service account token", func(ctx context.Context) {
 
@@ -355,16 +349,13 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 
 	/*
 	   Testname: Projected service account token file ownership and permission.
-	   Description: Ensure that Projected Service Account Token is mounted with
-	               correct file ownership and permission mounted. We test the
-	               following scenarios here.
-	   1. RunAsUser is set,
-	   2. FsGroup is set,
-	   3. RunAsUser and FsGroup are set,
-	   4. Default, neither RunAsUser nor FsGroup is set,
+	   Description: 确保 Projected Service Account Token 挂载时文件属主和权限正确。这里测试以下场景。
+	   1. 设置 RunAsUser，
+	   2. 设置 FsGroup，
+	   3. 同时设置 RunAsUser 和 FsGroup，
+	   4. 默认情况，RunAsUser 和 FsGroup 都不设置，
 
-	   Containers MUST verify that the projected service account token can be
-	   read and has correct file mode set including ownership and permission.
+	   容器 MUST 验证 projected service account token 可读，且文件模式（包括属主和权限）正确。
 	*/
 	f.It("should set ownership and permission when RunAsUser or FsGroup is present [LinuxOnly]", func(ctx context.Context) {
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
@@ -667,17 +658,16 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 	/*
 	   Release: v1.21
 	   Testname: OIDC Discovery (ServiceAccountIssuerDiscovery)
-	   Description: Ensure kube-apiserver serves correct OIDC discovery
-	   endpoints by deploying a Pod that verifies its own
-	   token against these endpoints.
+	   Description: 确保 kube-apiserver 提供正确的 OIDC discovery
+	   endpoint：部署一个 Pod，用它自身的 token 对这些 endpoint 进行验证。
 	*/
 	framework.ConformanceIt("ServiceAccountIssuerDiscovery should support OIDC discovery of service account issuer", func(ctx context.Context) {
 
-		// Allow the test pod access to the OIDC discovery non-resource URLs.
-		// The role should have already been automatically created as part of the
-		// RBAC bootstrap policy, but not the role binding. If RBAC is disabled,
-		// we skip creating the binding. We also make sure we clean up the
-		// binding after the test.
+		// 允许测试 Pod 访问 OIDC discovery 的非资源 URL。
+		// 该 role 应已作为 RBAC bootstrap policy 的一部分自动创建，
+		// 但 role binding 不会。如果 RBAC 被禁用，
+		// 我们跳过创建 binding。测试结束后
+		// 也会确保清理该 binding。
 		const clusterRoleName = "system:service-account-issuer-discovery"
 		crbName := fmt.Sprintf("%s-%s", f.Namespace.Name, clusterRoleName)
 		if crb, err := f.ClientSet.RbacV1().ClusterRoleBindings().Create(
@@ -701,7 +691,7 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 				},
 			},
 			metav1.CreateOptions{}); err != nil {
-			// Tolerate RBAC not being enabled
+			// 容忍 RBAC 未启用
 			framework.Logf("error granting ClusterRoleBinding %s: %v", crbName, err)
 		} else {
 			defer func() {
@@ -712,7 +702,7 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 			}()
 		}
 
-		// Create the pod with tokens.
+		// 创建带 token 的 Pod。
 		tokenPath := "/var/run/secrets/tokens"
 		tokenName := "sa-token"
 		audience := "oidc-discovery-test"
@@ -761,7 +751,7 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 		framework.Logf("created pod")
 		podErr := e2epod.WaitForPodSuccessInNamespace(ctx, f.ClientSet, pod.Name, f.Namespace.Name)
 
-		// Get the logs before calling ExpectNoError, so we can debug any errors.
+		// 在调用 ExpectNoError 之前先取日志，便于排查错误。
 		var logs string
 		if err := wait.Poll(30*time.Second, 2*time.Minute, func() (done bool, err error) {
 			framework.Logf("polling logs")
@@ -782,12 +772,12 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 	})
 
 	/*
-			   Release: v1.19
-			   Testname: ServiceAccount lifecycle test
-			   Description: Creates a ServiceAccount with a static Label MUST be added as shown in watch event.
-		                        Patching the ServiceAccount MUST return it's new property.
-		                        Listing the ServiceAccounts MUST return the test ServiceAccount with it's patched values.
-		                        ServiceAccount will be deleted and MUST find a deleted watch event.
+		   Release: v1.19
+		   Testname: ServiceAccount lifecycle test
+		   Description: 创建带静态 Label 的 ServiceAccount，MUST 如 watch 事件所示被添加。
+					给 ServiceAccount 打补丁 MUST 返回其新属性。
+					列出 ServiceAccounts MUST 返回补丁后的测试 ServiceAccount。
+					ServiceAccount 将被删除，MUST 能找到删除的 watch 事件。
 	*/
 	framework.ConformanceIt("should run through the lifecycle of a ServiceAccount", func(ctx context.Context) {
 		testNamespaceName := f.Namespace.Name
@@ -880,10 +870,10 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 	/*
 		Release: v1.21
 		Testname: RootCA ConfigMap test
-		Description: Ensure every namespace exist a ConfigMap for root ca cert.
-			1. Created automatically
-			2. Recreated if deleted
-			3. Reconciled if modified
+		Description: 确保每个命名空间都存在一个用于 root CA 证书的 ConfigMap。
+			1. 自动创建
+			2. 删除后重建
+			3. 修改后调和
 	*/
 	framework.ConformanceIt("should guarantee kube-root-ca.crt exist in any namespace", func(ctx context.Context) {
 		framework.ExpectNoError(wait.PollImmediate(500*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
@@ -949,9 +939,9 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 	/*
 		Release: v1.26
 		Testname: ServiceAccount, update a ServiceAccount
-		Description: A ServiceAccount is created which MUST succeed. When
-		updating the ServiceAccount it MUST succeed and the field MUST equal
-		the new value.
+		Description: 创建 ServiceAccount 必须成功。更新
+		ServiceAccount 必须成功，且字段必须等于
+		新值。
 	*/
 	framework.ConformanceIt("should update a ServiceAccount", func(ctx context.Context) {
 		saClient := f.ClientSet.CoreV1().ServiceAccounts(f.Namespace.Name)
@@ -988,9 +978,9 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 	/*
 		Release: v1.32
 		Testname: ServiceAccount, create and review token
-		Description: Creating a ServiceAccount MUST succeed. Creating a ServiceAccountToken
-		MUST succeed. The token MUST not be empty. Creating a TokenReview MUST succeed.
-		The TokenReview MUST be authenticated without any errors.
+		Description: 创建 ServiceAccount 必须成功。创建 ServiceAccountToken
+		必须成功。token 不能为空。创建 TokenReview 必须成功。
+		TokenReview 必须认证成功且无任何错误。
 	*/
 	framework.ConformanceIt("should create a serviceAccountToken and ensure a successful TokenReview", func(ctx context.Context) {
 		ns := f.Namespace.Name
@@ -1022,7 +1012,7 @@ var _ = SIGDescribe("ServiceAccounts", func() {
 
 var reportLogsParser = regexp.MustCompile("([a-zA-Z0-9-_]*)=([a-zA-Z0-9-_]*)$")
 
-// ParseInClusterClientLogs parses logs of pods using inclusterclient.
+// ParseInClusterClientLogs 解析使用 inclusterclient 的 Pod 日志。
 func ParseInClusterClientLogs(logs string) (int, error) {
 	seenTokens := map[string]struct{}{}
 

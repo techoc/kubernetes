@@ -45,9 +45,9 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// NOTE: All the tests in this file are run serially because they share a limited set of GPU(s), please inspect
-// the CI job definitions to see how many GPU(s) are available in the environment
-// Currently the CI jobs have 2 nodes each with 4 Nvidia T4's across both GCE and AWS harness(es).
+// 注意：此文件中的所有测试串行运行，因为它们共享有限的 GPU 资源，请查看
+// CI job 定义以了解环境中有多少 GPU 可用
+// 目前 CI job 有 2 个节点，每个节点 4 块 Nvidia T4，涵盖 GCE 和 AWS 环境。
 
 var _ = SIGDescribe(feature.GPUDevicePlugin, framework.WithSerial(), "Sanity test using nvidia-smi", framework.WithProvider("aws", "gce"), func() {
 
@@ -115,7 +115,7 @@ var _ = SIGDescribe(feature.GPUDevicePlugin, framework.WithSerial(), "Test using
 	f.It("should run gpu based jobs", func(ctx context.Context) {
 		SetupEnvironmentAndSkipIfNeeded(ctx, f, f.ClientSet)
 
-		// Job set to have 5 completions with parallelism of 1 to ensure that it lasts long enough to experience the node recreation
+		// Job 设为 5 个 completions、并行度 1，以确保持续足够长以经历节点重建
 		completions := int32(5)
 		ginkgo.By("Starting GPU job")
 		StartJob(ctx, f, completions)
@@ -123,7 +123,7 @@ var _ = SIGDescribe(feature.GPUDevicePlugin, framework.WithSerial(), "Test using
 		job, err := e2ejob.GetJob(ctx, f.ClientSet, f.Namespace.Name, "cuda-add")
 		framework.ExpectNoError(err)
 
-		// make sure job is running by waiting for its first pod to start running
+		// 通过等待第一个 Pod 开始运行确保 job 正在运行
 		err = e2ejob.WaitForJobPodsRunningWithTimeout(ctx, f.ClientSet, f.Namespace.Name, job.Name, 1, e2ejob.JobTimeout*2)
 		framework.ExpectNoError(err)
 
@@ -301,7 +301,7 @@ func SetupEnvironmentAndSkipIfNeeded(ctx context.Context, f *framework.Framework
 	if framework.ProviderIs("gce") {
 		SetupNVIDIAGPUNode(ctx, f)
 	} else if framework.ProviderIs("aws") {
-		// see nvidia-device-plugin.yml in https://github.com/NVIDIA/k8s-device-plugin/tree/main/deployments/static
+		// 参见 https://github.com/NVIDIA/k8s-device-plugin/tree/main/deployments/static 中的 nvidia-device-plugin.yml
 		waitForGPUs(ctx, f, "kube-system", "nvidia-device-plugin-daemonset")
 	}
 
@@ -374,11 +374,11 @@ func logOSImages(ctx context.Context, f *framework.Framework) {
 }
 
 const (
-	// Nvidia driver installation can take upwards of 5 minutes.
+	// Nvidia 驱动安装可能需要 5 分钟以上。
 	driverInstallTimeout = 10 * time.Minute
 )
 
-// SetupNVIDIAGPUNode install Nvidia Drivers and wait for Nvidia GPUs to be available on nodes
+// SetupNVIDIAGPUNode 安装 Nvidia 驱动并等待节点上 Nvidia GPU 可用
 func SetupNVIDIAGPUNode(ctx context.Context, f *framework.Framework) {
 	logOSImages(ctx, f)
 
@@ -386,12 +386,12 @@ func SetupNVIDIAGPUNode(ctx context.Context, f *framework.Framework) {
 	var ds *appsv1.DaemonSet
 	dsYamlURLFromEnv := os.Getenv("NVIDIA_DRIVER_INSTALLER_DAEMONSET")
 	if dsYamlURLFromEnv != "" {
-		// Using DaemonSet from remote URL
+		// 使用远程 URL 中的 DaemonSet
 		framework.Logf("Using remote nvidia-driver-installer daemonset manifest from %v", dsYamlURLFromEnv)
 		ds, err = e2emanifest.DaemonSetFromURL(ctx, dsYamlURLFromEnv)
 		framework.ExpectNoError(err, "failed get remote")
 	} else {
-		// Using default local DaemonSet
+		// 使用默认的本地 DaemonSet
 		framework.Logf("Using default local nvidia-driver-installer daemonset manifest.")
 		data, err := e2etestfiles.Read("test/e2e/testing-manifests/gpu/gce/nvidia-driver-installer.yaml")
 		framework.ExpectNoError(err, "failed to read local manifest for nvidia-driver-installer daemonset")
@@ -436,14 +436,14 @@ func waitForGPUs(ctx context.Context, f *framework.Framework, namespace, name st
 		pods.Items = append(pods.Items, devicepluginPods.Items...)
 	}
 
-	// Wait for Nvidia GPUs to be available on nodes
+	// 等待节点上 Nvidia GPU 可用
 	framework.Logf("Waiting for drivers to be installed and GPUs to be available in Node Capacity...")
 	gomega.Eventually(ctx, func(ctx context.Context) error {
 		return areGPUsAvailableOnAllSchedulableNodes(ctx, f.ClientSet)
 	}, driverInstallTimeout, time.Second).Should(gomega.Succeed())
 }
 
-// StartJob starts a simple CUDA job that requests gpu and the specified number of completions
+// StartJob 启动一个简单的 CUDA job，请求 gpu 及指定数量的 completions
 func StartJob(ctx context.Context, f *framework.Framework, completions int32) {
 	var activeSeconds int64 = 3600
 	testJob := e2ejob.NewTestJob("succeed", "cuda-add", v1.RestartPolicyAlways, 1, completions, &activeSeconds, 6)
@@ -524,7 +524,7 @@ func podNames(pods []v1.Pod) []string {
 	return originalPodNames
 }
 
-// VerifyJobNCompletions verifies that the job has completions number of successful pods
+// VerifyJobNCompletions 验证该 job 有指定数量成功的 Pod
 func VerifyJobNCompletions(ctx context.Context, f *framework.Framework, completions int32) {
 	ns := f.Namespace.Name
 	pods, err := e2ejob.GetJobPods(ctx, f.ClientSet, f.Namespace.Name, "cuda-add")

@@ -60,9 +60,9 @@ var _ = SIGDescribe("KubeletSeparateDiskGC", feature.KubeletSeparateDiskGC, func
 		summary := eventuallyGetSummary(ctx)
 		gomega.Expect(summary.Node.Fs.AvailableBytes).ToNot(gomega.Equal(summary.Node.Runtime.ImageFs.AvailableBytes))
 		gomega.Expect(summary.Node.Fs.CapacityBytes).ToNot(gomega.Equal(summary.Node.Runtime.ImageFs.CapacityBytes))
-		// Node.Fs represents rootfs where /var/lib/kubelet is located.
-		// Since graphroot is left as the default in storage.conf, it will use the same filesystem location as rootfs.
-		// Therefore, Node.Fs should be the same as Runtime.ContainerFs.
+		// Node.Fs 表示 /var/lib/kubelet 所在的 rootfs。
+		// 由于 storage.conf 中 graphroot 保持默认值，它将使用与 rootfs 相同的文件系统位置。
+		// 因此 Node.Fs 应与 Runtime.ContainerFs 相同。
 		gomega.Expect(summary.Node.Fs.AvailableBytes).To(gomega.Equal(summary.Node.Runtime.ContainerFs.AvailableBytes))
 		gomega.Expect(summary.Node.Fs.CapacityBytes).To(gomega.Equal(summary.Node.Runtime.ContainerFs.CapacityBytes))
 	})
@@ -101,7 +101,7 @@ var _ = SIGDescribe("KubeletSeparateDiskGC", feature.KubeletSeparateDiskGC, func
 			})
 			runEvictionTest(f, pressureTimeout, expectedNodeCondition, expectedStarvedResource, logDiskMetrics, []podEvictSpec{
 				{
-					// This pod should exceed disk capacity on nodeFs since it writes a lot to writeable layer.
+					// 此 Pod 会向可写层写入大量数据，因此应超过 nodeFs 的磁盘容量。
 					evictionPriority: 1,
 					pod: diskConsumingPod("container-emptydir-disk-limit", diskTestInMb, nil,
 						v1.ResourceRequirements{}),
@@ -111,16 +111,16 @@ var _ = SIGDescribe("KubeletSeparateDiskGC", feature.KubeletSeparateDiskGC, func
 	})
 })
 
-// runImageFsPressureTest tests are similar to eviction tests but will skip the checks on eviction itself,
-// as we want to induce disk pressure on the imageFs filesystem.
+// runImageFsPressureTest 类似驱逐测试，但跳过对驱逐本身的检查，
+// 因为目的是在 imageFs 文件系统上引发磁盘压力。
 func runImageFsPressureTest(f *framework.Framework, pressureTimeout time.Duration, expectedNodeCondition v1.NodeConditionType, logFunc func(ctx context.Context), testSpecs []podEvictSpec) {
-	// Place the remainder of the test within a context so that the kubelet config is set before and after the test.
+	// 将后续测试放在一个 context 中，确保测试前后都设置 kubelet 配置。
 	ginkgo.Context("", func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
-			// Reduce memory usage in the allocatable cgroup to ensure we do not have MemoryPressure.
+			// 降低 allocatable cgroup 的内存用量，确保不会出现 MemoryPressure。
 			reduceAllocatableMemoryUsageIfCgroupv1()
-			// Nodes do not immediately report local storage capacity,
-			// so wait a little to allow pods requesting local storage to be scheduled.
+			// 节点不会立即报告本地存储容量，
+			// 因此稍等片刻，让请求本地存储的 Pod 得以调度。
 			time.Sleep(30 * time.Second)
 			ginkgo.By("setting up pods to be used by tests")
 			pods := []*v1.Pod{}
@@ -216,13 +216,13 @@ func runImageFsPressureTest(f *framework.Framework, pressureTimeout time.Duratio
 		ginkgo.AfterEach(func(ctx context.Context) {
 			prePullImagesIfNecessary := func() {
 				if expectedNodeCondition == v1.NodeDiskPressure && framework.TestContext.PrepullImages {
-					// The disk eviction test may cause the pre-pulled images to be evicted,
-					// so pre-pull those images again to ensure this test does not affect subsequent tests.
+					// 磁盘驱逐测试可能导致预拉取的镜像被驱逐，
+					// 因此重新预拉取这些镜像，确保本测试不影响后续测试。
 					err := PrePullAllImages(ctx)
 					framework.ExpectNoError(err)
 				}
 			}
-			// Run pre-pull for images using a `defer` to ensure that images are pulled even when the subsequent assertions fail.
+			// 使用 `defer` 运行镜像预拉取，确保即使后续断言失败也会拉取镜像。
 			defer prePullImagesIfNecessary()
 
 			ginkgo.By("deleting pods")
@@ -231,8 +231,8 @@ func runImageFsPressureTest(f *framework.Framework, pressureTimeout time.Duratio
 				e2epod.NewPodClient(f).DeleteSync(ctx, spec.pod.Name, metav1.DeleteOptions{}, 10*time.Minute)
 			}
 
-			// In case a test fails before verifying that NodeCondition no longer exist on the node,
-			// we should wait for the NodeCondition to disappear.
+			// 如果测试在验证 NodeCondition 已消失之前失败，
+			// 仍应等待该 NodeCondition 消失。
 			ginkgo.By(fmt.Sprintf("making sure NodeCondition %s no longer exists on the node", expectedNodeCondition))
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				if expectedNodeCondition != noPressure && hasNodeCondition(ctx, f, expectedNodeCondition) {
@@ -245,7 +245,7 @@ func runImageFsPressureTest(f *framework.Framework, pressureTimeout time.Duratio
 			ginkgo.By("making sure we have all the required images for testing")
 			prePullImagesIfNecessary()
 
-			// Ensure that the NodeCondition hasn't returned after pulling images.
+			// 确保拉取镜像后 NodeCondition 没有再次出现。
 			ginkgo.By(fmt.Sprintf("making sure NodeCondition %s doesn't exist again after pulling images", expectedNodeCondition))
 			gomega.Eventually(ctx, func(ctx context.Context) error {
 				if expectedNodeCondition != noPressure && hasNodeCondition(ctx, f, expectedNodeCondition) {

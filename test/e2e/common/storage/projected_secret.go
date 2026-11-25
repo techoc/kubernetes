@@ -42,7 +42,7 @@ var _ = SIGDescribe("Projected secret", func() {
 	/*
 	   Release: v1.9
 	   Testname: Projected Volume, Secrets, volume mode default
-	   Description: A Pod is created with a projected volume source 'secret' to store a secret with a specified key with default permission mode. Pod MUST be able to read the content of the key successfully and the mode MUST be -rw-r--r-- by default.
+	   Description: 创建一个带 projected volume source 'secret' 的 Pod，以默认权限 mode 存储指定 key 的 secret。Pod MUST 能成功读取该 key 的内容，默认 mode MUST 为 -rw-r--r--。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		doProjectedSecretE2EWithoutMapping(ctx, f, nil, nil, "projected-secret-test-"+string(uuid.NewUUID()), nil, nil)
@@ -51,8 +51,8 @@ var _ = SIGDescribe("Projected secret", func() {
 	/*
 	   Release: v1.9
 	   Testname: Projected Volume, Secrets, volume mode 0400
-	   Description: A Pod is created with a projected volume source 'secret' to store a secret with a specified key with permission mode set to 0x400 on the Pod. Pod MUST be able to read the content of the key successfully and the mode MUST be -r--------.
-	   This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+	   Description: 创建一个带 projected volume source 'secret' 的 Pod，以指定 key 存储 secret，并在 Pod 上将权限 mode 设为 0x400。Pod MUST 能成功读取该 key 的内容，且 mode MUST 为 -r--------。
+	   由于 Windows 不支持设置特定文件权限，该测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with defaultMode set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		defaultMode := int32(0400)
@@ -62,11 +62,11 @@ var _ = SIGDescribe("Projected secret", func() {
 	/*
 	   Release: v1.9
 	   Testname: Project Volume, Secrets, non-root, custom fsGroup
-	   Description: A Pod is created with a projected volume source 'secret' to store a secret with a specified key. The volume has permission mode set to 0440, fsgroup set to 1001 and user set to non-root uid of 1000. Pod MUST be able to read the content of the key successfully and the mode MUST be -r--r-----.
-	   This test is marked LinuxOnly since Windows does not support setting specific file permissions, or running as UID / GID.
+	   Description: 创建一个带 projected volume source 'secret' 的 Pod，以指定 key 存储 secret。volume 的权限 mode 设为 0440，fsgroup 设为 1001，用户设为非 root UID 1000。Pod MUST 能成功读取该 key 的内容，且 mode MUST 为 -r--r-----。
+	   由于 Windows 不支持设置特定文件权限或以 UID / GID 运行，该测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume as non-root with defaultMode and fsGroup set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		defaultMode := int32(0440) /* setting fsGroup sets mode to at least 440 */
+		defaultMode := int32(0440) /* 设置 fsGroup 会将 mode 设置为至少 440 */
 		fsGroup := int64(1001)
 		doProjectedSecretE2EWithoutMapping(ctx, f, &defaultMode, nil, "projected-secret-test-"+string(uuid.NewUUID()), &fsGroup, &nonRootTestUserID)
 	})
@@ -79,7 +79,7 @@ var _ = SIGDescribe("Projected secret", func() {
 	/*
 	   Release: v1.9
 	   Testname: Projected Volume, Secrets, mapped
-	   Description: A Pod is created with a projected volume source 'secret' to store a secret with a specified key with default permission mode. The secret is also mapped to a custom path. Pod MUST be able to read the content of the key successfully and the mode MUST be -r--------on the mapped volume.
+	   Description: 创建一个带 projected volume source 'secret' 的 Pod，以默认权限 mode 存储指定 key 的 secret。secret 还被映射到自定义路径。Pod MUST 能成功读取该 key 的内容，映射 volume 上的 mode MUST 为 -r--------。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings", f.WithNodeConformance(), func(ctx context.Context) {
 		doProjectedSecretE2EWithMapping(ctx, f, nil, nil, nil)
@@ -88,8 +88,8 @@ var _ = SIGDescribe("Projected secret", func() {
 	/*
 	   Release: v1.9
 	   Testname: Projected Volume, Secrets, mapped, volume mode 0400
-	   Description: A Pod is created with a projected volume source 'secret' to store a secret with a specified key with permission mode set to 0400. The secret is also mapped to a specific name. Pod MUST be able to read the content of the key successfully and the mode MUST be -r-------- on the mapped volume.
-	   This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+	   Description: 创建一个带 projected volume source 'secret' 的 Pod，以指定 key 存储 secret，权限 mode 设为 0400。secret 还被映射到特定名称。Pod MUST 能成功读取该 key 的内容，且映射后的 volume 上 mode MUST 为 -r--------。
+	   由于 Windows 不支持设置特定文件权限，该测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings and Item Mode set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		mode := int32(0400)
@@ -125,12 +125,12 @@ var _ = SIGDescribe("Projected secret", func() {
 	/*
 	   Release: v1.9
 	   Testname: Projected Volume, Secrets, mapped, multiple paths
-	   Description: A Pod is created with a projected volume source 'secret' to store a secret with a specified key. The secret is mapped to two different volume mounts. Pod MUST be able to read the content of the key successfully from the two volume mounts and the mode MUST be -r-------- on the mapped volumes.
+	   Description: 创建一个带 projected volume source 'secret' 的 Pod，以指定 key 存储 secret。secret 被映射到两个不同的 volume mount。Pod MUST 能从两个 volume mount 成功读取该 key 的内容，映射 volume 上的 mode MUST 为 -r--------。
 	*/
 	framework.ConformanceIt("should be consumable in multiple volumes in a pod", f.WithNodeConformance(), func(ctx context.Context) {
-		// This test ensures that the same secret can be mounted in multiple
-		// volumes in the same pod.  This test case exists to prevent
-		// regressions that break this use-case.
+		// 此测试确保同一个 secret 可以在同一个 Pod 的多个
+		// volume 中挂载。该测试用例用于防止
+		// 破坏此用例的回归。
 		var (
 			name             = "projected-secret-test-" + string(uuid.NewUUID())
 			volumeName       = "projected-secret-volume"
@@ -221,7 +221,7 @@ var _ = SIGDescribe("Projected secret", func() {
 	/*
 	   Release: v1.9
 	   Testname: Projected Volume, Secrets, create, update delete
-	   Description: Create a Pod with three containers with secrets namely a create, update and delete container. Create Container when started MUST no have a secret, update and delete containers MUST be created with a secret value. Create a secret in the create container, the Pod MUST be able to read the secret from the create container. Update the secret in the update container, Pod MUST be able to read the updated secret value. Delete the secret in the delete container. Pod MUST fail to read the secret from the delete container.
+	   Description: 创建一个含三个容器的 Pod，分别处理 secret 的创建、更新和删除。create 容器启动时不带 secret，update 和 delete 容器创建时带 secret 值。在 create 容器中创建 secret，Pod MUST 能从该容器读取。在 update 容器中更新 secret，Pod MUST 能读取更新后的值。在 delete 容器中删除 secret，Pod MUST 无法从该容器读取 secret。
 	*/
 	framework.ConformanceIt("optional updates should be reflected in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		podLogTimeout := e2epod.GetPodSecretUpdateTimeout(ctx, f.ClientSet)
@@ -401,7 +401,7 @@ var _ = SIGDescribe("Projected secret", func() {
 		framework.ExpectNoError(err, "Failed to delete secret %q in namespace %q", deleteSecret.Name, f.Namespace.Name)
 
 		ginkgo.By(fmt.Sprintf("Updating secret %v", updateSecret.Name))
-		updateSecret.ResourceVersion = "" // to force update
+		updateSecret.ResourceVersion = "" // 强制更新
 		delete(updateSecret.Data, "data-1")
 		updateSecret.Data["data-3"] = []byte("value-3")
 		_, err = f.ClientSet.CoreV1().Secrets(f.Namespace.Name).Update(ctx, updateSecret, metav1.UpdateOptions{})
@@ -419,9 +419,9 @@ var _ = SIGDescribe("Projected secret", func() {
 		gomega.Eventually(ctx, pollDeleteLogs, podLogTimeout, framework.Poll).Should(gomega.ContainSubstring("Error reading file /etc/projected-secret-volumes/delete/data-1"))
 	})
 
-	//The secret is in pending during volume creation until the secret objects are available
-	//or until mount the secret volume times out. There is no secret object defined for the pod, so it should return timeout exception unless it is marked optional.
-	//Slow (~5 mins)
+	//在 volume 创建期间 secret 处于 pending，直到 secret 对象可用
+	//或挂载 secret volume 超时。该 Pod 没有定义 secret 对象，因此除非标记为 optional，否则应返回超时异常。
+	//慢（约 5 分钟）
 	f.It("Should fail non-optional pod creation due to secret object does not exist", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		volumeMountPath := "/etc/projected-secret-volumes"
 		podName := "pod-secrets-" + string(uuid.NewUUID())
@@ -430,9 +430,9 @@ var _ = SIGDescribe("Projected secret", func() {
 		gomega.Consistently(ctx, getPod).WithTimeout(f.Timeouts.PodStart).Should(e2epod.BeInPhase(v1.PodPending))
 	})
 
-	//Secret object defined for the pod, If a key is specified which is not present in the secret,
-	// the volume setup will error unless it is marked optional, during the pod creation.
-	//Slow (~5 mins)
+	//为 Pod 定义了 Secret 对象，如果指定的 key 在 secret 中不存在，
+	// 则在 Pod 创建期间 volume 设置将报错，除非标记为 optional。
+	//慢（约 5 分钟）
 	f.It("Should fail non-optional pod creation due to the key in the secret object does not exist", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		volumeMountPath := "/etc/secret-volumes"
 		podName := "pod-secrets-" + string(uuid.NewUUID())

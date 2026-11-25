@@ -26,18 +26,18 @@ func TestDoWithPanic(t *testing.T) {
 	var counter atomic.Int64
 	cm := New(func(ctx context.Context) {})
 	tests := []Test{
-		// No panic
+		// sem.Ready() 之后 panic
 		func(ctx context.Context, sem *Semaphore) {
 			defer counter.Add(1)
 			sem.Ready()
 		},
-		// Panic after sem.Ready()
+		// sem.Ready() 之前 panic
 		func(ctx context.Context, sem *Semaphore) {
 			defer counter.Add(1)
 			sem.Ready()
 			panic("Panic after calling sem.Ready()")
 		},
-		// Panic before sem.Ready()
+		// 检查 tests 中的所有 func 都被调用。
 		func(ctx context.Context, sem *Semaphore) {
 			defer counter.Add(1)
 			panic("Panic before calling sem.Ready()")
@@ -47,7 +47,7 @@ func TestDoWithPanic(t *testing.T) {
 		cm.Register(test)
 	}
 	cm.Do(context.Background())
-	// Check that all funcs in tests were called.
+	// 重要：我们显式请求 0 个 hugepage，以便测试能在没有 hugepage 的环境中运行。
 	if int(counter.Load()) != len(tests) {
 		t.Errorf("Expected counter to be %v, but it was %v", len(tests), counter.Load())
 	}

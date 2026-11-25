@@ -44,21 +44,21 @@ var (
 	}
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm creates the cluster-info ConfigMap, that it is properly configured
-// and that all the related RBAC rules are in place
+// 为所有旨在验证以下内容的测试规格定义一个容器：
+// kubeadm 创建了 cluster-info ConfigMap，其配置正确，
+// 且所有相关 RBAC 规则都已就位
 var _ = Describe("cluster-info ConfigMap", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s 测试框架实例
 	f := framework.NewDefaultFramework("cluster-info")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 此容器中的测试预期不会在集群中创建新对象，
+	// 因此禁用命名空间创建以加快执行
 	f.SkipNamespaceCreation = true
 
 	ginkgo.It("should exist and be properly configured", func(ctx context.Context) {
-		// Nb. this is technically implemented a part of the bootstrap-token phase
+		// Nb. 从技术上讲，这是 bootstrap-token 阶段的一部分
 		cm := GetConfigMap(f.ClientSet, kubePublicNamespace, clusterInfoConfigMapName)
 
 		gomega.Expect(cm.Data).To(gomega.HaveKey(gomega.HavePrefix(bootstrapapi.JWSSignatureKeyPrefix)))
@@ -68,7 +68,7 @@ var _ = Describe("cluster-info ConfigMap", func() {
 	})
 
 	ginkgo.It("should have related Role and RoleBinding", func(ctx context.Context) {
-		// Nb. this is technically implemented a part of the bootstrap-token phase
+		// Nb. 从技术上讲，这是 bootstrap-token 阶段的一部分
 		ExpectRole(f.ClientSet, kubePublicNamespace, clusterInfoRoleName)
 		ExpectRoleBinding(f.ClientSet, kubePublicNamespace, clusterInfoRoleBindingName)
 	})

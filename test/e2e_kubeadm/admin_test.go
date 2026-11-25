@@ -34,25 +34,25 @@ const (
 	clusterAdminClusterRole         = "cluster-admin"
 )
 
-// Define a container for all the tests aimed at verifying that administrators
-// have "cluster-admin" level of access.
+// 为所有旨在验证管理员
+// 是否拥有 "cluster-admin" 级别权限的测试定义一个容器。
 var _ = Describe("admin", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s 测试框架实例
 	f := framework.NewDefaultFramework("admin")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 此容器中的测试预期不会在集群中创建新对象，
+	// 因此禁用命名空间创建以加快执行
 	f.SkipNamespaceCreation = true
 
 	ginkgo.It("kubeadm:cluster-admins CRB must exist and be binding the cluster-admin ClusterRole"+
 		" to the kubeadm:cluster-admins Group", func(ctx context.Context) {
 
-		// Use the ClusterConfiguration.kubernetesVersion to decide whether to look for the CRB.
-		// It was added in kubeadm v1.29-pre, but kubeadm supports a maximum skew of N-1
-		// with the control plane, so this is fine as long as kubernetesVersion matches
-		// the kubeadm version. Otherwise this test is skipped.
+		// 使用 ClusterConfiguration.kubernetesVersion 决定是否查找 CRB。
+		// 它在 kubeadm v1.29-pre 中加入，但 kubeadm 与 control plane 之间
+		// 最多支持 N-1 的版本偏差，因此只要 kubernetesVersion 与
+		// kubeadm 版本匹配就没问题，否则跳过此测试。
 		m := getClusterConfiguration(f.ClientSet)
 		const verKey = "kubernetesVersion"
 		verInterface, exists := m[verKey]
@@ -63,7 +63,7 @@ var _ = Describe("admin", func() {
 				kubeadmConfigClusterConfigurationConfigMapKey)
 		}
 
-		// Parse the version string
+		// 解析版本字符串
 		verStr, ok := verInterface.(string)
 		if !ok {
 			framework.Failf("cannot cast %s to string", verKey)
@@ -73,7 +73,7 @@ var _ = Describe("admin", func() {
 			framework.Failf("could not parse the %s key: %v", verKey, err)
 		}
 
-		// If the version is older than the version when this feature was added, skip this test
+		// 如果版本早于该特性加入时的版本，则跳过此测试
 		minVer := version.MustParseSemantic("v1.29.0-alpha.2.188+05076de57fc49f")
 		if !ver.AtLeast(minVer) {
 			e2eskipper.Skipf("Skipping because version %s is older than the minimum version %s",
@@ -81,7 +81,7 @@ var _ = Describe("admin", func() {
 				minVer)
 		}
 
-		// Expect the CRB to exist
+		// 期望 CRB 存在
 		ExpectClusterRoleBindingWithSubjectAndRole(f.ClientSet,
 			kubeadmClusterAdminsGroupAndCRB,
 			rbacv1.GroupKind, kubeadmClusterAdminsGroupAndCRB,

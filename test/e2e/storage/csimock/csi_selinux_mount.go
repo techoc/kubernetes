@@ -47,30 +47,30 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Tests for SELinuxMount feature.
-// The tests have explicit [Feature:SELinux] and are skipped unless explicitly requested.
-// All tests in this file exptect the SELinux is enabled on all worker nodes.
-// Supported node operating systems passed as --node-os-distro are "debian", "ubuntu" and "custom".
-// "custom" expects a Fedora Linux derivative (RHEL, CentOS, Rocky, Alma, ...)
-// (Patches for more distros are welcome, the author cannot test SELinux on "gci" - is it even supported?)
+// SELinuxMount 特性的测试。
+// 这些测试带有显式 [Feature:SELinux]，除非显式请求否则跳过。
+// 此文件中的所有测试都假设所有 worker 节点启用了 SELinux。
+// 通过 --node-os-distro 传入的受支持节点操作系统有 "debian"、"ubuntu" 和 "custom"。
+// "custom" 预期是 Fedora Linux 衍生版（RHEL、CentOS、Rocky、Alma 等）
+//（欢迎为更多发行版提交补丁，作者无法在 "gci" 上测试 SELinux —— 它到底支持吗？）
 //
 // KEP: https://github.com/kubernetes/enhancements/tree/master/keps/sig-storage/1710-selinux-relabeling
-// There are three feature gates: SELinuxMountReadWriteOncePod, SELinuxChangePolicy and SELinuxMount.
-// These tags are used in the tests:
+// 有三个 feature gate：SELinuxMountReadWriteOncePod、SELinuxChangePolicy 和 SELinuxMount。
+// 测试中使用了这些标签：
 //
 // [FeatureGate:SELinuxMountReadWriteOncePod]
-//   - The test requires SELinuxMountReadWriteOncePod enabled.
+//   - 测试要求启用 SELinuxMountReadWriteOncePod。
 //
 // [FeatureGate:SELinuxMountReadWriteOncePod] [Feature:SELinuxMountReadWriteOncePodOnly]
-//   - The test requires SELinuxMountReadWriteOncePod enabled and SELinuxMount disabled. This checks metrics that are emitted only when SELinuxMount is disabled.
+//   - 测试要求启用 SELinuxMountReadWriteOncePod 且禁用 SELinuxMount，检查仅在禁用时发出的指标。
 //
 // [FeatureGate:SELinuxMountReadWriteOncePod] [Feature:SELinuxMountReadWriteOncePodOnly] [Feature:SELinuxChangePolicy]
-//   - The test requires SELinuxMountReadWriteOncePod and SELinuxChangePolicy enabled and SELinuxMount disabled. This checks metrics that are emitted only when SELinuxMount is disabled.
+//   - 测试要求启用前两者且禁用 SELinuxMount，检查仅在禁用时发出的指标。
 //
 // [FeatureGate:SELinuxMountReadWriteOncePod] [Feature:SELinuxChangePolicy] [FeatureGate:SELinuxMount]
-//   - The test requires SELinuxMountReadWriteOncePod, Feature:SELinuxChangePolicy and SELinuxMount enabled.
+//   - 测试要求启用 SELinuxMountReadWriteOncePod、Feature:SELinuxChangePolicy 和 SELinuxMount。
 //
-// All other feature gate combinations should be invalid.
+// 其他所有 feature gate 组合都应无效。
 
 const (
 	controllerSELinuxMetricName = "selinux_warning_controller_selinux_volume_conflict"
@@ -80,7 +80,7 @@ var (
 	defaultSELinuxLabels = map[string]struct{ defaultProcessLabel, defaultFileLabel string }{
 		"debian": {"svirt_lxc_net_t", "svirt_lxc_file_t"},
 		"ubuntu": {"svirt_lxc_net_t", "svirt_lxc_file_t"},
-		// Assume "custom" means Fedora and derivates. `e2e.test --node-os-distro=` does not have "fedora" or "rhel".
+		// 假定 "custom" 表示 Fedora 及其衍生版。`e2e.test --node-os-distro=` 没有 "fedora" 或 "rhel"。
 		"custom": {"container_t", "container_file_t"},
 	}
 )
@@ -93,7 +93,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 	mount := v1.SELinuxChangePolicyMountOption
 	f.Context("SELinuxMount [LinuxOnly]", feature.SELinux, func() {
 		processLabel, fileLabel := getDefaultContainerSELinuxLabels()
-		// Make sure all options are set so system specific defaults are not used.
+		// 确保所有选项都已设置，以免使用系统特定的默认值。
 		seLinuxOpts1 := v1.SELinuxOptions{
 			User:  "system_u",
 			Role:  "system_r",
@@ -124,7 +124,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 			expectedUnstage            bool
 			testTags                   []interface{}
 		}{
-			// Start just a single pod and check its volume is mounted correctly
+			// 只启动一个 Pod 并检查其 volume 是否正确挂载
 			{
 				name:                      "should pass SELinux mount option for RWOP volume and Pod with SELinux context set",
 				csiDriverSELinuxEnabled:   true,
@@ -200,7 +200,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 				expectedFirstMountOptions: nil,
 				testTags:                  []interface{}{framework.WithFeatureGate(features.SELinuxMountReadWriteOncePod)},
 			},
-			// Start two pods in a sequence and check their volume is / is not unmounted in between
+			// 依次启动两个 Pod，检查其 volume 在两者之间是否被卸载
 			{
 				name:                       "should not unstage RWOP volume when starting a second pod with the same SELinux context",
 				csiDriverSELinuxEnabled:    true,
@@ -297,7 +297,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 				// Act
 				ginkgo.By("Starting the initial pod")
 				accessModes := []v1.PersistentVolumeAccessMode{t.volumeMode}
-				_, claim, pod := m.createPodWithSELinux(ctx, accessModes, t.mountOptions, t.firstPodSELinuxOpts, t.firstPodChangePolicy, false /* privileged */, sleepCommand)
+				_, claim, pod := m.createPodWithSELinux(ctx, accessModes, t.mountOptions, t.firstPodSELinuxOpts, t.firstPodChangePolicy, false /* 特权 */, sleepCommand)
 				err := e2epod.WaitForPodNameRunningInNamespace(ctx, m.cs, pod.Name, pod.Namespace)
 				framework.ExpectNoError(err, "starting the initial pod")
 
@@ -316,9 +316,9 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 					return
 				}
 
-				// Arrange 2nd part of the test
+				// 安排测试的第二部分
 				ginkgo.By("Starting the second pod to check if a volume used by the initial pod is / is not unmounted based on SELinux context")
-				// count fresh CSI driver calls between the first and the second pod
+				// 统计第一个和第二个 Pod 之间新的 CSI driver 调用
 				nodeStageMountOpts = nil
 				nodePublishMountOpts = nil
 				unstageCalls.Store(0)
@@ -326,7 +326,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 				stageCalls.Store(0)
 				publishCalls.Store(0)
 
-				// Skip scheduler, it would block scheduling the second pod with ReadWriteOncePod PV.
+				// 跳过 scheduler，否则它会阻止使用 ReadWriteOncePod PV 调度第二个 Pod。
 				pod, err = m.cs.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "getting the initial pod")
 				nodeSelection := e2epod.NodeSelection{Name: pod.Spec.NodeName}
@@ -337,30 +337,30 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 					f.Namespace.Name,
 					t.secondPodSELinuxOpts,
 					t.secondPodChangePolicy,
-					false, /* privileged */
+					false, /* 特权 */
 					sleepCommand)
 				framework.ExpectNoError(err, "creating second pod with SELinux context %s", t.secondPodSELinuxOpts)
 				m.pods = append(m.pods, pod2)
 
-				// Delete the initial pod only after kubelet processes the second pod and adds its volumes to
+				// 仅在 kubelet 处理完第二个 Pod 并将其 volume 加入后才删除初始 Pod
 				// DesiredStateOfWorld.
-				// In this state, any volume UnPublish / UnStage must be done because of SELinux contexts and not
-				// because of random races because volumes of the second pod are not in DesiredStateOfWorld yet.
+				// 在这种状态下，任何 volume UnPublish / UnStage 都必须因 SELinux 上下文而执行，而不是
+				// 由于随机竞争，第二个 Pod 的 volume 尚未进入 DesiredStateOfWorld。
 				ginkgo.By("Waiting for the second pod to start (or fail to start because of ReadWriteOncePod).")
 				reason := events.FailedMountVolume
 				var msg string
 				if t.expectedUnstage {
-					// This message is emitted before kubelet checks for ReadWriteOncePod
+					// 此消息在 kubelet 检查 ReadWriteOncePod 之前发出
 					msg = "conflicting SELinux labels of volume"
 				} else {
-					// Kubelet should re-use staged volume.
+					// Kubelet 应复用已 stage 的 volume。
 					if t.volumeMode == v1.ReadWriteOncePod {
-						// Wait for the second pod to get stuck because of RWOP.
+						// 等待第二个 Pod 因 RWOP 而卡住。
 						msg = "volume uses the ReadWriteOncePod access mode and is already in use by another pod"
 					} else {
-						// There is nothing blocking the second pod from starting, wait for the second pod to fullly start.
+						// 没有什么阻止第二个 Pod 启动，等待它完全启动。
 						reason = string(events.StartedContainer)
-						msg = "" // the message has changed in Kubernetes 1.35, the Reason must be enough.
+						msg = "" // 该消息在 Kubernetes 1.35 中已改变，Reason 必须足够。
 					}
 				}
 				eventSelector := fields.Set{
@@ -373,35 +373,35 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 				err = e2eevents.WaitTimeoutForEvent(ctx, m.cs, pod2.Namespace, eventSelector, msg, f.Timeouts.PodStart)
 				framework.ExpectNoError(err, "waiting for event %q in the second test pod", msg)
 
-				// Act 2nd part of the test
+				// 执行测试的第二部分
 				ginkgo.By("Deleting the initial pod")
 				err = e2epod.DeletePodWithWait(ctx, m.cs, pod)
 				framework.ExpectNoError(err, "deleting the initial pod")
 
-				// Assert 2nd part of the test
+				// 断言测试的第二部分
 				ginkgo.By("Waiting for the second pod to start")
 				err = e2epod.WaitForPodNameRunningInNamespace(ctx, m.cs, pod2.Name, pod2.Namespace)
 				framework.ExpectNoError(err, "starting the second pod")
 
 				ginkgo.By("Checking CSI driver calls for the second pod")
 				if t.expectedUnstage {
-					// Volume should be fully unstaged between the first and the second pod
+					// 第一个和第二个 Pod 之间 volume 应被完全 unstage
 					gomega.Expect(unstageCalls.Load()).To(gomega.BeNumerically(">", 0), "NodeUnstage calls after the first pod is deleted")
 					gomega.Expect(stageCalls.Load()).To(gomega.BeNumerically(">", 0), "NodeStage calls for the second pod")
-					// The second pod got the right mount option
+					// 第二个 Pod 获得了正确的挂载选项
 					gomega.Expect(nodeStageMountOpts).To(gomega.Equal(t.expectedSecondMountOptions), "NodeStage MountFlags for the second pod")
 				} else {
-					// Volume should not be fully unstaged between the first and the second pod
+					// 第一个和第二个 Pod 之间 volume 不应被完全 unstage
 					gomega.Expect(unstageCalls.Load()).To(gomega.BeNumerically("==", 0), "NodeUnstage calls after the first pod is deleted")
 					gomega.Expect(stageCalls.Load()).To(gomega.BeNumerically("==", 0), "NodeStage calls for the second pod")
 				}
-				// In both cases, Unublish and Publish is called, with the right mount opts
+				// 两种情况下都会调用 Unpublish 和 Publish，且挂载选项正确
 				gomega.Expect(unpublishCalls.Load()).To(gomega.BeNumerically(">", 0), "NodeUnpublish calls after the first pod is deleted")
 				gomega.Expect(publishCalls.Load()).To(gomega.BeNumerically(">", 0), "NodePublish calls for the second pod")
 				gomega.Expect(nodePublishMountOpts).To(gomega.Equal(t.expectedSecondMountOptions), "NodePublish MountFlags for the second pod")
 			}
-			// t.testTags is array and it's not possible to use It("name", func(){}, t.testTags...)
-			// Compose It() arguments separately.
+			// t.testTags 是数组，不能直接使用 It("name", func(){}, t.testTags...)
+			// 需单独组合 It() 的参数。
 			args := []interface{}{
 				t.name,
 				testFunc,
@@ -413,34 +413,34 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount", func() {
 })
 
 var (
-	// SELinux metrics that have volume_plugin and access_mode labels
+	// 带 volume_plugin 和 access_mode 标签的 SELinux 指标
 	metricsWithVolumePluginLabel = sets.New[string](
 		"volume_manager_selinux_volume_context_mismatch_errors_total",
 		"volume_manager_selinux_volume_context_mismatch_warnings_total",
 		"volume_manager_selinux_volumes_admitted_total",
 	)
-	// SELinuxMetrics that have only access_mode label
+	// 仅有 access_mode 标签的 SELinux 指标
 	metricsWithoutVolumePluginLabel = sets.New[string](
 		"volume_manager_selinux_container_errors_total",
 		"volume_manager_selinux_container_warnings_total",
 		"volume_manager_selinux_pod_context_mismatch_errors_total",
 		"volume_manager_selinux_pod_context_mismatch_warnings_total",
 	)
-	// All SELinux metrics
+	// 所有 SELinux 指标
 	allSELinuxMetrics = metricsWithoutVolumePluginLabel.Union(metricsWithVolumePluginLabel)
 )
 
-// While kubelet VolumeManager and KCM SELinuxWarningController are quite different components,
-// their tests would have exactly the same setup, so we test both here.
+// kubelet VolumeManager 和 KCM SELinuxWarningController 是不同的组件，
+// 但它们的测试设置完全相同，因此在这里一起测试。
 var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningController", func() {
 	f := framework.NewDefaultFramework("csi-mock-volumes-selinux-metrics")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 	m := newMockDriverSetup(f)
 
-	// [Serial]: the tests read global node metrics, so no other test changes them in parallel.
+	// [Serial]：这些测试读取全局节点指标，因此没有其他测试并行修改它们。
 	f.Context("SELinuxMount metrics [LinuxOnly]", feature.SELinux, f.WithSerial(), func() {
 		processLabel, _ := getDefaultContainerSELinuxLabels()
-		// Make sure all options are set so system specific defaults are not used.
+		// 确保所有选项都已设置，以免使用系统特定的默认值。
 		seLinuxOpts1 := v1.SELinuxOptions{
 			User:  "system_u",
 			Role:  "system_r",
@@ -462,16 +462,16 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 			firstPodSELinuxOpts              *v1.SELinuxOptions
 			firstPodChangePolicy             *v1.PodSELinuxChangePolicy
 			firstPodPrivileged               bool
-			firstPodTargetPhase              v1.PodPhase // Phase the first pod should reach before the second pod is created. Empty value means Running
+			firstPodTargetPhase              v1.PodPhase // 创建第二个 Pod 前第一个 Pod 应达到的阶段。空值表示 Running
 			secondPodSELinuxOpts             *v1.SELinuxOptions
 			secondPodChangePolicy            *v1.PodSELinuxChangePolicy
 			secondPodPrivileged              bool
 			volumeMode                       v1.PersistentVolumeAccessMode
 			waitForSecondPodStart            bool
 			secondPodFailureEvent            string
-			expectNodeIncreases              sets.Set[string] // For testing kubelet metrics
-			expectControllerConflictProperty string           // For testing  SELinuxWarningController metrics + events
-			testTags                         []interface{}    // SELinuxMountReadWriteOncePod and SELinuxChangePolicy are always added automatically
+			expectNodeIncreases              sets.Set[string] // 用于测试 kubelet 指标
+			expectControllerConflictProperty string           // 用于测试 SELinuxWarningController 指标 + 事件
+			testTags                         []interface{}    // SELinuxMountReadWriteOncePod 和 SELinuxChangePolicy 总是自动添加
 		}{
 			{
 				name:                    "warning is not bumped on two Pods with the same context on RWO volume",
@@ -480,7 +480,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodSELinuxOpts:    &seLinuxOpts1,
 				volumeMode:              v1.ReadWriteOnce,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{feature.SELinuxMountReadWriteOncePodOnly},
 			},
 			{
@@ -516,8 +516,8 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodChangePolicy:            &recursive,
 				volumeMode:                       v1.ReadWriteOnce,
 				waitForSecondPodStart:            true,
-				expectNodeIncreases:              sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
-				expectControllerConflictProperty: "", /* SELinuxController does not emit any warning either */
+				expectNodeIncreases:              sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
+				expectControllerConflictProperty: "", /* SELinuxController 也未发出任何警告 */
 				testTags:                         []interface{}{framework.WithFeatureGate(features.SELinuxChangePolicy), feature.SELinuxMountReadWriteOncePodOnly},
 			},
 			{
@@ -527,7 +527,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodSELinuxOpts:    &seLinuxOpts1,
 				volumeMode:              v1.ReadWriteOnce,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
@@ -605,8 +605,8 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodChangePolicy:            &recursive,
 				volumeMode:                       v1.ReadWriteMany,
 				waitForSecondPodStart:            true,
-				expectNodeIncreases:              sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
-				expectControllerConflictProperty: "", /* SELinuxController does not emit any warning either */
+				expectNodeIncreases:              sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
+				expectControllerConflictProperty: "", /* SELinuxController 也未发出任何警告 */
 				testTags:                         []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
@@ -618,7 +618,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodChangePolicy:   nil,
 				volumeMode:              v1.ReadWriteMany,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
@@ -630,7 +630,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodChangePolicy:   &mount,
 				volumeMode:              v1.ReadWriteMany,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
@@ -662,48 +662,48 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 			{
 				name:                    "error is not bumped on two privileged Pods with mount policy RWO volume",
 				csiDriverSELinuxEnabled: true,
-				firstPodSELinuxOpts:     nil, /* privileged Pods are typically without SELinux context */
+				firstPodSELinuxOpts:     nil, /* privileged Pod 通常没有 SELinux 上下文 */
 				firstPodPrivileged:      true,
 				firstPodChangePolicy:    &recursive,
-				secondPodSELinuxOpts:    nil, /* privileged Pods are typically without SELinux context */
+				secondPodSELinuxOpts:    nil, /* privileged Pod 通常没有 SELinux 上下文 */
 				secondPodPrivileged:     true,
 				secondPodChangePolicy:   &recursive,
 				volumeMode:              v1.ReadWriteOnce,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
 				name:                    "error is not bumped on two privileged Pods with recursive policy RWO volume",
 				csiDriverSELinuxEnabled: true,
-				firstPodSELinuxOpts:     nil, /* privileged Pods are typically without SELinux context */
+				firstPodSELinuxOpts:     nil, /* privileged Pod 通常没有 SELinux 上下文 */
 				firstPodPrivileged:      true,
 				firstPodChangePolicy:    &mount,
-				secondPodSELinuxOpts:    nil, /* privileged Pods are typically without SELinux context */
+				secondPodSELinuxOpts:    nil, /* privileged Pod 通常没有 SELinux 上下文 */
 				secondPodPrivileged:     true,
 				secondPodChangePolicy:   &mount,
 				volumeMode:              v1.ReadWriteOnce,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
 				name:                    "error is not bumped on a privileged and unprivileged Pod with given SELinux context and recursive policy",
 				csiDriverSELinuxEnabled: true,
-				firstPodSELinuxOpts:     nil, /* privileged Pods are typically without SELinux context */
+				firstPodSELinuxOpts:     nil, /* privileged Pod 通常没有 SELinux 上下文 */
 				firstPodPrivileged:      true,
 				secondPodSELinuxOpts:    &seLinuxOpts1,
 				secondPodChangePolicy:   &recursive,
 				secondPodPrivileged:     false,
 				volumeMode:              v1.ReadWriteMany,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
 				name:                             "error is bumped on a privileged and unprivileged Pod with given SELinux with MountOption policy",
 				csiDriverSELinuxEnabled:          true,
-				firstPodSELinuxOpts:              nil, /* privileged Pods are typically without SELinux context */
+				firstPodSELinuxOpts:              nil, /* privileged Pod 通常没有 SELinux 上下文 */
 				firstPodPrivileged:               true,
 				secondPodSELinuxOpts:             &seLinuxOpts1,
 				secondPodChangePolicy:            &mount,
@@ -719,7 +719,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				csiDriverSELinuxEnabled:          true,
 				firstPodSELinuxOpts:              &seLinuxOpts1,
 				firstPodChangePolicy:             &mount,
-				secondPodSELinuxOpts:             nil, /* privileged Pods are typically without SELinux context */
+				secondPodSELinuxOpts:             nil, /* privileged Pod 通常没有 SELinux 上下文 */
 				secondPodPrivileged:              true,
 				secondPodFailureEvent:            "conflicting SELinux labels of volume",
 				volumeMode:                       v1.ReadWriteOncePod,
@@ -736,7 +736,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodSELinuxOpts:    &seLinuxOpts2,
 				volumeMode:              v1.ReadWriteOnce,
 				waitForSecondPodStart:   true,
-				// The volume is unmounted between the first and the second Pod, so admitted_total increases,
+				// 第一个和第二个 Pod 之间 volume 被卸载，因此 admitted_total 增加，
 				expectNodeIncreases: sets.New[string]("volume_manager_selinux_volumes_admitted_total"),
 				testTags:            []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
@@ -748,7 +748,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodSELinuxOpts:    &seLinuxOpts2,
 				volumeMode:              v1.ReadWriteOnce,
 				waitForSecondPodStart:   true,
-				// The volume is unmounted between the first and the second Pod, so admitted_total increases,
+				// 第一个和第二个 Pod 之间 volume 被卸载，因此 admitted_total 增加，
 				expectNodeIncreases: sets.New[string]("volume_manager_selinux_volumes_admitted_total"),
 				testTags:            []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
@@ -759,7 +759,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodSELinuxOpts:    &seLinuxOpts2,
 				volumeMode:              v1.ReadWriteOnce,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
@@ -769,7 +769,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodSELinuxOpts:    &seLinuxOpts2,
 				volumeMode:              v1.ReadWriteMany,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
@@ -781,7 +781,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodChangePolicy:   &mount,
 				volumeMode:              v1.ReadWriteOnce,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 			{
@@ -793,7 +793,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 				secondPodChangePolicy:   &mount,
 				volumeMode:              v1.ReadWriteMany,
 				waitForSecondPodStart:   true,
-				expectNodeIncreases:     sets.New[string]( /* no metric is increased, admitted_total was already increased when the first pod started */ ),
+				expectNodeIncreases:     sets.New[string]( /* 没有指标增加，admitted_total 在第一个 Pod 启动时已增加 */ ),
 				testTags:                []interface{}{framework.WithFeatureGate(features.SELinuxMount)},
 			},
 		}
@@ -806,7 +806,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 					t.firstPodTargetPhase = v1.PodRunning
 				}
 
-				// Some metrics use CSI driver name as a label, which is "csi-mock-" + the namespace name.
+				// 某些指标用 CSI driver 名称作标签，即 "csi-mock-" 加上命名空间名称。
 				volumePluginLabel := "volume_plugin=\"kubernetes.io/csi/csi-mock-" + f.Namespace.Name + "\""
 				grabber, err := e2emetrics.NewMetricsGrabber(ctx, f.ClientSet, nil, f.ClientConfig(), true /*kubelet*/, false /*scheduler*/, true /*controllers*/, false /*apiserver*/, false /*autoscaler*/, false /*snapshotController*/)
 				framework.ExpectNoError(err, "creating the metrics grabber")
@@ -851,7 +851,7 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 
 				// Act
 				ginkgo.By("Starting the second pod")
-				// Skip scheduler, it would block scheduling the second pod with ReadWriteOncePod PV.
+				// 跳过 scheduler，否则它会阻止使用 ReadWriteOncePod PV 调度第二个 Pod。
 				nodeSelection := e2epod.NodeSelection{Name: pod.Spec.NodeName}
 				pod2, err := startPausePodWithSELinuxOptions(
 					f.ClientSet,
@@ -880,21 +880,21 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 					framework.ExpectNoError(err, "waiting for event %q in the second test pod", t.secondPodFailureEvent)
 				}
 
-				// Assert: count the kubelet metrics
+				// 断言：统计 kubelet 指标
 				expectIncreaseWithLabels := addLabels(t.expectNodeIncreases, volumePluginLabel, t.volumeMode)
 				framework.Logf("Waiting for changes of metrics %+v", expectIncreaseWithLabels)
 				err = waitForNodeMetricIncrease(ctx, grabber, pod.Spec.NodeName, volumePluginLabel, allSELinuxMetrics, expectIncreaseWithLabels, metrics, framework.PodStartShortTimeout)
 				framework.ExpectNoError(err, "waiting for metrics %s to increase", t.expectNodeIncreases)
 				if t.expectControllerConflictProperty != "" {
-					// Assert: count the KCM metrics + events
-					// We don't need to compare the initial and final KCM metrics,
-					// KCM metrics report exact pod namespaces+names as labels and the metric value is always "1".
+					// 断言：统计 KCM 指标 + 事件
+					// 无需比较 KCM 指标的初始值和最终值，
+					// KCM 指标将 Pod 的命名空间+名称作为标签精确报告，指标值始终为 "1"。
 					err = waitForControllerMetric(ctx, grabber, f.Namespace.Name, pod.Name, pod2.Name, t.expectControllerConflictProperty, framework.PodStartShortTimeout)
 					framework.ExpectNoError(err, "while waiting for metrics from KCM")
-					// Check the controler generated a conflict event on the first pod
+					// 检查控制器在第一个 Pod 上生成了冲突事件
 					err = waitForConflictEvent(ctx, m.cs, pod, pod2, t.expectControllerConflictProperty, f.Timeouts.PodStart)
 					framework.ExpectNoError(err, "while waiting for an event on the first pod")
-					// Check the controler generated event on the second pod
+					// 检查控制器在第二个 Pod 上生成了事件
 					err = waitForConflictEvent(ctx, m.cs, pod2, pod, t.expectControllerConflictProperty, f.Timeouts.PodStart)
 					framework.ExpectNoError(err, "while waiting for an event on the second pod")
 				} else {
@@ -902,8 +902,8 @@ var _ = utils.SIGDescribe("CSI Mock selinux on mount metrics and SELinuxWarningC
 					framework.ExpectNoError(err, "ensuring there are no SELinux conflict events")
 				}
 			}
-			// t.testTags is array and it's not possible to use It("name", func(){xxx}, t.testTags...)
-			// Compose It() arguments separately.
+			// t.testTags 是数组，不能直接使用 It("name", func(){xxx}, t.testTags...)
+			// 需单独组合 It() 的参数。
 			args := []interface{}{
 				t.name,
 				testFunc,
@@ -925,18 +925,18 @@ func grabNodeMetrics(ctx context.Context, grabber *e2emetrics.Grabber, nodeName 
 		if len(samples) == 0 {
 			continue
 		}
-		// For each metric + label combination, remember the last sample
+		// 对每个指标 + 标签组合，记住最后一个样本
 		for i := range samples {
 			// E.g. "volume_manager_selinux_pod_context_mismatch_errors_total"
 			metricName := samples[i].Metric[testutil.MetricNameLabel]
 			if metricNames.Has(string(metricName)) {
-				// E.g. "volume_manager_selinux_pod_context_mismatch_errors_total{access_mode="RWOP",volume_plugin="kubernetes.io/csi/csi-mock-ns"}
+				// 例如 "volume_manager_selinux_pod_context_mismatch_errors_total{access_mode="RWOP",volume_plugin="kubernetes.io/csi/csi-mock-ns"}
 				metricNameWithLabels := samples[i].Metric.String()
-				// Filter out metrics of any other volume plugin
+				// 过滤掉其他 volume plugin 的指标
 				if strings.Contains(metricNameWithLabels, "volume_plugin=") && !strings.Contains(metricNameWithLabels, volumePluginLabel) {
 					continue
 				}
-				// Overwrite any previous value, so only the last one is stored.
+				// 覆盖之前的值，只保留最后一个。
 				metrics[metricNameWithLabels] = float64(samples[i].Value)
 			}
 		}
@@ -956,7 +956,7 @@ func grabKCMSELinuxMetrics(ctx context.Context, grabber *e2emetrics.Grabber, nam
 		if len(samples) == 0 {
 			continue
 		}
-		// For each metric + label combination, remember the last sample
+		// 对每个指标 + 标签组合，记住最后一个样本
 		for i := range samples {
 			// E.g. "selinux_warning_controller_selinux_volume_conflict"
 			metricName := samples[i].Metric[testutil.MetricNameLabel]
@@ -968,9 +968,9 @@ func grabKCMSELinuxMetrics(ctx context.Context, grabber *e2emetrics.Grabber, nam
 			if string(metricNamespace) != namespace {
 				continue
 			}
-			// E.g. selinux_warning_controller_selinux_volume_conflict{pod1_name="testpod-c1",pod1_namespace="default",pod1_value="system_u:object_r:container_file_t:s0:c0,c1",pod2_name="testpod-c2",pod2_namespace="default",pod2_value="system_u:object_r:container_file_t:s0:c0,c2",property="SELinuxLabel"} 1
+			// 例如 selinux_warning_controller_selinux_volume_conflict{pod1_name="testpod-c1",pod1_namespace="default",pod1_value="system_u:object_r:container_file_t:s0:c0,c1",pod2_name="testpod-c2",pod2_namespace="default",pod2_value="system_u:object_r:container_file_t:s0:c0,c2",property="SELinuxLabel"} 1
 			metricNameWithLabels := samples[i].Metric.String()
-			// Overwrite any previous value, so only the last one is stored.
+			// 覆盖之前的值，只保留最后一个。
 			metrics[metricNameWithLabels] = float64(samples[i].Value)
 		}
 	}
@@ -992,14 +992,14 @@ func waitForNodeMetricIncrease(ctx context.Context, grabber *e2emetrics.Grabber,
 		}
 
 		noIncreaseMetrics = sets.New[string]()
-		// Always evaluate all SELinux metrics to check that the other metrics are not unexpectedly increased.
+		// 始终检查所有 SELinux 指标，确保其他指标没有意外增加。
 		for name := range metrics {
 			if expectedIncreaseNames.Has(name) {
 				if metrics[name] <= initialValues[name] {
 					noIncreaseMetrics.Insert(name)
 				}
 			} else {
-				// Expect the metric to be stable
+				// 期望该指标保持稳定
 				if initialValues[name] != metrics[name] {
 					return false, fmt.Errorf("metric %s unexpectedly increased to %v", name, metrics[name])
 				}
@@ -1072,8 +1072,8 @@ func waitForConflictEvent(ctx context.Context, cs clientset.Interface, pod, othe
 		"involvedObject.namespace": pod.Namespace,
 		"reason":                   expectControllerConflictProperty + "Conflict",
 	}.AsSelector().String()
-	// msg is a substring of the full event message that does not contain the actual SELinux label (too long, too variable)
-	// Full event: SELinuxLabel "system_u:system_r:container_t:s0:c0,c1" conflicts with pod pvc-volume-tester-djqqd that uses the same volume as this pod with SELinuxLabel "system_u:system_r:container_t:s0:c98,c99". If both pods land on the same node, only one of them may access the volume.
+	// msg 是完整事件消息的子串，不含实际 SELinux 标签（太长且多变）
+	// 完整事件：SELinuxLabel "system_u:system_r:container_t:s0:c0,c1" 与 Pod pvc-volume-tester-djqqd 冲突，后者与本 Pod 使用同一 volume，其 SELinuxLabel 为 "system_u:system_r:container_t:s0:c98,c99"。如果两个 Pod 落在同一节点，只有一个能访问该 volume。
 	msg := fmt.Sprintf("conflicts with pod %s that uses the same volume as this pod with %s", otherPod.Name, expectControllerConflictProperty)
 	ginkgo.By(fmt.Sprintf("Waiting for the SELinux controller event on pod %q: %q", pod.Name, msg))
 	return e2eevents.WaitTimeoutForEvent(ctx, cs, pod.Namespace, eventSelector, msg, timeout)
@@ -1103,7 +1103,7 @@ func checkForNoConflictEvents(ctx context.Context, cs clientset.Interface, pod, 
 }
 
 func dumpMetrics(metrics map[string]float64) {
-	// Print the metrics sorted by metric name for better readability
+	// 按指标名排序打印指标，便于阅读
 	keys := make([]string, 0, len(metrics))
 	for key := range metrics {
 		keys = append(keys, key)
@@ -1115,7 +1115,7 @@ func dumpMetrics(metrics map[string]float64) {
 	}
 }
 
-// Add labels to the metric name based on the current test case
+// 根据当前测试用例为指标名添加标签
 func addLabels(metricNames sets.Set[string], volumePluginLabel string, accessMode v1.PersistentVolumeAccessMode) sets.Set[string] {
 	ret := sets.New[string]()
 	accessModeShortString := helper.GetAccessModesAsString([]v1.PersistentVolumeAccessMode{accessMode})
@@ -1136,8 +1136,8 @@ func addLabels(metricNames sets.Set[string], volumePluginLabel string, accessMod
 
 func getDefaultContainerSELinuxLabels() (processLabel string, fileLabel string) {
 	defaultLabels := defaultSELinuxLabels[framework.TestContext.NodeOSDistro]
-	// This function can return "" for unknown distros!
-	// SELinux tests should be skipped on those in their ginkgo.It().
+	// 对未知发行版，此函数可能返回 ""！
+	// 在这些发行版上应跳过 SELinux 测试的 ginkgo.It()。
 	return defaultLabels.defaultProcessLabel, defaultLabels.defaultFileLabel
 }
 

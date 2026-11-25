@@ -38,7 +38,7 @@ import (
 
 var _ = SIGDescribe("Resource-usage", framework.WithSerial(), framework.WithSlow(), func() {
 	const (
-		// Interval to poll /stats/container on a node
+		// 轮询节点 /stats/container 的间隔
 		containerStatsPollingPeriod = 10 * time.Second
 	)
 
@@ -52,10 +52,10 @@ var _ = SIGDescribe("Resource-usage", framework.WithSerial(), framework.WithSlow
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
 		om = e2ekubelet.NewRuntimeOperationMonitor(ctx, f.ClientSet)
-		// The test collects resource usage from a standalone Cadvisor pod.
-		// The Cadvsior of Kubelet has a housekeeping interval of 10s, which is too long to
-		// show the resource usage spikes. But changing its interval increases the overhead
-		// of kubelet. Hence we use a Cadvisor pod.
+		// 测试从独立的 Cadvisor Pod 收集资源使用情况。
+		// Kubelet 的 Cadvsior 的 housekeeping 间隔为 10 秒，太长，
+		// 无法显示资源使用峰值。但修改其间隔会增加
+		// kubelet 的开销，因此我们使用单独的 Cadvisor Pod。
 		e2epod.NewPodClient(f).CreateSync(ctx, getCadvisorPod())
 		rc = NewResourceCollector(containerStatsPollingPeriod)
 	})
@@ -65,9 +65,9 @@ var _ = SIGDescribe("Resource-usage", framework.WithSerial(), framework.WithSlow
 		framework.Logf("runtime operation error metrics:\n%s", e2ekubelet.FormatRuntimeOperationErrorRate(result))
 	})
 
-	// This test measures and verifies the steady resource usage of node is within limit
-	// It collects data from a standalone Cadvisor with housekeeping interval 1s.
-	// It verifies CPU percentiles and the lastest memory usage.
+	// 此测试测量并验证节点的稳定资源使用量是否在上限内
+	// 它从 housekeeping 间隔为 1 秒的独立 Cadvisor 收集数据。
+	// 验证 CPU 百分位数和最新的内存使用量。
 	ginkgo.Context("regular resource usage tracking", func() {
 		rTests := []resourceTest{
 			{
@@ -90,7 +90,7 @@ var _ = SIGDescribe("Resource-usage", framework.WithSerial(), framework.WithSlow
 
 				runResourceUsageTest(ctx, f, rc, itArg)
 
-				// Log and verify resource usage
+				// 记录并验证资源使用量
 				logAndVerifyResource(ctx, f, rc, itArg.cpuLimits, itArg.memLimits, testInfo, true)
 			})
 		}
@@ -119,7 +119,7 @@ var _ = SIGDescribe("Resource-usage", framework.WithSerial(), framework.WithSlow
 
 				runResourceUsageTest(ctx, f, rc, testArg)
 
-				// Log and verify resource usage
+				// 记录并验证资源使用量
 				logAndVerifyResource(ctx, f, rc, testArg.cpuLimits, testArg.memLimits, testInfo, false)
 			})
 		}
@@ -136,39 +136,39 @@ func (rt *resourceTest) getTestName() string {
 	return fmt.Sprintf("resource_%d", rt.podsNr)
 }
 
-// runResourceUsageTest runs the resource usage test
+// runResourceUsageTest 运行资源使用量测试
 func runResourceUsageTest(ctx context.Context, f *framework.Framework, rc *ResourceCollector, testArg resourceTest) {
 	const (
-		// The monitoring time for one test
+		// 单个测试的监控时长
 		monitoringTime = 10 * time.Minute
-		// The periodic reporting period
+		// 定期报告周期
 		reportingPeriod = 5 * time.Minute
-		// sleep for an interval here to measure steady data
+		// 在此休眠一段时间以测量稳定数据
 		sleepAfterCreatePods = 10 * time.Second
 	)
 	pods := newTestPods(testArg.podsNr, true, imageutils.GetPauseImageName(), "test_pod")
 
 	rc.Start()
-	// Explicitly delete pods to prevent namespace controller cleanning up timeout
+	// 显式删除 Pod，防止命名空间控制器清理超时
 	ginkgo.DeferCleanup(deletePodsSync, f, append(pods, getCadvisorPod()))
 	ginkgo.DeferCleanup(rc.Stop)
 
 	ginkgo.By("Creating a batch of Pods")
 	e2epod.NewPodClient(f).CreateBatch(ctx, pods)
 
-	// wait for a while to let the node be steady
+	// 等待一段时间让节点稳定
 	time.Sleep(sleepAfterCreatePods)
 
-	// Log once and flush the stats.
+	// 记录一次并刷新统计信息。
 	rc.LogLatest()
 	rc.Reset()
 
 	ginkgo.By("Start monitoring resource usage")
-	// Periodically dump the cpu summary until the deadline is met.
-	// Note that without calling e2ekubelet.ResourceMonitor.Reset(), the stats
-	// would occupy increasingly more memory. This should be fine
-	// for the current test duration, but we should reclaim the
-	// entries if we plan to monitor longer (e.g., 8 hours).
+	// 定期 dump CPU 摘要直到截止时间。
+	// 注意，如果不调用 e2ekubelet.ResourceMonitor.Reset()，这些统计信息
+	// 会占用越来越多内存。对当前测试时长来说这应该没问题，
+	// 但如果计划监控更长时间（例如 8 小时），应回收
+	// 这些条目。
 	deadline := time.Now().Add(monitoringTime)
 	for time.Now().Before(deadline) && ctx.Err() == nil {
 		timeLeft := time.Until(deadline)
@@ -185,12 +185,12 @@ func runResourceUsageTest(ctx context.Context, f *framework.Framework, rc *Resou
 	logPods(ctx, f.ClientSet)
 }
 
-// logAndVerifyResource prints the resource usage as perf data and verifies whether resource usage satisfies the limit.
+// logAndVerifyResource 将资源使用量作为性能数据打印，并验证其是否满足上限。
 func logAndVerifyResource(ctx context.Context, f *framework.Framework, rc *ResourceCollector, cpuLimits e2ekubelet.ContainersCPUSummary,
 	memLimits e2ekubelet.ResourceUsagePerContainer, testInfo map[string]string, isVerify bool) {
 	nodeName := framework.TestContext.NodeName
 
-	// Obtain memory PerfData
+	// 获取内存 PerfData
 	usagePerContainer, err := rc.GetLatest()
 	framework.ExpectNoError(err)
 	framework.Logf("%s", formatResourceUsageStats(usagePerContainer))
@@ -205,11 +205,11 @@ func logAndVerifyResource(ctx context.Context, f *framework.Framework, rc *Resou
 	cpuSummaryPerNode := make(e2ekubelet.NodesCPUSummary)
 	cpuSummaryPerNode[nodeName] = cpuSummary
 
-	// Print resource usage
+	// 打印资源使用量
 	logPerfData(e2eperf.ResourceUsageToPerfDataWithLabels(usagePerNode, testInfo), "memory")
 	logPerfData(e2eperf.CPUUsageToPerfDataWithLabels(cpuSummaryPerNode, testInfo), "cpu")
 
-	// Verify resource usage
+	// 验证资源使用量
 	if isVerify {
 		verifyMemoryLimits(ctx, f.ClientSet, memLimits, usagePerNode)
 		verifyCPULimits(cpuLimits, cpuSummaryPerNode)

@@ -31,16 +31,16 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// DaemonSetUpgradeTest tests that a DaemonSet is running before and after
-// a cluster upgrade.
+// DaemonSetUpgradeTest 测试集群升级前后 DaemonSet
+// 是否都在运行。
 type DaemonSetUpgradeTest struct {
 	daemonSet *appsv1.DaemonSet
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (DaemonSetUpgradeTest) Name() string { return "[sig-apps] daemonset-upgrade" }
 
-// Setup creates a DaemonSet and verifies that it's running
+// Setup 创建 DaemonSet 并验证其正在运行
 func (t *DaemonSetUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	daemonSetName := "ds1"
 	labelSet := map[string]string{"ds-name": daemonSetName}
@@ -69,8 +69,8 @@ func (t *DaemonSetUpgradeTest) Setup(ctx context.Context, f *framework.Framework
 	t.validateRunningDaemonSet(ctx, f)
 }
 
-// Test waits until the upgrade has completed and then verifies that the DaemonSet
-// is still running
+// Test 等待升级完成，然后验证 DaemonSet
+// 仍在运行
 func (t *DaemonSetUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	ginkgo.By("Waiting for upgrade to complete before re-validating DaemonSet")
 	<-done
@@ -79,9 +79,9 @@ func (t *DaemonSetUpgradeTest) Test(ctx context.Context, f *framework.Framework,
 	t.validateRunningDaemonSet(ctx, f)
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *DaemonSetUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依赖命名空间删除来清理所有内容
 }
 
 func (t *DaemonSetUpgradeTest) validateRunningDaemonSet(ctx context.Context, f *framework.Framework) {
@@ -92,7 +92,7 @@ func (t *DaemonSetUpgradeTest) validateRunningDaemonSet(ctx context.Context, f *
 		framework.Failf("expected DaemonSet pod to be running on all nodes, it was not")
 	}
 
-	// DaemonSet resource itself should be good
+	// DaemonSet 资源本身应正常
 	ginkgo.By("confirming the DaemonSet resource is in a good state")
 
 	err = e2edaemonset.CheckDaemonStatus(ctx, f, t.daemonSet.Name)

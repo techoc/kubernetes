@@ -80,9 +80,9 @@ func createPVC(ctx context.Context, c clientset.Interface, pvc *v1.PersistentVol
 	return pvc
 }
 
-// These tests can run in parallel because each one provisions its volumes
-// through a dedicated CSI driver instance (unique provisioner name) in its own
-// namespace, so the metrics being verified are isolated from other tests.
+// 这些测试可以并行运行，因为每个测试都在自己的命名空间中
+// 通过专用的 CSI driver 实例（唯一 provisioner 名称）供给 volume，
+// 因此被验证的指标与其他测试隔离。
 var _ = utils.SIGDescribe("Volume metrics", func() {
 	var (
 		c              clientset.Interface
@@ -189,7 +189,7 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 		}
 		pvcNamespace := pod.Namespace
 
-		// Verify volume stat metrics were collected for the referenced PVC
+		// 验证已为引用的 PVC 收集 volume stat 指标
 		volumeStatKeys := []string{
 			kubeletmetrics.VolumeStatsUsedBytesKey,
 			kubeletmetrics.VolumeStatsCapacityBytesKey,
@@ -200,12 +200,12 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 		}
 		key := volumeStatKeys[0]
 		kubeletKeyName := fmt.Sprintf("%s_%s", kubeletmetrics.KubeletSubsystem, key)
-		// Poll kubelet metrics waiting for the volume to be picked up
-		// by the volume stats collector
+		// 轮询 kubelet 指标，等待 volume 被
+		// volume stats 收集器采集
 		var kubeMetrics e2emetrics.KubeletMetrics
 		waitErr := wait.PollUntilContextTimeout(ctx, 30*time.Second, 5*time.Minute, false, func(ctx context.Context) (bool, error) {
 			framework.Logf("Grabbing Kubelet metrics")
-			// Grab kubelet metrics from the node the pod was scheduled on
+			// 从 Pod 被调度到的节点上抓取 kubelet 指标
 			var err error
 			kubeMetrics, err = metricsGrabber.GrabFromKubelet(ctx, pod.Spec.NodeName)
 			if err != nil {
@@ -247,9 +247,9 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 		pod, err = c.CoreV1().Pods(ns).Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 
-		// Verify volume stat metrics were collected for the referenced PVC
+		// 验证已为引用的 PVC 收集 volume stat 指标
 		volumeStatKeys := []string{
-			// BlockMode PVCs only support capacity (for now)
+			// BlockMode PVC 目前只支持容量指标
 			kubeletmetrics.VolumeStatsCapacityBytesKey,
 		}
 		key := volumeStatKeys[0]
@@ -260,12 +260,12 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 			pvcName = ephemeral.VolumeClaimName(pod, &pod.Spec.Volumes[0])
 			pvcNamespace = pod.Namespace
 		}
-		// Poll kubelet metrics waiting for the volume to be picked up
-		// by the volume stats collector
+		// 轮询 kubelet 指标，等待 volume 被
+		// volume stats 收集器采集
 		var kubeMetrics e2emetrics.KubeletMetrics
 		waitErr := wait.PollUntilContextTimeout(ctx, 30*time.Second, 5*time.Minute, false, func(ctx context.Context) (bool, error) {
 			framework.Logf("Grabbing Kubelet metrics")
-			// Grab kubelet metrics from the node the pod was scheduled on
+			// 从 Pod 被调度到的节点上抓取 kubelet 指标
 			var err error
 			kubeMetrics, err = metricsGrabber.GrabFromKubelet(ctx, pod.Spec.NodeName)
 			if err != nil {
@@ -328,7 +328,7 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 		kubeMetrics, err := metricsGrabber.GrabFromKubelet(ctx, pod.Spec.NodeName)
 		framework.ExpectNoError(err)
 
-		// Metrics should have dimensions plugin_name and state available
+		// 指标应具有 plugin_name 和 state 这两个维度
 		totalVolumesKey := "volume_manager_total_volumes"
 		verifyMetric(totalVolumesKey, map[testutil.LabelName]testutil.LabelValue{
 			"state":       "actual_state_of_world",
@@ -343,19 +343,19 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 
 		pod := makePod(f, pvc, isEphemeral)
 
-		// Get metrics
+		// 获取指标
 		controllerMetrics, err := metricsGrabber.GrabFromControllerManager(ctx)
 		if err != nil {
 			e2eskipper.Skipf("Could not get controller-manager metrics - skipping")
 		}
 
-		// Create pod
+		// 创建 Pod
 		pod = createPod(ctx, c, pod)
 
 		err = e2epod.WaitTimeoutForPodRunningInNamespace(ctx, c, pod.Name, pod.Namespace, f.Timeouts.PodStart)
 		framework.ExpectNoError(err, "Error starting pod %s", pod.Name)
 
-		// Get updated metrics
+		// 获取更新后的指标
 		updatedControllerMetrics, err := metricsGrabber.GrabFromControllerManager(ctx)
 		if err != nil {
 			e2eskipper.Skipf("Could not get controller-manager metrics - skipping")
@@ -366,11 +366,11 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 		states := []string{"actual_state_of_world", "desired_state_of_world"}
 		pluginName := "kubernetes.io/csi:" + sc.Provisioner
 
-		// A single grab is enough here:
+		// 这里抓取一次就够：
 		// informer -> A/D controller DSW -> ASW -> Node status.volumesAttached -> Pod running
-		// We already waited for pod running, and the metric is collected from DSW/ASW at scrape time.
+		// 我们已经等待 Pod 运行，且指标在抓取时从 DSW/ASW 收集。
 		//
-		// Each test has a unique CSI driver name, so we assert exactly 1 more.
+		// 每个测试都有唯一的 CSI driver 名称，因此断言恰好增加 1。
 		oldStates := getStatesMetrics(totalVolumesKey, testutil.Metrics(controllerMetrics), pluginName)
 		updatedStates := getStatesMetrics(totalVolumesKey, testutil.Metrics(updatedControllerMetrics), pluginName)
 		for _, stateName := range states {
@@ -411,7 +411,7 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 		testAll(true)
 	})
 
-	// Test for pv controller metrics, concretely: bound/unbound pv/pvc count.
+	// 测试 pv controller 指标，具体为 bound/unbound pv/pvc 数量。
 	ginkgo.Describe("PVController", func() {
 		const (
 			namespaceKey            = "namespace"
@@ -441,9 +441,9 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 			pvcConfig                 e2epv.PersistentVolumeClaimConfig
 		)
 
-		// validator polls the pv controller metrics until the bound/unbound
-		// pv/pvc counts for this test's storage class and namespace match the
-		// expected values.
+		// validator 轮询 pv controller 指标，直到本测试 storage class 和命名空间的
+		// bound/unbound pv/pvc 数量与
+		// 预期值一致。
 		validator := func(ctx context.Context, metric mvs) {
 			gomega.Eventually(ctx, func(ctx context.Context) mvs {
 				controllerMetrics, err := metricsGrabber.GrabFromControllerManager(ctx)
@@ -467,7 +467,7 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 				NamePrefix:       "pv-test-",
 				StorageClassName: storageClassName,
 			}
-			// TODO: Insert volumeAttributesClassName into pvcConfig when "VolumeAttributesClass" is GA
+			// TODO: 当 "VolumeAttributesClass" GA 后，将 volumeAttributesClassName 插入 pvcConfig
 			volumeAttributesClassName = "bound-unbound-count-test-vac-" + f.UniqueName
 			pvcConfig = e2epv.PersistentVolumeClaimConfig{StorageClassName: &storageClassName}
 
@@ -516,7 +516,7 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 				validator(ctx, mvs{1, 0, 1, 0})
 			})
 
-		// TODO: Merge with bound/unbound tests when "VolumeAttributesClass" feature is enabled by default.
+		// TODO: 当 "VolumeAttributesClass" 特性默认启用后，与 bound/unbound 测试合并。
 		f.It("should create unbound pvc count metrics for pvc controller with volume attributes class dimension after creating pvc only", framework.WithFeatureGate(features.VolumeAttributesClass), feature.VolumeAttributesClass, func(ctx context.Context) {
 			var err error
 			dimensions := []string{namespaceKey, storageClassKey, volumeAttributeClassKey}
@@ -532,7 +532,7 @@ var _ = utils.SIGDescribe("Volume metrics", func() {
 			framework.ExpectNoError(err, "Invalid metric in Controller Manager metrics: %q", unboundPVCKey)
 		})
 
-		// TODO: Merge with bound/unbound tests when "VolumeAttributesClass" feature is enabled by default
+		// TODO: 当 "VolumeAttributesClass" 特性默认启用后，与 bound/unbound 测试合并
 		f.It("should create bound pv/pvc count metrics for pvc controller with volume attributes class dimension after creating both pv and pvc", framework.WithFeatureGate(features.VolumeAttributesClass), feature.VolumeAttributesClass, func(ctx context.Context) {
 			var err error
 			dimensions := []string{namespaceKey, storageClassKey, volumeAttributeClassKey}
@@ -605,14 +605,14 @@ func waitForDetachAndGrabMetrics(ctx context.Context, oldMetrics *storageControl
 		updatedStorageMetrics = getControllerStorageMetrics(updatedMetrics, pluginName)
 		newDetachCount, ok := updatedStorageMetrics.latencyMetrics["volume_detach"]
 
-		// if detach metrics are not yet there, we need to retry
+		// 如果 detach 指标尚未出现，需要重试
 		if !ok {
 			framework.Logf("Detach metrics not found yet")
 			return false, nil
 		}
 
-		// if old Detach count is more or equal to new detach count, that means detach
-		// event has not been observed yet.
+		// 如果旧的 Detach 计数大于等于新的，说明尚未观察到 detach
+		// 事件。
 		if oldDetachCount >= newDetachCount {
 			return false, nil
 		}
@@ -627,7 +627,7 @@ func waitForDetachAndGrabMetrics(ctx context.Context, oldMetrics *storageControl
 
 func verifyMetricCount(oldMetrics, newMetrics *storageControllerMetrics, metricName string, expectFailure bool) {
 	oldLatencyCount, ok := oldMetrics.latencyMetrics[metricName]
-	// if metric does not exist in oldMap, it probably hasn't been emitted yet.
+	// 如果指标不在 oldMap 中，可能尚未发出。
 	if !ok {
 		oldLatencyCount = 0
 	}
@@ -659,9 +659,9 @@ func verifyMetricCount(oldMetrics, newMetrics *storageControllerMetrics, metricN
 		newStatusCount = newStatusCounts.successCount
 	}
 
-	// It appears that in a busy cluster some spurious detaches are unavoidable
-	// even if the test is run serially.  We really just verify if new count
-	// is greater than old count
+	// 在繁忙集群中，即使串行运行测试，也难免出现一些虚假的 detach。
+	// 我们实际上只验证新计数是否
+	// 大于旧计数
 	if !expectFailure {
 		gomega.Expect(newLatencyCount).To(gomega.BeNumerically(">", oldLatencyCount), "New latency count %d should be more than old count %d for action %s", newLatencyCount, oldLatencyCount, metricName)
 	}
@@ -673,19 +673,19 @@ func getControllerStorageMetrics(ms e2emetrics.ControllerManagerMetrics, pluginN
 
 	for method, samples := range ms {
 		switch method {
-		// from the base metric name "storage_operation_duration_seconds"
+		// 来自基础指标名 "storage_operation_duration_seconds"
 		case "storage_operation_duration_seconds_count":
 			for _, sample := range samples {
 				count := int64(sample.Value)
 				operation := string(sample.Metric["operation_name"])
-				// if the volumes were provisioned with a CSI Driver
-				// the metric operation name will be prefixed with
+				// 如果 volume 由 CSI Driver 供给
+				// 指标操作名将加上前缀
 				// "kubernetes.io/csi:"
 				metricPluginName := string(sample.Metric["volume_plugin"])
 				status := string(sample.Metric["status"])
 				if !strings.Contains(metricPluginName, pluginName) {
-					// the metric volume plugin field doesn't match
-					// the default storageClass.Provisioner field
+					// 指标的 volume plugin 字段不匹配
+					// 默认的 storageClass.Provisioner 字段
 					continue
 				}
 
@@ -737,8 +737,8 @@ func verifyMetric(metricKeyName string, labels map[testutil.LabelName]testutil.L
 	gomega.Expect(found).To(gomega.BeTrueBecause("Failed to find metric %s with labels %v. Got %v", metricKeyName, labels, metrics[metricKeyName]))
 }
 
-// Finds the sample in the specified metric from `KubeletMetrics` tagged with
-// the specified namespace and pvc name
+// 在 `KubeletMetrics` 的指定指标中查找带有
+// 指定命名空间和 pvc 名称的样本
 func findVolumeStatMetric(metricKeyName string, namespace string, pvcName string, kubeletMetrics e2emetrics.KubeletMetrics) bool {
 	framework.Logf("Looking for sample in metric `%s` tagged with namespace `%s`, PVC `%s`", metricKeyName, namespace, pvcName)
 	return findMetric(metricKeyName, map[testutil.LabelName]testutil.LabelValue{
@@ -747,7 +747,7 @@ func findVolumeStatMetric(metricKeyName string, namespace string, pvcName string
 	}, testutil.Metrics(kubeletMetrics))
 }
 
-// Wait for the count of a pv controller's metric specified by metricName and dimension bigger than zero.
+// 等待 metricName 指定的 pv controller 指标在指定维度上的计数大于零。
 func waitForPVControllerSync(ctx context.Context, metricsGrabber *e2emetrics.Grabber, metricName, dimension string) {
 	backoff := wait.Backoff{
 		Duration: 1 * time.Second,
@@ -779,8 +779,8 @@ func getStatesMetrics(metricKey string, givenMetrics testutil.Metrics, pluginNam
 	return states
 }
 
-// makePod creates a pod which either references the PVC or creates it via a
-// generic ephemeral volume claim template.
+// makePod 创建一个 Pod，它要么引用 PVC，要么通过
+// generic ephemeral volume claim 模板创建 PVC。
 func makePod(f *framework.Framework, pvc *v1.PersistentVolumeClaim, isEphemeral bool) *v1.Pod {
 	claims := []*v1.PersistentVolumeClaim{pvc}
 	pod := e2epod.MakePod(f.Namespace.Name, nil, claims, f.NamespacePodSecurityLevel, "")

@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	// Plugin name of the external provisioner
+	// external provisioner 的插件名称
 	externalPluginName = "example.com/nfs"
 )
 
@@ -55,7 +55,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 	f := framework.NewDefaultFramework("volume-provisioning")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// filled in BeforeEach
+	// 在 BeforeEach 中填充
 	var c clientset.Interface
 	var ns string
 
@@ -67,8 +67,8 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 	f.Describe("DynamicProvisioner", framework.WithSlow(), feature.StorageProvider, func() {
 		ginkgo.It("should provision storage with different parameters", func(ctx context.Context) {
 
-			// This test checks that dynamic provisioning can provision a volume
-			// that can be used to persist data among pods.
+			// 此测试检查动态供给能否提供一个
+			// 可用于在 Pod 间持久化数据的 volume。
 			tests := []testsuites.StorageClassTest{
 				// GCE/GKE
 				{
@@ -129,7 +129,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 						"iopsPerGB": "50",
 					},
 					ClaimSize:    "3.5Gi",
-					ExpectedSize: "4Gi", // 4 GiB is minimum for io1
+					ExpectedSize: "4Gi", // io1 的最小值为 4 GiB
 					PvCheck: func(ctx context.Context, claim *v1.PersistentVolumeClaim) {
 						volume := testsuites.PVWriteReadSingleNodeCheck(ctx, c, f.Timeouts, claim, e2epod.NodeSelection{})
 						gomega.Expect(volume).NotTo(gomega.BeNil(), "get bound PV")
@@ -143,7 +143,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 					Parameters: map[string]string{
 						"type": "sc1",
 					},
-					ClaimSize:    "500Gi", // minimum for sc1
+					ClaimSize:    "500Gi", // sc1 的最小值
 					ExpectedSize: "500Gi",
 					PvCheck: func(ctx context.Context, claim *v1.PersistentVolumeClaim) {
 						volume := testsuites.PVWriteReadSingleNodeCheck(ctx, c, f.Timeouts, claim, e2epod.NodeSelection{})
@@ -158,7 +158,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 					Parameters: map[string]string{
 						"type": "st1",
 					},
-					ClaimSize:    "500Gi", // minimum for st1
+					ClaimSize:    "500Gi", // st1 的最小值
 					ExpectedSize: "500Gi",
 					PvCheck: func(ctx context.Context, claim *v1.PersistentVolumeClaim) {
 						volume := testsuites.PVWriteReadSingleNodeCheck(ctx, c, f.Timeouts, claim, e2epod.NodeSelection{})
@@ -180,7 +180,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 						gomega.Expect(volume).NotTo(gomega.BeNil(), "get bound PV")
 					},
 				},
-				// OpenStack generic tests (works on all OpenStack deployments)
+				// OpenStack 通用测试（适用于所有 OpenStack 部署）
 				{
 					Name:           "generic Cinder volume on OpenStack",
 					CloudProviders: []string{"openstack"},
@@ -208,7 +208,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 						testsuites.PVWriteReadSingleNodeCheck(ctx, c, f.Timeouts, claim, e2epod.NodeSelection{})
 					},
 				},
-				// vSphere generic test
+				// vSphere 通用测试
 				{
 					Name:           "generic vSphere volume",
 					CloudProviders: []string{"vsphere"},
@@ -250,7 +250,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 				suffix := fmt.Sprintf("%d", i)
 				test.Client = c
 
-				// overwrite StorageClass spec with provisioned StorageClass
+				// 用已供给的 StorageClass 覆盖 StorageClass spec
 				storageClass := testsuites.SetupStorageClass(ctx, test.Client, newStorageClass(test, ns, suffix))
 
 				test.Class = storageClass
@@ -267,8 +267,8 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 
 	ginkgo.Describe("DynamicProvisioner External", func() {
 		f.It("should let an external dynamic provisioner create and delete persistent volumes", f.WithSlow(), func(ctx context.Context) {
-			// external dynamic provisioner pods need additional permissions provided by the
-			// persistent-volume-provisioner clusterrole and a leader-locking role
+			// external dynamic provisioner Pod 需要由
+			// persistent-volume-provisioner clusterrole 和 leader-locking role 提供的额外权限
 			serviceAccountName := "default"
 			subject := rbacv1.Subject{
 				Kind:      rbacv1.ServiceAccountKind,
@@ -347,13 +347,13 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 				ClaimSize:  test.ClaimSize,
 				VolumeMode: &test.VolumeMode,
 			}, ns)
-			// NOTE: this test assumes that there's a default storageclass
+			// 注意：此测试假定存在 default storageclass
 			test.Class = testsuites.SetupStorageClass(ctx, test.Client, nil)
 
 			test.TestDynamicProvisioning(ctx)
 		})
 
-		// Modifying the default storage class can be disruptive to other tests that depend on it
+		// 修改默认 storage class 可能破坏依赖它的其他测试
 		f.It("should be disabled by changing the default annotation", f.WithSerial(), f.WithDisruptive(), func(ctx context.Context) {
 			e2epv.SkipIfNoDefaultStorageClass(ctx, c)
 
@@ -380,7 +380,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 			framework.ExpectNoError(err)
 			ginkgo.DeferCleanup(e2epv.DeletePersistentVolumeClaim, c, claim.Name, ns)
 
-			// The claim should timeout phase:Pending
+			// claim 应在 phase:Pending 超时
 			err = e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, c, ns, claim.Name, 2*time.Second, framework.ClaimProvisionShortTimeout)
 			gomega.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("not all in phase Bound")))
 			framework.Logf("%s", err.Error())
@@ -389,7 +389,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 			gomega.Expect(claim.Status.Phase).To(gomega.Equal(v1.ClaimPending))
 		})
 
-		// Modifying the default storage class can be disruptive to other tests that depend on it
+		// 修改默认 storage class 可能破坏依赖它的其他测试
 		f.It("should be disabled by removing the default annotation", f.WithSerial(), f.WithDisruptive(), func(ctx context.Context) {
 			e2epv.SkipIfNoDefaultStorageClass(ctx, c)
 
@@ -418,7 +418,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 				framework.ExpectNoError(e2epv.DeletePersistentVolumeClaim(ctx, c, claim.Name, ns))
 			}()
 
-			// The claim should timeout phase:Pending
+			// claim 应在 phase:Pending 超时
 			err = e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, c, ns, claim.Name, 2*time.Second, framework.ClaimProvisionShortTimeout)
 			gomega.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("not all in phase Bound")))
 			framework.Logf("%s", err.Error())
@@ -458,10 +458,10 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 				}
 			}()
 
-			// Watch events until the message about invalid key appears.
-			// Event delivery is not reliable and it's used only as a quick way how to check if volume with wrong KMS
-			// key was not provisioned. If the event is not delivered, we check that the volume is not Bound for whole
-			// ClaimProvisionTimeout in the very same loop.
+			// 监听事件直到出现关于无效 key 的消息。
+			// 事件传递不可靠，它仅用于快速检查使用错误 KMS key 的 volume
+			// 是否未被供给。如果事件未送达，我们在同一个循环中检查整个
+			// ClaimProvisionTimeout 期间 volume 都未 Bound。
 			err = wait.Poll(time.Second, framework.ClaimProvisionTimeout, func() (bool, error) {
 				events, err := c.CoreV1().Events(claim.Namespace).List(ctx, metav1.ListOptions{})
 				if err != nil {
@@ -478,7 +478,7 @@ var _ = utils.SIGDescribe("Dynamic Provisioning", func() {
 					return true, err
 				}
 				if pvc.Status.Phase != v1.ClaimPending {
-					// The PVC was bound to something, i.e. PV was created for wrong KMS key. That's bad!
+					// PVC 被绑定到了某个对象，即为错误的 KMS key 创建了 PV。这很糟糕！
 					return true, fmt.Errorf("PVC got unexpectedly %s (to PV %q)", pvc.Status.Phase, pvc.Spec.VolumeName)
 				}
 
@@ -524,7 +524,7 @@ func updateDefaultStorageClass(ctx context.Context, c clientset.Interface, scNam
 	verifyDefaultStorageClass(ctx, c, scName, expectedDefault)
 }
 
-// deleteStorageClass deletes the passed in StorageClass and catches errors other than "Not Found"
+// deleteStorageClass 删除传入的 StorageClass，并捕获 "Not Found" 以外的错误
 func deleteStorageClass(ctx context.Context, c clientset.Interface, className string) {
 	err := c.StorageV1().StorageClasses().Delete(ctx, className, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {

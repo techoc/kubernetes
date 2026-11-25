@@ -22,10 +22,10 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
-// KubeProxyMetrics is metrics for kube-proxy
+// KubeProxyMetrics 是 kube-proxy 的指标
 type KubeProxyMetrics testutil.Metrics
 
-// GetCounterMetricValue returns value for metric type counter.
+// GetCounterMetricValue 返回 counter 类型指标的值。
 func (m *KubeProxyMetrics) GetCounterMetricValue(metricName string) (float64, error) {
 	if len(testutil.Metrics(*m)[metricName]) == 0 {
 		return 0, fmt.Errorf("metric '%s' not found", metricName)

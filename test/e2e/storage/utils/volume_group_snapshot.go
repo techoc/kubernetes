@@ -30,22 +30,22 @@ import (
 )
 
 const (
-	// VolumeGroupSnapshot is the group snapshot api
+	// VolumeGroupSnapshot 是组快照 API
 	VolumeGroupSnapshotAPIGroup = "groupsnapshot.storage.k8s.io"
-	// VolumeGroupSnapshotAPIVersion is the group snapshot api version
+	// VolumeGroupSnapshotAPIVersion 是组快照 API 版本
 	VolumeGroupSnapshotAPIVersion = "groupsnapshot.storage.k8s.io/v1"
 )
 
 var (
 
-	// VolumeGroupSnapshotGVR is GroupVersionResource for volumegroupsnapshots
+	// VolumeGroupSnapshotGVR 是 volumegroupsnapshots 的 GroupVersionResource
 	VolumeGroupSnapshotGVR = schema.GroupVersionResource{Group: VolumeGroupSnapshotAPIGroup, Version: "v1", Resource: "volumegroupsnapshots"}
-	// VolumeGroupSnapshotClassGVR is GroupVersionResource for volumegroupsnapshotsclasses
+	// VolumeGroupSnapshotClassGVR 是 volumegroupsnapshotsclasses 的 GroupVersionResource
 	VolumeGroupSnapshotClassGVR   = schema.GroupVersionResource{Group: VolumeGroupSnapshotAPIGroup, Version: "v1", Resource: "volumegroupsnapshotclasses"}
 	VolumeGroupSnapshotContentGVR = schema.GroupVersionResource{Group: VolumeGroupSnapshotAPIGroup, Version: "v1", Resource: "volumegroupsnapshotcontents"}
 )
 
-// WaitForVolumeGroupSnapshotReady waits for a VolumeGroupSnapshot to be ready to use or until timeout occurs, whichever comes first.
+// WaitForVolumeGroupSnapshotReady 等待 VolumeGroupSnapshot 可用或超时，以先发生者为准。
 func WaitForVolumeGroupSnapshotReady(ctx context.Context, c dynamic.Interface, ns string, volumeGroupSnapshotName string, poll, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for VolumeGroupSnapshot %s to become ready", timeout, volumeGroupSnapshotName)
 
@@ -90,7 +90,7 @@ func GenerateVolumeGroupSnapshotClassSpec(
 			"kind":       "VolumeGroupSnapshotClass",
 			"apiVersion": VolumeGroupSnapshotAPIVersion,
 			"metadata": map[string]interface{}{
-				// Name must be unique, so let's base it on namespace name and use GenerateName
+				// 名称必须唯一，因此基于命名空间名称并使用 GenerateName
 				"name": names.SimpleNameGenerator.GenerateName(ns),
 			},
 			"driver":         snapshotter,

@@ -37,7 +37,7 @@ type numaPodResources struct {
 }
 
 func (R *numaPodResources) CheckAlignment() bool {
-	nodeNum := -1 // not set
+	nodeNum := -1 // 未设置
 	for _, cpuNode := range R.CPUToNUMANode {
 		if nodeNum == -1 {
 			nodeNum = cpuNode
@@ -55,7 +55,7 @@ func (R *numaPodResources) CheckAlignment() bool {
 
 func (R *numaPodResources) String() string {
 	var b strings.Builder
-	// To store the keys in slice in sorted order
+	// 以排序顺序将键存入 slice
 	var cpuKeys []int
 	for ck := range R.CPUToNUMANode {
 		cpuKeys = append(cpuKeys, ck)
@@ -126,7 +126,7 @@ func getCPUToNUMANodeMapFromEnv(f *framework.Framework, pod *v1.Pod, cnt *v1.Con
 		}
 	}
 
-	// filter out only the allowed CPUs
+	// 仅过滤出允许的 CPU
 	CPUMap := make(map[int]int)
 	for _, cpuID := range cpuIDs {
 		_, ok := CPUToNUMANode[cpuID]
@@ -140,9 +140,9 @@ func getCPUToNUMANodeMapFromEnv(f *framework.Framework, pod *v1.Pod, cnt *v1.Con
 
 func getPCIDeviceToNumaNodeMapFromEnv(f *framework.Framework, pod *v1.Pod, cnt *v1.Container, environ map[string]string) (map[string]int, error) {
 	pciDevPrefix := "PCIDEVICE_"
-	// at this point we don't care which plugin selected the device,
-	// we only need to know which devices were assigned to the POD.
-	// Hence, do prefix search for the variable and fetch the device(s).
+	// 此时我们不关心是哪个插件选择了设备，
+	// 只需知道哪些设备被分配给了 Pod。
+	// 因此对该变量做前缀搜索并获取设备。
 
 	NUMAPerDev := make(map[string]int)
 	for name, value := range environ {
@@ -150,7 +150,7 @@ func getPCIDeviceToNumaNodeMapFromEnv(f *framework.Framework, pod *v1.Pod, cnt *
 			continue
 		}
 
-		// a single plugin can allocate more than a single device
+		// 单个插件可以分配多个设备
 		pciDevs := strings.Split(value, ",")
 		for _, pciDev := range pciDevs {
 			pciDevNUMANode := e2epod.ExecCommandInContainer(f, pod.Name, cnt.Name,
@@ -241,13 +241,13 @@ func getPCIDeviceInfo(sysPCIDir string) ([]pciDeviceInfo, error) {
 		if _, err := os.Stat(filepath.Join(sysPCIDir, entry.Name(), "sriov_numvfs")); err == nil {
 			isPhysFn = true
 		} else if !os.IsNotExist(err) {
-			// unexpected error. Bail out
+			// 意外错误，退出
 			return nil, err
 		}
 		if _, err := os.Stat(filepath.Join(sysPCIDir, entry.Name(), "physfn")); err == nil {
 			isVFn = true
 		} else if !os.IsNotExist(err) {
-			// unexpected error. Bail out
+			// 意外错误，退出
 			return nil, err
 		}
 

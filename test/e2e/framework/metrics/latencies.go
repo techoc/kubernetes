@@ -20,17 +20,17 @@ import (
 	"time"
 )
 
-// PodLatencyData encapsulates pod startup latency information.
+// PodLatencyData 封装 Pod 启动延迟信息。
 type PodLatencyData struct {
-	// Name of the pod
+	// Pod 的名称
 	Name string
-	// Node this pod was running on
+	// 该 Pod 运行的节点
 	Node string
-	// Latency information related to pod startuptime
+	// 与 Pod 启动时间相关的延迟信息
 	Latency time.Duration
 }
 
-// LatencySlice is an array of PodLatencyData which encapsulates pod startup latency information.
+// LatencySlice 是 PodLatencyData 的数组，封装 Pod 启动延迟信息。
 type LatencySlice []PodLatencyData
 
 func (a LatencySlice) Len() int           { return len(a) }

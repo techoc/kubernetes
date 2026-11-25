@@ -52,7 +52,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// podsAPISuite is a Ginkgo test suite for the Kubelet Pods API.
+// podsAPISuite 是针对 Kubelet Pods API 的 Ginkgo 测试套件。
 var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 	f := framework.NewDefaultFramework("pods-api-test")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -83,10 +83,10 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 					return err
 				}
 				client = podsv1alpha1.NewPodsClient(conn)
-				// Make a simple call to ensure the server is responsive.
+				// 做一次简单调用以确保服务有响应。
 				_, err = client.ListPods(ctx, &podsv1alpha1.ListPodsRequest{})
 				if err != nil {
-					_ = conn.Close() // Close connection on failure to retry dialing
+					_ = conn.Close() // 失败时关闭连接以重试拨号
 					return err
 				}
 				return nil
@@ -100,7 +100,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 		})
 
 		ginkgo.It("should be able to list, get, and watch pods", func(ctx context.Context) {
-			// Create a test pod
+			// 创建测试 Pod
 			podName := "test-pod-" + string(uuid.NewUUID())
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -156,7 +156,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			watchClient, err := client.WatchPods(watchCtx, &podsv1alpha1.WatchPodsRequest{})
 			framework.ExpectNoError(err, "failed to watch pods")
 
-			// Expect to receive an ADDED event for the new pod
+			// 期望收到新 Pod 的 ADDED 事件
 			var podFromWatch v1.Pod
 			gomega.Eventually(ctx, func(ctx context.Context) (types.UID, error) {
 				event, err := watchClient.Recv()
@@ -164,7 +164,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 					return "", err
 				}
 				if event.Type != podsv1alpha1.EventType_ADDED {
-					return "", nil // Continue waiting
+					return "", nil // 继续等待
 				}
 				if err := podFromWatch.Unmarshal(event.Pod); err != nil {
 					return "", err
@@ -180,7 +180,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 				for {
 					event, err := watchClient.Recv()
 					if err != nil {
-						return // Error will be detected by Eventually timeout
+						return // 错误将由 Eventually 超时检测
 					}
 					eventChan <- event
 				}
@@ -190,7 +190,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			err = e2epod.NewPodClient(f).Delete(ctx, testPod.Name, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod})
 			framework.ExpectNoError(err, "failed to delete pod")
 
-			// Expect to receive a DELETED event
+			// 期望收到 DELETED 事件
 			gomega.Eventually(eventChan, "1m", "100ms").Should(gomega.Receive(gomega.SatisfyAll(
 				gomega.WithTransform(func(event *podsv1alpha1.WatchPodsEvent) podsv1alpha1.EventType { return event.Type }, gomega.Equal(podsv1alpha1.EventType_DELETED)),
 				gomega.WithTransform(
@@ -306,9 +306,9 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 				pod       *v1.Pod
 			}
 
-			// Channel to receive events for the test pod
+			// 接收测试 Pod 事件的 channel
 			podEventsCh := make(chan podEvent, 1000)
-			// Channel to signal initial sync complete
+			// 通知初始同步完成的 channel
 			initialSyncReceived := make(chan struct{}, 1)
 
 			go func() {
@@ -319,7 +319,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 				for {
 					event, err := watchClient.Recv()
 					if err != nil {
-						// Suppress log if it's a normal shutdown
+						// 正常关闭时不打印日志
 						if !errors.Is(err, context.Canceled) && status.Code(err) != codes.Canceled {
 							framework.Logf("Watch client Recv error: %v", err)
 						}
@@ -369,7 +369,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			}
 			testPod := e2epod.NewPodClient(f).CreateSync(ctx, pod)
 
-			// Drain events until we see the pod creation
+			// 持续读取事件直到看到 Pod 创建
 			ginkgo.By("waiting for the test pod ADDED event")
 			gomega.Eventually(ctx, func() *v1.Pod {
 				for {
@@ -391,13 +391,13 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			}, "1m").ShouldNot(gomega.BeNil(), "did not receive ADDED event for test pod")
 
 			ginkgo.By("deleting the test pod to trigger updates")
-			gracePeriod := int64(10) // Use a grace period to ensure we see the Terminating state
+			gracePeriod := int64(10) // 使用宽限期确保能看到 Terminating 状态
 			err = e2epod.NewPodClient(f).Delete(ctx, testPod.Name, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod})
 			framework.ExpectNoError(err, "failed to delete pod")
 
 			ginkgo.By("verifying status coherency and event ordering")
-			// We expect the pod to transition to Terminating (DeletionTimestamp set).
-			// We must NOT see it revert to non-terminating (DeletionTimestamp nil) after seeing it terminating.
+			// 期望 Pod 转为 Terminating（设置了 DeletionTimestamp）。
+			// 看到终止状态后 MUST NOT 再看到它回到非终止状态（DeletionTimestamp 为 nil）。
 			sawTerminating := false
 			sawDeleted := false
 			timeout := time.After(1 * time.Minute)
@@ -442,9 +442,9 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			err = e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, testPod.Name, f.Namespace.Name, 1*time.Minute)
 			framework.ExpectNoError(err, "pod did not disappear from API server")
 
-			// Check for any stray events that might have arrived after DELETED
-			// We use a small timeout here because if an event was going to arrive, it would likely have arrived by now
-			// given that the pod is already gone from the API server.
+			// 检查 DELETED 之后是否还有杂散事件
+			// 这里使用较短超时，因为如果要来事件，现在大概率已经到了，
+			// 毕竟 Pod 已从 API server 消失。
 			gomega.Consistently(ctx, podEventsCh, "2s").ShouldNot(gomega.Receive(gomega.WithTransform(func(e podEvent) types.UID {
 				return e.pod.UID
 			}, gomega.Equal(testPod.UID))), "received stray event after DELETED")
@@ -457,7 +457,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			watchClient, err := client.WatchPods(watchCtx, &podsv1alpha1.WatchPodsRequest{})
 			framework.ExpectNoError(err, "failed to watch pods")
 
-			// Channel to receive events
+			// 接收事件的 channel
 			eventCh := make(chan *podsv1alpha1.WatchPodsEvent, 1000)
 
 			go func() {
@@ -466,7 +466,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 				for {
 					event, err := watchClient.Recv()
 					if err != nil {
-						// Suppress log if it's a normal shutdown
+						// 正常关闭时不打印日志
 						if !errors.Is(err, context.Canceled) && status.Code(err) != codes.Canceled {
 							framework.Logf("Watch client Recv error in ordering test: %v", err)
 						}
@@ -477,9 +477,9 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			}()
 
 			// 1. Expect INITIAL_SYNC_COMPLETE
-			// Note: We might get ADDED events for existing pods before this, but for our new pod,
-			// the key is that we start strictly after this check or we identify our pod by UID.
-			// Since we create the pod AFTER starting the watch, we expect correct ordering.
+			// 注意：在此之前可能收到现有 Pod 的 ADDED 事件，但对于我们的新 Pod，
+			// 关键是严格在此检查之后开始，或通过 UID 识别我们的 Pod。
+			// 由于是在启动 watch 之后才创建 Pod，我们预期顺序正确。
 			gomega.Eventually(eventCh, "30s").Should(gomega.Receive(
 				gomega.WithTransform(func(e *podsv1alpha1.WatchPodsEvent) podsv1alpha1.EventType { return e.Type }, gomega.Equal(podsv1alpha1.EventType_INITIAL_SYNC_COMPLETE)),
 			), "expected INITIAL_SYNC_COMPLETE event")
@@ -522,7 +522,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			ginkgo.By("updating the pod during deletion to trigger more MODIFIED events")
 			patch = []byte(`{"metadata":{"labels":{"state":"modified-3"}}}`)
 			_, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Patch(ctx, testPod.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
-			// It's possible the pod is already gone if the grace period was short, but with 10s it should work.
+			// 如果宽限期很短，Pod 可能已消失，但 10 秒应该没问题。
 			framework.ExpectNoError(err, "failed to patch pod (3)")
 
 			ginkgo.By("collecting events for the test pod")
@@ -548,8 +548,8 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 						podEvents = append(podEvents, event)
 						if event.Type == podsv1alpha1.EventType_DELETED {
 							foundDeleted = true
-							// We've seen DELETED, but we stay in the loop to catch any immediate stray events
-							// until our timeout or API server confirmation.
+							// 已看到 DELETED，但仍留在循环中，以捕获直至超时或 API server 确认前
+							// 立即到达的杂散事件。
 						}
 					}
 				case <-timeout:
@@ -618,8 +618,8 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 						gomega.Expect(pod.DeletionTimestamp).NotTo(gomega.BeNil(), "DeletionTimestamp should not disappear in event %d", i)
 					}
 
-					// 2. Phase monotonicity (simple)
-					// Once Running, don't go back to Pending
+					// 2. Phase 单调性（简单）
+					// 一旦进入 Running，就不应回到 Pending
 					if previousPod.Status.Phase == v1.PodRunning && e.Type != podsv1alpha1.EventType_DELETED {
 						gomega.Expect(pod.Status.Phase).NotTo(gomega.Equal(v1.PodPending), "Pod should not regress from Running to Pending in event %d", i)
 					}
@@ -635,7 +635,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 		})
 
 		ginkgo.It("should return correct state post-restart without transient oscillations", func(ctx context.Context) {
-			// 1. Create a test pod and wait for it to be Ready
+			// 1. 创建测试 Pod 并等待其 Ready
 			podName := "restart-test-pod-" + string(uuid.NewUUID())
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -655,7 +655,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			ginkgo.By("creating a test pod")
 			testPod := e2epod.NewPodClient(f).CreateSync(ctx, pod)
 
-			// Verify it is Ready in the Pods API
+			// 在 Pods API 中验证其 Ready
 			ginkgo.By("verifying the pod is Ready in Pods API")
 			verifyPodReadyInAPI(ctx, client, testPod.UID)
 
@@ -670,7 +670,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 				updateKubeletConfig(ctx, f, oldCfg, true)
 			})
 
-			// Reconnect to the API
+			// 重新连接到 API
 			endpoint, err := util.LocalEndpoint("/var/lib/kubelet/pods-api", pods.Socket)
 			framework.ExpectNoError(err)
 			conn, err = grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -678,7 +678,7 @@ var _ = SIGDescribe("Kubelet Pods API", framework.WithSerial(), func() {
 			defer func() { _ = conn.Close() }()
 			client = podsv1alpha1.NewPodsClient(conn)
 
-			// 3. Query the API immediately post-restart
+			// 3. 重启后立即查询 API
 			ginkgo.By("querying the API immediately post-restart")
 			var phases []string
 

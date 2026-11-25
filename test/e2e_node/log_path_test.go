@@ -50,7 +50,7 @@ var _ = SIGDescribe("ContainerLogPath", framework.WithNodeConformance(), func() 
 						Name: podName,
 					},
 					Spec: v1.PodSpec{
-						// this pod is expected to exit successfully
+						// 此 Pod 预期成功退出
 						RestartPolicy: v1.RestartPolicyNever,
 						Containers: []v1.Container{
 							{
@@ -72,7 +72,7 @@ var _ = SIGDescribe("ContainerLogPath", framework.WithNodeConformance(), func() 
 						Name: podName,
 					},
 					Spec: v1.PodSpec{
-						// this pod is expected to exit successfully
+						// 此 Pod 预期成功退出
 						RestartPolicy: v1.RestartPolicyNever,
 						Containers: []v1.Container{
 							{
@@ -83,13 +83,13 @@ var _ = SIGDescribe("ContainerLogPath", framework.WithNodeConformance(), func() 
 									},
 								},
 								Name: podName,
-								// If we find expected log file and contains right content, exit 0
-								// else, keep checking until test timeout
+								// 如果找到预期的日志文件且内容正确，则退出 0
+								// 否则继续检查直到测试超时
 								Command: []string{"sh", "-c", "while true; do if [ -e " + expectedLogPath + " ] && grep -q " + log + " " + expectedLogPath + "; then exit 0; fi; sleep 1; done"},
 								VolumeMounts: []v1.VolumeMount{
 									{
 										Name: "logdir",
-										// mount ContainerLogsDir to the same path in container
+										// 将 ContainerLogsDir 挂载到容器中的相同路径
 										MountPath: expectedLogPath,
 										ReadOnly:  true,
 									},
@@ -127,12 +127,12 @@ var _ = SIGDescribe("ContainerLogPath", framework.WithNodeConformance(), func() 
 
 				logDir := kubelet.ContainerLogsDir
 
-				// get containerID from created Pod
+				// 从创建的 Pod 获取 containerID
 				createdLogPod, err := podClient.Get(ctx, logPodName, metav1.GetOptions{})
 				logContainerID := kubecontainer.ParseContainerID(klog.FromContext(ctx), createdLogPod.Status.ContainerStatuses[0].ContainerID)
 				framework.ExpectNoError(err, "Failed to get pod: %s", logPodName)
 
-				// build log file path
+				// 构建日志文件路径
 				expectedlogFile := logDir + "/" + logPodName + "_" + f.Namespace.Name + "_" + logContainerName + "-" + logContainerID.ID + ".log"
 
 				logCheckPodName := "log-check-" + string(uuid.NewUUID())
@@ -144,14 +144,14 @@ var _ = SIGDescribe("ContainerLogPath", framework.WithNodeConformance(), func() 
 
 				logCRIDir := "/var/log/pods"
 
-				// get podID from created Pod
+				// 从创建的 Pod 获取 podID
 				createdLogPod, err := podClient.Get(ctx, logPodName, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to get pod: %s", logPodName)
 				podNs := createdLogPod.Namespace
 				podName := createdLogPod.Name
 				podID := string(createdLogPod.UID)
 
-				// build log cri file path
+				// 构建 CRI 日志文件路径
 				expectedCRILogFile := logCRIDir + "/" + podNs + "_" + podName + "_" + podID + "/" + logContainerName + "/0.log"
 
 				logCRICheckPodName := "log-cri-check-" + string(uuid.NewUUID())

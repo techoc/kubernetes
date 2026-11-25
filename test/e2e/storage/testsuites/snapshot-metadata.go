@@ -65,12 +65,12 @@ func InitSnapshotMetadataTestSuite() storageframework.TestSuite {
 	return InitCustomSnapshotMetadataTestSuite(patterns)
 }
 
-// GetTestSuiteInfo implements framework.TestSuite.
+// GetTestSuiteInfo 实现 framework.TestSuite。
 func (s *snapshotMetadataTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 	return s.tsInfo
 }
 
-// SkipUnsupportedTests implements framework.TestSuite.
+// SkipUnsupportedTests 实现 framework.TestSuite。
 func (s *snapshotMetadataTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) string {
 	_, ok := driver.(storageframework.SnapshotMetadataTestDriver)
 	driverInfo := driver.GetDriverInfo()
@@ -104,7 +104,7 @@ func constructVerifierCommand(
 		command = append(command, fmt.Sprintf("-target-device-path=%s", targetDevicePath))
 	}
 
-	// return command
+	// 返回命令
 	return strings.Join(command, " ")
 }
 
@@ -122,7 +122,7 @@ func runSnapshotMetadataVerifier(pod *v1.Pod, toolCommand string) {
 
 func createBackupClientResources(ctx context.Context, f *framework.Framework) {
 	ginkgo.By("creating backup client resources")
-	// create from manifest
+	// 从 manifest 创建
 	backupClientManifests := []string{
 		"test/e2e/testing-manifests/storage-csi/external-snapshot-metadata/backup-client-rbac.yaml",
 	}
@@ -244,7 +244,7 @@ func createPVCFromSnapshot(ctx context.Context, clientSet clientset.Interface, f
 	return restorePvc, nil
 }
 
-// DefineTests implements framework.TestSuite.
+// DefineTests 实现 framework.TestSuite。
 func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	var (
 		smDriver  storageframework.SnapshotMetadataTestDriver
@@ -258,7 +258,7 @@ func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriv
 		testDevicePath string
 		err            error
 
-		// backup client
+		// 备份 client
 		backupClientPod  *v1.Pod
 		sourceDeviceName string
 		sourceDevicePath string
@@ -274,7 +274,7 @@ func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriv
 		backupClientPod, err := createBackupClientPod(ctx, f, clientSet, source, target)
 		framework.ExpectNoError(err, "Failed to create backup client pod")
 
-		// Update source and target device path
+		// 更新源设备和目标设备路径
 		for _, volume := range backupClientPod.Spec.Volumes {
 			if volume.PersistentVolumeClaim != nil && volume.PersistentVolumeClaim.ClaimName == sourceDevicePvcName {
 				sourceDeviceName = volume.Name
@@ -307,7 +307,7 @@ func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriv
 
 		config = smDriver.PrepareTest(ctx, f)
 
-		// Create snapshot metadata resources (CRD is already created by test runner script)
+		// 创建 snapshot metadata 资源（CRD 已由测试运行脚本创建）
 		ginkgo.By("Creating snapshot metadata resources")
 		err = storageutils.CreateSnapshotMetadataResources(ctx, f, config.Driver.GetDriverInfo().Name, config.DriverNamespace.Name)
 		framework.ExpectNoError(err, "Failed to create snapshot metadata resources")
@@ -329,7 +329,7 @@ func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriv
 		framework.ExpectNoError(err, "Failed to wait for pod %s to turn into running status. Error", testPod.Name)
 		testPod, err = clientSet.CoreV1().Pods(testPod.Namespace).Get(ctx, testPod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "Failed to get pod %s", testPod.Name)
-		testDevicePath = testPod.Spec.Containers[0].VolumeDevices[0].DevicePath // Other way?
+		testDevicePath = testPod.Spec.Containers[0].VolumeDevices[0].DevicePath // 还有其他方式吗？
 	}
 
 	createPVCFromSnapshot := func(ctx context.Context, pvcName, snaphotName string) *v1.PersistentVolumeClaim {
@@ -359,7 +359,7 @@ func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriv
 			backupClientPod = nil
 		}
 
-		// Cleanup snapshot metadata resources
+		// 清理 snapshot metadata 资源
 		if config != nil {
 			ginkgo.By("Cleaning up snapshot metadata resources")
 			err := storageutils.CleanupSnapshotMetadataResources(ctx, f, config.Driver.GetDriverInfo().Name, config.DriverNamespace.Name)
@@ -375,34 +375,34 @@ func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriv
 		parameters := map[string]string{}
 		sDriver := smDriver.(storageframework.SnapshottableTestDriver)
 
-		// Write content
+		// 写入内容
 		writeCmd := fmt.Sprintf("exec %s -c write-pod -- dd if=/dev/urandom of=%s bs=4K count=6 oflag=direct status=none", testPod.Name, testDevicePath)
 		writeToDeviceInPod(testPod, writeCmd)
 
-		// Create snap-1
+		// 创建 snap-1
 		ginkgo.By("taking snapshot snap-1")
 		snapResource1 := storageframework.CreateSnapshotResource(ctx, sDriver, config, pattern, testPVC.Name, testPVC.Namespace, f.Timeouts, parameters)
 		ginkgo.DeferCleanup(snapResource1.CleanupResource, f.Timeouts)
 
-		// Write more content
+		// 写入更多内容
 		writeCmd = fmt.Sprintf("exec %s -c write-pod -- dd if=/dev/urandom of=%s bs=4K count=3 oflag=direct status=none", testPod.Name, testDevicePath)
 		writeToDeviceInPod(testPod, writeCmd)
 
-		// Create snap-2
+		// 创建 snap-2
 		ginkgo.By("taking snapshot snap-2")
 		snapResource2 := storageframework.CreateSnapshotResource(ctx, sDriver, config, pattern, testPVC.Name, testPVC.Namespace, f.Timeouts, parameters)
 		ginkgo.DeferCleanup(snapResource2.CleanupResource, f.Timeouts)
 
-		// Restore PVC (source device) from snapshot snap-2
+		// 从快照 snap-2 恢复 PVC（源设备）
 		sourceDevicePvc := createPVCFromSnapshot(ctx, sourceDevicePvcName, snapResource2.Vs.GetName())
 
-		// Restore PVC (target device) from snapshot snap-1
+		// 从快照 snap-1 恢复 PVC（目标设备）
 		targetDevicePvc := createPVCFromSnapshot(ctx, targetDevicePvcName, snapResource1.Vs.GetName())
 
-		// create backup client
+		// 创建 backup client
 		backupClientPod = createBackupClientPod(ctx, sourceDevicePvc, targetDevicePvc)
 
-		// Run snapshot-metadata-verifier
+		// 运行 snapshot-metadata-verifier
 		ginkgo.By("run snapshot-metadata-verifier")
 		toolCommand := fmt.Sprintf("exec %s -c write-pod -- %s",
 			backupClientPod.Name,
@@ -416,19 +416,19 @@ func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriv
 		parameters := map[string]string{}
 		sDriver := smDriver.(storageframework.SnapshottableTestDriver)
 
-		// Write content
+		// 写入内容
 		writeCmd := fmt.Sprintf("exec %s -c write-pod -- dd if=/dev/urandom of=%s bs=4K count=6 oflag=direct status=none", testPod.Name, testDevicePath)
 		writeToDeviceInPod(testPod, writeCmd)
 
-		// Create snap-1
+		// 创建 snap-1
 		ginkgo.By("taking snapshot snap-1")
 		snapResource1 := storageframework.CreateSnapshotResource(ctx, sDriver, config, pattern, testPVC.Name, testPVC.Namespace, f.Timeouts, parameters)
 		ginkgo.DeferCleanup(snapResource1.CleanupResource, f.Timeouts)
 
-		// Restore PVC (source device) from snapshot snap-1
+		// 从快照 snap-1 恢复 PVC（源设备）
 		sourceDevicePvc := createPVCFromSnapshot(ctx, sourceDevicePvcName, snapResource1.Vs.GetName())
 
-		// create new PVC (target device)
+		// 创建新 PVC（目标设备）
 		ginkgo.By("creating pvc target-device")
 		targetPvcClaim := e2epv.MakePersistentVolumeClaim(e2epv.PersistentVolumeClaimConfig{
 			Name:             "target-device",
@@ -440,10 +440,10 @@ func (s *snapshotMetadataTestSuite) DefineTests(driver storageframework.TestDriv
 		targetDevicePvc, err := e2epv.CreatePVC(ctx, f.ClientSet, f.Namespace.Name, targetPvcClaim)
 		framework.ExpectNoError(err)
 
-		// create backup client
+		// 创建 backup client
 		backupClientPod = createBackupClientPod(ctx, sourceDevicePvc, targetDevicePvc)
 
-		// Run snapshot-metadata-verifier
+		// 运行 snapshot-metadata-verifier
 		ginkgo.By("run snapshot-metadata-verifier")
 		toolCommand := fmt.Sprintf("exec %s -c write-pod -- %s",
 			backupClientPod.Name,

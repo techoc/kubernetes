@@ -31,16 +31,16 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// SecretUpgradeTest test that a secret is available before and after
-// a cluster upgrade.
+// SecretUpgradeTest 测试升级前后 secret 是否可用
+// 是否都在运行。
 type SecretUpgradeTest struct {
 	secret *v1.Secret
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (SecretUpgradeTest) Name() string { return "[sig-storage] [sig-api-machinery] secret-upgrade" }
 
-// Setup creates a secret and then verifies that a pod can consume it.
+// Setup 创建 secret，然后验证 Pod 可以使用它。
 func (t *SecretUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	secretName := "upgrade-secret"
 
@@ -66,21 +66,21 @@ func (t *SecretUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	t.testPod(ctx, f)
 }
 
-// Test waits for the upgrade to complete, and then verifies that a
-// pod can still consume the secret.
+// Test 等待升级完成，然后验证
+// Pod 仍可使用该 secret。
 func (t *SecretUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	<-done
 	ginkgo.By("Consuming the secret after upgrade")
 	t.testPod(ctx, f)
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *SecretUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依赖命名空间删除来清理所有内容
 }
 
-// testPod creates a pod that consumes a secret and prints it out. The
-// output is then verified.
+// testPod 创建一个使用 secret 并打印其内容的 Pod，然后
+// 验证输出。
 func (t *SecretUpgradeTest) testPod(ctx context.Context, f *framework.Framework) {
 	volumeName := "secret-volume"
 	volumeMountPath := "/etc/secret-volume"

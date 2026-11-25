@@ -36,7 +36,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// Constants for common values
+// 通用值的常量
 const (
 	CommonName                 = "csi-snapshot-metadata"
 	TLSSecretName              = "csi-snapshot-metadata-server-certs"
@@ -49,7 +49,7 @@ const (
 	AppSelectorValue           = "csi-hostpathplugin"
 	SnapshotMetadataCRAudience = "csi-snapshot-metadata-test"
 
-	// SnapshotMetadataService API constants
+	// SnapshotMetadataService API 常量
 	SnapshotMetadataServiceGroup      = "cbt.storage.k8s.io"
 	SnapshotMetadataServiceVersion    = "v1beta1"
 	SnapshotMetadataServiceAPIVersion = SnapshotMetadataServiceGroup + "/" + SnapshotMetadataServiceVersion
@@ -57,7 +57,7 @@ const (
 	SnapshotMetadataServiceResource   = "snapshotmetadataservices"
 )
 
-// generateCA creates a self-signed CA certificate and private key using RSA.
+// generateCA 使用 RSA 创建自签名 CA 证书和私钥。
 func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	ginkgo.By("Generating CA certificate and private key")
 
@@ -90,7 +90,7 @@ func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	return caCert, caPrivateKey, nil
 }
 
-// generateServerCert creates a server certificate signed by the given CA using RSA.
+// generateServerCert 使用 RSA 创建由给定 CA 签名的服务端证书。
 func generateServerCert(driverNamespace string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey) ([]byte, []byte, error) {
 	ginkgo.By("Generating server certificate and private key")
 
@@ -124,7 +124,7 @@ func generateServerCert(driverNamespace string, caCert *x509.Certificate, caPriv
 	return serverCertBytes, serverKeyBytes, nil
 }
 
-// createTLSSecret creates or updates a TLS secret in the specified namespace.
+// createTLSSecret 在指定命名空间中创建或更新 TLS secret。
 func createTLSSecret(ctx context.Context, f *framework.Framework, driverNamespace string, certBytes, keyBytes []byte) error {
 	ginkgo.By("Creating TLS secret")
 
@@ -152,7 +152,7 @@ func createTLSSecret(ctx context.Context, f *framework.Framework, driverNamespac
 	return nil
 }
 
-// createSnapshotMetadataSVC creates a Kubernetes service for the snapshot metadata.
+// createSnapshotMetadataSVC 为 snapshot metadata 创建 Kubernetes service。
 func createSnapshotMetadataSVC(ctx context.Context, f *framework.Framework, driverName, driverNamespace string) error {
 	ginkgo.By("Creating Kubernetes service for snapshot metadata")
 	svc := &v1.Service{
@@ -184,7 +184,7 @@ func createSnapshotMetadataSVC(ctx context.Context, f *framework.Framework, driv
 	return nil
 }
 
-// createSnapshotMetdataServiceCR creates a SnapshotMetadataService custom resource.
+// createSnapshotMetdataServiceCR 创建 SnapshotMetadataService 自定义资源。
 func createSnapshotMetdataServiceCR(ctx context.Context, f *framework.Framework, driverName, driverNamespace string, caCert *x509.Certificate) error {
 	ginkgo.By("Creating snapshot metadata service CR")
 
@@ -216,8 +216,8 @@ func createSnapshotMetdataServiceCR(ctx context.Context, f *framework.Framework,
 	return nil
 }
 
-// CreateSnapshotMetadataResources sets up the snapshot metadata resources.
-// CRD creation is handled separately by the test runner script.
+// CreateSnapshotMetadataResources 搭建 snapshot metadata 资源。
+// CRD 的创建由测试运行脚本单独处理。
 func CreateSnapshotMetadataResources(ctx context.Context, f *framework.Framework, driverName, driverNamespace string) error {
 	caCert, caPrivateKey, err := generateCA()
 	if err != nil {
@@ -244,7 +244,7 @@ func CreateSnapshotMetadataResources(ctx context.Context, f *framework.Framework
 	return nil
 }
 
-// CleanupSnapshotMetadataResources cleans up the snapshot metadata resources.
+// CleanupSnapshotMetadataResources 清理 snapshot metadata 资源。
 func CleanupSnapshotMetadataResources(ctx context.Context, f *framework.Framework, driverName, driverNamespace string) error {
 	ginkgo.By("Cleaning up snapshot metadata resources")
 

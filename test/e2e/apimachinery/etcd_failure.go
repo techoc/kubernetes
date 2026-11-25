@@ -43,11 +43,11 @@ var _ = SIGDescribe("Etcd failure", framework.WithDisruptive(), framework.WithPr
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
-		// This test requires:
+		// 此测试需要：
 		// - SSH
-		// - master access
-		// ... so the provider check above should be identical to the intersection of
-		// providers that provide those capabilities.
+		// - master 访问权限
+		// ……因此上面的 provider 检查应与提供这些能力的
+		// provider 交集完全一致。
 		e2eskipper.SkipUnlessSSHKeyPresent()
 
 		err := e2erc.RunRC(ctx, testutils.RCConfig{
@@ -87,11 +87,11 @@ func etcdFailTest(ctx context.Context, f *framework.Framework, failCommand, fixC
 	apps.TestReplicationControllerServeImageOrFail(ctx, f, "basic", imageutils.GetE2EImage(imageutils.Agnhost))
 }
 
-// For this duration, etcd will be failed by executing a failCommand on the master.
-// If repeat is true, the failCommand will be called at a rate of once per second for
-// the failure duration. If repeat is false, failCommand will only be called once at the
-// beginning of the failure duration. After this duration, we execute a fixCommand on the
-// master and go on to assert that etcd and kubernetes components recover.
+// 在此期间，通过在 master 上执行 failCommand 让 etcd 故障。
+// 如果 repeat 为 true，在故障期间 failCommand 每秒调用一次；
+// 如果为 false，则只在故障开始时调用一次。
+// 故障期结束后，在 master 上执行 fixCommand，
+// 然后断言 etcd 和 Kubernetes 组件已恢复。
 const etcdFailureDuration = 20 * time.Second
 
 func doEtcdFailure(ctx context.Context, f *framework.Framework, failCommand, fixCommand string) {
@@ -104,7 +104,7 @@ func doEtcdFailure(ctx context.Context, f *framework.Framework, failCommand, fix
 
 func masterExec(ctx context.Context, f *framework.Framework, cmd string) {
 	nodes := framework.GetControlPlaneNodes(ctx, f.ClientSet)
-	// checks if there is at least one control-plane node
+	// 检查是否至少有一个 control-plane 节点
 
 	gomega.Expect(nodes.Items).NotTo(gomega.BeEmpty(),
 		"at least one node with label %s should exist.", framework.ControlPlaneLabel)

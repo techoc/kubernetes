@@ -62,15 +62,7 @@ var _ = SIGDescribe("Lease", func() {
 	/*
 		Release: v1.17
 		Testname: lease API should be available
-		Description: Create Lease object, and get it; create and get MUST be successful and Spec of the
-		read Lease MUST match Spec of original Lease. Update the Lease and get it; update and get MUST
-		be successful	and Spec of the read Lease MUST match Spec of updated Lease. Patch the Lease and
-		get it; patch and get MUST be successful and Spec of the read Lease MUST match Spec of patched
-		Lease. Create a second Lease with labels and list Leases; create and list MUST be successful and
-		list MUST return both leases. Delete the labels lease via delete collection; the delete MUST be
-		successful and MUST delete only the labels lease. List leases; list MUST be successful and MUST
-		return just the remaining lease. Delete the lease; delete MUST be successful. Get the lease; get
-		MUST return not found error.
+		Description: 创建 Lease 对象并读取；创建和读取 MUST 成功，读到的 Lease 的 Spec MUST 与原 Lease 一致。更新 Lease 并读取；更新和读取 MUST 成功，读到的 Lease 的 Spec MUST 与更新后的 Lease 一致。给 Lease 打补丁并读取；补丁和读取 MUST 成功，读到的 Lease 的 Spec MUST 与打补丁后的 Lease 一致。创建第二个带标签的 Lease 并列出 Leases；创建和列出 MUST 成功，列表 MUST 返回两个 lease。通过 delete collection 删除带标签的 lease；删除 MUST 成功且 MUST 只删除带标签的 lease。列出 leases；列出 MUST 成功且 MUST 只返回剩下的 lease。删除该 lease；删除 MUST 成功。读取该 lease；读取 MUST 返回 not found 错误。
 	*/
 	framework.ConformanceIt("lease API should be available", func(ctx context.Context) {
 		leaseClient := f.ClientSet.CoordinationV1().Leases(f.Namespace.Name)
@@ -175,10 +167,10 @@ var _ = SIGDescribe("Lease", func() {
 		}
 
 		leaseClient = f.ClientSet.CoordinationV1().Leases(metav1.NamespaceAll)
-		// Number of leases may be high in large clusters, as Lease object is
-		// created for every node by the corresponding Kubelet.
-		// That said, the objects themselves are small (~300B), so even with 5000
-		// of them, that gives ~1.5MB, which is acceptable.
+		// 大集群中 lease 数量可能很多，因为每个节点
+		// 都由相应的 Kubelet 创建一个 Lease 对象。
+		// 尽管如此，对象本身很小（约 300B），即使有 5000 个，
+		// 也只有约 1.5MB，可以接受。
 		_, err = leaseClient.List(ctx, metav1.ListOptions{})
 		framework.ExpectNoError(err, "couldn't list Leases from all namespace")
 	})

@@ -30,7 +30,7 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// PrivilegedPodTestConfig is configuration struct for privileged pod test
+// PrivilegedPodTestConfig 是 privileged pod 测试的配置结构体
 // TODO: Merge with tests in security_context.go
 type PrivilegedPodTestConfig struct {
 	f *framework.Framework
@@ -53,7 +53,7 @@ var _ = SIGDescribe("PrivilegedPod", framework.WithNodeConformance(), func() {
 	}
 
 	ginkgo.It("should enable privileged commands [LinuxOnly]", func(ctx context.Context) {
-		// Windows does not support privileged containers.
+		// Windows 不支持特权容器。
 		ginkgo.By("Creating a pod with a privileged container")
 		config.createPods(ctx)
 
@@ -75,8 +75,8 @@ func (c *PrivilegedPodTestConfig) run(containerName string, expectSuccess bool) 
 
 	if expectSuccess {
 		framework.ExpectNoError(err, msg)
-		// We need to clean up the dummy link that was created, as it
-		// leaks out into the node level -- yuck.
+		// 需要清理创建的 dummy link，因为它
+		// 会泄漏到节点级别 —— 真讨厌。
 		_, _, err := e2epod.ExecCommandInContainerWithFullOutput(
 			c.f, c.privilegedPod, containerName, reverseCmd...)
 		framework.ExpectNoError(err,

@@ -85,15 +85,15 @@ const (
 )
 
 var (
-	// KindDeployment is the GVK for Deployment
+	// KindDeployment 是 Deployment 的 GVK
 	KindDeployment = schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
-	// KindReplicaSet is the GVK for ReplicaSet
+	// KindReplicaSet 是 ReplicaSet 的 GVK
 	KindReplicaSet = schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "ReplicaSet"}
-	// KindCRD is the GVK for CRD for test purposes
+	// KindCRD 是用于测试目的 CRD 的 GVK
 	KindCRD = schema.GroupVersionKind{Group: crdGroup, Version: crdVersion, Kind: crdKind}
 )
 
-// ScalingDirection identifies the scale direction for HPA Behavior.
+// ScalingDirection 标识 HPA Behavior 的扩缩方向。
 type ScalingDirection int
 
 const (
@@ -103,12 +103,12 @@ const (
 )
 
 /*
-ResourceConsumer is a tool for testing. It helps to create a specified usage of CPU or memory.
-Typical use case:
+ResourceConsumer 是一个测试工具，用于创建指定的 CPU 或内存用量。
+典型用例：
 rc.ConsumeCPU(600)
-// ... check your assumption here
+// ... 在此检查你的假设
 rc.ConsumeCPU(300)
-// ... check your assumption here
+// ... 在此检查你的假设
 */
 type ResourceConsumer struct {
 	name                     string
@@ -139,14 +139,14 @@ type ResourceConsumer struct {
 	stopCPUPerPod            chan int
 }
 
-// ExternalMetricsController provides methods to control the external metrics server at runtime
+// ExternalMetricsController 提供在运行时控制 external metrics server 的方法
 type ExternalMetricsController struct {
 	clientSet   clientset.Interface
 	serviceName string
 	namespace   string
 }
 
-// NewExternalMetricsController creates a new controller for the external metrics server
+// NewExternalMetricsController 为 external metrics server 创建一个新的 controller
 func NewExternalMetricsController(clientSet clientset.Interface, serviceName, namespace string) *ExternalMetricsController {
 	return &ExternalMetricsController{
 		clientSet:   clientSet,
@@ -155,7 +155,7 @@ func NewExternalMetricsController(clientSet clientset.Interface, serviceName, na
 	}
 }
 
-// CreateMetric creates a new metric on the external metrics server
+// CreateMetric 在 external metrics server 上创建一个新 metric
 func (emc *ExternalMetricsController) CreateMetric(ctx context.Context, metricName string, value int64, labels map[string]string, shouldFail bool) error {
 	params := url.Values{}
 	params.Set("value", strconv.FormatInt(value, 10))
@@ -166,7 +166,7 @@ func (emc *ExternalMetricsController) CreateMetric(ctx context.Context, metricNa
 	return emc.sendMetricRequest(ctx, "create", metricName, params)
 }
 
-// SetMetricValue updates the value of an existing metric
+// SetMetricValue 更新现有 metric 的值
 func (emc *ExternalMetricsController) SetMetricValue(ctx context.Context, metricName string, value int64, labels map[string]string) error {
 	params := url.Values{}
 	params.Set("value", strconv.FormatInt(value, 10))
@@ -176,7 +176,7 @@ func (emc *ExternalMetricsController) SetMetricValue(ctx context.Context, metric
 	return emc.sendMetricRequest(ctx, "set", metricName, params)
 }
 
-// SetMetricFail configures whether a metric should return errors
+// SetMetricFail 配置 metric 是否应返回错误
 func (emc *ExternalMetricsController) SetMetricFail(ctx context.Context, metricName string, shouldFail bool, labels map[string]string) error {
 	params := url.Values{}
 	params.Set("fail", strconv.FormatBool(shouldFail))
@@ -193,7 +193,7 @@ func (emc *ExternalMetricsController) sendMetricRequest(ctx context.Context, act
 }
 
 func (emc *ExternalMetricsController) doRequestWithPortForward(ctx context.Context, action, metricName string, params url.Values) error {
-	// Find the pod
+	// 找到 Pod
 	pods, err := emc.clientSet.CoreV1().Pods(emc.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "name=" + emc.serviceName,
 	})
@@ -205,23 +205,23 @@ func (emc *ExternalMetricsController) doRequestWithPortForward(ctx context.Conte
 	}
 	podName := pods.Items[0].Name
 
-	// Set up port-forward
+	// 设置 port-forward
 	config, err := framework.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// re-use NewTransport which supports both SPDY and WebSocket according to KEP-4006
+	// 重新使用 NewTransport，它根据 KEP-4006 同时支持 SPDY 和 WebSocket
 	transport := e2epod.NewTransport(emc.clientSet, config)
-	// the external metrics server uses a self-signed certificate.
+	// external metrics server 使用自签名证书。
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   30 * time.Second,
 	}
 
-	// test/e2e/framework/pod/dial.go#ParseAddr expects
-	// <namespace>.<pod>:<port number> format as the URL
+	// test/e2e/framework/pod/dial.go#ParseAddr 期望
+	// URL 采用 <namespace>.<pod>:<port number> 格式
 	requestURL := fmt.Sprintf("https://%s.%s:%d/%s/%s", emc.namespace, podName, externalMetricsServerPort, action, metricName)
 	if len(params) > 0 {
 		requestURL += "?" + params.Encode()
@@ -248,17 +248,17 @@ func (emc *ExternalMetricsController) doRequestWithPortForward(ctx context.Conte
 	return nil
 }
 
-// RunExternalMetricsServer creates and returns an ExternalMetricsController for controlling the server
+// RunExternalMetricsServer 创建并返回一个用于控制服务器的 ExternalMetricsController
 func RunExternalMetricsServer(ctx context.Context, c clientset.Interface, ns, name string, serviceAnnotations map[string]string) *ExternalMetricsController {
 	runServiceAndApiregistrationForExternalMetricsServer(ctx, c, ns, name, serviceAnnotations)
 	return NewExternalMetricsController(c, name, ns)
 }
 
-// CleanupExternalMetricsServer removes the external metrics server resources
+// CleanupExternalMetricsServer 清理 external metrics server 资源
 func CleanupExternalMetricsServer(ctx context.Context, c clientset.Interface, ns, name string) {
 	ginkgo.By(fmt.Sprintf("Cleaning up external metrics server %s", name))
 
-	// Delete the APIService
+	// 删除 APIService
 	config, err := framework.LoadConfig()
 	if err == nil {
 		aggClient, err := aggregatorclient.NewForConfig(config)
@@ -270,26 +270,26 @@ func CleanupExternalMetricsServer(ctx context.Context, c clientset.Interface, ns
 		}
 	}
 
-	// Delete the deployment
+	// 删除 deployment
 	err = c.AppsV1().Deployments(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		framework.Logf("Error deleting deployment: %v", err)
 	}
 
-	// Delete the service
+	// 删除 service
 	err = c.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		framework.Logf("Error deleting service: %v", err)
 	}
 }
 
-// NewDynamicResourceConsumer is a wrapper to create a new dynamic ResourceConsumer
+// NewDynamicResourceConsumer 是创建新 dynamic ResourceConsumer 的包装器
 func NewDynamicResourceConsumer(ctx context.Context, name, nsName string, kind schema.GroupVersionKind, replicas, initCPUTotal, initMemoryTotal, initCustomMetric int, cpuLimit, memLimit int64, clientset clientset.Interface, scaleClient scaleclient.ScalesGetter, enableSidecar SidecarStatusType, sidecarType SidecarWorkloadType, podResources *v1.ResourceRequirements) *ResourceConsumer {
 	return NewResourceConsumer(ctx, name, nsName, kind, replicas, customMetricName, initCPUTotal, initMemoryTotal, initCustomMetric, dynamicConsumptionTimeInSeconds,
 		dynamicRequestSizeInMillicores, dynamicRequestSizeInMegabytes, dynamicRequestSizeCustomMetric, cpuLimit, memLimit, clientset, scaleClient, nil, nil, enableSidecar, sidecarType, podResources)
 }
 
-// getSidecarContainer returns sidecar container
+// getSidecarContainer 返回 sidecar 容器
 func getSidecarContainer(name string, cpuLimit, memLimit int64) v1.Container {
 	container := v1.Container{
 		Name:    name + "-sidecar",
@@ -317,11 +317,11 @@ func getSidecarContainer(name string, cpuLimit, memLimit int64) v1.Container {
 }
 
 /*
-NewResourceConsumer creates new ResourceConsumer
-initCPUTotal argument is in millicores
-initMemoryTotal argument is in megabytes
-memLimit argument is in megabytes, memLimit is a maximum amount of memory that can be consumed by a single pod
-cpuLimit argument is in millicores, cpuLimit is a maximum amount of cpu that can be consumed by a single pod
+NewResourceConsumer 创建新的 ResourceConsumer
+initCPUTotal 参数单位为 millicores
+initMemoryTotal 参数单位为 megabytes
+memLimit 参数单位为 megabytes，memLimit 是单个 pod 可消耗的最大内存量
+cpuLimit 参数单位为 millicores，cpuLimit 是单个 pod 可消耗的最大 CPU 量
 */
 func NewResourceConsumer(ctx context.Context, name, nsName string, kind schema.GroupVersionKind, replicas int, customMetricName string, initCPUTotal, initMemoryTotal, initCustomMetric, consumptionTimeInSeconds, requestSizeInMillicores,
 	requestSizeInMegabytes int, requestSizeCustomMetric int, cpuLimit, memLimit int64, clientset clientset.Interface, scaleClient scaleclient.ScalesGetter, podAnnotations, serviceAnnotations map[string]string, sidecarStatus SidecarStatusType, sidecarType SidecarWorkloadType, podResources *v1.ResourceRequirements) *ResourceConsumer {
@@ -349,7 +349,7 @@ func NewResourceConsumer(ctx context.Context, name, nsName string, kind schema.G
 
 	runServiceAndWorkloadForResourceConsumer(ctx, clientset, resourceClient, apiExtensionClient, nsName, name, kind, replicas, cpuLimit, memLimit, podAnnotations, serviceAnnotations, additionalContainers, podResources)
 	controllerName := name + "-ctrl"
-	// If sidecar is enabled and busy, run service and consumer for sidecar
+	// 如果 sidecar 已启用且繁忙，为 sidecar 运行 service 和 consumer
 	if sidecarStatus == Enable && sidecarType == Busy {
 		runServiceAndSidecarForResourceConsumer(ctx, clientset, nsName, name, kind, replicas, serviceAnnotations)
 		controllerName = name + "-sidecar-ctrl"
@@ -393,19 +393,19 @@ func NewResourceConsumer(ctx context.Context, name, nsName string, kind schema.G
 	return rc
 }
 
-// ConsumeCPU consumes given number of CPU
+// ConsumeCPU 消耗指定量的 CPU
 func (rc *ResourceConsumer) ConsumeCPU(millicores int) {
 	framework.Logf("RC %s: consume %v millicores in total", rc.name, millicores)
 	rc.cpu <- millicores
 }
 
-// ConsumeMem consumes given number of Mem
+// ConsumeMem 消耗指定量的内存
 func (rc *ResourceConsumer) ConsumeMem(megabytes int) {
 	framework.Logf("RC %s: consume %v MB in total", rc.name, megabytes)
 	rc.mem <- megabytes
 }
 
-// ConsumeCustomMetric consumes given number of custom metric
+// ConsumeCustomMetric 消耗指定量的自定义 metric
 func (rc *ResourceConsumer) ConsumeCustomMetric(amount int) {
 	framework.Logf("RC %s: consume custom metric %v in total", rc.name, amount)
 	rc.customMetric <- amount
@@ -522,8 +522,8 @@ func (rc *ResourceConsumer) sendConsumeCPURequest(ctx context.Context, millicore
 		return nil
 	}).WithTimeout(serviceInitializationTimeout).WithPolling(serviceInitializationInterval).Should(gomega.Succeed())
 
-	// Test has already finished (ctx got canceled), so don't fail on err from PollUntilContextTimeout
-	// which is a side-effect to context cancelling from the cleanup task.
+	// 测试已结束（ctx 已取消），因此不要因 PollUntilContextTimeout 的 err 而失败
+	// 这是清理任务取消 context 带来的副作用。
 	if ctx.Err() != nil {
 		return
 	}
@@ -531,7 +531,7 @@ func (rc *ResourceConsumer) sendConsumeCPURequest(ctx context.Context, millicore
 	framework.ExpectNoError(err)
 }
 
-// sendConsumeMemRequest sends POST request for memory consumption
+// sendConsumeMemRequest 发送用于消耗内存的 POST 请求
 func (rc *ResourceConsumer) sendConsumeMemRequest(ctx context.Context, megabytes int) {
 	err := framework.Gomega().Eventually(ctx, func(ctx context.Context) error {
 		proxyRequest, err := e2eservice.GetServicesProxyRequest(rc.clientSet, rc.clientSet.CoreV1().RESTClient().Post())
@@ -553,8 +553,8 @@ func (rc *ResourceConsumer) sendConsumeMemRequest(ctx context.Context, megabytes
 		return nil
 	}).WithTimeout(serviceInitializationTimeout).WithPolling(serviceInitializationInterval).Should(gomega.Succeed())
 
-	// Test has already finished (ctx got canceled), so don't fail on err from PollUntilContextTimeout
-	// which is a side-effect to context cancelling from the cleanup task.
+	// 测试已结束（ctx 已取消），因此不要因 PollUntilContextTimeout 的 err 而失败
+	// 这是清理任务取消 context 带来的副作用。
 	if ctx.Err() != nil {
 		return
 	}
@@ -562,7 +562,7 @@ func (rc *ResourceConsumer) sendConsumeMemRequest(ctx context.Context, megabytes
 	framework.ExpectNoError(err)
 }
 
-// sendConsumeCustomMetric sends POST request for custom metric consumption
+// sendConsumeCustomMetric 发送用于消耗自定义 metric 的 POST 请求
 func (rc *ResourceConsumer) sendConsumeCustomMetric(ctx context.Context, delta int) {
 	err := framework.Gomega().Eventually(ctx, func(ctx context.Context) error {
 		proxyRequest, err := e2eservice.GetServicesProxyRequest(rc.clientSet, rc.clientSet.CoreV1().RESTClient().Post())
@@ -585,8 +585,8 @@ func (rc *ResourceConsumer) sendConsumeCustomMetric(ctx context.Context, delta i
 		return nil
 	}).WithTimeout(serviceInitializationTimeout).WithPolling(serviceInitializationInterval).Should(gomega.Succeed())
 
-	// Test has already finished (ctx got canceled), so don't fail on err from PollUntilContextTimeout
-	// which is a side-effect to context cancelling from the cleanup task.
+	// 测试已结束（ctx 已取消），因此不要因 PollUntilContextTimeout 的 err 而失败
+	// 这是清理任务取消 context 带来的副作用。
 	if ctx.Err() != nil {
 		return
 	}
@@ -595,10 +595,9 @@ func (rc *ResourceConsumer) sendConsumeCustomMetric(ctx context.Context, delta i
 }
 
 /*
-ConsumeCPUPerPod sends CPU load directly to each consumer pod via the
-Kubernetes pod proxy API, bypassing kube-proxy's non-deterministic load
-balancing. millicoresTotal is divided evenly across all running pods,
-guaranteeing each pod receives an equal share regardless of cluster network config.
+ConsumeCPUPerPod 通过 Kubernetes pod proxy API 直接向每个 consumer pod 发送 CPU 负载，
+绕过 kube-proxy 不确定的负载均衡。millicoresTotal 会在所有运行中的 pod 间平均分配，
+确保无论集群网络配置如何，每个 pod 获得相同份额。
 */
 func (rc *ResourceConsumer) ConsumeCPUPerPod(millicoresTotal int) {
 	framework.Logf("RC %s: consume %v millicores in total (evenly distributed per pod)", rc.name, millicoresTotal)
@@ -635,10 +634,10 @@ func (rc *ResourceConsumer) makeConsumeCPUPerPodRequests(ctx context.Context) {
 	}
 }
 
-// sendConsumeCPUPerPodRequest distributes CPU load evenly across all running
-// pods by sending requests directly via the Kubernetes pod proxy API. This
-// bypasses kube-proxy load balancing, guaranteeing each pod receives exactly
-// its share.
+// sendConsumeCPUPerPodRequest 通过 Kubernetes pod proxy API 直接发送请求，在所有运行中的
+// pod 间均匀分配 CPU 负载。这绕过了 kube-proxy 的负载均衡，确保每个 pod
+// 都准确获得自己的份额。
+// Pod proxy URL: /api/v1/namespaces/{ns}/pods/{podname}:{port}/proxy/{path}
 func (rc *ResourceConsumer) sendConsumeCPUPerPodRequest(ctx context.Context, millicoresTotal int) {
 	var readyPods []string
 	err := framework.Gomega().Eventually(ctx, func(ctx context.Context) error {
@@ -673,10 +672,10 @@ func (rc *ResourceConsumer) sendConsumeCPUPerPodRequest(ctx context.Context, mil
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-			// Pod proxy URL: /api/v1/namespaces/{ns}/pods/{podname}:{port}/proxy/{path}
-			// Both service and pod proxy support the name:port format. Without an explicit
-			// port the API server defaults to port 80, but resource-consumer listens on
-			// targetPort (8080), so the port must be specified.
+			// service 和 pod proxy 都支持 name:port 格式。没有显式
+			// 端口时 API server 默认使用端口 80，但 resource-consumer 监听
+			// GetReplicas 获取副本数
+			// targetPort（8080），因此必须指定端口。
 			err := framework.Gomega().Eventually(ctx, func(ctx context.Context) error {
 				_, podErr := rc.clientSet.CoreV1().RESTClient().Post().
 					Resource("pods").
@@ -704,7 +703,7 @@ func (rc *ResourceConsumer) sendConsumeCPUPerPodRequest(ctx context.Context, mil
 	wg.Wait()
 }
 
-// GetReplicas get the replicas
+// 用子 Deployment 当前的 ready 副本数更新自定义资源的 status.replicas。
 func (rc *ResourceConsumer) GetReplicas(ctx context.Context) (int, error) {
 	switch rc.kind {
 	case KindDeployment:
@@ -734,7 +733,7 @@ func (rc *ResourceConsumer) GetReplicas(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		// Update custom resource's status.replicas with child Deployment's current number of ready replicas.
+		// GetHpa 获取对应的 horizontalPodAutoscaler 对象
 		err = unstructured.SetNestedField(crdInstance.Object, deploymentReplicas, "status", "replicas")
 		if err != nil {
 			return 0, err
@@ -749,12 +748,12 @@ func (rc *ResourceConsumer) GetReplicas(ctx context.Context) (int, error) {
 	}
 }
 
-// GetHpa get the corresponding horizontalPodAutoscaler object
+// WaitForReplicas 等待达到期望的副本数
 func (rc *ResourceConsumer) GetHpa(ctx context.Context, name string) (*autoscalingv1.HorizontalPodAutoscaler, error) {
 	return rc.clientSet.AutoscalingV1().HorizontalPodAutoscalers(rc.nsName).Get(ctx, name, metav1.GetOptions{})
 }
 
-// WaitForReplicas wait for the desired replicas
+// EnsureDesiredReplicasInRange 确保副本数在期望范围内
 func (rc *ResourceConsumer) WaitForReplicas(ctx context.Context, desiredReplicas int, duration time.Duration) {
 	interval := 20 * time.Second
 	err := framework.Gomega().Eventually(ctx, framework.HandleRetry(rc.GetReplicas)).
@@ -765,7 +764,7 @@ func (rc *ResourceConsumer) WaitForReplicas(ctx context.Context, desiredReplicas
 	framework.ExpectNoErrorWithOffset(1, err, "timeout waiting %v for %d replicas", duration, desiredReplicas)
 }
 
-// EnsureDesiredReplicasInRange ensure the replicas is in a desired range
+// dump HPA 以便调试
 func (rc *ResourceConsumer) EnsureDesiredReplicasInRange(ctx context.Context, minDesiredReplicas, maxDesiredReplicas int, duration time.Duration, hpaName string) {
 	interval := 10 * time.Second
 	desiredReplicasErr := framework.Gomega().Consistently(ctx, framework.HandleRetry(rc.GetReplicas)).
@@ -773,7 +772,7 @@ func (rc *ResourceConsumer) EnsureDesiredReplicasInRange(ctx context.Context, mi
 		WithPolling(interval).
 		Should(gomega.And(gomega.BeNumerically(">=", minDesiredReplicas), gomega.BeNumerically("<=", maxDesiredReplicas)))
 
-	// dump HPA for debugging
+	// Pause 停止负责消耗资源的后台 goroutine。
 	as, err := rc.GetHpa(ctx, hpaName)
 	if err != nil {
 		framework.Logf("Error getting HPA: %s", err)
@@ -783,7 +782,7 @@ func (rc *ResourceConsumer) EnsureDesiredReplicasInRange(ctx context.Context, mi
 	framework.ExpectNoError(desiredReplicasErr)
 }
 
-// Pause stops background goroutines responsible for consuming resources.
+// Resume 启动负责消耗资源的后台 goroutine。
 func (rc *ResourceConsumer) Pause() {
 	ginkgo.By(fmt.Sprintf("HPA pausing RC %s", rc.name))
 	rc.stopCPU <- 0
@@ -793,7 +792,7 @@ func (rc *ResourceConsumer) Pause() {
 	rc.stopWaitGroup.Wait()
 }
 
-// Resume starts background goroutines responsible for consuming resources.
+// CleanUp 清理负责消耗资源的后台 goroutine。
 func (rc *ResourceConsumer) Resume(ctx context.Context) {
 	ginkgo.By(fmt.Sprintf("HPA resuming RC %s", rc.name))
 	go rc.makeConsumeCPURequests(ctx)
@@ -802,7 +801,7 @@ func (rc *ResourceConsumer) Resume(ctx context.Context) {
 	go rc.makeConsumeCPUPerPodRequests(ctx)
 }
 
-// CleanUp clean up the background goroutines responsible for consuming resources.
+// 等待一段时间，确保所有子 goroutine 已结束。
 func (rc *ResourceConsumer) CleanUp(ctx context.Context) {
 	ginkgo.By(fmt.Sprintf("Removing consuming RC %s", rc.name))
 	close(rc.stopCPU)
@@ -810,7 +809,7 @@ func (rc *ResourceConsumer) CleanUp(ctx context.Context) {
 	close(rc.stopCustomMetric)
 	close(rc.stopCPUPerPod)
 	rc.stopWaitGroup.Wait()
-	// Wait some time to ensure all child goroutines are finished.
+	// 清理 sidecar 相关资源
 	time.Sleep(10 * time.Second)
 	kind := rc.kind.GroupKind()
 	if kind.Kind == crdKind {
@@ -824,7 +823,7 @@ func (rc *ResourceConsumer) CleanUp(ctx context.Context) {
 	framework.ExpectNoError(rc.clientSet.CoreV1().Services(rc.nsName).Delete(ctx, rc.name, metav1.DeleteOptions{}))
 	framework.ExpectNoError(e2eresource.DeleteResourceAndWaitForGC(ctx, rc.clientSet, schema.GroupKind{Group: "apps", Kind: "ReplicaSet"}, rc.nsName, rc.controllerName))
 	framework.ExpectNoError(rc.clientSet.CoreV1().Services(rc.nsName).Delete(ctx, rc.name+"-ctrl", metav1.DeleteOptions{}))
-	// Cleanup sidecar related resources
+	// runServiceAndSidecarForResourceConsumer 创建 service 并为 sidecar 容器运行 resource consumer
 	if rc.sidecarStatus == Enable && rc.sidecarType == Busy {
 		framework.ExpectNoError(rc.clientSet.CoreV1().Services(rc.nsName).Delete(ctx, rc.name+"-sidecar", metav1.DeleteOptions{}))
 		framework.ExpectNoError(rc.clientSet.CoreV1().Services(rc.nsName).Delete(ctx, rc.name+"-sidecar-ctrl", metav1.DeleteOptions{}))
@@ -909,7 +908,7 @@ func runServiceAndApiregistrationForExternalMetricsServer(ctx context.Context, c
 	framework.ExpectNoError(testutils.RunDeployment(ctx, extenalMetricsDeploymentConfig))
 }
 
-// runServiceAndSidecarForResourceConsumer creates service and runs resource consumer for sidecar container
+// 等待 controller service 的 endpoints 传播完成。
 func runServiceAndSidecarForResourceConsumer(ctx context.Context, c clientset.Interface, ns, name string, kind schema.GroupVersionKind, replicas int, serviceAnnotations map[string]string) {
 	ginkgo.By(fmt.Sprintf("Running consuming RC sidecar %s via %s with %v replicas", name, kind, replicas))
 
@@ -940,7 +939,7 @@ func runServiceAndSidecarForResourceConsumer(ctx context.Context, c clientset.In
 	}
 
 	framework.ExpectNoError(runReplicaSet(ctx, controllerRsConfig))
-	// Wait for endpoints to propagate for the controller service.
+	// MemLimit 单位为 bytes
 	framework.ExpectNoError(e2eendpointslice.WaitForEndpointCount(
 		ctx, c, ns, controllerName, 1))
 }
@@ -959,7 +958,7 @@ func runServiceAndWorkloadForResourceConsumer(ctx context.Context, c clientset.I
 		Replicas:             replicas,
 		CPURequest:           cpuLimitMillis,
 		CPULimit:             cpuLimitMillis,
-		MemRequest:           memLimitMb * 1024 * 1024, // MemLimit is in bytes
+		MemRequest:           memLimitMb * 1024 * 1024, // DeleteHorizontalPodAutoscaler 删除用于消耗资源的 horizontalPodAutoscaler。
 		MemLimit:             memLimitMb * 1024 * 1024,
 		Annotations:          podAnnotations,
 		AdditionalContainers: additionalContainers,
@@ -1026,7 +1025,7 @@ func runServiceAndWorkloadForResourceConsumer(ctx context.Context, c clientset.I
 	}
 
 	framework.ExpectNoError(runReplicaSet(ctx, controllerRsConfig))
-	// Wait for endpoints to propagate for the controller service.
+	// MemLimit 单位为 bytes
 	framework.ExpectNoError(e2eendpointslice.WaitForEndpointCount(
 		ctx, c, ns, controllerName, 1))
 }
@@ -1071,12 +1070,12 @@ func CreateCPUResourceHorizontalPodAutoscaler(ctx context.Context, rc *ResourceC
 	return CreateResourceHorizontalPodAutoscaler(ctx, rc, v1.ResourceCPU, autoscalingv2.UtilizationMetricType, cpu, minReplicas, maxReplicas)
 }
 
-// DeleteHorizontalPodAutoscaler delete the horizontalPodAutoscaler for consuming resources.
+// runReplicaSet 启动（并验证正确性）一个 replicaset。
 func DeleteHorizontalPodAutoscaler(ctx context.Context, rc *ResourceConsumer, autoscalerName string) {
 	framework.ExpectNoError(rc.clientSet.AutoscalingV1().HorizontalPodAutoscalers(rc.nsName).Delete(ctx, autoscalerName, metav1.DeleteOptions{}))
 }
 
-// runReplicaSet launches (and verifies correctness) of a replicaset.
+// DeleteContainerResourceHPA 删除用于消耗资源的 horizontalPodAutoscaler。
 func runReplicaSet(ctx context.Context, config testutils.ReplicaSetConfig) error {
 	ginkgo.By(fmt.Sprintf("creating replicaset %s in namespace %s", config.Name, config.Namespace))
 	config.NodeDumpFunc = e2edebug.DumpNodeDebugInfo
@@ -1103,7 +1102,7 @@ func CreateContainerResourceHorizontalPodAutoscaler(ctx context.Context, rc *Res
 	return CreateHorizontalPodAutoscaler(ctx, rc, targetRef, rc.nsName, metrics, resourceType, metricTargetType, metricTargetValue, minReplicas, maxReplicas)
 }
 
-// DeleteContainerResourceHPA delete the horizontalPodAutoscaler for consuming resources.
+// CreateMultiMetricHorizontalPodAutoscaler 创建一个带多个 metric 的 HPA
 func DeleteContainerResourceHPA(ctx context.Context, rc *ResourceConsumer, autoscalerName string) {
 	framework.ExpectNoError(rc.clientSet.AutoscalingV2().HorizontalPodAutoscalers(rc.nsName).Delete(ctx, autoscalerName, metav1.DeleteOptions{}))
 }
@@ -1164,7 +1163,7 @@ func CreateCPUHorizontalPodAutoscalerWithBehavior(ctx context.Context, rc *Resou
 	return hpa
 }
 
-// CreateMultiMetricHorizontalPodAutoscaler creates an HPA with multiple metrics
+// CreateExternalHorizontalPodAutoscalerWithBehavior 创建一个带自定义 behavior 的 HPA
 func CreateMultiMetricHorizontalPodAutoscaler(ctx context.Context, rc *ResourceConsumer, metrics []autoscalingv2.MetricSpec, minReplicas, maxReplicas int32) *autoscalingv2.HorizontalPodAutoscaler {
 	targetRef := autoscalingv2.CrossVersionObjectReference{
 		APIVersion: rc.kind.GroupVersion().String(),
@@ -1190,7 +1189,7 @@ func CreateMultiMetricHorizontalPodAutoscaler(ctx context.Context, rc *ResourceC
 	return hpa
 }
 
-// CreateExternalHorizontalPodAutoscalerWithBehavior creates an HPA with custom behavior
+// CreateExternalHorizontalPodAutoscaler 创建一个带单个外部 metric 的 HPA
 func CreateExternalHorizontalPodAutoscalerWithBehavior(ctx context.Context, rc *ResourceConsumer, metricName string, metricSelector map[string]string, targetType autoscalingv2.MetricTargetType, targetValue int64, minReplicas, maxReplicas int32, behavior *autoscalingv2.HorizontalPodAutoscalerBehavior) *autoscalingv2.HorizontalPodAutoscaler {
 	targetRef := autoscalingv2.CrossVersionObjectReference{
 		APIVersion: rc.kind.GroupVersion().String(),
@@ -1221,7 +1220,7 @@ func CreateExternalHorizontalPodAutoscalerWithBehavior(ctx context.Context, rc *
 	return hpa
 }
 
-// CreateExternalHorizontalPodAutoscaler creates an HPA with a single external metric
+// CreateExternalMetricSpec 为外部 metric 创建一个 MetricSpec
 func CreateExternalHorizontalPodAutoscaler(ctx context.Context, rc *ResourceConsumer, metricName string, metricSelector map[string]string, targetType autoscalingv2.MetricTargetType, targetValue int64, minReplicas, maxReplicas int32) *autoscalingv2.HorizontalPodAutoscaler {
 	metrics := []autoscalingv2.MetricSpec{
 		CreateExternalMetricSpec(metricName, metricSelector, targetType, targetValue),
@@ -1229,7 +1228,7 @@ func CreateExternalHorizontalPodAutoscaler(ctx context.Context, rc *ResourceCons
 	return CreateMultiMetricHorizontalPodAutoscaler(ctx, rc, metrics, minReplicas, maxReplicas)
 }
 
-// CreateExternalMetricSpec creates a MetricSpec for external metrics
+// CreateResourceMetricSpec 为资源 metric（CPU/Memory）创建一个 MetricSpec
 func CreateExternalMetricSpec(metricName string, metricSelector map[string]string, targetType autoscalingv2.MetricTargetType, targetValue int64) autoscalingv2.MetricSpec {
 	var selector *metav1.LabelSelector
 	if len(metricSelector) > 0 {
@@ -1261,7 +1260,7 @@ func CreateExternalMetricSpec(metricName string, metricSelector map[string]strin
 	}
 }
 
-// CreateResourceMetricSpec creates a MetricSpec for resource metrics (CPU/Memory)
+// SidecarStatusType 是 sidecar 状态的类型
 func CreateResourceMetricSpec(resourceType v1.ResourceName, targetType autoscalingv2.MetricTargetType, targetValue int32) autoscalingv2.MetricSpec {
 	return autoscalingv2.MetricSpec{
 		Type: autoscalingv2.ResourceMetricSourceType,
@@ -1351,7 +1350,7 @@ func DeleteHPAWithBehavior(ctx context.Context, rc *ResourceConsumer, autoscaler
 	framework.ExpectNoError(rc.clientSet.AutoscalingV2().HorizontalPodAutoscalers(rc.nsName).Delete(ctx, autoscalerName, metav1.DeleteOptions{}))
 }
 
-// SidecarStatusType type for sidecar status
+// SidecarWorkloadType 是 sidecar 的类型
 type SidecarStatusType bool
 
 const (
@@ -1359,7 +1358,7 @@ const (
 	Disable SidecarStatusType = false
 )
 
-// SidecarWorkloadType type of the sidecar
+// 如果 Custom Resource Definition 不存在，则创建它。
 type SidecarWorkloadType string
 
 const (
@@ -1395,12 +1394,12 @@ func CreateCustomResourceDefinition(ctx context.Context, c crdclientset.Interfac
 		},
 		Status: apiextensionsv1.CustomResourceDefinitionStatus{},
 	}
-	// Create Custom Resource Definition if it's not present.
+	// 等待刚创建的 CRD 出现在 discovery 中。
 	crd, err := c.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crdSchema.Name, metav1.GetOptions{})
 	if err != nil {
 		crd, err = c.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, crdSchema, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
-		// Wait until just created CRD appears in discovery.
+		// RecordBug 存储 E2E 测试套件源码中无法通过 ginkgo.Fail 报告的错误信息，
 		err = framework.Gomega().Eventually(ctx, framework.RetryNotFound(framework.HandleRetry(func(ctx context.Context) (*metav1.APIResourceList, error) {
 			return c.Discovery().ServerResourcesForGroupVersion(crd.Spec.Group + "/" + "v1")
 		}))).Should(framework.MakeMatcher(func(actual *metav1.APIResourceList) (func() string, error) {

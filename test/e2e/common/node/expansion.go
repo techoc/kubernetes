@@ -32,8 +32,8 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// These tests exercise the Kubernetes expansion syntax $(VAR).
-// For more information, see:
+// 这些测试验证 Kubernetes 的 $(VAR) 展开语法。
+// 详情参见：
 // https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/expansion.md
 var _ = SIGDescribe("Variable Expansion", func() {
 	f := framework.NewDefaultFramework("var-expansion")
@@ -42,7 +42,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 	/*
 		Release: v1.9
 		Testname: Environment variables, expansion
-		Description: Create a Pod with environment variables. Environment variables defined using previously defined environment variables MUST expand to proper values.
+		Description: 创建带环境变量的 Pod。使用之前定义的环境变量定义的环境变量 MUST 展开为正确的值。
 	*/
 	framework.ConformanceIt("should allow composing env vars into new env vars", f.WithNodeConformance(), func(ctx context.Context) {
 		envVars := []v1.EnvVar{
@@ -71,7 +71,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 	/*
 		Release: v1.9
 		Testname: Environment variables, command expansion
-		Description: Create a Pod with environment variables and container command using them. Container command using the  defined environment variables MUST expand to proper values.
+		Description: 创建带环境变量和使用这些变量的容器命令的 Pod。使用已定义环境变量的容器命令 MUST 展开为正确的值。
 	*/
 	framework.ConformanceIt("should allow substituting values in a container's command", f.WithNodeConformance(), func(ctx context.Context) {
 		envVars := []v1.EnvVar{
@@ -90,7 +90,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 	/*
 		Release: v1.9
 		Testname: Environment variables, command argument expansion
-		Description: Create a Pod with environment variables and container command arguments using them. Container command arguments using the  defined environment variables MUST expand to proper values.
+		Description: 创建带环境变量和使用这些变量的容器命令参数的 Pod。使用已定义环境变量的容器命令参数 MUST 展开为正确的值。
 	*/
 	framework.ConformanceIt("should allow substituting values in a container's args", f.WithNodeConformance(), func(ctx context.Context) {
 		envVars := []v1.EnvVar{
@@ -110,7 +110,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 	/*
 		Release: v1.19
 		Testname: VolumeSubpathEnvExpansion, subpath expansion
-		Description: Make sure a container's subpath can be set using an expansion of environment variables.
+		Description: 确保可以使用环境变量展开来设置容器的 subpath。
 	*/
 	framework.ConformanceIt("should allow substituting values in a volume subpath", func(ctx context.Context) {
 		envVars := []v1.EnvVar{
@@ -150,7 +150,7 @@ var _ = SIGDescribe("Variable Expansion", func() {
 	/*
 		Release: v1.19
 		Testname: VolumeSubpathEnvExpansion, subpath with backticks
-		Description: Make sure a container's subpath can not be set using an expansion of environment variables when backticks are supplied.
+		Description: 确保提供反引号时，不能使用环境变量展开来设置容器的 subpath。
 	*/
 	framework.ConformanceIt("should fail substituting values in a volume subpath with backticks", func(ctx context.Context) {
 
@@ -177,19 +177,19 @@ var _ = SIGDescribe("Variable Expansion", func() {
 		}
 		pod := newPod(nil, envVars, mounts, volumes)
 
-		// Pod should fail
+		// Pod 应失败
 		testPodFailSubpath(ctx, f, pod)
 	})
 
 	/*
 		Release: v1.19
 		Testname: VolumeSubpathEnvExpansion, subpath with absolute path
-		Description: Make sure a container's subpath can not be set using an expansion of environment variables when absolute path is supplied.
+		Description: 确保提供绝对路径时，不能使用环境变量展开来设置容器的 subpath。
 	*/
 	framework.ConformanceIt("should fail substituting values in a volume subpath with absolute path", func(ctx context.Context) {
 		absolutePath := "/tmp"
 		if framework.NodeOSDistroIs("windows") {
-			// Windows does not typically have a C:\tmp folder.
+			// Windows 通常没有 C:\\tmp 目录。
 			absolutePath = "C:\\Users"
 		}
 
@@ -216,14 +216,14 @@ var _ = SIGDescribe("Variable Expansion", func() {
 		}
 		pod := newPod(nil, envVars, mounts, volumes)
 
-		// Pod should fail
+		// Pod 应失败
 		testPodFailSubpath(ctx, f, pod)
 	})
 
 	/*
 		Release: v1.19
 		Testname: VolumeSubpathEnvExpansion, subpath ready from failed state
-		Description: Verify that a failing subpath expansion can be modified during the lifecycle of a container.
+		Description: 验证失败的 subpath 展开可以在容器生命周期内被修改。
 	*/
 	framework.ConformanceIt("should verify that a failing subpath expansion can be modified during the lifecycle of a container", f.WithSlow(), func(ctx context.Context) {
 
@@ -291,10 +291,10 @@ var _ = SIGDescribe("Variable Expansion", func() {
 	/*
 		Release: v1.19
 		Testname: VolumeSubpathEnvExpansion, subpath test writes
-		Description: Verify that a subpath expansion can be used to write files into subpaths.
-		1.	valid subpathexpr starts a container running
-		2.	test for valid subpath writes
-		3.	successful expansion of the subpathexpr isn't required for volume cleanup
+		Description: 验证 subpath 展开可用于向子路径写入文件。
+		1. 有效的 subpathexpr 会启动一个容器
+		2. 测试有效的 subpath 写入
+		3. subpathexpr 成功展开并非 volume 清理的必要条件
 
 	*/
 	framework.ConformanceIt("should succeed in writing subpaths in container", func(ctx context.Context) {
@@ -375,8 +375,8 @@ var _ = SIGDescribe("Variable Expansion", func() {
 	/*
 		Release: v1.30
 		Testname: Environment variables, expansion
-		Description: Create a Pod with environment variables. Environment variables defined using previously defined environment variables MUST expand to proper values.
-		Allow almost all printable ASCII characters in environment variables.
+		Description: 创建带环境变量的 Pod。使用之前定义的环境变量定义的环境变量 MUST 展开为正确的值。
+		允许环境变量中使用几乎全部可打印 ASCII 字符。
 	*/
 	framework.It("allow almost all printable ASCII characters as environment variable names", func(ctx context.Context) {
 		envVars := []v1.EnvVar{

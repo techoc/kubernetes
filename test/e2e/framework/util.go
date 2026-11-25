@@ -54,98 +54,98 @@ import (
 	watchtools "k8s.io/client-go/tools/watch"
 )
 
-// DEPRECATED constants. Use the timeouts in framework.Framework instead.
+// 已弃用的常量。请改用 framework.Framework 中的超时设置。
 const (
-	// PodListTimeout is how long to wait for the pod to be listable.
+	// PodListTimeout 是等待 Pod 可被列出的时长。
 	PodListTimeout = time.Minute
 
-	// PodStartTimeout is how long to wait for the pod to be started.
+	// PodStartTimeout 是等待 Pod 启动的时长。
 	PodStartTimeout = 5 * time.Minute
 
-	// PodStartShortTimeout is same as `PodStartTimeout` to wait for the pod to be started, but shorter.
-	// Use it case by case when we are sure pod start will not be delayed.
-	// minutes by slow docker pulls or something else.
+	// PodStartShortTimeout 与 `PodStartTimeout` 相同，但更短。
+	// 在确信 Pod 启动不会延迟的情况下视情况使用。
+	// 因 docker 拉取缓慢或其他原因而延迟几分钟。
 	PodStartShortTimeout = 2 * time.Minute
 
-	// PodDeleteTimeout is how long to wait for a pod to be deleted.
+	// PodDeleteTimeout 是等待 Pod 被删除的时长。
 	PodDeleteTimeout = 5 * time.Minute
 
-	// PodGetTimeout is how long to wait for a pod to be got.
+	// PodGetTimeout 是等待获取 Pod 的时长。
 	PodGetTimeout = 2 * time.Minute
 
-	// PodEventTimeout is how much we wait for a pod event to occur.
+	// PodEventTimeout 是等待 Pod 事件发生的时长。
 	PodEventTimeout = 2 * time.Minute
 
-	// ServiceStartTimeout is how long to wait for a service endpoint to be resolvable.
+	// ServiceStartTimeout 是等待 service endpoint 可解析的时长。
 	ServiceStartTimeout = 3 * time.Minute
 
-	// Poll is how often to Poll pods, nodes and claims.
+	// Poll 是轮询 Pod、节点和 claim 的频率。
 	Poll = 2 * time.Second
 
-	// PollShortTimeout is the short timeout value in polling.
+	// PollShortTimeout 是轮询中的较短超时值。
 	PollShortTimeout = 1 * time.Minute
 
-	// ServiceAccountProvisionTimeout is how long to wait for a service account to be provisioned.
-	// service accounts are provisioned after namespace creation
-	// a service account is required to support pod creation in a namespace as part of admission control
+	// ServiceAccountProvisionTimeout 是等待 service account 被供给的时长。
+	// service account 在命名空间创建后供给
+	// 作为 admission control 的一部分，在命名空间中创建 Pod 需要有 service account
 	ServiceAccountProvisionTimeout = 2 * time.Minute
 
-	// SingleCallTimeout is how long to try single API calls (like 'get' or 'list'). Used to prevent
-	// transient failures from failing tests.
+	// SingleCallTimeout 是尝试单个 API 调用（如 'get' 或 'list'）的时长，用于防止
+	// 瞬态失败导致测试失败。
 	SingleCallTimeout = 5 * time.Minute
 
-	// NodeReadyInitialTimeout is how long nodes have to be "ready" when a test begins. They should already
-	// be "ready" before the test starts, so this is small.
+	// NodeReadyInitialTimeout 是测试开始时节点必须处于 "ready" 状态的时长。测试开始前它们就应
+	// 已 "ready"，因此该值很小。
 	NodeReadyInitialTimeout = 20 * time.Second
 
-	// PodReadyBeforeTimeout is how long pods have to be "ready" when a test begins.
+	// PodReadyBeforeTimeout 是测试开始时 Pod 必须处于 "ready" 状态的时长。
 	PodReadyBeforeTimeout = 5 * time.Minute
 
-	// ClaimProvisionShortTimeout is same as `ClaimProvisionTimeout` to wait for claim to be dynamically provisioned, but shorter.
-	// Use it case by case when we are sure this timeout is enough.
+	// ClaimProvisionShortTimeout 与 `ClaimProvisionTimeout` 相同，但更短。
+	// 在确信该超时足够时视情况使用。
 	ClaimProvisionShortTimeout = 1 * time.Minute
 
-	// ClaimProvisionTimeout is how long claims have to become dynamically provisioned.
+	// ClaimProvisionTimeout 是等待 claim 完成动态供给的时长。
 	ClaimProvisionTimeout = 5 * time.Minute
 
-	// RestartNodeReadyAgainTimeout is how long a node is allowed to become "Ready" after it is restarted before
-	// the test is considered failed.
+	// RestartNodeReadyAgainTimeout 是节点重启后允许多长时间重新变为 "Ready"，
+	// 超过则测试失败。
 	RestartNodeReadyAgainTimeout = 5 * time.Minute
 
-	// RestartPodReadyAgainTimeout is how long a pod is allowed to become "running" and "ready" after a node
-	// restart before test is considered failed.
+	// RestartPodReadyAgainTimeout 是节点重启后允许 Pod 多长时间重新变为 "running" 和 "ready"，
+	// 超过则测试失败。
 	RestartPodReadyAgainTimeout = 5 * time.Minute
 
-	// SnapshotCreateTimeout is how long for snapshot to create snapshotContent.
+	// SnapshotCreateTimeout 是等待 snapshot 创建 snapshotContent 的时长。
 	SnapshotCreateTimeout = 5 * time.Minute
 
-	// SnapshotDeleteTimeout is how long for snapshot to delete snapshotContent.
+	// SnapshotDeleteTimeout 是等待 snapshot 删除 snapshotContent 的时长。
 	SnapshotDeleteTimeout = 5 * time.Minute
 
-	// ControlPlaneLabel is valid label for kubeadm based clusters like kops ONLY
+	// ControlPlaneLabel 仅对基于 kubeadm 的集群（如 kops）是有效标签
 	ControlPlaneLabel = "node-role.kubernetes.io/control-plane"
 )
 
 var (
-	// ProvidersWithSSH are those providers where each node is accessible with SSH
+	// ProvidersWithSSH 是指每个节点都可通过 SSH 访问的 provider
 	ProvidersWithSSH = []string{"gce", "aws", "local", "azure"}
 )
 
-// RunID is a unique identifier of the e2e run.
-// Beware that this ID is not the same for all tests in the e2e run, because each Ginkgo node creates it separately.
+// RunID 是 e2e 运行的唯一标识符。
+// 注意，e2e 运行中所有测试的该 ID 并不相同，因为每个 Ginkgo 节点都会单独创建它。
 var RunID = uuid.NewUUID()
 
-// CreateTestingNSFn is a func that is responsible for creating namespace used for executing e2e tests.
+// CreateTestingNSFn 负责创建用于执行 e2e 测试的命名空间。
 type CreateTestingNSFn func(ctx context.Context, baseName string, c clientset.Interface, labels map[string]string) (*v1.Namespace, error)
 
-// APIAddress returns a address of an instance.
+// APIAddress 返回实例的地址。
 func APIAddress() string {
 	instanceURL, err := url.Parse(TestContext.Host)
 	ExpectNoError(err)
 	return instanceURL.Hostname()
 }
 
-// ProviderIs returns true if the provider is included is the providers. Otherwise false.
+// 如果 provider 包含在 providers 中，ProviderIs 返回 true，否则返回 false。
 func ProviderIs(providers ...string) bool {
 	for _, provider := range providers {
 		if strings.EqualFold(provider, TestContext.Provider) {
@@ -155,7 +155,7 @@ func ProviderIs(providers ...string) bool {
 	return false
 }
 
-// MasterOSDistroIs returns true if the master OS distro is included in the supportedMasterOsDistros. Otherwise false.
+// 如果 master OS 发行版包含在 supportedMasterOsDistros 中，MasterOSDistroIs 返回 true，否则返回 false。
 func MasterOSDistroIs(supportedMasterOsDistros ...string) bool {
 	for _, distro := range supportedMasterOsDistros {
 		if strings.EqualFold(distro, TestContext.MasterOSDistro) {
@@ -165,7 +165,7 @@ func MasterOSDistroIs(supportedMasterOsDistros ...string) bool {
 	return false
 }
 
-// NodeOSDistroIs returns true if the node OS distro is included in the supportedNodeOsDistros. Otherwise false.
+// 如果节点 OS 发行版包含在 supportedNodeOsDistros 中，NodeOSDistroIs 返回 true，否则返回 false。
 func NodeOSDistroIs(supportedNodeOsDistros ...string) bool {
 	for _, distro := range supportedNodeOsDistros {
 		if strings.EqualFold(distro, TestContext.NodeOSDistro) {
@@ -175,7 +175,7 @@ func NodeOSDistroIs(supportedNodeOsDistros ...string) bool {
 	return false
 }
 
-// NodeOSArchIs returns true if the node OS arch is included in the supportedNodeOsArchs. Otherwise false.
+// 如果节点 OS 架构包含在 supportedNodeOsArchs 中，NodeOSArchIs 返回 true，否则返回 false。
 func NodeOSArchIs(supportedNodeOsArchs ...string) bool {
 	for _, arch := range supportedNodeOsArchs {
 		if strings.EqualFold(arch, TestContext.NodeOSArch) {
@@ -185,9 +185,9 @@ func NodeOSArchIs(supportedNodeOsArchs ...string) bool {
 	return false
 }
 
-// DeleteNamespaces deletes all namespaces that match the given delete and skip filters.
-// Filter is by simple strings.Contains; first skip filter, then delete filter.
-// Returns the list of deleted namespaces or an error.
+// DeleteNamespaces 删除所有匹配给定 delete 和 skip 过滤器的命名空间。
+// 过滤器使用简单的 strings.Contains；先应用 skip 过滤器，再应用 delete 过滤器。
+// 返回已删除命名空间的列表或错误。
 func DeleteNamespaces(ctx context.Context, c clientset.Interface, deleteFilter, skipFilter []string) ([]string, error) {
 	ginkgo.By("Deleting namespaces")
 	nsList, err := c.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
@@ -226,14 +226,14 @@ OUTER:
 	return deleted, nil
 }
 
-// WaitForNamespacesDeleted waits for the namespaces to be deleted.
+// WaitForNamespacesDeleted 等待命名空间被删除。
 func WaitForNamespacesDeleted(ctx context.Context, c clientset.Interface, namespaces []string, timeout time.Duration) error {
 	ginkgo.By(fmt.Sprintf("Waiting for namespaces %+v to vanish", namespaces))
 	nsMap := map[string]bool{}
 	for _, ns := range namespaces {
 		nsMap[ns] = true
 	}
-	//Now POLL until all namespaces have been eradicated.
+	// 现在轮询直到所有命名空间都被清除。
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, false,
 		func(ctx context.Context) (bool, error) {
 			nsList, err := c.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
@@ -304,30 +304,30 @@ func waitForServiceAccountInNamespace(ctx context.Context, c clientset.Interface
 	return nil
 }
 
-// WaitForDefaultServiceAccountInNamespace waits for the default service account to be provisioned
-// the default service account is what is associated with pods when they do not specify a service account
-// as a result, pods are not able to be provisioned in a namespace until the service account is provisioned
+// WaitForDefaultServiceAccountInNamespace 等待 default service account 被供给
+// 当 Pod 未指定 service account 时，会关联 default service account
+// 因此，在 service account 供给完成前，无法在命名空间中创建 Pod
 func WaitForDefaultServiceAccountInNamespace(ctx context.Context, c clientset.Interface, namespace string) error {
 	return waitForServiceAccountInNamespace(ctx, c, namespace, defaultServiceAccountName, ServiceAccountProvisionTimeout)
 }
 
-// WaitForKubeRootCAInNamespace waits for the configmap kube-root-ca.crt containing the service account
-// CA trust bundle to be provisioned in the specified namespace so that pods do not have to retry mounting
-// the config map (which creates noise that hides other issues in the Kubelet).
+// WaitForKubeRootCAInNamespace 等待包含 service account CA trust bundle 的
+// configmap kube-root-ca.crt 在指定命名空间中被供给，这样 Pod 就不必重试挂载
+// 该 config map（会产生噪音，掩盖 Kubelet 中的其他问题）。
 func WaitForKubeRootCAInNamespace(ctx context.Context, c clientset.Interface, namespace string) error {
 	return waitForConfigMapInNamespace(ctx, c, namespace, "kube-root-ca.crt", ServiceAccountProvisionTimeout)
 }
 
-// CreateTestingNS should be used by every test, note that we append a common prefix to the provided test name.
-// Please see NewFramework instead of using this directly.
+// 每个测试都应使用 CreateTestingNS。注意我们会在提供的测试名称前加上一个公共前缀。
+// 请改用 NewFramework，而不是直接使用它。
 func CreateTestingNS(ctx context.Context, baseName string, c clientset.Interface, labels map[string]string) (*v1.Namespace, error) {
 	if labels == nil {
 		labels = map[string]string{}
 	}
 	labels["e2e-run"] = string(RunID)
 
-	// We don't use ObjectMeta.GenerateName feature, as in case of API call
-	// failure we don't know whether the namespace was created and what is its
+	// 我们不使用 ObjectMeta.GenerateName 特性，因为 API 调用
+	// 失败时我们无法知道命名空间是否已创建及其名称是什么。
 	// name.
 	name := fmt.Sprintf("%v-%v", baseName, RandomSuffix())
 
@@ -339,14 +339,14 @@ func CreateTestingNS(ctx context.Context, baseName string, c clientset.Interface
 		},
 		Status: v1.NamespaceStatus{},
 	}
-	// Be robust about making the namespace creation call.
+	// 对创建命名空间的调用要健壮。
 	var got *v1.Namespace
 	if err := wait.PollUntilContextTimeout(ctx, Poll, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		var err error
 		got, err = c.CoreV1().Namespaces().Create(ctx, namespaceObj, metav1.CreateOptions{})
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) {
-				// regenerate on conflict
+				// 冲突时重新生成
 				Logf("Namespace name %q was already taken, generate a new name and retry", namespaceObj.Name)
 				namespaceObj.Name = fmt.Sprintf("%v-%v", baseName, RandomSuffix())
 			} else {
@@ -361,29 +361,29 @@ func CreateTestingNS(ctx context.Context, baseName string, c clientset.Interface
 
 	if TestContext.VerifyServiceAccount {
 		if err := WaitForDefaultServiceAccountInNamespace(ctx, c, got.Name); err != nil {
-			// Even if we fail to create serviceAccount in the namespace,
-			// we have successfully create a namespace.
-			// So, return the created namespace.
+			// 即使在该命名空间中创建 serviceAccount 失败，
+			// 我们也已成功创建了命名空间。
+			// 因此返回已创建的命名空间。
 			return got, err
 		}
 	}
 	return got, nil
 }
 
-// CheckTestingNSDeletedExcept checks whether all e2e based existing namespaces are in the Terminating state
-// and waits until they are finally deleted. It ignores namespace skip.
+// CheckTestingNSDeletedExcept 检查所有现存的 e2e 命名空间是否处于 Terminating 状态，
+// 并等待它们最终被删除。它会忽略要跳过的命名空间。
 func CheckTestingNSDeletedExcept(ctx context.Context, c clientset.Interface, skip string) error {
-	// TODO: Since we don't have support for bulk resource deletion in the API,
-	// while deleting a namespace we are deleting all objects from that namespace
-	// one by one (one deletion == one API call). This basically exposes us to
-	// throttling - currently controller-manager has a limit of max 20 QPS.
-	// Once #10217 is implemented and used in namespace-controller, deleting all
-	// object from a given namespace should be much faster and we will be able
-	// to lower this timeout.
-	// However, now Density test is producing ~26000 events and Load capacity test
-	// is producing ~35000 events, thus assuming there are no other requests it will
-	// take ~30 minutes to fully delete the namespace. Thus I'm setting it to 60
-	// minutes to avoid any timeouts here.
+	// TODO：由于 API 不支持批量删除资源，
+	// 删除命名空间时我们逐个删除其中的所有对象
+	//（一次删除等于一次 API 调用）。这基本上面临
+	// 限流 —— 目前 controller-manager 的上限是 20 QPS。
+	// 一旦 #10217 实现并用于 namespace-controller，删除给定命名空间中的所有
+	// 对象应该会快得多，我们就能
+	// 降低这个超时。
+	// 然而，现在 Density 测试产生约 26000 个事件，Load capacity 测试
+	// 产生约 35000 个事件。假设没有其他请求，完全删除命名空间
+	// 大约需要 30 分钟。因此我将其设为 60
+	// 分钟，以避免此处超时。
 	timeout := 60 * time.Minute
 
 	Logf("Waiting for terminating namespaces to be deleted...")
@@ -409,7 +409,7 @@ func CheckTestingNSDeletedExcept(ctx context.Context, c clientset.Interface, ski
 	return fmt.Errorf("Waiting for terminating namespaces to be deleted timed out")
 }
 
-// restclientConfig returns a config holds the information needed to build connection to kubernetes clusters.
+// restclientConfig 返回一个配置，其中包含构建到 Kubernetes 集群连接所需的信息。
 func restclientConfig(kubeContext string) (*clientcmdapi.Config, error) {
 	Logf(">>> kubeConfig: %s", TestContext.KubeConfig)
 	if TestContext.KubeConfig == "" {
@@ -426,10 +426,10 @@ func restclientConfig(kubeContext string) (*clientcmdapi.Config, error) {
 	return c, nil
 }
 
-// ClientConfigGetter is a func that returns getter to return a config.
+// ClientConfigGetter 是一个返回 getter 的函数，该 getter 返回配置。
 type ClientConfigGetter func() (*restclient.Config, error)
 
-// LoadConfig returns a config for a rest client with the UserAgent set to include the current test name.
+// LoadConfig 返回一个 rest client 配置，其 UserAgent 包含当前测试名称。
 func LoadConfig() (config *restclient.Config, err error) {
 	defer func() {
 		if err == nil && config != nil {
@@ -445,7 +445,7 @@ func LoadConfig() (config *restclient.Config, err error) {
 	}()
 
 	if TestContext.NodeE2E {
-		// This is a node e2e test, apply the node e2e configuration
+		// 这是 node e2e 测试，应用 node e2e 配置
 		return &restclient.Config{
 			Host:        TestContext.Host,
 			BearerToken: TestContext.BearerToken,
@@ -461,8 +461,8 @@ func LoadConfig() (config *restclient.Config, err error) {
 		}
 		return nil, err
 	}
-	// In case Host is not set in TestContext, sets it as
-	// CurrentContext Server for k8s API client to connect to.
+	// 如果 TestContext 中未设置 Host，则将其设为
+	// k8s API client 要连接的 CurrentContext Server。
 	if TestContext.Host == "" && c.Clusters != nil {
 		currentContext, ok := c.Clusters[c.CurrentContext]
 		if ok {
@@ -473,7 +473,7 @@ func LoadConfig() (config *restclient.Config, err error) {
 	return clientcmd.NewDefaultClientConfig(*c, &clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: TestContext.Host}}).ClientConfig()
 }
 
-// LoadClientset returns clientset for connecting to kubernetes clusters.
+// LoadClientset 返回用于连接 Kubernetes 集群的 clientset。
 func LoadClientset() (*clientset.Clientset, error) {
 	config, err := LoadConfig()
 	if err != nil {
@@ -482,12 +482,12 @@ func LoadClientset() (*clientset.Clientset, error) {
 	return clientset.NewForConfig(config)
 }
 
-// RandomSuffix provides a random sequence to append to pods,services,rcs.
+// RandomSuffix 提供一个随机序列，用于附加到 pod、service、rc 上。
 func RandomSuffix() string {
 	return strconv.Itoa(rand.Intn(10000))
 }
 
-// StartCmdAndStreamOutput returns stdout and stderr after starting the given cmd.
+// StartCmdAndStreamOutput 启动给定 cmd 后返回 stdout 和 stderr。
 func StartCmdAndStreamOutput(cmd *exec.Cmd) (stdout, stderr io.ReadCloser, err error) {
 	stdout, err = cmd.StdoutPipe()
 	if err != nil {
@@ -497,28 +497,28 @@ func StartCmdAndStreamOutput(cmd *exec.Cmd) (stdout, stderr io.ReadCloser, err e
 	if err != nil {
 		return
 	}
-	// cmd.Args contains command itself as 0th argument, so it's sufficient to
-	// print 1st and latter arguments
+	// cmd.Args 的第 0 个参数是命令本身，因此只需
+	// 打印第 1 个及之后的参数即可。
 	Logf("Asynchronously running '%s %s'", cmd.Path, strings.Join(cmd.Args[1:], " "))
 	err = cmd.Start()
 	return
 }
 
-// TryKill is rough equivalent of ctrl+c for cleaning up processes. Intended to be run in defer.
+// TryKill 大致相当于 ctrl+c，用于清理进程。应在 defer 中运行。
 func TryKill(cmd *exec.Cmd) {
 	if err := cmd.Process.Kill(); err != nil {
 		Logf("ERROR failed to kill command %v! The process may leak", cmd)
 	}
 }
 
-// EnsureLoadBalancerResourcesDeleted ensures that cloud load balancer resources that were created
-// are actually cleaned up.  Currently only implemented for GCE/GKE.
+// EnsureLoadBalancerResourcesDeleted 确保创建的云负载均衡器资源
+// 确实被清理。目前仅针对 GCE/GKE 实现。
 func EnsureLoadBalancerResourcesDeleted(ctx context.Context, ip, portRange string) error {
 	return TestContext.CloudConfig.Provider.EnsureLoadBalancerResourcesDeleted(ctx, ip, portRange)
 }
 
-// CoreDump SSHs to the master and all nodes and dumps their logs into dir.
-// It shells out to cluster/log-dump/log-dump.sh to accomplish this.
+// CoreDump 通过 SSH 登录 master 和所有节点，将日志 dump 到 dir。
+// 它调用 cluster/log-dump/log-dump.sh 来完成。
 func CoreDump(dir string) {
 	if TestContext.DisableLogDump {
 		Logf("Skipping dumping logs from cluster")
@@ -544,28 +544,28 @@ func CoreDump(dir string) {
 	}
 }
 
-// parseSystemdServices converts services separator from comma to space.
+// parseSystemdServices 将 service 分隔符从逗号转换为空格。
 func parseSystemdServices(services string) string {
 	return strings.TrimSpace(strings.Replace(services, ",", " ", -1))
 }
 
-// RunCmd runs cmd using args and returns its stdout and stderr. It also outputs
-// cmd's stdout and stderr to their respective OS streams.
+// RunCmd 用 args 运行 cmd 并返回其 stdout 和 stderr，同时
+// 将 cmd 的 stdout 和 stderr 输出到相应的 OS 流。
 func RunCmd(command string, args ...string) (string, string, error) {
 	return RunCmdEnv(nil, command, args...)
 }
 
-// RunCmdEnv runs cmd with the provided environment and args and
-// returns its stdout and stderr. It also outputs cmd's stdout and
-// stderr to their respective OS streams.
+// RunCmdEnv 用给定的环境和参数运行 cmd，并
+// 返回其 stdout 和 stderr，同时也会输出 cmd 的 stdout 和
+// stderr 到相应的 OS 流。
 func RunCmdEnv(env []string, command string, args ...string) (string, string, error) {
 	Logf("Running %s %v", command, args)
 	var bout, berr bytes.Buffer
 	cmd := exec.Command(command, args...)
-	// We also output to the OS stdout/stderr to aid in debugging in case cmd
-	// hangs and never returns before the test gets killed.
+	// 我们还输出到 OS stdout/stderr，以便在 cmd
+	// 挂起且测试被杀之前一直不返回时辅助调试。
 	//
-	// This creates some ugly output because gcloud doesn't always provide
+	// 这会产生一些难看的输出，因为 gcloud 并不总是提供
 	// newlines.
 	cmd.Stdout = io.MultiWriter(os.Stdout, &bout)
 	cmd.Stderr = io.MultiWriter(os.Stderr, &berr)
@@ -579,7 +579,7 @@ func RunCmdEnv(env []string, command string, args ...string) (string, string, er
 	return stdout, stderr, nil
 }
 
-// GetNodeExternalIPs returns a list of external ip address(es) if any for a node
+// 如果节点有外部 IP，GetNodeExternalIPs 返回其外部 IP 地址列表
 func GetNodeExternalIPs(node *v1.Node) (ips []string) {
 	for j := range node.Status.Addresses {
 		nodeAddress := &node.Status.Addresses[j]
@@ -590,7 +590,7 @@ func GetNodeExternalIPs(node *v1.Node) (ips []string) {
 	return
 }
 
-// GetControlPlaneNodes returns a list of control plane nodes
+// GetControlPlaneNodes 返回 control plane 节点列表
 func GetControlPlaneNodes(ctx context.Context, c clientset.Interface) *v1.NodeList {
 	allNodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	ExpectNoError(err, "error reading all nodes")
@@ -598,15 +598,15 @@ func GetControlPlaneNodes(ctx context.Context, c clientset.Interface) *v1.NodeLi
 	var cpNodes v1.NodeList
 
 	for _, node := range allNodes.Items {
-		// Check for the control plane label
+		// 检查 control plane 标签
 		if _, hasLabel := node.Labels[ControlPlaneLabel]; hasLabel {
 			cpNodes.Items = append(cpNodes.Items, node)
 			continue
 		}
 
-		// Check for the specific taint
+		// 检查特定的 taint
 		for _, taint := range node.Spec.Taints {
-			// NOTE the taint key is the same as the control plane label
+			// 注意，taint key 与 control plane 标签相同
 			if taint.Key == ControlPlaneLabel && taint.Effect == v1.TaintEffectNoSchedule {
 				cpNodes.Items = append(cpNodes.Items, node)
 				continue
@@ -617,7 +617,7 @@ func GetControlPlaneNodes(ctx context.Context, c clientset.Interface) *v1.NodeLi
 	return &cpNodes
 }
 
-// PrettyPrintJSON converts metrics to JSON format.
+// PrettyPrintJSON 将 metrics 转换为 JSON 格式。
 func PrettyPrintJSON(metrics interface{}) string {
 	output := &bytes.Buffer{}
 	if err := json.NewEncoder(output).Encode(metrics); err != nil {
@@ -633,24 +633,24 @@ func PrettyPrintJSON(metrics interface{}) string {
 }
 
 // WatchEventSequenceVerifier ...
-// manages a watch for a given resource, ensures that events take place in a given order, retries the test on failure
+// 管理给定资源的 watch，确保事件按给定顺序发生，失败时重试测试
 //
-//	ctx                 cancellation signal across API boundaries, e.g: context from Ginkgo
-//	dc                  sets up a client to the API
-//	resourceType        specify the type of resource
-//	namespace           select a namespace
-//	resourceName        the name of the given resource
-//	listOptions         options used to find the resource, recommended to use listOptions.labelSelector
-//	expectedWatchEvents array of events which are expected to occur
-//	scenario            the test itself
-//	retryCleanup        a function to run which ensures that there are no dangling resources upon test failure
+//	ctx                 跨 API 边界的取消信号，例如来自 Ginkgo 的 context
+//	dc                  设置到 API 的 client
+//	resourceType       指定资源类型
+//	namespace          选择一个命名空间
+//	resourceName       给定资源的名称
+//	listOptions        查找资源时使用的选项，建议使用 listOptions.labelSelector
+//	expectedWatchEvents 预期发生的事件数组
+//	scenario           测试本身
+//	retryCleanup       测试失败时运行的函数，用于确保没有残留资源
 //
-// this tooling relies on the test to return the events as they occur
-// the entire scenario must be run to ensure that the desired watch events arrive in order (allowing for interweaving of watch events)
+// 此工具依赖测试在事件发生时返回事件
+// 必须运行整个场景，以确保所需的 watch 事件按顺序到达（允许 watch 事件交织）
 //
-//	if an expected watch event is missing we elect to clean up and run the entire scenario again
+//	scenario           测试本身
 //
-// we try the scenario three times to allow the sequencing to fail a couple of times
+// 场景尝试三次，允许顺序有几次失败
 func WatchEventSequenceVerifier(ctx context.Context, dc dynamic.Interface, resourceType schema.GroupVersionResource, namespace string, resourceName string, listOptions metav1.ListOptions, expectedWatchEvents []watch.Event, scenario func(*watchtools.RetryWatcher) []watch.Event, retryCleanup func() error) {
 	listWatcher := &cache.ListWatch{
 		WatchFunc: func(listOptions metav1.ListOptions) (watch.Interface, error) {
@@ -667,7 +667,7 @@ retriesLoop:
 		resourceWatch, err := watchtools.NewRetryWatcher(initResource.GetResourceVersion(), listWatcher)
 		ExpectNoError(err, "Failed to create a resource watch of %v in namespace %v", resourceType.Resource, namespace)
 
-		// NOTE the test may need access to the events to see what's going on, such as a change in status
+		// 注意，测试可能需要访问事件以了解情况，例如 status 的变化
 		actualWatchEvents := scenario(resourceWatch)
 		errs := sets.NewString()
 		gomega.Expect(len(expectedWatchEvents)).To(gomega.BeNumerically("<=", len(actualWatchEvents)), "Did not get enough watch events")

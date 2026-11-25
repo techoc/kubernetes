@@ -59,7 +59,7 @@ var _ = utils.SIGDescribe("Ephemeralstorage", func() {
 				pod, err := c.CoreV1().Pods(f.Namespace.Name).Create(ctx, pod, metav1.CreateOptions{})
 				framework.ExpectNoError(err)
 
-				// Allow it to sleep for 30 seconds
+				// 允许休眠 30 秒
 				time.Sleep(30 * time.Second)
 				framework.Logf("Deleting pod %q/%q", pod.Namespace, pod.Name)
 				framework.ExpectNoError(e2epod.DeletePodWithWait(ctx, c, pod))

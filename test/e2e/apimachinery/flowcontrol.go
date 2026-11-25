@@ -99,10 +99,10 @@ var _ = SIGDescribe("API priority and fairness", func() {
 		}
 	})
 
-	// This test creates two flow schemas and a corresponding priority level for
-	// each flow schema. One flow schema has a higher match precedence. With two
-	// clients making requests at different rates, we test to make sure that the
-	// higher QPS client cannot drown out the other one despite having higher
+	// 此测试创建两个 flow schema 及各自对应的 priority level。
+	// 其中一个 flow schema 的匹配优先级更高。通过让两个客户端以不同速率
+	// 发请求，验证高 QPS 客户端不会压垮另一个客户端，
+	// 即使 QPS 更高，高 QPS 客户端也不能压垮另一个客户端
 	// priority.
 	ginkgo.It("should ensure that requests can't be drowned out (priority)", func(ctx context.Context) {
 		// See https://github.com/kubernetes/kubernetes/issues/96710
@@ -126,11 +126,11 @@ var _ = SIGDescribe("API priority and fairness", func() {
 			expectedCompletedPercentage float64 //lint:ignore U1000 field is actually used
 		}
 		clients := []client{
-			// "highqps" refers to a client that creates requests at a much higher
-			// QPS than its counter-part and well above its concurrency share limit.
-			// In contrast, "lowqps" stays under its concurrency shares.
-			// Additionally, the "highqps" client also has a higher matching
-			// precedence for its flow schema.
+			// "highqps" 指请求速率远高于对等方、
+			// 且远超其并发份额上限的客户端。
+			// 相比之下，"lowqps" 保持在并发份额之内。
+			// 此外，"highqps" 客户端的 flow schema
+			// 匹配优先级也更高。
 			{username: highQPSClientName, qps: 90, concurrencyMultiplier: 2.0, matchingPrecedence: 999, expectedCompletedPercentage: 0.90},
 			{username: lowQPSClientName, qps: 4, concurrencyMultiplier: 0.5, matchingPrecedence: 1000, expectedCompletedPercentage: 0.90},
 		}
@@ -174,7 +174,7 @@ var _ = SIGDescribe("API priority and fairness", func() {
 
 		ginkgo.By("checking completed requests with expected values")
 		for _, client := range clients {
-			// Each client should have 95% of its ideal number of completed requests.
+			// 每个客户端应完成理想请求数的 95%。
 			maxCompletedRequests := float64(client.concurrency) * client.qps * loadDuration.Seconds()
 			fractionCompleted := float64(client.completedRequests) / maxCompletedRequests
 			framework.Logf("client %q completed %d/%d requests (%.1f%%)", client.username, client.completedRequests, int32(maxCompletedRequests), 100*fractionCompleted)
@@ -184,11 +184,11 @@ var _ = SIGDescribe("API priority and fairness", func() {
 		}
 	})
 
-	// This test has two clients (different usernames) making requests at
-	// different rates. Both clients' requests get mapped to the same flow schema
-	// and priority level. We expect APF's "ByUser" flow distinguisher to isolate
-	// the two clients and not allow one client to drown out the other despite
-	// having a higher QPS.
+	// 此测试有两个客户端（不同用户名）以不同速率发请求，
+	// 两者的请求映射到相同的 flow schema 和 priority level。
+	// 期望 APF 的 "ByUser" flow distinguisher 能隔离两个客户端，
+	// 即使一方 QPS 更高，也不会压垮另一方。
+
 	ginkgo.It("should ensure that requests can't be drowned out (fairness)", func(ctx context.Context) {
 		// See https://github.com/kubernetes/kubernetes/issues/96710
 		ginkgo.Skip("skipping test until flakiness is resolved")
@@ -246,7 +246,7 @@ var _ = SIGDescribe("API priority and fairness", func() {
 
 		ginkgo.By("checking completed requests with expected values")
 		for _, client := range clients {
-			// Each client should have 95% of its ideal number of completed requests.
+			// 每个客户端应完成理想请求数的 95%。
 			maxCompletedRequests := float64(client.concurrency) * client.qps * float64(loadDuration/time.Second)
 			fractionCompleted := float64(client.completedRequests) / maxCompletedRequests
 			framework.Logf("client %q completed %d/%d requests (%.1f%%)", client.username, client.completedRequests, int32(maxCompletedRequests), 100*fractionCompleted)
@@ -260,14 +260,10 @@ var _ = SIGDescribe("API priority and fairness", func() {
 	   Release: v1.29
 	   Testname: Priority and Fairness FlowSchema API
 	   Description:
-	   The flowcontrol.apiserver.k8s.io API group MUST exist in the
-	     /apis discovery document.
-	   The flowcontrol.apiserver.k8s.io/v1 API group/version MUST exist
-	     in the /apis/flowcontrol.apiserver.k8s.io discovery document.
-	   The flowschemas and flowschemas/status resources MUST exist
-	     in the /apis/flowcontrol.apiserver.k8s.io/v1 discovery document.
-	   The flowschema resource must support create, get, list, watch,
-	     update, patch, delete, and deletecollection.
+	   flowcontrol.apiserver.k8s.io API 组 MUST 出现在 /apis discovery 文档中。
+	   flowcontrol.apiserver.k8s.io/v1 API 组/版本 MUST 出现在 /apis/flowcontrol.apiserver.k8s.io discovery 文档中。
+	   flowschemas 和 flowschemas/status 资源 MUST 出现在 /apis/flowcontrol.apiserver.k8s.io/v1 discovery 文档中。
+	   flowschema 资源必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support FlowSchema API operations", func(ctx context.Context) {
 		fsVersion := "v1"
@@ -505,15 +501,11 @@ var _ = SIGDescribe("API priority and fairness", func() {
 	   Release: v1.29
 	   Testname: Priority and Fairness PriorityLevelConfiguration API
 	   Description:
-	   The flowcontrol.apiserver.k8s.io API group MUST exist in the
-	     /apis discovery document.
-	   The flowcontrol.apiserver.k8s.io/v1 API group/version MUST exist
-	     in the /apis/flowcontrol.apiserver.k8s.io discovery document.
-	   The prioritylevelconfiguration and prioritylevelconfiguration/status
-	     resources MUST exist in the
-	     /apis/flowcontrol.apiserver.k8s.io/v1 discovery document.
-	   The prioritylevelconfiguration resource must support create, get,
-	     list, watch, update, patch, delete, and deletecollection.
+	   flowcontrol.apiserver.k8s.io API 组 MUST 出现在 /apis discovery 文档中。
+	   flowcontrol.apiserver.k8s.io/v1 API 组/版本 MUST 出现在 /apis/flowcontrol.apiserver.k8s.io discovery 文档中。
+	   prioritylevelconfiguration 和 prioritylevelconfiguration/status 资源 MUST 出现在
+	   /apis/flowcontrol.apiserver.k8s.io/v1 discovery 文档中。
+	   prioritylevelconfiguration 资源必须支持 create、get、list、watch、update、patch、delete 和 deletecollection。
 	*/
 	framework.ConformanceIt("should support PriorityLevelConfiguration API operations", func(ctx context.Context) {
 		plVersion := "v1"
@@ -730,8 +722,8 @@ var _ = SIGDescribe("API priority and fairness", func() {
 	})
 })
 
-// createPriorityLevel creates a priority level with the provided assured
-// concurrency share.
+// createPriorityLevel 创建一个具有指定 assured concurrency share 的 priority level
+// concurrency share。
 func createPriorityLevel(ctx context.Context, f *framework.Framework, priorityLevelName string, nominalConcurrencyShares int32) *flowcontrol.PriorityLevelConfiguration {
 	createdPriorityLevel, err := f.ClientSet.FlowcontrolV1().PriorityLevelConfigurations().Create(
 		ctx,
@@ -787,8 +779,8 @@ func getPriorityLevelNominalConcurrency(ctx context.Context, c clientset.Interfa
 	return 0, errPriorityLevelNotFound
 }
 
-// createFlowSchema creates a flow schema referring to a particular priority
-// level and matching the username provided.
+// createFlowSchema 创建一个引用特定 priority level 并匹配指定用户名的 flow schema。
+// level 并与提供的用户名匹配。
 func createFlowSchema(ctx context.Context, f *framework.Framework, flowSchemaName string, matchingPrecedence int32, priorityLevelName string, matchingUsernames []string) *flowcontrol.FlowSchema {
 	var subjects []flowcontrol.Subject
 	for _, matchingUsername := range matchingUsernames {
@@ -833,10 +825,10 @@ func createFlowSchema(ctx context.Context, f *framework.Framework, flowSchemaNam
 	return createdFlowSchema
 }
 
-// waitForSteadyState repeatedly polls the API server to check if the newly
-// created flow schema and priority level have been seen by the APF controller
-// by checking: (1) the dangling priority level reference condition in the flow
-// schema status, and (2) metrics. The function times out after 30 seconds.
+// waitForSteadyState 反复轮询 API server，检查新创建的
+// flow schema 和 priority level 是否已被 APF 控制器识别：
+// (1) flow schema status 中的 dangling priority level reference condition，
+// (2) metrics。函数在 30 秒后超时。
 func waitForSteadyState(ctx context.Context, f *framework.Framework, flowSchemaName string, priorityLevelName string) {
 	framework.ExpectNoError(wait.PollUntilContextTimeout(ctx, time.Second, 30*time.Second, false, func(ctx context.Context) (bool, error) {
 		fs, err := f.ClientSet.FlowcontrolV1().FlowSchemas().Get(ctx, flowSchemaName, metav1.GetOptions{})
@@ -845,10 +837,10 @@ func waitForSteadyState(ctx context.Context, f *framework.Framework, flowSchemaN
 		}
 		condition := apihelpers.GetFlowSchemaConditionByType(fs, flowcontrol.FlowSchemaConditionDangling)
 		if condition == nil || condition.Status != flowcontrol.ConditionFalse {
-			// The absence of the dangling status object implies that the APF
-			// controller isn't done with syncing the flow schema object. And, of
-			// course, the condition being anything but false means that steady state
-			// hasn't been achieved.
+			// 缺少 dangling status 对象意味着 APF 控制器
+			// 尚未完成 flow schema 对象的同步。当然，如果该 condition
+			// 不是 false，就说明尚未达到稳态。
+			// makeRequests 向 API server 创建一个请求并返回响应。
 			return false, nil
 		}
 		_, err = getPriorityLevelNominalConcurrency(ctx, f.ClientSet, priorityLevelName)
@@ -862,7 +854,7 @@ func waitForSteadyState(ctx context.Context, f *framework.Framework, flowSchemaN
 	}))
 }
 
-// makeRequests creates a request to the API server and returns the response.
+// makeRequests 向 API server 创建一个请求并返回响应。
 func makeRequest(f *framework.Framework, username string) *http.Response {
 	config := f.ClientConfig()
 	config.Impersonate.UserName = username
@@ -887,8 +879,8 @@ func getFlowSchemaUID(response *http.Response) string {
 	return response.Header.Get(flowcontrol.ResponseHeaderMatchedFlowSchemaUID)
 }
 
-// uniformQPSLoadSingle loads the API server with requests at a uniform <qps>
-// for <loadDuration> time. The number of successfully completed requests is
+// uniformQPSLoadSingle 以 <qps> 的均匀速率向 API server 发请求，持续
+// <loadDuration> 时间。返回成功完成的请求数。
 // returned.
 func uniformQPSLoadSingle(f *framework.Framework, username string, qps float64, loadDuration time.Duration) int32 {
 	var completed atomic.Int32
@@ -900,32 +892,32 @@ func uniformQPSLoadSingle(f *framework.Framework, username string, qps float64, 
 		select {
 		case <-ticker.C:
 			wg.Add(1)
-			// Each request will have a non-zero latency. In addition, there may be
-			// multiple concurrent requests in-flight. As a result, a request may
-			// take longer than the time between two different consecutive ticks
-			// regardless of whether a requests is accepted or rejected. For example,
-			// in cases with clients making requests far above their concurrency
-			// share, with little time between consecutive requests, due to limited
-			// concurrency, newer requests will be enqueued until older ones
-			// complete. Hence the synchronisation with sync.WaitGroup.
+			// 每个请求都有非零延迟。此外可能有多个并发请求在途。因此，
+			// 无论请求被接受还是拒绝，单个请求都可能
+			// 耗时超过两个相邻 tick 之间的间隔。例如，
+			// 当客户端的请求速率远高于其并发份额、请求间隔很小时，
+			// 受并发限制，新请求会一直排队直到旧请求
+			// 完成。因此需要 sync.WaitGroup 进行同步。
+			// 仍在途的请求不应计入完成数。
+			// 不要泄漏 goroutine
 			go func() {
 				defer wg.Done()
 				makeRequest(f, username)
 				completed.Add(1)
 			}()
 		case <-timer.C:
-			// Still in-flight requests should not contribute to the completed count.
+			// uniformQPSLoadConcurrent 用 <concurrency> 个冒充为 <username> 的客户端
 			totalCompleted := completed.Load()
-			wg.Wait() // do not leak goroutines
+			wg.Wait() // 向 API server 发请求，每个客户端以 <qps> 定义的均匀速率发请求。
 			return totalCompleted
 		}
 	}
 }
 
-// uniformQPSLoadConcurrent loads the API server with a <concurrency> number of
-// clients impersonating to be <username>, each creating requests at a uniform
-// rate defined by <qps>. The sum of number of successfully completed requests
-// across all concurrent clients is returned.
+// uniformQPSLoadConcurrent 用 <concurrency> 个冒充为 <username> 的客户端向 API server
+// 发请求，每个客户端以 <qps> 定义的均匀速率发请求。返回所有并发客户端
+// 成功完成的请求总数。
+// 所有并发客户端的成功请求数会累加后返回。
 func uniformQPSLoadConcurrent(f *framework.Framework, username string, concurrency int32, qps float64, loadDuration time.Duration) int32 {
 	var completed atomic.Int32
 	var wg sync.WaitGroup

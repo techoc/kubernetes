@@ -76,9 +76,9 @@ var _ = SIGDescribe("Aggregator", func() {
 	f := framework.NewDefaultFramework("aggregator")
 	f.NamespacePodSecurityLevel = admissionapi.LevelBaseline
 
-	// We want namespace initialization BeforeEach inserted by
-	// NewDefaultFramework to happen before this, so we put this BeforeEach
-	// after NewDefaultFramework.
+	// 希望 NewDefaultFramework 插入的命名空间初始化 BeforeEach
+	// 先于本 BeforeEach 执行，因此把本 BeforeEach 放在
+	// NewDefaultFramework 之后。
 	ginkgo.BeforeEach(func() {
 		config, err := framework.LoadConfig()
 		if err != nil {
@@ -95,18 +95,17 @@ var _ = SIGDescribe("Aggregator", func() {
 	/*
 		Release: v1.17, v1.21, v1.27
 		Testname: aggregator-supports-the-sample-apiserver
-		Description: Ensure that the sample-apiserver code from 1.17 and compiled against 1.17
-		will work on the current Aggregator/API-Server.
-		This test is marked LinuxOnly because etcd does not provide or support images for Windows.
+		Description: 确保用 1.17 编译的 sample-apiserver 代码能在当前 Aggregator/API-Server 上运行。
+		该测试标记为 LinuxOnly，因为 etcd 不提供或不支持 Windows 镜像。
 	*/
 	framework.ConformanceIt("Should be able to support the 1.17 Sample API Server using the current Aggregator [LinuxOnly]", func(ctx context.Context) {
-		// Testing a 1.17 version of the sample-apiserver
+		// 测试 1.17 版本的 sample-apiserver
 		TestSampleAPIServer(ctx, f, aggrclient, imageutils.GetE2EImage(imageutils.APIServer), defaultApiServiceGroupName, defaultApiServiceVersion)
 	})
 })
 
 func cleanupSampleAPIServer(ctx context.Context, client clientset.Interface, aggrclient *aggregatorclient.Clientset, n sampleAPIServerObjectNames, apiServiceName string) {
-	// delete the APIService first to avoid causing discovery errors
+	// 先删除 APIService，避免引发 discovery 错误
 	_ = aggrclient.ApiregistrationV1().APIServices().Delete(ctx, apiServiceName, metav1.DeleteOptions{})
 
 	_ = client.AppsV1().Deployments(n.namespace).Delete(ctx, "sample-apiserver-deployment", metav1.DeleteOptions{})
@@ -135,11 +134,11 @@ func generateSampleAPIServerObjectNames(namespace string) sampleAPIServerObjectN
 	}
 }
 
-// SetUpSampleAPIServer sets up a sample-apiserver.
+// SetUpSampleAPIServer 搭建一个 sample-apiserver。
 //
 // Important:
-// Test cases that call this function should be marked as serial due to potential conflicts
-// with other test cases that also set up a sample-apiserver. For more information, see
+// 调用此函数的测试用例应标记为 serial，因为可能与其他同样搭建 sample-apiserver 的用例
+// 发生冲突。详情参见
 // https://github.com/kubernetes/kubernetes/issues/119582#issuecomment-2215054411.
 func SetUpSampleAPIServer(ctx context.Context, f *framework.Framework, aggrclient *aggregatorclient.Clientset, image string, n sampleAPIServerObjectNames, apiServiceGroupName, apiServiceVersion string) {
 	ginkgo.By("Registering the sample API server.")
@@ -149,7 +148,7 @@ func SetUpSampleAPIServer(ctx context.Context, f *framework.Framework, aggrclien
 	apiServiceName := apiServiceVersion + "." + apiServiceGroupName
 
 	// kubectl create -f namespace.yaml
-	// NOTE: aggregated apis should generally be set up in their own namespace. As the test framework is setting up a new namespace, we are just using that.
+	// NOTE: 聚合 api 通常应放在各自的命名空间中。由于测试框架会创建一个新命名空间，这里直接复用它。
 
 	// kubectl create -f secret.yaml
 	secretName := "sample-apiserver-secret"
@@ -351,10 +350,10 @@ func SetUpSampleAPIServer(ctx context.Context, f *framework.Framework, aggrclien
 		framework.ExpectNoError(err, "creating role binding %s in namespace %s", n.roleBinding, "kube-system")
 	}
 
-	// Wait for the extension apiserver to be up and healthy
+	// 等待扩展 apiserver 启动并健康检查通过
 	// kubectl get deployments -n <aggregated-api-namespace> && status == Running
-	// NOTE: aggregated apis should generally be set up in their own namespace (<aggregated-api-namespace>). As the test framework
-	// is setting up a new namespace, we are just using that.
+	// NOTE: 聚合 api 通常应放在各自的命名空间（<aggregated-api-namespace>）中。由于测试框架
+	// 会创建一个新命名空间，这里直接复用它。
 	err = e2edeployment.WaitForDeploymentComplete(client, deployment)
 	framework.ExpectNoError(err, "deploying extension apiserver in namespace %s", n.namespace)
 
@@ -423,8 +422,8 @@ func SetUpSampleAPIServer(ctx context.Context, f *framework.Framework, aggrclien
 	framework.ExpectNoError(err, "gave up waiting for apiservice wardle to come up successfully")
 }
 
-// TestSampleAPIServer is a basic test if the sample-apiserver code from 1.29 and compiled against 1.29
-// will work on the current Aggregator/API-Server.
+// TestSampleAPIServer 是一个基本测试，检查用 1.29 编译的 sample-apiserver 代码
+// 能否在当前 Aggregator/API-Server 上运行。
 func TestSampleAPIServer(ctx context.Context, f *framework.Framework, aggrclient *aggregatorclient.Clientset, image, apiServiceGroupName, apiServiceVersion string) {
 	n := generateSampleAPIServerObjectNames(f.Namespace.Name)
 	SetUpSampleAPIServer(ctx, f, aggrclient, image, n, apiServiceGroupName, apiServiceVersion)
@@ -485,10 +484,10 @@ func TestSampleAPIServer(ctx context.Context, f *framework.Framework, aggrclient
 
 	flunderName = generateFlunderName("dynamic-flunder")
 
-	// Rerun the Create/List/Delete tests using the Dynamic client.
-	// Discovery may still show the aggregated API group as stale if the
-	// kube-apiserver's DiscoveryManager hasn't synced yet, so poll until
-	// the wardle/flunders GVR appears in the discovery results.
+	// 使用 Dynamic 客户端重新运行 Create/List/Delete 测试。
+	// 如果 kube-apiserver 的 DiscoveryManager 尚未同步，discovery 结果中
+	// 聚合 API 组可能仍显示为过期，因此轮询直到
+	// discovery 结果中出现 wardle/flunders 的 GVR。
 	gvr := schema.GroupVersionResource{Group: apiServiceGroupName, Version: apiServiceVersion, Resource: "flunders"}
 	err = pollTimed(ctx, 1*time.Second, 60*time.Second, func(ctx context.Context) (bool, error) {
 		resources, discoveryErr := client.Discovery().ServerPreferredNamespacedResources()
@@ -580,8 +579,8 @@ func TestSampleAPIServer(ctx context.Context, f *framework.Framework, aggrclient
 		framework.Failf("Unable to find %s in APIServiceList", apiServiceName)
 	}
 
-	// As the APIService doesn't have any labels currently set we need to
-	// set one so that we can select it later when we call deleteCollection
+	// APIService 当前没有设置任何标签，需要先设置一个，
+	// 以便后续调用 deleteCollection 时能够选中它。
 	ginkgo.By("Adding a label to the APIService")
 	apiServiceClient := aggrclient.ApiregistrationV1().APIServices()
 	apiServiceLabel := map[string]string{"e2e-apiservice": "patched"}
@@ -764,9 +763,9 @@ func TestSampleAPIServer(ctx context.Context, f *framework.Framework, aggrclient
 	cleanupSampleAPIServer(ctx, client, aggrclient, n, apiServiceName)
 }
 
-// pollTimed will call Poll but time how long Poll actually took.
-// It will then framework.Logf the msg with the duration of the Poll.
-// It is assumed that msg will contain one %s for the elapsed time.
+// pollTimed 调用 Poll，并记录 Poll 实际耗时。
+// 随后通过 framework.Logf 输出 msg 及 Poll 的耗时。
+// 假定 msg 中包含一个 %s，用于填入耗时。
 func pollTimed(ctx context.Context, interval, timeout time.Duration, condition wait.ConditionWithContextFunc, msg string) error {
 	defer func(start time.Time, msg string) {
 		elapsed := time.Since(start)

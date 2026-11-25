@@ -33,16 +33,16 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// JobUpgradeTest is a test harness for batch Jobs.
+// JobUpgradeTest 是批处理 Job 的测试框架。
 type JobUpgradeTest struct {
 	job       *batchv1.Job
 	namespace string
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (JobUpgradeTest) Name() string { return "[sig-apps] job-upgrade" }
 
-// Setup starts a Job with a parallelism of 2 and 2 completions running.
+// Setup 启动一个并行度为 2、completions 为 2 的 Job。
 func (t *JobUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	t.namespace = f.Namespace.Name
 
@@ -57,7 +57,7 @@ func (t *JobUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 	framework.ExpectNoError(err)
 }
 
-// Test verifies that the Jobs Pods are running after the an upgrade
+// Test 验证升级后 Job 的 Pod 仍在运行
 func (t *JobUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	<-done
 	ginkgo.By("Ensuring job is running")
@@ -68,13 +68,13 @@ func (t *JobUpgradeTest) Test(ctx context.Context, f *framework.Framework, done 
 	framework.ExpectNoError(err)
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *JobUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
-	// rely on the namespace deletion to clean up everything
+	// 依赖命名空间删除来清理所有内容
 }
 
-// ensureAllJobPodsRunning uses c to check if the Job named jobName in ns
-// is running, returning an error if the expected parallelism is not
+// ensureAllJobPodsRunning 使用 c 检查 ns 中名为 jobName 的 Job
+// 是否正在运行，如果实际并行度与预期的
 // satisfied.
 func ensureAllJobPodsRunning(ctx context.Context, c clientset.Interface, ns, jobName string, parallelism int32) error {
 	label := labels.SelectorFromSet(labels.Set(map[string]string{e2ejob.JobSelectorKey: jobName}))
@@ -97,9 +97,8 @@ func ensureAllJobPodsRunning(ctx context.Context, c clientset.Interface, ns, job
 	return nil
 }
 
-// ensureJobRunning uses c to check if the Job named jobName in ns is running,
-// (not completed, nor failed, nor suspended) returning an error if it can't
-// read the job or when it's not runnig
+// 不一致则返回错误。ensureJobRunning 使用 c 检查 ns 中名为 jobName 的 Job 是否在运行，
+// （未完成、未失败、未暂停），如果无法读取 Job 或其未运行则返回错误。
 func ensureJobRunning(ctx context.Context, c clientset.Interface, ns, jobName string) error {
 	job, err := e2ejob.GetJob(ctx, c, ns, jobName)
 	if err != nil {

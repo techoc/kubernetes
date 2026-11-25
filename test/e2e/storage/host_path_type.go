@@ -470,12 +470,12 @@ func verifyPodHostPathTypeFailure(ctx context.Context, f *framework.Framework, n
 	msg := "hostPath type check failed"
 
 	err = e2eevents.WaitTimeoutForEvent(ctx, f.ClientSet, f.Namespace.Name, eventSelector, msg, f.Timeouts.PodStart)
-	// Events are unreliable, don't depend on the event. It's used only to speed up the test.
+	// 事件不可靠，不要依赖它。它仅用于加速测试。
 	if err != nil {
 		framework.Logf("Warning: did not get event about FailedMountVolume")
 	}
 
-	// Check the pod is still not running
+	// 检查 Pod 仍未运行
 	p, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err, "could not re-read the pod after event (or timeout)")
 	gomega.Expect(p.Status.Phase).To(gomega.Equal(v1.PodPending), "Pod phase isn't pending")

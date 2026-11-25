@@ -62,7 +62,7 @@ var hostnameIPOverrides = struct {
 	m map[string]string
 }{m: make(map[string]string)}
 
-// AddHostnameIP adds <hostname,ip> pair into hostnameIPOverrides map.
+// AddHostnameIP 将 <hostname,ip> 对加入 hostnameIPOverrides map。
 func AddHostnameIP(hostname, ip string) {
 	hostnameIPOverrides.Lock()
 	defer hostnameIPOverrides.Unlock()
@@ -74,15 +74,15 @@ var sshKeyOverrides = struct {
 	m map[string]string
 }{m: make(map[string]string)}
 
-// AddSSHKey adds a <hosrtname,path to SSH private key> pair into the sshKeyOverrides map
+// AddSSHKey 将 <hostname,SSH 私钥路径> 对加入 sshKeyOverrides map
 func AddSSHKey(hostname, keyFilePath string) {
 	sshKeyOverrides.Lock()
 	defer sshKeyOverrides.Unlock()
 	sshKeyOverrides.m[hostname] = keyFilePath
 }
 
-// GetSSHUser returns the ssh-user CLI flag, the KUBE_SSH_USER environment variable, or the default ssh user
-// for the ssh environment in that order
+// GetSSHUser 按以下顺序返回 ssh-user CLI flag、KUBE_SSH_USER 环境变量或默认 ssh 用户：
+// 用于 ssh 环境。
 func GetSSHUser() string {
 	if *sshUser == "" {
 		*sshUser = os.Getenv("KUBE_SSH_USER")
@@ -93,7 +93,7 @@ func GetSSHUser() string {
 	return *sshUser
 }
 
-// GetHostnameOrIP converts hostname into ip and apply user if necessary.
+// GetHostnameOrIP 将主机名转换为 IP，并在必要时应用用户。
 func GetHostnameOrIP(hostname string) string {
 	hostnameIPOverrides.RLock()
 	defer hostnameIPOverrides.RUnlock()
@@ -109,24 +109,24 @@ func GetHostnameOrIP(hostname string) string {
 	return host
 }
 
-// getSSHCommand handles proper quoting so that multiple commands are executed in the same shell over ssh
+// getSSHCommand 处理正确的引号转义，使多个命令通过 ssh 在同一个 shell 中执行
 func getSSHCommand(sep string, args ...string) string {
 	return fmt.Sprintf("'%s'", strings.Join(args, sep))
 }
 
-// SSH executes ssh command with runSSHCommand as root. The `sudo` makes sure that all commands
-// are executed by root, so that there won't be permission mismatch between different commands.
+// SSH 以 root 身份通过 runSSHCommand 执行 ssh 命令。`sudo` 确保所有命令
+// 都由 root 执行，避免不同命令之间的权限不匹配。
 func SSH(host string, cmd ...string) (string, error) {
 	return runSSHCommand(host, "ssh", append([]string{GetHostnameOrIP(host), "--", "sudo"}, cmd...)...)
 }
 
-// SSHNoSudo executes ssh command with runSSHCommand as normal user. Sometimes we need this,
-// for example creating a directory that we'll copy files there with scp.
+// SSHNoSudo 以普通用户身份通过 runSSHCommand 执行 ssh 命令。有时需要这样做，
+// 例如创建目录以便之后用 scp 复制文件。
 func SSHNoSudo(host string, cmd ...string) (string, error) {
 	return runSSHCommand(host, "ssh", append([]string{GetHostnameOrIP(host), "--"}, cmd...)...)
 }
 
-// runSSHCommand executes the ssh or scp command, adding the flag provided --ssh-options
+// runSSHCommand 执行 ssh 或 scp 命令，并添加 --ssh-options 提供的 flag
 func runSSHCommand(host, cmd string, args ...string) (string, error) {
 	if key, err := getPrivateSSHKey(host); len(key) != 0 {
 		if err != nil {
@@ -151,7 +151,7 @@ func runSSHCommand(host, cmd string, args ...string) (string, error) {
 	return string(output), nil
 }
 
-// getPrivateSSHKey returns the path to ssh private key
+// getPrivateSSHKey 返回 SSH 私钥的路径
 func getPrivateSSHKey(host string) (string, error) {
 	if *sshKey != "" {
 		if _, err := os.Stat(*sshKey); err != nil {

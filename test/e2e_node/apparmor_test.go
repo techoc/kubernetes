@@ -163,7 +163,7 @@ func loadTestProfiles() error {
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr
 	out, err := cmd.Output()
-	// apparmor_parser does not always return an error code, so consider any stderr output an error.
+	// apparmor_parser 并不总是返回错误码，因此将任何 stderr 输出都视为错误。
 	if err != nil || stderr.Len() > 0 {
 		if stderr.Len() > 0 {
 			klog.Warning(stderr.String())
@@ -180,11 +180,11 @@ func loadTestProfiles() error {
 func runAppArmorTest(ctx context.Context, f *framework.Framework, shouldRun bool, profile string, useField bool) v1.PodStatus {
 	pod := createPodWithAppArmor(ctx, f, profile, useField)
 	if shouldRun {
-		// The pod needs to start before it stops, so wait for the longer start timeout.
+		// Pod 必须先启动再停止，因此等待更长的启动超时。
 		framework.ExpectNoError(e2epod.WaitTimeoutForPodNoLongerRunningInNamespace(ctx,
 			f.ClientSet, pod.Name, f.Namespace.Name, framework.PodStartTimeout))
 	} else {
-		// Pod should remain in the pending state. Wait for the Reason to be set to "AppArmor".
+		// Pod 应保持 pending 状态。等待 Reason 被设为 "AppArmor"。
 		fieldSelector := fields.OneTermEqualSelector("metadata.name", pod.Name).String()
 		w := &cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
@@ -202,8 +202,8 @@ func runAppArmorTest(ctx context.Context, f *framework.Framework, shouldRun bool
 				return true, err
 			}
 			if !exists {
-				// We need to make sure we see the object in the cache before we start waiting for events
-				// or we would be waiting for the timeout if such object didn't exist.
+				// 开始等待事件前，需要确保已在缓存中看到该对象，
+				// 否则若对象不存在就会一直等到超时。
 				return true, apierrors.NewNotFound(v1.Resource("pods"), pod.Name)
 			}
 
@@ -221,7 +221,7 @@ func runAppArmorTest(ctx context.Context, f *framework.Framework, shouldRun bool
 				if t.Status.Reason == "AppArmor" {
 					return true, nil
 				}
-				// Loading a profile not available on disk should return a container creation error
+				// 加载磁盘上不存在的 profile 应返回容器创建错误
 				if len(t.Status.ContainerStatuses) > 0 && t.Status.ContainerStatuses[0].State.Waiting.Reason == kuberuntime.ErrCreateContainer.Error() {
 					return true, nil
 				}
@@ -282,7 +282,7 @@ func expectRejection(status v1.PodStatus) {
 }
 
 func isAppArmorEnabled() bool {
-	// TODO(tallclair): Pass this through the image setup rather than hardcoding.
+	// TODO(tallclair): 应通过镜像设置传递此值，而不是硬编码。
 	if strings.Contains(framework.TestContext.NodeName, "-gci-dev-") {
 		gciVersionRe := regexp.MustCompile("-gci-dev-([0-9]+)-")
 		matches := gciVersionRe.FindStringSubmatch(framework.TestContext.NodeName)

@@ -53,8 +53,8 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// StorageClassTest represents parameters to be used by provisioning tests.
-// Not all parameters are used by all tests.
+// StorageClassTest 表示供给测试使用的参数。
+// 并非所有测试都会用到全部参数。
 type StorageClassTest struct {
 	Client               clientset.Interface
 	Timeouts             *framework.TimeoutContext
@@ -80,8 +80,8 @@ type provisioningTestSuite struct {
 	tsInfo storageframework.TestSuiteInfo
 }
 
-// InitCustomProvisioningTestSuite returns provisioningTestSuite that implements TestSuite interface
-// using custom test patterns
+// InitCustomProvisioningTestSuite 返回实现 TestSuite 接口的 provisioningTestSuite，
+// 使用自定义测试模式
 func InitCustomProvisioningTestSuite(patterns []storageframework.TestPattern) storageframework.TestSuite {
 	return &provisioningTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
@@ -94,8 +94,8 @@ func InitCustomProvisioningTestSuite(patterns []storageframework.TestPattern) st
 	}
 }
 
-// InitProvisioningTestSuite returns provisioningTestSuite that implements TestSuite interface\
-// using test suite default patterns
+// InitProvisioningTestSuite 返回实现 TestSuite 接口的 provisioningTestSuite，
+// 使用测试套件的默认模式
 func InitProvisioningTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.DefaultFsDynamicPV,
@@ -110,7 +110,7 @@ func (p *provisioningTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInf
 }
 
 func (p *provisioningTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) string {
-	// Check preconditions.
+	// 检查前置条件。
 	if pattern.VolType != storageframework.DynamicPV {
 		return fmt.Sprintf("Suite %q does not support %v", p.tsInfo.Name, pattern.VolType)
 	}
@@ -139,15 +139,15 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 		l       local
 	)
 
-	// Beware that it also registers an AfterEach which renders f unusable. Any code using
-	// f must run inside an It or Context callback.
+	// 注意，它还会注册一个 AfterEach，使 f 失效。任何使用 f 的代码
+	// 都必须在 It 或 Context 回调中运行。
 	f := framework.NewFrameworkWithCustomTimeouts("provisioning", storageframework.GetDriverTimeouts(driver))
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	init := func(ctx context.Context) {
 		l = local{}
 		dDriver, _ = driver.(storageframework.DynamicPVTestDriver)
-		// Now do the more expensive test initialization.
+		// 现在执行开销较大的测试初始化。
 		l.config = driver.PrepareTest(ctx, f)
 		l.migrationCheck = newMigrationOpCheck(ctx, f.ClientSet, f.ClientConfig(), dInfo.InTreePluginName)
 		ginkgo.DeferCleanup(l.migrationCheck.validateMigrationVolumeOpCounts)
@@ -390,7 +390,7 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 
 		dc := l.config.Framework.DynamicClient
 
-		// Make hello-populator handle Hello resource in hello.example.com group
+		// 让 hello-populator 处理 hello.example.com 组中的 Hello 资源
 		ginkgo.By("Creating VolumePopulator CR datasource")
 		volumePopulatorGVR := schema.GroupVersionResource{Group: "populator.storage.k8s.io", Version: "v1beta1", Resource: "volumepopulators"}
 		helloPopulatorCR := &unstructured.Unstructured{
@@ -418,7 +418,7 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 			}
 		}()
 
-		// Create Hello CR datasource
+		// 创建 Hello CR 数据源
 		ginkgo.By("Creating Hello CR datasource")
 		helloCRName := "example-hello"
 		fileName := fmt.Sprintf("example-%s.txt", f.Namespace.Name)
@@ -507,7 +507,7 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 		testConfig := storageframework.ConvertTestConfig(l.config)
 		dataSourceRef := prepareSnapshotDataSourceForProvisioning(ctx, f, testConfig, l.config, pattern, l.cs, dc, l.pvc, l.sc, sDriver, pattern.VolMode, "")
 
-		// Get the created PVC and record the actual size of the pv (from pvc status).
+		// 获取创建的 PVC，并记录 pv 的实际大小（来自 pvc status）。
 		c, err := l.testCase.Client.CoreV1().PersistentVolumeClaims(l.pvc.Namespace).Get(ctx, l.pvc.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "Failed to get pvc: %v", err)
 		actualPVSize := c.Status.Capacity.Storage().Value()
@@ -516,40 +516,40 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 		pod, err := e2epod.CreatePod(ctx, l.testCase.Client, f.Namespace.Name, nil, createdClaims, f.NamespacePodSecurityLevel, "")
 		framework.ExpectNoError(err, "Failed to create pod: %v", err)
 
-		// Mount path should not be empty.
+		// 挂载路径不应为空。
 		mountpath := findVolumeMountPath(pod, c)
 		gomega.Expect(mountpath).ShouldNot(gomega.BeEmpty())
 
-		// Save filesystem size of the origin volume.
+		// 保存原始 volume 的文件系统大小。
 		originFSSize, err := getFilesystemSizeBytes(pod, mountpath)
 		framework.ExpectNoError(err, "Failed to obtain filesystem size of a volume mount: %v", err)
 
-		// For the new PVC, request a size that is larger than the origin PVC actually provisioned.
+		// 为新 PVC 请求一个大于原始 PVC 实际供给大小的尺寸。
 		storageRequest := resource.NewQuantity(actualPVSize, resource.BinarySI)
 		storageRequest.Add(resource.MustParse("1Gi"))
 		pvc2.Spec.Resources.Requests = v1.ResourceList{
 			v1.ResourceStorage: *storageRequest,
 		}
 
-		// Set PVC snapshot data source.
+		// 设置 PVC 的 snapshot 数据源。
 		pvc2.Spec.DataSourceRef = dataSourceRef
 
-		// Create a new claim and a pod that will use the new PVC.
+		// 创建新的 claim 和一个使用该 PVC 的 Pod。
 		c2, err := l.testCase.Client.CoreV1().PersistentVolumeClaims(pvc2.Namespace).Create(ctx, pvc2, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "Failed to create pvc: %v", err)
 		createdClaims2 := []*v1.PersistentVolumeClaim{c2}
 		pod2, err := e2epod.CreatePod(ctx, l.testCase.Client, f.Namespace.Name, nil, createdClaims2, f.NamespacePodSecurityLevel, "")
 		framework.ExpectNoError(err, "Failed to create pod: %v", err)
 
-		// Mount path should not be empty.
+		// 挂载路径不应为空。
 		mountpath2 := findVolumeMountPath(pod2, c2)
 		gomega.Expect(mountpath2).ShouldNot(gomega.BeEmpty())
 
-		// Get actual size of the restored filesystem.
+		// 获取恢复后文件系统的实际大小。
 		restoredFSSize, err := getFilesystemSizeBytes(pod2, mountpath2)
 		framework.ExpectNoError(err, "Failed to obtain filesystem size of a volume mount: %v", err)
 
-		// Filesystem of a restored volume should be larger than the origin.
+		// 恢复后 volume 的文件系统应大于原始文件系统。
 		msg := fmt.Sprintf("Filesystem resize failed when restoring from snapshot to PVC with larger size. "+
 			"Restored fs size: %v bytes is not larger than origin fs size: %v bytes.\n"+
 			"HINT: Your driver needs to check the volume in NodeStageVolume and resize fs if needed.\n"+
@@ -565,8 +565,8 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 		init(ctx)
 
 		if l.config.ClientNodeSelection.Name == "" {
-			// Schedule all pods to the same topology segment (e.g. a cloud availability zone), some
-			// drivers don't support cloning across them.
+			// 将所有 Pod 调度到同一个 topology segment（例如云可用区），因为某些
+			// driver 不支持跨 topology segment 克隆。
 			if err := ensureTopologyRequirements(ctx, &l.config.ClientNodeSelection, l.cs, dInfo, 1); err != nil {
 				framework.Failf("Error setting topology requirements: %v", err)
 			}
@@ -588,7 +588,7 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 			}
 			e2evolume.TestVolumeClientSlow(ctx, f, testConfig, nil, "", tests)
 		}
-		// Cloning fails if the source disk is still in the process of detaching, so we wait for the VolumeAttachment to be removed before cloning.
+		// 如果源磁盘仍在卸载过程中，克隆会失败，因此在克隆前等待 VolumeAttachment 被移除。
 		volumeAttachment := e2evolume.GetVolumeAttachmentName(ctx, f.ClientSet, testConfig, l.testCase.Provisioner, dataSourceRef.Name, l.sourcePVC.Namespace)
 		framework.ExpectNoError(e2evolume.WaitForVolumeAttachmentTerminated(ctx, volumeAttachment, f.ClientSet, f.Timeouts.DataSourceProvision))
 		l.testCase.TestDynamicProvisioning(ctx)
@@ -604,8 +604,8 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 		init(ctx)
 
 		if l.config.ClientNodeSelection.Name == "" {
-			// Schedule all pods to the same topology segment (e.g. a cloud availability zone), some
-			// drivers don't support cloning across them.
+			// 将所有 Pod 调度到同一个 topology segment（例如云可用区），因为某些
+			// driver 不支持跨 topology segment 克隆。
 			if err := ensureTopologyRequirements(ctx, &l.config.ClientNodeSelection, l.cs, dInfo, 1); err != nil {
 				framework.Failf("Error setting topology requirements: %v", err)
 			}
@@ -630,14 +630,14 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 			}
 			e2evolume.TestVolumeClientSlow(ctx, f, testConfig, nil, "", tests)
 		}
-		// Cloning fails if the source disk is still in the process of detaching, so we wait for the VolumeAttachment to be removed before cloning.
+		// 如果源磁盘仍在卸载过程中，克隆会失败，因此在克隆前等待 VolumeAttachment 被移除。
 		volumeAttachment := e2evolume.GetVolumeAttachmentName(ctx, f.ClientSet, testConfig, l.testCase.Provisioner, dataSourceRef.Name, l.sourcePVC.Namespace)
 		framework.ExpectNoError(e2evolume.WaitForVolumeAttachmentTerminated(ctx, volumeAttachment, f.ClientSet, f.Timeouts.DataSourceProvision))
 		l.testCase.TestDynamicProvisioning(ctx)
 	})
 
 	f.It("should provision storage with pvc data source in parallel", f.WithSlow(), func(ctx context.Context) {
-		// Test cloning a single volume multiple times.
+		// 测试多次克隆单个 volume。
 		if !dInfo.Capabilities[storageframework.CapPVCDataSource] {
 			e2eskipper.Skipf("Driver %q does not support cloning - skipping", dInfo.Name)
 		}
@@ -648,8 +648,8 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 		init(ctx)
 
 		if l.config.ClientNodeSelection.Name == "" {
-			// Schedule all pods to the same topology segment (e.g. a cloud availability zone), some
-			// drivers don't support cloning across them.
+			// 将所有 Pod 调度到同一个 topology segment（例如云可用区），因为某些
+			// driver 不支持跨 topology segment 克隆。
 			if err := ensureTopologyRequirements(ctx, &l.config.ClientNodeSelection, l.cs, dInfo, 1); err != nil {
 				framework.Failf("Error setting topology requirements: %v", err)
 			}
@@ -666,7 +666,7 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 				defer ginkgo.GinkgoRecover()
 				defer wg.Done()
 				ginkgo.By(fmt.Sprintf("Cloning volume nr. %d", i))
-				// Each go routine must have its own pod prefix
+				// 每个 goroutine 必须有自己的 Pod 前缀
 				myTestConfig := testConfig
 				myTestConfig.Prefix = fmt.Sprintf("%s-%d", myTestConfig.Prefix, i)
 
@@ -684,7 +684,7 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 					}
 					e2evolume.TestVolumeClientSlow(ctx, f, myTestConfig, nil, "", tests)
 				}
-				// Cloning fails if the source disk is still in the process of detaching, so we wait for the VolumeAttachment to be removed before cloning.
+				// 如果源磁盘仍在卸载过程中，克隆会失败，因此在克隆前等待 VolumeAttachment 被移除。
 				volumeAttachment := e2evolume.GetVolumeAttachmentName(ctx, f.ClientSet, testConfig, l.testCase.Provisioner, dataSourceRef.Name, l.sourcePVC.Namespace)
 				framework.ExpectNoError(e2evolume.WaitForVolumeAttachmentTerminated(ctx, volumeAttachment, f.ClientSet, f.Timeouts.DataSourceProvision))
 				t.TestDynamicProvisioning(ctx)
@@ -694,9 +694,9 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 	})
 
 	ginkgo.It("should mount multiple PV pointing to the same storage on the same node", func(ctx context.Context) {
-		// csi-hostpath driver does not support this test case. In this test case, we have 2 PV containing the same underlying storage.
-		// during the NodeStage call for the second volume, csi-hostpath fails the call, because it thinks the volume is already staged at a different path.
-		// Note: This is not an issue with driver like PD CSI where the NodeStage is a no-op for block mode.
+		// csi-hostpath driver 不支持此测试用例。该用例中有 2 个 PV 包含相同的底层存储。
+		// 在第二个 volume 的 NodeStage 调用期间，csi-hostpath 会失败，因为它认为该 volume 已在另一路径 stage。
+		// 注意：对于 PD CSI 这类 driver，NodeStage 在块模式下是空操作，因此不会有此问题。
 		if pattern.VolMode == v1.PersistentVolumeBlock {
 			e2eskipper.Skipf("skipping multiple PV mount test for block mode")
 		}
@@ -716,9 +716,9 @@ func (p *provisioningTestSuite) DefineTests(driver storageframework.TestDriver, 
 	})
 }
 
-// SetupStorageClass ensures that a StorageClass from a spec exists, if the StorageClass already exists
-// then it's returned as it is, if it doesn't exist then it's created first
-// and then returned, if the spec is nil then we return the `default` StorageClass
+// SetupStorageClass 确保 spec 中的 StorageClass 存在；如果已存在，
+// 则原样返回；如果不存在则先创建
+// 再返回；如果 spec 为 nil 则返回 `default` StorageClass。
 func SetupStorageClass(
 	ctx context.Context,
 	client clientset.Interface,
@@ -731,7 +731,7 @@ func SetupStorageClass(
 	if class != nil {
 		computedStorageClass, err = client.StorageV1().StorageClasses().Get(ctx, class.Name, metav1.GetOptions{})
 		if err == nil {
-			// skip storageclass creation if it already exists
+			// 若 storageclass 已存在则跳过创建
 			ginkgo.By("Storage class " + computedStorageClass.Name + " is already created, skipping creation.")
 		} else {
 			ginkgo.By("Creating a StorageClass")
@@ -749,7 +749,7 @@ func SetupStorageClass(
 			ginkgo.DeferCleanup(clearComputedStorageClass)
 		}
 	} else {
-		// StorageClass is nil, so the default one will be used
+		// StorageClass 为 nil，因此将使用默认的
 		scName, err := e2epv.GetDefaultStorageClassName(ctx, client)
 		framework.ExpectNoError(err)
 		ginkgo.By("Wanted storage class is nil, fetching default StorageClass=" + scName)
@@ -760,9 +760,9 @@ func SetupStorageClass(
 	return computedStorageClass
 }
 
-// TestDynamicProvisioning tests dynamic provisioning with specified StorageClassTest
-// it's assumed that the StorageClass `t.Class` is already provisioned,
-// see #ProvisionStorageClass
+// TestDynamicProvisioning 使用指定的 StorageClassTest 测试动态供给
+// 假定 StorageClass `t.Class` 已被供给，
+// 参见 #ProvisionStorageClass
 func (t StorageClassTest) TestDynamicProvisioning(ctx context.Context) *v1.PersistentVolume {
 	var err error
 	client := t.Client
@@ -780,17 +780,17 @@ func (t StorageClassTest) TestDynamicProvisioning(ctx context.Context) *v1.Persi
 	framework.ExpectNoError(err)
 	defer func() {
 		framework.Logf("deleting claim %q/%q", claim.Namespace, claim.Name)
-		// typically this claim has already been deleted
+		// 通常此 claim 已被删除
 		err = client.CoreV1().PersistentVolumeClaims(claim.Namespace).Delete(ctx, claim.Name, metav1.DeleteOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
 			framework.Failf("Error deleting claim %q. Error: %v", claim.Name, err)
 		}
 	}()
 
-	// ensure that the claim refers to the provisioned StorageClass
+	// 确保 claim 引用的是已供给的 StorageClass
 	gomega.Expect(*claim.Spec.StorageClassName).To(gomega.Equal(class.Name))
 
-	// if late binding is configured, create and delete a pod to provision the volume
+	// 如果配置了延迟绑定，则创建并删除一个 Pod 以供给 volume
 	if *class.VolumeBindingMode == storagev1.VolumeBindingWaitForFirstConsumer {
 		ginkgo.By(fmt.Sprintf("creating a pod referring to the class=%+v claim=%+v", class, claim))
 		var podConfig *e2epod.Config = &e2epod.Config{
@@ -801,12 +801,12 @@ func (t StorageClassTest) TestDynamicProvisioning(ctx context.Context) *v1.Persi
 
 		var pod *v1.Pod
 		pod, err := e2epod.CreateSecPod(ctx, client, podConfig, t.Timeouts.DataSourceProvision)
-		// Delete pod now, otherwise PV can't be deleted below
+		// 现在删除 Pod，否则下面无法删除 PV
 		framework.ExpectNoError(err)
 		e2epod.DeletePodOrFail(ctx, client, pod.Namespace, pod.Name)
 	}
 
-	// Run the checker
+	// 运行检查器
 	if t.PvCheck != nil {
 		t.PvCheck(ctx, claim)
 	}
@@ -816,13 +816,13 @@ func (t StorageClassTest) TestDynamicProvisioning(ctx context.Context) *v1.Persi
 	ginkgo.By(fmt.Sprintf("deleting claim %q/%q", claim.Namespace, claim.Name))
 	framework.ExpectNoError(client.CoreV1().PersistentVolumeClaims(claim.Namespace).Delete(ctx, claim.Name, metav1.DeleteOptions{}))
 
-	// Wait for the PV to get deleted if reclaim policy is Delete. (If it's
-	// Retain, there's no use waiting because the PV won't be auto-deleted and
-	// it's expected for the caller to do it.) Technically, the first few delete
-	// attempts may fail, as the volume is still attached to a node because
-	// kubelet is slowly cleaning up the previous pod, however it should succeed
-	// in a couple of minutes. Wait 20 minutes (or whatever custom value is specified in
-	// t.Timeouts.PVDeleteSlow) to recover from random cloud hiccups.
+	// 如果 reclaim policy 为 Delete，则等待 PV 被删除。（如果是
+	// Retain，等待没有意义，因为 PV 不会自动删除，
+	// 预期由调用方处理。）从技术上讲，前几次删除
+	// 尝试可能失败，因为 volume 仍挂载在节点上，
+	// kubelet 正在慢慢清理前一个 Pod，但应在几分钟内
+	// 成功。等待 20 分钟（或 t.Timeouts.PVDeleteSlow 中指定的自定义值），
+	// 以应对随机的云服务故障。
 	if pv != nil && pv.Spec.PersistentVolumeReclaimPolicy == v1.PersistentVolumeReclaimDelete {
 		ginkgo.By(fmt.Sprintf("deleting the claim's PV %q", pv.Name))
 		framework.ExpectNoError(e2epv.WaitForPersistentVolumeDeleted(ctx, client, pv.Name, 5*time.Second, t.Timeouts.PVDeleteSlow))
@@ -831,20 +831,20 @@ func (t StorageClassTest) TestDynamicProvisioning(ctx context.Context) *v1.Persi
 	return pv
 }
 
-// getBoundPV returns a PV details.
+// getBoundPV 返回 PV 详细信息。
 func getBoundPV(ctx context.Context, client clientset.Interface, pvc *v1.PersistentVolumeClaim) (*v1.PersistentVolume, error) {
-	// Get new copy of the claim
+	// 获取 claim 的新副本
 	claim, err := client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(ctx, pvc.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the bound PV
+	// 获取绑定的 PV
 	pv, err := client.CoreV1().PersistentVolumes().Get(ctx, claim.Spec.VolumeName, metav1.GetOptions{})
 	return pv, err
 }
 
-// checkProvisioning verifies that the claim is bound and has the correct properties
+// checkProvisioning 验证 claim 已绑定且具有正确的属性
 func (t StorageClassTest) checkProvisioning(ctx context.Context, client clientset.Interface, claim *v1.PersistentVolumeClaim, class *storagev1.StorageClass) *v1.PersistentVolume {
 	err := e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, client, claim.Namespace, claim.Name, framework.Poll, t.Timeouts.ClaimProvision)
 	framework.ExpectNoError(err)
@@ -853,7 +853,7 @@ func (t StorageClassTest) checkProvisioning(ctx context.Context, client clientse
 	pv, err := getBoundPV(ctx, client, claim)
 	framework.ExpectNoError(err)
 
-	// Check sizes
+	// 检查大小
 	expectedCapacity := resource.MustParse(t.ExpectedSize)
 	pvCapacity := pv.Spec.Capacity[v1.ResourceName(v1.ResourceStorage)]
 	gomega.Expect(pvCapacity.Value()).To(gomega.BeNumerically(">=", expectedCapacity.Value()), "pvCapacity is not greater or equal to expectedCapacity")
@@ -862,10 +862,10 @@ func (t StorageClassTest) checkProvisioning(ctx context.Context, client clientse
 	claimCapacity := claim.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
 	gomega.Expect(claimCapacity.Value()).To(gomega.BeNumerically(">=", requestedCapacity.Value()), "claimCapacity is not greater or equal to requestedCapacity")
 
-	// Check PV properties
+	// 检查 PV 属性
 	ginkgo.By("checking the PV")
 
-	// Every access mode in PV should be in PVC
+	// PV 中的每个 access mode 都应出现在 PVC 中
 	gomega.Expect(pv.Spec.AccessModes).NotTo(gomega.BeZero())
 	for _, pvMode := range pv.Spec.AccessModes {
 		found := false
@@ -895,26 +895,26 @@ func (t StorageClassTest) checkProvisioning(ctx context.Context, client clientse
 	return pv
 }
 
-// PVWriteReadSingleNodeCheck checks that a PV retains data on a single node
-// and returns the PV.
+// PVWriteReadSingleNodeCheck 检查 PV 在单个节点上保留数据
+// 并返回该 PV。
 //
-// It starts two pods:
-// - The first pod writes 'hello word' to the /mnt/test (= the volume) on one node.
-// - The second pod runs grep 'hello world' on /mnt/test on the same node.
+// 它启动两个 Pod：
+// - 第一个 Pod 在一个节点上向 /mnt/test（即 volume）写入 'hello word'。
+// - 第二个 Pod 在同一节点上对 /mnt/test 运行 grep 'hello world'。
 //
-// The node is selected by Kubernetes when scheduling the first
-// pod. It's then selected via its name for the second pod.
+// 第一个 Pod 的节点由 Kubernetes 调度时选择，
+// 第二个 Pod 则按名称选择该节点。
 //
-// If both succeed, Kubernetes actually allocated something that is
-// persistent across pods.
+// 如果两者都成功，说明 Kubernetes 实际分配了跨 Pod
+// 持久化的存储。
 //
-// This is a common test that can be called from a StorageClassTest.PvCheck.
+// 这是一个通用测试，可由 StorageClassTest.PvCheck 调用。
 func PVWriteReadSingleNodeCheck(ctx context.Context, client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, node e2epod.NodeSelection) *v1.PersistentVolume {
 	ginkgo.By(fmt.Sprintf("checking the created volume is writable on node %+v", node))
 	command := "echo 'hello world' > /mnt/test/data"
 	pod := StartInPodWithVolume(ctx, client, claim.Namespace, claim.Name, "pvc-volume-tester-writer", command, node)
 	ginkgo.DeferCleanup(func(ctx context.Context) {
-		// pod might be nil now.
+		// 此时 pod 可能为 nil。
 		StopPod(ctx, client, pod)
 	})
 	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, client, pod.Name, pod.Namespace, timeouts.PodStartSlow))
@@ -922,51 +922,51 @@ func PVWriteReadSingleNodeCheck(ctx context.Context, client clientset.Interface,
 	framework.ExpectNoError(err, "get pod")
 	actualNodeName := runningPod.Spec.NodeName
 	StopPod(ctx, client, pod)
-	pod = nil // Don't stop twice.
+	pod = nil // 不要停止两次。
 
-	// Get a new copy of the PV
+	// 获取 PV 的新副本
 	e2evolume, err := getBoundPV(ctx, client, claim)
 	framework.ExpectNoError(err)
 
 	ginkgo.By(fmt.Sprintf("checking the created volume has the correct mount options, is readable and retains data on the same node %q", actualNodeName))
 	command = "grep 'hello world' /mnt/test/data"
 
-	// We give the second pod the additional responsibility of checking the volume has
-	// been mounted with the PV's mount options, if the PV was provisioned with any
+	// 我们让第二个 Pod 额外负责检查 volume 是否
+	// 使用了 PV 的挂载选项（如果 PV 配置了挂载选项）。
 	for _, option := range e2evolume.Spec.MountOptions {
-		// Get entry, get mount options at 6th word, replace brackets with commas
+		// 获取条目，取第 6 个单词处的挂载选项，并将方括号替换为逗号
 		command += fmt.Sprintf(" && ( mount | grep 'on /mnt/test' | awk '{print $6}' | sed 's/^(/,/; s/)$/,/' | grep -q ,%s, )", option)
 	}
 	command += " || (mount | grep 'on /mnt/test'; false)"
 
 	if framework.NodeOSDistroIs("windows") {
-		// agnhost doesn't support mount
+		// agnhost 不支持 mount
 		command = "grep 'hello world' /mnt/test/data"
 	}
 	RunInPodWithVolume(ctx, client, timeouts, claim.Namespace, claim.Name, "pvc-volume-tester-reader", command, e2epod.NodeSelection{Name: actualNodeName, Selector: node.Selector})
 	return e2evolume
 }
 
-// PVMultiNodeCheck checks that a PV retains data when moved between nodes.
+// PVMultiNodeCheck 检查 PV 在节点间移动时是否保留数据。
 //
-// It starts these pods:
-// - The first pod writes 'hello word' to the /mnt/test (= the volume) on one node.
-// - The second pod runs grep 'hello world' on /mnt/test on another node.
+// 它启动以下 Pod：
+// - 第一个 Pod 在一个节点上向 /mnt/test（即 volume）写入 'hello word'。
+// - 第二个 Pod 在另一个节点上对 /mnt/test 运行 grep 'hello world'。
 //
-// The first node is selected by Kubernetes when scheduling the first pod. The second pod uses the same criteria, except that a special anti-affinity
-// for the first node gets added. This test can only pass if the cluster has more than one
-// suitable node. The caller has to ensure that.
+// 第一个节点由 Kubernetes 调度第一个 Pod 时选择。第二个 Pod 使用相同标准，
+// 但额外添加了对第一个节点的反亲和性。只有集群有多个
+// 合适节点时测试才能通过。调用方必须确保这一点。
 //
-// If all succeeds, Kubernetes actually allocated something that is
-// persistent across pods and across nodes.
+// 如果全部成功，说明 Kubernetes 实际分配了
+// 跨 Pod 且跨节点持久化的存储。
 //
-// This is a common test that can be called from a StorageClassTest.PvCheck.
+// 这是一个通用测试，可由 StorageClassTest.PvCheck 调用。
 func PVMultiNodeCheck(ctx context.Context, client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, node e2epod.NodeSelection) {
 	gomega.Expect(node.Name).To(gomega.BeZero(), "this test only works when not locked onto a single node")
 
 	var pod *v1.Pod
 	defer func() {
-		// passing pod = nil is okay.
+		// 传入 pod = nil 是可以的。
 		StopPod(ctx, client, pod)
 	}()
 
@@ -978,9 +978,9 @@ func PVMultiNodeCheck(ctx context.Context, client clientset.Interface, timeouts 
 	framework.ExpectNoError(err, "get pod")
 	actualNodeName := runningPod.Spec.NodeName
 	StopPod(ctx, client, pod)
-	pod = nil // Don't stop twice.
+	pod = nil // 不要停止两次。
 
-	// Add node-anti-affinity.
+	// 添加 node anti-affinity。
 	secondNode := node
 	e2epod.SetAntiAffinity(&secondNode, actualNodeName)
 	ginkgo.By(fmt.Sprintf("checking the created volume is readable and retains data on another node %+v", secondNode))
@@ -994,7 +994,7 @@ func PVMultiNodeCheck(ctx context.Context, client clientset.Interface, timeouts 
 	pod = nil
 }
 
-// TestBindingWaitForFirstConsumerMultiPVC tests the binding with WaitForFirstConsumer mode
+// TestBindingWaitForFirstConsumerMultiPVC 测试 WaitForFirstConsumer 模式下的绑定
 func (t StorageClassTest) TestBindingWaitForFirstConsumerMultiPVC(ctx context.Context, claims []*v1.PersistentVolumeClaim, nodeSelector map[string]string, expectUnschedulable bool) ([]*v1.PersistentVolume, *v1.Node) {
 	var err error
 	gomega.Expect(claims).ToNot(gomega.BeEmpty())
@@ -1024,19 +1024,19 @@ func (t StorageClassTest) TestBindingWaitForFirstConsumerMultiPVC(ctx context.Co
 		}
 	}()
 
-	// Wait for ClaimProvisionTimeout (across all PVCs in parallel) and make sure the phase did not become Bound i.e. the Wait errors out
+	// 等待 ClaimProvisionTimeout（并行等待所有 PVC），并确保 phase 未变为 Bound，即 Wait 超时报错
 	ginkgo.By("checking the claims are in pending state")
 	err = e2epv.WaitForPersistentVolumeClaimsPhase(ctx, v1.ClaimBound, t.Client, namespace, claimNames, 2*time.Second /* Poll */, t.Timeouts.ClaimProvisionShort, true)
 	gomega.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("not all in phase Bound")))
 	verifyPVCsPending(ctx, t.Client, createdClaims)
 
 	ginkgo.By("creating a pod referring to the claims")
-	// Create a pod referring to the claim and wait for it to get to running
+	// 创建一个引用该 claim 的 Pod 并等待其进入运行态
 	var pod *v1.Pod
 	if expectUnschedulable {
-		pod, err = e2epod.CreateUnschedulablePod(ctx, t.Client, namespace, nodeSelector, createdClaims, admissionapi.LevelPrivileged, "" /* command */)
+		pod, err = e2epod.CreateUnschedulablePod(ctx, t.Client, namespace, nodeSelector, createdClaims, admissionapi.LevelPrivileged, "" /* 命令 */)
 	} else {
-		pod, err = e2epod.CreatePod(ctx, t.Client, namespace, nil /* nodeSelector */, createdClaims, admissionapi.LevelPrivileged, "" /* command */)
+		pod, err = e2epod.CreatePod(ctx, t.Client, namespace, nil /* nodeSelector */, createdClaims, admissionapi.LevelPrivileged, "" /* 命令 */)
 	}
 	framework.ExpectNoError(err)
 	ginkgo.DeferCleanup(func(ctx context.Context) error {
@@ -1044,22 +1044,22 @@ func (t StorageClassTest) TestBindingWaitForFirstConsumerMultiPVC(ctx context.Co
 		return e2epod.WaitForPodNotFoundInNamespace(ctx, t.Client, pod.Name, pod.Namespace, t.Timeouts.PodDelete)
 	})
 	if expectUnschedulable {
-		// Verify that no claims are provisioned.
+		// 验证没有 claim 被供给。
 		verifyPVCsPending(ctx, t.Client, createdClaims)
 		return nil, nil
 	}
 
-	// collect node details
+	// 收集节点详情
 	node, err := t.Client.CoreV1().Nodes().Get(ctx, pod.Spec.NodeName, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 
 	ginkgo.By("re-checking the claims to see they bound")
 	var pvs []*v1.PersistentVolume
 	for _, claim := range createdClaims {
-		// Get new copy of the claim
+		// 获取 claim 的新副本
 		claim, err = t.Client.CoreV1().PersistentVolumeClaims(claim.Namespace).Get(ctx, claim.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
-		// make sure claim did bind
+		// 确保 claim 已绑定
 		err = e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, t.Client, claim.Namespace, claim.Name, framework.Poll, t.Timeouts.ClaimProvision)
 		framework.ExpectNoError(err)
 
@@ -1071,20 +1071,20 @@ func (t StorageClassTest) TestBindingWaitForFirstConsumerMultiPVC(ctx context.Co
 	return pvs, node
 }
 
-// RunInPodWithVolume runs a command in a pod with given claim mounted to /mnt directory.
-// It starts, checks, collects output and stops it.
+// RunInPodWithVolume 在 Pod 中运行命令，并将给定 claim 挂载到 /mnt 目录。
+// 它启动、检查、收集输出并停止。
 func RunInPodWithVolume(ctx context.Context, c clientset.Interface, t *framework.TimeoutContext, ns, claimName, podName, command string, node e2epod.NodeSelection) *v1.Pod {
 	pod := StartInPodWithVolume(ctx, c, ns, claimName, podName, command, node)
 	defer StopPod(ctx, c, pod)
 	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, c, pod.Name, pod.Namespace, t.PodStartSlow))
-	// get the latest status of the pod
+	// 获取 Pod 的最新状态
 	pod, err := c.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	return pod
 }
 
-// StartInPodWithVolume starts a command in a pod with given claim mounted to /mnt directory
-// The caller is responsible for checking the pod and deleting it.
+// StartInPodWithVolume 在 Pod 中启动命令，并将给定 claim 挂载到 /mnt 目录
+// 调用方负责检查该 Pod 并删除它。
 func StartInPodWithVolume(ctx context.Context, c clientset.Interface, ns, claimName, podName, command string, node e2epod.NodeSelection) *v1.Pod {
 	return StartInPodWithVolumeSource(ctx, c, v1.VolumeSource{
 		PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
@@ -1093,8 +1093,8 @@ func StartInPodWithVolume(ctx context.Context, c clientset.Interface, ns, claimN
 	}, ns, podName, command, node)
 }
 
-// StartInPodWithVolumeSource starts a command in a pod with given volume mounted to /mnt directory
-// The caller is responsible for checking the pod and deleting it.
+// StartInPodWithVolumeSource 在 Pod 中启动命令，并将给定 volume 挂载到 /mnt 目录
+// 调用方负责检查该 Pod 并删除它。
 func StartInPodWithVolumeSource(ctx context.Context, c clientset.Interface, volSrc v1.VolumeSource, ns, podName, command string, node e2epod.NodeSelection) *v1.Pod {
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -1137,8 +1137,8 @@ func StartInPodWithVolumeSource(ctx context.Context, c clientset.Interface, volS
 	return pod
 }
 
-// StopPod first tries to log the output of the pod's container, then deletes the pod and
-// waits for that to succeed.
+// StopPod 先记录 Pod 容器的输出，再删除 Pod 并
+// 等待删除成功。
 func StopPod(ctx context.Context, c clientset.Interface, pod *v1.Pod) {
 	if pod == nil {
 		return
@@ -1152,9 +1152,9 @@ func StopPod(ctx context.Context, c clientset.Interface, pod *v1.Pod) {
 	framework.ExpectNoError(e2epod.DeletePodWithWait(ctx, c, pod))
 }
 
-// StopPodAndDependents first tries to log the output of the pod's container,
-// then deletes the pod and waits for that to succeed. Also waits for all owned
-// resources to be deleted.
+// StopPodAndDependents 先记录 Pod 容器的输出，
+// 再删除 Pod 并等待成功，同时等待所有归属的
+// 资源被删除。
 func StopPodAndDependents(ctx context.Context, c clientset.Interface, timeouts *framework.TimeoutContext, pod *v1.Pod) {
 	if pod == nil {
 		return
@@ -1166,8 +1166,8 @@ func StopPodAndDependents(ctx context.Context, c clientset.Interface, timeouts *
 		framework.Logf("Pod %s has the following logs: %s", pod.Name, body)
 	}
 
-	// We must wait explicitly for removal of the generic ephemeral volume PVs.
-	// For that we must find them first...
+	// 必须显式等待 generic ephemeral volume 的 PV 被移除。
+	// 为此必须先找到它们……
 	pvs, err := c.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
 	framework.ExpectNoError(err, "list PVs")
 	var podPVs []v1.PersistentVolume
@@ -1178,7 +1178,7 @@ func StopPodAndDependents(ctx context.Context, c clientset.Interface, timeouts *
 		}
 		pvc, err := c.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(ctx, pv.Spec.ClaimRef.Name, metav1.GetOptions{})
 		if err != nil && apierrors.IsNotFound(err) {
-			// Must have been some unrelated PV, otherwise the PVC should exist.
+			// 一定是某个无关的 PV，否则 PVC 应该存在。
 			continue
 		}
 		framework.ExpectNoError(err, "get PVC")
@@ -1191,14 +1191,14 @@ func StopPodAndDependents(ctx context.Context, c clientset.Interface, timeouts *
 	deletionPolicy := metav1.DeletePropagationForeground
 	err = c.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name,
 		metav1.DeleteOptions{
-			// If the pod is the owner of some resources (like ephemeral inline volumes),
-			// then we want to be sure that those are also gone before we return.
-			// Blocking pod deletion via metav1.DeletePropagationForeground achieves that.
+			// 如果 Pod 是某些资源（如 ephemeral inline volume）的属主，
+			// 返回前要确保这些资源也已消失。
+			// 使用 metav1.DeletePropagationForeground 阻塞式删除 Pod 可实现这一点。
 			PropagationPolicy: &deletionPolicy,
 		})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return // assume pod was already deleted
+			return // 假定 Pod 已被删除
 		}
 		framework.Logf("pod Delete API error: %v", err)
 	}
@@ -1206,8 +1206,8 @@ func StopPodAndDependents(ctx context.Context, c clientset.Interface, timeouts *
 	framework.ExpectNoError(e2epod.WaitForPodNotFoundInNamespace(ctx, c, pod.Name, pod.Namespace, timeouts.PodDelete))
 	if len(podPVs) > 0 {
 		for _, pv := range podPVs {
-			// As with CSI inline volumes, we use the pod delete timeout here because conceptually
-			// the volume deletion needs to be that fast (whatever "that" is).
+			// 与 CSI inline volume 一样，这里使用 Pod 删除超时，因为从概念上讲
+			// volume 删除也需要这么快（不管"这么快"指什么）。
 			framework.Logf("Wait up to %v for pod PV %s to be fully deleted", timeouts.PodDelete, pv.Name)
 			framework.ExpectNoError(e2epv.WaitForPersistentVolumeDeleted(ctx, c, pv.Name, 5*time.Second, timeouts.PVDeleteSlow))
 		}
@@ -1216,7 +1216,7 @@ func StopPodAndDependents(ctx context.Context, c clientset.Interface, timeouts *
 
 func verifyPVCsPending(ctx context.Context, client clientset.Interface, pvcs []*v1.PersistentVolumeClaim) {
 	for _, claim := range pvcs {
-		// Get new copy of the claim
+		// 获取 claim 的新副本
 		claim, err := client.CoreV1().PersistentVolumeClaims(claim.Namespace).Get(ctx, claim.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 		gomega.Expect(claim.Status.Phase).To(gomega.Equal(v1.ClaimPending))
@@ -1251,7 +1251,7 @@ func prepareSnapshotDataSourceForProvisioning(
 		initClaim = updatedClaim
 	}
 
-	// write namespace to the /mnt/test (= the volume).
+	// 将命名空间写入 /mnt/test（即 volume）。
 	tests := []e2evolume.Test{
 		{
 			Volume:          *storageutils.CreateVolumeSource(initClaim.Name, false /* readOnly */),
@@ -1334,9 +1334,9 @@ func preparePVCDataSourceForProvisioning(
 	return dataSourceRef
 }
 
-// findVolumeMountPath looks for a claim name inside a pod and returns an absolute path of its volume mount point.
+// findVolumeMountPath 在 Pod 中查找 claim 名称，并返回其 volume 挂载点的绝对路径。
 func findVolumeMountPath(pod *v1.Pod, claim *v1.PersistentVolumeClaim) string {
-	// Find volume name that the pod2 assigned to pvc.
+	// 查找 pod2 分配给 pvc 的 volume 名称。
 	volumeName = ""
 	for _, volume := range pod.Spec.Volumes {
 		if volume.PersistentVolumeClaim.ClaimName == claim.Name {
@@ -1345,7 +1345,7 @@ func findVolumeMountPath(pod *v1.Pod, claim *v1.PersistentVolumeClaim) string {
 		}
 	}
 
-	// Find where the pod mounted the volume inside a container.
+	// 查找 Pod 在容器内挂载 volume 的位置。
 	containerMountPath := ""
 	for _, volumeMount := range pod.Spec.Containers[0].VolumeMounts {
 		if volumeMount.Name == volumeName {
@@ -1356,9 +1356,9 @@ func findVolumeMountPath(pod *v1.Pod, claim *v1.PersistentVolumeClaim) string {
 	return containerMountPath
 }
 
-// getFilesystemSizeBytes returns the total capacity of the filesystem mounted inside a pod
-// at the given mountPath. It selects the appropriate platform-specific logic (Windows/Linux).
-// This function relies on the `framework.NodeOSDistroIs` helper to determine the target OS.
+// getFilesystemSizeBytes 返回 Pod 内指定挂载路径处文件系统的总容量。
+// 它会根据平台（Windows/Linux）选择相应逻辑。
+// 此函数依赖 `framework.NodeOSDistroIs` 辅助函数来判断目标 OS。
 func getFilesystemSizeBytes(pod *v1.Pod, mountPath string) (int64, error) {
 	if framework.NodeOSDistroIs("windows") {
 		return getFilesystemSizeBytesWindows(pod, mountPath)
@@ -1366,9 +1366,9 @@ func getFilesystemSizeBytes(pod *v1.Pod, mountPath string) (int64, error) {
 	return getFilesystemSizeBytesLinux(pod, mountPath)
 }
 
-// getFilesystemSizeBytesLinux returns the total size of a filesystem using 'stat' (block size * block count).
+// getFilesystemSizeBytesLinux 使用 'stat'（块大小 * 块数）返回文件系统总大小。
 func getFilesystemSizeBytesLinux(pod *v1.Pod, mountPath string) (int64, error) {
-	// Get Block Size: Executes 'stat -f -c %s <mountPath>' inside the pod.
+	// 获取块大小：在 Pod 内执行 'stat -f -c %s <mountPath>'。
 	cmd := fmt.Sprintf("stat -f -c %%s %v", mountPath)
 	blockSize, err := e2ekubectl.RunKubectl(pod.Namespace, "exec", pod.Name, "--", "/bin/sh", "-c", cmd)
 	if err != nil {
@@ -1394,10 +1394,10 @@ func getFilesystemSizeBytesLinux(pod *v1.Pod, mountPath string) (int64, error) {
 	return int64(bs * bc), nil
 }
 
-// getFilesystemSizeBytesWindows returns the total size of the filesystem backing
-// the given mountPath inside a Windows pod.
+// getFilesystemSizeBytesWindows 返回 Windows Pod 内指定挂载路径
+// 背后文件系统的总大小。
 func getFilesystemSizeBytesWindows(pod *v1.Pod, mountPath string) (int64, error) {
-	// Resolve the underlying volume by executing: (Get-Item -Path "<mountPath>").Target
+	// 通过执行 (Get-Item -Path "<mountPath>").Target 解析底层 volume。
 	resolveVolumeIDCmd := fmt.Sprintf(`(Get-Item -Path "%s").Target`, mountPath)
 	out, err := e2ekubectl.RunKubectl(
 		pod.Namespace,
@@ -1416,17 +1416,17 @@ func getFilesystemSizeBytesWindows(pod *v1.Pod, mountPath string) (int64, error)
 	if volumeID == "" {
 		return 0, fmt.Errorf("resolved empty volumeID for mountPath %q", mountPath)
 	}
-	// If this is a normal drive letter volume (like "C:" or "D:"),
-	// then Get-Volume -DriveLetter works fine.
+	// 如果是普通盘符 volume（如 "C:" 或 "D:"），
+	// 则 Get-Volume -DriveLetter 可以正常工作。
 	if len(volumeID) == 2 && volumeID[1] == ':' {
 		driveLetter := volumeID[:1] // "C"
 		psCmd := fmt.Sprintf(`(Get-Volume -DriveLetter %s).Size`, driveLetter)
 
 		return runGetVolumeSize(pod, psCmd, fmt.Sprintf("drive %s", driveLetter))
 	}
-	// Otherwise, this is a real volume GUID:
-	// This path usually requires resolving to the Disk Number first, following CSI Proxy logic.
-	// We simplify the final step by executing a sequence of commands to resolve the Disk Number and get the Size.
+	// 否则这是一个真正的 volume GUID：
+	// 该路径通常需要先按 CSI Proxy 的逻辑解析为磁盘号。
+	// 我们通过执行一系列命令来解析磁盘号并获取大小，以简化最后一步。
 	psDiskNumCmd := fmt.Sprintf(`(Get-Volume -UniqueId "%s" | Get-Partition).DiskNumber`, volumeID)
 
 	diskOut, err := e2ekubectl.RunKubectl(
@@ -1450,8 +1450,8 @@ func getFilesystemSizeBytesWindows(pod *v1.Pod, mountPath string) (int64, error)
 	return runGetVolumeSize(pod, diskSizeCmd, fmt.Sprintf("disk %s (volumeID=%s)", diskNumStr, volumeID))
 }
 
-// runGetVolumeSize is a shared helper function that executes a PowerShell command
-// expected to return a single integer (the size in bytes) and parses it.
+// runGetVolumeSize 是共享辅助函数，执行一条 PowerShell 命令，
+// 期望返回单个整数（字节大小）并解析它。
 func runGetVolumeSize(pod *v1.Pod, psCmd, debugTag string) (int64, error) {
 	out, err := e2ekubectl.RunKubectl(
 		pod.Namespace,
@@ -1464,7 +1464,7 @@ func runGetVolumeSize(pod *v1.Pod, psCmd, debugTag string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed running PowerShell Get-Volume for %s: %w", debugTag, err)
 	}
-	// Clean output of null bytes, carriage returns, and whitespace for safe parsing.
+	// 清理输出中的空字节、回车和空白，以便安全解析。
 	cleaned := strings.Trim(out, "\x00 \r\n\t")
 	totalBytes, err := strconv.ParseInt(cleaned, 10, 64)
 	if err != nil {
@@ -1474,12 +1474,12 @@ func runGetVolumeSize(pod *v1.Pod, psCmd, debugTag string) (int64, error) {
 	return totalBytes, nil
 }
 
-// MultiplePVMountSingleNodeCheck checks that multiple PV pointing to the same underlying storage can be mounted simultaneously on a single node.
+// MultiplePVMountSingleNodeCheck 检查指向同一底层存储的多个 PV 能否在单个节点上同时挂载。
 //
 // Steps:
-// - Start Pod1 using PVC1, PV1 (which points to a underlying volume v) on node N1.
-// - Create PVC2, PV2 and prebind them. PV2 points to the same underlying volume v.
-// - Start Pod2 using PVC2, PV2 (which points to a underlying volume v) on node N1.
+// - 在节点 N1 上使用 PVC1、PV1（指向底层 volume v）启动 Pod1。
+// - 创建 PVC2、PV2 并预绑定。PV2 指向同一底层 volume v。
+// - 在节点 N1 上使用 PVC2、PV2（指向底层 volume v）启动 Pod2。
 func MultiplePVMountSingleNodeCheck(ctx context.Context, client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, node e2epod.NodeSelection) {
 	pod1Config := e2epod.Config{
 		NS:            claim.Namespace,
@@ -1494,7 +1494,7 @@ func MultiplePVMountSingleNodeCheck(ctx context.Context, client clientset.Interf
 	}()
 	ginkgo.By(fmt.Sprintf("Created Pod %s/%s on node %s", pod1.Namespace, pod1.Name, pod1.Spec.NodeName))
 
-	// Create new PV which points to the same underlying storage. Retain policy is used so that deletion of second PVC does not trigger the deletion of its bound PV and underlying storage.
+	// 创建指向同一底层存储的新 PV。使用 Retain 策略，以便删除第二个 PVC 时不会触发其绑定 PV 和底层存储的删除。
 	e2evolume, err := getBoundPV(ctx, client, claim)
 	framework.ExpectNoError(err)
 	pv2Config := e2epv.PersistentVolumeConfig{

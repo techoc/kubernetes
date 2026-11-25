@@ -44,7 +44,7 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// Windows output can contain additional \r
+// Windows 输出可能包含额外的 \r
 var newLineRegexp = regexp.MustCompile("\r?\n")
 
 type dnsTestCommon struct {
@@ -110,7 +110,7 @@ func (t *dnsTestCommon) checkDNSRecordFrom(name string, predicate func([]string)
 	}
 }
 
-// runDig queries for `dnsName`. Returns a list of responses.
+// runDig 查询 `dnsName`，返回响应列表。
 func (t *dnsTestCommon) runDig(dnsName, target string) []string {
 	cmd := []string{"dig", "+short"}
 	switch target {
@@ -196,7 +196,7 @@ func (t *dnsTestCommon) restoreDNSConfigMap(ctx context.Context, configMapData m
 }
 
 func (t *dnsTestCommon) createUtilPodLabel(ctx context.Context, baseName string) {
-	// Actual port # doesn't matter, just needs to exist.
+	// 实际端口号无关紧要，只需存在即可。
 	const servicePort = 10101
 	podName := fmt.Sprintf("%s-%s", baseName, string(uuid.NewUUID()))
 	ports := []v1.ContainerPort{{ContainerPort: servicePort, Protocol: v1.ProtocolTCP}}
@@ -242,7 +242,7 @@ func (t *dnsTestCommon) deleteUtilPod(ctx context.Context) {
 	}
 }
 
-// deleteCoreDNSPods manually deletes the CoreDNS pods to apply the changes to the ConfigMap.
+// deleteCoreDNSPods 手动删除 CoreDNS Pod，使 ConfigMap 的更改生效。
 func (t *dnsTestCommon) deleteCoreDNSPods(ctx context.Context) {
 
 	label := labels.SelectorFromSet(labels.Set(map[string]string{"k8s-app": "kube-dns"}))
@@ -334,8 +334,8 @@ func (t *dnsTestCommon) createDNSServer(ctx context.Context, namespace string, a
 }
 
 func (t *dnsTestCommon) createDNSServerWithPtrRecord(ctx context.Context, namespace string, isIPv6 bool) {
-	// NOTE: PTR records are generated automatically by CoreDNS. So, if we're creating A records, we're
-	// going to also have PTR records. See: https://coredns.io/plugins/hosts/
+	// 注意：PTR 记录由 CoreDNS 自动生成。因此，如果创建 A 记录，也会
+	// 有 PTR 记录。参见：https://coredns.io/plugins/hosts/
 	var aRecords map[string]string
 	if isIPv6 {
 		aRecords = map[string]string{"my.test": "2001:db8::29"}
@@ -354,9 +354,9 @@ func (t *dnsTestCommon) deleteDNSServerPod(ctx context.Context) {
 }
 
 type dnsQuerier struct {
-	name  string             // container name
-	image imageutils.ImageID // container image
-	cmd   string             // a shell-script in a string
+	name  string             // 容器名称
+	image imageutils.ImageID // 容器镜像
+	cmd   string             // 字符串形式的 shell 脚本
 }
 
 func createDNSPod(namespace string, probers []dnsQuerier, podHostName, serviceName string) *v1.Pod {
@@ -376,8 +376,8 @@ func createDNSPod(namespace string, probers []dnsQuerier, podHostName, serviceNa
 		},
 	}
 
-	// This is an "agnhost pod" but we use the 0th container as a webserver.
-	// TODO: Consider scraping logs instead of running a webserver.
+	// 这是一个 "agnhost pod"，但我们将第 0 个容器用作 webserver。
+	// TODO：考虑抓取日志，而非运行 webserver。
 	dnsPod := e2epod.NewAgnhostPod(namespace, podName, volumes, mounts, nil, "test-webserver")
 	dnsPod.Spec.Containers[0].Name = "webserver"
 
@@ -385,7 +385,7 @@ func createDNSPod(namespace string, probers []dnsQuerier, podHostName, serviceNa
 	for _, probe := range probers {
 		name := probe.name + "-querier"
 		if probe.image == imageutils.Agnhost {
-			// agnhost is special cased, to keep all of its logic consistent.
+			// agnhost 是特例，以保持其所有逻辑一致。
 			ctr := e2epod.NewAgnhostContainer(name, mounts, nil)
 			ctr.Command = []string{"sh", "-c", probe.cmd}
 			probeCtrs = append(probeCtrs, ctr)
@@ -415,9 +415,9 @@ func createProbeCommand(namesToResolve []string, hostEntries []string, ptrLookup
 		dnsRecord = "AAAA"
 	}
 	for _, name := range namesToResolve {
-		// Resolve by TCP and UDP DNS.  Use $$(...) because $(...) is
-		// expanded by kubernetes (though this won't expand so should
-		// remain a literal, safe > sorry).
+		// 通过 TCP 和 UDP DNS 解析。使用 $$(...) 是因为 $(...) 会
+		// 被 Kubernetes 展开（尽管这里不会展开，所以应
+		// 保持字面量，安全优先 > 抱歉）。
 		lookup := fmt.Sprintf("%s %s", name, dnsRecord)
 		if strings.HasPrefix(name, "_") {
 			lookup = fmt.Sprintf("%s SRV", name)
@@ -432,7 +432,7 @@ func createProbeCommand(namesToResolve []string, hostEntries []string, ptrLookup
 
 	hostEntryCmd := `test -n "$$(getent hosts %s)" && echo OK > /results/%s;`
 	if framework.NodeOSDistroIs("windows") {
-		// We don't have getent on Windows, but we can still check the hosts file.
+		// Windows 上没有 getent，但仍可检查 hosts 文件。
 		hostEntryCmd = `test -n "$$(grep '%s' C:/Windows/System32/drivers/etc/hosts)" && echo OK > /results/%s;`
 	}
 	for _, name := range hostEntries {
@@ -458,7 +458,7 @@ func createProbeCommand(namesToResolve []string, hostEntries []string, ptrLookup
 	return probeCmd, fileNames
 }
 
-// createTargetedProbeCommand returns a command line that performs a DNS lookup for a specific record type
+// createTargetedProbeCommand 返回一个对特定记录类型执行 DNS 查询的命令行
 func createTargetedProbeCommand(nameToResolve string, lookup string, fileNamePrefix string) (string, string) {
 	fileName := fmt.Sprintf("%s_udp@%s", fileNamePrefix, nameToResolve)
 	nameLookup := fmt.Sprintf("%s %s", nameToResolve, lookup)
@@ -505,7 +505,7 @@ func assertFilesContain(ctx context.Context, fileNames []string, fileDir string,
 		}
 		framework.Logf("Lookups using %s/%s failed for: %v\n", pod.Namespace, pod.Name, failed)
 
-		// grab logs from all the containers
+		// 抓取所有容器的日志
 		for _, container := range pod.Spec.Containers {
 			logs, err := e2epod.GetPodLogs(ctx, client, pod.Namespace, pod.Name, container.Name)
 			if err != nil {
@@ -533,7 +533,7 @@ func validateDNSResults(ctx context.Context, f *framework.Framework, pod *v1.Pod
 	if err != nil {
 		framework.Failf("ginkgo.Failed to get pod %s/%s: %v", pod.Namespace, pod.Name, err)
 	}
-	// Try to find results for each expected name.
+	// 尝试为每个预期名称查找结果。
 	ginkgo.By("looking for the results for each expected name from probers")
 	assertFilesExist(ctx, fileNames, "results", pod, f.ClientSet)
 
@@ -556,7 +556,7 @@ func validateTargetedProbeOutput(ctx context.Context, f *framework.Framework, po
 	if err != nil {
 		framework.Failf("ginkgo.Failed to get pod %s/%s: %v", pod.Namespace, pod.Name, err)
 	}
-	// Try to find the expected value for each expected name.
+	// 尝试为每个预期名称查找预期值。
 	ginkgo.By("looking for the results for each expected name from probers")
 	assertFilesContain(ctx, fileNames, "results", pod, f.ClientSet, true, value)
 

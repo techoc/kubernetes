@@ -40,8 +40,8 @@ var _ = SIGDescribe("ContainerMetrics", "[LinuxOnly]", framework.WithNodeConform
 	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
 	ginkgo.Context("when querying /metrics/cadvisor", func() {
 		ginkgo.BeforeEach(func(ctx context.Context) {
-			// When PodAndContainerStatsFromCRI is enabled, cadvisor metrics are not available
-			// as stats are fetched directly from CRI instead.
+			// 启用 PodAndContainerStatsFromCRI 后，cadvisor 指标不可用，
+			// 因为统计信息直接从 CRI 获取。
 			if e2eskipper.IsFeatureGateEnabled(features.PodAndContainerStatsFromCRI) {
 				e2eskipper.Skipf("Skipping cadvisor metrics test because PodAndContainerStatsFromCRI feature gate is enabled")
 			}
@@ -80,7 +80,7 @@ var _ = SIGDescribe("ContainerMetrics", "[LinuxOnly]", framework.WithNodeConform
 				"container_sockets":                  boundedSample(0, 10),
 				"container_spec_cpu_period":          preciseSample(100000),
 				"container_spec_cpu_shares":          preciseSample(2),
-				// memory limit rounded down to nearest page size (arch-default: e.g., 4K on x86, 64K on ppc64le)
+				// 内存限制向下取整到最近的页大小（架构默认：例如 x86 上 4K，ppc64le 上 64K）
 				"container_spec_memory_limit_bytes":             boundedSample(79953920, 79998976),
 				"container_spec_memory_reservation_limit_bytes": preciseSample(0),
 				"container_spec_memory_swap_limit_bytes":        boundedSample(0, 80*e2evolume.Mb),
@@ -106,8 +106,8 @@ var _ = SIGDescribe("ContainerMetrics", "[LinuxOnly]", framework.WithNodeConform
 				"container_fs_write_seconds_total":            preciseSample(0),
 				"container_fs_writes_merged_total":            preciseSample(0),
 			}
-			// Missing from containerd, so set gstruct.IgnoreMissing
-			// See https://github.com/google/cadvisor/issues/2785
+			// containerd 中缺失该项，因此设置 gstruct.IgnoreMissing
+			// 参见 https://github.com/google/cadvisor/issues/2785
 			appendMatchesForContainer(f.Namespace.Name, pod0, pod1, "busybox-container", ctrOptionalMatches, keys, gstruct.AllowDuplicates|gstruct.IgnoreMissing|gstruct.IgnoreExtras)
 
 			podMatches := map[string]types.GomegaMatcher{
@@ -120,7 +120,7 @@ var _ = SIGDescribe("ContainerMetrics", "[LinuxOnly]", framework.WithNodeConform
 				"container_network_transmit_packets_dropped_total": boundedSample(0, 1000),
 				"container_network_transmit_packets_total":         boundedSample(0, 1000),
 			}
-			// TODO: determine why these are missing from containerd but not CRI-O
+			// TODO: 查明为何这些项在 containerd 中缺失而 CRI-O 中没有
 			appendMatchesForContainer(f.Namespace.Name, pod0, pod1, "POD", podMatches, keys, gstruct.AllowDuplicates|gstruct.IgnoreMissing|gstruct.IgnoreExtras)
 
 			matchResourceMetrics := gstruct.MatchKeys(gstruct.IgnoreExtras, keys)

@@ -43,7 +43,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, without mapping
-		Description: Create a ConfigMap, create a Pod that mounts a volume and populates the volume with data stored in the ConfigMap. The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount. The data content of the file MUST be readable and verified and file modes MUST default to 0x644.
+		Description: 创建 ConfigMap，创建一个挂载 volume 并用 ConfigMap 中数据填充该 volume 的 Pod。创建的 ConfigMap MUST 能被新 Pod 通过 volume mount 读取。文件内容 MUST 可读并验证，文件 mode MUST 默认为 0x644。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		doConfigMapE2EWithoutMappings(ctx, f, false, 0, nil, nil)
@@ -52,8 +52,8 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, without mapping, volume mode set
-		Description: Create a ConfigMap, create a Pod that mounts a volume and populates the volume with data stored in the ConfigMap. File mode is changed to a custom value of '0x400'. The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount. The data content of the file MUST be readable and verified and file modes MUST be set to the custom value of '0x400'
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+		Description: 创建 ConfigMap，创建一个挂载 volume 并用 ConfigMap 中数据填充该 volume 的 Pod。文件 mode 改为自定义值 '0x400'。创建的 ConfigMap MUST 能被新创建的 Pod 通过 volume mount 读取。文件内容 MUST 可读并经过验证，文件 mode MUST 设置为自定义值 '0x400'
+		由于 Windows 不支持设置特定文件权限，该测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with defaultMode set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		defaultMode := int32(0400)
@@ -61,14 +61,14 @@ var _ = SIGDescribe("ConfigMap", func() {
 	})
 
 	f.It("should be consumable from pods in volume as non-root with defaultMode and fsGroup set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options, and it does not support setting file permissions.
+		// Windows 不支持 RunAsUser / FSGroup SecurityContext 选项，也不支持设置文件权限。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
-		defaultMode := int32(0440) /* setting fsGroup sets mode to at least 440 */
+		defaultMode := int32(0440) /* 设置 fsGroup 会将 mode 设置为至少 440 */
 		doConfigMapE2EWithoutMappings(ctx, f, true, 1001, &defaultMode, nil)
 	})
 
 	f.It("should be consumable from pods in volume as non-root with defaultUser set [LinuxOnly]", f.WithFeatureGate(features.AtomicWriteVolumeUserFields), func(ctx context.Context) {
-		// Windows does not support setting file ownership for virtualized container accounts.
+		// Windows 不支持为虚拟化容器账户设置文件属主。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		defaultUser := int64(1000)
 		doConfigMapE2EWithoutMappings(ctx, f, true, 1001, nil, &defaultUser)
@@ -77,14 +77,14 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, without mapping, non-root user
-		Description: Create a ConfigMap, create a Pod that mounts a volume and populates the volume with data stored in the ConfigMap. Pod is run as a non-root user with uid=1000. The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount. The file on the volume MUST have file mode set to default value of 0x644.
+		Description: 创建 ConfigMap，创建一个挂载 volume 并用 ConfigMap 中数据填充该 volume 的 Pod。Pod 以 uid=1000 的非 root 用户运行。创建的 ConfigMap MUST 能被新 Pod 通过 volume mount 读取。volume 上的文件 mode MUST 设为默认值 0x644。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume as non-root", f.WithNodeConformance(), func(ctx context.Context) {
 		doConfigMapE2EWithoutMappings(ctx, f, true, 0, nil, nil)
 	})
 
 	f.It("should be consumable from pods in volume as non-root with FSGroup [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options.
+		// Windows 不支持 RunAsUser / FSGroup SecurityContext 选项。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		doConfigMapE2EWithoutMappings(ctx, f, true, 1001, nil, nil)
 	})
@@ -92,7 +92,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, with mapping
-		Description: Create a ConfigMap, create a Pod that mounts a volume and populates the volume with data stored in the ConfigMap. Files are mapped to a path in the volume. The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount. The data content of the file MUST be readable and verified and file modes MUST default to 0x644.
+		Description: 创建 ConfigMap，创建一个挂载 volume 并用 ConfigMap 中数据填充该 volume 的 Pod。文件被映射到 volume 中的路径。创建的 ConfigMap MUST 能被新 Pod 通过 volume mount 读取。文件内容 MUST 可读并验证，文件 mode MUST 默认为 0x644。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings", f.WithNodeConformance(), func(ctx context.Context) {
 		doConfigMapE2EWithMappings(ctx, f, false, 0, nil, nil)
@@ -101,8 +101,8 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, with mapping, volume mode set
-		Description: Create a ConfigMap, create a Pod that mounts a volume and populates the volume with data stored in the ConfigMap. Files are mapped to a path in the volume. File mode is changed to a custom value of '0x400'. The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount. The data content of the file MUST be readable and verified and file modes MUST be set to the custom value of '0x400'
-		This test is marked LinuxOnly since Windows does not support setting specific file permissions.
+		Description: 创建 ConfigMap，创建一个挂载 volume 并用 ConfigMap 中数据填充该 volume 的 Pod。文件被映射到 volume 中的某个路径。文件 mode 改为自定义值 '0x400'。创建的 ConfigMap MUST 能被新创建的 Pod 通过 volume mount 读取。文件内容 MUST 可读并经过验证，文件 mode MUST 设置为自定义值 '0x400'
+		由于 Windows 不支持设置特定文件权限，该测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings and Item mode set [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
 		mode := int32(0400)
@@ -110,7 +110,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	})
 
 	f.It("should be consumable from pods in volume with mappings and Item user set [LinuxOnly]", f.WithFeatureGate(features.AtomicWriteVolumeUserFields), func(ctx context.Context) {
-		// Windows does not support setting file ownership for virtualized container accounts.
+		// Windows 不支持为虚拟化容器账户设置文件属主。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		user := int64(1000)
 		doConfigMapE2EWithMappings(ctx, f, true, 1001, nil, &user)
@@ -119,14 +119,14 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, with mapping, non-root user
-		Description: Create a ConfigMap, create a Pod that mounts a volume and populates the volume with data stored in the ConfigMap. Files are mapped to a path in the volume. Pod is run as a non-root user with uid=1000. The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount. The file on the volume MUST have file mode set to default value of 0x644.
+		Description: 创建 ConfigMap，创建一个挂载 volume 并用 ConfigMap 中数据填充该 volume 的 Pod。文件被映射到 volume 中的路径。Pod 以 uid=1000 的非 root 用户运行。创建的 ConfigMap MUST 能被新 Pod 通过 volume mount 读取。volume 上的文件 mode MUST 设为默认值 0x644。
 	*/
 	framework.ConformanceIt("should be consumable from pods in volume with mappings as non-root", f.WithNodeConformance(), func(ctx context.Context) {
 		doConfigMapE2EWithMappings(ctx, f, true, 0, nil, nil)
 	})
 
 	f.It("should be consumable from pods in volume with mappings as non-root with FSGroup [LinuxOnly]", f.WithNodeConformance(), func(ctx context.Context) {
-		// Windows does not support RunAsUser / FSGroup SecurityContext options.
+		// Windows 不支持 RunAsUser / FSGroup SecurityContext 选项。
 		e2eskipper.SkipIfNodeOSDistroIs("windows")
 		doConfigMapE2EWithMappings(ctx, f, true, 1001, nil, nil)
 	})
@@ -134,7 +134,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, update
-		Description: The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount that is mapped to custom path in the Pod. When the ConfigMap is updated the change to the config map MUST be verified by reading the content from the mounted file in the Pod.
+		Description: 创建的 ConfigMap MUST 能被新 Pod 通过映射到 Pod 中自定义路径的 volume mount 读取。ConfigMap 更新后，MUST 通过读取 Pod 中挂载文件的内容来验证更改。
 	*/
 	framework.ConformanceIt("updates should be reflected in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		podLogTimeout := e2epod.GetPodSecretUpdateTimeout(ctx, f.ClientSet)
@@ -173,7 +173,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 		gomega.Eventually(ctx, pollLogs, podLogTimeout, framework.Poll).Should(gomega.ContainSubstring("value-1"))
 
 		ginkgo.By(fmt.Sprintf("Updating configmap %v", configMap.Name))
-		configMap.ResourceVersion = "" // to force update
+		configMap.ResourceVersion = "" // 强制更新
 		configMap.Data["data-1"] = "value-2"
 		_, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Update(ctx, configMap, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "Failed to update configmap %q in namespace %q", configMap.Name, f.Namespace.Name)
@@ -185,7 +185,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.12
 		Testname: ConfigMap Volume, text data, binary data
-		Description: The ConfigMap that is created with text data and binary data MUST be accessible to read from the newly created Pod using the volume mount that is mapped to custom path in the Pod. ConfigMap's text data and binary data MUST be verified by reading the content from the mounted files in the Pod.
+		Description: 用文本数据和二进制数据创建的 ConfigMap MUST 能被新 Pod 通过映射到自定义路径的 volume mount 读取。ConfigMap 的文本和二进制数据 MUST 通过读取 Pod 中挂载文件的内容来验证。
 	*/
 	framework.ConformanceIt("binary data should be reflected in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		podLogTimeout := e2epod.GetPodSecretUpdateTimeout(ctx, f.ClientSet)
@@ -250,7 +250,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, create, update and delete
-		Description: The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount that is mapped to custom path in the Pod. When the config map is updated the change to the config map MUST be verified by reading the content from the mounted file in the Pod. Also when the item(file) is deleted from the map that MUST result in a error reading that item(file).
+		Description: 创建的 ConfigMap MUST 能被新 Pod 通过映射到自定义路径的 volume mount 读取。ConfigMap 更新后 MUST 通过读取 Pod 中挂载文件来验证更改。从 map 中删除 item（文件）后，读取该文件 MUST 报错。
 	*/
 	framework.ConformanceIt("optional updates should be reflected in volume", f.WithNodeConformance(), func(ctx context.Context) {
 		podLogTimeout := e2epod.GetPodSecretUpdateTimeout(ctx, f.ClientSet)
@@ -412,7 +412,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 		framework.ExpectNoError(err, "Failed to delete configmap %q in namespace %q", deleteConfigMap.Name, f.Namespace.Name)
 
 		ginkgo.By(fmt.Sprintf("Updating configmap %v", updateConfigMap.Name))
-		updateConfigMap.ResourceVersion = "" // to force update
+		updateConfigMap.ResourceVersion = "" // 强制更新
 		delete(updateConfigMap.Data, "data-1")
 		updateConfigMap.Data["data-3"] = "value-3"
 		_, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Update(ctx, updateConfigMap, metav1.UpdateOptions{})
@@ -433,7 +433,7 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.9
 		Testname: ConfigMap Volume, multiple volume maps
-		Description: The ConfigMap that is created MUST be accessible to read from the newly created Pod using the volume mount that is mapped to multiple paths in the Pod. The content MUST be accessible from all the mapped volume mounts.
+		Description: 创建的 ConfigMap MUST 能被新 Pod 通过映射到多个路径的 volume mount 读取。所有映射的 volume mount MUST 都能访问其内容。
 	*/
 	framework.ConformanceIt("should be consumable in multiple volumes in the same pod", f.WithNodeConformance(), func(ctx context.Context) {
 		var (
@@ -510,11 +510,11 @@ var _ = SIGDescribe("ConfigMap", func() {
 	/*
 		Release: v1.21
 		Testname: ConfigMap Volume, immutability
-		Description: Create a ConfigMap. Update it's data field, the update MUST succeed.
-			Mark the ConfigMap as immutable, the update MUST succeed. Try to update its data, the update MUST fail.
-			Try to mark the ConfigMap back as not immutable, the update MUST fail.
-			Try to update the ConfigMap`s metadata (labels), the update must succeed.
-			Try to delete the ConfigMap, the deletion must succeed.
+		Description: 创建 ConfigMap。更新其 data 字段，更新 MUST 成功。
+			将 ConfigMap 标记为 immutable，更新 MUST 成功。尝试更新其 data，更新 MUST 失败。
+			尝试将 ConfigMap 改回非 immutable，更新 MUST 失败。
+			尝试更新 ConfigMap 的 metadata（labels），更新必须成功。
+			尝试删除 ConfigMap，删除必须成功。
 	*/
 	framework.ConformanceIt("should be immutable if `immutable` field is set", func(ctx context.Context) {
 		name := "immutable"
@@ -527,20 +527,20 @@ var _ = SIGDescribe("ConfigMap", func() {
 		currentConfigMap, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Update(ctx, currentConfigMap, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "Failed to update config map %q in namespace %q", configMap.Name, configMap.Namespace)
 
-		// Mark config map as immutable.
+		// 将 config map 标记为 immutable。
 		trueVal := true
 		currentConfigMap.Immutable = &trueVal
 		currentConfigMap, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Update(ctx, currentConfigMap, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "Failed to mark config map %q in namespace %q as immutable", configMap.Name, configMap.Namespace)
 
-		// Ensure data can't be changed now.
+		// 确保现在无法更改 data。
 		currentConfigMap.Data["data-5"] = "value-5"
 		_, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Update(ctx, currentConfigMap, metav1.UpdateOptions{})
 		if !apierrors.IsInvalid(err) {
 			framework.Failf("expected 'invalid' as error, got instead: %v", err)
 		}
 
-		// Ensure config map can't be switched from immutable to mutable.
+		// 确保 config map 无法从 immutable 切回 mutable。
 		currentConfigMap, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Get(ctx, name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "Failed to get config map %q in namespace %q", configMap.Name, configMap.Namespace)
 		if !*currentConfigMap.Immutable {
@@ -554,21 +554,21 @@ var _ = SIGDescribe("ConfigMap", func() {
 			framework.Failf("expected 'invalid' as error, got instead: %v", err)
 		}
 
-		// Ensure that metadata can be changed.
+		// 确保 metadata 可以更改。
 		currentConfigMap, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Get(ctx, name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "Failed to get config map %q in namespace %q", configMap.Name, configMap.Namespace)
 		currentConfigMap.Labels = map[string]string{"label1": "value1"}
 		_, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Update(ctx, currentConfigMap, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "Failed to update config map %q in namespace %q", configMap.Name, configMap.Namespace)
 
-		// Ensure that immutable config map can be deleted.
+		// 确保 immutable 的 config map 可以删除。
 		err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Delete(ctx, name, metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "Failed to delete config map %q in namespace %q", configMap.Name, configMap.Namespace)
 	})
 
-	// The pod is in pending during volume creation until the configMap objects are available
-	// or until mount the configMap volume times out. There is no configMap object defined for the pod, so it should return timeout exception unless it is marked optional.
-	// Slow (~5 mins)
+	// 在 volume 创建期间 Pod 处于 pending，直到 configMap 对象可用
+	// 或挂载 configMap volume 超时。该 Pod 没有定义 configMap 对象，因此除非标记为 optional，否则应返回超时异常。
+	// 慢（约 5 分钟）
 	f.It("Should fail non-optional pod creation due to configMap object does not exist", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		volumeMountPath := "/etc/configmap-volumes"
 		pod := createNonOptionalConfigMapPod(ctx, f, volumeMountPath)
@@ -576,9 +576,9 @@ var _ = SIGDescribe("ConfigMap", func() {
 		gomega.Consistently(ctx, getPod).WithTimeout(f.Timeouts.PodStart).Should(e2epod.BeInPhase(v1.PodPending))
 	})
 
-	// ConfigMap object defined for the pod, If a key is specified which is not present in the ConfigMap,
-	// the volume setup will error unless it is marked optional, during the pod creation.
-	// Slow (~5 mins)
+	// 为 Pod 定义了 ConfigMap 对象，如果指定的 key 在 ConfigMap 中不存在，
+	// 则在 Pod 创建期间 volume 设置将报错，除非标记为 optional。
+	// 慢（约 5 分钟）
 	f.It("Should fail non-optional pod creation due to the key in the configMap object does not exist", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		volumeMountPath := "/etc/configmap-volumes"
 		pod := createNonOptionalConfigMapPodWithConfig(ctx, f, volumeMountPath)
@@ -691,8 +691,8 @@ func doConfigMapE2EWithMappings(ctx context.Context, f *framework.Framework, asU
 		pod.Spec.Volumes[0].VolumeSource.ConfigMap.Items[0].User = itemUser
 	}
 
-	// Just check file mode if fsGroup is not set. If fsGroup is set, the
-	// final mode is adjusted and we are not testing that case.
+	// 如果未设置 fsGroup，只检查文件 mode。如果设置了 fsGroup，
+	// 最终 mode 会被调整，我们不测试该情况。
 	output := []string{
 		"content of file \"/etc/configmap-volume/path/to/data-2\": value-2",
 	}
@@ -714,7 +714,7 @@ func createNonOptionalConfigMapPod(ctx context.Context, f *framework.Framework, 
 	createName := "cm-test-opt-create-" + string(uuid.NewUUID())
 	createVolumeName := "createcm-volume"
 
-	// creating a pod without configMap object created, by mentioning the configMap volume source's local reference name
+	// 创建 Pod 时不创建 configMap 对象，只提及 configMap volume source 的 local reference name
 	pod := createConfigMapVolumeMounttestPod(f.Namespace.Name, createVolumeName, createName, path.Join(volumeMountPath, "create"),
 		"--break_on_expected_content=false", containerTimeoutArg, "--file_content_in_loop=/etc/configmap-volumes/create/data-1")
 	pod.Spec.Volumes[0].VolumeSource.ConfigMap.Optional = &falseValue
@@ -738,7 +738,7 @@ func createNonOptionalConfigMapPodWithConfig(ctx context.Context, f *framework.F
 	if configMap, err = f.ClientSet.CoreV1().ConfigMaps(f.Namespace.Name).Create(ctx, configMap, metav1.CreateOptions{}); err != nil {
 		framework.Failf("unable to create test configMap %s: %v", configMap.Name, err)
 	}
-	// creating a pod with configMap object, but with different key which is not present in configMap object.
+	// 创建带 configMap 对象的 Pod，但使用 configMap 中不存在的 key。
 	pod := createConfigMapVolumeMounttestPod(f.Namespace.Name, createVolumeName, createName, path.Join(volumeMountPath, "create"),
 		"--break_on_expected_content=false", containerTimeoutArg, "--file_content_in_loop=/etc/configmap-volumes/create/data-1")
 	pod.Spec.Volumes[0].VolumeSource.ConfigMap.Optional = &falseValue

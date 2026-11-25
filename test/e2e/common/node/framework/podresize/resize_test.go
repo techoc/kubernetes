@@ -104,7 +104,7 @@ func TestMakeResizePatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			patch := MakeResizePatch(tt.old, tt.new, nil, nil)
 
-			// Ignore the "$setElementOrder" directive for patch comparison.
+			// patch 比较时忽略 "$setElementOrder" 指令。
 			patchMap := strategicpatch.JSONMap{}
 			err := json.Unmarshal(patch, &patchMap)
 			require.NoError(t, err)

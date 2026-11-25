@@ -20,15 +20,15 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// NOTE(claudiub): These constants should NOT be used as Pod Container Images.
+// NOTE(claudiub): 这些常量不应作为 Pod 的容器镜像使用。
 const (
 	AgnhostImageName = "agnhost"
 )
 
 var (
-	// PrevAgnhostImage is the fully qualified URI to the AgnhostPrev image
+	// PrevAgnhostImage 是 AgnhostPrev 镜像的完整限定 URI
 	PrevAgnhostImage = imageutils.GetE2EImage(imageutils.AgnhostPrev)
 
-	// AgnhostImage is the fully qualified URI to the Agnhost image
+	// AgnhostImage 是 Agnhost 镜像的完整限定 URI
 	AgnhostImage = imageutils.GetE2EImage(imageutils.Agnhost)
 )

@@ -77,13 +77,13 @@ var busyboxImage = imageutils.GetE2EImage(imageutils.BusyBox)
 var agnhostImage = imageutils.GetE2EImage(imageutils.Agnhost)
 
 const (
-	// Kubelet internal cgroup name for node allocatable cgroup.
+	// Kubelet 内部对 node allocatable cgroup 的命名。
 	defaultNodeAllocatableCgroup = "kubepods"
-	// defaultPodResourcesPath is the path to the local endpoint serving the podresources GRPC service.
+	// defaultPodResourcesPath 是提供 podresources gRPC service 的本地 endpoint 路径。
 	defaultPodResourcesPath    = "/var/lib/kubelet/pod-resources"
 	defaultPodResourcesTimeout = 10 * time.Second
 	defaultPodResourcesMaxSize = 1024 * 1024 * 16 // 16 Mb
-	// state files
+	// 状态文件
 	cpuManagerStateFile    = "/var/lib/kubelet/cpu_manager_state"
 	memoryManagerStateFile = "/var/lib/kubelet/memory_manager_state"
 	usernsStateFiles       = "/var/lib/kubelet/pods/*/userns"
@@ -92,7 +92,7 @@ const (
 var (
 	kubeletHealthCheckURL    = fmt.Sprintf("http://127.0.0.1:%d/healthz", ports.KubeletHealthzPort)
 	containerRuntimeUnitName = ""
-	// KubeletConfig is the kubelet configuration the test is running against.
+	// KubeletConfig 是测试所针对的 kubelet 配置。
 	kubeletCfg *kubeletconfig.KubeletConfiguration
 )
 
@@ -194,12 +194,12 @@ func addBeforeEachForCleaningUpPods(f *framework.Framework) {
 }
 
 func waitForKubeletToStart(ctx context.Context, f *framework.Framework) {
-	// wait until the kubelet health check will succeed
+	// 等待 kubelet 健康检查成功
 	gomega.Eventually(ctx, func() bool {
 		return e2enode.HealthCheck(kubeletHealthCheckURL)
 	}, 2*time.Minute, 5*time.Second).Should(gomega.BeTrueBecause("expected kubelet to be in healthy state"))
 
-	// Wait for the Kubelet to be ready.
+	// 等待 Kubelet 就绪。
 	gomega.Eventually(ctx, func(ctx context.Context) error {
 		nodes, err := e2enode.TotalReady(ctx, f.ClientSet)
 		if err != nil {
@@ -217,7 +217,7 @@ func deleteStateFile(stateFileName string) {
 	framework.ExpectNoError(err, "failed to delete the state file")
 }
 
-// listNamespaceEvents lists the events in the given namespace.
+// listNamespaceEvents 列出指定命名空间中的事件。
 func listNamespaceEvents(ctx context.Context, c clientset.Interface, ns string) error {
 	ls, err := c.CoreV1().Events(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -248,10 +248,10 @@ func getLocalNode(ctx context.Context, f *framework.Framework) *v1.Node {
 	return &nodeList.Items[0]
 }
 
-// getLocalTestNode fetches the node object describing the local worker node set up by the e2e_node infra, alongside with its ready state.
-// getLocalTestNode is a variant of `getLocalNode` which reports but does not set any requirement about the node readiness state, letting
-// the caller decide. The check is intentionally done like `getLocalNode` does.
-// Note `getLocalNode` aborts (as in ginkgo.Expect) the test implicitly if the worker node is not ready.
+// getLocalTestNode 获取描述 e2e_node 基础设施建立的本地 worker 节点的 node 对象及其就绪状态。
+// getLocalTestNode 是 `getLocalNode` 的变体，它报告但不要求节点就绪状态，
+// 由调用方决定。检查方式有意与 `getLocalNode` 一致。
+// 注意，如果 worker 节点未就绪，`getLocalNode` 会隐式中止测试（类似 ginkgo.Expect）。
 func getLocalTestNode(ctx context.Context, f *framework.Framework) (*v1.Node, bool) {
 	logger := klog.FromContext(ctx)
 	node, err := f.ClientSet.CoreV1().Nodes().Get(ctx, framework.TestContext.NodeName, metav1.GetOptions{})
@@ -270,15 +270,15 @@ func getLocalNodeCPUDetails(ctx context.Context, f *framework.Framework) (cpuCap
 	cpuRes := cpuCap.DeepCopy()
 	cpuRes.Sub(cpuAlloc)
 
-	// RoundUp reserved CPUs to get only integer cores.
+	// 对预留的 CPU 向上取整，只保留整数核心。
 	cpuRes.RoundUp(0)
 
 	return cpuCap.Value(), cpuCap.Value() - cpuRes.Value(), cpuRes.Value()
 }
 
-// logKubeletLatencyMetrics logs KubeletLatencyMetrics computed from the Prometheus
-// metrics exposed on the current node and identified by the metricNames.
-// The Kubelet subsystem prefix is automatically prepended to these metric names.
+// logKubeletLatencyMetrics 记录从当前节点暴露的 Prometheus 指标中
+// 计算得出、由 metricNames 标识的 KubeletLatencyMetrics。
+// Kubelet 子系统前缀会自动加到这些指标名之前。
 func logKubeletLatencyMetrics(ctx context.Context, metricNames ...string) {
 	metricSet := sets.NewString()
 	for _, key := range metricNames {
@@ -292,9 +292,9 @@ func logKubeletLatencyMetrics(ctx context.Context, metricNames ...string) {
 	}
 }
 
-// getCRIClient connects CRI and returns CRI runtime service clients and image service client.
+// getCRIClient 连接 CRI，返回 CRI runtime service client 和 image service client。
 func getCRIClient(ctx context.Context) (internalapi.RuntimeService, internalapi.ImageManagerService, error) {
-	// connection timeout for CRI service connection
+	// CRI service 连接的超时时间
 	const connectionTimeout = 2 * time.Minute
 	runtimeEndpoint := framework.TestContext.ContainerRuntimeEndpoint
 	useStreaming := utilfeature.DefaultFeatureGate.Enabled(features.CRIListStreaming)
@@ -309,7 +309,7 @@ func getCRIClient(ctx context.Context) (internalapi.RuntimeService, internalapi.
 	imageManagerEndpoint := runtimeEndpoint
 	if framework.TestContext.ImageServiceEndpoint != "" {
 		//ImageServiceEndpoint is the same as ContainerRuntimeEndpoint if not
-		//explicitly specified
+		// 显式指定
 		imageManagerEndpoint = framework.TestContext.ImageServiceEndpoint
 	}
 	i, err := remote.NewRemoteImageServiceBuilder().
@@ -323,10 +323,10 @@ func getCRIClient(ctx context.Context) (internalapi.RuntimeService, internalapi.
 	return r, i, nil
 }
 
-// findKubeletServiceName searches the unit name among the services known to systemd.
-// if the `running` parameter is true, restricts the search among currently running services;
-// otherwise, also stopped, failed, exited (non-running in general) services are also considered.
-// TODO: Find a uniform way to deal with systemctl/initctl/service operations. #34494
+// findKubeletServiceName 在 systemd 已知的服务中搜索单元名称。
+// 如果 `running` 参数为 true，只在当前运行的服务中搜索；
+// 否则也考虑已停止、失败、退出（一般为非运行）的服务。
+// TODO: 找到处理 systemctl/initctl/service 操作的统一方式。#34494
 func findKubeletServiceName(running bool) string {
 	cmdLine := []string{
 		"systemctl", "list-units", "*kubelet*",
@@ -410,17 +410,17 @@ func startContainerRuntime() error {
 	return performContainerRuntimeUnitOp(startContainerRuntimeUnitOp)
 }
 
-// restartKubelet restarts the current kubelet service.
-// the "current" kubelet service is the instance managed by the current e2e_node test run.
-// If `running` is true, restarts only if the current kubelet is actually running. In some cases,
-// the kubelet may have exited or can be stopped, typically because it was intentionally stopped
-// earlier during a test, or, sometimes, because it just crashed.
-// Warning: the "current" kubelet is poorly defined. The "current" kubelet is assumed to be the most
-// recent kubelet service unit, IOW there is not a unique ID we use to bind explicitly a kubelet
-// instance to a test run.
+// restartKubelet 重启当前的 kubelet service。
+// "当前" kubelet service 指由本次 e2e_node 测试运行管理的实例。
+// 如果 `running` 为 true，仅在当前 kubelet 确实运行时才重启。有时 kubelet
+// 可能已退出或可被停止，通常是因为测试中先前有意停止了它，
+// 或者只是崩溃了。
+// 警告："当前" kubelet 定义不清晰，通常假定为最近的 kubelet service 单元，
+// 换言之，并没有唯一 ID 能将某个 kubelet 实例
+// 明确绑定到一次测试运行。
 func restartKubelet(ctx context.Context, running bool) {
 	kubeletServiceName := findKubeletServiceName(running)
-	// reset the kubelet service start-limit-hit
+	// 重置 kubelet service 的 start-limit-hit
 	stdout, err := exec.CommandContext(ctx, "sudo", "systemctl", "reset-failed", kubeletServiceName).CombinedOutput()
 	framework.ExpectNoError(err, "Failed to reset kubelet start-limit-hit with systemctl: %v, %s", err, string(stdout))
 
@@ -428,24 +428,24 @@ func restartKubelet(ctx context.Context, running bool) {
 	framework.ExpectNoError(err, "Failed to restart kubelet with systemctl: %v, %s", err, string(stdout))
 }
 
-// mustStopKubelet will kill the running kubelet, and returns a func that will restart the process again
+// mustStopKubelet 杀死正在运行的 kubelet，并返回一个可再次启动进程的 func
 func mustStopKubelet(ctx context.Context, f *framework.Framework) func(ctx context.Context) {
 	kubeletServiceName := findKubeletServiceName(true)
 
-	// reset the kubelet service start-limit-hit
+	// 重置 kubelet service 的 start-limit-hit
 	stdout, err := exec.CommandContext(ctx, "sudo", "systemctl", "reset-failed", kubeletServiceName).CombinedOutput()
 	framework.ExpectNoError(err, "Failed to reset kubelet start-limit-hit with systemctl: %v, %s", err, string(stdout))
 
 	stdout, err = exec.CommandContext(ctx, "sudo", "systemctl", "kill", kubeletServiceName).CombinedOutput()
 	framework.ExpectNoError(err, "Failed to stop kubelet with systemctl: %v, %s", err, string(stdout))
 
-	// wait until the kubelet health check fail
+	// 等待 kubelet 健康检查失败
 	gomega.Eventually(ctx, func() bool {
 		return e2enode.HealthCheck(kubeletHealthCheckURL)
 	}, f.Timeouts.PodStart, f.Timeouts.Poll).Should(gomega.BeFalseBecause("kubelet was expected to be stopped but it is still running"))
 
 	return func(ctx context.Context) {
-		// we should restart service, otherwise the transient service start will fail
+		// 应重启 service，否则临时的 service 启动会失败
 		stdout, err := exec.CommandContext(ctx, "sudo", "systemctl", "restart", kubeletServiceName).CombinedOutput()
 		framework.ExpectNoError(err, "Failed to restart kubelet with systemctl: %v, %v", err, stdout)
 		waitForKubeletToStart(ctx, f)
@@ -459,10 +459,10 @@ func toCgroupFsName(cgroupName cm.CgroupName) string {
 	return cgroupName.ToCgroupfs()
 }
 
-// reduceAllocatableMemoryUsageIfCgroupv1 uses memory.force_empty (https://lwn.net/Articles/432224/)
-// to make the kernel reclaim memory in the allocatable cgroup
-// the time to reduce pressure may be unbounded, but usually finishes within a second.
-// memory.force_empty is no supported in cgroupv2.
+// reduceAllocatableMemoryUsageIfCgroupv1 使用 memory.force_empty（https://lwn.net/Articles/432224/）
+// 让内核回收 allocatable cgroup 中的内存
+// 降低压力所需的时间可能没有上限，但通常在一秒内完成。
+// cgroupv2 不支持 memory.force_empty。
 func reduceAllocatableMemoryUsageIfCgroupv1() {
 	if !IsCgroup2UnifiedMode() {
 		cmd := fmt.Sprintf("echo 0 > /sys/fs/cgroup/memory/%s/memory.force_empty", toCgroupFsName(cm.NewCgroupName(cm.RootCgroupName, defaultNodeAllocatableCgroup)))
@@ -471,9 +471,9 @@ func reduceAllocatableMemoryUsageIfCgroupv1() {
 	}
 }
 
-// Equivalent of featuregatetesting.SetFeatureGateDuringTest
-// which can't be used here because we're not in a Testing context.
-// This must be in a non-"_test" file to pass
+// 等价于 featuregatetesting.SetFeatureGateDuringTest
+// 但这里不能使用它，因为我们不在 Testing 上下文中。
+// 这必须放在非 "_test" 文件中才能通过编译
 // make verify WHAT=test-featuregates
 func withFeatureGate(feature featuregate.Feature, desired bool) func() {
 	current := utilfeature.DefaultFeatureGate.Enabled(feature)
@@ -483,11 +483,11 @@ func withFeatureGate(feature featuregate.Feature, desired bool) func() {
 	}
 }
 
-// waitForAllContainerRemoval waits until all the containers on a given pod are really gone.
-// This is needed by the e2e tests which involve exclusive resource allocation (cpu, topology manager; podresources; etc.)
-// In these cases, we need to make sure the tests clean up after themselves to make sure each test runs in
-// a pristine environment. The only way known so far to do that is to introduce this wait.
-// Worth noting, however, that this makes the test runtime much bigger.
+// waitForAllContainerRemoval 等待给定 Pod 上的所有容器真正消失。
+// 涉及独占资源分配（CPU、topology manager、podresources 等）的 e2e 测试需要它。
+// 在这些情况下，需要确保测试自行清理，使每个测试都在
+// 干净环境中运行。目前已知的唯一方法就是引入此等待。
+// 但要注意，这会显著增加测试运行时间。
 func waitForAllContainerRemoval(ctx context.Context, podName, podNS string) {
 	rs, _, err := getCRIClient(ctx)
 	framework.ExpectNoError(err)
@@ -515,7 +515,7 @@ func getPidsForProcess(name, pidFile string) ([]int, error) {
 		if err == nil {
 			return []int{pid}, nil
 		}
-		// log the error and fall back to pidof
+		// 记录错误并回退到 pidof
 		runtime.HandleError(err)
 	}
 	return procfs.PidOf(name)
@@ -541,8 +541,8 @@ func getPidFromPidFile(pidFile string) (int, error) {
 	return pid, nil
 }
 
-// WaitForPodInitContainerRestartCount waits for the given Pod init container
-// to achieve at least a given restartCount
+// WaitForPodInitContainerRestartCount 等待给定 Pod 的 init container
+// 达到至少指定的 restartCount
 // TODO: eventually look at moving to test/e2e/framework/pod
 func WaitForPodInitContainerRestartCount(ctx context.Context, c clientset.Interface, namespace, podName string, initContainerIndex int, desiredRestartCount int32, timeout time.Duration) error {
 	conditionDesc := fmt.Sprintf("init container %d started", initContainerIndex)
@@ -555,7 +555,7 @@ func WaitForPodInitContainerRestartCount(ctx context.Context, c clientset.Interf
 	})
 }
 
-// WaitForPodContainerRestartCount waits for the given Pod container to achieve at least a given restartCount
+// WaitForPodContainerRestartCount 等待给定 Pod 的容器达到至少指定的 restartCount
 // TODO: eventually look at moving to test/e2e/framework/pod
 func WaitForPodContainerRestartCount(ctx context.Context, c clientset.Interface, namespace, podName string, containerIndex int, desiredRestartCount int32, timeout time.Duration) error {
 	conditionDesc := fmt.Sprintf("container %d started", containerIndex)
@@ -568,9 +568,9 @@ func WaitForPodContainerRestartCount(ctx context.Context, c clientset.Interface,
 	})
 }
 
-// WaitForPodInitContainerToFail waits for the given Pod init container to fail with the given reason, specifically due to
-// invalid container configuration. In this case, the container will remain in a waiting state with a specific
-// reason set, which should match the given reason.
+// WaitForPodInitContainerToFail 等待给定 Pod 的 init container 因指定原因失败，特别是由于
+// 无效的容器配置。此时容器将保持 waiting 状态，并带有特定的
+// reason，应与给定的原因匹配。
 // TODO: eventually look at moving to test/e2e/framework/pod
 func WaitForPodInitContainerToFail(ctx context.Context, c clientset.Interface, namespace, podName string, containerIndex int, reason string, timeout time.Duration) error {
 	conditionDesc := fmt.Sprintf("container %d failed with reason %s", containerIndex, reason)
@@ -655,11 +655,11 @@ func getKubeletMetrics(ctx context.Context) (e2emetrics.KubeletMetrics, error) {
 	return e2emetrics.GrabKubeletMetricsWithoutProxy(ctx, nodeNameOrIP()+":10255", "/metrics")
 }
 
-// ErrMetricNotFound indicates that a metric family or matching sample was not found in scraped metrics.
+// ErrMetricNotFound 表示抓取的指标中未找到指标族或匹配的样本。
 var ErrMetricNotFound = errors.New("metric or sample not found in kubelet metrics")
 
-// getCounterMetricValue extracts the counter metric value matching metricName and labels.
-// It returns ErrMetricNotFound if metricName or the matching label sample is not found in metrics.
+// getCounterMetricValue 提取匹配 metricName 和 labels 的 counter 指标值。
+// 如果指标中未找到 metricName 或匹配的标签样本，则返回 ErrMetricNotFound。
 func getCounterMetricValue(metrics e2emetrics.KubeletMetrics, metricName string, labels map[string]string) (float64, error) {
 	samples, ok := metrics[metricName]
 	if !ok {

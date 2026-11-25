@@ -81,9 +81,9 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 			ginkgo.By("Waiting 15 seconds for cAdvisor to collect 2 stats points")
 			time.Sleep(15 * time.Second)
 
-			// Setup expectations.
+			// 设置期望值。
 			const (
-				maxStartAge = time.Hour * 24 * 365 // 1 year
+				maxStartAge = time.Hour * 24 * 365 // 1 年
 				maxStatsAge = time.Minute
 			)
 			ginkgo.By("Fetching node so we can match against an appropriate memory limit")
@@ -91,28 +91,28 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 			memoryCapacity := node.Status.Capacity["memory"]
 			memoryLimit := memoryCapacity.Value()
 			fsCapacityBounds := bounded(100*e2evolume.Mb, 10*e2evolume.Tb)
-			// Expectations for system containers.
+			// 对系统容器的期望。
 			sysContExpectations := func() types.GomegaMatcher {
 				return gstruct.MatchAllFields(gstruct.Fields{
 					"Name":      gstruct.Ignore(),
 					"StartTime": recent(maxStartAge),
 					"CPU": ptrMatchAllFields(gstruct.Fields{
 						"Time": recent(maxStatsAge),
-						// CRI stats provider tries to estimate the value of UsageNanoCores. This value can be
-						// either 0 or between 10000 and 2e10 ( upper limit seen during test execution ).
-						// Please refer, https://github.com/kubernetes/kubernetes/pull/95345#discussion_r501630942
-						// for more information.
+						// CRI stats provider 尝试估算 UsageNanoCores 的值，该值可能是
+						// 0，或介于 10000 到 2e10 之间（测试运行中观察到的上限）。
+						// 更多信息参见 https://github.com/kubernetes/kubernetes/pull/95345#discussion_r501630942
+						//
 						"UsageNanoCores":       gomega.SatisfyAny(gstruct.PointTo(gomega.BeZero()), bounded(10000, 2e10)),
 						"UsageCoreNanoSeconds": bounded(10000000, 1e15),
 						"PSI":                  psiExpectation(),
 					}),
 					"Memory": ptrMatchAllFields(gstruct.Fields{
 						"Time": recent(maxStatsAge),
-						// We don't limit system container memory.
+						// 我们不限制系统容器的内存。
 						"AvailableBytes":  gomega.BeNil(),
 						"UsageBytes":      bounded(1*e2evolume.Mb, memoryLimit),
 						"WorkingSetBytes": bounded(1*e2evolume.Mb, memoryLimit),
-						// this now returns /sys/fs/cgroup/memory.stat total_rss
+						// 现在它返回 /sys/fs/cgroup/memory.stat 的 total_rss
 						"RSSBytes":        bounded(1*e2evolume.Mb, memoryLimit),
 						"PageFaults":      bounded(1000, 1e9),
 						"MajorPageFaults": bounded(0, 1e9),
@@ -129,8 +129,8 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 			expectedPageFaultsUpperBound := 1000000
 			expectedMajorPageFaultsUpperBound := 1e9
 			if IsCgroup2UnifiedMode() {
-				// On cgroupv2 these stats are recursive, so make sure they are at least like the value set
-				// above for the container.
+				// 在 cgroupv2 上这些统计是递归的，因此确保它们至少达到
+				// 上面为容器设置的值。
 				expectedPageFaultsUpperBound = 1e9
 				expectedMajorPageFaultsUpperBound = 1e9
 			}
@@ -138,7 +138,7 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 			podsContExpectations := sysContExpectations().(*gstruct.FieldsMatcher)
 			podsContExpectations.Fields["Memory"] = ptrMatchAllFields(gstruct.Fields{
 				"Time": recent(maxStatsAge),
-				// Pods are limited by Node Allocatable
+				// Pod 受 Node Allocatable 限制
 				"AvailableBytes":  bounded(1*e2evolume.Kb, memoryLimit),
 				"UsageBytes":      bounded(10*e2evolume.Kb, memoryLimit),
 				"WorkingSetBytes": bounded(10*e2evolume.Kb, memoryLimit),
@@ -153,14 +153,14 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 				"runtime": runtimeContExpectations,
 				"pods":    podsContExpectations,
 			}
-			// The Kubelet only manages the 'misc' system container if the host is not running systemd.
+			// 只有当宿主机未运行 systemd 时，Kubelet 才管理 'misc' 系统容器。
 			if !systemdutil.IsRunningSystemd() {
 				framework.Logf("Host not running systemd; expecting 'misc' system container.")
 				miscContExpectations := sysContExpectations().(*gstruct.FieldsMatcher)
-				// Misc processes are system-dependent, so relax the memory constraints.
+				// Misc 进程依赖具体系统，因此放宽内存约束。
 				miscContExpectations.Fields["Memory"] = ptrMatchAllFields(gstruct.Fields{
 					"Time": recent(maxStatsAge),
-					// We don't limit system container memory.
+					// 我们不限制系统容器的内存。
 					"AvailableBytes":  gomega.BeNil(),
 					"UsageBytes":      bounded(100*e2evolume.Kb, memoryLimit),
 					"WorkingSetBytes": bounded(100*e2evolume.Kb, memoryLimit),
@@ -171,7 +171,7 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 				})
 				systemContainers["misc"] = miscContExpectations
 			}
-			// Expectations for pods.
+			// 对 Pod 的期望。
 			podExpectations := gstruct.MatchAllFields(gstruct.Fields{
 				"PodRef":    gstruct.Ignore(),
 				"StartTime": recent(maxStartAge),
@@ -293,7 +293,7 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 						"AvailableBytes":  bounded(100*e2evolume.Mb, memoryLimit),
 						"UsageBytes":      bounded(10*e2evolume.Mb, memoryLimit),
 						"WorkingSetBytes": bounded(10*e2evolume.Mb, memoryLimit),
-						// this now returns /sys/fs/cgroup/memory.stat total_rss
+						// 现在它返回 /sys/fs/cgroup/memory.stat 的 total_rss
 						"RSSBytes":        bounded(1*e2evolume.Kb, memoryLimit),
 						"PageFaults":      bounded(1000, 1e9),
 						"MajorPageFaults": bounded(0, 1e9),
@@ -317,7 +317,7 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 						"Time":           recent(maxStatsAge),
 						"AvailableBytes": fsCapacityBounds,
 						"CapacityBytes":  fsCapacityBounds,
-						// we assume we are not running tests on machines more than 10tb of disk
+						// 假定测试机器的磁盘不超过 10TB
 						"UsedBytes":  bounded(e2evolume.Kb, 10*e2evolume.Tb),
 						"InodesFree": bounded(1e4, 1e8),
 						"Inodes":     bounded(1e4, 1e8),
@@ -328,7 +328,7 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 							"Time":           recent(maxStatsAge),
 							"AvailableBytes": fsCapacityBounds,
 							"CapacityBytes":  fsCapacityBounds,
-							// we assume we are not running tests on machines more than 10tb of disk
+							// 假定测试机器的磁盘不超过 10TB
 							"UsedBytes":  bounded(e2evolume.Kb, 10*e2evolume.Tb),
 							"InodesFree": bounded(1e4, 1e8),
 							"Inodes":     bounded(1e4, 1e8),
@@ -338,7 +338,7 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 							"Time":           recent(maxStatsAge),
 							"AvailableBytes": fsCapacityBounds,
 							"CapacityBytes":  fsCapacityBounds,
-							// we assume we are not running tests on machines more than 10tb of disk
+							// 假定测试机器的磁盘不超过 10TB
 							"UsedBytes":  bounded(e2evolume.Kb, 10*e2evolume.Tb),
 							"InodesFree": bounded(1e4, 1e8),
 							"Inodes":     bounded(1e4, 1e8),
@@ -351,7 +351,7 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 						"NumOfRunningProcesses": bounded(0, 1e8),
 					}),
 				}),
-				// Ignore extra pods since the tests run in parallel.
+				// 忽略额外的 Pod，因为测试是并行运行的。
 				"Pods": gstruct.MatchElements(summaryObjectID, gstruct.IgnoreExtras, gstruct.Elements{
 					fmt.Sprintf("%s::%s", f.Namespace.Name, pod0): podExpectations,
 					fmt.Sprintf("%s::%s", f.Namespace.Name, pod1): podExpectations,
@@ -359,9 +359,9 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 			})
 
 			ginkgo.By("Validating /stats/summary")
-			// Give pods a minute to actually start up.
+			// 给 Pod 一分钟真正启动。
 			gomega.Eventually(ctx, getNodeSummary, 180*time.Second, 15*time.Second).Should(matchExpectations)
-			// Then the summary should match the expectations a few more times.
+			// 之后 summary 应在几次内持续符合期望。
 			gomega.Consistently(ctx, getNodeSummary, 30*time.Second, 15*time.Second).Should(matchExpectations)
 		})
 	})
@@ -406,17 +406,17 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 		ginkgo.It("should report Memory pressure in PSI metrics", func(ctx context.Context) {
 			podName := "memory-pressure-pod"
 			ginkgo.By("Creating a pod to generate Memory pressure")
-			// Create a pod that generates memory pressure by continuously writing to files,
-			// forcing kernel page cache reclamation.
+			// 创建一个通过持续写文件来产生内存压力的 Pod，
+			// 强制内核回收 page cache。
 			podSpec := getStressTestPod(podName, "memory-stress", []string{})
 			podSpec.Spec.Containers[0].Command = []string{"/bin/sh", "-c"}
 			podSpec.Spec.Containers[0].Args = []string{
-				// Write 50MB files in an infinite loop, cycling through 5 file names, so
-				// the kernel must keep reclaiming file cache inside the 200MB limit.
-				// The first pass writes small 10MB files: without that ramp, the very
-				// first pass fills the whole limit with dirty pages before writeback has
-				// started, and on filesystems that hold dirty data longer (XFS on Fedora
-				// CoreOS) the kernel OOM kills the container instead of reclaiming.
+				// 在无限循环中写入 50MB 文件，轮流使用 5 个文件名，从而
+				// 内核必须在 200MB 限制内不断回收文件缓存。
+				// 第一轮写入较小的 10MB 文件：如果没有这个渐进过程，
+				// 第一轮会在回写开始前用脏页填满整个限制，
+				// 而在保留脏页较久的文件系统（如 Fedora CoreOS 上的
+				// XFS）上，内核会 OOM 杀死容器而非回收内存。
 				"i=0; while [ $i -lt 5 ]; do dd if=/dev/zero of=testfile.$i bs=1M count=10 &>/dev/null; i=$((i+1)); sleep 0.1; done; " +
 					"i=0; while true; do dd if=/dev/zero of=testfile.$i bs=1M count=50 &>/dev/null; i=$(((i+1)%5)); sleep 0.1; done",
 			}
@@ -433,13 +433,13 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 			ginkgo.By("Waiting for the pod to start")
 			framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod))
 
-			// Linux 6.16 and newer reclaim this workload's file cache without
-			// blocking the pod for long, so Full.Avg10 stays at zero and a
-			// check on the average cannot pass there. The total stall time
-			// still grows on every kernel, so check that Full.Total becomes
-			// positive and then keeps growing while the workload runs. An idle
-			// pod adds no stall time, so growth proves the pressure comes from
-			// this pod.
+			// Linux 6.16 及更新版本能在不长时间阻塞 Pod 的情况下
+			// 回收该工作负载的文件缓存，因此 Full.Avg10 保持为零，
+			// 检查平均值无法通过。总停顿时间
+			// 在所有内核上仍会增长，因此检查 Full.Total 是否变为
+			// 正数并在工作负载运行期间持续增长。空闲
+			// Pod 不会增加停顿时间，因此增长证明压力来自
+			// 该 Pod。
 			ginkgo.By("Validating that Memory PSI metrics report stall time")
 			var baselineTotal uint64
 			gomega.Eventually(ctx, func(ctx context.Context) (uint64, error) {
@@ -461,15 +461,15 @@ var _ = SIGDescribe("Summary API", framework.WithNodeConformance(), func() {
 		ginkgo.It("should report I/O pressure in PSI metrics", func(ctx context.Context) {
 			podName := "io-pressure-pod"
 			ginkgo.By("Creating a pod to generate I/O pressure")
-			// This workload uses a shell loop to continuously write a file to disk and
-			// sync it, which generates sustained I/O pressure and is a reliable way
-			// to trigger and measure I/O-related PSI metrics.
+			// 该工作负载使用 shell 循环持续向磁盘写文件并
+			// 同步，从而产生持续的 I/O 压力，是触发和测量
+			// I/O 相关 PSI 指标的可靠方法。
 			podSpec := getStressTestPod(podName, "io-stress", []string{})
 			podSpec.Spec.Containers[0].Command = []string{"/bin/sh", "-c"}
 			podSpec.Spec.Containers[0].Args = []string{
-				// This command runs an infinite loop to generate sustained I/O pressure.
-				// In each iteration, it writes a 128MB file using `dd` and then calls `sync`
-				// to ensure the data is flushed from memory to the disk, creating authentic I/O stalls.
+				// 此命令运行无限循环以产生持续的 I/O 压力。
+				// 每次迭代用 `dd` 写入 128MB 文件，然后调用 `sync`
+				// 确保数据从内存刷到磁盘，从而产生真实的 I/O 停顿。
 				"while true; do dd if=/dev/zero of=testfile bs=1M count=128 &>/dev/null; sync; rm testfile &>/dev/null; done",
 			}
 			pod := e2epod.NewPodClient(f).Create(ctx, podSpec)
@@ -513,7 +513,7 @@ func getSummaryTestPods(f *framework.Framework, numRestarts int32, names ...stri
 						Command: getRestartingContainerCommand("/test-empty-dir-mnt", 0, numRestarts, "dd if=/dev/zero of=/outside_the_volume.txt oflag=direct bs=4096 count=2 2>/dev/null; dd if=/outside_the_volume.txt of=/dev/null iflag=direct bs=4096 count=2 2>/dev/null; ping -c 1 google.com; echo 'hello world' >> /test-empty-dir-mnt/file; dd if=/dev/zero of=/dev/null bs=1 count=10000000;"),
 						Resources: v1.ResourceRequirements{
 							Limits: v1.ResourceList{
-								// Must set memory limit to get MemoryStats.AvailableBytes
+								// 必须设置内存限制才能获得 MemoryStats.AvailableBytes
 								v1.ResourceMemory: resource.MustParse("80M"),
 							},
 						},
@@ -538,7 +538,7 @@ func getSummaryTestPods(f *framework.Framework, numRestarts int32, names ...stri
 	return pods
 }
 
-// Mapping function for gstruct.MatchAllElements
+// gstruct.MatchAllElements 的映射函数
 func summaryObjectID(element interface{}) string {
 	switch el := element.(type) {
 	case kubeletstatsv1alpha1.PodStats:
@@ -555,7 +555,7 @@ func summaryObjectID(element interface{}) string {
 	}
 }
 
-// Convenience functions for common matcher combinations.
+// 常用 matcher 组合的便捷函数。
 func ptrMatchAllFields(fields gstruct.Fields) types.GomegaMatcher {
 	return gstruct.PointTo(gstruct.MatchAllFields(fields))
 }
@@ -571,8 +571,8 @@ func boundedValue(lower, upper interface{}) types.GomegaMatcher {
 }
 
 func swapExpectation(upper interface{}) types.GomegaMatcher {
-	// Size after which we consider memory to be "unlimited". This is not
-	// MaxInt64 due to rounding by the kernel.
+	// 超过此大小后我们认为内存"无限"。它不是
+	// MaxInt64，因为内核会取整。
 	const maxMemorySize = uint64(1 << 62)
 
 	swapBytesMatcher := gomega.Or(
@@ -596,7 +596,7 @@ func recent(d time.Duration) types.GomegaMatcher {
 		return t.Time
 	}, gomega.And(
 		gomega.BeTemporally(">=", time.Now().Add(-d)),
-		// Now() is the test start time, not the match time, so permit a few extra minutes.
+		// Now() 是测试开始时间而非匹配时间，因此允许多几分钟。
 		gomega.BeTemporally("<", time.Now().Add(3*time.Minute))))
 }
 
@@ -666,8 +666,8 @@ func ioExpectation(maxStatsAge time.Duration) types.GomegaMatcher {
 		}))
 }
 
-// getStressTestPod returns a pod definition for running a stress test.
-// This follows the test plan's strategy to use a configurable container to generate load.
+// getStressTestPod 返回用于运行压力测试的 Pod 定义。
+// 这遵循测试计划的策略：使用可配置的容器产生负载。
 func getStressTestPod(name, containerName string, args []string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -686,9 +686,9 @@ func getStressTestPod(name, containerName string, args []string) *v1.Pod {
 	}
 }
 
-// pressureDetected is a matcher for verifying that PSI stats show pressure.
-// The test plan requires asserting that values are plausibly correlated with the load,
-// not just that the fields exist.
+// pressureDetected 是用于验证 PSI 统计是否显示压力的 matcher。
+// 测试计划要求断言数值与负载合理相关，
+// 而不仅仅是字段存在。
 func pressureDetected(level string, threshold float64) types.GomegaMatcher {
 	var fields gstruct.Fields
 	switch level {
@@ -716,8 +716,8 @@ func pressureDetected(level string, threshold float64) types.GomegaMatcher {
 	}))
 }
 
-// podMemoryPSIFullTotal returns the memory PSI full total stall time in
-// microseconds reported for the given pod in /stats/summary.
+// podMemoryPSIFullTotal 返回给定 Pod 在 /stats/summary 中报告的
+// 内存 PSI full 总停顿时间（微秒）。
 func podMemoryPSIFullTotal(ctx context.Context, namespace, podName string) (uint64, error) {
 	summary, err := getNodeSummary(ctx)
 	if err != nil {

@@ -18,10 +18,10 @@ package metrics
 
 import "k8s.io/component-base/metrics/testutil"
 
-// ClusterAutoscalerMetrics is metrics for cluster autoscaler
+// ClusterAutoscalerMetrics 是 cluster autoscaler 的指标
 type ClusterAutoscalerMetrics testutil.Metrics
 
-// Equal returns true if all metrics are the same as the arguments.
+// Equal 在所有指标都与参数相同时返回 true。
 func (m *ClusterAutoscalerMetrics) Equal(o ClusterAutoscalerMetrics) bool {
 	return (*testutil.Metrics)(m).Equal(testutil.Metrics(o))
 }

@@ -40,17 +40,17 @@ import (
 )
 
 var _ = SIGDescribe("Pod InPlace Resize Memory-Backed Volume with CRI Proxy", framework.WithFeatureGate(features.InPlacePodVerticalScalingMemoryBackedVolumes), func() {
-	// Tests the coordinated pipelining of multiple, concurrent volume and container resize operations.
+	// 测试多个并发 volume 和容器 resize 操作的协调流水线。
 	//
-	// The test creates a pod with two memory-backed emptyDir volumes (vol-1 and vol-2) and triggers a patch that:
-	// 1. Downsizes vol-1 (100Mi -> 50Mi)
-	// 2. Upsizes vol-2 (100Mi -> 250Mi)
-	// 3. Upsizes the container's memory limit (220Mi -> 320Mi)
+	// 测试创建一个带两个 memory-backed emptyDir volume（vol-1 和 vol-2）的 Pod，并触发一个 patch：
+	// 1. 缩小 vol-1（100Mi -> 50Mi）
+	// 2. 扩大 vol-2（100Mi -> 250Mi）
+	// 3. 扩大容器的 memory limit（220Mi -> 320Mi）
 	//
-	// By injecting a delay into the container's CRI UpdateContainerResources call, the test verifies that:
-	// - The downsize of vol-1 executes immediately (as volume downsizing is the first step in a downsize sequence).
-	// - The upsize of vol-2 is blocked and remains at 100Mi while container upsizing is pending (since volume upsizing must wait for container cgroup memory expansion to complete).
-	// - After the container cgroup update unblocks, the upsize of vol-2 eventually completes.
+	// 通过在容器的 CRI UpdateContainerResources 调用中注入延迟，测试验证：
+	// - vol-1 的缩小立即执行（因为 volume 缩小是缩小序列的第一步）。
+	// - 容器扩容待处理期间，vol-2 的扩大被阻塞并保持在 100Mi（因为 volume 扩大必须等待容器 cgroup 内存扩展完成）。
+	// - 容器 cgroup 更新解除阻塞后，vol-2 的扩大最终完成。
 	f := framework.NewDefaultFramework("pod-resize-memory-vol-criproxy")
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
@@ -93,7 +93,7 @@ var _ = SIGDescribe("Pod InPlace Resize Memory-Backed Volume with CRI Proxy", fr
 			limit100 := resource.MustParse("100Mi")
 			testPod.Spec.Volumes = []v1.Volume{
 				{
-					Name: "vol-1", // to be downsized to 50Mi
+					Name: "vol-1", // 将缩小到 50Mi
 					VolumeSource: v1.VolumeSource{
 						EmptyDir: &v1.EmptyDirVolumeSource{
 							Medium:    v1.StorageMediumMemory,
@@ -102,7 +102,7 @@ var _ = SIGDescribe("Pod InPlace Resize Memory-Backed Volume with CRI Proxy", fr
 					},
 				},
 				{
-					Name: "vol-2", // to be upsized to 250Mi
+					Name: "vol-2", // 将扩大到 250Mi
 					VolumeSource: v1.VolumeSource{
 						EmptyDir: &v1.EmptyDirVolumeSource{
 							Medium:    v1.StorageMediumMemory,
@@ -174,15 +174,15 @@ var _ = SIGDescribe("Pod InPlace Resize Memory-Backed Volume with CRI Proxy", fr
 				types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "resize")
 			framework.ExpectNoError(pErr, "failed to patch volume/container limits")
 
-			// Actuation sequence:
-			// 1. Downsize vol-1 to 50Mi (Volume downsizing is step 1 of downsizing).
-			// 2. Call UpdateContainerResources to expand cgroup to 320Mi (Cgroup expansion is step 1 of upsizing).
-			//    --> Delayed here for 40s.
-			// 3. Upsize vol-2 to 250Mi (Volume upsizing is step 2 of upsizing).
+			// 执行顺序：
+			// 1. 将 vol-1 缩小到 50Mi（volume 缩小是缩小的第 1 步）。
+			// 2. 调用 UpdateContainerResources 将 cgroup 扩展到 320Mi（cgroup 扩展是扩大的第 1 步）。
+			//    --> 此处延迟 40 秒。
+			// 3. 将 vol-2 扩大到 250Mi（volume 扩大是扩大的第 2 步）。
 			//
-			// So, while blocked at step 2 (during the 40s delay):
-			// - vol-1 (downsize) MUST be downsized immediately to 50Mi.
-			// - vol-2 (upsize) MUST NOT be upsized yet and must remain at 100Mi.
+			// 因此，在第 2 步阻塞期间（40 秒延迟内）：
+			// - vol-1（缩小）MUST 立即缩小到 50Mi。
+			// - vol-2（扩大）MUST NOT 此时扩大，必须保持在 100Mi。
 
 			ginkgo.By("Verifying vol-1 is downsized immediately while vol-2 remains unchanged")
 			gomega.Eventually(ctx, func(ctx context.Context) (string, error) {
@@ -190,7 +190,7 @@ var _ = SIGDescribe("Pod InPlace Resize Memory-Backed Volume with CRI Proxy", fr
 				return stdout, err
 			}).WithTimeout(30 * time.Second).WithPolling(500 * time.Millisecond).Should(gomega.ContainSubstring("50"))
 
-			// Verify that vol-2 remains at 100Mi during the CRI block
+			// 验证 CRI 阻塞期间 vol-2 保持在 100Mi
 			stdout, _, err := e2epod.ExecCommandInContainerWithFullOutput(f, newPod.Name, "c1", "df", "-m", "/cache2")
 			framework.ExpectNoError(err)
 			gomega.Expect(stdout).To(gomega.ContainSubstring("100"))

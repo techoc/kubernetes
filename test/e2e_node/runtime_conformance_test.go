@@ -38,14 +38,14 @@ import (
 
 var _ = SIGDescribe("Container Runtime Conformance Test", func() {
 	f := framework.NewDefaultFramework("runtime-conformance")
-	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged // custom registry pods need HostPorts
+	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged // 自定义 registry 的 Pod 需要 HostPort
 
 	ginkgo.Describe("container runtime conformance blackbox test", func() {
 
 		ginkgo.Context("when running a container with a new image", func() {
-			// The following images are not added into NodePrePullImageList, because this test is
-			// testing image pulling, these images don't need to be prepulled. The ImagePullPolicy
-			// is v1.PullAlways, so it won't be blocked by framework image pre-pull list check.
+			// 以下镜像不加入 NodePrePullImageList，因为此测试
+			// 测试的是镜像拉取，这些镜像无需预拉取。ImagePullPolicy
+			// 为 v1.PullAlways，因此不会被 framework 的镜像预拉取列表检查阻塞。
 			for _, testCase := range []struct {
 				description  string
 				image        string
@@ -71,7 +71,7 @@ var _ = SIGDescribe("Container Runtime Conformance Test", func() {
 
 					registryAddress, podNodes, err = e2eregistry.SetupRegistry(ctx, f, true)
 					framework.ExpectNoError(err)
-					// we need to wait for the registry to be removed and so we need to delete the whole NS ourselves
+					// 需要等待 registry 被移除，因此必须自行删除整个命名空间
 					ginkgo.DeferCleanup(func(ctx context.Context) {
 						f.DeleteNamespace(ctx, f.Namespace.Name)
 					})
@@ -84,7 +84,7 @@ var _ = SIGDescribe("Container Runtime Conformance Test", func() {
 						Container: v1.Container{
 							Name:  name,
 							Image: registryAddress + "/" + testCase.image,
-							// PullAlways makes sure that the image will always be pulled even if it is present before the test.
+							// PullAlways 确保即使测试前镜像已存在，也始终会拉取。
 							ImagePullPolicy: v1.PullAlways,
 						},
 						RestartPolicy: v1.RestartPolicyNever,
@@ -96,7 +96,7 @@ var _ = SIGDescribe("Container Runtime Conformance Test", func() {
 					auth := e2eregistry.User1DockerSecret(registryAddress).Data[v1.DockerConfigJsonKey]
 					configFile := filepath.Join(services.KubeletRootDirectory, "config.json")
 
-					// the kubelet would cache the config for 5 minutes, let's restart instead
+					// kubelet 会缓存配置 5 分钟，改为重启更直接
 					restartKubelet(context.Background(), true)
 
 					err := os.WriteFile(configFile, []byte(auth), 0644)
@@ -104,7 +104,7 @@ var _ = SIGDescribe("Container Runtime Conformance Test", func() {
 					ginkgo.DeferCleanup(func(ctx context.Context) {
 						imageManagerDir := filepath.Join(services.KubeletRootDirectory, "image_manager")
 
-						// restart the kubelet
+						// 重启 kubelet
 						withStoppedKubelet(ctx, f, false, func() {
 							framework.ExpectNoError(os.Remove(configFile))
 							framework.ExpectNoError(os.RemoveAll(imageManagerDir))
@@ -120,16 +120,16 @@ var _ = SIGDescribe("Container Runtime Conformance Test", func() {
 						)
 					})
 
-					// checkContainerStatus checks whether the container status matches expectation.
+					// checkContainerStatus 检查容器状态是否符合预期。
 					checkContainerStatus := func(ctx context.Context) error {
 						status, err := container.GetStatus(ctx)
 						if err != nil {
 							return fmt.Errorf("failed to get container status: %w", err)
 						}
-						// We need to check container state first. The default pod status is pending, If we check
-						// pod phase first, and the expected pod phase is Pending, the container status may not
-						// even show up when we check it.
-						// Check container state
+						// 需要先检查容器状态。默认 Pod 状态是 pending，如果先检查
+						// Pod phase 且期望的 phase 是 Pending，那么检查时容器状态可能
+						// 尚未出现。
+						// 检查容器状态
 						if !testCase.waiting {
 							if status.State.Running == nil {
 								return fmt.Errorf("expected container state: Running, got: %q",
@@ -147,7 +147,7 @@ var _ = SIGDescribe("Container Runtime Conformance Test", func() {
 								return fmt.Errorf("unexpected waiting reason: %q", reason)
 							}
 						}
-						// Check pod phase
+						// 检查 Pod phase
 						phase, err := container.GetPhase(ctx)
 						if err != nil {
 							return fmt.Errorf("failed to get pod phase: %w", err)

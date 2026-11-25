@@ -32,7 +32,7 @@ import (
 
 var (
 	googleDNSHostname = "dns.google"
-	// The ConfigMap update mechanism takes longer than the standard
+	// ConfigMap 更新机制比标准的慢，
 	// wait.ForeverTestTimeout.
 	moreForeverTestTimeout = 2 * 60 * time.Second
 )
@@ -124,8 +124,8 @@ func (t *dnsNameserverTest) run(ctx context.Context, isIPv6 bool) {
 	}
 
 	t.restoreDNSConfigMap(ctx, originalConfigMapData)
-	// Wait for the deleted ConfigMap to take effect, otherwise the
-	// configuration can bleed into other tests.
+	// 等待被删除的 ConfigMap 生效，否则
+	// 配置可能干扰其他测试。
 	t.checkDNSRecordFrom(
 		"abc.acme.local",
 		func(actual []string) bool { return len(actual) == 0 },
@@ -148,7 +148,7 @@ func (t *dnsPtrFwdTest) run(ctx context.Context, isIPv6 bool) {
 	t.createDNSServerWithPtrRecord(ctx, t.f.Namespace.Name, isIPv6)
 	ginkgo.DeferCleanup(t.deleteDNSServerPod)
 
-	// Should still be able to lookup public nameserver without explicit upstream nameserver set.
+	// 即使未显式设置 upstream nameserver，也应能查询公共 nameserver。
 	if isIPv6 {
 		t.checkDNSRecordFrom(
 			"2001:4860:4860::8888",

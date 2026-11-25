@@ -86,7 +86,7 @@ func doGuaranteedPodResizeTests(f *framework.Framework) {
 	ginkgo.DescribeTableSubtree("guaranteed qos - 1 container with resize policy", feature.InPlacePodVerticalScaling, func(cpuPolicy, memPolicy v1.ResourceResizeRestartPolicy, resizeInitCtrs bool) {
 		ginkgo.DescribeTable("resizing", func(ctx context.Context, desiredCPU, desiredMem string) {
 
-			// The tests for guaranteed pods include extended resources.
+			// guaranteed pod 的测试包含扩展资源。
 			nodes, err := e2enode.GetReadySchedulableNodes(context.Background(), f.ClientSet)
 			framework.ExpectNoError(err)
 			for _, node := range nodes.Items {
@@ -101,13 +101,13 @@ func doGuaranteedPodResizeTests(f *framework.Framework) {
 			originalContainers := makeGuaranteedContainers(1, cpuPolicy, memPolicy, true, true, originalCPU, originalMem)
 			expectedContainers := makeGuaranteedContainers(1, cpuPolicy, memPolicy, true, true, desiredCPU, desiredMem)
 			for i, c := range expectedContainers {
-				// If the pod has init containers, but we are not resizing them, keep the original resources.
+				// 如果 Pod 有 init container，但不调整它们，保留其原有资源。
 				if c.InitCtr && !resizeInitCtrs {
 					c.Resources = originalContainers[i].Resources
 					expectedContainers[i] = c
 					continue
 				}
-				// For containers where the resize policy is "restart", we expect a restart.
+				// 对于 resize 策略为 "restart" 的容器，预期会重启。
 				expectRestart := int32(0)
 				if cpuPolicy == v1.RestartContainer && desiredCPU != originalCPU {
 					expectRestart = 1
@@ -121,8 +121,8 @@ func doGuaranteedPodResizeTests(f *framework.Framework) {
 
 			doPatchAndRollback(ctx, f, originalContainers, expectedContainers, nil, nil, true, false)
 		},
-			// All tests will perform the requested resize, and once completed, will roll back the change.
-			// This results in the coverage of both increase and decrease of resources.
+			// 所有测试都会执行请求的 resize，完成后再回滚更改。
+			// 这样可覆盖资源增加和减少两种情况。
 			ginkgo.Entry("cpu", increasedCPU, originalMem),
 			ginkgo.Entry("mem", originalCPU, increasedMem),
 			ginkgo.Entry("cpu & mem in the same direction", increasedCPU, increasedMem),
@@ -137,8 +137,8 @@ func doGuaranteedPodResizeTests(f *framework.Framework) {
 		ginkgo.Entry("cpu & mem restart + resize initContainers", v1.RestartContainer, v1.RestartContainer, true),
 	)
 
-	// All tests will perform the requested resize, and once completed, will roll back the change.
-	// This results in coverage of both the operation as described, and its reverse.
+	// 所有测试都会执行请求的 resize，完成后再回滚更改。
+	// 这样可覆盖所述操作及其逆操作。
 	ginkgo.Describe("guaranteed pods with multiple containers", func() {
 		ginkgo.It("3 containers - increase cpu & mem on c1, c2, decrease cpu & mem on c3 - net increase [MinimumKubeletVersion:1.34]", func(ctx context.Context) {
 			originalContainers := makeGuaranteedContainers(3, v1.NotRequired, v1.NotRequired, false, false, originalCPU, originalMem)
@@ -230,7 +230,7 @@ func doBurstablePodResizeTests(f *framework.Framework) {
 			originalContainers := makeBurstableContainers(1, cpuPolicy, memPolicy, originalCPU, originalCPULimit, originalMem, originalMemLimit)
 			expectedContainers := makeBurstableContainers(1, cpuPolicy, memPolicy, desiredContainerResources.cpuReq, desiredContainerResources.cpuLim, desiredContainerResources.memReq, desiredContainerResources.memLim)
 			for i, c := range expectedContainers {
-				// For containers where the resize policy is "restart", we expect a restart.
+				// 对于 resize 策略为 "restart" 的容器，预期会重启。
 				expectRestart := int32(0)
 				if cpuPolicy == v1.RestartContainer && (desiredContainerResources.cpuReq != originalCPU || desiredContainerResources.cpuLim != originalCPULimit) {
 					expectRestart = 1
@@ -244,8 +244,8 @@ func doBurstablePodResizeTests(f *framework.Framework) {
 
 			doPatchAndRollback(ctx, f, originalContainers, expectedContainers, nil, nil, true, false)
 		},
-			// All tests will perform the requested resize, and once completed, will roll back the change.
-			// This results in the coverage of both increase and decrease of resources.
+			// 所有测试都会执行请求的 resize，完成后再回滚更改。
+			// 这样可覆盖资源增加和减少两种情况。
 			ginkgo.Entry("cpu requests", resourceRequestsLimits{increasedCPU, originalCPULimit, originalMem, originalMemLimit}),
 			ginkgo.Entry("cpu limits", resourceRequestsLimits{originalCPU, increasedCPULimit, originalMem, originalMemLimit}),
 			ginkgo.Entry("mem requests", resourceRequestsLimits{originalCPU, originalCPULimit, increasedMem, originalMemLimit}),
@@ -261,68 +261,68 @@ func doBurstablePodResizeTests(f *framework.Framework) {
 		ginkgo.Entry("cpu & mem restart", v1.RestartContainer, v1.RestartContainer),
 	)
 
-	// The following tests cover the remaining burstable pod scenarios:
-	// - multiple containers
-	// - adding limits where only requests were previously set
-	// - adding requests where none were previously set
-	// - resizing with equivalents (e.g. 2m -> 1m)
+	// 以下测试覆盖其余 burstable pod 场景：
+	// - 多容器
+	// - 在原先只有 request 的地方添加 limit
+	// - 在原先没有任何设置的地方添加 request
+	// - 用等价资源 resize（例如 2m -> 1m）
 	ginkgo.Describe("burstable pods - extended", func() {
 		/*
 			Release: v1.35
 			Testname: In-place Pod Resize, burtable pod with multiple containers and various operations
-			Description: Issuing a Pod Resize request via the Pod Resize subresource patch endpoint to modify CPU and memory requests and limits on a 6-container pod with various operations MUST result in the Pod resources being updated as expected.
+			Description: 通过 Pod Resize 子资源的 patch endpoint 发起 Pod Resize 请求，用各种操作修改一个 6 容器 Pod 的 CPU 和内存 request 与 limit，MUST 使 Pod 资源按预期更新。
 		*/
 		framework.ConformanceIt("6 containers - various operations performed (including adding limits and requests) [MinimumKubeletVersion:1.34]", func(ctx context.Context) {
 			originalContainers := []podresize.ResizableContainerInfo{
 				{
-					// c1 starts with CPU requests only; increase CPU requests + add CPU limits
+					// c1 起初只有 CPU request；增加 CPU request 并添加 CPU limit
 					Name:      "c1",
 					Resources: &cgroups.ContainerResources{CPUReq: originalCPU},
 				},
 				{
-					// c2 starts with memory requests only; increase memory requests + add memory limits
+					// c2 起初只有 memory request；增加 memory request 并添加 memory limit
 					Name:      "c2",
 					Resources: &cgroups.ContainerResources{MemReq: originalMem},
 				},
 				{
-					// c3 starts with CPU and memory requests; decrease memory requests only
+					// c3 起初有 CPU 和 memory request；只减少 memory request
 					Name:      "c3",
 					Resources: &cgroups.ContainerResources{CPUReq: originalCPU, MemReq: originalMem},
 				},
 				{
-					// c4 starts with CPU requests only; decrease CPU requests + add memory requests
+					// c4 起初只有 CPU request；减少 CPU request 并添加 memory request
 					Name:      "c4",
 					Resources: &cgroups.ContainerResources{CPUReq: originalCPU},
 				},
 				{
-					// c5 starts with memory requests only; increase memory requests + add CPU requests
+					// c5 起初只有 memory request；增加 memory request 并添加 CPU request
 					Name:      "c5",
 					Resources: &cgroups.ContainerResources{MemReq: originalMem},
 				},
 			}
 			expectedContainers := []podresize.ResizableContainerInfo{
 				{
-					// c1 starts with CPU requests only; increase CPU requests + add CPU limits
+					// c1 起初只有 CPU request；增加 CPU request 并添加 CPU limit
 					Name:      "c1",
 					Resources: &cgroups.ContainerResources{CPUReq: increasedCPU, CPULim: increasedCPULimit},
 				},
 				{
-					// c2 starts with memory requests only; decrease memory requests + add memory limits
+					// c2 起初只有 memory request；减少 memory request 并添加 memory limit
 					Name:      "c2",
 					Resources: &cgroups.ContainerResources{MemReq: reducedMem, MemLim: increasedMemLimit},
 				},
 				{
-					// c3 starts with CPU and memory requests; decrease memory requests onloy
+					// c3 起初有 CPU 和 memory request；只减少 memory request
 					Name:      "c3",
 					Resources: &cgroups.ContainerResources{CPUReq: originalCPU, MemReq: reducedMem},
 				},
 				{
-					// c4 starts with CPU requests only; decrease CPU requests + add memory requests
+					// c4 起初只有 CPU request；减少 CPU request 并添加 memory request
 					Name:      "c4",
 					Resources: &cgroups.ContainerResources{CPUReq: reducedCPU, MemReq: originalMem},
 				},
 				{
-					// c5 starts with memory requests only; increase memory requests + add CPU requests
+					// c5 起初只有 memory request；增加 memory request 并添加 CPU request
 					Name:      "c5",
 					Resources: &cgroups.ContainerResources{CPUReq: originalCPU, MemReq: increasedMem},
 				},
@@ -333,7 +333,7 @@ func doBurstablePodResizeTests(f *framework.Framework) {
 		/*
 			Release: v1.35
 			Testname: In-place Pod Resize, burstable pod resized with equivalents
-			Description: Issuing an in-place Pod Resize request via the Pod Resize subresource patch endpoint to modify CPU requests and limits using equivalent values (e.g. 2m -> 1m) MUST result in the updated Pod resources displayed correctly in the status.
+			Description: 通过 Pod Resize 子资源的 patch endpoint 发起原地 Pod Resize 请求，用等价的值（例如 2m -> 1m）修改 CPU request 和 limit，MUST 使更新后的 Pod 资源在 status 中正确显示。
 		*/
 		framework.ConformanceIt("resize with equivalents [MinimumKubeletVersion:1.34]", func(ctx context.Context) {
 			originalContainers := []podresize.ResizableContainerInfo{
@@ -567,10 +567,10 @@ func doPodResizePatchErrorTests(f *framework.Framework) {
 }
 
 func doPodResizeMemoryLimitDecreaseTest(f *framework.Framework) {
-	// Tests the behavior when decreasing memory limit:
-	// 1. Decrease the limit a little bit - should succeed
-	// 2. Decrease the limit down to a tiny amount - should fail
-	// 3. Revert the limit back to the original value - should succeed
+	// 测试减少 memory limit 时的行为：
+	// 1. 稍微降低 limit —— 应成功
+	// 2. 将 limit 降到极小值 —— 应失败
+	// 3. 将 limit 恢复原值 —— 应成功
 	ginkgo.It("decrease memory limit below usage", feature.InPlacePodVerticalScaling, func(ctx context.Context) {
 		podClient := e2epod.NewPodClient(f)
 		original := []podresize.ResizableContainerInfo{{
@@ -581,7 +581,7 @@ func doPodResizeMemoryLimitDecreaseTest(f *framework.Framework) {
 		ginkgo.By("creating and verifying pod")
 		testPod := createAndVerifyPod(ctx, f, podClient, original, nil, false)
 
-		// 1. Decrease the limit a little bit - should succeed
+		// 1. 稍微降低 limit —— 应成功
 		ginkgo.By("Patching pod with a slightly lowered memory limit")
 		viableLoweredLimit := []podresize.ResizableContainerInfo{{
 			Name:      "c1",
@@ -599,14 +599,14 @@ func doPodResizeMemoryLimitDecreaseTest(f *framework.Framework) {
 		resizedPod := podresize.WaitForPodResizeActuation(ctx, f, podClient, testPod, viableLoweredLimit)
 		podresize.ExpectPodResized(ctx, f, resizedPod, viableLoweredLimit)
 
-		// There is some latency after container startup before memory usage is scraped. On CRI-O
-		// this latency is much higher, so wait enough time for cAdvisor to scrape metrics twice.
+		// 容器启动后，采集 memory 用量前有一段延迟。在 CRI-O 上
+		// 这个延迟更大，因此要等待足够时间让 cAdvisor 采集两次指标。
 		ginkgo.By("Waiting for stats scraping")
 		const scrapingDelay = 30 * time.Second // 2 * maxHousekeepingInterval
 		startTime := testPod.Status.StartTime
 		time.Sleep(time.Until(startTime.Add(scrapingDelay)))
 
-		// 2. Decrease the limit down to a tiny amount - should fail
+		// 2. 将 limit 降到极小值 —— 应失败
 		const nonViableMemoryLimit = "10Ki"
 		ginkgo.By("Patching pod with a greatly lowered memory limit")
 		nonViableLoweredLimit := []podresize.ResizableContainerInfo{{
@@ -622,7 +622,7 @@ func doPodResizeMemoryLimitDecreaseTest(f *framework.Framework) {
 			Eventually(ctx, framework.RetryNotFound(framework.GetObject(f.ClientSet.CoreV1().Pods(testPod.Namespace).Get, testPod.Name, metav1.GetOptions{}))).
 			WithTimeout(f.Timeouts.PodStart).
 			Should(framework.MakeMatcher(func(pod *v1.Pod) (func() string, error) {
-				// If VerifyPodStatusResources succeeds, it means the resize completed.
+				// 如果 VerifyPodStatusResources 成功，说明 resize 已完成。
 				if podresize.VerifyPodStatusResources(pod, nonViableLoweredLimit) == nil {
 					return nil, gomega.StopTrying("non-viable resize unexpectedly completed")
 				}
@@ -658,7 +658,7 @@ func doPodResizeMemoryLimitDecreaseTest(f *framework.Framework) {
 		ginkgo.By("verifying pod status resources still match the viable resize")
 		framework.ExpectNoError(podresize.VerifyPodStatusResources(testPod, viableLoweredLimit))
 
-		// 3. Revert the limit back to the original value - should succeed
+		// 3. 将 limit 恢复原值 —— 应成功
 		ginkgo.By("Patching pod to revert to original state")
 		patch = podresize.MakeResizePatch(nonViableLoweredLimit, original, nil, nil)
 		testPod, pErr = f.ClientSet.CoreV1().Pods(testPod.Namespace).Patch(ctx, testPod.Name,
@@ -679,7 +679,7 @@ func doPodResizeMemoryLimitDecreaseTest(f *framework.Framework) {
 
 func doPodResizeInitContainerResizeTest(f *framework.Framework) {
 	ginkgo.It("should support resizing a non-sidecar init container", func(ctx context.Context) {
-		// A command that never exits, to allow us to patch the init container while it's running.
+		// 一个永不退出的命令，便于我们在容器运行时给 init container 打补丁。
 		cmd := "tail -f /dev/null"
 
 		originalContainers := []podresize.ResizableContainerInfo{
@@ -744,7 +744,7 @@ func doPodResizeInitContainerResizeTest(f *framework.Framework) {
 		framework.ExpectNoError(pErr, "failed to patch pod for resize")
 		verifyInitContainerResources(ctx, f, patchedPod, resizedContainers, resizedInitCtr)
 
-		// Resize has been actuated, test the reverse operation.
+		// resize 已生效，测试逆操作。
 		ginkgo.By("patching and verifying pod to revert to original resources")
 		patch = podresize.MakeResizePatch(resizedContainers, originalContainers, nil, nil)
 		patchedPod, pErr = f.ClientSet.CoreV1().Pods(newPod.Namespace).Patch(ctx, newPod.Name,
@@ -761,7 +761,7 @@ func doPodResizeReadAndReplaceTests(f *framework.Framework) {
 	/*
 		Release: v1.35
 		Testname: In-place Pod Resize, read and replace endpoints
-		Description: Issuing a Pod Resize request via the Pod Resize subresource replace endpoint MUST result in the Pod resources being updated as expected. The Pod object fetched from the Pod Resize subresource MUST be equivalent to the Pod object fetched from the main Pod endpoint after the resize is completed.
+		Description: 通过 Pod Resize 子资源的 replace endpoint 发起 Pod Resize 请求，MUST 使 Pod 资源按预期更新。resize 完成后，从 Pod Resize 子资源获取的 Pod 对象 MUST 与从主 Pod endpoint 获取的对象等价。
 	*/
 	framework.ConformanceIt("resize pod via the replace endpoint [MinimumKubeletVersion:1.34]", func(ctx context.Context) {
 		podClient := e2epod.NewPodClient(f)
@@ -810,7 +810,7 @@ func doPodResizeReadAndReplaceTests(f *framework.Framework) {
 			Eventually(ctx, framework.RetryNotFound(framework.GetObject(f.ClientSet.CoreV1().Pods(pod.Namespace).Get, pod.Name, metav1.GetOptions{}))).
 			WithTimeout(f.Timeouts.PodStart).
 			Should(framework.MakeMatcher(func(pod *v1.Pod) (func() string, error) {
-				// For some reason, the pod object returned from the client doesn't have the GVK populated.
+				// 不知为何，客户端返回的 pod 对象没有填充 GVK。
 				pod.Kind = "Pod"
 				pod.APIVersion = "v1"
 
@@ -841,12 +841,12 @@ func doPodResizeReadAndReplaceTests(f *framework.Framework) {
 }
 
 func doPodResizeMemoryVolumeTests(f *framework.Framework) {
-	// Tests the behavior when resizing memory-backed emptyDir volume limits:
-	// 1. Create a pod with memory-backed emptyDir volume of size origSizeLimit.
-	// 2. Resize the volume size limit up to desiredSizeLimit - should succeed without pod restart.
-	// 3. Rollback the volume size limit down to origSizeLimit - should succeed without pod restart.
-	// TODO: When InPlacePodVerticalScalingMemoryBackedVolumes is GA, move these tests to the InPlacePodVerticalScaling table as an
-	// as an additional parameter to test it with memory-backed emptyDir volumes.
+	// 测试调整 memory-backed emptyDir volume limit 时的行为：
+	// 1. 创建一个带 origSizeLimit 大小的 memory-backed emptyDir volume 的 Pod。
+	// 2. 将 volume size limit 调大到 desiredSizeLimit —— 应成功且 Pod 不重启。
+	// 3. 将 volume size limit 回滚到 origSizeLimit —— 应成功且 Pod 不重启。
+	// TODO: 当 InPlacePodVerticalScalingMemoryBackedVolumes GA 后，将这些测试移到 InPlacePodVerticalScaling 表中，
+	// 作为附加参数，用 memory-backed emptyDir volume 测试。
 	ginkgo.DescribeTable("memory-backed emptyDir volume resize",
 		func(ctx context.Context, origCPU, desiredCPU, origMem, desiredMem, origSizeLimit, desiredSizeLimit string) {
 			podClient := e2epod.NewPodClient(f)
@@ -994,11 +994,11 @@ func doPodResizeMemoryVolumeTests(f *framework.Framework) {
 }
 
 func doPodResizeMemoryVolumeSizeLimitDecreaseTest(f *framework.Framework) {
-	// Tests the behavior when shrinking memory-backed emptyDir volume sizeLimit below active usage:
-	// 1. Create a pod with memory-backed emptyDir volume of size 128Mi.
-	// 2. Write 100Mi of data to the volume.
-	// 3. Resize the volume size limit down to 50Mi - should fail and report error in condition.
-	// 4. Verify volume mount size is not shrunk and container did not restart.
+	// 测试将 memory-backed emptyDir volume 的 sizeLimit 缩到低于当前用量时的行为：
+	// 1. 创建一个带 128Mi memory-backed emptyDir volume 的 Pod。
+	// 2. 向该 volume 写入 100Mi 数据。
+	// 3. 将 volume size limit 缩到 50Mi —— 应失败，并在 condition 中报告错误。
+	// 4. 验证 volume 挂载大小没有缩小，容器没有重启。
 	ginkgo.It("should fail to shrink sizeLimit of a memory-backed volume below active usage", func(ctx context.Context) {
 		podClient := e2epod.NewPodClient(f)
 		original := []podresize.ResizableContainerInfo{{
@@ -1106,13 +1106,13 @@ func doPodResizeMemoryVolumeSizeLimitDecreaseTest(f *framework.Framework) {
 	})
 }
 
-// NOTE: Pod resize scheduler, resource quota, limit ranger, deferred resize tests are out of scope in e2e_node tests,
+// 注意：Pod resize scheduler、resource quota、limit ranger、deferred resize 测试不在 e2e_node 测试范围内，
 //
-//	because in e2e_node tests
-//	   a) scheduler and controller manager is not running by the Node e2e
-//	   b) api-server in services doesn't start with --enable-admission-plugins=ResourceQuota
-//	      and is not possible to start it from TEST_ARGS
-//	Above tests in test/e2e/node/pod_resize.go
+// \t因为在 e2e_node 测试中
+// \t   a) Node e2e 不会运行 scheduler 和 controller manager
+// \t   b) services 中的 api-server 未以 --enable-admission-plugins=ResourceQuota 启动
+// \t      且无法通过 TEST_ARGS 启动它
+// 上述测试位于 test/e2e/node/pod_resize.go
 var _ = SIGDescribe("Pod InPlace Resize Container", func() {
 	f := framework.NewDefaultFramework("pod-resize-tests")
 
@@ -1168,7 +1168,7 @@ func doPatchAndRollback(ctx context.Context, f *framework.Framework, originalCon
 	ginkgo.By("patching and verifying pod for resize")
 	patchAndVerify(ctx, f, podClient, newPod, originalContainers, expectedContainers, originalPodResources, expectedPodResources, "resize")
 	if doRollback {
-		// Resize has been actuated, test the reverse operation.
+		// resize 已生效，测试逆操作。
 		rollbackContainers := createRollbackContainers(originalContainers, expectedContainers)
 		ginkgo.By("patching and verifying pod for rollback")
 		patchAndVerify(ctx, f, podClient, newPod, expectedContainers, rollbackContainers, expectedPodResources, originalPodResources, "rollback")
@@ -1218,7 +1218,7 @@ func patchAndVerify(ctx context.Context, f *framework.Framework, podClient *e2ep
 		framework.ExpectNoError(podresize.VerifyPodCgroupValues(ctx, f, resizedPod))
 	}
 
-	// Verify CPU weight moved in the right direction
+	// 验证 CPU weight 朝正确方向变化
 	for i, ci := range expectedContainers {
 		oldW, ok := oldWeights[ci.Name]
 		if !ok {
@@ -1264,10 +1264,10 @@ func createAndVerifyPod(ctx context.Context, f *framework.Framework, podClient *
 	testPod.GenerateName = "resize-test-"
 	testPod = e2epod.MustMixinRestrictedPodSecurity(testPod)
 
-	// TODO: mount pod cgroup path for all pod resize related tests and remove
-	// dependency on mountPodCgroup
+	// TODO: 为所有 pod resize 相关测试挂载 pod cgroup 路径，并移除
+	// 对 mountPodCgroup 的依赖
 	if mountPodCgroup {
-		// mount pod cgroup in first container that can be used for pod cgroup values verification
+		// 在第一个容器中挂载 pod cgroup，用于验证 pod cgroup 值
 		cgroups.ConfigureHostPathForPodCgroup(testPod)
 	}
 
@@ -1290,7 +1290,7 @@ func makeGuaranteedContainers(numContainers int,
 
 	containers := []podresize.ResizableContainerInfo{}
 	for i := range numContainers {
-		// Offset the resources a bit so that in multi-container pods, not all containers have the same resources.
+		// 稍微错开资源值，使多容器 Pod 中各容器资源不完全相同。
 		resources := &cgroups.ContainerResources{
 			CPUReq: offsetCPU(i, cpu),
 			CPULim: offsetCPU(i, cpu),
@@ -1331,7 +1331,7 @@ func makeBurstableContainers(numContainers int,
 
 	containers := []podresize.ResizableContainerInfo{}
 	for i := range numContainers {
-		// Offset the resources a bit so that in multi-container pods, not all containers have the same resources.
+		// 稍微错开资源值，使多容器 Pod 中各容器资源不完全相同。
 		resources := &cgroups.ContainerResources{CPUReq: offsetCPU(i, cpu), CPULim: offsetCPU(i, cpuLimit), MemReq: offsetMemory(int64(i), mem), MemLim: offsetMemory(int64(i), memLimit)}
 		containers = append(containers, podresize.ResizableContainerInfo{
 			Name:      fmt.Sprintf("c%d", i+1),
@@ -1349,7 +1349,7 @@ func createRollbackContainers(originalContainers, expectedContainers []podresize
 	for i, c := range rollbackContainers {
 		gomega.Expect(c.Name).To(gomega.Equal(expectedContainers[i].Name),
 			"test case containers & expectations should be in the same order")
-		// Resizes that trigger a restart should trigger a second restart when rolling back.
+		// 触发重启的 resize 在回滚时应再次触发重启。
 		rollbackContainers[i].RestartCount = expectedContainers[i].RestartCount
 	}
 	return rollbackContainers
@@ -1361,8 +1361,8 @@ func verifyInitContainerResources(ctx context.Context, f *framework.Framework, p
 	podresize.VerifyPodResizePolicy(pod, expectedContainers)
 	podresize.VerifyPodResources(pod, expectedContainers, nil)
 
-	// Wait for the init container to display the expected resources in its status, and that
-	// the cgroups are as expected.
+	// 等待 init container 在 status 中显示预期资源，并且
+	// cgroup 符合预期。
 	framework.ExpectNoError(framework.Gomega().
 		Eventually(ctx, framework.RetryNotFound(framework.GetObject(f.ClientSet.CoreV1().Pods(pod.Namespace).Get, pod.Name, metav1.GetOptions{}))).
 		WithTimeout(f.Timeouts.PodStart).

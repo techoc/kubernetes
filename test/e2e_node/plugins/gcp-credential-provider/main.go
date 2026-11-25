@@ -78,16 +78,16 @@ func getCredentials(tokenEndpoint string, r io.Reader, w io.Writer) error {
 		if !reflect.DeepEqual(authRequest.ServiceAccountAnnotations, expectedAnnotations) {
 			return fmt.Errorf("unexpected service account annotations, want: %v, got: %v", expectedAnnotations, authRequest.ServiceAccountAnnotations)
 		}
-		// The service account token is not actually used for authentication by this test plugin.
-		// We extract the claims from the token to validate the audience.
-		// This is solely for testing assertions and is not an actual security layer.
-		// Post validation in this block, we proceed with the default flow for fetching credentials.
+		// 此测试插件实际上并不使用 service account token 进行认证。
+		// 我们从 token 中提取 claims 以验证 audience。
+		// 这仅用于测试断言，并非真正的安全层。
+		// 在此块中完成验证后，继续按默认流程获取凭据。
 		c, err := getClaims(authRequest.ServiceAccountToken)
 		if err != nil {
 			return err
 		}
-		// The audience in the token should match the audience configured in tokenAttributes.serviceAccountTokenAudience
-		// in CredentialProviderConfig.
+		// token 中的 audience 应与 CredentialProviderConfig 中
+		// tokenAttributes.serviceAccountTokenAudience 配置的 audience 一致。
 		if len(c.Audience) != 1 || c.Audience[0] != "test-audience" {
 			return fmt.Errorf("unexpected audience: %v", c.Audience)
 		}
@@ -119,17 +119,17 @@ func getCredentials(tokenEndpoint string, r io.Reader, w io.Writer) error {
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		// The error from json.Marshal is intentionally not included so as to not leak credentials into the logs
+		// 有意不包含 json.Marshal 的错误，以免将凭据泄露到日志中
 		return errors.New("error marshaling response")
 	}
 
 	return nil
 }
 
-// getClaims is used to extract claims from the service account token when the plugin is running in service account mode
-// This is solely for testing assertions and is not an actual security layer.
-// We get claims and validate the audience of the token (audience in the token matches the audience configured
-// in tokenAttributes.serviceAccountTokenAudience in CredentialProviderConfig).
+// 当插件以 service account 模式运行时，getClaims 用于从 service account token 中提取 claims
+// 这仅用于测试断言，并非真正的安全层。
+// 我们获取 claims 并验证 token 的 audience（token 中的 audience 与
+// CredentialProviderConfig 中 tokenAttributes.serviceAccountTokenAudience 配置的 audience 一致）。
 func getClaims(tokenData string) (claims, error) {
 	if strings.HasPrefix(strings.TrimSpace(tokenData), "{") {
 		return claims{}, errors.New("token is not a JWS")
@@ -158,7 +158,7 @@ type claims struct {
 	privateClaims
 }
 
-// copied from https://github.com/kubernetes/kubernetes/blob/60c4c2b2521fb454ce69dee737e3eb91a25e0535/pkg/serviceaccount/claims.go#L51-L67
+// 复制自 https://github.com/kubernetes/kubernetes/blob/60c4c2b2521fb454ce69dee737e3eb91a25e0535/pkg/serviceaccount/claims.go#L51-L67
 
 type privateClaims struct {
 	Kubernetes kubernetes `json:"kubernetes.io,omitempty"`

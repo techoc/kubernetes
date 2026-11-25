@@ -16,7 +16,7 @@ limitations under the License.
 
 package perftype
 
-// ResourceSeries defines the time series of the resource usage.
+// ResourceSeries 定义资源使用情况的时间序列。
 type ResourceSeries struct {
 	Timestamp            []int64           `json:"ts"`
 	CPUUsageInMilliCores []int64           `json:"cpu"`
@@ -24,7 +24,7 @@ type ResourceSeries struct {
 	Units                map[string]string `json:"unit"`
 }
 
-// NodeTimeSeries defines the time series of the operations and the resource
+// NodeTimeSeries 定义操作和资源的时间序列
 // usage.
 type NodeTimeSeries struct {
 	OperationData map[string][]int64         `json:"op_series,omitempty"`

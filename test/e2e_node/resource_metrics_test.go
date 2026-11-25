@@ -65,7 +65,7 @@ var _ = SIGDescribe("ResourceMetricsAPI", feature.ResourceMetrics, func() {
 				"container_swap_usage_bytes", "pod_swap_usage_bytes",
 			}
 
-			// node_swap_usage_bytes requires cAdvisor which is not available when PodAndContainerStatsFromCRI is enabled
+			// node_swap_usage_bytes 需要 cAdvisor，而启用 PodAndContainerStatsFromCRI 时 cAdvisor 不可用
 			if !e2eskipper.IsFeatureGateEnabled(features.PodAndContainerStatsFromCRI) {
 				keys = append(keys, "node_swap_usage_bytes")
 			}
@@ -131,7 +131,7 @@ var _ = SIGDescribe("ResourceMetricsAPI", feature.ResourceMetrics, func() {
 			gomega.Eventually(ctx, func(ctx context.Context) (e2emetrics.KubeletMetrics, error) {
 				metrics, err := getResourceMetrics(ctx)
 				if err == nil {
-					// Dump metrics on each attempt to help diagnose failures
+					// 每次尝试时 dump 指标以帮助诊断失败
 					dumpResourceMetricsForPods(metrics, f.Namespace.Name, pod0, pod1)
 				}
 				return metrics, err
@@ -175,18 +175,18 @@ func getResourceMetrics(ctx context.Context) (e2emetrics.KubeletMetrics, error) 
 	return e2emetrics.GrabKubeletMetricsWithoutProxy(ctx, nodeNameOrIP()+":10255", "/metrics/resource")
 }
 
-// dumpResourceMetricsForPods logs the actual metric values for specified pods in a clear format.
-// This helps diagnose test failures by showing exactly what values were returned.
+// dumpResourceMetricsForPods 以清晰格式记录指定 Pod 的实际指标值。
+// 通过准确显示返回了哪些值来帮助诊断测试失败。
 func dumpResourceMetricsForPods(metrics e2emetrics.KubeletMetrics, namespace string, podNames ...string) {
 	framework.Logf("=== Resource Metrics Dump for Test Pods ===")
 	framework.Logf("Namespace: %s, Pods: %v", namespace, podNames)
 
-	// Define the metrics we care about and their expected ranges for documentation
+	// 定义我们关心的指标及其预期范围，作为文档
 	type metricInfo struct {
 		name        string
 		expectedMin string
 		expectedMax string
-		usesPodID   bool // true for pod-level, false for container-level
+		usesPodID   bool // true 表示 pod 级，false 表示容器级
 	}
 	metricsToCheck := []metricInfo{
 		{"container_cpu_usage_seconds_total", "0", "100", false},
@@ -261,7 +261,7 @@ func makeCustomLabelID(label string) func(interface{}) string {
 
 func boundedSample(lower, upper interface{}) types.GomegaMatcher {
 	return gstruct.PointTo(gstruct.MatchAllFields(gstruct.Fields{
-		// We already check Metric when matching the Id
+		// 匹配 Id 时已经检查了 Metric
 		"Metric": gstruct.Ignore(),
 		"Value":  gomega.And(gomega.BeNumerically(">=", lower), gomega.BeNumerically("<=", upper)),
 		"Timestamp": gomega.WithTransform(func(t testutil.Time) time.Time {
@@ -269,12 +269,12 @@ func boundedSample(lower, upper interface{}) types.GomegaMatcher {
 				return time.Now()
 			}
 
-			// model.Time is in Milliseconds since epoch
+			// model.Time 是自 epoch 以来的毫秒数
 			return time.Unix(0, int64(t)*int64(time.Millisecond))
 		},
 			gomega.And(
 				gomega.BeTemporally(">=", time.Now().Add(-maxStatsAge)),
-				// Now() is the test start time, not the match time, so permit a few extra minutes.
+				// Now() 是测试开始时间而非匹配时间，因此允许多几分钟。
 				gomega.BeTemporally("<", time.Now().Add(2*time.Minute))),
 		),
 		"Histogram": gstruct.Ignore(),

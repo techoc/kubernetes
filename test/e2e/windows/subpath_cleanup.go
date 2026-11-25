@@ -32,11 +32,11 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// This test verifies that pods with multiple subPath volume mounts on Windows
-// nodes terminate cleanly. It validates the fix for
-// https://github.com/kubernetes/kubernetes/issues/112630 where leaked file
-// handles from subPath preparation caused emptyDir volumes to fail cleanup,
-// leaving pods stuck in Terminating state.
+// 此测试验证在 Windows 节点上带多个 subPath volume 挂载的 Pod
+// 能否干净终止。它验证了针对
+// https://github.com/kubernetes/kubernetes/issues/112630 的修复：subPath 准备过程中泄漏的文件
+// 句柄导致 emptyDir volume 清理失败，
+// 使 Pod 卡在 Terminating 状态。
 var _ = sigDescribe(feature.Windows, "Windows subpath cleanup", skipUnlessWindows(func() {
 	f := framework.NewDefaultFramework("windows-subpath-cleanup")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -104,9 +104,9 @@ var _ = sigDescribe(feature.Windows, "Windows subpath cleanup", skipUnlessWindow
 								MountPath: `C:\etc\config\key3`,
 								SubPath:   "key3",
 							},
-							// Nested HostPath mounts: each is inside the previous,
-							// testing cleanup with overlapping mount points. Note that these are intentionally not
-							// in the right order to test a mount that is containing an existing mount.
+							// 嵌套的 HostPath 挂载：每个挂载都在前一个挂载内部，
+							// 用于测试重叠挂载点的清理。注意，这些挂载有意不按
+							// 正确顺序排列，以测试包含现有挂载的挂载场景。
 							{
 								Name:      "hostpath-outer",
 								MountPath: `C:\data`,
@@ -119,7 +119,7 @@ var _ = sigDescribe(feature.Windows, "Windows subpath cleanup", skipUnlessWindow
 								Name:      "hostpath-middle",
 								MountPath: `C:\data\nested`,
 							},
-							// EmptyDir mounts
+							// EmptyDir 挂载
 							{
 								Name:      "emptydir-1",
 								MountPath: `C:\scratch\dir1`,
@@ -128,7 +128,7 @@ var _ = sigDescribe(feature.Windows, "Windows subpath cleanup", skipUnlessWindow
 								Name:      "emptydir-2",
 								MountPath: `C:\scratch\dir2`,
 							},
-							// EmptyDir memory-backed mounts
+							// memory-backed EmptyDir 挂载
 							{
 								Name:      "emptydir-memory-1",
 								MountPath: `C:\scratch\mem1`,
@@ -137,7 +137,7 @@ var _ = sigDescribe(feature.Windows, "Windows subpath cleanup", skipUnlessWindow
 								Name:      "emptydir-memory-2",
 								MountPath: `C:\scratch\mem2`,
 							},
-							// Secret mounts with subPath
+							// 带 subPath 的 Secret 挂载
 							{
 								Name:      "secret-volume",
 								MountPath: `C:\etc\secret\secret1`,
@@ -148,7 +148,7 @@ var _ = sigDescribe(feature.Windows, "Windows subpath cleanup", skipUnlessWindow
 								MountPath: `C:\etc\secret\secret2`,
 								SubPath:   "secret2",
 							},
-							// Projected volume mounts with subPath
+							// 带 subPath 的 Projected volume 挂载
 							{
 								Name:      "projected-volume",
 								MountPath: `C:\etc\projected\key1`,
@@ -159,7 +159,7 @@ var _ = sigDescribe(feature.Windows, "Windows subpath cleanup", skipUnlessWindow
 								MountPath: `C:\etc\projected\secret1`,
 								SubPath:   "secret1",
 							},
-							// DownwardAPI mounts with subPath
+							// 带 subPath 的 DownwardAPI 挂载
 							{
 								Name:      "downwardapi-volume",
 								MountPath: `C:\etc\podinfo\labels`,
@@ -299,7 +299,7 @@ var _ = sigDescribe(feature.Windows, "Windows subpath cleanup", skipUnlessWindow
 		err = e2epod.DeletePodWithGracePeriod(ctx, f.ClientSet, pod, 30)
 		framework.ExpectNoError(err, "deleting pod")
 
-		// Prior to addressing https://github.com/kubernetes/kubernetes/issues/112630, this would time out
+		// 在修复 https://github.com/kubernetes/kubernetes/issues/112630 之前，此处会超时
 		err = e2epod.WaitForPodNotFoundInNamespace(ctx, f.ClientSet, podName, f.Namespace.Name, 5*time.Minute)
 		framework.ExpectNoError(err, "waiting for pod to be fully deleted")
 	})

@@ -44,7 +44,7 @@ var _ = SIGDescribe("Downward API", func() {
 	/*
 	   Release: v1.9
 	   Testname: DownwardAPI, environment for name, namespace and ip
-	   Description: Downward API MUST expose Pod and Container fields as environment variables. Specify Pod Name, namespace and IP as environment variable in the Pod Spec are visible at runtime in the container.
+	   Description: Downward API MUST 将 Pod 和 Container 的字段作为环境变量暴露。在 Pod Spec 中指定 Pod 名称、命名空间和 IP 作为环境变量，它们在容器运行时可见。
 	*/
 	framework.ConformanceIt("should provide pod name, namespace and IP address as env vars", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downward-api-" + string(uuid.NewUUID())
@@ -90,7 +90,7 @@ var _ = SIGDescribe("Downward API", func() {
 	/*
 	   Release: v1.9
 	   Testname: DownwardAPI, environment for host ip
-	   Description: Downward API MUST expose Pod and Container fields as environment variables. Specify host IP as environment variable in the Pod Spec are visible at runtime in the container.
+	   Description: Downward API MUST 将 Pod 和 Container 的字段作为环境变量暴露。在 Pod Spec 中指定 host IP 作为环境变量，它在容器运行时可见。
 	*/
 	framework.ConformanceIt("should provide host IP as an env var", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downward-api-" + string(uuid.NewUUID())
@@ -116,7 +116,7 @@ var _ = SIGDescribe("Downward API", func() {
 	/*
 	   Release: v1.32
 	   Testname: DownwardAPI, environment for hostIPs
-	   Description: Downward API MUST expose Pod and Container fields as environment variables. Specify hostIPs as environment variable in the Pod Spec are visible at runtime in the container.
+	   Description: Downward API MUST 将 Pod 和 Container 的字段作为环境变量暴露。在 Pod Spec 中指定 hostIPs 作为环境变量，它们在容器运行时可见。
 	*/
 	framework.ConformanceIt("should provide hostIPs as an env var", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downward-api-" + string(uuid.NewUUID())
@@ -192,7 +192,7 @@ var _ = SIGDescribe("Downward API", func() {
 	/*
 	   Release: v1.9
 	   Testname: DownwardAPI, environment for CPU and memory limits and requests
-	   Description: Downward API MUST expose CPU request and Memory request set through environment variables at runtime in the container.
+	   Description: Downward API MUST 通过环境变量在容器运行时暴露设置的 CPU request 和 Memory request。
 	*/
 	framework.ConformanceIt("should provide container's limits.cpu/memory and requests.cpu/memory as env vars", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downward-api-" + string(uuid.NewUUID())
@@ -243,7 +243,7 @@ var _ = SIGDescribe("Downward API", func() {
 	/*
 	   Release: v1.9
 	   Testname: DownwardAPI, environment for default CPU and memory limits and requests
-	   Description: Downward API MUST expose CPU request and Memory limits set through environment variables at runtime in the container.
+	   Description: Downward API MUST 通过环境变量在容器运行时暴露设置的 CPU request 和 Memory limit。
 	*/
 	framework.ConformanceIt("should provide default limits.cpu/memory from node allocatable", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downward-api-" + string(uuid.NewUUID())
@@ -293,7 +293,7 @@ var _ = SIGDescribe("Downward API", func() {
 	/*
 	   Release: v1.9
 	   Testname: DownwardAPI, environment for Pod UID
-	   Description: Downward API MUST expose Pod UID set through environment variables at runtime in the container.
+	   Description: Downward API MUST 通过环境变量在容器运行时暴露设置的 Pod UID。
 	*/
 	framework.ConformanceIt("should provide pod UID as env vars", f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "downward-api-" + string(uuid.NewUUID())
@@ -343,7 +343,7 @@ var _ = SIGDescribe("Downward API", framework.WithSerial(), framework.WithDisrup
 				},
 			}
 
-			// Important: we explicitly request no hugepages so the test can run where none are present.
+			// 重要：我们允许 0，以便测试在未分配 hugepage 的环境中通过。
 			expectations := []string{
 				fmt.Sprintf("HUGEPAGES_LIMIT=%d", 0),
 				fmt.Sprintf("HUGEPAGES_REQUEST=%d", 0),
@@ -389,7 +389,7 @@ var _ = SIGDescribe("Downward API", framework.WithSerial(), framework.WithDisrup
 					},
 				},
 			}
-			// Important: we allow for 0 so the test passes in environments where no hugepages are allocated.
+			// 尽管 Pod Level Resources 的 CPU limit 设为 1250m（即 1.25），
 			expectations := []string{
 				"HUGEPAGES_LIMIT=((0)|([1-9][0-9]*))\n",
 			}
@@ -444,9 +444,9 @@ var _ = SIGDescribe("Downward API", feature.PodLevelResources, framework.WithFea
 			}
 
 			expectations := []string{
-				// Although the CPU limit for Pod Level Resources is set to 1250m (which would be 1.25),
-				// the Downward API uses convertResourceCPUToString to convert the value to a string,
-				// and this function rounds up the decimal, resulting in 2 here.
+				// Downward API 使用 convertResourceCPUToString 将值转换为字符串，
+				// 该函数会向上取整小数，因此这里得到 2。
+				// 在引入 Pod Level Resources 特性之前，如果未设置容器级
 				// https://github.com/kubernetes/kubernetes/blob/49cd87182cac80a4f3d29e2e65e80c8f88e890da/pkg/api/v1/resource/helpers.go#L148-L153
 				"CPU_LIMIT=2",
 				"MEMORY_LIMIT=67108864",
@@ -530,16 +530,16 @@ var _ = SIGDescribe("Downward API", feature.PodLevelResources, framework.WithFea
 				},
 			}
 
-			// Before the Pod Level Resources feature was introduced, if container-level
-			// resource limits were not set, the Downward API would return the node's
-			// allocatable resources instead of 0. So, it was sufficient to simply check
-			// that the value set in the environment variable was non-zero.
-			// However, after the Pod Level Resources feature was introduced, the node's
-			// allocatable resources are used as a fallback when pod-level resource limits
-			// are not specified. Therefore, we now need to verify that the value
-			// in the environment variable matches the node's allocatable resources.
-			// Because we need to dynamically retrieve the node's allocatable resources,
-			// we cannot simply use e2epodoutput.TestContainerOutputRegexp here.
+			// resource limit，Downward API 会返回节点的
+			// allocatable 资源而不是 0。因此只需检查
+			// 环境变量中设置的值非零即可。
+			// 然而，引入 Pod Level Resources 特性后，当未指定 Pod 级资源限制时，
+			// 节点的 allocatable 资源会被用作回退值。因此现在需要验证
+			// 环境变量中的值与节点的 allocatable 资源一致。
+			// 由于需要动态获取节点的 allocatable 资源，
+			// 这里不能直接使用 e2epodoutput.TestContainerOutputRegexp。
+			// 等待客户端 Pod 完成。
+			// 取日志。先获取 host。
 			podClient := e2epod.NewPodClient(f)
 			createdPod := podClient.Create(ctx, pod)
 			ginkgo.DeferCleanup(func(ctx context.Context) {
@@ -547,23 +547,23 @@ var _ = SIGDescribe("Downward API", feature.PodLevelResources, framework.WithFea
 				podClient.DeleteSync(ctx, createdPod.Name, metav1.DeleteOptions{}, f.Timeouts.PodDelete)
 			})
 
-			// Wait for client pod to complete.
+			// 获取节点 allocatable 资源
 			err := e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, f.ClientSet, createdPod.Name, f.Namespace.Name, f.Timeouts.PodStart)
 			framework.ExpectNoError(err)
 
-			// Grab its logs.  Get host first.
+			// 基于节点 allocatable 资源准备期望值
 			podStatus, err := podClient.Get(ctx, createdPod.Name, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 
-			// Get the node allocatable resources
+			// 每个容器
 			nodeName := podStatus.Spec.NodeName
 			node, err := f.ClientSet.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
-			// Prepare expectations based on node allocatable resources
+			// 基于节点 allocatable 资源准备期望值
 			expectations := []string{
-				// Although the CPU limit for Pod Level Resources is set to 1250m (which would be 1.25),
-				// the Downward API uses convertResourceCPUToString to convert the value to a string,
-				// and this function rounds up the decimal, resulting in 2 here.
+				// Downward API 使用 convertResourceCPUToString 将值转换为字符串，
+				// 该函数会向上取整小数，因此这里得到 2。
+				// 在引入 Pod Level Resources 特性之前，如果未设置容器级
 				// https://github.com/kubernetes/kubernetes/blob/49cd87182cac80a4f3d29e2e65e80c8f88e890da/pkg/api/v1/resource/helpers.go#L148-L153
 				"CPU_LIMIT=2",
 				fmt.Sprintf("MEMORY_LIMIT=%d", node.Status.Allocatable.Memory().Value()),

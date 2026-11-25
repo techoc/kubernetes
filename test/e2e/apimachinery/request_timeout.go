@@ -56,7 +56,7 @@ var _ = SIGDescribe("Server request timeout", func() {
 
 	ginkgo.It("the request should be served with a default timeout if the specified timeout in the request URL exceeds maximum allowed", func(ctx context.Context) {
 		rt := getRoundTripper(f)
-		// Choose a timeout that exceeds the default timeout (60s) enforced by the apiserver
+		// 选择一个超过 apiserver 默认超时（60s）的超时时间，
 		req := newRequest(f, "3m")
 
 		response, err := rt.RoundTrip(req)
@@ -85,7 +85,7 @@ var _ = SIGDescribe("Server request timeout", func() {
 func getRoundTripper(f *framework.Framework) http.RoundTripper {
 	config := rest.CopyConfig(f.ClientConfig())
 
-	// ensure we don't enforce any transport timeout from the client side.
+	// 确保客户端侧不引入传输层超时。
 	config.Timeout = 0
 
 	roundTripper, err := rest.TransportFor(config)

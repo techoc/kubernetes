@@ -25,16 +25,16 @@ import (
 	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 )
 
-// LocationParamGKE returns parameter related to location for gcloud command.
+// LocationParamGKE 返回 gcloud 命令与位置相关的参数。
 func LocationParamGKE() string {
 	if framework.TestContext.CloudConfig.MultiMaster {
-		// GKE Regional Clusters are being tested.
+		// 正在测试 GKE 区域集群。
 		return fmt.Sprintf("--region=%s", framework.TestContext.CloudConfig.Region)
 	}
 	return fmt.Sprintf("--zone=%s", framework.TestContext.CloudConfig.Zone)
 }
 
-// MasterUpgradeGKE upgrades master node to the specified version on GKE.
+// MasterUpgradeGKE 将 GKE 上的 master 节点升级到指定版本。
 func MasterUpgradeGKE(ctx context.Context, namespace string, v string) error {
 	framework.Logf("Upgrading master to %q", v)
 	args := []string{
@@ -58,7 +58,7 @@ func MasterUpgradeGKE(ctx context.Context, namespace string, v string) error {
 	return nil
 }
 
-// GCEUpgradeScript returns path of script for upgrading on GCE.
+// GCEUpgradeScript 返回 GCE 上用于升级的脚本路径。
 func GCEUpgradeScript() string {
 	if len(framework.TestContext.GCEUpgradeScript) == 0 {
 		return path.Join(framework.TestContext.RepoRoot, "cluster/gce/upgrade.sh")

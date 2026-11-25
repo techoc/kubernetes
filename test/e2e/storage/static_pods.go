@@ -38,30 +38,30 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// Tests for static Pods + CSI volume reconstruction.
+// 静态 Pod + CSI volume 重建的测试。
 //
-// NOTE: these tests *require* the cluster under test to be Kubernetes In Docker (kind)!
-// Kind runs its API server as a static Pod, and we leverage it here
-// to test kubelet starting without the API server.
+// 注意：这些测试*要求*被测集群是 Kubernetes In Docker（kind）！
+// Kind 将 API server 作为静态 Pod 运行，我们利用这一点
+// 来测试 kubelet 在没有 API server 时启动。
 var _ = utils.SIGDescribe("StaticPods", feature.Kind, func() {
 	f := framework.NewDefaultFramework("static-pods-csi")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// global vars for the ginkgo.BeforeEach() / It()'s below
+	// 下面 ginkgo.BeforeEach() / It() 使用的全局变量
 	var (
 		driver     storageframework.DynamicPVTestDriver
 		testConfig *storageframework.PerTestConfig
 	)
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
-		// Install a CSI driver. Using csi-driver-hospath here.
+		// 安装 CSI driver，这里使用 csi-driver-hospath。
 		driver = drivers.InitHostPathCSIDriver().(storageframework.DynamicPVTestDriver)
 		testConfig = driver.PrepareTest(ctx, f)
 	})
 
-	// Test https://github.com/kubernetes/kubernetes/issues/117745
-	// I.e. kubelet starts and it must start the API server as a static pod,
-	// while there is a CSI volume mounted by the previous kubelet.
+	// 测试 https://github.com/kubernetes/kubernetes/issues/117745
+	// 即 kubelet 启动时必须先以静态 Pod 形式启动 API server，
+	// 同时上一个 kubelet 挂载的 CSI volume 仍然存在。
 	f.It("should run after kubelet stopped with CSI volume mounted", f.WithDisruptive(), f.WithSerial(), func(ctx context.Context) {
 		var timeout int64 = 5
 
@@ -104,7 +104,7 @@ var _ = utils.SIGDescribe("StaticPods", feature.Kind, func() {
 		framework.ExpectNoError(err, "Starting kubelet")
 
 		ginkgo.By("Wait for a static pod with the API server to start")
-		const apiServerStartTimeout = 10 * time.Minute // It takes up to 2 minutes on my machine
+		const apiServerStartTimeout = 10 * time.Minute // 在我的机器上最多需要 2 分钟
 		gomega.Eventually(ctx, func(ctx context.Context) error {
 			_, err := f.ClientSet.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{TimeoutSeconds: &timeout})
 			return err
@@ -121,17 +121,17 @@ func startKindKubelet(ctx context.Context) error {
 }
 
 func stopControlPlane(ctx context.Context) error {
-	// Move all static pod manifests to a backup dir (incl. KCM, scheduler, API server and etcd)
+	// 将所有静态 Pod manifest 移到备份目录（包括 KCM、scheduler、API server 和 etcd）
 	return kubeletExec("sh", "-c", "mkdir -p /etc/kubernetes/manifests-backup && mv /etc/kubernetes/manifests/* /etc/kubernetes/manifests-backup/")
 }
 
 func enableControlPlane(ctx context.Context) error {
-	// Restore the static pod manifests from the backup dir.
-	// Using `sh` to get `*` expansion.
+	// 从备份目录恢复静态 Pod manifest。
+	// 使用 `sh` 以获得 `*` 展开。
 	return kubeletExec("sh", "-c", "mv /etc/kubernetes/manifests-backup/* /etc/kubernetes/manifests/")
 }
 
-// Run a command in container with kubelet (and the whole control plane as containers)
+// 在带 kubelet 的容器中运行命令（整个 control plane 都作为容器）
 func kubeletExec(command ...string) error {
 	containerName := getKindContainerName()
 	args := []string{"exec", containerName}

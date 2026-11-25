@@ -51,16 +51,28 @@ const (
 	controllerRevisionRetryTimeout = 1 * time.Minute
 )
 
-// This test must be run in serial because it assumes the Daemon Set pods will
-// always get scheduled.  If we run other tests in parallel, this may not
-// happen.  In the future, running in parallel may work if we have an eviction
-// model which lets the DS controller kick out other pods to make room.
-// See https://issues.k8s.io/21767 for more details
+// 总能被调度。若与其他测试并行，可能无法保证。
+// 将来如果有驱逐机制，让 DS 控制器可以驱逐其他 Pod 腾出空间，
+// 那么并行运行或许可行。
+// 详情参见 https://issues.k8s.io/21767
+// 清理
 var _ = SIGDescribe("ControllerRevision", framework.WithSerial(), func() {
 	var f *framework.Framework
 
 	ginkgo.AfterEach(func(ctx context.Context) {
-		// Clean up
+		/*
+			Release: v1.25
+			Testname: ControllerRevision, resource lifecycle
+			Description: 创建 DaemonSet 必须成功。按标签选择器列出所有
+			ControllerRevision 必须只找到一个。给 ControllerRevision 打上新标签后，
+			必须能找到该标签。为 DaemonSet 创建新的 ControllerRevision 必须成功。
+			按标签选择器列出 ControllerRevision 必须找到两个。删除 ControllerRevision 必须成功。
+			按标签选择器列出 ControllerRevision 必须只找到一个。更新 ControllerRevision 的标签后，
+			必须能找到该标签。给 DaemonSet 打补丁必须成功。按标签选择器列出
+			ControllerRevision 必须找到两个。通过标签选择器批量删除 ControllerRevision 必须成功。
+			按标签选择器列出 ControllerRevision 必须只找到一个。
+			当前 ControllerRevision 的 revision 必须为 3。
+		*/
 		daemonsets, err := f.ClientSet.AppsV1().DaemonSets(f.Namespace.Name).List(ctx, metav1.ListOptions{})
 		framework.ExpectNoError(err, "unable to dump DaemonSets")
 		if daemonsets != nil && len(daemonsets.Items) > 0 {
@@ -111,19 +123,15 @@ var _ = SIGDescribe("ControllerRevision", framework.WithSerial(), func() {
 	/*
 		Release: v1.25
 		Testname: ControllerRevision, resource lifecycle
-		Description: Creating a DaemonSet MUST succeed. Listing all
-		ControllerRevisions with a label selector MUST find only one.
-		After patching the ControllerRevision with a new label, the label
-		MUST be found. Creating a new ControllerRevision for the DaemonSet
-		MUST succeed. Listing the ControllerRevisions by label selector
-		MUST find only two. Deleting a ControllerRevision MUST succeed.
-		Listing the ControllerRevisions by label selector MUST find only
-		one. After updating the ControllerRevision with a new label, the
-		label MUST be found. Patching the DaemonSet MUST succeed. Listing the
-		ControllerRevisions by label selector MUST find only two. Deleting
-		a collection of ControllerRevision via a label selector MUST succeed.
-		Listing the ControllerRevisions by label selector MUST find only one.
-		The current ControllerRevision revision MUST be 3.
+		Description: 创建 DaemonSet 必须成功。按标签选择器列出所有
+		ControllerRevision 必须只找到一个。给 ControllerRevision 打上新标签后，
+		必须能找到该标签。为 DaemonSet 创建新的 ControllerRevision 必须成功。
+		按标签选择器列出 ControllerRevision 必须找到两个。删除 ControllerRevision 必须成功。
+		按标签选择器列出 ControllerRevision 必须只找到一个。更新 ControllerRevision 的标签后，
+		必须能找到该标签。给 DaemonSet 打补丁必须成功。按标签选择器列出
+		ControllerRevision 必须找到两个。通过标签选择器批量删除 ControllerRevision 必须成功。
+		按标签选择器列出 ControllerRevision 必须只找到一个。
+		当前 ControllerRevision 的 revision 必须为 3。
 	*/
 	framework.ConformanceIt("should manage the lifecycle of a ControllerRevision", func(ctx context.Context) {
 		csAppsV1 := f.ClientSet.AppsV1()
@@ -149,13 +157,17 @@ var _ = SIGDescribe("ControllerRevision", framework.WithSerial(), func() {
 		ds, err := c.AppsV1().DaemonSets(ns).Get(ctx, dsName, metav1.GetOptions{})
 		framework.ExpectNoError(err)
 
-		// Listing across all namespaces to verify api endpoint: listAppsV1ControllerRevisionForAllNamespaces
+		// 跨所有命名空间列出，验证 api endpoint: listAppsV1ControllerRevisionForAllNamespaces
 		ginkgo.By(fmt.Sprintf("Listing all ControllerRevisions with label %q", dsLabelSelector))
 		revs, err := csAppsV1.ControllerRevisions("").List(ctx, metav1.ListOptions{LabelSelector: dsLabelSelector})
 		framework.ExpectNoError(err, "Failed to list ControllerRevision: %v", err)
 		gomega.Expect(revs.Items).To(gomega.HaveLen(1), "Failed to find any controllerRevisions")
 
-		// Locate the current ControllerRevision from the list
+		/*
+			Release: v1.9
+			Testname: Replication Controller, run basic image
+			Description: Replication Controller 必须用 Basic Image 创建一个 Pod，并用指定镜像运行服务。必须通过 TCP、UDP 和 HTTP 连接服务来测试镜像。
+		*/
 		var initialRevision *appsv1.ControllerRevision
 
 		rev := revs.Items[0]

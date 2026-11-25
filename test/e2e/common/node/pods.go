@@ -71,12 +71,12 @@ const (
 	podRetryPeriod       = 1 * time.Second
 )
 
-// testHostIP tests that a pod gets a host IP
+// testHostIP 测试 Pod 是否获得 host IP
 func testHostIP(ctx context.Context, podClient *e2epod.PodClient, pod *v1.Pod) {
 	ginkgo.By("creating pod")
 	podClient.CreateSync(ctx, pod)
 
-	// Try to make sure we get a hostIP for each pod.
+	// 尽量确保每个 Pod 都获得 hostIP。
 	hostIPTimeout := 2 * time.Minute
 	t := time.Now()
 	for {
@@ -126,7 +126,7 @@ func getRestartDelay(ctx context.Context, podClient *e2epod.PodClient, podName s
 	beginTime := time.Now()
 	var previousRestartCount int32 = -1
 	var previousFinishedAt time.Time
-	for time.Since(beginTime) < (2 * maxBackOffTolerance) { // may just miss the 1st MaxContainerBackOff delay
+	for time.Since(beginTime) < (2 * maxBackOffTolerance) { // 可能刚好错过第一次 MaxContainerBackOff 延迟
 		time.Sleep(time.Second)
 		pod, err := podClient.Get(ctx, podName, metav1.GetOptions{})
 		framework.ExpectNoError(err, fmt.Sprintf("getting pod %s", podName))
@@ -136,7 +136,7 @@ func getRestartDelay(ctx context.Context, podClient *e2epod.PodClient, podName s
 			continue
 		}
 
-		// the only case this happens is if this is the first time the Pod is running and there is no "Last State".
+		// 只有在 Pod 首次运行且没有 "Last State" 时才会出现这种情况。
 		if status.LastTerminationState.Terminated == nil {
 			framework.Logf("Container's last state is not \"Terminated\".")
 			continue
@@ -144,7 +144,7 @@ func getRestartDelay(ctx context.Context, podClient *e2epod.PodClient, podName s
 
 		if previousRestartCount == -1 {
 			if status.State.Running != nil {
-				// container is still Running, there is no "FinishedAt" time.
+				// 容器仍在 Running，没有 "FinishedAt" 时间。
 				continue
 			} else if status.State.Terminated != nil {
 				previousFinishedAt = status.State.Terminated.FinishedAt.Time
@@ -154,8 +154,8 @@ func getRestartDelay(ctx context.Context, podClient *e2epod.PodClient, podName s
 			previousRestartCount = status.RestartCount
 		}
 
-		// when the RestartCount is changed, the Containers will be in one of the following states:
-		//Running, Terminated, Waiting (it already is waiting for the backoff period to expire, and the last state details have been stored into status.LastTerminationState).
+		// 当 RestartCount 改变时，容器将处于以下状态之一：
+		// Running、Terminated、Waiting（它已在等待 backoff 期结束，且上一个状态详情已存入 status.LastTerminationState）。
 		if status.RestartCount > previousRestartCount {
 			var startedAt time.Time
 			if status.State.Running != nil {
@@ -172,9 +172,9 @@ func getRestartDelay(ctx context.Context, podClient *e2epod.PodClient, podName s
 	return 0, fmt.Errorf("timeout getting pod restart delay")
 }
 
-// expectNoErrorWithRetries checks if an error occurs with the given retry count.
+// expectNoErrorWithRetries 检查在给定重试次数内是否发生错误。
 func expectNoErrorWithRetries(fn func() error, maxRetries int, explain ...interface{}) {
-	// TODO (pohly): replace the entire function with gomege.Eventually.
+	// TODO (pohly): 用 gomega.Eventually 替换整个函数。
 	var err error
 	for i := range maxRetries {
 		err = fn()
@@ -203,7 +203,7 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.9
 		Testname: Pods, assigned hostip
-		Description: Create a Pod. Pod status MUST return successfully and contains a valid IP address.
+		Description: 创建一个 Pod。Pod status MUST 成功返回并包含有效 IP 地址。
 	*/
 	framework.ConformanceIt("should get a host IP", f.WithNodeConformance(), func(ctx context.Context) {
 		name := "pod-hostip-" + string(uuid.NewUUID())
@@ -225,7 +225,7 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.9
 		Testname: Pods, lifecycle
-		Description: A Pod is created with a unique label. Pod MUST be accessible when queried using the label selector upon creation. Add a watch, check if the Pod is running. Pod then deleted, The pod deletion timestamp is observed. The watch MUST return the pod deleted event. Query with the original selector for the Pod MUST return empty list.
+		Description: 创建带唯一标签的 Pod。创建时用标签选择器查询 MUST 能访问到该 Pod。添加 watch，检查 Pod 是否运行。然后删除 Pod，观察到删除时间戳。watch MUST 返回 Pod 删除事件。用原选择器查询 Pod MUST 返回空列表。
 	*/
 	framework.ConformanceIt("should be submitted and removed", f.WithNodeConformance(), func(ctx context.Context) {
 		ginkgo.By("creating the pod")
@@ -296,10 +296,10 @@ var _ = SIGDescribe("Pods", func() {
 			framework.Failf("Timeout while waiting for pod creation")
 		}
 
-		// We need to wait for the pod to be running, otherwise the deletion
-		// may be carried out immediately rather than gracefully.
+		// 需要等待 Pod 进入运行态，否则删除
+		// 可能立即执行而非优雅删除。
 		framework.ExpectNoError(e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, pod.Name, f.Namespace.Name))
-		// save the running pod
+		// 保存运行中的 Pod
 		pod, err = podClient.Get(ctx, pod.Name, metav1.GetOptions{})
 		framework.ExpectNoError(err, "failed to GET scheduled pod")
 
@@ -343,7 +343,7 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.9
 		Testname: Pods, update
-		Description: Create a Pod with a unique label. Query for the Pod with the label as selector MUST be successful. Update the pod to change the value of the Label. Query for the Pod with the new value for the label MUST be successful.
+		Description: 创建带唯一标签的 Pod。以该标签为选择器查询 Pod MUST 成功。更新 Pod 以更改标签值。以新标签值查询 Pod MUST 成功。
 	*/
 	framework.ConformanceIt("should be updated", f.WithNodeConformance(), func(ctx context.Context) {
 		ginkgo.By("creating the pod")
@@ -397,7 +397,7 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.9
 		Testname: Pods, ActiveDeadlineSeconds
-		Description: Create a Pod with a unique label. Query for the Pod with the label as selector MUST be successful. The Pod is updated with ActiveDeadlineSeconds set on the Pod spec. Pod MUST terminate of the specified time elapses.
+		Description: 创建带唯一标签的 Pod。以该标签为选择器查询 Pod MUST 成功。更新 Pod，在 spec 中设置 ActiveDeadlineSeconds。指定时间过后 Pod MUST 终止。
 	*/
 	framework.ConformanceIt("should allow activeDeadlineSeconds to be updated", f.WithNodeConformance(), func(ctx context.Context) {
 		ginkgo.By("creating the pod")
@@ -443,11 +443,11 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.9
 		Testname: Pods, service environment variables
-		Description: Create a server Pod listening on port 9376. A Service called fooservice is created for the server Pod listening on port 8765 targeting port 8080. If a new Pod is created in the cluster then the Pod MUST have the fooservice environment variables available from this new Pod. The new create Pod MUST have environment variables such as FOOSERVICE_SERVICE_HOST, FOOSERVICE_SERVICE_PORT, FOOSERVICE_PORT, FOOSERVICE_PORT_8765_TCP_PORT, FOOSERVICE_PORT_8765_TCP_PROTO, FOOSERVICE_PORT_8765_TCP and FOOSERVICE_PORT_8765_TCP_ADDR that are populated with proper values.
+		Description: 创建一个监听 9376 端口的 server Pod。为该 server Pod 创建一个名为 fooservice 的 Service，监听 8765 端口，目标端口 8080。如果集群中创建了新 Pod，该 Pod MUST 具有 fooservice 的环境变量。新创建的 Pod MUST 具有 FOOSERVICE_SERVICE_HOST、FOOSERVICE_SERVICE_PORT、FOOSERVICE_PORT、FOOSERVICE_PORT_8765_TCP_PORT、FOOSERVICE_PORT_8765_TCP_PROTO、FOOSERVICE_PORT_8765_TCP 和 FOOSERVICE_PORT_8765_TCP_ADDR 等环境变量，且值正确。
 	*/
 	framework.ConformanceIt("should contain environment variables for services", f.WithNodeConformance(), func(ctx context.Context) {
-		// Make a pod that will be a service.
-		// This pod serves its hostname via HTTP.
+		// 创建一个将作为服务的 Pod。
+		// 该 Pod 通过 HTTP 提供其 hostname。
 		serverName := "server-envvars-" + string(uuid.NewUUID())
 		serverPod := e2epod.MustMixinRestrictedPodSecurity(&v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -466,13 +466,13 @@ var _ = SIGDescribe("Pods", func() {
 		})
 		podClient.CreateSync(ctx, serverPod)
 
-		// This service exposes port 8080 of the test pod as a service on port 8765
-		// TODO(filbranden): We would like to use a unique service name such as:
+		// 该服务将测试 Pod 的 8080 端口暴露为服务的 8765 端口
+		// TODO(filbranden): 我们希望使用唯一的服务名，例如：
 		//   svcName := "svc-envvars-" + randomSuffix()
-		// However, that affects the name of the environment variables which are the capitalized
-		// service name, so that breaks this test.  One possibility is to tweak the variable names
-		// to match the service.  Another is to rethink environment variable names and possibly
-		// allow overriding the prefix in the service manifest.
+		// 但那会影响环境变量名（环境变量名是大写的
+		// 服务名），从而破坏此测试。一种办法是调整变量名
+		// 使其与服务匹配。另一种是重新考虑环境变量命名，并可能
+		// 允许在服务 manifest 中覆盖前缀。
 		svcName := "fooservice"
 		svc := &v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
@@ -494,7 +494,7 @@ var _ = SIGDescribe("Pods", func() {
 		_, err := f.ClientSet.CoreV1().Services(f.Namespace.Name).Create(ctx, svc, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "failed to create service")
 
-		// Make a client pod that verifies that it has the service environment variables.
+		// 创建一个客户端 Pod，验证它拥有服务相关的环境变量。
 		podName := "client-envvars-" + string(uuid.NewUUID())
 		const containerName = "env3cont"
 		pod := e2epod.MustMixinRestrictedPodSecurity(&v1.Pod{
@@ -514,8 +514,8 @@ var _ = SIGDescribe("Pods", func() {
 			},
 		})
 
-		// It's possible for the Pod to be created before the Kubelet is updated with the new
-		// service. In that case, we just retry.
+		// 有可能 Pod 在创建时 Kubelet 尚未获取新的
+		// service。这种情况下直接重试。
 		const maxRetries = 3
 		expectedVars := []string{
 			"FOOSERVICE_SERVICE_HOST=",
@@ -534,8 +534,8 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.13
 		Testname: Pods, remote command execution over websocket
-		Description: A Pod is created. Websocket is created to retrieve exec command output from this pod.
-		Message retrieved form Websocket MUST match with expected exec command output.
+		Description: 创建一个 Pod。建立 Websocket 以从该 Pod 获取 exec 命令输出。
+		从 Websocket 获取的消息 MUST 与预期的 exec 命令输出一致。
 	*/
 	framework.ConformanceIt("should support remote command execution over websockets", f.WithNodeConformance(), func(ctx context.Context) {
 		config, err := framework.LoadConfig()
@@ -594,7 +594,7 @@ var _ = SIGDescribe("Pods", func() {
 				}
 				if msg[0] != 1 {
 					if len(msg) == 1 {
-						// skip an empty message on stream other than stdout
+						// 跳过 stdout 以外流上的空消息
 						continue
 					} else {
 						framework.Failf("Got message from server that didn't start with channel 1 (STDOUT): %v", msg)
@@ -616,8 +616,8 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.13
 		Testname: Pods, logs from websockets
-		Description: A Pod is created. Websocket is created to retrieve log of a container from this pod.
-		Message retrieved form Websocket MUST match with container's output.
+		Description: 创建一个 Pod。建立 Websocket 以从该 Pod 获取某个容器的日志。
+		从 Websocket 获取的消息 MUST 与容器的输出一致。
 	*/
 	framework.ConformanceIt("should support retrieving logs from the container over websockets", f.WithNodeConformance(), func(ctx context.Context) {
 		config, err := framework.LoadConfig()
@@ -656,10 +656,10 @@ var _ = SIGDescribe("Pods", func() {
 
 		url := req.URL()
 
-		// Poll for the expected log content. The container may report Running before
-		// its first stdout line ("container is alive") has been flushed, especially on
-		// runtimes with slower container startup (e.g. VM-isolated containers). Retry
-		// the websocket read until we observe the expected output or the timeout
+		// 轮询预期的日志内容。容器可能在第一行 stdout（"container is alive"）刷新之前
+		// 就报告 Running，尤其是在容器启动较慢的运行时上
+		//（例如 VM 隔离的容器）。重试
+		// websocket 读取，直到看到预期输出或超时
 		// elapses.
 		gomega.Eventually(ctx, func() (string, error) {
 			ws, err := e2ewebsocket.OpenWebSocketForURL(url, config, []string{"binary.k8s.io"})
@@ -686,7 +686,7 @@ var _ = SIGDescribe("Pods", func() {
 			"Unexpected websocket logs from pod %q", pod.Name)
 	})
 
-	// Slow (~7 mins)
+	// 慢（约 7 分钟）
 	f.It("should have their auto-restart back-off timer reset on image update", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "pod-back-off-image"
 		containerName := "back-off"
@@ -727,7 +727,7 @@ var _ = SIGDescribe("Pods", func() {
 		}
 	})
 
-	// Slow by design (~27 mins) issue #19027
+	// 设计上很慢（约 27 分钟）issue #19027
 	f.It("should cap back-off at MaxContainerBackOff", f.WithSlow(), f.WithNodeConformance(), func(ctx context.Context) {
 		podName := "back-off-cap"
 		containerName := "back-off-cap"
@@ -748,9 +748,9 @@ var _ = SIGDescribe("Pods", func() {
 		})
 
 		podClient.CreateSync(ctx, pod)
-		time.Sleep(2 * kubelet.MaxCrashLoopBackOff) // it takes slightly more than 2*x to get to a back-off of x
+		time.Sleep(2 * kubelet.MaxCrashLoopBackOff) // 达到 x 的 back-off 所需时间略大于 2*x
 
-		// wait for a delay == capped delay of MaxContainerBackOff
+		// 等待延迟 == MaxContainerBackOff 的上限延迟
 		ginkgo.By("getting restart delay when capped")
 		var (
 			delay1 time.Duration
@@ -777,7 +777,7 @@ var _ = SIGDescribe("Pods", func() {
 			framework.Failf("timed out waiting for container restart in pod=%s/%s", podName, containerName)
 		}
 
-		if delay2 < kubelet.MaxCrashLoopBackOff || delay2 > maxBackOffTolerance { // syncloop cumulative drift
+		if delay2 < kubelet.MaxCrashLoopBackOff || delay2 > maxBackOffTolerance { // syncloop 累积漂移
 			framework.Failf("expected %s back-off got=%s on delay2", kubelet.MaxCrashLoopBackOff, delay2)
 		}
 	})
@@ -831,9 +831,9 @@ var _ = SIGDescribe("Pods", func() {
 		ginkgo.By(fmt.Sprintf("patching pod status with condition %q to true", readinessGate1))
 		_, err := podClient.Patch(ctx, podName, types.StrategicMergePatchType, []byte(fmt.Sprintf(patchStatusFmt, readinessGate1, "True")), metav1.PatchOptions{}, "status")
 		framework.ExpectNoError(err)
-		// Sleep for 10 seconds.
+		// 睡眠 10 秒。
 		time.Sleep(syncLoopFrequency)
-		// Verify the pod is still not ready
+		// 验证 Pod 仍未就绪
 		if podClient.PodIsReady(ctx, podName) {
 			framework.Failf("Expect pod(%s/%s)'s Ready condition to be false with only one condition in readinessGates equal to True", f.Namespace.Name, pod.Name)
 		}
@@ -853,8 +853,8 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.19
 		Testname: Pods, delete a collection
-		Description: A set of pods is created with a label selector which MUST be found when listed.
-		The set of pods is deleted and MUST NOT show up when listed by its label selector.
+		Description: 创建一组带标签选择器的 Pod，列出时 MUST 能找到它们。
+		删除这组 Pod 后，按标签选择器列出时 MUST 不再出现。
 	*/
 	framework.ConformanceIt("should delete a collection of pods", func(ctx context.Context) {
 		podTestNames := []string{"test-pod-1", "test-pod-2", "test-pod-3"}
@@ -862,7 +862,7 @@ var _ = SIGDescribe("Pods", func() {
 		one := int64(1)
 
 		ginkgo.By("Create set of pods")
-		// create a set of pods in test namespace
+		// 在测试命名空间中创建一组 Pod
 		for _, podTestName := range podTestNames {
 			_ = podClient.Create(ctx,
 				e2epod.MustMixinRestrictedPodSecurity(&v1.Pod{
@@ -883,17 +883,17 @@ var _ = SIGDescribe("Pods", func() {
 			framework.Logf("created %v", podTestName)
 		}
 
-		// wait as required for all 3 pods to be running
+		// 按需等待全部 3 个 Pod 运行
 		ginkgo.By("waiting for all 3 pods to be running")
 		err := e2epod.WaitForPodsRunningReady(ctx, f.ClientSet, f.Namespace.Name, 3, f.Timeouts.PodStart)
 		framework.ExpectNoError(err, "3 pods not found running.")
 
-		// delete Collection of pods with a label in the current namespace
+		// 在当前命名空间中批量删除带某标签的 Pod
 		err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).DeleteCollection(ctx, metav1.DeleteOptions{GracePeriodSeconds: &one}, metav1.ListOptions{
 			LabelSelector: "type=Testing"})
 		framework.ExpectNoError(err, "failed to delete collection of pods")
 
-		// wait for all pods to be deleted
+		// 等待所有 Pod 被删除
 		ginkgo.By("waiting for all pods to be deleted")
 		err = wait.PollUntilContextTimeout(ctx, podRetryPeriod, f.Timeouts.PodDelete, true, checkPodListQuantity(f, "type=Testing", 0))
 		framework.ExpectNoError(err, "found a pod(s)")
@@ -902,9 +902,8 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.20
 		Testname: Pods, completes the lifecycle of a Pod and the PodStatus
-		Description: A Pod is created with a static label which MUST succeed. It MUST succeed when
-		patching the label and the pod data. When checking and replacing the PodStatus it MUST
-		succeed. It MUST succeed when deleting the Pod.
+		Description: 创建带静态标签的 Pod 必须成功。给标签和 Pod 数据打补丁必须
+		成功。检查并替换 PodStatus 必须成功。删除 Pod 必须成功。
 	*/
 	framework.ConformanceIt("should run through the lifecycle of Pods and PodStatus", func(ctx context.Context) {
 		podResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
@@ -1089,10 +1088,9 @@ var _ = SIGDescribe("Pods", func() {
 	/*
 		Release: v1.25
 		Testname: Pods, patching status
-		Description: A pod is created which MUST succeed
-		and be found running. The pod status when patched
-		MUST succeed. Given the patching of the pod status,
-		the fields MUST equal the new values.
+		Description: 创建 Pod 必须成功，且能发现其处于运行状态。给 pod status
+		打补丁 MUST 成功。鉴于对 pod status 打了补丁，
+		各字段 MUST 等于新值。
 	*/
 	framework.ConformanceIt("should patch a pod status", func(ctx context.Context) {
 		podName := "pod-" + utilrand.String(5)

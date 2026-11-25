@@ -25,7 +25,7 @@ import (
 	e2ekubectl "k8s.io/kubernetes/test/e2e/framework/kubectl"
 )
 
-// WaitForSSHTunnels waits for establishing SSH tunnel to busybox pod.
+// WaitForSSHTunnels 等待与 busybox Pod 建立 SSH 隧道。
 func WaitForSSHTunnels(ctx context.Context, namespace string) {
 	framework.Logf("Waiting for SSH tunnels to establish")
 	e2ekubectl.RunKubectl(namespace, "run", "ssh-tunnel-test",
@@ -35,7 +35,7 @@ func WaitForSSHTunnels(ctx context.Context, namespace string) {
 		"echo", "Hello")
 	defer e2ekubectl.RunKubectl(namespace, "delete", "pod", "ssh-tunnel-test")
 
-	// allow up to a minute for new ssh tunnels to establish
+	// 最多等待一分钟让新的 SSH 隧道建立
 	wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, func(ctx context.Context) (bool, error) {
 		_, err := e2ekubectl.RunKubectl(namespace, "logs", "ssh-tunnel-test")
 		return err == nil, nil

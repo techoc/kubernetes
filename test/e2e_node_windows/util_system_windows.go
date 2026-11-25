@@ -28,24 +28,24 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// SYSTEM impersonation. The container silo job object created by hcsshim/HCS
-// has a security descriptor that grants access only to NT AUTHORITY\SYSTEM and
-// the container's own context — not to Administrators. So an elevated-but-not-
-// SYSTEM process is denied at open time regardless of the requested access
-// mask (and SeDebugPrivilege does not help: it bypasses DACLs only for
-// OpenProcess/OpenThread, not job objects). runAsSystem briefly assumes a
-// SYSTEM token so the host-side affinity read can open the silo.
+// SYSTEM 模拟。hcsshim/HCS 创建的容器 silo job object
+// 的安全描述符只授权 NT AUTHORITY\SYSTEM 和
+// 容器自身上下文访问，不授权 Administrators。因此一个已提升但非
+// SYSTEM 的进程在打开时会被拒绝，无论请求何种访问
+// 掩码（SeDebugPrivilege 也无济于事：它只对
+// OpenProcess/OpenThread 绕过 DACL，对 job object 无效）。runAsSystem 短暂使用
+// SYSTEM token，使宿主机侧的 affinity 读取能打开 silo。
 //
-// Requires the suite to run elevated: Administrators hold SeDebugPrivilege
-// (to open a SYSTEM process) and SeImpersonatePrivilege (to set a thread
+// 要求测试套件以提升权限运行：Administrators 持有 SeDebugPrivilege
+//（用于打开 SYSTEM 进程）和 SeImpersonatePrivilege（用于设置线程
 // token) by default.
 
 const systemSIDString = "S-1-5-18" // NT AUTHORITY\SYSTEM
 
-// runAsSystem runs fn while the current OS thread impersonates SYSTEM, then
-// reverts. The goroutine is locked to its thread for the duration because
-// SetThreadToken/RevertToSelf are per-thread: locking guarantees fn() runs
-// under the impersonated token and that we revert the same thread we changed.
+// runAsSystem 在当前 OS 线程模拟 SYSTEM 时运行 fn，然后
+// 恢复。期间 goroutine 锁定到其线程，因为
+// SetThreadToken/RevertToSelf 是线程级的：锁定确保 fn() 在
+// 模拟 token 下运行，且恢复的是被修改的同一线程。
 func runAsSystem(fn func() error) (err error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -74,8 +74,8 @@ func runAsSystem(fn func() error) (err error) {
 
 const seDebugName = "SeDebugPrivilege"
 
-// enablePrivilege enables the named privilege on the current process token. It
-// is a no-op-equivalent if the privilege is already enabled.
+// enablePrivilege 在当前进程 token 上启用指定特权。如果
+// 特权已启用，则相当于空操作。
 func enablePrivilege(name string) error {
 	var tok windows.Token
 	if err := windows.OpenProcessToken(windows.CurrentProcess(),
@@ -96,21 +96,21 @@ func enablePrivilege(name string) error {
 		PrivilegeCount: 1,
 		Privileges:     [1]windows.LUIDAndAttributes{{Luid: luid, Attributes: windows.SE_PRIVILEGE_ENABLED}},
 	}
-	// AdjustTokenPrivileges returns success even when the privilege is not held
-	// (GetLastError would be ERROR_NOT_ALL_ASSIGNED); in that case the later
-	// OpenProcess against a SYSTEM process simply fails and is surfaced there.
+	// AdjustTokenPrivileges 即使未持有特权也会返回成功
+	//（此时 GetLastError 为 ERROR_NOT_ALL_ASSIGNED）；这种情况下后续
+	// 对 SYSTEM 进程的 OpenProcess 会失败，并在那里体现。
 	if err := windows.AdjustTokenPrivileges(tok, false, &tp, 0, nil, nil); err != nil {
 		return fmt.Errorf("AdjustTokenPrivileges(%s): %w", name, err)
 	}
 	return nil
 }
 
-// duplicateSystemToken duplicates an impersonation token from a SYSTEM process.
-// It prefers well-known host (session-0) SYSTEM processes: a token duplicated
-// from a process running *inside* a container silo is silo-scoped and cannot
-// open a different container's silo job object (STATUS_ACCESS_DENIED), even
-// though its user is S-1-5-18. Host processes like services.exe yield a
-// host-scoped token that can open any silo.
+// duplicateSystemToken 从 SYSTEM 进程复制一个模拟 token。
+// 它优先选择已知的宿主机（session-0）SYSTEM 进程：从
+// 容器 silo *内部*运行的进程复制的 token 只在 silo 内有效，无法
+// 打开另一个容器的 silo job object（STATUS_ACCESS_DENIED），即使
+// 其用户是 S-1-5-18。services.exe 等宿主机进程产生的 token
+// 具有宿主机范围，可打开任意 silo。
 func duplicateSystemToken() (windows.Token, error) {
 	systemSID, err := windows.StringToSid(systemSIDString)
 	if err != nil {
@@ -137,13 +137,13 @@ func duplicateSystemToken() (windows.Token, error) {
 		procs = append(procs, proc{pe.ProcessID, strings.ToLower(windows.UTF16ToString(pe.ExeFile[:]))})
 	}
 
-	// Preferred host SYSTEM processes first; then anything else as fallback.
+	// 优先使用宿主机 SYSTEM 进程，其他作为回退。
 	preferred := map[string]int{"services.exe": 0, "winlogon.exe": 1, "wininit.exe": 2, "lsass.exe": 3}
 	sort.SliceStable(procs, func(i, j int) bool {
 		pi, oki := preferred[procs[i].name]
 		pj, okj := preferred[procs[j].name]
 		if oki != okj {
-			return oki // preferred ones sort first
+			return oki // 优先项排在前面
 		}
 		return pi < pj
 	})
@@ -157,10 +157,10 @@ func duplicateSystemToken() (windows.Token, error) {
 		"(is the suite running elevated with SeDebugPrivilege?)")
 }
 
-// trySystemTokenFromPID duplicates an impersonation token from pid iff that
-// process runs as systemSID. It returns ok=false (and no error) on any failure
-// so the caller can try the next process: some protected SYSTEM processes
-// (e.g. csrss.exe) deny TOKEN_DUPLICATE even with SeDebugPrivilege.
+// 当且仅当 pid 进程以 systemSID 运行时，trySystemTokenFromPID 从该进程
+// 复制模拟 token。任何失败都返回 ok=false（无错误），
+// 以便调用方尝试下一个进程：某些受保护的 SYSTEM 进程
+// （如 csrss.exe）即使有 SeDebugPrivilege 也拒绝 TOKEN_DUPLICATE。
 func trySystemTokenFromPID(pid uint32, systemSID *windows.SID) (windows.Token, bool) {
 	ph, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
 	if err != nil {

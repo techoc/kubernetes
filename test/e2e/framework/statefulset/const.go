@@ -21,10 +21,10 @@ import (
 )
 
 const (
-	// StatefulSetPoll is a poll interval for StatefulSet tests
+	// StatefulSetPoll 是 StatefulSet 测试的轮询间隔
 	StatefulSetPoll = 10 * time.Second
-	// StatefulSetTimeout is a timeout interval for StatefulSet operations
+	// StatefulSetTimeout 是 StatefulSet 操作的超时时长
 	StatefulSetTimeout = 10 * time.Minute
-	// StatefulPodTimeout is a timeout for stateful pods to change state
+	// StatefulPodTimeout 是有状态 Pod 更改状态的超时时长
 	StatefulPodTimeout = 5 * time.Minute
 )

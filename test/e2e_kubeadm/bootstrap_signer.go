@@ -43,16 +43,16 @@ var _ = Describe("bootstrap signer", func() {
 	})
 
 	ginkgo.It("should be active", func(ctx context.Context) {
-		//NB. this is technically implemented a part of the control-plane phase
-		//    and more specifically if the controller manager is properly configured,
-		//    the bootstrapsigner controller is activated and the system:controller:bootstrap-signer
-		//    group will be automatically created
+		// NB. 从技术上讲，这是 control-plane 阶段的一部分，
+		//    更具体地说，如果 controller manager 配置正确，
+		//    bootstrapsigner 控制器会被激活，并自动创建
+		//    system:controller:bootstrap-signer 组
 		ExpectRole(f.ClientSet, kubeSystemNamespace, bootstrapTokensSignerRoleName)
 	})
 
-	// NB. This test is disruptive as it mutates cluster-info, but it's not tagged
-	// as disruptive or serial because we want to run it in the kubeadm e2e test jobs,
-	// which only run tests in parallel.
+	// NB. 此测试会修改 cluster-info，具有破坏性，但未标记
+	// 为 disruptive 或 serial，因为我们希望在 kubeadm e2e 测试 job 中运行它，
+	// 这些 job 只并行运行测试。
 	f.It("should resign the bootstrap tokens when cluster-info changed and remove the signature when the token is deleted", func(ctx context.Context) {
 		ginkgo.By("create a new bootstrap token secret")
 		tokenID, err := GenerateTokenID()

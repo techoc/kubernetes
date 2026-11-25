@@ -52,18 +52,18 @@ func scheduleFailureEvent(podName string) func(*v1.Event) bool {
 	}
 }
 
-// Action is a function to be performed by the system.
+// Action 是要由系统执行的函数。
 type Action func(ctx context.Context) error
 
-// observeEventAfterAction returns true if an event matching the predicate was emitted
-// from the system after performing the supplied action.
+// 如果执行给定 Action 后系统发出了匹配 predicate 的事件，
+// observeEventAfterAction 返回 true。
 func observeEventAfterAction(ctx context.Context, c clientset.Interface, ns string, eventPredicate func(*v1.Event) bool, action Action) (bool, error) {
-	// TODO (pohly): add context support
+	// TODO (pohly): 添加 context 支持
 	observedMatchingEvent := false
 	informerStartedChan := make(chan struct{})
 	var informerStartedGuard sync.Once
 
-	// Create an informer to list/watch events from the test framework namespace.
+	// 创建一个 informer，list/watch 测试框架命名空间中的事件。
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
@@ -71,7 +71,7 @@ func observeEventAfterAction(ctx context.Context, c clientset.Interface, ns stri
 				return ls, err
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				// Signal parent goroutine that watching has begun.
+				// 通知父 goroutine 监控已开始。
 				defer informerStartedGuard.Do(func() { close(informerStartedChan) })
 				w, err := c.CoreV1().Events(ns).Watch(ctx, options)
 				return w, err
@@ -93,20 +93,20 @@ func observeEventAfterAction(ctx context.Context, c clientset.Interface, ns stri
 		},
 	)
 
-	// Start the informer and block this goroutine waiting for the started signal.
+	// 启动 informer，并阻塞此 goroutine 等待启动信号。
 	informerStopChan := make(chan struct{})
 	defer func() { close(informerStopChan) }()
 	go controller.Run(informerStopChan)
 	<-informerStartedChan
 
-	// Invoke the action function.
+	// 调用 action 函数。
 	err := action(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	// Poll whether the informer has found a matching event with a timeout.
-	// Wait up 2 minutes polling every second.
+	// 带超时轮询 informer 是否找到匹配的事件。
+	// 最多等待 2 分钟，每秒轮询一次。
 	timeout := 2 * time.Minute
 	interval := 1 * time.Second
 	err = wait.PollUntilContextTimeout(ctx, interval, timeout, false, func(ctx context.Context) (bool, error) {

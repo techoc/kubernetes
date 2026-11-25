@@ -48,14 +48,14 @@ var _ = instrumentation.SIGDescribe("Logging soak [Performance]", framework.With
 	f := framework.NewDefaultFramework("logging-soak")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Not a global constant (irrelevant outside this test), also not a parameter (if you want more logs, use --scale=).
+	// 不是全局常量（在此测试之外无关），也不是参数（如需更多日志，请使用 --scale=）。
 	kbRateInSeconds := 1 * time.Second
 	totalLogTime := 2 * time.Minute
 
-	// This test is designed to run and confirm that logs are being generated at a large scale, and that they can be grabbed by the kubelet.
-	// By running it repeatedly in the background, you can simulate large collections of chatty containers.
-	// This can expose problems in your docker configuration (logging), log searching infrastructure, to tune deployments to match high load
-	// scenarios.  TODO jayunit100 add this to the kube CI in a follow on infra patch.
+	// 此测试旨在运行并确认日志大规模生成，且能被 kubelet 抓取。
+	// 通过在后台反复运行，可以模拟大量话痨容器。
+	// 这可以暴露 docker 配置（日志）、日志搜索基础设施中的问题，以便调整部署以匹配高负载
+	// 场景。TODO jayunit100 在后续 infra patch 中将其加入 kube CI。
 
 	ginkgo.It(fmt.Sprintf("should survive logging 1KB every %v seconds, for a duration of %v", kbRateInSeconds, totalLogTime), func(ctx context.Context) {
 		ginkgo.By(fmt.Sprintf("scaling up to %v pods per node", loggingSoak.Scale))
@@ -79,8 +79,8 @@ var _ = instrumentation.SIGDescribe("Logging soak [Performance]", framework.With
 	})
 })
 
-// RunLogPodsWithSleepOf creates a pod on every node, logs continuously (with "sleep" pauses), and verifies that the log string
-// was produced in each and every pod at least once.  The final arg is the timeout for the test to verify all the pods got logs.
+// RunLogPodsWithSleepOf 在每个节点上创建一个 Pod，持续输出日志（带 "sleep" 暂停），并验证日志字符串
+// 在每个 Pod 中至少生成一次。最后一个参数是测试验证所有 Pod 都产生日志的超时时间。
 func RunLogPodsWithSleepOf(ctx context.Context, f *framework.Framework, sleep time.Duration, podname string, timeout time.Duration) {
 
 	nodes, err := e2enode.GetReadySchedulableNodes(ctx, f.ClientSet)
@@ -88,7 +88,7 @@ func RunLogPodsWithSleepOf(ctx context.Context, f *framework.Framework, sleep ti
 	totalPods := len(nodes.Items)
 	gomega.Expect(nodes.Items).ToNot(gomega.BeEmpty())
 
-	kilobyte := strings.Repeat("logs-123", 128) // 8*128=1024 = 1KB of text.
+	kilobyte := strings.Repeat("logs-123", 128) // 8*128=1024 = 1KB 文本。
 
 	appName := "logging-soak" + podname
 	podlables := e2enode.CreatePodsPerNodeForSimpleApp(
@@ -119,8 +119,8 @@ func RunLogPodsWithSleepOf(ctx context.Context, f *framework.Framework, sleep ti
 		framework.PodStateVerification{
 			Selectors:   podlables,
 			ValidPhases: []v1.PodPhase{v1.PodRunning, v1.PodSucceeded},
-			// we don't validate total log data, since there is no guarantee all logs will be stored forever.
-			// instead, we just validate that some logs are being created in std out.
+			// 我们不验证日志总量，因为无法保证所有日志都会永久保存。
+			// 而是只验证 stdout 中有日志产生。
 			Verify: func(p v1.Pod) (bool, error) {
 				s, err := e2eoutput.LookForStringInLog(f.Namespace.Name, p.Name, "logging-soak", "logs-123", 1*time.Second)
 				return s != "", err
@@ -128,7 +128,7 @@ func RunLogPodsWithSleepOf(ctx context.Context, f *framework.Framework, sleep ti
 		},
 	)
 
-	largeClusterForgiveness := time.Duration(len(nodes.Items)/5) * time.Second // i.e. a 100 node cluster gets an extra 20 seconds to complete.
+	largeClusterForgiveness := time.Duration(len(nodes.Items)/5) * time.Second // 即 100 节点的集群额外获得 20 秒完成时间。
 	pods, err := logSoakVerification.WaitFor(ctx, totalPods, timeout+largeClusterForgiveness)
 
 	if err != nil {

@@ -32,23 +32,23 @@ func containsDataRace(output string) bool {
 	return dataRaceRE.MatchString(output)
 }
 
-// Detect data races in output and mark those tests as failed.
-// Ginkgo itself captures the warning in the output of those
-// tests where it is printed, but does not mark the tests as failed.
-// This is not exactly wrong (the reason might be in code that was
-// started elsewhere), but without a test being marked as "failed",
-// prune-junit-xml will prune the output and spyglass won't show
-// the test as failed.
+// 检测输出中的数据竞争，并将相关测试标记为失败。
+// Ginkgo 自身会在打印警告的测试输出中捕获该警告，
+// 但不会把测试标记为失败。
+// 这不完全是错的（原因可能在于别处启动的代码），
+// 但如果测试没有被标记为 "failed"，
+// prune-junit-xml 会裁剪输出，spyglass 也不会
+// 将该测试显示为失败。
 //
-// Modifies the report. Doesn't touch tests which are already failed
-// because those already need to be investigated.
+// 修改报告。不触碰已经失败的测试，
+// 因为它们已经需要排查了。
 func detectDataRaces(report ginkgo.Report) {
 	for i, spec := range report.SpecReports {
 		if spec.State != types.SpecStatePassed {
 			continue
 		}
 
-		// Both variants of captured output get checked, just to be on the safe side.
+		// 为保险起见，检查捕获输出的两种形式。
 		ginkgoWriterRace := containsDataRace(spec.CapturedGinkgoWriterOutput)
 		stdoutRace := containsDataRace(spec.CapturedStdOutErr)
 		if ginkgoWriterRace || stdoutRace {
@@ -61,7 +61,7 @@ func detectDataRaces(report ginkgo.Report) {
 					Time: time.Now(),
 				},
 			}
-			// Let's move that text to the failure message.
+			// 将这段文本移到失败消息中。
 			if stdoutRace {
 				spec.Failure.Message = spec.CapturedStdOutErr
 				spec.CapturedStdOutErr = ""

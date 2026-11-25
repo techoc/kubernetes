@@ -61,14 +61,14 @@ var _ = utils.SIGDescribe("NFSPersistentVolumes", framework.WithDisruptive(), fr
 	)
 
 	ginkgo.BeforeEach(func(ctx context.Context) {
-		// To protect the NFS volume pod from the kubelet restart, we isolate it on its own node.
+		// 为保护 NFS volume Pod 免受 kubelet 重启影响，我们将其隔离在单独的节点上。
 		e2eskipper.SkipUnlessNodeCountIsAtLeast(minNodes)
 
 		c = f.ClientSet
 		ns = f.Namespace.Name
 		volLabel = labels.Set{e2epv.VolumeSelectorKey: ns}
 		selector = metav1.SetAsLabelSelector(volLabel)
-		// Start the NFS server pod.
+		// 启动 NFS server Pod。
 		_, nfsServerPod, nfsServerHost = e2evolume.NewNFSServer(ctx, c, ns, []string{"-G", "777", "/exports"})
 		ginkgo.DeferCleanup(e2epod.DeletePodWithWait, c, nfsServerPod)
 		nfsPVconfig = e2epv.PersistentVolumeConfig{
@@ -116,13 +116,13 @@ var _ = utils.SIGDescribe("NFSPersistentVolumes", framework.WithDisruptive(), fr
 
 		ginkgo.AfterEach(func(ctx context.Context) {
 			framework.Logf("Tearing down test spec")
-			tearDownTestCase(ctx, c, f, ns, clientPod, pvc, pv, true /* force PV delete */)
+			tearDownTestCase(ctx, c, f, ns, clientPod, pvc, pv, true /* 强制删除 PV */)
 			pv, pvc, clientPod = nil, nil, nil
 		})
 
-		// Test table housing the ginkgo.It() title string and test spec.  runTest is type testBody, defined at
-		// the start of this file.  To add tests, define a function mirroring the testBody signature and assign
-		// to runTest.
+		// 测试表包含 ginkgo.It() 的标题字符串和测试规格。runTest 是 testBody 类型，定义在
+		// 本文件开头。要添加测试，定义一个符合 testBody 签名的函数并赋值
+		// 给 runTest。
 		disruptiveTestTable := []disruptiveTest{
 			{
 				testItStmt: "Should test that a file written to the mount before kubelet restart is readable after restart.",
@@ -138,7 +138,7 @@ var _ = utils.SIGDescribe("NFSPersistentVolumes", framework.WithDisruptive(), fr
 			},
 		}
 
-		// Test loop executes each disruptiveTest iteratively.
+		// 测试循环逐个执行 disruptiveTest。
 		for _, test := range disruptiveTestTable {
 			func(t disruptiveTest) {
 				ginkgo.It(t.testItStmt, func(ctx context.Context) {
@@ -151,8 +151,8 @@ var _ = utils.SIGDescribe("NFSPersistentVolumes", framework.WithDisruptive(), fr
 	})
 })
 
-// initTestCase initializes spec resources (pv, pvc, and pod) and returns pointers to be consumed
-// by the test.
+// initTestCase 初始化规格资源（pv、pvc 和 pod），并返回供
+// 测试使用的指针。
 func initTestCase(ctx context.Context, f *framework.Framework, c clientset.Interface, pvConfig e2epv.PersistentVolumeConfig, pvcConfig e2epv.PersistentVolumeClaimConfig, ns, nodeName string) (*v1.Pod, *v1.PersistentVolume, *v1.PersistentVolumeClaim) {
 	pv, pvc, err := e2epv.CreatePVPVC(ctx, c, f.Timeouts, pvConfig, pvcConfig, ns, false)
 	defer func() {
@@ -175,7 +175,7 @@ func initTestCase(ctx context.Context, f *framework.Framework, c clientset.Inter
 	}()
 	err = e2epod.WaitTimeoutForPodRunningInNamespace(ctx, c, pod.Name, pod.Namespace, f.Timeouts.PodStart)
 	framework.ExpectNoError(err, fmt.Sprintf("Pod %q timed out waiting for phase: Running", pod.Name))
-	// Return created api objects
+	// 返回创建的 API 对象
 	pod, err = c.CoreV1().Pods(ns).Get(ctx, pod.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 	pvc, err = c.CoreV1().PersistentVolumeClaims(ns).Get(ctx, pvc.Name, metav1.GetOptions{})
@@ -185,9 +185,9 @@ func initTestCase(ctx context.Context, f *framework.Framework, c clientset.Inter
 	return pod, pv, pvc
 }
 
-// tearDownTestCase destroy resources created by initTestCase.
+// tearDownTestCase 销毁 initTestCase 创建的资源。
 func tearDownTestCase(ctx context.Context, c clientset.Interface, f *framework.Framework, ns string, client *v1.Pod, pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolume, forceDeletePV bool) {
-	// Ignore deletion errors.  Failing on them will interrupt test cleanup.
+	// 忽略删除错误，否则会中断测试清理。
 	e2epod.DeletePodWithWait(ctx, c, client)
 	e2epv.DeletePersistentVolumeClaim(ctx, c, pvc.Name, ns)
 	if forceDeletePV && pv != nil {

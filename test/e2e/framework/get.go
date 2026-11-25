@@ -29,62 +29,62 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// GetFunc is a function which retrieves a certain object.
+// GetFunc 是获取某个对象的函数。
 type GetFunc[T any] func(ctx context.Context) (T, error)
 
-// APIGetFunc is a get functions as used in client-go.
+// APIGetFunc 是 client-go 中使用的 get 函数。
 type APIGetFunc[T any] func(ctx context.Context, name string, getOptions metav1.GetOptions) (T, error)
 
-// APIListFunc is a list functions as used in client-go.
+// APIListFunc 是 client-go 中使用的 list 函数。
 type APIListFunc[T any] func(ctx context.Context, listOptions metav1.ListOptions) (T, error)
 
-// GetObject takes a get function like clientset.CoreV1().Pods(ns).Get
-// and the parameters for it and returns a function that executes that get
-// operation in a [gomega.Eventually] or [gomega.Consistently].
+// GetObject 接受一个类似 clientset.CoreV1().Pods(ns).Get 的 get 函数
+// 及其参数，返回一个在 [gomega.Eventually] 或 [gomega.Consistently] 中
+// 执行该 get 操作的函数。
 //
-// Delays and retries are handled by [HandleRetry]. A "not found" error is
-// a fatal error that causes polling to stop immediately. If that is not
-// desired, then wrap the result with [IgnoreNotFound].
+// 延迟和重试由 [HandleRetry] 处理。"not found" 错误是
+// 致命错误，会立即停止轮询。如果不想这样，
+// 就用 [IgnoreNotFound] 包装结果。
 func GetObject[T any](get APIGetFunc[T], name string, getOptions metav1.GetOptions) GetFunc[T] {
 	return HandleRetry(func(ctx context.Context) (T, error) {
 		return get(ctx, name, getOptions)
 	})
 }
 
-// ListObjects takes a list function like clientset.CoreV1().Pods(ns).List
-// and the parameters for it and returns a function that executes that list
-// operation in a [gomega.Eventually] or [gomega.Consistently].
+// ListObjects 接受一个类似 clientset.CoreV1().Pods(ns).List 的 list 函数
+// 及其参数，返回一个执行该 list 操作的函数。
+// 执行该 get 操作的函数。
 //
-// Delays and retries are handled by [HandleRetry].
+// 延迟和重试由 [HandleRetry] 处理。
 func ListObjects[T any](list APIListFunc[T], listOptions metav1.ListOptions) GetFunc[T] {
 	return HandleRetry(func(ctx context.Context) (T, error) {
 		return list(ctx, listOptions)
 	})
 }
 
-// HandleRetry wraps an arbitrary get function. When the wrapped function
-// returns an error, HandleGetError will decide whether the call should be
-// retried and if requested, will sleep before doing so.
+// HandleRetry 包装任意 get 函数。当被包装的函数
+// 返回错误时，HandleGetError 决定该调用是否
+// 需要重试，并在需要时先休眠。
 //
-// This is meant to be used inside [gomega.Eventually] or [gomega.Consistently].
+// 这旨在用于 [gomega.Eventually] 或 [gomega.Consistently] 内部。
 func HandleRetry[T any](get GetFunc[T]) GetFunc[T] {
 	return func(ctx context.Context) (T, error) {
 		t, err := get(ctx)
 		if err != nil {
 			if retry, delay := ShouldRetry(err); retry {
 				if delay > 0 {
-					// We could return
-					// gomega.TryAgainAfter(delay) here,
-					// but then we need to funnel that
-					// error through any other
-					// wrappers. Waiting directly is simpler.
+					// 我们本可以返回
+					// 这里的 gomega.TryAgainAfter(delay)，
+					// 但那样就需要把这个
+					// 错误穿过所有其他
+					// 包装器。直接等待更简单。
 					ctx, cancel := context.WithTimeout(ctx, delay)
 					defer cancel()
 					<-ctx.Done()
 				}
 				return t, err
 			}
-			// Give up polling immediately.
+			// 立即放弃轮询。
 			var null T
 			return t, gomega.StopTrying(fmt.Sprintf("Unexpected final error while getting %T", null)).Wrap(err)
 		}
@@ -92,15 +92,15 @@ func HandleRetry[T any](get GetFunc[T]) GetFunc[T] {
 	}
 }
 
-// ShouldRetry decides whether to retry an API request. Optionally returns a
-// delay to retry after.
+// ShouldRetry 决定是否重试 API 请求，并可返回
+// 重试前的延迟。
 func ShouldRetry(err error) (retry bool, retryAfter time.Duration) {
-	// if the error sends the Retry-After header, we respect it as an explicit confirmation we should retry.
+	// 如果错误带有 Retry-After header，我们将其视为应重试的明确信号。
 	if delay, shouldRetry := apierrors.SuggestsClientDelay(err); shouldRetry {
 		return shouldRetry, time.Duration(delay) * time.Second
 	}
 
-	// these errors indicate a transient error that should be retried.
+	// 这些错误表示应重试的瞬态错误。
 	if apierrors.IsTimeout(err) ||
 		apierrors.IsTooManyRequests(err) ||
 		apierrors.IsServiceUnavailable(err) ||
@@ -112,18 +112,18 @@ func ShouldRetry(err error) (retry bool, retryAfter time.Duration) {
 	return false, 0
 }
 
-// RetryNotFound wraps an arbitrary get function. When the wrapped function
-// encounters a "not found" error, that error is treated as a transient problem
-// and polling continues.
+// RetryNotFound 包装任意 get 函数。当被包装的函数
+// 遇到 "not found" 错误时，将其视为瞬态问题
+// 并继续轮询。
 //
-// This is meant to be used inside [gomega.Eventually] or [gomega.Consistently].
+// 这旨在用于 [gomega.Eventually] 或 [gomega.Consistently] 内部。
 func RetryNotFound[T any](get GetFunc[T]) GetFunc[T] {
 	return func(ctx context.Context) (T, error) {
 		t, err := get(ctx)
 		if apierrors.IsNotFound(err) {
-			// If we are wrapping HandleRetry, then the error will
-			// be gomega.StopTrying. We need to get rid of that,
-			// otherwise gomega.Eventually will stop.
+			// 如果包装的是 HandleRetry，错误将是
+			// gomega.StopTrying。需要去掉它，
+			// 否则 gomega.Eventually 会停止。
 			var stopTryingErr gomega.PollingSignalError
 			if errors.As(err, &stopTryingErr) {
 				if wrappedErr := errors.Unwrap(stopTryingErr); wrappedErr != nil {
@@ -131,16 +131,16 @@ func RetryNotFound[T any](get GetFunc[T]) GetFunc[T] {
 				}
 			}
 
-			// Mark the error as transient in case that we get
-			// wrapped by HandleRetry.
+			// 将错误标记为瞬态，以防被
+			// HandleRetry 包装。
 			err = transientError{error: err}
 		}
 		return t, err
 	}
 }
 
-// transientError wraps some other error and indicates that the
-// wrapper error is something that may go away.
+// transientError 包装另一个错误，表示
+// 该错误是可能消失的瞬态错误。
 type transientError struct {
 	error
 }

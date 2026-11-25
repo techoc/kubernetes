@@ -35,10 +35,10 @@ import (
 	storageutils "k8s.io/kubernetes/test/e2e/storage/utils"
 )
 
-// VolumeResource is a generic implementation of TestResource that wil be able to
-// be used in most of TestSuites.
-// See volume_io.go or volumes.go in test/e2e/storage/testsuites/ for how to use this resource.
-// Also, see subpath.go in the same directory for how to extend and use it.
+// VolumeResource 是 TestResource 的通用实现，可在
+// 大多数 TestSuite 中使用。
+// 有关如何使用此资源，参见 test/e2e/storage/testsuites/ 中的 volume_io.go 或 volumes.go。
+// 另外，参见同目录下的 subpath.go 了解如何扩展和使用它。
 type VolumeResource struct {
 	Config    *PerTestConfig
 	Pattern   TestPattern
@@ -50,13 +50,13 @@ type VolumeResource struct {
 	Volume TestVolume
 }
 
-// CreateVolumeResource constructs a VolumeResource for the current test. It knows how to deal with
-// different test pattern volume types.
+// CreateVolumeResource 为当前测试构造 VolumeResource。它知道如何处理
+// 不同的测试模式 volume 类型。
 func CreateVolumeResource(ctx context.Context, driver TestDriver, config *PerTestConfig, pattern TestPattern, testVolumeSizeRange e2evolume.SizeRange) *VolumeResource {
 	return CreateVolumeResourceWithAccessModes(ctx, driver, config, pattern, testVolumeSizeRange, driver.GetDriverInfo().RequiredAccessModes, nil)
 }
 
-// CreateVolumeResource constructs a VolumeResource for the current test using the specified VAC name.
+// CreateVolumeResource 使用指定的 VAC 名称为当前测试构造 VolumeResource。
 func CreateVolumeResourceWithVAC(ctx context.Context, driver TestDriver, config *PerTestConfig, pattern TestPattern, testVolumeSizeRange e2evolume.SizeRange, vacName *string) *VolumeResource {
 	if pattern.VolType != DynamicPV {
 		framework.Failf("Creating volume with VAC only supported on dynamic PV tests")
@@ -64,7 +64,7 @@ func CreateVolumeResourceWithVAC(ctx context.Context, driver TestDriver, config 
 	return CreateVolumeResourceWithAccessModes(ctx, driver, config, pattern, testVolumeSizeRange, driver.GetDriverInfo().RequiredAccessModes, vacName)
 }
 
-// CreateVolumeResourceWithAccessModes constructs a VolumeResource for the current test with the provided access modes.
+// CreateVolumeResourceWithAccessModes 使用给定的 access mode 为当前测试构造 VolumeResource。
 func CreateVolumeResourceWithAccessModes(ctx context.Context, driver TestDriver, config *PerTestConfig, pattern TestPattern, testVolumeSizeRange e2evolume.SizeRange, accessModes []v1.PersistentVolumeAccessMode, vacName *string) *VolumeResource {
 	r := VolumeResource{
 		Config:  config,
@@ -74,7 +74,7 @@ func CreateVolumeResourceWithAccessModes(ctx context.Context, driver TestDriver,
 	f := config.Framework
 	cs := f.ClientSet
 
-	// Create volume for pre-provisioned volume tests
+	// 为预供给 volume 测试创建 volume
 	r.Volume = CreateVolume(ctx, driver, config, pattern.VolType)
 
 	switch pattern.VolType {
@@ -174,7 +174,7 @@ func createEphemeralVolumeSource(scName string, volMode v1.PersistentVolumeMode,
 	}
 }
 
-// CleanupResource cleans up VolumeResource
+// CleanupResource 清理 VolumeResource
 func (r *VolumeResource) CleanupResource(ctx context.Context) error {
 	f := r.Config.Framework
 	var cleanUpErrs []error
@@ -187,7 +187,7 @@ func (r *VolumeResource) CleanupResource(ctx context.Context) error {
 			}
 		case DynamicPV:
 			ginkgo.By("Deleting pvc")
-			// We only delete the PVC so that PV (and disk) can be cleaned up by dynamic provisioner
+			// 我们只删除 PVC，以便 PV（和磁盘）由动态供给器清理
 			if r.Pv != nil && r.Pv.Spec.PersistentVolumeReclaimPolicy != v1.PersistentVolumeReclaimDelete {
 				framework.Failf("Test framework does not currently support Dynamically Provisioned Persistent Volume %v specified with reclaim policy that isn't %v",
 					r.Pv.Name, v1.PersistentVolumeReclaimDelete)
@@ -196,7 +196,7 @@ func (r *VolumeResource) CleanupResource(ctx context.Context) error {
 				cs := f.ClientSet
 				pv := r.Pv
 				if pv == nil && r.Pvc.Name != "" {
-					// This happens for late binding. Check whether we have a volume now that we need to wait for.
+					// 这发生在延迟绑定场景中。检查现在是否有需要等待的 volume。
 					pvc, err := cs.CoreV1().PersistentVolumeClaims(r.Pvc.Namespace).Get(ctx, r.Pvc.Name, metav1.GetOptions{})
 					switch {
 					case err == nil:
@@ -207,8 +207,8 @@ func (r *VolumeResource) CleanupResource(ctx context.Context) error {
 							}
 						}
 					case apierrors.IsNotFound(err):
-						// Without the PVC, we cannot locate the corresponding PV. Let's
-						// hope that it is gone.
+						// 没有 PVC 就无法定位相应的 PV。只能
+						// 希望它已经消失。
 					default:
 						cleanUpErrs = append(cleanUpErrs, fmt.Errorf("failed to find PVC %v: %w", r.Pvc.Name, err))
 					}
@@ -239,7 +239,7 @@ func (r *VolumeResource) CleanupResource(ctx context.Context) error {
 		}
 	}
 
-	// Cleanup volume for pre-provisioned volume tests
+	// 清理预供给 volume 测试的 volume
 	if r.Volume != nil {
 		if err := storageutils.TryFunc(func() {
 			r.Volume.DeleteVolume(ctx)

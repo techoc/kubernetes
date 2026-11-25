@@ -92,9 +92,9 @@ var _ = SIGDescribe(framework.WithSerial(), "Pods status phase", func() {
 		gomega.Expect(sandboxes).To(gomega.HaveLen(1))
 		podSandboxID := sandboxes[0].Id
 
-		// We need to wait for the pod to be Running before simulating the node reboot,
-		// to avoid any unintended effects from the previous init container state.
-		// Simulate node reboot by restarting the kubelet and the pod sandbox.
+		// 模拟节点重启前需要等待 Pod 进入 Running 状态，
+		// 以避免先前 init container 状态带来的意外影响。
+		// 通过重启 kubelet 和 Pod sandbox 来模拟节点重启。
 		ginkgo.By("Stopping the kubelet")
 		startKubelet := mustStopKubelet(ctx, f)
 		gomega.Eventually(ctx, func() bool {

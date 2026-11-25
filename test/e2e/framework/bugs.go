@@ -33,12 +33,12 @@ var (
 	bugMutex sync.Mutex
 )
 
-// RecordBug stores information about a bug in the E2E suite source code that
-// cannot be reported through ginkgo.Fail because it was found outside of some
-// test, for example during test registration.
+// 因为它是在某个测试之外发现的，例如在测试注册期间。
+// 可以用它代替 panic。这样所有 bug 可以
+// 一起报告，而不是遇到第一个就失败。
 //
-// This can be used instead of raising a panic. Then all bugs can be reported
-// together instead of failing after the first one.
+// NewBug 通过跳过指定数量的栈帧来获取位置，创建一个新 bug。
+// 传入 0 将记录 NewBug 直接调用方的源码位置。
 func RecordBug(bug Bug) {
 	bugMutex.Lock()
 	defer bugMutex.Unlock()
@@ -52,16 +52,16 @@ type Bug struct {
 	Message    string
 }
 
-// NewBug creates a new bug with a location that is obtained by skipping a certain number
-// of stack frames. Passing zero will record the source code location of the direct caller
-// of NewBug.
+// FormatBugs 生成一份报告，包含之前通过 RecordBug 记录的所有 bug。
+// 如果有 bug，报告会连同错误一起返回。
+// 按文件名、行号、消息排序。为简单起见，
 func NewBug(message string, skip int) Bug {
 	location := types.NewCodeLocation(skip + 1)
 	return Bug{FileName: location.FileName, LineNumber: location.LineNumber, Message: message}
 }
 
-// FormatBugs produces a report that includes all bugs recorded earlier via
-// RecordBug. An error is returned with the report if there have been bugs.
+// 这里使用完整文件名，尽管输出可能使用
+// 相对路径。通常结果应相同，因为完整
 func FormatBugs() error {
 	bugMutex.Lock()
 	defer bugMutex.Unlock()
@@ -75,10 +75,10 @@ func FormatBugs() error {
 	if err != nil {
 		return fmt.Errorf("get current directory: %v", err)
 	}
-	// Sort by file name, line number, message. For the sake of simplicity
-	// this uses the full file name even though the output the may use a
-	// relative path. Usually the result should be the same because full
-	// paths will all have the same prefix.
+	// 路径都有相同前缀。
+	// 尽可能使用相对路径。
+	// ResourceTestcaseInterface 描述如何通过对其执行不同操作来测试某个特定 API endpoint
+	//
 	sort.Slice(bugs, func(i, j int) bool {
 		switch strings.Compare(bugs[i].FileName, bugs[j].FileName) {
 		case -1:
@@ -95,7 +95,7 @@ func FormatBugs() error {
 		return bugs[i].Message < bugs[j].Message
 	})
 	for _, bug := range bugs {
-		// Use relative paths, if possible.
+		// 创建或打补丁后的对象内容通过确保
 		path := bug.FileName
 		if wd != "" {
 			if relpath, err := filepath.Rel(wd, bug.FileName); err == nil {

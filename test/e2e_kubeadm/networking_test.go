@@ -35,33 +35,33 @@ var (
 	serviceSubnetInKubeadmConfig bool
 )
 
-// Define container for all the test specification aimed at verifying
-// that kubeadm configures the networking as expected.
-// in case you want to skip this test use SKIP=setup-networking
+// 为所有旨在验证以下内容的测试规格定义一个容器：
+// 验证 kubeadm 按预期配置了网络。
+// 如需跳过此测试，请使用 SKIP=setup-networking
 var _ = Describe("networking [setup-networking]", func() {
 
-	// Get an instance of the k8s test framework
+	// 获取 k8s 测试框架实例
 	f := framework.NewDefaultFramework("networking")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
-	// Tests in this container are not expected to create new objects in the cluster
-	// so we are disabling the creation of a namespace in order to get a faster execution
+	// 此容器中的测试预期不会在集群中创建新对象，
+	// 因此禁用命名空间创建以加快执行
 	f.SkipNamespaceCreation = true
 
-	// Tests are either single-stack (either IPv4 or IPv6 address)	or dual-stack
-	// We can determine this from the kubeadm config by looking at the number of
-	// IPs specified in networking.podSubnet
+	// 测试要么是单栈（IPv4 或 IPv6 地址），要么是双栈
+	// 我们可以通过查看 kubeadm config 中
+	// networking.podSubnet 指定的 IP 数量来判断
 	ginkgo.BeforeEach(func() {
-		// gets the ClusterConfiguration from the kubeadm kubeadm-config ConfigMap as a untyped map
+		// 从 kubeadm kubeadm-config ConfigMap 中以无类型 map 形式获取 ClusterConfiguration
 		cc := getClusterConfiguration(f.ClientSet)
-		// Extract the networking.podSubnet
-		// Please note that this test assumes that the user does not alter network configs
-		// using the extraArgs option.
+		// 提取 networking.podSubnet
+		// 请注意，此测试假定用户不会通过
+		// extraArgs 选项修改网络配置。
 		if _, ok := cc["networking"]; ok {
 			netCC := cc["networking"].(map[interface{}]interface{})
 			if ps, ok := netCC["podSubnet"]; ok {
-				// If podSubnet is not specified, podSubnet cases will be skipped.
-				// Note that kubeadm does not currently apply defaults for PodSubnet, so we skip.
+				// 如果未指定 podSubnet，将跳过 podSubnet 相关用例。
+				// 注意 kubeadm 目前不会为 PodSubnet 应用默认值，因此跳过。
 				podSubnetInKubeadmConfig = true
 				cidrs := strings.Split(ps.(string), ",")
 				if len(cidrs) > 1 {
@@ -69,7 +69,7 @@ var _ = Describe("networking [setup-networking]", func() {
 				}
 			}
 			if _, ok := netCC["serviceSubnet"]; ok {
-				// If serviceSubnet is not specified, serviceSubnet cases will be skipped.
+				// 如果未指定 serviceSubnet，将跳过 serviceSubnet 相关用例。
 				serviceSubnetInKubeadmConfig = true
 			}
 		}
@@ -88,7 +88,7 @@ var _ = Describe("networking [setup-networking]", func() {
 				if _, ok := cc["networking"]; ok {
 					netCC := cc["networking"].(map[interface{}]interface{})
 					if ps, ok := netCC["podSubnet"]; ok {
-						// Check that the pod CIDR allocated to the node(s) is within the kubeadm-config podCIDR.
+						// 检查分配给节点的 pod CIDR 是否在 kubeadm-config 的 podCIDR 范围内。
 						nodes, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 						framework.ExpectNoError(err, "error listing nodes")
 						for _, node := range nodes.Items {
@@ -112,8 +112,8 @@ var _ = Describe("networking [setup-networking]", func() {
 				if _, ok := cc["networking"]; ok {
 					netCC := cc["networking"].(map[interface{}]interface{})
 					if ss, ok := netCC["serviceSubnet"]; ok {
-						// Get the kubernetes service in the default namespace.
-						// Check that service CIDR allocated is within the serviceSubnet range.
+						// 获取默认命名空间中的 kubernetes service。
+						// 检查分配的 service CIDR 是否在 serviceSubnet 范围内。
 						svc, err := f.ClientSet.CoreV1().Services("default").Get(ctx, "kubernetes", metav1.GetOptions{})
 						framework.ExpectNoError(err, "error getting Service %q from namespace %q", "kubernetes", "default")
 						if !ipWithinSubnet(ss.(string), svc.Spec.ClusterIP) {
@@ -139,7 +139,7 @@ var _ = Describe("networking [setup-networking]", func() {
 					if ps, ok := netCC["podSubnet"]; ok {
 						nodes, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 						framework.ExpectNoError(err, "error listing nodes")
-						// Check that the pod CIDRs allocated to the node(s) are within the kubeadm-config podCIDR.
+						// 检查分配给节点的 pod CIDR 是否在 kubeadm-config 的 podCIDR 范围内。
 						var found bool
 						configCIDRs := strings.Split(ps.(string), ",")
 						for _, node := range nodes.Items {
@@ -163,14 +163,14 @@ var _ = Describe("networking [setup-networking]", func() {
 	})
 })
 
-// ipWithinSubnet returns true if an IP (targetIP) falls within the reference subnet (refIPNet)
+// 如果 IP（targetIP）落在参考子网（refIPNet）内，ipWithinSubnet 返回 true
 func ipWithinSubnet(refIPNet, targetIP string) bool {
 	_, rNet, _ := netutils.ParseCIDRSloppy(refIPNet)
 	tIP := netutils.ParseIPSloppy(targetIP)
 	return rNet.Contains(tIP)
 }
 
-// subnetWithinSubnet returns true if a subnet (targetNet) falls within the reference subnet (refIPNet)
+// 如果子网（targetNet）落在参考子网（refIPNet）内，subnetWithinSubnet 返回 true
 func subnetWithinSubnet(refIPNet, targetNet string) bool {
 	_, rNet, _ := netutils.ParseCIDRSloppy(refIPNet)
 	tNet, _, _ := netutils.ParseCIDRSloppy(targetNet)

@@ -108,13 +108,13 @@ var _ = SIGDescribe("ReplicaSet", func() {
 	/*
 		Release: v1.9
 		Testname: Replica Set, run basic image
-		Description: Create a ReplicaSet with a Pod and a single Container. Make sure that the Pod is running. Pod SHOULD send a valid response when queried.
+		Description: 创建一个带一个 Pod 和单个容器的 ReplicaSet。确保 Pod 正在运行。查询时 Pod SHOULD 返回有效响应。
 	*/
 	framework.ConformanceIt("should serve a basic image on each replica with a public image", func(ctx context.Context) {
 		testReplicaSetServeImageOrFail(ctx, f, "basic", imageutils.GetE2EImage(imageutils.Agnhost))
 	})
 
-	f.It("should serve a basic image on each replica with a private image", f.WithProvider("gce") /* requires private images */, func(ctx context.Context) {
+	f.It("should serve a basic image on each replica with a private image", f.WithProvider("gce") /* 需要私有镜像 */, func(ctx context.Context) {
 		privateimage := imageutils.GetConfig(imageutils.AgnhostPrivate)
 		testReplicaSetServeImageOrFail(ctx, f, "private", privateimage.GetE2EImage())
 	})
@@ -126,7 +126,7 @@ var _ = SIGDescribe("ReplicaSet", func() {
 	/*
 		Release: v1.13
 		Testname: Replica Set, adopt matching pods and release non matching pods
-		Description: A Pod is created, then a Replica Set (RS) whose label selector will match the Pod. The RS MUST either adopt the Pod or delete and replace it with a new Pod. When the labels on one of the Pods owned by the RS change to no longer match the RS's label selector, the RS MUST release the Pod and update the Pod's owner references
+		Description: 先创建一个 Pod，再创建一个标签选择器与该 Pod 匹配的 Replica Set（RS）。RS MUST 收养该 Pod，或删除并用新 Pod 替换。当 RS 拥有的某个 Pod 的标签不再匹配 RS 的标签选择器时，RS MUST 释放该 Pod 并更新其 owner reference。
 	*/
 	framework.ConformanceIt("should adopt matching pods on creation and release no longer matching pods", func(ctx context.Context) {
 		testRSAdoptMatchingAndReleaseNotMatching(ctx, f)
@@ -135,10 +135,9 @@ var _ = SIGDescribe("ReplicaSet", func() {
 	/*
 		Release: v1.21
 		Testname: ReplicaSet, completes the scaling of a ReplicaSet subresource
-		Description: Create a ReplicaSet (RS) with a single Pod. The Pod MUST be verified
-		that it is running. The RS MUST get and verify the scale subresource count.
-		The RS MUST update and verify the scale subresource. The RS MUST patch and verify
-		a scale subresource.
+		Description: 创建一个只有一个 Pod 的 ReplicaSet（RS）。必须验证 Pod
+		正在运行。RS 必须获取并验证 scale 子资源的计数。
+		RS 必须更新并验证 scale 子资源。RS 必须给 scale 子资源打补丁并验证。
 	*/
 	framework.ConformanceIt("Replicaset should have a working scale subresource", func(ctx context.Context) {
 		testRSScaleSubresources(ctx, f)
@@ -147,9 +146,9 @@ var _ = SIGDescribe("ReplicaSet", func() {
 	/*
 		Release: v1.21
 		Testname: ReplicaSet, is created, Replaced and Patched
-		Description: Create a ReplicaSet (RS) with a single Pod. The Pod MUST be verified
-		that it is running. The RS MUST scale to two replicas and verify the scale count
-		The RS MUST be patched and verify that patch succeeded.
+		Description: 创建一个只有一个 Pod 的 ReplicaSet（RS）。必须验证 Pod
+		正在运行。RS 必须缩容/扩容到两个副本并验证副本数。
+		RS 必须被打补丁并验证补丁成功。
 	*/
 	framework.ConformanceIt("Replace and Patch tests", func(ctx context.Context) {
 		testRSLifeCycle(ctx, f)
@@ -158,9 +157,9 @@ var _ = SIGDescribe("ReplicaSet", func() {
 	/*
 		Release: v1.22
 		Testname: ReplicaSet, list and delete a collection of ReplicaSets
-		Description: When a ReplicaSet is created it MUST succeed. It
-		MUST succeed when listing ReplicaSets via a label selector. It
-		MUST succeed when deleting the ReplicaSet via deleteCollection.
+		Description: 创建 ReplicaSet 必须成功。通过标签选择器列出
+		ReplicaSet 必须成功。通过 deleteCollection 删除
+		ReplicaSet 必须成功。
 	*/
 	framework.ConformanceIt("should list and delete a collection of ReplicaSets", func(ctx context.Context) {
 		listRSDeleteCollection(ctx, f)
@@ -169,38 +168,38 @@ var _ = SIGDescribe("ReplicaSet", func() {
 
 	/*	Release: v1.22
 		Testname: ReplicaSet, status sub-resource
-		Description: Create a ReplicaSet resource which MUST succeed.
-		Attempt to read, update and patch its status sub-resource; all
-		mutating sub-resource operations MUST be visible to subsequent reads.
+		Description: 创建 ReplicaSet 资源必须成功。
+		尝试读取、更新和打补丁其 status 子资源；所有
+		修改子资源的操作必须能被后续读取看到。
 	*/
 	framework.ConformanceIt("should validate Replicaset Status endpoints", func(ctx context.Context) {
 		testRSStatus(ctx, f)
 	})
 })
 
-// A basic test to check the deployment of an image using a ReplicaSet. The
-// image serves its hostname which is checked for each replica.
+// 使用 ReplicaSet 检查镜像部署的基本测试。
+// 镜像提供其 hostname，每个副本都会检查。
 func testReplicaSetServeImageOrFail(ctx context.Context, f *framework.Framework, test string, image string) {
 	name := "my-hostname-" + test + "-" + string(uuid.NewUUID())
 	rsLabels := map[string]string{"name": name}
 	replicas := int32(1)
 
-	// Create a ReplicaSet for a service that serves its hostname.
-	// The source for the Docker container kubernetes/serve_hostname is
-	// in contrib/for-demos/serve_hostname
+	// 为一个提供 hostname 的服务创建 ReplicaSet。
+	// 检查新 RC 的 Pod 是否已创建。
+	// TODO: 也许可以改为只检查 owner reference。
 	framework.Logf("Creating ReplicaSet %s", name)
 	newRS := newRS(name, replicas, rsLabels, name, image, []string{"serve-hostname"})
 	newRS.Spec.Template.Spec.Containers[0].Ports = []v1.ContainerPort{{ContainerPort: 9376}}
 	_, err := f.ClientSet.AppsV1().ReplicaSets(f.Namespace.Name).Create(ctx, newRS, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Check that pods for the new RS were created.
-	// TODO: Maybe switch PodsCreated to just check owner references.
+	// 检查新 RS 的 Pod 是否已创建。
+	// 未运行的 Pod 会导致此测试超时。
 	pods, err := e2epod.PodsCreatedByLabel(ctx, f.ClientSet, f.Namespace.Name, name, replicas, labels.SelectorFromSet(rsLabels))
 	framework.ExpectNoError(err)
 
-	// Wait for the pods to enter the running state. Waiting loops until the pods
-	// are running so non-running pods cause a timeout for this test.
+	// 等待 Pod 进入运行态。循环等待直到 Pod 运行，
+	// 验证有服务在监听。
 	framework.Logf("Ensuring a pod for ReplicaSet %q is running", name)
 	running := int32(0)
 	for _, pod := range pods.Items {
@@ -221,18 +220,18 @@ func testReplicaSetServeImageOrFail(ctx context.Context, f *framework.Framework,
 		running++
 	}
 
-	// Sanity check
+	// 1. 创建一个配额，将当前命名空间中的 Pod 数限制为 2。
 	gomega.Expect(running).To(gomega.Equal(replicas), "unexpected number of running pods: %+v", pods.Items)
 
-	// Verify that something is listening.
+	// 2. 创建一个想运行 3 个 Pod 的 replication controller。
 	framework.Logf("Trying to dial the pod")
 	framework.ExpectNoError(e2epod.WaitForPodsResponding(ctx, f.ClientSet, f.Namespace.Name, name, labels.SelectorFromSet(rsLabels), true, 2*time.Minute, pods))
 }
 
-// 1. Create a quota restricting pods in the current namespace to 2.
-// 2. Create a replica set that wants to run 3 pods.
-// 3. Check replica set conditions for a ReplicaFailure condition.
-// 4. Scale down the replica set and observe the condition is gone.
+// 3. 检查 replication controller 的 conditions 中是否有 ReplicaFailure。
+// 2. 创建一个想运行 3 个 Pod 的 replica set。
+// 3. 检查 replica set 的 conditions 中是否有 ReplicaFailure。
+// 4. 缩容 replica set 并观察 condition 消失。
 func testReplicaSetConditionCheck(ctx context.Context, f *framework.Framework) {
 	c := f.ClientSet
 	namespace := f.Namespace.Name
@@ -344,18 +343,18 @@ func testRSAdoptMatchingAndReleaseNotMatching(ctx context.Context, f *framework.
 	ginkgo.By("Then the orphan pod is adopted")
 	err = wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		p2, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, p.Name, metav1.GetOptions{})
-		// The Pod p should either be adopted or deleted by the ReplicaSet
+		// Pod p 应被 ReplicaSet 收养或删除
 		if apierrors.IsNotFound(err) {
 			return true, nil
 		}
 		framework.ExpectNoError(err)
 		for _, owner := range p2.OwnerReferences {
 			if *owner.Controller && owner.UID == rs.UID {
-				// pod adopted
+				// pod 仍属于 replication controller
 				return true, nil
 			}
 		}
-		// pod still not adopted
+		// pod 已释放
 		return false, nil
 	})
 	framework.ExpectNoError(err)
@@ -387,11 +386,11 @@ func testRSAdoptMatchingAndReleaseNotMatching(ctx context.Context, f *framework.
 		framework.ExpectNoError(err)
 		for _, owner := range p2.OwnerReferences {
 			if *owner.Controller && owner.UID == rs.UID {
-				// pod still belonging to the replicaset
+				// pod 仍属于 replicaset
 				return false, nil
 			}
 		}
-		// pod already released
+		// 1. 获取最新资源
 		return true, nil
 	})
 	framework.ExpectNoError(err)
@@ -401,7 +400,7 @@ func testRSScaleSubresources(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	c := f.ClientSet
 
-	// Create webserver pods.
+	// 创建 webserver Pod。
 	podName := "sample-pod"
 	rsPodLabels := map[string]string{
 		"name": podName,
@@ -415,7 +414,7 @@ func testRSScaleSubresources(ctx context.Context, f *framework.Framework) {
 	createdRS, err := c.AppsV1().ReplicaSets(ns).Create(ctx, rs, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Verify that the required pods have come up.
+	// 验证所需的 Pod 都已启动。
 	err = e2ereplicaset.WaitForReplicaSetTargetAvailableReplicas(ctx, c, createdRS, replicas)
 	framework.ExpectNoError(err, "error in waiting for pods to come up: %s", err)
 
@@ -428,7 +427,7 @@ func testRSScaleSubresources(ctx context.Context, f *framework.Framework) {
 	gomega.Expect(scale.Status.Replicas).To(gomega.Equal(int32(1)))
 
 	ginkgo.By("updating a scale subresource")
-	scale.ResourceVersion = "" // indicate the scale update should be unconditional
+	scale.ResourceVersion = "" // 表示 scale 更新应无条件执行
 	scale.Spec.Replicas = 2
 	scaleResult, err := c.AppsV1().ReplicaSets(ns).UpdateScale(ctx, rsName, scale, metav1.UpdateOptions{})
 	if err != nil {
@@ -444,8 +443,8 @@ func testRSScaleSubresources(ctx context.Context, f *framework.Framework) {
 	gomega.Expect(*(rs.Spec.Replicas)).To(gomega.Equal(int32(2)))
 
 	ginkgo.By("Patch a scale subresource")
-	scale.ResourceVersion = "" // indicate the scale update should be unconditional
-	scale.Spec.Replicas = 4    // should be 2 after "UpdateScale" operation, now Patch to 4
+	scale.ResourceVersion = "" // 表示 scale 更新应无条件执行
+	scale.Spec.Replicas = 4    // "UpdateScale" 操作后应为 2，现在 Patch 为 4
 	rsScalePatchPayload, err := json.Marshal(autoscalingv1.Scale{
 		Spec: autoscalingv1.ScaleSpec{
 			Replicas: scale.Spec.Replicas,
@@ -461,13 +460,13 @@ func testRSScaleSubresources(ctx context.Context, f *framework.Framework) {
 	gomega.Expect(*(rs.Spec.Replicas)).To(gomega.Equal(int32(4)), "replicaset should have 4 replicas")
 }
 
-// ReplicaSet Replace and Patch tests
+// ReplicaSet Replace 和 Patch 测试
 func testRSLifeCycle(ctx context.Context, f *framework.Framework) {
 	ns := f.Namespace.Name
 	c := f.ClientSet
 	zero := int64(0)
 
-	// Create webserver pods.
+	// 创建 webserver Pod。
 	podName := "sample-pod"
 	rsPodLabels := map[string]string{
 		"name": podName,
@@ -495,11 +494,11 @@ func testRSLifeCycle(ctx context.Context, f *framework.Framework) {
 	framework.ExpectNoError(err)
 	gomega.Expect(createdRS).To(apimachineryutils.HaveValidResourceVersion())
 
-	// Verify that the required pods have come up.
+	// 验证所需的 Pod 都已启动。
 	err = e2epod.VerifyPodsRunning(ctx, c, ns, podName, labels.SelectorFromSet(map[string]string{"name": podName}), false, replicas)
 	framework.ExpectNoError(err, "Failed to create pods: %s", err)
 
-	// Scale the ReplicaSet
+	// 扩缩容 ReplicaSet
 	ginkgo.By(fmt.Sprintf("Scaling up %q replicaset", rsName))
 	_, err = e2ereplicaset.UpdateReplicaSetWithRetries(c, ns, rsName, func(update *appsv1.ReplicaSet) {
 		x := int32(2)
@@ -507,7 +506,7 @@ func testRSLifeCycle(ctx context.Context, f *framework.Framework) {
 	})
 	framework.ExpectNoError(err, "ReplicaSet fail to scale to %q replicasets")
 
-	// Patch the PeplicaSet
+	// 给 PeplicaSet 打补丁
 	ginkgo.By("patching the ReplicaSet")
 	rsPatch, err := json.Marshal(map[string]interface{}{
 		"metadata": map[string]interface{}{
@@ -557,7 +556,7 @@ func testRSLifeCycle(ctx context.Context, f *framework.Framework) {
 	framework.ExpectNoError(err, "failed to see replicas of %v in namespace %v scale to requested amount of %v", rs.Name, ns, rsPatchReplicas)
 }
 
-// List and DeleteCollection operations
+// List 和 DeleteCollection 操作
 func listRSDeleteCollection(ctx context.Context, f *framework.Framework) {
 
 	ns := f.Namespace.Name

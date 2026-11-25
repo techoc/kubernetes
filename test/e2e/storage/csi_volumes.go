@@ -24,14 +24,14 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 )
 
-// List of testDrivers to be executed in below loop
+// 在下面循环中要执行的 testDrivers 列表
 var csiTestDrivers = []func() storageframework.TestDriver{
 	drivers.InitHostPathCSIDriver,
 	drivers.InitGcePDCSIDriver,
-	// Don't run tests with mock driver (drivers.InitMockCSIDriver), it does not provide persistent storage.
+	// 不使用 mock driver（drivers.InitMockCSIDriver）运行测试，它不提供持久存储。
 }
 
-// This executes testSuites for csi volumes.
+// 这会为 csi volume 执行 testSuites。
 var _ = utils.SIGDescribe("CSI Volumes", func() {
 	for _, initDriver := range csiTestDrivers {
 		curDriver := initDriver()

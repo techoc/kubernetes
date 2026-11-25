@@ -47,18 +47,18 @@ func getTestEmbeddedSource() *EmbeddedFileSource {
 func TestEmbeddedFileSource(t *testing.T) {
 	s := getTestEmbeddedSource()
 
-	// read a file which exists and compare the contents
+	// 读取一个存在的文件并比较其内容
 	b, err := s.ReadTestFile(fooPath)
 
 	require.NoError(t, err)
 	assert.Equal(t, fooContents, string(b))
 
-	// read a non-existent file and ensure that the returned value is empty and error is nil
-	// Note: this is done so that the next file source can be tried by the caller
+	// 读取一个不存在的文件，确保返回值为空且 error 为 nil
+	// 注意：这样做是为了让调用方可以尝试下一个文件来源
 	b, err = s.ReadTestFile(notExistsPath)
 	require.NoError(t, err)
 	assert.Empty(t, b)
 
-	// describing the test filesystem should list down all files
+	// 描述测试文件系统时应列出所有文件
 	assert.Equal(t, expectedDescription, s.DescribeFiles())
 }

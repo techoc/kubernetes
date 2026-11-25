@@ -64,24 +64,20 @@ var _ = SIGDescribe("ReplicationController", func() {
 		dc = f.DynamicClient
 	})
 
-	/*
-		Release: v1.9
-		Testname: Replication Controller, run basic image
-		Description: Replication Controller MUST create a Pod with Basic Image and MUST run the service with the provided image. Image MUST be tested by dialing into the service listening through TCP, UDP and HTTP.
-	*/
+	/* 需要私有镜像 */
 	framework.ConformanceIt("should serve a basic image on each replica with a public image", func(ctx context.Context) {
 		TestReplicationControllerServeImageOrFail(ctx, f, "basic", imageutils.GetE2EImage(imageutils.Agnhost))
 	})
 
-	f.It("should serve a basic image on each replica with a private image", f.WithProvider("gce") /* requires private images */, func(ctx context.Context) {
+	f.It("should serve a basic image on each replica with a private image", f.WithProvider("gce") /* 需要私有镜像 */, func(ctx context.Context) {
 		privateimage := imageutils.GetConfig(imageutils.AgnhostPrivate)
 		TestReplicationControllerServeImageOrFail(ctx, f, "private", privateimage.GetE2EImage())
 	})
 
 	/*
-		Release: v1.15
-		Testname: Replication Controller, check for issues like exceeding allocated quota
-		Description: Attempt to create a Replication Controller with pods exceeding the namespace quota. The creation MUST fail
+		Release: v1.13
+		Testname: Replication Controller, adopt matching pods
+		Description: 先创建一个无属主的 Pod，再创建一个标签选择器与该 Pod 匹配的 Replication Controller（RC）。RC 必须收养该 Pod，或删除并用新 Pod 替换它
 	*/
 	framework.ConformanceIt("should surface a failure condition on a common issue like exceeded quota", func(ctx context.Context) {
 		testReplicationControllerConditionCheck(ctx, f)
@@ -89,17 +85,17 @@ var _ = SIGDescribe("ReplicationController", func() {
 
 	/*
 		Release: v1.13
-		Testname: Replication Controller, adopt matching pods
-		Description: An ownerless Pod is created, then a Replication Controller (RC) is created whose label selector will match the Pod. The RC MUST either adopt the Pod or delete and replace it with a new Pod
+		Testname: Replication Controller, release pods
+		Description: 创建 Replication Controller（RC）及其 Pod。当某个 Pod 的标签不再匹配 RC 的标签选择器时，RC 必须释放该 Pod 并更新其 owner reference。
 	*/
 	framework.ConformanceIt("should adopt matching pods on creation", func(ctx context.Context) {
 		testRCAdoptMatchingOrphans(ctx, f)
 	})
 
 	/*
-		Release: v1.13
-		Testname: Replication Controller, release pods
-		Description: A Replication Controller (RC) is created, and its Pods are created. When the labels on one of the Pods change to no longer match the RC's label selector, the RC MUST release the Pod and update the Pod's owner references.
+		Release: v1.20
+		Testname: Replication Controller, lifecycle
+		Description: 创建、读取、打补丁并删除 Replication Controller（RC），每步都要验证。
 	*/
 	framework.ConformanceIt("should release no longer matching pods", func(ctx context.Context) {
 		testRCReleaseControlledNotMatching(ctx, f)
@@ -108,7 +104,7 @@ var _ = SIGDescribe("ReplicationController", func() {
 	/*
 		Release: v1.20
 		Testname: Replication Controller, lifecycle
-		Description: A Replication Controller (RC) is created, read, patched, and deleted with verification.
+		Description: 创建 Replication Controller（RC）并读取、打补丁、删除，每步都要验证。
 	*/
 	framework.ConformanceIt("should test the lifecycle of a ReplicationController", func(ctx context.Context) {
 		testRcName := "rc-test"
@@ -203,7 +199,7 @@ var _ = SIGDescribe("ReplicationController", func() {
 				},
 			})
 			framework.ExpectNoError(err, "failed to marshal json of replicationcontroller label patch")
-			// Patch the ReplicationController
+			// 给 ReplicationController 打补丁
 			ginkgo.By("patching ReplicationController")
 			testRcPatched, err := f.ClientSet.CoreV1().ReplicationControllers(testRcNamespace).Patch(ctx, testRcName, types.StrategicMergePatchType, []byte(rcLabelPatchPayload), metav1.PatchOptions{})
 			framework.ExpectNoError(err, "Failed to patch ReplicationController")
@@ -234,7 +230,7 @@ var _ = SIGDescribe("ReplicationController", func() {
 			})
 			framework.ExpectNoError(err, "Failed to marshal JSON of ReplicationController label patch")
 
-			// Patch the ReplicationController's status
+			// 给 ReplicationController 的 scale 打补丁
 			ginkgo.By("patching ReplicationController status")
 			rcStatus, err := f.ClientSet.CoreV1().ReplicationControllers(testRcNamespace).Patch(ctx, testRcName, types.StrategicMergePatchType, []byte(rcStatusPatchPayload), metav1.PatchOptions{}, "status")
 			framework.ExpectNoError(err, "Failed to patch ReplicationControllerStatus")
@@ -293,7 +289,7 @@ var _ = SIGDescribe("ReplicationController", func() {
 			})
 			framework.ExpectNoError(err, "Failed to marshal json of replicationcontroller label patch")
 
-			// Patch the ReplicationController's scale
+			// 获取 ReplicationController
 			ginkgo.By("patching ReplicationController scale")
 			_, err = f.ClientSet.CoreV1().ReplicationControllers(testRcNamespace).Patch(ctx, testRcName, types.StrategicMergePatchType, []byte(rcScalePatchPayload), metav1.PatchOptions{}, "scale")
 			framework.ExpectNoError(err, "Failed to patch ReplicationControllerScale")
@@ -337,7 +333,7 @@ var _ = SIGDescribe("ReplicationController", func() {
 				framework.Fail("Failed to find updated ready replica count")
 			}
 
-			// Get the ReplicationController
+			// 替换 ReplicationController 的 status
 			ginkgo.By("fetching ReplicationController; ensuring that it's patched")
 			rc, err := f.ClientSet.CoreV1().ReplicationControllers(testRcNamespace).Get(ctx, testRcName, metav1.GetOptions{})
 			framework.ExpectNoError(err, "failed to fetch ReplicationController")
@@ -347,7 +343,13 @@ var _ = SIGDescribe("ReplicationController", func() {
 			rcStatusUpdatePayload.Status.AvailableReplicas = 1
 			rcStatusUpdatePayload.Status.ReadyReplicas = 1
 
-			// Replace the ReplicationController's status
+			/*
+				Release: v1.26
+				Testname: Replication Controller, get and update ReplicationController scale
+				Description: 创建 ReplicationController 必须成功。读取
+				ReplicationController 的 scale 必须成功。更新
+				ReplicationController 的 scale 必须成功，且字段必须等于新值。
+			*/
 			ginkgo.By("updating ReplicationController status")
 			_, err = f.ClientSet.CoreV1().ReplicationControllers(testRcNamespace).UpdateStatus(ctx, rcStatusUpdatePayload, metav1.UpdateOptions{})
 			framework.ExpectNoError(err, "failed to update ReplicationControllerStatus")
@@ -420,9 +422,9 @@ var _ = SIGDescribe("ReplicationController", func() {
 	/*
 		Release: v1.26
 		Testname: Replication Controller, get and update ReplicationController scale
-		Description: A ReplicationController is created which MUST succeed. It MUST
-		succeed when reading the ReplicationController scale. When updating the
-		ReplicationController scale it MUST succeed and the field MUST equal the new value.
+		Description: 创建 ReplicationController 必须成功。读取
+		ReplicationController 的 scale 必须成功。更新 ReplicationController 的
+		scale 必须成功，且字段必须等于新值。
 	*/
 	framework.ConformanceIt("should get and update a ReplicationController scale", func(ctx context.Context) {
 		rcClient := f.ClientSet.CoreV1().ReplicationControllers(ns)
@@ -444,7 +446,7 @@ var _ = SIGDescribe("ReplicationController", func() {
 		gomega.Expect(scale.Status.Replicas).To(gomega.Equal(initialRCReplicaCount), "Failed to get the current replica count")
 
 		ginkgo.By("Updating a scale subresource")
-		scale.ResourceVersion = "" // indicate the scale update should be unconditional
+		scale.ResourceVersion = "" // 表示 scale 更新应无条件执行
 		scale.Spec.Replicas = expectedRCReplicaCount
 		_, err = rcClient.UpdateScale(ctx, rcName, scale, metav1.UpdateOptions{})
 		framework.ExpectNoError(err, "Failed to update scale subresource: %v", err)
@@ -482,31 +484,31 @@ func newRC(rsName string, replicas int32, rcPodLabels map[string]string, imageNa
 	}
 }
 
-// TestReplicationControllerServeImageOrFail is a basic test to check
-// the deployment of an image using a replication controller.
-// The image serves its hostname which is checked for each replica.
+// 使用 replication controller 部署镜像的情况。
+// 镜像提供其 hostname，每个副本都会检查。
+// 为一个提供 hostname 的服务创建 replication controller。
 func TestReplicationControllerServeImageOrFail(ctx context.Context, f *framework.Framework, test string, image string) {
 	name := "my-hostname-" + test + "-" + string(uuid.NewUUID())
 	rcLabels := map[string]string{"name": name}
 	replicas := int32(1)
 
-	// Create a replication controller for a service
-	// that serves its hostname.
-	// The source for the Docker container kubernetes/serve_hostname is
-	// in contrib/for-demos/serve_hostname
+	// Docker 镜像 kubernetes/serve_hostname 的源码位于
+	// contrib/for-demos/serve_hostname
+	// 检查新 RC 的 Pod 是否已创建。
+	// TODO: 也许可以改为只检查 owner reference。
 	ginkgo.By(fmt.Sprintf("Creating replication controller %s", name))
 	newRC := newRC(name, replicas, rcLabels, name, image, []string{"serve-hostname"})
 	newRC.Spec.Template.Spec.Containers[0].Ports = []v1.ContainerPort{{ContainerPort: 9376}}
 	_, err := f.ClientSet.CoreV1().ReplicationControllers(f.Namespace.Name).Create(ctx, newRC, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	// Check that pods for the new RC were created.
-	// TODO: Maybe switch PodsCreated to just check owner references.
+	// 等待 Pod 进入运行态并 Ready。循环等待直到 Pod 运行，
+	// 未运行的 Pod 会导致此测试超时。
 	pods, err := e2epod.PodsCreatedByLabel(ctx, f.ClientSet, f.Namespace.Name, name, replicas, labels.SelectorFromSet(rcLabels))
 	framework.ExpectNoError(err)
 
-	// Wait for the pods to enter the running state and are Ready. Waiting loops until the pods
-	// are running so non-running pods cause a timeout for this test.
+	// 健全性检查
+	// 验证有服务在监听。
 	framework.Logf("Ensuring all pods for ReplicationController %q are running", name)
 	running := int32(0)
 	for _, pod := range pods.Items {
@@ -527,18 +529,18 @@ func TestReplicationControllerServeImageOrFail(ctx context.Context, f *framework
 		running++
 	}
 
-	// Sanity check
+	// 1. 创建一个配额，将当前命名空间中的 Pod 数限制为 2。
 	gomega.Expect(running).To(gomega.Equal(replicas), "unexpected number of running and ready pods: %+v", pods.Items)
 
-	// Verify that something is listening.
+	// 2. 创建一个想运行 3 个 Pod 的 replication controller。
 	framework.Logf("Trying to dial the pod")
 	framework.ExpectNoError(e2epod.WaitForPodsResponding(ctx, f.ClientSet, f.Namespace.Name, name, labels.SelectorFromSet(rcLabels), true, 2*time.Minute, pods))
 }
 
-// 1. Create a quota restricting pods in the current namespace to 2.
-// 2. Create a replication controller that wants to run 3 pods.
-// 3. Check replication controller conditions for a ReplicaFailure condition.
-// 4. Relax quota or scale down the controller and observe the condition is gone.
+// 3. 检查 replication controller 的 conditions 中是否有 ReplicaFailure。
+// 4. 放宽配额或缩容控制器，观察该 condition 消失。
+// Pod p 应被 RC 收养或删除
+// pod 已收养
 func testReplicationControllerConditionCheck(ctx context.Context, f *framework.Framework) {
 	c := f.ClientSet
 	namespace := f.Namespace.Name
@@ -650,18 +652,18 @@ func testRCAdoptMatchingOrphans(ctx context.Context, f *framework.Framework) {
 	ginkgo.By("Then the orphan pod is adopted")
 	err = wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		p2, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, p.Name, metav1.GetOptions{})
-		// The Pod p should either be adopted or deleted by the RC
+		// pod 仍未收养
 		if apierrors.IsNotFound(err) {
 			return true, nil
 		}
 		framework.ExpectNoError(err)
 		for _, owner := range p2.OwnerReferences {
 			if *owner.Controller && owner.UID == rc.UID {
-				// pod adopted
+				// pod 仍属于 replication controller
 				return true, nil
 			}
 		}
-		// pod still not adopted
+		// pod 已释放
 		return false, nil
 	})
 	framework.ExpectNoError(err)
@@ -704,11 +706,11 @@ func testRCReleaseControlledNotMatching(ctx context.Context, f *framework.Framew
 		framework.ExpectNoError(err)
 		for _, owner := range p2.OwnerReferences {
 			if *owner.Controller && owner.UID == rc.UID {
-				// pod still belonging to the replication controller
+				// updateReplicationControllerWithRetries 在冲突时按以下步骤重试更新给定的 rc：
 				return false, nil
 			}
 		}
-		// pod already released
+		// 1. 获取最新资源
 		return true, nil
 	})
 	framework.ExpectNoError(err)
@@ -716,10 +718,10 @@ func testRCReleaseControlledNotMatching(ctx context.Context, f *framework.Framew
 
 type updateRcFunc func(d *v1.ReplicationController)
 
-// updateReplicationControllerWithRetries retries updating the given rc on conflict with the following steps:
-// 1. Get latest resource
+// 3. 更新资源
+// 应用更新，然后尝试推送到 apiserver。
 // 2. applyUpdate
-// 3. Update the resource
+// 从 watch 中读取事件，直到每个给定条件都满足，然后返回最后
 func updateReplicationControllerWithRetries(ctx context.Context, c clientset.Interface, namespace, name string, applyUpdate updateRcFunc) (*v1.ReplicationController, error) {
 	var rc *v1.ReplicationController
 	var updateErr error
@@ -728,7 +730,7 @@ func updateReplicationControllerWithRetries(ctx context.Context, c clientset.Int
 		if rc, err = c.CoreV1().ReplicationControllers(namespace).Get(ctx, name, metav1.GetOptions{}); err != nil {
 			return false, err
 		}
-		// Apply the update, then attempt to push it to the apiserver.
+		// 遇到的事件。第一个返回错误的条件会终止 watch（事件也会一并返回）。
 		applyUpdate(rc)
 		if rc, err = c.CoreV1().ReplicationControllers(namespace).Update(ctx, rc, metav1.UpdateOptions{}); err == nil {
 			framework.Logf("Updating replication controller %q", name)
@@ -744,18 +746,18 @@ func updateReplicationControllerWithRetries(ctx context.Context, c clientset.Int
 }
 
 // watchUntilWithoutRetry ...
-// reads items from the watch until each provided condition succeeds, and then returns the last watch
-// encountered. The first condition that returns an error terminates the watch (and the event is also returned).
-// If no event has been received, the returned event will be nil.
-// Conditions are satisfied sequentially so as to provide a useful primitive for higher level composition.
-// Waits until context deadline or until context is canceled.
+// 如果未收到任何事件，返回的事件将为 nil。
+// 条件按顺序满足，以便为更高层的组合提供有用的原语。
+// 等待直到 context 超时或被取消。
+// 与 watchtools.UntilWithoutRetry 相同，只是不关闭 watch —— 因为要与 WatchEventSequenceVerifier 配合使用，需要持续收集 watch 事件。
+// 用上一个事件检查下一个条件，提前结束等待下一个 watch 事件
 //
-// the same as watchtools.UntilWithoutRetry, just without the closing of the watch - as for the purpose of being paired with WatchEventSequenceVerifier, the watch is needed for continual watch event collection
+// 与 watchtools.UntilWithoutRetry 相同，只是不关闭 watch —— 因为要与 WatchEventSequenceVerifier 配合使用，需要持续收集 watch 事件。
 func watchUntilWithoutRetry(ctx context.Context, watcher watch.Interface, conditions ...watchtools.ConditionFunc) (*watch.Event, error) {
 	ch := watcher.ResultChan()
 	var lastEvent *watch.Event
 	for _, condition := range conditions {
-		// check the next condition against the previous event and short circuit waiting for the next watch
+		// 用上一个事件检查下一个条件，提前结束等待下一个 watch 事件
 		if lastEvent != nil {
 			done, err := condition(*lastEvent)
 			if err != nil {

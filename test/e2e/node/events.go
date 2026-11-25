@@ -92,7 +92,7 @@ var _ = SIGDescribe("Events", func() {
 		}
 		framework.Logf("%+v\n", podWithUID)
 		var events *v1.EventList
-		// Check for scheduler event about the pod.
+		// 检查有关该 Pod 的 scheduler 事件。
 		ginkgo.By("checking for scheduler event about the pod")
 		framework.ExpectNoError(wait.Poll(framework.Poll, 5*time.Minute, func() (bool, error) {
 			selector := fields.Set{
@@ -112,7 +112,7 @@ var _ = SIGDescribe("Events", func() {
 			}
 			return false, nil
 		}))
-		// Check for kubelet event about the pod.
+		// 检查有关该 Pod 的 kubelet 事件。
 		ginkgo.By("checking for kubelet event about the pod")
 		framework.ExpectNoError(wait.Poll(framework.Poll, 5*time.Minute, func() (bool, error) {
 			selector := fields.Set{

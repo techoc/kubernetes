@@ -152,18 +152,18 @@ func createWindowsBasicStaticPod(dir, name, namespace string) error {
 	return nil
 }
 
-// staticPodPath returns the path for a static pod manifest file.
+// staticPodPath 返回静态 Pod manifest 文件的路径。
 func staticPodPath(dir, name, namespace string) string {
 	return filepath.Join(dir, namespace+"-"+name+".yaml")
 }
 
-// deleteStaticPod removes the static pod manifest file.
+// deleteStaticPod 删除静态 Pod manifest 文件。
 func deleteStaticPod(dir, name, namespace string) error {
 	file := staticPodPath(dir, name, namespace)
 	return os.Remove(file)
 }
 
-// getPodFromStandaloneKubelet queries the kubelet's read-only port to find a pod by name.
+// getPodFromStandaloneKubelet 查询 kubelet 的只读端口，按名称查找 Pod。
 func getPodFromStandaloneKubelet(ctx context.Context, podNamespace string, podName string) (*v1.Pod, error) {
 	endpoint := fmt.Sprintf("http://127.0.0.1:%d/pods", ports.KubeletReadOnlyPort)
 	tr := &http.Transport{
@@ -198,7 +198,7 @@ func getPodFromStandaloneKubelet(ctx context.Context, podNamespace string, podNa
 	}
 
 	for _, p := range pods.Items {
-		// Static pods have a node name suffix so comparing as substring
+		// 静态 Pod 的名称带有节点名后缀，因此按子串比较
 		if strings.Contains(p.Name, podName) && strings.Contains(p.Namespace, podNamespace) {
 			return &p, nil
 		}
@@ -207,7 +207,7 @@ func getPodFromStandaloneKubelet(ctx context.Context, podNamespace string, podNa
 	return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, podName)
 }
 
-// decodePods decodes the JSON response from the kubelet /pods endpoint.
+// decodePods 解码 kubelet /pods endpoint 返回的 JSON。
 func decodePods(respBody []byte) (*v1.PodList, error) {
 	var pods v1.PodList
 	err := json.Unmarshal(respBody, &pods)

@@ -31,12 +31,12 @@ import (
 )
 
 const (
-	// PreconfiguredRuntimeClassHandler is the name of the runtime handler
-	// that is expected to be preconfigured in the test environment.
+	// PreconfiguredRuntimeClassHandler 是预期在测试环境中
+	// 预先配置好的 runtime handler 名称。
 	PreconfiguredRuntimeClassHandler = "test-handler"
 )
 
-// NewRuntimeClassPod returns a test pod with the given runtimeClassName
+// NewRuntimeClassPod 返回一个使用指定 runtimeClassName 的测试 Pod
 func NewRuntimeClassPod(runtimeClassName string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -55,18 +55,18 @@ func NewRuntimeClassPod(runtimeClassName string) *v1.Pod {
 	}
 }
 
-// NodeSupportsPreconfiguredRuntimeClassHandler checks if test-handler is configured by reading the configuration from container runtime config.
-// If no error is returned, the container runtime is assumed to support the test-handler, otherwise an error will be returned.
+// NodeSupportsPreconfiguredRuntimeClassHandler 通过读取容器运行时配置检查是否配置了 test-handler。
+// 如果没有错误返回，则认为容器运行时支持 test-handler，否则返回错误。
 func NodeSupportsPreconfiguredRuntimeClassHandler(ctx context.Context, f *framework.Framework) error {
 	node, err := e2enode.GetRandomReadySchedulableNode(ctx, f.ClientSet)
 	framework.ExpectNoError(err)
 	hostExec := storageutils.NewHostExec(f)
 	ginkgo.DeferCleanup(hostExec.Cleanup)
 
-	// This is a hacky check that greps the container runtime config to determine if the test-handler is the underlying container runtime config.
+	// 这是一种粗糙的检查，通过 grep 容器运行时配置来判断 test-handler 是否在底层运行时配置中。
 	// For containerd, this is configured in kube-up for GCE clusters here: https://github.com/kubernetes/kubernetes/blob/eb729620c522753bc7ae61fc2c7b7ea19d4aad2f/cluster/gce/gci/configure-helper.sh#L3069-L3076
 	// For cri-o, see configuration here: https://github.com/cri-o/cri-o/blob/5dc6a035c940f5dde3a727b2e2d8d4b7e371ad55/contrib/test/ci/e2e-base.yml#L2-L13
-	// If the `runtimes.test-handler` substring is found in the runtime config, it is assumed that the handler is configured.
+	// 如果在运行时配置中找到 `runtimes.test-handler` 子串，就认为该 handler 已配置。
 	cmd := fmt.Sprintf(`if [ -e '/etc/containerd/config.toml' ]; then
 grep -q 'runtimes.%s' /etc/containerd/config.toml
   exit

@@ -127,7 +127,7 @@ var _ = utils.SIGDescribe("CSI Mock volume attach", func() {
 			attachmentName := e2evolume.GetVolumeAttachmentName(ctx, m.cs, testConfig, m.provisioner, claim.Name, claim.Namespace)
 			ginkgo.DeferCleanup(framework.IgnoreNotFound(m.cs.StorageV1().VolumeAttachments().Delete), attachmentName, metav1.DeleteOptions{})
 
-			// Use a short interval to quickly detect VolumeAttachment creation and immediately recreate the CSIDriver
+			// 使用较短间隔快速检测 VolumeAttachment 创建，并立即重建 CSIDriver
 			interval := 200 * time.Millisecond
 			ginkgo.By("Checking if VolumeAttachment was created for the pod")
 			err = e2evolume.WaitForVolumeAttachmentCreated(ctx, attachmentName, m.cs, interval, csiVolumeAttachmentTimeout)
@@ -166,7 +166,7 @@ var _ = utils.SIGDescribe("CSI Mock volume attach", func() {
 			m.init(ctx, testParameters{registerDriver: false, disableAttach: true})
 			ginkgo.DeferCleanup(m.cleanup)
 
-			_, claim, pod := m.createPod(ctx, pvcReference) // late binding as specified above
+			_, claim, pod := m.createPod(ctx, pvcReference) // 按上述规定延迟绑定
 			if pod == nil {
 				return
 			}
@@ -185,11 +185,11 @@ var _ = utils.SIGDescribe("CSI Mock volume attach", func() {
 				getPod := e2epod.Get(m.cs, pod)
 				gomega.Consistently(ctx, getPod).WithTimeout(10*time.Second).Should(e2epod.BeInPhase(v1.PodPending),
 					"Pod should not be in running status because attaching should failed")
-				// Events are unreliable, don't depend on the event. It's used only to speed up the test.
+				// 事件不可靠，不要依赖它。它仅用于加速测试。
 				framework.Logf("Attach should fail and the corresponding event should show up, error: %v", err)
 			}
 
-			// VolumeAttachment should be created because the default value for CSI attachable is true
+			// 应创建 VolumeAttachment，因为 CSI attachable 默认值为 true
 			ginkgo.By("Checking if VolumeAttachment was created for the pod")
 			testConfig := storageframework.ConvertTestConfig(m.config)
 			attachmentName := e2evolume.GetVolumeAttachmentName(ctx, m.cs, testConfig, m.provisioner, claim.Name, claim.Namespace)
@@ -223,8 +223,8 @@ var _ = utils.SIGDescribe("CSI Mock volume attach", func() {
 			framework.ExpectNoError(err, "Failed to start pod: %v", err)
 
 			ginkgo.By(fmt.Sprintf("Wait for the volumeattachment to be deleted up to %v", csiVolumeAttachmentTimeout))
-			// This step can be slow because we have to wait either a NodeUpdate event happens or
-			// the detachment for this volume timeout so that we can do a force detach.
+			// 此步骤可能较慢，因为必须等待 NodeUpdate 事件发生，或
+			// 该 volume 的卸载超时，才能执行强制卸载。
 			err = e2evolume.WaitForVolumeAttachmentTerminated(ctx, attachmentName, m.cs, csiVolumeAttachmentTimeout)
 			framework.ExpectNoError(err, "Failed to delete VolumeAttachment: %v", err)
 		})

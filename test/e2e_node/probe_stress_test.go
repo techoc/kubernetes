@@ -45,8 +45,8 @@ const (
 var _ = SIGDescribe("Probe Stress", framework.WithSerial(), func() {
 	f := framework.NewDefaultFramework("probe-stress")
 	addAfterEachForCleaningUpPods(f)
-	// LevelPrivileged is required because the stress tests create pods with many containers
-	// that may require elevated permissions for networking and resource allocation
+	// 必须使用 LevelPrivileged，因为压力测试会创建带很多容器的 Pod，
+	// 这些容器可能需要提升的权限来进行网络和资源分配
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
 
 	ginkgo.Context("HTTP liveness probes", func() {
@@ -71,8 +71,8 @@ var _ = SIGDescribe("Probe Stress", framework.WithSerial(), func() {
 	})
 })
 
-// runProbeStressTest creates a pod with many containers, waits for them to be running,
-// and verifies that none of the containers have restarted unexpectedly.
+// runProbeStressTest 创建一个带很多容器的 Pod，等待它们运行，
+// 并验证没有容器意外重启。
 func runProbeStressTest(ctx context.Context, f *framework.Framework, pod *v1.Pod) {
 	ginkgo.By(fmt.Sprintf("Creating pod %s with %d containers", pod.Name, len(pod.Spec.Containers)))
 	pod = e2epod.NewPodClient(f).Create(ctx, pod)

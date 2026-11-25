@@ -55,11 +55,11 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 	})
 
 	////////////////////////////////////////////////////////////////////////////
-	// Helper functions
+	// 辅助函数
 	////////////////////////////////////////////////////////////////////////////
 
-	// endpointSlicesForService returns a helper function to be used with
-	// gomega.Eventually(...). It fetches the EndpointSlices for the given
+	// endpointSlicesForService 返回一个可与
+	// gomega.Eventually(...) 一起使用，它获取给定服务的 EndpointSlices。
 	// serviceName.
 	endpointSlicesForService := func(serviceName string) any {
 		return func(ctx context.Context) ([]discoveryv1.EndpointSlice, error) {
@@ -71,17 +71,17 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		}
 	}
 
-	// gomegaCustomError constructs a function that can be returned from a gomega
-	// matcher to report an error.
+	// gomegaCustomError 构造一个可从 gomega matcher 返回以报告错误的函数。
+	// gomegaCustomError 构造一个可从 gomega matcher 返回以报告错误的函数。
 	gomegaCustomError := func(format string, a ...any) func() string {
 		return func() string {
 			return fmt.Sprintf(format, a...)
 		}
 	}
 
-	// requestsFromClient returns a helper function to be used with
-	// gomega.Eventually(...). It fetches the logs from the clientPod and returns
-	// them in reverse-chronological order.
+	// requestsFromClient 返回一个可与
+	// gomega.Eventually(...) 一起使用，它从 clientPod 获取日志并按
+	// 时间倒序返回。
 	requestsFromClient := func(clientPod *v1.Pod) any {
 		return func(ctx context.Context) (reverseChronologicalLogLines []string, err error) {
 			logs, err := e2epod.GetPodLogs(ctx, c, f.Namespace.Name, clientPod.Name, clientPod.Spec.Containers[0].Name)
@@ -94,8 +94,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		}
 	}
 
-	// getNodesForMultiNode returns a set of nodes for a test case with 3 zones with 2
-	// nodes each. If there are not suitable nodes/zones, the test is skipped.
+	// getNodesForMultiNode 为一个包含 3 个 zone、每个 zone 2 个节点的测试用例
+	// 返回一组节点。若没有合适的节点/zone，则跳过测试。
 	getNodesForMultiNode := func(ctx context.Context) ([]*v1.Node, []*v1.Node, []*v1.Node) {
 		nodeList, err := e2enode.GetReadySchedulableNodes(ctx, c)
 		framework.ExpectNoError(err)
@@ -124,7 +124,7 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		return multiNodeZones[0], multiNodeZones[1], multiNodeZones[2]
 	}
 
-	// Data structures for tracking server and client pods
+	// 用于跟踪 server 和 client Pod 的数据结构
 	type serverPod struct {
 		node *v1.Node
 		pod  *v1.Pod
@@ -136,8 +136,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		pod       *v1.Pod
 	}
 
-	// allocateClientsAndServers figures out where to put clients and servers for
-	// a simple "same-zone" traffic distribution test.
+	// allocateClientsAndServers 为一个简单的"同 zone"流量分发测试
+	// 确定 client 和 server 的放置位置。
 	allocateClientsAndServers := func(ctx context.Context) ([]*clientPod, []*serverPod) {
 		ginkgo.By("finding 3 zones with schedulable nodes")
 		nodeList, err := e2enode.GetReadySchedulableNodes(ctx, c)
@@ -160,20 +160,20 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		var clientPods []*clientPod
 		var serverPods []*serverPod
 
-		// We want clients in all three zones
+		// 我们希望三个 zone 中都有 client
 		for _, node := range nodeForZone {
 			clientPods = append(clientPods, &clientPod{node: node})
 		}
 
-		// and endpoints in the first two zones
+		// 前两个 zone 中有 endpoint
 		serverPods = []*serverPod{
 			{node: clientPods[0].node},
 			{node: clientPods[1].node},
 		}
 
-		// The clients with an endpoint in the same zone should only connect to
-		// that endpoint. The client with no endpoint in its zone should connect
-		// to both endpoints.
+		// 与 endpoint 同 zone 的 client 只应连接到
+		// 该 endpoint。其所在 zone 没有 endpoint 的 client 应连接
+		// 两个 endpoint。
 		clientPods[0].endpoints = []*serverPod{serverPods[0]}
 		clientPods[1].endpoints = []*serverPod{serverPods[1]}
 		clientPods[2].endpoints = serverPods
@@ -181,8 +181,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		return clientPods, serverPods
 	}
 
-	// allocateMultiNodeClientsAndServers figures out where to put clients and servers
-	// for a "same-zone" traffic distribution test with multiple nodes in each zone.
+	// allocateMultiNodeClientsAndServers 确定每个 zone 有多个节点的"同 zone"
+	// 流量分发测试中 client 和 server 的放置位置。
 	allocateMultiNodeClientsAndServers := func(ctx context.Context) ([]*clientPod, []*serverPod) {
 		ginkgo.By("finding a set of zones and nodes for the test")
 		zone1Nodes, zone2Nodes, zone3Nodes := getNodesForMultiNode(ctx)
@@ -190,8 +190,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		var clientPods []*clientPod
 		var serverPods []*serverPod
 
-		// First zone: a client and an endpoint on each node, and both clients
-		// should talk to both endpoints.
+		// 第一个 zone：每个节点上有一个 client 和一个 endpoint，两个 client
+		// 都应与两个 endpoint 通信。
 		endpointsForZone := []*serverPod{
 			{node: zone1Nodes[0]},
 			{node: zone1Nodes[1]},
@@ -209,7 +209,7 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		)
 		serverPods = append(serverPods, endpointsForZone...)
 
-		// Second zone: a client on one node and a server on the other.
+		// 第二个 zone：一个节点上是 client，另一个节点上是 server。
 		endpointsForZone = []*serverPod{
 			{node: zone2Nodes[1]},
 		}
@@ -222,8 +222,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		)
 		serverPods = append(serverPods, endpointsForZone...)
 
-		// Third zone: just a client, which should connect to the servers in the
-		// other two zones.
+		// 第三个 zone：只有一个 client，它应连接到
+		// 另外两个 zone 中的 server。
 		clientPods = append(clientPods,
 			&clientPod{
 				node:      zone3Nodes[0],
@@ -234,7 +234,7 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		return clientPods, serverPods
 	}
 
-	// createService creates the service for a traffic distribution test
+	// createService 为流量分发测试创建 service
 	createService := func(ctx context.Context, trafficDist string) *v1.Service {
 		serviceName := "traffic-dist-test-service"
 		ginkgo.By(fmt.Sprintf("creating a service %q with trafficDistribution %q", serviceName, trafficDist))
@@ -259,8 +259,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		return svc
 	}
 
-	// createPods creates endpoint pods for svc as described by serverPods, waits for
-	// the EndpointSlices to be updated, and creates clientPods as described by
+	// createPods 按 serverPods 的描述为 svc 创建 endpoint Pod，等待
+	// EndpointSlices 更新，然后按描述创建 clientPods。
 	// clientPods.
 	createPods := func(ctx context.Context, svc *v1.Service, clientPods []*clientPod, serverPods []*serverPod) {
 		var podsToCreate []*v1.Pod
@@ -302,8 +302,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		e2epod.NewPodClient(f).CreateBatch(ctx, podsToCreate)
 	}
 
-	// checkTrafficDistribution checks that traffic from clientPods is distributed in
-	// the expected way.
+	// checkTrafficDistribution 检查来自 clientPods 的流量是否按
+	// 预期方式分发。
 	checkTrafficDistribution := func(ctx context.Context, clientPods []*clientPod) {
 		for _, cp := range clientPods {
 			wantedEndpoints := sets.New[string]()
@@ -332,10 +332,10 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 					consecutiveSuccessfulRequests++
 					unreachedEndpoints.Delete(destEndpoint)
 					if consecutiveSuccessfulRequests >= 10 && len(unreachedEndpoints) == 0 {
-						return nil, nil // Pass condition.
+						return nil, nil // 通过条件。
 					}
 				}
-				// Ideally, the matcher would never reach this condition
+				// 理想情况下，matcher 永远不会达到此条件
 				return gomegaCustomError("requests didn't meet the required criteria to reach all endpoints %v\nreverseChronologicalLogLines=\n%v", wantedEndpoints.UnsortedList(), strings.Join(reverseChronologicalLogLines, "\n")), nil
 			})
 
@@ -344,7 +344,7 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 	}
 
 	////////////////////////////////////////////////////////////////////////////
-	// Main test specifications.
+	// 主要测试规格。
 	////////////////////////////////////////////////////////////////////////////
 
 	framework.It("should route traffic to an endpoint in the same zone when using PreferClose", func(ctx context.Context) {
@@ -382,8 +382,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		var clientPods []*clientPod
 		var serverPods []*serverPod
 
-		// The first zone: a client and a server on each node. Each client only
-		// talks to the server on the same node.
+		// 第一个 zone：每个节点上有一个 client 和一个 server。每个 client 只
+		// 与同节点上的 server 通信。
 		endpointsForZone := []*serverPod{
 			{node: zone1Nodes[0]},
 			{node: zone1Nodes[1]},
@@ -400,8 +400,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		)
 		serverPods = append(serverPods, endpointsForZone...)
 
-		// The second zone: a client on one node and a server on the other. The
-		// client should fall back to connecting (only) to its same-zone endpoint.
+		// 第二个 zone：一个节点上是 client，另一个节点上是 server。
+		// client 应回退到仅连接其同 zone 的 endpoint。
 		endpointsForZone = []*serverPod{
 			{node: zone2Nodes[1]},
 		}
@@ -413,8 +413,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		)
 		serverPods = append(serverPods, endpointsForZone...)
 
-		// The third zone: just a client. Since it has neither a same-node nor a
-		// same-zone endpoint, it should connect to all endpoints.
+		// 第三个 zone：只有一个 client。由于既无同节点也无
+		// 同 zone 的 endpoint，它应连接到所有 endpoint。
 		clientPods = append(clientPods,
 			&clientPod{
 				node:      zone3Nodes[0],
@@ -436,7 +436,7 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		}
 		nodes := nodeList.Items[:2]
 
-		// One client and one server on each node
+		// 每个节点上一个 client 和一个 server
 		serverPods := []*serverPod{
 			{node: &nodes[0]},
 			{node: &nodes[1]},
@@ -470,8 +470,8 @@ var _ = common.SIGDescribe("Traffic Distribution", func() {
 		checkTrafficDistribution(ctx, clientPods)
 
 		ginkgo.By("recreating the missing server pod and waiting for the EndpointSlices to be updated")
-		// We can't use createPods() here because if we only tell it about
-		// serverPods[0] and not serverPods[1] it will expect there to be only one
+		// 这里不能用 createPods()，因为如果只告诉它
+		// serverPods[0] 而不告诉它 serverPods[1]，它会期望只有一个。
 		// endpoint.
 		pod := e2epod.NewAgnhostPod(f.Namespace.Name, "server-0-new", nil, nil, nil, "serve-hostname")
 		nodeSelection := e2epod.NodeSelection{Name: serverPods[0].node.Name}

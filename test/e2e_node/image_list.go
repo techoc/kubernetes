@@ -39,16 +39,16 @@ import (
 )
 
 const (
-	// Number of attempts to pull an image.
+	// 拉取镜像的尝试次数。
 	maxImagePullRetries = 5
-	// Sleep duration between image pull retry attempts.
+	// 镜像拉取重试之间的休眠时长。
 	imagePullRetryDelay = time.Second
-	// Number of parallel count to pull images.
+	// 并行拉取镜像的数量。
 	maxParallelImagePullCount = 5
 )
 
-// NodePrePullImageList is a list of images used in node e2e test. These images will be prepulled
-// before test running so that the image pulling won't fail in actual test.
+// NodePrePullImageList 是 node e2e 测试中使用的镜像列表，这些镜像会预先拉取，
+// 以免实际测试中镜像拉取失败。
 var NodePrePullImageList = sets.NewString(
 	imageutils.GetE2EImage(imageutils.AgnhostPrev),
 	imageutils.GetE2EImage(imageutils.Agnhost),
@@ -65,14 +65,14 @@ var NodePrePullImageList = sets.NewString(
 	imageutils.GetE2EImage(imageutils.Etcd),
 )
 
-// updateImageAllowList updates the e2epod.ImagePrePullList with
-// 1. the hard coded lists
-// 2. the ones passed in from framework.TestContext.ExtraEnvs
-// So this function needs to be called after the extra envs are applied.
+// updateImageAllowList 用以下内容更新 e2epod.ImagePrePullList：
+// 1. 硬编码的列表
+// 2. 从 framework.TestContext.ExtraEnvs 传入的镜像
+// 因此此函数必须在应用 extra env 之后调用。
 func updateImageAllowList(ctx context.Context) {
-	// Union NodePrePullImageList and PrePulledImages into the framework image pre-pull list.
+	// 将 NodePrePullImageList 和 PrePulledImages 合并到 framework 的镜像预拉取列表。
 	e2epod.ImagePrePullList = NodePrePullImageList.Union(commontest.PrePulledImages)
-	// Images from extra envs
+	// 来自 extra env 的镜像
 	e2epod.ImagePrePullList.Insert(getNodeProblemDetectorImage())
 	if sriovDevicePluginImage, err := getSRIOVDevicePluginImage(); err != nil {
 		klog.Errorln(err)
@@ -100,13 +100,13 @@ func getNodeProblemDetectorImage() string {
 	return image
 }
 
-// puller represents a generic image puller
+// puller 表示通用镜像拉取器
 type puller interface {
-	// Pull pulls an image by name
+	// Pull 按名称拉取镜像
 	Pull(ctx context.Context, image string) ([]byte, error)
-	// Remove removes an image by name
+	// Remove 按名称删除镜像
 	Remove(ctx context.Context, image string) error
-	// Name returns the name of the specific puller implementation
+	// Name 返回具体 puller 实现的名称
 	Name() string
 }
 
@@ -141,7 +141,7 @@ func getPuller(ctx context.Context) (puller, error) {
 	}, nil
 }
 
-// PrePullAllImages pre-fetches all images tests depend on so that we don't fail in an actual test.
+// PrePullAllImages 预取测试依赖的所有镜像，以免实际测试中失败。
 func PrePullAllImages(ctx context.Context) error {
 	puller, err := getPuller(ctx)
 	if err != nil {
@@ -235,7 +235,7 @@ func getContainerImageFromE2ETestDaemonset(dsYamlPath string) (string, error) {
 	return ds.Spec.Template.Spec.Containers[0].Image, nil
 }
 
-// getSRIOVDevicePluginImage returns the image of SRIOV device plugin.
+// getSRIOVDevicePluginImage 返回 SRIOV device plugin 的镜像。
 func getSRIOVDevicePluginImage() (string, error) {
 	data, err := e2etestfiles.Read(SRIOVDevicePluginDSYAML)
 	if err != nil {

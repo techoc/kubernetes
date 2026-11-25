@@ -20,5 +20,5 @@ package e2enodewindows
 
 import "k8s.io/kubernetes/test/e2e/framework"
 
-// SIGWindowsDescribe annotates the test with the SIG windows label.
+// SIGWindowsDescribe 为测试添加 SIG windows 标签注解。
 var SIGWindowsDescribe = framework.SIGDescribe("windows")

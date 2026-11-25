@@ -54,10 +54,10 @@ var _ = common.SIGDescribe("Pod Host IPs", framework.WithNodeConformance(), func
 			gomega.Expect(p.Status.HostIP).ShouldNot(gomega.BeEquivalentTo(""))
 			gomega.Expect(p.Status.HostIPs).ShouldNot(gomega.BeNil())
 
-			// validate first ip in HostIPs is same as HostIP
+			// 验证 HostIPs 中的第一个 IP 与 HostIP 相同
 			gomega.Expect(p.Status.HostIP).Should(gomega.Equal(p.Status.HostIPs[0].IP))
 			if len(p.Status.HostIPs) > 1 {
-				// assert 2 host ips belong to different families
+				// 断言 2 个 host IP 属于不同 IP 族
 				if netutils.IsIPv4String(p.Status.HostIPs[0].IP) == netutils.IsIPv4String(p.Status.HostIPs[1].IP) {
 					framework.Failf("both internalIPs %s and %s belong to the same families", p.Status.HostIPs[0].IP, p.Status.HostIPs[1].IP)
 				}
@@ -85,10 +85,10 @@ var _ = common.SIGDescribe("Pod Host IPs", framework.WithNodeConformance(), func
 			gomega.Expect(p.Status.HostIP).ShouldNot(gomega.BeEquivalentTo(""))
 			gomega.Expect(p.Status.HostIPs).ShouldNot(gomega.BeNil())
 
-			// validate first ip in HostIPs is same as HostIP
+			// 验证 HostIPs 中的第一个 IP 与 HostIP 相同
 			gomega.Expect(p.Status.HostIP).Should(gomega.Equal(p.Status.HostIPs[0].IP))
 			if len(p.Status.HostIPs) > 1 {
-				// assert 2 host ips belong to different families
+				// 断言 2 个 host IP 属于不同 IP 族
 				if netutils.IsIPv4String(p.Status.HostIPs[0].IP) == netutils.IsIPv4String(p.Status.HostIPs[1].IP) {
 					framework.Failf("both internalIPs %s and %s belong to the same families", p.Status.HostIPs[0].IP, p.Status.HostIPs[1].IP)
 				}

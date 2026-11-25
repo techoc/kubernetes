@@ -78,8 +78,8 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (non-default behavi
 			)
 			ginkgo.DeferCleanup(e2eautoscaling.DeleteHPAWithBehavior, rc, hpa.Name)
 
-			// making sure HPA is ready, doing its job and already has a recommendation recorded
-			// for stabilization logic before lowering the consumption
+			// 确保 HPA 已就绪、正常工作，并且在降低用量前
+			// 已记录用于稳定逻辑的推荐值
 			ginkgo.By("triggering scale up to record a recommendation")
 			rc.ConsumeCPU(usageForReplicas(3))
 			rc.WaitForReplicas(ctx, 3, maxHPAReactionTime+maxResourceConsumerDelay+waitBuffer)
@@ -119,8 +119,8 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (non-default behavi
 			)
 			ginkgo.DeferCleanup(e2eautoscaling.DeleteHPAWithBehavior, rc, hpa.Name)
 
-			// making sure HPA is ready, doing its job and already has a recommendation recorded
-			// for stabilization logic before increasing the consumption
+			// 确保 HPA 已就绪、正常工作，并且在降低用量前
+			// 在提高用量前已记录用于稳定逻辑的推荐值
 			ginkgo.By("triggering scale down to record a recommendation")
 			rc.ConsumeCPU(usageForReplicas(1))
 			rc.WaitForReplicas(ctx, 1, maxHPAReactionTime+maxResourceConsumerDelay+waitBuffer)
@@ -249,11 +249,11 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (non-default behavi
 
 			ginkgo.By("verifying time waited for a scale up to 2 replicas")
 			deadline := limitWindowLength + maxHPAReactionTime + maxResourceConsumerDelay
-			// First scale event can happen right away, as there were no scale events in the past.
+			// 第一次扩缩容事件可以立即发生，因为过去没有扩缩容事件。
 			gomega.Expect(timeWaitedFor2).To(gomega.BeNumerically("<", deadline), "waited %s, wanted less than %s", timeWaitedFor2, deadline)
 
 			ginkgo.By("verifying time waited for a scale up to 3 replicas")
-			// Second scale event needs to respect limit window.
+			// 第二次扩缩容事件需要遵守 limit window。
 			gomega.Expect(timeWaitedFor3).To(gomega.BeNumerically(">", limitWindowLength), "waited %s, wanted to wait more than %s", timeWaitedFor3, limitWindowLength)
 			gomega.Expect(timeWaitedFor3).To(gomega.BeNumerically("<", deadline), "waited %s, wanted less than %s", timeWaitedFor3, deadline)
 		})
@@ -291,11 +291,11 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (non-default behavi
 
 			ginkgo.By("verifying time waited for a scale down to 2 replicas")
 			deadline := limitWindowLength + maxHPAReactionTime + maxResourceConsumerDelay
-			// First scale event can happen right away, as there were no scale events in the past.
+			// 第一次扩缩容事件可以立即发生，因为过去没有扩缩容事件。
 			gomega.Expect(timeWaitedFor2).To(gomega.BeNumerically("<", deadline), "waited %s, wanted less than %s", timeWaitedFor2, deadline)
 
 			ginkgo.By("verifying time waited for a scale down to 1 replicas")
-			// Second scale event needs to respect limit window.
+			// 第二次扩缩容事件需要遵守 limit window。
 			gomega.Expect(timeWaitedFor1).To(gomega.BeNumerically(">", limitWindowLength), "waited %s, wanted more than %s", timeWaitedFor1, limitWindowLength)
 			gomega.Expect(timeWaitedFor1).To(gomega.BeNumerically("<", deadline), "waited %s, wanted less than %s", timeWaitedFor1, deadline)
 		})
@@ -330,17 +330,17 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (non-default behavi
 			timeWaitedFor3 := time.Since(waitStart)
 
 			waitStart = time.Now()
-			// Scale up limited by percentage takes ceiling, so new replicas number is ceil(3 * 1.5) = ceil(4.5) = 5
+			// 按百分比限制的扩容取上整，因此新副本数为 ceil(3 * 1.5) = ceil(4.5) = 5
 			rc.WaitForReplicas(ctx, 5, maxHPAReactionTime+maxResourceConsumerDelay+limitWindowLength)
 			timeWaitedFor5 := time.Since(waitStart)
 
 			ginkgo.By("verifying time waited for a scale up to 3 replicas")
 			deadline := limitWindowLength + maxHPAReactionTime + maxResourceConsumerDelay
-			// First scale event can happen right away, as there were no scale events in the past.
+			// 第一次扩缩容事件可以立即发生，因为过去没有扩缩容事件。
 			gomega.Expect(timeWaitedFor3).To(gomega.BeNumerically("<", deadline), "waited %s, wanted less than %s", timeWaitedFor3, deadline)
 
 			ginkgo.By("verifying time waited for a scale up to 5 replicas")
-			// Second scale event needs to respect limit window.
+			// 第二次扩缩容事件需要遵守 limit window。
 			gomega.Expect(timeWaitedFor5).To(gomega.BeNumerically(">", limitWindowLength), "waited %s, wanted to wait more than %s", timeWaitedFor5, limitWindowLength)
 			gomega.Expect(timeWaitedFor5).To(gomega.BeNumerically("<", deadline), "waited %s, wanted less than %s", timeWaitedFor5, deadline)
 		})
@@ -373,17 +373,17 @@ var _ = SIGDescribe(feature.HPA, "Horizontal pod autoscaling (non-default behavi
 			timeWaitedFor5 := time.Since(waitStart)
 
 			waitStart = time.Now()
-			// Scale down limited by percentage takes floor, so new replicas number is floor(5 * 0.75) = floor(3.75) = 3
+			// 按百分比限制的缩容取下整，因此新副本数为 floor(5 * 0.75) = floor(3.75) = 3
 			rc.WaitForReplicas(ctx, 3, maxHPAReactionTime+maxResourceConsumerDelay+limitWindowLength)
 			timeWaitedFor3 := time.Since(waitStart)
 
 			ginkgo.By("verifying time waited for a scale down to 5 replicas")
 			deadline := limitWindowLength + maxHPAReactionTime + maxResourceConsumerDelay
-			// First scale event can happen right away, as there were no scale events in the past.
+			// 第一次扩缩容事件可以立即发生，因为过去没有扩缩容事件。
 			gomega.Expect(timeWaitedFor5).To(gomega.BeNumerically("<", deadline), "waited %s, wanted less than %s", timeWaitedFor5, deadline)
 
 			ginkgo.By("verifying time waited for a scale down to 3 replicas")
-			// Second scale event needs to respect limit window.
+			// 第二次扩缩容事件需要遵守 limit window。
 			gomega.Expect(timeWaitedFor3).To(gomega.BeNumerically(">", limitWindowLength), "waited %s, wanted more than %s", timeWaitedFor3, limitWindowLength)
 			gomega.Expect(timeWaitedFor3).To(gomega.BeNumerically("<", deadline), "waited %s, wanted less than %s", timeWaitedFor3, deadline)
 		})
@@ -552,12 +552,12 @@ var _ = SIGDescribe(feature.HPA, framework.WithSlow(), framework.WithFeatureGate
 				initPods := 10
 				podCPURequest := 200
 				targetCPUUtilizationPercent := 60
-				// Compute initial load for 10 pods.
+				// 计算 10 个 Pod 的初始负载。
 				initCPUUsageTotal := usageForReplicasWithRequest(initPods, podCPURequest, targetCPUUtilizationPercent)
 				waitDeadline := maxHPAReactionTime + maxResourceConsumerDelay + waitBuffer
 
-				// Pass 0 as initCPUTotal so the regular ConsumeCPU goroutine stays idle.
-				// We drive load exclusively via ConsumeCPUPerPod to guarantee even distribution.
+				// initCPUTotal 传 0，让常规的 ConsumeCPU goroutine 保持空闲。
+				// 完全通过 ConsumeCPUPerPod 驱动负载，以保证均匀分布。
 				rc := e2eautoscaling.NewDynamicResourceConsumer(ctx,
 					hpaName, f.Namespace.Name, e2eautoscaling.KindDeployment, initPods,
 					0, 0, 0, int64(podCPURequest), 200,
@@ -576,9 +576,9 @@ var _ = SIGDescribe(feature.HPA, framework.WithSlow(), framework.WithFeatureGate
 				ginkgo.By("waiting for deployment to start initial pods")
 				rc.WaitForReplicas(ctx, initPods, waitDeadline)
 
-				// Set initial stable load using even per-pod distribution and wait for
-				// HPA to observe it before triggering scale-up. This ensures HPA has a
-				// baseline measurement before we push load above the scale-up tolerance.
+				// 使用均匀的每 Pod 分布设置初始稳定负载，并等待
+				// HPA 观察到它后再触发扩容。这确保 HPA 在我们将负载推到扩容量容忍度之上前
+				// 已有基线测量值。
 				rc.ConsumeCPUPerPod(initCPUUsageTotal)
 				rc.EnsureDesiredReplicasInRange(ctx, initPods, initPods, maxHPAReactionTime+maxResourceConsumerDelay, hpa.Name)
 
@@ -592,8 +592,8 @@ var _ = SIGDescribe(feature.HPA, framework.WithSlow(), framework.WithFeatureGate
 				framework.Logf("time waited for scale up: %s", timeWaited)
 				gomega.Expect(timeWaited).To(gomega.BeNumerically("<", waitDeadline), "waited %s, wanted less than %s", timeWaited, waitDeadline)
 
-				// Increase to 12 replicas. Difference is less than 10% default tolerance
-				// but should still scale up due to the small (2%) custom scale-up tolerance.
+				// 增加到 12 个副本。差值小于默认的 10% 容忍度，
+				// 但由于自定义扩容量容忍度很小（2%），仍应扩容。
 				ginkgo.By("trying to trigger scale up to 12 replicas")
 				rc.ConsumeCPUPerPod(usageForReplicasWithRequest(12, podCPURequest, targetCPUUtilizationPercent))
 
@@ -604,8 +604,8 @@ var _ = SIGDescribe(feature.HPA, framework.WithSlow(), framework.WithFeatureGate
 				framework.Logf("time waited for scale up: %s", timeWaited)
 				gomega.Expect(timeWaited).To(gomega.BeNumerically("<", waitDeadline), "waited %s, wanted less than %s", timeWaited, waitDeadline)
 
-				// Drop load to 10-replica level. Should NOT scale down because the
-				// difference is within the large (30%) custom scale-down tolerance.
+				// 将负载降回 10 副本的水平。不应缩容，因为
+				// 差值在自定义缩容量容忍度（30%）范围内。
 				ginkgo.By("triggering scale down by lowering consumption")
 				waitStart = time.Now()
 				rc.ConsumeCPUPerPod(usageForReplicasWithRequest(10, podCPURequest, targetCPUUtilizationPercent))
@@ -621,11 +621,11 @@ var _ = SIGDescribe(feature.HPA, framework.WithSlow(), framework.WithFeatureGate
 		})
 	})
 
-// usageForReplicas returns usage for (n - 0.5) replicas as if they would consume all CPU
-// under the target. The 0.5 replica reduction is to accommodate for the deviation between
-// the actual consumed cpu and requested usage by the ResourceConsumer.
-// HPA rounds up the recommendations. So, if the usage is e.g. for 3.5 replicas,
-// the recommended replica number will be 4.
+// usageForReplicas 返回 (n - 0.5) 个副本的用量，假设它们消耗了目标值以下的全部 CPU。
+// 减少 0.5 个副本是为了容纳实际消耗的 CPU 与 ResourceConsumer 请求的用量之间的偏差。
+// HPA 会对推荐值向上取整。因此，如果用量相当于 3.5 个副本，
+// 推荐的副本数将是 4。
+// 无 panic
 func usageForReplicas(replicas int) int {
 	return usageForReplicasWithRequest(replicas, podCPURequest, targetCPUUtilizationPercent)
 }

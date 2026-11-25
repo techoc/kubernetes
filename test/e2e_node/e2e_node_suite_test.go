@@ -16,8 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// To run tests in this suite
-// NOTE: This test suite requires password-less sudo capabilities to run the kubelet and kube-apiserver.
+// 运行此测试套件
+// 注意：此测试套件需要免密 sudo 权限来运行 kubelet 和 kube-apiserver。
 package e2enode
 
 import (
@@ -57,10 +57,10 @@ import (
 	e2enodetestingmanifests "k8s.io/kubernetes/test/e2e_node/testing-manifests"
 	system "k8s.io/system-validators/validators"
 
-	// define and freeze constants
+	// 定义并固定常量
 	_ "k8s.io/kubernetes/test/e2e/feature"
 
-	// reconfigure framework
+	// 重新配置 framework
 	_ "k8s.io/kubernetes/test/e2e/framework/debug/init"
 	_ "k8s.io/kubernetes/test/e2e/framework/metrics/init"
 	_ "k8s.io/kubernetes/test/e2e/framework/node/init"
@@ -76,32 +76,32 @@ import (
 var (
 	e2eCriProxy *criproxy.RemoteRuntime
 	e2es        *services.E2EServices
-	// featureGates is a map of feature names to bools that enable or disable alpha/experimental features.
+	// featureGates 是特性名到布尔值的 map，用于启用或禁用 alpha/实验性特性。
 	featureGates map[string]bool
-	// serviceFeatureGates is a map of feature names to bools that enable or
-	// disable alpha/experimental features for API service.
+	// serviceFeatureGates 是特性名到布尔值的 map，用于为 API service
+	// 启用或禁用 alpha/实验性特性。
 	serviceFeatureGates map[string]bool
 
-	// TODO(random-liu): Change the following modes to sub-command.
+	// TODO(random-liu): 将以下模式改为子命令。
 	runServicesMode    = flag.Bool("run-services-mode", false, "If true, only run services (etcd, apiserver) in current process, and not run test.")
 	runKubeletMode     = flag.Bool("run-kubelet-mode", false, "If true, only start kubelet, and not run test.")
 	systemValidateMode = flag.Bool("system-validate-mode", false, "If true, only run system validation in current process, and not run test.")
 	systemSpecFile     = flag.String("system-spec-file", "", "The name of the system spec file that will be used for node conformance test. If it's unspecified or empty, the default system spec (system.DefaultSysSpec) will be used.")
 )
 
-// registerNodeFlags registers flags specific to the node e2e test suite.
+// registerNodeFlags 注册特定于 node e2e 测试套件的 flag。
 func registerNodeFlags(flags *flag.FlagSet) {
-	// Mark the test as node e2e when node flags are api.Registry.
+	// 当 node flag 为 api.Registry 时，将测试标记为 node e2e。
 	framework.TestContext.NodeE2E = true
 	flags.StringVar(&framework.TestContext.BearerToken, "bearer-token", "", "The bearer token to authenticate with. If not specified, it would be a random token. Currently this token is only used in node e2e tests.")
 	flags.StringVar(&framework.TestContext.NodeName, "node-name", "", "Name of the node to run tests on.")
 	flags.StringVar(&framework.TestContext.KubeletConfigDropinDir, "config-dir", "", "Path to a directory containing drop-in configurations for the kubelet.")
 	// TODO(random-liu): Move kubelet start logic out of the test.
 	// TODO(random-liu): Move log fetch logic out of the test.
-	// There are different ways to start kubelet (systemd, initd, docker, manually started etc.)
-	// and manage logs (journald, upstart etc.).
-	// For different situation we need to mount different things into the container, run different commands.
-	// It is hard and unnecessary to deal with the complexity inside the test suite.
+	// 启动 kubelet 的方式有多种（systemd、initd、docker、手动启动等），
+	// 管理日志的方式也有多种（journald、upstart 等）。
+	// 不同情况下需要向容器中挂载不同的内容，运行不同的命令。
+	// 在测试套件内部处理这些复杂性既困难也无必要。
 	flags.BoolVar(&framework.TestContext.NodeConformance, "conformance", false, "If true, the test suite will not start kubelet, and fetch system log (kernel, docker, kubelet log etc.) to the report directory.")
 	flags.BoolVar(&framework.TestContext.PrepullImages, "prepull-images", true, "If true, prepull images so image pull failures do not cause test failures.")
 	flags.BoolVar(&framework.TestContext.RestartKubelet, "restart-kubelet", false, "If true, restart Kubelet unit when the process is killed.")
@@ -119,17 +119,17 @@ func registerNodeFlags(flags *flag.FlagSet) {
 }
 
 func init() {
-	// Enable embedded FS file lookup as fallback
+	// 启用嵌入式 FS 文件查找作为回退
 	e2etestfiles.AddFileSource(e2etestingmanifests.GetE2ETestingManifestsFS())
 	e2etestfiles.AddFileSource(e2enodetestingmanifests.GetE2ENodeTestingManifestsFS())
 }
 
 func TestMain(m *testing.M) {
-	// e2e_node.test can behave like several other commands which are required
-	// when doing node testing on a remote virtual machine.
+	// e2e_node.test 可以表现得像其他几个命令，
+	// 这些命令在远程虚拟机上进行节点测试时是必需的。
 	//
-	// e2e_node.test owns pflag.CommandLine and flag.CommandLine.
-	// Other commands must use separate FlagSets.
+	// e2e_node.test 拥有 pflag.CommandLine 和 flag.CommandLine。
+	// 其他命令必须使用独立的 FlagSet。
 	pflag.Usage = func() {
 		fmt.Fprint(pflag.CommandLine.Output(), `Usage when invoked under a different name:
     gcp-credential-provider (no flags) - emulate test/e2e_node/plugins/gcp-credential-provider
@@ -149,10 +149,10 @@ Usage as e2e_node.test:
 	case strings.HasPrefix(cmdName, "mounter"):
 		mounter.Main()
 	case len(os.Args) > 1 && os.Args[1] == "remote":
-		// The hard-coded verbosity in `make test-e2e-node` is 4
-		// (https://github.com/kubernetes/kubernetes/blob/17e2eda6119170e6ce1a065716432b1d37d028dd/hack/make-rules/test-e2e-node.sh#L248).
-		// Pre-pending -v4 emulates that behavior, with the difference that an explicit
-		// -v passed by the caller (typically kubetest2) could be used to override it.
+		// `make test-e2e-node` 中硬编码的详细级别是 4
+		//（https://github.com/kubernetes/kubernetes/blob/17e2eda6119170e6ce1a065716432b1d37d028dd/hack/make-rules/test-e2e-node.sh#L248）。
+		// 前置 -v4 模拟该行为，区别在于显式的
+		// 调用方（通常是 kubetest2）传入的 -v 可用于覆盖它。
 		args := append([]string{"-v=4"}, os.Args[2:]...)
 		node.Main(args)
 	default:
@@ -161,18 +161,18 @@ Usage as e2e_node.test:
 }
 
 func testMain(m *testing.M) {
-	// Copy go flags in TestMain, to ensure go test flags are registered (no longer available in init() as of go1.13)
+	// 在 TestMain 中复制 go flag，以确保 go test flag 已注册（自 go1.13 起 init() 中不再可用）
 	e2econfig.CopyFlags(e2econfig.Flags, flag.CommandLine)
 	framework.RegisterCommonFlags(flag.CommandLine)
 	registerNodeFlags(flag.CommandLine)
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-	// Mark the run-services-mode flag as hidden to prevent user from using it.
+	// 将 run-services-mode flag 标记为隐藏，防止用户使用。
 	pflag.CommandLine.MarkHidden("run-services-mode")
-	// It's weird that if I directly use pflag in TestContext, it will report error.
-	// It seems that someone is using flag.Parse() after init() and TestMain().
-	// TODO(random-liu): Find who is using flag.Parse() and cause errors and move the following logic
-	// into TestContext.
-	// TODO(pohly): remove RegisterNodeFlags from test_context.go enable Viper config support here?
+	// 奇怪的是，如果直接在 TestContext 中使用 pflag，会报错。
+	// 似乎有人在 init() 和 TestMain() 之后调用了 flag.Parse()。
+	// TODO(random-liu): 找出谁在使用 flag.Parse() 导致错误，并将以下逻辑
+	// 移入 TestContext。
+	// TODO(pohly): 从 test_context.go 移除 RegisterNodeFlags，在这里启用 Viper 配置支持？
 
 	pflag.Parse()
 	if pflag.CommandLine.NArg() > 0 {
@@ -194,29 +194,29 @@ func testMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// When running the containerized conformance test, we'll mount the
-// host root filesystem as readonly to /rootfs.
+// 运行容器化 conformance 测试时，我们会将
+// 宿主机根文件系统以只读方式挂载到 /rootfs。
 const rootfs = "/rootfs"
 
 func TestE2eNode(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	// Make sure we are not limited by sshd when it comes to open files
+	// 确保打开文件时不受 sshd 的限制
 	if err := rlimit.SetNumFiles(1000000); err != nil {
 		klog.Infof("failed to set rlimit on max file handles: %v", err)
 	}
 
 	if *runServicesMode {
-		// If run-services-mode is specified, only run services in current process.
+		// 如果指定了 run-services-mode，则只在当前进程中运行 service。
 		services.RunE2EServices(t)
 		return
 	}
 	if *runKubeletMode {
-		// If run-kubelet-mode is specified, only start kubelet.
+		// 如果指定了 run-kubelet-mode，则只启动 kubelet。
 		services.RunKubelet(tCtx, featureGates)
 		return
 	}
 	if *systemValidateMode {
-		// If system-validate-mode is specified, only run system validation in current process.
+		// 如果指定了 system-validate-mode，则只在当前进程中运行系统验证。
 		spec := &system.DefaultSysSpec
 		if *systemSpecFile != "" {
 			var err error
@@ -226,10 +226,10 @@ func TestE2eNode(t *testing.T) {
 			}
 		}
 		if framework.TestContext.NodeConformance {
-			// Chroot to /rootfs to make system validation can check system
-			// as in the root filesystem.
-			// TODO(random-liu): Consider to chroot the whole test process to make writing
-			// test easier.
+			// chroot 到 /rootfs，使系统验证能够检查根文件系统中的
+			// 系统状态。
+			// TODO(random-liu): 考虑将整个测试进程 chroot，以简化
+			// 测试编写。
 			if err := syscall.Chroot(rootfs); err != nil {
 				klog.Exitf("chroot %q failed: %v", rootfs, err)
 			}
@@ -244,9 +244,9 @@ func TestE2eNode(t *testing.T) {
 		return
 	}
 
-	// We're not running in a special mode so lets run tests.
+	// 我们没有运行在特殊模式下，因此运行测试。
 	gomega.RegisterFailHandler(ginkgo.Fail)
-	// Initialize the KubeletConfigDropinDir again if the test doesn't run in run-kubelet-mode.
+	// 如果测试不在 run-kubelet-mode 下运行，则重新初始化 KubeletConfigDropinDir。
 	if framework.TestContext.KubeletConfigDropinDir == "" {
 		var err error
 		framework.TestContext.KubeletConfigDropinDir, err = services.KubeletConfigDirCWDDir()
@@ -256,28 +256,28 @@ func TestE2eNode(t *testing.T) {
 	}
 	reportDir := framework.TestContext.ReportDir
 	if reportDir != "" {
-		// Create the directory if it doesn't already exist
-		// NOTE: junit report can be simply created by executing your tests with the new --junit-report flags instead.
+		// 如果目录不存在则创建
+		// 注意：也可以直接用新的 --junit-report flag 运行测试来生成 junit 报告。
 		if err := os.MkdirAll(reportDir, 0755); err != nil {
 			klog.Errorf("Failed creating report directory: %v", err)
 		}
 	}
 
-	// annotate created pods with source code location to make it easier to find tests
-	// which do insufficient cleanup and pollute the node state with lingering pods
+	// 给创建的 Pod 标注源代码位置，便于找到清理不充分、
+	// 遗留 Pod 污染节点状态的测试
 	e2epod.GlobalOwnerTracking = true
 
 	suiteConfig, reporterConfig := framework.CreateGinkgoConfig()
 	ginkgo.RunSpecs(t, "E2eNode Suite", suiteConfig, reporterConfig)
 }
 
-// Setup the kubelet on the node
+// 在节点上设置 kubelet
 var _ = ginkgo.SynchronizedBeforeSuite(func(ctx context.Context) []byte {
-	// Run system validation test.
+	// 运行系统验证测试。
 	gomega.Expect(validateSystem()).To(gomega.Succeed(), "system validation")
 
-	// Pre-pull the images tests depend on so we can fail immediately if there is an image pull issue
-	// This helps with debugging test flakes since it is hard to tell when a test failure is due to image pulling.
+	// 预先拉取测试依赖的镜像，以便镜像拉取出现问题时立即失败
+	// 这有助于排查测试不稳定问题，因为很难判断测试失败是否由镜像拉取引起。
 	if framework.TestContext.PrepullImages {
 		klog.Infof("Pre-pulling images so that they are cached for the tests.")
 		updateImageAllowList(ctx)
@@ -285,9 +285,9 @@ var _ = ginkgo.SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 		gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 	}
 
-	// TODO(yifan): Temporary workaround to disable coreos from auto restart
-	// by masking the locksmithd.
-	// We should mask locksmithd when provisioning the machine.
+	// TODO(yifan): 临时解决方法，通过屏蔽 locksmithd
+	// 来禁用 CoreOS 自动重启。
+	// 配置机器时应屏蔽 locksmithd。
 	maskLocksmithdOnCoreos()
 
 	if framework.TestContext.CriProxyEnabled {
@@ -307,8 +307,8 @@ var _ = ginkgo.SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	}
 
 	if *startServices {
-		// If the services are expected to stop after test, they should monitor the test process.
-		// If the services are expected to keep running after test, they should not monitor the test process.
+		// 如果期望 service 在测试后停止，它们应监控测试进程。
+		// 如果期望 service 在测试后继续运行，它们不应监控测试进程。
 		e2es = services.NewE2EServices(*stopServices)
 		gomega.Expect(e2es.Start(ctx, featureGates)).To(gomega.Succeed(), "should be able to start node services.")
 	} else {
@@ -320,27 +320,27 @@ var _ = ginkgo.SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 		waitForNodeReady(ctx)
 	}
 
-	// Reference common test to make the import valid.
+	// 引用 common test 以使 import 有效。
 	commontest.CurrentSuite = commontest.NodeE2E
 
-	// ginkgo would spawn multiple processes to run tests.
-	// Since the bearer token is generated randomly at run time,
-	// we need to distribute the bearer token to other processes to make them use the same token.
+	// ginkgo 会派生多个进程来运行测试。
+	// 由于 bearer token 在运行时随机生成，
+	// 需要将它分发给其他进程，使其使用同一个 token。
 	return []byte(framework.TestContext.BearerToken)
 }, func(ctx context.Context, token []byte) {
 	framework.TestContext.BearerToken = string(token)
-	// update test context with node configuration.
+	// 用节点配置更新测试 context。
 	gomega.Expect(updateTestContext(ctx)).To(gomega.Succeed(), "update test context with node config.")
 
-	// Store current Kubelet configuration in the package variable
-	// This assumes all tests which dynamically change kubelet configuration
-	// must: 1) run in serial; 2) restore kubelet configuration after test.
+	// 将当前 Kubelet 配置存储到包变量中
+	// 这假定所有动态更改 kubelet 配置的测试
+	// 必须：1）串行运行；2）测试后恢复 kubelet 配置。
 	var err error
 	kubeletCfg, err = getCurrentKubeletConfig(ctx)
 	framework.ExpectNoError(err)
 })
 
-// Tear down the kubelet on the node
+// 拆除节点上的 kubelet
 var _ = ginkgo.SynchronizedAfterSuite(func() {}, func() {
 	if e2es != nil {
 		if *startServices && *stopServices {
@@ -357,15 +357,15 @@ var _ = ginkgo.SynchronizedAfterSuite(func() {}, func() {
 	klog.Infof("Tests Finished")
 })
 
-// validateSystem runs system validation in a separate process and returns error if validation fails.
+// validateSystem 在单独的进程中运行系统验证，验证失败时返回错误。
 func validateSystem() error {
 	testBin, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("can't get current binary: %w", err)
 	}
-	// Pass all flags into the child process, so that it will see the same flag set.
+	// 将所有 flag 传给子进程，使其看到相同的 flag 集合。
 	output, err := exec.Command(testBin, append([]string{"--system-validate-mode"}, os.Args[1:]...)...).CombinedOutput()
-	// The output of system validation should have been formatted, directly print here.
+	// 系统验证的输出应该已格式化，直接打印即可。
 	fmt.Print(string(output))
 	if err != nil {
 		return fmt.Errorf("system validation failed: %w", err)
@@ -376,7 +376,7 @@ func validateSystem() error {
 func maskLocksmithdOnCoreos() {
 	data, err := os.ReadFile("/etc/os-release")
 	if err != nil {
-		// Not all distros contain this file.
+		// 并非所有发行版都包含此文件。
 		klog.Infof("Could not read /etc/os-release: %v", err)
 		return
 	}
@@ -389,9 +389,9 @@ func maskLocksmithdOnCoreos() {
 
 func waitForNodeReady(ctx context.Context) {
 	const (
-		// nodeReadyTimeout is the time to wait for node to become ready.
+		// nodeReadyTimeout 是等待节点变为 ready 的时长。
 		nodeReadyTimeout = 2 * time.Minute
-		// nodeReadyPollInterval is the interval to check node ready.
+		// nodeReadyPollInterval 是检查节点是否 ready 的间隔。
 		nodeReadyPollInterval = 1 * time.Second
 	)
 	client, err := getAPIServerClient()
@@ -408,14 +408,14 @@ func waitForNodeReady(ctx context.Context) {
 	}, nodeReadyTimeout, nodeReadyPollInterval).Should(gomega.Succeed())
 }
 
-// updateTestContext updates the test context with the node name.
+// updateTestContext 用节点名称更新测试 context。
 func updateTestContext(ctx context.Context) error {
 	setExtraEnvs()
 	updateImageAllowList(ctx)
 
-	// Set KubeletRootDir to match the kubelet configuration used in node e2e tests.
-	// This ensures tests that use framework.TestContext.KubeletRootDir (e.g., for HostPath volumes)
-	// use the correct path.
+	// 设置 KubeletRootDir 以匹配 node e2e 测试中使用的 kubelet 配置。
+	// 这确保使用 framework.TestContext.KubeletRootDir 的测试（例如 HostPath volume）
+	// 使用正确的路径。
 	if framework.TestContext.KubeletRootDir == "" {
 		framework.TestContext.KubeletRootDir = services.KubeletRootDirectory
 	}
@@ -426,12 +426,12 @@ func updateTestContext(ctx context.Context) error {
 	}
 
 	if !framework.TestContext.StandaloneMode {
-		// Update test context with current node object.
+		// 用当前 node 对象更新测试 context。
 		node, err := getNode(client)
 		if err != nil {
 			return fmt.Errorf("failed to get node: %w", err)
 		}
-		framework.TestContext.NodeName = node.Name // Set node name from API server, it is already set to the computer name by default.
+		framework.TestContext.NodeName = node.Name // 从 API server 设置节点名称，默认已设为计算机名。
 	}
 
 	framework.Logf("Node name: %s", framework.TestContext.NodeName)
@@ -439,7 +439,7 @@ func updateTestContext(ctx context.Context) error {
 	return nil
 }
 
-// getNode gets node object from the apiserver.
+// getNode 从 apiserver 获取 node 对象。
 func getNode(c *clientset.Clientset) (*v1.Node, error) {
 	nodes, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	framework.ExpectNoError(err, "should be able to list nodes.")
@@ -453,7 +453,7 @@ func getNode(c *clientset.Clientset) (*v1.Node, error) {
 	return &nodes.Items[0], nil
 }
 
-// getAPIServerClient gets a apiserver client.
+// getAPIServerClient 获取 apiserver client。
 func getAPIServerClient() (*clientset.Clientset, error) {
 	config, err := framework.LoadConfig()
 	if err != nil {
@@ -466,7 +466,7 @@ func getAPIServerClient() (*clientset.Clientset, error) {
 	return client, nil
 }
 
-// loadSystemSpecFromFile returns the system spec from the file with the
+// loadSystemSpecFromFile 从文件中返回系统规格，
 // filename.
 func loadSystemSpecFromFile(filename string) (*system.SysSpec, error) {
 	b, err := os.ReadFile(filename)

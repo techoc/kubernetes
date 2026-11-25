@@ -235,11 +235,11 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 		containers                        []draContainerInfo
 		unreferencedClaims                []*resourceapi.ResourceClaim
 		expectedPodCgroup                 cgroups.ContainerResources
-		expectedContainersCgroup          []cgroups.ContainerResources // per container
-		expectedContainersScoreMemRequest []int64                      // per container
+		expectedContainersCgroup          []cgroups.ContainerResources // 每个容器
+		expectedContainersScoreMemRequest []int64                      // 每个容器
 		requiresHugepages                 bool
 		expectedPodHugepagesLimit         string
-		expectedContainerHugepagesLimits  []string // per container
+		expectedContainerHugepagesLimits  []string // 每个容器
 	}{
 		{
 			name:                 "direct mappings",
@@ -249,21 +249,21 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res1CPU1GiCg, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 1000m (c1 from spec) + 1000m (c2 from spec) + 1000m (CPU claim)
-				// CPU limit: 2000m (c1 from spec) + 2000m (c2 from spec) + 1000m (CPU claim)
-				// Memory limit: 2048Mi (c1 from spec) + 2048Mi (c2 from spec) + 1000Mi (memory claim)
+				// CPU request: 1000m (c1 来自 spec) + 1000m (c2 来自 spec) + 1000m (CPU claim)
+				// CPU limit: 2000m (c1 来自 spec) + 2000m (c2 来自 spec) + 1000m (CPU claim)
+				// Memory limit: 2048Mi (c1 来自 spec) + 2048Mi (c2 来自 spec) + 1000Mi (memory claim)
 				CPUReq: "3000m",
 				CPULim: "5000m",
 				MemLim: "5096Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 1000m (CPU claim)
-				// Memory limit: 2048Mi (from spec) + 1000Mi (memory claim)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 1000m (CPU claim)
+				// Memory limit: 2048Mi (来自 spec) + 1000Mi (memory claim)
 				{CPUReq: "1000m", CPULim: "3000m", MemLim: "3048Mi"},
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 1000m (CPU claim)
-				// Memory limit: 2048Mi (from spec) + 1000Mi (memory claim)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 1000m (CPU claim)
+				// Memory limit: 2048Mi (来自 spec) + 1000Mi (memory claim)
 				{CPUReq: "1000m", CPULim: "3000m", MemLim: "3048Mi"},
 			},
 			expectedContainersScoreMemRequest: []int64{1524, 1524}, // 1024 (c1) + 1000/2 (Direct memory) = 1524Mi
@@ -276,22 +276,22 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res1CPU1GiCg, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 1000m (c1 from spec) + 1000m (c2 from spec) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
-				// CPU limit: 2000m (c1 from spec) + 2000m (c2 from spec) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
-				// Memory limit: 2048Mi (c1 from spec) + 2048Mi (c2 from spec) + 100Mi (Memory Claim - PerPod) + 200Mi (Memory Claim - PerContainer * 2)
+				// CPU request: 1000m (c1 来自 spec) + 1000m (c2 来自 spec) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
+				// CPU limit: 2000m (c1 来自 spec) + 2000m (c2 来自 spec) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
+				// Memory limit: 2048Mi (c1 来自 spec) + 2048Mi (c2 来自 spec) + 100Mi (Memory Claim - PerPod) + 200Mi (Memory Claim - PerContainer * 2)
 				CPUReq: "2300m",
 				CPULim: "4300m",
 				MemLim: "4396Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (from spec) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
-				// Note: PerPod overhead is counted fully in both the containers, but counted only once at the pod level limiting the overall limit.
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (来自 spec) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
+				// 注意：PerPod 开销在两个容器中都完整计入，但在 Pod 级别只计一次，用于限制总上限。
 				{CPUReq: "1000m", CPULim: "2200m", MemLim: "2248Mi"},
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (from spec) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (来自 spec) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
 				{CPUReq: "1000m", CPULim: "2200m", MemLim: "2248Mi"},
 			},
 			expectedContainersScoreMemRequest: []int64{1174, 1174}, // 1024 (c1) + 100 (PerContainer) + 100/2 (PerPod) = 1174Mi
@@ -304,21 +304,21 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res1CPU1GiCg, Claims: []*resourceapi.ResourceClaim{claimCPUMem, claimCPUMem2}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 1000m (c1 from spec) + 1000m (c2 from spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
-				// CPU limit: 2000m (c1 from spec) + 2000m (c2 from spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
-				// Memory limit: 2048Mi (c1 from spec) + 2048Mi (c2 from spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerPod) + 200Mi (Memory Claim - PerContainer * 2)
+				// CPU request: 1000m (c1 来自 spec) + 1000m (c2 来自 spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
+				// CPU limit: 2000m (c1 来自 spec) + 2000m (c2 来自 spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
+				// Memory limit: 2048Mi (c1 来自 spec) + 2048Mi (c2 来自 spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerPod) + 200Mi (Memory Claim - PerContainer * 2)
 				CPUReq: "3300m",
 				CPULim: "5300m",
 				MemLim: "5396Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (from spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (来自 spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
 				{CPUReq: "1000m", CPULim: "3200m", MemLim: "3248Mi"},
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (from spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (来自 spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
 				{CPUReq: "1000m", CPULim: "3200m", MemLim: "3248Mi"},
 			},
 			expectedContainersScoreMemRequest: []int64{1674, 1674}, // 1024 (c1) + 1000/2 (Direct Mem) + 100 (PerContainer) + 100/2 (PerPod) = 1674Mi
@@ -331,21 +331,21 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res1CPU1GiCg, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 1000m (c1 from spec) + 1000m (c2 from spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
-				// CPU limit: 2000m (c1 from spec) + 2000m (c2 from spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
-				// Memory limit: 2048Mi (c1 from spec) + 2048Mi (c2 from spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerPod) + 200Mi (Memory Claim - PerContainer * 2)
+				// CPU request: 1000m (c1 来自 spec) + 1000m (c2 来自 spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
+				// CPU limit: 2000m (c1 来自 spec) + 2000m (c2 来自 spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerPod) + 200m (CPU Claim - PerContainer * 2)
+				// Memory limit: 2048Mi (c1 来自 spec) + 2048Mi (c2 来自 spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerPod) + 200Mi (Memory Claim - PerContainer * 2)
 				CPUReq: "3300m",
 				CPULim: "5300m",
 				MemLim: "5396Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (from spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (来自 spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
 				{CPUReq: "1000m", CPULim: "3200m", MemLim: "3248Mi"},
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (from spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim -PerPod)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 1000m (Direct CPU) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (来自 spec) + 1000Mi (Direct Mem) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim -PerPod)
 				{CPUReq: "1000m", CPULim: "3200m", MemLim: "3248Mi"},
 			},
 			expectedContainersScoreMemRequest: []int64{1674, 1674}, // 1024 (c1) + 1000/2 (Direct Mem) + 100 (PerContainer) + 100/2 (PerPod) = 1674Mi
@@ -359,21 +359,21 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res1CPU1GiCg},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 1000m (c1 from spec) + 1000m (c2 from spec) + 100m (CPU Claim - PerPod)
-				// CPU limit: 2000m (c1 from spec) + 2000m (c2 from spec) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (c1 from spec) + 2048Mi (c2 from spec) + 100Mi (Memory Claim - PerPod)
+				// CPU request: 1000m (c1 来自 spec) + 1000m (c2 来自 spec) + 100m (CPU Claim - PerPod)
+				// CPU limit: 2000m (c1 来自 spec) + 2000m (c2 来自 spec) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (c1 来自 spec) + 2048Mi (c2 来自 spec) + 100Mi (Memory Claim - PerPod)
 				CPUReq: "2100m",
 				CPULim: "4100m",
 				MemLim: "4196Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2 (from spec - uninflated)
-				// Memory limit: 2Gi (from spec - uninflated)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2 (来自 spec - 未膨胀)
+				// Memory limit: 2Gi (来自 spec - 未膨胀)
 				{CPUReq: "1000m", CPULim: "2", MemLim: "2Gi"},
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2 (from spec - uninflated)
-				// Memory limit: 2Gi (from spec - uninflated)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2 (来自 spec - 未膨胀)
+				// Memory limit: 2Gi (来自 spec - 未膨胀)
 				{CPUReq: "1000m", CPULim: "2", MemLim: "2Gi"},
 			},
 			expectedContainersScoreMemRequest: []int64{1024, 1024}, // 1024 (c1) + 0 (DRA share) = 1024Mi
@@ -387,24 +387,24 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: nil, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 2000m (from pod-level spec)
-				// CPU limit: 4000m (from pod-level spec)
-				// Memory limit: 4096Mi (from pod-level spec)
+				// CPU request: 2000m (来自 pod 级 spec)
+				// CPU limit: 4000m (来自 pod 级 spec)
+				// Memory limit: 4096Mi (来自 pod 级 spec)
 				CPUReq: "2000m",
 				CPULim: "4000m",
 				MemLim: "4096Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: empty
-				// CPU limit: 4 (inherits pod-level limits directly)
-				// Memory limit: 4Gi (inherits pod-level limits directly)
+				// CPU request: 空
+				// CPU limit: 4 (直接继承 pod 级限制)
+				// Memory limit: 4Gi (直接继承 pod 级限制)
 				{CPULim: "4", MemLim: "4Gi"},
-				// CPU request: empty
-				// CPU limit: 4 (inherits pod-level limits directly)
-				// Memory limit: 4Gi (inherits pod-level limits directly)
+				// CPU request: 空
+				// CPU limit: 4 (直接继承 pod 级限制)
+				// Memory limit: 4Gi (直接继承 pod 级限制)
 				{CPULim: "4", MemLim: "4Gi"},
 			},
-			expectedContainersScoreMemRequest: []int64{1024, 1024}, // pod level memory requests (2048Mi) / 2 = 1024Mi
+			expectedContainersScoreMemRequest: []int64{1024, 1024}, // pod 级 memory request (2048Mi) / 2 = 1024Mi
 		},
 		{
 			name:                 "pod-level resources specified, container-level limits specified",
@@ -415,24 +415,24 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res1CPU1GiCg, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 2500m (from pod-level spec)
-				// CPU limit: 4000m (from pod-level spec)
-				// Memory limit: 4096Mi (from pod-level spec)
+				// CPU request: 2500m (来自 pod 级 spec)
+				// CPU limit: 4000m (来自 pod 级 spec)
+				// Memory limit: 4096Mi (来自 pod 级 spec)
 				CPUReq: "2500m",
 				CPULim: "4000m",
 				MemLim: "4096Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (from spec) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (来自 spec) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
 				{CPUReq: "1000m", CPULim: "2200m", MemLim: "2248Mi"},
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
-				// Memory limit: 2048Mi (from spec) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec) + 100m (CPU Claim - PerContainer) + 100m (CPU Claim - PerPod)
+				// Memory limit: 2048Mi (来自 spec) + 100Mi (Memory Claim - PerContainer) + 100Mi (Memory Claim - PerPod)
 				{CPUReq: "1000m", CPULim: "2200m", MemLim: "2248Mi"},
 			},
-			expectedContainersScoreMemRequest: []int64{1250, 1250}, // c_effective (1174) + remaining ((2500-2348)/2) = 1174 + 76 = 1250Mi
+			expectedContainersScoreMemRequest: []int64{1250, 1250}, // c_effective (1174) + 剩余 ((2500-2348)/2) = 1174 + 76 = 1250Mi
 		},
 		{
 			name:                 "hugepages overhead mapping",
@@ -442,21 +442,21 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res1CPU1GiCg, Claims: []*resourceapi.ResourceClaim{claimHugepages}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 1000m (c1 from spec) + 1000m (c2 from spec)
-				// CPU limit: 2000m (c1 from spec) + 2000m (c2 from spec)
-				// Memory limit: 2048Mi (c1 from spec) + 2048Mi (c2 from spec)
+				// CPU request: 1000m (c1 来自 spec) + 1000m (c2 来自 spec)
+				// CPU limit: 2000m (c1 来自 spec) + 2000m (c2 来自 spec)
+				// Memory limit: 2048Mi (c1 来自 spec) + 2048Mi (c2 来自 spec)
 				CPUReq: "2000m",
 				CPULim: "4000m",
 				MemLim: "4096Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec)
-				// Memory limit: 2Gi (from spec)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec)
+				// Memory limit: 2Gi (来自 spec)
 				{CPUReq: "1000m", CPULim: "2000m", MemLim: "2Gi"},
-				// CPU request: 1000m (from spec)
-				// CPU limit: 2000m (from spec)
-				// Memory limit: 2Gi (from spec)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 2000m (来自 spec)
+				// Memory limit: 2Gi (来自 spec)
 				{CPUReq: "1000m", CPULim: "2000m", MemLim: "2Gi"},
 			},
 			expectedContainersScoreMemRequest: []int64{1024, 1024},
@@ -493,15 +493,15 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: req1CPU1GiCg, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 1000m (c1 from spec) + 1000m (c2 from spec) + 1000m (DRA Direct CPU)
+				// CPU request: 1000m (c1 来自 spec) + 1000m (c2 来自 spec) + 1000m (DRA Direct CPU)
 				CPUReq: "3000m",
 				CPULim: "",
 				MemLim: "",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
+				// CPU request: 1000m (来自 spec)
 				{CPUReq: "1000m", CPULim: "", MemLim: ""},
-				// CPU request: 1000m (from spec)
+				// CPU request: 1000m (来自 spec)
 				{CPUReq: "1000m", CPULim: "", MemLim: ""},
 			},
 			expectedContainersScoreMemRequest: []int64{1524, 1524}, // 1024 (c1) + 1000/2 (Direct memory) = 1524Mi
@@ -538,21 +538,21 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res1CPU1GiGuaranteed, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 1000m (c1 from spec) + 1000m (c2 from spec) + 1000m (DRA Direct CPU)
-				// CPU limit: 1000m (c1 from spec) + 1000m (c2 from spec) + 1000m (DRA Direct CPU)
-				// Memory limit: 1024Mi (c1 from spec) + 1024Mi (c2 from spec) + 1000Mi (DRA Direct memory)
+				// CPU request: 1000m (c1 来自 spec) + 1000m (c2 来自 spec) + 1000m (DRA Direct CPU)
+				// CPU limit: 1000m (c1 来自 spec) + 1000m (c2 来自 spec) + 1000m (DRA Direct CPU)
+				// Memory limit: 1024Mi (c1 来自 spec) + 1024Mi (c2 来自 spec) + 1000Mi (DRA Direct memory)
 				CPUReq: "3000m",
 				CPULim: "3000m",
 				MemLim: "3048Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 1000m (from spec)
-				// CPU limit: 1000m (from spec) + 1000m (DRA Direct CPU)
-				// Memory limit: 1024Mi (from spec) + 1000Mi (DRA Direct memory)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 1000m (来自 spec) + 1000m (DRA Direct CPU)
+				// Memory limit: 1024Mi (来自 spec) + 1000Mi (DRA Direct memory)
 				{CPUReq: "1000m", CPULim: "2000m", MemLim: "2024Mi"},
-				// CPU request: 1000m (from spec)
-				// CPU limit: 1000m (from spec) + 1000m (DRA Direct CPU)
-				// Memory limit: 1024Mi (from spec) + 1000Mi (DRA Direct memory)
+				// CPU request: 1000m (来自 spec)
+				// CPU limit: 1000m (来自 spec) + 1000m (DRA Direct CPU)
+				// Memory limit: 1024Mi (来自 spec) + 1000Mi (DRA Direct memory)
 				{CPUReq: "1000m", CPULim: "2000m", MemLim: "2024Mi"},
 			},
 			expectedContainersScoreMemRequest: []int64{0, 0},
@@ -565,21 +565,21 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 				{Name: "c2", Resources: res100mCPU1GiCg, Claims: []*resourceapi.ResourceClaim{claimCPUMem2}},
 			},
 			expectedPodCgroup: cgroups.ContainerResources{
-				// CPU request: 100m (c1 from spec) + 100m (c2 from spec) + 100m (direct1) + 100m (direct2)
-				// CPU limit: 200m (c1 from spec) + 200m (c2 from spec) + 100m (direct1) + 100m (direct2)
-				// Memory limit: 2048Mi (c1 from spec) + 2048Mi (c2 from spec) + 1000Mi (direct1) + 2000Mi (direct2)
+				// CPU request: 100m (c1 来自 spec) + 100m (c2 来自 spec) + 100m (direct1) + 100m (direct2)
+				// CPU limit: 200m (c1 来自 spec) + 200m (c2 来自 spec) + 100m (direct1) + 100m (direct2)
+				// Memory limit: 2048Mi (c1 来自 spec) + 2048Mi (c2 来自 spec) + 1000Mi (direct1) + 2000Mi (direct2)
 				CPUReq: "400m",
 				CPULim: "600m",
 				MemLim: "7096Mi",
 			},
 			expectedContainersCgroup: []cgroups.ContainerResources{
-				// CPU request: 100m (from spec)
-				// CPU limit: 200m (from spec) + 100m (direct1)
-				// Memory limit: 2048Mi (from spec) + 1000Mi (direct1)
+				// CPU request: 100m (来自 spec)
+				// CPU limit: 200m (来自 spec) + 100m (direct1)
+				// Memory limit: 2048Mi (来自 spec) + 1000Mi (direct1)
 				{CPUReq: "100m", CPULim: "300m", MemLim: "3048Mi"},
-				// CPU request: 100m (from spec)
-				// CPU limit: 200m (from spec) + 100m (direct2)
-				// Memory limit: 2048Mi (from spec) + 2000Mi (direct2)
+				// CPU request: 100m (来自 spec)
+				// CPU limit: 200m (来自 spec) + 100m (direct2)
+				// Memory limit: 2048Mi (来自 spec) + 2000Mi (direct2)
 				{CPUReq: "100m", CPULim: "300m", MemLim: "4048Mi"},
 			},
 			expectedContainersScoreMemRequest: []int64{2024, 3024}, // c1: 1024 + 1000Mi = 2024Mi, c2: 1024 + 2000Mi = 3024Mi
@@ -600,7 +600,7 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 			driver := drautils.NewDriverInstance(tCtx)
 			b := drautils.NewBuilderNow(tCtx, driver)
 
-			// Run driver with these custom devices
+			// 使用这些自定义设备运行 driver
 			driverResources := map[string]resourceslice.DriverResources{
 				nodes.NodeNames[0]: {
 					Pools: map[string]resourceslice.Pool{
@@ -614,7 +614,7 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 			}
 			driver.Run(tCtx, framework.TestContext.KubeletRootDir, nodes, driverResources)
 
-			// Create claims and classes
+			// 创建 claim 和 class
 			createdClaims := createClaims(tCtx, b, tc.containers, tc.unreferencedClaims)
 
 			pod := makeTestPod(tc.podResources, tc.containers, tc.unreferencedClaims, createdClaims)
@@ -627,7 +627,7 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 			podClient := e2epod.NewPodClient(f)
 			pod = podClient.CreateSync(ctx, pod)
 
-			// Verify Pod-level cgroups on the node
+			// 验证节点上的 Pod 级 cgroup
 			ginkgo.By("verifying pod cgroup limits on the node")
 			err := cgroups.VerifyPodCgroups(ctx, f, pod, &tc.expectedPodCgroup)
 			framework.ExpectNoError(err)
@@ -659,7 +659,7 @@ func doNodeAllocatableCgroupsTests(f *framework.Framework) {
 			}
 
 			ginkgo.By("verifying containers oom_score_adj matches QoS rules with overhead")
-			// Retrieve node capacity to check exact adjustment
+			// 获取节点容量以检查精确调整量
 			node, err := f.ClientSet.CoreV1().Nodes().Get(ctx, pod.Spec.NodeName, metav1.GetOptions{})
 			framework.ExpectNoError(err)
 			nodeMemBytes := node.Status.Capacity.Memory().Value()
@@ -696,7 +696,7 @@ func doNodeAllocatableResizeTests(f *framework.Framework) {
 		desiredContainers                               []draContainerInfo
 		unreferencedClaims                              []*resourceapi.ResourceClaim
 		expectedPodCgroupAfterResize                    cgroups.ContainerResources
-		expectedContainersCgroupAfterResize             []cgroups.ContainerResources // per container
+		expectedContainersCgroupAfterResize             []cgroups.ContainerResources // 每个容器
 		expectedPodAllocatedResourcesAfterResize        v1.ResourceList
 		expectedContainersAllocatedResourcesAfterResize []v1.ResourceList
 	}{
@@ -709,19 +709,19 @@ func doNodeAllocatableResizeTests(f *framework.Framework) {
 			desiredContainers: []draContainerInfo{
 				{Name: "c1", Resources: &cgroups.ContainerResources{CPUReq: "500m", CPULim: "1500m", MemReq: "1000Mi", MemLim: "2000Mi"}, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
-			// CPU request: 500m (from resized spec) + 1000m (DRA Direct CPU)
-			// CPU limit: 1500m (from resized spec) + 1000m (DRA Direct CPU)
-			// Memory limit: 2000Mi (from resized spec) + 1000Mi (DRA Direct memory)
+			// CPU request: 500m (来自调整后的 spec) + 1000m (DRA Direct CPU)
+			// CPU limit: 1500m (来自调整后的 spec) + 1000m (DRA Direct CPU)
+			// Memory limit: 2000Mi (来自调整后的 spec) + 1000Mi (DRA Direct memory)
 			expectedPodCgroupAfterResize: cgroups.ContainerResources{CPUReq: "1500m", CPULim: "2500m", MemLim: "3000Mi"},
 			expectedContainersCgroupAfterResize: []cgroups.ContainerResources{
 				{CPUReq: "500m", CPULim: "2500m", MemLim: "3000Mi"},
 			},
-			// Pod level allocated resources includes DRA resources
+			// Pod 级 allocated resources 包含 DRA 资源
 			expectedPodAllocatedResourcesAfterResize: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse("1500m"),
 				v1.ResourceMemory: resource.MustParse("2000Mi"),
 			},
-			// Container level allocated resources does not include DRA resources
+			// 容器级 allocated resources 不包含 DRA 资源
 			expectedContainersAllocatedResourcesAfterResize: []v1.ResourceList{
 				{
 					v1.ResourceCPU:    resource.MustParse("500m"),
@@ -738,9 +738,9 @@ func doNodeAllocatableResizeTests(f *framework.Framework) {
 			desiredContainers: []draContainerInfo{
 				{Name: "c1", Resources: &cgroups.ContainerResources{CPUReq: "1500m", CPULim: "2500m", MemReq: "1500Mi", MemLim: "3000Mi"}, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
-			// CPU request: 1500m (from resized spec) + 100m (DRA PerPod CPU) + 100m (DRA PerContainer CPU)
-			// CPU limit: 2500m (from resized spec) + 100m (DRA PerPod CPU) + 100m (DRA PerContainer CPU)
-			// Memory limit: 3000Mi (from resized spec) + 100Mi (DRA PerPod memory) + 100Mi (DRA PerContainer memory)
+			// CPU request: 1500m (来自调整后的 spec) + 100m (DRA PerPod CPU) + 100m (DRA PerContainer CPU)
+			// CPU limit: 2500m (来自调整后的 spec) + 100m (DRA PerPod CPU) + 100m (DRA PerContainer CPU)
+			// Memory limit: 3000Mi (来自调整后的 spec) + 100Mi (DRA PerPod memory) + 100Mi (DRA PerContainer memory)
 			expectedPodCgroupAfterResize: cgroups.ContainerResources{CPUReq: "1700m", CPULim: "2700m", MemLim: "3200Mi"},
 			expectedContainersCgroupAfterResize: []cgroups.ContainerResources{
 				{CPUReq: "1500m", CPULim: "2700m", MemLim: "3200Mi"},
@@ -767,15 +767,15 @@ func doNodeAllocatableResizeTests(f *framework.Framework) {
 			desiredContainers: []draContainerInfo{
 				{Name: "c1", Resources: nil, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
-			// CPU request: 3000m (from resized pod-level spec)
-			// CPU limit: 5000m (from resized pod-level spec)
-			// Memory limit: 5Gi (from resized pod-level spec)
+			// CPU request: 3000m (来自调整后的 pod 级 spec)
+			// CPU limit: 5000m (来自调整后的 pod 级 spec)
+			// Memory limit: 5Gi (来自调整后的 pod 级 spec)
 			expectedPodCgroupAfterResize: cgroups.ContainerResources{CPUReq: "3000m", CPULim: "5000m", MemLim: "5120Mi"},
-			// Container level limit default to pod level values and limits are not explicitly specified in the container spec
+			// 容器 spec 未显式指定 limit 时，容器级 limit 默认为 pod 级值
 			expectedContainersCgroupAfterResize: []cgroups.ContainerResources{
 				{CPULim: "5", MemLim: "5Gi"},
 			},
-			// Pod status allocated resources is purely based on pod level resources
+			// Pod status 中的 allocated resources 完全基于 pod 级资源
 			expectedPodAllocatedResourcesAfterResize: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse("3"),
 				v1.ResourceMemory: resource.MustParse("3Gi"),
@@ -818,18 +818,18 @@ func doNodeAllocatableResizeTests(f *framework.Framework) {
 			desiredContainers: []draContainerInfo{
 				{Name: "c1", Resources: &cgroups.ContainerResources{CPUReq: "1", CPULim: "2", MemReq: "1Gi", MemLim: "2Gi"}, Claims: []*resourceapi.ResourceClaim{claimCPUMem}},
 			},
-			// Pod cgroup remains the same after container resize
+			// 容器 resize 后 Pod cgroup 保持不变
 			expectedPodCgroupAfterResize: cgroups.ContainerResources{CPUReq: "2000m", CPULim: "4000m", MemLim: "4Gi"},
-			// Container cgroup updated after resize and includes DRA
+			// resize 后容器 cgroup 更新并包含 DRA
 			expectedContainersCgroupAfterResize: []cgroups.ContainerResources{
 				{CPUReq: "1000m", CPULim: "3000m", MemLim: "3048Mi"},
 			},
-			// Pod level allocated resources based on only pod level resources
+			// Pod 级 allocated resources 仅基于 pod 级资源
 			expectedPodAllocatedResourcesAfterResize: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse("2"),
 				v1.ResourceMemory: resource.MustParse("2Gi"),
 			},
-			// Container level allocated resources includes resized spec values (and excludes DRA)
+			// 容器级 allocated resources 包含调整后的 spec 值（不含 DRA）
 			expectedContainersAllocatedResourcesAfterResize: []v1.ResourceList{
 				{
 					v1.ResourceCPU:    resource.MustParse("1"),
@@ -988,7 +988,7 @@ func makeTestPod(podResources *cgroups.ContainerResources, containers []draConta
 }
 
 func computeExpectedOomScoreAdj(memReqMi int64, nodeMemBytes int64) int64 {
-	// This implements the OOM score calculation formula in Kubelet's GetContainerOOMScoreAdjust() in pkg/kubelet/qos/policy.go.
+	// 这实现了 Kubelet 的 GetContainerOOMScoreAdjust()（位于 pkg/kubelet/qos/policy.go）中的 OOM score 计算公式。
 	score := 1000 - (1000 * memReqMi * 1024 * 1024 / nodeMemBytes)
 	if score < 2 {
 		return 2

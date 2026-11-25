@@ -50,204 +50,204 @@ import (
 	k8sjson "sigs.k8s.io/json"
 )
 
-// ResourceTestcaseInterface describes how to test one particular API endpoint
-// by executing different operations against it.
+// ResourceTestcaseInterface 描述如何通过对其执行不同操作来测试某个特定 API endpoint
+// 对其执行各种操作。
 //
-// The content of created or patched objects is verified by ensuring that
-// all fields are set as in the sent object. Extra fields or map entries
-// are ignored.
+// 创建或打补丁后的对象内容通过确保
+// 所有字段都与发送对象中的设置一致来验证。多余字段或 map 条目
+// 会被忽略。
 //
-// Basic create/read/update/delete (CRUD) semantic is covered, which
-// is the minimum that is required for conformance testing of a
-// GA feature. Actual functional testing is desirable, but not
+// 涵盖基本的 create/read/update/delete（CRUD）语义，这是
+// GA 特性一致性测试的最低要求。
+// 理想情况下还应做实际功能测试，但并非必需。
 // required.
 //
-// See [ResourceTestcase] for an implementation of this interface
-// where test data is provided as Go objects and patch strings.
+// 参见 [ResourceTestcase]，它提供了该接口的一个实现，
+// 其中测试数据以 Go 对象和 patch 字符串形式提供。
 type ResourceTestcaseInterface interface {
-	// GetGroupVersionResource returns the API group, version, and resource (plural form, lower case).
+	// GetGroupVersionResource 返回 API group、version 和 resource（复数形式、小写）。
 	GetGroupVersionResource() schema.GroupVersionResource
 
-	// IsNamespaced defines whether the object must be created inside a namespace.
+	// IsNamespaced 定义对象是否必须在命名空间内创建。
 	IsNamespaced() bool
 
-	// HasStatus defines whether the resource has a "status" sub-resource.
+	// HasStatus 定义资源是否有 "status" 子资源。
 	//
-	// Other sub-resources are not supported by this common test code.
+	// 此通用测试代码不支持其他子资源。
 	HasStatus() bool
 
-	// VerifyContent defines whether the content of objects returned by
-	// the apiserver gets compared against the content that was sent.
+	// VerifyContent 定义是否将 apiserver 返回的对象内容与
+	// 发送的内容进行比较。
 	//
-	// If enabled, all field values that were sent must also be included
-	// in the returned object. Additional fields and list or map entries
-	// may get added (for example, because of defaulting or mutating
-	// admission).
+	// 如果启用，所有发送的字段值也必须包含在
+	// 返回的对象中。可能额外添加字段及 list 或 map 条目
+	//（例如由默认值处理或 mutating admission
+	// 引入）。
 	//
-	// This should not be enabled in conformance tests because admission
-	// is allowed to modify what is being stored.
+	// 一致性测试中不应启用此选项，因为 admission
+	// 可以修改被存储的内容。
 	VerifyContent() bool
 
-	// GetInitialObject returns the data which is going to be used in a Create call.
+	// GetInitialObject 返回将用于 Create 调用的数据。
 	//
-	// For cluster-scoped resources the test namespace can be used
-	// to create a name which does not conflict with other objects
-	// because it is unique while the test runs.
+	// 对于集群级资源，可以使用测试命名空间
+	// 创建一个不与其他对象冲突的名称，
+	// 因为它在测试运行期间是唯一的。
 	//
-	// It does not need to be set for namespaced resources because the
-	// caller will ensure that. The caller cannot do that for the name because
-	// different resources have different rules for what names are valid
+	// 对于命名空间级资源无需设置，因为
+	// 调用方会保证这一点。调用方无法对名称这样做，因为
+	// 不同资源对有效名称有不同规则
 	GetInitialObject(namespace string) *unstructured.Unstructured
 
-	// GetUpdateSpec modifies an existing object.
-	// It gets called for the result of creating the initial object.
+	// GetUpdateSpec 修改现有对象。
+	// 它会在创建初始对象的结果上调用。
 	//
-	// Ideally it should  change the spec (hence the name).
-	// If that is impossible, then adding some label is also okay.
-	// The goal is to add some fields that can be checked for
-	// after an Update.
+	// 理想情况下它应更改 spec（因此得名）。
+	// 如果不可能，添加一些 label 也可以。
+	// 目标是添加一些字段，以便 Update 后
+	// 可以检查。
 	//
-	// May modify and return the input object.
+	// 可以修改并返回输入对象。
 	GetUpdateSpec(object *unstructured.Unstructured) *unstructured.Unstructured
 
-	// GetUpdateStatus modifies the status of an existing object.
-	// It gets called for the result of creating the initial object
-	// and then updating its spec.
+	// GetUpdateStatus 修改现有对象的 status。
+	// 它会在创建初始对象
+	// 并更新其 spec 之后调用。
 	//
-	// May modify and return the input object.
+	// 可以修改并返回输入对象。
 	GetUpdateStatus(object *unstructured.Unstructured) *unstructured.Unstructured
 
-	// GetPatchSpec describes how to generate patches.
+	// GetPatchSpec 描述如何生成 patch。
 	//
-	// Each patch is applied to the initial object by itself, without the other patches.
-	// An empty slice is valid and disables testing of patching. This may not be sufficient
-	// for full conformance testing of the resource.
+	// 每个 patch 单独应用到初始对象，不与其他 patch 叠加。
+	// 返回空 slice 是合法的，表示禁用 patch 测试。但这可能不足够
+	// 完成资源的一致性测试。
 	//
-	// If content verification is enabled, then this must cause the same change as GetUpdateSpec
-	// because verification of the patch result uses the GetUpdateSpec result as reference.
+	// 如果启用了内容验证，那么它必须产生与 GetUpdateSpec 相同的更改，
+	// 因为 patch 结果的验证以 GetUpdateSpec 的结果为参照。
 	GetPatchSpec() []Patch
 
-	// GetPatchStatus is like GetPatchSpec for the status.
+	// GetPatchStatus 对 status 的作用类似于 GetPatchSpec。
 	//
-	// The initial object with the updated spec gets patched,
-	// so the result must match the result of GetUpdateStatus
-	// applied to GetInitialObject if content verification is
+	// 带有更新后 spec 的初始对象会被打补丁，
+	// 因此结果必须与应用到 GetInitialObject 的 GetUpdateStatus 结果一致，
+	// 前提是启用了内容验证。
 	// enabled.
 	GetPatchStatus(object *unstructured.Unstructured) []Patch
 }
 
-// Patch contains the parameters for a Patch API call.
+// Patch 包含 Patch API 调用的参数。
 //
-// The data must match an existing object.
+// 数据必须与现有对象匹配。
 //
-// There's no retry loop because of conflicts, so the patch should not include
-// a check of the ResourceVersion. Checking the UID in the patch is encouraged to prevent
-// patching a replaced resource.
+// 由于没有针对冲突的重试循环，patch 不应包含
+// 对 ResourceVersion 的检查。鼓励在 patch 中检查 UID，以防止
+// 误改一个已被替换的资源。
 type Patch struct {
 	GetData func(object *unstructured.Unstructured) []byte
 	Type    types.PatchType
 }
 
-// ResourceTestcase provides test data for testing operations for a resource.
-// Test data is based on the native Go type of the resource.
-// The template parameter must be a pointer to the native Go type.
+// ResourceTestcase 为测试某个资源的操作提供测试数据。
+// 测试数据基于资源的原生 Go 类型。
+// 模板参数必须是指向该原生 Go 类型的指针。
 //
-// The data is used like this:
-// - create InitialSpec -> update with UpdateSpec -> update status with UpdateStatus
-// - create InitialSpec -> apply StrategicMergePatchSpec and compare against UpdateSpec -> apply StrategicMergePatchStatus and compare against UpdateStatus
+// 数据使用方式如下：
+// - 创建 InitialSpec -> 用 UpdateSpec 更新 -> 用 UpdateStatus 更新 status
+// - 创建 InitialSpec -> 应用 StrategicMergePatchSpec 并与 UpdateSpec 比较 -> 应用 StrategicMergePatchStatus 并与 UpdateStatus 比较
 type ResourceTestcase[T runtime.Object] struct {
-	// GroupResourceVersion identifies the API group, version and resource (plural form, lower case)
-	// within that API which is to be tested.
+	// GroupResourceVersion 标识要测试的 API 组、版本和资源（复数形式、小写）
+	// 以及该 API 中的具体资源。
 	GVR schema.GroupVersionResource
 
-	// Namespaced must be true if the resource must be created in a
-	// namespace, false if it is cluster-scoped. Leaving it unset is
-	// an error.
+	// 如果资源必须在命名空间中创建，Namespaced 必须为 true；
+	// 如果是集群级资源则为 false。保持未设置是错误的。
 	//
-	// Namespaced resources get created in the test namespace.
 	//
-	// The name of cluster-scoped resources gets extended with
-	// `-<test namespace name>` to make it unique.
+	// Namespaced 资源在测试命名空间中创建。
+	//
+	// 集群级资源的名称会追加
+	// `-<测试命名空间名称>` 以保证唯一。
 	Namespaced *bool
 
-	// ContentVerificationEnabled defines whether the content of objects returned by
-	// the apiserver gets compared against the content that was sent.
+	// ContentVerificationEnabled 定义是否比较 apiserver 返回对象的内容
+	// 发送的内容进行比较。
 	//
-	// If enabled, all field values that were sent must also be included
-	// in the returned object. Additional fields and list or map entries
-	// may get added (for example, because of defaulting or mutating
-	// admission).
+	// 如果启用，所有发送的字段值也必须包含在
+	// 返回的对象中。可能额外添加字段及 list 或 map 条目
+	//（例如由默认值处理或 mutating admission
+	// 引入）。
 	//
-	// This should not be enabled in conformance tests because admission
-	// is allowed to modify what is being stored.
+	// 一致性测试中不应启用此选项，因为 admission
+	// 可以修改被存储的内容。
 	ContentVerificationEnabled bool
 
-	// InitialSpec must contain the initial state of a valid resource, without a status.
+	// InitialSpec 必须包含有效资源的初始状态，不含 status。
 	InitialSpec T
 
-	// UpdateSpec gets called for the created initial object
-	// and must update something, ideally the spec (hence the name).
-	// If that is not possible, then adding some label also works
-	// for the sake of testing an update.
+	// UpdateSpec 会对创建的初始对象调用，
+	// 并且必须更改某些内容，理想情况下是 spec（因此得名）。
+	// 如果无法更改 spec，添加一些 label 也可以，
+	// 只要能测试更新即可。
 	//
-	// May modify and return the input object.
+	// 可以修改并返回输入对象。
 	UpdateSpec func(T) T
 
-	// UpdateStatus gets called for the updated object
-	// and must add a status.
+	// UpdateStatus 会对更新后的对象调用，
+	// 并且必须添加 status。
 	//
-	// May be nil if no status is supported.
+	// 如果不支持 status，可以为 nil。
 	//
-	// May modify and return the input object.
+	// 可以修改并返回输入对象。
 	UpdateStatus func(T) T
 
-	// StrategicMergePatchSpec may modify fields in InitialSpec
-	// with a strategic merge patch
-	// (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/strategic-merge-patch.md).
-	// Muse use JSON encoding.
+	// StrategicMergePatchSpec 可以用 strategic merge patch 修改 InitialSpec 中的字段
 	//
-	// If content verification is enabled, then this must contain the same change as UpdateSpec
-	// because verification of the patch result uses UpdateSpec as reference.
+	//（https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/strategic-merge-patch.md）。
+	// 必须使用 JSON 编码。
+	//
+	// 如果启用了内容验证，那么它必须包含与 UpdateSpec 相同的更改，
+	// 因为 patch 结果的验证以 UpdateSpec 为参照。
 	StrategicMergePatchSpec string
 
-	// StrategicMergePatchStatus may add status fields
-	// with a strategic merge patch
-	// (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/strategic-merge-patch.md)
-	// Must use JSON encoding.
+	// StrategicMergePatchStatus 可以添加 status 字段
 	//
-	// The initial object with the updated spec gets patched,
-	// so the result must match GetUpdateStatus
-	// applied to GetInitialObject if content verification is
+	//（https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/strategic-merge-patch.md）
+	// 必须使用 JSON 编码。
+	//
+	// 带有更新后 spec 的初始对象会被打补丁，
+	// 因此结果必须与 GetUpdateStatus 一致
+	// 前提是启用了内容验证。
 	// enabled.
 	//
-	// If empty, the status sub-resource is not getting tested.
-	// May contain the name, but that's not required.
+	// 如果为空，则不测试 status 子资源。
+	// 可以包含名称，但不是必需。
 	StrategicMergePatchStatus string
 
-	// ApplyPatchSpec corresponds to StrategicMergePatchSpec,
-	// using the JSON encoding of a server-side-apply (SSA) patch
-	// (https://kubernetes.io/docs/reference/using-api/server-side-apply).
+	// ApplyPatchSpec 对应 StrategicMergePatchSpec，
+	// 使用 server-side apply（SSA）patch 的 JSON 编码
+	//（https://kubernetes.io/docs/reference/using-api/server-side-apply）。
 	ApplyPatchSpec string
 
-	// ApplyPatchStatus corresponds to StrategicMergePatchStatus,
-	// using the JSON encoding of a server-side-apply (SSA) patch
-	// (https://kubernetes.io/docs/reference/using-api/server-side-apply).
+	// ApplyPatchStatus 对应 StrategicMergePatchStatus，
+	// 使用 server-side apply（SSA）patch 的 JSON 编码
+	//（https://kubernetes.io/docs/reference/using-api/server-side-apply）。
 	ApplyPatchStatus string
 
-	// JSONPatchSpec corresponds to StrategicMergePatchSpec,
-	// using a JSON patch (https://tools.ietf.org/html/rfc6902).
+	// JSONPatchSpec 对应 StrategicMergePatchSpec，
+	// 使用 JSON patch（https://tools.ietf.org/html/rfc6902）。
 	JSONPatchSpec string
 
-	// JSONPatchStatus corresponds to StrategicMergePatchStatus,
-	// using a JSON patch (https://tools.ietf.org/html/rfc6902).
+	// JSONPatchStatus 对应 StrategicMergePatchStatus，
+	// 使用 JSON patch（https://tools.ietf.org/html/rfc6902）。
 	JSONPatchStatus string
 
-	// JSONMergePatchSpec corresponds to StrategicMergePatchSpec,
-	// using a JSON merge patch (https://tools.ietf.org/html/rfc7386).
+	// JSONMergePatchSpec 对应 StrategicMergePatchSpec，
+	// 使用 JSON merge patch（https://tools.ietf.org/html/rfc7386）。
 	JSONMergePatchSpec string
 
-	// JSONMergePatchStatus corresponds to StrategicMergePatchStatus,
-	// using a JSON merge patch (https://tools.ietf.org/html/rfc7386).
+	// JSONMergePatchStatus 对应 StrategicMergePatchStatus，
+	// 使用 JSON merge patch（https://tools.ietf.org/html/rfc7386）。
 	JSONMergePatchStatus string
 }
 
@@ -421,8 +421,8 @@ func (tc *ResourceTestcase[T]) toUnstructured(what string, in T) *unstructured.U
 }
 
 func (tc *ResourceTestcase[T]) toUnstructuredFromJSON(what string, in []byte) *unstructured.Unstructured {
-	// UnmarshalCaseSensitivePreserveInts does not need kind (in contrast to unstructured.Unstructured.UnmarshalJSON)
-	// and matches the behavior of preserving ints that we get when receiving from the apiserver (in contrast to plain json.Unmarshal).
+	// UnmarshalCaseSensitivePreserveInts 不需要 kind（与 unstructured.Unstructured.UnmarshalJSON 不同），
+	// 并且保持从 apiserver 接收时的整数保留行为（与普通 json.Unmarshal 不同）。
 	var out unstructured.Unstructured
 	err := k8sjson.UnmarshalCaseSensitivePreserveInts(in, &out.Object)
 	framework.ExpectNoError(err, "decode %s from JSON", what)
@@ -443,8 +443,8 @@ func (tc *ResourceTestcase[T]) fromUnstructured(what string, in *unstructured.Un
 
 }
 
-// createPatchObject parses JSON data and then copies namespace/name/uid/kind/apiVersion from the existing object
-// to make the patch complete. This works for strategic merge patches, apply patches and JSON merge patches.
+// createPatchObject 解析 JSON 数据，然后从现有对象复制 namespace/name/uid/kind/apiVersion
+// 以使 patch 完整。这适用于 strategic merge patch、apply patch 和 JSON merge patch。
 func (tc *ResourceTestcase[T]) createPatchObject(what string, data string, existingObject *unstructured.Unstructured) *unstructured.Unstructured {
 	object := tc.toUnstructuredFromJSON(what, []byte(data))
 	object.SetNamespace(existingObject.GetNamespace())
@@ -455,10 +455,10 @@ func (tc *ResourceTestcase[T]) createPatchObject(what string, data string, exist
 	return object
 }
 
-// TestResource covers all the typical endpoints for a resource through
-// dynamic client calls.
+// TestResource 通过 dynamic client 调用覆盖资源的所有典型 endpoint。
+// 设置 client。
 func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestcaseInterface) {
-	// Set up clients.
+	// 例如 `cluster-scoped resource "deviceclasses"`
 	gvr := tc.GetGroupVersionResource()
 	gv := gvr.GroupVersion()
 	resource := gvr.Resource
@@ -472,8 +472,8 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		client = resourceClient
 		resourceType = "cluster-scoped resource"
 	}
-	// e.g. `cluster-scoped resource "deviceclasses"`
-	// gvr.String() is too long and includes a comma ("resource.k8s.io/v1, Resource=deviceclasses").
+	// gvr.String() 太长且包含逗号（"resource.k8s.io/v1, Resource=deviceclasses"）。
+	// 测试会给所有对象添加一个 label，用于 List 和 DeleteCollection。
 	resourceType = fmt.Sprintf("%s %q", resourceType, gvr.Resource)
 	config := dynamic.ConfigFor(f.ClientConfig())
 	httpClient, err := rest.HTTPClientFor(config)
@@ -481,9 +481,9 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 	restClient, err := rest.UnversionedRESTClientForConfigAndClient(config, httpClient)
 	framework.ExpectNoError(err, "construct REST client")
 
-	// All objects get one label added by the test for List and DeleteCollection.
-	// The label must get added to all objects returned by ResourceTestcase
-	// because the implementation of that interface is unaware of the extra label.
+	// 该 label 必须添加到 ResourceTestcase 返回的所有对象上，
+	// 因为该接口的实现不知道这个额外的 label。
+	// 为 Create、Get 和 List 做准备。
 	labelName := "e2e-test.kubernetes.io"
 	labelValue := f.UniqueName
 	listOptions := metav1.ListOptions{LabelSelector: labelName + "=" + labelValue}
@@ -498,7 +498,7 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		return obj
 	}
 
-	// Prepare for Create, Get and List.
+	// 获取 API 中的所有资源。结果列表必须包含我们正在测试的资源。
 	desiredInitialObject := addLabel(tc.GetInitialObject(f.Namespace.Name))
 	if tc.IsNamespaced() {
 		desiredInitialObject.SetNamespace(f.Namespace.Name)
@@ -513,7 +513,7 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		desiredUpdatedObjectWithStatus = addLabel(tc.GetUpdateStatus(desiredUpdatedObject))
 	}
 
-	// Get all resources in the API. The resulting list of resources must include what we are testing.
+	// 设置 informer，可选地也在命名空间中设置。
 	ginkgo.By(fmt.Sprintf("Get %s", gv))
 	path := "/apis/" + gv.String()
 	var api unstructured.Unstructured
@@ -531,10 +531,10 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		framework.Failf("API for %s does not include entry for %s, got:\n%s", gv, resource, format.Object(api, 1))
 	}
 
-	// Set up informers, optionally also in the namespace.
-	// After each step we check that the informers catch up
-	// and what events they received in the meantime.
-	// They get stopped through test context cancellation.
+	// 每步之后我们检查 informer 是否追上
+	// 以及期间它们收到了哪些事件。
+	// 它们通过测试 context 取消来停止。
+	// matchObject 生成一个 matcher，用于检查 list 操作的结果
 	var resourceEvents, namespaceEvents eventRecorder
 	resourceInformer := dynamicinformer.NewFilteredDynamicInformer(f.DynamicClient, gvr, "", 0, nil, func(options *metav1.ListOptions) {
 		options.LabelSelector = listOptions.LabelSelector
@@ -564,9 +564,9 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		ginkgo.Fail("informers should have synced and didn't")
 	}
 
-	// matchObject generates a matcher which checks the result of a list operation
-	// against the expected object. Content verification is optional. Without it,
-	// only the namespace and name are checked.
+	// 是否与期望对象一致。内容验证是可选的，没有它时，
+	// 只检查 namespace 和 name。
+	// matchEvents 生成一个 matcher，用于检查 informer 事件列表。
 	matchObject := func(expectedObject *unstructured.Unstructured) gtypes.GomegaMatcher {
 		return &matchObjectList{expectedObject: expectedObject, verifyContent: tc.VerifyContent()}
 	}
@@ -577,24 +577,24 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		gomega.Expect(resourceEvents.list()).To(gomega.HaveField("Events", gomega.BeEmpty()), "no events from namespace informer yet")
 	}
 
-	// matchEvents generates a matcher which checks the informer event list.
+	// 事件应只涉及给定的对象。
 	//
-	// The events are expected to involve only the given object.
-	// The ResourceVersion must not decrease.
-	// The sequence of valid events is given as a regular expression
-	// which is applied to the string returned by [EventList.Types].
+	// ResourceVersion 不得降低。
+	// 有效事件序列以正则表达式形式给出，
+	// 应用于 [EventList.Types] 返回的字符串。
+	// 验证 ids 事件的 namespace/name/uid。
 	matchEvents := func(obj *unstructured.Unstructured, regexp string) gtypes.GomegaMatcher {
-		// Verify namespace/name/uid of ids event.
+		// 用 regexp 匹配 Types() 的结果。
 		ids := gomega.HaveField("Events", gomega.Or(gomega.BeEmpty(), gomega.HaveEach(gomega.HaveField("ID()", gomega.Equal(fmt.Sprintf("%s, %s", klog.KObj(obj), obj.GetUID()))))))
 
-		// Match the regexp against the result of Types().
+		// 包含完整的对象 dump，HaveField 本身不会。
 		order := gomega.HaveField("Types()", gomega.MatchRegexp(regexp))
 
-		// Include full object dump, HaveField itself doesn't.
+		// ResourceVersion 不得降低。Delete 事件会重置序列。
 		return framework.GomegaObject(gomega.And(ids, order))
 	}
 
-	// ResourceVersion must not decrease. Delete events reset the sequence.
+	// 尚无内容可比较，初始版本。
 	var resourceRV, namespaceRV string
 	nextEvents := func(rv *string, events eventList) {
 		ginkgo.GinkgoHelper()
@@ -613,7 +613,7 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 
 			nextRV := metaData.GetResourceVersion()
 			if *rv == "" {
-				// Nothing to compare yet, initial version.
+				// 每步之后结果的验证（即验证什么）。
 				*rv = nextRV
 				return
 			}
@@ -632,18 +632,18 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		}
 	}
 
-	// Verification of the result after each step (= what).
+	// 可以检查对象内容，或仅限于 name/namespace。
 	//
-	// Can check the content of an object or be limited to just name/namespace.
+	// 还会检查 informer。在只读步骤之后这有点冗余，
 	//
-	// Also checks the informers. This is a bit redundant after read-only steps,
-	// but then it's also fast and thus can be done more often than strictly necessary.
-	// Collected informer events get reset, so each verify call must match
-	// events since the previous one.
+	// 但速度快，因此可以更频繁地执行。
+	// 收集到的 informer 事件会被重置，因此每次 verify 调用必须匹配
+	// 自上次调用以来的事件。
+	// 这会在把失败交给 Ginkgo 之前捕获多种不同的失败。
 	verify := func(what string, expected, actual *unstructured.Unstructured, haveExpectedEvents gtypes.GomegaMatcher) {
 		ginkgo.GinkgoHelper()
 
-		// This captures several different failures before handing them to Ginkgo.
+		// 如果已有失败，立即中止检查，否则只会慢慢超时。
 		var failures gomegaFailures
 
 		if expected != nil {
@@ -657,12 +657,12 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 			failures.G().Expect(actual).To(apimachineryutils.HaveValidResourceVersion())
 		}
 
-		// Abort checking now if there were failures, otherwise we just risk timining out slowly.
+		// 即使缓存是最新的，仍需等待事件传递。
 		failures.Check()
 
 		failures.G().Eventually(ctx, listResource).Should(matchObject(expected), "list of resources from informer cache after %s", what)
 		if haveExpectedEvents != nil {
-			// Even if the cache is up-to-date we still need to wait for event delivery.
+			// 创建初始资源。
 			failures.G().Eventually(resourceEvents.list).
 				WithTimeout(5*time.Second).
 				Should(haveExpectedEvents, "list of resource informer events after %s", what)
@@ -680,12 +680,12 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		failures.Check()
 	}
 
-	// Create the initial resource.
+	// 始终清理。
 	ginkgo.By(fmt.Sprintf("Creating:\n%s", format.Object(desiredInitialObject, 1)))
 	existingObject, err := client.Create(ctx, desiredInitialObject, metav1.CreateOptions{FieldValidation: "Strict"})
 	framework.ExpectNoError(err, "create initial %s", resourceType)
 	ginkgo.DeferCleanup(func(ctx context.Context) {
-		// Always clean up.
+		// 先初始创建对象，然后由集群组件执行一些可选更新。
 		err = client.Delete(ctx, desiredInitialObject.GetName(), metav1.DeleteOptions{})
 		if apierrors.IsNotFound(err) {
 			return
@@ -694,21 +694,21 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		ensureNotFound(ctx, getResource)
 	})
 	verify("create", desiredInitialObject, existingObject,
-		// Initial creation of the object followed by some optional updates by cluster components.
+		// Get 以检查存在性。
 		matchEvents(existingObject, "^add,(update,)*$"),
 	)
 	createdResourceVersion := existingObject.GetResourceVersion()
 
-	// Get to check for existence.
+	// 集群组件的可选更新。
 	ginkgo.By(fmt.Sprintf("Getting %s", klog.KObj(desiredInitialObject)))
 	existingObject, err = client.Get(ctx, desiredInitialObject.GetName(), metav1.GetOptions{})
 	framework.ExpectNoError(err, "get updated %s", resourceType)
 	verify("get", desiredInitialObject, existingObject,
-		// Optional updates by cluster components.
+		// 更新资源。重试，因为现有对象可能同时被更新。
 		matchEvents(existingObject, "^(update,)*$"),
 	)
 
-	// Update the resource. Retry because the existing object might have been updated in the meantime.
+	// 立即重试。
 	mustGet := false
 	gomega.Eventually(ctx, func(ctx context.Context) error {
 		if mustGet {
@@ -726,18 +726,18 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		}
 		mustGet = apierrors.IsConflict(err)
 		if mustGet {
-			// Retry immediately.
+			// 延迟后重试。
 			return fmt.Errorf("update %s: %w", resourceType, err)
 		}
 		if retry, retryAfter := framework.ShouldRetry(err); retry {
-			// Retry with a delay.
+			// 放弃，发生了其他错误。
 			return gomega.TryAgainAfter(retryAfter)
 		}
-		// Give up, some other error occurred.
+		// 至少一次更新。
 		return gomega.StopTrying(fmt.Sprintf("update %s", resourceType)).Wrap(err)
 	}).Should(gomega.Succeed())
 	verify("update", desiredUpdatedObject, existingObject,
-		// At least one update.
+		// status 同样处理。此外读取 status（结果相同，但 endpoint+method 不同）。
 		matchEvents(existingObject, "^(update,)+$"),
 	)
 	updatedResourceVersion := existingObject.GetResourceVersion()
@@ -747,7 +747,7 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		framework.Failf("ResourceVersion should have increased during update and didn't (before: %s, after: %s)", createdResourceVersion, updatedResourceVersion)
 	}
 
-	// Same for the status. In addition, read the status (same result, but different endpoint+method).
+	// patch 资源，可能使用多种不同的 patch 类型。
 	if tc.HasStatus() {
 		mustGet := false
 		gomega.Eventually(ctx, func(ctx context.Context) error {
@@ -766,18 +766,18 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 			}
 			mustGet = apierrors.IsConflict(err)
 			if mustGet {
-				// Retry immediately.
+				// 延迟后重试。
 				return fmt.Errorf("update %s status: %w", resourceType, err)
 			}
 			if retry, retryAfter := framework.ShouldRetry(err); retry {
-				// Retry with a delay.
+				// 放弃，发生了其他错误。
 				return gomega.TryAgainAfter(retryAfter)
 			}
-			// Give up, some other error occurred.
+			// 至少一次更新。
 			return gomega.StopTrying(fmt.Sprintf("update %s status", resourceType)).Wrap(err)
 		}).Should(gomega.Succeed())
 		verify("update status", desiredUpdatedObjectWithStatus, existingObject,
-			// At least one update.
+			// status 同样处理。此外读取 status（结果相同，但 endpoint+method 不同）。
 			matchEvents(existingObject, "^(update,)+$"),
 		)
 
@@ -785,28 +785,28 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		existingObject, err = client.Get(ctx, desiredInitialObject.GetName(), metav1.GetOptions{}, "status")
 		framework.ExpectNoError(err, "get updated %s", resourceType)
 		verify("get", desiredUpdatedObjectWithStatus, existingObject,
-			// Optional updates by cluster components.
+			// 更新资源。重试，因为现有对象可能同时被更新。
 			matchEvents(existingObject, "^(update,)*$"),
 		)
 	}
 
-	// Patch the resource, potentially using multiple different patch types.
-	// The result must be the same each time if content verification is enabled.
+	// 如果启用了内容验证，每次结果必须相同。
+	// 删除资源以便重新开始。
 	for _, patch := range tc.GetPatchSpec() {
-		// Delete the resource to start anew.
+		// 可选更新、删除。
 		ginkgo.By(fmt.Sprintf("Deleting %s", klog.KObj(desiredInitialObject)))
 		err = client.Delete(ctx, desiredInitialObject.GetName(), metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "delete updated %s", resourceType)
 		ensureNotFound(ctx, getResource)
 		verify("delete", nil, nil,
-			// Optional updates, deletion.
+			// 我们必须在这里验证，
 			//
-			// We have to verify this here because
-			// otherwise we have no guarantee that we see the delete event.
+			// 否则无法保证能看到 delete 事件。
+			// 为 patch 重新创建。
 			matchEvents(existingObject, "^(update,)*delete,$"),
 		)
 
-		// Recreate for patching.
+		// 重新创建后至少一次更新。
 		ginkgo.By(fmt.Sprintf("Creating again:\n%s", format.Object(desiredInitialObject, 1)))
 		existingObject, err = client.Create(ctx, desiredInitialObject, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "create %s again", resourceType)
@@ -822,32 +822,32 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		existingObject, err = client.Patch(ctx, desiredInitialObject.GetName(), patch.Type, patchData, options)
 		framework.ExpectNoError(err, "patch %s %s", patch.Type, resourceType)
 		verify(fmt.Sprintf("patch %s", patch.Type), desiredUpdatedObject, existingObject,
-			// Recreation and then at least one update.
+			// status 同样处理。patch 在更新后的对象上应用。
 			matchEvents(existingObject, "^add,(update,)+$"),
 		)
 	}
 
-	// Same for status. The patches apply on top of the updated object.
+	// 再次更新。
 	for _, patch := range tc.GetPatchStatus(existingObject) {
-		// Delete the resource to start anew.
+		// 可选更新、删除。
 		ginkgo.By(fmt.Sprintf("Deleting %s", klog.KObj(desiredInitialObject)))
 		err = client.Delete(ctx, desiredInitialObject.GetName(), metav1.DeleteOptions{})
 		framework.ExpectNoError(err, "delete updated %s", resourceType)
 		ensureNotFound(ctx, getResource)
 		verify("delete", nil, nil,
-			// Optional updates, deletion.
+			// 我们必须在这里验证，
 			//
-			// We have to verify this here because
-			// otherwise we have no guarantee that we see the delete event.
+			// 否则无法保证能看到 delete 事件。
+			// 为 patch 重新创建。
 			matchEvents(existingObject, "^(update,)*delete,$"),
 		)
 
-		// Recreate for patching.
+		// 重新创建后至少一次更新。
 		ginkgo.By(fmt.Sprintf("Creating again:\n%s", format.Object(desiredInitialObject, 1)))
 		existingObject, err = client.Create(ctx, desiredInitialObject, metav1.CreateOptions{})
 		framework.ExpectNoError(err, "create %s again", resourceType)
 
-		// Update again.
+		// 在 List 和 DeleteCollection 调用中使用该 label 作为 selector。
 		mustGet := false
 		gomega.Eventually(ctx, func(ctx context.Context) error {
 			if mustGet {
@@ -865,14 +865,14 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 			}
 			mustGet = apierrors.IsConflict(err)
 			if mustGet {
-				// Retry immediately.
+				// 延迟后重试。
 				return fmt.Errorf("update %s: %w", resourceType, err)
 			}
 			if retry, retryAfter := framework.ShouldRetry(err); retry {
-				// Retry with a delay.
+				// 放弃，发生了其他错误。
 				return gomega.TryAgainAfter(retryAfter)
 			}
-			// Give up, some other error occurred.
+			// 至少一次更新。
 			return gomega.StopTrying(fmt.Sprintf("update %s", resourceType)).Wrap(err)
 		}).Should(gomega.Succeed())
 		patchData := patch.GetData(existingObject)
@@ -887,18 +887,18 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		existingObject, err = client.Patch(ctx, desiredInitialObject.GetName(), patch.Type, patchData, options, "status")
 		framework.ExpectNoError(err, "patch %s %s status", patch.Type, resourceType)
 		verify(fmt.Sprintf("patch %s status", patch.Type), desiredUpdatedObject, existingObject,
-			// Recreation and then at least one update.
+			// status 同样处理。patch 在更新后的对象上应用。
 			matchEvents(existingObject, "^add,(update,)+$"),
 		)
 	}
 
-	// Use the label as selector in List and DeleteCollection calls.
+	// 集群组件的可选更新，然后删除。
 	ginkgo.By(fmt.Sprintf("Listing %s collection with label selector %s", gvr, listOptions.LabelSelector))
 	items, err := client.List(ctx, listOptions)
 	framework.ExpectNoError(err, "list %s", resourceType)
 	gomega.Expect(items.Items).Should(gomega.HaveLen(1), "Should have listed exactly the test resource.")
 	verify("list", desiredUpdatedObject, &items.Items[0],
-		// Optional updates by cluster components.
+		// 更新资源。重试，因为现有对象可能同时被更新。
 		matchEvents(existingObject, "^(update,)*$"),
 	)
 
@@ -908,7 +908,7 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 		framework.ExpectNoError(err, "list %s in all namespaces", resourceType)
 		gomega.Expect(items.Items).Should(gomega.HaveLen(1), "Should have listed exactly the test resource in all namespaces.")
 		verify("list all namespaces", desiredUpdatedObject, &items.Items[0],
-			// Optional updates by cluster components.
+			// 更新资源。重试，因为现有对象可能同时被更新。
 			matchEvents(existingObject, "^(update,)*$"),
 		)
 	}
@@ -918,16 +918,16 @@ func TestResource(ctx context.Context, f *framework.Framework, tc ResourceTestca
 	framework.ExpectNoError(err, "delete collection of %s", resourceType)
 	ensureNotFound(ctx, getResource)
 	verify("list", nil, nil,
-		// Optional updates by cluster components, then deletion.
+		// ensureNotFound 确保 get 函数返回的错误是 NotFound。
 		matchEvents(existingObject, "^(update,)*delete,$"),
 	)
 }
 
-// ensureNotFound ensures that the error returned by the get function is NotFound.
-// This can be called after deleting an object to ensure that it really got removed
-// and not just marked for deletion with a DeletionTimestamp. Deletion is not
-// necessarily instantaneous e.g. because some cluster component might add its
-// own finalizer.
+// 可在删除对象后调用，以确保它确实被移除，
+// 而不只是通过 DeletionTimestamp 标记为待删除。删除并不
+// 一定是即时的，例如某个集群组件可能添加自己的
+// finalizer。
+/* 来自以往的一致性测试，例如 https://github.com/kubernetes/kubernetes/blame/be361a18dda0f2fab1f5e25f8067a9ed43fc3b89/test/e2e/storage/storageclass.go#L152 */
 func ensureNotFound(ctx context.Context, get func(context.Context) (*unstructured.Unstructured, error)) {
 	ginkgo.GinkgoHelper()
 	ginkgo.By("Checking for existence")
@@ -941,6 +941,6 @@ func ensureNotFound(ctx context.Context, get func(context.Context) (*unstructure
 		default:
 			return fmt.Errorf("resource not removed yet:\n%s", format.Object(obj, 1))
 		}
-	}).WithTimeout(30 * time.Second /* From prior conformance tests, e.g. https://github.com/kubernetes/kubernetes/blame/be361a18dda0f2fab1f5e25f8067a9ed43fc3b89/test/e2e/storage/storageclass.go#L152 */).
+	}).WithTimeout(30 * time.Second /* 来自以往的一致性测试，例如 https://github.com/kubernetes/kubernetes/blame/be361a18dda0f2fab1f5e25f8067a9ed43fc3b89/test/e2e/storage/storageclass.go#L152 */).
 		Should(gomega.Succeed())
 }

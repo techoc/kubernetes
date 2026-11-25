@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Build the binary with `go build conformance.go`, then run the conformance binary on a node candidate.  If compiled
-// on a non-linux machine, must be cross compiled for the host.
+// 用 `go build conformance.go` 构建二进制文件，然后在候选节点上运行 conformance 二进制文件。如果
+// 在非 Linux 机器上编译，必须为主机交叉编译。
 package main
 
 import (
@@ -39,8 +39,8 @@ var checkFlag = flag.String(
 	"check", "all", "what to check for conformance.  One or more of all,container-runtime,daemons,dns,firewall,kernel")
 
 func init() {
-	// Set this to false to undo util/logs.go settings it to true.  Prevents cadvisor log spam.
-	// Remove this once util/logs.go stops setting the flag to true.
+	// 将其设为 false 以撤销 util/logs.go 将其设为 true 的设置，防止 cadvisor 日志刷屏。
+	// 当 util/logs.go 不再将该 flag 设为 true 后删除此项。
 	flag.Set("logtostderr", "false")
 }
 
@@ -56,7 +56,7 @@ func main() {
 	}
 }
 
-// check returns errors found while checking the provided components.  Will prevent errors to stdout.
+// check 返回检查给定组件时发现的错误，并防止错误输出到 stdout。
 func check(options ...string) []error {
 	errs := []error{}
 	for _, c := range options {
@@ -85,16 +85,16 @@ func check(options ...string) []error {
 const kubeletClusterDNSRegexStr = `\/kubelet.*--cluster-dns=(\S+) `
 const kubeletClusterDomainRegexStr = `\/kubelet.*--cluster-domain=(\S+)`
 
-// dns checks that cluster dns has been properly configured and can resolve the kubernetes.default service
+// dns 检查集群 DNS 是否配置正确，能否解析 kubernetes.default service
 func dns() error {
 	dnsRegex, err := regexp.Compile(kubeletClusterDNSRegexStr)
 	if err != nil {
-		// This should never happen and can only be fixed by changing the code
+		// 这不应发生，只能通过修改代码来修复
 		panic(err)
 	}
 	domainRegex, err := regexp.Compile(kubeletClusterDomainRegexStr)
 	if err != nil {
-		// This should never happen and can only be fixed by changing the code
+		// 这不应发生，只能通过修改代码来修复
 		panic(err)
 	}
 
@@ -108,11 +108,11 @@ func dns() error {
 
 	kubecmd, err := exec.Command("ps", "aux").CombinedOutput()
 	if err != nil {
-		// Executing ps aux shouldn't have failed
+		// 执行 ps aux 不应失败
 		panic(err)
 	}
 
-	// look for the dns flag and parse the value
+	// 查找 dns flag 并解析其值
 	dns := dnsRegex.FindStringSubmatch(string(kubecmd))
 	if len(dns) < 2 {
 		return printSuccess(
@@ -120,7 +120,7 @@ func dns() error {
 				"--cluster-dns and --cluster-domain when run", notConfigured)
 	}
 
-	// look for the domain flag and parse the value
+	// 查找 domain flag 并解析其值
 	domain := domainRegex.FindStringSubmatch(string(kubecmd))
 	if len(domain) < 2 {
 		return printSuccess(
@@ -128,22 +128,22 @@ func dns() error {
 				"--cluster-dns and --cluster-domain when run", notConfigured)
 	}
 
-	// do a lookup with the flags the kubelet is running with
+	// 用 kubelet 当前运行时的 flag 进行一次查询
 	nsArgs := []string{"-q=a", fmt.Sprintf("kubernetes.default.%s", domain[1]), dns[1]}
 	if err = exec.Command("nslookup", nsArgs...).Run(); err != nil {
-		// Mark this as failed since there was a clear intention to set it up, but it is done so improperly
+		// 将其标记为失败，因为显然打算配置它，但配置方式有误
 		return printError(
 			"Dns Check (Optional): %s No hosts resolve to kubernetes.default  kubelet found, but cannot resolve "+
 				"kubernetes.default using nslookup %s error: %v", failed, strings.Join(nsArgs, " "), err)
 	}
 
-	// Can resolve kubernetes.default using the kubelete dns and domain values
+	// 能用 kubelet 的 dns 和 domain 值解析 kubernetes.default
 	return printSuccess("Dns Check (Optional): %s", success)
 }
 
 const cmdlineCGroupMemory = `cgroup_enable=memory`
 
-// kernel checks that the kernel has been configured correctly to support the required cgroup features
+// kernel 检查内核是否正确配置以支持所需的 cgroup 特性
 func kernel() error {
 	cmdline, err := os.ReadFile("/proc/cmdline")
 	if err != nil {
@@ -158,7 +158,7 @@ func kernel() error {
 const iptablesInputRegexStr = `Chain INPUT \(policy DROP\)`
 const iptablesForwardRegexStr = `Chain FORWARD \(policy DROP\)`
 
-// firewall checks that iptables does not have common firewall rules setup that would disrupt traffic
+// firewall 检查 iptables 是否设置了会干扰流量的常见防火墙规则
 func firewall() error {
 	out, err := exec.Command("iptables", "-L", "INPUT").CombinedOutput()
 	if err != nil {
@@ -166,21 +166,21 @@ func firewall() error {
 	}
 	inputRegex, err := regexp.Compile(iptablesInputRegexStr)
 	if err != nil {
-		// This should never happen and can only be fixed by changing the code
+		// 这不应发生，只能通过修改代码来修复
 		panic(err)
 	}
 	if inputRegex.Match(out) {
 		return printError("Firewall IPTables Check %s: Found INPUT rule matching %s", failed, iptablesInputRegexStr)
 	}
 
-	// Check GCE forward rules
+	// 检查 GCE forward 规则
 	out, err = exec.Command("iptables", "-L", "FORWARD").CombinedOutput()
 	if err != nil {
 		return printSuccess("Firewall IPTables Check %s: Could not run iptables", skipped)
 	}
 	forwardRegex, err := regexp.Compile(iptablesForwardRegexStr)
 	if err != nil {
-		// This should never happen and can only be fixed by changing the code
+		// 这不应发生，只能通过修改代码来修复
 		panic(err)
 	}
 	if forwardRegex.Match(out) {
@@ -190,7 +190,7 @@ func firewall() error {
 	return printSuccess("Firewall IPTables Check %s", success)
 }
 
-// daemons checks that the required node programs are running: kubelet and kube-proxy
+// daemons 检查所需的节点程序是否在运行：kubelet 和 kube-proxy
 func daemons() error {
 	if exec.Command("pgrep", "-f", "kubelet").Run() != nil {
 		return printError("Daemon Check %s: kubelet process not found", failed)
@@ -203,21 +203,21 @@ func daemons() error {
 	return printSuccess("Daemon Check %s", success)
 }
 
-// printError provides its arguments to print a format string to the console (newline terminated) and returns an
-// error with the same string
+// printError 将其参数格式化打印到控制台（以换行结尾），并返回
+// 带相同字符串的 error
 func printError(s string, args ...interface{}) error {
 	es := fmt.Sprintf(s, args...)
 	fmt.Println(es)
 	return errors.New(es)
 }
 
-// printSuccess provides its arguments to print a format string to the console (newline terminated) and returns nil
+// printSuccess 将其参数格式化打印到控制台（以换行结尾）并返回 nil
 func printSuccess(s string, args ...interface{}) error {
 	fmt.Println(fmt.Sprintf(s, args...))
 	return nil
 }
 
-// appendNotNil appends err to errs iff err is not nil
+// appendNotNil 仅在 err 非 nil 时将其追加到 errs
 func appendNotNil(errs []error, err error) []error {
 	if err != nil {
 		return append(errs, err)

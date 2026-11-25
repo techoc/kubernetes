@@ -24,22 +24,22 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
-// TestCase describes the data for a netpol test
+// TestCase 描述 netpol 测试的数据
 type TestCase struct {
 	ToPort       int
 	Protocol     v1.Protocol
 	Reachability *Reachability
 }
 
-// PodString represents a namespace 'x' + pod 'a' as "x/a".
+// PodString 将命名空间 'x' 和 Pod 'a' 表示为 "x/a"。
 type PodString string
 
-// NewPodString instantiates a PodString from the given namespace and name.
+// NewPodString 从给定的命名空间和名称实例化一个 PodString。
 func NewPodString(namespace string, podName string) PodString {
 	return PodString(fmt.Sprintf("%s/%s", namespace, podName))
 }
 
-// String converts back to a string
+// String 转换回字符串
 func (pod PodString) String() string {
 	return string(pod)
 }
@@ -52,40 +52,40 @@ func (pod PodString) split() (string, string) {
 	return pieces[0], pieces[1]
 }
 
-// Namespace extracts the namespace
+// Namespace 提取命名空间
 func (pod PodString) Namespace() string {
 	ns, _ := pod.split()
 	return ns
 }
 
-// PodName extracts the pod name
+// PodName 提取 Pod 名称
 func (pod PodString) PodName() string {
 	_, podName := pod.split()
 	return podName
 }
 
-// Peer is used for matching pods by either or both of the pod's namespace and name.
+// Peer 用于按 Pod 的命名空间和/或名称匹配 Pod。
 type Peer struct {
 	Namespace string
 	Pod       string
 }
 
-// Matches checks whether the Peer matches the PodString:
-// - an empty namespace means the namespace will always match
-// - otherwise, the namespace must match the PodString's namespace
-// - same goes for Pod: empty matches everything, otherwise must match exactly
+// Matches 检查 Peer 是否匹配 PodString：
+// - 空命名空间表示总是匹配
+// - 否则命名空间必须与 PodString 的命名空间一致
+// - Pod 同理：空匹配全部，否则必须完全匹配
 func (p *Peer) Matches(pod PodString) bool {
 	return (p.Namespace == "" || p.Namespace == pod.Namespace()) && (p.Pod == "" || p.Pod == pod.PodName())
 }
 
-// Reachability packages the data for a cluster-wide connectivity probe
+// Reachability 封装集群范围连通性探测的数据
 type Reachability struct {
 	Expected   *TruthTable
 	Observed   *TruthTable
 	PodStrings []PodString
 }
 
-// NewReachability instantiates a reachability
+// NewReachability 实例化一个 reachability
 func NewReachability(podStrings []PodString, defaultExpectation bool) *Reachability {
 	var podNames []string
 	for _, podString := range podStrings {
@@ -99,8 +99,8 @@ func NewReachability(podStrings []PodString, defaultExpectation bool) *Reachabil
 	return r
 }
 
-// AllowLoopback expects all communication from a pod to itself to be allowed.
-// In general, call it after setting up any other rules since loopback logic follows no policy.
+// AllowLoopback 期望从 Pod 到自身的所有通信都被允许。
+// 一般应在设置其他规则后调用，因为 loopback 逻辑不受任何策略约束。
 func (r *Reachability) AllowLoopback() {
 	for _, podString := range r.PodStrings {
 		podName := podString.String()
@@ -108,12 +108,12 @@ func (r *Reachability) AllowLoopback() {
 	}
 }
 
-// Expect sets the expected value for a single observation
+// Expect 设置单次观测的期望值
 func (r *Reachability) Expect(from PodString, to PodString, isConnected bool) {
 	r.Expected.Set(string(from), string(to), isConnected)
 }
 
-// ExpectAllIngress defines that any traffic going into the pod will be allowed/denied (true/false)
+// ExpectAllIngress 定义进入 Pod 的任意流量是被允许还是拒绝（true/false）
 func (r *Reachability) ExpectAllIngress(pod PodString, connected bool) {
 	r.Expected.SetAllTo(string(pod), connected)
 	if !connected {
@@ -121,7 +121,7 @@ func (r *Reachability) ExpectAllIngress(pod PodString, connected bool) {
 	}
 }
 
-// ExpectAllEgress defines that any traffic going out of the pod will be allowed/denied (true/false)
+// ExpectAllEgress 定义离开 Pod 的任意流量是被允许还是拒绝（true/false）
 func (r *Reachability) ExpectAllEgress(pod PodString, connected bool) {
 	r.Expected.SetAllFrom(string(pod), connected)
 	if !connected {
@@ -129,7 +129,7 @@ func (r *Reachability) ExpectAllEgress(pod PodString, connected bool) {
 	}
 }
 
-// ExpectPeer sets expected values using Peer matchers
+// ExpectPeer 使用 Peer matcher 设置期望值
 func (r *Reachability) ExpectPeer(from *Peer, to *Peer, connected bool) {
 	for _, fromPod := range r.PodStrings {
 		if from.Matches(fromPod) {
@@ -142,12 +142,12 @@ func (r *Reachability) ExpectPeer(from *Peer, to *Peer, connected bool) {
 	}
 }
 
-// Observe records a single connectivity observation
+// Observe 记录一次连通性观测
 func (r *Reachability) Observe(fromPod PodString, toPod PodString, isConnected bool) {
 	r.Observed.Set(fromPod.String(), toPod.String(), isConnected)
 }
 
-// Summary produces a useful summary of expected and observed data
+// Summary 生成期望数据与观测数据的有用摘要
 func (r *Reachability) Summary(ignoreLoopback bool) (trueObs int, falseObs int, ignoredObs int, comparison *TruthTable) {
 	comparison = r.Expected.Compare(r.Observed)
 	if !comparison.IsComplete() {
@@ -157,7 +157,7 @@ func (r *Reachability) Summary(ignoreLoopback bool) (trueObs int, falseObs int, 
 	for from, dict := range comparison.Values {
 		for to, val := range dict {
 			if ignoreLoopback && from == to {
-				// Never fail on loopback, because its not yet defined.
+				// loopback 绝不算失败，因为尚未对其作出定义。
 				ignoredObs++
 			} else if val {
 				trueObs++
@@ -169,7 +169,7 @@ func (r *Reachability) Summary(ignoreLoopback bool) (trueObs int, falseObs int, 
 	return
 }
 
-// PrintSummary prints the summary
+// PrintSummary 打印摘要
 func (r *Reachability) PrintSummary(printExpected bool, printObserved bool, printComparison bool) {
 	right, wrong, ignored, comparison := r.Summary(ignoreLoopback)
 	if ignored > 0 {

@@ -49,7 +49,7 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		ginkgo.GinkgoHelper()
 		node := getLocalNode(ctx, f)
 
-		// -1 represents that the resource is not found
+		// -1 表示未找到该资源
 		result := ResourceValue{
 			Allocatable: -1,
 			Capacity:    -1,
@@ -97,10 +97,10 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 
 	nodeStatusUpdateTimeout := 1 * time.Minute
 	devicePluginUpdateTimeout := 1 * time.Minute
-	devicePluginGracefulTimeout := 5 * time.Minute // see endpointStopGracePeriod in pkg/kubelet/cm/devicemanager/types.go
+	devicePluginGracefulTimeout := 5 * time.Minute // 参见 pkg/kubelet/cm/devicemanager/types.go 中的 endpointStopGracePeriod
 
 	ginkgo.It("when GetDevicePluginOptions fails, device plugin will not be used", func(ctx context.Context) {
-		// randomizing so tests can run in parallel
+		// 随机化以便测试可并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 
 		expectedErr := fmt.Errorf("GetDevicePluginOptions failed")
@@ -116,7 +116,7 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		time.Sleep(time.Second)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, []*kubeletdevicepluginv1beta1.Device{{ID: "testdevice", Health: kubeletdevicepluginv1beta1.Healthy}})
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也应停止
 		gomega.Expect(err).To(gomega.MatchError(gomega.ContainSubstring("failed to get device plugin options")))
 		gomega.Expect(err).To(gomega.MatchError(gomega.ContainSubstring(expectedErr.Error())))
 
@@ -124,12 +124,12 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		gomega.Expect(plugin.WasCalled("GetDevicePluginOptions")).To(gomega.BeTrueBecause("get device plugin options should be called exactly once"))
 		gomega.Expect(plugin.Calls()).To(gomega.HaveLen(1))
 
-		// kubelet will not even register the resource
+		// kubelet 甚至不会注册该资源
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: -1, Capacity: -1}))
 	})
 
 	ginkgo.It("will set allocatable to zero when a single device became unhealthy and then back to 1 if it got healthy again", func(ctx context.Context) {
-		// randomizing so tests can run in parallel
+		// 随机化以便测试可并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 		devices := []*kubeletdevicepluginv1beta1.Device{{ID: "testdevice", Health: kubeletdevicepluginv1beta1.Healthy}}
 		plugin := testdeviceplugin.NewDevicePlugin(nil)
@@ -138,19 +138,19 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		time.Sleep(time.Second)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, devices)
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也应停止
 		gomega.Expect(err).To(gomega.Succeed())
 
-		// at first the device is healthy
+		// 起初设备是健康的
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 1, Capacity: 1}))
 
-		// now make the device unhealthy
+		// 现在让设备变得不健康
 		devices[0].Health = kubeletdevicepluginv1beta1.Unhealthy
 		plugin.UpdateDevices(devices)
 
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 1}))
 
-		// now make the device healthy again
+		// 现在让设备恢复健康
 		devices[0].Health = kubeletdevicepluginv1beta1.Healthy
 		plugin.UpdateDevices(devices)
 
@@ -158,7 +158,7 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 	})
 
 	ginkgo.It("will set allocatable to zero when a single device became unhealthy, but capacity will stay at 1", func(ctx context.Context) {
-		// randomizing so tests can run in parallel
+		// 随机化以便测试可并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 		devices := []*kubeletdevicepluginv1beta1.Device{{ID: "testdevice", Health: kubeletdevicepluginv1beta1.Healthy}}
 		plugin := testdeviceplugin.NewDevicePlugin(nil)
@@ -167,42 +167,42 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		time.Sleep(time.Second)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, devices)
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也应停止
 		gomega.Expect(err).To(gomega.Succeed())
 
 		ginkgo.By("initial state: capacity and allocatable are set")
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 1, Capacity: 1}))
 
-		// schedule a pod that requests the device
+		// 调度一个请求该设备的 Pod
 		client := e2epod.NewPodClient(f)
 		pod := client.Create(ctx, createPod(resourceName, 1))
 
-		// wait for the pod to be running
+		// 等待 Pod 进入运行态
 		gomega.Expect(e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)).To(gomega.Succeed())
 
 		ginkgo.By("once pod is running, it does not affect allocatable value")
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 1, Capacity: 1}))
 
-		// now make the device unhealthy
+		// 现在让设备变得不健康
 		devices[0].Health = kubeletdevicepluginv1beta1.Unhealthy
 		plugin.UpdateDevices(devices)
 
 		ginkgo.By("even when device became unhealthy. pod is still running and keeping the capacity")
-		// we keep the allocatable at the same value even though device is not healthy any longer
+		// 即使设备已不健康，我们仍保持 allocatable 值不变
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 1}))
 
-		// pod is not affected by the device becoming unhealthy
+		// Pod 不受设备变不健康的影响
 
 		gomega.Consistently(func() v1.PodPhase {
 			pod, err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 			return pod.Status.Phase
 		}, devicePluginUpdateTimeout, f.Timeouts.Poll).Should(gomega.Equal(v1.PodRunning))
 
-		// deleting the pod
+		// 删除 Pod
 		err = f.ClientSet.CoreV1().Pods(f.Namespace.Name).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 		gomega.Expect(err).To(gomega.Succeed())
 
-		// wait for the pod to be deleted
+		// 等待 Pod 被删除
 		gomega.Eventually(func() error {
 			_, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 			return err
@@ -213,7 +213,7 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 	})
 
 	ginkgo.It("will lower allocatable to a number of unhealthy devices and then back if they became healthy again", func(ctx context.Context) {
-		// randomizing so tests can run in parallel
+		// 随机化以便测试可并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 
 		devices := []*kubeletdevicepluginv1beta1.Device{
@@ -228,38 +228,38 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		time.Sleep(time.Second)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, devices)
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也应停止
 		gomega.Expect(err).To(gomega.Succeed())
 
-		// at first all the devices are healthy
+		// 起初所有设备都是健康的
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 4, Capacity: 4}))
 
-		// now make one device unhealthy
+		// 现在让一个设备变得不健康
 		devices[3].Health = kubeletdevicepluginv1beta1.Unhealthy
 		plugin.UpdateDevices(devices)
 
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 3, Capacity: 4}))
 
-		// now make the device healthy again
+		// 现在让设备恢复健康
 		devices[3].Health = kubeletdevicepluginv1beta1.Healthy
 		plugin.UpdateDevices(devices)
 
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 4, Capacity: 4}))
 
-		// now make two devices unhealthy
+		// 现在让两个设备变得不健康
 		devices[1].Health = kubeletdevicepluginv1beta1.Unhealthy
 		devices[3].Health = kubeletdevicepluginv1beta1.Unhealthy
 		plugin.UpdateDevices(devices)
 
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 2, Capacity: 4}))
 
-		// now make the device healthy again
+		// 现在让设备恢复健康
 		devices[3].Health = kubeletdevicepluginv1beta1.Healthy
 		plugin.UpdateDevices(devices)
 
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 3, Capacity: 4}))
 
-		// now make the device healthy again
+		// 现在让设备恢复健康
 		devices[1].Health = kubeletdevicepluginv1beta1.Healthy
 		plugin.UpdateDevices(devices)
 
@@ -267,11 +267,11 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 	})
 
 	ginkgo.It("when ListAndWatch fails immediately, node allocatable will be set to zero and kubelet will not retry to list resources", func(ctx context.Context) {
-		// randomizing so tests can run in parallel
+		// 随机化以便测试可并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 		devices := []*kubeletdevicepluginv1beta1.Device{{ID: "testdevice", Health: kubeletdevicepluginv1beta1.Healthy}}
 
-		// Initially, there are no allocatable of this resource
+		// 起初该资源没有 allocatable
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: -1, Capacity: -1}))
 
 		plugin := testdeviceplugin.NewDevicePlugin(func(name string) error {
@@ -285,21 +285,21 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		time.Sleep(time.Second)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, devices)
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也应停止
 		gomega.Expect(err).To(gomega.Succeed())
 
-		// kubelet registers the resource, but will not have any allocatable
+		// kubelet 注册了该资源，但不会有任何 allocatable
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 0}))
 
-		// kubelet will never retry ListAndWatch (this will sleep for a long time)
+		// kubelet 永远不会重试 ListAndWatch（它会长时间休眠）
 		gomega.Consistently(plugin.Calls, devicePluginUpdateTimeout, f.Timeouts.Poll).Should(gomega.HaveLen(2))
 
-		// however kubelet will not delete the resource
+		// 但 kubelet 不会删除该资源
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 0}))
 	})
 
 	ginkgo.It("when ListAndWatch fails after provisioning devices, node allocatable will be set to zero and kubelet will not retry to list resources", func(ctx context.Context) {
-		// randomizing so tests can run in parallel
+		// 随机化以便测试可并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 		devices := []*kubeletdevicepluginv1beta1.Device{
 			{ID: "0", Health: kubeletdevicepluginv1beta1.Healthy},
@@ -320,30 +320,30 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		time.Sleep(time.Second)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, devices)
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也应停止
 		gomega.Expect(err).To(gomega.Succeed())
 
-		// at first the device is healthy
+		// 起初设备是健康的
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 2, Capacity: 2}))
 
-		// let's make ListAndWatch fail
+		// 让 ListAndWatch 失败
 		failing = true
 
-		// kubelet will mark all devices as unhealthy
+		// kubelet 会将所有设备标记为不健康
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 2}))
 
-		// kubelet will never retry ListAndWatch (this will sleep for a long time)
+		// kubelet 永远不会重试 ListAndWatch（它会长时间休眠）
 		gomega.Consistently(plugin.Calls, devicePluginUpdateTimeout, f.Timeouts.Poll).Should(gomega.HaveLen(2))
 
-		// however kubelet will not delete the resource and will keep the capacity
+		// 但 kubelet 不会删除该资源，且会保留容量
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 2}))
 
-		// after the graceful period devices capacity will reset to zero
+		// 宽限期后设备容量将重置为零
 		gomega.Eventually(getNodeResourceValues, devicePluginGracefulTimeout+1*time.Minute, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 0}))
 	})
 
 	ginkgo.It("when device plugin is stopped after provisioning devices, node allocatable will be set to zero", func(ctx context.Context) {
-		// randomizing so tests can run in parallel
+		// 随机化以便测试可并行运行
 		resourceName := fmt.Sprintf("test.device/%s", f.UniqueName)
 		devices := []*kubeletdevicepluginv1beta1.Device{
 			{ID: "0", Health: kubeletdevicepluginv1beta1.Healthy},
@@ -358,19 +358,19 @@ var _ = SIGDescribe("Device Plugin Failures:", framework.WithNodeConformance(), 
 		time.Sleep(time.Second)
 
 		err := plugin.RegisterDevicePlugin(ctx, f.UniqueName, resourceName, devices)
-		defer plugin.Stop() // should stop even if registration failed
+		defer plugin.Stop() // 即使注册失败也应停止
 		gomega.Expect(err).To(gomega.Succeed())
 
-		// at first the device is healthy
+		// 起初设备是健康的
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 2, Capacity: 2}))
 
-		// let's unload the plugin
+		// 卸载插件
 		plugin.Stop()
 
-		// kubelet will mark all devices as unhealthy
+		// kubelet 会将所有设备标记为不健康
 		gomega.Eventually(getNodeResourceValues, nodeStatusUpdateTimeout, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 2}))
 
-		// after the graceful period devices capacity will reset to zero
+		// 宽限期后设备容量将重置为零
 		gomega.Eventually(getNodeResourceValues, devicePluginGracefulTimeout+1*time.Minute, f.Timeouts.Poll).WithContext(ctx).WithArguments(resourceName).Should(gomega.Equal(ResourceValue{Allocatable: 0, Capacity: 0}))
 	})
 })

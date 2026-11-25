@@ -50,7 +50,7 @@ var _ = ginkgo.Describe("[sig-node] ContainerTerminationMetrics Validation", fun
 
 		ginkgo.By("Checking kubelet metrics via API Server Proxy")
 		gomega.Eventually(ctx, func() error {
-			// Get the actual node the pod was scheduled on
+			// 获取 Pod 实际被调度到的节点
 			p, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, createdPod.Name, metav1.GetOptions{})
 			if err != nil {
 				return err

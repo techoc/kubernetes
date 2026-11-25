@@ -45,7 +45,7 @@ var buildNoCGOTargets = []string{
 	"test/e2e_node/plugins/gcp-credential-provider",
 }
 
-// BuildGo builds k8s binaries.
+// BuildGo 构建 k8s 二进制文件。
 func BuildGo() error {
 	if err := BuildTargets(true); err != nil {
 		return fmt.Errorf("unable to build cgo targets : %w", err)
@@ -56,7 +56,7 @@ func BuildGo() error {
 	return nil
 }
 
-// BuildGo builds k8s binaries.
+// BuildGo 构建 k8s 二进制文件。
 func BuildTargets(cgo bool) error {
 	klog.Infof("Building k8s binaries...")
 	k8sRoot, err := utils.GetK8sRootDir()
@@ -77,9 +77,9 @@ func BuildTargets(cgo bool) error {
 	}
 	if IsDockerizedBuild() {
 		klog.Infof("Building dockerized k8s binaries targets %s for architecture %s", targets, GetTargetBuildArch())
-		// Multi-architecture build is only supported in dockerized build
+		// 多架构构建仅在 dockerized 构建中支持
 		cmd = exec.Command(filepath.Join(k8sRoot, "build/run.sh"), "make", fmt.Sprintf("WHAT=%s", what), fmt.Sprintf("KUBE_BUILD_PLATFORMS=%s", GetTargetBuildArch()))
-		// Ensure we run this command in k8s root directory for dockerized build
+		// dockerized 构建时，确保此命令在 k8s 根目录中运行
 		cmd.Dir = k8sRoot
 	}
 	cmd.Stdout = os.Stdout
@@ -91,23 +91,23 @@ func BuildTargets(cgo bool) error {
 	return nil
 }
 
-// IsDockerizedBuild returns if test needs to use dockerized build
+// IsDockerizedBuild 返回测试是否需要使用 dockerized 构建
 func IsDockerizedBuild() bool {
 	return *useDockerizedBuild
 }
 
-// GetTargetBuildArch returns the target build architecture for dockerized build
+// GetTargetBuildArch 返回 dockerized 构建的目标架构
 func GetTargetBuildArch() string {
 	return *targetBuildArch
 }
 
-// IsTargetArchArm64 returns if the target is for windows/arm64 platform
+// IsTargetArchArm64 返回目标是否为 windows/arm64 平台
 func IsTargetArchArm64() bool {
 	return GetTargetBuildArch() == "windows/arm64"
 }
 
 func getK8sBin(bin string) (string, error) {
-	// Use commandline specified path
+	// 使用命令行指定的路径
 	if *k8sBinDir != "" {
 		absPath, err := filepath.Abs(*k8sBinDir)
 		if err != nil {
@@ -135,11 +135,11 @@ func getK8sBin(bin string) (string, error) {
 		return filepath.Join(buildOutputDir, bin), nil
 	}
 
-	// Give up with error
+	// 放弃并返回错误
 	return "", fmt.Errorf("unable to locate %s, Can be defined using --k8s-path", bin)
 }
 
-// GetKubeletServerBin returns the path of kubelet binary.
+// GetKubeletServerBin 返回 kubelet 二进制文件的路径。
 func GetKubeletServerBin() string {
 	bin, err := getK8sBin("kubelet.exe")
 	if err != nil {

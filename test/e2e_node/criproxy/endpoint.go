@@ -26,8 +26,8 @@ const (
 	defaultUnixEndpoint = "unix:///tmp/kubelet_remote_proxy_%v.sock"
 )
 
-// GenerateEndpoint generates a new unix socket server of grpc server.
+// GenerateEndpoint 为 gRPC server 创建一个新的 unix socket server。
 func GenerateEndpoint() (string, error) {
-	// use random int be a part fo file name
+	// 使用随机整数作为文件名的一部分
 	return fmt.Sprintf(defaultUnixEndpoint, rand.Int()), nil
 }

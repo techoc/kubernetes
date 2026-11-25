@@ -32,9 +32,9 @@ import (
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
-// These tests requires SSH to nodes, so the provider check should be identical to there
-// (the limiting factor is the implementation of util.go's e2essh.GetSigner(...)).
-// Cluster must support node reboot.
+// 这些测试需要对节点进行 SSH，因此 provider 检查应与那里相同
+// （限制因素是 util.go 中 e2essh.GetSigner(...) 的实现）。
+// 集群必须支持节点重启。
 var _ = utils.SIGDescribe("CSI Mock when kubelet restart", framework.WithSerial(), framework.WithDisruptive(), framework.WithProvider(framework.ProvidersWithSSH...), func() {
 	f := framework.NewDefaultFramework("csi-mock-when-kubelet-restart")
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -79,7 +79,7 @@ var _ = utils.SIGDescribe("CSI Mock when kubelet restart", framework.WithSerial(
 				calls, err := m.driver.GetCalls(ctx)
 				if err != nil {
 					if apierrors.IsUnexpectedServerError(err) {
-						// kubelet might not be ready yet when getting the calls
+						// 收到调用时 kubelet 可能尚未就绪
 						gomega.TryAgainAfter(framework.Poll).Wrap(err).Now()
 						return nil
 					}

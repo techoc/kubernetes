@@ -26,22 +26,22 @@ import (
 )
 
 const (
-	// poll is how often to poll pods, nodes and claims.
+	// WaitForDeploymentRevisionAndImage 等待 deployment 及其新 RS 的 revision 和容器镜像与给定的 revision 和镜像匹配。
 	poll             = 2 * time.Second
 	pollShortTimeout = 1 * time.Minute
 	pollLongTimeout  = 5 * time.Minute
 )
 
-// WaitForDeploymentRevisionAndImage waits for the deployment's and its new RS's revision and container image to match the given revision and image.
-// Note that deployment revision and its new RS revision should be updated shortly most of the time, but an overwhelmed RS controller
-// may result in taking longer to relabel a RS.
+// 注意，多数情况下 deployment revision 和新 RS revision 应很快更新，但 RS controller 过载时
+// 可能需要更长时间才能给 RS 重新打标签。
+// WaitForDeploymentComplete 等待 deployment 完成，不检查 rolling update 策略是否被破坏。
 func WaitForDeploymentRevisionAndImage(c clientset.Interface, ns, deploymentName string, revision, image string) error {
 	return testutils.WaitForDeploymentRevisionAndImage(c, ns, deploymentName, revision, image, framework.Logf, poll, pollLongTimeout)
 }
 
-// WaitForDeploymentComplete waits for the deployment to complete, and don't check if rolling update strategy is broken.
-// Rolling update strategy is used only during a rolling update, and can be violated in other situations,
-// such as shortly after a scaling event or the deployment is just created.
+// Rolling update 策略只在 rolling update 期间使用，在其他情况下可能被违反，
+// 例如刚发生扩缩容或 deployment 刚创建后。
+// MakeMatcher 基于单个回调函数构建一个 gomega.Matcher。
 func WaitForDeploymentComplete(c clientset.Interface, d *appsv1.Deployment) error {
 	return testutils.WaitForDeploymentComplete(c, d, framework.Logf, poll, pollLongTimeout)
 }

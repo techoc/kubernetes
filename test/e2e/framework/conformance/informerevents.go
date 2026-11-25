@@ -27,17 +27,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// eventRecorder implements [cache.ResourceEventHandler] by recording all events.
-// It is thread-safe.
+// 它是线程安全的。
+// event 描述一个 add/update/delete 事件。
 type eventRecorder struct {
 	mutex  sync.Mutex
 	events []event
 }
 
-// event describes one add/update/delete event.
-// They can be distinguished based on which object(s) are set.
-// Delete events may contain a tombstone instead of the actual
-// deleted object.
+// event 描述一个 add/update/delete 事件。
+// 可根据设置了哪些对象来区分它们。
+// Delete 事件可能包含 tombstone 而不是实际的
+// 被删除对象。
 type event struct {
 	oldObj, newObj any
 	isInitialList  bool
@@ -56,14 +56,14 @@ func (e event) Type() string {
 	}
 }
 
-// ID returns "[namespace/]name, uid" for the object
-// described in the event. If for whatever reason
-// that is different for the old and new event (an error!),
-// it returns both strings separated by semicolon.
-// If meta data access is not possible, the error string is returned.
+// ID 返回事件中所描述对象的 "[namespace/]name, uid"。
+// 如果由于某种原因，旧事件和新事件的 ID
+// 不同（这是错误！），
+// 则用分号分隔返回两个字符串。
+// 如果无法访问元数据，则返回错误字符串。
 //
-// This is meant to be used with gomega.HaveEach and a matcher
-// which checks for the expected ID.
+// 这旨在与 gomega.HaveEach 及检查期望 ID 的 matcher
+// 一起使用。
 func (e event) ID() string {
 	oldID := id(e.oldObj)
 	newID := id(e.newObj)
@@ -124,7 +124,7 @@ func (er *eventRecorder) OnDelete(obj any) {
 	})
 }
 
-// list returns a shallow copy of the current list of events.
+// list 返回当前事件列表的浅拷贝。
 func (er *eventRecorder) list() eventList {
 	er.mutex.Lock()
 	defer er.mutex.Unlock()
@@ -132,8 +132,8 @@ func (er *eventRecorder) list() eventList {
 	return eventList{Events: slices.Clone(er.events)}
 }
 
-// reset clears the current list of events.
-// Should only be called during idle periods.
+// reset 清空当前事件列表。
+// 只应在空闲期间调用。
 func (er *eventRecorder) reset() eventList {
 	er.mutex.Lock()
 	defer er.mutex.Unlock()
@@ -143,18 +143,18 @@ func (er *eventRecorder) reset() eventList {
 	return events
 }
 
-// eventList adds pretty-printing to a slice of events.
+// eventList 为事件 slice 添加漂亮打印。
 type eventList struct {
 	Events []event
 }
 
-// Types returns a comma-separated list of the type of each event.
-// For the sake of simplicity the last entry also ends with a comma.
+// Types 返回一个逗号分隔的列表，包含每个事件的类型。
+// 为简单起见，最后一项也以逗号结尾。
 //
-// This can be used in Gomega assertions like this:
+// 可在如下的 Gomega 断言中使用：
 //
-//	gomega.Expect(events).To(gomega.HaveField("Types()", gomega.MatchRegexp("^add,(update,)*$"))
-//	gomega.Expect(events).To(gomega.HaveField("Types()", gomega.MatchRegexp("^(update,)*$"))
+// \tgomega.Expect(events).To(gomega.HaveField("Types()", gomega.MatchRegexp("^(update,)*$"))'
+// poll 是轮询 pod、node 和 claim 的频率。
 func (el eventList) Types() string {
 	var buffer strings.Builder
 

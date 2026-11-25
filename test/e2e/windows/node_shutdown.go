@@ -68,7 +68,7 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 			"spec.nodeName": nodeName,
 		}.AsSelector().String()
 
-		// Define test pods
+		// 定义测试 Pod
 		pods := []*v1.Pod{
 			getGracePeriodOverrideTestPod("period-20-"+string(uuid.NewUUID()), nodeName, 20, ""),
 			getGracePeriodOverrideTestPod("period-25-"+string(uuid.NewUUID()), nodeName, 25, ""),
@@ -96,19 +96,19 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 				},
 			}
 
-			// Setup watch to continuously monitor any pod events and detect invalid pod status updates
+			// 设置 watch 持续监控 Pod 事件，检测无效的 Pod 状态更新
 			_, err = watchtools.Until(ctx, list.ResourceVersion, w, func(event watch.Event) (bool, error) {
 				if pod, ok := event.Object.(*v1.Pod); ok {
 					if isPodReadyWithFailedStatus(pod) {
 						return false, fmt.Errorf("failing test due to detecting invalid pod status")
 					}
-					// Watch will never terminate (only when the test ends due to context cancellation)
+					// watch 永不终止（仅在测试因 context 取消而结束时才终止）
 					return false, nil
 				}
 				return false, nil
 			})
 
-			// Ignore timeout error since the context will be explicitly cancelled and the watch will never return true
+			// 忽略超时错误，因为 context 将被显式取消，watch 永远不会返回 true
 			if err != nil && !wait.Interrupted(err) {
 				framework.Failf("watch for invalid pod status failed: %v", err.Error())
 			}
@@ -125,7 +125,7 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 			framework.Logf("Pod (%v/%v) status conditions: %#v", pod.Namespace, pod.Name, pod.Status.Conditions)
 		}
 
-		// use to keep the node active before testing critical pods reaching the terminate state
+		// 在测试 critical Pod 进入终止状态前，用于保持节点活跃
 		delyapodName := "delay-shutdown-20-" + string(uuid.NewUUID())
 		delayPod := getGracePeriodOverrideTestPod(delyapodName, nodeName, 20, scheduling.SystemNodeCritical)
 		e2epod.NewPodClient(f).CreateSync(ctx, delayPod)
@@ -135,7 +135,7 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 		emitSignalPrepareForShutdown(nodeName, f, ctx)
 
 		ginkgo.By("Verifying that non-critical pods are shutdown")
-		// Non critical pod should be shutdown
+		// 非 critical Pod 应被关闭
 		gomega.Eventually(ctx, func(ctx context.Context) error {
 			list, err = e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{
 				FieldSelector: nodeSelector,
@@ -143,7 +143,7 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 			if err != nil {
 				return err
 			}
-			// Find pods with names starting with "period"
+			// 查找名称以 "period" 开头的 Pod
 			filteredPods := []v1.Pod{}
 			for _, pod := range list.Items {
 				if strings.HasPrefix(pod.Name, "period") {
@@ -169,7 +169,7 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 		}, podStatusUpdateTimeout, pollInterval).Should(gomega.Succeed())
 
 		ginkgo.By("Verifying that all pods are shutdown")
-		// All pod should be shutdown
+		// 所有 Pod 都应被关闭
 		gomega.Eventually(ctx, func(ctx context.Context) error {
 			list, err = e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{
 				FieldSelector: nodeSelector,
@@ -177,7 +177,7 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 			if err != nil {
 				return err
 			}
-			// Find pods with names starting with "period"
+			// 查找名称以 "period" 开头的 Pod
 			filteredPods := []v1.Pod{}
 			for _, pod := range list.Items {
 				if strings.HasPrefix(pod.Name, "period") {
@@ -195,12 +195,12 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 			}
 			return nil
 		},
-			// Critical pod starts shutdown after (nodeShutdownGracePeriod-nodeShutdownGracePeriodCriticalPods)
+			// critical Pod 在 (nodeShutdownGracePeriod-nodeShutdownGracePeriodCriticalPods) 后开始关闭
 			podStatusUpdateTimeout+(nodeShutdownGracePeriod-nodeShutdownGracePeriodCriticalPods),
 			pollInterval).Should(gomega.Succeed())
 
 		ginkgo.By("Verify that all pod ready to start condition are set to false after terminating")
-		// All pod ready to start condition should set to false
+		// 所有 Pod 的 ready to start condition 应设为 false
 		gomega.Eventually(ctx, func(ctx context.Context) error {
 			list, err = e2epod.NewPodClient(f).List(ctx, metav1.ListOptions{
 				FieldSelector: nodeSelector,
@@ -209,7 +209,7 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 				return err
 			}
 
-			// Find pods with names starting with "period"
+			// 查找名称以 "period" 开头的 Pod
 			filteredPods := []v1.Pod{}
 			for _, pod := range list.Items {
 				if strings.HasPrefix(pod.Name, "period") {
@@ -232,10 +232,10 @@ var _ = sigDescribe(feature.Windows, "GracefulNodeShutdown", framework.WithSeria
 	})
 }))
 
-// getGracePeriodOverrideTestPod returns a new Pod object containing a container
-// runs a shell script, hangs the process until a SIGTERM signal is received.
-// The script waits for $PID to ensure that the process does not exist.
-// If priorityClassName is scheduling.SystemNodeCritical, the Pod is marked as critical and a comment is added.
+// getGracePeriodOverrideTestPod 返回一个新的 Pod 对象，其中包含一个容器，
+// 该容器运行 shell 脚本，并挂起进程直到收到 SIGTERM 信号。
+// 脚本等待 $PID，以确保进程不存在。
+// 如果 priorityClassName 为 scheduling.SystemNodeCritical，Pod 会被标记为 critical 并添加注释。
 func getGracePeriodOverrideTestPod(name string, node string, gracePeriod int64, priorityClassName string) *v1.Pod {
 	agnhostImage := imageutils.GetE2EImage(imageutils.Agnhost)
 
@@ -276,7 +276,7 @@ func getGracePeriodOverrideTestPod(name string, node string, gracePeriod int64, 
 	return pod
 }
 
-// Emits a reboot event from HPC. Will cause kubelet to react to an active shutdown event.
+// 从 HPC 发出 reboot 事件，使 kubelet 对主动关机事件作出反应。
 func emitSignalPrepareForShutdown(nodeName string, f *framework.Framework, ctx context.Context) {
 	ginkgo.By("scheduling a pod with a container that emits a PrepareForShutdown signal")
 
@@ -352,7 +352,7 @@ func isPodShutdown(pod *v1.Pod) bool {
 	return pod.Status.Message == podShutdownMessage && pod.Status.Reason == podShutdownReason && hasContainersNotReadyCondition && pod.Status.Phase == v1.PodFailed
 }
 
-// Pods should never report failed phase and have ready condition = true (https://github.com/kubernetes/kubernetes/issues/108594)
+// Pod 不应同时报告 failed phase 和 ready condition = true（https://github.com/kubernetes/kubernetes/issues/108594）
 func isPodReadyWithFailedStatus(pod *v1.Pod) bool {
 	return pod.Status.Phase == v1.PodFailed && podutils.IsPodReady(pod)
 }

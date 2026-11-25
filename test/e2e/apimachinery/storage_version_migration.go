@@ -38,7 +38,7 @@ var _ = SIGDescribe("StorageVersionMigration", func() {
 		/*
 		   Release: v1.37
 		   Testname: CRUD operations for storageversionmigrations
-		   Description: kube-apiserver must support create/update/list/patch/delete operations for storagemigration.k8s.io/v1 StorageVersionMigration.
+		   Description: kube-apiserver 必须支持对 storagemigration.k8s.io/v1 StorageVersionMigration 的 create/update/list/patch/delete 操作。
 		*/
 		framework.ConformanceIt("storagemigration.k8s.io/v1 StorageVersionMigration", func(ctx context.Context) {
 			e2econformance.TestResource(ctx, f,
@@ -54,7 +54,7 @@ var _ = SIGDescribe("StorageVersionMigration", func() {
 						},
 					},
 					UpdateSpec: func(obj *svmv1.StorageVersionMigration) *svmv1.StorageVersionMigration {
-						// Spec is immutable, so let's add a label instead.
+						// Spec 不可变，因此改用添加 label 的方式。
 						if obj.Labels == nil {
 							obj.Labels = make(map[string]string)
 						}

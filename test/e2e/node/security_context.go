@@ -14,11 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* This test check that SecurityContext parameters specified at the
- * pod or the container level work as intended. These tests cannot be
- * run when the 'SecurityContextDeny' admission controller is not used
- * so they are skipped by default.
- */
+/* 此测试检查在 Pod 或容器级别指定的 SecurityContext 参数是否按预期工作。当未使用 'SecurityContextDeny' admission controller 时无法运行这些测试，因此默认跳过。 */
 
 package node
 
@@ -40,10 +36,10 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// SeccompProcStatusField is the field of /proc/$PID/status referencing the seccomp filter type.
+// SeccompProcStatusField 是 /proc/$PID/status 中引用 seccomp filter 类型的字段。
 const SeccompProcStatusField = "Seccomp:"
 
-// ProcSelfStatusPath is the path to /proc/self/status.
+// ProcSelfStatusPath 是 /proc/self/status 的路径。
 const ProcSelfStatusPath = "/proc/self/status"
 
 func scTestPod(hostIPC bool, hostPID bool) *v1.Pod {
@@ -95,12 +91,12 @@ var _ = SIGDescribe("Security Context", func() {
 			pod.Spec.SecurityContext.SupplementalGroups = []int64{int64(supplementalGroup)}
 			pod.Spec.SecurityContext.RunAsUser = &uidInImage
 
-			// In specified image(agnhost E2E image),
-			// - user-defined-in-image(uid=1000) is defined
-			// - user-defined-in-image belongs to group-defined-in-image(gid=50000)
-			// thus, resultant supplementary group of the container processes should be
-			// - 1000: self
-			// - 50000: pre-defined groups define in the container image of self(uid=1000)
+			// 在指定的镜像（agnhost E2E 镜像）中，
+			// - 定义了 user-defined-in-image（uid=1000）
+			// - user-defined-in-image 属于 group-defined-in-image（gid=50000）
+			// 因此，容器进程的最终 supplementary group 应为
+			// - 1000：自身
+			// - 50000：在自身（uid=1000）的容器镜像中预定义的组
 			// - 60000: SupplementalGroups
 			// $ id -G
 			// 1000 50000 60000
@@ -129,8 +125,8 @@ var _ = SIGDescribe("Security Context", func() {
 	/*
 		Release: v1.21
 		Testname: Security Context, test RunAsGroup at pod level
-		Description: Container is created with runAsUser and runAsGroup option by passing uid 1001 and gid 2002 at pod level. Pod MUST be in Succeeded phase.
-		[LinuxOnly]: This test is marked as LinuxOnly since Windows does not support running as UID / GID.
+		Description: 通过在 pod 级别传入 uid 1001 和 gid 2002，创建带 runAsUser 和 runAsGroup 选项的容器。Pod MUST 处于 Succeeded 阶段。
+		[LinuxOnly]: 由于 Windows 不支持以 UID / GID 运行，此测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should support pod.Spec.SecurityContext.RunAsUser And pod.Spec.SecurityContext.RunAsGroup [LinuxOnly]", func(ctx context.Context) {
 		pod := scTestPod(false, false)
@@ -164,8 +160,8 @@ var _ = SIGDescribe("Security Context", func() {
 	/*
 		Release: v1.21
 		Testname: Security Context, test RunAsGroup at container level
-		Description: Container is created with runAsUser and runAsGroup option by passing uid 1001 and gid 2002 at containr level. Pod MUST be in Succeeded phase.
-		[LinuxOnly]: This test is marked as LinuxOnly since Windows does not support running as UID / GID.
+		Description: 通过在容器级别传入 uid 1001 和 gid 2002，创建带 runAsUser 和 runAsGroup 选项的容器。Pod MUST 处于 Succeeded 阶段。
+		[LinuxOnly]: 由于 Windows 不支持以 UID / GID 运行，此测试标记为 LinuxOnly。
 	*/
 	framework.ConformanceIt("should support container.SecurityContext.RunAsUser And container.SecurityContext.RunAsGroup [LinuxOnly]", func(ctx context.Context) {
 		pod := scTestPod(false, false)
@@ -203,27 +199,27 @@ var _ = SIGDescribe("Security Context", func() {
 		pod.Spec.Containers[0].SecurityContext = &v1.SecurityContext{SeccompProfile: &v1.SeccompProfile{Type: v1.SeccompProfileTypeUnconfined}}
 		pod.Spec.SecurityContext = &v1.PodSecurityContext{SeccompProfile: &v1.SeccompProfile{Type: v1.SeccompProfileTypeRuntimeDefault}}
 		pod.Spec.Containers[0].Command = []string{"grep", SeccompProcStatusField, ProcSelfStatusPath}
-		e2eoutput.TestContainerOutput(ctx, f, "seccomp unconfined container", pod, 0, []string{"0"}) // seccomp disabled
+		e2eoutput.TestContainerOutput(ctx, f, "seccomp unconfined container", pod, 0, []string{"0"}) // 禁用 seccomp
 	})
 
 	ginkgo.It("should support seccomp unconfined on the pod [LinuxOnly]", func(ctx context.Context) {
 		pod := scTestPod(false, false)
 		pod.Spec.SecurityContext = &v1.PodSecurityContext{SeccompProfile: &v1.SeccompProfile{Type: v1.SeccompProfileTypeUnconfined}}
 		pod.Spec.Containers[0].Command = []string{"grep", SeccompProcStatusField, ProcSelfStatusPath}
-		e2eoutput.TestContainerOutput(ctx, f, "seccomp unconfined pod", pod, 0, []string{"0"}) // seccomp disabled
+		e2eoutput.TestContainerOutput(ctx, f, "seccomp unconfined pod", pod, 0, []string{"0"}) // 禁用 seccomp
 	})
 
 	ginkgo.It("should support seccomp runtime/default [LinuxOnly]", func(ctx context.Context) {
 		pod := scTestPod(false, false)
 		pod.Spec.Containers[0].SecurityContext = &v1.SecurityContext{SeccompProfile: &v1.SeccompProfile{Type: v1.SeccompProfileTypeRuntimeDefault}}
 		pod.Spec.Containers[0].Command = []string{"grep", SeccompProcStatusField, ProcSelfStatusPath}
-		e2eoutput.TestContainerOutput(ctx, f, "seccomp runtime/default", pod, 0, []string{"2"}) // seccomp filtered
+		e2eoutput.TestContainerOutput(ctx, f, "seccomp runtime/default", pod, 0, []string{"2"}) // seccomp 已过滤
 	})
 })
 
 func testPodSELinuxLabeling(ctx context.Context, f *framework.Framework, hostIPC bool, hostPID bool) {
-	// Write and read a file with an empty_dir volume
-	// with a pod with the MCS label s0:c0,c1
+	// 使用 empty_dir volume 写入和读取文件
+	// 使用带 MCS 标签 s0:c0,c1 的 Pod
 	pod := scTestPod(hostIPC, hostPID)
 	volumeName := "test-volume"
 	mountPath := "/mounted_volume"
@@ -266,8 +262,8 @@ func testPodSELinuxLabeling(ctx context.Context, f *framework.Framework, hostIPC
 	foundPod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err)
 
-	// Confirm that the file can be accessed from a second
-	// pod using host_path with the same MCS label
+	// 确认第二个 Pod 使用带相同 MCS 标签的 host_path
+	// 时能访问该文件
 	volumeHostPath := fmt.Sprintf("%s/pods/%s/volumes/kubernetes.io~empty-dir/%s", framework.TestContext.KubeletRootDir, foundPod.UID, volumeName)
 	ginkgo.By(fmt.Sprintf("confirming a container with the same label can read the file under --kubelet-root-dir=%s", framework.TestContext.KubeletRootDir))
 	pod = scTestPod(hostIPC, hostPID)
@@ -296,8 +292,8 @@ func testPodSELinuxLabeling(ctx context.Context, f *framework.Framework, hostIPC
 	}
 	e2eoutput.TestContainerOutput(ctx, f, "Pod with same MCS label reading test file", pod, 0, []string{testContent})
 
-	// Confirm that the same pod with a different MCS
-	// label cannot access the volume
+	// 确认带不同 MCS 标签的同一 Pod
+	// 无法访问该 volume
 	ginkgo.By("confirming a container with a different MCS label is unable to read the file")
 	pod = scTestPod(hostIPC, hostPID)
 	pod.Spec.Volumes = volumes
@@ -312,7 +308,7 @@ func testPodSELinuxLabeling(ctx context.Context, f *framework.Framework, hostIPC
 	err = e2epod.WaitForPodNameRunningInNamespace(ctx, f.ClientSet, pod.Name, f.Namespace.Name)
 	framework.ExpectNoError(err, "Error waiting for pod to run %v", pod)
 
-	// for this to work, SELinux should be in enforcing mode, so let's check that
+	// 为此，SELinux 必须处于 enforcing 模式，先检查一下
 	isEnforced, err := tk.ReadFileViaContainer(pod.Name, "test-container", "/sys/fs/selinux/enforce")
 	if err == nil && isEnforced == "1" {
 		_, err = tk.ReadFileViaContainer(pod.Name, "test-container", testFilePath)

@@ -37,18 +37,18 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// LabelLogOnPodFailure can be used to mark which Pods will have their logs logged in the case of
-// a test failure. By default, if there are no Pods with this label, only the first 5 Pods will
-// have their logs fetched.
+// LabelLogOnPodFailure 用于标记在测试失败时
+// 哪些 Pod 会被记录日志。默认情况下，如果没有带此标签的 Pod，只记录前 5 个
+// Pod 的日志。
 const LabelLogOnPodFailure = "log-on-pod-failure"
 
-// PodsCreatedByLabel returns a created pod list matched by the given label.
+// PodsCreatedByLabel 返回与指定标签匹配的已创建 Pod 列表。
 func PodsCreatedByLabel(ctx context.Context, c clientset.Interface, ns, name string, replicas int32, label labels.Selector) (*v1.PodList, error) {
 	timeout := 2 * time.Minute
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(5 * time.Second) {
 		options := metav1.ListOptions{LabelSelector: label.String()}
 
-		// List the pods, making sure we observe all the replicas.
+		// 列出 Pod，确保观察到所有副本。
 		pods, err := c.CoreV1().Pods(ns).List(ctx, options)
 		if err != nil {
 			return nil, err
@@ -71,7 +71,7 @@ func PodsCreatedByLabel(ctx context.Context, c clientset.Interface, ns, name str
 	return nil, fmt.Errorf("Pod name %s: Gave up waiting %v for %d pods to come up", name, timeout, replicas)
 }
 
-// VerifyPods checks if the specified pod is responding.
+// VerifyPods 检查指定 Pod 是否有响应。
 func VerifyPods(ctx context.Context, c clientset.Interface, ns, name string, selector labels.Selector, wantName bool, replicas int32) error {
 	pods, err := PodsCreatedByLabel(ctx, c, ns, name, replicas, selector)
 	if err != nil {
@@ -81,7 +81,7 @@ func VerifyPods(ctx context.Context, c clientset.Interface, ns, name string, sel
 	return podsRunningMaybeResponding(ctx, c, ns, name, selector, pods, wantName, true)
 }
 
-// VerifyPodsRunning checks if the specified pod is running.
+// VerifyPodsRunning 检查指定 Pod 是否正在运行。
 func VerifyPodsRunning(ctx context.Context, c clientset.Interface, ns, name string, selector labels.Selector, wantName bool, replicas int32) error {
 	pods, err := PodsCreatedByLabel(ctx, c, ns, name, replicas, selector)
 	if err != nil {
@@ -103,8 +103,8 @@ func podsRunningMaybeResponding(ctx context.Context, c clientset.Interface, ns s
 }
 
 func podsRunning(ctx context.Context, c clientset.Interface, pods *v1.PodList) []error {
-	// Wait for the pods to enter the running state. Waiting loops until the pods
-	// are running so non-running pods cause a timeout for this test.
+	// 等待 Pod 进入运行态。循环等待直到 Pod 运行，
+	// 验证有服务在监听。
 	ginkgo.By("ensuring each pod is running")
 	e := []error{}
 	errorChan := make(chan error)
@@ -125,9 +125,9 @@ func podsRunning(ctx context.Context, c clientset.Interface, pods *v1.PodList) [
 	return e
 }
 
-// LogPodStates logs basic info of provided pods for debugging.
+// LogPodStates 记录给定 Pod 的基本信息以便调试。
 func LogPodStates(pods []v1.Pod) {
-	// Find maximum widths for pod, node, and phase strings for column printing.
+	// 找出 Pod、节点和 phase 字符串的最大宽度，用于列打印。
 	maxPodW, maxNodeW, maxPhaseW, maxGraceW := len("POD"), len("NODE"), len("PHASE"), len("GRACE")
 	for i := range pods {
 		pod := &pods[i]
@@ -141,13 +141,13 @@ func LogPodStates(pods []v1.Pod) {
 			maxPhaseW = len(pod.Status.Phase)
 		}
 	}
-	// Increase widths by one to separate by a single space.
+	// 宽度加一，用单个空格分隔。
 	maxPodW++
 	maxNodeW++
 	maxPhaseW++
 	maxGraceW++
 
-	// Log pod info. * does space padding, - makes them left-aligned.
+	// 记录 Pod 信息。* 表示空格填充，- 表示左对齐。
 	framework.Logf("%-[1]*[2]s %-[3]*[4]s %-[5]*[6]s %-[7]*[8]s %[9]s",
 		maxPodW, "POD", maxNodeW, "NODE", maxPhaseW, "PHASE", maxGraceW, "GRACE", "CONDITIONS")
 	for _, pod := range pods {
@@ -158,11 +158,11 @@ func LogPodStates(pods []v1.Pod) {
 		framework.Logf("%-[1]*[2]s %-[3]*[4]s %-[5]*[6]s %-[7]*[8]s %[9]v",
 			maxPodW, pod.ObjectMeta.Name, maxNodeW, pod.Spec.NodeName, maxPhaseW, pod.Status.Phase, maxGraceW, grace, pod.Status.Conditions)
 	}
-	framework.Logf("") // Final empty line helps for readability.
+	framework.Logf("") // 最后一个空行有助于阅读。
 }
 
-// logPodTerminationMessages logs termination messages for failing pods.  It's a short snippet (much smaller than full logs), but it often shows
-// why pods crashed and since it is in the API, it's fast to retrieve.
+// logPodTerminationMessages 记录失败 Pod 的终止消息。它很短（远小于完整日志），但常常能显示
+// Pod 崩溃的原因，而且由于它位于 API 中，获取很快。
 func logPodTerminationMessages(pods []v1.Pod) {
 	for _, pod := range pods {
 		for _, status := range pod.Status.InitContainerStatuses {
@@ -178,10 +178,10 @@ func logPodTerminationMessages(pods []v1.Pod) {
 	}
 }
 
-// logPodLogs logs the container logs from pods in the given namespace. This can be helpful for debugging
-// issues that do not cause the container to fail (e.g.: network connectivity issues)
-// We will log the Pods that have the LabelLogOnPodFailure label. If there aren't any, we default to
-// logging only the first 5 Pods. This requires the reportDir to be set, and the pods are logged into:
+// logPodLogs 记录指定命名空间中 Pod 的容器日志。有助于调试
+// 那些不会导致容器失败的问题（例如网络连接问题）
+// 我们将记录带有 LabelLogOnPodFailure 标签的 Pod。如果没有，则默认
+// 只记录前 5 个 Pod。这需要设置 reportDir，日志写入：
 // {report_dir}/pods/{namespace}/{pod}/{container_name}/logs.txt
 func logPodLogs(ctx context.Context, c clientset.Interface, namespace string, pods []v1.Pod, reportDir string) {
 	if reportDir == "" {
@@ -196,7 +196,7 @@ func logPodLogs(ctx context.Context, c clientset.Interface, namespace string, po
 	}
 	maxPods := len(logPods)
 
-	// There are no pods with the LabelLogOnPodFailure label, we default to the first 5 Pods.
+	// 没有带 LabelLogOnPodFailure 标签的 Pod，默认记录前 5 个。
 	if maxPods == 0 {
 		logPods = pods
 		maxPods = len(pods)
@@ -231,7 +231,7 @@ func logPodLogs(ctx context.Context, c clientset.Interface, namespace string, po
 	}
 }
 
-// DumpAllPodInfoForNamespace logs all pod information for a given namespace.
+// DumpAllPodInfoForNamespace 记录指定命名空间的所有 Pod 信息。
 func DumpAllPodInfoForNamespace(ctx context.Context, c clientset.Interface, namespace, reportDir string) {
 	pods, err := c.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -242,15 +242,15 @@ func DumpAllPodInfoForNamespace(ctx context.Context, c clientset.Interface, name
 	logPodLogs(ctx, c, namespace, pods.Items, reportDir)
 }
 
-// FilterNonRestartablePods filters out pods that will never get recreated if
-// deleted after termination.
+// FilterNonRestartablePods 过滤掉终止后删除时
+// 永远不会被重建的 Pod。
 func FilterNonRestartablePods(pods []*v1.Pod) []*v1.Pod {
 	var results []*v1.Pod
 	for _, p := range pods {
 		if isNotRestartAlwaysMirrorPod(p) {
-			// Mirror pods with restart policy == Never will not get
-			// recreated if they are deleted after the pods have
-			// terminated. For now, we discount such pods.
+			// restart policy 为 Never 的 mirror Pod 在终止后被删除时
+			// 不会被重建。
+			// 目前先不考虑这类 Pod。
 			// https://github.com/kubernetes/kubernetes/issues/34003
 			continue
 		}
@@ -260,16 +260,16 @@ func FilterNonRestartablePods(pods []*v1.Pod) []*v1.Pod {
 }
 
 func isNotRestartAlwaysMirrorPod(p *v1.Pod) bool {
-	// Check if the pod is a mirror pod
+	// 检查 Pod 是否为 mirror pod
 	if _, ok := p.Annotations[v1.MirrorPodAnnotationKey]; !ok {
 		return false
 	}
 	return p.Spec.RestartPolicy != v1.RestartPolicyAlways
 }
 
-// NewAgnhostPod returns a pod that uses the agnhost image. The image's binary supports various subcommands
-// that behave the same, no matter the underlying OS. If no args are given, it defaults to the pause subcommand.
-// For more information about agnhost subcommands, see: https://github.com/kubernetes/kubernetes/tree/master/test/images/agnhost#agnhost
+// NewAgnhostPod 返回一个使用 agnhost 镜像的 Pod。该镜像的二进制支持多种子命令，
+// 无论底层 OS 如何，行为都一致。如果未提供参数，默认使用 pause 子命令。
+// 有关 agnhost 子命令的详细信息，参见：https://github.com/kubernetes/kubernetes/tree/master/test/images/agnhost#agnhost
 func NewAgnhostPod(ns, podName string, volumes []v1.Volume, mounts []v1.VolumeMount, ports []v1.ContainerPort, args ...string) *v1.Pod {
 	immediate := int64(0)
 	pod := &v1.Pod{
@@ -306,7 +306,7 @@ func NewAgnhostPodFromContainers(ns, podName string, volumes []v1.Volume, contai
 	return pod
 }
 
-// NewAgnhostContainer returns the container Spec of an agnhost container.
+// NewAgnhostContainer 返回 agnhost 容器的容器 Spec。
 func NewAgnhostContainer(containerName string, mounts []v1.VolumeMount, ports []v1.ContainerPort, args ...string) v1.Container {
 	if len(args) == 0 {
 		args = []string{"pause"}
@@ -322,24 +322,24 @@ func NewAgnhostContainer(containerName string, mounts []v1.VolumeMount, ports []
 	}
 }
 
-// NewExecPodSpec returns the pod spec of hostexec pod
+// NewExecPodSpec 返回 hostexec Pod 的 Pod spec
 func NewExecPodSpec(ns, name string, hostNetwork bool) *v1.Pod {
 	pod := NewAgnhostPod(ns, name, nil, nil, nil)
 	pod.Spec.HostNetwork = hostNetwork
 	return pod
 }
 
-// newExecPodSpec returns the pod spec of exec pod
+// newExecPodSpec 返回 exec Pod 的 Pod spec
 func newExecPodSpec(ns, generateName string) *v1.Pod {
-	// GenerateName is an optional prefix, used by the server,
-	// to generate a unique name ONLY IF the Name field has not been provided
+	// GenerateName 是可选前缀，由服务器使用，
+	// 仅在未提供 Name 字段时生成唯一名称
 	pod := NewAgnhostPod(ns, "", nil, nil, nil)
 	pod.ObjectMeta.GenerateName = generateName
 	return pod
 }
 
-// CreateExecPodOrFail creates a agnhost pause pod used as a vessel for kubectl exec commands.
-// Pod name is uniquely generated.
+// CreateExecPodOrFail 创建一个 agnhost pause Pod，用作 kubectl exec 命令的载体。
+// Pod 名称是唯一生成的。
 func CreateExecPodOrFail(ctx context.Context, client clientset.Interface, ns, generateName string, tweak func(*v1.Pod)) *v1.Pod {
 	framework.Logf("Creating new exec pod")
 	pod := newExecPodSpec(ns, generateName)
@@ -353,11 +353,11 @@ func CreateExecPodOrFail(ctx context.Context, client clientset.Interface, ns, ge
 	return execPod
 }
 
-// WithWindowsHostProcess sets the Pod's Windows HostProcess option to true. When this option is set,
-// HostNetwork can be enabled.
-// Containers running as HostProcess will require certain usernames to be set, otherwise the Pod will
-// not start: NT AUTHORITY\SYSTEM, NT AUTHORITY\Local service, NT AUTHORITY\NetworkService.
-// If the given username is empty, NT AUTHORITY\SYSTEM will be used instead.
+// WithWindowsHostProcess 将 Pod 的 Windows HostProcess 选项设为 true。设置该选项后，
+// 可以启用 HostNetwork。
+// 以 HostProcess 运行的容器需要设置特定用户名，否则 Pod
+// 无法启动：NT AUTHORITY\SYSTEM、NT AUTHORITY\Local service、NT AUTHORITY\NetworkService。
+// 如果给定的用户名为空，将使用 NT AUTHORITY\SYSTEM。
 // See: https://kubernetes.io/docs/tasks/configure-pod-container/create-hostprocess-pod/
 func WithWindowsHostProcess(pod *v1.Pod, username string) {
 	if pod.Spec.SecurityContext == nil {
@@ -375,22 +375,22 @@ func WithWindowsHostProcess(pod *v1.Pod, username string) {
 	pod.Spec.SecurityContext.WindowsOptions.RunAsUserName = &username
 }
 
-// CheckPodsRunningReady returns whether all pods whose names are listed in
-// podNames in namespace ns are running and ready, using c and waiting at most
+// CheckPodsRunningReady 返回命名空间 ns 中 podNames 列出的所有 Pod
+// 是否都在运行且就绪，使用 c 并最多等待 timeout。
 // timeout.
 func CheckPodsRunningReady(ctx context.Context, c clientset.Interface, ns string, podNames []string, timeout time.Duration) bool {
 	return checkPodsCondition(ctx, c, ns, podNames, timeout, testutils.PodRunningReady, "running and ready")
 }
 
-// CheckPodsRunningReadyOrSucceeded returns whether all pods whose names are
-// listed in podNames in namespace ns are running and ready, or succeeded; use
-// c and waiting at most timeout.
+// CheckPodsRunningReadyOrSucceeded 返回命名空间 ns 中 podNames 列出的所有 Pod
+// 是否都在运行且就绪或已成功；使用 c 并最多等待 timeout。
+// 使用 c 并最多等待 timeout。
 func CheckPodsRunningReadyOrSucceeded(ctx context.Context, c clientset.Interface, ns string, podNames []string, timeout time.Duration) bool {
 	return checkPodsCondition(ctx, c, ns, podNames, timeout, testutils.PodRunningReadyOrSucceeded, "running and ready, or succeeded")
 }
 
-// checkPodsCondition returns whether all pods whose names are listed in podNames
-// in namespace ns are in the condition, using c and waiting at most timeout.
+// checkPodsCondition 返回命名空间 ns 中 podNames 列出的所有 Pod
+// 是否都处于指定 condition，使用 c 并最多等待 timeout。
 func checkPodsCondition(ctx context.Context, c clientset.Interface, ns string, podNames []string, timeout time.Duration, condition podCondition, desc string) bool {
 	np := len(podNames)
 	framework.Logf("Waiting up to %v for %d pods to be %s: %s", timeout, np, desc, podNames)
@@ -400,13 +400,13 @@ func checkPodsCondition(ctx context.Context, c clientset.Interface, ns string, p
 	}
 	result := make(chan waitPodResult, len(podNames))
 	for _, podName := range podNames {
-		// Launch off pod readiness checkers.
+		// 启动 Pod 就绪检查器。
 		go func(name string) {
 			err := WaitForPodCondition(ctx, c, ns, name, desc, timeout, condition)
 			result <- waitPodResult{err == nil, name}
 		}(podName)
 	}
-	// Wait for them all to finish.
+	// 等待它们全部完成。
 	success := true
 	for range podNames {
 		res := <-result
@@ -419,24 +419,24 @@ func checkPodsCondition(ctx context.Context, c clientset.Interface, ns string, p
 	return success
 }
 
-// GetPodLogs returns the logs of the specified container (namespace/pod/container).
+// GetPodLogs 返回指定容器的日志（namespace/pod/container）。
 func GetPodLogs(ctx context.Context, c clientset.Interface, namespace, podName, containerName string) (string, error) {
 	return getPodLogsInternal(ctx, c, namespace, podName, containerName, false, nil, nil)
 }
 
-// GetPodLogsSince returns the logs of the specified container (namespace/pod/container) since a timestamp.
+// GetPodLogsSince 返回指定容器自某个时间戳以来的日志（namespace/pod/container）。
 func GetPodLogsSince(ctx context.Context, c clientset.Interface, namespace, podName, containerName string, since time.Time) (string, error) {
 	sinceTime := metav1.NewTime(since)
 	return getPodLogsInternal(ctx, c, namespace, podName, containerName, false, &sinceTime, nil)
 }
 
-// GetPreviousPodLogs returns the logs of the previous instance of the
-// specified container (namespace/pod/container).
+// GetPreviousPodLogs 返回指定容器上一个实例的日志
+// 指定容器的上一个实例（namespace/pod/container）。
 func GetPreviousPodLogs(ctx context.Context, c clientset.Interface, namespace, podName, containerName string) (string, error) {
 	return getPodLogsInternal(ctx, c, namespace, podName, containerName, true, nil, nil)
 }
 
-// utility function for gomega Eventually
+// gomega Eventually 的辅助函数
 func getPodLogsInternal(ctx context.Context, c clientset.Interface, namespace, podName, containerName string, previous bool, sinceTime *metav1.Time, tailLines *int) (string, error) {
 	request := c.CoreV1().RESTClient().Get().
 		Resource("pods").
@@ -460,7 +460,7 @@ func getPodLogsInternal(ctx context.Context, c clientset.Interface, namespace, p
 	return string(logs), err
 }
 
-// GetPodsInNamespace returns the pods in the given namespace.
+// GetPodsInNamespace 返回指定命名空间中的 Pod。
 func GetPodsInNamespace(ctx context.Context, c clientset.Interface, ns string, ignoreLabels map[string]string) ([]*v1.Pod, error) {
 	pods, err := c.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -478,7 +478,7 @@ func GetPodsInNamespace(ctx context.Context, c clientset.Interface, ns string, i
 	return filtered, nil
 }
 
-// GetPods return the label matched pods in the given ns
+// GetPods 返回指定命名空间中匹配标签的 Pod
 func GetPods(ctx context.Context, c clientset.Interface, ns string, matchLabels map[string]string) ([]v1.Pod, error) {
 	label := labels.SelectorFromSet(matchLabels)
 	listOpts := metav1.ListOptions{LabelSelector: label.String()}
@@ -489,13 +489,13 @@ func GetPods(ctx context.Context, c clientset.Interface, ns string, matchLabels 
 	return pods.Items, nil
 }
 
-// GetPodSecretUpdateTimeout returns the timeout duration for updating pod secret.
+// GetPodSecretUpdateTimeout 返回更新 Pod secret 的超时时长。
 func GetPodSecretUpdateTimeout(ctx context.Context, c clientset.Interface) time.Duration {
-	// With SecretManager(ConfigMapManager), we may have to wait up to full sync period +
-	// TTL of secret(configmap) to elapse before the Kubelet projects the update into the
-	// volume and the container picks it up.
-	// So this timeout is based on default Kubelet sync period (1 minute) + maximum TTL for
-	// secret(configmap) that's based on cluster size + additional time as a fudge factor.
+	// 使用 SecretManager（ConfigMapManager）时，Kubelet 将更新投射到 volume 并被容器
+	// 感知之前，可能要等待完整的同步周期加上 secret（configmap）的 TTL。
+	// volume 并被容器感知。
+	// 因此该超时基于默认的 Kubelet 同步周期（1 分钟）加上
+	// 基于集群规模的 secret（configmap）最大 TTL，再加一些余量。
 	secretTTL, err := getNodeTTLAnnotationValue(ctx, c)
 	if err != nil {
 		framework.Logf("Couldn't get node TTL annotation (using default value of 0): %v", err)
@@ -504,7 +504,7 @@ func GetPodSecretUpdateTimeout(ctx context.Context, c clientset.Interface) time.
 	return podLogTimeout
 }
 
-// VerifyPodHasConditionWithType verifies the pod has the expected condition by type
+// VerifyPodHasConditionWithType 按类型验证 Pod 是否具有预期的 condition
 func VerifyPodHasConditionWithType(ctx context.Context, f *framework.Framework, pod *v1.Pod, cType v1.PodConditionType) {
 	pod, err := f.ClientSet.CoreV1().Pods(f.Namespace.Name).Get(ctx, pod.Name, metav1.GetOptions{})
 	framework.ExpectNoError(err, "Failed to get the recent pod object for name: %q", pod.Name)
@@ -518,8 +518,8 @@ func getNodeTTLAnnotationValue(ctx context.Context, c clientset.Interface) (time
 	if err != nil || len(nodes.Items) == 0 {
 		return time.Duration(0), fmt.Errorf("Couldn't list any nodes to get TTL annotation: %w", err)
 	}
-	// Since TTL the kubelet is using is stored in node object, for the timeout
-	// purpose we take it from the first node (all of them should be the same).
+	// kubelet 使用的 TTL 存储在 node 对象中，为了计算超时，
+	// 我们从第一个节点获取（所有节点应相同）。
 	node := &nodes.Items[0]
 	if node.Annotations == nil {
 		return time.Duration(0), fmt.Errorf("No annotations found on the node")
@@ -535,7 +535,7 @@ func getNodeTTLAnnotationValue(ctx context.Context, c clientset.Interface) (time
 	return time.Duration(intValue) * time.Second, nil
 }
 
-// FilterActivePods returns pods that have not terminated.
+// FilterActivePods 返回尚未终止的 Pod。
 func FilterActivePods(pods []*v1.Pod) []*v1.Pod {
 	var result []*v1.Pod
 	for _, p := range pods {
@@ -549,7 +549,7 @@ func FilterActivePods(pods []*v1.Pod) []*v1.Pod {
 	return result
 }
 
-// IsPodActive return true if the pod meets certain conditions.
+// IsPodActive 在 Pod 满足特定条件时返回 true。
 func IsPodActive(p *v1.Pod) bool {
 	return v1.PodSucceeded != p.Status.Phase &&
 		v1.PodFailed != p.Status.Phase &&

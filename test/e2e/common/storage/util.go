@@ -25,14 +25,14 @@ import (
 )
 
 var (
-	// non-Administrator Windows user used in tests. This is the Windows equivalent of the Linux non-root UID usage.
+	// 测试中使用的非管理员 Windows 用户。这是 Linux 非 root UID 用法在 Windows 上的等价做法。
 	nonAdminTestUserName = "ContainerUser"
-	// non-root UID used in tests.
+	// 测试中使用的非 root UID。
 	nonRootTestUserID = int64(1000)
 )
 
-// setPodNonRootUser configures the Pod to run as a non-root user.
-// For Windows, it sets the RunAsUserName field to ContainerUser, and for Linux, it sets the RunAsUser field to 1000.
+// setPodNonRootUser 将 Pod 配置为以非 root 用户运行。
+// 对 Windows，将 RunAsUserName 字段设为 ContainerUser；对 Linux，将 RunAsUser 字段设为 1000。
 func setPodNonRootUser(pod *v1.Pod) {
 	if framework.NodeOSDistroIs("windows") {
 		pod.Spec.SecurityContext.WindowsOptions = &v1.WindowsSecurityContextOptions{RunAsUserName: &nonAdminTestUserName}
@@ -41,8 +41,8 @@ func setPodNonRootUser(pod *v1.Pod) {
 	}
 }
 
-// getFileModeRegex returns a file mode related regex which should be matched by the mounttest pods' output.
-// If the given mask is nil, then the regex will contain the default OS file modes, which are 0644 for Linux and 0775 for Windows.
+// getFileModeRegex 返回一个与文件 mode 相关的正则，mounttest Pod 的输出应能匹配它。
+// 如果给定的 mask 为 nil，正则将包含默认的 OS 文件 mode：Linux 为 0644，Windows 为 0775。
 func getFileModeRegex(filePath string, mask *int32) string {
 	var (
 		linuxMask   int32
@@ -62,7 +62,7 @@ func getFileModeRegex(filePath string, mask *int32) string {
 	return fmt.Sprintf("(%s|%s)", linuxOutput, windowsOutput)
 }
 
-// createMounts creates a v1.VolumeMount list with a single element.
+// createMounts 创建一个只含单个元素的 v1.VolumeMount 列表。
 func createMounts(volumeName, volumeMountPath string, readOnly bool) []v1.VolumeMount {
 	return []v1.VolumeMount{
 		{

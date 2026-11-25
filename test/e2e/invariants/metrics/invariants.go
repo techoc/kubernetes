@@ -28,29 +28,29 @@ import (
 )
 
 const (
-	// apiServerValidationDeclarativeValidationMismatchTotal is the metric name for declarative validation mismatches.
+	// apiServerValidationDeclarativeValidationMismatchTotal 是声明式验证不匹配的指标名。
 	apiServerValidationDeclarativeValidationMismatchTotal = "apiserver_validation_declarative_validation_mismatch_total"
-	// apiServerValidationDeclarativeValidationPanicTotal is the metric name for declarative validation panics.
+	// apiServerValidationDeclarativeValidationPanicTotal 是声明式验证 panic 的指标名。
 	apiServerValidationDeclarativeValidationPanicTotal = "apiserver_validation_declarative_validation_panic_total"
 )
 
-// metricInvariant defines an invariant check for a metric.
+// metricInvariant 定义某个指标的不变量检查。
 type metricInvariant struct {
 	metricName string
-	// sig associated with the invariant
-	// Bugs related to this invariant check failing should be labeled with
-	// this sig.
+	// 与该不变量关联的 sig
+	// 与此不变量检查失败相关的 bug 应打上
+	// 此 sig 标签。
 	sig string
-	// owners are the individuals responsible for the invariant
-	// Bugs related to this invariant check failing should be assigned to these
-	// GitHub handles
+	// owners 是负责该不变量的个人
+	// 与此不变量检查失败相关的 bug 应分配给这些
+	// GitHub 账号
 	owners  []string
 	isValid func(metricstestutil.Samples) bool
 }
 
-// apiServerInvariants are the standard invariants checked for the API server.
+// apiServerInvariants 是对 API server 检查的标准不变量。
 //
-// Please speak to SIG-Testing leads before adding anything here.
+// 在此添加任何内容前请先与 SIG-Testing 负责人沟通。
 var apiServerInvariants = []metricInvariant{
 	{
 		metricName: apiServerValidationDeclarativeValidationMismatchTotal,
@@ -66,8 +66,8 @@ var apiServerInvariants = []metricInvariant{
 	},
 }
 
-// checkInvariants checks the provided metrics against a list of invariants.
-// If failOnMissing is true, it returns an error if a metric listed in invariants is missing from the metrics map.
+// checkInvariants 根据不变量列表检查给定的指标。
+// 如果 failOnMissing 为 true，当不变量中列出的指标在 metrics map 中缺失时返回错误。
 func checkInvariants(metrics map[string]metricstestutil.Samples, invariants []metricInvariant, failOnMissing bool) error {
 	var errs []error
 	for _, inv := range invariants {
@@ -95,7 +95,7 @@ If this failed in a periodic CI job, please file a bug and /assign the owners`, 
 	return utilerrors.NewAggregate(errs)
 }
 
-// allSamplesZero is a helper function that returns true if all samples have a value of zero.
+// allSamplesZero 是所有样本值都为零时返回 true 的辅助函数。
 func allSamplesZero(samples metricstestutil.Samples) bool {
 	for _, sample := range samples {
 		if sample.Value != 0 {
@@ -105,8 +105,8 @@ func allSamplesZero(samples metricstestutil.Samples) bool {
 	return true
 }
 
-// CheckMetricInvariants scrapes metrics from the API server and checks that
-// invariant metrics have the expected values.
+// CheckMetricInvariants 从 API server 抓取指标，并检查
+// 不变量指标是否具有预期值。
 func CheckMetricInvariants(ctx context.Context, client kubernetes.Interface, failOnMissing bool) error {
 	scrapeCtx, cancelScrape := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelScrape()

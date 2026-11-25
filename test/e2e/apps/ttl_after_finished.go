@@ -38,7 +38,7 @@ import (
 const (
 	dummyFinalizer = "k8s.io/dummy-finalizer"
 
-	// JobTimeout is how long to wait for a job to finish.
+	// JobTimeout 是等待 job 完成的时间。
 	JobTimeout = 15 * time.Minute
 )
 
@@ -111,7 +111,7 @@ func testFinishedJob(ctx context.Context, f *framework.Framework) {
 	}
 }
 
-// finishTime returns finish time of the specified job.
+// finishTime 返回指定 job 的完成时间。
 func finishTime(finishedJob *batchv1.Job) metav1.Time {
 	var finishTime metav1.Time
 	for _, c := range finishedJob.Status.Conditions {
@@ -122,7 +122,7 @@ func finishTime(finishedJob *batchv1.Job) metav1.Time {
 	return finishTime
 }
 
-// updateJobWithRetries updates job with retries.
+// updateJobWithRetries 带重试地更新 job。
 func updateJobWithRetries(ctx context.Context, c clientset.Interface, namespace, name string, applyUpdate func(*batchv1.Job)) (job *batchv1.Job, err error) {
 	jobs := c.BatchV1().Jobs(namespace)
 	var updateErr error
@@ -130,7 +130,7 @@ func updateJobWithRetries(ctx context.Context, c clientset.Interface, namespace,
 		if job, err = jobs.Get(ctx, name, metav1.GetOptions{}); err != nil {
 			return false, err
 		}
-		// Apply the update, then attempt to push it to the apiserver.
+		// 遇到的事件。第一个返回错误的条件会终止 watch（事件也会一并返回）。
 		applyUpdate(job)
 		if job, err = jobs.Update(ctx, job, metav1.UpdateOptions{}); err == nil {
 			framework.Logf("Updating job %s", name)
@@ -145,8 +145,8 @@ func updateJobWithRetries(ctx context.Context, c clientset.Interface, namespace,
 	return job, pollErr
 }
 
-// waitForJobDeleting uses c to wait for the Job jobName in namespace ns to have
-// a non-nil deletionTimestamp (i.e. being deleted).
+// waitForJobDeleting 使用 c 等待命名空间 ns 中的 Job jobName
+// 具有非 nil 的 deletionTimestamp（即正在被删除）。
 func waitForJobDeleting(ctx context.Context, c clientset.Interface, ns, jobName string) error {
 	return wait.PollUntilContextTimeout(ctx, framework.Poll, JobTimeout, true, func(ctx context.Context) (bool, error) {
 		curr, err := c.BatchV1().Jobs(ns).Get(ctx, jobName, metav1.GetOptions{})

@@ -41,8 +41,8 @@ import (
 	"github.com/onsi/gomega"
 )
 
-// This test checks if node-problem-detector (NPD) runs fine without error on
-// the up to 10 nodes in the cluster. NPD's functionality is tested in e2e_node tests.
+// 此测试检查 node-problem-detector（NPD）在集群中最多 10 个节点上
+// 是否正常运行无错误。NPD 的功能在 e2e_node 测试中验证。
 var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framework.WithProvider(framework.ProvidersWithSSH...), framework.WithProvider("gce"), func() {
 	const (
 		pollInterval      = 1 * time.Second
@@ -73,7 +73,7 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 					break
 				}
 			}
-			// Not every node has to have an external IP address.
+			// 并非每个节点都必须有外部 IP 地址。
 			if len(host) > 0 {
 				nodes = append(nodes, node)
 				hosts = append(hosts, host)
@@ -95,11 +95,11 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 		rssStats := make(map[string][]float64)
 		workingSetStats := make(map[string][]float64)
 
-		// Some tests suites running for days.
-		// This test is not marked as Disruptive or Serial so we do not want to
-		// restart the kubelet during the test to check for KubeletStart event
-		// detection. We use heuristic here to check if we need to validate for the
-		// KubeletStart event since there is no easy way to check when test has actually started.
+		// 某些测试套件会运行数天。
+		// 此测试未标记为 Disruptive 或 Serial，因此不想
+		// 在测试期间重启 kubelet 来检查 KubeletStart 事件
+		// 检测。这里使用启发式方法判断是否需要验证
+		// KubeletStart 事件，因为没有简便方法检查测试何时真正开始。
 		checkForKubeletStart := false
 
 		for _, host := range hosts {
@@ -114,9 +114,9 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 
 			if isStandaloneMode[host] {
 				ginkgo.By(fmt.Sprintf("Check node %q has node-problem-detector process", host))
-				// Using brackets "[n]" is a trick to prevent grep command itself from
-				// showing up, because string text "[n]ode-problem-detector" does not
-				// match regular expression "[n]ode-problem-detector".
+				// 使用方括号 "[n]" 是一种技巧，防止 grep 命令自身
+				// 出现在结果中，因为字符串 "[n]ode-problem-detector" 不会
+				// 匹配正则 "[n]ode-problem-detector"。
 				psCmd := "ps aux | grep [n]ode-problem-detector"
 				result, err = e2essh.SSH(ctx, psCmd, host, framework.TestContext.Provider)
 				framework.ExpectNoError(err)
@@ -130,14 +130,14 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 				gomega.Expect(result.Code).To(gomega.Equal(0))
 				gomega.Expect(result.Stdout).NotTo(gomega.ContainSubstring("node-problem-detector.service: Failed"))
 
-				// We only will check for the KubeletStart even if parsing of date here succeeded.
+				// 只有此处日期解析成功时才检查 KubeletStart 事件。
 				ginkgo.By(fmt.Sprintf("Check when node-problem-detector started on node %q", host))
 				npdStartTimeCommand := "sudo systemctl show --timestamp=utc node-problem-detector -P ActiveEnterTimestamp"
 				result, err = e2essh.SSH(ctx, npdStartTimeCommand, host, framework.TestContext.Provider)
 				framework.ExpectNoError(err)
 				gomega.Expect(result.Code).To(gomega.Equal(0))
 
-				// The time format matches the systemd format.
+				// 时间格式与 systemd 格式一致。
 				// 'utc': 'Day YYYY-MM-DD HH:MM:SS UTC (see https://www.freedesktop.org/software/systemd/man/systemd.time.html)
 				st, err := time.Parse("Mon 2006-01-02 15:04:05 MST", result.Stdout)
 				if err != nil {
@@ -187,8 +187,8 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 		workingSetStatsMsg := "WorkingSet (MB):"
 		for i, host := range hosts {
 			if isStandaloneMode[host] {
-				// When in standalone mode, NPD is running as systemd service. We
-				// calculate its cpu usage from cgroup cpuacct value differences.
+				// 在 standalone 模式下，NPD 作为 systemd service 运行。我们
+				// 根据 cgroup cpuacct 值的差值计算其 CPU 使用率。
 				cpuUsage := cpuUsageStats[host][1] - cpuUsageStats[host][0]
 				totaltime := uptimeStats[host][1] - uptimeStats[host][0]
 				cpuStatsMsg += fmt.Sprintf(" %s[%.3f];", nodes[i].Name, cpuUsage/totaltime)
@@ -222,11 +222,11 @@ var _ = SIGDescribe("NodeProblemDetector", feature.NodeProblemDetector, framewor
 			}, pollTimeout, pollInterval).Should(gomega.Succeed())
 
 			if checkForKubeletStart {
-				// Node problem detector reports kubelet start events automatically starting from NPD v0.7.0+.
-				// Since Kubelet may be restarted for a few times after node is booted. We just check the event
-				// is detected, but do not check how many times Kubelet is started.
+				// 从 NPD v0.7.0 起，Node problem detector 会自动报告 kubelet 启动事件。
+				// 由于节点启动后 Kubelet 可能重启数次，我们只检查
+				// 是否检测到事件，不检查 Kubelet 启动了多少次。
 				//
-				// Some test suites run for hours and KubeletStart event will already be cleaned up
+				// 某些测试套件运行数小时，KubeletStart 事件可能已被清理
 				ginkgo.By(fmt.Sprintf("Check node-problem-detector posted KubeletStart event on node %q", node.Name))
 				gomega.Eventually(ctx, func(ctx context.Context) error {
 					return verifyEventExists(ctx, f, eventListOptions, "KubeletStart", node.Name)
@@ -305,8 +305,8 @@ func getMemoryStat(ctx context.Context, f *framework.Framework, host string) (rs
 
 	var rssToken, inactiveFileToken string
 	if isCgroupV2 {
-		// Use Anon memory for RSS as cAdvisor on cgroupv2
-		// see https://github.com/google/cadvisor/blob/a9858972e75642c2b1914c8d5428e33e6392c08a/container/libcontainer/handler.go#L799
+		// 在 cgroupv2 上，cAdvisor 使用 Anon 内存作为 RSS
+		// 参见 https://github.com/google/cadvisor/blob/a9858972e75642c2b1914c8d5428e33e6392c08a/container/libcontainer/handler.go#L799
 		rssToken = "anon"
 		inactiveFileToken = "inactive_file"
 	} else {
@@ -335,7 +335,7 @@ func getMemoryStat(ctx context.Context, f *framework.Framework, host string) (rs
 		workingSet -= totalInactiveFile
 	}
 
-	// Convert to MB
+	// 转换为 MB
 	rss = rss / 1024 / 1024
 	workingSet = workingSet / 1024 / 1024
 	return
@@ -359,7 +359,7 @@ func getCPUStat(ctx context.Context, f *framework.Framework, host string) (usage
 	uptime, err = strconv.ParseFloat(lines[1], 64)
 	framework.ExpectNoError(err, "Cannot parse float for uptime")
 
-	// Convert from nanoseconds to seconds
+	// 从纳秒转换为秒
 	usage *= 1e-9
 	return
 }

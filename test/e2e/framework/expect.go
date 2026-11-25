@@ -29,17 +29,18 @@ import (
 	"github.com/onsi/gomega/types"
 )
 
-// MakeMatcher builds a gomega.Matcher based on a single callback function.
-// That function is passed the actual value that is to be checked.
-// There are three possible outcomes of the check:
-//   - An error is returned, which then is converted into a failure
-//     by Gomega.
-//   - A non-nil failure function is returned, which then is called
-//     by Gomega once a failure string is needed. This is useful
-//     to avoid unnecessarily preparing a failure string for intermediate
-//     failures in Eventually or Consistently.
-//   - Both function and error are nil, which means that the check
-//     succeeded.
+// MakeMatcher 基于单个回调函数构建一个 gomega.Matcher。
+// 该函数接收要检查的实际值。
+// 检查有三种可能的结果：
+//
+//   - 返回错误，随后由 Gomega 转换为失败
+//
+//   - 返回非 nil 的 failure 函数，当需要失败字符串时
+//     由 Gomega 调用。这有助于
+//     避免在 Eventually 或 Consistently 的中间失败中
+//     不必要地准备失败字符串。
+//
+//   - 函数和错误都为 nil，表示检查通过
 func MakeMatcher[T interface{}](match func(actual T) (failure func() string, err error)) types.GomegaMatcher {
 	return &matcher[T]{
 		match: match,
@@ -77,25 +78,22 @@ func (m matcher[T]) NegatedFailureMessage(actual interface{}) string {
 
 var _ types.GomegaMatcher = &matcher[string]{}
 
-// Gomega returns an interface that can be used like gomega to express
-// assertions. The difference is that failed assertions are returned as an
+// Gomega 返回一个可像 gomega 一样用于表达断言的接口。
+// 区别在于失败的断言会作为错误返回，
 // error:
 //
 //	if err := Gomega().Expect(pod.Status.Phase).To(gomega.Equal(v1.Running)); err != nil {
 //	    return fmt.Errorf("test pod not running: %w", err)
 //	}
 //
-// This error can get wrapped to provide additional context for the
-// failure. The test then should use ExpectNoError to turn a non-nil error into
-// a failure.
+// 可以包装此错误，为失败提供额外上下文。
+// 然后测试应使用 ExpectNoError 将非 nil 错误转换为失败。
 //
-// When using this approach, there is no need for call offsets and extra
-// descriptions for the Expect call because the call stack will be dumped when
-// ExpectNoError is called and the additional description(s) can be added by
-// wrapping the error.
+// 使用这种方式时，不需要调用偏移和额外的
+// Expect 描述，因为调用 ExpectNoError 时会 dump 调用栈，
+// 额外的描述可以通过包装错误来添加。
 //
-// Asynchronous assertions use the framework's Poll interval and PodStart timeout
-// by default.
+// 异步断言默认使用 framework 的 Poll 间隔和 PodStart 超时。
 func Gomega() GomegaInstance {
 	return gomegaInstance{}
 }
@@ -210,8 +208,8 @@ func newAsyncAssertion(ctx context.Context, args []interface{}, consistently boo
 	return asyncAssertion{
 		ctx:  ctx,
 		args: args,
-		// PodStart is used as default because waiting for a pod is the
-		// most common operation.
+		// 使用 PodStart 作为默认值，因为等待 Pod 是
+		// 最常见的操作。
 		timeout:      TestContext.timeouts.PodStart,
 		interval:     TestContext.timeouts.Poll,
 		consistently: consistently,
@@ -258,9 +256,9 @@ func (a asyncAssertion) WithPolling(interval time.Duration) AsyncAssertion {
 	return a
 }
 
-// FailureError is an error where the error string is meant to be passed to
-// ginkgo.Fail directly, i.e. adding some prefix like "unexpected error" is not
-// necessary. It is also not necessary to dump the error struct.
+// FailureError 是一种错误，其错误字符串旨在直接传给
+// ginkgo.Fail，即不需要添加诸如 "unexpected error" 的前缀。
+// 也不必要 dump 错误结构体。
 type FailureError struct {
 	msg            string
 	fullStackTrace string
@@ -282,10 +280,11 @@ func (f *FailureError) backtrace() {
 	f.fullStackTrace = ginkgotypes.NewCodeLocationWithStackTrace(2).FullStackTrace
 }
 
-// ErrFailure is an empty error that can be wrapped to indicate that an error
-// is a FailureError. It can also be used to test for a FailureError:.
+// ErrFailure 是一个空错误，可包装它以指示某个错误
+// 是 FailureError。它也可用于测试 FailureError：
 //
-//	return fmt.Errorf("some problem%w", ErrFailure)
+// 如 [gomega.Expect] 中一样，explain 参数可用于提供
+//
 //	...
 //	err := someOperation()
 //	if errors.Is(err, ErrFailure) {
@@ -293,30 +292,30 @@ func (f *FailureError) backtrace() {
 //	}
 var ErrFailure error = FailureError{}
 
-// ExpectNoError checks if "err" is set, and if so, fails assertion while logging the error.
+// ExpectNoError 检查 "err" 是否设置，如果设置则在记录错误的同时使断言失败。
 //
-// As in [gomega.Expect], the explain parameters can be used to provide
-// additional information in case of a failure in one of these two ways:
-//   - A single string is used as first line of the failure message directly.
-//   - A string with additional parameters is passed through [fmt.Sprintf].
+// 与 [gomega.Expect] 中一样，explain 参数可用于提供
+// 通过以下两种方式之一提供失败时的附加信息：
+//   - 单个字符串直接用作失败消息的第一行。
+//   - 带附加参数的字符串通过 [fmt.Sprintf] 处理。
 func ExpectNoError(err error, explain ...interface{}) {
 	ExpectNoErrorWithOffset(1, err, explain...)
 }
 
-// ExpectNoErrorWithOffset checks if "err" is set, and if so, fails assertion while logging the error at "offset" levels above its caller
-// (for example, for call chain f -> g -> ExpectNoErrorWithOffset(1, ...) error would be logged for "f").
+// ExpectNoErrorWithOffset 检查 "err" 是否设置，如果设置则在比调用方高 "offset" 层的位置记录错误并使断言失败
+// （例如调用链 f -> g -> ExpectNoErrorWithOffset(1, ...) 时，错误将记录为来自 "f"）。
 //
-// As in [gomega.Expect], the explain parameters can be used to provide
-// additional information in case of a failure in one of these two ways:
-//   - A single string is used as first line of the failure message directly.
-//   - A string with additional parameters is passed through [fmt.Sprintf].
+// 与 [gomega.Expect] 中一样，explain 参数可用于提供
+// 通过以下两种方式之一提供失败时的附加信息：
+//   - 单个字符串直接用作失败消息的第一行。
+//   - 带附加参数的字符串通过 [fmt.Sprintf] 处理。
 func ExpectNoErrorWithOffset(offset int, err error, explain ...interface{}) {
 	if err == nil {
 		return
 	}
 
-	// Errors usually contain unexported fields. We have to use
-	// a formatter here which can print those.
+	// 错误通常包含未导出的字段。因此必须使用
+	// 能打印这些字段的格式化器。
 	prefix := ""
 	if len(explain) > 0 {
 		if str, ok := explain[0].(string); ok {
@@ -326,22 +325,22 @@ func ExpectNoErrorWithOffset(offset int, err error, explain ...interface{}) {
 		}
 	}
 
-	// This intentionally doesn't use gomega.Expect. Instead we take
-	// full control over what information is presented where:
-	// - The complete error object is logged because it may contain
-	//   additional information that isn't included in its error
+	// 这里刻意不使用 gomega.Expect，而是
+	// 完全控制哪些信息展示在哪里：
+	// - 记录完整的错误对象，因为它可能包含
+	//   未包含在其 error 字符串中的附加信息
 	//   string.
-	// - It is not included in the failure message because
-	//   it might make the failure message very large and/or
-	//   cause error aggregation to work less well: two
-	//   failures at the same code line might not be matched in
-	//   https://go.k8s.io/triage because the error details are too
+	// - 不把它放进失败消息，因为
+	//   它可能让失败消息变得很大，和/或
+	//   影响错误聚合效果：两处
+	//   同一代码行的失败可能无法在
+	//   https://go.k8s.io/triage 中匹配，因为错误细节过于
 	//   different.
 	//
-	// Some errors include all relevant information in the Error
-	// string. For those we can skip the redundant log message.
-	// For our own failures we only log the additional stack backtrace
-	// because it is not included in the failure message.
+	// 有些错误把所有相关信息都放在 Error 字符串里。
+	// 对这类错误可以跳过冗余的日志消息。
+	// 对于我们自己制造的失败，只记录额外的栈回溯，
+	// 因为它不包含在失败消息中。
 	var failure FailureError
 	if errors.As(err, &failure) && failure.Backtrace() != "" {
 		log(offset+1, fmt.Sprintf("Failed inside E2E framework:\n    %s", strings.ReplaceAll(failure.Backtrace(), "\n", "\n    ")))

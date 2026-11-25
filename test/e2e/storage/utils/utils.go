@@ -48,23 +48,23 @@ import (
 	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
-// KubeletOpt type definition
+// KubeletOpt 类型定义
 type KubeletOpt string
 
 const (
-	// NodeStateTimeout defines Timeout
+	// NodeStateTimeout 定义超时
 	NodeStateTimeout = 1 * time.Minute
-	// KStart defines start value
+	// KStart 定义启动值
 	KStart KubeletOpt = "start"
-	// KStop defines stop value
+	// KStop 定义停止值
 	KStop KubeletOpt = "stop"
-	// KRestart defines restart value
+	// KRestart 定义重启值
 	KRestart     KubeletOpt = "restart"
 	minValidSize string     = "1Ki"
 	maxValidSize string     = "10Ei"
 )
 
-// VerifyFSGroupInPod verifies that the passed in filePath contains the expectedFSGroup
+// VerifyFSGroupInPod 验证传入的 filePath 包含预期的 FSGroup
 func VerifyFSGroupInPod(ctx context.Context, f *framework.Framework, filePath, expectedFSGroup string, pod *v1.Pod) {
 	cmd := fmt.Sprintf("ls -l %s", filePath)
 	stdout, stderr, err := e2epod.ExecShellInPodWithFullOutput(ctx, f, pod.Name, cmd)
@@ -74,7 +74,7 @@ func VerifyFSGroupInPod(ctx context.Context, f *framework.Framework, filePath, e
 	gomega.Expect(expectedFSGroup).To(gomega.Equal(fsGroupResult), "Expected fsGroup of %s, got %s", expectedFSGroup, fsGroupResult)
 }
 
-// getKubeletRunning return if the kubelet is running or not
+// getKubeletRunning 返回 kubelet 是否正在运行
 func getKubeletRunning(ctx context.Context, nodeIP string) bool {
 	command := "systemctl show kubelet --property ActiveState --value"
 	framework.Logf("Attempting `%s`", command)
@@ -86,7 +86,7 @@ func getKubeletRunning(ctx context.Context, nodeIP string) bool {
 	return strings.TrimSpace(sshResult.Stdout) == "active"
 }
 
-// TestKubeletRestartsAndRestoresMount tests that a volume mounted to a pod remains mounted after a kubelet restarts
+// TestKubeletRestartsAndRestoresMount 测试 kubelet 重启后挂载到 Pod 的 volume 是否仍保持挂载
 func TestKubeletRestartsAndRestoresMount(ctx context.Context, c clientset.Interface, f *framework.Framework, clientPod *v1.Pod, volumePath string) {
 	byteLen := 64
 	seed := time.Now().UTC().UnixNano()
@@ -106,7 +106,7 @@ func TestKubeletRestartsAndRestoresMount(ctx context.Context, c clientset.Interf
 	framework.Logf("Volume mount detected on pod %s and written file %s is readable post-restart.", clientPod.Name, volumePath)
 }
 
-// TestKubeletRestartsAndRestoresMap tests that a volume mapped to a pod remains mapped after a kubelet restarts
+// TestKubeletRestartsAndRestoresMap 测试 kubelet 重启后映射到 Pod 的 volume 是否仍保持映射
 func TestKubeletRestartsAndRestoresMap(ctx context.Context, c clientset.Interface, f *framework.Framework, clientPod *v1.Pod, volumePath string) {
 	byteLen := 64
 	seed := time.Now().UTC().UnixNano()
@@ -126,10 +126,10 @@ func TestKubeletRestartsAndRestoresMap(ctx context.Context, c clientset.Interfac
 	framework.Logf("Volume map detected on pod %s and written data %s is readable post-restart.", clientPod.Name, volumePath)
 }
 
-// TestVolumeUnmountsFromDeletedPodWithForceOption tests that a volume unmounts if the client pod was deleted while the kubelet was down.
-// forceDelete is true indicating whether the pod is forcefully deleted.
-// checkSubpath is true indicating whether the subpath should be checked.
-// If secondPod is set, it is started when kubelet is down to check that the volume is usable while the old pod is being deleted and the new pod is starting.
+// TestVolumeUnmountsFromDeletedPodWithForceOption 测试 kubelet 停机期间客户端 Pod 被删除时 volume 是否被卸载。
+// forceDelete 为 true 表示 Pod 被强制删除。
+// checkSubpath 为 true 表示应检查 subpath。
+// 如果设置了 secondPod，它会在 kubelet 停机期间启动，以检查在旧 Pod 被删除、新 Pod 启动期间 volume 是否可用。
 func TestVolumeUnmountsFromDeletedPodWithForceOption(ctx context.Context, c clientset.Interface, f *framework.Framework, clientPod *v1.Pod, forceDelete bool, checkSubpath bool, secondPod *v1.Pod, volumePath string) {
 	nodeIP, err := getHostAddress(ctx, c, clientPod)
 	framework.ExpectNoError(err)
@@ -154,7 +154,7 @@ func TestVolumeUnmountsFromDeletedPodWithForceOption(ctx context.Context, c clie
 	seed := time.Now().UTC().UnixNano()
 	CheckWriteToPath(ctx, f, clientPod, v1.PersistentVolumeFilesystem, false, volumePath, byteLen, seed)
 
-	// This command is to make sure kubelet is started after test finishes no matter it fails or not.
+	// 此命令用于确保测试结束后无论成功失败都启动 kubelet。
 	ginkgo.DeferCleanup(KubeletCommand, KStart, c, clientPod)
 	ginkgo.By("Stopping the kubelet.")
 	KubeletCommand(ctx, KStop, c, clientPod)
@@ -181,8 +181,8 @@ func TestVolumeUnmountsFromDeletedPodWithForceOption(ctx context.Context, c clie
 	}
 
 	if forceDelete {
-		// With forceDelete, since pods are immediately deleted from API server, there is no way to be sure when volumes are torn down
-		// so wait some time to finish
+		// 使用 forceDelete 时，Pod 会立即从 API server 删除，无法确定 volume 何时被拆除，
+		// 因此等待一段时间让操作完成
 		time.Sleep(30 * time.Second)
 	}
 
@@ -227,30 +227,30 @@ func TestVolumeUnmountsFromDeletedPodWithForceOption(ctx context.Context, c clie
 
 }
 
-// TestVolumeUnmountsFromDeletedPod tests that a volume unmounts if the client pod was deleted while the kubelet was down.
+// TestVolumeUnmountsFromDeletedPod 测试 kubelet 停机期间客户端 Pod 被删除时 volume 是否被卸载。
 func TestVolumeUnmountsFromDeletedPod(ctx context.Context, c clientset.Interface, f *framework.Framework, clientPod *v1.Pod, volumePath string) {
 	TestVolumeUnmountsFromDeletedPodWithForceOption(ctx, c, f, clientPod, false, false, nil, volumePath)
 }
 
-// TestVolumeUnmountsFromForceDeletedPod tests that a volume unmounts if the client pod was forcefully deleted while the kubelet was down.
+// TestVolumeUnmountsFromForceDeletedPod 测试 kubelet 停机期间客户端 Pod 被强制删除时 volume 是否被卸载。
 func TestVolumeUnmountsFromForceDeletedPod(ctx context.Context, c clientset.Interface, f *framework.Framework, clientPod *v1.Pod, volumePath string) {
 	TestVolumeUnmountsFromDeletedPodWithForceOption(ctx, c, f, clientPod, true, false, nil, volumePath)
 }
 
-// TestVolumeUnmapsFromDeletedPodWithForceOption tests that a volume unmaps if the client pod was deleted while the kubelet was down.
-// forceDelete is true indicating whether the pod is forcefully deleted.
+// TestVolumeUnmapsFromDeletedPodWithForceOption 测试 kubelet 停机期间客户端 Pod 被删除时 volume 是否被解除映射。
+// forceDelete 为 true 表示 Pod 被强制删除。
 func TestVolumeUnmapsFromDeletedPodWithForceOption(ctx context.Context, c clientset.Interface, f *framework.Framework, clientPod *v1.Pod, forceDelete bool, devicePath string) {
 	nodeIP, err := getHostAddress(ctx, c, clientPod)
 	framework.ExpectNoError(err, "Failed to get nodeIP.")
 	nodeIP = nodeIP + ":22"
 
-	// Creating command to check whether path exists
+	// 创建用于检查路径是否存在的命令
 	podDirectoryCmd := fmt.Sprintf("ls /var/lib/kubelet/pods/%s/volumeDevices/*/ | grep '.'", clientPod.UID)
 	if isSudoPresent(ctx, nodeIP, framework.TestContext.Provider) {
 		podDirectoryCmd = fmt.Sprintf("sudo sh -c \"%s\"", podDirectoryCmd)
 	}
-	// Directories in the global directory have unpredictable names, however, device symlinks
-	// have the same name as pod.UID. So just find anything with pod.UID name.
+	// global 目录中的目录名不可预测，但设备符号链接
+	// 的名称与 pod.UID 相同。因此只需查找名称为 pod.UID 的项。
 	globalBlockDirectoryCmd := fmt.Sprintf("find /var/lib/kubelet/plugins -name %s", clientPod.UID)
 	if isSudoPresent(ctx, nodeIP, framework.TestContext.Provider) {
 		globalBlockDirectoryCmd = fmt.Sprintf("sudo sh -c \"%s\"", globalBlockDirectoryCmd)
@@ -268,7 +268,7 @@ func TestVolumeUnmapsFromDeletedPodWithForceOption(ctx context.Context, c client
 	framework.ExpectNoError(err, "Encountered SSH error.")
 	gomega.Expect(result.Code).To(gomega.Equal(0), fmt.Sprintf("Expected find exit code of 0, got %d", result.Code))
 
-	// This command is to make sure kubelet is started after test finishes no matter it fails or not.
+	// 此命令用于确保测试结束后无论成功失败都启动 kubelet。
 	ginkgo.DeferCleanup(KubeletCommand, KStart, c, clientPod)
 	ginkgo.By("Stopping the kubelet.")
 	KubeletCommand(ctx, KStop, c, clientPod)
@@ -287,8 +287,8 @@ func TestVolumeUnmapsFromDeletedPodWithForceOption(ctx context.Context, c client
 	framework.ExpectNoError(err, "Expected pod to be not found.")
 
 	if forceDelete {
-		// With forceDelete, since pods are immediately deleted from API server, there is no way to be sure when volumes are torn down
-		// so wait some time to finish
+		// 使用 forceDelete 时，Pod 会立即从 API server 删除，无法确定 volume 何时被拆除，
+		// 因此等待一段时间让操作完成
 		time.Sleep(30 * time.Second)
 	}
 
@@ -307,17 +307,17 @@ func TestVolumeUnmapsFromDeletedPodWithForceOption(ctx context.Context, c client
 	framework.Logf("Volume unmaped on node %s", clientPod.Spec.NodeName)
 }
 
-// TestVolumeUnmapsFromDeletedPod tests that a volume unmaps if the client pod was deleted while the kubelet was down.
+// TestVolumeUnmapsFromDeletedPod 测试 kubelet 停机期间客户端 Pod 被删除时 volume 是否被解除映射。
 func TestVolumeUnmapsFromDeletedPod(ctx context.Context, c clientset.Interface, f *framework.Framework, clientPod *v1.Pod, devicePath string) {
 	TestVolumeUnmapsFromDeletedPodWithForceOption(ctx, c, f, clientPod, false, devicePath)
 }
 
-// TestVolumeUnmapsFromForceDeletedPod tests that a volume unmaps if the client pod was forcefully deleted while the kubelet was down.
+// TestVolumeUnmapsFromForceDeletedPod 测试 kubelet 停机期间客户端 Pod 被强制删除时 volume 是否被解除映射。
 func TestVolumeUnmapsFromForceDeletedPod(ctx context.Context, c clientset.Interface, f *framework.Framework, clientPod *v1.Pod, devicePath string) {
 	TestVolumeUnmapsFromDeletedPodWithForceOption(ctx, c, f, clientPod, true, devicePath)
 }
 
-// RunInPodWithVolume runs a command in a pod with given claim mounted to /mnt directory.
+// RunInPodWithVolume 在 Pod 中运行命令，并将给定 claim 挂载到 /mnt 目录。
 func RunInPodWithVolume(ctx context.Context, c clientset.Interface, t *framework.TimeoutContext, ns, claimName, command string) {
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -362,7 +362,7 @@ func RunInPodWithVolume(ctx context.Context, c clientset.Interface, t *framework
 	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, c, pod.Name, pod.Namespace, t.PodStartSlow))
 }
 
-// StartExternalProvisioner create external provisioner pod
+// StartExternalProvisioner 创建 external provisioner Pod
 func StartExternalProvisioner(ctx context.Context, c clientset.Interface, ns string, externalPluginName string) *v1.Pod {
 	podClient := c.CoreV1().Pods(ns)
 
@@ -446,36 +446,36 @@ func isSudoPresent(ctx context.Context, nodeIP string, provider string) bool {
 	return false
 }
 
-// CheckReadWriteToPath check that path can b e read and written
+// CheckReadWriteToPath 检查路径是否可读写
 func CheckReadWriteToPath(ctx context.Context, f *framework.Framework, pod *v1.Pod, volMode v1.PersistentVolumeMode, path string) {
 	if volMode == v1.PersistentVolumeBlock {
 		// random -> file1
 		err := e2epod.VerifyExecInPodSucceed(ctx, f, pod, "dd if=/dev/urandom of=/tmp/file1 bs=64 count=1")
 		framework.ExpectNoError(err, "Failed to write to file1")
-		// file1 -> dev (write to dev)
+		// file1 -> dev（写入 dev）
 		err = e2epod.VerifyExecInPodSucceed(ctx, f, pod, fmt.Sprintf("dd if=/tmp/file1 of=%s bs=64 count=1", path))
 		framework.ExpectNoError(err, "Failed to write to block volume")
-		// dev -> file2 (read from dev)
+		// dev -> file2（从 dev 读取）
 		err = e2epod.VerifyExecInPodSucceed(ctx, f, pod, fmt.Sprintf("dd if=%s of=/tmp/file2 bs=64 count=1", path))
 		framework.ExpectNoError(err, "Failed to read from block volume")
-		// file1 == file2 (check contents)
+		// file1 == file2（检查内容）
 		err = e2epod.VerifyExecInPodSucceed(ctx, f, pod, "diff /tmp/file1 /tmp/file2")
 		framework.ExpectNoError(err, "Failed to compare file1 and file2")
-		// Clean up temp files
+		// 清理临时文件
 		err = e2epod.VerifyExecInPodSucceed(ctx, f, pod, "rm -f /tmp/file1 /tmp/file2")
 		framework.ExpectNoError(err, "Failed to clean up temp files")
 
-		// Check that writing file to block volume fails
+		// 检查向块 volume 写入文件是否失败
 		err = e2epod.VerifyExecInPodFail(ctx, f, pod, fmt.Sprintf("echo 'Hello world.' > %s/file1.txt", path), 1)
 		framework.ExpectNoError(err, "Expected write to block volume to fail")
 	} else {
-		// text -> file1 (write to file)
+		// text -> file1（写入文件）
 		err := e2epod.VerifyExecInPodSucceed(ctx, f, pod, fmt.Sprintf("echo 'Hello world.' > %s/file1.txt", path))
 		framework.ExpectNoError(err, "Failed to write to file1")
-		// grep file1 (read from file and check contents)
+		// grep file1（读取文件并检查内容）
 		err = e2epod.VerifyExecInPodSucceed(ctx, f, pod, readFile("Hello word.", path))
 		framework.ExpectNoError(err, "Failed to read from file1")
-		// Check that writing to directory as block volume fails
+		// 检查将目录作为块 volume 写入是否失败
 		err = e2epod.VerifyExecInPodFail(ctx, f, pod, fmt.Sprintf("dd if=/dev/urandom of=%s bs=64 count=1", path), 1)
 		framework.ExpectNoError(err, "Expected write to directory to fail")
 	}
@@ -488,7 +488,7 @@ func readFile(content, path string) string {
 	return fmt.Sprintf("grep 'Hello world.' %s/file1.txt", path)
 }
 
-// genBinDataFromSeed generate binData with random seed
+// genBinDataFromSeed 用随机种子生成 binData
 func genBinDataFromSeed(len int, seed int64) []byte {
 	binData := make([]byte, len)
 	r := rand.New(rand.NewSource(seed))
@@ -501,12 +501,12 @@ func genBinDataFromSeed(len int, seed int64) []byte {
 	return binData
 }
 
-// CheckReadFromPath validate that file can be properly read.
+// CheckReadFromPath 验证文件是否可被正确读取。
 //
-// Note: directIO does not work with (default) BusyBox Pods. A requirement for
-// directIO to function correctly, is to read whole sector(s) for Block-mode
-// PVCs (normally a sector is 512 bytes), or memory pages for files (commonly
-// 4096 bytes).
+// 注意：directIO 不适用于默认的 BusyBox Pod。directIO 正常工作的条件是：
+// 对块模式 PVC 读取完整扇区（通常一个扇区 512 字节），
+// 或对文件读取内存页（通常
+// 4096 字节）。
 func CheckReadFromPath(ctx context.Context, f *framework.Framework, pod *v1.Pod, volMode v1.PersistentVolumeMode, directIO bool, path string, len int, seed int64) {
 	var pathForVolMode string
 	var iflag string
@@ -529,11 +529,10 @@ func CheckReadFromPath(ctx context.Context, f *framework.Framework, pod *v1.Pod,
 	framework.ExpectNoError(err, "Failed to read from %s", pathForVolMode)
 }
 
-// CheckWriteToPath that file can be properly written.
+// CheckWriteToPath 验证文件是否可被正确写入。
 //
-// Note: nocache does not work with (default) BusyBox Pods. To read without
-// caching, enable directIO with CheckReadFromPath and check the hints about
-// the len requirements.
+// 注意：nocache 不适用于默认的 BusyBox Pod。要无缓存读取，
+// 请在 CheckReadFromPath 中启用 directIO，并查看关于长度要求的提示。
 func CheckWriteToPath(ctx context.Context, f *framework.Framework, pod *v1.Pod, volMode v1.PersistentVolumeMode, nocache bool, path string, len int, seed int64) {
 	var pathForVolMode string
 	var oflag string
@@ -556,7 +555,7 @@ func CheckWriteToPath(ctx context.Context, f *framework.Framework, pod *v1.Pod, 
 	framework.ExpectNoError(err, "Failed to write to %s", pathForVolMode)
 }
 
-// GetSectorSize returns the sector size of the device.
+// GetSectorSize 返回设备的扇区大小。
 func GetSectorSize(ctx context.Context, f *framework.Framework, pod *v1.Pod, device string) int {
 	stdout, _, err := e2epod.ExecShellInPodWithFullOutput(ctx, f, pod.Name, fmt.Sprintf("blockdev --getss %s", device))
 	framework.ExpectNoError(err, "Failed to get sector size of %s", device)
@@ -566,7 +565,7 @@ func GetSectorSize(ctx context.Context, f *framework.Framework, pod *v1.Pod, dev
 	return ss
 }
 
-// findMountPoints returns all mount points on given node under specified directory.
+// findMountPoints 返回给定节点上指定目录下的所有挂载点。
 func findMountPoints(ctx context.Context, hostExec HostExec, node *v1.Node, dir string) []string {
 	result, err := hostExec.IssueCommandWithResult(ctx, fmt.Sprintf(`find %s -type d -exec mountpoint {} \; | grep 'is a mountpoint$' || true`, dir), node)
 	framework.ExpectNoError(err, "Encountered HostExec error.")
@@ -582,16 +581,16 @@ func findMountPoints(ctx context.Context, hostExec HostExec, node *v1.Node, dir 
 	return mountPoints
 }
 
-// FindVolumeGlobalMountPoints returns all volume global mount points on the node of given pod.
+// FindVolumeGlobalMountPoints 返回给定 Pod 所在节点上的所有 volume 全局挂载点。
 func FindVolumeGlobalMountPoints(ctx context.Context, hostExec HostExec, node *v1.Node) sets.String {
 	return sets.NewString(findMountPoints(ctx, hostExec, node, "/var/lib/kubelet/plugins")...)
 }
 
-// CreateDriverNamespace creates a namespace for CSI driver installation.
-// The namespace is still tracked and ensured that gets deleted when test terminates.
+// CreateDriverNamespace 为 CSI driver 安装创建一个命名空间。
+// 该命名空间仍会被跟踪，并确保测试结束时被删除。
 func CreateDriverNamespace(ctx context.Context, f *framework.Framework) *v1.Namespace {
 	ginkgo.By(fmt.Sprintf("Building a driver namespace object, basename %s", f.Namespace.Name))
-	// The driver namespace will be bound to the test namespace in the prefix
+	// driver 命名空间将在前缀上与测试命名空间绑定
 	namespace, err := f.CreateNamespace(ctx, f.Namespace.Name, map[string]string{
 		"e2e-framework":      f.BaseName,
 		"e2e-test-namespace": f.Namespace.Name,
@@ -608,7 +607,7 @@ func CreateDriverNamespace(ctx context.Context, f *framework.Framework) *v1.Name
 	return namespace
 }
 
-// WaitForGVRDeletion waits until a non-namespaced object has been deleted
+// WaitForGVRDeletion 等待非命名空间级对象被删除
 func WaitForGVRDeletion(ctx context.Context, c dynamic.Interface, gvr schema.GroupVersionResource, objectName string, poll, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for %s %s to be deleted", timeout, gvr.Resource, objectName)
 
@@ -631,7 +630,7 @@ func WaitForGVRDeletion(ctx context.Context, c dynamic.Interface, gvr schema.Gro
 	return fmt.Errorf("%s %s is not deleted within %v", gvr.Resource, objectName, timeout)
 }
 
-// EnsureGVRDeletion checks that no object as defined by the group/version/kind and name is ever found during the given time period
+// EnsureGVRDeletion 检查给定时间段内是否从未找到由 group/version/kind 和 name 定义的对象
 func EnsureGVRDeletion(ctx context.Context, c dynamic.Interface, gvr schema.GroupVersionResource, objectName string, poll, timeout time.Duration, namespace string) error {
 	var resourceClient dynamic.ResourceInterface
 	if namespace != "" {
@@ -647,7 +646,7 @@ func EnsureGVRDeletion(ctx context.Context, c dynamic.Interface, gvr schema.Grou
 	return err
 }
 
-// EnsureNoGVRDeletion checks that an object as defined by the group/version/kind and name has not been deleted during the given time period
+// EnsureNoGVRDeletion 检查由 group/version/kind 和 name 定义的对象在给定时间段内未被删除
 func EnsureNoGVRDeletion(ctx context.Context, c dynamic.Interface, gvr schema.GroupVersionResource, objectName string, poll, timeout time.Duration, namespace string) error {
 	var resourceClient dynamic.ResourceInterface
 	if namespace != "" {
@@ -665,7 +664,7 @@ func EnsureNoGVRDeletion(ctx context.Context, c dynamic.Interface, gvr schema.Gr
 	return err
 }
 
-// WaitForNamespacedGVRDeletion waits until a namespaced object has been deleted
+// WaitForNamespacedGVRDeletion 等待命名空间级对象被删除
 func WaitForNamespacedGVRDeletion(ctx context.Context, c dynamic.Interface, gvr schema.GroupVersionResource, ns, objectName string, poll, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for %s %s to be deleted", timeout, gvr.Resource, objectName)
 
@@ -688,12 +687,12 @@ func WaitForNamespacedGVRDeletion(ctx context.Context, c dynamic.Interface, gvr 
 	return fmt.Errorf("%s %s in namespace %s is not deleted within %v", gvr.Resource, objectName, ns, timeout)
 }
 
-// WaitForOwnedResourcesDeleted waits until all objects of the given GVR
-// in the namespace (or cluster-scoped if ns=="") with the specified ownerUID are deleted.
+// WaitForOwnedResourcesDeleted 等待命名空间中（若 ns=="" 则为集群级）
+// 具有指定 ownerUID 的给定 GVR 的所有对象被删除。
 func WaitForOwnedResourcesDeleted(ctx context.Context,
 	c dynamic.Interface,
 	gvr schema.GroupVersionResource,
-	ns string, // empty for cluster-scoped resources
+	ns string, // 集群级资源为空
 	ownerUID types.UID,
 	poll, timeout time.Duration) error {
 	scope := "cluster-scoped"
@@ -734,7 +733,7 @@ func WaitForOwnedResourcesDeleted(ctx context.Context,
 	return fmt.Errorf("some %s %s owned by %s were not deleted within %v", gvr.Resource, scope, ownerUID, timeout)
 }
 
-// FilterResourcesByOwner filters unstructured resources to only those owned by the specified owner kind and UID
+// FilterResourcesByOwner 过滤 unstructured 资源，只保留由指定 owner kind 和 UID 拥有的资源
 func FilterResourcesByOwner(resources []unstructured.Unstructured, ownerKind string, ownerUID types.UID) []unstructured.Unstructured {
 	var filtered []unstructured.Unstructured
 	for _, resource := range resources {
@@ -748,9 +747,9 @@ func FilterResourcesByOwner(resources []unstructured.Unstructured, ownerKind str
 	return filtered
 }
 
-// WaitUntil runs checkDone until a timeout is reached
+// WaitUntil 反复运行 checkDone 直到超时
 func WaitUntil(poll, timeout time.Duration, checkDone func() bool) bool {
-	// TODO (pohly): replace with gomega.Eventually
+	// TODO (pohly): 用 gomega.Eventually 替换
 	for start := time.Now(); time.Since(start) < timeout; time.Sleep(poll) {
 		if checkDone() {
 			framework.Logf("WaitUntil finished successfully after %v", time.Since(start))
@@ -762,8 +761,8 @@ func WaitUntil(poll, timeout time.Duration, checkDone func() bool) bool {
 	return false
 }
 
-// WaitForGVRFinalizer waits until a object from a given GVR contains a finalizer
-// If namespace is empty, assume it is a non-namespaced object
+// WaitForGVRFinalizer 等待给定 GVR 的对象包含 finalizer
+// 如果命名空间为空，则假定它是非命名空间级对象
 func WaitForGVRFinalizer(ctx context.Context, c dynamic.Interface, gvr schema.GroupVersionResource, objectName, objectNamespace, finalizer string, poll, timeout time.Duration) error {
 	framework.Logf("Waiting up to %v for object %s %s of resource %s to contain finalizer %s", timeout, objectNamespace, objectName, gvr.Resource, finalizer)
 	var (
@@ -796,7 +795,7 @@ func WaitForGVRFinalizer(ctx context.Context, c dynamic.Interface, gvr schema.Gr
 	return err
 }
 
-// VerifyFilePathGIDInPod verfies expected GID of the target filepath
+// VerifyFilePathGIDInPod 验证目标文件路径的预期 GID
 func VerifyFilePathGIDInPod(ctx context.Context, f *framework.Framework, filePath, expectedGID string, pod *v1.Pod) {
 	cmd := fmt.Sprintf("ls -l %s", filePath)
 	stdout, stderr, err := e2epod.ExecShellInPodWithFullOutput(ctx, f, pod.Name, cmd)
@@ -807,7 +806,7 @@ func VerifyFilePathGIDInPod(ctx context.Context, f *framework.Framework, filePat
 	gomega.Expect(ll[3]).To(gomega.Equal(expectedGID))
 }
 
-// ChangeFilePathGIDInPod changes the GID of the target filepath.
+// ChangeFilePathGIDInPod 更改目标文件路径的 GID。
 func ChangeFilePathGIDInPod(ctx context.Context, f *framework.Framework, filePath, targetGID string, pod *v1.Pod) {
 	cmd := fmt.Sprintf("chgrp %s %s", targetGID, filePath)
 	_, _, err := e2epod.ExecShellInPodWithFullOutput(ctx, f, pod.Name, cmd)
@@ -815,7 +814,7 @@ func ChangeFilePathGIDInPod(ctx context.Context, f *framework.Framework, filePat
 	VerifyFilePathGIDInPod(ctx, f, filePath, targetGID, pod)
 }
 
-// DeleteStorageClass deletes the passed in StorageClass and catches errors other than "Not Found"
+// DeleteStorageClass 删除传入的 StorageClass，并捕获 "Not Found" 以外的错误
 func DeleteStorageClass(ctx context.Context, cs clientset.Interface, className string) error {
 	err := cs.StorageV1().StorageClasses().Delete(ctx, className, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -824,7 +823,7 @@ func DeleteStorageClass(ctx context.Context, cs clientset.Interface, className s
 	return nil
 }
 
-// CreateVolumeSource creates a volume source object
+// CreateVolumeSource 创建 volume source 对象
 func CreateVolumeSource(pvcName string, readOnly bool) *v1.VolumeSource {
 	return &v1.VolumeSource{
 		PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
@@ -834,7 +833,7 @@ func CreateVolumeSource(pvcName string, readOnly bool) *v1.VolumeSource {
 	}
 }
 
-// TryFunc try to execute the function and return err if there is any
+// TryFunc 尝试执行函数，如有错误则返回
 func TryFunc(f func()) error {
 	var err error
 	if f == nil {
@@ -849,15 +848,15 @@ func TryFunc(f func()) error {
 	return err
 }
 
-// GetSizeRangesIntersection takes two instances of storage size ranges and determines the
-// intersection of the intervals (if it exists) and return the minimum of the intersection
-// to be used as the claim size for the test.
-// if value not set, that means there's no minimum or maximum size limitation and we set default size for it.
+// GetSizeRangesIntersection 接受两个存储大小范围实例，确定其
+// 交集（如果存在），并返回交集的最小值，
+// 作为测试中 claim 的大小。
+// 如果未设置值，表示没有大小上下限限制，我们为其设置默认大小。
 func GetSizeRangesIntersection(first e2evolume.SizeRange, second e2evolume.SizeRange) (string, error) {
 	var firstMin, firstMax, secondMin, secondMax resource.Quantity
 	var err error
 
-	//if SizeRange is not set, assign a minimum or maximum size
+	// 如果未设置 SizeRange，则指定最小或最大大小
 	if len(first.Min) == 0 {
 		first.Min = minValidSize
 	}
@@ -887,12 +886,12 @@ func GetSizeRangesIntersection(first e2evolume.SizeRange, second e2evolume.SizeR
 	interSectionStart := math.Max(float64(firstMin.Value()), float64(secondMin.Value()))
 	intersectionEnd := math.Min(float64(firstMax.Value()), float64(secondMax.Value()))
 
-	// the minimum of the intersection shall be returned as the claim size
+	// 应返回交集的最小值作为 claim 大小
 	var intersectionMin resource.Quantity
 
-	if intersectionEnd-interSectionStart >= 0 { //have intersection
-		intersectionMin = *resource.NewQuantity(int64(interSectionStart), "BinarySI") //convert value to BinarySI format. E.g. 5Gi
-		// return the minimum of the intersection as the claim size
+	if intersectionEnd-interSectionStart >= 0 { // 有交集
+		intersectionMin = *resource.NewQuantity(int64(interSectionStart), "BinarySI") // 将值转换为 BinarySI 格式，例如 5Gi
+		// 返回交集的最小值作为 claim 大小
 		return intersectionMin.String(), nil
 	}
 	return "", fmt.Errorf("intersection of size ranges %+v, %+v is null", first, second)

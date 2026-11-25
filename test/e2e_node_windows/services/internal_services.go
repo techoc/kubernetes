@@ -32,10 +32,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// e2eService manages e2e services in current process.
+// e2eService 管理当前进程中的 e2e service。
 type e2eServices struct {
 	rmDirs []string
-	// statically linked e2e services
+	// 静态链接的 e2e service
 	etcdServer   *etcd3testing.EtcdTestServer
 	etcdStorage  *storagebackend.Config
 	apiServer    *APIServer
@@ -46,19 +46,19 @@ func newE2EServices() *e2eServices {
 	return &e2eServices{}
 }
 
-// run starts all e2e services and wait for the termination signal. Once receives the
-// termination signal, it will stop the e2e services gracefully.
+// run 启动所有 e2e service 并等待终止信号。收到终止信号后，
+// 会优雅地停止这些 e2e service。
 func (es *e2eServices) run(t *testing.T) error {
 	defer es.stop(t)
 	if err := es.start(t); err != nil {
 		return err
 	}
-	// Wait until receiving a termination signal.
+	// 等待收到终止信号。
 	waitForTerminationSignal()
 	return nil
 }
 
-// start starts the tests embedded services or returns an error.
+// start 启动测试内嵌的 service，或返回错误。
 func (es *e2eServices) start(t *testing.T) error {
 	tCtx := ktesting.Init(t)
 	klog.Info("Starting e2e services...")
@@ -78,11 +78,11 @@ func (es *e2eServices) start(t *testing.T) error {
 	return nil
 }
 
-// stop stops the embedded e2e services.
+// stop 停止内嵌的 e2e service。
 func (es *e2eServices) stop(t *testing.T) {
 	klog.Info("Stopping e2e services...")
-	// TODO(random-liu): Use a loop to stop all services after introducing
-	// service interface.
+	// TODO(random-liu): 引入 service 接口后，使用循环停止所有 service。
+	//
 	klog.Info("Stopping namespace controller")
 	if es.nsController != nil {
 		if err := es.nsController.Stop(); err != nil {
@@ -113,7 +113,7 @@ func (es *e2eServices) stop(t *testing.T) {
 	klog.Info("E2E services stopped.")
 }
 
-// startEtcd starts the embedded etcd instance or returns an error.
+// startEtcd 启动内嵌的 etcd 实例，或返回错误。
 func (es *e2eServices) startEtcd(t *testing.T) error {
 	klog.Info("Starting etcd")
 	server, etcdStorage := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
@@ -122,21 +122,21 @@ func (es *e2eServices) startEtcd(t *testing.T) error {
 	return nil
 }
 
-// startAPIServer starts the embedded API server or returns an error.
+// startAPIServer 启动内嵌的 API server，或返回错误。
 func (es *e2eServices) startAPIServer(ctx context.Context, etcdStorage *storagebackend.Config) error {
 	klog.Info("Starting API server")
 	es.apiServer = NewAPIServer(*etcdStorage)
 	return es.apiServer.Start(ctx)
 }
 
-// startNamespaceController starts the embedded namespace controller or returns an error.
+// startNamespaceController 启动内嵌的 namespace controller，或返回错误。
 func (es *e2eServices) startNamespaceController(ctx context.Context) error {
 	klog.FromContext(ctx).Info("Starting namespace controller")
 	es.nsController = NewNamespaceController(framework.TestContext.Host)
 	return es.nsController.Start(ctx)
 }
 
-// getServicesHealthCheckURLs returns the health check urls for the internal services.
+// getServicesHealthCheckURLs 返回内部 service 的健康检查 URL。
 func getServicesHealthCheckURLs() []string {
 	return []string{
 		getAPIServerHealthCheckURL(),

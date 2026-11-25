@@ -30,12 +30,12 @@ import (
 	"github.com/onsi/ginkgo/v2"
 )
 
-// PersistentVolumeUpgradeTest test that a pv is available before and after a cluster upgrade.
+// PersistentVolumeUpgradeTest 测试集群升级前后 PV 是否可用。
 type PersistentVolumeUpgradeTest struct {
 	pvc *v1.PersistentVolumeClaim
 }
 
-// Name returns the tracking name of the test.
+// Name 返回测试的跟踪名称。
 func (PersistentVolumeUpgradeTest) Name() string { return "[sig-storage] persistent-volume-upgrade" }
 
 const (
@@ -45,11 +45,11 @@ const (
 	pvReadCmd  string = "cat " + pvTestFile
 )
 
-// Setup creates a pv and then verifies that a pod can consume it.  The pod writes data to the volume.
+// Setup 创建 PV，然后验证 Pod 可以使用它。Pod 向 volume 写入数据。
 func (t *PersistentVolumeUpgradeTest) Setup(ctx context.Context, f *framework.Framework) {
 
 	var err error
-	// At the moment, the user of this test limits execution to GCE.
+	// 目前该测试的使用者将执行范围限制在 GCE。
 
 	ns := f.Namespace.Name
 
@@ -65,15 +65,15 @@ func (t *PersistentVolumeUpgradeTest) Setup(ctx context.Context, f *framework.Fr
 	t.testPod(ctx, f, pvWriteCmd+";"+pvReadCmd)
 }
 
-// Test waits for the upgrade to complete, and then verifies that a pod can still consume the pv
-// and that the volume data persists.
+// Test 等待升级完成，然后验证 Pod 仍可使用该 PV，
+// 且 volume 数据仍然存在。
 func (t *PersistentVolumeUpgradeTest) Test(ctx context.Context, f *framework.Framework, done <-chan struct{}, upgrade upgrades.UpgradeType) {
 	<-done
 	ginkgo.By("Consuming the PV after upgrade")
 	t.testPod(ctx, f, pvReadCmd)
 }
 
-// Teardown cleans up any remaining resources.
+// Teardown 清理所有剩余资源。
 func (t *PersistentVolumeUpgradeTest) Teardown(ctx context.Context, f *framework.Framework) {
 	errs := e2epv.PVPVCCleanup(ctx, f.ClientSet, f.Namespace.Name, nil, t.pvc)
 	if len(errs) > 0 {
@@ -81,7 +81,7 @@ func (t *PersistentVolumeUpgradeTest) Teardown(ctx context.Context, f *framework
 	}
 }
 
-// testPod creates a pod that consumes a pv and prints it out. The output is then verified.
+// testPod 创建一个使用 PV 并打印其内容的 Pod，然后验证输出。
 func (t *PersistentVolumeUpgradeTest) testPod(ctx context.Context, f *framework.Framework, cmd string) {
 	pod := e2epod.MakePod(f.Namespace.Name, nil, []*v1.PersistentVolumeClaim{t.pvc}, f.NamespacePodSecurityLevel, cmd)
 	expectedOutput := []string{pvTestData}
