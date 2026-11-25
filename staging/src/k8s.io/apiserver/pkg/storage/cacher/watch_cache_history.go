@@ -29,11 +29,11 @@ import (
 )
 
 const (
-	// defaultLowerBoundCapacity is a default value for event cache capacity's lower bound.
-	// TODO: Figure out, to what value we can decreased it.
+	// defaultLowerBoundCapacity 是事件缓存容量下界的默认值。
+	// TODO: 确定可以把它降到什么值。
 	defaultLowerBoundCapacity = 100
 
-	// defaultUpperBoundCapacity should be able to keep the required history.
+	// defaultUpperBoundCapacity 应当足以保留所需的历史记录。
 	defaultUpperBoundCapacity = 100 * 1024
 )
 
@@ -60,15 +60,12 @@ func capacityUpperBound(eventFreshDuration time.Duration) int {
 	if eventFreshDuration <= DefaultEventFreshDuration {
 		return defaultUpperBoundCapacity
 	}
-	// eventFreshDuration determines how long the watch events are supposed
-	// to be stored in the watch cache.
-	// In very high churn situations, there is a need to store more events
-	// in the watch cache, hence it would have to be upsized accordingly.
-	// Because of that, for larger values of eventFreshDuration, we set the
-	// upper bound of the watch cache's capacity proportionally to the ratio
-	// between eventFreshDuration and DefaultEventFreshDuration.
-	// Given that the watch cache size can only double, we round up that
-	// proportion to the next power of two.
+	// eventFreshDuration 决定 watch 事件应当在 watch cache 中存储多久。
+	// 在极高的 churn 场景下，需要在 watch cache 中存储更多事件，
+	// 因此必须相应地扩容。基于这一点，对于较大的 eventFreshDuration
+	// 值，我们将 watch cache 容量的上界设为按 eventFreshDuration 与
+	// DefaultEventFreshDuration 之比成正比的值。由于 watch cache 的大小
+	// 只能翻倍增长，我们把该比例向上取整到 2 的下一个幂。
 	exponent := int(math.Ceil((math.Log2(eventFreshDuration.Seconds() / DefaultEventFreshDuration.Seconds()))))
 	if maxExponent := int(math.Floor((math.Log2(math.MaxInt32 / defaultUpperBoundCapacity)))); exponent > maxExponent {
 		// 确保容量上界能放进 32 位整数：位移过大将溢出 int，因此显式截断并告警。
@@ -83,18 +80,18 @@ func capacityUpperBound(eventFreshDuration time.Duration) int {
 type watchCacheHistory struct {
 	config *ImmutableWatchCacheConfig
 
-	// Maximum size of history window.
+	// 历史记录窗口的最大容量。
 	capacity int
 
-	// upper bound of capacity since event cache has a dynamic size.
+	// 由于事件缓存大小是动态的，此为容量的上界。
 	upperBoundCapacity int
 
-	// lower bound of capacity since event cache has a dynamic size.
+	// 由于事件缓存大小是动态的，此为容量的下界。
 	lowerBoundCapacity int
 
-	// cache is used a cyclic buffer - the "current" contents of it are
-	// stored in [start_index%capacity, end_index%capacity) - so the
-	// "current" contents have exactly end_index-start_index items.
+	// cache 被用作环形缓冲区——其“当前”内容存储在
+	// [start_index%capacity, end_index%capacity) 区间内，
+	// 也就是说“当前”内容恰好有 end_index-start_index 个元素。
 	cache      []*watchCacheEvent
 	startIndex int
 	endIndex   int

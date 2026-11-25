@@ -36,21 +36,21 @@ type (
 // 用来覆盖 apiserver 的通用机制（序列化、转换、patch），并非真实资源。
 type Pod struct {
 	metav1.TypeMeta `json:""`
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
-	// Specification of the desired behavior of the pod.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 期望的 Pod 行为规约。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Spec PodSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 
-	// Most recently observed status of the pod.
-	// This data may not be up to date.
-	// Populated by the system.
-	// Read-only.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 最近一次观测到的 Pod 状态。
+	// 该数据可能不是最新的。
+	// 由系统填充。
+	// 只读。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status PodStatus `json:"status,omitempty" protobuf:"bytes,3,opt,name=status"`
 }
@@ -59,32 +59,32 @@ type Pod struct {
 // status 由系统写入，客户端提交的 status 会被忽略，这一点在
 // 存储层的策略中强制，而非依赖类型定义。
 type PodStatus struct {
-	// Current condition of the pod.
-	// More info: http://kubernetes.io/docs/user-guide/pod-states#pod-phase
+	// Pod 当前的条件状态。
+	// 更多信息：http://kubernetes.io/docs/user-guide/pod-states#pod-phase
 	// +optional
 	Phase PodPhase `json:"phase,omitempty" protobuf:"bytes,1,opt,name=phase,casttype=PodPhase"`
-	// Current service state of pod.
-	// More info: http://kubernetes.io/docs/user-guide/pod-states#pod-conditions
+	// Pod 当前的服务状态。
+	// 更多信息：http://kubernetes.io/docs/user-guide/pod-states#pod-conditions
 	// +optional
 	Conditions []PodCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,2,rep,name=conditions"`
-	// A human readable message indicating details about why the pod is in this condition.
+	// 一段人类可读的消息，说明 Pod 处于当前状态的具体原因。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,3,opt,name=message"`
-	// A brief CamelCase message indicating details about why the pod is in this state.
-	// e.g. 'DiskPressure'
+	// 一段简短的 CamelCase 消息，说明 Pod 处于当前状态的具体原因。
+	// 例如：'DiskPressure'
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,4,opt,name=reason"`
 
-	// IP address of the host to which the pod is assigned. Empty if not yet scheduled.
+	// Pod 被分配到的宿主机的 IP 地址。尚未调度时为空。
 	// +optional
 	HostIP string `json:"hostIP,omitempty" protobuf:"bytes,5,opt,name=hostIP"`
-	// IP address allocated to the pod. Routable at least within the cluster.
-	// Empty if not yet allocated.
+	// 分配给 Pod 的 IP 地址。至少在集群内可路由。
+	// 尚未分配时为空。
 	// +optional
 	PodIP string `json:"podIP,omitempty" protobuf:"bytes,6,opt,name=podIP"`
 
-	// RFC 3339 date and time at which the object was acknowledged by the Kubelet.
-	// This is before the Kubelet pulled the container image(s) for the pod.
+	// Kubelet 确认接收该对象的 RFC 3339 日期和时间。
+	// 该时间在 Kubelet 拉取 Pod 的容器镜像之前。
 	// +optional
 	StartTime *metav1.Time `json:"startTime,omitempty" protobuf:"bytes,7,opt,name=startTime"`
 }
@@ -94,24 +94,24 @@ type PodStatus struct {
 // Conditions 使用 merge 策略与 type 作为合并键，保证不同控制面组件
 // 可以并发更新各自负责的条件而不互相覆盖。
 type PodCondition struct {
-	// Type is the type of the condition.
-	// Currently only Ready.
-	// More info: http://kubernetes.io/docs/user-guide/pod-states#pod-conditions
+	// 条件的类型。
+	// 目前仅有 Ready。
+	// 更多信息：http://kubernetes.io/docs/user-guide/pod-states#pod-conditions
 	Type PodConditionType `json:"type" protobuf:"bytes,1,opt,name=type,casttype=PodConditionType"`
-	// Status is the status of the condition.
-	// Can be True, False, Unknown.
-	// More info: http://kubernetes.io/docs/user-guide/pod-states#pod-conditions
+	// 条件的状态。
+	// 可以取 True、False、Unknown。
+	// 更多信息：http://kubernetes.io/docs/user-guide/pod-states#pod-conditions
 	Status ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=ConditionStatus"`
-	// Last time we probed the condition.
+	// 上一次探测该条件的时间。
 	// +optional
 	LastProbeTime metav1.Time `json:"lastProbeTime,omitempty" protobuf:"bytes,3,opt,name=lastProbeTime"`
-	// Last time the condition transitioned from one status to another.
+	// 该条件从一个状态迁移到另一个状态的上一次时间。
 	// +optional
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty" protobuf:"bytes,4,opt,name=lastTransitionTime"`
-	// Unique, one-word, CamelCase reason for the condition's last transition.
+	// 该条件上一次迁移的原因，要求唯一、单词、CamelCase 形式。
 	// +optional
 	Reason string `json:"reason,omitempty" protobuf:"bytes,5,opt,name=reason"`
-	// Human-readable message indicating details about last transition.
+	// 说明上一次迁移详情的人类可读消息。
 	// +optional
 	Message string `json:"message,omitempty" protobuf:"bytes,6,opt,name=message"`
 }
