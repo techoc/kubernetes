@@ -30,8 +30,7 @@ import (
 	"k8s.io/kubectl/pkg/util/term"
 )
 
-// Enclose argument in double-quotes. Double each double-quote character as
-// an escape sequence.
+// 将参数括在双引号中。每个双引号字符都加倍作为转义序列。
 func cmdQuoteArg(arg string) string {
 	var result strings.Builder
 	result.WriteString(`"`)
@@ -46,8 +45,8 @@ func (e Editor) args(path string) []string {
 	if e.Shell {
 		last := args[len(args)-1]
 		if args[0] == windowsShell {
-			// Use double-quotation around whole command line string
-			// See https://stackoverflow.com/a/6378038
+			// 在整个命令行字符串两边使用双引号
+			// 参见 https://stackoverflow.com/a/6378038
 			args[len(args)-1] = fmt.Sprintf(`"%s %s"`, last, cmdQuoteArg(path))
 		} else {
 			args[len(args)-1] = fmt.Sprintf("%s %q", last, path)
@@ -58,8 +57,8 @@ func (e Editor) args(path string) []string {
 	return args
 }
 
-// Launch opens the described or returns an error. The TTY will be protected, and
-// SIGQUIT, SIGTERM, and SIGINT will all be trapped.
+// Launch 打开所描述的对象，或返回错误。TTY 将受到保护，并且
+// SIGQUIT、SIGTERM 和 SIGINT 都会被捕获。
 func (e Editor) Launch(path string) error {
 	if len(e.Args) == 0 {
 		return fmt.Errorf("no editor defined, can't open %s", path)
@@ -71,8 +70,8 @@ func (e Editor) Launch(path string) error {
 	args := e.args(abs)
 	var cmd *exec.Cmd
 	if e.Shell && args[0] == windowsShell {
-		// Pass all arguments to cmd.exe as one string
-		// See https://pkg.go.dev/os/exec#Command
+		// 将所有参数作为一个字符串传递给 cmd.exe
+		// 参见 https://pkg.go.dev/os/exec#Command
 		cmd = exec.Command(args[0])
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 		cmd.SysProcAttr.CmdLine = strings.Join(args, " ")

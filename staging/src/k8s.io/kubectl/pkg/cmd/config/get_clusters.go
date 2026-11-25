@@ -33,8 +33,8 @@ var (
 		kubectl config get-clusters`)
 )
 
-// NewCmdConfigGetClusters creates a command object for the "get-clusters" action, which
-// lists all clusters defined in the kubeconfig.
+// NewCmdConfigGetClusters 为 "get-clusters" 操作创建命令对象，
+// 列出 kubeconfig 中定义的所有 cluster。
 func NewCmdConfigGetClusters(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "get-clusters",

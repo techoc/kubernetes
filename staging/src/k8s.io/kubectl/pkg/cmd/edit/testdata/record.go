@@ -30,7 +30,7 @@ import (
 
 type EditTestCase struct {
 	Description string `yaml:"description"`
-	// create or edit
+	// create 或 edit
 	Mode             string   `yaml:"mode"`
 	Args             []string `yaml:"args"`
 	Filename         string   `yaml:"filename"`
@@ -44,16 +44,16 @@ type EditTestCase struct {
 }
 
 type EditStep struct {
-	// edit or request
+	// edit 或 request
 	StepType string `yaml:"type"`
 
-	// only applies to request
+	// 仅适用于 request
 	RequestMethod      string `yaml:"expectedMethod,omitempty"`
 	RequestPath        string `yaml:"expectedPath,omitempty"`
 	RequestContentType string `yaml:"expectedContentType,omitempty"`
 	Input              string `yaml:"expectedInput"`
 
-	// only applies to request
+	// 仅适用于 request
 	ResponseStatusCode int `yaml:"resultingStatusCode,omitempty"`
 
 	Output string `yaml:"resultingOutput"`
@@ -72,14 +72,14 @@ func main() {
 
 	fmt.Println(http.ListenAndServe(":8081", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 
-		// Record non-discovery things
+		// 记录非 discovery 的请求
 		record := false
 		switch segments := strings.Split(strings.Trim(req.URL.Path, "/"), "/"); segments[0] {
 		case "api":
-			// api, version
+			// api、version
 			record = len(segments) > 2
 		case "apis":
-			// apis, group, version
+			// apis、group、version
 			record = len(segments) > 3
 		case "callback":
 			record = true

@@ -49,19 +49,19 @@ var (
 	  kubectl create secret tls tls-secret --cert=path/to/tls.crt --key=path/to/tls.key`))
 )
 
-// CreateSecretTLSOptions holds the options for 'create secret tls' sub command
+// CreateSecretTLSOptions 保存 'create secret tls' 子命令的选项
 type CreateSecretTLSOptions struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
 
-	// Name is the name of this TLS secret.
+	// Name 是此 TLS secret 的名称。
 	Name string
-	// Key is the path to the user's private key.
+	// Key 是用户私钥的路径。
 	Key string
-	// Cert is the path to the user's public key certificate.
+	// Cert 是用户公钥证书的路径。
 	Cert string
-	// AppendHash; if true, derive a hash from the Secret and append it to the name
+	// AppendHash；为 true 时，根据 Secret 派生哈希并追加到名称后
 	AppendHash bool
 
 	FieldManager     string
@@ -76,7 +76,7 @@ type CreateSecretTLSOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewSecretTLSOptions creates a new *CreateSecretTLSOptions with default value
+// NewSecretTLSOptions 创建一个带有默认值的 *CreateSecretTLSOptions
 func NewSecretTLSOptions(ioStrems genericiooptions.IOStreams) *CreateSecretTLSOptions {
 	return &CreateSecretTLSOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -84,7 +84,7 @@ func NewSecretTLSOptions(ioStrems genericiooptions.IOStreams) *CreateSecretTLSOp
 	}
 }
 
-// NewCmdCreateSecretTLS is a macro command for creating secrets to work with TLS client or server
+// NewCmdCreateSecretTLS 是一个用于创建配合 TLS 客户端或服务端使用的 secret 的宏命令
 func NewCmdCreateSecretTLS(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewSecretTLSOptions(ioStreams)
 
@@ -116,7 +116,7 @@ func NewCmdCreateSecretTLS(f cmdutil.Factory, ioStreams genericiooptions.IOStrea
 	return cmd
 }
 
-// Complete loads data from the command line environment
+// Complete 从命令行环境加载数据
 func (o *CreateSecretTLSOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -164,19 +164,19 @@ func (o *CreateSecretTLSOptions) Complete(f cmdutil.Factory, cmd *cobra.Command,
 	return nil
 }
 
-// Validate checks if CreateSecretTLSOptions hass sufficient value to run
+// Validate 检查 CreateSecretTLSOptions 是否具备运行所需的足够值
 func (o *CreateSecretTLSOptions) Validate() error {
-	// TODO: This is not strictly necessary. We can generate a self signed cert
-	// if no key/cert is given. The only requirement is that we either get both
-	// or none. See test/e2e/ingress_utils for self signed cert generation.
+	// TODO: 严格来说这不是必需的。如果没有提供 key/cert，我们可以生成一个自签名证书。
+	// 唯一的要求是两者要么都提供，要么都不提供。自签名证书的生成方式参见
+	// test/e2e/ingress_utils。
 	if len(o.Key) == 0 || len(o.Cert) == 0 {
 		return fmt.Errorf("key and cert must be specified")
 	}
 	return nil
 }
 
-// Run calls createSecretTLS which will create secretTLS based on CreateSecretTLSOptions
-// and makes an API call to the server
+// Run 调用 createSecretTLS，后者根据 CreateSecretTLSOptions 创建 secretTLS，
+// 并向服务端发起 API 调用
 func (o *CreateSecretTLSOptions) Run() error {
 	secretTLS, err := o.createSecretTLS()
 	if err != nil {
@@ -203,8 +203,8 @@ func (o *CreateSecretTLSOptions) Run() error {
 	return o.PrintObj(secretTLS)
 }
 
-// createSecretTLS fills in key value pair from the information given in
-// CreateSecretTLSOptions into *corev1.Secret
+// createSecretTLS 将 CreateSecretTLSOptions 中给出的信息
+// 填充为键值对写入 *corev1.Secret
 func (o *CreateSecretTLSOptions) createSecretTLS() (*corev1.Secret, error) {
 	namespace := ""
 	if o.EnforceNamespace {
@@ -221,9 +221,9 @@ func (o *CreateSecretTLSOptions) createSecretTLS() (*corev1.Secret, error) {
 	if _, err := tls.X509KeyPair(tlsCert, tlsKey); err != nil {
 		return nil, err
 	}
-	// TODO: Add more validation.
-	// 1. If the certificate contains intermediates, it is a valid chain.
-	// 2. Format etc.
+	// TODO: 添加更多校验。
+	// 1. 如果证书包含中间证书，则它是一条有效的证书链。
+	// 2. 格式等。
 
 	secretTLS := newSecretObj(o.Name, namespace, corev1.SecretTypeTLS)
 	secretTLS.Data[corev1.TLSCertKey] = []byte(tlsCert)
@@ -239,7 +239,7 @@ func (o *CreateSecretTLSOptions) createSecretTLS() (*corev1.Secret, error) {
 	return secretTLS, nil
 }
 
-// readFile just reads a file into a byte array.
+// readFile 只是将文件读取为字节数组。
 func readFile(file string) ([]byte, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {

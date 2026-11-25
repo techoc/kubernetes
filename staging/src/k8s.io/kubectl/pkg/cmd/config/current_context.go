@@ -28,7 +28,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// CurrentContextOptions holds the command-line options for 'config current-context' sub command
+// CurrentContextOptions 保存 'config current-context' 子命令的命令行选项
 type CurrentContextOptions struct {
 	ConfigAccess clientcmd.ConfigAccess
 }
@@ -42,7 +42,7 @@ var (
 		kubectl config current-context`)
 )
 
-// NewCmdConfigCurrentContext returns a Command instance for 'config current-context' sub command
+// NewCmdConfigCurrentContext 返回 'config current-context' 子命令的 Command 实例
 func NewCmdConfigCurrentContext(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	options := &CurrentContextOptions{ConfigAccess: configAccess}
 
@@ -59,7 +59,7 @@ func NewCmdConfigCurrentContext(out io.Writer, configAccess clientcmd.ConfigAcce
 	return cmd
 }
 
-// RunCurrentContext performs the execution of 'config current-context' sub command
+// RunCurrentContext 执行 'config current-context' 子命令
 func RunCurrentContext(out io.Writer, options *CurrentContextOptions) error {
 	config, err := options.ConfigAccess.GetStartingConfig()
 	if err != nil {

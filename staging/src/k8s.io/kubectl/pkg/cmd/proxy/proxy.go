@@ -37,9 +37,9 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// ProxyOptions have the data required to perform the proxy operation
+// ProxyOptions 包含执行 proxy 操作所需的数据
 type ProxyOptions struct {
-	// Common user flags
+	// 常用用户 flag
 	staticDir     string
 	staticPrefix  string
 	apiPrefix     string
@@ -99,7 +99,7 @@ var (
 		kubectl proxy --api-prefix=/k8s-api`))
 )
 
-// NewProxyOptions creates the options for proxy
+// NewProxyOptions 创建 proxy 的选项
 func NewProxyOptions(ioStreams genericiooptions.IOStreams) *ProxyOptions {
 	return &ProxyOptions{
 		IOStreams:     ioStreams,
@@ -114,7 +114,7 @@ func NewProxyOptions(ioStreams genericiooptions.IOStreams) *ProxyOptions {
 	}
 }
 
-// NewCmdProxy returns the proxy Cobra command
+// NewCmdProxy 返回 proxy Cobra 命令
 func NewCmdProxy(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewProxyOptions(ioStreams)
 
@@ -147,7 +147,7 @@ func NewCmdProxy(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra
 	return cmd
 }
 
-// Complete adapts from the command line args and factory to the data required.
+// Complete 将命令行参数和 factory 适配为所需的数据。
 func (o *ProxyOptions) Complete(f cmdutil.Factory) error {
 	clientConfig, err := f.ToRESTConfig()
 	if err != nil {
@@ -191,7 +191,7 @@ func (o *ProxyOptions) Complete(f cmdutil.Factory) error {
 	return nil
 }
 
-// Validate checks to the ProxyOptions to see if there is sufficient information to run the command.
+// Validate 检查 ProxyOptions 是否包含运行命令所需的足够信息。
 func (o ProxyOptions) Validate() error {
 	if o.port != defaultPort && o.unixSocket != "" {
 		return errors.New("cannot set --unix-socket and --port at the same time")
@@ -209,7 +209,7 @@ func (o ProxyOptions) Validate() error {
 	return nil
 }
 
-// RunProxy checks given arguments and executes command
+// RunProxy 检查给定参数并执行命令
 func (o ProxyOptions) RunProxy() error {
 	server, err := proxy.NewServer(o.staticDir, o.apiPrefix, o.staticPrefix, o.filter, o.clientConfig, o.keepalive, o.appendServerPath)
 
@@ -217,8 +217,8 @@ func (o ProxyOptions) RunProxy() error {
 		return err
 	}
 
-	// Separate listening from serving so we can report the bound port
-	// when it is chosen by os (eg: port == 0)
+	// 将监听与服务分开，以便当端口由 os 选择时（例如 port == 0）
+	// 我们能够报告实际绑定的端口
 	var l net.Listener
 	if o.unixSocket == "" {
 		l, err = server.Listen(o.address, o.port)

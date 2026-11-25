@@ -39,82 +39,82 @@ import (
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
-// Label and annotation keys from the ApplySet specification.
+// ApplySet 规范中的 label 和 annotation 键。
 // https://git.k8s.io/enhancements/keps/sig-cli/3659-kubectl-apply-prune#design-details-applyset-specification
 const (
-	// ApplySetToolingAnnotation is the key of the label that indicates which tool is used to manage this ApplySet.
-	// Tooling should refuse to mutate ApplySets belonging to other tools.
-	// The value must be in the format <toolname>/<semver>.
-	// Example value: "kubectl/v1.27" or "helm/v3" or "kpt/v1.0.0"
+	// ApplySetToolingAnnotation 是 label 的键，用于指示由哪个工具管理此 ApplySet。
+	// 工具应拒绝修改属于其他工具的 ApplySet。
+	// 值必须采用 <toolname>/<semver> 格式。
+	// 示例值："kubectl/v1.27"、"helm/v3" 或 "kpt/v1.0.0"
 	ApplySetToolingAnnotation = "applyset.kubernetes.io/tooling"
 
-	// ApplySetAdditionalNamespacesAnnotation annotation extends the scope of the ApplySet beyond the parent
-	// object's own namespace (if any) to include the listed namespaces. The value is a comma-separated
-	// list of the names of namespaces other than the parent's namespace in which objects are found
-	// Example value: "kube-system,ns1,ns2".
+	// ApplySetAdditionalNamespacesAnnotation 注解将 ApplySet 的范围扩展到 parent
+	// 对象自身的 namespace（如有）之外，使其包含列出的 namespace。值是以逗号分隔的
+	// namespace 名称列表，这些 namespace 不同于 parent 所在 namespace，但其中存在成员对象
+	// 示例值："kube-system,ns1,ns2"。
 	ApplySetAdditionalNamespacesAnnotation = "applyset.kubernetes.io/additional-namespaces"
 
 	// Deprecated: ApplySetGRsAnnotation is a list of group-resources used to optimize listing of ApplySet member objects.
-	// It is optional in the ApplySet specification, as tools can perform discovery or use a different optimization.
-	// However, it is currently required in kubectl.
-	// When present, the value of this annotation must be a comma separated list of the group-resources,
-	// in the fully-qualified name format, i.e. <resourcename>.<group>.
-	// Example value: "certificates.cert-manager.io,configmaps,deployments.apps,secrets,services"
-	// Deprecated and replaced by ApplySetGKsAnnotation, support for this can be removed in applyset beta or GA.
+	// 在 ApplySet 规范中它是可选的，因为工具可以执行发现或使用其他优化方式。
+	// 不过，目前在 kubectl 中它是必需的。
+	// 如果存在，此注解的值必须是以逗号分隔的 group-resource 列表，
+	// 采用完全限定名称格式，即 <resourcename>.<group>。
+	// 示例值："certificates.cert-manager.io,configmaps,deployments.apps,secrets,services"
+	// 已弃用并由 ApplySetGKsAnnotation 取代，在 applyset 进入 beta 或 GA 时可移除对其的支持。
 	DeprecatedApplySetGRsAnnotation = "applyset.kubernetes.io/contains-group-resources"
 
-	// ApplySetGKsAnnotation is a list of group-kinds used to optimize listing of ApplySet member objects.
-	// It is optional in the ApplySet specification, as tools can perform discovery or use a different optimization.
-	// However, it is currently required in kubectl.
-	// When present, the value of this annotation must be a comma separated list of the group-kinds,
-	// in the fully-qualified name format, i.e. <kind>.<group>.
-	// Example value: "Certificate.cert-manager.io,ConfigMap,deployments.apps,Secret,Service"
+	// ApplySetGKsAnnotation 是用于优化列出 ApplySet 成员对象的 group-kind 列表。
+	// 在 ApplySet 规范中它是可选的，因为工具可以执行发现或使用其他优化方式。
+	// 不过，目前在 kubectl 中它是必需的。
+	// 如果存在，此注解的值必须是以逗号分隔的 group-kind 列表，
+	// 采用完全限定名称格式，即 <kind>.<group>。
+	// 示例值："Certificate.cert-manager.io,ConfigMap,deployments.apps,Secret,Service"
 	ApplySetGKsAnnotation = "applyset.kubernetes.io/contains-group-kinds"
 
-	// ApplySetParentIDLabel is the key of the label that makes object an ApplySet parent object.
-	// Its value MUST use the format specified in V1ApplySetIdFormat below
+	// ApplySetParentIDLabel 是使对象成为 ApplySet parent 对象的 label 键。
+	// 其值必须使用下面 V1ApplySetIdFormat 中指定的格式
 	ApplySetParentIDLabel = "applyset.kubernetes.io/id"
 
-	// V1ApplySetIdFormat is the format required for the value of ApplySetParentIDLabel (and ApplysetPartOfLabel).
-	// The %s segment is the unique ID of the object itself, which MUST be the base64 encoding
-	// (using the URL safe encoding of RFC4648) of the hash of the GKNN of the object it is on, in the form:
+	// V1ApplySetIdFormat 是 ApplySetParentIDLabel（以及 ApplysetPartOfLabel）的值所要求的格式。
+	// 其中 %s 段是对象自身的唯一 ID，必须是该对象 GKNN 哈希的 base64 编码
+	// （使用 RFC4648 的 URL 安全编码），形式为：
 	// base64(sha256(<name>.<namespace>.<kind>.<group>)).
 	V1ApplySetIdFormat = "applyset-%s-v1"
 
-	// ApplysetPartOfLabel is the key of the label which indicates that the object is a member of an ApplySet.
-	// The value of the label MUST match the value of ApplySetParentIDLabel on the parent object.
+	// ApplysetPartOfLabel 是表明对象属于某个 ApplySet 成员的 label 键。
+	// 该 label 的值必须与 parent 对象上 ApplySetParentIDLabel 的值一致。
 	ApplysetPartOfLabel = "applyset.kubernetes.io/part-of"
 
-	// ApplysetParentCRDLabel is the key of the label that can be set on a CRD to identify
-	// the custom resource type it defines (not the CRD itself) as an allowed parent for an ApplySet.
+	// ApplysetParentCRDLabel 是可设置在 CRD 上的 label 键，用于标识
+	// 它所定义的自定义资源类型（而非 CRD 本身）是 ApplySet 允许的 parent。
 	ApplysetParentCRDLabel = "applyset.kubernetes.io/is-parent-type"
 )
 
 var defaultApplySetParentGVR = schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
 
-// ApplySet tracks the information about an applyset apply/prune
+// ApplySet 记录一次 applyset apply/prune 的相关信息
 type ApplySet struct {
-	// parentRef is a reference to the parent object that is used to track the applyset.
+	// parentRef 指向用于跟踪 applyset 的 parent 对象。
 	parentRef *ApplySetParentRef
 
-	// toolingID is the value to be used and validated in the applyset.kubernetes.io/tooling annotation.
+	// toolingID 是要在 applyset.kubernetes.io/tooling 注解中使用并校验的值。
 	toolingID ApplySetTooling
 
-	// currentResources is the set of resources that are part of the sever-side set as of when the current operation started.
+	// currentResources 是当前操作开始时属于服务端集合的资源集合。
 	currentResources map[schema.GroupKind]*kindInfo
 
-	// currentNamespaces is the set of namespaces that contain objects in this applyset as of when the current operation started.
+	// currentNamespaces 是当前操作开始时包含此 applyset 中对象的 namespace 集合。
 	currentNamespaces sets.Set[string]
 
-	// updatedResources is the set of resources that will be part of the set as of when the current operation completes.
+	// updatedResources 是当前操作完成后将成为集合中一员的资源集合。
 	updatedResources map[schema.GroupKind]*kindInfo
 
-	// updatedNamespaces is the set of namespaces that will contain objects in this applyset as of when the current operation completes.
+	// updatedNamespaces 是当前操作完成后将包含此 applyset 中对象的 namespace 集合。
 	updatedNamespaces sets.Set[string]
 
 	restMapper meta.RESTMapper
 
-	// client is a client specific to the ApplySet parent object's type
+	// client 是专用于 ApplySet parent 对象类型的客户端
 	client resource.RESTClient
 }
 
@@ -123,7 +123,7 @@ var builtinApplySetParentGVRs = sets.New[schema.GroupVersionResource](
 	schema.GroupVersionResource{Version: "v1", Resource: "configmaps"},
 )
 
-// ApplySetParentRef stores object and type meta for the parent object that is used to track the applyset.
+// ApplySetParentRef 存储用于跟踪 applyset 的 parent 对象的对象元信息和类型元信息。
 type ApplySetParentRef struct {
 	Name      string
 	Namespace string
@@ -134,8 +134,8 @@ func (p ApplySetParentRef) IsNamespaced() bool {
 	return p.Scope.Name() == meta.RESTScopeNameNamespace
 }
 
-// String returns the string representation of the parent object using the same format
-// that we expect to receive in the --applyset flag on the CLI.
+// String 使用与 CLI 上 --applyset flag 所期望的相同格式，
+// 返回 parent 对象的字符串表示。
 func (p ApplySetParentRef) String() string {
 	return fmt.Sprintf("%s.%s/%s", p.Resource.Resource, p.Resource.Group, p.Name)
 }
@@ -149,7 +149,7 @@ func (t ApplySetTooling) String() string {
 	return fmt.Sprintf("%s/%s", t.Name, t.Version)
 }
 
-// NewApplySet creates a new ApplySet object tracked by the given parent object.
+// NewApplySet 创建一个新的 ApplySet 对象，由给定的 parent 对象跟踪。
 func NewApplySet(parent *ApplySetParentRef, tooling ApplySetTooling, mapper meta.RESTMapper, client resource.RESTClient) *ApplySet {
 	return &ApplySet{
 		currentResources:  make(map[schema.GroupKind]*kindInfo),
@@ -165,26 +165,26 @@ func NewApplySet(parent *ApplySetParentRef, tooling ApplySetTooling, mapper meta
 
 const applySetIDPartDelimiter = "."
 
-// ID is the label value that we are using to identify this applyset.
-// Format: base64(sha256(<name>.<namespace>.<kind>.<group>)), using the URL safe encoding of RFC4648.
+// ID 是我们用来标识此 applyset 的 label 值。
+// 格式：base64(sha256(<name>.<namespace>.<kind>.<group>))，使用 RFC4648 的 URL 安全编码。
 
 func (a ApplySet) ID() string {
 	unencoded := strings.Join([]string{a.parentRef.Name, a.parentRef.Namespace, a.parentRef.GroupVersionKind.Kind, a.parentRef.GroupVersionKind.Group}, applySetIDPartDelimiter)
 	hashed := sha256.Sum256([]byte(unencoded))
 	b64 := base64.RawURLEncoding.EncodeToString(hashed[:])
-	// Label values must start and end with alphanumeric values, so add a known-safe prefix and suffix.
+	// label 值必须以字母数字字符开头和结尾，因此添加已知安全的前缀和后缀。
 	return fmt.Sprintf(V1ApplySetIdFormat, b64)
 }
 
-// Validate imposes restrictions on the parent object that is used to track the applyset.
+// Validate 对用于跟踪 applyset 的 parent 对象施加限制。
 func (a ApplySet) Validate(ctx context.Context, client dynamic.Interface) error {
 	var errors []error
 	if a.parentRef.IsNamespaced() && a.parentRef.Namespace == "" {
 		errors = append(errors, fmt.Errorf("namespace is required to use namespace-scoped ApplySet"))
 	}
 	if !builtinApplySetParentGVRs.Has(a.parentRef.Resource) {
-		// Determine which custom resource types are allowed as ApplySet parents.
-		// Optimization: Since this makes requests, we only do this if they aren't using a default type.
+		// 确定哪些自定义资源类型可用作 ApplySet 的 parent。
+		// 优化：由于这会产生请求，仅当使用的不是默认类型时才执行。
 		permittedCRParents, err := a.getAllowedCustomResourceParents(ctx, client)
 		if err != nil {
 			errors = append(errors, fmt.Errorf("identifying allowed custom resource parent types: %w", err))
@@ -220,8 +220,8 @@ func (a *ApplySet) getAllowedCustomResourceParents(ctx context.Context, client d
 	}
 	set := sets.New[schema.GroupVersionResource]()
 	for i := range list.Items {
-		// Custom resources must be named `<names.plural>.<group>`
-		// and are served under `/apis/<group>/<version>/.../<plural>`
+		// 自定义资源必须命名为 `<names.plural>.<group>`
+		// 并且在 `/apis/<group>/<version>/.../<plural>` 下提供
 		gr := schema.ParseGroupResource(list.Items[i].GetName())
 		set.Insert(gr.WithVersion(""))
 	}
@@ -234,7 +234,7 @@ func (a *ApplySet) LabelsForMember() map[string]string {
 	}
 }
 
-// addLabels sets our tracking labels on each object; this should be called as part of loading the objects.
+// addLabels 在每个对象上设置我们的跟踪 label；应在加载对象时调用。
 func (a *ApplySet) AddLabels(objects ...*resource.Info) error {
 	applysetLabels := a.LabelsForMember()
 	for _, obj := range objects {
@@ -294,7 +294,7 @@ func (a *ApplySet) fetchParent() error {
 	}
 
 	if a.currentResources, err = parseKindAnnotation(annotations, a.restMapper); err != nil {
-		// TODO: handle GVRs for now-deleted CRDs
+		// TODO: 处理已删除 CRD 对应的 GVR
 		return fmt.Errorf("parsing ApplySet annotation on %q: %w", a.parentRef, err)
 	}
 	a.currentNamespaces = parseNamespacesAnnotation(annotations)
@@ -309,8 +309,8 @@ func (a *ApplySet) LabelSelectorForMembers() string {
 	})
 }
 
-// AllPrunableResources returns the list of all resources that should be considered for pruning.
-// This is potentially a superset of the resources types that actually contain resources.
+// AllPrunableResources 返回所有应被视为可清理的资源列表。
+// 这可能包含实际存在资源的类型之外的超集。
 func (a *ApplySet) AllPrunableResources() []*kindInfo {
 	var ret []*kindInfo
 	for _, m := range a.currentResources {
@@ -319,8 +319,8 @@ func (a *ApplySet) AllPrunableResources() []*kindInfo {
 	return ret
 }
 
-// AllPrunableNamespaces returns the list of all namespaces that should be considered for pruning.
-// This is potentially a superset of the namespaces that actually contain resources.
+// AllPrunableNamespaces 返回所有应被视为可清理的 namespace 列表。
+// 这可能包含实际存在资源的 namespace 之外的超集。
 func (a *ApplySet) AllPrunableNamespaces() []string {
 	var ret []string
 	for ns := range a.currentNamespaces {
@@ -345,7 +345,7 @@ func toolingBaseName(toolAnnotation string) string {
 	return toolAnnotation
 }
 
-// kindInfo holds type information about a particular resource type.
+// kindInfo 保存特定资源类型的类型信息。
 type kindInfo struct {
 	restMapping *meta.RESTMapping
 }
@@ -357,12 +357,12 @@ func parseKindAnnotation(annotations map[string]string, mapper meta.RESTMapper) 
 			return parseDeprecatedResourceAnnotation(annotations[DeprecatedApplySetGRsAnnotation], mapper)
 		}
 
-		// The spec does not require this annotation. However, 'missing' means 'perform discovery'.
-		// We return an error because we do not currently support dynamic discovery in kubectl apply.
+		// 规范并不要求此注解。但“缺失”意味着“执行发现”。
+		// 由于当前 kubectl apply 不支持动态发现，我们返回错误。
 		return nil, fmt.Errorf("kubectl requires the %q annotation to be set on all ApplySet parent objects", ApplySetGKsAnnotation)
 	}
 	mappings := make(map[schema.GroupKind]*kindInfo)
-	// Annotation present but empty means that this is currently an empty set.
+	// 注解存在但为空表示当前集合为空。
 	if annotation == "" {
 		return mappings, nil
 	}
@@ -382,7 +382,7 @@ func parseKindAnnotation(annotations map[string]string, mapper meta.RESTMapper) 
 
 func parseDeprecatedResourceAnnotation(annotation string, mapper meta.RESTMapper) (map[schema.GroupKind]*kindInfo, error) {
 	mappings := make(map[schema.GroupKind]*kindInfo)
-	// Annotation present but empty means that this is currently an empty set.
+	// 注解存在但为空表示当前集合为空。
 	if annotation == "" {
 		return mappings, nil
 	}
@@ -405,18 +405,18 @@ func parseDeprecatedResourceAnnotation(annotation string, mapper meta.RESTMapper
 
 func parseNamespacesAnnotation(annotations map[string]string) sets.Set[string] {
 	annotation, ok := annotations[ApplySetAdditionalNamespacesAnnotation]
-	if !ok { // this annotation is completely optional
+	if !ok { // 此注解完全是可选的
 		return sets.Set[string]{}
 	}
-	// Don't include an empty namespace
+	// 不要包含空的 namespace
 	if annotation == "" {
 		return sets.Set[string]{}
 	}
 	return sets.New(strings.Split(annotation, ",")...)
 }
 
-// addResource registers the given resource and namespace as being part of the updated set of
-// resources being applied by the current operation.
+// addResource 将给定的资源和 namespace 注册为当前操作所应用的更新集合
+// 中的一部分。
 func (a *ApplySet) addResource(restMapping *meta.RESTMapping, namespace string) {
 	gk := restMapping.GroupVersionKind.GroupKind()
 	if _, found := a.updatedResources[gk]; !found {
@@ -439,11 +439,11 @@ func (a *ApplySet) updateParent(mode ApplySetUpdateMode, dryRun cmdutil.DryRunSt
 	if err != nil {
 		return fmt.Errorf("failed to encode patch for ApplySet parent: %w", err)
 	}
-	// Note that because we are using SSA, we will remove any annotations we don't specify,
-	// which is how we remove the deprecated contains-group-resources annotation.
+	// 注意，由于使用 SSA，我们会移除所有未指定的注解，
+	// 这也是移除已弃用的 contains-group-resources 注解的方式。
 	err = serverSideApplyRequest(a, data, dryRun, validation, false)
 	if err != nil && errors.IsConflict(err) {
-		// Try again with conflicts forced
+		// 强制解决冲突后重试
 		klog.Warningf("WARNING: failed to update ApplySet: %s\nApplySet field manager %s should own these fields. Retrying with conflicts forced.", err.Error(), a.FieldManager())
 		err = serverSideApplyRequest(a, data, dryRun, validation, true)
 	}
@@ -479,9 +479,9 @@ func (a *ApplySet) buildParentPatch(mode ApplySetUpdateMode) *metav1.PartialObje
 	var newGKsAnnotation, newNsAnnotation string
 	switch mode {
 	case updateToSuperset:
-		// If the apply succeeded but pruning failed, the set of group resources that
-		// the ApplySet should track is the superset of the previous and current resources.
-		// This ensures that the resources that failed to be pruned are not orphaned from the set.
+		// 如果 apply 成功但清理失败，那么 ApplySet 应跟踪的
+		// group resource 集合应为之前和当前资源的并集。
+		// 这可以确保清理失败的资源不会从集合中变成孤立资源。
 		grSuperset := sets.KeySet(a.currentResources).Union(sets.KeySet(a.updatedResources))
 		newGKsAnnotation = generateKindsAnnotation(grSuperset)
 		newNsAnnotation = generateNamespacesAnnotation(a.currentNamespaces.Union(a.updatedNamespaces), a.parentRef.Namespace)
@@ -529,7 +529,7 @@ func (a ApplySet) FieldManager() string {
 	return fmt.Sprintf("%s-applyset", a.toolingID.Name)
 }
 
-// ParseApplySetParentRef creates a new ApplySetParentRef from a parent reference in the format [RESOURCE][.GROUP]/NAME
+// ParseApplySetParentRef 根据 [RESOURCE][.GROUP]/NAME 格式的 parent 引用创建新的 ApplySetParentRef
 func ParseApplySetParentRef(parentRefStr string, mapper meta.RESTMapper) (*ApplySetParentRef, error) {
 	var gvr schema.GroupVersionResource
 	var name string
@@ -557,7 +557,7 @@ func ParseApplySetParentRef(parentRefStr string, mapper meta.RESTMapper) (*Apply
 	return &ApplySetParentRef{Name: name, RESTMapping: mapping}, nil
 }
 
-// Prune deletes any objects from the apiserver that are no longer in the applyset.
+// Prune 从 apiserver 删除所有不再属于该 applyset 的对象。
 func (a *ApplySet) Prune(ctx context.Context, o *ApplyOptions) error {
 	printer, err := o.ToPrinter("pruned")
 	if err != nil {
@@ -584,19 +584,19 @@ func (a *ApplySet) Prune(ctx context.Context, o *ApplyOptions) error {
 	return nil
 }
 
-// BeforeApply should be called before applying the objects.
-// It pre-updates the parent object so that it covers the resources that will be applied.
-// In this way, even if we are interrupted, we will not leak objects.
+// BeforeApply 应在应用对象之前调用。
+// 它会预先更新 parent 对象，使其覆盖即将被应用的资源。
+// 这样即使操作被中断，也不会泄漏对象。
 func (a *ApplySet) BeforeApply(objects []*resource.Info, dryRunStrategy cmdutil.DryRunStrategy, validationDirective string) error {
 	if err := a.fetchParent(); err != nil {
 		return err
 	}
-	// Update the live parent object to the superset of the current and previous resources.
-	// Doing this before the actual apply and prune operations improves behavior by ensuring
-	// the live object contains the superset on failure. This may cause the next pruning
-	// operation to make a larger number of GET requests than strictly necessary, but it prevents
-	// object leakage from the set. The superset will automatically be reduced to the correct
-	// set by the next successful operation.
+	// 将 live parent 对象更新为当前资源和之前资源的并集。
+	// 在实际执行 apply 和 prune 之前这样做可以改善行为：确保
+	// 失败时 live 对象仍包含并集。这可能导致下一次清理
+	// 操作发出比严格必要数量更多的 GET 请求，但可以防止
+	// 对象从集合中泄漏。下一次成功操作会自动将并集缩减为正确的
+	// 集合。
 	for _, info := range objects {
 		a.addResource(info.ResourceMapping(), info.Namespace)
 	}

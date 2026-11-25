@@ -88,7 +88,7 @@ type PluginListOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCmdPluginList provides a way to list all plugin executables visible to kubectl
+// NewCmdPluginList 提供一种列出 kubectl 可见的所有插件可执行文件的方式
 func NewCmdPluginList(streams genericiooptions.IOStreams) *cobra.Command {
 	o := &PluginListOptions{
 		IOStreams: streams,
@@ -161,7 +161,7 @@ func (o *PluginListOptions) Run() error {
 	return nil
 }
 
-// ListPlugins returns list of plugin paths.
+// ListPlugins 返回插件路径列表。
 func (o *PluginListOptions) ListPlugins() ([]string, []error) {
 	plugins := []string{}
 	errors := []error{}
@@ -197,9 +197,9 @@ func (o *PluginListOptions) ListPlugins() ([]string, []error) {
 	return plugins, errors
 }
 
-// pathVerifier receives a path and determines if it is valid or not
+// pathVerifier 接收一个路径并判断其是否有效
 type PathVerifier interface {
-	// Verify determines if a given path is valid
+	// Verify 判断给定路径是否有效
 	Verify(path string) []error
 }
 
@@ -208,20 +208,20 @@ type CommandOverrideVerifier struct {
 	seenPlugins map[string]string
 }
 
-// Verify implements PathVerifier and determines if a given path
-// is valid depending on whether or not it overwrites an existing
-// kubectl command path, or a previously seen plugin.
+// Verify 实现 PathVerifier，根据给定路径是否覆盖现有的
+// kubectl 命令路径，或是否覆盖此前见过的插件，
+// 来判断该路径是否有效。
 func (v *CommandOverrideVerifier) Verify(path string) []error {
 	if v.root == nil {
 		return []error{fmt.Errorf("unable to verify path with nil root")}
 	}
 
-	// extract the plugin binary name
+	// 提取插件二进制文件的名称
 	binName := filepath.Base(path)
 
 	cmdPath := strings.Split(binName, "-")
 	if len(cmdPath) > 1 {
-		// the first argument is always "kubectl" for a plugin binary
+		// 对于插件二进制文件，第一个参数始终是 "kubectl"
 		cmdPath = cmdPath[1:]
 	}
 
@@ -269,8 +269,8 @@ func isExecutable(fullPath string) (bool, error) {
 	return false, nil
 }
 
-// uniquePathsList deduplicates a given slice of strings without
-// sorting or otherwise altering its order in any way.
+// uniquePathsList 对给定的字符串切片去重，
+// 但不排序，也不以任何方式更改其顺序。
 func uniquePathsList(paths []string) []string {
 	seen := map[string]bool{}
 	newPaths := []string{}

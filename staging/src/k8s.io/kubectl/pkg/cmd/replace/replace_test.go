@@ -69,7 +69,7 @@ func TestReplaceObject(t *testing.T) {
 	cmd.Flags().Set("output", "name")
 	cmd.Run(cmd, []string{})
 
-	// uses the name from the file, not the response
+	// 使用文件中的名称，而非响应中的名称
 	if buf.String() != "replicationcontroller/rc1\n" {
 		t.Errorf("unexpected output: %s", buf.String())
 	}

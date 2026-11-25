@@ -45,12 +45,12 @@ var (
 	  kubectl create serviceaccount my-service-account`))
 )
 
-// ServiceAccountOpts holds the options for 'create serviceaccount' sub command
+// ServiceAccountOpts 保存 'create serviceaccount' 子命令的选项
 type ServiceAccountOpts struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
-	// Name of resource being created
+	// 待创建资源的名称
 	Name                string
 	DryRunStrategy      cmdutil.DryRunStrategy
 	ValidationDirective string
@@ -66,7 +66,7 @@ type ServiceAccountOpts struct {
 	genericiooptions.IOStreams
 }
 
-// NewServiceAccountOpts creates a new *ServiceAccountOpts with sane defaults
+// NewServiceAccountOpts 创建一个带有合理默认值的 *ServiceAccountOpts
 func NewServiceAccountOpts(ioStreams genericiooptions.IOStreams) *ServiceAccountOpts {
 	return &ServiceAccountOpts{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -74,7 +74,7 @@ func NewServiceAccountOpts(ioStreams genericiooptions.IOStreams) *ServiceAccount
 	}
 }
 
-// NewCmdCreateServiceAccount is a macro command to create a new service account
+// NewCmdCreateServiceAccount 是一个用于创建新 service account 的宏命令
 func NewCmdCreateServiceAccount(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewServiceAccountOpts(ioStreams)
 
@@ -101,7 +101,7 @@ func NewCmdCreateServiceAccount(f cmdutil.Factory, ioStreams genericiooptions.IO
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *ServiceAccountOpts) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -149,7 +149,7 @@ func (o *ServiceAccountOpts) Complete(f cmdutil.Factory, cmd *cobra.Command, arg
 	return nil
 }
 
-// Validate checks ServiceAccountOpts to see if there is sufficient information run the command.
+// Validate 检查 ServiceAccountOpts 是否包含运行命令所需的足够信息。
 func (o *ServiceAccountOpts) Validate() error {
 	if len(o.Name) == 0 {
 		return fmt.Errorf("name must be specified")
@@ -157,7 +157,7 @@ func (o *ServiceAccountOpts) Validate() error {
 	return nil
 }
 
-// Run makes the api call to the server
+// Run 向服务端发起 API 调用
 func (o *ServiceAccountOpts) Run() error {
 	serviceAccount, err := o.createServiceAccount()
 	if err != nil {

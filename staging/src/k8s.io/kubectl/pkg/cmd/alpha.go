@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// NewCmdAlpha creates a command that acts as an alternate root command for features in alpha
+// NewCmdAlpha 创建一个命令，作为 alpha 阶段特性的备用根命令
 func NewCmdAlpha(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "alpha",
@@ -34,8 +34,8 @@ func NewCmdAlpha(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.C
 		Long:  templates.LongDesc(i18n.T("These commands correspond to alpha features that are not enabled in Kubernetes clusters by default.")),
 	}
 
-	// NewKubeletCommand() will hide the alpha command if it has no subcommands. Overriding
-	// the help function ensures a reasonable message if someone types the hidden command anyway.
+	// 如果没有子命令，NewKubeletCommand() 会隐藏 alpha 命令。此处覆盖
+	// help 函数，确保即使有人输入了被隐藏的命令，也能得到合理的提示。
 	if !cmd.HasAvailableSubCommands() {
 		cmd.SetHelpFunc(func(*cobra.Command, []string) {
 			cmd.Println(i18n.T("No alpha commands are available in this version of kubectl"))

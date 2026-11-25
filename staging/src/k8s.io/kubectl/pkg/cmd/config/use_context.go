@@ -42,7 +42,7 @@ type useContextOptions struct {
 	contextName  string
 }
 
-// NewCmdConfigUseContext returns a Command instance for 'config use-context' sub command
+// NewCmdConfigUseContext 返回 'config use-context' 子命令的 Command 实例
 func NewCmdConfigUseContext(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	options := &useContextOptions{configAccess: configAccess}
 

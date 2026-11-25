@@ -31,7 +31,7 @@ var (
 		kubectl options`))
 )
 
-// NewCmdOptions implements the options command
+// NewCmdOptions 实现 options 命令
 func NewCmdOptions(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "options",
@@ -43,11 +43,11 @@ func NewCmdOptions(out io.Writer) *cobra.Command {
 		},
 	}
 
-	// The `options` command needs write its output to the `out` stream
-	// (typically stdout). Without calling SetOutput here, the Usage()
-	// function call will fall back to stderr.
+	// `options` 命令需要将其输出写入 `out` 流
+	// （通常是 stdout）。如果不在这里调用 SetOutput，Usage()
+	// 函数调用会回退到 stderr。
 	//
-	// See https://github.com/kubernetes/kubernetes/pull/46394 for details.
+	// 详见 https://github.com/kubernetes/kubernetes/pull/46394。
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 

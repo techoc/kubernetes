@@ -206,7 +206,7 @@ defaults:
 								Name:    "output",
 								Default: "json",
 							},
-							// show-labels option is overwritten and thus not present
+							// show-labels 选项被覆盖，因此不存在
 						},
 					},
 				},
@@ -300,7 +300,7 @@ defaults:
 				t.Fatalf("Run() unexpected error = %v", err)
 			}
 
-			// Verify the file was written
+			// 验证文件已写入
 			data, err := os.ReadFile(kubercPath)
 			if err != nil {
 				t.Fatalf("failed to read written kuberc file: %v", err)
@@ -315,7 +315,7 @@ defaults:
 				t.Errorf("Run() output mismatch (-expected +got):\n%s", diff)
 			}
 
-			// Verify output message
+			// 验证输出信息
 			if !strings.Contains(out.String(), "Updated") {
 				t.Errorf("expected output to contain 'Updated', got: %s", out.String())
 			}
@@ -614,7 +614,7 @@ aliases:
 								Name:    "output",
 								Default: "json",
 							},
-							// show-labels option is overwritten and thus not present
+							// show-labels 选项被覆盖，因此不存在
 						},
 					},
 				},
@@ -709,7 +709,7 @@ aliases:
 				t.Fatalf("Run() unexpected error = %v", err)
 			}
 
-			// Verify the file was written
+			// 验证文件已写入
 			data, err := os.ReadFile(kubercPath)
 			if err != nil {
 				t.Fatalf("failed to read written kuberc file: %v", err)
@@ -724,7 +724,7 @@ aliases:
 				t.Errorf("Run() output mismatch (-expected +got):\n%s", diff)
 			}
 
-			// Verify output message
+			// 验证输出信息
 			if !strings.Contains(out.String(), "Updated") {
 				t.Errorf("expected output to contain 'Updated', got: %s", out.String())
 			}
@@ -1063,7 +1063,7 @@ func TestSetOptions_Run_CredentialPlugin(t *testing.T) {
 				t.Fatalf("Run() unexpected error = %v", err)
 			}
 
-			// Verify the file was written
+			// 验证文件已写入
 			data, err := os.ReadFile(kubercPath)
 			if err != nil {
 				t.Fatalf("failed to read written kuberc file: %v", err)
@@ -1078,7 +1078,7 @@ func TestSetOptions_Run_CredentialPlugin(t *testing.T) {
 				t.Errorf("Run() output mismatch (-expected +got):\n%s", diff)
 			}
 
-			// Verify output message
+			// 验证输出信息
 			if !strings.Contains(out.String(), "Updated") {
 				t.Errorf("expected output to contain 'Updated', got: %s", out.String())
 			}

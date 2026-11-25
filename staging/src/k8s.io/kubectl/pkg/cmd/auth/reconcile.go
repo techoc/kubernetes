@@ -41,8 +41,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// ReconcileOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// ReconcileOptions 是执行该操作所需数据的起点。新增字段时请添加在这里，而不是
+// 引用 cmd.Flags()
 type ReconcileOptions struct {
 	PrintFlags             *genericclioptions.PrintFlags
 	FilenameOptions        *resource.FilenameOptions
@@ -78,7 +78,7 @@ var (
 		kubectl auth reconcile -f my-rbac-rules.yaml`)
 )
 
-// NewReconcileOptions returns a new ReconcileOptions instance
+// NewReconcileOptions 返回一个新的 ReconcileOptions 实例
 func NewReconcileOptions(ioStreams genericiooptions.IOStreams) *ReconcileOptions {
 	return &ReconcileOptions{
 		FilenameOptions: &resource.FilenameOptions{},
@@ -87,7 +87,7 @@ func NewReconcileOptions(ioStreams genericiooptions.IOStreams) *ReconcileOptions
 	}
 }
 
-// NewCmdReconcile holds the options for 'auth reconcile' sub command
+// NewCmdReconcile 保存 'auth reconcile' 子命令的选项
 func NewCmdReconcile(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewReconcileOptions(streams)
 
@@ -114,7 +114,7 @@ func NewCmdReconcile(f cmdutil.Factory, streams genericiooptions.IOStreams) *cob
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *ReconcileOptions) Complete(cmd *cobra.Command, f cmdutil.Factory, args []string) error {
 	if err := o.FilenameOptions.RequireFilenameOrKustomize(); err != nil {
 		return err
@@ -174,7 +174,7 @@ func (o *ReconcileOptions) Complete(cmd *cobra.Command, f cmdutil.Factory, args 
 	return nil
 }
 
-// Validate makes sure provided values for ReconcileOptions are valid
+// Validate 确保 ReconcileOptions 中提供的值有效
 func (o *ReconcileOptions) Validate() error {
 	if o.Visitor == nil {
 		return errors.New("ReconcileOptions.Visitor must be set")
@@ -197,9 +197,9 @@ func (o *ReconcileOptions) Validate() error {
 	return nil
 }
 
-// RunReconcile performs the execution
+// RunReconcile 执行操作
 func (o *ReconcileOptions) RunReconcile() error {
-	// conflictBackoff retries up to 3 times on conflict, with no delay
+	// conflictBackoff 在发生冲突时最多重试 3 次，不做延迟
 	conflictBackoff := wait.Backoff{Steps: 3}
 
 	return o.Visitor.Visit(func(info *resource.Info, err error) error {
@@ -304,7 +304,7 @@ func (o *ReconcileOptions) RunReconcile() error {
 
 		default:
 			klog.V(1).Infof("skipping %#v", info.Object.GetObjectKind())
-			// skip ignored resources
+			// 跳过被忽略的资源
 		}
 
 		return nil

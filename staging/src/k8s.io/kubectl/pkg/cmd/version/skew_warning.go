@@ -24,13 +24,13 @@ import (
 	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
-// supportedMinorVersionSkew is the maximum supported difference between the client and server minor versions.
-// For example: client versions 1.18, 1.19, and 1.20 would be within the supported version skew for server version 1.19,
-// and server versions 1.18, 1.19, and 1.20 would be within the supported version skew for client version 1.19.
+// supportedMinorVersionSkew 是客户端与服务端 minor 版本之间支持的最大差异。
+// 例如：对于服务端版本 1.19，客户端版本 1.18、1.19 和 1.20 都在支持的版本偏差范围内；
+// 对于客户端版本 1.19，服务端版本 1.18、1.19 和 1.20 也都在支持的版本偏差范围内。
 const supportedMinorVersionSkew = 1
 
-// getVersionSkewWarning returns a warning message if the difference between the client and version is greater than
-// the supported version skew.
+// 如果客户端与服务端的版本差异超过
+// 支持的版本偏差，getVersionSkewWarning 会返回一条警告消息。
 func getVersionSkewWarning(clientVersion, serverVersion apimachineryversion.Info) (string, error) {
 	parsedClientVersion, err := version.ParseSemantic(clientVersion.GitVersion)
 	if err != nil {

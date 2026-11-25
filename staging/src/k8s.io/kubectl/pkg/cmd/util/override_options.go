@@ -29,13 +29,13 @@ import (
 type OverrideType string
 
 const (
-	// OverrideTypeJSON will use an RFC6902 JSON Patch to alter the generated output
+	// OverrideTypeJSON 将使用 RFC6902 JSON Patch 来修改生成的输出
 	OverrideTypeJSON OverrideType = "json"
 
-	// OverrideTypeMerge will use an RFC7396 JSON Merge Patch to alter the generated output
+	// OverrideTypeMerge 将使用 RFC7396 JSON Merge Patch 来修改生成的输出
 	OverrideTypeMerge OverrideType = "merge"
 
-	// OverrideTypeStrategic will use a Strategic Merge Patch to alter the generated output
+	// OverrideTypeStrategic 将使用 Strategic Merge Patch 来修改生成的输出
 	OverrideTypeStrategic OverrideType = "strategic"
 )
 

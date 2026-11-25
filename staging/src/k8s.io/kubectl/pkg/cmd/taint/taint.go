@@ -43,7 +43,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// TaintOptions have the data required to perform the taint operation
+// TaintOptions 包含执行 taint 操作所需的数据
 type TaintOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	ToPrinter  func(string) (printers.ResourcePrinter, error)
@@ -128,7 +128,7 @@ func NewCmdTaint(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.C
 	return cmd
 }
 
-// Complete adapts from the command line args and factory to the data required.
+// Complete 从命令行参数和 factory 中整理出所需的数据。
 func (o *TaintOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) (err error) {
 	namespace, _, err := f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
@@ -151,8 +151,8 @@ func (o *TaintOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []st
 		return err
 	}
 
-	// retrieves resource and taint args from args
-	// also checks args to verify that all resources are specified before taints
+	// 从 args 中提取资源和 taint 参数
+	// 同时检查参数，确保所有资源都在 taint 之前指定
 	taintArgs := []string{}
 	metTaintArg := false
 	for _, s := range args {
@@ -206,13 +206,13 @@ func (o *TaintOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []st
 	return nil
 }
 
-// validateFlags checks for the validation of flags for kubectl taints.
+// validateFlags 校验 kubectl taint 的各个 flag。
 func (o TaintOptions) validateFlags() error {
-	// Cannot have a non-empty selector and all flag set. They are mutually exclusive.
+	// selector 非空时不能同时设置 all，两者互斥。
 	if o.all && o.selector != "" {
 		return fmt.Errorf("setting 'all' parameter with a non empty selector is prohibited")
 	}
-	// If both selector and all are not set.
+	// selector 和 all 均未设置的情况。
 	if !o.all && o.selector == "" {
 		if len(o.resources) < 2 {
 			return fmt.Errorf("at least one resource name must be specified since 'all' parameter is not set")
@@ -223,7 +223,7 @@ func (o TaintOptions) validateFlags() error {
 	return nil
 }
 
-// Validate checks to the TaintOptions to see if there is sufficient information run the command.
+// Validate 检查 TaintOptions 中是否有足够的信息来运行命令。
 func (o TaintOptions) Validate() error {
 	resourceType := strings.ToLower(o.resources[0])
 	fullySpecifiedGVR, _, err := explain.SplitAndParseResourceRequest(resourceType, o.Mapper)
@@ -240,7 +240,7 @@ func (o TaintOptions) Validate() error {
 		return fmt.Errorf("invalid resource type %s, only node types are supported", resourceType)
 	}
 
-	// check the format of taint args and checks removed taints aren't in the new taints list
+	// 检查 taint 参数的格式，并确认待删除的 taint 不在新增 taint 列表中
 	var conflictTaints []string
 	for _, taintAdd := range o.taintsToAdd {
 		for _, taintRemove := range o.taintsToRemove {
@@ -259,7 +259,7 @@ func (o TaintOptions) Validate() error {
 	return o.validateFlags()
 }
 
-// RunTaint does the work
+// RunTaint 执行具体操作
 func (o TaintOptions) RunTaint() error {
 	r := o.builder.Do()
 	if err := r.Err(); err != nil {
@@ -351,7 +351,7 @@ func (o TaintOptions) RunTaint() error {
 	})
 }
 
-// updateTaints applies a taint option(o) to a node in cluster after computing the net effect of operation(i.e. does it result in an overwrite?), it reports back the end result in a way that user can easily interpret.
+// updateTaints 在计算操作的最终效果（即是否会导致覆盖）之后，将 taint 选项 (o) 应用到集群中的节点，并以用户易于理解的方式报告最终结果。
 func (o TaintOptions) updateTaints(obj runtime.Object) (string, error) {
 	node, ok := obj.(*v1.Node)
 	if !ok {

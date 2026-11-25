@@ -127,7 +127,7 @@ func TestData() (*corev1.PodList, *corev1.ServiceList, *corev1.ReplicationContro
 	return pods, svc, rc
 }
 
-// EmptyTestData returns no pod, service, or replication controller
+// EmptyTestData 不返回任何 pod、service 或 replication controller
 func EmptyTestData() (*corev1.PodList, *corev1.ServiceList, *corev1.ReplicationControllerList) {
 	pods := &corev1.PodList{
 		ListMeta: metav1.ListMeta{
@@ -181,8 +181,8 @@ func InitTestErrorHandler(t *testing.T) {
 	})
 }
 
-// WithAlphaEnvs calls func f with the given env-var-based feature gates enabled,
-// and then restores the original values of those variables.
+// WithAlphaEnvs 在启用给定基于环境变量的 feature gate 的情况下调用 func f，
+// 然后恢复这些变量的原始值。
 func WithAlphaEnvs(features []cmdutil.FeatureGate, t *testing.T, f func(*testing.T)) {
 	for _, feature := range features {
 		key := string(feature)
@@ -196,8 +196,8 @@ func WithAlphaEnvs(features []cmdutil.FeatureGate, t *testing.T, f func(*testing
 	f(t)
 }
 
-// WithAlphaEnvs calls func f with the given env-var-based feature gates disabled,
-// and then restores the original values of those variables.
+// WithAlphaEnvs 在禁用给定基于环境变量的 feature gate 的情况下调用 func f，
+// 然后恢复这些变量的原始值。
 func WithAlphaEnvsDisabled(features []cmdutil.FeatureGate, t *testing.T, f func(*testing.T)) {
 	for _, feature := range features {
 		key := string(feature)

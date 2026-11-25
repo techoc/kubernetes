@@ -29,8 +29,8 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-// EventPrinter stores required fields to be used for
-// default printing for events command.
+// EventPrinter 保存 events 命令默认打印时
+// 所需的字段。
 type EventPrinter struct {
 	NoHeaders     bool
 	AllNamespaces bool
@@ -38,7 +38,7 @@ type EventPrinter struct {
 	headersPrinted bool
 }
 
-// PrintObj prints different type of event objects.
+// PrintObj 打印不同类型的 event 对象。
 func (ep *EventPrinter) PrintObj(obj runtime.Object, out io.Writer) error {
 	if !ep.NoHeaders && !ep.headersPrinted {
 		ep.printHeadings(out)
@@ -98,8 +98,8 @@ func getInterval(e corev1.Event) string {
 	return interval
 }
 
-// translateMicroTimestampSince returns the elapsed time since timestamp in
-// human-readable approximation.
+// translateMicroTimestampSince 返回自 timestamp 起经过的时间，
+// 以近似的人类可读格式表示。
 func translateMicroTimestampSince(timestamp metav1.MicroTime) string {
 	if timestamp.IsZero() {
 		return "<unknown>"
@@ -108,8 +108,8 @@ func translateMicroTimestampSince(timestamp metav1.MicroTime) string {
 	return duration.HumanDuration(time.Since(timestamp.Time))
 }
 
-// translateTimestampSince returns the elapsed time since timestamp in
-// human-readable approximation.
+// translateTimestampSince 返回自 timestamp 起经过的时间，
+// 以近似的人类可读格式表示。
 func translateTimestampSince(timestamp metav1.Time) string {
 	if timestamp.IsZero() {
 		return "<unknown>"

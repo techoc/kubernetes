@@ -24,47 +24,47 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-// HumanPrintFlags provides default flags necessary for printing.
-// Given the following flag values, a printer can be requested that knows
-// how to handle printing based on these values.
+// HumanPrintFlags 提供打印所需的默认标志。
+// 给定以下标志值后，可以请求一个能够
+// 根据这些值处理打印的打印器。
 type HumanPrintFlags struct {
 	ShowKind     *bool
 	ShowLabels   *bool
 	SortBy       *string
 	ColumnLabels *[]string
 
-	// get.go-specific values
+	// get.go 专用值
 	NoHeaders bool
 
 	Kind          schema.GroupKind
 	WithNamespace bool
 }
 
-// SetKind sets the Kind option
+// SetKind 设置 Kind 选项
 func (f *HumanPrintFlags) SetKind(kind schema.GroupKind) {
 	f.Kind = kind
 }
 
-// EnsureWithKind sets the "Showkind" humanreadable option to true.
+// EnsureWithKind 将 "Showkind" 可读选项设为 true。
 func (f *HumanPrintFlags) EnsureWithKind() error {
 	showKind := true
 	f.ShowKind = &showKind
 	return nil
 }
 
-// EnsureWithNamespace sets the "WithNamespace" humanreadable option to true.
+// EnsureWithNamespace 将 "WithNamespace" 可读选项设为 true。
 func (f *HumanPrintFlags) EnsureWithNamespace() error {
 	f.WithNamespace = true
 	return nil
 }
 
-// AllowedFormats returns more customized formatting options
+// AllowedFormats 返回更多定制化的格式选项
 func (f *HumanPrintFlags) AllowedFormats() []string {
 	return []string{"wide"}
 }
 
-// ToPrinter receives an outputFormat and returns a printer capable of
-// handling human-readable output.
+// ToPrinter 接收一个 outputFormat，并返回能够
+// 处理人类可读输出的打印器。
 func (f *HumanPrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrinter, error) {
 	if len(outputFormat) > 0 && outputFormat != "wide" {
 		return nil, genericclioptions.NoCompatiblePrinterError{Options: f, AllowedFormats: f.AllowedFormats()}
@@ -95,13 +95,13 @@ func (f *HumanPrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrint
 		ShowLabels:    showLabels,
 	})
 
-	// TODO(juanvallejo): handle sorting here
+	// TODO(juanvallejo): 在此处处理排序
 
 	return p, nil
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to human-readable printing to it
+// AddFlags 接收一个 *cobra.Command 引用，并绑定
+// 与人类可读打印相关的标志
 func (f *HumanPrintFlags) AddFlags(c *cobra.Command) {
 	if f.ShowLabels != nil {
 		c.Flags().BoolVar(f.ShowLabels, "show-labels", *f.ShowLabels, "When printing, show all labels as the last column (default hide labels column)")
@@ -117,8 +117,8 @@ func (f *HumanPrintFlags) AddFlags(c *cobra.Command) {
 	}
 }
 
-// NewHumanPrintFlags returns flags associated with
-// human-readable printing, with default values set.
+// NewHumanPrintFlags 返回与人类可读打印相关的标志，
+// 并已设置默认值。
 func NewHumanPrintFlags() *HumanPrintFlags {
 	showLabels := false
 	sortBy := ""

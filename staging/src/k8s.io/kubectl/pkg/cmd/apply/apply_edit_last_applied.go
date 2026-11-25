@@ -57,7 +57,7 @@ var (
 		kubectl apply edit-last-applied -f deploy.yaml -o json`)
 )
 
-// NewCmdApplyEditLastApplied created the cobra CLI command for the `apply edit-last-applied` command.
+// NewCmdApplyEditLastApplied 创建 `apply edit-last-applied` 命令对应的 cobra CLI 命令。
 func NewCmdApplyEditLastApplied(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := editor.NewEditOptions(editor.ApplyEditMode, ioStreams)
 
@@ -74,7 +74,7 @@ func NewCmdApplyEditLastApplied(f cmdutil.Factory, ioStreams genericiooptions.IO
 		},
 	}
 
-	// bind flag structs
+	// 绑定 flag 结构体
 	o.RecordFlags.AddFlags(cmd)
 	o.PrintFlags.AddFlags(cmd)
 

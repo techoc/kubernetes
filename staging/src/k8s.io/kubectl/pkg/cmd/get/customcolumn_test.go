@@ -29,7 +29,7 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 )
 
-// UniversalDecoder call must specify parameter versions; otherwise it will decode to internal versions.
+// 调用 UniversalDecoder 时必须指定参数版本，否则会解码为内部版本。
 var decoder = scheme.Codecs.UniversalDecoder(scheme.Scheme.PrioritizedVersionsAllGroups()...)
 
 func TestMassageJSONPath(t *testing.T) {
@@ -348,7 +348,7 @@ foo    baz           <none>
 	}
 }
 
-// this mimics how resource/get.go calls the customcolumn printer
+// 这里模拟 resource/get.go 调用 customcolumn 打印器的方式
 func TestIndividualPrintObjOnExistingTabWriter(t *testing.T) {
 	columns := []Column{
 		{

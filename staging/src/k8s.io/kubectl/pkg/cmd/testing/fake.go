@@ -53,7 +53,7 @@ import (
 	"k8s.io/kubectl/pkg/validation"
 )
 
-// InternalType is the schema for internal type
+// InternalType 是内部类型的 schema
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type InternalType struct {
@@ -63,7 +63,7 @@ type InternalType struct {
 	Name string
 }
 
-// ExternalType is the schema for external type
+// ExternalType 是外部类型的 schema
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalType struct {
@@ -73,7 +73,7 @@ type ExternalType struct {
 	Name string `json:"name"`
 }
 
-// ExternalType2 is another schema for external type
+// ExternalType2 是外部类型的另一种 schema
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalType2 struct {
@@ -83,46 +83,46 @@ type ExternalType2 struct {
 	Name string `json:"name"`
 }
 
-// GetObjectKind returns the ObjectKind schema
+// GetObjectKind 返回 ObjectKind schema
 func (obj *InternalType) GetObjectKind() schema.ObjectKind { return obj }
 
-// SetGroupVersionKind sets the version and kind
+// SetGroupVersionKind 设置版本和 kind
 func (obj *InternalType) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind returns GroupVersionKind schema
+// GroupVersionKind 返回 GroupVersionKind schema
 func (obj *InternalType) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
-// GetObjectKind returns the ObjectKind schema
+// GetObjectKind 返回 ObjectKind schema
 func (obj *ExternalType) GetObjectKind() schema.ObjectKind { return obj }
 
-// SetGroupVersionKind returns the GroupVersionKind schema
+// SetGroupVersionKind 返回 GroupVersionKind schema
 func (obj *ExternalType) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind returns the GroupVersionKind schema
+// GroupVersionKind 返回 GroupVersionKind schema
 func (obj *ExternalType) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
-// GetObjectKind returns the ObjectKind schema
+// GetObjectKind 返回 ObjectKind schema
 func (obj *ExternalType2) GetObjectKind() schema.ObjectKind { return obj }
 
-// SetGroupVersionKind sets the API version and obj kind from schema
+// SetGroupVersionKind 根据 schema 设置 API 版本和对象 kind
 func (obj *ExternalType2) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind returns the FromAPIVersionAndKind schema
+// GroupVersionKind 返回 FromAPIVersionAndKind schema
 func (obj *ExternalType2) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
-// NewInternalType returns an initialized InternalType instance
+// NewInternalType 返回一个初始化好的 InternalType 实例
 func NewInternalType(kind, apiversion, name string) *InternalType {
 	item := InternalType{Kind: kind,
 		APIVersion: apiversion,
@@ -158,7 +158,7 @@ func convertExternalType2ToInternalType(in *ExternalType2, out *InternalType, s 
 	return nil
 }
 
-// InternalNamespacedType schema for internal namespaced types
+// InternalNamespacedType 是内部 namespace 类型的 schema
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type InternalNamespacedType struct {
@@ -169,7 +169,7 @@ type InternalNamespacedType struct {
 	Namespace string
 }
 
-// ExternalNamespacedType schema for external namespaced types
+// ExternalNamespacedType 是外部 namespace 类型的 schema
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalNamespacedType struct {
@@ -180,7 +180,7 @@ type ExternalNamespacedType struct {
 	Namespace string `json:"namespace"`
 }
 
-// ExternalNamespacedType2 schema for external namespaced types
+// ExternalNamespacedType2 是外部 namespace 类型的另一种 schema
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalNamespacedType2 struct {
@@ -191,46 +191,46 @@ type ExternalNamespacedType2 struct {
 	Namespace string `json:"namespace"`
 }
 
-// GetObjectKind returns the ObjectKind schema
+// GetObjectKind 返回 ObjectKind schema
 func (obj *InternalNamespacedType) GetObjectKind() schema.ObjectKind { return obj }
 
-// SetGroupVersionKind sets the API group and kind from schema
+// SetGroupVersionKind 根据 schema 设置 API group 和 kind
 func (obj *InternalNamespacedType) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind returns the GroupVersionKind schema
+// GroupVersionKind 返回 GroupVersionKind schema
 func (obj *InternalNamespacedType) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
-// GetObjectKind returns the ObjectKind schema
+// GetObjectKind 返回 ObjectKind schema
 func (obj *ExternalNamespacedType) GetObjectKind() schema.ObjectKind { return obj }
 
-// SetGroupVersionKind sets the API version and kind from schema
+// SetGroupVersionKind 根据 schema 设置 API 版本和 kind
 func (obj *ExternalNamespacedType) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind returns the GroupVersionKind schema
+// GroupVersionKind 返回 GroupVersionKind schema
 func (obj *ExternalNamespacedType) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
-// GetObjectKind returns the ObjectKind schema
+// GetObjectKind 返回 ObjectKind schema
 func (obj *ExternalNamespacedType2) GetObjectKind() schema.ObjectKind { return obj }
 
-// SetGroupVersionKind sets the API version and kind from schema
+// SetGroupVersionKind 根据 schema 设置 API 版本和 kind
 func (obj *ExternalNamespacedType2) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind returns the GroupVersionKind schema
+// GroupVersionKind 返回 GroupVersionKind schema
 func (obj *ExternalNamespacedType2) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
-// NewInternalNamespacedType returns an initialized instance of InternalNamespacedType
+// NewInternalNamespacedType 返回一个初始化好的 InternalNamespacedType 实例
 func NewInternalNamespacedType(kind, apiversion, name, namespace string) *InternalNamespacedType {
 	item := InternalNamespacedType{Kind: kind,
 		APIVersion: apiversion,
@@ -271,19 +271,19 @@ func convertExternalNamespacedType2ToInternalNamespacedType(in *ExternalNamespac
 	return nil
 }
 
-// ValidVersion of API
+// API 的有效版本
 var ValidVersion = "v1"
 
-// InternalGV is the internal group version object
+// InternalGV 是内部 group version 对象
 var InternalGV = schema.GroupVersion{Group: "apitest", Version: runtime.APIVersionInternal}
 
-// UnlikelyGV is a group version object for unrecognised version
+// UnlikelyGV 是表示无法识别版本的 group version 对象
 var UnlikelyGV = schema.GroupVersion{Group: "apitest", Version: "unlikelyversion"}
 
-// ValidVersionGV is the valid group version object
+// ValidVersionGV 是有效的 group version 对象
 var ValidVersionGV = schema.GroupVersion{Group: "apitest", Version: ValidVersion}
 
-// NewExternalScheme returns required objects for ExternalScheme
+// NewExternalScheme 返回 ExternalScheme 所需的对象
 func NewExternalScheme() (*runtime.Scheme, meta.RESTMapper, runtime.Codec) {
 	scheme := runtime.NewScheme()
 	mapper, codec := AddToScheme(scheme)
@@ -334,16 +334,16 @@ func registerConversions(s *runtime.Scheme) error {
 	return nil
 }
 
-// AddToScheme adds required objects into scheme
+// AddToScheme 将所需对象添加到 scheme 中
 func AddToScheme(scheme *runtime.Scheme) (meta.RESTMapper, runtime.Codec) {
 	scheme.AddKnownTypeWithName(InternalGV.WithKind("Type"), &InternalType{})
 	scheme.AddKnownTypeWithName(UnlikelyGV.WithKind("Type"), &ExternalType{})
-	// This tests that kubectl will not confuse the external scheme with the internal scheme, even when they accidentally have versions of the same name.
+	// 这用于测试 kubectl 不会将外部 scheme 与内部 scheme 混淆，即使它们意外地包含同名版本。
 	scheme.AddKnownTypeWithName(ValidVersionGV.WithKind("Type"), &ExternalType2{})
 
 	scheme.AddKnownTypeWithName(InternalGV.WithKind("NamespacedType"), &InternalNamespacedType{})
 	scheme.AddKnownTypeWithName(UnlikelyGV.WithKind("NamespacedType"), &ExternalNamespacedType{})
-	// This tests that kubectl will not confuse the external scheme with the internal scheme, even when they accidentally have versions of the same name.
+	// 这用于测试 kubectl 不会将外部 scheme 与内部 scheme 混淆，即使它们意外地包含同名版本。
 	scheme.AddKnownTypeWithName(ValidVersionGV.WithKind("NamespacedType"), &ExternalNamespacedType2{})
 
 	utilruntime.Must(registerConversions(scheme))
@@ -404,7 +404,7 @@ func (d *FakeCachedDiscoveryClient) ServerPreferredResources() ([]*metav1.APIRes
 	return d.PreferredResources, nil
 }
 
-// TestFactory extends cmdutil.Factory
+// TestFactory 扩展 cmdutil.Factory
 type TestFactory struct {
 	cmdutil.Factory
 
@@ -423,10 +423,10 @@ type TestFactory struct {
 	OpenAPIV3ClientFunc              func() (openapiclient.Client, error)
 }
 
-// NewTestFactory returns an initialized TestFactory instance
+// NewTestFactory 返回一个初始化好的 TestFactory 实例
 func NewTestFactory() *TestFactory {
-	// specify an optionalClientConfig to explicitly use in testing
-	// to avoid polluting an existing user config.
+	// 指定在测试中显式使用的 optionalClientConfig，
+	// 以避免污染现有用户的配置。
 	tmpFile, err := os.CreateTemp(os.TempDir(), "cmdtests_temp")
 	if err != nil {
 		panic(fmt.Sprintf("unable to create a fake client config: %v", err))
@@ -460,13 +460,13 @@ func NewTestFactory() *TestFactory {
 	}
 }
 
-// WithNamespace is used to mention namespace reactively
+// WithNamespace 用于以响应式方式指定 namespace
 func (f *TestFactory) WithNamespace(ns string) *TestFactory {
 	f.kubeConfigFlags.WithNamespace(ns)
 	return f
 }
 
-// WithClientConfig sets the client config to use
+// WithClientConfig 设置要使用的客户端配置
 func (f *TestFactory) WithClientConfig(clientConfig clientcmd.ClientConfig) *TestFactory {
 	f.kubeConfigFlags.WithClientConfig(clientConfig)
 	return f
@@ -477,7 +477,7 @@ func (f *TestFactory) WithDiscoveryClient(discoveryClient discovery.CachedDiscov
 	return f
 }
 
-// Cleanup cleans up TestFactory temp config file
+// Cleanup 清理 TestFactory 的临时配置文件
 func (f *TestFactory) Cleanup() {
 	if f.tempConfigFile == nil {
 		return
@@ -487,17 +487,17 @@ func (f *TestFactory) Cleanup() {
 	os.Remove(f.tempConfigFile.Name())
 }
 
-// ToRESTConfig is used to get ClientConfigVal from a TestFactory
+// ToRESTConfig 用于从 TestFactory 获取 ClientConfigVal
 func (f *TestFactory) ToRESTConfig() (*restclient.Config, error) {
 	return f.ClientConfigVal, nil
 }
 
-// ClientForMapping is used to Client from a TestFactory
+// ClientForMapping 用于从 TestFactory 获取 Client
 func (f *TestFactory) ClientForMapping(mapping *meta.RESTMapping) (resource.RESTClient, error) {
 	return f.Client, nil
 }
 
-// PathOptions returns a new PathOptions with a temp file
+// PathOptions 返回一个使用临时文件的 PathOptions
 func (f *TestFactory) PathOptions() *clientcmd.PathOptions {
 	pathOptions := clientcmd.NewDefaultPathOptions()
 	pathOptions.GlobalFile = f.tempConfigFile.Name()
@@ -505,7 +505,7 @@ func (f *TestFactory) PathOptions() *clientcmd.PathOptions {
 	return pathOptions
 }
 
-// PathOptionsWithConfig writes a config to a temp file and returns PathOptions
+// PathOptionsWithConfig 将配置写入临时文件并返回 PathOptions
 func (f *TestFactory) PathOptionsWithConfig(config clientcmdapi.Config) (*clientcmd.PathOptions, error) {
 	pathOptions := f.PathOptions()
 	err := clientcmd.WriteToFile(config, pathOptions.GlobalFile)
@@ -516,7 +516,7 @@ func (f *TestFactory) PathOptionsWithConfig(config clientcmdapi.Config) (*client
 	return pathOptions, nil
 }
 
-// UnstructuredClientForMapping is used to get UnstructuredClient from a TestFactory
+// UnstructuredClientForMapping 用于从 TestFactory 获取 UnstructuredClient
 func (f *TestFactory) UnstructuredClientForMapping(mapping *meta.RESTMapping) (resource.RESTClient, error) {
 	if f.UnstructuredClientForMappingFunc != nil {
 		return f.UnstructuredClientForMappingFunc(mapping.GroupVersionKind.GroupVersion())
@@ -524,12 +524,12 @@ func (f *TestFactory) UnstructuredClientForMapping(mapping *meta.RESTMapping) (r
 	return f.UnstructuredClient, nil
 }
 
-// Validator returns a validation schema
+// Validator 返回一个校验 schema
 func (f *TestFactory) Validator(validateDirective string) (validation.Schema, error) {
 	return validation.NullSchema{}, nil
 }
 
-// OpenAPISchema returns openapi resources
+// OpenAPISchema 返回 openapi 资源
 func (f *TestFactory) OpenAPISchema() (openapi.Resources, error) {
 	if f.OpenAPISchemaFunc != nil {
 		return f.OpenAPISchemaFunc()
@@ -544,7 +544,7 @@ func (f *TestFactory) OpenAPIV3Client() (openapiclient.Client, error) {
 	return openapitest.NewFakeClient(), nil
 }
 
-// NewBuilder returns an initialized resource.Builder instance
+// NewBuilder 返回一个初始化好的 resource.Builder 实例
 func (f *TestFactory) NewBuilder() *resource.Builder {
 	return resource.NewFakeBuilder(
 		func(version schema.GroupVersion) (resource.RESTClient, error) {
@@ -563,7 +563,7 @@ func (f *TestFactory) NewBuilder() *resource.Builder {
 	)
 }
 
-// KubernetesClientSet initializes and returns the Clientset using TestFactory
+// KubernetesClientSet 使用 TestFactory 初始化并返回 Clientset
 func (f *TestFactory) KubernetesClientSet() (*kubernetes.Clientset, error) {
 	fakeClient := f.Client.(*fake.RESTClient)
 	clientset := kubernetes.NewForConfigOrDie(f.ClientConfigVal)
@@ -594,7 +594,7 @@ func (f *TestFactory) KubernetesClientSet() (*kubernetes.Clientset, error) {
 	return clientset, nil
 }
 
-// DynamicClient returns a dynamic client from TestFactory
+// DynamicClient 从 TestFactory 返回 dynamic client
 func (f *TestFactory) DynamicClient() (dynamic.Interface, error) {
 	if f.FakeDynamicClient != nil {
 		return f.FakeDynamicClient, nil
@@ -602,9 +602,9 @@ func (f *TestFactory) DynamicClient() (dynamic.Interface, error) {
 	return f.Factory.DynamicClient()
 }
 
-// RESTClient returns a REST client from TestFactory
+// RESTClient 从 TestFactory 返回 REST 客户端
 func (f *TestFactory) RESTClient() (*restclient.RESTClient, error) {
-	// Swap out the HTTP client out of the client with the fake's version.
+	// 将客户端中的 HTTP client 替换为 fake 的 HTTP client 版本。
 	fakeClient := f.Client.(*fake.RESTClient)
 	restClient, err := restclient.RESTClientFor(f.ClientConfigVal)
 	if err != nil {
@@ -614,7 +614,7 @@ func (f *TestFactory) RESTClient() (*restclient.RESTClient, error) {
 	return restClient, nil
 }
 
-// DiscoveryClient returns a discovery client from TestFactory
+// DiscoveryClient 从 TestFactory 返回 discovery 客户端
 func (f *TestFactory) DiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
 	fakeClient := f.Client.(*fake.RESTClient)
 
@@ -631,8 +631,8 @@ func (f *TestFactory) DiscoveryClient() (discovery.CachedDiscoveryInterface, err
 func testRESTMapper() meta.RESTMapper {
 	groupResources := testDynamicResources()
 	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
-	// for backwards compatibility with existing tests, allow rest mappings from the scheme to show up
-	// TODO: make this opt-in?
+	// 为兼容现有测试，允许 scheme 中的 rest mapping 显示出来
+	// TODO: 是否改成显式开启？
 	mapper = meta.FirstHitRESTMapper{
 		MultiRESTMapper: meta.MultiRESTMapper{
 			mapper,
@@ -645,7 +645,7 @@ func testRESTMapper() meta.RESTMapper {
 	return expander
 }
 
-// ScaleClient returns the ScalesGetter from a TestFactory
+// ScaleClient 从 TestFactory 返回 ScalesGetter
 func (f *TestFactory) ScaleClient() (scaleclient.ScalesGetter, error) {
 	return f.ScaleGetter, nil
 }
@@ -762,7 +762,7 @@ func testDynamicResources() []*restmapper.APIGroupResources {
 				"v1beta1": {
 					{Name: "storageclasses", Namespaced: false, Kind: "StorageClass"},
 				},
-				// bogus version of a known group/version/resource to make sure kubectl falls back to generic object mode
+				// 使用一个已知 group/version/resource 的错误版本，以确保 kubectl 回退到通用对象模式
 				"v0": {
 					{Name: "storageclasses", Namespaced: false, Kind: "StorageClass"},
 				},

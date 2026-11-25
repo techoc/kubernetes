@@ -32,43 +32,43 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 )
 
-// JSONPathWait holds a JSONPath Parser which has the ability
-// to check for the JSONPath condition and compare with the API server provided JSON output.
+// JSONPathWait 持有一个 JSONPath 解析器，能够
+// 检查 JSONPath 条件，并与 API server 提供的 JSON 输出进行比较。
 type JSONPathWait struct {
 	matchAnyValue  bool
 	jsonPathValue  string
 	jsonPathParser *jsonpath.JSONPath
-	// errOut is written to if an error occurs
+	// 发生错误时会写入 errOut
 	errOut io.Writer
 }
 
-// IsJSONPathConditionMet fulfills the requirements of the interface ConditionFunc which provides condition check
+// IsJSONPathConditionMet 满足条件检查接口 ConditionFunc 的要求
 func (j JSONPathWait) IsJSONPathConditionMet(ctx context.Context, info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	return getObjAndCheckCondition(ctx, info, o, j.isJSONPathConditionMet, j.checkCondition)
 }
 
-// isJSONPathConditionMet is a helper function of IsJSONPathConditionMet
-// which check the watch event and check if a JSONPathWait condition is met
+// isJSONPathConditionMet 是 IsJSONPathConditionMet 的辅助函数，
+// 用于检查 watch 事件以及 JSONPathWait 条件是否满足
 func (j JSONPathWait) isJSONPathConditionMet(event watch.Event) (bool, error) {
 	if event.Type == watch.Error {
-		// keep waiting in the event we see an error - we expect the watch to be closed by
-		// the server
+		// 遇到错误时继续等待——我们预期
+		// 服务端会关闭 watch
 		err := apierrors.FromObject(event.Object)
 		fmt.Fprintf(j.errOut, "error: An error occurred while waiting for the condition to be satisfied: %v", err)
 		return false, nil
 	}
 	if event.Type == watch.Deleted {
-		// this will chain back out, result in another get and an return false back up the chain
+		// 这会层层返回，导致再次执行 get，并沿调用链返回 false
 		return false, nil
 	}
-	// event runtime Object can be safely asserted to Unstructed
-	// because we are working with dynamic client
+	// 事件中的 runtime Object 可以安全地断言为 Unstructed，
+	// 因为我们使用的是 dynamic client
 	obj := event.Object.(*unstructured.Unstructured)
 	return j.checkCondition(obj)
 }
 
-// checkCondition uses JSONPath parser to parse the JSON received from the API server
-// and check if it matches the desired condition
+// checkCondition 使用 JSONPath 解析器解析从 API server 收到的 JSON，
+// 并检查它是否符合期望的条件
 func (j JSONPathWait) checkCondition(obj *unstructured.Unstructured) (bool, error) {
 	queryObj := obj.UnstructuredContent()
 	parseResults, err := j.jsonPathParser.FindResults(queryObj)
@@ -91,8 +91,8 @@ func (j JSONPathWait) checkCondition(obj *unstructured.Unstructured) (bool, erro
 	return isConditionMet, nil
 }
 
-// verifyParsedJSONPath verifies the JSON received from the API server is valid.
-// It will only accept a single JSON
+// verifyParsedJSONPath 验证从 API server 收到的 JSON 是否有效。
+// 它只接受单个 JSON
 func verifyParsedJSONPath(results [][]reflect.Value) error {
 	if len(results) > 1 {
 		return errors.New("given jsonpath expression matches more than one list")
@@ -103,13 +103,13 @@ func verifyParsedJSONPath(results [][]reflect.Value) error {
 	return nil
 }
 
-// compareResults will compare the reflect.Value from the result parsed by the
-// JSONPath parser with the expected value given by the value
+// compareResults 会将 JSONPath 解析器解析结果中的 reflect.Value，
+// 与给定值所提供的期望值进行比较
 //
-// Since this is coming from an unstructured this can only ever be a primitive,
-// map[string]interface{}, or []interface{}.
-// We do not support the last two and rely on fmt to handle conversion to string
-// and compare the result with user input
+// 由于数据来自 unstructured，它只能是基本类型、
+// map[string]interface{} 或 []interface{}。
+// 我们不支持后两种类型，而是依赖 fmt 处理到字符串的转换，
+// 并将结果与用户输入比较
 func compareResults(r reflect.Value, expectedVal string) (bool, error) {
 	switch r.Interface().(type) {
 	case map[string]interface{}, []interface{}:

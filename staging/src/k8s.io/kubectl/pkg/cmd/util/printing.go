@@ -22,8 +22,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// SuggestAPIResources returns a suggestion to use the "api-resources" command
-// to retrieve a supported list of resources
+// SuggestAPIResources 返回一条建议，使用 "api-resources" 命令
+// 获取受支持的资源列表
 func SuggestAPIResources(parent string) string {
 	return templates.LongDesc(fmt.Sprintf("Use \"%s api-resources\" for a complete list of supported resources.", parent))
 }

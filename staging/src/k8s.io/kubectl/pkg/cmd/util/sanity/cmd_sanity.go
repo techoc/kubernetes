@@ -28,27 +28,27 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// CmdCheck is the commom type of functions to check cobra commands
+// CmdCheck 是用于检查 cobra 命令的函数的通用类型
 type CmdCheck func(cmd *cobra.Command) []error
 
-// GlobalCheck is the common type of functions to check global flags
+// GlobalCheck 是用于检查全局 flag 的函数的通用类型
 type GlobalCheck func() []error
 
 var (
-	// AllCmdChecks is the list of CmdCheck type functions
+	// AllCmdChecks 是 CmdCheck 类型函数的列表
 	AllCmdChecks = []CmdCheck{
 		CheckLongDesc,
 		CheckExamples,
 		CheckFlags,
 	}
 
-	// AllGlobalChecks is the list of GlobalCheck type functions
+	// AllGlobalChecks 是 GlobalCheck 类型函数的列表
 	AllGlobalChecks = []GlobalCheck{
 		CheckGlobalVarFlags,
 	}
 )
 
-// RunGlobalChecks runs all the GlobalCheck functions passed and checks for error
+// RunGlobalChecks 运行传入的所有 GlobalCheck 函数并检查错误
 func RunGlobalChecks(globalChecks []GlobalCheck) []error {
 	fmt.Fprint(os.Stdout, "---+ RUNNING GLOBAL CHECKS\n")
 	errors := []error{}
@@ -58,7 +58,7 @@ func RunGlobalChecks(globalChecks []GlobalCheck) []error {
 	return errors
 }
 
-// RunCmdChecks runs all the CmdCheck functions passed, skipping skippable commands and looks for error
+// RunCmdChecks 运行传入的所有 CmdCheck 函数，跳过可跳过的命令并检查错误
 func RunCmdChecks(cmd *cobra.Command, cmdChecks []CmdCheck, skipCmd []string) []error {
 	cmdPath := cmd.CommandPath()
 
@@ -88,7 +88,7 @@ func RunCmdChecks(cmd *cobra.Command, cmdChecks []CmdCheck, skipCmd []string) []
 	return errors
 }
 
-// CheckLongDesc checks if the long description is valid
+// CheckLongDesc 检查长描述是否有效
 func CheckLongDesc(cmd *cobra.Command) []error {
 	fmt.Fprint(os.Stdout, "   ↳ checking long description\n")
 	cmdPath := cmd.CommandPath()
@@ -101,7 +101,7 @@ func CheckLongDesc(cmd *cobra.Command) []error {
 	return nil
 }
 
-// CheckExamples checks if the command examples are valid
+// CheckExamples 检查命令示例是否有效
 func CheckExamples(cmd *cobra.Command) []error {
 	fmt.Fprint(os.Stdout, "   ↳ checking examples\n")
 	cmdPath := cmd.CommandPath()
@@ -120,7 +120,7 @@ func CheckExamples(cmd *cobra.Command) []error {
 	return errors
 }
 
-// CheckFlags checks if the command-line flags are valid
+// CheckFlags 检查命令行 flag 是否有效
 func CheckFlags(cmd *cobra.Command) []error {
 	allFlagsSlice := []*pflag.Flag{}
 
@@ -135,7 +135,7 @@ func CheckFlags(cmd *cobra.Command) []error {
 
 	errors := []error{}
 
-	// check flags long names
+	// 检查 flag 的长名称
 	regex, err := regexp.Compile(`^[a-z]+[a-z\-]*$`)
 	if err != nil {
 		errors = append(errors, fmt.Errorf("command %q: unable to compile regex to check flags", cmd.CommandPath()))
@@ -151,7 +151,7 @@ func CheckFlags(cmd *cobra.Command) []error {
 	return errors
 }
 
-// CheckGlobalVarFlags checks if the global flags are valid
+// CheckGlobalVarFlags 检查全局 flag 是否有效
 func CheckGlobalVarFlags() []error {
 	fmt.Fprint(os.Stdout, "   ↳ checking flags from global vars\n")
 	errors := []error{}

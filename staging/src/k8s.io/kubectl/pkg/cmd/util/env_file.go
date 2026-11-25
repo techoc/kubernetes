@@ -30,8 +30,8 @@ import (
 
 var utf8bom = []byte{0xEF, 0xBB, 0xBF}
 
-// processEnvFileLine returns a blank key if the line is empty or a comment.
-// The value will be retrieved from the environment if necessary.
+// processEnvFileLine 在该行为空行或注释时返回空的 key。
+// 必要时会从环境变量中获取对应的 value。
 func processEnvFileLine(line []byte, filePath string,
 	currentLine int) (key, value string, err error) {
 
@@ -40,15 +40,15 @@ func processEnvFileLine(line []byte, filePath string,
 			filePath, currentLine+1, line)
 	}
 
-	// We trim UTF8 BOM from the first line of the file but no others
+	// 只去掉文件首行的 UTF8 BOM，其他行不做处理
 	if currentLine == 0 {
 		line = bytes.TrimPrefix(line, utf8bom)
 	}
 
-	// trim the line from all leading whitespace first
+	// 先去掉行首的所有空白字符
 	line = bytes.TrimLeftFunc(line, unicode.IsSpace)
 
-	// If the line is empty or a comment, we return a blank key/value pair.
+	// 如果该行为空或为注释，则返回空的 key/value 对。
 	if len(line) == 0 || line[0] == '#' {
 		return ``, ``, nil
 	}
@@ -62,15 +62,15 @@ func processEnvFileLine(line []byte, filePath string,
 	if len(data) == 2 {
 		value = data[1]
 	} else {
-		// No value (no `=` in the line) is a signal to obtain the value
-		// from the environment.
+		// 没有 value（行中没有 `=`）表示需要
+		// 从环境变量中获取该值。
 		value = os.Getenv(key)
 	}
 	return
 }
 
-// AddFromEnvFile processes an env file allows a generic addTo to handle the
-// collection of key value pairs or returns an error.
+// AddFromEnvFile 处理 env 文件，允许通用的 addTo 函数
+// 处理收集到的键值对，或在出错时返回错误。
 func AddFromEnvFile(filePath string, addTo func(key, value string) error) error {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -81,8 +81,8 @@ func AddFromEnvFile(filePath string, addTo func(key, value string) error) error 
 	scanner := bufio.NewScanner(f)
 	currentLine := 0
 	for scanner.Scan() {
-		// Process the current line, retrieving a key/value pair if
-		// possible.
+		// 处理当前行，尽可能获取一个
+		// 键值对。
 		scannedBytes := scanner.Bytes()
 		key, value, err := processEnvFileLine(scannedBytes, filePath, currentLine)
 		if err != nil {
@@ -91,7 +91,7 @@ func AddFromEnvFile(filePath string, addTo func(key, value string) error) error 
 		currentLine++
 
 		if len(key) == 0 {
-			// no key means line was empty or a comment
+			// 没有 key 表示该行为空行或注释
 			continue
 		}
 

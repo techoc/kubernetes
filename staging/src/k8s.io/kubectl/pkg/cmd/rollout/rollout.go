@@ -53,7 +53,7 @@ var (
 		`)
 )
 
-// NewCmdRollout returns a Command instance for 'rollout' sub command
+// NewCmdRollout 返回 'rollout' 子命令的 Command 实例
 func NewCmdRollout(parent string, f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "rollout SUBCOMMAND",
@@ -63,7 +63,7 @@ func NewCmdRollout(parent string, f cmdutil.Factory, streams genericiooptions.IO
 		Example:               rolloutExample,
 		Run:                   cmdutil.DefaultSubCommandRun(streams.Out),
 	}
-	// subcommands
+	// 子命令
 	cmd.AddCommand(NewCmdRolloutHistory(f, streams))
 	cmd.AddCommand(NewCmdRolloutPause(f, streams))
 	cmd.AddCommand(NewCmdRolloutResume(f, streams))

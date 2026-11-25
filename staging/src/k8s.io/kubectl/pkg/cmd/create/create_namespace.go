@@ -45,11 +45,11 @@ var (
 	  kubectl create namespace my-namespace`))
 )
 
-// NamespaceOptions is the options for 'create namespace' sub command
+// NamespaceOptions 是 'create namespace' 子命令的选项
 type NamespaceOptions struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
-	// Name of resource being created
+	// 待创建资源的名称
 	Name string
 
 	DryRunStrategy      cmdutil.DryRunStrategy
@@ -64,7 +64,7 @@ type NamespaceOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewNamespaceOptions creates a new *NamespaceOptions with sane defaults
+// NewNamespaceOptions 创建一个带有合理默认值的 *NamespaceOptions
 func NewNamespaceOptions(ioStreams genericiooptions.IOStreams) *NamespaceOptions {
 	return &NamespaceOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -72,7 +72,7 @@ func NewNamespaceOptions(ioStreams genericiooptions.IOStreams) *NamespaceOptions
 	}
 }
 
-// NewCmdCreateNamespace is a macro command to create a new namespace
+// NewCmdCreateNamespace 是一个用于创建新 namespace 的宏命令
 func NewCmdCreateNamespace(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 
 	o := NewNamespaceOptions(ioStreams)
@@ -101,7 +101,7 @@ func NewCmdCreateNamespace(f cmdutil.Factory, ioStreams genericiooptions.IOStrea
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *NamespaceOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	name, err := NameFromCommandArgs(cmd, args)
 	if err != nil {
@@ -136,7 +136,7 @@ func (o *NamespaceOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args 
 	return err
 }
 
-// Run performs the execution of the 'create namespace' sub command
+// Run 执行 'create namespace' 子命令
 func (o *NamespaceOptions) Run() error {
 	namespace := o.createNamespace()
 	if err := util.CreateOrUpdateAnnotation(o.CreateAnnotation, namespace, scheme.DefaultJSONEncoder()); err != nil {
@@ -161,7 +161,7 @@ func (o *NamespaceOptions) Run() error {
 	return o.PrintObj(namespace)
 }
 
-// createNamespace outputs a namespace object using the configured fields
+// createNamespace 使用配置的字段输出一个 namespace 对象
 func (o *NamespaceOptions) createNamespace() *corev1.Namespace {
 	namespace := &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: corev1.SchemeGroupVersion.String(), Kind: "Namespace"},
@@ -170,7 +170,7 @@ func (o *NamespaceOptions) createNamespace() *corev1.Namespace {
 	return namespace
 }
 
-// Validate validates required fields are set to support structured generation
+// Validate 校验必填字段是否已设置，以支持结构化生成
 func (o *NamespaceOptions) Validate() error {
 	if len(o.Name) == 0 {
 		return fmt.Errorf("name must be specified")

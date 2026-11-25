@@ -39,8 +39,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// ImageOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// ImageOptions 是执行该操作所需数据的起点。新增字段时请添加在这里，而不是
+// 引用 cmd.Flags()
 type SetImageOptions struct {
 	resource.FilenameOptions
 
@@ -66,12 +66,12 @@ type SetImageOptions struct {
 	genericiooptions.IOStreams
 }
 
-// ImageResolver is a func that receives an image name, and
-// resolves it to an appropriate / compatible image name.
-// Adds flexibility for future image resolving methods.
+// ImageResolver 是一个接收镜像名称的函数，
+// 并将其解析为合适/兼容的镜像名称。
+// 为将来的镜像解析方式提供灵活性。
 type ImageResolverFunc func(in string) (string, error)
 
-// ImageResolver to use.
+// 要使用的 ImageResolver。
 var ImageResolver = resolveImageFunc
 
 var (
@@ -98,7 +98,7 @@ var (
 		kubectl set image -f path/to/file.yaml nginx=nginx:1.9.1 --local -o yaml`)
 )
 
-// NewImageOptions returns an initialized SetImageOptions instance
+// NewImageOptions 返回一个已初始化的 SetImageOptions 实例
 func NewImageOptions(streams genericiooptions.IOStreams) *SetImageOptions {
 	return &SetImageOptions{
 		PrintFlags:  genericclioptions.NewPrintFlags("image updated").WithTypeSetter(scheme.Scheme),
@@ -110,7 +110,7 @@ func NewImageOptions(streams genericiooptions.IOStreams) *SetImageOptions {
 	}
 }
 
-// NewCmdImage returns an initialized Command instance for the 'set image' sub command
+// NewCmdImage 返回 'set image' 子命令的已初始化 Command 实例
 func NewCmdImage(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewImageOptions(streams)
 	validArgs := []string{"daemonsets", "deployments", "pods", "cronjobs", "replicasets", "replicationcontrollers", "statefulsets"}
@@ -143,7 +143,7 @@ func NewCmdImage(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.C
 	return cmd
 }
 
-// Complete completes all required options
+// Complete 补全所有必需的选项
 func (o *SetImageOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 
@@ -193,9 +193,9 @@ func (o *SetImageOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args [
 			ResourceTypeOrNameArgs(o.All, o.Resources...).
 			Latest()
 	} else {
-		// if a --local flag was provided, and a resource was specified in the form
-		// <resource>/<name>, fail immediately as --local cannot query the api server
-		// for the specified resource.
+		// 如果提供了 --local 标志，且资源以
+		// <resource>/<name> 形式指定，则立即失败，因为 --local 无法向 api server
+		// 查询指定资源。
 		if len(o.Resources) > 0 {
 			return resource.LocalResourceError
 		}
@@ -209,7 +209,7 @@ func (o *SetImageOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args [
 	return nil
 }
 
-// Validate makes sure provided values in SetImageOptions are valid
+// Validate 确保 SetImageOptions 中提供的值有效
 func (o *SetImageOptions) Validate() error {
 	errors := []error{}
 	if o.All && len(o.Selector) > 0 {
@@ -229,7 +229,7 @@ func (o *SetImageOptions) Validate() error {
 	return utilerrors.NewAggregate(errors)
 }
 
-// Run performs the execution of 'set image' sub command
+// Run 执行 'set image' 子命令
 func (o *SetImageOptions) Run() error {
 	allErrs := []error{}
 
@@ -256,7 +256,7 @@ func (o *SetImageOptions) Run() error {
 		if err != nil {
 			return nil, err
 		}
-		// record this change (for rollout history)
+		// 记录此次变更（用于 rollout 历史）
 		if err := o.Recorder.Record(obj); err != nil {
 			klog.V(4).Infof("error recording current command: %v", err)
 		}
@@ -272,7 +272,7 @@ func (o *SetImageOptions) Run() error {
 			continue
 		}
 
-		// no changes
+		// 无变更
 		if string(patch.Patch) == "{}" || len(patch.Patch) == 0 {
 			continue
 		}
@@ -284,7 +284,7 @@ func (o *SetImageOptions) Run() error {
 			continue
 		}
 
-		// patch the change
+		// 应用该变更的补丁
 		actual, err := resource.
 			NewHelper(info.Client, info.Mapping).
 			DryRun(o.DryRunStrategy == cmdutil.DryRunServer).
@@ -304,7 +304,7 @@ func (o *SetImageOptions) Run() error {
 
 func setImage(containers []v1.Container, containerName string, image string) bool {
 	containerFound := false
-	// Find the container to update, and update its image
+	// 找到要更新的容器，并更新其镜像
 	for i, c := range containers {
 		if c.Name == containerName || containerName == "*" {
 			containerFound = true
@@ -314,7 +314,7 @@ func setImage(containers []v1.Container, containerName string, image string) boo
 	return containerFound
 }
 
-// getResourcesAndImages retrieves resources and container name:images pair from given args
+// getResourcesAndImages 从给定参数中检索资源及容器名:镜像对
 func getResourcesAndImages(args []string) (resources []string, containerImages map[string]string, err error) {
 	pairType := "image"
 	resources, imageArgs, err := cmdutil.GetResourcesAndPairs(args, pairType)
@@ -330,7 +330,7 @@ func hasWildcardKey(containerImages map[string]string) bool {
 	return ok
 }
 
-// implements ImageResolver
+// 实现 ImageResolver
 func resolveImageFunc(in string) (string, error) {
 	return in, nil
 }

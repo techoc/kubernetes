@@ -29,8 +29,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// TablePrinter decodes table objects into typed objects before delegating to another printer.
-// Non-table types are simply passed through
+// TablePrinter 先将 table 对象解码为类型化对象，再委托给另一个打印器。
+// 非 table 类型则直接透传
 type TablePrinter struct {
 	Delegate printers.ResourcePrinter
 }
@@ -40,8 +40,8 @@ func (t *TablePrinter) PrintObj(obj runtime.Object, writer io.Writer) error {
 	if err == nil {
 		return t.Delegate.PrintObj(table, writer)
 	}
-	// if we are unable to decode server response into a v1beta1.Table,
-	// fallback to client-side printing with whatever info the server returned.
+	// 如果无法将服务端的响应解码为 v1beta1.Table，
+	// 则退回到客户端打印，使用服务端返回的现有信息。
 	klog.V(2).Infof("Unable to decode server response into a Table. Falling back to hardcoded types: %v", err)
 	return t.Delegate.PrintObj(obj, writer)
 }
@@ -51,7 +51,7 @@ var recognizedTableVersions = map[schema.GroupVersionKind]bool{
 	metav1.SchemeGroupVersion.WithKind("Table"):      true,
 }
 
-// assert the types are identical, since we're decoding both types into a metav1.Table
+// 断言类型相同，因为这两种类型都会被解码为 metav1.Table
 var _ metav1.Table = metav1beta1.Table{}
 var _ metav1beta1.Table = metav1.Table{}
 

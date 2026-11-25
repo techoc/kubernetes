@@ -34,7 +34,7 @@ var (
 		kubectl config delete-context minikube`)
 )
 
-// NewCmdConfigDeleteContext returns a Command instance for 'config delete-context' sub command
+// NewCmdConfigDeleteContext 返回 'config delete-context' 子命令的 Command 实例
 func NewCmdConfigDeleteContext(out, errOut io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "delete-context NAME",

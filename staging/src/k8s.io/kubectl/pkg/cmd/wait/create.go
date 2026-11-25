@@ -24,7 +24,7 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 )
 
-// IsCreated is a condition func for waiting for something to be created
+// IsCreated 是用于等待某对象被创建的条件函数
 func IsCreated(ctx context.Context, info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	if len(info.Name) == 0 || info.Object == nil {
 		return nil, false, fmt.Errorf("resource name must be provided")

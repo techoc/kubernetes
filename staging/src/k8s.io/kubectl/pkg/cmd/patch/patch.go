@@ -49,8 +49,8 @@ import (
 
 var patchTypes = map[string]types.PatchType{"json": types.JSONPatchType, "merge": types.MergePatchType, "strategic": types.StrategicMergePatchType}
 
-// PatchOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// PatchOptions 是执行该操作所需数据的起始部分。添加新字段时请加在这里，
+// 而不是引用 cmd.Flags()
 type PatchOptions struct {
 	resource.FilenameOptions
 
@@ -266,7 +266,7 @@ func (o *PatchOptions) RunPatch() error {
 
 			didPatch := !reflect.DeepEqual(info.Object, patchedObj)
 
-			// if the recorder makes a change, compute and create another patch
+			// 如果 recorder 产生了修改，则计算并创建另一个 patch
 			if mergePatch, err := o.Recorder.MakeRecordMergePatch(patchedObj); err != nil {
 				klog.V(4).Infof("error recording current command: %v", err)
 			} else if len(mergePatch) > 0 {
@@ -323,7 +323,7 @@ func getPatchedJSON(patchType types.PatchType, originalJS, patchJS []byte, gvk s
 			return nil, err
 		}
 		bytes, err := patchObj.Apply(originalJS)
-		// TODO: This is pretty hacky, we need a better structured error from the json-patch
+		// TODO: 这相当 hacky，我们需要 json-patch 提供结构更好的错误
 		if err != nil && strings.Contains(err.Error(), "doc is missing key") {
 			msg := err.Error()
 			ix := strings.Index(msg, "key:")
@@ -336,7 +336,7 @@ func getPatchedJSON(patchType types.PatchType, originalJS, patchJS []byte, gvk s
 		return jsonpatch.MergePatch(originalJS, patchJS)
 
 	case types.StrategicMergePatchType:
-		// get a typed object for this GVK if we need to apply a strategic merge patch
+		// 如果需要应用 strategic merge patch，则获取该 GVK 的类型化对象
 		obj, err := creater.New(gvk)
 		if err != nil {
 			return nil, fmt.Errorf("strategic merge patch is not supported for %s locally, try --type merge", gvk.String())
@@ -344,7 +344,7 @@ func getPatchedJSON(patchType types.PatchType, originalJS, patchJS []byte, gvk s
 		return strategicpatch.StrategicMergePatch(originalJS, patchJS, obj)
 
 	default:
-		// only here as a safety net - go-restful filters content-type
+		// 仅作为兜底 —— go-restful 会过滤 content-type
 		return nil, fmt.Errorf("unknown Content-Type header for patch: %v", patchType)
 	}
 }

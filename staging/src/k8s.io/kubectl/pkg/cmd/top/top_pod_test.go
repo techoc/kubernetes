@@ -111,12 +111,12 @@ func TestTopPod(t *testing.T) {
 		namespaces         []string
 		containers         bool
 		listsNamespaces    bool
-		// extraPaths overrides the response of the pod list endpoint, e.g. to
-		// simulate server-side filtering by the core API.
+		// extraPaths 覆盖 pod list 端点的响应，例如用于
+		// 模拟 core API 的服务端过滤。
 		extraPaths func(req *http.Request) (*http.Response, error)
-		// expectedInOutput/nonExpectedInOutput override the pod names derived
-		// from namespaces, for cases where the printed pods differ from what
-		// the metrics API returned (e.g. client-side field selector filtering).
+		// expectedInOutput/nonExpectedInOutput 覆盖根据 namespace 推导出的
+		// pod 名称，适用于打印出的 pod 与 metrics API 返回的 pod
+		// 不一致的情况（例如客户端 field selector 过滤）。
 		expectedInOutput    []string
 		nonExpectedInOutput []string
 		expectedSwapBytes   map[string]string // exact swap column values per pod
@@ -212,8 +212,8 @@ func TestTopPod(t *testing.T) {
 			expectedSwapBytes: map[string]string{"pod1": "4Mi", "pod2": "0Mi", "pod3": "3Mi"},
 		},
 		{
-			// The metrics API returns all three pods, while the pod list
-			// endpoint only returns pod1, so the client must drop pod2 and pod3.
+			// metrics API 返回了全部三个 pod，而 pod list 端点
+			// 只返回 pod1，因此客户端必须丢弃 pod2 和 pod3。
 			name:                "pod with field selector filtering metrics",
 			options:             &TopPodOptions{FieldSelector: "spec.nodeName=node-a"},
 			namespaces:          []string{testNS, testNS, testNS},
@@ -435,9 +435,9 @@ func runTopPodTest(t *testing.T, opts runTopPodOpts) (stdout string, stderr stri
 				if opts.extraPaths != nil {
 					return opts.extraPaths(req)
 				}
-				// The command lists pods directly (e.g. to resolve a field
-				// selector, or to check pod age when no metrics are returned),
-				// so serve the standard pod list by default.
+				// 该命令会直接列出 pod（例如为了解析 field
+				// selector，或在未返回指标时检查 pod 的存活时长），
+				// 因此默认提供标准的 pod 列表响应。
 				return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: cmdtesting.ObjBody(codec, defaultPodList())}, nil
 			default:
 				t.Fatalf("unexpected request: %#v\nGot URL: %#v", req, req.URL)
@@ -489,8 +489,8 @@ func defaultPodList() *v1.PodList {
 	}
 }
 
-// onlyPod1ListResponse serves a pod list containing only pod1, simulating the
-// core API filtering pods by a field selector.
+// onlyPod1ListResponse 提供仅包含 pod1 的 pod 列表，模拟
+// core API 按 field selector 过滤 pod 的行为。
 func onlyPod1ListResponse(req *http.Request) (*http.Response, error) {
 	body, _ := marshallBody(v1.PodList{
 		ListMeta: metav1.ListMeta{ResourceVersion: "2"},

@@ -36,8 +36,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// RestartOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// RestartOptions 是执行该操作所需数据的起点。新增字段时应添加到此处，
+// 而不是引用 cmd.Flags()
 type RestartOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	ToPrinter  func(string) (printers.ResourcePrinter, error)
@@ -76,7 +76,7 @@ var (
 		kubectl rollout restart deployment --selector=app=nginx`)
 )
 
-// NewRolloutRestartOptions returns an initialized RestartOptions instance
+// NewRolloutRestartOptions 返回初始化后的 RestartOptions 实例
 func NewRolloutRestartOptions(streams genericiooptions.IOStreams) *RestartOptions {
 	return &RestartOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("restarted").WithTypeSetter(scheme.Scheme),
@@ -84,7 +84,7 @@ func NewRolloutRestartOptions(streams genericiooptions.IOStreams) *RestartOption
 	}
 }
 
-// NewCmdRolloutRestart returns a Command instance for 'rollout restart' sub command
+// NewCmdRolloutRestart 返回 'rollout restart' 子命令的 Command 实例
 func NewCmdRolloutRestart(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewRolloutRestartOptions(streams)
 
@@ -112,7 +112,7 @@ func NewCmdRolloutRestart(f cmdutil.Factory, streams genericiooptions.IOStreams)
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *RestartOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	o.Resources = args
 
@@ -141,7 +141,7 @@ func (o *RestartOptions) Validate() error {
 	return nil
 }
 
-// RunRestart performs the execution of 'rollout restart' sub command
+// RunRestart 执行 'rollout restart' 子命令
 func (o RestartOptions) RunRestart() error {
 	r := o.Builder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
@@ -160,11 +160,11 @@ func (o RestartOptions) RunRestart() error {
 	allErrs := []error{}
 	infos, err := r.Infos()
 	if err != nil {
-		// restore previous command behavior where
-		// an error caused by retrieving infos due to
-		// at least a single broken object did not result
-		// in an immediate return, but rather an overall
-		// aggregation of errors.
+		// 恢复此前命令的行为：
+		// 当至少有一个损坏的对象导致
+		// 获取 infos 出错时，不会立即返回，
+		// 而是先汇总所有错误，
+		// 然后一并返回。
 		allErrs = append(allErrs, err)
 	}
 

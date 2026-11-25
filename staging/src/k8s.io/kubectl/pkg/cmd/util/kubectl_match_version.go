@@ -36,7 +36,7 @@ const (
 	flagMatchBinaryVersion = "match-server-version"
 )
 
-// MatchVersionFlags is for setting the "match server version" function.
+// MatchVersionFlags 用于设置"匹配服务端版本"的功能。
 type MatchVersionFlags struct {
 	Delegate genericclioptions.RESTClientGetter
 
@@ -63,10 +63,10 @@ func (f *MatchVersionFlags) checkMatchingServerVersion() error {
 	return f.matchesServerVersionErr
 }
 
-// ToRESTConfig implements RESTClientGetter.
-// Returns a REST client configuration based on a provided path
-// to a .kubeconfig file, loading rules, and config flag overrides.
-// Expects the AddFlags method to have been called.
+// ToRESTConfig 实现 RESTClientGetter。
+// 根据给定的 .kubeconfig 文件路径、加载规则和配置 flag 覆盖项
+// 返回 REST client 配置。
+// 假定 AddFlags 方法已被调用。
 func (f *MatchVersionFlags) ToRESTConfig() (*rest.Config, error) {
 	if err := f.checkMatchingServerVersion(); err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (f *MatchVersionFlags) ToRESTConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO we should not have to do this.  It smacks of something going wrong.
+	// TODO 我们本不该这么做，这看起来像是哪里出了问题。
 	setKubernetesDefaults(clientConfig)
 	return clientConfig, nil
 }
@@ -91,7 +91,7 @@ func (f *MatchVersionFlags) ToDiscoveryClient() (discovery.CachedDiscoveryInterf
 	return f.Delegate.ToDiscoveryClient()
 }
 
-// ToRESTMapper returns a mapper.
+// ToRESTMapper 返回一个 mapper。
 func (f *MatchVersionFlags) ToRESTMapper() (meta.RESTMapper, error) {
 	if err := f.checkMatchingServerVersion(); err != nil {
 		return nil, err
@@ -109,20 +109,20 @@ func NewMatchVersionFlags(delegate genericclioptions.RESTClientGetter) *MatchVer
 	}
 }
 
-// setKubernetesDefaults sets default values on the provided client config for accessing the
-// Kubernetes API or returns an error if any of the defaults are impossible or invalid.
-// TODO this isn't what we want.  Each clientset should be setting defaults as it sees fit.
+// setKubernetesDefaults 为给定的 client 配置设置访问 Kubernetes API 所需的默认值，
+// 如果其中任何默认值无法设置或无效，则返回错误。
+// TODO 这并非我们想要的做法。每个 clientset 都应自行按需设置默认值。
 func setKubernetesDefaults(config *rest.Config) error {
-	// TODO remove this hack.  This is allowing the GetOptions to be serialized.
+	// TODO 移除这个 hack。它只是为了让 GetOptions 能够被序列化。
 	config.GroupVersion = &schema.GroupVersion{Group: "", Version: "v1"}
 
 	if config.APIPath == "" {
 		config.APIPath = "/api"
 	}
 	if config.NegotiatedSerializer == nil {
-		// This codec factory ensures the resources are not converted. Therefore, resources
-		// will not be round-tripped through internal versions. Defaulting does not happen
-		// on the client.
+		// 该 codec factory 确保资源不会被转换，因此资源不会
+		// 经由 internal 版本来回转换。客户端不会执行
+		// defaulting。
 		config.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
 	}
 	return rest.SetKubernetesDefaults(config)

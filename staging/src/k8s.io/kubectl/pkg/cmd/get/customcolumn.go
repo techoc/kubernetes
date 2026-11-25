@@ -38,13 +38,13 @@ import (
 
 var jsonRegexp = regexp.MustCompile(`^\{\.?([^{}]+)\}$|^\.?([^{}]+)$`)
 
-// RelaxedJSONPathExpression attempts to be flexible with JSONPath expressions, it accepts:
-//   - metadata.name (no leading '.' or curly braces '{...}'
-//   - {metadata.name} (no leading '.')
-//   - .metadata.name (no curly braces '{...}')
-//   - {.metadata.name} (complete expression)
+// RelaxedJSONPathExpression 尽量灵活处理 JSONPath 表达式，它接受：
+//   - metadata.name（没有前导 '.' 或花括号 '{...}'）
+//   - {metadata.name}（没有前导 '.'）
+//   - .metadata.name（没有花括号 '{...}'）
+//   - {.metadata.name}（完整表达式）
 //
-// And transforms them all into a valid jsonpath expression:
+// 并将它们全部转换为合法的 jsonpath 表达式：
 //
 //	{.metadata.name}
 func RelaxedJSONPathExpression(pathExpression string) (string, error) {
@@ -67,8 +67,8 @@ func RelaxedJSONPathExpression(pathExpression string) (string, error) {
 	return fmt.Sprintf("{.%s}", fieldSpec), nil
 }
 
-// NewCustomColumnsPrinterFromSpec creates a custom columns printer from a comma separated list of <header>:<jsonpath-field-spec> pairs.
-// e.g. NAME:metadata.name,API_VERSION:apiVersion creates a printer that prints:
+// NewCustomColumnsPrinterFromSpec 根据以逗号分隔的 <header>:<jsonpath-field-spec> 对创建自定义列打印器。
+// 例如，NAME:metadata.name,API_VERSION:apiVersion 会创建一个打印如下内容的打印器：
 //
 //	NAME               API_VERSION
 //	foo                bar
@@ -102,9 +102,9 @@ func splitOnWhitespace(line string) []string {
 	return result
 }
 
-// NewCustomColumnsPrinterFromTemplate creates a custom columns printer from a template stream.  The template is expected
-// to consist of two lines, whitespace separated.  The first line is the header line, the second line is the jsonpath field spec
-// For example, the template below:
+// NewCustomColumnsPrinterFromTemplate 根据模板流创建自定义列打印器。模板应
+// 由两行组成，以空白分隔。第一行是表头行，第二行是 jsonpath 字段规格
+// 例如，下面的模板：
 // NAME               API_VERSION
 // {metadata.name}    {apiVersion}
 func NewCustomColumnsPrinterFromTemplate(templateReader io.Reader, decoder runtime.Decoder) (*CustomColumnsPrinter, error) {
@@ -137,30 +137,30 @@ func NewCustomColumnsPrinterFromTemplate(templateReader io.Reader, decoder runti
 	return &CustomColumnsPrinter{Columns: columns, Decoder: decoder, NoHeaders: false}, nil
 }
 
-// Column represents a user specified column
+// Column 表示用户指定的列
 type Column struct {
-	// The header to print above the column, general style is ALL_CAPS
+	// 打印在列上方的表头，通常风格为全大写
 	Header string
-	// The pointer to the field in the object to print in JSONPath form
-	// e.g. {.ObjectMeta.Name}, see pkg/util/jsonpath for more details.
+	// 以 JSONPath 形式指向对象中要打印字段的指针
+	// 例如 {.ObjectMeta.Name}，详见 pkg/util/jsonpath。
 	FieldSpec string
 }
 
-// CustomColumnPrinter is a printer that knows how to print arbitrary columns
-// of data from templates specified in the `Columns` array
+// CustomColumnPrinter 是一个打印器，知道如何打印 `Columns` 数组中
+// 模板所指定的任意数据列
 type CustomColumnsPrinter struct {
 	Columns   []Column
 	Decoder   runtime.Decoder
 	NoHeaders bool
-	// lastType records type of resource printed last so that we don't repeat
-	// header while printing same type of resources.
+	// lastType 记录上次打印的资源类型，以免在打印
+	// 相同类型的资源时重复打印表头。
 	lastType reflect.Type
 }
 
 func (s *CustomColumnsPrinter) PrintObj(obj runtime.Object, out io.Writer) error {
-	// we use reflect.Indirect here in order to obtain the actual value from a pointer.
-	// we need an actual value in order to retrieve the package path for an object.
-	// using reflect.Indirect indiscriminately is valid here, as all runtime.Objects are supposed to be pointers.
+	// 这里使用 reflect.Indirect 是为了从指针中获取实际值。
+	// 我们需要实际值才能获取对象所属的包路径。
+	// 此处不加区分地使用 reflect.Indirect 是安全的，因为所有 runtime.Object 都应为指针。
 	if printers.InternalObjectPreventer.IsForbidden(reflect.Indirect(reflect.ValueOf(obj)).Type().PkgPath()) {
 		return errors.New(printers.InternalObjectPrinterErr)
 	}

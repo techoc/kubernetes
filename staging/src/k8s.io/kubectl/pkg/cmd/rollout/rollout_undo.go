@@ -35,8 +35,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// UndoOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// UndoOptions 是执行该操作所需数据的起点。新增字段时应添加到此处，
+// 而不是引用 cmd.Flags()
 type UndoOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	ToPrinter  func(string) (printers.ResourcePrinter, error)
@@ -74,7 +74,7 @@ var (
 		"Consider using '%[3]s apply' with your previous configuration file instead.\n"
 )
 
-// NewRolloutUndoOptions returns an initialized UndoOptions instance
+// NewRolloutUndoOptions 返回初始化后的 UndoOptions 实例
 func NewRolloutUndoOptions(streams genericiooptions.IOStreams) *UndoOptions {
 	return &UndoOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("rolled back").WithTypeSetter(scheme.Scheme),
@@ -83,7 +83,7 @@ func NewRolloutUndoOptions(streams genericiooptions.IOStreams) *UndoOptions {
 	}
 }
 
-// NewCmdRolloutUndo returns a Command instance for the 'rollout undo' sub command
+// NewCmdRolloutUndo 返回 'rollout undo' 子命令的 Command 实例
 func NewCmdRolloutUndo(parent string, f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewRolloutUndoOptions(streams)
 	o.CmdBaseName = parent
@@ -113,7 +113,7 @@ func NewCmdRolloutUndo(parent string, f cmdutil.Factory, streams genericiooption
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *UndoOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	o.Resources = args
 	var err error
@@ -145,7 +145,7 @@ func (o *UndoOptions) Validate() error {
 	return nil
 }
 
-// RunUndo performs the execution of 'rollout undo' sub command
+// RunUndo 执行 'rollout undo' 子命令
 func (o *UndoOptions) RunUndo() error {
 	r := o.Builder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).

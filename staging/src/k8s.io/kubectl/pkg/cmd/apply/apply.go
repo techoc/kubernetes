@@ -54,9 +54,9 @@ import (
 	"k8s.io/kubectl/pkg/validation"
 )
 
-// ApplyFlags directly reflect the information that CLI is gathering via flags.  They will be converted to Options, which
-// reflect the runtime requirements for the command.  This structure reduces the transformation to wiring and makes
-// the logic itself easy to unit test
+// ApplyFlags 直接反映 CLI 通过 flag 收集的信息。它们会被转换为 Options，
+// 后者反映命令的运行时需求。这种结构将转换简化为单纯的接线，并使
+// 逻辑本身易于单元测试。
 type ApplyFlags struct {
 	RecordFlags *genericclioptions.RecordFlags
 	PrintFlags  *genericclioptions.PrintFlags
@@ -78,7 +78,7 @@ type ApplyFlags struct {
 	genericiooptions.IOStreams
 }
 
-// ApplyOptions defines flags and other configuration parameters for the `apply` command
+// ApplyOptions 定义 `apply` 命令的 flag 及其他配置参数
 type ApplyOptions struct {
 	Recorder genericclioptions.Recorder
 
@@ -113,31 +113,31 @@ type ApplyOptions struct {
 
 	genericiooptions.IOStreams
 
-	// Objects (and some denormalized data) which are to be
-	// applied. The standard way to fill in this structure
-	// is by calling "GetObjects()", which will use the
-	// resource builder if "objectsCached" is false. The other
-	// way to set this field is to use "SetObjects()".
-	// Subsequent calls to "GetObjects()" after setting would
-	// not call the resource builder; only return the set objects.
+	// 待应用的
+	// 对象（及部分反规范化数据）。填充此结构的标准方式
+	// 是调用 "GetObjects()"，当 "objectsCached" 为 false 时，
+	// 它会使用 resource builder。另一种
+	// 设置该字段的方式是使用 "SetObjects()"。
+	// 设置之后再次调用 "GetObjects()" 不会
+	// 调用 resource builder，只会返回已设置的对象。
 	objects       []*resource.Info
 	objectsCached bool
 
-	// Stores visited objects/namespaces for later use
-	// calculating the set of objects to prune.
+	// 保存已访问的对象/namespace，供之后
+	// 计算待清理对象集合时使用。
 	VisitedUids       sets.Set[types.UID]
 	VisitedNamespaces sets.Set[string]
 
-	// Function run after the objects are generated and
-	// stored in the "objects" field, but before the
-	// apply is run on these objects.
+	// 在对象生成并
+	// 存入 "objects" 字段之后、
+	// 对这些对象执行 apply 之前运行的函数。
 	PreProcessorFn func() error
-	// Function run after all objects have been applied.
-	// The standard PostProcessorFn is "PrintAndPrunePostProcessor()".
+	// 在所有对象都被应用后运行的函数。
+	// 标准的 PostProcessorFn 是 "PrintAndPrunePostProcessor()"。
 	PostProcessorFn func() error
 
-	// ApplySet tracks the set of objects that have been applied, for the purposes of pruning.
-	// See git.k8s.io/enhancements/keps/sig-cli/3659-kubectl-apply-prune
+	// ApplySet 记录已应用的对象集合，用于清理。
+	// 参见 git.k8s.io/enhancements/keps/sig-cli/3659-kubectl-apply-prune
 	ApplySet *ApplySet
 }
 
@@ -180,7 +180,7 @@ var (
 
 var ApplySetToolVersion = version.Get().GitVersion
 
-// NewApplyFlags returns a default ApplyFlags
+// NewApplyFlags 返回默认的 ApplyFlags
 func NewApplyFlags(streams genericiooptions.IOStreams) *ApplyFlags {
 	return &ApplyFlags{
 		RecordFlags: genericclioptions.NewRecordFlags(),
@@ -194,7 +194,7 @@ func NewApplyFlags(streams genericiooptions.IOStreams) *ApplyFlags {
 	}
 }
 
-// NewCmdApply creates the `apply` command
+// NewCmdApply 创建 `apply` 命令
 func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	flags := NewApplyFlags(ioStreams)
 
@@ -214,7 +214,7 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericiooptions.
 
 	flags.AddFlags(cmd)
 
-	// apply subcommands
+	// apply 子命令
 	cmd.AddCommand(NewCmdApplyViewLastApplied(f, flags.IOStreams))
 	cmd.AddCommand(NewCmdApplySetLastApplied(f, flags.IOStreams))
 	cmd.AddCommand(NewCmdApplyEditLastApplied(f, flags.IOStreams))
@@ -222,9 +222,9 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericiooptions.
 	return cmd
 }
 
-// AddFlags registers flags for a cli
+// AddFlags 为 CLI 注册 flag
 func (flags *ApplyFlags) AddFlags(cmd *cobra.Command) {
-	// bind flag structs
+	// 绑定 flag 结构体
 	flags.DeleteFlags.AddFlags(cmd)
 	flags.RecordFlags.AddFlags(cmd)
 	flags.PrintFlags.AddFlags(cmd)
@@ -240,7 +240,7 @@ func (flags *ApplyFlags) AddFlags(cmd *cobra.Command) {
 	cmdutil.AddSubresourceFlags(cmd, &flags.Subresource, "If specified, apply will operate on the subresource of the requested object.  Only allowed when using --server-side.")
 }
 
-// ToOptions converts from CLI inputs to runtime inputs
+// ToOptions 将 CLI 输入转换为运行时输入
 func (flags *ApplyFlags) ToOptions(f cmdutil.Factory, cmd *cobra.Command, baseName string, args []string) (*ApplyOptions, error) {
 	if len(args) != 0 {
 		return nil, cmdutil.UsageErrorf(cmd, "Unexpected args: %v", args)
@@ -260,7 +260,7 @@ func (flags *ApplyFlags) ToOptions(f cmdutil.Factory, cmd *cobra.Command, baseNa
 
 	fieldManager := GetApplyFieldManagerFlag(cmd, serverSideApply)
 
-	// allow for a success message operation to be specified at print time
+	// 允许在打印时指定成功消息的操作
 	toPrinter := func(operation string) (printers.ResourcePrinter, error) {
 		flags.PrintFlags.NamePrintFlags.Operation = operation
 		cmdutil.PrintFlagsWithDryRunStrategy(flags.PrintFlags, dryRunStrategy)
@@ -316,8 +316,8 @@ func (flags *ApplyFlags) ToOptions(f cmdutil.Factory, cmd *cobra.Command, baseNa
 		if err != nil {
 			return nil, fmt.Errorf("invalid parent reference %q: %w", flags.ApplySetRef, err)
 		}
-		// ApplySet uses the namespace value from the flag, but not from the kubeconfig or defaults
-		// This means the namespace flag is required when using a namespaced parent.
+		// ApplySet 使用 flag 中的 namespace 值，而不使用 kubeconfig 或默认值
+		// 这意味着使用带 namespace 的 parent 时必须提供 namespace flag。
 		if enforceNamespace && parent.IsNamespaced() {
 			parent.Namespace = namespace
 		}
@@ -339,8 +339,8 @@ func (flags *ApplyFlags) ToOptions(f cmdutil.Factory, cmd *cobra.Command, baseNa
 	}
 
 	o := &ApplyOptions{
-		// 	Store baseName for use in printing warnings / messages involving the base command name.
-		// 	This is useful for downstream command that wrap this one.
+		// 	保存 baseName，用于打印涉及基础命令名称的警告/消息。
+		// 	这对包装此命令的下游命令很有用。
 		cmdBaseName: baseName,
 
 		PrintFlags: flags.PrintFlags,
@@ -386,7 +386,7 @@ func (flags *ApplyFlags) ToOptions(f cmdutil.Factory, cmd *cobra.Command, baseNa
 	return o, nil
 }
 
-// Validate verifies if ApplyOptions are valid and without conflicts.
+// Validate 验证 ApplyOptions 是否有效且无冲突。
 func (o *ApplyOptions) Validate() error {
 	if o.ForceConflicts && !o.ServerSideApply {
 		return fmt.Errorf("--force-conflicts only works with --server-side")
@@ -417,8 +417,8 @@ func (o *ApplyOptions) Validate() error {
 		}
 	}
 	if o.Prune {
-		// Do not force the recreation of an object(s) if we're pruning; this can cause
-		// undefined behavior since object UID's change.
+		// 如果正在清理，则不要强制重建对象；因为对象 UID 会发生变化，
+		// 这可能导致未定义行为。
 		if o.DeleteOptions.ForceDeletion {
 			return fmt.Errorf("--force cannot be used with --prune")
 		}
@@ -448,21 +448,21 @@ func (o *ApplyOptions) Validate() error {
 }
 
 func isIncompatibleServerError(err error) bool {
-	// 415: Unsupported media type means we're talking to a server which doesn't
-	// support server-side apply.
+	// 415: Unsupported media type 表示所连接的服务器
+	// 不支持 server-side apply。
 	if _, ok := err.(*errors.StatusError); !ok {
-		// Non-StatusError means the error isn't because the server is incompatible.
+		// 非 StatusError 表示该错误并非由服务器不兼容引起。
 		return false
 	}
 	return err.(*errors.StatusError).Status().Code == http.StatusUnsupportedMediaType
 }
 
-// GetObjects returns a (possibly cached) version of all the valid objects to apply
-// as a slice of pointer to resource.Info and an error if one or more occurred.
-// IMPORTANT: This function can return both valid objects AND an error, since
-// "ContinueOnError" is set on the builder. This function should not be called
-// until AFTER the "complete" and "validate" methods have been called to ensure that
-// the ApplyOptions is filled in and valid.
+// GetObjects 返回所有待应用有效对象的（可能缓存的）版本，
+// 形式为指向 resource.Info 的指针切片，以及发生的错误（如有）。
+// 重要：此函数可能同时返回有效对象和错误，因为
+// builder 上设置了 "ContinueOnError"。在调用 "complete" 和 "validate"
+// 方法之前不应调用此函数，以确保
+// ApplyOptions 已被填充且有效。
 func (o *ApplyOptions) GetObjects() ([]*resource.Info, error) {
 	var err error = nil
 	if !o.objectsCached {
@@ -489,14 +489,14 @@ func (o *ApplyOptions) GetObjects() ([]*resource.Info, error) {
 	return o.objects, err
 }
 
-// SetObjects stores the set of objects (as resource.Info) to be
-// subsequently applied.
+// SetObjects 存储待应用的对象集合（以 resource.Info 表示），
+// 供后续应用。
 func (o *ApplyOptions) SetObjects(infos []*resource.Info) {
 	o.objects = infos
 	o.objectsCached = true
 }
 
-// Run executes the `apply` command.
+// Run 执行 `apply` 命令。
 func (o *ApplyOptions) Run() error {
 	if o.PreProcessorFn != nil {
 		klog.V(4).Infof("Running apply pre-processor function")
@@ -505,13 +505,13 @@ func (o *ApplyOptions) Run() error {
 		}
 	}
 
-	// Enforce CLI specified namespace on server request.
+	// 在服务请求上强制使用 CLI 指定的 namespace。
 	if o.EnforceNamespace {
 		o.VisitedNamespaces.Insert(o.Namespace)
 	}
 
-	// Generates the objects using the resource builder if they have not
-	// already been stored by calling "SetObjects()" in the pre-processor.
+	// 如果预处理程序中没有通过 "SetObjects()"
+	// 存储对象，则使用 resource builder 生成对象。
 	errs := []error{}
 	infos, err := o.GetObjects()
 	if err != nil {
@@ -527,14 +527,14 @@ func (o *ApplyOptions) Run() error {
 		}
 	}
 
-	// Iterate through all objects, applying each one.
+	// 遍历所有对象，逐个应用。
 	for _, info := range infos {
 		if err := o.applyOneObject(info); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	// If any errors occurred during apply, then return error (or
-	// aggregate of errors).
+	// 如果 apply 过程中出现任何错误，则返回错误
+	// （或错误的聚合）。
 	if len(errs) == 1 {
 		return errs[0]
 	}
@@ -573,7 +573,7 @@ func (o *ApplyOptions) applyOneObject(info *resource.Info) error {
 		WithFieldValidation(o.ValidationDirective)
 
 	if o.ServerSideApply {
-		// Send the full object to be applied on the server side.
+		// 将完整对象发送到服务端进行应用。
 		data, err := runtime.Encode(unstructured.UnstructuredJSONScheme, info.Object)
 		if err != nil {
 			return cmdutil.AddSourceToErr("serverside-apply", info.Source, err)
@@ -614,23 +614,23 @@ See https://kubernetes.io/docs/reference/using-api/server-side-apply/#conflicts`
 
 		info.Refresh(obj, true)
 
-		// Migrate managed fields if necessary.
+		// 如有必要，迁移 managed fields。
 		//
-		// By checking afterward instead of fetching the object beforehand and
-		// unconditionally fetching we can make 3 network requests in the rare
-		// case of migration and 1 request if migration is unnecessary.
+		// 事后检查而非事先获取对象，可以避免无条件获取，
+		// 从而在极少发生迁移的情况下发起 3 次网络请求，
+		// 在无需迁移时只需 1 次请求。
 		//
-		// To check beforehand means 2 requests for most operations, and 3
-		// requests in worst case.
+		// 事先检查意味着大多数操作需要 2 次请求，最坏情况下
+		// 需要 3 次请求。
 		if err = o.saveLastApplyAnnotationIfNecessary(helper, info); err != nil {
 			fmt.Fprintf(o.ErrOut, warningMigrationLastAppliedFailed, err.Error())
 		} else if performedMigration, err := o.migrateToSSAIfNecessary(helper, info); err != nil {
-			// Print-error as a warning.
-			// This is a non-fatal error because object was successfully applied
-			// above, but it might have issues since migration failed.
+			// 将打印错误作为警告处理。
+			// 这是非致命错误，因为对象已在上面成功应用，
+			// 但迁移失败可能会导致问题。
 			//
-			// This migration will be re-attempted if necessary upon next
-			// apply.
+			// 如有必要，下次 apply 时会重试此迁移。
+			//
 			fmt.Fprintf(o.ErrOut, warningMigrationPatchFailed, err.Error())
 		} else if performedMigration {
 			if obj, err = helper.Patch(
@@ -640,8 +640,8 @@ See https://kubernetes.io/docs/reference/using-api/server-side-apply/#conflicts`
 				data,
 				&options,
 			); err != nil {
-				// Re-send original SSA patch (this will allow dropped fields to
-				// finally be removed)
+				// 重新发送原始的 SSA patch（这样可以让被丢弃的字段
+				// 最终被移除）
 				fmt.Fprintf(o.ErrOut, warningMigrationReapplyFailed, err.Error())
 			} else {
 				info.Refresh(obj, false)
@@ -669,9 +669,9 @@ See https://kubernetes.io/docs/reference/using-api/server-side-apply/#conflicts`
 		return nil
 	}
 
-	// Get the modified configuration of the object. Embed the result
-	// as an annotation in the modified configuration, so that it will appear
-	// in the patch sent to the server.
+	// 获取对象的修改后配置。将结果作为注解
+	// 嵌入修改后配置，使其出现在
+	// 发送给服务端的 patch 中。
 	modified, err := util.GetModifiedConfiguration(info.Object, true, unstructured.UnstructuredJSONScheme)
 	if err != nil {
 		return cmdutil.AddSourceToErr(fmt.Sprintf("retrieving modified configuration from:\n%s\nfor:", info.String()), info.Source, err)
@@ -682,20 +682,20 @@ See https://kubernetes.io/docs/reference/using-api/server-side-apply/#conflicts`
 			return cmdutil.AddSourceToErr(fmt.Sprintf("retrieving current configuration of:\n%s\nfrom server for:", info.String()), info.Source, err)
 		}
 
-		// Create the resource if it doesn't exist
-		// First, update the annotation used by kubectl apply
+		// 如果资源不存在，则创建它
+		// 首先更新 kubectl apply 使用的注解
 		if err := util.CreateApplyAnnotation(info.Object, unstructured.UnstructuredJSONScheme); err != nil {
 			return cmdutil.AddSourceToErr("creating", info.Source, err)
 		}
 
-		// prune nulls when client-side apply does a create to match what will happen when client-side applying an update.
-		// do this after CreateApplyAnnotation so the annotation matches what will be persisted on an update apply of the same manifest.
+		// client-side apply 执行创建时清除 null 值，以与 client-side apply 执行更新时的行为保持一致。
+		// 在 CreateApplyAnnotation 之后执行此操作，使注解与同一 manifest 更新 apply 时持久化的内容一致。
 		if u, ok := info.Object.(runtime.Unstructured); ok {
 			pruneNullsFromMap(u.UnstructuredContent())
 		}
 
 		if o.DryRunStrategy != cmdutil.DryRunClient {
-			// Then create the resource and skip the three-way merge
+			// 然后创建资源，跳过三方合并
 			obj, err := helper.Create(info.Namespace, true, info.Object)
 			if err != nil {
 				return cmdutil.AddSourceToErr("creating", info.Source, err)
@@ -802,39 +802,38 @@ func pruneNulls(v interface{}) {
 	}
 }
 
-// Saves the last-applied-configuration annotation in a separate SSA field manager
-// to prevent it from being dropped by users who have transitioned to SSA.
+// 将 last-applied-configuration 注解保存在单独的 SSA field manager 中，
+// 防止已转向 SSA 的用户丢弃该注解。
 //
-// If this operation is not performed, then the last-applied-configuration annotation
-// would be removed from the object upon the first SSA usage. We want to keep it
-// around for a few releases since it is required to downgrade to
-// SSA per [1] and [2]. This code should be removed once the annotation is
-// deprecated.
+// 如果不执行此操作，那么在首次使用 SSA 时，last-applied-configuration 注解
+// 就会从对象中被移除。我们希望将其保留几个版本，
+// 因为根据 [1] 和 [2]，降级到
+// SSA 时需要该注解。待该注解被弃用后，应移除这段代码。
 //
 // - [1] https://kubernetes.io/docs/reference/using-api/server-side-apply/#downgrading-from-server-side-apply-to-client-side-apply
 // - [2] https://github.com/kubernetes/kubernetes/pull/90187
 //
-// If the annotation is not already present, or if it is already managed by the
-// separate SSA fieldmanager, this is a no-op.
+// 如果该注解尚不存在，或已由单独的 SSA fieldmanager 管理，
+// 则此操作为空操作。
 func (o *ApplyOptions) saveLastApplyAnnotationIfNecessary(
 	helper *resource.Helper,
 	info *resource.Info,
 ) error {
 	if o.FieldManager != fieldManagerServerSideApply {
-		// There is no point in preserving the annotation if the field manager
-		// will not remain default. This is because the server will not keep
-		// the annotation up to date.
+		// 如果 field manager 不会保持默认值，则保留该注解没有意义，
+		// 因为服务端不会持续更新
+		// 该注解。
 		return nil
 	}
 
-	// Send an apply patch with the last-applied-annotation
-	// so that it is not orphaned by SSA in the following patch:
+	// 发送带有 last-applied 注解的 apply patch，
+	// 使其在后续 patch 中不会被 SSA 孤立：
 	accessor, err := meta.Accessor(info.Object)
 	if err != nil {
 		return err
 	}
 
-	// Get the current annotations from the object.
+	// 从对象中获取当前注解。
 	annots := accessor.GetAnnotations()
 	if annots == nil {
 		annots = map[string]string{}
@@ -843,13 +842,13 @@ func (o *ApplyOptions) saveLastApplyAnnotationIfNecessary(
 	fieldManager := fieldManagerLastAppliedAnnotation
 	originalAnnotation, hasAnnotation := annots[corev1.LastAppliedConfigAnnotation]
 
-	// If the annotation does not already exist, we do not do anything
+	// 如果注解尚不存在，则不执行任何操作
 	if !hasAnnotation {
 		return nil
 	}
 
-	// If there is already an SSA field manager which owns the field, then there
-	// is nothing to do here.
+	// 如果已有 SSA field manager 拥有该字段，
+	// 则无需在此处执行任何操作。
 	if owners := csaupgrade.FindFieldsOwners(
 		accessor.GetManagedFields(),
 		metav1.ManagedFieldsOperationApply,
@@ -887,21 +886,21 @@ func (o *ApplyOptions) saveLastApplyAnnotationIfNecessary(
 	return info.Refresh(newObj, false)
 }
 
-// Check if the returned object needs to have its kubectl-client-side-apply
-// managed fields migrated server-side-apply.
+// 检查返回对象是否需要将 kubectl-client-side-apply
+// 的 managed fields 迁移到 server-side-apply。
 //
-// field ownership metadata is stored in three places:
+// 字段所有权元数据存储在这三个位置：
 //   - server-side managed fields
 //   - client-side managed fields
-//   - and the last_applied_configuration annotation.
+//   - 以及 last_applied_configuration 注解。
 //
-// The migration merges the client-side-managed fields into the
-// server-side-managed fields, leaving the last_applied_configuration
-// annotation in place. Server will keep the annotation up to date
-// after every server-side-apply where the following conditions are ment:
+// 迁移会将 client-side 管理的字段合并到
+// server-side 管理的字段中，并保留 last_applied_configuration
+// 注解。在满足以下条件时，服务端会在每次 server-side-apply
+// 后持续更新该注解：
 //
-//  1. field manager is 'kubectl'
-//  2. annotation already exists
+//  1. field manager 为 'kubectl'
+//  2. 注解已存在
 func (o *ApplyOptions) migrateToSSAIfNecessary(
 	helper *resource.Helper,
 	info *resource.Info,
@@ -911,15 +910,15 @@ func (o *ApplyOptions) migrateToSSAIfNecessary(
 		return false, err
 	}
 
-	// To determine which field managers were used by kubectl for client-side-apply
-	// we search for a manager used in `Update` operations which owns the
-	// last-applied-annotation.
+	// 要确定 kubectl 曾使用哪些 field manager 执行 client-side-apply，
+	// 我们会查找在 `Update` 操作中使用过、且拥有
+	// last-applied 注解的 manager。
 	//
-	// This is the last client-side-apply manager which changed the field.
+	// 这是最后一次修改该字段的 client-side-apply manager。
 	//
-	// There may be multiple owners if multiple managers wrote the same exact
-	// configuration. In this case there are multiple owners, we want to migrate
-	// them all.
+	// 如果多个 manager 写入了完全相同的配置，则可能存在多个所有者。
+	// 在这种情况下，我们希望将所有所有者都迁移。
+	//
 	csaManagers := csaupgrade.FindFieldsOwners(
 		accessor.GetManagedFields(),
 		metav1.ManagedFieldsOperationUpdate,
@@ -930,8 +929,8 @@ func (o *ApplyOptions) migrateToSSAIfNecessary(
 		managerNames.Insert(entry.Manager)
 	}
 
-	// Re-attempt patch as many times as it is conflicting due to ResourceVersion
-	// test failing
+	// 因 ResourceVersion 测试失败而冲突时，重试 patch
+	//
 	for i := 0; i < maxPatchRetry; i++ {
 		var patchData []byte
 		var obj runtime.Object
@@ -940,14 +939,14 @@ func (o *ApplyOptions) migrateToSSAIfNecessary(
 			info.Object, managerNames, o.FieldManager)
 
 		if err != nil {
-			// If patch generation failed there was likely a bug.
+			// 如果 patch 生成失败，很可能存在 bug。
 			return false, err
 		} else if patchData == nil {
-			// nil patch data means nothing to do - object is already migrated
+			// patch 数据为 nil 表示无需操作——对象已经迁移完成
 			return false, nil
 		}
 
-		// Send the patch to upgrade the managed fields if it is non-nil
+		// 如果 patch 非 nil，则发送它以升级 managed fields
 		obj, err = helper.Patch(
 			info.Namespace,
 			info.Name,
@@ -957,30 +956,30 @@ func (o *ApplyOptions) migrateToSSAIfNecessary(
 		)
 
 		if err == nil {
-			// Stop retrying upon success.
+			// 成功后停止重试。
 			info.Refresh(obj, false)
 			return true, nil
 		} else if !errors.IsConflict(err) {
-			// Only retry if there was a conflict
+			// 仅在发生冲突时重试
 			return false, err
 		}
 
-		// Refresh the object for next iteration
+		// 刷新对象以供下一轮迭代使用
 		err = info.Get()
 		if err != nil {
-			// If there was an error fetching, return error
+			// 如果获取时出错，则返回错误
 			return false, err
 		}
 	}
 
-	// Reaching this point with non-nil error means there was a conflict and
-	// max retries was hit
-	// Return the last error witnessed (which will be a conflict)
+	// 执行到这里且错误非 nil，表示发生了冲突且
+	// 已达到最大重试次数
+	// 返回最后观察到的错误（将是冲突错误）
 	return false, err
 }
 
 func (o *ApplyOptions) shouldPrintObject() bool {
-	// Print object only if output format other than "name" is specified
+	// 仅在指定了非 "name" 的输出格式时打印对象
 	shouldPrint := false
 	output := *o.PrintFlags.OutputFormat
 	shortOutput := output == "name"
@@ -1034,16 +1033,16 @@ func (o *ApplyOptions) printObjects() error {
 	return nil
 }
 
-// MarkNamespaceVisited keeps track of which namespaces the applied
-// objects belong to. Used for pruning.
+// MarkNamespaceVisited 记录已应用对象所属的
+// namespace。用于清理。
 func (o *ApplyOptions) MarkNamespaceVisited(info *resource.Info) {
 	if info.Namespaced() {
 		o.VisitedNamespaces.Insert(info.Namespace)
 	}
 }
 
-// MarkObjectVisited keeps track of UIDs of the applied
-// objects. Used for pruning.
+// MarkObjectVisited 记录已应用
+// 对象的 UID。用于清理。
 func (o *ApplyOptions) MarkObjectVisited(info *resource.Info) error {
 	metadata, err := meta.Accessor(info.Object)
 	if err != nil {
@@ -1054,11 +1053,11 @@ func (o *ApplyOptions) MarkObjectVisited(info *resource.Info) error {
 	return nil
 }
 
-// PrintAndPrunePostProcessor returns a function which meets the PostProcessorFn
-// function signature. This returned function prints all the
-// objects as a list (if configured for that), and prunes the
-// objects not applied. The returned function is the standard
-// apply post processor.
+// PrintAndPrunePostProcessor 返回一个符合 PostProcessorFn
+// 函数签名的函数。该函数会将所有
+// 对象打印为列表（如果如此配置），并清理
+// 未被应用的对象。返回的函数是标准的
+// apply 后处理器。
 func (o *ApplyOptions) PrintAndPrunePostProcessor() func() error {
 
 	return func() error {
@@ -1070,9 +1069,9 @@ func (o *ApplyOptions) PrintAndPrunePostProcessor() func() error {
 		if o.Prune {
 			if cmdutil.ApplySet.IsEnabled() && o.ApplySet != nil {
 				if err := o.ApplySet.Prune(ctx, o); err != nil {
-					// Do not update the ApplySet. If pruning failed, we want to keep the superset
-					// of the previous and current resources in the ApplySet, so that the pruning
-					// step of the next apply will be able to clean up the set correctly.
+					// 不要更新 ApplySet。如果清理失败，我们希望保留
+					// ApplySet 中之前和当前资源的并集，以便下次 apply
+					// 的清理步骤能够正确地清理该集合。
 					return err
 				}
 			} else {
@@ -1086,15 +1085,15 @@ func (o *ApplyOptions) PrintAndPrunePostProcessor() func() error {
 }
 
 const (
-	// FieldManagerClientSideApply is the default client-side apply field manager.
+	// FieldManagerClientSideApply 是默认的 client-side apply field manager。
 	//
-	// The default field manager is not `kubectl-apply` to distinguish from
-	// server-side apply.
+	// 默认 field manager 不是 `kubectl-apply`，以区别于
+	// server-side apply。
 	FieldManagerClientSideApply = "kubectl-client-side-apply"
-	// The default server-side apply field manager is `kubectl`
-	// instead of a field manager like `kubectl-server-side-apply`
-	// for backward compatibility to not conflict with old versions
-	// of kubectl server-side apply where `kubectl` has already been the field manager.
+	// 默认的 server-side apply field manager 是 `kubectl`，
+	// 而不是类似 `kubectl-server-side-apply` 的名称，
+	// 这是为了向后兼容，避免与旧版本
+	// kubectl server-side apply 中 `kubectl` 已作为 field manager 的情况冲突。
 	fieldManagerServerSideApply = "kubectl"
 
 	fieldManagerLastAppliedAnnotation = "kubectl-last-applied"
@@ -1108,13 +1107,13 @@ var (
 	)
 )
 
-// GetApplyFieldManagerFlag gets the field manager for kubectl apply
-// if it is not set.
+// GetApplyFieldManagerFlag 获取 kubectl apply 的 field manager，
+// 前提是它尚未设置。
 //
-// The default field manager is not `kubectl-apply` to distinguish between
-// client-side and server-side apply.
+// 默认 field manager 不是 `kubectl-apply`，以区分
+// client-side 和 server-side apply。
 func GetApplyFieldManagerFlag(cmd *cobra.Command, serverSide bool) string {
-	// The field manager flag was set
+	// field manager flag 已设置
 	if cmd.Flag("field-manager").Changed {
 		return cmdutil.GetFlagString(cmd, "field-manager")
 	}
@@ -1126,11 +1125,11 @@ func GetApplyFieldManagerFlag(cmd *cobra.Command, serverSide bool) string {
 	return FieldManagerClientSideApply
 }
 
-// WarnIfDeleting prints a warning if a resource is being deleted
+// WarnIfDeleting 在资源正在被删除时打印警告
 func WarnIfDeleting(obj runtime.Object, stderr io.Writer) {
 	metadata, _ := meta.Accessor(obj)
 	if metadata != nil && metadata.GetDeletionTimestamp() != nil {
-		// just warn the user about the conflict
+		// 仅向用户发出冲突警告
 		fmt.Fprintf(stderr, warningChangesOnDeletingResource, metadata.GetName())
 	}
 }

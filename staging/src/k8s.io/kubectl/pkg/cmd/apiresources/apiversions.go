@@ -37,21 +37,21 @@ var (
 		kubectl api-versions`))
 )
 
-// APIVersionsOptions have the data required for API versions
+// APIVersionsOptions 包含 API 版本所需的数据
 type APIVersionsOptions struct {
 	discoveryClient discovery.CachedDiscoveryInterface
 
 	genericiooptions.IOStreams
 }
 
-// NewAPIVersionsOptions creates the options for APIVersions
+// NewAPIVersionsOptions 创建 APIVersions 所需的选项
 func NewAPIVersionsOptions(ioStreams genericiooptions.IOStreams) *APIVersionsOptions {
 	return &APIVersionsOptions{
 		IOStreams: ioStreams,
 	}
 }
 
-// NewCmdAPIVersions creates the `api-versions` command
+// NewCmdAPIVersions 创建 `api-versions` 命令
 func NewCmdAPIVersions(restClientGetter genericclioptions.RESTClientGetter, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewAPIVersionsOptions(ioStreams)
 	cmd := &cobra.Command{
@@ -68,7 +68,7 @@ func NewCmdAPIVersions(restClientGetter genericclioptions.RESTClientGetter, ioSt
 	return cmd
 }
 
-// Complete adapts from the command line args and factory to the data required
+// Complete 将命令行参数和 factory 适配为所需的数据
 func (o *APIVersionsOptions) Complete(restClientGetter genericclioptions.RESTClientGetter, cmd *cobra.Command, args []string) error {
 	if len(args) != 0 {
 		return cmdutil.UsageErrorf(cmd, "unexpected arguments: %v", args)
@@ -78,9 +78,9 @@ func (o *APIVersionsOptions) Complete(restClientGetter genericclioptions.RESTCli
 	return err
 }
 
-// RunAPIVersions does the work
+// RunAPIVersions 执行实际工作
 func (o *APIVersionsOptions) RunAPIVersions() error {
-	// Always request fresh data from the server
+	// 始终向服务端请求最新数据
 	o.discoveryClient.Invalidate()
 
 	groupList, err := o.discoveryClient.ServerGroups()

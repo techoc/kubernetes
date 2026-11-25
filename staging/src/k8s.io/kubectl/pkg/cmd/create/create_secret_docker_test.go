@@ -159,7 +159,7 @@ func TestCreateSecretDockerRegistry(t *testing.T) {
 		},
 	}
 
-	// Run all the tests
+	// 运行所有测试
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			var secretDockerRegistry *corev1.Secret = nil
@@ -223,7 +223,7 @@ func TestCreateSecretDockerRegistryFromFile(t *testing.T) {
 		},
 	}
 
-	// Run all the tests
+	// 运行所有测试
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			tmp, _ := os.MkdirTemp("", "input")

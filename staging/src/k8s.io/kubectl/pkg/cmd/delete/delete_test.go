@@ -102,16 +102,16 @@ func TestDeleteObjectByTuple(t *testing.T) {
 		Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
 			switch p, m := req.URL.Path, req.Method; {
 
-			// replication controller with cascade off
+			// 关闭级联的 replication controller
 			case p == "/namespaces/test/replicationcontrollers/redis-master-controller" && m == "DELETE":
 				return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: cmdtesting.ObjBody(codec, &rc.Items[0])}, nil
 
-			// secret with cascade on, but no client-side reaper
+			// 开启级联但没有 client-side reaper 的 secret
 			case p == "/namespaces/test/secrets/mysecret" && m == "DELETE":
 				return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: cmdtesting.ObjBody(codec, &rc.Items[0])}, nil
 
 			default:
-				// Ensures no GET is performed when deleting by name
+				// 确保按名称删除时不会执行 GET 请求
 				t.Fatalf("unexpected request: %#v\n%#v", req.URL, req)
 				return nil, nil
 			}
@@ -128,7 +128,7 @@ func TestDeleteObjectByTuple(t *testing.T) {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
 
-	// Test cascading delete of object without client-side reaper doesn't make GET requests
+	// 测试没有 client-side reaper 时，对象的级联删除不会发出 GET 请求
 	streams, _, buf, _ = genericiooptions.NewTestIOStreams()
 	cmd = NewCmdDelete(tf, streams)
 	cmd.Flags().Set("namespace", "test")
@@ -152,7 +152,7 @@ func hasExpectedPropagationPolicy(body io.ReadCloser, policy *metav1.DeletionPro
 	return *policy == *parsedBody.PropagationPolicy
 }
 
-// TestCascadingStrategy tests that DeleteOptions.DeletionPropagation is appropriately set while deleting objects.
+// TestCascadingStrategy 测试删除对象时 DeleteOptions.DeletionPropagation 是否被正确设置。
 func TestCascadingStrategy(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 	_, _, rc := cmdtesting.TestData()
@@ -177,7 +177,7 @@ func TestCascadingStrategy(t *testing.T) {
 		}),
 	}
 
-	// DeleteOptions.PropagationPolicy should be Background, when cascading strategy is empty (default).
+	// 当级联策略为空（默认值）时，DeleteOptions.PropagationPolicy 应为 Background。
 	backgroundPolicy := metav1.DeletePropagationBackground
 	policy = &backgroundPolicy
 	streams, _, buf, _ := genericiooptions.NewTestIOStreams()
@@ -189,7 +189,7 @@ func TestCascadingStrategy(t *testing.T) {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
 
-	// DeleteOptions.PropagationPolicy should be Foreground, when cascading strategy is foreground.
+	// 当级联策略为 foreground 时，DeleteOptions.PropagationPolicy 应为 Foreground。
 	foregroundPolicy := metav1.DeletePropagationForeground
 	policy = &foregroundPolicy
 	streams, _, buf, _ = genericiooptions.NewTestIOStreams()
@@ -202,7 +202,7 @@ func TestCascadingStrategy(t *testing.T) {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
 
-	// Test that delete options should be set to orphan when cascading strategy is orphan.
+	// 测试当级联策略为 orphan 时，delete 选项应设置为 orphan。
 	orphanPolicy := metav1.DeletePropagationOrphan
 	policy = &orphanPolicy
 	streams, _, buf, _ = genericiooptions.NewTestIOStreams()
@@ -231,16 +231,16 @@ func TestDeleteNamedObject(t *testing.T) {
 		Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
 			switch p, m := req.URL.Path, req.Method; {
 
-			// replication controller with cascade off
+			// 关闭级联的 replication controller
 			case p == "/namespaces/test/replicationcontrollers/redis-master-controller" && m == "DELETE":
 				return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: cmdtesting.ObjBody(codec, &rc.Items[0])}, nil
 
-			// secret with cascade on, but no client-side reaper
+			// 开启级联但没有 client-side reaper 的 secret
 			case p == "/namespaces/test/secrets/mysecret" && m == "DELETE":
 				return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: cmdtesting.ObjBody(codec, &rc.Items[0])}, nil
 
 			default:
-				// Ensures no GET is performed when deleting by name
+				// 确保按名称删除时不会执行 GET 请求
 				t.Fatalf("unexpected request: %#v\n%#v", req.URL, req)
 				return nil, nil
 			}
@@ -257,7 +257,7 @@ func TestDeleteNamedObject(t *testing.T) {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
 
-	// Test cascading delete of object without client-side reaper doesn't make GET requests
+	// 测试没有 client-side reaper 时，对象的级联删除不会发出 GET 请求
 	streams, _, buf, _ = genericiooptions.NewTestIOStreams()
 	cmd = NewCmdDelete(tf, streams)
 	cmd.Flags().Set("namespace", "test")
@@ -298,7 +298,7 @@ func TestDeleteObject(t *testing.T) {
 	cmd.Flags().Set("output", "name")
 	cmd.Run(cmd, []string{})
 
-	// uses the name from the file, not the response
+	// 使用文件中的名称，而非响应中的名称
 	if buf.String() != "replicationcontroller/redis-master\n" {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
@@ -488,8 +488,8 @@ func TestGracePeriodScenarios(t *testing.T) {
 	for _, test := range tc {
 		t.Run(test.name, func(t *testing.T) {
 
-			// Use a custom fatal behavior with panic/recover so that we can test failure scenarios where
-			// os.Exit() would normally be called
+			// 使用 panic/recover 实现自定义的 fatal 行为，以便测试通常会调用
+			// os.Exit() 的失败场景
 			cmdutil.BehaviorOnFatal(func(actualErrOut string, actualExitCode int) {
 				if test.expectedExitCode != actualExitCode {
 					t.Errorf("unexpected exit code:\n\tExpected: %d\n\tActual:   %d\n", test.expectedExitCode, actualExitCode)
@@ -505,8 +505,8 @@ func TestGracePeriodScenarios(t *testing.T) {
 				}
 			}()
 
-			// Setup a fake HTTP Client to capture whether a delete request was made or not and if so,
-			// the actual grace period that was used.
+			// 设置一个伪 HTTP Client，用于捕获是否发出了 delete 请求；如果发出，
+			// 则捕获实际使用的 grace period。
 			actualGracePeriod := ""
 			deleteOccurred := false
 			tf.UnstructuredClient = &fake.RESTClient{
@@ -526,7 +526,7 @@ func TestGracePeriodScenarios(t *testing.T) {
 				}),
 			}
 
-			// Test the command using the flags specified in the test case
+			// 使用测试用例中指定的 flag 测试命令
 			streams, _, out, errOut := genericiooptions.NewTestIOStreams()
 			cmd := NewCmdDelete(tf, streams)
 			cmd.Flags().Set("output", "name")
@@ -541,7 +541,7 @@ func TestGracePeriodScenarios(t *testing.T) {
 			}
 			cmd.Run(cmd, test.cmdArgs)
 
-			// Check actual vs expected conditions
+			// 检查实际情况与预期是否一致
 			if len(test.expectedDeleteRequestPath) > 0 && !deleteOccurred {
 				t.Errorf("expected http delete request to %s but it did not occur", test.expectedDeleteRequestPath)
 			}
@@ -629,7 +629,7 @@ func TestDeleteObjectIgnoreNotFound(t *testing.T) {
 func TestDeleteAllNotFound(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 	_, svc, _ := cmdtesting.TestData()
-	// Add an item to the list which will result in a 404 on delete
+	// 向列表中添加一个在删除时会产生 404 的项
 	svc.Items = append(svc.Items, corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "foo"}})
 	notFoundError := &errors.NewNotFound(corev1.Resource("services"), "foo").ErrStatus
 
@@ -655,7 +655,7 @@ func TestDeleteAllNotFound(t *testing.T) {
 		}),
 	}
 
-	// Make sure we can explicitly choose to fail on NotFound errors, even with --all
+	// 确保即使使用 --all，也能显式选择在 NotFound 错误时失败
 	options := &DeleteOptions{
 		FilenameOptions:   resource.FilenameOptions{},
 		GracePeriod:       -1,
@@ -684,7 +684,7 @@ func TestDeleteAllIgnoreNotFound(t *testing.T) {
 
 	codec := scheme.Codecs.LegacyCodec(scheme.Scheme.PrioritizedVersionsAllGroups()...)
 
-	// Add an item to the list which will result in a 404 on delete
+	// 向列表中添加一个在删除时会产生 404 的项
 	svc.Items = append(svc.Items, corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "foo"}})
 	notFoundError := &errors.NewNotFound(corev1.Resource("services"), "foo").ErrStatus
 
@@ -823,7 +823,7 @@ func TestDeleteMultipleResourcesWithTheSameName(t *testing.T) {
 			case p == "/namespaces/test/services/foo" && m == "DELETE":
 				return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: cmdtesting.ObjBody(codec, &svc.Items[0])}, nil
 			default:
-				// Ensures no GET is performed when deleting by name
+				// 确保按名称删除时不会执行 GET 请求
 				t.Fatalf("unexpected request: %#v\n%#v", req.URL, req)
 				return nil, nil
 			}

@@ -41,7 +41,7 @@ var (
 		kubectl kuberc set --section aliases --name getn --command get --prependarg nodes --option output=wide`))
 )
 
-// NewCmdKubeRC creates a command object for the "kuberc" action, and adds all child commands to it.
+// NewCmdKubeRC 为 "kuberc" 操作创建命令对象，并向其中添加所有子命令。
 func NewCmdKubeRC(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "kuberc SUBCOMMAND",

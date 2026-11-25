@@ -54,7 +54,7 @@ var node *corev1.Node
 var cordonedNode *corev1.Node
 
 func TestMain(m *testing.M) {
-	// Create a node.
+	// 创建一个 node。
 	node = &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "node",
@@ -63,7 +63,7 @@ func TestMain(m *testing.M) {
 		Status: corev1.NodeStatus{},
 	}
 
-	// A copy of the same node, but cordoned.
+	// 同一 node 的副本，但处于 cordon 状态。
 	cordonedNode = node.DeepCopy()
 	cordonedNode.Spec.Unschedulable = true
 	os.Exit(m.Run())
@@ -217,9 +217,9 @@ func TestCordon(t *testing.T) {
 			sawFatal := false
 			func() {
 				defer func() {
-					// Recover from the panic below.
+					// 从下面的 panic 中恢复。
 					recovered = recover()
-					// Restore cmdutil behavior
+					// 恢复 cmdutil 的默认行为
 					cmdutil.DefaultBehaviorOnFatal()
 				}()
 				cmdutil.BehaviorOnFatal(func(e string, code int) {
@@ -869,9 +869,9 @@ func TestDrain(t *testing.T) {
 				fatalMsg := ""
 				func() {
 					defer func() {
-						// Recover from the panic below.
+						// 从下面的 panic 中恢复。
 						recovered = recover()
-						// Restore cmdutil behavior
+						// 恢复 cmdutil 的默认行为
 						cmdutil.DefaultBehaviorOnFatal()
 					}()
 					cmdutil.BehaviorOnFatal(func(e string, code int) { sawFatal = true; fatalMsg = e; panic(e) })
@@ -891,11 +891,11 @@ func TestDrain(t *testing.T) {
 				evicted := evictions > 0
 
 				if test.expectDelete {
-					// Test Delete
+					// 测试 Delete
 					if !testEviction && !deleted {
 						t.Fatalf("%s: pod never deleted", test.description)
 					}
-					// Test Eviction
+					// 测试 Eviction
 					if testEviction {
 						if !evicted {
 							t.Fatalf("%s: pod never evicted", test.description)
@@ -922,7 +922,7 @@ func TestDrain(t *testing.T) {
 						t.Fatalf("%s: expected warning, but found no stderr output", test.description)
 					}
 
-					// Mac and Bazel on Linux behave differently when returning newlines
+					// Mac 与 Linux 上的 Bazel 在返回换行时的行为不同
 					if a, e := errBuf.String(), test.expectWarning; !strings.Contains(a, e) {
 						t.Fatalf("%s: actual warning message did not match expected warning message.\n Expecting:\n%v\n  Got:\n%v", test.description, e, a)
 					}

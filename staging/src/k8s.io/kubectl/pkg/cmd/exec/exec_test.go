@@ -305,7 +305,7 @@ func execPod() *corev1.Pod {
 func TestSetupTTY(t *testing.T) {
 	streams, _, _, stderr := genericiooptions.NewTestIOStreams()
 
-	// test 1 - don't attach stdin
+	// 测试 1 - 不 attach stdin
 	o := &StreamOptions{
 		// InterruptParent: ,
 		Stdin:     false,
@@ -331,8 +331,8 @@ func TestSetupTTY(t *testing.T) {
 		t.Errorf("don't attach stdin: stderr wasn't empty: %s", stderr.String())
 	}
 
-	// tests from here on attach stdin
-	// test 2 - don't request a TTY
+	// 以下测试均 attach stdin
+	// 测试 2 - 不请求 TTY
 	o.Stdin = true
 	o.In = &bytes.Buffer{}
 	o.TTY = false
@@ -355,7 +355,7 @@ func TestSetupTTY(t *testing.T) {
 		t.Errorf("attach stdin, no TTY: stderr wasn't empty: %s", stderr.String())
 	}
 
-	// test 3 - request a TTY, but stdin is not a terminal
+	// 测试 3 - 请求 TTY，但 stdin 不是终端
 	o.Stdin = true
 	o.In = &bytes.Buffer{}
 	o.ErrOut = stderr
@@ -379,7 +379,7 @@ func TestSetupTTY(t *testing.T) {
 		t.Errorf("attach stdin, TTY, not a terminal: expected 'input is not a terminal' to stderr")
 	}
 
-	// test 4 - request a TTY, stdin is a terminal
+	// 测试 4 - 请求 TTY，且 stdin 是终端
 	o.Stdin = true
 	o.In = &bytes.Buffer{}
 	stderr.Reset()
@@ -427,7 +427,7 @@ func TestCreateExecutor(t *testing.T) {
 		t.Fatalf("unable to parse test url: %v", err)
 	}
 	config := cmdtesting.DefaultClientConfig()
-	// First, ensure that no environment variable creates the fallback executor.
+	// 首先，确保没有任何环境变量会创建 fallback executor。
 	executor, err := createExecutor(url, config)
 	if err != nil {
 		t.Fatalf("unable to create executor: %v", err)
@@ -435,7 +435,7 @@ func TestCreateExecutor(t *testing.T) {
 	if _, isFallback := executor.(*remotecommand.FallbackExecutor); !isFallback {
 		t.Errorf("expected fallback executor, got %#v", executor)
 	}
-	// Next, check turning on feature flag explicitly also creates fallback executor.
+	// 接下来，检查显式开启 feature flag 也会创建 fallback executor。
 	t.Setenv(string(cmdutil.RemoteCommandWebsockets), "true")
 	executor, err = createExecutor(url, config)
 	if err != nil {
@@ -444,7 +444,7 @@ func TestCreateExecutor(t *testing.T) {
 	if _, isFallback := executor.(*remotecommand.FallbackExecutor); !isFallback {
 		t.Errorf("expected fallback executor, got %#v", executor)
 	}
-	// Finally, check explicit disabling does NOT create the fallback executor.
+	// 最后，检查显式关闭时不会创建 fallback executor。
 	t.Setenv(string(cmdutil.RemoteCommandWebsockets), "false")
 	executor, err = createExecutor(url, config)
 	if err != nil {

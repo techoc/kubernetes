@@ -74,7 +74,7 @@ var (
 		kubectl edit deployment mydeployment --subresource='status'`))
 )
 
-// NewCmdEdit creates the `edit` command
+// NewCmdEdit 创建 `edit` 命令
 func NewCmdEdit(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := editor.NewEditOptions(editor.NormalEditMode, ioStreams)
 	cmd := &cobra.Command{
@@ -91,7 +91,7 @@ func NewCmdEdit(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.
 		},
 	}
 
-	// bind flag structs
+	// 绑定 flag 结构体
 	o.RecordFlags.AddFlags(cmd)
 	o.PrintFlags.AddFlags(cmd)
 

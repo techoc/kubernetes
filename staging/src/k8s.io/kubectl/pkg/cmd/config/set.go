@@ -64,7 +64,7 @@ var (
 	kubectl config set users.cluster-admin.client-key-data cert_data_here --set-raw-bytes=true`)
 )
 
-// NewCmdConfigSet returns a Command instance for 'config set' sub command
+// NewCmdConfigSet 返回 'config set' 子命令的 Command 实例
 func NewCmdConfigSet(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	options := &setOptions{configAccess: configAccess}
 
@@ -244,7 +244,7 @@ func modifyConfig(curr reflect.Value, steps *navigationSteps, propertyValue stri
 				}
 
 				if !steps.moreStepsRemaining() && unset {
-					// if we're supposed to unset the value or if the value is a map that doesn't exist, create a new value and overwrite
+					// 如果需要取消设置该值，或者该值是一个不存在的 map，则创建新值并覆盖
 					newValue := reflect.New(currFieldValue.Type()).Elem()
 					currFieldValue.Set(newValue)
 					return nil

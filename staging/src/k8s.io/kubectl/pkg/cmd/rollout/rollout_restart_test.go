@@ -122,7 +122,7 @@ func TestRolloutRestartError(t *testing.T) {
 	}
 }
 
-// Tests that giving selectors with no matching objects shows an error
+// 测试当给出的选择器没有匹配对象时会显示错误
 func TestRolloutRestartSelectorNone(t *testing.T) {
 	labelSelector := "app=test"
 
@@ -138,7 +138,7 @@ func TestRolloutRestartSelectorNone(t *testing.T) {
 			Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
 				switch p, m, q := req.URL.Path, req.Method, req.URL.Query(); {
 				case p == "/namespaces/test/deployments" && m == "GET" && q.Get("labelSelector") == labelSelector:
-					// Return an empty list
+					// 返回空列表
 					responseDeployments := &appsv1.DeploymentList{}
 					body := io.NopCloser(bytes.NewReader([]byte(runtime.EncodeOrDie(encoder, responseDeployments))))
 					return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: body}, nil
@@ -164,7 +164,7 @@ func TestRolloutRestartSelectorNone(t *testing.T) {
 	}
 }
 
-// Tests that giving selectors with no matching objects shows an error
+// 测试当给出的选择器没有匹配对象时会显示错误
 func TestRolloutRestartSelectorMany(t *testing.T) {
 	firstDeployment := appsv1.Deployment{}
 	firstDeployment.Name = "nginx-deployment-1"
@@ -184,13 +184,13 @@ func TestRolloutRestartSelectorMany(t *testing.T) {
 			Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
 				switch p, m, q := req.URL.Path, req.Method, req.URL.Query(); {
 				case p == "/namespaces/test/deployments" && m == "GET" && q.Get("labelSelector") == labelSelector:
-					// Return the list of 2 deployments
+					// 返回包含两个 deployment 的列表
 					responseDeployments := &appsv1.DeploymentList{}
 					responseDeployments.Items = []appsv1.Deployment{firstDeployment, secondDeployment}
 					body := io.NopCloser(bytes.NewReader([]byte(runtime.EncodeOrDie(encoder, responseDeployments))))
 					return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: body}, nil
 				case (p == "/namespaces/test/deployments/nginx-deployment-1" || p == "/namespaces/test/deployments/nginx-deployment-2") && m == "PATCH":
-					// Pick deployment based on path
+					// 根据路径选择对应的 deployment
 					responseDeployment := firstDeployment
 					if strings.HasSuffix(p, "nginx-deployment-2") {
 						responseDeployment = secondDeployment

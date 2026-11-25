@@ -41,36 +41,36 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TokenOptions is the data required to perform a token request operation.
+// TokenOptions 是执行 token 请求操作所需的数据。
 type TokenOptions struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
 
-	// Flags hold the parsed CLI flags.
+	// Flags 保存解析后的 CLI flag。
 	Flags *pflag.FlagSet
 
-	// Name and namespace of service account to create a token for
+	// 要为其创建 token 的 service account 的名称和 namespace
 	Name      string
 	Namespace string
 
-	// BoundObjectKind is the kind of object to bind the token to. Optional. Can be Pod or Secret.
+	// BoundObjectKind 是 token 要绑定到的对象类型。可选。可以是 Pod 或 Secret。
 	BoundObjectKind string
-	// BoundObjectName is the name of the object to bind the token to. Required if BoundObjectKind is set.
+	// BoundObjectName 是 token 要绑定到的对象的名称。如果设置了 BoundObjectKind，则必填。
 	BoundObjectName string
-	// BoundObjectUID is the uid of the object to bind the token to. If unset, defaults to the current uid of the bound object.
+	// BoundObjectUID 是 token 要绑定到的对象的 uid。如果未设置，则默认取被绑定对象当前的 uid。
 	BoundObjectUID string
 
-	// Audiences indicate the valid audiences for the requested token. If unset, defaults to the Kubernetes API server audiences.
+	// Audiences 表示所请求 token 的有效受众。如果未设置，则默认为 Kubernetes API server 的受众。
 	Audiences []string
 
-	// Duration is the requested token lifetime. Optional.
+	// Duration 是所请求 token 的有效期。可选。
 	Duration time.Duration
 
-	// CoreClient is the API client used to request the token. Required.
+	// CoreClient 是用于请求 token 的 API 客户端。必填。
 	CoreClient corev1client.CoreV1Interface
 
-	// IOStreams are the output streams for the operation. Required.
+	// IOStreams 是此操作的输出流。必填。
 	genericiooptions.IOStreams
 }
 
@@ -111,7 +111,7 @@ func NewTokenOpts(ioStreams genericiooptions.IOStreams) *TokenOptions {
 	}
 }
 
-// NewCmdCreateToken returns an initialized Command for 'create token' sub command
+// NewCmdCreateToken 返回 'create token' 子命令的一个初始化好的 Command
 func NewCmdCreateToken(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewTokenOpts(ioStreams)
 
@@ -159,7 +159,7 @@ func NewCmdCreateToken(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) 
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *TokenOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 
@@ -191,7 +191,7 @@ func (o *TokenOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []st
 	return nil
 }
 
-// Validate makes sure provided values for TokenOptions are valid
+// Validate 确保为 TokenOptions 提供的值有效
 func (o *TokenOptions) Validate() error {
 	if o.CoreClient == nil {
 		return fmt.Errorf("no client provided")
@@ -233,7 +233,7 @@ func (o *TokenOptions) Validate() error {
 	return nil
 }
 
-// Run requests a token
+// Run 请求 token
 func (o *TokenOptions) Run() error {
 	request := &authenticationv1.TokenRequest{
 		Spec: authenticationv1.TokenRequestSpec{
@@ -265,10 +265,10 @@ func (o *TokenOptions) Run() error {
 	}
 
 	if printers.IsTerminal(o.Out) {
-		// include a newline when printing interactively
+		// 交互式打印时包含换行符
 		fmt.Fprintf(o.Out, "%s\n", response.Status.Token)
 	} else {
-		// otherwise just print the token
+		// 否则只打印 token
 		fmt.Fprintf(o.Out, "%s", response.Status.Token)
 	}
 

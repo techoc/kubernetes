@@ -80,7 +80,7 @@ func NewCmdTop(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Com
 		SuggestFor: []string{"stats"},
 	}
 
-	// create subcommands
+	// 创建子命令
 	cmd.AddCommand(NewCmdTopNode(f, nil, streams))
 	cmd.AddCommand(NewCmdTopPod(f, nil, streams))
 

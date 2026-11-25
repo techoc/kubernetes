@@ -49,7 +49,7 @@ var (
 		kubectl create cronjob my-job --image=busybox --schedule="*/1 * * * *" -- date`)
 )
 
-// CreateCronJobOptions is returned by NewCreateCronJobOptions
+// CreateCronJobOptions 由 NewCreateCronJobOptions 返回
 type CreateCronJobOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 
@@ -73,7 +73,7 @@ type CreateCronJobOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCreateCronJobOptions returns an initialized CreateCronJobOptions instance
+// NewCreateCronJobOptions 返回一个初始化好的 CreateCronJobOptions 实例
 func NewCreateCronJobOptions(ioStreams genericiooptions.IOStreams) *CreateCronJobOptions {
 	return &CreateCronJobOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -81,7 +81,7 @@ func NewCreateCronJobOptions(ioStreams genericiooptions.IOStreams) *CreateCronJo
 	}
 }
 
-// NewCmdCreateCronJob is a command to create CronJobs.
+// NewCmdCreateCronJob 是用于创建 CronJob 的命令。
 func NewCmdCreateCronJob(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewCreateCronJobOptions(ioStreams)
 	cmd := &cobra.Command{
@@ -112,7 +112,7 @@ func NewCmdCreateCronJob(f cmdutil.Factory, ioStreams genericiooptions.IOStreams
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *CreateCronJobOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	name, err := NameFromCommandArgs(cmd, args)
 	if err != nil {
@@ -164,7 +164,7 @@ func (o *CreateCronJobOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, a
 	return nil
 }
 
-// Run performs the execution of 'create cronjob' sub command
+// Run 执行 'create cronjob' 子命令
 func (o *CreateCronJobOptions) Run() error {
 	cronJob := o.createCronJob()
 	if err := util.CreateOrUpdateAnnotation(o.CreateAnnotation, cronJob, scheme.DefaultJSONEncoder()); err != nil {

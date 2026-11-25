@@ -39,23 +39,23 @@ import (
 )
 
 var (
-	// Explaining the Regex below:
-	// ^(?P<host>[\w\*\-\.]*) -> Indicates the host - 0-N characters of letters, number, underscore, '-', '.' and '*'
-	// (?P<path>/.*) -> Indicates the path and MUST start with '/' - / + 0-N characters
-	// Separator from host/path to svcname:svcport -> "="
-	// (?P<svcname>[\w\-]+) -> Service Name (letters, numbers, '-') -> 1-N characters
-	// Separator from svcname to svcport -> ":"
-	// (?P<svcport>[\w\-]+) -> Service Port (letters, numbers, '-') -> 1-N characters
+	// 下面解释一下这个正则表达式：
+	// ^(?P<host>[\w\*\-\.]*) -> 表示 host —— 0 到 N 个字母、数字、下划线、'-'、'.' 和 '*'
+	// (?P<path>/.*) -> 表示 path，且必须以 '/' 开头 —— '/' 加 0 到 N 个字符
+	// host/path 到 svcname:svcport 之间的分隔符 -> "="
+	// (?P<svcname>[\w\-]+) -> Service 名称（字母、数字、'-'）-> 1 到 N 个字符
+	// svcname 到 svcport 之间的分隔符 -> ":"
+	// (?P<svcport>[\w\-]+) -> Service 端口（字母、数字、'-'）-> 1 到 N 个字符
 	regexHostPathSvc = `^(?P<host>[\w\*\-\.]*)(?P<path>/.*)=(?P<svcname>[\w\-]+):(?P<svcport>[\w\-]+)`
 
-	// This Regex is optional -> (....)?
-	// (?P<istls>tls) -> Verify if the argument after "," is 'tls'
-	// Optional Separator from tls to the secret name -> "=?"
-	// (?P<secretname>[\w\-]+)? -> Optional secret name after the separator -> 1-N characters
+	// 这个正则表达式是可选的 -> (....)?
+	// (?P<istls>tls) -> 检查 "," 后面的参数是否为 'tls'
+	// tls 到 secret 名称之间的可选分隔符 -> "=?"
+	// (?P<secretname>[\w\-]+)? -> 分隔符后面可选的 secret 名称 -> 1 到 N 个字符
 	regexTLS = `(,(?P<istls>tls)=?(?P<secretname>[\w\-]+)?)?`
 
-	// The validation Regex is the concatenation of hostPathSvc validation regex
-	// and the TLS validation regex
+	// 校验用的正则表达式是 hostPathSvc 校验正则
+	// 与 TLS 校验正则拼接而成的
 	ruleRegex = regexHostPathSvc + regexTLS
 
 	ingressLong = templates.LongDesc(i18n.T(`
@@ -101,7 +101,7 @@ var (
 		`))
 )
 
-// CreateIngressOptions is returned by NewCmdCreateIngress
+// CreateIngressOptions 由 NewCmdCreateIngress 返回
 type CreateIngressOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 
@@ -125,7 +125,7 @@ type CreateIngressOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCreateIngressOptions creates the CreateIngressOptions to be used later
+// NewCreateIngressOptions 创建供后续使用的 CreateIngressOptions
 func NewCreateIngressOptions(ioStreams genericiooptions.IOStreams) *CreateIngressOptions {
 	return &CreateIngressOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -133,8 +133,8 @@ func NewCreateIngressOptions(ioStreams genericiooptions.IOStreams) *CreateIngres
 	}
 }
 
-// NewCmdCreateIngress is a macro command to create a new ingress.
-// This command is better known to users as `kubectl create ingress`.
+// NewCmdCreateIngress 是一个用于创建新 ingress 的宏命令。
+// 用户更熟悉的形式是 `kubectl create ingress`。
 func NewCmdCreateIngress(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewCreateIngressOptions(ioStreams)
 
@@ -166,7 +166,7 @@ func NewCmdCreateIngress(f cmdutil.Factory, ioStreams genericiooptions.IOStreams
 	return cmd
 }
 
-// Complete completes all the options
+// Complete 完成所有选项的设置
 func (o *CreateIngressOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	name, err := NameFromCommandArgs(cmd, args)
 	if err != nil {
@@ -208,7 +208,7 @@ func (o *CreateIngressOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, a
 	return err
 }
 
-// Validate validates the Ingress object to be created
+// Validate 校验待创建的 Ingress 对象
 func (o *CreateIngressOptions) Validate() error {
 	if len(o.DefaultBackend) == 0 && len(o.Rules) == 0 {
 		return fmt.Errorf("not enough information provided: every ingress has to either specify a default-backend (which catches all traffic) or a list of rules (which catch specific paths)")
@@ -238,7 +238,7 @@ func (o *CreateIngressOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of 'create ingress' sub command
+// Run 执行 'create ingress' 子命令
 func (o *CreateIngressOptions) Run() error {
 	ingress := o.createIngress()
 
@@ -296,7 +296,7 @@ func (o *CreateIngressOptions) buildAnnotations() map[string]string {
 	return annotations
 }
 
-// buildIngressSpec builds the .spec from the diverse arguments passed to kubectl
+// buildIngressSpec 根据传给 kubectl 的各种参数构建 .spec
 func (o *CreateIngressOptions) buildIngressSpec() networkingv1.IngressSpec {
 	var ingressSpec networkingv1.IngressSpec
 
@@ -334,7 +334,7 @@ func (o *CreateIngressOptions) buildTLSRules() []networkingv1.IngressTLS {
 			}
 
 			idxSecret := getIndexSecret(secret, ingressTLSs)
-			// We accept the same host into TLS secrets only once
+			// 同一个 host 只接受一次写入 TLS secrets
 			if _, ok := hostAlreadyPresent[host]; !ok {
 				if idxSecret > -1 {
 					ingressTLSs[idxSecret].Hosts = append(ingressTLSs[idxSecret].Hosts, host)
@@ -357,7 +357,7 @@ func (o *CreateIngressOptions) buildTLSRules() []networkingv1.IngressTLS {
 	return ingressTLSs
 }
 
-// buildIngressRules builds the .spec.rules for an ingress object.
+// buildIngressRules 为 ingress 对象构建 .spec.rules。
 func (o *CreateIngressOptions) buildIngressRules() []networkingv1.IngressRule {
 	ingressRules := []networkingv1.IngressRule{}
 
@@ -398,7 +398,7 @@ func buildHTTPIngressPath(pathsvc string) networkingv1.HTTPIngressPath {
 	var pathType networkingv1.PathType
 	pathType = "Exact"
 
-	// If * in the End, turn pathType=Prefix but remove the * from the end
+	// 如果末尾是 *，则将 pathType 设为 Prefix，但去掉末尾的 *
 	if path[len(path)-1:] == "*" {
 		pathType = "Prefix"
 		path = path[0 : len(path)-1]

@@ -38,7 +38,7 @@ import (
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
-// TopNodeOptions contains all the options for running the top-node cli command.
+// TopNodeOptions 包含运行 top-node CLI 命令所需的全部选项。
 type TopNodeOptions struct {
 	ResourceName       string
 	Selector           string
@@ -239,7 +239,7 @@ func getNodeMetricsFromMetricsAPI(metricsClient metricsclientset.Interface, reso
 		}
 		return metrics, nil
 	}
-	// fallback to metric v1beta1
+	// 回退到 metric v1beta1
 	versionedMetrics := &metricsV1beta1api.NodeMetricsList{}
 	mc := metricsClient.MetricsV1beta1()
 	nm := mc.NodeMetricses()

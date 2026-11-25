@@ -361,24 +361,24 @@ func TestCheckInvalidErr(t *testing.T) {
 				Status: metav1.StatusFailure,
 				Code:   http.StatusUnprocessableEntity,
 				Reason: metav1.StatusReasonInvalid,
-				// Details is nil.
+				// Details 为 nil。
 			}},
 			"The request is invalid",
 			DefaultErrorExitCode,
 		},
-		// invalid error that that includes a message but no details
+		// 包含消息但没有 details 的无效错误
 		{
 			&errors.StatusError{ErrStatus: metav1.Status{
 				Status: metav1.StatusFailure,
 				Code:   http.StatusUnprocessableEntity,
 				Reason: metav1.StatusReasonInvalid,
-				// Details is nil.
+				// Details 为 nil。
 				Message: "Some message",
 			}},
 			"The request is invalid: Some message",
 			DefaultErrorExitCode,
 		},
-		// webhook response that sets code=422 with no reason
+		// 设置了 code=422 但没有 reason 的 webhook 响应
 		{
 			&errors.StatusError{ErrStatus: metav1.Status{
 				Status:  "Failure",
@@ -388,7 +388,7 @@ func TestCheckInvalidErr(t *testing.T) {
 			`Error from server: admission webhook "my.webhook" denied the request without explanation`,
 			DefaultErrorExitCode,
 		},
-		// webhook response that sets code=422 with no reason and non-nil details
+		// 设置了 code=422 但没有 reason，且 details 非 nil 的 webhook 响应
 		{
 			&errors.StatusError{ErrStatus: metav1.Status{
 				Status:  "Failure",
@@ -399,7 +399,7 @@ func TestCheckInvalidErr(t *testing.T) {
 			`Error from server: admission webhook "my.webhook" denied the request without explanation`,
 			DefaultErrorExitCode,
 		},
-		// source-wrapped webhook response that sets code=422 with no reason
+		// 设置了 code=422 但没有 reason 的 webhook 响应（带 source 包装）
 		{
 			AddSourceToErr("creating", "configmap.yaml", &errors.StatusError{ErrStatus: metav1.Status{
 				Status:  "Failure",
@@ -409,7 +409,7 @@ func TestCheckInvalidErr(t *testing.T) {
 			`Error from server: error when creating "configmap.yaml": admission webhook "my.webhook" denied the request without explanation`,
 			DefaultErrorExitCode,
 		},
-		// webhook response that sets reason=Invalid and code=422 and a message
+		// 设置了 reason=Invalid、code=422 以及消息的 webhook 响应
 		{
 			&errors.StatusError{ErrStatus: metav1.Status{
 				Status:  "Failure",

@@ -24,9 +24,9 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-// skipPrinter allows conditionally suppressing object output via the output field.
-// table objects are suppressed by setting their Rows to nil (allowing column definitions to propagate to the delegate).
-// non-table objects are suppressed by not calling the delegate at all.
+// skipPrinter 允许通过 output 字段有条件地抑制对象输出。
+// 对 table 对象，将其 Rows 设为 nil 来抑制输出（这样列定义仍可传递给委托的打印器）。
+// 对非 table 对象，则完全不调用委托的打印器来抑制输出。
 type skipPrinter struct {
 	delegate printers.ResourcePrinter
 	output   *bool

@@ -122,7 +122,7 @@ func TestRunExposeService(t *testing.T) {
 					Selector: map[string]string{"run": "this"},
 				},
 			},
-			// No --name flag specified below. Service will use the rc's name passed via the 'default-name' parameter
+			// 下面未指定 --name flag。Service 将使用通过 'default-name' 参数传入的 rc 名称
 			flags: map[string]string{"selector": "run=this", "port": "80", "labels": "runas=amayor"},
 			output: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "mayor", Namespace: "", Labels: map[string]string{"runas": "amayor"}},
@@ -1684,7 +1684,7 @@ func TestGenerateService(t *testing.T) {
 				},
 			},
 		},
-		// Fixed #114402 kubectl expose fails for apps with same-port, different-protocol
+		// 修复 #114402：kubectl expose 对于相同端口、不同协议的应用会失败
 		"test #114402": {
 			selector:  "foo=bar,baz=blah",
 			name:      "test",

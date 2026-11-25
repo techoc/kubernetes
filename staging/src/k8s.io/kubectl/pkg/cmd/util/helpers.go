@@ -59,9 +59,9 @@ type debugError interface {
 	DebugError() (msg string, args []interface{})
 }
 
-// AddSourceToErr adds handleResourcePrefix and source string to error message.
-// verb is the string like "creating", "deleting" etc.
-// source is the filename or URL to the template file(*.json or *.yaml), or stdin to use to handle the resource.
+// AddSourceToErr 在错误消息中加入 handleResourcePrefix 和 source 字符串。
+// verb 是类似 "creating"、"deleting" 等的字符串。
+// source 是模板文件（*.json 或 *.yaml）的文件名或 URL，或者是用于处理资源的 stdin。
 func AddSourceToErr(verb string, source string, err error) error {
 	if source != "" {
 		if statusError, ok := err.(apierrors.APIStatus); ok {
@@ -76,30 +76,29 @@ func AddSourceToErr(verb string, source string, err error) error {
 
 var fatalErrHandler = fatal
 
-// BehaviorOnFatal allows you to override the default behavior when a fatal
-// error occurs, which is to call os.Exit(code). You can pass 'panic' as a function
-// here if you prefer the panic() over os.Exit(1).
+// BehaviorOnFatal 允许覆盖发生致命错误时的默认行为，
+// 默认行为是调用 os.Exit(code)。如果更倾向于 panic() 而非 os.Exit(1)，
+// 可以在此处传入 'panic' 函数。
 func BehaviorOnFatal(f func(string, int)) {
 	fatalErrHandler = f
 }
 
-// DefaultBehaviorOnFatal allows you to undo any previous override.  Useful in
-// tests.
+// DefaultBehaviorOnFatal 用于撤销之前的覆盖行为，在测试中很有用。
 func DefaultBehaviorOnFatal() {
 	fatalErrHandler = fatal
 }
 
-// fatal prints the message (if provided) and then exits. If V(99) or greater,
-// klog.Fatal is invoked for extended information. This is intended for maintainer
-// debugging and out of a reasonable range for users.
+// fatal 打印消息（如果提供）然后退出。如果 V(99) 或更高，
+// 会调用 klog.Fatal 以输出更多信息。这是为维护者调试设计的，
+// 超出了普通用户合理使用的范围。
 func fatal(msg string, code int) {
 	// nolint:logcheck // Not using the result of klog.V(99) inside the if
-	// branch is okay, we just use it to determine how to terminate.
+	// 分支中没有使用 klog.V(99) 的结果是可以的，我们只是用它来决定如何终止。
 	if klog.V(99).Enabled() {
 		klog.FatalDepth(2, msg)
 	}
 	if len(msg) > 0 {
-		// add newline if needed
+		// 必要时添加换行符
 		if !strings.HasSuffix(msg, "\n") {
 			msg += "\n"
 		}
@@ -108,33 +107,30 @@ func fatal(msg string, code int) {
 	os.Exit(code)
 }
 
-// ErrExit may be passed to CheckError to instruct it to output nothing but exit with
-// status code 1.
+// ErrExit 可传给 CheckError，指示它不输出任何内容，
+// 仅以状态码 1 退出。
 var ErrExit = fmt.Errorf("exit")
 
-// CheckErr prints a user friendly error to STDERR and exits with a non-zero
-// exit code. Unrecognized errors will be printed with an "error: " prefix.
+// CheckErr 将用户可读的错误信息打印到 STDERR，并以非零退出码退出。
+// 无法识别的错误会加上 "error: " 前缀输出。
 //
-// This method is generic to the command in use and may be used by non-Kubectl
-// commands.
+// 该方法与具体命令无关，也可供非 Kubectl 命令使用。
 func CheckErr(err error) {
 	checkErr(err, fatalErrHandler)
 }
 
-// CheckDiffErr prints a user friendly error to STDERR and exits with a
-// non-zero and non-one exit code. Unrecognized errors will be printed
-// with an "error: " prefix.
+// CheckDiffErr 将用户可读的错误信息打印到 STDERR，并以非零且非 1 的
+// 退出码退出。无法识别的错误会加上 "error: " 前缀输出。
 //
-// This method is meant specifically for `kubectl diff` and may be used
-// by other commands.
+// 该方法专为 `kubectl diff` 设计，也可供其他命令使用。
 func CheckDiffErr(err error) {
 	checkErr(err, func(msg string, code int) {
 		fatalErrHandler(msg, code+1)
 	})
 }
 
-// isInvalidReasonStatusError returns true if this is an API Status error with reason=Invalid.
-// This is distinct from generic 422 errors we want to fall back to generic error handling.
+// isInvalidReasonStatusError 在错误是 reason=Invalid 的 API Status 错误时返回 true。
+// 这不同于普通的 422 错误，后者我们会回退到通用错误处理。
 func isInvalidReasonStatusError(err error) bool {
 	if !apierrors.IsInvalid(err) {
 		return false
@@ -147,10 +143,10 @@ func isInvalidReasonStatusError(err error) bool {
 	return status.Reason == metav1.StatusReasonInvalid
 }
 
-// checkErr formats a given error as a string and calls the passed handleErr
-// func with that string and an kubectl exit code.
+// checkErr 将给定错误格式化为字符串，并以该字符串和 kubectl 退出码
+// 调用传入的 handleErr 函数。
 func checkErr(err error, handleErr func(string, int)) {
-	// unwrap aggregates of 1
+	// 解包只包含一个错误的聚合错误
 	if agg, ok := err.(utilerrors.Aggregate); ok && len(agg.Errors()) == 1 {
 		err = agg.Errors()[0]
 	}
@@ -167,7 +163,7 @@ func checkErr(err error, handleErr func(string, int)) {
 		details := status.Details
 		s := "The request is invalid"
 		if details == nil {
-			// if we have no other details, include the message from the server if present
+			// 如果没有其他详情，则附上服务端返回的消息（如有）
 			if len(status.Message) > 0 {
 				s += ": " + status.Message
 			}
@@ -177,8 +173,8 @@ func checkErr(err error, handleErr func(string, int)) {
 		if len(details.Kind) != 0 || len(details.Name) != 0 {
 			s = fmt.Sprintf("The %s %q is invalid", details.Kind, details.Name)
 		} else if len(status.Message) > 0 && len(details.Causes) == 0 {
-			// only append the message if we have no kind/name details and no causes,
-			// since default invalid error constructors duplicate that information in the message
+			// 仅在没有 kind/name 详情且没有 causes 时才附上该消息，
+			// 因为默认的 invalid 错误构造函数会在消息中重复这些信息
 			s += ": " + status.Message
 		}
 
@@ -207,7 +203,7 @@ func checkErr(err error, handleErr func(string, int)) {
 			handleErr(MultipleErrors(``, err.Errors()), DefaultErrorExitCode)
 		case utilexec.ExitError:
 			handleErr(err.Error(), err.ExitStatus())
-		default: // for any other error type
+		default: // 适用于任何其他错误类型
 			msg, ok := StandardErrorMessage(err)
 			if !ok {
 				msg = err.Error()
@@ -224,7 +220,7 @@ func statusCausesToAggrError(scs []metav1.StatusCause) utilerrors.Aggregate {
 	errs := make([]error, 0, len(scs))
 	errorMsgs := sets.New[string]()
 	for _, sc := range scs {
-		// check for duplicate error messages and skip them
+		// 检查重复的错误消息并跳过
 		msg := fmt.Sprintf("%s: %s", sc.Field, sc.Message)
 		if errorMsgs.Has(msg) {
 			continue
@@ -235,12 +231,11 @@ func statusCausesToAggrError(scs []metav1.StatusCause) utilerrors.Aggregate {
 	return utilerrors.NewAggregate(errs)
 }
 
-// StandardErrorMessage translates common errors into a human readable message, or returns
-// false if the error is not one of the recognized types. It may also log extended
-// information to klog.
+// StandardErrorMessage 将常见错误转换为用户可读的消息；
+// 如果错误不属于已知类型，则返回 false。它还可能向 klog
+// 记录扩展信息。
 //
-// This method is generic to the command in use and may be used by non-Kubectl
-// commands.
+// 该方法与具体命令无关，也可供非 Kubectl 命令使用。
 func StandardErrorMessage(err error) (string, bool) {
 	if debugErr, ok := err.(debugError); ok {
 		msg, args := debugErr.DebugError()
@@ -276,8 +271,8 @@ func StandardErrorMessage(err error) (string, bool) {
 	return "", false
 }
 
-// MultilineError returns a string representing an error that splits sub errors into their own
-// lines. The returned string will end with a newline.
+// MultilineError 返回一个表示错误的字符串，其中每个子错误
+// 各占一行。返回的字符串以换行符结尾。
 func MultilineError(prefix string, err error) string {
 	if agg, ok := err.(utilerrors.Aggregate); ok {
 		errs := utilerrors.Flatten(agg).Errors()
@@ -298,9 +293,9 @@ func MultilineError(prefix string, err error) string {
 	return fmt.Sprintf("%s%s\n", prefix, err)
 }
 
-// PrintErrorWithCauses prints an error's kind, name, and each of the error's causes in a new line.
-// The returned string will end with a newline.
-// Returns true if a case exists to handle the error type, or false otherwise.
+// PrintErrorWithCauses 将错误的 kind、name 以及每个 cause 分别打印在新的一行。
+// 返回的字符串以换行符结尾。
+// 如果存在处理该错误类型的分支，则返回 true，否则返回 false。
 func PrintErrorWithCauses(err error, errOut io.Writer) bool {
 	switch t := err.(type) {
 	case *apierrors.StatusError:
@@ -318,8 +313,8 @@ func PrintErrorWithCauses(err error, errOut io.Writer) bool {
 	return false
 }
 
-// MultipleErrors returns a newline delimited string containing
-// the prefix and referenced errors in standard form.
+// MultipleErrors 返回一个以换行符分隔的字符串，
+// 其中包含前缀及标准格式的各个错误。
 func MultipleErrors(prefix string, errs []error) string {
 	buf := &bytes.Buffer{}
 	for _, err := range errs {
@@ -328,7 +323,7 @@ func MultipleErrors(prefix string, errs []error) string {
 	return buf.String()
 }
 
-// messageForError returns the string representing the error.
+// messageForError 返回表示错误的字符串。
 func messageForError(err error) string {
 	msg, ok := StandardErrorMessage(err)
 	if !ok {
@@ -354,7 +349,7 @@ func GetFlagString(cmd *cobra.Command, flag string) string {
 	return s
 }
 
-// GetFlagStringSlice can be used to accept multiple argument with flag repetition (e.g. -f arg1,arg2 -f arg3 ...)
+// GetFlagStringSlice 可用于通过重复 flag 来接受多个参数（例如 -f arg1,arg2 -f arg3 ...）
 func GetFlagStringSlice(cmd *cobra.Command, flag string) []string {
 	s, err := cmd.Flags().GetStringSlice(flag)
 	if err != nil {
@@ -363,7 +358,7 @@ func GetFlagStringSlice(cmd *cobra.Command, flag string) []string {
 	return s
 }
 
-// GetFlagStringArray can be used to accept multiple argument with flag repetition (e.g. -f arg1 -f arg2 ...)
+// GetFlagStringArray 可用于通过重复 flag 来接受多个参数（例如 -f arg1 -f arg2 ...）
 func GetFlagStringArray(cmd *cobra.Command, flag string) []string {
 	s, err := cmd.Flags().GetStringArray(flag)
 	if err != nil {
@@ -380,7 +375,7 @@ func GetFlagBool(cmd *cobra.Command, flag string) bool {
 	return b
 }
 
-// Assumes the flag has a default value.
+// 假定该 flag 具有默认值。
 func GetFlagInt(cmd *cobra.Command, flag string) int {
 	i, err := cmd.Flags().GetInt(flag)
 	if err != nil {
@@ -389,7 +384,7 @@ func GetFlagInt(cmd *cobra.Command, flag string) int {
 	return i
 }
 
-// Assumes the flag has a default value.
+// 假定该 flag 具有默认值。
 func GetFlagInt32(cmd *cobra.Command, flag string) int32 {
 	i, err := cmd.Flags().GetInt32(flag)
 	if err != nil {
@@ -398,7 +393,7 @@ func GetFlagInt32(cmd *cobra.Command, flag string) int32 {
 	return i
 }
 
-// Assumes the flag has a default value.
+// 假定该 flag 具有默认值。
 func GetFlagInt64(cmd *cobra.Command, flag string) int64 {
 	i, err := cmd.Flags().GetInt64(flag)
 	if err != nil {
@@ -429,33 +424,33 @@ const (
 	// owner: @ardaguclu
 	// kep: https://kep.k8s.io/3104
 	//
-	// Separate kubectl user preferences.
+	// 分离 kubectl 用户偏好设置。
 	KubeRC FeatureGate = "KUBECTL_KUBERC"
 
 	// owner: @justinb
 	// kep: https://kep.k8s.io/3659
 	//
-	// Improved kubectl apply --prune behavior.
+	// 改进 kubectl apply --prune 的行为。
 	ApplySet FeatureGate = "KUBECTL_APPLYSET"
 
 	// owner: @seans
 	// kep: https://kep.k8s.io/4006
 	//
-	// Transition to WebSockets.
+	// 过渡到 WebSockets。
 	RemoteCommandWebsockets FeatureGate = "KUBECTL_REMOTE_COMMAND_WEBSOCKETS"
 	PortForwardWebsockets   FeatureGate = "KUBECTL_PORT_FORWARD_WEBSOCKETS"
 )
 
-// IsEnabled returns true iff environment variable is set to true.
-// All other cases, it returns false.
+// IsEnabled 仅在环境变量被设置为 true 时返回 true，
+// 其他所有情况均返回 false。
 func (f FeatureGate) IsEnabled() bool {
 	return strings.ToLower(os.Getenv(string(f))) == "true"
 }
 
-// IsDisabled returns true iff environment variable is set to false.
-// All other cases, it returns true.
-// This function is used for the cases where feature is enabled by default,
-// but it may be needed to provide a way to ability to disable this feature.
+// IsDisabled 仅在环境变量被设置为 false 时返回 true，
+// 其他所有情况均返回 true。
+// 该函数用于功能默认启用的场景，
+// 此时可能需要提供一种方式来禁用该功能。
 func (f FeatureGate) IsDisabled() bool {
 	return strings.ToLower(os.Getenv(string(f))) == "false"
 }
@@ -485,12 +480,12 @@ func AddJsonFilenameFlag(flags *pflag.FlagSet, value *[]string, usage string) {
 	flags.SetAnnotation("filename", cobra.BashCompFilenameExt, annotations)
 }
 
-// AddKustomizeFlag adds kustomize flag to a command
+// AddKustomizeFlag 为命令添加 kustomize flag
 func AddKustomizeFlag(flags *pflag.FlagSet, value *string) {
 	flags.StringVarP(value, "kustomize", "k", *value, "Process the kustomization directory. This flag can't be used together with -f or -R.")
 }
 
-// AddDryRunFlag adds dry-run flag to a command. Usually used by mutations.
+// AddDryRunFlag 为命令添加 dry-run flag，通常用于变更类操作。
 func AddDryRunFlag(cmd *cobra.Command) {
 	cmd.Flags().String(
 		"dry-run",
@@ -535,16 +530,16 @@ func AddLabelSelectorFlagVar(cmd *cobra.Command, p *string) {
 }
 
 func AddPruningFlags(cmd *cobra.Command, prune *bool, pruneAllowlist *[]string, all *bool, applySetRef *string) {
-	// Flags associated with the original allowlist-based alpha
+	// 与最初基于 allowlist 的 alpha 相关的 flag
 	cmd.Flags().StringArrayVar(pruneAllowlist, "prune-allowlist", *pruneAllowlist, "Overwrite the default allowlist with <group/version/kind> for --prune")
 	cmd.Flags().BoolVar(all, "all", *all, "Select all resources in the namespace of the specified resource types.")
 
-	// Flags associated with the new ApplySet-based alpha
+	// 与新的基于 ApplySet 的 alpha 相关的 flag
 	if ApplySet.IsEnabled() {
 		cmd.Flags().StringVar(applySetRef, "applyset", *applySetRef, "[alpha] The name of the ApplySet that tracks which resources are being managed, for the purposes of determining what to prune. Live resources that are part of the ApplySet but have been removed from the provided configs will be deleted. Format: [RESOURCE][.GROUP]/NAME. A Secret will be used if no resource or group is specified.")
 		cmd.Flags().BoolVar(prune, "prune", *prune, "Automatically delete previously applied resource objects that do not appear in the provided configs. For alpha1, use with either -l or --all. For alpha2, use with --applyset.")
 	} else {
-		// different docs for the shared --prune flag if only alpha1 is enabled
+		// 如果只启用了 alpha1，则共享的 --prune flag 使用不同的说明文档
 		cmd.Flags().BoolVar(prune, "prune", *prune, "Automatically delete resource objects, that do not appear in the configs and are created by either apply or create --save-config. Should be used with either -l or --all.")
 	}
 }
@@ -561,11 +556,11 @@ type ValidateOptions struct {
 	ValidationDirective string
 }
 
-// Merge converts the passed in object to JSON, merges the fragment into it using an RFC7396 JSON Merge Patch,
-// and returns the resulting object
-// TODO: merge assumes JSON serialization, and does not properly abstract API retrieval
+// Merge 将传入的对象转换为 JSON，使用 RFC7396 JSON Merge Patch
+// 将 fragment 合并进去，并返回结果对象
+// TODO: merge 假定使用 JSON 序列化，并且没有恰当地抽象 API 的获取方式
 func Merge(codec runtime.Codec, dst runtime.Object, fragment string) (runtime.Object, error) {
-	// encode dst into versioned json and apply fragment directly too it
+	// 将 dst 编码为带版本的 json，然后直接对其应用 fragment
 	target, err := runtime.Encode(codec, dst)
 	if err != nil {
 		return nil, err
@@ -581,8 +576,8 @@ func Merge(codec runtime.Codec, dst runtime.Object, fragment string) (runtime.Ob
 	return out, nil
 }
 
-// StrategicMerge converts the passed in object to JSON, merges the fragment into it using a Strategic Merge Patch,
-// and returns the resulting object
+// StrategicMerge 将传入的对象转换为 JSON，使用 Strategic Merge Patch
+// 将 fragment 合并进去，并返回结果对象
 func StrategicMerge(codec runtime.Codec, dst runtime.Object, fragment string, dataStruct runtime.Object) (runtime.Object, error) {
 	target, err := runtime.Encode(codec, dst)
 	if err != nil {
@@ -599,8 +594,8 @@ func StrategicMerge(codec runtime.Codec, dst runtime.Object, fragment string, da
 	return out, nil
 }
 
-// JSONPatch converts the passed in object to JSON, performs an RFC6902 JSON Patch using operations specified in the
-// fragment, and returns the resulting object
+// JSONPatch 将传入的对象转换为 JSON，按照 fragment 中指定的操作执行
+// RFC6902 JSON Patch，并返回结果对象
 func JSONPatch(codec runtime.Codec, dst runtime.Object, fragment string) (runtime.Object, error) {
 	target, err := runtime.Encode(codec, dst)
 	if err != nil {
@@ -621,8 +616,8 @@ func JSONPatch(codec runtime.Codec, dst runtime.Object, fragment string) (runtim
 	return out, nil
 }
 
-// DumpReaderToFile writes all data from the given io.Reader to the specified file
-// (usually for temporary use).
+// DumpReaderToFile 将给定 io.Reader 中的所有数据写入指定文件
+// （通常用于临时用途）。
 func DumpReaderToFile(reader io.Reader, filename string) error {
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
@@ -674,7 +669,7 @@ func GetValidationDirective(cmd *cobra.Command) (string, error) {
 			return metav1.FieldValidationStrict, fmt.Errorf(`invalid - validate option %q; must be one of: strict (or true), warn, ignore (or false)`, validateFlag)
 		}
 	}
-	// The flag was a boolean
+	// 该 flag 是布尔值
 	if b {
 		return metav1.FieldValidationStrict, nil
 	}
@@ -684,30 +679,30 @@ func GetValidationDirective(cmd *cobra.Command) (string, error) {
 type DryRunStrategy int
 
 const (
-	// DryRunNone indicates the client will make all mutating calls
+	// DryRunNone 表示客户端将发起所有变更类调用
 	DryRunNone DryRunStrategy = iota
 
-	// DryRunClient, or client-side dry-run, indicates the client will prevent
-	// making mutating calls such as CREATE, PATCH, and DELETE
+	// DryRunClient（即 client-side dry-run）表示客户端将阻止
+	// 发起 CREATE、PATCH 和 DELETE 等变更类调用
 	DryRunClient
 
-	// DryRunServer, or server-side dry-run, indicates the client will send
-	// mutating calls to the APIServer with the dry-run parameter to prevent
-	// persisting changes.
+	// DryRunServer（即 server-side dry-run）表示客户端将携带
+	// dry-run 参数向 APIServer 发送变更类调用，以防止
+	// 变更被持久化。
 	//
-	// Note that clients sending server-side dry-run calls should verify that
-	// the APIServer and the resource supports server-side dry-run, and otherwise
-	// clients should fail early.
+	// 注意，发送 server-side dry-run 调用的客户端应确认
+	// APIServer 和资源支持 server-side dry-run，否则
+	// 客户端应尽早失败。
 	//
-	// If a client sends a server-side dry-run call to an APIServer that doesn't
-	// support server-side dry-run, then the APIServer will persist changes inadvertently.
+	// 如果客户端向不支持 server-side dry-run 的 APIServer
+	// 发送 server-side dry-run 调用，APIServer 将意外地持久化变更。
 	DryRunServer
 )
 
 func GetDryRunStrategy(cmd *cobra.Command) (DryRunStrategy, error) {
 	var dryRunFlag = GetFlagString(cmd, "dry-run")
 	b, err := strconv.ParseBool(dryRunFlag)
-	// The flag is not a boolean
+	// 该 flag 不是布尔值
 	if err != nil {
 		switch dryRunFlag {
 		case cmd.Flag("dry-run").NoOptDefVal:
@@ -723,7 +718,7 @@ func GetDryRunStrategy(cmd *cobra.Command) (DryRunStrategy, error) {
 			return DryRunNone, fmt.Errorf(`Invalid dry-run value (%v). Must be "none", "server", or "client".`, dryRunFlag)
 		}
 	}
-	// The flag was a boolean
+	// 该 flag 是布尔值
 	if b {
 		klog.Warningf(`--dry-run=%v is deprecated (boolean value) and can be replaced with --dry-run=%s.`, dryRunFlag, "client")
 		return DryRunClient, nil
@@ -732,12 +727,11 @@ func GetDryRunStrategy(cmd *cobra.Command) (DryRunStrategy, error) {
 	return DryRunNone, nil
 }
 
-// PrintFlagsWithDryRunStrategy sets a success message at print time for the dry run strategy
+// PrintFlagsWithDryRunStrategy 在打印时根据 dry run 策略设置成功消息
 //
-// TODO(juanvallejo): This can be cleaned up even further by creating
-// a PrintFlags struct that binds the --dry-run flag, and whose
-// ToPrinter method returns a printer that understands how to print
-// this success message.
+// TODO(juanvallejo): 可以进一步清理：创建一个绑定 --dry-run flag 的
+// PrintFlags 结构体，其 ToPrinter 方法返回一个了解如何打印
+// 该成功消息的 printer。
 func PrintFlagsWithDryRunStrategy(printFlags *genericclioptions.PrintFlags, dryRunStrategy DryRunStrategy) *genericclioptions.PrintFlags {
 	switch dryRunStrategy {
 	case DryRunClient:
@@ -748,7 +742,7 @@ func PrintFlagsWithDryRunStrategy(printFlags *genericclioptions.PrintFlags, dryR
 	return printFlags
 }
 
-// GetResourcesAndPairs retrieves resources and "KEY=VALUE or KEY-" pair args from given args
+// GetResourcesAndPairs 从给定参数中提取资源以及形如 "KEY=VALUE 或 KEY-" 的键值对参数
 func GetResourcesAndPairs(args []string, pairType string) (resources []string, pairArgs []string, err error) {
 	foundPair := false
 	for _, s := range args {
@@ -769,7 +763,8 @@ func GetResourcesAndPairs(args []string, pairType string) (resources []string, p
 	return
 }
 
-// ParsePairs retrieves new and remove pairs (if supportRemove is true) from "KEY=VALUE or KEY-" pair args
+// ParsePairs 从 "KEY=VALUE 或 KEY-" 形式的参数中提取新增和删除的键值对
+// （当 supportRemove 为 true 时提取删除项）
 func ParsePairs(pairArgs []string, pairType string, supportRemove bool) (newPairs map[string]string, removePairs []string, err error) {
 	newPairs = map[string]string{}
 	if supportRemove {
@@ -807,8 +802,8 @@ func ParsePairs(pairArgs []string, pairType string, supportRemove bool) (newPair
 	return
 }
 
-// IsSiblingCommandExists receives a pointer to a cobra command and a target string.
-// Returns true if the target string is found in the list of sibling commands.
+// IsSiblingCommandExists 接受一个指向 cobra 命令的指针和一个目标字符串。
+// 如果在同级命令列表中找到了目标字符串，则返回 true。
 func IsSiblingCommandExists(cmd *cobra.Command, targetCmdName string) bool {
 	for _, c := range cmd.Parent().Commands() {
 		if c.Name() == targetCmdName {
@@ -819,8 +814,8 @@ func IsSiblingCommandExists(cmd *cobra.Command, targetCmdName string) bool {
 	return false
 }
 
-// DefaultSubCommandRun prints a command's help string to the specified output if no
-// arguments (sub-commands) are provided, or a usage error otherwise.
+// DefaultSubCommandRun 在没有参数（子命令）时将命令的帮助字符串打印到指定输出，
+// 否则输出用法错误。
 func DefaultSubCommandRun(out io.Writer) func(c *cobra.Command, args []string) {
 	return func(c *cobra.Command, args []string) {
 		c.SetOut(out)
@@ -831,16 +826,16 @@ func DefaultSubCommandRun(out io.Writer) func(c *cobra.Command, args []string) {
 	}
 }
 
-// RequireNoArguments exits with a usage error if extra arguments are provided.
+// RequireNoArguments 在提供了多余参数时以用法错误退出。
 func RequireNoArguments(c *cobra.Command, args []string) {
 	if len(args) > 0 {
 		CheckErr(UsageErrorf(c, "unknown command %q", strings.Join(args, " ")))
 	}
 }
 
-// StripComments will transform a YAML file into JSON, thus dropping any comments
-// in it. Note that if the given file has a syntax error, the transformation will
-// fail and we will manually drop all comments from the file.
+// StripComments 会将 YAML 文件转换为 JSON，从而去掉其中的所有注释。
+// 注意，如果给定文件存在语法错误，转换会失败，
+// 此时我们会手动删除文件中的所有注释。
 func StripComments(file []byte) []byte {
 	stripped := file
 	stripped, err := yaml.ToJSON(stripped)
@@ -850,7 +845,7 @@ func StripComments(file []byte) []byte {
 	return stripped
 }
 
-// ManualStrip is used for dropping comments from a YAML file
+// ManualStrip 用于删除 YAML 文件中的注释
 func ManualStrip(file []byte) []byte {
 	stripped := []byte{}
 	lines := bytes.Split(file, []byte("\n"))
@@ -868,13 +863,13 @@ func ManualStrip(file []byte) []byte {
 	return stripped
 }
 
-// ScaleClientFunc provides a ScalesGetter
+// ScaleClientFunc 提供一个 ScalesGetter
 type ScaleClientFunc func(genericclioptions.RESTClientGetter) (scale.ScalesGetter, error)
 
-// ScaleClientFn gives a way to easily override the function for unit testing if needed.
+// ScaleClientFn 用于在需要时轻松覆盖该函数以进行单元测试。
 var ScaleClientFn ScaleClientFunc = scaleClient
 
-// scaleClient gives you back scale getter
+// scaleClient 返回一个 scale getter
 func scaleClient(restClientGetter genericclioptions.RESTClientGetter) (scale.ScalesGetter, error) {
 	discoveryClient, err := restClientGetter.ToDiscoveryClient()
 	if err != nil {
@@ -900,7 +895,7 @@ func scaleClient(restClientGetter genericclioptions.RESTClientGetter) (scale.Sca
 	return scale.New(restClient, mapper, dynamic.LegacyAPIPathResolverFunc, resolver), nil
 }
 
-// Difference removes any elements of subArray from fullArray and returns the result
+// Difference 从 fullArray 中移除 subArray 中的所有元素并返回结果
 func Difference(fullArray []string, subArray []string) []string {
 	exclude := make(map[string]bool, len(subArray))
 	for _, elem := range subArray {

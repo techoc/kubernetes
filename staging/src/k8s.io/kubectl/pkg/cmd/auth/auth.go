@@ -23,9 +23,9 @@ import (
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
-// NewCmdAuth returns an initialized Command instance for 'auth' sub command
+// NewCmdAuth 返回 'auth' 子命令的已初始化 Command 实例
 func NewCmdAuth(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
-	// Parent command to which all subcommands are added.
+	// 所有子命令都添加到这个父命令上。
 	cmds := &cobra.Command{
 		Use:   "auth",
 		Short: "Inspect authorization",

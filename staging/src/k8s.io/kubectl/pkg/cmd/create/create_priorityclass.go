@@ -51,7 +51,7 @@ var (
 		kubectl create priorityclass high-priority --value=1000 --description="high priority" --preemption-policy="Never"`))
 )
 
-// PriorityClassOptions holds the options for 'create priorityclass' sub command
+// PriorityClassOptions 保存 'create priorityclass' 子命令的选项
 type PriorityClassOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
@@ -71,7 +71,7 @@ type PriorityClassOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewPriorityClassOptions returns an initialized PriorityClassOptions instance
+// NewPriorityClassOptions 返回一个初始化好的 PriorityClassOptions 实例
 func NewPriorityClassOptions(ioStreams genericiooptions.IOStreams) *PriorityClassOptions {
 	return &PriorityClassOptions{
 		Value:            0,
@@ -81,7 +81,7 @@ func NewPriorityClassOptions(ioStreams genericiooptions.IOStreams) *PriorityClas
 	}
 }
 
-// NewCmdCreatePriorityClass is a macro command to create a new priorityClass.
+// NewCmdCreatePriorityClass 是一个用于创建新 priorityClass 的宏命令。
 func NewCmdCreatePriorityClass(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewPriorityClassOptions(ioStreams)
 
@@ -111,7 +111,7 @@ func NewCmdCreatePriorityClass(f cmdutil.Factory, ioStreams genericiooptions.IOS
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *PriorityClassOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -152,7 +152,7 @@ func (o *PriorityClassOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, a
 	return nil
 }
 
-// Run performs the execution of the 'create priorityclass' sub command
+// Run 执行 'create priorityclass' 子命令
 func (o *PriorityClassOptions) Run() error {
 	priorityClass, err := o.createPriorityClass()
 	if err != nil {
@@ -185,7 +185,7 @@ func (o *PriorityClassOptions) Run() error {
 func (o *PriorityClassOptions) createPriorityClass() (*schedulingv1.PriorityClass, error) {
 	preemptionPolicy := corev1.PreemptionPolicy(o.PreemptionPolicy)
 	return &schedulingv1.PriorityClass{
-		// this is ok because we know exactly how we want to be serialized
+		// 这样没问题，因为我们确切知道自己希望如何序列化
 		TypeMeta: metav1.TypeMeta{APIVersion: schedulingv1.SchemeGroupVersion.String(), Kind: "PriorityClass"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: o.Name,

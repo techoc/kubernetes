@@ -72,9 +72,9 @@ var (
 	kubectl events --types=Warning,Normal`))
 )
 
-// EventsFlags directly reflect the information that CLI is gathering via flags.  They will be converted to Options, which
-// reflect the runtime requirements for the command.  This structure reduces the transformation to wiring and makes
-// the logic itself easy to unit test.
+// EventsFlags 直接反映 CLI 通过 flag 收集的信息。它们会被转换为 Options，
+// 后者反映命令运行时的需求。这种结构将转换简化为单纯的接线，并使
+// 逻辑本身易于单元测试。
 type EventsFlags struct {
 	RESTClientGetter genericclioptions.RESTClientGetter
 	PrintFlags       *genericclioptions.PrintFlags
@@ -88,7 +88,7 @@ type EventsFlags struct {
 	genericiooptions.IOStreams
 }
 
-// NewEventsFlags returns a default EventsFlags
+// NewEventsFlags 返回默认的 EventsFlags
 func NewEventsFlags(restClientGetter genericclioptions.RESTClientGetter, streams genericiooptions.IOStreams) *EventsFlags {
 	return &EventsFlags{
 		RESTClientGetter: restClientGetter,
@@ -98,8 +98,8 @@ func NewEventsFlags(restClientGetter genericclioptions.RESTClientGetter, streams
 	}
 }
 
-// EventsOptions is a set of options that allows you to list events.  This is the object reflects the
-// runtime needs of an events command, making the logic itself easy to unit test.
+// EventsOptions 是一组用于列出 event 的选项。该对象反映 events 命令的
+// 运行时需求，使逻辑本身易于单元测试。
 type EventsOptions struct {
 	Namespace     string
 	AllNamespaces bool
@@ -116,7 +116,7 @@ type EventsOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCmdEvents creates a new events command
+// NewCmdEvents 创建一个新的 events 命令
 func NewCmdEvents(restClientGetter genericclioptions.RESTClientGetter, streams genericiooptions.IOStreams) *cobra.Command {
 	flags := NewEventsFlags(restClientGetter, streams)
 
@@ -138,7 +138,7 @@ func NewCmdEvents(restClientGetter genericclioptions.RESTClientGetter, streams g
 	return cmd
 }
 
-// AddFlags registers flags for a cli.
+// AddFlags 为 CLI 注册 flag。
 func (flags *EventsFlags) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&flags.Watch, "watch", "w", flags.Watch, "After listing the requested events, watch for more events.")
 	cmd.Flags().BoolVarP(&flags.AllNamespaces, "all-namespaces", "A", flags.AllNamespaces, "If present, list the requested object(s) across all namespaces. Namespace in current context is ignored even if specified with --namespace.")
@@ -148,7 +148,7 @@ func (flags *EventsFlags) AddFlags(cmd *cobra.Command) {
 	cmdutil.AddChunkSizeFlag(cmd, &flags.ChunkSize)
 }
 
-// ToOptions converts from CLI inputs to runtime inputs.
+// ToOptions 将 CLI 输入转换为运行时输入。
 func (flags *EventsFlags) ToOptions() (*EventsOptions, error) {
 	o := &EventsOptions{
 		AllNamespaces: flags.AllNamespaces,
@@ -218,7 +218,7 @@ func (o *EventsOptions) Validate() error {
 	return nil
 }
 
-// Run retrieves events
+// Run 获取 event
 func (o *EventsOptions) Run() error {
 	ctx := context.TODO()
 	namespace := o.Namespace
@@ -303,7 +303,7 @@ func (o *EventsOptions) runWatch(ctx context.Context, namespace string, listOpti
 	intr := interrupt.New(nil, cancel)
 	intr.Run(func() error {
 		_, err := watchtools.UntilWithoutRetry(cctx, eventWatch, func(e watch.Event) (bool, error) {
-			if e.Type == watch.Deleted { // events are deleted after 1 hour; don't print that
+			if e.Type == watch.Deleted { // event 会在 1 小时后被删除，不要打印这类事件
 				return false, nil
 			}
 
@@ -328,10 +328,10 @@ func (o *EventsOptions) runWatch(ctx context.Context, namespace string, listOpti
 	return nil
 }
 
-// filteredEventType checks given event can be printed
-// by comparing it in filtered event flag.
-// If --event flag is not set by user, this function allows
-// all events to be printed.
+// filteredEventType 通过将给定 event 与过滤用的 event flag 比对，
+// 检查它是否可以打印。
+// 如果用户未设置 --event flag，此函数允许
+// 打印所有 event。
 func (o *EventsOptions) filteredEventType(et string) bool {
 	if len(o.FilterTypes) == 0 {
 		return true
@@ -346,7 +346,7 @@ func (o *EventsOptions) filteredEventType(et string) bool {
 	return false
 }
 
-// SortableEvents implements sort.Interface for []api.Event by time
+// SortableEvents 按时间为 []api.Event 实现 sort.Interface
 type SortableEvents []corev1.Event
 
 func (list SortableEvents) Len() int {
@@ -361,8 +361,8 @@ func (list SortableEvents) Less(i, j int) bool {
 	return eventTime(list[i]).Before(eventTime(list[j]))
 }
 
-// Return the time that should be used for sorting, which can come from
-// various places in corev1.Event.
+// 返回应用于排序的时间，该时间可能来自 corev1.Event 中的
+// 不同字段。
 func eventTime(event corev1.Event) time.Time {
 	if event.Series != nil {
 		return event.Series.LastObservedTime.Time
@@ -373,10 +373,10 @@ func eventTime(event corev1.Event) time.Time {
 	return event.EventTime.Time
 }
 
-// Inspired by k8s.io/cli-runtime/pkg/resource splitResourceTypeName()
+// 灵感来自 k8s.io/cli-runtime/pkg/resource 中的 splitResourceTypeName()
 
-// decodeResourceTypeName handles type/name resource formats and returns a resource tuple
-// (empty or not), whether it successfully found one, and an error
+// decodeResourceTypeName 处理 type/name 格式的资源，返回资源元组
+// （可能为空）、是否成功找到资源，以及错误
 func decodeResourceTypeName(mapper meta.RESTMapper, s string) (gvk schema.GroupVersionKind, name string, found bool, err error) {
 	if !strings.Contains(s, "/") {
 		return

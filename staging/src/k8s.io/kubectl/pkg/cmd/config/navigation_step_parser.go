@@ -44,12 +44,12 @@ func newNavigationSteps(path string) (*navigationSteps, error) {
 	for currPartIndex < len(individualParts) {
 		switch currType.Kind() {
 		case reflect.Map:
-			// if we're in a map, we need to locate a name.  That name may contain dots, so we need to know what tokens are legal for the map's value type
-			// for example, we could have a set request like: `set clusters.10.10.12.56.insecure-skip-tls-verify true`.  We enter this case with
-			// steps representing 10, 10, 12, 56, insecure-skip-tls-verify.  The name is "10.10.12.56", so we want to collect all those parts together and
-			// store them as a single step.  In order to do that, we need to determine what set of tokens is a legal step AFTER the name of the map key
-			// This set of reflective code pulls the type of the map values, uses that type to look up the set of legal tags.  Those legal tags are used to
-			// walk the list of remaining parts until we find a match to a legal tag or the end of the string.  That name is used to burn all the used parts.
+			// 在 map 中时，需要定位一个名称。该名称可能包含点，因此我们需要知道 map 值类型允许哪些 token
+			// 例如，可能有这样的 set 请求：`set clusters.10.10.12.56.insecure-skip-tls-verify true`。进入此分支时，
+			// 各步骤分别为 10、10、12、56、insecure-skip-tls-verify。名称是 "10.10.12.56"，因此我们要收集所有这些部分，
+			// 将它们存储为单个步骤。为此，需要确定在 map 键名之后哪些 token 集合可以构成合法步骤
+			// 下面这段反射代码获取 map 值的类型，用该类型查找合法的 tag 集合。这些合法 tag 用于
+			// 遍历剩余部分列表，直到找到匹配的合法 tag 或字符串末尾。该名称用于消耗所有已使用的部分。
 			mapValueType := currType.Elem().Elem()
 			mapValueOptions, err := getPotentialTypeValues(mapValueType)
 			if err != nil {
@@ -96,15 +96,15 @@ func (s *navigationSteps) moreStepsRemaining() bool {
 	return len(s.steps) > s.currentStepIndex
 }
 
-// findNameStep takes the list of parts and a set of valid tags that can be used after the name.  It then walks the list of parts
-// until it find a valid "next" tag or until it reaches the end of the parts and then builds the name back up out of the individual parts
+// findNameStep 接收部分列表和一组可在名称之后使用的有效 tag。然后遍历该列表，
+// 直到找到有效的 "next" tag 或到达列表末尾，再将各个部分重新拼接成名称
 func findNameStep(parts []string, typeOptions sets.Set[string]) string {
 	if len(parts) == 0 {
 		return ""
 	}
 
 	numberOfPartsInStep := findKnownValue(parts[1:], typeOptions) + 1
-	// if we didn't find a known value, then the entire thing must be a name
+	// 如果未找到已知值，则整个部分必定是一个名称
 	if numberOfPartsInStep == 0 {
 		numberOfPartsInStep = len(parts)
 	}
@@ -113,7 +113,7 @@ func findNameStep(parts []string, typeOptions sets.Set[string]) string {
 	return strings.Join(nextParts, ".")
 }
 
-// getPotentialTypeValues takes a type and looks up the tags used to represent its fields when serialized.
+// getPotentialTypeValues 接收一个类型，并查找序列化时用于表示其字段的 tag。
 func getPotentialTypeValues(typeValue reflect.Type) (map[string]reflect.Type, error) {
 	if typeValue.Kind() == reflect.Pointer {
 		typeValue = typeValue.Elem()

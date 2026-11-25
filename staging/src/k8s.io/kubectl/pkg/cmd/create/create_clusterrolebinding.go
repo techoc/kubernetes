@@ -46,7 +46,7 @@ var (
 		  kubectl create clusterrolebinding cluster-admin --clusterrole=cluster-admin --user=user1 --user=user2 --group=group1`))
 )
 
-// ClusterRoleBindingOptions is returned by NewCmdCreateClusterRoleBinding
+// ClusterRoleBindingOptions 由 NewCmdCreateClusterRoleBinding 返回
 type ClusterRoleBindingOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
@@ -66,7 +66,7 @@ type ClusterRoleBindingOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewClusterRoleBindingOptions creates a new *ClusterRoleBindingOptions with sane defaults
+// NewClusterRoleBindingOptions 创建一个带有合理默认值的 *ClusterRoleBindingOptions
 func NewClusterRoleBindingOptions(ioStreams genericiooptions.IOStreams) *ClusterRoleBindingOptions {
 	return &ClusterRoleBindingOptions{
 		Users:           []string{},
@@ -77,7 +77,7 @@ func NewClusterRoleBindingOptions(ioStreams genericiooptions.IOStreams) *Cluster
 	}
 }
 
-// NewCmdCreateClusterRoleBinding returns an initialized command instance of ClusterRoleBinding
+// NewCmdCreateClusterRoleBinding 返回一个初始化好的 ClusterRoleBinding 命令实例
 func NewCmdCreateClusterRoleBinding(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewClusterRoleBindingOptions(ioStreams)
 
@@ -105,7 +105,7 @@ func NewCmdCreateClusterRoleBinding(f cmdutil.Factory, ioStreams genericiooption
 	cmd.Flags().StringArrayVar(&o.ServiceAccounts, "serviceaccount", o.ServiceAccounts, "Service accounts to bind to the clusterrole, in the format <namespace>:<name>. The flag can be repeated to add multiple service accounts.")
 	cmdutil.AddFieldManagerFlagVar(cmd, &o.FieldManager, "kubectl-create")
 
-	// Completion for relevant flags
+	// 相关 flag 的补全
 	cmdutil.CheckErr(cmd.RegisterFlagCompletionFunc(
 		"clusterrole",
 		func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -115,7 +115,7 @@ func NewCmdCreateClusterRoleBinding(f cmdutil.Factory, ioStreams genericiooption
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *ClusterRoleBindingOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -152,7 +152,7 @@ func (o *ClusterRoleBindingOptions) Complete(f cmdutil.Factory, cmd *cobra.Comma
 	return nil
 }
 
-// Run performs the execution of the 'create clusterrolebinding' sub command
+// Run 执行 'create clusterrolebinding' 子命令
 func (o *ClusterRoleBindingOptions) Run() error {
 	clusterRoleBinding, err := o.createClusterRoleBinding()
 	if err != nil {

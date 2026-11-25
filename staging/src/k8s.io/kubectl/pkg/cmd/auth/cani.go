@@ -44,8 +44,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// CanIOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// CanIOptions 是执行该操作所需数据的起点。新增字段时请添加在这里，而不是
+// 引用 cmd.Flags()
 type CanIOptions struct {
 	AllNamespaces   bool
 	Quiet           bool
@@ -106,11 +106,11 @@ var (
 
 	resourceVerbs       = sets.New[string]("get", "list", "watch", "create", "update", "patch", "delete", "deletecollection", "use", "bind", "impersonate", "*", "approve", "sign", "escalate", "attest")
 	nonResourceURLVerbs = sets.New[string]("get", "put", "post", "head", "options", "delete", "patch", "*")
-	// holds all the server-supported resources that cannot be discovered by clients. i.e. users and groups for the impersonate verb
+	// 保存所有客户端无法发现的、服务端支持的资源，例如 impersonate 动词的 users 和 groups
 	nonStandardResourceNames = sets.New[string]("users", "groups")
 )
 
-// NewCmdCanI returns an initialized Command for 'auth can-i' sub command
+// NewCmdCanI 返回 'auth can-i' 子命令的已初始化 Command
 func NewCmdCanI(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := &CanIOptions{
 		IOStreams: streams,
@@ -149,9 +149,9 @@ func NewCmdCanI(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Co
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *CanIOptions) Complete(f cmdutil.Factory, args []string) error {
-	// Set default WarningPrinter if not already set.
+	// 若尚未设置，则设置默认的 WarningPrinter。
 	if o.WarningPrinter == nil {
 		o.WarningPrinter = printers.NewWarningPrinter(o.ErrOut, printers.WarningPrinterOptions{Color: printers.AllowsColorOutput(o.ErrOut)})
 	}
@@ -206,7 +206,7 @@ func (o *CanIOptions) Complete(f cmdutil.Factory, args []string) error {
 	return nil
 }
 
-// Validate makes sure provided values for CanIOptions are valid
+// Validate 确保 CanIOptions 中提供的值有效
 func (o *CanIOptions) Validate() error {
 	if o.List {
 		if o.Quiet || o.AllNamespaces || o.Subresource != "" {
@@ -248,7 +248,7 @@ func (o *CanIOptions) Validate() error {
 	return nil
 }
 
-// RunAccessList lists all the access current user has
+// RunAccessList 列出当前用户拥有的所有权限
 func (o *CanIOptions) RunAccessList() error {
 	sar := &authorizationv1.SelfSubjectRulesReview{
 		Spec: authorizationv1.SelfSubjectRulesReviewSpec{
@@ -263,7 +263,7 @@ func (o *CanIOptions) RunAccessList() error {
 	return o.printStatus(response.Status)
 }
 
-// RunAccessCheck checks if user has access to a certain resource or non resource URL
+// RunAccessCheck 检查用户是否有权访问某个资源或非资源 URL
 func (o *CanIOptions) RunAccessCheck() (bool, error) {
 	var sar *authorizationv1.SelfSubjectAccessReview
 	if o.NonResourceURL == "" {

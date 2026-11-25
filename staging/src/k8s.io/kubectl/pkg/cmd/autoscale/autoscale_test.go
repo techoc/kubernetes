@@ -235,14 +235,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(10),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(80)),
 								},
@@ -281,14 +281,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: nil,
 					MaxReplicas: int32(10),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(80)),
 								},
@@ -327,14 +327,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(-1),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(80)),
 								},
@@ -404,14 +404,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(1)),
 					MaxReplicas: int32(5),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(70)),
 								},
@@ -450,14 +450,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(8),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(60)),
 								},
@@ -496,14 +496,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(10),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceMemory,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(50)),
 								},
@@ -543,14 +543,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(10),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(70)),
 								},
@@ -559,10 +559,10 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceMemory,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(50)),
 								},
@@ -602,14 +602,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(10),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:         autoscalingv2.AverageValueMetricType,
 									AverageValue: &cpu500m,
 								},
@@ -618,10 +618,10 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceMemory,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(50)),
 								},
@@ -661,14 +661,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(10),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:         autoscalingv2.AverageValueMetricType,
 									AverageValue: &cpu500m,
 								},
@@ -677,10 +677,10 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceMemory,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:               autoscalingv2.UtilizationMetricType,
 									AverageUtilization: ptr.To(int32(50)),
 								},
@@ -722,10 +722,10 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceMemory,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:         autoscalingv2.AverageValueMetricType,
 									AverageValue: &mem512Mi,
 								},
@@ -765,14 +765,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(10),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:         autoscalingv2.AverageValueMetricType,
 									AverageValue: &cpu500m,
 								},
@@ -781,10 +781,10 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceMemory,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:         autoscalingv2.AverageValueMetricType,
 									AverageValue: &mem512Mi,
 								},
@@ -824,14 +824,14 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 					MinReplicas: ptr.To(int32(2)),
 					MaxReplicas: int32(10),
 					Metrics: []autoscalingv2.MetricSpec{
-						// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
+						// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricSpec
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:         autoscalingv2.AverageValueMetricType,
 									AverageValue: &cpu2000m,
 								},
@@ -840,10 +840,10 @@ func TestCreateHorizontalPodAutoscalerV2(t *testing.T) {
 						{
 							Type: autoscalingv2.ResourceMetricSourceType,
 							Resource: &autoscalingv2.ResourceMetricSource{
-								// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
+								// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#ResourceMetricSource
 								Name: corev1.ResourceMemory,
 								Target: autoscalingv2.MetricTarget{
-									// Reference: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
+									// 参考: https://pkg.go.dev/k8s.io/api/autoscaling/v2#MetricTarget
 									Type:         autoscalingv2.AverageValueMetricType,
 									AverageValue: &mem3Gi,
 								},

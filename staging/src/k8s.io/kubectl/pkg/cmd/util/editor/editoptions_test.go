@@ -240,7 +240,7 @@ func TestManagedFieldsExtractAndRestore(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// operate on a copy, so we can compare the original and the modified object
+			// 在副本上操作，以便比较原始对象与修改后的对象
 			objCopy := test.object.DeepCopyObject()
 			var infos []*resource.Info
 			o := NewEditOptions(NormalEditMode, genericiooptions.NewTestIOStreamsDiscard())

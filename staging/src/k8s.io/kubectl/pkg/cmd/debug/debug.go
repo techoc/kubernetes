@@ -112,7 +112,7 @@ var nameSuffixFunc = utilrand.String
 
 type DebugAttachFunc func(ctx context.Context, restClientGetter genericclioptions.RESTClientGetter, cmdPath string, ns, podName, containerName string) error
 
-// DebugOptions holds the options for an invocation of kubectl debug.
+// DebugOptions 保存一次 kubectl debug 调用所需的选项
 type DebugOptions struct {
 	Args               []string
 	ArgsOnly           bool
@@ -157,7 +157,7 @@ type DebugOptions struct {
 	resource.FilenameOptions
 }
 
-// NewDebugOptions returns a DebugOptions initialized with default values.
+// NewDebugOptions 返回一个使用默认值初始化的 DebugOptions。
 func NewDebugOptions(streams genericiooptions.IOStreams) *DebugOptions {
 	return &DebugOptions{
 		Args:               []string{},
@@ -168,7 +168,7 @@ func NewDebugOptions(streams genericiooptions.IOStreams) *DebugOptions {
 	}
 }
 
-// NewCmdDebug returns a cobra command that runs kubectl debug.
+// NewCmdDebug 返回一个运行 kubectl debug 的 cobra 命令。
 func NewCmdDebug(restClientGetter genericclioptions.RESTClientGetter, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewDebugOptions(streams)
 
@@ -217,16 +217,16 @@ func (o *DebugOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.CustomProfileFile, "custom", o.CustomProfileFile, i18n.T("Path to a JSON or YAML file containing a partial container spec to customize built-in debug profiles."))
 }
 
-// Complete finishes run-time initialization of debug.DebugOptions.
+// Complete 完成 debug.DebugOptions 的运行时初始化。
 func (o *DebugOptions) Complete(restClientGetter genericclioptions.RESTClientGetter, cmd *cobra.Command, args []string) error {
 	var err error
 
 	o.PullPolicy = corev1.PullPolicy(cmdutil.GetFlagString(cmd, "image-pull-policy"))
 
-	// Arguments
+	// 参数
 	argsLen := cmd.ArgsLenAtDash()
 	o.TargetNames = args
-	// If there is a dash and there are args after the dash, extract the args.
+	// 如果有破折号且破折号后面还有参数，则提取这些参数。
 	if argsLen >= 0 && len(args) > argsLen {
 		o.TargetNames, o.Args = args[:argsLen], args[argsLen:]
 	}
@@ -237,16 +237,16 @@ func (o *DebugOptions) Complete(restClientGetter genericclioptions.RESTClientGet
 		o.Attach = true
 	}
 
-	// Downstream tools may want to use their own customized
-	// attach function to do extra work or use attach command
-	// with different flags instead of the static one defined in
-	// handleAttachPod. But if this function is not set explicitly,
-	// we fall back to default.
+	// 下游工具可能希望使用自己定制的
+	// attach 函数来完成额外工作，或者使用带有不同 flag 的
+	// attach 命令，而不是 handleAttachPod 中定义的
+	// 静态实现。但如果未显式设置该函数，
+	// 我们回退到默认实现。
 	if o.AttachFunc == nil {
 		o.AttachFunc = o.handleAttachPod
 	}
 
-	// Environment
+	// 环境变量
 	envStrings, err := cmd.Flags().GetStringToString("env")
 	if err != nil {
 		return fmt.Errorf("internal error getting env flag: %v", err)
@@ -261,11 +261,11 @@ func (o *DebugOptions) Complete(restClientGetter genericclioptions.RESTClientGet
 		return err
 	}
 
-	// Record flags that the user explicitly changed from their defaults
+	// 记录用户显式修改过默认值的 flag
 	o.attachChanged = cmd.Flags().Changed("attach")
 	o.shareProcessedChanged = cmd.Flags().Changed("share-processes")
 
-	// Set default WarningPrinter
+	// 设置默认的 WarningPrinter
 	if o.WarningPrinter == nil {
 		o.WarningPrinter = printers.NewWarningPrinter(o.ErrOut, printers.WarningPrinterOptions{Color: printers.AllowsColorOutput(o.ErrOut)})
 	}
@@ -318,7 +318,7 @@ func (o *DebugOptions) Complete(restClientGetter genericclioptions.RESTClientGet
 	return nil
 }
 
-// Validate checks that the provided debug options are specified.
+// Validate 检查所提供的 debug 选项是否已指定。
 func (o *DebugOptions) Validate() error {
 	// Attach
 	if o.Attach && o.attachChanged && len(o.Image) == 0 && len(o.Container) == 0 {
@@ -334,7 +334,7 @@ func (o *DebugOptions) Validate() error {
 			return fmt.Errorf("you must specify an existing container or a new image when specifying args.")
 		}
 	} else {
-		// These flags are exclusive to --copy-to
+		// 这些 flag 仅用于 --copy-to
 		switch {
 		case o.Replace:
 			return fmt.Errorf("--replace may only be used with --copy-to.")
@@ -360,7 +360,7 @@ func (o *DebugOptions) Validate() error {
 	// Pull Policy
 	switch o.PullPolicy {
 	case corev1.PullAlways, corev1.PullIfNotPresent, corev1.PullNever, "":
-		// continue
+		// 继续
 	default:
 		return fmt.Errorf("invalid image pull policy: %s", o.PullPolicy)
 	}
@@ -399,7 +399,7 @@ func (o *DebugOptions) Validate() error {
 		}
 	}
 
-	// Warning for legacy profile
+	// 针对 legacy profile 的警告
 	if o.Profile == ProfileLegacy {
 		fmt.Fprintln(o.ErrOut, `--profile=legacy is deprecated and planned to be removed in v1.39. It is recommended to specify other profile, for example "--profile=general".`) //nolint:errcheck
 	}
@@ -407,7 +407,7 @@ func (o *DebugOptions) Validate() error {
 	return nil
 }
 
-// Run executes a kubectl debug.
+// Run 执行一次 kubectl debug。
 func (o *DebugOptions) Run(restClientGetter genericclioptions.RESTClientGetter, cmd *cobra.Command) error {
 	ctx := context.Background()
 
@@ -455,8 +455,8 @@ func (o *DebugOptions) Run(restClientGetter genericclioptions.RESTClientGetter, 
 	return err
 }
 
-// visitNode handles debugging for node targets by creating a privileged pod running in the host namespaces.
-// Returns an already created pod and container name for subsequent attach, if applicable.
+// visitNode 通过创建一个运行在 host 命名空间中的特权 pod 来处理节点目标的调试。
+// 如适用，返回已创建的 pod 和容器名称，供后续 attach 使用。
 func (o *DebugOptions) visitNode(ctx context.Context, node *corev1.Node) (*corev1.Pod, string, error) {
 	pods := o.podClient.Pods(o.Namespace)
 	debugPod, err := o.generateNodeDebugPod(node)
@@ -471,11 +471,11 @@ func (o *DebugOptions) visitNode(ctx context.Context, node *corev1.Node) (*corev
 	return newPod, newPod.Spec.Containers[0].Name, nil
 }
 
-// visitPod handles debugging for pod targets by (depending on options):
-//  1. Creating an ephemeral debug container in an existing pod, OR
-//  2. Making a copy of pod with certain attributes changed
+// visitPod 根据（取决于选项的）以下方式处理 pod 目标的调试：
+//  1. 在现有 pod 中创建一个临时调试容器，或者
+//  2. 创建一个修改了某些属性的 pod 副本
 //
-// visitPod returns a pod and debug container name for subsequent attach, if applicable.
+// 如适用，visitPod 会返回 pod 和调试容器名称，供后续 attach 使用。
 func (o *DebugOptions) visitPod(ctx context.Context, pod *corev1.Pod) (*corev1.Pod, string, error) {
 	if len(o.CopyTo) > 0 {
 		return o.debugByCopy(ctx, pod)
@@ -483,7 +483,7 @@ func (o *DebugOptions) visitPod(ctx context.Context, pod *corev1.Pod) (*corev1.P
 	return o.debugByEphemeralContainer(ctx, pod)
 }
 
-// debugByEphemeralContainer runs an EphemeralContainer in the target Pod for use as a debug container
+// debugByEphemeralContainer 在目标 Pod 中运行一个 EphemeralContainer 作为调试容器
 func (o *DebugOptions) debugByEphemeralContainer(ctx context.Context, pod *corev1.Pod) (*corev1.Pod, string, error) {
 	klog.V(2).Infof("existing ephemeral containers: %v", pod.Spec.EphemeralContainers)
 	podJS, err := json.Marshal(pod)
@@ -513,8 +513,8 @@ func (o *DebugOptions) debugByEphemeralContainer(ctx context.Context, pod *corev
 	pods := o.podClient.Pods(pod.Namespace)
 	result, err := pods.Patch(ctx, pod.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{}, "ephemeralcontainers")
 	if err != nil {
-		// The apiserver will return a 404 when the EphemeralContainers feature is disabled because the `/ephemeralcontainers` subresource
-		// is missing. Unlike the 404 returned by a missing pod, the status details will be empty.
+		// 当 EphemeralContainers 特性被禁用时，apiserver 会因缺少 `/ephemeralcontainers` 子资源
+		// 而返回 404。与 pod 不存在时返回的 404 不同，此时 status details 将为空。
 		if serr, ok := err.(*errors.StatusError); ok && serr.Status().Reason == metav1.StatusReasonNotFound && serr.ErrStatus.Details.Name == "" {
 			return nil, "", fmt.Errorf("ephemeral containers are disabled for this cluster (error from server: %q)", err)
 		}
@@ -525,8 +525,8 @@ func (o *DebugOptions) debugByEphemeralContainer(ctx context.Context, pod *corev
 	return result, debugContainer.Name, nil
 }
 
-// applyCustomProfile applies given partial container json file on to the profile
-// incorporated debug pod.
+// applyCustomProfile 将给定的部分容器 json 文件应用到 profile
+// 所整合的 debug pod 上。
 func (o *DebugOptions) applyCustomProfile(debugPod *corev1.Pod, containerName string) error {
 	o.CustomProfile.Name = containerName
 	customJS, err := json.Marshal(o.CustomProfile)
@@ -567,8 +567,8 @@ func (o *DebugOptions) applyCustomProfile(debugPod *corev1.Pod, containerName st
 	return nil
 }
 
-// applyCustomProfileEphemeral applies given partial container json file on to the profile
-// incorporated ephemeral container of the pod.
+// applyCustomProfileEphemeral 将给定的部分容器 json 文件应用到 profile
+// 所整合的 pod 临时容器上。
 func (o *DebugOptions) applyCustomProfileEphemeral(debugPod *corev1.Pod, containerName string) error {
 	o.CustomProfile.Name = containerName
 	customJS, err := json.Marshal(o.CustomProfile)
@@ -609,7 +609,7 @@ func (o *DebugOptions) applyCustomProfileEphemeral(debugPod *corev1.Pod, contain
 	return nil
 }
 
-// debugByCopy runs a copy of the target Pod with a debug container added or an original container modified
+// debugByCopy 运行目标 Pod 的一个副本，并添加调试容器或修改原有容器
 func (o *DebugOptions) debugByCopy(ctx context.Context, pod *corev1.Pod) (*corev1.Pod, string, error) {
 	copied, dc, err := o.generatePodCopyWithDebugContainer(pod)
 	if err != nil {
@@ -638,7 +638,7 @@ func (o *DebugOptions) debugByCopy(ctx context.Context, pod *corev1.Pod) (*corev
 	return created, dc, nil
 }
 
-// Display warning message if some capabilities are set by profile and non-root user is specified in .Spec.SecurityContext.RunAsUser.(#1650)
+// 当 profile 设置了某些 capability 且 .Spec.SecurityContext.RunAsUser 指定了非 root 用户时，显示警告消息。（#1650）
 func (o *DebugOptions) displayWarning(container *corev1.Container, pod *corev1.Pod) {
 	if container == nil {
 		return
@@ -664,8 +664,8 @@ func (o *DebugOptions) displayWarning(container *corev1.Container, pod *corev1.P
 	_, _ = fmt.Fprintln(o.ErrOut, `Warning: Non-root user is configured for the entire target Pod, and some capabilities granted by debug profile may not work. Please consider using "--custom" with a custom profile that specifies "securityContext.runAsUser: 0".`)
 }
 
-// generateDebugContainer returns a debugging pod and an EphemeralContainer suitable for use as a debug container
-// in the given pod.
+// generateDebugContainer 返回一个调试 pod 和一个适合在给定 pod 中用作调试容器的
+// EphemeralContainer
 func (o *DebugOptions) generateDebugContainer(pod *corev1.Pod) (*corev1.Pod, *corev1.EphemeralContainer, error) {
 	name := o.computeDebugContainerName(pod)
 	ec := &corev1.EphemeralContainer{
@@ -705,19 +705,19 @@ func (o *DebugOptions) generateDebugContainer(pod *corev1.Pod) (*corev1.Pod, *co
 	return copied, ec, nil
 }
 
-// generateNodeDebugPod generates a debugging pod that schedules on the specified node.
-// The generated pod will run in the host PID, Network & IPC namespaces, and it will have the node's filesystem mounted at /host.
+// generateNodeDebugPod 生成一个调度到指定节点上的调试 pod。
+// 生成的 pod 将运行在宿主机 PID、Network 和 IPC 命名空间中，并将节点文件系统挂载到 /host。
 func (o *DebugOptions) generateNodeDebugPod(node *corev1.Node) (*corev1.Pod, error) {
 	cn := "debugger"
-	// Setting a user-specified container name doesn't make much difference when there's only one container,
-	// but the argument exists for pod debugging so it might be confusing if it didn't work here.
+	// 当只有一个容器时，指定用户自定义容器名并无太大区别，
+	// 但该参数是为 pod 调试而存在的，如果这里不支持可能会让人困惑。
 	if len(o.Container) > 0 {
 		cn = o.Container
 	}
 
-	// The name of the debugging pod is based on the target node, and it's not configurable to
-	// limit the number of command line flags. There may be a collision on the name, but this
-	// should be rare enough that it's not worth the API round trip to check.
+	// 调试 pod 的名称基于目标节点，且不可配置，
+	// 以限制命令行 flag 的数量。名称可能会冲突，但这种情况
+	// 应该非常罕见，不值得为此多一次 API 往返检查。
 	pn := fmt.Sprintf("node-debugger-%s-%s", node.Name, nameSuffixFunc(5))
 	if !o.Quiet {
 		fmt.Fprintf(o.Out, "Creating debugging pod %s with container %s on node %s.\n", pn, cn, node.Name)
@@ -772,7 +772,7 @@ func (o *DebugOptions) generateNodeDebugPod(node *corev1.Node) (*corev1.Pod, err
 	return p, nil
 }
 
-// generatePodCopyWithDebugContainer takes a Pod and returns a copy and the debug container name of that copy
+// generatePodCopyWithDebugContainer 接受一个 Pod，返回其副本及该副本中调试容器的名称
 func (o *DebugOptions) generatePodCopyWithDebugContainer(pod *corev1.Pod) (*corev1.Pod, string, error) {
 	copied := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -783,9 +783,9 @@ func (o *DebugOptions) generatePodCopyWithDebugContainer(pod *corev1.Pod) (*core
 		},
 		Spec: *pod.Spec.DeepCopy(),
 	}
-	// set EphemeralContainers to nil so that the copy of pod can be created
+	// 将 EphemeralContainers 设为 nil，以便创建该 pod 的副本
 	copied.Spec.EphemeralContainers = nil
-	// change ShareProcessNamespace configuration only when commanded explicitly
+	// 仅在显式指定时才更改 ShareProcessNamespace 配置
 	if o.shareProcessedChanged {
 		copied.Spec.ShareProcessNamespace = ptr.To(o.ShareProcesses)
 	}
@@ -793,7 +793,7 @@ func (o *DebugOptions) generatePodCopyWithDebugContainer(pod *corev1.Pod) (*core
 		copied.Spec.NodeName = ""
 	}
 
-	// Apply image mutations
+	// 应用镜像修改
 	for i, c := range copied.Spec.Containers {
 		override := o.SetImages["*"]
 		if img, ok := o.SetImages[c.Name]; ok {
@@ -808,10 +808,10 @@ func (o *DebugOptions) generatePodCopyWithDebugContainer(pod *corev1.Pod) (*core
 
 	c, ok := containerByName[name]
 	if !ok {
-		// Adding a new debug container
+		// 添加一个新的调试容器
 		if len(o.Image) == 0 {
 			if len(o.SetImages) > 0 {
-				// This was a --set-image only invocation
+				// 这是一次仅包含 --set-image 的调用
 				return copied, "", nil
 			}
 			return nil, "", fmt.Errorf("you must specify image when creating new container")
@@ -894,9 +894,9 @@ func containerNameToRef(pod *corev1.Pod) map[string]*corev1.Container {
 	return names
 }
 
-// waitForContainer watches the given pod until the container is running
+// waitForContainer 监视给定 pod 直到容器开始运行
 func (o *DebugOptions) waitForContainer(ctx context.Context, ns, podName, containerName string) (*corev1.Pod, error) {
-	// TODO: expose the timeout
+	// TODO: 暴露超时时间
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(ctx, 0*time.Second)
 	defer cancel()
 
@@ -983,7 +983,7 @@ func (o *DebugOptions) handleAttachPod(ctx context.Context, restClientGetter gen
 
 	status := getContainerStatusByName(pod, containerName)
 	if status == nil {
-		// impossible path
+		// 不可能发生的路径
 		return fmt.Errorf("error getting container status of container name %q: %+v", containerName, err)
 	}
 	if status.State.Terminated != nil {
@@ -1010,7 +1010,7 @@ func getContainerStatusByName(pod *corev1.Pod, containerName string) *corev1.Con
 	return nil
 }
 
-// logOpts logs output from opts to the pods log.
+// logOpts 将 opts 的输出记录到 pod 的日志中。
 func logOpts(ctx context.Context, restClientGetter genericclioptions.RESTClientGetter, pod *corev1.Pod, opts *attach.AttachOptions) error {
 	ctrName, err := opts.GetContainerName(pod)
 	if err != nil {

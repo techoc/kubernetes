@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// this file contains factories with no other dependencies
+// 本文件包含不依赖其他内容的 factory
 
 package util
 
@@ -41,7 +41,7 @@ import (
 type factoryImpl struct {
 	clientGetter genericclioptions.RESTClientGetter
 
-	// Caches OpenAPI document and parsed resources
+	// 缓存 OpenAPI 文档及解析后的资源
 	openAPIParser *openapi.CachedOpenAPIParser
 	oapi          *openapi.CachedOpenAPIGetter
 	parser        sync.Once
@@ -91,7 +91,7 @@ func (f *factoryImpl) DynamicClient() (dynamic.Interface, error) {
 	return dynamic.NewForConfig(clientConfig)
 }
 
-// NewBuilder returns a new resource builder for structured api objects.
+// NewBuilder 为结构化的 API 对象返回一个新的 resource builder。
 func (f *factoryImpl) NewBuilder() *resource.Builder {
 	return resource.NewBuilder(f.clientGetter)
 }
@@ -144,12 +144,11 @@ func (f *factoryImpl) UnstructuredClientForMapping(mapping *meta.RESTMapping) (r
 }
 
 func (f *factoryImpl) Validator(validationDirective string) (validation.Schema, error) {
-	// client-side schema validation is only performed
-	// when the validationDirective is strict.
-	// If the directive is warn, we rely on the ParamVerifyingSchema
-	// to ignore the client-side validation and provide a warning
-	// to the user that attempting warn validation when SS validation
-	// is unsupported is inert.
+	// 仅在 validationDirective 为 strict 时
+	// 才执行客户端 schema 校验。
+	// 如果指令为 warn，则依赖 ParamVerifyingSchema
+	// 忽略客户端校验，并向用户发出警告：在不支持 SS 校验时
+	// 尝试使用 warn 校验不会生效。
 	if validationDirective == metav1.FieldValidationIgnore {
 		return validation.NullSchema{}, nil
 	}
@@ -163,13 +162,13 @@ func (f *factoryImpl) Validator(validationDirective string) (validation.Schema, 
 	if err != nil {
 		return nil, err
 	}
-	// Create the FieldValidationVerifier for use in the ParamVerifyingSchema.
+	// 创建 FieldValidationVerifier，供 ParamVerifyingSchema 使用。
 	discoveryClient, err := f.ToDiscoveryClient()
 	if err != nil {
 		return nil, err
 	}
-	// Memory-cache the OpenAPI V3 responses. The disk cache behavior is determined by
-	// the discovery client.
+	// 将 OpenAPI V3 响应缓存在内存中。磁盘缓存行为由
+	// discovery client 决定。
 	oapiV3Client := cached.NewClient(discoveryClient.OpenAPIV3())
 	queryParam := resource.QueryParamFieldValidation
 	primary := newCachingVerifier(resource.NewQueryParamVerifierV3(dynamicClient, oapiV3Client, queryParam))
@@ -178,21 +177,21 @@ func (f *factoryImpl) Validator(validationDirective string) (validation.Schema, 
 	return validation.NewParamVerifyingSchema(schema, fallback, string(validationDirective)), nil
 }
 
-// OpenAPISchema returns metadata and structural information about
-// Kubernetes object definitions.
+// OpenAPISchema 返回有关 Kubernetes 对象定义的
+// 元信息和结构信息。
 func (f *factoryImpl) OpenAPISchema() (openapi.Resources, error) {
 	openAPIGetter := f.openAPIGetter()
 	if openAPIGetter == nil {
 		return nil, errors.New("no openapi getter")
 	}
 
-	// Lazily initialize the OpenAPIParser once
+	// 延迟初始化 OpenAPIParser，且只初始化一次
 	f.parser.Do(func() {
-		// Create the caching OpenAPIParser
+		// 创建带缓存的 OpenAPIParser
 		f.openAPIParser = openapi.NewOpenAPIParser(f.openAPIGetter())
 	})
 
-	// Delegate to the OpenAPIPArser
+	// 委托给 OpenAPIParser 处理
 	return f.openAPIParser.Parse()
 }
 

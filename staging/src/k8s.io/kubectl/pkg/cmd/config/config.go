@@ -31,7 +31,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// NewCmdConfig creates a command object for the "config" action, and adds all child commands to it.
+// NewCmdConfig 为 "config" 操作创建命令对象，并将所有子命令添加到其中。
 func NewCmdConfig(restClientGetter genericclioptions.RESTClientGetter, pathOptions *clientcmd.PathOptions, streams genericiooptions.IOStreams) *cobra.Command {
 	if len(pathOptions.ExplicitFileFlag) == 0 {
 		pathOptions.ExplicitFileFlag = clientcmd.RecommendedConfigPathFlag
@@ -52,10 +52,10 @@ func NewCmdConfig(restClientGetter genericclioptions.RESTClientGetter, pathOptio
 		Run: cmdutil.DefaultSubCommandRun(streams.ErrOut),
 	}
 
-	// file paths are common to all sub commands
+	// 文件路径对所有子命令通用
 	cmd.PersistentFlags().StringVar(&pathOptions.LoadingRules.ExplicitPath, pathOptions.ExplicitFileFlag, pathOptions.LoadingRules.ExplicitPath, "use a particular kubeconfig file")
 
-	// TODO(juanvallejo): update all subcommands to work with genericiooptions.IOStreams
+	// TODO(juanvallejo): 更新所有子命令以使用 genericiooptions.IOStreams
 	cmd.AddCommand(NewCmdConfigView(streams, pathOptions))
 	cmd.AddCommand(NewCmdConfigSetCluster(streams.Out, pathOptions))
 	cmd.AddCommand(NewCmdConfigSetCredentials(streams.Out, pathOptions))

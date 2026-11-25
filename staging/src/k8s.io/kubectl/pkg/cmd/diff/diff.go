@@ -81,18 +81,18 @@ var (
 		cat service.yaml | kubectl diff -f -`))
 )
 
-// Number of times we try to diff before giving-up
+// 放弃之前尝试 diff 的次数
 const maxRetries = 4
 
-// Constants for masking sensitive values
+// 用于遮盖敏感值的常量
 const (
 	sensitiveMaskDefault = "***"
 	sensitiveMaskBefore  = "*** (before)"
 	sensitiveMaskAfter   = "*** (after)"
 )
 
-// diffError returns the ExitError if the status code is less than 1,
-// nil otherwise.
+// 如果状态码小于 1，diffError 返回 ExitError，
+// 否则返回 nil。
 func diffError(err error) exec.ExitError {
 	if err, ok := err.(exec.ExitError); ok && err.ExitStatus() <= 1 {
 		return err
@@ -143,12 +143,10 @@ func NewCmdDiff(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Co
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckDiffErr(options.Complete(f, cmd, args))
 			cmdutil.CheckDiffErr(options.Validate())
-			// `kubectl diff` propagates the error code from
-			// diff or `KUBECTL_EXTERNAL_DIFF`. Also, we
-			// don't want to print an error if diff returns
-			// error code 1, which simply means that changes
-			// were found. We also don't want kubectl to
-			// return 1 if there was a problem.
+			// `kubectl diff` 会传播 diff 或 `KUBECTL_EXTERNAL_DIFF`
+			// 返回的错误码。此外，我们不想在 diff 返回错误码 1 时
+			// 打印错误，因为这仅仅表示发现了变更；
+			// 同样，出现问题时也不希望 kubectl 返回 1。
 			if err := options.Run(); err != nil {
 				if exitErr := diffError(err); exitErr != nil {
 					cmdutil.CheckErr(cmdutil.ErrExit)
@@ -158,9 +156,9 @@ func NewCmdDiff(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Co
 		},
 	}
 
-	// Flag errors exit with code 1, however according to the diff
-	// command it means changes were found.
-	// Thus, it should return status code greater than 1.
+	// flag 错误以退出码 1 结束，但按照 diff 命令的约定，
+	// 退出码 1 表示发现了变更。
+	// 因此此处应返回大于 1 的状态码。
 	cmd.SetFlagErrorFunc(func(command *cobra.Command, err error) error {
 		cmdutil.CheckDiffErr(cmdutil.UsageErrorf(cmd, "%s", err.Error()))
 		return nil
@@ -180,9 +178,9 @@ func NewCmdDiff(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Co
 	return cmd
 }
 
-// DiffProgram finds and run the diff program. The value of
-// KUBECTL_EXTERNAL_DIFF environment variable will be used a diff
-// program. By default, `diff(1)` will be used.
+// DiffProgram 查找并运行 diff 程序。
+// KUBECTL_EXTERNAL_DIFF 环境变量的值将用作 diff 程序。
+// 默认使用 `diff(1)`。
 type DiffProgram struct {
 	Exec exec.Interface
 	genericiooptions.IOStreams
@@ -195,7 +193,7 @@ func (d *DiffProgram) getCommand(args ...string) (string, exec.Cmd) {
 		diff = diffCommand[0]
 
 		if len(diffCommand) > 1 {
-			// Regex accepts: Alphanumeric (case-insensitive), dash and equal
+			// 正则表达式接受：字母数字（不区分大小写）、短横线和等号
 			isValidChar := regexp.MustCompile(`^[a-zA-Z0-9-=]+$`).MatchString
 			for i := 1; i < len(diffCommand); i++ {
 				if isValidChar(diffCommand[i]) {
@@ -215,12 +213,12 @@ func (d *DiffProgram) getCommand(args ...string) (string, exec.Cmd) {
 	return diff, cmd
 }
 
-// Run runs the detected diff program. `from` and `to` are the directory to diff.
+// Run 运行检测到的 diff 程序。`from` 和 `to` 是要进行 diff 的目录。
 func (d *DiffProgram) Run(from, to string) error {
 	diff, cmd := d.getCommand(from, to)
 	if err := cmd.Run(); err != nil {
-		// Let's not wrap diff errors, or we won't be able to
-		// differentiate them later.
+		// 不要包装 diff 错误，否则之后将无法
+		// 区分它们。
 		if diffErr := diffError(err); diffErr != nil {
 			return diffErr
 		}
@@ -229,10 +227,10 @@ func (d *DiffProgram) Run(from, to string) error {
 	return nil
 }
 
-// Printer is used to print an object.
+// Printer 用于打印对象。
 type Printer struct{}
 
-// Print the object inside the writer w.
+// 将对象打印到 writer w 中。
 func (p *Printer) Print(obj runtime.Object, w io.Writer) error {
 	if obj == nil {
 		return nil
@@ -246,13 +244,13 @@ func (p *Printer) Print(obj runtime.Object, w io.Writer) error {
 
 }
 
-// DiffVersion gets the proper version of objects, and aggregate them into a directory.
+// DiffVersion 获取对象的相应版本，并将它们聚合到一个目录中。
 type DiffVersion struct {
 	Dir  *Directory
 	Name string
 }
 
-// NewDiffVersion creates a new DiffVersion with the named version.
+// NewDiffVersion 使用指定版本创建一个新的 DiffVersion。
 func NewDiffVersion(name string) (*DiffVersion, error) {
 	dir, err := CreateDirectory(name)
 	if err != nil {
@@ -274,7 +272,7 @@ func (v *DiffVersion) getObject(obj Object) (runtime.Object, error) {
 	return nil, fmt.Errorf("Unknown version: %v", v.Name)
 }
 
-// Print prints the object using the printer into a new file in the directory.
+// Print 使用 printer 将对象打印到目录中的新文件里。
 func (v *DiffVersion) Print(name string, obj runtime.Object, printer Printer) error {
 	f, err := v.Dir.NewFile(name)
 	if err != nil {
@@ -284,13 +282,13 @@ func (v *DiffVersion) Print(name string, obj runtime.Object, printer Printer) er
 	return printer.Print(obj, f)
 }
 
-// Directory creates a new temp directory, and allows to easily create new files.
+// Directory 创建一个新的临时目录，并支持在其中轻松创建新文件。
 type Directory struct {
 	Name string
 }
 
-// CreateDirectory does create the actual disk directory, and return a
-// new representation of it.
+// CreateDirectory 创建实际的磁盘目录，
+// 并返回它的新表示。
 func CreateDirectory(prefix string) (*Directory, error) {
 	name, err := os.MkdirTemp("", prefix+"-")
 	if err != nil {
@@ -302,18 +300,18 @@ func CreateDirectory(prefix string) (*Directory, error) {
 	}, nil
 }
 
-// NewFile creates a new file in the directory.
+// NewFile 在目录中创建一个新文件。
 func (d *Directory) NewFile(name string) (*os.File, error) {
 	return os.OpenFile(filepath.Join(d.Name, name), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0700)
 }
 
-// Delete removes the directory recursively.
+// Delete 递归删除该目录。
 func (d *Directory) Delete() error {
 	return os.RemoveAll(d.Name)
 }
 
-// Object is an interface that let's you retrieve multiple version of
-// it.
+// Object 是一个接口，可用于获取对象的
+// 多个版本。
 type Object interface {
 	Live() runtime.Object
 	Merged() (runtime.Object, error)
@@ -321,8 +319,8 @@ type Object interface {
 	Name() string
 }
 
-// InfoObject is an implementation of the Object interface. It gets all
-// the information from the Info object.
+// InfoObject 是 Object 接口的实现，从 Info 对象中获取
+// 全部信息。
 type InfoObject struct {
 	LocalObj        runtime.Object
 	Info            *resource.Info
@@ -338,13 +336,13 @@ type InfoObject struct {
 
 var _ Object = &InfoObject{}
 
-// Returns the live version of the object
+// 返回对象的 live 版本
 func (obj InfoObject) Live() runtime.Object {
 	return obj.Info.Object
 }
 
-// Returns the "merged" object, as it would look like if applied or
-// created.
+// 返回 "merged" 对象，即应用或创建后
+// 呈现的样子。
 func (obj InfoObject) Merged() (runtime.Object, error) {
 	helper := resource.NewHelper(obj.Info.Client, obj.Info.Mapping).
 		DryRun(true).
@@ -367,9 +365,9 @@ func (obj InfoObject) Merged() (runtime.Object, error) {
 		)
 	}
 
-	// Build the patcher, and then apply the patch with dry-run, unless the object doesn't exist, in which case we need to create it.
+	// 构建 patcher，然后以 dry-run 方式应用 patch；如果对象不存在，则需要创建它。
 	if obj.Live() == nil {
-		// Dry-run create if the object doesn't exist.
+		// 如果对象不存在，则以 dry-run 方式创建。
 		return helper.CreateWithOptions(
 			obj.Info.Namespace,
 			true,
@@ -393,8 +391,8 @@ func (obj InfoObject) Merged() (runtime.Object, error) {
 		return nil, err
 	}
 
-	// This is using the patcher from apply, to keep the same behavior.
-	// We plan on replacing this with server-side apply when it becomes available.
+	// 这里使用了 apply 中的 patcher，以保持行为一致。
+	// 待 server-side apply 可用后，我们计划用它替换这段逻辑。
 	patcher := &apply.Patcher{
 		Mapping:         obj.Info.Mapping,
 		Helper:          helper,
@@ -423,7 +421,7 @@ func (obj InfoObject) Name() string {
 	)
 }
 
-// toUnstructured converts a runtime.Object into an unstructured.Unstructured object.
+// toUnstructured 将 runtime.Object 转换为 unstructured.Unstructured 对象。
 func toUnstructured(obj runtime.Object) (*unstructured.Unstructured, error) {
 	if obj == nil {
 		return nil, nil
@@ -437,19 +435,19 @@ func toUnstructured(obj runtime.Object) (*unstructured.Unstructured, error) {
 	return u, nil
 }
 
-// Masker masks sensitive values in an object while preserving diff-able
-// changes.
+// Masker 遮盖对象中的敏感值，同时保留可进行 diff 的
+// 变更。
 //
-// All sensitive values in the object will be masked with a fixed-length
-// asterisk mask. If two values are different, an additional suffix will
-// be added so they can be diff-ed.
+// 对象中的所有敏感值都会被替换为固定长度的
+// 星号掩码。如果两个值不同，会额外添加后缀，
+// 以便能够进行 diff。
 type Masker struct {
 	from *unstructured.Unstructured
 	to   *unstructured.Unstructured
 }
 
 func NewMasker(from, to runtime.Object) (*Masker, error) {
-	// Convert objects to unstructured
+	// 将对象转换为 unstructured
 	f, err := toUnstructured(from)
 	if err != nil {
 		return nil, fmt.Errorf("convert to unstructured: %w", err)
@@ -459,7 +457,7 @@ func NewMasker(from, to runtime.Object) (*Masker, error) {
 		return nil, fmt.Errorf("convert to unstructured: %w", err)
 	}
 
-	// Run masker
+	// 运行 masker
 	m := &Masker{
 		from: f,
 		to:   t,
@@ -470,7 +468,7 @@ func NewMasker(from, to runtime.Object) (*Masker, error) {
 	return m, nil
 }
 
-// dataFromUnstructured returns the underlying nested map in the data key.
+// dataFromUnstructured 返回 data 键下的底层嵌套 map。
 func (m Masker) dataFromUnstructured(u *unstructured.Unstructured) (map[string]interface{}, error) {
 	if u == nil {
 		return nil, nil
@@ -485,9 +483,9 @@ func (m Masker) dataFromUnstructured(u *unstructured.Unstructured) (map[string]i
 	return data, nil
 }
 
-// run compares and patches sensitive values.
+// run 比较并修补敏感值。
 func (m *Masker) run() error {
-	// Extract nested map object
+	// 提取嵌套的 map 对象
 	from, err := m.dataFromUnstructured(m.from)
 	if err != nil {
 		return fmt.Errorf("extract 'data' field: %w", err)
@@ -498,9 +496,9 @@ func (m *Masker) run() error {
 	}
 
 	for k := range from {
-		// Add before/after suffix when key exists on both
-		// objects and are not equal, so that it will be
-		// visible in diffs.
+		// 当两个对象中都存在该键且值不相等时，
+		// 添加 before/after 后缀，使其在 diff 中
+		// 可见。
 		if _, ok := to[k]; ok {
 			if from[k] != to[k] {
 				from[k] = sensitiveMaskBefore
@@ -512,13 +510,13 @@ func (m *Masker) run() error {
 		from[k] = sensitiveMaskDefault
 	}
 	for k := range to {
-		// Mask remaining keys that were not in 'from'
+		// 遮盖 'from' 中不存在的其余键
 		if _, ok := from[k]; !ok {
 			to[k] = sensitiveMaskDefault
 		}
 	}
 
-	// Patch objects with masked data
+	// 用遮盖后的数据修补对象
 	if m.from != nil && from != nil {
 		if err := unstructured.SetNestedMap(m.from.UnstructuredContent(), from, "data"); err != nil {
 			return fmt.Errorf("patch masked data: %w", err)
@@ -532,17 +530,17 @@ func (m *Masker) run() error {
 	return nil
 }
 
-// From returns the masked version of the 'from' object.
+// From 返回 'from' 对象遮盖后的版本。
 func (m *Masker) From() runtime.Object {
 	return m.from
 }
 
-// To returns the masked version of the 'to' object.
+// To 返回 'to' 对象遮盖后的版本。
 func (m *Masker) To() runtime.Object {
 	return m.to
 }
 
-// Differ creates two DiffVersion and diffs them.
+// Differ 创建两个 DiffVersion 并对它们进行 diff。
 type Differ struct {
 	From *DiffVersion
 	To   *DiffVersion
@@ -564,7 +562,7 @@ func NewDiffer(from, to string) (*Differ, error) {
 	return &differ, nil
 }
 
-// Diff diffs to versions of a specific object, and print both versions to directories.
+// Diff 对特定对象的两个版本进行 diff，并将两个版本打印到目录中。
 func (d *Differ) Diff(obj Object, printer Printer, showManagedFields, showSecrets bool) error {
 	from, err := d.From.getObject(obj)
 	if err != nil {
@@ -580,7 +578,7 @@ func (d *Differ) Diff(obj Object, printer Printer, showManagedFields, showSecret
 		to = omitManagedFields(to)
 	}
 
-	// Mask secret values if object is V1Secret
+	// 如果对象是 V1Secret，则遮盖其敏感值
 	if gvk := to.GetObjectKind().GroupVersionKind(); !showSecrets && gvk.Version == "v1" && gvk.Kind == "Secret" {
 		m, err := NewMasker(from, to)
 		if err != nil {
@@ -601,22 +599,22 @@ func (d *Differ) Diff(obj Object, printer Printer, showManagedFields, showSecret
 func omitManagedFields(o runtime.Object) runtime.Object {
 	a, err := meta.Accessor(o)
 	if err != nil {
-		// The object is not a `metav1.Object`, ignore it.
+		// 该对象不是 `metav1.Object`，忽略它。
 		return o
 	}
 	a.SetManagedFields(nil)
 	return o
 }
 
-// Run runs the diff program against both directories.
+// Run 针对两个目录运行 diff 程序。
 func (d *Differ) Run(diff *DiffProgram) error {
 	return diff.Run(d.From.Dir.Name, d.To.Dir.Name)
 }
 
-// TearDown removes both temporary directories recursively.
+// TearDown 递归删除两个临时目录。
 func (d *Differ) TearDown() {
-	d.From.Dir.Delete() // Ignore error
-	d.To.Dir.Delete()   // Ignore error
+	d.From.Dir.Delete() // 忽略错误
+	d.To.Dir.Delete()   // 忽略错误
 }
 
 func isConflict(err error) bool {
@@ -680,9 +678,9 @@ func (o *DiffOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []str
 	return nil
 }
 
-// Run uses the factory to parse file arguments, find the version to
-// diff, and find each Info object for each files, and runs against the
-// differ.
+// Run 使用 factory 解析文件参数，确定要 diff 的版本，
+// 为每个文件找到对应的 Info 对象，然后交给 differ
+// 进行处理。
 func (o *DiffOptions) Run() error {
 	differ, err := NewDiffer("LIVE", "MERGED")
 	if err != nil {
@@ -760,8 +758,8 @@ func (o *DiffOptions) Run() error {
 			klog.Warningf("pruning failed and could not be evaluated err: %v", err)
 		}
 
-		// Print pruned objects into old file and thus, diff
-		// command will show them as pruned.
+		// 将被清理的对象打印到旧文件中，这样 diff
+		// 命令会将它们显示为已清理。
 		for _, p := range prunedObjs {
 			name, err := getObjectName(p)
 			if err != nil {
@@ -781,7 +779,7 @@ func (o *DiffOptions) Run() error {
 	return differ.Run(o.Diff)
 }
 
-// Validate makes sure provided values for DiffOptions are valid
+// Validate 确保为 DiffOptions 提供的值有效
 func (o *DiffOptions) Validate() error {
 	return nil
 }

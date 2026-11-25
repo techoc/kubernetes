@@ -423,7 +423,7 @@ func TestCreateConfigMap(t *testing.T) {
 		},
 	}
 
-	// run all the tests
+	// 运行所有测试
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			var configMap *corev1.ConfigMap = nil

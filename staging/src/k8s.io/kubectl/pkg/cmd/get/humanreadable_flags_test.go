@@ -73,7 +73,7 @@ func TestHumanReadablePrinterSupportsExpectedOptions(t *testing.T) {
 		showKind   bool
 		showLabels bool
 
-		// TODO(juanvallejo): test sorting once it's moved to the HumanReadablePrinter
+		// TODO(juanvallejo): 待排序逻辑移至 HumanReadablePrinter 后再测试排序
 		sortBy       string
 		columnLabels []string
 

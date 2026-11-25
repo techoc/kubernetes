@@ -91,12 +91,12 @@ var (
 		do echo "Checking conditions..."; sleep 1; done`))
 )
 
-// errNoMatchingResources is returned when there is no resources matching a query.
+// 当没有资源匹配查询时，返回 errNoMatchingResources。
 var errNoMatchingResources = errors.New("no matching resources found")
 
-// WaitFlags directly reflect the information that CLI is gathering via flags.  They will be converted to Options, which
-// reflect the runtime requirements for the command.  This structure reduces the transformation to wiring and makes
-// the logic itself easy to unit test
+// WaitFlags 直接反映 CLI 通过标志收集的信息。它们会被转换为 Options，后者
+// 反映命令的运行时需求。这种结构把转换简化为接线，并使
+// 逻辑本身易于单元测试
 type WaitFlags struct {
 	RESTClientGetter     genericclioptions.RESTClientGetter
 	PrintFlags           *genericclioptions.PrintFlags
@@ -108,7 +108,7 @@ type WaitFlags struct {
 	genericiooptions.IOStreams
 }
 
-// NewWaitFlags returns a default WaitFlags
+// NewWaitFlags 返回默认的 WaitFlags
 func NewWaitFlags(restClientGetter genericclioptions.RESTClientGetter, streams genericiooptions.IOStreams) *WaitFlags {
 	return &WaitFlags{
 		RESTClientGetter: restClientGetter,
@@ -127,7 +127,7 @@ func NewWaitFlags(restClientGetter genericclioptions.RESTClientGetter, streams g
 	}
 }
 
-// NewCmdWait returns a cobra command for waiting
+// NewCmdWait 返回用于等待的 cobra 命令
 func NewCmdWait(restClientGetter genericclioptions.RESTClientGetter, streams genericiooptions.IOStreams) *cobra.Command {
 	flags := NewWaitFlags(restClientGetter, streams)
 
@@ -150,7 +150,7 @@ func NewCmdWait(restClientGetter genericclioptions.RESTClientGetter, streams gen
 	return cmd
 }
 
-// AddFlags registers flags for a cli
+// AddFlags 为 CLI 注册标志
 func (flags *WaitFlags) AddFlags(cmd *cobra.Command) {
 	flags.PrintFlags.AddFlags(cmd)
 	flags.ResourceBuilderFlags.AddFlags(cmd.Flags())
@@ -159,7 +159,7 @@ func (flags *WaitFlags) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringArrayVar(&flags.ForCondition, "for", flags.ForCondition, "The condition to wait on: [create|delete|condition=condition-name[=condition-value]|jsonpath='{JSONPath expression}'=[JSONPath value]]. The default condition-value is true. Condition values are compared after Unicode simple case folding, which is a more general form of case-insensitivity. Multiple conditions are supported and AND'ed to each other in a sequential order. If --for=create is passed, it is always waited first.")
 }
 
-// ToOptions converts from CLI inputs to runtime inputs
+// ToOptions 将 CLI 输入转换为运行时输入
 func (flags *WaitFlags) ToOptions(args []string) (*WaitOptions, error) {
 	printer, err := flags.PrintFlags.ToPrinter()
 	if err != nil {
@@ -250,7 +250,7 @@ func conditionFuncsFor(conditions []string, errOut io.Writer) ([]ConditionFunc, 
 	return condFuncs, nil
 }
 
-// newJSONPathParser will create a new JSONPath parser based on the jsonPathExpression
+// newJSONPathParser 根据 jsonPathExpression 创建一个新的 JSONPath 解析器
 func newJSONPathParser(jsonPathExpression string) (*jsonpath.JSONPath, error) {
 	j := jsonpath.New("wait").AllowMissingKeys(true)
 	if jsonPathExpression == "" {
@@ -262,8 +262,8 @@ func newJSONPathParser(jsonPathExpression string) (*jsonpath.JSONPath, error) {
 	return j, nil
 }
 
-// processJSONPathInput will parse and process the provided JSONPath input containing a JSON expression and optionally
-// a value for the matching condition.
+// processJSONPathInput 将解析并处理提供的 JSONPath 输入，其中包含 JSON 表达式，以及可选的
+// 匹配条件的值。
 func processJSONPathInput(input string) (string, string, error) {
 	jsonPathInput := splitJSONPathInput(input)
 	if numOfArgs := len(jsonPathInput); numOfArgs < 1 || numOfArgs > 2 {
@@ -283,8 +283,8 @@ func processJSONPathInput(input string) (string, string, error) {
 	return relaxedJSONPathExp, jsonPathValue, nil
 }
 
-// splitJSONPathInput splits the provided input string on single '='. Double '==' will not cause the string to be
-// split. E.g., "a.b.c====d.e.f===g.h.i===" will split to ["a.b.c====d.e.f==","g.h.i==",""].
+// splitJSONPathInput 按单个 '=' 拆分输入字符串。连续的 '==' 不会导致字符串被
+// 拆分。例如，"a.b.c====d.e.f===g.h.i===" 会被拆分为 ["a.b.c====d.e.f==","g.h.i==",""]。
 func splitJSONPathInput(input string) []string {
 	var output []string
 	var element strings.Builder
@@ -304,22 +304,22 @@ func splitJSONPathInput(input string) []string {
 	return append(output, element.String())
 }
 
-// ResourceLocation holds the location of a resource
+// ResourceLocation 保存资源的位置
 type ResourceLocation struct {
 	GroupResource schema.GroupResource
 	Namespace     string
 	Name          string
 }
 
-// UIDMap maps ResourceLocation with UID
+// UIDMap 将 ResourceLocation 映射到 UID
 type UIDMap map[ResourceLocation]types.UID
 
-// WaitOptions is a set of options that allows you to wait.  This is the object reflects the runtime needs of a wait
-// command, making the logic itself easy to unit test with our existing mocks.
+// WaitOptions 是一组用于等待的选项。该对象反映 wait 命令的运行时需求，
+// 从而使逻辑本身易于用现有 mock 进行单元测试。
 type WaitOptions struct {
 	ResourceFinder genericclioptions.ResourceFinder
-	// UIDMap maps a resource location to a UID.  It is optional, but ConditionFuncs may choose to use it to make the result
-	// more reliable.  For instance, delete can look for UID consistency during delegated calls.
+	// UIDMap 将资源位置映射到 UID。它是可选的，但 ConditionFuncs 可以选择使用它来使结果
+	// 更可靠。例如，delete 可以在委托调用期间检查 UID 是否一致。
 	UIDMap        UIDMap
 	DynamicClient dynamic.Interface
 	Timeout       time.Duration
@@ -330,7 +330,7 @@ type WaitOptions struct {
 	genericiooptions.IOStreams
 }
 
-// ConditionFunc is the interface for providing condition checks
+// ConditionFunc 是提供条件检查的接口
 type ConditionFunc func(ctx context.Context, info *resource.Info, o *WaitOptions) (finalObject runtime.Object, done bool, err error)
 
 // Deprecated: Use RunWaitContext instead, which allows canceling.
@@ -338,16 +338,16 @@ func (o *WaitOptions) RunWait() error {
 	return o.RunWaitContext(context.Background())
 }
 
-// RunWaitContext runs the waiting logic
+// RunWaitContext 运行等待逻辑
 func (o *WaitOptions) RunWaitContext(ctx context.Context) error {
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(ctx, o.Timeout)
 	defer cancel()
 	if containsCondition(o.ForCondition, "create") {
-		// TODO(soltysh): this is not ideal solution, because we're polling every .5s,
-		// and we have to use ResourceFinder, which contains the resource name.
-		// In the long run, we should expose resource information from ResourceFinder,
-		// or functions from ResourceBuilder for parsing those. Lastly, this poll
-		// should be replaced with a ListWatch cache.
+		// TODO(soltysh): 这并非理想方案，因为我们每 0.5 秒轮询一次，
+		// 而且必须使用包含资源名称的 ResourceFinder。
+		// 长远来看，我们应从 ResourceFinder 暴露资源信息，
+		// 或提供 ResourceBuilder 中的函数来解析这些信息。最后，此轮询
+		// 应替换为 ListWatch 缓存。
 		if err := wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, o.Timeout, true, func(context.Context) (done bool, err error) {
 			foundResource := false
 			visitErr := o.ResourceFinder.Do().Visit(func(info *resource.Info, err error) error {

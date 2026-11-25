@@ -34,7 +34,7 @@ var (
 		kubectl config delete-cluster minikube`)
 )
 
-// NewCmdConfigDeleteCluster returns a Command instance for 'config delete-cluster' sub command
+// NewCmdConfigDeleteCluster 返回 'config delete-cluster' 子命令的 Command 实例
 func NewCmdConfigDeleteCluster(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "delete-cluster NAME",

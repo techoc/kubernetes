@@ -36,7 +36,7 @@ func TestPluginPathsAreUnaltered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// cleanup
+	// 清理
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
 			panic(fmt.Errorf("unexpected cleanup error: %v", err))
@@ -56,7 +56,7 @@ func TestPluginPathsAreUnaltered(t *testing.T) {
 		PluginPaths: pluginPaths,
 	}
 
-	// write at least one valid plugin file
+	// 至少写入一个有效的插件文件
 	if _, err := os.CreateTemp(tempDir, "kubectl-"); err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
@@ -68,7 +68,7 @@ func TestPluginPathsAreUnaltered(t *testing.T) {
 		t.Fatalf("unexpected error %v - %v", err, errOut.String())
 	}
 
-	// ensure original paths remain unaltered
+	// 确保原始路径保持不变
 	if len(verifier.seenUnsorted) != len(pluginPaths) {
 		t.Fatalf("saw unexpected plugin paths. Expecting %v, got %v", pluginPaths, verifier.seenUnsorted)
 	}
@@ -84,7 +84,7 @@ func TestPluginPathsAreValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// cleanup
+	// 清理
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
 			panic(fmt.Errorf("unexpected cleanup error: %v", err))
@@ -140,7 +140,7 @@ func TestPluginPathsAreValid(t *testing.T) {
 				PluginPaths: test.pluginPaths,
 			}
 
-			// create files
+			// 创建文件
 			if test.pluginFile != nil {
 				if _, err := test.pluginFile(); err != nil {
 					t.Fatalf("unexpected error creating plugin file: %v", err)

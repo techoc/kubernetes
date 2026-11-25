@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package taints implements utilites for working with taints
+// Package taints 提供处理 taint 的工具函数
 package taint
 
 import (
@@ -27,15 +27,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-// Exported taint constant strings
+// 导出的 taint 常量字符串
 const (
 	MODIFIED  = "modified"
 	TAINTED   = "tainted"
 	UNTAINTED = "untainted"
 )
 
-// parseTaints takes a spec which is an array and creates slices for new taints to be added, taints to be deleted.
-// It also validates the spec. For example, the form `<key>` may be used to remove a taint, but not to add one.
+// parseTaints 接收一个数组形式的 spec，创建待添加 taint 和待删除 taint 的切片。
+// 它还会校验 spec。例如，`<key>` 形式可用于删除 taint，但不能用于添加 taint。
 func parseTaints(spec []string) ([]corev1.Taint, []corev1.Taint, error) {
 	var taints, taintsToRemove []corev1.Taint
 	uniqueTaints := map[corev1.TaintEffect]sets.Set[string]{}
@@ -52,15 +52,15 @@ func parseTaints(spec []string) ([]corev1.Taint, []corev1.Taint, error) {
 			if err != nil {
 				return nil, nil, err
 			}
-			// validate that the taint has an effect, which is required to add the taint
+			// 校验 taint 是否带有 effect，添加 taint 时必须指定 effect
 			if len(newTaint.Effect) == 0 {
 				return nil, nil, fmt.Errorf("invalid taint spec: %v", taintSpec)
 			}
-			// validate if taint is unique by <key, effect>
+			// 按 <key, effect> 校验 taint 是否唯一
 			if len(uniqueTaints[newTaint.Effect]) > 0 && uniqueTaints[newTaint.Effect].Has(newTaint.Key) {
 				return nil, nil, fmt.Errorf("duplicated taints with the same key and effect: %v", newTaint)
 			}
-			// add taint to existingTaints for uniqueness check
+			// 将 taint 加入现有 taint 集合，以便进行唯一性检查
 			if len(uniqueTaints[newTaint.Effect]) == 0 {
 				uniqueTaints[newTaint.Effect] = sets.Set[string]{}
 			}
@@ -72,8 +72,8 @@ func parseTaints(spec []string) ([]corev1.Taint, []corev1.Taint, error) {
 	return taints, taintsToRemove, nil
 }
 
-// parseTaint parses a taint from a string, whose form must be either
-// '<key>=<value>:<effect>', '<key>:<effect>', or '<key>'.
+// parseTaint 从字符串中解析 taint，字符串格式必须为
+// '<key>=<value>:<effect>'、'<key>:<effect>' 或 '<key>' 之一。
 func parseTaint(st string) (corev1.Taint, error) {
 	var taint corev1.Taint
 
@@ -125,12 +125,12 @@ func validateTaintEffect(effect corev1.TaintEffect) error {
 	return nil
 }
 
-// reorganizeTaints returns the updated set of taints, taking into account old taints that were not updated,
-// old taints that were updated, old taints that were deleted, and new taints.
+// reorganizeTaints 返回更新后的 taint 集合，综合考虑未更新的旧 taint、
+// 已更新的旧 taint、已删除的旧 taint 以及新增的 taint。
 func reorganizeTaints(node *corev1.Node, overwrite bool, taintsToAdd []corev1.Taint, taintsToRemove []corev1.Taint) (string, []corev1.Taint, error) {
 	newTaints := append([]corev1.Taint{}, taintsToAdd...)
 	oldTaints := node.Spec.Taints
-	// add taints that already existing but not updated to newTaints
+	// 将已存在但未更新的 taint 加入 newTaints
 	added := addTaints(oldTaints, &newTaints)
 	allErrs, deleted := deleteTaints(taintsToRemove, &newTaints)
 	if (added && deleted) || overwrite {
@@ -141,7 +141,7 @@ func reorganizeTaints(node *corev1.Node, overwrite bool, taintsToAdd []corev1.Ta
 	return UNTAINTED, newTaints, utilerrors.NewAggregate(allErrs)
 }
 
-// deleteTaints deletes the given taints from the node's taintlist.
+// deleteTaints 从节点的 taint 列表中删除给定的 taint。
 func deleteTaints(taintsToRemove []corev1.Taint, newTaints *[]corev1.Taint) ([]error, bool) {
 	allErrs := []error{}
 	var removed bool
@@ -158,8 +158,8 @@ func deleteTaints(taintsToRemove []corev1.Taint, newTaints *[]corev1.Taint) ([]e
 	return allErrs, removed
 }
 
-// addTaints adds the newTaints list to existing ones and updates the newTaints List.
-// TODO: This needs a rewrite to take only the new values instead of appended newTaints list to be consistent.
+// addTaints 将 newTaints 列表加入现有 taint 列表，并更新 newTaints 列表。
+// TODO: 需要重写此函数，使其只接收新值，而不是追加到 newTaints 列表，以保持一致。
 func addTaints(oldTaints []corev1.Taint, newTaints *[]corev1.Taint) bool {
 	for _, oldTaint := range oldTaints {
 		existsInNew := false
@@ -176,7 +176,7 @@ func addTaints(oldTaints []corev1.Taint, newTaints *[]corev1.Taint) bool {
 	return len(oldTaints) != len(*newTaints)
 }
 
-// checkIfTaintsAlreadyExists checks if the node already has taints that we want to add and returns a string with taint keys.
+// checkIfTaintsAlreadyExists 检查节点上是否已存在我们要添加的 taint，并返回由 taint key 组成的字符串。
 func checkIfTaintsAlreadyExists(oldTaints []corev1.Taint, taints []corev1.Taint) string {
 	var existingTaintList = make([]string, 0)
 	for _, taint := range taints {
@@ -189,7 +189,7 @@ func checkIfTaintsAlreadyExists(oldTaints []corev1.Taint, taints []corev1.Taint)
 	return strings.Join(existingTaintList, ",")
 }
 
-// deleteTaintsByKey removes all the taints that have the same key to given taintKey
+// deleteTaintsByKey 删除所有 key 与给定 taintKey 相同的 taint
 func deleteTaintsByKey(taints []corev1.Taint, taintKey string) ([]corev1.Taint, bool) {
 	newTaints := []corev1.Taint{}
 	for i := range taints {
@@ -201,7 +201,7 @@ func deleteTaintsByKey(taints []corev1.Taint, taintKey string) ([]corev1.Taint, 
 	return newTaints, len(taints) != len(newTaints)
 }
 
-// deleteTaint removes all the taints that have the same key and effect to given taintToDelete.
+// deleteTaint 删除所有 key 和 effect 与给定 taintToDelete 相同的 taint。
 func deleteTaint(taints []corev1.Taint, taintToDelete *corev1.Taint) ([]corev1.Taint, bool) {
 	newTaints := []corev1.Taint{}
 	for i := range taints {

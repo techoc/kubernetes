@@ -437,8 +437,8 @@ func TestAnnotateErrors(t *testing.T) {
 
 	for k, testCase := range testCases {
 		t.Run(k, func(t *testing.T) {
-			// tf satisfies cmdutil.Factory, which embeds genericclioptions.RESTClientGetter, so the
-			// same value serves both tab-completion (via ValidArgsFunction) and resource building.
+			// tf 满足 cmdutil.Factory，后者内嵌了 genericclioptions.RESTClientGetter，
+			// 因此同一个值可同时用于 Tab 补全（通过 ValidArgsFunction）和资源构建。
 			tf := cmdtesting.NewTestFactory().WithNamespace("test")
 			defer tf.Cleanup()
 
@@ -583,9 +583,9 @@ func TestRunAnnotate(t *testing.T) {
 	}
 }
 
-// resourceFinderFunc adapts a resource.Result into a ResourceFinder so tests
-// can inject a real *resource.Result (which supports IntoSingleItemImplied)
-// while AnnotateOptions.ResourceBuilder uses the narrower ResourceFinder interface.
+// resourceFinderFunc 将 resource.Result 适配为 ResourceFinder，使测试可以注入一个
+// 真正的 *resource.Result（它支持 IntoSingleItemImplied），
+// 而 AnnotateOptions.ResourceBuilder 使用的则是范围更窄的 ResourceFinder 接口。
 type resourceFinderFunc func() resource.Visitor
 
 func (f resourceFinderFunc) Do() resource.Visitor { return f() }
@@ -630,8 +630,8 @@ func TestAnnotateResourceVersion(t *testing.T) {
 
 	iostreams, _, _, _ := genericiooptions.NewTestIOStreams()
 
-	// Use tf.NewBuilder() (FakeBuilder) which routes through tf.UnstructuredClient
-	// and returns a real *resource.Result supporting IntoSingleItemImplied.
+	// 使用 tf.NewBuilder()（FakeBuilder），它经由 tf.UnstructuredClient 路由，
+	// 并返回支持 IntoSingleItemImplied 的真正 *resource.Result。
 	result := tf.NewBuilder().
 		Unstructured().
 		NamespaceParam("test").DefaultNamespace().

@@ -55,8 +55,8 @@ func TestCertificates(t *testing.T) {
 			command: "approve",
 			args:    []string{"existing"},
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // unstructured get
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // typed get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // 非结构化 get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // 带类型的 get
 				`PUT /apis/certificates.k8s.io/v1/certificatesigningrequests/existing/approval`,
 			},
 			expectOutput: `approved`,
@@ -68,7 +68,7 @@ func TestCertificates(t *testing.T) {
 			command:   "approve",
 			args:      []string{"existing"},
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // unstructured get, 404
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // 非结构化 get，404
 			},
 			expectFailure:   true,
 			expectErrOutput: `could not find the requested resource`,
@@ -78,8 +78,8 @@ func TestCertificates(t *testing.T) {
 			command: "approve",
 			args:    []string{"approved"},
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // unstructured get
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // typed get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // 非结构化 get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // 带类型的 get
 			},
 			expectOutput: `approved`,
 		},
@@ -89,8 +89,8 @@ func TestCertificates(t *testing.T) {
 			args:    []string{"approved"},
 			force:   true,
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // unstructured get
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // typed get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // 非结构化 get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // 带类型的 get
 				`PUT /apis/certificates.k8s.io/v1/certificatesigningrequests/approved/approval`,
 			},
 			expectOutput: `approved`,
@@ -100,8 +100,8 @@ func TestCertificates(t *testing.T) {
 			command: "approve",
 			args:    []string{"denied"},
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // unstructured get
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // typed get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // 非结构化 get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // 带类型的 get
 			},
 			expectFailure:   true,
 			expectErrOutput: `is already Denied`,
@@ -112,8 +112,8 @@ func TestCertificates(t *testing.T) {
 			command: "deny",
 			args:    []string{"existing"},
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // unstructured get
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // typed get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // 非结构化 get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // 带类型的 get
 				`PUT /apis/certificates.k8s.io/v1/certificatesigningrequests/existing/approval`,
 			},
 			expectOutput: `denied`,
@@ -125,7 +125,7 @@ func TestCertificates(t *testing.T) {
 			command:   "deny",
 			args:      []string{"existing"},
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // unstructured get, 404
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/existing`, // 非结构化 get，404
 			},
 			expectFailure:   true,
 			expectErrOutput: `could not find the requested resource`,
@@ -135,8 +135,8 @@ func TestCertificates(t *testing.T) {
 			command: "deny",
 			args:    []string{"denied"},
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // unstructured get
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // typed get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // 非结构化 get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // 带类型的 get
 			},
 			expectOutput: `denied`,
 		},
@@ -146,8 +146,8 @@ func TestCertificates(t *testing.T) {
 			args:    []string{"denied"},
 			force:   true,
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // unstructured get
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // typed get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // 非结构化 get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/denied`, // 带类型的 get
 				`PUT /apis/certificates.k8s.io/v1/certificatesigningrequests/denied/approval`,
 			},
 			expectOutput: `denied`,
@@ -157,8 +157,8 @@ func TestCertificates(t *testing.T) {
 			command: "deny",
 			args:    []string{"approved"},
 			expectActions: []string{
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // unstructured get
-				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // typed get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // 非结构化 get
+				`GET /apis/certificates.k8s.io/v1/certificatesigningrequests/approved`, // 带类型的 get
 			},
 			expectFailure:   true,
 			expectErrOutput: `is already Approved`,
@@ -239,10 +239,10 @@ func TestCertificates(t *testing.T) {
 			tf.ClientConfigVal.Transport = fakeClient.Transport
 
 			defer func() {
-				// Restore cmdutil behavior.
+				// 恢复 cmdutil 的默认行为。
 				cmdutil.DefaultBehaviorOnFatal()
 			}()
-			// Check exit code.
+			// 检查退出码。
 			cmdutil.BehaviorOnFatal(func(e string, code int) {
 				if !tc.expectFailure {
 					t.Log(e)

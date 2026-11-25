@@ -171,9 +171,9 @@ func TestRunAccessCheck(t *testing.T) {
 			actualAllowed, err := test.o.RunAccessCheck()
 			switch {
 			case test.serverErr == nil && err == nil:
-				// pass
+				// 通过
 			case err != nil && test.serverErr != nil && strings.Contains(err.Error(), test.serverErr.Error()):
-				// pass
+				// 通过
 			default:
 				t.Errorf("%s: expected %v, got %v", test.name, test.serverErr, err)
 				return

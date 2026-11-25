@@ -28,44 +28,44 @@ import (
 type debugStyle int
 
 const (
-	// debug by ephemeral container
+	// 通过临时容器调试
 	ephemeral debugStyle = iota
-	// debug by pod copy
+	// 通过 pod 副本调试
 	podCopy
-	// debug node
+	// 调试节点
 	node
-	// unsupported debug methodology
+	// 不支持的调试方式
 	unsupported
 )
 
 const (
-	// NOTE: when you add a new profile string, remember to add it to the
-	// --profile flag's help text
+	// 注意：添加新的 profile 字符串时，记得同时将其加入
+	// --profile flag 的帮助文本
 
-	// ProfileLegacy represents the legacy debugging profile which is backwards-compatible with 1.23 behavior.
+	// ProfileLegacy 表示旧版调试 profile，与 1.23 的行为向后兼容。
 	//
 	// Deprecated: legacyProfile is planned to be removed in v1.39.
 	ProfileLegacy = "legacy"
-	// ProfileGeneral contains a reasonable set of defaults tailored for each debugging journey.
+	// ProfileGeneral 包含针对每种调试过程量身定制的一组合理默认值。
 	ProfileGeneral = "general"
-	// ProfileBaseline is identical to "general" but eliminates privileges that are disallowed under
-	// the baseline security profile, such as host namespaces, host volume, mounts and SYS_PTRACE.
+	// ProfileBaseline 与 "general" 相同，但去掉了 baseline 安全 profile 下不允许的特权，
+	// 例如 host 命名空间、host volume、mount 和 SYS_PTRACE。
 	ProfileBaseline = "baseline"
-	// ProfileRestricted is identical to "baseline" but adds configuration that's required
-	// under the restricted security profile, such as requiring a non-root user and dropping all capabilities.
+	// ProfileRestricted 与 "baseline" 相同，但增加了 restricted 安全 profile 下所需的配置，
+	// 例如要求非 root 用户并丢弃所有 capability。
 	ProfileRestricted = "restricted"
-	// ProfileNetadmin offers elevated privileges for network debugging.
+	// ProfileNetadmin 为网络调试提供提升的特权。
 	ProfileNetadmin = "netadmin"
-	// ProfileSysadmin offers elevated privileges for debugging.
+	// ProfileSysadmin 为调试提供提升的特权。
 	ProfileSysadmin = "sysadmin"
 )
 
 type ProfileApplier interface {
-	// Apply applies the profile to the given container in the pod.
+	// Apply 将此 profile 应用到 pod 中给定的容器。
 	Apply(pod *corev1.Pod, containerName string, target runtime.Object) error
 }
 
-// NewProfileApplier returns a new Options for the given profile name.
+// NewProfileApplier 根据给定的 profile 名称返回一个新的 Options。
 func NewProfileApplier(profile string, kflags KeepFlags) (ProfileApplier, error) {
 	switch profile {
 	case ProfileLegacy:
@@ -108,7 +108,7 @@ type sysadminProfile struct {
 	KeepFlags
 }
 
-// KeepFlags holds the flag set that determine which fields to keep in the copy pod.
+// KeepFlags 保存决定要在副本 pod 中保留哪些字段的 flag 集合。
 type KeepFlags struct {
 	Labels         bool
 	Annotations    bool
@@ -118,21 +118,21 @@ type KeepFlags struct {
 	InitContainers bool
 }
 
-// RemoveLabels removes labels from the pod.
+// RemoveLabels 从 pod 中移除 label。
 func (kflags KeepFlags) RemoveLabels(p *corev1.Pod) {
 	if !kflags.Labels {
 		p.Labels = nil
 	}
 }
 
-// RemoveAnnotations remove annotations from the pod.
+// RemoveAnnotations 从 pod 中移除 annotation。
 func (kflags KeepFlags) RemoveAnnotations(p *corev1.Pod) {
 	if !kflags.Annotations {
 		p.Annotations = nil
 	}
 }
 
-// RemoveProbes remove probes from all containers of the pod.
+// RemoveProbes 从 pod 的所有容器中移除 probe。
 func (kflags KeepFlags) RemoveProbes(p *corev1.Pod) {
 	for i := range p.Spec.Containers {
 		if !kflags.Liveness {
@@ -147,7 +147,7 @@ func (kflags KeepFlags) RemoveProbes(p *corev1.Pod) {
 	}
 }
 
-// RemoveInitContainers remove initContainers from the pod.
+// RemoveInitContainers 从 pod 中移除 initContainer。
 func (kflags KeepFlags) RemoveInitContainers(p *corev1.Pod) {
 	if !kflags.InitContainers {
 		p.Spec.InitContainers = nil
@@ -185,7 +185,7 @@ func (p *legacyProfile) Apply(pod *corev1.Pod, containerName string, target runt
 		p.RemoveLabels(pod)
 
 	case ephemeral:
-		// no additional modifications needed
+		// 无需额外修改
 	}
 
 	return nil
@@ -235,7 +235,7 @@ func (p *baselineProfile) Apply(pod *corev1.Pod, containerName string, target ru
 		shareProcessNamespace(pod)
 
 	case ephemeral, node:
-		// no additional modifications needed
+		// 无需额外修改
 	}
 
 	return nil
@@ -262,7 +262,7 @@ func (p *restrictedProfile) Apply(pod *corev1.Pod, containerName string, target 
 		shareProcessNamespace(pod)
 
 	case ephemeral, node:
-		// no additional modifications needed
+		// 无需额外修改
 	}
 
 	return nil
@@ -288,7 +288,7 @@ func (p *netadminProfile) Apply(pod *corev1.Pod, containerName string, target ru
 		shareProcessNamespace(pod)
 
 	case ephemeral:
-		// no additional modifications needed
+		// 无需额外修改
 	}
 
 	return nil
@@ -308,7 +308,7 @@ func (p *sysadminProfile) Apply(pod *corev1.Pod, containerName string, target ru
 		mountRootPartition(pod, containerName)
 
 	case podCopy:
-		// to mimic general, default and baseline
+		// 模仿 general、default 和 baseline
 		p.RemoveLabels(pod)
 		p.RemoveAnnotations(pod)
 		p.RemoveProbes(pod)
@@ -316,13 +316,13 @@ func (p *sysadminProfile) Apply(pod *corev1.Pod, containerName string, target ru
 		shareProcessNamespace(pod)
 
 	case ephemeral:
-		// no additional modifications needed
+		// 无需额外修改
 	}
 
 	return nil
 }
 
-// mountRootPartition mounts the host's root path at "/host" in the container.
+// mountRootPartition 将宿主机的根路径挂载到容器中的 "/host"。
 func mountRootPartition(p *corev1.Pod, containerName string) {
 	const volumeName = "host-root"
 	p.Spec.Volumes = append(p.Spec.Volumes, corev1.Volume{
@@ -343,23 +343,23 @@ func mountRootPartition(p *corev1.Pod, containerName string) {
 	})
 }
 
-// useHostNamespaces configures the pod to use the host's network, PID, and IPC
-// namespaces.
+// useHostNamespaces 将 pod 配置为使用宿主机的 network、PID 和 IPC
+// 命名空间。
 func useHostNamespaces(p *corev1.Pod) {
 	p.Spec.HostNetwork = true
 	p.Spec.HostPID = true
 	p.Spec.HostIPC = true
 }
 
-// shareProcessNamespace configures all containers in the pod to share the
-// process namespace.
+// shareProcessNamespace 将 pod 中的所有容器配置为共享
+// 进程命名空间。
 func shareProcessNamespace(p *corev1.Pod) {
 	if p.Spec.ShareProcessNamespace == nil {
 		p.Spec.ShareProcessNamespace = ptr.To(true)
 	}
 }
 
-// clearSecurityContext clears the security context for the container.
+// clearSecurityContext 清除容器的安全上下文。
 func clearSecurityContext(p *corev1.Pod, containerName string) {
 	podutils.VisitContainers(&p.Spec, podutils.AllContainers, func(c *corev1.Container, _ podutils.ContainerType) bool {
 		if c.Name != containerName {
@@ -370,7 +370,7 @@ func clearSecurityContext(p *corev1.Pod, containerName string) {
 	})
 }
 
-// setPrivileged configures the containers as privileged.
+// setPrivileged 将容器配置为特权容器。
 func setPrivileged(p *corev1.Pod, containerName string) {
 	podutils.VisitContainers(&p.Spec, podutils.AllContainers, func(c *corev1.Container, _ podutils.ContainerType) bool {
 		if c.Name != containerName {
@@ -384,7 +384,7 @@ func setPrivileged(p *corev1.Pod, containerName string) {
 	})
 }
 
-// disallowRoot configures the container to run as a non-root user.
+// disallowRoot 将容器配置为以非 root 用户运行。
 func disallowRoot(p *corev1.Pod, containerName string) {
 	podutils.VisitContainers(&p.Spec, podutils.AllContainers, func(c *corev1.Container, _ podutils.ContainerType) bool {
 		if c.Name != containerName {
@@ -398,7 +398,7 @@ func disallowRoot(p *corev1.Pod, containerName string) {
 	})
 }
 
-// dropCapabilities drops all Capabilities for the container
+// dropCapabilities 丢弃容器的所有 Capability
 func dropCapabilities(p *corev1.Pod, containerName string) {
 	podutils.VisitContainers(&p.Spec, podutils.AllContainers, func(c *corev1.Container, _ podutils.ContainerType) bool {
 		if c.Name != containerName {
@@ -416,7 +416,7 @@ func dropCapabilities(p *corev1.Pod, containerName string) {
 	})
 }
 
-// allowProcessTracing grants the SYS_PTRACE capability to the container.
+// allowProcessTracing 为容器授予 SYS_PTRACE capability。
 func allowProcessTracing(p *corev1.Pod, containerName string) {
 	podutils.VisitContainers(&p.Spec, podutils.AllContainers, func(c *corev1.Container, _ podutils.ContainerType) bool {
 		if c.Name != containerName {
@@ -427,7 +427,7 @@ func allowProcessTracing(p *corev1.Pod, containerName string) {
 	})
 }
 
-// allowNetadminCapability grants NET_ADMIN and NET_RAW capability to the container.
+// allowNetadminCapability 为容器授予 NET_ADMIN 和 NET_RAW capability。
 func allowNetadminCapability(p *corev1.Pod, containerName string) {
 	podutils.VisitContainers(&p.Spec, podutils.AllContainers, func(c *corev1.Container, _ podutils.ContainerType) bool {
 		if c.Name != containerName {
@@ -449,7 +449,7 @@ func addCapability(c *corev1.Container, capability corev1.Capability) {
 	c.SecurityContext.Capabilities.Add = append(c.SecurityContext.Capabilities.Add, capability)
 }
 
-// disallowPrivilegeEscalation configures the containers not allowed PrivilegeEscalation
+// disallowPrivilegeEscalation 将容器配置为不允许 PrivilegeEscalation
 func disallowPrivilegeEscalation(p *corev1.Pod, containerName string) {
 	podutils.VisitContainers(&p.Spec, podutils.AllContainers, func(c *corev1.Container, _ podutils.ContainerType) bool {
 		if c.Name != containerName {
@@ -463,7 +463,7 @@ func disallowPrivilegeEscalation(p *corev1.Pod, containerName string) {
 	})
 }
 
-// setSeccompProfile apply SeccompProfile to the containers
+// setSeccompProfile 将 SeccompProfile 应用于容器
 func setSeccompProfile(p *corev1.Pod, containerName string) {
 	podutils.VisitContainers(&p.Spec, podutils.AllContainers, func(c *corev1.Container, _ podutils.ContainerType) bool {
 		if c.Name != containerName {

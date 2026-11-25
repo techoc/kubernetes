@@ -49,16 +49,16 @@ var (
 		kubectl create quota best-effort --hard=pods=100 --scopes=BestEffort`))
 )
 
-// QuotaOpts holds the command-line options for 'create quota' sub command
+// QuotaOpts 保存 'create quota' 子命令的命令行选项
 type QuotaOpts struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
-	// The name of a quota object.
+	// quota 对象的名称。
 	Name string
-	// The hard resource limit string before parsing.
+	// 解析前的硬资源限制字符串。
 	Hard string
-	// The scopes of a quota object before parsing.
+	// 解析前 quota 对象的作用域。
 	Scopes           string
 	CreateAnnotation bool
 	FieldManager     string
@@ -72,7 +72,7 @@ type QuotaOpts struct {
 	genericiooptions.IOStreams
 }
 
-// NewQuotaOpts creates a new *QuotaOpts with sane defaults
+// NewQuotaOpts 创建一个带有合理默认值的 *QuotaOpts
 func NewQuotaOpts(ioStreams genericiooptions.IOStreams) *QuotaOpts {
 	return &QuotaOpts{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -80,7 +80,7 @@ func NewQuotaOpts(ioStreams genericiooptions.IOStreams) *QuotaOpts {
 	}
 }
 
-// NewCmdCreateQuota is a macro command to create a new quota
+// NewCmdCreateQuota 是一个用于创建新 quota 的宏命令
 func NewCmdCreateQuota(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewQuotaOpts(ioStreams)
 
@@ -109,7 +109,7 @@ func NewCmdCreateQuota(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) 
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *QuotaOpts) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -157,7 +157,7 @@ func (o *QuotaOpts) Complete(f cmdutil.Factory, cmd *cobra.Command, args []strin
 	return nil
 }
 
-// Validate checks to the QuotaOpts to see if there is sufficient information run the command.
+// Validate 检查 QuotaOpts 是否包含运行命令所需的足够信息。
 func (o *QuotaOpts) Validate() error {
 	if len(o.Name) == 0 {
 		return fmt.Errorf("name must be specified")
@@ -165,7 +165,7 @@ func (o *QuotaOpts) Validate() error {
 	return nil
 }
 
-// Run does the work
+// Run 执行实际工作
 func (o *QuotaOpts) Run() error {
 	resourceQuota, err := o.createQuota()
 	if err != nil {
@@ -222,10 +222,10 @@ func (o *QuotaOpts) createQuota() (*corev1.ResourceQuota, error) {
 	return resourceQuota, nil
 }
 
-// populateResourceListV1 takes strings of form <resourceName1>=<value1>,<resourceName1>=<value2>
-// and returns ResourceList.
+// populateResourceListV1 接受形如 <resourceName1>=<value1>,<resourceName1>=<value2> 的字符串，
+// 并返回 ResourceList。
 func populateResourceListV1(spec string) (corev1.ResourceList, error) {
-	// empty input gets a nil response to preserve generator test expected behaviors
+	// 空输入返回 nil，以保持生成器测试的预期行为
 	if spec == "" {
 		return nil, nil
 	}
@@ -248,7 +248,7 @@ func populateResourceListV1(spec string) (corev1.ResourceList, error) {
 }
 
 func parseScopes(spec string) ([]corev1.ResourceQuotaScope, error) {
-	// empty input gets a nil response to preserve test expected behaviors
+	// 空输入返回 nil，以保持测试的预期行为
 	if spec == "" {
 		return nil, nil
 	}
@@ -256,7 +256,7 @@ func parseScopes(spec string) ([]corev1.ResourceQuotaScope, error) {
 	scopes := strings.Split(spec, ",")
 	result := make([]corev1.ResourceQuotaScope, 0, len(scopes))
 	for _, scope := range scopes {
-		// intentionally do not verify the scope against the valid scope list. This is done by the apiserver anyway.
+		// 故意不根据有效 scope 列表校验 scope。apiserver 反正也会做这件事。
 
 		if scope == "" {
 			return nil, fmt.Errorf("invalid resource quota scope \"\"")

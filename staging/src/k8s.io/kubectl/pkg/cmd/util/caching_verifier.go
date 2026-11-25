@@ -23,14 +23,14 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 )
 
-// cachingVerifier wraps the given Verifier to cache return values forever.
+// cachingVerifier 包装给定的 Verifier，永久缓存其返回值。
 type cachingVerifier struct {
 	cache map[schema.GroupVersionKind]error
 	mu    sync.RWMutex
 	next  resource.Verifier
 }
 
-// newCachingVerifier creates a new cache using the given underlying verifier.
+// newCachingVerifier 使用给定的底层 verifier 创建一个新的缓存。
 func newCachingVerifier(next resource.Verifier) *cachingVerifier {
 	return &cachingVerifier{
 		cache: make(map[schema.GroupVersionKind]error),
@@ -38,9 +38,9 @@ func newCachingVerifier(next resource.Verifier) *cachingVerifier {
 	}
 }
 
-// HasSupport implements resource.Verifier. It cached return values from the underlying verifier forever.
+// HasSupport 实现 resource.Verifier。它永久缓存来自底层 verifier 的返回值。
 func (cv *cachingVerifier) HasSupport(gvk schema.GroupVersionKind) error {
-	// Try to get the cached value.
+	// 尝试获取缓存的值。
 	cv.mu.RLock()
 	err, ok := cv.cache[gvk]
 	cv.mu.RUnlock()
@@ -48,10 +48,10 @@ func (cv *cachingVerifier) HasSupport(gvk schema.GroupVersionKind) error {
 		return err
 	}
 
-	// Cache miss. Get the actual result.
+	// 缓存未命中，获取实际结果。
 	err = cv.next.HasSupport(gvk)
 
-	// Update the cache.
+	// 更新缓存。
 	cv.mu.Lock()
 	cv.cache[gvk] = err
 	cv.mu.Unlock()

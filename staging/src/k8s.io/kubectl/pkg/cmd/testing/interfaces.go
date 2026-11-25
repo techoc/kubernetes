@@ -21,8 +21,8 @@ import (
 	client "k8s.io/client-go/rest"
 )
 
-// RESTClient is a client helper for dealing with RESTful resources
-// in a generic way.
+// RESTClient 是一个以通用方式处理 RESTful 资源的客户端辅助工具。
+// 资源。
 type RESTClient interface {
 	Get() *client.Request
 	Post() *client.Request

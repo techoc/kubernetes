@@ -25,8 +25,8 @@ type crlfWriter struct {
 	io.Writer
 }
 
-// NewCRLFWriter implements a CR/LF line ending writer used for normalizing
-// text for Windows platforms.
+// NewCRLFWriter 实现了一个使用 CR/LF 行尾的写入器，用于在 Windows 平台上
+// 规范化文本。
 func NewCRLFWriter(w io.Writer) io.Writer {
 	return crlfWriter{w}
 }

@@ -51,7 +51,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// GetOptions contains the input to the get command.
+// GetOptions 包含 get 命令的输入。
 type GetOptions struct {
 	PrintFlags             *PrintFlags
 	ToPrinter              func(*meta.RESTMapping, *bool, bool, bool) (printers.ResourcePrinterFunc, error)
@@ -144,7 +144,7 @@ const (
 	useServerPrintColumns = "server-print"
 )
 
-// NewGetOptions returns a GetOptions with default chunk size 500.
+// NewGetOptions 返回一个默认分块大小为 500 的 GetOptions。
 func NewGetOptions(parent string, streams genericiooptions.IOStreams) *GetOptions {
 	return &GetOptions{
 		PrintFlags: NewGetPrintFlags(),
@@ -156,8 +156,8 @@ func NewGetOptions(parent string, streams genericiooptions.IOStreams) *GetOption
 	}
 }
 
-// NewCmdGet creates a command object for the generic "get" action, which
-// retrieves one or more resources from a server.
+// NewCmdGet 为通用的 "get" 操作创建命令对象，该操作
+// 从服务端获取一个或多个资源。
 func NewCmdGet(parent string, f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewGetOptions(parent, streams)
 
@@ -167,7 +167,7 @@ func NewCmdGet(parent string, f cmdutil.Factory, streams genericiooptions.IOStre
 		Short:                 i18n.T("Display one or many resources"),
 		Long:                  getLong + "\n\n" + cmdutil.SuggestAPIResources(parent),
 		Example:               getExample,
-		// ValidArgsFunction is set when this function is called so that we have access to the util package
+		// 在调用此函数时设置 ValidArgsFunction，以便能够访问 util 包
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate())
@@ -193,7 +193,7 @@ func NewCmdGet(parent string, f cmdutil.Factory, streams genericiooptions.IOStre
 	return cmd
 }
 
-// Complete takes the command arguments and factory and infers any remaining options.
+// Complete 接收命令参数和 factory，并推断其余选项。
 func (o *GetOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	if len(o.Raw) > 0 {
 		if len(args) > 0 {
@@ -217,8 +217,8 @@ func (o *GetOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []stri
 
 	o.NoHeaders = cmdutil.GetFlagBool(cmd, "no-headers")
 
-	// TODO (soltysh): currently we don't support custom columns
-	// with server side print. So in these cases force the old behavior.
+	// TODO (soltysh): 目前服务端打印不支持自定义列，
+	// 因此在这些情况下强制使用旧行为。
 	outputOption := cmd.Flags().Lookup("output").Value.String()
 	if strings.Contains(outputOption, "custom-columns") || outputOption == "yaml" || strings.Contains(outputOption, "json") {
 		o.ServerPrint = false
@@ -229,13 +229,13 @@ func (o *GetOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []stri
 		templateArg = *o.PrintFlags.TemplateFlags.TemplateArgument
 	}
 
-	// human readable printers have special conversion rules, so we determine if we're using one.
+	// 人类可读打印器有特殊的转换规则，因此需要判断是否在使用它。
 	if (len(*o.PrintFlags.OutputFormat) == 0 && len(templateArg) == 0) || *o.PrintFlags.OutputFormat == "wide" {
 		o.IsHumanReadablePrinter = true
 	}
 
 	o.ToPrinter = func(mapping *meta.RESTMapping, outputObjects *bool, withNamespace bool, withKind bool) (printers.ResourcePrinterFunc, error) {
-		// make a new copy of current flags / opts before mutating
+		// 在修改之前，先复制一份当前的 flags / opts
 		printFlags := o.PrintFlags.Copy()
 
 		if mapping != nil {
@@ -294,7 +294,7 @@ func (o *GetOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []stri
 	return nil
 }
 
-// Validate checks the set of flags provided by the user.
+// Validate 检查用户提供的标志集合。
 func (o *GetOptions) Validate() error {
 	if len(o.Raw) > 0 {
 		if o.Watch || o.WatchOnly || len(o.LabelSelector) > 0 {
@@ -325,20 +325,20 @@ func (o *GetOptions) Validate() error {
 	return nil
 }
 
-// OriginalPositioner and NopPositioner is required for swap/sort operations of data in table format
+// 对 table 格式的数据进行交换/排序操作时需要 OriginalPositioner 和 NopPositioner
 type OriginalPositioner interface {
 	OriginalPosition(int) int
 }
 
-// NopPositioner and OriginalPositioner is required for swap/sort operations of data in table format
+// 对 table 格式的数据进行交换/排序操作时需要 NopPositioner 和 OriginalPositioner
 type NopPositioner struct{}
 
-// OriginalPosition returns the original position from NopPositioner object
+// OriginalPosition 从 NopPositioner 对象返回原始位置
 func (t *NopPositioner) OriginalPosition(ix int) int {
 	return ix
 }
 
-// RuntimeSorter holds the required objects to perform sorting of runtime objects
+// RuntimeSorter 持有对 runtime 对象进行排序所需的对象
 type RuntimeSorter struct {
 	field      string
 	decoder    runtime.Decoder
@@ -346,10 +346,10 @@ type RuntimeSorter struct {
 	positioner OriginalPositioner
 }
 
-// Sort performs the sorting of runtime objects
+// Sort 执行对 runtime 对象的排序
 func (r *RuntimeSorter) Sort() error {
-	// a list is only considered "sorted" if there are 0 or 1 items in it
-	// AND (if 1 item) the item is not a Table object
+	// 只有当列表中包含 0 或 1 个项时，才认为它是"已排序的"，
+	// 并且（如果有 1 个项）该项不是 Table 对象
 	if len(r.objects) == 0 {
 		return nil
 	}
@@ -378,9 +378,9 @@ func (r *RuntimeSorter) Sort() error {
 		}
 	}
 
-	// we use a NopPositioner when dealing with Table objects
-	// because the objects themselves are not swapped, but rather
-	// the rows in each object are swapped / sorted.
+	// 处理 Table 对象时使用 NopPositioner，
+	// 因为被交换/排序的不是对象本身，
+	// 而是每个对象中的行。
 	r.positioner = &NopPositioner{}
 
 	if includesRuntimeObjs && includesTable {
@@ -390,8 +390,8 @@ func (r *RuntimeSorter) Sort() error {
 		return nil
 	}
 
-	// if not dealing with a Table response from the server, assume
-	// all objects are runtime.Object as usual, and sort using old method.
+	// 如果处理的不是来自服务端的 Table 响应，则照常假设
+	// 所有对象都是 runtime.Object，并使用旧方法排序。
 	var err error
 	if r.positioner, err = SortObjects(r.decoder, r.objects, r.field); err != nil {
 		return err
@@ -399,7 +399,7 @@ func (r *RuntimeSorter) Sort() error {
 	return nil
 }
 
-// OriginalPosition returns the original position of a runtime object
+// OriginalPosition 返回 runtime 对象的原始位置
 func (r *RuntimeSorter) OriginalPosition(ix int) int {
 	if r.positioner == nil {
 		return 0
@@ -407,13 +407,13 @@ func (r *RuntimeSorter) OriginalPosition(ix int) int {
 	return r.positioner.OriginalPosition(ix)
 }
 
-// WithDecoder allows custom decoder to be set for testing
+// WithDecoder 允许设置自定义解码器以用于测试
 func (r *RuntimeSorter) WithDecoder(decoder runtime.Decoder) *RuntimeSorter {
 	r.decoder = decoder
 	return r
 }
 
-// NewRuntimeSorter returns a new instance of RuntimeSorter
+// NewRuntimeSorter 返回一个新的 RuntimeSorter 实例
 func NewRuntimeSorter(objects []runtime.Object, sortBy string) *RuntimeSorter {
 	parsedField, err := RelaxedJSONPathExpression(sortBy)
 	if err != nil {
@@ -438,14 +438,14 @@ func (o *GetOptions) transformRequests(req *rest.Request) {
 		"application/json",
 	}, ","))
 
-	// if sorting, ensure we receive the full object in order to introspect its fields via jsonpath
+	// 如果要排序，确保接收到完整对象，以便通过 jsonpath 检查其字段
 	if len(o.SortBy) > 0 {
 		req.Param("includeObject", "Object")
 	}
 }
 
-// Run performs the get operation.
-// TODO: remove the need to pass these arguments, like other commands.
+// Run 执行 get 操作。
+// TODO: 像其他命令一样，去掉传递这些参数的必要性。
 func (o *GetOptions) Run(f cmdutil.Factory, args []string) error {
 	if len(o.Raw) > 0 {
 		restClient, err := f.RESTClient()
@@ -460,8 +460,8 @@ func (o *GetOptions) Run(f cmdutil.Factory, args []string) error {
 
 	chunkSize := o.ChunkSize
 	if len(o.SortBy) > 0 {
-		// TODO(juanvallejo): in the future, we could have the client use chunking
-		// to gather all results, then sort them all at the end to reduce server load.
+		// TODO(juanvallejo): 将来可以让客户端使用分块
+		// 收集所有结果，最后统一排序，以减轻服务端负载。
 		chunkSize = 0
 	}
 
@@ -516,9 +516,9 @@ func (o *GetOptions) Run(f cmdutil.Factory, args []string) error {
 	var printer printers.ResourcePrinter
 	var lastMapping *meta.RESTMapping
 
-	// track if we write any output
+	// 跟踪是否写入了任何输出
 	trackingWriter := &trackingWriterWrapper{Delegate: o.Out}
-	// output an empty line separating output
+	// 输出一个空行来分隔输出内容
 	separatorWriter := &separatorWriterWrapper{Delegate: trackingWriter}
 
 	w := printers.GetNewTabWriter(separatorWriter)
@@ -545,11 +545,11 @@ func (o *GetOptions) Run(f cmdutil.Factory, args []string) error {
 			w.Flush()
 			w.SetRememberedWidths(nil)
 
-			// add linebreaks between resource groups (if there is more than one)
-			// when it satisfies all following 3 conditions:
-			// 1) it's not the first resource group
-			// 2) it has row header
-			// 3) we've written output since the last time we started a new set of headers
+			// 在资源组之间添加换行（如果有多个资源组），
+			// 需满足以下全部三个条件：
+			// 1）不是第一个资源组
+			// 2）带有行表头
+			// 3）自上次输出新表头以来已写入过内容
 			if lastMapping != nil && !o.NoHeaders && trackingWriter.Written > 0 {
 				separatorWriter.SetReady(true)
 			}
@@ -570,7 +570,7 @@ func (o *GetOptions) Run(f cmdutil.Factory, args []string) error {
 	}
 	w.Flush()
 	if trackingWriter.Written == 0 && !o.IgnoreNotFound && len(allErrs) == 0 {
-		// if we wrote no output, and had no errors, and are not ignoring NotFound, be sure we output something
+		// 如果没有写入任何输出、没有错误且不忽略 NotFound，请确保输出一些内容
 		if allResourcesNamespaced {
 			fmt.Fprintf(o.ErrOut, "No resources found in %s namespace.\n", o.Namespace)
 		} else {
@@ -596,8 +596,8 @@ type separatorWriterWrapper struct {
 }
 
 func (s *separatorWriterWrapper) Write(p []byte) (n int, err error) {
-	// If we're about to write non-empty bytes and `s` is ready,
-	// we prepend an empty line to `p` and reset `s.Read`.
+	// 如果即将写入非空字节且 `s` 已就绪，
+	// 就在 `p` 前面加一个空行，并重置 `s.Read`。
 	if len(p) != 0 && s.Ready {
 		fmt.Fprintln(s.Delegate)
 		s.Ready = false
@@ -609,8 +609,8 @@ func (s *separatorWriterWrapper) SetReady(state bool) {
 	s.Ready = state
 }
 
-// watch starts a client-side watch of one or more resources.
-// TODO: remove the need for arguments here.
+// watch 启动对一个或多个资源的客户端 watch。
+// TODO: 在此去掉对参数的需要。
 func (o *GetOptions) watch(f cmdutil.Factory, args []string) error {
 	r := f.NewBuilder().
 		Unstructured().
@@ -629,7 +629,7 @@ func (o *GetOptions) watch(f cmdutil.Factory, args []string) error {
 	}
 	infos, err := r.Infos()
 	if err != nil {
-		// Ignore "NotFound" error when ignore-not-found is set to true
+		// 当 ignore-not-found 设为 true 时，忽略 "NotFound" 错误
 		if apierrors.IsNotFound(err) && o.IgnoreNotFound {
 			return nil
 		}
@@ -648,15 +648,15 @@ func (o *GetOptions) watch(f cmdutil.Factory, args []string) error {
 		return err
 	}
 
-	// watching from resourceVersion 0, starts the watch at ~now and
-	// will return an initial watch event.  Starting form ~now, rather
-	// the rv of the object will insure that we start the watch from
-	// inside the watch window, which the rv of the object might not be.
+	// 从 resourceVersion 0 开始 watch，会从大约当前时刻开始，并
+	// 返回初始的 watch 事件。从大约当前时刻（而非对象自身的 rv）开始，
+	// 可以确保 watch 的起点位于
+	// watch 窗口之内，而对象的 rv 可能并不在此窗口内。
 	rv := "0"
 	isList := meta.IsListType(obj)
 	if isList {
-		// the resourceVersion of list objects is ~now but won't return
-		// an initial watch event
+		// list 对象的 resourceVersion 大约是当前时刻，但不会返回
+		// 初始 watch 事件
 		rv, err = meta.NewAccessor().ResourceVersion(obj)
 		if err != nil {
 			return err
@@ -665,7 +665,7 @@ func (o *GetOptions) watch(f cmdutil.Factory, args []string) error {
 
 	writer := printers.GetNewTabWriter(o.Out)
 
-	// print the current object
+	// 打印当前对象
 	var objsToPrint []runtime.Object
 	if isList {
 		objsToPrint, _ = meta.ExtractList(obj)
@@ -682,14 +682,14 @@ func (o *GetOptions) watch(f cmdutil.Factory, args []string) error {
 	}
 	writer.Flush()
 	if isList {
-		// we can start outputting objects now, watches started from lists don't emit synthetic added events
+		// 现在可以开始输出对象了，从 list 启动的 watch 不会发出合成的 added 事件
 		*outputObjects = true
 	} else {
-		// suppress output, since watches started for individual items emit a synthetic ADDED event first
+		// 抑制输出，因为从单个项启动的 watch 会先发出一个合成的 ADDED 事件
 		*outputObjects = false
 	}
 
-	// print watched changes
+	// 打印 watch 到的变更
 	w, err := r.Watch(rv)
 	if err != nil {
 		return err
@@ -708,7 +708,7 @@ func (o *GetOptions) watch(f cmdutil.Factory, args []string) error {
 				return false, err
 			}
 			writer.Flush()
-			// after processing at least one event, start outputting objects
+			// 处理完至少一个事件后，开始输出对象
 			*outputObjects = true
 			return false, nil
 		})
@@ -718,10 +718,10 @@ func (o *GetOptions) watch(f cmdutil.Factory, args []string) error {
 }
 
 func (o *GetOptions) printGeneric(r *resource.Result) error {
-	// we flattened the data from the builder, so we have individual items, but now we'd like to either:
-	// 1. if there is more than one item, combine them all into a single list
-	// 2. if there is a single item and that item is a list, leave it as its specific list
-	// 3. if there is a single item and it is not a list, leave it as a single item
+	// 我们已经将 builder 中的数据展平，得到的是单个项，但现在我们希望：
+	// 1. 如果有多个项，将它们全部合并为一个列表
+	// 2. 如果只有一个项且该项是列表，则保留为其原有的具体列表类型
+	// 3. 如果只有一个项且不是列表，则保留为单个项
 	var errs []error
 	singleItemImplied := false
 	infos, err := r.IntoSingleItemImplied(&singleItemImplied).Infos()
@@ -743,10 +743,10 @@ func (o *GetOptions) printGeneric(r *resource.Result) error {
 
 	var obj runtime.Object
 	if !singleItemImplied || len(infos) != 1 {
-		// we have zero or multple items, so coerce all items into a list.
-		// we don't want an *unstructured.Unstructured list yet, as we
-		// may be dealing with non-unstructured objects. Compose all items
-		// into an corev1.List, and then decode using an unstructured scheme.
+		// 我们有零个或多个项，因此将所有项强制转换为一个列表。
+		// 暂时不想要 *unstructured.Unstructured 列表，因为可能
+		// 处理的是非 unstructured 对象。先将所有项组合成
+		// corev1.List，再用 unstructured scheme 解码。
 		list := corev1.List{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "List",
@@ -780,7 +780,7 @@ func (o *GetOptions) printGeneric(r *resource.Result) error {
 			return err
 		}
 
-		// take the items and create a new list for display
+		// 取出这些项并创建一个新列表用于展示
 		list := &unstructured.UnstructuredList{
 			Object: map[string]interface{}{
 				"kind":       "List",

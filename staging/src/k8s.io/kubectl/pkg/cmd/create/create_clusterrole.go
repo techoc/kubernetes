@@ -57,11 +57,11 @@ var (
 		# Create a cluster role name "monitoring" with AggregationRule specified
 		kubectl create clusterrole monitoring --aggregation-rule="rbac.example.com/aggregate-to-monitoring=true"`))
 
-	// Valid nonResource verb list for validation.
+	// 用于校验的有效 nonResource 动词列表。
 	validNonResourceVerbs = []string{"*", "get", "post", "put", "delete", "patch", "head", "options"}
 )
 
-// CreateClusterRoleOptions is returned by NewCmdCreateClusterRole
+// CreateClusterRoleOptions 由 NewCmdCreateClusterRole 返回
 type CreateClusterRoleOptions struct {
 	*CreateRoleOptions
 	NonResourceURLs []string
@@ -69,7 +69,7 @@ type CreateClusterRoleOptions struct {
 	FieldManager    string
 }
 
-// NewCmdCreateClusterRole initializes and returns new ClusterRoles command
+// NewCmdCreateClusterRole 初始化并返回一个新的 ClusterRoles 命令
 func NewCmdCreateClusterRole(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	c := &CreateClusterRoleOptions{
 		CreateRoleOptions: NewCreateRoleOptions(ioStreams),
@@ -103,9 +103,9 @@ func NewCmdCreateClusterRole(f cmdutil.Factory, ioStreams genericiooptions.IOStr
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (c *CreateClusterRoleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
-	// Remove duplicate nonResourceURLs
+	// 移除重复的 nonResourceURL
 	nonResourceURLs := []string{}
 	for _, n := range c.NonResourceURLs {
 		if !arrayContains(nonResourceURLs, n) {
@@ -117,7 +117,7 @@ func (c *CreateClusterRoleOptions) Complete(f cmdutil.Factory, cmd *cobra.Comman
 	return c.CreateRoleOptions.Complete(f, cmd, args)
 }
 
-// Validate makes sure there is no discrepency in CreateClusterRoleOptions
+// Validate 确保 CreateClusterRoleOptions 中没有不一致之处
 func (c *CreateClusterRoleOptions) Validate() error {
 	if c.Name == "" {
 		return fmt.Errorf("name must be specified")
@@ -130,7 +130,7 @@ func (c *CreateClusterRoleOptions) Validate() error {
 		return nil
 	}
 
-	// validate verbs.
+	// 校验动词。
 	if len(c.Verbs) == 0 {
 		return fmt.Errorf("at least one verb must be specified")
 	}
@@ -139,7 +139,7 @@ func (c *CreateClusterRoleOptions) Validate() error {
 		return fmt.Errorf("one of resource or nonResourceURL must be specified")
 	}
 
-	// validate resources
+	// 校验资源
 	if len(c.Resources) > 0 {
 		for _, v := range c.Verbs {
 			if !arrayContains(validResourceVerbs, v) {
@@ -151,7 +151,7 @@ func (c *CreateClusterRoleOptions) Validate() error {
 		}
 	}
 
-	//validate non-resource-url
+	// 校验非资源 URL
 	if len(c.NonResourceURLs) > 0 {
 		for _, v := range c.Verbs {
 			if !arrayContains(validNonResourceVerbs, v) {
@@ -178,10 +178,10 @@ func (c *CreateClusterRoleOptions) Validate() error {
 
 }
 
-// RunCreateRole creates a new clusterRole
+// RunCreateRole 创建一个新的 clusterRole
 func (c *CreateClusterRoleOptions) RunCreateRole() error {
 	clusterRole := &rbacv1.ClusterRole{
-		// this is ok because we know exactly how we want to be serialized
+		// 这样没问题，因为我们确切知道自己希望如何序列化
 		TypeMeta: metav1.TypeMeta{APIVersion: rbacv1.SchemeGroupVersion.String(), Kind: "ClusterRole"},
 	}
 	clusterRole.Name = c.Name
@@ -207,7 +207,7 @@ func (c *CreateClusterRoleOptions) RunCreateRole() error {
 		return err
 	}
 
-	// Create ClusterRole.
+	// 创建 ClusterRole。
 	if c.DryRunStrategy != cmdutil.DryRunClient {
 		createOptions := metav1.CreateOptions{}
 		if c.FieldManager != "" {

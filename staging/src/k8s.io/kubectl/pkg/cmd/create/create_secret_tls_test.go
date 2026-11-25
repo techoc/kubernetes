@@ -160,7 +160,7 @@ func TestCreateSecretTLS(t *testing.T) {
 		},
 	}
 
-	// Run all the tests
+	// 运行所有测试
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			secretTLSOptions := CreateSecretTLSOptions{

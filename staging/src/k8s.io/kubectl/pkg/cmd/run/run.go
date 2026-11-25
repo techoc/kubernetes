@@ -291,7 +291,7 @@ func (o *RunOptions) Complete(f cmdutil.Factory, cmd *cobra.Command) error {
 }
 
 func (o *RunOptions) Validate(args []string) error {
-	// Let kubectl run follow rules for `--`, see #13004 issue
+	// 让 kubectl run 遵循 `--` 的规则，参见 issue #13004
 	if len(args) == 0 || o.ArgsLenAtDash == 0 {
 		return fmt.Errorf("NAME is required for run")
 	}
@@ -398,9 +398,9 @@ func (o *RunOptions) Run(f cmdutil.Factory, cmd *cobra.Command, args []string) e
 		var pod *corev1.Pod
 		waitForExitCode := !o.LeaveStdinOpen && (o.RestartPolicy == corev1.RestartPolicyNever || o.RestartPolicy == corev1.RestartPolicyOnFailure)
 		if waitForExitCode {
-			// we need different exit condition depending on restart policy
-			// for Never it can either fail or succeed, for OnFailure only
-			// success matters
+			// 根据 restart policy 的不同，需要不同的退出条件：
+			// 对于 Never，失败或成功都可以；对于 OnFailure，
+			// 只有成功才算数
 			exitCondition := podCompleted
 			if o.RestartPolicy == corev1.RestartPolicyOnFailure {
 				exitCondition = podSucceeded
@@ -410,7 +410,7 @@ func (o *RunOptions) Run(f cmdutil.Factory, cmd *cobra.Command, args []string) e
 				return err
 			}
 		} else {
-			// after removal is done, return successfully if we are not interested in the exit code
+			// 移除完成后，如果我们不关心退出码，则成功返回
 			return nil
 		}
 
@@ -422,7 +422,7 @@ func (o *RunOptions) Run(f cmdutil.Factory, cmd *cobra.Command, args []string) e
 			if len(pod.Status.ContainerStatuses) == 0 || pod.Status.ContainerStatuses[0].State.Terminated == nil {
 				return unknownRcErr
 			}
-			// assume here that we have at most one status because kubectl-run only creates one container per pod
+			// 此处可以假设最多只有一个 status，因为 kubectl-run 每个 pod 只创建一个容器
 			rc := pod.Status.ContainerStatuses[0].State.Terminated.ExitCode
 			if rc == 0 {
 				return unknownRcErr
@@ -471,7 +471,7 @@ func (o *RunOptions) removeCreatedObjects(f cmdutil.Factory, createdObjects []*R
 	return nil
 }
 
-// waitForPod watches the given pod until the exitCondition is true
+// waitForPod 监视给定 pod 直到 exitCondition 为 true
 func waitForPod(podClient corev1client.PodsGetter, ns, name string, timeout time.Duration, exitCondition watchtools.ConditionFunc) (*corev1.Pod, error) {
 	ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), timeout)
 	defer cancel()
@@ -519,7 +519,7 @@ func handleAttachPod(f cmdutil.Factory, podClient corev1client.PodsGetter, ns, n
 		opts.AttachFunc = attach.DefaultAttachFunc
 	}
 
-	// Fetch and display any logs that were printed before attach connects.
+	// 获取并显示 attach 连接之前已经打印的日志。
 	var logsSinceTime *metav1.Time
 	ctrName, err := opts.GetContainerName(pod)
 	if err == nil {
@@ -546,7 +546,7 @@ func handleAttachPod(f cmdutil.Factory, podClient corev1client.PodsGetter, ns, n
 	return nil
 }
 
-// logOpts logs output from opts to the pods log.
+// logOpts 将 opts 的输出记录到 pod 的日志中。
 func logOpts(ctx context.Context, restClientGetter genericclioptions.RESTClientGetter, pod *corev1.Pod, opts *attach.AttachOptions, podOpts *corev1.PodLogOptions) error {
 	if podOpts == nil {
 		ctrName, err := opts.GetContainerName(pod)
@@ -640,7 +640,7 @@ func (o *RunOptions) createPod(name string, labels map[string]string, args []str
 		}
 	}
 	if len(o.Port) > 0 {
-		// we can safely assume the port correctly parses into number
+		// 我们可以安全地认为端口能正确解析为数字
 		portNo, _ := strconv.Atoi(o.Port)
 		pod.Spec.Containers[0].Ports = []corev1.ContainerPort{
 			{
@@ -653,17 +653,17 @@ func (o *RunOptions) createPod(name string, labels map[string]string, args []str
 }
 
 func (o *RunOptions) createService(name string, labels map[string]string) *corev1.Service {
-	// we can safely assume the port correctly parses into number
+	// 我们可以安全地认为端口能正确解析为数字
 	portNo, _ := strconv.Atoi(o.Port)
 
 	service := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
-			// this should match only the labels requested by the user explicitly
+			// 这应该只匹配用户显式请求的 label
 			Labels: o.Labels,
 		},
 		Spec: corev1.ServiceSpec{
-			// use labels here, to ensure we match what the pod has
+			// 这里使用 label，以确保匹配 pod 实际拥有的 label
 			Selector: labels,
 			Ports: []corev1.ServicePort{{
 				Port:       int32(portNo),
@@ -681,7 +681,7 @@ func (o *RunOptions) createGeneratedObject(f cmdutil.Factory, cmd *cobra.Command
 	if err != nil {
 		return nil, err
 	}
-	// run has compiled knowledge of the thing is creating
+	// run 对它所创建的对象有预先了解
 	gvks, _, err := scheme.Scheme.ObjectKinds(obj)
 	if err != nil {
 		return nil, err
@@ -769,12 +769,12 @@ func parseEnvs(envArray []string) ([]corev1.EnvVar, error) {
 	return envs, nil
 }
 
-// ErrPodCompleted is returned by PodRunning or PodContainerRunning to indicate that
-// the pod has already reached completed state.
+// PodRunning 或 PodContainerRunning 返回 ErrPodCompleted，表示
+// pod 已经达到完成状态。
 var ErrPodCompleted = fmt.Errorf("pod ran to completion")
 
-// podCompleted returns true if the pod has run to completion, false if the pod has not yet
-// reached running state, or an error in any other case.
+// podCompleted 在 pod 已运行完成时返回 true，在 pod 尚未
+// 达到 running 状态时返回 false，其他任何情况下返回错误。
 func podCompleted(event watch.Event) (bool, error) {
 	switch event.Type {
 	case watch.Deleted:
@@ -790,8 +790,8 @@ func podCompleted(event watch.Event) (bool, error) {
 	return false, nil
 }
 
-// podSucceeded returns true if the pod has run to completion, false if the pod has not yet
-// reached running state, or an error in any other case.
+// podSucceeded 在 pod 已运行完成时返回 true，在 pod 尚未
+// 达到 running 状态时返回 false，其他任何情况下返回错误。
 func podSucceeded(event watch.Event) (bool, error) {
 	switch event.Type {
 	case watch.Deleted:
@@ -804,9 +804,9 @@ func podSucceeded(event watch.Event) (bool, error) {
 	return false, nil
 }
 
-// podRunningAndReady returns true if the pod is running and ready, false if the pod has not
-// yet reached those states, returns ErrPodCompleted if the pod has run to completion, or
-// an error in any other case.
+// podRunningAndReady 在 pod 正在运行且就绪时返回 true，在 pod 尚未
+// 达到这些状态时返回 false，在 pod 已运行完成时返回 ErrPodCompleted，
+// 其他任何情况下返回错误。
 func podRunningAndReady(event watch.Event) (bool, error) {
 	switch event.Type {
 	case watch.Deleted:

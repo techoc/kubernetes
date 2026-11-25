@@ -30,8 +30,8 @@ import (
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
-// DeleteFlags composes common printer flag structs
-// used for commands requiring deletion logic.
+// DeleteFlags 组合了需要删除逻辑的命令
+// 所使用的通用 printer flag 结构体。
 type DeleteFlags struct {
 	FileNameFlags *genericclioptions.FileNameFlags
 	LabelSelector *string
@@ -57,7 +57,7 @@ func (f *DeleteFlags) ToOptions(dynamicClient dynamic.Interface, streams generic
 		IOStreams:     streams,
 	}
 
-	// add filename options
+	// 添加 filename 相关选项
 	if f.FileNameFlags != nil {
 		options.FilenameOptions = f.FileNameFlags.ToOptions()
 	}
@@ -68,7 +68,7 @@ func (f *DeleteFlags) ToOptions(dynamicClient dynamic.Interface, streams generic
 		options.FieldSelector = *f.FieldSelector
 	}
 
-	// add output format
+	// 添加 output 格式
 	if f.Output != nil {
 		options.Output = *f.Output
 	}
@@ -165,12 +165,12 @@ func (f *DeleteFlags) AddFlags(cmd *cobra.Command) {
 	}
 }
 
-// NewDeleteCommandFlags provides default flags and values for use with the "delete" command
+// NewDeleteCommandFlags 为 "delete" 命令提供默认的 flag 及其取值
 func NewDeleteCommandFlags(usage string) *DeleteFlags {
 	cascadingStrategy := "background"
 	gracePeriod := -1
 
-	// setup command defaults
+	// 设置命令默认值
 	all := false
 	allNamespaces := false
 	force := false
@@ -189,7 +189,8 @@ func NewDeleteCommandFlags(usage string) *DeleteFlags {
 	kustomize := ""
 
 	return &DeleteFlags{
-		// Not using helpers.go since it provides function to add '-k' for FileNameOptions, but not FileNameFlags
+		// 不使用 helpers.go，因为它只提供了为 FileNameOptions 添加 '-k' 的函数，
+		// 并未提供为 FileNameFlags 添加的函数
 		FileNameFlags: &genericclioptions.FileNameFlags{Usage: usage, Filenames: &filenames, Kustomize: &kustomize, Recursive: &recursive},
 		LabelSelector: &labelSelector,
 		FieldSelector: &fieldSelector,
@@ -210,7 +211,7 @@ func NewDeleteCommandFlags(usage string) *DeleteFlags {
 	}
 }
 
-// NewDeleteFlags provides default flags and values for use in commands outside of "delete"
+// NewDeleteFlags 为 "delete" 之外的命令提供默认的 flag 及其取值
 func NewDeleteFlags(usage string) *DeleteFlags {
 	cascadingStrategy := "background"
 	gracePeriod := -1
@@ -229,7 +230,7 @@ func NewDeleteFlags(usage string) *DeleteFlags {
 		CascadingStrategy: &cascadingStrategy,
 		GracePeriod:       &gracePeriod,
 
-		// add non-defaults
+		// 添加非默认项
 		Force:   &force,
 		Timeout: &timeout,
 		Wait:    &wait,
@@ -238,7 +239,7 @@ func NewDeleteFlags(usage string) *DeleteFlags {
 
 func parseCascadingFlag(streams genericiooptions.IOStreams, cascadingFlag string) (metav1.DeletionPropagation, error) {
 	boolValue, err := strconv.ParseBool(cascadingFlag)
-	// The flag is not a boolean
+	// 该 flag 不是布尔值
 	if err != nil {
 		switch cascadingFlag {
 		case "orphan":
@@ -251,7 +252,7 @@ func parseCascadingFlag(streams genericiooptions.IOStreams, cascadingFlag string
 			return metav1.DeletePropagationBackground, fmt.Errorf(`invalid cascade value (%v). Must be "background", "foreground", or "orphan"`, cascadingFlag)
 		}
 	}
-	// The flag was a boolean
+	// 该 flag 是布尔值
 	if boolValue {
 		fmt.Fprintf(streams.ErrOut, "warning: --cascade=%v is deprecated (boolean value) and can be replaced with --cascade=%s.\n", cascadingFlag, "background")
 		return metav1.DeletePropagationBackground, nil

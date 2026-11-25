@@ -47,7 +47,7 @@ import (
 	streamhttp "k8s.io/streaming/pkg/httpstream"
 )
 
-// PortForwardOptions contains all the options for running the port-forward cli command.
+// PortForwardOptions 包含运行 port-forward CLI 命令所需的全部选项。
 type PortForwardOptions struct {
 	Namespace     string
 	PodName       string
@@ -95,7 +95,7 @@ var (
 )
 
 const (
-	// Amount of time to wait until at least one pod is running
+	// 等待至少一个 pod 进入 running 状态的时间
 	defaultPodPortForwardWaitTimeout = 60 * time.Second
 )
 
@@ -116,7 +116,7 @@ func NewCmdPortForward(f cmdutil.Factory, streams genericiooptions.IOStreams) *c
 	}
 	cmdutil.AddPodRunningTimeoutFlag(cmd, defaultPodPortForwardWaitTimeout)
 	cmd.Flags().StringSliceVar(&opts.Address, "address", []string{"localhost"}, "Addresses to listen on (comma separated). Only accepts IP addresses or localhost as a value. When localhost is supplied, kubectl will try to bind on both 127.0.0.1 and ::1 and will fail if neither of these addresses are available to bind.")
-	// TODO support UID
+	// TODO 支持 UID
 	return cmd
 }
 
@@ -147,7 +147,7 @@ func createDialer(method string, url *url.URL, opts PortForwardOptions) (streamh
 		if err != nil {
 			return nil, err
 		}
-		// First attempt tunneling (websocket) dialer, then fallback to spdy dialer.
+		// 先尝试使用 tunneling（websocket）dialer，失败则回退到 spdy dialer。
 		dialer = portforward.NewFallbackDialerForStreaming(tunnelingDialer, dialer, func(err error) bool {
 			return streamhttp.IsUpgradeFailure(err) || streamhttp.IsHTTPSProxyError(err)
 		})
@@ -167,8 +167,8 @@ func (f *defaultPortForwarder) ForwardPorts(method string, url *url.URL, opts Po
 	return fw.ForwardPorts()
 }
 
-// splitPort splits port string which is in form of [LOCAL PORT]:REMOTE PORT
-// and returns local and remote ports separately
+// splitPort 拆分形如 [LOCAL PORT]:REMOTE PORT 的端口字符串，
+// 并分别返回本地端口和远端端口
 func splitPort(port string) (local, remote string) {
 	parts := strings.Split(port, ":")
 	if len(parts) == 2 {
@@ -178,10 +178,10 @@ func splitPort(port string) (local, remote string) {
 	return parts[0], parts[0]
 }
 
-// Translates service port to target port
-// It rewrites ports as needed if the Service port declares targetPort.
-// It returns an error when a named targetPort can't find a match in the pod, or the Service did not declare
-// the port.
+// 将 service 端口转换为 target 端口
+// 如果 Service 端口声明了 targetPort，它会按需重写端口。
+// 当命名的 targetPort 在 pod 中找不到匹配项，或 Service 未声明
+// 该端口时，会返回错误。
 func translateServicePortToTargetPort(ports []string, svc corev1.Service, pod corev1.Pod) ([]string, error) {
 	var translated []string
 	for _, port := range ports {
@@ -201,11 +201,11 @@ func translateServicePortToTargetPort(ports []string, svc corev1.Service, pod co
 		}
 		containerPort, err := util.LookupContainerPortNumberByServicePort(svc, pod, int32(portnum))
 		if err != nil {
-			// can't resolve a named port, or Service did not declare this port, return an error
+			// 无法解析命名端口，或 Service 未声明该端口，返回错误
 			return nil, err
 		}
 
-		// convert the resolved target port back to a string
+		// 将解析出的 target 端口转换回字符串
 		remotePort = strconv.Itoa(int(containerPort))
 
 		if localPort != remotePort {
@@ -217,8 +217,8 @@ func translateServicePortToTargetPort(ports []string, svc corev1.Service, pod co
 	return translated, nil
 }
 
-// convertPodNamedPortToNumber converts named ports into port numbers
-// It returns an error when a named port can't be found in the pod containers
+// convertPodNamedPortToNumber 将命名端口转换为端口号
+// 当在 pod 容器中找不到命名端口时，会返回错误
 func convertPodNamedPortToNumber(ports []string, pod corev1.Pod) ([]string, error) {
 	var converted []string
 	for _, port := range ports {
@@ -278,8 +278,8 @@ func checkUDPPorts(udpOnlyPorts sets.Set[int], ports []string, obj metav1.Object
 	return nil
 }
 
-// checkUDPPortInService returns an error if remote port in Service is a UDP port
-// TODO: remove this check after #47862 is solved
+// 如果 Service 中的远端端口是 UDP 端口，checkUDPPortInService 返回错误
+// TODO: 在 #47862 解决后移除此检查
 func checkUDPPortInService(ports []string, svc *corev1.Service) error {
 	udpPorts := sets.New[int]()
 	tcpPorts := sets.New[int]()
@@ -295,8 +295,8 @@ func checkUDPPortInService(ports []string, svc *corev1.Service) error {
 	return checkUDPPorts(udpPorts.Difference(tcpPorts), ports, svc)
 }
 
-// checkUDPPortInPod returns an error if remote port in Pod is a UDP port
-// TODO: remove this check after #47862 is solved
+// 如果 Pod 中的远端端口是 UDP 端口，checkUDPPortInPod 返回错误
+// TODO: 在 #47862 解决后移除此检查
 func checkUDPPortInPod(ports []string, pod *corev1.Pod) error {
 	udpPorts := sets.New[int]()
 	tcpPorts := sets.New[int]()
@@ -314,7 +314,7 @@ func checkUDPPortInPod(ports []string, pod *corev1.Pod) error {
 	return checkUDPPorts(udpPorts.Difference(tcpPorts), ports, pod)
 }
 
-// Complete completes all the required options for port-forward cmd.
+// Complete 补全 port-forward 命令的所有必需选项。
 func (o *PortForwardOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	if len(args) < 2 {
@@ -351,7 +351,7 @@ func (o *PortForwardOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, arg
 
 	o.PodName = forwardablePod.Name
 
-	// handle service port mapping to target port if needed
+	// 在需要时处理 service 端口到 target 端口的映射
 	switch t := obj.(type) {
 	case *corev1.Service:
 		err = checkUDPPortInService(args[1:], t)
@@ -394,7 +394,7 @@ func (o *PortForwardOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, arg
 	return nil
 }
 
-// Validate validates all the required options for port-forward cmd.
+// Validate 校验 port-forward 命令的所有必需选项。
 func (o PortForwardOptions) Validate() error {
 	if len(o.PodName) == 0 {
 		return fmt.Errorf("pod name or resource type/name must be specified")
@@ -415,9 +415,9 @@ func (o PortForwardOptions) RunPortForward() error {
 	return o.RunPortForwardContext(context.Background())
 }
 
-// RunPortForwardContext implements all the necessary functionality for port-forward cmd.
-// It ends portforwarding when an error is received from the backend, or an os.Interrupt
-// signal is received, or the provided context is done.
+// RunPortForwardContext 实现 port-forward 命令的全部必要功能。
+// 当从后端收到错误、收到 os.Interrupt 信号，
+// 或提供的 context 结束时，它会终止端口转发。
 func (o PortForwardOptions) RunPortForwardContext(ctx context.Context) error {
 	pod, err := o.PodClient.Pods(o.Namespace).Get(ctx, o.PodName, metav1.GetOptions{})
 	if err != nil {

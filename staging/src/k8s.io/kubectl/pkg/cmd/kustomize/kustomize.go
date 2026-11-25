@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
-// NewCmdKustomize returns an adapted kustomize build command.
+// NewCmdKustomize 返回经过适配的 kustomize build 命令。
 func NewCmdKustomize(streams genericiooptions.IOStreams) *cobra.Command {
 	h := build.MakeHelp("kubectl", "kustomize")
 	return build.NewCmdBuild(

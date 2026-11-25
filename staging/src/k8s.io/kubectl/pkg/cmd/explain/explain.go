@@ -69,9 +69,9 @@ const (
 	plaintextOpenAPIV2TemplateName = "plaintext-openapiv2"
 )
 
-// ExplainFlags directly reflect the information that CLI is gathering via flags.
-// They will be converted to Options, which reflect the runtime requirements for
-// the command.
+// ExplainFlags 直接反映 CLI 通过 flag 收集的信息。
+// 它们将被转换为 Options，
+// 后者反映命令的运行时需求。
 type ExplainFlags struct {
 	APIVersion   string
 	OutputFormat string

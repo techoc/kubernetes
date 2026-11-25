@@ -30,17 +30,17 @@ import (
 
 var argumentEnvironment = regexp.MustCompile("(?ms)^(.+)\\=(.*)$")
 
-// IsEnvironmentArgument checks whether a string is an environment argument, that is, whether it matches the "anycharacters=anycharacters" pattern.
+// IsEnvironmentArgument 检查一个字符串是否为环境变量参数，即是否匹配 "anycharacters=anycharacters" 模式。
 func IsEnvironmentArgument(s string) bool {
 	return argumentEnvironment.MatchString(s)
 }
 
-// SplitEnvironmentFromResources separates resources from environment arguments.
-// Resources must come first. Arguments may have the "DASH-" syntax.
+// SplitEnvironmentFromResources 将资源与环境变量参数分开。
+// 资源必须写在前面。参数可以使用 "DASH-" 语法。
 func SplitEnvironmentFromResources(args []string) (resources, envArgs []string, ok bool) {
 	first := true
 	for _, s := range args {
-		// this method also has to understand env removal syntax, i.e. KEY-
+		// 该方法还必须理解环境变量删除语法，即 KEY-
 		isEnv := IsEnvironmentArgument(s) || strings.HasSuffix(s, "-")
 		switch {
 		case first && isEnv:
@@ -57,8 +57,8 @@ func SplitEnvironmentFromResources(args []string) (resources, envArgs []string, 
 	return resources, envArgs, true
 }
 
-// parseIntoEnvVar parses the list of key-value pairs into kubernetes EnvVar.
-// envVarType is for making errors more specific to user intentions.
+// parseIntoEnvVar 将键值对列表解析为 kubernetes EnvVar。
+// envVarType 用于让错误信息更贴近用户的意图。
 func parseIntoEnvVar(spec []string, defaultReader io.Reader, envVarType string) ([]v1.EnvVar, []string, bool, error) {
 	env := []v1.EnvVar{}
 	exists := sets.New[string]()
@@ -103,8 +103,8 @@ func parseIntoEnvVar(spec []string, defaultReader io.Reader, envVarType string) 
 	return env, remove, usedStdin, nil
 }
 
-// ParseEnv parses the elements of the first argument looking for environment variables in key=value form and, if one of those values is "-", it also scans the reader and returns true for its third return value.
-// The same environment variable cannot be both modified and removed in the same command.
+// ParseEnv 解析第一个参数中的元素，查找 key=value 形式的环境变量；如果其中某个值为 "-"，它还会扫描 reader，并在第三个返回值中返回 true。
+// 同一个环境变量不能在同一条命令中既被修改又被删除。
 func ParseEnv(spec []string, defaultReader io.Reader) ([]v1.EnvVar, []string, bool, error) {
 	return parseIntoEnvVar(spec, defaultReader, "environment variable")
 }

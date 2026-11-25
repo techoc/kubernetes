@@ -322,9 +322,9 @@ func TestWhoAmIRun(t *testing.T) {
 			err := test.o.Run()
 			switch {
 			case test.expectedError == nil && err == nil:
-				// pass
+				// 通过
 			case err != nil && test.expectedError != nil && strings.Contains(err.Error(), test.expectedError.Error()):
-				// pass
+				// 通过
 			default:
 				t.Errorf("%s: expected %v, got %v", test.name, test.expectedError, err)
 				return

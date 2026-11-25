@@ -62,8 +62,8 @@ var (
 		kubectl set resources -f path/to/file.yaml --limits=cpu=200m,memory=512Mi --local -o yaml`)
 )
 
-// SetResourcesOptions is the start of the data required to perform the operation. As new fields are added, add them here instead of
-// referencing the cmd.Flags
+// SetResourcesOptions 是执行该操作所需数据的起点。新增字段时请添加在这里，而不是
+// 引用 cmd.Flags
 type SetResourcesOptions struct {
 	resource.FilenameOptions
 
@@ -93,8 +93,8 @@ type SetResourcesOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewResourcesOptions returns a ResourcesOptions indicating all containers in the selected
-// pod templates are selected by default.
+// NewResourcesOptions 返回一个 ResourcesOptions，默认选中所选 pod 模板中的
+// 所有容器。
 func NewResourcesOptions(streams genericiooptions.IOStreams) *SetResourcesOptions {
 	return &SetResourcesOptions{
 		PrintFlags:  genericclioptions.NewPrintFlags("resource requirements updated").WithTypeSetter(scheme.Scheme),
@@ -108,7 +108,7 @@ func NewResourcesOptions(streams genericiooptions.IOStreams) *SetResourcesOption
 	}
 }
 
-// NewCmdResources returns initialized Command instance for the 'set resources' sub command
+// NewCmdResources 返回 'set resources' 子命令的已初始化 Command 实例
 func NewCmdResources(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewResourcesOptions(streams)
 
@@ -143,7 +143,7 @@ func NewCmdResources(f cmdutil.Factory, streams genericiooptions.IOStreams) *cob
 	return cmd
 }
 
-// Complete completes all required options
+// Complete 补全所有必需的选项
 func (o *SetResourcesOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 
@@ -185,11 +185,11 @@ func (o *SetResourcesOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, ar
 			ResourceTypeOrNameArgs(o.All, args...).
 			Latest()
 	} else {
-		// if a --local flag was provided, and a resource was specified in the form
-		// <resource>/<name>, fail immediately as --local cannot query the api server
-		// for the specified resource.
-		// TODO: this should be in the builder - if someone specifies tuples, fail when
-		// local is true
+		// 如果提供了 --local 标志，且资源以
+		// <resource>/<name> 形式指定，则立即失败，因为 --local 无法向 api server
+		// 查询指定资源。
+		// TODO: 这应该放在 builder 中——如果指定了 tuple，当
+		// local 为 true 时应报错
 		if len(args) > 0 {
 			return resource.LocalResourceError
 		}
@@ -199,7 +199,7 @@ func (o *SetResourcesOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, ar
 	return err
 }
 
-// Validate makes sure that provided values in ResourcesOptions are valid
+// Validate 确保 ResourcesOptions 中提供的值有效
 func (o *SetResourcesOptions) Validate() error {
 	var err error
 	if o.Local && o.DryRunStrategy == cmdutil.DryRunServer {
@@ -227,7 +227,7 @@ func (o *SetResourcesOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of 'set resources' sub command
+// Run 执行 'set resources' 子命令
 func (o *SetResourcesOptions) Run() error {
 	allErrs := []error{}
 	patches := CalculatePatches(o.Infos, scheme.DefaultJSONEncoder(), func(obj runtime.Object) ([]byte, error) {
@@ -264,7 +264,7 @@ func (o *SetResourcesOptions) Run() error {
 		if !transformed {
 			return nil, nil
 		}
-		// record this change (for rollout history)
+		// 记录此次变更（用于 rollout 历史）
 		if err := o.Recorder.Record(obj); err != nil {
 			klog.V(4).Infof("error recording current command: %v", err)
 		}
@@ -280,7 +280,7 @@ func (o *SetResourcesOptions) Run() error {
 			continue
 		}
 
-		//no changes
+		//无变更
 		if string(patch.Patch) == "{}" || len(patch.Patch) == 0 {
 			continue
 		}

@@ -36,8 +36,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// PauseOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// PauseOptions 是执行该操作所需数据的起点。新增字段时应添加到此处，
+// 而不是引用 cmd.Flags()
 type PauseOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	ToPrinter  func(string) (printers.ResourcePrinter, error)
@@ -70,7 +70,7 @@ var (
 		kubectl rollout pause deployment/nginx`)
 )
 
-// NewCmdRolloutPause returns a Command instance for 'rollout pause' sub command
+// NewCmdRolloutPause 返回 'rollout pause' 子命令的 Command 实例
 func NewCmdRolloutPause(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := &PauseOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("paused").WithTypeSetter(scheme.Scheme),
@@ -102,7 +102,7 @@ func NewCmdRolloutPause(f cmdutil.Factory, streams genericiooptions.IOStreams) *
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *PauseOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	o.Pauser = polymorphichelpers.ObjectPauserFn
 
@@ -130,7 +130,7 @@ func (o *PauseOptions) Validate() error {
 	return nil
 }
 
-// RunPause performs the execution of 'rollout pause' sub command
+// RunPause 执行 'rollout pause' 子命令
 func (o *PauseOptions) RunPause() error {
 	r := o.Builder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
@@ -149,11 +149,11 @@ func (o *PauseOptions) RunPause() error {
 	allErrs := []error{}
 	infos, err := r.Infos()
 	if err != nil {
-		// restore previous command behavior where
-		// an error caused by retrieving infos due to
-		// at least a single broken object did not result
-		// in an immediate return, but rather an overall
-		// aggregation of errors.
+		// 恢复此前命令的行为：
+		// 当至少有一个损坏的对象导致
+		// 获取 infos 出错时，不会立即返回，
+		// 而是先汇总所有错误，
+		// 然后一并返回。
 		allErrs = append(allErrs, err)
 	}
 

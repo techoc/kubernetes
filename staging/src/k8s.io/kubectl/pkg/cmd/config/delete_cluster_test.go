@@ -80,7 +80,7 @@ func (test deleteClusterTest) run(t *testing.T) {
 		return
 	}
 
-	// Verify cluster was removed from kubeconfig file
+	// 验证 cluster 已从 kubeconfig 文件中移除
 	config, err := clientcmd.LoadFromFile(fakeKubeFile.Name())
 	if err != nil {
 		t.Fatalf("unexpected error loading kubeconfig file: %v", err)

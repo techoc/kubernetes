@@ -36,7 +36,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// GetContextsOptions contains the assignable options from the args.
+// GetContextsOptions 包含从参数中可赋值的选项。
 type GetContextsOptions struct {
 	configAccess clientcmd.ConfigAccess
 	nameOnly     bool
@@ -60,8 +60,8 @@ var (
 		kubectl config get-contexts my-context`)
 )
 
-// NewCmdConfigGetContexts creates a command object for the "get-contexts" action, which
-// retrieves one or more contexts from a kubeconfig.
+// NewCmdConfigGetContexts 为 "get-contexts" 操作创建命令对象，
+// 从 kubeconfig 中检索一个或多个 context。
 func NewCmdConfigGetContexts(streams genericiooptions.IOStreams, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	options := &GetContextsOptions{
 		configAccess: configAccess,
@@ -87,7 +87,7 @@ func NewCmdConfigGetContexts(streams genericiooptions.IOStreams, configAccess cl
 	return cmd
 }
 
-// Complete assigns GetContextsOptions from the args.
+// Complete 从参数中赋值 GetContextsOptions。
 func (o *GetContextsOptions) Complete(cmd *cobra.Command, args []string) error {
 	supportedOutputTypes := sets.New[string]("", "name")
 	if !supportedOutputTypes.Has(o.outputFormat) {
@@ -106,12 +106,12 @@ func (o *GetContextsOptions) Complete(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Validate ensures the of output format
+// Validate 确保输出格式有效
 func (o *GetContextsOptions) Validate() error {
 	return nil
 }
 
-// RunGetContexts implements all the necessary functionality for context retrieval.
+// RunGetContexts 实现 context 检索所需的全部功能。
 func (o GetContextsOptions) RunGetContexts() error {
 	config, err := o.configAccess.GetStartingConfig()
 	if err != nil {
@@ -124,8 +124,8 @@ func (o GetContextsOptions) RunGetContexts() error {
 		defer out.Flush()
 	}
 
-	// Build a list of context names to print, and warn if any requested contexts are not found.
-	// Do this before printing the headers so it doesn't look ugly.
+	// 构建要打印的 context 名称列表，并在请求的 context 未找到时发出警告。
+	// 在打印表头之前执行此操作，以免输出显得难看。
 	allErrs := []error{}
 	toPrint := []string{}
 	if len(o.contextNames) == 0 {

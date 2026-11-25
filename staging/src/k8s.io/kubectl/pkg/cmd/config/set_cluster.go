@@ -66,7 +66,7 @@ var (
 		kubectl config set-cluster e2e --proxy-url=https://1.2.3.4`)
 )
 
-// NewCmdConfigSetCluster returns a Command instance for 'config set-cluster' sub command
+// NewCmdConfigSetCluster 返回 'config set-cluster' 子命令的 Command 实例
 func NewCmdConfigSetCluster(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	options := &setClusterOptions{configAccess: configAccess}
 
@@ -128,8 +128,8 @@ func (o *setClusterOptions) modifyCluster(existingCluster clientcmdapi.Cluster) 
 
 	if o.server.Provided() {
 		modifiedCluster.Server = o.server.Value()
-		// specifying a --server on the command line, overrides the TLSServerName that was specified in the kubeconfig file.
-		// if both are specified, then the next if block will write the new TLSServerName.
+		// 在命令行指定 --server 会覆盖 kubeconfig 文件中指定的 TLSServerName。
+		// 如果两者都指定了，下一个 if 块将写入新的 TLSServerName。
 		modifiedCluster.TLSServerName = ""
 	}
 	if o.tlsServerName.Provided() {
@@ -137,7 +137,7 @@ func (o *setClusterOptions) modifyCluster(existingCluster clientcmdapi.Cluster) 
 	}
 	if o.insecureSkipTLSVerify.Provided() {
 		modifiedCluster.InsecureSkipTLSVerify = o.insecureSkipTLSVerify.Value()
-		// Specifying insecure mode clears any certificate authority
+		// 指定不安全模式会清除所有 certificate authority
 		if modifiedCluster.InsecureSkipTLSVerify {
 			modifiedCluster.CertificateAuthority = ""
 			modifiedCluster.CertificateAuthorityData = nil
@@ -152,7 +152,7 @@ func (o *setClusterOptions) modifyCluster(existingCluster clientcmdapi.Cluster) 
 		} else {
 			caPath, _ = filepath.Abs(caPath)
 			modifiedCluster.CertificateAuthority = caPath
-			// Specifying a certificate authority file clears certificate authority data and insecure mode
+			// 指定 certificate authority 文件会清除 certificate authority data 和不安全模式
 			if caPath != "" {
 				modifiedCluster.InsecureSkipTLSVerify = false
 				modifiedCluster.CertificateAuthorityData = nil

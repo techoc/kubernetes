@@ -36,8 +36,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// ResumeOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// ResumeOptions 是执行该操作所需数据的起点。新增字段时应添加到此处，
+// 而不是引用 cmd.Flags()
 type ResumeOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	ToPrinter  func(string) (printers.ResourcePrinter, error)
@@ -69,7 +69,7 @@ var (
 		kubectl rollout resume deployment/nginx`)
 )
 
-// NewRolloutResumeOptions returns an initialized ResumeOptions instance
+// NewRolloutResumeOptions 返回初始化后的 ResumeOptions 实例
 func NewRolloutResumeOptions(streams genericiooptions.IOStreams) *ResumeOptions {
 	return &ResumeOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("resumed").WithTypeSetter(scheme.Scheme),
@@ -77,7 +77,7 @@ func NewRolloutResumeOptions(streams genericiooptions.IOStreams) *ResumeOptions 
 	}
 }
 
-// NewCmdRolloutResume returns a Command instance for 'rollout resume' sub command
+// NewCmdRolloutResume 返回 'rollout resume' 子命令的 Command 实例
 func NewCmdRolloutResume(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewRolloutResumeOptions(streams)
 
@@ -105,7 +105,7 @@ func NewCmdRolloutResume(f cmdutil.Factory, streams genericiooptions.IOStreams) 
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *ResumeOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	o.Resources = args
 
@@ -134,7 +134,7 @@ func (o *ResumeOptions) Validate() error {
 	return nil
 }
 
-// RunResume performs the execution of 'rollout resume' sub command
+// RunResume 执行 'rollout resume' 子命令
 func (o ResumeOptions) RunResume() error {
 	r := o.Builder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
@@ -153,11 +153,11 @@ func (o ResumeOptions) RunResume() error {
 	allErrs := []error{}
 	infos, err := r.Infos()
 	if err != nil {
-		// restore previous command behavior where
-		// an error caused by retrieving infos due to
-		// at least a single broken object did not result
-		// in an immediate return, but rather an overall
-		// aggregation of errors.
+		// 恢复此前命令的行为：
+		// 当至少有一个损坏的对象导致
+		// 获取 infos 出错时，不会立即返回，
+		// 而是先汇总所有错误，
+		// 然后一并返回。
 		allErrs = append(allErrs, err)
 	}
 

@@ -25,12 +25,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// DefaultContainerAnnotationName is an annotation name that can be used to preselect the interesting container
-// from a pod when running kubectl.
+// DefaultContainerAnnotationName 是一个 annotation 名称，运行 kubectl 时可用于
+// 预先从 pod 中选出目标容器。
 const DefaultContainerAnnotationName = "kubectl.kubernetes.io/default-container"
 
-// FindContainerByName selects the named container from the spec of
-// the provided pod or return nil if no such container exists.
+// FindContainerByName 从给定 pod 的 spec 中选出指定名称的容器，
+// 若不存在则返回 nil。
 func FindContainerByName(pod *v1.Pod, name string) (*v1.Container, string) {
 	for i := range pod.Spec.Containers {
 		if pod.Spec.Containers[i].Name == name {
@@ -50,16 +50,16 @@ func FindContainerByName(pod *v1.Pod, name string) (*v1.Container, string) {
 	return nil, ""
 }
 
-// FindOrDefaultContainerByName defaults a container for a pod to the first container if any
-// exists, or returns an error. It will print a message to the user indicating a default was
-// selected if there was more than one container.
+// FindOrDefaultContainerByName 在 pod 中存在容器时默认选择第一个容器，
+// 否则返回错误。如果容器不止一个，它会向用户打印一条消息，
+// 说明已选定默认容器。
 func FindOrDefaultContainerByName(pod *v1.Pod, name string, quiet bool, warn io.Writer) (*v1.Container, error) {
-	// this should never happen, but just in case
+	// 这理论上不会发生，但以防万一
 	if len(pod.Spec.Containers) == 0 {
 		return nil, fmt.Errorf("pod %s/%s does not have any containers", pod.Namespace, pod.Name)
 	}
 
-	// if no container name was specified read the default container from the annotation as per
+	// 如果未指定容器名称，则按照以下文档从 annotation 中读取默认容器：
 	// https://github.com/kubernetes/enhancements/tree/master/keps/sig-cli/2227-kubectl-default-container
 	if len(name) == 0 {
 		name = pod.Annotations[DefaultContainerAnnotationName]
@@ -76,7 +76,7 @@ func FindOrDefaultContainerByName(pod *v1.Pod, name string, quiet bool, warn io.
 		return container, nil
 	}
 
-	// fallback to pick the first container to maintain existing behavior
+	// 回退到选择第一个容器，以保持现有行为
 	container := &pod.Spec.Containers[0]
 	if !quiet && (len(pod.Spec.Containers) > 1 || len(pod.Spec.InitContainers) > 0 || len(pod.Spec.EphemeralContainers) > 0) {
 		fmt.Fprintf(warn, "Defaulted container %q out of: %s\n", container.Name, AllContainerNames(pod)) // nolint:errcheck
@@ -85,9 +85,9 @@ func FindOrDefaultContainerByName(pod *v1.Pod, name string, quiet bool, warn io.
 	return container, nil
 }
 
-// AllContainerNames returns a comma-separated list of all container names in the pod,
-// including regular containers, ephemeral containers (marked with "ephem"), and init
-// containers (marked with "init") in that order.
+// AllContainerNames 返回 pod 中所有容器名称的逗号分隔列表，
+// 按顺序包括普通容器、ephemeral 容器（标记为 "ephem"）以及 init
+// 容器（标记为 "init"）。
 func AllContainerNames(pod *v1.Pod) string {
 	var containers []string
 	for _, container := range pod.Spec.Containers {

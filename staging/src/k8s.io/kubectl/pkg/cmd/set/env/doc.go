@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package env provides functions to incorporate environment variables into set env.
+// Package env 提供将环境变量纳入 set env 的功能。
 package env

@@ -28,8 +28,8 @@ import (
 	"k8s.io/kubectl/pkg/cmd/util"
 )
 
-// PrintFlags composes common printer flag structs
-// used in the Get command.
+// PrintFlags 组合了 Get 命令中使用的
+// 通用打印器标志结构体。
 type PrintFlags struct {
 	JSONYamlPrintFlags *genericclioptions.JSONYamlPrintFlags
 	NamePrintFlags     *genericclioptions.NamePrintFlags
@@ -41,30 +41,30 @@ type PrintFlags struct {
 	OutputFormat *string
 }
 
-// SetKind sets the Kind option of humanreadable flags
+// SetKind 设置可读标志中的 Kind 选项
 func (f *PrintFlags) SetKind(kind schema.GroupKind) {
 	f.HumanReadableFlags.SetKind(kind)
 }
 
-// EnsureWithNamespace ensures that humanreadable flags return
-// a printer capable of printing with a "namespace" column.
+// EnsureWithNamespace 确保可读标志返回
+// 能够打印带 "namespace" 列的打印器。
 func (f *PrintFlags) EnsureWithNamespace() error {
 	return f.HumanReadableFlags.EnsureWithNamespace()
 }
 
-// EnsureWithKind ensures that humanreadable flags return
-// a printer capable of including resource kinds.
+// EnsureWithKind 确保可读标志返回
+// 能够包含资源 Kind 的打印器。
 func (f *PrintFlags) EnsureWithKind() error {
 	return f.HumanReadableFlags.EnsureWithKind()
 }
 
-// Copy returns a copy of PrintFlags for mutation
+// Copy 返回一份可用于修改的 PrintFlags 副本
 func (f *PrintFlags) Copy() PrintFlags {
 	printFlags := *f
 	return printFlags
 }
 
-// AllowedFormats is the list of formats in which data can be displayed
+// AllowedFormats 是数据可显示格式的列表
 func (f *PrintFlags) AllowedFormats() []string {
 	formats := f.JSONYamlPrintFlags.AllowedFormats()
 	formats = append(formats, f.NamePrintFlags.AllowedFormats()...)
@@ -74,8 +74,8 @@ func (f *PrintFlags) AllowedFormats() []string {
 	return formats
 }
 
-// ToPrinter attempts to find a composed set of PrintFlags suitable for
-// returning a printer based on current flag values.
+// ToPrinter 尝试找到一组组合的 PrintFlags，以便
+// 根据当前标志值返回合适的打印器。
 func (f *PrintFlags) ToPrinter() (printers.ResourcePrinter, error) {
 	outputFormat := ""
 	if f.OutputFormat != nil {
@@ -89,7 +89,7 @@ func (f *PrintFlags) ToPrinter() (printers.ResourcePrinter, error) {
 	f.HumanReadableFlags.NoHeaders = noHeaders
 	f.CustomColumnsFlags.NoHeaders = noHeaders
 
-	// for "get.go" we want to support a --template argument given, even when no --output format is provided
+	// 对 "get.go" 而言，即使没有提供 --output 格式，我们也希望支持传入 --template 参数
 	if f.TemplateFlags.TemplateArgument != nil && len(*f.TemplateFlags.TemplateArgument) > 0 && len(outputFormat) == 0 {
 		outputFormat = "go-template"
 	}
@@ -121,8 +121,8 @@ func (f *PrintFlags) ToPrinter() (printers.ResourcePrinter, error) {
 	return nil, genericclioptions.NoCompatiblePrinterError{OutputFormat: &outputFormat, AllowedFormats: f.AllowedFormats()}
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to humanreadable and template printing.
+// AddFlags 接收一个 *cobra.Command 引用，并绑定
+// 与可读格式和模板打印相关的标志。
 func (f *PrintFlags) AddFlags(cmd *cobra.Command) {
 	f.JSONYamlPrintFlags.AddFlags(cmd)
 	f.NamePrintFlags.AddFlags(cmd)
@@ -150,8 +150,8 @@ func (f *PrintFlags) AddFlags(cmd *cobra.Command) {
 	}
 }
 
-// NewGetPrintFlags returns flags associated with humanreadable,
-// template, and "name" printing, with default values set.
+// NewGetPrintFlags 返回与可读格式、模板及 "name" 打印相关的标志，
+// 并已设置默认值。
 func NewGetPrintFlags() *PrintFlags {
 	outputFormat := ""
 	noHeaders := false

@@ -36,7 +36,7 @@ var (
 		kubectl config delete-user minikube`)
 )
 
-// DeleteUserOptions holds the data needed to run the command
+// DeleteUserOptions 保存运行命令所需的数据
 type DeleteUserOptions struct {
 	user string
 
@@ -47,7 +47,7 @@ type DeleteUserOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewDeleteUserOptions creates the options for the command
+// NewDeleteUserOptions 创建命令所需的选项
 func NewDeleteUserOptions(ioStreams genericiooptions.IOStreams, configAccess clientcmd.ConfigAccess) *DeleteUserOptions {
 	return &DeleteUserOptions{
 		configAccess: configAccess,
@@ -55,7 +55,7 @@ func NewDeleteUserOptions(ioStreams genericiooptions.IOStreams, configAccess cli
 	}
 }
 
-// NewCmdConfigDeleteUser returns a Command instance for 'config delete-user' sub command
+// NewCmdConfigDeleteUser 返回 'config delete-user' 子命令的 Command 实例
 func NewCmdConfigDeleteUser(streams genericiooptions.IOStreams, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	o := NewDeleteUserOptions(streams, configAccess)
 
@@ -76,7 +76,7 @@ func NewCmdConfigDeleteUser(streams genericiooptions.IOStreams, configAccess cli
 	return cmd
 }
 
-// Complete sets up the command to run
+// Complete 设置命令运行所需的配置
 func (o *DeleteUserOptions) Complete(cmd *cobra.Command, args []string) error {
 	config, err := o.configAccess.GetStartingConfig()
 	if err != nil {
@@ -98,7 +98,7 @@ func (o *DeleteUserOptions) Complete(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Validate ensures the command has enough info to run
+// Validate 确保命令具有运行所需的足够信息
 func (o *DeleteUserOptions) Validate() error {
 	_, ok := o.config.AuthInfos[o.user]
 	if !ok {
@@ -108,7 +108,7 @@ func (o *DeleteUserOptions) Validate() error {
 	return nil
 }
 
-// Run performs the command
+// Run 执行命令
 func (o *DeleteUserOptions) Run() error {
 	delete(o.config.AuthInfos, o.user)
 

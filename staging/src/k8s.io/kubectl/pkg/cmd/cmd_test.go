@@ -33,7 +33,7 @@ import (
 )
 
 func TestNormalizationFuncGlobalExistence(t *testing.T) {
-	// This test can be safely deleted when we will not support multiple flag formats
+	// 当不再支持多种 flag 格式时，可以安全地删除此测试
 	root := NewKubectlCommand(KubectlOptions{IOStreams: genericiooptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr}})
 
 	if root.Parent() != nil {
@@ -52,7 +52,7 @@ func TestNormalizationFuncGlobalExistence(t *testing.T) {
 		sub = sub.Commands()[0]
 	}
 
-	// In case of failure of this test check this PR: spf13/cobra#110
+	// 如果此测试失败，请查看这个 PR：spf13/cobra#110
 	if reflect.ValueOf(sub.Flags().GetNormalizeFunc()).Pointer() != reflect.ValueOf(root.Flags().GetNormalizeFunc()).Pointer() {
 		t.Fatal("child and root commands should have the same normalization functions")
 	}
@@ -83,8 +83,8 @@ func TestKubectlSubcommandShadowPlugin(t *testing.T) {
 			expectPlugin:     "",
 			expectPluginArgs: []string{},
 		},
-		// rest of the tests are copied from TestKubectlCommandHandlesPlugins function,
-		// just to retest them also when feature is enabled.
+		// 其余测试复制自 TestKubectlCommandHandlesPlugins 函数，
+		// 以便在该特性启用时也重新运行这些测试。
 		{
 			name:             "test that normal commands are able to be executed, when no plugin overshadows them",
 			args:             []string{"kubectl", "config", "get-clusters"},
@@ -135,12 +135,12 @@ func TestKubectlSubcommandShadowPlugin(t *testing.T) {
 			}
 			ioStreams, _, _, _ := genericiooptions.NewTestIOStreams()
 			root := NewDefaultKubectlCommandWithArgs(KubectlOptions{PluginHandler: pluginsHandler, Arguments: test.args, IOStreams: ioStreams})
-			// original plugin handler (DefaultPluginHandler) is implemented by exec call so no additional actions are expected on the cobra command if we activate the plugin flow
+			// 原始的 plugin handler（DefaultPluginHandler）通过 exec 调用实现，因此若激活 plugin 流程，不应期望 cobra 命令上有额外的动作
 			if !pluginsHandler.lookedup && !pluginsHandler.executed {
-				// args must be set, otherwise Execute will use os.Args (args used for starting the test) and test.args would not be passed
-				// to the command which might invoke only "kubectl" without any additional args and give false positives
+				// 必须设置 args，否则 Execute 会使用 os.Args（启动测试时使用的参数），
+				// 导致 test.args 不会传给命令，可能只调用 "kubectl" 而没有附带其他参数，从而产生误判
 				root.SetArgs(test.args[1:])
-				// Important note! Incorrect command or command failing validation might just call os.Exit(1) which would interrupt execution of the test
+				// 重要提示！错误的命令或校验失败的命令可能会直接调用 os.Exit(1)，从而中断测试执行
 				if err := root.Execute(); err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -152,7 +152,7 @@ func TestKubectlSubcommandShadowPlugin(t *testing.T) {
 			}
 
 			if pluginsHandler.lookedup && !pluginsHandler.executed && len(test.expectLookupError) == 0 {
-				// we have to fail here, because we have found the plugin, but not executed the plugin, nor the command (this would normally result in an error: unknown command)
+				// 这里必须判定失败，因为我们已经找到了 plugin，但既没有执行该 plugin，也没有执行命令（这通常会导致 unknown command 错误）
 				t.Fatalf("expected plugin execution, but did not occur")
 			}
 
@@ -217,8 +217,8 @@ func TestKubectlCommandHandlesPlugins(t *testing.T) {
 			name: "test that a plugin does not execute over an existing command by the same name",
 			args: []string{"kubectl", "version", "--client=true"},
 		},
-		// The following tests make sure that commands added by Cobra cannot be shadowed by a plugin
-		// See https://github.com/kubernetes/kubectl/issues/1116
+		// 以下测试确保由 Cobra 添加的命令不会被 plugin 遮蔽
+		// 参见 https://github.com/kubernetes/kubectl/issues/1116
 		{
 			name: "test that a plugin does not execute over Cobra's help command",
 			args: []string{"kubectl", "help"},
@@ -231,9 +231,9 @@ func TestKubectlCommandHandlesPlugins(t *testing.T) {
 			name: "test that a plugin does not execute over Cobra's __completeNoDesc command",
 			args: []string{"kubectl", cobra.ShellCompNoDescRequestCmd, "de"},
 		},
-		// The following tests make sure that commands added by Cobra cannot be shadowed by a plugin
-		// even when a flag is specified first.  This can happen when using aliases.
-		// See https://github.com/kubernetes/kubectl/issues/1119
+		// 以下测试确保即使先指定了 flag，由 Cobra 添加的命令也不会被 plugin 遮蔽。
+		// 使用别名时可能出现这种情况。
+		// 参见 https://github.com/kubernetes/kubectl/issues/1119
 		{
 			name: "test that a flag does not break Cobra's help command",
 			args: []string{"kubectl", "--kubeconfig=/path/to/kubeconfig", "help"},
@@ -246,9 +246,9 @@ func TestKubectlCommandHandlesPlugins(t *testing.T) {
 			name: "test that a flag does not break Cobra's __completeNoDesc command",
 			args: []string{"kubectl", "--kubeconfig=/path/to/kubeconfig", cobra.ShellCompNoDescRequestCmd},
 		},
-		// As for the previous tests, an alias could add a flag without using the = form.
-		// We don't support this case as parsing the flags becomes quite complicated (flags
-		// that take a value, versus flags that don't)
+		// 与之前的测试类似，别名可以在不使用 = 形式的情况下添加 flag。
+		// 我们不支持这种情况，因为解析这类 flag 会变得相当复杂（区分为
+		// 需要取值的 flag 和不需要取值的 flag）
 		// {
 		// 	name: "test that a flag with a space does not break Cobra's help command",
 		// 	args: []string{"kubectl", "--kubeconfig", "/path/to/kubeconfig", "help"},
@@ -271,12 +271,12 @@ func TestKubectlCommandHandlesPlugins(t *testing.T) {
 			}
 			ioStreams, _, _, _ := genericiooptions.NewTestIOStreams()
 			root := NewDefaultKubectlCommandWithArgs(KubectlOptions{PluginHandler: pluginsHandler, Arguments: test.args, IOStreams: ioStreams})
-			// original plugin handler (DefaultPluginHandler) is implemented by exec call so no additional actions are expected on the cobra command if we activate the plugin flow
+			// 原始的 plugin handler（DefaultPluginHandler）通过 exec 调用实现，因此若激活 plugin 流程，不应期望 cobra 命令上有额外的动作
 			if !pluginsHandler.lookedup && !pluginsHandler.executed {
-				// args must be set, otherwise Execute will use os.Args (args used for starting the test) and test.args would not be passed
-				// to the command which might invoke only "kubectl" without any additional args and give false positives
+				// 必须设置 args，否则 Execute 会使用 os.Args（启动测试时使用的参数），
+				// 导致 test.args 不会传给命令，可能只调用 "kubectl" 而没有附带其他参数，从而产生误判
 				root.SetArgs(test.args[1:])
-				// Important note! Incorrect command or command failing validation might just call os.Exit(1) which would interrupt execution of the test
+				// 重要提示！错误的命令或校验失败的命令可能会直接调用 os.Exit(1)，从而中断测试执行
 				if err := root.Execute(); err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -288,7 +288,7 @@ func TestKubectlCommandHandlesPlugins(t *testing.T) {
 			}
 
 			if pluginsHandler.lookedup && !pluginsHandler.executed && len(test.expectLookupError) == 0 {
-				// we have to fail here, because we have found the plugin, but not executed the plugin, nor the command (this would normally result in an error: unknown command)
+				// 这里必须判定失败，因为我们已经找到了 plugin，但既没有执行该 plugin，也没有执行命令（这通常会导致 unknown command 错误）
 				t.Fatalf("expected plugin execution, but did not occur")
 			}
 
@@ -342,11 +342,11 @@ type testPluginHandler struct {
 	pluginsDirectory string
 	validPrefixes    []string
 
-	// lookup results
+	// 查找结果
 	lookedup  bool
 	lookupErr error
 
-	// execution results
+	// 执行结果
 	executed       bool
 	executedPlugin string
 	withArgs       []string

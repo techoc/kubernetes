@@ -62,20 +62,20 @@ var (
 		  kubectl create secret docker-registry my-secret --from-file=path/to/.docker/config.json`))
 )
 
-// DockerConfigJSON represents a local docker auth config file
-// for pulling images.
+// DockerConfigJSON 表示用于拉取镜像的本地 docker 认证配置文件
+// 文件。
 type DockerConfigJSON struct {
 	Auths DockerConfig `json:"auths" datapolicy:"token"`
 	// +optional
 	HttpHeaders map[string]string `json:"HttpHeaders,omitempty" datapolicy:"token"`
 }
 
-// DockerConfig represents the config file used by the docker CLI.
-// This config that represents the credentials that should be used
-// when pulling images from specific image repositories.
+// DockerConfig 表示 docker CLI 使用的配置文件。
+// 该配置表示从特定镜像仓库拉取镜像时
+// 应使用的凭据。
 type DockerConfig map[string]DockerConfigEntry
 
-// DockerConfigEntry holds the user information that grant the access to docker registry
+// DockerConfigEntry 保存授予 docker registry 访问权限的用户信息
 type DockerConfigEntry struct {
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty" datapolicy:"password"`
@@ -83,25 +83,25 @@ type DockerConfigEntry struct {
 	Auth     string `json:"auth,omitempty" datapolicy:"token"`
 }
 
-// CreateSecretDockerRegistryOptions holds the options for 'create secret docker-registry' sub command
+// CreateSecretDockerRegistryOptions 保存 'create secret docker-registry' 子命令的选项
 type CreateSecretDockerRegistryOptions struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
 
-	// Name of secret (required)
+	// secret 的名称（必填）
 	Name string
-	// FileSources to derive the secret from (optional)
+	// 派生 secret 所用的 FileSources（可选）
 	FileSources []string
-	// Username for registry (required)
+	// registry 的用户名（必填）
 	Username string
-	// Email for registry (optional)
+	// registry 的邮箱（可选）
 	Email string
-	// Password for registry (required)
+	// registry 的密码（必填）
 	Password string `datapolicy:"password"`
-	// Server for registry (required)
+	// registry 的服务端（必填）
 	Server string
-	// AppendHash; if true, derive a hash from the Secret and append it to the name
+	// AppendHash；为 true 时，根据 Secret 派生哈希并追加到名称后
 	AppendHash bool
 
 	FieldManager     string
@@ -116,7 +116,7 @@ type CreateSecretDockerRegistryOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewSecretDockerRegistryOptions creates a new *CreateSecretDockerRegistryOptions with default value
+// NewSecretDockerRegistryOptions 创建一个带有默认值的 *CreateSecretDockerRegistryOptions
 func NewSecretDockerRegistryOptions(ioStreams genericiooptions.IOStreams) *CreateSecretDockerRegistryOptions {
 	return &CreateSecretDockerRegistryOptions{
 		Server:     "https://index.docker.io/v1/",
@@ -125,7 +125,7 @@ func NewSecretDockerRegistryOptions(ioStreams genericiooptions.IOStreams) *Creat
 	}
 }
 
-// NewCmdCreateSecretDockerRegistry is a macro command for creating secrets to work with Docker registries
+// NewCmdCreateSecretDockerRegistry 是一个用于创建配合 Docker registry 使用的 secret 的宏命令
 func NewCmdCreateSecretDockerRegistry(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewSecretDockerRegistryOptions(ioStreams)
 
@@ -164,7 +164,7 @@ func NewCmdCreateSecretDockerRegistry(f cmdutil.Factory, ioStreams genericioopti
 	return cmd
 }
 
-// Complete loads data from the command line environment
+// Complete 从命令行环境加载数据
 func (o *CreateSecretDockerRegistryOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -217,7 +217,7 @@ func (o *CreateSecretDockerRegistryOptions) Complete(f cmdutil.Factory, cmd *cob
 	return nil
 }
 
-// Validate checks if CreateSecretDockerRegistryOptions has sufficient value to run
+// Validate 检查 CreateSecretDockerRegistryOptions 是否具备运行所需的足够值
 func (o *CreateSecretDockerRegistryOptions) Validate() error {
 	if len(o.Name) == 0 {
 		return fmt.Errorf("name must be specified")
@@ -228,8 +228,8 @@ func (o *CreateSecretDockerRegistryOptions) Validate() error {
 	return nil
 }
 
-// Run calls createSecretDockerRegistry which will create secretDockerRegistry based on CreateSecretDockerRegistryOptions
-// and makes an API call to the server
+// Run 调用 createSecretDockerRegistry，后者根据 CreateSecretDockerRegistryOptions 创建 secretDockerRegistry，
+// 并向服务端发起 API 调用
 func (o *CreateSecretDockerRegistryOptions) Run() error {
 	secretDockerRegistry, err := o.createSecretDockerRegistry()
 	if err != nil {
@@ -257,8 +257,8 @@ func (o *CreateSecretDockerRegistryOptions) Run() error {
 	return o.PrintObj(secretDockerRegistry)
 }
 
-// createSecretDockerRegistry fills in key value pair from the information given in
-// CreateSecretDockerRegistryOptions into *corev1.Secret
+// createSecretDockerRegistry 将 CreateSecretDockerRegistryOptions 中给出的信息
+// 填充为键值对写入 *corev1.Secret
 func (o *CreateSecretDockerRegistryOptions) createSecretDockerRegistry() (*corev1.Secret, error) {
 	namespace := ""
 	if o.EnforceNamespace {
@@ -286,7 +286,7 @@ func (o *CreateSecretDockerRegistryOptions) createSecretDockerRegistry() (*corev
 	return secretDockerRegistry, nil
 }
 
-// handleDockerCfgJSONContent serializes a ~/.docker/config.json file
+// handleDockerCfgJSONContent 序列化 ~/.docker/config.json 文件
 func handleDockerCfgJSONContent(username, password, email, server string) ([]byte, error) {
 	dockerConfigAuth := DockerConfigEntry{
 		Username: username,
@@ -301,7 +301,7 @@ func handleDockerCfgJSONContent(username, password, email, server string) ([]byt
 	return json.Marshal(dockerConfigJSON)
 }
 
-// encodeDockerConfigFieldAuth returns base64 encoding of the username and password string
+// encodeDockerConfigFieldAuth 返回用户名和密码字符串的 base64 编码
 func encodeDockerConfigFieldAuth(username, password string) string {
 	fieldValue := username + ":" + password
 	return base64.StdEncoding.EncodeToString([]byte(fieldValue))

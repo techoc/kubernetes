@@ -38,7 +38,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// SetLastAppliedOptions defines options for the `apply set-last-applied` command.`
+// SetLastAppliedOptions 定义 `apply set-last-applied` 命令的选项。`
 type SetLastAppliedOptions struct {
 	CreateAnnotation bool
 
@@ -60,7 +60,7 @@ type SetLastAppliedOptions struct {
 	genericiooptions.IOStreams
 }
 
-// PatchBuffer caches changes that are to be applied.
+// PatchBuffer 缓存待应用的变更。
 type PatchBuffer struct {
 	Patch     []byte
 	PatchType types.PatchType
@@ -84,7 +84,7 @@ var (
 		`))
 )
 
-// NewSetLastAppliedOptions takes option arguments from a CLI stream and returns it at SetLastAppliedOptions type.
+// NewSetLastAppliedOptions 从 CLI 流中获取选项参数，并以 SetLastAppliedOptions 类型返回。
 func NewSetLastAppliedOptions(ioStreams genericiooptions.IOStreams) *SetLastAppliedOptions {
 	return &SetLastAppliedOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("configured").WithTypeSetter(scheme.Scheme),
@@ -92,7 +92,7 @@ func NewSetLastAppliedOptions(ioStreams genericiooptions.IOStreams) *SetLastAppl
 	}
 }
 
-// NewCmdApplySetLastApplied creates the cobra CLI `apply` subcommand `set-last-applied`.`
+// NewCmdApplySetLastApplied 创建 cobra CLI 中 `apply` 的子命令 `set-last-applied`。`
 func NewCmdApplySetLastApplied(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewSetLastAppliedOptions(ioStreams)
 	cmd := &cobra.Command{
@@ -117,7 +117,7 @@ func NewCmdApplySetLastApplied(f cmdutil.Factory, ioStreams genericiooptions.IOS
 	return cmd
 }
 
-// Complete populates dry-run and output flag options.
+// Complete 填充 dry-run 与 output flag 的选项。
 func (o *SetLastAppliedOptions) Complete(f cmdutil.Factory, cmd *cobra.Command) error {
 	var err error
 	o.dryRunStrategy, err = cmdutil.GetDryRunStrategy(cmd)
@@ -144,7 +144,7 @@ func (o *SetLastAppliedOptions) Complete(f cmdutil.Factory, cmd *cobra.Command) 
 	return nil
 }
 
-// Validate checks SetLastAppliedOptions for validity.
+// Validate 检查 SetLastAppliedOptions 是否有效。
 func (o *SetLastAppliedOptions) Validate() error {
 	r := o.builder.
 		Unstructured().
@@ -162,7 +162,7 @@ func (o *SetLastAppliedOptions) Validate() error {
 			return err
 		}
 
-		// Verify the object exists in the cluster before trying to patch it.
+		// 在尝试 patch 之前，先确认对象存在于集群中。
 		if err := info.Get(); err != nil {
 			if errors.IsNotFound(err) {
 				return err
@@ -177,7 +177,7 @@ func (o *SetLastAppliedOptions) Validate() error {
 			return fmt.Errorf("no last-applied-configuration annotation found on resource: %s, to create the annotation, run the command with --create-annotation", info.Name)
 		}
 
-		//only add to PatchBufferList when changed
+		//仅在发生变更时才加入 PatchBufferList
 		if !bytes.Equal(cmdutil.StripComments(originalBuf), cmdutil.StripComments(diffBuf)) {
 			p := PatchBuffer{Patch: patchBuf, PatchType: patchType}
 			o.patchBufferList = append(o.patchBufferList, p)
@@ -191,7 +191,7 @@ func (o *SetLastAppliedOptions) Validate() error {
 	return err
 }
 
-// RunSetLastApplied executes the `set-last-applied` command according to SetLastAppliedOptions.
+// RunSetLastApplied 根据 SetLastAppliedOptions 执行 `set-last-applied` 命令。
 func (o *SetLastAppliedOptions) RunSetLastApplied() error {
 	for i, patch := range o.patchBufferList {
 		info := o.infoList[i]

@@ -69,7 +69,7 @@ var (
         kubectl autoscale deployment bar --min=2 --max=8 --cpu=60% --memory=70%`))
 )
 
-// AutoscaleOptions declares the arguments accepted by the Autoscale command
+// AutoscaleOptions 声明 Autoscale 命令接受的参数
 type AutoscaleOptions struct {
 	FilenameOptions *resource.FilenameOptions
 
@@ -101,7 +101,7 @@ type AutoscaleOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewAutoscaleOptions creates the options for autoscale
+// NewAutoscaleOptions 创建 autoscale 的选项
 func NewAutoscaleOptions(ioStreams genericiooptions.IOStreams) *AutoscaleOptions {
 	return &AutoscaleOptions{
 		PrintFlags:      genericclioptions.NewPrintFlags("autoscaled").WithTypeSetter(scheme.Scheme),
@@ -113,7 +113,7 @@ func NewAutoscaleOptions(ioStreams genericiooptions.IOStreams) *AutoscaleOptions
 	}
 }
 
-// NewCmdAutoscale returns the autoscale Cobra command
+// NewCmdAutoscale 返回 autoscale Cobra 命令
 func NewCmdAutoscale(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewAutoscaleOptions(ioStreams)
 
@@ -133,7 +133,7 @@ func NewCmdAutoscale(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *c
 		},
 	}
 
-	// bind flag structs
+	// 绑定 flag 结构体
 	o.RecordFlags.AddFlags(cmd)
 	o.PrintFlags.AddFlags(cmd)
 	cmd.Flags().Int32Var(&o.Min, "min", -1, "The lower limit for the number of pods that can be set by the autoscaler. If it's not specified or negative, the server will apply a default value.")
@@ -152,7 +152,7 @@ func NewCmdAutoscale(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *c
 	return cmd
 }
 
-// Complete verifies command line arguments and loads data from the command environment
+// Complete 校验命令行参数并从命令环境中加载数据
 func (o *AutoscaleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.dryRunStrategy, err = cmdutil.GetDryRunStrategy(cmd)
@@ -196,7 +196,7 @@ func (o *AutoscaleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args 
 	return nil
 }
 
-// Validate checks that the provided attach options are specified.
+// Validate 检查所提供的 attach 选项是否已指定。
 func (o *AutoscaleOptions) Validate() error {
 	if o.Max < 1 {
 		return fmt.Errorf("--max=MAXPODS is required and must be at least 1, max: %d", o.Max)
@@ -204,17 +204,17 @@ func (o *AutoscaleOptions) Validate() error {
 	if o.Max < o.Min {
 		return fmt.Errorf("--max=MAXPODS must be larger or equal to --min=MINPODS, max: %d, min: %d", o.Max, o.Min)
 	}
-	// only one of the CPUPercent or CPU param is allowed
+	// CPUPercent 或 CPU 参数只允许指定其中一个
 	if o.CPUPercent > 0 && o.CPU != "" {
 		return fmt.Errorf("--cpu-percent and --cpu are mutually exclusive")
 	}
-	// validate CPU target if specified
+	// 如果指定了 CPU 目标，则进行校验
 	if o.CPU != "" {
 		if _, _, _, err := parseResourceInput(o.CPU, corev1.ResourceCPU); err != nil {
 			return err
 		}
 	}
-	// validate Memory target if specified
+	// 如果指定了 Memory 目标，则进行校验
 	if o.Memory != "" {
 		if _, _, _, err := parseResourceInput(o.Memory, corev1.ResourceMemory); err != nil {
 			return err
@@ -248,8 +248,8 @@ func (o *AutoscaleOptions) Run() error {
 			return fmt.Errorf("cannot autoscale a %s: %w", mapping.GroupVersionKind.Kind, err)
 		}
 
-		// handles the creation of HorizontalPodAutoscaler objects for both autoscaling/v2 and autoscaling/v1 APIs.
-		// If autoscaling/v2 API fails, try to create and handle HorizontalPodAutoscaler using autoscaling/v1 API
+		// 处理 autoscaling/v2 和 autoscaling/v1 API 下 HorizontalPodAutoscaler 对象的创建。
+		// 如果 autoscaling/v2 API 失败，则尝试使用 autoscaling/v1 API 创建并处理 HorizontalPodAutoscaler
 		var hpaV2 runtime.Object
 		hpaV2, err = o.createHorizontalPodAutoscalerV2(info.Name, mapping)
 		if err != nil {
@@ -258,7 +258,7 @@ func (o *AutoscaleOptions) Run() error {
 		if err = o.handleHPA(hpaV2); err != nil {
 			klog.V(1).Infof("Encountered an error with the autoscaling/v2 HorizontalPodAutoscaler: %v. "+
 				"Falling back to try the autoscaling/v1 HorizontalPodAutoscaler", err)
-			// check if the HPA can be created using v1 API.
+			// 检查是否可以使用 v1 API 创建 HPA。
 			if ok, err := o.canCreateHPAV1(); !ok {
 				return fmt.Errorf("failed to create autoscaling/v2 HPA and the configuration is incompatible with autoscaling/v1: %w", err)
 			}
@@ -280,9 +280,9 @@ func (o *AutoscaleOptions) Run() error {
 }
 
 func (o *AutoscaleOptions) canCreateHPAV1() (bool, error) {
-	// Allow fallback to v1 HPA only if:
-	// 1. CPUPercent is set and Memory is not set.
-	// 2. Or, Memory is not set and the metric type is UtilizationMetricType.
+	// 仅在以下条件下允许回退到 v1 HPA：
+	// 1. 设置了 CPUPercent 且未设置 Memory。
+	// 2. 或者，未设置 Memory 且指标类型是 UtilizationMetricType。
 	_, _, metricsType, err := parseResourceInput(o.CPU, corev1.ResourceCPU)
 	if err != nil {
 		return false, err
@@ -291,7 +291,7 @@ func (o *AutoscaleOptions) canCreateHPAV1() (bool, error) {
 		(o.Memory == "" && metricsType == autoscalingv2.UtilizationMetricType), nil
 }
 
-// handleHPA handles the creation and management of a single HPA object.
+// handleHPA 处理单个 HPA 对象的创建和管理。
 func (o *AutoscaleOptions) handleHPA(hpa runtime.Object) error {
 	if err := o.Recorder.Record(hpa); err != nil {
 		return fmt.Errorf("error recording current command: %w", err)
@@ -368,7 +368,7 @@ func (o *AutoscaleOptions) createHorizontalPodAutoscalerV2(refName string, mappi
 
 	metrics := []autoscalingv2.MetricSpec{}
 
-	// add CPU metric if any of the CPU targets are specified
+	// 如果指定了任何 CPU 目标，则添加 CPU 指标
 	if o.CPUPercent > 0 {
 		cpuMetric := autoscalingv2.MetricSpec{
 			Type: autoscalingv2.ResourceMetricSourceType,
@@ -382,7 +382,7 @@ func (o *AutoscaleOptions) createHorizontalPodAutoscalerV2(refName string, mappi
 		metrics = append(metrics, cpuMetric)
 	}
 
-	// add Cpu metric if any of the cpu targets are specified
+	// 如果指定了任何 cpu 目标，则添加 Cpu 指标
 	if o.CPU != "" {
 		cpuMetric := autoscalingv2.MetricSpec{
 			Type: autoscalingv2.ResourceMetricSourceType,
@@ -409,7 +409,7 @@ func (o *AutoscaleOptions) createHorizontalPodAutoscalerV2(refName string, mappi
 		metrics = append(metrics, cpuMetric)
 	}
 
-	// add Memory metric if any of the memory targets are specified
+	// 如果指定了任何 memory 目标，则添加 Memory 指标
 	if o.Memory != "" {
 		memoryMetric := autoscalingv2.MetricSpec{
 			Type: autoscalingv2.ResourceMetricSourceType,
@@ -435,7 +435,7 @@ func (o *AutoscaleOptions) createHorizontalPodAutoscalerV2(refName string, mappi
 		metrics = append(metrics, memoryMetric)
 	}
 
-	// Only set Metrics if there are any defined
+	// 仅在定义了指标时才设置 Metrics
 	if len(metrics) > 0 {
 		scaler.Spec.Metrics = metrics
 	} else {
@@ -481,20 +481,20 @@ func (o *AutoscaleOptions) createHorizontalPodAutoscalerV1(refName string, mappi
 	return &scaler
 }
 
-// parseResourceInput parses a resource input string into either a utilization percentage or a quantity value.
-// It supports:
-// - Percentage values (e.g., "70%") for UtilizationMetricType
-// - Quantity values with units (e.g., "500m", "2Gi")
-// - Bare numbers without units, which are interpreted as:
-//   - CPU: milliCPU ("500" → "500m")
-//   - Memory: Mebibytes ("512" → "512Mi")
+// parseResourceInput 将资源输入字符串解析为利用率百分比或数量值。
+// 它支持：
+// - 百分比值（例如 "70%"），用于 UtilizationMetricType
+// - 带单位的数量值（例如 "500m"、"2Gi"）
+// - 不带单位的裸数字，其解释如下：
+//   - CPU：milliCPU（"500" → "500m"）
+//   - Memory：Mebibytes（"512" → "512Mi"）
 func parseResourceInput(input string, resourceType corev1.ResourceName) (apiresource.Quantity, int32, autoscalingv2.MetricTargetType, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return apiresource.Quantity{}, 0, "", fmt.Errorf("empty input")
 	}
 
-	// Case 1: Handle percentage-based metrics like "70%"
+	// 情况 1：处理类似 "70%" 的基于百分比的指标
 	percentValue, isPercent, err := parsePercentage(input)
 	if isPercent {
 		if err != nil {
@@ -503,7 +503,7 @@ func parseResourceInput(input string, resourceType corev1.ResourceName) (apireso
 		return apiresource.Quantity{}, percentValue, autoscalingv2.UtilizationMetricType, nil
 	}
 
-	// Case 2: Try to interpret input as a bare number (e.g., "500"), and apply default float
+	// 情况 2：尝试将输入解释为裸数字（例如 "500"），并应用默认单位
 	valueFloat, err := strconv.ParseFloat(input, 64)
 	if err == nil {
 		unit, err := getDefaultUnitForResource(resourceType)
@@ -519,7 +519,7 @@ func parseResourceInput(input string, resourceType corev1.ResourceName) (apireso
 		return quantity, 0, autoscalingv2.AverageValueMetricType, nil
 	}
 
-	// Case 3: Parse normally if input has a valid unit (e.g., "500m", "2Gi")
+	// 情况 3：输入带有有效单位时按常规解析（例如 "500m"、"2Gi"）
 	quantity, err := apiresource.ParseQuantity(input)
 	if err != nil {
 		return apiresource.Quantity{}, 0, "", fmt.Errorf("invalid resource %s value: %s", resourceType, input)

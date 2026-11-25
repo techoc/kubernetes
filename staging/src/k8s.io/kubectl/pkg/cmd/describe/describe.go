@@ -70,8 +70,8 @@ var (
 		kubectl describe pods frontend`))
 )
 
-// DescribeFlags directly reflect the information that CLI is gathering via flags. They will be converted to Options,
-// which reflect the runtime requirements for the command.
+// DescribeFlags 直接反映 CLI 通过标志收集的信息。它们会被转换为 Options，
+// 后者体现命令运行时的需求。
 type DescribeFlags struct {
 	Factory                 cmdutil.Factory
 	Selector                string
@@ -82,7 +82,7 @@ type DescribeFlags struct {
 	genericiooptions.IOStreams
 }
 
-// NewDescribeFlags returns a default DescribeFlags
+// NewDescribeFlags 返回一个默认的 DescribeFlags
 func NewDescribeFlags(f cmdutil.Factory, streams genericiooptions.IOStreams) *DescribeFlags {
 	return &DescribeFlags{
 		Factory:         f,
@@ -95,7 +95,7 @@ func NewDescribeFlags(f cmdutil.Factory, streams genericiooptions.IOStreams) *De
 	}
 }
 
-// AddFlags registers flags for a cli
+// AddFlags 为 CLI 注册标志
 func (flags *DescribeFlags) AddFlags(cmd *cobra.Command) {
 	cmdutil.AddFilenameOptionFlags(cmd, flags.FilenameOptions, "containing the resource to describe")
 	cmdutil.AddLabelSelectorFlagVar(cmd, &flags.Selector)
@@ -108,7 +108,7 @@ func (flags *DescribeFlags) AddFlags(cmd *cobra.Command) {
 	cmdutil.AddChunkSizeFlag(cmd, &flags.DescriberSettings.ChunkSize)
 }
 
-// ToOptions converts from CLI inputs to runtime input
+// ToOptions 将 CLI 输入转换为运行时输入
 func (flags *DescribeFlags) ToOptions(parent string, args []string) (*DescribeOptions, error) {
 
 	var err error
@@ -235,7 +235,7 @@ func (o *DescribeOptions) Run() error {
 	}
 
 	if len(infos) == 0 && len(allErrs) == 0 {
-		// if we wrote no output, and had no errors, be sure we output something.
+		// 如果既没有输出、也没有错误，确保至少输出一些内容。
 		if o.AllNamespaces {
 			fmt.Fprintln(o.ErrOut, "No resources found")
 		} else {

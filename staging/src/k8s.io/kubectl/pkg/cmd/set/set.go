@@ -33,7 +33,7 @@ var (
 		These commands help you make changes to existing application resources.`))
 )
 
-// NewCmdSet returns an initialized Command instance for 'set' sub command
+// NewCmdSet 返回 'set' 子命令的已初始化 Command 实例
 func NewCmdSet(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "set SUBCOMMAND",
@@ -43,7 +43,7 @@ func NewCmdSet(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Com
 		Run:                   cmdutil.DefaultSubCommandRun(streams.ErrOut),
 	}
 
-	// add subcommands
+	// 添加子命令
 	cmd.AddCommand(NewCmdImage(f, streams))
 	cmd.AddCommand(NewCmdResources(f, streams))
 	cmd.AddCommand(NewCmdSelector(f, streams))

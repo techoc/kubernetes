@@ -59,8 +59,8 @@ var (
 		kubectl api-resources --api-group=rbac.authorization.k8s.io`)
 )
 
-// APIResourceOptions is the start of the data required to perform the operation.
-// As new fields are added, add them here instead of referencing the cmd.Flags()
+// APIResourceOptions 是执行该操作所需数据的起点。
+// 新增字段时请添加在这里，而不是引用 cmd.Flags()
 type APIResourceOptions struct {
 	SortBy     string
 	APIGroup   string
@@ -79,7 +79,7 @@ type APIResourceOptions struct {
 	PrintObj   printers.ResourcePrinterFunc
 }
 
-// NewAPIResourceOptions creates the options for APIResource
+// NewAPIResourceOptions 创建 APIResource 所需的选项
 func NewAPIResourceOptions(ioStreams genericiooptions.IOStreams) *APIResourceOptions {
 	return &APIResourceOptions{
 		IOStreams:  ioStreams,
@@ -88,7 +88,7 @@ func NewAPIResourceOptions(ioStreams genericiooptions.IOStreams) *APIResourceOpt
 	}
 }
 
-// NewCmdAPIResources creates the `api-resources` command
+// NewCmdAPIResources 创建 `api-resources` 命令
 func NewCmdAPIResources(restClientGetter genericclioptions.RESTClientGetter, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewAPIResourceOptions(ioStreams)
 
@@ -115,7 +115,7 @@ func NewCmdAPIResources(restClientGetter genericclioptions.RESTClientGetter, ioS
 	return cmd
 }
 
-// Validate checks to the APIResourceOptions to see if there is sufficient information run the command
+// Validate 检查 APIResourceOptions，判断是否有足够信息来运行命令
 func (o *APIResourceOptions) Validate() error {
 	supportedSortTypes := sets.New[string]("", "name", "kind")
 	if len(o.SortBy) > 0 {
@@ -126,7 +126,7 @@ func (o *APIResourceOptions) Validate() error {
 	return nil
 }
 
-// Complete adapts from the command line args and validates them
+// Complete 适配命令行参数并对其进行校验
 func (o *APIResourceOptions) Complete(restClientGetter genericclioptions.RESTClientGetter, cmd *cobra.Command, args []string) error {
 	if len(args) != 0 {
 		return cmdutil.UsageErrorf(cmd, "unexpected arguments: %v", args)
@@ -166,13 +166,13 @@ func (o *APIResourceOptions) Complete(restClientGetter genericclioptions.RESTCli
 	return nil
 }
 
-// RunAPIResources does the work
+// RunAPIResources 执行实际工作
 func (o *APIResourceOptions) RunAPIResources() error {
 	w := printers.GetNewTabWriter(o.Out)
 	defer w.Flush()
 
 	if !o.Cached {
-		// Always request fresh data from the server
+		// 始终向服务端请求最新数据
 		o.discoveryClient.Invalidate()
 	}
 
@@ -204,23 +204,23 @@ func (o *APIResourceOptions) RunAPIResources() error {
 			if len(resource.Verbs) == 0 {
 				continue
 			}
-			// filter apiGroup
+			// 过滤 apiGroup
 			if o.groupChanged && o.APIGroup != gv.Group {
 				continue
 			}
-			// filter namespaced
+			// 过滤 namespaced
 			if o.nsChanged && o.Namespaced != resource.Namespaced {
 				continue
 			}
-			// filter to resources that support the specified verbs
+			// 过滤出支持指定 verbs 的资源
 			if len(o.Verbs) > 0 && !sets.New[string](resource.Verbs...).HasAll(o.Verbs...) {
 				continue
 			}
-			// filter to resources that belong to the specified categories
+			// 过滤出属于指定 categories 的资源
 			if len(o.Categories) > 0 && !sets.New[string](resource.Categories...).HasAll(o.Categories...) {
 				continue
 			}
-			// set these because we display a concatenation of these two values under APIVERSION column of human-readable output
+			// 设置这些值，因为在人类可读输出的 APIVERSION 列中显示的是这两个值的拼接结果
 			resource.Group = gv.Group
 			resource.Version = gv.Version
 			apiResources = append(apiResources, resource)

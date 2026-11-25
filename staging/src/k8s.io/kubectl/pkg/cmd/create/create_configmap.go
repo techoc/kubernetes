@@ -68,23 +68,23 @@ var (
 		  kubectl create configmap my-config --from-env-file=path/to/bar.env`))
 )
 
-// ConfigMapOptions holds properties for create configmap sub-command
+// ConfigMapOptions 保存 create configmap 子命令的属性
 type ConfigMapOptions struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
 
-	// Name of configMap (required)
+	// configMap 的名称（必填）
 	Name string
-	// Type of configMap (optional)
+	// configMap 的类型（可选）
 	Type string
-	// FileSources to derive the configMap from (optional)
+	// 派生 configMap 所用的 FileSources（可选）
 	FileSources []string
-	// LiteralSources to derive the configMap from (optional)
+	// 派生 configMap 所用的 LiteralSources（可选）
 	LiteralSources []string
-	// EnvFileSources to derive the configMap from (optional)
+	// 派生 configMap 所用的 EnvFileSources（可选）
 	EnvFileSources []string
-	// AppendHash; if true, derive a hash from the ConfigMap and append it to the name
+	// AppendHash；为 true 时，根据 ConfigMap 派生哈希并追加到名称后
 	AppendHash bool
 
 	FieldManager     string
@@ -99,7 +99,7 @@ type ConfigMapOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewConfigMapOptions creates a new *ConfigMapOptions with default value
+// NewConfigMapOptions 创建一个带有默认值的 *ConfigMapOptions
 func NewConfigMapOptions(ioStreams genericiooptions.IOStreams) *ConfigMapOptions {
 	return &ConfigMapOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -107,7 +107,7 @@ func NewConfigMapOptions(ioStreams genericiooptions.IOStreams) *ConfigMapOptions
 	}
 }
 
-// NewCmdCreateConfigMap creates the `create configmap` Cobra command
+// NewCmdCreateConfigMap 创建 `create configmap` Cobra 命令
 func NewCmdCreateConfigMap(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewConfigMapOptions(ioStreams)
 
@@ -140,7 +140,7 @@ func NewCmdCreateConfigMap(f cmdutil.Factory, ioStreams genericiooptions.IOStrea
 	return cmd
 }
 
-// Complete loads data from the command line environment
+// Complete 从命令行环境加载数据
 func (o *ConfigMapOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -187,7 +187,7 @@ func (o *ConfigMapOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args 
 	return nil
 }
 
-// Validate checks if ConfigMapOptions has sufficient value to run
+// Validate 检查 ConfigMapOptions 是否具备运行所需的足够值
 func (o *ConfigMapOptions) Validate() error {
 	if len(o.Name) == 0 {
 		return fmt.Errorf("name must be specified")
@@ -198,7 +198,7 @@ func (o *ConfigMapOptions) Validate() error {
 	return nil
 }
 
-// Run calls createConfigMap and filled in value for configMap object
+// Run 调用 createConfigMap 并为 configMap 对象填充值
 func (o *ConfigMapOptions) Run() error {
 	configMap, err := o.createConfigMap()
 	if err != nil {
@@ -225,8 +225,8 @@ func (o *ConfigMapOptions) Run() error {
 	return o.PrintObj(configMap)
 }
 
-// createConfigMap fills in key value pair from the information given in
-// ConfigMapOptions into *corev1.ConfigMap
+// createConfigMap 将 ConfigMapOptions 中给出的信息
+// 填充为键值对写入 *corev1.ConfigMap
 func (o *ConfigMapOptions) createConfigMap() (*corev1.ConfigMap, error) {
 	namespace := ""
 	if o.EnforceNamespace {
@@ -273,8 +273,8 @@ func (o *ConfigMapOptions) createConfigMap() (*corev1.ConfigMap, error) {
 	return configMap, nil
 }
 
-// handleConfigMapFromLiteralSources adds the specified literal source
-// information into the provided configMap.
+// handleConfigMapFromLiteralSources 将指定的字面量来源信息
+// 添加到给定的 configMap 中。
 func handleConfigMapFromLiteralSources(configMap *corev1.ConfigMap, literalSources []string) error {
 	for _, literalSource := range literalSources {
 		keyName, value, err := util.ParseLiteralSource(literalSource)
@@ -290,8 +290,8 @@ func handleConfigMapFromLiteralSources(configMap *corev1.ConfigMap, literalSourc
 	return nil
 }
 
-// handleConfigMapFromFileSources adds the specified file source information
-// into the provided configMap
+// handleConfigMapFromFileSources 将指定的文件来源信息
+// 添加到给定的 configMap 中
 func handleConfigMapFromFileSources(configMap *corev1.ConfigMap, fileSources []string) error {
 	for _, fileSource := range fileSources {
 		keyName, filePath, err := util.ParseFileSource(fileSource)
@@ -336,8 +336,8 @@ func handleConfigMapFromFileSources(configMap *corev1.ConfigMap, fileSources []s
 	return nil
 }
 
-// handleConfigMapFromEnvFileSources adds the specified env file source information
-// into the provided configMap
+// handleConfigMapFromEnvFileSources 将指定的 env 文件来源信息
+// 添加到给定的 configMap 中
 func handleConfigMapFromEnvFileSources(configMap *corev1.ConfigMap, envFileSources []string) error {
 	for _, envFileSource := range envFileSources {
 		info, err := os.Stat(envFileSource)
@@ -363,8 +363,8 @@ func handleConfigMapFromEnvFileSources(configMap *corev1.ConfigMap, envFileSourc
 	return nil
 }
 
-// addKeyFromFileToConfigMap adds a key with the given name to a ConfigMap, populating
-// the value with the content of the given file path, or returns an error.
+// addKeyFromFileToConfigMap 使用给定名称向 ConfigMap 添加一个 key，值取自给定文件路径的内容；
+// 若失败则返回错误。
 func addKeyFromFileToConfigMap(configMap *corev1.ConfigMap, keyName, filePath string) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -382,8 +382,8 @@ func addKeyFromFileToConfigMap(configMap *corev1.ConfigMap, keyName, filePath st
 	return nil
 }
 
-// addKeyFromLiteralToConfigMap adds the given key and data to the given config map,
-// returning an error if the key is not valid or if the key already exists.
+// addKeyFromLiteralToConfigMap 将给定的 key 和数据添加到给定的 config map，
+// 如果 key 无效或已存在则返回错误。
 func addKeyFromLiteralToConfigMap(configMap *corev1.ConfigMap, keyName, data string) error {
 	err := validateNewConfigMap(configMap, keyName)
 	if err != nil {
@@ -394,8 +394,8 @@ func addKeyFromLiteralToConfigMap(configMap *corev1.ConfigMap, keyName, data str
 	return nil
 }
 
-// validateNewConfigMap checks whether the keyname is valid
-// Note, the rules for ConfigMap keys are the exact same as the ones for SecretKeys.
+// validateNewConfigMap 检查 key 名称是否有效
+// 注意，ConfigMap key 的规则与 SecretKey 的规则完全相同。
 func validateNewConfigMap(configMap *corev1.ConfigMap, keyName string) error {
 	if errs := validation.IsConfigMapKey(keyName); len(errs) > 0 {
 		return fmt.Errorf("%q is not a valid key name for a ConfigMap: %s", keyName, strings.Join(errs, ","))

@@ -55,8 +55,8 @@ var (
 
 type updateSubjects func(existings []rbacv1.Subject, targets []rbacv1.Subject) (bool, []rbacv1.Subject)
 
-// SubjectOptions is the start of the data required to perform the operation. As new fields are added, add them here instead of
-// referencing the cmd.Flags
+// SubjectOptions 是执行该操作所需数据的起点。新增字段时请添加在这里，而不是
+// 引用 cmd.Flags
 type SubjectOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 
@@ -82,7 +82,7 @@ type SubjectOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewSubjectOptions returns an initialized SubjectOptions instance
+// NewSubjectOptions 返回一个已初始化的 SubjectOptions 实例
 func NewSubjectOptions(streams genericiooptions.IOStreams) *SubjectOptions {
 	return &SubjectOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("subjects updated").WithTypeSetter(scheme.Scheme),
@@ -91,7 +91,7 @@ func NewSubjectOptions(streams genericiooptions.IOStreams) *SubjectOptions {
 	}
 }
 
-// NewCmdSubject returns the "new subject" sub command
+// NewCmdSubject 返回 "new subject" 子命令
 func NewCmdSubject(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewSubjectOptions(streams)
 	cmd := &cobra.Command{
@@ -121,7 +121,7 @@ func NewCmdSubject(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra
 	return cmd
 }
 
-// Complete completes all required options
+// Complete 补全所有必需的选项
 func (o *SubjectOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	o.Output = cmdutil.GetFlagString(cmd, "output")
 	var err error
@@ -152,9 +152,9 @@ func (o *SubjectOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []
 		Flatten()
 
 	if o.Local {
-		// if a --local flag was provided, and a resource was specified in the form
-		// <resource>/<name>, fail immediately as --local cannot query the api server
-		// for the specified resource.
+		// 如果提供了 --local 标志，且资源以
+		// <resource>/<name> 形式指定，则立即失败，因为 --local 无法向 api server
+		// 查询指定资源。
 		if len(args) > 0 {
 			return resource.LocalResourceError
 		}
@@ -173,7 +173,7 @@ func (o *SubjectOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []
 	return nil
 }
 
-// Validate makes sure provided values in SubjectOptions are valid
+// Validate 确保 SubjectOptions 中提供的值有效
 func (o *SubjectOptions) Validate() error {
 	if o.Local && o.DryRunStrategy == cmdutil.DryRunServer {
 		return fmt.Errorf("cannot specify --local and --dry-run=server - did you mean --dry-run=client?")
@@ -202,7 +202,7 @@ func (o *SubjectOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of "set subject" sub command
+// Run 执行 "set subject" 子命令
 func (o *SubjectOptions) Run(fn updateSubjects) error {
 	patches := CalculatePatches(o.Infos, scheme.DefaultJSONEncoder(), func(obj runtime.Object) ([]byte, error) {
 		subjects := []rbacv1.Subject{}
@@ -239,7 +239,7 @@ func (o *SubjectOptions) Run(fn updateSubjects) error {
 
 		transformed, err := updateSubjectForObject(obj, subjects, fn)
 		if transformed && err == nil {
-			// TODO: switch UpdatePodSpecForObject to work on v1.PodSpec
+			// TODO: 改用 UpdatePodSpecForObject 处理 v1.PodSpec
 			return runtime.Encode(scheme.DefaultJSONEncoder(), obj)
 		}
 		return nil, err
@@ -254,7 +254,7 @@ func (o *SubjectOptions) Run(fn updateSubjects) error {
 			continue
 		}
 
-		//no changes
+		//无变更
 		if string(patch.Patch) == "{}" || len(patch.Patch) == 0 {
 			continue
 		}
@@ -283,7 +283,7 @@ func (o *SubjectOptions) Run(fn updateSubjects) error {
 	return utilerrors.NewAggregate(allErrs)
 }
 
-// Note: the obj mutates in the function
+// 注意：该函数会修改 obj
 func updateSubjectForObject(obj runtime.Object, subjects []rbacv1.Subject, fn updateSubjects) (bool, error) {
 	switch t := obj.(type) {
 	case *rbacv1.RoleBinding:

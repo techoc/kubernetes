@@ -44,9 +44,9 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// AnnotateFlags directly reflect the information that CLI is gathering via flags.  They will be converted to Options, which
-// reflect the runtime requirements for the command.  This structure reduces the transformation to wiring and makes
-// the logic itself easy to unit test
+// AnnotateFlags 直接反映 CLI 通过标志收集的信息。它们会被转换为 Options，
+// 后者体现命令运行时的需求。该结构把转换简化为单纯的装配，
+// 使逻辑本身更易于单元测试
 type AnnotateFlags struct {
 	PrintFlags           *genericclioptions.PrintFlags
 	RecordFlags          *genericclioptions.RecordFlags
@@ -61,7 +61,7 @@ type AnnotateFlags struct {
 	genericiooptions.IOStreams
 }
 
-// NewAnnotateFlags returns a default AnnotateFlags
+// NewAnnotateFlags 返回一个默认的 AnnotateFlags
 func NewAnnotateFlags(
 	restClientGetter genericclioptions.RESTClientGetter,
 	streams genericiooptions.IOStreams,
@@ -83,7 +83,7 @@ func NewAnnotateFlags(
 	}
 }
 
-// AnnotateOptions have the data required to perform the annotate operation
+// AnnotateOptions 包含执行 annotate 操作所需的数据
 type AnnotateOptions struct {
 	PrintObj        printers.ResourcePrinterFunc
 	Recorder        genericclioptions.Recorder
@@ -136,7 +136,7 @@ var (
     kubectl annotate pods foo description-`))
 )
 
-// NewCmdAnnotate creates the `annotate` command
+// NewCmdAnnotate 创建 `annotate` 命令
 func NewCmdAnnotate(parent string, f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	flags := NewAnnotateFlags(f, streams)
 
@@ -159,7 +159,7 @@ func NewCmdAnnotate(parent string, f cmdutil.Factory, streams genericiooptions.I
 	return cmd
 }
 
-// AddFlags registers flags for a cli.
+// AddFlags 为 CLI 注册标志。
 func (flags *AnnotateFlags) AddFlags(cmd *cobra.Command, ioStreams genericiooptions.IOStreams) {
 	flags.PrintFlags.AddFlags(cmd)
 	flags.ResourceBuilderFlags.AddFlags(cmd.Flags())
@@ -172,15 +172,15 @@ func (flags *AnnotateFlags) AddFlags(cmd *cobra.Command, ioStreams genericioopti
 	cmd.Flags().StringVar(&flags.ResourceVersion, "resource-version", flags.ResourceVersion, i18n.T("If non-empty, the annotation update will only succeed if this is the current resource-version for the object. Only valid when specifying a single resource."))
 }
 
-// ToOptions converts from CLI inputs to runtime inputs.
+// ToOptions 将 CLI 输入转换为运行时输入。
 func (flags *AnnotateFlags) ToOptions(cmd *cobra.Command, args []string) (*AnnotateOptions, error) {
 	dryRunStrategy, err := cmdutil.GetDryRunStrategy(cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	// retrieves resource and annotation args from args
-	// also checks args to verify that all resources are specified before annotations
+	// 从参数中提取资源和 annotation 参数
+	// 同时检查参数，确认所有资源都写在 annotation 之前
 	resources, annotationArgs, err := cmdutil.GetResourcesAndPairs(args, "annotation")
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (flags *AnnotateFlags) ToOptions(cmd *cobra.Command, args []string) (*Annot
 		return nil, err
 	}
 
-	// Checks the options and flags to see if there is sufficient information run the command.
+	// 检查选项和标志，确认是否有足够的信息运行命令。
 	if flags.List && flags.PrintFlags.OutputFormat != nil && len(*flags.PrintFlags.OutputFormat) > 0 {
 		return nil, fmt.Errorf("--list and --output may not be specified together")
 	}
@@ -260,7 +260,7 @@ func (flags *AnnotateFlags) ToOptions(cmd *cobra.Command, args []string) (*Annot
 	return options, nil
 }
 
-// RunAnnotate does the work
+// RunAnnotate 执行实际工作
 func (o AnnotateOptions) RunAnnotate() error {
 	visitor := o.ResourceBuilder.Do()
 
@@ -269,7 +269,7 @@ func (o AnnotateOptions) RunAnnotate() error {
 		result.IntoSingleItemImplied(&singleItemImpliedResource)
 	}
 
-	// only apply resource version locking on a single resource.
+	// 仅对单个资源应用 resourceVersion 锁定。
 	if !singleItemImpliedResource && len(o.ResourceVersion) > 0 {
 		return fmt.Errorf("--resource-version may only be used with a single resource")
 	}
@@ -292,7 +292,7 @@ func (o AnnotateOptions) RunAnnotate() error {
 			name, namespace := info.Name, info.Namespace
 
 			if len(o.ResourceVersion) != 0 {
-				// ensure resourceVersion is always sent in the patch by clearing it from the starting JSON
+				// 从起始 JSON 中清除 resourceVersion，确保补丁中始终携带该字段
 				accessor, err := meta.Accessor(obj)
 				if err != nil {
 					return err
@@ -361,12 +361,12 @@ func (o AnnotateOptions) RunAnnotate() error {
 	})
 }
 
-// parseAnnotations retrieves new and remove annotations from annotation args
+// parseAnnotations 从 annotation 参数中提取要新增和要删除的 annotation
 func parseAnnotations(annotationArgs []string) (map[string]string, []string, error) {
 	return cmdutil.ParsePairs(annotationArgs, "annotation", true)
 }
 
-// validateAnnotations checks the format of annotation args and checks removed annotations aren't in the new annotations map
+// validateAnnotations 检查 annotation 参数的格式，并确认待删除的 annotation 不在新增 annotation 的映射中
 func validateAnnotations(removeAnnotations []string, newAnnotations map[string]string) error {
 	var modifyRemoveBuf bytes.Buffer
 	for _, removeAnnotation := range removeAnnotations {
@@ -384,11 +384,11 @@ func validateAnnotations(removeAnnotations []string, newAnnotations map[string]s
 	return nil
 }
 
-// validateNoAnnotationOverwrites validates that when overwrite is false, to-be-updated annotations don't exist in the object annotation map (yet)
+// validateNoAnnotationOverwrites 校验当 overwrite 为 false 时，待更新的 annotation 尚未存在于对象的 annotation 映射中
 func validateNoAnnotationOverwrites(accessor metav1.Object, annotations map[string]string) error {
 	var buf bytes.Buffer
 	for key, value := range annotations {
-		// change-cause annotation can always be overwritten
+		// change-cause annotation 始终允许被覆盖
 		if key == polymorphichelpers.ChangeCauseAnnotation {
 			continue
 		}
@@ -405,7 +405,7 @@ func validateNoAnnotationOverwrites(accessor metav1.Object, annotations map[stri
 	return nil
 }
 
-// updateAnnotations updates annotations of obj
+// updateAnnotations 更新 obj 的 annotation
 func (o AnnotateOptions) updateAnnotations(obj runtime.Object) error {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {

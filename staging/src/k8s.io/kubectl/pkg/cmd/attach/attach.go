@@ -70,11 +70,11 @@ const (
 	defaultDetachSequence = "ctrl-p,ctrl-q"
 )
 
-// AttachOptions declare the arguments accepted by the Attach command
+// AttachOptions 声明 Attach 命令接受的参数
 type AttachOptions struct {
 	exec.StreamOptions
 
-	// whether to disable use of standard error when streaming output from tty
+	// 从 tty 流式输出时是否禁用标准错误的使用
 	DisableStderr bool
 
 	DetachKeys string
@@ -94,7 +94,7 @@ type AttachOptions struct {
 	Config        *restclient.Config
 }
 
-// NewAttachOptions creates the options for attach
+// NewAttachOptions 创建 attach 的选项
 func NewAttachOptions(streams genericiooptions.IOStreams) *AttachOptions {
 	return &AttachOptions{
 		StreamOptions: exec.StreamOptions{
@@ -105,7 +105,7 @@ func NewAttachOptions(streams genericiooptions.IOStreams) *AttachOptions {
 	}
 }
 
-// NewCmdAttach returns the attach Cobra command
+// NewCmdAttach 返回 attach Cobra 命令
 func NewCmdAttach(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewAttachOptions(streams)
 	cmd := &cobra.Command{
@@ -130,12 +130,12 @@ func NewCmdAttach(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.
 	return cmd
 }
 
-// RemoteAttach defines the interface accepted by the Attach command - provided for test stubbing
+// RemoteAttach 定义 Attach 命令接受的接口 —— 用于测试打桩
 type RemoteAttach interface {
 	Attach(url *url.URL, config *restclient.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool, terminalSizeQueue remotecommand.TerminalSizeQueue) error
 }
 
-// DefaultAttachFunc is the default AttachFunc used
+// DefaultAttachFunc 是默认的 AttachFunc
 func DefaultAttachFunc(o *AttachOptions, containerToAttach *corev1.Container, raw bool, sizeQueue remotecommand.TerminalSizeQueue) func() error {
 	return func() error {
 		restClient, err := restclient.RESTClientFor(o.Config)
@@ -168,10 +168,10 @@ func DefaultAttachFunc(o *AttachOptions, containerToAttach *corev1.Container, ra
 	}
 }
 
-// DefaultRemoteAttach is the standard implementation of attaching
+// DefaultRemoteAttach 是 attach 的标准实现
 type DefaultRemoteAttach struct{}
 
-// Attach executes attach to a running container
+// Attach 执行对正在运行的容器的 attach
 func (*DefaultRemoteAttach) Attach(url *url.URL, config *restclient.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool, terminalSizeQueue remotecommand.TerminalSizeQueue) error {
 	exec, err := createExecutor(url, config)
 	if err != nil {
@@ -186,15 +186,15 @@ func (*DefaultRemoteAttach) Attach(url *url.URL, config *restclient.Config, stdi
 	})
 }
 
-// createExecutor returns the Executor or an error if one occurred.
+// createExecutor 返回 Executor，如果发生错误则返回 error。
 func createExecutor(url *url.URL, config *restclient.Config) (remotecommand.Executor, error) {
 	exec, err := remotecommand.NewSPDYExecutor(config, "POST", url)
 	if err != nil {
 		return nil, err
 	}
-	// Fallback executor is default, unless feature flag is explicitly disabled.
+	// 默认情况下使用 fallback executor，除非显式禁用 feature flag。
 	if !cmdutil.RemoteCommandWebsockets.IsDisabled() {
-		// WebSocketExecutor must be "GET" method as described in RFC 6455 Sec. 4.1 (page 17).
+		// 如 RFC 6455 Sec. 4.1（第 17 页）所述，WebSocketExecutor 必须是 "GET" 方法。
 		websocketExec, err := remotecommand.NewWebSocketExecutor(config, "GET", url.String())
 		if err != nil {
 			return nil, err
@@ -209,7 +209,7 @@ func createExecutor(url *url.URL, config *restclient.Config) (remotecommand.Exec
 	return exec, nil
 }
 
-// Complete verifies command line arguments and loads data from the command environment
+// Complete 校验命令行参数并从命令环境中加载数据
 func (o *AttachOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Namespace, _, err = f.ToRawKubeConfigLoader().Namespace()
@@ -241,7 +241,7 @@ func (o *AttachOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []s
 	return nil
 }
 
-// Validate checks that the provided attach options are specified.
+// Validate 检查所提供的 attach 选项是否已指定。
 func (o *AttachOptions) Validate() error {
 	if len(o.Resources) == 0 {
 		return fmt.Errorf("at least 1 argument is required for attach")
@@ -256,7 +256,7 @@ func (o *AttachOptions) Validate() error {
 	return nil
 }
 
-// Run executes a validated remote execution against a pod.
+// Run 对 pod 执行经过校验的远程执行。
 func (o *AttachOptions) Run() error {
 	if o.Pod == nil {
 		b := o.Builder().
@@ -283,10 +283,10 @@ func (o *AttachOptions) Run() error {
 		if o.Pod.Status.Phase == corev1.PodSucceeded || o.Pod.Status.Phase == corev1.PodFailed {
 			return fmt.Errorf("cannot attach a container in a completed pod; current phase is %s", o.Pod.Status.Phase)
 		}
-		// TODO: convert this to a clean "wait" behavior
+		// TODO: 将其转换为干净的 "wait" 行为
 	}
 
-	// check for TTY
+	// 检查 TTY
 	containerToAttach, err := o.containerToAttachTo(o.Pod)
 	if err != nil {
 		return fmt.Errorf("cannot attach to the container: %v", err)
@@ -297,24 +297,24 @@ func (o *AttachOptions) Run() error {
 			fmt.Fprintf(o.ErrOut, "error: Unable to use a TTY - container %s did not allocate one\n", containerToAttach.Name)
 		}
 	} else if !o.TTY && containerToAttach.TTY {
-		// the container was launched with a TTY, so we have to force a TTY here, otherwise you'll get
-		// an error "Unrecognized input header"
+		// 容器是以 TTY 启动的，所以这里必须强制使用 TTY，否则会收到
+		// "Unrecognized input header" 错误
 		o.TTY = true
 	}
 
-	// ensure we can recover the terminal while attached
+	// 确保在 attach 期间能够恢复终端
 	t := o.SetupTTY()
 
 	var sizeQueue remotecommand.TerminalSizeQueue
 	if t.Raw {
 		if size := t.GetSize(); size != nil {
-			// fake resizing +1 and then back to normal so that attach-detach-reattach will result in the
-			// screen being redrawn
+			// 伪造调整大小为 +1 然后再恢复正常，以便 attach-detach-reattach 后
+			// 屏幕会被重绘
 			sizePlusOne := *size
 			sizePlusOne.Width++
 			sizePlusOne.Height++
 
-			// this call spawns a goroutine to monitor/update the terminal size
+			// 此调用会启动一个 goroutine 来监视/更新终端大小
 			sizeQueue = &terminalSizeQueueAdapter{
 				delegate: t.MonitorSize(&sizePlusOne, size),
 			}
@@ -347,14 +347,14 @@ func (o *AttachOptions) findAttachablePod(obj runtime.Object) (*corev1.Pod, erro
 	return attachablePod, nil
 }
 
-// containerToAttach returns a reference to the container to attach to, given by name.
-// use the kubectl.kubernetes.io/default-container annotation for selecting the container to be attached
-// or the first container in the pod will be chosen If name is empty.
+// containerToAttach 返回按名称指定的要 attach 的容器的引用。
+// 使用 kubectl.kubernetes.io/default-container annotation 来选择要 attach 的容器，
+// 如果名称为空，则选择 pod 中的第一个容器。
 func (o *AttachOptions) containerToAttachTo(pod *corev1.Pod) (*corev1.Container, error) {
 	return podcmd.FindOrDefaultContainerByName(pod, o.ContainerName, o.Quiet, o.ErrOut)
 }
 
-// GetContainerName returns the name of the container to attach to, with a fallback.
+// GetContainerName 返回要 attach 的容器名称，并带有回退机制。
 func (o *AttachOptions) GetContainerName(pod *corev1.Pod) (string, error) {
 	c, err := o.containerToAttachTo(pod)
 	if err != nil {
@@ -363,8 +363,8 @@ func (o *AttachOptions) GetContainerName(pod *corev1.Pod) (string, error) {
 	return c.Name, nil
 }
 
-// reattachMessage returns a message to print after attach has completed, or
-// the empty string if no message should be printed.
+// reattachMessage 返回 attach 完成后要打印的消息，如果不应打印任何消息，
+// 则返回空字符串。
 func (o *AttachOptions) reattachMessage(containerName string, rawTTY bool) string {
 	if o.Quiet || !o.Stdin || !rawTTY {
 		return ""

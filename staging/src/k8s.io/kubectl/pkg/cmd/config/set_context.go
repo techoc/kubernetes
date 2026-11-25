@@ -53,7 +53,7 @@ var (
 		kubectl config set-context gce --user=cluster-admin`)
 )
 
-// NewCmdConfigSetContext returns a Command instance for 'config set-context' sub command
+// NewCmdConfigSetContext 返回 'config set-context' 子命令的 Command 实例
 func NewCmdConfigSetContext(restClientGetter genericclioptions.RESTClientGetter, out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	options := &setContextOptions{configAccess: configAccess}
 

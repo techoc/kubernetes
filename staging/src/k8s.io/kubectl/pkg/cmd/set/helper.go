@@ -26,7 +26,7 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 )
 
-// selectContainers allows one or more containers to be matched against a string or wildcard
+// selectContainers 允许用一个字符串或通配符匹配一个或多个容器
 func selectContainers(containers []v1.Container, spec string) ([]*v1.Container, []*v1.Container) {
 	out := []*v1.Container{}
 	skipped := []*v1.Container{}
@@ -40,9 +40,9 @@ func selectContainers(containers []v1.Container, spec string) ([]*v1.Container, 
 	return out, skipped
 }
 
-// selectString returns true if the provided string matches spec, where spec is a string with
-// a non-greedy '*' wildcard operator.
-// TODO: turn into a regex and handle greedy matches and backtracking.
+// selectString 在提供的字符串匹配 spec 时返回 true，其中 spec 是带有
+// 非贪婪 '*' 通配符运算符的字符串。
+// TODO: 改用正则表达式，并处理贪婪匹配和回溯。
 func selectString(s, spec string) bool {
 	if spec == "*" {
 		return true
@@ -61,13 +61,13 @@ Loop:
 		}
 		next := strings.Index(s[pos:], part)
 		switch {
-		// next part not in string
+		// 下一部分不在字符串中
 		case next < pos:
 			fallthrough
-		// first part does not match start of string
+		// 第一部分与字符串开头不匹配
 		case i == 0 && pos != 0:
 			fallthrough
-		// last part does not exactly match remaining part of string
+		// 最后一部分与字符串剩余部分不完全匹配
 		case i == (len(parts)-1) && len(s) != (len(part)+next):
 			match = false
 			break Loop
@@ -78,7 +78,7 @@ Loop:
 	return match
 }
 
-// Patch represents the result of a mutation to an object.
+// Patch 表示对对象所做的修改的结果。
 type Patch struct {
 	Info *resource.Info
 	Err  error
@@ -88,13 +88,13 @@ type Patch struct {
 	Patch  []byte
 }
 
-// PatchFn is a function type that accepts an info object and returns a byte slice.
-// Implementations of PatchFn should update the object and return it encoded.
+// PatchFn 是一个接受 info 对象并返回字节切片的函数类型。
+// PatchFn 的实现应更新对象并返回其编码后的形式。
 type PatchFn func(runtime.Object) ([]byte, error)
 
-// CalculatePatch calls the mutation function on the provided info object, and generates a strategic merge patch for
-// the changes in the object. Encoder must be able to encode the info into the appropriate destination type.
-// This function returns whether the mutation function made any change in the original object.
+// CalculatePatch 对提供的 info 对象调用修改函数，并为对象中的变更生成
+// strategic merge patch。Encoder 必须能将该 info 编码为适当的目标类型。
+// 该函数返回修改函数是否对原对象做出了任何更改。
 func CalculatePatch(patch *Patch, encoder runtime.Encoder, mutateFn PatchFn) bool {
 	patch.Before, patch.Err = runtime.Encode(encoder, patch.Info.Object)
 	patch.After, patch.Err = mutateFn(patch.Info.Object)
@@ -109,8 +109,8 @@ func CalculatePatch(patch *Patch, encoder runtime.Encoder, mutateFn PatchFn) boo
 	return true
 }
 
-// CalculatePatches calculates patches on each provided info object. If the provided mutateFn
-// makes no change in an object, the object is not included in the final list of patches.
+// CalculatePatches 为每个提供的 info 对象计算补丁。如果提供的 mutateFn
+// 未对某个对象做出更改，则该对象不会包含在最终的补丁列表中。
 func CalculatePatches(infos []*resource.Info, encoder runtime.Encoder, mutateFn PatchFn) []*Patch {
 	var patches []*Patch
 	for _, info := range infos {
@@ -131,12 +131,12 @@ func findEnv(env []v1.EnvVar, name string) (v1.EnvVar, bool) {
 	return v1.EnvVar{}, false
 }
 
-// updateEnv adds and deletes specified environment variables from existing environment variables.
-// An added variable replaces all existing variables with the same name.
-// Removing a variable removes all existing variables with the same name.
-// If the existing list contains duplicates that are unrelated to the variables being added and removed,
-// those duplicates are left intact in the result.
-// If a variable is both added and removed, the removal takes precedence.
+// updateEnv 在现有环境变量中添加和删除指定的环境变量。
+// 添加的变量会替换所有同名的现有变量。
+// 删除变量会移除所有同名的现有变量。
+// 如果现有列表包含与所添加和删除的变量无关的重复项，
+// 这些重复项会原样保留在结果中。
+// 如果一个变量同时被添加和删除，则删除优先。
 func updateEnv(existing []v1.EnvVar, env []v1.EnvVar, remove []string) []v1.EnvVar {
 	out := []v1.EnvVar{}
 	covered := sets.New[string](remove...)

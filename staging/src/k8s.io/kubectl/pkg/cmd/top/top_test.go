@@ -35,8 +35,8 @@ import (
 	metricsv1beta1api "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-// metricsAPIVersions lists the metrics API versions the top commands support,
-// so tests can run every case against each version.
+// metricsAPIVersions 列出 top 命令支持的 metrics API 版本，
+// 以便测试可以针对每个版本运行所有用例。
 var metricsAPIVersions = []struct {
 	name     string
 	apisBody string
@@ -65,9 +65,9 @@ func marshallBody(metrics interface{}) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(result)), nil
 }
 
-// versionedNodeMetricsList converts internal node metrics to the given
-// metrics API version, returning the list and its first item for use as fake
-// clientset reactor return values.
+// versionedNodeMetricsList 将内部 node 指标转换为指定的
+// metrics API 版本，返回列表及其第一项，用作 fake
+// clientset reactor 的返回值。
 func versionedNodeMetricsList(t *testing.T, version string, in *metricsapi.NodeMetricsList) (list, first runtime.Object) {
 	t.Helper()
 	switch version {
@@ -89,9 +89,9 @@ func versionedNodeMetricsList(t *testing.T, version string, in *metricsapi.NodeM
 	}
 }
 
-// versionedPodMetricsList converts internal pod metrics to the given metrics
-// API version, returning the list and its first item (nil for an empty list)
-// for use as fake clientset reactor return values.
+// versionedPodMetricsList 将内部 pod 指标转换为指定的 metrics
+// API 版本，返回列表及其第一项（空列表时为 nil），
+// 用作 fake clientset reactor 的返回值。
 func versionedPodMetricsList(t *testing.T, version string, in *metricsapi.PodMetricsList) (list, first runtime.Object) {
 	t.Helper()
 	switch version {

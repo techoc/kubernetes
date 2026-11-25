@@ -86,7 +86,7 @@ var (
 		kubectl expose deployment nginx --port=80 --target-port=8000`))
 )
 
-// ExposeServiceOptions holds the options for kubectl expose command
+// ExposeServiceOptions 保存 kubectl expose 命令的各个选项
 type ExposeServiceOptions struct {
 	cmdutil.OverrideOptions
 
@@ -98,16 +98,16 @@ type ExposeServiceOptions struct {
 	Name        string
 	DefaultName string
 	Selector    string
-	// Port will be used if a user specifies --port OR the exposed object as one port
+	// 当用户指定了 --port，或被暴露对象只有一个端口时，使用 Port
 	Port string
-	// Ports will be used iff a user doesn't specify --port AND the exposed object has multiple ports
+	// 仅当用户未指定 --port 且被暴露对象有多个端口时，才使用 Ports
 	Ports          string
 	Labels         string
 	ExternalIP     string
 	LoadBalancerIP string
 	Type           string
 	Protocol       string
-	// Protocols will be used to keep port-protocol mapping derived from exposed object
+	// Protocols 用于保存从被暴露对象推导出的端口-协议映射
 	Protocols       string
 	TargetPort      string
 	PortName        string
@@ -134,7 +134,7 @@ type ExposeServiceOptions struct {
 	genericiooptions.IOStreams
 }
 
-// exposeServiceFlags is a struct that contains the user input flags to the command.
+// exposeServiceFlags 是一个结构体，保存用户为命令输入的各个 flag。
 type ExposeServiceFlags struct {
 	cmdutil.OverrideOptions
 	PrintFlags  *genericclioptions.PrintFlags
@@ -143,7 +143,7 @@ type ExposeServiceFlags struct {
 	fieldManager string
 	Protocol     string
 
-	// Port will be used if a user specifies --port OR the exposed object as one port
+	// 当用户指定了 --port，或被暴露对象只有一个端口时，使用 Port
 	Port            string
 	Type            string
 	LoadBalancerIP  string
@@ -169,7 +169,7 @@ func NewExposeFlags(ioStreams genericiooptions.IOStreams) *ExposeServiceFlags {
 	}
 }
 
-// NewCmdExposeService is a command to expose the service from user's input
+// NewCmdExposeService 根据用户输入创建用于暴露 service 的命令
 func NewCmdExposeService(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	flags := NewExposeFlags(streams)
 
@@ -267,7 +267,7 @@ func (flags *ExposeServiceFlags) ToOptions(cmd *cobra.Command, args []string) (*
 	return e, nil
 }
 
-// Complete loads data from the command line environment
+// Complete 从命令行环境中加载数据
 func (o *ExposeServiceOptions) Complete(f cmdutil.Factory) error {
 	var err error
 
@@ -291,7 +291,7 @@ func (o *ExposeServiceOptions) Complete(f cmdutil.Factory) error {
 	return err
 }
 
-// RunExpose retrieves the Kubernetes Object from the API server and expose it to a
+// RunExpose 从 API server 获取 Kubernetes 对象，并将其暴露为一个
 // Kubernetes Service
 func (o *ExposeServiceOptions) RunExpose(cmd *cobra.Command, args []string) error {
 	r := o.Builder.
@@ -323,8 +323,8 @@ func (o *ExposeServiceOptions) RunExpose(cmd *cobra.Command, args []string) erro
 		}
 		o.DefaultName = name
 
-		// For objects that need a pod selector, derive it from the exposed object in case a user
-		// didn't explicitly specify one via --selector
+		// 对于需要 pod selector 的对象，如果用户没有通过 --selector 显式指定，
+		// 则从被暴露的对象中推导 selector
 		if len(o.Selector) == 0 {
 			s, err := o.MapBasedSelectorForObject(info.Object)
 			if err != nil {
@@ -335,8 +335,8 @@ func (o *ExposeServiceOptions) RunExpose(cmd *cobra.Command, args []string) erro
 
 		isHeadlessService := o.ClusterIP == "None"
 
-		// For objects that need a port, derive it from the exposed object in case a user
-		// didn't explicitly specify one via --port
+		// 对于需要端口的对象，如果用户没有通过 --port 显式指定，
+		// 则从被暴露的对象中推导端口
 		if len(o.Port) == 0 {
 			ports, err := o.PortsForObject(info.Object)
 			if err != nil {
@@ -354,8 +354,8 @@ func (o *ExposeServiceOptions) RunExpose(cmd *cobra.Command, args []string) erro
 			}
 		}
 
-		// Always try to derive protocols from the exposed object, may use
-		// different protocols for different ports.
+		// 始终尝试从被暴露的对象推导协议，不同端口可能使用
+		// 不同的协议。
 		protocolsMap, err := o.ProtocolsForObject(info.Object)
 		if err != nil {
 			return fmt.Errorf("couldn't find protocol via introspection: %v", err)
@@ -372,7 +372,7 @@ func (o *ExposeServiceOptions) RunExpose(cmd *cobra.Command, args []string) erro
 			o.Labels = polymorphichelpers.MakeLabels(labels)
 		}
 
-		// Generate new object
+		// 生成新对象
 		service, err := o.createService()
 		if err != nil {
 			return err
@@ -409,7 +409,7 @@ func (o *ExposeServiceOptions) RunExpose(cmd *cobra.Command, args []string) erro
 		if err != nil {
 			return err
 		}
-		// Serialize the object with the annotation applied.
+		// 序列化应用了 annotation 之后的对象。
 		client, err := o.ClientForMapping(objMapping)
 		if err != nil {
 			return err
@@ -460,9 +460,8 @@ func (o *ExposeServiceOptions) createService() (*corev1.Service, error) {
 		}
 	}
 
-	// ports takes precedence over port since it will be
-	// specified only when the user hasn't specified a port
-	// via --port and the exposed object has multiple ports.
+	// ports 优先于 port，因为它只在用户未通过 --port 指定端口、
+	// 且被暴露对象有多个端口时才会被设置。
 	var portString string
 	portString = o.Ports
 	if len(o.Ports) == 0 {
@@ -479,8 +478,8 @@ func (o *ExposeServiceOptions) createService() (*corev1.Service, error) {
 				return nil, err
 			}
 			name := servicePortName
-			// If we are going to assign multiple ports to a service, we need to
-			// generate a different name for each one.
+			// 如果要为 service 分配多个端口，需要为每个端口
+			// 生成不同的名称。
 			if len(portStringSlice) > 1 {
 				name = fmt.Sprintf("port-%d", i+1)
 			}
@@ -488,14 +487,14 @@ func (o *ExposeServiceOptions) createService() (*corev1.Service, error) {
 
 			switch {
 			case len(protocol) == 0 && len(portProtocolMap) == 0:
-				// Default to TCP, what the flag was doing previously.
+				// 默认使用 TCP，与之前 flag 的行为保持一致。
 				protocol = "TCP"
 			case len(protocol) > 0 && len(portProtocolMap) > 0:
-				// User has specified the --protocol while exposing a multiprotocol resource
-				// We should stomp multiple protocols with the one specified ie. do nothing
+				// 用户在暴露多协议资源时指定了 --protocol，
+				// 此时应让指定的协议覆盖多个协议，即无需额外处理
 			case len(protocol) == 0 && len(portProtocolMap) > 0:
-				// no --protocol and we expose a multiprotocol resource
-				protocol = "TCP" // have the default so we can stay sane
+				// 未指定 --protocol，且暴露的是多协议资源
+				protocol = "TCP" // 设置默认值，避免后续处理复杂化
 				if exposeProtocols, found := portProtocolMap[stillPortString]; found {
 					if len(exposeProtocols) == 1 {
 						protocol = exposeProtocols[0]
@@ -533,13 +532,13 @@ func (o *ExposeServiceOptions) createService() (*corev1.Service, error) {
 	targetPortString := o.TargetPort
 	if len(targetPortString) > 0 {
 		targetPort := intstr.Parse(targetPortString)
-		// Use the same target-port for every port
+		// 对所有端口使用相同的 target-port
 		for i := range service.Spec.Ports {
 			service.Spec.Ports[i].TargetPort = targetPort
 		}
 	} else {
-		// If --target-port or --container-port haven't been specified, this
-		// should be the same as Port
+		// 如果未指定 --target-port 或 --container-port，则 target-port
+		// 应与 Port 相同
 		for i := range service.Spec.Ports {
 			port := service.Spec.Ports[i].Port
 			service.Spec.Ports[i].TargetPort = intstr.FromInt32(port)
@@ -574,7 +573,7 @@ func (o *ExposeServiceOptions) createService() (*corev1.Service, error) {
 	return &service, nil
 }
 
-// parseLabels turns a string representation of a label set into a map[string]string
+// parseLabels 将 label 集合的字符串表示转换为 map[string]string
 func parseLabels(labelSpec string) (map[string]string, error) {
 	if len(labelSpec) == 0 {
 		return nil, fmt.Errorf("no label spec passed")
@@ -604,7 +603,7 @@ func makeProtocols(protocols map[string][]string) string {
 	return strings.Join(out, ",")
 }
 
-// parseProtocols turns a string representation of a protocols set into a map[string]string
+// parseProtocols 将协议集合的字符串表示转换为 map[string]string
 func parseProtocols(protocols string) (map[string][]string, error) {
 	if len(protocols) == 0 {
 		return nil, fmt.Errorf("no protocols passed")

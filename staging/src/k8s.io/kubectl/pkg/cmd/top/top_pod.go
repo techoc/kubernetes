@@ -210,16 +210,16 @@ func (o TopPodOptions) RunTopPod() error {
 		}
 	}
 
-	// First we check why no metrics have been received.
+	// 首先检查为什么没有收到指标数据。
 	if len(metrics.Items) == 0 {
-		// If the API server query is successful but all the pods are newly created,
-		// the metrics are probably not ready yet, so we return the error here in the first place.
+		// 如果 API server 查询成功，但所有 pod 都是新建的，
+		// 那么指标数据可能尚未就绪，因此首先在此返回错误。
 		err := verifyEmptyMetrics(o, labelSelector, fieldSelector)
 		if err != nil {
 			return err
 		}
 
-		// if we had no errors, be sure we output something.
+		// 如果没有任何错误，请确保输出了某些内容。
 		if o.AllNamespaces {
 			fmt.Fprintln(o.ErrOut, "No resources found")
 		} else {
@@ -257,7 +257,7 @@ func getMetricsFromMetricsAPI(metricsClient metricsclientset.Interface, namespac
 		}
 		return metrics, nil
 	}
-	// fallback to metric v1beta1
+	// 回退到 metric v1beta1
 	versionedMetrics := &metricsv1beta1api.PodMetricsList{}
 	if resourceName != "" {
 		m, err := metricsClient.MetricsV1beta1().PodMetricses(ns).Get(context.TODO(), resourceName, metav1.GetOptions{})

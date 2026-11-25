@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// ViewLastAppliedOptions defines options for the `apply view-last-applied` command.`
+// ViewLastAppliedOptions 定义 `apply view-last-applied` 命令的选项。`
 type ViewLastAppliedOptions struct {
 	FilenameOptions              resource.FilenameOptions
 	Selector                     string
@@ -59,7 +59,7 @@ var (
 		kubectl apply view-last-applied -f deploy.yaml -o json`))
 )
 
-// NewViewLastAppliedOptions takes option arguments from a CLI stream and returns it at ViewLastAppliedOptions type.
+// NewViewLastAppliedOptions 从 CLI 流中获取选项参数，并以 ViewLastAppliedOptions 类型返回。
 func NewViewLastAppliedOptions(ioStreams genericiooptions.IOStreams) *ViewLastAppliedOptions {
 	return &ViewLastAppliedOptions{
 		OutputFormat: "yaml",
@@ -68,7 +68,7 @@ func NewViewLastAppliedOptions(ioStreams genericiooptions.IOStreams) *ViewLastAp
 	}
 }
 
-// NewCmdApplyViewLastApplied creates the cobra CLI `apply` subcommand `view-last-applied`.`
+// NewCmdApplyViewLastApplied 创建 cobra CLI 中 `apply` 的子命令 `view-last-applied`。`
 func NewCmdApplyViewLastApplied(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	options := NewViewLastAppliedOptions(ioStreams)
 
@@ -95,7 +95,7 @@ func NewCmdApplyViewLastApplied(f cmdutil.Factory, ioStreams genericiooptions.IO
 	return cmd
 }
 
-// Complete checks an object for last-applied-configuration annotations.
+// Complete 检查对象是否带有 last-applied-configuration 注解。
 func (o *ViewLastAppliedOptions) Complete(cmd *cobra.Command, f cmdutil.Factory, args []string) error {
 	cmdNamespace, enforceNamespace, err := f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
@@ -140,12 +140,12 @@ func (o *ViewLastAppliedOptions) Complete(cmd *cobra.Command, f cmdutil.Factory,
 	return nil
 }
 
-// Validate checks ViewLastAppliedOptions for validity.
+// Validate 检查 ViewLastAppliedOptions 是否有效。
 func (o *ViewLastAppliedOptions) Validate() error {
 	return nil
 }
 
-// RunApplyViewLastApplied executes the `view-last-applied` command according to ViewLastAppliedOptions.
+// RunApplyViewLastApplied 根据 ViewLastAppliedOptions 执行 `view-last-applied` 命令。
 func (o *ViewLastAppliedOptions) RunApplyViewLastApplied(cmd *cobra.Command) error {
 	for _, str := range o.LastAppliedConfigurationList {
 		switch o.OutputFormat {

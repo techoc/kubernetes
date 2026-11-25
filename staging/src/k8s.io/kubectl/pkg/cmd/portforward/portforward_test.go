@@ -1011,7 +1011,7 @@ func TestCreateDialer(t *testing.T) {
 	}
 	config := cmdtesting.DefaultClientConfig()
 	opts := PortForwardOptions{Config: config}
-	// First, ensure that no environment variable creates the fallback dialer.
+	// 首先，确保没有任何环境变量会创建 fallback dialer。
 	dialer, err := createDialer("GET", url, opts)
 	if err != nil {
 		t.Fatalf("unable to create dialer: %v", err)
@@ -1019,7 +1019,7 @@ func TestCreateDialer(t *testing.T) {
 	if _, isFallback := dialer.(*portforward.StreamingFallbackDialer); !isFallback {
 		t.Errorf("expected fallback dialer, got %#v", dialer)
 	}
-	// Next, check turning on feature flag explicitly also creates fallback dialer.
+	// 接着，检查显式开启 feature flag 也会创建 fallback dialer。
 	t.Setenv(string(cmdutil.PortForwardWebsockets), "true")
 	dialer, err = createDialer("GET", url, opts)
 	if err != nil {
@@ -1028,7 +1028,7 @@ func TestCreateDialer(t *testing.T) {
 	if _, isFallback := dialer.(*portforward.StreamingFallbackDialer); !isFallback {
 		t.Errorf("expected fallback dialer, got %#v", dialer)
 	}
-	// Finally, check explicit disabling does NOT create the fallback dialer.
+	// 最后，检查显式禁用不会创建 fallback dialer。
 	t.Setenv(string(cmdutil.PortForwardWebsockets), "false")
 	dialer, err = createDialer("GET", url, opts)
 	if err != nil {

@@ -35,7 +35,7 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 )
 
-// Verifies that schemas that are not in the master tree of Kubernetes can be retrieved via Get.
+// 验证不在 Kubernetes 主树中的 schema 也能通过 Get 获取。
 func TestDescribeUnknownSchemaObject(t *testing.T) {
 	d := &testDescriber{Output: "test output"}
 	oldFn := describe.DescriberFn
@@ -67,7 +67,7 @@ func TestDescribeUnknownSchemaObject(t *testing.T) {
 	}
 }
 
-// Verifies that schemas that are not in the master tree of Kubernetes can be retrieved via Get.
+// 验证不在 Kubernetes 主树中的 schema 也能通过 Get 获取。
 func TestDescribeUnknownNamespacedSchemaObject(t *testing.T) {
 	d := &testDescriber{Output: "test output"}
 	oldFn := describe.DescriberFn
@@ -328,8 +328,8 @@ func TestDescribeNoResourcesFound(t *testing.T) {
 	}
 }
 
-// TestDescribeShowEventsCardinality tests the cardinality-based ShowEvents
-// default for the standard list and direct-name paths.
+// TestDescribeShowEventsCardinality 测试标准列表和直接按名称查询路径下
+// 基于结果数量的 ShowEvents 默认值。
 func TestDescribeShowEventsCardinality(t *testing.T) {
 	onePod := &corev1.PodList{
 		ListMeta: metav1.ListMeta{ResourceVersion: "15"},
@@ -350,7 +350,7 @@ func TestDescribeShowEventsCardinality(t *testing.T) {
 		args             []string
 		flags            map[string]string
 		pods             *corev1.PodList
-		exactName        string // if set, use direct GET client instead of list Resp
+		exactName        string // 若设置，则使用直接 GET 客户端而非列表 Resp
 		expectShowEvents bool
 	}{
 		{
@@ -433,8 +433,8 @@ func TestDescribeShowEventsCardinality(t *testing.T) {
 	}
 }
 
-// TestDescribeShowEventsPrefixPath tests the cardinality-based ShowEvents
-// default for the prefix-match path (kubectl describe TYPE NAME_PREFIX).
+// TestDescribeShowEventsPrefixPath 测试前缀匹配路径
+// （kubectl describe TYPE NAME_PREFIX）下基于结果数量的 ShowEvents 默认值。
 func TestDescribeShowEventsPrefixPath(t *testing.T) {
 	twoFooOneBar := &corev1.PodList{
 		ListMeta: metav1.ListMeta{ResourceVersion: "15"},
@@ -470,7 +470,7 @@ func TestDescribeShowEventsPrefixPath(t *testing.T) {
 		pods             *corev1.PodList
 		flags            map[string]string
 		expectShowEvents bool
-		expectMatchCount int // 0 when expecting error
+		expectMatchCount int // 预期报错时为 0
 		expectFatal      bool
 	}{
 		{
@@ -562,8 +562,8 @@ func TestDescribeShowEventsPrefixPath(t *testing.T) {
 	}
 }
 
-// TestDescribePartialErrorStillDisablesEvents verifies that when ContinueOnError
-// produces partial results, the cardinality check applies to successful infos.
+// TestDescribePartialErrorStillDisablesEvents 验证当 ContinueOnError
+// 产生部分结果时，数量检查只针对成功的 info。
 func TestDescribePartialErrorStillDisablesEvents(t *testing.T) {
 	d := &testDescriber{Output: "test output"}
 	oldFn := describe.DescriberFn
@@ -613,8 +613,8 @@ func TestDescribePartialErrorStillDisablesEvents(t *testing.T) {
 	}
 }
 
-// TestDescribeMixedResourceTypesDisablesEvents verifies that the cardinality
-// check applies across resource types (1 pod + 1 service = events off).
+// TestDescribeMixedResourceTypesDisablesEvents 验证数量检查跨资源类型生效
+// （1 个 pod + 1 个 service = 关闭 events）。
 func TestDescribeMixedResourceTypesDisablesEvents(t *testing.T) {
 	d := &testDescriber{Output: "test output"}
 	oldFn := describe.DescriberFn
@@ -655,9 +655,9 @@ func TestDescribeMixedResourceTypesDisablesEvents(t *testing.T) {
 	}
 }
 
-// TestDescribeDescriberErrorsRetainDisabledEvents verifies that when 3 objects
-// are fetched (events disabled) but the describer fails for 2, the successful
-// describe still receives ShowEvents=false.
+// TestDescribeDescriberErrorsRetainDisabledEvents 验证当获取了 3 个对象
+// （events 已关闭）、但其中 2 个的 describer 失败时，
+// 成功的 describe 仍收到 ShowEvents=false。
 func TestDescribeDescriberErrorsRetainDisabledEvents(t *testing.T) {
 	cd := &conditionalDescriber{
 		Output:    "test output",
@@ -720,7 +720,7 @@ func (t *testDescriber) describerFor(restClientGetter genericclioptions.RESTClie
 	return t, nil
 }
 
-// conditionalDescriber fails Describe() for names in FailNames, succeeds for others.
+// conditionalDescriber 对 FailNames 中的名称让 Describe() 失败，其他名称则成功。
 type conditionalDescriber struct {
 	FailNames    map[string]bool
 	Output       string

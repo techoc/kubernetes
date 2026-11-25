@@ -30,7 +30,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// RenameContextOptions contains the options for running the rename-context cli command.
+// RenameContextOptions 包含运行 rename-context 命令行命令所需的选项。
 type RenameContextOptions struct {
 	configAccess clientcmd.ConfigAccess
 	contextName  string
@@ -58,7 +58,7 @@ var (
 		kubectl config rename-context old-name new-name`)
 )
 
-// NewCmdConfigRenameContext creates a command object for the "rename-context" action
+// NewCmdConfigRenameContext 为 "rename-context" 操作创建命令对象
 func NewCmdConfigRenameContext(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	options := &RenameContextOptions{configAccess: configAccess}
 
@@ -78,7 +78,7 @@ func NewCmdConfigRenameContext(out io.Writer, configAccess clientcmd.ConfigAcces
 	return cmd
 }
 
-// Complete assigns RenameContextOptions from the args.
+// Complete 从参数中赋值 RenameContextOptions。
 func (o *RenameContextOptions) Complete(cmd *cobra.Command, args []string, out io.Writer) error {
 	if len(args) != 2 {
 		return helpErrorf(cmd, "Unexpected args: %v", args)
@@ -89,7 +89,7 @@ func (o *RenameContextOptions) Complete(cmd *cobra.Command, args []string, out i
 	return nil
 }
 
-// Validate makes sure that provided values for command-line options are valid
+// Validate 确保命令行选项中提供的值有效
 func (o RenameContextOptions) Validate() error {
 	if len(o.newName) == 0 {
 		return errors.New("You must specify a new non-empty context name")
@@ -97,7 +97,7 @@ func (o RenameContextOptions) Validate() error {
 	return nil
 }
 
-// RunRenameContext performs the execution for 'config rename-context' sub command
+// RunRenameContext 执行 'config rename-context' 子命令
 func (o RenameContextOptions) RunRenameContext(out io.Writer) error {
 	config, err := o.configAccess.GetStartingConfig()
 	if err != nil {

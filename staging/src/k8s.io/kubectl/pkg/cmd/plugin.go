@@ -26,35 +26,35 @@ import (
 	"syscall"
 )
 
-// PluginHandler is capable of parsing command line arguments
-// and performing executable filename lookups to search
-// for valid plugin files, and execute found plugins.
+// PluginHandler 能够解析命令行参数，
+// 并执行可执行文件名查找，以搜索
+// 有效的插件文件，并执行找到的插件。
 type PluginHandler interface {
-	// exists at the given filename, or a boolean false.
-	// Lookup will iterate over a list of given prefixes
-	// in order to recognize valid plugin filenames.
-	// The first filepath to match a prefix is returned.
+	// 给定文件名处存在可执行文件，则返回后者；否则返回布尔值 false。
+	// Lookup 会遍历给定的前缀列表，
+	// 以识别有效的插件文件名。
+	// 返回第一个匹配前缀的文件路径。
 	Lookup(filename string) (string, bool)
-	// Execute receives an executable's filepath, a slice
-	// of arguments, and a slice of environment variables
-	// to relay to the executable.
+	// Execute 接收可执行文件的路径、
+	// 参数切片，以及要传递给该可执行文件
+	// 的环境变量切片。
 	Execute(executablePath string, cmdArgs, environment []string) error
 }
 
-// DefaultPluginHandler implements PluginHandler
+// DefaultPluginHandler 实现 PluginHandler
 type DefaultPluginHandler struct {
 	ValidPrefixes []string
 }
 
-// NewDefaultPluginHandler instantiates the DefaultPluginHandler with a list of
-// given filename prefixes used to identify valid plugin filenames.
+// NewDefaultPluginHandler 用给定的文件名前缀列表
+// 实例化 DefaultPluginHandler，这些前缀用于识别有效的插件文件名。
 func NewDefaultPluginHandler(validPrefixes []string) *DefaultPluginHandler {
 	return &DefaultPluginHandler{
 		ValidPrefixes: validPrefixes,
 	}
 }
 
-// Lookup implements PluginHandler
+// Lookup 实现 PluginHandler
 func (h *DefaultPluginHandler) Lookup(filename string) (string, bool) {
 	for _, prefix := range h.ValidPrefixes {
 		path, err := exec.LookPath(fmt.Sprintf("%s-%s", prefix, filename))
@@ -66,9 +66,9 @@ func (h *DefaultPluginHandler) Lookup(filename string) (string, bool) {
 	return "", false
 }
 
-// Execute implements PluginHandler
+// Execute 实现 PluginHandler
 func (h *DefaultPluginHandler) Execute(executablePath string, cmdArgs, environment []string) error {
-	// Windows does not support exec syscall.
+	// Windows 不支持 exec 系统调用。
 	if runtime.GOOS == "windows" {
 		cmd := command(executablePath, cmdArgs...)
 		cmd.Stdout = os.Stdout
@@ -82,8 +82,8 @@ func (h *DefaultPluginHandler) Execute(executablePath string, cmdArgs, environme
 		return err
 	}
 
-	// invoke cmd binary relaying the environment and args given
-	// append executablePath to cmdArgs, as execve will make first argument the "binary name".
+	// 调用 cmd 二进制文件，并传递给定的环境和参数
+	// 将 executablePath 追加到 cmdArgs，因为 execve 会把第一个参数当作"二进制名称"。
 	return syscall.Exec(executablePath, append([]string{executablePath}, cmdArgs...), environment)
 }
 
@@ -95,17 +95,17 @@ func command(name string, arg ...string) *exec.Cmd {
 	if filepath.Base(name) == name {
 		lp, err := exec.LookPath(name)
 		if lp != "" && !shouldSkipOnLookPathErr(err) {
-			// Update cmd.Path even if err is non-nil.
-			// If err is ErrDot (especially on Windows), lp may include a resolved
-			// extension (like .exe or .bat) that should be preserved.
+			// 即使 err 非 nil，也更新 cmd.Path。
+			// 如果 err 是 ErrDot（尤其是在 Windows 上），lp 可能包含已解析的
+			// 扩展名（如 .exe 或 .bat），应予以保留。
 			cmd.Path = lp
 		}
 	}
 	return cmd
 }
 
-// HandlePluginCommand receives a pluginHandler and command-line arguments and attempts to find
-// a plugin executable on the PATH that satisfies the given arguments.
+// HandlePluginCommand 接收 pluginHandler 和命令行参数，并尝试在 PATH 上查找
+// 满足给定参数的插件可执行文件。
 func HandlePluginCommand(pluginHandler PluginHandler, cmdArgs []string, minArgs int) error {
 	var remainingArgs []string // all "non-flag" arguments
 	for _, arg := range cmdArgs {
@@ -116,21 +116,21 @@ func HandlePluginCommand(pluginHandler PluginHandler, cmdArgs []string, minArgs 
 	}
 
 	if len(remainingArgs) == 0 {
-		// the length of cmdArgs is at least 1
+		// cmdArgs 的长度至少为 1
 		return fmt.Errorf("flags cannot be placed before plugin name: %s", cmdArgs[0])
 	}
 
 	foundBinaryPath := ""
 
-	// attempt to find binary, starting at longest possible name with given cmdArgs
+	// 尝试查找二进制文件，从使用给定 cmdArgs 组成的最长可能名称开始
 	for len(remainingArgs) > 0 {
 		path, found := pluginHandler.Lookup(strings.Join(remainingArgs, "-"))
 		if !found {
 			remainingArgs = remainingArgs[:len(remainingArgs)-1]
 			if len(remainingArgs) < minArgs {
-				// we shouldn't continue searching with shorter names.
-				// this is especially for not searching kubectl-create plugin
-				// when kubectl-create-foo plugin is not found.
+				// 不应继续用更短的名称搜索。
+				// 这尤其用于避免在 kubectl-create-foo 插件未找到时
+				// 继续搜索 kubectl-create 插件。
 				break
 			}
 
@@ -150,7 +150,7 @@ func HandlePluginCommand(pluginHandler PluginHandler, cmdArgs []string, minArgs 
 		return err
 	}
 
-	// invoke cmd binary relaying the current environment and args given
+	// 调用 cmd 二进制文件，并传递当前环境和给定参数
 	if err := pluginHandler.Execute(foundBinaryPath, cmdArgs[len(remainingArgs):], pluginEnv); err != nil {
 		return err
 	}
@@ -175,8 +175,8 @@ func pluginEnvironment() ([]string, error) {
 	return append(pluginEnv, "KUBECTL_PATH="+kubectlPath), nil
 }
 
-// IsSubcommandPluginAllowed returns the given command is allowed
-// to use plugin as subcommand if the subcommand does not exist as builtin.
+// 如果给定命令没有对应的内置子命令，IsSubcommandPluginAllowed 返回
+// 是否允许使用插件作为该子命令。
 func IsSubcommandPluginAllowed(foundCmd string) bool {
 	allowedCmds := map[string]struct{}{"create": {}}
 	_, ok := allowedCmds[foundCmd]

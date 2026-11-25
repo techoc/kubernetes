@@ -35,14 +35,14 @@ var (
 		kubectl config get-users`)
 )
 
-// GetUsersOptions holds the data needed to run the command
+// GetUsersOptions 保存运行命令所需的数据
 type GetUsersOptions struct {
 	configAccess clientcmd.ConfigAccess
 
 	genericiooptions.IOStreams
 }
 
-// NewGetUsersOptions creates the options for the command
+// NewGetUsersOptions 创建命令所需的选项
 func NewGetUsersOptions(ioStreams genericiooptions.IOStreams, configAccess clientcmd.ConfigAccess) *GetUsersOptions {
 	return &GetUsersOptions{
 		configAccess: configAccess,
@@ -50,8 +50,8 @@ func NewGetUsersOptions(ioStreams genericiooptions.IOStreams, configAccess clien
 	}
 }
 
-// NewCmdConfigGetUsers creates a command object for the "get-users" action, which
-// lists all users defined in the kubeconfig.
+// NewCmdConfigGetUsers 为 "get-users" 操作创建命令对象，
+// 列出 kubeconfig 中定义的所有 user。
 func NewCmdConfigGetUsers(streams genericiooptions.IOStreams, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	o := NewGetUsersOptions(streams, configAccess)
 
@@ -68,7 +68,7 @@ func NewCmdConfigGetUsers(streams genericiooptions.IOStreams, configAccess clien
 	return cmd
 }
 
-// Run performs the command
+// Run 执行命令
 func (o *GetUsersOptions) Run() error {
 	config, err := o.configAccess.GetStartingConfig()
 	if err != nil {

@@ -163,7 +163,7 @@ func NewDrainCmdOptions(f cmdutil.Factory, ioStreams genericiooptions.IOStreams)
 	return o
 }
 
-// onPodDeletionOrEvictionFinished is called by drain.Helper, when eviction/deletetion of the pod is finished
+// 当 pod 的驱逐/删除完成时，drain.Helper 会调用 onPodDeletionOrEvictionFinished
 func (o *DrainCmdOptions) onPodDeletionOrEvictionFinished(pod *corev1.Pod, usingEviction bool, err error) {
 	var verbStr string
 	if usingEviction {
@@ -188,7 +188,7 @@ func (o *DrainCmdOptions) onPodDeletionOrEvictionFinished(pod *corev1.Pod, using
 	}
 }
 
-// onPodDeletionOrEvictionStarted is called by drain.Helper, when eviction/deletion of the pod is started
+// 当 pod 的驱逐/删除开始时，drain.Helper 会调用 onPodDeletionOrEvictionStarted
 func (o *DrainCmdOptions) onPodDeletionOrEvictionStarted(pod *corev1.Pod, usingEviction bool) {
 	if !klog.V(2).Enabled() {
 		return
@@ -238,8 +238,8 @@ func NewCmdDrain(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra
 	return cmd
 }
 
-// Complete populates some fields from the factory, grabs command line
-// arguments and looks up the node using Builder
+// Complete 从 factory 中填充部分字段，获取命令行
+// 参数，并使用 Builder 查找 node
 func (o *DrainCmdOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 
@@ -284,7 +284,7 @@ func (o *DrainCmdOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args [
 		return printer.PrintObj, nil
 	}
 
-	// Set default WarningPrinter if not already set.
+	// 如果尚未设置，则使用默认的 WarningPrinter。
 	if o.WarningPrinter == nil {
 		o.WarningPrinter = printers.NewWarningPrinter(o.ErrOut, printers.WarningPrinterOptions{Color: printers.AllowsColorOutput(o.ErrOut)})
 	}
@@ -321,7 +321,7 @@ func (o *DrainCmdOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args [
 	})
 }
 
-// RunDrain runs the 'drain' command
+// RunDrain 运行 'drain' 命令
 func (o *DrainCmdOptions) RunDrain() error {
 	if err := o.RunCordonOrUncordon(true); err != nil {
 		return err
@@ -397,8 +397,8 @@ func (o *DrainCmdOptions) deleteOrEvictPodsSimple(nodeInfo *resource.Info) error
 	return nil
 }
 
-// RunCordonOrUncordon runs either Cordon or Uncordon.  The desired value for
-// "Unschedulable" is passed as the first arg.
+// RunCordonOrUncordon 执行 cordon 或 uncordon。
+// "Unschedulable" 的期望值通过第一个参数传入。
 func (o *DrainCmdOptions) RunCordonOrUncordon(desired bool) error {
 	cordonOrUncordon := "cordon"
 	if !desired {
@@ -457,7 +457,7 @@ func (o *DrainCmdOptions) RunCordonOrUncordon(desired bool) error {
 	return nil
 }
 
-// already() and changed() return suitable strings for {un,}cordoning
+// already() 和 changed() 返回适用于 {un,}cordoning 的字符串
 
 func already(desired bool) string {
 	if desired {

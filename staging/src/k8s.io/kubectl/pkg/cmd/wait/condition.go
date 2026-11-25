@@ -37,15 +37,15 @@ import (
 	"k8s.io/kubectl/pkg/util/interrupt"
 )
 
-// ConditionalWait hold information to check an API status condition
+// ConditionalWait 持有检查 API 状态条件所需的信息
 type ConditionalWait struct {
 	conditionName   string
 	conditionStatus string
-	// errOut is written to if an error occurs
+	// 发生错误时会写入 errOut
 	errOut io.Writer
 }
 
-// IsConditionMet is a conditionfunc for waiting on an API condition to be met
+// IsConditionMet 是用于等待某个 API 条件得到满足的条件函数
 func (w ConditionalWait) IsConditionMet(ctx context.Context, info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	return getObjAndCheckCondition(ctx, info, o, w.isConditionMet, w.checkCondition)
 }
@@ -86,14 +86,14 @@ func (w ConditionalWait) checkCondition(obj *unstructured.Unstructured) (bool, e
 
 func (w ConditionalWait) isConditionMet(event watch.Event) (bool, error) {
 	if event.Type == watch.Error {
-		// keep waiting in the event we see an error - we expect the watch to be closed by
-		// the server
+		// 遇到错误时继续等待——我们预期
+		// 服务端会关闭 watch
 		err := apierrors.FromObject(event.Object)
 		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the condition to be satisfied: %v", err)
 		return false, nil
 	}
 	if event.Type == watch.Deleted {
-		// this will chain back out, result in another get and an return false back up the chain
+		// 这会层层返回，导致再次执行 get，并沿调用链返回 false
 		return false, nil
 	}
 	obj := event.Object.(*unstructured.Unstructured)
@@ -103,8 +103,8 @@ func (w ConditionalWait) isConditionMet(event watch.Event) (bool, error) {
 type isCondMetFunc func(event watch.Event) (bool, error)
 type checkCondFunc func(obj *unstructured.Unstructured) (bool, error)
 
-// getObjAndCheckCondition will make a List query to the API server to get the object and check if the condition is met using check function.
-// If the condition is not met, it will make a Watch query to the server and pass in the condMet function
+// getObjAndCheckCondition 会向 API server 发起 List 查询以获取对象，并使用 check 函数检查条件是否满足。
+// 如果条件未满足，它会向服务端发起 Watch 查询，并传入 condMet 函数
 func getObjAndCheckCondition(ctx context.Context, info *resource.Info, o *WaitOptions, condMet isCondMetFunc, check checkCondFunc) (runtime.Object, bool, error) {
 	if len(info.Name) == 0 {
 		return info.Object, false, fmt.Errorf("resource name must be provided")
@@ -114,7 +114,7 @@ func getObjAndCheckCondition(ctx context.Context, info *resource.Info, o *WaitOp
 	timeout := time.Until(endTime)
 	errWaitTimeoutWithName := extendErrWaitTimeout(wait.ErrorInterrupted(nil), info) // nolint:staticcheck // SA1019
 	if o.Timeout == 0 {
-		// If timeout is zero we will fetch the object(s) once only and check
+		// 如果 timeout 为零，只获取一次对象并检查
 		gottenObj, initObjGetErr := o.DynamicClient.Resource(info.Mapping.Resource).Namespace(info.Namespace).Get(ctx, info.Name, metav1.GetOptions{})
 		if initObjGetErr != nil {
 			return nil, false, initObjGetErr
@@ -132,7 +132,7 @@ func getObjAndCheckCondition(ctx context.Context, info *resource.Info, o *WaitOp
 		return gottenObj, true, nil
 	}
 	if timeout < 0 {
-		// we're out of time
+		// 时间已用尽
 		return info.Object, false, errWaitTimeoutWithName
 	}
 
@@ -149,7 +149,7 @@ func getObjAndCheckCondition(ctx context.Context, info *resource.Info, o *WaitOp
 		},
 	}, o.DynamicClient)
 
-	// this function is used to refresh the cache to prevent timeout waits on resources that have disappeared
+	// 该函数用于刷新缓存，避免对已消失的资源等待至超时
 	preconditionFunc := func(store cache.Store) (bool, error) {
 		_, exists, err := store.Get(&metav1.ObjectMeta{Namespace: info.Namespace, Name: info.Name})
 		if err != nil {

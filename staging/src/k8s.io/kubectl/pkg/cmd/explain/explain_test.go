@@ -164,8 +164,8 @@ type explainTestCase struct {
 	ExpectPattern      []string
 	ExpectErrorPattern string
 
-	// Custom OpenAPI V3 client to use for the test. If nil, a default one will
-	// be provided
+	// 测试要使用的自定义 OpenAPI V3 客户端。如果为 nil，则将
+	// 提供一个默认客户端
 	OpenAPIV3SchemaFn func() (openapiclient.Client, error)
 }
 
@@ -210,13 +210,13 @@ func TestExplainOpenAPIV3(t *testing.T) {
 		fakeDiscoveryClient := discovery.NewDiscoveryClientForConfigOrDie(&rest.Config{Host: "https://not.a.real.site:65543/"})
 		return fakeDiscoveryClient.OpenAPIV3(), nil
 	}
-	// Returns a client that causes fallback to v2 implementation
+	// 返回一个会导致回退到 v2 实现的客户端
 	cases := []explainTestCase{
 		{
-			// No --output, but OpenAPIV3 enabled should fall back to v2 if
-			// v2 is not available. Shows this by making openapiv3 client
-			// point to a bad URL. So the fact the proper data renders is
-			// indication v2 was used instead.
+			// 没有 --output 但启用了 OpenAPIV3 时，如果没有
+			// v2 则应回退到 v2。这里通过让 openapiv3 客户端
+			// 指向一个错误的 URL 来演示。因此正确数据能被渲染出来
+			// 就表明实际使用的是 v2。
 			Name:              "Fallback",
 			Args:              []string{"pods"},
 			ExpectPattern:     []string{`\s*KIND:[\t ]*Pod\s*`},
@@ -229,8 +229,8 @@ func TestExplainOpenAPIV3(t *testing.T) {
 			ExpectPattern: []string{`\s*VERSION:[\t ]*(v2|autoscaling/v2)\s*`},
 		},
 		{
-			// Show that explicitly specifying --output plaintext-openapiv2 causes
-			// old implementation to be used even though OpenAPIV3 is enabled
+			// 表明显式指定 --output plaintext-openapiv2 会使
+			// 旧实现被使用，即使 OpenAPIV3 已启用
 			Name:              "OutputPlaintextV2",
 			Args:              []string{"pods"},
 			Flags:             map[string]string{"output": "plaintext-openapiv2"},
@@ -269,9 +269,9 @@ func runExplainTestCases(t *testing.T, cases []explainTestCase) {
 
 		t.Run(tcase.Name, func(t *testing.T) {
 
-			// Catch os.Exit calls for tests which expect them
-			// and replace them with panics that we catch in each test
-			// to check if it is expected.
+			// 为预期会调用 os.Exit 的测试捕获这些调用，
+			// 并将它们替换为我们在每个测试中捕获的 panic，
+			// 以检查其是否符合预期。
 			cmdutil.BehaviorOnFatal(func(str string, code int) {
 				panic(catchFatal(errors.New(str)))
 			})
@@ -281,8 +281,8 @@ func runExplainTestCases(t *testing.T, cases []explainTestCase) {
 
 			func() {
 				defer func() {
-					// Catch panic and check at end of test if it is
-					// expected.
+					// 捕获 panic 并在测试结束时检查其是否
+					// 符合预期。
 					if panicErr := recover(); panicErr != nil {
 						if e := panicErr.(catchFatal); e != nil {
 							err = e
@@ -331,14 +331,14 @@ func runExplainTestCases(t *testing.T, cases []explainTestCase) {
 	}
 }
 
-// OpenAPI V2 specifications retrieval -- should never be called.
+// OpenAPI V2 规范获取 —— 不应被调用。
 func panicOpenAPISchemaFn() (openapi.Resources, error) {
 	panic("should never be called")
 }
 
-// OpenAPI V3 specifications retrieval does *not* retrieve V2 specifications.
+// OpenAPI V3 规范获取 *不会* 获取 V2 规范。
 func TestExplainOpenAPIV3DoesNotLoadOpenAPIV2Specs(t *testing.T) {
-	// Set up OpenAPI V3 specifications endpoint for explain.
+	// 为 explain 设置 OpenAPI V3 规范端点。
 	fakeServer, err := clienttestutil.NewFakeOpenAPIV3Server(filepath.Join(testDataPath, "openapi", "v3"))
 	if err != nil {
 		t.Fatalf("error starting fake openapi server: %v", err.Error())
@@ -350,22 +350,22 @@ func TestExplainOpenAPIV3DoesNotLoadOpenAPIV2Specs(t *testing.T) {
 		fakeDiscoveryClient := discovery.NewDiscoveryClientForConfigOrDie(&rest.Config{Host: fakeServer.HttpServer.URL})
 		return fakeDiscoveryClient.OpenAPIV3(), nil
 	}
-	// OpenAPI V2 specifications retrieval will panic if called.
+	// 如果调用 OpenAPI V2 规范获取，将触发 panic。
 	tf.OpenAPISchemaFunc = panicOpenAPISchemaFn
 
-	// Explain the following resources, validating the command does not panic.
+	// 解释以下资源，验证命令不会 panic。
 	cmd := explain.NewCmdExplain("kubectl", tf, genericiooptions.NewTestIOStreamsDiscard())
 	resources := []string{"pods", "services", "endpoints", "configmaps"}
 	for _, resource := range resources {
 		cmd.Run(cmd, []string{resource})
 	}
-	// Verify retrieving OpenAPI V2 specifications will panic.
+	// 验证获取 OpenAPI V2 规范将触发 panic。
 	defer func() {
 		if panicErr := recover(); panicErr == nil {
 			t.Fatal("expecting panic for openapi v2 retrieval")
 		}
 	}()
-	// Set OpenAPI V2 output flag for explain.
+	// 为 explain 设置 OpenAPI V2 输出 flag。
 	if err := cmd.Flags().Set("output", "plaintext-openapiv2"); err != nil {
 		t.Fatal(err)
 	}

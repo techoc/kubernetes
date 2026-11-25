@@ -47,7 +47,7 @@ var (
 		kubectl kuberc view --kuberc /path/to/kuberc`))
 )
 
-// ViewOptions contains the options for viewing kuberc configuration
+// ViewOptions 包含查看 kuberc 配置时使用的选项
 type ViewOptions struct {
 	KubeRCFile string
 	Explicit   bool
@@ -58,7 +58,7 @@ type ViewOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCmdKubeRCView returns a Command instance for 'kuberc view' sub command
+// NewCmdKubeRCView 返回 'kuberc view' 子命令的 Command 实例
 func NewCmdKubeRCView(streams genericiooptions.IOStreams) *cobra.Command {
 	o := &ViewOptions{
 		PrintFlags:  genericclioptions.NewPrintFlags("").WithDefaultOutput("yaml"),
@@ -85,7 +85,7 @@ func NewCmdKubeRCView(streams genericiooptions.IOStreams) *cobra.Command {
 	return cmd
 }
 
-// Complete sets default values for ViewOptions
+// Complete 为 ViewOptions 设置默认值
 func (o *ViewOptions) Complete(cmd *cobra.Command) error {
 	if cmd.Flags().Changed("kuberc") {
 		o.KubeRCFile = cmd.Flag("kuberc").Value.String()
@@ -101,7 +101,7 @@ func (o *ViewOptions) Complete(cmd *cobra.Command) error {
 	return nil
 }
 
-// Validate validates the ViewOptions
+// Validate 校验 ViewOptions
 func (o *ViewOptions) Validate() error {
 	if o.KubeRCFile == "" {
 		return fmt.Errorf("KUBERC is disabled via KUBERC=off environment variable")
@@ -110,7 +110,7 @@ func (o *ViewOptions) Validate() error {
 	return nil
 }
 
-// Run executes the view command
+// Run 执行 view 命令
 func (o *ViewOptions) Run() error {
 	pref, err := kuberc.LoadPreference(o.KubeRCFile)
 	if err != nil {

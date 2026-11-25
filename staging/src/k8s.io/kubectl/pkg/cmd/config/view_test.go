@@ -29,9 +29,9 @@ import (
 
 type viewClusterTest struct {
 	description string
-	config      clientcmdapi.Config //initiate kubectl config
-	flags       []string            //kubectl config viw flags
-	expected    string              //expect out
+	config      clientcmdapi.Config //初始化 kubectl config
+	flags       []string            //kubectl config view 的标志
+	expected    string              //期望输出
 }
 
 func TestViewCluster(t *testing.T) {
@@ -305,7 +305,7 @@ func (test viewClusterTest) run(t *testing.T) {
 	pathOptions.EnvVar = ""
 	streams, _, buf, _ := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdConfigView(streams, pathOptions)
-	// "context" is a global flag, inherited from base kubectl command in the real world
+	// "context" 是全局标志，实际中从基础 kubectl 命令继承
 	cmd.Flags().String("context", "", "The name of the kubeconfig context to use")
 	cmd.Flags().Parse(test.flags)
 

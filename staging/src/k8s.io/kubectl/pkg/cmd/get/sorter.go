@@ -34,8 +34,8 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 )
 
-// SortingPrinter sorts list types before delegating to another printer.
-// Non-list types are simply passed through
+// SortingPrinter 在委托给另一个打印器之前，先对列表类型进行排序。
+// 非列表类型则直接透传
 type SortingPrinter struct {
 	SortField string
 	Delegate  printers.ResourcePrinter
@@ -93,16 +93,16 @@ func (s *SortingPrinter) sortObj(obj runtime.Object) error {
 	return meta.SetList(obj, objs)
 }
 
-// SortObjects sorts the runtime.Object based on fieldInput and returns RuntimeSort that implements
-// the golang sort interface
+// SortObjects 根据 fieldInput 对 runtime.Object 排序，并返回实现了
+// golang sort 接口的 RuntimeSort
 func SortObjects(decoder runtime.Decoder, objs []runtime.Object, fieldInput string) (*RuntimeSort, error) {
 	for ix := range objs {
 		item := objs[ix]
 		switch u := item.(type) {
 		case *runtime.Unknown:
 			var err error
-			// decode runtime.Unknown to runtime.Unstructured for sorting.
-			// we don't actually want the internal versions of known types.
+			// 将 runtime.Unknown 解码为 runtime.Unstructured 以便排序。
+			// 我们并不想要已知类型的内部版本。
 			if objs[ix], _, err = decoder.Decode(u.Raw, nil, &unstructured.Unstructured{}); err != nil {
 				return nil, err
 			}
@@ -119,10 +119,10 @@ func SortObjects(decoder runtime.Decoder, objs []runtime.Object, fieldInput stri
 		return nil, err
 	}
 
-	// We don't do any model validation here, so we traverse all objects to be sorted
-	// and, if the field is valid to at least one of them, we consider it to be a
-	// valid field; otherwise error out.
-	// Note that this requires empty fields to be considered later, when sorting.
+	// 这里不做任何模型校验，因此会遍历所有待排序对象，
+	// 如果该字段对其中至少一个对象有效，就认为是有效字段；
+	// 否则报错。
+	// 注意，这要求排序时稍后再考虑空字段。
 	var fieldFoundOnce bool
 	for _, obj := range objs {
 		values, err := findJSONPathResults(parser, obj)
@@ -143,15 +143,15 @@ func SortObjects(decoder runtime.Decoder, objs []runtime.Object, fieldInput stri
 	return sorter, nil
 }
 
-// RuntimeSort is an implementation of the golang sort interface that knows how to sort
-// lists of runtime.Object
+// RuntimeSort 是 golang sort 接口的实现，知道如何对
+// runtime.Object 列表进行排序
 type RuntimeSort struct {
 	field        string
 	objs         []runtime.Object
 	origPosition []int
 }
 
-// NewRuntimeSort creates a new RuntimeSort struct that implements golang sort interface
+// NewRuntimeSort 创建一个新的 RuntimeSort 结构体，它实现了 golang sort 接口
 func NewRuntimeSort(field string, objs []runtime.Object) *RuntimeSort {
 	sorter := &RuntimeSort{field: field, objs: objs, origPosition: make([]int, len(objs))}
 	for ix := range objs {
@@ -182,18 +182,18 @@ func isLess(i, j reflect.Value) (bool, error) {
 	case reflect.Pointer:
 		return isLess(i.Elem(), j.Elem())
 	case reflect.Struct:
-		// sort metav1.Time
+		// 对 metav1.Time 排序
 		in := i.Interface()
 		if t, ok := in.(metav1.Time); ok {
 			time := j.Interface().(metav1.Time)
 			return t.Before(&time), nil
 		}
-		// sort resource.Quantity
+		// 对 resource.Quantity 排序
 		if iQuantity, ok := in.(resource.Quantity); ok {
 			jQuantity := j.Interface().(resource.Quantity)
 			return iQuantity.Cmp(jQuantity) < 0, nil
 		}
-		// fallback to the fields comparison
+		// 回退到字段比较
 		for idx := 0; idx < i.NumField(); idx++ {
 			less, err := isLess(i.Field(idx), j.Field(idx))
 			if err != nil || !less {
@@ -202,7 +202,7 @@ func isLess(i, j reflect.Value) (bool, error) {
 		}
 		return true, nil
 	case reflect.Array, reflect.Slice:
-		// note: the length of i and j may be different
+		// 注意：i 和 j 的长度可能不同
 		for idx := 0; idx < min(i.Len(), j.Len()); idx++ {
 			less, err := isLess(i.Index(idx), j.Index(idx))
 			if err != nil || !less {
@@ -269,7 +269,7 @@ func isLess(i, j reflect.Value) (bool, error) {
 			}
 		case string:
 			if jtype, ok := j.Interface().(string); ok {
-				// check if it's a Quantity
+				// 检查是否为 Quantity
 				itypeQuantity, err := resource.ParseQuantity(itype)
 				if err != nil {
 					return itype < jtype, nil
@@ -278,7 +278,7 @@ func isLess(i, j reflect.Value) (bool, error) {
 				if err != nil {
 					return itype < jtype, nil
 				}
-				// Both strings are quantity
+				// 两个字符串都是数量值
 				return itypeQuantity.Cmp(jtypeQuantity) < 0, nil
 			}
 		default:
@@ -331,9 +331,9 @@ func (r *RuntimeSort) Less(i, j int) bool {
 	return less
 }
 
-// OriginalPosition returns the starting (original) position of a particular index.
-// e.g. If OriginalPosition(0) returns 5 than the
-// item currently at position 0 was at position 5 in the original unsorted array.
+// OriginalPosition 返回某个索引的起始（原始）位置。
+// 例如，如果 OriginalPosition(0) 返回 5，
+// 则当前位于位置 0 的项在原始未排序数组中位于位置 5。
 func (r *RuntimeSort) OriginalPosition(ix int) int {
 	if ix < 0 || ix > len(r.origPosition) {
 		return -1

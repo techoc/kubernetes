@@ -121,9 +121,8 @@ func setupOutputWriter(dir string, defaultWriter io.Writer, filename string, fil
 	}
 	fullFile := filepath.Join(dir, filename) + fileExtension
 	parent := filepath.Dir(fullFile)
-	// Dump output can contain sensitive cluster state, such as pod logs with
-	// embedded credentials, so restrict created directories and files to the
-	// owner.
+	// dump 输出可能包含敏感的集群状态，例如带有凭据的 Pod 日志，
+	// 因此将创建的目录和文件限制为仅所有者可访问。
 	cmdutil.CheckErr(os.MkdirAll(parent, 0700))
 
 	file, err := os.OpenFile(fullFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
@@ -210,8 +209,7 @@ func (o *ClusterInfoDumpOptions) Run() error {
 		}
 	}
 	for _, namespace := range namespaces {
-		// TODO: this is repetitive in the extreme.  Use reflection or
-		// something to make this a for loop.
+		// TODO: 这里重复代码太多。用反射或其他方式把它改成一个 for 循环。
 		events, err := o.CoreClient.Events(namespace).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			return err
@@ -275,7 +273,7 @@ func (o *ClusterInfoDumpOptions) Run() error {
 
 			requests, err := o.LogsForObject(o.RESTClientGetter, pod, &corev1.PodLogOptions{Container: container.Name}, timeout, false)
 			if err != nil {
-				// Print error and return.
+				// 打印错误并返回。
 				writer.Write([]byte(fmt.Sprintf("Create log request error: %s\n", err.Error())))
 				return
 			}
@@ -283,7 +281,7 @@ func (o *ClusterInfoDumpOptions) Run() error {
 			for _, request := range requests {
 				data, err := request.DoRaw(context.TODO())
 				if err != nil {
-					// Print error and return.
+					// 打印错误并返回。
 					writer.Write([]byte(fmt.Sprintf("Request log error: %s\n", err.Error())))
 					return
 				}

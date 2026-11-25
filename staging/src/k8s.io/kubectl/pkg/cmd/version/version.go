@@ -35,10 +35,10 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// TODO(knverey): remove this hardcoding once kubectl being built with module support makes BuildInfo available.
+// TODO(knverey): 一旦使用模块支持构建的 kubectl 能提供 BuildInfo，就移除这段硬编码。
 const kustomizeVersion = "v5.8.1"
 
-// Version is a struct for version information
+// Version 是承载版本信息的结构体
 type Version struct {
 	ClientVersion    *apimachineryversion.Info `json:"clientVersion,omitempty" yaml:"clientVersion,omitempty"`
 	KustomizeVersion string                    `json:"kustomizeVersion,omitempty" yaml:"kustomizeVersion,omitempty"`
@@ -51,7 +51,7 @@ var (
 		kubectl version`))
 )
 
-// Options is a struct to support version command
+// Options 是支持 version 命令的结构体
 type Options struct {
 	ClientOnly       bool
 	Output           string
@@ -64,7 +64,7 @@ type Options struct {
 	genericiooptions.IOStreams
 }
 
-// NewOptions returns initialized Options
+// NewOptions 返回已初始化的 Options
 func NewOptions(ioStreams genericiooptions.IOStreams) *Options {
 	return &Options{
 		IOStreams: ioStreams,
@@ -72,7 +72,7 @@ func NewOptions(ioStreams genericiooptions.IOStreams) *Options {
 
 }
 
-// NewCmdVersion returns a cobra command for fetching versions
+// NewCmdVersion 返回用于获取版本信息的 cobra 命令
 func NewCmdVersion(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewOptions(ioStreams)
 	cmd := &cobra.Command{
@@ -91,7 +91,7 @@ func NewCmdVersion(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cob
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *Options) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 
@@ -101,8 +101,8 @@ func (o *Options) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string)
 		return nil
 	}
 	o.discoveryClient, err = f.ToDiscoveryClient()
-	// if we had an empty rest.Config, continue and just print out client information.
-	// if we had an error other than being unable to build a rest.Config, fail.
+	// 如果 rest.Config 为空，则继续并只打印客户端信息。
+	// 如果错误不是因无法构建 rest.Config 引起的，则失败。
 	if err != nil && !clientcmd.IsEmptyConfig(err) {
 		return err
 	}
@@ -111,7 +111,7 @@ func (o *Options) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string)
 	return nil
 }
 
-// Validate validates the provided options
+// Validate 校验提供的选项
 func (o *Options) Validate() error {
 	if len(o.args) != 0 {
 		return errors.New(fmt.Sprintf("extra arguments: %v", o.args))
@@ -124,7 +124,7 @@ func (o *Options) Validate() error {
 	return nil
 }
 
-// Run executes version command
+// Run 执行 version 命令
 func (o *Options) Run() error {
 	var (
 		serverErr   error
@@ -135,7 +135,7 @@ func (o *Options) Run() error {
 	versionInfo.KustomizeVersion = getKustomizeVersion()
 
 	if !o.ClientOnly && o.discoveryClient != nil {
-		// Always request fresh data from the server
+		// 始终向服务端请求最新数据
 		o.discoveryClient.Invalidate()
 		versionInfo.ServerVersion, serverErr = o.discoveryClient.ServerVersion()
 	}
@@ -160,8 +160,8 @@ func (o *Options) Run() error {
 		}
 		fmt.Fprintln(o.Out, string(marshalled))
 	default:
-		// There is a bug in the program if we hit this case.
-		// However, we follow a policy of never panicking.
+		// 如果走到这种情况，说明程序中存在 bug。
+		// 不过，我们遵循绝不 panic 的原则。
 		return fmt.Errorf("VersionOptions were not validated: --output=%q should have been rejected", o.Output)
 	}
 

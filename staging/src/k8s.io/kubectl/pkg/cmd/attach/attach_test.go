@@ -161,7 +161,7 @@ func TestPodAndContainerAttach(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// setup opts to fetch our test pod
+			// 设置 opts 以获取我们的测试 pod
 			test.options.AttachablePodFn = fakeAttachablePodFn(test.obj)
 			test.options.Resources = test.args
 
@@ -576,7 +576,7 @@ func TestCreateExecutor(t *testing.T) {
 		t.Fatalf("unable to parse test url: %v", err)
 	}
 	config := cmdtesting.DefaultClientConfig()
-	// First, ensure that no environment variable creates the fallback executor.
+	// 首先，确保没有环境变量导致使用 fallback executor。
 	executor, err := createExecutor(url, config)
 	if err != nil {
 		t.Fatalf("unable to create executor: %v", err)
@@ -584,7 +584,7 @@ func TestCreateExecutor(t *testing.T) {
 	if _, isFallback := executor.(*remotecommand.FallbackExecutor); !isFallback {
 		t.Errorf("expected fallback executor, got %#v", executor)
 	}
-	// Next, check turning on feature flag explicitly also creates fallback executor.
+	// 接下来，检查显式打开 feature flag 也会创建 fallback executor。
 	t.Setenv(string(cmdutil.RemoteCommandWebsockets), "true")
 	executor, err = createExecutor(url, config)
 	if err != nil {
@@ -593,7 +593,7 @@ func TestCreateExecutor(t *testing.T) {
 	if _, isFallback := executor.(*remotecommand.FallbackExecutor); !isFallback {
 		t.Errorf("expected fallback executor, got %#v", executor)
 	}
-	// Finally, check explicit disabling does NOT create the fallback executor.
+	// 最后，检查显式关闭不会创建 fallback executor。
 	t.Setenv(string(cmdutil.RemoteCommandWebsockets), "false")
 	executor, err = createExecutor(url, config)
 	if err != nil {

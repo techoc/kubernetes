@@ -40,9 +40,9 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// WhoAmIFlags directly reflect the information that CLI is gathering via flags.  They will be converted to Options, which
-// reflect the runtime requirements for the command.  This structure reduces the transformation to wiring and makes
-// the logic itself easy to unit test.
+// WhoAmIFlags 直接反映 CLI 通过标志收集的信息。它们会被转换为 Options，后者
+// 反映命令的运行时需求。这种结构把转换简化为接线，并使
+// 逻辑本身易于单元测试。
 type WhoAmIFlags struct {
 	RESTClientGetter genericclioptions.RESTClientGetter
 	PrintFlags       *genericclioptions.PrintFlags
@@ -50,7 +50,7 @@ type WhoAmIFlags struct {
 	genericiooptions.IOStreams
 }
 
-// NewWhoAmIFlags returns a default WhoAmIFlags.
+// NewWhoAmIFlags 返回默认的 WhoAmIFlags。
 func NewWhoAmIFlags(restClientGetter genericclioptions.RESTClientGetter, streams genericiooptions.IOStreams) *WhoAmIFlags {
 	return &WhoAmIFlags{
 		RESTClientGetter: restClientGetter,
@@ -59,12 +59,12 @@ func NewWhoAmIFlags(restClientGetter genericclioptions.RESTClientGetter, streams
 	}
 }
 
-// AddFlags registers flags for a cli.
+// AddFlags 为 CLI 注册标志。
 func (flags *WhoAmIFlags) AddFlags(cmd *cobra.Command) {
 	flags.PrintFlags.AddFlags(cmd)
 }
 
-// ToOptions converts from CLI inputs to runtime inputs.
+// ToOptions 将 CLI 输入转换为运行时输入。
 func (flags *WhoAmIFlags) ToOptions(ctx context.Context, args []string) (*WhoAmIOptions, error) {
 	w := &WhoAmIOptions{
 		ctx:       ctx,
@@ -104,8 +104,8 @@ func (flags *WhoAmIFlags) ToOptions(ctx context.Context, args []string) (*WhoAmI
 	return w, nil
 }
 
-// WhoAmIOptions is the start of the data required to perform the operation. As new fields are added,
-// add them here instead of referencing the cmd.Flags()
+// WhoAmIOptions 是执行该操作所需数据的起点。新增字段时，
+// 请添加在这里，而不是引用 cmd.Flags()
 type WhoAmIOptions struct {
 	authV1alpha1Client authenticationv1alpha1client.AuthenticationV1alpha1Interface
 	authV1beta1Client  authenticationv1beta1client.AuthenticationV1beta1Interface
@@ -136,7 +136,7 @@ var (
 	`)
 )
 
-// NewCmdWhoAmI returns an initialized Command for 'auth whoami' sub command. Experimental.
+// NewCmdWhoAmI 返回 'auth whoami' 子命令的已初始化 Command。实验性功能。
 func NewCmdWhoAmI(restClientGetter genericclioptions.RESTClientGetter, streams genericiooptions.IOStreams) *cobra.Command {
 	flags := NewWhoAmIFlags(restClientGetter, streams)
 
@@ -165,7 +165,7 @@ var (
 		"the selfsubjectreviews API is not enabled in the cluster or you do not have permission to call it")
 )
 
-// Run prints all user attributes.
+// Run 打印所有用户属性。
 func (o WhoAmIOptions) Run() error {
 	var (
 		res runtime.Object
@@ -176,12 +176,12 @@ func (o WhoAmIOptions) Run() error {
 		SelfSubjectReviews().
 		Create(context.TODO(), &authenticationv1.SelfSubjectReview{}, metav1.CreateOptions{})
 	if err != nil && errors.IsNotFound(err) {
-		// Fallback to Beta API if Beta is not enabled
+		// 如果 Beta 未启用，则回退到 Beta API
 		res, err = o.authV1beta1Client.
 			SelfSubjectReviews().
 			Create(context.TODO(), &authenticationv1beta1.SelfSubjectReview{}, metav1.CreateOptions{})
 		if err != nil && errors.IsNotFound(err) {
-			// Fallback to Alpha API if Beta is not enabled
+			// 如果 Beta 未启用，则回退到 Alpha API
 			res, err = o.authV1alpha1Client.
 				SelfSubjectReviews().
 				Create(context.TODO(), &authenticationv1alpha1.SelfSubjectReview{}, metav1.CreateOptions{})

@@ -45,8 +45,8 @@ func TestPatchObject(t *testing.T) {
 			case p == "/namespaces/test/services/frontend" && (m == "PATCH" || m == "GET"):
 				obj := svc.Items[0]
 
-				// ensure patched object reflects successful
-				// patch edits from the client
+				// 确保被 patch 的对象反映了来自客户端的
+				// 成功 patch 修改
 				if m == "PATCH" {
 					obj.Spec.Type = "NodePort"
 				}
@@ -65,7 +65,7 @@ func TestPatchObject(t *testing.T) {
 	cmd.Flags().Set("output", "name")
 	cmd.Run(cmd, []string{"services/frontend"})
 
-	// uses the name from the response
+	// 使用响应中的名称
 	if buf.String() != "service/baz\n" {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
@@ -100,7 +100,7 @@ func TestPatchObjectFromFile(t *testing.T) {
 	cmd.Flags().Set("filename", "../../../testdata/frontend-service.yaml")
 	cmd.Run(cmd, []string{})
 
-	// uses the name from the response
+	// 使用响应中的名称
 	if buf.String() != "service/baz\n" {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
@@ -131,7 +131,7 @@ func TestPatchNoop(t *testing.T) {
 		}),
 	}
 
-	// Patched
+	// 已打补丁
 	{
 		patchObject = patchObject.DeepCopy()
 		if patchObject.Annotations == nil {
@@ -187,7 +187,7 @@ func TestPatchObjectFromFileOutput(t *testing.T) {
 	cmd.Run(cmd, []string{})
 
 	t.Log(buf.String())
-	// make sure the value returned by the server is used
+	// 确保使用服务端返回的值
 	if !strings.Contains(buf.String(), "post-patch: post-patch-value") {
 		t.Errorf("unexpected output: %s", buf.String())
 	}
@@ -210,8 +210,8 @@ func TestPatchSubresource(t *testing.T) {
 			case p == "/namespaces/test/pods/foo/status" && (m == "PATCH" || m == "GET"):
 				obj := pod
 
-				// ensure patched object reflects successful
-				// patch edits from the client
+				// 确保被 patch 的对象反映了来自客户端的
+				// 成功 patch 修改
 				if m == "PATCH" {
 					obj.Status.Phase = expectedStatus
 				}
@@ -235,7 +235,7 @@ func TestPatchSubresource(t *testing.T) {
 	var actualStatus corev1.PodPhase
 	decoder.SeekTo("status", "phase")
 	decoder.Decode(&actualStatus)
-	// check the status.phase value is updated in the response
+	// 检查响应中的 status.phase 值已更新
 	if actualStatus != expectedStatus {
 		t.Errorf("unexpected pod status to be set to %s got: %s", expectedStatus, actualStatus)
 	}

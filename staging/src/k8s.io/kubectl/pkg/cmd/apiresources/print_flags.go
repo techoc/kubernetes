@@ -65,7 +65,7 @@ func (f *PrintFlags) AddFlags(cmd *cobra.Command) {
 	}
 }
 
-// PrintOptions struct defines a struct for various print options
+// PrintOptions 结构体定义了各种打印选项
 type PrintOptions struct {
 	SortBy    *string
 	NoHeaders bool
@@ -81,16 +81,16 @@ func (f *HumanPrintFlags) AllowedFormats() []string {
 	return []string{"wide"}
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to human-readable printing to it
+// AddFlags 接收一个 *cobra.Command 引用，并绑定
+// 与人类可读打印相关的标志
 func (f *HumanPrintFlags) AddFlags(c *cobra.Command) {
 	if f.SortBy != nil {
 		c.Flags().StringVar(f.SortBy, "sort-by", *f.SortBy, "If non-empty, sort list types using this field specification.  The field specification is expressed as a JSONPath expression (e.g. '{.metadata.name}'). The field in the API resource specified by this JSONPath expression must be an integer or a string.")
 	}
 }
 
-// ToPrinter receives an outputFormat and returns a printer capable of
-// handling human-readable output.
+// ToPrinter 接收一个 outputFormat，并返回能够
+// 处理人类可读输出的打印器。
 func (f *HumanPrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrinter, error) {
 	if len(outputFormat) > 0 && outputFormat != "wide" {
 		return nil, genericclioptions.NoCompatiblePrinterError{Options: f, AllowedFormats: f.AllowedFormats()}
@@ -157,12 +157,12 @@ func (f *NamePrintFlags) AllowedFormats() []string {
 	return []string{"name"}
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to name printing to it
+// AddFlags 接收一个 *cobra.Command 引用，并绑定
+// 与名称打印相关的标志
 func (f *NamePrintFlags) AddFlags(_ *cobra.Command) {}
 
-// ToPrinter receives an outputFormat and returns a printer capable of
-// handling human-readable output.
+// ToPrinter 接收一个 outputFormat，并返回能够
+// 处理人类可读输出的打印器。
 func (f *NamePrintFlags) ToPrinter(outputFormat string) (printers.ResourcePrinter, error) {
 	if outputFormat == "name" {
 		return NamePrinter{}, nil

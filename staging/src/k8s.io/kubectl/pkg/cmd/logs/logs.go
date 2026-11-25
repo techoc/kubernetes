@@ -140,7 +140,7 @@ type LogsOptions struct {
 	Container                    string
 	InsecureSkipTLSVerifyBackend bool
 
-	// whether or not a container name was given via --container
+	// 是否通过 --container 指定了容器名称
 	ContainerNameSpecified bool
 	Selector               string
 	MaxFollowConcurrency   int
@@ -169,7 +169,7 @@ func NewLogsOptions(streams genericiooptions.IOStreams) *LogsOptions {
 	}
 }
 
-// NewCmdLogs creates a new pod logs command
+// NewCmdLogs 创建一个新的 pod logs 命令
 func NewCmdLogs(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewLogsOptions(streams)
 
@@ -233,7 +233,7 @@ func (o *LogsOptions) ToLogOptions() (*corev1.PodLogOptions, error) {
 	}
 
 	if o.SinceSeconds != 0 {
-		// round up to the nearest second
+		// 向上取整到最近的秒
 		sec := int64(o.SinceSeconds.Round(time.Second).Seconds())
 		logOptions.SinceSeconds = &sec
 	}
@@ -362,9 +362,9 @@ func (o LogsOptions) RunLogs() error {
 	return o.RunLogsContext(context.Background())
 }
 
-// RunLogsContext retrieves a pod log.
+// RunLogsContext 获取 pod 日志。
 //
-// When a signal is received, streaming is stopped, then followed by os.Exit(1).
+// 收到信号时，先停止流式传输，然后执行 os.Exit(1)。
 func (o LogsOptions) RunLogsContext(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -407,7 +407,7 @@ func (o LogsOptions) parallelConsumeRequest(ctx context.Context, requests map[co
 			out := o.addPrefixIfNeeded(objRef, writer)
 			if err := o.consumeWithRetry(ctx, request, out, writer); err != nil {
 				writer.CloseWithError(err)
-				// It's important to return here to propagate the error via the pipe
+				// 此处返回很重要，以便通过管道传播错误
 				return
 			}
 		}(objRef, request)
@@ -469,9 +469,9 @@ func (o LogsOptions) addPrefixIfNeeded(ref corev1.ObjectReference, writer io.Wri
 		return writer
 	}
 
-	// We rely on ref.FieldPath to contain a reference to a container
-	// including a container name (not an index) so we can get a container name
-	// without making an extra API request.
+	// 我们依赖 ref.FieldPath 包含对容器的引用，
+	// 其中包含容器名称（而非索引），这样我们无需额外的 API 请求
+	// 就能获得容器名称。
 	var containerName string
 	containerNameMatches := o.containerNameFromRefSpecRegexp.FindStringSubmatch(ref.FieldPath)
 	if len(containerNameMatches) == 2 {
@@ -485,14 +485,13 @@ func (o LogsOptions) addPrefixIfNeeded(ref corev1.ObjectReference, writer io.Wri
 	}
 }
 
-// DefaultConsumeRequest reads the data from request and writes into
-// the out writer. It buffers data from requests until the newline or io.EOF
-// occurs in the data, so it doesn't interleave logs sub-line
-// when running concurrently.
+// DefaultConsumeRequest 从 request 读取数据并写入
+// out writer。它会将 request 中的数据缓冲到出现换行符或 io.EOF
+// 为止，从而避免并发运行时日志出现子行交错。
 //
-// A successful read returns err == nil, not err == io.EOF.
-// Because the function is defined to read from request until io.EOF, it does
-// not treat an io.EOF as an error to be reported.
+// 成功读取时返回 err == nil，而不是 err == io.EOF。
+// 由于该函数定义为一直从 request 读取直到 io.EOF，因此
+// 它不会将 io.EOF 视为需要报告的错误。
 func DefaultConsumeRequest(ctx context.Context, request rest.ResponseWrapper, out io.Writer) error {
 	readCloser, err := request.Stream(ctx)
 	if err != nil {
@@ -526,13 +525,13 @@ func (pw *prefixingWriter) Write(p []byte) (int, error) {
 		return 0, nil
 	}
 
-	// Perform an "atomic" write of a prefix and p to make sure that it doesn't interleave
-	// sub-line when used concurrently with io.PipeWrite.
+	// 对前缀和 p 执行"原子"写入，确保与 io.PipeWrite
+	// 并发使用时不会出现子行交错
 	n, err := pw.writer.Write(append(pw.prefix, p...))
 	if n > len(p) {
-		// To comply with the io.Writer interface requirements we must
-		// return a number of bytes written from p (0 <= n <= len(p)),
-		// so we are ignoring the length of the prefix here.
+		// 为符合 io.Writer 接口的要求，我们必须
+		// 返回从 p 读取的字节数（0 <= n <= len(p)），
+		// 因此这里忽略前缀的长度。
 		return len(p), err
 	}
 	return n, err

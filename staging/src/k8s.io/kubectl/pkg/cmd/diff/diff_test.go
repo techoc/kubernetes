@@ -45,7 +45,7 @@ func (f *FakeObject) Name() string {
 }
 
 func (f *FakeObject) Merged() (runtime.Object, error) {
-	// Return nil if merged object does not exist
+	// 如果 merged 对象不存在，则返回 nil
 	if f.merged == nil {
 		return nil, nil
 	}
@@ -53,7 +53,7 @@ func (f *FakeObject) Merged() (runtime.Object, error) {
 }
 
 func (f *FakeObject) Live() runtime.Object {
-	// Return nil if live object does not exist
+	// 如果 live 对象不存在，则返回 nil
 	if f.live == nil {
 		return nil
 	}
@@ -78,7 +78,7 @@ func TestDiffProgram(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Testing diff --report-identical-files
+		// 测试 diff --report-identical-files
 		if i == 2 {
 			output_msg := "Files /dev/zero and /dev/zero are identical\n"
 			if output := stdout.String(); output != output_msg {
@@ -333,16 +333,16 @@ func TestMasker(t *testing.T) {
 				from: &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
-							"username": "***", // still masked
-							"password": "***", // still masked
+							"username": "***", // 仍被遮盖
+							"password": "***", // 仍被遮盖
 						},
 					},
 				},
 				to: &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
-							"username": "***", // still masked
-							"password": "***", // still masked
+							"username": "***", // 仍被遮盖
+							"password": "***", // 仍被遮盖
 						},
 					},
 				},
@@ -351,7 +351,7 @@ func TestMasker(t *testing.T) {
 		{
 			name: "object_created",
 			input: diff{
-				from: nil, // does not exist yet
+				from: nil, // 尚不存在
 				to: &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
@@ -362,12 +362,12 @@ func TestMasker(t *testing.T) {
 				},
 			},
 			want: diff{
-				from: nil, // does not exist yet
+				from: nil, // 尚不存在
 				to: &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
-							"username": "***", // no suffix needed
-							"password": "***", // no suffix needed
+							"username": "***", // 无需添加后缀
+							"password": "***", // 无需添加后缀
 						},
 					},
 				},
@@ -384,18 +384,18 @@ func TestMasker(t *testing.T) {
 						},
 					},
 				},
-				to: nil, // removed
+				to: nil, // 已移除
 			},
 			want: diff{
 				from: &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
-							"username": "***", // no suffix needed
-							"password": "***", // no suffix needed
+							"username": "***", // 无需添加后缀
+							"password": "***", // 无需添加后缀
 						},
 					},
 				},
-				to: nil, // removed
+				to: nil, // 已移除
 			},
 		},
 		{
@@ -412,7 +412,7 @@ func TestMasker(t *testing.T) {
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
 							"username": "abc",
-							"password": "123", // added
+							"password": "123", // 已添加
 						},
 					},
 				},
@@ -429,7 +429,7 @@ func TestMasker(t *testing.T) {
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
 							"username": "***",
-							"password": "***", // no suffix needed
+							"password": "***", // 无需添加后缀
 						},
 					},
 				},
@@ -450,7 +450,7 @@ func TestMasker(t *testing.T) {
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
 							"username": "abc",
-							"password": "456", // changed
+							"password": "456", // 已更改
 						},
 					},
 				},
@@ -460,7 +460,7 @@ func TestMasker(t *testing.T) {
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
 							"username": "***",
-							"password": "*** (before)", // added suffix for diff
+							"password": "*** (before)", // 为 diff 添加后缀
 						},
 					},
 				},
@@ -468,7 +468,7 @@ func TestMasker(t *testing.T) {
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
 							"username": "***",
-							"password": "*** (after)", // added suffix for diff
+							"password": "*** (after)", // 为 diff 添加后缀
 						},
 					},
 				},
@@ -489,7 +489,7 @@ func TestMasker(t *testing.T) {
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
 							"username": "abc",
-							// "password": "123", // removed
+							// "password": "123", // 已移除
 						},
 					},
 				},
@@ -499,7 +499,7 @@ func TestMasker(t *testing.T) {
 					Object: map[string]interface{}{
 						"data": map[string]interface{}{
 							"username": "***",
-							"password": "***", // no suffix needed
+							"password": "***", // 无需添加后缀
 						},
 					},
 				},
@@ -517,7 +517,7 @@ func TestMasker(t *testing.T) {
 			name: "empty_secret_from",
 			input: diff{
 				from: &unstructured.Unstructured{
-					Object: map[string]interface{}{}, // no data key
+					Object: map[string]interface{}{}, // 没有 data 键
 				},
 				to: &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -530,7 +530,7 @@ func TestMasker(t *testing.T) {
 			},
 			want: diff{
 				from: &unstructured.Unstructured{
-					Object: map[string]interface{}{}, // no data key
+					Object: map[string]interface{}{}, // 没有 data 键
 				},
 				to: &unstructured.Unstructured{
 					Object: map[string]interface{}{
@@ -554,7 +554,7 @@ func TestMasker(t *testing.T) {
 					},
 				},
 				to: &unstructured.Unstructured{
-					Object: map[string]interface{}{}, // no data key
+					Object: map[string]interface{}{}, // 没有 data 键
 				},
 			},
 			want: diff{
@@ -567,7 +567,7 @@ func TestMasker(t *testing.T) {
 					},
 				},
 				to: &unstructured.Unstructured{
-					Object: map[string]interface{}{}, // no data key
+					Object: map[string]interface{}{}, // 没有 data 键
 				},
 			},
 		},
@@ -576,7 +576,7 @@ func TestMasker(t *testing.T) {
 			input: diff{
 				from: &unstructured.Unstructured{
 					Object: map[string]interface{}{
-						"some_other_key": map[string]interface{}{ // invalid key
+						"some_other_key": map[string]interface{}{ // 无效的键
 							"username": "abc",
 							"password": "123",
 						},
@@ -584,7 +584,7 @@ func TestMasker(t *testing.T) {
 				},
 				to: &unstructured.Unstructured{
 					Object: map[string]interface{}{
-						"some_other_key": map[string]interface{}{ // invalid key
+						"some_other_key": map[string]interface{}{ // 无效的键
 							"username": "abc",
 							"password": "123",
 						},
@@ -595,16 +595,16 @@ func TestMasker(t *testing.T) {
 				from: &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"some_other_key": map[string]interface{}{
-							"username": "abc", // skipped
-							"password": "123", // skipped
+							"username": "abc", // 已跳过
+							"password": "123", // 已跳过
 						},
 					},
 				},
 				to: &unstructured.Unstructured{
 					Object: map[string]interface{}{
 						"some_other_key": map[string]interface{}{
-							"username": "abc", // skipped
-							"password": "123", // skipped
+							"username": "abc", // 已跳过
+							"password": "123", // 已跳过
 						},
 					},
 				},

@@ -41,7 +41,7 @@ import (
 	utilsnet "k8s.io/utils/net"
 )
 
-// NewCmdCreateService is a macro command to create a new service
+// NewCmdCreateService 是一个用于创建新 service 的宏命令
 func NewCmdCreateService(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "service",
@@ -58,7 +58,7 @@ func NewCmdCreateService(f cmdutil.Factory, ioStreams genericiooptions.IOStreams
 	return cmd
 }
 
-// ServiceOptions holds the options for 'create service' sub command
+// ServiceOptions 保存 'create service' 子命令的选项
 type ServiceOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
@@ -81,7 +81,7 @@ type ServiceOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewServiceOptions creates a ServiceOptions struct
+// NewServiceOptions 创建一个 ServiceOptions 结构体
 func NewServiceOptions(ioStreams genericiooptions.IOStreams, serviceType corev1.ServiceType) *ServiceOptions {
 	return &ServiceOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -90,7 +90,7 @@ func NewServiceOptions(ioStreams genericiooptions.IOStreams, serviceType corev1.
 	}
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *ServiceOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	name, err := NameFromCommandArgs(cmd, args)
 	if err != nil {
@@ -135,7 +135,7 @@ func (o *ServiceOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []
 	return nil
 }
 
-// Validate if the options are valid
+// Validate 检查选项是否有效
 func (o *ServiceOptions) Validate() error {
 	if o.ClusterIP == corev1.ClusterIPNone && o.Type != corev1.ServiceTypeClusterIP {
 		return fmt.Errorf("ClusterIP=None can only be used with ClusterIP service type")
@@ -169,7 +169,7 @@ func (o *ServiceOptions) createService() (*corev1.Service, error) {
 		})
 	}
 
-	// setup default label and selector
+	// 设置默认的 label 和 selector
 	labels := map[string]string{}
 	labels["app"] = o.Name
 	selector := map[string]string{}
@@ -199,7 +199,7 @@ func (o *ServiceOptions) createService() (*corev1.Service, error) {
 	return &service, nil
 }
 
-// Run the service command
+// Run 执行 service 命令
 func (o *ServiceOptions) Run() error {
 	service, err := o.createService()
 	if err != nil {
@@ -240,7 +240,7 @@ var (
     kubectl create service clusterip my-cs --clusterip="None"`))
 )
 
-// NewCmdCreateServiceClusterIP is a command to create a ClusterIP service
+// NewCmdCreateServiceClusterIP 是一个用于创建 ClusterIP service 的命令
 func NewCmdCreateServiceClusterIP(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewServiceOptions(ioStreams, corev1.ServiceTypeClusterIP)
 
@@ -278,7 +278,7 @@ var (
     kubectl create service nodeport my-ns --tcp=5678:8080`))
 )
 
-// NewCmdCreateServiceNodePort is a macro command for creating a NodePort service
+// NewCmdCreateServiceNodePort 是一个用于创建 NodePort service 的宏命令
 func NewCmdCreateServiceNodePort(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewServiceOptions(ioStreams, corev1.ServiceTypeNodePort)
 
@@ -315,7 +315,7 @@ var (
     kubectl create service loadbalancer my-lbs --tcp=5678:8080`))
 )
 
-// NewCmdCreateServiceLoadBalancer is a macro command for creating a LoadBalancer service
+// NewCmdCreateServiceLoadBalancer 是一个用于创建 LoadBalancer service 的宏命令
 func NewCmdCreateServiceLoadBalancer(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewServiceOptions(ioStreams, corev1.ServiceTypeLoadBalancer)
 
@@ -355,7 +355,7 @@ var (
 	kubectl create service externalname my-ns --external-name bar.com`))
 )
 
-// NewCmdCreateServiceExternalName is a macro command for creating an ExternalName service
+// NewCmdCreateServiceExternalName 是一个用于创建 ExternalName service 的宏命令
 func NewCmdCreateServiceExternalName(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewServiceOptions(ioStreams, corev1.ServiceTypeExternalName)
 

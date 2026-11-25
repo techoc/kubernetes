@@ -99,7 +99,7 @@ var (
 	  env | grep RAILS_ | kubectl set env -e - deployment/registry`)
 )
 
-// EnvOptions holds values for 'set env' command-lone options
+// EnvOptions 保存 'set env' 命令行选项的值
 type EnvOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	resource.FilenameOptions
@@ -133,8 +133,8 @@ type EnvOptions struct {
 	WarningPrinter *printers.WarningPrinter
 }
 
-// NewEnvOptions returns an EnvOptions indicating all containers in the selected
-// pod templates are selected by default and allowing environment to be overwritten
+// NewEnvOptions 返回一个 EnvOptions，默认选中所选 pod 模板中的
+// 所有容器，并允许覆盖环境变量
 func NewEnvOptions(streams genericiooptions.IOStreams) *EnvOptions {
 	return &EnvOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("env updated").WithTypeSetter(scheme.Scheme),
@@ -145,7 +145,7 @@ func NewEnvOptions(streams genericiooptions.IOStreams) *EnvOptions {
 	}
 }
 
-// NewCmdEnv implements the OpenShift cli env command
+// NewCmdEnv 实现 OpenShift cli env 命令
 func NewCmdEnv(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewEnvOptions(streams)
 
@@ -212,7 +212,7 @@ func (o *EnvOptions) keyToEnvName(key string) string {
 	return envName
 }
 
-// Complete completes all required options
+// Complete 补全所有必需的选项
 func (o *EnvOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	if o.All && len(o.Selector) > 0 {
 		return fmt.Errorf("cannot set --all and --selector at the same time")
@@ -247,7 +247,7 @@ func (o *EnvOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []stri
 		return err
 	}
 	o.builder = f.NewBuilder
-	// Set default WarningPrinter if not already set.
+	// 若尚未设置，则设置默认的 WarningPrinter。
 	if o.WarningPrinter == nil {
 		o.WarningPrinter = printers.NewWarningPrinter(o.ErrOut, printers.WarningPrinterOptions{Color: printers.AllowsColorOutput(o.ErrOut)})
 	}
@@ -255,7 +255,7 @@ func (o *EnvOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []stri
 	return nil
 }
 
-// Validate makes sure provided values for EnvOptions are valid
+// Validate 确保 EnvOptions 中提供的值有效
 func (o *EnvOptions) Validate() error {
 	if o.Local && o.dryRunStrategy == cmdutil.DryRunServer {
 		return fmt.Errorf("cannot specify --local and --dry-run=server - did you mean --dry-run=client?")
@@ -275,7 +275,7 @@ func (o *EnvOptions) Validate() error {
 	return nil
 }
 
-// RunEnv contains all the necessary functionality for the OpenShift cli env command
+// RunEnv 包含 OpenShift cli env 命令的全部必要功能
 func (o *EnvOptions) RunEnv() error {
 	env, remove, envFromStdin, err := envutil.ParseEnv(append(o.EnvParams, o.envArgs...), o.In)
 	if err != nil {
@@ -442,33 +442,33 @@ func (o *EnvOptions) RunEnv() error {
 
 					fmt.Fprintf(o.Out, "# %s %s, container %s\n", objKind, objName, c.Name)
 					for _, env := range c.Env {
-						// Print the simple value
+						// 打印简单值
 						if env.ValueFrom == nil {
 							fmt.Fprintf(o.Out, "%s=%s\n", env.Name, env.Value)
 							continue
 						}
 
-						// Print the reference version
+						// 打印引用版本
 						if !o.Resolve {
 							fmt.Fprintf(o.Out, "# %s from %s\n", env.Name, envutil.GetEnvVarRefString(env.ValueFrom))
 							continue
 						}
 
 						value, err := envutil.GetEnvVarRefValue(o.clientset, o.namespace, store, env.ValueFrom, obj, c)
-						// Print the resolved value
+						// 打印解析后的值
 						if err == nil {
 							fmt.Fprintf(o.Out, "%s=%s\n", env.Name, value)
 							continue
 						}
 
-						// Print the reference version and save the resolve error
+						// 打印引用版本并保存解析错误
 						fmt.Fprintf(o.Out, "# %s from %s\n", env.Name, envutil.GetEnvVarRefString(env.ValueFrom))
 						errString := err.Error()
 						resolveErrors[errString] = append(resolveErrors[errString], env.Name)
 						resolutionErrorsEncountered = true
 					}
 
-					// Print any resolution errors
+					// 打印所有解析错误
 					errs := []string{}
 					for err, vars := range resolveErrors {
 						sort.Strings(vars)
@@ -506,7 +506,7 @@ func (o *EnvOptions) RunEnv() error {
 			continue
 		}
 
-		// no changes
+		// 无变更
 		if string(patch.Patch) == "{}" || len(patch.Patch) == 0 {
 			continue
 		}
@@ -528,8 +528,8 @@ func (o *EnvOptions) RunEnv() error {
 			continue
 		}
 
-		// make sure arguments to set or replace environment variables are set
-		// before returning a successful message
+		// 在返回成功消息之前，确保设置或替换环境变量的参数
+		// 都已设置
 		if len(env) == 0 && len(o.envArgs) == 0 {
 			return fmt.Errorf("at least one environment variable must be provided")
 		}

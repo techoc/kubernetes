@@ -40,8 +40,8 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// NewCmdCreateSecret groups subcommands to create various types of secrets.
-// This is the entry point of create_secret.go which will be called by create.go
+// NewCmdCreateSecret 将用于创建各种类型 secret 的子命令组合在一起。
+// 这是 create_secret.go 的入口，将由 create.go 调用
 func NewCmdCreateSecret(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "secret (docker-registry | generic | tls)",
@@ -97,23 +97,23 @@ var (
 	  kubectl create secret generic my-secret --from-env-file=path/to/foo.env --from-env-file=path/to/bar.env`))
 )
 
-// CreateSecretOptions holds the options for 'create secret' sub command
+// CreateSecretOptions 保存 'create secret' 子命令的选项
 type CreateSecretOptions struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
 
-	// Name of secret (required)
+	// secret 的名称（必填）
 	Name string
-	// Type of secret (optional)
+	// secret 的类型（可选）
 	Type string
-	// FileSources to derive the secret from (optional)
+	// 派生 secret 所用的 FileSources（可选）
 	FileSources []string
-	// LiteralSources to derive the secret from (optional)
+	// 派生 secret 所用的 LiteralSources（可选）
 	LiteralSources []string
-	// EnvFileSources to derive the secret from (optional)
+	// 派生 secret 所用的 EnvFileSources（可选）
 	EnvFileSources []string
-	// AppendHash; if true, derive a hash from the Secret data and type and append it to the name
+	// AppendHash；为 true 时，根据 Secret 的数据和类型派生哈希并追加到名称后
 	AppendHash bool
 
 	FieldManager     string
@@ -128,7 +128,7 @@ type CreateSecretOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewSecretOptions creates a new *CreateSecretOptions with default value
+// NewSecretOptions 创建一个带有默认值的 *CreateSecretOptions
 func NewSecretOptions(ioStreams genericiooptions.IOStreams) *CreateSecretOptions {
 	return &CreateSecretOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -136,7 +136,7 @@ func NewSecretOptions(ioStreams genericiooptions.IOStreams) *CreateSecretOptions
 	}
 }
 
-// NewCmdCreateSecretGeneric is a command to create generic secrets from files, directories, or literal values
+// NewCmdCreateSecretGeneric 是一个根据文件、目录或字面值创建通用 secret 的命令
 func NewCmdCreateSecretGeneric(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewSecretOptions(ioStreams)
 
@@ -169,7 +169,7 @@ func NewCmdCreateSecretGeneric(f cmdutil.Factory, ioStreams genericiooptions.IOS
 	return cmd
 }
 
-// Complete loads data from the command line environment
+// Complete 从命令行环境加载数据
 func (o *CreateSecretOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -217,7 +217,7 @@ func (o *CreateSecretOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, ar
 	return nil
 }
 
-// Validate checks if CreateSecretOptions has sufficient value to run
+// Validate 检查 CreateSecretOptions 是否具备运行所需的足够值
 func (o *CreateSecretOptions) Validate() error {
 	if len(o.Name) == 0 {
 		return fmt.Errorf("name must be specified")
@@ -228,8 +228,8 @@ func (o *CreateSecretOptions) Validate() error {
 	return nil
 }
 
-// Run calls createSecret which will create secret based on CreateSecretOptions
-// and makes an API call to the server
+// Run 调用 createSecret，后者根据 CreateSecretOptions 创建 secret，
+// 并向服务端发起 API 调用
 func (o *CreateSecretOptions) Run() error {
 	secret, err := o.createSecret()
 	if err != nil {
@@ -257,8 +257,8 @@ func (o *CreateSecretOptions) Run() error {
 	return o.PrintObj(secret)
 }
 
-// createSecret fills in key value pair from the information given in
-// CreateSecretOptions into *corev1.Secret
+// createSecret 将 CreateSecretOptions 中给出的信息
+// 填充为键值对写入 *corev1.Secret
 func (o *CreateSecretOptions) createSecret() (*corev1.Secret, error) {
 	namespace := ""
 	if o.EnforceNamespace {
@@ -291,7 +291,7 @@ func (o *CreateSecretOptions) createSecret() (*corev1.Secret, error) {
 	return secret, nil
 }
 
-// newSecretObj will create a new Secret Object given name, namespace and secretType
+// newSecretObj 根据给定的 name、namespace 和 secretType 创建一个新的 Secret 对象
 func newSecretObj(name, namespace string, secretType corev1.SecretType) *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -307,8 +307,8 @@ func newSecretObj(name, namespace string, secretType corev1.SecretType) *corev1.
 	}
 }
 
-// handleSecretFromLiteralSources adds the specified literal source
-// information into the provided secret
+// handleSecretFromLiteralSources 将指定的字面量来源信息
+// 添加到给定的 secret 中
 func handleSecretFromLiteralSources(secret *corev1.Secret, literalSources []string) error {
 	for _, literalSource := range literalSources {
 		keyName, value, err := util.ParseLiteralSource(literalSource)
@@ -323,7 +323,7 @@ func handleSecretFromLiteralSources(secret *corev1.Secret, literalSources []stri
 	return nil
 }
 
-// handleSecretFromFileSources adds the specified file source information into the provided secret
+// handleSecretFromFileSources 将指定的文件来源信息添加到给定的 secret 中
 func handleSecretFromFileSources(secret *corev1.Secret, fileSources []string) error {
 	for _, fileSource := range fileSources {
 		keyName, filePath, err := util.ParseFileSource(fileSource)
@@ -339,7 +339,7 @@ func handleSecretFromFileSources(secret *corev1.Secret, fileSources []string) er
 				return fmt.Errorf("error reading %s: %v", filePath, err)
 			}
 		}
-		// if the filePath is a directory
+		// 如果 filePath 是目录
 		if fileInfo.IsDir() {
 			if strings.Contains(fileSource, "=") {
 				return fmt.Errorf("cannot give a key name for a directory path")
@@ -357,7 +357,7 @@ func handleSecretFromFileSources(secret *corev1.Secret, fileSources []string) er
 					}
 				}
 			}
-			// if the filepath is a file
+			// 如果 filepath 是文件
 		} else {
 			if err := addKeyFromFileToSecret(secret, keyName, filePath); err != nil {
 				return err
@@ -369,8 +369,8 @@ func handleSecretFromFileSources(secret *corev1.Secret, fileSources []string) er
 	return nil
 }
 
-// handleSecretFromEnvFileSources adds the specified env files source information
-// into the provided secret
+// handleSecretFromEnvFileSources 将指定的 env 文件来源信息
+// 添加到给定的 secret 中
 func handleSecretFromEnvFileSources(secret *corev1.Secret, envFileSources []string) error {
 	for _, envFileSource := range envFileSources {
 		info, err := os.Stat(envFileSource)
@@ -396,8 +396,8 @@ func handleSecretFromEnvFileSources(secret *corev1.Secret, envFileSources []stri
 	return nil
 }
 
-// addKeyFromFileToSecret adds a key with the given name to a Secret, populating
-// the value with the content of the given file path, or returns an error.
+// addKeyFromFileToSecret 使用给定名称向 Secret 添加一个 key，值取自给定文件路径的内容；
+// 若失败则返回错误。
 func addKeyFromFileToSecret(secret *corev1.Secret, keyName, filePath string) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -406,8 +406,8 @@ func addKeyFromFileToSecret(secret *corev1.Secret, keyName, filePath string) err
 	return addKeyFromLiteralToSecret(secret, keyName, data)
 }
 
-// addKeyFromLiteralToSecret adds the given key and data to the given secret,
-// returning an error if the key is not valid or if the key already exists.
+// addKeyFromLiteralToSecret 将给定的 key 和数据添加到给定的 secret，
+// 如果 key 无效或已存在则返回错误。
 func addKeyFromLiteralToSecret(secret *corev1.Secret, keyName string, data []byte) error {
 	if errs := validation.IsConfigMapKey(keyName); len(errs) != 0 {
 		return fmt.Errorf("%q is not valid key name for a Secret %s", keyName, strings.Join(errs, ";"))

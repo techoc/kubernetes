@@ -80,7 +80,7 @@ func testComponentStatusData() *corev1.ComponentStatusList {
 	}
 }
 
-// Verifies that schemas that are not in the master tree of Kubernetes can be retrieved via Get.
+// 验证不在 Kubernetes 主树中的 schema 也能通过 Get 获取。
 func TestGetUnknownSchemaObject(t *testing.T) {
 	t.Skip("This test is completely broken.  The first thing it does is add the object to the scheme!")
 	tf := cmdtesting.NewTestFactory().WithNamespace("test")
@@ -154,7 +154,7 @@ func TestGetValidateLabelColumnsWithCustomColumns(t *testing.T) {
 	}
 }
 
-// Verifies that schemas that are not in the master tree of Kubernetes can be retrieved via Get.
+// 验证不在 Kubernetes 主树中的 schema 也能通过 Get 获取。
 func TestGetSchemaObject(t *testing.T) {
 	tf := cmdtesting.NewTestFactory().WithNamespace("test")
 	defer tf.Cleanup()
@@ -420,7 +420,7 @@ service/baz   <unknown>
 		t.Errorf("expected\n%v\ngot\n%v", e, a)
 	}
 
-	// The error out should be empty
+	// 错误输出应为空
 	if e, a := "", bufErr.String(); e != a {
 		t.Errorf("expected\n%v\ngot\n%v", e, a)
 	}
@@ -482,7 +482,7 @@ service/baz   ClusterIP   <none>       <none>        <none>    <unknown>
 		t.Errorf("expected\n%v\ngot\n%v", e, a)
 	}
 
-	// The error out should be empty
+	// 错误输出应为空
 	if e, a := "", bufErr.String(); e != a {
 		t.Errorf("expected\n%v\ngot\n%v", e, a)
 	}
@@ -550,7 +550,7 @@ service/baz   ClusterIP   <none>       <none>        <none>    <unknown>
 			t.Errorf("[kubectl get %v] expected\n%v\ngot\n%v", cmdArgs, e, a)
 		}
 
-		// The error out should be empty
+		// 错误输出应为空
 		if e, a := "", bufErr.String(); e != a {
 			t.Errorf("[kubectl get %v] expected\n%v\ngot\n%v", cmdArgs, e, a)
 		}
@@ -774,7 +774,7 @@ func TestGetNonExistObject(t *testing.T) {
 		}
 	})
 
-	// Get nonexistentpod fails with above error message
+	// Get nonexistentpod 因上述错误消息而失败
 	streams, _, buf, _ := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdGet("kubectl", tf, streams)
 	cmd.SetOut(buf)
@@ -823,7 +823,7 @@ func TestGetNonExistObjectIgnoreNotFound(t *testing.T) {
 		}
 	})
 
-	// Get nonexistentpod passes without error when setting ignore-not-found to true
+	// 将 ignore-not-found 设为 true 时，Get nonexistentpod 无错误通过
 	streams, _, buf, _ := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdGet("kubectl", tf, streams)
 	cmd.SetOut(buf)
@@ -853,7 +853,7 @@ func TestEmptyResult(t *testing.T) {
 
 	streams, _, _, errbuf := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdGet("kubectl", tf, streams)
-	// we're assuming that an empty file is being passed from stdin
+	// 假设从 stdin 传入的是一个空文件
 	cmd.Flags().Set("filename", "-")
 	cmd.Run(cmd, []string{})
 
@@ -878,7 +878,7 @@ func TestEmptyResultJSON(t *testing.T) {
 
 	streams, _, outbuf, errbuf := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdGet("kubectl", tf, streams)
-	// we're assuming that an empty file is being passed from stdin
+	// 假设从 stdin 传入的是一个空文件
 	cmd.Flags().Set("filename", "-")
 	cmd.Flags().Set("output", "json")
 	cmd.Run(cmd, []string{})
@@ -945,7 +945,7 @@ func TestGetSortedObjects(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
-	// sorting with metadata.name
+	// 按 metadata.name 排序
 	cmd.Flags().Set("sort-by", ".metadata.name")
 	cmd.Run(cmd, []string{"pods"})
 
@@ -985,7 +985,7 @@ func TestGetSortedObjectsUnstructuredTable(t *testing.T) {
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
-	// sorting with metadata.name
+	// 按 metadata.name 排序
 	cmd.Flags().Set("sort-by", ".metadata.name")
 	cmd.Run(cmd, []string{"pods"})
 
@@ -1340,8 +1340,8 @@ serverunknown   Unhealthy             fizzbuzz error
 func TestGetMixedGenericObjects(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 
-	// ensure that a runtime.Object without
-	// an ObjectMeta field is handled properly
+	// 确保没有 ObjectMeta 字段的 runtime.Object
+	// 能被正确处理
 	structuredObj := &metav1.Status{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Status",
@@ -1879,7 +1879,7 @@ func watchTestData() ([]corev1.Pod, []watch.Event) {
 		},
 	}
 	events := []watch.Event{
-		// current state events
+		// 当前状态事件
 		{
 			Type: watch.Added,
 			Object: &corev1.Pod{
@@ -1914,7 +1914,7 @@ func watchTestData() ([]corev1.Pod, []watch.Event) {
 				},
 			},
 		},
-		// resource events
+		// 资源事件
 		{
 			Type: watch.Modified,
 			Object: &corev1.Pod{
@@ -2234,7 +2234,7 @@ func TestWatchNonExistObject(t *testing.T) {
 		}
 	})
 
-	// Get nonexistentpod fails with above error message
+	// Get nonexistentpod 因上述错误消息而失败
 	streams, _, buf, _ := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdGet("kubectl", tf, streams)
 	cmd.SetOut(buf)
@@ -2277,7 +2277,7 @@ func TestWatchNonExistObjectIgnoreNotFound(t *testing.T) {
 		}
 	})
 
-	// Get nonexistentpod passes without error when setting ignore-not-found to true
+	// 将 ignore-not-found 设为 true 时，Get nonexistentpod 无错误通过
 	streams, _, buf, _ := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdGet("kubectl", tf, streams)
 	cmd.SetOut(buf)
@@ -3041,7 +3041,7 @@ var podColumns = []metav1.TableColumnDefinition{
 	{Name: "Readiness Gates", Type: "string", Format: "", Priority: 1},
 }
 
-// build a meta table response from a pod list
+// 根据 pod 列表构建 meta table 响应
 func podTableObjBody(codec runtime.Codec, pods ...corev1.Pod) io.ReadCloser {
 	table := &metav1beta1.Table{
 		TypeMeta:          metav1.TypeMeta{APIVersion: "meta.k8s.io/v1beta1", Kind: "Table"},
@@ -3065,7 +3065,7 @@ func podTableObjBody(codec runtime.Codec, pods ...corev1.Pod) io.ReadCloser {
 	return cmdtesting.BytesBody(data)
 }
 
-// build a meta table response from a pod list
+// 根据 pod 列表构建 meta table 响应
 func podV1TableObjBody(codec runtime.Codec, pods ...corev1.Pod) io.ReadCloser {
 	table := &metav1.Table{
 		TypeMeta:          metav1.TypeMeta{APIVersion: "meta.k8s.io/v1", Kind: "Table"},
@@ -3089,7 +3089,7 @@ func podV1TableObjBody(codec runtime.Codec, pods ...corev1.Pod) io.ReadCloser {
 	return cmdtesting.BytesBody(data)
 }
 
-// build meta table watch events from pod watch events
+// 根据 pod watch 事件构建 meta table watch 事件
 func podTableWatchBody(codec runtime.Codec, events []watch.Event) io.ReadCloser {
 	tableEvents := []watch.Event{}
 	for i, e := range events {
@@ -3112,7 +3112,7 @@ func podTableWatchBody(codec runtime.Codec, events []watch.Event) io.ReadCloser 
 	return watchBody(codec, tableEvents)
 }
 
-// build a meta table response from a service list
+// 根据 service 列表构建 meta table 响应
 func serviceTableObjBody(codec runtime.Codec, services ...corev1.Service) io.ReadCloser {
 	table := &metav1.Table{
 		ColumnDefinitions: []metav1.TableColumnDefinition{
@@ -3135,7 +3135,7 @@ func serviceTableObjBody(codec runtime.Codec, services ...corev1.Service) io.Rea
 	return cmdtesting.ObjBody(codec, table)
 }
 
-// build a meta table response from a node list
+// 根据 node 列表构建 meta table 响应
 func nodeTableObjBody(codec runtime.Codec, nodes ...corev1.Node) io.ReadCloser {
 	table := &metav1.Table{
 		ColumnDefinitions: []metav1.TableColumnDefinition{
@@ -3157,7 +3157,7 @@ func nodeTableObjBody(codec runtime.Codec, nodes ...corev1.Node) io.ReadCloser {
 	return cmdtesting.ObjBody(codec, table)
 }
 
-// build a meta table response from a componentStatus list
+// 根据 componentStatus 列表构建 meta table 响应
 func componentStatusTableObjBody(codec runtime.Codec, componentStatuses ...corev1.ComponentStatus) io.ReadCloser {
 	table := &metav1.Table{
 		ColumnDefinitions: []metav1.TableColumnDefinition{
@@ -3184,7 +3184,7 @@ func componentStatusTableObjBody(codec runtime.Codec, componentStatuses ...corev
 	return cmdtesting.ObjBody(codec, table)
 }
 
-// build an empty table response
+// 构建一个空的 table 响应
 func emptyTableObjBody(codec runtime.Codec) io.ReadCloser {
 	table := &metav1.Table{
 		ColumnDefinitions: podColumns,

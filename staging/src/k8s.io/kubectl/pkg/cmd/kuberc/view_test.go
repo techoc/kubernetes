@@ -111,7 +111,7 @@ aliases:
 				t.Fatalf("Run() unexpected error = %v", err)
 			}
 
-			// Unmarshal actual output to v1beta1.Preference
+			// 将实际输出反序列化为 v1beta1.Preference
 			var actualPref v1beta1.Preference
 			if err := yaml.Unmarshal(out.Bytes(), &actualPref); err != nil {
 				t.Fatalf("failed to unmarshal actual output: %v", err)

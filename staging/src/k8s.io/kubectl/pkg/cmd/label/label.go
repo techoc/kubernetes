@@ -53,16 +53,16 @@ const (
 	MsgModified   = "modified"
 )
 
-// LabelOptions have the data required to perform the label operation
+// LabelOptions 包含执行 label 操作所需的数据
 type LabelOptions struct {
-	// Filename options
+	// filename 相关选项
 	resource.FilenameOptions
 	RecordFlags *genericclioptions.RecordFlags
 
 	PrintFlags *genericclioptions.PrintFlags
 	ToPrinter  func(string) (printers.ResourcePrinter, error)
 
-	// Common user flags
+	// 通用用户 flag
 	overwrite       bool
 	list            bool
 	local           bool
@@ -75,7 +75,7 @@ type LabelOptions struct {
 	outputFormat    string
 	fieldManager    string
 
-	// results of arg parsing
+	// 参数解析结果
 	resources    []string
 	newLabels    map[string]string
 	removeLabels []string
@@ -87,7 +87,7 @@ type LabelOptions struct {
 	builder                      *resource.Builder
 	unstructuredClientForMapping func(mapping *meta.RESTMapping) (resource.RESTClient, error)
 
-	// Common shared fields
+	// 通用共享字段
 	genericiooptions.IOStreams
 }
 
@@ -168,7 +168,7 @@ func NewCmdLabel(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra
 	return cmd
 }
 
-// Complete adapts from the command line args and factory to the data required.
+// Complete 将命令行参数和 factory 转换为所需的数据。
 func (o *LabelOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 
@@ -186,7 +186,7 @@ func (o *LabelOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []st
 
 	o.ToPrinter = func(operation string) (printers.ResourcePrinter, error) {
 		o.PrintFlags.NamePrintFlags.Operation = operation
-		// PrintFlagsWithDryRunStrategy must be done after NamePrintFlags.Operation is set
+		// PrintFlagsWithDryRunStrategy 必须在 NamePrintFlags.Operation 设置之后调用
 		cmdutil.PrintFlagsWithDryRunStrategy(o.PrintFlags, o.dryRunStrategy)
 		return o.PrintFlags.ToPrinter()
 	}
@@ -215,7 +215,7 @@ func (o *LabelOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []st
 	return nil
 }
 
-// Validate checks to the LabelOptions to see if there is sufficient information run the command.
+// Validate 检查 LabelOptions 中是否有足够的信息来运行命令。
 func (o *LabelOptions) Validate() error {
 	if o.all && len(o.selector) > 0 {
 		return fmt.Errorf("cannot set --all and --selector at the same time")
@@ -244,7 +244,7 @@ func (o *LabelOptions) Validate() error {
 	return nil
 }
 
-// RunLabel does the work
+// RunLabel 执行实际操作
 func (o *LabelOptions) RunLabel() error {
 	b := o.builder.
 		Unstructured().
@@ -268,12 +268,12 @@ func (o *LabelOptions) RunLabel() error {
 		return err
 	}
 
-	// only apply resource version locking on a single resource
+	// 仅对单个资源应用 resource version 锁定
 	if !one && len(o.resourceVersion) > 0 {
 		return fmt.Errorf("--resource-version may only be used with a single resource")
 	}
 
-	// TODO: support bulk generic output a la Get
+	// TODO: 像 Get 一样支持批量通用输出
 	return r.Visit(func(info *resource.Info, err error) error {
 		if err != nil {
 			return err
@@ -284,7 +284,7 @@ func (o *LabelOptions) RunLabel() error {
 		obj := info.Object
 
 		if len(o.resourceVersion) != 0 {
-			// ensure resourceVersion is always sent in the patch by clearing it from the starting JSON
+			// 从起始 JSON 中清除 resourceVersion，确保它始终在 patch 中被发送
 			accessor, err := meta.Accessor(obj)
 			if err != nil {
 				return err

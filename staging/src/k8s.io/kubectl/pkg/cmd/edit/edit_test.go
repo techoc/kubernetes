@@ -44,7 +44,7 @@ import (
 
 type EditTestCase struct {
 	Description string `yaml:"description"`
-	// create or edit
+	// create 或 edit
 	Mode             string   `yaml:"mode"`
 	Args             []string `yaml:"args"`
 	Filename         string   `yaml:"filename"`
@@ -61,16 +61,16 @@ type EditTestCase struct {
 }
 
 type EditStep struct {
-	// edit or request
+	// edit 或 request
 	StepType string `yaml:"type"`
 
-	// only applies to request
+	// 仅适用于 request
 	RequestMethod      string `yaml:"expectedMethod,omitempty"`
 	RequestPath        string `yaml:"expectedPath,omitempty"`
 	RequestContentType string `yaml:"expectedContentType,omitempty"`
 	Input              string `yaml:"expectedInput"`
 
-	// only applies to request
+	// 仅适用于 request
 	ResponseStatusCode int `yaml:"resultingStatusCode,omitempty"`
 
 	Output string `yaml:"resultingOutput"`
@@ -120,7 +120,7 @@ func TestEdit(t *testing.T) {
 			}
 			if !bytes.Equal(body, expectedInput) {
 				if updateInputFixtures {
-					// Convenience to allow recapturing the input and persisting it here
+					// 便于重新捕获输入并持久化到此处
 					os.WriteFile(inputFile, body, os.FileMode(0644))
 				} else {
 					t.Errorf("%s, step %d: diff in edit content:\n%s", name, i, cmp.Diff(string(body), string(expectedInput)))
@@ -143,7 +143,7 @@ func TestEdit(t *testing.T) {
 		}
 		if !bytes.Equal(body, expectedInput) {
 			if updateInputFixtures {
-				// Convenience to allow recapturing the input and persisting it here
+				// 便于重新捕获输入并持久化到此处
 				os.WriteFile(inputFile, body, os.FileMode(0644))
 			} else {
 				t.Errorf("%s, step %d: diff in edit content:\n%s", name, i, cmp.Diff(string(body), string(expectedInput)))
@@ -189,7 +189,7 @@ func TestEdit(t *testing.T) {
 		}
 		return nil
 	})
-	// sanity check that we found the right folder
+	// 健全性检查，确认找到了正确的目录
 	if !testcases.Has("create-list") {
 		t.Fatalf("Error locating edit testcases")
 	}

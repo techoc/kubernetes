@@ -43,8 +43,8 @@ func (e Editor) args(path string) []string {
 	return args
 }
 
-// Launch opens the described or returns an error. The TTY will be protected, and
-// SIGQUIT, SIGTERM, and SIGINT will all be trapped.
+// Launch 打开所描述的对象，或返回错误。TTY 将受到保护，并且
+// SIGQUIT、SIGTERM 和 SIGINT 都会被捕获。
 func (e Editor) Launch(path string) error {
 	if len(e.Args) == 0 {
 		return fmt.Errorf("no editor defined, can't open %s", path)

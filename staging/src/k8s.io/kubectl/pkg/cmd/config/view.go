@@ -34,7 +34,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// ViewOptions holds the command-line options for 'config view' sub command
+// ViewOptions 保存 'config view' 子命令的命令行选项
 type ViewOptions struct {
 	PrintFlags  *genericclioptions.PrintFlags
 	PrintObject printers.ResourcePrinterFunc
@@ -68,7 +68,7 @@ var (
 		kubectl config view -o jsonpath='{.users[?(@.name == "e2e")].user.password}'`)
 )
 
-// NewCmdConfigView returns a Command instance for 'config view' sub command
+// NewCmdConfigView 返回 'config view' 子命令的 Command 实例
 func NewCmdConfigView(streams genericiooptions.IOStreams, ConfigAccess clientcmd.ConfigAccess) *cobra.Command {
 	o := &ViewOptions{
 		PrintFlags:   genericclioptions.NewPrintFlags("").WithTypeSetter(scheme.Scheme).WithDefaultOutput("yaml"),
@@ -100,7 +100,7 @@ func NewCmdConfigView(streams genericiooptions.IOStreams, ConfigAccess clientcmd
 	return cmd
 }
 
-// Complete completes the required command-line options
+// Complete 补全所需的命令行选项
 func (o *ViewOptions) Complete(cmd *cobra.Command, args []string) error {
 	if len(args) != 0 {
 		return cmdutil.UsageErrorf(cmd, "unexpected arguments: %v", args)
@@ -121,7 +121,7 @@ func (o *ViewOptions) Complete(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Validate makes sure that provided values for command-line options are valid
+// Validate 确保命令行选项中提供的值有效
 func (o ViewOptions) Validate() error {
 	if !o.Merge.Value() && !o.ConfigAccess.IsExplicitFile() {
 		return errors.New("if merge==false a precise file must be specified")
@@ -130,7 +130,7 @@ func (o ViewOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of 'config view' sub command
+// Run 执行 'config view' 子命令
 func (o ViewOptions) Run() error {
 	config, err := o.loadConfig()
 	if err != nil {
@@ -175,7 +175,7 @@ func (o ViewOptions) loadConfig() (*clientcmdapi.Config, error) {
 	return config, err
 }
 
-// getStartingConfig returns the Config object built from the sources specified by the options, the filename read (only if it was a single file), and an error if something goes wrong
+// getStartingConfig 返回根据选项指定的来源构建的 Config 对象、读取的文件名（仅在单个文件时），以及出错时的错误
 func (o *ViewOptions) getStartingConfig() (*clientcmdapi.Config, error) {
 	switch {
 	case !o.Merge.Value():

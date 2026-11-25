@@ -38,28 +38,28 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// SetSelectorOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
-// referencing the cmd.Flags()
+// SetSelectorOptions 是执行该操作所需数据的起点。新增字段时请添加在这里，而不是
+// 引用 cmd.Flags()
 type SetSelectorOptions struct {
-	// Bound
+	// 已绑定
 	ResourceBuilderFlags *genericclioptions.ResourceBuilderFlags
 	PrintFlags           *genericclioptions.PrintFlags
 	RecordFlags          *genericclioptions.RecordFlags
 	dryRunStrategy       cmdutil.DryRunStrategy
 	fieldManager         string
 
-	// set by args
+	// 由参数设置
 	resources       []string
 	selector        *metav1.LabelSelector
 	resourceVersion string
 
-	// computed
+	// 计算所得
 	WriteToServer  bool
 	PrintObj       printers.ResourcePrinterFunc
 	Recorder       genericclioptions.Recorder
 	ResourceFinder genericclioptions.ResourceFinder
 
-	// set at initialization
+	// 在初始化时设置
 	genericiooptions.IOStreams
 }
 
@@ -77,7 +77,7 @@ var (
         kubectl create deployment my-dep --image=nginx -o yaml --dry-run=client | kubectl label --local -f - environment=qa -o yaml | kubectl create -f -`)
 )
 
-// NewSelectorOptions returns an initialized SelectorOptions instance
+// NewSelectorOptions 返回一个已初始化的 SelectorOptions 实例
 func NewSelectorOptions(streams genericiooptions.IOStreams) *SetSelectorOptions {
 	return &SetSelectorOptions{
 		ResourceBuilderFlags: genericclioptions.NewResourceBuilderFlags().
@@ -94,7 +94,7 @@ func NewSelectorOptions(streams genericiooptions.IOStreams) *SetSelectorOptions 
 	}
 }
 
-// NewCmdSelector is the "set selector" command.
+// NewCmdSelector 是 "set selector" 命令。
 func NewCmdSelector(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewSelectorOptions(streams)
 
@@ -122,7 +122,7 @@ func NewCmdSelector(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobr
 	return cmd
 }
 
-// Complete assigns the SelectorOptions from args.
+// Complete 根据参数赋值 SelectorOptions。
 func (o *SetSelectorOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 
@@ -155,7 +155,7 @@ func (o *SetSelectorOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, arg
 	return err
 }
 
-// Validate basic inputs
+// Validate 校验基本输入
 func (o *SetSelectorOptions) Validate() error {
 	if o.selector == nil {
 		return fmt.Errorf("one selector is required")
@@ -163,7 +163,7 @@ func (o *SetSelectorOptions) Validate() error {
 	return nil
 }
 
-// RunSelector executes the command.
+// RunSelector 执行该命令。
 func (o *SetSelectorOptions) RunSelector() error {
 	r := o.ResourceFinder.Do()
 
@@ -174,7 +174,7 @@ func (o *SetSelectorOptions) RunSelector() error {
 		patch := &Patch{Info: info}
 
 		if len(o.resourceVersion) != 0 {
-			// ensure resourceVersion is always sent in the patch by clearing it from the starting JSON
+			// 从起始 JSON 中清除 resourceVersion，以确保补丁中总会发送它
 			accessor, err := meta.Accessor(info.Object)
 			if err != nil {
 				return err
@@ -197,7 +197,7 @@ func (o *SetSelectorOptions) RunSelector() error {
 				return nil, selectErr
 			}
 
-			// record this change (for rollout history)
+			// 记录此次变更（用于 rollout 历史）
 			if err := o.Recorder.Record(patch.Info.Object); err != nil {
 				klog.V(4).Infof("error recording current command: %v", err)
 			}
@@ -246,7 +246,7 @@ func updateSelectorForObject(obj runtime.Object, selector metav1.LabelSelector) 
 	return err
 }
 
-// getResourcesAndSelector retrieves resources and the selector expression from the given args (assuming selectors the last arg)
+// getResourcesAndSelector 从给定参数中检索资源和 selector 表达式（假设 selector 是最后一个参数）
 func getResourcesAndSelector(args []string) (resources []string, selector *metav1.LabelSelector, err error) {
 	if len(args) == 0 {
 		return []string{}, nil, nil

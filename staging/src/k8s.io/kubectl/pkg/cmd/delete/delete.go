@@ -179,7 +179,7 @@ func (o *DeleteOptions) Complete(f cmdutil.Factory, args []string, cmd *cobra.Co
 
 	if o.DeleteAll || len(o.LabelSelector) > 0 || len(o.FieldSelector) > 0 {
 		if f := cmd.Flags().Lookup("ignore-not-found"); f != nil && !f.Changed {
-			// If the user didn't explicitly set the option, default to ignoring NotFound errors when used with --all, -l, or --field-selector
+			// 如果用户没有显式设置该选项，则在使用 --all、-l 或 --field-selector 时默认忽略 NotFound 错误
 			o.IgnoreNotFound = true
 		}
 	}
@@ -190,8 +190,8 @@ func (o *DeleteOptions) Complete(f cmdutil.Factory, args []string, cmd *cobra.Co
 		o.GracePeriod = 1
 	}
 	if o.GracePeriod == 0 && !o.ForceDeletion {
-		// To preserve backwards compatibility, but prevent accidental data loss, we convert --grace-period=0
-		// into --grace-period=1. Users may provide --force to bypass this conversion.
+		// 为保持向后兼容，同时避免意外的数据丢失，我们将 --grace-period=0
+		// 转换为 --grace-period=1。用户可以提供 --force 来绕过此转换。
 		o.GracePeriod = 1
 	}
 	if o.ForceDeletion && o.GracePeriod < 0 {
@@ -203,7 +203,7 @@ func (o *DeleteOptions) Complete(f cmdutil.Factory, args []string, cmd *cobra.Co
 		return err
 	}
 
-	// Set default WarningPrinter if not already set.
+	// 如果尚未设置，则使用默认的 WarningPrinter。
 	if o.WarningPrinter == nil {
 		o.WarningPrinter = printers.NewWarningPrinter(o.ErrOut, printers.WarningPrinterOptions{Color: printers.AllowsColorOutput(o.ErrOut)})
 	}
@@ -231,9 +231,9 @@ func (o *DeleteOptions) Complete(f cmdutil.Factory, args []string, cmd *cobra.Co
 	o.Result = r
 
 	if o.Interactive {
-		// preview result will be used to list resources for confirmation prior to actual delete.
-		// We can not use r as result object because it can only be used once. But we need to traverse
-		// twice. Parameters in preview result must be equal to genuine result.
+		// preview result 将用于在实际删除前列出资源以供确认。
+		// 不能使用 r 作为结果对象，因为它只能使用一次，而我们需要遍历
+		// 两次。preview result 中的参数必须与真实结果一致。
 		previewr := f.NewBuilder().
 			Unstructured().
 			ContinueOnError().
@@ -383,7 +383,7 @@ func (o *DeleteOptions) DeleteResult(r *resource.Result) error {
 				Namespace:     info.Namespace,
 				Name:          info.Name,
 			}]; !ok {
-				// resource not in the list of previewed resources based on resourceLocation
+				// 根据 resourceLocation 判断，该资源不在预览资源列表中
 				return nil
 			}
 		}
@@ -423,7 +423,7 @@ func (o *DeleteOptions) DeleteResult(r *resource.Result) error {
 		}
 		responseMetadata, err := meta.Accessor(response)
 		if err != nil {
-			// we don't have UID, but we didn't fail the delete, next best thing is just skipping the UID
+			// 我们没有 UID，但删除并未失败，退而求其次只能跳过 UID 检查
 			klog.V(1).Info(err)
 			return nil
 		}
@@ -441,20 +441,20 @@ func (o *DeleteOptions) DeleteResult(r *resource.Result) error {
 	if !o.WaitForDeletion {
 		return nil
 	}
-	// if we don't have a dynamic client, we don't want to wait.  Eventually when delete is cleaned up, this will likely
-	// drop out.
+	// 如果没有 dynamic client，就不进行等待。等 delete 相关代码清理完毕后，
+	// 这段逻辑很可能也会被移除。
 	if o.DynamicClient == nil {
 		return nil
 	}
 
-	// If we are dry-running, then we don't want to wait
+	// 如果是 dry-run，则不需要等待
 	if o.DryRunStrategy != cmdutil.DryRunNone {
 		return nil
 	}
 
 	effectiveTimeout := o.Timeout
 	if effectiveTimeout == 0 {
-		// if we requested to wait forever, set it to a week.
+		// 如果请求无限等待，则将其设为一周。
 		effectiveTimeout = 168 * time.Hour
 	}
 	waitOptions := cmdwait.WaitOptions{
@@ -469,8 +469,8 @@ func (o *DeleteOptions) DeleteResult(r *resource.Result) error {
 	}
 	err = waitOptions.RunWaitContext(context.Background())
 	if errors.IsForbidden(err) || errors.IsMethodNotSupported(err) {
-		// if we're forbidden from waiting, we shouldn't fail.
-		// if the resource doesn't support a verb we need, we shouldn't fail.
+		// 如果被禁止等待，不应因此失败。
+		// 如果资源不支持我们需要的 verb，也不应因此失败。
 		klog.V(1).Info(err)
 		return nil
 	}
@@ -492,8 +492,8 @@ func (o *DeleteOptions) deleteResource(info *resource.Info, deleteOptions *metav
 	return deleteResponse, nil
 }
 
-// PrintObj for deleted objects is special because we do not have an object to print.
-// This mirrors name printer behavior
+// 已删除对象的 PrintObj 比较特殊，因为没有可供打印的对象。
+// 此处的行为与 name printer 一致
 func (o *DeleteOptions) PrintObj(info *resource.Info) {
 	operation := "deleted"
 	groupKind := info.Mapping.GroupVersionKind
@@ -518,12 +518,12 @@ func (o *DeleteOptions) PrintObj(info *resource.Info) {
 	}
 
 	if o.Output == "name" {
-		// -o name: prints resource/name
+		// -o name：打印 resource/name
 		fmt.Fprintf(o.Out, "%s/%s\n", kindString, info.Name)
 		return
 	}
 
-	// understandable output by default
+	// 默认输出易于理解的内容
 	fmt.Fprintf(o.Out, "%s \"%s\" %s\n", kindString, info.Name, operation)
 }
 

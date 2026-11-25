@@ -410,12 +410,12 @@ func annotateRuntimeObject(t *testing.T, originalObj, currentObj runtime.Object,
 		t.Fatal(err)
 	}
 
-	// The return value of this function is used in the body of the GET
-	// request in the unit tests. Here we are adding a misc label to the object.
-	// In tests, the validatePatchApplication() gets called in PATCH request
-	// handler in fake round tripper. validatePatchApplication call
-	// checks that this DELETE_ME label was deleted by the apply implementation in
-	// kubectl.
+	// 此函数的返回值用于单元测试中 GET 请求的请求体。
+	// 这里我们会给对象添加一个额外的 label。
+	// 在测试中，伪 round tripper 的 PATCH 请求处理器会调用
+	// validatePatchApplication()。它会检查这个 DELETE_ME label
+	// 是否被 kubectl 中的 apply 实现删除。
+	//
 	originalLabels := originalAccessor.GetLabels()
 	originalLabels["DELETE_ME"] = "DELETE_ME"
 	originalAccessor.SetLabels(originalLabels)
@@ -542,7 +542,7 @@ func TestRunApplyPrintsValidObjectList(t *testing.T) {
 	cmd.Flags().Set("dry-run", "client")
 	cmd.Run(cmd, []string{})
 
-	// ensure that returned list can be unmarshaled back into a configmap list
+	// 确保返回的列表可以反序列化回 configmap 列表
 	cmList := corev1.List{}
 	if err := runtime.DecodeInto(codec, buf.Bytes(), &cmList); err != nil {
 		t.Fatal(err)
@@ -728,7 +728,7 @@ func TestApplyObjectWithoutAnnotation(t *testing.T) {
 	cmd.Flags().Set("output", "name")
 	cmd.Run(cmd, []string{})
 
-	// uses the name from the file, not the response
+	// 使用文件中的名称，而非响应中的名称
 	expectRC := "replicationcontroller/" + nameRC + "\n"
 	expectWarning := fmt.Sprintf(warningNoLastAppliedConfigAnnotation, "replicationcontrollers/test-rc", corev1.LastAppliedConfigAnnotation, "kubectl")
 	if errBuf.String() != expectWarning {
@@ -775,7 +775,7 @@ func TestOpenAPIV3DoesNotLoadV2(t *testing.T) {
 		cmd.Flags().Set("output", "name")
 		cmd.Run(cmd, []string{})
 
-		// uses the name from the file, not the response
+		// 使用文件中的名称，而非响应中的名称
 		expectRC := "replicationcontroller/" + nameRC + "\n"
 		if buf.String() != expectRC {
 			t.Fatalf("unexpected output: %s\nexpected: %s", buf.String(), expectRC)
@@ -827,7 +827,7 @@ func TestApplyObject(t *testing.T) {
 					cmd.Flags().Set("output", "name")
 					cmd.Run(cmd, []string{})
 
-					// uses the name from the file, not the response
+					// 使用文件中的名称，而非响应中的名称
 					expectRC := "replicationcontroller/" + nameRC + "\n"
 					if buf.String() != expectRC {
 						t.Fatalf("unexpected output: %s\nexpected: %s", buf.String(), expectRC)
@@ -899,14 +899,14 @@ func TestApplyPruneObjects(t *testing.T) {
 func TestApplyPruneObjectsWithAllowlist(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 
-	// Read ReplicationController from the file we will use to apply. This one will not be pruned because it exists in the file.
+	// 从将要 apply 的文件中读取 ReplicationController。因为它存在于文件中，所以不会被清理。
 	rc := readUnstructuredFromFile(t, filenameRC)
 	err := setLastAppliedConfigAnnotation(rc)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Create another ReplicationController that can be pruned
+	// 创建另一个可被清理的 ReplicationController
 	rc2 := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "ReplicationController",
@@ -923,7 +923,7 @@ func TestApplyPruneObjectsWithAllowlist(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a ConfigMap that can be pruned
+	// 创建一个可被清理的 ConfigMap
 	cm := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "ConfigMap",
@@ -940,7 +940,7 @@ func TestApplyPruneObjectsWithAllowlist(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create Namespace that can be pruned
+	// 创建一个可被清理的 Namespace
 	ns := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "Namespace",
@@ -956,7 +956,7 @@ func TestApplyPruneObjectsWithAllowlist(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a ConfigMap without a UID. Resources without a UID will not be pruned.
+	// 创建一个没有 UID 的 ConfigMap。没有 UID 的资源不会被清理。
 	cmNoUID := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "ConfigMap",
@@ -972,7 +972,7 @@ func TestApplyPruneObjectsWithAllowlist(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a ConfigMap without a last applied annotation. Resources without a last applied annotation will not be pruned.
+	// 创建一个没有 last applied 注解的 ConfigMap。没有 last applied 注解的资源不会被清理。
 	cmNoLastApplied := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"kind":       "ConfigMap",
@@ -1003,7 +1003,7 @@ func TestApplyPruneObjectsWithAllowlist(t *testing.T) {
 			},
 		},
 		// Deprecated: kubectl apply will no longer prune non-namespaced resources by default when used with the --namespace flag in a future release
-		// namespace is a non-namespaced resource and will not be pruned in the future
+		// namespace 是非 namespaced 资源，未来不会被清理
 		"prune with namespace and without allowlist should delete resources that are not in the specified file": {
 			currentResources:        []runtime.Object{rc, rc2, cm, ns},
 			namespace:               "test",
@@ -1015,7 +1015,7 @@ func TestApplyPruneObjectsWithAllowlist(t *testing.T) {
 				"namespace/test-apply pruned",
 			},
 		},
-		// Even namespace is a non-namespaced resource, it will be pruned if specified in pruneAllowList in the future
+		// 即使 namespace 是非 namespaced 资源，未来如果它在 pruneAllowList 中被指定，也会被清理
 		"prune with namespace and allowlist should delete all matching resources": {
 			currentResources:        []runtime.Object{rc, cm, ns},
 			pruneAllowlist:          []string{"core/v1/ConfigMap", "core/v1/Namespace"},
@@ -1150,14 +1150,14 @@ func TestApplyPruneObjectsWithAllowlist(t *testing.T) {
 					}
 				}
 
-				// Make sure nothing unexpected was pruned
+				// 确保没有清理任何意料之外的资源
 				for _, resource := range prunedResources {
 					if !slices.Contains(tc.expectedPrunedResources, resource) {
 						t.Fatalf("expected %s not to be pruned, but it was", resource)
 					}
 				}
 
-				// Make sure everything that was expected to be pruned was pruned
+				// 确保所有预期要清理的资源都被清理了
 				for _, resource := range tc.expectedPrunedResources {
 					if !slices.Contains(prunedResources, resource) {
 						t.Fatalf("expected %s to be pruned, but it was not", resource)
@@ -1184,8 +1184,8 @@ func setLastAppliedConfigAnnotation(obj runtime.Object) error {
 	return nil
 }
 
-// Tests that apply of object in need of CSA migration results in a call
-// to patch it.
+// 测试对需要 CSA 迁移的对象执行 apply 会导致
+// 调用 patch。
 func TestApplyCSAMigration(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 	nameRC, rcWithManagedFields := readAndAnnotateReplicationController(t, filenameRCManagedFieldsLA)
@@ -1196,10 +1196,10 @@ func TestApplyCSAMigration(t *testing.T) {
 			tf := cmdtesting.NewTestFactory().WithNamespace("test")
 			defer tf.Cleanup()
 
-			// The object after patch should be equivalent to the output of
-			// csaupgrade.UpgradeManagedFields
+			// patch 之后的对象应等价于
+			// csaupgrade.UpgradeManagedFields 的输出
 			//
-			// Parse object into unstructured, apply patch
+			// 将对象解析为 unstructured，应用 patch
 			postPatchObj := &unstructured.Unstructured{}
 			err := json.Unmarshal(rcWithManagedFields, &postPatchObj.Object)
 			require.NoError(t, err)
@@ -1222,8 +1222,8 @@ func TestApplyCSAMigration(t *testing.T) {
 				Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
 					switch p, m := req.URL.Path, req.Method; {
 					case p == pathRC && m == "GET":
-						// During retry loop for patch fetch is performed.
-						// keep returning the unchanged data
+						// 在重试循环期间会执行获取操作。
+						// 持续返回未变更的数据
 						if patches < targetPatches {
 							bodyRC := io.NopCloser(bytes.NewReader(rcWithManagedFields))
 							return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: bodyRC}, nil
@@ -1239,22 +1239,22 @@ func TestApplyCSAMigration(t *testing.T) {
 
 							switch applies {
 							case 0:
-								// initial apply.
-								// Just return the same object but with managed fields
+								// 初次 apply。
+								// 返回相同的对象，但带有 managed fields
 								bodyRC := io.NopCloser(bytes.NewReader(rcWithManagedFields))
 								return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: bodyRC}, nil
 							case 1:
-								// Second apply should include only last apply annotation unmodified
-								// Return new object
-								// NOTE: on a real server this would also modify the managed fields
-								// just return the same object unmodified. It is not so important
-								// for this test for the last-applied to appear in new field
-								// manager response, only that the client asks the server to do it
+								// 第二次 apply 应只包含未修改的 last apply 注解
+								// 返回新对象
+								// 注意：在真实服务端上，这也会修改 managed fields
+								// 这里只返回未修改的相同对象。对于本次测试而言，
+								// last-applied 是否出现在新的 field manager 响应中并不重要，
+								// 重要的是客户端请求服务端执行该操作
 								bodyRC := io.NopCloser(bytes.NewReader(rcWithManagedFields))
 								return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: bodyRC}, nil
 							case 2, 3:
-								// Before the last apply we have formed our JSONPAtch so it
-								// should reply now with the upgraded object
+								// 在最后一次 apply 之前，我们已经构造好了 JSONPatch，
+								// 因此现在应返回升级后的对象
 								bodyRC := io.NopCloser(bytes.NewReader(postPatchData))
 								return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: bodyRC}, nil
 							default:
@@ -1266,7 +1266,7 @@ func TestApplyCSAMigration(t *testing.T) {
 								patches += 1
 							}()
 
-							// Require that the patch is equal to what is expected
+							// 要求 patch 与预期一致
 							body, err := io.ReadAll(req.Body)
 							require.NoError(t, err)
 							require.Equal(t, expectedPatch, body)
@@ -1276,7 +1276,7 @@ func TestApplyCSAMigration(t *testing.T) {
 								bodyRC := io.NopCloser(bytes.NewReader(postPatchData))
 								return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: bodyRC}, nil
 							default:
-								// Return conflict until the client has retried enough times
+								// 在客户端重试足够次数之前，持续返回冲突
 								return &http.Response{StatusCode: http.StatusConflict, Header: cmdtesting.DefaultHeader()}, nil
 
 							}
@@ -1303,13 +1303,13 @@ func TestApplyCSAMigration(t *testing.T) {
 			cmd.Flags().Set("show-managed-fields", "true")
 			cmd.Run(cmd, []string{})
 
-			// JSONPatch should have been attempted exactly the given number of times
+			// JSONPatch 应恰好被尝试给定的次数
 			require.Equal(t, targetPatches, patches, "should retry as many times as a conflict was returned")
 			require.Equal(t, 3, applies, "should perform specified # of apply calls upon migration")
 			require.Empty(t, errBuf.String())
 
-			// ensure that in the future there will be no migrations necessary
-			// (by showing migration is a no-op)
+			// 确保将来不再需要迁移
+			// （通过表明迁移是空操作）
 
 			rc := &corev1.ReplicationController{}
 			if err := runtime.DecodeInto(codec, buf.Bytes(), rc); err != nil {
@@ -1322,8 +1322,8 @@ func TestApplyCSAMigration(t *testing.T) {
 			require.NotEmpty(t, rc.ManagedFields)
 			require.Equal(t, rc, upgradedRC, "upgrading should be no-op in future")
 
-			// Apply the upgraded object.
-			// Expect only a single PATCH call to apiserver
+			// 应用升级后的对象。
+			// 期望只向 apiserver 发出一次 PATCH 调用
 			ioStreams, _, _, errBuf = genericiooptions.NewTestIOStreams()
 			cmd = NewCmdApply("kubectl", tf, ioStreams)
 			cmd.Flags().Set("filename", filenameRC)
@@ -1344,7 +1344,7 @@ func TestApplyObjectOutput(t *testing.T) {
 	nameRC, currentRC := readAndAnnotateReplicationController(t, filenameRC)
 	pathRC := "/namespaces/test/replicationcontrollers/" + nameRC
 
-	// Add some extra data to the post-patch object
+	// 向 patch 后的对象添加一些额外数据
 	postPatchObj := &unstructured.Unstructured{}
 	if err := json.Unmarshal(currentRC, &postPatchObj.Object); err != nil {
 		t.Fatal(err)
@@ -1465,7 +1465,7 @@ func TestApplyRetry(t *testing.T) {
 						t.Fatalf("apply didn't retry when get conflict error")
 					}
 
-					// uses the name from the file, not the response
+					// 使用文件中的名称，而非响应中的名称
 					expectRC := "replicationcontroller/" + nameRC + "\n"
 					if buf.String() != expectRC {
 						t.Fatalf("unexpected output: %s\nexpected: %s", buf.String(), expectRC)
@@ -1512,7 +1512,7 @@ func TestApplyNonExistObject(t *testing.T) {
 	cmd.Flags().Set("output", "name")
 	cmd.Run(cmd, []string{})
 
-	// uses the name from the file, not the response
+	// 使用文件中的名称，而非响应中的名称
 	expectRC := "replicationcontroller/" + nameRC + "\n"
 	if buf.String() != expectRC {
 		t.Errorf("unexpected output: %s\nexpected: %s", buf.String(), expectRC)
@@ -1558,7 +1558,7 @@ func TestApplyEmptyPatch(t *testing.T) {
 	}
 	tf.ClientConfigVal = cmdtesting.DefaultClientConfig()
 
-	// 1. apply non exist object
+	// 1. apply 一个不存在的对象
 	ioStreams, _, buf, _ := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdApply("kubectl", tf, ioStreams)
 	cmd.Flags().Set("filename", filenameRC)
@@ -1573,7 +1573,7 @@ func TestApplyEmptyPatch(t *testing.T) {
 		t.Fatal("No server-side post call detected")
 	}
 
-	// 2. test apply already exist object, will not send empty patch request
+	// 2. 测试 apply 已存在的对象，不会发送空的 patch 请求
 	ioStreams, _, buf, _ = genericiooptions.NewTestIOStreams()
 	cmd = NewCmdApply("kubectl", tf, ioStreams)
 	cmd.Flags().Set("filename", filenameRC)
@@ -1645,10 +1645,10 @@ func testApplyMultipleObjects(t *testing.T, asList bool) {
 
 			cmd.Run(cmd, []string{})
 
-			// Names should come from the REST response, NOT the files
+			// 名称应来自 REST 响应，而不是文件
 			expectRC := "replicationcontroller/" + nameRC + "\n"
 			expectSVC := "service/" + nameSVC + "\n"
-			// Test both possible orders since output is non-deterministic.
+			// 由于输出顺序不确定，测试两种可能的顺序。
 			expectOne := expectRC + expectSVC
 			expectTwo := expectSVC + expectRC
 			if buf.String() != expectOne && buf.String() != expectTwo {
@@ -1717,9 +1717,9 @@ func TestApplyNULLPreservation(t *testing.T) {
 								}
 								verifiedPatch = true
 
-								// The real API server would had returned the patched object but Kubectl
-								// is ignoring the actual return object.
-								// TODO: Make this match actual server behavior by returning the patched object.
+								// 真实 API server 会返回修补后的对象，但 Kubectl
+								// 忽略了实际返回的对象。
+								// TODO: 通过返回修补后的对象，使其与真实服务端行为一致。
 								body := io.NopCloser(bytes.NewReader(deploymentBytes))
 								return &http.Response{StatusCode: http.StatusOK, Header: cmdtesting.DefaultHeader(), Body: body}, nil
 							default:
@@ -1755,7 +1755,7 @@ func TestApplyNULLPreservation(t *testing.T) {
 	}
 }
 
-// TestUnstructuredApply checks apply operations on an unstructured object
+// TestUnstructuredApply 检查对 unstructured 对象执行的 apply 操作
 func TestUnstructuredApply(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 	name, curr := readAndAnnotateUnstructured(t, filenameWidgetClientside)
@@ -1822,7 +1822,7 @@ func TestUnstructuredApply(t *testing.T) {
 	}
 }
 
-// TestUnstructuredIdempotentApply checks repeated apply operation on an unstructured object
+// TestUnstructuredIdempotentApply 检查对 unstructured 对象重复执行 apply 的操作
 func TestUnstructuredIdempotentApply(t *testing.T) {
 	cmdtesting.InitTestErrorHandler(t)
 
@@ -1853,8 +1853,8 @@ func TestUnstructuredIdempotentApply(t *testing.T) {
 									Header:     cmdtesting.DefaultHeader(),
 									Body:       body}, nil
 							case p == path && m == "PATCH":
-								// In idempotent updates, kubectl will resolve to an empty patch and not send anything to the server
-								// Thus, if we reach this branch, kubectl is unnecessarily sending a patch.
+								// 在幂等更新中，kubectl 会得到空 patch，不会向服务端发送任何内容
+								// 因此，如果执行到这个分支，说明 kubectl 正在不必要地发送 patch。
 								patch, err := io.ReadAll(req.Body)
 								if err != nil {
 									t.Fatal(err)
@@ -2030,7 +2030,7 @@ func TestForceApply(t *testing.T) {
 		"post":        1,
 	}
 
-	// Set the patch retry back off period to something low, so the test can run more quickly
+	// 将 patch 重试退避时长设为较小值，以加快测试运行
 	patchRetryBackOffPeriod = 1 * time.Millisecond
 
 	for _, testingOpenAPISchema := range testingOpenAPISchemas {
@@ -2205,15 +2205,15 @@ func TestDontAllowForceApplyWithServerSide(t *testing.T) {
 }
 
 func TestApplyDryRunClientMergesWithServerState(t *testing.T) {
-	// This test verifies that --dry-run=client performs a proper three-way merge:
-	// - Values from the manifest should overwrite server values
-	// - Server-only values (not in manifest) should be preserved
+	// 此测试验证 --dry-run=client 会执行正确的三方合并：
+	// - manifest 中的值应覆盖服务端的值
+	// - 仅服务端存在的值（不在 manifest 中）应被保留
 	//
-	//   Server state:  port=9999, clusterIP=10.0.0.42
-	//   Last applied:  port=9999 (no clusterIP - it's server-assigned)
-	//   New manifest:  port=80   (no clusterIP)
+	//   服务端状态：port=9999, clusterIP=10.0.0.42
+	//   上次应用：port=9999（无 clusterIP——由服务端分配）
+	//   新 manifest：port=80（无 clusterIP）
 	//
-	// Expected result: port=80 (from manifest), clusterIP=10.0.0.42 (preserved from server)
+	// 预期结果：port=80（来自 manifest），clusterIP=10.0.0.42（保留自服务端）
 	cmdtesting.InitTestErrorHandler(t)
 
 	lastApplied := `{"apiVersion":"v1","kind":"Service","metadata":{"name":"test-service","namespace":"test"},"spec":{"ports":[{"port":9999,"protocol":"TCP"}]}}`
@@ -2346,8 +2346,8 @@ func TestApplySetParentValidation(t *testing.T) {
 		"parent namespace should not use the default namespace from ClientConfig": {
 			applysetFlag: "mysecret",
 			setup: func(t *testing.T, f *cmdtesting.TestFactory) {
-				// by default, the value "default" is used for the namespace
-				// make sure this assumption still holds
+				// 默认情况下，namespace 使用 "default" 值
+				// 确保这一假设仍然成立
 				ns, overridden, err := f.ToRawKubeConfigLoader().Namespace()
 				require.NoError(t, err)
 				require.Falsef(t, overridden, "namespace unexpectedly overridden")
@@ -2434,7 +2434,7 @@ func setUpClientsForApplySetWithSSA(t *testing.T, tf *cmdtesting.TestFactory, ob
 			var gvr schema.GroupVersionResource
 			var name, namespace string
 
-			if len(tokens) == 4 && tokens[0] == "namespaces" { // e.g. namespaces/my-ns/secrets/my-secret
+			if len(tokens) == 4 && tokens[0] == "namespaces" { // 例如 namespaces/my-ns/secrets/my-secret
 				namespace = tokens[1]
 				name = tokens[3]
 				gvr = schema.GroupVersionResource{Version: "v1", Resource: tokens[2]}
@@ -2589,8 +2589,8 @@ func TestApplySetParentManagement(t *testing.T) {
 	})
 	defer cmdutil.DefaultBehaviorOnFatal()
 
-	// Initially, the rc 'exists' server side but the svc and applyset secret do not
-	// This should 'update' the rc and create the secret
+	// 起初，rc 在服务端“存在”，但 svc 和 applyset secret 不存在
+	// 这应“更新”rc 并创建 secret
 	ioStreams, _, outbuff, errbuff := genericiooptions.NewTestIOStreams()
 	cmdtesting.WithAlphaEnvs([]cmdutil.FeatureGate{cmdutil.ApplySet}, t, func(t *testing.T) {
 		cmd := NewCmdApply("kubectl", tf, ioStreams)
@@ -2621,7 +2621,7 @@ metadata:
   uid: a-static-fake-uid
 `, string(createSecretYaml))
 
-	// Next, do an apply that creates a second resource, the svc, and updates the applyset secret
+	// 接下来执行 apply，创建第二个资源 svc，并更新 applyset secret
 	outbuff.Reset()
 	errbuff.Reset()
 	cmdtesting.WithAlphaEnvs([]cmdutil.FeatureGate{cmdutil.ApplySet}, t, func(t *testing.T) {
@@ -2654,8 +2654,8 @@ metadata:
   uid: a-static-fake-uid
 `, string(updatedSecretYaml))
 
-	// Next, do an apply that attempts to remove the rc from the set, but pruning fails
-	// Both types remain in the ApplySet
+	// 接下来执行 apply，尝试从集合中移除 rc，但清理失败
+	// 两种类型都保留在 ApplySet 中
 	failDeletes = true
 	outbuff.Reset()
 	errbuff.Reset()
@@ -2688,7 +2688,7 @@ metadata:
   uid: a-static-fake-uid
 `, string(updatedSecretYaml))
 
-	// Finally, do an apply that successfully removes the rc and updates the set
+	// 最后执行 apply，成功移除 rc 并更新集合
 	failDeletes = false
 
 	outbuff.Reset()
@@ -2842,7 +2842,7 @@ func TestApplySet_ClusterScopedCustomResourceParent(t *testing.T) {
 	})
 	defer cmdutil.DefaultBehaviorOnFatal()
 
-	// Initially, the rc 'exists' server side the parent CR does not. This should fail.
+	// 起初，rc 在服务端“存在”，但 parent CR 不存在。这应当失败。
 	cmdtesting.WithAlphaEnvs([]cmdutil.FeatureGate{cmdutil.ApplySet}, t, func(t *testing.T) {
 		cmd := NewCmdApply("kubectl", tf, ioStreams)
 		cmd.Flags().Set("filename", filenameRC)
@@ -2853,7 +2853,7 @@ func TestApplySet_ClusterScopedCustomResourceParent(t *testing.T) {
 	})
 	cmdtesting.InitTestErrorHandler(t)
 
-	// Simulate creating the CR parent out of band
+	// 模拟在带外创建 CR parent
 	require.NoError(t, tf.FakeDynamicClient.Tracker().Add(cr))
 	cmdtesting.WithAlphaEnvs([]cmdutil.FeatureGate{cmdutil.ApplySet}, t, func(t *testing.T) {
 		cmd := NewCmdApply("kubectl", tf, ioStreams)
@@ -3116,7 +3116,7 @@ metadata:
 			contentType := req.Header.Get("Content-Type")
 			forceConflicts := req.URL.Query().Get("force") == "true"
 			if req.Method == "PATCH" && contentType == string(types.ApplyPatchType) {
-				// make the ApplySet secret SSA request fail unless conflicts are forced
+				// 让 ApplySet secret 的 SSA 请求失败，除非强制解决冲突
 				if req.URL.Path == pathSecret {
 					if !forceConflicts {
 						applyReturnedConflict = true
@@ -3369,12 +3369,12 @@ func TestApplyWithPruneV2Fail(t *testing.T) {
 	}
 }
 
-// fatalNoExit is a handler that replaces the default cmdutil.BehaviorOnFatal,
-// that still prints as expected, but does not call os.Exit (which terminates our tests)
+// fatalNoExit 是一个处理器，用于替换默认的 cmdutil.BehaviorOnFatal，
+// 它仍会按预期打印信息，但不调用 os.Exit（否则会终止测试）
 func fatalNoExit(t *testing.T, ioStreams genericiooptions.IOStreams) func(msg string, code int) {
 	return func(msg string, code int) {
 		if len(msg) > 0 {
-			// add newline if needed
+			// 如有必要，添加换行符
 			if !strings.HasSuffix(msg, "\n") {
 				msg += "\n"
 			}
@@ -3393,8 +3393,8 @@ func TestApplySetDryRun(t *testing.T) {
 	tf := cmdtesting.NewTestFactory().WithNamespace("test")
 	defer tf.Cleanup()
 
-	// Scenario: the rc 'exists' server side but the applyset secret does not
-	// In dry run mode, non-dry run patch requests should not be made, and the secret should not be created
+	// 场景：rc 在服务端“存在”，但 applyset secret 不存在
+	// 在 dry run 模式下，不应发出非 dry run 的 patch 请求，也不应创建 secret
 	serverSideData := map[string][]byte{
 		pathRC: rc,
 	}

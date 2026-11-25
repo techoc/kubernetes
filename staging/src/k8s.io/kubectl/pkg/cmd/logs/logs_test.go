@@ -855,8 +855,8 @@ func TestLogComplete(t *testing.T) {
 		cmd := NewCmdLogs(f, genericiooptions.NewTestIOStreamsDiscard())
 		out := ""
 
-		// checkErr breaks tests in case of errors, plus we just
-		// need to check errors returned by the command validation
+		// checkErr 在出现错误时中断测试，同时我们只是
+		// 需要检查命令校验返回的错误
 		o := test.opts(genericiooptions.NewTestIOStreamsDiscard())
 		err := o.Complete(f, cmd, test.args)
 		if err == nil {
@@ -1041,10 +1041,10 @@ func (r *responseWrapperMock) Stream(context.Context) (io.ReadCloser, error) {
 type logTestMock struct {
 	logsForObjectRequests map[corev1.ObjectReference]restclient.ResponseWrapper
 
-	// We need a WaitGroup in some test cases to make sure that we fetch logs concurrently.
-	// These test cases will finish successfully without the WaitGroup, but the WaitGroup
-	// will help us to identify regression when someone accidentally changes
-	// concurrent fetching to sequential
+	// 某些测试用例需要 WaitGroup，以确保并发获取日志。
+	// 没有 WaitGroup 这些测试用例也能成功完成，但 WaitGroup
+	// 有助于在有人不经意间将并发获取改为串行时
+	// 发现回归。
 	wg *sync.WaitGroup
 }
 
@@ -1055,7 +1055,7 @@ func (l *logTestMock) mockConsumeRequest(ctx context.Context, request restclient
 	}
 	defer readCloser.Close()
 
-	// Just copy everything for a test sake
+	// 为了测试，直接复制所有内容
 	_, err = io.Copy(out, readCloser)
 	if l.wg != nil {
 		l.wg.Done()

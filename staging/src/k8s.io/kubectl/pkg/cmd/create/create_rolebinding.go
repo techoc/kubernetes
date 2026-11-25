@@ -48,7 +48,7 @@ var (
 		kubectl create rolebinding admin-binding --role=admin --serviceaccount=monitoring:sa-dev`))
 )
 
-// RoleBindingOptions holds the options for 'create rolebinding' sub command
+// RoleBindingOptions 保存 'create rolebinding' 子命令的选项
 type RoleBindingOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
@@ -71,7 +71,7 @@ type RoleBindingOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewRoleBindingOptions creates a new *RoleBindingOptions with sane defaults
+// NewRoleBindingOptions 创建一个带有合理默认值的 *RoleBindingOptions
 func NewRoleBindingOptions(ioStreams genericiooptions.IOStreams) *RoleBindingOptions {
 	return &RoleBindingOptions{
 		Users:           []string{},
@@ -82,7 +82,7 @@ func NewRoleBindingOptions(ioStreams genericiooptions.IOStreams) *RoleBindingOpt
 	}
 }
 
-// NewCmdCreateRoleBinding returns an initialized Command instance for 'create rolebinding' sub command
+// NewCmdCreateRoleBinding 返回 'create rolebinding' 子命令的一个初始化好的 Command 实例
 func NewCmdCreateRoleBinding(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewRoleBindingOptions(ioStreams)
 
@@ -113,7 +113,7 @@ func NewCmdCreateRoleBinding(f cmdutil.Factory, ioStreams genericiooptions.IOStr
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *RoleBindingOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -152,7 +152,7 @@ func (o *RoleBindingOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, arg
 	return err
 }
 
-// Validate validates required fields are set
+// Validate 校验必填字段是否已设置
 func (o *RoleBindingOptions) Validate() error {
 	if len(o.Name) == 0 {
 		return fmt.Errorf("name must be specified")
@@ -163,7 +163,7 @@ func (o *RoleBindingOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of 'create rolebinding' sub command
+// Run 执行 'create rolebinding' 子命令
 func (o *RoleBindingOptions) Run() error {
 	roleBinding, err := o.createRoleBinding()
 	if err != nil {

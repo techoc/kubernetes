@@ -60,7 +60,7 @@ var (
 		kubectl rollout status deployment/nginx`)
 )
 
-// RolloutStatusOptions holds the command-line options for 'rollout status' sub command
+// RolloutStatusOptions 保存 'rollout status' 子命令的命令行选项
 type RolloutStatusOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 
@@ -81,7 +81,7 @@ type RolloutStatusOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewRolloutStatusOptions returns an initialized RolloutStatusOptions instance
+// NewRolloutStatusOptions 返回初始化后的 RolloutStatusOptions 实例
 func NewRolloutStatusOptions(streams genericiooptions.IOStreams) *RolloutStatusOptions {
 	return &RolloutStatusOptions{
 		PrintFlags:      genericclioptions.NewPrintFlags("").WithTypeSetter(scheme.Scheme),
@@ -92,7 +92,7 @@ func NewRolloutStatusOptions(streams genericiooptions.IOStreams) *RolloutStatusO
 	}
 }
 
-// NewCmdRolloutStatus returns a Command instance for the 'rollout status' sub command
+// NewCmdRolloutStatus 返回 'rollout status' 子命令的 Command 实例
 func NewCmdRolloutStatus(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewRolloutStatusOptions(streams)
 
@@ -122,7 +122,7 @@ func NewCmdRolloutStatus(f cmdutil.Factory, streams genericiooptions.IOStreams) 
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *RolloutStatusOptions) Complete(f cmdutil.Factory, args []string) error {
 	o.Builder = f.NewBuilder
 
@@ -143,7 +143,7 @@ func (o *RolloutStatusOptions) Complete(f cmdutil.Factory, args []string) error 
 	return nil
 }
 
-// Validate makes sure all the provided values for command-line options are valid
+// Validate 确保为命令行选项提供的所有值都有效
 func (o *RolloutStatusOptions) Validate() error {
 	if len(o.BuilderArgs) == 0 && cmdutil.IsFilenameSliceEmpty(o.FilenameOptions.Filenames, o.FilenameOptions.Kustomize) {
 		return fmt.Errorf("required resource not specified")
@@ -156,7 +156,7 @@ func (o *RolloutStatusOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of 'rollout status' sub command
+// Run 执行 'rollout status' 子命令
 func (o *RolloutStatusOptions) Run() error {
 	r := o.Builder().
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
@@ -195,7 +195,7 @@ func (o *RolloutStatusOptions) Run() error {
 			},
 		}, o.DynamicClient)
 
-		// if the rollout isn't done yet, keep watching deployment status
+		// 如果 rollout 尚未完成，则继续观察 deployment 状态
 		ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), o.Timeout)
 		intr := interrupt.New(nil, cancel)
 		return intr.Run(func() error {
@@ -207,7 +207,7 @@ func (o *RolloutStatusOptions) Run() error {
 						return false, err
 					}
 					fmt.Fprintf(o.Out, "%s", status)
-					// Quit waiting if the rollout is done
+					// 如果 rollout 已完成，则停止等待
 					if done {
 						return true, nil
 					}
@@ -220,7 +220,7 @@ func (o *RolloutStatusOptions) Run() error {
 					return false, nil
 
 				case watch.Deleted:
-					// We need to abort to avoid cases of recreation and not to silently watch the wrong (new) object
+					// 必须中止，以避免对象被重建的情况，也避免静默地观察错误的（新）对象
 					return true, fmt.Errorf("object has been deleted")
 
 				default:

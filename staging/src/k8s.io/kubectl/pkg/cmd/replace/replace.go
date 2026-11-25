@@ -177,14 +177,14 @@ func (o *ReplaceOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []
 		return err
 	}
 
-	//Replace will create a resource if it doesn't exist already, so ignore not found error
+	//如果资源不存在，Replace 会创建该资源，因此忽略 not found 错误
 	deleteOpts.IgnoreNotFound = true
 	if o.PrintFlags.OutputFormat != nil {
 		deleteOpts.Output = *o.PrintFlags.OutputFormat
 	}
 	if deleteOpts.GracePeriod == 0 {
-		// To preserve backwards compatibility, but prevent accidental data loss, we convert --grace-period=0
-		// into --grace-period=1 and wait until the object is successfully deleted.
+		// 为保持向后兼容，同时避免意外的数据丢失，我们将 --grace-period=0
+		// 转换为 --grace-period=1，并等待对象被成功删除。
 		deleteOpts.GracePeriod = 1
 		deleteOpts.WaitForDeletion = true
 	}
@@ -251,8 +251,8 @@ func (o *ReplaceOptions) Validate() error {
 }
 
 func (o *ReplaceOptions) Run(f cmdutil.Factory) error {
-	// raw only makes sense for a single file resource multiple objects aren't likely to do what you want.
-	// the validator enforces this, so
+	// raw 仅对单文件资源有意义；多个对象不太可能符合预期。
+	// 校验器会强制检查这一点，因此
 	if len(o.Raw) > 0 {
 		restClient, err := f.RESTClient()
 		if err != nil {
@@ -295,7 +295,7 @@ func (o *ReplaceOptions) Run(f cmdutil.Factory) error {
 			return o.PrintObj(info.Object)
 		}
 
-		// Serialize the object with the annotation applied.
+		// 序列化应用了注解的对象。
 		obj, err := resource.
 			NewHelper(info.Client, info.Mapping).
 			DryRun(o.DryRunStrategy == cmdutil.DryRunServer).

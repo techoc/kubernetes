@@ -38,7 +38,7 @@ import (
 func generateNodeAndTaintedNode(oldTaints []corev1.Taint, newTaints []corev1.Taint) (*corev1.Node, *corev1.Node) {
 	var taintedNode *corev1.Node
 
-	// Create a node.
+	// 创建一个节点。
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "node-name",
@@ -50,7 +50,7 @@ func generateNodeAndTaintedNode(oldTaints []corev1.Taint, newTaints []corev1.Tai
 		Status: corev1.NodeStatus{},
 	}
 
-	// A copy of the same node, but tainted.
+	// 同一节点的副本，但带有污点。
 	taintedNode = node.DeepCopy()
 	taintedNode.Spec.Taints = newTaints
 
@@ -86,7 +86,7 @@ func TestTaint(t *testing.T) {
 		expectFatal bool
 		expectTaint bool
 	}{
-		// success cases
+		// 成功用例
 		{
 			description: "taints a node with effect NoSchedule",
 			newTaints: []corev1.Taint{{
@@ -197,7 +197,7 @@ func TestTaint(t *testing.T) {
 			expectTaint: true,
 		},
 
-		// error cases
+		// 错误用例
 		{
 			description: "invalid taint key",
 			args:        []string{"node", "node-name", "nospecialchars^@=banana:NoSchedule"},
@@ -269,7 +269,7 @@ func TestTaint(t *testing.T) {
 						}
 						defer req.Body.Close()
 
-						// apply the patch
+						// 应用补丁
 						oldJSON, err := runtime.Encode(codec, oldNode)
 						if err != nil {
 							t.Fatalf("%s: unexpected error: %v", test.description, err)
@@ -279,7 +279,7 @@ func TestTaint(t *testing.T) {
 							t.Fatalf("%s: unexpected error: %v", test.description, err)
 						}
 
-						// decode the patch
+						// 解码补丁
 						if err := runtime.DecodeInto(codec, appliedPatch, newNode); err != nil {
 							t.Fatalf("%s: unexpected error: %v", test.description, err)
 						}
@@ -314,12 +314,12 @@ func TestTaint(t *testing.T) {
 			sawFatal := false
 			func() {
 				defer func() {
-					// Recover from the panic below.
+					// 从下方抛出的 panic 中恢复。
 					if r := recover(); r != nil {
 						t.Logf("Recovered: %v", r)
 					}
 
-					// Restore cmdutil behavior
+					// 恢复 cmdutil 的默认行为
 					cmdutil.DefaultBehaviorOnFatal()
 				}()
 				cmdutil.BehaviorOnFatal(func(e string, code int) { sawFatal = true; panic(e) })

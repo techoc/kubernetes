@@ -79,7 +79,7 @@ func TestSetCredentialsOptions(t *testing.T) {
 		},
 		{
 			name: "test4",
-			// Cannot provide both token and basic auth.
+			// 不能同时提供 token 和基本认证。
 			flags: []string{
 				"me",
 				"--token=foo",
@@ -127,7 +127,7 @@ func TestSetCredentialsOptions(t *testing.T) {
 		{
 			name: "test7",
 			flags: []string{
-				"--auth-provider-arg=client-id-", // auth provider name not required
+				"--auth-provider-arg=client-id-", // 不需要 auth provider 名称
 				"--auth-provider-arg=client-secret-",
 				"me",
 			},
@@ -144,7 +144,7 @@ func TestSetCredentialsOptions(t *testing.T) {
 			name: "test8",
 			flags: []string{
 				"--auth-provider=oidc",
-				"--auth-provider-arg=client-id", // values must be of form 'key=value' or 'key-'
+				"--auth-provider-arg=client-id", // 值必须为 'key=value' 或 'key-' 形式
 				"me",
 			},
 			wantCompleteErr: true,
@@ -152,7 +152,7 @@ func TestSetCredentialsOptions(t *testing.T) {
 		{
 			name:  "test9",
 			flags: []string{
-				// No name for authinfo provided.
+				// 未提供 authinfo 的名称。
 			},
 			wantCompleteErr: true,
 		},

@@ -33,36 +33,36 @@ import (
 )
 
 func GetPluginCommandGroup(kubectl *cobra.Command) templates.CommandGroup {
-	// Find root level
+	// 查找根层级
 	return templates.CommandGroup{
 		Message:  i18n.T("Subcommands provided by plugins:"),
 		Commands: registerPluginCommands(kubectl, false),
 	}
 }
 
-// SetupPluginCompletion adds a Cobra command to the command tree for each
-// plugin.  This is only done when performing shell completion that relate
-// to plugins.
+// SetupPluginCompletion 为每个插件向命令树添加一个
+// Cobra 命令。仅在执行与插件相关的
+// shell 补全时才会这样做。
 func SetupPluginCompletion(cmd *cobra.Command, args []string) {
 	kubectl := cmd.Root()
 	if len(args) > 0 {
 		if strings.HasPrefix(args[0], "-") {
-			// Plugins are not supported if the first argument is a flag,
-			// so no need to add them in that case.
+			// 如果第一个参数是标志，则不支持插件，
+			// 因此这种情况下无需添加插件。
 			return
 		}
 
 		if len(args) == 1 {
-			// We are completing a subcommand at the first level so
-			// we should include all plugins names.
+			// 此时正在补全第一层的子命令，
+			// 因此应包含所有插件名称。
 			registerPluginCommands(kubectl, true)
 			return
 		}
 
-		// We have more than one argument.
-		// Check if we know the first level subcommand.
-		// If we don't it could be a plugin and we'll need to add
-		// the plugin commands for completion to work.
+		// 此时有多个参数。
+		// 检查是否知道第一层子命令。
+		// 如果不知道，它可能是插件，需要添加
+		// 对应的插件命令才能使补全生效。
 		found := false
 		for _, subCmd := range kubectl.Commands() {
 			if args[0] == subCmd.Name() {
@@ -72,14 +72,14 @@ func SetupPluginCompletion(cmd *cobra.Command, args []string) {
 		}
 
 		if !found {
-			// We don't know the subcommand for which completion
-			// is being called: it could be a plugin.
+			// 我们不知道调用补全时针对的是哪个子命令：
+			// 它可能是插件。
 			//
-			// When using a plugin, the kubectl global flags are not supported.
-			// Therefore, when doing completion, we need to remove these flags
-			// to avoid them being included in the completion choices.
-			// This must be done *before* adding the plugin commands so that
-			// when creating those plugin commands, the flags don't exist.
+			// 使用插件时不支持 kubectl 全局标志。
+			// 因此，执行补全时需要移除这些标志，
+			// 以免它们出现在补全选项中。
+			// 这必须在添加插件命令*之前*完成，
+			// 这样创建这些插件命令时就不会存在这些标志。
 			kubectl.ResetFlags()
 			cobra.CompDebugln("Cleared global flags for plugin completion", true)
 
@@ -88,8 +88,8 @@ func SetupPluginCompletion(cmd *cobra.Command, args []string) {
 	}
 }
 
-// registerPluginCommand allows adding Cobra command to the command tree or extracting them for usage in
-// e.g. the help function or for registering the completion function
+// registerPluginCommand 允许将 Cobra 命令添加到命令树，或提取出来用于
+// 帮助函数或注册补全函数等场景
 func registerPluginCommands(kubectl *cobra.Command, list bool) (cmds []*cobra.Command) {
 	userDefinedCommands := []*cobra.Command{}
 
@@ -107,7 +107,7 @@ func registerPluginCommands(kubectl *cobra.Command, list bool) (cmds []*cobra.Co
 		plugin = filepath.Base(plugin)
 		args := []string{}
 
-		// Plugins are named "kubectl-<name>" or with more - such as
+		// 插件命名为 "kubectl-<name>"，也可能包含更多 -，例如
 		// "kubectl-<name>-<subcmd1>..."
 		rawPluginArgs := strings.Split(plugin, "-")[1:]
 		pluginArgs := rawPluginArgs[:1]
@@ -115,16 +115,16 @@ func registerPluginCommands(kubectl *cobra.Command, list bool) (cmds []*cobra.Co
 			pluginArgs = rawPluginArgs
 		}
 
-		// Iterate through all segments, for kubectl-my_plugin-sub_cmd, we will end up with
-		// two iterations: one for my_plugin and one for sub_cmd.
+		// 遍历所有片段；对于 kubectl-my_plugin-sub_cmd，最终会进行
+		// 两次迭代：一次处理 my_plugin，一次处理 sub_cmd。
 		for _, arg := range pluginArgs {
-			// Underscores (_) in plugin's filename are replaced with dashes(-)
-			// e.g. foo_bar -> foo-bar
+			// 插件文件名中的下划线 (_) 会被替换为短横线 (-)
+			// 例如 foo_bar -> foo-bar
 			args = append(args, strings.ReplaceAll(arg, "_", "-"))
 		}
 
-		// In order to avoid that the same plugin command is added more than once,
-		// find the lowest command given args from the root command
+		// 为避免同一个插件命令被重复添加，
+		// 从根命令出发，根据这些参数找到层级最低的命令
 		parentCmd, remainingArgs, _ := kubectl.Find(args)
 		if parentCmd == nil {
 			parentCmd = kubectl
@@ -133,17 +133,17 @@ func registerPluginCommands(kubectl *cobra.Command, list bool) (cmds []*cobra.Co
 		for _, remainingArg := range remainingArgs {
 			cmd := &cobra.Command{
 				Use: remainingArg,
-				// Add a description that will be shown with completion choices.
-				// Make each one different by including the plugin name to avoid
-				// all plugins being grouped in a single line during completion for zsh.
+				// 添加将随补全选项一起显示的描述。
+				// 让每个描述都包含插件名称以互不相同，
+				// 避免 zsh 补全时把所有插件归到同一行。
 				Short:              fmt.Sprintf(i18n.T("The command %s is a plugin installed by the user"), remainingArg),
 				DisableFlagParsing: true,
-				// Allow plugins to provide their own completion choices
+				// 允许插件提供自己的补全选项
 				ValidArgsFunction: pluginCompletion,
-				// A Run is required for it to be a valid command
+				// 必须提供 Run，命令才算有效
 				Run: func(cmd *cobra.Command, args []string) {},
 			}
-			// Add the plugin command to the list of user defined commands
+			// 将插件命令添加到用户定义命令列表中
 			userDefinedCommands = append(userDefinedCommands, cmd)
 
 			if list {
@@ -156,37 +156,37 @@ func registerPluginCommands(kubectl *cobra.Command, list bool) (cmds []*cobra.Co
 	return userDefinedCommands
 }
 
-// pluginCompletion deals with shell completion beyond the plugin name, it allows to complete
-// plugin arguments and flags.
-// It will look on $PATH for a specific executable file that will provide completions
-// for the plugin in question.
+// pluginCompletion 处理插件名称之后的 shell 补全，可补全
+// 插件的参数和标志。
+// 它会在 $PATH 中查找某个特定的可执行文件，
+// 该文件将为相应的插件提供补全。
 //
-// When called, this completion executable should print the completion choices to stdout.
-// The arguments passed to the executable file will be the arguments for the plugin currently
-// on the command-line.  For example, if a user types:
+// 调用时，该补全可执行文件应将补全选项打印到 stdout。
+// 传给可执行文件的参数就是当前命令行中
+// 插件的参数。例如，如果用户输入：
 //
 //	kubectl myplugin arg1 arg2 a<TAB>
 //
-// the completion executable will be called with arguments: "arg1" "arg2" "a".
-// And if a user types:
+// 则调用补全可执行文件时会传入参数："arg1" "arg2" "a"。
+// 如果用户输入：
 //
 //	kubectl myplugin arg1 arg2 <TAB>
 //
-// the completion executable will be called with arguments: "arg1" "arg2" "".  Notice the empty
-// last argument which indicates that a new word should be completed but that the user has not
-// typed anything for it yet.
+// 则调用补全可执行文件时会传入参数："arg1" "arg2" ""。
+// 注意最后一个参数是空的，表示需要补全一个新词，
+// 但用户尚未输入任何内容。
 //
-// Kubectl's plugin completion logic supports Cobra's ShellCompDirective system.  This means a plugin
-// can optionally print :<value of a shell completion directive> as its very last line to provide
-// directives to the shell on how to perform completion.  If this directive is not present, the
-// cobra.ShellCompDirectiveDefault will be used. Please see Cobra's documentation for more details:
+// Kubectl 的插件补全逻辑支持 Cobra 的 ShellCompDirective 机制。这意味着插件
+// 可以选择在最后一行打印 :<value of a shell completion directive>，以向 shell
+// 提供如何执行补全的指令。如果不存在该指令，则使用
+// cobra.ShellCompDirectiveDefault。更多细节请参阅 Cobra 文档：
 // https://github.com/spf13/cobra/blob/master/shell_completions.md#dynamic-completion-of-nouns
 //
-// The completion executable should be named kubectl_complete-<plugin>.  For example, for a plugin
-// named kubectl-get_all, the completion file should be named kubectl_complete-get_all.  The completion
-// executable must have executable permissions set on it and must be on $PATH.
+// 补全可执行文件应命名为 kubectl_complete-<plugin>。例如，对于名为
+// kubectl-get_all 的插件，补全文件应命名为 kubectl_complete-get_all。补全
+// 可执行文件必须设置可执行权限，并且必须位于 $PATH 中。
 func pluginCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	// Recreate the plugin name from the commandPath
+	// 从 commandPath 重建插件名称
 	pluginName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), "-", "_"), " ", "-")
 
 	path, found := lookupCompletionExec(pluginName)
@@ -200,13 +200,13 @@ func pluginCompletion(cmd *cobra.Command, args []string, toComplete string) ([]s
 	return getPluginCompletions(path, args, os.Environ())
 }
 
-// lookupCompletionExec will look for the existence of an executable
-// that can provide completion for the given plugin name.
-// The first filepath to match is returned, or a boolean false if
-// such an executable is not found.
+// lookupCompletionExec 查找是否存在这样的可执行文件：
+// 它能为给定插件名称提供补全。
+// 返回第一个匹配的文件路径；
+// 如果找不到这样的可执行文件，则返回布尔值 false。
 func lookupCompletionExec(pluginName string) (string, bool) {
-	// Convert the plugin name into the plugin completion name by inserting "_complete" before the first -.
-	// For example, convert kubectl-get_all to kubectl_complete-get_all
+	// 在第一个 - 前插入 "_complete"，将插件名称转换为插件补全名称。
+	// 例如，将 kubectl-get_all 转换为 kubectl_complete-get_all
 	pluginCompExec := strings.Replace(pluginName, "-", "_complete-", 1)
 	cobra.CompDebugln(fmt.Sprintf("About to look for: %s", pluginCompExec), true)
 	path, err := exec.LookPath(pluginCompExec)
@@ -216,11 +216,11 @@ func lookupCompletionExec(pluginName string) (string, bool) {
 	return path, true
 }
 
-// getPluginCompletions receives an executable's filepath, a slice
-// of arguments, and a slice of environment variables
-// to relay to the executable.
-// The executable is responsible for printing the completions of the
-// plugin for the current set of arguments.
+// getPluginCompletions 接收可执行文件的路径、
+// 一组参数，以及要传递给该可执行文件的
+// 环境变量切片。
+// 该可执行文件负责打印当前这组参数下
+// 插件的补全结果。
 func getPluginCompletions(executablePath string, cmdArgs, environment []string) ([]string, cobra.ShellCompDirective) {
 	buf := new(bytes.Buffer)
 
@@ -234,16 +234,16 @@ func getPluginCompletions(executablePath string, cmdArgs, environment []string) 
 	directive := cobra.ShellCompDirectiveDefault
 	if err := prog.Run(); err == nil {
 		for _, comp := range strings.Split(buf.String(), "\n") {
-			// Remove any empty lines
+			// 移除所有空行
 			if len(comp) > 0 {
 				comps = append(comps, comp)
 			}
 		}
 
-		// Check if the last line of output is of the form :<integer>, which
-		// indicates a Cobra ShellCompDirective.  We do this for plugins
-		// that use Cobra or the ones that wish to use this directive to
-		// communicate a special behavior for the shell.
+		// 检查输出的最后一行是否为 :<integer> 形式，
+		// 这表示 Cobra ShellCompDirective。这样做是为了兼容
+		// 使用 Cobra 的插件，或希望借此指令向 shell
+		// 传达特殊行为的插件。
 		if len(comps) > 0 {
 			lastLine := comps[len(comps)-1]
 			if len(lastLine) > 1 && lastLine[0] == ':' {

@@ -330,9 +330,9 @@ bazzes   b            somegroup/v1   true         Baz
 	}
 }
 
-// TestAPIResourcesRunJsonYaml is doing same thing as TestAPIResourcesRun but for JSON and YAML outputs
-// A separate test function is created because we are using apieqaulity.Semantic.DeepEqual
-// to check equality between input and output
+// TestAPIResourcesRunJsonYaml 与 TestAPIResourcesRun 的功能相同，但针对 JSON 和 YAML 输出
+// 之所以创建单独的测试函数，是因为我们使用 apieqaulity.Semantic.DeepEqual
+// 来检查输入与输出是否相等
 func TestAPIResourcesRunJsonYaml(t *testing.T) {
 	dc := cmdtesting.NewFakeCachedDiscoveryClient()
 	tf := cmdtesting.NewTestFactory().WithDiscoveryClient(dc)
@@ -404,7 +404,7 @@ func TestAPIResourcesRunJsonYaml(t *testing.T) {
 				}
 				require.NoError(tt, err)
 
-				// this will undo custom value we add in RunAPIResources in the lines:
+				// 这将撤销我们在 RunAPIResources 中于以下行添加的自定义值：
 				// resource.Group = gv.Group
 				// resource.Version = gv.Version
 				apiResourceList.GroupVersion = apiResourceList.APIResources[0].Group + "/" + apiResourceList.APIResources[0].Version

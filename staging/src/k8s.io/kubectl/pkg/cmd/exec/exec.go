@@ -102,7 +102,7 @@ func NewCmdExec(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Co
 	}
 	cmdutil.AddPodRunningTimeoutFlag(cmd, defaultPodExecTimeout)
 	cmdutil.AddJsonFilenameFlag(cmd.Flags(), &options.FilenameOptions.Filenames, "to use to exec into the resource")
-	// TODO support UID
+	// TODO: 支持 UID
 	cmdutil.AddContainerVarFlags(cmd, &options.ContainerName, options.ContainerName)
 	cmdutil.CheckErr(cmd.RegisterFlagCompletionFunc("container", completion.ContainerCompletionFunc(f)))
 
@@ -112,16 +112,16 @@ func NewCmdExec(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Co
 	return cmd
 }
 
-// RemoteExecutor defines the interface accepted by the Exec command - provided for test stubbing
+// RemoteExecutor 定义 Exec 命令接受的接口，用于测试时打桩
 type RemoteExecutor interface {
-	// Execute supports executing remote command in a pod.
+	// Execute 支持在 pod 中执行远程命令。
 	Execute(url *url.URL, config *restclient.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool, terminalSizeQueue remotecommand.TerminalSizeQueue) error
 
-	// ExecuteWithContext, in contrast to Execute, supports stopping the remote command via context cancellation.
+	// 与 Execute 不同，ExecuteWithContext 支持通过取消 context 来停止远程命令。
 	ExecuteWithContext(ctx context.Context, url *url.URL, config *restclient.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool, terminalSizeQueue remotecommand.TerminalSizeQueue) error
 }
 
-// DefaultRemoteExecutor is the standard implementation of remote command execution
+// DefaultRemoteExecutor 是远程命令执行的标准实现
 type DefaultRemoteExecutor struct{}
 
 func (d *DefaultRemoteExecutor) Execute(url *url.URL, config *restclient.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool, terminalSizeQueue remotecommand.TerminalSizeQueue) error {
@@ -142,15 +142,15 @@ func (*DefaultRemoteExecutor) ExecuteWithContext(ctx context.Context, url *url.U
 	})
 }
 
-// createExecutor returns the Executor or an error if one occurred.
+// createExecutor 返回 Executor，若发生错误则返回错误。
 func createExecutor(url *url.URL, config *restclient.Config) (remotecommand.Executor, error) {
 	exec, err := remotecommand.NewSPDYExecutor(config, "POST", url)
 	if err != nil {
 		return nil, err
 	}
-	// Fallback executor is default, unless feature flag is explicitly disabled.
+	// 除非显式禁用 feature flag，否则默认使用 fallback executor。
 	if !cmdutil.RemoteCommandWebsockets.IsDisabled() {
-		// WebSocketExecutor must be "GET" method as described in RFC 6455 Sec. 4.1 (page 17).
+		// 按照 RFC 6455 第 4.1 节（第 17 页）的描述，WebSocketExecutor 必须使用 "GET" 方法。
 		websocketExec, err := remotecommand.NewWebSocketExecutor(config, "GET", url.String())
 		if err != nil {
 			return nil, err
@@ -171,19 +171,19 @@ type StreamOptions struct {
 	ContainerName string
 	Stdin         bool
 	TTY           bool
-	// minimize unnecessary output
+	// 尽量减少不必要的输出
 	Quiet bool
-	// InterruptParent, if set, is used to handle interrupts while attached
+	// 如果设置了 InterruptParent，则在 attached 状态下用它处理中断
 	InterruptParent *interrupt.Handler
 
 	genericiooptions.IOStreams
 
-	// for testing
+	// 用于测试
 	overrideStreams func() (io.ReadCloser, io.Writer, io.Writer)
 	isTerminalIn    func(t term.TTY) bool
 }
 
-// ExecOptions declare the arguments accepted by the Exec command
+// ExecOptions 声明 Exec 命令接受的参数
 type ExecOptions struct {
 	StreamOptions
 	resource.FilenameOptions
@@ -203,13 +203,13 @@ type ExecOptions struct {
 	Config        *restclient.Config
 }
 
-// Complete verifies command line arguments and loads data from the command environment
+// Complete 校验命令行参数，并从命令环境中加载数据
 func (p *ExecOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, argsIn []string, argsLenAtDash int) error {
 	if len(argsIn) > 0 && argsLenAtDash != 0 {
 		p.ResourceName = argsIn[0]
 	}
-	// we expect exactly one arg (the pod/resource name) before the dash separator.
-	// pflag guarantees `argsLenAtDash <= len(args)`.
+	// 我们期望在短横线分隔符之前恰好有一个参数（pod/资源名称）。
+	// pflag 保证 `argsLenAtDash <= len(args)`。
 	if argsLenAtDash == 0 || argsLenAtDash == 1 {
 		p.Command = argsIn[argsLenAtDash:]
 	} else if len(argsIn) > 1 || (len(argsIn) > 0 && len(p.FilenameOptions.Filenames) != 0) {
@@ -246,7 +246,7 @@ func (p *ExecOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, argsIn []s
 	return nil
 }
 
-// Validate checks that the provided exec options are specified.
+// Validate 检查所提供的 exec 选项是否已指定。
 func (p *ExecOptions) Validate() error {
 	if len(p.PodName) == 0 && len(p.ResourceName) == 0 && len(p.FilenameOptions.Filenames) == 0 {
 		return fmt.Errorf("pod, type/name or --filename must be specified")
@@ -267,7 +267,7 @@ func (o *StreamOptions) SetupTTY() term.TTY {
 	}
 
 	if !o.Stdin {
-		// need to nil out o.In to make sure we don't create a stream for stdin
+		// 需要将 o.In 置为 nil，以确保不会为 stdin 创建流
 		o.In = nil
 		o.TTY = false
 		return t
@@ -293,12 +293,12 @@ func (o *StreamOptions) SetupTTY() term.TTY {
 		return t
 	}
 
-	// if we get to here, the user wants to attach stdin, wants a TTY, and o.In is a terminal, so we
-	// can safely set t.Raw to true
+	// 能执行到这里，说明用户希望 attach stdin、请求 TTY，且 o.In 是终端，因此
+	// 可以安全地将 t.Raw 设为 true
 	t.Raw = true
 
 	if o.overrideStreams == nil {
-		// use dockerterm.StdStreams() to get the right I/O handles on Windows
+		// 在 Windows 上使用 dockerterm.StdStreams() 获取正确的 I/O 句柄
 		o.overrideStreams = dockerterm.StdStreams
 	}
 	stdin, stdout, _ := o.overrideStreams()
@@ -312,12 +312,12 @@ func (o *StreamOptions) SetupTTY() term.TTY {
 	return t
 }
 
-// Run executes a validated remote execution against a pod.
+// Run 针对 pod 执行经过校验的远程执行。
 func (p *ExecOptions) Run() error {
 	var err error
-	// we still need legacy pod getter when PodName in ExecOptions struct is provided,
-	// since there are any other command run this function by providing Podname with PodsGetter
-	// and without resource builder, eg: `kubectl cp`.
+	// 当 ExecOptions 结构体中提供了 PodName 时，仍需使用旧的 pod getter，
+	// 因为其他命令可能通过提供 PodName 和 PodsGetter 来调用此函数，
+	// 且不提供 resource builder，例如 `kubectl cp`。
 	if len(p.PodName) != 0 {
 		p.Pod, err = p.PodClient.Pods(p.Namespace).Get(context.TODO(), p.PodName, metav1.GetOptions{})
 		if err != nil {
@@ -367,18 +367,18 @@ func (p *ExecOptions) Run() error {
 		}
 	}
 
-	// ensure we can recover the terminal while attached
+	// 确保在 attached 状态下可以恢复终端
 	t := p.SetupTTY()
 
 	var sizeQueue remotecommand.TerminalSizeQueue
 	if t.Raw {
-		// this call spawns a goroutine to monitor/update the terminal size
+		// 此调用会启动一个 goroutine 来监控/更新终端大小
 		sizeQueue = &terminalSizeQueueAdapter{
 			delegate: t.MonitorSize(t.GetSize()),
 		}
 
-		// unset p.Err if it was previously set because both stdout and stderr go over p.Out when tty is
-		// true
+		// 如果之前设置了 p.Err，则将其清除，因为在 tty 为 true 时 stdout 和 stderr
+		// 都会通过 p.Out 输出
 		p.ErrOut = nil
 	}
 
@@ -388,7 +388,7 @@ func (p *ExecOptions) Run() error {
 			return err
 		}
 
-		// TODO: consider abstracting into a client invocation or client helper
+		// TODO: 考虑抽象为 client 调用或 client helper
 		req := restClient.Post().
 			Resource("pods").
 			Name(pod.Name).

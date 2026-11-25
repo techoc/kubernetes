@@ -33,13 +33,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// ResourceStore defines a new resource store data structure.
+// ResourceStore 定义了一种新的资源存储数据结构。
 type ResourceStore struct {
 	SecretStore    map[string]*corev1.Secret
 	ConfigMapStore map[string]*corev1.ConfigMap
 }
 
-// NewResourceStore returns a pointer to a new resource store data structure.
+// NewResourceStore 返回一个指向新资源存储数据结构的指针。
 func NewResourceStore() *ResourceStore {
 	return &ResourceStore{
 		SecretStore:    make(map[string]*corev1.Secret),
@@ -47,7 +47,7 @@ func NewResourceStore() *ResourceStore {
 	}
 }
 
-// getSecretRefValue returns the value of a secret in the supplied namespace
+// getSecretRefValue 返回指定命名空间中 secret 的值
 func getSecretRefValue(client kubernetes.Interface, namespace string, store *ResourceStore, secretSelector *corev1.SecretKeySelector) (string, error) {
 	secret, ok := store.SecretStore[secretSelector.Name]
 	if !ok {
@@ -65,7 +65,7 @@ func getSecretRefValue(client kubernetes.Interface, namespace string, store *Res
 
 }
 
-// getConfigMapRefValue returns the value of a configmap in the supplied namespace
+// getConfigMapRefValue 返回指定命名空间中 configmap 的值
 func getConfigMapRefValue(client kubernetes.Interface, namespace string, store *ResourceStore, configMapSelector *corev1.ConfigMapKeySelector) (string, error) {
 	configMap, ok := store.ConfigMapStore[configMapSelector.Name]
 	if !ok {
@@ -82,14 +82,14 @@ func getConfigMapRefValue(client kubernetes.Interface, namespace string, store *
 	return "", fmt.Errorf("key %s not found in config map %s", configMapSelector.Key, configMapSelector.Name)
 }
 
-// getFieldRef returns the value of the supplied path in the given object
+// getFieldRef 返回给定对象中指定路径的值
 func getFieldRef(obj runtime.Object, from *corev1.EnvVarSource) (string, error) {
 	return extractFieldPathAsString(obj, from.FieldRef.FieldPath)
 }
 
-// extractFieldPathAsString extracts the field from the given object
-// and returns it as a string.  The object must be a pointer to an
-// API type.
+// extractFieldPathAsString 从给定对象中提取字段，
+// 并以字符串形式返回。该对象必须是指向
+// API 类型的指针。
 func extractFieldPathAsString(obj interface{}, fieldPath string) (string, error) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -129,13 +129,13 @@ func extractFieldPathAsString(obj interface{}, fieldPath string) (string, error)
 	return "", fmt.Errorf("unsupported fieldPath: %v", fieldPath)
 }
 
-// splitMaybeSubscriptedPath checks whether the specified fieldPath is
-// subscripted, and
-//   - if yes, this function splits the fieldPath into path and subscript, and
-//     returns (path, subscript, true).
-//   - if no, this function returns (fieldPath, "", false).
+// splitMaybeSubscriptedPath 检查指定的 fieldPath 是否
+// 带有下标，并且
+//   - 如果是，该函数将 fieldPath 拆分为 path 和 subscript，并返回
+//     (path, subscript, true)。
+//   - 如果不是，则返回 (fieldPath, "", false)。
 //
-// Example inputs and outputs:
+// 输入与输出示例：
 //   - "metadata.annotations['myKey']" --> ("metadata.annotations", "myKey", true)
 //   - "metadata.annotations['a[b]c']" --> ("metadata.annotations", "a[b]c", true)
 //   - "metadata.labels[”]"           --> ("metadata.labels", "", true)
@@ -155,9 +155,9 @@ func splitMaybeSubscriptedPath(fieldPath string) (string, string, bool) {
 	return parts[0], parts[1], true
 }
 
-// formatMap formats map[string]string to a string.
+// formatMap 将 map[string]string 格式化为字符串。
 func formatMap(m map[string]string) (fmtStr string) {
-	// output with keys in sorted order to provide stable output
+	// 按 key 排序输出，以提供稳定的结果
 	keys := sets.New[string]()
 	for key := range m {
 		keys.Insert(key)
@@ -170,13 +170,13 @@ func formatMap(m map[string]string) (fmtStr string) {
 	return
 }
 
-// getResourceFieldRef returns the value of a resource in the given container
+// getResourceFieldRef 返回给定容器中某项资源的值
 func getResourceFieldRef(from *corev1.EnvVarSource, container *corev1.Container) (string, error) {
 	return extractContainerResourceValue(from.ResourceFieldRef, container)
 }
 
-// ExtractContainerResourceValue extracts the value of a resource
-// in an already known container
+// ExtractContainerResourceValue 从已知容器中
+// 提取某项资源的值
 func extractContainerResourceValue(fs *corev1.ResourceFieldSelector, container *corev1.Container) (string, error) {
 	divisor := resource.Quantity{}
 	if divisor.Cmp(fs.Divisor) == 0 {
@@ -199,8 +199,8 @@ func extractContainerResourceValue(fs *corev1.ResourceFieldSelector, container *
 	case "requests.ephemeral-storage":
 		return convertResourceEphemeralStorageToString(container.Resources.Requests.StorageEphemeral(), divisor)
 	}
-	// handle extended standard resources with dynamic names
-	// example: requests.hugepages-<pageSize> or limits.hugepages-<pageSize>
+	// 处理具有动态名称的扩展标准资源
+	// 例如：requests.hugepages-<pageSize> 或 limits.hugepages-<pageSize>
 	if strings.HasPrefix(fs.Resource, "requests.") {
 		resourceName := corev1.ResourceName(strings.TrimPrefix(fs.Resource, "requests."))
 		if IsHugePageResourceName(resourceName) {
@@ -216,35 +216,35 @@ func extractContainerResourceValue(fs *corev1.ResourceFieldSelector, container *
 	return "", fmt.Errorf("Unsupported container resource : %v", fs.Resource)
 }
 
-// convertResourceCPUToString converts cpu value to the format of divisor and returns
-// ceiling of the value.
+// convertResourceCPUToString 将 cpu 值转换为 divisor 的格式，并返回
+// 该值的向上取整结果。
 func convertResourceCPUToString(cpu *resource.Quantity, divisor resource.Quantity) (string, error) {
 	c := int64(math.Ceil(float64(cpu.MilliValue()) / float64(divisor.MilliValue())))
 	return strconv.FormatInt(c, 10), nil
 }
 
-// convertResourceMemoryToString converts memory value to the format of divisor and returns
-// ceiling of the value.
+// convertResourceMemoryToString 将 memory 值转换为 divisor 的格式，并返回
+// 该值的向上取整结果。
 func convertResourceMemoryToString(memory *resource.Quantity, divisor resource.Quantity) (string, error) {
 	m := int64(math.Ceil(float64(memory.Value()) / float64(divisor.Value())))
 	return strconv.FormatInt(m, 10), nil
 }
 
-// convertResourceHugePagesToString converts hugepages value to the format of divisor and returns
-// ceiling of the value.
+// convertResourceHugePagesToString 将 hugepages 值转换为 divisor 的格式，并返回
+// 该值的向上取整结果。
 func convertResourceHugePagesToString(hugePages *resource.Quantity, divisor resource.Quantity) (string, error) {
 	m := int64(math.Ceil(float64(hugePages.Value()) / float64(divisor.Value())))
 	return strconv.FormatInt(m, 10), nil
 }
 
-// convertResourceEphemeralStorageToString converts ephemeral storage value to the format of divisor and returns
-// ceiling of the value.
+// convertResourceEphemeralStorageToString 将 ephemeral storage 值转换为 divisor 的格式，并返回
+// 该值的向上取整结果。
 func convertResourceEphemeralStorageToString(ephemeralStorage *resource.Quantity, divisor resource.Quantity) (string, error) {
 	m := int64(math.Ceil(float64(ephemeralStorage.Value()) / float64(divisor.Value())))
 	return strconv.FormatInt(m, 10), nil
 }
 
-// GetEnvVarRefValue returns the value referenced by the supplied EnvVarSource given the other supplied information.
+// GetEnvVarRefValue 根据其他提供的信息，返回给定 EnvVarSource 所引用的值。
 func GetEnvVarRefValue(kc kubernetes.Interface, ns string, store *ResourceStore, from *corev1.EnvVarSource, obj runtime.Object, c *corev1.Container) (string, error) {
 	if from.SecretKeyRef != nil {
 		return getSecretRefValue(kc, ns, store, from.SecretKeyRef)
@@ -265,7 +265,7 @@ func GetEnvVarRefValue(kc kubernetes.Interface, ns string, store *ResourceStore,
 	return "", fmt.Errorf("invalid valueFrom")
 }
 
-// GetEnvVarRefString returns a text description of whichever field is set within the supplied EnvVarSource argument.
+// GetEnvVarRefString 返回给定 EnvVarSource 参数中所设置字段的文本描述。
 func GetEnvVarRefString(from *corev1.EnvVarSource) string {
 	if from.ConfigMapKeyRef != nil {
 		return fmt.Sprintf("configmap %s, key %s", from.ConfigMapKeyRef.Name, from.ConfigMapKeyRef.Key)
@@ -290,8 +290,8 @@ func GetEnvVarRefString(from *corev1.EnvVarSource) string {
 	return "invalid valueFrom"
 }
 
-// IsHugePageResourceName returns true if the resource name has the huge page
-// resource prefix.
+// 如果资源名称带有 huge page
+// 资源前缀，IsHugePageResourceName 返回 true。
 func IsHugePageResourceName(name corev1.ResourceName) bool {
 	return strings.HasPrefix(string(name), corev1.ResourceHugePagesPrefix)
 }

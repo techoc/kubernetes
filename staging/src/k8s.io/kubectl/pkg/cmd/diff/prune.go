@@ -122,7 +122,7 @@ func (p *pruner) prune(tracker *tracker, namespace string, mapping *meta.RESTMap
 	return pobjs, nil
 }
 
-// MarkVisited marks visited namespaces and uids
+// MarkVisited 标记已访问过的 namespace 和 uid
 func (t *tracker) MarkVisited(info *resource.Info) {
 	if info.Namespaced() {
 		t.visitedNamespaces.Insert(info.Namespace)

@@ -240,8 +240,8 @@ func addConditionWithObservedGeneration(in *unstructured.Unstructured, name, sta
 	return in
 }
 
-// createUnstructured parses the yaml string into a map[string]interface{}.  Verifies that the string does not have
-// any tab characters.
+// createUnstructured 将 yaml 字符串解析为 map[string]interface{}，并验证字符串中
+// 不含任何制表符。
 func createUnstructured(t *testing.T, config string) *unstructured.Unstructured {
 	t.Helper()
 	result := map[string]interface{}{}
@@ -1118,9 +1118,9 @@ func TestWaitForDeletionIgnoreNotFound(t *testing.T) {
 	}
 }
 
-// TestWaitForDifferentJSONPathCondition will run tests on different types of
-// JSONPath expression to check the JSONPath can be parsed correctly from a Pod Yaml
-// and check if the comparison returns as expected.
+// TestWaitForDifferentJSONPathCondition 将针对不同类型的
+// JSONPath 表达式运行测试，检查能否从 Pod Yaml 中正确解析 JSONPath，
+// 并验证比较结果是否符合预期。
 func TestWaitForDifferentJSONPathExpression(t *testing.T) {
 	scheme := runtime.NewScheme()
 	listMapping := map[schema.GroupVersionResource]string{
@@ -1384,8 +1384,8 @@ func TestWaitForDifferentJSONPathExpression(t *testing.T) {
 	}
 }
 
-// TestWaitForJSONPathCondition will run tests to check whether
-// the List actions and Watch actions match what we expected
+// TestWaitForJSONPathCondition 将运行测试，检查
+// List 动作和 Watch 动作是否与预期一致
 func TestWaitForJSONPathCondition(t *testing.T) {
 	scheme := runtime.NewScheme()
 	listMapping := map[schema.GroupVersionResource]string{
@@ -1647,7 +1647,7 @@ func TestWaitForJSONPathCondition(t *testing.T) {
 	}
 }
 
-// TestConditionFuncFor tests that the condition string can be properly parsed into a ConditionFunc.
+// TestConditionFuncFor 测试条件字符串能否被正确解析为 ConditionFunc。
 func TestConditionFuncFor(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -1773,7 +1773,7 @@ func TestConditionFuncFor(t *testing.T) {
 	}
 }
 
-// TestWaitForMultipleConditions tests that multiple conditions are evaluated with AND logic.
+// TestWaitForMultipleConditions 测试多个条件是否按 AND 逻辑求值。
 func TestWaitForMultipleConditions(t *testing.T) {
 	scheme := runtime.NewScheme()
 	listMapping := map[schema.GroupVersionResource]string{
@@ -1895,7 +1895,7 @@ func TestWaitForMultipleConditions(t *testing.T) {
 			conditionFuncs, err := conditionFuncsFor([]string{"condition=Ready", "condition=Available"}, io.Discard)
 			require.NoError(t, err)
 
-			// For the mixed condition test, use different condition functions
+			// 对于混合条件测试，使用不同的条件函数
 			if strings.Contains(test.name, "mixed condition") {
 				conditionFuncs, err = conditionFuncsFor([]string{"condition=Ready", "jsonpath={.status.phase}=Running"}, io.Discard)
 				require.NoError(t, err)

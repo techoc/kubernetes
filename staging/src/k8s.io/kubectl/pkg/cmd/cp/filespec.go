@@ -32,9 +32,9 @@ type pathSpec interface {
 	String() string
 }
 
-// localPath represents a client-native path, which will differ based
-// on the client OS, its methods will use path/filepath package which
-// is OS dependant
+// localPath 表示客户端本地路径，其形式因
+// 客户端操作系统而异；其方法使用 path/filepath 包，
+// 该包依赖于操作系统
 type localPath struct {
 	file string
 }
@@ -82,15 +82,15 @@ func isRelative(base, target localPath) bool {
 	return relative == "." || relative == stripPathShortcuts(relative)
 }
 
-// remotePath represents always UNIX path, its methods will use path
-// package which is always using `/`
+// remotePath 始终表示 UNIX 路径，其方法使用 path
+// 包，该包始终使用 `/`
 type remotePath struct {
 	file string
 }
 
 func newRemotePath(fileName string) remotePath {
-	// we assume remote file is a linux container but we need to convert
-	// windows path separators to unix style for consistent processing
+	// 我们假设远端文件位于 Linux 容器中，但仍需将
+	// Windows 路径分隔符转换为 Unix 风格，以便统一处理
 	file := strings.ReplaceAll(stripTrailingSlash(fileName), `\`, "/")
 	return remotePath{file: file}
 }
@@ -124,7 +124,7 @@ func (p remotePath) StripSlashes() remotePath {
 	return newRemotePath(stripLeadingSlash(p.file))
 }
 
-// strips trailing slash (if any) both unix and windows style
+// 去除 Unix 和 Windows 风格的末尾斜杠（如果有）
 func stripTrailingSlash(file string) string {
 	if len(file) == 0 {
 		return file
@@ -136,11 +136,11 @@ func stripTrailingSlash(file string) string {
 }
 
 func stripLeadingSlash(file string) string {
-	// tar strips the leading '/' and '\' if it's there, so we will too
+	// tar 会去除开头的 '/' 和 '\'（如果存在），我们也这样做
 	return strings.TrimLeft(file, `/\`)
 }
 
-// stripPathShortcuts removes any leading or trailing "../" from a given path
+// stripPathShortcuts 移除给定路径开头或结尾的所有 "../"
 func stripPathShortcuts(p string) string {
 	newPath := p
 	trimmedPosix := strings.TrimPrefix(newPath, "../")
@@ -157,7 +157,7 @@ func stripPathShortcuts(p string) string {
 		trimmedWindows = strings.TrimPrefix(newPath, `..\`)
 	}
 
-	// trim leftover {".", ".."}
+	// 修剪剩余的 {"."、".."}
 	if newPath == "." || newPath == ".." {
 		newPath = ""
 	}

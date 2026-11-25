@@ -66,7 +66,7 @@ var (
 		kubectl cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar`))
 )
 
-// CopyOptions have the data required to perform the copy operation
+// CopyOptions 包含执行复制操作所需的数据
 type CopyOptions struct {
 	Container  string
 	Namespace  string
@@ -83,14 +83,14 @@ type CopyOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCopyOptions creates the options for copy
+// NewCopyOptions 创建复制所需的选项
 func NewCopyOptions(ioStreams genericiooptions.IOStreams) *CopyOptions {
 	return &CopyOptions{
 		IOStreams: ioStreams,
 	}
 }
 
-// NewCmdCp creates a new Copy command.
+// NewCmdCp 创建一个新的 Copy 命令。
 func NewCmdCp(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewCopyOptions(ioStreams)
 
@@ -104,31 +104,31 @@ func NewCmdCp(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Co
 			var comps []string
 			if len(args) == 0 {
 				if strings.IndexAny(toComplete, "/.~") == 0 {
-					// Looks like a path, do nothing
+					// 看起来是路径，不做处理
 				} else if strings.Contains(toComplete, ":") {
-					// TODO: complete remote files in the pod
+					// TODO: 补全 pod 中的远端文件
 				} else if idx := strings.Index(toComplete, "/"); idx > 0 {
-					// complete <namespace>/<pod>
+					// 补全 <namespace>/<pod>
 					namespace := toComplete[:idx]
 					template := "{{ range .items }}{{ .metadata.namespace }}/{{ .metadata.name }}: {{ end }}"
 					comps = completion.CompGetFromTemplate(&template, f, namespace, []string{"pod"}, toComplete)
 				} else {
-					// Complete namespaces followed by a /
+					// 补全后面跟着 / 的命名空间
 					for _, ns := range completion.CompGetResource(f, "namespace", toComplete) {
 						comps = append(comps, fmt.Sprintf("%s/", ns))
 					}
-					// Complete pod names followed by a :
+					// 补全后面跟着 : 的 pod 名称
 					for _, pod := range completion.CompGetResource(f, "pod", toComplete) {
 						comps = append(comps, fmt.Sprintf("%s:", pod))
 					}
 
-					// Finally, provide file completion if we need to.
-					// We only do this if:
-					// 1- There are other completions found (if there are no completions,
-					//    the shell will do file completion itself)
-					// 2- If there is some input from the user (or else we will end up
-					//    listing the entire content of the current directory which could
-					//    be too many choices for the user)
+					// 最后，在需要时提供文件补全。
+					// 仅在以下情况下这样做：
+					// 1- 已找到其他补全结果（如果没有补全结果，
+					//    shell 会自行完成文件补全）
+					// 2- 用户已输入一些内容（否则最终会
+					//    列出当前目录的全部内容，选项可能
+					//    过多，对用户不便）
 					if len(comps) > 0 && len(toComplete) > 0 {
 						if files, err := os.ReadDir("."); err == nil {
 							for _, file := range files {
@@ -137,14 +137,14 @@ func NewCmdCp(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Co
 									if file.IsDir() {
 										filename = fmt.Sprintf("%s/", filename)
 									}
-									// We are completing a file prefix
+									// 我们正在补全文件前缀
 									comps = append(comps, filename)
 								}
 							}
 						}
 					} else if len(toComplete) == 0 {
-						// If the user didn't provide any input to complete,
-						// we provide a hint that a path can also be used
+						// 如果用户未提供任何待补全的输入，
+						// 就提示也可以使用路径
 						comps = append(comps, "./", "/")
 					}
 				}
@@ -171,7 +171,7 @@ var (
 func extractFileSpec(arg string) (fileSpec, error) {
 	i := strings.Index(arg, ":")
 
-	// filespec starting with a semicolon is invalid
+	// 以分号开头的 filespec 无效
 	if i == 0 {
 		return fileSpec{}, errFileSpecDoesntMatchFormat
 	}
@@ -200,7 +200,7 @@ func extractFileSpec(arg string) (fileSpec, error) {
 	}
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *CopyOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	if cmd.Parent() != nil {
 		o.ExecParentCmdName = cmd.Parent().CommandPath()
@@ -227,7 +227,7 @@ func (o *CopyOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []str
 	return nil
 }
 
-// Validate makes sure provided values for CopyOptions are valid
+// Validate 确保 CopyOptions 中提供的值有效
 func (o *CopyOptions) Validate() error {
 	if len(o.args) != 2 {
 		return fmt.Errorf("source and destination are required")
@@ -235,7 +235,7 @@ func (o *CopyOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution
+// Run 执行操作
 func (o *CopyOptions) Run() error {
 	srcSpec, err := extractFileSpec(o.args[0])
 	if err != nil {
@@ -262,10 +262,10 @@ func (o *CopyOptions) Run() error {
 	return fmt.Errorf("one of src or dest must be a remote file specification")
 }
 
-// checkDestinationIsDir receives a destination fileSpec and
-// determines if the provided destination path exists on the
-// pod. If the destination path does not exist or is _not_ a
-// directory, an error is returned with the exit code received.
+// checkDestinationIsDir 接收目标 fileSpec，
+// 判断给定目标路径是否存在于
+// pod 上。如果目标路径不存在，或者_不是_
+// 目录，则返回错误及收到的退出码。
 func (o *CopyOptions) checkDestinationIsDir(dest fileSpec) error {
 	options := &exec.ExecOptions{
 		StreamOptions: exec.StreamOptions{
@@ -309,12 +309,12 @@ func (o *CopyOptions) copyToPod(src, dest fileSpec, options *exec.ExecOptions) e
 	destFile := dest.File.(remotePath)
 
 	if err := o.checkDestinationIsDir(dest); err == nil {
-		// If no error, dest.File was found to be a directory.
-		// Copy specified src into it
+		// 没有错误表示 dest.File 是一个目录。
+		// 将指定的 src 复制到其中
 		destFile = destFile.Join(srcFile.Base())
 	} else if errors.Is(err, context.DeadlineExceeded) {
-		// we haven't decided destination is directory or not because context timeout is exceeded.
-		// That's why, we should shortcut the process in here.
+		// 由于超出 context 超时时间，我们尚未确定目标是否为目录。
+		// 因此，这里应直接跳过后续流程。
 		return err
 	}
 
@@ -355,8 +355,8 @@ func (o *CopyOptions) copyFromPod(src, dest fileSpec) error {
 	reader := newTarPipe(src, o)
 	srcFile := src.File.(remotePath)
 	destFile := dest.File.(localPath)
-	// remove extraneous path shortcuts - these could occur if a path contained extra "../"
-	// and attempted to navigate beyond "/" in a remote filesystem
+	// 移除多余的路径快捷符——如果路径包含多余的 "../" 就可能出现这种情况，
+	// 并试图在远端文件系统中导航到 "/" 之外
 	prefix := stripPathShortcuts(srcFile.StripSlashes().Clean().String())
 	return o.untarAll(src.PodNamespace, src.PodName, prefix, srcFile, destFile, reader)
 }
@@ -424,7 +424,7 @@ func (t *TarPipe) Read(p []byte) (n int, err error) {
 }
 
 func makeTar(src localPath, dest remotePath, writer io.Writer) error {
-	// TODO: use compression here?
+	// TODO: 这里是否使用压缩？
 	tarWriter := tar.NewWriter(writer)
 	defer tarWriter.Close()
 
@@ -449,7 +449,7 @@ func recursiveTar(srcDir, srcFile localPath, destDir, destFile remotePath, tw *t
 				return err
 			}
 			if len(files) == 0 {
-				//case empty directory
+				//空目录的情况
 				hdr, _ := tar.FileInfoHeader(stat, fpath)
 				hdr.Name = destFile.String()
 				if err := tw.WriteHeader(hdr); err != nil {
@@ -464,7 +464,7 @@ func recursiveTar(srcDir, srcFile localPath, destDir, destFile remotePath, tw *t
 			}
 			return nil
 		} else if stat.Mode()&os.ModeSymlink != 0 {
-			//case soft link
+			//软链接的情况
 			hdr, _ := tar.FileInfoHeader(stat, fpath)
 			target, err := os.Readlink(fpath)
 			if err != nil {
@@ -477,7 +477,7 @@ func recursiveTar(srcDir, srcFile localPath, destDir, destFile remotePath, tw *t
 				return err
 			}
 		} else {
-			//case regular file or other file type like pipe
+			//普通文件或管道等其他文件类型的情况
 			hdr, err := tar.FileInfoHeader(stat, fpath)
 			if err != nil {
 				return err
@@ -505,7 +505,7 @@ func recursiveTar(srcDir, srcFile localPath, destDir, destFile remotePath, tw *t
 
 func (o *CopyOptions) untarAll(ns, pod string, prefix string, src remotePath, dest localPath, reader io.Reader) error {
 	symlinkWarningPrinted := false
-	// TODO: use compression here?
+	// TODO: 这里是否使用压缩？
 	tarReader := tar.NewReader(reader)
 	for {
 		header, err := tarReader.Next()
@@ -516,20 +516,20 @@ func (o *CopyOptions) untarAll(ns, pod string, prefix string, src remotePath, de
 			break
 		}
 
-		// All the files will start with the prefix, which is the directory where
-		// they were located on the pod, we need to strip down that prefix, but
-		// if the prefix is missing it means the tar was tempered with.
-		// For the case where prefix is empty we need to ensure that the path
-		// is not absolute, which also indicates the tar file was tempered with.
+		// 所有文件都会以前缀开头，该前缀是它们在
+		// pod 上所在目录，我们需要去除该前缀；但如果
+		// 前缀缺失，则说明 tar 被篡改过。
+		// 对于前缀为空的情况，我们需要确保路径
+		// 不是绝对路径，这同样表明 tar 文件被篡改过。
 		if !strings.HasPrefix(header.Name, prefix) {
 			return fmt.Errorf("tar contents corrupted")
 		}
 
-		// basic file information
+		// 基本文件信息
 		mode := header.FileInfo().Mode()
-		// header.Name is a name of the REMOTE file, so we need to create
-		// a remotePath so that it goes through appropriate processing related
-		// with cleaning remote paths
+		// header.Name 是远端文件的名称，因此我们需要创建
+		// remotePath，使其经过与清理远端路径相关的
+		// 适当处理
 		destFileName := dest.Join(newRemotePath(header.Name[len(prefix):]))
 
 		if !isRelative(dest, destFileName) {

@@ -46,7 +46,7 @@ var (
 		kubectl rollout history daemonset/abc --revision=3`)
 )
 
-// RolloutHistoryOptions holds the options for 'rollout history' sub command
+// RolloutHistoryOptions 保存 'rollout history' 子命令的选项
 type RolloutHistoryOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	ToPrinter  func(string) (printers.ResourcePrinter, error)
@@ -66,7 +66,7 @@ type RolloutHistoryOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewRolloutHistoryOptions returns an initialized RolloutHistoryOptions instance
+// NewRolloutHistoryOptions 返回初始化后的 RolloutHistoryOptions 实例
 func NewRolloutHistoryOptions(streams genericiooptions.IOStreams) *RolloutHistoryOptions {
 	return &RolloutHistoryOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("").WithTypeSetter(scheme.Scheme),
@@ -74,7 +74,7 @@ func NewRolloutHistoryOptions(streams genericiooptions.IOStreams) *RolloutHistor
 	}
 }
 
-// NewCmdRolloutHistory returns a Command instance for RolloutHistory sub command
+// NewCmdRolloutHistory 返回 RolloutHistory 子命令的 Command 实例
 func NewCmdRolloutHistory(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewRolloutHistoryOptions(streams)
 
@@ -105,7 +105,7 @@ func NewCmdRolloutHistory(f cmdutil.Factory, streams genericiooptions.IOStreams)
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 补全所有必需的选项
 func (o *RolloutHistoryOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	o.Resources = args
 
@@ -126,7 +126,7 @@ func (o *RolloutHistoryOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, 
 	return nil
 }
 
-// Validate makes sure all the provided values for command-line options are valid
+// Validate 确保为命令行选项提供的所有值都有效
 func (o *RolloutHistoryOptions) Validate() error {
 	if len(o.Resources) == 0 && cmdutil.IsFilenameSliceEmpty(o.Filenames, o.Kustomize) {
 		return fmt.Errorf("required resource not specified")
@@ -138,7 +138,7 @@ func (o *RolloutHistoryOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of 'rollout history' sub command
+// Run 执行 'rollout history' 子命令
 func (o *RolloutHistoryOptions) Run() error {
 
 	r := o.Builder().
@@ -177,7 +177,7 @@ func (o *RolloutHistoryOptions) Run() error {
 			}
 
 			if o.Revision > 0 {
-				// Ensure the specified revision exists before printing
+				// 打印之前先确认指定的 revision 存在
 				revision, exists := historyInfo[o.Revision]
 				if !exists {
 					return fmt.Errorf("unable to find the specified revision")

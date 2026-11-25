@@ -58,7 +58,7 @@ var (
 	`))
 )
 
-// SetServiceAccountOptions encapsulates the data required to perform the operation.
+// SetServiceAccountOptions 封装执行该操作所需的数据。
 type SetServiceAccountOptions struct {
 	PrintFlags  *genericclioptions.PrintFlags
 	RecordFlags *genericclioptions.RecordFlags
@@ -80,7 +80,7 @@ type SetServiceAccountOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewSetServiceAccountOptions returns an initialized SetServiceAccountOptions instance
+// NewSetServiceAccountOptions 返回一个已初始化的 SetServiceAccountOptions 实例
 func NewSetServiceAccountOptions(streams genericiooptions.IOStreams) *SetServiceAccountOptions {
 	return &SetServiceAccountOptions{
 		PrintFlags:  genericclioptions.NewPrintFlags("serviceaccount updated").WithTypeSetter(scheme.Scheme),
@@ -92,7 +92,7 @@ func NewSetServiceAccountOptions(streams genericiooptions.IOStreams) *SetService
 	}
 }
 
-// NewCmdServiceAccount returns the "set serviceaccount" command.
+// NewCmdServiceAccount 返回 "set serviceaccount" 命令。
 func NewCmdServiceAccount(f cmdutil.Factory, streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewSetServiceAccountOptions(streams)
 
@@ -121,7 +121,7 @@ func NewCmdServiceAccount(f cmdutil.Factory, streams genericiooptions.IOStreams)
 	return cmd
 }
 
-// Complete configures serviceAccountConfig from command line args.
+// Complete 根据命令行参数配置 serviceAccountConfig。
 func (o *SetServiceAccountOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 
@@ -173,7 +173,7 @@ func (o *SetServiceAccountOptions) Complete(f cmdutil.Factory, cmd *cobra.Comman
 	return err
 }
 
-// Run creates and applies the patch either locally or calling apiserver.
+// Run 在本地或通过调用 apiserver 创建并应用补丁。
 func (o *SetServiceAccountOptions) Run() error {
 	patchErrs := []error{}
 	patchFn := func(obj runtime.Object) ([]byte, error) {
@@ -184,7 +184,7 @@ func (o *SetServiceAccountOptions) Run() error {
 		if err != nil {
 			return nil, err
 		}
-		// record this change (for rollout history)
+		// 记录此次变更（用于 rollout 历史）
 		if err := o.Recorder.Record(obj); err != nil {
 			klog.V(4).Infof("error recording current command: %v", err)
 		}

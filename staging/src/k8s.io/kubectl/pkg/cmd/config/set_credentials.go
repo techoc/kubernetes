@@ -122,13 +122,13 @@ var (
 		kubectl config set-credentials cluster-admin --exec-env=var-to-remove-`)
 )
 
-// NewCmdConfigSetCredentials returns a Command instance for 'config set-credentials' sub command
+// NewCmdConfigSetCredentials 返回 'config set-credentials' 子命令的 Command 实例
 func NewCmdConfigSetCredentials(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
 	options := &setCredentialsOptions{configAccess: configAccess}
 	return newCmdConfigSetCredentials(out, options)
 }
 
-// NewCmdConfigSetAuthInfo returns a Command instance for 'config set-credentials' sub command
+// NewCmdConfigSetAuthInfo 返回 'config set-credentials' 子命令的 Command 实例
 //
 // Deprecated: Use NewCmdConfigSetCredentials instead
 func NewCmdConfigSetAuthInfo(out io.Writer, configAccess clientcmd.ConfigAccess) *cobra.Command {
@@ -271,7 +271,7 @@ func (o *setCredentialsOptions) modifyAuthInfo(existingAuthInfo clientcmdapi.Aut
 	if o.authProvider.Provided() {
 		newName := o.authProvider.Value()
 
-		// Only overwrite if the existing auth-provider is nil, or different than the newly specified one.
+		// 仅在现有 auth-provider 为 nil 或不同于新指定的 auth-provider 时覆盖。
 		if modifiedAuthInfo.AuthProvider == nil || modifiedAuthInfo.AuthProvider.Name != newName {
 			modifiedAuthInfo.AuthProvider = &clientcmdapi.AuthProviderConfig{
 				Name: newName,
@@ -294,25 +294,25 @@ func (o *setCredentialsOptions) modifyAuthInfo(existingAuthInfo clientcmdapi.Aut
 	if o.execCommand.Provided() {
 		newExecCommand := o.execCommand.Value()
 
-		// create new Exec if doesn't exist, otherwise just modify the command
+		// 如果 Exec 不存在则创建，否则只修改命令
 		if modifiedAuthInfo.Exec == nil {
 			modifiedAuthInfo.Exec = &clientcmdapi.ExecConfig{
 				Command: newExecCommand,
 			}
 		} else {
 			modifiedAuthInfo.Exec.Command = newExecCommand
-			// explicitly reset exec arguments
+			// 显式重置 exec 参数
 			modifiedAuthInfo.Exec.Args = nil
 		}
 	}
 
-	// modify next values only if Exec exists, ignore these changes otherwise
+	// 仅在 Exec 存在时修改后续值，否则忽略这些更改
 	if modifiedAuthInfo.Exec != nil {
 		if o.execAPIVersion.Provided() {
 			modifiedAuthInfo.Exec.APIVersion = o.execAPIVersion.Value()
 		}
 
-		// rewrite exec arguments list with new values
+		// 用新值重写 exec 参数列表
 		if o.execArgs != nil {
 			modifiedAuthInfo.Exec.Args = o.execArgs
 		}
@@ -325,7 +325,7 @@ func (o *setCredentialsOptions) modifyAuthInfo(existingAuthInfo clientcmdapi.Aut
 			modifiedAuthInfo.Exec.ProvideClusterInfo = o.execProvideClusterInfo.Value()
 		}
 
-		// iterate over the existing exec env values and remove the specified
+		// 遍历现有的 exec 环境变量值并移除指定的变量
 		if o.execEnvToRemove != nil {
 			newExecEnv := []clientcmdapi.ExecEnvVar{}
 			for _, value := range modifiedAuthInfo.Exec.Env {
@@ -343,21 +343,21 @@ func (o *setCredentialsOptions) modifyAuthInfo(existingAuthInfo clientcmdapi.Aut
 			modifiedAuthInfo.Exec.Env = newExecEnv
 		}
 
-		// update or create specified environment variables for the exec plugin
+		// 为 exec 插件更新或创建指定的环境变量
 		if o.execEnv != nil {
 			newEnv := []clientcmdapi.ExecEnvVar{}
 			for newEnvName, newEnvValue := range o.execEnv {
 				needToCreate := true
 				for i := 0; i < len(modifiedAuthInfo.Exec.Env); i++ {
 					if modifiedAuthInfo.Exec.Env[i].Name == newEnvName {
-						// update the existing value
+						// 更新现有值
 						needToCreate = false
 						modifiedAuthInfo.Exec.Env[i].Value = newEnvValue
 						break
 					}
 				}
 				if needToCreate {
-					// create a new env value
+					// 创建新的环境变量值
 					newEnv = append(newEnv, clientcmdapi.ExecEnvVar{Name: newEnvName, Value: newEnvValue})
 				}
 			}
@@ -365,7 +365,7 @@ func (o *setCredentialsOptions) modifyAuthInfo(existingAuthInfo clientcmdapi.Aut
 		}
 	}
 
-	// If any auth info was set, make sure any other existing auth types are cleared
+	// 如果设置了任何认证信息，请确保清除其他现有的认证类型
 	if setToken || setBasic {
 		if !setToken {
 			modifiedAuthInfo.Token = ""

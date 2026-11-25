@@ -524,7 +524,7 @@ func TestTarDestinationName(t *testing.T) {
 		},
 	}
 
-	// ensure files exist on disk
+	// 确保文件存在于磁盘上
 	for _, file := range files {
 		completePath := dir + "/" + file.name
 		if err := os.MkdirAll(filepath.Dir(completePath), 0755); err != nil {
@@ -565,7 +565,7 @@ func TestBadTar(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	// More or less cribbed from https://golang.org/pkg/archive/tar/#example__minimal
+	// 大致改写自 https://golang.org/pkg/archive/tar/#example__minimal
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	var files = []struct {
@@ -666,9 +666,9 @@ func TestCopyToPod(t *testing.T) {
 		opts.Complete(tf, cmd, []string{test.src, fmt.Sprintf("pod-ns/pod-name:%s", test.dest)})
 		t.Run(name, func(t *testing.T) {
 			err = opts.Run()
-			//If error is NotFound error , it indicates that the
-			//request has been sent correctly.
-			//Treat this as no error.
+			//如果错误是 NotFound 错误，说明请求
+			//已被正确发送。
+			//将其视为无错误。
 			if test.expectedErr && errors.IsNotFound(err) {
 				t.Errorf("expected error but didn't get one")
 			}
@@ -893,7 +893,7 @@ func TestUntar(t *testing.T) {
 		expected   string // Expect to find the file here (or not, if empty)
 	}
 	files := []file{{
-		// Absolute file within dest
+		// dest 中的绝对路径文件
 		path:     basedir + "/" + "abs",
 		expected: basedir + basedir + "/" + "abs",
 	}, { // Absolute file outside dest
@@ -946,7 +946,7 @@ func TestUntar(t *testing.T) {
 		})
 
 		if f.expected != "" {
-			// outerlink is the number of backticks to escape to testdir
+			// outerlink 是到达 testdir 所需转义的反引号数量
 			outerlink, _ := filepath.Rel(f.expected, testdir)
 			links = append(links, file{
 				path:       f.path + "outerlink",
@@ -957,7 +957,7 @@ func TestUntar(t *testing.T) {
 	}
 	files = append(files, links...)
 
-	// Test back-tick escaping through a symlink.
+	// 测试通过符号转义反引号。
 	files = append(files,
 		file{
 			path:       "nested/again/back-link",
@@ -969,7 +969,7 @@ func TestUntar(t *testing.T) {
 			expected: basedir + "/" + "back-link-file",
 		})
 
-	// Test chaining back-tick symlinks.
+	// 测试链接包含反引号的符号链接。
 	files = append(files,
 		file{
 			path:       "nested/back-link-first",
@@ -1018,7 +1018,7 @@ func TestUntar(t *testing.T) {
 	}
 	tw.Close()
 
-	// Capture warnings to stderr for debugging.
+	// 将警告信息捕获到 stderr 以便调试。
 	output := (*testWriter)(t)
 	opts := NewCopyOptions(genericiooptions.IOStreams{In: &bytes.Buffer{}, Out: output, ErrOut: output})
 
@@ -1069,7 +1069,7 @@ func TestUntar_SingleFile(t *testing.T) {
 	require.NoError(t, err)
 	tw.Close()
 
-	// Capture warnings to stderr for debugging.
+	// 将警告信息捕获到 stderr 以便调试。
 	output := (*testWriter)(t)
 	opts := NewCopyOptions(genericiooptions.IOStreams{In: &bytes.Buffer{}, Out: output, ErrOut: output})
 

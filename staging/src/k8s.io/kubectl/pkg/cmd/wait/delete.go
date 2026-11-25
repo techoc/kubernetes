@@ -37,7 +37,7 @@ import (
 	"k8s.io/kubectl/pkg/util/interrupt"
 )
 
-// IsDeleted is a condition func for waiting for something to be deleted
+// IsDeleted 是用于等待某对象被删除的条件函数
 func IsDeleted(ctx context.Context, info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	if len(info.Name) == 0 {
 		return info.Object, false, fmt.Errorf("resource name must be provided")
@@ -48,7 +48,7 @@ func IsDeleted(ctx context.Context, info *resource.Info, o *WaitOptions) (runtim
 		return info.Object, true, nil
 	}
 	if initObjGetErr != nil {
-		// TODO this could do something slightly fancier if we wish
+		// TODO 如有需要，这里可以做得更精巧一些
 		return info.Object, false, initObjGetErr
 	}
 	resourceLocation := ResourceLocation{
@@ -66,14 +66,14 @@ func IsDeleted(ctx context.Context, info *resource.Info, o *WaitOptions) (runtim
 	timeout := time.Until(endTime)
 	errWaitTimeoutWithName := extendErrWaitTimeout(wait.ErrorInterrupted(nil), info) // nolint:staticcheck // SA1019
 	if o.Timeout == 0 {
-		// If timeout is zero check if the object exists once only
+		// 如果 timeout 为零，则只检查一次对象是否存在
 		if gottenObj == nil {
 			return nil, true, nil
 		}
 		return gottenObj, false, fmt.Errorf("condition not met for %s", info.ObjectName())
 	}
 	if timeout < 0 {
-		// we're out of time
+		// 时间已用尽
 		return info.Object, false, errWaitTimeoutWithName
 	}
 
@@ -89,14 +89,14 @@ func IsDeleted(ctx context.Context, info *resource.Info, o *WaitOptions) (runtim
 		},
 	}, o.DynamicClient)
 
-	// this function is used to refresh the cache to prevent timeout waits on resources that have disappeared
+	// 该函数用于刷新缓存，避免对已消失的资源等待至超时
 	preconditionFunc := func(store cache.Store) (bool, error) {
 		obj, exists, err := store.Get(&metav1.ObjectMeta{Namespace: info.Namespace, Name: info.Name})
 		if err != nil {
 			return true, err
 		}
 		if !exists {
-			// since we're looking for it to disappear we just return here if it no longer exists
+			// 由于我们正等待其消失，如果它已不存在就直接返回
 			return true, nil
 		}
 		acc, err := meta.Accessor(obj)
@@ -131,17 +131,17 @@ func IsDeleted(ctx context.Context, info *resource.Info, o *WaitOptions) (runtim
 	return gottenObj, true, nil
 }
 
-// Wait has helper methods for handling watches, including error handling.
+// Wait 提供处理 watch 的辅助方法，包括错误处理。
 type Wait struct {
 	errOut io.Writer
 }
 
-// IsDeleted returns true if the object is deleted. It prints any errors it encounters.
+// 如果对象已被删除，IsDeleted 返回 true。它会打印遇到的所有错误。
 func (w Wait) IsDeleted(event watch.Event) (bool, error) {
 	switch event.Type {
 	case watch.Error:
-		// keep waiting in the event we see an error - we expect the watch to be closed by
-		// the server if the error is unrecoverable.
+		// 遇到错误时继续等待——如果错误不可恢复，
+		// 服务端会关闭 watch。
 		err := apierrors.FromObject(event.Object)
 		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the object to be deleted: %v", err)
 		return false, nil

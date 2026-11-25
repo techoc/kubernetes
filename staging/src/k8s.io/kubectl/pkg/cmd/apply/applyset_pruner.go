@@ -43,7 +43,7 @@ type ApplySetDeleteOptions struct {
 	IOStreams genericiooptions.IOStreams
 }
 
-// PruneObject is an apiserver object that should be deleted as part of prune.
+// PruneObject 是应当作为 prune 的一部分被删除的 apiserver 对象。
 type PruneObject struct {
 	Name      string
 	Namespace string
@@ -51,7 +51,7 @@ type PruneObject struct {
 	Object    runtime.Object
 }
 
-// String returns a human-readable name of the object, for use in debug messages.
+// String 返回对象便于人类阅读的名称，用于调试信息。
 func (p *PruneObject) String() string {
 	s := p.Mapping.GroupVersionKind.GroupKind().String()
 
@@ -63,8 +63,8 @@ func (p *PruneObject) String() string {
 	return s
 }
 
-// FindAllObjectsToPrune returns the list of objects that will be pruned.
-// Calling this instead of Prune can be useful for dry-run / diff behaviour.
+// FindAllObjectsToPrune 返回将被清理的对象列表。
+// 在 dry-run / diff 场景下，调用此方法代替 Prune 会很有用。
 func (a *ApplySet) FindAllObjectsToPrune(ctx context.Context, dynamicClient dynamic.Interface, visitedUids sets.Set[types.UID]) ([]PruneObject, error) {
 	type task struct {
 		namespace   string
@@ -75,8 +75,8 @@ func (a *ApplySet) FindAllObjectsToPrune(ctx context.Context, dynamicClient dyna
 	}
 	var tasks []*task
 
-	// We run discovery in parallel, in as many goroutines as priority and fairness will allow
-	// (We don't expect many requests in real-world scenarios - maybe tens, unlikely to be hundreds)
+	// 我们并行执行发现，goroutine 数量取优先级与公平性所允许的上限
+	// （实际场景中请求不会太多，可能有几十个，不太可能有数百个）
 	for gvk, resource := range a.AllPrunableResources() {
 		scope := resource.restMapping.Scope
 
@@ -84,7 +84,7 @@ func (a *ApplySet) FindAllObjectsToPrune(ctx context.Context, dynamicClient dyna
 		case meta.RESTScopeNameNamespace:
 			for _, namespace := range a.AllPrunableNamespaces() {
 				if namespace == "" {
-					// Just double-check because otherwise we get cryptic error messages
+					// 再检查一次，否则会得到含义不明的错误信息
 					return nil, fmt.Errorf("unexpectedly encountered empty namespace during prune of namespace-scoped resource %v", gvk)
 				}
 				tasks = append(tasks, &task{
@@ -119,7 +119,7 @@ func (a *ApplySet) FindAllObjectsToPrune(ctx context.Context, dynamicClient dyna
 			}
 		}()
 	}
-	// Wait for all the goroutines to finish
+	// 等待所有 goroutine 完成
 	wg.Wait()
 
 	var allObjects []PruneObject

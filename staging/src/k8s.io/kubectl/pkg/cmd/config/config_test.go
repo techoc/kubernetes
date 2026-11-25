@@ -117,11 +117,11 @@ func TestSetNonExistentContext(t *testing.T) {
 
 	func() {
 		defer func() {
-			// Restore cmdutil behavior.
+			// 恢复 cmdutil 的行为。
 			cmdutil.DefaultBehaviorOnFatal()
 		}()
 
-		// Check exit code.
+		// 检查退出码。
 		cmdutil.BehaviorOnFatal(func(e string, code int) {
 			if code != 1 {
 				t.Errorf("The exit code is %d, expected 1", code)
@@ -136,7 +136,7 @@ func TestSetNonExistentContext(t *testing.T) {
 
 func TestSetIntoExistingStruct(t *testing.T) {
 	expectedConfig := newRedFederalCowHammerConfig()
-	expectedConfig.AuthInfos["red-user"].Password = "new-path-value" // Fake value for testing.
+	expectedConfig.AuthInfos["red-user"].Password = "new-path-value" // 用于测试的假值。
 	test := configCommandTest{
 		args:           []string{"set", "users.red-user.password", "new-path-value"},
 		startingConfig: newRedFederalCowHammerConfig(),
@@ -393,11 +393,11 @@ func TestEmbedNoKeyOrCertDisallowed(t *testing.T) {
 
 	func() {
 		defer func() {
-			// Restore cmdutil behavior.
+			// 恢复 cmdutil 的行为。
 			cmdutil.DefaultBehaviorOnFatal()
 		}()
 
-		// Check exit code.
+		// 检查退出码。
 		cmdutil.BehaviorOnFatal(func(e string, code int) {
 			if code != 1 {
 				t.Errorf("The exit code is %d, expected 1", code)
@@ -452,11 +452,11 @@ func TestTokenAndBasicDisallowed(t *testing.T) {
 
 	func() {
 		defer func() {
-			// Restore cmdutil behavior.
+			// 恢复 cmdutil 的行为。
 			cmdutil.DefaultBehaviorOnFatal()
 		}()
 
-		// Check exit code.
+		// 检查退出码。
 		cmdutil.BehaviorOnFatal(func(e string, code int) {
 			if code != 1 {
 				t.Errorf("The exit code is %d, expected 1", code)
@@ -476,7 +476,7 @@ func TestBasicClearsToken(t *testing.T) {
 
 	authInfoWithBasic := clientcmdapi.NewAuthInfo()
 	authInfoWithBasic.Username = "myuser"
-	authInfoWithBasic.Password = "mypass" // Fake value for testing.
+	authInfoWithBasic.Password = "mypass" // 用于测试的假值。
 
 	startingConfig := newRedFederalCowHammerConfig()
 	startingConfig.AuthInfos["another-user"] = authInfoWithToken
@@ -496,7 +496,7 @@ func TestBasicClearsToken(t *testing.T) {
 func TestTokenClearsBasic(t *testing.T) {
 	authInfoWithBasic := clientcmdapi.NewAuthInfo()
 	authInfoWithBasic.Username = "myuser"
-	authInfoWithBasic.Password = "mypass" // Fake value for testing.
+	authInfoWithBasic.Password = "mypass" // 用于测试的假值。
 
 	authInfoWithToken := clientcmdapi.NewAuthInfo()
 	authInfoWithToken.Token = "token"
@@ -581,11 +581,11 @@ func TestSetBytesBad(t *testing.T) {
 
 	func() {
 		defer func() {
-			// Restore cmdutil behavior.
+			// 恢复 cmdutil 的行为。
 			cmdutil.DefaultBehaviorOnFatal()
 		}()
 
-		// Check exit code.
+		// 检查退出码。
 		cmdutil.BehaviorOnFatal(func(e string, code int) {
 			if code != 1 {
 				t.Errorf("The exit code is %d, expected 1", code)
@@ -759,11 +759,11 @@ func TestEmbedNoCADisallowed(t *testing.T) {
 
 	func() {
 		defer func() {
-			// Restore cmdutil behavior.
+			// 恢复 cmdutil 的行为。
 			cmdutil.DefaultBehaviorOnFatal()
 		}()
 
-		// Check exit code.
+		// 检查退出码。
 		cmdutil.BehaviorOnFatal(func(e string, code int) {
 			if code != 1 {
 				t.Errorf("The exit code is %d, expected 1", code)
@@ -786,11 +786,11 @@ func TestCAAndInsecureDisallowed(t *testing.T) {
 
 	func() {
 		defer func() {
-			// Restore cmdutil behavior.
+			// 恢复 cmdutil 的行为。
 			cmdutil.DefaultBehaviorOnFatal()
 		}()
 
-		// Check exit code.
+		// 检查退出码。
 		cmdutil.BehaviorOnFatal(func(e string, code int) {
 			if code != 1 {
 				t.Errorf("The exit code is %d, expected 1", code)
@@ -953,7 +953,7 @@ func testConfigCommand(args []string, startingConfig clientcmdapi.Config, t *tes
 
 	streams, _, buf, _ := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdConfig(tf, clientcmd.NewDefaultPathOptions(), streams)
-	// "context" is a global flag, inherited from base kubectl command in the real world
+	// "context" 是全局标志，实际中从基础 kubectl 命令继承
 	cmd.PersistentFlags().String("context", "", "The name of the kubeconfig context to use")
 	cmd.SetArgs(argsToUse)
 	cmd.Execute()

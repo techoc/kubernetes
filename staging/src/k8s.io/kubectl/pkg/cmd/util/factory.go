@@ -28,45 +28,45 @@ import (
 	"k8s.io/kubectl/pkg/validation"
 )
 
-// Factory provides abstractions that allow the Kubectl command to be extended across multiple types
-// of resources and different API sets.
-// The rings are here for a reason. In order for composers to be able to provide alternative factory implementations
-// they need to provide low level pieces of *certain* functions so that when the factory calls back into itself
-// it uses the custom version of the function. Rather than try to enumerate everything that someone would want to override
-// we split the factory into rings, where each ring can depend on methods in an earlier ring, but cannot depend
-// upon peer methods in its own ring.
-// TODO: make the functions interfaces
-// TODO: pass the various interfaces on the factory directly into the command constructors (so the
-// commands are decoupled from the factory).
+// Factory 提供的抽象使 Kubectl 命令能够扩展到多种
+// 资源类型和不同的 API 集合。
+// 分层（ring）的存在有其原因：为了让组合者能够提供自定义的 factory 实现，
+// 他们需要提供*某些*函数的底层组件，这样 factory 回调自身时
+// 就会使用这些函数的定制版本。与其试图枚举所有可能被覆盖的内容，
+// 不如将 factory 拆分为多个层：每层可以依赖更早层中的方法，
+// 但不能依赖同一层中的同级方法。
+// TODO: 将这些函数改为接口
+// TODO: 将 factory 上的各个接口直接传入命令构造函数（从而
+// 让命令与 factory 解耦）。
 type Factory interface {
 	genericclioptions.RESTClientGetter
 
-	// DynamicClient returns a dynamic client ready for use
+	// DynamicClient 返回可直接使用的 dynamic client
 	DynamicClient() (dynamic.Interface, error)
 
-	// KubernetesClientSet gives you back an external clientset
+	// KubernetesClientSet 返回一个外部的 clientset
 	KubernetesClientSet() (*kubernetes.Clientset, error)
 
-	// Returns a RESTClient for accessing Kubernetes resources or an error.
+	// 返回用于访问 Kubernetes 资源的 RESTClient，或返回错误。
 	RESTClient() (*restclient.RESTClient, error)
 
-	// NewBuilder returns an object that assists in loading objects from both disk and the server
-	// and which implements the common patterns for CLI interactions with generic resources.
+	// NewBuilder 返回一个对象，可帮助从磁盘和服务端加载对象，
+	// 并实现了 CLI 与通用资源交互的常见模式。
 	NewBuilder() *resource.Builder
 
-	// Returns a RESTClient for working with the specified RESTMapping or an error. This is intended
-	// for working with arbitrary resources and is not guaranteed to point to a Kubernetes APIServer.
+	// 返回用于处理指定 RESTMapping 的 RESTClient，或返回错误。它面向
+	// 任意资源，并不保证指向 Kubernetes APIServer。
 	ClientForMapping(mapping *meta.RESTMapping) (resource.RESTClient, error)
-	// Returns a RESTClient for working with Unstructured objects.
+	// 返回用于处理 Unstructured 对象的 RESTClient。
 	UnstructuredClientForMapping(mapping *meta.RESTMapping) (resource.RESTClient, error)
 
-	// Returns a schema that can validate objects stored on disk.
+	// 返回一个可用于校验磁盘上对象的 schema。
 	Validator(validationDirective string) (validation.Schema, error)
 
-	// Used for retrieving openapi v2 resources.
+	// 用于获取 openapi v2 资源。
 	openapi.OpenAPIResourcesGetter
 
-	// OpenAPIV3Schema returns a client for fetching parsed schemas for
-	// any group version
+	// OpenAPIV3Schema 返回一个 client，用于获取任意 group version
+	// 的解析后 schema
 	OpenAPIV3Client() (openapiclient.Client, error)
 }

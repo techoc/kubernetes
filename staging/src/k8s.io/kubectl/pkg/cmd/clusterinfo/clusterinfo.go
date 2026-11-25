@@ -92,7 +92,7 @@ func (o *ClusterInfoOptions) Complete(restClientGetter genericclioptions.RESTCli
 }
 
 func (o *ClusterInfoOptions) Run() error {
-	// TODO use generalized labels once they are implemented (#341)
+	// TODO 待通用标签实现后改用通用标签（#341）
 	b := o.Builder.
 		WithScheme(scheme.Scheme, scheme.Scheme.PrioritizedVersionsAllGroups()...).
 		NamespaceParam(o.Namespace).DefaultNamespace().
@@ -123,13 +123,13 @@ func (o *ClusterInfoOptions) Run() error {
 				if len(service.Spec.Ports) > 0 {
 					port := service.Spec.Ports[0]
 
-					// guess if the scheme is https
+					// 推测 scheme 是否为 https
 					scheme := ""
 					if port.Name == "https" || port.Port == 443 {
 						scheme = "https"
 					}
 
-					// format is <scheme>:<service-name>:<service-port-name>
+					// 格式为 <scheme>:<service-name>:<service-port-name>
 					name = utilnet.JoinSchemeNamePort(scheme, service.ObjectMeta.Name, port.Name)
 				}
 
@@ -151,7 +151,7 @@ func (o *ClusterInfoOptions) Run() error {
 	o.Out.Write([]byte("\nTo further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.\n"))
 	return err
 
-	// TODO consider printing more information about cluster
+	// TODO 考虑输出更多关于集群的信息
 }
 
 func printService(out io.Writer, name, link string) {

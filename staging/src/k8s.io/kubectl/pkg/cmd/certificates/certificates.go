@@ -40,7 +40,7 @@ import (
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
-// NewCmdCertificate returns `certificate` Cobra command
+// NewCmdCertificate 返回 `certificate` 的 Cobra 命令
 func NewCmdCertificate(restClientGetter genericclioptions.RESTClientGetter, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                   "certificate SUBCOMMAND",
@@ -58,7 +58,7 @@ func NewCmdCertificate(restClientGetter genericclioptions.RESTClientGetter, ioSt
 	return cmd
 }
 
-// CertificateOptions declares the arguments accepted by the certificate command
+// CertificateOptions 声明 certificate 命令接受的参数
 type CertificateOptions struct {
 	resource.FilenameOptions
 
@@ -74,7 +74,7 @@ type CertificateOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCertificateOptions creates CertificateOptions struct for `certificate` command
+// NewCertificateOptions 为 `certificate` 命令创建 CertificateOptions 结构体
 func NewCertificateOptions(ioStreams genericiooptions.IOStreams, operation string) *CertificateOptions {
 	return &CertificateOptions{
 		PrintFlags: genericclioptions.NewPrintFlags(operation).WithTypeSetter(scheme.Scheme),
@@ -82,7 +82,7 @@ func NewCertificateOptions(ioStreams genericiooptions.IOStreams, operation strin
 	}
 }
 
-// Complete loads data from the command environment
+// Complete 从命令环境中加载数据
 func (o *CertificateOptions) Complete(restClientGetter genericclioptions.RESTClientGetter, cmd *cobra.Command, args []string) error {
 	o.csrNames = args
 	o.outputStyle = cmdutil.GetFlagString(cmd, "output")
@@ -111,7 +111,7 @@ func (o *CertificateOptions) Complete(restClientGetter genericclioptions.RESTCli
 	return nil
 }
 
-// Validate checks if the provided `certificate` arguments are valid
+// Validate 检查提供的 `certificate` 参数是否有效
 func (o *CertificateOptions) Validate() error {
 	if len(o.csrNames) < 1 && cmdutil.IsFilenameSliceEmpty(o.Filenames, o.Kustomize) {
 		return fmt.Errorf("one or more CSRs must be specified as <name> or -f <filename>")
@@ -119,7 +119,7 @@ func (o *CertificateOptions) Validate() error {
 	return nil
 }
 
-// NewCmdCertificateApprove returns the `certificate approve` Cobra command
+// NewCmdCertificateApprove 返回 `certificate approve` 的 Cobra 命令
 func NewCmdCertificateApprove(restClientGetter genericclioptions.RESTClientGetter, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewCertificateOptions(ioStreams, "approved")
 
@@ -158,7 +158,7 @@ func NewCmdCertificateApprove(restClientGetter genericclioptions.RESTClientGette
 	return cmd
 }
 
-// RunCertificateApprove approves a certificate signing request
+// RunCertificateApprove 批准证书签名请求
 func (o *CertificateOptions) RunCertificateApprove(force bool) error {
 	return o.modifyCertificateCondition(
 		o.builder,
@@ -167,7 +167,7 @@ func (o *CertificateOptions) RunCertificateApprove(force bool) error {
 	)
 }
 
-// NewCmdCertificateDeny returns the `certificate deny` Cobra command
+// NewCmdCertificateDeny 返回 `certificate deny` 的 Cobra 命令
 func NewCmdCertificateDeny(restClientGetter genericclioptions.RESTClientGetter, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewCertificateOptions(ioStreams, "denied")
 
@@ -201,7 +201,7 @@ func NewCmdCertificateDeny(restClientGetter genericclioptions.RESTClientGetter, 
 	return cmd
 }
 
-// RunCertificateDeny denies a certificate signing request
+// RunCertificateDeny 拒绝证书签名请求
 func (o *CertificateOptions) RunCertificateDeny(force bool) error {
 	return o.modifyCertificateCondition(
 		o.builder,
@@ -234,7 +234,7 @@ func (o *CertificateOptions) modifyCertificateCondition(builder *resource.Builde
 				return fmt.Errorf("can only handle %s objects, got %s", want.String(), got.String())
 			}
 			var csr runtime.Object
-			// get a typed object
+			// 获取带类型的对象
 			csr, err = o.certificatesV1Client.CertificateSigningRequests().Get(context.TODO(), obj.GetName(), metav1.GetOptions{})
 			if apierrors.IsNotFound(err) {
 				return fmt.Errorf("could not find v1 version of %s: %v", obj.GetName(), err)

@@ -116,7 +116,7 @@ func (p *pruner) prune(namespace string, mapping *meta.RESTMapping) error {
 		}
 		annots := metadata.GetAnnotations()
 		if _, ok := annots[corev1.LastAppliedConfigAnnotation]; !ok {
-			// don't prune resources not created with apply
+			// 不清理并非通过 apply 创建的资源
 			continue
 		}
 		uid := metadata.GetUID()

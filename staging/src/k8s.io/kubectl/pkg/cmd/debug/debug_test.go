@@ -34,7 +34,7 @@ import (
 )
 
 func TestGenerateDebugContainer(t *testing.T) {
-	// Slightly less randomness for testing.
+	// 测试时降低一点随机性。
 	defer func(old func(int) string) { nameSuffixFunc = old }(nameSuffixFunc)
 	var suffixCounter int
 	nameSuffixFunc = func(int) string {
@@ -2573,7 +2573,7 @@ func TestCompleteAndValidate(t *testing.T) {
 	ioStreams, _, _, _ := genericiooptions.NewTestIOStreams()
 	cmpFilter := cmp.FilterPath(func(p cmp.Path) bool {
 		switch p.String() {
-		// IOStreams contains unexported fields
+		// IOStreams 包含未导出的字段
 		case "IOStreams", "Applier":
 			return true
 		}

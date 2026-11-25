@@ -53,7 +53,7 @@ var (
 		kubectl create job test-job --from=cronjob/a-cronjob`))
 )
 
-// CreateJobOptions is the command line options for 'create job'
+// CreateJobOptions 是 'create job' 的命令行选项
 type CreateJobOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 
@@ -76,7 +76,7 @@ type CreateJobOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCreateJobOptions initializes and returns new CreateJobOptions instance
+// NewCreateJobOptions 初始化并返回一个新的 CreateJobOptions 实例
 func NewCreateJobOptions(ioStreams genericiooptions.IOStreams) *CreateJobOptions {
 	return &CreateJobOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -84,7 +84,7 @@ func NewCreateJobOptions(ioStreams genericiooptions.IOStreams) *CreateJobOptions
 	}
 }
 
-// NewCmdCreateJob is a command to ease creating Jobs from CronJobs.
+// NewCmdCreateJob 是一个便于从 CronJob 创建 Job 的命令。
 func NewCmdCreateJob(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewCreateJobOptions(ioStreams)
 	cmd := &cobra.Command{
@@ -111,7 +111,7 @@ func NewCmdCreateJob(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *c
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *CreateJobOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	name, err := NameFromCommandArgs(cmd, args)
 	if err != nil {
@@ -160,7 +160,7 @@ func (o *CreateJobOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args 
 	return nil
 }
 
-// Validate makes sure provided values and valid Job options
+// Validate 确保所提供的值和 Job 选项有效
 func (o *CreateJobOptions) Validate() error {
 	if (len(o.Image) == 0 && len(o.From) == 0) || (len(o.Image) != 0 && len(o.From) != 0) {
 		return fmt.Errorf("either --image or --from must be specified")
@@ -171,7 +171,7 @@ func (o *CreateJobOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution of 'create job' sub command
+// Run 执行 'create job' 子命令
 func (o *CreateJobOptions) Run() error {
 	var job *batchv1.Job
 	if len(o.Image) > 0 {
@@ -225,7 +225,7 @@ func (o *CreateJobOptions) Run() error {
 
 func (o *CreateJobOptions) createJob() *batchv1.Job {
 	job := &batchv1.Job{
-		// this is ok because we know exactly how we want to be serialized
+		// 这样没问题，因为我们确切知道自己希望如何序列化
 		TypeMeta: metav1.TypeMeta{APIVersion: batchv1.SchemeGroupVersion.String(), Kind: "Job"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: o.Name,
@@ -259,7 +259,7 @@ func (o *CreateJobOptions) createJobFromCronJob(cronJob *batchv1.CronJob) *batch
 	}
 
 	job := &batchv1.Job{
-		// this is ok because we know exactly how we want to be serialized
+		// 这样没问题，因为我们确切知道自己希望如何序列化
 		TypeMeta: metav1.TypeMeta{APIVersion: batchv1.SchemeGroupVersion.String(), Kind: "Job"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        o.Name,
@@ -267,9 +267,9 @@ func (o *CreateJobOptions) createJobFromCronJob(cronJob *batchv1.CronJob) *batch
 			Labels:      cronJob.Spec.JobTemplate.Labels,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					// we are not using metav1.NewControllerRef because it
-					// sets BlockOwnerDeletion to true which additionally mandates
-					// cronjobs/finalizer role and not backwards-compatible.
+					// 这里没有使用 metav1.NewControllerRef，是因为它
+					// 会把 BlockOwnerDeletion 设为 true，从而额外要求
+					// cronjobs/finalizer 角色，并且不向后兼容。
 					APIVersion: batchv1.SchemeGroupVersion.String(),
 					Kind:       "CronJob",
 					Name:       cronJob.GetName(),

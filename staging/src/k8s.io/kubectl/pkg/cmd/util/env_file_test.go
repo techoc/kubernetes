@@ -21,8 +21,7 @@ import (
 	"testing"
 )
 
-// Test the cases of proccessEnvFileLine that can be run without touching the
-// environment.
+// 测试 proccessEnvFileLine 中无需触碰环境即可运行的用例。
 func Test_processEnvFileLine(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -70,16 +69,15 @@ func Test_processEnvFileLine(t *testing.T) {
 	}
 }
 
-// proccessEnvFileLine needs to fetch the value from the environment if no
-// equals sign is provided.
-// For example:
+// 如果没有提供等号，proccessEnvFileLine 需要从环境中获取值。
+// 例如：
 //
 //	my_key1=alpha
 //	my_key2=beta
 //	my_key3
 //
-// In this file, my_key3 must be fetched from the environment.
-// Test this capability.
+// 在此文件中，my_key3 必须从环境中获取。
+// 测试此能力。
 func Test_processEnvFileLine_readEnvironment(t *testing.T) {
 	const realKey = "k8s_test_env_file_key"
 	const realValue = `my_value`

@@ -34,8 +34,8 @@ var columnsFormats = map[string]bool{
 	"custom-columns":      true,
 }
 
-// CustomColumnsPrintFlags provides default flags necessary for printing
-// custom resource columns from an inline-template or file.
+// CustomColumnsPrintFlags 提供打印所需的默认标志，
+// 用于从内联模板或文件打印自定义资源列。
 type CustomColumnsPrintFlags struct {
 	NoHeaders        bool
 	TemplateArgument string
@@ -50,10 +50,10 @@ func (f *CustomColumnsPrintFlags) AllowedFormats() []string {
 	return formats
 }
 
-// ToPrinter receives an templateFormat and returns a printer capable of
-// handling custom-column printing.
-// Returns false if the specified templateFormat does not match a supported format.
-// Supported format types can be found in pkg/printers/printers.go
+// ToPrinter 接收一个 templateFormat，并返回能够
+// 处理自定义列打印的打印器。
+// 如果指定的 templateFormat 与支持的格式不匹配，则返回 false。
+// 支持的格式类型见 pkg/printers/printers.go
 func (f *CustomColumnsPrintFlags) ToPrinter(templateFormat string) (printers.ResourcePrinter, error) {
 	if len(templateFormat) == 0 {
 		return nil, genericclioptions.NoCompatiblePrinterError{}
@@ -82,7 +82,7 @@ func (f *CustomColumnsPrintFlags) ToPrinter(templateFormat string) (printers.Res
 		return nil, fmt.Errorf("custom-columns format specified but no custom columns given")
 	}
 
-	// UniversalDecoder call must specify parameter versions; otherwise it will decode to internal versions.
+	// 调用 UniversalDecoder 时必须指定参数版本，否则会解码为内部版本。
 	decoder := scheme.Codecs.UniversalDecoder(scheme.Scheme.PrioritizedVersionsAllGroups()...)
 
 	var printer *CustomColumnsPrinter
@@ -99,13 +99,13 @@ func (f *CustomColumnsPrintFlags) ToPrinter(templateFormat string) (printers.Res
 	return NewCustomColumnsPrinterFromSpec(templateValue, decoder, f.NoHeaders)
 }
 
-// AddFlags receives a *cobra.Command reference and binds
-// flags related to custom-columns printing
+// AddFlags 接收一个 *cobra.Command 引用，并绑定
+// 与自定义列打印相关的标志
 func (f *CustomColumnsPrintFlags) AddFlags(c *cobra.Command) {}
 
-// NewCustomColumnsPrintFlags returns flags associated with
-// custom-column printing, with default values set.
-// NoHeaders and TemplateArgument should be set by callers.
+// NewCustomColumnsPrintFlags 返回与自定义列打印相关的标志，
+// 并已设置默认值。
+// NoHeaders 和 TemplateArgument 应由调用方设置。
 func NewCustomColumnsPrintFlags() *CustomColumnsPrintFlags {
 	return &CustomColumnsPrintFlags{
 		NoHeaders:        false,

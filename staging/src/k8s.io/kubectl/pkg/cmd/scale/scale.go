@@ -103,7 +103,7 @@ func NewScaleOptions(ioStreams genericiooptions.IOStreams) *ScaleOptions {
 	}
 }
 
-// NewCmdScale returns a cobra command with the appropriate configuration and flags to run scale
+// NewCmdScale 返回一个带有适当配置和标志的 cobra 命令，用于运行 scale
 func NewCmdScale(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewScaleOptions(ioStreams)
 
@@ -190,7 +190,7 @@ func (o *ScaleOptions) Validate() error {
 	return nil
 }
 
-// RunScale executes the scaling
+// RunScale 执行扩缩容操作
 func (o *ScaleOptions) RunScale() error {
 	r := o.builder.
 		Unstructured().
@@ -206,18 +206,18 @@ func (o *ScaleOptions) RunScale() error {
 		return err
 	}
 
-	// We don't immediately return infoErr if it is not nil.
-	// Because we want to proceed for other valid resources and
-	// at the end of the function, we'll return this
-	// to show invalid resources to the user.
+	// 即使 infoErr 非 nil，我们也不会立即返回它。
+	// 因为我们希望继续处理其他有效资源，
+	// 并在函数末尾返回该错误，
+	// 以便向用户展示无效的资源。
 	infos, infoErr := r.Infos()
 
 	if len(o.ResourceVersion) != 0 && len(infos) > 1 {
 		return fmt.Errorf("cannot use --resource-version with multiple resources")
 	}
 
-	// only set a precondition if the user has requested one.  A nil precondition means we can do a blind update, so
-	// we avoid a Scale GET that may or may not succeed
+	// 仅在用户要求时才设置 precondition。nil precondition 意味着可以盲目更新，因此
+	// 我们避免执行可能成功也可能失败的 Scale GET
 	var precondition *scale.ScalePrecondition
 	if o.CurrentReplicas != -1 || len(o.ResourceVersion) > 0 {
 		precondition = &scale.ScalePrecondition{Size: o.CurrentReplicas, ResourceVersion: o.ResourceVersion}
@@ -258,7 +258,7 @@ func (o *ScaleOptions) RunScale() error {
 			return err
 		}
 
-		// if the recorder makes a change, compute and create another patch
+		// 如果 recorder 做出了更改，则计算并创建另一个补丁
 		if mergePatch, err := o.Recorder.MakeRecordMergePatch(info.Object); err != nil {
 			klog.V(4).Infof("error recording current command: %v", err)
 		} else if len(mergePatch) > 0 {
@@ -290,18 +290,18 @@ func scaler(f cmdutil.Factory) (scale.Scaler, error) {
 	return scale.NewScaler(scalesGetter), nil
 }
 
-// updateReplicas updates spec.replicas for built-in scalable types.
-// replicas needs to be in int64, as SetNestedField only supports this type (and float64).
+// updateReplicas 为内置可扩缩容类型更新 spec.replicas。
+// replicas 必须为 int64，因为 SetNestedField 只支持该类型（以及 float64）。
 func updateReplicas(info *resource.Info, replicas int64) error {
 	unstructuredObj, ok := info.Object.(*unstructured.Unstructured)
 	if !ok {
 		return nil
 	}
 
-	// Only update for built-in types where spec.replicas is guaranteed:
-	// - apps group: Deployment, ReplicaSet, StatefulSet
-	// - core group: ReplicationController
-	// Skip other groups (e.g., CRDs) as they may define replicas at a different path.
+	// 只对确保存在 spec.replicas 的内置类型进行更新：
+	// - apps 组：Deployment、ReplicaSet、StatefulSet
+	// - core 组：ReplicationController
+	// 跳过其他组（例如 CRD），因为它们可能在其他路径定义 replicas。
 	gvk := unstructuredObj.GroupVersionKind()
 	if gvk.Group != "apps" && gvk.Group != "" {
 		return nil

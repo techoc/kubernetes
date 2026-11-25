@@ -38,7 +38,7 @@ func addProfilingFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&profileOutput, "profile-output", "profile.pprof", "Name of the file to write the profile to")
 }
 
-// initProfiling inits profiling and returns a function to be called on exit to flush and close.
+// initProfiling 初始化性能分析，并返回一个在退出时调用的函数，用于刷新和关闭。
 func initProfiling() (func() error, error) {
 	var (
 		f   *os.File
@@ -58,8 +58,8 @@ func initProfiling() (func() error, error) {
 			f.Close() //nolint:errcheck
 			return nil, err
 		}
-	// Block and mutex profiles need a call to Set{Block,Mutex}ProfileRate to
-	// output anything. We choose to sample all events.
+	// Block 和 mutex profile 需要调用 Set{Block,Mutex}ProfileRate 才能
+	// 输出任何内容。我们选择对所有事件采样。
 	case "block":
 		runtime.SetBlockProfileRate(1)
 	case "mutex":
@@ -70,21 +70,21 @@ func initProfiling() (func() error, error) {
 			return nil, err
 		}
 
-		// Enable the CPU profiler. Samples will be captured in the execution trace.
-		// This is the same rate value as used in pprof.StartCPUProfile.
+		// 启用 CPU profiler。采样将记录在执行跟踪中。
+		// 这与 pprof.StartCPUProfile 使用的采样率相同。
 		runtime.SetCPUProfileRate(100)
 		if err := trace.Start(f); err != nil {
 			f.Close() //nolint:errcheck
 			return nil, err
 		}
 	default:
-		// Check the profile name is valid.
+		// 检查 profile 名称是否有效。
 		if profile := pprof.Lookup(profileName); profile == nil {
 			return nil, fmt.Errorf("unknown profile '%s'", profileName)
 		}
 	}
 
-	// If the command is interrupted before the end (ctrl-c), flush the profiling files
+	// 如果命令在执行结束前被中断（ctrl-c），仍会刷新性能分析文件
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {

@@ -74,7 +74,7 @@ var (
 		kubectl kuberc set --section credentialplugin --policy Allowlist --allowlist-entry command=cloud-credential-helper`))
 )
 
-// SetOptions contains the options for setting kuberc configuration
+// SetOptions 包含设置 kuberc 配置时使用的选项
 type SetOptions struct {
 	KubeRCFile       string
 	Section          string // "defaults", "aliases", or "credentialplugin"
@@ -102,7 +102,7 @@ func NewSetOptions(ioStreams genericiooptions.IOStreams) *SetOptions {
 	}
 }
 
-// NewCmdKubeRCSet returns a Command instance for 'kuberc set' sub command
+// NewCmdKubeRCSet 返回 'kuberc set' 子命令的 Command 实例
 func NewCmdKubeRCSet(streams genericiooptions.IOStreams) *cobra.Command {
 	o := NewSetOptions(streams)
 
@@ -134,7 +134,7 @@ func NewCmdKubeRCSet(streams genericiooptions.IOStreams) *cobra.Command {
 	return cmd
 }
 
-// Complete sets default values for SetOptions
+// Complete 为 SetOptions 设置默认值
 func (o *SetOptions) Complete(cmd *cobra.Command) error {
 	if cmd.Flags().Changed("kuberc") {
 		o.KubeRCFile = cmd.Flag("kuberc").Value.String()
@@ -149,7 +149,7 @@ func (o *SetOptions) Complete(cmd *cobra.Command) error {
 	return nil
 }
 
-// Validate validates the SetOptions
+// Validate 校验 SetOptions
 func (o *SetOptions) Validate() error {
 	if o.KubeRCFile == "" {
 		return fmt.Errorf("KUBERC is disabled via KUBERC=off environment variable")
@@ -198,7 +198,7 @@ func (o *SetOptions) Validate() error {
 	return nil
 }
 
-// Run executes the set command
+// Run 执行 set 命令
 func (o *SetOptions) Run() error {
 	pref, err := o.loadOrCreatePreference()
 	if err != nil {
@@ -225,7 +225,7 @@ func (o *SetOptions) Run() error {
 	return kuberc.SavePreference(pref, o.KubeRCFile, o.Out)
 }
 
-// loadOrCreatePreference loads existing preference or creates a new one
+// loadOrCreatePreference 加载现有的 preference，或创建一个新的
 func (o *SetOptions) loadOrCreatePreference() (*v1beta1.Preference, error) {
 	pref, err := kuberc.LoadPreference(o.KubeRCFile)
 	if err != nil && !os.IsNotExist(err) {
@@ -244,7 +244,7 @@ func (o *SetOptions) loadOrCreatePreference() (*v1beta1.Preference, error) {
 	return pref, nil
 }
 
-// parseOptions parses the --option flags into CommandOptionDefault structs
+// parseOptions 将 --option flag 解析为 CommandOptionDefault 结构体
 func (o *SetOptions) parseOptions() ([]v1beta1.CommandOptionDefault, error) {
 	var options []v1beta1.CommandOptionDefault
 
@@ -254,7 +254,7 @@ func (o *SetOptions) parseOptions() ([]v1beta1.CommandOptionDefault, error) {
 			return nil, fmt.Errorf("invalid option format %q, expected flag=value", opt)
 		}
 
-		// Remove leading dashes from flag name if present
+		// 如果 flag 名称带有前导短横线，则将其去掉
 		flagName := strings.TrimLeft(parts[0], "-")
 
 		options = append(options, v1beta1.CommandOptionDefault{
@@ -266,7 +266,7 @@ func (o *SetOptions) parseOptions() ([]v1beta1.CommandOptionDefault, error) {
 	return options, nil
 }
 
-// setDefaults updates the defaults section of the preference
+// setDefaults 更新 preference 的 defaults 部分
 func (o *SetOptions) setDefaults(pref *v1beta1.Preference, options []v1beta1.CommandOptionDefault) error {
 	for i, def := range pref.Defaults {
 		if def.Command == o.Command {
@@ -275,8 +275,8 @@ func (o *SetOptions) setDefaults(pref *v1beta1.Preference, options []v1beta1.Com
 			}
 
 			if len(options) == 0 {
-				// Preserve existing options if --option flag was not specified
-				// If specified, completely replace existing options
+				// 如果未指定 --option flag，则保留现有 options
+				// 若已指定，则完全替换现有 options
 				options = def.Options
 			}
 
@@ -293,9 +293,9 @@ func (o *SetOptions) setDefaults(pref *v1beta1.Preference, options []v1beta1.Com
 	return nil
 }
 
-// setAlias updates the aliases section of the preference
+// setAlias 更新 preference 的 aliases 部分
 func (o *SetOptions) setAlias(pref *v1beta1.Preference, options []v1beta1.CommandOptionDefault) error {
-	// Check if this alias already exists
+	// 检查该 alias 是否已存在
 	for i, alias := range pref.Aliases {
 		if alias.Name == o.AliasName {
 			if !o.Overwrite {
@@ -303,22 +303,22 @@ func (o *SetOptions) setAlias(pref *v1beta1.Preference, options []v1beta1.Comman
 			}
 
 			if len(options) == 0 {
-				// Preserve existing options if --option flag was not specified
-				// If specified, completely replace existing options
+				// 如果未指定 --option flag，则保留现有 options
+				// 若已指定，则完全替换现有 options
 				options = alias.Options
 			}
 
 			prependArgs := o.PrependArgs
 			if len(prependArgs) == 0 {
-				// Preserve existing prependArgs if --prependarg flag was not specified
-				// If specified, completely replace existing prependArgs
+				// 如果未指定 --prependarg flag，则保留现有 prependArgs
+				// 若已指定，则完全替换现有 prependArgs
 				prependArgs = alias.PrependArgs
 			}
 
 			appendArgs := o.AppendArgs
 			if len(appendArgs) == 0 {
-				// Preserve existing appendArgs if --appendarg flag was not specified
-				// If specified, completely replace existing appendArgs
+				// 如果未指定 --appendarg flag，则保留现有 appendArgs
+				// 若已指定，则完全替换现有 appendArgs
 				appendArgs = alias.AppendArgs
 			}
 
@@ -344,7 +344,7 @@ func (o *SetOptions) setAlias(pref *v1beta1.Preference, options []v1beta1.Comman
 	return nil
 }
 
-// setCredentialPlugin sets the credential plugin policy and (optionally) the allowlist
+// setCredentialPlugin 设置 credential plugin 策略以及（可选的）allowlist
 func (o *SetOptions) setCredentialPlugin(pref *v1beta1.Preference, options []v1beta1.CommandOptionDefault) error {
 	policy := v1beta1.CredentialPluginPolicy(o.PluginPolicy)
 

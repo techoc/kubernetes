@@ -56,10 +56,10 @@ var (
 		# Create a role named "foo" with SubResource specified
 		kubectl create role foo --verb=get,list,watch --resource=pods,pods/status`))
 
-	// Valid resource verb list for validation.
+	// 用于校验的有效资源动词列表。
 	validResourceVerbs = []string{"*", "get", "delete", "list", "create", "update", "patch", "watch", "proxy", "deletecollection", "use", "bind", "escalate", "impersonate"}
 
-	// Specialized verbs and GroupResources
+	// 专用动词和 GroupResources
 	specialVerbs = map[string][]schema.GroupResource{
 		"use": {
 			{
@@ -112,7 +112,7 @@ var (
 	}
 )
 
-// AddSpecialVerb allows the addition of items to the `specialVerbs` map for non-k8s native resources.
+// AddSpecialVerb 允许向 `specialVerbs` map 添加非 k8s 原生资源的条目。
 func AddSpecialVerb(verb string, gr schema.GroupResource) {
 	resources, ok := specialVerbs[verb]
 	if !ok {
@@ -122,14 +122,14 @@ func AddSpecialVerb(verb string, gr schema.GroupResource) {
 	specialVerbs[verb] = resources
 }
 
-// ResourceOptions holds the related options for '--resource' option
+// ResourceOptions 保存与 '--resource' 选项相关的选项
 type ResourceOptions struct {
 	Group       string
 	Resource    string
 	SubResource string
 }
 
-// CreateRoleOptions holds the options for 'create role' sub command
+// CreateRoleOptions 保存 'create role' 子命令的选项
 type CreateRoleOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 
@@ -152,7 +152,7 @@ type CreateRoleOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCreateRoleOptions returns an initialized CreateRoleOptions instance
+// NewCreateRoleOptions 返回一个初始化好的 CreateRoleOptions 实例
 func NewCreateRoleOptions(ioStreams genericiooptions.IOStreams) *CreateRoleOptions {
 	return &CreateRoleOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -161,7 +161,7 @@ func NewCreateRoleOptions(ioStreams genericiooptions.IOStreams) *CreateRoleOptio
 	}
 }
 
-// NewCmdCreateRole returnns an initialized Command instance for 'create role' sub command
+// NewCmdCreateRole 返回 'create role' 子命令的一个初始化好的 Command 实例
 func NewCmdCreateRole(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewCreateRoleOptions(ioStreams)
 
@@ -190,7 +190,7 @@ func NewCmdCreateRole(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *CreateRoleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	name, err := NameFromCommandArgs(cmd, args)
 	if err != nil {
@@ -198,10 +198,10 @@ func (o *CreateRoleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args
 	}
 	o.Name = name
 
-	// Remove duplicate verbs.
+	// 移除重复的动词。
 	verbs := []string{}
 	for _, v := range o.Verbs {
-		// VerbAll respresents all kinds of verbs.
+		// VerbAll 表示所有类型的动词。
 		if v == "*" {
 			verbs = []string{"*"}
 			break
@@ -212,8 +212,8 @@ func (o *CreateRoleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args
 	}
 	o.Verbs = verbs
 
-	// Support resource.group pattern. If no API Group specified, use "" as core API Group.
-	// e.g. --resource=pods,deployments.extensions
+	// 支持 resource.group 形式。如果未指定 API Group，则使用 "" 作为核心 API Group。
+	// 例如 --resource=pods,deployments.extensions
 	resources := cmdutil.GetFlagStringSlice(cmd, "resource")
 	for _, r := range resources {
 		sections := strings.SplitN(r, "/", 2)
@@ -237,7 +237,7 @@ func (o *CreateRoleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args
 		o.Resources = append(o.Resources, *resource)
 	}
 
-	// Remove duplicate resource names.
+	// 移除重复的资源名称。
 	resourceNames := []string{}
 	for _, n := range o.ResourceNames {
 		if !arrayContains(resourceNames, n) {
@@ -246,7 +246,7 @@ func (o *CreateRoleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args
 	}
 	o.ResourceNames = resourceNames
 
-	// Complete other options for Run.
+	// 补全 Run 所需的其他选项。
 	o.Mapper, err = f.ToRESTMapper()
 	if err != nil {
 		return err
@@ -287,13 +287,13 @@ func (o *CreateRoleOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args
 	return nil
 }
 
-// Validate makes sure there is no discrepency in provided option values
+// Validate 确保所提供选项的值没有不一致之处
 func (o *CreateRoleOptions) Validate() error {
 	if o.Name == "" {
 		return fmt.Errorf("name must be specified")
 	}
 
-	// validate verbs.
+	// 校验动词。
 	if len(o.Verbs) == 0 {
 		return fmt.Errorf("at least one verb must be specified")
 	}
@@ -304,7 +304,7 @@ func (o *CreateRoleOptions) Validate() error {
 		}
 	}
 
-	// validate resources.
+	// 校验资源。
 	if len(o.Resources) == 0 {
 		return fmt.Errorf("at least one resource must be specified")
 	}
@@ -350,10 +350,10 @@ func (o *CreateRoleOptions) validateResource() error {
 	return nil
 }
 
-// RunCreateRole performs the execution of 'create role' sub command
+// RunCreateRole 执行 'create role' 子命令
 func (o *CreateRoleOptions) RunCreateRole() error {
 	role := &rbacv1.Role{
-		// this is ok because we know exactly how we want to be serialized
+		// 这样没问题，因为我们确切知道自己希望如何序列化
 		TypeMeta: metav1.TypeMeta{APIVersion: rbacv1.SchemeGroupVersion.String(), Kind: "Role"},
 	}
 	role.Name = o.Name
@@ -370,7 +370,7 @@ func (o *CreateRoleOptions) RunCreateRole() error {
 		return err
 	}
 
-	// Create role.
+	// 创建 role。
 	if o.DryRunStrategy != cmdutil.DryRunClient {
 		createOptions := metav1.CreateOptions{}
 		if o.FieldManager != "" {
@@ -399,15 +399,15 @@ func arrayContains(s []string, e string) bool {
 }
 
 func generateResourcePolicyRules(mapper meta.RESTMapper, verbs []string, resources []ResourceOptions, resourceNames []string, nonResourceURLs []string) ([]rbacv1.PolicyRule, error) {
-	// groupResourceMapping is a apigroup-resource map. The key of this map is api group, while the value
-	// is a string array of resources under this api group.
-	// E.g.  groupResourceMapping = {"extensions": ["replicasets", "deployments"], "batch":["jobs"]}
+	// groupResourceMapping 是一个 apigroup-resource 映射。该 map 的 key 是 api group，value
+	// 是该 api group 下资源名称的字符串数组。
+	// 例如 groupResourceMapping = {"extensions": ["replicasets", "deployments"], "batch":["jobs"]}
 	groupResourceMapping := map[string][]string{}
 
-	// This loop does the following work:
-	// 1. Constructs groupResourceMapping based on input resources.
-	// 2. Prevents pointing to non-existent resources.
-	// 3. Transfers resource short name to long name. E.g. rs.extensions is transferred to replicasets.extensions
+	// 此循环完成以下工作：
+	// 1. 根据输入资源构造 groupResourceMapping。
+	// 2. 避免指向不存在的资源。
+	// 3. 将资源简称转换为全称。例如 rs.extensions 转换为 replicasets.extensions
 	for _, r := range resources {
 		resource := schema.GroupVersionResource{Resource: r.Resource, Group: r.Group}
 		groupVersionResource, err := mapper.ResourceFor(schema.GroupVersionResource{Resource: r.Resource, Group: r.Group})
@@ -423,7 +423,7 @@ func generateResourcePolicyRules(mapper meta.RESTMapper, verbs []string, resourc
 		}
 	}
 
-	// Create separate rule for each of the api group.
+	// 为每个 api group 创建单独的 rule。
 	rules := []rbacv1.PolicyRule{}
 	for _, g := range sets.List(sets.KeySet(groupResourceMapping)) {
 		rule := rbacv1.PolicyRule{}

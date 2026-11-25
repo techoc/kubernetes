@@ -51,18 +51,18 @@ var (
 		kubectl create pdb my-pdb --selector=app=nginx --min-available=50%`))
 )
 
-// PodDisruptionBudgetOpts holds the command-line options for poddisruptionbudget sub command
+// PodDisruptionBudgetOpts 保存 poddisruptionbudget 子命令的命令行选项
 type PodDisruptionBudgetOpts struct {
-	// PrintFlags holds options necessary for obtaining a printer
+	// PrintFlags 保存获取 printer 所需的选项
 	PrintFlags *genericclioptions.PrintFlags
 	PrintObj   func(obj runtime.Object) error
-	// Name of resource being created
+	// 待创建资源的名称
 	Name string
 
 	MinAvailable   string
 	MaxUnavailable string
 
-	// A label selector to use for this budget
+	// 用于该预算的 label selector
 	Selector         string
 	CreateAnnotation bool
 	FieldManager     string
@@ -76,7 +76,7 @@ type PodDisruptionBudgetOpts struct {
 	genericiooptions.IOStreams
 }
 
-// NewPodDisruptionBudgetOpts creates a new *PodDisruptionBudgetOpts with sane defaults
+// NewPodDisruptionBudgetOpts 创建一个带有合理默认值的 *PodDisruptionBudgetOpts
 func NewPodDisruptionBudgetOpts(ioStreams genericiooptions.IOStreams) *PodDisruptionBudgetOpts {
 	return &PodDisruptionBudgetOpts{
 		PrintFlags: genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
@@ -84,7 +84,7 @@ func NewPodDisruptionBudgetOpts(ioStreams genericiooptions.IOStreams) *PodDisrup
 	}
 }
 
-// NewCmdCreatePodDisruptionBudget is a macro command to create a new pod disruption budget.
+// NewCmdCreatePodDisruptionBudget 是一个用于创建新 pod disruption budget 的宏命令。
 func NewCmdCreatePodDisruptionBudget(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewPodDisruptionBudgetOpts(ioStreams)
 
@@ -115,7 +115,7 @@ func NewCmdCreatePodDisruptionBudget(f cmdutil.Factory, ioStreams genericiooptio
 	return cmd
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需选项的设置
 func (o *PodDisruptionBudgetOpts) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
 	var err error
 	o.Name, err = NameFromCommandArgs(cmd, args)
@@ -163,7 +163,7 @@ func (o *PodDisruptionBudgetOpts) Complete(f cmdutil.Factory, cmd *cobra.Command
 	return nil
 }
 
-// Validate checks to the PodDisruptionBudgetOpts to see if there is sufficient information run the command
+// Validate 检查 PodDisruptionBudgetOpts 是否包含运行命令所需的足够信息
 func (o *PodDisruptionBudgetOpts) Validate() error {
 	if len(o.Name) == 0 {
 		return fmt.Errorf("name must be specified")
@@ -181,9 +181,9 @@ func (o *PodDisruptionBudgetOpts) Validate() error {
 		return fmt.Errorf("min-available and max-unavailable cannot be both specified")
 	}
 
-	// The following regex matches the following values:
-	// 10, 20, 30%, 50% (number and percentage)
-	// but not 10Gb, 20Mb
+	// 以下正则表达式匹配这些值：
+	// 10、20、30%、50%（数字和百分比）
+	// 但不匹配 10Gb、20Mb
 	re := regexp.MustCompile(`^[0-9]+%?$`)
 
 	switch {
@@ -196,7 +196,7 @@ func (o *PodDisruptionBudgetOpts) Validate() error {
 	return nil
 }
 
-// Run performs the execution of the 'create poddisruptionbudget' sub command
+// Run 执行 'create poddisruptionbudget' 子命令
 func (o *PodDisruptionBudgetOpts) Run() error {
 	podDisruptionBudget, err := o.createPodDisruptionBudgets()
 	if err != nil {
