@@ -47,8 +47,8 @@ var updateTaintBackoff = wait.Backoff{
 	Jitter:   1.0,
 }
 
-// AddOrUpdateTaintOnNode add taints to the node. If taint was added into node, it'll issue API calls
-// to update nodes; otherwise, no API calls. Return error if any.
+// AddOrUpdateTaintOnNode 为节点添加 taint。若 taint 确实写入了节点则发起 API 调用更新节点，
+// 否则不产生任何 API 调用，出错时返回错误。
 // 返回值只反映 API 调用是否成功；taint 已存在且内容相同时直接返回 nil，避免无意义写入。
 func AddOrUpdateTaintOnNode(c clientset.Interface, nodeName string, taints ...*v1.Taint) error {
 	if len(taints) == 0 {
@@ -58,8 +58,7 @@ func AddOrUpdateTaintOnNode(c clientset.Interface, nodeName string, taints ...*v
 	return clientretry.RetryOnConflict(updateTaintBackoff, func() error {
 		var err error
 		var oldNode *v1.Node
-		// First we try getting node from the API server cache, as it's cheaper. If it fails
-		// we get it from etcd to be sure to have fresh data.
+		// 先尝试从 API server 缓存读取节点（开销更小）；失败时再从 etcd 强一致读取，确保拿到最新数据。
 		// 重试时必须强一致读取，否则可能基于旧版本反复生成同样的冲突补丁。
 		if firstTry {
 			oldNode, err = c.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{ResourceVersion: "0"})
@@ -88,7 +87,7 @@ func AddOrUpdateTaintOnNode(c clientset.Interface, nodeName string, taints ...*v
 	})
 }
 
-// PatchNodeTaints patches node's taints.
+// PatchNodeTaints 提交节点 taints 的补丁。
 // 仅对 .spec.taints 做 strategic merge；由于该字段没有 patchMergeKey，
 // 这里特意去掉旧对象的 resourceVersion 并只替换 taints，避免错误合并。
 func PatchNodeTaints(c clientset.Interface, nodeName string, oldNode *v1.Node, newNode *v1.Node) error {
@@ -151,17 +150,15 @@ func addOrUpdateTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool) {
 	return newNode, true
 }
 
-// RemoveTaintOffNode is for cleaning up taints temporarily added to node,
-// won't fail if target taint doesn't exist or has been removed.
-// If passed a node it'll check if there's anything to be done, if taint is not present it won't issue
-// any API calls.
+// RemoveTaintOffNode 用于清理临时加到节点上的 taint；目标 taint 不存在或已被移除时不会失败。
+// 若传入了 node，会先检查是否有事可做——taint 不存在时不发起任何 API 调用。
 // 幂等设计：移除不存在的 taint 不是错误，调用方可放心重试。
 func RemoveTaintOffNode(c clientset.Interface, nodeName string, node *v1.Node, taints ...*v1.Taint) error {
 	if len(taints) == 0 {
 		return nil
 	}
-	// Short circuit for limiting amount of API calls.
-	// 调用方通常持有 informer 中的节点快照，可据此避免一次无意义的读-改-写。
+	// 短路逻辑以减少 API 调用次数：调用方通常持有 informer 中的节点快照，
+	// 可据此避免一次无意义的读-改-写。
 	if node != nil {
 		match := false
 		for _, taint := range taints {
@@ -207,7 +204,7 @@ func RemoveTaintOffNode(c clientset.Interface, nodeName string, node *v1.Node, t
 	})
 }
 
-// taintExists checks if the given taint exists in list of taints. Returns true if exists false otherwise.
+// taintExists 检查给定 taint 是否存在于 taint 列表中，存在返回 true，否则返回 false。
 // 只按 key+effect 匹配，不比较 value，与 MatchTaint 的语义保持一致。
 func taintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
 	for _, taint := range taints {

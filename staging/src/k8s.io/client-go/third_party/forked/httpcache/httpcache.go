@@ -3,11 +3,9 @@
 // - ioutil.NopCloser replaced with io.NopCloser (deprecated)
 // - ioutil.ReadAll replaced with io.ReadAll (deprecated)
 
-// Package httpcache provides a http.RoundTripper implementation that works as a
-// mostly RFC-compliant cache for http responses.
-//
-// It is only suitable for use as a 'private' cache (i.e. for a web-browser or an API-client
-// and not for a shared proxy).
+// Package httpcache 提供一个 http.RoundTripper 实现，用作 HTTP 响应缓存。
+// 该缓存基本符合 RFC，且只适合作为「私有」缓存
+// （即用于 web 浏览器或 API 客户端，而非共享代理）。
 //
 // 该实现仅供单个客户端本地使用，因此忽略 private/public 与 s-maxage 等共享缓存语义；
 // client-go 用它缓存 discovery 文档，以 ETag 协商减少重复传输。
@@ -33,9 +31,8 @@ const (
 	XFromCache = "X-From-Cache"
 )
 
-// A Cache interface is used by the Transport to store and retrieve responses.
-//
-// 实现必须并发安全，因为 Transport 可能被多个请求同时使用。
+// Cache 接口被 Transport 用于存取响应。实现必须并发安全，
+// 因为 Transport 可能被多个请求同时使用。
 type Cache interface {
 	// Get returns the []byte representation of a cached response and a bool
 	// set to true if the value isn't empty
@@ -46,8 +43,7 @@ type Cache interface {
 	Delete(key string)
 }
 
-// cacheKey returns the cache key for req.
-//
+// cacheKey 返回 req 的缓存键：
 // GET 直接用 URL 作 key，其他方法加上 method 前缀，避免对同一 URL 的不同写操作互相污染。
 func cacheKey(req *http.Request) string {
 	if req.Method == http.MethodGet {
@@ -57,8 +53,7 @@ func cacheKey(req *http.Request) string {
 	}
 }
 
-// CachedResponse returns the cached http.Response for req if present, and nil
-// otherwise.
+// CachedResponse 返回 req 对应的缓存 http.Response，不存在则返回 nil。
 //
 // 返回的 Response.Body 由内存字节重建，调用方仍需按常规关闭它。
 func CachedResponse(c Cache, req *http.Request) (resp *http.Response, err error) {
@@ -71,7 +66,7 @@ func CachedResponse(c Cache, req *http.Request) (resp *http.Response, err error)
 	return http.ReadResponse(bufio.NewReader(b), req)
 }
 
-// MemoryCache is an implemtation of Cache that stores responses in an in-memory map.
+// MemoryCache 是 Cache 的实现，把响应存放在内存 map 中。
 //
 // 无容量上限，仅适合缓存体量可控的元数据（如 discovery 文档）；大响应请用磁盘后端。
 type MemoryCache struct {
@@ -79,7 +74,7 @@ type MemoryCache struct {
 	items map[string][]byte
 }
 
-// Get returns the []byte representation of the response and true if present, false if not
+// Get 返回响应的 []byte 表示，存在时返回 true，否则返回 false。
 //
 // 读锁只在查表期间持有，返回的切片不与缓存内部状态共享写路径。
 func (c *MemoryCache) Get(key string) (resp []byte, ok bool) {
@@ -117,7 +112,7 @@ type Transport struct {
 	// If nil, http.DefaultTransport is used
 	Transport http.RoundTripper
 	Cache     Cache
-	// If true, responses returned from the cache will be given an extra header, X-From-Cache
+	// 为 true 时，来自缓存的响应会额外带上 X-From-Cache 头。
 	// 该头便于调用方与测试区分命中缓存的响应。
 	MarkCachedResponses bool
 }
@@ -133,8 +128,7 @@ func (t *Transport) Client() *http.Client {
 	return &http.Client{Transport: t}
 }
 
-// varyMatches will return false unless all of the cached values for the headers listed in Vary
-// match the new request
+// varyMatches：除非 Vary 所列请求头的缓存值与新请求全部匹配，否则返回 false。
 //
 // 命中缓存前必须校验 Vary：缓存时把请求头值存进 X-Varied-* 伪头，比较时再还原。
 func varyMatches(cachedResp *http.Response, req *http.Request) bool {
@@ -163,7 +157,6 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 	if cacheable {
 		cachedResp, err = CachedResponse(t.Cache, req)
 	} else {
-		// Need to invalidate an existing value
 		// 非安全方法意味着资源可能被修改，先使旧缓存失效。
 		t.Cache.Delete(cacheKey)
 	}
@@ -209,7 +202,7 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 
 		resp, err = transport.RoundTrip(req)
 		if err == nil && req.Method == "GET" && resp.StatusCode == http.StatusNotModified {
-			// Replace the 304 response with the one from cache, but update with some new headers
+			// 用缓存中的响应替换 304，但用少量新头更新它：
 			// 304 只携带少数字段，用这些端到端头刷新缓存副本，其余信息仍以原响应为准。
 			endToEndHeaders := getEndToEndHeaders(resp.Header)
 			for _, header := range endToEndHeaders {
@@ -218,8 +211,7 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 			resp = cachedResp
 		} else if (err != nil || (cachedResp != nil && resp.StatusCode >= 500)) &&
 			req.Method == "GET" && canStaleOnError(cachedResp.Header, req.Header) {
-			// In case of transport failure and stale-if-error activated, returns cached content
-			// when available
+			// 传输故障且启用 stale-if-error 时，若有缓存内容则直接返回缓存；
 			// 仅在服务端/传输故障时使用陈旧缓存；4xx 等客户端错误不适用。
 			return cachedResp, nil
 		} else {
@@ -256,7 +248,7 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 		}
 		switch req.Method {
 		case "GET":
-			// Delay caching until EOF is reached.
+			// 推迟写缓存，直到读到 EOF：
 			// 未读完的响应可能不完整（连接中断），只有读到 EOF 才写入缓存。
 			resp.Body = &cachingReadCloser{
 				R: resp.Body,
@@ -307,15 +299,12 @@ type timer interface {
 
 var clock timer = &realClock{}
 
-// getFreshness will return one of fresh/stale/transparent based on the cache-control
-// values of the request and the response
+// getFreshness 依据请求与响应的 cache-control 值，返回 fresh/stale/transparent 之一。
 //
-// fresh indicates the response can be returned
-// stale indicates that the response needs validating before it is returned
-// transparent indicates the response should not be used to fulfil the request
+// fresh 表示响应可以直接返回；stale 表示响应需要先验证再返回；
+// transparent 表示不应使用该响应来满足本次请求。
 //
-// Because this is only a private cache, 'public' and 'private' in cache-control aren't
-// signficant. Similarly, smax-age isn't used.
+// 由于这只是私有缓存，cache-control 中的 'public' 与 'private' 并不重要；s-maxage 同样不使用。
 //
 // 计算顺序遵循 RFC 7234：请求侧 no-cache 优先，其次是响应侧 no-cache，
 // 再根据 max-age/Expires 与请求侧的 max-age/min-fresh/max-stale 调整有效寿命。
@@ -550,9 +539,8 @@ func headerAllCommaSepValues(headers http.Header, name string) []string {
 	return vals
 }
 
-// cachingReadCloser is a wrapper around ReadCloser R that calls OnEOF
-// handler with a full copy of the content read from R when EOF is
-// reached.
+// cachingReadCloser 包装 ReadCloser R：读到 EOF 时，用从 R 读出的内容的完整副本
+// 调用 OnEOF 回调。
 //
 // 保留完整副本是为了在响应被消费完后仍能序列化入缓存；代价是响应体会在内存中多留一份。
 type cachingReadCloser struct {

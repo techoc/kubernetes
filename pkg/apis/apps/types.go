@@ -26,12 +26,11 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // StatefulSet 表示一组具有一致身份的 Pod。
-// Identities are defined as:
+// 身份定义包括：
 // - 网络：单一稳定的 DNS 和主机名。
 // - 存储：按需提供任意数量的 VolumeClaim。
 //
-// The StatefulSet guarantees that a given network identity will always
-// map to the same storage identity.
+// StatefulSet 保证给定的网络身份始终映射到相同的存储身份。
 type StatefulSet struct {
 	metav1.TypeMeta
 	// +optional
@@ -100,11 +99,11 @@ type RollingUpdateStatefulSetStrategy struct {
 	Partition int32
 	// 更新期间允许不可用的 Pod 最大数量。
 	// 值可以是绝对数量（如 5）或期望 Pod 数的百分比（如 10%）。
-	// Absolute number is calculated from percentage by rounding up. This can not be 0.
-	// Defaults to 1. This field is beta-level and is enabled by default. The field applies to all pods in the range 0 to
-	// Replicas-1. That means if there is any unavailable pod in the range 0 to Replicas-1, it
-	// will be counted towards MaxUnavailable.
-	// This setting might not be effective for the OrderedReady podManagementPolicy. That policy ensures pods are created and become ready one at a time.
+	// 绝对数量由百分比向上取整计算得出。此值不能为 0。
+	// 默认为 1。此字段为 beta 级别，默认启用。该字段适用于范围 0 到
+	// Replicas-1 内的所有 Pod。也就是说，若 0 到 Replicas-1 范围内存在任何不可用 Pod，
+	// 都会被计入 MaxUnavailable。
+	// 该设置对 OrderedReady 的 podManagementPolicy 可能无效，该策略确保 Pod 逐个创建并就绪。
 	//
 	// +featureGate=MaxUnavailableStatefulSet
 	// +optional
@@ -117,19 +116,17 @@ type RollingUpdateStatefulSetStrategy struct {
 type PersistentVolumeClaimRetentionPolicyType string
 
 const (
-	// RetainPersistentVolumeClaimRetentionPolicyType is the default
-	// PersistentVolumeClaimRetentionPolicy and specifies that
-	// 与 StatefulSet VolumeClaimTemplates 关联的 PersistentVolumeClaims。
-	// will not be deleted.
+	// RetainPersistentVolumeClaimRetentionPolicyType 是默认的
+	// PersistentVolumeClaimRetentionPolicy，表示与 StatefulSet VolumeClaimTemplates
+	// 关联的 PersistentVolumeClaims 不会被删除。
 	RetainPersistentVolumeClaimRetentionPolicyType PersistentVolumeClaimRetentionPolicyType = "Retain"
-	// DeletePersistentVolumeClaimRetentionPolicyType specifies that
-	// 与 StatefulSet VolumeClaimTemplates 关联的 PersistentVolumeClaims。
-	// will be deleted in the scenario specified in
-	// StatefulSetPersistentVolumeClaimPolicy.
+	// DeletePersistentVolumeClaimRetentionPolicyType 表示与 StatefulSet
+	// VolumeClaimTemplates 关联的 PersistentVolumeClaims，
+	// 将在 StatefulSetPersistentVolumeClaimRetentionPolicy 所指定的场景下被删除。
 	DeletePersistentVolumeClaimRetentionPolicyType PersistentVolumeClaimRetentionPolicyType = "Delete"
 )
 
-// StatefulSetPersistentVolumeClaimRetentionPolicy describes the policy used for PVCs
+// StatefulSetPersistentVolumeClaimRetentionPolicy 描述由
 // StatefulSet VolumeClaimTemplates 创建的 PVC 使用的保留策略。
 type StatefulSetPersistentVolumeClaimRetentionPolicy struct {
 	// WhenDeleted specifies what happens to PVCs created from StatefulSet
@@ -151,9 +148,9 @@ type StatefulSetOrdinals struct {
 	// start 表示第一个副本的起始序号。可用于从其他序号（例如从 1 开始）为副本编号，
 	// 以替代默认的从 0 开始命名，也可用于协调副本从一个 StatefulSet 逐步迁移到另一个。
 	// 如果设置，副本序号范围为：
+	// [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas)。
 	// 如果未设置，默认为 0，副本序号范围为：
-	// [.spec.ordinals.start, .spec.ordinals.start + .spec.replicas).
-	// [0, .spec.replicas).
+	// [0, .spec.replicas)。
 	// +optional
 	Start int32
 }
@@ -168,17 +165,16 @@ type StatefulSetSpec struct {
 	Replicas int32
 
 	// Selector 是对 Pod 的标签查询，用于匹配副本数量。
-	// If empty, defaulted to labels on the pod template.
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+	// 若为空，默认使用 Pod 模板上的标签。
+	// 更多信息参见: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +optional
 	Selector *metav1.LabelSelector
 
-	// Template 是描述待创建 Pod 的对象；当
-	// insufficient replicas are detected. Each pod stamped out by the StatefulSet
-	// will fulfill this Template, but have a unique identity from the rest
-	// of the StatefulSet. Each pod will be named with the format
-	// <statefulsetname>-<podindex>. For example, a pod in a StatefulSet named
-	// "web" with index number "3" would be named "web-3".
+	// Template 是描述待创建 Pod 的对象；当检测到副本不足时，由 StatefulSet 创建。
+	// StatefulSet 创建的每个 Pod 都会满足此 Template，
+	// 但拥有区别于该 StatefulSet 其余 Pod 的唯一身份。
+	// 每个 Pod 将按 <statefulsetname>-<podindex> 格式命名。例如，名为
+	// "web" 的 StatefulSet 中序号为 "3" 的 Pod 将被命名为 "web-3"。
 	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	Template api.PodTemplateSpec
 
@@ -221,7 +217,7 @@ type StatefulSetSpec struct {
 	RevisionHistoryLimit *int32
 
 	// 新建 Pod 必须保持 Ready 状态的最短秒数。
-	// without any of its container crashing for it to be considered available.
+	// 其任何容器都不得崩溃，才能被认为可用。
 	// 默认为 0，即 Pod 一旦 Ready 就被认为可用。
 	// +optional
 	MinReadySeconds int32
@@ -267,7 +263,6 @@ type StatefulSetStatus struct {
 	CurrentRevision string
 
 	// updateRevision 非空时，表示用于生成序号区间 [replicas-updatedReplicas,replicas) 内 Pod 的 StatefulSet 版本。
-	// [replicas-updatedReplicas,replicas)
 	UpdateRevision string
 
 	// collisionCount 是 StatefulSet 的哈希冲突计数。当控制器需要为最新的
@@ -379,7 +374,7 @@ type DeploymentSpec struct {
 	// +optional
 	Selector *metav1.LabelSelector
 
-	// Template describes the pods that will be created.
+	// Template 描述将被创建的 Pod。
 	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	Template api.PodTemplateSpec
 
@@ -393,10 +388,9 @@ type DeploymentSpec struct {
 	// +optional
 	MinReadySeconds int32
 
-	// The number of old ReplicaSets to retain to allow rollback.
+	// 保留的旧 ReplicaSet 数量，以便回滚。
 	// 使用指针类型，以区分显式设置为 0 与未设置。
-	// This is set to the max value of int32 (i.e. 2147483647) by default, which means
-	// "retaining all old ReplicaSets".
+	// 默认设置为 int32 最大值（即 2147483647），意味着"保留所有旧 ReplicaSet"。
 	// +optional
 	RevisionHistoryLimit *int32
 
@@ -406,7 +400,7 @@ type DeploymentSpec struct {
 	Paused bool
 
 	// 已弃用。
-	// The config this deployment is rolling back to. Will be cleared after rollback is done.
+	// 本 Deployment 正在回滚到的配置。回滚完成后会被清除。
 	// +optional
 	RollbackTo *RollbackConfig
 
@@ -435,7 +429,7 @@ type DeploymentRollback struct {
 	RollbackTo RollbackConfig
 }
 
-// RollbackConfig specifies the state of a revision to roll back to.
+// RollbackConfig 描述要回滚到的某个修订版本的状态。
 // 已弃用。
 type RollbackConfig struct {
 	// The revision to rollback to. If set to 0, rollback to the last revision.
@@ -457,11 +451,9 @@ type DeploymentStrategy struct {
 	// +optional
 	Type DeploymentStrategyType
 
-	// Rolling update config params. Present only if DeploymentStrategyType =
-	// RollingUpdate.
+	// 滚动更新配置参数。仅当 DeploymentStrategyType = RollingUpdate 时存在。
 	//---
-	// TODO: 按我们最终确定的 oneOf 约定更新此处，
-	// to be.
+	// TODO: 按我们最终确定的 oneOf 约定更新此处。
 	// +optional
 	RollingUpdate *RollingUpdateDeployment
 }
@@ -480,15 +472,13 @@ const (
 // RollingUpdateDeployment is the spec to control the desired behavior of rolling update.
 type RollingUpdateDeployment struct {
 	// 更新期间允许不可用的 Pod 最大数量。
-	// Value can be an absolute number (ex: 5) or a percentage of total pods at the start of update (ex: 10%).
-	// Absolute number is calculated from percentage by rounding down.
-	// This can not be 0 if MaxSurge is 0.
-	// By default, a fixed value of 1 is used.
-	// Example: when this is set to 30%, the old RC can be scaled down by 30%
-	// immediately when the rolling update starts. Once new pods are ready, old RC
-	// can be scaled down further, followed by scaling up the new RC, ensuring
-	// that at least 70% of original number of pods are available at all times
-	// during the update.
+	// 值可以是绝对数量（如 5）或更新开始时 Pod 总数的百分比（如 10%）。
+	// 绝对数量由百分比向下取整计算得出。
+	// 若 MaxSurge 为 0，则此值不能为 0。
+	// 默认使用固定值 1。
+	// 示例：设为 30% 时，滚动更新一开始旧的 RC 就可以立即缩容 30%。
+	// 一旦新 Pod 就绪，旧 RC 可进一步缩容，接着扩容新 RC，
+	// 确保更新期间始终至少有 70% 的原始 Pod 可用。
 	// +optional
 	MaxUnavailable intstr.IntOrString
 
@@ -533,8 +523,8 @@ type DeploymentStatus struct {
 	// +optional
 	UnavailableReplicas int32
 
-	// 本 Deployment 所针对的终止中 Pod 总数。终止中 Pod 的 .metadata.deletionTimestamp
-	// .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.
+	// 本 Deployment 所针对的终止中 Pod 总数。终止中 Pod 的 .metadata.deletionTimestamp 非空，
+	// 且尚未进入 Failed 或 Succeeded 的 .status.phase。
 	//
 	// 这是 beta 字段，需要开启 DeploymentReplicaSetTerminatingReplicas 特性（默认开启）。
 	// +optional
@@ -599,11 +589,11 @@ type DaemonSetUpdateStrategy struct {
 	// +optional
 	Type DaemonSetUpdateStrategyType
 
-	// Rolling update config params. Present only if type = "RollingUpdate".
+	// 滚动更新配置参数。仅当 type = "RollingUpdate" 时存在。
 	//---
-	// TODO: 按我们最终确定的 oneOf 约定更新此处，
-	// to be. Same as Deployment `strategy.rollingUpdate`.
-	// See https://github.com/kubernetes/kubernetes/issues/35345
+	// TODO: 按我们最终确定的 oneOf 约定更新此处。
+	// 与 Deployment 的 `strategy.rollingUpdate` 相同。
+	// 参见 https://github.com/kubernetes/kubernetes/issues/35345
 	// +optional
 	RollingUpdate *RollingUpdateDaemonSet
 }
@@ -622,60 +612,51 @@ const (
 
 // RollingUpdateDaemonSet is the spec to control the desired behavior of daemon set rolling update.
 type RollingUpdateDaemonSet struct {
-	// The maximum number of DaemonSet pods that can be unavailable during the
-	// update. Value can be an absolute number (ex: 5) or a percentage of total
-	// number of DaemonSet pods at the start of the update (ex: 10%). Absolute
-	// number is calculated from percentage by rounding up.
-	// This cannot be 0 if MaxSurge is 0
-	// Default value is 1.
+	// 更新期间允许不可用的 DaemonSet Pod 最大数量。
+	// 值可以是绝对数量（如 5）或更新开始时 DaemonSet Pod 总数的百分比（如 10%）。
+	// 绝对数量由百分比向上取整计算得出。
+	// 若 MaxSurge 为 0，则此值不能为 0。
+	// 默认值为 1。
 	// 示例：设为 30% 时，最多允许 30% 的节点
 	// （即 status.desiredNumberScheduled）处于不可用状态。
-	// can have their pods stopped for an update at any given time. The update
-	// starts by stopping at most 30% of those DaemonSet pods and then brings
-	// up new DaemonSet pods in their place. Once the new pods are available,
-	// it then proceeds onto other DaemonSet pods, thus ensuring that at least
-	// 70% of original number of DaemonSet pods are available at all times during
-	// the update.
+	// 任何给定时刻，这些节点上的 Pod 都可以因更新而停止。更新开始时，
+	// 最多停止 30% 的 DaemonSet Pod，然后在原位置启动新 Pod。
+	// 新 Pod 可用后，再继续处理其他 DaemonSet Pod，
+	// 从而确保更新期间始终至少有 70% 的原始 DaemonSet Pod 可用。
 	// +optional
 	MaxUnavailable intstr.IntOrString
 
-	// The maximum number of nodes with an existing available DaemonSet pod that
-	// can have an updated DaemonSet pod during during an update.
+	// 更新期间，允许在已有可用 DaemonSet Pod 的节点上创建更新后 DaemonSet Pod 的最大节点数。
 	// 值可以是绝对数量（如 5）或期望 Pod 数的百分比（如 10%）。
-	// This can not be 0 if MaxUnavailable is 0.
-	// Absolute number is calculated from percentage by rounding up to a minimum of 1.
-	// Default value is 0.
-	// 示例：设为 30% 时，最多允许 30% 的节点
-	// （即 status.desiredNumberScheduled）处于不可用状态。
-	// can have their a new pod created before the old pod is marked as deleted.
-	// The update starts by launching new pods on 30% of nodes. Once an updated
-	// pod is available (Ready for at least minReadySeconds) the old DaemonSet pod
-	// on that node is marked deleted. If the old pod becomes unavailable for any
-	// reason (Ready transitions to false, is evicted, or is drained) an updated
-	// pod is immediately created on that node without considering surge limits.
-	// Allowing surge implies the possibility that the resources consumed by the
-	// daemonset on any given node can double if the readiness check fails, and
-	// so resource intensive daemonsets should take into account that they may
-	// cause evictions during disruption.
+	// 若 MaxUnavailable 为 0，则此值不能为 0。
+	// 绝对数量由百分比向上取整计算，至少为 1。
+	// 默认值为 0。
+	// 示例：设为 30% 时，30% 拥有可用 daemon Pod 的节点可以在旧 Pod 被标记
+	// 删除之前先创建新 Pod。更新开始时在 30% 的节点上启动新 Pod。一旦更新后
+	// Pod 可用（至少就绪 minReadySeconds），该节点上的旧 DaemonSet Pod 就被标记删除。
+	// 若旧 Pod 因任何原因变得不可用（Ready 变为 false、被驱逐或被排空），
+	// 会立即在该节点上创建更新后 Pod，且不受 surge 限制。
+	// 允许 surge 意味着：若就绪检查失败，daemonset 在某节点上消耗的资源
+	// 可能翻倍，因此资源密集型的 daemonset 应考虑到中断期间可能引发驱逐。
 	// +optional
 	MaxSurge intstr.IntOrString
 }
 
 // DaemonSetSpec 是 daemon set 的 spec。
 type DaemonSetSpec struct {
-	// A label query over pods that are managed by the daemon set.
+	// 该 daemon set 所管理的 Pod 的标签查询。
 	// 必须匹配才能被控制。
-	// If empty, defaulted to labels on Pod template.
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+	// 若为空，默认使用 Pod 模板上的标签。
+	// 更多信息参见: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +optional
 	Selector *metav1.LabelSelector
 
-	// An object that describes the pod that will be created.
-	// The DaemonSet will create exactly one copy of this pod on every node
-	// that matches the template's node selector (or on every node if no node
-	// selector is specified).
+	// 描述将被创建的 Pod 的对象。
+	// DaemonSet 会在每个匹配模板 node selector 的节点上
+	// （若未指定 node selector，则在每个节点上）
+	// 恰好创建一个此 Pod 的副本。
 	// template.spec.restartPolicy 唯一允许的值是 "Always"。
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template
+	// 更多信息参见: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template
 	Template api.PodTemplateSpec
 
 	// An update strategy to replace existing DaemonSet pods with new pods.
@@ -688,14 +669,13 @@ type DaemonSetSpec struct {
 	MinReadySeconds int32
 
 	// 已弃用。
-	// A sequence number representing a specific generation of the template.
-	// Populated by the system. It can be set only during the creation.
+	// 表示模板某个特定 generation 的序号。由系统填充。只能在创建时设置。
 	// +optional
 	TemplateGeneration int64
 
-	// The number of old history to retain to allow rollback.
+	// 保留的旧历史记录数量，以便回滚。
 	// 使用指针类型，以区分显式设置为 0 与未设置。
-	// Defaults to 10.
+	// 默认为 10。
 	// +optional
 	RevisionHistoryLimit *int32
 }
@@ -723,15 +703,13 @@ type DaemonSetStatus struct {
 	// +optional
 	UpdatedNumberScheduled int32
 
-	// 应当运行该
-	// daemon pod and have one or more of the daemon pod running and
-	// available (ready for at least spec.minReadySeconds)
+	// 应当运行该 daemon Pod、且有一个或多个该 daemon Pod 正在运行并就绪
+	// （至少就绪 spec.minReadySeconds 时长）的节点总数。
 	// +optional
 	NumberAvailable int32
 
-	// 应当运行该
-	// daemon pod and have none of the daemon pod running and available
-	// (ready for at least spec.minReadySeconds)
+	// 应当运行该 daemon Pod、但没有一个该 daemon Pod 正在运行并就绪
+	// （至少就绪 spec.minReadySeconds 时长）的节点总数。
 	// +optional
 	NumberUnavailable int32
 
@@ -773,15 +751,14 @@ type DaemonSet struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// The desired behavior of this daemon set.
+	// 该 daemon set 的期望行为。
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Spec DaemonSetSpec
 
-	// The current status of this daemon set. This data may be
-	// 在一段时间内处于过期状态。
-	// Populated by the system.
-	// Read-only.
+	// 本 daemon set 的当前状态。这些数据可能在一段时间内处于过期状态。
+	// 由系统填充。
+	// 只读。
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status DaemonSetStatus
@@ -821,8 +798,8 @@ type ReplicaSet struct {
 	// +optional
 	Spec ReplicaSetSpec
 
-	// Status is the current status of this ReplicaSet. This data may be
-	// 在一段时间内处于过期状态。
+	// Status 是本 ReplicaSet 的当前状态。这些数据可能在
+	// 一段时间内处于过期状态。
 	// +optional
 	Status ReplicaSetStatus
 }
@@ -839,8 +816,7 @@ type ReplicaSetList struct {
 }
 
 // ReplicaSetSpec 是 ReplicaSet 的 spec。
-// As the internal representation of a ReplicaSet, it must have
-// a Template set.
+// 作为 ReplicaSet 的内部表示，必须设置 Template。
 type ReplicaSetSpec struct {
 	// Replicas is the number of desired replicas.
 	Replicas int32
@@ -853,13 +829,12 @@ type ReplicaSetSpec struct {
 
 	// Selector 是对 Pod 的标签查询，用于匹配副本数量。
 	// 必须匹配才能被控制。
-	// If empty, defaulted to labels on pod template.
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+	// 若为空，默认使用 Pod 模板上的标签。
+	// 更多信息参见: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +optional
 	Selector *metav1.LabelSelector
 
-	// Template 是描述待创建 Pod 的对象；当
-	// insufficient replicas are detected.
+	// Template 是描述待创建 Pod 的对象；当检测到副本不足时创建。
 	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	// +optional
 	Template api.PodTemplateSpec
@@ -868,7 +843,7 @@ type ReplicaSetSpec struct {
 // ReplicaSetStatus 表示 ReplicaSet 的当前状态。
 type ReplicaSetStatus struct {
 	// Replicas 是最近一次观测到的非终止中 Pod 数量。
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
+	// 更多信息参见: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	Replicas int32
 
 	// label 匹配该 replicaset Pod 模板 label 的非终止中 Pod 数。

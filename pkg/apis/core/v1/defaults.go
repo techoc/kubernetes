@@ -570,7 +570,7 @@ func SetDefaults_PodLogOptions(obj *v1.PodLogOptions) {
 // 2. 若没有容器设置 request，则 Pod 级 request 取 Pod 级 limit。
 // 这一行为既保证 Pod 级资源统计的一致性，又兼容容器级的资源声明，
 // 详见 KEP-2837：https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/2837-pod-level-resource-spec/README.md#proposed-validation--defaulting-rules
-// TODO(ndixita): Remove defaultPodRequests once PodLevelResourcesFixDefaulting feature gate is GA.
+// TODO(ndixita): 待 PodLevelResourcesFixDefaulting feature gate 进入 GA 后移除 defaultPodRequests。
 func defaultPodRequests(obj *v1.Pod) {
 	// 只有在 Pod 级资源已部分指定时才填充默认值。
 	if obj.Spec.Resources == nil {
@@ -615,7 +615,7 @@ func defaultPodRequests(obj *v1.Pod) {
 
 // defaultHugePagePodLimits 仅在容器设置了大页 limit 而 Pod 级未设置时，
 // 用所有容器大页 limit 的聚合值填充 Pod 级 limit。
-// TODO(ndixita): Remove defaultHugePagePodLimits once PodLevelResourcesFixDefaulting feature gate is GA.
+// TODO(ndixita): 待 PodLevelResourcesFixDefaulting feature gate 进入 GA 后移除 defaultHugePagePodLimits。
 func defaultHugePagePodLimits(pod *v1.Pod) {
 	// 只有在 Pod 级资源已部分指定时才填充大页 limit 默认值。
 	if pod.Spec.Resources == nil {

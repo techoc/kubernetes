@@ -84,8 +84,7 @@ func addConversionFuncs(scheme *runtime.Scheme) error {
 	return nil
 }
 
-// Convert_certificates_PodCertificateRequestSpec_To_v1_PodCertificateRequestSpec
-// 把内部版本的 PodCertificateRequestSpec 转换为 v1 外部版本。
+// Convert_certificates_PodCertificateRequestSpec_To_v1_PodCertificateRequestSpec 把内部版本的 PodCertificateRequestSpec 转换为 v1 外部版本。
 // 当前两个版本字段一致，直接委托给生成的自动转换函数即可；
 // 保留手写入口是为了将来版本出现差异时有扩展点。
 func Convert_certificates_PodCertificateRequestSpec_To_v1_PodCertificateRequestSpec(in *certificates.PodCertificateRequestSpec, out *certificatesv1.PodCertificateRequestSpec, s conversion.Scope) error {

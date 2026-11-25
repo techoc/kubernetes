@@ -44,7 +44,7 @@ type flagzTextSerializer struct {
 	flagReader    Reader
 }
 
-// Encode writes the flagz information in plain text format to the given writer, using the provided obj.
+// Encode 使用给定的 obj 把 flagz 信息以纯文本格式写入指定 writer；
 // 参数按字典序排序，保证同一进程内输出顺序稳定，便于人工比对。
 func (s flagzTextSerializer) Encode(obj runtime.Object, w io.Writer) error {
 	if _, err := fmt.Fprintf(w, headerFmt, s.componentName); err != nil {
@@ -71,13 +71,13 @@ func (s flagzTextSerializer) Encode(obj runtime.Object, w io.Writer) error {
 	return nil
 }
 
-// Decode is not supported for text/plain serialization.
+// Decode：text/plain 序列化不支持解码；
 // flagz 是只读端点，解码没有语义。
 func (s flagzTextSerializer) Decode(data []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	return nil, nil, fmt.Errorf("decode not supported for text/plain")
 }
 
-// Identifier returns a unique identifier for this serializer.
+// Identifier 返回该序列化器的唯一标识；
 // 固定标识符用于序列化器缓存，避免每次请求重新构造。
 func (s flagzTextSerializer) Identifier() runtime.Identifier {
 	return runtime.Identifier("flagzTextSerializer")

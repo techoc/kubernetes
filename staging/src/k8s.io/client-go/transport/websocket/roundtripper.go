@@ -66,10 +66,8 @@ type ConnectionHolder interface {
 	Connection() *gwebsocket.Conn
 }
 
-// RoundTripper knows how to establish a connection to a remote WebSocket endpoint and make it available for use.
-// RoundTripper must not be reused.
-//
-// 因为一次成功握手后连接被保存在 rt.Conn 中，复用同一个实例会让第二次请求
+// RoundTripper 负责建立与远端 WebSocket 端点的连接并供上层使用，不得复用：
+// 一次成功握手后连接保存在 rt.Conn 中，复用同一个实例会让第二次请求
 // 覆盖前者，所以调用方必须为每个连接创建独立实例。
 type RoundTripper struct {
 	// TLSConfig holds the TLS configuration settings to use when connecting
@@ -91,9 +89,7 @@ func (rt *RoundTripper) Connection() *gwebsocket.Conn {
 	return rt.Conn
 }
 
-// DataBufferSize returns the size of buffers for the
-// websocket connection.
-//
+// DataBufferSize 返回 WebSocket 连接的缓冲区大小。
 // 32KB 足以容纳常规 exec 数据帧，同时避免为每条流分配过大内存。
 func (rt *RoundTripper) DataBufferSize() int {
 	return 32 * 1024
@@ -116,7 +112,7 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 		}
 	}()
 
-	// set the protocol version directly on the dialer from the header
+	// 从请求头取出协议版本并直接设置到 dialer 上：
 	// 子协议通过请求头传入，但 gorilla/websocket 要求通过 Dialer.Subprotocols 指定，
 	// 因此取出后要从 Header 中删除，避免作为普通头重复发送。
 	protocolVersions := request.Header[wsstream.WebSocketProtocolHeader]
@@ -152,7 +148,7 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 				if readErr != nil {
 					cause = fmt.Errorf("%w: unable to read error from server response", cause)
 				} else {
-					// If returned error can be decoded as "metav1.Status", return a "StatusError".
+					// 若返回的错误体能解码为 "metav1.Status"，就返回 "StatusError"：
 					// 服务端通常以 Status 描述拒绝原因，保留它可以向上层暴露 403/404 等语义。
 					responseError = strings.TrimSpace(string(responseErrorBytes))
 					if len(responseError) > 0 {
@@ -172,7 +168,7 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 		return nil, err
 	}
 
-	// Ensure we got back a protocol we understand
+	// 确认协商回的是我们认识的子协议：
 	// 服务端可能选择我们未请求的子协议，此时连接不可用，必须关闭并按升级失败处理。
 	foundProtocol := false
 	for _, protocolVersion := range protocolVersions {
@@ -191,10 +187,9 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 	return resp, nil
 }
 
-// RoundTripperFor transforms the passed rest config into a wrapped roundtripper, as well
-// as a pointer to the websocket RoundTripper. The websocket RoundTripper contains the
-// websocket connection after RoundTrip() on the wrapper. Returns an error if there is
-// a problem creating the round trippers.
+// RoundTripperFor 把传入的 rest config 转换为一个包装 roundtripper，并同时返回
+// WebSocket RoundTripper 的指针；对包装 roundtripper 调用 RoundTrip() 之后，
+// WebSocket RoundTripper 即持有建立的 WebSocket 连接。创建 round tripper 出错时返回错误。
 //
 // 返回的 wrapper 负责认证等 HTTP 层逻辑，真正的 WebSocket 握手仍由第二个返回值完成；
 // 两者必须配套使用。

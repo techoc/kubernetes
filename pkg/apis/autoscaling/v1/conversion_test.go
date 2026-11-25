@@ -30,8 +30,7 @@ import (
 
 // 该测试针对 issue #101370：修复 CPU 指标同时存在 AverageValue 和 Utilization 时，
 // 转换到 v1 应优先取 Utilization 值，且不能被目标对象中已有的旧值干扰。
-// TestConvert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec
-// 用表驱动方式验证 internal HPA Spec 到 v1 Spec 的转换：
+// TestConvert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec 用表驱动方式验证 internal HPA Spec 到 v1 Spec 的转换：
 // 包括 CPU 利用率优先于 AverageValue、目标对象旧值被覆盖、
 // 无指标时保留目标字段，以及只有利用率指标的情况。
 func TestConvert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec(t *testing.T) {

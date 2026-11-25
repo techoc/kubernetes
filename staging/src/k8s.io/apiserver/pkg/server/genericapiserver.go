@@ -460,7 +460,7 @@ func (s emptyDelegate) MuxAndDiscoveryCompleteSignals() map[string]<-chan struct
 func (s emptyDelegate) Destroy() {
 }
 
-// preparedGenericAPIServer is a private wrapper that enforces a call of PrepareRun() before Run can be invoked.
+// preparedGenericAPIServer 是私有包装类型，强制在调用 Run 之前先调用 PrepareRun()；
 // 未导出的类型把“必须先 PrepareRun”编码进类型系统，避免漏装 healthz/OpenAPI。
 type preparedGenericAPIServer struct {
 	*GenericAPIServer
@@ -489,7 +489,7 @@ func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 	s.installHealthz()
 	s.installLivez()
 
-	// as soon as shutdown is initiated, readiness should start failing
+	// 一旦开始关闭流程，readiness 就应开始失败，
 	// 让负载均衡在 ShutdownDelayDuration 窗口内先停止发送流量。
 	readinessStopCh := s.lifecycleSignals.ShutdownInitiated.Signaled()
 	err := s.addReadyzShutdownCheck(readinessStopCh)
@@ -854,7 +854,7 @@ func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *A
 		}
 		resourceInfos = append(resourceInfos, r...)
 
-		// Aggregated discovery only aggregates resources under /apis
+		// 聚合发现只聚合 /apis 前缀下的资源；
 		// 旧版 /api 使用单独的 manager，避免与 /apis 的组名冲突。
 		if apiPrefix == APIGroupPrefix {
 			s.AggregatedDiscoveryGroupManager.AddGroupVersion(
@@ -982,8 +982,7 @@ func (s *GenericAPIServer) InstallAPIGroups(apiGroupInfos ...*APIGroupInfo) erro
 	return nil
 }
 
-// registerStorageReadinessCheck registers the readiness checks for all underlying storages
-// for a given APIGroup.
+// registerStorageReadinessCheck 为指定 APIGroup 下所有底层 storage 注册就绪检查；
 // 仅注册实现了 rest.StorageWithReadiness 的存储，其他存储视为始终就绪。
 func (s *GenericAPIServer) registerStorageReadinessCheck(groupName string, apiGroupInfo *APIGroupInfo) {
 	for version, storageMap := range apiGroupInfo.VersionedResourcesStorageMap {

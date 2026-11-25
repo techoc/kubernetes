@@ -48,7 +48,6 @@ var simpleEquality = conversion.EqualitiesOrDie(
 	},
 )
 
-// Define a number of test types.
 // 以下测试类型刻意覆盖不同形态：基本类型、嵌套结构体、内嵌结构体、
 // interface{} 切片、[]byte、自定义 MarshalJSON 等。
 type A struct {
@@ -374,15 +373,13 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
-// TestUnknownFields checks for the collection of unknown
-// field errors from the various possible locations of
-// unknown fields (e.g. fields on struct, inlined struct, slice, etc)
+// TestUnknownFields 检查来自未知字段各种可能位置（如结构体字段、内联结构体、切片等）
+// 收集到的未知字段错误集合。
 //
 // 未知字段错误必须带完整路径（含数组下标与内联展开），且各层级互不串扰。
 func TestUnknownFields(t *testing.T) {
-	// simples checks that basic unknown fields are found
-	// in fields, subfields and slices.
-	// 基础场景：结构体字段、切片元素中的未知字段。
+	// simples 检查字段、子字段与切片中的基本未知字段能否被发现，
+	// 覆盖结构体字段、切片元素中的未知字段场景。
 	var simplesData = `{
 "ca": [
 	{
@@ -401,21 +398,10 @@ func TestUnknownFields(t *testing.T) {
 		`unknown field "unknown2"`,
 	}
 
-	// same-name, different-levels checks that
-	// fields at a higher level in the json
-	// are not persisted to unrecognized fields
-	// at lower levels and vice-versa.
-	//
-	// In this case, the field "cc" exists at the root level
-	// but not in the nested field ul1. If we are
-	// improperly retaining matched keys, this not
-	// see an issue with "cc" existing inside "ul1"
-	//
-	// The opposite for "aaa", which exists at the
-	// nested level but not at the root.
-	//
-	// 同名不同层：验证匹配集合按层级隔离，根层的 "cc" 不会掩盖 ul1 内的
-	// 未知 "cc"，反之亦然。
+	// 同名不同层：验证高层级已匹配的字段不会残留在低层级的未识别字段中，反之亦然，
+	// 即匹配集合按层级隔离。本例中 "cc" 存在于根层但不存在于嵌套字段 ul1 中，
+	// 若匹配集合被错误保留，ul1 内的未知 "cc" 就不会被报告；"aaa" 则相反，
+	// 它存在于嵌套层级而不在根层。
 	var sameNameDiffLevelData = `
 	{
 		"cc": "foo",
@@ -432,10 +418,8 @@ func TestUnknownFields(t *testing.T) {
 		`unknown field "ul1.cc"`,
 	}
 
-	// inlined-inlined confirms that we see
-	// fields that are doubly nested and don't recognize
-	// those that aren't
-	// 双层内联：已知键应被识别，未知键仍要报错。
+	// inlined-inlined 确认能识别双层嵌套内联的字段、并拒绝未识别的键：
+	// 已知键应被识别，未知键仍要报错。
 	var inlinedInlinedData = `{
 		"bb": "foo",
 		"bc": {
@@ -449,8 +433,7 @@ func TestUnknownFields(t *testing.T) {
 		`unknown field "aa"`,
 	}
 
-	// combined tests everything together
-	// 综合场景：多层内联 + 切片 + 根层未知字段同时出现。
+	// combined 综合场景：多层内联 + 切片 + 根层未知字段同时出现。
 	var combinedData = `
 	{
 		"ia": {
@@ -679,9 +662,8 @@ func TestUnknownFields(t *testing.T) {
 	}
 }
 
-// BenchmarkFromUnstructuredWithValidation benchmarks
-// the time and memory required to perform FromUnstructured
-// with the various validation directives (Ignore, Warn, Strict)
+// BenchmarkFromUnstructuredWithValidation 对使用各种校验指令
+// （Ignore、Warn、Strict）执行 FromUnstructured 所需的耗时与内存做基准测试。
 //
 // 对比开启/关闭未知字段检测的分配与耗时，防止检测逻辑造成性能回退。
 func BenchmarkFromUnstructuredWithValidation(b *testing.B) {
@@ -709,12 +691,9 @@ func BenchmarkFromUnstructuredWithValidation(b *testing.B) {
 	}
 }
 
-// Verifies that:
-// 1) serialized json -> object
-// 2) serialized json -> map[string]interface{} -> object
-// produces the same object.
-//
-// 验证转换器与标准库 JSON 对同一输入产生相同对象（含错误行为一致）。
+// 验证「序列化 JSON -> 对象」与「JSON -> map[string]interface{} -> 对象」
+// 两条路径产生相同的对象；转换器与标准库 JSON 对同一输入产生相同对象
+// （含错误行为一致）。
 func doUnrecognized(t *testing.T, jsonData string, item interface{}, expectedErr error) {
 	unmarshalledObj := reflect.New(reflect.TypeOf(item).Elem()).Interface()
 	err := json.Unmarshal([]byte(jsonData), unmarshalledObj)
@@ -1239,7 +1218,6 @@ func TestInline(t *testing.T) {
 				}
 			}()
 
-			// Check the expectation against stdlib
 			// 第一步：先确认期望值本身与标准库一致，避免测试基准错误。
 			jsonData, err := json.Marshal(tc.obj)
 			if err != nil {

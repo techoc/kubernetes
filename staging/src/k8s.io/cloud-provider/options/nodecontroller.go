@@ -24,14 +24,14 @@ import (
 	nodeconfig "k8s.io/cloud-provider/controllers/node/config"
 )
 
-// NodeControllerOptions holds the ServiceController options.
+// NodeControllerOptions 持有 NodeController 的选项（原注释误写为 ServiceController），
 // 实际是 cloud-node-controller 的 flag 视图，直接嵌入内部配置结构，
 // AddFlags/ApplyTo 负责在 pflag 与配置之间搬运值。
 type NodeControllerOptions struct {
 	*nodeconfig.NodeControllerConfiguration
 }
 
-// AddFlags adds flags related to ServiceController for controller manager to the specified FlagSet.
+// AddFlags 把 NodeController 相关的 flag 注册到指定的 FlagSet。
 // flag 默认值取自嵌入配置；因此 ApplyTo 只需处理需要特殊推导的字段。
 func (o *NodeControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
@@ -39,12 +39,12 @@ func (o *NodeControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	}
 
 	fs.Int32Var(&o.ConcurrentNodeSyncs, "concurrent-node-syncs", o.ConcurrentNodeSyncs, "Number of workers concurrently synchronizing nodes.")
-	// If concurrent-node-status-updates is not specified it will be derived from concurrent-node-syncs for backwards compatibility
+	// 为向后兼容，未指定 --concurrent-node-status-updates 时将从 --concurrent-node-syncs 推导。
 	// 默认写 0 表示“未设置”，ApplyTo 时再决定回退值，避免 flag 默认值掩盖用户显式输入。
 	fs.Int32Var(&o.ConcurrentNodeStatusUpdates, "concurrent-node-status-updates", 0, "Number of workers concurrently updating node statuses. If unspecified or 0, --concurrent-node-syncs is used instead")
 }
 
-// ApplyTo fills up ServiceController config with options.
+// ApplyTo 用选项填充 NodeController 配置。
 // 状态更新 worker 数在未显式设置时回退为并发同步数，保持旧版本行为。
 func (o *NodeControllerOptions) ApplyTo(cfg *nodeconfig.NodeControllerConfiguration) error {
 	if o == nil {
@@ -63,7 +63,7 @@ func (o *NodeControllerOptions) ApplyTo(cfg *nodeconfig.NodeControllerConfigurat
 	return nil
 }
 
-// Validate checks validation of NodeControllerOptions.
+// Validate 校验 NodeControllerOptions。
 // 同步数必须为正；状态更新数允许 0（表示继承），但不允许负数。
 func (o *NodeControllerOptions) Validate() []error {
 	if o == nil {

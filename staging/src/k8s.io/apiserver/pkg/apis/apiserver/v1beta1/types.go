@@ -23,36 +23,29 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EgressSelectorConfiguration provides versioned configuration for egress selector clients.
 // EgressSelectorConfiguration 是 egress 选择器配置的外部版本：apiserver 在
 // 访问控制面、etcd、集群内服务等不同目标时，按此配置选择代理或直连。
 type EgressSelectorConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// connectionServices contains a list of egress selection client configurations
-	// 每个条目对应一种出口用途；同一 name 重复出现属于配置错误，需在校验阶段拒绝。
+	// 包含一组 egress selection 客户端配置；每个条目对应一种出口用途；同一 name 重复出现属于配置错误，需在校验阶段拒绝。
 	EgressSelections []EgressSelection `json:"egressSelections"`
 }
 
-// EgressSelection provides the configuration for a single egress selection client.
 // EgressSelection 描述某一类出口流量的连接方式。
 type EgressSelection struct {
-	// name is the name of the egress selection.
-	// Currently supported values are "controlplane", "master", "etcd" and "cluster"
-	// The "master" egress selector is deprecated in favor of "controlplane"
-	// name 是 egress 选择的键；"master" 为兼容旧配置保留，新配置应使用 "controlplane"。
+	// name 是 egress 选择的名称，目前支持 "controlplane"、"master"、"etcd" 和 "cluster"；
+	// "master" 为兼容旧配置保留，新配置应使用 "controlplane"。
 	Name string `json:"name"`
 
-	// connection is the exact information used to configure the egress selection
-	// 具体连接参数；未设置时按直连处理。
+	// connection 是配置 egress selection 的具体连接参数；未设置时按直连处理。
 	Connection Connection `json:"connection"`
 }
 
-// Connection provides the configuration for a single egress selection client.
 // Connection 决定与 egress 代理（如 konnectivity server）通信的协议及传输层参数。
 type Connection struct {
-	// Protocol is the protocol used to connect from client to the konnectivity server.
-	// 协议为 HTTPConnect 或 GRPC 时必须提供 Transport；Direct 表示不经代理。
+	// ProxyProtocol 是客户端连接 konnectivity server 使用的协议；
+	// 为 HTTPConnect 或 GRPC 时必须提供 Transport；Direct 表示不经代理。
 	ProxyProtocol ProtocolType `json:"proxyProtocol,omitempty"`
 
 	// Transport defines the transport configurations we use to dial to the konnectivity server.
@@ -61,7 +54,6 @@ type Connection struct {
 	Transport *Transport `json:"transport,omitempty"`
 }
 
-// ProtocolType is a set of valid values for Connection.ProtocolType
 // ProtocolType 限定可用协议，避免配置中出现拼写错误导致静默直连。
 type ProtocolType string
 
@@ -75,7 +67,6 @@ const (
 	ProtocolDirect ProtocolType = "Direct"
 )
 
-// Transport defines the transport configurations we use to dial to the konnectivity server
 // Transport 是传输层的联合配置，TCP 与 UDS 互斥使用；至少配置其一。
 type Transport struct {
 	// TCP is the TCP configuration for communicating with the konnectivity server via TCP
@@ -90,7 +81,6 @@ type Transport struct {
 	UDS *UDSTransport `json:"uds,omitempty"`
 }
 
-// TCPTransport provides the information to connect to konnectivity server via TCP
 // TCPTransport 通过 URL 指向代理地址；https 时会启用 TLS 配置。
 type TCPTransport struct {
 	// URL is the location of the konnectivity server to connect to.
@@ -102,7 +92,6 @@ type TCPTransport struct {
 	TLSConfig *TLSConfig `json:"tlsConfig,omitempty"`
 }
 
-// UDSTransport provides the information to connect to konnectivity server via UDS
 // UDSTransport 仅用于 Unix domain socket，路径不带 unix:// 前缀。
 type UDSTransport struct {
 	// UDSName is the name of the unix domain socket to connect to konnectivity server
@@ -110,9 +99,8 @@ type UDSTransport struct {
 	UDSName string `json:"udsName,omitempty"`
 }
 
-// TLSConfig provides the authentication information to connect to konnectivity server
-// Only used with TCPTransport
-// TLSConfig 的字段均为文件路径；http:// URL 下必须留空，https:// 下要求
+// TLSConfig 提供连接 konnectivity server 的认证信息，仅与 TCPTransport 配合使用；
+// 字段均为文件路径；http:// URL 下必须留空，https:// 下要求
 // 同时提供客户端证书与私钥做 mTLS，CABundle 为空则使用系统信任根。
 type TLSConfig struct {
 	// caBundle is the file location of the CA to be used to determine trust with the konnectivity server.
@@ -140,7 +128,6 @@ type TLSConfig struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TracingConfiguration provides versioned configuration for tracing clients.
 // TracingConfiguration 直接内嵌组件配置中的 tracing 结构，复用其字段与语义。
 type TracingConfiguration struct {
 	metav1.TypeMeta `json:""`
@@ -151,24 +138,19 @@ type TracingConfiguration struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// AuthenticationConfiguration provides versioned configuration for authentication.
 // AuthenticationConfiguration 取代旧的 --oidc-* 命令行参数，是认证器的声明式配置。
 type AuthenticationConfiguration struct {
 	metav1.TypeMeta `json:""`
 
-	// jwt is a list of authenticator to authenticate Kubernetes users using
-	// JWT compliant tokens. The authenticator will attempt to parse a raw ID token,
-	// verify it's been signed by the configured issuer. The public key to verify the
-	// signature is discovered from the issuer's public endpoint using OIDC discovery.
-	// For an incoming token, each JWT authenticator will be attempted in
-	// the order in which it is specified in this list.  Note however that
-	// other authenticators may run before or after the JWT authenticators.
-	// The specific position of JWT authenticators in relation to other
-	// authenticators is neither defined nor stable across releases.  Since
-	// each JWT authenticator must have a unique issuer URL, at most one
-	// JWT authenticator will attempt to cryptographically validate the token.
+	// jwt 是一组使用符合 JWT 规范的 token 认证 Kubernetes 用户的认证器。
+	// 认证器会尝试解析原始 ID token，并验证其由配置的 issuer 签名；
+	// 验签公钥通过 OIDC discovery 从 issuer 的公开端点获取。
+	// 对传入的 token，按本列表指定顺序依次尝试每个 JWT 认证器；
+	// 但其他认证器可能排在 JWT 认证器之前或之后，其相对位置在各版本间
+	// 既未定义也不稳定。由于每个 JWT 认证器必须拥有唯一的 issuer URL，
+	// 最多只有一个 JWT 认证器会尝试对 token 进行密码学校验。
 	//
-	// The minimum valid JWT payload must contain the following claims:
+	// 合法 JWT payload 至少需要包含以下 claims：
 	// {
 	//		"iss": "https://issuer.example.com",
 	//		"aud": ["audience"],
@@ -179,39 +161,33 @@ type AuthenticationConfiguration struct {
 	// 列表顺序只影响尝试顺序，不影响最终身份来源。
 	JWT []JWTAuthenticator `json:"jwt"`
 
-	// If present --anonymous-auth must not be set
 	// 匿名认证与 --anonymous-auth 参数互斥，同时配置会因语义冲突在校验阶段报错。
 	Anonymous *AnonymousAuthConfig `json:"anonymous,omitempty"`
 }
 
-// AnonymousAuthConfig provides the configuration for the anonymous authenticator.
 // AnonymousAuthConfig 控制匿名请求是否被认证为 system:anonymous，以及可选的
 // 路径白名单。
 type AnonymousAuthConfig struct {
 	Enabled bool `json:"enabled"`
 
-	// If set, anonymous auth is only allowed if the request meets one of the
-	// conditions.
-	// 条件之间是 OR 关系；为空表示所有请求都可匿名（只要 Enabled 为 true）。
+	// 请求满足以下任一条件时才允许匿名认证；条件之间是 OR 关系；
+	// 为空表示所有请求都可匿名（只要 Enabled 为 true）。
 	Conditions []AnonymousAuthCondition `json:"conditions,omitempty"`
 }
 
-// AnonymousAuthCondition describes the condition under which anonymous auth
-// should be enabled.
-// AnonymousAuthCondition 目前仅支持按请求路径匹配，路径需精确匹配。
+// AnonymousAuthCondition 描述允许匿名认证的启用条件；目前仅支持按请求路径匹配，路径需精确匹配。
 type AnonymousAuthCondition struct {
 	// Path for which anonymous auth is enabled.
 	Path string `json:"path"`
 }
 
-// JWTAuthenticator provides the configuration for a single JWT authenticator.
 // JWTAuthenticator 描述一个 OIDC issuer：发现端点、claim 映射与用户校验规则。
 type JWTAuthenticator struct {
 	// issuer contains the basic OIDC provider connection options.
 	// +required
 	Issuer Issuer `json:"issuer"`
 
-	// claimValidationRules are rules that are applied to validate token claims to authenticate users.
+	// claimValidationRules 是认证用户前应用于校验 token claims 的规则。
 	// +optional
 	// 规则之间按逻辑与组合，全部通过才认证成功；失败时整个 token 被拒绝。
 	ClaimValidationRules []ClaimValidationRule `json:"claimValidationRules,omitempty"`
@@ -228,7 +204,6 @@ type JWTAuthenticator struct {
 	UserValidationRules []UserValidationRule `json:"userValidationRules,omitempty"`
 }
 
-// Issuer provides the configuration for an external provider's specific settings.
 // Issuer 描述如何定位并信任外部 OIDC provider。
 type Issuer struct {
 	// url points to the issuer URL in a format https://url or https://url/path.
@@ -240,34 +215,33 @@ type Issuer struct {
 	// +required
 	URL string `json:"url"`
 
-	// discoveryURL, if specified, overrides the URL used to fetch discovery
-	// information instead of using "{url}/.well-known/openid-configuration".
-	// The exact value specified is used, so "/.well-known/openid-configuration"
-	// must be included in discoveryURL if needed.
+	// discoveryURL 若指定，则覆盖用于获取 discovery 信息的地址，不再使用
+	// "{url}/.well-known/openid-configuration"。
+	// 指定值会被原样使用，因此必要时需在 discoveryURL 中包含
+	// "/.well-known/openid-configuration"。
 	//
-	// The "issuer" field in the fetched discovery information must match the "issuer.url" field
-	// in the AuthenticationConfiguration and will be used to validate the "iss" claim in the presented JWT.
-	// This is for scenarios where the well-known and jwks endpoints are hosted at a different
-	// location than the issuer (such as locally in the cluster).
+	// 获取到的 discovery 信息中的 "issuer" 字段必须与 AuthenticationConfiguration
+	// 中的 "issuer.url" 字段一致，并用于校验所提交 JWT 中的 "iss" claim。
+	// 发现地址被覆盖后该约束依然成立，防止配置被用来把验签流量
+	// 导到不受信任的端点。
+	// 这适用于 well-known 与 jwks 端点与 issuer 不在同一位置（例如部署在集群内）的场景。
 	//
-	// Example:
-	// A discovery url that is exposed using kubernetes service 'oidc' in namespace 'oidc-namespace'
-	// and discovery information is available at '/.well-known/openid-configuration'.
+	// 示例：
+	// 通过命名空间 'oidc-namespace' 中的 kubernetes service 'oidc' 暴露 discovery 地址，
+	// discovery 信息位于 '/.well-known/openid-configuration'。
 	// discoveryURL: "https://oidc.oidc-namespace/.well-known/openid-configuration"
-	// certificateAuthority is used to verify the TLS connection and the hostname on the leaf certificate
-	// must be set to 'oidc.oidc-namespace'.
+	// certificateAuthority 用于验证 TLS 连接，叶子证书上的 hostname 必须
+	// 设置为 'oidc.oidc-namespace'。
 	//
 	// curl https://oidc.oidc-namespace/.well-known/openid-configuration (.discoveryURL field)
 	// {
 	//     issuer: "https://oidc.example.com" (.url field)
 	// }
 	//
-	// discoveryURL must be different from url.
-	// Required to be unique across all JWT authenticators.
-	// Note that egress selection configuration is not used for this network connection.
+	// discoveryURL 必须与 url 不同。
+	// 在所有 JWT 认证器之间必须保持唯一。
+	// 注意：该网络连接不使用 egress 选择配置。
 	// +optional
-	// 发现地址被覆盖后，provider 返回的 issuer 仍必须与 url 一致，防止配置被
-	// 用来把验签流量导到不受信任的端点。
 	DiscoveryURL *string `json:"discoveryURL,omitempty"`
 
 	// certificateAuthority contains PEM-encoded certificate authority certificates
@@ -314,7 +288,6 @@ type Issuer struct {
 	EgressSelectorType EgressSelectorType `json:"egressSelectorType,omitempty"`
 }
 
-// AudienceMatchPolicyType is a set of valid values for issuer.audienceMatchPolicy
 // AudienceMatchPolicyType 限制 audience 匹配策略的取值，未知值会被校验拒绝。
 type AudienceMatchPolicyType string
 
@@ -324,9 +297,8 @@ const (
 	AudienceMatchPolicyMatchAny AudienceMatchPolicyType = "MatchAny"
 )
 
-// EgressSelectorType is an indicator of which egress selection should be used for sending traffic.
-// EgressSelectorType 与 egress 配置中的 selection name 一一对应，便于复用同一
-// 出口定义而不在认证配置中重复连接参数。
+// EgressSelectorType 指示发送流量应使用哪个 egress 选择，与 egress 配置中的 selection name 一一对应，
+// 便于复用同一定义而不在认证配置中重复连接参数。
 type EgressSelectorType string
 
 const (
@@ -337,7 +309,6 @@ const (
 	EgressSelectorCluster EgressSelectorType = "cluster"
 )
 
-// ClaimValidationRule provides the configuration for a single claim validation rule.
 // ClaimValidationRule 支持两种互斥形式：claim/requiredValue 的等值校验，或 CEL
 // expression 的任意校验。二者不可混用，避免语义不清。
 type ClaimValidationRule struct {
@@ -376,7 +347,6 @@ type ClaimValidationRule struct {
 	Message string `json:"message,omitempty"`
 }
 
-// ClaimMappings provides the configuration for claim mapping
 // ClaimMappings 定义如何把 token claims 映射成 username、groups、uid 与 extra。
 type ClaimMappings struct {
 	// username represents an option for the username attribute.
@@ -440,7 +410,6 @@ type ClaimMappings struct {
 	Extra []ExtraMapping `json:"extra,omitempty"`
 }
 
-// PrefixedClaimOrExpression provides the configuration for a single prefixed claim or expression.
 // PrefixedClaimOrExpression 用于 username/groups：claim 形式必须带 prefix（可为空串），
 // expression 形式自行返回最终值，不再附加前缀。
 type PrefixedClaimOrExpression struct {
@@ -468,7 +437,6 @@ type PrefixedClaimOrExpression struct {
 	Expression string `json:"expression,omitempty"`
 }
 
-// ClaimOrExpression provides the configuration for a single claim or expression.
 // ClaimOrExpression 用于 uid 等不需要前缀的属性；claim 与 expression 二选一。
 type ClaimOrExpression struct {
 	// claim is the JWT claim to use.
@@ -491,7 +459,6 @@ type ClaimOrExpression struct {
 	Expression string `json:"expression,omitempty"`
 }
 
-// ExtraMapping provides the configuration for a single extra mapping.
 // ExtraMapping 把 CEL 求值结果附加到 user.Info.Extra，key 必须是带域前缀的
 // 规范化名称，以免与内置属性冲突。
 type ExtraMapping struct {
@@ -520,7 +487,6 @@ type ExtraMapping struct {
 	ValueExpression string `json:"valueExpression"`
 }
 
-// UserValidationRule provides the configuration for a single user info validation rule.
 // UserValidationRule 在映射完成后对最终 UserInfo 施加不变量，例如阻止外部
 // 身份冒用 system: 前缀。表达式只能读 user，不能修改映射结果。
 type UserValidationRule struct {
@@ -583,12 +549,10 @@ type AuthorizerConfiguration struct {
 	// types like Node, RBAC, ABAC, etc.
 	Type string `json:"type"`
 
-	// Name used to describe the webhook
-	// This is explicitly used in monitoring machinery for metrics
-	// Note: Names must be DNS1123 labels like `myauthorizername` or
-	//		 subdomains like `myauthorizer.example.domain`
-	// Required, with no default
-	// 名称会进入指标标签，因此必须满足 DNS1123，且在同一配置内唯一。
+	// Name 用于描述该 webhook 授权器，会显式用于监控机制中的指标。
+	// 注意：名称必须是 DNS1123 标签（如 `myauthorizername`）或
+	//		 子域名（如 `myauthorizer.example.domain`）。
+	// 必填，无默认值，且在同一配置内必须唯一。
 	Name string `json:"name"`
 
 	// Webhook defines the configuration for a Webhook authorizer
@@ -673,9 +637,7 @@ type WebhookConnectionInfo struct {
 	//   allowed for kube-apiserver.
 	Type string `json:"type"`
 
-	// Path to KubeConfigFile for connection info
-	// Required, if connectionInfo.Type is KubeConfig
-	// 仅在 Type=KubeConfigFile 时需要；InClusterConfig 会忽略该字段。
+	// 指向 kubeconfig 文件的路径；仅在 Type=KubeConfigFile 时必填；InClusterConfig 会忽略该字段。
 	KubeConfigFile *string `json:"kubeConfigFile"`
 }
 

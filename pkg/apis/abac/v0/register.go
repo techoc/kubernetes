@@ -40,8 +40,8 @@ var (
 	// SchemeBuilder 是本包的 scheme 构造器，保存了需要执行的初始化函数。
 	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 一起移到 k8s.io/api。
 	SchemeBuilder runtime.SchemeBuilder
-	// localSchemeBuilder ïs a pointer to SchemeBuilder instance. Using localSchemeBuilder
-	// defaulting and conversion init funcs are registered as well.
+	// localSchemeBuilder 是指向 SchemeBuilder 实例的指针；使用 localSchemeBuilder
+	// 时，defaulting 和 conversion 初始化函数也会被一并注册。
 	// localSchemeBuilder 和 AddToScheme 仍留在 k8s.io/kubernetes。
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme 是通用的注册函数，把本包的 group/version 与类型映射到 scheme。

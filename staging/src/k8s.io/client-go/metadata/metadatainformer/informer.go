@@ -71,9 +71,9 @@ func NewFilteredSharedInformerFactory(client metadata.Interface, defaultResync t
 	}
 }
 
-// NewSharedInformerFactoryWithOptions constructs a new instance of metadataSharedInformerFactory with additional options.
+// NewSharedInformerFactoryWithOptions 构造带额外选项的 metadataSharedInformerFactory 新实例。
 //
-// 中文：默认监听所有命名空间，options 在构造后依次应用，可覆盖该默认值或注入 transform。
+// 默认监听所有命名空间，options 在构造后依次应用，可覆盖该默认值或注入 transform。
 func NewSharedInformerFactoryWithOptions(client metadata.Interface, defaultResync time.Duration, options ...SharedInformerOption) SharedInformerFactory {
 	factory := &metadataSharedInformerFactory{
 		client:           client,
@@ -100,16 +100,14 @@ type metadataSharedInformerFactory struct {
 
 	lock      sync.Mutex
 	informers map[schema.GroupVersionResource]informers.GenericInformer
-	// startedInformers is used for tracking which informers have been started.
-	// This allows Start() to be called multiple times safely.
-	// 中文：Start 幂等性依赖该标记；同一 informer 只会启动一次。
+	// startedInformers 用于跟踪哪些 informer 已经启动，使 Start() 可以被安全地多次调用。
+	// Start 幂等性依赖该标记；同一 informer 只会启动一次。
 	startedInformers map[schema.GroupVersionResource]bool
 	tweakListOptions TweakListOptionsFunc
 	// wg tracks how many goroutines were started.
 	wg sync.WaitGroup
-	// shuttingDown is true when Shutdown has been called. It may still be running
-	// because it needs to wait for goroutines.
-	// 中文：置位后 Start 不再启动新 informer，但 Shutdown 仍可能阻塞在等待已启动者退出。
+	// shuttingDown 在调用 Shutdown 后置为 true；Shutdown 可能仍在运行，因为需要等待 goroutine 退出。
+	// 置位后 Start 不再启动新 informer，但 Shutdown 仍可能阻塞在等待已启动者退出。
 	shuttingDown bool
 }
 
@@ -136,9 +134,8 @@ func (f *metadataSharedInformerFactory) ForResource(gvr schema.GroupVersionResou
 	return informer
 }
 
-// Start is a legacy wrapper that initializes all requested informers.
-//
-// 中文：把 stop channel 适配为 context，仅用于兼容旧调用方。
+// Start 是遗留包装函数：把 stop channel 适配为 context 并初始化所有已请求的 informer，
+// 仅用于兼容旧调用方。
 //
 //logcheck:context // StartWithContext should be used instead of Start in code which supports contextual logging.
 func (f *metadataSharedInformerFactory) Start(stopCh <-chan struct{}) {
@@ -159,10 +156,8 @@ func (f *metadataSharedInformerFactory) StartWithContext(ctx context.Context) {
 	for informerType, informer := range f.informers {
 		if !f.startedInformers[informerType] {
 			f.wg.Add(1)
-			// We need a new variable in each loop iteration,
-			// otherwise the goroutine would use the loop variable
-			// and that keeps changing.
-			// 中文：与 Go 1.22 之前的循环变量语义兼容，显式捕获本次迭代的 informer。
+			// 每次迭代都需要一个新变量，否则 goroutine 会使用不断变化的循环变量。
+			// 与 Go 1.22 之前的循环变量语义兼容，显式捕获本次迭代的 informer。
 			informer := informer.Informer()
 			go func() {
 				defer f.wg.Done()
@@ -199,7 +194,7 @@ func (f *metadataSharedInformerFactory) WaitForCacheSync(stopCh <-chan struct{})
 
 // Shutdown 停止接受新的启动请求，并等待已启动的 informer goroutine 退出。
 //
-// 中文：defer 注册顺序保证先释放锁再 wg.Wait，否则等待期间持锁会阻塞其它调用方；
+// defer 注册顺序保证先释放锁再 wg.Wait，否则等待期间持锁会阻塞其它调用方；
 // 置位 shuttingDown 后 StartWithContext 直接返回，新的 informer 不会再被启动。
 func (f *metadataSharedInformerFactory) Shutdown() {
 	// Will return immediately if there is nothing to wait for.
@@ -266,7 +261,7 @@ func (d *metadataInformer) Informer() cache.SharedIndexInformer {
 
 // Lister 返回基于该 informer 索引器的 lister。
 //
-// 中文：RuntimeObjectShim 把 PartialObjectMetadata 适配为通用 runtime.Object 视图，
+// RuntimeObjectShim 把 PartialObjectMetadata 适配为通用 runtime.Object 视图，
 // 使调用方无需感知元数据专用的 lister 类型。
 func (d *metadataInformer) Lister() cache.GenericLister {
 	return metadatalister.NewRuntimeObjectShim(metadatalister.New(d.informer.GetIndexer(), d.gvr))

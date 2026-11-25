@@ -88,7 +88,6 @@ func (bus *DBusCon) CurrentInhibitDelay() (time.Duration, error) {
 		return 0, fmt.Errorf("InhibitDelayMaxUSec from logind is not a uint64 as expected")
 	}
 
-	// InhibitDelayMaxUSec is in microseconds
 	// logind 以微秒为单位暴露 InhibitDelayMaxUSec。
 	duration := time.Duration(delay) * time.Microsecond
 	return duration, nil

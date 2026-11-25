@@ -95,8 +95,8 @@ type StorageClassList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Captures the intent to attach or detach the specified volume to/from
-// the specified node.
+// VolumeAttachment 记录将指定 volume 挂载（attach）或卸载（detach）到
+// 指定 node 的意图。
 //
 // VolumeAttachment 对象是非命名空间对象。
 type VolumeAttachment struct {
@@ -111,8 +111,8 @@ type VolumeAttachment struct {
 	// 由 Kubernetes 系统填充。
 	Spec VolumeAttachmentSpec
 
-	// Status of the VolumeAttachment request.
-	// Populated by the entity completing the attach or detach
+	// VolumeAttachment 请求的状态。
+	// 由完成挂载或卸载操作的实体填充，
 	// 即外部 attacher 执行的操作。
 	// +optional
 	Status VolumeAttachmentStatus
@@ -164,27 +164,26 @@ type VolumeAttachmentSource struct {
 
 // The status of a VolumeAttachment request.
 type VolumeAttachmentStatus struct {
-	// Indicates the volume is successfully attached.
+	// 表示 volume 已成功挂载。
 	// 该字段只能由完成 attach 的实体设置，
 	// 即外部 attacher 执行的操作。
 	Attached bool
 
-	// Upon successful attach, this field is populated with any
-	// information returned by the attach operation that must be passed
-	// into subsequent WaitForAttach or Mount calls.
+	// 挂载成功后，此字段会被填入挂载操作返回的、
+	// 必须传递给后续 WaitForAttach 或 Mount 调用的信息。
 	// 该字段只能由完成 attach 的实体设置，
 	// 即外部 attacher 执行的操作。
 	// +optional
 	AttachmentMetadata map[string]string
 
-	// The last error encountered during attach operation, if any.
+	// 挂载操作期间遇到的最后一个错误（如有）。
 	// 该字段只能由完成 attach 的实体设置，
 	// 即外部 attacher 执行的操作。
 	// +optional
 	AttachError *VolumeError
 
-	// The last error encountered during detach operation, if any.
-	// This field must only be set by the entity completing the detach
+	// 卸载操作期间遇到的最后一个错误（如有）。
+	// 该字段只能由完成 detach 的实体设置，
 	// 即外部 attacher 执行的操作。
 	// +optional
 	DetachError *VolumeError
@@ -237,12 +236,10 @@ type CSIDriver struct {
 	metav1.TypeMeta
 
 	// 标准的对象元数据。
-	// metadata.Name indicates the name of the CSI driver that this object
-	// refers to; it MUST be the same name returned by the CSI GetPluginName()
-	// call for that driver.
-	// The driver name must be 63 characters or less, beginning and ending with
-	// an alphanumeric character ([a-z0-9A-Z]) with dashes (-), dots (.), and
-	// alphanumerics between.
+	// metadata.Name 表示此对象所引用的 CSI 驱动名称；
+	// 它必须与该驱动 CSI GetPluginName() 调用返回的名称一致。
+	// 驱动名必须为 63 个字符或更少，以字母数字字符（[a-z0-9A-Z]）开头和结尾，
+	// 中间可包含短横线（-）、点（.）和字母数字字符。
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	metav1.ObjectMeta
 
@@ -267,15 +264,14 @@ type CSIDriverList struct {
 
 // CSIDriverSpec 是 CSIDriver 的规格。
 type CSIDriverSpec struct {
-	// attachRequired indicates this CSI volume driver requires an attach
-	// operation (because it implements the CSI ControllerPublishVolume()
-	// method), and that the Kubernetes attach detach controller should call
-	// the attach volume interface which checks the volumeattachment status
-	// and waits until the volume is attached before proceeding to mounting.
-	// The CSI external-attacher coordinates with CSI volume driver and updates
-	// the volumeattachment status when the attach operation is complete.
-	// If the value is specified to false, the attach operation will be skipped.
-	// Otherwise the attach operation will be called.
+	// attachRequired 表示该 CSI volume 驱动需要挂载（attach）操作
+	// （因为它实现了 CSI ControllerPublishVolume() 方法），并且 Kubernetes
+	// 的挂载/卸载控制器应调用挂载 volume 的接口，由该接口检查 volumeattachment
+	// 状态，并等待 volume 挂载完成后再继续执行挂载（mount）。
+	// CSI external-attacher 与 CSI volume 驱动协调，并在挂载操作完成时
+	// 更新 volumeattachment 状态。
+	// 若该值显式设为 false，则跳过挂载操作。
+	// 否则会调用挂载操作。
 	//
 	// 该字段不可变。
 	//
@@ -312,18 +308,17 @@ type CSIDriverSpec struct {
 	// +optional
 	PodInfoOnMount *bool
 
-	// VolumeLifecycleModes defines what kind of volumes this CSI volume driver supports.
-	// The default if the list is empty is "Persistent", which is the usage
-	// defined by the CSI specification and implemented in Kubernetes via the usual
-	// PV/PVC mechanism.
-	// The other mode is "Ephemeral". In this mode, volumes are defined inline
-	// inside the pod spec with CSIVolumeSource and their lifecycle is tied to
-	// the lifecycle of that pod. A driver has to be aware of this
-	// because it is only going to get a NodePublishVolume call for such a volume.
+	// VolumeLifecycleModes 定义该 CSI volume 驱动支持的 volume 类型。
+	// 若列表为空，默认为 "Persistent"，即 CSI 规范定义的、
+	// Kubernetes 通过常规 PV/PVC 机制实现的用法。
+	// 另一种模式是 "Ephemeral"。在这种模式下，volume 以 CSIVolumeSource
+	// 的形式内联定义在 Pod spec 中，其生命周期与该 Pod 的生命周期绑定。
+	// 驱动必须意识到这一点，因为对这样的 volume，
+	// 驱动只会收到一次 NodePublishVolume 调用。
 	// 有关实现此模式的更多信息，参见
 	// https://kubernetes-csi.github.io/docs/ephemeral-local-volumes.html
-	// A driver can support one or more of these mode and
-	// more modes may be added in the future.
+	// 一个驱动可以支持一种或多种这样的模式，
+	// 未来可能添加更多模式。
 	//
 	// 该字段不可变。
 	//
@@ -670,39 +665,35 @@ type CSINodeList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CSIStorageCapacity stores the result of one CSI GetCapacity call.
-// For a given StorageClass, this describes the available capacity in a
-// particular topology segment.  This can be used when considering where to
-// instantiate new PersistentVolumes.
+// CSIStorageCapacity 存储一次 CSI GetCapacity 调用的结果。
+// 对于给定的 StorageClass，它描述某个特定拓扑段中的可用容量。
+// 在考虑将新的 PersistentVolume 实例化到何处时可以使用。
 //
 // 例如可表达如下信息：
 // - 存储类别 "standard" 在 "topology.kubernetes.io/zone=us-east1" 有 "1234 GiB" 可用
 // - 存储类别 "localssd" 在 "kubernetes.io/hostname=knode-abc123" 有 "10 GiB" 可用
 //
-// The following three cases all imply that no capacity is available for
-// a certain combination:
-// - no object exists with suitable topology and storage class name
-// - such an object exists, but the capacity is unset
-// - such an object exists, but the capacity is zero
+// 以下三种情况都意味着某个特定组合没有可用容量：
+// - 不存在具有合适拓扑和存储类名的对象
+// - 这样的对象存在，但 capacity 未设置
+// - 这样的对象存在，但 capacity 为零
 //
 // 这些对象的生产者可自行决定采用哪种方式。
 //
-// They are consumed by the kube-scheduler when a CSI driver opts into
-// capacity-aware scheduling with CSIDriverSpec.StorageCapacity. The scheduler
-// compares the MaximumVolumeSize against the requested size of pending volumes
-// to filter out unsuitable nodes. If MaximumVolumeSize is unset, it falls back
-// to a comparison against the less precise Capacity. If that is also unset,
-// the scheduler assumes that capacity is insufficient and tries some other
-// node.
+// 当 CSI 驱动通过 CSIDriverSpec.StorageCapacity 选择启用
+// 容量感知调度时，由 kube-scheduler 消费这些对象。调度器将
+// MaximumVolumeSize 与待处理 volume 的请求大小进行比较，以过滤掉不合适的节点。
+// 若 MaximumVolumeSize 未设置，则回退到与精度较低的 Capacity
+// 进行比较。若该值也未设置，调度器认为容量不足，
+// 转而尝试其他节点。
 type CSIStorageCapacity struct {
 	metav1.TypeMeta
-	// Standard object's metadata. The name has no particular meaning. It must be
-	// be a DNS subdomain (dots allowed, 253 characters). To ensure that
-	// there are no conflicts with other CSI drivers on the cluster, the recommendation
-	// is to use csisc-<uuid>, a generated name, or a reverse-domain name which ends
-	// with the unique CSI driver name.
+	// 标准对象元数据。名称没有特定含义。它必须是
+	// DNS 子域（允许点号，253 个字符）。为确保与
+	// 集群中的其他 CSI 驱动不冲突，
+	// 建议使用 csisc-<uuid>、生成名，或以唯一 CSI 驱动名结尾的反向域名。
 	//
-	// Objects are namespaced.
+	// 对象是有命名空间的。
 	//
 	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
@@ -717,11 +708,10 @@ type CSIStorageCapacity struct {
 	// +optional
 	NodeTopology *metav1.LabelSelector
 
-	// The name of the StorageClass that the reported capacity applies to.
-	// It must meet the same requirements as the name of a StorageClass
-	// object (non-empty, DNS subdomain). If that object no longer exists,
-	// the CSIStorageCapacity object is obsolete and should be removed by its
-	// creator.
+	// 所报告容量适用的 StorageClass 名称。
+	// 它必须满足与 StorageClass 对象名相同的要求（非空、DNS 子域）。
+	// 若该对象已不存在，则此 CSIStorageCapacity 对象已过时，
+	// 应由其创建者移除。
 	// 该字段不可变。
 	StorageClassName string
 
@@ -779,7 +769,7 @@ type VolumeAttributesClass struct {
 	// +optional
 	metav1.ObjectMeta
 
-	// Name of the CSI driver
+	// Name 是 CSI 驱动名称。
 	// 该字段不可变。
 	DriverName string
 

@@ -148,9 +148,8 @@ func ValidateRoleBinding(roleBinding *rbac.RoleBinding) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, validation.ValidateObjectMeta(&roleBinding.ObjectMeta, true, ValidateRBACName, field.NewPath("metadata"))...)
 
-	// TODO allow multiple API groups.  For now, restrict to one, but I can envision other experimental roles in other groups taking
-	// advantage of the binding infrastructure
-	// 目前只允许 RBAC 组的角色引用，为将来其他 API 组复用绑定机制留有余地。
+	// TODO 允许多个 API 组：目前只允许 RBAC 组的角色引用，
+	// 但设想将来其他 API 组的实验性角色也可复用绑定机制，留有余地。
 	if roleBinding.RoleRef.APIGroup != rbac.GroupName {
 		allErrs = append(allErrs, field.NotSupported(field.NewPath("roleRef", "apiGroup"), roleBinding.RoleRef.APIGroup, []string{rbac.GroupName}))
 	}
@@ -197,9 +196,8 @@ func ValidateClusterRoleBinding(roleBinding *rbac.ClusterRoleBinding) field.Erro
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, validation.ValidateObjectMeta(&roleBinding.ObjectMeta, false, ValidateRBACName, field.NewPath("metadata"))...)
 
-	// TODO allow multiple API groups.  For now, restrict to one, but I can envision other experimental roles in other groups taking
-	// advantage of the binding infrastructure
-	// 目前只允许 RBAC 组的角色引用，为将来其他 API 组复用绑定机制留有余地。
+	// TODO 允许多个 API 组：目前只允许 RBAC 组的角色引用，
+	// 但设想将来其他 API 组的实验性角色也可复用绑定机制，留有余地。
 	if roleBinding.RoleRef.APIGroup != rbac.GroupName {
 		allErrs = append(allErrs, field.NotSupported(field.NewPath("roleRef", "apiGroup"), roleBinding.RoleRef.APIGroup, []string{rbac.GroupName}))
 	}

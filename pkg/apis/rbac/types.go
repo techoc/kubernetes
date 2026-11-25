@@ -20,10 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Authorization is calculated against
+// Authorization 按以下顺序评估：
 // 1. 评估 ClusterRoleBindings——命中即短路
 // 2. 评估所请求命名空间中的 RoleBindings——命中即短路
-// 3. deny by default
+// 3. 默认拒绝（deny by default）
 
 // APIGroupAll and these consts are default values for rbac authorization.
 const (
@@ -55,8 +55,10 @@ type PolicyRule struct {
 	// ResourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.
 	ResourceNames []string
 
-	// NonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full, final step in the path
-	// If an action is not a resource API request, then the URL is split on '/' and is checked against the NonResourceURLs to look for a match.
+	// NonResourceURLs 是用户应有权访问的部分 URL 集合。允许使用 *，
+	// 但只能作为路径中完整且最后的一步。
+	// 若某个操作不是资源 API 请求，则 URL 会按 '/' 拆分，
+	// 并与 NonResourceURLs 比对以寻找匹配项。
 	// 非资源 URL 不属于命名空间，因此本字段仅适用于被 ClusterRoleBinding 引用的 ClusterRole
 	// 规则只能针对 API 资源（如 "pods"、"secrets"）或非资源 URL 路径（如 "/api"），二者不可兼得
 	NonResourceURLs []string
@@ -113,7 +115,7 @@ type RoleBinding struct {
 	// subjects 包含角色所作用对象的引用。
 	Subjects []Subject
 
-	// RoleRef can reference a Role in the current namespace or a ClusterRole in the global namespace.
+	// RoleRef 可以引用当前命名空间中的 Role，或全局命名空间中的 ClusterRole。
 	// 若 RoleRef 无法解析，授权器必须返回错误
 	// 该字段不可变。
 	RoleRef RoleRef
@@ -179,7 +181,7 @@ type ClusterRoleBinding struct {
 	// subjects 包含角色所作用对象的引用。
 	Subjects []Subject
 
-	// RoleRef can only reference a ClusterRole in the global namespace.
+	// RoleRef 只能引用全局命名空间中的 ClusterRole。
 	// 若 RoleRef 无法解析，授权器必须返回错误
 	// 该字段不可变。
 	RoleRef RoleRef

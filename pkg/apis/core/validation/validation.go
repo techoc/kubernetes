@@ -430,8 +430,7 @@ func ValidateObjectMetaWithOpts(meta *metav1.ObjectMeta, isNamespaced bool, name
 }
 
 // ValidateObjectMeta 在对象创建时校验元数据，假定名称生成已完成；额外校验 finalizer 名称合法性。
-// TODO: Remove calls to this method scattered in validations of specific resources, e.g., ValidatePodUpdate.
-// TODO: Remove calls to this method scattered in validations of specific resources, e.g., ValidatePodUpdate.
+// TODO: 移除散落在具体资源校验（如 ValidatePodUpdate）中对本方法的调用。
 func ValidateObjectMeta(meta *metav1.ObjectMeta, requiresNamespace bool, nameFn ValidateNameFunc, fldPath *field.Path) field.ErrorList {
 	allErrs := apimachineryvalidation.ValidateObjectMeta(meta, requiresNamespace, apimachineryvalidation.ValidateNameFunc(nameFn), fldPath)
 	// run additional checks for the finalizer name
@@ -6833,7 +6832,7 @@ func dropCPUMemoryUpdates(resourceList, oldResourceList core.ResourceList) core.
 }
 
 // dropCPUMemoryResourcesFromContainer 从容器中删除 CPU 与内存资源，并在存在时从旧 Pod 容器中拷贝回来。
-// TODO(ndixita): refactor to reuse dropCPUMemoryResourceRequirementsUpdates
+// TODO(ndixita): 重构以复用 dropCPUMemoryResourceRequirementsUpdates。
 func dropCPUMemoryResourcesFromContainer(container *core.Container, oldPodSpecContainer *core.Container) {
 	lim := dropCPUMemoryUpdates(container.Resources.Limits, oldPodSpecContainer.Resources.Limits)
 	req := dropCPUMemoryUpdates(container.Resources.Requests, oldPodSpecContainer.Resources.Requests)
@@ -8721,7 +8720,7 @@ func ValidateEndpoints(endpoints, oldEndpoints *core.Endpoints) field.ErrorList 
 
 	subsetErrs := validateEndpointSubsets(endpoints.Subsets, field.NewPath("subsets"))
 	if len(subsetErrs) != 0 {
-		// If this is an update, and Subsets was unchanged, then ignore the
+		// 若这是一次更新且 Subsets 未发生变化，则忽略这些错误：
 		// 老版本 Kubernetes 曾认为这些数据合法，不应因为升级而导致存量对象无法更新。
 		// 只有先拿到错误才做 DeepEqual，是因为 Endpoints 可能很大、比较开销高；
 		// 没有错误时无需付出这份代价。

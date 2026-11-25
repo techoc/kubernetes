@@ -83,7 +83,6 @@ func TestCachedTokenAuthenticator(t *testing.T) {
 	resultUsers["usertoken2"] = &user.DefaultInfo{Name: "user2"}
 	resultUsers["usertoken3"] = &user.DefaultInfo{Name: "user3"}
 
-	// populate cache
 	// 首次调用应回源，并缓存成功结果。
 	if resp, ok, err := a.AuthenticateToken(context.Background(), "usertoken1"); err != nil || !ok || resp.User.GetName() != "user1" {
 		t.Errorf("Expected user1")
@@ -102,7 +101,6 @@ func TestCachedTokenAuthenticator(t *testing.T) {
 	calledWithToken = []string{}
 	resultUsers, resultOk, resultErr = nil, false, nil
 
-	// authenticate calls still succeed and backend is not hit
 	// 后端改为失败，但 TTL 内仍应命中缓存返回成功结果。
 	if resp, ok, err := a.AuthenticateToken(context.Background(), "usertoken1"); err != nil || !ok || resp.User.GetName() != "user1" {
 		t.Errorf("Expected user1")
@@ -117,7 +115,6 @@ func TestCachedTokenAuthenticator(t *testing.T) {
 		t.Errorf("Expected no token calls, got %v", calledWithToken)
 	}
 
-	// skip forward in time
 	// 推进超过 TTL，缓存应失效并重新回源（此时后端返回失败）。
 	fakeClock.Step(2 * time.Minute)
 
@@ -565,8 +562,7 @@ func (s *singleBenchmark) bench(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		r := mathrand.New(mathrand.NewSource(mathrand.Int63()))
 		for pb.Next() {
-			// some problems appear with random access, some appear with many
-			// requests for a single entry, so we do both.
+			// 有的问题出现在随机访问时，有的出现在大量请求同一条目时，因此两者都做：
 			// 随机访问覆盖分片竞争，固定 token 覆盖同一 key 的 singleflight 竞争。
 			s.doAuthForTokenN(r.Intn(s.tokenCount), a)
 			s.doAuthForTokenN(0, a)

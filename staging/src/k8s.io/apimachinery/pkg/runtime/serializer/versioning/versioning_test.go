@@ -40,7 +40,6 @@ func (d *testDecodable) GetObjectKind() schema.ObjectKind                { retur
 func (d *testDecodable) SetGroupVersionKind(gvk schema.GroupVersionKind) { d.gvk = gvk }
 func (d *testDecodable) GroupVersionKind() schema.GroupVersionKind       { return d.gvk }
 func (d *testDecodable) DeepCopyObject() runtime.Object {
-	// no real deepcopy because these tests check for pointer equality
 	// 不做真正的深拷贝：测试通过指针相等判断是否返回了同一对象。
 	return d
 }
@@ -194,7 +193,6 @@ func TestDecode(t *testing.T) {
 			sameObject:  decodable2,
 			decodes:     schema.GroupVersion{Group: "other", Version: runtime.APIVersionInternal},
 		},
-		// defaultGVK.Group is allowed to force a conversion to the destination group
 		// defaultGVK 的 Group 可强制把解码结果转换到目标组。
 		{
 			serializer:  &mockSerializer{actual: gvk1, obj: decodable1},
@@ -204,7 +202,6 @@ func TestDecode(t *testing.T) {
 			sameObject:  decodable2,
 			decodes:     schema.GroupVersion{Group: "force", Version: runtime.APIVersionInternal},
 		},
-		// uses direct conversion for into when objects differ
 		// 目标对象类型与解码结果不同时，走直接转换（Convert）而非版本转换。
 		{
 			into:        decodable3,
@@ -213,7 +210,6 @@ func TestDecode(t *testing.T) {
 			expectedGVK: gvk1,
 			sameObject:  decodable3,
 		},
-		// decode into the same version as the serialized object
 		// 解码目标版本与序列化对象版本相同时，应直接返回同一对象。
 		{
 			decodes: schema.GroupVersions{gvk1.GroupVersion()},

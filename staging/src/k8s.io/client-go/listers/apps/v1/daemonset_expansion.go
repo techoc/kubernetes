@@ -66,13 +66,11 @@ func (s *daemonSetLister) GetPodDaemonSets(pod *v1.Pod) ([]*apps.DaemonSet, erro
 		}
 		selector, err = metav1.LabelSelectorAsSelector(daemonSet.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the pod
-			// 中文：selector 非法时无法判定，保守地视为不匹配。
+			// selector 非法时无法判定，保守地视为该 DaemonSet 与 pod 不匹配。
 			continue
 		}
 
-		// If a daemonSet with a nil or empty selector creeps in, it should match nothing, not everything.
-		// 中文：空 selector 按“匹配空集”处理，绝不能退化为“匹配全部”。
+		// 空 selector 按“匹配空集”处理，绝不能退化为“匹配全部”。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue
 		}
@@ -106,12 +104,10 @@ func (s *daemonSetLister) GetHistoryDaemonSets(history *apps.ControllerRevision)
 	for _, ds := range list {
 		selector, err := metav1.LabelSelectorAsSelector(ds.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the history
-			// 中文：非法 selector 保守视为不匹配。
+			// 非法 selector 无法判定，保守视为与 history 不匹配。
 			continue
 		}
-		// If a DaemonSet with a nil or empty selector creeps in, it should match nothing, not everything.
-		// 中文：空 selector 不得匹配一切。
+		// DaemonSet 的 selector 为 nil 或空时不得匹配一切。
 		if selector.Empty() || !selector.Matches(labels.Set(history.Labels)) {
 			continue
 		}

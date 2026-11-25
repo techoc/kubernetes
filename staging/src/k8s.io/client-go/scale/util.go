@@ -36,7 +36,7 @@ import (
 	scaleext "k8s.io/client-go/scale/scheme/extensionsv1beta1"
 )
 
-// PreferredResourceMapper determines the preferred version of a resource to scale
+// PreferredResourceMapper 决定要伸缩（scale）的目标资源的优先版本。
 // 通常由 meta.RESTMapper 实现：给定可能缺少版本的资源，返回服务端首选版本的 GVR。
 type PreferredResourceMapper interface {
 	// ResourceFor takes a partial resource and returns the preferred resource.
@@ -49,8 +49,7 @@ var _ PreferredResourceMapper = meta.RESTMapper(nil)
 // ScaleKindResolver knows about the relationship between
 // resources and the GroupVersionKind of their scale subresources.
 type ScaleKindResolver interface {
-	// ScaleForResource returns the GroupVersionKind of the
-	// scale subresource for the given GroupVersionResource.
+	// ScaleForResource 返回给定 GroupVersionResource 的 scale 子资源的 GroupVersionKind。
 	// 注意返回的是 scale 子资源自身的 GVK，而非父资源的 GVK。
 	ScaleForResource(resource schema.GroupVersionResource) (scaleVersion schema.GroupVersionKind, err error)
 }
@@ -110,11 +109,8 @@ func (r *cachedScaleKindResolver) ScaleForResource(resource schema.GroupVersionR
 		return gvk, nil
 	}
 
-	// we could have multiple fetches of the same resources, but that's probably
-	// better than limiting to only one reader at once (mu.Mutex),
-	// or blocking checks for other resources while we fetch
-	// (mu.Lock before fetch).
-	// 即有少量重复的 discovery 请求，也优于把所有资源查询串行化。
+	// 可能出现对同一资源的少量重复获取，但这优于用 mu.Mutex 把所有资源查询串行化
+	// （同一时刻只允许一个读取者），也优于在 fetch 之前加 mu.Lock 而阻塞对其他资源的检查。
 	gvk, err := r.base.ScaleForResource(resource)
 	if err != nil {
 		return schema.GroupVersionKind{}, err
@@ -142,7 +138,7 @@ func NewDiscoveryScaleKindResolver(client discovery.ServerResourcesInterface) Sc
 	}
 }
 
-// ScaleConverter knows how to convert between external scale versions.
+// ScaleConverter 负责在 scale 的各外部版本之间转换。
 // 内部通过 internalVersioner 把任意外部版本先收敛到内部类型，再由 scheme 转出目标版本。
 type ScaleConverter struct {
 	scheme            *runtime.Scheme

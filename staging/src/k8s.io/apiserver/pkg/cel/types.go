@@ -185,7 +185,7 @@ func (t *DeclType) MaybeAssignTypeName(name string) *DeclType {
 	return t
 }
 
-// ExprType returns the CEL expression type of this declaration.
+// ExprType 返回该声明的 CEL 表达式类型；
 // 供较旧的表达树（exprpb.Type）接口使用；新代码应优先用 CelType。
 func (t *DeclType) ExprType() (*exprpb.Type, error) {
 	return cel.TypeToExprType(t.celType)
@@ -323,7 +323,7 @@ func (f *DeclField) TypeName() string {
 	return f.Type.TypeName()
 }
 
-// DefaultValue returns the zero value associated with the field.
+// DefaultValue 返回与该字段关联的零值；
 // 字段级默认值优先于类型默认值；后者是 schema 的类型零值。
 func (f *DeclField) DefaultValue() ref.Val {
 	if f.defaultValue != nil {
@@ -332,7 +332,7 @@ func (f *DeclField) DefaultValue() ref.Val {
 	return f.Type.DefaultValue()
 }
 
-// EnumValues returns the set of values that this field may take.
+// EnumValues 返回该字段可取的值集合；
 // 始终返回非 nil 切片，使调用方可以直接 range 而不必判空。
 func (f *DeclField) EnumValues() []ref.Val {
 	if f.enumValues == nil || len(f.enumValues) == 0 {
@@ -583,8 +583,7 @@ func findScalar(typename string) *DeclType {
 }
 
 var (
-	// AnyType is equivalent to the CEL 'protobuf.Any' type in that the value may have any of the
-	// types supported.
+	// AnyType 等价于 CEL 的 'protobuf.Any' 类型，值可以是任意受支持的类型；
 	// any/dyn 的最小尺寸取 1（JSON null），因为编译期无法确定实际类型。
 	AnyType = NewSimpleTypeWithMinSize("any", cel.AnyType, nil, 1)
 

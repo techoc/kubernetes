@@ -80,7 +80,7 @@ var (
 	stringType             = reflect.TypeOf(string(""))
 	fieldCache             = newFieldsCache()
 
-	// DefaultUnstructuredConverter performs unstructured to Go typed object conversions.
+	// DefaultUnstructuredConverter 执行 unstructured 到 Go 强类型对象的转换。
 	//
 	// 比较函数把 time.Time 按 UTC 归一化，因为同一时刻可能因时区不同而
 	// DeepEqual 失败。KUBE_PATCH_CONVERSION_DETECTOR 可开启测试用的双重校验。
@@ -159,11 +159,8 @@ type fromUnstructuredContext struct {
 	unknownFieldErrors []error
 }
 
-// pushMatchedKeyTracker adds a placeholder set for tracking
-// matched keys for the given level. This should only be
-// called from `structFromUnstructured`.
-//
-// 每个结构体层级压入一个占位集合；未知字段检测关闭时完全跳过以省分配。
+// pushMatchedKeyTracker 为当前层级压入一个占位集合，用于跟踪已匹配的 key。
+// 只应从 `structFromUnstructured` 调用；未知字段检测关闭时完全跳过以省分配。
 func (c *fromUnstructuredContext) pushMatchedKeyTracker() {
 	if !c.returnUnknownFields {
 		return
@@ -365,7 +362,6 @@ func fromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error 
 		}
 	}
 
-	// Check if the object has a custom JSON marshaller/unmarshaller.
 	// 自定义转换（structured-merge-diff 的 TypeReflectEntry）优先于反射逻辑。
 	entry := value.TypeReflectEntryOf(dv.Type())
 	if entry.CanConvertFromUnstructured() {
@@ -410,8 +406,7 @@ func fieldInfoFromField(structType reflect.Type, field int) *fieldInfo {
 		items := strings.Split(jsonTag, ",")
 		info.name = items[0]
 		if isInlinedFromTag(typeField, items[0], items[1:]) {
-			// match stdlib behavior when controlled by tag
-			// 空名 + 内联选项表示该字段的键应展开到父对象。
+			// 与标准库行为一致（由 tag 控制时）：空名 + 内联选项表示该字段的键应展开到父对象。
 			info.name = ""
 		} else if len(info.name) == 0 && !typeField.Anonymous {
 			// match stdlib behavior for naming fields that don't specify a json tag name
@@ -492,9 +487,7 @@ func mapFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) err
 func sliceFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error {
 	st, dt := sv.Type(), dv.Type()
 	if st.Kind() == reflect.String && dt.Elem().Kind() == reflect.Uint8 {
-		// We store original []byte representation as string.
-		// This conversion is allowed, but we need to be careful about
-		// marshaling data appropriately.
+		// 原始 []byte 表示被存为 string。该转换是允许的，但序列化数据要谨慎处理：
 		// []byte 在 JSON 中是 base64 字符串，先 Marshal 再 Unmarshal 才能正确还原。
 		if len(sv.Interface().(string)) > 0 {
 			marshalled, err := json.Marshal(sv.Interface())
@@ -579,8 +572,7 @@ func structFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) 
 		fv := dv.Field(i)
 
 		if len(fieldInfo.name) == 0 {
-			// This field is inlined, recurse into fromUnstructured again
-			// with the same set of matched keys.
+			// 该字段是内联的，用同一组已匹配 key 再次递归调用 fromUnstructured；
 			// 内联字段的键直接属于当前层，因此沿用同一匹配集合。
 			ctx.isInlined = true
 			if err := fromUnstructured(sv, fv, ctx); err != nil {
@@ -703,7 +695,6 @@ func toUnstructuredViaJSON(obj interface{}, u *map[string]interface{}) error {
 
 // toUnstructured 把 Go 值递归转换为 JSON 兼容的 interface{} 值。
 func toUnstructured(sv, dv reflect.Value) error {
-	// Check if the object has a custom string converter.
 	// 自定义转换优先于反射，保证特殊类型（如 resource.Quantity）的语义。
 	entry := value.TypeReflectEntryOf(sv.Type())
 	if entry.CanConvertToUnstructured() {
@@ -889,7 +880,6 @@ func structToUnstructured(sv, dv reflect.Value) error {
 			continue
 		}
 		if len(fieldInfo.name) == 0 {
-			// This field is inlined.
 			// 内联字段的键直接写入当前 map。
 			if err := toUnstructured(fv, dv); err != nil {
 				return err

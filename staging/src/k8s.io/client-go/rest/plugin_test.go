@@ -120,7 +120,7 @@ func TestAuthPluginPersist(t *testing.T) {
 		// non-persisting plugins should work fine without modifying config.
 		{"pluginA2", map[string]string{}, map[string]string{}, map[string]string{}},
 		{"pluginA2", fooBarConfig, fooBarConfig, fooBarConfig},
-		// plugins that persist config should be able to persist when they want.
+		// 持久化型插件应在其选择的时机持久化。
 		// 首次登录只写入 login 标记；请求发出后才累加 roundTrips，说明两次持久化点不同。
 		{
 			"pluginPersist",
@@ -205,10 +205,8 @@ func Test_WhenNilPersister_NoOpPersisterIsAssigned(t *testing.T) {
 
 }
 
-// emptyTransport provides an empty http.Response with an initialized header
-// to allow wrapping RoundTrippers to set header values.
-//
-// 返回带初始化 Header 的空响应，这样各层包装可以直接 Add 头部而无需判空。
+// emptyTransport 提供带已初始化 Header 的空响应，
+// 这样各层包装可以直接 Add 头部而无需判空。
 type emptyTransport struct{}
 
 func (*emptyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -218,7 +216,7 @@ func (*emptyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
-// wrapTransport sets "wrapTransport" = "Y" on the response.
+// wrapTransport 在响应上设置 "wrapTransport" = "Y"，
 // 用来断言用户自带的 WrapTransport 是否被保留，并与插件链共存。
 type wrapTransport struct {
 	rt http.RoundTripper
@@ -262,7 +260,7 @@ func pluginAProvider(string, map[string]string, AuthProviderConfigPersister) (Au
 	return &pluginA{}, nil
 }
 
-// wrapTransportB sets "pluginB" = "Y" on the response.
+// wrapTransportB 在响应上设置 "pluginB" = "Y"，
 // 与 wrapTransportA 相同，仅用不同的响应头区分两个插件。
 type wrapTransportB struct {
 	rt http.RoundTripper
@@ -309,9 +307,8 @@ func (i *inMemoryPersister) Persist(config map[string]string) error {
 	return nil
 }
 
-// wrapTransportPersist increments the "roundTrips" entry from the config when
-// roundTrip is called.
-// 每次请求都把计数持久化，模拟插件在请求过程中刷新并保存令牌的行为。
+// wrapTransportPersist 在 roundTrip 被调用时累加 config 中的 "roundTrips" 计数，
+// 模拟插件在请求过程中刷新并保存令牌的行为。
 type wrapTransportPersist struct {
 	rt        http.RoundTripper
 	config    map[string]string

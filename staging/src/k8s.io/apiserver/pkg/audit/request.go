@@ -87,7 +87,7 @@ func LogRequestMetadata(ctx context.Context, req *http.Request, requestReceivedT
 	})
 }
 
-// LogImpersonatedUser fills in the impersonated user attributes into an audit event.
+// LogImpersonatedUser 把被假冒（impersonated）用户的属性写入审计事件，
 // 同时记录所命中的 impersonation 限制，便于审计"谁以谁的身份做了什么"。
 func LogImpersonatedUser(ctx context.Context, user user.Info, constraint string) {
 	ac := AuditContextFrom(ctx)
@@ -97,8 +97,7 @@ func LogImpersonatedUser(ctx context.Context, user user.Info, constraint string)
 	ac.LogImpersonatedUser(user, constraint)
 }
 
-// LogRequestObject fills in the request object into an audit event. The passed runtime.Object
-// will be converted to the given gv.
+// LogRequestObject 把请求对象写入审计事件，传入的 runtime.Object 会被转换为给定的 gv。
 // 仅 metadata 级别及以上才记录；请求体本身只在 Request/RequestResponse 级别输出。
 func LogRequestObject(ctx context.Context, obj runtime.Object, objGV schema.GroupVersion, gvr schema.GroupVersionResource, subresource string, s runtime.NegotiatedSerializer) {
 	ac := AuditContextFrom(ctx)
@@ -109,8 +108,7 @@ func LogRequestObject(ctx context.Context, obj runtime.Object, objGV schema.Grou
 		return
 	}
 
-	// meta.Accessor is more general than ObjectMetaAccessor, but if it fails, we can just skip setting these bits
-	// 取不到 ObjectMeta 时仅跳过元数据填充，不影响请求体的记录。
+	// meta.Accessor 比 ObjectMetaAccessor 更通用；取不到 ObjectMeta 时仅跳过元数据填充，不影响请求体的记录。
 	objMeta, _ := meta.Accessor(obj)
 	if shouldOmitManagedFields(ac) {
 		// 必须复制后再清理，绝不能修改请求对象本身：审计不能改变业务语义。
@@ -236,8 +234,7 @@ func encodeObject(obj runtime.Object, gv schema.GroupVersion, serializer runtime
 	}, nil
 }
 
-// truncate User-Agent if too long, otherwise return it directly.
-// 限制长度可防止恶意客户端用超长 UA 撑大审计日志。
+// User-Agent 过长时截断，否则直接返回；限制长度可防止恶意客户端用超长 UA 撑大审计日志。
 func maybeTruncateUserAgent(req *http.Request) string {
 	ua := req.UserAgent()
 	if len(ua) > maxUserAgentLength {
@@ -247,14 +244,10 @@ func maybeTruncateUserAgent(req *http.Request) string {
 	return ua
 }
 
-// copyWithoutManagedFields will make a deep copy of the specified object and
-// will discard the managed fields from the copy.
-// The specified object is expected to be a meta.Object or a "list".
-// The specified object obj is treated as readonly and hence not mutated.
-// On return, an error is set if the function runs into any error while
-// removing the managed fields, the boolean value is true if the copy has
-// been made successfully, otherwise false.
-//
+// copyWithoutManagedFields 对指定对象做深拷贝，并在拷贝中丢弃 managed fields。
+// 指定对象应是 meta.Object 或 "list"。
+// 参数 obj 按只读处理，不会被修改。
+// 移除 managed fields 出错时返回 error；拷贝成功布尔值为 true，否则为 false；
 // 不支持的对象类型返回 (nil, false, nil)，调用方据此决定是否使用原对象。
 func copyWithoutManagedFields(obj runtime.Object) (runtime.Object, bool, error) {
 	isAccessor := true
@@ -318,8 +311,6 @@ func shouldOmitManagedFields(ac *AuditContext) bool {
 		return true
 	}
 
-	// If we can't decide, return false to maintain current behavior which is
-	// to retain the manage fields in the audit.
-	// 配置尚未初始化时保守地保留 managedFields，维持既有行为。
+	// 无法判定（配置尚未初始化）时返回 false，保守地保留 managedFields，维持审计中保留 manage fields 的既有行为。
 	return false
 }

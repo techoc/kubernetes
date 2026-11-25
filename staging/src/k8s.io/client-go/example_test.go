@@ -166,8 +166,8 @@ func Example_usingDynamicClient() {
 		return
 	}
 
-	// Define the GroupVersionResource for the object you want to access.
-	// For Pods, this is {Group: "", Version: "v1", Resource: "pods"}.
+	// 定义要访问对象的 GroupVersionResource；Pod 对应
+	// {Group: "", Version: "v1", Resource: "pods"}。
 	// 核心组的 Group 为空字符串，资源名使用复数小写形式。
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 
@@ -213,8 +213,7 @@ func Example_usingInformers() {
 		return
 	}
 
-	// A SharedInformerFactory provides a shared cache for multiple informers,
-	// which reduces memory and network overhead.
+	// SharedInformerFactory 为多个 informer 提供共享缓存，减少内存与网络开销。
 	// 第二个参数是 resync 周期：即使对象没有变化，也会按该周期重放一次 Update 事件。
 	factory := informers.NewSharedInformerFactory(clientset, 10*time.Minute)
 	podInformer := factory.Core().V1().Pods().Informer()
@@ -309,8 +308,7 @@ func Example_serverSideApply() {
 	replicas := int32(2)
 	image := "nginx:1.14.2"
 
-	// The FieldManager is a required field that identifies the controller managing
-	// this object's state.
+	// FieldManager 是必填字段，用于标识管理该对象状态的控制器。
 	// 不同 FieldManager 各自拥有自己写入的字段，字段冲突会在 Apply 时被服务端拒绝。
 	fieldManager := "my-controller"
 
@@ -403,7 +401,7 @@ func Example_leaderElection() {
 		return
 	}
 
-	// Create the leader elector.
+	// 创建 leader elector。
 	// 三个时间参数必须满足 LeaseDuration > RenewDeadline > RetryPeriod*1.2，
 	// 否则 NewLeaderElector 会直接返回错误。
 	elector, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{

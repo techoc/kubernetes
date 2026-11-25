@@ -21,33 +21,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
-// 与内部 config 包保持一致，才能在同一 Group 下完成版本转换。
+// GroupName 是本包使用的 API 组名，必须与内部 config 包保持一致，才能在同一 Group 下完成版本转换。
 const GroupName = "cloudcontrollermanager.config.k8s.io"
 
 var (
-	// GroupName is the group name use in this package
-	// SchemeGroupVersion 是外部资源注册使用的 v1alpha1 版本，序列化首选它。
+	// SchemeGroupVersion 是注册外部资源使用的 v1alpha1 GroupVersion，序列化首选它。
 	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha1"}
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 是携带本 API 包各 scheme 初始化函数的构建器。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// localSchemeBuilder ïs a pointer to SchemeBuilder instance. Using localSchemeBuilder
-	// defaulting and conversion init funcs are registered as well.
+	// localSchemeBuilder 是指向 SchemeBuilder 实例的指针，defaulting 和 conversion
+	// 初始化函数也经由它注册。
 	// 通过指针共享同一个 builder，生成代码才能把手写函数与自动生成函数注册到一起。
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是全局函数，把本 API 组与版本注册到给定 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
-	// 手写默认化与生成代码分开注册，缺少生成文件时本包仍可编译。
+	// 这里只注册手动编写的函数，生成函数的注册在生成的文件中进行。
+	// 分开注册使得缺少生成文件时本包仍可编译。
 	localSchemeBuilder.Register(addDefaultingFuncs)
 }
 
-// addKnownTypes registers known types to the given scheme
+// addKnownTypes 把已知类型注册到给定 scheme。
 // 外部类型集合必须与内部 config 包登记的集合一一对应，否则转换会报未知类型。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,

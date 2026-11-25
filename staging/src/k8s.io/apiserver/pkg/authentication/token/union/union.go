@@ -25,19 +25,18 @@ import (
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 )
 
-// unionAuthTokenHandler authenticates tokens using a chain of authenticator.Token objects
-// unionAuthTokenHandler 是不可变链的持有者；所有字段在构造时确定，因此并发
+// unionAuthTokenHandler 使用一组 authenticator.Token 对象构成的认证链对 token 认证，
+// 它是不可变链的持有者；所有字段在构造时确定，因此并发
 // 调用 AuthenticateToken 安全。
 type unionAuthTokenHandler struct {
 	// Handlers is a chain of request authenticators to delegate to
 	Handlers []authenticator.Token
-	// FailOnError determines whether an error returns short-circuits the chain
-	// FailOnError 用于“不可忽略错误”的场景（如匿名认证前的强制认证链）。
+	// FailOnError 决定是否让错误返回短路认证链，用于“不可忽略错误”的场景（如匿名认证前的强制认证链）。
 	FailOnError bool
 }
 
-// New returns a token authenticator that validates credentials using a chain of authenticator.Token objects.
-// The entire chain is tried until one succeeds. If all fail, an aggregate error is returned.
+// New 返回使用一组 authenticator.Token 对象构成的认证链校验凭据的 token 认证器：
+// 整条链依次尝试直到有一个成功；若全部失败则返回聚合错误。
 // 单个认证器时直接返回它，省去一层间接调用。
 func New(authTokenHandlers ...authenticator.Token) authenticator.Token {
 	if len(authTokenHandlers) == 1 {
@@ -46,8 +45,8 @@ func New(authTokenHandlers ...authenticator.Token) authenticator.Token {
 	return &unionAuthTokenHandler{Handlers: authTokenHandlers, FailOnError: false}
 }
 
-// NewFailOnError returns a token authenticator that validates credentials using a chain of authenticator.Token objects.
-// The first error short-circuits the chain.
+// NewFailOnError 返回使用一组 authenticator.Token 对象构成的认证链校验凭据的 token 认证器，
+// 第一个错误即短路整条链。
 // 错误短路可避免在某个认证器不可用时继续尝试后续认证器，从而防止降级绕过。
 func NewFailOnError(authTokenHandlers ...authenticator.Token) authenticator.Token {
 	if len(authTokenHandlers) == 1 {
@@ -56,7 +55,7 @@ func NewFailOnError(authTokenHandlers ...authenticator.Token) authenticator.Toke
 	return &unionAuthTokenHandler{Handlers: authTokenHandlers, FailOnError: true}
 }
 
-// AuthenticateToken authenticates the token using a chain of authenticator.Token objects.
+// AuthenticateToken 使用认证链中的各 authenticator.Token 对象对 token 认证：
 // 成功即返回；默认模式下收集错误继续尝试，全部失败后聚合返回，调用方可用
 // 错误判断是“凭据无效”还是“后端不可用”。
 func (authHandler *unionAuthTokenHandler) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {

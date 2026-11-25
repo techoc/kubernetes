@@ -117,7 +117,7 @@ type AdmissionRequest struct {
 
 // AdmissionResponse 描述准入响应
 type AdmissionResponse struct {
-	// UID is an identifier for the individual request/response.
+	// UID 是单次请求/响应的标识符，
 	// 应从对应的 AdmissionRequest 中原样复制。
 	UID types.UID
 	// Allowed 表示准入请求是否被允许。

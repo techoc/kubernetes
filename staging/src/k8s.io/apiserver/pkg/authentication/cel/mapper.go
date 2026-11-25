@@ -27,16 +27,15 @@ import (
 var _ ClaimsMapper = &mapper{}
 var _ UserMapper = &mapper{}
 
-// mapper implements the ClaimsMapper and UserMapper interface.
-// 同一个实现同时服务于 claims 与 userInfo 两类求值，区别仅在于激活变量名。
+// mapper 同时实现 ClaimsMapper 与 UserMapper 接口，同一个实现服务于
+// claims 与 userInfo 两类求值，区别仅在于激活变量名。
 type mapper struct {
 	// 编译后的 CEL 表达式；求值时按顺序逐个执行。
 	compilationResults []CompilationResult
 }
 
-// CELMapper is a struct that holds the compiled expressions for
-// username, groups, uid, extra, claimValidation and userValidation
-// 将认证配置中不同用途的 CEL 表达式分组保存，便于认证插件按需调用。
+// CELMapper 分别持有 username、groups、uid、extra、claimValidation 与 userValidation
+// 的已编译 CEL 表达式，按用途分组保存，便于认证插件按需调用。
 type CELMapper struct {
 	Username             ClaimsMapper
 	Groups               ClaimsMapper
@@ -60,7 +59,7 @@ func NewUserMapper(compilationResults []CompilationResult) UserMapper {
 	}
 }
 
-// EvalClaimMapping evaluates the given claim mapping expression and returns a EvaluationResult.
+// EvalClaimMapping 求值给定的 claim 映射表达式并返回一个 EvaluationResult，
 // 用于期望恰好产生一个结果的映射表达式（如 username）；结果数量不符时报错。
 func (m *mapper) EvalClaimMapping(ctx context.Context, claims traits.Mapper) (EvaluationResult, error) {
 	results, err := m.eval(ctx, &varNameActivation{name: claimsVarName, value: claims})
@@ -73,13 +72,13 @@ func (m *mapper) EvalClaimMapping(ctx context.Context, claims traits.Mapper) (Ev
 	return results[0], nil
 }
 
-// EvalClaimMappings evaluates the given expressions and returns a list of EvaluationResult.
+// EvalClaimMappings 求值给定的表达式并返回 EvaluationResult 列表，
 // 用于会产生多个结果的表达式（如 groups、extra）。
 func (m *mapper) EvalClaimMappings(ctx context.Context, claims traits.Mapper) ([]EvaluationResult, error) {
 	return m.eval(ctx, &varNameActivation{name: claimsVarName, value: claims})
 }
 
-// EvalUser evaluates the given user expressions and returns a list of EvaluationResult.
+// EvalUser 求值给定的 user 表达式并返回 EvaluationResult 列表；
 // userInfo 变量在编译期已按 user.Info 的结构做类型检查。
 func (m *mapper) EvalUser(ctx context.Context, userInfo traits.Mapper) ([]EvaluationResult, error) {
 	return m.eval(ctx, &varNameActivation{name: userVarName, value: userInfo})

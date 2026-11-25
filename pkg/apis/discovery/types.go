@@ -71,11 +71,10 @@ type Endpoint struct {
 	Addresses []string
 	// conditions 包含端点当前状态的信息。
 	Conditions EndpointConditions
-	// hostname of this endpoint. This field may be used by consumers of
-	// endpoints to distinguish endpoints from each other (e.g. in DNS names).
-	// Multiple endpoints which use the same hostname should be considered
-	// fungible (e.g. multiple A values in DNS). Must pass DNS Label (RFC 1123)
-	// 校验。
+	// hostname 是该端点的主机名。端点的消费方可用它来区分
+	// 各个端点（例如在 DNS 名称中）。使用相同 hostname 的
+	// 多个端点应被视为可互换（例如 DNS 中的多个 A 记录）。
+	// 必须通过 DNS Label（RFC 1123）校验。
 	// +optional
 	Hostname *string
 	// targetRef 是指向表示此端点的 Kubernetes 对象的引用。
@@ -123,12 +122,12 @@ type EndpointConditions struct {
 
 // EndpointHints 提供描述端点应如何使用提示。
 type EndpointHints struct {
-	// forZones indicates the zone(s) this endpoint should be consumed by when
-	// 使用拓扑感知路由。最多可包含 8 个条目。
+	// forZones 指示在使用拓扑感知路由时，该端点应由哪些 zone 消费。
+	// 最多可包含 8 个条目。
 	ForZones []ForZone
 
-	// forNodes indicates the node(s) this endpoint should be consumed by when
-	// 使用拓扑感知路由。最多可包含 8 个条目。
+	// forNodes 指示在使用拓扑感知路由时，该端点应由哪些 node 消费。
+	// 最多可包含 8 个条目。
 	ForNodes []ForNode
 }
 
@@ -159,13 +158,14 @@ type EndpointPort struct {
 	Port *int32
 	// 此端口的应用层协议。实现方可将其作为提示，为理解的协议提供更丰富的行为。
 	// 此字段遵循标准 Kubernetes 标签语法，有效值为：
-	// * 无前缀的协议名 —— 保留给 IANA 标准服务名（参见 RFC-6335 及
+	// * 无前缀的协议名 —— 保留给 IANA 标准服务名
+	// （参见 RFC-6335 及 https://www.iana.org/assignments/service-names）。
 	// * Kubernetes 定义的前缀名：
+	// * 'kubernetes.io/h2c' —— 明文上的 HTTP/2 prior knowledge，
+	//   参见 https://www.rfc-editor.org/rfc/rfc9113.html#name-starting-http-2-with-prior-
+	// * 'kubernetes.io/ws' —— 明文 WebSocket，参见 https://www.rfc-editor.org/rfc/rfc6455
+	// * 'kubernetes.io/wss' —— TLS 上的 WebSocket，参见 https://www.rfc-editor.org/rfc/rfc6455
 	// * 其他协议应使用实现自定义的前缀名，例如 mycompany.com/my-custom-protocol。
-	// RFC-6335 and https://www.iana.org/assignments/service-names).
-	// * 'kubernetes.io/h2c' - HTTP/2 prior knowledge over cleartext as described in https://www.rfc-editor.org/rfc/rfc9113.html#name-starting-http-2-with-prior-
-	// * 'kubernetes.io/ws'  - WebSocket over cleartext as described in https://www.rfc-editor.org/rfc/rfc6455
-	// * 'kubernetes.io/wss' - WebSocket over TLS as described in https://www.rfc-editor.org/rfc/rfc6455
 	// +optional
 	AppProtocol *string
 }

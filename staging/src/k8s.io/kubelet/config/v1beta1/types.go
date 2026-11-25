@@ -1097,38 +1097,31 @@ type KubeletConfiguration struct {
 type KubeletAuthorizationMode string
 
 const (
-	// KubeletAuthorizationModeAlwaysAllow authorizes all authenticated requests
-	// 放行所有已认证请求，只在完全信任调用方的环境使用。
+	// KubeletAuthorizationModeAlwaysAllow 放行所有已认证请求，只在完全信任调用方的环境使用。
 	KubeletAuthorizationModeAlwaysAllow KubeletAuthorizationMode = "AlwaysAllow"
-	// KubeletAuthorizationModeWebhook uses the SubjectAccessReview API to determine authorization
-	// 借助 apiserver 的 SubjectAccessReview 做细粒度授权，是生产环境的推荐选择。
+	// KubeletAuthorizationModeWebhook 借助 apiserver 的 SubjectAccessReview API 做细粒度授权，是生产环境的推荐选择。
 	KubeletAuthorizationModeWebhook KubeletAuthorizationMode = "Webhook"
 )
 
 // KubeletAuthorization 把授权模式与 Webhook 参数打包成一个配置块。
 type KubeletAuthorization struct {
-	// mode is the authorization mode to apply to requests to the kubelet server.
-	// Valid values are `AlwaysAllow` and `Webhook`.
-	// Webhook mode uses the SubjectAccessReview API to determine authorization.
-	// 授权模式决定已认证请求的后续判定路径。
+	// mode 决定发往 kubelet 服务器的请求采用哪种授权模式，合法取值为 `AlwaysAllow` 与 `Webhook`，
+	// 其中 Webhook 模式借助 SubjectAccessReview API 判定授权。授权模式决定已认证请求的后续判定路径。
 	// +optional
 	Mode KubeletAuthorizationMode `json:"mode,omitempty"`
 
-	// webhook contains settings related to Webhook authorization.
-	// 仅在 Mode 为 Webhook 时发挥作用。
+	// webhook 是 Webhook 授权的相关设置，仅在 Mode 为 Webhook 时发挥作用。
 	// +optional
 	Webhook KubeletWebhookAuthorization `json:"webhook"`
 }
 
 // KubeletWebhookAuthorization 控制 Webhook 授权结果的缓存时长。
 type KubeletWebhookAuthorization struct {
-	// cacheAuthorizedTTL is the duration to cache 'authorized' responses from the
-	// webhook authorizer.
+	// cacheAuthorizedTTL 是缓存 webhook 授权器 'authorized' 响应的时长。
 	// 缓存放行结果可减少 SAR 调用，代价是权限撤销存在延迟。
 	// +optional
 	CacheAuthorizedTTL metav1.Duration `json:"cacheAuthorizedTTL,omitempty"`
-	// cacheUnauthorizedTTL is the duration to cache 'unauthorized' responses from
-	// the webhook authorizer.
+	// cacheUnauthorizedTTL 是缓存 webhook 授权器 'unauthorized' 响应的时长。
 	// 拒绝结果通常缓存更短，以便尽快反映权限变更。
 	// +optional
 	CacheUnauthorizedTTL metav1.Duration `json:"cacheUnauthorizedTTL,omitempty"`
@@ -1136,51 +1129,39 @@ type KubeletWebhookAuthorization struct {
 
 // KubeletAuthentication 聚合 x509、Webhook、匿名三种认证方式的配置。
 type KubeletAuthentication struct {
-	// x509 contains settings related to x509 client certificate authentication.
-	// 客户端证书认证适合机器对机器的固定身份调用。
+	// x509 是 x509 客户端证书认证的相关设置，适合机器对机器的固定身份调用。
 	// +optional
 	X509 KubeletX509Authentication `json:"x509"`
-	// webhook contains settings related to webhook bearer token authentication.
-	// Webhook 认证把 token 校验交给 apiserver 的 TokenReview API。
+	// webhook 是 webhook bearer token 认证的相关设置，把 token 校验交给 apiserver 的 TokenReview API。
 	// +optional
 	Webhook KubeletWebhookAuthentication `json:"webhook"`
-	// anonymous contains settings related to anonymous authentication.
-	// 其他认证方式未拒绝的请求才可能落到匿名通道。
+	// anonymous 是匿名认证的相关设置，其他认证方式未拒绝的请求才可能落到匿名通道。
 	// +optional
 	Anonymous KubeletAnonymousAuthentication `json:"anonymous"`
 }
 
 // KubeletX509Authentication 配置基于客户端证书的认证。
 type KubeletX509Authentication struct {
-	// clientCAFile is the path to a PEM-encoded certificate bundle. If set, any request
-	// presenting a client certificate signed by one of the authorities in the bundle
-	// is authenticated with a username corresponding to the CommonName,
-	// and groups corresponding to the Organization in the client certificate.
-	// 证书中的 CommonName 与 Organization 会映射为用户名与用户组。
+	// clientCAFile 是 PEM 编码证书包的路径。设置后，凡出示由包中任一证书机构签发的
+	// 客户端证书的请求都会被认证，证书中的 CommonName 与 Organization 会映射为用户名与用户组。
 	// +optional
 	ClientCAFile string `json:"clientCAFile,omitempty"`
 }
 
 // KubeletWebhookAuthentication 配置基于 TokenReview 的 bearer token 认证。
 type KubeletWebhookAuthentication struct {
-	// enabled allows bearer token authentication backed by the
-	// tokenreviews.authentication.k8s.io API.
-	// 是否启用基于 TokenReview 的 bearer token 认证。
+	// enabled 是否启用基于 tokenreviews.authentication.k8s.io API 的 bearer token 认证。
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
-	// cacheTTL enables caching of authentication results
-	// 缓存认证结果可减轻 apiserver 负担，但会延长 token 失效的感知时间。
+	// cacheTTL 开启认证结果缓存。缓存认证结果可减轻 apiserver 负担，但会延长 token 失效的感知时间。
 	// +optional
 	CacheTTL metav1.Duration `json:"cacheTTL,omitempty"`
 }
 
 // KubeletAnonymousAuthentication 控制是否允许匿名请求落到 kubelet 服务。
 type KubeletAnonymousAuthentication struct {
-	// enabled allows anonymous requests to the kubelet server.
-	// Requests that are not rejected by another authentication method are treated as
-	// anonymous requests.
-	// Anonymous requests have a username of `system:anonymous`, and a group name of
-	// `system:unauthenticated`.
+	// enabled 允许匿名请求访问 kubelet 服务器。未被其他认证方式拒绝的请求会被视为匿名请求，
+	// 其用户名为 `system:anonymous`，用户组名为 `system:unauthenticated`。
 	// 默认拒绝匿名请求；确需放开时需评估节点上敏感端点的暴露风险。
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
@@ -1193,14 +1174,12 @@ type KubeletAnonymousAuthentication struct {
 // It exists in the kubeletconfig API group because it is classified as a versioned input to the Kubelet.
 type SerializedNodeConfigSource struct {
 	metav1.TypeMeta `json:""`
-	// source is the source that we are serializing.
-	// 把配置来源对象整体序列化，便于 kubelet 重启后从检查点恢复。
+	// source 是正在被序列化的配置来源。把配置来源对象整体序列化，
+	// 便于 kubelet 重启后从检查点恢复。
 	// +optional
 	Source v1.NodeConfigSource `json:"source,omitempty" protobuf:"bytes,1,opt,name=source"`
 }
 
-// MemoryReservation specifies the memory reservation of different types for each NUMA node
-// MemoryReservation 描述某个 NUMA 节点上各内存类型的预留量。
 // MemoryReservation 描述某个 NUMA 节点上各内存类型的预留量。
 //
 // NumaNode 指定节点编号，Limits 给出各资源类型在该节点上的预留量。
@@ -1212,20 +1191,17 @@ type MemoryReservation struct {
 
 // ShutdownGracePeriodByPodPriority specifies the shutdown grace period for Pods based on their associated priority class value
 type ShutdownGracePeriodByPodPriority struct {
-	// priority is the priority value associated with the shutdown grace period
-	// 优先级区间的下界，与列表中下一个条目共同确定范围。
+	// priority 是与关机宽限期关联的优先级值，即优先级区间的下界，与列表中下一个条目共同确定范围。
 	Priority int32 `json:"priority"`
-	// shutdownGracePeriodSeconds is the shutdown grace period in seconds
-	// 该优先级区间对应的 Pod 关机宽限秒数。
+	// shutdownGracePeriodSeconds 是关机宽限秒数，即该优先级区间对应的 Pod 关机宽限期。
 	ShutdownGracePeriodSeconds int64 `json:"shutdownGracePeriodSeconds"`
 }
 
 // MemorySwapConfiguration 配置容器可用的 swap 行为，需 NodeSwap 门控配合。
 type MemorySwapConfiguration struct {
-	// swapBehavior configures swap memory available to container workloads. May be one of
-	// "", "NoSwap": workloads can not use swap, default option.
-	// "LimitedSwap": workload swap usage is limited. The swap limit is proportionate to the container's memory request.
-	// NoSwap 禁止容器使用 swap；LimitedSwap 按内存 request 比例限制 swap 用量。
+	// swapBehavior 配置容器工作负载可用的 swap 内存，可取值为：
+	// "" 或 "NoSwap"：工作负载不能使用 swap，为默认选项；
+	// "LimitedSwap"：swap 用量受限，上限按容器的 memory request 比例计算。
 	// +featureGate=NodeSwap
 	// +optional
 	SwapBehavior string `json:"swapBehavior,omitempty"`
@@ -1233,10 +1209,8 @@ type MemorySwapConfiguration struct {
 
 // CrashLoopBackOffConfig 调整容器重启退避算法的上限，需特性门控开启。
 type CrashLoopBackOffConfig struct {
-	// maxContainerRestartPeriod is the maximum duration the backoff delay can accrue
-	// to for container restarts, minimum 1 second, maximum 300 seconds. If not set,
-	// defaults to the internal crashloopbackoff maximum (300s).
-	// 退避延迟的上限，取值 1s 到 300s；不设置则沿用内部最大值 300s。
+	// maxContainerRestartPeriod 是容器重启退避延迟可累积的上限，最小 1 秒、最大 300 秒；
+	// 不设置则沿用内部 crashloopbackoff 最大值（300s）。
 	// +featureGate=KubeletCrashLoopBackOffMax
 	// +optional
 	MaxContainerRestartPeriod *metav1.Duration `json:"maxContainerRestartPeriod,omitempty"`
@@ -1250,78 +1224,61 @@ type CrashLoopBackOffConfig struct {
 type CredentialProviderConfig struct {
 	metav1.TypeMeta `json:""`
 
-	// providers is a list of credential provider plugins that will be enabled by the kubelet.
-	// Multiple providers may match against a single image, in which case credentials
-	// from all providers will be returned to the kubelet. If multiple providers are called
-	// for a single image, the results are combined. If providers return overlapping
-	// auth keys, the value from the provider earlier in this list is attempted first.
-	// 多个插件可能匹配同一镜像，凭据会合并；靠前的插件凭据优先尝试。
+	// providers 是 kubelet 启用的凭据插件列表。多个插件可能匹配同一镜像，
+	// 此时所有匹配插件的凭据都会返回给 kubelet 并合并；若插件返回重叠的凭据键，
+	// 靠前的插件凭据优先尝试。
 	Providers []CredentialProvider `json:"providers"`
 }
 
 // CredentialProvider represents an exec plugin to be invoked by the kubelet. The plugin is only
 // invoked when an image being pulled matches the images handled by the plugin (see matchImages).
 type CredentialProvider struct {
-	// name is the required name of the credential provider. It must match the name of the
-	// provider executable as seen by the kubelet. The executable must be in the kubelet's
-	// bin directory (set by the --image-credential-provider-bin-dir flag).
-	// Required to be unique across all providers.
-	// 名称必须与 kubelet 可见的可执行文件名一致，且在插件列表中唯一。
+	// name 是凭据插件的必填名称，必须与 kubelet 可见的可执行文件名一致。
+	// 可执行文件必须位于 kubelet 的 bin 目录（由 --image-credential-provider-bin-dir 标志设置），
+	// 且名称必须在所有插件中唯一。
 	Name string `json:"name"`
 
-	// matchImages is a required list of strings used to match against images in order to
-	// determine if this provider should be invoked. If one of the strings matches the
-	// requested image from the kubelet, the plugin will be invoked and given a chance
-	// to provide credentials. Images are expected to contain the registry domain
-	// and URL path.
+	// matchImages 是必填的字符串列表，用于匹配镜像以决定是否调用该插件。
+	// 只要其中某个字符串匹配上 kubelet 请求的镜像，插件就会被调用并提供凭据。
+	// 镜像需包含仓库域名与 URL 路径。
 	//
-	// Each entry in matchImages is a pattern which can optionally contain a port and a path.
-	// Globs can be used in the domain, but not in the port or the path. Globs are supported
-	// as subdomains like '*.k8s.io' or 'k8s.*.io', and top-level-domains such as 'k8s.*'.
-	// Matching partial subdomains like 'app*.k8s.io' is also supported. Each glob can only match
-	// a single subdomain segment, so *.io does not match *.k8s.io.
+	// matchImages 的每个条目都是模式，可选地包含端口与路径。通配符只能用于域名部分，
+	// 不能用于端口或路径。支持 '*.k8s.io'、'k8s.*.io' 这类子域写法与 'k8s.*' 这类
+	// 顶级域写法，也支持 'app*.k8s.io' 这样的部分子域匹配。每个通配符只匹配一段子域，
+	// 因此 *.io 不会匹配 *.k8s.io。
 	//
-	// A match exists between an image and a matchImage when all of the below are true:
-	// - Both contain the same number of domain parts and each part matches.
-	// - The URL path of an imageMatch must be a prefix of the target image URL path.
-	// - If the imageMatch contains a port, then the port must match in the image as well.
+	// 镜像与 matchImage 满足以下全部条件才算匹配：
+	// - 两者的域名段数相同且每段都匹配。
+	// - matchImage 的 URL 路径必须是目标镜像 URL 路径的前缀。
+	// - 若 matchImage 带有端口，镜像的端口必须与之相同。
 	//
-	// Example values of matchImages:
+	// matchImages 取值示例：
 	//   - 123456789.dkr.ecr.us-east-1.amazonaws.com
 	//   - *.azurecr.io
 	//   - gcr.io
 	//   - *.*.registry.io
 	//   - registry.io:8080/path
-	// 通配符只能出现在域名部分且只匹配一段子域；端口与路径必须精确匹配。
 	MatchImages []string `json:"matchImages"`
 
-	// defaultCacheDuration is the default duration the plugin will cache credentials in-memory
-	// if a cache duration is not provided in the plugin response. This field is required.
-	// 插件响应未给出缓存时长时采用此默认值。
+	// defaultCacheDuration 是必填字段：当插件响应未给出缓存时长时，插件在内存中缓存凭据所用时长的默认值。
 	DefaultCacheDuration *metav1.Duration `json:"defaultCacheDuration"`
 
-	// Required input version of the exec CredentialProviderRequest. The returned CredentialProviderResponse
-	// MUST use the same encoding version as the input. Current supported values are:
+	// 调用 exec 插件时 CredentialProviderRequest 的必填输入版本。返回的 CredentialProviderResponse
+	// 必须使用与请求相同的编码版本，否则插件调用失败。当前支持的取值：
 	// - credentialprovider.kubelet.k8s.io/v1beta1
-	// 请求与响应必须使用同一编码版本，否则插件调用失败。
 	APIVersion string `json:"apiVersion"`
 
-	// Arguments to pass to the command when executing it.
-	// 传给插件可执行文件的命令行参数。
+	// 执行命令时传给插件可执行文件的命令行参数。
 	// +optional
 	Args []string `json:"args,omitempty"`
 
-	// Env defines additional environment variables to expose to the process. These
-	// are unioned with the host's environment, as well as variables client-go uses
-	// to pass argument to the plugin.
-	// 附加环境变量会与宿主环境及 client-go 注入的变量合并。
+	// env 定义暴露给插件进程的附加环境变量，会与宿主环境以及 client-go
+	// 用于向插件传参的变量合并。
 	// +optional
 	Env []ExecEnvVar `json:"env,omitempty"`
 }
 
-// ExecEnvVar is used for setting environment variables when executing an exec-based
-// credential plugin.
-// ExecEnvVar 表示传给 exec 凭据插件进程的单个环境变量。
+// ExecEnvVar 表示执行 exec 凭据插件进程时设置的单个环境变量。
 //
 // Name 是环境变量名，Value 是环境变量值。
 type ExecEnvVar struct {
@@ -1331,14 +1288,10 @@ type ExecEnvVar struct {
 
 // UserNamespaces contains User Namespace configurations.
 type UserNamespaces struct {
-	// IDsPerPod is the mapping length of UIDs and GIDs.
-	// The length must be a multiple of 65536, and must be less than 1<<32.
-	// On non-linux such as windows, only null / absent is allowed.
-	//
-	// Changing the value may require recreating all containers on the node.
+	// IDsPerPod 是 UID 与 GID 的映射长度，必须是 65536 的倍数且小于 1<<32；
+	// 在 windows 等非 linux 系统上只允许为 null/缺省。修改该值可能需要重建节点上的所有容器。
 	//
 	// Default: 65536
-	// 映射长度必须是 65536 的倍数且小于 1<<32；修改通常要重建容器。
 	// +optional
 	IDsPerPod *int64 `json:"idsPerPod,omitempty"`
 }
@@ -1349,10 +1302,8 @@ type UserNamespaces struct {
 type ImagePullIntent struct {
 	metav1.TypeMeta `json:""`
 
-	// Image is the image spec from a Container's `image` field.
-	// The filename is a SHA-256 hash of this value. This is to avoid filename-unsafe
-	// characters like ':' and '/'.
-	// 用 SHA-256 作为文件名，规避冒号、斜杠等文件名不安全字符。
+	// Image 是容器 `image` 字段中的镜像 spec。文件名取该值的 SHA-256 哈希，
+	// 以规避 ':'、'/' 等文件名不安全字符。
 	Image string `json:"image"`
 }
 
@@ -1366,15 +1317,11 @@ type ImagePullIntent struct {
 type ImagePulledRecord struct {
 	metav1.TypeMeta `json:""`
 
-	// LastUpdatedTime is the time of the last update to this record
-	// 记录最近一次凭据校验的时间，用于判断记录是否仍然可信。
+	// LastUpdatedTime 是本记录最近一次更新的时间，用于判断记录是否仍然可信。
 	LastUpdatedTime metav1.Time `json:"lastUpdatedTime"`
 
-	// ImageRef is a reference to the image represented by this file as received
-	// from the CRI.
-	// The filename is a SHA-256 hash of this value. This is to avoid filename-unsafe
-	// characters like ':' and '/'.
-	// 来自 CRI 的镜像引用；文件名同样取其 SHA-256 以保证安全。
+	// ImageRef 是来自 CRI 的本记录所代表镜像的引用。文件名同样取该值的 SHA-256 哈希，
+	// 以规避 ':'、'/' 等文件名不安全字符。
 	ImageRef string `json:"imageRef"`
 
 	// CredentialMapping maps `image` to the set of credentials that it was
@@ -1391,49 +1338,41 @@ type ImagePulledRecord struct {
 	CredentialMapping map[string]ImagePullCredentials `json:"credentialMapping,omitempty"`
 }
 
-// ImagePullCredentials describe credentials that can be used to pull an image.
-// ImagePullCredentials 记录某个镜像拉取时使用过的凭据来源，供后续校验复用。
+// ImagePullCredentials 记录某个镜像拉取时可使用/使用过的凭据来源，供后续校验复用。
 type ImagePullCredentials struct {
-	// KubernetesSecretCoordinates is an index of coordinates of all the kubernetes
-	// secrets that were used to pull the image.
-	// 记录拉取时用到的 Secret，便于镜像复用时快速核对凭据是否仍有效。
+	// KubernetesSecretCoordinates 是拉取该镜像时用到的所有 Kubernetes Secret 的坐标索引，
+	// 便于镜像复用时快速核对凭据是否仍有效。
 	// +optional
 	// +listType=set
 	KubernetesSecrets []ImagePullSecret `json:"kubernetesSecrets,omitempty"`
 
-	// KubernetesServiceAccounts is an index of coordinates of all the kubernetes
-	// service accounts that were used to pull the image.
-	// 记录向凭据插件提供 token 的 ServiceAccount。
+	// KubernetesServiceAccounts 是拉取该镜像时用到的所有 Kubernetes ServiceAccount 的坐标索引，
+	// 即曾向凭据插件提供 token 的 ServiceAccount。
 	// +optional
 	// +listType=set
 	KubernetesServiceAccounts []ImagePullServiceAccount `json:"kubernetesServiceAccounts,omitempty"`
 
-	// NodePodsAccessible is a flag denoting the pull credentials are accessible
-	// by all the pods on the node, or that no credentials are needed for the pull.
+	// NodePodsAccessible 表示拉取凭据可被节点上所有 Pod 使用，或该次拉取无需凭据。
 	//
-	// If true, it is mutually exclusive with the `kubernetesSecrets` field.
-	// 为 true 表示节点上所有 Pod 都可用这些凭据，与 kubernetesSecrets 互斥。
+	// 为 true 时与 `kubernetesSecrets` 字段互斥。
 	// +optional
 	NodePodsAccessible bool `json:"nodePodsAccessible,omitempty"`
 }
 
-// ImagePullSecret is a representation of a Kubernetes secret object coordinates along
-// with a credential hash of the pull secret credentials this object contains.
-// ImagePullSecret 用 Secret 坐标加凭据哈希索引一次拉取所用的 Secret。
+// ImagePullSecret 用 Kubernetes Secret 对象坐标加上其拉取凭据内容的凭据哈希，
+// 索引一次拉取所用的 Secret。
 type ImagePullSecret struct {
 	UID       string `json:"uid"`
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
 
-	// CredentialHash is a SHA-256 retrieved by hashing the image pull credentials
-	// content of the secret specified by the UID/Namespace/Name coordinates.
-	// 保存凭据内容的哈希而非原文，既能比对变化又避免落盘敏感信息。
+	// CredentialHash 是对 UID/Namespace/Name 坐标所指定 Secret 中的镜像拉取凭据内容
+	// 做 SHA-256 得到的哈希。保存哈希而非原文，既能比对变化又避免落盘敏感信息。
 	CredentialHash string `json:"credentialHash"`
 }
 
-// ImagePullServiceAccount is a representation of a Kubernetes service account object coordinates
-// for which the kubelet sent service account token to the credential provider plugin for image pull credentials.
-// ImagePullServiceAccount 记录拉取镜像时 token 对应的 ServiceAccount 坐标。
+// ImagePullServiceAccount 记录一个 Kubernetes ServiceAccount 对象的坐标：
+// kubelet 曾为获取镜像拉取凭据，把该 ServiceAccount 的 token 发送给凭据插件。
 type ImagePullServiceAccount struct {
 	UID       string `json:"uid"`
 	Namespace string `json:"namespace"`

@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// REST implements a RESTStorage for API services against etcd
+// REST 是针对 etcd 的 APIService RESTStorage 实现。
 // 薄包装一层 generic Store，只为追加 APIService 特有的表格输出和分类标签；
 // 通用 CRUD 行为全部下沉，避免复制 apiserver 的存储实现。
 type REST struct {
@@ -69,7 +69,7 @@ func NewREST(scheme *runtime.Scheme, optsGetter generic.RESTOptionsGetter) *REST
 // Implement CategoriesProvider
 var _ rest.CategoriesProvider = &REST{}
 
-// Categories implements the CategoriesProvider interface. Returns a list of categories a resource is part of.
+// Categories 实现 CategoriesProvider 接口，返回该资源所属的分类列表。
 // 分类用于 kubectl 的快捷资源名（如 kubectl get all），只归到 api-extensions，
 // 不混入 all：APIService 是基础设施配置，不该在排查工作负载时默认列出来。
 func (c *REST) Categories() []string {
@@ -78,7 +78,7 @@ func (c *REST) Categories() []string {
 
 var swaggerMetadataDescriptions = metav1.ObjectMeta{}.SwaggerDoc()
 
-// ConvertToTable implements the TableConvertor interface for REST.
+// ConvertToTable 为 REST 实现 TableConvertor 接口。
 // kubectl get 走的是服务端表格转换：列里展示后端服务和可用状态，
 // 让人一眼看出请求会转发到哪里、为什么报错，而不用逐个 GET 详情。
 func (c *REST) ConvertToTable(ctx context.Context, obj runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
@@ -142,8 +142,8 @@ func getCondition(conditions []apiregistration.APIServiceCondition, conditionTyp
 	return nil
 }
 
-// NewStatusREST makes a RESTStorage for status that has more limited options.
-// It is based on the original REST so that we can share the same underlying store
+// NewStatusREST 创建一个选项更受限的 status RESTStorage。
+// 它基于原始 REST 构建，以便两者共享同一个底层存储。
 // 复制 Store 值再改写策略字段：底层 etcd 连接和缓存仍然共享，
 // 但状态子资源只允许 UPDATE，不能从这里创建或删除整个 APIService。
 func NewStatusREST(scheme *runtime.Scheme, rest *REST) *StatusREST {
@@ -181,8 +181,7 @@ func (r *StatusREST) Get(ctx context.Context, name string, options *metav1.GetOp
 
 // Update alters the status subset of an object.
 func (r *StatusREST) Update(ctx context.Context, name string, objInfo rest.UpdatedObjectInfo, createValidation rest.ValidateObjectFunc, updateValidation rest.ValidateObjectUpdateFunc, forceAllowCreate bool, options *metav1.UpdateOptions) (runtime.Object, bool, error) {
-	// We are explicitly setting forceAllowCreate to false in the call to the underlying storage because
-	// subresources should never allow create on update.
+	// 调用底层存储时显式把 forceAllowCreate 设为 false：子资源绝不允许在 update 时创建。
 	// 不信任外层传进来的 forceAllowCreate：即便调用方误开了它，状态子资源
 	// 也绝不能借 UPDATE 把不存在的 APIService 凭空创建出来。
 	return r.store.Update(ctx, name, objInfo, createValidation, updateValidation, false, options)

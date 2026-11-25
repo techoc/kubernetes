@@ -61,8 +61,6 @@ const (
 	extraLongThrottleLatency = 1 * time.Second
 )
 
-// HTTPClient is an interface for testing a request object.
-//
 // 抽象出 http.Client 的唯一方法，便于在测试中替换传输层。
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -94,9 +92,8 @@ func defaultRequestRetryFn(maxRetries int) WithRetry {
 	return &withRetry{maxRetries: maxRetries}
 }
 
-// Request allows for building up a request to a server in a chained fashion.
-// Any errors are stored until the end of your call, so you only have to
-// check once.
+// Request 以链式调用方式逐步构造对服务端的请求。
+// 任何错误都会被暂存直到调用结束才返回，因此只需检查一次。
 //
 // 链式 setter 在遇到第一个错误后变为 no-op，后续调用不会覆盖原始错误，
 // 这样调用方只需在最后检查一次 Error()。Request 本身不是并发安全的：
@@ -131,10 +128,8 @@ type Request struct {
 	// output
 	err error
 
-	// only one of body / bodyBytes may be set. requests using body are not retryable.
-	//
-	// body 是流式 reader，只能消费一次，因此带 body 的请求无法安全重试；
-	// bodyBytes 可以每次重建 reader，是重试路径的要求。
+	// body 与 bodyBytes 只能设置其一。body 是流式 reader，只能消费一次，
+	// 因此带 body 的请求无法安全重试；bodyBytes 可以每次重建 reader，是重试路径的要求。
 	body      io.Reader
 	bodyBytes []byte
 
@@ -255,7 +250,7 @@ func (r *Request) Suffix(segments ...string) *Request {
 	return r
 }
 
-// Resource sets the resource to access (<resource>/[ns/<namespace>/]<name>)
+// Resource 设置要访问的资源，路径形态为 <resource>/[ns/<namespace>/]<name>。
 //
 // 重复设置或路径段非法都记录为 sticky error，而不是覆盖前值，
 // 以便尽早暴露调用方的拼接错误。
@@ -275,8 +270,7 @@ func (r *Request) Resource(resource string) *Request {
 	return r
 }
 
-// BackOff sets the request's backoff manager to the one specified,
-// or defaults to the stub implementation if nil is provided.
+// BackOff 把请求的 backoff 管理器设置为指定对象；传 nil 时使用默认的空实现。
 //
 // Deprecated: BackoffManager.Sleep ignores the caller's context. Use BackOffWithContext and BackoffManagerWithContext instead.
 //
@@ -608,7 +602,7 @@ func (r *Request) URL() *url.URL {
 		}
 	}
 
-	// timeout is handled specially here.
+	// timeout 在这里被特殊处理：
 	// 显式设置 timeout 参数，让服务端也能感知客户端的超时预算。
 	if r.timeout != 0 {
 		query.Set("timeout", r.timeout.String())
@@ -617,10 +611,8 @@ func (r *Request) URL() *url.URL {
 	return finalURL
 }
 
-// finalURLTemplate is similar to URL(), but will make all specific parameter values equal
-// - instead of name or namespace, "{name}" and "{namespace}" will be used, and all query
-// parameters will be reset. This creates a copy of the url so as not to change the
-// underlying object.
+// finalURLTemplate 与 URL() 类似，但把所有具体参数值抹平：name 与 namespace 分别替换为
+// "{name}" 与 "{namespace}"，所有查询参数被重置。返回 URL 副本，不修改底层对象。
 //
 // 该模板刻意抹掉具体对象名与 namespace，避免指标标签基数爆炸；
 // 因此这里的 URL 只能用于指标，不能用于实际请求。
@@ -728,10 +720,8 @@ func (r *Request) tryThrottleWithInfo(ctx context.Context, retryInfo string) err
 		klog.FromContext(ctx).V(3).Info("Waited before sending request", "delay", latency, "reason", retryInfo, "verb", r.verb, "URL", r.URL())
 
 		if latency > extraLongThrottleLatency {
-			// If the rate limiter latency is very high, the log message should be printed at a higher log level,
-			// but we use a throttled logger to prevent spamming.
-			//
-			// 使用限速日志器：高并发下每次等待都可能超过阈值，不限流会淹没日志。
+			// 限速等待极长时，日志应在更详细的级别打印，但为避免刷屏使用限速日志器：
+			// 高并发下每次等待都可能超过阈值，不限流会淹没日志。
 			globalThrottledLogger.info(klog.FromContext(ctx), "Waited before sending request", "delay", latency, "reason", retryInfo, "verb", r.verb, "URL", r.URL())
 		}
 	}
@@ -824,9 +814,7 @@ func (r *Request) Watch(ctx context.Context) (watch.Interface, error) {
 	}
 
 	isErrRetryableFunc := func(request *http.Request, err error) bool {
-		// The watch stream mechanism handles many common partial data errors, so closed
-		// connections can be retried in many cases.
-		//
+		// watch 流机制能处理许多常见的部分数据错误，因此连接被关闭时多数情况下可以安全重试。
 		// 只对连接级错误重试；HTTP 状态错误由下方 transformResponse 统一处理。
 		if net.IsProbableEOF(err) || net.IsTimeout(err) {
 			return true
@@ -1009,14 +997,12 @@ func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
 	}
 }
 
-// requestPreflightCheck looks for common programmer errors on Request.
+// requestPreflightCheck 检查 Request 中常见的调用方编码错误。
 //
-// We tackle here two programmer mistakes. The first one is to try to create
-// something(POST) using an empty string as namespace with namespaceSet as
-// true. If namespaceSet is true then namespace should also be defined. The
-// second mistake is, when under the same circumstances, the programmer tries
-// to GET, PUT or DELETE a named resource(resourceName != ""), again, if
-// namespaceSet is true then namespace must not be empty.
+// 这里处理两类错误：第一，在 namespaceSet 为 true 时试图以空字符串作为
+// namespace 创建资源（POST）——namespaceSet 为 true 时 namespace 也必须已定义；
+// 第二，在相同情况下试图 GET、PUT 或 DELETE 一个具名资源（resourceName != ""），
+// 同样，namespaceSet 为 true 时 namespace 不得为空。
 //
 // 这两类错误无法从服务端得到有意义的响应，提前在客户端拦截并给出明确原因。
 func (r *Request) requestPreflightCheck() error {
@@ -1210,7 +1196,7 @@ func (r *Request) Do(ctx context.Context) Result {
 	return result
 }
 
-// DoRaw executes the request but does not process the response body.
+// DoRaw 执行请求但不解析响应体。
 //
 // 非 2xx 且响应体无法解析为 Status 时，仍返回原始 body 并附带通用错误，
 // 便于调用方自行展示代理或网关返回的内容。
@@ -1237,7 +1223,7 @@ func (r *Request) DoRaw(ctx context.Context) ([]byte, error) {
 	return result.body, result.err
 }
 
-// transformResponse converts an API response into a structured API object
+// transformResponse 把 API 响应转换为结构化的 API 对象。
 //
 // 该函数只在响应体已被完整读取后调用；它不返回错误，而是把状态码、解码器
 // 与可能的错误一起放进 Result，由调用方决定如何处理。
@@ -1290,7 +1276,7 @@ func (r *Request) transformResponse(ctx context.Context, resp *http.Response, re
 		}
 		decoder, err = r.contentConfig.Negotiator.Decoder(mediaType, params)
 		if err != nil {
-			// if we fail to negotiate a decoder, treat this as an unstructured error
+			// 协商解码器失败时，按非结构化错误处理：
 			// 优先把非 2xx 转成通用错误；协议升级（101）则视为正常，交由调用方处理。
 			switch {
 			case resp.StatusCode == http.StatusSwitchingProtocols:
@@ -1337,8 +1323,7 @@ func (r *Request) transformResponse(ctx context.Context, resp *http.Response, re
 	}
 }
 
-// truncateBody decides if the body should be truncated, based on the glog Verbosity.
-//
+// truncateBody 根据 glog 的日志级别（Verbosity）决定是否截断 body。
 // 日志级别越高保留越多内容：V(10) 全量、V(9) 10KB、V(8) 1KB。
 func truncateBody(logger klog.Logger, body string) string {
 	max := 0
@@ -1463,7 +1448,7 @@ func retryAfterSeconds(resp *http.Response) (int, bool) {
 	return 0, false
 }
 
-// Result contains the result of calling Request.Do().
+// Result 包含调用 Request.Do() 的结果。
 //
 // Result 是不可变的响应快照：body 已被完整读入内存，因此可以安全地多次
 // 调用 Get/Into/Raw，而不依赖底层连接。
@@ -1495,7 +1480,7 @@ func (r Result) Get() (runtime.Object, error) {
 		return nil, fmt.Errorf("serializer for %s doesn't exist", r.contentType)
 	}
 
-	// decode, but if the result is Status return that as an error instead.
+	// 解码；若结果是 Status，则把它作为 error 返回：
 	// 即使 HTTP 状态是 2xx，body 中的 StatusFailure 也视为错误。
 	out, _, err := r.decoder.Decode(r.body, nil, nil)
 	if err != nil {
@@ -1571,8 +1556,7 @@ func (r Result) WasCreated(wasCreated *bool) Result {
 // additional information in Status will be used to enrich the error.
 // See the Request.Do() comment for what errors you might get.
 func (r Result) Error() error {
-	// if we have received an unexpected server error, and we have a body and decoder, we can try to extract
-	// a Status object.
+	// 若收到的是意外的服务端错误，且有 body 和 decoder，就尝试从中提取 Status 对象。
 	// 仅对“非结构化服务器错误”做二次解析；其他错误（含连接错误）原样返回。
 	if r.err == nil || !errors.IsUnexpectedServerError(r.err) || len(r.body) == 0 || r.decoder == nil {
 		return r.err
@@ -1606,8 +1590,7 @@ var NameMayNotBe = []string{".", ".."}
 // NameMayNotContain specifies substrings that cannot be used in names specified as path segments (like the REST API or etcd store)
 var NameMayNotContain = []string{"/", "%"}
 
-// IsValidPathSegmentName validates the name can be safely encoded as a path segment
-//
+// IsValidPathSegmentName 校验名字能否被安全地编码为路径段，
 // 返回人类可读的错误描述列表；空列表表示合法。
 func IsValidPathSegmentName(name string) []string {
 	for _, illegalName := range NameMayNotBe {
@@ -1626,9 +1609,8 @@ func IsValidPathSegmentName(name string) []string {
 	return errors
 }
 
-// IsValidPathSegmentPrefix validates the name can be used as a prefix for a name which will be encoded as a path segment
-// It does not check for exact matches with disallowed names, since an arbitrary suffix might make the name valid
-//
+// IsValidPathSegmentPrefix 校验名字能否作为「将被编码为路径段的名字」的前缀。
+// 它不检查与被禁名字的精确匹配，因为任意后缀可能使名字变得合法。
 // 用于 generateName 场景：前缀后面还会拼接随机后缀，因此 "." 或 ".." 可能变合法。
 func IsValidPathSegmentPrefix(name string) []string {
 	var errors []string

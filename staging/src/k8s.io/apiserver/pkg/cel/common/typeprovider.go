@@ -22,7 +22,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 )
 
-// TypeResolver resolves a type by a given name.
+// TypeResolver 按给定名称解析类型；
 // 用于把 CRD 等运行期才确定的 schema 注入 CEL 编译环境。
 type TypeResolver interface {
 	// Resolve resolves the type by its name.
@@ -48,9 +48,8 @@ type ResolvedType interface {
 	Val(fields map[string]ref.Val) ref.Val
 }
 
-// ResolverTypeProvider delegates type resolution first to the TypeResolver and then
-// to the underlying types.Provider for types not resolved by the TypeResolver.
-// 先查自定义解析器，未命中再回退到 CEL 内置类型，保证内建类型语义不变。
+// ResolverTypeProvider 优先用 TypeResolver 解析类型，TypeResolver 未能解析的类型
+// 再委托给底层 types.Provider，保证内建类型语义不变。
 type ResolverTypeProvider struct {
 	typeResolver           TypeResolver
 	underlyingTypeProvider types.Provider
@@ -109,8 +108,7 @@ func (p *ResolverTypeProvider) FindIdent(identName string) (ref.Val, bool) {
 	return p.underlyingTypeProvider.FindIdent(identName)
 }
 
-// ResolverEnvOption creates the ResolverTypeProvider with a given DynamicTypeResolver
-// and returns the CEL ResolverEnvOption to apply it to the env.
+// ResolverEnvOption 用给定的 DynamicTypeResolver 构造 ResolverTypeProvider，并返回可应用到 env 的 CEL 选项。
 // 在应用选项时捕获当前 env 的内置 provider 作为回退，避免构造顺序耦合。
 func ResolverEnvOption(resolver TypeResolver) cel.EnvOption {
 	return func(e *cel.Env) (*cel.Env, error) {

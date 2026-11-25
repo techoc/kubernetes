@@ -26,20 +26,14 @@ import (
 	"k8s.io/client-go/openapi"
 )
 
-// FakeClient implements openapi.Client interface, with hard-coded
-// return values, including the possibility to force errors.
-//
 // FakeClient 是 openapi.Client 的测试实现，返回硬编码值，并可通过 ForcedErr 强制出错。
 type FakeClient struct {
-	// Hard-coded paths to return from Paths() function.
 	// PathsMap 是 Paths() 直接返回的映射，key 为 "/apis/<group>/<version>" 形式。
 	PathsMap map[string]openapi.GroupVersion
-	// Hard-coded returned error.
 	// ForcedErr 非 nil 时，Paths() 直接返回该错误。
 	ForcedErr error
 }
 
-// Validate FakeClient implements openapi.Client interface.
 // 编译期断言：确保 FakeClient 实现了 openapi.Client。
 var _ openapi.Client = &FakeClient{}
 
@@ -58,21 +52,15 @@ func (f FakeClient) Paths() (map[string]openapi.GroupVersion, error) {
 	return f.PathsMap, nil
 }
 
-// FakeGroupVersion implements openapi.GroupVersion with hard-coded
-// return GroupVersion specification bytes. If ForcedErr is set, then
-// "Schema()" function returns the error instead of the GVSpec.
-//
-// FakeGroupVersion 是 openapi.GroupVersion 的测试实现，返回硬编码的 schema 字节。
+// FakeGroupVersion 是 openapi.GroupVersion 的测试实现，返回硬编码的 GroupVersion schema
+// 字节；若设置了 ForcedErr，Schema() 返回该错误而非 GVSpec。
 type FakeGroupVersion struct {
-	// Hard-coded GroupVersion specification
 	// GVSpec 为直接返回的 OpenAPI 文档字节。
 	GVSpec []byte
-	// Hard-coded returned error.
 	// ForcedErr 非 nil 时，Schema() 直接返回该错误。
 	ForcedErr error
 }
 
-// FileOpenAPIGroupVersion implements the openapi.GroupVersion interface.
 // 编译期断言：确保 FakeGroupVersion 实现了 openapi.GroupVersion。
 var _ openapi.GroupVersion = &FakeGroupVersion{}
 

@@ -23,8 +23,8 @@ limitations under the License.
 // +k8s:validation-gen-input=k8s.io/api/scheduling/v1alpha3
 
 // 这是 scheduling/v1alpha3 声明式校验的注册副本，
-// validation. It registers with the apiserver scheme and is the package
-// 跨包引用所指向的类型。另有一份不注册的副本被生成，
+// 它会向 apiserver scheme 注册，且是跨包引用所指向的类型。
+// 另有一份不注册的副本被生成，
 // 位于 k8s.io/api/scheduling/v1alpha3 包内，供树外消费者使用。
 
 package v1alpha3

@@ -25,7 +25,7 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 )
 
-// Version provides a webservice with version information.
+// Version 提供携带版本信息的 webservice。
 // Version 是可选的 /version 路由配置；Version 为 nil 时 Install 不注册任何
 // 路由，便于测试或裁剪端点。
 type Version struct {
@@ -38,7 +38,7 @@ func (v Version) Install(c *restful.Container) {
 		return
 	}
 
-	// Set up a service to return the git code version.
+	// 设置一个返回 git 代码版本的服务；
 	// 单独的 WebService 挂载在根路径 /version 下，不参与 /api 的组版本协商。
 	versionWS := new(restful.WebService)
 	versionWS.Path("/version")
@@ -54,7 +54,7 @@ func (v Version) Install(c *restful.Container) {
 	c.Add(versionWS)
 }
 
-// handleVersion writes the server's version information.
+// handleVersion 写入服务端的版本信息；
 // 直接写原始 JSON 而不是走协商/序列化链路，保证 /version 始终返回同一形态，
 // 不受请求 Accept 头影响。
 func (v Version) handleVersion(req *restful.Request, resp *restful.Response) {

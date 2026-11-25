@@ -30,12 +30,11 @@ import (
 // 结论。适用于编写控制器或 e2e 测试时探测可选 API（例如某个特性门控开启后才注册的资源）
 // 是否已存在于目标集群。
 func IsResourceEnabled(client DiscoveryInterface, resourceToCheck schema.GroupVersionResource) (bool, error) {
-	// this is a single request.  The ServerResourcesForGroupVersion handles the core v1 group as legacy.
-	// 中文：只查询目标 group/version，避免拉取全量 discovery 数据；核心 v1 组的遗留路径由
+	// 只查询目标 group/version，避免拉取全量 discovery 数据；核心 v1 组的遗留路径由
 	// ServerResourcesForGroupVersion 内部处理。
 	resourceList, err := client.ServerResourcesForGroupVersion(resourceToCheck.GroupVersion().String())
-	if apierrors.IsNotFound(err) { // if the discovery endpoint isn't present, then the resource isn't present.
-		// 中文：404 表示该 group/version 未注册，资源自然不存在，这不是错误。
+	if apierrors.IsNotFound(err) {
+		// 404 表示该 group/version 未注册，资源自然不存在，这不是错误。
 		return false, nil
 	}
 	if err != nil {
@@ -59,8 +58,7 @@ func MatchesServerVersion(clientVersion apimachineryversion.Info, client Discove
 	if err != nil {
 		return fmt.Errorf("couldn't read version from server: %v", err)
 	}
-	// GitVersion includes GitCommit and GitTreeState, but best to be safe?
-	// 中文：GitVersion 通常已隐含后两者，但仍显式比较，避免不同构建方式导致字段组合不一致。
+	// GitVersion 通常已隐含 GitCommit 与 GitTreeState，但仍显式比较，避免不同构建方式导致字段组合不一致。
 	if clientVersion.GitVersion != sVer.GitVersion || clientVersion.GitCommit != sVer.GitCommit || clientVersion.GitTreeState != sVer.GitTreeState {
 		return fmt.Errorf("server version (%#v) differs from client version (%#v)", sVer, clientVersion)
 	}
@@ -75,9 +73,7 @@ func MatchesServerVersion(clientVersion apimachineryversion.Info, client Discove
 func ServerSupportsVersion(client DiscoveryInterface, requiredGV schema.GroupVersion) error {
 	groups, err := client.ServerGroups()
 	if err != nil {
-		// This is almost always a connection error, and higher level code should treat this as a generic error,
-		// not a negotiation specific error.
-		// 中文：连接类错误应原样向上传递，交由上层按普通错误处理，而不是包装成版本协商错误。
+		// 这几乎总是连接类错误，应原样向上传递，交由上层按普通错误处理，而不是包装成版本协商错误。
 		return err
 	}
 	versions := metav1.ExtractGroupVersions(groups)
@@ -90,9 +86,8 @@ func ServerSupportsVersion(client DiscoveryInterface, requiredGV schema.GroupVer
 		return nil
 	}
 
-	// If the server supports no versions, then we should pretend it has the version because of old servers.
-	// This can happen because discovery fails due to 403 Forbidden errors
-	// 中文：空集合说明 discovery 结果不可信（多为旧版本服务端或 403），宁可假定支持。
+	// 若服务端不支持任何版本（空集合说明 discovery 结果不可信，多为旧版本服务端或 discovery
+	// 因 403 Forbidden 失败），宁可假定它支持所需版本。
 	if len(serverVersions) == 0 {
 		return nil
 	}

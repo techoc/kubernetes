@@ -47,8 +47,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Some tests print a lot of debug logs which slows down tests considerably,
-// causing them to even timeout.
+// 有些测试会打印大量调试日志，显著拖慢测试甚至导致超时，
 // 因此调试日志默认关闭，仅在本地排查匹配或队列问题时临时打开。
 var testDebugLogs = false
 
@@ -68,7 +67,7 @@ var mandPLs = func() map[string]*flowcontrol.PriorityLevelConfiguration {
 	return ans
 }()
 
-// in general usage, the boolean returned may be inaccurate by the time the caller examines it.
+// 一般用法下，调用方检查该布尔值时其结果可能已经不准确；
 // 加锁是为了避免与 controller 的 reconcile 循环并发读写 priorityLevelStates。
 func (cfgCtlr *configController) hasPriorityLevelState(plName string) bool {
 	cfgCtlr.lock.Lock()
@@ -314,7 +313,6 @@ func TestConfigConsumer(t *testing.T) {
 					t.Logf("For %s, desiredPLNames=%#+v", trialStep, desiredPLNames)
 					t.Logf("For %s, newFTRs=%#+v", trialStep, newFTRs)
 				}
-				// Check that the latest digestion did the right thing
 				// 重新计算“应当存活”的 PL：强制 PL 永不删除，非空闲 PL 因仍有请求
 				// 也必须保留，其余加上本步期望的 PL 即为最终集合。
 				nextPLNames := sets.NewString()

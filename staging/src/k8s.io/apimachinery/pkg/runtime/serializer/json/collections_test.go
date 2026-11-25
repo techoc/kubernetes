@@ -44,7 +44,7 @@ func TestCollectionsEncoding(t *testing.T) {
 	})
 }
 
-// testCollectionsEncoding should provide comprehensive tests to validate streaming implementation of encoder.
+// testCollectionsEncoding 全面验证 encoder 流式实现的行为。
 //
 // 除输出字节外，还用 writeCountingBuffer 断言 Write 调用次数：流式模式
 // 必须写出多次，非流式模式只能写一次（含 cannotStream 的降级情形）。
@@ -58,14 +58,10 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 		in           runtime.Object
 		cannotStream bool
 		expect       string
-		// allow provides allowed alternate representations.
-		// For the json v1->v2 transition, this is used to tolerate changes
-		// in how malformed input in munged.
 		// allow 提供可接受的等价输出。json v1->v2 过渡期用于容忍畸形输入
 		// 处理方式的差异。
 		allow []string
 	}{
-		// Preserving the distinction between integers and floating-point numbers
 		// 整数 1 与浮点 1.0 必须输出不同文本，避免下游把类型搞混。
 		{
 			name: "Struct with floats",
@@ -106,7 +102,6 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			},
 			expect: "{\"items\":[{\"float32\":1,\"float64\":1.1,\"int\":1}]}\n",
 		},
-		// Handling structs with duplicate field names (JSON tag names) without producing duplicate keys in the encoded output
 		// 两个字段映射到同一个 JSON key 时，期望行为是丢弃而不是输出重复键。
 		{
 			name: "StructWithDuplicatedTags",
@@ -120,7 +115,6 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			},
 			expect: "{\"metadata\":{},\"items\":[{\"metadata\":{}}]}\n",
 		},
-		// Encoding Go strings containing invalid UTF-8 sequences without error
 		// 非法 UTF-8 被替换为 U+FFFD，而不是报错或原样透传。
 		{
 			name: "UnstructuredList object invalid UTF-8 ",
@@ -148,7 +142,6 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			// Go json/v2 emits U+FFFD as raw UTF-8 bytes rather than the \ufffd escape.
 			allow: []string{"{\"items\":[{\"key\":\"\ufffd\"}]}\n"},
 		},
-		// Preserving the distinction between absent, present-but-null, and present-and-empty states for slices and maps
 		// nil slice/map 输出 null，空 slice/map 输出 []/{ }；对 Unstructured
 		// 而言 nil Items 会被规范化为 []，而 typed list 保留 null。
 		{
@@ -333,7 +326,6 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			},
 			expect: "{\"items\":[],\"map\":{}}\n",
 		},
-		// Handling structs implementing MarshallJSON method, especially built-in collection types.
 		// 顶层列表若实现 MarshalJSON，整体输出由它决定，无法逐项流式写出。
 		{
 			name:         "List with MarshallJSON cannot be streamed",
@@ -350,7 +342,6 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			},
 			expect: "{\"metadata\":{},\"items\":[\"marshallJSON\"]}\n",
 		},
-		// Handling raw bytes.
 		// []byte 编码为 base64 字符串，[N]byte 编码为数字数组（与 encoding/json
 		// 一致）。
 		{

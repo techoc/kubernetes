@@ -32,17 +32,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// ActionType is an integer to represent one type of resource change.
-// Different ActionTypes can be bit-wised to compose new semantics.
-//
+// ActionType 是以整数表示一种资源变更类型的位掩码，
+// 不同 ActionTypes 可以按位组合出新的语义。
 // 用位掩码表示资源变更，使插件可以同时注册“多个细分事件”（例如一次声明所有节点更新），
 // 而调度器在分发时仍能快速判断某个事件是否命中。
 type ActionType int64
 
-// Constants for ActionTypes.
-// CAUTION for contributors: When you add a new ActionType, you must update the following:
-// - The list of basicActionTypes, podActionTypes, and nodeActionTypes at k/k/pkg/scheduler/framework/types.go
-// - String() method.
+// ActionTypes 的常量定义。
+// 贡献者注意：新增 ActionType 时，必须同步更新以下内容：
+// - k/k/pkg/scheduler/framework/types.go 中 basicActionTypes、podActionTypes 和 nodeActionTypes 列表
+// - String() 方法。
 const (
 	Add ActionType = 1 << iota
 	Delete
@@ -50,12 +49,9 @@ const (
 	// 各细分事件必须是独立的单比特位，才能用按位或组合成下面的 Update 和 All。
 	// 这样插件注册一个组合事件，调度器分发时按位测试即可，无需逐个比较。
 
-	// UpdateNodeXYZ is only applicable for Node events.
-	// If you use UpdateNodeXYZ,
-	// your plugin's QueueingHint is only executed for the specific sub-Update event.
-	// It's better to narrow down the scope of the event by using them instead of just using Update event
-	// for better performance in requeueing.
-	// 细分节点更新事件，让插件只关心真正会影响自己的那部分变化，
+	// UpdateNodeXYZ 系列仅适用于 Node 事件。使用它们后，插件的 QueueingHint 只会对
+	// 对应的细分 sub-Update 事件执行；比起直接用 Update 事件，收窄事件范围能提升
+	// 重新入队的性能。即让插件只关心真正会影响自己的那部分变化，
 	// 避免每次节点状态抖动都触发无意义的重新入队。
 	UpdateNodeAllocatable
 	UpdateNodeLabel
@@ -68,12 +64,9 @@ const (
 	// UpdateNodePreemptionPolicy is an update for node's preemption policy.
 	UpdateNodePreemptionPolicy
 
-	// UpdatePodXYZ is only applicable for Pod events.
-	// If you use UpdatePodXYZ,
-	// your plugin's QueueingHint is only executed for the specific sub-Update event.
-	// It's better to narrow down the scope of the event by using them instead of Update event
-	// for better performance in requeueing.
-	// 同理，Pod 的更新按字段细分；重入队本身有开销，越早过滤掉无关事件越好。
+	// UpdatePodXYZ 系列仅适用于 Pod 事件。使用它们后，插件的 QueueingHint 只会对
+	// 对应的细分 sub-Update 事件执行；比起直接用 Update 事件，收窄事件范围能提升
+	// 重新入队的性能。同理，Pod 的更新按字段细分；重入队本身有开销，越早过滤掉无关事件越好。
 	UpdatePodLabel
 	// UpdatePodScaleDown is an update for pod's scale down (i.e., any resource request is reduced).
 	UpdatePodScaleDown
@@ -91,13 +84,13 @@ const (
 	All ActionType = 1<<iota - 1
 	// All 是所有已定义比特的并集，新增 ActionType 时它会自动扩展，无需手动维护。
 
-	// Use the general Update type if you don't either know or care the specific sub-Update type to use.
+	// 如果你不确定或不关心该用哪个具体的 sub-Update 类型，可以使用通用的 Update 类型。
 	// Update 是各细分更新位的并集，供不关心具体更新内容的插件使用；
 	// 用组合位而非单独一个新位，保证细分事件也能命中宽泛订阅。
 	Update = UpdateNodeAllocatable | UpdateNodeLabel | UpdateNodeTaint | UpdateNodeCondition | UpdateNodeAnnotation | UpdateNodeDeclaredFeature | UpdateNodePreemptionPolicy | UpdatePodLabel | UpdatePodScaleDown | UpdatePodScaleUp | UpdatePodToleration | UpdatePodSchedulingGatesEliminated | UpdatePodGeneratedResourceClaim
 
-	// None is a special ActionType that is only used internally.
-	// 零值表示“没有任何动作”，作为无效值哨兵，避免把空事件误判成某种变更。
+	// None 是仅供内部使用的特殊 ActionType。零值表示“没有任何动作”，作为无效值哨兵，
+	// 避免把空事件误判成某种变更。
 	None ActionType = 0
 )
 
@@ -141,55 +134,47 @@ func (a ActionType) String() string {
 		return "Update"
 	}
 
-	// Shouldn't reach here.
-	// 未知位返回空串，方便调用方把它当无效值过滤掉，而不是打印出误导性的数字。
+	// 理论上不应走到这里。未知位返回空串，方便调用方把它当无效值过滤掉，而不是打印出误导性的数字。
 	return ""
 }
 
-// EventResource is basically short for group/version/kind, which can uniquely represent a particular API resource.
-//
+// EventResource 基本上是 group/version/kind 的简称，可唯一表示某个 API 资源。
 // 用字符串标识资源类型，既覆盖内置资源也覆盖扩展资源（带 group 前缀），
 // 插件注册事件时无需依赖具体的 Go 类型。
 type EventResource string
 
-// Constants for GVKs.
+// GVK 的常量定义。
 //
-// CAUTION for contributors: When you add a new EventResource, you must register a new one to allResources at k/k/pkg/scheduler/framework/types.go
-//
-// Note:
-// - UpdatePodXYZ or UpdateNodeXYZ: triggered by updating particular parts of a Pod or a Node, e.g. updatePodLabel.
-// Use specific events rather than general ones (updatePodLabel vs update) can make the requeueing process more efficient
-// and consume less memory as less events will be cached at scheduler.
+// 贡献者注意：新增 EventResource 时，必须把它注册到 k/k/pkg/scheduler/framework/types.go 的 allResources 中。
 const (
-	// There are a couple of notes about how the scheduler notifies the events of Pods:
-	// - Add: add events could be triggered by either a newly created Pod or an existing Pod that is scheduled to a Node.
-	// - Delete: delete events could be triggered by:
-	//           - a Pod that is deleted
-	//           - a Pod that was assumed, but gets un-assumed due to some errors in the binding cycle.
-	//           - an existing Pod that was unscheduled but gets scheduled to a Node.
+	// 关于调度器如何通知 Pod 事件，有几点说明：
+	// - Add：可能由新建的 Pod 触发，也可能由被调度到某个 Node 上的既有 Pod 触发。
+	// - Delete：可能由以下情况触发：
+	//           - 被删除的 Pod
+	//           - 已 assume、但因绑定周期中出现某些错误而 un-assume 的 Pod
+	//           - 原本未调度、但被调度到某个 Node 上的既有 Pod
 	//
-	// Note that the Pod event type includes the events for the unscheduled Pod itself.
-	// i.e., when unscheduled Pods are updated, the scheduling queue checks with Pod/Update QueueingHint(s) whether the update may make the pods schedulable,
-	// and requeues them to activeQ/backoffQ when at least one QueueingHint(s) return Queue.
-	// Plugins **have to** implement a QueueingHint for Pod/Update event
-	// if the rejection from them could be resolved by updating unscheduled Pods themselves.
-	// Example: Pods that require excessive resources may be rejected by the noderesources plugin,
-	// if this unscheduled pod is updated to require fewer resources,
-	// the previous rejection from noderesources plugin can be resolved.
-	// this plugin would implement QueueingHint for Pod/Update event
-	// that returns Queue when such label changes are made in unscheduled Pods.
+	// 注意：Pod 事件类型也包含未调度 Pod 自身的事件。
+	// 即未调度的 Pod 被更新时，调度队列会通过 Pod/Update 的 QueueingHint(s) 检查该更新
+	// 是否可能让 Pod 变得可调度，只要有一个 QueueingHint 返回 Queue，就将其重新入队到
+	// activeQ/backoffQ。若插件的拒绝可以通过更新未调度 Pod 自身来化解，
+	// 插件**必须**为 Pod/Update 事件实现 QueueingHint。
+	// 示例：请求过多资源的 Pod 可能被 noderesources 插件拒绝；如果这个未调度的 Pod
+	// 被更新为请求更少的资源，noderesources 之前的拒绝就可以化解。
+	// 该插件就应实现针对 Pod/Update 事件的 QueueingHint，
+	// 在未调度 Pod 发生此类变更时返回 Queue。
 	//
-	// There is one general pod resource: Pod, that contains three specific pod resources: AssignedPod, UnscheduledPod, and TargetPod.
-	// Plugins can and are expected to register to specific pod events for better performance.
+	// Pod 是一个通用资源，包含三个具体的 Pod 资源：AssignedPod、UnscheduledPod 和 TargetPod。
+	// 出于性能考虑，插件可以（也应当）注册具体的 Pod 事件。
 	// Pod 是宽泛兜底项，只有无法判断该关心哪类 Pod 时才用它。
 	Pod EventResource = "Pod"
-	// AssignedPod resource is associated with the cluster event that gets triggered when a scheduled pod is updated.
+	// AssignedPod 对应“已调度的 Pod 被更新”这一集群事件。
 	// 已绑定的 Pod 变化通常意味着资源占用变化，影响正在排队的其他 Pod。
 	AssignedPod EventResource = "AssignedPod"
-	// UnscheduledPod resource is associated with the cluster event that gets triggered when an unscheduled pod is updated, other than the target pod.
+	// UnscheduledPod 对应“除目标 Pod 以外的未调度 Pod 被更新”这一集群事件。
 	// 其他待调度 Pod 的变化，可能让某个被拒绝的 Pod 重新有机会（例如它们释放了竞争资源）。
 	UnscheduledPod EventResource = "UnscheduledPod"
-	// TargetPod resource is associated with the cluster event that gets triggered when an unscheduled pod itself is updated.
+	// TargetPod 对应“未调度 Pod 自身被更新”这一集群事件。
 	// 被拒绝的 Pod 自身变化最直接：之前因资源过大被拒，调小请求后就能重新入队。
 	TargetPod EventResource = "TargetPod"
 	// 把 Pod 拆成三类，是为了让 QueueingHint 只评估相关的 Pod 集合，减少重入队计算量。
@@ -208,14 +193,19 @@ const (
 	PodGroup              EventResource = "scheduling.k8s.io/PodGroup"
 	CompositePodGroup     EventResource = "scheduling.k8s.io/CompositePodGroup"
 
-	// WildCard is a special EventResource to match all resources.
-	// e.g., If you register `{Resource: "*", ActionType: All}` in EventsToRegister,
-	// all coming clusterEvents will be admitted. Be careful to register it, it will
-	// increase the computing pressure in requeueing unless you really need it.
+	// WildCard 是能匹配所有资源的特殊 EventResource。
+	// 例如，在 EventsToRegister 里注册 `{Resource: "*", ActionType: All}`，
+	// 所有到来的 clusterEvent 都会被接纳。除非确实需要，注册它要谨慎，
+	// 它会推高重新入队的计算压力。
 	//
-	// Meanwhile, if the coming clusterEvent is a wildcard one, all pods
-	// will be moved from unschedulablePod pool to activeQ/backoffQ forcibly.
+	// 同时，如果到来的 clusterEvent 本身是通配符事件，所有 Pod
+	// 都会被强制从 unschedulablePod 池移动到 activeQ/backoffQ。
 	// 通配符绕过 QueueingHint 直接全量重入队，代价高，只在确实无法定位具体资源时使用。
+	//
+	// 注意：
+	// - UpdatePodXYZ 或 UpdateNodeXYZ：由更新 Pod 或 Node 的特定部分触发，例如 updatePodLabel。
+	// 与笼统事件（update）相比，使用具体事件（updatePodLabel）能让重入队流程更高效、
+	// 更省内存，因为调度器缓存的事件更少。
 	WildCard EventResource = "*"
 )
 
@@ -224,40 +214,36 @@ const (
 // 这样插件注册事件时就自带过滤逻辑，调度器不必为每种事件再回头查一遍插件实现。
 type ClusterEventWithHint struct {
 	Event ClusterEvent
-	// QueueingHintFn is executed for the Pod rejected by this plugin when the above Event happens,
-	// and filters out events to reduce useless retry of Pod's scheduling.
-	// It's an optional field. If not set,
-	// the scheduling of Pods will be always retried with backoff when this Event happens.
-	// (the same as Queue)
+	// 当上述 Event 发生时，QueueingHintFn 会针对曾被本插件拒绝的 Pod 执行，
+	// 过滤掉无关事件，减少 Pod 调度的无谓重试。该字段可选；若不设置，
+	// 此 Event 发生时 Pod 的调度总是带退避地重试（与返回 Queue 等效）。
 	// 两级过滤：PreQueueingHintFn 先粗筛出可能受影响的 Pod，QueueingHintFn 再逐个精筛，
 	// 避免对每个事件都遍历全部不可调度 Pod。
 	QueueingHintFn QueueingHintFn
-	// PreQueueingHintFn is called once per event to narrow the set of pods to evaluate with QueueingHint.
-	// If set, only pods identified in the returned PreQueueingHintResult are checked.
+	// PreQueueingHintFn 每个事件调用一次，用于收窄要交给 QueueingHint 评估的 Pod 集合。
+	// 若设置，则只检查返回的 PreQueueingHintResult 中指明的 Pod。
 	// 粗筛成本低、精度差，精筛成本高；分两层是为了在事件很多时省下大量精筛调用。
 	PreQueueingHintFn PreQueueingHintFn
 }
 
-// QueueingHintFn returns a hint that signals whether the event can make a Pod,
-// which was rejected by this plugin in the past scheduling cycle, schedulable or not.
-// It's called before a Pod gets moved from unschedulableQ to backoffQ or activeQ.
-// If it returns an error, we'll take the returned QueueingHint as `Queue` at the caller whatever we returned here so that
-// we can prevent the Pod from being stuck in the unschedulable pod pool.
+// QueueingHintFn 返回一个提示，表示该事件能否让一个在本插件过去的调度周期中被拒绝的
+// Pod 重新变得可调度。它会在 Pod 从 unschedulableQ 移动到 backoffQ 或 activeQ 之前被调用。
+// 若返回错误，无论这里返回什么，调用方都会把返回的 QueueingHint 当作 `Queue` 处理，
+// 以避免 Pod 卡在不可调度 Pod 池中。
 //
-// - `pod`: the Pod to be enqueued, which is rejected by this plugin in the past.
-// - `oldObj` `newObj`: the object involved in that event.
-//   - For example, the given event is "Node deleted", the `oldObj` will be that deleted Node.
-//   - `oldObj` is nil if the event is add event.
-//   - `newObj` is nil if the event is delete event.
+// - `pod`：待入队的 Pod，即过去被本插件拒绝的 Pod。
+// - `oldObj` `newObj`：该事件涉及的对象。
+//   - 例如，事件是 "Node deleted" 时，`oldObj` 就是那个被删除的 Node。
+//   - 事件为 add 时 `oldObj` 为 nil。
+//   - 事件为 delete 时 `newObj` 为 nil。
 //
 // 错误一律按 Queue 处理，是故意偏向“多调度一次”而非“漏调度”：
 // 宁可多付出一次调度周期，也不能让本可运行的 Pod 永久卡在不可调度队列里。
 type QueueingHintFn func(logger klog.Logger, pod *v1.Pod, oldObj, newObj interface{}) (QueueingHint, error)
 
-// PreQueueingHintResult is the return value of PreQueueingHintFn.
-// When AllPods is true, all unschedulable pods are evaluated (existing behavior).
-// When AllPods is false, only pods listed in Pods are evaluated.
-//
+// PreQueueingHintResult 是 PreQueueingHintFn 的返回值。
+// AllPods 为 true 时评估所有不可调度 Pod（即现有行为）；
+// 为 false 时只评估 Pods 中列出的 Pod。
 // 两种模式兼顾兼容与性能：不实现粗筛的插件走 AllPods 保持旧行为，
 // 能精确定位的插件只列出候选，减少后续逐 Pod 判断的开销。
 type PreQueueingHintResult struct {
@@ -265,14 +251,13 @@ type PreQueueingHintResult struct {
 	Pods    []types.NamespacedName
 }
 
-// PreQueueingHintFn is called once per event before iterating unschedulable pods.
-// PreQueueingHintFn will not be called when the deleted object is unknown (both oldObj and newObj are nil).
-// It returns a PreQueueingHintResult indicating which pods should be evaluated
-// by QueueingHintFn for this event. If it returns an error, the error is logged
-// and the result is treated as AllPods (all unschedulable pods are evaluated).
+// PreQueueingHintFn 在每个事件迭代不可调度 Pod 之前被调用一次。
+// 当被删除的对象未知时（oldObj 和 newObj 均为 nil），不会调用 PreQueueingHintFn。
+// 它返回一个 PreQueueingHintResult，指明该事件下哪些 Pod 应由 QueueingHintFn 评估；
+// 若返回错误，该错误会被记录日志，且结果按 AllPods 处理（评估所有不可调度 Pod）。
 //
-// - oldObj is the old object in update events, or the deleted object in delete events.
-// - newObj is the new/added object. It is nil for delete events.
+// - oldObj 是更新事件中的旧对象，或删除事件中被删除的对象。
+// - newObj 是新加入/新增的对象；删除事件时为 nil。
 //
 // 出错时退化为 AllPods，与 QueueingHintFn 一样遵循“漏调度比多调度更糟”的原则。
 // 删除对象未知时不调用，是因为此时没有可用信息做粗筛，调用也不会得到有意义的结果。
@@ -301,9 +286,8 @@ func (s QueueingHint) String() string {
 	return ""
 }
 
-// ClusterEvent abstracts how a system resource's state gets changed.
-// Resource represents the standard API resources such as Pod, Node, etc.
-// ActionType denotes the specific change such as Add, Update or Delete.
+// ClusterEvent 抽象了系统资源状态的变化方式：Resource 表示 Pod、Node 这类标准 API 资源，
+// ActionType 指明具体的变更（如 Add、Update 或 Delete）。
 // ClusterEvent 是插件与调度队列之间的通用事件格式。
 // CustomLabel 让少数没有对应 GVK 的事件（如超时）也能进入同一套指标体系。
 type ClusterEvent struct {
@@ -316,8 +300,7 @@ type ClusterEvent struct {
 	CustomLabel string
 }
 
-// Label is used for logging and metrics.
-// Label 生成稳定的指标标签；自定义标签优先，保证特殊事件不会污染通用事件的标签维度。
+// Label 用于日志与指标：生成稳定的指标标签；自定义标签优先，保证特殊事件不会污染通用事件的标签维度。
 func (ce ClusterEvent) Label() string {
 	if ce.CustomLabel != "" {
 		return ce.CustomLabel
@@ -326,8 +309,7 @@ func (ce ClusterEvent) Label() string {
 	return fmt.Sprintf("%v%v", ce.Resource, ce.ActionType)
 }
 
-// NodeInfo is node level aggregated information.
-// NodeInfo 把节点及其上所有 Pod 的聚合信息缓存成一份快照视图。
+// NodeInfo 是节点级别的聚合信息，把节点及其上所有 Pod 的状态缓存成一份快照视图。
 // 预计算这些派生数据，是因为 Filter/Score 阶段会被频繁调用，每次重算代价过高。
 // generation 字段让快照可以判断数据是否变化，从而跳过不必要的克隆。
 type NodeInfo interface {
@@ -381,8 +363,8 @@ type NodeInfo interface {
 	SetNode(node *v1.Node)
 }
 
-// QueuedEntityInfo is an interface that represents a schedulable entity in the scheduling queue.
-// It can be a single Pod (QueuedPodInfo) or a group of Pods (QueuedPodGroupInfo).
+// QueuedEntityInfo 是表示调度队列中一个可调度实体的接口，
+// 具体可以是单个 Pod（QueuedPodInfo）或一组 Pod（QueuedPodGroupInfo）。
 // QueuedEntityInfo 统一单个 Pod 和 PodGroup 的队列元数据。
 // 队列的排序、退避和统计只需要这些共性字段，不需要知道实体具体是 Pod 还是组。
 type QueuedEntityInfo interface {
@@ -438,9 +420,8 @@ type QueuedEntityInfo interface {
 	GetGatingPluginEvents() []ClusterEvent
 }
 
-// PodInfo is a wrapper to a Pod with additional pre-computed information to
-// accelerate processing. This information is typically immutable (e.g., pre-processed
-// inter-pod affinity selectors).
+// PodInfo 是对 Pod 的包装，附带为加速处理而预计算的信息，
+// 这些信息通常不可变（如预处理过的 Pod 间亲和性选择器）。
 // PodInfo 缓存预处理过的亲和性条件：选择器解析一次后可反复使用。
 // 亲和性在调度期间不变，所以这些派生数据可以安全地共享给多个插件。
 type PodInfo interface {
@@ -579,8 +560,8 @@ func GetPodAntiAffinityTerms(affinity *v1.Affinity) (terms []v1.PodAffinityTerm)
 	return terms
 }
 
-// Resource is a collection of compute resources.
-// Resource 用 int64 的毫核/字节数表达资源量，避免浮点误差在比较和累加时累积。
+// Resource 是计算资源的集合，用 int64 的毫核/字节数表达资源量，
+// 避免浮点误差在比较和累加时累积。
 // 方法集合刻意保持最小，只覆盖调度器真正需要的读取与取最大值操作。
 type Resource interface {
 	GetMilliCPU() int64
@@ -624,8 +605,8 @@ type ProtocolPort struct {
 	Port     int32
 }
 
-// NewProtocolPort creates a ProtocolPort instance.
-// NewProtocolPort 把 TCP 作为缺省协议，因为绝大多数端口冲突检查都发生在 TCP 上；
+// NewProtocolPort 创建 ProtocolPort 实例，把 TCP 作为缺省协议，
+// 因为绝大多数端口冲突检查都发生在 TCP 上；
 // 由构造函数统一补全，后续 Add/Remove/CheckConflict 才能只比较规范化的键。
 func NewProtocolPort(protocol string, port int32) *ProtocolPort {
 	pp := &ProtocolPort{
@@ -643,8 +624,7 @@ func NewProtocolPort(protocol string, port int32) *ProtocolPort {
 // HostPortInfo stores mapping from ip to a set of ProtocolPort
 type HostPortInfo map[string]map[ProtocolPort]struct{}
 
-// Add adds (ip, protocol, port) to HostPortInfo
-// Add 用两层 map 记录 (ip, protocol, port) 三元组，
+// Add 把 (ip, protocol, port) 加入 HostPortInfo。HostPortInfo 用两层 map 记录三元组，
 // 这样检查冲突时可以先按 ip 定位，再按协议端口查找，省去全表扫描。
 func (h HostPortInfo) Add(ip, protocol string, port int32) {
 	if port <= 0 {
@@ -664,8 +644,8 @@ func (h HostPortInfo) Add(ip, protocol string, port int32) {
 	h[ip][*pp] = struct{}{}
 }
 
-// Remove removes (ip, protocol, port) from HostPortInfo
-// Remove 在最后一个端口被移除时连 ip 键一起删掉，避免残留空 map 让 Len 和冲突检查多走分支。
+// Remove 从 HostPortInfo 移除 (ip, protocol, port)；在某个 ip 下最后一个端口被移除时
+// 连 ip 键一起删掉，避免残留空 map 让 Len 和冲突检查多走分支。
 func (h HostPortInfo) Remove(ip, protocol string, port int32) {
 	if port <= 0 {
 		return
@@ -691,9 +671,8 @@ func (h HostPortInfo) Len() int {
 	return length
 }
 
-// CheckConflict checks if the input (ip, protocol, port) conflicts with the existing
-// ones in HostPortInfo.
-// CheckConflict 必须双向检查：绑定 0.0.0.0 会占用所有 IP，
+// CheckConflict 检查输入 (ip, protocol, port) 是否与 HostPortInfo 中已有条目冲突。
+// 它必须双向检查：绑定 0.0.0.0 会占用所有 IP，
 // 而绑定具体 IP 时也要看是否已有 0.0.0.0 的监听，否则会漏判冲突。
 func (h HostPortInfo) CheckConflict(ip, protocol string, port int32) bool {
 	if port <= 0 {
@@ -726,8 +705,7 @@ func (h HostPortInfo) CheckConflict(ip, protocol string, port int32) bool {
 	return false
 }
 
-// sanitize the parameters
-// sanitize 把空值归一成默认值，让上层传入的零值也能得到符合直觉的结果。
+// sanitize 归一化参数：把空值归一成默认值，让上层传入的零值也能得到符合直觉的结果。
 func (h HostPortInfo) sanitize(ip, protocol *string) {
 	if len(*ip) == 0 {
 		*ip = DefaultBindAllHostIP
@@ -746,9 +724,8 @@ const (
 	CompositePodGroupKeyType EntityKeyType = "compositepodgroup"
 )
 
-// PodGroupInfo is a wrapper around the PodGroup API object together with a list of unscheduled pods that belong to the pod group.
-// Typically used as an input to pod group scheduling cycle plugins.
-// PodGroupInfo 把 API 对象与当前待调度 Pod 列表打包，供 pod group 调度周期的插件使用。
+// PodGroupInfo 把 PodGroup API 对象与属于该组的未调度 Pod 列表打包在一起，
+// 通常作为 pod group 调度周期插件的输入。
 // 区分普通组和复合组，是因为后者没有对应的单一 API 对象，需要从子组聚合信息。
 type PodGroupInfo interface {
 	// GetUnscheduledPods returns pods that are currently being considered for scheduling.
@@ -774,9 +751,8 @@ type PodGroupInfo interface {
 	GetChildren() []PodGroupInfo
 }
 
-// Placement determines the resources to be considered when scheduling a pod group.
-// Pod group scheduling cycle can check multiple placements and select the one that results
-// in the best pod assignments.
+// Placement 决定调度一个 pod group 时要考虑哪些资源。pod group 调度周期可以
+// 检查多个 Placement，选出最终 Pod 分配效果最好的一个。
 // Placement 描述一次候选放置方案，名字仅用于诊断，不参与调度语义。
 // 把候选节点集合限制在 Placement 内，便于对同一组尝试多种放置并比较优劣。
 type Placement struct {
@@ -789,8 +765,7 @@ type Placement struct {
 	Nodes []NodeInfo
 }
 
-// ProposedAssignment associates pod of a pod group with a proposed node assignment, determined in pod group scheduling cycle.
-// ProposedAssignment 保存 pod group 调度周期中的临时结果；
+// ProposedAssignment 保存 pod group 调度周期中确定的结果：组内 Pod 与其候选节点的对应关系；
 // CycleState 一并带出，让后续阶段能复用当时的计算数据而不必重新计算。
 type ProposedAssignment interface {
 	// GetPod returns the pod that has the proposed node assignment.
@@ -814,8 +789,8 @@ type PodGroupAssignments struct {
 	ProposedAssignments []ProposedAssignment
 }
 
-// EntityKey uniquely identifies a specific instance of an entity (like PodGroup or CompositePodGroup).
-// EntityKey 用 (类型, 命名空间, 名字) 三元组区分不同实体，
+// EntityKey 唯一标识某个实体（如 PodGroup 或 CompositePodGroup）的具体实例。
+// 它用 (类型, 命名空间, 名字) 三元组区分不同实体，
 // 因为同名的 Pod 和 PodGroup 可以同时存在，不能只用名字做键。
 type EntityKey struct {
 	Type      EntityKeyType
@@ -840,9 +815,8 @@ func (ek EntityKey) String() string {
 	return fmt.Sprintf("%s/%s/%s", ek.Type, ek.Namespace, ek.Name)
 }
 
-// MustParseEntityKey returns the entity key for a given key.
-// It should be only used in tests.
-// MustParseEntityKey 对非法输入返回零值而不是 panic，方便在测试和日志解析里宽容处理坏数据；
+// MustParseEntityKey 返回给定 key 对应的实体键，只应在测试中使用。
+// 它对非法输入返回零值而不是 panic，方便在测试和日志解析里宽容处理坏数据；
 // “Must”只是命名习惯，调用方仍需检查返回值是否有效。
 func MustParseEntityKey(key string) EntityKey {
 	parts := strings.Split(key, "/")
@@ -852,8 +826,8 @@ func MustParseEntityKey(key string) EntityKey {
 	return EntityKey{Type: EntityKeyType(parts[0]), Namespace: parts[1], Name: parts[2]}
 }
 
-// PodKey returns the key for a pod.
-// 下面几个构造函数集中管理 EntityKey 的类型字段，避免调用方手写字符串时拼错类型。
+// PodKey 返回某个 pod 的实体键。下面几个构造函数集中管理 EntityKey 的类型字段，
+// 避免调用方手写字符串时拼错类型。
 func PodKey(namespace, name string) EntityKey {
 	return EntityKey{Type: PodKeyType, Namespace: namespace, Name: name}
 }

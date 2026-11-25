@@ -81,7 +81,7 @@ type PriorityClass struct {
 	// +optional
 	Description string
 
-	// preemptionPolicy it the Policy for preempting pods with lower priority.
+	// preemptionPolicy 是抢占较低优先级 Pod 的策略。
 	// 取值为 Never 或 PreemptLowerPriority。
 	// 如果未设置，默认为 PreemptLowerPriority。
 	// +optional
@@ -94,7 +94,7 @@ type PriorityClass struct {
 type PriorityClassList struct {
 	metav1.TypeMeta
 	// 标准列表元数据。
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 更多信息参见: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta
 
@@ -145,9 +145,8 @@ const (
 
 // WorkloadSpec 定义 Workload 的期望状态。
 type WorkloadSpec struct {
-	// ControllerRef is an optional reference to the controlling object, such as a
-	// Deployment or Job. This field is intended for use by tools like CLIs
-	// to provide a link back to the original workload definition.
+	// ControllerRef 是对控制对象（如 Deployment 或 Job）的可选引用。
+	// 该字段供 CLI 等工具使用，以提供回链到原始工作负载定义的链接。
 	// 该字段不可变。
 	//
 	// +optional
@@ -163,9 +162,9 @@ type WorkloadSpec struct {
 	// +listMapKey=name
 	PodGroupTemplates []PodGroupTemplate
 
-	// CompositePodGroupTemplates is the list of CompositePodGroup templates that make up the Workload.
-	// The maximum number of templates is 8. This field is immutable.
-	// Exactly one of CompositePodGroupTemplates and PodGroupTemplates must be set.
+	// CompositePodGroupTemplates 是构成该 Workload 的 CompositePodGroup 模板列表。
+	// 模板数量最多为 8 个。该字段不可变。
+	// CompositePodGroupTemplates 与 PodGroupTemplates 必须且只能设置其一。
 	//
 	// 仅当 CompositePodGroup 特性门控启用时使用此字段。
 	//
@@ -208,22 +207,20 @@ type PodGroupTemplate struct {
 	// +required
 	SchedulingPolicy PodGroupSchedulingPolicy
 
-	// SchedulingConstraints defines optional scheduling constraints (e.g. topology) for this PodGroupTemplate.
-	// This field is only available when the TopologyAwareWorkloadScheduling feature gate is enabled.
+	// SchedulingConstraints 为此 PodGroupTemplate 定义可选的调度约束（如拓扑）。
+	// 仅当启用 TopologyAwareWorkloadScheduling 特性门控时该字段可用。
 	// 该字段不可变。
 	//
 	// +optional
 	// +featureGate=TopologyAwareWorkloadScheduling
 	SchedulingConstraints *PodGroupSchedulingConstraints
 
-	// ResourceClaims defines which ResourceClaims may be shared among Pods in
-	// the group. Pods consume the devices allocated to a PodGroup's claim by
-	// defining a claim in its own Spec.ResourceClaims that matches the
-	// PodGroup's claim exactly. The claim must have the same name and refer to
-	// the same ResourceClaim or ResourceClaimTemplate.
+	// ResourceClaims 定义组内 Pod 之间可以共享哪些 ResourceClaims。
+	// Pod 通过在自己的 Spec.ResourceClaims 中定义与 PodGroup 的声明完全匹配的声明，
+	// 来消费分配给 PodGroup 声明的设备。声明必须同名，并引用相同的
+	// ResourceClaim 或 ResourceClaimTemplate。
 	//
-	// This is a beta-level field and requires that the
-	// DRAWorkloadResourceClaims feature gate is enabled.
+	// 此为 beta 级字段，需要启用 DRAWorkloadResourceClaims 特性门控。
 	//
 	// 该字段不可变。
 	//
@@ -235,22 +232,21 @@ type PodGroupTemplate struct {
 	// +featureGate=DRAWorkloadResourceClaims
 	ResourceClaims []PodGroupResourceClaim
 
-	// DisruptionMode defines the mode in which a given PodGroup can be disrupted.
-	// One of Single, All.
+	// DisruptionMode 定义给定 PodGroup 可被打断（disrupted）的模式。
+	// 取值为 Single、All 之一。
 	// 该字段不可变。
 	//
 	// +optional
 	DisruptionMode *DisruptionMode
 
-	// PriorityClassName indicates the priority that should be considered when scheduling
-	// a pod group created from this template.
+	// PriorityClassName 指示调度由该模板创建的 Pod 组时应考虑的优先级。
 	// 该字段不可变。
 	//
 	// +optional
 	PriorityClassName string
 
-	// Priority is the value of priority of pod groups created from this template. Various
-	// system components use this field to find the priority of the pod group.
+	// Priority 是由该模板创建的 Pod 组的优先级数值。
+	// 多个系统组件使用该字段查找 Pod 组的优先级。
 	// 数值越大，优先级越高。
 	// 该字段不可变。
 	//
@@ -278,33 +274,31 @@ type CompositePodGroupTemplate struct {
 	// +required
 	SchedulingPolicy CompositePodGroupSchedulingPolicy
 
-	// SchedulingConstraints defines optional scheduling constraints (e.g. topology) for this CompositePodGroupTemplate.
+	// SchedulingConstraints 为此 CompositePodGroupTemplate 定义可选的调度约束（如拓扑）。
 	// 该字段不可变。
 	//
 	// +optional
 	SchedulingConstraints *CompositePodGroupSchedulingConstraints
 
-	// DisruptionMode defines the mode in which a given CompositePodGroup can be disrupted.
-	// One of Single, All.
+	// DisruptionMode 定义给定 CompositePodGroup 可被打断的模式。
+	// 取值为 Single、All 之一。
 	// 该字段不可变。
 	//
 	// +optional
 	DisruptionMode *CompositeDisruptionMode
 
-	// PriorityClassName indicates the priority that should be considered when scheduling
-	// a composite pod group created from this template. If no priority class is specified,
-	// admission control can set this to the global default priority class if it exists.
-	// Otherwise, composite pod groups created from this template will have the priority set
-	// to zero.
+	// PriorityClassName 指示调度由该模板创建的复合 Pod 组时应考虑的优先级。
+	// 若未指定优先级类，当存在全局默认优先级类时，准入控制可将此字段设置为其。
+	// 否则，由该模板创建的复合 Pod 组的优先级将被设为零。
 	// 该字段不可变。
 	//
 	// +optional
 	PriorityClassName string
 
-	// Priority is the value of priority of composite pod groups created from this template.
-	// Various system components use this field to find the priority of the composite pod group.
-	// When Priority Admission Controller is enabled, it prevents users from setting this field.
-	// The admission controller populates this field from PriorityClassName.
+	// Priority 是由此模板创建的复合 Pod 组的优先级数值。
+	// 多个系统组件使用该字段查找复合 Pod 组的优先级。
+	// 启用 Priority 准入控制器时，会阻止用户设置此字段。
+	// 该准入控制器会根据 PriorityClassName 填充此字段。
 	// 数值越大，优先级越高。
 	// 该字段不可变。
 	//
@@ -490,9 +484,8 @@ type PodGroupList struct {
 
 // PodGroupSpec 定义 PodGroup 的期望状态。
 type PodGroupSpec struct {
-	// ParentCompositePodGroupName contains the name of the parent composite pod group
-	// within the same namespace as this pod group.
-	// If it's nil, then this pod group is a root of a workload's hierarchy.
+	// ParentCompositePodGroupName 包含与此 Pod 组同命名空间内的父复合 Pod 组名称。
+	// 若为 nil，则此 Pod 组是某个工作负载层级的根。
 	// 仅当 CompositePodGroup 特性门控启用时使用此字段。
 	// 该字段不可变。
 	//
@@ -500,34 +493,32 @@ type PodGroupSpec struct {
 	// +optional
 	ParentCompositePodGroupName *string
 
-	// WorkloadRef references an optional PodGroup template within the Workload
-	// object that was used to create the PodGroup.
+	// WorkloadRef 引用创建该 PodGroup 时所使用的 Workload 对象中的
+	// 可选 PodGroup 模板。
 	// 该字段不可变。
 	//
 	// +optional
 	WorkloadRef *WorkloadReference
 
-	// SchedulingPolicy defines the scheduling policy for this instance of the PodGroup.
+	// SchedulingPolicy 为此 PodGroup 实例定义调度策略。
 	// 控制器应从 PodGroupTemplate 复制该字段来填充。
 	//
 	// +required
 	SchedulingPolicy PodGroupSchedulingPolicy
 
-	// SchedulingConstraints defines optional scheduling constraints (e.g. topology) for this PodGroup.
+	// SchedulingConstraints 为此 PodGroup 定义可选的调度约束（如拓扑）。
 	// 控制器应从 PodGroupTemplate 复制该字段来填充。
 	// 该字段不可变。
-	// This field is only available when the TopologyAwareWorkloadScheduling feature gate is enabled.
+	// 仅当启用 TopologyAwareWorkloadScheduling 特性门控时该字段可用。
 	//
 	// +optional
 	// +featureGate=TopologyAwareWorkloadScheduling
 	SchedulingConstraints *PodGroupSchedulingConstraints
 
-	// ResourceClaims defines which ResourceClaims may be shared among Pods in
-	// the group. Pods must reference these claims in order to consume the
-	// allocated devices.
+	// ResourceClaims 定义组内 Pod 之间可以共享哪些 ResourceClaims。
+	// Pod 必须引用这些声明才能消费已分配的设备。
 	//
-	// This is a beta-level field and requires that the
-	// DRAWorkloadResourceClaims feature gate is enabled.
+	// 此为 beta 级字段，需要启用 DRAWorkloadResourceClaims 特性门控。
 	//
 	// 该字段不可变。
 	//
@@ -539,28 +530,27 @@ type PodGroupSpec struct {
 	// +featureGate=DRAWorkloadResourceClaims
 	ResourceClaims []PodGroupResourceClaim
 
-	// DisruptionMode defines the mode in which a given PodGroup can be disrupted.
+	// DisruptionMode 定义给定 PodGroup 可被打断的模式。
 	// 控制器应从 PodGroupTemplate 复制该字段来填充。
-	// One of Single, All. Defaults to Single if unset.
+	// 取值为 Single、All 之一。若未设置，默认为 Single。
 	// 该字段不可变。
 	//
 	// +optional
 	DisruptionMode *DisruptionMode
 
-	// PriorityClassName defines the priority that should be considered when scheduling this pod group.
+	// PriorityClassName 定义调度此 Pod 组时应考虑的优先级。
 	// 控制器应从 PodGroupTemplate 复制该字段来填充。
-	// Otherwise, it is validated and resolved similarly to the PriorityClassName on PodGroupTemplate
-	// (i.e. if no priority class is specified, admission control can set this to the global default
-	// priority class if it exists. Otherwise, the pod group's priority will be zero).
+	// 否则，其校验与解析方式与 PodGroupTemplate 上的 PriorityClassName 类似
+	// （即若未指定优先级类，当存在全局默认优先级类时，准入控制可将此字段设置为其。
+	// 否则，Pod 组的优先级将为零）。
 	// 该字段不可变。
 	//
 	// +optional
 	PriorityClassName string
 
-	// Priority is the value of priority of this pod group. Various system components
-	// use this field to find the priority of the pod group. When Priority Admission
-	// Controller is enabled, it prevents users from setting this field. The admission
-	// controller populates this field from PriorityClassName.
+	// Priority 是此 Pod 组的优先级数值。多个系统组件
+	// 使用该字段查找 Pod 组的优先级。启用 Priority 准入控制器时，
+	// 会阻止用户设置此字段。该准入控制器会根据 PriorityClassName 填充此字段。
 	// 数值越大，优先级越高。
 	// 该字段不可变。
 	//
@@ -568,9 +558,9 @@ type PodGroupSpec struct {
 	Priority *int32
 
 	// PreemptionPolicy 定义抢占低优先级 Pod/PodGroup 的策略。
-	// One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset.
-	// When Priority Admission Controller is enabled, it populates this field from PriorityClassName,
-	// and defaults to PreemptLowerPriority if value is unset in PriorityClass.
+	// 取值为 Never、PreemptLowerPriority 之一。若未设置，默认为 PreemptLowerPriority。
+	// 启用 Priority 准入控制器时，该控制器会根据 PriorityClassName 填充此字段，
+	// 若 PriorityClass 中该值未设置，则默认为 PreemptLowerPriority。
 	// 该字段不可变。
 	// 仅当 PodGroupPreemptionPolicy 特性开关开启时该字段才可用。
 	//
@@ -660,16 +650,15 @@ type PodGroupResourceClaimStatus struct {
 // WorkloadReference references the Workload object together with the template
 // that was used to create a particular PodGroup.
 type WorkloadReference struct {
-	// WorkloadName is the name of the Workload object that contains a template
-	// that was used when creating a pod group. It must
-	// be a DNS name.
+	// WorkloadName 是包含创建 Pod 组时所用模板的 Workload 对象的名称。
+	// 必须是 DNS 名称。
 	// 该字段必填。
 	//
 	// +required
 	WorkloadName string
 
-	// TemplateName is the name of a template within the Workload object that
-	// was used to create a pod group. It must be a DNS label.
+	// TemplateName 是创建 Pod 组时所使用的 Workload 对象内模板的名称。
+	// 必须是 DNS 标签。
 	// 该字段必填。
 	//
 	// +required
@@ -738,58 +727,57 @@ type CompositePodGroupList struct {
 
 // CompositePodGroupSpec 定义 CompositePodGroup 的期望状态。
 type CompositePodGroupSpec struct {
-	// ParentCompositePodGroupName contains the name of the parent composite pod group
-	// within the same namespace as this composite pod group. It must be a DNS name.
-	// If it's nil, then this composite pod group is a root of a workload's hierarchy.
+	// ParentCompositePodGroupName 包含与此复合 Pod 组同命名空间内的父复合 Pod 组名称。
+	// 必须是 DNS 名称。
+	// 若为 nil，则此复合 Pod 组是某个工作负载层级的根。
 	// 该字段不可变。
 	//
 	// +optional
 	ParentCompositePodGroupName *string
 
-	// WorkloadRef references an optional CompositePodGroup template within the
-	// Workload object that was used to create the CompositePodGroup.
+	// WorkloadRef 引用创建该 CompositePodGroup 时所使用的、
+	// Workload 对象内的可选 CompositePodGroup 模板。
 	// 该字段必填。
 	// 该字段不可变。
 	//
 	// +required
 	WorkloadRef *WorkloadReference
 
-	// SchedulingPolicy defines the scheduling policy for this instance of the CompositePodGroup.
+	// SchedulingPolicy 为此 CompositePodGroup 实例定义调度策略。
 	// 控制器应从 CompositePodGroupTemplate 复制该字段来填充。
 	// 该字段不可变。
 	//
 	// +required
 	SchedulingPolicy CompositePodGroupSchedulingPolicy
 
-	// SchedulingConstraints defines optional scheduling constraints (e.g. topology) for this CompositePodGroup.
+	// SchedulingConstraints 为此 CompositePodGroup 定义可选的调度约束（如拓扑）。
 	// 控制器应从 CompositePodGroupTemplate 复制该字段来填充。
 	// 该字段不可变。
 	//
 	// +optional
 	SchedulingConstraints *CompositePodGroupSchedulingConstraints
 
-	// DisruptionMode defines the mode in which a given CompositePodGroup can be disrupted.
+	// DisruptionMode 定义给定 CompositePodGroup 可被打断的模式。
 	// 控制器应从 CompositePodGroupTemplate 复制该字段来填充。
-	// One of Single, All. Defaults to Single if unset.
+	// 取值为 Single、All 之一。若未设置，默认为 Single。
 	// 该字段不可变。
 	//
 	// +optional
 	DisruptionMode *CompositeDisruptionMode
 
-	// PriorityClassName defines the priority that should be considered when scheduling this CompositePodGroup.
+	// PriorityClassName 定义调度此 CompositePodGroup 时应考虑的优先级。
 	// 控制器应从 CompositePodGroupTemplate 复制该字段来填充。
-	// If left unspecified, it is validated and resolved similarly to the PriorityClassName field in Pods
-	// (i.e. if no priority class is specified, admission control can set this to the global default
-	// priority class if it exists. Otherwise, the composite pod group's priority will be zero).
+	// 若未指定，其校验与解析方式与 Pod 的 PriorityClassName 字段类似
+	// （即若未指定优先级类，当存在全局默认优先级类时，准入控制可将此字段设置为其。
+	// 否则，复合 Pod 组的优先级将为零）。
 	// 该字段不可变。
 	//
 	// +optional
 	PriorityClassName string
 
-	// Priority is the value of priority of this composite pod group. Various system components
-	// use this field to find the priority of the composite pod group. When Priority Admission
-	// Controller is enabled, it prevents users from setting this field. The admission
-	// controller populates this field from PriorityClassName.
+	// Priority 是此复合 Pod 组的优先级数值。多个系统组件
+	// 使用该字段查找复合 Pod 组的优先级。启用 Priority 准入控制器时，
+	// 会阻止用户设置此字段。该准入控制器会根据 PriorityClassName 填充此字段。
 	// 数值越大，优先级越高。
 	// 该字段不可变。
 	//
@@ -797,9 +785,9 @@ type CompositePodGroupSpec struct {
 	Priority *int32
 
 	// PreemptionPolicy 定义抢占低优先级 Pod/PodGroup 的策略。
-	// One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset.
-	// When Priority Admission Controller is enabled, it populates this field from PriorityClassName,
-	// and defaults to PreemptLowerPriority if value is unset in PriorityClass.
+	// 取值为 Never、PreemptLowerPriority 之一。若未设置，默认为 PreemptLowerPriority。
+	// 启用 Priority 准入控制器时，该控制器会根据 PriorityClassName 填充此字段，
+	// 若 PriorityClass 中该值未设置，则默认为 PreemptLowerPriority。
 	// 该字段不可变。
 	// 仅当 PodGroupPreemptionPolicy 特性开关开启时该字段才可用。
 	//
@@ -813,7 +801,7 @@ type CompositePodGroupSpec struct {
 //
 // +union
 type CompositePodGroupSchedulingPolicy struct {
-	// Basic specifies that the groups of this composite group should be scheduled independently.
+	// Basic 表示该复合组内的组应被独立调度。
 	// 该字段不可变。
 	//
 	// +optional

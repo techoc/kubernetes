@@ -30,25 +30,20 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// APIGroupResources is an API group with a mapping of versions to
-// resources.
-// APIGroupResources 用来把某个 API group 的发现信息（各版本及其资源）聚合在一起，
+// APIGroupResources 把某个 API group 的发现信息（各版本及其资源）聚合在一起，
 // 是构造 DeferredDiscoveryRESTMapper 的输入数据。
 type APIGroupResources struct {
 	Group metav1.APIGroup
-	// A mapping of version string to a slice of APIResources for
-	// that version.
 	// 版本字符串（不含 group 前缀）到该版本 APIResource 列表的映射。
 	VersionedResources map[string][]metav1.APIResource
 }
 
-// NewDiscoveryRESTMapper returns a PriorityRESTMapper based on the discovered
-// groups and resources passed in.
-//
-// NewDiscoveryRESTMapperWithContext is a better alternative because it supports contextual logging and cancellation.
+// NewDiscoveryRESTMapper 基于传入的发现结果（groups 与 resources）返回一个
+// PriorityRESTMapper。
+// NewDiscoveryRESTMapperWithContext 是更好的替代：支持上下文日志与取消，
+// 新代码应优先使用 ...WithContext 版本。
 //
 // Contextual logging: Use NewDiscoveryRESTMapperWithContext instead.
-// 该构造函数已不带 Context，新代码应优先使用 ...WithContext 版本。
 func NewDiscoveryRESTMapper(groupResources []*APIGroupResources) meta.RESTMapper {
 	mappers, resourcePriority, kindPriority := newDiscoveryRESTMapper(groupResources)
 	multiMapper := make(meta.MultiRESTMapper, len(mappers))
@@ -94,8 +89,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 	for _, group := range groupResources {
 		groupPriority = append(groupPriority, group.Group.Name)
 
-		// Make sure the preferred version comes first
-		// 只有该 preferred version 确实出现在发现结果中时才加入优先级，避免排入空版本。
+		// 确保 preferred version 排在最前：只有它确实出现在发现结果中时才加入优先级，避免排入空版本。
 		if len(group.Group.PreferredVersion.Version) != 0 {
 			preferred := group.Group.PreferredVersion.Version
 			if _, ok := group.VersionedResources[preferred]; ok {
@@ -143,8 +137,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 					scope = meta.RESTScopeRoot
 				}
 
-				// if we have a slash, then this is a subresource and we shouldn't create mappings for those.
-				// 子资源（如 pods/status）无法直接映射为独立的 GVR，故跳过。
+				// 名字含斜杠说明是子资源，无法直接映射为独立的 GVR，故跳过。
 				if strings.Contains(resource.Name, "/") {
 					continue
 				}
@@ -229,9 +222,8 @@ func GetAPIGroupResourcesWithContext(ctx context.Context, cl discovery.Discovery
 	return result, nil
 }
 
-// DeferredDiscoveryRESTMapper is a RESTMapper and RESTMapperContext that will defer
-// initialization of the RESTMapper until the first mapping is
-// requested.
+// DeferredDiscoveryRESTMapper 是同时实现 RESTMapper 与 RESTMapperContext 的映射器，
+// 会推迟初始化，直到第一次请求映射。
 // 延迟初始化可以避免在启动阶段即对 API server 发起发现请求；
 // 当映射失败且缓存已不新鲜时，它会失效缓存并重新发现。
 type DeferredDiscoveryRESTMapper struct {

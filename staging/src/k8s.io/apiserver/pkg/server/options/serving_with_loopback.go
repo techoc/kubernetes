@@ -46,10 +46,8 @@ func (o *SecureServingOptions) WithLoopback() *SecureServingOptionsWithLoopback 
 	}
 }
 
-// Set a validity period of approximately 3 years for the loopback certificate
-// to avoid kube-apiserver disruptions due to certificate expiration.
-// When this certificate expires, restarting kube-apiserver will automatically
-// regenerate a new certificate with fresh validity dates.
+// 回环证书的有效期设为约 3 年，避免 kube-apiserver 因证书过期而中断；
+// 证书过期后，重启 kube-apiserver 会自动重新生成带有新有效期的证书。
 // 回环证书是进程内自签的，重启即重新生成，因此长有效期是安全的。
 const maxAge = (3*365 + 1) * 24 * time.Hour
 
@@ -78,8 +76,8 @@ func (s *SecureServingOptionsWithLoopback) applyTo(secureServingInfo **server.Se
 		return nil
 	}
 
-	// create self-signed cert+key with the fake server.LoopbackClientServerNameOverride and
-	// let the server return it when the loopback client connects.
+	// 用伪主机名 server.LoopbackClientServerNameOverride 生成自签证书+私钥，
+	// 并在回环客户端连接时由服务端返回该证书：
 	// 证书仅用于本机回环，SNI 使用固定伪主机名，不需要（也无法）由外部 CA 签发。
 	certPem, keyPem, err := certutil.GenerateSelfSignedCertKeyWithOptions(certutil.SelfSignedCertKeyOptions{
 		Host:   server.LoopbackClientServerNameOverride,
@@ -93,7 +91,7 @@ func (s *SecureServingOptionsWithLoopback) applyTo(secureServingInfo **server.Se
 		return fmt.Errorf("failed to generate self-signed certificate for loopback connection: %v", err)
 	}
 
-	// Write to the front of SNICerts so that this overrides any other certs with the same name
+	// 插到 SNICerts 最前面，使其覆盖任何其他同名证书：
 	// 必须排在前面：SNI 匹配按顺序命中，回环伪主机名不能被其他证书抢先。
 	(*secureServingInfo).SNICerts = append([]dynamiccertificates.SNICertKeyContentProvider{certProvider}, (*secureServingInfo).SNICerts...)
 

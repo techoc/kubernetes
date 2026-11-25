@@ -119,8 +119,7 @@ var (
 
 // Mandatory FlowSchema objects
 var (
-	// "exempt" priority-level is used for preventing priority inversion and ensuring that sysadmin
-	// requests are always possible.
+	// "exempt" priority-level 用于防止优先级反转并确保系统管理员的请求始终可提交；
 	// 该 FlowSchema 优先级最高（precedence 1），覆盖所有动词、资源与非资源 URL，
 	// 因此 system:masters 的请求永远不会因流控被拒绝。
 	MandatoryFlowSchemaExempt = newFlowSchema(
@@ -147,8 +146,7 @@ var (
 			},
 		},
 	)
-	// "catch-all" priority-level only gets a minimal positive share of concurrency and won't be reaching
-	// ideally unless you intentionally deleted the suggested "global-default".
+	// "catch-all" priority-level 只保留最小的正并发份额；理想情况下不应命中，除非故意删除了建议的 "global-default"。
 	// precedence 10000 保证它在所有其他 FlowSchema 之后匹配。
 	MandatoryFlowSchemaCatchAll = newFlowSchema(
 		flowcontrol.FlowSchemaNameCatchAll,
@@ -178,7 +176,7 @@ var (
 
 // Suggested PriorityLevelConfiguration objects
 var (
-	// system priority-level
+	// system priority-level：
 	// 允许借出 33% 的并发额度给其他级别，系统组件繁忙时仍能回收闲置份额。
 	SuggestedPriorityLevelConfigurationSystem = newPriorityLevelConfiguration(
 		"system",
@@ -216,7 +214,7 @@ var (
 				},
 			},
 		})
-	// leader-election priority-level
+	// leader-election priority-level：
 	// 不借出额度：选主请求被其他级别挤占会导致控制器整体失联，代价过高。
 	SuggestedPriorityLevelConfigurationLeaderElection = newPriorityLevelConfiguration(
 		"leader-election",
@@ -235,7 +233,7 @@ var (
 				},
 			},
 		})
-	// workload-high priority-level
+	// workload-high priority-level：
 	// 队列数较多（128），因为该级别承载多种不同控制器，需要更细的隔离粒度。
 	SuggestedPriorityLevelConfigurationWorkloadHigh = newPriorityLevelConfiguration(
 		"workload-high",
@@ -254,7 +252,7 @@ var (
 				},
 			},
 		})
-	// workload-low priority-level
+	// workload-low priority-level：
 	// 份额最大（100）但可借出 90%：空闲时可被高优先级级别完全借用，实现按需分配。
 	SuggestedPriorityLevelConfigurationWorkloadLow = newPriorityLevelConfiguration(
 		"workload-low",
@@ -273,7 +271,7 @@ var (
 				},
 			},
 		})
-	// global-default priority-level
+	// global-default priority-level：
 	// 与 workload-low 相同的可借出比例，作为未被其他 FlowSchema 命中的普通认证用户的归宿。
 	SuggestedPriorityLevelConfigurationGlobalDefault = newPriorityLevelConfiguration(
 		"global-default",
@@ -298,7 +296,6 @@ var (
 // Ordered by matching precedence, so that their interactions are easier
 // to follow while reading this source.
 var (
-	// the following flow schema exempts probes
 	// 探针放行到 exempt 级别：kubelet 依赖探针结果决定是否重启容器，
 	// 若被流控排队会引发误判与连锁重启。
 	SuggestedFlowSchemaProbes = newFlowSchema(

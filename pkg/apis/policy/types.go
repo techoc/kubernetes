@@ -42,28 +42,27 @@ type PodDisruptionBudgetSpec struct {
 	// +optional
 	MaxUnavailable *intstr.IntOrString
 
-	// UnhealthyPodEvictionPolicy defines the criteria for when unhealthy pods
-	// should be considered for eviction. Current implementation considers healthy pods,
-	// as pods that have status.conditions item with type="Ready",status="True".
+	// UnhealthyPodEvictionPolicy 定义了何时应将不健康的 Pod 纳入驱逐考量。
+	// 当前实现将健康 Pod 视为 status.conditions 中存在 type="Ready"、
+	// status="True" 条目的 Pod。
 	//
-	// Valid policies are IfHealthyBudget and AlwaysAllow.
-	// If no policy is specified, the default behavior will be used,
-	// which corresponds to the IfHealthyBudget policy.
+	// 合法的策略为 IfHealthyBudget 和 AlwaysAllow。
+	// 若未指定策略，则使用默认行为，
+	// 等同于 IfHealthyBudget 策略。
 	//
-	// IfHealthyBudget policy means that running pods (status.phase="Running"),
-	// but not yet healthy can be evicted only if the guarded application is not
-	// disrupted (status.currentHealthy is at least equal to status.desiredHealthy).
+	// IfHealthyBudget 策略表示：正在运行（status.phase="Running"）但尚未健康的
+	// Pod，仅当受保护的应用未处于中断状态（status.currentHealthy 至少等于
+	// status.desiredHealthy）时才可被驱逐。
 	// 健康的 Pod 会受到 PDB 的驱逐保护。
 	//
-	// AlwaysAllow policy means that all running pods (status.phase="Running"),
-	// but not yet healthy are considered disrupted and can be evicted regardless
-	// of whether the criteria in a PDB is met. This means perspective running
-	// pods of a disrupted application might not get a chance to become healthy.
+	// AlwaysAllow 策略表示：所有正在运行（status.phase="Running"）但尚未健康的
+	// Pod 都被视为处于中断状态，无论是否满足 PDB 中的条件都可以被驱逐。
+	// 这意味着已中断应用的运行中 Pod 可能没有机会恢复健康。
 	// 健康的 Pod 会受到 PDB 的驱逐保护。
 	//
-	// Additional policies may be added in the future.
-	// Clients making eviction decisions should disallow eviction of unhealthy pods
-	// if they encounter an unrecognized policy in this field.
+	// 未来可能添加更多策略。
+	// 若在此字段中遇到无法识别的策略，做出驱逐决定的客户端
+	// 应禁止驱逐不健康的 Pod。
 	// +optional
 	UnhealthyPodEvictionPolicy *UnhealthyPodEvictionPolicyType
 }
@@ -74,16 +73,15 @@ type PodDisruptionBudgetSpec struct {
 type UnhealthyPodEvictionPolicyType string
 
 const (
-	// IfHealthyBudget policy means that running pods (status.phase="Running"),
-	// but not yet healthy can be evicted only if the guarded application is not
-	// disrupted (status.currentHealthy is at least equal to status.desiredHealthy).
+	// IfHealthyBudget 策略表示：正在运行（status.phase="Running"）但尚未健康的
+	// Pod，仅当受保护的应用未处于中断状态（status.currentHealthy 至少等于
+	// status.desiredHealthy）时才可被驱逐。
 	// 健康的 Pod 会受到 PDB 的驱逐保护。
 	IfHealthyBudget UnhealthyPodEvictionPolicyType = "IfHealthyBudget"
 
-	// AlwaysAllow policy means that all running pods (status.phase="Running"),
-	// but not yet healthy are considered disrupted and can be evicted regardless
-	// of whether the criteria in a PDB is met. This means perspective running
-	// pods of a disrupted application might not get a chance to become healthy.
+	// AlwaysAllow 策略表示：所有正在运行（status.phase="Running"）但尚未健康的
+	// Pod 都被视为处于中断状态，无论是否满足 PDB 中的条件都可以被驱逐。
+	// 这意味着已中断应用的运行中 Pod 可能没有机会恢复健康。
 	// 健康的 Pod 会受到 PDB 的驱逐保护。
 	AlwaysAllow UnhealthyPodEvictionPolicyType = "AlwaysAllow"
 )

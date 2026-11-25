@@ -48,7 +48,6 @@ func startCloudNodeController(ctx context.Context, initContext ControllerInitCon
 	// Start the CloudNodeController
 	nodeController, err := cloudnodecontroller.NewCloudNodeController(
 		completedConfig.SharedInformers.Core().V1().Nodes(),
-		// cloud node controller uses existing cluster role from node-controller
 		// 复用 node-controller 的 ClusterRole，避免为 CCM 单独扩权。
 		completedConfig.ClientBuilder.ClientOrDie(initContext.ClientName),
 		cloud,
@@ -75,7 +74,6 @@ func startCloudNodeLifecycleController(ctx context.Context, initContext Controll
 	// Start the cloudNodeLifecycleController
 	cloudNodeLifecycleController, err := cloudnodelifecyclecontroller.NewCloudNodeLifecycleController(
 		completedConfig.SharedInformers.Core().V1().Nodes(),
-		// cloud node lifecycle controller uses existing cluster role from node-controller
 		// 同样复用 node-controller 的 ClusterRole。
 		completedConfig.ClientBuilder.ClientOrDie(initContext.ClientName),
 		cloud,
@@ -105,8 +103,8 @@ func startServiceController(ctx context.Context, initContext ControllerInitConte
 		utilfeature.DefaultFeatureGate,
 	)
 	if err != nil {
-		// This error shouldn't fail. It lives like this as a legacy.
-		// 历史行为：云厂商未实现 LoadBalancer 接口时只打印错误并跳过该控制器，
+		// 这个错误不应导致启动失败；保持现状是历史遗留行为。
+		// 云厂商未实现 LoadBalancer 接口时只打印错误并跳过该控制器，
 		// 不能因为单个可选能力缺失而让 CCM 整体退出。
 		klog.Errorf("Failed to start service controller: %v", err)
 		return nil, false, nil
@@ -134,21 +132,19 @@ func startRouteController(ctx context.Context, initContext ControllerInitContext
 		return nil, false, nil
 	}
 
-	// failure: bad cidrs in config
-	// 解析 clusterCIDR；后续 route controller 用它判断哪些路由由本集群负责。
+	// 失败场景：配置中的 clusterCIDR 非法。解析 clusterCIDR；
+	// 后续 route controller 用它判断哪些路由由本集群负责。
 	clusterCIDRs, dualStack, err := processCIDRs(completedConfig.ComponentConfig.KubeCloudShared.ClusterCIDR)
 	if err != nil {
 		return nil, false, err
 	}
 
-	// failure: more than one cidr but they are not configured as dual stack
-	// 多于一个 CIDR 却不同时包含 IPv4/IPv6，说明配置写错了，属于硬错误。
+	// 失败场景：多于一个 CIDR 却未按双栈配置（即不同时包含 IPv4/IPv6），说明配置写错了，属于硬错误。
 	if len(clusterCIDRs) > 1 && !dualStack {
 		return nil, false, fmt.Errorf("len of ClusterCIDRs==%v and they are not configured as dual stack (at least one from each IPFamily", len(clusterCIDRs))
 	}
 
-	// failure: more than cidrs is not allowed even with dual stack
-	// 双栈最多两个 CIDR，再多就无法与云侧路由一一对应。
+	// 失败场景：即使是双栈也不允许超过两个 CIDR，再多就无法与云侧路由一一对应。
 	if len(clusterCIDRs) > 2 {
 		return nil, false, fmt.Errorf("length of clusterCIDRs is:%v more than max allowed of 2", len(clusterCIDRs))
 	}

@@ -54,7 +54,7 @@ import (
 )
 
 const (
-	// The maximum length of requester-controlled attributes to allow caching.
+	// 允许进入缓存的请求方可控属性的最大长度；
 	// 超过该阈值说明属性可能被恶意放大，缓存会显著增加内存占用，
 	// 因此直接绕过缓存。
 	maxControlledAttrCacheSize = 10000
@@ -123,7 +123,6 @@ func New(config *rest.Config, version string, authorizedTTL, unauthorizedTTL tim
 
 // newWithBackoff allows tests to skip the sleep.
 func newWithBackoff(subjectAccessReview subjectAccessReviewer, authorizedTTL, unauthorizedTTL time.Duration, retryBackoff wait.Backoff, decisionOnError authorizer.Decision, matchConditions []apiserver.WebhookMatchCondition, am metrics.AuthorizerMetrics, compiler authorizationcel.Compiler, name string) (*WebhookAuthorizer, error) {
-	// compile all expressions once in validation and save the results to be used for eval later
 	// 构造期编译一次，运行期只做求值；编译失败直接让 authorizer 初始化失败。
 	cm, fieldErr := apiservervalidation.ValidateAndCompileMatchConditions(compiler, matchConditions)
 	if err := fieldErr.ToAggregate(); err != nil {
@@ -281,7 +280,6 @@ func (w *WebhookAuthorizer) Authorize(ctx context.Context, attr authorizer.Attri
 		}, webhook.DefaultShouldRetry); err != nil {
 			klog.Errorf("Failed to make webhook authorizer request: %v", err)
 
-			// we're returning NoOpinion, and the parent context has not timed out or been canceled
 			// 只有真正的 fail-open（而非父 ctx 取消）才计入 fail-open 指标，
 			// 否则会把客户端主动断开误统计成 webhook 故障。
 			if w.decisionOnError == authorizer.DecisionNoOpinion && ctx.Err() == nil {
@@ -316,7 +314,6 @@ func (w *WebhookAuthorizer) Authorize(ctx context.Context, attr authorizer.Attri
 
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
 // webhook 授权器没有额外的条件数据来源，因此直接把普通判定包装成
 // ConditionsAwareDecision，保证接口可组合。
 func (w *WebhookAuthorizer) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
@@ -341,8 +338,7 @@ func resourceAttributesFrom(attr authorizer.Attributes) *authorizationv1.Resourc
 		Name:        attr.GetName(),
 	}
 
-	// If we are able to get any requirements while parsing selectors, use them, even if there's an error.
-	// This is because selectors only narrow, so if a subset of selector requirements are available, the request can be allowed.
+	// 解析选择器时只要拿到部分约束就使用它们，即使伴随错误：
 	// 选择器只能收窄授权范围；带部分约束去鉴权永远不会比“无约束”更宽松，
 	// 因此解析部分失败时仍发送已解析出的约束。
 	if selectorRequirements, _ := fieldSelectorToAuthorizationAPI(attr); len(selectorRequirements) > 0 {
@@ -455,8 +451,8 @@ func (w *WebhookAuthorizer) RulesFor(ctx context.Context, user user.Info, namesp
 // to return match or no match found, which then is used to
 // determine if the webhook should be skipped.
 func (w *WebhookAuthorizer) match(ctx context.Context, r *authorizationv1.SubjectAccessReview) (bool, error) {
-	// A nil celMatcher or zero saved CompilationResults matches all requests.
-	// 未配置 matchConditions 时视为匹配全部，保持原有行为。
+	// celMatcher 为 nil 或 CompilationResults 为空时匹配全部请求，
+	// 即未配置 matchConditions 时视为匹配全部，保持原有行为。
 	if w.celMatcher == nil || w.celMatcher.CompilationResults == nil {
 		return true, nil
 	}
@@ -477,9 +473,9 @@ func convertToSARExtra(extra map[string][]string) map[string]authorizationv1.Ext
 	return ret
 }
 
-// subjectAccessReviewInterfaceFromConfig builds a client from the specified kubeconfig file,
-// and returns a SubjectAccessReviewInterface that uses that client. Note that the client submits SubjectAccessReview
-// requests to the exact path specified in the kubeconfig file, so arbitrary non-API servers can be targeted.
+// subjectAccessReviewInterfaceFromConfig 用指定 kubeconfig 文件构造客户端，并返回基于该客户端的
+// SubjectAccessReviewInterface。注意客户端会把 SubjectAccessReview 请求提交到
+// kubeconfig 中指定的精确路径，因此也可以指向任意非 API server 的服务端。
 //
 // version 选择使用 v1 还是 v1beta1 协议；两者都基于同一 generic webhook
 // 客户端，只是反序列化目标不同。
@@ -543,7 +539,7 @@ func (t *subjectAccessReviewV1Client) Create(ctx context.Context, subjectAccessR
 	return
 }
 
-// subjectAccessReviewV1ClientGW used by the generic webhook, doesn't specify GVR.
+// subjectAccessReviewV1ClientGW 供 generic webhook 使用，不指定 GVR：
 // 通用 webhook 客户端已经绑定了 URL，因此不能再附加 Resource 路径。
 type subjectAccessReviewV1ClientGW struct {
 	client rest.Interface
@@ -562,7 +558,7 @@ func (t *subjectAccessReviewV1ClientGW) Create(ctx context.Context, subjectAcces
 	return result, statusCode, err
 }
 
-// subjectAccessReviewV1beta1ClientGW used by the generic webhook, doesn't specify GVR.
+// subjectAccessReviewV1beta1ClientGW 供 generic webhook 使用，不指定 GVR：
 // 远程服务可能只实现 v1beta1 协议，这里在客户端做 v1<->v1beta1 转换，
 // 使上层始终只处理 v1 类型。
 type subjectAccessReviewV1beta1ClientGW struct {

@@ -8584,7 +8584,6 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 				testMetric(t, k, v)
 			}
 
-			// check after the terminating error clears
 			// 第二次清理：移除注入的错误，验证重试路径。
 			if tt.wantWorkerAfterRetry != nil {
 				podWorkers.podSyncer = originalPodSyncer
@@ -8910,7 +8909,6 @@ func (tvm *testVolumeMounter) GetPath() string {
 // 并覆盖文件缺失、键缺失与可选键等错误路径。
 func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	// Create a temporary directory for test files
 	// 使用临时目录承载 env 文件，避免污染工作区。
 	tmpDir, err := os.MkdirTemp("", "filekeyref-test")
 	require.NoError(t, err)
@@ -8918,8 +8916,7 @@ func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 		_ = os.RemoveAll(tmpDir)
 	}()
 
-	// Create test environment variable files
-	// 每个用例可自行决定 env 文件的内容以及文件是否存在。
+	// 创建测试用的环境变量文件；每个用例可自行决定 env 文件的内容以及文件是否存在。
 	createEnvFile := func(filename, content string) string {
 		filePath := filepath.Join(tmpDir, filename)
 		err := os.WriteFile(filePath, []byte(content), 0644)
@@ -9279,7 +9276,6 @@ func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 
-				// Sort both slices for comparison
 				// 排序后比较，忽略变量生成顺序。
 				sort.Sort(Envs(envs))
 				sort.Sort(Envs(tc.expectedEnvs))

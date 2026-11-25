@@ -23,8 +23,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/policy"
 )
 
-// Convert_v1beta1_PodDisruptionBudget_To_policy_PodDisruptionBudget
-// 把 v1beta1 版本的 PodDisruptionBudget 转换为内部版本。
+// Convert_v1beta1_PodDisruptionBudget_To_policy_PodDisruptionBudget 把 v1beta1 版本的 PodDisruptionBudget 转换为内部版本。
 // 转换的关键在于 v1beta1 的 selector 对"空"的解释与 v1/内部版本不同：
 // v1beta1 中 nil selector 表示匹配全部 Pod，而空但非 nil 的 selector 表示不匹配任何 Pod；
 // 在内部版本中语义正好相反（空 selector 表示匹配全部）。因此需要在这里做特殊映射，
@@ -51,8 +50,7 @@ func Convert_v1beta1_PodDisruptionBudget_To_policy_PodDisruptionBudget(in *v1bet
 	return nil
 }
 
-// Convert_policy_PodDisruptionBudget_To_v1beta1_PodDisruptionBudget
-// 把内部版本的 PodDisruptionBudget 转换为 v1beta1 版本。
+// Convert_policy_PodDisruptionBudget_To_v1beta1_PodDisruptionBudget 把内部版本的 PodDisruptionBudget 转换为 v1beta1 版本。
 // 与反向转换对称：内部版本的 selector 语义需要映射回 v1beta1 的惯例
 // （nil 表示全部匹配，空但非 nil 表示全部不匹配）。
 func Convert_policy_PodDisruptionBudget_To_v1beta1_PodDisruptionBudget(in *policy.PodDisruptionBudget, out *v1beta1.PodDisruptionBudget, s conversion.Scope) error {

@@ -32,11 +32,10 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-// StringSliceProvider is a way to get a string slice value.  It is heavily used for authentication headers among other places.
+// StringSliceProvider 是取字符串切片值的提供器接口，认证请求头等场景大量使用。
 // 通过接口延迟取值，使配置可以在运行期动态更新（例如热加载的请求头列表）。
 type StringSliceProvider interface {
-	// Value returns the current string slice.  Callers should never mutate the returned value.
-	// 返回的切片可能被多个请求共享，调用方不得修改。
+	// Value 返回当前的字符串切片；返回的切片可能被多个请求共享，调用方不得修改。
 	Value() []string
 }
 
@@ -58,21 +57,17 @@ func (s StaticStringSlice) Value() []string {
 
 // requestHeaderAuthRequestHandler 按配置的请求头列表构造用户身份。
 type requestHeaderAuthRequestHandler struct {
-	// nameHeaders are the headers to check (in order, case-insensitively) for an identity. The first header with a value wins.
-	// 用户名请求头，按顺序取第一个非空值。
+	// nameHeaders 是提取用户身份（用户名）的请求头，按顺序、不区分大小写匹配，第一个有值的头生效。
 	nameHeaders StringSliceProvider
 
-	// nameHeaders are the headers to check (in order, case-insensitively) for an identity UID. The first header with a value wins.
-	// UID 请求头，按顺序取第一个非空值。
+	// uidHeaders 是提取用户身份 UID 的请求头，按顺序、不区分大小写匹配，第一个有值的头生效。
 	uidHeaders StringSliceProvider
 
-	// groupHeaders are the headers to check (case-insensitively) for group membership.  All values of all headers will be added.
-	// 组请求头，所有头部的所有值都会被合并。
+	// groupHeaders 是提取组成员关系的请求头，不区分大小写匹配；所有命中头部的所有值都会被合并。
 	groupHeaders StringSliceProvider
 
-	// extraHeaderPrefixes are the head prefixes to check (case-insensitively) for filling in
-	// the user.Info.Extra.  All values of all matching headers will be added.
-	// Extra 信息以请求头前缀表示，前缀之后的部分（小写、URL 解码）作为 key。
+	// extraHeaderPrefixes 是不区分大小写匹配、用于填充 user.Info.Extra 的请求头前缀；
+	// 前缀之后的部分（小写、URL 解码）作为 key，所有命中头部的所有值都会被添加。
 	extraHeaderPrefixes StringSliceProvider
 }
 
@@ -145,8 +140,7 @@ func (a *requestHeaderAuthRequestHandler) AuthenticateRequest(req *http.Request)
 	groups := allHeaderValues(req.Header, a.groupHeaders.Value())
 	extra := newExtra(req.Header, a.extraHeaderPrefixes.Value())
 
-	// clear headers used for authentication
-	// 认证信息已提取完毕，立即清除请求头，避免被后续 handler 或代理当作可信输入。
+	// 认证信息已提取完毕，立即清除用于认证的请求头，避免被后续 handler 或代理当作可信输入。
 	ClearAuthenticationHeaders(req.Header, a.nameHeaders, a.uidHeaders, a.groupHeaders, a.extraHeaderPrefixes)
 
 	return &authenticator.Response{
@@ -229,8 +223,7 @@ func unescapeExtraKey(encodedKey string) string {
 func newExtra(h http.Header, headerPrefixes []string) map[string][]string {
 	ret := map[string][]string{}
 
-	// we have to iterate over prefixes first in order to have proper ordering inside the value slices
-	// 先遍历前缀，保证同一前缀下多个请求头的值按配置顺序排列。
+	// 必须先遍历前缀，保证同一前缀下多个请求头的值按配置顺序排列。
 	for _, prefix := range headerPrefixes {
 		for headerName, vv := range h {
 			if !hasPrefixIgnoreCase(headerName, prefix) {

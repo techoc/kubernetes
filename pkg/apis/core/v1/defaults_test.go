@@ -1690,7 +1690,6 @@ func TestPodHostNetworkDefaults(t *testing.T) {
 					Ports: []v1.ContainerPort{{
 						ContainerPort: portNum,
 						Protocol:      v1.ProtocolTCP,
-						// Note: HostPort is not set
 						// 有意留空 HostPort，这样才能观察默认化是否发生。
 					}},
 				}},
@@ -1754,9 +1753,6 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 		case visit.value.Kind() == reflect.Slice:
 			if !visit.value.IsNil() {
 				// 切片已有值：可能是默认值也可能是显式输入，先记录再尝试下钻到元素。
-				// if we already have a value, we either got defaulted or there
-				// was a fixed input - flag it and see if we can descend
-				// anyway.
 				marshaled, _ := json.Marshal(defaultedV.Interface())
 				defaults[visit.path] = string(marshaled)
 				toVisit = append(toVisit, testPath{path: visit.path + "[0]", value: visit.value.Index(0)})
@@ -1767,7 +1763,6 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 				}
 				// 对 nil 的结构体切片，临时追加一个零值元素以便递归发现其子字段默认值；
 				// ManagedFields 是元数据内部实现，跳过以免产生噪声。
-				// if we don't already have a value, and contain structs, add an empty item so we can recurse
 				item := reflect.New(visit.value.Type().Elem()).Elem()
 				visit.value.Set(reflect.Append(visit.value, item))
 				toVisit = append(toVisit, testPath{path: visit.path + "[0]", value: visit.value.Index(0)})
@@ -1778,7 +1773,6 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 		case visit.value.Kind() == reflect.Map:
 			if !visit.value.IsNil() {
 				// map 已有值说明被默认化，记录其 JSON 表示。
-				// if we already have a value, we got defaulted
 				marshaled, _ := json.Marshal(defaultedV.Interface())
 				defaults[visit.path] = string(marshaled)
 			} else if visit.value.Type().Key().Kind() == reflect.String && visit.value.Type().Elem().Kind() == reflect.Struct {
@@ -1787,7 +1781,6 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 					break
 				}
 				// 对 nil 的结构体 map 注入一个零值条目，递归探测其结构内部。
-				// if we don't already have a value, and contain structs, add an empty item so we can recurse
 				item := reflect.New(visit.value.Type().Elem()).Elem()
 				visit.value.Set(reflect.MakeMap(visit.value.Type()))
 				visit.value.SetMapIndex(reflect.New(visit.value.Type().Key()).Elem(), item)

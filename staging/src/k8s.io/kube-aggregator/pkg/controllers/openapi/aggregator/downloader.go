@@ -37,8 +37,7 @@ type CacheableDownloader interface {
 	Get() (*spec.Swagger, string, error)
 }
 
-// cacheableDownloader is a downloader that will always return the data
-// and the etag.
+// cacheableDownloader 是一种总是同时返回数据（spec）与 etag 的下载器。
 // handler 用 atomic.Pointer 保存：代理证书轮换时 UpdateHandler 会被并发调用替换 handler，
 // 而 Get 从另一个 goroutine 读取；原子指针让替换对读侧可见且无需加锁阻塞下载。
 type cacheableDownloader struct {
@@ -50,7 +49,7 @@ type cacheableDownloader struct {
 	spec    *spec.Swagger
 }
 
-// NewCacheableDownloader creates a downloader that also returns the etag, making it useful to use as a cached dependency.
+// NewCacheableDownloader 创建一个同时返回 etag 的下载器，适合用作带缓存的依赖。
 // 每个 APIService 对应一个实例，因此 etag/spec 是该 APIService 独有的缓存；
 // 这样不同 APIService 即使内容相同也不会互相污染缓存状态。
 func NewCacheableDownloader(apiServiceName string, downloader *Downloader, handler http.Handler) CacheableDownloader {
@@ -102,7 +101,7 @@ func (d *cacheableDownloader) get() (*spec.Swagger, string, error) {
 	return d.spec, d.etag, nil
 }
 
-// Downloader is the OpenAPI downloader type. It will try to download spec from /openapi/v2 or /swagger.json endpoint.
+// Downloader 是 OpenAPI 下载器类型，尝试从 /openapi/v2 或 /swagger.json 端点下载 spec。
 // 无状态类型：每次下载所需的 handler 与 etag 都由调用方传入，
 // 因此可以安全地在不同 APIService 之间共享同一个 Downloader 实例。
 type Downloader struct {
@@ -144,7 +143,7 @@ func (s *Downloader) Download(handler http.Handler, etag string) (returnSpec *sp
 	}
 	req.Header.Add("Accept", "application/json")
 
-	// Only pass eTag if it is not generated locally
+	// 只有当 eTag 不是本地生成时才传给服务端。
 	// 本地生成的 etag 只是我们用来判断内容是否变化的手段，服务端不认识它；
 	// 若发过去会被忽略甚至误解，因此只在确实来自服务端时带上 If-None-Match。
 	if len(etag) > 0 && !strings.HasPrefix(etag, locallyGeneratedEtagPrefix) {
@@ -174,12 +173,9 @@ func (s *Downloader) Download(handler http.Handler, etag string) (returnSpec *sp
 			// 这仍能把“内容没变”识别为 304，避免不必要的重复聚合。
 			newEtag = etagFor(writer.Data())
 			if len(etag) > 0 && strings.HasPrefix(etag, locallyGeneratedEtagPrefix) {
-				// The function call with an etag and server does not report an etag.
-				// That means this server does not support etag and the etag that passed
-				// to the function generated previously by us. Just compare etags and
-				// return StatusNotModified if they are the same.
-				// 上次传进来的 etag 是我们自己生成的，说明该服务不支持 etag；
-				// 此时比较本地哈希即可判断是否真的变化，内容未变就伪装成 304。
+				// 调用带着 etag，但服务端没有报告 etag，说明该服务不支持 etag，
+				// 传进来的 etag 是我们此前自己生成的。此时比较本地哈希即可判断
+				// 内容是否真的变化，两个 etag 相同就伪装成 304（StatusNotModified）返回。
 				if etag == newEtag {
 					return nil, etag, http.StatusNotModified, nil
 				}

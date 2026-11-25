@@ -22,8 +22,7 @@ import (
 	cpconfig "k8s.io/cloud-provider/config"
 )
 
-// KubeCloudSharedOptions holds the options shared between kube-controller-manager
-// and cloud-controller-manager.
+// KubeCloudSharedOptions 持有 kube-controller-manager 与 cloud-controller-manager 共享的选项。
 // 嵌入内部配置以保证两个组件读写同一结构；CloudProvider 单独持有，
 // 因为其 flag 解析需要额外校验（如配置文件与 flag 互斥）。
 type KubeCloudSharedOptions struct {
@@ -31,9 +30,8 @@ type KubeCloudSharedOptions struct {
 	CloudProvider *CloudProviderOptions
 }
 
-// NewKubeCloudSharedOptions returns common/default configuration values for both
-// the kube-controller-manager and the cloud-contoller-manager. Any common changes should
-// be made here. Any individual changes should be made in that controller.
+// NewKubeCloudSharedOptions 返回 kube-controller-manager 与 cloud-controller-manager 共用的
+// 默认配置值；共用变更应在此进行，各控制器独有的变更放在各自控制器里。
 // 这里不复制配置，而是持有传入指针；调用方负责传入已默认化的配置。
 func NewKubeCloudSharedOptions(cfg *cpconfig.KubeCloudSharedConfiguration) *KubeCloudSharedOptions {
 	o := &KubeCloudSharedOptions{
@@ -46,7 +44,7 @@ func NewKubeCloudSharedOptions(cfg *cpconfig.KubeCloudSharedConfiguration) *Kube
 	return o
 }
 
-// AddFlags adds flags related to shared variable for controller manager to the specified FlagSet.
+// AddFlags 把共享变量相关的 flag 注册到给定的 FlagSet。
 // 已弃用的 flag 仍会注册并标记 Deprecated，保证旧启动脚本不因未知 flag 直接失败。
 func (o *KubeCloudSharedOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
@@ -71,8 +69,8 @@ func (o *KubeCloudSharedOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.MarkDeprecated("node-sync-period", "This flag is currently no-op and will be deleted.")
 }
 
-// ApplyTo fills up KubeCloudShared config with options.
-// 先应用 CloudProvider 子选项，再逐字段复制；任何子选项错误都会中止，避免部分生效。
+// ApplyTo 用选项填充 KubeCloudShared 配置：先应用 CloudProvider 子选项，再逐字段复制；
+// 任何子选项错误都会中止，避免部分生效。
 func (o *KubeCloudSharedOptions) ApplyTo(cfg *cpconfig.KubeCloudSharedConfiguration) error {
 	if o == nil {
 		return nil
@@ -96,8 +94,8 @@ func (o *KubeCloudSharedOptions) ApplyTo(cfg *cpconfig.KubeCloudSharedConfigurat
 	return nil
 }
 
-// Validate checks validation of KubeCloudSharedOptions.
-// 校验委托给 CloudProvider：云提供商名称、配置文件与外部插件等约束都在那里检查。
+// Validate 校验 KubeCloudSharedOptions：校验委托给 CloudProvider，
+// 云提供商名称、配置文件与外部插件等约束都在那里检查。
 func (o *KubeCloudSharedOptions) Validate() []error {
 	if o == nil {
 		return nil

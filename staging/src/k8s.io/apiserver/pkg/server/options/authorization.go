@@ -52,9 +52,9 @@ type DelegatingAuthorizationOptions struct {
 	// AllowCacheTTL is the length of time that a successful authorization response will be cached
 	AllowCacheTTL time.Duration
 
-	// DenyCacheTTL is the length of time that an unsuccessful authorization response will be cached.
-	// You generally want more responsive, "deny, try again" flows.
-	// 拒绝结果缓存更短，以便权限授予后能较快生效。
+	// DenyCacheTTL 是不成功授权响应的缓存时长；
+	// 通常希望“拒绝后重试”的流程响应更灵敏，
+	// 因此拒绝结果缓存更短，以便权限授予后能较快生效。
 	DenyCacheTTL time.Duration
 
 	// AlwaysAllowPaths are HTTP paths which are excluded from authorization. They can be plain
@@ -85,8 +85,7 @@ func NewDelegatingAuthorizationOptions() *DelegatingAuthorizationOptions {
 		DenyCacheTTL:        10 * time.Second,
 		ClientTimeout:       10 * time.Second,
 		WebhookRetryBackoff: DefaultAuthWebhookRetryBackoff(),
-		// This allows the kubelet to always get health and readiness without causing an authorization check.
-		// This field can be cleared by callers if they don't want this behavior.
+		// 这使得 kubelet 无需触发授权检查就能始终获取健康与就绪状态；调用方若不想保留该行为可以清空此字段。
 		// 健康检查端点必须忽略授权，否则节点无法在授权系统故障时判断自身状态。
 		AlwaysAllowPaths: []string{"/healthz", "/readyz", "/livez"},
 		// In an authorization call delegated to a kube-apiserver (the expected common-case), system:masters has full
@@ -255,7 +254,7 @@ func (s *DelegatingAuthorizationOptions) getClient() (kubernetes.Interface, erro
 		return nil, fmt.Errorf("failed to get delegated authorization kubeconfig: %v", err)
 	}
 
-	// set high qps/burst limits since this will effectively limit API server responsiveness
+	// 设置较高的 qps/burst 限制，因为这实际上决定了 API server 的响应能力：
 	// 授权是请求路径上的同步调用，QPS 过低会直接拖慢整个 apiserver。
 	clientConfig.QPS = 200
 	clientConfig.Burst = 400

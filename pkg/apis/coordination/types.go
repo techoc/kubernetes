@@ -103,9 +103,9 @@ type LeaseCandidate struct {
 
 // LeaseCandidateSpec 是 Lease 的规格定义。
 type LeaseCandidateSpec struct {
-	// LeaseName is the name of the lease for which this candidate is contending.
-	// The limits on this field are the same as on Lease.name. Multiple lease candidates
-	// may reference the same Lease.name.
+	// LeaseName 是该 candidate 所竞争的 lease 的名称。
+	// 该字段的限制与 Lease.name 相同。多个 lease candidate
+	// 可以引用同一个 Lease.name。
 	// 该字段不可变。
 	// +required
 	LeaseName string
@@ -123,7 +123,7 @@ type LeaseCandidateSpec struct {
 	// Old LeaseCandidate objects are periodically garbage collected.
 	// +optional
 	RenewTime *metav1.MicroTime
-	// BinaryVersion is the binary version. It must be in a semver format without leading `v`.
+	// BinaryVersion 是二进制版本，必须为不带前导 `v` 的 semver 格式。
 	// 该字段必填。
 	// +required
 	BinaryVersion string

@@ -281,8 +281,7 @@ func Convert_autoscaling_ResourceMetricSource_To_v1_ResourceMetricSource(in *aut
 	return nil
 }
 
-// Convert_v1_ContainerResourceMetricStatus_To_autoscaling_ContainerResourceMetricStatus
-// 把 v1 的容器资源指标状态还原为 internal 结构。
+// Convert_v1_ContainerResourceMetricStatus_To_autoscaling_ContainerResourceMetricStatus 把 v1 的容器资源指标状态还原为 internal 结构。
 func Convert_v1_ContainerResourceMetricStatus_To_autoscaling_ContainerResourceMetricStatus(in *autoscalingv1.ContainerResourceMetricStatus, out *autoscaling.ContainerResourceMetricStatus, s conversion.Scope) error {
 	out.Name = core.ResourceName(in.Name)
 	out.Container = in.Container
@@ -295,8 +294,7 @@ func Convert_v1_ContainerResourceMetricStatus_To_autoscaling_ContainerResourceMe
 	return nil
 }
 
-// Convert_autoscaling_ContainerResourceMetricStatus_To_v1_ContainerResourceMetricStatus
-// 把 internal 的容器资源指标状态映射为 v1 结构，nil 的 AverageValue 不写出。
+// Convert_autoscaling_ContainerResourceMetricStatus_To_v1_ContainerResourceMetricStatus 把 internal 的容器资源指标状态映射为 v1 结构，nil 的 AverageValue 不写出。
 func Convert_autoscaling_ContainerResourceMetricStatus_To_v1_ContainerResourceMetricStatus(in *autoscaling.ContainerResourceMetricStatus, out *autoscalingv1.ContainerResourceMetricStatus, s conversion.Scope) error {
 	out.Name = v1.ResourceName(in.Name)
 	out.Container = in.Container
@@ -519,8 +517,7 @@ func Convert_v1_HorizontalPodAutoscaler_To_autoscaling_HorizontalPodAutoscaler(i
 	return nil
 }
 
-// Convert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec
-// 把 internal HPA Spec 转成 v1 Spec，并从 Metrics 中提取 CPU 利用率写入
+// Convert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec 把 internal HPA Spec 转成 v1 Spec，并从 Metrics 中提取 CPU 利用率写入
 // v1 专用的 TargetCPUUtilizationPercentage 字段。
 func Convert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec(in *autoscaling.HorizontalPodAutoscalerSpec, out *autoscalingv1.HorizontalPodAutoscalerSpec, s conversion.Scope) error {
 	if err := Convert_autoscaling_CrossVersionObjectReference_To_v1_CrossVersionObjectReference(&in.ScaleTargetRef, &out.ScaleTargetRef, s); err != nil {
@@ -541,8 +538,7 @@ func Convert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscal
 	return nil
 }
 
-// Convert_v1_HorizontalPodAutoscalerSpec_To_autoscaling_HorizontalPodAutoscalerSpec
-// 把 v1 Spec 转成 internal Spec，把 TargetCPUUtilizationPercentage 展开成
+// Convert_v1_HorizontalPodAutoscalerSpec_To_autoscaling_HorizontalPodAutoscalerSpec 把 v1 Spec 转成 internal Spec，把 TargetCPUUtilizationPercentage 展开成
 // 一条 CPU 资源指标；其他指标由注解恢复。
 func Convert_v1_HorizontalPodAutoscalerSpec_To_autoscaling_HorizontalPodAutoscalerSpec(in *autoscalingv1.HorizontalPodAutoscalerSpec, out *autoscaling.HorizontalPodAutoscalerSpec, s conversion.Scope) error {
 	if err := Convert_v1_CrossVersionObjectReference_To_autoscaling_CrossVersionObjectReference(&in.ScaleTargetRef, &out.ScaleTargetRef, s); err != nil {
@@ -571,8 +567,7 @@ func Convert_v1_HorizontalPodAutoscalerSpec_To_autoscaling_HorizontalPodAutoscal
 	return nil
 }
 
-// Convert_autoscaling_HorizontalPodAutoscalerStatus_To_v1_HorizontalPodAutoscalerStatus
-// 把 internal HPA Status 转成 v1 Status，提取 CPU 资源指标的平均利用率写入
+// Convert_autoscaling_HorizontalPodAutoscalerStatus_To_v1_HorizontalPodAutoscalerStatus 把 internal HPA Status 转成 v1 Status，提取 CPU 资源指标的平均利用率写入
 // v1 专用字段；完整状态由外层转换保存到注解中。
 func Convert_autoscaling_HorizontalPodAutoscalerStatus_To_v1_HorizontalPodAutoscalerStatus(in *autoscaling.HorizontalPodAutoscalerStatus, out *autoscalingv1.HorizontalPodAutoscalerStatus, s conversion.Scope) error {
 	out.ObservedGeneration = in.ObservedGeneration
@@ -593,8 +588,7 @@ func Convert_autoscaling_HorizontalPodAutoscalerStatus_To_v1_HorizontalPodAutosc
 	return nil
 }
 
-// Convert_v1_HorizontalPodAutoscalerStatus_To_autoscaling_HorizontalPodAutoscalerStatus
-// 把 v1 Status 转成 internal Status，把 CPU 利用率展开成一条 Resource 指标状态；
+// Convert_v1_HorizontalPodAutoscalerStatus_To_autoscaling_HorizontalPodAutoscalerStatus 把 v1 Status 转成 internal Status，把 CPU 利用率展开成一条 Resource 指标状态；
 // 完整的指标状态由外层转换从注解恢复。
 func Convert_v1_HorizontalPodAutoscalerStatus_To_autoscaling_HorizontalPodAutoscalerStatus(in *autoscalingv1.HorizontalPodAutoscalerStatus, out *autoscaling.HorizontalPodAutoscalerStatus, s conversion.Scope) error {
 	out.ObservedGeneration = in.ObservedGeneration
@@ -618,8 +612,7 @@ func Convert_v1_HorizontalPodAutoscalerStatus_To_autoscaling_HorizontalPodAutosc
 	return nil
 }
 
-// Convert_v1_ContainerResourceMetricSource_To_autoscaling_ContainerResourceMetricSource
-// 把 v1 的容器资源指标映射为 internal 结构，根据利用率是否为 nil 推断目标类型。
+// Convert_v1_ContainerResourceMetricSource_To_autoscaling_ContainerResourceMetricSource 把 v1 的容器资源指标映射为 internal 结构，根据利用率是否为 nil 推断目标类型。
 func Convert_v1_ContainerResourceMetricSource_To_autoscaling_ContainerResourceMetricSource(in *autoscalingv1.ContainerResourceMetricSource, out *autoscaling.ContainerResourceMetricSource, s conversion.Scope) error {
 	out.Name = core.ResourceName(in.Name)
 	out.Container = in.Container
@@ -639,8 +632,7 @@ func Convert_v1_ContainerResourceMetricSource_To_autoscaling_ContainerResourceMe
 	return nil
 }
 
-// Convert_autoscaling_ContainerResourceMetricSource_To_v1_ContainerResourceMetricSource
-// 把 internal 的容器资源指标映射为 v1 结构。
+// Convert_autoscaling_ContainerResourceMetricSource_To_v1_ContainerResourceMetricSource 把 internal 的容器资源指标映射为 v1 结构。
 func Convert_autoscaling_ContainerResourceMetricSource_To_v1_ContainerResourceMetricSource(in *autoscaling.ContainerResourceMetricSource, out *autoscalingv1.ContainerResourceMetricSource, s conversion.Scope) error {
 	out.Name = v1.ResourceName(in.Name)
 	out.Container = in.Container

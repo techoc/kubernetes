@@ -24,24 +24,19 @@ import (
 	migrationconfig "k8s.io/controller-manager/pkg/leadermigration/config"
 )
 
-// LeaderMigrationOptions is the set of options for Leader Migration,
-// which is given to the controller manager through flags
-// 领导者迁移相关的命令行选项。
+// LeaderMigrationOptions 是领导者迁移的一组命令行选项，经 flag 传给 controller-manager。
 // 注意：nil 的 *LeaderMigrationOptions 有特殊语义，表示“使用默认选项（关闭迁移）”。
 type LeaderMigrationOptions struct {
-	// Enabled indicates whether leader migration is enabled through the --enabled-leader-migration flag.
-	// 是否通过 --enable-leader-migration 开启迁移。
+	// Enabled 表示是否通过 --enable-leader-migration 开启领导者迁移。
 	Enabled bool
 
-	// ControllerMigrationConfig is the path to the file of LeaderMigrationConfiguration type.
-	// It can be set with --leader-migration-config flag
-	// If the path is "" (default vaule), the default vaule will be used.
-	// 迁移配置文件路径；为空时使用 controller-manager 推荐的默认配置。
+	// ControllerMigrationConfig 是 LeaderMigrationConfiguration 类型配置文件的路径，
+	// 可通过 --leader-migration-config 设置；路径为 ""（默认值）时，
+	// 使用 controller-manager 推荐的默认配置。
 	ControllerMigrationConfig string
 }
 
-// DefaultLeaderMigrationOptions returns a LeaderMigrationOptions with default values.
-// 返回默认选项：关闭迁移且不指定配置文件。
+// DefaultLeaderMigrationOptions 返回一个取默认值的 LeaderMigrationOptions：关闭迁移且不指定配置文件。
 func DefaultLeaderMigrationOptions() *LeaderMigrationOptions {
 	return &LeaderMigrationOptions{
 		Enabled:                   false,
@@ -49,7 +44,7 @@ func DefaultLeaderMigrationOptions() *LeaderMigrationOptions {
 	}
 }
 
-// AddFlags adds all flags related to leader migration to given flag set.
+// AddFlags 把所有领导者迁移相关 flag 注册到给定的 flag set。
 // 注册两个 flag：开启开关与配置文件路径。nil 接收者直接跳过。
 func (o *LeaderMigrationOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
@@ -63,16 +58,14 @@ func (o *LeaderMigrationOptions) AddFlags(fs *pflag.FlagSet) {
 			"The config file should be of type LeaderMigrationConfiguration, group controllermanager.config.k8s.io, version v1alpha1.")
 }
 
-// ApplyTo applies the options of leader migration to generic configuration.
-// 把选项应用到通用配置：
+// ApplyTo 把领导者迁移选项应用到通用配置：
 // 1) nil 选项 -> 关闭迁移；
 // 2) 未开启 -> 直接返回；
 // 3) 开启但未指定文件 -> 使用默认迁移配置；
 // 4) 开启且指定文件 -> 读取并校验后写入配置。
 func (o *LeaderMigrationOptions) ApplyTo(cfg *config.GenericControllerManagerConfiguration) error {
 	if o == nil {
-		// an nil LeaderMigrationOptions indicates that default options should be used
-		// in which case leader migration will be disabled
+		// nil 的 LeaderMigrationOptions 表示使用默认选项，即关闭领导者迁移。
 		cfg.LeaderMigrationEnabled = false
 		return nil
 	}

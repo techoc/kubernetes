@@ -58,8 +58,8 @@ func TestDecode(t *testing.T) {
 		assertOnError func(t *testing.T, e error)
 	}
 
-	// Test cases are grouped by the kind of the CBOR data item being decoded, as enumerated in
-	// https://www.rfc-editor.org/rfc/rfc8949.html#section-2.
+	// 测试用例按所解码 CBOR 数据项的类别分组，类别枚举见
+	// https://www.rfc-editor.org/rfc/rfc8949.html#section-2。
 	// group 把一组用例放在同名子测试下；用例未指定模式时对全部模式运行。
 	group := func(t *testing.T, name string, tests []test) {
 		t.Run(name, func(t *testing.T) {
@@ -686,7 +686,6 @@ func TestDecode(t *testing.T) {
 			}),
 		},
 	}, func() (generated []test) {
-		// Generate test cases for all simple values (0 to 255) because the number of possible simple values is fixed and small.
 		// 简单值取值固定且数量有限，穷举 0-255 以覆盖所有分支。
 		for i := 0; i <= 255; i++ {
 			each := test{
@@ -703,7 +702,6 @@ func TestDecode(t *testing.T) {
 				// 已在上面显式定义，跳过生成。
 				continue
 			case 24, 25, 26, 27, 28, 29, 30, 31: // reserved
-				// these are considered not well-formed
 				// 保留值被视为格式错误，应返回语法错误。
 				each.assertOnError = assertOnConcreteError(func(t *testing.T, e *cbor.SyntaxError) {
 					if e == nil {
@@ -713,7 +711,6 @@ func TestDecode(t *testing.T) {
 					}
 				})
 			default:
-				// reject all unrecognized simple values
 				// 所有未识别的简单值都必须被拒绝。
 				each.assertOnError = assertOnConcreteError(func(t *testing.T, e *cbor.UnacceptableDataItemError) {
 					if diff := cmp.Diff(&cbor.UnacceptableDataItemError{CBORType: "primitives", Message: fmt.Sprintf("simple value %d is not recognized", i)}, e); diff != "" {

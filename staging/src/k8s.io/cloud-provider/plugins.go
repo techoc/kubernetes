@@ -25,14 +25,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Factory is a function that returns a cloudprovider.Interface.
-// The config parameter provides an io.Reader handler to the factory in
-// order to load specific configurations. If no configuration is provided
-// the parameter is nil.
+// Factory 是返回 cloudprovider.Interface 的构造函数。config 参数向工厂提供
+// 一个 io.Reader 用于加载特定配置；若未提供配置，该参数为 nil。
 // 云厂商在各自包的 init 中注册 Factory，进程启动后即不可再注册。
 type Factory func(config io.Reader) (Interface, error)
 
-// All registered cloud providers.
+// providers 保存所有已注册的云提供商。
 // providers 被启动阶段与运行期并发读取，必须由 providersMutex 保护。
 var (
 	providersMutex sync.Mutex
@@ -41,8 +39,7 @@ var (
 
 const externalCloudProvider = "external"
 
-// RegisterCloudProvider registers a cloudprovider.Factory by name.  This
-// is expected to happen during app startup.
+// RegisterCloudProvider 按名称注册一个 cloudprovider.Factory，预期在应用启动阶段完成。
 // 重复注册属于编程错误，直接 Fatal 终止，避免运行时行为不确定。
 func RegisterCloudProvider(name string, cloud Factory) {
 	providersMutex.Lock()
@@ -54,8 +51,7 @@ func RegisterCloudProvider(name string, cloud Factory) {
 	providers[name] = cloud
 }
 
-// IsCloudProvider returns true if name corresponds to an already registered
-// cloud provider.
+// IsCloudProvider 在 name 对应某个已注册的云提供商时返回 true。
 // 只查询注册表，不校验 Factory 是否可成功初始化。
 func IsCloudProvider(name string) bool {
 	providersMutex.Lock()
@@ -64,11 +60,9 @@ func IsCloudProvider(name string) bool {
 	return found
 }
 
-// GetCloudProvider creates an instance of the named cloud provider, or nil if
-// the name is unknown.  The error return is only used if the named provider
-// was known but failed to initialize. The config parameter specifies the
-// io.Reader handler of the configuration file for the cloud provider, or nil
-// for no configuration.
+// GetCloudProvider 创建指定名称的云提供商实例；名称未知时返回 nil。
+// 错误返回值仅用于"名称已知但初始化失败"的情形。config 参数指向云提供商
+// 配置文件的 io.Reader，无配置时为 nil。
 // 未知 provider 返回 (nil, nil)，调用方需自行把 nil 实例视为“未注册”。
 func GetCloudProvider(name string, config io.Reader) (Interface, error) {
 	providersMutex.Lock()
@@ -80,13 +74,13 @@ func GetCloudProvider(name string, config io.Reader) (Interface, error) {
 	return f(config)
 }
 
-// Detects if the string is an external cloud provider
+// IsExternal 判断给定字符串是否为外部云提供商。
 // "external" 表示云逻辑由进程外的 cloud-controller-manager 提供，本进程不初始化任何实现。
 func IsExternal(name string) bool {
 	return name == externalCloudProvider
 }
 
-// DisableWarningForProvider logs information about disabled cloud provider state
+// DisableWarningForProvider 记录云提供商被禁用的相关信息。
 // 对非 external provider 输出迁移提示：内置云提供商已被移除，需改用外部 CCM。
 func DisableWarningForProvider(providerName string) {
 	if !IsExternal(providerName) {
@@ -97,13 +91,13 @@ func DisableWarningForProvider(providerName string) {
 	}
 }
 
-// ErrorForDisabledProvider returns an error formatted with the supplied provider name
+// ErrorForDisabledProvider 返回按给定 provider 名称格式化的错误。
 // 返回可操作的错误信息，明确指引用户设置 --cloud-provider=external。
 func ErrorForDisabledProvider(providerName string) error {
 	return fmt.Errorf("cloud provider %q was specified, but built-in cloud providers are disabled. Please set --cloud-provider=external and migrate to an external cloud provider", providerName)
 }
 
-// InitCloudProvider creates an instance of the named cloud provider.
+// InitCloudProvider 创建指定名称的云提供商实例。
 // 这是启动路径上唯一的初始化入口：负责打开配置文件、调用 Factory 并做基本校验。
 func InitCloudProvider(name string, configFilePath string) (Interface, error) {
 	var cloud Interface

@@ -46,8 +46,8 @@ type StatefulSetValidationOptions struct {
 	AllowStatefulSetRecreateStrategy bool
 }
 
-// ValidateStatefulSetName can be used to check whether the given StatefulSet name is valid.
-// Prefix indicates this name will be used as part of generation, in which case
+// ValidateStatefulSetName 可用于检查给定的 StatefulSet 名称是否合法。
+// Prefix 表示该名称将作为生成名字的一部分使用，此时
 // 允许结尾的连字符。
 func ValidateStatefulSetName(name string, prefix bool) []string {
 	// TODO: Validate that there's room for the suffix inserted by the pods.
@@ -317,8 +317,8 @@ func ValidateStatefulSetStatusUpdate(statefulSet, oldStatefulSet *apps.StatefulS
 	return allErrs
 }
 
-// ValidateControllerRevisionName can be used to check whether the given ControllerRevision name is valid.
-// Prefix indicates this name will be used as part of generation, in which case
+// ValidateControllerRevisionName 可用于检查给定的 ControllerRevision 名称是否合法。
+// Prefix 表示该名称将作为生成名字的一部分使用，此时
 // 允许结尾的连字符。
 var ValidateControllerRevisionName = apimachineryvalidation.NameIsDNSSubdomain
 
@@ -529,8 +529,8 @@ func ValidateDaemonSetUpdateStrategy(strategy *apps.DaemonSetUpdateStrategy, fld
 	return allErrs
 }
 
-// ValidateDaemonSetName can be used to check whether the given daemon set name is valid.
-// Prefix indicates this name will be used as part of generation, in which case
+// ValidateDaemonSetName 可用于检查给定的 daemon set 名称是否合法。
+// Prefix 表示该名称将作为生成名字的一部分使用，此时
 // 允许结尾的连字符。
 var ValidateDaemonSetName = apimachineryvalidation.NameIsDNSSubdomain
 
@@ -741,9 +741,8 @@ func ValidateDeploymentRollback(obj *apps.DeploymentRollback) field.ErrorList {
 	return allErrs
 }
 
-// ValidateReplicaSetName can be used to check whether the given ReplicaSet
-// name is valid.
-// Prefix indicates this name will be used as part of generation, in which case
+// ValidateReplicaSetName 可用于检查给定的 ReplicaSet 名称是否合法。
+// Prefix 表示该名称将作为生成名字的一部分使用，此时
 // 允许结尾的连字符。
 var ValidateReplicaSetName = apimachineryvalidation.NameIsDNSSubdomain
 

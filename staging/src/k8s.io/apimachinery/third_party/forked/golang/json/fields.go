@@ -22,10 +22,9 @@ const (
 	patchMergeKeyTagKey = "patchMergeKey"
 )
 
-// Finds the patchStrategy and patchMergeKey struct tag fields on a given
-// struct field given the struct type and the JSON name of the field.
-// It returns field type, a slice of patch strategies, merge key and error.
-// TODO: fix the returned errors to be introspectable.
+// 在给定结构体类型上，按字段的 JSON 名查找其 patchStrategy 与 patchMergeKey 结构体标签，
+// 返回字段类型、patch 策略列表、merge key 和错误。
+// TODO: 让返回的 error 可内省（introspectable）。
 //
 // 查找顺序与 encoding/json 一致：优先精确匹配 JSON 名，其次大小写不敏感匹配；
 // 字段可能位于匿名字段链中，因此需要沿 index 逐层下钻。
@@ -50,7 +49,6 @@ func LookupPatchMetadataForStruct(t reflect.Type, jsonField string) (
 			f = ff
 			break
 		}
-		// Do case-insensitive comparison.
 		// 精确匹配失败时记录第一个大小写不敏感匹配，但不立即跳出，以便后续精确匹配优先。
 		if f == nil && ff.equalFold(ff.nameBytes, jf) {
 			f = ff
@@ -73,8 +71,8 @@ func LookupPatchMetadataForStruct(t reflect.Type, jsonField string) (
 	return
 }
 
-// A field represents a single field found in a struct.
-// 该结构与 encoding/json 内部的 field 对应，但额外记录了 patch tag 所需的信息。
+// field 表示结构体中的单个字段，与 encoding/json 内部的 field 对应，
+// 但额外记录了 patch tag 所需的信息。
 type field struct {
 	name      string
 	nameBytes []byte                 // []byte(name)
@@ -102,9 +100,7 @@ func fillField(f field) field {
 	return f
 }
 
-// byName sorts field by name, breaking ties with depth,
-// then breaking ties with "name came from json tag", then
-// breaking ties with index sequence.
+// byName 按字段名排序，平局时依次以深度、"name came from json tag"、index 顺序打破，
 // 排序规则与 encoding/json 一致，是后续"字段遮蔽"消除算法的前提。
 type byName []field
 
@@ -125,8 +121,7 @@ func (x byName) Less(i, j int) bool {
 	return byIndex(x).Less(i, j)
 }
 
-// byIndex sorts field by index sequence.
-// 按字段在结构体中的声明顺序排序，使最终输出稳定。
+// byIndex 按字段的 index 序列（即在结构体中的声明顺序）排序，使最终输出稳定。
 type byIndex []field
 
 func (x byIndex) Len() int { return len(x) }
@@ -146,9 +141,9 @@ func (x byIndex) Less(i, j int) bool {
 	return len(x[i].index) < len(x[j].index)
 }
 
-// typeFields returns a list of fields that JSON should recognize for the given type.
-// The algorithm is breadth-first search over the set of structs to include - the top struct
-// and then any reachable anonymous structs.
+// typeFields 返回 JSON 对给定类型应当识别的字段列表。
+// 算法是对需纳入的结构体集合做广度优先搜索——先是顶层结构体，
+// 再是所有可达的匿名结构体。
 // 该实现直接取自 encoding/json，确保字段选择规则与标准库完全一致。
 func typeFields(t reflect.Type) []field {
 	// Anonymous fields to explore at the current level and the next.
@@ -238,10 +233,8 @@ func typeFields(t reflect.Type) []field {
 	// Delete all fields that are hidden by the Go rules for embedded fields,
 	// except that fields with JSON tags are promoted.
 
-	// The fields are sorted in primary order of name, secondary order
-	// of field index length. Loop over names; for each name, delete
-	// hidden fields by choosing the one dominant field that survives.
-	// 同名冲突时只保留 dominant 字段；排序后同一名字的字段必然相邻。
+	// 字段按名字为主序、index 长度为次序排序。逐个名字循环，选出存活的 dominant 字段
+	// 以删除被遮蔽字段；同名冲突时只保留 dominant 字段，排序后同一名字的字段必然相邻。
 	out := fields[:0]
 	for advance, i := 0, 0; i < len(fields); i += advance {
 		// One iteration per name.
@@ -382,10 +375,8 @@ const (
 //
 // See http://play.golang.org/p/tTxjOc0OGo
 //
-// The returned function is specialized for matching against s and
-// should only be given s. It's not curried for performance reasons.
-//
-// 根据 s 的字符特征选择最廉价的大小写折叠实现；返回的函数只适用于与 s 比较。
+// 根据 s 的字符特征选择最廉价的大小写折叠实现；返回的函数针对与 s 的匹配做了特化，
+// 只应传入 s；不做柯里化（curry）是出于性能考虑。
 func foldFunc(s []byte) func(s, t []byte) bool {
 	nonLetter := false
 	special := false // special letter
@@ -410,10 +401,8 @@ func foldFunc(s []byte) func(s, t []byte) bool {
 	return simpleLetterEqualFold
 }
 
-// equalFoldRight is a specialization of bytes.EqualFold when s is
-// known to be all ASCII (including punctuation), but contains an 's',
-// 'S', 'k', or 'K', requiring a Unicode fold on the bytes in t.
-// See comments on foldFunc.
+// equalFoldRight 是 bytes.EqualFold 的特化版本：已知 s 全为 ASCII（含标点符号），
+// 但含有 's'、'S'、'k' 或 'K'，需要对 t 中的字节做 Unicode 折叠。见 foldFunc 的注释。
 // 因为 s 含特殊字母，t 中对应位置可能是开尔文符号或长 s，需要逐 rune 比较。
 func equalFoldRight(s, t []byte) bool {
 	for _, sb := range s {
@@ -483,10 +472,8 @@ func asciiEqualFold(s, t []byte) bool {
 	return true
 }
 
-// simpleLetterEqualFold is a specialization of bytes.EqualFold for
-// use when s is all ASCII letters (no underscores, etc) and also
-// doesn't contain 'k', 'K', 's', or 'S'.
-// See comments on foldFunc.
+// simpleLetterEqualFold 是 bytes.EqualFold 的特化版本：s 全为 ASCII 字母
+// （无下划线等），且不含 'k'、'K'、's'、'S'。见 foldFunc 的注释。
 // 这是最快的路径：长度相等且逐字节只比较大小写位。
 func simpleLetterEqualFold(s, t []byte) bool {
 	if len(s) != len(t) {
@@ -513,9 +500,8 @@ func parseTag(tag string) (string, tagOptions) {
 	return tag, tagOptions("")
 }
 
-// Contains reports whether a comma-separated list of options
-// contains a particular substr flag. substr must be surrounded by a
-// string boundary or commas.
+// Contains 判断逗号分隔的选项列表中是否包含某个 substr 标志；
+// substr 两侧必须是字符串边界或逗号。
 // 逐项比较而非子串匹配，避免 "omitemptyx" 被误判为包含 "omitempty"。
 func (o tagOptions) Contains(optionName string) bool {
 	if len(o) == 0 {

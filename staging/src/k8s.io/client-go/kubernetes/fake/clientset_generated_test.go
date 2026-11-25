@@ -80,17 +80,15 @@ func TestManagedFieldClientset(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"k0": "v0"}, cm.Data)
 
-	// Apply with test-manager-1
-	// Expect data to be shared with initial create
-	// 不同 manager 管理不同字段时，apply 应合并而不是覆盖。
+	// 用 test-manager-1 执行 Apply。
+	// 预期数据与初始创建共享合并：不同 manager 管理不同字段时，apply 应合并而不是覆盖。
 	cm, err = client.CoreV1().ConfigMaps("default").Apply(context.Background(),
 		v1ac.ConfigMap(name, namespace).WithData(map[string]string{"k1": "v1"}),
 		meta_v1.ApplyOptions{FieldManager: "test-manager-1"})
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"k0": "v0", "k1": "v1"}, cm.Data)
 
-	// Apply conflicting with test-manager-2, expect apply to fail
-	// test-manager-2 试图修改 test-manager-1 拥有的 k1，未 force 时应冲突。
+	// 与 test-manager-2 冲突的 Apply，预期失败：test-manager-2 试图修改 test-manager-1 拥有的 k1，未 force 时应冲突。
 	_, err = client.CoreV1().ConfigMaps("default").Apply(context.Background(),
 		v1ac.ConfigMap(name, namespace).WithData(map[string]string{"k1": "xyz"}),
 		meta_v1.ApplyOptions{FieldManager: "test-manager-2"})
@@ -113,17 +111,16 @@ func TestManagedFieldClientset(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"k0": "v0", "k1": "v101", "k2": "v2"}, cm.Data)
 
-	// Force apply with test-manager-2
-	// Expect data owned by test-manager-1 to be updated, expect data already owned but not in apply configuration to be removed
-	// Force 会夺取冲突字段的所有权，并删除该 manager 拥有但本次 apply 未声明的字段（k2）。
+	// 用 test-manager-2 执行 Force apply。
+	// Force 会夺取冲突字段（test-manager-1 拥有的 k1）的所有权并更新其值，
+	// 同时删除该 manager 拥有但本次 apply 未声明的字段（k2）。
 	cm, err = client.CoreV1().ConfigMaps("default").Apply(context.Background(),
 		v1ac.ConfigMap(name, namespace).WithData(map[string]string{"k1": "v202"}),
 		meta_v1.ApplyOptions{FieldManager: "test-manager-2", Force: true})
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"k0": "v0", "k1": "v202"}, cm.Data)
 
-	// Update with test-manager-1 to perform a force update of the entire resource
-	// 普通 Update 忽略字段所有权，整体替换 Data。
+	// 用 test-manager-1 执行 Update，相当于对整个资源强制更新：普通 Update 忽略字段所有权，整体替换 Data。
 	cm, err = client.CoreV1().ConfigMaps("default").Update(context.Background(),
 		&v1.ConfigMap{
 			TypeMeta: meta_v1.TypeMeta{

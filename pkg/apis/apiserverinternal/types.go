@@ -31,7 +31,7 @@ type StorageVersion struct {
 	// spec 为空，仅为符合 Kubernetes API 规范而保留。
 	Spec StorageVersionSpec
 
-	// API server instances report the version they can decode and the version they
+	// API server 实例会上报其能够解码的版本，以及
 	// 持久化对象到后端时所使用的编码方式。
 	Status StorageVersionStatus
 }
@@ -39,8 +39,8 @@ type StorageVersion struct {
 // StorageVersionSpec 是空规格。
 type StorageVersionSpec struct{}
 
-// StorageVersionStatus API server instances report the versions they can decode and the version they
-// 持久化对象到后端时所使用的编码方式。
+// StorageVersionStatus 是 API server 实例上报的、其能够解码的版本，
+// 以及持久化对象到后端时所使用的编码方式。
 type StorageVersionStatus struct {
 	// The reported versions per API server instance.
 	// +optional
@@ -71,7 +71,7 @@ type ServerStorageVersion struct {
 	// The encodingVersion must be included in the decodableVersions.
 	DecodableVersions []string
 
-	// The API server can serve these versions.
+	// API server 可以提供（serve）这些版本。
 	// decodableVersions 必须涵盖所有 servedVersions。
 	ServedVersions []string
 }

@@ -32,7 +32,7 @@ import (
 	"k8s.io/kube-aggregator/pkg/apis/apiregistration"
 )
 
-// ValidateAPIService validates that the APIService is correctly defined.
+// ValidateAPIService 校验 APIService 的定义是否正确。
 // 这里不只是逐字段检错：APIService 有两条隐含约束必须在对象级别才能检查——
 // 名字必须等于 version.group，以及本地服务和远程服务的合法配置互斥。
 // 校验器返回错误列表而不是首个错误，是为了让调用方一次看到所有问题。
@@ -56,8 +56,7 @@ func ValidateAPIService(ctx context.Context, apiService *apiregistration.APIServ
 		field.NewPath("metadata"),
 		utilfeature.DefaultFeatureGate.Enabled(features.DeclarativeValidationBeta))
 
-	// in this case we allow empty group
-	// 核心 API 组历史上没有组名，它的 APIService 只能写成 v1.；
+	// 此处允许空 group：核心 API 组历史上没有组名，它的 APIService 只能写成 v1.；
 	// 其他情况留空组名会让对象落不到任何 GroupVersion 上，所以必须拒绝。
 	if len(apiService.Spec.Group) == 0 && apiService.Spec.Version != "v1" {
 		allErrs = append(allErrs, field.Required(field.NewPath("spec", "group"), "only v1 may have an empty group and it better be legacy kube"))
@@ -110,7 +109,7 @@ func ValidateAPIService(ctx context.Context, apiService *apiregistration.APIServ
 	return allErrs
 }
 
-// ValidateAPIServiceUpdate validates an update of APIService.
+// ValidateAPIServiceUpdate 校验 APIService 的更新。
 // 更新校验 = 元数据更新校验 + 完整的创建校验。Spec 里各字段之间的约束
 // （比如名字必须匹配、TLS 配置互斥）在更新后同样要成立，
 // 因此这里老老实实复用创建校验，没有"只校验变化字段"的捷径。
@@ -121,7 +120,7 @@ func ValidateAPIServiceUpdate(ctx context.Context, newAPIService *apiregistratio
 	return allErrs
 }
 
-// ValidateAPIServiceStatus validates that the APIService status is one of 'True', 'False' or 'Unknown'.
+// ValidateAPIServiceStatus 校验 APIService status 的取值必须是 'True'、'False' 或 'Unknown' 之一。
 // 状态由控制器写入，但依然要校验：一个拼错的状态值会让依赖"True/False/Unknown"
 // 三态判断的调用方失去依据。这里只管状态取值，条件的 Type、Reason 等交给别的层。
 func ValidateAPIServiceStatus(status *apiregistration.APIServiceStatus, fldPath *field.Path) field.ErrorList {
@@ -139,7 +138,7 @@ func ValidateAPIServiceStatus(status *apiregistration.APIServiceStatus, fldPath 
 	return allErrs
 }
 
-// ValidateAPIServiceStatusUpdate validates an update of the status field of APIService.
+// ValidateAPIServiceStatusUpdate 校验 APIService status 字段的更新。
 // 状态更新走的是独立子资源，因此不校验 Spec：控制器只应被允许回写状态，
 // 用户也不该因为 Spec 里有错就改不了状态。
 func ValidateAPIServiceStatusUpdate(ctx context.Context, newAPIService *apiregistration.APIService, oldAPIService *apiregistration.APIService) field.ErrorList {

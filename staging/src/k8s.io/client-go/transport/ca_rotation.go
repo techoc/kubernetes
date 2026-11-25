@@ -32,8 +32,8 @@ import (
 
 var _ utilnet.RoundTripperWrapper = &atomicTransportHolder{}
 
-// atomicTransportHolder holds a transport that can be atomically updated
-// when CA files change, enabling graceful CA rotation without cache complexity
+// atomicTransportHolder 持有可在 CA 文件变化时原子更新的 transport，
+// 从而在不引入缓存复杂度的前提下完成 CA 平滑轮换。
 //
 // 与重建整个 REST 客户端不同，这里只替换持有的 *http.Transport，
 // 已有请求继续使用旧 transport 完成，新请求则走新的根证书池。
@@ -93,7 +93,7 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 		return
 	}
 
-	// only attempt CA reload once per caRefreshDuration, even if the reload fails
+	// 即使重新加载失败，也每个 caRefreshDuration 只尝试一次：
 	// 失败也推进检查时间，防止文件持续不可读时每个请求都触发 stat/read。
 	h.transportLastChecked = h.clock.Now()
 
@@ -103,7 +103,7 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 
 	// Load new CA data from file
 	newCAData, err := os.ReadFile(h.caFile)
-	// Return old transport on read error
+	// 读取出错时返回旧 transport：
 	// 文件暂时不可读（如 kubelet 原子替换 CA 卷的瞬间）时保留旧 transport，
 	// 保证连接不会因短暂的 IO 错误中断。
 	if err != nil {
@@ -144,7 +144,7 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 	// Update our tracking of current CA data
 	h.currentCAData = newCAData
 
-	// Close idle connections on the old transport to encourage migration
+	// 关闭旧 transport 上的空闲连接，促进流量迁移到新 transport：
 	// 旧连接仍被进行中的请求使用，只能关闭空闲连接，使其自然淘汰。
 	oldTransport.CloseIdleConnections()
 

@@ -41,8 +41,7 @@ type Info interface {
 	GetExtra() map[string][]string
 }
 
-// DefaultInfo provides a simple user information exchange object
-// for components that implement the UserInfo interface.
+// DefaultInfo 是一个简单的用户信息交换对象，供实现 UserInfo 接口的组件使用。
 // 该类型不校验字段，使用方需自行保证 Name 非空且 Extra 的键为小写。
 type DefaultInfo struct {
 	Name   string
@@ -72,7 +71,7 @@ func (i *DefaultInfo) GetExtra() map[string][]string {
 }
 
 const (
-	// well-known user and group names
+	// 知名的用户与组名：
 	// 这些名字是授权策略的稳定契约，不得修改；修改会破坏所有基于内置 ClusterRole 的授权。
 	SystemPrivilegedGroup = "system:masters"
 	NodesGroup            = "system:nodes"
@@ -88,8 +87,7 @@ const (
 	KubeControllerManager = "system:kube-controller-manager"
 	KubeScheduler         = "system:kube-scheduler"
 
-	// CredentialIDKey is the key used in a user's "extra" to specify the unique
-	// identifier for this identity document).
+	// CredentialIDKey 是用户 "extra" 中用于携带该身份凭据唯一标识的键。
 	// 值由各认证器写入，用于审计与准入策略区分同一用户的不同凭据。
 	CredentialIDKey = "authentication.kubernetes.io/credential-id"
 )

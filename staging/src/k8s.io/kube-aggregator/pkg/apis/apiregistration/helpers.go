@@ -23,10 +23,9 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 )
 
-// SortedByGroupAndVersion sorts APIServices into their different groups, and then sorts them based on their versions.
-// For example, the first element of the first array contains the APIService with the highest version number, in the
-// group with the highest priority; while the last element of the last array contains the APIService with the lowest
-// version number, in the group with the lowest priority.
+// SortedByGroupAndVersion 把 APIService 按 group 分组，再在组内按版本排序。
+// 例如第一个数组的第一个元素是优先级最高 group 中版本号最高的 APIService，
+// 最后一个数组的最后一个元素是优先级最低 group 中版本号最低的 APIService。
 // 聚合层把 APIService 按 group 分组、组内按版本排序，供 discovery 和路由按优先级消费。
 // 用二维数组而不是扁平切片，是为了把“先选高优先级 group、再在其内选高优先级版本”的
 // 两级决策直接体现在数据结构里，调用方顺序遍历即可得到正确优先级。
@@ -36,8 +35,7 @@ func SortedByGroupAndVersion(servers []*APIService) [][]*APIService {
 
 	ret := [][]*APIService{}
 	for _, curr := range serversByGroupPriorityMinimum {
-		// check to see if we already have an entry for this group
-		// 已经全局按 groupPriority 排好序，所以同 group 的 APIService 必然相邻出现。
+		// 检查该 group 是否已有条目：已经全局按 groupPriority 排好序，所以同 group 的 APIService 必然相邻出现。
 		// 这里线性查找只需要在已有分组中比对，分组数量通常很小，不值得再建索引。
 		existingIndex := -1
 		for j, groupInReturn := range ret {
@@ -96,7 +94,7 @@ func (s ByVersionPriority) Less(i, j int) bool {
 	return version.CompareKubeAwareVersionStrings(s[i].Spec.Version, s[j].Spec.Version) > 0
 }
 
-// NewLocalAvailableAPIServiceCondition returns a condition for an available local APIService.
+// NewLocalAvailableAPIServiceCondition 返回表示本地 APIService 可用的 condition。
 // 本地 APIService（Spec.Service 为 nil，由聚合层自身提供）不需要走远端健康检查，
 // 因此直接构造一个可用的状态；Reason/Message 固定为 Local，便于在 status 中区分来源。
 func NewLocalAvailableAPIServiceCondition() APIServiceCondition {
@@ -109,7 +107,7 @@ func NewLocalAvailableAPIServiceCondition() APIServiceCondition {
 	}
 }
 
-// GetAPIServiceConditionByType gets an *APIServiceCondition by APIServiceConditionType if present
+// GetAPIServiceConditionByType 按 APIServiceConditionType 查找 condition，存在则返回其指针。
 // 返回切片元素的地址而不是值副本，是为了让调用方（如 SetAPIServiceCondition）能原地修改
 // condition 的 Status、Reason 等字段，同时保留切片中其他 condition 不被改动。
 func GetAPIServiceConditionByType(apiService *APIService, conditionType APIServiceConditionType) *APIServiceCondition {
@@ -121,8 +119,7 @@ func GetAPIServiceConditionByType(apiService *APIService, conditionType APIServi
 	return nil
 }
 
-// SetAPIServiceCondition sets the status condition.  It either overwrites the existing one or
-// creates a new one
+// SetAPIServiceCondition 设置 status condition：存在则覆盖，不存在则新增。
 // 只在 Status 真正翻转时才更新 LastTransitionTime，因为该字段语义是“状态最后一次变化的时间”，
 // 而 Reason/Message 每次都覆盖以反映最新的探测结果。这样状态稳定但消息变化时不会误导调用方
 // 以为发生过状态转换。
@@ -142,7 +139,7 @@ func SetAPIServiceCondition(apiService *APIService, newCondition APIServiceCondi
 	existingCondition.Message = newCondition.Message
 }
 
-// IsAPIServiceConditionTrue indicates if the condition is present and strictly true
+// IsAPIServiceConditionTrue 表示该 condition 是否存在且严格为 true。
 // 缺席的 condition 视为 false，而不是 Unknown：调用方通常只关心“是否已确定可用”，
 // 未设置状态自然不满足这一条件。注意这里严格比较 ConditionTrue，
 // ConditionUnknown 不会被误判为可用。

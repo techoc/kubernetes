@@ -33,7 +33,6 @@ import (
 
 const workItemKey = "key"
 
-// CertCallbackRefreshDuration is exposed so that integration tests can crank up the reload speed.
 // 轮询证书回调的周期；导出以便集成测试调小等待时间。
 var CertCallbackRefreshDuration = 5 * time.Minute
 
@@ -49,7 +48,6 @@ type dynamicClientCert struct {
 	reload     reloadFunc
 	connDialer *connrotation.Dialer
 
-	// queue only ever has one item, but it has nice error handling backoff/retry semantics
 	// 队列中始终只有一项；复用它是为了获得现成的限速退避重试语义。
 	queue workqueue.TypedRateLimitingInterface[string]
 }
@@ -89,7 +87,6 @@ func (c *dynamicClientCert) loadClientCert() (*tls.Certificate, error) {
 	c.clientCert = cert
 	c.certMtx.Unlock()
 
-	// The first certificate requested is not a rotation that is worth closing connections for
 	// 首次获取证书时没有旧连接需要关闭，避免无谓地打断启动阶段的连接。
 	if !haveCert {
 		return cert, nil

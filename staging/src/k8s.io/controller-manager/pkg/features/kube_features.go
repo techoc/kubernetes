@@ -23,33 +23,27 @@ import (
 
 // 本文件集中声明 controller-manager（主要是 CCM/KCM）专有的 feature gate。
 // 新增 gate 时：先在此处定义常量，再在下面的版本表中登记其版本与默认状态。
-// Every feature gate should have an entry here following this template:
+// 每个 feature gate 都应在此按如下模板登记条目：
 //
 // // owner: @username
 // MyFeature featuregate.Feature = "MyFeature"
 //
-// Feature gates should be listed in alphabetical, case-sensitive
-// 按字母序（大写在前）排列，可减少多人同时修改同一行造成的代码冲突。
-// (upper before any lower case character) order. This reduces the risk
-// of code conflicts because changes are more likely to be scattered
-// across the file.
+// feature gate 应按区分大小写的字母序（大写在前）排列，
+// 这可减少多人同时修改同一区域造成的代码冲突，因为改动会更分散地落在文件各处。
 const (
 	// owner: @lukasmetzner
 	// kep:  http://kep.k8s.io/5237
-	// Use watch based route controller reconciliation instead of frequent periodic reconciliation.
-	// 使用 watch 驱动路由控制器对账，替代频繁定时对账（KEP-5237，Alpha）。
+	// 使用 watch 驱动路由控制器对账，替代频繁的定时对账（KEP-5237，Alpha）。
 	CloudControllerManagerWatchBasedRoutesReconciliation featuregate.Feature = "CloudControllerManagerWatchBasedRoutesReconciliation"
 
 	// owner: @nckturner
 	// kep:  http://kep.k8s.io/2699
-	// Enable webhook in cloud controller manager
 	// 在 cloud-controller-manager 中启用 webhook（KEP-2699，Alpha）。
 	CloudControllerManagerWebhook featuregate.Feature = "CloudControllerManagerWebhook"
 
 	// owner: @jefftree, @tchap
 	//
-	// Make kube-controller-manager release leader election lock on exit.
-	// 让 kube-controller-manager 退出时主动释放领导者锁，缩短故障转移等待时间（Alpha）。
+	// 让 kube-controller-manager 退出时主动释放领导者选举锁，缩短故障转移等待时间（Alpha）。
 	ControllerManagerReleaseLeaderElectionLockOnExit featuregate.Feature = "ControllerManagerReleaseLeaderElectionLockOnExit"
 )
 
@@ -58,9 +52,9 @@ func SetupCurrentKubernetesSpecificFeatureGates(featuregates featuregate.Mutable
 	return featuregates.AddVersioned(versionedCloudPublicFeatureGates)
 }
 
-// 版本化 gate 表：记录每个 gate 首次出现的版本、默认值与发布阶段（Alpha/Beta/GA）。
-// versionedCloudPublicFeatureGates consists of versioned cloud-specific feature keys.
-// To add a new feature, define a key for it above and add it here.
+// versionedCloudPublicFeatureGates 收录版本化的云专有 feature key：
+// 记录每个 gate 首次出现的版本、默认值与发布阶段（Alpha/Beta/GA）。
+// 新增特性时先在上面定义 key，再添加到这里。
 var versionedCloudPublicFeatureGates = map[featuregate.Feature]featuregate.VersionedSpecs{
 	CloudControllerManagerWatchBasedRoutesReconciliation: {
 		{Version: version.MustParse("1.35"), Default: false, PreRelease: featuregate.Alpha},

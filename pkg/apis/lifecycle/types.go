@@ -29,23 +29,21 @@ const (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EvictionRequest 定义一项请求，理想情况下应促成 .spec.target 的优雅驱逐
-// .spec.target（例如 Pod 的终止）。
+// EvictionRequest 定义一项请求，理想情况下应促成对
+// .spec.target（例如 Pod 的终止）的优雅驱逐。
 //
 // evictionrequest-controller 观察所有 EvictionRequest 的意图，并将其转换为
-// Evictions.
-//   - .spec.requester is set as a label on the Eviction for easier lookup.
-//   - Each target can have a set of responders assigned to it. Eviction objects are observed by
-//     these responders, who implement the eviction logic and update the Eviction's status with
-//     progress.
+// Eviction。
+//   - .spec.requester 会被设置为 Eviction 上的 label，便于查找。
+//   - 每个目标都可以分配一组 responder。Eviction 对象由这些 responder
+//     观测，responder 实现驱逐逻辑并在 Eviction 的 status 中更新进度。
 //
-// There is many-to-many relationship between EvictionRequests and Evictions in general.
-// And many-to-one if the target is a  pod.
+// 通常 EvictionRequest 与 Eviction 之间是多对多关系；
+// 若目标是 Pod，则为多对一。
 //
-// 若所有请求者都撤回对同一目标的驱逐意图，驱逐将被
-// canceled. Deleting an EvictionRequest also counts as a withdrawal.
-// Once all EvictionRequest of a target are removed, the corresponding Evictions are eventually
-// garbage collected.
+// 若所有请求者都撤回对同一目标的驱逐意图，驱逐将被取消。
+// 删除 EvictionRequest 同样视为撤回。当某个目标的所有 EvictionRequest
+// 都被移除后，对应的 Eviction 最终会被垃圾回收。
 type EvictionRequest struct {
 	metav1.TypeMeta
 
@@ -107,8 +105,8 @@ type EvictionRequestPodReference struct {
 	// 该字段必填。
 	// +required
 	Name string
-	// uid of the target.
-	// 可在目标的 .metadata.uid 中找到，为 8-4-4-4-12 格式的小写 UUID。
+	// uid 是目标对象的 UID，可在目标的 .metadata.uid 中找到，
+	// 为 8-4-4-4-12 格式的小写 UUID。
 	// 该字段必填。
 	// +required
 	UID apimachinerytypes.UID
@@ -176,25 +174,25 @@ type EvictionRequestList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Eviction 发起一次驱逐流程，理想情况下应促成 .spec.target 的优雅驱逐
-// .spec.target（例如 Pod 的终止）。
+// Eviction 发起一次驱逐流程，理想情况下应促成对 .spec.target
+// （例如 Pod 的终止）的优雅驱逐。
 //
 // evictionrequest-controller 观察所有 EvictionRequest 的意图，并将其转换为
 // Eviction，并管理 Eviction 的生命周期。
 // 即使在 requester 撤回请求后，.status.requesters 中仍会保留这些 requester。
-// 若所有请求者都撤回对同一目标的驱逐意图，驱逐将被
+// 若所有请求者都撤回对同一目标的驱逐意图，驱逐将被取消。
 // 当与该 Eviction 的 .spec.target 对应的所有 EvictionRequest 都被移除后，
 // 这个 Eviction 对象最终会被垃圾回收。
 //
 // 如果 target 是 pod，.status.targetResponders 将根据 Pod 的
-// .spec.evictionResponders.
+// .spec.evictionResponders 填充。
 //
-// Responders should observe and communicate through the .status to help with the eviction
-// of the target when they see their state == Active in .status.targetResponders. ResponderStatus
-// struct should then be periodically updated to indicate the progress or completion of the eviction
-// process by each responder in .status.responders. If .status.responders[].heartbeatTime is not
-// updated within the heartbeat deadline defined by the Eviction API (currently 20 minutes), the
-// eviction is passed over to the next responder with a lower priority.
+// responder 应当观测并通过 .status 进行通信：当它们在
+// .status.targetResponders 中看到自身状态为 Active 时，应协助完成目标驱逐。
+// 随后 ResponderStatus 结构体需被周期性更新，以在 .status.responders 中
+// 反映每个 responder 的驱逐进度或完成情况。若
+// .status.responders[].heartbeatTime 未在 Eviction API 定义的心跳截止时间
+// （目前为 20 分钟）内更新，驱逐将移交给下一个优先级更低的 responder。
 //
 // 如果没有其他 responder 且 target 是 pod，最后一个优先级为 100 的默认
 // imperative-eviction.k8s.io/evictor responder 将通过 imperative Eviction API
@@ -266,8 +264,8 @@ type EvictionPodReference struct {
 	// 该字段必填。
 	// +required
 	Name string
-	// uid of the target.
-	// 可在目标的 .metadata.uid 中找到，为 8-4-4-4-12 格式的小写 UUID。
+	// uid 是目标对象的 UID，可在目标的 .metadata.uid 中找到，
+	// 为 8-4-4-4-12 格式的小写 UUID。
 	// 该字段必填。
 	// +required
 	UID apimachinerytypes.UID
@@ -309,17 +307,17 @@ type EvictionStatus struct {
 	// +listMapKey=name
 	Requesters []Requester
 
-	// targetResponders reference responders that should eventually respond to this eviction
-	// to help with the graceful eviction of a target. These responders are selected sequentially,
-	// according to their specified priority by setting the Active state to the TargetResponder
-	// .state field. The maximum number of active responders allowed is 1.
-	// Eventually each responder can end up in an Interrupted, Canceled or, Completed state.
-	// Responders should observe these states in order to navigate their lifecycle.
+	// targetResponders 引用最终应响应本次驱逐、以协助目标优雅驱逐的
+	// responder。这些 responder 按各自指定的优先级顺序被依次选中，
+	// 选中方式是将 TargetResponder 的 .state 字段设为 Active。
+	// 允许处于 Active 状态的 responder 最大数量为 1。
+	// 每个 responder 最终会进入 Interrupted、Canceled 或 Completed 状态之一。
+	// responder 应当观测这些状态以推进自身的生命周期。
 	//
 	// 如果 target 是 pod，该字段根据 Pod 的 .spec.evictionResponders 填充。
 	// 根据 target 的不同，列表中还可能加入默认 responder。
 	//
-	// Default responders:
+	// 默认 responder：
 	// - 若 target 是 pod，则将优先级为 100 的 imperative-eviction.k8s.io/evictor responder
 	// 加入列表。它将调用 imperative Eviction API（pods/<name>/eviction 子资源）。
 	// 该调用可能因 PodDisruptionBudget 阻止 pod 终止而失败。
@@ -369,8 +367,8 @@ const (
 	// EvictionConditionReasonAwaitingEviction 表示该 Eviction 工作正常，target 已被安排驱逐。
 	// 该 reason 用于 Failed 和 TargetEvicted condition。
 	EvictionConditionReasonAwaitingEviction EvictionConditionReason = "AwaitingEviction"
-	// EvictionConditionReasonEvictionInvalid means that the Eviction is not accepted because the
-	// initial configuration is not valid.
+	// EvictionConditionReasonEvictionInvalid 表示 Eviction 未被接受，
+	// 因为初始配置无效。
 	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonEvictionInvalid EvictionConditionReason = "EvictionInvalid"
 	// EvictionConditionReasonCanceledDueToNoRequesters 表示不存在 target 相同且 .spec.intent 为 Eviction
@@ -449,14 +447,13 @@ type TargetResponder struct {
 	// +required
 	Name string
 
-	// priority for this responder. Higher priorities are selected first by the evictionrequest-controller.
-	// If there are responders with the same priority, the responder whose domain name comes first in the
-	// alphabetical higher domain order, will be picked. This means that the top domain labels are compared
-	// alphabetically first, followed by the lower domain labels. The key is compared last.
+	// priority 是该 responder 的优先级。evictionrequest-controller 会优先选择
+	// 优先级更高的 responder。若有多个 responder 优先级相同，则选中域名在
+	// "higher domain" 字母序中排在最前的那个：即先按字母序比较顶级域名标签，
+	// 再依次比较更低层级的域名标签，最后比较 key。
 	//
-	// The responder that is the managing controller of the pod should set the value of
-	// this field to 10000 to allow both for preemption or fallback registration by other
-	// responders.
+	// 作为 pod 管理控制器的 responder 应将此字段设为 10000，
+	// 以便其他 responder 既能抢占，也能在其后注册回退。
 	//
 	// 最小值为 0，最大值为 100000。
 	// 0-999 区间保留给后缀为 *.k8s.io 的响应者。
@@ -521,19 +518,16 @@ type ResponderStatus struct {
 	// +required
 	Name string
 
-	// startTime tracks the time at which this responder was designated as active and should start
-	// processing the eviction request.
+	// startTime 记录该 responder 被指定为 Active、应当开始处理驱逐请求的时间。
 	// 设置时应反映当前时间。
-	// This field is initialized by Kubernetes when this responder becomes active.
+	// 该字段由 Kubernetes 在该 responder 变为 Active 时初始化。
 	// 一旦设置便不可变。
 	// +optional
 	StartTime *metav1.Time
 
-	// heartbeatTime is the last time at which the eviction process was reported to be in progress
-	// by the responder.
+	// heartbeatTime 是 responder 最后一次上报驱逐过程仍在进行的时间。
 	// 设置时应反映当前时间。
-	// Responders should avoid heartbeats more frequent than 20 seconds to avoid overloading the
-	// control-plane.
+	// responder 应避免心跳频率高于每 20 秒一次，以免压垮控制面。
 	// +optional
 	HeartbeatTime *metav1.Time
 

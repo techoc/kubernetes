@@ -278,7 +278,6 @@ func TestRetryAfterCancellation(t *testing.T) {
 		t.Errorf("Expected error")
 	}
 
-	// This retries the lookup with a fresh context.
 	// 使用未取消的 context 重试：缓存不应把中途取消留下的错误当作永久失败。
 	r, err := c.ServerResourcesForGroupVersionWithContext(ctx, "astronomy/v8beta1")
 	if err != nil {
@@ -538,8 +537,6 @@ func TestPartialRetryableFailure(t *testing.T) {
 	}
 }
 
-// Tests that schema instances returned by openapi cached and returned after
-// successive calls
 // 该测试确认：OpenAPI 客户端与解析出的 schema 会被缓存，连续调用返回同一指针；
 // 而 Invalidate 之后必须重新构造，返回内容相同但指针不同。
 func TestOpenAPIMemCache(t *testing.T) {
@@ -608,8 +605,6 @@ func TestOpenAPIMemCache(t *testing.T) {
 	}
 }
 
-// Tests that schema instances returned by openapi are cached and returned after
-// successive calls.
 // 与 TestOpenAPIMemCache 类似，但走 *WithContext API：此时连 paths map 本身也会被缓存。
 func TestOpenAPIMemCacheWithContext(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
@@ -679,7 +674,6 @@ func TestOpenAPIMemCacheWithContext(t *testing.T) {
 	}
 }
 
-// Tests function "GroupsAndMaybeResources" when the "unaggregated" discovery is returned.
 // 覆盖旧版（分两次请求 /api 与 /apis）发现格式；该格式不返回资源，故 resourcesMap 恒为 nil。
 func TestMemCacheGroupsAndMaybeResources(t *testing.T) {
 	tests := []struct {
@@ -845,7 +839,6 @@ func TestMemCacheGroupsAndMaybeResources(t *testing.T) {
 	}
 }
 
-// Tests function "GroupsAndMaybeResources" when the "aggregated" discovery is returned.
 // 覆盖 v2 aggregated discovery：一次响应即包含 group 与资源，并验证 stale 版本被计入 failedGVs。
 func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 	tests := []struct {
@@ -1388,7 +1381,6 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 	}
 }
 
-// Tests function "ServerGroups" when the "aggregated" discovery is returned.
 // 额外验证 preferred version 的取舍：列表中的第一个版本被视为首选版本。
 func TestMemCacheAggregatedServerGroups(t *testing.T) {
 	tests := []struct {

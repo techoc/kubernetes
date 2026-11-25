@@ -1000,8 +1000,7 @@ func Test_syncNode(t *testing.T) {
 				},
 			},
 		},
-		{ // for backward compatibility the cloud providers that does not implement
-			// providerID does not block the node initialization
+		{ // 向后兼容：未实现 providerID 的云提供商不应阻塞节点初始化。
 			// 云实现不支持 providerID 时，不能伪造 ProviderID，应保留节点现有信息并成功返回。
 			name:        "provider ID not implemented",
 			expectedErr: false,
@@ -2117,8 +2116,7 @@ func Test_reconcileNodeLabels(t *testing.T) {
 
 }
 
-// Tests that node address changes are detected correctly
-// 校验 nodeAddressesChangeDetected 的比较语义：集合语义（顺序无关）、
+// TestNodeAddressesChangeDetected 校验 nodeAddressesChangeDetected 的比较语义：集合语义（顺序无关）、
 // 类型与值都参与比较，以及仅增删 Hostname 也算变化。
 // 错误地判定“无变化”会导致节点地址长期过期。
 func TestNodeAddressesChangeDetected(t *testing.T) {
@@ -2251,7 +2249,7 @@ func TestNodeAddressesChangeDetected(t *testing.T) {
 		"Node address changes are not detected correctly")
 }
 
-// Test updateNodeAddress with instanceV2, same test case with TestNodeAddressesNotUpdate.
+// TestNodeAddressesNotUpdateV2 通过 InstancesV2 测试 updateNodeAddress，用例与 TestNodeAddressesNotUpdate 相同。
 // 云侧报告实例不存在（ExistsByProviderID=false）时，即使能返回元数据也不应更新地址，
 // 否则会为已删除的实例保留陈旧网络信息。
 func TestNodeAddressesNotUpdateV2(t *testing.T) {
@@ -2332,8 +2330,8 @@ func TestNodeAddressesNotUpdateV2(t *testing.T) {
 	}
 }
 
-// This test checks that a node with the external cloud provider taint is cloudprovider initialized and
-// and node addresses will not be updated when node isn't present according to the cloudprovider
+// TestNodeAddressesNotUpdate 验证带 external cloud provider 污点的节点能被云初始化，
+// 且按云侧视图节点不存在时不会更新节点地址。
 // 与 V2 用例对应，覆盖传统 Instances 路径；两条路径必须保持相同的保护逻辑。
 func TestNodeAddressesNotUpdate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
@@ -2747,8 +2745,7 @@ func TestGetInstanceMetadata(t *testing.T) {
 // TestUpdateNodeStatus 验证节点状态回写的并发模型：不同 worker 数下都应处理完所有节点，
 // 且对云提供的调用次数与节点数一致（每个节点只查一次地址）。
 func TestUpdateNodeStatus(t *testing.T) {
-	// emaulate the latency of the cloud API calls
-	// 人为加入延迟以放大并发差异，使 worker 数对总耗时的影响可观察。
+	// 模拟云 API 调用的延迟：人为加入延迟以放大并发差异，使 worker 数对总耗时的影响可观察。
 	const cloudLatency = 10 * time.Millisecond
 
 	// generateNodes 批量生成最小 Node，只需名称即可驱动状态回写路径。

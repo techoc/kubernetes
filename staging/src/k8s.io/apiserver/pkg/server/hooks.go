@@ -45,7 +45,7 @@ import (
 // 不能带着不完整状态继续对外服务。
 type PostStartHookFunc func(context PostStartHookContext) error
 
-// PreShutdownHookFunc is a function that can be added to the shutdown logic.
+// PreShutdownHookFunc 是可以加入关闭逻辑的函数；
 // 与 PostStartHook 不同，其 panic 会被捕获，错误也会被聚合返回而非终止进程。
 type PreShutdownHookFunc func() error
 
@@ -164,7 +164,7 @@ func (s *GenericAPIServer) AddPreShutdownHookOrDie(name string, hook PreShutdown
 	}
 }
 
-// RunPostStartHooks runs the PostStartHooks for the server.
+// RunPostStartHooks 运行该 server 的 PostStartHooks；
 // 每个 hook 并发执行；持有锁直到所有 goroutine 启动完毕，避免与后续注册竞争。
 func (s *GenericAPIServer) RunPostStartHooks(ctx context.Context) {
 	s.postStartHookLock.Lock()
@@ -181,7 +181,7 @@ func (s *GenericAPIServer) RunPostStartHooks(ctx context.Context) {
 	}
 }
 
-// RunPreShutdownHooks runs the PreShutdownHooks for the server
+// RunPreShutdownHooks 运行该 server 的 PreShutdownHooks；
 // 串行执行并聚合所有错误，确保一个 hook 失败不会阻止其他清理逻辑运行。
 func (s *GenericAPIServer) RunPreShutdownHooks() error {
 	var errorList []error

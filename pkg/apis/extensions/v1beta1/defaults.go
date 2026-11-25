@@ -94,15 +94,15 @@ func SetDefaults_Deployment(obj *extensionsv1beta1.Deployment) {
 			obj.Labels = labels
 		}
 	}
-	// Set extensionsv1beta1.DeploymentSpec.Replicas to 1 if it is not set.
+	// 若 extensionsv1beta1.DeploymentSpec.Replicas 未设置则置为 1，
 	// 未指定副本数时按单副本处理，这是最保守的默认行为。
 	if obj.Spec.Replicas == nil {
 		obj.Spec.Replicas = new(int32)
 		*obj.Spec.Replicas = 1
 	}
 	strategy := &obj.Spec.Strategy
-	// Set default extensionsv1beta1.DeploymentStrategyType as RollingUpdate.
-	// 滚动更新是默认策略，可避免升级期间服务中断。
+	// 将 extensionsv1beta1.DeploymentStrategyType 默认设为 RollingUpdate，
+	// 滚动更新可避免升级期间服务中断。
 	if strategy.Type == "" {
 		strategy.Type = extensionsv1beta1.RollingUpdateDeploymentStrategyType
 	}
@@ -119,22 +119,20 @@ func SetDefaults_Deployment(obj *extensionsv1beta1.Deployment) {
 			strategy.RollingUpdate.MaxUnavailable = &maxUnavailable
 		}
 		if strategy.RollingUpdate.MaxSurge == nil {
-			// Set default MaxSurge as 1 by default.
-			// 默认允许额外创建一个副本，保证滚动更新期间仍有足够可用副本。
+			// 默认将 MaxSurge 设为 1，允许额外创建一个副本，
+			// 保证滚动更新期间仍有足够可用副本。
 			maxSurge := intstr.FromInt32(1)
 			strategy.RollingUpdate.MaxSurge = &maxSurge
 		}
 	}
-	// Set extensionsv1beta1.DeploymentSpec.ProgressDeadlineSeconds to MaxInt,
-	// which has the same meaning as unset.
+	// 将 extensionsv1beta1.DeploymentSpec.ProgressDeadlineSeconds 默认设为 MaxInt，
 	// 用 MaxInt32 表示「无截止时间」，语义与不设置一致，同时避免 nil 判断扩散。
 	if obj.Spec.ProgressDeadlineSeconds == nil {
 		obj.Spec.ProgressDeadlineSeconds = new(int32)
 		*obj.Spec.ProgressDeadlineSeconds = math.MaxInt32
 	}
-	// Set extensionsv1beta1.DeploymentSpec.RevisionHistoryLimit to MaxInt32,
-	// which has the same meaning as unset.
-	// 同理，MaxInt32 保留所有历史版本，等价于不限制。
+	// 将 extensionsv1beta1.DeploymentSpec.RevisionHistoryLimit 默认设为 MaxInt32，
+	// 语义与不设置相同，保留所有历史版本，等价于不限制。
 	if obj.Spec.RevisionHistoryLimit == nil {
 		obj.Spec.RevisionHistoryLimit = new(int32)
 		*obj.Spec.RevisionHistoryLimit = math.MaxInt32
@@ -178,8 +176,8 @@ func SetDefaults_NetworkPolicy(obj *extensionsv1beta1.NetworkPolicy) {
 	}
 
 	if len(obj.Spec.PolicyTypes) == 0 {
-		// Any policy that does not specify policyTypes implies at least "Ingress".
-		// 旧版本 API 没有 policyTypes 字段，按 Ingress 隔离推断，保持向后兼容。
+		// 未指定 policyTypes 的策略至少隐含 "Ingress"，
+		// 旧版本 API 没有该字段，按 Ingress 隔离推断，保持向后兼容。
 		obj.Spec.PolicyTypes = []extensionsv1beta1.PolicyType{extensionsv1beta1.PolicyTypeIngress}
 		// 存在 Egress 规则时也需要启用 Egress 隔离，否则这些规则会被忽略。
 		if len(obj.Spec.Egress) != 0 {

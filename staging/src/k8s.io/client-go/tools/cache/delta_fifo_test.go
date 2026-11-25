@@ -84,14 +84,14 @@ func (f *DeltaFIFO) getByKey(key string) (item interface{}, exists bool, err err
 	return d, exists, nil
 }
 
-// helper function to reduce stuttering
+// 辅助函数，用于减少命名上的重复（stuttering）。
 // testPop 取出下一个条目并返回其最新 delta 的对象；FIFO 为空时会阻塞，
 // 因此只用于确定有数据的场景。
 func testPop(f *DeltaFIFO) testFifoObject {
 	return Pop(f).(Deltas).Newest().Object.(testFifoObject)
 }
 
-// testPopIfAvailable returns `{}, false` if Pop returns a nil object
+// testPopIfAvailable 在 Pop 返回 nil 对象时返回 `{}, false`。
 // 用于后台消费协程：Close 后 Pop 返回 nil，它便自然退出。
 func testPopIfAvailable(f *DeltaFIFO) (testFifoObject, bool) {
 	obj := Pop(f)
@@ -807,8 +807,8 @@ func TestDeltaFIFO_UpdateResyncRace(t *testing.T) {
 	}
 }
 
-// pop2 captures both parameters, unlike Pop().
-// 同时拿到对象和 isInInitialList 标志，用于验证初次同步状态。
+// pop2 与 Pop() 不同，同时捕获两个参数：
+// 拿到对象和 isInInitialList 标志，用于验证初次同步状态。
 func pop2[T any](queue Queue) (T, bool) {
 	var result interface{}
 	var isList bool

@@ -30,9 +30,9 @@ import (
 // Or, for a more detailed implementation use https://github.com/martini-contrib/cors
 // or implement CORS at your proxy layer.
 
-// WithCORS is a simple CORS implementation that wraps an http Handler.
-// Pass nil for allowedMethods and allowedHeaders to use the defaults. If allowedOriginPatterns
-// is empty or nil, no CORS support is installed.
+// WithCORS 是一个包装 http Handler 的简单 CORS 实现。
+// allowedMethods 与 allowedHeaders 传 nil 时使用默认值；allowedOriginPatterns
+// 为空或 nil 时不安装 CORS 支持。
 // 安全边界：只有 Origin 命中白名单正则时才回写 CORS 头；未命中时仍转发请求，
 // 但浏览器会因缺少允许头而拦截响应。
 func WithCORS(handler http.Handler, allowedOriginPatterns []string, allowedMethods []string, allowedHeaders []string, exposedHeaders []string, allowCredentials string) http.Handler {
@@ -42,7 +42,7 @@ func WithCORS(handler http.Handler, allowedOriginPatterns []string, allowedMetho
 	}
 	allowedOriginPatternsREs := allowedOriginRegexps(allowedOriginPatterns)
 
-	// Set defaults for methods and headers if nothing was passed
+	// 未传入 methods 或 headers 时设置默认值；
 	// 预先把列表拼成响应头字符串，避免每个请求重复拼接。
 	if allowedMethods == nil {
 		allowedMethods = []string{"POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH"}
@@ -78,7 +78,6 @@ func WithCORS(handler http.Handler, allowedOriginPatterns []string, allowedMetho
 		w.Header().Set("Access-Control-Expose-Headers", exposeHeadersResponseHeader)
 		w.Header().Set("Access-Control-Allow-Credentials", allowCredentials)
 
-		// Stop here if its a preflight OPTIONS request
 		// 预检请求不进入业务 handler，直接 204 返回。
 		if req.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusNoContent)

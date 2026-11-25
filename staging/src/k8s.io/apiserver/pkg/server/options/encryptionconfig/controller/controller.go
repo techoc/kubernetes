@@ -35,17 +35,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// workqueueKey is the dummy key used to process change in encryption config file.
+// workqueueKey 是处理加密配置文件变更时使用的固定（dummy）队列 key；
 // 队列只需要“有一个待处理信号”，因此固定使用同一个 key。
 const workqueueKey = "key"
 
-// EncryptionConfigFileChangePollDuration is exposed so that integration tests can crank up the reload speed.
+// EncryptionConfigFileChangePollDuration 对外暴露，便于集成测试加快重载节奏。
 //
 // 采用轮询而非 fsnotify：配置文件常通过 ConfigMap 挂载，其更新是目录
 // 级的原子替换，inotify 行为在不同文件系统上不可靠。
 var EncryptionConfigFileChangePollDuration = time.Minute
 
-// DynamicEncryptionConfigContent which can dynamically handle changes in encryption config file.
+// DynamicEncryptionConfigContent 可动态响应加密配置文件的变更。
 //
 // 字段 getEncryptionConfigHash / loadEncryptionConfig 以函数形式保存，
 // 便于测试替换为受控实现。
@@ -100,7 +100,7 @@ func NewDynamicEncryptionConfiguration(
 	}
 }
 
-// Run starts the controller and blocks until ctx is canceled.
+// Run 启动控制器并阻塞直到 ctx 被取消。
 //
 // 两个 goroutine：一个在 ctx 取消时关闭队列，另一个消费队列；主 goroutine
 // 负责按间隔投递触发信号，并在退出前等待二者结束。
@@ -184,7 +184,7 @@ func (d *DynamicEncryptionConfigContent) processWorkItem(serverCtx context.Conte
 		// TODO can work queue metrics help here?
 
 		if !updatedEffectiveConfig {
-			// avoid leaking if we're not using the newly constructed transformers (due to an error or them not being changed)
+			// 若新构造的 transformers 未被采用（因出错或配置未变化），必须关闭以避免泄漏：
 			// 新 transformers 可能已启动 KMS 连接，未启用时必须关闭。
 			closeTransformers()
 		}
@@ -213,7 +213,7 @@ func (d *DynamicEncryptionConfigContent) processWorkItem(serverCtx context.Conte
 		err = fmt.Errorf("unexpected number of healthz checks: %d. Should have only one", len(encryptionConfiguration.HealthChecks))
 		return
 	}
-	// get healthz checks for all new KMS plugins.
+	// 获取全部新 KMS 插件的 healthz 检查。
 	// 先健康检查再切换：若新配置的 KMS 不可用，立即切换会让后续写入
 	// 失败甚至不可用，因此失败时保持旧配置继续服务。
 	if err = d.validateNewTransformersHealth(ctx, encryptionConfiguration.HealthChecks[0], encryptionConfiguration.KMSCloseGracePeriod); err != nil {
@@ -236,7 +236,7 @@ func (d *DynamicEncryptionConfigContent) processWorkItem(serverCtx context.Conte
 	updatedEffectiveConfig = true
 }
 
-// loadEncryptionConfig processes the next set of content from the file.
+// processEncryptionConfig 处理文件中的下一份加密配置内容。
 //
 // 两次哈希比较：加载前避免无谓解析，加载后再比一次以规避 TOCTOU
 // （文件在读取过程中又被替换）。
@@ -288,8 +288,7 @@ func (d *DynamicEncryptionConfigContent) validateNewTransformersHealth(
 		kmsPluginCloseGracePeriod = minKMSPluginCloseGracePeriod
 	}
 
-	// really make sure that the immediate check does not hang
-	// 外层再套一层超时，防止单次 Check 卡住导致整个 reload 永久阻塞。
+	// 务必确保立即执行的 Check 不会挂住：外层再套一层超时，防止单次 Check 卡住导致整个 reload 永久阻塞。
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, kmsPluginCloseGracePeriod)
 	defer cancel()

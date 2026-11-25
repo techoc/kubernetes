@@ -21,24 +21,17 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
-// Lister helps list resources.
-//
 // Lister 是动态客户端缓存的只读视图：从共享索引器读取 unstructured 对象，
 // 不发起任何服务端请求。对象以指针形式返回，调用方应视其为只读。
 type Lister interface {
-	// List lists all resources in the indexer.
 	// List 返回索引器中所有匹配 selector 的资源；selector 为 nil 表示不筛选。
 	List(selector labels.Selector) (ret []*unstructured.Unstructured, err error)
-	// Get retrieves a resource from the indexer with the given name
 	// Get 按名称从索引器读取资源；若不存在返回错误。
 	Get(name string) (*unstructured.Unstructured, error)
-	// Namespace returns an object that can list and get resources in a given namespace.
 	// Namespace 返回绑定到指定命名空间的 lister 视图。
 	Namespace(namespace string) NamespaceLister
 }
 
-// NamespaceLister helps list and get resources.
-//
 // NamespaceLister 是对单个命名空间进行列举与获取的只读接口。
 type NamespaceLister interface {
 	// List lists all resources in the indexer for a given namespace.

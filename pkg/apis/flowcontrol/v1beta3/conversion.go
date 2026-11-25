@@ -22,8 +22,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/flowcontrol"
 )
 
-// Convert_v1beta3_PriorityLevelConfiguration_To_flowcontrol_PriorityLevelConfiguration
-// 把 v1beta3 对象转换为内部类型，并处理往返注解：
+// Convert_v1beta3_PriorityLevelConfiguration_To_flowcontrol_PriorityLevelConfiguration 把 v1beta3 对象转换为内部类型，并处理往返注解：
 // v1beta3 -> internal 转换时需要移除 NominalConcurrencyShares 字段的往返注解，
 // 同时不能修改源（v1beta3）对象的 annotations。
 func Convert_v1beta3_PriorityLevelConfiguration_To_flowcontrol_PriorityLevelConfiguration(in *v1beta3.PriorityLevelConfiguration, out *flowcontrol.PriorityLevelConfiguration, s conversion.Scope) error {
@@ -41,8 +40,7 @@ func Convert_v1beta3_PriorityLevelConfiguration_To_flowcontrol_PriorityLevelConf
 	return nil
 }
 
-// Convert_flowcontrol_PriorityLevelConfiguration_To_v1beta3_PriorityLevelConfiguration
-// 把内部类型转换为 v1beta3 对象，并处理往返注解：
+// Convert_flowcontrol_PriorityLevelConfiguration_To_v1beta3_PriorityLevelConfiguration 把内部类型转换为 v1beta3 对象，并处理往返注解：
 // internal -> v1beta3 转换时，若 NominalConcurrencyShares 为 0 则添加注解以保留零值语义，
 // 同时不能修改源（内部类型）对象的 annotations。
 func Convert_flowcontrol_PriorityLevelConfiguration_To_v1beta3_PriorityLevelConfiguration(in *flowcontrol.PriorityLevelConfiguration, out *v1beta3.PriorityLevelConfiguration, s conversion.Scope) error {

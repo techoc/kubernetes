@@ -30,18 +30,15 @@ import (
 // RequestAuditConfig 是某个请求最终生效的审计配置。它是一次策略评估的
 // 结果快照，调用方应在请求生命周期内复用它，避免重复评估。
 type RequestAuditConfig struct {
-	// Level at which the request is being audited at
 	// 请求使用的审计级别（None/Metadata/Request/RequestResponse）。
 	Level audit.Level
 
-	// OmitStages is the stages that need to be omitted from being audited.
 	// 需要从审计中省略的阶段，例如 RequestReceived；用于降低敏感或
 	// 高噪声阶段的记录量。
 	OmitStages []audit.Stage
 
-	// OmitManagedFields indicates whether to omit the managed fields of the request
-	// and response bodies from being written to the API audit log.
-	// 是否剔除 managedFields。它们体积大且由服务端维护，通常对审计价值低。
+	// 是否把请求与响应体中的 managed fields 从 API 审计日志中剔除。
+	// 它们体积大且由服务端维护，通常对审计价值低。
 	OmitManagedFields bool
 }
 

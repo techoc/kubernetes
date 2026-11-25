@@ -68,7 +68,7 @@ func New() *Metrics {
 	}
 }
 
-// Register registers apiservice availability metrics.
+// Register 注册 APIService 可用性指标。
 // 两类指标走不同注册入口：普通计数器走 registrationFunc，
 // 而需要自定义 Describe/Collect 的 gauge 走 StableCollector 入口。
 func (m *Metrics) Register(
@@ -102,7 +102,7 @@ type availabilityCollector struct {
 	availabilities map[string]bool
 }
 
-// SetUnavailableGauge set the metrics so that it reflect the current state base on availability of the given service
+// SetUnavailableGauge 根据给定服务的可用性设置指标，使其反映当前状态。
 // gauge 表示“当前状态”，所以每次收到 APIService 都无条件覆盖旧值，
 // 不存在累加语义。
 func (m *Metrics) SetUnavailableGauge(newAPIService *apiregistrationv1.APIService) {
@@ -114,7 +114,7 @@ func (m *Metrics) SetUnavailableGauge(newAPIService *apiregistrationv1.APIServic
 	m.SetAPIServiceUnavailable(newAPIService.Name)
 }
 
-// SetUnavailableCounter increases the metrics only if the given service is unavailable and its APIServiceCondition has changed
+// SetUnavailableCounter 仅在给定服务不可用且其 APIServiceCondition 发生变化时才增加指标计数。
 // 计数器只在“从可用变为不可用”的瞬间自增，避免同一段不可用时间内重复计数；
 // 因此必须同时拿到新旧对象来判断状态是否真的翻转。
 func (m *Metrics) SetUnavailableCounter(originalAPIService, newAPIService *apiregistrationv1.APIService) {
@@ -132,8 +132,8 @@ func (m *Metrics) SetUnavailableCounter(originalAPIService, newAPIService *apire
 	}
 }
 
-// Check if apiServiceStatusCollector implements necessary interface.
-// 编译期断言，防止接口签名变化后 collector 仍被注册却不被调用。
+// 编译期断言，检查 apiServiceStatusCollector 实现了必要接口，
+// 防止接口签名变化后 collector 仍被注册却不被调用。
 var _ metrics.StableCollector = &availabilityCollector{}
 
 func newAvailabilityCollector() *availabilityCollector {
@@ -187,7 +187,7 @@ func (c *availabilityCollector) setAPIServiceAvailability(apiServiceKey string, 
 	c.availabilities[apiServiceKey] = availability
 }
 
-// ForgetAPIService removes the availability gauge of the given apiservice.
+// ForgetAPIService 删除给定 APIService 的可用性 gauge。
 // APIService 删除后必须清理，否则 gauge 会永远停留在最后一次看到的状态，
 // 让监控看到已不存在的对象。
 func (c *availabilityCollector) ForgetAPIService(apiServiceKey string) {

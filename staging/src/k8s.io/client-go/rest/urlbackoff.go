@@ -27,12 +27,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Set of resp. Codes that we backoff for.
-// In general these should be errors that indicate a server is overloaded.
-// These shouldn't be configured by any user, we set them based on conventions
-// described in
-//
-// 中文：429 表示服务端限流；>= 500 且不超过 maxResponseCode 的响应也视为过载。
+// 需要退避的响应码集合，通常表示服务端过载；不由用户配置，取值基于约定：
+// 429 表示服务端限流；>= 500 且不超过 maxResponseCode 的响应也视为过载。
 var serverIsOverloadedSet = sets.NewInt(429)
 var maxResponseCode = 499
 
@@ -60,8 +56,8 @@ var _ BackoffManagerWithContext = &URLBackoff{}
 // URLBackoff struct implements the semantics on top of Backoff which
 // we need for URL specific exponential backoff.
 type URLBackoff struct {
-	// Uses backoff as underlying implementation.
-	// 以 host 为 key 记录失败次数，因此同一 API server 的不同路径共享退避状态。
+	// 底层使用 Backoff 实现；以 host 为 key 记录失败次数，
+	// 因此同一 API server 的不同路径共享退避状态。
 	Backoff *flowcontrol.Backoff
 }
 
@@ -142,7 +138,7 @@ func (b *URLBackoff) UpdateBackoffWithContext(ctx context.Context, actualURL *ur
 		klog.FromContext(ctx).V(4).Info("Client is returning errors", "code", responseCode, "err", err)
 	}
 
-	//If we got this far, there is no backoff required for this URL anymore.
+	// 走到这里说明该 URL 不再需要退避：
 	// 成功或仅客户端错误时清除该 host 的历史，避免过期的失败记录拖慢后续请求。
 	b.Backoff.Reset(b.baseUrlKey(actualURL))
 }
@@ -177,7 +173,7 @@ func (b *URLBackoff) SleepWithContext(ctx context.Context, d time.Duration) {
 	}
 }
 
-// backoffManagerNopContext wraps a BackoffManager and adds the *WithContext methods.
+// backoffManagerNopContext 包装 BackoffManager 并补上 *WithContext 方法。
 // 兼容适配器：让仅实现旧接口的 BackoffManager 也能满足新接口要求。
 type backoffManagerNopContext struct {
 	BackoffManager

@@ -38,7 +38,7 @@ import (
 // alphaPattern 匹配形如 v1alpha1 的版本名，用于区分 alpha API。
 var alphaPattern = regexp.MustCompile(`^v\d+alpha\d+$`)
 
-// resourceExpirationEvaluator holds info for deciding if a particular rest.Storage needs to excluded from the API
+// resourceExpirationEvaluator 持有判断某个 rest.Storage 是否需要从 API 中排除所需的信息；
 // 判断依据来自生成代码中的 APILifecycleRemoved/APILifecycleIntroduced，
 // 以及若干用于发布窗口内“宽限”的环境变量。
 type resourceExpirationEvaluator struct {
@@ -132,7 +132,7 @@ func NewResourceExpirationEvaluatorFromOptions(opts ResourceExpirationEvaluatorO
 	return ret, nil
 }
 
-// isNotRemoved checks if a resource is removed due to the APILifecycleRemoved information.
+// isNotRemoved 根据 APILifecycleRemoved 信息检查资源是否已被移除；
 // 需要先转换到目标版本再断言 removedInterface，因为删除注解按外部版本生成。
 func (e *resourceExpirationEvaluator) isNotRemoved(gv schema.GroupVersion, versioner runtime.ObjectVersioner, resourceServingInfo rest.Storage) bool {
 	internalPtr := resourceServingInfo.New()
@@ -167,9 +167,9 @@ func (e *resourceExpirationEvaluator) ShouldServeForVersion(majorRemoved, minorR
 	if removedVer.LessThan(e.currentVersion) {
 		return false
 	}
-	// at this point major and minor are equal, so this API should be removed when the current release GAs.
-	// If this is an alpha tag, don't remove by default, but allow the option.
-	// If the cluster-admin has requested serving one more release, allow it.
+	// 走到这里 major 与 minor 相同，说明该 API 应在当前发布 GA 时移除。
+	// 若是 alpha 标签，默认不移除，但提供选项强制移除；
+	// 若集群管理员要求再服务一个发布周期，则允许继续服务。
 	// 恰好处于移除版本时，默认只在 GA 后移除；alpha 阶段留出清理测试的时间。
 	if e.isAlpha && !e.isAlphaZero && e.strictRemovedHandlingInAlpha { // don't serve in alpha.1+ if we want strict handling
 		return false

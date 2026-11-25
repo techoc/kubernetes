@@ -58,17 +58,16 @@ const (
 )
 
 var (
-	// See https://golang.org/pkg/crypto/aes/#NewCipher for details on supported key sizes for AES.
+	// AES 支持的密钥长度详见 https://golang.org/pkg/crypto/aes/#NewCipher；
 	// 16/24/32 字节分别对应 AES-128/192/256，禁止其他长度是为了避免
 	// 弱密钥被误用。
 	aesKeySizes = []int{16, 24, 32}
 
-	// See https://godoc.org/golang.org/x/crypto/nacl/secretbox#Open for details on the supported key sizes for Secretbox.
-	// Secretbox 只支持 256 位密钥。
+	// Secretbox 支持的密钥长度详见 https://godoc.org/golang.org/x/crypto/nacl/secretbox#Open；只支持 256 位密钥。
 	secretBoxKeySizes = []int{32}
 )
 
-// ValidateEncryptionConfiguration validates a v1.EncryptionConfiguration.
+// ValidateEncryptionConfiguration 校验一个 v1.EncryptionConfiguration。
 // reload 表示配置是否来自热重载路径：非 v1 的 KMS 名称始终要求全局唯一，
 // 而 v1 名称只在热重载时要求唯一，以兼容既有静态配置。
 func ValidateEncryptionConfiguration(c *apiserver.EncryptionConfiguration, reload bool) field.ErrorList {
@@ -85,7 +84,7 @@ func ValidateEncryptionConfiguration(c *apiserver.EncryptionConfiguration, reloa
 		return allErrs
 	}
 
-	// kmsProviderNames is used to track config names to ensure they are unique.
+	// kmsProviderNames 用于跟踪各 provider 配置的名称并保证其唯一；
 	// 跨资源项共享同一集合，因为 KMS provider 名是整个配置内的逻辑标识。
 	kmsProviderNames := sets.New[string]()
 	for i, conf := range c.Resources {
