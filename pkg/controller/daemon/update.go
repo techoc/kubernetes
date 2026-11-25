@@ -496,7 +496,7 @@ func Match(ds *apps.DaemonSet, history *apps.ControllerRevision) (bool, error) {
 	return bytes.Equal(patch, history.Data.Raw), nil
 }
 
-// getPatch 返回一个可用于将 DaemonSet 恢复到旧版本的 strategic merge patch。
+// getPatch 返回策略性合并补丁，用于将 DaemonSet 恢复到旧版本。
 // 错误为 nil 时 patch 有效。当前只保存 Pod 模板；今后可以增减保存的字段，
 // 同时仍兼容此前记录的 patch。
 func getPatch(ds *apps.DaemonSet) ([]byte, error) {

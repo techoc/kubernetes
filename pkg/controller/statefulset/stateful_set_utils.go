@@ -128,7 +128,6 @@ func getPodName(set *apps.StatefulSet, ordinal int) string {
 // claim 必须是 set 的 VolumeClaimTemplates 中声明的模板。
 func getPersistentVolumeClaimName(set *apps.StatefulSet, claim *v1.PersistentVolumeClaim, ordinal int) string {
 	// 名称格式被卷可用区打散启发式（ChooseZoneForVolume）依赖，不要随意更改。
-	// NOTE: This name format is used by the heuristics for zone spreading in ChooseZoneForVolume
 	return fmt.Sprintf("%s-%s-%d", claim.Name, set.Name, ordinal)
 }
 
@@ -430,7 +429,7 @@ func updateStorage(set *apps.StatefulSet, pod *v1.Pod) {
 			VolumeSource: v1.VolumeSource{
 				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
 					ClaimName: claim.Name,
-					// TODO: Use source definition to set this value when we have one.
+					// TODO: 有来源定义时，用该定义设置此值。
 					ReadOnly: false,
 				},
 			},

@@ -99,7 +99,7 @@ type Controller struct {
 	// 作为结构体成员是为了便于测试时注入。
 	jobStoreSynced cache.InformerSynced
 
-	// 一个 TTLCache，记录每个 rc 预期会观察到的 Pod 创建/删除事件。
+	// 一个 TTLCache，记录每个控制器预期会观察到的 Pod 创建/删除事件。
 	expectations controller.ControllerExpectationsInterface
 
 	// finalizerExpectations 跟踪那些控制器预期会观察到跟踪 finalizer 被移除的 Pod UID。
@@ -688,12 +688,10 @@ func (jm *Controller) enqueueSyncJobInternal(logger klog.Logger, obj interface{}
 		return
 	}
 
-	// TODO: Handle overlapping controllers better. Either disallow them at admission time or
-	// deterministically avoid syncing controllers that fight over pods. Currently, we only
-	// ensure that the same controller is synced for a given pod. When we periodically relist
-	// all controllers there will still be some replica instability. One way to handle this is
-	// by querying the store for all controllers that this rc overlaps, as well as all
-	// controllers that overlap this rc, and sorting them.
+	// TODO: 更好地处理控制器重叠：可以在准入阶段禁止重叠，或确定性地避免同步
+	// 争夺同一组 Pod 的控制器。目前只保证同一个 Pod 不会同步到不同的控制器。
+	// 周期性重新列出所有控制器时仍可能出现副本不稳定。一种方法是查询存储中
+	// 所有与本控制器发生重叠的控制器，再对它们排序。
 	logger.V(2).Info("enqueueing job", "key", key, "delay", delay)
 	jm.queue.AddAfter(key, delay)
 }

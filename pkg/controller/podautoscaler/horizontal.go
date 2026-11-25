@@ -354,7 +354,7 @@ func (a *HorizontalController) deleteHPA(obj interface{}) {
 		)
 	}
 
-	// TODO: could we leak if we fail to get the key?
+	// TODO: 如果获取键失败，会不会泄漏？
 	a.queue.Forget(key)
 
 	// 删除 HPA 及其关联的 selector 记录。

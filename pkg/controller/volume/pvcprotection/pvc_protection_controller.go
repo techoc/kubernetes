@@ -42,8 +42,7 @@ import (
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
-// Controller 负责在 PVC 不再被任何 Pod 使用时移除其 PVCProtectionFinalizer。
-
+// LazyLivePodList 延迟查询并缓存实时 Pod 列表，使同一命名空间的多次 PVC 检查复用结果。
 type LazyLivePodList struct {
 	// cache 保存首次实时列表查询得到的 Pod 列表，nil 表示尚未查询过。
 	cache []v1.Pod

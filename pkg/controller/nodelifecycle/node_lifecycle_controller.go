@@ -132,7 +132,7 @@ const (
 const (
 	// 重试节点健康状态更新时的休眠间隔。
 	retrySleepTime = 20 * time.Millisecond
-	// 大多数 Pod 由 monitorNodeHealth 巡检处理；Pod update worker 只处理缓存滞后的 Pod，4 个足够。
+	// 大多数 Pod 由 monitorNodeHealth 巡检；Pod 更新 worker 仅处理缓存滞后的 Pod，4 个足够。
 	podUpdateWorkerSize = 4
 	// nodeUpdateWorkerSize 定义处理节点/Pod 更新的 worker 数量。
 	nodeUpdateWorkerSize = 8
@@ -152,14 +152,14 @@ var labelReconcileInfo = []struct {
 }{
 	{
 		// 以稳定版标签为准调和 beta 版操作系统标签。
-		// TODO(#89477): no earlier than 1.22: drop the beta labels if they differ from the GA labels
+		// TODO(#89477): 不早于 1.22：删除与 GA 标签值不同的 beta 标签。
 		primaryKey:            v1.LabelOSStable,
 		secondaryKey:          kubeletapis.LabelOS,
 		ensureSecondaryExists: true,
 	},
 	{
 		// 以稳定版标签为准调和 beta 版架构标签。
-		// TODO(#89477): no earlier than 1.22: drop the beta labels if they differ from the GA labels
+		// TODO(#89477): 不早于 1.22：删除与 GA 标签值不同的 beta 标签。
 		primaryKey:            v1.LabelArchStable,
 		secondaryKey:          kubeletapis.LabelArch,
 		ensureSecondaryExists: true,
@@ -264,7 +264,7 @@ type Controller struct {
 	recorder    record.EventRecorder
 
 	// 控制器检查 kubelet 健康信号的周期，应小于 nodeMonitorGracePeriod。
-	// TODO: Change node health monitor to watch based.
+	// TODO: 将节点健康监控改为基于 watch。
 	nodeMonitorPeriod time.Duration
 
 	// 节点刚创建时（例如集群启动或扩容）给予更长的宽限期，避免因启动慢被误判为失联。
@@ -508,13 +508,12 @@ func (nc *Controller) doNodeProcessingPassWorker(ctx context.Context) {
 		nodeName := obj
 		if err := nc.doNoScheduleTaintingPass(ctx, nodeName); err != nil {
 			logger.Error(err, "Failed to taint NoSchedule on node, requeue it", "node", klog.KRef("", nodeName))
-			// TODO(k82cn): Add nodeName back to the queue
+			// TODO(k82cn): 将 nodeName 重新加入队列。
 		}
-		// TODO: re-evaluate whether there are any labels that need to be
-		// reconcile in 1.19. Remove this function if it's no longer necessary.
+		// TODO: 在 1.19 中重新评估是否需要调和其他标签；若已无必要，删除此函数。
 		if err := nc.reconcileNodeLabels(ctx, nodeName); err != nil {
 			logger.Error(err, "Failed to reconcile labels for node, requeue it", "node", klog.KRef("", nodeName))
-			// TODO(yujuhong): Add nodeName back to the queue
+			// TODO(yujuhong): 将 nodeName 重新加入队列。
 		}
 		nc.nodeUpdateQueue.Done(nodeName)
 	}
@@ -648,7 +647,7 @@ type shortCircuitError struct {
 	error
 }
 
-// Unwrap 暴露底层错误，便于 errors.Is/As 判断。
+// Unwrap 返回底层错误。
 func (n shortCircuitError) Unwrap() error {
 	return n.error
 }
@@ -870,7 +869,7 @@ func (nc *Controller) tryUpdateNodeHealth(ctx context.Context, node *v1.Node) (t
 	// - 两者都有、探测时间不同但 Ready 状态相同：仅更新 probeTimestamp；
 	// - 两者都有、探测时间与 Ready 状态都不同：状态发生转换，同时更新两个时间戳。
 	//   Ready 条件自上次观测以来发生了变化。
-	// TODO: things to consider:
+	// TODO: 需要考虑以下情况：
 	//   - 若 LastProbeTime 出现时间倒流，很可能是异常数据，目前予以忽略；
 	//   - 目前唯一由控制器外部触发的正确 Ready 状态转换是 kubelet 将节点标记为 Ready，此处未做检查，
 	//     虽然可以这样处理，但看起来并无必要。
@@ -897,7 +896,7 @@ func (nc *Controller) tryUpdateNodeHealth(ctx context.Context, node *v1.Node) (t
 		}
 	} else if savedCondition != nil && currentReadyCondition == nil {
 		logger.Error(nil, "ReadyCondition was removed from Status of Node", "node", klog.KObj(node))
-		// TODO: figure out what to do in this case. For now we do the same thing as above.
+		// TODO: 确定此情况应如何处理；目前沿用上面的做法。
 		nodeHealth = &nodeHealthData{
 			status:                   &node.Status,
 			probeTimestamp:           nc.now(),
@@ -944,7 +943,7 @@ func (nc *Controller) tryUpdateNodeHealth(ctx context.Context, node *v1.Node) (t
 					nc.consistencyStore.WroteAt(
 						// 控制器级别的一致性检查：lease 缓存过期时需等其追上后再处理任何节点。
 						types.NamespacedName{},
-						"", // No specific UID for generic name
+						"", // 通用名称没有对应的特定 UID。
 						leaseResource,
 						liveLease.ResourceVersion,
 					)

@@ -202,7 +202,7 @@ func (c *Controller) removeFinalizer(ctx context.Context, pv *v1.PersistentVolum
 func (c *Controller) isBeingUsed(pv *v1.PersistentVolume) bool {
 	// 只有 Bound 相位代表仍在使用中
 	if pv.Status.Phase == v1.VolumeBound {
-		// the PV is being used now
+		// 该 PV 当前仍被使用。
 		return true
 	}
 

@@ -244,8 +244,8 @@ func podMapWithUIDs(uids []string) map[types.UID][]*v1.Pod {
 	podMap := make(map[types.UID][]*v1.Pod)
 	for _, uid := range uids {
 		podMap[types.UID(uid)] = []*v1.Pod{
-			{ /* supposedly a pod */ },
-			{ /* supposedly another pod pod */ },
+			{ /* 一个占位 Pod */ },
+			{ /* 另一个占位 Pod */ },
 		}
 	}
 	return podMap

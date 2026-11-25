@@ -48,7 +48,7 @@ func Register() {
 // 可选地指定直方图的桶边界；不指定时使用默认边界。
 func New(buckets ...float64) Metrics {
 	if len(buckets) == 0 {
-		buckets = []float64{0.005, 0.025, 0.1, 0.5, 1, 2.5, 10, 30, 60, 120, 180, 240} // 5ms to 4m
+		buckets = []float64{0.005, 0.025, 0.1, 0.5, 1, 2.5, 10, 30, 60, 120, 180, 240} // 5ms 到 4m
 	}
 	m := Metrics{
 		KubeRegistry: metrics.NewKubeRegistry(),
@@ -65,7 +65,7 @@ func New(buckets ...float64) Metrics {
 				Subsystem:      controllerSubsystem,
 				Name:           "pod_deletion_duration_seconds",
 				Help:           "Latency, in seconds, between the time when a device taint effect has been activated and a Pod's deletion via DeviceTaintEvictionController.",
-				Buckets:        []float64{0.005, 0.025, 0.1, 0.5, 1, 2.5, 10, 30, 60, 120, 180, 240}, // 5ms to 4m,
+				Buckets:        []float64{0.005, 0.025, 0.1, 0.5, 1, 2.5, 10, 30, 60, 120, 180, 240}, // 5ms 到 4m，
 				StabilityLevel: metrics.ALPHA,
 			},
 		),

@@ -89,7 +89,7 @@ type jobControlInterface interface {
 	// CreateJob 根据给定的 spec 创建 Job。
 	CreateJob(namespace string, job *batchv1.Job) (*batchv1.Job, error)
 	// DeleteJob 删除指定名称的 Job。
-	// TODO: delete by UID?
+	// TODO: 改为按 UID 删除？
 	DeleteJob(namespace string, name string) error
 }
 

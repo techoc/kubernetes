@@ -402,7 +402,7 @@ func (ec *Controller) enqueueResourceClaimTemplate(logger klog.Logger, obj any) 
 	for _, object := range objects {
 		pod, ok1 := object.(*v1.Pod)
 		if !ok1 {
-			// Not a pod?!
+			// 不是 Pod？！
 			runtime.HandleErrorWithLogger(logger, nil, "unexpected type in Pod cache", "type", fmt.Sprintf("%T", object))
 			return
 		}
@@ -427,7 +427,7 @@ func (ec *Controller) enqueueResourceClaimTemplate(logger klog.Logger, obj any) 
 		for _, object := range objects {
 			podGroup, ok := object.(*schedulingapi.PodGroup)
 			if !ok {
-				// Not a PodGroup?!
+				// 不是 PodGroup？！
 				runtime.HandleErrorWithLogger(logger, nil, "unexpected type in PodGroup cache", "type", fmt.Sprintf("%T", object))
 				return
 			}
@@ -451,7 +451,7 @@ func (ec *Controller) enqueuePod(logger klog.Logger, obj any, deleted bool) {
 	}
 	pod, ok := obj.(*v1.Pod)
 	if !ok {
-		// Not a pod?!
+		// 不是 Pod？！
 		logger.Error(nil, "EnqueuePod called for unexpected object", "type", fmt.Sprintf("%T", obj))
 		return
 	}
@@ -592,7 +592,7 @@ func (ec *Controller) enqueuePodGroup(logger klog.Logger, obj any, deleted bool)
 	}
 	podGroup, ok := obj.(*schedulingapi.PodGroup)
 	if !ok {
-		// Not a PodGroup?!
+		// 不是 PodGroup？！
 		logger.Error(nil, "enqueuePodGroup called for unexpected object", "type", fmt.Sprintf("%T", obj))
 		return
 	}
@@ -656,7 +656,7 @@ func (ec *Controller) enqueuePodGroup(logger klog.Logger, obj any, deleted bool)
 	for _, object := range objects {
 		pod, ok := object.(*v1.Pod)
 		if !ok {
-			// Not a pod?!
+			// 不是 Pod？！
 			runtime.HandleErrorWithLogger(logger, nil, "unexpected object in Pod indexer", "type", fmt.Sprintf("%T", object))
 			return
 		}

@@ -274,11 +274,8 @@ func getCSRVerificationFuncForSignerName(signerName string) (isRequestForSignerF
 	case capiv1beta1.LegacyUnknownSignerName:
 		return isLegacyUnknown, nil
 	default:
-		// TODO type this error so that a different reporting loop (one without a signing cert), can mark
-		//  CSRs with unknown kube signers as terminal if we wish.  This largely depends on how tightly we want to control
-		//  our signerNames.
-		// 未知 signer 目前视为普通错误由通用控制器重试；
-		// 若将其定义为终态，需要单独的错误类型与上报循环。
+		// TODO：为未知 kube signer 定义单独的错误类型，使无签名证书的上报循环能将这些 CSR 标记为终态；
+		// 是否这样做取决于对 signerNames 的控制需求。
 		return nil, fmt.Errorf("unrecognized signerName: %q", signerName)
 	}
 }

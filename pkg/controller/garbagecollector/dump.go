@@ -145,7 +145,7 @@ namespace=%v
 func NewDOTVertex(node *node) *dotVertex {
 	gv, err := schema.ParseGroupVersion(node.identity.APIVersion)
 	if err != nil {
-		// this indicates a bad data serialization that should be prevented during storage of the API
+		// 这表明 API 对象存储前本应阻止此类错误序列化。
 		utilruntime.HandleError(err)
 	}
 	return &dotVertex{
@@ -163,7 +163,7 @@ func NewDOTVertex(node *node) *dotVertex {
 func NewMissingdotVertex(ownerRef metav1.OwnerReference) *dotVertex {
 	gv, err := schema.ParseGroupVersion(ownerRef.APIVersion)
 	if err != nil {
-		// this indicates a bad data serialization that should be prevented during storage of the API
+		// 这表明 API 对象存储前本应阻止此类错误序列化。
 		utilruntime.HandleError(err)
 	}
 	return &dotVertex{
@@ -182,7 +182,7 @@ func (m *concurrentUIDToNode) ToDOTNodesAndEdges() ([]*dotVertex, []dotEdge) {
 	return toDOTNodesAndEdges(m.uidToNode)
 }
 
-// dotEdge 表示依赖图中的一条有向边，从被依赖者（F，from）指向所有者（T，to）。
+// dotEdge 表示依赖图中的一条有向边：F 是被依赖者，T 是所有者。
 type dotEdge struct {
 	F types.UID
 	T types.UID

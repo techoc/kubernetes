@@ -205,9 +205,9 @@ func (r *ControllerExpectations) SatisfiedExpectations(logger klog.Logger, contr
 }
 
 // isExpired 判断期望是否已超过超时时限。
-// TODO: Extend ExpirationCache to support explicit expiration.
-// TODO: Make this possible to disable in tests.
-// TODO: Support injection of clock.
+// TODO: 扩展 ExpirationCache 以支持显式过期。
+// TODO: 支持在测试中禁用该行为。
+// TODO: 支持注入时钟。
 func (exp *ControlleeExpectations) isExpired() bool {
 	return clock.RealClock{}.Since(exp.timestamp) > ExpectationsTimeout
 }
@@ -275,7 +275,7 @@ func (e *ControlleeExpectations) Add(add, del int64) {
 
 // Fulfilled 在新增和删除期望均已满足（计数不大于零）时返回 true。
 func (e *ControlleeExpectations) Fulfilled() bool {
-	// TODO: think about why this line being atomic doesn't matter
+	// TODO: 思考为何此处使用原子操作并不影响结果。
 	return atomic.LoadInt64(&e.add) <= 0 && atomic.LoadInt64(&e.del) <= 0
 }
 
@@ -320,11 +320,10 @@ type UIDSet struct {
 // UIDTrackingControllerExpectations 跟踪被删除 Pod 的 UID。
 // 相比普通期望，额外的缓存是为安全处理优雅删除：把设置 DeletionTimestamp 的
 // 更新视作删除，只有记住预期删除的 UID 才能避免重复计数。
-// TODO: Track creates as well (#22599)
+// TODO: 同时跟踪创建事件（#22599）。
 type UIDTrackingControllerExpectations struct {
 	ControllerExpectationsInterface
-	// TODO: There is a much nicer way to do this that involves a single store,
-	// a lock per entry, and a ControlleeExpectationsInterface type.
+	// TODO: 可改用单个 store、每项一把锁和 ControlleeExpectationsInterface 类型，实现会更简洁。
 	uidStoreLock sync.Mutex
 	// 存放与 ControllerExpectationsInterface 所跟踪期望关联的 UID。
 	uidStore cache.Store
@@ -423,7 +422,7 @@ func (r RealRSControl) PatchReplicaSet(ctx context.Context, namespace, name stri
 	return err
 }
 
-// TODO: merge the controller revision interface in controller_history.go with this one
+// TODO: 将 controller_history.go 中的 ControllerRevision 接口与此接口合并。
 // ControllerRevisionControlInterface 抽象 ControllerRevision 的补丁更新和扩缩，
 // 供 daemonset 控制器注入假实现以测试其行为。
 type ControllerRevisionControlInterface interface {
@@ -721,8 +720,8 @@ func (s ByLogging) Less(i, j int) bool {
 	if podutil.IsPodReady(s[i]) != podutil.IsPodReady(s[j]) {
 		return podutil.IsPodReady(s[i])
 	}
-	// TODO: take availability into account when we push minReadySeconds information from deployment into pods,
-	//       see https://github.com/kubernetes/kubernetes/issues/22065
+	// TODO: 将 Deployment 的 minReadySeconds 信息下发到 Pod 时考虑可用性，
+	//       参见 https://github.com/kubernetes/kubernetes/issues/22065。
 	// 4. 就绪时间越长越优先，无就绪时间最末。
 	if podutil.IsPodReady(s[i]) && podutil.IsPodReady(s[j]) {
 		readyTime1 := podReadyTime(s[i])
@@ -765,8 +764,8 @@ func (s ActivePods) Less(i, j int) bool {
 	if podutil.IsPodReady(s[i]) != podutil.IsPodReady(s[j]) {
 		return !podutil.IsPodReady(s[i])
 	}
-	// TODO: take availability into account when we push minReadySeconds information from deployment into pods,
-	//       see https://github.com/kubernetes/kubernetes/issues/22065
+	// TODO: 将 Deployment 的 minReadySeconds 信息下发到 Pod 时考虑可用性，
+	//       参见 https://github.com/kubernetes/kubernetes/issues/22065。
 	// 4. 就绪时间短的优先删除；双方都就绪时，最近才就绪的更小。
 	if podutil.IsPodReady(s[i]) && podutil.IsPodReady(s[j]) {
 		readyTime1 := podReadyTime(s[i])
@@ -854,8 +853,8 @@ func (s ActivePodsWithRanks) Less(i, j int) bool {
 	if s.Rank[i] != s.Rank[j] {
 		return s.Rank[i] > s.Rank[j]
 	}
-	// TODO: take availability into account when we push minReadySeconds information from deployment into pods,
-	//       see https://github.com/kubernetes/kubernetes/issues/22065
+	// TODO: 将 Deployment 的 minReadySeconds 信息下发到 Pod 时考虑可用性，
+	//       参见 https://github.com/kubernetes/kubernetes/issues/22065。
 	// 6. 就绪时间短的优先删除；双方都就绪时，最近才就绪的更小。
 	if podutil.IsPodReady(s.Pods[i]) && podutil.IsPodReady(s.Pods[j]) {
 		readyTime1 := podReadyTime(s.Pods[i])

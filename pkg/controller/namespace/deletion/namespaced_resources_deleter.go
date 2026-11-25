@@ -450,7 +450,7 @@ func (d *namespacedResourcesDeleter) deleteAllContentForGroupVersionResource(
 	logger.V(5).Info("Namespace controller - deleteAllContentForGroupVersionResource - items remaining", "namespace", namespace, "resource", gvr, "items", len(unstructuredList.Items))
 	// 列表为空说明该 GVR 已清理完毕。
 	if len(unstructuredList.Items) == 0 {
-		// we're done
+		// 已全部清理完毕。
 		return gvrDeletionMetadata{finalizerEstimateSeconds: 0, numRemaining: 0}, nil
 	}
 
@@ -600,7 +600,6 @@ func (d *namespacedResourcesDeleter) deleteAllContent(ctx context.Context, ns *v
 	}
 
 	// errs 为空时 NewAggregate 返回 nil。
-	// if len(errs)==0, NewAggregate returns nil.
 	err = utilerrors.NewAggregate(errs)
 	logger.V(4).Info("namespace controller - deleteAllContent", "namespace", namespace, "estimate", estimate, "err", err)
 	return estimate, err
@@ -645,7 +644,6 @@ func (d *namespacedResourcesDeleter) estimateGracefulTerminationForPods(ctx cont
 	for i := range items.Items {
 		pod := items.Items[i]
 		// 已成功或已失败的 Pod 处于终态，不参与优雅终止时间估算。
-		// filter out terminal pods
 		phase := pod.Status.Phase
 		if v1.PodSucceeded == phase || v1.PodFailed == phase {
 			continue

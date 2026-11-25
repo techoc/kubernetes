@@ -25,7 +25,6 @@ var (
 	SchemeBuilder runtime.SchemeBuilder
 	// localSchemeBuilder 在 SchemeBuilder 上扩展外部类型，
 	// 本包还会在此注册默认化与转换的初始化函数。
-	// defaulting and conversion init funcs are registered as well.
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme 是把本 API 组版本注册到 scheme 的全局入口。
 	AddToScheme = localSchemeBuilder.AddToScheme

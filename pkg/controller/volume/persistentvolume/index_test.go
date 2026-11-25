@@ -184,8 +184,6 @@ func TestMatchVolume(t *testing.T) {
 		"successful-match-very-large": {
 			expectedMatch: "local-pd-very-large",
 			// 保持 PVC 容量小于 int64 上限：这样即使 PV 容量溢出，PVC 不会同样溢出而产生误匹配信号。
-			// we keep the pvc size less than int64 so that in case the pv overflows
-			// the pvc does not overflow equally and give us false matching signals.
 			claim: makePVC("1E", func(pvc *v1.PersistentVolumeClaim) {
 				pvc.Spec.AccessModes = []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}
 				pvc.Spec.StorageClassName = &classLarge
@@ -230,8 +228,7 @@ func TestMatchVolume(t *testing.T) {
 func TestMatchingWithBoundVolumes(t *testing.T) {
 	fs := v1.PersistentVolumeFilesystem
 	volumeIndex := newPersistentVolumeOrderedIndex()
-	// 构造两个相似的 PV， pv1 假装已被绑定。
-	// two similar volumes, one is bound
+	// 构造两个相似的 PV，pv1 假装已被绑定。
 	pv1 := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:  "gce-pd-1",
@@ -246,7 +243,6 @@ func TestMatchingWithBoundVolumes(t *testing.T) {
 			},
 			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce, v1.ReadOnlyMany},
 			// 该卷假装已被绑定：设置 ClaimRef。
-			// this one we're pretending is already bound
 			ClaimRef:   &v1.ObjectReference{UID: "abc123"},
 			VolumeMode: &fs,
 		},
@@ -353,7 +349,6 @@ func TestAllPossibleAccessModes(t *testing.T) {
 	}
 
 	// 模拟 PV 中仅存在两种访问模式组合：RWO+ROX 和 RWO+ROW+RWX。
-	// the mock PVs creates contain 2 types of accessmodes:   RWO+ROX and RWO+ROW+RWX
 	// 请求 RWO 时，期望生成三种包含 RWO 的模式组合。
 	possibleModes := index.allPossibleMatchingAccessModes([]v1.PersistentVolumeAccessMode{v1.ReadWriteOnce})
 	if len(possibleModes) != 3 {
@@ -462,7 +457,6 @@ func TestFindingVolumeWithDifferentAccessModes(t *testing.T) {
 	}
 
 	// 请求模式的顺序不应影响匹配结果；包含 RWX 的请求应匹配到 nfs。
-	// order of the requested modes should not matter
 	claim.Spec.AccessModes = []v1.PersistentVolumeAccessMode{v1.ReadWriteMany, v1.ReadWriteOnce, v1.ReadOnlyMany}
 	volume, _ = index.findBestMatchForClaim(claim, false)
 	if volume.Name != nfs.Name {
@@ -470,7 +464,6 @@ func TestFindingVolumeWithDifferentAccessModes(t *testing.T) {
 	}
 
 	// 请求更少的模式仍应匹配到支持该模式的卷。
-	// fewer modes requested should still match
 	claim.Spec.AccessModes = []v1.PersistentVolumeAccessMode{v1.ReadWriteMany}
 	volume, _ = index.findBestMatchForClaim(claim, false)
 	if volume.Name != nfs.Name {
@@ -478,7 +471,6 @@ func TestFindingVolumeWithDifferentAccessModes(t *testing.T) {
 	}
 
 	// 假装精确匹配的 ebs 已被绑定，应回退到下一级模式（gce）。
-	// pretend the exact match is bound.  should get the next level up of modes.
 	ebs.Spec.ClaimRef = &v1.ObjectReference{}
 	claim.Spec.AccessModes = []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}
 	volume, _ = index.findBestMatchForClaim(claim, false)
@@ -487,7 +479,6 @@ func TestFindingVolumeWithDifferentAccessModes(t *testing.T) {
 	}
 
 	// 继续回退：gce 也被绑定后，应匹配到 nfs。
-	// continue up the levels of modes.
 	gce.Spec.ClaimRef = &v1.ObjectReference{}
 	claim.Spec.AccessModes = []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}
 	volume, _ = index.findBestMatchForClaim(claim, false)
@@ -496,7 +487,6 @@ func TestFindingVolumeWithDifferentAccessModes(t *testing.T) {
 	}
 
 	// 部分模式请求：只请求 ROX 时，应匹配到仍可用的 gce。
-	// partial mode request
 	gce.Spec.ClaimRef = nil
 	claim.Spec.AccessModes = []v1.PersistentVolumeAccessMode{v1.ReadOnlyMany}
 	volume, _ = index.findBestMatchForClaim(claim, false)
@@ -507,7 +497,6 @@ func TestFindingVolumeWithDifferentAccessModes(t *testing.T) {
 
 // createNodeAffinity 为给定的 key 和 value 构造一个 VolumeNodeAffinity，
 // 其中包含一个使用 In 操作符的 NodeSelectorRequirement。
-// createVolumeNodeAffinity returns a VolumeNodeAffinity for given key and value.
 func createNodeAffinity(key string, value string) *v1.VolumeNodeAffinity {
 	return &v1.VolumeNodeAffinity{
 		Required: &v1.NodeSelector{
@@ -531,7 +520,6 @@ func createNodeAffinity(key string, value string) *v1.VolumeNodeAffinity {
 func createTestVolumes() []*v1.PersistentVolume {
 	fs := v1.PersistentVolumeFilesystem
 	// 这些卷故意乱序排列，用于测试索引的排序功能。
-	// these volumes are deliberately out-of-order to test indexing and sorting
 	return []*v1.PersistentVolume{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -572,7 +560,6 @@ func createTestVolumes() []*v1.PersistentVolume {
 					v1.ReadOnlyMany,
 				},
 				// 该卷假装已被绑定。
-				// this one we're pretending is already bound
 				ClaimRef:   &v1.ObjectReference{UID: "def456"},
 				VolumeMode: &fs,
 			},
@@ -620,7 +607,6 @@ func createTestVolumes() []*v1.PersistentVolume {
 					v1.ReadOnlyMany,
 				},
 				// 该卷假装已被绑定。
-				// this one we're pretending is already bound
 				ClaimRef:   &v1.ObjectReference{UID: "abc123"},
 				VolumeMode: &fs,
 			},
@@ -1166,8 +1152,6 @@ func TestVolumeModeCheck(t *testing.T) {
 	filesystemMode := v1.PersistentVolumeFilesystem
 
 	// 若 feature gate 启用，VolumeMode 总会被默认值化；若禁用，VolumeMode 会被 API 丢弃并忽略。
-	// If feature gate is enabled, VolumeMode will always be defaulted
-	// If feature gate is disabled, VolumeMode is dropped by API and ignored
 	// 每个场景声明是否期望模式不匹配，以及待检查的 PV 和 PVC。
 	scenarios := map[string]struct {
 		isExpectedMismatch bool
@@ -1225,7 +1209,6 @@ func TestVolumeModeCheck(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			expectedMismatch := volume.CheckVolumeModeMismatches(&scenario.pvc.Spec, &scenario.vol.Spec)
 			// 期望匹配却检测到不匹配（或反之）都属于错误。
-			// expected to match but either got an error or no returned pvmatch
 			if expectedMismatch && !scenario.isExpectedMismatch {
 				t.Errorf("Unexpected failure for scenario, expected not to mismatch on modes but did: %s", name)
 			}
@@ -1243,8 +1226,6 @@ func TestFilteringVolumeModes(t *testing.T) {
 	filesystemMode := v1.PersistentVolumeFilesystem
 
 	// 若 feature gate 启用，VolumeMode 总会被默认值化；若禁用，VolumeMode 会被 API 丢弃并忽略。
-	// If feature gate is enabled, VolumeMode will always be defaulted
-	// If feature gate is disabled, VolumeMode is dropped by API and ignored
 	// 每个场景声明是否期望匹配，以及待匹配的索引和 PVC。
 	scenarios := map[string]struct {
 		isExpectedMatch bool
@@ -1292,7 +1273,6 @@ func TestFilteringVolumeModes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			pvmatch, err := scenario.vol.findBestMatchForClaim(scenario.pvc, false)
 			// 期望匹配却没匹配到（或期望不匹配却匹配到）都应报错。
-			// expected to match but either got an error or no returned pvmatch
 			if pvmatch == nil && scenario.isExpectedMatch {
 				t.Errorf("Unexpected failure for scenario, no matching volume: %s", name)
 			}
@@ -1300,7 +1280,6 @@ func TestFilteringVolumeModes(t *testing.T) {
 				t.Errorf("Unexpected failure for scenario: %s - %+v", name, err)
 			}
 			// 期望不匹配时，若返回了匹配卷或出现错误，也属于异常。
-			// expected to not match but either got an error or a returned pvmatch
 			if pvmatch != nil && !scenario.isExpectedMatch {
 				t.Errorf("Unexpected failure for scenario, expected no matching volume: %s", name)
 			}
@@ -1370,12 +1349,10 @@ func TestStorageObjectInUseProtectionFiltering(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			err := checkVolumeSatisfyClaim(testCase.vol, testCase.pvc)
 			// 期望匹配却返回错误，属于异常。
-			// expected to match but got an error
 			if err != nil && testCase.isExpectedMatch {
 				t.Errorf("%s: expected to match but got an error: %v", name, err)
 			}
 			// 期望不匹配却通过了检查，属于异常。
-			// not expected to match but did
 			if err == nil && !testCase.isExpectedMatch {
 				t.Errorf("%s: not expected to match but did", name)
 			}
@@ -1403,7 +1380,6 @@ func TestStorageObjectInUseProtectionFiltering(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			pvmatch, err := testCase.vol.findBestMatchForClaim(testCase.pvc, false)
 			// 期望匹配却没匹配到（或期望不匹配却匹配到）都应报错。
-			// expected to match but either got an error or no returned pvmatch
 			if pvmatch == nil && testCase.isExpectedMatch {
 				t.Errorf("Unexpected failure for testcase, no matching volume: %s", name)
 			}
@@ -1411,7 +1387,6 @@ func TestStorageObjectInUseProtectionFiltering(t *testing.T) {
 				t.Errorf("Unexpected failure for testcase: %s - %+v", name, err)
 			}
 			// 期望不匹配时，若返回了匹配卷或出现错误，也属于异常。
-			// expected to not match but either got an error or a returned pvmatch
 			if pvmatch != nil && !testCase.isExpectedMatch {
 				t.Errorf("Unexpected failure for testcase, expected no matching volume: %s", name)
 			}
@@ -1422,9 +1397,9 @@ func TestStorageObjectInUseProtectionFiltering(t *testing.T) {
 	}
 }
 
-// TestFindingPreboundVolumes 验证预绑定（ClaimRef 指向该 PVC）优先于容量和访问模式的常规匹配顺序：
+// TestFindingPreboundVolumes 验证预绑定（ClaimRef 指向该 PVC）在容量与访问模式满足要求时优先于常规匹配顺序：
 // 精确容量匹配优先；精确匹配被别的 PVC 预绑定时选下一档容量；
-// 大卷预绑定给本 PVC 时应直接返回它；容量不足或访问模式不符的卷预绑定给本 PVC 时同样优先返回。
+// 满足要求的大卷预绑定给本 PVC 时直接返回；容量不足或访问模式不符的预绑定卷仍会被过滤。
 func TestFindingPreboundVolumes(t *testing.T) {
 	fs := v1.PersistentVolumeFilesystem
 	claim := &v1.PersistentVolumeClaim{
@@ -1460,14 +1435,12 @@ func TestFindingPreboundVolumes(t *testing.T) {
 	index.store.Add(pvBadMode)
 
 	// 无预绑定时，按容量精确匹配到 pv1。
-	// expected exact match on size
 	volume, _ := index.findBestMatchForClaim(claim, false)
 	if volume.Name != pv1.Name {
 		t.Errorf("Expected %s but got volume %s instead", pv1.Name, volume.Name)
 	}
 
 	// 精确匹配的 pv1 被别的 PVC 预绑定，应退而选择容量更大的 pv5。
-	// pretend the exact match is pre-bound.  should get the next size up.
 	pv1.Spec.ClaimRef = &v1.ObjectReference{Name: "foo", Namespace: "bar"}
 	volume, _ = index.findBestMatchForClaim(claim, false)
 	if volume.Name != pv5.Name {
@@ -1475,7 +1448,6 @@ func TestFindingPreboundVolumes(t *testing.T) {
 	}
 
 	// pv1 可用但最大的 pv8 预绑定给本 PVC：预绑定关系优先，应直接返回 pv8。
-	// pretend the exact match is available but the largest volume is pre-bound to the claim.
 	pv1.Spec.ClaimRef = nil
 	pv8.Spec.ClaimRef = claimRef
 	volume, _ = index.findBestMatchForClaim(claim, false)
@@ -1483,8 +1455,7 @@ func TestFindingPreboundVolumes(t *testing.T) {
 		t.Errorf("Expected %s but got volume %s instead", pv8.Name, volume.Name)
 	}
 
-	// 容量过小的 pvBadSize 预绑定给本 PVC：预绑定优先，应返回它而非精确匹配的 pv1。
-	// pretend the volume with too small a size is pre-bound to the claim. should get the exact match.
+	// 容量过小的 pvBadSize 虽预绑定给本 PVC，仍不满足容量要求，应选择精确匹配的 pv1。
 	pv8.Spec.ClaimRef = nil
 	pvBadSize.Spec.ClaimRef = claimRef
 	volume, _ = index.findBestMatchForClaim(claim, false)
@@ -1492,8 +1463,7 @@ func TestFindingPreboundVolumes(t *testing.T) {
 		t.Errorf("Expected %s but got volume %s instead", pv1.Name, volume.Name)
 	}
 
-	// 访问模式不符的 pvBadMode 预绑定给本 PVC：同样因预绑定优先而返回它。
-	// pretend the volume without the right access mode is pre-bound to the claim. should get the exact match.
+	// 访问模式不符的 pvBadMode 虽预绑定给本 PVC，仍不满足访问模式要求，应选择精确匹配的 pv1。
 	pvBadSize.Spec.ClaimRef = nil
 	pvBadMode.Spec.ClaimRef = claimRef
 	volume, _ = index.findBestMatchForClaim(claim, false)
@@ -1511,7 +1481,6 @@ func TestBestMatchDelayed(t *testing.T) {
 	}
 
 	// 通过 PV controller 完成的绑定应被延迟。
-	// binding through PV controller should be delayed
 	claim := makePVC("8G", nil)
 	volume, err := volList.findBestMatchForClaim(claim, true)
 	if err != nil {
@@ -1571,8 +1540,6 @@ func TestCheckAccessModes(t *testing.T) {
 	}
 }
 
-// 原注释：byCapacity 用于按存储容量升序排列卷。
-// byCapacity is used to order volumes by ascending storage size
 // byCapacity 实现 sort.Interface，按容量升序排列 PV 列表。
 type byCapacity struct {
 	volumes []*v1.PersistentVolume
@@ -1593,8 +1560,6 @@ func (c byCapacity) Len() int {
 	return len(c.volumes)
 }
 
-// 原注释：matchStorageCapacity 是一个 matchPredicate，用于排序与查找卷。
-// matchStorageCapacity is a matchPredicate used to sort and find volumes
 // matchStorageCapacity 比较两个 PV 的存储容量，pvA 小于等于 pvB 时返回 true。
 func matchStorageCapacity(pvA, pvB *v1.PersistentVolume) bool {
 	aQty := pvA.Spec.Capacity[v1.ResourceStorage]

@@ -3367,7 +3367,7 @@ func (om *fakeObjectManager) DeletePod(pod *v1.Pod) error {
 	} else if found {
 		return om.podsIndexer.Delete(obj)
 	}
-	return nil // Not found, no error in deleting.
+	return nil // 未找到对象，删除操作不返回错误。
 }
 
 // CreateClaim 将 PVC 写入本地索引器。
@@ -3536,7 +3536,7 @@ func (om *fakeObjectManager) setPodAvailable(set *apps.StatefulSet, ordinal int,
 // addTerminatingPod 新增一个带删除时间戳的 Pod，用于模拟正在终止的 Pod。
 func (om *fakeObjectManager) addTerminatingPod(set *apps.StatefulSet, ordinal int) ([]*v1.Pod, error) {
 	pod := newStatefulSetPod(set, ordinal)
-	pod.SetUID(types.UID(pod.Name + "-uid")) // To match fakeObjectManager.CreatePod
+	pod.SetUID(types.UID(pod.Name + "-uid")) // 与 fakeObjectManager.CreatePod 保持一致
 	pod.Status.Phase = v1.PodRunning
 	deleted := metav1.NewTime(time.Now())
 	pod.DeletionTimestamp = &deleted
@@ -3751,7 +3751,7 @@ func checkClaimInvarients(set *apps.StatefulSet, pod *v1.Pod, claim *v1.Persiste
 		if claimShouldBeRetained {
 			return fmt.Errorf("claim for Pod %s was not created", pod.Name)
 		}
-		return nil // A non-retained claim has no invariants to satisfy.
+		return nil // 不保留的 PVC 没有需要满足的不变量。
 	}
 
 	if pod.Status.Phase != v1.PodRunning || !podutil.IsPodReady(pod) {
@@ -4143,10 +4143,10 @@ func scaleDownStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlIn
 	for _, claim := range claims {
 		claimPodName := getClaimPodName(set, claim)
 		if claimPodName == "" {
-			continue // Skip claims not related to a stateful set pod.
+			continue // 跳过与 StatefulSet Pod 无关的 PVC。
 		}
 		if _, found := currentPods[claimPodName]; found {
-			continue // Skip claims which still have a current pod.
+			continue // 跳过仍有关联 Pod 的 PVC。
 		}
 		for _, refs := range claim.GetOwnerReferences() {
 			if refs.Name == claimPodName {
@@ -4346,7 +4346,7 @@ func isOrHasInternalError(err error) bool {
 // 只有就绪时间超过 MinReadySeconds 的 Pod 才计入可用副本。
 func TestStatefulSetRollingUpdateRespectsMinReadySeconds(t *testing.T) {
 	// 该测试验证在滚动更新逻辑中向 isUnavailable() 传递 MinReadySeconds 的改动确实生效。
-	set := setMinReadySeconds(newStatefulSet(2), int32(30)) // 30 seconds MinReadySeconds
+	set := setMinReadySeconds(newStatefulSet(2), int32(30)) // MinReadySeconds 为 30 秒
 	client := fake.NewClientset(set)
 	om, _, ssc := setupController(client)
 

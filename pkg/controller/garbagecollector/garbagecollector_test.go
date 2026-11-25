@@ -1061,7 +1061,7 @@ func TestGarbageCollectorSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TODO(#115478): migrate this test to use fakeClient instead of the real client.
+	// TODO(#115478)：将此测试迁移为使用 fakeClient，替代真实客户端。
 	// 这里用真实客户端配合测试服务器，通过 handler 切换来模拟 informer 同步失败。
 	client := &wrappedKubeClientWithUnsupportedWatchListSemantics{kubeClient}
 
@@ -1565,7 +1565,7 @@ func TestConflictingData(t *testing.T) {
 			},
 		},
 		// 子节点指向仍存在属主的、已不再服务的 API 版本（如 extensions/v1beta1 deployment）：
-		// * 不应被删除 (this is indistinguishable from referencing an unknown kind/version)
+		// * 不应被删除（与引用未知 kind/version 无法区分）
 		// * 一旦观察到真实属主，虚拟属主不应反复轮询 attemptToDelete
 		{
 			name: "child -> existing owner with inaccessible API version (child first)",
@@ -1677,7 +1677,7 @@ func TestConflictingData(t *testing.T) {
 			},
 		},
 		// 子节点指向已不存在属主的、不再服务的 API 版本（如 extensions/v1beta1 deployment）：
-		// * 不应被删除 (this is indistinguishable from referencing an unknown kind/version)
+		// * 不应被删除（与引用未知 kind/version 无法区分）
 		// * 应反复轮询 attemptToDelete
 		// * 不应阻塞缺失 deployment 的合法子节点的删除
 		{
@@ -1692,7 +1692,7 @@ func TestConflictingData(t *testing.T) {
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual)},
 					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // 虚拟属主已入队等待删除尝试
 				}),
-				// 4,5：观察到子节点 pointing at served apiVersion where owner does not exist
+				// 4,5：观察到子节点指向仍在服务但属主不存在的 apiVersion
 				processEvent(makeAddEvent(pod2ns1, deployment1apps)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual), makeNode(pod2ns1, withOwners(deployment1apps))},
@@ -1748,7 +1748,7 @@ func TestConflictingData(t *testing.T) {
 					pendingAttemptToDelete: []*node{
 						makeNode(deployment1apps, virtual)}, // 虚拟属主已入队等待删除尝试
 				}),
-				// 4,5：观察到子节点 pointing at no-longer-served apiVersion
+				// 4,5：观察到子节点指向已不再服务的 apiVersion
 				processEvent(makeAddEvent(pod1ns1, deployment1extensions)),
 				assertState(state{
 					graphNodes: []*node{
@@ -1815,7 +1815,7 @@ func TestConflictingData(t *testing.T) {
 					pendingAttemptToDelete: []*node{
 						makeNode(pod2ns1, withOwners(deployment1apps)),       // 缺失 apps/v1 属主的子节点已入队等待删除尝试
 						makeNode(deployment1extensions, virtual),             // 新的虚拟属主已入队等待删除尝试
-						makeNode(pod1ns1, withOwners(deployment1extensions)), // 引用不可访问 API 版本的子节点 - requeued to end
+						makeNode(pod1ns1, withOwners(deployment1extensions)), // 引用不可访问 API 版本的子节点已重新排到队尾
 					},
 				}),
 
@@ -2287,7 +2287,7 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod2ns1, withOwners(pod1ns1))}, // 不匹配的子节点已入队等待删除
 				}),
 
-				// 8,9：处理 attemptToDelete of good child
+				// 8,9：处理合法子节点的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
@@ -2355,7 +2355,7 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod2ns1, withOwners(pod1ns1))}, // 不匹配的子节点已入队等待删除
 				}),
 
-				// 9,10：处理 attemptToDelete of good child
+				// 9,10：处理合法子节点的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
@@ -2442,7 +2442,7 @@ func TestConflictingData(t *testing.T) {
 					},
 				}),
 
-				// 8,9：处理 attemptToDelete of bad cluster child
+				// 8,9：处理无效集群级子节点的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
@@ -2464,7 +2464,7 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1nonamespace, virtual)}, // 缺失的虚拟属主被替换为备用坐标，仍为虚拟节点
 					absentOwnerCache: []objectReference{pod1ns1}, // 缓存缺失属主的不存在状态
 					pendingAttemptToDelete: []*node{
-						makeNode(pod2ns1, withOwners(pod1ns1)), // 合法子节点 of missing parent enqueued for deletion
+						makeNode(pod2ns1, withOwners(pod1ns1)), // 缺失属主的合法子节点已入队等待删除
 						makeNode(pod1nonamespace, virtual),     // 新的虚拟属主坐标已入队等待删除
 					},
 				}),

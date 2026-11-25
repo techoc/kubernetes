@@ -44,7 +44,7 @@ func (dc *DeploymentController) rollback(ctx context.Context, d *apps.Deployment
 		if rollbackRevision = deploymentutil.LastRevision(logger, allRSs); rollbackRevision == 0 {
 			// 找不到可回退的历史版本，放弃回滚并清理标记
 			dc.emitRollbackWarningEvent(d, deploymentutil.RollbackRevisionNotFound, "Unable to find last revision.")
-			// Gives up rollback
+			// 放弃回滚
 			return dc.updateDeploymentAndClearRollbackTo(ctx, d)
 		}
 	}
@@ -67,7 +67,7 @@ func (dc *DeploymentController) rollback(ctx context.Context, d *apps.Deployment
 		}
 	}
 	dc.emitRollbackWarningEvent(d, deploymentutil.RollbackRevisionNotFound, "Unable to find the revision to rollback to.")
-	// Gives up rollback
+	// 放弃回滚
 	return dc.updateDeploymentAndClearRollbackTo(ctx, d)
 }
 
@@ -118,7 +118,7 @@ func (dc *DeploymentController) updateDeploymentAndClearRollbackTo(ctx context.C
 
 // getRollbackTo 从已废弃的 rollback 注解中读取目标 revision；注解缺失或格式非法时返回 nil。
 func getRollbackTo(d *apps.Deployment) *int64 {
-	// Extract the annotation used for round-tripping the deprecated RollbackTo field.
+	// 提取用于往返保存已废弃 RollbackTo 字段的注解。
 	revision := d.Annotations[apps.DeprecatedRollbackTo]
 	if revision == "" {
 		return nil

@@ -77,7 +77,6 @@ func TestRequestProcessingDuration(t *testing.T) {
 
 	// SampleSum 与 Bucket 依赖实际观测值，
 	// 去掉它们才能让断言只关注计数器式的 _count。
-	// (SampleSum and Bucket), verifying only _count lines.
 	want := `# HELP resourcepoolstatusrequest_controller_request_processing_duration_seconds [ALPHA] Time taken to process a ResourcePoolStatusRequest
 # TYPE resourcepoolstatusrequest_controller_request_processing_duration_seconds histogram
 resourcepoolstatusrequest_controller_request_processing_duration_seconds_count{driver_name="driver-a.example.com"} 1

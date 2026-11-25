@@ -117,7 +117,6 @@ func newVolumeReactor(ctx context.Context, client *fake.Clientset, ctrl *Persist
 func (r *volumeReactor) waitForIdle() {
 	r.ctrl.runningOperations.WaitForCompletion()
 	// 每 10 毫秒检查一次控制器是否仍在动作，空闲即退出。
-	// idle.
 	oldChanges := -1
 	for {
 		time.Sleep(10 * time.Millisecond)
@@ -345,7 +344,6 @@ func newExternalProvisionedVolume(name, capacity, boundToClaimUID, boundToClaimN
 	return &volume
 }
 
-// newVolume returns a new volume with given attributes
 // newVolumeWithFinalizers 在 newVolume 基础上附加 finalizer，用于测试删除被阻塞的场景。
 func newVolumeWithFinalizers(name, capacity, boundToClaimUID, boundToClaimName string, phase v1.PersistentVolumePhase, reclaimPolicy v1.PersistentVolumeReclaimPolicy, class string, finalizers []string, annotations ...string) *v1.PersistentVolume {
 	retVolume := newVolume(name, capacity, boundToClaimUID, boundToClaimName, phase, reclaimPolicy, class, annotations...)
@@ -402,7 +400,7 @@ func withMessage(message string, volumes []*v1.PersistentVolume) []*v1.Persisten
 }
 
 // newVolumeArray 返回只含一个卷的切片，该卷由 newVolume() 用相同参数构造。
-// TODO: make the newVolumeArray function accept volume attributes class name as an input parameter
+// TODO: 让 newVolumeArray 接受卷属性类名作为输入参数。
 func newVolumeArray(name, capacity, boundToClaimUID, boundToClaimName string, phase v1.PersistentVolumePhase, reclaimPolicy v1.PersistentVolumeReclaimPolicy, class string, annotations ...string) []*v1.PersistentVolume {
 	return []*v1.PersistentVolume{
 		newVolume(name, capacity, boundToClaimUID, boundToClaimName, phase, reclaimPolicy, class, annotations...),
@@ -485,7 +483,7 @@ func newClaim(name, claimUID, capacity, boundToVolume string, phase v1.Persisten
 }
 
 // newClaimArray 返回只含一个声明的切片，该声明由 newClaim() 用相同参数构造。
-// TODO: make the newClaimArray function accept volume attributes class name as an input parameter
+// TODO: 让 newClaimArray 接受卷属性类名作为输入参数。
 func newClaimArray(name, claimUID, capacity, boundToVolume string, phase v1.PersistentVolumeClaimPhase, class *string, annotations ...string) []*v1.PersistentVolumeClaim {
 	return []*v1.PersistentVolumeClaim{
 		newClaim(name, claimUID, capacity, boundToVolume, phase, class, annotations...),
@@ -499,10 +497,8 @@ func claimWithVAC(vacName *string, claims []*v1.PersistentVolumeClaim) []*v1.Per
 }
 
 // claimWithAnnotation 把给定注解写入声明切片的首个元素，便于内联拼装声明对象。
-// TODO(refactor): This helper function (and other helpers related to claim
-// arrays) could use some cleaning up (most assume an array size of one)-
-// replace with annotateClaim at all callsites. The tests require claimArrays
-// but mostly operate on single claims
+// TODO(refactor): 清理此辅助函数及其他 claim 数组辅助函数（多数假设数组长度为一）。
+// 所有调用点改用 annotateClaim；测试需要 claimArrays，但多数只操作单个 claim。
 func claimWithAnnotation(name, value string, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	if claims[0].Annotations == nil {
 		claims[0].Annotations = map[string]string{name: value}
@@ -534,14 +530,12 @@ func annotateClaim(claim *v1.PersistentVolumeClaim, ann map[string]string) *v1.P
 }
 
 // volumeWithVAC 给单个卷设置 VolumeAttributesClassName，供内联构造使用。
-// Meant to be used to compose volume specified inline in a test.
 func volumeWithVAC(vacName string, volume *v1.PersistentVolume) *v1.PersistentVolume {
 	volume.Spec.VolumeAttributesClassName = &vacName
 	return volume
 }
 
 // volumesWithVAC 批量设置卷的 VolumeAttributesClassName。
-// Meant to be used to compose volumes specified inline in a test.
 func volumesWithVAC(vacName string, volumes []*v1.PersistentVolume) []*v1.PersistentVolume {
 	for _, volume := range volumes {
 		volumeWithVAC(vacName, volume)
@@ -550,7 +544,6 @@ func volumesWithVAC(vacName string, volumes []*v1.PersistentVolume) []*v1.Persis
 }
 
 // volumeWithAnnotation 给单个卷写入注解，供内联构造使用。
-// Meant to be used to compose volume specified inline in a test.
 func volumeWithAnnotation(name, value string, volume *v1.PersistentVolume) *v1.PersistentVolume {
 	if volume.Annotations == nil {
 		volume.Annotations = map[string]string{name: value}
@@ -561,7 +554,6 @@ func volumeWithAnnotation(name, value string, volume *v1.PersistentVolume) *v1.P
 }
 
 // volumesWithAnnotation 批量给卷写入注解。
-// Meant to be used to compose volumes specified inline in a test.
 func volumesWithAnnotation(name, value string, volumes []*v1.PersistentVolume) []*v1.PersistentVolume {
 	for _, volume := range volumes {
 		volumeWithAnnotation(name, value, volume)
@@ -570,7 +562,6 @@ func volumesWithAnnotation(name, value string, volumes []*v1.PersistentVolume) [
 }
 
 // claimWithAccessMode 设置首个声明的访问模式。
-// Meant to be used to compose claims specified inline in a test.
 func claimWithAccessMode(modes []v1.PersistentVolumeAccessMode, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	claims[0].Spec.AccessModes = modes
 	return claims
@@ -765,7 +756,7 @@ func runSyncTests(t *testing.T, ctx context.Context, tests []controllerTest, sto
 		}
 		ctrl.podLister = corelisters.NewPodLister(podIndexer)
 
-		// Run the tested functions
+		// 执行待测函数。
 		err = test.test(ctrl, reactor.VolumeReactor, test)
 		if err != nil {
 			t.Errorf("Test %q failed: %v", test.name, err)

@@ -264,7 +264,7 @@ func (op *updateOp) updateNodeFromAlias(ctx context.Context, sync *NodeSync, nod
 	return nil
 }
 
-// updateAliasFromNode updates the cloud alias given the node allocation.
+// updateAliasFromNode 根据节点分配结果更新云平台别名。
 func (op *updateOp) updateAliasFromNode(ctx context.Context, sync *NodeSync, node *v1.Node) error {
 	if sync.mode != SyncFromCluster {
 		sync.kubeAPI.EmitNodeWarningEvent(
@@ -300,8 +300,7 @@ func (op *updateOp) updateAliasFromNode(ctx context.Context, sync *NodeSync, nod
 	return nil
 }
 
-// allocateRange allocates a new range and updates both the cloud
-// platform and the node allocation.
+// allocateRange 分配新地址范围，并同步更新云平台与节点分配信息。
 func (op *updateOp) allocateRange(ctx context.Context, sync *NodeSync, node *v1.Node) error {
 	if sync.mode != SyncFromCluster {
 		sync.kubeAPI.EmitNodeWarningEvent(node.Name, InvalidModeEvent,

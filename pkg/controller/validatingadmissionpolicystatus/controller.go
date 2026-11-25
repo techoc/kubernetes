@@ -103,7 +103,7 @@ func NewController(policyInformer informerv1.ValidatingAdmissionPolicyInformer, 
 // enqueuePolicy 将策略对象名加入工作队列。
 func (c *Controller) enqueuePolicy(policy any) {
 	if policy, ok := policy.(*v1.ValidatingAdmissionPolicy); ok {
-		// policy objects are cluster-scoped, no point include its namespace.
+		// 策略对象是集群级的，队列键无需包含命名空间。
 		key := policy.ObjectMeta.Name
 		if key == "" {
 			utilruntime.HandleError(fmt.Errorf("cannot get name of object %v", policy))

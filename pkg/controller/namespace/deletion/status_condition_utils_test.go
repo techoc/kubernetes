@@ -198,7 +198,7 @@ func TestProcessContentTotals(t *testing.T) {
 		},
 		{
 			// 仅有 finalizer 剩余：理论上不应出现（资源先于 finalizer 被清理），但实现仍需能处理。
-			name: "just finalizers", // this shouldn't happen
+			name: "just finalizers", // 理论上不应出现
 
 			contentTotals: allGVRDeletionMetadata{
 				gvrToNumRemaining: map[schema.GroupVersionResource]int{},

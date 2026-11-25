@@ -28,8 +28,8 @@ import (
 
 // hpaSelectorTracker 有两种实现，由 HPAOptimizedSelectorStore 特性门控决定：
 // 门控开启时使用 hpaSelectorStore（优化实现），关闭时使用 biMultimapSelectorTracker。
-// TODO: Remove Bimultimap implementation once HPAOptimizedSelectorStore
-// graduates to GA.
+// TODO: HPAOptimizedSelectorStore 正式发布后，
+// 移除 Bimultimap 实现。
 // 接口只暴露选择器的增删以及按 Pod 反查 HPA 的能力，
 // 使控制器无需关心底层存储结构。
 type hpaSelectorTracker interface {
@@ -148,7 +148,7 @@ var _ hpaSelectorTracker = &biMultimapSelectorTracker{}
 
 // biMultimapSelectorTracker 是基于 BiMultimap 的旧版 hpaSelectorTracker，
 // 在 HPAOptimizedSelectorStore 门控关闭时使用。
-// TODO: Remove once HPAOptimizedSelectorStore graduates to GA.
+// TODO: HPAOptimizedSelectorStore 正式发布后移除旧实现。
 type biMultimapSelectorTracker struct {
 	mu        sync.Mutex
 	selectors *selectors.BiMultimap

@@ -143,6 +143,6 @@ func (ctrl *PersistentVolumeController) GetEventRecorder() record.EventRecorder 
 
 // GetSubpather 返回 subpath 操作接口；PV 控制器中没有任何卷插件需要 subpath。
 func (ctrl *PersistentVolumeController) GetSubpather() subpath.Interface {
-	// No volume plugin needs Subpaths in PV controller.
+	// PV 控制器没有需要 subpath 的卷插件。
 	return nil
 }

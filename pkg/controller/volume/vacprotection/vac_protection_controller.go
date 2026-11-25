@@ -76,6 +76,7 @@ const (
 // 集群中这会带来性能问题，与既有 PVC 保护控制器面临的情况类似，详见
 // https://github.com/kubernetes/kubernetes/issues/109282
 
+// Controller 通过 VAC 保护 finalizer 延迟删除仍被 PV 或 PVC 引用的 VolumeAttributesClass。
 type Controller struct {
 	client clientset.Interface
 

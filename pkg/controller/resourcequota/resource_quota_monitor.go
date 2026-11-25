@@ -197,8 +197,8 @@ func (qm *QuotaMonitor) controllerFor(ctx context.Context, resource schema.Group
 
 	// 此处不自建 list/watch：聚合 API 服务器应自行运行配额控制器，
 	// 避免本控制器为每个未知资源承担额外存储开销。
-	// TODO: if we can share storage with garbage collector, it may make sense to support other resources
-	// until that time, aggregated api servers will have to run their own controller to reconcile their own quota.
+	// TODO: 若能与垃圾回收器共享存储，或许可以支持其他资源；
+	// 在此之前，聚合 API 服务器必须运行自己的控制器来核对其配额。
 	return nil, fmt.Errorf("unable to monitor quota for resource %q", resource.String())
 }
 

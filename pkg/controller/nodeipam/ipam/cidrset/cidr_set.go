@@ -52,7 +52,7 @@ type CidrSet struct {
 
 const (
 	// 子网掩码位数最多只能比集群掩码位数大 16。
-	// TODO: https://github.com/kubernetes/kubernetes/issues/44918
+	// TODO: 参见 https://github.com/kubernetes/kubernetes/issues/44918
 	// 受未压缩位图实现限制，clusterSubnetMaxDiff 被限制为 16；
 	// 因此 IPv6 集群的子网掩码至少为 48 位（IPv6 默认掩码为 64 位）。
 	clusterSubnetMaxDiff = 16

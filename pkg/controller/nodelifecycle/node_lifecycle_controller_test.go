@@ -2574,7 +2574,7 @@ func TestMonitorNodeHealthMarkPodsNotReadyRetry(t *testing.T) {
 // TestApplyNoExecuteTaints 验证 NoExecute 污点能正确施加到节点上。
 // 节点控制器只负责把节点放入污点队列，真正驱逐 Pod 的工作由 taint manager 完成。
 func TestApplyNoExecuteTaints(t *testing.T) {
-	// TODO: Remove skip once https://github.com/kubernetes/kubernetes/pull/114607 merges.
+	// TODO: 待 https://github.com/kubernetes/kubernetes/pull/114607 合并后移除跳过逻辑。
 	if goruntime.GOOS == "windows" {
 		t.Skip("Skipping test on Windows.")
 	}
@@ -2812,7 +2812,7 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 // TestApplyNoExecuteTaintsToUnreachableNode 验证超过 nodeMonitorGracePeriod 未上报状态的节点会被加上 NoExecute 污点，
 // 并在恢复心跳后污点被移除。
 func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
-	// TODO: Remove skip once https://github.com/kubernetes/kubernetes/pull/114607 merges.
+	// TODO: 待 https://github.com/kubernetes/kubernetes/pull/114607 合并后移除跳过逻辑。
 	if goruntime.GOOS == "windows" {
 		t.Skip("Skipping test on Windows.")
 	}
@@ -2995,7 +2995,7 @@ func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
 
 // TestApplyNoExecuteTaintsToNodesEnqueueTwice 验证节点即使被重复入队，仍能保证每个应被污点化的节点都带上 NoExecute 污点。
 func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
-	// TODO: Remove skip once https://github.com/kubernetes/kubernetes/pull/114607 merges.
+	// TODO: 待 https://github.com/kubernetes/kubernetes/pull/114607 合并后移除跳过逻辑。
 	if goruntime.GOOS == "windows" {
 		t.Skip("Skipping test on Windows.")
 	}

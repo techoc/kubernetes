@@ -30,7 +30,7 @@ const (
 )
 
 // PodPVCIndexFunc 创建索引函数，对给定 Pod 返回其 PVC 键（即 namespace/name）。
-// 其中也包含可能为通用临时卷（generic ephemeral volume）创建的 PVC。
+// 其中也包含可能为通用临时卷创建的 PVC。
 func PodPVCIndexFunc() func(obj interface{}) ([]string, error) {
 	return func(obj interface{}) ([]string, error) {
 		pod, ok := obj.(*v1.Pod)

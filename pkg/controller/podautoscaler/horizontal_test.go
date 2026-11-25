@@ -94,10 +94,9 @@ var statusOk = []autoscalingv2.HorizontalPodAutoscalerCondition{
 	{Type: autoscalingv2.ScalingLimited, Status: v1.ConditionFalse, Reason: "DesiredWithinRange"},
 }
 
-// scaledToZeroFalse is the ScaledToZero condition the HPA controller records on
-// every successful rescale when the (beta, default-on) HPAScaleToZero feature
-// gate is enabled and the workload is not being scaled to zero. Tests that
-// perform a rescale append this to their expected conditions.
+// scaledToZeroFalse 是 HPA 控制器在每次成功扩缩容后记录的 ScaledToZero 条件：
+// HPAScaleToZero 特性门控（beta，默认开启）已启用，且工作负载未缩至零。
+// 执行扩缩容的测试应将其追加到预期条件中。
 var scaledToZeroFalse = autoscalingv2.HorizontalPodAutoscalerCondition{
 	Type: autoscalingv2.ScaledToZero, Status: v1.ConditionFalse, Reason: "NotScaledToZero",
 }
@@ -593,7 +592,7 @@ type testCase struct {
 	scaleUpRules    *autoscalingv2.HPAScalingRules
 	scaleDownRules  *autoscalingv2.HPAScalingRules
 
-	// CPU target utilization as a percentage of the requested resources.
+	// CPU 目标使用率，占申请资源的百分比。
 	CPUTarget                    int32
 	CPUCurrent                   int32
 	verifyCPUCurrent             bool
@@ -611,32 +610,32 @@ type testCase struct {
 	metricsTarget                []autoscalingv2.MetricSpec
 	expectedDesiredReplicas      int32
 	expectedConditions           []autoscalingv2.HorizontalPodAutoscalerCondition
-	// Channel with names of HPA objects which we have reconciled.
+	// 已协调的 HPA 对象名称通道。
 	processed chan string
 
-	// expected results reported to the mock monitor at first.
+	// mock monitor 初次报告的预期结果。
 	expectedReportedReconciliationActionLabel     monitor.ActionLabel
 	expectedReportedReconciliationErrorLabel      monitor.ErrorLabel
 	expectedReportedMetricComputationActionLabels map[autoscalingv2.MetricSourceType]monitor.ActionLabel
 	expectedReportedMetricComputationErrorLabels  map[autoscalingv2.MetricSourceType]monitor.ErrorLabel
 	checkDesiredReplicaMetric                     bool
 
-	// expectedReconciliationCount specifies the minimum number of reconciliations to wait for.
-	// This verifies that reconciliationsTotal counter metric is incremented on each cycle.
-	// The actual count may be higher; we only verify it's at least this value.
+	// expectedReconciliationCount 指定等待的最小协调次数。
+	// 用于验证 reconciliationsTotal 计数器在每轮协调中递增。
+	// 实际次数可能更高，只需确认至少达到该值。
 	expectedReconciliationCount int
-	// expectedMetricComputationCounts specifies the minimum computation count per metric type.
-	// This verifies that metricComputationTotal counter metric is incremented for each
-	// metric type on each reconciliation. The actual counts may be higher.
+	// expectedMetricComputationCounts 指定每种指标类型的最小计算次数。
+	// 用于验证 metricComputationTotal 计数器在每轮协调中按指标类型递增。
+	// 实际次数可能更高。
 	expectedMetricComputationCounts map[autoscalingv2.MetricSourceType]int
 
-	// Target resource information.
+	// 目标资源信息。
 	resource *fakeResource
 
-	// Last scale time
+	// 上次扩缩容时间。
 	lastScaleTime *metav1.Time
 
-	// override the test clients
+	// 覆盖测试客户端。
 	testClient        *fake.Clientset
 	testMetricsClient *metricsfake.Clientset
 	testCMClient      *cmfake.FakeCustomMetricsClient
@@ -1270,7 +1269,7 @@ func (tc *testCase) verifyRecordedMetric(ctx context.Context, t *testing.T) {
 			assert.GreaterOrEqual(t, int(mcv), expectedCount, "metric computation count for %s should be at least %d", metricType, expectedCount)
 		}
 
-		// TODO: Retrieve the namespace and HPA names from the test case (tc) to replace hardcoded values below (and check).
+		// TODO: 从测试用例 tc 中获取命名空间和 HPA 名称，替换下方硬编码值并校验。
 		if tc.checkDesiredReplicaMetric {
 			v, err := metricstestutil.GetGaugeMetricValue(monitor.DesiredReplicasCount.WithLabelValues("test-namespace", "test-hpa"))
 			if err != nil {
@@ -1341,7 +1340,7 @@ func (tc *testCase) setupController(t *testing.T) (*HorizontalController, inform
 		metricsClient,
 		informerFactory.Autoscaling().V2().HorizontalPodAutoscalers(),
 		informerFactory.Core().V1().Pods(),
-		100*time.Millisecond, // we need non-zero resync period to avoid race conditions
+		100*time.Millisecond, // 非零重同步周期用于避免竞态条件。
 		defaultDownscalestabilizationWindow,
 		defaultTestingTolerance,
 		defaultTestingCPUInitializationPeriod,
@@ -1355,7 +1354,7 @@ func (tc *testCase) setupController(t *testing.T) (*HorizontalController, inform
 		hpaController.selectorTracker.PutIfAbsent(key.Namespace, key, sel)
 	}
 
-	// reset all HPA prometheus metrics
+	// 重置所有 HPA Prometheus 指标。
 	monitor.Register()
 	monitor.ReconciliationsTotal.Reset()
 	monitor.ReconciliationsDuration.Reset()
@@ -1392,19 +1391,19 @@ func (tc *testCase) runTestWithController(t *testing.T, hpaController *Horizonta
 	tc.Unlock()
 
 	if shouldWait {
-		// We need to wait for events to be broadcasted (sleep for longer than record.sleepDuration).
+		// 等待事件广播完成，等待时间需超过 record.sleepDuration。
 		timeoutTime := time.Now().Add(2 * time.Second)
 		for now := time.Now(); timeoutTime.After(now); now = time.Now() {
 			sleepUntil := timeoutTime.Sub(now)
 			select {
 			case <-tc.processed:
-				// drain the chan of any sent events to keep it from filling before the timeout
+				// 排空通道中的已发送事件，避免超时前通道填满。
 			case <-time.After(sleepUntil):
-				// timeout reached, ready to verifyResults
+				// 已超时，可以调用 verifyResults。
 			}
 		}
 	} else {
-		// Wait for HPA to be processed.
+		// 等待 HPA 处理完成。
 		if minReconciliations < 1 {
 			t.Logf("minReconciliations should be at least 1, got %d; adjusting to 1", minReconciliations)
 			minReconciliations = 1
@@ -1416,7 +1415,7 @@ func (tc *testCase) runTestWithController(t *testing.T, hpaController *Horizonta
 			case <-tc.processed:
 				reconciliationsProcessed++
 			case <-time.After(100 * time.Millisecond):
-				// continue waiting
+				// 继续等待。
 			}
 		}
 		if reconciliationsProcessed < minReconciliations {
@@ -1714,9 +1713,9 @@ func TestScaleCPU(t *testing.T) {
 			hpa := buildHPA(t, &tt.fixture)
 			key := fmt.Sprintf("%s/%s", hpa.Namespace, hpa.Name)
 
-			// Register the HPA in the selector tracker. In production this is done by
-			// enqueueHPA before the worker calls reconcileAutoscaler, but this test
-			// calls reconcileAutoscaler directly, bypassing the queue.
+			// 在 selector tracker 中注册 HPA。生产中 enqueueHPA 会在 worker 调用
+			// reconcileAutoscaler 前完成注册，而此测试直接调用 reconcileAutoscaler，
+			// 绕过了队列。
 			hpaKey := selectors.Key{Name: hpa.Name, Namespace: hpa.Namespace}
 			setup.controller.selectorTracker.PutIfAbsent(hpa.Namespace, hpaKey, labels.Nothing())
 
@@ -1853,9 +1852,9 @@ func TestScaleContainerResource(t *testing.T) {
 			hpa := buildHPA(t, &tt.fixture)
 			key := fmt.Sprintf("%s/%s", hpa.Namespace, hpa.Name)
 
-			// Register the HPA in the selector tracker. In production this is done by
-			// enqueueHPA before the worker calls reconcileAutoscaler, but this test
-			// calls reconcileAutoscaler directly, bypassing the queue.
+			// 在 selector tracker 中注册 HPA。生产中 enqueueHPA 会在 worker 调用
+			// reconcileAutoscaler 前完成注册，而此测试直接调用 reconcileAutoscaler，
+			// 绕过了队列。
 			hpaKey := selectors.Key{Name: hpa.Name, Namespace: hpa.Namespace}
 			setup.controller.selectorTracker.PutIfAbsent(hpa.Namespace, hpaKey, labels.Nothing())
 
@@ -2151,9 +2150,9 @@ func TestScaleUpCM(t *testing.T) {
 			hpa := buildHPA(t, &tt.fixture)
 			key := fmt.Sprintf("%s/%s", hpa.Namespace, hpa.Name)
 
-			// Register the HPA in the selector tracker. In production this is done by
-			// enqueueHPA before the worker calls reconcileAutoscaler, but this test
-			// calls reconcileAutoscaler directly, bypassing the queue.
+			// 在 selector tracker 中注册 HPA。生产中 enqueueHPA 会在 worker 调用
+			// reconcileAutoscaler 前完成注册，而此测试直接调用 reconcileAutoscaler，
+			// 绕过了队列。
 			hpaKey := selectors.Key{Name: hpa.Name, Namespace: hpa.Namespace}
 			setup.controller.selectorTracker.PutIfAbsent(hpa.Namespace, hpaKey, labels.Nothing())
 
@@ -2511,9 +2510,9 @@ func TestScaleUpCMObject(t *testing.T) {
 			hpa := buildHPA(t, &tt.fixture)
 			key := fmt.Sprintf("%s/%s", hpa.Namespace, hpa.Name)
 
-			// Register the HPA in the selector tracker. In production this is done by
-			// enqueueHPA before the worker calls reconcileAutoscaler, but this test
-			// calls reconcileAutoscaler directly, bypassing the queue.
+			// 在 selector tracker 中注册 HPA。生产中 enqueueHPA 会在 worker 调用
+			// reconcileAutoscaler 前完成注册，而此测试直接调用 reconcileAutoscaler，
+			// 绕过了队列。
 			hpaKey := selectors.Key{Name: hpa.Name, Namespace: hpa.Namespace}
 			setup.controller.selectorTracker.PutIfAbsent(hpa.Namespace, hpaKey, labels.Nothing())
 
@@ -2569,9 +2568,9 @@ func TestScaleUpCMObject(t *testing.T) {
 	}
 }
 
-// TestScaleWithOneInvalidMetric verifies HPA behavior when one metric spec is invalid
-// (e.g., unknown type "CheddarCheese") alongside a valid CPU metric. The valid metric
-// still drives scaling decisions; the invalid one is reported as a spec error.
+// TestScaleWithOneInvalidMetric 验证一个指标 spec 无效（如未知类型 "CheddarCheese"）
+// 同时存在有效 CPU 指标时的 HPA 行为。有效指标仍驱动扩缩容决策，
+// 无效指标则作为 spec 错误上报。
 func TestScaleWithOneInvalidMetric(t *testing.T) {
 	tests := []struct {
 		name                                 string
@@ -2588,8 +2587,8 @@ func TestScaleWithOneInvalidMetric(t *testing.T) {
 		expectedErrorFromReconcileAutoscaler string
 	}{
 		{
-			// Scale up proceeds based on valid CPU metric despite invalid "CheddarCheese" metric,
-			// but reconcileAutoscaler still returns the invalid-metric error.
+			// 尽管 "CheddarCheese" 指标无效，扩缩容仍依据有效 CPU 指标执行，
+			// 但 reconcileAutoscaler 会返回无效指标错误。
 			name: "scale up with one invalid metric",
 			fixture: horizontalScenario{
 				minReplicas:         2,
@@ -2615,19 +2614,19 @@ func TestScaleWithOneInvalidMetric(t *testing.T) {
 			expectedErrorLabel:      monitor.ErrorLabelSpec,
 			expectedMetricActionLabels: map[autoscalingv2.MetricSourceType]monitor.ActionLabel{
 				autoscalingv2.ResourceMetricSourceType: monitor.ActionLabelScaleUp,
-				// Actually, such an invalid type should be validated in the kube-apiserver and invalid metric type shouldn't be recorded.
+				// 实际上，此类无效类型应由 kube-apiserver 校验，不应记录无效指标类型。
 				"CheddarCheese": monitor.ActionLabelNone,
 			},
 			expectedMetricErrorLabels: map[autoscalingv2.MetricSourceType]monitor.ErrorLabel{
 				autoscalingv2.ResourceMetricSourceType: monitor.ErrorLabelNone,
-				// Actually, such an invalid type should be validated in the kube-apiserver and invalid metric type shouldn't be recorded.
+				// 实际上，此类无效类型应由 kube-apiserver 校验，不应记录无效指标类型。
 				"CheddarCheese": monitor.ErrorLabelSpec,
 			},
 			expectedErrorFromReconcileAutoscaler: "invalid metrics (1 invalid out of 2)",
 		},
 		{
-			// From zero with CPU + invalid metric: CPU alone can't scale from zero (only object/external can),
-			// so HPA stays at 0 replicas regardless of feature gate state
+			// 从零扩缩容且同时存在 CPU 和无效指标时，仅靠 CPU 无法从零扩容
+			// （只有 object/external 指标可以），因此无论特性门控状态如何，HPA 都保持 0 个副本。
 			name: "from zero with invalid metric, HPAScaleToZero enabled",
 			fixture: horizontalScenario{
 				minReplicas:         0,
@@ -2720,9 +2719,9 @@ func TestScaleWithOneInvalidMetric(t *testing.T) {
 			hpa := buildHPA(t, &tt.fixture)
 			key := fmt.Sprintf("%s/%s", hpa.Namespace, hpa.Name)
 
-			// Register the HPA in the selector tracker. In production this is done by
-			// enqueueHPA before the worker calls reconcileAutoscaler, but this test
-			// calls reconcileAutoscaler directly, bypassing the queue.
+			// 在 selector tracker 中注册 HPA。生产中 enqueueHPA 会在 worker 调用
+			// reconcileAutoscaler 前完成注册，而此测试直接调用 reconcileAutoscaler，
+			// 绕过了队列。
 			hpaKey := selectors.Key{Name: hpa.Name, Namespace: hpa.Namespace}
 			setup.controller.selectorTracker.PutIfAbsent(hpa.Namespace, hpaKey, labels.Nothing())
 
@@ -3245,9 +3244,9 @@ func TestScaleDownCM(t *testing.T) {
 			hpa := buildHPA(t, &tt.fixture)
 			key := fmt.Sprintf("%s/%s", hpa.Namespace, hpa.Name)
 
-			// Register the HPA in the selector tracker. In production this is done by
-			// enqueueHPA before the worker calls reconcileAutoscaler, but this test
-			// calls reconcileAutoscaler directly, bypassing the queue.
+			// 在 selector tracker 中注册 HPA。生产中 enqueueHPA 会在 worker 调用
+			// reconcileAutoscaler 前完成注册，而此测试直接调用 reconcileAutoscaler，
+			// 绕过了队列。
 			hpaKey := selectors.Key{Name: hpa.Name, Namespace: hpa.Namespace}
 			setup.controller.selectorTracker.PutIfAbsent(hpa.Namespace, hpaKey, labels.Nothing())
 
@@ -3292,14 +3291,14 @@ func TestScaleDownCM(t *testing.T) {
 	}
 }
 
-// TestScaleToZeroBehavior consolidates tests for HPA scale-to-zero handling:
-//   - Without ScaledToZero condition, scaling from zero is disabled regardless of HPAScaleToZero.
-//   - When minReplicas is increased above zero with ScaledToZero condition present, behavior
-//     differs based on HPAScaleToZero: enabled → scale up to minReplicas; disabled → scaling disabled.
-//   - On normal rescale with stale ScaledToZero condition: HPAScaleToZero enabled → condition set to False;
-//     disabled → condition removed entirely.
-//   - Manual scale to zero (minReplicas >= 1, no ScaledToZero condition) pauses HPA regardless of HPAScaleToZero.
-//   - With HPAScaleToZero disabled, no ScaledToZero condition is recorded on a normal rescale.
+// TestScaleToZeroBehavior 汇总 HPA 缩至零时的各类行为：
+//   - 没有 ScaledToZero 条件时，无论 HPAScaleToZero 如何设置，均禁止从零扩容。
+//   - 存在 ScaledToZero 条件且 minReplicas 增至零以上时，行为取决于 HPAScaleToZero：
+//     开启则扩容至 minReplicas；关闭则禁止扩缩容。
+//   - 正常扩缩容时存在过期 ScaledToZero 条件：HPAScaleToZero 开启则将条件设为 False；
+//     关闭则完全移除该条件。
+//   - 手动缩至零（minReplicas >= 1 且无 ScaledToZero 条件）时，无论 HPAScaleToZero 如何设置，均暂停 HPA。
+//   - HPAScaleToZero 关闭时，正常扩缩容不会记录 ScaledToZero 条件。
 func TestScaleToZeroBehavior(t *testing.T) {
 	targetValue := resource.MustParse("15.0")
 
@@ -3314,7 +3313,7 @@ func TestScaleToZeroBehavior(t *testing.T) {
 		expectedConditions      []autoscalingv2.HorizontalPodAutoscalerCondition
 	}{
 		{
-			// Without ScaledToZero condition, scaling from zero is disabled regardless of feature gate
+			// 没有 ScaledToZero 条件时，无论特性门控如何设置，均禁止从零扩容。
 			name:           "from zero without condition, HPAScaleToZero enabled",
 			hpaScaleToZero: true,
 			fixture: horizontalScenario{
@@ -3379,7 +3378,7 @@ func TestScaleToZeroBehavior(t *testing.T) {
 			},
 		},
 		{
-			// HPA previously scaled to zero, minReplicas increased to 2 → scale up to minReplicas
+			// HPA 此前已缩至零，minReplicas 增至 2，应扩容至 minReplicas。
 			name:           "minReplicas increased with ScaledToZero condition, HPAScaleToZero enabled",
 			hpaScaleToZero: true,
 			fixture: horizontalScenario{
@@ -3417,7 +3416,7 @@ func TestScaleToZeroBehavior(t *testing.T) {
 			},
 		},
 		{
-			// HPAScaleToZero disabled: scaledToZeroCondition=false → treated as manual scale-down, scaling disabled
+			// HPAScaleToZero 关闭：scaledToZeroCondition=false 视为手动缩容，禁止扩缩容。
 			name:           "minReplicas increased with ScaledToZero condition, HPAScaleToZero disabled",
 			hpaScaleToZero: false,
 			fixture: horizontalScenario{
@@ -3453,7 +3452,7 @@ func TestScaleToZeroBehavior(t *testing.T) {
 			},
 		},
 		{
-			// HPAScaleToZero enabled: ScaledToZero condition set to False on normal rescale
+			// HPAScaleToZero 开启：正常扩缩容时将 ScaledToZero 条件设为 False。
 			name:           "stale ScaledToZero condition cleared on normal rescale, HPAScaleToZero enabled",
 			hpaScaleToZero: true,
 			fixture: horizontalScenario{
@@ -3485,7 +3484,7 @@ func TestScaleToZeroBehavior(t *testing.T) {
 			},
 		},
 		{
-			// HPAScaleToZero disabled: stale ScaledToZero condition removed on rescale
+			// HPAScaleToZero 关闭：扩缩容时移除过期的 ScaledToZero 条件。
 			name:           "stale ScaledToZero condition removed on normal rescale, HPAScaleToZero disabled",
 			hpaScaleToZero: false,
 			fixture: horizontalScenario{
@@ -3514,8 +3513,8 @@ func TestScaleToZeroBehavior(t *testing.T) {
 			}),
 		},
 		{
-			// With minReplicas >= 1, a workload manually scaled to zero (no ScaledToZero condition)
-			// should cause HPA to pause (ScalingDisabled), regardless of feature gate
+			// minReplicas >= 1 时，工作负载被手动缩至零（无 ScaledToZero 条件）
+			// 应使 HPA 暂停（ScalingDisabled），无论特性门控如何设置。
 			name:           "manual scale to zero disables HPA, HPAScaleToZero enabled",
 			hpaScaleToZero: true,
 			fixture: horizontalScenario{
@@ -3568,7 +3567,7 @@ func TestScaleToZeroBehavior(t *testing.T) {
 			},
 		},
 		{
-			// With HPAScaleToZero disabled, no ScaledToZero condition is recorded.
+			// HPAScaleToZero 关闭时，正常扩缩容不会记录 ScaledToZero 条件。
 			name:           "no ScaledToZero condition when HPAScaleToZero disabled",
 			hpaScaleToZero: false,
 			fixture: horizontalScenario{
@@ -3874,9 +3873,9 @@ func TestTolerance(t *testing.T) {
 			hpa := buildHPA(t, &tt.fixture)
 			key := fmt.Sprintf("%s/%s", hpa.Namespace, hpa.Name)
 
-			// Register the HPA in the selector tracker. In production this is done by
-			// enqueueHPA before the worker calls reconcileAutoscaler, but this test
-			// calls reconcileAutoscaler directly, bypassing the queue.
+			// 在 selector tracker 中注册 HPA。生产中 enqueueHPA 会在 worker 调用
+			// reconcileAutoscaler 前完成注册，而此测试直接调用 reconcileAutoscaler，
+			// 绕过了队列。
 			hpaKey := selectors.Key{Name: hpa.Name, Namespace: hpa.Namespace}
 			setup.controller.selectorTracker.PutIfAbsent(hpa.Namespace, hpaKey, labels.Nothing())
 
@@ -4044,7 +4043,7 @@ func TestConfigurableTolerance(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if !tt.configurableToleranceGate {
-				// Set emulated version to 1.36 so that disabling the feature gate is allowed.
+				// 将模拟版本设为 1.36，以便允许关闭该特性门控。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.36"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HPAConfigurableTolerance, tt.configurableToleranceGate)
@@ -4618,7 +4617,7 @@ func TestMetricsEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// TODO: Remove skip once this issue is resolved: https://github.com/kubernetes/kubernetes/issues/124083
+			// TODO: 此问题解决后移除跳过：https://github.com/kubernetes/kubernetes/issues/124083
 			if tt.skipWindowsTest && goruntime.GOOS == "windows" {
 				t.Skip("Skip flaking test on Windows.")
 			}
@@ -4643,9 +4642,9 @@ func TestMetricsEdgeCases(t *testing.T) {
 			hpa := buildHPA(t, &tt.fixture)
 			key := fmt.Sprintf("%s/%s", hpa.Namespace, hpa.Name)
 
-			// Register the HPA in the selector tracker. In production this is done by
-			// enqueueHPA before the worker calls reconcileAutoscaler, but this test
-			// calls reconcileAutoscaler directly, bypassing the queue.
+			// 在 selector tracker 中注册 HPA。生产中 enqueueHPA 会在 worker 调用
+			// reconcileAutoscaler 前完成注册，而此测试直接调用 reconcileAutoscaler，
+			// 绕过了队列。
 			hpaKey := selectors.Key{Name: hpa.Name, Namespace: hpa.Namespace}
 			setup.controller.selectorTracker.PutIfAbsent(hpa.Namespace, hpaKey, labels.Nothing())
 
@@ -4795,7 +4794,7 @@ func TestUpscaleCap(t *testing.T) {
 }
 
 func TestUpscaleCapGreaterThanMaxReplicas(t *testing.T) {
-	// TODO: Remove skip once this issue is resolved: https://github.com/kubernetes/kubernetes/issues/124083
+	// TODO: 此问题解决后移除跳过：https://github.com/kubernetes/kubernetes/issues/124083
 	if goruntime.GOOS == "windows" {
 		t.Skip("Skip flaking test on Windows.")
 	}
@@ -4806,7 +4805,7 @@ func TestUpscaleCapGreaterThanMaxReplicas(t *testing.T) {
 		statusReplicas:  3,
 		scaleUpRules:    generateScalingRules(0, 0, 700, 60, 0),
 		initialReplicas: 3,
-		// expectedDesiredReplicas would be 24 without maxReplicas
+		// 若不设置 maxReplicas，expectedDesiredReplicas 将为 24。
 		expectedDesiredReplicas: 20,
 		CPUTarget:               10,
 		reportedLevels:          []uint64{100, 200, 300},
@@ -5049,8 +5048,8 @@ func TestConditionAmbiguousSelectorWhenPartialSelectorOverlapBetweenHPAs(t *test
 							Name:      fmt.Sprintf("%s-%d", podNamePrefix, i),
 							Namespace: testNamespace,
 							Labels: map[string]string{
-								"name":    podNamePrefix, // selected by the original HPA
-								"cheddar": "cheese",      // selected by test-hpa-2
+								"name":    podNamePrefix, // 由原始 HPA 选择。
+								"cheddar": "cheese",      // 由 test-hpa-2 选择。
 							},
 						},
 					}
@@ -5201,11 +5200,11 @@ func TestConditionInvalidSourceType(t *testing.T) {
 		expectedReportedReconciliationActionLabel: monitor.ActionLabelNone,
 		expectedReportedReconciliationErrorLabel:  monitor.ErrorLabelSpec,
 		expectedReportedMetricComputationActionLabels: map[autoscalingv2.MetricSourceType]monitor.ActionLabel{
-			// Actually, such an invalid type should be validated in the kube-apiserver and invalid metric type shouldn't be recorded.
+			// 实际上，此类无效类型应由 kube-apiserver 校验，不应记录无效指标类型。
 			"CheddarCheese": monitor.ActionLabelNone,
 		},
 		expectedReportedMetricComputationErrorLabels: map[autoscalingv2.MetricSourceType]monitor.ErrorLabel{
-			// Actually, such an invalid type should be validated in the kube-apiserver and invalid metric type shouldn't be recorded.
+			// 实际上，此类无效类型应由 kube-apiserver 校验，不应记录无效指标类型。
 			"CheddarCheese": monitor.ErrorLabelSpec,
 		},
 	}
@@ -5426,30 +5425,29 @@ func TestStabilizeDownscale(t *testing.T) {
 	tc.runTest(t)
 }
 
-// TestComputedToleranceAlgImplementation is a regression test which
-// back-calculates a minimal percentage for downscaling based on a small percentage
-// increase in pod utilization which is calibrated against the tolerance value.
+// TestComputedToleranceAlgImplementation 是一项回归测试：根据 Pod 使用率的小幅增长
+// 反推缩容所需的最小百分比，并以容差值为基准进行校准。
 func TestComputedToleranceAlgImplementation(t *testing.T) {
 
 	startPods := int32(10)
-	// 150 mCPU per pod.
+	// 每个 Pod 150 mCPU。
 	totalUsedCPUOfAllPods := uint64(startPods * 150)
-	// Each pod starts out asking for 2X what is really needed.
-	// This means we will have a 50% ratio of used/requested
+	// 每个 Pod 最初申请实际需求 2 倍的资源，
+	// 因此 used/requested 比率为 50%。
 	totalRequestedCPUOfAllPods := int32(2 * totalUsedCPUOfAllPods)
 	requestedToUsed := float64(totalRequestedCPUOfAllPods / int32(totalUsedCPUOfAllPods))
-	// Spread the amount we ask over 10 pods.  We can add some jitter later in reportedLevels.
+	// 将申请总量分摊到 10 个 Pod；后续可在 reportedLevels 中加入抖动。
 	perPodRequested := totalRequestedCPUOfAllPods / startPods
 
-	// Force a minimal scaling event by satisfying  (tolerance < 1 - resourcesUsedRatio).
+	// 满足 tolerance < 1 - resourcesUsedRatio，触发最小扩缩容事件。
 	target := math.Abs(1/(requestedToUsed*(1-defaultTestingTolerance))) + .01
 	finalCPUPercentTarget := int32(target * 100)
 	resourcesUsedRatio := float64(totalUsedCPUOfAllPods) / float64(float64(totalRequestedCPUOfAllPods)*target)
 
-	// i.e. .60 * 20 -> scaled down expectation.
+	// 即 .60 * 20，预期缩容。
 	finalPods := int32(math.Ceil(resourcesUsedRatio * float64(startPods)))
 
-	// To breach tolerance we will create a utilization ratio difference of tolerance to usageRatioToleranceValue)
+	// 为突破容差，使使用率比率与 usageRatioToleranceValue 相差一个容差。
 	tc1 := testCase{
 		minReplicas:             0,
 		maxReplicas:             1000,
@@ -5580,10 +5578,10 @@ func TestAvoidUnnecessaryUpdates(t *testing.T) {
 	testClient.PrependReactor("list", "horizontalpodautoscalers", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		tc.Lock()
 		defer tc.Unlock()
-		// fake out the verification logic and mark that we're done processing
+		// 绕过验证逻辑，并标记处理已完成。
 		go func() {
-			// wait a tick and then mark that we're finished (otherwise, we have no
-			// way to indicate that we're finished, because the function decides not to do anything)
+			// 等待片刻后标记完成；否则函数决定不执行任何操作时，
+			// 无法向外部表明处理已结束。
 			time.Sleep(1 * time.Second)
 			tc.Lock()
 			tc.statusUpdated = true
@@ -5614,11 +5612,10 @@ func TestAvoidUnnecessaryUpdates(t *testing.T) {
 								Name: v1.ResourceCPU,
 								Target: autoscalingv2.MetricTarget{
 									Type: autoscalingv2.UtilizationMetricType,
-									// TODO: Change this to &tc.CPUTarget and the expected ScaleLimited
-									//       condition to False. This test incorrectly leaves the v1
-									//       HPA field TargetCPUUtilizization field blank and the
-									//       controller defaults to a target of 80. So the test relies
-									//       on downscale stabilization to prevent a scale change.
+									// TODO: 改为 &tc.CPUTarget，并将预期 ScaleLimited 条件设为 False。
+									//       此测试错误地留空 v1 HPA 的 TargetCPUUtilizization 字段，
+									//       控制器因而默认目标值为 80。测试依赖缩容稳定窗口
+									//       来避免副本数变化。
 									AverageUtilization: &eighty,
 								},
 							},
@@ -5675,7 +5672,7 @@ func TestAvoidUnnecessaryUpdates(t *testing.T) {
 	})
 	testClient.PrependReactor("update", "horizontalpodautoscalers", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		assert.Fail(t, "should not have attempted to update the HPA when nothing changed")
-		// mark that we've processed this HPA
+		// 标记此 HPA 已处理。
 		tc.processed <- ""
 		return true, nil, fmt.Errorf("unexpected call")
 	})
@@ -5814,13 +5811,13 @@ func generateScalingRules(pods, podsPeriod, percent, percentPeriod, stabilizatio
 	return &directionBehavior
 }
 
-// generateEventsUniformDistribution generates events that uniformly spread in the time window
+// generateEventsUniformDistribution 在时间窗口内均匀生成事件。
 //
 //	time.Now()-periodSeconds  ; time.Now()
 //
-// It split the time window into several segments (by the number of events) and put the event in the center of the segment
-// it is needed if you want to create events for several policies (to check how "outdated" flag is set).
-// E.g. generateEventsUniformDistribution([]int{1,2,3,4}, 120) will spread events uniformly for the last 120 seconds:
+// 将时间窗口按事件数分段，并把每个事件放在对应段的中点。
+// 为多个策略生成事件时需要使用此分布，以检查 "outdated" 标志如何设置。
+// 例如，generateEventsUniformDistribution([]int{1,2,3,4}, 120) 会在最近 120 秒内均匀分布事件：
 //
 //	1          2          3          4
 //
@@ -5829,9 +5826,9 @@ func generateScalingRules(pods, podsPeriod, percent, percentPeriod, stabilizatio
 //	^          ^          ^          ^          ^
 //
 // -120s      -90s       -60s       -30s       now()
-// And we can safely have two different stabilizationWindows:
-//   - 60s (guaranteed to have last half of events)
-//   - 120s (guaranteed to have all events)
+// 因此可以安全设置两个不同的 stabilizationWindows：
+//   - 60s（保证覆盖最近一半事件）
+//   - 120s（保证覆盖全部事件）
 func generateEventsUniformDistribution(rawEvents []int, periodSeconds int) []timestampedScaleEvent {
 	events := make([]timestampedScaleEvent, len(rawEvents))
 	segmentDuration := float64(periodSeconds) / float64(len(rawEvents))
@@ -5930,18 +5927,18 @@ func TestScalingWithRules(t *testing.T) {
 	type TestCase struct {
 		name string
 		key  string
-		// controller arguments
+		// 控制器参数。
 		scaleUpEvents   []timestampedScaleEvent
 		scaleDownEvents []timestampedScaleEvent
-		// HPA Spec arguments
+		// HPA Spec 参数。
 		specMinReplicas int32
 		specMaxReplicas int32
 		scaleUpRules    *autoscalingv2.HPAScalingRules
 		scaleDownRules  *autoscalingv2.HPAScalingRules
-		// external world state
+		// 外部环境状态。
 		currentReplicas              int32
 		prenormalizedDesiredReplicas int32
-		// test expected result
+		// 测试预期结果。
 		expectedReplicas  int32
 		expectedCondition string
 	}
@@ -6002,7 +5999,7 @@ func TestScalingWithRules(t *testing.T) {
 			scaleUpRules:                 generateScalingRules(0, 0, 1, 60, 0),
 			name:                         "scaleUpLimit is the limit because scaleUpLimit < maxReplicas with user policies",
 		},
-		// ScaleUp without PeriodSeconds usage
+		// 不使用 PeriodSeconds 的扩容。
 		{
 			name:                         "scaleUp with default behavior",
 			specMinReplicas:              1,
@@ -6155,8 +6152,8 @@ func TestScalingWithRules(t *testing.T) {
 			expectedCondition:            "TooManyReplicas",
 		},
 		{
-			// corner case for calculating the scaleUpLimit, when we changed pod policy after a lot of scaleUp events
-			// in this case we shouldn't allow scale up, though, the naive formula will suggest that scaleUplimit is less then CurrentReplicas (100-15+5 < 100)
+			// 计算 scaleUpLimit 的边界情况：多次扩容后修改 Pod 策略。
+			// 此时不应允许扩容，尽管简单公式会得出 scaleUplimit < CurrentReplicas（100-15+5 < 100）。
 			name:                         "scaleUp with currentReplicas limitation with rate.PeriodSeconds with a lot of recent scale up events",
 			scaleUpEvents:                generateEventsUniformDistribution([]int{1, 5, 9}, 120),
 			specMinReplicas:              1,
@@ -6164,7 +6161,7 @@ func TestScalingWithRules(t *testing.T) {
 			scaleUpRules:                 generateScalingRules(5, 120, 0, 0, 0),
 			currentReplicas:              100,
 			prenormalizedDesiredReplicas: 500,
-			expectedReplicas:             100, // 120 seconds ago we had (100 - 15) replicas, now the rate.Pods = 5,
+			expectedReplicas:             100, // 120 秒前有 (100 - 15) 个副本，现在 rate.Pods = 5。
 			expectedCondition:            "ScaleUpLimit",
 		},
 		{
@@ -6201,7 +6198,7 @@ func TestScalingWithRules(t *testing.T) {
 			expectedReplicas:             16,
 			expectedCondition:            "ScaleUpLimit",
 		},
-		// ScaleDown with PeriodSeconds usage
+		// 使用 PeriodSeconds 的缩容。
 		{
 			name:                         "scaleDown with default policy and previous events",
 			scaleDownEvents:              generateEventsUniformDistribution([]int{1, 5, 9}, 120),
@@ -6209,7 +6206,7 @@ func TestScalingWithRules(t *testing.T) {
 			specMaxReplicas:              1000,
 			currentReplicas:              10,
 			prenormalizedDesiredReplicas: 5,
-			expectedReplicas:             5, // without scaleDown rate limitations the PeriodSeconds does not influence anything
+			expectedReplicas:             5, // 若没有 scaleDown 速率限制，PeriodSeconds 不会影响结果。
 			expectedCondition:            "DesiredWithinRange",
 		},
 		{
@@ -6239,7 +6236,7 @@ func TestScalingWithRules(t *testing.T) {
 			scaleDownEvents:              generateEventsUniformDistribution([]int{1, 5, 9}, 120),
 			specMinReplicas:              5,
 			specMaxReplicas:              1000,
-			scaleDownRules:               generateScalingRules(0, 0, 100, 120, 300), // 100% removal - is always to 0 => limited by MinReplicas
+			scaleDownRules:               generateScalingRules(0, 0, 100, 120, 300), // 移除 100% 总会得到 0，因此实际结果受 MinReplicas 限制。
 			currentReplicas:              100,
 			prenormalizedDesiredReplicas: 2,
 			expectedReplicas:             5,
@@ -6280,8 +6277,8 @@ func TestScalingWithRules(t *testing.T) {
 			expectedCondition:            "ScaleDownLimit",
 		},
 		{
-			// corner case for calculating the scaleDownLimit, when we changed pod or percent policy after a lot of scaleDown events
-			// in this case we shouldn't allow scale down, though, the naive formula will suggest that scaleDownlimit is more then CurrentReplicas (100+30-10% > 100)
+			// 计算 scaleDownLimit 的边界情况：多次缩容后修改 Pod 或百分比策略。
+			// 此时不应允许缩容，尽管简单公式会得出 scaleDownlimit > CurrentReplicas（100+30-10% > 100）。
 			name:                         "scaleDown with previous events preventing further scale down",
 			scaleDownEvents:              generateEventsUniformDistribution([]int{10, 10, 10}, 120),
 			specMinReplicas:              1,
@@ -6289,11 +6286,11 @@ func TestScalingWithRules(t *testing.T) {
 			scaleDownRules:               generateScalingRules(0, 0, 10, 120, 300),
 			currentReplicas:              100,
 			prenormalizedDesiredReplicas: 0,
-			expectedReplicas:             100, // (100 + 30) - 10% = 117 is more then 100 (currentReplicas), keep 100
+			expectedReplicas:             100, // (100 + 30) - 10% = 117，大于 100（currentReplicas），因此保留 100。
 			expectedCondition:            "ScaleDownLimit",
 		},
 		{
-			// corner case, the same as above, but calculation shows that we should go below zero
+			// 与上例相同的边界情况，但计算结果表明副本数应低于零。
 			name:                         "scaleDown with with previous events still allowing more scale down",
 			scaleDownEvents:              generateEventsUniformDistribution([]int{10, 10, 10}, 120),
 			specMinReplicas:              1,
@@ -6301,7 +6298,7 @@ func TestScalingWithRules(t *testing.T) {
 			scaleDownRules:               generateScalingRules(0, 0, 1000, 120, 300),
 			currentReplicas:              10,
 			prenormalizedDesiredReplicas: 5,
-			expectedReplicas:             5, // (10 + 30) - 1000% = -360 is less than 0 and less then 5 (desired by metrics), set 5
+			expectedReplicas:             5, // (10 + 30) - 1000% = -360，小于 0 且小于指标期望的 5，因此设为 5。
 			expectedCondition:            "DesiredWithinRange",
 		},
 		{
@@ -6400,7 +6397,7 @@ func TestScalingWithRules(t *testing.T) {
 
 }
 
-// TestStoreScaleEvents tests events storage and usage
+// TestStoreScaleEvents 测试扩缩容事件的存储与使用。
 func TestStoreScaleEvents(t *testing.T) {
 	type TestCase struct {
 		name                   string
@@ -6415,14 +6412,14 @@ func TestStoreScaleEvents(t *testing.T) {
 		{
 			name:                   "empty entries with default behavior",
 			replicaChange:          5,
-			prevScaleEvents:        []timestampedScaleEvent{}, // no history -> 0 replica change
-			newScaleEvents:         []timestampedScaleEvent{}, // no behavior -> no events are stored
+			prevScaleEvents:        []timestampedScaleEvent{}, // 无历史记录，副本数变化为 0。
+			newScaleEvents:         []timestampedScaleEvent{}, // 无行为配置，不存储事件。
 			expectedReplicasChange: 0,
 		},
 		{
 			name:                   "empty entries with two-policy-behavior",
 			replicaChange:          5,
-			prevScaleEvents:        []timestampedScaleEvent{}, // no history -> 0 replica change
+			prevScaleEvents:        []timestampedScaleEvent{}, // 无历史记录，副本数变化为 0。
 			newScaleEvents:         []timestampedScaleEvent{{5, time.Now(), false}},
 			scalingRules:           generateScalingRules(10, 60, 100, 60, 0),
 			expectedReplicasChange: 0,
@@ -6431,10 +6428,10 @@ func TestStoreScaleEvents(t *testing.T) {
 			name:          "one outdated entry to be kept untouched without behavior",
 			replicaChange: 5,
 			prevScaleEvents: []timestampedScaleEvent{
-				{7, time.Now().Add(-time.Second * time.Duration(61)), false}, // outdated event, should be replaced
+				{7, time.Now().Add(-time.Second * time.Duration(61)), false}, // 过期事件，应替换。
 			},
 			newScaleEvents: []timestampedScaleEvent{
-				{7, time.Now(), false}, // no behavior -> we don't touch stored events
+				{7, time.Now(), false}, // 无行为配置，不改动已存储事件。
 			},
 			expectedReplicasChange: 0,
 		},
@@ -6442,7 +6439,7 @@ func TestStoreScaleEvents(t *testing.T) {
 			name:          "one outdated entry to be replaced with behavior",
 			replicaChange: 5,
 			prevScaleEvents: []timestampedScaleEvent{
-				{7, time.Now().Add(-time.Second * time.Duration(61)), false}, // outdated event, should be replaced
+				{7, time.Now().Add(-time.Second * time.Duration(61)), false}, // 过期事件，应替换。
 			},
 			newScaleEvents: []timestampedScaleEvent{
 				{5, time.Now(), false},
@@ -6467,7 +6464,7 @@ func TestStoreScaleEvents(t *testing.T) {
 			name:          "two entries, one of them to be replaced",
 			replicaChange: 5,
 			prevScaleEvents: []timestampedScaleEvent{
-				{7, time.Now().Add(-time.Second * time.Duration(61)), false}, // outdated event, should be replaced
+				{7, time.Now().Add(-time.Second * time.Duration(61)), false}, // 过期事件，应替换。
 				{6, time.Now().Add(-time.Second * time.Duration(59)), false},
 			},
 			newScaleEvents: []timestampedScaleEvent{
@@ -6483,8 +6480,8 @@ func TestStoreScaleEvents(t *testing.T) {
 			prevScaleEvents: []timestampedScaleEvent{
 				{8, time.Now().Add(-time.Second * time.Duration(29)), false},
 				{6, time.Now().Add(-time.Second * time.Duration(59)), false},
-				{7, time.Now().Add(-time.Second * time.Duration(61)), false}, // outdated event, should be marked as outdated
-				{9, time.Now().Add(-time.Second * time.Duration(61)), false}, // outdated event, should be replaced
+				{7, time.Now().Add(-time.Second * time.Duration(61)), false}, // 过期事件，应标记为过期。
+				{9, time.Now().Add(-time.Second * time.Duration(61)), false}, // 过期事件，应替换。
 			},
 			newScaleEvents: []timestampedScaleEvent{
 				{8, time.Now(), false},
@@ -6514,7 +6511,7 @@ func TestStoreScaleEvents(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// testing scale up
+			// 测试扩容。
 			var behaviorUp *autoscalingv2.HorizontalPodAutoscalerBehavior
 			if tc.scalingRules != nil {
 				behaviorUp = &autoscalingv2.HorizontalPodAutoscalerBehavior{
@@ -6537,7 +6534,7 @@ func TestStoreScaleEvents(t *testing.T) {
 				assert.Equal(t, expEvent.replicaChange, gotEvent.replicaChange, "up: idx:%v replicaChange", i)
 				assert.Equal(t, expEvent.outdated, gotEvent.outdated, "up: idx:%v outdated", i)
 			}
-			// testing scale down
+			// 测试缩容。
 			var behaviorDown *autoscalingv2.HorizontalPodAutoscalerBehavior
 			if tc.scalingRules != nil {
 				behaviorDown = &autoscalingv2.HorizontalPodAutoscalerBehavior{
@@ -6627,7 +6624,7 @@ func TestNormalizeDesiredReplicasWithBehavior(t *testing.T) {
 			recommendations: []timestampedRecommendation{
 				{1, now.Add(-2 * time.Minute)},
 				{2, now.Add(-1 * time.Minute)}},
-			currentReplicas:              100, // to apply scaleDown delay we should have current > desired
+			currentReplicas:              100, // 应用 scaleDown 延迟需要 current > desired。
 			prenormalizedDesiredReplicas: 3,
 			expectedStabilizedReplicas:   3,
 			expectedRecommendations: []timestampedRecommendation{
@@ -6643,7 +6640,7 @@ func TestNormalizeDesiredReplicasWithBehavior(t *testing.T) {
 			recommendations: []timestampedRecommendation{
 				{4, now.Add(-2 * time.Minute)},
 				{5, now.Add(-1 * time.Minute)}},
-			currentReplicas:              1, // to apply scaleDown delay we should have current > desired
+			currentReplicas:              1, // 应用 scaleDown 延迟需要 current > desired。
 			prenormalizedDesiredReplicas: 3,
 			expectedStabilizedReplicas:   3,
 			expectedRecommendations: []timestampedRecommendation{
@@ -6659,7 +6656,7 @@ func TestNormalizeDesiredReplicasWithBehavior(t *testing.T) {
 			recommendations: []timestampedRecommendation{
 				{10, now.Add(-10 * time.Minute)},
 				{9, now.Add(-9 * time.Minute)}},
-			currentReplicas:              100, // to apply scaleDown delay we should have current > desired
+			currentReplicas:              100, // 应用 scaleDown 延迟需要 current > desired。
 			prenormalizedDesiredReplicas: 3,
 			expectedStabilizedReplicas:   3,
 			expectedRecommendations: []timestampedRecommendation{
@@ -6701,9 +6698,8 @@ func TestNormalizeDesiredReplicasWithBehavior(t *testing.T) {
 			scaleDownStabilizationWindowSeconds: 3 * 60,
 		},
 		{
-			// we can reuse only the first recommendation element
-			// as the scale up delay = 150 (set in test), scale down delay = 300 (by default)
-			// hence, only the first recommendation is obsolete for both scale up and scale down
+			// 只能复用第一个推荐元素：扩容延迟为 150（测试设置），
+			// 缩容延迟默认为 300，因此只有第一个推荐对扩容和缩容都已过期。
 			name: "scale up stabilization, reuse one of obsolete recommendation element",
 			key:  "",
 			recommendations: []timestampedRecommendation{
@@ -6935,14 +6931,14 @@ func TestMultipleHPAs(t *testing.T) {
 	var minReplicas int32 = 1
 	var cpuTarget int32 = 10
 
-	// generate resources (HPAs, Scales, Pods...)
+	// 生成资源（HPA、Scale、Pod 等）。
 	for i := 0; i < hpaCount; i++ {
 		hpaName := fmt.Sprintf("dummy-hpa-%v", i)
 		deploymentName := fmt.Sprintf("dummy-target-%v", i)
 		labelSet := map[string]string{"name": deploymentName}
 		selector := labels.SelectorFromSet(labelSet).String()
 
-		// generate HPAs
+		// 生成 HPA。
 		h := autoscalingv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      hpaName,
@@ -6981,7 +6977,7 @@ func TestMultipleHPAs(t *testing.T) {
 		}
 		hpaList[i] = h
 
-		// generate Scale
+		// 生成 Scale。
 		scaleList[deploymentName] = &autoscalingv1.Scale{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      deploymentName,
@@ -6996,7 +6992,7 @@ func TestMultipleHPAs(t *testing.T) {
 			},
 		}
 
-		// generate Pods
+		// 生成 Pod。
 		cpuRequest := resource.MustParse("1.0")
 		pod := v1.Pod{
 			Status: v1.PodStatus{
@@ -7046,7 +7042,7 @@ func TestMultipleHPAs(t *testing.T) {
 		podNamePrefix := ""
 		labelSet := map[string]string{}
 
-		// selector should be in form: "name=dummy-target-X" where X is the number of resource
+		// 选择器格式应为 "name=dummy-target-X"，其中 X 为资源编号。
 		selector := action.(core.ListAction).GetListRestrictions().Labels
 		parsedSelector := strings.Split(selector.String(), "=")
 		if len(parsedSelector) > 1 {
@@ -7108,15 +7104,15 @@ func TestMultipleHPAs(t *testing.T) {
 	testClient.AddReactor("list", "pods", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &v1.PodList{}
 
-		// selector should be in form: "name=dummy-target-X" where X is the number of resource
+		// 选择器格式应为 "name=dummy-target-X"，其中 X 为资源编号。
 		selector := action.(core.ListAction).GetListRestrictions().Labels
 		parsedSelector := strings.Split(selector.String(), "=")
 
-		// list with filter
+		// 带过滤条件的列表。
 		if len(parsedSelector) > 1 {
 			obj.Items = append(obj.Items, *podList[parsedSelector[1]])
 		} else {
-			// no filter - return all pods
+			// 无过滤条件，返回全部 Pod。
 			for _, p := range podList {
 				obj.Items = append(obj.Items, *p)
 			}
@@ -7188,10 +7184,10 @@ func TestMultipleHPAs(t *testing.T) {
 	require.NoError(t, err)
 	assert.InEpsilon(t, float64(hpaCount), v, 0.01, "Expected objects count to match number of HPAs")
 
-	// Simulate the watch event for deletion
+	// 模拟删除的 watch 事件。
 	hpaWatcher.Delete(&hpaList[0])
 
-	// Give the controller time to process the deletion and update the monitor
+	// 等待控制器处理删除事件并更新 monitor。
 	assert.Eventually(t, func() bool {
 		v, err := metricstestutil.GetGaugeMetricValue(monitor.NumHorizontalPodAutoscalers)
 		return err == nil && v == float64(hpaCount-1)
@@ -7204,7 +7200,7 @@ func TestHPARescaleWithSuccessfulConflictRetry(t *testing.T) {
 		maxReplicas:             6,
 		specReplicas:            3,
 		statusReplicas:          3,
-		expectedDesiredReplicas: 5, // On success, the desired count is updated.
+		expectedDesiredReplicas: 5, // 成功后更新期望副本数。
 		CPUTarget:               50,
 		reportedLevels:          []uint64{600, 700, 800},
 		reportedCPURequests:     []resource.Quantity{resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0")},
@@ -7228,14 +7224,14 @@ func TestHPARescaleWithSuccessfulConflictRetry(t *testing.T) {
 	tc.testScaleClient = testScaleClient
 
 	updateCallCount := 0
-	// Use PrependReactor to simulate a transient conflict.
+	// 使用 PrependReactor 模拟瞬时冲突。
 	testScaleClient.PrependReactor("update", "replicationcontrollers", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		updateCallCount++
-		// On the first call, simulate a conflict error.
+		// 首次调用时模拟冲突错误。
 		if updateCallCount == 1 {
 			return true, nil, k8serrors.NewConflict(schema.GroupResource{Group: "", Resource: "replicationcontrollers"}, "test-rc", fmt.Errorf("simulated conflict"))
 		}
-		// On subsequent calls, let the default successful reactor handle it.
+		// 后续调用交由默认的成功 reactor 处理。
 		return false, nil, nil
 	})
 
@@ -7321,11 +7317,11 @@ func TestReconciliationsTotalCountMultipleReconciliations(t *testing.T) {
 		expectedReportedMetricComputationErrorLabels: map[autoscalingv2.MetricSourceType]monitor.ErrorLabel{
 			autoscalingv2.ResourceMetricSourceType: monitor.ErrorLabelNone,
 		},
-		// The specific count value is not important. This test verifies that
-		// reconciliationsTotal counter is incremented on each reconciliation cycle.
+		// 具体计数值不重要，此测试验证 reconciliationsTotal 计数器
+		// 在每轮协调中递增。
 		expectedReconciliationCount: 3,
-		// The specific count values are not important. This test verifies that
-		// metricComputationTotal counter is incremented for each metric type on each reconciliation.
+		// 具体计数值不重要，此测试验证 metricComputationTotal 计数器
+		// 在每轮协调中按每种指标类型递增。
 		expectedMetricComputationCounts: map[autoscalingv2.MetricSourceType]int{
 			autoscalingv2.ResourceMetricSourceType: 3,
 		},
@@ -7396,8 +7392,8 @@ func TestBuildQuantity(t *testing.T) {
 	}
 }
 
-// spyWorkQueue wraps a real rate-limiting workqueue and records whether items
-// were enqueued via Add (immediate) or AddRateLimited (delayed).
+// spyWorkQueue 包装真实限速工作队列，记录条目通过 Add（立即）
+// 还是 AddRateLimited（延迟）入队。
 type spyWorkQueue struct {
 	workqueue.TypedRateLimitingInterface[string]
 	mu                  sync.Mutex
@@ -7666,7 +7662,7 @@ func TestUpdateHPAFallsBackWhenFeatureDisabled(t *testing.T) {
 		"with HPAGeneration disabled, all updates should be rate-limited")
 }
 
-// fakeRVGetter satisfies consistencyutil.LastSyncRVGetter for tests.
+// fakeRVGetter 在测试中实现 consistencyutil.LastSyncRVGetter。
 type fakeRVGetter struct {
 	rv string
 }
@@ -7693,9 +7689,8 @@ func newConsistencyTestController(hpaLister autoscalinglisters.HorizontalPodAuto
 	return ctrl
 }
 
-// TestUpdateStatusPopulatesConsistencyStore verifies updateStatus records the
-// post-write RV/UID with the consistency store so EnsureReady reports stale
-// until the informer has caught up.
+// TestUpdateStatusPopulatesConsistencyStore 验证 updateStatus 将写入后的 RV/UID
+// 记录到一致性存储，使 EnsureReady 在 informer 追平前报告数据过期。
 func TestUpdateStatusPopulatesConsistencyStore(t *testing.T) {
 	hpa := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
@@ -7737,9 +7732,8 @@ func TestUpdateStatusPopulatesConsistencyStore(t *testing.T) {
 	}
 }
 
-// TestReconcileKeyEnsureReadyStaleCache verifies reconcileKey returns the
-// consistency error and increments the HPARequeueSkips metric when the HPA
-// informer has not yet observed the controller's last write.
+// TestReconcileKeyEnsureReadyStaleCache 验证 HPA informer 尚未观察到控制器
+// 最后一次写入时，reconcileKey 返回一致性错误并递增 HPARequeueSkips 指标。
 func TestReconcileKeyEnsureReadyStaleCache(t *testing.T) {
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	hpaLister := autoscalinglisters.NewHorizontalPodAutoscalerLister(indexer)
@@ -7776,8 +7770,8 @@ func TestReconcileKeyEnsureReadyStaleCache(t *testing.T) {
 	assert.Equal(t, 1, int(after-before), "HPARequeueSkips should increment once per stale reconcile")
 }
 
-// TestDeleteHPAClearsConsistencyStore verifies deleteHPA clears the per-owner
-// consistency record, including when the informer delivers a tombstone.
+// TestDeleteHPAClearsConsistencyStore 验证 deleteHPA 清除按所有者记录的
+// 一致性数据，包括 informer 传入 tombstone 的情况。
 func TestDeleteHPAClearsConsistencyStore(t *testing.T) {
 	tests := []struct {
 		name string

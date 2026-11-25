@@ -47,15 +47,12 @@ const (
 	pendingExpiration  = 24 * time.Hour
 )
 
-// CSRCleanerController is a controller that garbage collects old certificate
-// signing requests (CSRs). Since there are mechanisms that automatically
-// create CSRs, and mechanisms that automatically approve CSRs, in order to
-// prevent a build up of CSRs over time, it is necessary to GC them. CSRs will
-// be removed if they meet one of the following criteria: the CSR is Approved
-// with a certificate and is old enough to be past the GC issued deadline, the
-// CSR is denied and is old enough to be past the GC denied deadline, the CSR
-// is Pending and is old enough to be past the GC pending deadline, the CSR is
-// approved with a certificate and the certificate is expired.
+// CSRCleanerController 回收过期 CSR（证书签名请求），避免自动创建和审批导致其无限累积。
+// 满足以下任一条件时会删除 CSR：
+//   - 已批准（Approved）并签发证书，且超过已签发清理时限；
+//   - 已拒绝（Denied），且超过拒绝清理时限；
+//   - 待处理（Pending），且超过待处理清理时限；
+//   - 已批准并签发证书，但证书已过期。
 type CSRCleanerController struct {
 	csrClient csrclient.CertificateSigningRequestInterface
 	csrLister certificateslisters.CertificateSigningRequestLister

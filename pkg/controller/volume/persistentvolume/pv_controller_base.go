@@ -223,8 +223,7 @@ func (ctrl *PersistentVolumeController) updateVolume(ctx context.Context, volume
 	err = ctrl.syncVolume(ctx, volume)
 	if err != nil {
 		if errors.IsConflict(err) {
-			// 版本冲突错误相当常见，控制器
-			// 控制器可以很容易地从该状态恢复。
+			// 版本冲突很常见，控制器可直接从该状态恢复。
 			logger.V(3).Info("Could not sync volume", "volumeName", volume.Name, "err", err)
 		} else {
 			logger.Error(err, "Could not sync volume", "volumeName", volume.Name)
@@ -272,8 +271,7 @@ func (ctrl *PersistentVolumeController) updateClaim(ctx context.Context, claim *
 	err = ctrl.syncClaim(ctx, claim)
 	if err != nil {
 		if errors.IsConflict(err) {
-			// 版本冲突错误相当常见，控制器
-			// 控制器可以很容易地从该状态恢复。
+			// 版本冲突很常见，控制器可直接从该状态恢复。
 			logger.V(3).Info("Could not sync claim", "PVC", klog.KObj(claim), "err", err)
 		} else {
 			logger.Error(err, "Could not sync claim", "PVC", klog.KObj(claim))
@@ -283,7 +281,7 @@ func (ctrl *PersistentVolumeController) updateClaim(ctx context.Context, claim *
 	return nil
 }
 
-// Unit test [5-5] [5-6] [5-7]
+// 单元测试 [5-5] [5-6] [5-7]
 // deleteClaim 在 worker 线程中运行，处理“声明删除”事件，
 // 清理缓存与时间戳，并触发关联卷的同步。
 func (ctrl *PersistentVolumeController) deleteClaim(ctx context.Context, claim *v1.PersistentVolumeClaim) {
@@ -294,7 +292,7 @@ func (ctrl *PersistentVolumeController) deleteClaim(ctx context.Context, claim *
 	claimKey := claimToClaimKey(claim)
 	logger.V(4).Info("Claim deleted", "PVC", klog.KObj(claim))
 	// 清理可能残留的未完成的制备起始时间戳。
-	// Unit test [5-8] [5-9]
+	// 单元测试 [5-8] [5-9]
 	ctrl.operationTimestamps.Delete(claimKey)
 
 	volumeName := claim.Spec.VolumeName
@@ -351,12 +349,9 @@ func (ctrl *PersistentVolumeController) Run(ctx context.Context) {
 // updateClaimMigrationAnnotations 修复声明上的 CSI 迁移注解；无变化时返回副本不写 API。
 func (ctrl *PersistentVolumeController) updateClaimMigrationAnnotations(ctx context.Context,
 	claim *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
-	// TODO: update[Claim|Volume]MigrationAnnotations can be optimized to not
-	// copy the claim/volume if no modifications are required. Though this
-	// requires some refactoring as well as an interesting change in the
-	// semantics of the function which may be undesirable. If no copy is made
-	// when no modifications are required this function could sometimes return a
-	// copy of the volume and sometimes return a ref to the original.
+	// TODO: 优化 update[Claim|Volume]MigrationAnnotations，无需修改时避免复制 claim/volume。
+	// 但这需要重构，并会改变函数语义：不复制时，返回值可能时而为副本、时而为原对象引用，
+	// 这种不确定性可能不受欢迎。
 	// 先深拷贝声明，避免直接修改 informer 缓存中的对象。
 	claimClone := claim.DeepCopy()
 	logger := klog.FromContext(ctx)
@@ -672,7 +667,7 @@ func (ctrl *PersistentVolumeController) setClaimProvisioner(ctx context.Context,
 
 	// 参数中的声明可能指向 watcher 缓存对象，绝不能直接修改，必须先深拷贝。
 	claimClone := claim.DeepCopy()
-	// TODO: remove the beta storage provisioner anno after the deprecation period
+	// TODO: 弃用期结束后移除 beta 存储制备器注解。
 	logger := klog.FromContext(ctx)
 	metav1.SetMetaDataAnnotation(&claimClone.ObjectMeta, storagehelpers.AnnBetaStorageProvisioner, provisionerName)
 	metav1.SetMetaDataAnnotation(&claimClone.ObjectMeta, storagehelpers.AnnStorageProvisioner, provisionerName)

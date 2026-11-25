@@ -332,7 +332,7 @@ func (dc *DisruptionController) getPodDeployment(ctx context.Context, controller
 	}
 	rs, err := dc.rsLister.ReplicaSets(namespace).Get(controllerRef.Name)
 	if err != nil {
-		// The only possible error is NotFound, which is ok here.
+		// 这里唯一可能的错误是 NotFound，可以忽略。
 		return nil, nil
 	}
 	if rs.UID != controllerRef.UID {
@@ -461,7 +461,7 @@ func (dc *DisruptionController) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
 	logger := klog.FromContext(ctx)
-	// Start events processing pipeline.
+	// 启动事件处理流水线。
 	if dc.kubeClient != nil {
 		logger.Info("Sending events to api server.")
 		dc.broadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: dc.kubeClient.CoreV1().Events("")})

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package populator 提供相关接口的实现，负责监控并维持 desired state of the world
+// Package populator 提供相关接口的实现，负责监控并维持期望状态
 // 缓存与 informer 中“真实状态”的一致性。
 package populator
 
@@ -38,7 +38,7 @@ import (
 	volutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
-// DesiredStateOfWorldPopulator 定期检查 desired state of the world 中的 Pod
+// DesiredStateOfWorldPopulator 定期检查期望状态中的 Pod
 // 是否仍然存在，不存在则将其移除；同时遍历活跃 Pod 列表，确保带有卷的 Pod
 // 都存在于该缓存中，从而使实际卷挂载状态与 informer 中的真实状态保持一致。
 type DesiredStateOfWorldPopulator interface {
@@ -116,7 +116,7 @@ func (dswp *desiredStateOfWorldPopulator) populatorLoopFunc(ctx context.Context)
 	}
 }
 
-// findAndRemoveDeletedPods 遍历 desired state of the world 中的所有 Pod，
+// findAndRemoveDeletedPods 遍历期望状态中的所有 Pod，
 // 若某 Pod 在 informer 中已不存在，或其 UID 与缓存中的记录不匹配（同名 Pod 被重建），
 // 则将其从缓存移除；此外，当卷从可挂载变为不可挂载时，也要清理相关挂载记录。
 func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.Logger) {
@@ -144,7 +144,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.L
 		default:
 			volumeActionFlag := util.DetermineVolumeAction(
 				informerPod,
-				true /* default volume action */)
+				true /* 默认卷操作 */)
 
 			if volumeActionFlag {
 				informerPodUID := volutil.GetUniquePodName(informerPod)
@@ -158,7 +158,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.L
 		}
 
 		// 走到这里说明 Pod 已不存在，或与 informer 中的 UID 不匹配，
-		// 因此必须从 desired state of the world 中清除。
+		// 因此必须从期望状态中清除。
 		logger.V(1).Info("Removing pod from dsw because it does not exist in pod informer", "podName", dswPodKey, "podUID", dswPodUID)
 		dswp.desiredStateOfWorld.DeletePod(dswPodUID, dswPodToAdd.VolumeName, dswPodToAdd.NodeName)
 	}
@@ -181,7 +181,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.L
 }
 
 // findAndAddActivePods 全量列举 informer 中的 Pod，跳过已终止的 Pod，
-// 处理其余 Pod 的卷并补齐到 desired state of the world 缓存。
+// 处理其余 Pod 的卷并补齐到期望状态缓存。
 // 同时记录列举时间，供上层按 listPodsRetryDuration 做节流。
 func (dswp *desiredStateOfWorldPopulator) findAndAddActivePods(logger klog.Logger) {
 	pods, err := dswp.podLister.List(labels.Everything())

@@ -57,6 +57,7 @@ var (
 		[]string{"plugin_name", "state"}, nil,
 		metrics.ALPHA, "")
 
+	// ForceDetachMetricCounter 按原因统计 A/D 控制器执行强制 detach 的次数。
 	ForceDetachMetricCounter = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      attachDetachController,
@@ -111,9 +112,9 @@ type attachDetachStateCollector struct {
 
 // volumeCount 是两级映射，按维度（节点或状态）与插件名累计卷数量，例如：
 //
-//	node 172.168.1.100.ec2.internal has 10 EBS and 3 glusterfs PVC in use:
+//	node 172.168.1.100.ec2.internal 正在使用 10 个 EBS 和 3 个 glusterfs PVC：
 //	{"172.168.1.100.ec2.internal": {"aws-ebs": 10, "glusterfs": 3}}
-//	state actual_state_of_world contains a total of 10 EBS volumes:
+//	状态 actual_state_of_world 中共有 10 个 EBS 卷：
 //	{"actual_state_of_world": {"aws-ebs": 10}}
 type volumeCount map[string]map[string]int64
 

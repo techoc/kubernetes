@@ -61,14 +61,12 @@ const (
 var registerMetrics sync.Once
 
 // Test_Run_Positive_DoNothing 调用 Run()，验证在没有待处理卷时不触发任何 attach 或 detach。
-// Calls Run()
-// Verifies there are no calls to attach or detach.
 func Test_Run_Positive_DoNothing(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -88,10 +86,10 @@ func Test_Run_Positive_DoNothing(t *testing.T) {
 	reconciler := NewReconciler(
 		reconcilerLoopPeriod, maxWaitForUnmountDuration, syncLoopPeriod, false, false, dsw, asw, ad, nsu, nodeLister, fakeRecorder)
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 0 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, true /* expectZeroNewAttacherCallCount */, fakePlugin)
 	verifyNewDetacherCallCount(t, true /* expectZeroNewDetacherCallCount */, fakePlugin)
@@ -101,15 +99,12 @@ func Test_Run_Positive_DoNothing(t *testing.T) {
 
 // Test_Run_Positive_OneDesiredVolumeAttach 在期望状态缓存中放入一个 node/volume/pod 元组并调用 Run()，
 // 验证产生一次 attach 调用且不产生 detach 调用。
-// Populates desiredStateOfWorld cache with one node/volume/pod tuple.
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
 func Test_Run_Positive_OneDesiredVolumeAttach(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -146,10 +141,10 @@ func Test_Run_Positive_OneDesiredVolumeAttach(t *testing.T) {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
 	verifyNewDetacherCallCount(t, true /* expectZeroNewDetacherCallCount */, fakePlugin)
@@ -158,18 +153,12 @@ func Test_Run_Positive_OneDesiredVolumeAttach(t *testing.T) {
 // Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithUnmountedVolume 验证完整生命周期：
 // 先放入一个 node/volume/pod 元组并调用 Run()，期望一次 attach；
 // 随后将卷标记为已卸载并从期望状态删除元组，期望一次 detach 且不再有新 attach。
-// Populates desiredStateOfWorld cache with one node/volume/pod tuple.
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
-// Marks the node/volume as unmounted.
-// Deletes the node/volume/pod tuple from desiredStateOfWorld cache.
-// Verifies there is one detach call and no (new) attach calls.
 func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithUnmountedVolume(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -204,17 +193,17 @@ func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithUnmountedVolume(t *te
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
 	verifyNewDetacherCallCount(t, true /* expectZeroNewDetacherCallCount */, fakePlugin)
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 
-	// Act
+	// 执行
 	dsw.DeletePod(types.UniquePodName(podName), generatedVolumeName, nodeName)
 	volumeExists = dsw.VolumeExists(generatedVolumeName, nodeName)
 	if volumeExists {
@@ -228,7 +217,7 @@ func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithUnmountedVolume(t *te
 	asw.SetVolumesMountedByNode(logger, []v1.UniqueVolumeName{generatedVolumeName}, nodeName)
 	asw.SetVolumesMountedByNode(logger, nil, nodeName)
 
-	// Assert
+	// 断言
 	waitForNewDetacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -239,11 +228,6 @@ func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithUnmountedVolume(t *te
 // Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithMountedVolume 验证卷仍处于挂载状态时，
 // 从期望状态删除 pod 不会立即 detach，而是等定时器触发强制 detach（超时原因），
 // 同时检查对应的强制 detach 指标增加一次。
-// Populates desiredStateOfWorld cache with one node/volume/pod tuple.
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
-// Deletes the node/volume/pod tuple from desiredStateOfWorld cache without first marking the node/volume as unmounted.
-// Verifies there is one detach call and no (new) attach calls.
 func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithMountedVolume(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -253,8 +237,7 @@ func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithMountedVolume(t *test
 		legacyregistry.MustRegister(metrics.ForceDetachMetricCounter)
 	})
 
-	// NOTE 原文：该值来自全局变量，测试开始时不一定为 0。因此先记录初值，后续只比较增量。
-	// NOTE: This value is being pulled from a global variable, so it won't necessarily be 0 at the start of the test
+	// 注意：该值来自全局变量，测试开始时不一定为 0。因此先记录初值，后续只比较增量。
 	initialForceDetachCountTimeout, err := metricstestutil.GetCounterMetricValue(metrics.ForceDetachMetricCounter.WithLabelValues(metrics.ForceDetachReasonTimeout))
 	if err != nil {
 		t.Errorf("Error getting initialForceDetachCountTimeout")
@@ -265,7 +248,7 @@ func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithMountedVolume(t *test
 		t.Errorf("Error getting initialForceDetachCountOutOfService")
 	}
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -301,17 +284,17 @@ func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithMountedVolume(t *test
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
 	verifyNewDetacherCallCount(t, true /* expectZeroNewDetacherCallCount */, fakePlugin)
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 
-	// Act
+	// 执行
 	dsw.DeletePod(types.UniquePodName(podName), generatedVolumeName, nodeName)
 	volumeExists = dsw.VolumeExists(generatedVolumeName, nodeName)
 	if volumeExists {
@@ -322,7 +305,7 @@ func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithMountedVolume(t *test
 			nodeName)
 	}
 
-	// Assert -- Timer will trigger detach
+	// 断言：定时器将触发 detach。
 	waitForNewDetacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -330,29 +313,20 @@ func Test_Run_Positive_OneDesiredVolumeAttachThenDetachWithMountedVolume(t *test
 	waitForDetachCallCount(t, 1 /* expectedDetachCallCount */, fakePlugin)
 
 	// 超时触发的强制 detach 应在 Timeout 原因的计数器上加一。
-	// Force detach metric due to timeout
 	testForceDetachMetric(t, int(initialForceDetachCountTimeout)+1, metrics.ForceDetachReasonTimeout)
 	// 本场景不应产生 OutOfService 原因的强制 detach，因此断言计数保持初值。
-	// We shouldn't see any additional force detaches, so only consider the initial count
 	testForceDetachMetric(t, int(initialForceDetachCountOutOfService), metrics.ForceDetachReasonOutOfService)
 }
 
 // Test_Run_Negative_OneDesiredVolumeAttachThenDetachWithUnmountedVolumeUpdateStatusFail 在节点状态更新失败时，
 // 先放入一个 node/volume/pod 元组并调用 Run()，期望一次 attach；标记卷已卸载并删除元组后，
 // 由于状态更新失败，验证不会产生 detach 调用，也不会有新 attach 调用。
-// Populates desiredStateOfWorld cache with one node/volume/pod tuple.
-// Has node update fail
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
-// Marks the node/volume as unmounted.
-// Deletes the node/volume/pod tuple from desiredStateOfWorld cache.
-// Verifies there are NO detach call and no (new) attach calls.
 func Test_Run_Negative_OneDesiredVolumeAttachThenDetachWithUnmountedVolumeUpdateStatusFail(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -388,17 +362,17 @@ func Test_Run_Negative_OneDesiredVolumeAttachThenDetachWithUnmountedVolumeUpdate
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
 	verifyNewDetacherCallCount(t, true /* expectZeroNewDetacherCallCount */, fakePlugin)
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 
-	// Act
+	// 执行
 	dsw.DeletePod(types.UniquePodName(podName), generatedVolumeName, nodeName)
 	volumeExists = dsw.VolumeExists(generatedVolumeName, nodeName)
 	if volumeExists {
@@ -411,7 +385,7 @@ func Test_Run_Negative_OneDesiredVolumeAttachThenDetachWithUnmountedVolumeUpdate
 	asw.SetVolumesMountedByNode(logger, []v1.UniqueVolumeName{generatedVolumeName}, nodeName)
 	asw.SetVolumesMountedByNode(logger, nil, nodeName)
 
-	// Assert
+	// 断言
 	// 状态更新失败时，卷会被重新上报为已挂载，因此不应触发 detach。
 	verifyNewDetacherCallCount(t, true /* expectZeroNewDetacherCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
@@ -423,20 +397,12 @@ func Test_Run_Negative_OneDesiredVolumeAttachThenDetachWithUnmountedVolumeUpdate
 // Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteMany 创建一个 ReadWriteMany 卷，
 // 在期望状态中放入两个指向该卷的 node/volume/pod 元组：调用 Run() 后期望两次 attach、零次 detach；
 // 逐个删除元组（均不先标记卸载）后，期望分别产生对应的 detach，且不再有新 attach。
-// Creates a volume with accessMode ReadWriteMany
-// Populates desiredStateOfWorld cache with two node/volume/pod tuples pointing to the created volume
-// Calls Run()
-// Verifies there are two attach calls and no detach calls.
-// Deletes the first node/volume/pod tuple from desiredStateOfWorld cache without first marking the node/volume as unmounted.
-// Verifies there is one detach call and no (new) attach calls.
-// Deletes the second node/volume/pod tuple from desiredStateOfWorld cache without first marking the node/volume as unmounted.
-// Verifies there are two detach calls and no (new) attach calls.
 func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteMany(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -474,10 +440,10 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteMany(t *testing.
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 2 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForTotalAttachCallCount(t, 2 /* expectedAttachCallCount */, fakePlugin)
@@ -485,7 +451,7 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteMany(t *testing.
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 	waitForAttachedToNodesCount(t, 2 /* expectedNodeCount */, generatedVolumeName, asw)
 
-	// Act
+	// 执行
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
 	volumeExists := dsw.VolumeExists(generatedVolumeName, nodeName1)
 	if volumeExists {
@@ -497,14 +463,14 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteMany(t *testing.
 	}
 
 	// 未标记卸载，因此需要等待定时器触发 detach。
-	// Assert -- Timer will trigger detach
+	// 断言：定时器将触发 detach。
 	waitForNewDetacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForTotalAttachCallCount(t, 2 /* expectedAttachCallCount */, fakePlugin)
 	verifyNewDetacherCallCount(t, false /* expectZeroNewDetacherCallCount */, fakePlugin)
 	waitForTotalDetachCallCount(t, 1 /* expectedDetachCallCount */, fakePlugin)
 
-	// Act
+	// 执行
 	dsw.DeletePod(types.UniquePodName(podName2), generatedVolumeName, nodeName2)
 	volumeExists = dsw.VolumeExists(generatedVolumeName, nodeName2)
 	if volumeExists {
@@ -516,7 +482,7 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteMany(t *testing.
 	}
 
 	// 删除第二个 pod 后，同样等待定时器触发第二次 detach。
-	// Assert -- Timer will trigger detach
+	// 断言：定时器将触发 detach。
 	waitForNewDetacherCallCount(t, 2 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForTotalAttachCallCount(t, 2 /* expectedAttachCallCount */, fakePlugin)
@@ -528,18 +494,12 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteMany(t *testing.
 // 在期望状态中放入两个指向它的 node/volume/pod 元组：调用 Run() 后只有一个节点能 attach 成功，
 // 另一个节点会被标记 multiattach 错误。删除成功 attach 的节点上的 pod 后，
 // 卷先 detach 再 attach 到另一个节点，故最终为两次 attach、一次 detach。
-// Creates a volume with accessMode ReadWriteOnce
-// Populates desiredStateOfWorld cache with two ode/volume/pod tuples pointing to the created volume
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
-// Deletes the node/volume/pod tuple from desiredStateOfWorld which succeeded in attaching
-// Verifies there are two attach call and one detach call.
 func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteOnce(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -567,7 +527,6 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteOnce(t *testing.
 	dsw.AddNode(nodeName2)
 
 	// 同时加入两个 pod，以触发 reconciler 中潜在的竞态条件。
-	// Add both pods at the same time to provoke a potential race condition in the reconciler
 	generatedVolumeName, podAddErr := dsw.AddPod(types.UniquePodName(podName1), controllervolumetesting.NewPod(podName1, podName1), volumeSpec, nodeName1)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
@@ -577,10 +536,10 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteOnce(t *testing.
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForTotalAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -591,12 +550,10 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteOnce(t *testing.
 	nodesForVolume := asw.GetNodesForAttachedVolume(generatedVolumeName)
 
 	// 检查 multiattach 错误是否已标记在至少一个卷+节点上。
-	// check if multiattach is marked
-	// at least one volume+node should be marked with multiattach error
 	nodeAttachedTo := nodesForVolume[0]
 	waitForMultiAttachErrorOnNode(t, nodeAttachedTo, dsw)
 
-	// Act
+	// 执行
 	// 找出实际 attach 成功的节点，后续只删除该节点上的 pod 才能触发 detach。
 	podToDelete := ""
 	if nodesForVolume[0] == nodeName1 {
@@ -617,7 +574,7 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteOnce(t *testing.
 			nodesForVolume[0])
 	}
 
-	// Assert
+	// 断言
 	waitForNewDetacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewDetacherCallCount(t, false /* expectZeroNewDetacherCallCount */, fakePlugin)
 	waitForTotalDetachCallCount(t, 1 /* expectedDetachCallCount */, fakePlugin)
@@ -629,17 +586,12 @@ func Test_Run_OneVolumeAttachAndDetachMultipleNodesWithReadWriteOnce(t *testing.
 // Test_Run_OneVolumeAttachAndDetachUncertainNodesWithReadWriteOnce 创建 ReadWriteOnce 卷：
 // 先把卷 attach 到名为 "uncertain-node" 的节点，该 attach 调用因超时失败但卷实际已挂上；
 // 删除该 pod 后，再创建调度到普通节点的 pod，验证卷能成功 attach 到新节点。
-// Creates a volume with accessMode ReadWriteOnce
-// First create a pod which will try to attach the volume to the a node named "uncertain-node". The attach call for this node will
-// fail for timeout, but the volume will be actually attached to the node after the call.
-// Secondly, delete this pod.
-// Lastly, create a pod scheduled to a normal node which will trigger attach volume to the node. The attach should return successfully.
 func Test_Run_OneVolumeAttachAndDetachUncertainNodesWithReadWriteOnce(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -666,10 +618,9 @@ func Test_Run_OneVolumeAttachAndDetachUncertainNodesWithReadWriteOnce(t *testing
 	dsw.AddNode(nodeName1)
 	dsw.AddNode(nodeName2)
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Add the pod in which the volume is attached to the uncertain node
 	generatedVolumeName, podAddErr := dsw.AddPod(types.UniquePodName(podName1), controllervolumetesting.NewPod(podName1, podName1), volumeSpec, nodeName1)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
@@ -677,15 +628,12 @@ func Test_Run_OneVolumeAttachAndDetachUncertainNodesWithReadWriteOnce(t *testing
 
 	// 给异步 attach 留出时间：卷会被加入实际状态（asw），但因 attach 调用失败不应上报为已挂载。
 	time.Sleep(1 * time.Second)
-	// Volume is added to asw. Because attach operation fails, volume should not be reported as attached to the node.
 	waitForVolumeAddedToNode(t, generatedVolumeName, nodeName1, asw)
 	verifyVolumeAttachedToNode(t, generatedVolumeName, nodeName1, cache.AttachStateAttached, asw)
 	verifyVolumeReportedAsAttachedToNode(t, logger, generatedVolumeName, nodeName1, true, asw, volumeAttachedCheckTimeout)
 
 	// 卷加入节点时默认被标记为已挂载，之后依据节点状态中的 VolumeInUse 更新；
 	// 这里手动清空，否则删除操作会因挂载状态而被延迟。
-	// When volume is added to the node, it is set to mounted by default. Then the status will be updated by checking node status VolumeInUse.
-	// Without this, the delete operation will be delayed due to mounted status
 	asw.SetVolumesMountedByNode(logger, nil, nodeName1)
 
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
@@ -693,7 +641,6 @@ func Test_Run_OneVolumeAttachAndDetachUncertainNodesWithReadWriteOnce(t *testing
 	waitForVolumeRemovedFromNode(t, generatedVolumeName, nodeName1, asw)
 
 	// 再添加一个 pod，尝试把卷挂到另一个节点。
-	// Add a second pod which tries to attach the volume to a different node.
 	generatedVolumeName, podAddErr = dsw.AddPod(types.UniquePodName(podName2), controllervolumetesting.NewPod(podName2, podName2), volumeSpec, nodeName2)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
@@ -709,7 +656,7 @@ func Test_Run_UpdateNodeStatusFailBeforeOneVolumeDetachNodeWithReadWriteOnce(t *
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -735,41 +682,30 @@ func Test_Run_UpdateNodeStatusFailBeforeOneVolumeDetachNodeWithReadWriteOnce(t *
 	dsw.AddNode(nodeName1)
 
 	// 添加 pod，使卷 attach 到 FailDetachNode。
-	// Add the pod in which the volume is attached to the FailDetachNode
 	generatedVolumeName, podAddErr := dsw.AddPod(types.UniquePodName(podName1), controllervolumetesting.NewPod(podName1, podName1), volumeSpec, nodeName1)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 
-	// Act
+	// 执行
 	reconciliationLoopFunc(ctx)
 
 	// 卷应被加入 asw 并上报为已挂载到该节点。
-	// Volume is added to asw, volume should be reported as attached to the node.
 	waitForVolumeAddedToNode(t, generatedVolumeName, nodeName1, asw)
 	verifyVolumeAttachedToNode(t, generatedVolumeName, nodeName1, cache.AttachStateAttached, asw)
 	verifyVolumeReportedAsAttachedToNode(t, logger, generatedVolumeName, nodeName1, true, asw, volumeAttachedCheckTimeout)
 
-	// Delete the pod
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
 
 	// 注入失败的状态更新器，模拟节点状态更新失败。
-	// Mock NodeStatusUpdate fail
 	rc.(*reconciler).nodeStatusUpdater = statusupdater.NewFakeNodeStatusUpdater(true /* returnError */)
 	reconciliationLoopFunc(ctx)
 	// 首次 detach 至少要等 maxWaitForUnmountDuration（测试中 50ms）之后才会发生，等待 100ms 确保越过该窗口。
-	// The first detach will be triggered after at least 50ms (maxWaitForUnmountDuration in test).
 	time.Sleep(100 * time.Millisecond)
 	reconciliationLoopFunc(ctx)
 	// detach 前会先从上报列表中移除该卷（RemoveVolumeFromReportAsAttached）；
 	// 状态更新失败后控制器又把卷加回已挂载列表。GetVolumesToReportAttached 会触发状态更新，
 	// 此后在下一次变化（重新触发 detach）前都不再需要更新该卷状态。
-	// Right before detach operation is performed, the volume will be first removed from being reported
-	// as attached on node status (RemoveVolumeFromReportAsAttached). After UpdateNodeStatus operation which is expected to fail,
-	// controller then added the volume back as attached.
-	// verifyVolumeReportedAsAttachedToNode will check volume is in the list of volume attached that needs to be updated
-	// in node status. By calling this function (GetVolumesToReportAttached), node status should be updated, and the volume
-	// will not need to be updated until new changes are applied (detach is triggered again)
 	verifyVolumeAttachedToNode(t, generatedVolumeName, nodeName1, cache.AttachStateAttached, asw)
 	verifyVolumeReportedAsAttachedToNode(t, logger, generatedVolumeName, nodeName1, true, asw, volumeAttachedCheckTimeout)
 
@@ -783,7 +719,7 @@ func Test_Run_OneVolumeDetachFailNodeWithReadWriteOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -811,44 +747,35 @@ func Test_Run_OneVolumeDetachFailNodeWithReadWriteOnce(t *testing.T) {
 	dsw.AddNode(nodeName1)
 	dsw.AddNode(nodeName2)
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
 	// 添加 pod，使卷 attach 到 FailDetachNode。
-	// Add the pod in which the volume is attached to the FailDetachNode
 	generatedVolumeName, podAddErr := dsw.AddPod(types.UniquePodName(podName1), controllervolumetesting.NewPod(podName1, podName1), volumeSpec, nodeName1)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 
-	// Volume is added to asw, volume should be reported as attached to the node.
 	waitForVolumeAddedToNode(t, generatedVolumeName, nodeName1, asw)
 	verifyVolumeAttachedToNode(t, generatedVolumeName, nodeName1, cache.AttachStateAttached, asw)
 	verifyVolumeReportedAsAttachedToNode(t, logger, generatedVolumeName, nodeName1, true, asw, volumeAttachedCheckTimeout)
 
 	// 删除 pod，但该节点上的 detach 会失败。
-	// Delete the pod, but detach will fail
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
 
 	waitForVolumeAttachStateToNode(t, generatedVolumeName, nodeName1, cache.AttachStateUncertain, asw)
 	verifyVolumeReportedAsAttachedToNode(t, logger, generatedVolumeName, nodeName1, false, asw, volumeAttachedCheckTimeout)
 
-	// Add a second pod which tries to attach the volume to the same node.
-	// After adding pod to the same node, detach will not be triggered any more,
-	// the volume gets attached and reported as attached to the node.
 	generatedVolumeName, podAddErr = dsw.AddPod(types.UniquePodName(podName2), controllervolumetesting.NewPod(podName2, podName2), volumeSpec, nodeName1)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 	// 休眠 1 秒，验证第二个 pod 加入后不会再触发 detach。
-	// Sleep 1s to verify no detach are triggered after second pod is added in the future.
 	time.Sleep(1000 * time.Millisecond)
 	verifyVolumeAttachedToNode(t, generatedVolumeName, nodeName1, cache.AttachStateAttached, asw)
 	verifyVolumeReportedAsAttachedToNode(t, logger, generatedVolumeName, nodeName1, true, asw, volumeAttachedCheckTimeout)
 	// verifyVolumeNoStatusUpdateNeeded(t, logger, generatedVolumeName, nodeName1, asw)
 
-	// Add a third pod which tries to attach the volume to a different node.
-	// At this point, volume is still attached to first node. There are no status update for both nodes.
 	generatedVolumeName, podAddErr = dsw.AddPod(types.UniquePodName(podName3), controllervolumetesting.NewPod(podName3, podName3), volumeSpec, nodeName2)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
@@ -861,17 +788,12 @@ func Test_Run_OneVolumeDetachFailNodeWithReadWriteOnce(t *testing.T) {
 // Test_Run_OneVolumeAttachAndDetachTimeoutNodesWithReadWriteOnce 创建 ReadWriteOnce 卷：
 // 先尝试把卷挂到 "timeout-node"，attach 调用超时失败但卷实际已挂上；
 // 删除该 pod 后再创建调度到普通节点的 pod，验证卷能成功挂到新节点。
-// Creates a volume with accessMode ReadWriteOnce
-// First create a pod which will try to attach the volume to the a node named "timeout-node". The attach call for this node will
-// fail for timeout, but the volume will be actually attached to the node after the call.
-// Secondly, delete the this pod.
-// Lastly, create a pod scheduled to a normal node which will trigger attach volume to the node. The attach should return successfully.
 func Test_Run_OneVolumeAttachAndDetachTimeoutNodesWithReadWriteOnce(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -898,26 +820,22 @@ func Test_Run_OneVolumeAttachAndDetachTimeoutNodesWithReadWriteOnce(t *testing.T
 	dsw.AddNode(nodeName1)
 	dsw.AddNode(nodeName2)
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
 	// 添加 pod，使卷尝试挂到超时节点。
-	// Add the pod in which the volume is attached to the timeout node
 	generatedVolumeName, podAddErr := dsw.AddPod(types.UniquePodName(podName1), controllervolumetesting.NewPod(podName1, podName1), volumeSpec, nodeName1)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
 	}
 
 	// 卷被加入 asw，但因 attach 调用超时失败，不应上报为已挂载。
-	// Volume is added to asw. Because attach operation fails, volume should not be reported as attached to the node.
 	waitForVolumeAddedToNode(t, generatedVolumeName, nodeName1, asw)
 	verifyVolumeAttachedToNode(t, generatedVolumeName, nodeName1, cache.AttachStateUncertain, asw)
 	verifyVolumeReportedAsAttachedToNode(t, logger, generatedVolumeName, nodeName1, false, asw, volumeAttachedCheckTimeout)
 
 	// 卷加入节点时默认设为已挂载，之后依据节点状态中的 VolumeInUse 更新；
 	// 手动清空，否则删除操作会被挂载状态延迟。
-	// When volume is added to the node, it is set to mounted by default. Then the status will be updated by checking node status VolumeInUse.
-	// Without this, the delete operation will be delayed due to mounted status
 	asw.SetVolumesMountedByNode(logger, nil, nodeName1)
 
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
@@ -925,7 +843,6 @@ func Test_Run_OneVolumeAttachAndDetachTimeoutNodesWithReadWriteOnce(t *testing.T
 	waitForVolumeRemovedFromNode(t, generatedVolumeName, nodeName1, asw)
 
 	// 再添加一个 pod，尝试把卷挂到另一个节点。
-	// Add a second pod which tries to attach the volume to a different node.
 	generatedVolumeName, podAddErr = dsw.AddPod(types.UniquePodName(podName2), controllervolumetesting.NewPod(podName2, podName2), volumeSpec, nodeName2)
 	if podAddErr != nil {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podAddErr)
@@ -937,17 +854,8 @@ func Test_Run_OneVolumeAttachAndDetachTimeoutNodesWithReadWriteOnce(t *testing.T
 // 在期望状态放入一个 node/volume/pod 元组并调用 Run()，期望一次 attach、零次 detach；
 // 不先标记卸载就删除 pod 后，由于节点带 out-of-service 污点，
 // 无需等待 maxWaitForUnmountDuration 即立即 detach，同时 OutOfService 原因的强制 detach 指标加一。
-// Populates desiredStateOfWorld cache with one node/volume/pod tuple.
-// The node has node.kubernetes.io/out-of-service taint present.
 //
 // maxWaitForUnmountDuration 被设得很长（4200 秒），使 detach 不会因超时立即发生。
-// The maxWaitForUnmountDuration is longer (in this case it is 4200 * time.Second so that detach does not happen
-// immediately due to timeout.
-//
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
-// Deletes the pod from desiredStateOfWorld cache without first marking the node/volume as unmounted.
-// Verifies there is one detach call and no (new) attach calls.
 func Test_Run_OneVolumeDetachOnOutOfServiceTaintedNode(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -957,8 +865,7 @@ func Test_Run_OneVolumeDetachOnOutOfServiceTaintedNode(t *testing.T) {
 		legacyregistry.MustRegister(metrics.ForceDetachMetricCounter)
 	})
 
-	// NOTE 原文：该值来自全局变量，测试开始时不一定为 0，后续只比较增量。
-	// NOTE: This value is being pulled from a global variable, so it won't necessarily be 0 at the start of the test
+	// 注意：该值来自全局变量，测试开始时不一定为 0，后续只比较增量。
 	initialForceDetachCountOutOfService, err := metricstestutil.GetCounterMetricValue(metrics.ForceDetachMetricCounter.WithLabelValues(metrics.ForceDetachReasonOutOfService))
 	if err != nil {
 		t.Errorf("Error getting initialForceDetachCountOutOfService")
@@ -969,7 +876,7 @@ func Test_Run_OneVolumeDetachOnOutOfServiceTaintedNode(t *testing.T) {
 		t.Errorf("Error getting initialForceDetachCountTimeout")
 	}
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -1014,10 +921,10 @@ func Test_Run_OneVolumeDetachOnOutOfServiceTaintedNode(t *testing.T) {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1026,12 +933,8 @@ func Test_Run_OneVolumeDetachOnOutOfServiceTaintedNode(t *testing.T) {
 
 	// 删除 pod 时卷尚未卸载，正常应等到 maxLongWaitForUnmountDuration 到期才 detach；
 	// 但此节点带 out-of-service 污点，因此会跳过等待立即 detach。
-	// Delete the pod and the volume will be detached only after the maxLongWaitForUnmountDuration expires as volume is
-	//not unmounted. Here maxLongWaitForUnmountDuration is used to mimic that node is out of service.
-	// But in this case the node has the node.kubernetes.io/out-of-service taint and hence it will not wait for
-	// maxLongWaitForUnmountDuration and will progress to detach immediately.
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
-	// Assert -- Detach will be triggered if node has out of service taint
+	// 断言：节点带 out-of-service 污点时应触发 detach。
 	waitForNewDetacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1039,9 +942,7 @@ func Test_Run_OneVolumeDetachOnOutOfServiceTaintedNode(t *testing.T) {
 	waitForDetachCallCount(t, 1 /* expectedDetachCallCount */, fakePlugin)
 
 	// 因 out-of-service 污点触发的强制 detach：OutOfService 计数器加一，Timeout 计数器保持初值。
-	// Force detach metric due to out-of-service taint
 	testForceDetachMetric(t, int(initialForceDetachCountOutOfService)+1, metrics.ForceDetachReasonOutOfService)
-	// We shouldn't see any additional force detaches, so only consider the initial count
 	testForceDetachMetric(t, int(initialForceDetachCountTimeout), metrics.ForceDetachReasonTimeout)
 }
 
@@ -1049,23 +950,14 @@ func Test_Run_OneVolumeDetachOnOutOfServiceTaintedNode(t *testing.T) {
 // 放入一个 node/volume/pod 元组并调用 Run()，期望一次 attach、零次 detach；
 // 不先标记卸载就删除 pod 后，由于节点没有该污点，必须等待 maxWaitForUnmountDuration 到期，
 // 因此验证此时不产生 detach，也不产生新的 attach。
-// Populates desiredStateOfWorld cache with one node/volume/pod tuple.
-// The node does not have the node.kubernetes.io/out-of-service taint present.
 //
 // maxWaitForUnmountDuration 设得很长（4200 秒），使 detach 不会因超时立即发生。
-// The maxWaitForUnmountDuration is longer (in this case it is 4200 * time.Second so that detach does not happen
-// immediately due to timeout.
-//
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
-// Deletes the pod from desiredStateOfWorld cache without first marking the node/volume as unmounted.
-// Verifies there is no detach call and no (new) attach calls.
 func Test_Run_OneVolumeDetachOnNoOutOfServiceTaintedNode(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -1107,10 +999,10 @@ func Test_Run_OneVolumeDetachOnNoOutOfServiceTaintedNode(t *testing.T) {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1119,12 +1011,8 @@ func Test_Run_OneVolumeDetachOnNoOutOfServiceTaintedNode(t *testing.T) {
 
 	// 删除 pod 时卷尚未卸载：由于节点没有 out-of-service 污点，
 	// 必须等待 maxLongWaitForUnmountDuration 到期，因此不会立即 detach。
-	// Delete the pod and the volume will be detached only after the maxLongWaitForUnmountDuration expires as volume is
-	// not unmounted. Here maxLongWaitForUnmountDuration is used to mimic that node is out of service.
-	// But in this case the node does not have the node.kubernetes.io/out-of-service taint and hence it will wait for
-	// maxLongWaitForUnmountDuration and will not be detached immediately.
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
-	// Assert -- Detach will be triggered only after maxLongWaitForUnmountDuration expires
+	// 断言：仅在 maxLongWaitForUnmountDuration 到期后触发 detach。
 	waitForNewDetacherCallCount(t, 0 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1136,21 +1024,12 @@ func Test_Run_OneVolumeDetachOnNoOutOfServiceTaintedNode(t *testing.T) {
 // 节点初始健康，放入 node/volume/pod 元组并调用 Run()，期望一次 attach、零次 detach；
 // 不先标记卸载就删除 pod 后，节点健康时即使超过 maxWaitForUnmountDuration 也不 detach；
 // 将节点标记为不健康后，则在该超时后触发 detach。
-// Populates desiredStateOfWorld cache with one node/volume/pod tuple.
-// The node starts as healthy.
-//
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
-// Deletes the pod from desiredStateOfWorld cache without first marking the node/volume as unmounted.
-// Verifies that the volume is NOT detached after maxWaitForUnmountDuration.
-// Marks the node as unhealthy.
-// Verifies that the volume is detached after maxWaitForUnmountDuration.
 func Test_Run_OneVolumeDetachOnUnhealthyNode(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -1200,10 +1079,10 @@ func Test_Run_OneVolumeDetachOnUnhealthyNode(t *testing.T) {
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1211,12 +1090,10 @@ func Test_Run_OneVolumeDetachOnUnhealthyNode(t *testing.T) {
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 
 	// 节点健康且卷未卸载，即使等待超过 maxWaitForUnmountDuration 也不 detach。
-	// Act
-	// Delete the pod and the volume will be detached even after the maxWaitForUnmountDuration expires as volume is
-	// not unmounted and the node is healthy.
+	// 执行
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
 	time.Sleep(maxWaitForUnmountDuration * 5)
-	// Assert
+	// 断言
 	waitForNewDetacherCallCount(t, 0 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1224,12 +1101,11 @@ func Test_Run_OneVolumeDetachOnUnhealthyNode(t *testing.T) {
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 
 	// 将节点标记为不健康（Ready=False），应使等待中的 detach 立即生效。
-	// Act
-	// Mark the node unhealthy
+	// 执行
 	node2 := node1.DeepCopy()
 	node2.Status.Conditions[0].Status = v1.ConditionFalse
 	informerFactory.Core().V1().Nodes().Informer().GetStore().Update(node2)
-	// Assert -- Detach was triggered after maxWaitForUnmountDuration
+	// 断言：maxWaitForUnmountDuration 到期后已触发 detach。
 	waitForNewDetacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1241,20 +1117,6 @@ func Test_Run_OneVolumeDetachOnUnhealthyNode(t *testing.T) {
 // 节点初始健康，放入元组并调用 Run()，期望一次 attach、零次 detach；
 // 删除 pod 后节点健康时不 detach，标记不健康后若禁用卸载时强制 detach 仍不 detach；
 // 随后打上 out-of-service 污点，则仍只有一次 attach，但会触发一次 detach。
-// Populates desiredStateOfWorld cache with one node/volume/pod tuple.
-// The node starts as healthy.
-//
-// Calls Run()
-// Verifies there is one attach call and no detach calls.
-// Deletes the pod from desiredStateOfWorld cache without first marking the node/volume as unmounted.
-// Verifies that the volume is NOT detached after maxWaitForUnmountDuration.
-// Marks the node as unhealthy.
-// Sets forceDetachOnUmountDisabled to true.
-// Verifies that the volume is not detached after maxWaitForUnmountDuration.
-//
-// Then applies the node.kubernetes.io/out-of-service taint.
-// Verifies that there is still just one attach call.
-// Verifies there is now one detach call.
 func Test_Run_OneVolumeDetachOnUnhealthyNodeWithForceDetachOnUnmountDisabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -1263,7 +1125,7 @@ func Test_Run_OneVolumeDetachOnUnhealthyNodeWithForceDetachOnUnmountDisabled(t *
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(metrics.ForceDetachMetricCounter)
 	})
-	// NOTE: This value is being pulled from a global variable, so it won't necessarily be 0 at the start of the test
+	// 注意：该值来自全局变量，测试开始时不一定为 0，后续只比较增量。
 	initialForceDetachCountOutOfService, err := metricstestutil.GetCounterMetricValue(metrics.ForceDetachMetricCounter.WithLabelValues(metrics.ForceDetachReasonOutOfService))
 	if err != nil {
 		t.Errorf("Error getting initialForceDetachCountOutOfService")
@@ -1274,7 +1136,7 @@ func Test_Run_OneVolumeDetachOnUnhealthyNodeWithForceDetachOnUnmountDisabled(t *
 		t.Errorf("Error getting initialForceDetachCountTimeout")
 	}
 
-	// Arrange
+	// 准备
 	volumePluginMgr, fakePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
 	asw := cache.NewActualStateOfWorld(volumePluginMgr)
@@ -1328,10 +1190,10 @@ func Test_Run_OneVolumeDetachOnUnhealthyNodeWithForceDetachOnUnmountDisabled(t *
 		t.Fatalf("AddPod failed. Expected: <no error> Actual: <%v>", podErr)
 	}
 
-	// Act
+	// 执行
 	go reconciler.Run(ctx)
 
-	// Assert
+	// 断言
 	waitForNewAttacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1339,12 +1201,10 @@ func Test_Run_OneVolumeDetachOnUnhealthyNodeWithForceDetachOnUnmountDisabled(t *
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 
 	// 节点健康且卷未卸载，即使超过等待时间也不 detach。
-	// Act
-	// Delete the pod and the volume will be detached even after the maxWaitForUnmountDuration expires as volume is
-	// not unmounted and the node is healthy.
+	// 执行
 	dsw.DeletePod(types.UniquePodName(podName1), generatedVolumeName, nodeName1)
 	time.Sleep(maxWaitForUnmountDuration * 5)
-	// Assert
+	// 断言
 	waitForNewDetacherCallCount(t, 0 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1352,15 +1212,14 @@ func Test_Run_OneVolumeDetachOnUnhealthyNodeWithForceDetachOnUnmountDisabled(t *
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 
 	// 将节点标记为不健康，但因禁用了卸载时强制 detach，仍不应触发 detach。
-	// Act
-	// Mark the node unhealthy
+	// 执行
 	node2 := node1.DeepCopy()
 	node2.Status.Conditions[0].Status = v1.ConditionFalse
 	updateErr := informerFactory.Core().V1().Nodes().Informer().GetStore().Update(node2)
 	if updateErr != nil {
 		t.Fatalf("Update node failed. Expected: <no error> Actual: <%v>", updateErr)
 	}
-	// Assert -- Detach was not triggered after maxWaitForUnmountDuration
+	// 断言：maxWaitForUnmountDuration 到期后仍未触发 detach。
 	waitForNewDetacherCallCount(t, 0 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1368,21 +1227,18 @@ func Test_Run_OneVolumeDetachOnUnhealthyNodeWithForceDetachOnUnmountDisabled(t *
 	waitForDetachCallCount(t, 0 /* expectedDetachCallCount */, fakePlugin)
 
 	// 到此为止不应有强制 detach：OutOfService 与 Timeout 计数器均保持初值。
-	// Force detach metric due to out-of-service taint
-	// We shouldn't see any additional force detaches, so only consider the initial count
 	testForceDetachMetric(t, int(initialForceDetachCountOutOfService), metrics.ForceDetachReasonOutOfService)
 	testForceDetachMetric(t, int(initialForceDetachCountTimeout), metrics.ForceDetachReasonTimeout)
 
 	// 给不健康节点打上 out-of-service 污点，该污点可绕过 forceDetachOnUnmountDisabled 的限制。
-	// Act
-	// Taint the node
+	// 执行
 	node3 := node2.DeepCopy()
 	node3.Spec.Taints = append(node3.Spec.Taints, v1.Taint{Key: v1.TaintNodeOutOfService, Effect: v1.TaintEffectNoExecute})
 	updateErr = informerFactory.Core().V1().Nodes().Informer().GetStore().Update(node3)
 	if updateErr != nil {
 		t.Fatalf("Update node failed. Expected: <no error> Actual: <%v>", updateErr)
 	}
-	// Assert -- Detach was triggered after maxWaitForUnmountDuration
+	// 断言：maxWaitForUnmountDuration 到期后已触发 detach。
 	waitForNewDetacherCallCount(t, 1 /* expectedCallCount */, fakePlugin)
 	verifyNewAttacherCallCount(t, false /* expectZeroNewAttacherCallCount */, fakePlugin)
 	waitForAttachCallCount(t, 1 /* expectedAttachCallCount */, fakePlugin)
@@ -1390,10 +1246,7 @@ func Test_Run_OneVolumeDetachOnUnhealthyNodeWithForceDetachOnUnmountDisabled(t *
 	waitForDetachCallCount(t, 1 /* expectedDetachCallCount */, fakePlugin)
 
 	// 污点触发一次强制 detach：OutOfService 计数器加一，Timeout 计数器保持初值。
-	// Force detach metric due to out-of-service taint
-	// We should see one more force detach, so consider the initial count + 1
 	testForceDetachMetric(t, int(initialForceDetachCountOutOfService)+1, metrics.ForceDetachReasonOutOfService)
-	// We shouldn't see any additional force detaches, so only consider the initial count
 	testForceDetachMetric(t, int(initialForceDetachCountTimeout), metrics.ForceDetachReasonTimeout)
 }
 
@@ -1452,7 +1305,7 @@ func Test_ReportWaitingOnDetach(t *testing.T) {
 
 	for _, test := range tests {
 		logger, _ := ktesting.NewTestContext(t)
-		// Arrange
+		// 准备
 		t.Logf("Test %q starting", test.name)
 		volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 		dsw := cache.NewDesiredStateOfWorld(volumePluginMgr)
@@ -1480,7 +1333,7 @@ func Test_ReportWaitingOnDetach(t *testing.T) {
 				volumeSpec := controllervolumetesting.GetTestVolumeSpec(string(volumeName), volumeName)
 				volumeSpec.PersistentVolume.Spec.AccessModes = []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}
 				// 用节点名和 pod 名拼出唯一 UID，避免不同节点的同名 pod 在期望状态中冲突。
-				uid := string(n.name) + "-" + podName // unique UID
+				uid := string(n.name) + "-" + podName // 唯一 UID
 				namespace, name := utilstrings.SplitQualifiedName(podName)
 				pod := controllervolumetesting.NewPod(uid, name)
 				pod.Namespace = namespace
@@ -1491,7 +1344,7 @@ func Test_ReportWaitingOnDetach(t *testing.T) {
 			}
 		}
 		// 只对 node1 上的卷调用上报，触发 multiattach 错误事件。
-		// Act
+		// 执行
 		volumes := dsw.GetVolumesToAttach()
 		for _, vol := range volumes {
 			if vol.NodeName == "node1" {
@@ -1499,7 +1352,7 @@ func Test_ReportWaitingOnDetach(t *testing.T) {
 			}
 		}
 
-		// Assert
+		// 断言
 		// 关闭事件通道后遍历全部事件，逐条比对；同时检查是否有缺失或额外事件。
 		close(fakeRecorder.Events)
 		index := 0
@@ -2005,8 +1858,6 @@ func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.Conditio
 	return wait.ExponentialBackoff(backoff, fn)
 }
 
-// 原注释：verifies the force detach metric with reason。
-// verifies the force detach metric with reason
 // testForceDetachMetric 校验给定原因（reason）的强制 detach 计数器是否等于期望值。
 func testForceDetachMetric(t *testing.T, inputForceDetachMetricCounter int, reason string) {
 	t.Helper()

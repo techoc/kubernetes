@@ -28,9 +28,12 @@ const subsystem = "dynamic_resource_allocation"
 
 // NumResourceClaimLabels 定义 ResourceClaim 数量指标的标签维度。
 type NumResourceClaimLabels struct {
-	Allocated   string
+	// Allocated 表示 ResourceClaim 是否已分配。
+	Allocated string
+	// AdminAccess 表示 ResourceClaim 是否用于管理员访问。
 	AdminAccess string
-	Source      string
+	// Source 表示 ResourceClaim 的创建来源。
+	Source string
 }
 
 var (

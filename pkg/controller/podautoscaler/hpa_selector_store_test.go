@@ -158,8 +158,8 @@ func BenchmarkHPAsMatchingPodsParallel(b *testing.B) {
 	benchmarkMatchingPodsParallel(b, newHPASelectorStore())
 }
 
-// TODO: Remove once HPAOptimizedSelectorStore graduates to GA and the legacy
-// BiMultimap tracker is removed.
+// TODO: HPAOptimizedSelectorStore 正式发布且旧版 BiMultimap 跟踪器移除后，
+// 删除此基准测试。
 // BenchmarkHPAsMatchingPodsParallelBiMultimap 基准测试旧版 BiMultimap 跟踪器，用于与新版做性能对比。
 func BenchmarkHPAsMatchingPodsParallelBiMultimap(b *testing.B) {
 	benchmarkMatchingPodsParallel(b, newBiMultimapSelectorTracker())

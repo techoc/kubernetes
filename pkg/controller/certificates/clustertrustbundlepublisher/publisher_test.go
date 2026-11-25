@@ -314,7 +314,7 @@ func fakeKubeClientSetWithCTBList(t *testing.T, signerName string, ctbs ...runti
 			t.Fatalf("expected list action, got %v", action)
 		}
 
-		// fakeClient does not implement field selector, we have to do it manually
+		// fakeClient 不支持字段选择器，需手动筛选。
 		listRestrictions := listAction.GetListRestrictions()
 		if listRestrictions.Fields == nil || listRestrictions.Fields.String() != ("spec.signerName="+signerName) {
 			return false, nil, nil
@@ -331,8 +331,7 @@ func fakeKubeClientSetWithCTBList(t *testing.T, signerName string, ctbs ...runti
 			}
 		}
 
-		// Ensure that Watch doesn't return any objects either by bumping up the resource version
-		// beyond what the fake client uses.
+		// 同时提高 resourceVersion，确保 Watch 也不会返回 fake client 已有对象。
 		retList.ResourceVersion = "1000"
 
 		return true, retList, nil

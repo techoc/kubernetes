@@ -103,9 +103,9 @@ func testPod(namespace string, id int, nPorts int, isReady bool, ipFamilies []v1
 	for _, family := range ipFamilies {
 		var ip string
 		if family == v1.IPv4Protocol {
-			// if id=1, ip=1.2.3.4
-			// if id=2, ip=1.2.3.5
-			// if id=999, ip=1.2.6.235
+			// 示例：id=1, ip=1.2.3.4
+			// 示例：id=2, ip=1.2.3.5
+			// 示例：id=999, ip=1.2.6.235
 			ip = fmt.Sprintf("1.2.%d.%d", 3+((4+id)/256), (4+id)%256)
 		} else {
 			ip = fmt.Sprintf("2000::%x", 4+id)
@@ -446,7 +446,7 @@ func TestSyncEndpointsWithPodResourceVersionUpdateOnly(t *testing.T) {
 			IPFamilies: []v1.IPFamily{v1.IPv4Protocol},
 		},
 	})
-	// 只 bump ResourceVersion，保持 IP、端口与就绪状态不变，模拟无实质变化的状态更新。
+	// 只递增 ResourceVersion，保持 IP、端口与就绪状态不变，模拟无实质变化的状态更新。
 	pod0.ResourceVersion = "3"
 	pod1.ResourceVersion = "4"
 	endpoints.podStore.Add(pod0)
@@ -1948,7 +1948,7 @@ func TestLastTriggerChangeTimeAnnotation_AnnotationCleared(t *testing.T) {
 
 // TestPodUpdatesBatching 验证由 Pod 更新引发的 Endpoints 更新会被批处理（在 batchPeriod 内合并）。
 // 本用例依赖真实的 time.Sleep，因为当前控制器没有方便的时钟注入点。
-// TODO(mborsz): 待条件允许时迁移到 mock clock。
+// TODO(mborsz): 待条件允许时迁移到模拟时钟。
 func TestPodUpdatesBatching(t *testing.T) {
 	// podUpdate 描述一次更新：delay 为相对上次事件的等待时间，podName 与 podIP 指定目标 Pod
 	// 与新 IP。
@@ -2104,7 +2104,7 @@ func TestPodUpdatesBatching(t *testing.T) {
 
 // TestPodAddsBatching 验证由 Pod 新增引发的 Endpoints 更新会被批处理。
 // 同样依赖真实的 time.Sleep，当前控制器无法 mock 时钟。
-// TODO(mborsz): 待条件允许时迁移到 mock clock。
+// TODO(mborsz): 待条件允许时迁移到模拟时钟。
 func TestPodAddsBatching(t *testing.T) {
 	// podAdd 只携带相对等待时间 delay，Pod 由循环下标生成。
 	type podAdd struct {
@@ -2219,7 +2219,7 @@ func TestPodAddsBatching(t *testing.T) {
 
 // TestPodDeleteBatching 验证由 Pod 删除引发的 Endpoints 更新会被批处理。
 // 依赖真实 time.Sleep，当前控制器无法 mock 时钟。
-// TODO(mborsz): 待条件允许时迁移到 mock clock。
+// TODO(mborsz): 待条件允许时迁移到模拟时钟。
 func TestPodDeleteBatching(t *testing.T) {
 	// podDelete 指定相对等待时间与要删除的 Pod 名称。
 	type podDelete struct {
@@ -2787,7 +2787,7 @@ func TestMultiplePodChanges(t *testing.T) {
 	pod2.Status.Conditions[0].Status = v1.ConditionFalse
 	_ = controller.podStore.Update(pod2)
 	controller.onPodUpdate(pod, pod2)
-	// blockNextAction should eventually unblock once server gets endpoints request.
+	// 测试服务器收到 Endpoints 请求后，blockNextAction 最终应解除阻塞。
 	waitForChanReceive(t, 1*time.Second, blockNextAction, "Pod Update should have caused a request to be sent to the test server")
 	// 此时缓存中的 Endpoints 更新尚未生效。
 	pod3 := pod.DeepCopy()

@@ -53,7 +53,7 @@ import (
 
 const (
 	// maxRetries 是 Service 被丢弃出队列前的重试次数。
-	// 按当前速率限制器（5ms*2^(maxRetries-1)）， successive 重试间隔为：
+	// 按当前速率限制器（5ms*2^(maxRetries-1)），连续重试间隔为：
 	// 5ms、10ms、20ms、40ms、80ms、160ms、320ms、640ms、1.3s、2.6s、5.1s、10.2s、20.4s、41s、82s。
 	maxRetries = 15
 
@@ -394,7 +394,6 @@ func (e *Controller) syncService(ctx context.Context, key string) error {
 	// 无选择器的 Service 不由本控制器生成 Endpoints；
 	// 这类 Service 的 Endpoints 由用户通过 REST API 在带外创建。
 	if service.Spec.Selector == nil {
-		// services without a selector receive no endpoints from this controller;
 		return nil
 	}
 
@@ -509,7 +508,7 @@ func (e *Controller) syncService(ctx context.Context, key string) error {
 		newEndpoints.Annotations[v1.EndpointsLastChangeTriggerTime] =
 			endpointsLastChangeTriggerTime.UTC().Format(time.RFC3339Nano)
 		// 超过容量上限时截断 endpoint 并打上 over-capacity 注解；未超限时清除该注解。
-	} else { // No new trigger time, clear the annotation.
+	} else { // 没有新的触发时间，清除该注解。
 		delete(newEndpoints.Annotations, v1.EndpointsLastChangeTriggerTime)
 	}
 
@@ -536,10 +535,10 @@ func (e *Controller) syncService(ctx context.Context, key string) error {
 	var updatedEndpoints *v1.Endpoints
 	// 根据是否已有 Endpoints 决定走创建还是更新路径。
 	if createEndpoints {
-		// No previous endpoints, create them
+		// Endpoints 不存在，创建新对象。
 		_, err = e.client.CoreV1().Endpoints(service.Namespace).Create(ctx, newEndpoints, metav1.CreateOptions{})
 	} else {
-		// Pre-existing
+		// Endpoints 已存在，更新原对象。
 		updatedEndpoints, err = e.client.CoreV1().Endpoints(service.Namespace).Update(ctx, newEndpoints, metav1.UpdateOptions{})
 	}
 	// 创建失败多数是因为命名空间正在终止或策略配置错误。
@@ -682,7 +681,7 @@ func addEndpointSubset(logger klog.Logger, subsets []v1.EndpointSubset, pod *v1.
 		})
 		readyEps++
 		// Pod 未就绪且 Service 不容忍时，地址只能放入 NotReadyAddresses。
-	} else { // if it is not a ready address it has to be not ready
+	} else { // 不是就绪地址，就只能放入未就绪地址。
 		logger.V(5).Info("Pod is out of service", "pod", klog.KObj(pod))
 		subsets = append(subsets, v1.EndpointSubset{
 			NotReadyAddresses: []v1.EndpointAddress{epa},
@@ -712,8 +711,7 @@ func capacityAnnotationSetCorrectly(annotations map[string]string, subsets []v1.
 	}
 	// 截断前先统计 Ready 与 NotReady 地址总数。
 	if numEndpoints > maxCapacity {
-		// If subsets are over capacity, they must be truncated so consider
-		// the annotation as not set correctly
+		// 子集已超容量，必须截断，因此当前注解状态不正确。
 		return false
 	}
 	_, ok := annotations[v1.EndpointsOverCapacity]

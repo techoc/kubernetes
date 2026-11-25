@@ -71,7 +71,7 @@ func init() {
 		string(features.DRADeviceTaints):           true,
 		string(features.DRADeviceTaintRules):       true,
 		string(features.DRAWorkloadResourceClaims): true,
-		string(features.GenericWorkload):           true, // Dependency of DRAWorkloadResourceClaims
+		string(features.GenericWorkload):           true, // DRAWorkloadResourceClaims 的依赖项
 	}); err != nil {
 		// 特性门配置失败意味着后续测试前提不成立，直接 panic 让测试尽早失败。
 		panic(err)
@@ -180,7 +180,6 @@ type state struct {
 	queued      MockState[workItem]
 }
 
-// step describes a state after handling ready work items and how much to move time forward.
 // step 描述处理完就绪工作项后的期望状态以及时间推进量。
 type step struct {
 	pods        []*v1.Pod
@@ -579,7 +578,7 @@ var (
 	// 用于验证驱逐按命名空间聚合统计事件。
 	inUseClaimOtherNamespace = st.FromResourceClaim(claim).
 					Namespace(namespace+"-other").
-					OwnerReference(podName, podUID+"-2", podKind). // podWithClaimNameOtherNamespace below.
+					OwnerReference(podName, podUID+"-2", podKind). // 下方定义了 podWithClaimNameOtherNamespace。
 					Allocation(allocationResultOtherDevices).
 					ReservedForPod(podName, types.UID(podUID+"-2")).
 					Obj()
@@ -587,7 +586,7 @@ var (
 	// 用于验证同一命名空间内多个 Pod 的驱逐统计。
 	inUseClaimOtherName = st.FromResourceClaim(claim).
 				Name(claimName+"-other").
-				OwnerReference(podName+"-other", podUID+"-3", podKind). // podWithClaimNameOtherName below.
+				OwnerReference(podName+"-other", podUID+"-3", podKind). // 下方定义了 podWithClaimNameOtherName。
 				Allocation(allocationResultOtherDevices).
 				ReservedForPod(podName+"-other", types.UID(podUID+"-3")).
 				Obj()
@@ -595,7 +594,7 @@ var (
 	// 用于验证一个 Pod 引用多个 claim 时只被驱逐一次。
 	inUseClaimOtherNameShared = st.FromResourceClaim(claim).
 					Name(claimName+"-other").
-					OwnerReference(podName+"-other", podUID+"-3", podKind). // podWithClaimNameOtherName below.
+					OwnerReference(podName+"-other", podUID+"-3", podKind). // 下方定义了 podWithClaimNameOtherName。
 					Allocation(allocationResultOtherDevices).
 					ReservedFor(resourceapi.ResourceClaimConsumerReference{Resource: "pods", Name: podName, UID: types.UID(podUID)}, resourceapi.ResourceClaimConsumerReference{Resource: "pods", Name: podName + "-other", UID: types.UID(podUID + "-3")}).
 					Obj()
@@ -1096,7 +1095,7 @@ func testController(tCtx ktesting.TContext) {
 					queuedShifted:   MockState[workItem]{Ready: newWorkItems(podWithClaimName)},
 				},
 				{
-					// Deleted, but condition not updated yet.
+					// Pod 已删除，但 condition 尚未更新。
 					ruleStats:       map[types.UID]taintRuleStats{ruleEvict.UID: {numEvictedPods: 1}},
 					rules:           l(inProgress(ruleEvict, true, "PodsPendingEviction", "1 pod needs to be evicted in 1 namespace.", metav1Time(taintTime.Add(ruleStatusPeriod)))),
 					queuedProcessed: MockState[workItem]{Later: newDelayedWorkItems(ruleEvict, ruleStatusPeriod)},
@@ -1322,7 +1321,7 @@ func testController(tCtx ktesting.TContext) {
 					add(inUseClaim),
 					add(inUseClaimOtherNameShared),
 					add(podWithTwoClaimNames),
-					add(ruleEvictInstance2Later), // Reversed, so now the pod gets scheduled for delayed eviction, which cannot get canceled.
+					add(ruleEvictInstance2Later), // 顺序反转后，Pod 会被安排延迟驱逐，且无法取消。
 					add(ruleEvictInstance1),
 				},
 			},
@@ -1408,8 +1407,8 @@ func testController(tCtx ktesting.TContext) {
 			},
 			events: []any{
 				update(sliceTainted, sliceTaintedExtended),
-				update(inUseClaim, inUseClaim),             // No real change here, good enough for testing some code paths.
-				update(podWithClaimName, podWithClaimName), // Same here.
+				update(inUseClaim, inUseClaim),             // 无实际变化，足以覆盖部分代码路径。
+				update(podWithClaimName, podWithClaimName), // 同上。
 			},
 			finalState: state{
 				slices:          l(sliceTaintedExtended, slice2),
@@ -1470,7 +1469,7 @@ func testController(tCtx ktesting.TContext) {
 			events: []any{
 				add(sliceTainted),
 				add(slice2),
-				add(inUseClaimOld), // pod not the owner
+				add(inUseClaimOld), // Pod 不是属主
 				add(podWithExtendedResourceClaimInStatus),
 			},
 			finalState: state{
@@ -2041,7 +2040,7 @@ func testController(tCtx ktesting.TContext) {
 			events: []any{
 				add(sliceTainted),
 				add(slice2),
-				add(inUseClaimOld), // pod not the owner
+				add(inUseClaimOld), // Pod 不是属主
 				add(podWithClaimTemplateInStatus),
 			},
 			finalState: state{
@@ -2173,7 +2172,7 @@ func testHandlers(tContext *testContext, tc testCase) {
 	tContext.pools = tc.initialState.slicesAsMap()
 
 	// Pod 与 DeviceTaintRule 是控制器会从 informer 缓存读取的对象，
-	// 因此 only 这两类需要同步到 podStore；slice/claim 由事件参数直接传入。
+	// 因此只有这两类需要同步到 podStore；slice/claim 由事件参数直接传入。
 	// 同时也要写入 fake client 的 tracker：informer 没有运行，
 	// 所有 API 读写必须手动在缓存与 tracker 之间保持一致。
 	podStore := tContext.informerFactory.Core().V1().Pods().Informer().GetStore()
@@ -2589,7 +2588,7 @@ func testEviction(tCtx ktesting.TContext) {
 				wg.Wait()
 			}()
 			wg.Go(func() {
-				tCtx.AssertNoError(controller.Run(tCtx, 10 /* workers */), "eviction controller failed")
+				tCtx.AssertNoError(controller.Run(tCtx, 10 /* worker 数量 */), "eviction controller failed")
 			})
 
 			// 等待控制器完成 informer 同步后再施加后续变更，确保事件不会在启动阶段丢失。
@@ -2698,7 +2697,7 @@ func synctestDeviceTaintRule(tCtx ktesting.TContext, toleration, slowDelete bool
 	wg.Go(func() {
 		// 只开一个 worker 保证顺序执行：并发 worker 会导致状态更新顺序不确定，
 		// 使 Status 断言出现随机失败（flaky）。
-		tCtx.AssertNoError(controller.Run(tCtx, 1 /* workers */), "eviction controller failed")
+		tCtx.AssertNoError(controller.Run(tCtx, 1 /* worker 数量 */), "eviction controller failed")
 	})
 
 	// 等待 informer 同步完成，确保后续对规则的更新能被控制器感知。
@@ -2709,7 +2708,7 @@ func synctestDeviceTaintRule(tCtx ktesting.TContext, toleration, slowDelete bool
 
 	start := metav1.Now()
 	tCtx.Logf("TIME: start")
-	check(tCtx, "initial processing: ", l(inProgress(ruleNone, false, "NoEffect", "0 published devices selected. 1 allocated device selected. 1 pod would be evicted in 1 namespace if the effect was NoExecute. This information will not be updated again. Recreate the DeviceTaintRule to trigger an update.", &start /* processed before waiting for cache sync completion */)), l(podWithClaimName))
+	check(tCtx, "initial processing: ", l(inProgress(ruleNone, false, "NoEffect", "0 published devices selected. 1 allocated device selected. 1 pod would be evicted in 1 namespace if the effect was NoExecute. This information will not be updated again. Recreate the DeviceTaintRule to trigger an update.", &start /* 等待缓存同步完成前已处理 */)), l(podWithClaimName))
 
 	// 推进 20 秒虚拟时间，保证规则更新前后的时间戳不同，
 	// 便于断言规则状态中 LastTransitionTime 的变化。
@@ -2912,7 +2911,7 @@ func doCancelEviction(tCtx ktesting.TContext, deletePod bool) {
 		wg.Wait()
 	}()
 	wg.Go(func() {
-		tCtx.AssertNoError(controller.Run(tCtx, 10 /* workers */), "eviction controller failed")
+		tCtx.AssertNoError(controller.Run(tCtx, 10 /* worker 数量 */), "eviction controller failed")
 	})
 
 	// 最终 Pod 被安排驱逐。
@@ -3012,7 +3011,7 @@ func synctestParallelPodDeletion(tCtx ktesting.TContext) {
 		wg.Wait()
 	}()
 	wg.Go(func() {
-		tCtx.AssertNoError(controller.Run(tCtx, 10 /* workers */), "eviction controller failed")
+		tCtx.AssertNoError(controller.Run(tCtx, 10 /* worker 数量 */), "eviction controller failed")
 	})
 
 	// 该场景不应产生任何事件。
@@ -3085,11 +3084,11 @@ func synctestRetry(tCtx ktesting.TContext) {
 		wg.Wait()
 	}()
 	wg.Go(func() {
-		tCtx.AssertNoError(controller.Run(tCtx, 10 /* workers */), "eviction controller failed")
+		tCtx.AssertNoError(controller.Run(tCtx, 10 /* worker 数量 */), "eviction controller failed")
 	})
 
 	// 默认指数退避的第一次重试间隔为 5ms，该延迟会计入删除指标。
-	expectLatencies := []time.Duration{5 * time.Millisecond /* default exponential retry */}
+	expectLatencies := []time.Duration{5 * time.Millisecond /* 默认指数退避 */}
 
 	// 最终 Pod 被删除并记录事件。
 	tCtx.Eventually(func(tCtx ktesting.TContext) error {
@@ -3112,7 +3111,7 @@ func synctestRetry(tCtx ktesting.TContext) {
 //   - 规则移除后撤销驱逐决定。
 func BenchmarkTaintUntaint(b *testing.B) {
 	tCtx := ktesting.Init(b)
-	tContext := setup(tCtx, false) // Disable DRAWorkloadResourceClaims because it's alpha
+	tContext := setup(tCtx, false) // 因 DRAWorkloadResourceClaims 尚为 alpha 而将其关闭
 	podStore := tContext.informerFactory.Core().V1().Pods().Informer().GetStore()
 	// 基准测试中关闭事件日志输出；如需观察事件可注释掉这一行。
 	tContext.Controller.eventLogger = nil

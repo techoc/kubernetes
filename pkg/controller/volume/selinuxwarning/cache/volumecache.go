@@ -34,6 +34,7 @@ const (
 	dumpLogLevel = 10
 )
 
+// VolumeCache 维护 Pod 使用的卷及 SELinux 标签、变更策略等冲突检测所需状态。
 type VolumeCache interface {
 	// AddVolume 向缓存添加一个卷，并返回本次新增或更新引发的冲突列表。
 	AddVolume(logger klog.Logger, volumeName v1.UniqueVolumeName, podKey cache.ObjectName, seLinuxLabel string, changePolicy v1.PodSELinuxChangePolicy, csiDriver string) []Conflict
@@ -50,7 +51,7 @@ type VolumeCache interface {
 	GetConflicts(logger klog.Logger) []Conflict
 }
 
-// VolumeCache 保存 Pod 使用的所有卷及控制器需要跟踪的属性，
+// volumeCache 保存 Pod 使用的所有卷及控制器需要跟踪的属性，
 // 例如 SELinux 标签和 SELinuxChangePolicy。
 type volumeCache struct {
 	mutex             sync.RWMutex
@@ -302,7 +303,7 @@ func (c *volumeCache) dump(logger klog.Logger) {
 	}
 }
 
-// GetPodsForCSIDriver returns all pods that use volumes with the given CSI driver.
+// GetPodsForCSIDriver 返回使用指定 CSI 驱动卷的所有 Pod。
 func (c *volumeCache) GetPodsForCSIDriver(driverName string) []cache.ObjectName {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()

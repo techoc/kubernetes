@@ -44,8 +44,8 @@ func TestValidateSecretForSigning(t *testing.T) {
 	// 表驱动用例：每行只改动一个字段，便于定位是哪一项校验拒绝了 token。
 	cases := []struct {
 		description string // 用例名称
-		tokenID     string // token ID
-		tokenSecret string // token secret
+		tokenID     string // 令牌 ID
+		tokenSecret string // 令牌秘密部分
 		okToSign    string // 是否允许签名
 		expiration  string // 过期时间
 		valid       bool   // 期望是否校验通过

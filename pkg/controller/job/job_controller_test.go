@@ -76,7 +76,7 @@ const fastJobApiBackoff = 10 * time.Millisecond
 const fastRequeue = 10 * time.Millisecond
 
 // testFinishedAt 表示比 Unix 纪元晚一秒的时间。
-// 用于那些不希望触发退避（back-off）逻辑的测试用例。
+// 用于不希望触发退避逻辑的测试用例。
 var testFinishedAt = metav1.NewTime((time.Time{}).Add(time.Second))
 
 // newJobWithName 创建一个指定名称、并行度、完成数、退避上限及完成模式的 Job。
@@ -1550,7 +1550,7 @@ func TestControllerSyncJob(t *testing.T) {
 			if diff := cmp.Diff(tc.expectedConditions, actual.Status.Conditions, cmpopts.IgnoreFields(batch.JobCondition{}, "LastProbeTime", "LastTransitionTime")); diff != "" {
 				t.Errorf("unexpected conditions (-want,+got):\n%s", diff)
 			}
-			// 校验 slow start 的批量上限
+			// 校验慢启动的批量上限
 			expectedLimit := 0
 			// 按 SlowStartInitialBatchSize 逐轮累加，推算出允许的最大创建调用次数。
 			for pass := uint8(0); expectedLimit <= tc.podLimit; pass++ {
@@ -2878,7 +2878,7 @@ func TestSyncJobPastDeadline(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			if !tc.enableJobManagedBy {
-				// TODO: this will be removed in 1.38.
+				// TODO: 此段将在 1.38 版本移除。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 			}
 			featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -3234,7 +3234,7 @@ func TestSyncJobWhenManagedBy(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			// 将模拟版本固定为 1.34，使特性在该版本下的默认行为稳定可测。
-			// TODO: this will be removed in 1.38.
+			// TODO: 此段将在 1.38 版本移除。
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 			featuregatetesting.SetFeatureGateDuringTest(t, feature.DefaultFeatureGate, features.JobManagedBy, tc.enableJobManagedBy)
 
@@ -4410,7 +4410,7 @@ func TestSyncJobWithJobPodFailurePolicy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			// 未开启 JobManagedBy 时固定模拟版本为 1.33，以匹配该特性关闭时的默认行为。
 			if !tc.enableJobManagedBy {
-				// TODO: this will be removed in 1.38.
+				// TODO: 此段将在 1.38 版本移除。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.33"))
 			}
 			featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -4697,7 +4697,7 @@ func TestSyncJobWithJobSuccessPolicy(t *testing.T) {
 				},
 			},
 		},
-		// 参考 issue 123775：确保条件不会因后续状态更新而丢失。
+		// 参考问题 123775：确保条件不会因后续状态更新而丢失。
 		"job with successPolicy; job has SuccessCriteriaMet condition when job meets to successPolicy and some pods still are running": {
 			job: batch.Job{
 				TypeMeta:   validTypeMeta,
@@ -5268,7 +5268,7 @@ func TestSyncJobWithJobSuccessPolicy(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			if !tc.enableJobManagedBy {
-				// TODO: this will be remove in 1.38
+				// TODO: 此段将在 1.38 版本移除。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 			}
 			featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -5950,7 +5950,7 @@ func TestSyncJobWithJobBackoffLimitPerIndex(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			if !tc.enableJobManagedBy {
-				// TODO: this will be removed in 1.38.
+				// TODO: 此段将在 1.38 版本移除。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 			}
 			featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -7499,7 +7499,7 @@ func TestJobBackoffForOnFailure(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			if !tc.enableJobManagedBy {
-				// TODO: this will be removed in 1.38.
+				// TODO: 此段将在 1.38 版本移除。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.34"))
 			}
 			featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -8331,7 +8331,7 @@ func TestSyncJobPodSchedulingGroup(t *testing.T) {
 				objs = append(objs, tc.existingPodGroup)
 			}
 			clientSet := fake.NewClientset(objs...)
-			// TODO: this will be removed in 1.38.
+			// TODO: 此段将在 1.38 版本移除。
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.36"))
 			featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 				features.GenericWorkload: tc.workloadWithJob,

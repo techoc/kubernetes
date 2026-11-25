@@ -457,8 +457,7 @@ func (jm *ControllerV2) updateCronJob(logger klog.Logger, old interface{}, curr 
 
 	// 其他参数变更则立即入队：若尚在截止时间内，同步循环会处理；
 	// 否则变更会在下一次调度时生效。
-	// TODO: need to handle the change of spec.JobTemplate.metadata.labels explicitly
-	//   to cleanup jobs with old labels
+	// TODO: 需要显式处理 spec.JobTemplate.metadata.labels 的变化，以清理带有旧标签的 Job。
 	jm.enqueueController(curr)
 }
 
@@ -591,13 +590,11 @@ func (jm *ControllerV2) syncCronJob(
 		logger.V(4).Info("Missed starting window", "cronjob", klog.KObj(cronJob))
 		jm.recorder.Eventf(cronJob, corev1.EventTypeWarning, "MissSchedule", "Missed scheduled time to start a job: %s", scheduledTime.UTC().Format(time.RFC1123Z))
 
-		// TODO: Since we don't set LastScheduleTime when not scheduling, we are going to keep noticing
-		// the miss every cycle.  In order to avoid sending multiple events, and to avoid processing
-		// the cj again and again, we could set a Status.LastMissedTime when we notice a miss.
-		// Then, when we call getRecentUnmetScheduleTimes, we can take max(creationTimestamp,
-		// Status.LastScheduleTime, Status.LastMissedTime), and then so we won't generate
-		// and event the next time we process it, and also so the user looking at the status
-		// can see easily that there was a missed execution.
+		// TODO: 不调度时不会设置 LastScheduleTime，因此每个周期都会重复发现漏跑。
+		// 为避免重复发送事件和反复处理该 CronJob，可以在发现漏跑时设置 Status.LastMissedTime。
+		// 随后调用 getRecentUnmetScheduleTimes 时，取 creationTimestamp、Status.LastScheduleTime
+		// 和 Status.LastMissedTime 的最大值，这样下次处理就不会再次生成事件，用户也能从状态中
+		// 直接看出曾有一次执行被漏掉。
 		t := nextScheduleTimeDuration(cronJob, now, sched)
 		return t, updateStatus, nil
 	}
@@ -616,9 +613,9 @@ func (jm *ControllerV2) syncCronJob(
 		//（例如尚未观察到状态更新或新建的 Pod），因此 Forbid 理论上仍可能并发。
 		// 只要两次执行在时间上相隔足够远，通常不会触发这个问题。
 		//
-		// TODO: for Forbid, we could use the same name for every execution, as a lock.
-		// With replace, we could use a name that is deterministic per execution time.
-		// But that would mean that you could not inspect prior successes or failures of Forbid jobs.
+		// TODO: 对于 Forbid，可以每次执行都使用同一个名称作为锁。
+		// 对于 Replace，可以按执行时间生成确定性的名称。
+		// 但这样一来，就无法再查看 Forbid Job 过去的成功或失败记录。
 		logger.V(4).Info("Not starting job because prior execution is still running and concurrency policy is Forbid", "cronjob", klog.KObj(cronJob))
 		jm.recorder.Eventf(cronJob, corev1.EventTypeNormal, "JobAlreadyActive", "Not starting job because prior execution is running and concurrency policy is Forbid")
 		t := nextScheduleTimeDuration(cronJob, now, sched)

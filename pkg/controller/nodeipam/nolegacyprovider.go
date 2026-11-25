@@ -37,7 +37,7 @@ func (f *fakeController) Run(ctx context.Context) {
 }
 
 // createLegacyIPAM 构建 legacy IPAM 控制器的桩实现。
-// 在本构建（未启用 legacy cloud provider 支持）中它总是返回错误，
+// 在本构建（未启用旧版云提供程序支持）中它总是返回错误，
 // 提示用户当前二进制不支持从集群/云获取 podCIDR 的旧模式。
 func createLegacyIPAM(
 	ctx context.Context,

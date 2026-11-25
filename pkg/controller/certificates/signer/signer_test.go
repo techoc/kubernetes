@@ -423,7 +423,7 @@ func TestHandle(t *testing.T) {
 }
 
 // insecureRand 使用固定种子的非密码学随机数，以加快测试并保证结果可复现。
-// 仅供测试使用，DO NOT COPY THIS CODE。
+// 仅供测试使用，请勿复制此代码。
 var insecureRand = rand.New(rand.NewSource(0))
 
 // csrBuilder 汇总构造测试 CSR 所需的字段，方便表驱动用例声明。

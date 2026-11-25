@@ -374,7 +374,7 @@ func RecordMetric(key string, c *OperationStartTimeCache, err error) {
 	} else {
 		timeTaken := time.Since(ts.startTs).Seconds()
 		metricutil.RecordOperationLatencyMetric(ts.pluginName, ts.operation, timeTaken)
-		// end of this operation, remove the timestamp entry from cache
+		// 操作结束，从缓存删除时间戳条目。
 		c.Delete(key)
 	}
 }

@@ -38,6 +38,7 @@ import (
 )
 
 const (
+	// BurstReplicas 是复制控制器处理突发副本变更时允许的客户端突发量。
 	BurstReplicas = replicaset.BurstReplicas
 )
 
@@ -66,9 +67,8 @@ func NewReplicationManager(ctx context.Context, podInformer coreinformers.PodInf
 				// RC API 不支持 .status.terminatingReplicas 字段；RS 支持该字段，并向上传播给 Deployment 以支持上层功能，因此这里必须显式关闭。
 				EnableStatusTerminatingReplicas: false,
 			},
-			// TODO: Replication controller does not currently support stale controller consistency.
-			// In order to support stale controller consistency, we would need to parameterize the metrics
-			// and resource types passed to the consistency store.
+			// TODO: 复制控制器目前不支持过期控制器一致性检查。
+			// 要支持该功能，需要把传给一致性存储的指标和资源类型改为可参数化。
 			consistencyutil.NewNoopConsistencyStore(),
 		),
 	}

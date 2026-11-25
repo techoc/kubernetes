@@ -437,7 +437,7 @@ func TestSyncServiceEndpointSliceLabelSelection(t *testing.T) {
 	gvk := schema.GroupVersionKind{Version: "v1", Kind: "Service"}
 	ownerRef := metav1.NewControllerRef(service, gvk)
 
-	// 5 slices, 3 with matching labels for our service
+	// 共 5 个切片，其中 3 个带有匹配本 Service 的标签。
 	endpointSlices := []*discovery.EndpointSlice{{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "matching-1",
@@ -1155,7 +1155,7 @@ func TestSyncService(t *testing.T) {
 		},
 		{
 			// 读取 EndpointSlice 的客户端本来就必须按 IP 地址对端点去重。
-			// 若出现 2 个 ready Pod，说明上层链路已有问题，不应在此掩盖。hat.
+			// 若出现 2 个就绪 Pod，说明上层链路已有问题，不应在此掩盖。
 			name: "Two Ready pods with same IPs",
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2030,7 +2030,7 @@ func TestUpdateNode(t *testing.T) {
 	updateNode2 := node2.DeepCopy()
 	updateNode2.Labels = map[string]string{v1.LabelTopologyZone: "zone-b"}
 
-	// 给 Node 加上 zone 标签并调用事件处理器 updateNode 后，AddHints 应成功。ld succeed.
+	// 给 Node 加上 zone 标签并调用事件处理器 updateNode 后，AddHints 应成功。
 	esController.nodeStore.Update(updateNode1)
 	esController.nodeStore.Update(updateNode2)
 	esController.updateNode(node1, updateNode1)

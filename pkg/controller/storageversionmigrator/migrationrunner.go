@@ -269,9 +269,8 @@ func (crc *MigrationRunnerController) markAsActive(ctx context.Context, svm *svm
 						WithMessage(fmt.Sprintf("Migration %s is running", svm.Name)).
 						WithObservedGeneration(crd.Generation)))
 
-			// TODO: We should see if there's a way to surface non-conflict/not-found errors
-			// to the SVM Status to let the user know that the migration is stuck due to issues
-			// outside of the controller's control.
+			// TODO: 研究如何把非冲突、非未找到错误暴露到 SVM Status，
+			// 让用户知道迁移因控制器无法处理的问题而卡住。
 			_, err = crc.crdClient.ApplyStatus(ctx, applyConfig, metav1.ApplyOptions{FieldManager: MigrationRunnerControllerName, Force: true})
 			return err
 		})
@@ -414,9 +413,8 @@ func (crc *MigrationRunnerController) finishCRDMigration(ctx context.Context, cr
 			}
 		}
 
-		// TODO: We should see if there's a way to surface non-conflict/not-found errors
-		// to the SVM Status to let the user know that the migration is stuck due to issues
-		// outside of the controller's control.
+		// TODO: 研究如何把非冲突、非未找到错误暴露到 SVM Status，
+		// 让用户知道迁移因控制器无法处理的问题而卡住。
 		_, err = crc.crdClient.ApplyStatus(ctx, applyConfig, metav1.ApplyOptions{FieldManager: MigrationRunnerControllerName, Force: true})
 		return err
 	})

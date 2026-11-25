@@ -57,7 +57,6 @@ const (
 	// 都可能触发重试。以当前限速器（1s*2^(numRetries-1)）为例，连续入队的延迟依次为：
 	//
 	// 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 512s, 1000s（上限）
-	// 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 512s, 1000s (max)
 	maxRetries = 15
 
 	// endpointSliceChangeMinSyncDelay 表示 EndpointSlice 变更后将 syncService 入队的最小延迟。
@@ -191,19 +190,19 @@ type Controller struct {
 	eventBroadcaster record.EventBroadcaster
 	eventRecorder    record.EventRecorder
 
-	// serviceLister 用于 list/get Service，数据来自传给 NewController 的共享 informer。
+	// serviceLister 用于列出/获取 Service，数据来自传给 NewController 的共享 informer。
 	serviceLister corelisters.ServiceLister
 	// servicesSynced 在 Service 共享 informer 至少完成一次同步后返回 true。
 	// 作为结构体字段是为了便于在测试中注入。
 	servicesSynced cache.InformerSynced
 
-	// podLister 用于 list/get Pod，数据来自传给 NewController 的共享 informer。
+	// podLister 用于列出/获取 Pod，数据来自传给 NewController 的共享 informer。
 	podLister corelisters.PodLister
 	// podsSynced 在 Pod 共享 informer 至少完成一次同步后返回 true。
 	// 作为结构体字段是为了便于在测试中注入。
 	podsSynced cache.InformerSynced
 
-	// endpointSliceLister 用于 list/get EndpointSlice，数据来自传给 NewController 的共享 informer。
+	// endpointSliceLister 用于列出/获取 EndpointSlice，数据来自传给 NewController 的共享 informer。
 	endpointSliceLister discoverylisters.EndpointSliceLister
 	// endpointSlicesSynced 在 EndpointSlice 共享 informer 至少完成一次同步后返回 true。
 	// 作为结构体字段是为了便于在测试中注入。
@@ -212,7 +211,7 @@ type Controller struct {
 	// 用于判断缓存中的 EndpointSlice 是否已过期。
 	endpointSliceTracker *endpointsliceutil.EndpointSliceTracker
 
-	// nodeLister 用于 list/get Node，数据来自传给 NewController 的共享 informer。
+	// nodeLister 用于列出/获取 Node，数据来自传给 NewController 的共享 informer。
 	nodeLister corelisters.NodeLister
 	// nodesSynced 在 Node 共享 informer 至少完成一次同步后返回 true。
 	// 作为结构体字段是为了便于在测试中注入。
@@ -510,7 +509,7 @@ func (c *Controller) onServiceUpdate(obj interface{}) {
 	c.serviceQueue.Add(key)
 }
 
-// onServiceDelete 从缓存中移除 Service Selector，并将该 Service 入队处理。
+// onServiceDelete 从缓存中移除 Service 选择器，并将该 Service 入队处理。
 func (c *Controller) onServiceDelete(obj interface{}) {
 	key, err := controller.KeyFunc(obj)
 	if err != nil {
@@ -609,8 +608,7 @@ func (c *Controller) updateNode(old, cur interface{}) {
 	oldNode := old.(*v1.Node)
 	curNode := cur.(*v1.Node)
 
-	// LabelTopologyZone may be added by cloud provider asynchronously after the Node is created.
-	// The topology cache should be updated in this case.
+	// 云厂商可能在 Node 创建后异步添加 LabelTopologyZone，此时需要更新拓扑缓存。
 	if isNodeReady(oldNode) != isNodeReady(curNode) ||
 		oldNode.Labels[v1.LabelTopologyZone] != curNode.Labels[v1.LabelTopologyZone] {
 		c.topologyQueue.Add(topologyQueueItemKey)

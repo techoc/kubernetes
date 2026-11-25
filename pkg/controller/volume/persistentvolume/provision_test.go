@@ -289,7 +289,7 @@ func TestProvisionSync(t *testing.T) {
 			},
 			test: wrapTestWithPluginCalls(
 				nil,                                // 回收调用（本场景无）
-				[]error{nil},                       // delete calls
+				[]error{nil},                       // 删除调用
 				[]provisionCall{provision1Success}, // 创建调用
 				testSyncClaim,
 			),
@@ -526,7 +526,7 @@ func TestProvisionSync(t *testing.T) {
 				}),
 		},
 		{
-			// volume provision for PVC that scheduled
+			// 已调度的 PVC 的卷制备。
 			name:            "11-24 - skip finding PV and wait external provisioner for PVC annotated with AnnSelectedNode",
 			initialVolumes:  newVolumeArray("volume11-24", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimDelete, classExternalWait),
 			expectedVolumes: newVolumeArray("volume11-24", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimDelete, classExternalWait),

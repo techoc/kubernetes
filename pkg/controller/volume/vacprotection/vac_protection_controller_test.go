@@ -131,7 +131,7 @@ func TestVACProtectionController(t *testing.T) {
 				{
 					verb:      "update",
 					resource:  "volumeattributesclasses",
-					reactorfn: generateUpdateErrorFunc(t, 2 /* update fails twice*/),
+					reactorfn: generateUpdateErrorFunc(t, 2 /* 更新失败两次 */),
 				},
 			},
 			expectedActions: []clienttesting.Action{
@@ -156,7 +156,7 @@ func TestVACProtectionController(t *testing.T) {
 				{
 					verb:      "update",
 					resource:  "volumeattributesclasses",
-					reactorfn: generateUpdateErrorFunc(t, 2 /* update fails twice*/),
+					reactorfn: generateUpdateErrorFunc(t, 2 /* 更新失败两次 */),
 				},
 			},
 			expectedActions: []clienttesting.Action{

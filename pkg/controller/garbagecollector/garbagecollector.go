@@ -34,7 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
-	clientset "k8s.io/client-go/kubernetes" // import known versions
+	clientset "k8s.io/client-go/kubernetes" // 导入已知版本
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/tools/cache"
@@ -398,12 +398,10 @@ func (gc *GarbageCollector) isDangling(ctx context.Context, reference metav1.Own
 		return true, nil, nil
 	}
 
-	// TODO: we need to verify the reference resource is supported by the
-	// system. If it's not a valid resource, the garbage collector should i)
-	// ignore the reference when decide if the object should be deleted, and
-	// ii) should update the object to remove such references. This is to
-	// prevent objects having references to an old resource from being
-	// deleted during a cluster upgrade.
+	// TODO：验证 reference 对应的资源是否受系统支持。若资源无效，垃圾回收器应：
+	// 1. 判断对象是否删除时忽略该引用；
+	// 2. 更新对象并移除该引用。
+	// 以防集群升级后，对象因引用旧资源而被删除。
 	// 将引用解析为可查询的资源；集群级与命名空间级的命名空间参数不同。
 	resource, namespaced, err := gc.apiResource(reference.APIVersion, reference.Kind)
 	if err != nil {
@@ -423,9 +421,8 @@ func (gc *GarbageCollector) isDangling(ctx context.Context, reference metav1.Own
 		return false, nil, namespacedOwnerOfClusterScopedObjectErr
 	}
 
-	// TODO: It's only necessary to talk to the API server if the owner node
-	// is a "virtual" node. The local graph could lag behind the real
-	// status, but in practice, the difference is small.
+	// TODO：仅当 owner 节点为虚拟节点时才需查询 API Server。
+	// 本地图可能落后于真实状态，但实际差异很小。
 	// 向 API Server 获取 owner 最新状态，以 UID 是否匹配判定引用是否悬空。
 	owner, err = gc.metadataClient.Resource(resource).Namespace(resourceDefaultNamespace(namespaced, item.identity.Namespace)).Get(ctx, reference.Name, metav1.GetOptions{})
 	switch {
@@ -509,9 +506,8 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 		)
 		return nil
 	}
-	// TODO: It's only necessary to talk to the API server if this is a
-	// "virtual" node. The local graph could lag behind the real status, but in
-	// practice, the difference is small.
+	// TODO：仅当节点为虚拟节点时才需查询 API Server。
+	// 本地图可能落后于真实状态，但实际差异很小。
 	// 获取对象最新版本，NotFound 或 UID 不匹配都说明对象已消失。
 	latest, err := gc.getObject(item.identity)
 	switch {
@@ -535,8 +531,7 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 		return enqueuedVirtualDeleteEventErr
 	}
 
-	// TODO: attemptToOrphanWorker() routine is similar. Consider merging
-	// attemptToOrphanWorker() into attemptToDeleteItem() as well.
+	// TODO：attemptToOrphanWorker() 逻辑与此类似，考虑将其也合并到 attemptToDeleteItem()。
 	// 处于 foreground 删除流程时交给专门的处理逻辑。
 	if item.isDeletingDependents() {
 		return gc.processDeletingDependentsItem(logger, item)

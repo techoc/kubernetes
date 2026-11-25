@@ -191,7 +191,7 @@ func justBeforeTheNextHour() time.Time {
 
 // weekAfterTheHour 构造用于调度测试的时间点。
 // weekAfterTheHour 返回一周后的 10:00:00Z，
-// 用于模拟长期未调度（overdue）且超过截止时间的场景。
+// 用于模拟长期未调度且已超过截止时间的场景。
 func weekAfterTheHour() time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-26T10:00:00Z")
 	if err != nil {
@@ -1678,7 +1678,7 @@ func TestControllerV2UpdateCronJob(t *testing.T) {
 			expectedDelay: 0 * time.Second,
 		},
 
-		// TODO: Add more test cases for updating scheduling.
+		// TODO: 补充更多调度更新相关的测试用例。
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

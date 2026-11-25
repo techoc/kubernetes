@@ -195,8 +195,7 @@ func (gb *GraphBuilder) controllerFor(logger klog.Logger, resource schema.GroupV
 			gb.graphChanges.Add(event)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			// TODO: check if there are differences in the ownerRefs,
-			// finalizers, and DeletionTimestamp; if not, ignore the update.
+			// TODO：检查 ownerRefs、finalizers 和 DeletionTimestamp 是否变化；无变化时忽略更新。
 			event := &event{
 				eventType: updateEvent,
 				obj:       newObj,
@@ -542,8 +541,7 @@ type ownerRefPair struct {
 	newRef metav1.OwnerReference
 }
 
-// TODO: profile this function to see if a naive N^2 algorithm performs better
-// 当引用数量较小时。
+// TODO：当引用数量较小时，分析此函数，确认朴素平方复杂度算法是否更快。
 // referencesDiffs 比较新旧 ownerRef 列表，返回新增、删除和变更（同 UID 但内容不同）的引用。
 func referencesDiffs(old []metav1.OwnerReference, new []metav1.OwnerReference) (added []metav1.OwnerReference, removed []metav1.OwnerReference, changed []ownerRefPair) {
 	oldUIDToRef := make(map[string]metav1.OwnerReference)

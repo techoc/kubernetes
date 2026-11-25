@@ -41,8 +41,11 @@ type ConsistencyStore interface {
 // ConsistencyError 指出导致一致性检查失败的 GroupResource 及读写双方的资源版本，
 // 便于调用方定位具体是哪一类资源的缓存滞后。
 type ConsistencyError struct {
-	ReadRV        string
-	WroteRV       string
+	// ReadRV 是 informer 缓存观测到的资源版本。
+	ReadRV string
+	// WroteRV 是属主写入资源时记录的资源版本。
+	WroteRV string
+	// GroupResource 是发生读取滞后的资源类型。
 	GroupResource schema.GroupResource
 }
 
@@ -79,7 +82,7 @@ func NewConsistencyStore(stores map[schema.GroupResource]LastSyncRVGetter) *Real
 	}
 }
 
-// getWrittenRecord returns the record for the given owner, or nil if no record exists.
+// getWrittenRecord 返回给定属主的记录；不存在时返回 nil。
 func (c *RealConsistencyStore) getWrittenRecord(owner types.NamespacedName) *ownerRecord {
 	c.writesLock.RLock()
 	defer c.writesLock.RUnlock()
@@ -195,7 +198,6 @@ func (w *ownerRecord) EnsureReady(c *RealConsistencyStore) error {
 		}
 		// 写入版本大于读取版本，说明缓存尚未追上，本次检查失败。
 		if i > 0 {
-			// read version is not as new as owner version, not ready
 			return &ConsistencyError{
 				WroteRV:       wroteRV,
 				ReadRV:        readRV,

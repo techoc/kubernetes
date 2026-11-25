@@ -199,7 +199,7 @@ func TestNewEndpointSlice(t *testing.T) {
 // TestAddressToEndpoint 验证地址转换会保留 IP、主机名、节点名和 TargetRef，
 // 正确设置 Ready 条件，并依据 IP 家族推导出地址类型。
 func TestAddressToEndpoint(t *testing.T) {
-	//name: "simple + gate enabled",
+	// 简单场景，启用特性门控。
 	epAddress := v1.EndpointAddress{
 		IP:       "10.1.2.3",
 		Hostname: "foo",

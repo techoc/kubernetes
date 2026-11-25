@@ -299,7 +299,7 @@ func attachDetachRecoveryTestCase(t *testing.T, extraPods1 []*v1.Pod, extraPods2
 	fakeKubeClient := controllervolumetesting.CreateTestClient(logger)
 	informerFactory := informers.NewSharedInformerFactory(fakeKubeClient, time.Second*1)
 	plugins := controllervolumetesting.CreateTestPlugin(true)
-	var prober volume.DynamicPluginProber = nil // TODO (#51147) inject mock
+	var prober volume.DynamicPluginProber = nil // TODO（#51147）：注入模拟实现
 	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 	csiNodeInformer := informerFactory.Storage().V1().CSINodes().Informer()
 	podInformer := informerFactory.Core().V1().Pods().Informer()

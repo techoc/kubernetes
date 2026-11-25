@@ -50,7 +50,9 @@ func NewBiMultimap() *BiMultimap {
 
 // Key 是命名空间与名称组成的对象标识。
 type Key struct {
-	Name      string
+	// Name 是对象名称。
+	Name string
+	// Namespace 是对象所属命名空间；非命名空间对象为空。
 	Namespace string
 }
 
@@ -79,8 +81,7 @@ type selectorKey struct {
 type selectingObject struct {
 	key      Key
 	selector pkglabels.Selector
-	// selectorKey is a stable serialization of selector for
-	// association caching.
+	// selectorKey 是用于关联缓存的选择器稳定序列化值。
 	selectorKey selectorKey
 }
 
@@ -97,8 +98,7 @@ type labelsKey struct {
 type labeledObject struct {
 	key    Key
 	labels map[string]string
-	// labelsKey is a stable serialization of labels for association
-	// caching.
+	// labelsKey 是用于关联缓存的标签稳定序列化值。
 	labelsKey labelsKey
 }
 
@@ -117,7 +117,7 @@ func (m *BiMultimap) Put(key Key, labels map[string]string) {
 		namespace: key.Namespace,
 	}
 	if l, ok := m.labeledObjects[key]; ok {
-		// Update labeled object.
+		// 更新带标签的对象。
 		if labelsKey == l.labelsKey {
 			// 标签未变化则关联无需更新，直接返回。
 			return
@@ -125,7 +125,7 @@ func (m *BiMultimap) Put(key Key, labels map[string]string) {
 		// 标签变化会改变匹配关系，先清理旧关联再重建。
 		m.delete(key)
 	}
-	// Add labeled object.
+	// 添加带标签的对象。
 	labels = copyLabels(labels)
 	labeledObject := &labeledObject{
 		key:       key,
@@ -133,7 +133,7 @@ func (m *BiMultimap) Put(key Key, labels map[string]string) {
 		labelsKey: labelsKey,
 	}
 	m.labeledObjects[key] = labeledObject
-	// Add associations.
+	// 添加关联。
 	if _, ok := m.selectingByLabeled[labelsKey]; !ok {
 		// 缓存未命中：需扫描全部同命名空间的选择器对象，计算匹配集合并缓存。
 		selecting := &selectingObjects{
@@ -148,19 +148,19 @@ func (m *BiMultimap) Put(key Key, labels map[string]string) {
 				selecting.objects[s.key] = s
 			}
 		}
-		// Associate selecting with labeled.
+		// 建立选择器对象到带标签对象的关联。
 		m.selectingByLabeled[labelsKey] = selecting
 	}
 	selecting := m.selectingByLabeled[labelsKey]
 	selecting.refCount++
 	for _, sObject := range selecting.objects {
-		// Associate labeled with selecting.
+		// 建立带标签对象到选择器对象的关联。
 		labeled := m.labeledBySelecting[sObject.selectorKey]
 		labeled.objects[labeledObject.key] = labeledObject
 	}
 }
 
-// Delete removes a labeled object and incoming associations.
+// Delete 删除带标签的对象及其传入关联。
 func (m *BiMultimap) Delete(key Key) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
@@ -180,10 +180,10 @@ func (m *BiMultimap) delete(key Key) {
 		// 该标签值没有关联缓存，直接返回。
 		return
 	}
-	// Remove associations.
+	// 移除关联。
 	for _, selectingObject := range m.selectingByLabeled[labelsKey].objects {
 		selectorKey := selectingObject.selectorKey
-		// Delete selectingObject to labeledObject association.
+		// 删除选择器对象到带标签对象的关联。
 		delete(m.labeledBySelecting[selectorKey].objects, key)
 	}
 	m.selectingByLabeled[labelsKey].refCount--
@@ -212,22 +212,22 @@ func (m *BiMultimap) PutSelector(key Key, selector pkglabels.Selector) {
 		namespace: key.Namespace,
 	}
 	if s, ok := m.selectingObjects[key]; ok {
-		// Update selecting object.
+		// 更新带选择器的对象。
 		if selectorKey == s.selectorKey {
 			// 选择器未变化则关联无需更新，直接返回。
 			return
 		}
-		// Delete before readding.
+		// 先删除再重新添加。
 		m.deleteSelector(key)
 	}
-	// Add selecting object.
+	// 添加带选择器的对象。
 	selectingObject := &selectingObject{
 		key:         key,
 		selector:    selector,
 		selectorKey: selectorKey,
 	}
 	m.selectingObjects[key] = selectingObject
-	// Add associations.
+	// 添加关联。
 	if _, ok := m.labeledBySelecting[selectorKey]; !ok {
 		// 缓存未命中：需扫描全部同命名空间的带标签对象，计算匹配集合并缓存。
 		labeled := &labeledObjects{
@@ -242,13 +242,13 @@ func (m *BiMultimap) PutSelector(key Key, selector pkglabels.Selector) {
 				labeled.objects[l.key] = l
 			}
 		}
-		// Associate labeled with selecting.
+		// 建立带标签对象到选择器对象的关联。
 		m.labeledBySelecting[selectorKey] = labeled
 	}
 	labeled := m.labeledBySelecting[selectorKey]
 	labeled.refCount++
 	for _, labeledObject := range labeled.objects {
-		// Associate selecting with labeled.
+		// 建立选择器对象到带标签对象的关联。
 		selecting := m.selectingByLabeled[labeledObject.labelsKey]
 		selecting.objects[selectingObject.key] = selectingObject
 	}
@@ -274,10 +274,10 @@ func (m *BiMultimap) deleteSelector(key Key) {
 		// 该标签值没有关联缓存，直接返回。
 		return
 	}
-	// Remove associations.
+	// 移除关联。
 	for _, labeledObject := range m.labeledBySelecting[selectorKey].objects {
 		labelsKey := labeledObject.labelsKey
-		// Delete labeledObject to selectingObject association.
+		// 删除带标签对象到选择器对象的关联。
 		delete(m.selectingByLabeled[labelsKey].objects, key)
 	}
 	m.labeledBySelecting[selectorKey].refCount--

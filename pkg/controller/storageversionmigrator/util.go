@@ -32,7 +32,7 @@ func setStatusConditions(
 	conditionType svmv1.MigrationConditionType,
 	reason, message string,
 ) *svmv1.StorageVersionMigration {
-	// Cannot set the condition twice.
+	// 同一条件不能重复设置。
 	if meta.IsStatusConditionTrue(toBeUpdatedSVM.Status.Conditions, string(conditionType)) ||
 		meta.IsStatusConditionFalse(toBeUpdatedSVM.Status.Conditions, string(conditionType)) {
 		return toBeUpdatedSVM

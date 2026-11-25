@@ -22,7 +22,7 @@ import (
 
 // EndpointSliceMirroringControllerConfiguration 描述 EndpointSliceMirroringController 的配置项。
 type EndpointSliceMirroringControllerConfiguration struct {
-	// MirroringConcurrentServiceEndpointSyncs 是并发执行的 Service Endpoint 同步操作数。
+	// MirroringConcurrentServiceEndpointSyncs 是并发执行的服务端点同步操作数。
 	// 数值越大，EndpointSlice 更新越快，但 CPU 与网络负载也越高。
 	MirroringConcurrentServiceEndpointSyncs int32
 

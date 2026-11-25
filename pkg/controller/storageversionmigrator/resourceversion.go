@@ -194,7 +194,7 @@ func (rv *ResourceVersionController) sync(ctx context.Context, key string) error
 	logger := klog.FromContext(ctx)
 	startTime := time.Now()
 
-	// SVM is a cluster scoped resource so we don't care about the namespace
+	// SVM 是集群级资源，无需关心命名空间。
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return err
@@ -202,13 +202,13 @@ func (rv *ResourceVersionController) sync(ctx context.Context, key string) error
 
 	svm, err := rv.svmListers.Get(name)
 	if apierrors.IsNotFound(err) {
-		// no work to do, don't fail and requeue
+		// 无需处理，不要返回错误或重新入队。
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	// working with copy to avoid race condition between this and migration controller
+	// 使用副本，避免与迁移控制器之间发生数据竞争。
 	toBeProcessedSVM := svm.DeepCopy()
 
 	if !meta.IsStatusConditionTrue(toBeProcessedSVM.Status.Conditions, string(svmv1.MigrationRunning)) {
@@ -233,8 +233,8 @@ func (rv *ResourceVersionController) sync(ctx context.Context, key string) error
 		return err
 	}
 	if !exists {
-		// our GC cache could be missing a recently created custom resource, so give it some time to catch up
-		// we resync discovery every 30 seconds so twice that should be sufficient
+		// GC 缓存可能尚未收录新建的自定义资源，留些时间等待缓存追上。
+		// discovery 每 30 秒重新同步一次，等待两倍周期应已足够。
 		if toBeProcessedSVM.CreationTimestamp.Add(time.Minute).After(time.Now()) {
 			rv.resetMapperIfStale()
 			return fmt.Errorf("resource does not exist in our rest mapper, requeuing to attempt again")
@@ -246,7 +246,7 @@ func (rv *ResourceVersionController) sync(ctx context.Context, key string) error
 	if err != nil {
 		return err
 	}
-	// The resource does not support CRUD operations for migration.
+	// 该资源不支持迁移所需的 CRUD 操作。
 	if !isMigratable {
 		err := fmt.Errorf("resource %q does not support discovery operations: %v", gvr.String(), verbsRequiredForMigration)
 		logger.Error(err, "resource is not able to be migrated, not retrying", "gvr", gvr.String())
@@ -258,8 +258,7 @@ func (rv *ResourceVersionController) sync(ctx context.Context, key string) error
 		return err
 	}
 
-	// Compare the resource version against itself, if it fails then it is not a
-	// well formed RV and we should fail migration.
+	// 将 resourceVersion 与自身比较；若失败，说明其格式无效，应终止迁移。
 	if _, err := resourceversion.CompareResourceVersion(latestRV, latestRV); err != nil {
 		err := fmt.Errorf("latest resourceVersion for %s is not valid: %w", gvr.String(), err)
 		return rv.failMigration(ctx, toBeProcessedSVM, err.Error())
@@ -285,7 +284,7 @@ func (rv *ResourceVersionController) getLatestResourceVersion(gvr schema.GroupVe
 
 	var randomList *metav1.PartialObjectMetadataList
 	if isResourceNamespaceScoped {
-		// get list resourceVersion from random non-existent namesapce for the given GVR
+		// 从给定 GVR 的随机不存在命名空间中获取列表的 resourceVersion。
 		randomList, err = rv.metadataClient.Resource(gvr).
 			Namespace(fakeSVMNamespaceName).
 			List(ctx, metav1.ListOptions{
@@ -298,7 +297,7 @@ func (rv *ResourceVersionController) getLatestResourceVersion(gvr schema.GroupVe
 			})
 	}
 	if err != nil {
-		// error here is very abstract. adding additional context for better debugging
+		// 此处错误信息过于笼统，补充上下文以便调试。
 		return "", fmt.Errorf("error getting latest resourceVersion for %s: %w", gvr.String(), err)
 	}
 
@@ -342,10 +341,8 @@ func (rv *ResourceVersionController) isResourceNamespaceScoped(ctx context.Conte
 	return false, fmt.Errorf("resource %q not found", gvr.String())
 }
 
-// isResourceMigratable checks if the GVR has the list of verbs required for
-// migration. Returns true if all verbs are in the discovery document and false
-// otherwise. If there is an error querying the discovery client or we fail to
-// get the GVR, return an error.
+// isResourceMigratable 检查 GVR 是否支持迁移所需的全部动词。
+// 查询 discovery 客户端或获取 GVR 失败时返回错误，否则按动词集合判断是否可迁移。
 func (rv *ResourceVersionController) isResourceMigratable(ctx context.Context, gvr schema.GroupVersionResource) (bool, error) {
 	resourceList, err := rv.discoveryClient.ServerResourcesForGroupVersionWithContext(ctx, gvr.GroupVersion().String())
 	if apierrors.IsNotFound(err) {
@@ -353,8 +350,7 @@ func (rv *ResourceVersionController) isResourceMigratable(ctx context.Context, g
 	}
 
 	if resourceList != nil {
-		// even in case of an error above there might be a partial list for APIs that
-		// were already successfully discovered.
+		// 即使上面的查询出错，仍可能拿到已成功发现的 API 的部分列表。
 		for _, resource := range resourceList.APIResources {
 			if resource.Name == gvr.Resource {
 				if resource.Verbs != nil && sets.NewString(resource.Verbs...).HasAll(verbsRequiredForMigration...) {

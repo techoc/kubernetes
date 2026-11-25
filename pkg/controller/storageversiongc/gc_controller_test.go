@@ -76,9 +76,6 @@ func newKubeApiserverLease(name, holderIdentity string) *coordinationv1.Lease {
 // StorageVersion 状态中的 serverStorageVersions 会剔除对应条目；
 // 当剩余 Lease 对编码版本达成一致时，commonEncodingVersion 应更新为新版本，
 // 并置上 AllEncodingVersionsEqual 条件。
-// status.serverStorageVersions is updated when a kube-apiserver Lease is deleted.
-// If the remaining Leases agree on a new encoding version, status.commonEncodingVersion
-// should reflect the newly agreed version.
 func Test_StorageVersionUpdatedWithAllEncodingVersionsEqualOnLeaseDeletion(t *testing.T) {
 	// 三个 apiserver 各对应一个 Lease：lease1 使用 v1，另外两个使用 v2。
 	// 删除 lease1 后，剩余节点才能形成新的共识版本 v2。
@@ -139,7 +136,6 @@ func Test_StorageVersionUpdatedWithAllEncodingVersionsEqualOnLeaseDeletion(t *te
 
 	// 控制器通过 informer 异步处理删除事件，需轮询等待状态收敛；
 	// 每 100ms 检查一次，最多 5 秒，给协调循环留出足够时间。
-	// Wait up to 5 seconds, checking every 100ms to ensure controller had a chance to reconcile
 	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 		storageVersion, err := clientset.InternalV1alpha1().StorageVersions().Get(
 			ctx, "k8s.test.resources", metav1.GetOptions{},
@@ -188,7 +184,6 @@ func Test_StorageVersionUpdatedWithAllEncodingVersionsEqualOnLeaseDeletion(t *te
 // Test_StorageVersionUpdatedWithDifferentEncodingVersionsOnLeaseDeletion 验证删除 Lease 后
 // serverStorageVersions 会剔除过期条目；若剩余 Lease 的编码版本不一致，
 // 则 commonEncodingVersion 必须保持原值，不能武断地更新为其中某个版本。
-// should remain unchanged.
 func Test_StorageVersionUpdatedWithDifferentEncodingVersionsOnLeaseDeletion(t *testing.T) {
 	lease1 := newKubeApiserverLease("kube-apiserver-1", "kube-apiserver-1")
 	lease2 := newKubeApiserverLease("kube-apiserver-2", "kube-apiserver-2")
@@ -219,8 +214,7 @@ func Test_StorageVersionUpdatedWithDifferentEncodingVersionsOnLeaseDeletion(t *t
 	_, ctx := ktesting.NewTestContext(t)
 	setupController(ctx, clientset)
 
-	// Delete the lease object and verify that storage version status is updated
-	// 这次删除的 lease2 其持有者 ID 本就不在 StorageVersion 状态中，应不影响编码版本共识。
+	// 删除 lease2 并验证状态；其持有者 ID 本就不在 StorageVersion 状态中，应不影响编码版本共识。
 	if err := clientset.CoordinationV1().Leases(metav1.NamespaceSystem).Delete(context.Background(), "kube-apiserver-2", metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("error deleting lease object: %v", err)
 	}
@@ -263,8 +257,6 @@ func Test_StorageVersionUpdatedWithDifferentEncodingVersionsOnLeaseDeletion(t *t
 
 // Test_StorageVersionContainsInvalidLeaseID 验证状态清理逻辑：
 // serverStorageVersions 中对应 Lease 已不存在的条目（过期持有者身份）必须被移除。
-// Test_StorageVersionContainsInvalidLeaseID validates that status.serverStorageVersions
-// only contains the holder identity from kube-apiserver Leases that exist.
 func Test_StorageVersionContainsInvalidLeaseID(t *testing.T) {
 	lease1 := newKubeApiserverLease("kube-apiserver-1", "kube-apiserver-1")
 	lease2 := newKubeApiserverLease("kube-apiserver-2", "kube-apiserver-2")
@@ -293,7 +285,7 @@ func Test_StorageVersionContainsInvalidLeaseID(t *testing.T) {
 				},
 				{
 					// 该 APIServerID 没有对应 Lease，属于应被清理的过期持有者记录。
-					APIServerID:       "kube-apiserver-4", // doesn't exist
+					APIServerID:       "kube-apiserver-4", // 不存在
 					EncodingVersion:   "v2",
 					DecodableVersions: []string{"v1"},
 				},
@@ -356,8 +348,6 @@ func Test_StorageVersionContainsInvalidLeaseID(t *testing.T) {
 
 // Test_StorageVersionDeletedOnLeaseDeletion 验证当集群中最后一个 kube-apiserver Lease 被删除时，
 // 已无使用者依赖该资源，对应的 StorageVersion 对象应被 GC 删除。
-// Test_StorageVersionDeletedOnLeaseDeletion validates that a StorageVersion
-// object is deleted if there are no kube-apiserver Leases.
 func Test_StorageVersionDeletedOnLeaseDeletion(t *testing.T) {
 	lease1 := newKubeApiserverLease("kube-apiserver-1", "kube-apiserver-1")
 

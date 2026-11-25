@@ -575,7 +575,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
 				}
-				return // do not check the rest on error
+				return // 出错时不再检查其余部分
 			}
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

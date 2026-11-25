@@ -326,9 +326,9 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 
 				podNamespace: "ns2",
 				podName:      "pod2-recursive",
-				volumeName:   "vol2",                            // there is no other pod that uses vol2 -> change of policy and label is possible
-				label:        "system_u:system_r:label-new",     // was label2 in the original pod2
-				changePolicy: v1.SELinuxChangePolicyMountOption, // was Recursive in the original pod2
+				volumeName:   "vol2",                            // 没有其他 Pod 使用 vol2，因此可以更改策略和标签。
+				label:        "system_u:system_r:label-new",     // 原 pod2 使用 label2。
+				changePolicy: v1.SELinuxChangePolicyMountOption, // 原 pod2 使用 Recursive 策略。
 			},
 			expectedConflicts: nil,
 		},
@@ -339,9 +339,9 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 
 				podNamespace: "ns3",
 				podName:      "pod3-1",
-				volumeName:   "vol3",                            // vol3 is used by pod3-2 with label3 and Recursive policy
-				label:        "system_u:system_r:label-new",     // Technically, it's not possible to change a label of an existing pod, but we still check for conflicts
-				changePolicy: v1.SELinuxChangePolicyMountOption, // ChangePolicy change can happen when CSIDriver is updated from SELinuxMount: false to SELinuxMount: true
+				volumeName:   "vol3",                            // vol3 正被 pod3-2 使用，其标签为 label3，策略为 Recursive。
+				label:        "system_u:system_r:label-new",     // 严格来说，现有 Pod 的标签不可更改，但这里仍检查冲突。
+				changePolicy: v1.SELinuxChangePolicyMountOption, // CSIDriver 从 SELinuxMount: false 更新为 SELinuxMount: true 时可能更改 ChangePolicy。
 			},
 			expectedConflicts: []Conflict{
 				{

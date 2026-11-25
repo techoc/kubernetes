@@ -407,7 +407,7 @@ func (spc *StatefulPodControl) createPersistentVolumeClaims(set *apps.StatefulSe
 				errs = append(errs, fmt.Errorf("pvc %s is being deleted", claim.Name))
 			}
 		}
-		// TODO: Check resource requirements and accessmodes, update if necessary
+		// TODO: 检查资源需求与访问模式，必要时更新 PVC。
 	}
 	return errorutils.NewAggregate(errs)
 }

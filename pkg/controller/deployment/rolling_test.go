@@ -292,6 +292,7 @@ func TestDeploymentController_cleanupUnhealthyReplicas(t *testing.T) {
 	}
 }
 
+// TestDeploymentController_scaleDownOldReplicaSetsForRollingUpdate 验证滚动更新时旧 ReplicaSet 的缩容上限与边界条件。
 func TestDeploymentController_scaleDownOldReplicaSetsForRollingUpdate(t *testing.T) {
 	tests := []struct {
 		deploymentReplicas  int32
@@ -370,8 +371,7 @@ func TestDeploymentController_scaleDownOldReplicaSetsForRollingUpdate(t *testing
 			t.Errorf("expected scaling to occur; actions: %v", fakeClientset.Actions())
 			continue
 		}
-		// There are both list and update actions logged, so extract the update
-		// action for verification.
+		// 操作记录中同时包含 list 和 update，提取 update 操作进行校验。
 		var updateAction core.UpdateAction
 		for _, action := range fakeClientset.Actions() {
 			switch a := action.(type) {

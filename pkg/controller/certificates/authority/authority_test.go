@@ -199,7 +199,7 @@ func TestCertificateAuthority(t *testing.T) {
 			name:   "expired ca",
 			policy: PermissiveSigningPolicy{TTL: time.Hour, Now: nowFunc},
 			mutateCA: func(ca *CertificateAuthority) {
-				ca.Certificate.NotAfter = now // pretend that the CA has expired
+				ca.Certificate.NotAfter = now // 模拟 CA 已过期
 			},
 			wantErr: "the signer has expired: NotAfter=" + now.String(),
 		},
@@ -208,7 +208,7 @@ func TestCertificateAuthority(t *testing.T) {
 			name:   "expired ca with backdate",
 			policy: PermissiveSigningPolicy{TTL: time.Hour, Backdate: 5 * time.Minute, Now: nowFunc},
 			mutateCA: func(ca *CertificateAuthority) {
-				ca.Certificate.NotAfter = now // pretend that the CA has expired
+				ca.Certificate.NotAfter = now // 模拟 CA 已过期
 			},
 			wantErr: "refusing to sign a certificate that expired in the past: NotAfter=" + now.String(),
 		},

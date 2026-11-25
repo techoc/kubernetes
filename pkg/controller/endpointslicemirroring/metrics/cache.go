@@ -54,8 +54,10 @@ type EndpointPortCache struct {
 
 // EfficiencyInfo 保存端点数与切片数，用于计算期望切片数和分布效率。
 type EfficiencyInfo struct {
+	// Endpoints 是该端口组合对应的期望端点总数。
 	Endpoints int
-	Slices    int
+	// Slices 是这些端点实际分布到的 EndpointSlice 数量。
+	Slices int
 }
 
 // NewEndpointPortCache 初始化并返回一个空的 EndpointPortCache。

@@ -324,7 +324,7 @@ type trackedTaint struct {
 // deviceTaint 返回该 taint 对应的 DeviceTaint 对象。
 func (tt trackedTaint) deviceTaint() *resourceapi.DeviceTaint {
 	if tt.rule != nil {
-		// TODO when GA: directly point to rule.Spec.Taint.
+		// TODO：GA 后直接指向 rule.Spec.Taint。
 		return &resourceapi.DeviceTaint{
 			Key:       tt.rule.Spec.Taint.Key,
 			Value:     tt.rule.Spec.Taint.Value,
@@ -1437,7 +1437,7 @@ func (tc *Controller) handleSliceChange(oldSlice, newSlice *resourceapi.Resource
 	for o < len(oldDeviceTaints) || n < len(newDeviceTaints) {
 		// 按相同设备名配对遍历新旧列表。
 		for o < len(oldDeviceTaints) && n < len(newDeviceTaints) && oldDeviceTaints[o].deviceName == newDeviceTaints[n].deviceName {
-			if !apiequality.Semantic.DeepEqual(oldDeviceTaints[o].taint, newDeviceTaints[n].taint) { // TODO: hard-code the comparison?
+			if !apiequality.Semantic.DeepEqual(oldDeviceTaints[o].taint, newDeviceTaints[n].taint) { // TODO：改为硬编码比较？
 				modifiedDevices.Insert(oldDeviceTaints[o].deviceName)
 			}
 			o++

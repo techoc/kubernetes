@@ -213,7 +213,7 @@ func (q *RateLimitedTimedQueue) Try(logger klog.Logger, fn ActionFunc) {
 	q.limiterLock.Lock()
 	defer q.limiterLock.Unlock()
 	for ok {
-		// rate limit the queue checking
+		// 检查队列处理是否受到速率限制。
 		if !q.limiter.TryAccept() {
 			logger.V(10).Info("Try rate limited", "value", val)
 			// 速率受限，留到下一轮 Try 再处理。

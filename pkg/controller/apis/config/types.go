@@ -62,42 +62,30 @@ type KubeControllerManagerConfiguration struct {
 	KubeCloudShared cpconfig.KubeCloudSharedConfiguration
 
 	// AttachDetachControllerConfiguration 保存 AttachDetachController 相关功能的配置。
-	// AttachDetachController related features.
 	AttachDetachController attachdetachconfig.AttachDetachControllerConfiguration
 	// CronJobControllerConfiguration 保存 CronJobController 相关功能的配置。
-	// related features.
 	CronJobController cronjobconfig.CronJobControllerConfiguration
 	// CSRSigningControllerConfiguration 保存 CSRSigningController 相关功能的配置。
-	// CSRSigningController related features.
 	CSRSigningController csrsigningconfig.CSRSigningControllerConfiguration
 	// DaemonSetControllerConfiguration 保存 DaemonSetController 相关功能的配置。
-	// related features.
 	DaemonSetController daemonconfig.DaemonSetControllerConfiguration
 	// DeploymentControllerConfiguration 保存 DeploymentController 相关功能的配置。
-	// DeploymentController related features.
 	DeploymentController deploymentconfig.DeploymentControllerConfiguration
 	// DisruptionControllerConfiguration 保存 DisruptionController 相关功能的配置。
-	// DisruptionController related features.
 	DisruptionController disruptionconfig.DisruptionControllerConfiguration
 	// DeviceTaintEvictionControllerConfiguration 保存 DeviceTaintEvictionController 相关功能的配置。
 	DeviceTaintEvictionController devicetaintevictionconfig.DeviceTaintEvictionControllerConfiguration
 	// DeprecatedControllerConfiguration 包含已废弃的配置项（当前为空）。
-	// features.
 	DeprecatedController DeprecatedControllerConfiguration
 	// EndpointControllerConfiguration 保存 EndpointController 相关功能的配置。
-	// related features.
 	EndpointController endpointconfig.EndpointControllerConfiguration
 	// EndpointSliceControllerConfiguration 保存 EndpointSliceController 相关功能的配置。
-	// EndpointSliceController related features.
 	EndpointSliceController endpointsliceconfig.EndpointSliceControllerConfiguration
 	// EndpointSliceMirroringControllerConfiguration 保存 EndpointSliceMirroringController 相关功能的配置。
-	// EndpointSliceMirroringController related features.
 	EndpointSliceMirroringController endpointslicemirroringconfig.EndpointSliceMirroringControllerConfiguration
 	// EphemeralVolumeControllerConfiguration 保存 EphemeralVolumeController 相关功能的配置。
-	// related features.
 	EphemeralVolumeController ephemeralvolumeconfig.EphemeralVolumeControllerConfiguration
 	// GarbageCollectorControllerConfiguration 保存 GarbageCollectorController 相关功能的配置。
-	// GarbageCollectorController related features.
 	GarbageCollectorController garbagecollectorconfig.GarbageCollectorControllerConfiguration
 	// HPAControllerConfiguration 保存 HPAController 相关功能的配置。
 	HPAController poautosclerconfig.HPAControllerConfiguration
@@ -106,42 +94,30 @@ type KubeControllerManagerConfiguration struct {
 	// LegacySATokenCleanerConfiguration 保存 LegacySATokenCleaner 相关功能的配置。
 	LegacySATokenCleaner serviceaccountconfig.LegacySATokenCleanerConfiguration
 	// NamespaceControllerConfiguration 保存 NamespaceController 相关功能的配置。
-	// related features.
 	NamespaceController namespaceconfig.NamespaceControllerConfiguration
 	// NodeIPAMControllerConfiguration 保存 NodeIPAMController 相关功能的配置。
-	// related features.
 	NodeIPAMController nodeipamconfig.NodeIPAMControllerConfiguration
 	// NodeLifecycleControllerConfiguration 保存 NodeLifecycleController 相关功能的配置。
-	// NodeLifecycleController related features.
 	NodeLifecycleController nodelifecycleconfig.NodeLifecycleControllerConfiguration
 	// PersistentVolumeBinderControllerConfiguration 保存 PersistentVolumeBinderController 相关功能的配置。
-	// PersistentVolumeBinderController related features.
 	PersistentVolumeBinderController persistentvolumeconfig.PersistentVolumeBinderControllerConfiguration
 	// PodGCControllerConfiguration 保存 PodGCController 相关功能的配置。
-	// related features.
 	PodGCController podgcconfig.PodGCControllerConfiguration
 	// ReplicaSetControllerConfiguration 保存 ReplicaSetController 相关功能的配置。
 	ReplicaSetController replicasetconfig.ReplicaSetControllerConfiguration
 	// ReplicationControllerConfiguration 保存 ReplicationController 相关功能的配置。
-	// ReplicationController related features.
 	ReplicationController replicationconfig.ReplicationControllerConfiguration
 	// ResourceQuotaControllerConfiguration 保存 ResourceQuotaController 相关功能的配置。
-	// ResourceQuotaController related features.
 	ResourceQuotaController resourcequotaconfig.ResourceQuotaControllerConfiguration
 	// SAControllerConfiguration 保存 SAController 相关功能的配置。
-	// related features.
 	SAController serviceaccountconfig.SAControllerConfiguration
 	// ServiceControllerConfiguration 保存 ServiceController 相关功能的配置。
-	// related features.
 	ServiceController serviceconfig.ServiceControllerConfiguration
 	// StatefulSetControllerConfiguration 保存 StatefulSetController 相关功能的配置。
-	// StatefulSetController related features.
 	StatefulSetController statefulsetconfig.StatefulSetControllerConfiguration
 	// TTLAfterFinishedControllerConfiguration 保存 TTLAfterFinishedController 相关功能的配置。
-	// TTLAfterFinishedController related features.
 	TTLAfterFinishedController ttlafterfinishedconfig.TTLAfterFinishedControllerConfiguration
 	// ValidatingAdmissionPolicyStatusControllerConfiguration 保存 ValidatingAdmissionPolicyStatusController 相关功能的配置。
-	// ValidatingAdmissionPolicyStatusController related features.
 	ValidatingAdmissionPolicyStatusController validatingadmissionpolicystatusconfig.ValidatingAdmissionPolicyStatusControllerConfiguration
 	// ResourceClaimControllerConfiguration 保存 ResourceClaimController 相关功能的配置。
 	ResourceClaimController resourceclaimconfig.ResourceClaimControllerConfiguration

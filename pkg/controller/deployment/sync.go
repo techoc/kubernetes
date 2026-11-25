@@ -267,8 +267,8 @@ func (dc *DeploymentController) getNewReplicaSet(ctx context.Context, d *apps.De
 			cond := deploymentutil.NewDeploymentCondition(apps.DeploymentProgressing, v1.ConditionFalse, deploymentutil.FailedRSCreateReason, msg)
 			deploymentutil.SetDeploymentCondition(&d.Status, *cond)
 			// 此时已经要报告更重要的问题，这个创建错误就不必再关心了。
-			// TODO: Identify which errors are permanent and switch DeploymentIsFailed to take into account
-			// these reasons as well. Related issue: https://github.com/kubernetes/kubernetes/issues/18568
+			// TODO: 识别哪些错误是永久性的，并让 DeploymentIsFailed 同时考虑这些原因。
+			// 相关问题：https://github.com/kubernetes/kubernetes/issues/18568
 			_, _ = dc.client.AppsV1().Deployments(d.Namespace).UpdateStatus(ctx, d, metav1.UpdateOptions{})
 		}
 		dc.eventRecorder.Eventf(d, v1.EventTypeWarning, deploymentutil.FailedRSCreateReason, "%s", msg)
@@ -481,7 +481,7 @@ func calculateStatus(allRSs []*apps.ReplicaSet, newRS *apps.ReplicaSet, deployme
 	}
 
 	status := apps.DeploymentStatus{
-		// TODO: Ensure that if we start retrying status updates, we won't pick up a new Generation value.
+		// TODO: 如果开始重试状态更新，确保不会读取到新的 Generation 值。
 		ObservedGeneration:  deployment.Generation,
 		Replicas:            deploymentutil.GetActualReplicaCountForReplicaSets(allRSs),
 		UpdatedReplicas:     deploymentutil.GetActualReplicaCountForReplicaSets([]*apps.ReplicaSet{newRS}),

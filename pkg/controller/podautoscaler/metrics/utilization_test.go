@@ -129,7 +129,7 @@ type metricUsageRatioTestCase struct {
 
 // TestMetricUsageRatio 测试：根据 Pod 指标和目标使用量，计算使用量比值及当前使用量。
 func TestMetricUsageRatio(t *testing.T) {
-	// TODO: add more unit tests
+	// TODO: 补充更多单元测试。
 	testCases := []metricUsageRatioTestCase{
 		{
 			name: "base case",

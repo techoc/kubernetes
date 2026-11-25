@@ -185,19 +185,26 @@ const (
 	// 以下是上述指标中 "result" 以及 "status"（job_pods_creation_total）
 	// 标签的可能取值。
 
+	// Succeeded 表示成功。
 	Succeeded = "succeeded"
-	Failed    = "failed"
+	// Failed 表示失败。
+	Failed = "failed"
 
 	// 以下是 terminated_pods_tracking_finalizer 指标中 "event" 标签的可能
 	// 取值。
-	Add    = "add"
+	// Add 表示新增带跟踪 finalizer 的已终止 Pod。
+	Add = "add"
+	// Delete 表示删除带跟踪 finalizer 的已终止 Pod。
 	Delete = "delete"
 
 	// 以下是 job_pods_creation_total 指标中 "reason" 标签的可能取值。
 
-	PodCreateNew                   = "new"
+	// PodCreateNew 表示使用默认策略创建新 Pod。
+	PodCreateNew = "new"
+	// PodRecreateTerminatingOrFailed 表示因 Pod 正在终止或已失败而重建 Pod。
 	PodRecreateTerminatingOrFailed = "recreate_terminating_or_failed"
-	PodRecreateFailed              = "recreate_failed"
+	// PodRecreateFailed 表示因 Pod 已失败而重建 Pod。
+	PodRecreateFailed = "recreate_failed"
 )
 
 // registerMetrics 保证指标只注册一次。

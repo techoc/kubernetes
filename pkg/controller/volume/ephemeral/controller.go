@@ -43,7 +43,7 @@ import (
 	"k8s.io/kubernetes/pkg/controller/volume/events"
 )
 
-// Controller 为 Pod 规格中的临时内联卷（ephemeral inline volume）创建 PVC。
+// Controller 为 Pod 规格中的临时内联卷创建 PVC。
 type Controller interface {
 	// Run 启动控制器，使用 workers 个 worker 并发处理队列，直至 ctx 被取消。
 	Run(ctx context.Context, workers int)
@@ -304,7 +304,7 @@ func (ec *ephemeralController) handleVolume(ctx context.Context, pod *v1.Pod, vo
 		if err := ephemeral.VolumeIsForPod(pod, pvc); err != nil {
 			return err
 		}
-		// Already created, nothing more to do.
+		// PVC 已创建，无需重复处理。
 		logger.V(5).Info("Ephemeral: PVC already created", "volumeName", vol.Name, "PVC", klog.KObj(pvc))
 		return nil
 	}

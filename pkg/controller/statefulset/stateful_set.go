@@ -221,7 +221,7 @@ func NewStatefulSetController(
 	ssc.setLister = setInformer.Lister()
 	ssc.setListerSynced = setInformer.Informer().HasSynced
 
-	// TODO: Watch volumes
+	// TODO: 监听卷事件。
 	return ssc
 }
 
@@ -324,9 +324,8 @@ func (ssc *StatefulSetController) updatePod(logger klog.Logger, old, cur interfa
 			logger.V(4).Info("StatefulSet Pod phase changed", "pod", klog.KObj(curPod), "statefulSet", klog.KObj(set), "podPhase", curPod.Status.Phase)
 		}
 		ssc.enqueueStatefulSet(logger, set)
-		// TODO: MinReadySeconds in the Pod will generate an Available condition to be added in
-		// the Pod status which in turn will trigger a requeue of the owning replica set thus
-		// having its status updated with the newly available replica.
+		// TODO: Pod 的 MinReadySeconds 会在 Pod 状态中生成 Available 条件，进而触发所属控制器重新入队，
+		//       使其状态计入新变为可用的副本。
 		if !podutil.IsPodReady(oldPod) && podutil.IsPodReady(curPod) && set.Spec.MinReadySeconds > 0 {
 			logger.V(2).Info("StatefulSet will be enqueued after minReadySeconds for availability check", "statefulSet", klog.KObj(set), "minReadySeconds", set.Spec.MinReadySeconds)
 			// 当前队列无法为多个就绪时间不同的 Pod 分别计时；
@@ -382,7 +381,6 @@ func (ssc *StatefulSetController) deletePod(logger klog.Logger, obj interface{})
 
 // getPodsForStatefulSet 返回 set 应当管理的 Pod，并通过接管/放弃来调和 ControllerRef。
 // 注意：返回的 Pod 是指向缓存对象的指针，修改前必须先拷贝。
-// NOTE: Returned Pods are pointers to objects from the cache.
 func (ssc *StatefulSetController) getPodsForStatefulSet(ctx context.Context, set *apps.StatefulSet, selector labels.Selector) ([]*v1.Pod, error) {
 	podsForSts, err := controller.FilterPodsByOwner(ssc.podIndexer, &set.ObjectMeta, "StatefulSet", true)
 	if err != nil {

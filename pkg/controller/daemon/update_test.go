@@ -697,7 +697,7 @@ func setPodReadiness(t *testing.T, dsc *daemonSetsController, ready bool, count 
 		if !podutil.UpdatePodCondition(&pod.Status, &condition) {
 			t.Fatal("failed to update pod")
 		}
-		// TODO: workaround UpdatePodCondition calling time.Now() directly
+		// TODO: 规避 UpdatePodCondition 直接调用 time.Now() 的问题。
 		setCondition := podutil.GetPodReadyCondition(pod.Status)
 		setCondition.LastTransitionTime.Time = dsc.failedPodsBackoff.Clock.Now()
 		logger.Info("marked pod ready", "pod", pod.Name, "ready", ready)

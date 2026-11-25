@@ -90,7 +90,7 @@ func generateUpdateErrorFunc(t *testing.T, failures int) clienttesting.ReactionF
 			acc, _ := meta.Accessor(update.GetObject())
 			return true, nil, apierrors.NewForbidden(update.GetResource().GroupResource(), acc.GetName(), errors.New("Mock error"))
 		}
-		// Update succeeds
+		// 更新成功。
 		return false, nil, nil
 	}
 }
@@ -121,7 +121,7 @@ func TestPVProtectionController(t *testing.T) {
 		// expectedActions 是期望发生的 kubeclient 动作列表，用于精确断言。
 		expectedActions []clienttesting.Action
 	}{
-		// PV events
+		// PV 事件。
 		//
 		{
 			// 普通 PV 缺少 finalizer 时应补加
@@ -145,15 +145,15 @@ func TestPVProtectionController(t *testing.T) {
 				{
 					verb:      "update",
 					resource:  "persistentvolumes",
-					reactorfn: generateUpdateErrorFunc(t, 2 /* update fails twice*/),
+					reactorfn: generateUpdateErrorFunc(t, 2 /* 更新失败两次 */),
 				},
 			},
 			expectedActions: []clienttesting.Action{
-				// This fails
+				// 本次更新失败。
 				clienttesting.NewUpdateAction(pvVer, "", withProtectionFinalizer(pv())),
-				// This fails too
+				// 本次更新也失败。
 				clienttesting.NewUpdateAction(pvVer, "", withProtectionFinalizer(pv())),
-				// This succeeds
+				// 本次更新成功。
 				clienttesting.NewUpdateAction(pvVer, "", withProtectionFinalizer(pv())),
 			},
 		},
@@ -173,15 +173,15 @@ func TestPVProtectionController(t *testing.T) {
 				{
 					verb:      "update",
 					resource:  "persistentvolumes",
-					reactorfn: generateUpdateErrorFunc(t, 2 /* update fails twice*/),
+					reactorfn: generateUpdateErrorFunc(t, 2 /* 更新失败两次 */),
 				},
 			},
 			expectedActions: []clienttesting.Action{
-				// Fails
+				// 失败。
 				clienttesting.NewUpdateAction(pvVer, "", deleted(pv())),
-				// Fails too
+				// 也失败。
 				clienttesting.NewUpdateAction(pvVer, "", deleted(pv())),
-				// Succeeds
+				// 成功。
 				clienttesting.NewUpdateAction(pvVer, "", deleted(pv())),
 			},
 		},
@@ -202,7 +202,7 @@ func TestPVProtectionController(t *testing.T) {
 
 		client := fake.NewSimpleClientset(objs...)
 
-		// Create informers
+		// 创建 informer。
 		informers := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 		pvInformer := informers.Core().V1().PersistentVolumes()
 
@@ -221,7 +221,7 @@ func TestPVProtectionController(t *testing.T) {
 			client.Fake.PrependReactor(reactor.verb, reactor.resource, reactor.reactorfn)
 		}
 
-		// Create the controller
+		// 创建控制器。
 		logger, _ := ktesting.NewTestContext(t)
 		ctrl, err := NewPVProtectionController(logger, pvInformer, client)
 		if err != nil {

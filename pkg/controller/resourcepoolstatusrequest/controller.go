@@ -243,7 +243,7 @@ func (c *Controller) syncRequest(ctx context.Context, key string) error {
 		}
 	}()
 
-	// Get the request
+	// 获取请求。
 	request, err := c.requestLister.Get(key)
 	if err != nil {
 		// 对象已从缓存消失（通常已被删除），返回 nil 不重试；事件可能滞后于删除。
@@ -365,13 +365,13 @@ func (c *Controller) calculatePoolStatus(ctx context.Context, request *resourcev
 		driver             string
 		poolName           string
 		nodeName           string
-		nodeNameMixed      bool // true when slices have different NodeNames
+		nodeNameMixed      bool // slice 的 NodeNames 是否不同
 		totalDevices       int32
-		unavailableDevices int32 // devices carrying a NoSchedule/NoExecute taint
+		unavailableDevices int32 // 携带 NoSchedule/NoExecute taint 的设备
 		sliceCount         int32
 		expectedSliceCount int64
 		generation         int64
-		// Data for the partition/counter/shareable views (Alpha 1.37).
+		// partition/counter/shareable 视图的数据（Alpha 1.37）。
 		devices        []deviceRecord
 		sharedCounters []resourcev1.CounterSet
 	}
@@ -409,7 +409,7 @@ func (c *Controller) calculatePoolStatus(ctx context.Context, request *resourcev
 		}
 	}
 
-	// Pass 2: Aggregate only slices at max generation
+	// 第二遍：只聚合 generation 最大的 slice。
 	poolData := make(map[string]*poolInfo)
 	for _, slice := range slices {
 		if slice.Spec.Driver != driver {

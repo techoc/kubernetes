@@ -967,6 +967,7 @@ func TestCidrSetMetricsHistogram(t *testing.T) {
 	expectMetrics(t, cidr, em)
 }
 
+// TestCidrSetMetricsDual 验证 IPv4 与 IPv6 CIDR 集合的指标相互独立。
 func TestCidrSetMetricsDual(t *testing.T) {
 	// 创建 IPv4 cidrSet 并校验其初始指标。
 	cidrIPv4 := "10.0.0.0/16"

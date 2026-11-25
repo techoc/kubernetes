@@ -2001,7 +2001,7 @@ func (ctrl *PersistentVolumeController) getProvisionerNameFromVolume(volume *v1.
 	}
 	// 执行到这里，说明要么使用了外部制备器，要么插件已迁移到 CSI。
 	// 对于外部制备器（plugin == nil），不使用 AnnDynamicallyProvisioned 注解值，
-	// 而改用 StorageClass 的 Provisioner 字段，以避免在 local storage provisioner 给卷打上任意名称时 造成指标标签基数爆炸。
+	// 而改用 StorageClass 的 Provisioner 字段，以避免 local storage provisioner 给卷打上任意名称时造成指标标签基数爆炸。
 	storageClass := storagehelpers.GetPersistentVolumeClass(volume)
 	class, err := ctrl.classLister.Get(storageClass)
 	if err != nil {

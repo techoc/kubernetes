@@ -64,7 +64,7 @@ const (
 
 	// Deployment 条件的各种原因
 	//
-	// Progressing：
+	// Progressing 条件：
 
 	// ReplicaSetUpdatedReason 在发布过程中某个 ReplicaSet 被更新时添加到 Deployment 上。
 	ReplicaSetUpdatedReason = "ReplicaSetUpdated"
@@ -85,7 +85,7 @@ const (
 	// Deployment 被误判为失败。
 	ResumedDeployReason = "DeploymentResumed"
 	//
-	// Available：
+	// Available 条件：
 
 	// MinimumReplicasAvailable 在 Deployment 达到最小所需可用副本数时添加。
 	MinimumReplicasAvailable = "MinimumReplicasAvailable"
@@ -540,8 +540,8 @@ type podListFunc func(string, metav1.ListOptions) (*v1.PodList, error)
 // 注意这里不会协调 ControllerRef（纳管/弃管），因为只有控制器自身才应做这件事；
 // 但会过滤掉 ControllerRef 不匹配的 ReplicaSet。
 func ListReplicaSets(deployment *apps.Deployment, getRSList RsListFunc) ([]*apps.ReplicaSet, error) {
-	// TODO: Right now we list replica sets by their labels. We should list them by selector, i.e. the replica set's selector
-	//       should be a superset of the deployment's selector, see https://github.com/kubernetes/kubernetes/issues/19830.
+	// TODO: 当前按标签列出 ReplicaSet；应改为按选择器列出，即 ReplicaSet 的选择器
+	//       必须是 Deployment 选择器的超集。见 https://github.com/kubernetes/kubernetes/issues/19830。
 	namespace := deployment.Namespace
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 	if err != nil {

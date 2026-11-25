@@ -503,7 +503,6 @@ func TestActivePodSchedulingGroupIndexer(t *testing.T) {
 	}
 	_ = indexer.Add(pod3)
 
-	// Terminated pod should not appear in the index.
 	// 终态 Pod 不应进入活跃 Pod 索引。
 	pod4 := terminatedPod(podForPG("pod-4", "pg-a"), v1.PodSucceeded)
 	_ = indexer.Add(pod4)
@@ -520,7 +519,6 @@ func TestActivePodSchedulingGroupIndexer(t *testing.T) {
 	}
 
 	// 查询不存在的 PodGroup 应返回空列表。
-	// Nonexistent PodGroup should return empty.
 	objs, err = indexer.ByIndex(activePodSchedulingGroupIndex, defaultNS+"/nonexistent")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

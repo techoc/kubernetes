@@ -444,7 +444,7 @@ func (rq *Controller) replenishQuota(ctx context.Context, groupResource schema.G
 		resourceQuota := resourceQuotas[i]
 		resourceQuotaResources := quota.ResourceNames(resourceQuota.Status.Hard)
 		if intersection := evaluator.MatchingResources(resourceQuotaResources); len(intersection) > 0 {
-			// TODO: make this support targeted replenishment to a specific kind, right now it does a full recalc on that quota.
+			// TODO: 支持仅补充特定类型的资源；目前会对该配额触发全量重算。
 			rq.enqueueResourceQuota(logger, resourceQuota)
 		}
 	}

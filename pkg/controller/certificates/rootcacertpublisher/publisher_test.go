@@ -264,7 +264,7 @@ func TestConfigMapUpdateNoHotLoop(t *testing.T) {
 				configMapIndexer.Add(obj)
 			}
 
-			// Publisher manages certificate ConfigMap objects inside Namespaces
+			// Publisher 管理各命名空间中的证书 ConfigMap。
 			// 手动构造 Publisher 而非走 informer，便于精确控制缓存内容与客户端动作。
 			controller := Publisher{
 				client:         client,

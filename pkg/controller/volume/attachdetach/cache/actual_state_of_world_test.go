@@ -915,7 +915,6 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_Marked(t *testing.T) {
 
 // Test_MarkDesireToDetach_Positive_MarkedAddVolumeNodeReset 验证
 // ResetDetachRequestTime 能把已设置的卸载请求时间清零，恢复默认状态。
-// Verifies mountedByNode is true and detachRequestedTime is reset to zero.
 func Test_MarkDesireToDetach_Positive_MarkedAddVolumeNodeReset(t *testing.T) {
 	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
@@ -1099,7 +1098,7 @@ func Test_RemoveVolumeFromReportAsAttached_Delete_AddVolumeNode(t *testing.T) {
 	// 删除后重新添加，验证上报状态随条目生命周期正确重建。
 	asw.DeleteVolumeNode(generatedVolumeName, nodeName)
 
-	asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, "" /*device path*/, true)
+	asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, "" /* 设备路径 */, true)
 
 	reportAsAttachedVolumesMap = asw.GetVolumesToReportAttached(logger)
 	volumes, exists = reportAsAttachedVolumesMap[nodeName]

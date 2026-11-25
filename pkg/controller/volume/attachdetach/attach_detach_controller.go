@@ -490,7 +490,7 @@ func (adc *attachDetachController) podAdd(logger klog.Logger, obj interface{}) {
 
 	volumeActionFlag := util.DetermineVolumeAction(
 		pod,
-		true /* default volume action */)
+		true /* 默认卷操作 */)
 
 	util.ProcessPodVolumes(logger, pod, volumeActionFlag, /* addVolumes */
 		adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister, adc.csiMigratedPluginManager, adc.intreeToCSITranslator)
@@ -514,7 +514,7 @@ func (adc *attachDetachController) podUpdate(logger klog.Logger, oldObj, newObj 
 
 	volumeActionFlag := util.DetermineVolumeAction(
 		pod,
-		true /* default volume action */)
+		true /* 默认卷操作 */)
 
 	util.ProcessPodVolumes(logger, pod, volumeActionFlag, /* addVolumes */
 		adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister, adc.csiMigratedPluginManager, adc.intreeToCSITranslator)
@@ -540,7 +540,7 @@ func (adc *attachDetachController) podDelete(logger klog.Logger, obj interface{}
 // 以规避节点添加时清空已挂载卷字段导致的状态不一致。
 func (adc *attachDetachController) nodeAdd(logger klog.Logger, obj interface{}) {
 	node, ok := obj.(*v1.Node)
-	// TODO: investigate if nodeName is empty then if we can return
+	// TODO: 调查 nodeName 为空时能否直接返回。
 	// kubernetes/kubernetes/issues/37777
 	// 节点添加可能清空已挂载卷字段，因此下面主动触发与真实状态的同步。
 	if node == nil || !ok {
@@ -556,7 +556,7 @@ func (adc *attachDetachController) nodeAdd(logger klog.Logger, obj interface{}) 
 // nodeUpdate 处理节点更新事件：把节点加入期望状态并处理其 VolumesInUse。
 func (adc *attachDetachController) nodeUpdate(logger klog.Logger, oldObj, newObj interface{}) {
 	node, ok := newObj.(*v1.Node)
-	// TODO: investigate if nodeName is empty then if we can return
+	// TODO: 调查 nodeName 为空时能否直接返回。
 	if node == nil || !ok {
 		return
 	}
@@ -656,7 +656,7 @@ func (adc *attachDetachController) syncPVCByKey(logger klog.Logger, key string) 
 		}
 		volumeActionFlag := util.DetermineVolumeAction(
 			pod,
-			true /* default volume action */)
+			true /* 默认卷操作 */)
 
 		util.ProcessPodVolumes(logger, pod, volumeActionFlag, /* addVolumes */
 			adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister, adc.csiMigratedPluginManager, adc.intreeToCSITranslator)

@@ -393,7 +393,7 @@ func (rsc *ReplicaSetController) updateRS(logger klog.Logger, old, cur interface
 	oldRS := old.(*apps.ReplicaSet)
 	curRS := cur.(*apps.ReplicaSet)
 
-	// TODO: make a KEP and fix informers to always call the delete event handler on re-create
+	// TODO: 提交 KEP，并修复 informer，使其在对象重建后始终调用删除事件处理器。
 	if curRS.UID != oldRS.UID {
 		key, err := controller.KeyFunc(oldRS)
 		if err != nil {
@@ -534,16 +534,11 @@ func (rsc *ReplicaSetController) updatePod(logger klog.Logger, old, cur interfac
 		}
 		logger.V(4).Info("Pod objectMeta updated.", "pod", klog.KObj(oldPod), "oldObjectMeta", oldPod.ObjectMeta, "curObjectMeta", curPod.ObjectMeta)
 		rsc.enqueueRS(rs)
-		// TODO: MinReadySeconds in the Pod will generate an Available condition to be added in
-		// the Pod status which in turn will trigger a requeue of the owning replica set thus
-		// having its status updated with the newly available replica. For now, we can fake the
-		// update by resyncing the controller MinReadySeconds after the it is requeued because
-		// a Pod transitioned to Ready.
-		// If there are multiple pods with varying readiness times, we cannot correctly track it
-		// with the current queue. Further resyncs are attempted at the end of the syncReplicaSet
-		// function.
-		// Note that this still suffers from #29229, we are just moving the problem one level
-		// "closer" to kubelet (from the deployment to the replica set controller).
+		// TODO: Pod 的 MinReadySeconds 会在 Pod 状态中生成 Available 条件，进而触发所属 ReplicaSet 重新入队，
+		//       使其状态计入新变为可用的副本。目前可在 Pod 转为 Ready 并重新入队后，
+		//       通过重新同步控制器的 MinReadySeconds 来模拟该更新。
+		//       若多个 Pod 的就绪时间不同，当前队列无法准确分别跟踪；syncReplicaSet 末尾会尝试再次重新同步。
+		//       注意这仍受 #29229 影响，只是把问题从 Deployment 控制器下移到了 ReplicaSet 控制器。
 		if !podutil.IsPodReady(oldPod) && podutil.IsPodReady(curPod) && rs.Spec.MinReadySeconds > 0 {
 			logger.V(2).Info("pod will be enqueued after a while for availability check", "duration", rs.Spec.MinReadySeconds, "kind", rsc.Kind, "pod", klog.KObj(oldPod))
 			rsc.enqueueRSAfter(rs, time.Duration(rs.Spec.MinReadySeconds)*time.Second)
@@ -646,11 +641,8 @@ func (rsc *ReplicaSetController) manageReplicas(ctx context.Context, activePods 
 		if diff > rsc.burstReplicas {
 			diff = rsc.burstReplicas
 		}
-		// TODO: Track UIDs of creates just like deletes. The problem currently
-		// is we'd need to wait on the result of a create to record the pod's
-		// UID, which would require locking *across* the create, which will turn
-		// into a performance bottleneck. We should generate a UID for the pod
-		// beforehand and store it via ExpectCreations.
+		// TODO: 像跟踪删除一样跟踪创建操作的 UID。当前记录 Pod UID 需要等待创建结果，
+		//       这要求在创建期间持锁，可能成为性能瓶颈。应提前生成 Pod UID，并通过 ExpectCreations 保存。
 		rsc.expectations.ExpectCreations(logger, rsKey, diff)
 		logger.V(2).Info("Too few replicas", "replicaSet", klog.KObj(rs), "need", *(rs.Spec.Replicas), "creating", diff)
 		// 批量创建 Pod：批大小从 SlowStartInitialBatchSize 开始，每成功一轮就翻倍，类似“慢启动”。

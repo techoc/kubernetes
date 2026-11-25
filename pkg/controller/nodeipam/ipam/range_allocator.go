@@ -257,8 +257,7 @@ func (r *rangeAllocator) syncNode(ctx context.Context, key string) error {
 	node, err := r.nodeLister.Get(key)
 	if apierrors.IsNotFound(err) {
 		logger.V(3).Info("node has been deleted", "node", key)
-		// TODO: obtain the node object information to call ReleaseCIDR from here
-		// and retry if there is an error.
+		// TODO: 获取节点对象信息，从这里调用 ReleaseCIDR，并在出错时重试。
 		return nil
 	}
 	if err != nil {

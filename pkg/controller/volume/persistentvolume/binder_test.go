@@ -475,7 +475,7 @@ func TestSync(t *testing.T) {
 		{
 			// 声明绑定到已绑定至其他声明的卷，
 			// 检查声明被标记为 lost。
-			// TODO: test that an event is emitted
+			// TODO: 补充事件已发出的断言。
 			name:            "3-6 - bound claim with bound volume",
 			initialVolumes:  newVolumeArray("volume3-6", "10Gi", "uid3-6-x", "claim3-6-x", v1.VolumeAvailable, v1.PersistentVolumeReclaimRetain, classEmpty),
 			expectedVolumes: newVolumeArray("volume3-6", "10Gi", "uid3-6-x", "claim3-6-x", v1.VolumeAvailable, v1.PersistentVolumeReclaimRetain, classEmpty),

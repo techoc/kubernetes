@@ -252,7 +252,7 @@ func testRecognizer(t *testing.T, cases []func(b *csrBuilder), recognizeFunc fun
 }
 
 // 非密码学安全的随机数，仅用于加速测试。
-// DO NOT COPY THIS CODE
+// 请勿复制此代码。
 var insecureRand = rand.New(rand.NewSource(0))
 
 // makeTestCsr 构造一个仅包含 CN 的默认测试 CSR。

@@ -28,7 +28,7 @@ import (
 //   - 可选的 Job 失败消息（仅当 Pod 命中 'FailJob' 规则时存在）；
 //   - 一个布尔值，表示失败是否应计入 backoffLimit（若指定，
 //     也计入 backoffLimitPerIndex）。命中 'Ignore' 规则时不应计入；
-//   - 指向命中的 pod failure policy action 的指针。
+//   - 指向命中的 Pod 失败策略动作的指针。
 func matchPodFailurePolicy(podFailurePolicy *batch.PodFailurePolicy, failedPod *v1.Pod) (*string, bool, *batch.PodFailurePolicyAction) {
 	// 未配置策略时沿用默认行为：计入失败次数，不产生失败消息。
 	if podFailurePolicy == nil {

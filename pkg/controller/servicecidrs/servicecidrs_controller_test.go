@@ -106,7 +106,7 @@ func TestControllerSync(t *testing.T) {
 		cidrs      []*networkingapiv1.ServiceCIDR
 		ips        []*networkingapiv1.IPAddress
 		cidrSynced string
-		actions    [][]string // verb and resource and subresource
+		actions    [][]string // 动词、资源和子资源
 	}{
 		{
 			name: "no existing service CIDRs",
@@ -136,7 +136,7 @@ func TestControllerSync(t *testing.T) {
 			actions:    [][]string{{"patch", "servicecidrs", ""}},
 		},
 		{
-			name: "service CIDR being deleted but within the grace period must be requeued not remove the finalizer", // TODO: assert is actually requeued
+			name: "service CIDR being deleted but within the grace period must be requeued not remove the finalizer", // TODO: 断言确实已重新入队
 			cidrs: []*networkingapiv1.ServiceCIDR{
 				deletingServiceCIDR,
 			},
@@ -515,7 +515,7 @@ func TestController_ipToCidrs(t *testing.T) {
 				makeServiceCIDR("unrelated2", "10.0.0.0/16", ""),
 			},
 			// 192.168.0.63 是 /26 的广播地址，不应算作 /26 内的可用 IP。
-			ip:   makeIPAddress("192.168.0.63"), // broadcast for 192.168.0.0/26
+			ip:   makeIPAddress("192.168.0.63"),
 			want: []string{defaultservicecidr.DefaultServiceCIDRName, "overlapping"},
 		}, {
 			name: "three CIDR - two same and one larger - IPv6 subnet address",

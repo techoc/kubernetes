@@ -66,7 +66,7 @@ func ControllerRevisionControllerIndexKey(namespace string, ownerReference *meta
 // 检查与注册之间若有其他控制器抢先注册，二次确认后也视为成功。
 func AddControllerRevisionControllerIndexer(informer cache.SharedIndexInformer) error {
 	if _, exists := informer.GetIndexer().GetIndexers()[ControllerRevisionControllerIndex]; exists {
-		// indexer already exists, do nothing
+		// 索引已存在，无需重复注册。
 		return nil
 	}
 

@@ -414,9 +414,9 @@ func TestResolveDevicePartitions(t *testing.T) {
 		requestAttr *string
 		devices     []deviceRecord
 		// wantAttr 是每台设备期望解析出的分区属性。
-		wantAttr []string // resolved partitionAttr per device
+		wantAttr []string // 每台设备解析出的 partitionAttr
 		// wantType 是每台设备期望解析出的分区类型，空串表示未解析。
-		wantType []string // resolved partitionType per device ("" when unresolved)
+		wantType []string // 每台设备解析出的 partitionType（空串表示未解析）
 	}{
 		// 设备自己声明的 profile 优先于请求默认 shape。
 		"slice declaration wins over request default": {

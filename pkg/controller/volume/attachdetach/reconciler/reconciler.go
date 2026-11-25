@@ -243,7 +243,7 @@ func (rc *reconciler) reconcile(ctx context.Context) {
 			// 刷新节点状态，表明该卷已不再可安全挂载。
 			err = rc.nodeStatusUpdater.UpdateNodeStatusForNode(logger, attachedVolume.NodeName)
 			if err != nil {
-				// Skip detaching this volume if unable to update node status
+				// 无法更新节点状态时跳过本次 detach。
 				logger.Error(err, "UpdateNodeStatusForNode failed while attempting to report volume as attached", "node", klog.KRef("", string(attachedVolume.NodeName)), "volumeName", attachedVolume.VolumeName)
 				// 节点状态更新失败时把卷加回“报告为已挂载”，让状态更新器重新写回卷列表；
 				// 此处 DetachVolume 尚未真正调用，必须自行回滚以维持每次协调的一致性。
@@ -259,9 +259,9 @@ func (rc *reconciler) reconcile(ctx context.Context) {
 			verifySafeToDetach := !forceDetachTimeoutExpired && !hasOutOfServiceTaint
 			err = rc.attacherDetacher.DetachVolume(logger, attachedVolume.AttachedVolume, verifySafeToDetach, rc.actualStateOfWorld)
 			if err == nil {
-				if verifySafeToDetach { // normal detach
+				if verifySafeToDetach { // 正常卸载
 					logger.Info("attacherDetacher.DetachVolume started", "node", klog.KRef("", string(attachedVolume.NodeName)), "volumeName", attachedVolume.VolumeName)
-				} else { // force detach
+				} else { // 强制卸载
 					if forceDetachTimeoutExpired {
 						metrics.RecordForcedDetachMetric(metrics.ForceDetachReasonTimeout)
 						logger.Info("attacherDetacher.DetachVolume started: this volume is not safe to detach, but maxWaitForUnmountDuration expired, force detaching",
@@ -384,8 +384,8 @@ func (rc *reconciler) reportMultiAttachError(logger klog.Logger, volumeToAttach 
 	for _, scheduledPod := range volumeToAttach.ScheduledPods {
 		// 每个待挂载 Pod 都要单独生成消息：它们可能位于不同命名空间，
 		// 而某命名空间的用户不应看到其他命名空间里的 Pod 名称。
-		localPodNames := []string{} // Names of pods in scheduledPods's namespace
-		otherPods := 0              // Count of pods in other namespaces
+		localPodNames := []string{} // scheduledPods 所在命名空间中的 Pod 名称
+		otherPods := 0              // 其他命名空间中的 Pod 数量
 		for _, pod := range pods {
 			if pod.Namespace == scheduledPod.Namespace {
 				localPodNames = append(localPodNames, pod.Name)

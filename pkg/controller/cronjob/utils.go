@@ -86,7 +86,7 @@ func deleteFromActiveList(cj *batchv1.CronJob, uid types.UID) {
 	if cj == nil {
 		return
 	}
-	// TODO: @alpatel the memory footprint can may be reduced here by
+	// TODO: @alpatel 可通过原地删除元素降低内存占用，例如：
 	//  cj.Status.Active = append(cj.Status.Active[:indexToRemove], cj.Status.Active[indexToRemove:]...)
 	newActive := []corev1.ObjectReference{}
 	for _, j := range cj.Status.Active {
@@ -155,7 +155,7 @@ func mostRecentScheduleTime(cj *batchv1.CronJob, now time.Time, schedule cron.Sc
 	// 直到周二上午才有人发现并重启，那么每个小时调度一次的 CronJob
 	// 错过的 80 多次 Job 都应该自动启动（前提是允许并发和延迟启动）。
 	//
-	// 但如果存在 bug，或控制器所在服务器/apiserver 时钟不准
+	// 但如果存在缺陷，或控制器所在服务器/apiserver 时钟不准
 	// （用于设置 creationTimestamp），错过的启动时间可能多到离谱
 	// （甚至相差数十年），足以耗尽控制器的 CPU 和内存。因此此时不
 	// 再枚举所有错过的启动时间。

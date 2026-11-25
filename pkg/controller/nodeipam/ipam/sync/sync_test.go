@@ -175,14 +175,14 @@ func TestNodeSyncUpdate(t *testing.T) {
 			desc: "update alias from node",
 			mode: SyncFromCluster,
 			node: nodeWithCIDRRange,
-			// XXX/bowei -- validation
+			// XXX/bowei -- 待验证
 		},
 		{
 			desc: "update node from alias",
 			mode: SyncFromCloud,
 			node: nodeWithoutCIDRRange,
 			fake: fakeAPIs{aliasRange: test.MustParseCIDR("10.1.2.3/16")},
-			// XXX/bowei -- validation
+			// XXX/bowei -- 待验证
 		},
 		{
 			desc:      "update node from alias",

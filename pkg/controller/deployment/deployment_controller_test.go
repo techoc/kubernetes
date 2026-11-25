@@ -354,7 +354,7 @@ func TestSyncDeploymentDeletionRace(t *testing.T) {
 	f.runExpectError(ctx, testutil.GetKey(d, t), false)
 }
 
-// issue: https://github.com/kubernetes/kubernetes/issues/23218
+// 问题：https://github.com/kubernetes/kubernetes/issues/23218
 // TestDontSyncDeploymentsWithEmptyPodSelector 验证 Pod 选择器为空的 Deployment 不会被同步，
 // 以免误选集群中所有 Pod。
 func TestDontSyncDeploymentsWithEmptyPodSelector(t *testing.T) {

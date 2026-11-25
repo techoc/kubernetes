@@ -74,8 +74,7 @@ func (m *BaseControllerRefManager) ClaimObject(ctx context.Context, obj metav1.O
 			// 因此先返回 true，不再检查删除时间戳。
 			return true, nil
 		}
-		// Owned by us but selector doesn't match.
-		// Try to release, unless we're being deleted.
+		// 对象归我们所有，但选择器已不匹配；除非控制器正在删除，否则尝试释放。
 		if m.Controller.GetDeletionTimestamp() != nil {
 			return false, nil
 		}
@@ -227,9 +226,7 @@ func (m *PodControllerRefManager) ReleasePod(ctx context.Context, pod *v1.Pod) e
 			// 422 在两种情况下出现：Pod 已无属主，或 Pod 的 UID 不匹配（即被删除后重建）；
 			// 两种情况都说明目标状态已达成，可以忽略。
 
-			// TODO: If the pod has owner references, but none of them
-			// has the owner.UID, server will silently ignore the patch.
-			// Investigate why.
+			// TODO: 若 Pod 有属主引用但都不匹配 owner.UID，服务端会静默忽略补丁；需查明原因。
 			return nil
 		}
 	}

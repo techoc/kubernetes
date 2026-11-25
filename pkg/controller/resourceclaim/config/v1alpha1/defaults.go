@@ -27,8 +27,6 @@ import (
 // 也没有简单的退出途径。需要使用这些默认值时，应在包装该类型的结构的 `SetDefaults_` 方法中调用它。
 func RecommendedDefaultResourceClaimControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.ResourceClaimControllerConfiguration) {
 	if obj.ConcurrentSyncs == 0 {
-		// 50 workers were needed to pass the 1000 simulated node DRA test (#133113).
-		// The workers are mostly just idle unless some real work has to be done.
 		// 选 50 个 worker 是为了通过 1000 个模拟节点的 DRA 测试（#133113）；
 		// 没有实际工作时这些 worker 基本处于空闲状态，因此代价很小。
 		obj.ConcurrentSyncs = 50

@@ -328,7 +328,7 @@ func (dsc *DaemonSetsController) updateDaemonset(logger klog.Logger, cur, old in
 	curDS := cur.(*apps.DaemonSet)
 
 	// 仅凭 Update 事件无法区分重建，手动触发旧对象的删除流程以清理期望值。
-	// TODO: make a KEP and fix informers to always call the delete event handler on re-create
+	// TODO: 提交 KEP 并修复 informer，使其在对象重建时始终调用删除事件处理器。
 	if curDS.UID != oldDS.UID {
 		key, err := controller.KeyFunc(oldDS)
 		if err != nil {
@@ -377,7 +377,6 @@ func (dsc *DaemonSetsController) deleteDaemonset(logger klog.Logger, obj interfa
 	)
 
 	// 同名重建时旧的期望值已无意义，必须清除以免新对象被阻塞。
-	// Delete expectations for the DaemonSet so if we create a new one with the same name it starts clean
 	dsc.expectations.DeleteExpectations(logger, key)
 
 	dsc.queue.Add(key)
@@ -459,7 +458,7 @@ func (dsc *DaemonSetsController) enqueue(ds *apps.DaemonSet) {
 		return
 	}
 
-	// TODO: Handle overlapping controllers better. See comment in ReplicationManager.
+	// TODO: 更好地处理控制器重叠问题，参见 ReplicationManager 中的注释。
 	dsc.queue.Add(key)
 }
 
@@ -471,7 +470,7 @@ func (dsc *DaemonSetsController) enqueueDaemonSetAfter(obj interface{}, after ti
 		return
 	}
 
-	// TODO: Handle overlapping controllers better. See comment in ReplicationManager.
+	// TODO: 更好地处理控制器重叠问题，参见 ReplicationManager 中的注释。
 	dsc.queue.AddAfter(key, after)
 }
 
@@ -483,8 +482,6 @@ func (dsc *DaemonSetsController) getDaemonSetsForPod(pod *v1.Pod) []*apps.Daemon
 	}
 	// 多个 DaemonSet 选中同一 Pod 属于用户配置错误，ControllerRef 会限制实际动作但需告警。
 	if len(sets) > 1 {
-		// ControllerRef will ensure we don't do anything crazy, but more than one
-		// item in this list nevertheless constitutes user error.
 		utilruntime.HandleError(fmt.Errorf("user error! more than one daemon is selecting pods with labels: %+v", pod.Labels))
 	}
 	return sets
@@ -498,8 +495,6 @@ func (dsc *DaemonSetsController) getDaemonSetsForHistory(logger klog.Logger, his
 	}
 	// 多个 DaemonSet 选中同一历史对象属于用户配置错误，记录日志便于排查。
 	if len(daemonSets) > 1 {
-		// ControllerRef will ensure we don't do anything crazy, but more than one
-		// item in this list nevertheless constitutes user error.
 		logger.V(4).Info("Found more than one DaemonSet selecting the ControllerRevision. This is potentially a user error",
 			"controllerRevision", klog.KObj(history), "labels", history.Labels)
 	}
@@ -512,13 +507,11 @@ func (dsc *DaemonSetsController) addHistory(logger klog.Logger, obj interface{})
 	history := obj.(*apps.ControllerRevision)
 	// 重启后对象可能已处于待删除状态，按删除事件处理。
 	if history.DeletionTimestamp != nil {
-		// On a restart of the controller manager, it's possible for an object to
-		// show up in a state that is already pending deletion.
 		dsc.deleteHistory(logger, history)
 		return
 	}
 
-	// If it has a ControllerRef, that's all that matters.
+	// 已有 ControllerRef 时只需处理其所属控制器。
 	if controllerRef := metav1.GetControllerOf(history); controllerRef != nil {
 		ds := dsc.resolveControllerRef(history.Namespace, controllerRef)
 		if ds == nil {
@@ -528,8 +521,7 @@ func (dsc *DaemonSetsController) addHistory(logger klog.Logger, obj interface{})
 		return
 	}
 
-	// Otherwise, it's an orphan. Get a list of all matching DaemonSets and sync
-	// them to see if anyone wants to adopt it.
+	// 否则它是孤儿对象；找出所有匹配的 DaemonSet 并同步，检查是否有控制器愿意收养。
 	daemonSets := dsc.getDaemonSetsForHistory(logger, history)
 	if len(daemonSets) == 0 {
 		return
@@ -547,7 +539,6 @@ func (dsc *DaemonSetsController) updateHistory(logger klog.Logger, old, cur inte
 	oldHistory := old.(*apps.ControllerRevision)
 	// 周期性 resync 会产生 ResourceVersion 不变的更新事件，无需处理。
 	if curHistory.ResourceVersion == oldHistory.ResourceVersion {
-		// Periodic resync will send update events for all known ControllerRevisions.
 		return
 	}
 
@@ -555,13 +546,13 @@ func (dsc *DaemonSetsController) updateHistory(logger klog.Logger, old, cur inte
 	oldControllerRef := metav1.GetControllerOf(oldHistory)
 	controllerRefChanged := !reflect.DeepEqual(curControllerRef, oldControllerRef)
 	if controllerRefChanged && oldControllerRef != nil {
-		// The ControllerRef was changed. Sync the old controller, if any.
+		// ControllerRef 已变化；若旧引用存在，同步旧控制器。
 		if ds := dsc.resolveControllerRef(oldHistory.Namespace, oldControllerRef); ds != nil {
 			dsc.enqueueDaemonSet(ds)
 		}
 	}
 
-	// If it has a ControllerRef, that's all that matters.
+	// 已有 ControllerRef 时只需处理其所属控制器。
 	if curControllerRef != nil {
 		ds := dsc.resolveControllerRef(curHistory.Namespace, curControllerRef)
 		if ds == nil {
@@ -572,8 +563,7 @@ func (dsc *DaemonSetsController) updateHistory(logger klog.Logger, old, cur inte
 		return
 	}
 
-	// Otherwise, it's an orphan. If anything changed, sync matching controllers
-	// to see if anyone wants to adopt it now.
+	// 否则它是孤儿对象；若有变化，同步匹配的控制器，检查现在是否愿意收养。
 	labelChanged := !reflect.DeepEqual(curHistory.Labels, oldHistory.Labels)
 	if labelChanged || controllerRefChanged {
 		daemonSets := dsc.getDaemonSetsForHistory(logger, curHistory)
@@ -592,10 +582,9 @@ func (dsc *DaemonSetsController) updateHistory(logger klog.Logger, old, cur inte
 func (dsc *DaemonSetsController) deleteHistory(logger klog.Logger, obj interface{}) {
 	history, ok := obj.(*apps.ControllerRevision)
 
-	// When a delete is dropped, the relist will notice a ControllerRevision in the store not
-	// in the list, leading to the insertion of a tombstone object which contains
-	// the deleted key/value. Note that this value might be stale. If the ControllerRevision
-	// changed labels the new DaemonSet will not be woken up till the periodic resync.
+	// 删除事件丢失时，重新列表会发现缓存中有对象但最新列表没有，
+	// 因而插入包含已删除键值的墓碑对象。该值可能已过时；
+	// 若 ControllerRevision 的标签已变化，新的 DaemonSet 要等周期性 resync 才会被唤醒。
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
@@ -611,7 +600,7 @@ func (dsc *DaemonSetsController) deleteHistory(logger klog.Logger, obj interface
 
 	controllerRef := metav1.GetControllerOf(history)
 	if controllerRef == nil {
-		// No controller should care about orphans being deleted.
+		// 没有控制器关心孤儿对象的删除。
 		return
 	}
 	ds := dsc.resolveControllerRef(history.Namespace, controllerRef)
@@ -629,14 +618,11 @@ func (dsc *DaemonSetsController) addPod(logger klog.Logger, obj interface{}) {
 
 	// 重启后看到的新 Pod 可能已处于待删除状态，按删除处理避免误判为创建观测。
 	if pod.DeletionTimestamp != nil {
-
-		// on a restart of the controller manager, it's possible a new pod shows up in a state that
-		// is already pending deletion. Prevent the pod from being a creation observation.
 		dsc.deletePod(logger, pod)
 		return
 	}
 
-	// If it has a ControllerRef, that's all that matters.
+	// 已有 ControllerRef 时只需处理其所属控制器。
 	if controllerRef := metav1.GetControllerOf(pod); controllerRef != nil {
 		ds := dsc.resolveControllerRef(pod.Namespace, controllerRef)
 		if ds == nil {
@@ -652,11 +638,8 @@ func (dsc *DaemonSetsController) addPod(logger klog.Logger, obj interface{}) {
 		return
 	}
 
-	// Otherwise, it's an orphan. Get a list of all matching DaemonSets and sync
-	// them to see if anyone wants to adopt it.
+	// 否则它是孤儿 Pod；找出所有匹配的 DaemonSet 并同步，检查是否有控制器愿意收养。
 	// 孤儿 Pod 没有控制器在等待，不能记录创建期望，否则会永久阻塞该 DaemonSet。
-	// DO NOT observe creation because no controller should be waiting for an
-	// orphan.
 	dss := dsc.getDaemonSetsForPod(pod)
 	if len(dss) == 0 {
 		return
@@ -675,17 +658,11 @@ func (dsc *DaemonSetsController) updatePod(logger klog.Logger, old, cur interfac
 	oldPod := old.(*v1.Pod)
 	// 同一 Pod 的不同版本 ResourceVersion 必然不同，相同则说明是 resync。
 	if curPod.ResourceVersion == oldPod.ResourceVersion {
-		// Periodic resync will send update events for all known pods.
-		// Two different versions of the same pod will always have different RVs.
 		return
 	}
 
 	// 优雅删除先设置删除时间戳，kubelet 随后才真正移除 Pod；提前入队以免等待过久。
 	if curPod.DeletionTimestamp != nil {
-		// when a pod is deleted gracefully its deletion timestamp is first modified to reflect a grace period,
-		// and after such time has passed, the kubelet actually deletes it from the store. We receive an update
-		// for modification of the deletion timestamp and expect an ds to create more replicas asap, not wait
-		// until the kubelet actually deletes the pod.
 		dsc.deletePod(logger, curPod)
 		return
 	}
@@ -694,13 +671,13 @@ func (dsc *DaemonSetsController) updatePod(logger klog.Logger, old, cur interfac
 	oldControllerRef := metav1.GetControllerOf(oldPod)
 	controllerRefChanged := !reflect.DeepEqual(curControllerRef, oldControllerRef)
 	if controllerRefChanged && oldControllerRef != nil {
-		// The ControllerRef was changed. Sync the old controller, if any.
+		// ControllerRef 已变化；若旧引用存在，同步旧控制器。
 		if ds := dsc.resolveControllerRef(oldPod.Namespace, oldControllerRef); ds != nil {
 			dsc.enqueueDaemonSet(ds)
 		}
 	}
 
-	// If it has a ControllerRef, that's all that matters.
+	// 已有 ControllerRef 时只需处理其所属控制器。
 	if curControllerRef != nil {
 		ds := dsc.resolveControllerRef(curPod.Namespace, curControllerRef)
 		if ds == nil {
@@ -710,18 +687,16 @@ func (dsc *DaemonSetsController) updatePod(logger klog.Logger, old, cur interfac
 		dsc.enqueueDaemonSet(ds)
 		// Pod 刚变 Ready 时可用性需等待 MinReadySeconds，延迟入队以触发状态更新。
 		changedToReady := !podutil.IsPodReady(oldPod) && podutil.IsPodReady(curPod)
-		// See https://github.com/kubernetes/kubernetes/pull/38076 for more details
+		// 详情见 https://github.com/kubernetes/kubernetes/pull/38076
 		if changedToReady && ds.Spec.MinReadySeconds > 0 {
 			// 多等一秒抵消 AddAfter 的毫秒级时钟偏差。
-			// Add a second to avoid milliseconds skew in AddAfter.
-			// See https://github.com/kubernetes/kubernetes/issues/39785#issuecomment-279959133 for more info.
+			// 更多信息见 https://github.com/kubernetes/kubernetes/issues/39785#issuecomment-279959133。
 			dsc.enqueueDaemonSetAfter(ds, (time.Duration(ds.Spec.MinReadySeconds)*time.Second)+time.Second)
 		}
 		return
 	}
 
-	// Otherwise, it's an orphan. If anything changed, sync matching controllers
-	// to see if anyone wants to adopt it now.
+	// 否则它是孤儿对象；若有变化，同步匹配的控制器，检查现在是否愿意收养。
 	dss := dsc.getDaemonSetsForPod(curPod)
 	if len(dss) == 0 {
 		return
@@ -739,11 +714,9 @@ func (dsc *DaemonSetsController) updatePod(logger klog.Logger, old, cur interfac
 // 使其能立即补建副本。
 func (dsc *DaemonSetsController) deletePod(logger klog.Logger, obj interface{}) {
 	pod, ok := obj.(*v1.Pod)
-	// When a delete is dropped, the relist will notice a pod in the store not
-	// in the list, leading to the insertion of a tombstone object which contains
-	// the deleted key/value. Note that this value might be stale. If the pod
-	// changed labels the new daemonset will not be woken up till the periodic
-	// resync.
+	// 删除事件丢失时，重新列表会发现缓存中有 Pod 但最新列表没有，
+	// 因而插入包含已删除键值的墓碑对象。该值可能已过时；
+	// 若 Pod 的标签已变化，新的 DaemonSet 要等周期性 resync 才会被唤醒。
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
@@ -760,7 +733,7 @@ func (dsc *DaemonSetsController) deletePod(logger klog.Logger, obj interface{}) 
 	// 孤儿 Pod 的删除没有控制器关心。
 	controllerRef := metav1.GetControllerOf(pod)
 	if controllerRef == nil {
-		// No controller should care about orphans being deleted.
+		// 没有控制器关心孤儿对象的删除。
 		return
 	}
 	ds := dsc.resolveControllerRef(pod.Namespace, controllerRef)
@@ -817,14 +790,12 @@ func (dsc *DaemonSetsController) getDaemonPods(ctx context.Context, ds *apps.Dae
 	if err != nil {
 		return nil, err
 	}
-	// List all pods indexed to DS UID and Orphan pods
+	// 列出按 DaemonSet UID 索引的 Pod 及孤儿 Pod。
 	pods, err := controller.FilterPodsByOwner(dsc.podIndexer, &ds.ObjectMeta, "DaemonSet", true)
 	if err != nil {
 		return nil, err
 	}
 	// 收养前用非缓存的 quorum 读复查对象是否已被删除，避免收养一个正在消失的 DaemonSet（见 #42639）。
-	// If any adoptions are attempted, we should first recheck for deletion with
-	// an uncached quorum read sometime after listing Pods (see #42639).
 	dsNotDeleted := controller.RecheckDeletionTimestamp(func(ctx context.Context) (metav1.Object, error) {
 		fresh, err := dsc.kubeClient.AppsV1().DaemonSets(ds.Namespace).Get(ctx, ds.Name, metav1.GetOptions{})
 		if err != nil {
@@ -836,7 +807,7 @@ func (dsc *DaemonSetsController) getDaemonPods(ctx context.Context, ds *apps.Dae
 		return fresh, nil
 	})
 
-	// Use ControllerRefManager to adopt/orphan as needed.
+	// 使用 ControllerRefManager 按需收养或解除归属。
 	cm := controller.NewPodControllerRefManager(dsc.podControl, ds, selector, controllerKind, dsNotDeleted)
 	return cm.ClaimPods(ctx, pods)
 }
@@ -848,15 +819,12 @@ func (dsc *DaemonSetsController) getNodesToDaemonPods(ctx context.Context, ds *a
 	if err != nil {
 		return nil, err
 	}
-	// Group Pods by Node name.
+	// 按节点名对 Pod 分组。
 	nodeToDaemonPods := make(map[string][]*v1.Pod)
 	logger := klog.FromContext(ctx)
 	for _, pod := range claimedPods {
 		// 终态且待删除的 Pod 已由 kubelet/PodGC 处理，控制器无需再介入。
 		if !includeDeletedTerminal && podutil.IsPodTerminal(pod) && pod.DeletionTimestamp != nil {
-			// This Pod has a finalizer or is already scheduled for deletion from the
-			// store by the kubelet or the Pod GC. The DS controller doesn't have
-			// anything else to do with it.
 			continue
 		}
 		nodeName, err := util.GetTargetNodeName(pod)
@@ -875,9 +843,7 @@ func (dsc *DaemonSetsController) getNodesToDaemonPods(ctx context.Context, ds *a
 // resolveControllerRef 解析 ControllerRef 指向的 DaemonSet；Kind 不匹配、
 // 找不到对象或 UID 不一致时返回 nil。
 func (dsc *DaemonSetsController) resolveControllerRef(namespace string, controllerRef *metav1.OwnerReference) *apps.DaemonSet {
-	// 缓存索引只支持按名称查找，因此先按名称取再校验 UID。
-	// We can't look up by UID, so look up by Name and then verify UID.
-	// Don't even try to look up by Name if it's the wrong Kind.
+	// 缓存索引只支持按名称查找，因此先按名称取再校验 UID；Kind 不匹配时直接返回。
 	if controllerRef.Kind != controllerKind.Kind {
 		return nil
 	}
@@ -886,8 +852,7 @@ func (dsc *DaemonSetsController) resolveControllerRef(namespace string, controll
 		return nil
 	}
 	if ds.UID != controllerRef.UID {
-		// The controller we found with this Name is not the same one that the
-		// ControllerRef points to.
+		// 按名称找到的控制器与 ControllerRef 指向的对象不是同一个。
 		return nil
 	}
 	return ds
@@ -910,12 +875,11 @@ func (dsc *DaemonSetsController) podsShouldBeOnNode(
 
 	switch {
 	case shouldRun && !exists:
-		// If daemon pod is supposed to be running on node, but isn't, create daemon pod.
+		// 节点应运行守护 Pod 但没有副本时，在该节点创建副本。
 		nodesNeedingDaemonPods = append(nodesNeedingDaemonPods, node.Name)
 		// 节点应继续运行 DaemonSet Pod 时，清理失败/成功副本与多余副本。
 	case shouldContinueRunning:
-		// If a daemon pod failed, delete it
-		// If there's non-daemon pods left on this node, we will create it in the next sync loop
+		// 删除失败的守护 Pod；若节点上还留有非守护 Pod，下一轮同步会补建。
 		var daemonPodsRunning []*v1.Pod
 		for _, pod := range daemonPods {
 			if pod.DeletionTimestamp != nil {
@@ -923,8 +887,6 @@ func (dsc *DaemonSetsController) podsShouldBeOnNode(
 			}
 			// 这是 DaemonSet 与 kubelet 拒绝 Pod 反复拉锯的关键位置，必须退避避免热循环。
 			if pod.Status.Phase == v1.PodFailed {
-				// This is a critical place where DS is often fighting with kubelet that rejects pods.
-				// We need to avoid hot looping and backoff.
 				backoffKey := failedPodsBackoffKey(ds, node.Name)
 
 				now := dsc.failedPodsBackoff.Clock.Now()
@@ -941,13 +903,13 @@ func (dsc *DaemonSetsController) podsShouldBeOnNode(
 
 				msg := fmt.Sprintf("Found failed daemon pod %s/%s on node %s, will try to kill it", pod.Namespace, pod.Name, node.Name)
 				logger.V(2).Info("Found failed daemon pod on node, will try to kill it", "pod", klog.KObj(pod), "node", klog.KObj(node))
-				// Emit an event so that it's discoverable to users.
+				// 发出事件，便于用户发现该情况。
 				dsc.eventRecorder.Eventf(ds, v1.EventTypeWarning, FailedDaemonPodReason, "%s", msg)
 				podsToDelete = append(podsToDelete, pod.Name)
 			} else if pod.Status.Phase == v1.PodSucceeded {
 				msg := fmt.Sprintf("Found succeeded daemon pod %s/%s on node %s, will try to delete it", pod.Namespace, pod.Name, node.Name)
 				logger.V(2).Info("Found succeeded daemon pod on node, will try to delete it", "pod", klog.KObj(pod), "node", klog.KObj(node))
-				// Emit an event so that it's discoverable to users.
+				// 发出事件，便于用户发现该情况。
 				dsc.eventRecorder.Eventf(ds, v1.EventTypeNormal, SucceededDaemonPodReason, "%s", msg)
 				podsToDelete = append(podsToDelete, pod.Name)
 			} else {
@@ -956,10 +918,9 @@ func (dsc *DaemonSetsController) podsShouldBeOnNode(
 		}
 
 		// 未启用 surge 时每个节点只保留最早创建的一个运行副本。
-		// When surge is not enabled, if there is more than 1 running pod on a node delete all but the oldest
 		if !util.AllowsSurge(ds) {
 			if len(daemonPodsRunning) <= 1 {
-				// There are no excess pods to be pruned, and no pods to create
+				// 没有需要清理的多余 Pod，也无需创建 Pod。
 				break
 			}
 
@@ -971,18 +932,17 @@ func (dsc *DaemonSetsController) podsShouldBeOnNode(
 		}
 
 		if len(daemonPodsRunning) <= 1 {
-			// // There are no excess pods to be pruned
+			// 没有需要清理的多余 Pod。
 			if len(daemonPodsRunning) == 0 && shouldRun {
-				// We are surging so we need to have at least one non-deleted pod on the node
+				// 正在 surge，节点上至少需要保留一个未删除的 Pod。
 				nodesNeedingDaemonPods = append(nodesNeedingDaemonPods, node.Name)
 			}
 			break
 		}
 
-		// 启用 surge 时仅在新旧副本处于滚动替换的中间状态才短暂允许两个副本。
-		// When surge is enabled, we allow 2 pods if and only if the oldest pod matching the current hash state
-		// is not ready AND the oldest pod that doesn't match the current hash state is ready. All other pods are
-		// deleted. If neither pod is ready, only the one matching the current hash revision is kept.
+		// 启用 surge 时仅在新旧副本处于滚动替换的中间状态才短暂允许两个副本：
+		// 当前 hash 的最早 Pod 未就绪且旧 hash 的最早 Pod 已就绪时保留两者，其余全部删除；
+		// 两者都未就绪时只保留当前 hash 的副本。
 		var oldestNewPod, oldestOldPod *v1.Pod
 		sort.Sort(podByCreationTimestampAndPhase(daemonPodsRunning))
 		for _, pod := range daemonPodsRunning {
@@ -1012,7 +972,6 @@ func (dsc *DaemonSetsController) podsShouldBeOnNode(
 
 		// 节点不应再运行 DaemonSet Pod，删除其上所有副本。
 	case !shouldContinueRunning && exists:
-		// If daemon pod isn't supposed to run on node, but it is, delete all daemon pods on node.
 		for _, pod := range daemonPods {
 			if pod.DeletionTimestamp != nil {
 				continue
@@ -1032,7 +991,6 @@ func (dsc *DaemonSetsController) updateDaemonSet(ctx context.Context, ds *apps.D
 	}
 
 	// 上一轮的创建/删除尚未观测完成时不做滚动更新，避免并发操作放大。
-	// Process rolling updates if we're ready.
 	if dsc.expectations.SatisfiedExpectations(klog.FromContext(ctx), key) {
 		switch ds.Spec.UpdateStrategy.Type {
 		case apps.OnDeleteDaemonSetStrategyType:
@@ -1055,19 +1013,16 @@ func (dsc *DaemonSetsController) updateDaemonSet(ctx context.Context, ds *apps.D
 // manage 管理 DaemonSet Pod 在节点上的调度与运行：找出缺 Pod 的节点和多余的 Pod，
 // 调用 syncNodes 执行创建与删除。
 func (dsc *DaemonSetsController) manage(ctx context.Context, ds *apps.DaemonSet, nodeList []*v1.Node, hash string) error {
-	// Find out the pods which are created for the nodes by DaemonSet.
+	// 找出 DaemonSet 已在各节点创建的 Pod。
 	nodeToDaemonPods, err := dsc.getNodesToDaemonPods(ctx, ds, false)
 	if err != nil {
 		return fmt.Errorf("couldn't get node to daemon pod mapping for daemon set %q: %v", ds.Name, err)
 	}
 
-	// For each node, if the node is running the daemon pod but isn't supposed to, kill the daemon
-	// pod. If the node is supposed to run the daemon pod, but isn't, create the daemon pod on the node.
+	// 逐节点检查：不应运行却存在守护 Pod 时删除；应运行却不存在时创建。
 	logger := klog.FromContext(ctx)
 	var nodesNeedingDaemonPods, podsToDelete []string
 	// 容差与必需节点亲和性对所有节点相同，且解析开销较大，循环外只计算一次。
-	// The daemon pod tolerations and the parsed required node affinity are
-	// the same for every node; build them once instead of once per node.
 	tolerations := daemonPodTolerations(ds)
 	requiredNodeAffinity := nodeaffinity.NewRequiredNodeAffinity(ds.Spec.Template.Spec.NodeSelector, ds.Spec.Template.Spec.Affinity)
 	for _, node := range nodeList {
@@ -1079,11 +1034,9 @@ func (dsc *DaemonSetsController) manage(ctx context.Context, ds *apps.DaemonSet,
 	}
 
 	// 指向已不存在节点的未调度 Pod 永远无法被调度，PodGC 也清理不了，需由本控制器删除。
-	// Remove unscheduled pods assigned to not existing nodes when daemonset pods are scheduled by scheduler.
-	// If node doesn't exist then pods are never scheduled and can't be deleted by PodGCController.
 	podsToDelete = append(podsToDelete, getUnscheduledPodsWithoutNode(nodeList, nodeToDaemonPods)...)
 
-	// Label new pods using the hash label value of the current history when creating them
+	// 创建新 Pod 时使用当前历史版本的 hash 标签值。
 	if err = dsc.syncNodes(ctx, ds, podsToDelete, nodesNeedingDaemonPods, hash); err != nil {
 		return err
 	}
@@ -1094,7 +1047,6 @@ func (dsc *DaemonSetsController) manage(ctx context.Context, ds *apps.DaemonSet,
 // syncNodes 删除指定 Pod 并在指定节点创建 DaemonSet Pod，返回聚合错误。
 func (dsc *DaemonSetsController) syncNodes(ctx context.Context, ds *apps.DaemonSet, podsToDelete, nodesNeedingDaemonPods []string, hash string) error {
 	// 必须在发起创建/删除前设置期望值，否则事件可能先于期望记录到达而被丢弃。
-	// We need to set expectations before creating/deleting pods to avoid race conditions.
 	logger := klog.FromContext(ctx)
 	dsKey, err := controller.KeyFunc(ds)
 	if err != nil {
@@ -1114,27 +1066,19 @@ func (dsc *DaemonSetsController) syncNodes(ctx context.Context, ds *apps.DaemonS
 	dsc.expectations.SetExpectations(logger, dsKey, createDiff, deleteDiff)
 
 	// 错误通道容量覆盖全部操作，避免 goroutine 写入时阻塞。
-	// error channel to communicate back failures.  make the buffer big enough to avoid any blocking
 	errCh := make(chan error, createDiff+deleteDiff)
 
 	logger.V(4).Info("Nodes needing daemon pods for daemon set, creating", "daemonset", klog.KObj(ds), "needCount", nodesNeedingDaemonPods, "createCount", createDiff)
 	createWait := sync.WaitGroup{}
-	// If the returned error is not nil we have a parse error.
-	// The controller handles this via the hash.
+	// 返回错误表示解析失败；控制器改用 hash 处理。
 	generation, err := util.GetTemplateGeneration(ds)
 	if err != nil {
 		generation = nil
 	}
 	template := util.CreatePodTemplate(ds.Spec.Template, generation, hash)
-	// 采用慢启动批量创建：首批失败即停止扩大批次，避免配额不足等场景刷屏 APIServer 与事件系统。
-	// Batch the pod creates. Batch sizes start at SlowStartInitialBatchSize
-	// and double with each successful iteration in a kind of "slow start".
-	// This handles attempts to start large numbers of pods that would
-	// likely all fail with the same error. For example a project with a
-	// low quota that attempts to create a large number of pods will be
-	// prevented from spamming the API service with the pod create requests
-	// after one of its pods fails.  Conveniently, this also prevents the
-	// event spam that those failures would generate.
+	// 采用慢启动批量创建：首批从 SlowStartInitialBatchSize 开始，每轮成功后翻倍。
+	// 某个 Pod 创建失败即停止扩大批次，避免配额不足等情况下大量请求以相同错误失败，
+	// 同时防止失败事件刷屏。
 	batchSize := min(createDiff, controller.SlowStartInitialBatchSize)
 	for pos := 0; createDiff > pos; batchSize, pos = min(2*batchSize, createDiff-(pos+batchSize)), pos+batchSize {
 		errorCount := len(errCh)
@@ -1146,9 +1090,6 @@ func (dsc *DaemonSetsController) syncNodes(ctx context.Context, ds *apps.DaemonS
 
 				podTemplate := template.DeepCopy()
 				// 改写 Pod 的节点亲和性以确保默认调度器绑定到目标节点；目标节点不会存在冲突的亲和性。
-				// The pod's NodeAffinity will be updated to make sure the Pod is bound
-				// to the target node by default scheduler. It is safe to do so because there
-				// should be no conflicting node affinity with the target node.
 				podTemplate.Spec.Affinity = util.ReplaceDaemonSetPodNodeNameNodeAffinity(
 					podTemplate.Spec.Affinity, nodesNeedingDaemonPods[ix])
 
@@ -1157,8 +1098,7 @@ func (dsc *DaemonSetsController) syncNodes(ctx context.Context, ds *apps.DaemonS
 
 				if err != nil {
 					if apierrors.HasStatusCause(err, v1.NamespaceTerminatingCause) {
-						// If the namespace is being torn down, we can safely ignore
-						// this error since all subsequent creations will fail.
+						// 命名空间正在销毁，后续创建也都会失败，可安全忽略此错误。
 						return
 					}
 				}
@@ -1171,13 +1111,12 @@ func (dsc *DaemonSetsController) syncNodes(ctx context.Context, ds *apps.DaemonS
 			}(i)
 		}
 		createWait.Wait()
-		// any skipped pods that we never attempted to start shouldn't be expected.
+		// 从未尝试启动的跳过 Pod 不应计入期望值。
 		skippedPods := createDiff - (batchSize + pos)
 		if errorCount < len(errCh) && skippedPods > 0 {
 			logger.V(2).Info("Slow-start failure. Skipping creation pods, decrementing expectations for daemon set", "skippedPods", skippedPods, "daemonset", klog.KObj(ds))
 			dsc.expectations.LowerExpectations(logger, dsKey, skippedPods, 0)
-			// The skipped pods will be retried later. The next controller resync will
-			// retry the slow start process.
+			// 跳过的 Pod 稍后会重试；下次控制器 resync 将重新执行慢启动流程。
 			break
 		}
 	}
@@ -1190,9 +1129,7 @@ func (dsc *DaemonSetsController) syncNodes(ctx context.Context, ds *apps.DaemonS
 			defer deleteWait.Done()
 			// 删除失败也要递减期望值，因为永远等不到对应的删除事件。
 			if err := dsc.podControl.DeletePod(ctx, ds.Namespace, podsToDelete[ix], ds); err != nil {
-				// We are cleaning up an expectation that this delete will be observed,
-				// since any failure to delete the pod means that we will never observe
-				// the delete.
+				// 删除失败意味着永远观察不到删除事件，因此清除对应的删除期望。
 				dsc.expectations.DeletionObserved(logger, dsKey)
 				if !apierrors.IsNotFound(err) {
 					logger.V(2).Info("Failed deletion, decremented expectations for daemon set", "daemonset", klog.KObj(ds))
@@ -1204,7 +1141,7 @@ func (dsc *DaemonSetsController) syncNodes(ctx context.Context, ds *apps.DaemonS
 	}
 	deleteWait.Wait()
 
-	// collect errors if any for proper reporting/retry logic in the controller
+	// 收集错误，供控制器上报和重试。
 	errors := []error{}
 	close(errCh)
 	for err := range errCh {
@@ -1259,14 +1196,12 @@ func storeDaemonSetStatus(
 		}
 
 		// 超过重试上限后停止，由工作队列限速重新入队。
-		// Stop retrying if we exceed statusUpdateRetries - the DaemonSet will be requeued with a rate limit.
 		if i >= StatusUpdateRetries {
 			break
 		}
-		// Update the set with the latest resource version for the next poll
+		// 重新获取对象，为下一次更新使用最新 ResourceVersion。
 		if toUpdate, getErr = dsClient.Get(ctx, ds.Name, metav1.GetOptions{}); getErr != nil {
-			// If the GET fails we can't trust status.Replicas anymore. This error
-			// is bound to be more interesting than the update failure.
+			// GET 失败后已无法信任 status.Replicas，该错误比更新失败更值得返回。
 			return nil, getErr
 		}
 	}
@@ -1298,7 +1233,6 @@ func (dsc *DaemonSetsController) updateDaemonSetStatus(ctx context.Context, ds *
 
 			currentNumberScheduled++
 			// 按创建时间排序，只以最早的副本作为该节点的状态代表。
-			// Sort the daemon pods by creation time, so that the oldest is first.
 			daemonPods, _ := nodeToDaemonPods[node.Name]
 			sort.Sort(podByCreationTimestampAndPhase(daemonPods))
 			pod := daemonPods[0]
@@ -1308,8 +1242,7 @@ func (dsc *DaemonSetsController) updateDaemonSetStatus(ctx context.Context, ds *
 					numberAvailable++
 				}
 			}
-			// If the returned error is not nil we have a parse error.
-			// The controller handles this via the hash.
+			// 返回错误表示解析失败；控制器改用 hash 处理。
 			generation, err := util.GetTemplateGeneration(ds)
 			if err != nil {
 				generation = nil
@@ -1339,7 +1272,6 @@ func (dsc *DaemonSetsController) updateDaemonSetStatus(ctx context.Context, ds *
 	}
 
 	// MinReadySeconds 到期后再次入队，作为时钟偏差的最后一道防线。
-	// Resync the DaemonSet after MinReadySeconds as a last line of defense to guard against clock-skew.
 	if ds.Spec.MinReadySeconds > 0 && numberReady != numberAvailable {
 		dsc.enqueueDaemonSetAfter(ds, time.Duration(ds.Spec.MinReadySeconds)*time.Second)
 	}
@@ -1367,9 +1299,6 @@ func (dsc *DaemonSetsController) syncDaemonSet(ctx context.Context, key string) 
 	}
 
 	// 若 informer 尚未观察到自己的写入，则本地读与已生效状态不一致，先返回等待。
-	// If our writes have not yet been observed by our informers, we should not
-	// continue since our reads will not be in sync with our previously enacted
-	// state.
 	if err := dsc.consistencyStore.EnsureReady(dsNamespacedName); err != nil {
 		var consistencyErr *consistencyutil.ConsistencyError
 		if errors.As(err, &consistencyErr) {
@@ -1404,29 +1333,21 @@ func (dsc *DaemonSetsController) syncDaemonSet(ctx context.Context, key string) 
 		return nil
 	}
 
-	// 上一轮创建/删除的期望未满足时不调和，避免重复操作。
-	// Don't process a daemon set until all its creations and deletions have been processed.
-	// For example if daemon set foo asked for 3 new daemon pods in the previous call to manage,
-	// then we do not want to call manage on foo until the daemon pods have been created.
+	// 上一轮创建/删除的期望未满足时不调和，避免重复操作；
+	// 例如上一轮 manage 请求创建 3 个守护 Pod，必须等它们创建完成后才能再次处理。
 	dsKey, err := controller.KeyFunc(ds)
 	if err != nil {
 		return fmt.Errorf("couldn't get key for object %#v: %v", ds, err)
 	}
 
-	// 删除中的 DaemonSet 其历史与 Pod 的垃圾回收顺序无法保证，状态不可可靠计算，直接返回。
-	// If the DaemonSet is being deleted (either by foreground deletion or
-	// orphan deletion), we cannot be sure if the DaemonSet history objects
-	// it owned still exist -- those history objects can either be deleted
-	// or orphaned. Garbage collector doesn't guarantee that it will delete
-	// DaemonSet pods before deleting DaemonSet history objects, because
-	// DaemonSet history doesn't own DaemonSet pods. We cannot reliably
-	// calculate the status of a DaemonSet being deleted. Therefore, return
-	// here without updating status for the DaemonSet being deleted.
+	// 删除中的 DaemonSet 可能采用前台删除或孤儿删除，其历史对象可能已删除或失去归属。
+	// 历史对象不拥有 DaemonSet Pod，垃圾回收器也不保证先删 Pod 再删历史，
+	// 因此无法可靠计算删除中对象的状态，直接返回而不更新状态。
 	if ds.DeletionTimestamp != nil {
 		return nil
 	}
 
-	// Construct histories of the DaemonSet, and get the hash of current history
+	// 构建 DaemonSet 的历史版本，并取当前版本的 hash。
 	cur, old, err := dsc.constructHistory(ctx, ds)
 	if err != nil {
 		return fmt.Errorf("failed to construct revisions of DaemonSet: %v", err)
@@ -1435,7 +1356,7 @@ func (dsc *DaemonSetsController) syncDaemonSet(ctx context.Context, key string) 
 
 	// 期望未满足时只更新状态，且不能推进 ObservedGeneration（该版本尚未被真正处理）。
 	if !dsc.expectations.SatisfiedExpectations(logger, dsKey) {
-		// Only update status. Don't raise observedGeneration since controller didn't process object of that generation.
+		// 只更新状态；控制器尚未处理该代对象，不能推进 ObservedGeneration。
 		return dsc.updateDaemonSetStatus(ctx, ds, nodeList, hash, false)
 	}
 
@@ -1444,8 +1365,7 @@ func (dsc *DaemonSetsController) syncDaemonSet(ctx context.Context, key string) 
 	switch {
 	// 调和错误与状态错误同时发生时优先返回调和错误。
 	case err != nil && statusErr != nil:
-		// If there was an error, and we failed to update status,
-		// log it and return the original error.
+		// 若调和与状态更新都失败，记录状态错误并返回原始调和错误。
 		logger.Error(statusErr, "Failed to update status", "daemonSet", klog.KObj(ds))
 		return err
 	case err != nil:
@@ -1477,7 +1397,6 @@ func daemonPodTolerations(ds *apps.DaemonSet) []v1.Toleration {
 // 容差和必需节点亲和性只取决于 DaemonSet 本身，由调用方预计算后传入，
 // 避免在集群每个节点上重复解析节点亲和性这一主要开销。
 func nodeShouldRunDaemonPod(logger klog.Logger, node *v1.Node, ds *apps.DaemonSet, tolerations []v1.Toleration, requiredNodeAffinity nodeaffinity.RequiredNodeAffinity) (bool, bool) {
-	// If the daemon set specifies a node name, check that it matches with node.Name.
 	// Pod 模板指定了节点名时，只有该节点可以运行副本。
 	if !(ds.Spec.Template.Spec.NodeName == "" || ds.Spec.Template.Spec.NodeName == node.Name) {
 		return false, false
@@ -1491,7 +1410,6 @@ func nodeShouldRunDaemonPod(logger klog.Logger, node *v1.Node, ds *apps.DaemonSe
 
 	// 已有副本若能容忍 NoExecute 污点则继续运行，否则既不创建也不保留。
 	if !fitsTaints {
-		// Scheduled daemon pods should continue running if they tolerate NoExecute taint.
 		_, hasUntoleratedTaint := v1helper.FindMatchingUntoleratedTaint(logger, taints, tolerations, func(t *v1.Taint) bool {
 			return t.Effect == v1.TaintEffectNoExecute
 		}, utilfeature.DefaultFeatureGate.Enabled(features.TaintTolerationComparisonOperators))
@@ -1505,7 +1423,6 @@ func nodeShouldRunDaemonPod(logger klog.Logger, node *v1.Node, ds *apps.DaemonSe
 // tolerations 与 requiredNodeAffinity 必须由 DaemonSet Pod 模板推导（见 NodeShouldRunDaemonPod）。
 func predicates(logger klog.Logger, node *v1.Node, taints []v1.Taint, tolerations []v1.Toleration, requiredNodeAffinity nodeaffinity.RequiredNodeAffinity) (fitsNodeAffinity, fitsTaints bool) {
 	// 为向后兼容忽略亲和性解析错误，仅按不匹配处理。
-	// Ignore parsing errors for backwards compatibility.
 	fitsNodeAffinity, _ = requiredNodeAffinity.Match(node)
 	_, hasUntoleratedTaint := v1helper.FindMatchingUntoleratedTaint(logger, taints, tolerations, func(t *v1.Taint) bool {
 		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
@@ -1521,7 +1438,6 @@ func NewPod(ds *apps.DaemonSet, nodeName string) *v1.Pod {
 	newPod.Spec.NodeName = nodeName
 
 	// 守护 Pod 需要默认容差才能容忍常见系统污点。
-	// Added default tolerations for DaemonSet pods.
 	util.AddOrUpdateDaemonPodTolerations(&newPod.Spec)
 
 	return newPod
@@ -1539,7 +1455,6 @@ func (o podByCreationTimestampAndPhase) Swap(i, j int) { o[i], o[j] = o[j], o[i]
 // 使最早的副本稳定地排在前面。
 func (o podByCreationTimestampAndPhase) Less(i, j int) bool {
 	// 已调度的 Pod 视为更稳定，排在未调度 Pod 之前。
-	// Scheduled Pod first
 	if len(o[i].Spec.NodeName) != 0 && len(o[j].Spec.NodeName) == 0 {
 		return true
 	}
@@ -1653,15 +1568,12 @@ func (dsc *DaemonSetsController) syncNodeUpdate(ctx context.Context, nodeName st
 		daemonPods := podsByDS[dsKey]
 		scheduled := len(daemonPods) > 0
 
-		// 只在需要创建/删除副本或需要重算误调度计数时入队，避免节点更新放大为全量调和。
-		// Enqueue DaemonSet for sync in the following scenarios:
-		// 1. (shouldRun && !scheduled): Node now meets scheduling requirements but no pod exists
-		//    - Need to create a new pod on this node
-		// 2. (!shouldContinueRunning && scheduled): Node no longer meets requirements but pod exists
-		//    - Need to delete the existing pod from this node
-		// 3. (scheduled && ds.Status.NumberMisscheduled > 0): DaemonSet pod exists and misscheduled count is nonzero.
-		//    - For example: a pod was scheduled before the node became unready and tainted; after the node becomes ready and taints are removed, the pod may now be valid again.
-		//    - Need to recalculate NumberMisscheduled to ensure the DaemonSet status accurately reflects the current scheduling state.
+		// 只在需要创建/删除副本或需要重算误调度计数时入队，避免节点更新放大为全量调和：
+		// 1. (shouldRun && !scheduled)：节点现在满足调度条件但没有 Pod，需要创建副本。
+		// 2. (!shouldContinueRunning && scheduled)：节点不再满足条件但仍有 Pod，需要删除副本。
+		// 3. (scheduled && ds.Status.NumberMisscheduled > 0)：已有 Pod 但误调度计数非零。
+		//    例如 Pod 在节点变为 NotReady 并添加污点前已调度；节点恢复且污点移除后，
+		//    该 Pod 可能重新有效，需重算 NumberMisscheduled，使状态准确反映当前调度情况。
 		if (shouldRun && !scheduled) || (!shouldContinueRunning && scheduled) || (scheduled && ds.Status.NumberMisscheduled > 0) {
 			dsc.enqueueDaemonSet(ds)
 		}

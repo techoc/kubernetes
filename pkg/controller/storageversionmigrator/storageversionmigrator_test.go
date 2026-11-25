@@ -184,7 +184,7 @@ func TestSync(t *testing.T) {
 		}
 	}
 
-	// TODO: Add mock discovery
+	// TODO: 添加模拟的 discovery 客户端。
 	testCases := []struct {
 		name                 string
 		key                  string

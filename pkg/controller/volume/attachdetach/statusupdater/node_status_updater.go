@@ -63,7 +63,7 @@ type nodeStatusUpdater struct {
 // 单个节点更新失败不会中断其他节点的处理，但最终会聚合为错误以触发上层重试。
 func (nsu *nodeStatusUpdater) UpdateNodeStatuses(logger klog.Logger) error {
 	var nodeIssues int
-	// TODO: investigate right behavior if nodeName is empty
+	// TODO: 调查 nodeName 为空时的正确处理方式。
 	// kubernetes/kubernetes/issues/37777
 	nodesToUpdate := nsu.actualStateOfWorld.GetVolumesToReportAttached(logger)
 	for nodeName, attachedVolumes := range nodesToUpdate {
@@ -92,14 +92,12 @@ func (nsu *nodeStatusUpdater) UpdateNodeStatusForNode(logger klog.Logger, nodeNa
 func (nsu *nodeStatusUpdater) processNodeVolumes(logger klog.Logger, nodeName types.NodeName, attachedVolumes []v1.AttachedVolume) error {
 	nodeObj, err := nsu.nodeLister.Get(string(nodeName))
 	if errors.IsNotFound(err) {
-		// If node does not exist, its status cannot be updated.
-		// Do nothing so that there is no retry until node is created.
+		// 节点不存在时无法更新状态；静默跳过，等待节点创建后再处理。
 		logger.V(2).Info(
 			"Could not update node status. Failed to find node in NodeInformer cache", "node", klog.KRef("", string(nodeName)), "err", err)
 		return nil
 	} else if err != nil {
-		// For all other errors, log error and reset flag statusUpdateNeeded
-		// back to true to indicate this node status needs to be updated again.
+		// 其他错误需记录日志并重置 statusUpdateNeeded，以便后续重试。
 		logger.V(2).Info("Error retrieving nodes from node lister", "err", err)
 		nsu.actualStateOfWorld.SetNodeStatusUpdateNeeded(logger, nodeName)
 		return err
@@ -107,14 +105,12 @@ func (nsu *nodeStatusUpdater) processNodeVolumes(logger klog.Logger, nodeName ty
 
 	err = nsu.updateNodeStatus(logger, nodeName, nodeObj, attachedVolumes)
 	if errors.IsNotFound(err) {
-		// If node does not exist, its status cannot be updated.
-		// Do nothing so that there is no retry until node is created.
+		// 节点不存在时无法更新状态；静默跳过，等待节点创建后再处理。
 		logger.V(2).Info(
 			"Could not update node status, node does not exist - skipping", "node", klog.KObj(nodeObj))
 		return nil
 	} else if err != nil {
-		// If update node status fails, reset flag statusUpdateNeeded back to true
-		// to indicate this node status needs to be updated again
+		// 更新失败时重置 statusUpdateNeeded，表示该节点仍需再次更新。
 		nsu.actualStateOfWorld.SetNodeStatusUpdateNeeded(logger, nodeName)
 
 		logger.V(2).Info("Could not update node status; re-marking for update", "node", klog.KObj(nodeObj), "err", err)

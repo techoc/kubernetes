@@ -187,8 +187,7 @@ func RecordNodeStatusChange(logger klog.Logger, recorder record.EventRecorder, n
 		Namespace:  "",
 	}
 	logger.V(2).Info("Recording status change event message for node", "status", newStatus, "node", node.Name)
-	// TODO: This requires a transaction, either both node status is updated
-	// and event is recorded or neither should happen, see issue #6055.
+	// TODO: 这里需要事务：节点状态更新与事件记录必须同时成功或同时不生效，参见 issue #6055。
 	recorder.Eventf(ref, v1.EventTypeNormal, newStatus, "Node %s status is now: %s", node.Name, newStatus)
 }
 

@@ -111,7 +111,7 @@ func CreatePodTemplate(template v1.PodTemplateSpec, generation *int64, hash stri
 	if generation != nil {
 		newTemplate.ObjectMeta.Labels[extensions.DaemonSetTemplateGenerationKey] = fmt.Sprint(*generation)
 	}
-	// TODO: do we need to validate if the DaemonSet is RollingUpdate or not?
+	// TODO: 是否需要校验 DaemonSet 是否采用 RollingUpdate 策略？
 	if len(hash) > 0 {
 		newTemplate.ObjectMeta.Labels[extensions.DefaultDaemonSetUniqueLabelKey] = hash
 	}
