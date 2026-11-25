@@ -68,37 +68,35 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
-// Info about an API group.
-//
 // APIGroupInfo 描述一个 API 组的安装信息：版本优先级、各版本的资源存储、
 // 编解码器与 OpenAPI 定义。它是 InstallAPIGroup* 的唯一输入。
 type APIGroupInfo struct {
 	// PrioritizedVersions 按优先级从高到低排列；发现文档与默认版本选择都依赖该顺序。
 	PrioritizedVersions []schema.GroupVersion
-	// Info about the resources in this group. It's a map from version to resource to the storage.
+	// 该组内各资源的信息：从版本到资源再到存储的映射。
 	VersionedResourcesStorageMap map[string]map[string]rest.Storage
-	// OptionsExternalVersion controls the APIVersion used for common objects in the
-	// schema like api.Status, api.DeleteOptions, and metav1.ListOptions. Other implementors may
-	// define a version "v1beta1" but want to use the Kubernetes "v1" internal objects.
-	// If nil, defaults to groupMeta.GroupVersion.
-	// TODO: Remove this when https://github.com/kubernetes/kubernetes/issues/19018 is fixed.
+	// OptionsExternalVersion 控制 schema 中通用对象（如 api.Status、
+	// api.DeleteOptions、metav1.ListOptions）所使用的 APIVersion。
+	// 其他实现者可能定义了 "v1beta1" 版本，却想使用 Kubernetes 的 "v1"
+	// 内部对象。若为 nil，默认取 groupMeta.GroupVersion。
+	// TODO: 待 https://github.com/kubernetes/kubernetes/issues/19018 修复后移除本字段。
 	OptionsExternalVersion *schema.GroupVersion
-	// MetaGroupVersion defaults to "meta.k8s.io/v1" and is the scheme group version used to decode
-	// common API implementations like ListOptions. Future changes will allow this to vary by group
-	// version (for when the inevitable meta/v2 group emerges).
+	// MetaGroupVersion 默认为 "meta.k8s.io/v1"，是用于解码 ListOptions 等
+	// 通用 API 实现的 scheme 组版本。未来的改动将允许它按组版本而异
+	// （当不可避免的 meta/v2 组出现时）。
 	MetaGroupVersion *schema.GroupVersion
 
-	// Scheme includes all of the types used by this group and how to convert between them (or
-	// to convert objects from outside of this group that are accepted in this API).
-	// TODO: replace with interfaces
+	// Scheme 包含此组使用的所有类型以及它们之间的转换方式
+	// （或把本组之外、但被本 API 接受的对象转换进来的方式）。
+	// TODO: 替换为接口
 	Scheme *runtime.Scheme
-	// NegotiatedSerializer controls how this group encodes and decodes data
+	// NegotiatedSerializer 控制此组如何编码和解码数据
 	NegotiatedSerializer runtime.NegotiatedSerializer
-	// ParameterCodec performs conversions for query parameters passed to API calls
+	// ParameterCodec 对传给 API 调用的查询参数执行转换
 	ParameterCodec runtime.ParameterCodec
 
-	// StaticOpenAPISpec is the spec derived from the definitions of all resources installed together.
-	// It is set during InstallAPIGroups, InstallAPIGroup, and InstallLegacyAPIGroup.
+	// StaticOpenAPISpec 是由一起安装的所有资源的定义派生出的 spec。
+	// 它在 InstallAPIGroups、InstallAPIGroup 和 InstallLegacyAPIGroup 期间被设置。
 	StaticOpenAPISpec map[string]*spec.Schema
 }
 
@@ -111,96 +109,97 @@ func (a *APIGroupInfo) destroyStorage() {
 	}
 }
 
-// GenericAPIServer contains state for a Kubernetes cluster api server.
+// GenericAPIServer 持有 Kubernetes 集群 API 服务器的状态。
 //
 // 该结构只承载“通用”能力；具体 API 组由 kube-apiserver/aggregator 通过
 // InstallAPIGroup* 注入。生命周期钩子（post-start/pre-shutdown）在
 // PrepareRun 之后才会真正生效。
 type GenericAPIServer struct {
-	// discoveryAddresses is used to build cluster IPs for discovery.
+	// discoveryAddresses 用于为发现服务构造 cluster IP。
 	discoveryAddresses discovery.Addresses
 
-	// LoopbackClientConfig is a config for a privileged loopback connection to the API server
+	// LoopbackClientConfig 是到 API 服务器的特权回环（loopback）连接的配置
 	LoopbackClientConfig *restclient.Config
 
-	// Flagz is used to set up flagz endpoint.
+	// Flagz 用于搭建 flagz 端点。
 	Flagz flagz.Reader
 
-	// minRequestTimeout is how short the request timeout can be.  This is used to build the RESTHandler
+	// minRequestTimeout 是请求超时下限的最小值。用于构造 RESTHandler
 	minRequestTimeout time.Duration
 
-	// ShutdownTimeout is the timeout used for server shutdown. This specifies the timeout before server
-	// gracefully shutdown returns.
+	// ShutdownTimeout 是服务器关闭使用的超时。它指定服务器
+	// 优雅关闭返回前的超时时间。
 	ShutdownTimeout time.Duration
 
-	// legacyAPIGroupPrefixes is used to set up URL parsing for authorization and for validating requests
-	// to InstallLegacyAPIGroup
+	// legacyAPIGroupPrefixes 用于设置授权时的 URL 解析，以及校验发往
+	// InstallLegacyAPIGroup 的请求
 	legacyAPIGroupPrefixes sets.String
 
-	// admissionControl is used to build the RESTStorage that backs an API Group.
+	// admissionControl 用于构建支撑某个 API Group 的 RESTStorage。
 	admissionControl admission.Interface
 
-	// SecureServingInfo holds configuration of the TLS server.
+	// SecureServingInfo 保存 TLS 服务器的配置。
 	SecureServingInfo *SecureServingInfo
 
-	// ExternalAddress is the address (hostname or IP and port) that should be used in
-	// external (public internet) URLs for this GenericAPIServer.
+	// ExternalAddress 是本 GenericAPIServer 在外部（公网）URL 中
+	// 应当使用的地址（主机名或 IP 加端口）。
 	ExternalAddress string
 
-	// Serializer controls how common API objects not in a group/version prefix are serialized for this server.
-	// Individual APIGroups may define their own serializers.
+	// Serializer 控制本服务器如何序列化不带组/版本前缀的通用 API 对象。
+	// 各个 APIGroup 可以定义自己的序列化器。
 	Serializer runtime.NegotiatedSerializer
 
-	// "Outputs"
-	// Handler holds the handlers being used by this API server
+	// “输出”
+	// Handler 持有本 API 服务器正在使用的处理器链
 	Handler *APIServerHandler
 
-	// UnprotectedDebugSocket is used to serve pprof information in a unix-domain socket. This socket is
-	// not protected by authentication/authorization.
+	// UnprotectedDebugSocket 用于在 unix 域 socket 上提供 pprof 信息。
+	// 该 socket 不受认证/授权保护。
 	UnprotectedDebugSocket *routes.DebugSocket
 
-	// listedPathProvider is a lister which provides the set of paths to show at /
+	// listedPathProvider 是一个 lister，提供 / 路径下展示的路径集合
 	listedPathProvider routes.ListedPathProvider
 
-	// DiscoveryGroupManager serves /apis in an unaggregated form.
+	// DiscoveryGroupManager 以非聚合形式服务 /apis。
 	DiscoveryGroupManager discovery.GroupManager
 
-	// AggregatedDiscoveryGroupManager serves /apis in an aggregated form.
+	// AggregatedDiscoveryGroupManager 以聚合形式服务 /apis。
 	AggregatedDiscoveryGroupManager discoveryendpoint.ResourceManager
 
-	// PeerAggregatedDiscoveryManager serves /apis aggregated from all peer apiservers.
+	// PeerAggregatedDiscoveryManager 服务从所有对等 apiserver 聚合而来的 /apis。
 	PeerAggregatedDiscoveryManager discoveryendpoint.PeerAggregatedResourceManager
 
-	// AggregatedLegacyDiscoveryGroupManager serves /api in an aggregated form.
+	// AggregatedLegacyDiscoveryGroupManager 以聚合形式服务 /api。
 	AggregatedLegacyDiscoveryGroupManager discoveryendpoint.ResourceManager
 
-	// Enable swagger and/or OpenAPI if these configs are non-nil.
+	// 若这些配置非 nil，则启用 swagger 和/或 OpenAPI。
 	openAPIConfig *openapicommon.Config
 
-	// Enable swagger and/or OpenAPI V3 if these configs are non-nil.
+	// 若这些配置非 nil，则启用 swagger 和/或 OpenAPI V3。
 	openAPIV3Config *openapicommon.OpenAPIV3Config
 
-	// SkipOpenAPIInstallation indicates not to install the OpenAPI handler
-	// during PrepareRun.
-	// Set this to true when the specific API Server has its own OpenAPI handler
-	// (e.g. kube-aggregator)
+	// skipOpenAPIInstallation 表示在 PrepareRun 期间不安装 OpenAPI 处理器。
+	// 当具体的 API Server 有自己的 OpenAPI 处理器时
+	// （如 kube-aggregator），将其设为 true
 	skipOpenAPIInstallation bool
 
-	// OpenAPIVersionedService controls the /openapi/v2 endpoint, and can be used to update the served spec.
-	// It is set during PrepareRun if `openAPIConfig` is non-nil unless `skipOpenAPIInstallation` is true.
+	// OpenAPIVersionedService 控制 /openapi/v2 端点，可用于更新对外提供的 spec。
+	// 若 `openAPIConfig` 非 nil 且 `skipOpenAPIInstallation` 不为 true，
+	// 它会在 PrepareRun 期间被设置。
 	OpenAPIVersionedService *handler.OpenAPIService
 
-	// OpenAPIV3VersionedService controls the /openapi/v3 endpoint and can be used to update the served spec.
-	// It is set during PrepareRun if `openAPIConfig` is non-nil unless `skipOpenAPIInstallation` is true.
+	// OpenAPIV3VersionedService 控制 /openapi/v3 端点，可用于更新对外提供的 spec。
+	// 若 `openAPIConfig` 非 nil 且 `skipOpenAPIInstallation` 不为 true，
+	// 它会在 PrepareRun 期间被设置。
 	OpenAPIV3VersionedService *handler3.OpenAPIService
 
-	// StaticOpenAPISpec is the spec derived from the restful container endpoints.
-	// It is set during PrepareRun.
+	// StaticOpenAPISpec 是从 restful container 端点派生出的 spec。
+	// 它在 PrepareRun 期间被设置。
 	StaticOpenAPISpec *spec.Swagger
 
-	// PostStartHooks are each called after the server has started listening, in a separate go func for each
-	// with no guarantee of ordering between them.  The map key is a name used for error reporting.
-	// It may kill the process with a panic if it wishes to by returning an error.
+	// 每个 PostStartHooks 都在服务器开始监听之后、各自独立的 go func 中调用，
+	// 彼此之间没有顺序保证。映射的键是用于错误报告的名字。
+	// 钩子若愿意，可以通过返回错误让进程以 panic 终止。
 	postStartHookLock      sync.Mutex
 	postStartHooks         map[string]postStartHookEntry
 	postStartHooksCalled   bool
@@ -210,152 +209,155 @@ type GenericAPIServer struct {
 	preShutdownHooks       map[string]preShutdownHookEntry
 	preShutdownHooksCalled bool
 
-	// healthz checks
+	// healthz 检查项注册表
 	healthzRegistry healthCheckRegistry
 	readyzRegistry  healthCheckRegistry
 	livezRegistry   healthCheckRegistry
 
 	livezGracePeriod time.Duration
 
-	// auditing. The backend is started before the server starts listening.
+	// 审计。后端在服务器开始监听之前启动。
 	AuditBackend audit.Backend
 
-	// Authorizer determines whether a user is allowed to make a certain request. The Handler does a preliminary
-	// authorization check using the request URI but it may be necessary to make additional checks, such as in
-	// the create-on-update case
+	// Authorizer 决定用户是否被允许发起某个请求。Handler 会基于请求 URI
+	// 做初步授权检查，但可能有必要做额外检查，
+	// 例如 create-on-update 的场景
 	Authorizer authorizer.UnconditionalAuthorizer
 
-	// EquivalentResourceRegistry provides information about resources equivalent to a given resource,
-	// and the kind associated with a given resource. As resources are installed, they are registered here.
+	// EquivalentResourceRegistry 提供与给定资源等价的资源信息，
+	// 以及与给定资源关联的 kind。随着资源被安装，它们会注册到这里。
 	EquivalentResourceRegistry runtime.EquivalentResourceRegistry
 
-	// delegationTarget is the next delegate in the chain. This is never nil.
+	// delegationTarget 是委托链中的下一环。它永远不为 nil。
 	delegationTarget DelegationTarget
 
-	// NonLongRunningRequestWaitGroup allows you to wait for all chain
-	// handlers associated with non long-running requests
-	// to complete while the server is shuting down.
+	// NonLongRunningRequestWaitGroup 允许你在服务器关闭期间，
+	// 等待所有与非长时运行请求
+	// 关联的链式处理器完成。
 	NonLongRunningRequestWaitGroup *utilwaitgroup.SafeWaitGroup
-	// WatchRequestWaitGroup allows us to wait for all chain
-	// handlers associated with active watch requests to
-	// complete while the server is shuting down.
+	// WatchRequestWaitGroup 允许我们在服务器关闭期间，
+	// 等待所有与活跃 watch 请求关联的
+	// 链式处理器完成。
 	WatchRequestWaitGroup *utilwaitgroup.RateLimitedSafeWaitGroup
 
-	// ShutdownDelayDuration allows to block shutdown for some time, e.g. until endpoints pointing to this API server
-	// have converged on all node. During this time, the API server keeps serving, /healthz will return 200,
-	// but /readyz will return failure.
+	// ShutdownDelayDuration 允许在一段时间内阻塞关闭流程，例如直到指向本 API 服务器的
+	// endpoints 在所有节点上收敛为止。在此期间，API 服务器持续服务，/healthz 返回 200，
+	// 但 /readyz 返回失败。
 	ShutdownDelayDuration time.Duration
 
-	// The limit on the request body size that would be accepted and decoded in a write request.
-	// 0 means no limit.
+	// 写请求中会被接收并解码的请求体大小上限。
+	// 0 表示无限制。
 	maxRequestBodyBytes int64
 
-	// APIServerID is the ID of this API server
+	// APIServerID 是本 API 服务器的 ID
 	APIServerID string
 
-	// StorageReadinessHook implements post-start-hook functionality for checking readiness
-	// of underlying storage for registered resources.
+	// StorageReadinessHook 实现了用于检查已注册资源的
+	// 底层存储就绪性的 post-start-hook 功能。
 	StorageReadinessHook *StorageReadinessHook
 
-	// StorageVersionManager holds the storage versions of the API resources installed by this server.
+	// StorageVersionManager 持有本服务器安装的 API 资源的存储版本。
 	StorageVersionManager storageversion.Manager
 
-	// EffectiveVersion determines which apis and features are available
-	// based on when the api/feature lifecyle.
+	// EffectiveVersion 基于 API/特性的生命周期，
+	// 决定哪些 API 和特性可用。
 	EffectiveVersion basecompatibility.EffectiveVersion
-	// EmulationForwardCompatible is an option to implicitly enable all APIs which are introduced after the emulation version and
-	// have higher priority than APIs of the same group resource enabled at the emulation version.
-	// If true, all APIs that have higher priority than the APIs(beta+) of the same group resource enabled at the emulation version will be installed.
-	// This is needed when a controller implementation migrates to newer API versions, for the binary version, and also uses the newer API versions even when emulation version is set.
-	// Not applicable to alpha APIs.
+	// EmulationForwardCompatible 是一个选项，隐式启用所有在模拟版本之后引入、
+	// 且优先级高于模拟版本下已启用的同组资源 API 的 API。
+	// 若为 true，所有优先级高于模拟版本下已启用的同组资源 API（beta+）的 API 都会被安装。
+	// 当控制器实现（就其二进制版本而言）迁移到更新的 API 版本、并且在设置了模拟版本时
+	// 仍使用这些更新版本时，需要该选项。
+	// 不适用于 alpha API。
 	EmulationForwardCompatible bool
-	// RuntimeConfigEmulationForwardCompatible is an option to explicitly enable specific APIs introduced after the emulation version through the runtime-config.
-	// If true, APIs identified by group/version that are enabled in the --runtime-config flag will be installed even if it is introduced after the emulation version. --runtime-config flag values that identify multiple APIs, such as api/all,api/ga,api/beta, are not influenced by this flag and will only enable APIs available at the current emulation version.
-	// If false, error would be thrown if any GroupVersion or GroupVersionResource explicitly enabled in the --runtime-config flag is introduced after the emulation version.
+	// RuntimeConfigEmulationForwardCompatible 是一个通过 runtime-config 显式启用
+	// 模拟版本之后引入的特定 API 的选项。
+	// 若为 true，由 group/version 标识、在 --runtime-config flag 中启用的 API 即使是在模拟版本之后引入的也会被安装。--runtime-config flag 中标识多个 API 的取值（如 api/all、api/ga、api/beta）不受本 flag 影响，只会启用当前模拟版本下可用的 API。
+	// 若为 false，当 --runtime-config flag 中显式启用的任何 GroupVersion 或 GroupVersionResource 是在模拟版本之后引入时会抛出错误。
 	RuntimeConfigEmulationForwardCompatible bool
 
-	// FeatureGate is a way to plumb feature gate through if you have them.
+	// FeatureGate 是如果你有 feature gate，将其贯穿传递下去的方式。
 	FeatureGate featuregate.FeatureGate
 
-	// lifecycleSignals provides access to the various signals that happen during the life cycle of the apiserver.
+	// lifecycleSignals 提供对 API 服务器生命周期中发生的各种信号的访问。
 	lifecycleSignals lifecycleSignals
 
-	// destroyFns contains a list of functions that should be called on shutdown to clean up resources.
+	// destroyFns 包含一组在关闭时应调用以清理资源的函数。
 	destroyFns []func()
 
-	// muxAndDiscoveryCompleteSignals holds signals that indicate all known HTTP paths have been registered.
-	// it exists primarily to avoid returning a 404 response when a resource actually exists but we haven't installed the path to a handler.
-	// it is exposed for easier composition of the individual servers.
-	// the primary users of this field are the WithMuxCompleteProtection filter and the NotFoundHandler
+	// muxAndDiscoveryCompleteSignals 持有指示所有已知 HTTP 路径均已注册完成的信号。
+	// 它的存在主要是为了避免在资源实际存在、但我们尚未安装其处理路径时
+	// 返回 404 响应。
+	// 对外暴露该字段是为了便于各个服务器的组合。
+	// 本字段的主要使用者是 WithMuxCompleteProtection 过滤器和 NotFoundHandler
 	muxAndDiscoveryCompleteSignals map[string]<-chan struct{}
 
-	// ShutdownSendRetryAfter dictates when to initiate shutdown of the HTTP
-	// Server during the graceful termination of the apiserver. If true, we wait
-	// for non longrunning requests in flight to be drained and then initiate a
-	// shutdown of the HTTP Server. If false, we initiate a shutdown of the HTTP
-	// Server as soon as ShutdownDelayDuration has elapsed.
-	// If enabled, after ShutdownDelayDuration elapses, any incoming request is
-	// rejected with a 429 status code and a 'Retry-After' response.
+	// ShutdownSendRetryAfter 决定在 API 服务器优雅终止期间何时启动
+	// HTTP 服务器的关闭。若为 true，我们会等待
+	// 在途的非长时运行请求排空后再启动
+	// HTTP 服务器的关闭。若为 false，一旦 ShutdownDelayDuration
+	// 到期，我们就启动 HTTP 服务器的关闭。
+	// 若启用，在 ShutdownDelayDuration 到期后，任何 incoming 请求都会
+	// 被以 429 状态码和 'Retry-After' 响应拒绝。
 	ShutdownSendRetryAfter bool
 
-	// ShutdownWatchTerminationGracePeriod, if set to a positive value,
-	// is the maximum duration the apiserver will wait for all active
-	// watch request(s) to drain.
-	// Once this grace period elapses, the apiserver will no longer
-	// wait for any active watch request(s) in flight to drain, it will
-	// proceed to the next step in the graceful server shutdown process.
-	// If set to a positive value, the apiserver will keep track of the
-	// number of active watch request(s) in flight and during shutdown
-	// it will wait, at most, for the specified duration and allow these
-	// active watch requests to drain with some rate limiting in effect.
-	// The default is zero, which implies the apiserver will not keep
-	// track of active watch request(s) in flight and will not wait
-	// for them to drain, this maintains backward compatibility.
-	// This grace period is orthogonal to other grace periods, and
-	// it is not overridden by any other grace period.
+	// ShutdownWatchTerminationGracePeriod，若设为正值，
+	// 是 API 服务器等待所有活跃
+	// watch 请求排空的最长时间。
+	// 该宽限期一旦到期，API 服务器将不再
+	// 等待在途的活跃 watch 请求排空，而是进入
+	// 优雅关闭流程的下一步。
+	// 若设为正值，API 服务器将跟踪
+	// 在途活跃 watch 请求的数量，并在关闭期间
+	// 至多等待指定的时长，允许这些活跃
+	// watch 请求在一定限流下排空。
+	// 默认值为零，表示 API 服务器不跟踪
+	// 在途活跃 watch 请求，也不会等待
+	// 它们排空，以保持向后兼容。
+	// 该宽限期与其他宽限期相互正交，
+	// 且不会被任何其他宽限期覆盖。
 	ShutdownWatchTerminationGracePeriod time.Duration
 }
 
-// DelegationTarget is an interface which allows for composition of API servers with top level handling that works
-// as expected.
+// DelegationTarget 是一个接口，允许组合 API 服务器并让顶层处理
+// 按预期工作。
 //
 // 组合模式：kube-apiserver 在最外层，聚合层与各 API 组按顺序委托。每个
 // 实现的 NextDelegate 指向下一环，直到 emptyDelegate 返回 404。
 type DelegationTarget interface {
-	// UnprotectedHandler returns a handler that is NOT protected by a normal chain
+	// UnprotectedHandler 返回一个未经标准保护链保护的 handler
 	UnprotectedHandler() http.Handler
 
-	// PostStartHooks returns the post-start hooks that need to be combined
+	// PostStartHooks 返回需要被组合的 post-start 钩子
 	PostStartHooks() map[string]postStartHookEntry
 
-	// PreShutdownHooks returns the pre-stop hooks that need to be combined
+	// PreShutdownHooks 返回需要被组合的 pre-stop 钩子
 	PreShutdownHooks() map[string]preShutdownHookEntry
 
-	// HealthzChecks returns the healthz checks that need to be combined
+	// HealthzChecks 返回需要被组合的 healthz 检查项
 	HealthzChecks() []healthz.HealthChecker
 
-	// ListedPaths returns the paths for supporting an index
+	// ListedPaths 返回用于支持索引页的路径
 	ListedPaths() []string
 
-	// NextDelegate returns the next delegationTarget in the chain of delegations
+	// NextDelegate 返回委托链中的下一个 delegationTarget
 	NextDelegate() DelegationTarget
 
-	// PrepareRun does post API installation setup steps. It calls recursively the same function of the delegates.
+	// PrepareRun 执行 API 安装完成后的准备步骤。它会递归调用各委托对象的同名函数。
 	PrepareRun() preparedGenericAPIServer
 
-	// MuxAndDiscoveryCompleteSignals exposes registered signals that indicate if all known HTTP paths have been installed.
+	// MuxAndDiscoveryCompleteSignals 暴露已注册的信号，用于指示所有已知 HTTP 路径是否已安装完成。
 	MuxAndDiscoveryCompleteSignals() map[string]<-chan struct{}
 
-	// Destroy cleans up its resources on shutdown.
-	// Destroy has to be implemented in thread-safe way and be prepared
-	// for being called more than once.
+	// Destroy 在关闭时清理自身资源。
+	// Destroy 必须以线程安全的方式实现，并且要能接受
+	// 被多次调用。
 	Destroy()
 }
 
 // UnprotectedHandler 返回未经认证/授权链保护的 handler；仅供内部组合使用，
 // 直接对外暴露会绕过所有安全过滤。
 func (s *GenericAPIServer) UnprotectedHandler() http.Handler {
-	// when we delegate, we need the server we're delegating to choose whether or not to use gorestful
+	// 委托时，需要由被委托到的服务器决定是否使用 gorestful
 	return s.Handler.Director
 }
 
@@ -384,8 +386,8 @@ func (s *GenericAPIServer) NextDelegate() DelegationTarget {
 	return s.delegationTarget
 }
 
-// RegisterMuxAndDiscoveryCompleteSignal registers the given signal that will be used to determine if all known
-// HTTP paths have been registered. It is okay to call this method after instantiating the generic server but before running.
+// RegisterMuxAndDiscoveryCompleteSignal 注册给定信号，用于判断所有已知
+// HTTP 路径是否已注册完成。可以在实例化通用服务器之后、运行之前调用本方法。
 func (s *GenericAPIServer) RegisterMuxAndDiscoveryCompleteSignal(signalName string, signal <-chan struct{}) error {
 	if _, exists := s.muxAndDiscoveryCompleteSignals[signalName]; exists {
 		return fmt.Errorf("%s already registered", signalName)
@@ -398,15 +400,15 @@ func (s *GenericAPIServer) MuxAndDiscoveryCompleteSignals() map[string]<-chan st
 	return s.muxAndDiscoveryCompleteSignals
 }
 
-// RegisterDestroyFunc registers a function that will be called during Destroy().
-// The function have to be idempotent and prepared to be called more than once.
+// RegisterDestroyFunc 注册一个将在 Destroy() 期间调用的函数。
+// 该函数必须是幂等的，并且要能接受被多次调用。
 func (s *GenericAPIServer) RegisterDestroyFunc(destroyFn func()) {
 	s.destroyFns = append(s.destroyFns, destroyFn)
 }
 
-// Destroy cleans up all its and its delegation target resources on shutdown.
-// It starts with destroying its own resources and later proceeds with
-// its delegation target.
+// Destroy 在关闭时清理其自身及其委托目标的全部资源。
+// 它先销毁自身资源，随后继续处理
+// 其委托目标。
 func (s *GenericAPIServer) Destroy() {
 	for _, destroyFn := range s.destroyFns {
 		destroyFn()
@@ -418,8 +420,8 @@ func (s *GenericAPIServer) Destroy() {
 
 // emptyDelegate 是委托链的终点：未匹配的请求最终落到这里的 handler。
 type emptyDelegate struct {
-	// handler is called at the end of the delegation chain
-	// when a request has been made against an unregistered HTTP path the individual servers will simply pass it through until it reaches the handler.
+	// handler 在委托链的末尾被调用：
+	// 当请求命中未注册的 HTTP 路径时，各个服务器会直接将其透传，直到到达该 handler。
 	handler http.Handler
 }
 
@@ -428,7 +430,7 @@ func NewEmptyDelegate() DelegationTarget {
 	return emptyDelegate{}
 }
 
-// NewEmptyDelegateWithCustomHandler allows for registering a custom handler usually for special handling of 404 requests
+// NewEmptyDelegateWithCustomHandler 允许注册一个自定义 handler，通常用于对 404 请求做特殊处理
 func NewEmptyDelegateWithCustomHandler(handler http.Handler) DelegationTarget {
 	return emptyDelegate{handler}
 }
@@ -466,7 +468,7 @@ type preparedGenericAPIServer struct {
 	*GenericAPIServer
 }
 
-// PrepareRun does post API installation setup steps. It calls recursively the same function of the delegates.
+// PrepareRun 执行 API 安装完成后的准备步骤。它会递归调用各委托对象的同名函数。
 //
 // 顺序很重要：先递归准备委托链，再安装本层的 OpenAPI 与健康检查，
 // 这样根路径索引才能看到所有已注册端点。
@@ -504,7 +506,7 @@ func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 			flagz.Install(s.Handler.NonGoRestfulMux, componentName, s.Flagz)
 		}
 	}
-	// statusz is installed last so that it can list all the paths that have been registered
+	// statusz 最后安装，这样它就能列出所有已注册的路径
 	if utilfeature.DefaultFeatureGate.Enabled(zpagesfeatures.ComponentStatusz) {
 		statusz.Install(s.Handler.NonGoRestfulMux, componentName, statusz.NewRegistry(s.EffectiveVersion, statusz.WithListedPaths(s.ListedPaths())))
 	}
@@ -512,20 +514,20 @@ func (s *GenericAPIServer) PrepareRun() preparedGenericAPIServer {
 	return preparedGenericAPIServer{s}
 }
 
-// Run spawns the secure http server. It only returns if stopCh is closed
-// or the secure port cannot be listened on initially.
+// Run 启动安全的 http 服务器。只有当 stopCh 关闭
+// 或安全端口最初无法监听时才会返回。
 //
-// Deprecated: use RunWithContext instead. Run will not get removed to avoid
-// breaking consumers, but should not be used in new code.
+// Deprecated: 请改用 RunWithContext。为避免破坏现有使用方，
+// Run 不会被移除，但新代码不应使用。
 func (s preparedGenericAPIServer) Run(stopCh <-chan struct{}) error {
 	// 兼容旧调用方：把 channel 适配为 context 后复用新实现。
 	ctx := wait.ContextForChannel(stopCh)
 	return s.RunWithContext(ctx)
 }
 
-// RunWithContext spawns the secure http server. It only returns if ctx is canceled
-// or the secure port cannot be listened on initially.
-// This is the diagram of what contexts/channels/signals are dependent on each other:
+// RunWithContext 启动安全的 http 服务器。只有当 ctx 被取消
+// 或安全端口最初无法监听时才会返回。
+// 以下是各 context/channel/signal 之间依赖关系的示意图：
 //
 // |                                   ctx
 // |                                    |
@@ -573,10 +575,10 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 	delayedStopCh := s.lifecycleSignals.AfterShutdownDelayDuration
 	shutdownInitiatedCh := s.lifecycleSignals.ShutdownInitiated
 
-	// Clean up resources on shutdown.
+	// 关闭时清理资源。
 	defer s.Destroy()
 
-	// If UDS profiling is enabled, start a local http server listening on that socket
+	// 若启用了 UDS profiling，启动一个监听该 socket 的本地 http 服务器
 	if s.UnprotectedDebugSocket != nil {
 		go func() {
 			defer utilruntime.HandleCrashWithContext(ctx)
@@ -584,9 +586,9 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 		}()
 	}
 
-	// spawn a new goroutine for closing the MuxAndDiscoveryComplete signal
-	// registration happens during construction of the generic api server
-	// the last server in the chain aggregates signals from the previous instances
+	// 为关闭 MuxAndDiscoveryComplete 信号派生一个新的 goroutine：
+	// 信号的注册发生在通用 api server 的构造阶段，
+	// 委托链中最后一个服务器会聚合前面各个实例的信号
 	go func() {
 		for _, muxAndDiscoveryCompletedSignal := range s.GenericAPIServer.MuxAndDiscoveryCompleteSignals() {
 			select {
@@ -607,32 +609,32 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 
 		<-stopCh
 
-		// As soon as shutdown is initiated, /readyz should start returning failure.
-		// This gives the load balancer a window defined by ShutdownDelayDuration to detect that /readyz is red
-		// and stop sending traffic to this server.
+		// 一旦开始关闭流程，/readyz 就应当开始返回失败。
+		// 这给了负载均衡器一个由 ShutdownDelayDuration 定义的窗口，
+		// 用于发现 /readyz 变红并停止向本服务器发送流量。
 		shutdownInitiatedCh.Signal()
 		klog.V(1).InfoS("[graceful-termination] shutdown event", "name", shutdownInitiatedCh.Name())
 
 		time.Sleep(s.ShutdownDelayDuration)
 	}()
 
-	// close socket after delayed stopCh
+	// 在延迟的 stopCh 之后关闭 socket
 	shutdownTimeout := s.ShutdownTimeout
 	if s.ShutdownSendRetryAfter {
-		// when this mode is enabled, we do the following:
-		// - the server will continue to listen until all existing requests in flight
-		//   (not including active long running requests) have been drained.
-		// - once drained, http Server Shutdown is invoked with a timeout of 2s,
-		//   net/http waits for 1s for the peer to respond to a GO_AWAY frame, so
-		//   we should wait for a minimum of 2s
+		// 启用该模式时，我们会执行以下操作：
+		// - 服务器持续监听，直到所有在途的既有请求
+		//   （不含活跃的长时运行请求）全部排空。
+		// - 排空后，以 2 秒超时调用 http Server Shutdown，
+		//   因为 net/http 会等待 1 秒让对端响应 GO_AWAY 帧，
+		//   所以我们至少应等待 2 秒
 		shutdownTimeout = 2 * time.Second
 		klog.V(1).InfoS("[graceful-termination] using HTTP Server shutdown timeout", "shutdownTimeout", shutdownTimeout)
 	}
 
 	notAcceptingNewRequestCh := s.lifecycleSignals.NotAcceptingNewRequest
 	drainedCh := s.lifecycleSignals.InFlightRequestsDrained
-	// Canceling the parent context does not immediately cancel the HTTP server.
-	// We only inherit context values here and deal with cancellation ourselves.
+	// 取消父 context 并不会立即取消 HTTP 服务器。
+	// 这里只继承 context 的值，取消由我们自己处理。
 	stopHTTPServerCtx, stopHTTPServer := context.WithCancelCause(context.WithoutCancel(ctx))
 	go func() {
 		defer stopHTTPServer(errors.New("time to stop HTTP server"))
@@ -645,9 +647,9 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 		<-timeToStopHttpServerCh
 	}()
 
-	// Start the audit backend before any request comes in. This means we must call Backend.Run
-	// before http server start serving. Otherwise the Backend.ProcessEvents call might block.
-	// AuditBackend.Run will stop as soon as all in-flight requests are drained.
+	// 在任何请求进入之前启动审计后端。这意味着必须在 http 服务器开始服务之前
+	// 调用 Backend.Run，否则 Backend.ProcessEvents 调用可能会阻塞。
+	// AuditBackend.Run 会在所有在途请求排空后立即停止。
 	if s.AuditBackend != nil {
 		if err := s.AuditBackend.Run(drainedCh.Signaled()); err != nil {
 			return fmt.Errorf("failed to run the audit backend: %v", err)
@@ -666,48 +668,46 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 		klog.V(1).InfoS("[graceful-termination] shutdown event", "name", httpServerStoppedListeningCh.Name())
 	}()
 
-	// we don't accept new request as soon as both ShutdownDelayDuration has
-	// elapsed and preshutdown hooks have completed.
+	// 一旦 ShutdownDelayDuration 到期且 pre-shutdown 钩子执行完毕，
+	// 我们就不再接受新请求。
 	preShutdownHooksHasStoppedCh := s.lifecycleSignals.PreShutdownHooksStopped
 	go func() {
 		defer klog.V(1).InfoS("[graceful-termination] shutdown event", "name", notAcceptingNewRequestCh.Name())
 		defer notAcceptingNewRequestCh.Signal()
 
-		// wait for the delayed stopCh before closing the handler chain
+		// 等待延迟的 stopCh 之后再关闭处理器链
 		<-delayedStopCh.Signaled()
 
-		// Additionally wait for preshutdown hooks to also be finished, as some of them need
-		// to send API calls to clean up after themselves (e.g. lease reconcilers removing
-		// itself from the active servers).
+		// 此外还要等待 pre-shutdown 钩子全部完成，因为其中一些钩子需要
+		// 发起 API 调用来清理自身（例如 lease reconciler 要把自己
+		// 从活跃服务器列表中移除）。
 		<-preShutdownHooksHasStoppedCh.Signaled()
 	}()
 
-	// wait for all in-flight non-long running requests to finish
+	// 等待所有在途的非长时运行请求完成
 	nonLongRunningRequestDrainedCh := make(chan struct{})
 	go func() {
 		defer close(nonLongRunningRequestDrainedCh)
 		defer klog.V(1).Info("[graceful-termination] in-flight non long-running request(s) have drained")
 
-		// wait for the delayed stopCh before closing the handler chain (it rejects everything after Wait has been called).
+		// 在延迟的 stopCh 之后再关闭处理器链（调用 Wait 之后它会拒绝一切请求）。
 		<-notAcceptingNewRequestCh.Signaled()
 
-		// Wait for all requests to finish, which are bounded by the RequestTimeout variable.
-		// once NonLongRunningRequestWaitGroup.Wait is invoked, the apiserver is
-		// expected to reject any incoming request with a {503, Retry-After}
-		// response via the WithWaitGroup filter. On the contrary, we observe
-		// that incoming request(s) get a 'connection refused' error, this is
-		// because, at this point, we have called 'Server.Shutdown' and
-		// net/http server has stopped listening. This causes incoming
-		// request to get a 'connection refused' error.
-		// On the other hand, if 'ShutdownSendRetryAfter' is enabled incoming
-		// requests will be rejected with a {429, Retry-After} since
-		// 'Server.Shutdown' will be invoked only after in-flight requests
-		// have been drained.
-		// TODO: can we consolidate these two modes of graceful termination?
+		// 等待所有请求完成，其数量受 RequestTimeout 变量约束。
+		// 一旦调用 Wait，apiserver 就应当
+		// 通过 WithWaitGroup 过滤器以 {503, Retry-After} 响应拒绝任何
+		// incoming 请求。但相反，我们观察到 incoming 请求收到的是
+		// 'connection refused' 错误，原因是：此时我们已调用 'Server.Shutdown'
+		// 且 net/http 服务器已停止监听，这会使 incoming 请求
+		// 得到 'connection refused' 错误。
+		// 另一方面，若启用了 'ShutdownSendRetryAfter'，incoming 请求
+		// 会被以 {429, Retry-After} 拒绝，因为只有在在途请求
+		// 排空之后才会调用 'Server.Shutdown'。
+		// TODO: 能否将这两种优雅终止模式合并？
 		s.NonLongRunningRequestWaitGroup.Wait()
 	}()
 
-	// wait for all in-flight watches to finish
+	// 等待所有在途 watch 完成
 	activeWatchesDrainedCh := make(chan struct{})
 	go func() {
 		defer close(activeWatchesDrainedCh)
@@ -718,22 +718,22 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 			return
 		}
 
-		// Wait for all active watches to finish
+		// 等待所有活跃 watch 完成
 		grace := s.ShutdownWatchTerminationGracePeriod
 		activeBefore, activeAfter, err := s.WatchRequestWaitGroup.Wait(func(count int) (utilwaitgroup.RateLimiter, context.Context, context.CancelFunc) {
 			qps := float64(count) / grace.Seconds()
-			// TODO: we don't want the QPS (max requests drained per second) to
-			//  get below a certain floor value, since we want the server to
-			//  drain the active watch requests as soon as possible.
-			//  For now, it's hard coded to 200, and it is subject to change
-			//  based on the result from the scale testing.
+			// TODO: 我们不希望 QPS（每秒排空的最大请求数）
+			//  跌破某个下限，因为我们希望服务器
+			//  尽快排空活跃的 watch 请求。
+			//  目前硬编码为 200，该值可能根据
+			//  规模测试的结果调整。
 			if qps < 200 {
 				qps = 200
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), grace)
-			// We don't expect more than one token to be consumed
-			// in a single Wait call, so setting burst to 1.
+			// 我们不预期单次 Wait 调用会消耗超过一个令牌，
+			// 因此 burst 设为 1。
 			return rate.NewLimiter(rate.Limit(qps), 1), ctx, cancel
 		})
 		klog.V(1).InfoS("[graceful-termination] active watch request(s) have drained",
@@ -751,8 +751,8 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 	klog.V(1).Info("[graceful-termination] waiting for shutdown to be initiated")
 	<-stopCh
 
-	// run shutdown hooks directly. This includes deregistering from
-	// the kubernetes endpoint in case of kube-apiserver.
+	// 直接运行 shutdown 钩子。这包括从
+	// kubernetes endpoint 中注销（针对 kube-apiserver 的情形）。
 	func() {
 		defer func() {
 			preShutdownHooksHasStoppedCh.Signal()
@@ -764,7 +764,7 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 		return err
 	}
 
-	// Wait for all requests in flight to drain, bounded by the RequestTimeout variable.
+	// 等待所有在途请求排空，其数量受 RequestTimeout 变量约束。
 	<-drainedCh.Signaled()
 
 	if s.AuditBackend != nil {
@@ -772,7 +772,7 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 		klog.V(1).InfoS("[graceful-termination] audit backend shutdown completed")
 	}
 
-	// wait for stoppedCh that is closed when the graceful termination (server.Shutdown) is finished.
+	// 等待 stoppedCh，它在优雅终止（server.Shutdown）完成时被关闭。
 	<-listenerStoppedCh
 	<-stoppedCh
 
@@ -780,22 +780,22 @@ func (s preparedGenericAPIServer) RunWithContext(ctx context.Context) error {
 	return nil
 }
 
-// NonBlockingRun spawns the secure http server. An error is
-// returned if the secure port cannot be listened on.
-// The returned channel is closed when the (asynchronous) termination is finished.
+// NonBlockingRun 启动安全的 http 服务器。若安全端口无法监听，
+// 则返回错误。
+// 返回的通道在（异步）终止完成时被关闭。
 //
-// Deprecated: use RunWithContext instead. Run will not get removed to avoid
-// breaking consumers, but should not be used in new code.
+// Deprecated: 请改用 RunWithContext。为避免破坏现有使用方，
+// Run 不会被移除，但新代码不应使用。
 func (s preparedGenericAPIServer) NonBlockingRun(stopCh <-chan struct{}, shutdownTimeout time.Duration) (<-chan struct{}, <-chan struct{}, error) {
 	ctx := wait.ContextForChannel(stopCh)
 	return s.NonBlockingRunWithContext(ctx, shutdownTimeout)
 }
 
-// NonBlockingRunWithContext spawns the secure http server. An error is
-// returned if the secure port cannot be listened on.
-// The returned channel is closed when the (asynchronous) termination is finished.
+// NonBlockingRunWithContext 启动安全的 http 服务器。若安全端口无法监听，
+// 则返回错误。
+// 返回的通道在（异步）终止完成时被关闭。
 func (s preparedGenericAPIServer) NonBlockingRunWithContext(ctx context.Context, shutdownTimeout time.Duration) (<-chan struct{}, <-chan struct{}, error) {
-	// Use an internal stop channel to allow cleanup of the listeners on error.
+	// 使用内部停止通道，以便出错时能清理监听器。
 	internalStopCh := make(chan struct{})
 	var stoppedCh <-chan struct{}
 	var listenerStoppedCh <-chan struct{}
@@ -808,9 +808,8 @@ func (s preparedGenericAPIServer) NonBlockingRunWithContext(ctx context.Context,
 		}
 	}
 
-	// Now that listener have bound successfully, it is the
-	// responsibility of the caller to close the provided channel to
-	// ensure cleanup.
+	// 监听器已成功绑定之后，关闭所提供的通道以保证清理完成
+	// 就是调用方的责任了。
 	go func() {
 		<-ctx.Done()
 		close(internalStopCh)
@@ -827,7 +826,8 @@ func (s preparedGenericAPIServer) NonBlockingRunWithContext(ctx context.Context,
 	return stoppedCh, listenerStoppedCh, nil
 }
 
-// installAPIResources is a private method for installing the REST storage backing each api groupversionresource
+// installAPIResources 是一个私有方法，用于安装支撑每个 api groupversionresource
+// 的 REST 存储
 func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *APIGroupInfo, typeConverter managedfields.TypeConverter) error {
 	var resourceInfos []*storageversion.ResourceInfo
 	for _, groupVersion := range apiGroupInfo.PrioritizedVersions {
@@ -866,7 +866,7 @@ func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *A
 				},
 			)
 		} else {
-			// There is only one group version for legacy resources, priority can be defaulted to 0.
+			// legacy 资源只有一个组版本，优先级可以默认为 0。
 			s.AggregatedLegacyDiscoveryGroupManager.AddGroupVersion(
 				groupVersion.Group,
 				apidiscoveryv2.APIVersionDiscovery{
@@ -884,18 +884,18 @@ func (s *GenericAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *A
 
 	if s.FeatureGate.Enabled(features.StorageVersionAPI) &&
 		s.FeatureGate.Enabled(features.APIServerIdentity) {
-		// API installation happens before we start listening on the handlers,
-		// therefore it is safe to register ResourceInfos here. The handler will block
-		// write requests until the storage versions of the targeting resources are updated.
+		// API 安装发生在我们开始监听处理器之前，
+		// 因此在这里注册 ResourceInfos 是安全的。在目标资源的存储版本
+		// 被更新之前，处理器会阻塞写请求。
 		s.StorageVersionManager.AddResourceInfo(resourceInfos...)
 	}
 
 	return nil
 }
 
-// InstallLegacyAPIGroup exposes the given legacy api group in the API.
-// The <apiGroupInfo> passed into this function shouldn't be used elsewhere as the
-// underlying storage will be destroyed on this servers shutdown.
+// InstallLegacyAPIGroup 在 API 中暴露给定的 legacy api 组。
+// 传入本函数的 <apiGroupInfo> 不应再在其他地方使用，
+// 因为其底层存储会在本服务器关闭时被销毁。
 func (s *GenericAPIServer) InstallLegacyAPIGroup(apiPrefix string, apiGroupInfo *APIGroupInfo) error {
 	// 只允许显式登记的旧前缀（通常是 /api），防止任意路径被当成核心组。
 	if !s.legacyAPIGroupPrefixes.Has(apiPrefix) {
@@ -911,10 +911,10 @@ func (s *GenericAPIServer) InstallLegacyAPIGroup(apiPrefix string, apiGroupInfo 
 		return err
 	}
 
-	// Install the version handler.
-	// Add a handler at /<apiPrefix> to enumerate the supported api versions.
+	// 安装版本处理器。
+	// 在 /<apiPrefix> 添加一个处理器以列举受支持的 api 版本。
 	legacyRootAPIHandler := discovery.NewLegacyRootAPIHandler(s.discoveryAddresses, s.Serializer, apiPrefix)
-	// No peer-to-peer discovery for legacy API group.
+	// legacy API 组不支持对等发现（peer-to-peer discovery）。
 	wrapped := discoveryendpoint.WrapAggregatedDiscoveryToHandler(legacyRootAPIHandler, s.AggregatedLegacyDiscoveryGroupManager, s.AggregatedLegacyDiscoveryGroupManager)
 	s.Handler.GoRestfulContainer.Add(wrapped.GenerateWebService("/api", metav1.APIVersions{}))
 	s.registerStorageReadinessCheck("", apiGroupInfo)
@@ -922,16 +922,17 @@ func (s *GenericAPIServer) InstallLegacyAPIGroup(apiPrefix string, apiGroupInfo 
 	return nil
 }
 
-// InstallAPIGroups exposes given api groups in the API.
-// The <apiGroupInfos> passed into this function shouldn't be used elsewhere as the
-// underlying storage will be destroyed on this servers shutdown.
+// InstallAPIGroups 在 API 中暴露给定的 api 组。
+// 传入本函数的 <apiGroupInfos> 不应再在其他地方使用，
+// 因为其底层存储会在本服务器关闭时被销毁。
 func (s *GenericAPIServer) InstallAPIGroups(apiGroupInfos ...*APIGroupInfo) error {
 	for _, apiGroupInfo := range apiGroupInfos {
 		if len(apiGroupInfo.PrioritizedVersions) == 0 {
 			return fmt.Errorf("no version priority set for %#v", *apiGroupInfo)
 		}
-		// Do not register empty group or empty version.  Doing so claims /apis/ for the wrong entity to be returned.
-		// Catching these here places the error  much closer to its origin
+		// 不要注册空的 group 或空的 version。那样做会把 /apis/ 错误地
+		// 声明为某个错误实体返回的内容。
+		// 在这里拦截这些问题，能让错误离它的来源更近
 		if len(apiGroupInfo.PrioritizedVersions[0].Group) == 0 {
 			return fmt.Errorf("cannot register handler with an empty group for %#v", *apiGroupInfo)
 		}
@@ -950,12 +951,12 @@ func (s *GenericAPIServer) InstallAPIGroups(apiGroupInfos ...*APIGroupInfo) erro
 			return fmt.Errorf("unable to install api resources: %v", err)
 		}
 
-		// setup discovery
-		// Install the version handler.
-		// Add a handler at /apis/<groupName> to enumerate all versions supported by this group.
+		// 设置发现信息
+		// 安装版本处理器。
+		// 在 /apis/<groupName> 添加处理器，以列举该组支持的所有版本。
 		apiVersionsForDiscovery := []metav1.GroupVersionForDiscovery{}
 		for _, groupVersion := range apiGroupInfo.PrioritizedVersions {
-			// Check the config to make sure that we elide versions that don't have any resources
+			// 检查配置，确保省略掉没有任何资源的版本
 			if len(apiGroupInfo.VersionedResourcesStorageMap[groupVersion.Version]) == 0 {
 				continue
 			}
@@ -999,9 +1000,9 @@ func (s *GenericAPIServer) registerStorageReadinessCheck(groupName string, apiGr
 	}
 }
 
-// InstallAPIGroup exposes the given api group in the API.
-// The <apiGroupInfo> passed into this function shouldn't be used elsewhere as the
-// underlying storage will be destroyed on this servers shutdown.
+// InstallAPIGroup 在 API 中暴露给定的 api 组。
+// 传入本函数的 <apiGroupInfo> 不应再在其他地方使用，
+// 因为其底层存储会在本服务器关闭时被销毁。
 func (s *GenericAPIServer) InstallAPIGroup(apiGroupInfo *APIGroupInfo) error {
 	return s.InstallAPIGroups(apiGroupInfo)
 }
@@ -1060,8 +1061,8 @@ func (s *GenericAPIServer) newAPIGroupVersion(apiGroupInfo *APIGroupInfo, groupV
 	}
 }
 
-// NewDefaultAPIGroupInfo returns an APIGroupInfo stubbed with "normal" values
-// exposed for easier composition from other packages
+// NewDefaultAPIGroupInfo 返回一个用“常规”值预填的 APIGroupInfo，
+// 对外暴露以便其他包更容易地组合使用
 func NewDefaultAPIGroupInfo(group string, scheme *runtime.Scheme, parameterCodec runtime.ParameterCodec, codecs serializer.CodecFactory) APIGroupInfo {
 	// 默认启用流式集合编码，降低大列表的峰值内存。
 	opts := []serializer.CodecFactoryOptionsMutator{
@@ -1078,7 +1079,7 @@ func NewDefaultAPIGroupInfo(group string, scheme *runtime.Scheme, parameterCodec
 	return APIGroupInfo{
 		PrioritizedVersions:          scheme.PrioritizedVersionsForGroup(group),
 		VersionedResourcesStorageMap: map[string]map[string]rest.Storage{},
-		// TODO unhardcode this.  It was hardcoded before, but we need to re-evaluate
+		// TODO 去掉这里的硬编码。此前是硬编码的，但我们需要重新评估
 		OptionsExternalVersion: &schema.GroupVersion{Version: "v1"},
 		Scheme:                 scheme,
 		ParameterCodec:         parameterCodec,
@@ -1086,11 +1087,10 @@ func NewDefaultAPIGroupInfo(group string, scheme *runtime.Scheme, parameterCodec
 	}
 }
 
-// getOpenAPIModels is a private method for getting the OpenAPI models
+// getOpenAPIModels 是一个私有方法，用于获取 OpenAPI 模型
 func (s *GenericAPIServer) getOpenAPIModels(apiPrefix string, apiGroupInfos ...*APIGroupInfo) (managedfields.TypeConverter, error) {
 	if s.openAPIV3Config == nil {
-		// SSA is GA and requires OpenAPI config to be set
-		// to create models.
+		// SSA 已 GA，创建模型必须设置 OpenAPI 配置。
 		return nil, errors.New("OpenAPIV3 config must not be nil")
 	}
 	pathsToIgnore := openapiutil.NewTrie(s.openAPIV3Config.IgnorePrefixes)
@@ -1103,7 +1103,7 @@ func (s *GenericAPIServer) getOpenAPIModels(apiPrefix string, apiGroupInfos ...*
 		resourceNames = append(resourceNames, groupResources...)
 	}
 
-	// Build the openapi definitions for those resources and convert it to proto models
+	// 为这些资源构建 openapi 定义，并将其转换为 proto 模型
 	openAPISpec, err := openapibuilder3.BuildOpenAPIDefinitionsForResources(s.openAPIV3Config, resourceNames...)
 	if err != nil {
 		return nil, err
@@ -1121,9 +1121,9 @@ func (s *GenericAPIServer) getOpenAPIModels(apiPrefix string, apiGroupInfos ...*
 	return typeConverter, nil
 }
 
-// getResourceNamesForGroup is a private method for getting the canonical names for each resource to build in an api group
+// getResourceNamesForGroup 是一个私有方法，用于获取 api 组中要构建的每个资源的规范名称
 func getResourceNamesForGroup(apiPrefix string, apiGroupInfo *APIGroupInfo, pathsToIgnore openapiutil.Trie) ([]string, error) {
-	// Get the canonical names of every resource we need to build in this api group
+	// 获取本 api 组中需要构建的每个资源的规范名称
 	resourceNames := make([]string, 0)
 	for _, groupVersion := range apiGroupInfo.PrioritizedVersions {
 		for resource, storage := range apiGroupInfo.VersionedResourcesStorageMap[groupVersion.Version] {
