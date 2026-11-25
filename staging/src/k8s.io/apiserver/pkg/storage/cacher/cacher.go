@@ -64,65 +64,62 @@ var (
 )
 
 const (
-	// storageWatchListPageSize is the cacher's request chunk size of
-	// initial and resync watch lists to storage.
+	// storageWatchListPageSize 是 cacher 向存储发起初始 watch 列表和重新同步
+	// watch 列表时的请求分块大小。
 	//
 	// 分页拉取可避免一次性从 etcd 读取海量对象造成内存与延迟尖峰。
 	storageWatchListPageSize = int64(10000)
 
-	// DefaultEventFreshDuration is the default time duration of events
-	// we want to keep.
-	// We set it to defaultBookmarkFrequency plus epsilon to maximize
-	// chances that last bookmark was sent within kept history, at the
-	// same time, minimizing the needed memory usage.
+	// DefaultEventFreshDuration 是我们希望保留事件的默认时间窗口。
+	// 该值设为 defaultBookmarkFrequency 加上一段 epsilon，以最大化
+	// 「最后一个 bookmark 落在保留历史内」的可能性，同时尽量减少内存占用。
 	DefaultEventFreshDuration = defaultBookmarkFrequency + 15*time.Second
 
-	// defaultBookmarkFrequency defines how frequently watch bookmarks should be send
-	// in addition to sending a bookmark right before watch deadline.
+	// defaultBookmarkFrequency 定义除在 watch 截止前立即发送之外，
+	// watch bookmark 应当发送的频率。
 	defaultBookmarkFrequency = time.Minute
 )
 
-// Config contains the configuration for a given Cache.
+// Config 包含给定 Cache 的配置。
 type Config struct {
-	// An underlying storage.Interface.
+	// 底层的 storage.Interface。
 	Storage storage.Interface
 
-	// An underlying storage.Versioner.
+	// 底层的 storage.Versioner。
 	Versioner storage.Versioner
 
-	// The GroupResource the cacher is caching. Used for disambiguating *unstructured.Unstructured (CRDs) in logging
-	// and metrics.
+	// cacher 正在缓存的 GroupResource。用于在日志和指标中区分
+	// *unstructured.Unstructured（CRD）。
 	GroupResource schema.GroupResource
 
-	// EventsHistoryWindow specifies minimum history duration that storage is keeping.
-	// If lower than DefaultEventFreshDuration, the cache creation will fail.
+	// EventsHistoryWindow 指定存储保留的最小历史时长。
+	// 若低于 DefaultEventFreshDuration，缓存创建将会失败。
 	//
 	// 该值必须覆盖 bookmark 周期，否则 watch 可能因历史被裁剪而中断。
 	EventsHistoryWindow time.Duration
 
-	// The Cache will be caching objects of a given Type and assumes that they
-	// are all stored under ResourcePrefix directory in the underlying database.
+	// Cache 将缓存给定 Type 的对象，并假定它们全部存储在底层数据库的
+	// ResourcePrefix 目录下。
 	ResourcePrefix string
 
-	// KeyFunc is used to get a key in the underlying storage for a given object.
+	// KeyFunc 用于获取给定对象在底层存储中的键。
 	KeyFunc func(runtime.Object) (string, error)
 
-	// GetAttrsFunc is used to get object labels, fields
+	// GetAttrsFunc 用于获取对象的 labels 和 fields。
 	GetAttrsFunc func(runtime.Object) (label labels.Set, field fields.Set, err error)
 
-	// IndexerFuncs is used for optimizing amount of watchers that
-	// needs to process an incoming event.
+	// IndexerFuncs 用于优化需要处理某个 incoming event 的
+	// watcher 数量。
 	IndexerFuncs storage.IndexerFuncs
 
-	// Indexers is used to accelerate the list operation, falls back to regular list
-	// operation if no indexer found.
+	// Indexers 用于加速 list 操作；若未找到 indexer，则回退到普通 list
+	// 操作。
 	Indexers *cache.Indexers
 
-	// NewFunc is a function that creates new empty object storing a object of type Type.
+	// NewFunc 是一个创建存储 Type 类型对象的空新对象的函数。
 	NewFunc func() runtime.Object
 
-	// NewList is a function that creates new empty object storing a list of
-	// objects of type Type.
+	// NewList 是一个创建存储 Type 类型对象列表的空新对象的函数。
 	NewListFunc func() runtime.Object
 
 	Codec runtime.Codec
@@ -196,10 +193,10 @@ func (i *indexedWatchers) deleteWatcher(number int, scope namespacedName, value 
 //
 // 出现 watcher 属于异常情况（通常意味着缓存重建），因此打 warning 便于发现。
 func (i *indexedWatchers) terminateAll(groupResource schema.GroupResource, done func(*cacheWatcher)) {
-	// note that we don't have to call setDrainInputBufferLocked method on the watchers
-	// because we take advantage of the default value - stop immediately
-	// also watchers that have had already its draining strategy set
-	// are no longer available (they were removed from the allWatchers and the valueWatchers maps)
+	// 注意我们不必调用 watcher 的 setDrainInputBufferLocked 方法，
+	// 因为我们直接利用其默认值——立即停止；
+	// 另外，已经设置过 draining 策略的 watcher
+	// 不再存在于表中（它们已从 allWatchers 和 valueWatchers 映射中移除）
 	if len(i.allWatchers) > 0 || len(i.valueWatchers) > 0 {
 		klog.Warningf("Terminating all watchers from cacher %v", groupResource)
 	}
@@ -213,14 +210,14 @@ func (i *indexedWatchers) terminateAll(groupResource schema.GroupResource, done 
 	i.valueWatchers = map[string]watchersMap{}
 }
 
-// As we don't need a high precision here, we keep all watchers timeout within a
-// second in a bucket, and pop up them once at the timeout. To be more specific,
-// if you set fire time at X, you can get the bookmark within (X-1,X+1) period.
+// 由于这里不需要高精度，我们把超时在同一秒内的所有 watcher
+// 放进同一个桶，并在超时时一次性弹出它们。更具体地说，
+// 若设置的触发时间为 X，你可以在 (X-1,X+1) 区间内收到 bookmark。
 //
 // 按秒分桶把“为每个 watcher 维护定时器”降为“每秒处理一个桶”，
 // 在数万 watcher 的规模下显著降低定时器开销。
 type watcherBookmarkTimeBuckets struct {
-	// the key of watcherBuckets is the number of seconds since createTime
+	// watchersBuckets 的键是「距 createTime 的秒数」
 	watchersBuckets   map[int64][]*cacheWatcher
 	createTime        time.Time
 	startBucketID     int64
@@ -239,15 +236,14 @@ func newTimeBucketWatchers(clock clock.Clock, bookmarkFrequency time.Duration) *
 	}
 }
 
-// adds a watcher to the bucket, if the deadline is before the start, it will be
-// added to the first one.
+// 向桶中添加一个 watcher；若截止时间早于起始时间，
+// 则会被加入第一个桶。
 //
 // 返回 false 表示该 watcher 已无需要发送的 bookmark（例如已过期）。
 func (t *watcherBookmarkTimeBuckets) addWatcherThreadUnsafe(w *cacheWatcher) bool {
-	// note that the returned time can be before t.createTime,
-	// especially in cases when the nextBookmarkTime method
-	// give us the zero value of type Time
-	// so buckedID can hold a negative value
+	// 注意返回的时间可能早于 t.createTime，尤其是当 nextBookmarkTime
+	// 方法给出 Time 类型的零值时，
+	// 因此 bucketID 可能为负值
 	nextTime, ok := w.nextBookmarkTime(t.clock.Now(), t.bookmarkFrequency)
 	if !ok {
 		return false
@@ -264,7 +260,7 @@ func (t *watcherBookmarkTimeBuckets) addWatcherThreadUnsafe(w *cacheWatcher) boo
 // popExpiredWatchersThreadUnsafe 弹出所有已到期桶中的 watcher，并推进 startBucketID。
 func (t *watcherBookmarkTimeBuckets) popExpiredWatchersThreadUnsafe() [][]*cacheWatcher {
 	currentBucketID := int64(t.clock.Since(t.createTime) / time.Second)
-	// There should be one or two elements in almost all cases
+	// 绝大多数情况下应只有一个或两个元素
 	expiredWatchers := make([][]*cacheWatcher, 0, 2)
 	for ; t.startBucketID <= currentBucketID; t.startBucketID++ {
 		if watchers, ok := t.watchersBuckets[t.startBucketID]; ok {
@@ -284,117 +280,113 @@ type indexedTriggerFunc struct {
 	indexerFunc storage.IndexerFunc
 }
 
-// Cacher is responsible for serving WATCH and LIST requests for a given
-// resource from its internal cache and updating its cache in the background
-// based on the underlying storage contents.
-// Cacher implements storage.Interface (although most of the calls are just
-// delegated to the underlying storage).
+// Cacher 负责从内部缓存为给定资源提供 WATCH 和 LIST 请求服务，
+// 并根据底层存储内容在后台更新其缓存。
+// Cacher 实现了 storage.Interface（尽管大多数调用只是
+// 委托给底层存储）。
 //
 // 读写路径不同：写操作直接委托给底层存储，读操作（Get/GetList/Watch）优先由
 // watchCache 服务，从而把 etcd 的读压力与 apiserver 的读并发解耦。
 type Cacher struct {
-	// HighWaterMarks for performance debugging.
-	// Important: Since HighWaterMark is using sync/atomic, it has to be at the top of the struct due to a bug on 32-bit platforms
-	// See: https://golang.org/pkg/sync/atomic/ for more information
+	// 用于性能调试的 HighWaterMarks。
+	// 重要：由于 HighWaterMark 使用 sync/atomic，因 32 位平台上的一个 bug，
+	// 它必须位于结构体顶部。
+	// 参见：https://golang.org/pkg/sync/atomic/ 获取更多信息
 	incomingHWM storage.HighWaterMark
-	// Incoming events that should be dispatched to watchers.
+	// 应当被分发给 watchers 的 incoming 事件。
 	incoming chan watchCacheEvent
 
 	resourcePrefix string
 
 	sync.RWMutex
 
-	// Before accessing the cacher's cache, wait for the ready to be ok.
-	// This is necessary to prevent users from accessing structures that are
-	// uninitialized or are being repopulated right now.
-	// ready needs to be set to false when the cacher is paused or stopped.
-	// ready needs to be set to true when the cacher is ready to use after
-	// initialization.
+	// 访问 cacher 的缓存之前，必须等待 ready 就绪。
+	// 这是为了防止用户访问尚未初始化或正在重新填充的结构。
+	// 当 cacher 被暂停或停止时，ready 需要被置为 false。
+	// 当 cacher 初始化完成、可以使用后，ready 需要被置为 true。
 	ready *ready
 
-	// Underlying storage.Interface.
+	// 底层的 storage.Interface。
 	storage storage.Interface
 
-	// Expected type of objects in the underlying cache.
+	// 底层缓存中对象的预期类型。
 	objectType reflect.Type
-	// Used for logging, to disambiguate *unstructured.Unstructured (CRDs)
+	// 用于日志输出，以区分 *unstructured.Unstructured（CRD）
 	groupResource schema.GroupResource
 
-	// "sliding window" of recent changes of objects and the current state.
+	// 对象近期变更与当前状态的“滑动窗口”。
 	watchCache *watchCache
 	reflector  *cache.Reflector
 
-	// Versioner is used to handle resource versions.
+	// Versioner 用于处理 resource version。
 	versioner storage.Versioner
 
-	// newFunc is a function that creates new empty object storing a object of type Type.
+	// newFunc 是一个创建存储 Type 类型对象的空新对象的函数。
 	newFunc func() runtime.Object
 
-	// newListFunc is a function that creates new empty list for storing objects of type Type.
+	// newListFunc 是一个创建用于存储 Type 类型对象的空新列表的函数。
 	newListFunc func() runtime.Object
 
-	// indexedTrigger is used for optimizing amount of watchers that needs to process
-	// an incoming event.
+	// indexedTrigger 用于优化需要处理 incoming event 的
+	// watcher 数量。
 	indexedTrigger *indexedTriggerFunc
-	// watchers is mapping from the value of trigger function that a
-	// watcher is interested into the watchers
+	// watchers 是从 watcher 感兴趣的 trigger 函数取值
+	// 到对应 watcher 集合的映射
 	watcherIdx int
 	watchers   indexedWatchers
 
-	// Defines a time budget that can be spend on waiting for not-ready watchers
-	// while dispatching event before shutting them down.
+	// 定义在分发事件时，可以花在等待未就绪 watcher 上的
+	// 时间预算，超过后将其关闭。
 	dispatchTimeoutBudget timeBudget
 
-	// Handling graceful termination.
+	// 处理优雅终止。
 	stopLock sync.RWMutex
 	stopped  bool
 	stopCh   chan struct{}
 	stopWg   sync.WaitGroup
 
 	clock clock.Clock
-	// timer is used to avoid unnecessary allocations in underlying watchers.
+	// timer 用于避免底层 watcher 中不必要的内存分配。
 	timer *time.Timer
 
-	// dispatching determines whether there is currently dispatching of
-	// any event in flight.
+	// dispatching 表示当前是否有某个事件
+	// 正在分发中。
 	dispatching bool
-	// watchersBuffer is a list of watchers potentially interested in currently
-	// dispatched event.
+	// watchersBuffer 是可能关心当前正在分发事件的
+	// watcher 列表。
 	watchersBuffer []*cacheWatcher
-	// blockedWatchers is a list of watchers whose buffer is currently full.
+	// blockedWatchers 是当前缓冲区已满的 watcher 列表。
 	blockedWatchers []*cacheWatcher
-	// watchersToStop is a list of watchers that were supposed to be stopped
-	// during current dispatching, but stopping was deferred to the end of
-	// dispatching that event to avoid race with closing channels in watchers.
+	// watchersToStop 是本来应当在当前分发过程中停止、
+	// 但为避免与 watcher 中关闭通道的竞态而推迟到
+	// 该事件分发结束时再停止的 watcher 列表。
 	watchersToStop []*cacheWatcher
-	// Maintain a timeout queue to send the bookmark event before the watcher times out.
-	// Note that this field when accessed MUST be protected by the Cacher.lock.
+	// 维护一个超时队列，以便在 watcher 超时之前发送 bookmark 事件。
+	// 注意：访问该字段时必须持有 Cacher.lock 保护。
 	bookmarkWatchers *watcherBookmarkTimeBuckets
-	// expiredBookmarkWatchers is a list of watchers that were expired and need to be schedule for a next bookmark event
+	// expiredBookmarkWatchers 是已过期、需要为下一次 bookmark 事件重新调度的 watcher 列表
 	expiredBookmarkWatchers []*cacheWatcher
 	compactor               *compactor
 	watcherMetrics          *metrics.WatcherMetricsObservers
 }
 
-// NewCacherFromConfig creates a new Cacher responsible for servicing WATCH and LIST requests from
-// its internal cache and updating its cache in the background based on the
-// given configuration.
+// NewCacherFromConfig 根据给定配置创建一个新的 Cacher，负责从内部缓存
+// 提供 WATCH 和 LIST 请求服务，并在后台更新其缓存。
 //
 // 构造阶段完成校验与装配，真正的缓存填充在后台 goroutine 中通过 reflector 完成；
 // 在 ready 变为 true 之前，读请求会收到 429 而不是读到不完整数据。
 func NewCacherFromConfig(config Config) (*Cacher, error) {
 	stopCh := make(chan struct{})
 	obj := config.NewFunc()
-	// Give this error when it is constructed rather than when you get the
-	// first watch item, because it's much easier to track down that way.
+	// 在构造阶段就报出这个错误，而不是等到获取第一个
+	// watch 项时再报，因为这样更容易定位问题。
 	if err := runtime.CheckCodec(config.Codec, obj); err != nil {
 		return nil, fmt.Errorf("storage codec doesn't seem to match given type: %v", err)
 	}
 
 	var indexedTrigger *indexedTriggerFunc
 	if config.IndexerFuncs != nil {
-		// For now, we don't support multiple trigger functions defined
-		// for a given resource.
+		// 目前我们不支持为给定资源定义多个 trigger 函数。
 		if len(config.IndexerFuncs) > 1 {
 			return nil, fmt.Errorf("cacher %s doesn't support more than one IndexerFunc: ", reflect.TypeOf(obj).String())
 		}
@@ -437,14 +429,14 @@ func NewCacherFromConfig(config Config) (*Cacher, error) {
 			allWatchers:   make(map[namespacedName]watchersMap),
 			valueWatchers: make(map[string]watchersMap),
 		},
-		// TODO: Figure out the correct value for the buffer size.
+		// TODO: 需要确定缓冲区大小的正确取值。
 		incoming:              make(chan watchCacheEvent, 100),
 		dispatchTimeoutBudget: newTimeBudget(),
-		// We need to (potentially) stop both:
-		// - wait.Until go-routine
+		// 我们可能需要停止两者：
+		// - wait.Until goroutine
 		// - reflector.ListAndWatch
-		// and there are no guarantees on the order that they will stop.
-		// So we will be simply closing the channel, and synchronizing on the WaitGroup.
+		// 且无法保证它们停止的顺序。
+		// 因此我们只需关闭通道，并通过 WaitGroup 同步等待。
 		stopCh:           stopCh,
 		clock:            config.Clock,
 		timer:            time.NewTimer(time.Duration(0)),
@@ -452,17 +444,17 @@ func NewCacherFromConfig(config Config) (*Cacher, error) {
 		watcherMetrics:   metrics.NewWatcherMetricsObservers(config.GroupResource),
 	}
 
-	// Ensure that timer is stopped.
+	// 确保 timer 已停止。
 	if !cacher.timer.Stop() {
-		// Consume triggered (but not yet received) timer event
-		// so that future reuse does not get a spurious timeout.
+		// 消费已触发（但尚未被接收）的 timer 事件，
+		// 以免将来复用时出现虚假超时。
 		<-cacher.timer.C
 	}
 	var contextMetadata metadata.MD
 	if utilfeature.DefaultFeatureGate.Enabled(features.SeparateCacheWatchRPC) {
-		// Add grpc context metadata to watch and progress notify requests done by cacher to:
-		// * Prevent starvation of watch opened by cacher, by moving it to separate Watch RPC than watch request that bypass cacher.
-		// * Ensure that progress notification requests are executed on the same Watch RPC as their watch, which is required for it to work.
+		// 为 cacher 发起的 watch 和 progress notify 请求添加 grpc 上下文元数据，以：
+		// * 防止 cacher 打开的 watch 被饿死——将其移到与绕过 cacher 的 watch 请求分开的 Watch RPC 上。
+		// * 确保 progress notification 请求与其 watch 在同一 Watch RPC 上执行，这是其工作所要求的。
 		contextMetadata = metadata.New(map[string]string{"source": "cache"})
 	}
 
@@ -479,12 +471,12 @@ func NewCacherFromConfig(config Config) (*Cacher, error) {
 	reflectorName := "storage/cacher.go:" + resourcePrefix
 
 	reflector := cache.NewNamedReflector(reflectorName, listerWatcher, nil, watchCache, 0)
-	// Configure reflector's pager to for an appropriate pagination chunk size for fetching data from
-	// storage. The pager falls back to full list if paginated list calls fail due to an "Expired" error.
+	// 为 reflector 的 pager 配置合适的分页块大小，用于从存储拉取数据。
+	// 若分页列表调用因 "Expired" 错误失败，pager 会回退到全量列表。
 	reflector.WatchListPageSize = storageWatchListPageSize
-	// When etcd loses leader for 3 cycles, it returns error "no leader".
-	// We don't want to terminate all watchers as recreating all watchers puts high load on api-server.
-	// In most of the cases, leader is reelected within few cycles.
+	// 当 etcd 连续 3 个周期丢失 leader 时，会返回 "no leader" 错误。
+	// 我们不想因此终止所有 watcher，因为重建所有 watcher 会给 api-server 带来高负载。
+	// 大多数情况下，leader 会在几个周期内重新选出。
 	//
 	// 容忍 30s 的内部错误可避免 etcd 短暂选主时引发 watch 大面积重连风暴。
 	reflector.MaxInternalErrorRetryDuration = time.Second * 30
@@ -579,7 +571,7 @@ func (c *Cacher) Watch(ctx context.Context, key string, opts storage.ListOptions
 		return nil, errors.NewTooManyRequests(err.Error(), calculateRetryAfterForUnreadyCache(downtime))
 	}
 
-	// determine the namespace and name scope of the watch, first from the request, secondarily from the field selector
+	// 确定 watch 的 namespace 和 name 作用域：先取自请求，其次取自 field selector
 	//
 	// 作用域既可能来自 URL 路径（request context），也可能来自 fieldSelector 的等值匹配，
 	// 两者都考虑是为了让索引查找覆盖所有等价的请求形式。
@@ -595,8 +587,8 @@ func (c *Cacher) Watch(ctx context.Context, key string, opts storage.ListOptions
 		scope.name = selectorName
 	}
 
-	// for request like '/api/v1/watch/namespaces/*', set scope.namespace to empty.
-	// namespaces don't populate metadata.namespace in ObjFields.
+	// 对于形如 '/api/v1/watch/namespaces/*' 的请求，将 scope.namespace 置为空。
+	// namespaces 对象不会在 ObjFields 中填充 metadata.namespace。
 	if c.groupResource == coreNamespaceResource && len(scope.namespace) > 0 && scope.namespace == scope.name {
 		scope.namespace = ""
 	}
@@ -613,17 +605,17 @@ func (c *Cacher) Watch(ctx context.Context, key string, opts storage.ListOptions
 		}
 	}
 
-	// It boils down to a tradeoff between:
-	// - having it as small as possible to reduce memory usage
-	// - having it large enough to ensure that watchers that need to process
-	//   a bunch of changes have enough buffer to avoid from blocking other
-	//   watchers on our watcher having a processing hiccup
+	// 这本质上是在两者之间权衡：
+	// - 尽可能小以减少内存占用
+	// - 足够大，以确保需要处理
+	//   大量变更的 watcher 有足够的缓冲，
+	//   避免因某个 watcher 处理卡顿而阻塞其他 watcher
 	//
 	// 缓冲区按 watcher 数量动态建议，避免每个连接都分配大缓冲。
 	chanSize := c.watchCache.suggestedWatchChannelSize(c.indexedTrigger != nil, triggerSupported)
 
-	// client-go is going to fall back to a standard LIST on any error
-	// returned for watch-list requests
+	// 对于 watch-list 请求，client-go 会在收到任何错误时
+	// 回退到标准 LIST
 	//
 	// watch-list 依赖 RequestWatchProgress 能力；不支持时返回 errWatcher 让客户端回退到 LIST，
 	// 而不是静默降级成普通 watch（那会破坏 SendInitialEvents 语义）。
@@ -631,27 +623,27 @@ func (c *Cacher) Watch(ctx context.Context, key string, opts storage.ListOptions
 		return newErrWatcher(fmt.Errorf("a watch stream was requested by the client but the required storage feature %s is disabled", storage.RequestWatchProgress)), nil
 	}
 
-	// Determine the ResourceVersion to which the watch cache must be synchronized
+	// 确定 watch 缓存必须同步到的 ResourceVersion
 	requiredResourceVersion, err := c.getWatchCacheResourceVersion(ctx, requestedWatchRV, opts)
 	if err != nil {
 		return newErrWatcher(err), nil
 	}
 
-	// Determine a function that computes the bookmarkAfterResourceVersion
+	// 确定用于计算 bookmarkAfterResourceVersion 的函数
 	bookmarkAfterResourceVersionFn, err := c.getBookmarkAfterResourceVersionLockedFunc(requestedWatchRV, requiredResourceVersion, opts)
 	if err != nil {
 		return newErrWatcher(err), nil
 	}
 
-	// Determine watch timeout('0' means deadline is not set, ignore checking)
+	// 确定 watch 超时时间（'0' 表示未设置截止时间，跳过检查）
 	deadline, _ := ctx.Deadline()
 
 	identifier := fmt.Sprintf("key: %q, labels: %q, fields: %q", key, pred.Label, pred.Field)
 
-	// Create a watcher here to reduce memory allocations under lock,
-	// given that memory allocation may trigger GC and block the thread.
-	// Also note that emptyFunc is a placeholder, until we will be able
-	// to compute watcher.forget function (which has to happen under lock).
+	// 在此处创建 watcher，以减少锁内的内存分配，
+	// 因为内存分配可能触发 GC 并阻塞线程。
+	// 另请注意，emptyFunc 只是占位符，
+	// 直到我们能够计算 watcher.forget 函数（该计算必须在持锁时进行）。
 	watcher := newCacheWatcher(
 		chanSize,
 		filterWithAttrsAndPrefixFunction(key, pred, c.groupResource),
@@ -665,32 +657,32 @@ func (c *Cacher) Watch(ctx context.Context, key string, opts storage.ListOptions
 		identifier,
 	)
 
-	// note that c.waitUntilWatchCacheFreshAndForceAllEvents must be called without
-	// the c.watchCache.RLock held otherwise we are at risk of a deadlock
-	// mainly because c.watchCache.processEvent method won't be able to make progress
+	// 注意：调用 c.waitUntilWatchCacheFreshAndForceAllEvents 时不能持有
+	// c.watchCache.RLock，否则存在死锁风险，
+	// 主要是因为 c.watchCache.processEvent 方法将无法推进
 	//
-	// moreover even though the c.waitUntilWatchCacheFreshAndForceAllEvents acquires a lock
-	// it is safe to release the lock after the method finishes because we don't require
-	// any atomicity between the call to the method and further calls that actually get the events.
+	// 此外，尽管 c.waitUntilWatchCacheFreshAndForceAllEvents 会获取锁，
+	// 但在该方法结束后释放锁是安全的，因为我们不要求
+	// 该调用与后续真正获取事件的调用之间具有任何原子性。
 	err = c.waitUntilWatchCacheFreshAndForceAllEvents(ctx, requiredResourceVersion, opts)
 	if err != nil {
 		return newErrWatcher(err), nil
 	}
 
-	// We explicitly use thread unsafe version and do locking ourself to ensure that
-	// no new events will be processed in the meantime. The watchCache will be unlocked
-	// on return from this function.
-	// Note that we cannot do it under Cacher lock, to avoid a deadlock, since the
-	// underlying watchCache is calling processEvent under its lock.
+	// 我们显式使用非线程安全版本并自行加锁，以确保
+	// 在此期间不会有新事件被处理。从本函数返回时
+	// watchCache 将被解锁。
+	// 注意我们不能在 Cacher 锁下进行此操作以避免死锁，因为
+	// 底层 watchCache 会在其自身的锁下调用 processEvent。
 	c.watchCache.RLock()
 	defer c.watchCache.RUnlock()
 
 	var cacheInterval *watchCacheInterval
 	cacheInterval, err = c.watchCache.getAllEventsSinceLocked(requiredResourceVersion, key, opts)
 	if err != nil {
-		// To match the uncached watch implementation, once we have passed authn/authz/admission,
-		// and successfully parsed a resource version, other errors must fail with a watch event of type ERROR,
-		// rather than a directly returned error.
+		// 为与未缓存 watch 的实现保持一致，一旦通过了 authn/authz/admission
+		// 并成功解析了 resource version，其他错误必须以类型为 ERROR 的
+		// watch 事件失败，而不是直接返回错误。
 		return newErrWatcher(err), nil
 	}
 
@@ -704,20 +696,20 @@ func (c *Cacher) Watch(ctx context.Context, key string, opts storage.ListOptions
 		// 注册前再次检查 ready 代际：等待期间缓存可能已重建，此时旧区间与
 		// 新缓存不连续，必须放弃注册。
 		if generation, _, err := c.ready.checkAndReadGeneration(); generation != readyGeneration || err != nil {
-			// We went unready or are already on a different generation.
-			// Avoid registering and starting the watch as it will have to be
-			// terminated immediately anyway.
+			// 缓存变为未就绪或代际已经不同。
+			// 避免注册并启动该 watch，因为它反正
+			// 必须立即被终止。
 			return
 		}
 
-		// Update watcher.forget function once we can compute it.
+		// 在可以计算时更新 watcher.forget 函数。
 		watcher.forget = forgetWatcher(c, watcher, c.watcherIdx, scope, triggerValue, triggerSupported)
-		// Update the bookMarkAfterResourceVersion
+		// 更新 bookMarkAfterResourceVersion
 		watcher.setBookmarkAfterResourceVersion(bookmarkAfterResourceVersionFn())
 		c.watchers.addWatcher(watcher, c.watcherIdx, scope, triggerValue, triggerSupported)
 		addedWatcher = true
 
-		// Add it to the queue only when the client support watch bookmarks.
+		// 仅当客户端支持 watch bookmark 时才将其加入队列。
 		if watcher.allowWatchBookmarks {
 			c.bookmarkWatchers.addWatcherThreadUnsafe(watcher)
 		}
@@ -725,10 +717,10 @@ func (c *Cacher) Watch(ctx context.Context, key string, opts storage.ListOptions
 	}()
 
 	if !addedWatcher {
-		// Watcher isn't really started at this point, so it's safe to just drop it.
+		// 此时 watcher 尚未真正启动，因此直接丢弃它是安全的。
 		//
-		// We're simulating the immediate watch termination, which boils down to simply
-		// closing the watcher.
+		// 我们模拟立即终止 watch 的行为，其实质
+		// 就是简单地关闭该 watcher。
 		return newImmediateCloseWatcher(), nil
 	}
 
@@ -769,7 +761,8 @@ func (c *Cacher) Get(ctx context.Context, key string, opts storage.GetOptions, o
 	if err != nil {
 		return err
 	}
-	// Get long processing is >500ms, however wait for fresh cache timeout is 3s so want to avoid traces just showing waits.
+	// Get 处理耗时超过 500ms 才算慢，而等待缓存新鲜的超时是 3s，
+	// 因此要避免 trace 里只体现出等待时间。
 	defer span.End(500 * time.Millisecond)
 
 	if exists {
@@ -787,13 +780,13 @@ func (c *Cacher) Get(ctx context.Context, key string, opts storage.GetOptions, o
 	return nil
 }
 
-// computeListLimit determines whether the cacher should
-// apply a limit to an incoming LIST request and returns its value.
+// computeListLimit 判断 cacher 是否应当对 incoming LIST 请求
+// 应用 limit，并返回其取值。
 //
-// note that this function doesn't check RVM nor the Continuation token.
-// these parameters are validated by the shouldDelegateList function.
+// 注意该函数不检查 RV 也不检查 Continuation token，
+// 这些参数由 shouldDelegateList 函数负责校验。
 //
-// as of today, the limit is ignored for requests that set RV == 0
+// 截至目前，对于设置 RV == 0 的请求，limit 会被忽略
 func computeListLimit(opts storage.ListOptions) int64 {
 	if opts.Predicate.Limit <= 0 || opts.ResourceVersion == "0" {
 		return 0
@@ -807,7 +800,7 @@ type listResp struct {
 	ResourceVersion uint64
 }
 
-// GetList implements storage.Interface
+// GetList 实现了 storage.Interface
 //
 // 过滤器为空时走零拷贝快路径；否则先筛选对象指针、再按需构造结果切片，
 // 避免为被过滤掉的对象分配内存。
@@ -827,13 +820,13 @@ func (c *Cacher) GetList(ctx context.Context, key string, opts storage.ListOptio
 	defer span.End(500 * time.Millisecond)
 
 	if downtime, err := c.ready.check(); err != nil {
-		// If Cacher is not initialized, reject List requests
-		// as described in https://kep.k8s.io/4568
+		// 若 Cacher 尚未初始化，按 https://kep.k8s.io/4568
+		// 所述拒绝 List 请求
 		return errors.NewTooManyRequests(err.Error(), calculateRetryAfterForUnreadyCache(downtime))
 	}
 	span.AddEvent("Ready")
 
-	// List elements with at least 'listRV' from cache.
+	// 从缓存中列出 RV 至少为 'listRV' 的元素。
 	listPtr, err := meta.GetItemsPtr(listObj)
 	if err != nil {
 		return err
@@ -855,8 +848,8 @@ func (c *Cacher) GetList(ctx context.Context, key string, opts storage.ListOptio
 	var hasMoreListItems bool
 	limit := computeListLimit(opts)
 	if opts.Predicate.Empty() {
-		// Every item matches, so the result size is known upfront and items can be
-		// copied directly into the result list without an intermediate slice.
+		// 每个项都匹配，因此结果大小可以预先确定，
+		// 项可以直接拷入结果列表而无需中间切片。
 		//
 		// 快路径：直接按 limit 截断并写入结果，省去中间切片与二次拷贝。
 		count := len(resp.Items)
@@ -874,10 +867,10 @@ func (c *Cacher) GetList(ctx context.Context, key string, opts storage.ListOptio
 			lastSelectedObjectKey = elem.Key
 		}
 	} else {
-		// store pointer of eligible objects,
-		// Why not directly put object in the items of listObj?
-		//   the elements in ListObject are Struct type, making slice will bring excessive memory consumption.
-		//   so we try to delay this action as much as possible
+		// 存符合条件对象的指针，
+		// 为什么不直接把对象放进 listObj 的 items 里？
+		//   ListObject 中的元素是 Struct 类型，构造切片会带来过多的内存消耗。
+		//   因此我们尽可能推迟这一操作
 		var selectedObjects []runtime.Object
 		for i, obj := range resp.Items {
 			elem, ok := obj.(*store.Element)
@@ -902,10 +895,10 @@ func (c *Cacher) GetList(ctx context.Context, key string, opts storage.ListOptio
 			}
 		}
 		if len(selectedObjects) == 0 {
-			// Ensure that we never return a nil Items pointer in the result for consistency.
+			// 为保持一致性，确保结果中永不返回 nil 的 Items 指针。
 			listVal.Set(reflect.MakeSlice(listVal.Type(), 0, 0))
 		} else {
-			// Resize the slice appropriately, since we already know that size of result set
+			// 由于结果集大小已知，按合适的大小重建切片
 			listVal.Set(reflect.MakeSlice(listVal.Type(), len(selectedObjects), len(selectedObjects)))
 			span.AddEvent("Resized result")
 			for i, o := range selectedObjects {
@@ -933,7 +926,7 @@ func (c *Cacher) GetList(ctx context.Context, key string, opts storage.ListOptio
 	return nil
 }
 
-// baseObjectThreadUnsafe omits locking for cachingObject.
+// baseObjectThreadUnsafe 对 cachingObject 省略加锁。
 //
 // 直接取内层对象，避免为了读索引字段而触发一次深拷贝；调用方必须保证无并发写。
 func baseObjectThreadUnsafe(object runtime.Object) runtime.Object {
@@ -970,7 +963,7 @@ func (c *Cacher) triggerValuesThreadUnsafe(event *watchCacheEvent) ([]string, bo
 // 队列积压通过 incomingHWM 观测。
 func (c *Cacher) processEvent(event *watchCacheEvent) {
 	if curLen := int64(len(c.incoming)); c.incomingHWM.Update(curLen) {
-		// Monitor if this gets backed up, and how much.
+		// 监控 incoming 队列是否积压以及积压程度。
 		klog.V(1).Infof("cacher (%v): %v objects queued in incoming channel.", c.groupResource.String(), curLen)
 	}
 	c.incoming <- *event
@@ -980,15 +973,15 @@ func (c *Cacher) processEvent(event *watchCacheEvent) {
 //
 // 单 goroutine 保证事件顺序，避免 watcher 看到乱序的 RV。
 func (c *Cacher) dispatchEvents() {
-	// Jitter to help level out any aggregate load.
+	// 加入抖动，帮助拉平任何聚合负载。
 	bookmarkTimer := c.clock.NewTimer(wait.Jitter(time.Second, 0.25))
 	defer bookmarkTimer.Stop()
 
-	// The internal informer populates the RV as soon as it conducts
-	// The first successful sync with the underlying store.
-	// The cache must wait until this first sync is completed to be deemed ready.
-	// Since we cannot send a bookmark when the lastProcessedResourceVersion is 0,
-	// we poll aggressively for the first list RV before entering the dispatch loop.
+	// 内部 informer 一旦与底层 store 完成
+	// 首次成功同步，就会填充 RV。
+	// 缓存必须等这次首次同步完成后才能被视为就绪。
+	// 由于 lastProcessedResourceVersion 为 0 时无法发送 bookmark，
+	// 我们在进入分发循环之前以激进的方式轮询首个列表 RV。
 	lastProcessedResourceVersion := uint64(0)
 	if err := wait.PollUntilContextCancel(wait.ContextForChannel(c.stopCh), 10*time.Millisecond, true, func(_ context.Context) (bool, error) {
 		if rv := c.watchCache.getListResourceVersion(); rv != 0 {
@@ -997,8 +990,8 @@ func (c *Cacher) dispatchEvents() {
 		}
 		return false, nil
 	}); err != nil {
-		// given the function above never returns error,
-		// the non-empty error means that the stopCh was closed
+		// 鉴于上面的函数从不返回错误，
+		// 非空错误意味着 stopCh 已关闭
 		return
 	}
 	for {
@@ -1007,16 +1000,16 @@ func (c *Cacher) dispatchEvents() {
 			if !ok {
 				return
 			}
-			// Don't dispatch bookmarks coming from the storage layer.
-			// They can be very frequent (even to the level of subseconds)
-			// to allow efficient watch resumption on kube-apiserver restarts,
-			// and propagating them down may overload the whole system.
+			// 不要分发来自存储层的 bookmark。
+			// 为了在 kube-apiserver 重启时支持高效的 watch 恢复，
+			// 它们可能非常频繁（甚至达到亚秒级），
+			// 若把它们向下传播可能会使整个系统过载。
 			//
-			// TODO: If at some point we decide the performance and scalability
-			// footprint is acceptable, this is the place to hook them in.
-			// However, we then need to check if this was called as a result
-			// of a bookmark event or regular Add/Update/Delete operation by
-			// checking if resourceVersion here has changed.
+			// TODO: 如果将来我们认定其性能和可扩展性
+			// 开销可以接受，这里就是把它们接入的位置。
+			// 但届时需要通过检查此处的 resourceVersion
+			// 是否变化，来判断本调用是由 bookmark 事件
+			// 还是由普通的 Add/Update/Delete 操作触发的。
 			//
 			// 存储层 bookmark 频率极高，直接下发给客户端会造成放大效应；
 			// cacher 用自己的 1 秒节拍重新生成 bookmark。
@@ -1054,21 +1047,21 @@ func setCachingObjects(event *watchCacheEvent, versioner storage.Versioner) {
 		} else {
 			klog.Errorf("couldn't create cachingObject from: %#v", event.Object)
 		}
-		// Don't wrap PrevObject for update event (for create events it is nil).
-		// We only encode those to deliver DELETE watch events, so if
-		// event.Object is not nil it can be used only for watchers for which
-		// selector was satisfied for its previous version and is no longer
-		// satisfied for the current version.
-		// This is rare enough that it doesn't justify making deep-copy of the
-		// object (done by newCachingObject) every time.
+		// 不包装 update 事件的 PrevObject（create 事件中它为 nil）。
+		// 我们只在需要投递 DELETE watch 事件时编码它们，因此当
+		// event.Object 非 nil 时，它只可能被这类 watcher 使用：
+		// 其选择器对对象的旧版本满足、对当前版本
+		// 不再满足。
+		// 这种情况足够罕见，不值得每次都为此对象
+		// 做深拷贝（由 newCachingObject 完成）。
 	case watch.Deleted:
-		// Don't wrap Object for delete events - these are not to deliver any
-		// events. Only wrap PrevObject.
+		// 不包装 delete 事件的 Object——这些事件不用于投递
+		// 任何事件。只包装 PrevObject。
 		if object, err := newCachingObject(event.PrevObject); err == nil {
-			// Update resource version of the object.
-			// event.PrevObject is used to deliver DELETE watch events and
-			// for them, we set resourceVersion to <current> instead of
-			// the resourceVersion of the last modification of the object.
+			// 更新对象的 resource version。
+			// event.PrevObject 用于投递 DELETE watch 事件，
+			// 对于这类事件，我们把 resourceVersion 设为 <当前值>，而不是
+			// 对象最后一次修改时的 resourceVersion。
 			updateResourceVersion(object, versioner, event.ResourceVersion)
 			event.PrevObject = object
 		} else {
@@ -1084,29 +1077,29 @@ func setCachingObjects(event *watchCacheEvent, versioner storage.Versioner) {
 func (c *Cacher) dispatchEvent(event *watchCacheEvent) {
 	c.startDispatching(event)
 	defer c.finishDispatching()
-	// Watchers stopped after startDispatching will be delayed to finishDispatching,
+	// startDispatching 之后被停止的 watcher 会推迟到 finishDispatching 处理。
 
-	// Since add() can block, we explicitly add when cacher is unlocked.
-	// Dispatching event in nonblocking way first, which make faster watchers
-	// not be blocked by slower ones.
+	// 由于 add() 可能阻塞，我们在 cacher 未持锁时显式执行投递。
+	// 先以非阻塞方式分发事件，使快的 watcher
+	// 不会被慢的 watcher 阻塞。
 	if event.Type == watch.Bookmark {
 		for _, watcher := range c.watchersBuffer {
 			watcher.nonblockingAdd(event)
 		}
 	} else {
-		// Set up caching of object serializations only for dispatching this event.
+		// 仅为分发此事件而启用对象序列化的缓存。
 		//
-		// Storing serializations in memory would result in increased memory usage,
-		// but it would help for caching encodings for watches started from old
-		// versions. However, we still don't have a convincing data that the gain
-		// from it justifies increased memory usage, so for now we drop the cached
-		// serializations after dispatching this event.
+		// 把序列化结果常驻内存会增加内存占用，
+		// 但它有助于为从旧版本发起的 watch 缓存编码结果。
+		// 不过我们仍然没有令人信服的数据表明其收益
+		// 能抵得上内存占用的增加，所以目前我们在分发完此事件后
+		// 就丢弃缓存的序列化结果。
 		//
-		// Given that CachingObject is just wrapping the object and not perfoming
-		// deep-copying (until some field is explicitly being modified), we create
-		// it unconditionally to ensure safety and reduce deep-copying.
+		// 鉴于 CachingObject 只是包装对象而并不执行
+		// 深拷贝（直到某个字段被显式修改），我们无条件
+		// 创建它，以保证安全性并减少深拷贝。
 		//
-		// Make a shallow copy to allow overwriting Object and PrevObject.
+		// 做一次浅拷贝以允许覆写 Object 和 PrevObject。
 		wcEvent := *event
 		setCachingObjects(&wcEvent, c.versioner)
 		event = &wcEvent
@@ -1119,29 +1112,29 @@ func (c *Cacher) dispatchEvent(event *watchCacheEvent) {
 		}
 
 		if len(c.blockedWatchers) > 0 {
-			// dispatchEvent is called very often, so arrange
-			// to reuse timers instead of constantly allocating.
+			// dispatchEvent 被非常频繁地调用，因此安排
+			// 复用 timer 而不是不断分配。
 			startTime := time.Now()
 			timeout := c.dispatchTimeoutBudget.takeAvailable()
 			c.timer.Reset(timeout)
 
-			// Send event to all blocked watchers. As long as timer is running,
-			// `add` will wait for the watcher to unblock. After timeout,
-			// `add` will not wait, but immediately close a still blocked watcher.
-			// Hence, every watcher gets the chance to unblock itself while timer
-			// is running, not only the first ones in the list.
+			// 向所有被阻塞的 watcher 发送事件。只要 timer 还在运行，
+			// `add` 就会等待 watcher 解除阻塞。超时后，
+			// `add` 不再等待，而是立即关闭仍未解除阻塞的 watcher。
+			// 因此，每个 watcher 都有机会在 timer 运行期间
+			// 自行解除阻塞，而不仅仅是列表靠前的那些。
 			timer := c.timer
 			for _, watcher := range c.blockedWatchers {
 				if !watcher.add(event, timer) {
-					// fired, clean the timer by set it to nil.
+					// timer 已触发，将其置为 nil 以清理。
 					timer = nil
 				}
 			}
 
-			// Stop the timer if it is not fired
+			// 若 timer 未触发则停止它
 			if timer != nil && !timer.Stop() {
-				// Consume triggered (but not yet received) timer event
-				// so that future reuse does not get a spurious timeout.
+				// 消费已触发（但尚未被接收）的 timer 事件，
+				// 以免将来复用时出现虚假超时。
 				<-timer.C
 			}
 
@@ -1152,12 +1145,12 @@ func (c *Cacher) dispatchEvent(event *watchCacheEvent) {
 
 // startDispatchingBookmarkEventsLocked 把到期的 bookmark watcher 加入本轮的投递列表。
 func (c *Cacher) startDispatchingBookmarkEventsLocked() {
-	// Pop already expired watchers. However, explicitly ignore stopped ones,
-	// as we don't delete watcher from bookmarkWatchers when it is stopped.
+	// 弹出已到期的 watcher，但显式跳过已停止的，
+	// 因为 watcher 停止时我们不会把它从 bookmarkWatchers 中删除。
 	for _, watchers := range c.bookmarkWatchers.popExpiredWatchersThreadUnsafe() {
 		for _, watcher := range watchers {
-			// c.Lock() is held here.
-			// watcher.stopThreadUnsafe() is protected by c.Lock()
+			// 此处持有 c.Lock()。
+			// watcher.stopThreadUnsafe() 由 c.Lock() 保护
 			if watcher.stopped {
 				continue
 			}
@@ -1167,74 +1160,74 @@ func (c *Cacher) startDispatchingBookmarkEventsLocked() {
 	}
 }
 
-// startDispatching chooses watchers potentially interested in a given event
-// a marks dispatching as true.
+// startDispatching 选出可能关心给定事件的 watcher，
+// 并把 dispatching 标记为 true。
 //
 // 通过 namespace/name 与索引值两套索引快速收敛候选 watcher，避免 O(全部 watcher) 遍历。
 func (c *Cacher) startDispatching(event *watchCacheEvent) {
-	// It is safe to call triggerValuesThreadUnsafe here, because at this
-	// point only this thread can access this event (we create a separate
-	// watchCacheEvent for every dispatch).
+	// 在这里调用 triggerValuesThreadUnsafe 是安全的，因为此时
+	// 只有本线程能访问该事件（我们每次分发都会
+	// 创建独立的 watchCacheEvent）。
 	triggerValues, supported := c.triggerValuesThreadUnsafe(event)
 
 	c.Lock()
 	defer c.Unlock()
 
 	c.dispatching = true
-	// We are reusing the slice to avoid memory reallocations in every
-	// dispatchEvent() call. That may prevent Go GC from freeing items
-	// from previous phases that are sitting behind the current length
-	// of the slice, but there is only a limited number of those and the
-	// gain from avoiding memory allocations is much bigger.
+	// 我们复用该切片，以避免在每次
+	// dispatchEvent() 调用中重新分配内存。这可能使 Go GC 无法释放
+	// 之前阶段遗留在当前切片长度之后的
+	// 元素，但这样的元素数量有限，
+	// 而避免内存分配带来的收益要大得多。
 	c.watchersBuffer = c.watchersBuffer[:0]
 
 	if event.Type == watch.Bookmark {
 		c.startDispatchingBookmarkEventsLocked()
-		// return here to reduce following code indentation and diff
+		// 在此返回，以减少后续代码的缩进和 diff
 		return
 	}
 
-	// iterate over watchers for each applicable namespace/name tuple
+	// 对每个适用的 namespace/name 组合遍历 watcher
 	namespace := event.ObjFields["metadata.namespace"]
 	name := event.ObjFields["metadata.name"]
 	if len(namespace) > 0 {
 		if len(name) > 0 {
-			// namespaced watchers scoped by name
+			// 按 name 限定作用域的 namespaced watcher
 			for _, watcher := range c.watchers.allWatchers[namespacedName{namespace: namespace, name: name}] {
 				c.watchersBuffer = append(c.watchersBuffer, watcher)
 			}
 		}
-		// namespaced watchers not scoped by name
+		// 未按 name 限定作用域的 namespaced watcher
 		for _, watcher := range c.watchers.allWatchers[namespacedName{namespace: namespace}] {
 			c.watchersBuffer = append(c.watchersBuffer, watcher)
 		}
 	}
 	if len(name) > 0 {
-		// cluster-wide watchers scoped by name
+		// 按 name 限定作用域的 cluster-wide watcher
 		for _, watcher := range c.watchers.allWatchers[namespacedName{name: name}] {
 			c.watchersBuffer = append(c.watchersBuffer, watcher)
 		}
 	}
-	// cluster-wide watchers unscoped by name
+	// 未按 name 限定作用域的 cluster-wide watcher
 	for _, watcher := range c.watchers.allWatchers[namespacedName{}] {
 		c.watchersBuffer = append(c.watchersBuffer, watcher)
 	}
 
 	if supported {
-		// Iterate over watchers interested in the given values of the trigger.
+		// 遍历关心 trigger 给定取值的 watcher。
 		for _, triggerValue := range triggerValues {
 			for _, watcher := range c.watchers.valueWatchers[triggerValue] {
 				c.watchersBuffer = append(c.watchersBuffer, watcher)
 			}
 		}
 	} else {
-		// supported equal to false generally means that trigger function
-		// is not defined (or not aware of any indexes). In this case,
-		// watchers filters should generally also don't generate any
-		// trigger values, but can cause problems in case of some
-		// misconfiguration. Thus we paranoidly leave this branch.
+		// supported 为 false 通常意味着 trigger 函数
+		// 未定义（或不感知任何索引）。这种情况下，
+		// watcher 过滤器通常也不应生成任何
+		// trigger 取值，但某些错误配置仍可能引发问题，
+		// 因此出于谨慎我们保留这个分支。
 
-		// Iterate over watchers interested in exact values for all values.
+		// 遍历对所有精确取值感兴趣的 watcher。
 		for _, watchers := range c.watchers.valueWatchers {
 			for _, watcher := range watchers {
 				c.watchersBuffer = append(c.watchersBuffer, watcher)
@@ -1243,10 +1236,10 @@ func (c *Cacher) startDispatching(event *watchCacheEvent) {
 	}
 }
 
-// finishDispatching stops all the watchers that were supposed to be
-// stopped in the meantime, but it was deferred to avoid closing input
-// channels of watchers, as add() may still have writing to it.
-// It also marks dispatching as false.
+// finishDispatching 停止所有在此期间本应停止、但被推迟的
+// watcher——推迟是为了避免关闭 watcher 的输入通道，
+// 因为 add() 可能仍在向其写入。
+// 它同时把 dispatching 标记为 false。
 //
 // 延迟停止 watcher 是为了避免与 add() 并发关闭 channel（会 panic）。
 func (c *Cacher) finishDispatching() {
@@ -1262,7 +1255,7 @@ func (c *Cacher) finishDispatching() {
 		if watcher.stopped {
 			continue
 		}
-		// requeue the watcher for the next bookmark if needed.
+		// 如有需要，把 watcher 重新入队以等待下一次 bookmark。
 		c.bookmarkWatchers.addWatcherThreadUnsafe(watcher)
 	}
 	c.expiredBookmarkWatchers = c.expiredBookmarkWatchers[:0]
@@ -1306,13 +1299,13 @@ func (c *Cacher) MarkConsistent(consistent bool) {
 	c.watchCache.storage.MarkConsistent(consistent)
 }
 
-// Stop implements the graceful termination.
+// Stop 实现优雅终止。
 //
 // 幂等：cacher 会与子资源共享，重复 Stop 是正常情况，直接返回。
 func (c *Cacher) Stop() {
 	c.stopLock.Lock()
 	if c.stopped {
-		// avoid stopping twice (note: cachers are shared with subresources)
+		// 避免停止两次（注意：cacher 会与子资源共享）
 		c.stopLock.Unlock()
 		return
 	}
@@ -1338,9 +1331,9 @@ func forgetWatcher(c *Cacher, w *cacheWatcher, index int, scope namespacedName, 
 
 		w.setDrainInputBufferLocked(drainWatcher)
 
-		// It's possible that the watcher is already not in the structure (e.g. in case of
-		// simultaneous Stop() and terminateAllWatchers(), but it is safe to call stopLocked()
-		// on a watcher multiple times.
+		// 该 watcher 有可能已经不在结构中（例如 Stop() 与
+		// terminateAllWatchers() 同时发生的情形），但对同一个
+		// watcher 多次调用 stopLocked() 是安全的。
 		c.watchers.deleteWatcher(index, scope, triggerValue, triggerSupported)
 		c.stopWatcherLocked(w)
 	}
@@ -1371,7 +1364,7 @@ func filterWithAttrsAndPrefixFunction(prefix string, p storage.SelectionPredicat
 	return filterFunc
 }
 
-// LastSyncResourceVersion returns resource version to which the underlying cache is synced.
+// LastSyncResourceVersion 返回底层缓存已同步到的 resource version。
 //
 // 缓存未就绪时返回 503，调用方（如健康检查）据此判断是否可用。
 func (c *Cacher) LastSyncResourceVersion() (uint64, error) {
@@ -1383,10 +1376,10 @@ func (c *Cacher) LastSyncResourceVersion() (uint64, error) {
 	return c.versioner.ParseResourceVersion(resourceVersion)
 }
 
-// getBookmarkAfterResourceVersionLockedFunc returns a function that
-// spits a ResourceVersion after which the bookmark event will be delivered.
+// getBookmarkAfterResourceVersionLockedFunc 返回一个函数，
+// 该函数给出其后将投递 bookmark 事件的 ResourceVersion。
 //
-// The returned function must be called under the watchCache lock.
+// 返回的函数必须在持有 watchCache 锁时调用。
 //
 // 返回闭包而不是值，是因为其中的 watchCache.resourceVersion 必须在真正使用时
 // （持锁状态下）读取，才能保证与事件区间一致。
@@ -1399,28 +1392,28 @@ func (c *Cacher) getBookmarkAfterResourceVersionLockedFunc(parsedResourceVersion
 	case len(opts.ResourceVersion) == 0:
 		return func() uint64 { return requiredResourceVersion }, nil
 	case parsedResourceVersion == 0:
-		// here we assume that watchCache locked is already held
+		// 此处假定已经持有 watchCache 锁
 		return func() uint64 { return c.watchCache.resourceVersion }, nil
 	default:
 		return func() uint64 { return parsedResourceVersion }, nil
 	}
 }
 
-// isListWatchRequest is mirrored in staging/src/k8s.io/apiserver/pkg/endpoints/handlers/get.go
+// isListWatchRequest 在 staging/src/k8s.io/apiserver/pkg/endpoints/handlers/get.go 中有对应实现
 //
 // 只有同时要求初始事件与 bookmark 的请求才是 watch-list 语义。
 func isListWatchRequest(opts storage.ListOptions) bool {
 	return opts.SendInitialEvents != nil && *opts.SendInitialEvents && opts.Predicate.AllowWatchBookmarks
 }
 
-// getWatchCacheResourceVersion returns a ResourceVersion to which the watch cache must be synchronized to
+// getWatchCacheResourceVersion 返回 watch 缓存必须同步到的 ResourceVersion
 //
-// Depending on the input parameters, the semantics of the returned ResourceVersion are:
-//   - must be at Exact RV (when parsedWatchResourceVersion > 0)
-//   - can be at Any RV (when parsedWatchResourceVersion = 0)
-//   - must be at Most Recent RV (return an RV from etcd)
+// 取决于输入参数，返回的 ResourceVersion 的语义为：
+//   - 必须等于 Exact RV（当 parsedWatchResourceVersion > 0 时）
+//   - 可以是 Any RV（当 parsedWatchResourceVersion = 0 时）
+//   - 必须等于 Most Recent RV（从 etcd 返回一个 RV）
 //
-// note that the above semantic is enforced by the API validation (defined elsewhere):
+// 注意：上述语义由 API 校验（定义在其他位置）强制保证：
 //
 //	if SendInitiaEvents != nil => ResourceVersionMatch = NotOlderThan
 //	if ResourceVersionmatch != nil => ResourceVersionMatch = NotOlderThan & SendInitialEvents != nil
@@ -1428,7 +1421,7 @@ func (c *Cacher) getWatchCacheResourceVersion(ctx context.Context, parsedWatchRe
 	if len(opts.ResourceVersion) != 0 {
 		return parsedWatchResourceVersion, nil
 	}
-	// legacy case
+	// 遗留（legacy）场景
 	if opts.SendInitialEvents == nil && opts.ResourceVersion == "" {
 		return 0, nil
 	}
@@ -1436,21 +1429,21 @@ func (c *Cacher) getWatchCacheResourceVersion(ctx context.Context, parsedWatchRe
 	return rv, err
 }
 
-// waitUntilWatchCacheFreshAndForceAllEvents waits until cache is at least
-// as fresh as given requestedWatchRV if sendInitialEvents was requested.
-// otherwise, we allow for establishing the connection because the clients
-// can wait for events without unnecessary blocking.
+// waitUntilWatchCacheFreshAndForceAllEvents 在请求了 sendInitialEvents 时，
+// 等待缓存至少与给定的 requestedWatchRV 一样新；
+// 否则允许直接建立连接，因为客户端
+// 无需不必要的阻塞即可等待事件。
 //
 // 仅在需要回放全量初始事件时才等待缓存追平；普通 watch 允许立即建立连接。
 func (c *Cacher) waitUntilWatchCacheFreshAndForceAllEvents(ctx context.Context, requestedWatchRV uint64, opts storage.ListOptions) error {
 	if opts.SendInitialEvents != nil && *opts.SendInitialEvents {
-		// Here be dragons:
-		// Since the etcd feature checker needs to check all members
-		// to determine whether a given feature is supported,
-		// we may receive a positive response even if the feature is not supported.
+		// 前方有坑（here be dragons）：
+		// 由于 etcd 特性检查器需要检查所有成员
+		// 才能确定某特性是否受支持，
+		// 即使该特性不受支持，我们也可能收到肯定响应。
 		//
-		// In this very rare scenario, the worst case will be that this
-		// request will wait for 3 seconds before it fails.
+		// 在这种极罕见的场景下，最坏情况是该
+		// 请求会等待 3 秒后才失败。
 		span := tracing.SpanFromContext(ctx)
 		consistentReadSupported := delegator.ConsistentReadSupported()
 		c.watchCache.RLock()
@@ -1466,18 +1459,19 @@ func (c *Cacher) waitUntilWatchCacheFreshAndForceAllEvents(ctx context.Context, 
 	return nil
 }
 
-// Wait blocks until the cacher is Ready or Stopped, it returns an error if Stopped.
+// Wait 阻塞直到 cacher 就绪（Ready）或已停止（Stopped），若已停止则返回错误。
 func (c *Cacher) Wait(ctx context.Context) error {
 	return c.ready.wait(ctx)
 }
 
-// setInitialEventsEndBookmarkIfRequested sets initialEventsEndBookmark field in watchCacheInterval for watchlist request
+// setInitialEventsEndBookmarkIfRequested 为 watchlist 请求在 watchCacheInterval 中设置 initialEventsEndBookmark 字段
 //
 // bookmark 的 RV 必须是“初始事件区间结束时”的 RV，客户端据此知道可以从哪里继续 watch。
 func (c *Cacher) setInitialEventsEndBookmarkIfRequested(cacheInterval *watchCacheInterval, opts storage.ListOptions, currentResourceVersion uint64) {
 	if opts.SendInitialEvents != nil && *opts.SendInitialEvents && opts.Predicate.AllowWatchBookmarks {
-		// We don't need to set the InitialEventsAnnotation for this bookmark event,
-		// because this will be automatically set during event conversion in cacheWatcher.convertToWatchEvent method
+		// 无需为该 bookmark 事件设置 InitialEventsAnnotation，
+		// 因为它会在 cacheWatcher.convertToWatchEvent 方法中
+		// 转换事件时被自动设置
 		initialEventsEndBookmark := &watchCacheEvent{
 			Type:            watch.Bookmark,
 			Object:          c.newFunc(),
@@ -1514,7 +1508,7 @@ func (c *Cacher) Ready() bool {
 	return err == nil
 }
 
-// errWatcher implements watch.Interface to return a single error
+// errWatcher 以实现 watch.Interface 的方式返回单个错误
 //
 // 用于“watch 已建立但立即失败”的场景：客户端先收到 200，再在事件流中收到 Error 事件。
 type errWatcher struct {
@@ -1524,7 +1518,7 @@ type errWatcher struct {
 // newErrWatcher 把错误包装成 watch.Error 事件；若错误本身是 runtime.Object 或
 // StatusError 则保留其结构，否则构造通用 500 Status。
 func newErrWatcher(err error) *errWatcher {
-	// Create an error event
+	// 创建一个错误事件
 	errEvent := watch.Event{Type: watch.Error}
 	switch err := err.(type) {
 	case runtime.Object:
@@ -1540,7 +1534,7 @@ func newErrWatcher(err error) *errWatcher {
 		}
 	}
 
-	// Create a watcher with room for a single event, populate it, and close the channel
+	// 创建一个容量为单个事件的 watcher，填入事件，然后关闭通道
 	watcher := &errWatcher{result: make(chan watch.Event, 1)}
 	watcher.result <- errEvent
 	close(watcher.result)
@@ -1552,7 +1546,7 @@ func newErrWatcher(err error) *errWatcher {
 //
 // 只有递归查询且底层启用了快照时，缓存才有可能服务精确 RV；否则一律委托。
 func (c *Cacher) ShouldDelegateExactRV(resourceVersion string, recursive bool) (delegator.Result, error) {
-	// Not Recursive is not supported unitl exact RV is implemented for WaitUntilFreshAndGet.
+	// 不支持 Non-Recursive，直到 WaitUntilFreshAndGet 实现了精确 RV 为止。
 	if !recursive || !c.watchCache.storage.SnapshottingEnabled() {
 		return delegator.Result{ShouldDelegate: true}, nil
 	}
@@ -1565,7 +1559,7 @@ func (c *Cacher) ShouldDelegateExactRV(resourceVersion string, recursive bool) (
 
 // ShouldDelegateContinue 判断带 continue token 的翻页请求是否应委托给底层存储。
 func (c *Cacher) ShouldDelegateContinue(continueToken string, recursive bool) (delegator.Result, error) {
-	// Not Recursive is not supported unitl exact RV is implemented for WaitUntilFreshAndGet.
+	// 不支持 Non-Recursive，直到 WaitUntilFreshAndGet 实现了精确 RV 为止。
 	if !recursive || !c.watchCache.storage.SnapshottingEnabled() {
 		return delegator.Result{ShouldDelegate: true}, nil
 	}
@@ -1576,7 +1570,7 @@ func (c *Cacher) ShouldDelegateContinue(continueToken string, recursive bool) (d
 	if continueRV > 0 {
 		return c.shouldDelegateExactRV(uint64(continueRV))
 	} else {
-		// Continue with negative RV is a consistent read.
+		// 携带负数 RV 的 Continue 属于一致读。
 		return c.ShouldDelegateConsistentRead()
 	}
 }
@@ -1584,7 +1578,7 @@ func (c *Cacher) ShouldDelegateContinue(continueToken string, recursive bool) (d
 // shouldDelegateExactRV 判断缓存能否服务精确 RV；缓存未追平未来 RV 时，
 // 只有底层支持一致读才可能委托。
 func (c *Cacher) shouldDelegateExactRV(rv uint64) (delegator.Result, error) {
-	// Exact requests on future revision require support for consistent read, but are not a consistent read by themselves.
+	// 对未来的 revision 发起 Exact 请求需要一致读支持，但其本身并不是一致读。
 	if c.watchCache.notFresh(rv) {
 		return delegator.Result{
 			ShouldDelegate: !delegator.ConsistentReadSupported(),
@@ -1604,17 +1598,17 @@ func (c *Cacher) ShouldDelegateConsistentRead() (delegator.Result, error) {
 	}, nil
 }
 
-// Implements watch.Interface.
+// 实现了 watch.Interface。
 func (c *errWatcher) ResultChan() <-chan watch.Event {
 	return c.result
 }
 
-// Implements watch.Interface.
+// 实现了 watch.Interface。
 func (c *errWatcher) Stop() {
-	// no-op
+	// 空操作（no-op）
 }
 
-// immediateCloseWatcher implements watch.Interface that is immediately closed
+// immediateCloseWatcher 实现了一个立即关闭的 watch.Interface
 type immediateCloseWatcher struct {
 	result chan watch.Event
 }
@@ -1626,12 +1620,12 @@ func newImmediateCloseWatcher() *immediateCloseWatcher {
 	return watcher
 }
 
-// Implements watch.Interface.
+// 实现了 watch.Interface。
 func (c *immediateCloseWatcher) ResultChan() <-chan watch.Event {
 	return c.result
 }
 
-// Implements watch.Interface.
+// 实现了 watch.Interface。
 func (c *immediateCloseWatcher) Stop() {
-	// no-op
+	// 空操作（no-op）
 }

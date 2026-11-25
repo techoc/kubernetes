@@ -36,63 +36,56 @@ import (
 // 这里用类型别名而非新类型，方便直接把字符串常量作为 map 的 key 与开关使用。
 type Feature = string
 
-// RequestWatchProgress is an etcd feature for progress notification requests.
-// Default: false.
+// RequestWatchProgress 是 etcd 的一项特性，用于进度通知请求。默认值：false。
 var RequestWatchProgress Feature = "RequestWatchProgress"
 
-// RangeStream is an etcd feature (etcd 3.7+) for the streaming list RPC.
-// Default: true. MarkUnsupported flips it to false on an Unimplemented response,
-// reverting to true after a recheck interval.
+// RangeStream 是 etcd 的一项特性（etcd 3.7+），对应流式 list RPC。
+// 默认值：true。收到 Unimplemented 响应时 MarkUnsupported 会把它翻转为 false，
+// 并在一个重检（recheck）间隔后恢复为 true。
 //
 // 这种“乐观启用 + 失败降级 + 定期重探”的模式避免了启动时探测带来的
 // 额外延迟，同时保证与旧版 etcd 的兼容性。
 var RangeStream Feature = "RangeStream"
 
-// Versioner abstracts setting and retrieving metadata fields from database response
-// onto the object ot list. It is required to maintain storage invariants - updating an
-// object twice with the same data except for the ResourceVersion and SelfLink must be
-// a no-op. A resourceVersion of type uint64 is a 'raw' resourceVersion,
-// intended to be sent directly to or from the backend. A resourceVersion of
-// type string is a 'safe' resourceVersion, intended for consumption by users.
+// Versioner 抽象了「把数据库响应中的元数据字段设置/读取到对象或列表上」这一行为。
+// 它是维护存储不变量所必需的——除 ResourceVersion 和 SelfLink 外用相同数据
+// 连续更新同一对象两次，必须是空操作（no-op）。uint64 类型的 resourceVersion
+// 是「原始（raw）」resourceVersion，直接与后端之间收发；string 类型的
+// resourceVersion 是「安全（safe）」resourceVersion，供用户使用。
 //
 // 该不变量是 etcd 乐观并发控制的基础：resourceVersion 不参与对象内容比较，
 // 否则无意义的重复写入会不断递增版本号并唤醒所有 watcher。
 type Versioner interface {
-	// UpdateObject sets storage metadata into an API object. Returns an error if the object
-	// cannot be updated correctly. May return nil if the requested object does not need metadata
-	// from database.
+	// UpdateObject 把存储元数据写入 API 对象。若对象无法被正确更新则返回错误。
+	// 若请求的对象不需要来自数据库的元数据，可以返回 nil。
 	UpdateObject(obj runtime.Object, resourceVersion uint64) error
-	// UpdateList sets the resource version into an API list object. Returns an error if the object
-	// cannot be updated correctly. May return nil if the requested object does not need metadata from
-	// database. continueValue is optional and indicates that more results are available if the client
-	// passes that value to the server in a subsequent call. remainingItemCount indicates the number
-	// of remaining objects if the list is partial. The remainingItemCount field is omitted during
-	// serialization if it is set to nil.
+	// UpdateList 把 resource version 写入 API 列表对象。若对象无法被正确更新则返回错误。
+	// 若请求的对象不需要来自数据库的元数据，可以返回 nil。continueValue 是可选的，
+	// 它表示：只要客户端在后续调用中把该值传给服务端，就有更多结果可取。
+	// remainingItemCount 表示列表为部分结果时剩余对象的数量；
+	// 若将其设为 nil，序列化时会省略 remainingItemCount 字段。
 	UpdateList(obj runtime.Object, resourceVersion uint64, continueValue string, remainingItemCount *int64) error
-	// PrepareObjectForStorage should set SelfLink and ResourceVersion to the empty value. Should
-	// return an error if the specified object cannot be updated.
+	// PrepareObjectForStorage 应当把 SelfLink 和 ResourceVersion 置为空值。
+	// 若指定对象无法被更新，应当返回错误。
 	PrepareObjectForStorage(obj runtime.Object) error
-	// ObjectResourceVersion returns the resource version (for persistence) of the specified object.
-	// Should return an error if the specified object does not have a persistable version.
+	// ObjectResourceVersion 返回指定对象的 resource version（用于持久化）。
+	// 若指定对象没有可持久化的版本，应当返回错误。
 	ObjectResourceVersion(obj runtime.Object) (uint64, error)
 
-	// ParseResourceVersion takes a resource version argument and
-	// converts it to the storage backend. For watch we should pass to helper.Watch().
-	// Because resourceVersion is an opaque value, the default watch
-	// behavior for non-zero watch is to watch the next value (if you pass
-	// "1", you will see updates from "2" onwards).
+	// ParseResourceVersion 接收一个 resource version 参数并将其转换为存储后端的形式。
+	// 对于 watch，应当把结果传给 helper.Watch()。由于 resourceVersion 是一个不透明值，
+	// 非零 resourceVersion 的默认 watch 行为是从下一个值开始观察
+	// （传 "1"，你会看到从 "2" 开始的更新）。
 	ParseResourceVersion(resourceVersion string) (uint64, error)
 }
 
-// ResponseMeta contains information about the database metadata that is associated with
-// an object. It abstracts the actual underlying objects to prevent coupling with concrete
-// database and to improve testability.
+// ResponseMeta 包含与对象关联的数据库元数据信息。它抽象了实际底层对象，
+// 以避免与具体数据库耦合，并提升可测试性。
 type ResponseMeta struct {
-	// TTL is the time to live of the node that contained the returned object. It may be
-	// zero or negative in some cases (objects may be expired after the requested
-	// expiration time due to server lag).
+	// TTL 是包含所返回对象的那个节点的存活时间（time to live）。某些情况下它可能
+	// 为零或负值（由于服务端滞后，对象可能在所请求的过期时间之后才被清理）。
 	TTL int64
-	// The resource version of the node that contained the returned object.
+	// 包含所返回对象的那个节点的 resource version。
 	ResourceVersion uint64
 }
 
@@ -100,8 +93,8 @@ type ResponseMeta struct {
 // 返回单个字符串意味着一个索引键只对应一个值；多值索引需编码为单一字符串。
 type IndexerFunc func(obj runtime.Object) string
 
-// IndexerFuncs is a mapping from `<index name>` to function that
-// for a given object computes `<value for that index>`.
+// IndexerFuncs 是从 `<index name>`（索引名）到函数的映射，
+// 该函数针对给定对象计算 `<value for that index>`（该索引对应的值）。
 type IndexerFuncs map[string]IndexerFunc
 
 // Everything 接受所有对象。注意：SelectionPredicate 内含接口字段，不要直接修改此包级变量。
@@ -110,27 +103,25 @@ var Everything = SelectionPredicate{
 	Field: fields.Everything(),
 }
 
-// MatchValue defines a pair (`<index name>`, `<value for that index>`).
+// MatchValue 定义一个二元组（`<index name>`，`<value for that index>`）。
 type MatchValue struct {
 	IndexName string
 	Value     string
 }
 
-// Pass an UpdateFunc to Interface.GuaranteedUpdate to make an update
-// that is guaranteed to succeed.
-// See the comment for GuaranteedUpdate for more details.
+// 向 Interface.GuaranteedUpdate 传入一个 UpdateFunc，即可执行一次
+// 保证会成功的更新。更多细节见 GuaranteedUpdate 的注释。
 //
 // 返回的 ttl 为 nil 表示保持原 TTL；非 nil 则覆盖。返回 error 会中止重试。
 type UpdateFunc func(input runtime.Object, res ResponseMeta) (output runtime.Object, ttl *uint64, err error)
 
-// ValidateObjectFunc is a function to act on a given object. An error may be returned
-// if the hook cannot be completed. The function may NOT transform the provided
-// object.
-// NOTE: the object in obj may be nil if it cannot be read from the
-// storage, due to transformation or decode error.
+// ValidateObjectFunc 是针对给定对象执行操作（校验）的函数。若该钩子无法完成，
+// 可以返回错误。此函数不得（NOT）转换所传入的对象。
+// 注意：若因转换（transformation）或解码错误而无法从存储中读出对象，
+// obj 可能为 nil。
 type ValidateObjectFunc func(ctx context.Context, obj runtime.Object) error
 
-// ValidateAllObjectFunc is a "admit everything" instance of ValidateObjectFunc.
+// ValidateAllObjectFunc 是 ValidateObjectFunc 的「一律放行」实例。
 func ValidateAllObjectFunc(ctx context.Context, obj runtime.Object) error {
 	return nil
 }
@@ -138,22 +129,22 @@ func ValidateAllObjectFunc(ctx context.Context, obj runtime.Object) error {
 // Preconditions 是在执行操作（更新、删除等）之前必须满足的前置条件，
 // 仅包含不可变身份字段（UID）与乐观锁字段（ResourceVersion）。
 type Preconditions struct {
-	// Specifies the target UID.
+	// 指定目标 UID。
 	// +optional
 	UID *types.UID `json:"uid,omitempty"`
-	// Specifies the target ResourceVersion
+	// 指定目标 ResourceVersion
 	// +optional
 	ResourceVersion *string `json:"resourceVersion,omitempty"`
 }
 
-// NewUIDPreconditions returns a Preconditions with UID set.
+// NewUIDPreconditions 返回一个已设置 UID 的 Preconditions。
 func NewUIDPreconditions(uid string) *Preconditions {
 	u := types.UID(uid)
 	return &Preconditions{UID: &u}
 }
 
-// Check verifies the preconditions against obj. A nil receiver means "no
-// preconditions" and always succeeds, so callers need not branch on nil.
+// Check 针对 obj 校验前置条件。接收者为 nil 表示「无前置条件」，
+// 永远校验成功，因此调用方无需对 nil 做分支判断。
 func (p *Preconditions) Check(key string, obj runtime.Object) error {
 	if p == nil {
 		return nil
@@ -183,24 +174,24 @@ func (p *Preconditions) Check(key string, obj runtime.Object) error {
 	return nil
 }
 
-// Interface offers a common interface for object marshaling/unmarshaling operations and
-// hides all the storage-related operations behind it.
+// Interface 为对象的序列化/反序列化操作提供统一接口，
+// 并把所有存储相关操作隐藏在它背后。
 //
 // 所有实现都必须保证方法并发安全；ctx 的取消应尽快中止底层请求。
 type Interface interface {
-	// Returns Versioner associated with this interface.
+	// 返回与此接口关联的 Versioner。
 	Versioner() Versioner
 
-	// Create adds a new object at a key unless it already exists. 'ttl' is time-to-live
-	// in seconds (0 means forever). If no error is returned and out is not nil, out will be
-	// set to the read value from database.
+	// Create 在某个 key 上新建对象，除非该 key 已存在。'ttl' 是以秒计的
+	// 存活时间（0 表示永不过期）。若未返回错误且 out 非 nil，
+	// out 将被设置为从数据库读回的值。
 	Create(ctx context.Context, key string, obj, out runtime.Object, ttl uint64) error
 
-	// Delete removes the specified key and returns the value that existed at that spot.
-	// If key didn't exist, it will return NotFound storage error.
-	// If 'cachedExistingObject' is non-nil, it can be used as a suggestion about the
-	// current version of the object to avoid read operation from storage to get it.
-	// However, the implementations have to retry in case suggestion is stale.
+	// Delete 删除指定的 key，并返回该位置原本存在的值。
+	// 若 key 不存在，将返回 NotFound 存储错误。
+	// 若 'cachedExistingObject' 非 nil，可把它当作关于对象当前版本的建议，
+	// 以免再从存储读取一次取回它。
+	// 但实现必须在该建议过期时进行重试。
 	Delete(
 		ctx context.Context, key string, out runtime.Object, preconditions *Preconditions,
 		validateDeletion ValidateObjectFunc, cachedExistingObject runtime.Object, opts DeleteOptions) error
@@ -213,19 +204,19 @@ type Interface interface {
 	// 以一个 "ADDED" 事件发出，然后才开始 watch。
 	Watch(ctx context.Context, key string, opts ListOptions) (watch.Interface, error)
 
-	// Get unmarshals object found at key into objPtr. On a not found error, will either
-	// return a zero object of the requested type, or an error, depending on 'opts.ignoreNotFound'.
-	// Treats empty responses and nil response nodes exactly like a not found error.
-	// The returned contents may be delayed, but it is guaranteed that they will
-	// match 'opts.ResourceVersion' according 'opts.ResourceVersionMatch'.
+	// Get 把 key 处找到的对象反序列化到 objPtr。遇到 not found 错误时，
+	// 依据 'opts.ignoreNotFound' 返回所请求类型的零值对象、或者返回错误。
+	// 空响应与 nil 响应节点与 not found 错误按完全相同的方式处理。
+	// 返回的内容可能滞后，但保证会依据 'opts.ResourceVersionMatch'
+	// 匹配 'opts.ResourceVersion'。
 	Get(ctx context.Context, key string, opts GetOptions, objPtr runtime.Object) error
 
-	// GetList unmarshalls objects found at key into a *List api object (an object
-	// that satisfies runtime.IsList definition).
-	// If 'opts.Recursive' is false, 'key' is used as an exact match. If `opts.Recursive'
-	// is true, 'key' is used as a prefix.
-	// The returned contents may be delayed, but it is guaranteed that they will
-	// match 'opts.ResourceVersion' according 'opts.ResourceVersionMatch'.
+	// GetList 把 key 处找到的多个对象反序列化进一个 *List API 对象
+	// （即满足 runtime.IsList 定义的对象）。
+	// 若 'opts.Recursive' 为 false，'key' 用作精确匹配；若 'opts.Recursive'
+	// 为 true，'key' 用作前缀。
+	// 返回的内容可能滞后，但保证会依据 'opts.ResourceVersionMatch'
+	// 匹配 'opts.ResourceVersion'。
 	GetList(ctx context.Context, key string, opts ListOptions, listObj runtime.Object) error
 
 	// GuaranteedUpdate 会反复调用 'tryUpdate()' 更新 key 'key'（其类型为 'destination'），
@@ -263,97 +254,90 @@ type Interface interface {
 		ctx context.Context, key string, destination runtime.Object, ignoreNotFound bool,
 		preconditions *Preconditions, tryUpdate UpdateFunc, cachedExistingObject runtime.Object) error
 
-	// Stats returns storage stats.
+	// Stats 返回存储的统计信息。
 	Stats(ctx context.Context) (Stats, error)
 
-	// ReadinessCheck checks if the storage is ready for accepting requests.
+	// ReadinessCheck 检查存储是否已就绪、可以接受请求。
 	ReadinessCheck() error
 
-	// RequestWatchProgress requests the a watch stream progress status be sent in the
-	// watch response stream as soon as possible.
-	// Used for monitor watch progress even if watching resources with no changes.
+	// RequestWatchProgress 请求尽快在 watch 响应流中发送一条 watch 流的
+	// progress 状态。用于在监听的对象没有任何变化时也能监控 watch 进度。
 	//
-	// If watch is lagging, progress status might:
-	// * be pointing to stale resource version. Use etcd KV request to get linearizable resource version.
-	// * not be delivered at all. It's recommended to poll request progress periodically.
+	// 如果 watch 存在滞后，progress 状态可能：
+	// * 指向过期的 resource version。可使用 etcd KV 请求获取线性一致（linearizable）的 resource version。
+	// * 完全不被投递。建议周期性地轮询请求 progress。
 	//
-	// Note: Only watches with matching context grpc metadata will be notified.
+	// 注意：只有 context 中 grpc metadata 相匹配的 watch 会收到通知。
 	// https://github.com/kubernetes/kubernetes/blob/9325a57125e8502941d1b0c7379c4bb80a678d5c/vendor/go.etcd.io/etcd/client/v3/watch.go#L1037-L1042
 	//
-	// TODO: Remove when storage.Interface will be separate from etc3.store.
-	// Deprecated: Added temporarily to simplify exposing RequestProgress for watch cache.
+	// TODO: 当 storage.Interface 与 etcd3.store 分离后移除。
+	// Deprecated: 临时添加，用于简化向 watch cache 暴露 RequestProgress。
 	RequestWatchProgress(ctx context.Context) error
 
-	// GetCurrentResourceVersion gets the current resource version from etcd.
-	// This method issues an empty list request and reads only the ResourceVersion from the object metadata
+	// GetCurrentResourceVersion 从 etcd 获取当前的 resource version。
+	// 该方法会发起一次空的 list 请求，且只从对象元数据中读取 ResourceVersion
 	GetCurrentResourceVersion(ctx context.Context) (uint64, error)
 
-	// EnableResourceSizeEstimation enables estimating resource size by providing function get keys from storage.
+	// EnableResourceSizeEstimation 通过提供一个从存储获取 key 的函数来启用资源大小估算。
 	EnableResourceSizeEstimation(KeysFunc) error
 
-	// CompactRevision returns latest observed revision that was compacted.
-	// Without ListFromCacheSnapshot enabled only locally executed compaction will be observed.
-	// Returns 0 if no compaction was yet observed.
+	// CompactRevision 返回最近一次观测到的已压缩（compacted）revision。
+	// 未启用 ListFromCacheSnapshot 时，只会观测到本地执行的压缩。
+	// 若尚未观测到任何压缩，返回 0。
 	CompactRevision() int64
 }
 
-// KeysFunc is a function prototype to fetch keys from storage.
+// KeysFunc 是从存储获取 key 的函数原型。
 type KeysFunc func(context.Context) ([]string, error)
 
-// GetOptions provides the options that may be provided for storage get operations.
+// GetOptions 提供存储 get 操作可以传入的选项。
 type GetOptions struct {
-	// IgnoreNotFound determines what is returned if the requested object is not found. If
-	// true, a zero object is returned. If false, an error is returned.
+	// IgnoreNotFound 决定所请求的对象未找到时返回什么：为 true 时返回零值对象，
+	// 为 false 时返回错误。
 	IgnoreNotFound bool
-	// ResourceVersion provides a resource version constraint to apply to the get operation
-	// as a "not older than" constraint: the result contains data at least as new as the provided
-	// ResourceVersion. The newest available data is preferred, but any data not older than this
-	// ResourceVersion may be served.
+	// ResourceVersion 为 get 操作施加一个「不早于（not older than）」的
+	// resource version 约束：结果包含的数据至少与所给的 ResourceVersion 一样新。
+	// 优先使用最新可用数据，但任何不早于该 ResourceVersion 的数据都可以被返回。
 	ResourceVersion string
 }
 
-// ListOptions provides the options that may be provided for storage list operations.
+// ListOptions 提供存储 list 操作可以传入的选项。
 type ListOptions struct {
-	// ResourceVersion provides a resource version constraint to apply to the list operation
-	// as a "not older than" constraint: the result contains data at least as new as the provided
-	// ResourceVersion. The newest available data is preferred, but any data not older than this
-	// ResourceVersion may be served.
+	// ResourceVersion 为 list 操作施加一个「不早于（not older than）」的
+	// resource version 约束：结果包含的数据至少与所给的 ResourceVersion 一样新。
+	// 优先使用最新可用数据，但任何不早于该 ResourceVersion 的数据都可以被返回。
 	ResourceVersion string
-	// ResourceVersionMatch provides the rule for how the resource version constraint applies. If set
-	// to the default value "" the legacy resource version semantic apply.
+	// ResourceVersionMatch 规定 resource version 约束的适用规则。若设为默认值 ""，
+	// 则沿用旧版（legacy）的 resource version 语义。
 	ResourceVersionMatch metav1.ResourceVersionMatch
-	// Predicate provides the selection rules for the list operation.
+	// Predicate 提供 list 操作的筛选规则。
 	Predicate SelectionPredicate
-	// Recursive determines whether the list or watch is defined for a single object located at the
-	// given key, or for the whole set of objects with the given key as a prefix.
+	// Recursive 决定 list 或 watch 的作用对象：是给定 key 处的单个对象，
+	// 还是以给定 key 为前缀的全部对象集合。
 	Recursive bool
-	// ProgressNotify determines whether storage-originated bookmark (progress notify) events should
-	// be delivered to the users. The option is ignored for non-watch requests.
+	// ProgressNotify 决定来自存储层的 bookmark（progress notify）事件是否应投递给用户。
+	// 非 watch 请求会忽略该选项。
 	//
-	// Firstly, note that this field is different from the Predicate.AllowWatchBookmarks field.
-	// Secondly, this field is intended for internal clients only such as the watch cache.
+	// 首先，注意此字段与 Predicate.AllowWatchBookmarks 字段不同。
+	// 其次，此字段仅供内部客户端（例如 watch cache）使用。
 	//
-	// This means that external clients do not have the ability to set this field directly.
-	// For example by setting the allowWatchBookmarks query parameter.
+	// 这意味着外部客户端无法直接设置该字段——例如无法通过设置
+	// allowWatchBookmarks 查询参数来开启。
 	//
-	// The motivation for this approach is the fact that the frequency
-	// of bookmark events from a storage like etcd might be very high.
-	// As the number of watch requests increases, the server load would also increase.
+	// 这样做的动机在于：像 etcd 这样的存储产生 bookmark 事件的频率
+	// 可能非常高。随着 watch 请求数量增长，服务器负载也会随之上升。
 	//
-	// Furthermore, the server is not obligated to provide bookmark events at all,
-	// as described in https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/956-watch-bookmark#proposal
+	// 此外，服务器完全没有义务提供 bookmark 事件，
+	// 详见 https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/956-watch-bookmark#proposal
 	ProgressNotify bool
-	// SendInitialEvents, when set together with Watch option,
-	// begin the watch stream with synthetic init events to build the
-	// whole state of all resources followed by a synthetic "Bookmark"
-	// event containing a ResourceVersion after which the server
-	// continues streaming events.
+	// SendInitialEvents 与 Watch 选项一起设置时，会以合成的初始事件开始 watch 流，
+	// 构建出所有资源的完整状态，随后跟一个携带 ResourceVersion 的合成 "Bookmark"
+	// 事件，之后服务器继续流式发送事件。
 	SendInitialEvents *bool
-	// RecordTimestamps requests that the storage layer wrap each emitted watch
-	// object in a WatchEventWithRecordTime carrying its decode timestamp, for dispatch
-	// latency telemetry. This is intended for internal clients only (the watch
-	// cache); external clients cannot set it. The watch cache strips the wrapper
-	// before storing or serializing the object, so it never reaches other watchers.
+	// RecordTimestamps 要求存储层把每个发出的 watch 对象包装进 WatchEventWithRecordTime，
+	// 携带其解码时间戳，用于分发延迟遥测（telemetry）。该选项仅供内部客户端
+	// （watch cache）使用，外部客户端无法设置。watch cache 在存储或序列化对象之前
+	// 会剥离这层包装，因此它永远不会到达其他 watcher。
 	RecordTimestamps bool
 }
 
@@ -363,24 +347,22 @@ type ListOptions struct {
 // 绝不会发送给 watch 客户端。
 type WatchEventWithRecordTime interface {
 	runtime.Object
-	// RecordTime returns the decode timestamp of the wrapped event.
+	// RecordTime 返回被包装事件的解码时间戳。
 	RecordTime() time.Time
-	// Unwrap returns the underlying object.
+	// Unwrap 返回底层的原始对象。
 	Unwrap() runtime.Object
 }
 
-// DeleteOptions provides the options that may be provided for storage delete operations.
+// DeleteOptions 提供存储 delete 操作可以传入的选项。
 type DeleteOptions struct {
-	// ExpectTransformOrDecodeError, if enabled, will return an error if the object can be
-	// transformed and decoded.
-	// NOTE: for normal deletion flow it should always be false, it may be
-	// enabled by the caller only to facilitate unsafe deletion of corrupt
-	// object which otherwise can not be deleted using the normal flow
+	// ExpectTransformOrDecodeError 若启用，则当对象能够被正常转换和解码时返回错误。
+	// 注意：正常删除流程下它应当始终为 false；只有为了不安全地删除损坏对象
+	// （这类对象用正常流程无法删除）时，调用方才可以启用它。
 	ExpectTransformOrDecodeError bool
 }
 
-// ValidateListOptions validates ListOptions and computes the etcd revision to
-// read at, plus the continue key for paginated requests.
+// ValidateListOptions 校验 ListOptions，并计算出读取时使用的 etcd revision，
+// 以及分页请求的 continue key。
 //
 // withRev 为 0 表示“读取最新版本”；continue 令牌与 resourceVersion 互斥，
 // 因为令牌本身已经固定了遍历起点。
@@ -393,9 +375,9 @@ func ValidateListOptions(keyPrefix string, versioner Versioner, opts ListOptions
 		if len(opts.ResourceVersion) > 0 && opts.ResourceVersion != "0" {
 			return 0, "", apierrors.NewBadRequest("specifying resource version is not allowed when using continue")
 		}
-		// If continueRV > 0, the LIST request needs a specific resource version.
-		// continueRV==0 is invalid.
-		// If continueRV < 0, the request is for the latest resource version.
+		// 若 continueRV > 0，该 LIST 请求需要一个特定的 resource version。
+		// continueRV==0 是非法的。
+		// 若 continueRV < 0，则该请求针对最新的 resource version。
 		if continueRV > 0 {
 			withRev = continueRV
 		}
@@ -410,11 +392,11 @@ func ValidateListOptions(keyPrefix string, versioner Versioner, opts ListOptions
 	}
 	switch opts.ResourceVersionMatch {
 	case metav1.ResourceVersionMatchNotOlderThan:
-		// The not older than constraint is checked after we get a response from etcd,
-		// and returnedRV is then set to the revision we get from the etcd response.
+		// 「不早于」约束在拿到 etcd 响应之后才校验，
+		// 届时 withRev 会被设置为 etcd 响应返回的 revision。
 	case metav1.ResourceVersionMatchExact:
 		withRev = int64(parsedRV)
-	case "": // legacy case
+	case "": // 旧版（legacy）情形
 		if opts.Recursive && opts.Predicate.Limit > 0 && parsedRV > 0 {
 			withRev = int64(parsedRV)
 		}
@@ -424,16 +406,16 @@ func ValidateListOptions(keyPrefix string, versioner Versioner, opts ListOptions
 	return withRev, "", nil
 }
 
-// Stats provides statistics information about storage.
+// Stats 提供关于存储的统计信息。
 type Stats struct {
-	// ObjectCount informs about number of objects stored in the storage.
+	// ObjectCount 表示存储中保存的对象数量。
 	ObjectCount int64
-	// EstimatedAverageObjectSizeBytes informs about size of objects stored in the storage, based on size of serialized values.
-	// Value is an estimate, meaning it doesn't need to provide accurate nor consistent.
+	// EstimatedAverageObjectSizeBytes 基于序列化后的大小，表示存储中对象的大小。
+	// 该值是估算值，不要求准确，也不要求一致。
 	EstimatedAverageObjectSizeBytes int64
 }
 
-// PrepareKey validates and normalizes a storage key before use.
+// PrepareKey 在使用前校验并规范化存储 key。
 //
 // 拒绝 "." 与 ".." 路径段是安全要求：key 来自用户可控的资源名/命名空间，
 // 若不拦截可越过前缀边界访问其他资源的数据。
@@ -453,10 +435,9 @@ func PrepareKey(resourcePrefix, key string, recursive bool) (string, error) {
 	if key == "" || key == "/" {
 		return "", fmt.Errorf("empty key: %q", key)
 	}
-	// For recursive requests, we need to make sure the key ended with "/" so that we only
-	// get children "directories". e.g. if we have key "/a", "/a/b", "/ab", getting keys
-	// with prefix "/a" will return all three, while with prefix "/a/" will return only
-	// "/a/b" which is the correct answer.
+	// 对于递归请求，必须确保 key 以 "/" 结尾，这样只会取回子级「目录」。
+	// 例如存在 key "/a"、"/a/b"、"/ab" 时，用前缀 "/a" 取 key 会返回全部三个，
+	// 而用前缀 "/a/" 只返回 "/a/b"，后者才是正确答案。
 	if recursive && !strings.HasSuffix(key, "/") {
 		key += "/"
 	}

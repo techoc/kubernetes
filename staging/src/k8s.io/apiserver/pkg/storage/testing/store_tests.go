@@ -69,7 +69,7 @@ func RunTestCreate(ctx context.Context, t *testing.T, store storage.Interface, v
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := &example.Pod{} // reset
+			out := &example.Pod{} // 重置
 			// 在 Set 之前先确认该 kv 为空，避免上一次运行的残留数据掩盖 Create 的问题
 			key := computePodKey(tt.inputObj)
 			if err := store.Get(ctx, key, storage.GetOptions{}, out); !storage.IsNotFound(err) {
@@ -152,7 +152,7 @@ func RunTestGet(ctx context.Context, t *testing.T, store storage.Interface) {
 	currentRV, _ := strconv.Atoi(storedObj.ResourceVersion)
 	lastUpdatedCurrentRV, _ := strconv.Atoi(lastUpdatedObj.ResourceVersion)
 
-	// TODO(jpbetz): Add exact test cases
+	// TODO(jpbetz): 补充精确的测试用例。
 	// 注意：这里的用例故意只断言“可接受的输出集合”而非精确值，
 	// 因为 Get 的 NotOlderThan 语义允许返回比请求更新的版本。
 	tests := []struct {
@@ -272,7 +272,7 @@ func RunTestUnconditionalDelete(ctx context.Context, t *testing.T, store storage
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := &example.Pod{} // reset
+			out := &example.Pod{} // 重置
 			err := store.Delete(ctx, tt.key, out, nil, storage.ValidateAllObjectFunc, nil, storage.DeleteOptions{})
 			if tt.expectNotFoundErr {
 				if err == nil || !storage.IsNotFound(err) {
@@ -283,8 +283,8 @@ func RunTestUnconditionalDelete(ctx context.Context, t *testing.T, store storage
 			if err != nil {
 				t.Fatalf("Delete failed: %v", err)
 			}
-			// We expect the resource version of the returned object to be
-			// updated compared to the last existing object.
+			// 我们期望返回对象的 resource version 相比
+			// 最后一个存在的对象是更新过的。
 			if storedObj.ResourceVersion == out.ResourceVersion {
 				t.Errorf("expecting resource version to be updated, but get: %s", out.ResourceVersion)
 			}
@@ -327,8 +327,8 @@ func RunTestConditionalDelete(ctx context.Context, t *testing.T, store storage.I
 			if err != nil {
 				t.Fatalf("Delete failed: %v", err)
 			}
-			// We expect the resource version of the returned object to be
-			// updated compared to the last existing object.
+			// 我们期望返回对象的 resource version 相比
+			// 最后一个存在的对象是更新过的。
 			if storedObj.ResourceVersion == out.ResourceVersion {
 				t.Errorf("expecting resource version to be updated, but get: %s", out.ResourceVersion)
 			}
@@ -340,30 +340,30 @@ func RunTestConditionalDelete(ctx context.Context, t *testing.T, store storage.I
 	}
 }
 
-// The following set of Delete tests are testing the logic of adding `suggestion`
-// as a parameter with probably value of the current state.
-// Introducing it for GuaranteedUpdate cause a number of issues, so we're addressing
-// all of those upfront by adding appropriate tests:
+// 下面这组 Delete 测试校验的是：把 `suggestion` 作为参数传入、
+// 其取值可能是当前状态的值，这一逻辑是否正确。
+// 当初为 GuaranteedUpdate 引入该参数时引发了一系列问题，因此我们
+// 提前通过补充相应的测试把这些问题都覆盖掉：
 // - https://github.com/kubernetes/kubernetes/pull/35415
-//   [DONE] Lack of tests originally - added TestDeleteWithSuggestion.
+//   [DONE] 最初缺少测试 —— 已添加 TestDeleteWithSuggestion。
 // - https://github.com/kubernetes/kubernetes/pull/40664
-//   [DONE] Irrelevant for delete, as Delete doesn't write data (nor compare it).
+//   [DONE] 与 delete 无关，因为 Delete 不写数据（也不比较数据）。
 // - https://github.com/kubernetes/kubernetes/pull/47703
-//   [DONE] Irrelevant for delete, because Delete doesn't persist data.
+//   [DONE] 与 delete 无关，因为 Delete 不持久化数据。
 // - https://github.com/kubernetes/kubernetes/pull/48394/
-//   [DONE] Irrelevant for delete, because Delete doesn't compare data.
+//   [DONE] 与 delete 无关，因为 Delete 不比较数据。
 // - https://github.com/kubernetes/kubernetes/pull/43152
-//   [DONE] Added TestDeleteWithSuggestionAndConflict
+//   [DONE] 已添加 TestDeleteWithSuggestionAndConflict
 // - https://github.com/kubernetes/kubernetes/pull/54780
-//   [DONE] Irrelevant for delete, because Delete doesn't compare data.
+//   [DONE] 与 delete 无关，因为 Delete 不比较数据。
 // - https://github.com/kubernetes/kubernetes/pull/58375
-//   [DONE] Irrelevant for delete, because Delete doesn't compare data.
+//   [DONE] 与 delete 无关，因为 Delete 不比较数据。
 // - https://github.com/kubernetes/kubernetes/pull/77619
-//   [DONE] Added TestValidateDeletionWithSuggestion for corresponding delete checks.
+//   [DONE] 为对应的 delete 检查添加了 TestValidateDeletionWithSuggestion。
 // - https://github.com/kubernetes/kubernetes/pull/78713
-//   [DONE] Bug was in getState function which is shared with the new code.
+//   [DONE] 该 bug 位于 getState 函数中，而它与新代码共用。
 // - https://github.com/kubernetes/kubernetes/pull/78713
-//   [DONE] Added TestPreconditionalDeleteWithSuggestion
+//   [DONE] 已添加 TestPreconditionalDeleteWithSuggestion
 
 // RunTestDeleteWithSuggestion 校验 Delete 接受 suggestion 参数但不因此改变行为。
 func RunTestDeleteWithSuggestion(ctx context.Context, t *testing.T, store storage.Interface) {
@@ -464,7 +464,7 @@ func RunTestDeleteWithSuggestionOfDeletedObject(ctx context.Context, t *testing.
 		t.Errorf("Unexpected failure during deletion: %v", err)
 	}
 
-	// Now try deleting with stale object.
+	// 现在尝试用一个已过期的对象去删除。
 	out := &example.Pod{}
 	if err := store.Delete(ctx, key, out, nil, storage.ValidateAllObjectFunc, originalPod, storage.DeleteOptions{}); !storage.IsNotFound(err) {
 		t.Errorf("Unexpected error during deletion: %v, expected not-found", err)
@@ -492,7 +492,7 @@ func RunTestValidateDeletionWithSuggestion(ctx context.Context, t *testing.T, st
 		t.Errorf("validate function should have been called once, called %d", validationCalls)
 	}
 
-	// First update, so originalPod is outdated.
+	// 先做一次更新，这样 originalPod 就过期了。
 	updatedPod := &example.Pod{}
 	if err := store.GuaranteedUpdate(ctx, key, updatedPod, false, nil,
 		storage.SimpleUpdate(func(obj runtime.Object) (runtime.Object, error) {
@@ -550,7 +550,7 @@ func RunTestValidateDeletionWithOnlySuggestionValid(ctx context.Context, t *test
 		t.Errorf("validate function should have been called once, called %d", validationCalls)
 	}
 
-	// First update, so originalPod is outdated.
+	// 先做一次更新，这样 originalPod 就过期了。
 	updatedPod := &example.Pod{}
 	if err := store.GuaranteedUpdate(ctx, key, updatedPod, false, nil,
 		storage.SimpleUpdate(func(obj runtime.Object) (runtime.Object, error) {
@@ -633,8 +633,8 @@ func RunTestPreconditionalDeleteWithOnlySuggestionPass(ctx context.Context, t *t
 	}
 
 	prec := storage.NewUIDPreconditions("myUID")
-	// Although originalPod passes the precondition, its delete would fail due to conflict.
-	// The 2nd try with updatedPod would fail the precondition.
+	// 尽管 originalPod 能通过前置条件（precondition）检查，但由于存在冲突，
+	// 用它的删除会失败；第二次改用 updatedPod 删除则会通不过前置条件检查。
 	out := &example.Pod{}
 	err := store.Delete(ctx, key, out, prec, storage.ValidateAllObjectFunc, originalPod, storage.DeleteOptions{})
 	if err == nil || !storage.IsInvalidObj(err) {
@@ -1020,10 +1020,10 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 				Field: fields.Everything(),
 				Limit: 1,
 			},
-			// TODO(#108003): As of now, watchcache is deliberately ignoring
-			// limit if RV=0 is specified, returning whole list of objects.
-			// While this should eventually get fixed, for now we're explicitly
-			// ignoring this testcase for watchcache.
+			// TODO(#108003): 目前 watchcache 在指定 RV=0 时会刻意忽略
+			// limit，直接返回整个对象列表。
+			// 这个问题迟早应当修掉，但眼下我们在 watchcache 场景下
+			// 显式跳过这个测试用例。
 			ignoreForWatchCache:        true,
 			expectedOut:                []example.Pod{*createdPods[1]},
 			expectContinue:             true,
@@ -1039,10 +1039,10 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 				Field: fields.Everything(),
 				Limit: 1,
 			},
-			// TODO(#108003): As of now, watchcache is deliberately ignoring
-			// limit if RV=0 is specified, returning whole list of objects.
-			// While this should eventually get fixed, for now we're explicitly
-			// ignoring this testcase for watchcache.
+			// TODO(#108003): 目前 watchcache 在指定 RV=0 时会刻意忽略
+			// limit，直接返回整个对象列表。
+			// 这个问题迟早应当修掉，但眼下我们在 watchcache 场景下
+			// 显式跳过这个测试用例。
 			ignoreForWatchCache:        true,
 			expectedOut:                []example.Pod{*createdPods[1]},
 			expectContinue:             true,
@@ -2204,13 +2204,13 @@ func RunTestList(ctx context.Context, t *testing.T, store storage.Interface, com
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// For some asynchronous implementations of storage interface (in particular watchcache),
-			// certain requests may impact result of further requests. As an example, if we first
-			// ensure that watchcache is synchronized up to ResourceVersion X (using Get/List requests
-			// with NotOlderThan semantic), the further requests (even specifying earlier resource
-			// version) will also return the result synchronized to at least ResourceVersion X.
-			// By parallelizing test cases we ensure that the order in which test cases are defined
-			// doesn't automatically preclude some scenarios from happening.
+			// 对于存储接口的某些异步实现（尤其是 watchcache），
+			// 某些请求会影响后续请求的结果。举个例子：如果我们先用
+			// 带 NotOlderThan 语义的 Get/List 请求确保 watchcache 已同步到
+			// ResourceVersion X，那么后续请求（即使指定了更早的 resource
+			// version）也会返回至少同步到 ResourceVersion X 的结果。
+			// 通过并行执行测试用例，我们保证用例的定义顺序
+			// 不会自动让某些场景无法发生。
 			t.Parallel()
 
 			if watchCacheEnabled && tt.ignoreForWatchCache {
@@ -2434,10 +2434,10 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 			requestRV: "0",
 			validateResponseRV: func(t *testing.T, rv int) {
 				if cacheEnabled {
-					// Cache might not yet observed write
+					// 缓存可能还没观察到那次写入
 					assert.LessOrEqual(t, rv, lastResourceWriteRV)
 				} else {
-					// Etcd should always be up to date with consistent RV
+					// etcd 在一致 RV 上应当始终是最新的
 					assert.Equal(t, consistentRV, rv)
 				}
 			},
@@ -2469,14 +2469,14 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 			validateResponseRV: func(t *testing.T, rv int) {
 				if cacheEnabled {
 					if consistentReadsSupported {
-						// Consistent read will sync cache
+						// 一致读会把缓存同步到位
 						assert.Equal(t, cacheSyncRV, rv)
 					} else {
-						// Without consisten reads cache is not synced
+						// 没有一致读时缓存不会被同步
 						assert.LessOrEqual(t, rv, lastResourceWriteRV)
 					}
 				} else {
-					// Etcd always points to newest RV
+					// etcd 始终指向最新的 RV
 					assert.Equal(t, consistentRV, rv)
 				}
 			},
@@ -2512,7 +2512,7 @@ func RunTestConsistentList(ctx context.Context, t *testing.T, store storage.Inte
 // resourceVersion 以及全部已持久化的对象集合。
 // created 按创建顺序返回（含随后被删除的 baz），便于测试用例按下标引用。长度固定为 6。
 func seedMultiLevelData(ctx context.Context, store storage.Interface) (initialRV string, created []*example.Pod, updated *example.Pod, err error) {
-	// Setup storage with the following structure:
+	// 按如下结构准备存储：
 	//  /
 	//   - first/
 	//  |         - bar
@@ -2578,10 +2578,10 @@ func seedMultiLevelData(ctx context.Context, store storage.Interface) (initialRV
 		}
 	}
 
-	// For barFirst, we first create it with key /pods/first/bar and then we update
-	// it by changing its spec.nodeName. The point of doing this is to be able to
-	// test that if a pod with key /pods/first/bar is in fact returned, the returned
-	// pod is the updated one (i.e. with spec.nodeName changed).
+	// 对于 barFirst，我们先以 key /pods/first/bar 创建它，随后通过修改它的
+	// spec.nodeName 来更新它。这样做是为了能够测试：如果确实返回了 key 为
+	// /pods/first/bar 的 pod，那么返回的 pod 应当是更新后的那个
+	// （即 spec.nodeName 已被修改的那个）。
 	updated = &example.Pod{}
 	if err := store.GuaranteedUpdate(ctx, computePodKey(barFirst), updated, true, nil,
 		func(input runtime.Object, _ storage.ResponseMeta) (output runtime.Object, ttl *uint64, err error) {
@@ -2922,10 +2922,10 @@ func newErrInjectingModifier(inject errorInjector) TransformerModifier {
 // 校验错误聚合：损坏对象（corruptErr）应被收集进 API Status 的 causes，
 // 而其他错误必须立即中止；聚合数量有硬上限（100），超限后追加哨兵条目。
 func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store InterfaceWithTransformerOverride, corruptErr error) {
-	// the test creates n objects and assigns each object unique id i ie. 1 <= i <= n
+	// 本测试创建 n 个对象，并给每个对象分配唯一 id i，即 1 <= i <= n
 	objNameFn := func(id int) string {
-		// pad with leading zeros so that for i, j where i < j, object
-		// foo-{j} follows object foo-{i} in lexicographical order
+		// 用前导零补齐，使得当 i < j 时，对象
+		// foo-{j} 在字典序上排在对象 foo-{i} 之后
 		return fmt.Sprintf("foo-%06d", id)
 	}
 	keyFn := func(prefix string, id int) string {
@@ -2938,23 +2938,23 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 
 	tests := []struct {
 		name string
-		// number of Pod objects to be created when the test starts, the
-		// objects are named as "foo-{i}" where 1 <= i <= n
+		// 测试开始时创建的 Pod 对象数量，这些对象
+		// 命名为 "foo-{i}"，其中 1 <= i <= n
 		n int
-		// inject decides, per object key, whether transformation fails and with
-		// which error. Returning nil means the object transforms normally.
+		// inject 逐个对象 key 地决定转换是否失败、以及失败时返回哪个错误。
+		// 返回 nil 表示该对象可以正常转换。
 		inject func(t *testing.T, key string) error
-		// verifies the result from GetList
-		// list: result of GetList operation is saved into list
-		// err: error returned from GetList
+		// 校验 GetList 的结果：
+		// list: GetList 操作的结果保存在 list 中
+		// err: GetList 返回的错误
 		verifier func(t *testing.T, prefix string, list *example.PodList, err error)
 	}{
 		{
 			name: "first error is an unexpected error, no aggregation expected",
-			// we initially create n=7 objects with ids {1, 2, 3 ... 7}, they are put in the following disjoint sets:
-			// - good: {1, 3, 5, 7}, these objects will never become corrupt
-			// - unexpected: {2}, this object is marked to yield an unexpected error (not corruptObjErr)
-			// - corrupt: {4, 6}, these objects are marked to become corrupt
+			// 我们一开始创建 n=7 个对象，id 为 {1, 2, 3 ... 7}，它们被划分进下面这些互不相交的集合：
+			// - good: {1, 3, 5, 7}，这些对象永远不会变成损坏对象
+			// - unexpected: {2}，该对象被标记为会引发一个意外错误（不是 corruptObjErr）
+			// - corrupt: {4, 6}，这些对象被标记为会变成损坏对象
 			n: 7,
 			inject: func(t *testing.T, key string) error {
 				switch id := idOf(t, key); {
@@ -2966,23 +2966,23 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 					return nil
 				}
 			},
-			// the following sequence of events are expected to occur in order while retrieving the n objects:
+			// 预期在取回这 n 个对象的过程中按顺序发生下面这些事件：
 			//
-			// -- |- 1: no error, successfully decoded
-			//    |- 2: unexpected error, GetList aborts
+			// -- |- 1: 没有错误，成功解码
+			//    |- 2: 出现意外错误，GetList 中止
 			//
-			//  a) GetList encounters an unexpected (not corruptObjErr)
-			//  error while retrieving {2} and immediately aborts
-			//  b) GetList successfully decodes {1}
+			//  a) GetList 在取回 {2} 时遇到一个意外错误（不是 corruptObjErr），
+			//  并立即中止
+			//  b) GetList 成功解码 {1}
 			verifier: func(t *testing.T, _ string, list *example.PodList, err error) {
-				// a) the error returned from GetList should be a bare
-				// storage.InternalError, not wrapped — proves no aggregation
+				// a) GetList 返回的错误应当是一个裸的 storage.InternalError，
+				// 没有被包装 —— 这说明没有做聚合
 				// nolint:errorlint // the aggregator should return the error as is
 				if _, ok := err.(storage.InternalError); !ok {
 					t.Fatalf("expected the error to be %T, but got: %#v", storage.InternalError{}, err)
 				}
 
-				// b) GetList should successfully decode object 1 from the good set
+				// b) GetList 应当成功解码 good 集合中的对象 1
 				if want, got := 1, len(list.Items); want != got {
 					t.Fatalf("expected the list to have %d item(s), but got: %d", want, got)
 				}
@@ -2994,9 +2994,9 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 		{
 			name: "feature enabled, should aggregate corrupt object errors",
 
-			// we initially create n=7 objects with ids {1, 2, 3 ... 7}, they are put in the following disjoint sets:
-			// - good: {1, 3, 5, 7}, these objects will never become corrupt
-			// - corrupt: {2, 4, 6}, these objects are marked to become corrupt
+			// 我们一开始创建 n=7 个对象，id 为 {1, 2, 3 ... 7}，它们被划分进下面这些互不相交的集合：
+			// - good: {1, 3, 5, 7}，这些对象永远不会变成损坏对象
+			// - corrupt: {2, 4, 6}，这些对象被标记为会变成损坏对象
 			n: 7,
 			inject: func(t *testing.T, key string) error {
 				if idOf(t, key)%2 == 0 {
@@ -3004,11 +3004,11 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 				}
 				return nil
 			},
-			// while retrieving the n objects, we expect the following from GetList:
-			//  a) GetList encounters corruptObjErr while retrieving objects in the corrupt set
-			//  b) GetList successfully decodes object(s) in the good set
+			// 在取回这 n 个对象时，我们预期 GetList：
+			//  a) 遇到 corrupt 集合中对象时返回 corruptObjErr，并把这些错误全部聚合起来
+			//  b) GetList 成功解码 good 集合中的所有对象
 			verifier: func(t *testing.T, prefix string, list *example.PodList, listErr error) {
-				// the error returned from GetList should be an API status object
+				// GetList 返回的错误应当是一个 API status 对象
 				var statusGot apierrors.APIStatus
 				if !errors.As(listErr, &statusGot) {
 					t.Fatalf("expected an API status error object, but got: %v", listErr)
@@ -3016,7 +3016,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 
 				details := statusGot.Status().Details
 				corrupt := []string{keyFn(prefix, 2), keyFn(prefix, 4), keyFn(prefix, 6)}
-				// a) all the corruptObjErr errors should be aggregated
+				// a) 所有 corruptObjErr 错误都应当被聚合起来
 				if details == nil || len(details.Causes) != len(corrupt) {
 					t.Fatalf("expected the API status to include the corrupt object errors, but got: %v", details)
 				}
@@ -3026,7 +3026,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 					}
 				}
 
-				// b) GetList should successfully decode all objects in the good set
+				// b) GetList 应当成功解码 good 集合中的所有对象
 				good := []int{1, 3, 5, 7}
 				if want, got := len(good), len(list.Items); want != got {
 					t.Fatalf("expected the list to have %d item(s), but got: %d", want, got)
@@ -3041,10 +3041,10 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 		{
 			name: "feature enabled, aggregation should abort as soon as it encounters an unexpected error",
 
-			// we initially create n=7 objects with ids {1, 2, 3 ... 7}, they are put in the following disjoint sets:
-			// - good: {1, 3, 5, 7}, these objects will never become corrupt
-			// - unexpected: {4}, this object is marked to yield an unexpected error (not corruptObjErr)
-			// - corrupt: {2, 6}, these objects are marked to become corrupt
+			// 我们一开始创建 n=7 个对象，id 为 {1, 2, 3 ... 7}，它们被划分进下面这些互不相交的集合：
+			// - good: {1, 3, 5, 7}，这些对象永远不会变成损坏对象
+			// - unexpected: {4}，该对象被标记为返回一个意外错误（不是 corruptObjErr）
+			// - corrupt: {2, 6}，这些对象被标记为会变成损坏对象
 			n: 7,
 			inject: func(t *testing.T, key string) error {
 				switch id := idOf(t, key); {
@@ -3056,27 +3056,27 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 					return nil
 				}
 			},
-			// the following sequence of events are expected to occur in order while retrieving the n objects:
+			// 预期在取回这 n 个对象的过程中按顺序发生下面这些事件：
 			//
-			// --|- 1: no error, successfully decoded
-			//   |- 2: yields an expected corruptObjErr, GetList aggregates this error
-			//   |- 3: no error, successfully decoded
-			//   |- 4: unexpected error, GetList aborts
+			// --|- 1: 没有错误，成功解码
+			//   |- 2: 返回一个预期的 corruptObjErr，GetList 会聚合该错误
+			//   |- 3: 没有错误，成功解码
+			//   |- 4: 意外错误，GetList 中止
 			//
-			//  a) GetList encounters a corruptObjErr error while retrieving {2} in the corrupt set
-			//  b) GetList encounters an unexpected (not corruptObjErr) error while
-			//  retrieving {4} in the unexpected set, and immediately aborts
-			//  c) GetList successfully decodes {1,3} in the good set before it aborts
+			//  a) GetList 在取回 corrupt 集合中的 {2} 时遇到 corruptObjErr
+			//  b) GetList 在取回 unexpected 集合中的 {4} 时遇到一个意外错误
+			//  （不是 corruptObjErr），并立即中止
+			//  c) GetList 在中止之前成功解码 good 集合中的 {1,3}
 			verifier: func(t *testing.T, prefix string, list *example.PodList, err error) {
-				// the error returned from GetList should be an API status object
+				// GetList 返回的错误应当是一个 API status 对象
 				var statusGot apierrors.APIStatus
 				if !errors.As(err, &statusGot) {
 					t.Fatalf("expected an API status error object, but got: %v", err)
 				}
 
 				details := statusGot.Status().Details
-				// a) the corrupt error from {2} plus the unexpected abort error from {4}
-				// should both be surfaced as causes
+				// a) {2} 的 corrupt 错误与 {4} 导致中止的意外错误
+				// 都应当作为 cause 呈现出来
 				if details == nil || len(details.Causes) != 2 {
 					t.Fatalf("expected 2 causes (1 corrupt + 1 abort), but got: %v", details)
 				}
@@ -3087,7 +3087,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 					t.Errorf("expected abort cause type %q, but got: %q", want, got)
 				}
 
-				// b) verify that GetList successfully decodes objects before the abort
+				// b) 验证 GetList 在中止之前成功解码了那些对象
 				ids := []int{1, 3}
 				if want, got := len(ids), len(list.Items); want != got {
 					t.Errorf("expected GetList to successfully decode %d object(s), but got: %d", want, got)
@@ -3102,10 +3102,10 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 		{
 			name: "feature enabled, error aggregation should not exceed the maximum limit",
 
-			// aggregation limit is currently hard coded to 100
-			// we initially create n=210 objects with ids {1, 2, 3 ... 210}, they are put in the following disjoint sets:
-			// - good: {1, 3, 5 ... 195, 197, 199, ... 207, 209}, these 105 objects will never become corrupt
-			// - corrupt: {2, 4, 6 ... 196, 198, 200, ... 208, 210}, these 105 objects are marked to become corrupt
+			// 聚合上限目前是硬编码的 100
+			// 我们一开始创建 n=210 个对象，id 为 {1, 2, 3 ... 210}，它们被划分进下面这些互不相交的集合：
+			// - good: {1, 3, 5 ... 195, 197, 199, ... 207, 209}，这 105 个对象永远不会变成损坏对象
+			// - corrupt: {2, 4, 6 ... 196, 198, 200, ... 208, 210}，这 105 个对象被标记为会变成损坏对象
 			n: 210,
 			inject: func(t *testing.T, key string) error {
 				if idOf(t, key)%2 == 0 {
@@ -3113,21 +3113,21 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 				}
 				return nil
 			},
-			// while listing the n objects, we expect the following:
-			//  a) GetList continues to aggregate the corruptObjErr errors
-			//  until it reaches the maximum limit, and then it immediately aborts
-			//  b) GetList successfully decodes the first 100 objects in the good set into list
+			// 在列出这 n 个对象时，我们预期：
+			//  a) GetList 会持续聚合 corruptObjErr 错误，
+			//  直到达到上限，然后立即中止
+			//  b) GetList 成功把 good 集合中的前 100 个对象解码进 list
 			verifier: func(t *testing.T, _ string, list *example.PodList, err error) {
-				// must match the aggregation limit that etcd3 configures via
-				// corruptObjErrAggregatorFactory when the feature is enabled
+				// 必须与启用该特性时 etcd3 通过
+				// corruptObjErrAggregatorFactory 配置的聚合上限一致
 				limit := 100
 				var statusGot apierrors.APIStatus
 				if !errors.As(err, &statusGot) {
 					t.Fatalf("expected an API status error object, but got: %v", err)
 				}
 				details := statusGot.Status().Details
-				// a) the returned error should contain limit+1 causes:
-				// limit corrupt errors + the sentinel "too many" entry
+				// a) 返回的错误应当包含 limit+1 个 cause：
+				// limit 个 corrupt 错误 + 那个哨兵 "too many" 条目
 				if want := limit + 1; details == nil || len(details.Causes) != want {
 					t.Fatalf("expected %d causes (limit + sentinel), but got: %d", want, len(details.Causes))
 				}
@@ -3139,7 +3139,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 					t.Errorf("expected the sentinel error, diff: %s", cmp.Diff(want, got))
 				}
 
-				// b) before the limit is hit and GetList aborts, it successfully decodes 100 objects
+				// b) 在触达上限、GetList 中止之前，它成功解码了 100 个对象
 				if want, got := limit, len(list.Items); want != got {
 					t.Errorf("expected GetList to successfully decode %d object(s), but got: %d", want, got)
 				}
@@ -3148,26 +3148,26 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 		{
 			name: "feature enabled, there are exactly 100 (error aggregation limit) corrupt errors",
 
-			// aggregation limit is currently hard coded to 100
-			// we initially create n=100 objects with ids {1, 2, 3 ... 100}, they are put in the following disjoint sets:
-			// - good: {}, all the objects are marked to become corrupt
-			// - corrupt: {1, 2, 3 ... 99, 100}, these objects are marked to become corrupt
+			// 聚合上限目前是硬编码的 100
+			// 我们一开始创建 n=100 个对象，id 为 {1, 2, 3 ... 100}，它们被划分进下面这些互不相交的集合：
+			// - good: {}，所有对象都被标记为会变成损坏对象
+			// - corrupt: {1, 2, 3 ... 99, 100}，这些对象被标记为会变成损坏对象
 			n:      100,
 			inject: func(t *testing.T, key string) error { return corruptErr },
-			//  while listing the n objects, we expect the following:
-			//  a) GetList continues to aggregate the corruptObjErr errors
-			//  until it reaches the maximum limit, and then it immediately aborts
-			//  b) GetList successfully decodes zero objects
+			//  在列出这 n 个对象时，我们预期：
+			//  a) GetList 会持续聚合 corruptObjErr 错误，
+			//  直到达到上限，然后立即中止
+			//  b) GetList 成功解码的对象数为零
 			verifier: func(t *testing.T, _ string, list *example.PodList, err error) {
-				// must match the aggregation limit that etcd3 configures via
-				// corruptObjErrAggregatorFactory when the feature is enabled
+				// 必须与启用该特性时 etcd3 通过
+				// corruptObjErrAggregatorFactory 配置的聚合上限一致
 				limit := 100
 				var statusGot apierrors.APIStatus
 				if !errors.As(err, &statusGot) {
 					t.Fatalf("expected an API status error object, but got: %v", err)
 				}
-				// a) the returned error should contain limit+1 causes:
-				// limit corrupt errors + the sentinel "too many" entry
+				// a) 返回的错误应当包含 limit+1 个 cause：
+				// limit 个 corrupt 错误 + 那个哨兵 "too many" 条目
 				details := statusGot.Status().Details
 				if want := limit + 1; details == nil || len(details.Causes) != want {
 					t.Fatalf("expected %d causes (limit + sentinel), but got: %d", want, len(details.Causes))
@@ -3180,7 +3180,7 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 					t.Errorf("expected the sentinel error, diff: %s", cmp.Diff(want, got))
 				}
 
-				// b) all objects are corrupt, so GetList should decode 0 objects
+				// b) 所有对象都是损坏的，因此 GetList 解码出的对象数应为 0
 				if want, got := 0, len(list.Items); want != got {
 					t.Errorf("expected GetList to successfully decode %d object(s), but got: %d", want, got)
 				}
@@ -3226,14 +3226,14 @@ func RunTestGetListWithErrorAggregation(ctx context.Context, t *testing.T, store
 			}))
 			defer revertTransformer()
 
-			// step 4: invoke GetList again, this time it should encounter the corrupt object(s)
+			// 第 4 步：再次调用 GetList，这次它应当遇到损坏对象
 			out = &example.PodList{}
 			err = store.GetList(ctx, prefix, storageOpts, out)
 			if err == nil {
 				t.Fatalf("Expected GetList to return error")
 			}
 
-			// step 5: verify what we expect from GetList
+			// 第 5 步：校验我们对 GetList 的预期
 			test.verifier(t, prefix, out, err)
 		})
 	}
@@ -3251,9 +3251,9 @@ func RunTestGetListWithoutErrorAggregation(ctx context.Context, t *testing.T, st
 		return fmt.Sprintf("%s%s", prefix, objNameFn(id))
 	}
 
-	// Step 1: create 7 objects, where even-numbered ones are corrupt
-	// - good: {1, 3, 5, 7}
-	// - corrupt: {2, 4, 6}
+	// 第 1 步：创建 7 个对象，其中偶数号对象是损坏的
+	// - good（正常集合）: {1, 3, 5, 7}
+	// - corrupt（损坏集合）: {2, 4, 6}
 	n := 7
 	for i := 1; i <= n; i++ {
 		obj := &example.Pod{ObjectMeta: metav1.ObjectMeta{
@@ -3265,7 +3265,7 @@ func RunTestGetListWithoutErrorAggregation(ctx context.Context, t *testing.T, st
 		}
 	}
 
-	// Step 2: list all objects, expect no error before corruption
+	// 第 2 步：列出全部对象，在注入损坏之前预期没有错误
 	out := &example.PodList{}
 	storageOpts := storage.ListOptions{
 		Predicate: storage.Everything,
@@ -3279,7 +3279,7 @@ func RunTestGetListWithoutErrorAggregation(ctx context.Context, t *testing.T, st
 		t.Fatalf("Expected length: %d, but got: %d", want, got)
 	}
 
-	// Step 3: corrupt the transformer so even-numbered objects fail to decode
+	// 第 3 步：篡改 transformer，使偶数号对象解码失败
 	revertTransformer := store.UpdateTransformer(newErrInjectingModifier(func(key string) error {
 		if idOf(t, key)%2 == 0 {
 			return corruptErr
@@ -3288,14 +3288,14 @@ func RunTestGetListWithoutErrorAggregation(ctx context.Context, t *testing.T, st
 	}))
 	defer revertTransformer()
 
-	// Step 4: list again, expect GetList to abort on the first corrupt object
+	// 第 4 步：再次列出，预期 GetList 在遇到第一个损坏对象时中止
 	out = &example.PodList{}
 	err = store.GetList(ctx, prefix, storageOpts, out)
 	if err == nil {
 		t.Fatalf("Expected GetList to return error")
 	}
 
-	// Verify: the error should be a bare storage.InternalError (no aggregation)
+	// 校验：该错误应当是一个裸的 storage.InternalError（没有聚合）
 	// nolint:errorlint // the aggregator should return the error as is
 	intErr, ok := err.(storage.InternalError)
 	if !ok {
@@ -3305,7 +3305,7 @@ func RunTestGetListWithoutErrorAggregation(ctx context.Context, t *testing.T, st
 		t.Errorf("expected the error to start with %q, but got: %v", want, got)
 	}
 
-	// Verify: GetList successfully decodes {1} before aborting
+	// 校验：GetList 在中止之前已成功解码 {1}
 	if want, got := 1, len(out.Items); want != got {
 		t.Errorf("expected the list to have %d item(s), but got: %d", want, got)
 	}
@@ -3321,7 +3321,7 @@ type CallsValidation func(t *testing.T, pageSize, estimatedProcessedObjects uint
 // RunTestListContinuation 校验分页语义：limit 只在一致读下生效，
 // 且翻页时必须沿用首页返回的 RV，否则不同页可能来自不同快照。
 func RunTestListContinuation(ctx context.Context, t *testing.T, store storage.Interface, validation CallsValidation) {
-	// Setup storage with the following structure:
+	// 按如下结构准备存储：
 	//  /
 	//   - first/
 	//  |         - bar
@@ -3361,7 +3361,7 @@ func RunTestListContinuation(ctx context.Context, t *testing.T, store storage.In
 		currentRV = preset[i].storedObj.ResourceVersion
 	}
 
-	// test continuations
+	// 测试分页续传（continuation）
 	out := &example.PodList{}
 	pred := func(limit int64, continueValue string) storage.SelectionPredicate {
 		return storage.SelectionPredicate{
@@ -3376,8 +3376,8 @@ func RunTestListContinuation(ctx context.Context, t *testing.T, store storage.In
 		}
 	}
 	options := storage.ListOptions{
-		// Limit is ignored when ResourceVersion is set to 0.
-		// Set it to consistent read.
+		// 当 ResourceVersion 设为 0 时 Limit 会被忽略，
+		// 这里改为一致性读取。
 		ResourceVersion: "",
 		Predicate:       pred(1, ""),
 		Recursive:       true,
@@ -3398,10 +3398,10 @@ func RunTestListContinuation(ctx context.Context, t *testing.T, store storage.In
 
 	continueFromSecondItem := out.Continue
 
-	// no limit, should get two items
+	// 不设 limit，应当取回两个对象
 	out = &example.PodList{}
 	options = storage.ListOptions{
-		// ResourceVersion should be unset when setting continuation token.
+		// 设置 continuation token 时，ResourceVersion 应当保持未设置。
 		ResourceVersion: "",
 		Predicate:       pred(0, continueFromSecondItem),
 		Recursive:       true,
@@ -3422,10 +3422,10 @@ func RunTestListContinuation(ctx context.Context, t *testing.T, store storage.In
 		validation(t, 0, 2)
 	}
 
-	// limit, should get two more pages
+	// 设置 limit，还应当再取回两页
 	out = &example.PodList{}
 	options = storage.ListOptions{
-		// ResourceVersion should be unset when setting continuation token.
+		// 设置 continuation token 时，ResourceVersion 应当保持未设置。
 		ResourceVersion: "",
 		Predicate:       pred(1, continueFromSecondItem),
 		Recursive:       true,
@@ -3448,7 +3448,7 @@ func RunTestListContinuation(ctx context.Context, t *testing.T, store storage.In
 
 	out = &example.PodList{}
 	options = storage.ListOptions{
-		// ResourceVersion should be unset when setting continuation token.
+		// 设置 continuation token 时，ResourceVersion 应当保持未设置。
 		ResourceVersion: "",
 		Predicate:       pred(1, continueFromThirdItem),
 		Recursive:       true,
@@ -3515,7 +3515,7 @@ func RunTestListPaginationRareObject(ctx context.Context, t *testing.T, store st
 // 但底层可能需要多读若干条来凑够一页，validation 的第二个参数即反映这种放大。
 func RunTestListContinuationWithFilter(ctx context.Context, t *testing.T, store storage.Interface, validation CallsValidation) {
 	foo1 := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "1", Name: "foo"}}
-	bar2 := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "2", Name: "bar"}} // this should not match
+	bar2 := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "2", Name: "bar"}} // 这个对象不应匹配选择器
 	foo3 := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "3", Name: "foo"}}
 	foo4 := &example.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "4", Name: "foo"}}
 	preset := []struct {
@@ -3551,10 +3551,10 @@ func RunTestListContinuationWithFilter(ctx context.Context, t *testing.T, store 
 		currentRV = preset[i].storedObj.ResourceVersion
 	}
 
-	// the first list call should try to get 2 items from etcd (and only those items should be returned)
-	// the field selector should result in it reading 3 items via the transformer
-	// the chunking should result in 2 etcd Gets
-	// there should be a continueValue because there is more data
+	// 第一次 list 调用应当尝试从 etcd 取 2 个对象（且只返回这些对象）
+	// field selector 应当使其经 transformer 读取 3 个对象
+	// 分块（chunking）应当产生 2 次 etcd Get
+	// 由于还有剩余数据，应当返回一个 continueValue
 	out := &example.PodList{}
 	pred := func(limit int64, continueValue string) storage.SelectionPredicate {
 		return storage.SelectionPredicate{
@@ -3569,8 +3569,8 @@ func RunTestListContinuationWithFilter(ctx context.Context, t *testing.T, store 
 		}
 	}
 	options := storage.ListOptions{
-		// Limit is ignored when ResourceVersion is set to 0.
-		// Set it to consistent read.
+		// 当 ResourceVersion 设为 0 时 Limit 会被忽略，
+		// 这里改为一致性读取。
 		ResourceVersion: "",
 		Predicate:       pred(2, ""),
 		Recursive:       true,
@@ -3589,19 +3589,19 @@ func RunTestListContinuationWithFilter(ctx context.Context, t *testing.T, store 
 		validation(t, 2, 3)
 	}
 
-	// the rest of the test does not make sense if the previous call failed
+	// 若上一次调用失败，测试剩余部分就没有意义了
 	if t.Failed() {
 		return
 	}
 
 	cont := out.Continue
 
-	// the second list call should try to get 2 more items from etcd
-	// but since there is only one item left, that is all we should get with no continueValue
-	// both read counters should be incremented for the singular calls they make in this case
+	// 第二次 list 调用应当尝试再从 etcd 取 2 个对象
+	// 但只剩 1 个对象，所以只应取回它，且没有 continueValue
+	// 这种情况下两次都是单个对象的调用，两个读取计数器都应各自加一
 	out = &example.PodList{}
 	options = storage.ListOptions{
-		// ResourceVersion should be unset when setting continuation token.
+		// 设置 continuation token 时，ResourceVersion 应当保持未设置。
 		ResourceVersion: "",
 		Predicate:       pred(2, cont),
 		Recursive:       true,
@@ -3633,7 +3633,7 @@ type IncreaseRVFunc func(ctx context.Context, t *testing.T) (revision int64)
 // 实现应返回 API Status 并在其中附带一个"不一致但可用"的新 token，
 // 客户端据此可以继续翻页，而不是从头开始。
 func RunTestListInconsistentContinuation(ctx context.Context, t *testing.T, store storage.Interface, compaction Compaction) {
-	// Setup storage with the following structure:
+	// 按如下结构准备存储：
 	//  /
 	//   - first/
 	//  |         - bar
@@ -3699,7 +3699,7 @@ func RunTestListInconsistentContinuation(ctx context.Context, t *testing.T, stor
 
 	continueFromSecondItem := out.Continue
 
-	// update /second/bar
+	// 更新 /second/bar
 	oldName := preset[2].obj.Name
 	newPod := &example.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3720,7 +3720,7 @@ func RunTestListInconsistentContinuation(ctx context.Context, t *testing.T, stor
 	lastRVString := preset[2].storedObj.ResourceVersion
 	compaction(ctx, t, lastRVString)
 
-	// The old continue token should have expired
+	// 旧的 continue token 此时应当已过期
 	options = storage.ListOptions{
 		ResourceVersion: "0",
 		Predicate:       pred(0, continueFromSecondItem),
@@ -4083,8 +4083,8 @@ func RunTestGuaranteedUpdateChecksStoredData(ctx context.Context, t *testing.T, 
 	input := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}}
 	key := computePodKey(input)
 
-	// serialize input into etcd with data that would be normalized by a write -
-	// in this case, leading whitespace
+	// 把 input 序列化写入 etcd，且写入内容在正常写入时会被规范化——
+	// 这里是行首空格
 	revertTransformer := store.UpdatePrefixTransformer(
 		func(transformer *PrefixTransformer) value.Transformer {
 			transformer.prefix = []byte(string(transformer.prefix) + " ")
@@ -4198,7 +4198,7 @@ func RunTestGuaranteedUpdateWithConflict(ctx context.Context, t *testing.T, stor
 func RunTestGuaranteedUpdateWithSuggestionAndConflict(ctx context.Context, t *testing.T, store storage.Interface) {
 	key, originalPod := testPropagateStore(ctx, t, store, &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "test-ns"}})
 
-	// First, update without a suggestion so originalPod is outdated
+	// 第一步：不带 suggestion 进行更新，使 originalPod 变为过期版本
 	updatedPod := &example.Pod{}
 	err := store.GuaranteedUpdate(ctx, key, updatedPod, false, nil,
 		storage.SimpleUpdate(func(obj runtime.Object) (runtime.Object, error) {
@@ -4212,9 +4212,9 @@ func RunTestGuaranteedUpdateWithSuggestionAndConflict(ctx context.Context, t *te
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Second, update using the outdated originalPod as the suggestion. Return a conflict error when
-	// passed originalPod, and make sure that SimpleUpdate is called a second time after a live lookup
-	// with the value of updatedPod.
+	// 第二步：用过期的 originalPod 作为 suggestion 进行更新。当传入的是 originalPod 时返回冲突错误，
+	// 并确保在回源读取（live lookup，读到的是 updatedPod 的值）之后，
+	// SimpleUpdate 被第二次调用。
 	sawConflict := false
 	updatedPod2 := &example.Pod{}
 	err = store.GuaranteedUpdate(ctx, key, updatedPod2, false, nil,
@@ -4225,7 +4225,7 @@ func RunTestGuaranteedUpdateWithSuggestionAndConflict(ctx context.Context, t *te
 					t.Fatalf("unexpected second conflict")
 				}
 				sawConflict = true
-				// simulated stale object - return a conflict
+				// 模拟过期对象——返回冲突错误
 				return nil, apierrors.NewConflict(example.SchemeGroupVersion.WithResource("pods").GroupResource(), "name", errors.New("foo"))
 			}
 			pod.Generation = 3
@@ -4240,9 +4240,9 @@ func RunTestGuaranteedUpdateWithSuggestionAndConflict(ctx context.Context, t *te
 		t.Errorf("unexpected pod generation: %d", updatedPod2.Generation)
 	}
 
-	// Third, update using a current version as the suggestion.
-	// Return an error and make sure that SimpleUpdate is NOT called a second time,
-	// since the live lookup shows the suggestion was already up to date.
+	// 第三步：使用当前版本作为 suggestion 进行更新。
+	// 返回一个错误，并确保 SimpleUpdate 不会被第二次调用，
+	// 因为回源读取显示 suggestion 已经是最新的。
 	attempts := 0
 	updatedPod3 := &example.Pod{}
 	err = store.GuaranteedUpdate(ctx, key, updatedPod3, false, nil,
@@ -4310,7 +4310,7 @@ func RunTestTransformationFailure(ctx context.Context, t *testing.T, store Inter
 	}
 	revertTransformer()
 
-	// List should fail
+	// List 应当失败
 	var got example.PodList
 	storageOpts := storage.ListOptions{
 		Predicate: storage.Everything,
@@ -4320,7 +4320,7 @@ func RunTestTransformationFailure(ctx context.Context, t *testing.T, store Inter
 		t.Errorf("Unexpected error %v", err)
 	}
 
-	// Get should fail
+	// Get 应当失败
 	if err := store.Get(ctx, preset[1].key, storage.GetOptions{}, &example.Pod{}); !storage.IsInternalError(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -4328,16 +4328,16 @@ func RunTestTransformationFailure(ctx context.Context, t *testing.T, store Inter
 	updateFunc := func(input runtime.Object, res storage.ResponseMeta) (runtime.Object, *uint64, error) {
 		return input, nil, nil
 	}
-	// GuaranteedUpdate without suggestion should return an error
+	// 不带 suggestion 的 GuaranteedUpdate 应当返回错误
 	if err := store.GuaranteedUpdate(ctx, preset[1].key, &example.Pod{}, false, nil, updateFunc, nil); !storage.IsInternalError(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	// GuaranteedUpdate with suggestion should return an error if we don't change the object
+	// 带 suggestion 的 GuaranteedUpdate 若不修改对象，也应当返回错误
 	if err := store.GuaranteedUpdate(ctx, preset[1].key, &example.Pod{}, false, nil, updateFunc, preset[1].obj); err == nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// Delete fails with internal error.
+	// Delete 会以 internal error 失败。
 	if err := store.Delete(ctx, preset[1].key, &example.Pod{}, nil, storage.ValidateAllObjectFunc, nil, storage.DeleteOptions{}); !storage.IsInternalError(err) {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -4400,7 +4400,7 @@ func RunTestStats(ctx context.Context, t *testing.T, store storage.Interface, co
 // 再比对期望值；sizeEnabled 为 false 时忽略大小字段。
 func assertStats(t *testing.T, store storage.Interface, sizeEnabled bool, expectStats storage.Stats) {
 	t.Helper()
-	// Execute consistent LIST to refresh state of cache.
+	// 先执行一次一致性 LIST，刷新缓存的状态。
 	err := store.GetList(t.Context(), "/pods/", storage.ListOptions{Recursive: true, Predicate: storage.Everything}, &example.PodList{})
 	if err != nil {
 		t.Fatalf("GetList failed: %v", err)
