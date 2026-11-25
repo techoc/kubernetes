@@ -80,8 +80,8 @@ var (
 	provMigrationPVCBound = makeTestPVC("pvc-migration-provisioned", "1Gi", "", pvcBound, "pv-migration-bound", "1", &waitClassWithProvisioner)
 
 	// 用于 GenericEphemeralVolume 的 PVC 与 PV
-	conflictingGenericPVC = makeGenericEphemeralPVC("test-volume", false /* not owned*/)
-	correctGenericPVC     = makeGenericEphemeralPVC("test-volume", true /* owned */)
+	conflictingGenericPVC = makeGenericEphemeralPVC("test-volume", false /* 非 Pod 所有 */)
+	correctGenericPVC     = makeGenericEphemeralPVC("test-volume", true /* Pod 所有 */)
 	pvBoundGeneric        = makeTestPV("pv-bound", "node1", "1G", "1", correctGenericPVC, waitClass)
 
 	// 用于手动绑定的 PV
@@ -687,7 +687,7 @@ func makeTestPV(name, node, capacity, version string, boundToPVC *v1.PersistentV
 
 func makeTestPVForCSIMigration(labels map[string]string, pvc *v1.PersistentVolumeClaim, migrationEnabled bool) *v1.PersistentVolume {
 	pv := makeTestPV("pv-migration-bound", "node1", "1G", "1", pvc, waitClass)
-	pv.Spec.NodeAffinity = nil // Will be written by the CSI translation lib
+	pv.Spec.NodeAffinity = nil // 将由 CSI 转换库写入
 	pv.ObjectMeta.Labels = labels
 	// 迁移开启时用 GCEPersistentDisk，其特性门控已锁定为 GA；
 	// 未迁移场景用 RBD，其门控仍是 alpha。RBD 迁移进入 GA 后应换用其他未迁移插件；
@@ -833,6 +833,7 @@ func findPodVolumes(logger klog.Logger, binder SchedulerVolumeBinder, pod *v1.Po
 	return binder.FindPodVolumes(logger, pod, podVolumeClaims, node)
 }
 
+// TestFindPodVolumesWithoutProvisioning 验证无需动态供给时的卷匹配、冲突与缓存行为。
 func TestFindPodVolumesWithoutProvisioning(t *testing.T) {
 	t.Parallel()
 
@@ -1034,6 +1035,7 @@ func TestFindPodVolumesWithoutProvisioning(t *testing.T) {
 	}
 }
 
+// TestFindPodVolumesWithProvisioning 验证动态供给场景下延迟绑定卷的查找与冲突判定。
 func TestFindPodVolumesWithProvisioning(t *testing.T) {
 	t.Parallel()
 
@@ -1270,6 +1272,7 @@ func TestFindPodVolumesWithCSIMigration(t *testing.T) {
 	}
 }
 
+// TestAssumePodVolumes 验证假设卷绑定结果会正确更新 PV/PVC 缓存。
 func TestAssumePodVolumes(t *testing.T) {
 	type scenarioType struct {
 		// 输入
@@ -1387,6 +1390,7 @@ func TestAssumePodVolumes(t *testing.T) {
 	}
 }
 
+// TestRevertAssumedPodVolumes 验证回滚会恢复本次调度修改过的缓存条目。
 func TestRevertAssumedPodVolumes(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -1423,6 +1427,7 @@ func TestRevertAssumedPodVolumes(t *testing.T) {
 	testEnv.validateCacheRestored(t, pod, bindings, claims)
 }
 
+// TestBindAPIUpdate 验证 API 更新冲突时重试以及 Pod 删除后的处理。
 func TestBindAPIUpdate(t *testing.T) {
 	type scenarioType struct {
 		// 输入
@@ -1562,6 +1567,7 @@ func TestBindAPIUpdate(t *testing.T) {
 	}
 }
 
+// TestCheckBindings 验证绑定前会识别过时或失效的假设结果。
 func TestCheckBindings(t *testing.T) {
 	t.Parallel()
 
@@ -1767,6 +1773,7 @@ func TestCheckBindings(t *testing.T) {
 	}
 }
 
+// TestCheckBindingsWithCSIMigration 验证 CSI 迁移后绑定检查使用转换后的卷信息。
 func TestCheckBindingsWithCSIMigration(t *testing.T) {
 	t.Parallel()
 
@@ -1887,12 +1894,13 @@ func TestCheckBindingsWithCSIMigration(t *testing.T) {
 	}
 }
 
+// TestBindPodVolumes 覆盖静态与动态卷绑定、并发更新及失败路径。
 func TestBindPodVolumes(t *testing.T) {
 	t.Parallel()
 
 	type scenarioType struct {
 		// 输入
-		bindingsNil bool // Pass in nil bindings slice
+		bindingsNil bool // 传入 nil 绑定切片
 
 		nodes []*v1.Node
 
@@ -1929,7 +1937,7 @@ func TestBindPodVolumes(t *testing.T) {
 			initPVs:    []*v1.PersistentVolume{pvNode1a},
 			initPVCs:   []*v1.PersistentVolumeClaim{unboundPVC},
 			binding:    makeBinding(unboundPVC, pvNode1aBound),
-			shouldFail: false, // Will succeed after PVC is fully bound to this PV by pv controller.
+			shouldFail: false, // PV controller 将 PVC 完全绑定到该 PV 后成功。
 			delayFunc: func(t *testing.T, ctx context.Context, testEnv *testEnv, pod *v1.Pod, pvs []*v1.PersistentVolume, pvcs []*v1.PersistentVolumeClaim) {
 				pvc := pvcs[0]
 				pv := pvs[0]
@@ -1972,7 +1980,7 @@ func TestBindPodVolumes(t *testing.T) {
 			binding:    makeBinding(unboundPVC, pvNode1aBound),
 			apiPV:      pvNode1aBound,
 			apiPVC:     boundPVCNode1a,
-			shouldFail: true, // bindAPIUpdate will fail because API conflict
+			shouldFail: true, // API 冲突会导致 bindAPIUpdate 失败
 		},
 		"pod-deleted-after-time": {
 			binding:  makeBinding(unboundPVC, pvNode1aBound),
@@ -2112,6 +2120,7 @@ func TestBindPodVolumes(t *testing.T) {
 	}
 }
 
+// TestFindAssumeVolumes 验证重试时查找并恢复可复用的假设卷绑定。
 func TestFindAssumeVolumes(t *testing.T) {
 	// 测试用例
 	podPVCs := []*v1.PersistentVolumeClaim{unboundPVC}

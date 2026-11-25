@@ -17,7 +17,7 @@ limitations under the License.
 package reconcilers
 
 /*
-Original Source:
+原始来源：
 https://github.com/openshift/origin/blob/bb340c5dd5ff72718be86fb194dedc0faed7f4c7/pkg/cmd/server/election/lease_endpoint_reconciler_test.go
 */
 
@@ -73,7 +73,7 @@ func newFakeLeases(t *testing.T, baseKey string, s storage.Interface) *fakeLease
 			storage:   s,
 			destroyFn: func() {},
 			baseKey:   baseKey,
-			leaseTime: 1 * time.Minute, // avoid the lease to timeout on tests
+			leaseTime: 1 * time.Minute, // 避免租约在测试期间超时
 		},
 	}
 }
@@ -278,8 +278,7 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 			ip:            "1.2.3.4",
 			endpointPorts: []corev1.EndpointPort{{Name: "foo", Port: 8080, Protocol: "TCP"}},
 			initialState: []runtime.Object{
-				// 此处不能用 makeEndpointsArray()，因为不希望 Endpoints
-				// skip-mirror label
+				// 此处不能用 makeEndpointsArray()，因为它会添加 Endpoints 的 skip-mirror 标签。
 				&corev1.Endpoints{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: metav1.NamespaceDefault,
@@ -338,9 +337,9 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 		t.Run(test.testName, func(t *testing.T) {
 			// 使用与控制面相同的 base key，但加上随机
 			// 前缀，以便各子测试独立复用 etcd 实例。
-			// pkg/controlplane/instance.go:268:
+			// 控制面中的对应调用见 pkg/controlplane/instance.go:268：
 			// masterLeases, err := reconcilers.NewLeases(config, "/masterleases/", ttl)
-			// ref: https://issues.k8s.io/114049
+			// 背景见 https://issues.k8s.io/114049
 			baseKey := "/" + uuid.New().String() + "/masterleases/"
 			s, dFunc, err := factory.Create(*sc.ForResource(schema.GroupResource{Resource: "endpoints"}), newFunc, newListFunc, baseKey)
 			if err != nil {
@@ -428,9 +427,9 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 		t.Run(test.testName, func(t *testing.T) {
 			// 使用与控制面相同的 base key，但加上随机
 			// 前缀，以便各子测试独立复用 etcd 实例。
-			// pkg/controlplane/instance.go:268:
+			// 控制面中的对应调用见 pkg/controlplane/instance.go:268：
 			// masterLeases, err := reconcilers.NewLeases(config, "/masterleases/", ttl)
-			// ref: https://issues.k8s.io/114049
+			// 背景见 https://issues.k8s.io/114049
 			baseKey := "/" + uuid.New().String() + "/masterleases/"
 			s, dFunc, err := factory.Create(*sc.ForResource(schema.GroupResource{Resource: "endpoints"}), newFunc, newListFunc, baseKey)
 			if err != nil {
@@ -544,9 +543,9 @@ func TestLeaseRemoveEndpoints(t *testing.T) {
 		t.Run(test.testName, func(t *testing.T) {
 			// 使用与控制面相同的 base key，但加上随机
 			// 前缀，以便各子测试独立复用 etcd 实例。
-			// pkg/controlplane/instance.go:268:
+			// 控制面中的对应调用见 pkg/controlplane/instance.go:268：
 			// masterLeases, err := reconcilers.NewLeases(config, "/masterleases/", ttl)
-			// ref: https://issues.k8s.io/114049
+			// 背景见 https://issues.k8s.io/114049
 			baseKey := "/" + uuid.New().String() + "/masterleases/"
 			s, dFunc, err := factory.Create(*sc.ForResource(schema.GroupResource{Resource: "pods"}), newFunc, newListFunc, baseKey)
 			if err != nil {
@@ -662,9 +661,9 @@ func TestApiserverShutdown(t *testing.T) {
 		t.Run(test.testName, func(t *testing.T) {
 			// 使用与控制面相同的 base key，但加上随机
 			// 前缀，以便各子测试独立复用 etcd 实例。
-			// pkg/controlplane/instance.go:268:
+			// 控制面中的对应调用见 pkg/controlplane/instance.go:268：
 			// masterLeases, err := reconcilers.NewLeases(config, "/masterleases/", ttl)
-			// ref: https://issues.k8s.io/114049
+			// 背景见 https://issues.k8s.io/114049
 			baseKey := "/" + uuid.New().String() + "/masterleases/"
 			s, dFunc, err := factory.Create(*sc.ForResource(schema.GroupResource{Resource: "endpoints"}), newFunc, newListFunc, baseKey)
 			if err != nil {
@@ -682,7 +681,7 @@ func TestApiserverShutdown(t *testing.T) {
 			r := NewLeaseEndpointReconciler(epAdapter, fakeLeases)
 
 			if test.shutDownBeforeReconcile {
-				// shutdown apiserver first
+				// 先停止 apiserver
 				r.StopReconciling()
 				err = r.RemoveEndpoints(test.serviceName, netutils.ParseIPSloppy(test.ip), test.endpointPorts)
 				if err != nil {
@@ -695,7 +694,7 @@ func TestApiserverShutdown(t *testing.T) {
 					t.Errorf("unexpected error reconciling: %v", err)
 				}
 			} else {
-				// reconcile endpoints first
+				// 先协调 endpoints
 				err = r.ReconcileEndpoints(test.serviceName, netutils.ParseIPSloppy(test.ip), test.endpointPorts, false)
 				if err != nil {
 					t.Errorf("unexpected error reconciling: %v", err)

@@ -102,8 +102,7 @@ func OperationCompleteHook(plugin, operationName string) func(types.CompleteFunc
 		// 用操作名和插件名构造指标标签。
 		status := statusSuccess
 		if *c.Err != nil {
-			// TODO: Establish well-known error codes to be able to distinguish
-			// user configuration errors from system errors.
+			// TODO: 建立公认的错误码，以便区分用户配置错误和系统错误。
 			// 目前无法区分错误类型，统一记为 fail-unknown。
 			status = statusFailUnknown
 		}

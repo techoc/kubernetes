@@ -94,7 +94,8 @@ func getBinaryVersionOrZero(l *v1beta1.LeaseCandidate) semver.Version {
 	return v
 }
 
-// -1: lhs better, 1: rhs better
+// compare 按模拟版本、二进制版本和创建时间比较候选者优先级。
+// 返回 -1 表示 lhs 更优，返回 1 表示 rhs 更优。
 func compare(lhs, rhs *v1beta1.LeaseCandidate) int {
 	l := getEmulationVersionOrZero(lhs)
 	r := getEmulationVersionOrZero(rhs)

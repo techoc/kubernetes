@@ -262,8 +262,7 @@ func (f *FakeExtender) selectVictimsOnNodeByExtender(logger klog.Logger, pod *v1
 
 	var victims []*v1.Pod
 
-	// TODO(harry): handle PDBs in the future.
-	// 目前测试实现暂不处理 PDB。
+	// TODO(harry): 后续处理 PDB；目前测试实现暂不处理 PDB。
 	numViolatingVictim := 0
 
 	reprievePod := func(p *v1.Pod) bool {

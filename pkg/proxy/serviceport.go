@@ -166,7 +166,6 @@ func (bsvcPortInfo *BaseServicePortInfo) ExternallyAccessible() bool {
 }
 
 // UsesClusterEndpoints 是 ServicePort 接口的一部分。
-// UsesClusterEndpoints 是 ServicePort 接口的一部分。
 func (bsvcPortInfo *BaseServicePortInfo) UsesClusterEndpoints() bool {
 	// 内部流量策略为 "Cluster"，或者服务接受外部流量时，都需要 Cluster 端点；
 	// 即使外部流量策略为 "Local"，也要靠 Cluster 端点来实现短路（short circuiting），

@@ -592,12 +592,12 @@ func TestNodePortIPv4(t *testing.T) {
 						IP:       "10.20.30.41",
 						Port:     80,
 						Protocol: "TCP",
-					}: {}, // no real servers corresponding to no endpoints
+					}: {}, // 无端点，因此无对应 RealServer
 					{
 						IP:       "100.101.102.103",
 						Port:     3001,
 						Protocol: "TCP",
-					}: {}, // no real servers corresponding to no endpoints
+					}: {}, // 无端点，因此无对应 RealServer
 				},
 			},
 		},
@@ -1032,7 +1032,7 @@ func TestNodePortIPv6(t *testing.T) {
 			},
 			nodeIPs:           []string{"100.101.102.103"},
 			nodePortAddresses: []string{"0.0.0.0/0"},
-			/*since this is a node with only IPv4, proxier should not do anything */
+			/* 因为该节点只有 IPv4，proxier 不应产生任何变更。 */
 			expectedIPVS: &ipvstest.FakeIPVS{
 				Services:     map[ipvstest.ServiceKey]*utilipvs.VirtualServer{},
 				Destinations: map[ipvstest.ServiceKey][]*utilipvs.RealServer{},
@@ -1086,12 +1086,12 @@ func TestNodePortIPv6(t *testing.T) {
 						IP:       "2020::1",
 						Port:     80,
 						Protocol: "TCP",
-					}: {}, // no real servers corresponding to no endpoints
+					}: {}, // 无端点，因此无对应 RealServer
 					{
 						IP:       "2001:db8::1:1",
 						Port:     3001,
 						Protocol: "TCP",
-					}: {}, // no real servers corresponding to no endpoints
+					}: {}, // 无端点，因此无对应 RealServer
 				},
 			},
 		},
@@ -1717,7 +1717,7 @@ func TestExternalIPs(t *testing.T) {
 		t.Errorf("Failed to get ipvs services, err: %v", err)
 	}
 	// 期望 3 个：ClusterIP、IPv4 ExternalIP、回环 ExternalIP；IPv6 ExternalIP 被地址族过滤。
-	if len(services) != 3 { // ipvs filters out by ipfamily
+	if len(services) != 3 { // IPVS 按 IPFamily 过滤
 		t.Errorf("Expect 3 ipvs services, got %d", len(services))
 	}
 	found := false
@@ -1797,7 +1797,7 @@ func TestOnlyLocalExternalIPs(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to get ipvs services, err: %v", err)
 	}
-	if len(services) != 3 { // ipvs filters out by IPFamily
+	if len(services) != 3 { // IPVS 按 IPFamily 过滤
 		t.Errorf("Expect 3 ipvs services, got %d", len(services))
 	}
 	found := false
@@ -2251,8 +2251,8 @@ func TestAcceptIPVSTraffic(t *testing.T) {
 			{JumpChain: string(kubeLoadBalancerChain), MatchSet: kubeLoadBalancerSet},
 			{JumpChain: string(kubeMarkMasqChain), MatchSet: kubeClusterIPSet},
 			{JumpChain: string(kubeMarkMasqChain), MatchSet: kubeExternalIPSet},
-			{JumpChain: "ACCEPT", MatchSet: kubeExternalIPSet}, // With externalTrafficOnlyArgs
-			{JumpChain: "ACCEPT", MatchSet: kubeExternalIPSet}, // With dstLocalOnlyArgs
+			{JumpChain: "ACCEPT", MatchSet: kubeExternalIPSet}, // 使用 externalTrafficOnlyArgs
+			{JumpChain: "ACCEPT", MatchSet: kubeExternalIPSet}, // 使用 dstLocalOnlyArgs
 			{JumpChain: string(kubeNodePortChain), MatchSet: ""},
 			{JumpChain: "ACCEPT", MatchSet: kubeClusterIPSet},
 			{JumpChain: "ACCEPT", MatchSet: kubeLoadBalancerSet},
@@ -2298,11 +2298,11 @@ func TestOnlyLocalLoadBalancing(t *testing.T) {
 		makeTestEndpointSlice(svcPortName.Namespace, svcPortName.Name, 1, func(eps *discovery.EndpointSlice) {
 			eps.AddressType = discovery.AddressTypeIPv4
 			eps.Endpoints = []discovery.Endpoint{
-				{ // **local** endpoint address, should be added as RS
+				{ // 本地 endpoint 地址，应添加为 RS
 					Addresses: []string{epIP},
 					NodeName:  ptr.To(testNodeName),
 				},
-				{ // **remote** endpoint address, should not be added as RS
+				{ // 远端 endpoint 地址，不应添加为 RS
 					Addresses: []string{epIP1},
 					NodeName:  ptr.To("other-node"),
 				}}
@@ -2522,7 +2522,7 @@ func TestBuildServiceMapServiceTypeExternalName(t *testing.T) {
 	makeServiceMap(fp,
 		makeTestService("somewhere-else", "external-name", func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeExternalName
-			svc.Spec.ClusterIP = "172.16.55.4" // Should be ignored
+			svc.Spec.ClusterIP = "172.16.55.4" // 应被忽略
 			svc.Spec.ExternalName = "foo2.bar.com"
 			svc.Spec.Ports = addTestPort(svc.Spec.Ports, "blah", "UDP", 1235, 5321, 0)
 		}),
@@ -3461,7 +3461,7 @@ func Test_syncService(t *testing.T) {
 		alreadyBoundAddrs sets.Set[string]
 	}{
 		{
-			// 场景 0, old virtual server is same as new virtual server
+			// 场景 0：新旧虚拟服务相同。
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolTCP),
@@ -3481,7 +3481,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// 场景 1, old virtual server is different from new virtual server
+			// 场景 1：新旧虚拟服务的 Flags 不同。
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolTCP),
@@ -3501,7 +3501,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// 场景 2, old virtual server is different from new virtual server
+			// 场景 2：新旧虚拟服务的调度算法不同。
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolTCP),
@@ -3521,7 +3521,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// 场景 3, old virtual server is nil, and create new virtual server
+			// 场景 3：旧虚拟服务为 nil，需创建新虚拟服务。
 			oldVirtualServer: nil,
 			svcName:          "baz",
 			newVirtualServer: &utilipvs.VirtualServer{
@@ -3535,7 +3535,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// 场景 4, SCTP, old virtual server is same as new virtual server
+			// 场景 4：SCTP 新旧虚拟服务相同。
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolSCTP),
@@ -3555,7 +3555,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// 场景 5, old virtual server is different from new virtual server
+			// 场景 5：SCTP 新旧虚拟服务的 Flags 不同。
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolSCTP),
@@ -3575,7 +3575,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// 场景 6, old virtual server is different from new virtual server
+			// 场景 6：SCTP 新旧虚拟服务的调度算法不同。
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolSCTP),
@@ -3595,7 +3595,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: nil,
 		},
 		{
-			// 场景 7, old virtual server is nil, and create new virtual server
+			// 场景 7：SCTP 旧虚拟服务为 nil，需创建新虚拟服务。
 			oldVirtualServer: nil,
 			svcName:          "baz",
 			newVirtualServer: &utilipvs.VirtualServer{
@@ -3609,7 +3609,7 @@ func Test_syncService(t *testing.T) {
 			alreadyBoundAddrs: sets.New[string](),
 		},
 		{
-			// 场景 8, virtual server address already binded, skip sync
+			// 场景 8：虚拟服务地址已绑定，跳过同步。
 			oldVirtualServer: &utilipvs.VirtualServer{
 				Address:   netutils.ParseIPSloppy("1.2.3.4"),
 				Protocol:  string(v1.ProtocolSCTP),
@@ -3851,21 +3851,21 @@ func TestCleanLegacyServiceWithRealServers(t *testing.T) {
 	activeServices := sets.New("ipvs2")
 	// 系统中当前存在的全部 IPVS 虚拟服务。
 	currentServices := map[string]*utilipvs.VirtualServer{
-		"ipvs0": { // deleted with real servers
+		"ipvs0": { // 即使仍有 RealServer 也应删除
 			Address:   netutils.ParseIPSloppy("1.1.1.1"),
 			Protocol:  string(v1.ProtocolUDP),
 			Port:      53,
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		"ipvs1": { // deleted no real server
+		"ipvs1": { // 无 RealServer，仍应删除
 			Address:   netutils.ParseIPSloppy("2.2.2.2"),
 			Protocol:  string(v1.ProtocolUDP),
 			Port:      54,
 			Scheduler: "rr",
 			Flags:     utilipvs.FlagHashed,
 		},
-		"ipvs2": { // not deleted
+		"ipvs2": { // 不删除
 			Address:   netutils.ParseIPSloppy("3.3.3.3"),
 			Protocol:  string(v1.ProtocolUDP),
 			Port:      54,
@@ -4201,7 +4201,7 @@ func TestEndpointSliceE2E(t *testing.T) {
 			Addresses:  []string{"10.0.1.3"},
 			Conditions: discovery.EndpointConditions{Ready: ptr.To(true)},
 			NodeName:   ptr.To("node3"),
-		}, { // not ready endpoints should be ignored
+		}, { // 未就绪端点应被忽略
 			Addresses:  []string{"10.0.1.4"},
 			Conditions: discovery.EndpointConditions{Ready: ptr.To(false)},
 			NodeName:   ptr.To("node3"),
@@ -4344,7 +4344,7 @@ func Test_HealthCheckNodePortWhenTerminating(t *testing.T) {
 		}, {
 			Addresses:  []string{"10.0.1.3"},
 			Conditions: discovery.EndpointConditions{Ready: ptr.To(true)},
-		}, { // not ready endpoints should be ignored
+		}, { // 未就绪端点应被忽略
 			Addresses:  []string{"10.0.1.4"},
 			Conditions: discovery.EndpointConditions{Ready: ptr.To(false)},
 			NodeName:   ptr.To(testNodeName),
@@ -4396,7 +4396,7 @@ func Test_HealthCheckNodePortWhenTerminating(t *testing.T) {
 				Terminating: ptr.To(true),
 			},
 			NodeName: ptr.To(testNodeName),
-		}, { // not ready endpoints should be ignored
+		}, { // 未就绪端点应被忽略
 			Addresses: []string{"10.0.1.4"},
 			Conditions: discovery.EndpointConditions{
 				Ready:       ptr.To(false),

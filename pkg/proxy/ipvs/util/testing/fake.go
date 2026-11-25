@@ -28,7 +28,7 @@ import (
 	utilipvs "k8s.io/kubernetes/pkg/proxy/ipvs/util"
 )
 
-// FakeIPVS 是 ipvs Interface 的空操作（no-op）实现，用内存缓存模拟 ipvs 状态
+// FakeIPVS 是 ipvs Interface 的空操作实现，用内存缓存模拟 ipvs 状态
 type FakeIPVS struct {
 	Scheduler    string
 	Services     map[ServiceKey]*utilipvs.VirtualServer

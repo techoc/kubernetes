@@ -23,8 +23,9 @@ import (
 	fwk "k8s.io/kube-scheduler/framework"
 )
 
-// 注意：CycleState 用 sync.Map 作为底层存储，因为它天然线程安全。这样优化的是"一次写入、多次读取"的场景。
-// 内置插件都遵循这一模式：在 PreFilter/PreScore 中写入插件专属状态，随后在 Filter/Score 中多次读取。
+// CycleState 保存一次调度周期中由插件写入和读取的状态。
+// 它用 sync.Map 作为底层存储，因为插件通常遵循“一次写入、多次读取”的模式：
+// 在 PreFilter/PreScore 中写入插件专属状态，随后在 Filter/Score 中多次读取。
 type CycleState struct {
 	// storage 以 StateKey 为键、StateData 为值。
 	storage sync.Map

@@ -55,7 +55,7 @@ const (
 // preFilterState 保存 Pod 请求的宿主端口列表，由 PreFilter 计算并在 Filter 中复用。
 type preFilterState []v1.ContainerPort
 
-// Clone 返回 prefilter 状态的副本。
+// Clone 返回 prefilter 状态本身。
 func (s preFilterState) Clone() fwk.StateData {
 	// 该状态不受 Pod 增删影响，所以无需深拷贝，直接共享即可。
 	return s

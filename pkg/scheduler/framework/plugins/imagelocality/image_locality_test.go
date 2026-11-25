@@ -275,13 +275,13 @@ func TestImageLocalityPriority(t *testing.T) {
 		name         string
 	}{
 		{
-			// Pod: gcr.io/40 gcr.io/250
+			// Pod 镜像: gcr.io/40 gcr.io/250
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/40:latest 40MB
 			// 分数: 0 (40M/2 < 23M，低于最小阈值)
 
-			// Node2
+			// 节点 2
 			// 镜像: gcr.io/250:latest 250MB
 			// 分数: 100 * (250M/2 - 23M)/(1000M * 2 - 23M) = 5
 			pod:          &v1.Pod{Spec: test40250},
@@ -290,13 +290,13 @@ func TestImageLocalityPriority(t *testing.T) {
 			name:         "two images spread on two nodes, prefer the larger image one",
 		},
 		{
-			// Pod: gcr.io/40 gcr.io/300
+			// Pod 镜像: gcr.io/40 gcr.io/300
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/40:latest 40MB, gcr.io/300:latest 300MB
 			// 分数: 100 * ((40M + 300M)/2 - 23M)/(1000M * 2 - 23M) = 7
 
-			// Node2
+			// 节点 2
 			// 镜像: 不存在
 			// 分数: 0
 			pod:          &v1.Pod{Spec: test40300},
@@ -305,13 +305,13 @@ func TestImageLocalityPriority(t *testing.T) {
 			name:         "two images on one node, prefer this node",
 		},
 		{
-			// Pod: gcr.io/4000 gcr.io/10
+			// Pod 镜像: gcr.io/4000 gcr.io/10
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/4000:latest 2000MB
 			// 分数: 100 (4000 * 1/2 >= 1000M * 2，达到最大阈值)
 
-			// Node2
+			// 节点 2
 			// 镜像: gcr.io/10:latest 10MB
 			// 分数: 0 (10M/2 < 23M，低于最小阈值)
 			pod:          &v1.Pod{Spec: testMinMax},
@@ -320,17 +320,17 @@ func TestImageLocalityPriority(t *testing.T) {
 			name:         "if exceed limit, use limit",
 		},
 		{
-			// Pod: gcr.io/4000 gcr.io/10
+			// Pod 镜像: gcr.io/4000 gcr.io/10
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/4000:latest 4000MB
 			// 分数: 100 * (4000M/3 - 23M)/(1000M * 2 - 23M) = 66
 
-			// Node2
+			// 节点 2
 			// 镜像: gcr.io/10:latest 10MB
 			// 分数: 0 (10M*1/3 < 23M，低于最小阈值)
 
-			// Node3
+			// 节点 3
 			// 镜像: 无
 			// 分数: 0
 			pod:          &v1.Pod{Spec: testMinMax},
@@ -339,17 +339,17 @@ func TestImageLocalityPriority(t *testing.T) {
 			name:         "if exceed limit, use limit (with node which has no images present)",
 		},
 		{
-			// Pod: gcr.io/300 gcr.io/600 gcr.io/900
+			// Pod 镜像: gcr.io/300 gcr.io/600 gcr.io/900
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/600:latest 600MB, gcr.io/900:latest 900MB
 			// 分数: 100 * (600M * 2/3 + 900M * 2/3 - 23M) / (1000M * 3 - 23M) = 32
 
-			// Node2
+			// 节点 2
 			// 镜像: gcr.io/300:latest 300MB, gcr.io/600:latest 600MB, gcr.io/900:latest 900MB
 			// 分数: 100 * (300M * 1/3 + 600M * 2/3 + 900M * 2/3 - 23M) / (1000M *3 - 23M) = 36
 
-			// Node3
+			// 节点 3
 			// 镜像: 无
 			// 分数: 0
 			pod:          &v1.Pod{Spec: test300600900},
@@ -358,28 +358,28 @@ func TestImageLocalityPriority(t *testing.T) {
 			name:         "pod with multiple large images, node2 is preferred",
 		},
 		{
-			// Pod: gcr.io/30 gcr.io/40
+			// Pod 镜像: gcr.io/30 gcr.io/40
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/20:latest 20MB, gcr.io/30:latest 30MB, gcr.io/40:latest 40MB
 			// 分数: 100 * (30M + 40M * 1/2 - 23M) / (1000M * 2 - 23M) = 1
 
-			// Node2
-			// 镜像: 100 * (30M - 23M) / (1000M * 2 - 23M) = 0
-			// 分数: 0
+			// 节点 2
+			// 镜像: gcr.io/30:latest 30MB
+			// 分数: 100 * (30M - 23M) / (1000M * 2 - 23M) = 0
 			pod:          &v1.Pod{Spec: test3040},
 			nodes:        []*v1.Node{makeImageNode("node1", node203040), makeImageNode("node2", node400030)},
 			expectedList: []fwk.NodeScore{{Name: "node1", Score: 1}, {Name: "node2", Score: 0}},
 			name:         "pod with multiple small images",
 		},
 		{
-			// Pod: gcr.io/30  ImageVolume: gcr.io/300
+			// Pod 镜像: gcr.io/30  ImageVolume: gcr.io/300
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/300:latest 300MB
 			// 分数: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
 
-			// Node2
+			// 节点 2
 			// 镜像: gcr.io/30:latest 30MB
 			// 分数: 0 (30M * 1/2 < 23M，低于最小阈值)
 			pod:          &v1.Pod{Spec: testImageVolume},
@@ -388,13 +388,13 @@ func TestImageLocalityPriority(t *testing.T) {
 			name:         "pod with ImageVolume",
 		},
 		{
-			// Pod: gcr.io/30  gcr.io/300
+			// Pod 镜像: gcr.io/30  gcr.io/300
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/300:latest 300MB
 			// 分数: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
 
-			// Node2
+			// 节点 2
 			// 镜像: gcr.io/30:latest 30MB
 			// 分数: 0 (30M * 1/2 < 23M，低于最小阈值)
 			pod:          &v1.Pod{Spec: test30300AsContainers},
@@ -403,13 +403,13 @@ func TestImageLocalityPriority(t *testing.T) {
 			name:         "same images as ImageVolume pod but as regular container images",
 		},
 		{
-			// Pod: gcr.io/30  InitContainers: gcr.io/300
+			// Pod 镜像: gcr.io/30  InitContainers: gcr.io/300
 
-			// Node1
+			// 节点 1
 			// 镜像: gcr.io/40:latest 40MB, gcr.io/300:latest 300MB, gcr.io/2000:latest 2000MB
 			// 分数: 100 * (300M * 1/2 - 23M) / (1000M * 2 - 23M) = 6
 
-			// Node2
+			// 节点 2
 			// 镜像: gcr.io/20:latest 20MB, gcr.io/30:latest 30MB, gcr.io/40:latest 40MB
 			// 分数: 100 * (30M * 1/2  - 23M) / (1000M * 2 - 23M) = 0
 			pod:          &v1.Pod{Spec: test30Init300},

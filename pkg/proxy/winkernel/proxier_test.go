@@ -1480,7 +1480,6 @@ func TestCreateDsrLoadBalancer(t *testing.T) {
 // TestClusterIPLBInCreateDsrLoadBalancer 测试：当可用端点均为远端端点时，
 // syncProxyRules 只创建 ClusterIP 负载均衡器，不会创建 NodePort、ExternalIP 或 IngressIP
 // 负载均衡器。
-// TestClusterIPLBInCreateDsrLoadBalancer 验证远端端点场景下只创建 ClusterIP 负载均衡器。
 func TestClusterIPLBInCreateDsrLoadBalancer(t *testing.T) {
 	proxier := NewFakeProxier(t, testNodeName, netutils.ParseIPSloppy("10.0.0.1"), NETWORK_TYPE_OVERLAY, false)
 

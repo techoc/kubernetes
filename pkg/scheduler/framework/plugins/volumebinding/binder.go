@@ -196,6 +196,7 @@ type SchedulerVolumeBinder interface {
 	BindPodVolumes(ctx context.Context, assumedPod *v1.Pod, podVolumes *PodVolumes) error
 }
 
+// PodVolumeClaims 按绑定状态和绑定模式对 Pod 的 PVC 与 PV 分类，供卷绑定流程使用。
 type PodVolumeClaims struct {
 	// boundClaims 是 Pod 中已绑定的 PVC。
 	boundClaims []*v1.PersistentVolumeClaim

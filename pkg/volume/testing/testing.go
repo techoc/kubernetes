@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	// storage class 中指定的钩子，表示预期 provisioning 失败。
+	// StorageClass 中指定的钩子，表示预期 provisioning 失败。
 	ExpectProvisionFailureKey = "expect-provision-failure"
 	// 将该节点标记为"不确定"：首次 attach 返回超时错误，后续调用成功。
 	UncertainAttachNode = "uncertain-attach-node"
@@ -74,18 +74,22 @@ const (
 	TimeoutAndFailOnMountDeviceVolumeName = "timeout-and-fail-mount-device-name"
 	// 该卷名使 MountDevice 操作失败。
 	FailMountDeviceVolumeName = "fail-mount-device-volume-name"
-	// 该卷名使首次挂载成功，后续尝试超时。
+	// 该卷名使首次设备挂载成功，后续尝试超时。
 	SuccessAndTimeoutDeviceName = "success-and-timeout-device-name"
 	// 该卷名使首次 MountDevice 成功，后续尝试失败。
 	SuccessAndFailOnMountDeviceName = "success-and-failed-mount-device-name"
 
-	// 该卷名使 NodeExpandVolume 返回 FailedPrecondition 错误。
-	FailWithInUseVolumeName       = "fail-expansion-in-use"
+	// 该卷名使 NodeExpand 返回 FailedPrecondition 错误。
+	FailWithInUseVolumeName = "fail-expansion-in-use"
+	// 该卷名使 NodeExpand 返回“不支持”错误。
 	FailWithUnSupportedVolumeName = "fail-expansion-unsupported"
 
+	// 该卷名使 NodeExpand 返回普通失败错误。
 	FailVolumeExpansion = "fail-expansion-test"
 
-	InfeasibleNodeExpansion      = "infeasible-fail-node-expansion"
+	// 该卷名使 NodeExpand 返回“不可行”错误。
+	InfeasibleNodeExpansion = "infeasible-fail-node-expansion"
+	// 该卷名使 NodeExpand 返回其他最终错误。
 	OtherFinalNodeExpansionError = "other-final-node-expansion-error"
 
 	deviceNotMounted     = "deviceNotMounted"
@@ -96,6 +100,7 @@ const (
 	volumeMountUncertain = "volumeMountUncertain"
 	volumeMounted        = "volumeMounted"
 
+	// 该卷名使 NewMounter 始终失败。
 	FailNewMounter = "fail-new-mounter"
 )
 

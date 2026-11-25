@@ -1099,7 +1099,7 @@ func getAttemptsLabel(p *framework.QueuedPodInfo) string {
 	return strconv.Itoa(p.Attempts)
 }
 
-// handleSchedulingFailure 为 Pod 记录调度失败事件，并更新 Pod condition 与 nominated node name（若有）。
+// handleSchedulingFailure 为 Pod 记录调度失败事件，并更新 Pod 条件与候选节点名（若有）。
 func (sched *Scheduler) handleSchedulingFailure(ctx context.Context, podFwk framework.Framework, podInfo *framework.QueuedPodInfo, status *fwk.Status, nominatingInfo *fwk.NominatingInfo, start time.Time) {
 	podInfo = podInfo.DeepCopy()
 	calledDone := false

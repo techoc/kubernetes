@@ -72,11 +72,11 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			// Node1
 			//  CPU: 0 -> 3000/4000（0% -> 75%）
 			//  Memory: 0 -> 5000/10000（0% -> 50%）
-			//  Score: 68 (100 -> 87)
+			//  得分： 68 (100 -> 87)
 			// Node2
 			//  CPU: 0 -> 3000/6000（0% -> 50%）
 			//  Memory: 0 -> 5000/10000（0% -> 50%）
-			//  Score: 75 (100 -> 100)
+			//  得分： 75 (100 -> 100)
 			name:         "nothing scheduled, resources requested, differently sized nodes",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
 			nodes: []*v1.Node{
@@ -90,11 +90,11 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			// Node1
 			//  CPU: 3000 -> 6000/10000（30% -> 60%）
 			//  Memory: 0 -> 5000/20000（0% -> 25%）
-			//  Score: 73 (85 -> 82)
+			//  得分： 73 (85 -> 82)
 			// Node2
 			//  CPU: 3000 -> 6000/10000（30% -> 60%）
 			//  Memory: 5000 -> 10000/20000（25% -> 50%）
-			//  Score: 74 (97 -> 95)
+			//  得分： 74 (97 -> 95)
 			name:         "resources requested, pods scheduled with resources",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
 			nodes: []*v1.Node{
@@ -113,11 +113,11 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			// Node1
 			//  CPU: 3000 -> 6000/10000（30% -> 60%）
 			//  Memory: 0 -> 5000/20000（0% -> 25%）
-			//  Score: 73 (85 -> 82)
+			//  得分： 73 (85 -> 82)
 			// Node2
 			//  CPU: 3000 -> 6000/10000（30% -> 60%）
 			//  Memory: 5000 -> 10000/50000（10% -> 20%）
-			//  Score: 70 (90 -> 80)
+			//  得分： 70 (90 -> 80)
 			name:         "resources requested, pods scheduled with resources, differently sized nodes",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
 			nodes: []*v1.Node{
@@ -136,11 +136,11 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			// Node1
 			//  CPU: 3000 -> 3000/3000（100% -> 100%）
 			//  Memory: 0 -> 5000/5000（0% -> 100%）
-			//  Score: 100 (50 -> 100)
+			//  得分： 100 (50 -> 100)
 			// Node2
 			//  CPU: 0 -> 0/10000（0% -> 0%）
 			//  Memory: 0 -> 5000/5000（0% -> 100%）
-			//  Score: 50 (100 -> 50)
+			//  得分： 50 (100 -> 50)
 			name:         "resources requested, pods scheduled with resources, nodes to reach min/max score",
 			requestedPod: st.MakePod().Req(map[v1.ResourceName]string{"memory": "2000"}).Req(map[v1.ResourceName]string{"memory": "3000"}).Obj(),
 			nodes: []*v1.Node{
@@ -158,11 +158,11 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			// Node1
 			//  CPU: 3000 -> 6000/6000（50% -> 100%）
 			//  Memory: 0 -> 0/10000（0% -> 0%）
-			//  Score: 62 (75 -> 50)
+			//  得分： 62 (75 -> 50)
 			// Node2
 			//  CPU: 3000 -> 6000/6000（50% -> 100%）
 			//  Memory: 5000 -> 5000/10000（50% -> 50%）
-			//  Score: 62 (100 -> 75)
+			//  得分： 62 (100 -> 75)
 			name:         "requested resources at node capacity",
 			requestedPod: st.MakePod().Req(cpuOnly("1000m")).Req(cpuOnly("2000m")).Obj(),
 			nodes: []*v1.Node{
@@ -182,12 +182,12 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			//  CPU: 3000 -> 3000/3500（85.7% -> 85.7%）
 			//  Memory: 5000 -> 5000/40000（12.5% -> 12.5%）
 			//  GPU: 3 -> 4/8（37.5% -> 50%）
-			//  Score: 75 (69 -> 70)
+			//  得分： 75 (69 -> 70)
 			// Node2
 			//  CPU: 3000 -> 3000/3500（85.7% -> 85.7%）
 			//  Memory: 5000 -> 5000/40000（12.5% -> 12.5%）
 			//  GPU: 0 -> 1/8（0% -> 12.5%）
-			//  Score: 76 (62 -> 65)
+			//  得分： 76 (62 -> 65)
 			name:         "scalar resource is included in the score computation if pod requests the scalar resource",
 			requestedPod: st.MakePod().Req(cpuAndMemoryAndGpu("0", "0", "1")).Obj(),
 			nodes: []*v1.Node{
@@ -211,11 +211,11 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			//  CPU: 0 -> 3000/3500（0% -> 85.7%）
 			//  Memory: 0 -> 5000/40000（0% -> 12.5%）
 			//  GPU: 0 -> 0/8（Pod 未请求该标量资源，忽略）
-			//  Score: 56 (100 -> 63)
+			//  得分： 56 (100 -> 63)
 			// Node2
 			//  CPU: 0 -> 3000/3500（0% -> 85.7%）
 			//  Memory: 0 -> 5000/40000（0% -> 12.5%）
-			//  Score: 56 (100 -> 63)
+			//  得分： 56 (100 -> 63)
 			name:         "scalar resource is not included in the score computation if pod doesn't request the scalar resource",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
 			nodes: []*v1.Node{
@@ -236,11 +236,11 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			// Node1
 			//  CPU: 3000 -> 6000/10000（30% -> 60%）
 			//  Memory: 0 -> 5000/20000（0% -> 25%）
-			//  Score: 73 (85 -> 82)
+			//  得分： 73 (85 -> 82)
 			// Node2
 			//  CPU: 3000 -> 6000/10000（30% -> 60%）
 			//  Memory: 5000 -> 10000/20000（25% -> 50%）
-			//  Score: 74 (97 -> 95)
+			//  得分： 74 (97 -> 95)
 			name:         "resources requested, pods scheduled with resources if PreScore not called",
 			requestedPod: st.MakePod().Req(cpuAndMemory("1000m", "2000")).Req(cpuAndMemory("2000m", "3000")).Obj(),
 			nodes: []*v1.Node{
@@ -260,12 +260,12 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			//  CPU: 3000 -> 3000/3500（86% -> 86%）
 			//  Memory: 0 -> 0/40000（0% -> 0%）
 			//  DRA: 0 -> 1/8（0% -> 12%）
-			//  Score: 76 (60 -> 62)
+			//  得分： 76 (60 -> 62)
 			// Node2
 			//  CPU: 3000 -> 3000/3500（86% -> 86%）
 			//  Memory: 5000 -> 5000/40000（12% -> 12%）
 			//  DRA: 无法满足
-			//  Score: 75 (63 -> 63)
+			//  得分： 75 (63 -> 63)
 			name:         "include DRA resource on a node for balanced resource allocation",
 			requestedPod: st.MakePod().Req(map[v1.ResourceName]string{extendedResourceDRA: "1"}).Obj(),
 			nodes:        []*v1.Node{makeNode("node1", 3500, 40000, nil), makeNode("node2", 3500, 40000, nil)},
@@ -290,12 +290,12 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 			//  CPU: 3000 -> 3000/3500（86% -> 86%）
 			//  Memory: 0 -> 0/40000（0% -> 0%）
 			//  DRA: 0 -> 1/8（0% -> 12%）
-			//  Score: 76 (60 -> 62)
+			//  得分： 76 (60 -> 62)
 			// Node2
 			//  CPU: 3000 -> 3000/3500（86% -> 86%）
 			//  Memory: 5000 -> 5000/40000（12% -> 12%）
 			//  DRA: 无法满足
-			//  Score: 75 (63 -> 63)
+			//  得分： 75 (63 -> 63)
 			name:         "include DRA resource on a node for balanced resource allocation if PreScore not called",
 			requestedPod: st.MakePod().Req(map[v1.ResourceName]string{extendedResourceDRA: "1"}).Obj(),
 			nodes:        []*v1.Node{makeNode("node1", 3500, 40000, nil), makeNode("node2", 3500, 40000, nil)},
@@ -364,6 +364,7 @@ func testNodeResourcesBalancedAllocation(tCtx ktesting.TContext) {
 	}
 }
 
+// TestBalancedAllocationSignPod 验证资源签名覆盖普通、无请求及 DRA 扩展资源等边界场景。
 func TestBalancedAllocationSignPod(t *testing.T) {
 	testBalancedAllocationSignPod(ktesting.Init(t))
 }

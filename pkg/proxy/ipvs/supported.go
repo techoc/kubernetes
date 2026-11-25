@@ -33,10 +33,10 @@ import (
 // 如有必要，所需内核模块会被自动加载。
 func CanUseIPVSProxier(ctx context.Context, ipvs utilipvs.Interface, ipsetver IPSetVersioner, scheduler string) error {
 	logger := klog.FromContext(ctx)
-	// BUG: https://github.com/moby/ipvs/issues/27
+	// 已知问题：https://github.com/moby/ipvs/issues/27
 	// 内核未编译 ipvs 时，moby/ipvs 不返回错误而是返回 handle==nil，
 	// 这会让 ipvs.GetVirtualServers 和 ipvs.AddVirtualServer 误报成功（err==nil）。
-	// 该 bug 修复后，内核不支持 ipvs 时传入的 "ipvs" 会是 nil；修复前只能用"重新读取"来绕过。
+	// 该缺陷修复后，内核不支持 ipvs 时传入的 "ipvs" 会是 nil；修复前只能通过“重新读取”绕过。
 	if ipvs == nil {
 		return fmt.Errorf("ipvs not supported by the kernel")
 	}
@@ -92,7 +92,7 @@ func CanUseIPVSProxier(ctx context.Context, ipvs utilipvs.Interface, ipsetver IP
 		return err
 	}
 
-	// 为绕过上述 BUG，必须重新读取 VS 列表确认测试 VS 真的创建成功，不能只信任 AddVirtualServer 的返回值。
+	// 为绕过上述缺陷，必须重新读取 VS 列表确认测试 VS 真的创建成功，不能只信任 AddVirtualServer 的返回值。
 	vservers, err = ipvs.GetVirtualServers()
 	if err != nil {
 		logger.Error(err, "ipvs.GetVirtualServers")

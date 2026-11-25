@@ -1216,7 +1216,7 @@ func Test_RemovePodGroup(t *testing.T) {
 		initialPodGroups         []*schedulingv1beta1.PodGroup
 		initialCPGs              []*schedulingv1alpha3.CompositePodGroup
 		podGroupToDelete         *schedulingv1beta1.PodGroup
-		expectStateExists        string // "true", "false", or "" to skip
+		expectStateExists        string // "true"、"false" 或空字符串；空字符串表示跳过。
 		expectPodsCount          int
 		wantPodGroups            map[fwk.EntityKey]*schedulingv1beta1.PodGroup
 		wantChildren             map[fwk.EntityKey]sets.Set[fwk.EntityKey]

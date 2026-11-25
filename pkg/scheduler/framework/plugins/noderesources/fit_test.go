@@ -2843,7 +2843,7 @@ func testComputePodResourceRequestWithNodeAllocatableDRA(tCtx ktesting.TContext)
 			},
 			expected: &preFilterState{
 				Resource: framework.Resource{
-					MilliCPU: 150, // NodeAllocatableResourceClaimStatus 加标准请求
+					MilliCPU: 150, // NodeAllocatableResourceClaimStatus 加上标准请求
 					Memory:   1024 * 1024 * 1024,
 				},
 			},

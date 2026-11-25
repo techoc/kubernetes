@@ -267,8 +267,7 @@ type BlockVolumePlugin interface {
 	ConstructBlockVolumeSpec(podUID types.UID, volumeName, volumePath string) (*Spec, error)
 }
 
-// TODO(#14217)
-// 作为 Volume Host 重构的一部分，我们开始为特定宿主创建专用的 Volume Host。
+// TODO(#14217)：作为 Volume Host 重构的一部分，我们开始为特定宿主创建专用的 Volume Host。
 // 各特定宿主的新方法可以添加在此处。
 // 目前调用方通过类型断言获取特定类型的 Volume Host；但最终目标应是
 // 将特定的 Volume Host 直接传给需要它的函数（而不是使用一个包罗万象的
@@ -308,7 +307,7 @@ type CSIDriverVolumeHost interface {
 }
 
 // AttachDetachVolumeHost 是 AttachDetach Controller 专用的接口，插件可用它访问
-// Attach Detach Controller 上的方法。
+// 挂载与卸载控制器上的方法。
 type AttachDetachVolumeHost interface {
 	CSIDriverVolumeHost
 	// CSINodeLister 返回 CSINode API 对象的 informer lister。
@@ -466,8 +465,7 @@ func (spec *Spec) KubeletExpandablePluginName() string {
 // 写入 OtherAttributes 之前，使用强类型绑定这些值。
 type VolumeConfig struct {
 	// RecyclerPodTemplate 是能够清理持久卷的 Pod 模板。插件会在该模板基础上
-	// 按自身需求覆盖 Pod 的特定属性。需要覆盖的属性见
-	// NewPersistentVolumeRecyclerPodTemplate。
+	// 按自身需求覆盖 Pod 的特定属性；必须覆盖的属性见 NewPersistentVolumeRecyclerPodTemplate。
 	RecyclerPodTemplate *v1.Pod
 
 	// RecyclerMinimumTimeout 是回收 Pod 的 ActiveDeadlineSeconds 属性的最小秒数。
@@ -966,5 +964,7 @@ func ValidateRecyclerPodTemplate(pod *v1.Pod) error {
 type dummyPluginProber struct{}
 
 // Init 和 Probe 均为空实现：不执行初始化，也不返回任何探测事件。
-func (*dummyPluginProber) Init() error                  { return nil }
+func (*dummyPluginProber) Init() error { return nil }
+
+// Probe 不返回任何探测事件。
 func (*dummyPluginProber) Probe() ([]ProbeEvent, error) { return nil, nil }

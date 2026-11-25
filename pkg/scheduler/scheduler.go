@@ -69,6 +69,7 @@ type Scheduler struct {
 	// 通过 Cache 做出的改动，应当能被 NodeLister 与 Algorithm 观察到。
 	Cache internalcache.Cache
 
+	// Extenders 保存可参与过滤、抢占、打分和绑定的调度扩展器。
 	Extenders []fwk.Extender
 
 	// NextEntity 应阻塞直到下一个实体（Pod 或 PodGroup）可用。

@@ -109,7 +109,7 @@ func setDefaults_KubeSchedulerProfile(logger klog.Logger, prof *configv1.KubeSch
 
 // SetDefaults_KubeSchedulerConfiguration 为调度器配置补充默认值：并发度、profile、选主、客户端连接及退避等。
 func SetDefaults_KubeSchedulerConfiguration(obj *configv1.KubeSchedulerConfiguration) {
-	logger := klog.TODO() // called by generated code that doesn't pass a logger. See #115724
+	logger := klog.TODO() // 由未传入 logger 的生成代码调用，参见 #115724。
 	if obj.Parallelism == nil {
 		obj.Parallelism = ptr.To[int32](16)
 	}

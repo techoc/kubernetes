@@ -323,7 +323,7 @@ func (tracer *nftablesTracer) runChain(chname, sourceIP, protocol, destIP, destP
 
 			case hairpinCheckRegexp.MatchString(rule):
 				// `^ip6* saddr \. ip6* daddr \. meta l4proto \. th dport @hairpin-connections`
-				// 判断包是否发回自身客户端（hairpin）。
+				// 判断包是否发回自身客户端。
 				match := hairpinCheckRegexp.FindStringSubmatch(rule)
 				rule = strings.TrimPrefix(rule, match[0])
 				if sourceIP != destIP {

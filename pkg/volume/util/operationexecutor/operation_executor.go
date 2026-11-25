@@ -806,13 +806,13 @@ func (oe *operationExecutor) MountVolume(
 	// 默认按卷名串行，避免引用同卷的多个 pod 并行挂载/映射。
 	podName := nestedpendingoperations.EmptyUniquePodName
 
-	// TODO: remove this -- not necessary
+	// TODO: 删除此分支，这里无需额外处理。
 	if !volumeToMount.PluginIsAttachable && !volumeToMount.PluginIsDeviceMountable {
 		// 不可附加且不可设备挂载的插件可安全地为多个 pod 并行挂载同一卷。
 		podName = util.GetUniquePodName(volumeToMount.Pod)
 	}
 
-	// TODO mount_device
+	// TODO: 完善设备映射（mount_device）相关处理。
 	return oe.pendingOperations.Run(
 		volumeToMount.VolumeName, podName, "" /* nodeName */, generatedOperations)
 }

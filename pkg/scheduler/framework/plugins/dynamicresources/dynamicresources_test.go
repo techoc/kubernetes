@@ -428,7 +428,7 @@ var (
 				Pool:    nodeName,
 				Device:  sharedDeviceName,
 				Request: "req-1",
-				ShareID: ptr.To(types.UID("share-123")), // Shared device allocation
+				ShareID: ptr.To(types.UID("share-123")), // 共享设备分配
 			}},
 		},
 		NodeSelector: func() *v1.NodeSelector {
@@ -442,7 +442,7 @@ var (
 				Pool:    nodeName,
 				Device:  sharedDeviceName,
 				Request: "req-1",
-				ShareID: ptr.To(types.UID("share-123")), // Shared device allocation
+				ShareID: ptr.To(types.UID("share-123")), // 共享设备分配
 				ConsumedCapacity: map[resourceapi.QualifiedName]apiresource.Quantity{
 					capacityName: apiresource.MustParse("1"),
 				},
@@ -459,7 +459,7 @@ var (
 				Pool:    nodeName,
 				Device:  sharedDeviceName,
 				Request: "req-1",
-				ShareID: ptr.To(types.UID("share-456")), // Shared device allocation
+				ShareID: ptr.To(types.UID("share-456")), // 共享设备分配
 				ConsumedCapacity: map[resourceapi.QualifiedName]apiresource.Quantity{
 					capacityName: apiresource.MustParse("1"),
 				},
@@ -1538,7 +1538,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			},
 		},
 		"missing-claim": {
-			pod:    podWithClaimTemplate, // status not set
+			pod:    podWithClaimTemplate, // 未设置状态
 			claims: []*resourceapi.ResourceClaim{allocatedClaim, otherClaim},
 			want: want{
 				preenqueue: result{
@@ -3731,7 +3731,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			objs: func() []apiruntime.Object {
 				slice := st.MakeResourceSlice(nodeName, driver).Device("instance-1").Obj()
 				slice.Spec.Devices[0].NodeAllocatableResources = map[v1.ResourceName]resourceapi.NodeAllocatableResource{
-					v1.ResourceCPU: {Mapping: &resourceapi.NodeAllocatableMapping{DeviceMultiplier: new(apiresource.MustParse("11"))}}, // Exceeds node capacity of 10
+					v1.ResourceCPU: {Mapping: &resourceapi.NodeAllocatableMapping{DeviceMultiplier: new(apiresource.MustParse("11"))}}, // 超过节点容量 10
 				}
 				return []apiruntime.Object{slice, podWithClaimReferenceInContainer}
 			}(),
@@ -3751,7 +3751,7 @@ func testPlugin(tCtx ktesting.TContext) {
 			pod:                               podWithClaimReferenceInContainer,
 			claims: func() []*resourceapi.ResourceClaim {
 				claim := nodeAllocatableClaimWithCapacity.DeepCopy()
-				claim.Spec.Devices.Requests[0].Exactly.Capacity.Requests[nodeAllocatableResourceCapacityName] = apiresource.MustParse("11") // Exceeds node capacity of 10
+				claim.Spec.Devices.Requests[0].Exactly.Capacity.Requests[nodeAllocatableResourceCapacityName] = apiresource.MustParse("11") // 超过节点容量 10
 				return []*resourceapi.ResourceClaim{st.FromResourceClaim(claim).OwnerReference(podName, podUID, podKind).Obj()}
 			}(),
 			classes: []*resourceapi.DeviceClass{deviceClass},
@@ -3948,7 +3948,7 @@ func testPlugin(tCtx ktesting.TContext) {
 		"node-allocatable-unreferenced-claim-direct-mapped": {
 			enableDRANodeAllocatableResources: true,
 			nodes:                             []*v1.Node{workerNodeWithCapacity},
-			pod:                               podWithClaimName, // claim not referenced in any container
+			pod:                               podWithClaimName, // claim 未被任何容器引用
 			patchTestCase: func(tc *testPluginCase) {
 				tc.pod = tc.pod.DeepCopy()
 				tc.pod.Status.NodeAllocatableResourceClaimStatuses = []v1.NodeAllocatableResourceClaimStatus{
@@ -4014,7 +4014,7 @@ func testPlugin(tCtx ktesting.TContext) {
 		"node-allocatable-unreferenced-claim-overhead": {
 			enableDRANodeAllocatableResources: true,
 			nodes:                             []*v1.Node{workerNodeWithCapacity},
-			pod:                               podWithClaimName, // claim not referenced in any container
+			pod:                               podWithClaimName, // claim 未被任何容器引用
 			patchTestCase: func(tc *testPluginCase) {
 				tc.pod = tc.pod.DeepCopy()
 				tc.pod.Status.NodeAllocatableResourceClaimStatuses = []v1.NodeAllocatableResourceClaimStatus{
@@ -6030,7 +6030,7 @@ func TestPodGroupPostFilter(t *testing.T) {
 			wantStatus:            fwk.NewStatus(fwk.Unschedulable, "deallocation and deletion of ResourceClaims completed"),
 			verifyClaims: func(tCtx ktesting.TContext, testCtx *testContext) {
 				_, err := testCtx.client.ResourceV1().ResourceClaims(inUseClaim.Namespace).Get(tCtx, "pod-extended-resources", metav1.GetOptions{})
-				assert.Error(tCtx, err) // Should be deleted!
+				assert.Error(tCtx, err) // 应已被删除。
 			},
 		},
 		"unreserve-podgroup-claim": {
@@ -6211,7 +6211,7 @@ func TestPreQueueingHint(t *testing.T) {
 					Namespace: "ns1",
 				},
 			},
-			wantKeys: sets.New[string](), // no pod in indexer
+			wantKeys: sets.New[string](), // 索引器中无 Pod
 		},
 		"shared claim returns nil": {
 			newObj: &resourceapi.ResourceClaim{
@@ -6220,7 +6220,7 @@ func TestPreQueueingHint(t *testing.T) {
 					Namespace: "ns1",
 				},
 			},
-			wantKeys: sets.New[string](), // no pod in indexer
+			wantKeys: sets.New[string](), // 索引器中无 Pod
 		},
 		"claim with no matching pods returns empty set": {
 			newObj: &resourceapi.ResourceClaim{
@@ -6229,7 +6229,7 @@ func TestPreQueueingHint(t *testing.T) {
 					Namespace: "ns1",
 				},
 			},
-			wantKeys: sets.New[string](), // no pod in indexer
+			wantKeys: sets.New[string](), // 索引器中无 Pod
 		},
 		"delete event uses oldObj": {
 			oldObj: &resourceapi.ResourceClaim{
@@ -6239,7 +6239,7 @@ func TestPreQueueingHint(t *testing.T) {
 				},
 			},
 			newObj:   nil,
-			wantKeys: sets.New[string](), // no pod in indexer
+			wantKeys: sets.New[string](), // 索引器中无 Pod
 		},
 		"delete of allocated claim returns AllPods": {
 			oldObj: &resourceapi.ResourceClaim{
@@ -6252,7 +6252,7 @@ func TestPreQueueingHint(t *testing.T) {
 				},
 			},
 			newObj:   nil,
-			wantKeys: nil, // AllPods - deletion frees resources
+			wantKeys: nil, // AllPods：删除会释放资源
 		},
 
 		"deallocation returns nil to evaluate all pods": {

@@ -262,8 +262,7 @@ func ValidateNodeAffinityArgs(path *field.Path, args *config.NodeAffinityArgs) e
 			errs = append(errs, err)
 		}
 	}
-	// TODO: Add validation for requiredDuringSchedulingRequiredDuringExecution when it gets added to the API.
-	// 待该字段进入 API 后补充校验。
+	// TODO: 待 requiredDuringSchedulingRequiredDuringExecution 进入 API 后补充校验。
 	if terms := affinity.PreferredDuringSchedulingIgnoredDuringExecution; len(terms) != 0 {
 		_, err := nodeaffinity.NewPreferredSchedulingTerms(terms, field.WithPath(path.Child("addedAffinity", "preferredDuringSchedulingIgnoredDuringExecution")))
 		if err != nil {
@@ -276,6 +275,7 @@ func ValidateNodeAffinityArgs(path *field.Path, args *config.NodeAffinityArgs) e
 // VolumeBindingArgsValidationOptions 保存 VolumeBindingArgs 校验时依赖的可选设置，
 // 主要用于注入 feature gate 状态，便于测试。
 type VolumeBindingArgsValidationOptions struct {
+	// AllowStorageCapacityScoring 决定校验时是否允许 StorageCapacityScoring 特性门开启。
 	AllowStorageCapacityScoring bool
 }
 

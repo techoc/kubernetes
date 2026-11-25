@@ -15,21 +15,21 @@ limitations under the License.
 */
 
 /*
-This file defines block volume related methods for CSI driver.
-CSI driver is responsible for staging/publishing volumes to their staging/publish paths.
-Mapping and unmapping of a device in a publish path to its global map path and its
-pod device map path are done by operation_executor through MapBlockVolume/UnmapBlockVolume
-(MapBlockVolume and UnmapBlockVolume take care for lock, symlink, and bind mount).
+本文件定义 CSI 驱动的块卷相关方法。
+CSI 驱动负责将卷暂存或发布到对应的 staging/publish 路径。
+发布路径中的设备与全局映射路径及 Pod 设备映射路径之间的映射和解除映射，
+由 operation_executor 通过 MapBlockVolume/UnmapBlockVolume 完成；
+这两个操作负责加锁、符号链接和绑定挂载。
 
-Summary of block volume related CSI driver's methods are as follows:
- - GetGlobalMapPath returns a global map path,
- - GetPodDeviceMapPath returns a pod device map path and filename,
- - SetUpDevice calls CSI's NodeStageVolume and stage a volume to its staging path,
- - MapPodDevice calls CSI's NodePublishVolume and publish a volume to its publish path,
- - UnmapPodDevice calls CSI's NodeUnpublishVolume and unpublish a volume from its publish path,
- - TearDownDevice calls CSI's NodeUnstageVolume and unstage a volume from its staging path.
+块卷相关的 CSI 驱动方法如下：
+ - GetGlobalMapPath 返回全局映射路径，
+ - GetPodDeviceMapPath 返回 Pod 设备映射路径和文件名，
+ - SetUpDevice 调用 CSI 的 NodeStageVolume，将卷暂存到 staging 路径，
+ - MapPodDevice 调用 CSI 的 NodePublishVolume，将卷发布到 publish 路径，
+ - UnmapPodDevice 调用 CSI 的 NodeUnpublishVolume，从 publish 路径取消发布卷，
+ - TearDownDevice 调用 CSI 的 NodeUnstageVolume，从 staging 路径取消暂存卷。
 
-These methods are called by below sequences:
+这些方法按以下顺序调用：
  - operation_executor.MountVolume
    - csi.GetGlobalMapPath
    - csi.SetupDevice
@@ -53,14 +53,14 @@ These methods are called by below sequences:
      - NodeUnstageVolume
    - ASW.MarkDeviceAsUnmounted
 
-After successful MountVolume for block volume, directory structure will be like below:
-  /dev/loopX ... Descriptor lock(Loopback device to mapFile under global map path)
-  /var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/{specName}/dev/ ... Global map path
-  /var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/{specName}/dev/{podUID} ... MapFile(Bind mount to publish Path)
-  /var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/staging/{specName} ... Staging path
-  /var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/publish/{specName}/{podUID} ... Publish path
-  /var/lib/kubelet/pods/{podUID}/volumeDevices/kubernetes.io~csi/ ... Pod device map path
-  /var/lib/kubelet/pods/{podUID}/volumeDevices/kubernetes.io~csi/{specName} ... MapFile(Symlink to publish path)
+块卷成功完成 MountVolume 后，目录结构如下：
+  /dev/loopX ... 描述符锁（将全局映射路径下的 mapFile 映射为回环设备）
+  /var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/{specName}/dev/ ... 全局映射路径
+  /var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/{specName}/dev/{podUID} ... MapFile（绑定挂载到发布路径）
+  /var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/staging/{specName} ... 暂存路径
+  /var/lib/kubelet/plugins/kubernetes.io/csi/volumeDevices/publish/{specName}/{podUID} ... 发布路径
+  /var/lib/kubelet/pods/{podUID}/volumeDevices/kubernetes.io~csi/ ... Pod 设备映射路径
+  /var/lib/kubelet/pods/{podUID}/volumeDevices/kubernetes.io~csi/{specName} ... MapFile（符号链接到发布路径）
 */
 
 package csi

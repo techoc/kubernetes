@@ -173,7 +173,7 @@ func (cache *EndpointSliceCache) endpointInfoByServicePort(serviceNN types.Names
 				klog.ErrorS(nil, "Ignoring port with nil name", "portName", port.Name)
 				continue
 			}
-			// TODO: handle nil ports to mean "all"
+			// TODO: 处理端口为 nil 的情况，使其表示所有端口。
 			// 零值或空端口无法用于建立转发规则，跳过。
 			if port.Port == nil || *port.Port == int32(0) {
 				klog.ErrorS(nil, "Ignoring invalid endpoint port", "portName", *port.Name)

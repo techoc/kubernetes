@@ -22,7 +22,7 @@ package util
 // 但基本是拍脑袋定的。如 #11713 所述，这里用 request 而非 limit 来描述资源需求。
 const (
 	// DefaultMilliCPURequest 定义默认的 milli CPU 请求量。
-	DefaultMilliCPURequest int64 = 100 // 0.1 core
+	DefaultMilliCPURequest int64 = 100 // 0.1 核
 	// DefaultMemoryRequest 定义默认的内存请求量。
 	DefaultMemoryRequest int64 = 200 * 1024 * 1024 // 200 MB
 )

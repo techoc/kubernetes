@@ -2254,7 +2254,7 @@ func TestRunScorePlugins(t *testing.T) {
 				{
 					Name: scoreWithNormalizePlugin1,
 					Args: &runtime.Unknown{
-						Raw: []byte(`{ "scoreStatus": 1 }`), // To make sure this plugin isn't called, set error as an injected result.
+						Raw: []byte(`{ "scoreStatus": 1 }`), // 注入错误结果，以确保该插件不会被调用。
 					},
 				},
 			},
@@ -2301,7 +2301,7 @@ func TestRunScorePlugins(t *testing.T) {
 				{
 					Name: scorePlugin1,
 					Args: &runtime.Unknown{
-						Raw: []byte(`{ "scoreStatus": 1 }`), // To make sure this plugin isn't called, set error as an injected result.
+						Raw: []byte(`{ "scoreStatus": 1 }`), // 注入错误结果，以确保该插件不会被调用。
 					},
 				},
 			},
@@ -3052,7 +3052,7 @@ func TestRunPreFilterPlugins(t *testing.T) {
 				},
 			},
 			wantPreFilterResult: &fwk.PreFilterResult{NodeNames: sets.New[string]()},
-			wantSkippedPlugins:  sets.New[string](), // "skip" plugin isn't executed.
+			wantSkippedPlugins:  sets.New[string](), // "skip" 插件不会被执行。
 			wantStatusCode:      fwk.UnschedulableAndUnresolvable,
 		},
 	}
@@ -3395,7 +3395,7 @@ func TestFilterPlugins(t *testing.T) {
 
 				{
 					name: "TestPlugin2",
-					inj:  injectedResult{FilterStatus: int(fwk.Error)}, // To make sure this plugins isn't called, set error as an injected result.
+					inj:  injectedResult{FilterStatus: int(fwk.Error)}, // 注入错误结果，以确保该插件不会被调用。
 				},
 			},
 			wantStatus:     nil,
@@ -4035,10 +4035,10 @@ func TestGetPreBindPluginGroups(t *testing.T) {
 		{
 			name: "Multiple plugins, mixed parallel and serial",
 			plugins: []fwk.PreBindPlugin{
-				&TestPlugin{name: "p1"}, // serial
-				&TestPlugin{name: "p2"}, // parallel
-				&TestPlugin{name: "p3"}, // parallel
-				&TestPlugin{name: "p4"}, // serial
+				&TestPlugin{name: "p1"}, // 串行
+				&TestPlugin{name: "p2"}, // 并行
+				&TestPlugin{name: "p3"}, // 并行
+				&TestPlugin{name: "p4"}, // 串行
 			},
 			parallelPlugins: sets.New("p2", "p3"),
 			expectedGroups: [][]string{
@@ -4050,9 +4050,9 @@ func TestGetPreBindPluginGroups(t *testing.T) {
 		{
 			name: "Parallel plugins separated by serial",
 			plugins: []fwk.PreBindPlugin{
-				&TestPlugin{name: "p1"}, // parallel
-				&TestPlugin{name: "p2"}, // serial
-				&TestPlugin{name: "p3"}, // parallel
+				&TestPlugin{name: "p1"}, // 并行
+				&TestPlugin{name: "p2"}, // 串行
+				&TestPlugin{name: "p3"}, // 并行
 			},
 			parallelPlugins: sets.New("p1", "p3"),
 			expectedGroups: [][]string{
@@ -4064,9 +4064,9 @@ func TestGetPreBindPluginGroups(t *testing.T) {
 		{
 			name: "Skipped plugins",
 			plugins: []fwk.PreBindPlugin{
-				&TestPlugin{name: "p1"}, // serial
-				&TestPlugin{name: "p2"}, // serial & skipped
-				&TestPlugin{name: "p3"}, // serial
+				&TestPlugin{name: "p1"}, // 串行
+				&TestPlugin{name: "p2"}, // 串行并跳过
+				&TestPlugin{name: "p3"}, // 串行
 			},
 			skippedPlugins: sets.New("p2"),
 			expectedGroups: [][]string{
@@ -4077,9 +4077,9 @@ func TestGetPreBindPluginGroups(t *testing.T) {
 		{
 			name: "Parallel plugins with one skipped in between",
 			plugins: []fwk.PreBindPlugin{
-				&TestPlugin{name: "p1"}, // parallel
-				&TestPlugin{name: "p2"}, // parallel & skipped
-				&TestPlugin{name: "p3"}, // parallel
+				&TestPlugin{name: "p1"}, // 并行
+				&TestPlugin{name: "p2"}, // 并行并跳过
+				&TestPlugin{name: "p3"}, // 并行
 			},
 			parallelPlugins: sets.New("p1", "p2", "p3"),
 			skippedPlugins:  sets.New("p2"),
@@ -4088,9 +4088,9 @@ func TestGetPreBindPluginGroups(t *testing.T) {
 		{
 			name: "Parallel plugins with one serial & skipped in between",
 			plugins: []fwk.PreBindPlugin{
-				&TestPlugin{name: "p1"}, // parallel
-				&TestPlugin{name: "p2"}, // serial & skipped
-				&TestPlugin{name: "p3"}, // parallel
+				&TestPlugin{name: "p1"}, // 并行
+				&TestPlugin{name: "p2"}, // 串行并跳过
+				&TestPlugin{name: "p3"}, // 并行
 			},
 			parallelPlugins: sets.New("p1", "p3"),
 			skippedPlugins:  sets.New("p2"),
@@ -4102,14 +4102,14 @@ func TestGetPreBindPluginGroups(t *testing.T) {
 		{
 			name: "Complex mix",
 			plugins: []fwk.PreBindPlugin{
-				&TestPlugin{name: "p1"}, // serial
-				&TestPlugin{name: "p2"}, // parallel
-				&TestPlugin{name: "p3"}, // serial & skipped
-				&TestPlugin{name: "p4"}, // parallel
-				&TestPlugin{name: "p5"}, // parallel & skipped
-				&TestPlugin{name: "p6"}, // parallel
-				&TestPlugin{name: "p7"}, // serial
-				&TestPlugin{name: "p8"}, // serial
+				&TestPlugin{name: "p1"}, // 串行
+				&TestPlugin{name: "p2"}, // 并行
+				&TestPlugin{name: "p3"}, // 串行并跳过
+				&TestPlugin{name: "p4"}, // 并行
+				&TestPlugin{name: "p5"}, // 并行并跳过
+				&TestPlugin{name: "p6"}, // 并行
+				&TestPlugin{name: "p7"}, // 串行
+				&TestPlugin{name: "p8"}, // 串行
 			},
 			parallelPlugins: sets.New("p2", "p4", "p5", "p6"),
 			skippedPlugins:  sets.New("p3", "p5"),

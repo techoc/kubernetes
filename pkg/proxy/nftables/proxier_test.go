@@ -77,9 +77,7 @@ var testNodeIPs = []string{testNodeIP, testNodeIPAlt, testExternalIP, testNodeIP
 // NewFakeProxier 根据 IP 族创建一个带假 nftables 客户端和假网络的 Proxier，
 // 供规则生成与报文流测试共用。
 func NewFakeProxier(ipFamily v1.IPFamily) (*knftables.Fake, *Proxier) {
-	// TODO: Call NewProxier after refactoring out the goroutine
-	// invocation into a Run() method.
-	// 待把 goroutine 的启动重构到 Run() 方法中后，改为调用 NewProxier。
+	// TODO: 待把 goroutine 的启动重构到 Run() 方法中后，改为调用 NewProxier。
 	nftablesFamily := knftables.IPv4Family
 	podCIDR := "10.0.0.0/8"
 	serviceCIDRs := "172.30.0.0/16"
@@ -1967,7 +1965,7 @@ func TestBuildServiceMapServiceTypeExternalName(t *testing.T) {
 	makeServiceMap(fp,
 		makeTestService("somewhere-else", "external-name", func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeExternalName
-			svc.Spec.ClusterIP = "172.30.55.4" // Should be ignored
+			svc.Spec.ClusterIP = "172.30.55.4" // 应被忽略
 			svc.Spec.ExternalName = "foo2.bar.com"
 			svc.Spec.Ports = addTestPort(svc.Spec.Ports, "blah", "UDP", 1235, 5321, 0)
 		}),
@@ -2875,7 +2873,6 @@ func TestUpdateEndpointsMap(t *testing.T) {
 
 // TestHealthCheckNodePortWhenTerminating 验证：当所有本地端点都处于 terminating 状态时，
 // 不会启用健康检查节点端口。
-// TestHealthCheckNodePortWhenTerminating 验证所有本地端点 terminating 时不启用健康检查端口。
 func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 	_, fp := NewFakeProxier(v1.IPv4Protocol)
 	fp.OnServiceSynced()
@@ -2917,7 +2914,7 @@ func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 			Addresses:  []string{"10.0.1.3"},
 			Conditions: discovery.EndpointConditions{Ready: ptr.To(true)},
 			NodeName:   ptr.To(testNodeName),
-		}, { // not ready endpoints should be ignored
+		}, { // 未就绪端点应被忽略
 			Addresses:  []string{"10.0.1.4"},
 			Conditions: discovery.EndpointConditions{Ready: ptr.To(false)},
 			NodeName:   ptr.To(testNodeName),
@@ -2968,7 +2965,7 @@ func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 				Terminating: ptr.To(true),
 			},
 			NodeName: ptr.To(testNodeName),
-		}, { // not ready endpoints should be ignored
+		}, { // 未就绪端点应被忽略
 			Addresses: []string{"10.0.1.4"},
 			Conditions: discovery.EndpointConditions{
 				Ready:       ptr.To(false),
@@ -2987,10 +2984,8 @@ func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 	}
 }
 
-// TODO(thockin): add *more* tests for syncProxyRules() or break it down further and test the pieces.
+// TODO(thockin): 为 syncProxyRules() 补充更多测试，或进一步拆分函数并分别测试各部分。
 
-// 该测试确保 iptables proxier 在指定 internalTrafficPolicy 时，
-// 能把 Endpoints 正确转换为 iptables 规则输出。
 // TestInternalTrafficPolicy 校验 internalTrafficPolicy 下 ClusterIP 流量的转发与伪装行为。
 func TestInternalTrafficPolicy(t *testing.T) {
 	type endpoint struct {
@@ -3151,7 +3146,6 @@ func TestInternalTrafficPolicy(t *testing.T) {
 
 // TestTerminatingEndpointsTrafficPolicyLocal 验证：同时存在本地就绪端点与
 // “就绪且 terminating”的端点时，只使用就绪端点。
-// TestTerminatingEndpointsTrafficPolicyLocal 校验 Local 策略下 terminating 端点的使用规则。
 func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc1", Namespace: "ns1"},
@@ -3485,7 +3479,6 @@ func TestTerminatingEndpointsTrafficPolicyLocal(t *testing.T) {
 
 // TestTerminatingEndpointsTrafficPolicyCluster 验证：同时存在集群范围内就绪端点与
 // “就绪且 terminating”的端点时，只使用就绪端点。
-// TestTerminatingEndpointsTrafficPolicyCluster 校验 Cluster 策略下 terminating 端点的使用规则。
 func TestTerminatingEndpointsTrafficPolicyCluster(t *testing.T) {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc1", Namespace: "ns1"},
@@ -4497,8 +4490,8 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		`)
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	assertNumOperations(t, nft,
-		3, // add 1 element each to cluster-ips, service-ips, and hairpin-connections
-		3, // add+flush service chain, add 1 rule
+		3, // 分别向 cluster-ips、service-ips 和 hairpin-connections 添加 1 个元素
+		3, // 添加并清空服务链，再添加 1 条规则
 	)
 
 	// 删除一个 Service；其链会被清空，但不会立即删除。
@@ -4522,8 +4515,8 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		`)
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	assertNumOperations(t, nft,
-		3, // delete 1 element each from cluster-ips, service-ips, hairpin-connections
-		1, // flush service chain
+		3, // 分别从 cluster-ips、service-ips 和 hairpin-connections 删除 1 个元素
+		1, // 清空服务链
 	)
 
 	// 模拟时间流逝，确认过期链被删除。
@@ -4579,7 +4572,7 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		`)
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	assertNumOperations(t, nft,
-		2, // add 1 element each to cluster-ips and no-endpoint-services
+		2, // 分别向 cluster-ips 和 no-endpoint-services 添加 1 个元素
 	)
 
 	populateEndpointSlices(fp,
@@ -4619,9 +4612,9 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		`)
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	assertNumOperations(t, nft,
-		2, // add 1 element to service-ips, remove 1 element from no-endpoint-services
-		1, // add 1 element to hairpin-connections
-		3, // add+flush service chain, add 1 rule
+		2, // 向 service-ips 添加 1 个元素，从 no-endpoint-services 删除 1 个元素
+		1, // 向 hairpin-connections 添加 1 个元素
+		3, // 添加并清空服务链，再添加 1 条规则
 	)
 
 	// 修改某个已有 Service 的端点。
@@ -4653,8 +4646,8 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		`)
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	assertNumOperations(t, nft,
-		2, // remove 1 old element from hairpin-connections, add 1 new one
-		3, // add+flush service chain, add 1 rule
+		2, // 从 hairpin-connections 删除 1 个旧元素并添加 1 个新元素
+		3, // 添加并清空服务链，再添加 1 条规则
 	)
 
 	// 确保旧的 svc3 链在下次同步时被删除。
@@ -4693,8 +4686,8 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	// 第一条端点链未变化，但代码仍然会重建它。
 	assertNumOperations(t, nft,
-		1, // add 1 element to hairpin-connections
-		3, // add+flush service chain, add 1 rule
+		1, // 向 hairpin-connections 添加 1 个元素
+		3, // 添加并清空服务链，再添加 1 条规则
 	)
 
 	// 清空某 Service 的端点；其链会被清空，但不会立即删除。
@@ -4722,9 +4715,9 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		`)
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	assertNumOperations(t, nft,
-		2, // remove 1 element from service-ips, add 1 element to no-endpoint-services
-		2, // remove 2 elements from hairpin-connections
-		1, // flush service chain
+		2, // 从 service-ips 删除 1 个元素，向 no-endpoint-services 添加 1 个元素
+		2, // 从 hairpin-connections 删除 2 个元素
+		1, // 清空服务链
 	)
 
 	expectedStaleChains := sets.NewString("service-4AT6LBPK-ns3/svc3/tcp/p80")
@@ -4758,9 +4751,9 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 		`)
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	assertNumOperations(t, nft,
-		2, // remove 1 element from no-endpoint-services, add 1 element to service-ips
-		2, // add 2 elements to hairpin-connections
-		3, // add+flush service chain, add 1 rule
+		2, // 从 no-endpoint-services 删除 1 个元素，向 service-ips 添加 1 个元素
+		2, // 向 hairpin-connections 添加 2 个元素
+		3, // 添加并清空服务链，再添加 1 条规则
 	)
 
 	if len(fp.staleChains) != 0 {
@@ -4903,10 +4896,10 @@ func TestSyncProxyRulesStartup(t *testing.T) {
 	`)
 	assertNFTablesTransactionEqual(t, getLine(), expected, nft.Dump())
 	assertNumOperations(t, nft,
-		setupOps, // nft setup
-		1,        // add new svc1 endpoint to hairpin-connections
-		2,        // add svc3 IP to the cluster-ips, and to the no-endpoint-services set
-		6,        // add+flush 2 service chains + 1 rule each
+		setupOps, // nft 初始化
+		1,        // 向 hairpin-connections 添加 svc1 的新端点
+		2,        // 将 svc3 IP 添加到 cluster-ips 和 no-endpoint-services 集合
+		6,        // 添加并清空 2 个服务链，各添加 1 条规则
 	)
 }
 
@@ -5329,9 +5322,7 @@ func TestProxier_OnServiceCIDRsChanged(t *testing.T) {
 	assert.Equal(t, "fd00:10:96::/112,fd00:172:30::/112", proxier.serviceCIDRs)
 }
 
-// TestBadIPs 验证 Service/Endpoints 中“非法”的 IP 和 CIDR 在传给 nft 的输入中
-// 会被改写为“合法”值。
-// TestBadIPs 验证 Service 和 Endpoints 中的非法 IP/CIDR 被规范化后再交给 nft。
+// TestBadIPs 验证 Service 和 Endpoints 中带前导零的非法 IP/CIDR 会先规范化，避免将无效值传给 nft。
 func TestBadIPs(t *testing.T) {
 	nft, fp := NewFakeProxier(v1.IPv4Protocol)
 	metrics.RegisterMetrics(kubeproxyconfig.ProxyModeNFTables)

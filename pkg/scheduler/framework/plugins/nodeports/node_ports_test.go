@@ -153,7 +153,7 @@ func TestNodePorts(t *testing.T) {
 		},
 		{
 			pod: st.MakePod().
-				InitContainerPort(false /* sidecar */, []v1.ContainerPort{
+				InitContainerPort(false /* 是否为 sidecar */, []v1.ContainerPort{
 					{
 						ContainerPort: 8001,
 						HostPort:      8001,
@@ -167,7 +167,7 @@ func TestNodePorts(t *testing.T) {
 		},
 		{
 			pod: st.MakePod().
-				InitContainerPort(true /* sidecar */, []v1.ContainerPort{
+				InitContainerPort(true /* 是否为 sidecar */, []v1.ContainerPort{
 					{
 						ContainerPort: 8001,
 						HostPort:      8001,

@@ -65,7 +65,7 @@ type Controller struct {
 	// 工作队列用于去重并支持出错时方便的限流重试；这里只会放入一个条目，但仍按 namespace/name 作为 key。
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// 跟踪 kube-system ConfigMap informer，以便在 Run 中启动它。
+	// 跟踪 kube-system ConfigMap 通知器，以便在 Run 中启动它。
 	kubeSystemConfigMapInformer cache.SharedIndexInformer
 
 	// preRunCaches 是控制循环开始前需要同步的缓存。
@@ -120,7 +120,7 @@ func NewClusterAuthenticationTrustController(requiredAuthenticationData ClusterA
 					return cast.Namespace == configMapNamespace && cast.Name == configMapName
 				}
 			}
-			return true // always return true just in case.  The checks are fairly cheap
+			return true // 兜底放行；上述匹配检查成本很低
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
 			// informer 已带过滤器，任何回调都直接入队即可；

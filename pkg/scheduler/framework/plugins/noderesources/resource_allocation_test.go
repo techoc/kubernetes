@@ -315,7 +315,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 				deviceClassWithExtendResourceName,
 				st.MakeResourceSlice(nodeName, driverName).Device("device-1").Obj(),
 			},
-			expectedAllocatable: 1, // 1 device `device-1`
+			expectedAllocatable: 1, // 1 个设备 `device-1`
 			expectedAllocated:   0,
 		},
 		"DRA-backed-resource-implicit": {
@@ -330,7 +330,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 				},
 				st.MakeResourceSlice(nodeName, driverName).Device("device-1").Obj(),
 			},
-			expectedAllocatable: 1, // 1 device `device-1`
+			expectedAllocatable: 1, // 1 个设备 `device-1`
 			expectedAllocated:   0,
 		},
 		"DRA-backed-resource-no-slices": {
@@ -368,8 +368,8 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 					}).
 					Obj(),
 			},
-			expectedAllocatable: 2, // 2 allocatable devices `device-1`, `device-2`
-			expectedAllocated:   1, // 1 allocated by `testClaim`
+			expectedAllocatable: 2, // 2 个可分配设备 `device-1`、`device-2`
+			expectedAllocated:   1, // `testClaim` 已分配 1 个
 		},
 		"DRA-backed-resource-with-shared-device-allocation": {
 			enableDRAExtendedResource: true,
@@ -390,15 +390,15 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 									Driver:  driverName,
 									Pool:    nodeName,
 									Device:  "device-1",
-									ShareID: ptr.To(types.UID("share-123")), // Shared device allocation
+									ShareID: ptr.To(types.UID("share-123")), // 共享设备分配
 								},
 							},
 						},
 					}).
 					Obj(),
 			},
-			expectedAllocatable: 2, // 2 allocatable devices `device-1`, `device-2`
-			expectedAllocated:   1, // 1 allocated (shared) by `testClaim`
+			expectedAllocatable: 2, // 2 个可分配设备 `device-1`、`device-2`
+			expectedAllocated:   1, // `testClaim` 已分配 1 个（共享）
 		},
 		"DRA-backed-resource-multiple-devices-mixed-allocation": {
 			enableDRAExtendedResource: true,
@@ -436,7 +436,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 									Driver:  driverName,
 									Pool:    nodeName,
 									Device:  "device-2",
-									ShareID: ptr.To(types.UID("share-456")), // Shared device allocation
+									ShareID: ptr.To(types.UID("share-456")), // 共享设备分配
 								},
 							},
 						},
@@ -444,8 +444,8 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 					Obj(),
 				// device-3 保持未分配。
 			},
-			expectedAllocatable: 3, // 3 allocatable devices `device-1`, `device-2`, `device-3`
-			expectedAllocated:   2, // 2 allocated (1 full `test-claim-1` + 1 shared `test-claim-2`)
+			expectedAllocatable: 3, // 3 个可分配设备 `device-1`、`device-2`、`device-3`
+			expectedAllocated:   2, // 已分配 2 个（`test-claim-1` 完全占用 1 个，`test-claim-2` 共享 1 个）
 		},
 		"DRA-backed-resource-with-per-device-node-selection": {
 			enableDRAExtendedResource: true,
@@ -472,29 +472,29 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 				&resourceapi.ResourceSlice{
 					ObjectMeta: metav1.ObjectMeta{Name: "per-device-slice"},
 					Spec: resourceapi.ResourceSliceSpec{
-						Driver:                 driverName, // Match the CEL expression driver
+						Driver:                 driverName, // 与 CEL 表达式中的驱动匹配
 						Pool:                   resourceapi.ResourcePool{Name: "per-device-pool", ResourceSliceCount: 1},
-						PerDeviceNodeSelection: ptr.To(true), // Enable per-device node selection
+						PerDeviceNodeSelection: ptr.To(true), // 启用设备级节点选择
 						// 注意 PerDeviceNodeSelection 开启时，slice 级别不能设置 NodeName/AllNodes/NodeSelector。
 						Devices: []resourceapi.Device{
 							{
 								Name:     "device-1",
-								NodeName: ptr.To(nodeName), // This device matches the test node
+								NodeName: ptr.To(nodeName), // 该设备匹配测试节点
 								Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 									"model": {StringValue: ptr.To("SOME-XYZ")},
 								},
 								Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-									"memory": {Value: resource.MustParse("16Gi")}, // 16GB GPU - matches CEL (>= 8GB)
+									"memory": {Value: resource.MustParse("16Gi")}, // 16GB GPU，匹配 CEL（>= 8GB）
 								},
 							},
 							{
 								Name:     "device-2",
-								NodeName: ptr.To("other-node"), // This device matches a different node
+								NodeName: ptr.To("other-node"), // 该设备匹配另一个节点
 								Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 									"model": {StringValue: ptr.To("SOME-ZYX")},
 								},
 								Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-									"memory": {Value: resource.MustParse("12Gi")}, // 12GB GPU - matches CEL (>= 8GB)
+									"memory": {Value: resource.MustParse("12Gi")}, // 12GB GPU，匹配 CEL（>= 8GB）
 								},
 							},
 							{
@@ -517,7 +517,7 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 									"model": {StringValue: ptr.To("SOME-XZY")},
 								},
 								Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-									"memory": {Value: resource.MustParse("24Gi")}, // 24GB GPU - matches CEL (>= 8GiB)
+									"memory": {Value: resource.MustParse("24Gi")}, // 24GB GPU，匹配 CEL（>= 8GiB）
 								},
 							},
 						},
@@ -541,8 +541,8 @@ func testCalculateResourceAllocatableRequest(tCtx ktesting.TContext) {
 					}).
 					Obj(),
 			},
-			expectedAllocatable: 2, // device-1 matches the test node and device-3 matches via its selector
-			expectedAllocated:   1, // 1 allocated (device-1)
+			expectedAllocatable: 2, // device-1 匹配测试节点，device-3 通过选择器匹配
+			expectedAllocated:   1, // 已分配 1 个（device-1）
 		},
 	}
 

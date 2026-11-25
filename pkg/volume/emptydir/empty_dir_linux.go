@@ -61,9 +61,8 @@ func getPageSize(path string, mounter mount.Interface) (*resource.Quantity, erro
 		opt = strings.TrimSpace(opt)
 		prefix := "pagesize="
 		if strings.HasPrefix(opt, prefix) {
-			// NOTE: Adding suffix 'i' as result should be comparable with a medium size.
-			// pagesize 挂载选项不带后缀，
-			// e.g. pagesize=2M or pagesize=1024M for x86 CPUs
+			// 注意：结果需与介质大小可比较，因此补上 i 后缀。
+			// pagesize 挂载选项不带后缀，例如 x86 CPU 上的 pagesize=2M 或 pagesize=1024M。
 			trimmedOpt := strings.TrimPrefix(opt, prefix)
 			if !strings.HasSuffix(trimmedOpt, "i") {
 				trimmedOpt = trimmedOpt + "i"

@@ -59,7 +59,7 @@ const (
 	fsTypeBlockName = "block"
 
 	// CsiResyncPeriod 是默认的重新同步周期。
-	// TODO: increase to something useful
+	// TODO: 将重新同步周期调整为更有意义的值。
 	CsiResyncPeriod = time.Minute
 )
 
@@ -88,7 +88,7 @@ type RegistrationHandler struct {
 	csiPlugin *csiPlugin
 }
 
-// TODO (verult) consider using a struct instead of global variables
+// TODO (verult)：考虑使用结构体替代全局变量。
 // csiDrivers 记录节点上所有已注册的 CSI 驱动及其对应的 socket 端点。
 var csiDrivers = &DriversStore{}
 
@@ -453,9 +453,8 @@ func (p *csiPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 
 // CanSupport 判断规格是否引用 CSI 卷（内联卷或 PV）。
 func (p *csiPlugin) CanSupport(spec *volume.Spec) bool {
-	// TODO (vladimirvivien) CanSupport should also take into account
-	// the availability/registration of specified Driver in the volume source
-	// 还应考虑卷源中指定的驱动是否已注册可用。
+	// TODO (vladimirvivien)：CanSupport 还应检查卷源指定的驱动是否已注册可用；
+	// 当前仅判断卷源类型。
 	if spec == nil {
 		return false
 	}
@@ -567,7 +566,7 @@ func (p *csiPlugin) NewUnmounter(specName string, podUID types.UID) (volume.Unmo
 
 	// 从文件加载卸载所需的卷信息。
 	dir := unmounter.GetPath()
-	dataDir := filepath.Dir(dir) // dropoff /mount at end
+	dataDir := filepath.Dir(dir) // 去掉末尾的 /mount 目录
 	data, err := loadVolumeData(dataDir, volDataFileName)
 	if err != nil {
 		return nil, errors.New(log("unmounter failed to load volume data file [%s]: %v", dir, err))
@@ -640,11 +639,9 @@ func (p *csiPlugin) constructPVSourceSpec(volSpecName, driverName, volumeHandle 
 
 // SupportsMountOption 返回 true，CSI 插件支持挂载选项。
 func (p *csiPlugin) SupportsMountOption() bool {
-	// TODO (vladimirvivien) use CSI VolumeCapability.MountVolume.mount_flags
-	// to probe for the result for this method
-	// (bswartz) 在 CSI 规范支持探测之前，只能让插件直接向 Kubernetes
-	// 注册其是否支持挂载选项。
-	// 当前保守返回 true。
+	// TODO (vladimirvivien)：改用 CSI VolumeCapability.MountVolume.mount_flags 探测驱动能力。
+	// (bswartz) 在 CSI 规范支持探测之前，只能由插件直接声明是否支持挂载选项。
+	// 因此当前保守返回 true。
 	return true
 }
 

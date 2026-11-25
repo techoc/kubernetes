@@ -56,7 +56,7 @@ type Controller struct {
 	serviceSynced cache.InformerSynced
 
 	lock   sync.Mutex
-	stopCh chan struct{} // closed by Stop()
+	stopCh chan struct{} // 由 Stop 关闭
 }
 
 // Config 保存 kubernetes Service 控制器的配置。
@@ -103,8 +103,8 @@ func (c *Controller) Start(stopCh <-chan struct{}) {
 	go func() {
 		defer close(localStopCh)
 		select {
-		case <-stopCh: // from Start
-		case <-c.stopCh: // from Stop
+		case <-stopCh: // 来自 Start
+		case <-c.stopCh: // 来自 Stop
 		}
 	}()
 
@@ -118,7 +118,7 @@ func (c *Controller) Stop() {
 
 	select {
 	case <-c.stopCh:
-		return // only close once
+		return // 只关闭一次
 	default:
 		close(c.stopCh)
 	}

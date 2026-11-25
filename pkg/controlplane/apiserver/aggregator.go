@@ -62,7 +62,7 @@ func CreateAggregatorConfig(
 ) (*aggregatorapiserver.Config, error) {
 	// 浅拷贝配置：大部分配置保持不变，仅需调整与聚合服务器相关的少数项。
 	genericConfig := kubeAPIServerConfig
-	// 清空 post start hooks 与 RESTOptionsGetter，避免与其他服务器重复安装。
+	// 清空启动后钩子与 RESTOptionsGetter，避免与其他服务器重复安装。
 	genericConfig.PostStartHooks = map[string]genericapiserver.PostStartHookConfigEntry{}
 	genericConfig.RESTOptionsGetter = nil
 	// 聚合服务器有自己定制的 OpenAPI handler，需阻止通用服务器重复安装。
@@ -77,7 +77,7 @@ func CreateAggregatorConfig(
 	if peerProxy != nil {
 		originalHandlerChainBuilder := genericConfig.BuildHandlerChainFunc
 		genericConfig.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
-			// 先包裹 peer proxy handler，使其位于处理器链的最外层。
+			// 先包裹对等节点代理处理器，使其位于处理器链的最外层。
 			apiHandler = peerProxy.WrapHandler(apiHandler)
 			return originalHandlerChainBuilder(apiHandler, c)
 		}
@@ -87,7 +87,7 @@ func CreateAggregatorConfig(
 	etcdOptions := *commandOptions.Etcd
 	etcdOptions.StorageConfig.Codec = aggregatorscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion, v1beta1.SchemeGroupVersion)
 	etcdOptions.StorageConfig.EncodeVersioner = runtime.NewMultiGroupVersioner(v1.SchemeGroupVersion, schema.GroupKind{Group: v1beta1.GroupName})
-	etcdOptions.SkipHealthEndpoints = true // avoid double wiring of health checks
+	etcdOptions.SkipHealthEndpoints = true // 避免重复接入健康检查
 	if err := etcdOptions.ApplyTo(&genericConfig); err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func CreateAggregatorConfig(
 		},
 	}
 
-	// 清空 post start hooks，避免所有服务器重复添加导致失败。
+	// 清空启动后钩子，避免所有服务器重复添加导致失败。
 	aggregatorConfig.GenericConfig.PostStartHooks = map[string]genericapiserver.PostStartHookConfigEntry{}
 
 	return aggregatorConfig, nil
@@ -275,7 +275,7 @@ func makeAPIServiceAvailableHealthCheck(name string, apiServices []*v1.APIServic
 	}
 
 	// 监听 APIService 的新增与更新事件。
-	apiServiceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{ //nolint:errcheck // no way to return error
+	apiServiceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{ //nolint:errcheck // 该回调无法返回错误
 		AddFunc:    func(obj interface{}) { handleAPIServiceChange(obj.(*v1.APIService)) },
 		UpdateFunc: func(old, new interface{}) { handleAPIServiceChange(new.(*v1.APIService)) },
 	})

@@ -45,7 +45,7 @@ func TestCreateOrUpdateMasterService(t *testing.T) {
 		serviceName  string
 		servicePorts []corev1.ServicePort
 		serviceType  corev1.ServiceType
-		expectCreate *corev1.Service // nil means none expected
+		expectCreate *corev1.Service // nil 表示不期望操作
 	}{
 		{
 			testName:    "service does not exist",
@@ -105,7 +105,7 @@ func TestCreateOrUpdateMasterService(t *testing.T) {
 		servicePorts []corev1.ServicePort
 		serviceType  corev1.ServiceType
 		service      *corev1.Service
-		expectUpdate *corev1.Service // nil means none expected
+		expectUpdate *corev1.Service // nil 表示不期望操作
 	}{
 		{
 			testName:    "service definition wrong port",
@@ -399,7 +399,7 @@ func TestCreateOrUpdateMasterService(t *testing.T) {
 		servicePorts []corev1.ServicePort
 		serviceType  corev1.ServiceType
 		service      *corev1.Service
-		expectUpdate *corev1.Service // nil means none expected
+		expectUpdate *corev1.Service // nil 表示不期望操作
 	}{
 		{
 			testName:    "service definition wrong port, no expected update",

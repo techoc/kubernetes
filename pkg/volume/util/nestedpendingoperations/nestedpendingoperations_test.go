@@ -588,24 +588,24 @@ func Test_NestedPendingOperations_Positive_WaitWithExpBackoff(t *testing.T) {
 
 // 覆盖的用例：
 // 第一个操作 | 第二个操作 | 结果
-// None        | None        | 通过
-// None        | Volume      | 通过
-// None        | Volume Pod  | 通过
-// None        | Volume Node | 通过
-// Volume      | None        | 通过
-// Volume      | Volume      | 失败（上面的 Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletes 已覆盖）
-// Volume      | Volume Pod  | 失败
-// Volume      | Volume Node | 失败
-// Volume Pod  | None        | 通过
-// Volume Pod  | Volume      | 失败
-// Volume Pod  | Volume Pod  | 失败（上面的 Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes 已覆盖）
-// Volume Node | None        | 通过
-// Volume Node | Volume      | 失败
-// Volume Node | Volume Node | 失败
+// 无          | 无          | 通过
+// 无          | 卷          | 通过
+// 无          | 卷 Pod      | 通过
+// 无          | 卷 Node     | 通过
+// 卷          | 无          | 通过
+// 卷          | 卷          | 失败（上面的 Test_NestedPendingOperations_Negative_SecondOpBeforeFirstCompletes 已覆盖）
+// 卷          | 卷 Pod      | 失败
+// 卷          | 卷 Node     | 失败
+// 卷 Pod      | 无          | 通过
+// 卷 Pod      | 卷          | 失败
+// 卷 Pod      | 卷 Pod      | 失败（上面的 Test_NestedPendingOperations_Negative_SecondSubOpBeforeFirstCompletes 已覆盖）
+// 卷 Node     | 无          | 通过
+// 卷 Node     | 卷          | 失败
+// 卷 Node     | 卷 Node     | 失败
 
 // 以下组合不会出现在同一个二进制中，故无需覆盖，哪种结果都可以。
-// Volume Pod  | Volume Node
-// Volume Node | Volume Pod
+// 卷 Pod      | 卷 Node
+// 卷 Node     | 卷 Pod
 
 // Test_NestedPendingOperations_SecondOpBeforeFirstCompletes 枚举各种键形态组合，
 // 验证第一个操作未结束时第二个操作能否创建。
@@ -976,7 +976,7 @@ func Test_NestedPendingOperations_OperationExists_ExactMatchFirstNoPending(t *te
 	delay := 50 * time.Millisecond
 	backoffDelay := 500 * time.Millisecond
 
-	// fake operation1 for pod1 fails
+	// pod1 的模拟操作 1 失败。
 	operation1DoneCh := make(chan interface{})
 	operation1 := generateWaitWithErrorFunc(operation1DoneCh)
 	err1 := grm.Run(volumeName, podName1, nodeName /* nodeName：空节点名 */, volumetypes.GeneratedOperations{OperationFunc: operation1, OperationName: "umount"})

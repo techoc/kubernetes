@@ -33,7 +33,7 @@ func Test_Controller(t *testing.T) {
 	tests := []struct {
 		name       string
 		namespaces []string
-		actions    [][]string // verb and resource
+		actions    [][]string // 动词与资源
 	}{
 		{
 			name: "no system namespaces",

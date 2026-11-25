@@ -245,5 +245,8 @@ type DynamicResourcesArgs struct {
 	BindingTimeout *metav1.Duration
 }
 
+// DynamicResourcesFilterTimeoutDefault 是 DynamicResources 插件默认的单节点过滤超时。
 const DynamicResourcesFilterTimeoutDefault = 10 * time.Second
+
+// DynamicResourcesBindingTimeoutDefault 是 DynamicResources 插件默认的设备绑定条件等待超时。
 const DynamicResourcesBindingTimeoutDefault = 600 * time.Second

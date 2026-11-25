@@ -112,14 +112,14 @@ import (
 )
 
 const (
-	// DefaultEndpointReconcilerInterval 是 kubernetes Service endpoints 的默认协调间隔。
+	// DefaultEndpointReconcilerInterval 是 Kubernetes Service 端点的默认协调间隔。
 	DefaultEndpointReconcilerInterval = 10 * time.Second
 	// DefaultEndpointReconcilerTTL 是存储层的默认 TTL。
 	DefaultEndpointReconcilerTTL = 15 * time.Second
 	// IdentityLeaseComponentLabelKey 用于给 identity 租约打组件标签，表明：
 	//   1. 该租约是 identity 租约（不同于 leader election 租约）
 	//   2. 该租约归属哪个组件
-	// TODO(sttts): remove this indirection
+	// TODO(sttts): 移除此间接引用。
 	IdentityLeaseComponentLabelKey = controlplaneapiserver.IdentityLeaseComponentLabelKey
 	// repairLoopInterval 是 Service ClusterIP 与 NodePort 修复循环的执行间隔。
 	repairLoopInterval = 3 * time.Minute

@@ -92,7 +92,7 @@ func (c *csiAttacher) Attach(spec *volume.Spec, nodeName types.NodeName) (string
 		if spec.InlineVolumeSpecForCSIMigration {
 			// 内联 PV 场景：用 PV spec 填充 VA source。内联卷的 volume spec 由
 			// CSI 转换 API 生成，这样 AccessMode、MountOptions 等 CSI attacher
-			// 必需的字段（除 CSI PV source 中已有字段外）也能一并填充。
+			// 必需的字段（除 CSI 持久卷源中已有字段外）也能一并填充。
 			vaSrc = storage.VolumeAttachmentSource{
 				InlineVolumeSpec: &spec.PersistentVolume.Spec,
 			}
@@ -298,7 +298,7 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 		return err
 	}
 
-	// Get secrets and publish context required for mountDevice
+	// 获取 MountDevice 所需的 Secret 和发布上下文。
 	nodeName := string(c.plugin.host.GetNodeName())
 	publishContext, err := c.plugin.getPublishContext(c.k8s, csiSource.VolumeHandle, csiSource.Driver, nodeName)
 
@@ -531,7 +531,7 @@ func (c *csiAttacher) waitForVolumeAttachDetachStatusWithLister(spec *volume.Spe
 func (c *csiAttacher) UnmountDevice(deviceMountPath string) error {
 	klog.V(4).Info(log("attacher.UnmountDevice(%s)", deviceMountPath))
 
-	// Setup
+	// 从元数据恢复驱动名和卷句柄，供后续 RPC 使用。
 	var driverName, volID string
 	dataDir := filepath.Dir(deviceMountPath)
 	data, err := loadVolumeData(dataDir, volDataFileName)
@@ -576,7 +576,7 @@ func (c *csiAttacher) UnmountDevice(deviceMountPath string) error {
 		return nil
 	}
 
-	// Start UnmountDevice
+	// 调用 NodeUnstageVolume 取消暂存。
 	err = csi.NodeUnstageVolume(ctx,
 		volID,
 		deviceMountPath)
@@ -585,7 +585,7 @@ func (c *csiAttacher) UnmountDevice(deviceMountPath string) error {
 		return errors.New(log("attacher.UnmountDevice failed: %v", err))
 	}
 
-	// Delete the global directory + json file
+	// 取消暂存成功后删除全局目录和元数据文件。
 	if err := removeMountDir(c.plugin, deviceMountPath); err != nil {
 		return errors.New(log("failed to clean up global mount %s: %s", dataDir, err))
 	}

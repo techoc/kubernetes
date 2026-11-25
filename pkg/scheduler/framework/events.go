@@ -281,7 +281,7 @@ func extractNodeConditionsChange(newNode *v1.Node, oldNode *v1.Node) fwk.ActionT
 // extractNodeSpecUnschedulableChange 在节点从不可调度变为可调度时返回污点更新事件。
 func extractNodeSpecUnschedulableChange(newNode *v1.Node, oldNode *v1.Node) fwk.ActionType {
 	if newNode.Spec.Unschedulable != oldNode.Spec.Unschedulable && !newNode.Spec.Unschedulable {
-		// TODO: create UpdateNodeSpecUnschedulable ActionType
+		// TODO：新增 UpdateNodeSpecUnschedulable ActionType。
 		return fwk.UpdateNodeTaint
 	}
 	return fwk.None

@@ -33,7 +33,6 @@ import (
 func TestConntracker_DeleteEntries(t *testing.T) {
 	// 定义几条公共测试流：TCP(6)、UDP(17) 和其他协议(132)，
 	// 正反元组互为镜像，用于模拟真实的 conntrack 双向流。
-	// Define some common flows
 	// 正向与反向元组端口、地址互换，协议为 TCP(6)。
 	flow1 := &netlink.ConntrackFlow{
 		Forward: netlink.IPTuple{
@@ -86,7 +85,6 @@ func TestConntracker_DeleteEntries(t *testing.T) {
 		},
 	}
 	// 边界情况：只有协议的残缺流，用于验证不完整的元组不会误匹配任何表项。
-	// Edge case: Partial flow (missing some fields)
 	flowEmpty := &netlink.ConntrackFlow{
 		Forward: netlink.IPTuple{
 			Protocol: 6,
@@ -149,7 +147,6 @@ func TestConntracker_DeleteEntries(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 拷贝切片，避免前面用例的删除操作改动共享指针切片影响后续用例。
-			// avoid mutations of entries between tests
 			entries := make([]*netlink.ConntrackFlow, len(tc.initialEntries))
 			copy(entries, tc.initialEntries)
 

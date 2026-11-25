@@ -30,8 +30,10 @@ import (
 
 // CacheDebugger 聚合缓存对比器与导出器，用于排查调度器缓存与集群实际状态的不一致。
 type CacheDebugger struct {
+	// Comparer 对比 informer 状态与调度器缓存。
 	Comparer CacheComparer
-	Dumper   CacheDumper
+	// Dumper 导出调度器缓存与队列状态。
+	Dumper CacheDumper
 }
 
 // New 创建一个 CacheDebugger，用 informer lister、调度缓存和调度队列初始化对比器与导出器。

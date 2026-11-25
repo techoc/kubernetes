@@ -53,7 +53,6 @@ var (
 // 用于表明集群是否启用了 legacy token 跟踪。
 // 在 HA 集群中，所有控制器实例都启用该特性后，ConfigMap 最终会被创建。
 // 禁用该特性时，已有的 ConfigMap 会被删除。
-
 type Controller struct {
 	configMapClient   corev1client.ConfigMapsGetter
 	configMapInformer cache.SharedIndexInformer

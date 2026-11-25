@@ -405,7 +405,7 @@ func (b *iscsiDiskMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) e
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
 		// 卷在 MountDevice 阶段应该已带 -o context 挂载。
-		// TODO: 是否在 GetAttributes() 中从挂载表解析以确认？
+		// TODO: 是否应在 GetAttributes() 中解析挂载表以确认？
 		b.mountedWithSELinuxContext = mounterArgs.SELinuxLabel != ""
 	}
 	return err

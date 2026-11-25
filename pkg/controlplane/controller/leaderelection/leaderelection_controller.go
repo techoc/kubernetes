@@ -175,7 +175,7 @@ func (c *Controller) processNextElectionItem(ctx context.Context) bool {
 	}
 
 	intervalForRequeue, err := c.reconcileElectionStep(ctx, key)
-	if err != nil { // HandleErrorWithContext logs regardless of error value, filter out nil err.
+	if err != nil { // HandleErrorWithContext 即使错误值为 nil 也会记录，故需先过滤。
 		utilruntime.HandleErrorWithContext(ctx, err, "Failed to reconcile election step", "key", key)
 	}
 	if intervalForRequeue != noRequeue {
@@ -315,11 +315,11 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 	// 只要存在未过期的 PingTime，选举就仍在进行中。
 	for _, candidate := range candidates {
 		if candidate.Spec.PingTime == nil {
-			continue // shouldn't be the case after the above
+			continue // 经过上述检查后不应出现
 		}
 
 		if candidate.Spec.RenewTime != nil && !candidate.Spec.RenewTime.Before(candidate.Spec.PingTime) {
-			continue // this has renewed already
+			continue // 该候选者已完成续约
 		}
 
 		// 候选者的 PingTime 仍在选举时长内说明尚未 ack，需等待其响应。

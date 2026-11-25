@@ -1033,7 +1033,7 @@ func TestInstallCSIDriverExistingAnnotation(t *testing.T) {
 			t.Errorf("expected no error from creating CSINodeinfo but got: %v", err)
 			continue
 		}
-		err = nim.InstallCSIDriver(driverName, nodeID, 0 /* maxVolumeLimit */, nil) // TODO test maxVolumeLimit
+		err = nim.InstallCSIDriver(driverName, nodeID, 0 /* maxVolumeLimit */, nil) // TODO：测试 maxVolumeLimit
 		if err != nil {
 			t.Errorf("expected no error from InstallCSIDriver call but got: %v", err)
 			continue
@@ -1216,7 +1216,7 @@ func getCSINodeObjectMeta() metav1.ObjectMeta {
 	}
 }
 
-// applyNodeStatusPatch 将 strategic merge patch 应用到 Node 上，返回更新后的对象。
+// applyNodeStatusPatch 将策略性合并补丁应用到 Node 上，返回更新后的对象。
 func applyNodeStatusPatch(originalNode *v1.Node, patch []byte) (*v1.Node, error) {
 	original, err := json.Marshal(originalNode)
 	if err != nil {

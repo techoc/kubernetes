@@ -194,8 +194,7 @@ func podRequestsAndLimitsByLifecycle(pod *v1.Pod, reuseReqs, reuseLimits v1.Reso
 		// 未调度的 Pod 不可能是终态
 	case pod.Status.Phase == v1.PodSucceeded, pod.Status.Phase == v1.PodFailed:
 		terminal = true
-		// TODO: resolve https://github.com/kubernetes/kubernetes/issues/96515 and add a condition here
-		// 待上述 issue 解决后，在此补充终态判定条件
+		// TODO: 待 https://github.com/kubernetes/kubernetes/issues/96515 解决后，在此补充终态判定条件。
 	}
 	if terminal {
 		return

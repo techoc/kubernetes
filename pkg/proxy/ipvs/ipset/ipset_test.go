@@ -1425,7 +1425,7 @@ func TestValidateEntry(t *testing.T) {
 				Port:     -1,
 			},
 			set: &IPSet{
-				// TODO: set name string with white space?
+				// TODO: 补充集合名称含空格的测试用例。
 				Name: "negative-port-number",
 			},
 			valid: false,
@@ -1492,7 +1492,7 @@ func TestValidateEntry(t *testing.T) {
 			},
 			set: &IPSet{
 				Name: "IPV6",
-				// TODO: check set's hash family
+				// TODO: 检查集合的哈希地址族。
 			},
 			valid: true,
 		},
@@ -1610,7 +1610,7 @@ func TestValidateEntry(t *testing.T) {
 			},
 			set: &IPSet{
 				Name: "IPV6",
-				// TODO: check set's hash family
+				// TODO: 检查集合的哈希地址族。
 			},
 			valid: true,
 		},

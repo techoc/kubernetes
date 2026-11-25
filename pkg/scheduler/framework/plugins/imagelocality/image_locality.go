@@ -147,10 +147,10 @@ func scaledImageScore(imageState *fwk.ImageStateSummary, totalNumNodes int) int6
 }
 
 // normalizedImageName 返回符合 CRI 规范的镜像名（缺少 tag 时补 :latest）。
-// TODO: cover the corner cases of missed matches, e.g,
-// 1. Using Docker as runtime and docker.io/library/test:tag in pod spec, but only test:tag will present in node status
-// 2. Using the implicit registry, i.e., test:tag or library/test:tag in pod spec but only docker.io/library/test:tag
-// in node status; note that if users consistently use one registry format, this should not happen.
+// TODO: 覆盖镜像名无法匹配的边界情况，例如：
+// 1. Pod 规范使用 Docker 运行时，镜像写为 docker.io/library/test:tag，而节点状态只有 test:tag。
+// 2. Pod 规范使用隐式 registry，镜像写为 test:tag 或 library/test:tag，而节点状态只有
+// docker.io/library/test:tag。用户始终使用同一种 registry 格式时不会出现这些问题。
 func normalizedImageName(name string) string {
 	if strings.LastIndex(name, ":") <= strings.LastIndex(name, "/") {
 		name = name + ":latest"

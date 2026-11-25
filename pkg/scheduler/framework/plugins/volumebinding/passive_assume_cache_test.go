@@ -119,7 +119,7 @@ func TestBasicCache(t *testing.T) {
 	informer.update(objects["test-3"], updated)
 	objects[updated.Name] = updated
 
-	// List them
+	// 再次校验列表。
 	verifyList(t, cache, objects, "")
 
 	// 删除一个对象。
@@ -127,7 +127,7 @@ func TestBasicCache(t *testing.T) {
 	delete(objects, deleted.Name)
 	informer.delete(deleted)
 
-	// List them
+	// 再次校验列表。
 	verifyList(t, cache, objects, "")
 }
 
@@ -153,7 +153,7 @@ func TestPVCacheWithIndex(t *testing.T) {
 		informer.add(obj)
 	}
 
-	// List them
+	// 再次校验列表。
 	verifyList(t, cache, objects1, "test1")
 	verifyList(t, cache, objects2, "test2")
 
@@ -163,17 +163,16 @@ func TestPVCacheWithIndex(t *testing.T) {
 	informer.update(objects1[updated.Name], updated)
 	objects1[updated.Name] = updated
 
-	// List them
+	// 再次校验列表。
 	verifyList(t, cache, objects1, "test1")
 	verifyList(t, cache, objects2, "test2")
 
-	// Delete an object
 	// 删除一个对象。
 	deletedPV := objects1["test-7"]
 	delete(objects1, deletedPV.Name)
 	informer.delete(deletedPV)
 
-	// List them
+	// 再次校验列表。
 	verifyList(t, cache, objects1, "test1")
 	verifyList(t, cache, objects2, "test2")
 }

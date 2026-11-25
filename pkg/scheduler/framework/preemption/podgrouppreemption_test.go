@@ -181,7 +181,7 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 					capacity: 2,
 				},
 			},
-			expectedVictims: []string{"p1"}, // p1 is less important than p2 because it's not part of a pod group
+			expectedVictims: []string{"p1"}, // p1 不属于任何 Pod 组，因此优先级低于 p2
 			expectedStatus:  fwk.NewStatus(fwk.Success),
 		},
 		{
@@ -206,7 +206,7 @@ func TestPodGroupEvaluator_SelectVictimsOnDomain(t *testing.T) {
 					capacity: 2,
 				},
 			},
-			expectedVictims:                []string{"p1"}, // p1 is less important than p2 because of later StartTime
+			expectedVictims:                []string{"p1"}, // p1 的 StartTime 更晚，因此优先级低于 p2
 			expectedStatus:                 fwk.NewStatus(fwk.Success),
 			expectedNumPodGroupDisruptions: 1,
 		},

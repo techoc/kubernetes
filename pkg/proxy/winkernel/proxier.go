@@ -326,7 +326,7 @@ type endpointInfo struct {
 	providerAddress string
 	hns             HostNetworkService
 
-	// conditions
+	// 端点的就绪、服务和终止状态。
 	ready       bool
 	serving     bool
 	terminating bool
@@ -654,7 +654,7 @@ type Proxier struct {
 	endpointsChanges  *proxy.EndpointsChangeTracker
 	serviceChanges    *proxy.ServiceChangeTracker
 	endPointsRefCount endPointsReferenceCountMap
-	mu                sync.Mutex // protects the following fields
+	mu                sync.Mutex // 保护以下字段
 	svcPortMap        proxy.ServicePortMap
 	endpointsMap      proxy.EndpointsMap
 	// endpointSlicesSynced 与 servicesSynced 在启动后首次同步完成时置为 true，
@@ -662,7 +662,7 @@ type Proxier struct {
 	endpointSlicesSynced bool
 	servicesSynced       bool
 	initialized          int32
-	syncRunner           *runner.BoundedFrequencyRunner // governs calls to syncProxyRules
+	syncRunner           *runner.BoundedFrequencyRunner // 控制对 syncProxyRules 的调用
 	// 以下字段实际只读，因此不需要持有 mu。
 	nodeName string
 	nodeIP   net.IP
@@ -909,8 +909,7 @@ func NewDualStackProxier(
 func CleanupLeftovers() (encounteredError bool) {
 	// 删除所有 HNS 负载均衡器策略。
 	newHcnImpl().DeleteAllHnsLoadBalancerPolicy()
-	// TODO
-	// 删除所有 HNS 远端端点。
+	// TODO: 删除所有 HNS 远端端点。
 
 	return encounteredError
 }

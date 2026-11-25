@@ -87,7 +87,7 @@ var (
 	// NetworkProgrammingLatency 定义为编排网络所花费的时间：从 service 或 pod 发生变化，
 	// 到该变更传播出去、相应的 kube-proxy 规则完成同步为止。
 	// 对参与本次规则同步的每个 endpoints 对象分别导出。
-	// See https://github.com/kubernetes/community/blob/master/sig-scalability/slos/network_programming_latency.md
+	// 参见 https://github.com/kubernetes/community/blob/master/sig-scalability/slos/network_programming_latency.md
 	// 注意该指标部分依赖 master 上 endpoints controller 导出的时间；
 	// 若节点与 master 之间存在时钟漂移，测量结果可能不准确。
 	NetworkProgrammingLatency = metrics.NewHistogramVec(

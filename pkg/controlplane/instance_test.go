@@ -249,7 +249,7 @@ func newInstance(t *testing.T) (*Instance, *etcd3testing.EtcdTestServer, Complet
 	return apiserver, etcdserver, completed, assert
 }
 
-// TestVersion tests /version
+// TestVersion 验证 /version 端点。
 func TestVersion(t *testing.T) {
 	s, etcdserver, _, _ := newInstance(t)
 	defer etcdserver.Terminate(t)
@@ -494,13 +494,13 @@ func TestNewBetaResourcesEnabledByDefault(t *testing.T) {
 	config := DefaultAPIResourceConfigSource()
 	for gvr, enable := range config.ResourceConfigs {
 		if !strings.Contains(gvr.Version, "beta") {
-			continue // only check beta things
+			continue // 只检查 beta 资源
 		}
 		if !enable {
-			continue // only check things that are enabled
+			continue // 只检查已启用的资源
 		}
 		if legacyEnabledBetaResources[gvr] {
-			continue // this is a legacy beta resource
+			continue // 这是旧版 beta 资源
 		}
 		t.Errorf("no new beta resources can be enabled by default, see https://github.com/kubernetes/enhancements/blob/0ad0fc8269165ca300d05ca51c7ce190a79976a5/keps/sig-architecture/3136-beta-apis-off-by-default/README.md: %v", gvr)
 	}
@@ -513,7 +513,7 @@ func TestGenericStorageProviders(t *testing.T) {
 	_, config, _ := setUp(t)
 	completed := config.Complete()
 
-	// create kube storage providers
+	// 创建 kube 存储提供者。
 	client, err := kubernetes.NewForConfig(config.ControlPlane.Generic.LoopbackClientConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -546,7 +546,7 @@ func TestGenericStorageProviders(t *testing.T) {
 		t.Fatalf("DefaultGenericAPIResourceConfigSource has config for groups not in GenericStorageProviders: %v", sets.List(extra))
 	}
 
-	g := 0 // generic index
+	g := 0 // 通用存储提供者的索引
 	for k := range kube {
 		kt := reflect.TypeOf(kube[k])
 		var gt reflect.Type
@@ -635,12 +635,12 @@ func TestGetResetFieldsHasAllVersions(t *testing.T) {
 			for resource, storage := range resourcesInVersion {
 				servedVersions := allServedVersionsByResource[resource]
 				if len(servedVersions) <= 1 {
-					continue // only one version, nothing to check
+					continue // 只有一个版本，无需检查
 				}
 				if rfs, ok := storage.(rest.ResetFieldsStrategy); ok {
 					resetFields := rfs.GetResetFields()
 					if resetFields == nil {
-						continue // no reset fields, nothing to check
+						continue // 没有重置字段，无需检查
 					}
 					for _, sv := range servedVersions {
 						if _, exists := resetFields[fieldpath.APIVersion(sv)]; !exists {
@@ -668,7 +668,7 @@ func TestGetResetFieldsHasAllVersions(t *testing.T) {
 }
 
 // TestDeclarativeValidationEnablementInStrategies 验证每个 CreateStrategy 和
-// UpdateStrategy installed supports declarative validation.
+// UpdateStrategy 都支持声明式校验。
 func TestDeclarativeValidationEnablementInStrategies(t *testing.T) {
 	_, config, _ := setUp(t)
 
@@ -700,8 +700,7 @@ func TestDeclarativeValidationEnablementInStrategies(t *testing.T) {
 			for resource, storage := range resourcesInVersion {
 				gs, ok := storage.(registry.GenericStore)
 				if !ok {
-					// Non-generic storage (e.g. proxy/exec subresources)
-					// 没有需要检查的策略。
+					// 非通用存储（如 proxy/exec 子资源）没有需要检查的策略。
 					continue
 				}
 				name := gvr(groupName, v, resource)
@@ -731,8 +730,7 @@ func gvr(g string, v string, r string) string {
 	return gvr
 }
 
-// noStorageVersionHash 列出合法具有空存储版本哈希的资源。
-// version hash.
+// noStorageVersionHash 列出允许没有存储版本哈希的资源。
 var noStorageVersionHash = sets.NewString(
 	"v1/bindings",
 	"v1/componentstatuses",

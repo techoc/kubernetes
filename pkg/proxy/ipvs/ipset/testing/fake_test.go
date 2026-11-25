@@ -154,7 +154,6 @@ func TestSetEntry(t *testing.T) {
 	}
 
 	// 销毁所有集合后，两个内部 map 都应为空。
-	// 销毁所有集合
 	if err := fake.DestroyAllSets(); err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -166,4 +165,4 @@ func TestSetEntry(t *testing.T) {
 	}
 }
 
-// TODO: Test ignoreExistErr=false
+// TODO: 补充 ignoreExistErr=false 的测试。

@@ -1533,7 +1533,7 @@ func TestGetTPMapMatchingIncomingAffinityAntiAffinity(t *testing.T) {
 			pod: st.MakePod().Name("affi-antiaffi").PodAffinityExists("aaa", v1.LabelHostname, st.PodAffinityWithRequiredReq).
 				PodAffinityExists("bbb", v1.LabelHostname, st.PodAffinityWithRequiredReq).PodAntiAffinityExists("aaa", v1.LabelHostname, st.PodAntiAffinityWithRequiredReq).Obj(),
 			wantAffinityPodsMap: topologyToMatchedTermCount{
-				{key: v1.LabelHostname, value: "nodeA"}: 2, // 2 one for each term.
+				{key: v1.LabelHostname, value: "nodeA"}: 2, // 每个 term 对应 2 个。
 			},
 			wantAntiAffinityPodsMap: topologyToMatchedTermCount{
 				{key: v1.LabelHostname, value: "nodeA"}: 1,

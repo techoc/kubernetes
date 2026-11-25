@@ -113,6 +113,7 @@ func TestPreScoreSkip(t *testing.T) {
 	}
 }
 
+// TestPreScoreStateEmptyNodes 验证无匹配 Pod 时仍能构建拓扑域预计算状态。
 func TestPreScoreStateEmptyNodes(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -620,13 +621,14 @@ func TestPreScoreStateEmptyNodes(t *testing.T) {
 	}
 }
 
+// TestPodTopologySpreadScore 验证不同约束、候选节点与默认配置下的拓扑分布得分。
 func TestPodTopologySpreadScore(t *testing.T) {
 	tests := []struct {
 		name                      string
 		pod                       *v1.Pod
 		existingPods              []*v1.Pod
 		nodes                     []*v1.Node
-		failedNodes               []*v1.Node // nodes + failedNodes = all nodes
+		failedNodes               []*v1.Node // nodes 与 failedNodes 合为全部节点
 		objs                      []runtime.Object
 		want                      fwk.NodeScoreList
 		enableNodeInclusionPolicy bool
@@ -765,10 +767,10 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 			failedNodes: []*v1.Node{},
 			want: []fwk.NodeScore{
-				{Name: "node-a", Score: 33}, // +13, compared to maxSkew=1
-				{Name: "node-b", Score: 66}, // +6, compared to maxSkew=1
+				{Name: "node-a", Score: 33}, // 相比 maxSkew=1 增加 13
+				{Name: "node-b", Score: 66}, // 相比 maxSkew=1 增加 6
 				{Name: "node-c", Score: 100},
-				{Name: "node-d", Score: 16}, // +16, compared to maxSkew=1
+				{Name: "node-d", Score: 16}, // 相比 maxSkew=1 增加 16
 			},
 		},
 		{
@@ -797,9 +799,9 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 			failedNodes: []*v1.Node{},
 			want: []fwk.NodeScore{
-				{Name: "node-a", Score: 44}, // +16 compared to maxSkew=1
-				{Name: "node-b", Score: 66}, // +9 compared to maxSkew=1
-				{Name: "node-c", Score: 77}, // +6 compared to maxSkew=1
+				{Name: "node-a", Score: 44}, // 相比 maxSkew=1 增加 16
+				{Name: "node-b", Score: 66}, // 相比 maxSkew=1 增加 9
+				{Name: "node-c", Score: 77}, // 相比 maxSkew=1 增加 6
 				{Name: "node-d", Score: 100},
 			},
 		},
@@ -889,7 +891,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 			},
 			nodes: []*v1.Node{
 				st.MakeNode().Name("node-a").Label(v1.LabelHostname, "node-a").Obj(),
-				st.MakeNode().Name("node-b").Label("n", "node-b").Obj(), // label `n` doesn't match topologyKey
+				st.MakeNode().Name("node-b").Label("n", "node-b").Obj(), // 标签 `n` 与 topologyKey 不匹配
 				st.MakeNode().Name("node-x").Label(v1.LabelHostname, "node-x").Obj(),
 			},
 			failedNodes: []*v1.Node{
@@ -1129,7 +1131,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 				"node",
 				v1.ScheduleAnyway,
 				fooSelector,
-				ptr.To[int32](10), // larger than the number of domains(3)
+				ptr.To[int32](10), // 大于域数量（3）
 				nil,
 				nil,
 				nil,
@@ -1417,6 +1419,7 @@ func TestPodTopologySpreadScore(t *testing.T) {
 	}
 }
 
+// BenchmarkTestPodTopologySpreadScore 测量拓扑分布插件打分性能。
 func BenchmarkTestPodTopologySpreadScore(b *testing.B) {
 	tests := []struct {
 		name             string

@@ -161,6 +161,8 @@ type Cache interface {
 
 // Dump 表示缓存状态的一份快照导出。
 type Dump struct {
+	// AssumedPods 是已假定但尚未确认绑定的 Pod 键集合。
 	AssumedPods sets.Set[string]
-	Nodes       map[string]*framework.NodeInfo
+	// Nodes 是按节点名索引的节点信息视图。
+	Nodes map[string]*framework.NodeInfo
 }

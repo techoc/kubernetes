@@ -163,5 +163,5 @@ func TestCleanupLeftovers(t *testing.T) {
 		t.Fatalf("expected post-cleanup rules to be:\n%s\n\ngot:\n%s\n", expected, got)
 	}
 
-	// FIXME: check ipvs and ipset state
+	// FIXME: 还需检查 ipvs 与 ipset 的状态。
 }

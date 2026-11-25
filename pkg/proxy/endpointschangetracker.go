@@ -106,8 +106,7 @@ func (ect *EndpointsChangeTracker) EndpointSliceUpdate(endpointSlice *discovery.
 		metrics.EndpointChangesPending.Inc()
 		// 删除场景下注解里的 LastChangeTriggerTime 必然来自上一次更新时间，
 		// 并非我们想度量的触发时刻，因此直接丢弃。
-		// TODO(wojtek-t, robscott): Address the problem for EndpointSlice deletion
-		// when other EndpointSlice for that service still exist.
+		// TODO(wojtek-t, robscott): 解决删除 EndpointSlice 时，同一 Service 仍有其他 EndpointSlice 的情况。
 		// 删除时旧注解时间戳没有意义，直接丢弃；新增/更新时只接受 tracker 启动之后的时间戳，
 		// 避免重启前遗留的注解被算作本次的编程延迟。
 		if removeSlice {
@@ -149,7 +148,7 @@ func (ect *EndpointsChangeTracker) checkoutTriggerTimes(lastChangeTriggerTimes *
 // getLastChangeTriggerTime 解析 EndpointsLastChangeTriggerTime 注解并返回对应的 time.Time；
 // 注解缺失或格式错误时返回零值时间（上游代码会忽略零值）。
 func getLastChangeTriggerTime(annotations map[string]string) time.Time {
-	// TODO(#81360): ignore case when Endpoint is deleted.
+	// TODO(#81360): 处理 Endpoint 被删除的情况。
 	if _, ok := annotations[v1.EndpointsLastChangeTriggerTime]; !ok {
 		// Endpoints 对象可能根本没有该注解；此时返回零值，由上游代码忽略。
 		return time.Time{}
@@ -176,8 +175,8 @@ type UpdateEndpointsMapResult struct {
 	UpdatedServices sets.Set[types.NamespacedName]
 	// 只要有任一 UDP ServicePort 的 endpoint 发生变化就置 true，用于尽量减少 conntrack 清理调用次数。
 	ConntrackCleanupRequired bool
-	// 所有发生变更的 endpoints 对象的触发时间列表，用于导出 network programming latency。
-	// NOTE(oxddr): this can be simplified to []time.Time if memory consumption becomes an issue.
+	// 所有发生变更的端点对象的触发时间列表，用于导出网络编程延迟。
+	// 注意(oxddr)：若内存占用成为问题，可简化为 []time.Time。
 	LastChangeTriggerTimes map[types.NamespacedName][]time.Time
 }
 
@@ -287,8 +286,7 @@ func (em EndpointsMap) getLocalReadyEndpointIPs() map[types.NamespacedName]sets.
 
 // LocalReadyEndpoints 返回每个 Service 名字到其本地就绪 endpoint 数量的映射。
 func (em EndpointsMap) LocalReadyEndpoints() map[types.NamespacedName]int {
-	// TODO: If this will appear to be computationally expensive, consider
-	// computing this incrementally similarly to endpointsMap.
+	// TODO: 若确认计算开销过大，参照 endpointsMap 改为增量计算。
 
 	// 必须先通过 getLocalEndpointIPs 按 IP 去重：EndpointsMap 按 IP+端口组织，
 	// 而指向 10.0.0.1:80 和 10.0.0.1:443 的 Service 应算作 1 个而非 2 个 endpoint。

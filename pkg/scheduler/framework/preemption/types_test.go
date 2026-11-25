@@ -992,7 +992,7 @@ func TestNewVictim(t *testing.T) {
 	p1 := st.MakePod().Name("p1").StartTime(now).Obj()
 	p2 := st.MakePod().Name("p2").StartTime(later).Obj()
 	p3 := st.MakePod().Name("p3").StartTime(earlier).Obj()
-	p4 := st.MakePod().Name("p4").Obj() // nil start time
+	p4 := st.MakePod().Name("p4").Obj() // 启动时间为 nil
 	p5 := st.MakePod().Name("p5").StartTime(now).PodGroupName("pg1").Obj()
 
 	pi1, _ := framework.NewPodInfo(p1)
@@ -1113,8 +1113,8 @@ func TestNewDomainVictim(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				st.MakePod().Name("p1").Node("node1").Obj(),
-				st.MakePod().Name("p2").Node("node1").Obj(), // same node
-				st.MakePod().Name("p3").Node("node2").Obj(), // different node
+				st.MakePod().Name("p2").Node("node1").Obj(), // 同一节点
+				st.MakePod().Name("p3").Node("node2").Obj(), // 不同节点
 			},
 			priority:          20,
 			wantErr:           false,

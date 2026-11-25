@@ -502,7 +502,7 @@ func TestValidatePodGroup(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				st.MakePod().Name("p1").PodGroupName("pg1").Priority(10).PreemptionPolicy(v1.PreemptNever).Obj(),
-				st.MakePod().Name("p2").PodGroupName("pg2").Priority(10).PreemptionPolicy(v1.PreemptLowerPriority).Obj(), // different
+				st.MakePod().Name("p2").PodGroupName("pg2").Priority(10).PreemptionPolicy(v1.PreemptLowerPriority).Obj(), // 不同对象
 			},
 			profiles: profile.Map{
 				"": nil,
@@ -519,7 +519,7 @@ func TestValidatePodGroup(t *testing.T) {
 			},
 			podGroups: []*schedulingv1beta1.PodGroup{
 				st.MakePodGroup().Name("pg1").ParentCompositePodGroup("cpg-root").Priority(10).PreemptionPolicy(schedulingv1beta1.PreemptNever).Obj(),
-				st.MakePodGroup().Name("pg2").ParentCompositePodGroup("cpg-root").Priority(10).PreemptionPolicy(schedulingv1beta1.PreemptLowerPriority).Obj(), // different
+				st.MakePodGroup().Name("pg2").ParentCompositePodGroup("cpg-root").Priority(10).PreemptionPolicy(schedulingv1beta1.PreemptLowerPriority).Obj(), // 不同对象
 			},
 			pods: []*v1.Pod{
 				st.MakePod().Name("p1").PodGroupName("pg1").Priority(10).PreemptionPolicy(v1.PreemptNever).Obj(),
@@ -557,7 +557,7 @@ func TestValidatePodGroup(t *testing.T) {
 			compositePodGroup: st.MakeCompositePodGroup().Name("cpg-root").Priority(10).PreemptionPolicy(schedulingv1alpha3.PreemptNever).Obj(),
 			compositePodGroups: []*schedulingv1alpha3.CompositePodGroup{
 				st.MakeCompositePodGroup().Name("cpg-root").Priority(10).PreemptionPolicy(schedulingv1alpha3.PreemptNever).Obj(),
-				st.MakeCompositePodGroup().Name("cpg-nested").ParentCompositePodGroup("cpg-root").Priority(10).PreemptionPolicy(schedulingv1alpha3.PreemptLowerPriority).Obj(), // different
+				st.MakeCompositePodGroup().Name("cpg-nested").ParentCompositePodGroup("cpg-root").Priority(10).PreemptionPolicy(schedulingv1alpha3.PreemptLowerPriority).Obj(), // 不同对象
 			},
 			podGroups: []*schedulingv1beta1.PodGroup{
 				st.MakePodGroup().Name("pg1").ParentCompositePodGroup("cpg-nested").Priority(10).PreemptionPolicy(schedulingv1beta1.PreemptNever).Obj(),
@@ -686,7 +686,7 @@ func TestSkipPodGroupPodSchedule(t *testing.T) {
 		Cache:           cache,
 	}
 
-	// Assume Pod p3。
+	// 假定 Pod p3 已调度。
 	err = cache.AssumePod(logger, p3)
 	if err != nil {
 		t.Fatalf("Failed to assume pod p3: %v", err)
@@ -2381,11 +2381,11 @@ func TestUpdatePodGroupCondition(t *testing.T) {
 // fakePlacementPlugin 模拟放置生成、打分、过滤和预留行为的测试插件。
 type fakePlacementPlugin struct {
 	name                     string
-	filterStatus             map[string]*fwk.Status            // node name to status
-	generatePlacementsResult map[string]map[string][]string    // PodGroupInfo key to placement name to list of node names
-	generatePlacementsStatus map[string]*fwk.Status            // PodGroupInfo key to status
-	scorePlacementsResult    map[string]map[string]int64       // PodGroupInfo key to placement name to score
-	scorePlacementsStatus    map[string]map[string]*fwk.Status // PodGroupInfo key to placement name to status
+	filterStatus             map[string]*fwk.Status            // 节点名到状态的映射
+	generatePlacementsResult map[string]map[string][]string    // PodGroupInfo 键到放置方案名再到节点名列表的映射
+	generatePlacementsStatus map[string]*fwk.Status            // PodGroupInfo 键到状态的映射
+	scorePlacementsResult    map[string]map[string]int64       // PodGroupInfo 键到放置方案名再到分数的映射
+	scorePlacementsStatus    map[string]map[string]*fwk.Status // PodGroupInfo 键到放置方案名再到状态的映射
 	podPerNode               bool
 	reservedNodes            sets.Set[string]
 }
@@ -3711,14 +3711,14 @@ func TestCPGSchedulingPlacementAlgorithm(t *testing.T) {
 						"placement2": 2,
 					},
 					childPGInfo1.GetKey(): {
-						"placement1": 5, // should be disregarded due to parent priority
-						"placement2": 5, // should be disregarded due to parent priority
+						"placement1": 5, // 因父组优先级而忽略
+						"placement2": 5, // 因父组优先级而忽略
 						"placement3": 1,
 						"placement4": 2,
 					},
 					childPGInfo2.GetKey(): {
-						"placement1": 5, // should be disregarded due to parent priority
-						"placement2": 5, // should be disregarded due to parent priority
+						"placement1": 5, // 因父组优先级而忽略
+						"placement2": 5, // 因父组优先级而忽略
 						"placement3": 2,
 						"placement4": 1,
 					},
@@ -3761,14 +3761,14 @@ func TestCPGSchedulingPlacementAlgorithm(t *testing.T) {
 						"placement2": 1,
 					},
 					childPGInfo1.GetKey(): {
-						"placement1": 5, // should be disregarded due to pod group infeasibility
-						"placement2": 5, // should be disregarded due to pod group infeasibility
+						"placement1": 5, // 因 PodGroup 不可行而忽略
+						"placement2": 5, // 因 PodGroup 不可行而忽略
 						"placement3": 1,
 						"placement4": 2,
 					},
 					childPGInfo2.GetKey(): {
-						"placement1": 5, // should be disregarded due to pod group infeasibility
-						"placement2": 5, // should be disregarded due to pod group infeasibility
+						"placement1": 5, // 因 PodGroup 不可行而忽略
+						"placement2": 5, // 因 PodGroup 不可行而忽略
 						"placement3": 2,
 						"placement4": 1,
 					},
@@ -5090,7 +5090,7 @@ func TestCPGHierarchicalScheduling_Internal(t *testing.T) {
 		SchedulingQueue:  internalqueue.NewTestQueue(ctx, nil),
 		Cache:            cache,
 		client:           client,
-		nodeInfoSnapshot: snapshot, // will be updated by UpdateSnapshot
+		nodeInfoSnapshot: snapshot, // 将由 UpdateSnapshot 更新
 		FailureHandler: func(ctx context.Context, fwk framework.Framework, p *framework.QueuedPodInfo, status *fwk.Status, ni *fwk.NominatingInfo, start time.Time) {
 			lock.Lock()
 			defer lock.Unlock()

@@ -39,7 +39,7 @@ import (
 )
 
 // TestNodeAffinity 验证 Filter 与 PreFilter 对 Pod 必需节点亲和性（含 nodeSelector）的判定。
-// TODO: Add test case for RequiredDuringSchedulingRequiredDuringExecution after it's implemented.
+// TODO: RequiredDuringSchedulingRequiredDuringExecution 实现后补充对应测试。
 func TestNodeAffinity(t *testing.T) {
 	tests := []struct {
 		name                string

@@ -318,7 +318,7 @@ func New(_ context.Context, plArgs runtime.Object, h fwk.Handle, fts feature.Fea
 				return nil, fmt.Errorf("parsing addedAffinity.requiredDuringSchedulingIgnoredDuringExecution: %w", err)
 			}
 		}
-		// TODO: parse requiredDuringSchedulingRequiredDuringExecution when it gets added to the API.
+		// TODO: API 加入 requiredDuringSchedulingRequiredDuringExecution 后补充解析。
 		// 仅当配置了优先亲和性项时才构造对应的匹配器。
 		if terms := args.AddedAffinity.PreferredDuringSchedulingIgnoredDuringExecution; len(terms) != 0 {
 			pl.addedPrefSchedTerms, err = nodeaffinity.NewPreferredSchedulingTerms(terms)

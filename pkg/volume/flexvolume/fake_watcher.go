@@ -45,7 +45,7 @@ func (w *fakeWatcher) Init(eventHandler utilfs.FSEventHandler, _ utilfs.FSErrorH
 }
 
 // Run 空实现：测试直接调用 TriggerEvent，无需后台循环。
-func (w *fakeWatcher) Run(_ context.Context) { /* no-op */ }
+func (w *fakeWatcher) Run(_ context.Context) { /* 空操作 */ }
 
 // AddWatch 把路径记入监视列表，不实际监听文件系统。
 func (w *fakeWatcher) AddWatch(path string) error {

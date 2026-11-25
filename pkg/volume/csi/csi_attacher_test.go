@@ -1112,7 +1112,7 @@ func TestAttacherMountDevice(t *testing.T) {
 			createAttachment:        true,
 			populateDeviceMountPath: true,
 			shouldFail:              true,
-			// NOTE: Windows 上 os.Chmod 行为不符合预期，此用例在 Windows 上不会因权限不足而失败，故跳过。
+			// 注意：Windows 上 os.Chmod 行为不符合预期，此用例在 Windows 上不会因权限不足而失败，故跳过。
 			// TODO: 待 Windows 文件权限支持完善后移除跳过。
 			// https://github.com/kubernetes/kubernetes/pull/110921
 			skipOnWindows: true,

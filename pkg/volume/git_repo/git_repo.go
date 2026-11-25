@@ -178,7 +178,7 @@ func (b *gitRepoVolumeMounter) GetAttributes() volume.Attributes {
 	return volume.Attributes{
 		ReadOnly:       false,
 		Managed:        true,
-		SELinuxRelabel: true, // TODO: double check xattr 变更是否确实安全
+		SELinuxRelabel: true, // TODO: 确认 xattr 变更确实安全。
 	}
 }
 

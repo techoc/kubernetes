@@ -25,10 +25,15 @@ import (
 // Cache 是用于测试的 Cache 实现：可选地用 Func 字段覆盖各方法，避免依赖真实缓存行为。
 type Cache struct {
 	internalcache.Cache
-	AssumeFunc         func(*v1.Pod)
-	ForgetFunc         func(*v1.Pod)
-	IsAssumedPodFunc   func(*v1.Pod) bool
-	GetPodFunc         func(*v1.Pod) *v1.Pod
+	// AssumeFunc 覆盖 AssumePod；为 nil 时使用嵌入的 Cache。
+	AssumeFunc func(*v1.Pod)
+	// ForgetFunc 覆盖 ForgetPod；为 nil 时使用嵌入的 Cache。
+	ForgetFunc func(*v1.Pod)
+	// IsAssumedPodFunc 覆盖 IsAssumedPod；为 nil 时使用嵌入的 Cache。
+	IsAssumedPodFunc func(*v1.Pod) bool
+	// GetPodFunc 覆盖 GetPod；为 nil 时使用嵌入的 Cache。
+	GetPodFunc func(*v1.Pod) *v1.Pod
+	// UpdateSnapshotFunc 覆盖 UpdateSnapshot；为 nil 时使用嵌入的 Cache。
 	UpdateSnapshotFunc func(nodeSnapshot *internalcache.Snapshot) error
 }
 

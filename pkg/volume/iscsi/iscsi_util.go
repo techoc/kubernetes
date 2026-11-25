@@ -136,9 +136,10 @@ func updateISCSINode(b iscsiDiskMounter, tp string) error {
 	return nil
 }
 
-// StatFunc 和 GlobFunc 抽象文件系统查询，便于单元测试注入。
-// 路径不存在时最多重试 maxRetries 次；非默认传输方式下设备 PCI id 未知，改用 glob 匹配。
+// StatFunc 抽象路径状态查询，便于单元测试注入。
 type StatFunc func(string) (os.FileInfo, error)
+
+// GlobFunc 抽象文件系统通配匹配，便于单元测试注入。
 type GlobFunc func(string) ([]string, error)
 
 // waitForPathToExist 使用真实的 os.Stat 和 filepath.Glob 等待设备路径出现。
@@ -148,6 +149,7 @@ func waitForPathToExist(devicePath *string, maxRetries int, deviceTransport stri
 }
 
 // waitForPathToExistInternal 是等待设备路径出现的可注入实现。
+// 路径不存在时最多重试 maxRetries 次；非默认传输方式下设备 PCI id 未知，改用 glob 匹配。
 func waitForPathToExistInternal(devicePath *string, maxRetries int, deviceTransport string, osStat StatFunc, filepathGlob GlobFunc) bool {
 	if devicePath == nil {
 		return false

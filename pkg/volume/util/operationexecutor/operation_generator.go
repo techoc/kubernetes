@@ -49,9 +49,13 @@ import (
 )
 
 const (
-	unknownVolumePlugin                  string = "UnknownVolumePlugin"
-	unknownAttachableVolumePlugin        string = "UnknownAttachableVolumePlugin"
-	DetachOperationName                  string = "volume_detach"
+	unknownVolumePlugin           string = "UnknownVolumePlugin"
+	unknownAttachableVolumePlugin string = "UnknownAttachableVolumePlugin"
+
+	// DetachOperationName 是卷分离操作的名称，用于指标标签和日志关联。
+	DetachOperationName string = "volume_detach"
+
+	// VerifyControllerAttachedVolumeOpName 是校验控制器附加状态的操作名。
 	VerifyControllerAttachedVolumeOpName string = "verify_controller_attached_volume"
 )
 
@@ -163,6 +167,8 @@ type nodeResizeOperationOpts struct {
 	actualStateOfWorld ActualStateOfWorldMounterUpdater
 }
 
+// GenerateVolumesAreAttachedFunc 生成按插件批量核对节点附加状态的操作。
+// 规格或插件不可用、核对失败时仅记录日志并跳过；仅确认未附加的卷会被标记为已分离。
 func (og *operationGenerator) GenerateVolumesAreAttachedFunc(
 	attachedVolumes []AttachedVolume,
 	nodeName types.NodeName,
@@ -1085,7 +1091,7 @@ func (og *operationGenerator) GenerateMapVolumeFunc(
 		}
 
 		// 解析后设备路径可能变化，需重新更新实际状态。
-		// TODO: This can be improved after #82492 is merged and ASW has state.
+		// TODO: 等 #82492 合并且 ASW 保存相关状态后，可以改进此处处理。
 		if markedDevicePath != devicePath {
 			markDeviceMappedErr := actualStateOfWorld.MarkDeviceAsMounted(
 				volumeToMount.VolumeName, devicePath, globalMapPath, "")
@@ -1429,7 +1435,7 @@ func (og *operationGenerator) GenerateVerifyControllerAttachedVolumeFunc(
 		if !volumeToMount.ReportedInUse {
 			// 卷尚未出现在节点状态的 VolumesInUse 列表中时直接报错，由调用方记录并重试。
 			// 节点状态由 kubelet 周期性更新，最多可能需 10 秒才会生效。
-			// Issue #28141 to enable on demand status updates.
+			// 按需更新节点状态的方案见 Issue #28141。
 			eventErr, detailedErr := volumeToMount.GenerateError("Volume has not been added to the list of VolumesInUse in the node's volume status", nil)
 			return volumetypes.NewOperationContext(eventErr, detailedErr, migrated)
 		}
@@ -1635,9 +1641,8 @@ func (og *operationGenerator) GenerateExpandAndRecoverVolumeFunc(
 	}, nil
 }
 
-// Deprecated: This function should not be called by any controller code in future and should be removed
-// from kubernetes code
-// expandAndRecoverFunction 执行扩容并从失败中恢复；已废弃，未来不应再被控制器调用。
+// Deprecated: 未来不应再被任何控制器调用，并应从 Kubernetes 代码中移除。
+// expandAndRecoverFunction 执行扩容并从失败中恢复。
 func (og *operationGenerator) expandAndRecoverFunction(resizeOpts inTreeResizeOpts) inTreeResizeResponse {
 	pvc := resizeOpts.pvc
 	pv := resizeOpts.pv
@@ -2072,7 +2077,7 @@ func (og *operationGenerator) checkForRecoveryFromExpansion(pvc *v1.PersistentVo
 }
 
 // legacyCallNodeExpandOnPlugin 是旧版节点扩容调用方式，不支持从扩容失败中恢复。
-// TODO: Removing this code when RecoverVolumeExpansionFailure feature goes GA.
+// TODO: RecoverVolumeExpansionFailure 特性 GA 后移除此代码。
 func (og *operationGenerator) legacyCallNodeExpandOnPlugin(resizeOp nodeResizeOperationOpts) (bool, error) {
 	pvc := resizeOp.pvc
 	volumeToMount := resizeOp.vmt
@@ -2163,7 +2168,7 @@ func isDeviceOpened(deviceToDetach AttachedVolume, hostUtil hostutil.HostUtils) 
 	if !isDevicePath && devicePathErr == nil ||
 		(devicePathErr != nil && strings.Contains(devicePathErr.Error(), "does not exist")) {
 		// 不是设备路径或路径不存在。
-		// TODO: refer to #36092
+		// TODO: 参见 #36092。
 		klog.V(3).Infof("The path isn't device path or doesn't exist. Skip checking device path: %s", deviceToDetach.DevicePath)
 		deviceOpened = false
 	} else if devicePathErr != nil {

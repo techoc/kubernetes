@@ -22,7 +22,7 @@ import (
 	logsapi "k8s.io/component-base/logs/api/v1"
 )
 
-// KubeProxyLinuxConfiguration 包含 Kubernetes proxy server 与 Linux 平台相关、
+// KubeProxyLinuxConfiguration 包含 Kubernetes 代理服务器与 Linux 平台相关、
 // 但不专属于某个具体后端（如 iptables、ipvs、nftables）的配置细节。
 type KubeProxyLinuxConfiguration struct {
 	// conntrack 包含与 conntrack 相关的配置项。
@@ -34,14 +34,14 @@ type KubeProxyLinuxConfiguration struct {
 	OOMScoreAdj *int32
 }
 
-// KubeProxyWindowsConfiguration 包含 Kubernetes proxy server 与 Windows 平台相关、
+// KubeProxyWindowsConfiguration 包含 Kubernetes 代理服务器与 Windows 平台相关、
 // 但不专属于某个具体后端的配置细节。
 type KubeProxyWindowsConfiguration struct {
-	// runAsService 为 true 时，启用与 Windows service control manager API 的集成。
+	// runAsService 为 true 时，启用与 Windows 服务控制管理器 API 的集成。
 	RunAsService bool
 }
 
-// KubeProxyIPTablesConfiguration 包含 Kubernetes proxy server 与 iptables 相关的配置细节。
+// KubeProxyIPTablesConfiguration 包含 Kubernetes 代理服务器与 iptables 相关的配置细节。
 type KubeProxyIPTablesConfiguration struct {
 	// masqueradeBit 是在 iptables 或 ipvs 代理模式下用于 SNAT 的 iptables fwmark 位。
 	// 取值范围必须在 [0, 31] 内。
@@ -52,7 +52,7 @@ type KubeProxyIPTablesConfiguration struct {
 	LocalhostNodePorts *bool
 }
 
-// KubeProxyIPVSConfiguration 包含 Kubernetes proxy server 与 ipvs 相关的配置细节。
+// KubeProxyIPVSConfiguration 包含 Kubernetes 代理服务器与 ipvs 相关的配置细节。
 type KubeProxyIPVSConfiguration struct {
 	// scheduler 是要使用的 IPVS 调度器。
 	Scheduler string
@@ -72,14 +72,14 @@ type KubeProxyIPVSConfiguration struct {
 	UDPTimeout metav1.Duration
 }
 
-// KubeProxyNFTablesConfiguration 包含 Kubernetes proxy server 与 nftables 相关的配置细节。
+// KubeProxyNFTablesConfiguration 包含 Kubernetes 代理服务器与 nftables 相关的配置细节。
 type KubeProxyNFTablesConfiguration struct {
 	// masqueradeBit 是在 nftables 代理模式下用于 SNAT 的 iptables fwmark 位。
 	// 取值范围必须在 [0, 31] 内。
 	MasqueradeBit *int32
 }
 
-// KubeProxyConntrackConfiguration 包含 Kubernetes proxy server 的 conntrack 设置。
+// KubeProxyConntrackConfiguration 包含 Kubernetes 代理服务器 的 conntrack 设置。
 type KubeProxyConntrackConfiguration struct {
 	// maxPerCore 是每个 CPU 核心可跟踪的 NAT 连接数上限（0 表示保持现有限制并忽略 min）。
 	MaxPerCore *int32
@@ -103,7 +103,7 @@ type KubeProxyConntrackConfiguration struct {
 	UDPStreamTimeout metav1.Duration
 }
 
-// KubeProxyWinkernelConfiguration 包含 Kubernetes proxy server 的 Windows/HNS 设置。
+// KubeProxyWinkernelConfiguration 包含 Kubernetes 代理服务器 的 Windows/HNS 设置。
 type KubeProxyWinkernelConfiguration struct {
 	// networkName 是 kube-proxy 用于创建 endpoint 和 policy 的网络名称。
 	NetworkName string
@@ -132,7 +132,7 @@ type DetectLocalConfiguration struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeProxyConfiguration 包含配置 Kubernetes proxy server 所需的全部内容。
+// KubeProxyConfiguration 包含配置 Kubernetes 代理服务器 所需的全部内容。
 type KubeProxyConfiguration struct {
 	metav1.TypeMeta
 
@@ -145,7 +145,7 @@ type KubeProxyConfiguration struct {
 	// featureGates 是功能名称到布尔值的映射，用于启用或禁用 alpha/实验性功能。
 	FeatureGates map[string]bool
 
-	// clientConnection 指定 proxy server 与 apiserver 通信时使用的 kubeconfig 文件
+	// clientConnection 指定代理服务器与 apiserver 通信时使用的 kubeconfig 文件
 	// 及客户端连接设置。
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration
 	// logging 指定日志选项。
@@ -167,7 +167,7 @@ type KubeProxyConfiguration struct {
 	MetricsBindAddress string
 	// bindAddressHardFail 为 true 时，指示 kube-proxy 将端口绑定失败视为致命错误并退出。
 	BindAddressHardFail bool
-	// enableProfiling 通过 /debug/pprof handler 的 web 接口启用性能分析。
+	// enableProfiling 通过 /debug/pprof 处理器的 Web 接口启用性能分析。
 	// 性能分析 handler 由 metrics server 处理。
 	EnableProfiling bool
 	// showHiddenMetricsForVersion 是要显示隐藏指标所针对的版本。
@@ -213,7 +213,7 @@ type KubeProxyConfiguration struct {
 	ConfigSyncPeriod metav1.Duration
 }
 
-// ProxyMode 表示 Kubernetes proxy server 使用的代理模式。
+// ProxyMode 表示 Kubernetes 代理服务器 使用的代理模式。
 //
 // Linux 平台上有三种代理模式：`iptables`、`ipvs` 和 `nftables`。
 // Windows 平台上只有一种代理模式：`kernelspace`。

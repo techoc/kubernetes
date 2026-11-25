@@ -751,7 +751,7 @@ func TestController(t *testing.T) {
 								continue
 							}
 							if _, err := client.CoordinationV1beta1().LeaseCandidates(expectedLease.Namespace).Get(ctx, *l.Spec.HolderIdentity, metav1.GetOptions{}); err != nil {
-								continue // only candidate-aware controllers will follow preferredHolder
+								continue // 只有支持候选者的控制器才会跟随 preferredHolder
 							}
 
 							t.Logf("Deleting lease %s/%s because of preferredHolder %q != %q", l.Namespace, l.Name, *ph, *l.Spec.HolderIdentity)

@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-// Interface 是可注入的 ipvs 命令操作接口，实现必须保证并发安全（goroutine-safe）。
+// Interface 是可注入的 ipvs 命令操作接口，实现必须保证并发安全。
 type Interface interface {
 	// Flush 清空系统中的所有虚拟服务器，一旦出错立即返回该错误。
 	Flush() error
@@ -66,7 +66,7 @@ type ServiceFlags uint32
 
 // 以下常量定义 IPVS 服务的标志位
 const (
-	// FlagPersistent 指定 IPVS 服务的会话保持（session affinity）
+	// FlagPersistent 指定 IPVS 服务的会话保持
 	FlagPersistent = 0x1
 	// FlagHashed 指定 IPVS 服务的哈希标志
 	FlagHashed = 0x2

@@ -56,7 +56,7 @@ import (
 )
 
 const (
-	// kubeServicesChain 是 Service 的访问入口链（services portal chain）。
+	// kubeServicesChain 是 Service 的访问入口链。
 	kubeServicesChain utiliptables.Chain = "KUBE-SERVICES"
 
 	// kubeProxyFirewallChain 是 kube-proxy 的防火墙链。
@@ -68,7 +68,7 @@ const (
 	// kubePostroutingChain 是 Kubernetes 的 postrouting 链。
 	kubePostroutingChain utiliptables.Chain = "KUBE-POSTROUTING"
 
-	// kubeMarkMasqChain 用于给需要伪装（masquerade）的数据包打标记。
+	// kubeMarkMasqChain 用于给需要伪装的数据包打标记。
 	kubeMarkMasqChain utiliptables.Chain = "KUBE-MARK-MASQ"
 
 	// kubeNodePortChain 是 Kubernetes 的 NodePort 链。
@@ -88,7 +88,7 @@ const (
 	// https://github.com/kubernetes/kubernetes/issues/119656
 	kubeIPVSOutFilterChain utiliptables.Chain = "KUBE-IPVS-OUT-FILTER"
 
-	// defaultScheduler 是默认的 IPVS 调度算法：轮询（round robin）。
+	// defaultScheduler 是默认的 IPVS 调度算法：轮询。
 	defaultScheduler = "rr"
 
 	// defaultDummyDevice 是默认的 dummy 网卡，IPVS 的 Service 地址会绑定到它上面。
@@ -106,7 +106,7 @@ const (
 	sysctlArpAnnounce             = "net/ipv4/conf/all/arp_announce"
 )
 
-// NewDualStackProxier 返回一个用于双栈（dual-stack）场景的 Proxier。
+// NewDualStackProxier 返回一个用于双栈场景的 Proxier。
 func NewDualStackProxier(
 	ctx context.Context,
 	config *kubeproxyconfig.KubeProxyConfiguration,
@@ -173,7 +173,7 @@ type Proxier struct {
 	endpointSlicesSynced bool
 	servicesSynced       bool
 	initialized          int32
-	syncRunner           *runner.BoundedFrequencyRunner // governs calls to syncProxyRules
+	syncRunner           *runner.BoundedFrequencyRunner // 控制对 syncProxyRules 的调用
 
 	// 以下字段实际上是常量，访问时无需持有互斥锁。
 	syncPeriod    time.Duration
@@ -230,7 +230,7 @@ type Proxier struct {
 	// lbNoNodeAccessIPPortProtocolEntries 记录不允许从 K8s 节点访问的 LoadBalancer IP+端口+协议组合。
 	// LoadBalancerSourceRanges 无法直接限制来自节点的访问，因此需要额外安装
 	// iptables 规则。
-	// (ref: https://github.com/kubernetes/kubernetes/issues/119656)
+	// （参考：https://github.com/kubernetes/kubernetes/issues/119656）
 	lbNoNodeAccessIPPortProtocolEntries []*utilipset.Entry
 
 	logger klog.Logger
@@ -801,7 +801,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 		// 反复调用 ServicePortName.String() 会在 CPU profile 中显现。
 		svcPortNameString := svcPortName.String()
 
-		// 处理发端自身的回环流量（hairpin），通过 SNAT 改写源地址。
+		// 处理发端自身的回环流量，通过 SNAT 改写源地址。
 		for _, e := range proxier.endpointsMap[svcPortName] {
 			ep, ok := e.(*proxy.BaseEndpointInfo)
 			if !ok {
@@ -1784,7 +1784,7 @@ func getIPFamily(ip net.IP) v1.IPFamily {
 	return v1.IPv6Protocol
 }
 
-// IPVS Proxier 在需要对出口（egress）报文做 SNAT 时会回退到 iptables，
+// IPVS Proxier 在需要对出口报文做 SNAT 时会回退到 iptables，
 // 且只操作 iptables 的 *nat 表。
 // 为需要 SNAT 的报文创建并链接 kube postrouting 链。
 // Chain POSTROUTING（策略为 ACCEPT）

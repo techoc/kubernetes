@@ -188,7 +188,7 @@ func Test_podResourceCollector_CollectWithStability(t *testing.T) {
 							{Resources: v1.ResourceRequirements{Requests: v1.ResourceList{"cpu": resource.MustParse("1")}}},
 						},
 					},
-					// until node name is set, phase is ignored
+					// 设置节点名之前忽略 phase。
 					Status: v1.PodStatus{Phase: v1.PodSucceeded},
 				},
 				{

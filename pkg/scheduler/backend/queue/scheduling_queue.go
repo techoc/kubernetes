@@ -253,8 +253,11 @@ type PriorityQueue struct {
 
 // QueueingHintFunction 是对 QueueingHintFn 的包装，附带 PluginName。
 type QueueingHintFunction struct {
-	PluginName        string
-	QueueingHintFn    fwk.QueueingHintFn
+	// PluginName 标识提供这两个提示函数的插件。
+	PluginName string
+	// QueueingHintFn 判断入队事件是否可能使 Pod 可调度。
+	QueueingHintFn fwk.QueueingHintFn
+	// PreQueueingHintFn 在入队前判断事件是否与 Pod 相关。
 	PreQueueingHintFn fwk.PreQueueingHintFn
 }
 

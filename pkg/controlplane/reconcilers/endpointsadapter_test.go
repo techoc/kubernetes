@@ -158,8 +158,7 @@ func TestEndpointsAdapterCreate(t *testing.T) {
 			expectCreate: []runtime.Object{endpoints1},
 		},
 		"existing-endpointslice-incorrect": {
-			// 需要创建 Endpoints 且 EndpointSlice 已正确时不应报错，
-			// EndpointSlice already exists
+			// 需要创建 Endpoints 且 EndpointSlice 已存在时不应报错。
 			expectedError:  nil,
 			expectedResult: endpoints1,
 			expectCreate:   []runtime.Object{endpoints1},
@@ -168,8 +167,7 @@ func TestEndpointsAdapterCreate(t *testing.T) {
 			endpointsParam: endpoints1,
 		},
 		"existing-endpointslice-correct": {
-			// 需要创建 Endpoints 且 EndpointSlice 不正确时也不应报错，
-			// EndpointSlice already exists
+			// 需要创建 Endpoints 且 EndpointSlice 已存在时也不应报错。
 			expectedError:  nil,
 			expectedResult: endpoints2,
 			expectCreate:   []runtime.Object{endpoints2},
@@ -292,8 +290,7 @@ func TestEndpointsAdapterUpdate(t *testing.T) {
 			expectUpdate: []runtime.Object{endpoints3},
 		},
 		"missing-endpointslice": {
-			// 需要更新 Endpoints 且 EndpointSlice 已正确时不应报错，
-			// EndpointSlice doesn't exist
+			// 需要更新 Endpoints 且 EndpointSlice 不存在时不应报错。
 			expectedError:  nil,
 			expectedResult: endpoints1,
 			expectUpdate:   []runtime.Object{endpoints1},

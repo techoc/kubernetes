@@ -679,8 +679,8 @@ func TestPrepareCandidate(t *testing.T) {
 
 					mu := &sync.RWMutex{}
 					deletedPods := sets.New[string]()
-					deletionFailure := false // whether any request to delete pod failed
-					patchFailure := false    // whether any request to patch pod status failed
+					deletionFailure := false // 是否有删除 Pod 的请求失败
+					patchFailure := false    // 是否有更新 Pod 状态的请求失败
 
 					cs := clientsetfake.NewClientset(objs...)
 					cs.PrependReactor("delete", "pods", func(action clienttesting.Action) (bool, runtime.Object, error) {
@@ -787,7 +787,7 @@ func TestPrepareCandidate(t *testing.T) {
 						// 让请求完成
 						close(requestStopper)
 					} else {
-						close(requestStopper) // no need to stop requests
+						close(requestStopper) // 无需停止请求
 						status := executor.prepareCandidate(ctx, tt.candidate, preemptor, "test-plugin")
 						if tt.expectedStatus == nil {
 							if status != nil {

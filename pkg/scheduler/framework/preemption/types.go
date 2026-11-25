@@ -172,7 +172,7 @@ func (d *domain) GetName() string {
 
 // getHighestAllAncestor 返回组层级中 disruption mode 为 All 的最高层祖先的键。
 // 找到时返回 (key, true)，否则返回 (空键, false)。
-// TODO: log/return an error if there is a gap in the hierarchy.
+// TODO：层级存在断点时记录日志或返回错误。
 func getHighestAllAncestor(pod *v1.Pod, pgLister fwk.PodGroupLister, cpgLister fwk.CompositePodGroupLister) (fwk.EntityKey, bool) {
 	if pod.Spec.SchedulingGroup == nil || pgLister == nil {
 		return fwk.EntityKey{}, false
@@ -391,7 +391,7 @@ func (v *victim) Type() fwk.EntityKeyType {
 
 // NewPodVictim 创建一个代表单个 Pod 的 Victim。
 // 计算 Pod 优先级时会考虑其所属调度组；对单个合法 Pod，NewVictim 必然成功，故忽略其错误。
-// TODO: what we do below is not ideal:
+// TODO：下面的处理方式并不理想：
 //   - 从受害者重要性角度看，单个 Pod 本应始终使用 PodKeyType。
 //   - 但出于 WAP 相关指标统计，又需要记录该 Pod 属于 single 模式的 PodGroup。
 //   - 更合理的做法是额外保存一个字段，标记受害者 Pod 所属顶层组的类型。

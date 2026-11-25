@@ -155,10 +155,10 @@ func cleanBackingFilePath(path string) string {
 
 // FindGlobalMapPathUUIDFromPod 在 globalMapPath 下查找与 mapPath 符号链接对应的
 // {pod uuid} bind mount，并返回带有 Pod UUID 的全局映射路径。
-// （global map path 与 pod device map path 的细节见 pkg/volume/volume.go。）
+// （全局映射路径与 Pod 设备映射路径的细节见 pkg/volume/volume.go。）
 // 例如 mapPath 符号链接：pods/{podUid}/{DefaultKubeletVolumeDevicesDirName}/{escapeQualifiedPluginName}/{volumeName} -> /dev/sdX
 //
-//	globalMapPath/{pod uuid} bind mount: plugins/kubernetes.io/{PluginName}/{DefaultKubeletVolumeDevicesDirName}/{volumePluginDependentPath}/{pod uuid} -> /dev/sdX
+//	globalMapPath/{pod uuid} 绑定挂载：plugins/kubernetes.io/{PluginName}/{DefaultKubeletVolumeDevicesDirName}/{volumePluginDependentPath}/{pod uuid} -> /dev/sdX
 func (v VolumePathHandler) FindGlobalMapPathUUIDFromPod(pluginDir, mapPath string, podUID types.UID) (string, error) {
 	var globalMapPathUUID string
 	// 在插件目录下查找以 Pod UUID 命名的符号链接。

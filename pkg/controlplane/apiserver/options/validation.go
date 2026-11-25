@@ -57,7 +57,7 @@ func validateAPIPriorityAndFairness(options *Options) []error {
 	if options.Features.EnablePriorityAndFairness {
 		// 未显式指定以下 runtime-config 时默认认为 APF 开启；内部 APF 控制器使用 v1，故必须启用。
 		enabledAPIString := options.APIEnablement.RuntimeConfig.String()
-		testConfigs := []string{"flowcontrol.apiserver.k8s.io/v1", "api/ga", "api/all"} // in the order of precedence
+		testConfigs := []string{"flowcontrol.apiserver.k8s.io/v1", "api/ga", "api/all"} // 按优先级从高到低排列
 		for _, testConfig := range testConfigs {
 			if strings.Contains(enabledAPIString, fmt.Sprintf("%s=false", testConfig)) {
 				return []error{fmt.Errorf("--runtime-config=%s=false conflicts with --enable-priority-and-fairness=true", testConfig)}

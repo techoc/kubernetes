@@ -249,8 +249,8 @@ func (v VolumePathHandler) IsSymlinkExist(mapPath string) (bool, error) {
 	if fi.Mode()&os.ModeSymlink == os.ModeSymlink {
 		return true, nil
 	}
-	// go1.23 行为变更：Windows 上部分符号链接被识别为不规则文件。
-	// go1.23 behavior change: https://github.com/golang/go/issues/63703#issuecomment-2535941458
+	// go1.23 行为变更：Windows 上部分符号链接被识别为不规则文件，参见
+	// https://github.com/golang/go/issues/63703#issuecomment-2535941458
 	if (runtime.GOOS == "windows") && (fi.Mode()&os.ModeIrregular != 0) {
 		return true, nil
 	}

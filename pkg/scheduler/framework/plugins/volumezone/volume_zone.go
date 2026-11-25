@@ -120,7 +120,7 @@ func (pl *VolumeZone) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragm
 
 // PreFilter 在 prefilter 扩展点被调用。
 //
-// # 它查找 Pod 所请求卷对应 PersistentVolume 的拓扑信息
+// 它查找 Pod 所请求卷对应 PersistentVolume 的拓扑信息。
 //
 // 目前仅支持 PersistentVolumeClaim，并且只关注已绑定的 PersistentVolume。
 // 若 Pod 不需要调整大小或没有相关 PV 拓扑，则返回 Skip 以避免后续无意义计算。

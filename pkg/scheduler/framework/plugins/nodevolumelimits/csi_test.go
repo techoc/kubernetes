@@ -1280,6 +1280,7 @@ func getNodeWithPodAndVolumeLimits(limitSource string, pods []*v1.Pod, limit int
 // fakeCSIDriverLister 是测试用的最小 CSIDriver lister 实现。
 type fakeCSIDriverLister []storagev1.CSIDriver
 
+// Get 按名称返回测试驱动，未找到时返回 NotFound 以模拟真实 lister。
 func (l fakeCSIDriverLister) Get(name string) (*storagev1.CSIDriver, error) {
 	for i := range l {
 		if l[i].Name == name {
@@ -1289,6 +1290,7 @@ func (l fakeCSIDriverLister) Get(name string) (*storagev1.CSIDriver, error) {
 	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "storage.k8s.io", Resource: "csidrivers"}, name)
 }
 
+// List 保留接口实现；当前测试不通过列表查询驱动。
 func (l fakeCSIDriverLister) List(selector labels.Selector) ([]*storagev1.CSIDriver, error) {
 	return nil, fmt.Errorf("not implemented")
 }

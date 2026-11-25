@@ -33,9 +33,8 @@ import (
 // 保证它可以注册进组件指标注册表。
 var _ metrics.StableCollector = &nfacctMetricCollector{}
 
-// FIXME: The metrics code should not know details about how the iptables and nftables
-// backends work. The logic of `nfacctMetricCollector` and `nftCounterMetricCollector`
-// needs to move into their respective backends.
+// FIXME: 指标代码不应依赖 iptables 与 nftables 后端的实现细节；
+// `nfacctMetricCollector` 和 `nftCounterMetricCollector` 的逻辑应迁入各自的后端。
 // newNFAcctMetricCollector 构造 nfacct 计数器采集器；客户端初始化失败时返回 nil，
 // 调用方可据此跳过注册，而不是让整个 kube-proxy 启动失败。
 func newNFAcctMetricCollector(counter string, description *metrics.Desc) *nfacctMetricCollector {
@@ -97,9 +96,9 @@ const nftCounterListTimeout = 2 * time.Second
 // 编译期断言：nftCounterMetricCollector 必须实现 StableCollector。
 var _ metrics.StableCollector = &nftCounterMetricCollector{}
 
-// nftCounterMetricCollector reports named nftables counters from the kube-proxy
-// table of each IP family as const counter metrics labeled by ip_family and
-// protocol. counters maps each nftables counter name to its protocol label.
+// nftCounterMetricCollector 将各地址族 kube-proxy 表中的命名 nftables 计数器
+// 暴露为带 ip_family 和 protocol 标签的固定计数器指标。
+// counters 将每个 nftables 计数器名称映射到其 protocol 标签值。
 type nftCounterMetricCollector struct {
 	metrics.BaseStableCollector
 	clients     map[v1.IPFamily]knftables.Interface
@@ -155,8 +154,7 @@ func (n *nftCounterMetricCollector) CollectWithStability(ch chan<- metrics.Metri
 		counters, err := client.ListCounters(ctx)
 		cancel()
 		if err != nil {
-			// 表还不存在属于正常情况（规则尚未下发），无需记错误日志。
-			// A not-found error means the table doesn't exist
+			// 未找到错误表示表尚不存在（规则尚未下发），无需记录错误日志。
 			if !knftables.IsNotFound(err) {
 				klog.ErrorS(err, "failed to list nftables counters", "ipFamily", family)
 			}

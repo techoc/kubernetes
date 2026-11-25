@@ -41,8 +41,7 @@ type NewRunner func() (func(ctx context.Context, workers int), error)
 
 // RunWithLeaderElection 在选主成功后运行给定的 runner。
 // newRunnerFn 可能被调用多次，每次应返回另一个控制器实例的 Run 方法。
-
-// 仅在上下文结束或初次选主失败时返回。
+// 获取主机名失败或上下文结束时返回；选主或 runner 启动失败会按 RetryPeriod 重试。
 
 func RunWithLeaderElection(ctx context.Context, config *rest.Config, newRunnerFn NewRunner, timers LeaderElectionTimers) {
 	hostname, err := os.Hostname()

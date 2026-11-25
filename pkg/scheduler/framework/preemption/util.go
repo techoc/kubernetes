@@ -92,7 +92,7 @@ func victimRank(vi Victim) int {
 // 每个节点（PodGroup 或 CompositePodGroup）都会调用 visitFn；
 // 若 visitFn 返回 stop=true，则立即停止遍历。父节点缺失或无法查询时同样停止。
 // 调用方需确保 GenericWorkload 与 CompositePodGroup 两个特性门均已启用。
-// TODO: log/return an error if there is a gap in the hierarchy.
+// TODO：层级存在断点时记录日志或返回错误。
 func TraverseHierarchyUp(
 	namespace string,
 	startKey fwk.EntityKey,
@@ -146,7 +146,7 @@ func TraverseHierarchyUp(
 // 则返回该层级根组的优先级；若 podGroupLister 为 nil 或 Pod 不属于任何组，则返回 Pod 自身优先级。
 // 若 compositePodGroupLister 为 nil 或层级中某个父组查不到，则退回到最近一次成功解析的组优先级
 // （若一次都没成功，则退回 Pod 自身优先级）。
-// TODO: log/return an error if there is a gap in the hierarchy.
+// TODO：层级存在断点时记录日志或返回错误。
 func GetPodPriority(p *v1.Pod, podGroupLister fwk.PodGroupLister, compositePodGroupLister fwk.CompositePodGroupLister) int32 {
 	if p.Spec.SchedulingGroup == nil || podGroupLister == nil {
 		return corev1helpers.PodPriority(p)

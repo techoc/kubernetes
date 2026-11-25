@@ -56,7 +56,7 @@ const (
 
 // TestGetNetworkByName 验证按名称查询 HNS 网络能返回正确 ID。
 func TestGetNetworkByName(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -77,7 +77,7 @@ func TestGetNetworkByName(t *testing.T) {
 
 // TestGetAllEndpointsByNetwork 验证双栈 Endpoint 能按 IP 地址被正确索引。
 func TestGetAllEndpointsByNetwork(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -197,7 +197,7 @@ func TestGetAllEndpointsByNetworkWithDupEP(t *testing.T) {
 
 // TestGetEndpointByID 验证按 HNS ID 查询 Endpoint。
 func TestGetEndpointByID(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -239,7 +239,7 @@ func TestGetEndpointByID(t *testing.T) {
 
 // TestGetEndpointByIpAddressAndName 验证按 IP 和名称查询 Endpoint 结果一致。
 func TestGetEndpointByIpAddressAndName(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -293,7 +293,7 @@ func TestGetEndpointByIpAddressAndName(t *testing.T) {
 
 // TestCreateEndpointLocal 验证创建本地 Endpoint 的字段正确性。
 func TestCreateEndpointLocal(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -334,7 +334,7 @@ func TestCreateEndpointLocal(t *testing.T) {
 
 // TestCreateEndpointRemote 验证创建远端 Endpoint 时会设置 Provider 地址。
 func TestCreateEndpointRemote(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -381,7 +381,7 @@ func TestCreateEndpointRemote(t *testing.T) {
 
 // TestDeleteEndpoint 验证删除 Endpoint 后无法再查询到。
 func TestDeleteEndpoint(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -419,7 +419,7 @@ func TestDeleteEndpoint(t *testing.T) {
 
 // TestGetLoadBalancerExisting 验证存在匹配 LB 时会被复用而不是重建。
 func TestGetLoadBalancerExisting(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -497,7 +497,7 @@ func TestGetLoadBalancerExisting(t *testing.T) {
 
 // TestGetLoadBalancerNew 验证缓存为空时会创建新的 LB。
 func TestGetLoadBalancerNew(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -552,7 +552,7 @@ func TestGetLoadBalancerNew(t *testing.T) {
 
 // TestDeleteLoadBalancer 验证删除 LB 后无法再查询到。
 func TestDeleteLoadBalancer(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	hns := hns{hcn: newHcnImpl()}
 	Network := mustTestNetwork(t)
@@ -621,7 +621,7 @@ func mustTestNetwork(t *testing.T) *hcn.HostComputeNetwork {
 
 // TestHashEndpoints 验证 Endpoint 哈希与顺序无关。
 func TestHashEndpoints(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	t.Skip("Skipping failing test on Windows.")
 	Network := mustTestNetwork(t)
 	// 创建 Endpoint A。

@@ -97,7 +97,7 @@ const (
 	firewallIPsMap     = "firewall-ips"
 	firewallCheckChain = "firewall-check"
 
-	// 伪装（masquerade）
+	// 伪装
 	masqueradingChain     = "masquerading"
 	hairpinConnectionsSet = "hairpin-connections"
 
@@ -1367,7 +1367,7 @@ func (proxier *Proxier) syncProxyRules() (retryError error) {
 				hasExternalEndpoints = false
 			}
 		}
-		externalTrafficChain := svcInfo.externalChainName // eventually jumps to externalPolicyChain
+		externalTrafficChain := svcInfo.externalChainName // 最终跳转到 externalPolicyChain
 
 		// usesExternalTrafficChain 依据 hasEndpoints 而非 hasExternalEndpoints，
 		// 因为即使没有外部可用 Endpoint，也需要本地流量短路规则。

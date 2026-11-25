@@ -402,7 +402,7 @@ func TestGetVolCount(t *testing.T) {
 		{
 			name:    "wrong portal, no volumes",
 			baseDir: baseDir,
-			portal:  "192.168.0.2:3260", // incorrect IP address
+			portal:  "192.168.0.2:3260", // IP 地址不正确。
 			iqn:     "iqn.2003-01.io.k8s:e2e.volume-1",
 			count:   0,
 		},
@@ -410,7 +410,7 @@ func TestGetVolCount(t *testing.T) {
 			name:    "wrong iqn, no volumes",
 			baseDir: baseDir,
 			portal:  "127.0.0.1:3260",
-			iqn:     "iqn.2003-01.io.k8s:e2e.volume-3", // incorrect volume
+			iqn:     "iqn.2003-01.io.k8s:e2e.volume-3", // 卷不正确。
 			count:   0,
 		},
 		{

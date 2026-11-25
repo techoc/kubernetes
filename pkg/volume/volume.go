@@ -50,8 +50,7 @@ type BlockVolume interface {
 	// 若 MetricsProvider 已初始化，SupportsMetrics 应返回 true。
 	SupportsMetrics() bool
 
-	// MetricsProvider embeds methods for exposing metrics (e.g.
-	// used, available space).
+	// 内嵌 MetricsProvider 以暴露卷指标（如已用、可用空间）。
 	MetricsProvider
 }
 
@@ -104,7 +103,7 @@ type Attributes struct {
 // MounterArgs 为 Mounter 提供易于扩展的参数。
 type MounterArgs struct {
 	// 设置 FsUser 时，卷的属主会被改为 FsUser 并赋予写权限；否则不产生副作用。
-	// 目前仅 projection service account token 支持。
+	// 目前仅 projection 服务账号令牌支持。
 	FsUser              *int64
 	FsGroup             *int64
 	FSGroupChangePolicy *v1.PodFSGroupChangePolicy

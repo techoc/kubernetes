@@ -541,7 +541,7 @@ type insufficientResource struct {
 }
 
 // nodeFitsResources 检查节点是否有足够容量满足 Pod 的节点可分配资源需求。
-// TODO(pravk03): Unify this with the fitsRequest() in pkg/scheduler/framework/plugins/noderesources/fit.go.
+// TODO(pravk03): 与 pkg/scheduler/framework/plugins/noderesources/fit.go 中的 fitsRequest() 统一。
 func (pl *DynamicResources) nodeFitsResources(nodeInfo fwk.NodeInfo, podRequest *framework.Resource) *fwk.Status {
 	insufficientResources := make([]insufficientResource, 0, 4)
 

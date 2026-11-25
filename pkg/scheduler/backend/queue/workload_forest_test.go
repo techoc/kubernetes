@@ -974,7 +974,7 @@ func TestWorkloadForest_GetRootLookupInfoForCPG(t *testing.T) {
 			name:        "cpg cycle detection",
 			initialCPGs: []*schedulingv1alpha3.CompositePodGroup{cpg3WithCycle, cpg4WithCycle},
 			cpg:         cpg3WithCycle,
-			wantInfo:    nil, // cycle returns nil, false
+			wantInfo:    nil, // 周期返回 nil、false。
 		},
 	}
 

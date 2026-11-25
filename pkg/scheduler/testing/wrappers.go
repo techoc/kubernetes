@@ -993,7 +993,7 @@ func (p *PersistentVolumeClaimWrapper) Annotation(key, value string) *Persistent
 	return p
 }
 
-// VolumeName 将内部 PersistentVolumeClaim 的 volume name 设为 name。
+// VolumeName 将内部 PersistentVolumeClaim 的卷名设为 name。
 func (p *PersistentVolumeClaimWrapper) VolumeName(name string) *PersistentVolumeClaimWrapper {
 	p.PersistentVolumeClaim.Spec.VolumeName = name
 	return p

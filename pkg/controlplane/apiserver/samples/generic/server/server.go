@@ -68,8 +68,7 @@ APIs.`,
 		// 命令出错时不打印 usage。
 		SilenceUsage: true,
 		PersistentPreRunE: func(*cobra.Command, []string) error {
-			// silence client-go warnings.
-			// kube-apiserver 回环客户端不应记录自身发出的告警。
+			// 抑制 client-go 告警；kube-apiserver 回环客户端不应记录自身发出的告警。
 			rest.SetDefaultWarningHandler(rest.NoWarnings{})
 			return nil
 		},
@@ -95,7 +94,7 @@ APIs.`,
 				return utilerrors.NewAggregate(errs)
 			}
 
-			// add feature enablement metrics
+			// 添加特性启用状态指标。
 			utilfeature.DefaultMutableFeatureGate.AddMetrics()
 
 			return Run(ctx, completedOptions)
@@ -134,7 +133,7 @@ func NewOptions() *options.Options {
 	wd, _ := os.Getwd()
 	s.SecureServing.ServerCert.CertDirectory = filepath.Join(wd, ".sample-minimal-controlplane")
 
-	// 注入不依赖 Pod 与 Node 的 ServiceAccount token getter。
+	// 注入不依赖 Pod 与 Node 的服务账号令牌获取器。
 	s.Authentication.ServiceAccounts.OptionalTokenGetter = genericTokenGetter
 
 	return s
@@ -170,7 +169,7 @@ func Run(ctx context.Context, opts options.CompletedOptions) error {
 
 // CreateServerChain 创建通过委托连接的 apiserver 链：apiextensions → 原生 API → aggregator。
 func CreateServerChain(config CompletedConfig) (*aggregatorapiserver.APIAggregator, error) {
-	// 1. CRDs
+	// 1. CRD API 服务器
 	notFoundHandler := notfoundhandler.New(config.ControlPlane.Generic.Serializer, genericapifilters.NoMuxAndDiscoveryIncompleteKey)
 	apiExtensionsServer, err := config.APIExtensions.New(genericapiserver.NewEmptyDelegateWithCustomHandler(notFoundHandler))
 	if err != nil {
@@ -178,7 +177,7 @@ func CreateServerChain(config CompletedConfig) (*aggregatorapiserver.APIAggregat
 	}
 	crdAPIEnabled := config.APIExtensions.GenericConfig.MergedResourceConfig.ResourceEnabled(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions"))
 
-	// 2. Natively implemented resources
+	// 2. 原生实现的资源 API
 	nativeAPIs, err := config.ControlPlane.New("sample-generic-controlplane", apiExtensionsServer.GenericAPIServer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create generic controlplane apiserver: %w", err)

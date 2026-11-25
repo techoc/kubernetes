@@ -396,7 +396,7 @@ func TestValidateNodeAllocatableDRAClaimSharing(t *testing.T) {
 				},
 			},
 			nodeInfo: func() *framework.NodeInfo {
-				return framework.NewNodeInfo() // no pods on node, early exit triggers purely on reservation
+				return framework.NewNodeInfo() // 节点无 Pod，仅因预留关系触发提前退出
 			}(),
 			draManager: &mockDRAManager{
 				resourceSlices: []*resourceapi.ResourceSlice{sliceMapped},
@@ -457,13 +457,13 @@ func TestValidateNodeAllocatableDRAClaimSharing(t *testing.T) {
 						{
 							APIGroup: "scheduling.k8s.io",
 							Resource: "podgroups",
-							Name:     "other-pod-group", // reserved for a different group
+							Name:     "other-pod-group", // 为另一个组预留
 						},
 					},
 				},
 			},
 			nodeInfo: func() *framework.NodeInfo {
-				return framework.NewNodeInfo() // no pods on node, early exit triggers purely on reservation mismatch
+				return framework.NewNodeInfo() // 节点无 Pod，仅因预留不匹配触发提前退出
 			}(),
 			draManager: &mockDRAManager{
 				resourceSlices: []*resourceapi.ResourceSlice{sliceMapped},
@@ -1941,7 +1941,7 @@ func TestValidatePodLevelResourcesCoverDRA(t *testing.T) {
 				Resources(v1.ResourceRequirements{
 					Requests: v1.ResourceList{
 						v1.ResourceCPU:    resource.MustParse("2"),
-						v1.ResourceMemory: resource.MustParse("3Gi"), // Container (1Gi) + DRA flat pod overhead (1Gi) + DRA container overhead (1Gi) = 3Gi
+						v1.ResourceMemory: resource.MustParse("3Gi"), // 容器（1Gi）+ DRA Pod 固定开销（1Gi）+ DRA 容器开销（1Gi）= 3Gi
 					},
 				}).
 				Containers([]v1.Container{{
@@ -1972,7 +1972,7 @@ func TestValidatePodLevelResourcesCoverDRA(t *testing.T) {
 				Resources(v1.ResourceRequirements{
 					Requests: v1.ResourceList{
 						v1.ResourceCPU:    resource.MustParse("2"),
-						v1.ResourceMemory: resource.MustParse("2Gi"), // Container (1Gi) + DRA flat pod overhead (1Gi) + DRA container overhead (1Gi) = 3Gi > 2Gi
+						v1.ResourceMemory: resource.MustParse("2Gi"), // 容器（1Gi）+ DRA Pod 固定开销（1Gi）+ DRA 容器开销（1Gi）= 3Gi > 2Gi
 					},
 				}).
 				Containers([]v1.Container{{

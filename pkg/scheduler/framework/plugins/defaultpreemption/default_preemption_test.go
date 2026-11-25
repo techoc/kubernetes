@@ -347,8 +347,8 @@ func TestPostFilter(t *testing.T) {
 				st.MakePod().Name("p2").UID("p2").Namespace(v1.NamespaceDefault).Node("node2").Obj(),
 			},
 			nodes: []*v1.Node{
-				st.MakeNode().Name("node1").Capacity(nodeRes).Obj(), // no enough CPU resource
-				st.MakeNode().Name("node2").Capacity(nodeRes).Obj(), // no enough CPU resource
+				st.MakeNode().Name("node1").Capacity(nodeRes).Obj(), // CPU 资源不足
+				st.MakeNode().Name("node2").Capacity(nodeRes).Obj(), // CPU 资源不足
 			},
 			filteredNodesStatuses: framework.NewNodeToStatus(map[string]*fwk.Status{
 				"node1": fwk.NewStatus(fwk.Unschedulable),
@@ -366,9 +366,9 @@ func TestPostFilter(t *testing.T) {
 				st.MakePod().Name("p3").UID("p3").Namespace(v1.NamespaceDefault).Node("node3").Priority(highPriority).Obj(),
 			},
 			nodes: []*v1.Node{
-				st.MakeNode().Name("node1").Capacity(onePodRes).Obj(), // no pod will be preempted
-				st.MakeNode().Name("node2").Capacity(nodeRes).Obj(),   // no enough CPU resource
-				st.MakeNode().Name("node3").Capacity(onePodRes).Obj(), // no pod will be preempted
+				st.MakeNode().Name("node1").Capacity(onePodRes).Obj(), // 没有可抢占的 Pod
+				st.MakeNode().Name("node2").Capacity(nodeRes).Obj(),   // CPU 资源不足
+				st.MakeNode().Name("node3").Capacity(onePodRes).Obj(), // 没有可抢占的 Pod
 			},
 			filteredNodesStatuses: framework.NewNodeToStatus(map[string]*fwk.Status{
 				"node1": fwk.NewStatus(fwk.Unschedulable),
@@ -544,7 +544,7 @@ func TestPostFilter(t *testing.T) {
 			},
 			filteredNodesStatuses: framework.NewNodeToStatus(map[string]*fwk.Status{
 				"node1": fwk.NewStatus(fwk.Unschedulable),
-			}, fwk.NewStatus(fwk.UnschedulableAndUnresolvable)), // node2 is absent, so it defaults to UnschedulableAndUnresolvable
+			}, fwk.NewStatus(fwk.UnschedulableAndUnresolvable)), // node2 不存在，因此默认返回 UnschedulableAndUnresolvable
 			features: feature.Features{
 				EnableInPlacePodVerticalScalingSchedulerPreemption: true,
 			},
@@ -691,7 +691,7 @@ func TestDryRunPreemption(t *testing.T) {
 		initPods                          []*v1.Pod
 		registerPlugins                   []tf.RegisterPluginFunc
 		pdbs                              []*policy.PodDisruptionBudget
-		fakeFilterRC                      fwk.Code // return code for fake filter plugin
+		fakeFilterRC                      fwk.Code // 假 Filter 插件返回的状态码
 		disableParallelism                bool
 		expected                          [][]candidate
 		expectedNumFilterCalled           []int32
@@ -886,7 +886,7 @@ func TestDryRunPreemption(t *testing.T) {
 					},
 				},
 			},
-			expectedNumFilterCalled: []int32{4}, // no preemption would happen on node2 and no filter call is counted.
+			expectedNumFilterCalled: []int32{4}, // node2 不会发生抢占，因此不计入 Filter 调用次数。
 		},
 		{
 			name: "pod with anti-affinity is preempted",
@@ -918,7 +918,7 @@ func TestDryRunPreemption(t *testing.T) {
 					},
 				},
 			},
-			expectedNumFilterCalled: []int32{3}, // no preemption would happen on node2 and no filter call is counted.
+			expectedNumFilterCalled: []int32{3}, // node2 不会发生抢占，因此不计入 Filter 调用次数。
 		},
 		{
 			name: "preemption to resolve pod topology spread filter failure",
@@ -955,7 +955,7 @@ func TestDryRunPreemption(t *testing.T) {
 					},
 				},
 			},
-			expectedNumFilterCalled: []int32{5}, // node-a (3), node-b (2), node-x (0)
+			expectedNumFilterCalled: []int32{5}, // node-a（3 次）、node-b（2 次）、node-x（0 次）
 		},
 		{
 			name: "get Unschedulable in the preemption phase when the filter plugins filtering the nodes",
@@ -1136,7 +1136,7 @@ func TestDryRunPreemption(t *testing.T) {
 			disableParallelism: true,
 			expected: [][]candidate{
 				{
-					// cycle=0 => offset=4 => node5 (yes), node1 (yes)
+					// 第 0 轮 => 偏移量 4 => node5（是）、node1（是）
 					candidate{
 						name: "node1",
 						victims: &extenderv1.Victims{
@@ -1173,7 +1173,7 @@ func TestDryRunPreemption(t *testing.T) {
 			disableParallelism: true,
 			expected: [][]candidate{
 				{
-					// cycle=0 => offset=4 => node5 (no), node1 (yes), node2 (no), node3 (yes)
+					// 第 0 轮 => 偏移量 4 => node5（否）、node1（是）、node2（否）、node3（是）
 					candidate{
 						name: "node1",
 						victims: &extenderv1.Victims{
@@ -1212,7 +1212,7 @@ func TestDryRunPreemption(t *testing.T) {
 			disableParallelism: true,
 			expected: [][]candidate{
 				{
-					// cycle=0 => offset=4 => node5 (yes), node1 (yes)
+					// 第 0 轮 => 偏移量 4 => node5（是）、node1（是）
 					candidate{
 						name: "node1",
 						victims: &extenderv1.Victims{
@@ -1227,7 +1227,7 @@ func TestDryRunPreemption(t *testing.T) {
 					},
 				},
 				{
-					// cycle=1 => offset=1 => node2 (yes), node3 (yes)
+					// 第 1 轮 => 偏移量 1 => node2（是）、node3（是）
 					candidate{
 						name: "node2",
 						victims: &extenderv1.Victims{
@@ -1242,7 +1242,7 @@ func TestDryRunPreemption(t *testing.T) {
 					},
 				},
 				{
-					// cycle=2 => offset=3 => node4 (yes), node5 (yes)
+					// 第 2 轮 => 偏移量 3 => node4（是）、node5（是）
 					candidate{
 						name: "node4",
 						victims: &extenderv1.Victims{
@@ -1288,7 +1288,7 @@ func TestDryRunPreemption(t *testing.T) {
 					// 尽管 DefaultPreemptionArgs 配置要求最少 2 个候选，这里仍得到 3 个：
 					// 允许多返回一些候选是安全的。生产中若在 offset 附近找不到不违反 PDB 的候选，
 					// 额外返回的候选数量最多与 dryRunPreemption 的并行度相当。
-					// cycle=0 => offset=4 => node5 (yes, pdb), node1 (yes, pdb), node2 (no, pdb), node3 (yes)
+					// 第 0 轮 => 偏移量 4 => node5（是，违反 PDB）、node1（是，违反 PDB）、node2（否，违反 PDB）、node3（是）
 					candidate{
 						name: "node1",
 						victims: &extenderv1.Victims{
@@ -1371,8 +1371,8 @@ func TestDryRunPreemption(t *testing.T) {
 				st.MakePod().Name("p").UID("p").Priority(highPriority).Req(map[v1.ResourceName]string{v1.ResourceCPU: "3"}).Obj(),
 			},
 			initPods: []*v1.Pod{
-				victimPodWithDRANodeAllocatable, // 1 CPU standard + 2 CPU DRA = 3 CPU total
-				victimPodStandard,               // 1 CPU standard
+				victimPodWithDRANodeAllocatable, // 1 个 CPU 来自标准请求，2 个来自 DRA，共 3 个
+				victimPodStandard,               // 1 个 CPU 来自标准请求
 			},
 			registerPlugins: []tf.RegisterPluginFunc{
 				tf.RegisterPluginAsExtensions(noderesources.Name, nodeResourcesFitFunc, "Filter", "PreFilter"),
@@ -1532,7 +1532,7 @@ func TestSelectBestCandidate(t *testing.T) {
 		nodeNames      []string
 		pod            *v1.Pod
 		pods           []*v1.Pod
-		expected       []string // any of the items is valid
+		expected       []string // 列表中任一节点均可
 	}{
 		{
 			name:           "a pod that fits on both nodes when lower priority pods are preempted",
@@ -1721,7 +1721,7 @@ func TestSelectBestCandidate(t *testing.T) {
 			}
 
 			state := framework.NewCycleState()
-			// Some tests rely on PreFilter plugin to compute its CycleState.
+			// 部分用例依赖 PreFilter 插件计算 CycleState。
 			if _, status, _ := fwk.RunPreFilterPlugins(ctx, state, tt.pod); !status.IsSuccess() {
 				t.Errorf("Unexpected PreFilter Status: %v", status)
 			}
@@ -2047,7 +2047,7 @@ func TestCustomSelection(t *testing.T) {
 			}
 
 			state := framework.NewCycleState()
-			// Some tests rely on PreFilter plugin to compute its CycleState.
+			// 部分用例依赖 PreFilter 插件计算 CycleState。
 			if _, status, _ := fwk.RunPreFilterPlugins(ctx, state, tt.pod); !status.IsSuccess() {
 				t.Errorf("Unexpected PreFilter Status: %v", status)
 			}
@@ -2370,7 +2370,7 @@ func TestCustomOrdering(t *testing.T) {
 			}
 
 			state := framework.NewCycleState()
-			// Some tests rely on PreFilter plugin to compute its CycleState.
+			// 部分用例依赖 PreFilter 插件计算 CycleState。
 			if _, status, _ := fwk.RunPreFilterPlugins(ctx, state, tt.preemptor); !status.IsSuccess() {
 				t.Errorf("Unexpected PreFilter Status: %v", status)
 			}
@@ -2612,7 +2612,7 @@ func TestPreempt(t *testing.T) {
 		nodeNames      []string
 		registerPlugin tf.RegisterPluginFunc
 		want           *fwk.PostFilterResult
-		expectedPods   []string // list of preempted pods
+		expectedPods   []string // 被抢占 Pod 的列表
 	}{
 		{
 			name:      "basic preemption logic",
@@ -3437,7 +3437,7 @@ func TestSelectVictimsOnNode(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			cache := internalcache.New(ctx, nil, tt.features.EnableGenericWorkload, false /* CompositePodGroup */)
+			cache := internalcache.New(ctx, nil, tt.features.EnableGenericWorkload, false /* 是否启用 CompositePodGroup */)
 			for _, pg := range tt.podGroups {
 				cache.AddPodGroup(pg)
 			}
@@ -4013,7 +4013,7 @@ func TestDefaultPreemption_PodGroupPostFilter_InvalidSnapshot(t *testing.T) {
 					},
 				}
 				client = clientsetfake.NewClientset(pod)
-				cache = internalcache.New(ctx, nil, true, true /* compositePodGroupEnabled */)
+				cache = internalcache.New(ctx, nil, true, true /* 是否启用 compositePodGroup */)
 				snapshot = internalcache.NewTestSnapshotWithCompositePodGroups(testPods, nodes, nil, []*v1alpha3.CompositePodGroup{cpg})
 			}
 
@@ -4092,7 +4092,7 @@ func TestDefaultPreemption_PodGroupPostFilter_CompositePodGroup(t *testing.T) {
 		tf.RegisterBindPlugin(defaultbinder.Name, defaultbinder.New),
 	}
 
-	cache := internalcache.New(ctx, nil, true, true /* compositePodGroupEnabled */)
+	cache := internalcache.New(ctx, nil, true, true /* 是否启用 compositePodGroup */)
 	cache.AddPodGroup(pgOk)
 
 	snapshot := internalcache.NewEmptySnapshot()

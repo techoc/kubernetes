@@ -171,7 +171,7 @@ func (c *passiveAssumeCache[T]) Get(key string) (T, error) {
 
 	assumed, ok := c.assumed[key]
 	// 未 assume，或 informer 对象更新时，以 informer 对象为准。
-	if !ok || assumed.GetResourceVersion() != obj.GetResourceVersion() { // not assumed or Informer object is newer
+	if !ok || assumed.GetResourceVersion() != obj.GetResourceVersion() { // 未 assume，或 Informer 对象更新
 		return obj, nil
 	}
 	return assumed, nil

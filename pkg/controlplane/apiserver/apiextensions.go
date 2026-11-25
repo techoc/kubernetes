@@ -52,7 +52,7 @@ func CreateAPIExtensionsConfig(
 	etcdOptions.StorageConfig.Codec = apiextensionsapiserver.Codecs.LegacyCodec(v1beta1.SchemeGroupVersion, v1.SchemeGroupVersion)
 	// 优先使用更紧凑的 v1beta1 序列化存储，规避 v1 序列化过大而 v1beta1 可存储的问题（issue #82292）。
 	etcdOptions.StorageConfig.EncodeVersioner = runtime.NewMultiGroupVersioner(v1beta1.SchemeGroupVersion, schema.GroupKind{Group: v1beta1.GroupName})
-	etcdOptions.SkipHealthEndpoints = true // avoid double wiring of health checks
+	etcdOptions.SkipHealthEndpoints = true // 避免重复接入健康检查
 	if err := etcdOptions.ApplyTo(&genericConfig); err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func CreateAPIExtensionsConfig(
 		},
 	}
 
-	// 清空 post start hooks，避免重复添加导致失败。
+	// 清空启动后钩子，避免重复添加导致失败。
 	apiextensionsConfig.GenericConfig.PostStartHooks = map[string]server.PostStartHookConfigEntry{}
 
 	return apiextensionsConfig, nil

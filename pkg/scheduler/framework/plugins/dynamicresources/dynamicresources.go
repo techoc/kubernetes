@@ -250,7 +250,7 @@ func (pl *DynamicResources) Name() string {
 
 // SignPod 为 Pod 生成签名片段。
 // 判断 DRA claim 是单主机还是更复杂并不简单，这里保守地把带 DRA claim 的 Pod 排除在签名之外。
-// See https://github.com/kubernetes/kubernetes/issues/134986
+// 参见 https://github.com/kubernetes/kubernetes/issues/134986
 func (pl *DynamicResources) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	if len(pod.Spec.ResourceClaims) > 0 {
 		return nil, fwk.NewStatus(fwk.Unschedulable, "pods with dra resource claims are not signable")
@@ -609,7 +609,7 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 			// 目前共享仅限于同一个 PodGroup 调度周期。为控制 alpha 阶段 GenericWorkload
 			// feature gate 之外的影响，未分组的 Pod 以及跨 PodGroup 周期的 Pod 暂不能共享
 			// pending 分配的 claim。更广泛地共享这类 claim 可能有益：
-			// https://github.com/kubernetes/kubernetes/issues/137932
+			// 参见 https://github.com/kubernetes/kubernetes/issues/137932
 			if podGroupState != nil && podGroupState.pendingAllocations[claim.UID] != nil {
 				if pendingAllocation := pl.draManager.ResourceClaims().GetPendingAllocation(claim.UID); pendingAllocation != nil {
 					s.informationsForClaim[index].allocation = pendingAllocation
@@ -711,7 +711,7 @@ func (pl *DynamicResources) PreFilter(ctx context.Context, state fwk.CycleState,
 		//
 		// 万一并发修改让结果失效（极少见），这里会重试。
 		var allocatedState *structured.AllocatedState
-		err = wait.PollUntilContextTimeout(ctx, time.Microsecond, 5*time.Second, true /* immediate */, func(context.Context) (bool, error) {
+		err = wait.PollUntilContextTimeout(ctx, time.Microsecond, 5*time.Second, true /* 立即绑定 */, func(context.Context) (bool, error) {
 			if pl.fts.EnableDRAConsumableCapacity {
 				allocatedState, err = pl.draManager.ResourceClaims().GatherAllocatedState()
 				if err != nil {
@@ -1357,10 +1357,12 @@ func computeScore(iterator iter.Seq2[int, *resourceapi.ResourceClaim], allocatio
 	return score, nil
 }
 
+// ScoreExtensions 返回负责归一化 DRA 得分的插件自身。
 func (pl *DynamicResources) ScoreExtensions() fwk.ScoreExtensions {
 	return pl
 }
 
+// NormalizeScore 将 DRA 原始得分归一化到框架的节点分数范围；插件未启用时不做修改。
 func (pl *DynamicResources) NormalizeScore(ctx context.Context, cs fwk.CycleState, pod *v1.Pod, scores fwk.NodeScoreList) *fwk.Status {
 	if !pl.enabled {
 		return nil
@@ -1514,9 +1516,8 @@ func (pl *DynamicResources) Unreserve(ctx context.Context, cs fwk.CycleState, po
 		// 解除预留并在 API server 中取消分配。
 		if claim.Status.Allocation != nil &&
 			resourceclaim.IsReservedForPod(pod, claim, false /* acceptPodGroupReservation */) {
-			// Remove pod from ReservedFor. A strategic-merge-patch is used
-			// because that allows removing an individual entry without having
-			// the latest ResourceClaim.
+			// 使用 strategic merge patch 从 ReservedFor 中移除 Pod，
+			// 这样无需持有最新的 ResourceClaim 即可删除单个条目。
 			patch := fmt.Sprintf(`{"metadata": {"uid": %q}, "status": { "reservedFor": [ {"$patch": "delete", "uid": %q} ] }}`,
 				claim.UID,
 				pod.UID,
@@ -1574,7 +1575,7 @@ func (pl *DynamicResources) PreBind(ctx context.Context, cs fwk.CycleState, pod 
 					successCleanup()
 				}
 			}()
-			// Updated here such that Unreserve can work with patched claim.
+			// 在此更新，确保 Unreserve 能处理已经打过补丁的 claim。
 			state.claims.set(index, claim)
 		}
 	}
@@ -1608,13 +1609,13 @@ func (pl *DynamicResources) PreBind(ctx context.Context, cs fwk.CycleState, pod 
 		func(ctx context.Context) (bool, error) {
 			return pl.isPodReadyForBinding(state)
 		})
-	// GOAL: Calculate duration since start for metrics recording
+	// 计算耗时，用于记录指标。
 	duration := time.Since(start)
 	if errors.Is(err, context.DeadlineExceeded) {
 		err = fmt.Errorf("%w: %w", ErrDeviceBindingTimeout, err)
 	}
 
-	// Determine status label based on error
+	// 根据错误确定状态标签。
 	statusLabel := schedmetrics.BindingConditionsStatusSuccess
 	switch {
 	case err == nil:
@@ -1623,7 +1624,7 @@ func (pl *DynamicResources) PreBind(ctx context.Context, cs fwk.CycleState, pod 
 			"node", nodeName,
 			"devices", bindingConditionsStatusFormatter{state, statusLabel},
 		)
-		// keep success
+		// 保留成功状态。
 	case errors.Is(err, ErrDeviceBindingTimeout):
 		statusLabel = schedmetrics.BindingConditionsStatusTimeout
 	case errors.Is(err, ErrDeviceBindingFailed):
@@ -1632,7 +1633,7 @@ func (pl *DynamicResources) PreBind(ctx context.Context, cs fwk.CycleState, pod 
 		statusLabel = schedmetrics.BindingConditionsStatusError
 	}
 
-	// Record metrics for binding conditions outcome (success/failure/timeout/error)
+	// 记录绑定条件结果指标（成功、失败、超时或错误）。
 	profileLabel := pl.fh.ProfileName()
 	for _, claim := range state.claims.all() {
 		if claim.Status.Allocation == nil {
@@ -1644,7 +1645,7 @@ func (pl *DynamicResources) PreBind(ctx context.Context, cs fwk.CycleState, pod 
 				Observe(duration.Seconds())
 		}
 
-		// Count scheduling attempts that used devices with BindingConditions.
+		// 统计使用带 BindingConditions 设备的调度尝试。
 		for _, bcStatus := range listBindingConditionsStatus(claim) {
 			schedmetrics.DRABindingConditionsAllocationsTotal.
 				WithLabelValues(profileLabel, bcStatus.Driver, statusLabel).
@@ -1678,11 +1679,9 @@ func (pl *DynamicResources) PreBindPreFlight(ctx context.Context, cs fwk.CycleSt
 	return result, nil
 }
 
-// bindClaim gets called by PreBind for claim which is not reserved for the pod yet.
-// It might not even be allocated. bindClaim then ensures that the allocation
-// and reservation are recorded. This finishes the work started in Reserve.
-// Returns the updated claim, a function which (if not nil) should run when the
-// pod has been successfully bound, and an error if one occurred.
+// bindClaim 由 PreBind 调用，处理尚未为 Pod 预留的 claim。
+// claim 可能尚未分配；本函数确保分配结果与预留写入状态，完成 Reserve 开始的工作。
+// 返回更新后的 claim、Pod 成功绑定后应执行的清理函数（可为 nil）以及错误。
 func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, podGroupState *podGroupStateData, index int, pod *v1.Pod, nodeName string) (*resourceapi.ResourceClaim, func(), error) {
 	logger := klog.FromContext(ctx)
 	claim := state.claims.get(index)
@@ -1690,7 +1689,7 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 	allocation := state.informationsForClaim[index].allocation
 	isExtendedResourceClaim := false
 	if claim == state.claims.extendedResourceClaim() {
-		// extended resource requests satisfied by device plugin
+		// 扩展资源请求已由 device plugin 满足。
 		if allocation == nil && claim.Spec.Devices.Requests == nil {
 			return claim, nil, nil
 		}
@@ -1700,7 +1699,7 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 	resourceClaimModified := false
 	var resourceVersion string
 	defer func() {
-		// Creating the claim may have failed.
+		// claim 创建可能已经失败。
 		claimUID := types.UID("")
 		if claim != nil {
 			resourceVersion = claim.ResourceVersion
@@ -1741,7 +1740,7 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 		}
 	}
 
-	// Create the special claim for extended resource backed by DRA
+	// 为 DRA 支撑的扩展资源创建特殊 claim。
 	if isExtendedResourceClaim && isSpecialClaimName(claim.Name) {
 		var err error
 		claim, err = pl.createExtendedResourceClaimInAPI(ctx, pod, nodeName, state)
@@ -1750,8 +1749,7 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 		}
 
 		resourceClaimModified = true
-		// Track the actual extended ResourceClaim from now.
-		// Relevant if we need to delete again in Unreserve.
+		// 此后跟踪实际的扩展 ResourceClaim，以便 Unreserve 时再次删除。
 		if err := state.claims.updateExtendedResourceClaim(claim); err != nil {
 			return nil, nil, fmt.Errorf("internal error: update extended ResourceClaim: %w", err)
 		}
@@ -1771,7 +1769,7 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 			logger.V(5).Info("retrying update after conflict", "claim", klog.KObj(claim))
 			claim = updatedClaim
 		} else {
-			// All future retries must get a new claim first.
+			// 后续重试必须先重新获取 claim。
 			refreshClaim = true
 		}
 
@@ -1830,8 +1828,7 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 
 	logger.V(5).Info("reserved", "pod", klog.KObj(pod), "node", nodeName, "resourceclaim", klog.Format(claim))
 
-	// Patch the pod status with the new information about the generated
-	// special resource claim.
+	// 用生成的特殊资源 claim 信息更新 Pod 状态。
 	if isExtendedResourceClaim {
 		err := pl.patchPodExtendedResourceClaimStatus(ctx, pod, claim, nodeName, state)
 		if err != nil {
@@ -1842,8 +1839,7 @@ func (pl *DynamicResources) bindClaim(ctx context.Context, state *stateData, pod
 	return claim, prebindSuccessCleanup, nil
 }
 
-// allocationResultRequiresDRAOptionalNodeOperations checks whether an allocation result
-// has any allocated device that specifies SkipNodeOperations.
+// allocationResultRequiresDRAOptionalNodeOperations 判断分配结果中是否有设备指定 SkipNodeOperations。
 func allocationResultRequiresDRAOptionalNodeOperations(alloc *resourceapi.AllocationResult) bool {
 	if alloc == nil {
 		return false
@@ -1856,12 +1852,9 @@ func allocationResultRequiresDRAOptionalNodeOperations(alloc *resourceapi.Alloca
 	return false
 }
 
-// isClaimReadyForBinding checks whether a given resource claim is
-// ready for binding.
-// It returns an error if the claim is not ready for binding.
-// It returns true if (and only if) all binding conditions are true,
-// and no binding failure conditions are true,
-// which includes the case that there are no binding conditions.
+// isClaimReadyForBinding 判断给定 claim 是否已就绪，可进入绑定。
+// 所有绑定条件均为 true 且没有绑定失败条件时返回 true；没有绑定条件时也视为就绪。
+// claim 尚未就绪时返回 false；存在已置为 true 的绑定失败条件时返回错误。
 func (pl *DynamicResources) isClaimReadyForBinding(claim *resourceapi.ResourceClaim) (bool, error) {
 	if claim.Status.Allocation == nil {
 		return false, nil
@@ -1893,10 +1886,8 @@ func (pl *DynamicResources) isClaimReadyForBinding(claim *resourceapi.ResourceCl
 	return true, nil
 }
 
-// isClaimTimeout checks whether a given resource claim has
-// reached the binding timeout.
-// It returns true if the binding timeout is reached.
-// It returns false if the binding timeout is not reached.
+// isClaimTimeout 判断给定 claim 是否已达到绑定超时。
+// 只有启用相关特性门控且存在分配时间戳时才会判断超时。
 func (pl *DynamicResources) isClaimTimeout(claim *resourceapi.ResourceClaim) bool {
 	if !pl.fts.EnableDRADeviceBindingConditions || !pl.fts.EnableDRAResourceClaimDeviceStatus {
 		return false
@@ -1904,7 +1895,7 @@ func (pl *DynamicResources) isClaimTimeout(claim *resourceapi.ResourceClaim) boo
 	if claim.Status.Allocation == nil || claim.Status.Allocation.AllocationTimestamp == nil {
 		return false
 	}
-	// check if the binding timeout is reached
+	// 检查是否已达到绑定超时。
 	for _, deviceRequest := range claim.Status.Allocation.Devices.Results {
 		if deviceRequest.BindingConditions == nil {
 			continue
@@ -1916,11 +1907,9 @@ func (pl *DynamicResources) isClaimTimeout(claim *resourceapi.ResourceClaim) boo
 	return false
 }
 
-// isPodReadyForBinding checks the binding status of devices within the given state claims.
-// It returns true if (and only if) all binding conditions are true,
-// and no binding failure conditions are true,
-// which includes the case when there are no binding conditions.
-// It returns an error if any binding failure condition is set.
+// isPodReadyForBinding 检查状态中所有 claim 的设备绑定状态。
+// 所有绑定条件均为 true 且没有绑定失败条件时返回 true；没有绑定条件时也视为就绪。
+// 任一设备存在已置为 true 的绑定失败条件时返回错误；设备超时时返回超时错误。
 func (pl *DynamicResources) isPodReadyForBinding(state *stateData) (bool, error) {
 	for claimIndex, claim := range state.claims.all() {
 		claim, err := pl.draManager.ResourceClaims().Get(claim.Namespace, claim.Name)
@@ -1950,10 +1939,7 @@ func (pl *DynamicResources) getPodGroupSnapshot(pod *v1.Pod) (*schedulingapi.Pod
 	return pl.fh.SnapshotSharedLister().PodGroups().Get(pod.Namespace, *pod.Spec.SchedulingGroup.PodGroupName)
 }
 
-// hasBindingConditions checks whether any of the claims in the state
-// has binding conditions.
-// It returns true if at least one claim has binding conditions.
-// It returns false if no claim has binding conditions.
+// hasBindingConditions 判断状态中是否有 claim 包含绑定条件。
 func hasBindingConditions(state *stateData) bool {
 	for _, claim := range state.claims.all() {
 		if claim.Status.Allocation == nil {
@@ -1968,26 +1954,24 @@ func hasBindingConditions(state *stateData) bool {
 	return false
 }
 
-// statusUnschedulable ensures that there is a log message associated with the
-// line where the status originated.
+// statusUnschedulable 确保状态来源处关联一条日志，便于定位不可调度的原因。
 func statusUnschedulable(logger klog.Logger, reason string, kv ...interface{}) *fwk.Status {
 	if loggerV := logger.V(5); loggerV.Enabled() {
 		helper, loggerV := loggerV.WithCallStackHelper()
 		helper()
 		kv = append(kv, "reason", reason)
-		// nolint: logcheck // warns because it cannot check key/values
+		// nolint: logcheck // 无法检查键值对，因此抑制告警。
 		loggerV.Info("pod unschedulable", kv...)
 	}
 	return fwk.NewStatus(fwk.UnschedulableAndUnresolvable, reason)
 }
 
-// statusError ensures that there is a log message associated with the
-// line where the error originated.
+// statusError 确保错误来源处关联一条日志，便于定位失败原因。
 func statusError(logger klog.Logger, err error, kv ...interface{}) *fwk.Status {
 	if loggerV := logger.V(5); loggerV.Enabled() {
 		helper, loggerV := loggerV.WithCallStackHelper()
 		helper()
-		// nolint: logcheck // warns because it cannot check key/values
+		// nolint: logcheck // 无法检查键值对，因此抑制告警。
 		loggerV.Error(err, "dynamic resource plugin failed", kv...)
 	}
 	return fwk.AsStatus(err)
@@ -2009,6 +1993,7 @@ type bindingConditionsStatusFormatter struct {
 	statusLabel string
 }
 
+// String 按需生成设备绑定状态的单行日志摘要。
 func (d bindingConditionsStatusFormatter) String() string {
 	return formatBCStatusOneLine(getBindingConditionsStatusForStatus(d.state, d.statusLabel))
 }
@@ -2044,20 +2029,20 @@ func listBindingConditionsStatus(claim *resourceapi.ResourceClaim) []BindingCond
 
 		ds := getAllocatedDeviceStatus(claim, &res)
 		if ds == nil {
-			// No status yet => all BindingConditions are pending.
+			// 尚无设备状态，所有 BindingConditions 均处于 pending。
 			sum.Pending = append(sum.Pending, res.BindingConditions...)
 			out = append(out, sum)
 			continue
 		}
 
-		// Failed conditions that are true.
+		// 已置为 true 的失败条件。
 		for _, c := range res.BindingFailureConditions {
 			if apimeta.IsStatusConditionTrue(ds.Conditions, c) {
 				sum.Failed = append(sum.Failed, c)
 			}
 		}
 
-		// Pending conditions: those not yet true.
+		// 尚未置为 true 的 pending 条件。
 		for _, c := range res.BindingConditions {
 			if !apimeta.IsStatusConditionTrue(ds.Conditions, c) {
 				sum.Pending = append(sum.Pending, c)
@@ -2070,19 +2055,19 @@ func listBindingConditionsStatus(claim *resourceapi.ResourceClaim) []BindingCond
 	return out
 }
 
-// getBindingConditionsStatusForStatus selects which devices to log across ALL claims in the state.
+// getBindingConditionsStatusForStatus 从状态中的所有 claim 选出需要记录日志的设备。
 func getBindingConditionsStatusForStatus(state *stateData, statusLabel string) []BindingConditionsStatus {
 	var out []BindingConditionsStatus
 	for _, claim := range state.claims.all() {
 		for _, s := range listBindingConditionsStatus(claim) {
 			switch statusLabel {
 			case schedmetrics.BindingConditionsStatusSuccess:
-				// success: show all BC devices
+				// 成功：展示所有绑定条件已就绪的设备。
 				if len(s.Failed) == 0 && len(s.Pending) == 0 {
 					out = append(out, s)
 				}
 			case schedmetrics.BindingConditionsStatusFailed:
-				// failure: only devices that have at least one failure condition true
+				// 失败：只展示至少有一个失败条件置为 true 的设备。
 				if len(s.Failed) > 0 {
 					out = append(out, BindingConditionsStatus{
 						Driver: s.Driver,
@@ -2093,13 +2078,13 @@ func getBindingConditionsStatusForStatus(state *stateData, statusLabel string) [
 				}
 
 			case schedmetrics.BindingConditionsStatusTimeout:
-				// timeout/error: only devices still pending, and not failed
+				// 超时或错误：只展示仍 pending 且未失败的设备。
 				if len(s.Pending) > 0 && len(s.Failed) == 0 {
 					out = append(out, s)
 				}
 
 			default:
-				// Treat unknown like timeout/error
+				// 未知状态按超时或错误处理。
 				if len(s.Pending) > 0 && len(s.Failed) == 0 {
 					out = append(out, s)
 				}
@@ -2109,7 +2094,7 @@ func getBindingConditionsStatusForStatus(state *stateData, statusLabel string) [
 	return out
 }
 
-// formatBCStatusOneLine formats the selected devices into a single log-friendly line.
+// formatBCStatusOneLine 将选中的设备格式化为便于日志记录的单行文本。
 func formatBCStatusOneLine(devs []BindingConditionsStatus) string {
 	if len(devs) == 0 {
 		return ""
@@ -2128,8 +2113,8 @@ func formatBCStatusOneLine(devs []BindingConditionsStatus) string {
 	return strings.Join(parts, "; ")
 }
 
-// nodeSelectorFromAllocation returns a NodeSelector for the given allocation,
-// or nil if the allocation has no NodeSelector (meaning available on all nodes).
+// nodeSelectorFromAllocation 从分配结果构造 NodeSelector。
+// 分配结果未指定 NodeSelector 时返回 nil，表示所有节点均可用。
 func nodeSelectorFromAllocation(allocation *resourceapi.AllocationResult) (*nodeaffinity.NodeSelector, error) {
 	if allocation.NodeSelector == nil {
 		return nil, nil

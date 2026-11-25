@@ -59,7 +59,7 @@ func NewController(
 ) *Controller {
 	c := &Controller{
 		client:   client,
-		interval: 10 * time.Second, // same as DefaultEndpointReconcilerInterval
+		interval: 10 * time.Second, // 与 DefaultEndpointReconcilerInterval 相同
 	}
 
 	// 从命令行 flag 获取配置。
@@ -82,7 +82,7 @@ func NewController(
 
 // Controller 管理基于选择器的 Service IP 地址（ServiceCIDR）。
 type Controller struct {
-	cidrs []string // order matters, first cidr defines the default IP family
+	cidrs []string // 顺序有意义，首个 CIDR 决定默认 IP 族
 
 	client           clientset.Interface
 	eventBroadcaster record.EventBroadcaster

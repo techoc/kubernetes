@@ -2263,7 +2263,7 @@ func (f *frameworkImpl) GetWaitingPod(uid types.UID) fwk.WaitingPod {
 	if wp := f.waitingPods.get(uid); wp != nil {
 		return wp
 	}
-	return nil // Returning nil instead of *waitingPod(nil).
+	return nil // 避免将 *waitingPod(nil) 装入接口后成为非 nil 值。
 }
 
 // RejectWaitingPod 按 UID 拒绝一个 WaitingPod，返回值表示拒绝是否成功。

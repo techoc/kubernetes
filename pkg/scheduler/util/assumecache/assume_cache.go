@@ -69,8 +69,10 @@ var (
 
 // WrongTypeError 表示对象无法转换为期望类型。
 type WrongTypeError struct {
+	// TypeName 是缓存期望的对象类型。
 	TypeName string
-	Object   interface{}
+	// Object 是转换失败的实际对象。
+	Object interface{}
 }
 
 // Error 返回类型不匹配的错误描述。
@@ -85,7 +87,9 @@ func (e WrongTypeError) Is(err error) bool {
 
 // NotFoundError 表示按指定 key 找不到对象。
 type NotFoundError struct {
-	TypeName  string
+	// TypeName 是未找到对象的类型。
+	TypeName string
+	// ObjectKey 是查询使用的对象键。
 	ObjectKey string
 }
 
@@ -101,6 +105,7 @@ func (e NotFoundError) Is(err error) bool {
 
 // ObjectNameError 封装解析对象名称时的底层错误。
 type ObjectNameError struct {
+	// DetailedErr 保存名称解析失败的底层错误，供错误消息与调用方诊断。
 	DetailedErr error
 }
 

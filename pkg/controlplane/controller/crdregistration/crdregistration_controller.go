@@ -220,8 +220,8 @@ func (c *crdRegistrationController) handleVersionUpdate(groupVersion schema.Grou
 				Spec: v1.APIServiceSpec{
 					Group:                groupVersion.Group,
 					Version:              groupVersion.Version,
-					GroupPriorityMinimum: 1000, // CRDs should have relatively low priority
-					VersionPriority:      100,  // CRDs will be sorted by kube-like versions like any other APIService with the same VersionPriority
+					GroupPriorityMinimum: 1000, // CRD 的组优先级应相对较低
+					VersionPriority:      100,  // 与相同 VersionPriority 的其他 APIService 一样，按 Kubernetes 版本规则排序
 				},
 			})
 			return nil

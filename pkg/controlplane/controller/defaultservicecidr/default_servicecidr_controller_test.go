@@ -74,7 +74,7 @@ func TestControllerSync(t *testing.T) {
 	testCases := []struct {
 		name    string
 		cidrs   []*networkingapiv1.ServiceCIDR
-		actions [][]string // verb and resource
+		actions [][]string // 动词与资源
 	}{
 		{
 			name:    "no existing service CIDRs",
@@ -177,7 +177,7 @@ func TestControllerSyncConversions(t *testing.T) {
 		name            string
 		controllerCIDRs []string
 		existingCIDR    *networkingapiv1.ServiceCIDR
-		expectedAction  [][]string // verb, resource, [subresource]
+		expectedAction  [][]string // 动词、资源、[子资源]
 	}{
 		{
 			name:            "flags match ServiceCIDRs",
@@ -189,7 +189,7 @@ func TestControllerSyncConversions(t *testing.T) {
 				Spec: networkingapiv1.ServiceCIDRSpec{
 					CIDRs: []string{defaultIPv4CIDR, defaultIPv6CIDR},
 				},
-				Status: networkingapiv1.ServiceCIDRStatus{}, // No conditions
+				Status: networkingapiv1.ServiceCIDRStatus{}, // 无条件
 			},
 			expectedAction: [][]string{{"patch", "servicecidrs", "status"}},
 		},
@@ -213,7 +213,7 @@ func TestControllerSyncConversions(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: [][]string{}, // No patch expected, just logs/events
+			expectedAction: [][]string{}, // 不期望 patch，仅记录日志或事件
 		},
 		{
 			name:            "existing Ready=True condition -> no patch",
@@ -259,7 +259,7 @@ func TestControllerSyncConversions(t *testing.T) {
 					Name: DefaultServiceCIDRName,
 				},
 				Spec: networkingapiv1.ServiceCIDRSpec{
-					CIDRs: []string{defaultIPv4CIDR}, // Existing has both
+					CIDRs: []string{defaultIPv4CIDR}, // 现有 CIDR 配置
 				},
 				Status: networkingapiv1.ServiceCIDRStatus{},
 			},
@@ -273,7 +273,7 @@ func TestControllerSyncConversions(t *testing.T) {
 					Name: DefaultServiceCIDRName,
 				},
 				Spec: networkingapiv1.ServiceCIDRSpec{
-					CIDRs: []string{defaultIPv4CIDR}, // Existing has both
+					CIDRs: []string{defaultIPv4CIDR}, // 现有 CIDR 配置
 				},
 				Status: networkingapiv1.ServiceCIDRStatus{},
 			},
@@ -287,7 +287,7 @@ func TestControllerSyncConversions(t *testing.T) {
 					Name: DefaultServiceCIDRName,
 				},
 				Spec: networkingapiv1.ServiceCIDRSpec{
-					CIDRs: []string{defaultIPv6CIDR}, // Existing has both
+					CIDRs: []string{defaultIPv6CIDR}, // 现有 CIDR 配置
 				},
 				Status: networkingapiv1.ServiceCIDRStatus{},
 			},
@@ -301,7 +301,7 @@ func TestControllerSyncConversions(t *testing.T) {
 					Name: DefaultServiceCIDRName,
 				},
 				Spec: networkingapiv1.ServiceCIDRSpec{
-					CIDRs: []string{defaultIPv6CIDR}, // Existing has both
+					CIDRs: []string{defaultIPv6CIDR}, // 现有 CIDR 配置
 				},
 				Status: networkingapiv1.ServiceCIDRStatus{},
 			},
@@ -315,7 +315,7 @@ func TestControllerSyncConversions(t *testing.T) {
 					Name: DefaultServiceCIDRName,
 				},
 				Spec: networkingapiv1.ServiceCIDRSpec{
-					CIDRs: []string{defaultIPv6CIDR, defaultIPv4CIDR}, // Existing has both
+					CIDRs: []string{defaultIPv6CIDR, defaultIPv4CIDR}, // 现有 CIDR 配置
 				},
 				Status: networkingapiv1.ServiceCIDRStatus{},
 			},

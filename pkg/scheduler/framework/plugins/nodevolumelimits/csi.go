@@ -278,14 +278,14 @@ func (pl *CSILimits) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, 
 
 	csiNode, err := pl.csiManager.CSINodes().Get(node.Name)
 	if err != nil {
-		// TODO: return the error once CSINode is created by default (2 releases)
+		// TODO: CSINode 默认创建后（再经过两个发布周期）返回错误。
 		// 目前 CSINode 可能尚不存在，先容忍并继续，以免误判节点不可调度。
 		logger.V(5).Info("Could not get a CSINode object for the node", "node", klog.KObj(node), "err", err)
 	}
 
 	// 统计新 Pod 需要使用的 CSI 卷。
 	newVolumes := make(map[string]string)
-	if err := pl.filterAttachableVolumes(logger, pod, csiNode, true /* new pod */, newVolumes); err != nil {
+	if err := pl.filterAttachableVolumes(logger, pod, csiNode, true /* 新 Pod */, newVolumes); err != nil {
 		if apierrors.IsNotFound(err) {
 			// PVC 不存在，在它被创建之前该 Pod 永远不可调度，无需再排队。
 			return fwk.NewStatus(fwk.UnschedulableAndUnresolvable, err.Error())
@@ -320,7 +320,7 @@ func (pl *CSILimits) Filter(ctx context.Context, _ fwk.CycleState, pod *v1.Pod, 
 	// 统计节点上现有 Pod 使用的 CSI 卷。
 	attachedVolumes := make(map[string]string)
 	for _, existingPod := range nodeInfo.GetPods() {
-		if err := pl.filterAttachableVolumes(logger, existingPod.GetPod(), csiNode, false /* existing pod */, attachedVolumes); err != nil {
+		if err := pl.filterAttachableVolumes(logger, existingPod.GetPod(), csiNode, false /* 现有 Pod */, attachedVolumes); err != nil {
 			return fwk.AsStatus(err)
 		}
 	}

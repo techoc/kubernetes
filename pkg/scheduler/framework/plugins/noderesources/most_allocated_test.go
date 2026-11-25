@@ -159,7 +159,7 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			// node1 分数：(100 + 90) / 2 = 95
 			// node2（0~MaxNodeScore 刻度）：
 			// CPU 分数：(5000 * MaxNodeScore) / 10000 = 50
-			// 内存分数：9000 * MaxNodeScore / 9000 return 100
+			// 内存分数：9000 * MaxNodeScore / 9000 = 100
 			// node2 分数：(50 + 100) / 2 = 75
 			name: "resources requested equal node capacity",
 			requestedPod: st.MakePod().
@@ -305,8 +305,8 @@ func TestMostAllocatedScoringStrategy(t *testing.T) {
 			// Pod 请求了扩展资源时，需将其纳入打分。
 			// 两个节点的 CPU 与内存分数均为 50。
 			// 扩展资源分数：
-			// - node1 get: 2 / 4 * 100 = 50
-			// - node2 get: 2 / 10 * 100 = 20
+			// - 节点1得分： 2 / 4 * 100 = 50
+			// - 节点2得分： 2 / 10 * 100 = 20
 			// 最终分数为：
 			// - node1: (50 + 50 + 50) / 3 = 50
 			// - node2: (50 + 50 + 20) / 3 = 40

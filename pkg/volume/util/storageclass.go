@@ -31,7 +31,7 @@ const (
 	IsDefaultStorageClassAnnotation = "storageclass.kubernetes.io/is-default-class"
 
 	// BetaIsDefaultStorageClassAnnotation 是 IsDefaultStorageClassAnnotation 的 beta 版本。
-	// TODO: remove Beta when no longer used
+	// TODO: 不再使用 beta 注解时移除。
 	BetaIsDefaultStorageClassAnnotation = "storageclass.beta.kubernetes.io/is-default-class"
 )
 
@@ -69,7 +69,7 @@ func GetDefaultClass(lister storagev1listers.StorageClassLister) (*storagev1.Sto
 }
 
 // IsDefaultAnnotation 判断对象是否带有默认 StorageClass 注解。
-// TODO: remove Beta when no longer needed
+// TODO: 不再需要 beta 注解时移除。
 func IsDefaultAnnotation(obj metav1.ObjectMeta) bool {
 	if obj.Annotations[IsDefaultStorageClassAnnotation] == "true" {
 		return true

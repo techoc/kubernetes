@@ -415,7 +415,7 @@ func Test_InFlightPods(t *testing.T) {
 				{podEnqueued: newQueuedPodInfoForLookup(pod1)},
 			},
 			wantBackoffQPodNames: []string{"targetpod"},
-			wantInFlightPods:     []*v1.Pod{pod2}, // only pod2 is registered because pod is already enqueued back.
+			wantInFlightPods:     []*v1.Pod{pod2}, // 仅 pod2 已登记，因为该 Pod 已重新入队。
 			wantInFlightEvents:   []interface{}{pod2, nodeAdd},
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
@@ -459,7 +459,7 @@ func Test_InFlightPods(t *testing.T) {
 				{podEnqueued: newQueuedPodInfoForLookup(pod2)},
 			},
 			wantBackoffQPodNames: []string{"targetpod", "targetpod2"},
-			wantInFlightPods:     nil, // empty
+			wantInFlightPods:     nil, // 空
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
 					pvAdd: {
@@ -764,7 +764,7 @@ func Test_InFlightPods(t *testing.T) {
 						t.Errorf("Unexpected error from AddUnschedulablePodIfNotPresent: %v", err)
 					}
 				}},
-				{eventHappens: &pvAdd}, // Active again.
+				{eventHappens: &pvAdd}, // 再次活跃。
 				{callback: func(t *testing.T, q *PriorityQueue) {
 					poppedPod = popPod(t, logger, q, pod1)
 					// 应保留 UnschedulablePlugins 以便记录日志/调试
@@ -837,7 +837,7 @@ func Test_InFlightPods(t *testing.T) {
 				{podEnqueued: newQueuedPodInfoForLookup(pod3)},
 			},
 			wantBackoffQPodNames: []string{"targetpod", "targetpod2", "targetpod3"},
-			wantInFlightPods:     nil, // should be empty
+			wantInFlightPods:     nil, // 应为空
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
 					pvAdd: {
@@ -872,7 +872,7 @@ func Test_InFlightPods(t *testing.T) {
 			genericWorkloadEnabled: []bool{true},
 			initialPods:            []*v1.Pod{pgPod1, pgPod2},
 			actions: []action{
-				{podPopped: pgPod1}, // Pops group, so pgPod1 and pgPod2 are inFlight
+				{podPopped: pgPod1}, // 弹出整个组，因此 pgPod1 与 pgPod2 均在途
 				{eventHappens: &pvAdd},
 			},
 			wantInFlightPods:   []*v1.Pod{pgPod1, pgPod2},
@@ -928,7 +928,7 @@ func Test_InFlightPods(t *testing.T) {
 			},
 			wantActiveQPodNames:  []string{"pgpod1", "pgpod2"},
 			wantBackoffQPodNames: []string{"targetpod3"},
-			wantInFlightPods:     nil, // should be empty
+			wantInFlightPods:     nil, // 应为空
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
 					pvAdd: {
@@ -998,7 +998,7 @@ func Test_InFlightPods(t *testing.T) {
 				{podEnqueued: newQueuedPodInfoForLookup(pod3)},
 			},
 			wantActiveQPodNames: []string{"pgpod1", "pgpod2"},
-			wantInFlightPods:    nil, // should be empty
+			wantInFlightPods:    nil, // 应为空
 			queueingHintMap: QueueingHintMapPerProfile{
 				"": {
 					pvAdd: {
@@ -1033,7 +1033,7 @@ func Test_InFlightPods(t *testing.T) {
 			genericWorkloadEnabled: []bool{true},
 			initialPods:            []*v1.Pod{pgPod1, pgPod2},
 			actions: []action{
-				{podPopped: pgPod1}, // Pops group, so pgPod1 and pgPod2 are inFlight
+				{podPopped: pgPod1}, // 弹出整个组，因此 pgPod1 与 pgPod2 均在途
 				// 不带插件依次重新入队（意外错误）
 				{podEnqueued: &framework.QueuedPodInfo{
 					PodInfo: mustNewPodInfo(pgPod1),
@@ -1050,7 +1050,7 @@ func Test_InFlightPods(t *testing.T) {
 			genericWorkloadEnabled: []bool{true},
 			initialPods:            []*v1.Pod{pgPod1, pgPod2},
 			actions: []action{
-				{podPopped: pgPod1}, // Pops group, so pgPod1 and pgPod2 are inFlight
+				{podPopped: pgPod1}, // 弹出整个组，因此 pgPod1 与 pgPod2 均在途
 				// 带失败插件依次重新入队
 				{podEnqueued: &framework.QueuedPodInfo{
 					PodInfo: mustNewPodInfo(pgPod1),
@@ -1976,7 +1976,7 @@ func TestPriorityQueue_Activate(t *testing.T) {
 			name:               "pod already in activeQ",
 			qPodInActiveQ:      []*v1.Pod{highPriNominatedPodInfo.Pod},
 			qPodInfoToActivate: &framework.QueuedPodInfo{PodInfo: highPriNominatedPodInfo},
-			want:               []*framework.QueuedPodInfo{{PodInfo: highPriNominatedPodInfo}}, // 1 already active
+			want:               []*framework.QueuedPodInfo{{PodInfo: highPriNominatedPodInfo}}, // 1 已活跃
 		},
 		{
 			name:               "pod not in unschedulableEntities/backoffQ",
@@ -1993,7 +1993,7 @@ func TestPriorityQueue_Activate(t *testing.T) {
 		{
 			name:               "pod not in unschedulableEntities/backoffQ and not in-flight",
 			qPodInfoToActivate: &framework.QueuedPodInfo{PodInfo: highPriNominatedPodInfo},
-			qPodInInFlightPod:  medPriorityPodInfo.Pod, // different pod is in-flight
+			qPodInInFlightPod:  medPriorityPodInfo.Pod, // 另一个 Pod 在途
 			want:               []*framework.QueuedPodInfo{},
 		},
 		{
@@ -2831,7 +2831,7 @@ func TestPriorityQueue_MoveAllToActiveOrBackoffQueue(t *testing.T) {
 	// 把时钟推进 podMaxBackoffDuration，使 unschedulableEntities 中的 Pod 完成退避，
 	// Pod 会被移入 activeQ。
 	c.Step(q.backoffQ.podMaxBackoffDuration())
-	q.flushBackoffQCompleted(logger) // flush the completed backoffQ to move hpp1 to activeQ.
+	q.flushBackoffQCompleted(logger) // 冲刷已完成的 backoffQ，使 hpp1 移入 activeQ。
 	q.MoveAllToActiveOrBackoffQueue(logger, nodeAdd, nil, nil, nil)
 	if q.activeQ.len() != 4 {
 		t.Errorf("Expected 4 items to be in activeQ, but got: %v", q.activeQ.len())
@@ -2963,11 +2963,11 @@ func TestPriorityQueue_NominatedPodDeleted(t *testing.T) {
 func TestPriorityQueue_NominatedNodeNameEmptyNodeKey(t *testing.T) {
 	tests := []struct {
 		name                 string
-		initialNominatedNode string // if set, nominate the pod to this node before the test call
+		initialNominatedNode string // 若设置，则在测试调用前提名该 Pod 到此节点。
 		podNominatedNode     string // pod.Status.NominatedNodeName
 		nominatingMode       fwk.NominatingMode
-		nominatingNodeName   string // NominatedNodeName in nominatingInfo
-		wantNominatedNode    string // expected node after the call; empty means no nomination
+		nominatingNodeName   string // nominatingInfo 中的 NominatedNodeName
+		wantNominatedNode    string // 调用后的期望节点；为空表示不提名。
 	}{
 		{
 			name:           "ModeOverride empty without prior nomination",
@@ -3736,7 +3736,7 @@ func TestGatedPodFlushFrequency(t *testing.T) {
 			preEnqueuePluginName := "preEnqueuePlugin"
 			preEnqM := map[string]map[string]fwk.PreEnqueuePlugin{
 				"": {
-					preEnqueuePluginName: &preEnqueuePlugin{}, // Empty allowlist, gates all pods
+					preEnqueuePluginName: &preEnqueuePlugin{}, // 允许列表为空，阻塞所有 Pod。
 				},
 			}
 			logger, ctx := ktesting.NewTestContext(t)
@@ -3853,7 +3853,7 @@ func TestAddAttemptedPodGroupIfNeeded(t *testing.T) {
 				pInfo2 := q.newQueuedPodInfo(tCtx, pod2)
 				q.pendingPodGroupPods.add(pInfo1)
 				q.pendingPodGroupPods.add(pInfo2)
-				pgInfo.ConsecutiveErrorsCount = 5 // Set to non-zero to verify reset
+				pgInfo.ConsecutiveErrorsCount = 5 // 设为非零值，验证重置行为。
 			},
 			status:                     fwk.NewStatus(fwk.Unschedulable),
 			disableBackoff:             true,
@@ -3896,7 +3896,7 @@ func TestAddAttemptedPodGroupIfNeeded(t *testing.T) {
 				pInfo2 := q.newQueuedPodInfo(tCtx, pod2)
 				q.pendingPodGroupPods.add(pInfo1)
 				q.pendingPodGroupPods.add(pInfo2)
-				pgInfo.ConsecutiveErrorsCount = 5 // Set to non-zero to verify reset
+				pgInfo.ConsecutiveErrorsCount = 5 // 设为非零值，验证重置行为。
 			},
 			status:                     fwk.NewStatus(fwk.Unschedulable),
 			expectedUnschedulableCount: 1,
@@ -4548,7 +4548,7 @@ scheduler_pending_pods{queue="unschedulable"} 20
 			wants: `
 # HELP scheduler_plugin_execution_duration_seconds [BETA] Duration for running a plugin at a specific extension point.
 # TYPE scheduler_plugin_execution_duration_seconds histogram
-`, // the observed value will always be 0, because we don't proceed the fake clock.
+`, // 观测值始终为 0，因为未推进 fake clock。
 		},
 		{
 			name: "the metrics should be recorded (pluginMetricsSamplePercent=100)",
@@ -4586,7 +4586,7 @@ scheduler_plugin_execution_duration_seconds_bucket{extension_point="PreEnqueue",
 scheduler_plugin_execution_duration_seconds_bucket{extension_point="PreEnqueue",plugin="preEnqueuePlugin",status="Success",le="+Inf"} 1
 scheduler_plugin_execution_duration_seconds_sum{extension_point="PreEnqueue",plugin="preEnqueuePlugin",status="Success"} 0
 scheduler_plugin_execution_duration_seconds_count{extension_point="PreEnqueue",plugin="preEnqueuePlugin",status="Success"} 1
-`, // the observed value will always be 0, because we don't proceed the fake clock.
+`, // 观测值始终为 0，因为未推进 fake clock。
 		},
 		{
 			name: "Gated metric should be 1 when Ungated to Gated transition into moveToActiveQ",
@@ -5463,7 +5463,7 @@ func TestMoveAllToActiveOrBackoffQueue_PreEnqueueChecks(t *testing.T) {
 		{
 			name:     "preCheck isn't called if the event is not interested by any plugins",
 			podInfos: podInfos,
-			event:    pvAdd, // No plugin is interested in this event.
+			event:    pvAdd, // 没有插件关注此事件。
 			preEnqueueCheck: func(pod *v1.Pod) bool {
 				panic("preCheck shouldn't be called")
 			},
@@ -5561,7 +5561,7 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 		oldObj                 interface{}
 		newObj                 interface{}
 		expected               queueingStrategy
-		expectedExecutionCount int // expected total execution count of queueing hint function
+		expectedExecutionCount int // queueing hint 函数的期望总执行次数
 		queueingHintMap        QueueingHintMapPerProfile
 	}{
 		{
@@ -5756,7 +5756,7 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 						},
 						{
 							PluginName:     "fooPlugin3",
-							QueueingHintFn: queueHintReturnQueue, // It'll be ignored.
+							QueueingHintFn: queueHintReturnQueue, // 会被忽略。
 						},
 					},
 				},
@@ -5795,7 +5795,7 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 							QueueingHintFn: queueHintReturnQueue,
 						},
 					},
-					nodeAdd: { // not executed because NodeAdd is unrelated.
+					nodeAdd: { // 不执行，因为 NodeAdd 无关。
 						{
 							PluginName:     "fooPlugin1",
 							QueueingHintFn: queueHintReturnQueue,
@@ -5856,7 +5856,7 @@ func Test_isPodWorthRequeuing(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			count = 0 // reset count every time
+			count = 0 // 每次重置计数
 			logger, ctx := ktesting.NewTestContext(t)
 			q := NewTestQueue(ctx, newDefaultQueueSort(), WithQueueingHintMapPerProfile(test.queueingHintMap))
 			actual := q.isPodWorthRequeuing(logger, test.podInfo, test.event, test.oldObj, test.newObj, nil)
@@ -6358,7 +6358,7 @@ func TestPriorityQueue_MultipleProfiles(t *testing.T) {
 
 	pod1 := st.MakePod().Name("pod1").SchedulerName("scheduler-1").Obj()
 	pod2 := st.MakePod().Name("pod2").SchedulerName("scheduler-2").Obj()
-	pod3 := st.MakePod().Name("pod3").SchedulerName("scheduler-3").Obj() // No signer
+	pod3 := st.MakePod().Name("pod3").SchedulerName("scheduler-3").Obj() // 无签名器
 
 	q.Add(ctx, pod1)
 	q.Add(ctx, pod2)
@@ -8108,7 +8108,7 @@ func TestUpdatePodGroup(t *testing.T) {
 	}{
 		{
 			name:         "update pod group without pods",
-			initialState: stateActive, // will just add the PodGroup
+			initialState: stateActive, // 只添加 PodGroup
 		},
 		{
 			name:              "update active pod group",
@@ -8464,7 +8464,7 @@ func TestPriorityQueue_AddCompositePodGroup(t *testing.T) {
 				st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj(),
 			},
 			beforeAdd: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop root-cpg so it is in-flight
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 root-cpg，使其进入在途状态
 			},
 			cpgToAdd:               st.MakeCompositePodGroup().Name("child-cpg").Namespace("ns1").ParentCompositePodGroup("root-cpg").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -8732,7 +8732,7 @@ func TestPriorityQueue_DeleteCompositePodGroup(t *testing.T) {
 				st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg2").Obj(),
 			},
 			beforeDelete: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop root-cpg so it is in-flight
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 root-cpg，使其进入在途状态
 			},
 			cpgToDelete:            st.MakeCompositePodGroup().Name("child-cpg").Namespace("ns1").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -8754,9 +8754,9 @@ func TestPriorityQueue_DeleteCompositePodGroup(t *testing.T) {
 				st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg2").Obj(),
 			},
 			beforeDelete: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop root-cpg
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 root-cpg
 				pod3 := st.MakePod().Name("pod3").Namespace("ns1").UID("uid3").PodGroupName("pg1").Obj()
-				q.Add(ctx, pod3) // Arrives while root-cpg is in-flight -> goes to pendingPodGroupPods for child-cpg subtree
+				q.Add(ctx, pod3) // root-cpg 在途期间到达，进入 child-cpg 子树的 pendingPodGroupPods
 			},
 			cpgToDelete:            st.MakeCompositePodGroup().Name("child-cpg").Namespace("ns1").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -8775,9 +8775,9 @@ func TestPriorityQueue_DeleteCompositePodGroup(t *testing.T) {
 				st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj(),
 			},
 			beforeDelete: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop root-cpg
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 root-cpg
 				pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()
-				q.Add(ctx, pod2) // Arrives while root-cpg is in-flight -> goes to pendingPodGroupPods
+				q.Add(ctx, pod2) // root-cpg 在途期间到达，进入 pendingPodGroupPods
 			},
 			cpgToDelete:            st.MakeCompositePodGroup().Name("root-cpg").Namespace("ns1").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -8988,9 +8988,9 @@ func TestPriorityQueue_AddPodGroup_Hierarchical(t *testing.T) {
 				st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg2").Obj(),
 			},
 			beforeAdd: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop root-cpg so it is in-flight
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 root-cpg，使其进入在途状态
 				pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()
-				q.Add(ctx, pod2) // Arrives while root-cpg is in-flight
+				q.Add(ctx, pod2) // root-cpg 在途期间到达
 			},
 			pgToAdd:                st.MakePodGroup().Name("pg1").Namespace("ns1").ParentCompositePodGroup("root-cpg").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -9010,7 +9010,7 @@ func TestPriorityQueue_AddPodGroup_Hierarchical(t *testing.T) {
 				st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj(),
 			},
 			beforeAdd: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop root-cpg so it is in-flight
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 root-cpg，使其进入在途状态
 			},
 			pgToAdd:                st.MakePodGroup().Name("pg1").Namespace("ns1").ParentCompositePodGroup("root-cpg").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -9276,7 +9276,7 @@ func TestPriorityQueue_DeletePodGroup_Hierarchical(t *testing.T) {
 				st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg2").Obj(),
 			},
 			beforeDelete: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop root-cpg so it is in-flight
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 root-cpg，使其进入在途状态
 			},
 			pgToDelete:             st.MakePodGroup().Name("pg1").Namespace("ns1").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -9297,9 +9297,9 @@ func TestPriorityQueue_DeletePodGroup_Hierarchical(t *testing.T) {
 				st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg2").Obj(),
 			},
 			beforeDelete: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop root-cpg
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 root-cpg
 				pod3 := st.MakePod().Name("pod3").Namespace("ns1").UID("uid3").PodGroupName("pg1").Obj()
-				q.Add(ctx, pod3) // Arrives while root-cpg is in-flight -> goes to pendingPodGroupPods
+				q.Add(ctx, pod3) // root-cpg 在途期间到达，进入 pendingPodGroupPods
 			},
 			pgToDelete:             st.MakePodGroup().Name("pg1").Namespace("ns1").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -9315,7 +9315,7 @@ func TestPriorityQueue_DeletePodGroup_Hierarchical(t *testing.T) {
 				st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj(),
 			},
 			beforeDelete: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop pg1 so it is in-flight
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 pg1，使其进入在途状态
 			},
 			pgToDelete:             st.MakePodGroup().Name("pg1").Namespace("ns1").Obj(),
 			expectedActiveQ:        map[string][]string{},
@@ -9331,9 +9331,9 @@ func TestPriorityQueue_DeletePodGroup_Hierarchical(t *testing.T) {
 				st.MakePod().Name("pod1").Namespace("ns1").UID("uid1").PodGroupName("pg1").Obj(),
 			},
 			beforeDelete: func(ctx context.Context, q *PriorityQueue) {
-				_, _ = q.Pop(klog.FromContext(ctx)) // Pop pg1 so it is in-flight
+				_, _ = q.Pop(klog.FromContext(ctx)) // 弹出 pg1，使其进入在途状态
 				pod2 := st.MakePod().Name("pod2").Namespace("ns1").UID("uid2").PodGroupName("pg1").Obj()
-				q.Add(ctx, pod2) // Arrives while in-flight -> goes to pendingPodGroupPods
+				q.Add(ctx, pod2) // 在途期间到达，进入 pendingPodGroupPods
 			},
 			pgToDelete:             st.MakePodGroup().Name("pg1").Namespace("ns1").Obj(),
 			expectedActiveQ:        map[string][]string{},

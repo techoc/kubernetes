@@ -943,7 +943,7 @@ func TestSchedulerScheduleOne(t *testing.T) {
 			},
 			mockScheduleResult: scheduleResultOk,
 			postSchedulingCycle: func(ctx context.Context, sched *Scheduler) {
-				<-blockingPreBindStartCh // Wait for plugin to start
+				<-blockingPreBindStartCh // 等待插件启动
 				// 从「外部」触发抢占。
 				if bp := sched.Profiles[testSchedulerName].GetPodInPreBind(testPod.UID); bp != nil {
 					bp.CancelPod("context cancelled externally")
@@ -2417,7 +2417,7 @@ func TestSchedulerBinding(t *testing.T) {
 			extenders: []fwk.Extender{
 				&fakeExtender{isBinder: false, interestedPodName: "pod0"},
 			},
-			wantBinderID: -1, // default binding.
+			wantBinderID: -1, // 默认绑定。
 		},
 		{
 			name:    "one of the extenders is a binder and interested in pod",
@@ -2435,7 +2435,7 @@ func TestSchedulerBinding(t *testing.T) {
 				&fakeExtender{isBinder: false, interestedPodName: "pod1"},
 				&fakeExtender{isBinder: true, interestedPodName: "pod0"},
 			},
-			wantBinderID: -1, // default binding.
+			wantBinderID: -1, // 默认绑定。
 		},
 		{
 			name:    "ignore when extender bind failed",
@@ -2443,7 +2443,7 @@ func TestSchedulerBinding(t *testing.T) {
 			extenders: []fwk.Extender{
 				&fakeExtender{isBinder: true, errBind: true, interestedPodName: "pod1", ignorable: true},
 			},
-			wantBinderID: -1, // default binding.
+			wantBinderID: -1, // 默认绑定。
 		},
 	}
 

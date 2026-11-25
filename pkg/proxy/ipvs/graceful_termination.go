@@ -32,23 +32,18 @@ const (
 	rsCheckDeleteInterval = 1 * time.Minute
 )
 
-// listItem 保存真实服务器（real server）信息。
-// 如果没有特殊情况发生，真实服务器会在处理完成后被删除。
-// listItem 保存后端真实服务器（RS）的信息及其处理时间。
-// 若无特殊情况，RS 会在处理时间到达后被删除。
+// listItem 保存待优雅终止的 RS 及其所属 VS，无异常时会在后续清理中删除。
 type listItem struct {
 	VirtualServer *utilipvs.VirtualServer
 	RealServer    *utilipvs.RealServer
 }
 
-// String 返回唯一的真实服务器名称（包含虚拟服务器信息）。
-// String 返回包含虚拟服务信息的 RS 唯一名称
+// String 返回包含虚拟服务信息的 RS 唯一名称。
 func (g *listItem) String() string {
 	return GetUniqueRSName(g.VirtualServer, g.RealServer)
 }
 
-// GetUniqueRSName 返回一个包含虚拟服务器（VS）信息的字符串类型的唯一 RS 名称。
-// GetUniqueRSName 返回包含虚拟服务信息的字符串形式 RS 唯一名称
+// GetUniqueRSName 返回由 VS 与 RS 的字符串表示拼接而成的唯一 RS 名称。
 func GetUniqueRSName(vs *utilipvs.VirtualServer, rs *utilipvs.RealServer) string {
 	return vs.String() + "/" + rs.String()
 }
@@ -60,7 +55,6 @@ type graceTerminateRSList struct {
 }
 
 // add 向 RS 列表添加一个新元素；如果元素已存在则返回 false。
-// add 向 rsList 中加入一个新元素
 func (q *graceTerminateRSList) add(rs *listItem) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -76,7 +70,6 @@ func (q *graceTerminateRSList) add(rs *listItem) bool {
 }
 
 // remove 从 RS 列表中移除一个元素；如果元素不存在则返回 false。
-// remove 从 rsList 中移除一个元素
 func (q *graceTerminateRSList) remove(rs *listItem) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -119,7 +112,6 @@ func (q *graceTerminateRSList) flushList(handler func(rsToDelete *listItem) (boo
 }
 
 // exist 检查指定的唯一 RS 名称是否在列表中，并返回对应元素。
-// exist 检查指定的唯一 RS 是否在 rsList 中
 func (q *graceTerminateRSList) exist(uniqueRS string) (*listItem, bool) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -132,15 +124,12 @@ func (q *graceTerminateRSList) exist(uniqueRS string) (*listItem, bool) {
 
 // GracefulTerminationManager 管理 RS 的优雅终止信息并执行优雅终止工作。
 // rsList 是等待优雅终止的 RS 列表，ipvs 是用于执行 IPVS 删除/更新操作的接口。
-// GracefulTerminationManager 管理 RS 的优雅终止信息并执行优雅终止工作。
-// rsList 是待优雅终止的 RS 列表，ipvs 接口用于执行实际的 IPVS 删除/更新操作。
 type GracefulTerminationManager struct {
 	rsList graceTerminateRSList
 	ipvs   utilipvs.Interface
 }
 
-// NewGracefulTerminationManager 创建一个 gracefulTerminationManager，管理 IPVS RS 的优雅终止工作。
-// NewGracefulTerminationManager 创建一个管理器，负责 IPVS RS 的优雅终止工作
+// NewGracefulTerminationManager 创建一个负责 IPVS RS 优雅终止工作的管理器。
 func NewGracefulTerminationManager(ipvs utilipvs.Interface) *GracefulTerminationManager {
 	l := make(map[string]*listItem)
 	return &GracefulTerminationManager{
@@ -152,14 +141,12 @@ func NewGracefulTerminationManager(ipvs utilipvs.Interface) *GracefulTermination
 }
 
 // InTerminationList 检查指定的唯一 RS 名称是否处于优雅终止列表中。
-// InTerminationList 检查指定的 RS 唯一名称是否在优雅终止列表中
 func (m *GracefulTerminationManager) InTerminationList(uniqueRS string) bool {
 	_, exist := m.rsList.exist(uniqueRS)
 	return exist
 }
 
-// GracefulDeleteRS 将 RS 权重更新为 0，并加入优雅终止列表。
-// GracefulDeleteRS 将 RS 权重置为 0，并加入优雅终止列表
+// GracefulDeleteRS 优先删除 RS；仍有连接需要优雅终止时，将权重置 0 并加入等待列表。
 func (m *GracefulTerminationManager) GracefulDeleteRS(vs *utilipvs.VirtualServer, rs *utilipvs.RealServer) error {
 	// 先尝试直接删除 RS；若仍有活跃连接，再将其加入优雅终止列表等待权重归零
 	ele := &listItem{
@@ -219,7 +206,6 @@ func (m *GracefulTerminationManager) tryDeleteRs() {
 }
 
 // MoveRSOutofGracefulDeleteList 立即删除指定 RS 并从列表中移除。
-// MoveRSOutofGracefulDeleteList 立即删除 RS 并将其从 rsList 中移除
 func (m *GracefulTerminationManager) MoveRSOutofGracefulDeleteList(uniqueRS string) error {
 	rsToDelete, find := m.rsList.exist(uniqueRS)
 	if !find || rsToDelete == nil {
@@ -234,7 +220,6 @@ func (m *GracefulTerminationManager) MoveRSOutofGracefulDeleteList(uniqueRS stri
 }
 
 // Run 启动一个 goroutine，每隔一分钟尝试删除优雅终止列表中的 RS。
-// Run 启动一个 goroutine，每分钟尝试清理优雅终止列表中的 RS
 func (m *GracefulTerminationManager) Run() {
 	go wait.Until(m.tryDeleteRs, rsCheckDeleteInterval, wait.NeverStop)
 }

@@ -51,7 +51,7 @@ import (
 )
 
 var (
-	// IdentityLeaseGCPeriod 是 identity lease GC 控制器检查过期租约的间隔。
+	// IdentityLeaseGCPeriod 是身份租约垃圾回收控制器检查过期租约的间隔。
 	// 暴露该变量以便集成测试调整。
 	IdentityLeaseGCPeriod = 3600 * time.Second
 	// IdentityLeaseDurationSeconds 是 kube-apiserver identity 租约的时长（秒）。
@@ -261,7 +261,7 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 			IdentityLeaseRenewIntervalPeriod,
 			leaseName,
 			metav1.NamespaceSystem,
-			// TODO: receive identity label value as a parameter when post start hook is moved to generic apiserver.
+			// TODO: 将启动后钩子移入 generic apiserver 时，改为通过参数传入 identity 标签值。
 			labelAPIServerHeartbeatFunc(name, peeraddress),
 		)
 		s.GenericAPIServer.AddPostStartHookOrDie("start-kube-apiserver-identity-lease-controller", func(hookContext genericapiserver.PostStartHookContext) error {
@@ -272,7 +272,7 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 			return nil
 		})
 
-		// TODO: move this into generic apiserver and make the lease identity value configurable
+		// TODO: 将此钩子移入 generic apiserver，并允许配置租约 identity 值。
 		s.GenericAPIServer.AddPostStartHookOrDie("start-kube-apiserver-identity-lease-garbage-collector", func(hookContext genericapiserver.PostStartHookContext) error {
 			go apiserverleasegc.NewAPIServerLeaseGC(
 				client,

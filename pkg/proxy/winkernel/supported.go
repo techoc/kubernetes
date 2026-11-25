@@ -33,7 +33,7 @@ type KernelCompatTester interface {
 	IsCompatible() error
 }
 
-// CanUseWinKernelProxier 判断是否应该使用内核模式 Proxier，而不是传统的 userspace Proxier；
+// CanUseWinKernelProxier 判断是否应该使用内核模式 Proxier，而不是传统的用户态 Proxier；
 // 判断依据是 Windows 内核版本以及所需内核特性是否存在。
 func CanUseWinKernelProxier(kcompat KernelCompatTester) (bool, error) {
 	// 先让兼容性检查器验证内核版本与所需能力，避免在不兼容的系统上启用内核模式。
@@ -66,7 +66,7 @@ type DualStackCompatTester struct{}
 // DualStackCompatible 判断指定网络能否以双栈模式工作；任一前置检查失败都回退到单栈。
 func (t DualStackCompatTester) DualStackCompatible(networkName string) bool {
 	hcnImpl := newHcnImpl()
-	// 由于早期版本存在 bug，首个能正确检查双栈支持的 hnslib 标签是 v0.8.22；因此必须显式调用该检查。
+	// 由于早期版本存在缺陷，首个能正确检查双栈支持的 hnslib 标签是 v0.8.22；因此必须显式调用该检查。
 	if err := hcnImpl.Ipv6DualStackSupported(); err != nil {
 		// HCN 查询自身版本（该调用内部先做这件事，再解析是否支持双栈）理论上也可能失败，
 		// 但至少从已知情况看，唯一可能的场景是主机早于 1803、当时还不存在 HCN。

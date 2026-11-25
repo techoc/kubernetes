@@ -31,10 +31,14 @@ import (
 
 // CacheComparer 比较 informer 中的真实状态与调度器缓存快照，用于排查缓存不一致。
 type CacheComparer struct {
+	// NodeLister 提供 informer 观察到的集群节点，作为比对基准。
 	NodeLister corelisters.NodeLister
-	PodLister  corelisters.PodLister
-	Cache      internalcache.Cache
-	PodQueue   internalqueue.SchedulingQueue
+	// PodLister 提供 informer 观察到的集群 Pod，作为比对基准。
+	PodLister corelisters.PodLister
+	// Cache 提供调度器内部缓存视图。
+	Cache internalcache.Cache
+	// PodQueue 用于排除仍在队列中、尚未进入缓存的 Pod。
+	PodQueue internalqueue.SchedulingQueue
 }
 
 // Compare 比较 NodeLister/PodLister 中的节点和 Pod 与缓存快照的差异。

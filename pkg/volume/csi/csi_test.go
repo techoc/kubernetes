@@ -245,7 +245,7 @@ func TestCSI_VolumeAll(t *testing.T) {
 
 			client := fakeclient.NewSimpleClientset(objs...)
 
-			factory := informers.NewSharedInformerFactory(client, time.Hour /* disable resync */)
+			factory := informers.NewSharedInformerFactory(client, time.Hour /* 禁用重新同步 */)
 			csiDriverInformer := factory.Storage().V1().CSIDrivers()
 			volumeAttachmentInformer := factory.Storage().V1().VolumeAttachments()
 			if driverInfo != nil {

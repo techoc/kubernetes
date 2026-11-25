@@ -119,8 +119,7 @@ type UpdateServiceMapResult struct {
 // HealthCheckNodePorts 返回 Service 名字到 HealthCheckNodePort 的映射，
 // 只包含 sm 中该端口非零的 Service。
 func (sm ServicePortMap) HealthCheckNodePorts() map[types.NamespacedName]uint16 {
-	// TODO: If this will appear to be computationally expensive, consider
-	// computing this incrementally similarly to svcPortMap.
+	// TODO: 若确认计算开销过大，参照 svcPortMap 改为增量计算。
 	// 目前每次遍历全量映射，仅在确认开销可接受前保持简单实现。
 	ports := make(map[types.NamespacedName]uint16)
 	for svcPortName, info := range sm {
@@ -134,7 +133,7 @@ func (sm ServicePortMap) HealthCheckNodePorts() map[types.NamespacedName]uint16 
 // serviceToServiceMap 将单个 Service 对象转换为 ServicePortMap。
 // 会跳过无需代理的 Service 以及当前地址族没有集群 IP 的 Service。
 //
-// NOTE: service object should NOT be modified.
+// 注意：不得修改 Service 对象。
 func (sct *ServiceChangeTracker) serviceToServiceMap(service *v1.Service) ServicePortMap {
 	if service == nil {
 		return nil

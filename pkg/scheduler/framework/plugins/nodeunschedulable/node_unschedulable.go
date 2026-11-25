@@ -114,7 +114,7 @@ func (pl *NodeUnschedulable) Name() string {
 	return Name
 }
 
-// 基于 Pod 的 toleration 生成用于可行性与打分的签名片段。
+// SignPod 基于 Pod 的 toleration 生成用于可行性与打分的签名片段。
 func (pl *NodeUnschedulable) SignPod(ctx context.Context, pod *v1.Pod) ([]fwk.SignFragment, *fwk.Status) {
 	return []fwk.SignFragment{
 		{Key: fwk.TolerationsSignerName, Value: fwk.TolerationsSigner(pod)},
@@ -130,7 +130,7 @@ func (pl *NodeUnschedulable) PreFilter(ctx context.Context, cycleState fwk.Cycle
 	return nil, nil
 }
 
-// 本插件不提供 PreFilterExtensions。
+// PreFilterExtensions 返回 nil：本插件无需逐节点维护预过滤状态。
 func (pl *NodeUnschedulable) PreFilterExtensions() fwk.PreFilterExtensions {
 	return nil
 }

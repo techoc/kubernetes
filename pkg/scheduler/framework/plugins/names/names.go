@@ -59,7 +59,7 @@ const (
 	TaintToleration = "TaintToleration"
 	// VolumeBinding 处理卷绑定与卷拓扑的插件。
 	VolumeBinding = "VolumeBinding"
-	// VolumeRestrictions 检查卷相关限制（如单节点卷数量）的插件。
+	// VolumeRestrictions 检查卷挂载冲突与 ReadWriteOncePod 访问模式限制的插件。
 	VolumeRestrictions = "VolumeRestrictions"
 	// VolumeZone 检查卷所在可用区的插件。
 	VolumeZone = "VolumeZone"

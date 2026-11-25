@@ -124,7 +124,7 @@ func newTestPlugin() []VolumePlugin {
 // TestVolumePluginMgrFunc 验证插件管理器能按名称和 Spec 查找到已初始化的插件。
 func TestVolumePluginMgrFunc(t *testing.T) {
 	vpm := VolumePluginMgr{}
-	var prober DynamicPluginProber = nil // TODO (#51147) 注入 mock
+	var prober DynamicPluginProber = nil // TODO(#51147)：注入 mock。
 	vpm.InitPlugins(newTestPlugin(), prober, nil)
 
 	plug, err := vpm.FindPluginByName(testPluginName)

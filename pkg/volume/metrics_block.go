@@ -49,7 +49,7 @@ func (mb *metricsBlock) GetMetrics() (*Metrics, error) {
 	startTime := time.Now()
 	defer servermetrics.CollectVolumeStatCalDuration("block", startTime)
 
-	// TODO: Windows does not yet support VolumeMode=Block
+	// TODO: Windows 尚未支持 VolumeMode=Block。
 	if runtime.GOOS == "windows" {
 		return nil, NewNotImplementedError("Windows does not support Block volumes")
 	}

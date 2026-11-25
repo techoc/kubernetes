@@ -149,8 +149,7 @@ type downwardAPIVolume struct {
 	volName string
 	items   []v1.DownwardAPIVolumeFile
 	pod     *v1.Pod
-	// TODO: remove this redundancy as soon NewUnmounter func will have *v1.POD and not only types.UID
-	// podUID 与 pod.UID 重复，待 NewUnmounter 接收 *v1.Pod 后可移除。
+	// TODO: 待 NewUnmounter 接收 *v1.Pod 而不仅是 types.UID 后，移除与 pod.UID 重复的 podUID。
 	podUID types.UID
 	plugin *downwardAPIPlugin
 	volume.MetricsProvider
@@ -176,7 +175,7 @@ func (d *downwardAPIVolume) GetAttributes() volume.Attributes {
 
 // SetUp 设置卷。
 // 该函数故意不做幂等处理：数据需要周期性刷新，由 kubelet 内部同步周期驱动。
-// TODO: Add volume specific ticker and refresh loop
+// TODO: 增加卷专属的 ticker 和刷新循环。
 func (b *downwardAPIVolumeMounter) SetUp(mounterArgs volume.MounterArgs) error {
 	return b.SetUpAt(b.GetPath(), mounterArgs)
 }
@@ -268,8 +267,7 @@ func CollectData(items []v1.DownwardAPIVolumeFile, pod *v1.Pod, host volume.Volu
 			fileProjection.Mode = *defaultMode
 		}
 		if fileInfo.FieldRef != nil {
-			// TODO: unify with Kubelet.podFieldSelectorRuntimeValue
-			// 字段路径提取逻辑应与 kubelet 的字段选择器统一，避免行为漂移。
+			// TODO: 与 Kubelet.podFieldSelectorRuntimeValue 统一字段路径提取逻辑，避免行为漂移。
 			if values, err := fieldpath.ExtractFieldPathAsString(pod, fileInfo.FieldRef.FieldPath); err != nil {
 				klog.Errorf("Unable to extract field %s: %s", fileInfo.FieldRef.FieldPath, err.Error())
 				errlist = append(errlist, err)

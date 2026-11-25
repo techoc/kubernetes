@@ -194,7 +194,7 @@ func (runner *runner) GetRealServers(vs *VirtualServer) ([]*RealServer, error) {
 	rss := make([]*RealServer, 0, len(dsts))
 	for _, dst := range dsts {
 		dst, err := toRealServer(dst)
-		// TODO: aggregate errors?
+		// TODO: 是否应聚合转换错误，而非在首个错误处返回？
 		if err != nil {
 			return nil, fmt.Errorf("could not convert IPVS destination to local real server: %w", err)
 		}

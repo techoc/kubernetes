@@ -85,8 +85,7 @@ var testNodeIPs = []string{testNodeIP, testNodeIPAlt, testExternalIP, testNodeIP
 // 并预置 IP 族、伪装标记、conntrack 和健康检查服务等最小可用状态。
 // 由于依赖 goroutine 的初始化逻辑尚未拆分，这里手工组装而不调用 NewProxier。
 func NewFakeProxier(ipt utiliptables.Interface) *Proxier {
-	// TODO: Call NewProxier after refactoring out the goroutine
-	// invocation into a Run() method.
+	// TODO: 将 goroutine 启动逻辑拆到 Run() 方法后，改为调用 NewProxier。
 	ipfamily := v1.IPv4Protocol
 	podCIDR := "10.0.0.0/8"
 	if ipt.IsIPv6() {
@@ -693,7 +692,7 @@ func sortIPTablesRules(ruleData string) (string, error) {
 		sort.Slice(table.Chains, func(i, j int) bool {
 			switch {
 			case table.Chains[i].Name == kubeNodePortsChain:
-				// KUBE-NODEPORTS comes before anything
+				// KUBE-NODEPORTS 排在其他链之前。
 				return true
 			case table.Chains[j].Name == kubeNodePortsChain:
 				// 其他链排在 KUBE-NODEPORTS 之后。
@@ -1094,10 +1093,7 @@ func TestSortIPTablesRules(t *testing.T) {
 	}
 }
 
-// getLine 返回调用方的行号（如可取得），便于在用例很多的测试中
-// 定位失败发生在哪个用例。
-// which case more easily.
-// getLine 记录调用处行号，供下面的断言辅助函数在失败信息中定位用例位置。
+// getLine 返回调用方的行号（如可取得），供断言辅助函数在失败信息中定位用例位置。
 func getLine() int {
 	_, _, line, ok := stdruntime.Caller(1)
 	if ok {
@@ -1162,8 +1158,6 @@ func assertIPTablesChainEqual(t *testing.T, line int, table utiliptables.Table, 
 }
 
 // addressMatches 判断诸如 "! -s 192.168.0.0/16" 的 iptables 规则是否匹配 ipStr。
-// address.Value 可以是单个 IP（如 "1.2.3.4"）或 CIDR（如 "1.2.3.0/24"）。
-// ("1.2.3.0/24").
 // addressMatches 处理带 "!" 取反的地址匹配，以及 IP 与 CIDR 两种值形式。
 func addressMatches(t *testing.T, address *iptablestest.IPTablesValue, ipStr string) bool {
 	ip := netutils.ParseIPSloppy(ipStr)
@@ -1189,7 +1183,6 @@ func addressMatches(t *testing.T, address *iptablestest.IPTablesValue, ipStr str
 }
 
 // iptablesTracer 保存虚拟数据包穿越 iptables 规则时所需的状态。
-// iptables rules
 type iptablesTracer struct {
 	ipt      *iptablestest.FakeIPTables
 	localIPs sets.Set[string]
@@ -1207,9 +1200,6 @@ type iptablesTracer struct {
 	markMasq bool
 }
 
-// newIPTablesTracer 创建 iptablesTracer。nodeIPs 是应被视为本机节点 IP 的地址列表，
-// 用于判断 "--src-type LOCAL" / "--dst-type LOCAL" 规则是否匹配。
-// match).
 // newIPTablesTracer 创建 iptablesTracer。nodeIPs 用于模拟 --src-type/--dst-type LOCAL 的匹配。
 func newIPTablesTracer(t *testing.T, ipt *iptablestest.FakeIPTables, nodeIPs []string) *iptablesTracer {
 	localIPs := sets.New("127.0.0.1", "::1")
@@ -1228,7 +1218,6 @@ func newIPTablesTracer(t *testing.T, ipt *iptablestest.FakeIPTables, nodeIPs []s
 func (tracer *iptablesTracer) ruleMatches(rule *iptablestest.Rule, sourceIP, protocol, destIP, destPort string) bool {
 	// 一条规则内的各子条件是「与」关系，只要有任一子条件不匹配，
 	// 整条规则就不匹配；因此逐个子规则检查并在失配时立即返回。
-	// DON'T match, then fail.
 
 	if rule.SourceAddress != nil && !addressMatches(tracer.t, rule.SourceAddress, sourceIP) {
 		return false
@@ -1314,8 +1303,6 @@ func (tracer *iptablesTracer) runChain(table utiliptables.Table, chain utiliptab
 			// 若子链命中终结规则且跳转自身的规则不含概率条件，
 			// 则当前链也终止；但若是通过 --probability 跳转过去的，
 			// 还要继续拿后续规则与本包匹配，以模拟负载均衡的随机分流。
-			// 还要继续收集后续匹配规则，以模拟概率分流。
-			// chain.
 			if terminated && rule.Probability == nil {
 				return true
 			}
@@ -2293,7 +2280,6 @@ func TestNodePorts(t *testing.T) {
 		allowAltNodeIP bool
 
 		// expectFirewall 表示期望 KUBE-FIREWALL 链中包含反伪造（anti-martian）规则。
-		// an anti-martian-packet rule
 		expectFirewall bool
 	}{
 		{
@@ -2495,7 +2481,6 @@ func TestNodePorts(t *testing.T) {
 			}
 
 			// 除非 nodePortAddresses 排除了备用 IP，否则备用 IP 上的 NodePort 应可用。
-			// nodePortAddressess excludes altNodeIP
 			if tc.allowAltNodeIP {
 				runPacketFlowTests(t, getLine(), ipt, testNodeIPs, []packetFlowTest{
 					{
@@ -2521,7 +2506,6 @@ func TestNodePorts(t *testing.T) {
 
 			// 防火墙规则需手工检查：数据包模拟器不实现 conntrack 状态判断，
 			// 因此无法通过 runPacketFlowTests 验证。
-			// implement conntrack states.
 			var expected string
 			if tc.expectFirewall {
 				expected = "-A KUBE-FIREWALL -m comment --comment \"block incoming localnet connections\" -d 127.0.0.0/8 ! -s 127.0.0.0/8 -m conntrack ! --ctstate RELATED,ESTABLISHED,DNAT -j DROP\n"
@@ -3004,7 +2988,6 @@ func TestBuildServiceMapAddRemove(t *testing.T) {
 		}
 	}
 
-	// Remove some stuff
 	// oneService 由 services[0] 删除首个端口后构造，用于测试端口删除。
 	oneService := makeTestService("somewhere-else", "cluster-ip", func(svc *v1.Service) {
 		svc.Spec.Type = v1.ServiceTypeClusterIP
@@ -3051,7 +3034,7 @@ func TestBuildServiceMapServiceHeadless(t *testing.T) {
 		t.Errorf("expected service map length 0, got %d", len(fp.svcPortMap))
 	}
 
-	// No proxied services, so no healthchecks
+	// 没有代理 Service，因此无需健康检查端口。
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 0 {
 		t.Errorf("expected healthcheck ports length 0, got %d", len(healthCheckNodePorts))
@@ -3066,7 +3049,7 @@ func TestBuildServiceMapServiceTypeExternalName(t *testing.T) {
 	makeServiceMap(fp,
 		makeTestService("somewhere-else", "external-name", func(svc *v1.Service) {
 			svc.Spec.Type = v1.ServiceTypeExternalName
-			svc.Spec.ClusterIP = "172.30.55.4" // Should be ignored
+			svc.Spec.ClusterIP = "172.30.55.4" // 应被忽略
 			svc.Spec.ExternalName = "foo2.bar.com"
 			svc.Spec.Ports = addTestPort(svc.Spec.Ports, "blah", "UDP", 1235, 5321, 0)
 		}),
@@ -3076,7 +3059,7 @@ func TestBuildServiceMapServiceTypeExternalName(t *testing.T) {
 	if len(fp.svcPortMap) != 0 {
 		t.Errorf("expected service map length 0, got %v", fp.svcPortMap)
 	}
-	// No proxied services, so no healthchecks
+	// 没有代理 Service，因此无需健康检查端口。
 	healthCheckNodePorts := fp.svcPortMap.HealthCheckNodePorts()
 	if len(healthCheckNodePorts) != 0 {
 		t.Errorf("expected healthcheck ports length 0, got %v", healthCheckNodePorts)
@@ -4008,7 +3991,7 @@ func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 			Addresses:  []string{"10.0.1.3"},
 			Conditions: discovery.EndpointConditions{Ready: ptr.To(true)},
 			NodeName:   ptr.To(testNodeName),
-		}, { // not ready endpoints should be ignored
+		}, { // 未就绪端点应被忽略
 			Addresses:  []string{"10.0.1.4"},
 			Conditions: discovery.EndpointConditions{Ready: ptr.To(false)},
 			NodeName:   ptr.To(testNodeName),
@@ -4059,7 +4042,7 @@ func TestHealthCheckNodePortWhenTerminating(t *testing.T) {
 				Terminating: ptr.To(true),
 			},
 			NodeName: ptr.To(testNodeName),
-		}, { // not ready endpoints should be ignored
+		}, { // 未就绪端点应被忽略
 			Addresses: []string{"10.0.1.4"},
 			Conditions: discovery.EndpointConditions{
 				Ready:       ptr.To(false),
@@ -5215,7 +5198,6 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			// 所以这里的短路在语义上并不完全等价；
 			// 但对实现而言更简单，对用户也更方便，
 			// 因此该场景同样按短路处理。
-			// short-circuited too.
 			output: "10.180.0.2:80, 10.180.1.2:80",
 			masq:   false,
 		},
@@ -5319,7 +5301,6 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			destPort: 80,
 
 			// internalTrafficPolicy 生效：只选中本地端点。
-			// selected.
 			output: "10.180.0.3:80",
 			masq:   false,
 		},
@@ -5453,7 +5434,6 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			overrides: map[string]packetFlowTestOverride{
 				// 注入空 LocalTrafficDetector 时，所有访问 ClusterIP 的流量
 				// 都被当作来自 Pod，因此无需伪装。
-				// require masquerading.
 				"node to ClusterIP": {
 					masq: ptr.To(false),
 				},
@@ -5490,7 +5470,6 @@ func TestInternalExternalMasquerade(t *testing.T) {
 			localDetector: true,
 			overrides: map[string]packetFlowTestOverride{
 				// 开启 --masquerade-all 后，所有访问 ClusterIP 的流量都会被伪装。
-				// --masquerade-all.
 				"pod to ClusterIP": {
 					masq: ptr.To(true),
 				},
@@ -5724,7 +5703,6 @@ func TestSyncProxyRulesLargeClusterMode(t *testing.T) {
 
 	// 测试删除服务：需要新建一个服务，因为一旦删除现有服务，
 	// 端点数会跌破阈值，退出大集群模式。
-	// cluster mode.
 	svc4 := makeTestService("ns4", "svc4", func(svc *v1.Service) {
 		svc.Spec.Type = v1.ServiceTypeClusterIP
 		svc.Spec.ClusterIP = "172.30.0.44"
@@ -6087,7 +6065,6 @@ func TestSyncProxyRulesRepeated(t *testing.T) {
 	}
 
 	// REJECT 规则位于 filter 表而非 nat 表，因此 nat 规则数没有变化。
-	// changed.
 	rulesTotalMetric = countRulesFromMetric(logger, utiliptables.TableNAT, string(fp.ipFamily))
 	if rulesTotalMetric != rulesTotal {
 		t.Errorf("metric shows %d rules total but expected %d", rulesTotalMetric, rulesTotal)

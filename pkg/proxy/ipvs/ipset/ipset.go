@@ -483,12 +483,12 @@ func IsNotFoundError(err error) bool {
 	es := err.Error()
 	if strings.Contains(es, "does not exist") {
 		// 集合不存在的错误文本；参见 ipset 源码 errcode.c 中的定义。
-		// xref: https://github.com/Olipro/ipset/blob/master/lib/errcode.c#L32-L33
+		// 参考：https://github.com/Olipro/ipset/blob/master/lib/errcode.c#L32-L33
 		return true
 	}
 	if strings.Contains(es, "element is missing") {
 		// 条目不在集合中的错误文本；参见 ipset 源码 parse.c 中的相关处理。
-		// xref: https://github.com/Olipro/ipset/blob/master/lib/parse.c#L1904
+		// 参考：https://github.com/Olipro/ipset/blob/master/lib/parse.c#L1904
 		// https://github.com/Olipro/ipset/blob/master/lib/parse.c#L1925
 		return true
 	}

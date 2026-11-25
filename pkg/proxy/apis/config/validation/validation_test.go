@@ -520,7 +520,7 @@ func testValidateProxyModeLinux(t *testing.T) {
 // testValidateProxyModeWindows 校验 Windows 上仅允许 kernelspace（或空）模式，
 // 其余模式均应被拒绝。
 func testValidateProxyModeWindows(t *testing.T) {
-	// TODO: remove skip once the test has been fixed.
+	// TODO: 修复测试后移除该跳过逻辑。
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping failing test on Windows.")
 	}
@@ -890,7 +890,7 @@ func TestValidateDetectLocalConfiguration(t *testing.T) {
 			name: "bridgeInterfaceName is empty",
 			mode: kubeproxyconfig.LocalModeBridgeInterface,
 			config: kubeproxyconfig.DetectLocalConfiguration{
-				InterfaceNamePrefix: "eth0", // we won't care about prefix since mode is not prefix
+				InterfaceNamePrefix: "eth0", // 模式不是前缀匹配，无需关注此前缀
 			},
 			expectedErrs: field.ErrorList{field.Invalid(newPath.Child("DetectLocal").Child("InterfaceName"), "", "must not be empty")},
 		},

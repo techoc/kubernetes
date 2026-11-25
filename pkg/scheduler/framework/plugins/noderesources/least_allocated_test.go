@@ -50,13 +50,13 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 	}{
 		{
 			// node1 的打分（按剩余资源，映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
-			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
+			// CPU 得分： ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
+			// 内存得分： ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
 			// node1 最终得分：(100 + 100) / 2 = 100
 			// node2 的打分（按剩余资源，映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
-			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
-			// Node2 Score: (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
+			// CPU 得分： ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
+			// 内存得分： ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
+			// 节点2得分： (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
 			name:         "nothing scheduled, nothing requested",
 			requestedPod: st.MakePod().Obj(),
 			nodes: []*v1.Node{
@@ -69,13 +69,13 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 		},
 		{
 			// node1 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((4000 - 3000) * MaxNodeScore) / 4000 = 25
-			// Memory Score: ((10000 - 5000) * MaxNodeScore) / 10000 = 50
-			// Node1 Score: (25 + 50) / 2 = 37
+			// CPU 得分： ((4000 - 3000) * MaxNodeScore) / 4000 = 25
+			// 内存得分： ((10000 - 5000) * MaxNodeScore) / 10000 = 50
+			// 节点1得分： (25 + 50) / 2 = 37
 			// node2 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((6000 - 3000) * MaxNodeScore) / 6000 = 50
-			// Memory Score: ((10000 - 5000) * MaxNodeScore) / 10000 = 50
-			// Node2 Score: (50 + 50) / 2 = 50
+			// CPU 得分： ((6000 - 3000) * MaxNodeScore) / 6000 = 50
+			// 内存得分： ((10000 - 5000) * MaxNodeScore) / 10000 = 50
+			// 节点2得分： (50 + 50) / 2 = 50
 			name: "nothing scheduled, resources requested, differently sized nodes",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -106,13 +106,13 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 		},
 		{
 			// node1 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
-			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
-			// Node1 Score: (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
+			// CPU 得分： ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
+			// 内存得分： ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
+			// 节点1得分： (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
 			// node2 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
-			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
-			// Node2 Score: (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
+			// CPU 得分： ((4000 - 0) * MaxNodeScore) / 4000 = MaxNodeScore
+			// 内存得分： ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
+			// 节点2得分： (MaxNodeScore + MaxNodeScore) / 2 = MaxNodeScore
 			name:         "no resources requested, pods scheduled",
 			requestedPod: st.MakePod().Obj(),
 			nodes: []*v1.Node{
@@ -130,13 +130,13 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 		},
 		{
 			// node1 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
-			// Memory Score: ((20000 - 0) * MaxNodeScore) / 20000 = MaxNodeScore
-			// Node1 Score: (40 + 100) / 2 = 70
+			// CPU 得分： ((10000 - 6000) * MaxNodeScore) / 10000 = 40
+			// 内存得分： ((20000 - 0) * MaxNodeScore) / 20000 = MaxNodeScore
+			// 节点1得分： (40 + 100) / 2 = 70
 			// node2 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
-			// Memory Score: ((20000 - 5000) * MaxNodeScore) / 20000 = 75
-			// Node2 Score: (40 + 75) / 2 = 57
+			// CPU 得分： ((10000 - 6000) * MaxNodeScore) / 10000 = 40
+			// 内存得分： ((20000 - 5000) * MaxNodeScore) / 20000 = 75
+			// 节点2得分： (40 + 75) / 2 = 57
 			name:         "no resources requested, pods scheduled with resources",
 			requestedPod: st.MakePod().Obj(),
 			nodes: []*v1.Node{
@@ -154,13 +154,13 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 		},
 		{
 			// node1 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
-			// Memory Score: ((20000 - 5000) * MaxNodeScore) / 20000 = 75
-			// Node1 Score: (40 + 75) / 2 = 57
+			// CPU 得分： ((10000 - 6000) * MaxNodeScore) / 10000 = 40
+			// 内存得分： ((20000 - 5000) * MaxNodeScore) / 20000 = 75
+			// 节点1得分： (40 + 75) / 2 = 57
 			// node2 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
-			// Memory Score: ((20000 - 10000) * MaxNodeScore) / 20000 = 50
-			// Node2 Score: (40 + 50) / 2 = 45
+			// CPU 得分： ((10000 - 6000) * MaxNodeScore) / 10000 = 40
+			// 内存得分： ((20000 - 10000) * MaxNodeScore) / 20000 = 50
+			// 节点2得分： (40 + 50) / 2 = 45
 			name: "resources requested, pods scheduled with resources",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -179,13 +179,13 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 		},
 		{
 			// node1 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
-			// Memory Score: ((20000 - 5000) * MaxNodeScore) / 20000 = 75
-			// Node1 Score: (40 + 75) / 2 = 57
+			// CPU 得分： ((10000 - 6000) * MaxNodeScore) / 10000 = 40
+			// 内存得分： ((20000 - 5000) * MaxNodeScore) / 20000 = 75
+			// 节点1得分： (40 + 75) / 2 = 57
 			// node2 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((10000 - 6000) * MaxNodeScore) / 10000 = 40
-			// Memory Score: ((50000 - 10000) * MaxNodeScore) / 50000 = 80
-			// Node2 Score: (40 + 80) / 2 = 60
+			// CPU 得分： ((10000 - 6000) * MaxNodeScore) / 10000 = 40
+			// 内存得分： ((50000 - 10000) * MaxNodeScore) / 50000 = 80
+			// 节点2得分： (40 + 80) / 2 = 60
 			name: "resources requested, pods scheduled with resources, differently sized nodes",
 			requestedPod: st.MakePod().
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -204,13 +204,13 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 		},
 		{
 			// node1 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((4000 - 6000) * MaxNodeScore) / 4000 = 0
-			// Memory Score: ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
-			// Node1 Score: (0 + MaxNodeScore) / 2 = 50
+			// CPU 得分： ((4000 - 6000) * MaxNodeScore) / 4000 = 0
+			// 内存得分： ((10000 - 0) * MaxNodeScore) / 10000 = MaxNodeScore
+			// 节点1得分： (0 + MaxNodeScore) / 2 = 50
 			// node2 的打分（映射到 0-MaxNodeScore 区间）
-			// CPU Score: ((4000 - 6000) * MaxNodeScore) / 4000 = 0
-			// Memory Score: ((10000 - 5000) * MaxNodeScore) / 10000 = 50
-			// Node2 Score: (0 + 50) / 2 = 25
+			// CPU 得分： ((4000 - 6000) * MaxNodeScore) / 4000 = 0
+			// 内存得分： ((10000 - 5000) * MaxNodeScore) / 10000 = 50
+			// 节点2得分： (0 + 50) / 2 = 25
 			name:         "requested resources exceed node capacity",
 			requestedPod: st.MakePod().Req(map[v1.ResourceName]string{"cpu": "3000", "memory": "0"}).Obj(),
 			nodes: []*v1.Node{
@@ -239,12 +239,12 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 			resources:      defaultResources,
 		},
 		{
-			// CPU Score: ((4000 - 3000) *100) / 4000 = 25
-			// Memory Score: ((10000 - 5000) *100) / 10000 = 50
-			// Node1 Score: (25 * 1 + 50 * 2) / (1 + 2) = 41
-			// CPU Score: ((6000 - 3000) *100) / 6000 = 50
-			// Memory Score: ((10000 - 5000) *100) / 10000 = 50
-			// Node2 Score: (50 * 1 + 50 * 2) / (1 + 2) = 50
+			// CPU 得分： ((4000 - 3000) *100) / 4000 = 25
+			// 内存得分： ((10000 - 5000) *100) / 10000 = 50
+			// 节点1得分： (25 * 1 + 50 * 2) / (1 + 2) = 41
+			// CPU 得分： ((6000 - 3000) *100) / 6000 = 50
+			// 内存得分： ((10000 - 5000) *100) / 10000 = 50
+			// 节点2得分： (50 * 1 + 50 * 2) / (1 + 2) = 50
 			name: "nothing scheduled, resources requested with different weight on CPU and memory, differently sized nodes",
 			requestedPod: st.MakePod().Node("node1").
 				Req(map[v1.ResourceName]string{"cpu": "1000", "memory": "2000"}).
@@ -367,10 +367,10 @@ func TestLeastAllocatedScoringStrategy(t *testing.T) {
 		},
 		{
 			// 节点上没有扩展资源时：
-			// CPU Score: ((6000 - 3000) * 100) / 6000 = 50
-			// Memory Score: ((10000 - 4000) * 100) / 10000 = 60
-			// Node1 Score: (50 * 1 + 60 * 1) / (1 + 1) = 55
-			// Node2 Score: (50 * 1 + 60 * 1) / (1 + 1) = 55
+			// CPU 得分： ((6000 - 3000) * 100) / 6000 = 50
+			// 内存得分： ((10000 - 4000) * 100) / 10000 = 60
+			// 节点1得分： (50 * 1 + 60 * 1) / (1 + 1) = 55
+			// 节点2得分： (50 * 1 + 60 * 1) / (1 + 1) = 55
 			name: "if the node doesn't have a resource",
 			requestedPod: st.MakePod().Node("node1").
 				Req(map[v1.ResourceName]string{"cpu": "3000", "memory": "4000"}).

@@ -72,12 +72,12 @@ type TestServerInstanceOptions struct {
 
 // TestServer 表示一个运行中的测试服务器，包含访问它及其后端 etcd 所需的一切。
 type TestServer struct {
-	ClientConfig      *restclient.Config             // Rest client config
-	ServerOpts        *controlplaneapiserver.Options // ServerOpts
-	TearDownFn        TearDownFunc                   // TearDown function
-	TmpDir            string                         // Temp Dir used, by the apiserver
-	EtcdClient        *clientv3.Client               // used by tests that need to check data migrated from APIs that are no longer served
-	EtcdStoragePrefix string                         // storage prefix in etcd
+	ClientConfig      *restclient.Config             // REST 客户端配置
+	ServerOpts        *controlplaneapiserver.Options // 服务器选项
+	TearDownFn        TearDownFunc                   // 清理函数
+	TmpDir            string                         // apiserver 使用的临时目录
+	EtcdClient        *clientv3.Client               // 供测试检查已不再服务的 API 所迁移出的数据
+	EtcdStoragePrefix string                         // etcd 中的存储前缀
 }
 
 // NewDefaultTestServerOptions 返回测试服务器实例的默认选项。
@@ -110,7 +110,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 				klog.Errorf("Failed to shutdown test server clearly: %v", err)
 			}
 		}
-		os.RemoveAll(result.TmpDir) //nolint:errcheck // best effort
+		os.RemoveAll(result.TmpDir) //nolint:errcheck // 尽力清理，不处理删除错误
 	}
 	defer func() {
 		if result.TearDownFn == nil {
@@ -135,7 +135,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		return result, fmt.Errorf("failed to create listener: %w", err)
 	}
 	o.SecureServing.ServerCert.CertDirectory = result.TmpDir
-	o.SecureServing.ExternalAddress = o.SecureServing.Listener.Addr().(*net.TCPAddr).IP // use listener addr although it is a loopback device
+	o.SecureServing.ExternalAddress = o.SecureServing.Listener.Addr().(*net.TCPAddr).IP // 即使监听在回环设备上，也使用监听器地址
 
 	pkgPath, err := pkgPath(t)
 	if err != nil {
@@ -154,7 +154,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 	if err != nil {
 		t.Fatalf("create temp file failed: %v", err)
 	}
-	defer os.RemoveAll(saSigningKeyFile.Name()) //nolint:errcheck // best effort
+	defer os.RemoveAll(saSigningKeyFile.Name()) //nolint:errcheck // 尽力清理，不处理删除错误
 	if err = os.WriteFile(saSigningKeyFile.Name(), []byte(ecdsaPrivateKey), 0666); err != nil {
 		t.Fatalf("write file %s failed: %v", saSigningKeyFile.Name(), err)
 	}
@@ -274,7 +274,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 	result.ServerOpts = o
 	result.TearDownFn = func() {
 		tearDown()
-		etcdClient.Close() //nolint:errcheck // best effort
+		etcdClient.Close() //nolint:errcheck // 尽力清理，不处理删除错误
 	}
 	result.EtcdClient = etcdClient
 	result.EtcdStoragePrefix = storageConfig.Prefix
@@ -303,7 +303,7 @@ func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
 	// 从监听器地址中取出实际分配的端口。
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
-		ln.Close() //nolint:errcheck // best effort
+		ln.Close() //nolint:errcheck // 尽力清理，不处理删除错误
 		return nil, 0, fmt.Errorf("invalid listen address: %q", ln.Addr().String())
 	}
 

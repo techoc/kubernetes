@@ -159,7 +159,7 @@ func (w *AtomicWriter) Write(payload map[string]FileProjection, setPerms func(su
 		} else if !should && len(pathsToRemove) == 0 {
 			klog.V(4).Infof("%s: write not required for data directory %v", w.logContext, oldTsDir)
 			// 数据目录已是最新，但仍需确保用户可见的符号链接已创建。
-			// See https://github.com/kubernetes/kubernetes/issues/121472 for more details.
+			// 参见 https://github.com/kubernetes/kubernetes/issues/121472 了解更多细节。
 			// 将 oldTsDir 置空，避免误删数据目录。
 			shouldWrite = false
 			oldTsDir = ""

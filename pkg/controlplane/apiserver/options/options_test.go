@@ -416,7 +416,7 @@ func TestCompleteForServiceAccount(t *testing.T) {
 			signingKeyFiles:          "",
 			maxExpiration:            0,
 			maxExtendedExpiration:    365 * 24 * time.Hour,
-			externalMaxExpirationSec: 600, // 10m
+			externalMaxExpirationSec: 600, // 10 分钟
 
 			expectedMaxtokenExp:            10 * time.Minute,
 			expectedExtendedMaxTokenExp:    10 * time.Minute,
@@ -431,7 +431,7 @@ func TestCompleteForServiceAccount(t *testing.T) {
 			signingKeyFiles:          "",
 			maxExpiration:            1 * time.Hour,
 			maxExtendedExpiration:    24 * time.Hour,
-			externalMaxExpirationSec: 31556952, // 1 year
+			externalMaxExpirationSec: 31556952, // 1 年
 
 			expectedMaxtokenExp:            1 * time.Hour,
 			expectedExtendedMaxTokenExp:    24 * time.Hour,
@@ -444,8 +444,8 @@ func TestCompleteForServiceAccount(t *testing.T) {
 			},
 			externalSigner:           true,
 			signingKeyFiles:          "",
-			maxExpiration:            1 * time.Hour, // want 1hr
-			externalMaxExpirationSec: 600,           // signer can only sign 10m
+			maxExpiration:            1 * time.Hour, // 期望 1 小时
+			externalMaxExpirationSec: 600,           // 签名器最长只能签发 10 分钟
 
 			wantError: fmt.Errorf("service-account-max-token-expiration cannot be set longer than the token expiration supported by service-account-signing-endpoint: 1h0m0s > 10m0s"),
 		},
@@ -457,7 +457,7 @@ func TestCompleteForServiceAccount(t *testing.T) {
 			externalSigner:           true,
 			signingKeyFiles:          "",
 			maxExpiration:            0,
-			externalMaxExpirationSec: 300, // 5m
+			externalMaxExpirationSec: 300, // 5 分钟
 
 			wantError: fmt.Errorf("max token life supported by external-jwt-signer (300s) is less than acceptable (min 600s)"),
 		},
@@ -469,7 +469,7 @@ func TestCompleteForServiceAccount(t *testing.T) {
 			externalSigner:           true,
 			signingKeyFiles:          "",
 			maxExpiration:            0,
-			externalMaxExpirationSec: 900, // 15m
+			externalMaxExpirationSec: 900, // 15 分钟
 			metadataError:            fmt.Errorf("metadata error"),
 
 			wantError: fmt.Errorf("while setting up external-jwt-signer: rpc error: code = Unknown desc = metadata error"),
@@ -482,7 +482,7 @@ func TestCompleteForServiceAccount(t *testing.T) {
 			externalSigner:           true,
 			signingKeyFiles:          "",
 			maxExpiration:            0,
-			externalMaxExpirationSec: 900, // 15m
+			externalMaxExpirationSec: 900, // 15 分钟
 			fetchError:               fmt.Errorf("keys fetch error"),
 
 			wantError: fmt.Errorf("while setting up external-jwt-signer: while initially filling key cache: while performing initial cache fill: while fetching token verification keys: while getting externally supported jwt signing keys: rpc error: code = Unknown desc = keys fetch error"),
