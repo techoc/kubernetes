@@ -23,9 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// fmtErrs is a helper for nicer test output.  It will use multiple lines if
-// errs has more than 1 item.
-//
 // 返回的是带引号的字符串，便于在测试日志里看出空白和换行；多个错误时
 // 逐行输出而不是拼成一行，方便直接比较期望值。
 func fmtErrs(errs field.ErrorList) string {

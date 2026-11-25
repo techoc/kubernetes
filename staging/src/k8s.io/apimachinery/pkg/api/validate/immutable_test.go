@@ -29,12 +29,12 @@ import (
 // 判断两个值是否语义相等，跳过“未变化”的调用是生成校验层 ratcheting 的
 // 职责。因此它只应在 Create（不报错）或真正的 Update（必报错）时被调用。
 func TestImmutable(t *testing.T) {
-	// The Immutable function relies on validation ratcheting to avoid being
-	// called when old and new values are equivalent. This unit test only needs
-	// to confirm two behaviors:
-	// 1. The function does nothing for non-update operations (e.g., create).
-	// 2. The function *always* returns an error for update operations, since
-	//    ratcheting should have prevented the call if the values were unchanged.
+	// Immutable 依赖 validation ratcheting，避免在旧新值等价时被调用。本单测只需验证：
+	//
+	// 以确认两种行为：
+	// 1. 非更新操作（如 create）不执行校验。
+	// 2. 更新操作始终返回错误，因为值未变时本就不应调用。
+	//    若值未改变，棘轮校验本应阻止调用。
 
 	type simpleStruct struct {
 		S string
@@ -60,18 +60,18 @@ func TestImmutable(t *testing.T) {
 		// 判定发生了变更。
 		name: "with nil values",
 		fn: func(op operation.Operation, fld *field.Path) field.ErrorList {
-			// Explicitly type the nil to satisfy the generic function signature.
+			// 显式指定 nil 类型，以满足泛型函数签名。
 			return Immutable[*int](context.Background(), op, fld, nil, nil)
 		},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create operations should never return an error.
+			// Create 操作不应返回错误。
 			errs := tc.fn(operation.Operation{Type: operation.Create}, field.NewPath("field"))
 			if len(errs) != 0 {
 				t.Errorf("expected success for create operation, but got errors: %v", errs)
 			}
 
-			// Update operations should always return exactly one error.
+			// Update 操作应始终只返回一个错误。
 			errs = tc.fn(operation.Operation{Type: operation.Update}, field.NewPath("field"))
 			if len(errs) == 0 {
 				t.Errorf("expected a failure for update operation, but got success")

@@ -39,8 +39,7 @@ type lastAppliedManager struct {
 
 var _ Manager = &lastAppliedManager{}
 
-// NewLastAppliedManager converts the client-side apply annotation to
-// server-side apply managed fields
+// NewLastAppliedManager 将客户端应用注解转换为服务端应用托管字段。
 func NewLastAppliedManager(fieldManager Manager, typeConverter TypeConverter, objectConverter runtime.ObjectConvertor, groupVersion schema.GroupVersion) Manager {
 	// groupVersion 用于把 live 对象转换到注解中记录的版本，二者必须一致才能
 	// 做字段级比较。
@@ -52,26 +51,25 @@ func NewLastAppliedManager(fieldManager Manager, typeConverter TypeConverter, ob
 	}
 }
 
-// Update implements Manager.
+// Update 实现 Manager 接口。
 func (f *lastAppliedManager) Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error) {
 	return f.fieldManager.Update(liveObj, newObj, managed, manager)
 }
 
-// Apply will consider the last-applied annotation
-// for upgrading an object managed by client-side apply to server-side apply
-// without conflicts.
+// Apply 会考虑 last-applied 注解，
+// 将客户端应用管理的对象无冲突升级到服务端应用。
 //
 // 策略：先正常 apply；只有在出现冲突、且冲突字段都包含在 last-applied
 // 注解中时才以 force 重试，从而把“此前由 CSA 管理的字段”视为本管理器所有。
 func (f *lastAppliedManager) Apply(liveObj, newObj runtime.Object, managed Managed, manager string, force bool) (runtime.Object, Managed, error) {
 	newLiveObj, newManaged, newErr := f.fieldManager.Apply(liveObj, newObj, managed, manager, force)
-	// Upgrade the client-side apply annotation only from kubectl server-side-apply.
-	// To opt-out of this behavior, users may specify a different field manager.
+	//仅在使用 kubectl server-side-apply 时升级客户端应用注解。
+	//用户可指定其他字段管理器以退出此行为。
 	if manager != "kubectl" {
 		return newLiveObj, newManaged, newErr
 	}
 
-	// Check if we have conflicts
+	//检查是否存在冲突
 	if newErr == nil {
 		return newLiveObj, newManaged, newErr
 	}
@@ -82,8 +80,8 @@ func (f *lastAppliedManager) Apply(liveObj, newObj runtime.Object, managed Manag
 	}
 	conflictSet := conflictsToSet(conflicts)
 
-	// Check if conflicts are allowed due to client-side apply,
-	// and if so, then force apply
+	//检查客户端应用是否允许冲突，
+	//允许则强制执行 apply。
 	allowedConflictSet, err := f.allowedConflictsFromLastApplied(liveObj)
 	if err != nil {
 		return newLiveObj, newManaged, newErr
@@ -106,7 +104,7 @@ func (f *lastAppliedManager) allowedConflictsFromLastApplied(liveObj runtime.Obj
 		panic(fmt.Sprintf("couldn't get accessor: %v", err))
 	}
 
-	// If there is no client-side apply annotation, then there is nothing to do
+	//没有客户端应用注解时无需处理。
 	var annotations = accessor.GetAnnotations()
 	if annotations == nil {
 		return nil, fmt.Errorf("no last applied annotation")
@@ -153,10 +151,9 @@ func (f *lastAppliedManager) allowedConflictsFromLastApplied(liveObj runtime.Obj
 		return nil, fmt.Errorf("failed to compare last applied object and live object: %v", err)
 	}
 
-	// Remove fields in last applied that are different, added, or missing in
-	// the live object.
-	// Because last-applied fields don't match the live object fields,
-	// then we don't own these fields.
+	//移除 last-applied 中与线上对象不同、额外添加或缺失的字段；
+	//因为这些字段与线上对象不匹配，
+	//所以我们不拥有它们。
 	lastAppliedObjFieldSet = lastAppliedObjFieldSet.
 		Difference(comparison.Modified).
 		Difference(comparison.Added).
@@ -165,7 +162,7 @@ func (f *lastAppliedManager) allowedConflictsFromLastApplied(liveObj runtime.Obj
 	return lastAppliedObjFieldSet, nil
 }
 
-// TODO: replace with merge.Conflicts.ToSet()
+// TODO: 替换为 merge.Conflicts.ToSet()。
 //
 // 把冲突列表转换为字段路径集合，便于做集合差运算。
 func conflictsToSet(conflicts merge.Conflicts) *fieldpath.Set {

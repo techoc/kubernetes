@@ -39,8 +39,6 @@ func (m *Quantity) Marshal() (data []byte, err error) {
 	return data[:n], nil
 }
 
-// MarshalTo is a customized version of the generated Protobuf unmarshaler for a struct
-// with a single string field.
 // MarshalTo 写入调用方提供的缓冲区。先按 Size() 截断，是因为调用方应
 // 已按 Size() 准备容量；这与生成代码“从切片末尾写入”的语义一致。
 func (m *Quantity) MarshalTo(data []byte) (int, error) {
@@ -48,8 +46,7 @@ func (m *Quantity) MarshalTo(data []byte) (int, error) {
 	return m.MarshalToSizedBuffer(data[:size])
 }
 
-// MarshalToSizedBuffer is a customized version of the generated
-// Protobuf unmarshaler for a struct with a single string field.
+// MarshalToSizedBuffer 是单字符串字段结构体的定制 protobuf 编码实现。
 func (m *Quantity) MarshalToSizedBuffer(data []byte) (int, error) {
 	i := len(data)
 	_ = i
@@ -59,14 +56,12 @@ func (m *Quantity) MarshalToSizedBuffer(data []byte) (int, error) {
 	// 唯一的 protobuf 字段是字段 1（string），wire type 为 2
 	// （长度分隔）。从缓冲区末尾向前写是 gogo/protobuf 的约定，
 	// 这样调用方可通过返回的起点偏移得知数据位置。
-	// BEGIN CUSTOM MARSHAL
 	// 序列化规范字符串形式，而不是内部的 (amount, scale) 表示；
 	// ParseQuantity 是唯一支持的解码入口。
 	out := m.String()
 	i -= len(out)
 	copy(data[i:], out)
 	i = encodeVarintGenerated(data, i, uint64(len(out)))
-	// END CUSTOM MARSHAL
 	// 字段 1、wire type 2 的 tag：(1 << 3) | 2 == 0xa。
 	i--
 	data[i] = 0xa
@@ -98,7 +93,6 @@ func (m *Quantity) Size() (n int) {
 
 	// CUSTOM SIZE：线上传输的是规范字符串，因此按字符串长度计算，
 	// 而不是按结构体字段。
-	// BEGIN CUSTOM SIZE
 	l = len(m.String())
 	// END CUSTOM SIZE
 
@@ -112,8 +106,7 @@ func sovGenerated(x uint64) (n int) {
 	return (bits.Len64(x|1) + 6) / 7
 }
 
-// Unmarshal is a customized version of the generated Protobuf unmarshaler for a struct
-// with a single string field.
+// Unmarshal 是单字符串字段结构体的定制 protobuf 解码实现。
 func (m *Quantity) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -179,7 +172,6 @@ func (m *Quantity) Unmarshal(data []byte) error {
 
 			// CUSTOM DECODE：通过 ParseQuantity 重建，使线格式与内部
 			// 表示保持解耦。
-			// BEGIN CUSTOM DECODE
 			p, err := ParseQuantity(s)
 			if err != nil {
 				return err
@@ -278,7 +270,6 @@ func skipGenerated(data []byte) (n int, err error) {
 			return iNdEx, nil
 		case 3:
 			// Group：递归跳过，直到在当前嵌套层遇到匹配的 end-group
-			// （wire type 4）。
 			for {
 				var innerWire uint64
 				var start int = iNdEx

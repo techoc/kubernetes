@@ -27,9 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/duration"
 )
 
-// MetaToTableRow converts a list or object into one or more table rows. The provided rowFn is invoked for
-// each accessed item, with name and age being passed to each.
-//
 // 对列表递归展开（列表项本身也可能是列表），从而兼容 meta.EachListItem
 // 支持的嵌套结构；对单个对象则通过 meta.Accessor 取元数据。
 // 返回的每行都携带原始对象，便于调用方在 Table 响应中做 selfLink/object 引用。
@@ -69,9 +66,6 @@ func MetaToTableRow(obj runtime.Object, rowFn func(obj runtime.Object, m metav1.
 	return rows, nil
 }
 
-// ConvertToHumanReadableDateType returns the elapsed time since timestamp in
-// human-readable approximation.
-//
 // 零值时间不参与 time.Since 计算，避免把 1970 年当作创建时间而输出巨大的年龄。
 func ConvertToHumanReadableDateType(timestamp metav1.Time) string {
 	if timestamp.IsZero() {

@@ -29,8 +29,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/value"
 )
 
-// TypeConverter allows you to convert from runtime.Object to
-// typed.TypedValue and the other way around.
+// TypeConverter 用于在 runtime.Object 与 typed.TypedValue 之间双向转换。
 type TypeConverter interface {
 	ObjectToTyped(runtime.Object, ...typed.ValidationOptions) (*typed.TypedValue, error)
 	TypedToObject(*typed.TypedValue) (runtime.Object, error)
@@ -44,6 +43,8 @@ type typeConverter struct {
 
 var _ TypeConverter = &typeConverter{}
 
+// NewTypeConverter 将 OpenAPI schema 转换为结构化合并类型，并按 GVK 建立索引。
+// preserveUnknownFields 控制转换时是否保留 schema 未定义的字段。
 func NewTypeConverter(openapiSpec map[string]*spec.Schema, preserveUnknownFields bool) (TypeConverter, error) {
 	typeSchema, err := schemaconv.ToSchemaFromOpenAPI(openapiSpec, preserveUnknownFields)
 	if err != nil {
@@ -78,11 +79,8 @@ func (c *typeConverter) TypedToObject(value *typed.TypedValue) (runtime.Object, 
 // 的推导类型处理。
 type deducedTypeConverter struct{}
 
-// DeducedTypeConverter is a TypeConverter for CRDs that don't have a
-// schema. It does implement the same interface though (and create the
-// same types of objects), so that everything can still work the same.
-// CRDs are merged with all their fields being "atomic" (lists
-// included).
+// DeducedTypeConverter 用于没有 schema 的 CRD；它实现相同接口并创建相同类型的对象，
+// 因此行为保持一致。CRD 的所有字段（包括列表）均按 "atomic" 合并。
 //
 // 中文说明：没有 schema 的 CRD 无法得知字段粒度，只能整体原子合并——
 // 这会导致字段所有权更粗，但至少保证行为可预测。
@@ -90,7 +88,7 @@ func NewDeducedTypeConverter() TypeConverter {
 	return deducedTypeConverter{}
 }
 
-// ObjectToTyped converts an object into a TypedValue with a "deduced type".
+// ObjectToTyped 将对象转换为带有 "deduced type" 的 TypedValue。
 func (deducedTypeConverter) ObjectToTyped(obj runtime.Object, opts ...typed.ValidationOptions) (*typed.TypedValue, error) {
 	switch o := obj.(type) {
 	case *unstructured.Unstructured:
@@ -100,8 +98,7 @@ func (deducedTypeConverter) ObjectToTyped(obj runtime.Object, opts ...typed.Vali
 	}
 }
 
-// TypedToObject transforms the typed value into a runtime.Object. That
-// is not specific to deduced type.
+// TypedToObject 将 typed value 转换为 runtime.Object，不特定于 deduced type。
 func (deducedTypeConverter) TypedToObject(value *typed.TypedValue) (runtime.Object, error) {
 	return valueToObject(value.AsValue())
 }
@@ -117,8 +114,8 @@ func valueToObject(val value.Value) (runtime.Object, error) {
 	}
 }
 
-// GroupVersionOfTypedValue returns the extracted GroupVersion from the TypeMeta
-// fields of a TypedValue, or return false if no TypeMeta fields are found.
+// GroupVersionOfTypedValue 从 TypedValue 的 TypeMeta 字段提取 GroupVersion；
+// 找不到 TypeMeta 字段时返回 false。
 func GroupVersionOfTypedValue(object *typed.TypedValue) (schema.GroupVersion, bool) {
 	val := object.AsValue()
 	if val == nil || !val.IsMap() {
@@ -158,20 +155,20 @@ func indexModels(
 	return tr
 }
 
-// Get and parse GroupVersionKind from the extension. Returns empty if it doesn't have one.
+// 从扩展中获取并解析 GroupVersionKind；不存在时返回空值。
 //
 // 中文说明：OpenAPI 扩展经不同反序列化路径可能得到 map[interface{}]interface{}
 // （YAML）或 map[string]interface{}（JSON），因此两种都要处理。
 func parseGroupVersionKind(extensions map[string]interface{}) []schema.GroupVersionKind {
 	gvkListResult := []schema.GroupVersionKind{}
 
-	// Get the extensions
+	//获取扩展
 	gvkExtension, ok := extensions["x-kubernetes-group-version-kind"]
 	if !ok {
 		return []schema.GroupVersionKind{}
 	}
 
-	// gvk extension must be a list of at least 1 element.
+	//gvk 扩展必须是至少含一个元素的列表。
 	gvkList, ok := gvkExtension.([]interface{})
 	if !ok {
 		return []schema.GroupVersionKind{}
@@ -180,8 +177,7 @@ func parseGroupVersionKind(extensions map[string]interface{}) []schema.GroupVers
 	for _, gvk := range gvkList {
 		var group, version, kind string
 
-		// gvk extension list must be a map with group, version, and
-		// kind fields
+		//gvk 扩展列表必须是包含 group、version 和 kind 字段的映射。
 		if gvkMap, ok := gvk.(map[interface{}]interface{}); ok {
 			group, ok = gvkMap["group"].(string)
 			if !ok {

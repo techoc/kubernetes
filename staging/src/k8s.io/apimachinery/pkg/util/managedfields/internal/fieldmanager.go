@@ -32,13 +32,13 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/merge"
 )
 
-// DefaultMaxUpdateManagers defines the default maximum retained number of managedFields entries from updates
-// if the number of update managers exceeds this, the oldest entries will be merged until the number is below the maximum.
-// TODO(jennybuckley): Determine if this is really the best value. Ideally we wouldn't unnecessarily merge too many entries.
+// DefaultMaxUpdateManagers 定义默认保留的 update 类型 managedFields 条目数上限；
+// 超过上限时合并最旧条目，直到数量低于上限。
+// TODO(jennybuckley): 确认这是否为最佳值；理想情况下不应不必要地合并过多条目。
 const DefaultMaxUpdateManagers int = 10
 
-// DefaultTrackOnCreateProbability defines the default probability that the field management of an object
-// starts being tracked from the object's creation, instead of from the first time the object is applied to.
+// DefaultTrackOnCreateProbability 定义从对象创建时开始跟踪字段管理的默认概率，
+// 而不是从对象首次被 apply 时开始。
 // 中文说明：设为 1 表示完全从创建时开始跟踪，避免为省开销而随机跳过，
 // 从而保证 apply 语义确定。
 const DefaultTrackOnCreateProbability float32 = 1
@@ -46,8 +46,7 @@ const DefaultTrackOnCreateProbability float32 = 1
 // atMostEverySecond 限制错误日志频率，避免 managedFields 失败时刷屏。
 var atMostEverySecond = NewAtMostEvery(time.Second)
 
-// FieldManager updates the managed fields and merges applied
-// configurations.
+// FieldManager 更新托管字段并合并应用配置。
 //
 // 中文说明：它把内层 Manager 链与实际 API 对象的编解码隔离开——调用方只需
 // 传入 live/new 对象，FieldManager 负责取用、合并与回写 managedFields。
@@ -56,13 +55,12 @@ type FieldManager struct {
 	subresource  string
 }
 
-// NewFieldManager creates a new FieldManager that decodes, manages, then re-encodes managedFields
-// on update and apply requests.
+// NewFieldManager 创建 FieldManager，在 update 和 apply 请求中解码、管理并重新编码 managedFields。
 func NewFieldManager(f Manager, subresource string) *FieldManager {
 	return &FieldManager{fieldManager: f, subresource: subresource}
 }
 
-// newDefaultFieldManager is a helper function which wraps a Manager with certain default logic.
+// newDefaultFieldManager 为 Manager 包装默认逻辑。
 //
 // 中文说明：包装顺序即语义叠加顺序，从内到外依次为：剥离类型元信息、
 // 按 manager 归属更新、容量上限、创建时跟踪概率、last-applied 维护、
@@ -97,14 +95,13 @@ func decodeLiveOrNew(liveObj, newObj runtime.Object, ignoreManagedFieldsFromRequ
 		return nil, err
 	}
 
-	// We take the managedFields of the live object in case the request tries to
-	// manually set managedFields via a subresource.
+	//请求尝试通过子资源手动设置 managedFields 时，使用线上对象的 managedFields。
 	if ignoreManagedFieldsFromRequestObject {
 		return emptyManagedFieldsOnErr(DecodeManagedFields(liveAccessor.GetManagedFields()))
 	}
 
-	// If the object doesn't have metadata, we should just return without trying to
-	// set the managedFields at all, so creates/updates/patches will work normally.
+	//对象没有元数据时直接返回，不设置 managedFields，
+	//使 create、update 和 patch 正常工作。
 	newAccessor, err := meta.Accessor(newObj)
 	if err != nil {
 		return nil, err
@@ -115,9 +112,8 @@ func decodeLiveOrNew(liveObj, newObj runtime.Object, ignoreManagedFieldsFromRequ
 		return NewEmptyManaged(), nil
 	}
 
-	// If the managed field is empty or we failed to decode it,
-	// let's try the live object. This is to prevent clients who
-	// don't understand managedFields from deleting it accidentally.
+	//如果托管字段为空或解码失败，
+	//则尝试使用线上对象，防止不理解 managedFields 的客户端意外删除它。
 	managed, err := DecodeManagedFields(newAccessor.GetManagedFields())
 	if err != nil || len(managed.Fields()) == 0 {
 		return emptyManagedFieldsOnErr(DecodeManagedFields(liveAccessor.GetManagedFields()))
@@ -134,12 +130,10 @@ func emptyManagedFieldsOnErr(managed Managed, err error) (Managed, error) {
 	return managed, nil
 }
 
-// Update is used when the object has already been merged (non-apply
-// use-case), and simply updates the managed fields in the output
-// object.
+// Update 用于对象已完成合并的非 apply 场景，仅更新输出对象中的托管字段。
 func (f *FieldManager) Update(liveObj, newObj runtime.Object, manager string) (object runtime.Object, err error) {
-	// First try to decode the managed fields provided in the update,
-	// This is necessary to allow directly updating managed fields.
+	//首先尝试解码 update 提供的托管字段，
+	//以允许直接更新托管字段。
 	isSubresource := f.subresource != ""
 	managed, err := decodeLiveOrNew(liveObj, newObj, isSubresource)
 	if err != nil {
@@ -159,23 +153,19 @@ func (f *FieldManager) Update(liveObj, newObj runtime.Object, manager string) (o
 	return object, nil
 }
 
-// UpdateNoErrors is the same as Update, but it will not return
-// errors. If an error happens, we preserve the managedFields from
-// liveObj.
+// UpdateNoErrors 与 Update 相同，但不返回错误；
+// 发生错误时保留 liveObj 的 managedFields。
 func (f *FieldManager) UpdateNoErrors(liveObj, newObj runtime.Object, manager string) runtime.Object {
 	obj, err := f.Update(liveObj, newObj, manager)
 	if err != nil {
-		// Preserve the managedFields from the live object rather than
-		// stripping them entirely, to avoid silent data loss when the
-		// managedFields update fails (e.g. due to an unavailable
-		// conversion webhook).
-		// Note: meta.Accessor for liveObj and newObj below never return an error in this code branch,
-		// because if they would f.Update above would return "newObj, nil". Accordingly, the case
-		// where one of the accessors returns an error is not handled here.
+		//出错时保留线上对象的 managedFields，而不是全部剥离，
+		//从而避免因转换 webhook 不可用等更新失败导致静默数据丢失。
+		//注意：在此代码分支中，liveObj 和 newObj 的 meta.Accessor 不会返回错误，
+		//否则前面的 f.Update 会返回 "newObj, nil"。因此这里不处理访问器返回错误的情况。
 		if liveAccessor, aErr := meta.Accessor(liveObj); aErr == nil {
 			if newAccessor, aErr := meta.Accessor(newObj); aErr == nil {
 				atMostEverySecond.Do(func() {
-					//nolint:logcheck // Should not be reached.
+					//nolint:logcheck // 不应执行到这里。
 					klog.ErrorS(err, "[SHOULD NOT HAPPEN] failed to update managedFields (restored previous managedFields from live object)", "versionKind",
 						newObj.GetObjectKind().GroupVersionKind(), "namespace", newAccessor.GetNamespace(), "name", newAccessor.GetName())
 				})
@@ -187,9 +177,9 @@ func (f *FieldManager) UpdateNoErrors(liveObj, newObj runtime.Object, manager st
 	return obj
 }
 
-// Returns true if the managedFields indicate that the user is trying to
-// reset the managedFields, i.e. if the list is non-nil but empty, or if
-// the list has one empty item.
+// 如果 managedFields 表明用户试图重置托管字段，则返回 true，
+// 即列表非 nil 但为空，
+// 或列表仅含一个空条目。
 func isResetManagedFields(managedFields []metav1.ManagedFieldsEntry) bool {
 	if len(managedFields) == 0 {
 		return managedFields != nil
@@ -202,16 +192,15 @@ func isResetManagedFields(managedFields []metav1.ManagedFieldsEntry) bool {
 	return false
 }
 
-// Apply is used when server-side apply is called, as it merges the
-// object and updates the managed fields.
+// Apply 用于服务端应用，负责合并对象并更新托管字段。
 func (f *FieldManager) Apply(liveObj, appliedObj runtime.Object, manager string, force bool) (object runtime.Object, err error) {
-	// If the object doesn't have metadata, apply isn't allowed.
+	//对象没有元数据时不允许 apply。
 	accessor, err := meta.Accessor(liveObj)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't get accessor: %v", err)
 	}
 
-	// Decode the managed fields in the live object, since it isn't allowed in the patch.
+	//解码线上对象的 managedFields，因为补丁中不允许携带它。
 	managed, err := DecodeManagedFields(accessor.GetManagedFields())
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode managed fields: %v", err)

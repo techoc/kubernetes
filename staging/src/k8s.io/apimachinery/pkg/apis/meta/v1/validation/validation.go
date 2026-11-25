@@ -174,7 +174,6 @@ func ValidateFieldSelectorRequirement(requirement metav1.FieldSelectorRequiremen
 // ValidateDeleteOptions 校验删除选项之间的互斥关系与取值范围。
 func ValidateDeleteOptions(options *metav1.DeleteOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
-	//lint:file-ignore SA1019 Keep validation for deprecated OrphanDependents option until it's being removed
 	// OrphanDependents 已废弃，但仍需与新的 PropagationPolicy 做互斥校验，避免两种语义同时生效。
 	if options.OrphanDependents != nil && options.PropagationPolicy != nil {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("propagationPolicy"), options.PropagationPolicy, "orphanDependents and deletionPropagation cannot be both set"))

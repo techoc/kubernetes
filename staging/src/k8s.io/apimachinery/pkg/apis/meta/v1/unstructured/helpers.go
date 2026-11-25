@@ -285,7 +285,7 @@ func setNestedFieldNoCopy(obj map[string]interface{}, value interface{}, fields 
 // SetNestedStringSlice 设置嵌套字段为 []string 值。
 // 若某一层嵌套不是 map[string]interface{}，则返回错误。
 func SetNestedStringSlice(obj map[string]interface{}, value []string, fields ...string) error {
-	m := make([]interface{}, 0, len(value)) // convert []string into []interface{}
+	m := make([]interface{}, 0, len(value)) // 将 []string 转换为 []interface{}。
 	for _, v := range value {
 		m = append(m, v)
 	}
@@ -301,7 +301,7 @@ func SetNestedSlice(obj map[string]interface{}, value []interface{}, fields ...s
 // SetNestedStringMap 设置嵌套字段为 map[string]string 值。
 // 若某一层嵌套不是 map[string]interface{}，则返回错误。
 func SetNestedStringMap(obj map[string]interface{}, value map[string]string, fields ...string) error {
-	m := make(map[string]interface{}, len(value)) // convert map[string]string into map[string]interface{}
+	m := make(map[string]interface{}, len(value)) // 将 map[string]string 转换为 map[string]interface{}。
 	for k, v := range value {
 		m[k] = v
 	}
@@ -355,8 +355,7 @@ func jsonPath(fields []string) string {
 // extractOwnerReference 从原始 map 中提取 OwnerReference。
 // 注意：字段虽定义为 *bool，但从 JSON 解码后是 bool，因此需要手动转回指针。
 func extractOwnerReference(v map[string]interface{}) metav1.OwnerReference {
-	// though this field is a *bool, but when decoded from JSON, it's
-	// unmarshalled as bool.
+	// 该字段虽定义为 *bool，但从 JSON 解码后为 bool。
 	var controllerPtr *bool
 	if controller, found, err := NestedBool(v, "controller"); err == nil && found {
 		controllerPtr = &controller
@@ -377,7 +376,6 @@ func extractOwnerReference(v map[string]interface{}) metav1.OwnerReference {
 
 // UnstructuredJSONScheme 能把 JSON 数据转换为 Unstructured 类型，
 // 从而无需预定义 scheme 即可通用地访问对象。
-// TODO: move into serializer/json.
 var UnstructuredJSONScheme runtime.Codec = unstructuredJSONScheme{}
 
 type unstructuredJSONScheme struct{}
@@ -403,7 +401,7 @@ func (s unstructuredJSONScheme) Decode(data []byte, _ *schema.GroupVersionKind, 
 	if len(gvk.Kind) == 0 {
 		return nil, &gvk, runtime.NewMissingKindErr(string(data))
 	}
-	// TODO(109023): require apiVersion here as well
+	// TODO(109023): 此处也要求提供 apiVersion。
 
 	return obj, &gvk, nil
 }
@@ -428,13 +426,13 @@ func (unstructuredJSONScheme) doEncode(obj runtime.Object, w io.Writer) error {
 			items = append(items, i.Object)
 		}
 		listObj := make(map[string]interface{}, len(t.Object)+1)
-		for k, v := range t.Object { // Make a shallow copy
+		for k, v := range t.Object { // 进行浅复制。
 			listObj[k] = v
 		}
 		listObj["items"] = items
 		return json.NewEncoder(w).Encode(listObj)
 	case *runtime.Unknown:
-		// TODO: Unstructured needs to deal with ContentType.
+		// TODO: Unstructured 需要处理 ContentType。
 		_, err := w.Write(t.Raw)
 		return err
 	default:
@@ -442,7 +440,7 @@ func (unstructuredJSONScheme) doEncode(obj runtime.Object, w io.Writer) error {
 	}
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 func (unstructuredJSONScheme) Identifier() runtime.Identifier {
 	return unstructuredJSONSchemeIdentifier
 }
@@ -463,7 +461,6 @@ func (s unstructuredJSONScheme) decode(data []byte) (runtime.Object, error) {
 		return list, err
 	}
 
-	// No Items field, so it wasn't a list.
 	// 没有 items 字段，按单个对象处理。
 	unstruct := &Unstructured{}
 	err := s.decodeToUnstructured(data, unstruct)
@@ -510,8 +507,6 @@ func (s unstructuredJSONScheme) decodeToList(data []byte, list *UnstructuredList
 		return err
 	}
 
-	// For typed lists, e.g., a PodList, API server doesn't set each item's
-	// APIVersion and Kind. We need to set it.
 	// 类型化列表（如 PodList）中每个条目通常不带 APIVersion/Kind，需要在此补齐。
 	listAPIVersion := list.GetAPIVersion()
 	listKind := list.GetKind()
@@ -524,8 +519,6 @@ func (s unstructuredJSONScheme) decodeToList(data []byte, list *UnstructuredList
 		if err := s.decodeToUnstructured([]byte(i), unstruct); err != nil {
 			return err
 		}
-		// This is hacky. Set the item's Kind and APIVersion to those inferred
-		// from the List.
 		// 仅当条目自身没有 GVK 时才按列表类型推断，避免覆盖条目上已有的信息。
 		if len(unstruct.GetKind()) == 0 && len(unstruct.GetAPIVersion()) == 0 {
 			unstruct.SetKind(itemKind)
@@ -563,8 +556,6 @@ func NewJSONFallbackEncoder(encoder runtime.Encoder) runtime.Encoder {
 
 // Encode 先走底层编码器；只有“类型未注册”错误且对象为 Unstructured 时才回退。
 func (c *jsonFallbackEncoder) Encode(obj runtime.Object, w io.Writer) error {
-	// There is no need to handle runtime.CacheableObject, as we only
-	// fallback to other encoders here.
 	// 无需处理 CacheableObject：这里只负责回退到其他编码器。
 	err := c.encoder.Encode(obj, w)
 	if runtime.IsNotRegisteredError(err) {
@@ -576,7 +567,7 @@ func (c *jsonFallbackEncoder) Encode(obj runtime.Object, w io.Writer) error {
 	return err
 }
 
-// Identifier implements runtime.Encoder interface.
+// Identifier 实现 runtime.Encoder 接口。
 func (c *jsonFallbackEncoder) Identifier() runtime.Identifier {
 	return c.identifier
 }

@@ -30,15 +30,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/mergepatch"
 )
 
-// An alternate implementation of JSON Merge Patch
-// (https://tools.ietf.org/html/rfc7386) which supports the ability to annotate
-// certain fields with metadata that indicates whether the elements of JSON
-// lists should be merged or replaced.
+//这是 JSON Merge Patch（https://tools.ietf.org/html/rfc7386）的替代实现，
+//支持通过元数据标注 JSON 列表元素应当合并还是替换。
 //
-// For more information, see the PATCH section of docs/devel/api-conventions.md.
 //
-// Some of the content of this package was borrowed with minor adaptations from
-// evanphx/json-patch and openshift/origin.
+//更多信息参见 docs/devel/api-conventions.md 的 PATCH 章节。
+//本包部分内容稍作调整后借鉴自
+//evanphx/json-patch 和 openshift/origin。
 
 // 这些是 patch 中具有特殊含义的键：$patch 控制整段语义，
 // $deleteFromPrimitiveList/<field> 与 $setElementOrder/<field> 是列表的并行指令。
@@ -55,50 +53,42 @@ const (
 	setElementOrderDirectivePrefix         = "$setElementOrder"
 )
 
-// JSONMap is a representations of JSON object encoded as map[string]interface{}
-// where the children can be either map[string]interface{}, []interface{} or
-// primitive type).
-// Operating on JSONMap representation is much faster as it doesn't require any
-// json marshaling and/or unmarshaling operations.
+// JSONMap 是编码为 map[string]interface{} 的 JSON 对象，
+// 子节点可以是 map[string]interface{}、[]interface{} 或基本类型。
+// 直接操作 JSONMap 无需 JSON 编解码，因此速度更快。
 type JSONMap map[string]interface{}
 
 // DiffOptions 控制两方/三方 diff 的生成内容。
 // 零值表示：不生成 setElementOrder、包含所有变更与删除、不生成 retainKeys。
 type DiffOptions struct {
-	// SetElementOrder determines whether we generate the $setElementOrder parallel list.
+	//SetElementOrder 决定是否生成 $setElementOrder 并行列表。
 	SetElementOrder bool
-	// IgnoreChangesAndAdditions indicates if we keep the changes and additions in the patch.
+	//IgnoreChangesAndAdditions 决定是否在补丁中保留修改和新增内容。
 	IgnoreChangesAndAdditions bool
-	// IgnoreDeletions indicates if we keep the deletions in the patch.
+	//IgnoreDeletions 决定是否在补丁中保留删除内容。
 	IgnoreDeletions bool
-	// We introduce a new value retainKeys for patchStrategy.
-	// It indicates that all fields needing to be preserved must be
-	// present in the `retainKeys` list.
-	// And the fields that are present will be merged with live object.
-	// All the missing fields will be cleared when patching.
+	//为 patchStrategy 引入 retainKeys 值。
+	//所有需要保留的字段必须出现在 `retainKeys` 列表中；
+	//列表中的字段与线上对象合并，缺失字段在应用补丁时清除。
 	BuildRetainKeysDirective bool
 }
 
 // MergeOptions 控制 patch 合并阶段的语义。
 type MergeOptions struct {
-	// MergeParallelList indicates if we are merging the parallel list.
-	// We don't merge parallel list when calling mergeMap() in CreateThreeWayMergePatch()
-	// which is called client-side.
-	// We merge parallel list iff when calling mergeMap() in StrategicMergeMapPatch()
-	// which is called server-side
+	//MergeParallelList 决定是否合并并行列表。
+	//客户端调用 CreateThreeWayMergePatch() 中的 mergeMap() 时不合并并行列表；
+	//服务端调用 StrategicMergeMapPatch() 中的 mergeMap() 时合并并行列表。
 	MergeParallelList bool
-	// IgnoreUnmatchedNulls indicates if we should process the unmatched nulls.
+	//IgnoreUnmatchedNulls 决定是否处理原对象中不匹配的 null。
 	IgnoreUnmatchedNulls bool
 }
 
-// The following code is adapted from github.com/openshift/origin/pkg/util/jsonmerge.
-// Instead of defining a Delta that holds an original, a patch and a set of preconditions,
-// the reconcile method accepts a set of preconditions as an argument.
+//以下代码改编自 github.com/openshift/origin/pkg/util/jsonmerge。
+//与原实现不同，这里不定义保存原对象、补丁和前置条件的 Delta，
+//而是由 reconcile 方法直接接受前置条件集合。
 
-// CreateTwoWayMergePatch creates a patch that can be passed to StrategicMergePatch from an original
-// document and a modified document, which are passed to the method as json encoded content. It will
-// return a patch that yields the modified document when applied to the original document, or an error
-// if either of the two documents is invalid.
+// CreateTwoWayMergePatch 根据原始和修改后的 JSON 文档创建可传给 StrategicMergePatch 的补丁；
+// 任一文档无效时返回错误。
 //
 // 两方 patch 不涉及并发修改，因此总是生成 setElementOrder 以保留用户给定的列表顺序。
 func CreateTwoWayMergePatch(original, modified []byte, dataStruct interface{}, fns ...mergepatch.PreconditionFunc) ([]byte, error) {
@@ -136,9 +126,8 @@ func CreateTwoWayMergePatchUsingLookupPatchMeta(
 	return json.Marshal(patchMap)
 }
 
-// CreateTwoWayMergeMapPatch creates a patch from an original and modified JSON objects,
-// encoded JSONMap.
-// The serialized version of the map can then be passed to StrategicMergeMapPatch.
+// CreateTwoWayMergeMapPatch 根据原始和修改后的 JSONMap 创建补丁，
+// 序列化后的映射可传给 StrategicMergeMapPatch。
 func CreateTwoWayMergeMapPatch(original, modified JSONMap, dataStruct interface{}, fns ...mergepatch.PreconditionFunc) (JSONMap, error) {
 	schema, err := NewPatchMetaFromStruct(dataStruct)
 	if err != nil {
@@ -159,7 +148,7 @@ func CreateTwoWayMergeMapPatchUsingLookupPatchMeta(original, modified JSONMap, s
 		return nil, err
 	}
 
-	// Apply the preconditions to the patch, and return an error if any of them fail.
+	//对补丁应用前置条件，任一条件不满足则返回错误。
 	for _, fn := range fns {
 		if !fn(patchMap) {
 			return nil, mergepatch.NewErrPreconditionFailed(patchMap)
@@ -169,40 +158,40 @@ func CreateTwoWayMergeMapPatchUsingLookupPatchMeta(original, modified JSONMap, s
 	return patchMap, nil
 }
 
-// Returns a (recursive) strategic merge patch that yields modified when applied to original.
-// Including:
-// - Adding fields to the patch present in modified, missing from original
-// - Setting fields to the patch present in modified and original with different values
-// - Delete fields present in original, missing from modified through
-// - IFF map field - set to nil in patch
-// - IFF list of maps && merge strategy - use deleteDirective for the elements
-// - IFF list of primitives && merge strategy - use parallel deletion list
-// - IFF list of maps or primitives with replace strategy (default) - set patch value to the value in modified
-// - Build $retainKeys directive for fields with retainKeys patch strategy
+// 返回递归战略合并补丁，使其应用于 original 后得到 modified。
+// 包括：
+// - modified 有而 original 无的字段加入补丁。
+// - modified 与 original 值不同的字段在补丁中更新。
+// - original 有而 modified 无的字段通过以下方式删除：
+// - 映射字段设为 nil。
+// - 映射列表且使用 merge 策略时，为元素添加 deleteDirective。
+// - 基本类型列表且使用 merge 策略时，使用并行删除列表。
+// - 映射或基本类型列表使用 replace 策略（默认）时，补丁值取 modified 的值。
+// - 为使用 retainKeys 策略的字段构建 $retainKeys 指令。
 func diffMaps(original, modified map[string]interface{}, schema LookupPatchMeta, diffOptions DiffOptions) (map[string]interface{}, error) {
 	patch := map[string]interface{}{}
 
-	// This will be used to build the $retainKeys directive sent in the patch
+	//用于构建补丁中的 $retainKeys 指令。
 	retainKeysList := make([]interface{}, 0, len(modified))
 
-	// Compare each value in the modified map against the value in the original map
+	//将 modified 映射中的每个值与 original 比较。
 	for key, modifiedValue := range modified {
-		// Get the underlying type for pointers
+		//获取指针的底层类型。
 		if diffOptions.BuildRetainKeysDirective && modifiedValue != nil {
 			retainKeysList = append(retainKeysList, key)
 		}
 
 		originalValue, ok := original[key]
 		if !ok {
-			// Key was added, so add to patch
+			//key 是新增的，加入补丁。
 			if !diffOptions.IgnoreChangesAndAdditions {
 				patch[key] = modifiedValue
 			}
 			continue
 		}
 
-		// The patch may have a patch directive
-		// TODO: figure out if we need this. This shouldn't be needed by apply. When would the original map have patch directives in it?
+		//补丁可能带有 patch 指令。
+		//TODO: 确认是否需要此分支；apply 应不需要它，original 映射何时会带有 patch 指令？
 		foundDirectiveMarker, err := handleDirectiveMarker(key, originalValue, modifiedValue, patch)
 		if err != nil {
 			return nil, err
@@ -212,14 +201,14 @@ func diffMaps(original, modified map[string]interface{}, schema LookupPatchMeta,
 		}
 
 		if reflect.TypeOf(originalValue) != reflect.TypeOf(modifiedValue) {
-			// Types have changed, so add to patch
+			//类型已变化，加入补丁。
 			if !diffOptions.IgnoreChangesAndAdditions {
 				patch[key] = modifiedValue
 			}
 			continue
 		}
 
-		// Types are the same, so compare values
+		//类型相同，比较值。
 		switch originalValueTyped := originalValue.(type) {
 		case map[string]interface{}:
 			modifiedValueTyped := modifiedValue.(map[string]interface{})
@@ -236,10 +225,9 @@ func diffMaps(original, modified map[string]interface{}, schema LookupPatchMeta,
 	}
 
 	updatePatchIfMissing(original, modified, patch, diffOptions)
-	// Insert the retainKeysList iff there are values present in the retainKeysList and
-	// either of the following is true:
-	// - the patch is not empty
-	// - there are additional field in original that need to be cleared
+	//仅在 retainKeysList 非空且满足以下任一条件时插入：
+	//- 补丁非空。
+	//- original 中还有需要清除的额外字段。
 	if len(retainKeysList) > 0 &&
 		(len(patch) > 0 || hasAdditionalNewField(original, modified)) {
 		patch[retainKeysDirective] = sortScalars(retainKeysList)
@@ -247,7 +235,7 @@ func diffMaps(original, modified map[string]interface{}, schema LookupPatchMeta,
 	return patch, nil
 }
 
-// handleDirectiveMarker handles how to diff directive marker between 2 objects
+// handleDirectiveMarker 处理两个对象之间指令标记的差异。
 //
 // $patch 是元数据而非普通字段：只有值发生变化时才写入 patch，
 // 且返回 true 表示该键已处理完，调用方应跳过常规 diff。
@@ -269,23 +257,18 @@ func handleDirectiveMarker(key string, originalValue, modifiedValue interface{},
 	return false, nil
 }
 
-// handleMapDiff diff between 2 maps `originalValueTyped` and `modifiedValue`,
-// puts the diff in the `patch` associated with `key`
-// key is the key associated with originalValue and modifiedValue.
-// originalValue, modifiedValue are the old and new value respectively.They are both maps
-// patch is the patch map that contains key and the updated value, and it is the parent of originalValue, modifiedValue
-// diffOptions contains multiple options to control how we do the diff.
+// handleMapDiff 比较 originalValueTyped 与 modifiedValue 两个映射，并将差异写入 patch 的 key。
 func handleMapDiff(key string, originalValue, modifiedValue, patch map[string]interface{},
 	schema LookupPatchMeta, diffOptions DiffOptions) error {
 	subschema, patchMeta, err := schema.LookupPatchMetadataForStruct(key)
 
 	if err != nil {
-		// We couldn't look up metadata for the field
-		// If the values are identical, this doesn't matter, no patch is needed
+		//无法查找字段元数据；值相同时无需补丁，
+		//因此不影响结果。
 		if reflect.DeepEqual(originalValue, modifiedValue) {
 			return nil
 		}
-		// Otherwise, return the error
+		//否则返回错误。
 		return err
 	}
 	retainKeys, patchStrategy, err := extractRetainKeysPatchStrategy(patchMeta.GetPatchStrategies())
@@ -294,7 +277,7 @@ func handleMapDiff(key string, originalValue, modifiedValue, patch map[string]in
 	}
 	diffOptions.BuildRetainKeysDirective = retainKeys
 	switch patchStrategy {
-	// The patch strategic from metadata tells us to replace the entire object instead of diffing it
+	//元数据中的 patch strategy 要求替换整个对象，而不是计算差异。
 	case replaceDirective:
 		if !diffOptions.IgnoreChangesAndAdditions {
 			patch[key] = modifiedValue
@@ -304,7 +287,7 @@ func handleMapDiff(key string, originalValue, modifiedValue, patch map[string]in
 		if err != nil {
 			return err
 		}
-		// Maps were not identical, use provided patch value
+		//映射不相同，使用提供的补丁值。
 		if len(patchValue) > 0 {
 			patch[key] = patchValue
 		}
@@ -312,22 +295,17 @@ func handleMapDiff(key string, originalValue, modifiedValue, patch map[string]in
 	return nil
 }
 
-// handleSliceDiff diff between 2 slices `originalValueTyped` and `modifiedValue`,
-// puts the diff in the `patch` associated with `key`
-// key is the key associated with originalValue and modifiedValue.
-// originalValue, modifiedValue are the old and new value respectively.They are both slices
-// patch is the patch map that contains key and the updated value, and it is the parent of originalValue, modifiedValue
-// diffOptions contains multiple options to control how we do the diff.
+// handleSliceDiff 比较 originalValueTyped 与 modifiedValue 两个切片，并将差异写入 patch 的 key。
 func handleSliceDiff(key string, originalValue, modifiedValue []interface{}, patch map[string]interface{},
 	schema LookupPatchMeta, diffOptions DiffOptions) error {
 	subschema, patchMeta, err := schema.LookupPatchMetadataForSlice(key)
 	if err != nil {
-		// We couldn't look up metadata for the field
-		// If the values are identical, this doesn't matter, no patch is needed
+		//无法查找字段元数据；值相同时无需补丁，
+		//因此不影响结果。
 		if reflect.DeepEqual(originalValue, modifiedValue) {
 			return nil
 		}
-		// Otherwise, return the error
+		//否则返回错误。
 		return err
 	}
 	retainKeys, patchStrategy, err := extractRetainKeysPatchStrategy(patchMeta.GetPatchStrategies())
@@ -335,7 +313,7 @@ func handleSliceDiff(key string, originalValue, modifiedValue []interface{}, pat
 		return err
 	}
 	switch patchStrategy {
-	// Merge the 2 slices using mergePatchKey
+	//使用 mergePatchKey 合并两个切片。
 	case mergeDirective:
 		diffOptions.BuildRetainKeysDirective = retainKeys
 		addList, deletionList, setOrderList, err := diffLists(originalValue, modifiedValue, subschema, patchMeta.GetPatchMergeKey(), diffOptions)
@@ -345,7 +323,7 @@ func handleSliceDiff(key string, originalValue, modifiedValue []interface{}, pat
 		if len(addList) > 0 {
 			patch[key] = addList
 		}
-		// generate a parallel list for deletion
+		//生成用于删除的并行列表。
 		if len(deletionList) > 0 {
 			parallelDeletionListKey := fmt.Sprintf("%s/%s", deleteFromPrimitiveListDirectivePrefix, key)
 			patch[parallelDeletionListKey] = deletionList
@@ -360,34 +338,33 @@ func handleSliceDiff(key string, originalValue, modifiedValue []interface{}, pat
 	return nil
 }
 
-// replacePatchFieldIfNotEqual updates the patch if original and modified are not deep equal
-// if diffOptions.IgnoreChangesAndAdditions is false.
-// original is the old value, maybe either the live cluster object or the last applied configuration
-// modified is the new value, is always the users new config
+// original 与 modified 深度不相等且未忽略修改时，replacePatchFieldIfNotEqual 更新补丁。
+// original 是旧值，可以是线上对象或 last-applied 配置。
+// modified 始终是用户的新配置。
 func replacePatchFieldIfNotEqual(key string, original, modified interface{},
 	patch map[string]interface{}, diffOptions DiffOptions) {
 	if diffOptions.IgnoreChangesAndAdditions {
-		// Ignoring changes - do nothing
+		//忽略修改时不处理。
 		return
 	}
 	if reflect.DeepEqual(original, modified) {
-		// Contents are identical - do nothing
+		//内容相同则不处理。
 		return
 	}
-	// Create a patch to replace the old value with the new one
+	//创建补丁，用新值替换旧值。
 	patch[key] = modified
 }
 
-// updatePatchIfMissing iterates over `original` when ignoreDeletions is false.
-// Clear the field whose key is not present in `modified`.
-// original is the old value, maybe either the live cluster object or the last applied configuration
-// modified is the new value, is always the users new config
+// 未忽略删除时，updatePatchIfMissing 遍历 original，
+// 清除 modified 中不存在的 key。
+// original 是旧值，可以是线上对象或 last-applied 配置。
+// modified 始终是用户的新配置。
 func updatePatchIfMissing(original, modified, patch map[string]interface{}, diffOptions DiffOptions) {
 	if diffOptions.IgnoreDeletions {
-		// Ignoring deletion - do nothing
+		//忽略删除时不处理。
 		return
 	}
-	// Add nils for deleted values
+	//为删除的值添加 nil。
 	for key := range original {
 		if _, found := modified[key]; !found {
 			patch[key] = nil
@@ -395,7 +372,7 @@ func updatePatchIfMissing(original, modified, patch map[string]interface{}, diff
 	}
 }
 
-// validateMergeKeyInLists checks if each map in the list has the mentryerge key.
+// validateMergeKeyInLists 检查列表中的每个映射是否包含 merge key。
 func validateMergeKeyInLists(mergeKey string, lists ...[]interface{}) error {
 	for _, list := range lists {
 		for _, item := range list {
@@ -411,13 +388,11 @@ func validateMergeKeyInLists(mergeKey string, lists ...[]interface{}) error {
 	return nil
 }
 
-// normalizeElementOrder sort `patch` list by `patchOrder` and sort `serverOnly` list by `serverOrder`.
-// Then it merges the 2 sorted lists.
-// It guarantee the relative order in the patch list and in the serverOnly list is kept.
-// `patch` is a list of items in the patch, and `serverOnly` is a list of items in the live object.
-// `patchOrder` is the order we want `patch` list to have and
-// `serverOrder` is the order we want `serverOnly` list to have.
-// kind is the kind of each item in the lists `patch` and `serverOnly`.
+// normalizeElementOrder 分别按 patchOrder 和 serverOrder 排序 patch 与 serverOnly 列表，再合并两者。
+// 合并时保持两个列表各自的相对顺序。
+// patch 是补丁条目列表，serverOnly 是线上对象中仅服务端存在的条目列表。
+// patchOrder 和 serverOrder 分别指定两个列表期望的顺序，
+// kind 是两个列表中各条目的类型。
 //
 // 最终顺序的优先级：$setElementOrder > patch 中的顺序 > live 对象中的顺序。
 func normalizeElementOrder(patch, serverOnly, patchOrder, serverOrder []interface{}, mergeKey string, kind reflect.Kind) ([]interface{}, error) {
@@ -434,21 +409,20 @@ func normalizeElementOrder(patch, serverOnly, patchOrder, serverOrder []interfac
 	return all, nil
 }
 
-// mergeSortedSlice merges the 2 sorted lists by serverOrder with best effort.
-// It will insert each item in `left` list to `right` list. In most cases, the 2 lists will be interleaved.
-// The relative order of left and right are guaranteed to be kept.
-// They have higher precedence than the order in the live list.
-// The place for a item in `left` is found by:
-// scan from the place of last insertion in `right` to the end of `right`,
-// the place is before the first item that is greater than the item we want to insert.
-// example usage: using server-only items as left and patch items as right. We insert server-only items
-// to patch list. We use the order of live object as record for comparison.
+// mergeSortedSlice 尽力按 serverOrder 合并两个已排序列表。
+// 将 left 中每个条目插入 right，通常两者会交错。
+// 保持 left 和 right 各自的相对顺序。
+// 其顺序优先于线上列表。
+// left 中条目的插入位置按以下规则确定：
+// 从 right 中上次插入位置向后扫描，
+// 插入到第一个大于待插入条目的元素之前。
+// 示例：以服务端专有条目为 left、补丁条目为 right，将前者插入后者，
+// 并以线上对象顺序作为比较依据。
 //
 // less 只在两侧都能在 serverOrder 中找到位置时才有效；找不到时退化为"取 right"，
 // 这样未知元素（例如新加入的 patch 项）会排在已知位置之后。
 func mergeSortedSlice(left, right, serverOrder []interface{}, mergeKey string, kind reflect.Kind) []interface{} {
-	// Returns if l is less than r, and if both have been found.
-	// If l and r both present and l is in front of r, l is less than r.
+	//如果 l、r 均存在且 l 在 r 之前，则返回 true。
 	less := func(l, r interface{}) (bool, bool) {
 		li := index(serverOrder, l, mergeKey, kind)
 		ri := index(serverOrder, r, mergeKey, kind)
@@ -459,22 +433,22 @@ func mergeSortedSlice(left, right, serverOrder []interface{}, mergeKey string, k
 		}
 	}
 
-	// left and right should be non-overlapping.
+	//left 和 right 不应重叠。
 	size := len(left) + len(right)
 	i, j := 0, 0
 	s := make([]interface{}, size, size)
 
 	for k := 0; k < size; k++ {
 		if i >= len(left) && j < len(right) {
-			// have items left in `right` list
+			//right 中仍有条目。
 			s[k] = right[j]
 			j++
 		} else if j >= len(right) && i < len(left) {
-			// have items left in `left` list
+			//left 中仍有条目。
 			s[k] = left[i]
 			i++
 		} else {
-			// compare them if i and j are both in bound
+			//如果 i、j 均未越界，则比较两个条目。
 			less, foundBoth := less(left[i], right[j])
 			if foundBoth && less {
 				s[k] = left[i]
@@ -488,13 +462,13 @@ func mergeSortedSlice(left, right, serverOrder []interface{}, mergeKey string, k
 	return s
 }
 
-// index returns the index of the item in the given items, or -1 if it doesn't exist
-// l must NOT be a slice of slices, this should be checked before calling.
+// index 返回条目在给定列表中的索引，不存在时返回 -1。
+// l 不能是切片组成的切片，调用前必须检查。
 func index(l []interface{}, valToLookUp interface{}, mergeKey string, kind reflect.Kind) int {
 	var getValFn func(interface{}) interface{}
-	// Get the correct `getValFn` based on item `kind`.
-	// It should return the value of merge key for maps and
-	// return the item for other kinds.
+	//根据条目 kind 选择合适的 getValFn；
+	//映射返回 merge key 的值，
+	//其他类型返回条目本身。
 	switch kind {
 	case reflect.Map:
 		getValFn = func(item interface{}) interface{} {
@@ -519,8 +493,7 @@ func index(l []interface{}, valToLookUp interface{}, mergeKey string, kind refle
 	return -1
 }
 
-// extractToDeleteItems takes a list and
-// returns 2 lists: one contains items that should be kept and the other contains items to be deleted.
+// extractToDeleteItems 将列表拆为两个：保留条目与待删除条目。
 //
 // $patch: delete 元素不会参与后续合并，先剥离出来单独处理。
 func extractToDeleteItems(l []interface{}) ([]interface{}, []interface{}, error) {
@@ -541,14 +514,14 @@ func extractToDeleteItems(l []interface{}) ([]interface{}, []interface{}, error)
 	return nonDelete, toDelete, nil
 }
 
-// normalizeSliceOrder sort `toSort` list by `order`
+// normalizeSliceOrder 按 order 排序 toSort 列表。
 //
 // 使用 SliceStable 保证不在 order 中的元素维持原有相对顺序；
 // 删除指令被移到末尾，避免影响排序比较。
 func normalizeSliceOrder(toSort, order []interface{}, mergeKey string, kind reflect.Kind) ([]interface{}, error) {
 	var toDelete []interface{}
 	if kind == reflect.Map {
-		// make sure each item in toSort, order has merge key
+		//确保 toSort 和 order 中的每个条目都有 merge key。
 		err := validateMergeKeyInLists(mergeKey, toSort, order)
 		if err != nil {
 			return nil, err
@@ -571,22 +544,21 @@ func normalizeSliceOrder(toSort, order []interface{}, mergeKey string, kind refl
 	return toSort, nil
 }
 
-// Returns a (recursive) strategic merge patch, a parallel deletion list if necessary and
-// another list to set the order of the list
-// Only list of primitives with merge strategy will generate a parallel deletion list.
-// These two lists should yield modified when applied to original, for lists with merge semantics.
+// 返回递归战略合并补丁，以及必要时生成的并行删除列表和元素顺序列表。
+// 只有使用 merge 策略的基本类型列表会生成并行删除列表。
+// 对于使用 merge 语义的列表，这两个列表应用于 original 后应得到 modified。
 func diffLists(original, modified []interface{}, schema LookupPatchMeta, mergeKey string, diffOptions DiffOptions) ([]interface{}, []interface{}, []interface{}, error) {
 	if len(original) == 0 {
-		// Both slices are empty - do nothing
+		//两个切片都为空时不处理。
 		if len(modified) == 0 || diffOptions.IgnoreChangesAndAdditions {
 			return nil, nil, nil, nil
 		}
 
-		// Old slice was empty - add all elements from the new slice
+		// 旧切片为空时加入新切片的所有元素。
 		return modified, nil, nil, nil
 	}
 
-	// 列表元素类型必须一致，且不允许 list of lists。
+	// 列表元素类型必须一致，且不允许列表的列表。
 	elementType, err := sliceElementType(original, modified)
 	if err != nil {
 		return nil, nil, nil, err
@@ -608,14 +580,14 @@ func diffLists(original, modified []interface{}, schema LookupPatchMeta, mergeKe
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		// append the deletions to the end of the patch list.
+		//将删除列表追加到补丁列表末尾。
 		patchList = append(patchList, deleteList...)
 		deleteList = nil
-		// generate the setElementOrder list when there are content changes or order changes
+		//内容或顺序变化时生成 setElementOrder 列表。
 		if diffOptions.SetElementOrder &&
 			((!diffOptions.IgnoreChangesAndAdditions && (len(patchList) > 0 || !orderSame)) ||
 				(!diffOptions.IgnoreDeletions && len(patchList) > 0)) {
-			// Generate a list of maps that each item contains only the merge key.
+			//生成仅含 merge key 的映射列表。
 			setOrderList = make([]interface{}, len(modified))
 			for i, v := range modified {
 				typedV := v.(map[string]interface{})
@@ -625,7 +597,7 @@ func diffLists(original, modified []interface{}, schema LookupPatchMeta, mergeKe
 			}
 		}
 	case reflect.Slice:
-		// Lists of Lists are not permitted by the api
+		//API 不允许列表嵌套列表。
 		return nil, nil, nil, mergepatch.ErrNoListOfLists
 	default:
 		patchList, deleteList, err = diffListsOfScalars(original, modified, diffOptions)
@@ -633,7 +605,7 @@ func diffLists(original, modified []interface{}, schema LookupPatchMeta, mergeKe
 			return nil, nil, nil, err
 		}
 		patchList, err = normalizeSliceOrder(patchList, modified, mergeKey, kind)
-		// generate the setElementOrder list when there are content changes or order changes
+		//内容或顺序变化时生成 setElementOrder 列表。
 		if diffOptions.SetElementOrder && ((!diffOptions.IgnoreDeletions && len(deleteList) > 0) ||
 			(!diffOptions.IgnoreChangesAndAdditions && !reflect.DeepEqual(original, modified))) {
 			setOrderList = modified
@@ -642,7 +614,7 @@ func diffLists(original, modified []interface{}, schema LookupPatchMeta, mergeKe
 	return patchList, deleteList, setOrderList, err
 }
 
-// isOrderSame checks if the order in a list has changed
+// isOrderSame 检查列表顺序是否变化。
 func isOrderSame(original, modified []interface{}, mergeKey string) (bool, error) {
 	if len(original) != len(modified) {
 		return false, nil
@@ -656,17 +628,17 @@ func isOrderSame(original, modified []interface{}, mergeKey string) (bool, error
 	return true, nil
 }
 
-// diffListsOfScalars returns 2 lists, the first one is addList and the second one is deletionList.
-// Argument diffOptions.IgnoreChangesAndAdditions controls if calculate addList. true means not calculate.
-// Argument diffOptions.IgnoreDeletions controls if calculate deletionList. true means not calculate.
-// original may be changed, but modified is guaranteed to not be changed
+// diffListsOfScalars 返回新增列表和删除列表。
+// diffOptions.IgnoreChangesAndAdditions 为 true 时不计算新增列表。
+// diffOptions.IgnoreDeletions 为 true 时不计算删除列表。
+// original 可能被修改，modified 保证不被修改。
 //
 // 标量无法用 merge key 匹配，只能先排序再做双指针归并；排序依赖
 // fmt.Sprintf("%v") 的字符串序，因此不同数值类型可能按字典序而非数值序排列。
 func diffListsOfScalars(original, modified []interface{}, diffOptions DiffOptions) ([]interface{}, []interface{}, error) {
 	modifiedCopy := make([]interface{}, len(modified))
 	copy(modifiedCopy, modified)
-	// Sort the scalars for easier calculating the diff
+	//排序基本类型以便计算差异。
 	originalScalars := sortScalars(original)
 	modifiedScalars := sortScalars(modifiedCopy)
 
@@ -680,9 +652,9 @@ func diffListsOfScalars(original, modified []interface{}, diffOptions DiffOption
 		if !originalInBounds && !modifiedInBounds {
 			break
 		}
-		// we need to compare the string representation of the scalar,
-		// because the scalar is an interface which doesn't support either < or >
-		// And that's how func sortScalars compare scalars.
+		//需要比较基本类型的字符串表示，
+		//因为 scalar 是 interface，不支持 < 或 >；
+		//sortScalars 据此比较。
 		var originalString, modifiedString string
 		var originalValue, modifiedValue interface{}
 		if originalInBounds {
@@ -717,24 +689,24 @@ func diffListsOfScalars(original, modified []interface{}, diffOptions DiffOption
 	return addList, deduplicateScalars(deletionList), nil
 }
 
-// If first return value is non-nil, list1 contains an element not present in list2
-// If second return value is non-nil, list2 contains an element not present in list1
+// 第一个返回值非 nil 表示 list1 含有 list2 没有的元素；
+// 第二个返回值非 nil 表示 list2 含有 list1 没有的元素。
 func compareListValuesAtIndex(list1Inbounds, list2Inbounds bool, list1Value, list2Value string) (interface{}, interface{}) {
 	bothInBounds := list1Inbounds && list2Inbounds
 	switch {
-	// scalars are identical
+	//基本类型相同。
 	case bothInBounds && list1Value == list2Value:
 		return nil, nil
-	// only list2 is in bound
+	//仅 list2 未越界。
 	case !list1Inbounds:
 		fallthrough
-	// list2 has additional scalar
+	//list2 有额外元素。
 	case bothInBounds && list1Value > list2Value:
 		return nil, list2Value
-	// only original is in bound
+	//仅 original 未越界。
 	case !list2Inbounds:
 		fallthrough
-	// original has additional scalar
+	//original 有额外元素。
 	case bothInBounds && list1Value < list2Value:
 		return list1Value, nil
 	default:
@@ -742,9 +714,7 @@ func compareListValuesAtIndex(list1Inbounds, list2Inbounds bool, list1Value, lis
 	}
 }
 
-// diffListsOfMaps takes a pair of lists and
-// returns a (recursive) strategic merge patch list contains additions and changes and
-// a deletion list contains deletions
+// diffListsOfMaps 接收两个列表，返回包含新增和修改的递归补丁列表及删除列表。
 //
 // 两侧先按 merge key 排序，再做有序归并比较；merge key 值统一转成字符串比较，
 // 因此数字键 1 与字符串键 "1" 会被视为同一个键。
@@ -790,7 +760,7 @@ func diffListsOfMaps(original, modified []interface{}, schema LookupPatchMeta, m
 
 		switch {
 		case bothInBounds && ItemMatchesOriginalAndModifiedSlice(originalElementMergeKeyValueString, modifiedElementMergeKeyValueString):
-			// Merge key values are equal, so recurse
+			//merge key 相同，递归合并。
 			patchValue, err := diffMaps(originalElement, modifiedElement, schema, diffOptions)
 			if err != nil {
 				return nil, nil, err
@@ -801,22 +771,22 @@ func diffListsOfMaps(original, modified []interface{}, schema LookupPatchMeta, m
 			}
 			originalIndex++
 			modifiedIndex++
-		// only modified is in bound
+		//仅 modified 未越界。
 		case !originalInBounds:
 			fallthrough
-		// modified has additional map
+		//modified 有额外映射。
 		case bothInBounds && ItemAddedToModifiedSlice(originalElementMergeKeyValueString, modifiedElementMergeKeyValueString):
 			if !diffOptions.IgnoreChangesAndAdditions {
 				patch = append(patch, modifiedElement)
 			}
 			modifiedIndex++
-		// only original is in bound
+		//仅 original 未越界。
 		case !modifiedInBounds:
 			fallthrough
-		// original has additional map
+		//original 有额外映射。
 		case bothInBounds && ItemRemovedFromModifiedSlice(originalElementMergeKeyValueString, modifiedElementMergeKeyValueString):
 			if !diffOptions.IgnoreDeletions {
-				// Item was deleted, so add delete directive
+				//条目已删除，添加 delete 指令。
 				deletionList = append(deletionList, CreateDeleteDirective(mergeKey, originalElementMergeKeyValue))
 			}
 			originalIndex++
@@ -826,7 +796,7 @@ func diffListsOfMaps(original, modified []interface{}, schema LookupPatchMeta, m
 	return patch, deletionList, nil
 }
 
-// getMapAndMergeKeyValueByIndex return a map in the list and its merge key value given the index of the map.
+// getMapAndMergeKeyValueByIndex 根据索引返回列表中的映射及其 merge key 值。
 func getMapAndMergeKeyValueByIndex(index int, mergeKey string, listOfMaps []interface{}) (map[string]interface{}, interface{}, error) {
 	m, ok := listOfMaps[index].(map[string]interface{})
 	if !ok {
@@ -840,9 +810,8 @@ func getMapAndMergeKeyValueByIndex(index int, mergeKey string, listOfMaps []inte
 	return m, val, nil
 }
 
-// StrategicMergePatch applies a strategic merge patch. The patch and the original document
-// must be json encoded content. A patch can be created from an original and a modified document
-// by calling CreateStrategicMergePatch.
+// StrategicMergePatch 应用战略合并补丁。补丁和原始文档都必须是 JSON 编码内容；
+// 可先根据原始和修改后的文档调用 CreateStrategicMergePatch 创建补丁。
 func StrategicMergePatch(original, patch []byte, dataStruct interface{}) ([]byte, error) {
 	schema, err := NewPatchMetaFromStruct(dataStruct)
 	if err != nil {
@@ -886,22 +855,20 @@ func handleUnmarshal(j []byte) (map[string]interface{}, error) {
 	return m, nil
 }
 
-// StrategicMergeMapPatch applies a strategic merge patch. The original and patch documents
-// must be JSONMap. A patch can be created from an original and modified document by
-// calling CreateTwoWayMergeMapPatch.
-// Warning: the original and patch JSONMap objects are mutated by this function and should not be reused.
+// StrategicMergeMapPatch 应用战略合并补丁，original 和 patch 都必须是 JSONMap。
+// 可调用 CreateTwoWayMergeMapPatch 创建补丁。
+// 警告：此函数会修改 original 和 patch JSONMap，不应复用它们。
 func StrategicMergeMapPatch(original, patch JSONMap, dataStruct interface{}) (JSONMap, error) {
 	schema, err := NewPatchMetaFromStruct(dataStruct)
 	if err != nil {
 		return nil, err
 	}
 
-	// We need the go struct tags `patchMergeKey` and `patchStrategy` for fields that support a strategic merge patch.
-	// For native resources, we can easily figure out these tags since we know the fields.
+	//支持战略合并补丁的字段需要 Go 结构体 tag `patchMergeKey` 和 `patchStrategy`。
+	//原生资源可以根据已知字段直接确定这些 tag。
 
-	// Because custom resources are decoded as Unstructured and because we're missing the metadata about how to handle
-	// each field in a strategic merge patch, we can't find the go struct tags. Hence, we can't easily  do a strategic merge
-	// for custom resources. So we should fail fast and return an error.
+	//自定义资源被解码为 Unstructured，且缺少如何处理各字段的元数据，
+	//因此找不到 Go 结构体 tag，也无法直接执行战略合并；应快速失败并返回错误。
 	//
 	// 这是刻意的前置检查：若不在此拒绝，会静默退化成普通 merge patch，
 	// 与调用方对 list merge key 的预期不符。
@@ -912,6 +879,8 @@ func StrategicMergeMapPatch(original, patch JSONMap, dataStruct interface{}) (JS
 	return StrategicMergeMapPatchUsingLookupPatchMeta(original, patch, schema)
 }
 
+// StrategicMergeMapPatchUsingLookupPatchMeta 使用给定 schema 元数据将 patch 应用到 original。
+// 与 StrategicMergeMapPatch 不同，调用方需直接提供字段的补丁策略和合并键信息。
 func StrategicMergeMapPatchUsingLookupPatchMeta(original, patch JSONMap, schema LookupPatchMeta) (JSONMap, error) {
 	// 服务端合并需要处理并行列表（删除/排序指令），且保留未匹配的 null
 	// 以便把显式删除传递给下层存储。
@@ -922,13 +891,10 @@ func StrategicMergeMapPatchUsingLookupPatchMeta(original, patch JSONMap, schema 
 	return mergeMap(original, patch, schema, mergeOptions)
 }
 
-// MergeStrategicMergeMapPatchUsingLookupPatchMeta merges strategic merge
-// patches retaining `null` fields and parallel lists. If 2 patches change the
-// same fields and the latter one will override the former one. If you don't
-// want that happen, you need to run func MergingMapsHaveConflicts before
-// merging these patches. Applying the resulting merged merge patch to a JSONMap
-// yields the same as merging each strategic merge patch to the JSONMap in
-// succession.
+// MergeStrategicMergeMapPatchUsingLookupPatchMeta 合并战略合并补丁，并保留 `null` 字段和并行列表。
+// 后一个补丁会覆盖前一个补丁对同一字段的修改；
+// 如需检测冲突，应先调用 MergingMapsHaveConflicts。
+// 将合并补丁应用于 JSONMap 的结果，等同于依次应用每个战略合并补丁。
 //
 // 与 StrategicMergeMapPatch 不同，这里不合并并行列表、也不忽略未匹配的 null，
 // 因为输入本身就是 patch，需要保留全部指令以便后续整体应用。
@@ -948,22 +914,20 @@ func MergeStrategicMergeMapPatchUsingLookupPatchMeta(schema LookupPatchMeta, pat
 	return merged, nil
 }
 
-// handleDirectiveInMergeMap handles the patch directive when merging 2 maps.
+// handleDirectiveInMergeMap 处理合并两个映射时的 patch 指令。
 //
 // $patch: replace 会先删除指令键再返回 patch 本身；$patch: delete 返回空 map，
 // 由上层决定是否保留（取决于 IgnoreUnmatchedNulls）。
 func handleDirectiveInMergeMap(directive interface{}, patch map[string]interface{}) (map[string]interface{}, error) {
 	if directive == replaceDirective {
-		// If the patch contains "$patch: replace", don't merge it, just use the
-		// patch directly. Later on, we can add a single level replace that only
-		// affects the map that the $patch is in.
+		//补丁包含 "$patch: replace" 时不合并，直接使用补丁；
+		//未来可增加仅影响 $patch 所在映射的单层 replace。
 		delete(patch, directiveMarker)
 		return patch, nil
 	}
 
 	if directive == deleteDirective {
-		// If the patch contains "$patch: delete", don't merge it, just return
-		//  an empty map.
+		//补丁包含 "$patch: delete" 时不合并，直接返回空映射。
 		return map[string]interface{}{}, nil
 	}
 
@@ -1006,7 +970,7 @@ func mergeKeyValueEqual(left, right interface{}, mergeKey string) (bool, error) 
 	return mergeKeyLeft == mergeKeyRight, nil
 }
 
-// extractKey trims the prefix and return the original key
+// extractKey 去除前缀并返回原始 key。
 //
 // 只按第一个 '/' 切分：字段名本身可能含 '/'（如带斜杠的注解键）。
 func extractKey(s, prefix string) (string, error) {
@@ -1024,9 +988,9 @@ func extractKey(s, prefix string) (string, error) {
 	return substrings[1], nil
 }
 
-// validatePatchUsingSetOrderList verifies:
-// the relative order of any two items in the setOrderList list matches that in the patch list.
-// the items in the patch list must be a subset or the same as the $setElementOrder list (deletions are ignored).
+// validatePatchUsingSetOrderList 验证：
+// setOrderList 中任意两个条目的相对顺序与 patch 列表一致。
+// patch 列表条目必须是 $setElementOrder 列表的子集或与其相同（忽略删除项）。
 //
 // 用双指针做子序列检查：patch 中的每一项都必须按序出现在 setElementOrder 中，
 // 否则说明用户给出的顺序指令与实际 patch 内容矛盾。
@@ -1069,23 +1033,22 @@ func validatePatchWithSetOrderList(patchList, setOrderList interface{}, mergeKey
 		}
 		setOrderIndex++
 	}
-	// If patchIndex is inbound but setOrderIndex if out of bound mean there are items mismatching between the patch list and setElementOrder list.
-	// the second check is a sanity check, and should always be true if the first is true.
+	//patchIndex 未越界而 setOrderIndex 越界，表示 patch 列表与 setElementOrder 列表存在不匹配条目。
+	//第二项是合理性检查；第一项成立时它应始终成立。
 	if patchIndex < len(nonDeleteList) && setOrderIndex >= len(typedSetOrderList) {
 		return fmt.Errorf("The order in patch list:\n%v\n doesn't match %s list:\n%v\n", typedPatchList, setElementOrderDirectivePrefix, setOrderList)
 	}
 	return nil
 }
 
-// preprocessDeletionListForMerging preprocesses the deletion list.
-// it returns shouldContinue, isDeletionList, noPrefixKey
+// preprocessDeletionListForMerging 预处理删除列表，返回 shouldContinue、isDeletionList 和 noPrefixKey。
 //
 // 非并行列表合并模式下，删除列表被当作普通字段直接写入 original；
 // 合并模式下则剥离前缀，让后续 mergeSlice 按真正的字段名处理。
 func preprocessDeletionListForMerging(key string, original map[string]interface{},
 	patchVal interface{}, mergeDeletionList bool) (bool, bool, string, error) {
-	// If found a parallel list for deletion and we are going to merge the list,
-	// overwrite the key to the original key and set flag isDeleteList
+	//找到并行删除列表且需要合并该列表时，
+	//将 key 恢复为原始 key，并设置 isDeleteList 标志。
 	foundParallelListPrefix := strings.HasPrefix(key, deleteFromPrimitiveListDirectivePrefix)
 	if foundParallelListPrefix {
 		if !mergeDeletionList {
@@ -1098,11 +1061,11 @@ func preprocessDeletionListForMerging(key string, original map[string]interface{
 	return false, false, "", nil
 }
 
-// applyRetainKeysDirective looks for a retainKeys directive and applies to original
-// - if no directive exists do nothing
-// - if directive is found, clear keys in original missing from the directive list
-// - validate that all keys present in the patch are present in the retainKeys directive
-// note: original may be another patch request, e.g. applying the add+modified patch to the deletions patch. In this case it may have directives
+// applyRetainKeysDirective 查找 retainKeys 指令并应用于 original：
+// - 指令不存在时不处理。
+// - 找到指令时清除 original 中不在指令列表内的 key。
+// - 验证 patch 中所有 key 都在 retainKeys 指令内。
+// 注意：original 也可能是另一个补丁请求，例如将新增和修改补丁应用到删除补丁；此时它可能带有指令。
 //
 // retainKeys 的语义是"白名单"：original 中不在列表里的字段会被清除，
 // 而 patch 中出现未列入白名单的字段则视为格式错误。
@@ -1111,16 +1074,16 @@ func applyRetainKeysDirective(original, patch map[string]interface{}, options Me
 	if !foundInPatch {
 		return nil
 	}
-	// cleanup the directive
+	//清理指令。
 	delete(patch, retainKeysDirective)
 
 	if !options.MergeParallelList {
-		// If original is actually a patch, make sure the retainKeys directives are the same in both patches if present in both.
-		// If not present in the original patch, copy from the modified patch.
+		//如果 original 也是补丁，两个补丁都带有 retainKeys 指令时必须确保它们相同。
+		//original 补丁没有该指令时，从 modified 补丁复制。
 		retainKeysInOriginal, foundInOriginal := original[retainKeysDirective]
 		if foundInOriginal {
 			if !reflect.DeepEqual(retainKeysInOriginal, retainKeysInPatch) {
-				// This error actually should never happen.
+				//此错误不应发生。
 				return fmt.Errorf("%v and %v are not deep equal: this may happen when calculating the 3-way diff patch", retainKeysInOriginal, retainKeysInPatch)
 			}
 		} else {
@@ -1134,8 +1097,8 @@ func applyRetainKeysDirective(original, patch map[string]interface{}, options Me
 		return mergepatch.ErrBadPatchFormatForRetainKeys
 	}
 
-	// validate patch to make sure all fields in the patch are present in the retainKeysList.
-	// The map is used only as a set, the value is never referenced
+	//验证 patch 中所有字段都存在于 retainKeysList。
+	//该映射仅作为集合使用，值不会被读取。
 	m := map[interface{}]struct{}{}
 	for _, v := range retainKeysList {
 		m[v] = struct{}{}
@@ -1145,14 +1108,14 @@ func applyRetainKeysDirective(original, patch map[string]interface{}, options Me
 			strings.HasPrefix(k, setElementOrderDirectivePrefix) {
 			continue
 		}
-		// If there is an item present in the patch but not in the retainKeys list,
-		// the patch is invalid.
+		//如果 patch 中含有不在 retainKeys 列表内的条目，
+		//则补丁无效。
 		if _, found := m[k]; !found {
 			return mergepatch.ErrBadPatchFormatForRetainKeys
 		}
 	}
 
-	// clear not present fields
+	//清除不存在的字段。
 	for k := range original {
 		if _, found := m[k]; !found {
 			delete(original, k)
@@ -1161,36 +1124,36 @@ func applyRetainKeysDirective(original, patch map[string]interface{}, options Me
 	return nil
 }
 
-// mergePatchIntoOriginal processes $setElementOrder list.
-// When not merging the directive, it will make sure $setElementOrder list exist only in original.
-// When merging the directive, it will try to find the $setElementOrder list and
-// its corresponding patch list, validate it and merge it.
-// Then, sort them by the relative order in setElementOrder, patch list and live list.
-// The precedence is $setElementOrder > order in patch list > order in live list.
-// This function will delete the item after merging it to prevent process it again in the future.
-// Ref: https://git.k8s.io/design-proposals-archive/cli/preserve-order-in-strategic-merge-patch.md
+// mergePatchIntoOriginal 处理 $setElementOrder 列表。
+// 不合并指令时，确保 $setElementOrder 列表只存在于 original。
+// 合并指令时，查找 $setElementOrder 列表及对应的 patch 列表，
+// 校验后合并。
+// 随后按 setElementOrder、patch 列表和线上列表的相对顺序排序。
+// 优先级为 $setElementOrder > patch 列表顺序 > 线上列表顺序。
+// 条目合并后会删除，避免后续重复处理。
+// 参考：https://git.k8s.io/design-proposals-archive/cli/preserve-order-in-strategic-merge-patch.md
 //
 // 该函数会直接修改 patch：处理完的指令与对应列表键都会被删除，
 // 因此调用方不能复用传入的 patch map。
 func mergePatchIntoOriginal(original, patch map[string]interface{}, schema LookupPatchMeta, mergeOptions MergeOptions) error {
 	for key, patchV := range patch {
-		// Do nothing if there is no ordering directive
+		//没有顺序指令时不处理。
 		if !strings.HasPrefix(key, setElementOrderDirectivePrefix) {
 			continue
 		}
 
 		setElementOrderInPatch := patchV
-		// Copies directive from the second patch (`patch`) to the first patch (`original`)
-		// and checks they are equal and delete the directive in the second patch
+		//将第二个补丁（patch）的指令复制到第一个补丁（original），
+		//检查两者相等，并删除第二个补丁中的指令。
 		if !mergeOptions.MergeParallelList {
 			setElementOrderListInOriginal, ok := original[key]
 			if ok {
-				// check if the setElementOrder list in original and the one in patch matches
+				//检查 original 与 patch 中的 setElementOrder 列表是否匹配。
 				if !reflect.DeepEqual(setElementOrderListInOriginal, setElementOrderInPatch) {
 					return mergepatch.ErrBadPatchFormatForSetElementOrderList
 				}
 			} else {
-				// move the setElementOrder list from patch to original
+				//将 setElementOrder 列表从 patch 移至 original。
 				original[key] = setElementOrderInPatch
 			}
 		}
@@ -1207,12 +1170,12 @@ func mergePatchIntoOriginal(original, patch map[string]interface{}, schema Looku
 		if !ok {
 			return mergepatch.ErrBadArgType(typedSetElementOrderList, setElementOrderInPatch)
 		}
-		// Trim the setElementOrderDirectivePrefix to get the key of the list field in original.
+		//去除 setElementOrderDirectivePrefix，得到 original 中列表字段的 key。
 		originalKey, err := extractKey(key, setElementOrderDirectivePrefix)
 		if err != nil {
 			return err
 		}
-		// try to find the list with `originalKey` in `original` and `modified` and merge them.
+		//尝试在 original 和 modified 中查找 originalKey 对应的列表并合并。
 		originalList, foundOriginal := original[originalKey]
 		patchList, foundPatch := patch[originalKey]
 		if foundOriginal {
@@ -1235,7 +1198,7 @@ func mergePatchIntoOriginal(original, patch map[string]interface{}, schema Looku
 		if err != nil {
 			return err
 		}
-		// Check for consistency between the element order list and the field it applies to
+		//检查元素顺序列表与其作用的字段是否一致。
 		err = validatePatchWithSetOrderList(patchFieldValue, typedSetElementOrderList, patchMeta.GetPatchMergeKey())
 		if err != nil {
 			return err
@@ -1243,13 +1206,13 @@ func mergePatchIntoOriginal(original, patch map[string]interface{}, schema Looku
 
 		switch {
 		case foundOriginal && !foundPatch:
-			// no change to list contents
+			//列表内容未变化。
 			merged = originalFieldValue
 		case !foundOriginal && foundPatch:
-			// list was added
+			//列表是新增的。
 			v, keep := removeDirectives(patchFieldValue)
 			if !keep {
-				// Shouldn't be possible since patchFieldValue is a slice
+				//不应发生，因为 patchFieldValue 是切片。
 				continue
 			}
 
@@ -1264,14 +1227,14 @@ func mergePatchIntoOriginal(original, patch map[string]interface{}, schema Looku
 			continue
 		}
 
-		// Split all items into patch items and server-only items and then enforce the order.
+		//将所有条目分为 patch 条目和服务端专有条目，再强制排序。
 		var patchItems, serverOnlyItems []interface{}
 		if len(patchMeta.GetPatchMergeKey()) == 0 {
-			// Primitives doesn't need merge key to do partitioning.
+			//基本类型无需 merge key 即可分组。
 			patchItems, serverOnlyItems = partitionPrimitivesByPresentInList(merged, typedSetElementOrderList)
 
 		} else {
-			// Maps need merge key to do partitioning.
+			//映射需要 merge key 才能分组。
 			patchItems, serverOnlyItems, err = partitionMapsByPresentInList(merged, typedSetElementOrderList, patchMeta.GetPatchMergeKey())
 			if err != nil {
 				return err
@@ -1283,21 +1246,21 @@ func mergePatchIntoOriginal(original, patch map[string]interface{}, schema Looku
 			return err
 		}
 		kind := elementType.Kind()
-		// normalize merged list
-		// typedSetElementOrderList contains all the relative order in typedPatchList,
-		// so don't need to use typedPatchList
+		//规范化合并后的列表。
+		//typedSetElementOrderList 已包含 typedPatchList 的全部相对顺序，
+		//因此无需再使用 typedPatchList。
 		both, err := normalizeElementOrder(patchItems, serverOnlyItems, typedSetElementOrderList, originalFieldValue, patchMeta.GetPatchMergeKey(), kind)
 		if err != nil {
 			return err
 		}
 		original[originalKey] = both
-		// delete patch list from patch to prevent process again in the future
+		//从 patch 中删除 patch 列表，避免后续重复处理。
 		delete(patch, originalKey)
 	}
 	return nil
 }
 
-// partitionPrimitivesByPresentInList partitions elements into 2 slices, the first containing items present in partitionBy, the other not.
+// partitionPrimitivesByPresentInList 将基本类型条目分为存在于 partitionBy 中和不存在的两个切片。
 func partitionPrimitivesByPresentInList(original, partitionBy []interface{}) ([]interface{}, []interface{}) {
 	patch := make([]interface{}, 0, len(original))
 	serverOnly := make([]interface{}, 0, len(original))
@@ -1315,7 +1278,7 @@ func partitionPrimitivesByPresentInList(original, partitionBy []interface{}) ([]
 	return patch, serverOnly
 }
 
-// partitionMapsByPresentInList partitions elements into 2 slices, the first containing items present in partitionBy, the other not.
+// partitionMapsByPresentInList 将映射条目分为存在于 partitionBy 中和不存在的两个切片。
 func partitionMapsByPresentInList(original, partitionBy []interface{}, mergeKey string) ([]interface{}, []interface{}, error) {
 	patch := make([]interface{}, 0, len(original))
 	serverOnly := make([]interface{}, 0, len(original))
@@ -1341,9 +1304,8 @@ func partitionMapsByPresentInList(original, partitionBy []interface{}, mergeKey 
 	return patch, serverOnly, nil
 }
 
-// Removes directives from an object and returns value to use instead and whether
-// or not the field/index should even be kept
-// May modify input
+// 移除对象中的指令，返回替代值以及是否保留该字段或索引。
+// 可能修改输入。
 //
 // 带 $patch 指令的对象整体不保留（返回 keep=false），
 // 列表中的此类元素会被丢弃；其余递归清理。
@@ -1366,7 +1328,7 @@ func removeDirectives(obj interface{}) (interface{}, bool) {
 	} else if typedV, ok := obj.([]interface{}); ok {
 		var res []interface{}
 		if typedV != nil {
-			// Make sure res is non-nil if patch is non-nil
+			//patch 非 nil 时确保结果非 nil。
 			res = []interface{}{}
 		}
 		for _, v := range typedV {
@@ -1380,13 +1342,12 @@ func removeDirectives(obj interface{}) (interface{}, bool) {
 	}
 }
 
-// Merge fields from a patch map into the original map. Note: This may modify
-// both the original map and the patch because getting a deep copy of a map in
-// golang is highly non-trivial.
-// flag mergeOptions.MergeParallelList controls if using the parallel list to delete or keeping the list.
-// If patch contains any null field (e.g. field_1: null) that is not
-// present in original, then to propagate it to the end result use
-// mergeOptions.IgnoreUnmatchedNulls == false.
+// 将补丁映射中的字段合并到 original；Go 中映射深拷贝非常复杂，
+// 因此 original 和 patch 都可能被修改。
+// mergeOptions.MergeParallelList 控制使用并行列表删除条目还是保留列表。
+// 如果 patch 含有 original 中不存在的 null 字段（如 field_1: null），
+// 要将它传递到最终结果，需设置
+// mergeOptions.IgnoreUnmatchedNulls == false。
 //
 // 这是整个包的核心合并循环：先处理 map 级指令（$patch、$retainKeys、
 // $setElementOrder），再逐键递归；null 表示删除，类型变化表示整体替换。
@@ -1395,8 +1356,8 @@ func mergeMap(original, patch map[string]interface{}, schema LookupPatchMeta, me
 		return handleDirectiveInMergeMap(v, patch)
 	}
 
-	// nil is an accepted value for original to simplify logic in other places.
-	// If original is nil, replace it with an empty map and then apply the patch.
+	//original 允许为 nil，以简化其他位置的逻辑。
+	//original 为 nil 时替换为空映射，再应用补丁。
 	if original == nil {
 		original = map[string]interface{}{}
 	}
@@ -1406,16 +1367,16 @@ func mergeMap(original, patch map[string]interface{}, schema LookupPatchMeta, me
 		return nil, err
 	}
 
-	// Process $setElementOrder list and other lists sharing the same key.
-	// When not merging the directive, it will make sure $setElementOrder list exist only in original.
-	// When merging the directive, it will process $setElementOrder and its patch list together.
-	// This function will delete the merged elements from patch so they will not be reprocessed
+	//处理 $setElementOrder 列表及使用相同 key 的其他列表。
+	//不合并指令时，确保 $setElementOrder 列表只存在于 original。
+	//合并指令时，共同处理 $setElementOrder 及其 patch 列表。
+	//合并后的元素会从 patch 中删除，避免重复处理。
 	err = mergePatchIntoOriginal(original, patch, schema, mergeOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	// Start merging the patch into the original.
+	//开始将补丁合并到 original。
 	for k, patchV := range patch {
 		skipProcessing, isDeleteList, noPrefixKey, err := preprocessDeletionListForMerging(k, original, patchV, mergeOptions.MergeParallelList)
 		if err != nil {
@@ -1428,14 +1389,13 @@ func mergeMap(original, patch map[string]interface{}, schema LookupPatchMeta, me
 			k = noPrefixKey
 		}
 
-		// If the value of this key is null, delete the key if it exists in the
-		// original. Otherwise, check if we want to preserve it or skip it.
-		// Preserving the null value is useful when we want to send an explicit
-		// delete to the API server.
-		// In some cases, this may lead to inconsistent behavior with create.
-		// ref: https://github.com/kubernetes/kubernetes/issues/123304
-		// To avoid breaking compatibility,
-		// we made corresponding changes on the client side to ensure that the create and patch behaviors are idempotent.
+		//如果该 key 的值为 null，则从 original 删除已有 key；
+		//否则检查是否保留或跳过它。
+		//保留 null 有助于向 API 服务器发送显式删除，
+		//某些情况下这会导致与 create 行为不一致。
+		//参考：https://github.com/kubernetes/kubernetes/issues/123304
+		//为避免破坏兼容性，
+		//客户端也做了相应修改，确保 create 和 patch 行为幂等。
 		if patchV == nil {
 			delete(original, k)
 			if mergeOptions.IgnoreUnmatchedNulls {
@@ -1446,7 +1406,7 @@ func mergeMap(original, patch map[string]interface{}, schema LookupPatchMeta, me
 		_, ok := original[k]
 		if !ok {
 			if !isDeleteList {
-				// If it's not in the original document, just take the patch value.
+				//原文档中不存在该 key 时，直接采用补丁值。
 				if mergeOptions.IgnoreUnmatchedNulls {
 					discardNullValuesFromPatch(patchV)
 				}
@@ -1472,7 +1432,7 @@ func mergeMap(original, patch map[string]interface{}, schema LookupPatchMeta, me
 			}
 			continue
 		}
-		// If they're both maps or lists, recurse into the value.
+		//两者都是映射或列表时递归处理。
 		switch originalType.Kind() {
 		case reflect.Map:
 			subschema, patchMeta, err2 := schema.LookupPatchMetadataForStruct(k)
@@ -1497,7 +1457,7 @@ func mergeMap(original, patch map[string]interface{}, schema LookupPatchMeta, me
 		default:
 			original[k], ok = removeDirectives(patchV)
 			if !ok {
-				// if patchV itself is a directive, then don't keep it
+				//patchV 本身是指令时不要保留它。
 				delete(original, k)
 			}
 		}
@@ -1508,8 +1468,8 @@ func mergeMap(original, patch map[string]interface{}, schema LookupPatchMeta, me
 	return original, nil
 }
 
-// discardNullValuesFromPatch discards all null property values from patch.
-// It traverses all slices and map types.
+// discardNullValuesFromPatch 从 patch 中丢弃所有 null 属性值。
+// 它会遍历所有切片和映射类型。
 //
 // 仅在 IgnoreUnmatchedNulls 为 true 时使用：对象原本没有该字段时，
 // 显式 null 没有"删除"对象，保留它只会产生无意义的空字段。
@@ -1530,8 +1490,7 @@ func discardNullValuesFromPatch(patchV interface{}) {
 	}
 }
 
-// mergeMapHandler handles how to merge `patchV` whose key is `key` with `original` respecting
-// fieldPatchStrategy and mergeOptions.
+// mergeMapHandler 根据 fieldPatchStrategy 和 mergeOptions，将 key 对应的 patchV 合并到 original。
 //
 // replace 策略下直接用 patch 覆盖；其余情况递归 mergeMap。
 func mergeMapHandler(original, patch interface{}, schema LookupPatchMeta,
@@ -1548,8 +1507,7 @@ func mergeMapHandler(original, patch interface{}, schema LookupPatchMeta,
 	}
 }
 
-// mergeSliceHandler handles how to merge `patchV` whose key is `key` with `original` respecting
-// fieldPatchStrategy, fieldPatchMergeKey, isDeleteList and mergeOptions.
+// mergeSliceHandler 根据 fieldPatchStrategy、fieldPatchMergeKey、isDeleteList 和 mergeOptions 合并切片。
 //
 // 删除列表无论字段自身策略如何都按 merge 语义处理，否则无法定位要删除的元素。
 func mergeSliceHandler(original, patch interface{}, schema LookupPatchMeta,
@@ -1559,7 +1517,7 @@ func mergeSliceHandler(original, patch interface{}, schema LookupPatchMeta,
 		return nil, err
 	}
 
-	// Delete lists are handled the same way regardless of what the field's patch strategy is
+	//无论字段的 patch strategy 是什么，删除列表的处理方式都相同。
 	if fieldPatchStrategy == mergeDirective || isDeleteList {
 		return mergeSlice(typedOriginal, typedPatch, schema, fieldPatchMergeKey, mergeOptions, isDeleteList)
 	} else {
@@ -1567,9 +1525,7 @@ func mergeSliceHandler(original, patch interface{}, schema LookupPatchMeta,
 	}
 }
 
-// Merge two slices together. Note: This may modify both the original slice and
-// the patch because getting a deep copy of a slice in golang is highly
-// non-trivial.
+// 合并两个切片；Go 中切片深拷贝非常复杂，因此 original 和 patch 都可能被修改。
 //
 // 标量列表按"并集去重"合并；带 merge key 的 map 列表按 key 匹配后递归合并，
 // 最后由 normalizeElementOrder 统一排序。
@@ -1578,7 +1534,7 @@ func mergeSlice(original, patch []interface{}, schema LookupPatchMeta, mergeKey 
 		return original, nil
 	}
 
-	// All the values must be of the same type, but not a list.
+	//所有值必须类型相同，且不能是列表。
 	t, err := sliceElementType(original, patch)
 	if err != nil {
 		return nil, err
@@ -1586,13 +1542,12 @@ func mergeSlice(original, patch []interface{}, schema LookupPatchMeta, mergeKey 
 
 	var merged []interface{}
 	kind := t.Kind()
-	// If the elements are not maps, merge the slices of scalars.
+	//元素不是映射时，合并基本类型切片。
 	if kind != reflect.Map {
 		if mergeOptions.MergeParallelList && isDeleteList {
 			return deleteFromSlice(original, patch), nil
 		}
-		// Maybe in the future add a "concat" mode that doesn't
-		// deduplicate.
+		//未来可增加不去重的 "concat" 模式。
 		both := append(original, patch...)
 		merged = deduplicateScalars(both)
 
@@ -1612,7 +1567,7 @@ func mergeSlice(original, patch []interface{}, schema LookupPatchMeta, mergeKey 
 		}
 	}
 
-	// enforce the order
+	//强制排序。
 	var patchItems, serverOnlyItems []interface{}
 	if len(mergeKey) == 0 {
 		patchItems, serverOnlyItems = partitionPrimitivesByPresentInList(merged, patch)
@@ -1625,9 +1580,9 @@ func mergeSlice(original, patch []interface{}, schema LookupPatchMeta, mergeKey 
 	return normalizeElementOrder(patchItems, serverOnlyItems, patch, original, mergeKey, kind)
 }
 
-// mergeSliceWithSpecialElements handles special elements with directiveMarker
-// before merging the slices. It returns a updated `original` and a patch without special elements.
-// original and patch must be slices of maps, they should be checked before calling this function.
+// mergeSliceWithSpecialElements 在合并切片前处理带有 directiveMarker 的特殊元素，
+// 返回更新后的 original 和已移除特殊元素的 patch。
+// original 和 patch 必须是映射切片，调用前必须检查。
 //
 // 遇到 $patch: replace 时，整个列表以 patch 为准，original 中的内容全部丢弃；
 // 遇到 $patch: delete 时按 merge key 从 original 中删除对应元素。
@@ -1654,7 +1609,7 @@ func mergeSliceWithSpecialElements(original, patch []interface{}, mergeKey strin
 				}
 			case replaceDirective:
 				replace = true
-				// Continue iterating through the array to prune any other $patch elements.
+				//继续遍历数组，清除其他 $patch 元素。
 			case mergeDirective:
 				return nil, nil, fmt.Errorf("merging lists cannot yet be specified in the patch")
 			default:
@@ -1668,7 +1623,7 @@ func mergeSliceWithSpecialElements(original, patch []interface{}, mergeKey strin
 	return original, patchWithoutSpecialElements, nil
 }
 
-// delete all matching entries (based on merge key) from a merging list
+// 根据 merge key 从合并列表中删除所有匹配条目。
 //
 // 循环删除而不是一次遍历：original 中可能存在 merge key 重复的非法数据，
 // 需要把所有匹配项都清掉。
@@ -1682,14 +1637,14 @@ func deleteMatchingEntries(original []interface{}, mergeKey string, mergeValue i
 		if !found {
 			break
 		}
-		// Delete the element at originalKey.
+		//删除 originalKey 对应的元素。
 		original = append(original[:originalKey], original[originalKey+1:]...)
 	}
 	return original, nil
 }
 
-// mergeSliceWithoutSpecialElements merges slices with non-special elements.
-// original and patch must be slices of maps, they should be checked before calling this function.
+// mergeSliceWithoutSpecialElements 合并不含特殊元素的切片。
+// original 和 patch 必须是映射切片，调用前必须检查。
 //
 // 这是 map 列表合并的主路径：按 merge key 找到 original 中的对应元素后递归 mergeMap，
 // 找不到则追加到末尾。
@@ -1701,8 +1656,8 @@ func mergeSliceWithoutSpecialElements(original, patch []interface{}, mergeKey st
 			return nil, mergepatch.ErrNoMergeKey(typedV, mergeKey)
 		}
 
-		// If we find a value with this merge key value in original, merge the
-		// maps. Otherwise append onto original.
+		//在 original 中找到相同 merge key 的条目时合并映射，
+		//否则追加到 original。
 		originalMap, originalKey, found, err := findMapInSliceBasedOnKeyValue(original, mergeKey, mergeValue)
 		if err != nil {
 			return nil, err
@@ -1711,7 +1666,7 @@ func mergeSliceWithoutSpecialElements(original, patch []interface{}, mergeKey st
 		if found {
 			var mergedMaps interface{}
 			var err error
-			// Merge into original.
+			//合并到 original。
 			mergedMaps, err = mergeMap(originalMap, typedV, schema, mergeOptions)
 			if err != nil {
 				return nil, err
@@ -1725,7 +1680,7 @@ func mergeSliceWithoutSpecialElements(original, patch []interface{}, mergeKey st
 	return original, nil
 }
 
-// deleteFromSlice uses the parallel list to delete the items in a list of scalars
+// deleteFromSlice 使用并行列表删除基本类型列表中的条目。
 //
 // 用 map 做 O(1) 查找；toDeleteMap 的值无实际意义，只充当集合。
 func deleteFromSlice(current, toDelete []interface{}) []interface{} {
@@ -1742,7 +1697,7 @@ func deleteFromSlice(current, toDelete []interface{}) []interface{} {
 	return processed
 }
 
-// This method no longer panics if any element of the slice is not a map.
+// 此方法不再因切片中含有非映射元素而 panic。
 //
 // 返回元素、下标以及是否找到；merge key 值用 == 比较，
 // 因此数值类型（int/float64）之间的差异不会被忽略。
@@ -1762,10 +1717,10 @@ func findMapInSliceBasedOnKeyValue(m []interface{}, key string, value interface{
 	return nil, 0, false, nil
 }
 
-// This function takes a JSON map and sorts all the lists that should be merged
-// by key. This is needed by tests because in JSON, list order is significant,
-// but in Strategic Merge Patch, merge lists do not have significant order.
-// Sorting the lists allows for order-insensitive comparison of patched maps.
+// 此函数按 key 排序 JSON 映射中所有需要合并的列表。
+// 测试需要此操作，因为 JSON 中列表顺序有意义，
+// 而战略合并补丁中 merge 列表的顺序不重要。
+// 排序后可忽略顺序比较补丁后的映射。
 func sortMergeListsByName(mapJSON []byte, schema LookupPatchMeta) ([]byte, error) {
 	var m map[string]interface{}
 	err := json.Unmarshal(mapJSON, &m)
@@ -1781,7 +1736,7 @@ func sortMergeListsByName(mapJSON []byte, schema LookupPatchMeta) ([]byte, error
 	return json.Marshal(newM)
 }
 
-// Function sortMergeListsByNameMap recursively sorts the merge lists by its mergeKey in a map.
+// sortMergeListsByNameMap 递归按 mergeKey 排序映射中的 merge 列表。
 //
 // 并行指令列表（retainKeys、deleteFromPrimitiveList）也一并排序，
 // 保证生成的 JSON 可做稳定的字节级比较。
@@ -1806,7 +1761,7 @@ func sortMergeListsByNameMap(s map[string]interface{}, schema LookupPatchMeta) (
 				return nil, mergepatch.ErrBadPatchFormatForSetElementOrderList
 			}
 		} else if k != directiveMarker {
-			// recurse for map and slice.
+			//映射和切片递归处理。
 			switch typedV := v.(type) {
 			case map[string]interface{}:
 				subschema, _, err := schema.LookupPatchMetadataForStruct(k)
@@ -1842,7 +1797,7 @@ func sortMergeListsByNameMap(s map[string]interface{}, schema LookupPatchMeta) (
 	return newS, nil
 }
 
-// Function sortMergeListsByNameMap recursively sorts the merge lists by its mergeKey in an array.
+// sortMergeListsByNameMap 递归按 mergeKey 排序数组中的 merge 列表。
 //
 // recurse=false 用于 diffListsOfMaps：只按 merge key 排序当前层，
 // 不深入元素内部，避免改变元素内容。
@@ -1851,20 +1806,20 @@ func sortMergeListsByNameArray(s []interface{}, schema LookupPatchMeta, mergeKey
 		return s, nil
 	}
 
-	// We don't support lists of lists yet.
+	//尚不支持列表嵌套列表。
 	t, err := sliceElementType(s)
 	if err != nil {
 		return nil, err
 	}
 
-	// If the elements are not maps...
+	//如果元素不是映射：
 	if t.Kind() != reflect.Map {
-		// Sort the elements, because they may have been merged out of order.
+		//元素可能未按顺序合并，因此需要排序。
 		return deduplicateAndSortScalars(s), nil
 	}
 
-	// Elements are maps - if one of the keys of the map is a map or a
-	// list, we may need to recurse into it.
+	//元素是映射；如果某个 key 的值是映射或列表，
+	//可能需要递归处理。
 	newS := []interface{}{}
 	for _, elem := range s {
 		if recurse {
@@ -1880,7 +1835,7 @@ func sortMergeListsByNameArray(s []interface{}, schema LookupPatchMeta, mergeKey
 		}
 	}
 
-	// Sort the maps.
+	//排序映射。
 	newS = sortMapsBasedOnField(newS, mergeKey)
 	return newS, nil
 }
@@ -1921,7 +1876,7 @@ func sliceFromMapSlice(s []map[string]interface{}) []interface{} {
 // 用 fmt.Sprintf("%v") 是为了兼容任意类型的键值。
 type SortableSliceOfMaps struct {
 	s []map[string]interface{}
-	k string // key to sort on
+	k string //用于排序的 key。
 }
 
 func (ss SortableSliceOfMaps) Len() int {
@@ -1954,7 +1909,7 @@ func sortScalars(s []interface{}) []interface{} {
 // deduplicateScalars 就地去重：发现重复时用末尾元素覆盖当前位置并缩短切片。
 // 该算法不保序，调用方随后通常会排序。
 func deduplicateScalars(s []interface{}) []interface{} {
-	// Clever algorithm to deduplicate.
+	//巧妙的去重算法。
 	length := len(s) - 1
 	for i := 0; i < length; i++ {
 		for j := i + 1; j <= length; j++ {
@@ -1989,19 +1944,18 @@ func (ss SortableSliceOfScalars) Swap(i, j int) {
 	ss.s[i], ss.s[j] = ss.s[j], ss.s[i]
 }
 
-// Returns the type of the elements of N slice(s). If the type is different,
-// another slice or undefined, returns an error.
+// 返回 N 个切片中元素的类型；类型不同、是切片或未定义时返回错误。
 //
 // 空切片不贡献类型；全部为空时报错，因为调用方无法据此决定合并策略。
 func sliceElementType(slices ...[]interface{}) (reflect.Type, error) {
 	var prevType reflect.Type
 	for _, s := range slices {
-		// Go through elements of all given slices and make sure they are all the same type.
+		//遍历所有切片元素，确保类型一致。
 		for _, v := range s {
 			currentType := reflect.TypeOf(v)
 			if prevType == nil {
 				prevType = currentType
-				// We don't support lists of lists yet.
+				//尚不支持列表嵌套列表。
 				if prevType.Kind() == reflect.Slice {
 					return nil, mergepatch.ErrNoListOfLists
 				}
@@ -2021,10 +1975,9 @@ func sliceElementType(slices ...[]interface{}) (reflect.Type, error) {
 	return prevType, nil
 }
 
-// MergingMapsHaveConflicts returns true if the left and right JSON interface
-// objects overlap with different values in any key. All keys are required to be
-// strings. Since patches of the same Type have congruent keys, this is valid
-// for multiple patch types. This method supports strategic merge patch semantics.
+// 如果 left 和 right 两个 JSON 对象在任一 key 上重叠且值不同，MergingMapsHaveConflicts 返回 true。
+// 所有 key 必须是字符串；同一 Type 的补丁键一致，因此可适用于多种补丁类型。
+// 此方法支持战略合并补丁语义。
 //
 // 仅当同一字段被双方以不同方式修改时才判为冲突；merge 策略的标量列表
 // 天然是并集语义，因此不产生冲突。
@@ -2047,18 +2000,18 @@ func mergingMapFieldsHaveConflicts(
 		}
 		leftMarker, okLeft := leftType[directiveMarker]
 		rightMarker, okRight := rightType[directiveMarker]
-		// if one or the other has a directive marker,
-		// then we need to consider that before looking at the individual keys,
-		// since a directive operates on the whole map.
+		//如果任一侧带有指令标记，
+		//应先处理指令，再检查各个 key，
+		//因为指令作用于整个映射。
 		if okLeft || okRight {
-			// if one has a directive marker and the other doesn't,
-			// then we have a conflict, since one is deleting or replacing the whole map,
-			// and the other is doing things to individual keys.
+			//如果只有一侧带有指令标记，
+			//则存在冲突：一侧删除或替换整个映射，
+			//另一侧只修改单个 key。
 			if okLeft != okRight {
 				return true, nil
 			}
-			// if they both have markers, but they are not the same directive,
-			// then we have a conflict because they're doing different things to the map.
+			//如果两侧都有标记但指令不同，
+			//则对映射的操作不同，存在冲突。
 			if leftMarker != rightMarker {
 				return true, nil
 			}
@@ -2066,7 +2019,7 @@ func mergingMapFieldsHaveConflicts(
 		if fieldPatchStrategy == replaceDirective {
 			return false, nil
 		}
-		// Check the individual keys.
+		//检查各个 key。
 		return mapsHaveConflicts(leftType, rightType, schema)
 
 	case []interface{}:
@@ -2136,13 +2089,13 @@ func slicesHaveConflicts(
 	}
 
 	if fieldPatchStrategy == mergeDirective {
-		// Merging lists of scalars have no conflicts by definition
-		// So we only need to check further if the elements are maps
+		//基本类型列表合并按定义不存在冲突，
+		//只有元素为映射时才需要继续检查。
 		if elementType.Kind() != reflect.Map {
 			return false, nil
 		}
 
-		// Build a map for each slice and then compare the two maps
+		//为每个切片构建映射，再比较两个映射。
 		leftMap, err := sliceOfMapsToMapOfMaps(typedLeft, fieldPatchMergeKey)
 		if err != nil {
 			return true, err
@@ -2156,20 +2109,20 @@ func slicesHaveConflicts(
 		return mapsOfMapsHaveConflicts(leftMap, rightMap, schema)
 	}
 
-	// Either we don't have type information, or these are non-merging lists
+	//没有类型信息，或这些是不合并的列表。
 	if len(typedLeft) != len(typedRight) {
 		return true, nil
 	}
 
-	// Sort scalar slices to prevent ordering issues
-	// We have no way to sort non-merging lists of maps
+	//排序基本类型切片以避免顺序问题。
+	//无法排序不合并的映射列表。
 	if elementType.Kind() != reflect.Map {
 		typedLeft = deduplicateAndSortScalars(typedLeft)
 		typedRight = deduplicateAndSortScalars(typedRight)
 	}
 
-	// Compare the slices element by element in order
-	// This test will fail if the slices are not sorted
+	//按顺序逐元素比较切片。
+	//如果切片未排序，此检查会失败。
 	for i := range typedLeft {
 		if hasConflicts, err := mergingMapFieldsHaveConflicts(typedLeft[i], typedRight[i], schema, "", ""); hasConflicts {
 			return true, err
@@ -2213,17 +2166,12 @@ func mapsOfMapsHaveConflicts(typedLeft, typedRight map[string]interface{}, schem
 	return false, nil
 }
 
-// CreateThreeWayMergePatch reconciles a modified configuration with an original configuration,
-// while preserving any changes or deletions made to the original configuration in the interim,
-// and not overridden by the current configuration. All three documents must be passed to the
-// method as json encoded content. It will return a strategic merge patch, or an error if any
-// of the documents is invalid, or if there are any preconditions that fail against the modified
-// configuration, or, if overwrite is false and there are conflicts between the modified and current
-// configurations. Conflicts are defined as keys changed differently from original to modified
-// than from original to current. In other words, a conflict occurs if modified changes any key
-// in a way that is different from how it is changed in current (e.g., deleting it, changing its
-// value). We also propagate values fields that do not exist in original but are explicitly
-// defined in modified.
+// CreateThreeWayMergePatch 将修改后的配置与原始配置协调，
+// 保留期间对原始配置做出且未被当前配置覆盖的修改和删除。
+// 三个文档都必须以 JSON 编码内容传入；任一文档无效、
+// 前置条件不满足，或 overwrite 为 false 且 modified 与 current 存在冲突时返回错误。
+// 冲突是指某 key 从 original 到 modified 与从 original 到 current 的变化不同，
+// 例如删除或修改值的方式不同。original 中不存在但 modified 显式定义的字段也会传递。
 //
 // 三方 patch 的构造：delta = current->modified（不含删除），
 // deletions = original->modified（只含删除），再把 delta 叠加到 deletions 上，
@@ -2250,10 +2198,9 @@ func CreateThreeWayMergePatch(original, modified, current []byte, schema LookupP
 		}
 	}
 
-	// The patch is the difference from current to modified without deletions, plus deletions
-	// from original to modified. To find it, we compute deletions, which are the deletions from
-	// original to modified, and delta, which is the difference from current to modified without
-	// deletions, and then apply delta to deletions as a patch, which should be strictly additive.
+	//补丁包含 current 到 modified 的非删除差异，以及 original 到 modified 的删除。
+	//计算时先求 original 到 modified 的删除，再求 current 到 modified 的非删除差异，
+	//然后将 delta 作为补丁应用到 deletions；结果应严格只含新增。
 	deltaMapDiffOptions := DiffOptions{
 		IgnoreDeletions: true,
 		SetElementOrder: true,
@@ -2278,15 +2225,15 @@ func CreateThreeWayMergePatch(original, modified, current []byte, schema LookupP
 		return nil, err
 	}
 
-	// Apply the preconditions to the patch, and return an error if any of them fail.
+	//对补丁应用前置条件，任一条件不满足则返回错误。
 	for _, fn := range fns {
 		if !fn(patchMap) {
 			return nil, mergepatch.NewErrPreconditionFailed(patchMap)
 		}
 	}
 
-	// If overwrite is false, and the patch contains any keys that were changed differently,
-	// then return a conflict error.
+	//如果 overwrite 为 False 且补丁含有被不同修改的 key，
+	//则返回冲突错误。
 	if !overwrite {
 		changeMapDiffOptions := DiffOptions{}
 		changedMap, err := diffMaps(originalMap, currentMap, schema, changeMapDiffOptions)
@@ -2349,9 +2296,8 @@ func sliceTypeAssertion(original, patch interface{}) ([]interface{}, []interface
 	return typedOriginal, typedPatch, nil
 }
 
-// extractRetainKeysPatchStrategy process patch strategy, which is a string may contains multiple
-// patch strategies separated by ",". It returns a boolean var indicating if it has
-// retainKeys strategies and a string for the other strategy.
+// extractRetainKeysPatchStrategy 处理可能含多个逗号分隔策略的字符串，
+// 返回是否包含 retainKeys 以及其他策略。
 //
 // 仅支持 0/1/2 个策略，且最多一个 retainKeys；其他组合直接报错，
 // 避免对未知策略做错误的静默处理。
@@ -2381,7 +2327,7 @@ func extractRetainKeysPatchStrategy(strategies []string) (bool, string, error) {
 	}
 }
 
-// hasAdditionalNewField returns if original map has additional key with non-nil value than modified.
+// 如果 original 含有 modified 没有的非 nil 值字段，hasAdditionalNewField 返回 true。
 //
 // null 值不算"字段存在"，因为 diff 生成时 null 就代表删除，无需 retainKeys 指令。
 func hasAdditionalNewField(original, modified map[string]interface{}) bool {

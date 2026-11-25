@@ -154,7 +154,7 @@ func (c channelContext) Value(key any) any { return nil }
 //
 // Deprecated: 遗留轮询方法移除后将一并删除。
 func runConditionWithCrashProtection(condition ConditionFunc) (bool, error) {
-	//nolint:logcheck // Already deprecated.
+	//nolint:logcheck // 已弃用。
 	defer runtime.HandleCrash()
 	return condition()
 }

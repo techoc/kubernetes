@@ -41,7 +41,6 @@ func (m *Time) ProtoTime() *Timestamp {
 		Seconds: m.Time.Unix(),
 		// 保留这段注释说明原因：JSON 只处理秒精度；如果 protobuf 客户端写入纳秒，JSON 客户端读取不到，
 		// 就会出现意外的字段变更，并导致校验和相等性判断失败。
-		// Nanos:   int32(m.Time.Nanosecond()),
 	}
 }
 
@@ -66,10 +65,6 @@ func (m *Time) Unmarshal(data []byte) error {
 	}
 	// 出于与 ProtoTime 相同的兼容性原因，忽略 Nanos：JSON 只携带秒精度，
 	// protobuf 输入中的纳秒不能改变 JSON 客户端无法观察到的状态。
-	// leaving this here for the record.  our JSON only handled seconds, so this results in writes by
-	// protobuf clients storing values that aren't read by json clients, which results in unexpected
-	// field mutation, which fails various validation and equality code.
-	// m.Time = time.Unix(p.Seconds, int64(p.Nanos)).Local()
 	m.Time = time.Unix(p.Seconds, int64(0)).Local()
 	return nil
 }

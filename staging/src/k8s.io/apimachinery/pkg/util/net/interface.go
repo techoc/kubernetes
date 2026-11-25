@@ -50,7 +50,7 @@ var (
 )
 
 const (
-	// LoopbackInterfaceName is the default name of the loopback interface
+	//LoopbackInterfaceName 是回环接口的默认名称。
 	LoopbackInterfaceName = "lo"
 )
 
@@ -74,7 +74,7 @@ type RouteFile struct {
 	parse func(input io.Reader) ([]Route, error)
 }
 
-// noRoutesError can be returned in case of no routes
+// 没有路由时可能返回 noRoutesError。
 type noRoutesError struct {
 	message string
 }
@@ -83,7 +83,7 @@ func (e noRoutesError) Error() string {
 	return e.message
 }
 
-// IsNoRoutesError checks if an error is of type noRoutesError
+// IsNoRoutesError 检查错误是否为 noRoutesError 类型。
 func IsNoRoutesError(err error) bool {
 	if err == nil {
 		return false
@@ -112,7 +112,7 @@ func (rf RouteFile) extract() ([]Route, error) {
 	return rf.parse(file)
 }
 
-// getIPv4DefaultRoutes obtains the IPv4 routes, and filters out non-default routes.
+// getIPv4DefaultRoutes 获取 IPv4 路由并过滤非默认路由。
 func getIPv4DefaultRoutes(input io.Reader) ([]Route, error) {
 	routes := []Route{}
 	scanner := bufio.NewReader(input)
@@ -121,15 +121,15 @@ func getIPv4DefaultRoutes(input io.Reader) ([]Route, error) {
 		if err == io.EOF {
 			break
 		}
-		//ignore the headers in the route info
+		//忽略路由信息中的头部字段
 		if strings.HasPrefix(line, "Iface") {
 			continue
 		}
 		fields := strings.Fields(line)
-		// Interested in fields:
-		//  0 - interface name
-		//  1 - destination address
-		//  2 - gateway
+		//关注以下字段：
+		//0 - 接口名称
+		//1 - 目标地址
+		//2 - 网关
 		dest, err := parseIP(fields[1], familyIPv4)
 		if err != nil {
 			return nil, err
@@ -164,10 +164,10 @@ func getIPv6DefaultRoutes(input io.Reader) ([]Route, error) {
 			break
 		}
 		fields := strings.Fields(line)
-		// Interested in fields:
-		//  0 - destination address
-		//  4 - gateway
-		//  9 - interface name
+		//关注以下字段：
+		//0 - 目标地址
+		//4 - 网关
+		//9 - 接口名称
 		dest, err := parseIP(fields[0], familyIPv6)
 		if err != nil {
 			return nil, err
@@ -180,7 +180,7 @@ func getIPv6DefaultRoutes(input io.Reader) ([]Route, error) {
 			continue
 		}
 		if gw.Equal(net.IPv6zero) {
-			continue // loopback
+			continue //回环接口
 		}
 		routes = append(routes, Route{
 			Interface:   fields[9],
@@ -192,8 +192,8 @@ func getIPv6DefaultRoutes(input io.Reader) ([]Route, error) {
 	return routes, nil
 }
 
-// parseIP takes the hex IP address string from route file and converts it
-// to a net.IP address. For IPv4, the value must be converted to big endian.
+// parseIP 将路由文件中的十六进制 IP 字符串转换为 net.IP。
+// IPv4 值必须转换为大端序。
 //
 // 中文说明：/proc 中的 IPv4 地址按主机字节序存储，需反转字节才能得到网络序；
 // IPv6 已经是网络序，直接用。
@@ -211,7 +211,7 @@ func parseIP(str string, family AddressFamily) (net.IP, error) {
 		}
 		return net.IP([]byte{bytes[3], bytes[2], bytes[1], bytes[0]}), nil
 	}
-	// Must be IPv6
+	//必须是 IPv6
 	if len(bytes) != net.IPv6len {
 		return nil, fmt.Errorf("invalid IPv6 address in route")
 	}
@@ -236,8 +236,7 @@ func isLoopbackOrPointToPoint(intf *net.Interface) bool {
 	return intf.Flags&(net.FlagLoopback|net.FlagPointToPoint) != 0
 }
 
-// getMatchingGlobalIP returns the first valid global unicast address of the given
-// 'family' from the list of 'addrs'.
+// getMatchingGlobalIP 从 addrs 中返回指定地址族的第一有效全局单播地址。
 func getMatchingGlobalIP(logger klog.Logger, addrs []net.Addr, family AddressFamily) (net.IP, error) {
 	if len(addrs) > 0 {
 		for i := range addrs {
@@ -263,8 +262,8 @@ func getMatchingGlobalIP(logger klog.Logger, addrs []net.Addr, family AddressFam
 	return nil, nil
 }
 
-// getIPFromInterface gets the IPs on an interface and returns a global unicast address, if any. The
-// interface must be up, the IP must in the family requested, and the IP must be a global unicast address.
+// getIPFromInterface 获取接口上的 IP，并返回全局单播地址（如果有）。
+// 接口必须启用，IP 必须属于请求的地址族且为全局单播地址。
 func getIPFromInterface(logger klog.Logger, intfName string, forFamily AddressFamily, nw networkInterfacer) (net.IP, error) {
 	intf, err := nw.InterfaceByName(intfName)
 	if err != nil {
@@ -288,8 +287,8 @@ func getIPFromInterface(logger klog.Logger, intfName string, forFamily AddressFa
 	return nil, nil
 }
 
-// getIPFromLoopbackInterface gets the IPs on a loopback interface and returns a global unicast address, if any.
-// The loopback interface must be up, the IP must in the family requested, and the IP must be a global unicast address.
+// getIPFromLoopbackInterface 获取回环接口上的 IP，并返回全局单播地址（如果有）。
+// 回环接口必须启用，IP 必须属于请求的地址族且为全局单播地址。
 //
 // 中文说明：RFC5549 场景下默认路由的接口只有 link-local 地址，而真正的
 // 全局地址挂在 loopback 上，因此在路由接口找不到时需回退到这里。
@@ -321,7 +320,7 @@ func getIPFromLoopbackInterface(logger klog.Logger, forFamily AddressFamily, nw 
 	return nil, nil
 }
 
-// memberOf tells if the IP is of the desired family. Used for checking interface addresses.
+// memberOf 判断 IP 是否属于目标地址族，用于检查接口地址。
 func memberOf(ip net.IP, family AddressFamily) bool {
 	if ip.To4() != nil {
 		return family == familyIPv4
@@ -330,9 +329,9 @@ func memberOf(ip net.IP, family AddressFamily) bool {
 	}
 }
 
-// chooseIPFromHostInterfaces looks at all system interfaces, trying to find one that is up that
-// has a global unicast address (non-loopback, non-link local, non-point2point), and returns the IP.
-// addressFamilies determines whether it prefers IPv4 or IPv6
+// chooseIPFromHostInterfaces 遍历系统接口，寻找已启用且具有全局单播地址的接口，
+// 该地址不能是回环、链路本地或点到点地址，并返回其 IP。
+// addressFamilies 决定优先选择 IPv4 还是 IPv6。
 func chooseIPFromHostInterfaces(logger klog.Logger, nw networkInterfacer, addressFamilies AddressFamilyPreference) (net.IP, error) {
 	intfs, err := nw.Interfaces()
 	if err != nil {
@@ -369,7 +368,7 @@ func chooseIPFromHostInterfaces(logger klog.Logger, nw networkInterfacer, addres
 					logger.V(4).Info("Skipping: no address family match", "IP", ip, "interface", intf.Name)
 					continue
 				}
-				// TODO: Decide if should open up to allow IPv6 LLAs in future.
+				//TODO: 决定未来是否允许 IPv6 链路本地地址。
 				if !ip.IsGlobalUnicast() {
 					logger.V(4).Info("Skipping: non-global address", "IP", ip, "interface", intf.Name)
 					continue
@@ -382,22 +381,20 @@ func chooseIPFromHostInterfaces(logger klog.Logger, nw networkInterfacer, addres
 	return nil, fmt.Errorf("no acceptable interface with global unicast address found on host")
 }
 
-// ChooseHostInterface is a method used fetch an IP for a daemon.
-// If there is no routing info file, it will choose a global IP from the system
-// interfaces. Otherwise, it will use IPv4 and IPv6 route information to return the
-// IP of the interface with a gateway on it (with priority given to IPv4). For a node
-// with no internet connection, it returns error.
+// ChooseHostInterface 为守护进程获取 IP。
+// 没有路由信息文件时，从系统接口选择全局 IP；
+// 否则使用 IPv4 和 IPv6 路由信息，返回具有网关的接口 IP（优先 IPv4）。
+// 节点没有互联网连接时返回错误。
 //
-//logcheck:context // [ChooseHostInterfaceWithLogger] should be used instead of ChooseHostInterface in code which supports contextual logging.
+//logcheck:context // 支持上下文日志的代码应使用 [ChooseHostInterfaceWithLogger] 代替 ChooseHostInterface。
 func ChooseHostInterface() (net.IP, error) {
 	return ChooseHostInterfaceWithLogger(klog.Background())
 }
 
-// ChooseHostInterfaceWithLogger is a method used fetch an IP for a daemon.
-// If there is no routing info file, it will choose a global IP from the system
-// interfaces. Otherwise, it will use IPv4 and IPv6 route information to return the
-// IP of the interface with a gateway on it (with priority given to IPv4). For a node
-// with no internet connection, it returns error.
+// ChooseHostInterfaceWithLogger 为守护进程获取 IP，并支持上下文日志。
+// 没有路由信息文件时，从系统接口选择全局 IP；
+// 否则使用 IPv4 和 IPv6 路由信息，返回具有网关的接口 IP（优先 IPv4）。
+// 节点没有互联网连接时返回错误。
 //
 // 中文说明：这是支持上下文日志的主入口；无 logger 的版本仅为兼容保留。
 func ChooseHostInterfaceWithLogger(logger klog.Logger) (net.IP, error) {
@@ -418,17 +415,15 @@ func chooseHostInterface(logger klog.Logger, addressFamilies AddressFamilyPrefer
 	return chooseHostInterfaceFromRoute(logger, routes, nw, addressFamilies)
 }
 
-// networkInterfacer defines an interface for several net library functions. Production
-// code will forward to net library functions, and unit tests will override the methods
-// for testing purposes.
+// networkInterfacer 定义多个 net 库函数的接口。
+// 生产代码调用 net 库函数，单元测试则覆盖这些方法。
 type networkInterfacer interface {
 	InterfaceByName(intfName string) (*net.Interface, error)
 	Addrs(intf *net.Interface) ([]net.Addr, error)
 	Interfaces() ([]net.Interface, error)
 }
 
-// networkInterface implements the networkInterfacer interface for production code, just
-// wrapping the underlying net library function calls.
+// networkInterface 为生产代码实现 networkInterfacer，仅包装底层 net 库调用。
 type networkInterface struct{}
 
 func (_ networkInterface) InterfaceByName(intfName string) (*net.Interface, error) {
@@ -443,10 +438,10 @@ func (_ networkInterface) Interfaces() ([]net.Interface, error) {
 	return net.Interfaces()
 }
 
-// getAllDefaultRoutes obtains IPv4 and IPv6 default routes on the node. If unable
-// to read the IPv4 routing info file, we return an error. If unable to read the IPv6
-// routing info file (which is optional), we'll just use the IPv4 route information.
-// Using all the routing info, if no default routes are found, an error is returned.
+// getAllDefaultRoutes 获取节点上的 IPv4 和 IPv6 默认路由。
+// 无法读取 IPv4 路由信息文件时返回错误；IPv6 路由信息文件是可选的，
+// 无法读取时仅使用 IPv4 路由信息。
+// 如果所有路由信息中都没有默认路由，则返回错误。
 func getAllDefaultRoutes() ([]Route, error) {
 	routes, err := v4File.extract()
 	if err != nil {
@@ -463,10 +458,10 @@ func getAllDefaultRoutes() ([]Route, error) {
 	return routes, nil
 }
 
-// chooseHostInterfaceFromRoute cycles through each default route provided, looking for a
-// global IP address from the interface for the route. If there are routes but no global
-// address is obtained from the interfaces, it checks if the loopback interface has a global address.
-// addressFamilies determines whether it prefers IPv4 or IPv6
+// chooseHostInterfaceFromRoute 遍历默认路由，从对应接口寻找全局 IP。
+// 如果有路由但接口没有全局地址，
+// 则检查回环接口是否有全局地址。
+// addressFamilies 决定优先选择 IPv4 还是 IPv6。
 func chooseHostInterfaceFromRoute(logger klog.Logger, routes []Route, nw networkInterfacer, addressFamilies AddressFamilyPreference) (net.IP, error) {
 	for _, family := range addressFamilies {
 		logger.V(4).Info("Looking for default routes with IP addresses", "IPVersion", uint(family))
@@ -483,9 +478,9 @@ func chooseHostInterfaceFromRoute(logger klog.Logger, routes []Route, nw network
 				logger.V(4).Info("Found active IP", "IP", finalIP)
 				return finalIP, nil
 			}
-			// In case of network setups where default routes are present, but network
-			// interfaces use only link-local addresses (e.g. as described in RFC5549).
-			// the global IP is assigned to the loopback interface, and we should use it
+			//在存在默认路由但接口仅使用链路本地地址的部署中（如 RFC 5549 所述），
+			//需要此函数。
+			//全局 IP 被分配给回环接口，因此应使用该地址。
 			loopbackIP, err := getIPFromLoopbackInterface(logger, family, nw)
 			if err != nil {
 				return nil, err
@@ -500,22 +495,21 @@ func chooseHostInterfaceFromRoute(logger klog.Logger, routes []Route, nw network
 	return nil, fmt.Errorf("unable to select an IP from default routes.")
 }
 
-// ResolveBindAddress returns the IP address of a daemon, based on the given bindAddress:
-// If bindAddress is unset, it returns the host's default IP, as with ChooseHostInterface().
-// If bindAddress is unspecified or loopback, it returns the default IP of the same
-// address family as bindAddress.
-// Otherwise, it just returns bindAddress.
+// ResolveBindAddress 根据给定 bindAddress 返回守护进程 IP：
+// bindAddress 未设置时，与 ChooseHostInterface() 一样返回主机默认 IP。
+// bindAddress 为未指定地址或回环地址时，返回相同地址族的默认 IP。
 //
-//logcheck:context // [ResolveBindAddressWithLogger] should be used instead of ResolveBindAddress in code which supports contextual logging.
+// 否则直接返回 bindAddress。
+//
+//logcheck:context // 支持上下文日志的代码应使用 [ResolveBindAddressWithLogger] 代替 ResolveBindAddress。
 func ResolveBindAddress(bindAddress net.IP) (net.IP, error) {
 	return ResolveBindAddressWithLogger(klog.Background(), bindAddress)
 }
 
-// ResolveBindAddressWithLogger returns the IP address of a daemon, based on the given bindAddress:
-// If bindAddress is unset, it returns the host's default IP, as with ChooseHostInterface().
-// If bindAddress is unspecified or loopback, it returns the default IP of the same
-// address family as bindAddress.
-// Otherwise, it just returns bindAddress.
+// ResolveBindAddressWithLogger 根据给定 bindAddress 返回守护进程 IP，并支持上下文日志：
+// bindAddress 未设置时，与 ChooseHostInterface() 一样返回主机默认 IP。
+// bindAddress 为未指定地址或回环地址时，返回相同地址族的默认 IP。
+// 否则直接返回 bindAddress。
 //
 // 中文说明：绑定到 unspecified（0.0.0.0/::）或 loopback 时，实际对外地址仍需
 // 从主机接口选择，且保持与用户指定地址相同的族（IPv4/IPv6）。
@@ -535,20 +529,20 @@ func ResolveBindAddressWithLogger(logger klog.Logger, bindAddress net.IP) (net.I
 	return bindAddress, nil
 }
 
-// ChooseBindAddressForInterface choose a global IP for a specific interface, with priority given to IPv4.
-// This is required in case of network setups where default routes are present, but network
-// interfaces use only link-local addresses (e.g. as described in RFC5549).
-// e.g when using BGP to announce a host IP over link-local ip addresses and this ip address is attached to the lo interface.
+// ChooseBindAddressForInterface 为指定接口选择全局 IP，优先 IPv4。
+// 在存在默认路由但网络接口仅使用链路本地地址（如 RFC 5549 所述）的部署中，
+// 需要此函数。
+// 例如通过 BGP 在链路本地 IP 上宣告主机 IP，而该 IP 附加在 lo 接口上。
 //
-//logcheck:context // [ChooseBindAddressForInterfaceWithLogger] should be used instead of ChooseBindAddressForInterface in code which supports contextual logging.
+//logcheck:context // 支持上下文日志的代码应使用 [ChooseBindAddressForInterfaceWithLogger] 代替 ChooseBindAddressForInterface。
 func ChooseBindAddressForInterface(intfName string) (net.IP, error) {
 	return ChooseBindAddressForInterfaceWithLogger(klog.Background(), intfName)
 }
 
-// ChooseBindAddressForInterfaceWithLogger choose a global IP for a specific interface, with priority given to IPv4.
-// This is required in case of network setups where default routes are present, but network
-// interfaces use only link-local addresses (e.g. as described in RFC5549).
-// e.g when using BGP to announce a host IP over link-local ip addresses and this ip address is attached to the lo interface.
+// ChooseBindAddressForInterfaceWithLogger 为指定接口选择全局 IP，优先 IPv4，并支持上下文日志。
+// 在存在默认路由但网络接口仅使用链路本地地址（如 RFC 5549 所述）的部署中，
+// 需要此函数。
+// 例如通过 BGP 在链路本地 IP 上宣告主机 IP，而该 IP 附加在 lo 接口上。
 func ChooseBindAddressForInterfaceWithLogger(logger klog.Logger, intfName string) (net.IP, error) {
 	var nw networkInterfacer = networkInterface{}
 	for _, family := range preferIPv4 {

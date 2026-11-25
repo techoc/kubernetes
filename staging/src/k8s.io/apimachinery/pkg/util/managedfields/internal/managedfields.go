@@ -27,12 +27,12 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// ManagedInterface groups a fieldpath.ManagedFields together with the timestamps associated with each operation.
+// ManagedInterface 将 fieldpath.ManagedFields 与各操作的时间戳组合在一起。
 type ManagedInterface interface {
-	// Fields gets the fieldpath.ManagedFields.
+	//Fields 获取 fieldpath.ManagedFields。
 	Fields() fieldpath.ManagedFields
 
-	// Times gets the timestamps associated with each operation.
+	//Times 获取各操作关联的时间戳。
 	Times() map[string]*metav1.Time
 }
 
@@ -43,22 +43,22 @@ type managedStruct struct {
 
 var _ ManagedInterface = &managedStruct{}
 
-// Fields implements ManagedInterface.
+// Fields 实现 ManagedInterface 接口。
 func (m *managedStruct) Fields() fieldpath.ManagedFields {
 	return m.fields
 }
 
-// Times implements ManagedInterface.
+// Times 实现 ManagedInterface 接口。
 func (m *managedStruct) Times() map[string]*metav1.Time {
 	return m.times
 }
 
-// NewEmptyManaged creates an empty ManagedInterface.
+// NewEmptyManaged 创建空的 ManagedInterface。
 func NewEmptyManaged() ManagedInterface {
 	return NewManaged(fieldpath.ManagedFields{}, map[string]*metav1.Time{})
 }
 
-// NewManaged creates a ManagedInterface from a fieldpath.ManagedFields and the timestamps associated with each operation.
+// NewManaged 根据 fieldpath.ManagedFields 和各操作的时间戳创建 ManagedInterface。
 func NewManaged(f fieldpath.ManagedFields, t map[string]*metav1.Time) ManagedInterface {
 	return &managedStruct{
 		fields: f,
@@ -66,11 +66,9 @@ func NewManaged(f fieldpath.ManagedFields, t map[string]*metav1.Time) ManagedInt
 	}
 }
 
-// RemoveObjectManagedFields removes the ManagedFields from the object
-// before we merge so that it doesn't appear in the ManagedFields
-// recursively.
-// It panics if the object cannot provide metadata, which indicates a
-// programming error rather than bad input.
+// RemoveObjectManagedFields 在合并前从对象中移除 ManagedFields，
+// 避免它递归出现在结果的 ManagedFields 中。
+// 如果对象无法提供元数据则 panic，因为这表示编程错误而非输入错误。
 func RemoveObjectManagedFields(obj runtime.Object) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -79,7 +77,7 @@ func RemoveObjectManagedFields(obj runtime.Object) {
 	accessor.SetManagedFields(nil)
 }
 
-// EncodeObjectManagedFields converts and stores the fieldpathManagedFields into the objects ManagedFields
+// EncodeObjectManagedFields 转换 fieldpath.ManagedFields 并写入对象的 ManagedFields。
 func EncodeObjectManagedFields(obj runtime.Object, managed ManagedInterface) error {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -95,29 +93,29 @@ func EncodeObjectManagedFields(obj runtime.Object, managed ManagedInterface) err
 	return nil
 }
 
-// DecodeManagedFields converts ManagedFields from the wire format (api format)
-// to the format used by sigs.k8s.io/structured-merge-diff
+// DecodeManagedFields 将 ManagedFields 从线上格式（API 格式）转换为
+// sigs.k8s.io/structured-merge-diff 使用的格式。
 func DecodeManagedFields(encodedManagedFields []metav1.ManagedFieldsEntry) (ManagedInterface, error) {
 	managed := managedStruct{}
 	managed.fields = make(fieldpath.ManagedFields, len(encodedManagedFields))
 	managed.times = make(map[string]*metav1.Time, len(encodedManagedFields))
 
 	for i, encodedVersionedSet := range encodedManagedFields {
-		// Only Apply and Update are persistable operations.
+		//只有 Apply 和 Update 操作可以持久化。
 		switch encodedVersionedSet.Operation {
 		case metav1.ManagedFieldsOperationApply, metav1.ManagedFieldsOperationUpdate:
 		default:
 			return nil, fmt.Errorf("operation must be `Apply` or `Update`")
 		}
-		// Every entry must identify the API version it was recorded against.
+		//每个条目都必须标明记录时使用的 API 版本。
 		if len(encodedVersionedSet.APIVersion) < 1 {
 			return nil, fmt.Errorf("apiVersion must not be empty")
 		}
-		// FieldsV1 is the only format this implementation understands; an empty
-		// value means a malformed entry, anything else is unsupported.
+		//此实现只理解 FieldsV1 格式；空值表示条目格式错误，
+		//其他格式均不受支持。
 		switch encodedVersionedSet.FieldsType {
 		case "FieldsV1":
-			// Valid case.
+			//有效情况。
 		case "":
 			return nil, fmt.Errorf("missing fieldsType in managed fields entry %d", i)
 		default:
@@ -136,28 +134,28 @@ func DecodeManagedFields(encodedManagedFields []metav1.ManagedFieldsEntry) (Mana
 	return &managed, nil
 }
 
-// BuildManagerIdentifier creates a manager identifier string from a ManagedFieldsEntry
+// BuildManagerIdentifier 从 ManagedFieldsEntry 创建管理器标识符字符串。
 func BuildManagerIdentifier(encodedManager *metav1.ManagedFieldsEntry) (manager string, err error) {
 	encodedManagerCopy := *encodedManager
 
-	// The identifier must be stable across repeated applies, so volatile fields
-	// (fields, type, time) are excluded from the key.
-	// Never include fields type in the manager identifier
+	//标识符在多次 apply 间必须稳定，因此排除易变的字段
+	//（fields、type、time）。
+	//管理器标识符绝不包含 fields 类型。
 	encodedManagerCopy.FieldsType = ""
 
-	// Never include the fields in the manager identifier
+	//管理器标识符绝不包含字段内容。
 	encodedManagerCopy.FieldsV1 = nil
 
-	// Never include the time in the manager identifier
+	//管理器标识符绝不包含时间。
 	encodedManagerCopy.Time = nil
 
-	// For appliers, don't include the APIVersion in the manager identifier,
-	// so it will always have the same manager identifier each time it applied.
+	//对于 apply 操作，不在管理器标识符中包含 APIVersion，
+	//使每次 apply 都得到相同的标识符。
 	if encodedManager.Operation == metav1.ManagedFieldsOperationApply {
 		encodedManagerCopy.APIVersion = ""
 	}
 
-	// Use the remaining fields to build the manager identifier
+	//使用剩余字段构建管理器标识符。
 	b, err := json.Marshal(&encodedManagerCopy)
 	if err != nil {
 		return "", fmt.Errorf("error marshalling manager identifier: %v", err)
@@ -178,8 +176,8 @@ func decodeVersionedSet(encodedVersionedSet *metav1.ManagedFieldsEntry) (version
 	return fieldpath.NewVersionedSet(&set, fieldpath.APIVersion(encodedVersionedSet.APIVersion), encodedVersionedSet.Operation == metav1.ManagedFieldsOperationApply), nil
 }
 
-// encodeManagedFields converts ManagedFields from the format used by
-// sigs.k8s.io/structured-merge-diff to the wire format (api format)
+// encodeManagedFields 将 ManagedFields 从 sigs.k8s.io/structured-merge-diff 格式转换为
+// 线上格式（API 格式）。
 func encodeManagedFields(managed ManagedInterface) (encodedManagedFields []metav1.ManagedFieldsEntry, err error) {
 	if len(managed.Fields()) == 0 {
 		return nil, nil
@@ -200,8 +198,8 @@ func encodeManagedFields(managed ManagedInterface) (encodedManagedFields []metav
 }
 
 func sortEncodedManagedFields(encodedManagedFields []metav1.ManagedFieldsEntry) (sortedManagedFields []metav1.ManagedFieldsEntry, err error) {
-	// A deterministic order keeps serialized objects stable, which in turn
-	// avoids spurious updates and goroutine-diff noise.
+	//确定性顺序使序列化对象保持稳定，
+	//避免无意义更新和 goroutine 差异干扰。
 	sort.Slice(encodedManagedFields, func(i, j int) bool {
 		p, q := encodedManagedFields[i], encodedManagedFields[j]
 
@@ -236,13 +234,13 @@ func sortEncodedManagedFields(encodedManagedFields []metav1.ManagedFieldsEntry) 
 func encodeManagerVersionedSet(manager string, versionedSet fieldpath.VersionedSet) (encodedVersionedSet *metav1.ManagedFieldsEntry, err error) {
 	encodedVersionedSet = &metav1.ManagedFieldsEntry{}
 
-	// Get as many fields as we can from the manager identifier
+	//尽量从管理器标识符中提取字段。
 	err = json.Unmarshal([]byte(manager), encodedVersionedSet)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling manager identifier %v: %v", manager, err)
 	}
 
-	// Get the APIVersion, Operation, and Fields from the VersionedSet
+	//从 VersionedSet 获取 APIVersion、Operation 和 Fields。
 	encodedVersionedSet.APIVersion = string(versionedSet.APIVersion())
 	if versionedSet.Applied() {
 		encodedVersionedSet.Operation = metav1.ManagedFieldsOperationApply

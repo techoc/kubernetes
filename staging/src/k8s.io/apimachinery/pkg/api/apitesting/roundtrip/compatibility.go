@@ -38,50 +38,43 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// CompatibilityTestOptions holds configuration for running a compatibility test using in-memory objects
-// and serialized files on disk representing the current code and serialized data from previous versions.
-//
-// Example use: `NewCompatibilityTestOptions(scheme).Complete(t).Run(t)`
-//
 // 兼容性测试用于保证“新旧版本的序列化数据可以被新代码解码、且重新编码后
 // 字节不变”。选项结构既承载输入（scheme、测试数据目录、fuzz 函数），也在
 // Complete 后承载补全结果（填充好的对象、序列化器）。
 type CompatibilityTestOptions struct {
-	// Scheme is used to create new objects for filling, decoding, and for constructing serializers.
-	// Required.
+	// Scheme 用于创建待填充、待解码的对象以及构造序列化器，必填。
 	Scheme *runtime.Scheme
 
-	// TestDataDir points to a directory containing compatibility test data.
-	// Complete() populates this with "testdata" if unset.
+	// TestDataDir 指向兼容性测试数据目录；未设置时 Complete() 填入 "testdata"。
 	TestDataDir string
 
-	// TestDataDirCurrentVersion points to a directory containing compatibility test data for the current version.
-	// Complete() populates this with "<TestDataDir>/HEAD" if unset.
-	// Within this directory, `<group>.<version>.<kind>.[json|yaml|pb]` files are required to exist, and are:
-	// * verified to match serialized FilledObjects[GVK]
-	// * verified to decode without error
-	// * verified to round-trip byte-for-byte when re-encoded
-	// * verified to be semantically equal when decoded into memory
+	// TestDataDirCurrentVersion 指向当前版本的兼容性测试数据目录；未设置时
+	// Complete() 填入 "<TestDataDir>/HEAD"。目录中必须存在
+	// `<group>.<version>.<kind>.[json|yaml|pb]` 文件，并验证其：
+	// * 与 FilledObjects[GVK] 的序列化结果一致；
+	// * 可无错误解码；
+	// * 重新编码后逐字节不变；
+	// * 解码到内存后语义等价。
 	TestDataDirCurrentVersion string
 
-	// TestDataDirsPreviousVersions is a list of directories containing compatibility test data for previous versions.
-	// Complete() populates this with "<TestDataDir>/v*" directories if nil.
-	// Within these directories, `<group>.<version>.<kind>.[json|yaml|pb]` files are optional. If present, they are:
-	// * verified to decode without error
-	// * verified to round-trip byte-for-byte when re-encoded (or to match a `<group>.<version>.<kind>.[json|yaml|pb].after_roundtrip.[json|yaml|pb]` file if it exists)
-	// * verified to be semantically equal when decoded into memory
+	// TestDataDirsPreviousVersions 列出历史版本的兼容性数据目录；为 nil 时
+	// Complete() 填入 "<TestDataDir>/v*" 目录。其中
+	// `<group>.<version>.<kind>.[json|yaml|pb]` 文件可选；存在时验证其：
+	// * 可无错误解码；
+	// * 重新编码后逐字节不变，或在存在
+	//   `<group>.<version>.<kind>.[json|yaml|pb].after_roundtrip.[json|yaml|pb]` 时与之匹配；
+	// * 解码到内存后语义等价。
 	TestDataDirsPreviousVersions []string
 
-	// Kinds is a list of fully qualified kinds to test.
-	// Complete() populates this with Scheme.AllKnownTypes() if unset.
+	// Kinds 是待测试的完整 Kind 列表；未设置时 Complete() 填入 Scheme.AllKnownTypes()。
 	Kinds []schema.GroupVersionKind
 
-	// FilledObjects is an optional set of pre-filled objects to use for verifying HEAD fixtures.
-	// Complete() populates this with the result of CompatibilityTestObject(Kinds[*], Scheme, FillFuncs) for any missing kinds.
-	// Objects must deterministically populate every field and be identical on every invocation.
+	// FilledObjects 是校验 HEAD fixture 时可选用的预填充对象集合。
+	// Complete() 为缺失 Kind 填入 CompatibilityTestObject(Kinds[*], Scheme, FillFuncs) 的结果。
+	// 对象必须确定性地填充所有字段，且每次调用结果一致。
 	FilledObjects map[schema.GroupVersionKind]runtime.Object
 
-	// FillFuncs is an optional map of custom functions to use to fill instances of particular types.
+	// FillFuncs 是可选的类型自定义填充函数映射。
 	FillFuncs map[reflect.Type]FillFunc
 
 	// 以下三个序列化器在 Complete() 中按需初始化；外部注入可覆盖默认实现，
@@ -91,11 +84,6 @@ type CompatibilityTestOptions struct {
 	Proto runtime.Serializer
 }
 
-// FillFunc is a function that populates all serializable fields in obj.
-// s and i are string and integer values relevant to the object being populated
-// (for example, the json key or protobuf tag containing the object)
-// that can be used when filling the object to make the object content identifiable
-//
 // FillFunc 负责把 obj 的所有可序列化字段填充为可识别的内容；s/i 提供上下文
 // 信息（如 json key 或 protobuf tag），让填充结果能反映字段位置，便于定位差异。
 type FillFunc func(s string, i int, obj interface{})
@@ -105,8 +93,6 @@ func NewCompatibilityTestOptions(scheme *runtime.Scheme) *CompatibilityTestOptio
 	return &CompatibilityTestOptions{Scheme: scheme}
 }
 
-// coreKinds includes kinds that typically only need to be tested in a single API group
-//
 // 这些是各 group 共用的通用选项/事件类型，只在 core group 测一次即可，
 // 避免在所有 group 中重复生成与校验同一份数据。
 var coreKinds = sets.NewString(
@@ -121,12 +107,12 @@ var coreKinds = sets.NewString(
 func (c *CompatibilityTestOptions) Complete(t *testing.T) *CompatibilityTestOptions {
 	t.Helper()
 
-	// Verify scheme
+	// 校验 scheme。
 	if c.Scheme == nil {
 		t.Fatal("scheme is required")
 	}
 
-	// Populate testdata dirs
+	// 补全测试数据目录。
 	if c.TestDataDir == "" {
 		c.TestDataDir = "testdata"
 	}
@@ -144,22 +130,20 @@ func (c *CompatibilityTestOptions) Complete(t *testing.T) *CompatibilityTestOpti
 		c.TestDataDirsPreviousVersions = dirs
 	}
 
-	// Populate kinds
+	// 补全待测 Kind。
 	if len(c.Kinds) == 0 {
 		gvks := []schema.GroupVersionKind{}
 		for gvk := range c.Scheme.AllKnownTypes() {
 			if gvk.Version == "" || gvk.Version == runtime.APIVersionInternal {
-				// only test external types
-				// 内部版本不对外序列化，跳过。
+				// 仅测试外部类型；内部版本不对外序列化。
 				continue
 			}
 			if strings.HasSuffix(gvk.Kind, "List") {
-				// omit list types
-				// List 类型由 item 类型间接覆盖，且 fixture 数量会爆炸。
+				// 跳过 List 类型；item 类型已间接覆盖，且可避免 fixture 数量激增。
 				continue
 			}
 			if gvk.Group != "" && coreKinds.Has(gvk.Kind) {
-				// only test options types in the core API group
+				// 选项类型仅在核心 API 组测试。
 				continue
 			}
 			gvks = append(gvks, gvk)
@@ -167,8 +151,7 @@ func (c *CompatibilityTestOptions) Complete(t *testing.T) *CompatibilityTestOpti
 		c.Kinds = gvks
 	}
 
-	// Sort kinds to get deterministic test order
-	// 按 group/version/kind 字典序排序，确保生成的 fixture 与测试输出可复现。
+	// 按 group/version/kind 字典序排序，确保 fixture 生成与测试输出可复现。
 	sort.Slice(c.Kinds, func(i, j int) bool {
 		if c.Kinds[i].Group != c.Kinds[j].Group {
 			return c.Kinds[i].Group < c.Kinds[j].Group
@@ -182,7 +165,7 @@ func (c *CompatibilityTestOptions) Complete(t *testing.T) *CompatibilityTestOpti
 		return false
 	})
 
-	// Fill any missing objects
+	// 填充缺失对象。
 	if c.FilledObjects == nil {
 		c.FilledObjects = map[schema.GroupVersionKind]runtime.Object{}
 	}
@@ -238,8 +221,7 @@ func (c *CompatibilityTestOptions) Run(t *testing.T) {
 		})
 	}
 
-	// Check for unused HEAD fixtures
-	// HEAD 目录中的 fixture 必须全部被消费，否则会悄悄积累过期数据。
+	// HEAD fixture 必须全部使用，否则会积累过期数据。
 	t.Run("unused_fixtures", func(t *testing.T) {
 		files, err := os.ReadDir(c.TestDataDirCurrentVersion)
 		if err != nil {
@@ -314,8 +296,7 @@ func (c *CompatibilityTestOptions) runCurrentVersionTest(t *testing.T, gvk schem
 		t.Fatal(err)
 	}
 	{
-		// compact before decoding since embedded RawExtension fields retain indenting
-		// 内嵌 RawExtension 会保留缩进，先压缩以保证与 json.Unmarshal 行为一致。
+		// 内嵌 RawExtension 会保留缩进，先压缩以与 json.Unmarshal 行为一致。
 		compacted := &bytes.Buffer{}
 		if err := gojson.Compact(compacted, actualJSON); err != nil {
 			t.Error(err)
@@ -432,7 +413,7 @@ func (c *CompatibilityTestOptions) runPreviousVersionTest(t *testing.T, gvk sche
 		t.Fatal(err)
 	}
 
-	// compact before decoding since embedded RawExtension fields retain indenting
+	// 内嵌 RawExtension 保留缩进，解码前先压缩。
 	compacted := &bytes.Buffer{}
 	if err := gojson.Compact(compacted, jsonBeforeRoundTrip); err != nil {
 		t.Fatal(err)

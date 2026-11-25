@@ -112,7 +112,6 @@ type RESTMapping struct {
 
 // RESTMapper 允许客户端在资源与 kind 之间做映射，并把 kind/version 映射到
 // 操作对象的接口。它主要面向 kubernetes 兼容 REST API 的使用者，规范见
-// docs/devel/api-conventions.md。
 //
 // Kubernetes API 按 API group 组织不同版本的资源与对象 Kind；同名 Kind 或资源可能存在于不同 group 中，
 // 因此不能假设 Kind 和 Resource 在整个集群范围内唯一。

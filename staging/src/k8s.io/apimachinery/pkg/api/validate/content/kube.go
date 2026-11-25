@@ -33,18 +33,10 @@ const labelKeyMaxLength int = 63
 // labelKeyRegexp 只校验 name 部分（不含可选的前缀），前缀由 IsDNS1123Subdomain 单独校验。
 var labelKeyRegexp = regexp.MustCompile("^" + labelKeyFmt + "$")
 
-// IsQualifiedName tests whether the value passed is what Kubernetes calls a
-// "qualified name", which is the same as a label key.
-//
-// Deprecated: use IsLabelKey instead.
+// Deprecated: 请改用 IsLabelKey。
 // 中文补充：仅为向后兼容保留的别名。
 var IsQualifiedName = IsLabelKey
 
-// IsLabelKey tests whether the value passed is a valid label key. This format
-// is used to validate many fields in the Kubernetes API.
-// Label keys consist of an optional prefix and a name, separated by a '/'.
-// If the value is not valid, a list of error strings is returned. Otherwise, an
-// empty list (or nil) is returned.
 // 中文补充：前缀必须是合法的 DNS 子域；name 长度上限 63 且必须以字母数字开头和结尾。
 func IsLabelKey(value string) []string {
 	var errs []string
@@ -85,15 +77,11 @@ const labelValueFmt string = "(" + labelKeyFmt + ")?"
 // labelValueErrMsg 与 regex 配套使用，提示调用方合法取值。
 const labelValueErrMsg string = "a valid label must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character"
 
-// LabelValueMaxLength is a label's max length
 // 中文补充：与标签键 name 部分的长度上限保持一致。
 const LabelValueMaxLength int = 63
 
 var labelValueRegexp = regexp.MustCompile("^" + labelValueFmt + "$")
 
-// IsLabelValue tests whether the value passed is a valid label value.  If
-// the value is not valid, a list of error strings is returned.  Otherwise an
-// empty list (or nil) is returned.
 // 中文补充：空字符串合法，表示“无值”的标签。
 func IsLabelValue(value string) []string {
 	var errs []string
@@ -114,10 +102,6 @@ func prefixEach(msgs []string, prefix string) []string {
 	return msgs
 }
 
-// IsPrefixedLabelKey tests whether the value passed is a valid label key with
-// a domain prefix. This allows "example.com/key" but not "key".
-// If the value is not valid, a list of error strings is returned. Otherwise,
-// an empty list (or nil) is returned.
 // 中文补充：先复用 IsLabelKey 做完整校验，再要求必须存在而不仅是有可选的域名前缀。
 func IsPrefixedLabelKey(value string) []string {
 	if errs := IsLabelKey(value); len(errs) > 0 {

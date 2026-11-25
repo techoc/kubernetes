@@ -33,20 +33,17 @@ import (
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// overrideMetaFuncs override some generic fuzzer funcs from k8s.io/apimachinery in order to have more realistic
-// values in a Kubernetes context.
-//
 // 覆盖 apimachinery 的通用 fuzz 函数，让 runtime.Object / RawExtension 的取值
 // 更接近真实 API 场景（而不是随机结构）。
 func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(j *runtime.Object, c randfill.Continue) {
-			// TODO: uncomment when round trip starts from a versioned object
+			// TODO: 当往返测试从有版本对象开始时取消注释。
 			if true { // c.Bool() {
 				// 始终生成 runtime.Unknown：其 Raw 内容在往返中保持不变，
 				// 避免随机类型引入无法比较的字段。
 				*j = &runtime.Unknown{
-					// We do not set TypeMeta here because it is not carried through a round trip
+					// 此处不设置 TypeMeta，因为它不会经过往返转换。
 					Raw:         []byte(`{"apiVersion":"unknown.group/unknown","kind":"Something","someKey":"someValue"}`),
 					ContentType: runtime.ContentTypeJSON,
 				}
@@ -58,19 +55,18 @@ func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(r *runtime.RawExtension, c randfill.Continue) {
-			// Pick an arbitrary type and fuzz it
+			// 任选一种类型并进行模糊测试。
 			types := []runtime.Object{&testapigroup.Carp{}}
 			obj := types[c.Rand.Intn(len(types))]
 			c.Fill(obj)
 
-			// Convert the object to raw bytes
 			// 用与测试相同的 codec 编码，保证 RawExtension 内容可被解码回同一类型。
 			bytes, err := runtime.Encode(apitesting.TestCodec(codecs, v1.SchemeGroupVersion), obj)
 			if err != nil {
 				panic(fmt.Sprintf("Failed to encode object: %v", err))
 			}
 
-			// Set the bytes field on the RawExtension
+			// 设置 RawExtension 的 bytes 字段。
 			r.Raw = bytes
 		},
 	}
@@ -82,7 +78,6 @@ func testapigroupFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(s *testapigroup.CarpSpec, c randfill.Continue) {
 			c.FillNoCustom(s)
-			// has a default value
 			// TerminationGracePeriodSeconds 有默认值 30，随机一半概率保留默认。
 			ttl := int64(30)
 			if c.Bool() {
@@ -107,7 +102,7 @@ func testapigroupFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	}
 }
 
-// Funcs returns the fuzzer functions for the testapigroup.
+// Funcs 返回 testapigroup 的模糊测试函数。
 var Funcs = fuzzer.MergeFuzzerFuncs(
 	overrideMetaFuncs,
 	testapigroupFuncs,

@@ -125,7 +125,7 @@ func keepOrDeleteNullInObj(m map[string]interface{}, keepNull bool) (map[string]
 		case val != nil:
 			switch typedVal := val.(type) {
 			case map[string]interface{}:
-				// Explicitly-set empty maps are treated as values instead of empty patches
+				//显式设置的空映射按值处理，而不是视为空补丁。
 				// 空 map 表示“显式设置为空”，不能被当作无操作而丢弃。
 				if len(typedVal) == 0 {
 					if !keepNull {

@@ -28,19 +28,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// errNotList is returned when an object implements the Object style interfaces but not the List style
-// interfaces.
+// errNotList 表示对象实现了 Object 风格接口，但未实现 List 风格接口。
 var errNotList = fmt.Errorf("object does not implement the List interfaces")
 
-// errNotCommon is returned when an object exposes neither ListMeta nor ObjectMeta
-// via the common metadata interfaces.
+// errNotCommon 表示对象未通过公共元数据接口暴露 ListMeta 或 ObjectMeta。
 var errNotCommon = fmt.Errorf("object does not implement the common interface for accessing the SelfLink")
 
-// CommonAccessor returns a Common interface for the provided object or an error if the object does
-// not provide List.
+// CommonAccessor 返回对象的 Common 接口；对象未实现 List 时返回错误。
 func CommonAccessor(obj interface{}) (metav1.Common, error) {
-	// Both the local and metav1 ListMetaAccessor interfaces are accepted so
-	// that callers can use either the internal or the public meta packages.
+	// 同时接受本地与 metav1.ListMetaAccessor，以便调用方使用内部或公开 meta 包。
+	//
 	switch t := obj.(type) {
 	case List:
 		return t, nil
@@ -48,7 +45,7 @@ func CommonAccessor(obj interface{}) (metav1.Common, error) {
 		if m := t.GetListMeta(); m != nil {
 			return m, nil
 		}
-		// A nil ListMeta means the object is not list-like after all.
+		// ListMeta 为 nil 表明对象实际上并非列表。
 		return nil, errNotCommon
 	case metav1.ListMetaAccessor:
 		if m := t.GetListMeta(); m != nil {
@@ -67,12 +64,10 @@ func CommonAccessor(obj interface{}) (metav1.Common, error) {
 	}
 }
 
-// ListAccessor returns a List interface for the provided object or an error if the object does
-// not provide List.
-// IMPORTANT: Objects are NOT a superset of lists. Do not use this check to determine whether an
-// object *is* a List.
+// ListAccessor 返回对象的 List 接口；对象未实现 List 时返回错误。
+// 注意：Object 并非 List 的超集，不能用此检查判断对象是否为 List。
 func ListAccessor(obj interface{}) (List, error) {
-	// Lists are identified by the presence of ListMeta, not by Go type alone.
+	// 通过 ListMeta 而非仅凭 Go 类型识别列表。
 	switch t := obj.(type) {
 	case List:
 		return t, nil
@@ -91,17 +86,14 @@ func ListAccessor(obj interface{}) (List, error) {
 	}
 }
 
-// errNotObject is returned when an object implements the List style interfaces but not the Object style
-// interfaces.
+// errNotObject 表示对象实现了 List 风格接口，但未实现 Object 风格接口。
 var errNotObject = fmt.Errorf("object does not implement the Object interfaces")
 
-// Accessor takes an arbitrary object pointer and returns meta.Interface.
-// obj must be a pointer to an API type. An error is returned if the minimum
-// required fields are missing. Fields that are not required return the default
-// value and are a no-op if set.
+// Accessor 接受任意 API 类型对象指针并返回 metav1.Object。
+// 缺少必需字段时返回错误；可选字段返回默认值，设置时为 no-op。
 func Accessor(obj interface{}) (metav1.Object, error) {
-	// Prefer the direct metav1.Object implementation; the accessor interface is
-	// a fallback for types that embed metadata rather than offer it directly.
+	// 优先使用直接实现 metav1.Object 的类型；访问器接口仅作为嵌入元数据类型的回退。
+	//
 	switch t := obj.(type) {
 	case metav1.Object:
 		return t, nil
@@ -115,11 +107,11 @@ func Accessor(obj interface{}) (metav1.Object, error) {
 	}
 }
 
-// AsPartialObjectMetadata takes the metav1 interface and returns a partial object.
-// TODO: consider making this solely a conversion action.
+// AsPartialObjectMetadata 将 metav1 接口转换为部分对象元数据。
+// TODO: 考虑将此操作完全归入转换逻辑。
 func AsPartialObjectMetadata(m metav1.Object) *metav1.PartialObjectMetadata {
-	// Fast path: the object already wraps an ObjectMeta, so it can be reused
-	// without copying every individual field.
+	// 快速路径：对象已封装 ObjectMeta，可直接复用而无需逐字段复制。
+	//
 	switch t := m.(type) {
 	case *metav1.ObjectMeta:
 		return &metav1.PartialObjectMetadata{ObjectMeta: *t}
@@ -146,14 +138,12 @@ func AsPartialObjectMetadata(m metav1.Object) *metav1.PartialObjectMetadata {
 	}
 }
 
-// TypeAccessor returns an interface that allows retrieving and modifying the APIVersion
-// and Kind of an in-memory internal object.
-// TODO: this interface is used to test code that does not have ObjectMeta or ListMeta
-// in round tripping (objects which can use apiVersion/kind, but do not fit the Kube
-// api conventions).
+// TypeAccessor 返回可读写内存内部对象 APIVersion 与 Kind 的接口。
+// TODO: 用于往返测试不含 ObjectMeta/ListMeta、但可通过 apiVersion/kind 标识、
+// 不完全遵循 Kubernetes API 约定的对象。
 func TypeAccessor(obj interface{}) (Type, error) {
-	// Objects that already implement runtime.Object can answer GroupVersionKind
-	// directly, so no reflection is needed.
+	// 已实现 runtime.Object 的对象可直接提供 GroupVersionKind，无需反射。
+	//
 	if typed, ok := obj.(runtime.Object); ok {
 		return objectAccessor{typed}, nil
 	}
@@ -166,8 +156,8 @@ func TypeAccessor(obj interface{}) (Type, error) {
 		return nil, fmt.Errorf("expected struct, but got %v: %v (%#v)", v.Kind(), t, v.Interface())
 	}
 
-	// Locate the embedded TypeMeta and collect pointers to its fields so that
-	// later SetKind/SetAPIVersion calls mutate the original struct in place.
+	// 定位内嵌 TypeMeta 并收集字段指针，使后续 SetKind/SetAPIVersion 原地修改原结构体。
+	//
 	typeMeta := v.FieldByName("TypeMeta")
 	if !typeMeta.IsValid() {
 		return nil, fmt.Errorf("struct %v lacks embedded TypeMeta type", t)
@@ -179,8 +169,7 @@ func TypeAccessor(obj interface{}) (Type, error) {
 	return a, nil
 }
 
-// objectAccessor adapts a runtime.Object to the Type interface using its
-// TypeMeta.
+// objectAccessor 通过 TypeMeta 将 runtime.Object 适配为 Type 接口。
 type objectAccessor struct {
 	runtime.Object
 }
@@ -203,21 +192,19 @@ func (obj objectAccessor) SetAPIVersion(version string) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	gv, err := schema.ParseGroupVersion(version)
 	if err != nil {
-		// Tolerate a bare version ("v1") by treating it as the core group.
+		// 兼容仅含版本（"v1"）的输入，按核心组处理。
 		gv = schema.GroupVersion{Version: version}
 	}
 	gvk.Group, gvk.Version = gv.Group, gv.Version
 	obj.GetObjectKind().SetGroupVersionKind(gvk)
 }
 
-// NewAccessor returns a MetadataAccessor that can retrieve
-// or manipulate resource version on objects derived from core API
-// metadata concepts.
+// NewAccessor 返回可读写核心 API 元数据概念的 MetadataAccessor。
 func NewAccessor() MetadataAccessor {
 	return resourceAccessor{}
 }
 
-// resourceAccessor implements ResourceVersioner and SelfLinker.
+// resourceAccessor 实现 ResourceVersioner 和 SelfLinker。
 type resourceAccessor struct{}
 
 func (resourceAccessor) Kind(obj runtime.Object) (string, error) {
@@ -391,7 +378,7 @@ func (resourceAccessor) SetContinue(obj runtime.Object, version string) error {
 	return nil
 }
 
-// extractFromOwnerReference extracts v to o. v is the OwnerReferences field of an object.
+// extractFromOwnerReference 从对象的 OwnerReferences 字段 v 提取信息到 o。
 func extractFromOwnerReference(v reflect.Value, o *metav1.OwnerReference) error {
 	if err := runtime.Field(v, "APIVersion", &o.APIVersion); err != nil {
 		return err
@@ -409,8 +396,8 @@ func extractFromOwnerReference(v reflect.Value, o *metav1.OwnerReference) error 
 	if err := runtime.Field(v, "Controller", &controllerPtr); err != nil {
 		return err
 	}
-	// Dereference and copy so the returned OwnerReference does not alias the
-	// reflected struct; a nil pointer simply leaves the field unset.
+	// 解引用并复制，避免返回的 OwnerReference 与反射结构体共享数据；nil 指针保持字段未设置。
+	//
 	if controllerPtr != nil {
 		controller := *controllerPtr
 		o.Controller = &controller
@@ -426,7 +413,7 @@ func extractFromOwnerReference(v reflect.Value, o *metav1.OwnerReference) error 
 	return nil
 }
 
-// setOwnerReference sets v to o. v is the OwnerReferences field of an object.
+// setOwnerReference 将 o 写入对象的 OwnerReferences 字段 v。
 func setOwnerReference(v reflect.Value, o *metav1.OwnerReference) error {
 	if err := runtime.SetField(o.APIVersion, v, "APIVersion"); err != nil {
 		return err
@@ -440,8 +427,8 @@ func setOwnerReference(v reflect.Value, o *metav1.OwnerReference) error {
 	if err := runtime.SetField(o.UID, v, "UID"); err != nil {
 		return err
 	}
-	// A nil pointer means "unset"; leave the destination field untouched rather
-	// than writing a false value, which would change semantics on round-trip.
+	// nil 指针表示未设置；保持目标字段不变，而非写入 false，以免改变往返语义。
+	//
 	if o.Controller != nil {
 		controller := *(o.Controller)
 		if err := runtime.SetField(&controller, v, "Controller"); err != nil {
@@ -457,9 +444,8 @@ func setOwnerReference(v reflect.Value, o *metav1.OwnerReference) error {
 	return nil
 }
 
-// genericAccessor contains pointers to strings that can modify an arbitrary
-// struct and implements the Accessor interface. Fields that the target type
-// does not have are left nil and their accessors become no-ops.
+// genericAccessor 保存可修改任意结构体的字符串指针，并实现 Accessor 接口。
+// 目标类型缺少的字段保持 nil，其访问器为 no-op。
 type genericAccessor struct {
 	namespace         *string
 	name              *string
@@ -621,16 +607,16 @@ func (a genericAccessor) SetFinalizers(finalizers []string) {
 func (a genericAccessor) GetOwnerReferences() []metav1.OwnerReference {
 	var ret []metav1.OwnerReference
 	s := a.ownerReferences
-	// ownerReferences is a slice field, so it must be reached through a pointer.
+	// ownerReferences 是切片字段，必须通过指针访问。
 	if s.Kind() != reflect.Pointer || s.Elem().Kind() != reflect.Slice {
 		//nolint:logcheck // Should not happen.
 		klog.Errorf("expect %v to be a pointer to slice", s)
 		return ret
 	}
 	s = s.Elem()
-	// Set the capacity to one element greater to avoid copy if the caller later append an element.
-	// This matters because append on a shared backing array could alias the
-	// object's own storage.
+	// 容量多留一个元素，避免调用方后续 append 时复制。
+	// 共享底层数组上的 append 可能造成别名，因此必须隔离。
+	// 对象自身的存储。
 	ret = make([]metav1.OwnerReference, s.Len(), s.Len()+1)
 	for i := 0; i < s.Len(); i++ {
 		if err := extractFromOwnerReference(s.Index(i), &ret[i]); err != nil {
@@ -649,7 +635,7 @@ func (a genericAccessor) SetOwnerReferences(references []metav1.OwnerReference) 
 		klog.Errorf("expect %v to be a pointer to slice", s)
 	}
 	s = s.Elem()
-	// Build into a fresh slice so the caller's slice is never aliased.
+	// 构建新切片，确保不与调用方切片共享底层数组。
 	newReferences := reflect.MakeSlice(s.Type(), len(references), len(references))
 	for i := 0; i < len(references); i++ {
 		if err := setOwnerReference(newReferences.Index(i), &references[i]); err != nil {
@@ -661,7 +647,7 @@ func (a genericAccessor) SetOwnerReferences(references []metav1.OwnerReference) 
 	s.Set(newReferences)
 }
 
-// extractFromTypeMeta extracts pointers to version and kind fields from an object
+// extractFromTypeMeta 从对象中提取 version 与 kind 字段指针。
 func extractFromTypeMeta(v reflect.Value, a *genericAccessor) error {
 	if err := runtime.FieldPtr(v, "APIVersion", &a.apiVersion); err != nil {
 		return err

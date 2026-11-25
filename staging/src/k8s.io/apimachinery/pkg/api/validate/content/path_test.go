@@ -30,9 +30,9 @@ func TestIsPathSegmentPrefix(t *testing.T) {
 	}{
 		"empty": {
 			Name:        "",
-			ExpectedMsg: "", // NOTE: this probably should fail
+			ExpectedMsg: "", // 注意：此用例可能本应失败。
 		},
-		// NOTE: no validation of max length
+		// 注意：不校验最大长度。
 		"valid short": {
 			Name:        "foo",
 			ExpectedMsg: "",
@@ -41,12 +41,12 @@ func TestIsPathSegmentPrefix(t *testing.T) {
 			Name:        "foo.bar.baz",
 			ExpectedMsg: "",
 		},
-		// Make sure mixed case, non DNS subdomain characters are tolerated
+		// 确保容忍大小写混用及非 DNS 子域名字符。
 		"valid complex": {
 			Name:        "sha256:ABCDEF012345@ABCDEF012345",
 			ExpectedMsg: "",
 		},
-		// Make sure non-ascii characters are tolerated
+		// 确保容忍非 ASCII 字符。
 		"valid extended charset": {
 			Name:        "Iñtërnâtiônàlizætiøn",
 			ExpectedMsg: "",
@@ -103,9 +103,9 @@ func TestIsPathSegmentName(t *testing.T) {
 	}{
 		"empty": {
 			Name:        "",
-			ExpectedMsg: "", // NOTE: this probably should fail
+			ExpectedMsg: "", // 注意：此用例可能本应失败。
 		},
-		// NOTE: no validation of max length
+		// 注意：不校验最大长度。
 		"valid short": {
 			Name:        "foo",
 			ExpectedMsg: "",
@@ -114,12 +114,12 @@ func TestIsPathSegmentName(t *testing.T) {
 			Name:        "foo.bar.baz",
 			ExpectedMsg: "",
 		},
-		// Make sure mixed case, non DNS subdomain characters are tolerated
+		// 确保容忍大小写混用及非 DNS 子域名字符。
 		"valid complex": {
 			Name:        "sha256:ABCDEF012345@ABCDEF012345",
 			ExpectedMsg: "",
 		},
-		// Make sure non-ascii characters are tolerated
+		// 确保容忍非 ASCII 字符。
 		"valid extended charset": {
 			Name:        "Iñtërnâtiônàlizætiøn",
 			ExpectedMsg: "",

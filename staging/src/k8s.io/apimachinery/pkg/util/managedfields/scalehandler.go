@@ -68,7 +68,7 @@ func (h *ScaleHandler) ToSubresource() ([]metav1.ManagedFieldsEntry, error) {
 	t := map[string]*metav1.Time{}
 	for manager, versionedSet := range managed.Fields() {
 		path, ok := h.mappings[string(versionedSet.APIVersion())]
-		// Skip the entry if the APIVersion is unknown
+		//APIVersion 未知时跳过该条目。
 		// APIVersion 未知的条目无法定位 replicas，直接跳过。
 		if !ok || path == nil {
 			continue
@@ -108,17 +108,16 @@ func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]met
 	t := map[string]*metav1.Time{}
 
 	for manager, versionedSet := range parentFields {
-		// Get the main resource "replicas" path
+		//获取主资源的 "replicas" 路径。
 		path, ok := h.mappings[string(versionedSet.APIVersion())]
-		// Drop the entry if the APIVersion is unknown.
+		//APIVersion 未知时丢弃该条目。
 		// APIVersion 未知的条目无法映射路径，直接丢弃。
 		if !ok {
 			continue
 		}
 
-		// If the parent entry does not have the replicas path or it is nil, just
-		// keep it as it is. The path is nil for Custom Resources without scale
-		// subresource.
+		//如果父条目没有 replicas 路径或该路径为 nil，则保持原样；
+		//没有 scale 子资源的自定义资源，其路径为 nil。
 		// 主资源条目不含 replicas 路径、或该路径为 nil（无 scale 子资源的 CRD）时，
 		// 原样保留该条目。
 		if path == nil || !versionedSet.Set().Has(path) {
@@ -128,7 +127,7 @@ func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]met
 		}
 
 		if _, ok := scaleFields[manager]; !ok {
-			// "Steal" the replicas path from the main resource entry
+			//从主资源条目中“取走”replicas 路径。
 			// scale 侧没有同名 manager 时，把 replicas 字段从主资源条目中“偷走”，
 			// 避免同一字段被重复声明归属。
 			newSet := versionedSet.Set().Difference(fieldpath.NewSet(path))
@@ -144,7 +143,7 @@ func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]met
 				t[manager] = decodedParentEntries.Times()[manager]
 			}
 		} else {
-			// Field wasn't stolen, let's keep the entry as it is.
+			//字段未被取走，保持条目原样。
 			// scale 侧已有同名条目，主资源条目保持原样，并消费掉 scale 条目避免重复处理。
 			f[manager] = versionedSet
 			t[manager] = decodedParentEntries.Times()[manager]

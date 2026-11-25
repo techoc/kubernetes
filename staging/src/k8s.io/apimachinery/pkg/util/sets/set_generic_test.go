@@ -236,20 +236,20 @@ func TestSetHasAny(t *testing.T) {
 // TestSetEquals 验证集合相等与顺序无关、重复元素被忽略，并覆盖空集合与空字符串等边界，
 // 以及插入/删除后相等性的变化。
 func TestSetEquals(t *testing.T) {
-	// Simple case (order doesn't matter)
+	//简单场景（顺序无关）
 	a := sets.New("1", "2")
 	b := sets.New("2", "1")
 	if !a.Equal(b) {
 		t.Errorf("Expected to be equal: %v vs %v", a, b)
 	}
 
-	// It is a set; duplicates are ignored
+	//这是集合，重复元素会被忽略。
 	b = sets.New("2", "2", "1")
 	if !a.Equal(b) {
 		t.Errorf("Expected to be equal: %v vs %v", a, b)
 	}
 
-	// Edge cases around empty sets / empty strings
+	//空集合和空字符串的边界情况
 	a = sets.New[string]()
 	b = sets.New[string]()
 	if !a.Equal(b) {
@@ -266,7 +266,7 @@ func TestSetEquals(t *testing.T) {
 		t.Errorf("Expected to be not-equal: %v vs %v", a, b)
 	}
 
-	// Check for equality after mutation
+	//修改后检查是否相等
 	a = sets.New[string]()
 	a.Insert("1")
 	if a.Equal(b) {

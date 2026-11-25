@@ -29,30 +29,30 @@ const (
 	// 失败，避免半开连接长期占用。
 	DefaultStreamCreationTimeout = 30 * time.Second
 
-	// The SPDY subprotocol "channel.k8s.io" is used for remote command
-	// attachment/execution. This represents the initial unversioned subprotocol,
-	// which has the known bugs https://issues.k8s.io/13394 and
+	//SPDY 子协议 "channel.k8s.io" 用于远程命令附着和执行。
+	//这是初始的未版本化子协议，
+	//存在已知缺陷 https://issues.k8s.io/13394 和
 	// https://issues.k8s.io/13395.
 	StreamProtocolV1Name = "channel.k8s.io"
 
-	// The SPDY subprotocol "v2.channel.k8s.io" is used for remote command
-	// attachment/execution. It is the second version of the subprotocol and
-	// resolves the issues present in the first version.
+	//SPDY 子协议 "v2.channel.k8s.io" 用于远程命令附着和执行，
+	//是该子协议的第二版，
+	//解决了第一版中的问题。
 	StreamProtocolV2Name = "v2.channel.k8s.io"
 
-	// The SPDY subprotocol "v3.channel.k8s.io" is used for remote command
-	// attachment/execution. It is the third version of the subprotocol and
-	// adds support for resizing container terminals.
+	//SPDY 子协议 "v3.channel.k8s.io" 用于远程命令附着和执行，
+	//是该子协议的第三版，
+	//新增容器终端大小调整支持。
 	StreamProtocolV3Name = "v3.channel.k8s.io"
 
-	// The SPDY subprotocol "v4.channel.k8s.io" is used for remote command
-	// attachment/execution. It is the 4th version of the subprotocol and
-	// adds support for exit codes.
+	//SPDY 子协议 "v4.channel.k8s.io" 用于远程命令附着和执行，
+	//是该子协议的第四版，
+	//新增退出码支持。
 	StreamProtocolV4Name = "v4.channel.k8s.io"
 
-	// The subprotocol "v5.channel.k8s.io" is used for remote command
-	// attachment/execution. It is the 5th version of the subprotocol and
-	// adds support for a CLOSE signal.
+	//子协议 "v5.channel.k8s.io" 用于远程命令附着和执行，
+	//是该子协议的第五版，
+	//新增 CLOSE 信号支持。
 	StreamProtocolV5Name = "v5.channel.k8s.io"
 
 	// NonZeroExitCodeReason/ExitCodeCauseType 用于把容器退出码包装成
@@ -60,8 +60,8 @@ const (
 	NonZeroExitCodeReason = metav1.StatusReason("NonZeroExitCode")
 	ExitCodeCauseType     = metav1.CauseType("ExitCode")
 
-	// RemoteCommand stream identifiers. The first three identifiers (for STDIN,
-	// STDOUT, STDERR) are the same as their file descriptors.
+	//RemoteCommand 流标识符。前三个标识符（STDIN、
+	//STDOUT、STDERR）与相应文件描述符相同。
 	//
 	// 其余通道：StreamErr 传输错误状态，StreamResize 传输终端尺寸，
 	// StreamClose 用于 v5 的半关闭语义（255 故意远离小整数，避免与 fd 冲突）。

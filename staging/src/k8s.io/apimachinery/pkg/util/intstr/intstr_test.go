@@ -380,67 +380,67 @@ func TestMarshalCBOR(t *testing.T) {
 			want: []byte{0x43, 'a', 'b', 'c'},
 		},
 		{
-			in:   FromInt32(0), // min positive integer representable in one byte
+			in:   FromInt32(0), //one 字节可表示的最小正整数
 			want: []byte{0x00},
 		},
 		{
-			in:   FromInt32(23), // max positive integer representable in one byte
+			in:   FromInt32(23), //one 字节可表示的最大正整数
 			want: []byte{0x17},
 		},
 		{
-			in:   FromInt32(24), // min positive integer representable in two bytes
+			in:   FromInt32(24), //2 字节可表示的最小正整数
 			want: []byte{0x18, 0x18},
 		},
 		{
-			in:   FromInt32(math.MaxUint8), // max positive integer representable in two bytes
+			in:   FromInt32(math.MaxUint8), //2 字节可表示的最大正整数
 			want: []byte{0x18, 0xff},
 		},
 		{
-			in:   FromInt32(math.MaxUint8 + 1), // min positive integer representable in three bytes
+			in:   FromInt32(math.MaxUint8 + 1), //3 字节可表示的最小正整数
 			want: []byte{0x19, 0x01, 0x00},
 		},
 		{
-			in:   FromInt32(math.MaxUint16), // max positive integer representable in three bytes
+			in:   FromInt32(math.MaxUint16), //3 字节可表示的最大正整数
 			want: []byte{0x19, 0xff, 0xff},
 		},
 		{
-			in:   FromInt32(math.MaxUint16 + 1), // min positive integer representable in five bytes
+			in:   FromInt32(math.MaxUint16 + 1), //5 字节可表示的最小正整数
 			want: []byte{0x1a, 0x00, 0x01, 0x00, 0x00},
 		},
 		{
-			in:   FromInt32(math.MaxInt32), // max positive integer representable by Go int32
+			in:   FromInt32(math.MaxInt32), //Go int32 可表示的最大正整数
 			want: []byte{0x1a, 0x7f, 0xff, 0xff, 0xff},
 		},
 		{
-			in:   FromInt32(-1), // max negative integer representable in one byte
+			in:   FromInt32(-1), //one 字节可表示的最大负整数
 			want: []byte{0x20},
 		},
 		{
-			in:   FromInt32(-24), // min negative integer representable in one byte
+			in:   FromInt32(-24), //one 字节可表示的最小负整数
 			want: []byte{0x37},
 		},
 		{
-			in:   FromInt32(-1 - 24), // max negative integer representable in two bytes
+			in:   FromInt32(-1 - 24), //2 字节可表示的最大负整数
 			want: []byte{0x38, 0x18},
 		},
 		{
-			in:   FromInt32(-1 - math.MaxUint8), // min negative integer representable in two bytes
+			in:   FromInt32(-1 - math.MaxUint8), //2 字节可表示的最小负整数
 			want: []byte{0x38, 0xff},
 		},
 		{
-			in:   FromInt32(-2 - math.MaxUint8), // max negative integer representable in three bytes
+			in:   FromInt32(-2 - math.MaxUint8), //3 字节可表示的最大负整数
 			want: []byte{0x39, 0x01, 0x00},
 		},
 		{
-			in:   FromInt32(-1 - math.MaxUint16), // min negative integer representable in three bytes
+			in:   FromInt32(-1 - math.MaxUint16), //3 字节可表示的最小负整数
 			want: []byte{0x39, 0xff, 0xff},
 		},
 		{
-			in:   FromInt32(-2 - math.MaxUint16), // max negative integer representable in five bytes
+			in:   FromInt32(-2 - math.MaxUint16), //5 字节可表示的最大负整数
 			want: []byte{0x3a, 0x00, 0x01, 0x00, 0x00},
 		},
 		{
-			in:   FromInt32(math.MinInt32), // min negative integer representable by Go int32
+			in:   FromInt32(math.MinInt32), //Go int32 可表示的最小负整数
 			want: []byte{0x3a, 0x7f, 0xff, 0xff, 0xff},
 		},
 	} {
@@ -489,67 +489,67 @@ func TestUnmarshalCBOR(t *testing.T) {
 		},
 		{
 			in:   []byte{0x00},
-			want: FromInt32(0), // min positive integer representable in one byte
+			want: FromInt32(0), //one 字节可表示的最小正整数
 		},
 		{
 			in:   []byte{0x17},
-			want: FromInt32(23), // max positive integer representable in one byte
+			want: FromInt32(23), //one 字节可表示的最大正整数
 		},
 		{
 			in:   []byte{0x18, 0x18},
-			want: FromInt32(24), // min positive integer representable in two bytes
+			want: FromInt32(24), //2 字节可表示的最小正整数
 		},
 		{
 			in:   []byte{0x18, 0xff},
-			want: FromInt32(math.MaxUint8), // max positive integer representable in two bytes
+			want: FromInt32(math.MaxUint8), //2 字节可表示的最大正整数
 		},
 		{
 			in:   []byte{0x19, 0x01, 0x00},
-			want: FromInt32(math.MaxUint8 + 1), // min positive integer representable in three bytes
+			want: FromInt32(math.MaxUint8 + 1), //3 字节可表示的最小正整数
 		},
 		{
 			in:   []byte{0x19, 0xff, 0xff},
-			want: FromInt32(math.MaxUint16), // max positive integer representable in three bytes
+			want: FromInt32(math.MaxUint16), //3 字节可表示的最大正整数
 		},
 		{
 			in:   []byte{0x1a, 0x00, 0x01, 0x00, 0x00},
-			want: FromInt32(math.MaxUint16 + 1), // min positive integer representable in five bytes
+			want: FromInt32(math.MaxUint16 + 1), //5 字节可表示的最小正整数
 		},
 		{
 			in:   []byte{0x1a, 0x7f, 0xff, 0xff, 0xff},
-			want: FromInt32(math.MaxInt32), // max positive integer representable by Go int32
+			want: FromInt32(math.MaxInt32), //Go int32 可表示的最大正整数
 		},
 		{
 			in:   []byte{0x20},
-			want: FromInt32(-1), // max negative integer representable in one byte
+			want: FromInt32(-1), //one 字节可表示的最大负整数
 		},
 		{
 			in:   []byte{0x37},
-			want: FromInt32(-24), // min negative integer representable in one byte
+			want: FromInt32(-24), //one 字节可表示的最小负整数
 		},
 		{
 			in:   []byte{0x38, 0x18},
-			want: FromInt32(-1 - 24), // max negative integer representable in two bytes
+			want: FromInt32(-1 - 24), //2 字节可表示的最大负整数
 		},
 		{
 			in:   []byte{0x38, 0xff},
-			want: FromInt32(-1 - math.MaxUint8), // min negative integer representable in two bytes
+			want: FromInt32(-1 - math.MaxUint8), //2 字节可表示的最小负整数
 		},
 		{
 			in:   []byte{0x39, 0x01, 0x00},
-			want: FromInt32(-2 - math.MaxUint8), // max negative integer representable in three bytes
+			want: FromInt32(-2 - math.MaxUint8), //3 字节可表示的最大负整数
 		},
 		{
 			in:   []byte{0x39, 0xff, 0xff},
-			want: FromInt32(-1 - math.MaxUint16), // min negative integer representable in three bytes
+			want: FromInt32(-1 - math.MaxUint16), //3 字节可表示的最小负整数
 		},
 		{
 			in:   []byte{0x3a, 0x00, 0x01, 0x00, 0x00},
-			want: FromInt32(-2 - math.MaxUint16), // max negative integer representable in five bytes
+			want: FromInt32(-2 - math.MaxUint16), //5 字节可表示的最大负整数
 		},
 		{
 			in:   []byte{0x3a, 0x7f, 0xff, 0xff, 0xff},
-			want: FromInt32(math.MinInt32), // min negative integer representable by Go int32
+			want: FromInt32(math.MinInt32), //Go int32 可表示的最小负整数
 		},
 	} {
 		t.Run(fmt.Sprintf("{Type:%d,IntVal:%d,StrVal:%q}", tc.want.Type, tc.want.IntVal, tc.want.StrVal), func(t *testing.T) {

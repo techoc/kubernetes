@@ -25,10 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// TestDiscriminated exercises Discriminated's dispatch and ratcheting rules:
-// the rule selected by the discriminator runs, an absent rule falls back to the
-// default validator, and updates that change neither the discriminator nor the
-// value skip validation entirely.
+// TestDiscriminated 测试 Discriminated 的分发与棘轮规则：
+// 判别器选中的规则会执行；规则缺失时回退到默认校验器；更新时若判别器与成员关系均未变，
+// 则完全跳过值校验。
 func TestDiscriminated(t *testing.T) {
 	errMatch := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "match error")}
 	errDefault := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "default error")}
@@ -43,7 +42,7 @@ func TestDiscriminated(t *testing.T) {
 		return errDefault
 	}
 
-	// mockEqual compares pointer values by dereferencing, not by pointer identity.
+	// mockEqual 解引用后比较指针值，而非比较指针身份。
 	mockEqual := func(a, b *string) bool {
 		if a == nil && b == nil {
 			return true
@@ -93,11 +92,11 @@ func TestDiscriminated(t *testing.T) {
 			name:             "ratcheting: update, unchanged, skips validation",
 			opType:           operation.Update,
 			discriminator:    "B",
-			oldDiscriminator: "B", // unchanged
+			oldDiscriminator: "B", // 未改变。
 			value:            nil,
-			oldValue:         nil, // unchanged
+			oldValue:         nil, // 未改变。
 			rules: []DiscriminatedRule[*string, string]{
-				{Value: "B", Validation: mockErrorMatch}, // would fail if run
+				{Value: "B", Validation: mockErrorMatch}, // 若执行则会失败。
 			},
 			defaultValidation: mockErrorDefault,
 			expected:          nil,
@@ -108,9 +107,9 @@ func TestDiscriminated(t *testing.T) {
 			discriminator:    "B",
 			oldDiscriminator: "B",
 			value:            strPtr("same"),
-			oldValue:         strPtr("same"), // different pointer, same value
+			oldValue:         strPtr("same"), // 指针不同但值相同。
 			rules: []DiscriminatedRule[*string, string]{
-				{Value: "B", Validation: mockErrorMatch}, // would fail if run
+				{Value: "B", Validation: mockErrorMatch}, // 若执行则会失败。
 			},
 			defaultValidation: mockErrorDefault,
 			expected:          nil,
@@ -119,7 +118,7 @@ func TestDiscriminated(t *testing.T) {
 			name:             "ratcheting: update, discriminator changed, runs validation",
 			opType:           operation.Update,
 			discriminator:    "B",
-			oldDiscriminator: "A", // changed
+			oldDiscriminator: "A", // 已改变。
 			value:            nil,
 			oldValue:         nil,
 			rules: []DiscriminatedRule[*string, string]{
@@ -132,9 +131,9 @@ func TestDiscriminated(t *testing.T) {
 			name:             "ratcheting: update, value changed, discriminator unchanged, runs validation",
 			opType:           operation.Update,
 			discriminator:    "B",
-			oldDiscriminator: "B", // unchanged
+			oldDiscriminator: "B", // 未改变。
 			value:            strPtr("new"),
-			oldValue:         strPtr("old"), // changed
+			oldValue:         strPtr("old"), // 已改变。
 			rules: []DiscriminatedRule[*string, string]{
 				{Value: "B", Validation: mockErrorMatch},
 			},
@@ -176,8 +175,8 @@ func TestDiscriminated(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create has no old object; default oldDiscriminator to the new one so
-			// update cases that don't set it explicitly read as "unchanged".
+			// Create 没有旧对象；将 oldDiscriminator 默认设为新值，使未显式设置的更新用例视为未变。
+			//
 			oldDisc := tc.oldDiscriminator
 			if oldDisc == "" {
 				oldDisc = tc.discriminator
@@ -203,8 +202,8 @@ func TestDiscriminated(t *testing.T) {
 	}
 }
 
-// TestDiscriminatedIntDiscriminator verifies the generic discriminator type
-// works for non-string keys (here int).
+// TestDiscriminatedIntDiscriminator 验证泛型判别器类型。
+// 适用于非字符串键（此处为 int）。
 func TestDiscriminatedIntDiscriminator(t *testing.T) {
 	errMatch := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "match error")}
 	errDefault := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "default error")}
@@ -236,8 +235,8 @@ func TestDiscriminatedIntDiscriminator(t *testing.T) {
 	}
 }
 
-// TestDiscriminatedBoolDiscriminator verifies the generic discriminator type
-// works for bool keys.
+// TestDiscriminatedBoolDiscriminator 验证泛型判别器类型。
+// 适用于布尔键。
 func TestDiscriminatedBoolDiscriminator(t *testing.T) {
 	errMatch := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "match error")}
 	errDefault := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "default error")}
@@ -269,7 +268,7 @@ func TestDiscriminatedBoolDiscriminator(t *testing.T) {
 	}
 }
 
-// strPtr returns a new pointer to a copy of s, guaranteeing a distinct allocation.
+// strPtr 返回 s 副本的新指针，确保每次分配独立。
 func strPtr(s string) *string {
 	return &s
 }

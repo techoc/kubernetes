@@ -22,27 +22,21 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// Deprecated: Use k8s.io/utils/dump.Pretty instead.
-//
-// 已弃用：请改用 k8s.io/utils/dump.Pretty。
+// Deprecated: 请改用 k8s.io/utils/dump.Pretty。
 //
 //go:fix inline
 func Pretty(a interface{}) string {
 	return dump.Pretty(a)
 }
 
-// Deprecated: Use k8s.io/utils/dump.ForHash instead.
-//
-// 已弃用：请改用 k8s.io/utils/dump.ForHash。
+// Deprecated: 请改用 k8s.io/utils/dump.ForHash。
 //
 //go:fix inline
 func ForHash(a interface{}) string {
 	return dump.ForHash(a)
 }
 
-// Deprecated: Use k8s.io/utils/dump.OneLine instead.
-//
-// 已弃用：请改用 k8s.io/utils/dump.OneLine。
+// Deprecated: 请改用 k8s.io/utils/dump.OneLine。
 //
 //go:fix inline
 func OneLine(a interface{}) string {

@@ -39,7 +39,7 @@ func TestEvaluateTypes(t *testing.T) {
 		Out  string
 		Err  bool
 	}{
-		// Invalid syntaxes
+		//无效语法
 		{
 			In:  `x`,
 			Err: true,
@@ -49,13 +49,13 @@ func TestEvaluateTypes(t *testing.T) {
 			Err: true,
 		},
 
-		// Null
+		//空值
 		{
 			In:   `null`,
 			Data: nil,
 			Out:  `null`,
 		},
-		// Booleans
+		//布尔值
 		{
 			In:   `true`,
 			Data: true,
@@ -67,7 +67,7 @@ func TestEvaluateTypes(t *testing.T) {
 			Out:  `false`,
 		},
 
-		// Integers
+		//整数
 		{
 			In:   `0`,
 			Data: int64(0),
@@ -104,19 +104,19 @@ func TestEvaluateTypes(t *testing.T) {
 			Out:  `-9223372036854775808`,
 		},
 
-		// Int overflow
+		//整数溢出
 		{
-			In:   `9223372036854775808`, // MaxInt64 + 1
+			In:   `9223372036854775808`, //MaxInt64 + 1（溢出）
 			Data: float64(9223372036854775808),
 			Out:  `9223372036854776000`,
 		},
 		{
-			In:   `-9223372036854775809`, // MinInt64 - 1
+			In:   `-9223372036854775809`, //MinInt64 - 1（溢出）
 			Data: float64(math.MinInt64),
 			Out:  `-9223372036854776000`,
 		},
 
-		// Floats
+		//浮点数
 		{
 			In:   `0.0`,
 			Data: float64(0),
@@ -124,7 +124,7 @@ func TestEvaluateTypes(t *testing.T) {
 		},
 		{
 			In:   `-0.0`,
-			Data: float64(-0.0), //nolint:staticcheck // SA4026: in Go, the floating-point literal '-0.0' is the same as '0.0'
+			Data: float64(-0.0), //nolint:staticcheck // SA4026：Go 中浮点字面量 '-0.0' 与 '0.0' 相同。
 			Out:  `-0`,
 		},
 		{
@@ -148,50 +148,50 @@ func TestEvaluateTypes(t *testing.T) {
 			Out:  `-0.3`,
 		},
 		{
-			// Largest representable float32
+			//float32 可表示的最大值
 			In:   `3.40282346638528859811704183484516925440e+38`,
 			Data: float64(math.MaxFloat32),
 			Out:  strconv.FormatFloat(math.MaxFloat32, 'g', -1, 64),
 		},
 		{
-			// Smallest float32 without losing precision
+			//不损失精度的最小 float32 值
 			In:   `1.175494351e-38`,
 			Data: float64(1.175494351e-38),
 			Out:  `1.175494351e-38`,
 		},
 		{
-			// float32 closest to zero
+			//最接近零的 float32 值
 			In:   `1.401298464324817070923729583289916131280e-45`,
 			Data: float64(math.SmallestNonzeroFloat32),
 			Out:  strconv.FormatFloat(math.SmallestNonzeroFloat32, 'g', -1, 64),
 		},
 		{
-			// Largest representable float64
+			//float64 可表示的最大值
 			In:   `1.797693134862315708145274237317043567981e+308`,
 			Data: float64(math.MaxFloat64),
 			Out:  strconv.FormatFloat(math.MaxFloat64, 'g', -1, 64),
 		},
 		{
-			// Closest to zero without losing precision
+			//不损失精度的最接近零值
 			In:   `2.2250738585072014e-308`,
 			Data: float64(2.2250738585072014e-308),
 			Out:  `2.2250738585072014e-308`,
 		},
 
 		{
-			// float64 closest to zero
+			//最接近零的 float64 值
 			In:   `4.940656458412465441765687928682213723651e-324`,
 			Data: float64(math.SmallestNonzeroFloat64),
 			Out:  strconv.FormatFloat(math.SmallestNonzeroFloat64, 'g', -1, 64),
 		},
 
 		{
-			// math.MaxFloat64 + 2 overflow
+			//math.MaxFloat64 + 2 溢出
 			In:  `1.7976931348623159e+308`,
 			Err: true,
 		},
 
-		// Strings
+		//字符串
 		{
 			In:   `""`,
 			Data: string(""),
@@ -213,7 +213,7 @@ func TestEvaluateTypes(t *testing.T) {
 			Out:  `"Iñtërnâtiônàlizætiøn"`,
 		},
 
-		// Arrays
+		//数组
 		{
 			In:   `[]`,
 			Data: []interface{}{},
@@ -266,11 +266,11 @@ func TestEvaluateTypes(t *testing.T) {
 				`"A"`,
 				`"Iñtërnâtiônàlizætiøn"`,
 				`[null,true,1,1,1.5]`,
-				`{"boolkey":true,"floatkey":1,"intkey":1,"nullkey":null}`, // gets alphabetized by Marshal
+				`{"boolkey":true,"floatkey":1,"intkey":1,"nullkey":null}`, //经 Marshal 后按字母顺序排列
 			}, ",") + `]`,
 		},
 
-		// Maps
+		//映射
 		{
 			In:   `{}`,
 			Data: map[string]interface{}{},
@@ -279,7 +279,7 @@ func TestEvaluateTypes(t *testing.T) {
 		{
 			In:   `{"boolkey":true,"floatkey":1.0,"intkey":1,"nullkey":null}`,
 			Data: map[string]interface{}{"nullkey": nil, "boolkey": true, "intkey": int64(1), "floatkey": float64(1.0)},
-			Out:  `{"boolkey":true,"floatkey":1,"intkey":1,"nullkey":null}`, // gets alphabetized by Marshal
+			Out:  `{"boolkey":true,"floatkey":1,"intkey":1,"nullkey":null}`, //经 Marshal 后按字母顺序排列
 		},
 	}
 

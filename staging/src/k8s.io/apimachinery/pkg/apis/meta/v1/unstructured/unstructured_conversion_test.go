@@ -267,7 +267,7 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 				assert.Equal(t, testCase.expectPanic, v != nil, "unexpected panic")
 			}()
 			outObject := testCase.convertingObject.DeepCopyObject()
-			// Convert by specifying destination object
+			// 通过指定目标对象进行转换。
 			err := scheme.Convert(testCase.unstructuredToConvert, outObject, nil)
 			if err != nil {
 				if testCase.expectedErrFunc != nil {
@@ -286,7 +286,6 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 // 调用方只给 GroupVersion，scheme 必须自行找到该版本对应的 Go 类型。
 func TestUnstructuredToGVConversion(t *testing.T) {
 	scheme, _ := test.TestScheme()
-	// HACK: registering fake internal/v1beta1 api
 	// 注册伪造的 foo 组版本，用于构造“目标版本存在但类型不对”的场景；
 	// 这不对应真实的 API 组，只服务本测试。
 	scheme.AddKnownTypes(schema.GroupVersion{Group: "foo", Version: "v1beta1"}, &testapigroup.Carp{})
@@ -462,7 +461,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 				v := recover()
 				assert.Equal(t, testCase.expectPanic, v != nil, "unexpected panic")
 			}()
-			// Convert by specifying destination object
+			// 通过指定目标对象进行转换。
 			outObject, err := scheme.ConvertToVersion(testCase.unstructuredToConvert, testCase.targetGV)
 			if testCase.expectedErrFunc != nil {
 				if !testCase.expectedErrFunc(err) {
@@ -478,8 +477,8 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 // Unstructured 之间的转换只是拷贝，不做任何跨版本语义转换。未来可能
 // 收紧为报错，届时需同步调整此测试。
 func TestUnstructuredToUnstructuredConversion(t *testing.T) {
-	// eventually, we don't want any inter-unstructured conversion happen, but for now, the conversion
-	// just copy/pastes
+	// 最终我们不应进行非结构化对象之间的转换，但目前该转换
+	// 只是复制/粘贴。
 	scheme, _ := test.TestScheme()
 	inUnstructured := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -532,8 +531,8 @@ func benchmarkCarp() *testapigroupv1.Carp {
 	}
 }
 
-// BenchmarkToUnstructured measures typed-object to map conversion. The result
-// always has exactly apiVersion, kind and metadata/spec/status keys.
+// BenchmarkToUnstructured 测量有类型对象到 map 的转换。
+// 结果始终恰好包含 apiVersion、kind 和 metadata/spec/status 键。
 func BenchmarkToUnstructured(b *testing.B) {
 	carp := benchmarkCarp()
 	converter := runtime.DefaultUnstructuredConverter
@@ -550,8 +549,8 @@ func BenchmarkToUnstructured(b *testing.B) {
 	}
 }
 
-// BenchmarkFromUnstructured measures the reverse conversion; the assertion on
-// Status.Phase guards against the compiler optimizing away the result.
+// BenchmarkFromUnstructured 测量反向转换；关于以下内容的断言
+// Status.Phase 用于防止编译器优化掉结果。
 func BenchmarkFromUnstructured(b *testing.B) {
 	carp := benchmarkCarp()
 	converter := runtime.DefaultUnstructuredConverter

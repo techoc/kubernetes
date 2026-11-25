@@ -369,10 +369,10 @@ func TestErrorMatcher_Matches(t *testing.T) {
 		wantedErr: func() *Error {
 			e := baseErr()
 			e.Field = "field.child"
-			e.Type = ErrorTypeRequired // child error can be a different type
+			e.Type = ErrorTypeRequired //子错误可以是不同类型。
 			return e
 		},
-		actualErr: &Error{Field: "field", Type: ErrorTypeInvalid, Origin: "immutable", ShortCircuit: true}, // parent error short-circuited
+		actualErr: &Error{Field: "field", Type: ErrorTypeInvalid, Origin: "immutable", ShortCircuit: true}, //父错误会短路匹配。
 		matches:   true,
 	}, {
 		name:    "MatchAncestorShortCircuit: array child match",

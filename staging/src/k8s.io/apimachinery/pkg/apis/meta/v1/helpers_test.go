@@ -78,7 +78,7 @@ func TestLabelSelectorAsSelector(t *testing.T) {
 	for i, tc := range tc {
 		inCopy := tc.in.DeepCopy()
 		out, err := LabelSelectorAsSelector(tc.in)
-		// after calling LabelSelectorAsSelector, tc.in shouldn't be modified
+		// 调用 LabelSelectorAsSelector 后不应修改 tc.in。
 		if !reflect.DeepEqual(inCopy, tc.in) {
 			t.Errorf("[%v]expected:\n\t%#v\nbut got:\n\t%#v", i, inCopy, tc.in)
 		}
@@ -88,7 +88,7 @@ func TestLabelSelectorAsSelector(t *testing.T) {
 		if err != nil && !tc.expectErr {
 			t.Errorf("[%v]did not expect error but got: %v", i, err)
 		}
-		// fmt.Sprint() over String() as nil.String() will panic
+		// 使用 fmt.Sprint() 调用 String()，因为 nil.String() 会 panic。
 		if fmt.Sprint(out) != fmt.Sprint(tc.out) {
 			t.Errorf("[%v]expected:\n\t%s\nbut got:\n\t%s", i, fmt.Sprint(tc.out), fmt.Sprint(out))
 		}
@@ -197,24 +197,20 @@ func TestResetObjectMetaForStatus(t *testing.T) {
 	meta := &ObjectMeta{}
 	existingMeta := &ObjectMeta{}
 
-	// fuzz the existingMeta to set every field, no nils
+	// 模糊测试 existingMeta，设置所有字段且不使用 nil。
 	f := randfill.New().NilChance(0).NumElements(1, 1).MaxDepth(10)
 	f.Fill(existingMeta)
 	ResetObjectMetaForStatus(meta, existingMeta)
 
-	// not all fields are stomped during the reset.  These fields should not have been set. False
-	// set them all to their zero values.  Before you add anything to this list, consider whether or not
-	// you're enforcing immutability (those are fine) and whether /status should be able to update
-	// these values (these are usually not fine).
 	//
 	// 下面这些字段不应由 Reset 从 existingMeta 复制过来；把它们清零后若与
 	// Reset 结果不一致，就说明 Reset 越权复制了字段。
 
-	// generateName doesn't do anything after create
+	// create 之后 generateName 不再起作用。
 	existingMeta.SetGenerateName("")
-	// resourceVersion is enforced in validation and used during the storage update
+	// resourceVersion 由校验逻辑强制执行，并用于存储更新。
 	existingMeta.SetResourceVersion("")
-	// fields made immutable in validation
+	// 校验逻辑要求不可变的字段。
 	existingMeta.SetUID(types.UID(""))
 	existingMeta.SetName("")
 	existingMeta.SetNamespace("")
@@ -411,7 +407,7 @@ func TestFieldsV1UnmarshalJSON(t *testing.T) {
 			Error: "metav1.FieldsV1: UnmarshalJSON on nil pointer",
 		},
 		{
-			Name: "json null does not modify receiver", // conventional for json.Unmarshaler
+			Name: "json null does not modify receiver", // 符合 json.Unmarshaler 的惯例。
 			JSON: []byte(`null`),
 			Into: NewFieldsV1(`unmodified`),
 			Want: NewFieldsV1(`unmodified`),
@@ -480,7 +476,7 @@ func TestFieldsV1UnmarshalCBOR(t *testing.T) {
 		},
 		{
 			Name: "invalid input is copied verbatim",
-			CBOR: []byte{0xff}, // UnmarshalCBOR should never be called with malformed input, testing anyway.
+			CBOR: []byte{0xff}, // UnmarshalCBOR 不应收到畸形输入，仍测试该情况。
 			Into: &FieldsV1{},
 			Want: NewFieldsV1(string([]byte{0xff})),
 		},

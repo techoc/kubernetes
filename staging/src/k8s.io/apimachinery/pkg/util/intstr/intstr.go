@@ -33,7 +33,7 @@ import (
 
 // IntOrString 可承载 int32 或 string。在 JSON/YAML 编解码时会生成或消费
 // 其内部的值类型，因此字段可以同时接受名称或数字。
-// TODO: Rename to Int32OrString
+// TODO: 重命名为 Int32OrString。
 //
 // +protobuf=true
 // +protobuf.options.(gogoproto.goproto_stringer)=false
@@ -58,7 +58,7 @@ const (
 func FromInt(val int) IntOrString {
 	if val > math.MaxInt32 || val < math.MinInt32 {
 		// 超出 int32 时记录错误与调用栈以便定位，但仍按截断后的值构造。
-		//nolint:logcheck // Should not be reached.
+		//nolint:logcheck // 不应执行到这里。
 		klog.Errorf("value: %d overflows int32\n%s\n", val, debug.Stack())
 	}
 	return IntOrString{Type: Int, IntVal: int32(val)}
@@ -157,7 +157,7 @@ func (intstr IntOrString) MarshalCBOR() ([]byte, error) {
 
 // OpenAPISchemaType 供 kube-openapi 生成器在构建本类型的 OpenAPI 规范时使用。
 //
-// See: https://github.com/kubernetes/kube-openapi/tree/master/pkg/generators
+// 参见：https://github.com/kubernetes/kube-openapi/tree/master/pkg/generators
 func (IntOrString) OpenAPISchemaType() []string { return []string{"string"} }
 
 // OpenAPISchemaFormat 供 kube-openapi 生成器在构建 OpenAPI 规范时使用。
@@ -197,9 +197,8 @@ func GetScaledValueFromIntOrPercent(intOrPercent *IntOrString, total int, roundU
 	return value, nil
 }
 
-// GetValueFromIntOrPercent 已由 GetScaledValueFromIntOrPercent 取代。
+// Deprecated: 请使用 GetScaledValueFromIntOrPercent。
 // 旧实现把所有整数当作数值、把所有字符串（无论是否带百分号）都当作百分比。
-// Deprecated
 func GetValueFromIntOrPercent(intOrPercent *IntOrString, total int, roundUp bool) (int, error) {
 	if intOrPercent == nil {
 		return 0, errors.New("nil value for IntOrString")

@@ -22,8 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// lazyObject defers loading the mapper and typer until necessary.
-//
 // lazyObject 把 RESTMapper 的构造推迟到第一次真正使用时，避免客户端初始化
 // 阶段就发起 discovery 请求。一旦加载完成（无论成功失败），结果都被缓存。
 type lazyObject struct {
@@ -37,10 +35,6 @@ type lazyObject struct {
 	mapper RESTMapper
 }
 
-// NewLazyRESTMapperLoader handles unrecoverable errors when creating a RESTMapper / ObjectTyper by
-// returning those initialization errors when the interface methods are invoked. This defers the
-// initialization and any server calls until a client actually needs to perform the action.
-//
 // 把“构造失败”从 New 阶段挪到方法调用阶段，使客户端可以先构造、再在实际
 // 使用时统一处理错误。
 func NewLazyRESTMapperLoader(fn func() (RESTMapper, error)) RESTMapper {
@@ -48,8 +42,6 @@ func NewLazyRESTMapperLoader(fn func() (RESTMapper, error)) RESTMapper {
 	return obj
 }
 
-// init lazily loads the mapper and typer, returning an error if initialization has failed.
-//
 // 在锁内检查 loaded 并缓存结果，保证 loader 只执行一次；失败也缓存，
 // 后续调用直接返回同一错误。
 func (o *lazyObject) init() error {

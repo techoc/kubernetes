@@ -77,8 +77,8 @@ func testOne(v *Version, item, prev testItem) error {
 // ParseSemantic 的解析、排序与相等语义。
 func TestSemanticVersions(t *testing.T) {
 	tests := []testItem{
-		// This is every version string that appears in the 2.0 semver spec,
-		// sorted in strictly increasing order except as noted.
+		//这包含 semver 2.0 规范中的所有版本字符串，
+		//除特别说明外按严格递增顺序排列。
 		{version: "0.1.0"},
 		{version: "1.0.0-0.3.7"},
 		{version: "1.0.0-alpha"},
@@ -103,7 +103,7 @@ func TestSemanticVersions(t *testing.T) {
 		{version: "2.1.1"},
 		{version: "42.0.0"},
 
-		// We also allow whitespace and "v" prefix
+		//也允许空白和 "v" 前缀。
 		{version: "   42.0.0", unparsed: "42.0.0", equalsPrev: true},
 		{version: "\t42.0.0  ", unparsed: "42.0.0", equalsPrev: true},
 		{version: "43.0.0-1", unparsed: "43.0.0-1"},
@@ -132,7 +132,7 @@ func TestSemanticVersions(t *testing.T) {
 // 段数/数字格式错误、前导零、非法的 pre-release/build metadata、空白与 "v" 前缀误用等。
 func TestBadSemanticVersions(t *testing.T) {
 	tests := []string{
-		// "MUST take the form X.Y.Z"
+		//"必须采用 X.Y.Z 形式"
 		"1",
 		"1.2",
 		"1.2.3.4",
@@ -141,7 +141,7 @@ func TestBadSemanticVersions(t *testing.T) {
 		"1.2.",
 		"",
 		"..",
-		// "where X, Y, and Z are non-negative integers"
+		//"其中 X、Y、Z 是非负整数"
 		"-1.2.3",
 		"1.-2.3",
 		"1.2.-3",
@@ -152,28 +152,28 @@ func TestBadSemanticVersions(t *testing.T) {
 		"a.b.c",
 		"1 .2.3",
 		"1. 2.3",
-		// "and MUST NOT contain leading zeroes."
+		//"且不得包含前导零。"
 		"01.2.3",
 		"1.02.3",
 		"1.2.03",
-		// "[pre-release] identifiers MUST comprise only ASCII alphanumerics and hyphen"
+		//"[pre-release] 标识符只能包含 ASCII 字母、数字和连字符"
 		"1.2.3-/",
-		// "[pre-release] identifiers MUST NOT be empty"
+		//"[pre-release] 标识符不得为空"
 		"1.2.3-",
 		"1.2.3-.",
 		"1.2.3-foo.",
 		"1.2.3-.foo",
-		// "Numeric [pre-release] identifiers MUST NOT include leading zeroes"
+		//"数字型 [pre-release] 标识符不得包含前导零"
 		"1.2.3-01",
-		// "[build metadata] identifiers MUST comprise only ASCII alphanumerics and hyphen"
+		//"[build metadata] 标识符只能包含 ASCII 字母、数字和连字符"
 		"1.2.3+/",
-		// "[build metadata] identifiers MUST NOT be empty"
+		//"[build metadata] 标识符不得为空"
 		"1.2.3+",
 		"1.2.3+.",
 		"1.2.3+foo.",
 		"1.2.3+.foo",
 
-		// whitespace/"v"-prefix checks
+		//空白和 "v" 前缀检查
 		"v 1.2.3",
 		"vv1.2.3",
 	}
@@ -190,9 +190,8 @@ func TestBadSemanticVersions(t *testing.T) {
 // 允许额外数字段与任意后缀，String() 只保留被解释的数字部分，因此多个不同输入可能得到相等版本。
 func TestGenericVersions(t *testing.T) {
 	tests := []testItem{
-		// This is all of the strings from TestSemanticVersions, plus some strings
-		// from TestBadSemanticVersions that should parse as generic versions,
-		// plus some additional strings.
+		//这包含 TestSemanticVersions 的所有字符串、TestBadSemanticVersions 中可作为 generic 解析的部分，
+		//以及一些额外字符串。
 		{version: "0.1.0", unparsed: "0.1.0"},
 		{version: "1.0.0-0.3.7", unparsed: "1.0.0"},
 		{version: "1.0.0-alpha", unparsed: "1.0.0", equalsPrev: true},
@@ -445,10 +444,10 @@ func TestHighestSupportedVersion(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Arrange & Act
+		//准备并执行
 		actual, err := HighestSupportedVersion(tc.versions)
 
-		// Assert
+		//断言
 		if tc.shouldFail && err == nil {
 			t.Fatalf("expecting highestSupportedVersion to fail, but got nil error for testcase: %#v", tc)
 		}

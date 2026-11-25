@@ -22,11 +22,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
 // 这是仅供 apimachinery 内部测试使用的假 API 组，不随真实集群发布。
 const GroupName = "testapigroup.apimachinery.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
 // Kind 接收不带组限定的 kind，返回带组信息的 GroupKind。
@@ -40,22 +39,18 @@ func Resource(resource string) schema.GroupResource {
 }
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// TODO: 将 SchemeBuilder 与 zz_generated.deepcopy.go 移至 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 将保留在 k8s.io/kubernetes。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
 	// 只注册手写函数；生成函数在 generated 文件中注册，二者分离使得缺少生成文件时仍可编译。
 	localSchemeBuilder.Register(addKnownTypes, addConversionFuncs, addDefaultingFuncs)
 }
 
-// Adds the list of known types to the given scheme.
 // addKnownTypes 向 scheme 注册本组的所有已知类型，并挂上组版本级的元数据。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,

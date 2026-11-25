@@ -33,14 +33,13 @@ type NormalizationRule struct {
 // ErrorMatcher 是 Error 对象的比较辅助器。
 // 各 matchXxx 字段由链式 ByXxx 方法逐步开启，未开启的维度不参与比较。
 type ErrorMatcher struct {
-	// TODO(thockin): consider whether type is ever NOT required, maybe just
-	// assume it.
+	//TODO(thockin): 考虑 type 是否一定必需，或许可以直接假定必需。
 	matchType bool
-	// TODO(thockin): consider whether field could be assumed - if the
-	// "want" error has a nil field, don't match on field.
+	//TODO(thockin): 考虑是否可默认匹配 field；如果 "want" 错误的 field 为 nil，
+	//则不按 field 匹配。
 	matchField bool
-	// TODO(thockin): consider whether value could be assumed - if the
-	// "want" error has a nil value, don't match on value.
+	//TODO(thockin): 考虑是否可默认匹配 value；如果 "want" 错误的 value 为 nil，
+	//则不按 value 匹配。
 	matchValue                    bool
 	matchOrigin                   bool
 	matchDetail                   func(want, got string) bool
@@ -49,15 +48,15 @@ type ErrorMatcher struct {
 	matchSource                   bool
 	matchAncestorShortCircuit     bool
 	matchShortCircuit             bool
-	// normalizationRules holds the pre-compiled regex patterns for path normalization.
+	//normalizationRules 保存路径规范化所用的预编译正则表达式。
 	normalizationRules []NormalizationRule
 }
 
 // isChildPath 判断 child 是否为 parent 的后代路径。
 // 通过显式检查 '.' 或 '[' 分隔符，避免 "spec.containers" 被误判为 "spec.container" 的子路径。
 func isChildPath(parent, child string) bool {
-	// "" as parent path not supported. It can un-intentionally match with any path.
-	// theoretically system errors can be matched with any path errors.
+	//不支持将 "" 作为父路径，否则可能意外匹配任意路径；
+	//理论上系统错误可以匹配任意路径错误。
 	if len(parent) == 0 {
 		return false
 	}
@@ -130,7 +129,7 @@ func (m ErrorMatcher) normalizePath(path string) string {
 	for _, rule := range m.normalizationRules {
 		normalized := rule.Regexp.ReplaceAllString(path, rule.Replacement)
 		if normalized != path {
-			// Only apply the first matching rule.
+			//仅应用第一条匹配的规则。
 			return normalized
 		}
 	}
@@ -330,11 +329,11 @@ func (m ErrorMatcher) Test(tb TestIntf, want, got ErrorList) {
 		tb.Errorf("matchAncestorShortCircuit is not supported for test")
 	}
 	// 复制一份“全字段精确”匹配器，仅用于生成重复检测的 key 和最终未匹配错误的渲染。
-	exactly := m.Exactly() // makes a copy
+	exactly := m.Exactly() //创建副本。
 
-	// If we ever find an EXACT duplicate error, it's almost certainly a bug
-	// worth reporting. If we ever find a use-case where this is not a bug, we
-	// can revisit this assumption.
+	//如果发现完全重复的错误，几乎可以确定是缺陷，值得报告。
+	//如果未来存在合理用例，
+	//可重新审视此假设。
 	seen := map[string]bool{}
 	for _, g := range got {
 		key := exactly.Render(g)
@@ -353,14 +352,12 @@ func (m ErrorMatcher) Test(tb TestIntf, want, got ErrorList) {
 			if m.Matches(w, g) {
 				matched = true
 				if m.matchOrigin && w.Origin != "" {
-					// When origin is included in the match, we allow multiple
-					// matches against the same wanted error, so that tests
-					// can be insulated from the exact number, order, and
-					// wording of cases that might return more than one error.
+					//匹配包含 origin 时，允许同一个 "want" 错误匹配多个结果，
+					//使测试不受可能返回多个错误时的具体数量、顺序和措辞影响。
 					continue
 				} else {
-					// Single-match, save the rest of the "got" errors and move
-					// on to the next "want" error.
+					//单次匹配时保存剩余 "got" 错误，
+					//继续处理下一个 "want" 错误。
 					tmp = append(tmp, remaining[i+1:]...)
 					break
 				}

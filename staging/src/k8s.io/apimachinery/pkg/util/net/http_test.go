@@ -86,7 +86,7 @@ func TestGetClientIP(t *testing.T) {
 		},
 		{
 			Request: http.Request{
-				// RemoteAddr is in the form host:port
+				//RemoteAddr 格式为 host:port
 				RemoteAddr: ipString + ":1234",
 			},
 			ExpectedIP: ip,
@@ -101,7 +101,7 @@ func TestGetClientIP(t *testing.T) {
 				Header: map[string][]string{
 					"X-Forwarded-For": {invalidIPString},
 				},
-				// RemoteAddr is in the form host:port
+				//RemoteAddr 格式为 host:port
 				RemoteAddr: ipString,
 			},
 			ExpectedIP: ip,
@@ -265,22 +265,22 @@ func TestJoinPreservingTrailingSlash(t *testing.T) {
 		b    string
 		want string
 	}{
-		// All empty
+		//全部为空
 		{"", "", ""},
 
-		// Empty a
+		//a 为空
 		{"", "/", "/"},
 		{"", "foo", "foo"},
 		{"", "/foo", "/foo"},
 		{"", "/foo/", "/foo/"},
 
-		// Empty b
+		//b 为空
 		{"/", "", "/"},
 		{"foo", "", "foo"},
 		{"/foo", "", "/foo"},
 		{"/foo/", "", "/foo/"},
 
-		// Both populated
+		//两者均有值
 		{"/", "/", "/"},
 		{"foo", "foo", "foo/foo"},
 		{"/foo", "/foo", "/foo/foo"},
@@ -450,7 +450,7 @@ func TestSourceIPs(t *testing.T) {
 	}, {
 		name:         "mixed ipv4 ipv6",
 		forwardedFor: "aaaa:bbbb:cccc:dddd:eeee:ffff:0:1111,1.2.3.4",
-		remoteAddr:   "0:0:0:0:0:ffff:102:304", // ipv6 equivalent to 1.2.3.4
+		remoteAddr:   "0:0:0:0:0:ffff:102:304", //与 1.2.3.4 等价的 IPv6 地址
 		expected: []string{
 			"aaaa:bbbb:cccc:dddd:eeee:ffff:0:1111",
 			"1.2.3.4",
@@ -492,7 +492,7 @@ func TestParseWarningHeader(t *testing.T) {
 		wantRemainder string
 		wantErr       string
 	}{
-		// invalid cases
+		//无效用例
 		{
 			name:    "empty",
 			header:  ``,
@@ -544,7 +544,7 @@ func TestParseWarningHeader(t *testing.T) {
 			wantErr: "invalid text",
 		},
 
-		// valid cases
+		//有效用例
 		{
 			name:       "ok",
 			header:     `299 - "text"`,
@@ -555,13 +555,13 @@ func TestParseWarningHeader(t *testing.T) {
 			header:     `299 - "text\"\\\a\b\c"`,
 			wantResult: WarningHeader{Code: 299, Agent: `-`, Text: `text"\abc`},
 		},
-		// big code
+		//较大的 code
 		{
 			name:       "big code",
 			header:     `321 - "text"`,
 			wantResult: WarningHeader{Code: 321, Agent: "-", Text: "text"},
 		},
-		// RFC 2047 decoding
+		//RFC 2047 解码
 		{
 			name:       "ok, rfc 2047, iso-8859-1, q",
 			header:     `299 - "=?iso-8859-1?q?this=20is=20some=20text?="`,
@@ -660,7 +660,7 @@ func TestNewWarningHeader(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		// invalid cases
+		//无效用例
 		{
 			name:    "code too low",
 			code:    -1,

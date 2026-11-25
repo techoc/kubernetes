@@ -36,7 +36,7 @@ func defaultFillFuncs() map[reflect.Type]FillFunc {
 	funcs := map[reflect.Type]FillFunc{}
 	funcs[reflect.TypeOf(&runtime.RawExtension{})] = func(s string, i int, obj interface{}) {
 		// 生成规范化形式的原始对象；
-		// TODO: test non-normalized round-tripping... YAMLToJSON normalizes and makes exact comparisons fail
+		// TODO: 测试非规范化数据的往返；YAMLToJSON 会规范化数据，导致逐字节比较失败。
 		obj.(*runtime.RawExtension).Raw = []byte(`{"apiVersion":"example.com/v1","kind":"CustomType","spec":{"replicas":1},"status":{"available":1}}`)
 	}
 	funcs[reflect.TypeOf(&metav1.TypeMeta{})] = func(s string, i int, obj interface{}) {

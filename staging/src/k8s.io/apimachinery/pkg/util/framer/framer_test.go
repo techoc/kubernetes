@@ -50,27 +50,27 @@ func TestRead(t *testing.T) {
 	if n, err := r.Read(buf); err != io.ErrShortBuffer && n != 1 && bytes.Equal(buf, []byte{0x02}) {
 		t.Fatalf("unexpected: %v %d %v", err, n, buf)
 	}
-	// read the remaining frame
+	//读取帧的剩余部分
 	buf = make([]byte, 2)
 	if n, err := r.Read(buf); err != nil && n != 2 && bytes.Equal(buf, []byte{0x03, 0x04}) {
 		t.Fatalf("unexpected: %v %d %v", err, n, buf)
 	}
-	// read with buffer equal to frame
+	//使用与帧等长的缓冲区读取
 	buf = make([]byte, 3)
 	if n, err := r.Read(buf); err != nil && n != 3 && bytes.Equal(buf, []byte{0x05, 0x06, 0x07}) {
 		t.Fatalf("unexpected: %v %d %v", err, n, buf)
 	}
-	// read empty frame
+	//读取空帧
 	buf = make([]byte, 3)
 	if n, err := r.Read(buf); err != nil && n != 0 && bytes.Equal(buf, []byte{}) {
 		t.Fatalf("unexpected: %v %d %v", err, n, buf)
 	}
-	// read with larger buffer than frame
+	//使用比帧更长的缓冲区读取
 	buf = make([]byte, 3)
 	if n, err := r.Read(buf); err != nil && n != 1 && bytes.Equal(buf, []byte{0x08}) {
 		t.Fatalf("unexpected: %v %d %v", err, n, buf)
 	}
-	// read EOF
+	//读取到 EOF
 	if n, err := r.Read(buf); err != io.EOF && n != 0 {
 		t.Fatalf("unexpected: %v %d", err, n)
 	}
@@ -102,7 +102,7 @@ func TestReadLarge(t *testing.T) {
 	if n, err := r.Read(buf); err != nil && n != 1 && bytes.Equal(buf, []byte{0x08}) {
 		t.Fatalf("unexpected: %v %d %v", err, n, buf)
 	}
-	// read EOF
+	//读取到 EOF
 	if n, err := r.Read(buf); err != io.EOF && n != 0 {
 		t.Fatalf("unexpected: %v %d", err, n)
 	}
@@ -120,12 +120,12 @@ func TestReadInvalidFrame(t *testing.T) {
 	if n, err := r.Read(buf); err != io.ErrShortBuffer && n != 1 && bytes.Equal(buf, []byte{0x01}) {
 		t.Fatalf("unexpected: %v %d %v", err, n, buf)
 	}
-	// read the remaining frame
+	//读取帧的剩余部分
 	buf = make([]byte, 3)
 	if n, err := r.Read(buf); err != io.ErrUnexpectedEOF && n != 1 && bytes.Equal(buf, []byte{0x02}) {
 		t.Fatalf("unexpected: %v %d %v", err, n, buf)
 	}
-	// read EOF
+	//读取到 EOF
 	if n, err := r.Read(buf); err != io.EOF && n != 0 {
 		t.Fatalf("unexpected: %v %d", err, n)
 	}
@@ -242,7 +242,7 @@ func TestJSONFrameReaderShortBufferNoUnderlyingArrayReuse(t *testing.T) {
 	if n, err := r.Read(buf); !errors.Is(err, io.ErrShortBuffer) || n != 1 || string(buf[:n]) != "{" {
 		t.Fatalf("unexpected: %v %d %q", err, n, buf)
 	}
-	buf = append(buf, make([]byte, 1)...) // stomps the second byte of the backing array
+	buf = append(buf, make([]byte, 1)...) //覆盖底层数组的第二个字节
 	if n, err := r.Read(buf[1:]); err != nil || n != 1 || string(buf[1:1+n]) != "}" {
 		t.Fatalf("unexpected: %v %d %q", err, n, buf)
 	}

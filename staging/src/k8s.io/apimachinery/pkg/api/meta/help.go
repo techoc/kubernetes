@@ -29,7 +29,6 @@ import (
 var (
 	// isListCache 缓存已被判定为列表的类型，供 IsListType 复用，避免对同一类型重复做反射探测。
 	// 它是进程级全局状态，因此用读写锁保护；容量上限 1024 用于限制内存占用，超出后只查询不再写入。
-	// TODO: remove and replace with an interface check
 	isListCache = struct {
 		lock   sync.RWMutex
 		byType map[reflect.Type]bool
@@ -40,8 +39,6 @@ var (
 
 // IsListType 判断给定对象是否为列表类型，即是否带有名为 Items 的切片字段。
 // 非列表类型返回 false；对 Unstructured 对象直接委托其自身的 IsList 判定。
-// TODO: Replace the code in this check with an interface comparison by
-// creating and enforcing that lists implement a list accessor.
 func IsListType(obj runtime.Object) bool {
 	switch t := obj.(type) {
 	case runtime.Unstructured:
@@ -79,7 +76,6 @@ var (
 // GetItemsPtr 返回列表对象 Items 成员的指针。
 // 若 list 没有 Items 成员，则它并非真正的列表类型，会返回错误。
 // 该函数要么返回切片指针，要么返回错误，二者不会同时出现。
-// TODO: this will be replaced with an interface in the future
 func GetItemsPtr(list runtime.Object) (interface{}, error) {
 	obj, err := getItemsPtr(list)
 	if err != nil {
@@ -141,7 +137,7 @@ func eachListItem(obj runtime.Object, fn func(runtime.Object) error, allocNew bo
 		}
 		return unstructured.EachListItem(fn)
 	}
-	// TODO: Change to an interface call?
+	// TODO: 改为接口调用？
 	itemsPtr, err := GetItemsPtr(obj)
 	if err != nil {
 		return err
@@ -247,7 +243,6 @@ func extractList(obj runtime.Object, allocNew bool) ([]runtime.Object, error) {
 			case item.Object != nil:
 				list[i] = item.Object
 			case item.Raw != nil:
-				// TODO: Set ContentEncoding and ContentType correctly.
 				// 仅有原始字节时包装为 Unknown，交由调用方按需解码。
 				list[i] = &runtime.Unknown{Raw: item.Raw}
 			default:

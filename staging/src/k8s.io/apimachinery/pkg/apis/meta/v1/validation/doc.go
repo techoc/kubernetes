@@ -17,8 +17,6 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-input=k8s.io/apimachinery/pkg/apis/meta/v1
 
-// Package validation holds generated validations for meta/v1 types.
-//
 // 本包由 validation-gen 根据 meta/v1 的类型定义生成，集中承载 TypeMeta 等
 // 公共类型的声明式校验规则。把生成代码单独成包，避免污染 meta/v1 的公开 API。
 package validation

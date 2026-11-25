@@ -152,10 +152,8 @@ type YAMLDecoder struct {
 func NewDocumentDecoder(r io.ReadCloser) io.ReadCloser {
 	scanner := bufio.NewScanner(r)
 	// 扫描器缓冲区的初始分配大小为 4 KiB。
-	// 缓冲区初始大小 4K。
 	buf := make([]byte, 4*1024)
 	// 单个 token 的最大缓冲容量为 5 MiB。
-	// 单个 token 的最大缓冲上限 5M。
 	scanner.Buffer(buf, 5*1024*1024)
 	scanner.Split(splitYAMLDocument)
 	return &YAMLDecoder{
@@ -165,11 +163,10 @@ func NewDocumentDecoder(r io.ReadCloser) io.ReadCloser {
 }
 
 // Read 读取上一块的剩余内容，或从流中取下一块。
-// TODO: switch to readline approach.
+// TODO: 改用 readline 方式。
 func (d *YAMLDecoder) Read(data []byte) (n int, err error) {
 	left := len(d.remaining)
 	if left == 0 {
-		// 没有剩余数据时，从流中扫描下一块。
 		// 没有剩余数据时，从流中扫描下一块。
 		if !d.scanner.Scan() {
 			err := d.scanner.Err()
@@ -183,7 +180,6 @@ func (d *YAMLDecoder) Read(data []byte) (n int, err error) {
 		left = len(out)
 	}
 
-	// 当前块能够完整放入调用方缓冲区。
 	// 调用方缓冲足够，直接整块拷出。
 	if left <= len(data) {
 		copy(data, d.remaining)
@@ -191,7 +187,6 @@ func (d *YAMLDecoder) Read(data []byte) (n int, err error) {
 		return left, nil
 	}
 
-	// 调用方缓冲区不足，需要通过后续 Read 继续读取当前块。
 	// 缓冲不够，只拷出部分并保留剩余，返回 ErrShortBuffer 提示调用方重新读取。
 	copy(data, d.remaining[:len(data)])
 	d.remaining = d.remaining[len(data):]
@@ -213,12 +208,10 @@ func splitYAMLDocument(data []byte, atEOF bool) (advance int, token []byte, err 
 	}
 	sep := len([]byte(yamlSeparator))
 	if i := bytes.Index(data, []byte(yamlSeparator)); i >= 0 {
-		// 找到潜在的文档终止符，仍需检查其后是否有完整分隔内容。
 		// 找到潜在的分隔位置，需确认其后确实有换行才算完整文档。
 		i += sep
 		after := data[i:]
 		if len(after) == 0 {
-			// 分隔符后暂时没有更多字符可读。
 			// 分隔符后暂无内容：EOF 时取出完整文档，否则等待更多数据。
 			if atEOF {
 				return len(data), data[:len(data)-sep], nil
@@ -231,12 +224,10 @@ func splitYAMLDocument(data []byte, atEOF bool) (advance int, token []byte, err 
 		}
 		return 0, nil, nil
 	}
-	// 已到 EOF，最后一段没有终止分隔符，直接作为文档返回。
 	// 已到 EOF 时，最后一段没有终止分隔符，直接作为文档返回。
 	if atEOF {
 		return len(data), data, nil
 	}
-	// 当前数据不足以判断文档边界，需要继续读取。
 	// 需要更多数据才能确定边界。
 	return 0, nil, nil
 }
@@ -250,11 +241,11 @@ func splitYAMLDocument(data []byte, atEOF bool) (advance int, token []byte, err 
 // 一旦切换到 YAML，也不再切回 JSON。
 type YAMLOrJSONDecoder struct {
 	json         *json.Decoder
-	jsonConsumed int64 // of the stream total, how much was JSON?
+	jsonConsumed int64 //JSON 内容占流总长度的比例。
 	yaml         *YAMLToJSONDecoder
-	yamlConsumed int64 // of the stream total, how much was YAML?
+	yamlConsumed int64 //YAML 内容占流总长度的比例。
 	stream       *StreamReader
-	count        int // how many objects have been decoded
+	count        int //已解码的对象数量。
 }
 
 // JSONSyntaxError 包装 JSON 语法错误并保留其在流中的偏移。
@@ -328,10 +319,9 @@ func (d *YAMLOrJSONDecoder) Decode(into interface{}) error {
 			// 已成功解析多于 1 个 JSON 对象，流格式已确定为 JSON，不再切换。
 			return err
 		}
-		// If JSON decoding hits the end of one object and then fails on the
-		// next, it leaves any leading whitespace in the buffer, which can
-		// confuse the YAML decoder. We just eat any whitespace we find, up to
-		// and including the first newline.
+		//JSON 解码在一个对象结束后、下一个对象开始时失败，
+		//会在缓冲区留下前导空白，可能干扰 YAML 解码；
+		//因此丢弃空白，直到并包括第一个换行符。
 		// JSON 失败时缓冲区可能残留前导空白，先退回再吞掉空白，
 		// 避免干扰后续 YAML 解码。
 		d.stream.Rewind()

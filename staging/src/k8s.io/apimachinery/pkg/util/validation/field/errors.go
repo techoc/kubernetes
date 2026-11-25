@@ -140,9 +140,8 @@ func (e *Error) ErrorBody() string {
 				valstr = stringer.String()
 			} else {
 				// 最差情况：回退到原始结构体。
-				// TODO: internal types have panic guards against json.Marshalling to prevent
-				// accidental use of internal types in external serialized form.  For now, use
-				// %#v, although it would be better to show a more expressive output in the future
+				//TODO: 内部类型对 json.Marshalling 有 panic 防护，以防止意外将内部类型外部序列化。
+				//目前使用 %#v，未来最好提供更具表达力的输出。
 				valstr = fmt.Sprintf("%#v", e.BadValue)
 			}
 			s = fmt.Sprintf("%s: %s", e.Type, valstr)
@@ -175,7 +174,7 @@ func (e *Error) MarkCoveredByDeclarative() *Error {
 // 这些值应与 api/types.go 中的 CauseType 一一对应。
 type ErrorType string
 
-// TODO: These values are duplicated in api/types.go, but there's a circular dep.  Fix it.
+// TODO: 这些值与 api/types.go 重复，但存在循环依赖；需要消除重复。
 const (
 	// ErrorTypeNotFound 用于报告找不到请求的值（例如查找 ID）。见 NotFound()。
 	ErrorTypeNotFound ErrorType = "FieldValueNotFound"

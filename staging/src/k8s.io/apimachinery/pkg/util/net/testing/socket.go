@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package nettesting contains utilities for testing networking functionality.
-// Don't use these utilities in production code. They have not been security
-// reviewed.
+// nettesting 包提供网络功能测试工具。
+// 不要在生产代码中使用这些工具，因为它们尚未经过安全审查。
 package nettesting
 
 import (

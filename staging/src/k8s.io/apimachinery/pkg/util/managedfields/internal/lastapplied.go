@@ -24,14 +24,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// LastAppliedConfigAnnotation is the annotation used to store the previous
-// configuration of a resource for use in a three way diff by UpdateApplyAnnotation.
+// LastAppliedConfigAnnotation 是存储资源先前配置的注解，
+// 供 UpdateApplyAnnotation 执行三方差异比较。
 //
-// This is a copy of the corev1 annotation since we don't want to depend on the whole package.
+// 这是 corev1 注解的副本，以避免依赖整个包。
 const LastAppliedConfigAnnotation = "kubectl.kubernetes.io/last-applied-configuration"
 
-// SetLastApplied sets the last-applied annotation the given value in
-// the object.
+// SetLastApplied 将给定值写入对象的 last-applied 注解。
 //
 // 若加入注解后总大小超限，会删除该注解而不是返回错误：last-applied 是
 // 尽力而为的信息，不能因此阻止写入。函数签名保留 error 以兼容调用方，

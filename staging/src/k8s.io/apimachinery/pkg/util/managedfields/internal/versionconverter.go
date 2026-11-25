@@ -26,8 +26,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/typed"
 )
 
-// versionConverter is an implementation of
-// sigs.k8s.io/structured-merge-diff/merge.Converter
+// versionConverter 是 sigs.k8s.io/structured-merge-diff/merge.Converter 的实现。
 //
 // 中文说明：merge 引擎只认 typed value，而版本转换只能通过运行时对象做，
 // 因此这里“typed -> 对象 -> hub 版本 -> 目标版本 -> typed”往返一次。
@@ -40,7 +39,7 @@ type versionConverter struct {
 
 var _ merge.Converter = &versionConverter{}
 
-// NewVersionConverter builds a VersionConverter from a TypeConverter and an ObjectConvertor.
+// NewVersionConverter 根据 TypeConverter 和 ObjectConvertor 构建 VersionConverter。
 func newVersionConverter(t TypeConverter, o runtime.ObjectConvertor, h schema.GroupVersion) merge.Converter {
 	return &versionConverter{
 		typeConverter:   t,
@@ -55,7 +54,7 @@ func newVersionConverter(t TypeConverter, o runtime.ObjectConvertor, h schema.Gr
 	}
 }
 
-// NewCRDVersionConverter builds a VersionConverter for CRDs from a TypeConverter and an ObjectConvertor.
+// NewCRDVersionConverter 根据 TypeConverter 和 ObjectConvertor 构建用于 CRD 的 VersionConverter。
 func newCRDVersionConverter(t TypeConverter, o runtime.ObjectConvertor, h schema.GroupVersion) merge.Converter {
 	return &versionConverter{
 		typeConverter:   t,
@@ -67,26 +66,26 @@ func newCRDVersionConverter(t TypeConverter, o runtime.ObjectConvertor, h schema
 	}
 }
 
-// Convert implements sigs.k8s.io/structured-merge-diff/merge.Converter
+// Convert 实现 sigs.k8s.io/structured-merge-diff/merge.Converter。
 func (v *versionConverter) Convert(object *typed.TypedValue, version fieldpath.APIVersion) (*typed.TypedValue, error) {
 	groupVersion, err := schema.ParseGroupVersion(string(version))
 	if err != nil {
 		return object, err
 	}
 
-	// If attempting to convert to the same version as we already have, just return it.
+	//如果目标版本与当前版本相同，直接返回。
 	if typedVersion, ok := GroupVersionOfTypedValue(object); ok && typedVersion == groupVersion {
 		return object, nil
 	}
 
-	// Convert the smd typed value to a kubernetes object.
+	//将 SMD typed value 转换为 Kubernetes 对象。
 	objectToConvert, err := v.typeConverter.TypedToObject(object)
 	if err != nil {
 		return object, err
 	}
 	fromVersion := objectToConvert.GetObjectKind().GroupVersionKind().GroupVersion()
 
-	// Convert to internal
+	//转换为内部版本。
 	// 中文说明：先转到 hub 版本再转到目标版本，避免任意两版本之间都注册
 	// 转换函数（平方级组合）。
 	internalObject, err := v.objectConvertor.ConvertToVersion(objectToConvert, v.hubGetter(fromVersion))
@@ -94,13 +93,13 @@ func (v *versionConverter) Convert(object *typed.TypedValue, version fieldpath.A
 		return object, err
 	}
 
-	// Convert the object into the target version
+	//将对象转换为目标版本。
 	convertedObject, err := v.objectConvertor.ConvertToVersion(internalObject, groupVersion)
 	if err != nil {
 		return object, err
 	}
 
-	// Convert the object back to a smd typed value and return it.
+	//将对象转换回 SMD typed value 并返回。
 	return v.typeConverter.ObjectToTyped(convertedObject)
 }
 
@@ -115,6 +114,7 @@ type noCorrespondingTypeErr struct {
 	gvk schema.GroupVersionKind
 }
 
+// NewNoCorrespondingTypeError 构造错误，表示 schema 索引中没有给定 GVK 对应的类型。
 func NewNoCorrespondingTypeError(gvk schema.GroupVersionKind) error {
 	return &noCorrespondingTypeErr{gvk: gvk}
 }

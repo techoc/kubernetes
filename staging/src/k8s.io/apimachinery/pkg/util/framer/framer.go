@@ -30,6 +30,7 @@ type lengthDelimitedFrameWriter struct {
 	h [4]byte
 }
 
+// NewLengthDelimitedFrameWriter 返回 writer，每次 Write 先写入 4 字节大端长度前缀，再写入正文。
 func NewLengthDelimitedFrameWriter(w io.Writer) io.Writer {
 	return &lengthDelimitedFrameWriter{w: w}
 }
@@ -135,14 +136,14 @@ func (r *jsonFrameReader) Read(data []byte) (int, error) {
 	// 优先返回上一帧因缓冲区不足而暂存的剩余字节。
 	if n := len(r.remaining); n > 0 {
 		if n <= len(data) {
-			//nolint:staticcheck // SA4006,SA4010 underlying array of data is modified here.
+			//nolint:staticcheck // SA4006,SA4010：此处会修改 data 的底层数组。
 			data = append(data[0:0], r.remaining...)
 			r.remaining = nil
 			return n, nil
 		}
 
 		n = len(data)
-		//nolint:staticcheck // SA4006,SA4010 underlying array of data is modified here.
+		//nolint:staticcheck // SA4006,SA4010：此处会修改 data 的底层数组。
 		data = append(data[0:0], r.remaining[:n]...)
 		r.remaining = r.remaining[n:]
 		return n, io.ErrShortBuffer

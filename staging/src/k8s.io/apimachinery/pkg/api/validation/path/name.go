@@ -20,23 +20,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/validate/content"
 )
 
-// IsValidPathSegmentName validates the name can be safely encoded as a path segment
-//
-// Deprecated: use content.IsPathSegmentName directly.
+// Deprecated: 请直接使用 content.IsPathSegmentName。
 //
 // 保留此别名是为了不破坏既有调用方；实际实现已迁到 content 包，
 // 两处行为必须保持一致。
 var IsValidPathSegmentName = content.IsPathSegmentName
 
-// IsValidPathSegmentPrefix validates the name can be used as a prefix for a name which will be encoded as a path segment
-// It does not check for exact matches with disallowed names, since an arbitrary suffix might make the name valid
+// IsValidPathSegmentPrefix 校验名称可作为将编码为路径段的名称前缀；任意后缀可能使其合法，因此不检查禁用名称的精确匹配。
 //
-// Deprecated: use content.IsPathSegmentPrefix directly.
+// Deprecated: 请直接使用 content.IsPathSegmentPrefix。
 var IsValidPathSegmentPrefix = content.IsPathSegmentPrefix
 
-// ValidatePathSegmentName validates the name can be safely encoded as a path segment
-//
-// Deprecated: use a locally defined function.
+// Deprecated: 改用本地定义的函数。
 //
 // prefix 为 true 时按前缀规则校验（允许结尾部分尚未确定），否则按完整
 // 名称校验。返回值是可直接拼进 field.ErrorList 的错误描述列表。

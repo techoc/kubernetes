@@ -407,7 +407,7 @@ func (h *UpgradeAwareHandler) tryUpgrade(w http.ResponseWriter, req *http.Reques
 		if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
 			logger.Error(err, "Error proxying data from backend to client")
 		}
-		// Indicate we handled the request
+		//表明已处理该请求。
 		return true
 	}
 
@@ -465,9 +465,8 @@ func (h *UpgradeAwareHandler) tryUpgrade(w http.ResponseWriter, req *http.Reques
 }
 
 // singleJoiningSlash 拼接两个路径，保证中间恰好有一个斜杠。
-// FIXME: Taken from net/http/httputil/reverseproxy.go as singleJoiningSlash is not exported to be re-used.
-// 之所以复制而非调用标准库，是因为该函数未导出，无法直接复用。
-// See-also: https://github.com/golang/go/issues/44290
+// FIXME：取自 net/http/httputil/reverseproxy.go，因为该函数未导出，无法直接复用。
+// 另请参见：https://github.com/golang/go/issues/44290
 func singleJoiningSlash(a, b string) string {
 	aslash := strings.HasSuffix(a, "/")
 	bslash := strings.HasPrefix(b, "/")

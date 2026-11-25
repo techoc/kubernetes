@@ -23,8 +23,6 @@ import "encoding/asn1"
 // https://www.iana.org/assignments/enterprise-numbers.txt
 //
 // 根节点：1.3.6.1.4.1.57683
-//
-// Cloud Native Computing Foundation
 const (
 	// 单值，字符串类型
 	x509UIDSuffix = 2

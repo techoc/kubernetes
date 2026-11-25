@@ -50,7 +50,6 @@ var _ error = &StatusError{}
 // 加入这里的 reason 意味着"该语义已由 reason 唯一确定"，不应再仅凭状态码误判。
 var knownReasons = map[metav1.StatusReason]struct{}{
 	// StatusReasonUnknown 不列入已知原因：它代表"未能识别原因"，需要后续按状态码兜底判断。
-	// metav1.StatusReasonUnknown : {}
 	metav1.StatusReasonUnauthorized:          {},
 	metav1.StatusReasonForbidden:             {},
 	metav1.StatusReasonNotFound:              {},
@@ -259,7 +258,6 @@ func NewApplyConflict(causes []metav1.StatusCause, message string) *StatusError 
 		Code:   http.StatusConflict,
 		Reason: metav1.StatusReasonConflict,
 		Details: &metav1.StatusDetails{
-			// TODO: Get obj details here?
 			// 此处暂不填充对象级细节，只把冲突原因交给调用方。
 			Causes: causes,
 		},
@@ -700,8 +698,7 @@ func IsTimeout(err error) bool {
 
 // IsServerTimeout 判断 err 是否表示客户端需要重试请求。支持包装错误；err 为 nil 时返回 false。
 func IsServerTimeout(err error) bool {
-	// do not check the status code, because no https status code exists that can
-	// be scoped to retryable timeouts.
+	// 不检查状态码：HTTP 状态码无法专门表示可重试的超时。
 	return ReasonForError(err) == metav1.StatusReasonServerTimeout
 }
 
@@ -724,9 +721,9 @@ func IsTooManyRequests(err error) bool {
 		return true
 	}
 
-	// IsTooManyRequests' checking of code predates the checking of the code in
-	// the other Is* functions. In order to maintain backward compatibility, this
-	// does not check that the reason is unknown.
+	// IsTooManyRequests 检查状态码早于其他 Is* 函数；为保持向后兼容，
+	// 即使 reason 未知，也仍按状态码判断。
+	//
 	if code == http.StatusTooManyRequests {
 		return true
 	}
@@ -740,9 +737,9 @@ func IsRequestEntityTooLargeError(err error) bool {
 		return true
 	}
 
-	// IsRequestEntityTooLargeError's checking of code predates the checking of
-	// the code in the other Is* functions. In order to maintain backward
-	// compatibility, this does not check that the reason is unknown.
+	// IsRequestEntityTooLargeError 检查状态码早于其他 Is* 函数；
+	// 为保持向后兼容，
+	// 即使 reason 未知，也仍按状态码判断。
 	if code == http.StatusRequestEntityTooLarge {
 		return true
 	}
@@ -782,7 +779,7 @@ func SuggestsClientDelay(err error) (int, bool) {
 	t, ok := err.(APIStatus)
 	if (ok || errors.As(err, &t)) && t.Status().Details != nil {
 		switch t.Status().Reason {
-		// this StatusReason explicitly requests the caller to delay the action
+		// 此 StatusReason 明确要求调用方延迟操作。
 		case metav1.StatusReasonServerTimeout:
 			return int(t.Status().Details.RetryAfterSeconds), true
 		}

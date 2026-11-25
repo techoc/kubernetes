@@ -65,7 +65,7 @@ func (f *capManagersManager) Apply(liveObj, appliedObj runtime.Object, managed M
 // capUpdateManagers 把最旧的一批 update 条目合并进按版本划分的桶条目，
 // 使 update 来源的条目数不超过 f.maxUpdateManagers。
 func (f *capManagersManager) capUpdateManagers(managed Managed) (newManaged Managed, err error) {
-	// Gather all entries from updates
+	//收集所有 update 产生的条目
 	// 收集所有非 apply 的（即来自更新的）manager 条目。
 	updaters := []string{}
 	for manager, fields := range managed.Fields() {
@@ -77,7 +77,7 @@ func (f *capManagersManager) capUpdateManagers(managed Managed) (newManaged Mana
 		return managed, nil
 	}
 
-	// If we have more than the maximum, sort the update entries by time, oldest first.
+	//如果条目数超过上限，按时间从旧到新排序 update 条目。
 	// 条目超限时按更新时间排序，最旧的排在前面；时间相同时用 manager 名作为稳定排序的平局裁决。
 	sort.Slice(updaters, func(i, j int) bool {
 		iTime, jTime, iSeconds, jSeconds := managed.Times()[updaters[i]], managed.Times()[updaters[j]], int64(0), int64(0)
@@ -93,7 +93,7 @@ func (f *capManagersManager) capUpdateManagers(managed Managed) (newManaged Mana
 		return updaters[i] < updaters[j]
 	})
 
-	// Merge the oldest updaters with versioned bucket managers until the number of updaters is under the cap
+	//合并最旧的更新器与带版本的桶管理器，直到更新器数量低于上限。
 	// 从最旧的条目开始，把它们合并到按 API 版本划分的桶 manager，直到数量降到上限以下。
 	versionToFirstManager := map[string]string{}
 	for i, length := 0, len(updaters); i < len(updaters) && length > f.maxUpdateManagers; i++ {
@@ -102,8 +102,8 @@ func (f *capManagersManager) capUpdateManagers(managed Managed) (newManaged Mana
 		time := managed.Times()[manager]
 		version := string(vs.APIVersion())
 
-		// Create a new manager identifier for the versioned bucket entry.
-		// The version for this manager comes from the version of the update being merged into the bucket.
+		//为带版本的桶条目创建新的管理器标识符。
+		//该管理器的 version 来自被合并到桶中的 update。
 		// 为版本桶生成新的 manager 标识，版本取自被合并的更新条目。
 		bucket, err := BuildManagerIdentifier(&metav1.ManagedFieldsEntry{
 			Manager:    f.oldUpdatesManagerName,
@@ -114,12 +114,12 @@ func (f *capManagersManager) capUpdateManagers(managed Managed) (newManaged Mana
 			return managed, fmt.Errorf("failed to create bucket manager for version %v: %v", version, err)
 		}
 
-		// Merge the fieldets if this is not the first time the version was seen.
-		// Otherwise just record the manager name in versionToFirstManager
+		//如果该 version 不是首次出现，则合并字段集合。
+		//否则仅在 versionToFirstManager 中记录管理器名称。
 		// 同一版本第二次及以后出现时才真正合并；首次出现只记录其 manager 名，
 		// 这样可以在不新建桶的情况下尽量少改动条目。
 		if first, ok := versionToFirstManager[version]; ok {
-			// If the bucket doesn't exists yet, create one.
+			//如果桶尚不存在，则创建。
 			// 该版本还没有桶时，把首个条目改造成桶（复用其字段集合）。
 			if _, ok := managed.Fields()[bucket]; !ok {
 				s := managed.Fields()[first]
@@ -131,7 +131,7 @@ func (f *capManagersManager) capUpdateManagers(managed Managed) (newManaged Mana
 			delete(managed.Fields(), manager)
 			length--
 
-			// Use the time from the update being merged into the bucket, since it is more recent.
+			//使用被合并到桶中的 update 的时间，因为它更新。
 			// 桶的时间取最近一次被合并更新的时间，反映桶内最新的活动。
 			managed.Times()[bucket] = time
 		} else {

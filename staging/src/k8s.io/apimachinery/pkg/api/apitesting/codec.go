@@ -56,7 +56,7 @@ func TestStorageCodec(codecs runtimeserializer.CodecFactory, gvs ...schema.Group
 		}
 
 		// etcd2 只支持字符串数据，因此返回前需对非文本编码做一层 base64 包装。
-		// TODO: remove for etcd3 / make parameterizable
+		// TODO: 淘汰 etcd3 兼容逻辑，或改为可配置。
 		serializer := serializerInfo.Serializer
 		if !serializerInfo.EncodesAsText {
 			serializer = runtime.NewBase64Serializer(serializer, serializer)

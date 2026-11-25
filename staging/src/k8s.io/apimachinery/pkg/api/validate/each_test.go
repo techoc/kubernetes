@@ -345,7 +345,7 @@ func TestEachMapValRatcheting(t *testing.T) {
 		nil,
 		map[string]int{"one": 1},
 		DirectEqual,
-		1, // Expect validation for new entry
+		1, // 新条目应执行校验。
 	)
 
 	testEachMapValRatcheting(t, "empty map to nil map",

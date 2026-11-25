@@ -28,8 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// ValidateListOptions returns all validation errors found while validating the ListOptions.
-//
 // watch 与普通 list 对 resourceVersionMatch / sendInitialEvents 的规则完全不同，
 // 因此先分流到 validateWatchOptions。
 func ValidateListOptions(options *internalversion.ListOptions, isWatchListFeatureEnabled bool) field.ErrorList {

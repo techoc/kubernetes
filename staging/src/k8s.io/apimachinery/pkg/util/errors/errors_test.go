@@ -40,8 +40,8 @@ func TestEmptyAggregate(t *testing.T) {
 		t.Errorf("expected nil, got %#v", err)
 	}
 
-	// This is not normally possible, but pedantry demands I test it.
-	agg = aggregate(slice) // empty aggregate
+	//这种情况通常不会发生，但仍需测试以防边界遗漏。
+	agg = aggregate(slice) //空聚合
 	if s := agg.Error(); s != "" {
 		t.Errorf("expected empty string, got %q", s)
 	}
@@ -70,7 +70,7 @@ func TestAggregateWithNil(t *testing.T) {
 		t.Errorf("expected nil, got %#v", err)
 	}
 
-	// Append a non-nil error
+	//追加一个非 nil 错误
 	slice = append(slice, fmt.Errorf("err"))
 	agg = NewAggregate(slice)
 	if agg == nil {
@@ -390,7 +390,7 @@ func TestCreateAggregateFromMessageCountMap(t *testing.T) {
 func TestAggregateGoroutines(t *testing.T) {
 	testCases := []struct {
 		errs     []error
-		expected map[string]bool // can't compare directly to Aggregate due to non-deterministic ordering
+		expected map[string]bool //由于顺序不确定，不能直接与 Aggregate 比较
 	}{
 		{
 			[]error{},

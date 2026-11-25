@@ -25,87 +25,46 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ListOptions is the query options to a standard REST list call.
-//
 // ListOptions 是内部版本（internal）的列表/监听选项。它与 metav1.ListOptions 的
 // 区别在于选择器已经解析成 labels.Selector / fields.Selector，从而让内部组件
 // 不必重复解析字符串；字符串形式仅在 API 边界使用。
 type ListOptions struct {
 	metav1.TypeMeta
 
-	// A selector based on labels
 	// 已解析的标签选择器；为 nil 时表示"全部匹配"。
 	LabelSelector labels.Selector
-	// A selector based on fields
 	// 已解析的字段选择器；为 nil 时表示"全部匹配"。
 	FieldSelector fields.Selector
-	// If true, watch for changes to this list
+	// 为 true 时监听此列表的变化。
 	Watch bool
-	// allowWatchBookmarks requests watch events with type "BOOKMARK".
-	// Servers that do not implement bookmarks may ignore this flag and
-	// bookmarks are sent at the server's discretion. Clients should not
-	// assume bookmarks are returned at any specific interval, nor may they
-	// assume the server will send any BOOKMARK event during a session.
-	// If this is not a watch, this field is ignored.
 	//
 	// BOOKMARK 事件携带最新 resourceVersion，用于客户端在 watch 断开后从已知点恢复，
 	// 而不必重新 list 全量数据。服务端可自行决定发送时机。
 	AllowWatchBookmarks bool
-	// resourceVersion sets a constraint on what resource versions a request may be served from.
-	// See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for
-	// details.
+	// resourceVersion 限制请求可使用的资源版本。
+	// 参见 https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions。
 	ResourceVersion string
-	// resourceVersionMatch determines how resourceVersion is applied to list calls.
-	// It is highly recommended that resourceVersionMatch be set for list calls where
-	// resourceVersion is set.
-	// See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for
-	// details.
+	// resourceVersionMatch 决定 resourceVersion 如何应用于列表请求。
+	// 设置 resourceVersion 时，强烈建议同时指定该匹配方式。
+	// 参见 https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions。
 	ResourceVersionMatch metav1.ResourceVersionMatch
 
-	// Timeout for the list/watch call.
 	// 由 API 服务器在请求处理层转换为超时；watch 请求会据此限定时长。
 	TimeoutSeconds *int64
-	// Limit specifies the maximum number of results to return from the server. The server may
-	// not support this field on all resource types, but if it does and more results remain it
-	// will set the continue field on the returned list object.
+	// Limit 指定服务端返回结果的最大数量。并非所有资源类型都支持该字段；
+	// 若支持且仍有结果，服务端会在返回的列表对象中设置 continue 字段。
 	Limit int64
-	// Continue is a token returned by the server that lets a client retrieve chunks of results
-	// from the server by specifying limit. The server may reject requests for continuation tokens
-	// it does not recognize and will return a 410 error if the token can no longer be used because
-	// it has expired.
+	// Continue 是服务端返回的令牌，客户端配合 limit 可分批获取结果。
+	// 服务端可拒绝无法识别的续传令牌；令牌过期后会返回 410 错误。
 	Continue string
 
-	// `sendInitialEvents=true` may be set together with `watch=true`.
-	// In that case, the watch stream will begin with synthetic events to
-	// produce the current state of objects in the collection. Once all such
-	// events have been sent, a synthetic "Bookmark" event  will be sent.
-	// The bookmark will report the ResourceVersion (RV) corresponding to the
-	// set of objects, and be marked with `"k8s.io/initial-events-end": "true"` annotation.
-	// Afterwards, the watch stream will proceed as usual, sending watch events
-	// corresponding to changes (subsequent to the RV) to objects watched.
 	//
-	// When `sendInitialEvents` option is set, we require `resourceVersionMatch`
-	// option to also be set. The semantic of the watch request is as following:
-	// - `resourceVersionMatch` = NotOlderThan
-	//   is interpreted as "data at least as new as the provided `resourceVersion`"
-	//   and the bookmark event is send when the state is synced
-	//   to a `resourceVersion` at least as fresh as the one provided by the ListOptions.
-	//   If `resourceVersion` is unset, this is interpreted as "consistent read" and the
-	//   bookmark event is send when the state is synced at least to the moment
-	//   when request started being processed.
-	// - `resourceVersionMatch` set to any other value or unset
-	//   Invalid error is returned.
 	//
-	// Defaults to true if `resourceVersion=""` or `resourceVersion="0"` (for backward
-	// compatibility reasons) and to false otherwise.
 	//
 	// 该字段由服务端在转换 ListOptions 时根据 resourceVersion 补默认值，因此内部版本中
 	// 可能已经是非 nil。
 	SendInitialEvents *bool
 
-	// ShardSelector is the raw shard selector string from the request.
-	// Parsing is deferred to the apiserver storage layer where the CEL
-	// parser dependency is available.
 	//
 	// 延迟解析的原因：apimachinery 不依赖 CEL，存储层才有解析器。这样可保持依赖方向
 	// 单一，同时让分片选择器在存储层与其它过滤条件一起生效。
@@ -114,8 +73,6 @@ type ListOptions struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// List holds a list of objects, which may not be known by the server.
-//
 // List 是内部版本的列表类型。Items 使用 runtime.Object 而非具体类型，因为内部
 // 版本通常不知道具体资源类型，由调用方按需断言。
 type List struct {

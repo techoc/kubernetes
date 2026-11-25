@@ -23,19 +23,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name for this API.
+// GroupName 是此 API 的组名。
 const GroupName = "meta.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接受非限定 kind，并返回带组名的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// AddMetaToScheme registers base meta types into schemas.
-// These types are group-versioned but version-agnostic: they carry only
+// AddMetaToScheme 将基础元数据类型注册到 scheme。
+// 这些类型区分组版本但不区分版本：它们只携带
 // metadata, so a single v1beta1 registration serves every API group.
 func AddMetaToScheme(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
@@ -48,9 +48,8 @@ func AddMetaToScheme(scheme *runtime.Scheme) error {
 	return nil
 }
 
-// RegisterConversions adds conversion functions to the given scheme.
-// Only PartialObjectMetadataList is converted here; the other meta types are
-// identical enough to need no conversion.
+// RegisterConversions 向给定 scheme 添加转换函数。
+// 此处仅转换 PartialObjectMetadataList；其他元数据类型足够相似，无需转换。
 func RegisterConversions(s *runtime.Scheme) error {
 	if err := s.AddGeneratedConversionFunc((*PartialObjectMetadataList)(nil), (*v1.PartialObjectMetadataList)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1beta1_PartialObjectMetadataList_To_v1_PartialObjectMetadataList(a.(*PartialObjectMetadataList), b.(*v1.PartialObjectMetadataList), scope)

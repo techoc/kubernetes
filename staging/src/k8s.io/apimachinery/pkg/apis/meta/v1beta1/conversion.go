@@ -32,7 +32,6 @@ func Convert_Slice_string_To_v1beta1_IncludeObjectPolicy(in *[]string, out *Incl
 	return nil
 }
 
-// Convert_v1beta1_PartialObjectMetadataList_To_v1_PartialObjectMetadataList
 // 在 v1beta1 与 v1 之间转换 PartialObjectMetadataList。
 //
 // Items 通过 unsafe 指针直接重解释切片头：两个版本的 PartialObjectMetadata
@@ -43,7 +42,6 @@ func Convert_v1beta1_PartialObjectMetadataList_To_v1_PartialObjectMetadataList(i
 	return nil
 }
 
-// Convert_v1_PartialObjectMetadataList_To_v1beta1_PartialObjectMetadataList
 // 在 v1 与 v1beta1 之间转换 PartialObjectMetadataList，原理同上。
 func Convert_v1_PartialObjectMetadataList_To_v1beta1_PartialObjectMetadataList(in *v1.PartialObjectMetadataList, out *PartialObjectMetadataList, s conversion.Scope) error {
 	out.ListMeta = in.ListMeta

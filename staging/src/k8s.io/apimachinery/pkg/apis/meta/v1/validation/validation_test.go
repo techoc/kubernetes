@@ -300,24 +300,24 @@ func TestInvalidPatchOptions(t *testing.T) {
 		opts      metav1.PatchOptions
 		patchType types.PatchType
 	}{
-		// missing manager
+		// 缺少 manager。
 		{
 			opts:      metav1.PatchOptions{},
 			patchType: types.ApplyYAMLPatchType,
 		},
-		// missing manager
+		// 缺少 manager。
 		{
 			opts:      metav1.PatchOptions{},
 			patchType: types.ApplyCBORPatchType,
 		},
-		// force on non-apply
+		// 非 apply 操作设置了 force。
 		{
 			opts: metav1.PatchOptions{
 				Force: ptr.To(true),
 			},
 			patchType: types.MergePatchType,
 		},
-		// manager and force on non-apply
+		// manager 以及非 apply 操作的 force。
 		{
 			opts: metav1.PatchOptions{
 				FieldManager: "kubectl",
@@ -384,13 +384,13 @@ func TestValidateManagedFieldsInvalid(t *testing.T) {
 		FieldsType: "FieldsV1",
 		APIVersion: "v1",
 	}, {
-		// Operation is missing
+		// 缺少 Operation。
 		FieldsType: "FieldsV1",
 		APIVersion: "v1",
 	}, {
 		Operation:  metav1.ManagedFieldsOperationUpdate,
 		FieldsType: "FieldsV1",
-		// Invalid fieldManager
+		// fieldManager 非法。
 		Manager:    "field\nmanager",
 		APIVersion: "v1",
 	}, {
@@ -420,7 +420,7 @@ func TestValidateMangedFieldsValid(t *testing.T) {
 	tests := []metav1.ManagedFieldsEntry{{
 		Operation:  metav1.ManagedFieldsOperationUpdate,
 		APIVersion: "v1",
-		// FieldsType is missing
+		// 缺少 FieldsType。
 	}, {
 		Operation:  metav1.ManagedFieldsOperationUpdate,
 		FieldsType: "FieldsV1",

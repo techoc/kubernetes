@@ -29,8 +29,6 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/merge"
 )
 
-// NewConflictError returns an error including details on the requests apply conflicts
-//
 // NewConflictError 构造包含 apply 冲突详情的错误：
 // 每个冲突路径生成一条 FieldManagerConflict 类型的 StatusCause。
 func NewConflictError(conflicts merge.Conflicts) *errors.StatusError {

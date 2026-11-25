@@ -24,10 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// DependentRequired verifies that when triggerIsSet(obj) is true, dependentIsSet(obj)
-// is also true; otherwise reports an error at fldPath.Child(dependentName).
-// On Update, the check is skipped if neither side's set-ness changed from oldObj,
-// so unrelated updates can proceed past a pre-existing violation.
 // 中文补充：允许“既有的非法数据继续存在”，避免历史对象因新增校验而无法做无关更新（ratcheting）。
 func DependentRequired[T any](_ context.Context, op operation.Operation, fldPath *field.Path, obj, oldObj *T,
 	triggerName string, triggerIsSet ExtractorFn[*T, bool],
@@ -56,10 +52,6 @@ func DependentRequired[T any](_ context.Context, op operation.Operation, fldPath
 	}
 }
 
-// DependentForbidden verifies that when triggerIsSet(obj) is true, dependentIsSet(obj)
-// is false; otherwise reports an error at fldPath.Child(dependentName).
-// On Update, the check is skipped if neither side's set-ness changed from oldObj,
-// so unrelated updates can proceed past a pre-existing violation.
 // 中文补充：与 DependentRequired 对称，但语义相反——触发器存在时依赖项必须不存在。
 func DependentForbidden[T any](_ context.Context, op operation.Operation, fldPath *field.Path, obj, oldObj *T,
 	triggerName string, triggerIsSet ExtractorFn[*T, bool],

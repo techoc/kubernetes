@@ -344,7 +344,7 @@ func TestYAMLOrJSONDecoder(t *testing.T) {
 			{"foo": "bar"},
 			{"baz": "biz"},
 		}},
-		// Spaces for indent, tabs are not allowed in YAML.
+		//YAML 缩进允许空格，不允许制表符。
 		{"foo:\n  field: bar\n---\nbaz:\n  field: biz", 100, false, false, []generic{
 			{"foo": map[string]any{"field": "bar"}},
 			{"baz": map[string]any{"field": "biz"}},
@@ -364,48 +364,48 @@ func TestYAMLOrJSONDecoder(t *testing.T) {
 		{"foo: bar\n", 100, false, false, []generic{
 			{"foo": "bar"},
 		}},
-		// First document is JSON, second is YAML
+		//第一个文档是 JSON，第二个是 YAML。
 		{"{\"foo\": \"bar\"}\n---\n{baz: biz}", 100, false, false, []generic{
 			{"foo": "bar"},
 			{"baz": "biz"},
 		}},
-		// First document is JSON, second is YAML but with smaller size.
+		//第一个文档是 JSON，第二个是更小的 YAML。
 		{"{\"foo\": \"bar\"}\n---\na: b", 100, false, false, []generic{
 			{"foo": "bar"},
 			{"a": "b"},
 		}},
-		// First document is JSON, second is YAML,but with smaller size and
-		// trailing whitespace.
+		//第一个文档是 JSON，第二个是更小的 YAML，且
+		//末尾带空白。
 		{"{\"foo\": \"bar\"}    \n---\na: b", 100, false, false, []generic{
 			{"foo": "bar"},
 			{"a": "b"},
 		}},
-		// First document is JSON, second is YAML, longer than the buffer
+		//第一个文档是 JSON，第二个 YAML 超过缓冲区大小。
 		{"{\"foo\": \"bar\"}\n---\n{baz: biz0123456780123456780123456780123456780123456789}", 20, false, false, []generic{
 			{"foo": "bar"},
 			{"baz": "biz0123456780123456780123456780123456780123456789"},
 		}},
-		// First document is JSON, then whitespace, then YAML
+		//第一个文档是 JSON，接着空白，然后是 YAML。
 		{"{\"foo\": \"bar\"}    \n---\n{baz: biz}", 100, false, false, []generic{
 			{"foo": "bar"},
 			{"baz": "biz"},
 		}},
-		// First document is YAML, second is JSON
+		//第一个文档是 YAML，第二个是 JSON。
 		{"{foo: bar}\n---\n{\"baz\": \"biz\"}", 100, false, false, []generic{
 			{"foo": "bar"},
 			{"baz": "biz"},
 		}},
-		// First document is JSON, second is YAML, using spaces
+		//第一个文档是 JSON，第二个是使用空格缩进的 YAML。
 		{"{\n  \"foo\": \"bar\"\n}\n---\n{\n  baz: biz\n}", 100, false, false, []generic{
 			{"foo": "bar"},
 			{"baz": "biz"},
 		}},
-		// First document is JSON, second is YAML, using tabs
+		//第一个文档是 JSON，第二个是使用制表符缩进的 YAML。
 		{"{\n\t\"foo\": \"bar\"\n}\n---\n{\n\tbaz: biz\n}", 100, false, false, []generic{
 			{"foo": "bar"},
 			{"baz": "biz"},
 		}},
-		// First 2 documents are JSON, third is YAML (stream is JSON)
+		//前两个文档是 JSON，第三个是 YAML（整个流按 JSON 处理）。
 		// 格式由首个文档锁定：后续出现 YAML 会报错，而不是切换解码器。
 		{"{\"foo\": \"bar\"}\n{\"baz\": \"biz\"}\n---\n{qux: zrb}", 100, true, true, nil},
 	}
@@ -489,11 +489,11 @@ func testReadLines(t *testing.T, lineLengths []int) {
 		inputStream = append(inputStream, line...)
 	}
 
-	// init Reader
+	//初始化 Reader
 	reader := bufio.NewReader(bytes.NewReader(inputStream))
 	lineReader := &LineReader{reader: reader}
 
-	// read lines
+	//读取各行
 	var readLines [][]byte
 	for range lines {
 		bytes, err := lineReader.Read()
@@ -503,7 +503,7 @@ func testReadLines(t *testing.T, lineLengths []int) {
 		readLines = append(readLines, bytes)
 	}
 
-	// validate
+	//校验
 	for i := range lines {
 		if len(lines[i]) != len(readLines[i]) {
 			t.Fatalf("expected line length: %d, but got %d", len(lines[i]), len(readLines[i]))

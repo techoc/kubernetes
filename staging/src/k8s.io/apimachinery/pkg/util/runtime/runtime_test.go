@@ -45,7 +45,7 @@ func TestHandleCrash(t *testing.T) {
 			t.Errorf("Expected a panic to recover from")
 		}
 	}()
-	//nolint:logcheck // Intentionally uses the old API.
+	//nolint:logcheck // 有意使用旧 API。
 	defer HandleCrash()
 	panic("Test Panic")
 }
@@ -66,7 +66,7 @@ func TestCustomHandleCrash(t *testing.T) {
 				t.Errorf("Expected a panic to recover from")
 			}
 		}()
-		//nolint:logcheck // Intentionally uses the old API.
+		//nolint:logcheck // 有意使用旧 API。
 		defer HandleCrash()
 		panic("test")
 	}()
@@ -86,7 +86,7 @@ func TestCustomHandleError(t *testing.T) {
 		},
 	}
 	err := fmt.Errorf("test")
-	//nolint:logcheck // Intentionally uses the old API.
+	//nolint:logcheck // 有意使用旧 API。
 	HandleError(err)
 	if result != err {
 		t.Errorf("did not receive custom handler")
@@ -104,14 +104,14 @@ func TestHandleCrashLog(t *testing.T) {
 				t.Fatalf("expected a panic to recover from")
 			}
 		}()
-		//nolint:logcheck // Intentionally uses the old API.
+		//nolint:logcheck // 有意使用旧 API。
 		defer HandleCrash()
 		panic("test panic")
 	})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	// Example log:
+	//日志示例：
 	//
 	// ...] Observed a panic: test panic
 	// goroutine 6 [running]:
@@ -125,8 +125,8 @@ func TestHandleCrashLog(t *testing.T) {
 	if match, _ := regexp.MatchString(`"Observed a panic" panic="test panic"`, lines[0]); !match {
 		t.Errorf("mismatch panic message: %s", lines[0])
 	}
-	// The following regexp's verify that Kubernetes panic log matches Golang stdlib
-	// stacktrace pattern. We need to update these regexp's if stdlib changes its pattern.
+	//以下正则表达式验证 Kubernetes panic 日志符合 Go 标准库的调用栈格式。
+	//标准库格式变化时需要同步更新。
 	if match, _ := regexp.MatchString(`goroutine [0-9]+ \[.+\]:`, lines[1]); !match {
 		t.Errorf("mismatch goroutine: %s", lines[1])
 	}
@@ -143,7 +143,7 @@ func TestHandleCrashLog(t *testing.T) {
 func TestHandleCrashContextual(t *testing.T) {
 	for name, handleCrash := range map[string]func(logger klog.Logger, trigger func(), additionalHandlers ...func(context.Context, interface{})){
 		"WithLogger": func(logger klog.Logger, trigger func(), additionalHandlers ...func(context.Context, interface{})) {
-			logger = logger.WithCallDepth(2) // This function *and* the trigger helper.
+			logger = logger.WithCallDepth(2) //此函数和 trigger 辅助函数。
 			defer HandleCrashWithLogger(logger, additionalHandlers...)
 			trigger()
 		},
@@ -183,7 +183,7 @@ func TestHandleCrashContextual(t *testing.T) {
 					defer func() { ReallyCrash = true }()
 
 					handler := func(ctx context.Context, r interface{}) {
-						// Same formatting as in HandleCrash.
+						//格式与 HandleCrash 相同。
 						str, ok := r.(string)
 						if !ok {
 							str = fmt.Sprintf("%v", r)
@@ -215,7 +215,7 @@ func TestHandleCrashLogSilenceHTTPErrAbortHandler(t *testing.T) {
 				t.Fatalf("expected to recover from http.ErrAbortHandler")
 			}
 		}()
-		//nolint:logcheck // Intentionally uses the old API.
+		//nolint:logcheck // 有意使用旧 API。
 		defer HandleCrash()
 		panic(http.ErrAbortHandler)
 	})
@@ -227,7 +227,7 @@ func TestHandleCrashLogSilenceHTTPErrAbortHandler(t *testing.T) {
 	}
 }
 
-// captureStderr redirects stderr to result string, and then restore stderr from backup
+// captureStderr 将 stderr 重定向到结果字符串，然后从备份恢复 stderr。
 func captureStderr(f func()) (string, error) {
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -238,7 +238,7 @@ func captureStderr(f func()) (string, error) {
 	defer func() { os.Stderr = bak }()
 
 	resultCh := make(chan string)
-	// copy the output in a separate goroutine so printing can't block indefinitely
+	//在单独的 goroutine 中复制输出，避免打印无限阻塞。
 	// 管道缓冲区有限，必须在另一个 goroutine 中持续读取。
 	go func() {
 		var buf bytes.Buffer

@@ -45,9 +45,8 @@ type testArgs struct {
 	expectConflictSet *fieldpath.Set
 }
 
-// TestApplyUsingLastAppliedAnnotation tests that applying to an object
-// created with the client-side apply last-applied annotation
-// will not give conflicts
+// TestApplyUsingLastAppliedAnnotation 验证对使用客户端应用 last-applied 注解创建的对象
+// 执行 apply 不会产生冲突。
 //
 // 中文说明：复用同一 kubectl manager 时，只有 last-applied 中未声明的字段
 // 变更才会冲突；不同 manager 则要把所有被他人改过的字段都视为冲突。
@@ -362,7 +361,7 @@ spec:
 			expectConflictSet: fieldpath.NewSet(
 				fieldpath.MakePathOrDie("metadata", "labels", "app"),
 				fieldpath.MakePathOrDie("spec", "replicas"),
-				fieldpath.MakePathOrDie("spec", "selector"), // selector is atomic
+				fieldpath.MakePathOrDie("spec", "selector"), //selector 是原子字段
 				fieldpath.MakePathOrDie("spec", "template", "metadata", "labels", "app"),
 				fieldpath.MakePathOrDie("spec", "template", "spec", "containers", fieldpath.KeyByFields("name", "my-c"), "image"),
 			),
@@ -545,7 +544,7 @@ spec:
 		},
 		{
 			fieldManager: "kubectl",
-			// last-applied is empty
+			//last-applied 为空
 			lastApplied: []byte{},
 			original: []byte(`
 apiVersion: apps/v1
@@ -676,7 +675,7 @@ spec:
     new: test
 `),
 			expectConflictSet: fieldpath.NewSet(
-				fieldpath.MakePathOrDie("spec", "selector"), // selector is atomic
+				fieldpath.MakePathOrDie("spec", "selector"), //selector 是原子字段
 				fieldpath.MakePathOrDie("spec", "ports", fieldpath.KeyByFields("port", 443, "protocol", "TCP"), "targetPort"),
 			),
 		},
@@ -741,7 +740,7 @@ spec:
     new: test
 `),
 			expectConflictSet: fieldpath.NewSet(
-				fieldpath.MakePathOrDie("spec", "selector"), // selector is atomic
+				fieldpath.MakePathOrDie("spec", "selector"), //selector 是原子字段
 				fieldpath.MakePathOrDie("spec", "replicas"),
 			),
 		},
@@ -838,7 +837,7 @@ spec:
     otherNodeType: ""
 `),
 			expectConflictSet: fieldpath.NewSet(
-				fieldpath.MakePathOrDie("spec", "nodeSelector"), // selector is atomic
+				fieldpath.MakePathOrDie("spec", "nodeSelector"), //selector 是原子字段
 			),
 		},
 		{
@@ -881,7 +880,7 @@ spec:
   nodeSelector: {}
 `),
 			expectConflictSet: fieldpath.NewSet(
-				fieldpath.MakePathOrDie("spec", "nodeSelector"), // selector is atomic
+				fieldpath.MakePathOrDie("spec", "nodeSelector"), //selector 是原子字段
 				fieldpath.MakePathOrDie("spec", "nodeName"),
 			),
 		},
@@ -988,7 +987,7 @@ func testConflicts(t *testing.T, f managedfieldstest.TestFieldManager, tests []t
 					t.Errorf("expected to get\n%+v\nbut got\n%+v", expectedConflictErr, err)
 				}
 
-				// Yet force should resolve all conflicts
+				//但 force 应解决所有冲突
 				err = f.Apply(appliedObj, test.fieldManager, true)
 				if err != nil {
 					t.Errorf("unexpected error during force ownership apply: %v", err)
@@ -996,7 +995,7 @@ func testConflicts(t *testing.T, f managedfieldstest.TestFieldManager, tests []t
 
 			}
 
-			// Eventually resource should contain applied changes
+			//最终资源应包含已应用的更改
 			// 中文说明：DeepDerivative 只要求 applied 中出现的字段在 live 中一致，
 			// 不反对 server 补充默认字段。
 			if !apiequality.Semantic.DeepDerivative(appliedObj, f.Live()) {

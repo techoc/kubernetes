@@ -53,12 +53,6 @@ func TestNilUnstructuredContent(t *testing.T) {
 	assert.Equal(t, uCopy, &u)
 }
 
-// TestUnstructuredMetadataRoundTrip checks that metadata accessors
-// correctly set the metadata for unstructured objects.
-// First, it fuzzes an empty ObjectMeta and sets this value as the metadata for an unstructured object.
-// Next, it uses metadata accessor methods to set these fuzzed values to another unstructured object.
-// Finally, it checks that both the unstructured objects are equal.
-//
 // 中文说明：先用 converter 把 ObjectMeta 整体写入 metadata，再用 getter/setter
 // 逐字段复制到另一个对象；两者应完全一致。这验证 accessor 与
 // ToUnstructured 的语义（尤其是 omitempty）没有偏差。
@@ -86,12 +80,6 @@ func TestUnstructuredMetadataRoundTrip(t *testing.T) {
 	}
 }
 
-// TestUnstructuredMetadataOmitempty checks that ObjectMeta omitempty
-// semantics are enforced for unstructured objects.
-// The fuzzing test above should catch these cases but this is here just to be safe.
-// Example: the metadata.clusterName field has the omitempty json tag
-// so if it is set to it's zero value (""), it should be removed from the metadata map.
-//
 // 中文说明：把所有字段显式设为零值，metadata map 必须完全为空，证明
 // setter 遵守 omitempty 而不是留下 "name": "" 之类的条目。
 func TestUnstructuredMetadataOmitempty(t *testing.T) {
@@ -100,7 +88,7 @@ func TestUnstructuredMetadataOmitempty(t *testing.T) {
 	seed := rand.Int63()
 	fuzzer := fuzzer.FuzzerFor(metafuzzer.Funcs, rand.NewSource(seed), codecs)
 
-	// fuzz to make sure we don't miss any function calls below
+	// 模糊测试，确保不会遗漏下面的任何函数调用。
 	u := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	metadata := &metav1.ObjectMeta{}
 	fuzzer.Fill(metadata)
@@ -108,8 +96,8 @@ func TestUnstructuredMetadataOmitempty(t *testing.T) {
 		t.Fatalf("unexpected error setting fuzzed ObjectMeta: %v", err)
 	}
 
-	// set zero values for all fields in metadata explicitly
-	// to check that omitempty fields having zero values are never set
+	// 显式设置元数据所有字段的零值，
+	// 检查带 omitempty 的零值字段不会被写入。
 	u.SetName("")
 	u.SetGenerateName("")
 	u.SetNamespace("")
@@ -137,14 +125,14 @@ func TestUnstructuredMetadataOmitempty(t *testing.T) {
 	}
 }
 
-// TestRoundTripJSONCBORUnstructured performs fuzz testing for roundtrip for
-// unstructured object between JSON and CBOR
+// TestRoundTripJSONCBORUnstructured 对以下路径进行模糊往返测试：
+// JSON 与 CBOR 之间的非结构化对象。
 func TestRoundTripJSONCBORUnstructured(t *testing.T) {
 	roundtripType[*unstructured.Unstructured](t)
 }
 
-// TestRoundTripJSONCBORUnstructuredList performs fuzz testing for roundtrip for
-// unstructuredList object between JSON and CBOR
+// TestRoundTripJSONCBORUnstructuredList 对以下路径进行模糊往返测试：
+// JSON 与 CBOR 之间的非结构化列表对象。
 func TestRoundTripJSONCBORUnstructuredList(t *testing.T) {
 	roundtripType[*unstructured.UnstructuredList](t)
 }
@@ -185,11 +173,6 @@ func setObjectMetaUsingAccessors(u, uCopy *unstructured.Unstructured) {
 	uCopy.SetManagedFields(u.GetManagedFields())
 }
 
-// roundtripType performs fuzz testing for roundtrip conversion for
-// unstructured or unstructuredList object between two formats (A and B) in forward
-// and backward directions
-// Original and final unstructured/list are compared along with all intermediate ones
-//
 // 两种顺序都要跑（JSON→CBOR 与 CBOR→JSON），因为不同编码对数字、
 // null、空容器等的保留行为可能不对称。
 func roundtripType[U runtime.Unstructured](t *testing.T) {
@@ -202,33 +185,32 @@ func roundtripType[U runtime.Unstructured](t *testing.T) {
 	for i := 0; i < 50; i++ {
 		original := reflect.New(reflect.TypeFor[U]().Elem()).Interface().(runtime.Unstructured)
 		fuzzer.Fill(original)
-		// unstructured -> JSON > unstructured > CBOR -> unstructured -> JSON -> unstructured
+		// unstructured -> JSON > unstructured > CBOR -> unstructured -> JSON -> unstructured（往返路径）
 		roundtrip(t, original, jS, cS)
-		// unstructured -> CBOR > unstructured > JSON -> unstructured -> CBOR -> unstructured
+		// unstructured -> CBOR > unstructured > JSON -> unstructured -> CBOR -> unstructured（往返路径）
 		roundtrip(t, original, cS, jS)
 	}
 }
 
-// roundtrip tests that an Unstructured object roundtrips faithfully along the
-// sequence Unstructured -> A -> Unstructured -> B -> Unstructured -> A -> Unstructured,
-// given serializers for two encodings A and B. The final object and both intermediate
-// objects must all be equal to the original.
+// roundtrip 测试 Unstructured 对象沿以下序列往返后保持一致：
+// Unstructured -> A -> Unstructured -> B -> Unstructured -> A -> Unstructured（往返序列）。
+// 给定两种编码 A 和 B 的序列化器，最终对象及两个中间对象都必须与原对象相等。
 func roundtrip(t *testing.T, original runtime.Unstructured, a, b runtime.Serializer) {
 	var buf bytes.Buffer
 
 	buf.Reset()
-	// (original) Unstructured -> A
+	//（原始）Unstructured -> A。
 	if err := a.Encode(original, &buf); err != nil {
 		t.Fatalf("error encoding original unstructured to A: %v", err)
 	}
-	// A -> intermediate unstructured
+	// A -> 中间 unstructured 对象。
 	uA := reflect.New(reflect.TypeOf(original).Elem()).Interface().(runtime.Object)
 	uA, _, err := a.Decode(buf.Bytes(), nil, uA)
 	if err != nil {
 		t.Fatalf("error decoding A to unstructured: %v", err)
 	}
 
-	// Compare original unstructured vs intermediate unstructured
+	// 比较原始 unstructured 对象与中间对象。
 	tmp, ok := uA.(runtime.Unstructured)
 	if !ok {
 		t.Fatalf("unexpected type %T for unstructured", tmp)
@@ -238,18 +220,18 @@ func roundtrip(t *testing.T, original runtime.Unstructured, a, b runtime.Seriali
 	}
 
 	buf.Reset()
-	// intermediate unstructured -> B
+	// 中间 unstructured 对象 -> B。
 	if err := b.Encode(uA, &buf); err != nil {
 		t.Fatalf("error encoding unstructured to B: %v", err)
 	}
-	// B -> intermediate unstructured
+	// B -> 中间 unstructured 对象。
 	uB := reflect.New(reflect.TypeOf(original).Elem()).Interface().(runtime.Object)
 	uB, _, err = b.Decode(buf.Bytes(), nil, uB)
 	if err != nil {
 		t.Fatalf("error decoding B to unstructured: %v", err)
 	}
 
-	// compare original vs intermediate unstructured
+	// 比较原始对象与中间 unstructured 对象。
 	tmp, ok = uB.(runtime.Unstructured)
 	if !ok {
 		t.Fatalf("unexpected type %T for unstructured", tmp)
@@ -258,19 +240,19 @@ func roundtrip(t *testing.T, original runtime.Unstructured, a, b runtime.Seriali
 		t.Fatalf("unstructured via A differed from unstructured via B: %v", cmp.Diff(original, uB))
 	}
 
-	// intermediate unstructured -> A
+	// 中间 unstructured 对象 -> A。
 	buf.Reset()
 	if err := a.Encode(uB, &buf); err != nil {
 		t.Fatalf("error encoding unstructured to A: %v", err)
 	}
-	// A -> final unstructured
+	// A -> 最终 unstructured 对象。
 	final := reflect.New(reflect.TypeOf(original).Elem()).Interface().(runtime.Object)
 	final, _, err = a.Decode(buf.Bytes(), nil, final)
 	if err != nil {
 		t.Fatalf("error decoding A to unstructured: %v", err)
 	}
 
-	// Compare original unstructured vs final unstructured
+	// 比较原始与最终 unstructured 对象。
 	tmp, ok = final.(runtime.Unstructured)
 	if !ok {
 		t.Fatalf("unexpected type %T for unstructured", tmp)
@@ -344,7 +326,6 @@ func generateNonEmptyString(c randfill.Continue) string {
 	return temp
 }
 
-// generateNonEmptyNoSlashString generates a non-empty string without any slashes
 // 中文说明：apiVersion 的 group 与 version 部分都不能包含 "/"。
 func generateNonEmptyNoSlashString(c randfill.Continue) string {
 	temp := strings.ReplaceAll(generateNonEmptyString(c), "/", "")
@@ -354,8 +335,6 @@ func generateNonEmptyNoSlashString(c randfill.Continue) string {
 	return temp
 }
 
-// generateValidAPIVersionString generates valid apiVersion string with formats:
-// <string>/<string> or <string>
 // 中文说明：前者表示 <group>/<version>，后者表示核心组的 <version>。
 func generateValidAPIVersionString(c randfill.Continue) string {
 	if c.Bool() {
@@ -365,30 +344,12 @@ func generateValidAPIVersionString(c randfill.Continue) string {
 	}
 }
 
-// generateRandomTypeValue generates fuzzed valid JSON data types:
-// 1. numbers (float64, int64)
-// 2. string (utf-8 encodings)
-// 3. boolean
-// 4. array ([]interface{})
-// 5. object (map[string]interface{})
-// 6. null
-// Decoding into unstructured can only produce a nil interface{} value or the
-// concrete types map[string]interface{}, []interface{}, int64, float64, string, and bool
-// If a value of other types is put into an unstructured, it will roundtrip
-// to one of the above list of supported types. For example, if Time type is used,
-// it will be encoded into a RFC 3339 format string such as "2001-02-03T12:34:56Z"
-// and when decoding into Unstructured, there is no information to indicate
-// that this string was originally produced by encoding a metav1.Time.
-// All external-versioned builtin types are exercised through RoundtripToUnstructured
-// in apitesting package. Types like metav1.Time are implicitly being exercised
-// because they appear as fields in those types.
-//
 // 中文说明：该函数只生成 unstructured 解码后可能出现的类型集合。数组与
 // 对象会递归调用，深度到达 0 时只生成非递归类型，防止无限展开。
 func generateRandomTypeValue(depth int, c randfill.Continue) interface{} {
 	t := c.Rand.Intn(120)
-	// If the max depth for unstructured is reached, only add non-recursive types
-	// which is 20+ in range
+	// 达到非结构化对象的最大深度后，
+	// 只添加 20 以上的非递归类型。
 	if depth == 0 {
 		t = 20 + c.Rand.Intn(120-20)
 	}
@@ -407,7 +368,7 @@ func generateRandomTypeValue(depth int, c randfill.Continue) interface{} {
 		}
 		return item
 	case t < 40:
-		// Only valid UTF-8 encodings
+		// 仅有效的 UTF-8 编码。
 		var item string
 		c.Fill(&item)
 		return item
@@ -432,19 +393,13 @@ func unstructuredEqual(t *testing.T, a, b runtime.Unstructured) bool {
 	return anyEqual(t, a.UnstructuredContent(), b.UnstructuredContent())
 }
 
-// numberEqual asserts equality of two numbers which one is int64 and one is float64
-// In JSON, a non-decimal float64 is converted to int64 automatically in case the
-// float64 fits into int64 range. Otherwise, the non-decimal float64 remains a float.
-// As a result, this func does an int64 to float64 conversion using math/big package
-// to ensure the conversion is lossless before comparison.
-//
 // 中文说明：如果 int64 无法被 float64 精确表示，则两个数不可能相等，
 // 直接返回 false，避免引入舍入误差。
 func numberEqual(a int64, b float64) bool {
-	// Ensure roundtrip int64 to float64 conversion is lossless
+	// 确保 int64 到 float64 的往返转换无损。
 	f, accuracy := big.NewInt(a).Float64()
 	if accuracy == big.Exact {
-		// Distinction between int64 and float64 is not preserved during JSON roundtrip for all numbers.
+		// JSON 往返转换不能保留所有数字的 int64 与 float64 类型差异。
 		return f == b
 	}
 	return false

@@ -30,18 +30,14 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// IsQualifiedName tests whether the value passed is what Kubernetes calls a
-// "qualified name".  This is a format used in various places throughout the
-// system.  If the value is not valid, a list of error strings is returned.
-// Otherwise an empty list (or nil) is returned.
-// Deprecated: Use k8s.io/apimachinery/pkg/api/validate/content.IsQualifiedName instead.
+// IsQualifiedName 验证值是否符合 Kubernetes 的 "qualified name" 格式。
+// 无效时返回错误字符串列表，否则返回空列表或 nil。
+// Deprecated: 请改用 k8s.io/apimachinery/pkg/api/validate/content.IsQualifiedName。
 var IsQualifiedName = content.IsLabelKey
 
-// IsFullyQualifiedName checks if the name is fully qualified. This is similar
-// to IsFullyQualifiedDomainName but requires a minimum of 3 segments instead of
-// 2 and does not accept a trailing . as valid.
-// TODO: This function is deprecated and preserved until all callers migrate to
-// IsFullyQualifiedDomainName; please don't add new callers.
+// IsFullyQualifiedName 检查名称是否为完整限定名称。它与 IsFullyQualifiedDomainName 类似，
+// 但至少需要三段而不是两段，且不接受末尾的 "."。
+// TODO: 此函数已弃用，保留至所有调用方迁移到 IsFullyQualifiedDomainName；请勿新增调用方。
 // 中文补充：校验顺序为“非空 -> DNS 子域格式 -> 至少 3 段”，返回首个失败原因。
 func IsFullyQualifiedName(fldPath *field.Path, name string) field.ErrorList {
 	var allErrors field.ErrorList
@@ -57,9 +53,8 @@ func IsFullyQualifiedName(fldPath *field.Path, name string) field.ErrorList {
 	return allErrors
 }
 
-// IsFullyQualifiedDomainName checks if the domain name is fully qualified. This
-// is similar to IsFullyQualifiedName but only requires a minimum of 2 segments
-// instead of 3 and accepts a trailing . as valid.
+// IsFullyQualifiedDomainName 检查域名是否为完整限定域名。
+// 它与 IsFullyQualifiedName 类似，但至少需要两段，且接受末尾的 "."。
 // 中文补充：末尾的 '.'（FQDN 根标记）在校验前被去掉；除子域整体校验外，
 // 还要求每一段单独满足 RFC 1123 label 规则，以拦截超长单段。
 func IsFullyQualifiedDomainName(fldPath *field.Path, name string) field.ErrorList {
@@ -84,21 +79,19 @@ func IsFullyQualifiedDomainName(fldPath *field.Path, name string) field.ErrorLis
 	return allErrors
 }
 
-// Allowed characters in an HTTP Path as defined by RFC 3986. A HTTP path may
-// contain:
-// * unreserved characters (alphanumeric, '-', '.', '_', '~')
-// * percent-encoded octets
-// * sub-delims ("!", "$", "&", "'", "(", ")", "*", "+", ",", ";", "=")
-// * a colon character (":")
+// RFC 3986 定义的 HTTP 路径允许字符，路径可包含：
+// * 非保留字符（字母、数字、'-'、'.'、'_'、'~'）。
+// * 百分号编码的八位组。
+// * sub-delims（"!"、"$"、"&"、"'"、"("、")"、"*"、"+"、","、";"、"="）。
+// * 冒号（":"）。
 // 中文补充：该正则只做字符集检查，不验证百分号编码的合法性。
 const httpPathFmt string = `[A-Za-z0-9/\-._~%!$&'()*+,;=:]+`
 
 var httpPathRegexp = regexp.MustCompile("^" + httpPathFmt + "$")
 
-// IsDomainPrefixedPath checks if the given string is a domain-prefixed path
-// (e.g. acme.io/foo). All characters before the first "/" must be a valid
-// subdomain as defined by RFC 1123. All characters trailing the first "/" must
-// be valid HTTP Path characters as defined by RFC 3986.
+// IsDomainPrefixedPath 检查字符串是否为带域名前缀的路径（如 acme.io/foo）。
+// 第一个 "/" 之前必须是 RFC 1123 定义的合法子域名，
+// 之后必须非空并匹配 ^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$。
 func IsDomainPrefixedPath(fldPath *field.Path, dpPath string) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(dpPath) == 0 {
@@ -124,10 +117,9 @@ func IsDomainPrefixedPath(fldPath *field.Path, dpPath string) field.ErrorList {
 	return allErrs
 }
 
-// IsDomainPrefixedKey checks if the given key string is a domain-prefixed key
-// (e.g. acme.io/foo). All characters before the first "/" must be a valid
-// subdomain as defined by RFC 1123. All characters trailing the first "/" must
-// be non-empty and match the regex ^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$.
+// IsDomainPrefixedKey 检查 key 是否为带域名前缀的键（如 acme.io/foo）。
+// 第一个 "/" 之前必须是 RFC 1123 定义的合法子域名，
+// 之后必须非空并匹配 ^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$。
 func IsDomainPrefixedKey(fldPath *field.Path, key string) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(key) == 0 {
@@ -151,14 +143,12 @@ func IsDomainPrefixedKey(fldPath *field.Path, key string) field.ErrorList {
 	return allErrs
 }
 
-// LabelValueMaxLength is a label's max length
-// Deprecated: Use k8s.io/apimachinery/pkg/api/validate/content.LabelValueMaxLength instead.
+// LabelValueMaxLength 是标签值的最大长度。
+// Deprecated: 请改用 k8s.io/apimachinery/pkg/api/validate/content.LabelValueMaxLength。
 const LabelValueMaxLength int = content.LabelValueMaxLength
 
-// IsValidLabelValue tests whether the value passed is a valid label value.  If
-// the value is not valid, a list of error strings is returned.  Otherwise an
-// empty list (or nil) is returned.
-// Deprecated: Use k8s.io/apimachinery/pkg/api/validate/content.IsLabelValue instead.
+// IsValidLabelValue 验证值是否为合法标签值；无效时返回错误字符串列表，否则返回空列表或 nil。
+// Deprecated: 请改用 k8s.io/apimachinery/pkg/api/validate/content.IsLabelValue。
 var IsValidLabelValue = content.IsLabelValue
 
 // dns1123LabelFmt 是 RFC 1123 label 的正则：小写字母数字，中间可含 '-'，首尾必须是字母数字。
@@ -169,12 +159,12 @@ const dns1123LabelFmtWithUnderscore string = "_?[a-z0-9]([-_a-z0-9]*[a-z0-9])?"
 
 const dns1123LabelErrMsg string = "a lowercase RFC 1123 label must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character"
 
-// DNS1123LabelMaxLength is a label's max length in DNS (RFC 1123)
+// DNS1123LabelMaxLength 是 DNS 标签的最大长度（RFC 1123）。
 const DNS1123LabelMaxLength int = 63
 
 var dns1123LabelRegexp = regexp.MustCompile("^" + dns1123LabelFmt + "$")
 
-// IsDNS1123Label tests for a string that conforms to the definition of a label in
+// IsDNS1123Label 验证字符串是否符合 DNS（RFC 1123）标签定义。
 // DNS (RFC 1123).
 func IsDNS1123Label(value string) []string {
 	var errs []string
@@ -183,8 +173,7 @@ func IsDNS1123Label(value string) []string {
 	}
 	if !dns1123LabelRegexp.MatchString(value) {
 		if dns1123SubdomainRegexp.MatchString(value) {
-			// It was a valid subdomain and not a valid label.  Since we
-			// already checked length, it must be dots.
+			//它原本是合法子域名但不是合法标签；长度已检查，因此问题一定是点号。
 			// 中文补充：给出“不能包含点”的精确提示，比通用正则错误更易定位问题。
 			errs = append(errs, "must not contain dots")
 		} else {
@@ -200,14 +189,13 @@ const dns1123SubdomainErrorMsg string = "a lowercase RFC 1123 subdomain must con
 const dns1123SubdomainFmtWithUnderscore string = dns1123LabelFmtWithUnderscore + "(\\." + dns1123LabelFmtWithUnderscore + ")*"
 const dns1123SubdomainErrorMsgFG string = "a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '_', '-' or '.', and must start and end with an alphanumeric character"
 
-// DNS1123SubdomainMaxLength is a subdomain's max length in DNS (RFC 1123)
+// DNS1123SubdomainMaxLength 是 DNS 子域名的最大长度（RFC 1123）。
 const DNS1123SubdomainMaxLength int = 253
 
 var dns1123SubdomainRegexp = regexp.MustCompile("^" + dns1123SubdomainFmt + "$")
 var dns1123SubdomainRegexpWithUnderscore = regexp.MustCompile("^" + dns1123SubdomainFmtWithUnderscore + "$")
 
-// IsDNS1123Subdomain tests for a string that conforms to the definition of a
-// subdomain in DNS (RFC 1123).
+// IsDNS1123Subdomain 验证字符串是否符合 DNS（RFC 1123）子域名定义。
 func IsDNS1123Subdomain(value string) []string {
 	var errs []string
 	if len(value) > DNS1123SubdomainMaxLength {
@@ -219,8 +207,7 @@ func IsDNS1123Subdomain(value string) []string {
 	return errs
 }
 
-// IsDNS1123SubdomainWithUnderscore tests for a string that conforms to the definition of a
-// subdomain in DNS (RFC 1123), but allows the use of an underscore in the string
+// IsDNS1123SubdomainWithUnderscore 验证字符串是否符合 DNS（RFC 1123）子域名定义，但允许下划线。
 func IsDNS1123SubdomainWithUnderscore(value string) []string {
 	var errs []string
 	if len(value) > DNS1123SubdomainMaxLength {
@@ -236,12 +223,12 @@ func IsDNS1123SubdomainWithUnderscore(value string) []string {
 const dns1035LabelFmt string = "[a-z]([-a-z0-9]*[a-z0-9])?"
 const dns1035LabelErrMsg string = "a DNS-1035 label must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character"
 
-// DNS1035LabelMaxLength is a label's max length in DNS (RFC 1035)
+// DNS1035LabelMaxLength 是 DNS 标签的最大长度（RFC 1035）。
 const DNS1035LabelMaxLength int = 63
 
 var dns1035LabelRegexp = regexp.MustCompile("^" + dns1035LabelFmt + "$")
 
-// IsDNS1035Label tests for a string that conforms to the definition of a label in
+// IsDNS1035Label 验证字符串是否符合 DNS（RFC 1035）标签定义。
 // DNS (RFC 1035).
 func IsDNS1035Label(value string) []string {
 	var errs []string
@@ -254,15 +241,14 @@ func IsDNS1035Label(value string) []string {
 	return errs
 }
 
-// wildcard definition - RFC 1034 section 4.3.3.
-// examples:
-// - valid: *.bar.com, *.foo.bar.com
-// - invalid: *.*.bar.com, *.foo.*.com, *bar.com, f*.bar.com, *
+// 通配符定义见 RFC 1034 4.3.3。
+// 示例：
+// - 有效：*.bar.com、*.foo.bar.com。
+// - 无效：*.*.bar.com、*.foo.*.com、*bar.com、f*.bar.com、*。
 const wildcardDNS1123SubdomainFmt = "\\*\\." + dns1123SubdomainFmt
 const wildcardDNS1123SubdomainErrMsg = "a wildcard DNS-1123 subdomain must start with '*.', followed by a valid DNS subdomain, which must consist of lower case alphanumeric characters, '-' or '.' and end with an alphanumeric character"
 
-// IsWildcardDNS1123Subdomain tests for a string that conforms to the definition of a
-// wildcard subdomain in DNS (RFC 1034 section 4.3.3).
+// IsWildcardDNS1123Subdomain 验证字符串是否符合 DNS 通配符子域名定义（RFC 1034 4.3.3）。
 // 中文补充：正则每次调用时构建，因为 wildcard 校验不是热路径；通配符只能出现在最左侧。
 func IsWildcardDNS1123Subdomain(value string) []string {
 	wildcardDNS1123SubdomainRegexp := regexp.MustCompile("^" + wildcardDNS1123SubdomainFmt + "$")
@@ -277,12 +263,11 @@ func IsWildcardDNS1123Subdomain(value string) []string {
 	return errs
 }
 
-// IsCIdentifier tests for a string that conforms the definition of an identifier
-// in C. This checks the format, but not the length.
-// Deprecated: Use k8s.io/apimachinery/pkg/api/validate/content.IsCIdentifier instead.
+// IsCIdentifier 验证字符串是否符合 C 标识符定义，只检查格式而不检查长度。
+// Deprecated: 请改用 k8s.io/apimachinery/pkg/api/validate/content.IsCIdentifier。
 var IsCIdentifier = content.IsCIdentifier
 
-// IsValidPortNum tests that the argument is a valid, non-zero port number.
+// IsValidPortNum 验证参数是否为有效的非零端口号。
 func IsValidPortNum(port int) []string {
 	if 1 <= port && port <= 65535 {
 		return nil
@@ -290,7 +275,7 @@ func IsValidPortNum(port int) []string {
 	return []string{InclusiveRangeError(1, 65535)}
 }
 
-// IsInRange tests that the argument is in an inclusive range.
+// IsInRange 验证参数是否在闭区间内。
 func IsInRange(value int, min int, max int) []string {
 	if value >= min && value <= max {
 		return nil
@@ -298,8 +283,8 @@ func IsInRange(value int, min int, max int) []string {
 	return []string{InclusiveRangeError(min, max)}
 }
 
-// Now in libcontainer UID/GID limits is 0 ~ 1<<31 - 1
-// TODO: once we have a type for UID/GID we should make these that type.
+// libcontainer 的 UID/GID 范围目前为 0 到 1<<31-1。
+// TODO: 有了 UID/GID 类型后，应使用该类型。
 // 中文补充：上限取 MaxInt32 是为了与 libcontainer 的 UID/GID 映射范围保持一致。
 const (
 	minUserID  = 0
@@ -308,7 +293,7 @@ const (
 	maxGroupID = math.MaxInt32
 )
 
-// IsValidGroupID tests that the argument is a valid Unix GID.
+// IsValidGroupID 验证参数是否为有效的 Unix GID。
 func IsValidGroupID(gid int64) []string {
 	if minGroupID <= gid && gid <= maxGroupID {
 		return nil
@@ -316,7 +301,7 @@ func IsValidGroupID(gid int64) []string {
 	return []string{InclusiveRangeError(minGroupID, maxGroupID)}
 }
 
-// IsValidUserID tests that the argument is a valid Unix UID.
+// IsValidUserID 验证参数是否为有效的 Unix UID。
 func IsValidUserID(uid int64) []string {
 	if minUserID <= uid && uid <= maxUserID {
 		return nil
@@ -327,13 +312,11 @@ func IsValidUserID(uid int64) []string {
 var portNameCharsetRegex = regexp.MustCompile("^[-a-z0-9]+$")
 var portNameOneLetterRegexp = regexp.MustCompile("[a-z]")
 
-// IsValidPortName check that the argument is valid syntax. It must be
-// non-empty and no more than 15 characters long. It may contain only [-a-z0-9]
-// and must contain at least one letter [a-z]. It must not start or end with a
-// hyphen, nor contain adjacent hyphens.
+// IsValidPortName 验证端口名语法：必须非空、不超过 15 个字符，
+// 只能包含 [-a-z0-9]，至少含一个字母，
+// 不能以连字符开头或结尾，也不能含连续连字符。
 //
-// Note: We only allow lower-case characters, even though RFC 6335 is case
-// insensitive.
+// 注意：即使 RFC 6335 不区分大小写，这里也只允许小写字母。
 func IsValidPortName(port string) []string {
 	var errs []string
 	// 长度上限来自 RFC 6335 对服务名的限制。
@@ -361,7 +344,7 @@ const percentErrMsg string = "a valid percent string must be a numeric string fo
 
 var percentRegexp = regexp.MustCompile("^" + percentFmt + "$")
 
-// IsValidPercent checks that string is in the form of a percentage
+// IsValidPercent 验证字符串是否为百分比形式。
 func IsValidPercent(percent string) []string {
 	if !percentRegexp.MatchString(percent) {
 		return []string{RegexError(percentErrMsg, percentFmt, "1%", "93%")}
@@ -374,8 +357,8 @@ const httpHeaderNameErrMsg string = "a valid HTTP header must consist of alphanu
 
 var httpHeaderNameRegexp = regexp.MustCompile("^" + httpHeaderNameFmt + "$")
 
-// IsHTTPHeaderName checks that a string conforms to the Go HTTP library's
-// definition of a valid header field name (a stricter subset than RFC7230).
+// IsHTTPHeaderName 验证字符串是否符合 Go HTTP 库的合法头字段名定义，
+// 其范围比 RFC 7230 更严格。
 func IsHTTPHeaderName(value string) []string {
 	if !httpHeaderNameRegexp.MatchString(value) {
 		return []string{RegexError(httpHeaderNameErrMsg, httpHeaderNameFmt, "X-Header-Name")}
@@ -386,12 +369,12 @@ func IsHTTPHeaderName(value string) []string {
 const envVarNameFmt = "[-._a-zA-Z][-._a-zA-Z0-9]*"
 const envVarNameFmtErrMsg string = "a valid environment variable name must consist of alphabetic characters, digits, '_', '-', or '.', and must not start with a digit"
 
-// TODO(hirazawaui): Rename this when the RelaxedEnvironmentVariableValidation gate is removed.
+// TODO(hirazawaui): 移除 RelaxedEnvironmentVariableValidation 特性门后重命名。
 const relaxedEnvVarNameFmtErrMsg string = "a valid environment variable name must consist only of printable ASCII characters other than '='"
 
 var envVarNameRegexp = regexp.MustCompile("^" + envVarNameFmt + "$")
 
-// IsEnvVarName tests if a string is a valid environment variable name.
+// IsEnvVarName 验证字符串是否为合法环境变量名。
 // 中文补充：除正则外还拒绝 "."、".." 及以 ".." 开头的名称，防止路径穿越语义。
 func IsEnvVarName(value string) []string {
 	var errs []string
@@ -403,7 +386,7 @@ func IsEnvVarName(value string) []string {
 	return errs
 }
 
-// IsRelaxedEnvVarName tests if a string is a valid environment variable name.
+// IsRelaxedEnvVarName 按宽松规则验证字符串是否为合法环境变量名。
 // 中文补充：放宽版只要求非空且为可打印 ASCII（排除 '='），用于特性门控开启后的场景。
 func IsRelaxedEnvVarName(value string) []string {
 	var errs []string
@@ -427,7 +410,7 @@ const configMapKeyErrMsg string = "a valid config key must consist of alphanumer
 
 var configMapKeyRegexp = regexp.MustCompile("^" + configMapKeyFmt + "$")
 
-// IsConfigMapKey tests for a string that is a valid key for a ConfigMap or Secret
+// IsConfigMapKey 验证字符串是否为 ConfigMap 或 Secret 的合法键。
 // 中文补充：键长上限复用 subdomain 的 253，并额外拒绝 ".." 前缀以防挂载路径穿越。
 func IsConfigMapKey(value string) []string {
 	var errs []string
@@ -441,13 +424,12 @@ func IsConfigMapKey(value string) []string {
 	return errs
 }
 
-// MaxLenError returns a string explanation of a "string too long" validation
-// failure.
+// MaxLenError 返回 "string too long" 校验失败的说明字符串。
 func MaxLenError(length int) string {
 	return fmt.Sprintf("must be no more than %d characters", length)
 }
 
-// RegexError returns a string explanation of a regex validation failure.
+// RegexError 返回正则校验失败的说明字符串。
 // 中文补充：把示例值一并写进错误信息，让用户无需查源码即可知道期望格式。
 func RegexError(msg string, fmt string, examples ...string) string {
 	if len(examples) == 0 {
@@ -464,14 +446,12 @@ func RegexError(msg string, fmt string, examples ...string) string {
 	return msg
 }
 
-// EmptyError returns a string explanation of a "must not be empty" validation
-// failure.
+// EmptyError 返回 "must not be empty" 校验失败的说明字符串。
 func EmptyError() string {
 	return "must be non-empty"
 }
 
-// InclusiveRangeError returns a string explanation of a numeric "must be
-// between" validation failure.
+// InclusiveRangeError 返回数值必须在指定闭区间内的校验失败说明。
 func InclusiveRangeError(lo, hi int) string {
 	return fmt.Sprintf(`must be between %d and %d, inclusive`, lo, hi)
 }

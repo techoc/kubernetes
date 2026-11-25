@@ -21,9 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// ValidateTableOptions returns any invalid flags on TableOptions.
-// IncludeObject accepts the three defined enum values plus the empty string,
-// which predates the enum and must remain valid for compatibility.
+// ValidateTableOptions 返回 TableOptions 中的非法标志。
+// IncludeObject 接受三个已定义枚举值及空字符串；空字符串早于枚举，为兼容性必须保留。
 func ValidateTableOptions(opts *metav1.TableOptions) field.ErrorList {
 	var allErrs field.ErrorList
 	switch opts.IncludeObject {

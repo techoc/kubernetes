@@ -34,8 +34,8 @@ type schemeTypeConverter struct {
 // 编译期确认实现了 TypeConverter 接口。
 var _ TypeConverter = &schemeTypeConverter{}
 
-// NewSchemeTypeConverter creates a TypeConverter that uses the provided scheme to
-// convert between runtime.Objects and TypedValues.
+// NewSchemeTypeConverter 创建使用给定 scheme 的 TypeConverter，
+// 用于在 runtime.Object 与 TypedValue 之间转换。
 // 中文补充：scheme 负责 GVK -> 类型名，parser 负责该类型对应的 schema。
 func NewSchemeTypeConverter(scheme *runtime.Scheme, parser *typed.Parser) TypeConverter {
 	return &schemeTypeConverter{scheme: scheme, parser: parser}

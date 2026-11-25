@@ -23,35 +23,19 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// MessageCountMap contains occurrence for each error message.
-// Deprecated: Not used anymore in the k8s.io codebase, use `errors.Join` instead.
-//
-// MessageCountMap 记录每条错误信息出现的次数。
-// 已弃用：k8s.io 代码库已不再使用，请改用 `errors.Join`。
+// MessageCountMap 记录每种错误消息出现的次数。
+// Deprecated: k8s.io 代码库已不再使用，请改用 `errors.Join`。
 type MessageCountMap map[string]int
 
-// Aggregate represents an object that contains multiple errors, but does not
-// necessarily have singular semantic meaning.
-// The aggregate can be used with `errors.Is()` to check for the occurrence of
-// a specific error type.
-// Errors.As() is not supported, because the caller presumably cares about a
-// specific error of potentially multiple that match the given type.
-//
-// Aggregate 表示包含多个错误的对象，这些错误不要求有单一语义。
-// 可与 `errors.Is()` 一起用于检查是否出现某类特定错误。
-// 不支持 Errors.As()：调用方关心的是可能匹配该类型的多个错误中的某一个。
+// Aggregate 表示包含多个错误的对象，但这些错误不一定具有单一的语义。
+// 聚合结果可配合 `errors.Is()` 检查是否包含特定错误类型。
+// 不支持 Errors.As()，因为调用方通常只关心可能匹配多个错误中的某一个。
 type Aggregate interface {
 	error
 	Errors() []error
 	Is(error) bool
 }
 
-// NewAggregate converts a slice of errors into an Aggregate interface, which
-// is itself an implementation of the error interface.  If the slice is empty,
-// this returns nil.
-// It will check if any of the element of input error list is nil, to avoid
-// nil pointer panic when call Error().
-//
 // NewAggregate 把错误切片转换为 Aggregate（其本身也实现 error 接口）。
 // 切片为空时返回 nil；同时会过滤掉 nil 元素，避免调用 Error() 时空指针 panic。
 func NewAggregate(errlist []error) Aggregate {
@@ -73,13 +57,8 @@ func NewAggregate(errlist []error) Aggregate {
 
 // aggregate 实现 error 和 Errors 接口。将其保持为非导出类型，可以避免调用方构造
 // 空聚合：空聚合本身不代表错误，却仍然满足 error 接口。
-//
-// 该辅助类型实现 error 与 Errors 接口。保持私有可防止构造 0 个错误的 aggregate
-// （它不算错误，却满足 error 接口）。
 type aggregate []error
 
-// Error is part of the error interface.
-//
 // Error 实现 error 接口：单条错误直接返回其文本；
 // 多条错误去重后用 ", " 连接，多于一条时外层加方括号。
 func (agg aggregate) Error() string {
@@ -142,26 +121,14 @@ func (agg aggregate) visit(f func(err error) bool) bool {
 	return false
 }
 
-// Errors is part of the Aggregate interface.
-//
 // Errors 返回聚合中的所有错误（Aggregate 接口的一部分）。
 func (agg aggregate) Errors() []error {
 	return []error(agg)
 }
 
-// Matcher is used to match errors.  Returns true if the error matches.
-//
 // Matcher 用于匹配错误：匹配时返回 true。
 type Matcher func(error) bool
 
-// FilterOut removes all errors that match any of the matchers from the input
-// error.  If the input is a singular error, only that error is tested.  If the
-// input implements the Aggregate interface, the list of errors will be
-// processed recursively.
-//
-// 例如，可从错误列表中移除已知可接受的错误（如 io.EOF 或 os.PathNotFound），
-// 避免这些预期情况影响最终错误结果。
-//
 // FilterOut 从输入错误中移除所有被任一 matcher 匹配的错误。
 // 输入是单个错误时只测试它；实现 Aggregate 接口时递归处理其中的错误列表。
 // 例如可用于从错误列表中剔除已知可接受的错误（如 io.EOF 或 os.PathNotFound）。
@@ -178,8 +145,6 @@ func FilterOut(err error, fns ...Matcher) error {
 	return nil
 }
 
-// matchesError returns true if any Matcher returns true
-//
 // matchesError 在任一 Matcher 返回 true 时返回 true。
 func matchesError(err error, fns ...Matcher) bool {
 	for _, fn := range fns {
@@ -190,11 +155,6 @@ func matchesError(err error, fns ...Matcher) bool {
 	return false
 }
 
-// filterErrors returns any errors (or nested errors, if the list contains
-// nested Errors) for which all fns return false. If no errors
-// remain a nil list is returned. The resulting slice will have all
-// nested slices flattened as a side effect.
-//
 // filterErrors 返回所有不被任何 fn 匹配的错误（若列表含嵌套 Aggregate 则递归展开）。
 // 没有剩余错误时返回 nil；结果切片会顺带把嵌套切片展平。
 func filterErrors(list []error, fns ...Matcher) []error {
@@ -208,8 +168,6 @@ func filterErrors(list []error, fns ...Matcher) []error {
 	return result
 }
 
-// Flatten 接收可能包含任意层级嵌套 Aggregate 的聚合对象，并递归展开为单层 Aggregate。
-//
 // Flatten 递归地把任意嵌套的 Aggregate 展平为单个 Aggregate。
 func Flatten(agg Aggregate) Aggregate {
 	result := []error{}
@@ -231,12 +189,9 @@ func Flatten(agg Aggregate) Aggregate {
 	return NewAggregate(result)
 }
 
-// CreateAggregateFromMessageCountMap converts MessageCountMap Aggregate
-// Deprecated: Not used anymore in the k8s.io codebase, use `errors.Join` instead.
-//
 // CreateAggregateFromMessageCountMap 把 MessageCountMap 转换为 Aggregate；
 // 出现次数大于 1 的错误信息会附加 "(repeated N times)" 后缀。
-// 已弃用：k8s.io 代码库已不再使用，请改用 `errors.Join`。
+// Deprecated: k8s.io 代码库已不再使用，请改用 `errors.Join`。
 func CreateAggregateFromMessageCountMap(m MessageCountMap) Aggregate {
 	if m == nil {
 		return nil
@@ -252,9 +207,6 @@ func CreateAggregateFromMessageCountMap(m MessageCountMap) Aggregate {
 	return NewAggregate(result)
 }
 
-// Reduce 默认返回原始 err；如果 err 是 Aggregate 且只包含一个错误，则返回该错误；
-// 如果聚合为空，则返回 nil。
-//
 // Reduce 返回 err；若 err 是只含一项的 Aggregate，则返回该项；
 // 若是空 Aggregate，则返回 nil。
 func Reduce(err error) error {
@@ -269,9 +221,6 @@ func Reduce(err error) error {
 	return err
 }
 
-// AggregateGoroutines 并行执行传入函数，并将所有非 nil 错误收集到返回的 Aggregate。
-// 所有函数都成功时返回 nil。
-//
 // AggregateGoroutines 并行运行给定函数，把所有非 nil 错误收集到返回的 Aggregate 中；
 // 所有函数都成功时返回 nil。
 func AggregateGoroutines(funcs ...func() error) Aggregate {
@@ -289,7 +238,5 @@ func AggregateGoroutines(funcs ...func() error) Aggregate {
 	return NewAggregate(errs)
 }
 
-// ErrPreconditionViolated 表示调用操作所要求的前置条件未满足。
-//
 // ErrPreconditionViolated 在前置条件被违反时返回。
 var ErrPreconditionViolated = errors.New("precondition is violated")

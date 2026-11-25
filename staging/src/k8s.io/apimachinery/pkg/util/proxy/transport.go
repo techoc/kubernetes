@@ -68,7 +68,7 @@ var atomsToAttrs = map[atom.Atom]sets.String{
 	atom.Source:     sets.NewString("src"),
 	atom.Video:      sets.NewString("poster", "src"),
 
-	// TODO: css URLs hidden in style elements.
+	//TODO: 处理 style 元素中隐藏的 CSS URL。
 	// style 元素与 style 属性中的 url(...) 尚未处理，属于已知缺口。
 }
 
@@ -281,7 +281,7 @@ func (t *Transport) rewriteResponse(req *http.Request, resp *http.Response) (*ht
 
 	resp.Body = io.NopCloser(newContent)
 	// 内容已被改写，原 Content-Length 不再正确，必须删除并由新的长度替换。
-	// TODO: Remove any hash/signature headers here?
+	//TODO: 是否应在此移除所有 hash/signature 头？
 	// 内容变化后，摘要/签名类头也会失效，后续应考虑一并移除。
 	resp.Header.Del("Content-Length")
 	resp.ContentLength = int64(newContent.Len())

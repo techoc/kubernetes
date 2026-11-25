@@ -39,7 +39,7 @@ func NewVersionCheckManager(fieldManager Manager, gvk schema.GroupVersionKind) M
 
 // Update 实现 Manager：更新路径的版本一致性已在其他环节校验，这里直接透传。
 func (f *versionCheckManager) Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error) {
-	// Nothing to do for updates, this is checked in many other places.
+	//update 无需处理，其他位置已检查版本。
 	return f.fieldManager.Update(liveObj, newObj, managed, manager)
 }
 

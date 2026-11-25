@@ -127,7 +127,7 @@ func TestStreamReader_Read(t *testing.T) {
 		input: "",
 		steps: []srtStep{
 			srtRead(1, "", io.EOF),
-			srtRead(1, "", io.EOF), // still EOF
+			srtRead(1, "", io.EOF), //仍为 EOF
 		},
 	}, {
 		name:  "simple reads",
@@ -142,29 +142,29 @@ func TestStreamReader_Read(t *testing.T) {
 		input: "0123456789",
 		steps: []srtStep{
 			srtRead(8, "01234567", nil),
-			srtRead(8, "89", nil), // short read, no error
+			srtRead(8, "89", nil), //短读但无错误
 			srtRead(1, "", io.EOF),
 		},
 	}, {
 		name:  "short reads from buffer",
 		input: "0123456789",
 		steps: []srtStep{
-			srtRead(3, "012", nil), // fill buffer
+			srtRead(3, "012", nil), //填充缓冲区
 			srtRewind(),
 			// 回退后缓冲区里只有 3 字节，Read 不会为了满足请求而继续读底层，
 			// 这是 StreamReader 有意保留的"短读"语义。
-			srtRead(4, "012", nil), // short read from buffer
+			srtRead(4, "012", nil), //从缓冲区短读
 			srtRewind(),
-			srtRead(4, "012", nil),  // still short
-			srtRead(4, "3456", nil), // from reader
+			srtRead(4, "012", nil),  //仍然不足
+			srtRead(4, "3456", nil), //从 reader 读取
 			srtRewind(),
-			srtRead(10, "0123456", nil), // short read from buffer
+			srtRead(10, "0123456", nil), //从缓冲区短读
 		},
 	}}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reader := NewStreamReader(strings.NewReader(tt.input), 4) // small initial buffer
+			reader := NewStreamReader(strings.NewReader(tt.input), 4) //较小的初始缓冲区
 			srtRun(t, reader, tt.steps)
 		})
 	}
@@ -220,7 +220,7 @@ func TestStreamReader_Rewind(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reader := NewStreamReader(strings.NewReader(tt.input), 4) // small initial buffer
+			reader := NewStreamReader(strings.NewReader(tt.input), 4) //较小的初始缓冲区
 			srtRun(t, reader, tt.steps)
 		})
 	}
@@ -259,7 +259,7 @@ func TestStreamReader_RewindN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reader := NewStreamReader(strings.NewReader(tt.input), 4) // small initial buffer
+			reader := NewStreamReader(strings.NewReader(tt.input), 4) //较小的初始缓冲区
 			srtRun(t, reader, tt.steps)
 		})
 	}
@@ -279,7 +279,7 @@ func TestStreamReader_Consume(t *testing.T) {
 			srtConsumed(0),
 			srtRead(4, "0123", nil),
 			srtRead(4, "4567", nil),
-			srtConsume(2), // drops 01
+			srtConsume(2), //丢弃 01
 			srtConsumed(2),
 			srtRead(4, "89", nil),
 			srtRead(1, "", io.EOF),
@@ -318,7 +318,7 @@ func TestStreamReader_Consume(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reader := NewStreamReader(strings.NewReader(tt.input), 4) // small initial buffer
+			reader := NewStreamReader(strings.NewReader(tt.input), 4) //较小的初始缓冲区
 			srtRun(t, reader, tt.steps)
 		})
 	}
@@ -335,38 +335,38 @@ func TestStreamReader_ReadN(t *testing.T) {
 		name:  "short read full readN",
 		input: "0123456789",
 		steps: []srtStep{
-			srtRead(3, "012", nil), // fill buffer
+			srtRead(3, "012", nil), //填充缓冲区
 			srtRewind(),
-			srtRead(5, "012", nil), // short read from buffer
+			srtRead(5, "012", nil), //从缓冲区短读
 			srtRewind(),
-			srtReadN(5, "01234", nil), // full readN
+			srtReadN(5, "01234", nil), //完整 readN
 			srtRewind(),
-			srtRead(10, "01234", nil), // short read from buffer
+			srtRead(10, "01234", nil), //从缓冲区短读
 			srtRewind(),
-			srtReadN(10, "0123456789", nil), // full readN
+			srtReadN(10, "0123456789", nil), //完整 readN
 			srtRewind(),
-			srtRead(10, "0123456789", nil), // full read from buffer
+			srtRead(10, "0123456789", nil), //从缓冲区完整读取
 			srtRead(1, "", io.EOF),
 		},
 	}, {
 		name:  "short read consume readN",
 		input: "0123456789",
 		steps: []srtStep{
-			srtRead(3, "012", nil), // fill buffer
+			srtRead(3, "012", nil), //填充缓冲区
 			srtRewind(),
-			srtRead(4, "012", nil), // short read from buffer
+			srtRead(4, "012", nil), //从缓冲区短读
 			srtConsume(1),
 			srtRewind(),
-			srtRead(4, "12", nil), // short read from buffer
+			srtRead(4, "12", nil), //从缓冲区短读
 			srtRewind(),
-			srtReadN(4, "1234", nil), // full read
+			srtReadN(4, "1234", nil), //完整读取
 			srtConsume(1),
 			srtRewind(),
-			srtRead(4, "234", nil), // short read from buffer
+			srtRead(4, "234", nil), //从缓冲区短读
 			srtRewind(),
-			srtReadN(10, "23456789", io.EOF), // short readN, EOF
+			srtReadN(10, "23456789", io.EOF), //短读 readN，返回 EOF
 			srtRewind(),
-			srtRead(10, "23456789", nil), // full read from buffer
+			srtRead(10, "23456789", nil), //从缓冲区完整读取
 			srtRead(1, "", io.EOF),
 		},
 	}, {
@@ -379,7 +379,7 @@ func TestStreamReader_ReadN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reader := NewStreamReader(strings.NewReader(tt.input), 4) // small initial buffer
+			reader := NewStreamReader(strings.NewReader(tt.input), 4) //较小的初始缓冲区
 			srtRun(t, reader, tt.steps)
 		})
 	}
@@ -396,11 +396,11 @@ func TestStreamReader_Peek(t *testing.T) {
 		name:  "simple peek",
 		input: "0123456789",
 		steps: []srtStep{
-			srtPeek(3, "012", nil), // fill buffer
-			srtRead(5, "012", nil), // short read from buffer
+			srtPeek(3, "012", nil), //填充缓冲区
+			srtRead(5, "012", nil), //从缓冲区短读
 			srtRewind(),
-			srtPeek(6, "012345", nil),  // fill buffer
-			srtRead(10, "012345", nil), // short read from buffer
+			srtPeek(6, "012345", nil),  //填充缓冲区
+			srtRead(10, "012345", nil), //从缓冲区短读
 		},
 	}, {
 		name:  "empty input",

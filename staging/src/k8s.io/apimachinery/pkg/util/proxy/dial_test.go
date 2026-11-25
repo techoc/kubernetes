@@ -126,9 +126,9 @@ func TestDialURL(t *testing.T) {
 			ts.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, NextProtos: []string{"http2", "http/1.1"}}
 			ts.StartTLS()
 
-			// Make a copy of the config
+			//复制配置
 			tlsConfigCopy := tc.TLSConfig.Clone()
-			// Clone() mutates the receiver (!), so also call it on the copy
+			//Clone() 会修改接收者，因此还需对副本调用。
 			tlsConfigCopy.Clone()
 			transport := &http.Transport{
 				DialContext:     tc.Dial,
@@ -159,7 +159,7 @@ func TestDialURL(t *testing.T) {
 			u.Host = net.JoinHostPort("127.0.0.1", p)
 			conn, err := DialURL(context.Background(), u, transport)
 
-			// Make sure dialing doesn't mutate the transport's TLSConfig
+			//确保拨号不会修改传输器的 TLSConfig。
 			if !reflect.DeepEqual(tc.TLSConfig, tlsConfigCopy) {
 				t.Errorf("%s: transport's copy of TLSConfig was mutated\n%s", k, cmp.Diff(tc.TLSConfig, tlsConfigCopy))
 			}
@@ -190,7 +190,7 @@ func TestDialURL(t *testing.T) {
 
 }
 
-// localhostCert was generated from crypto/tls/generate_cert.go with the following command:
+// localhostCert 由 crypto/tls/generate_cert.go 使用以下命令生成：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host 127.0.0.1,::1,example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var localhostCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -213,7 +213,7 @@ a2wur8BSZ5E8SVzzvNZJlLSi6BbObQUjALHkjVYm11dWv/BY8jHdt+iFhbNBRASx
 ENuih3pX1Poki1qRYOtB/vAS99E1ORj9zJlUlzo=
 -----END CERTIFICATE-----`)
 
-// localhostKey is the private key for localhostCert.
+// localhostKey 是 localhostCert 的私钥。
 var localhostKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEogIBAAKCAQEArDDf0XCZXmUMhsBQgC5JhhW1mR7ptxrWjKrX1mtEvS5q/A9d
 Imb5DG3hEpRCHNiFn9qUmnyJF+79n5i/0F57Pz11AH1XxiceP8BfgmmH2UnZprBY

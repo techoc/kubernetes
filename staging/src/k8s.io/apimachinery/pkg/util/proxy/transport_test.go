@@ -29,8 +29,8 @@ import (
 	"testing"
 )
 
-// parseURLOrDie parses a test URL and panics on malformed input; test fixtures
-// are expected to be correct, so a parse failure is a test bug.
+// parseURLOrDie 解析测试 URL，输入畸形时 panic；测试夹具应保证正确，
+// 因此解析失败属于测试缺陷。
 func parseURLOrDie(inURL string) *url.URL {
 	parsed, err := url.Parse(inURL)
 	if err != nil {
@@ -39,11 +39,9 @@ func parseURLOrDie(inURL string) *url.URL {
 	return parsed
 }
 
-// TestProxyTransport verifies the proxy's response rewriting: absolute-path
-// links are rebased onto the proxy prefix, relative links are left alone,
-// same-host absolute links are treated as internal, external hosts are
-// untouched, requests get X-Forwarded-* headers, and redirect targets are
-// rewritten (and escaped) consistently.
+// TestProxyTransport 验证代理的响应重写：绝对路径链接重写到代理前缀，相对链接保持不变，
+// 同主机绝对链接视为内部链接，外部主机保持不变；
+// 请求添加 X-Forwarded-* 头，重定向目标按一致规则重写并转义。
 func TestProxyTransport(t *testing.T) {
 	testTransport := &Transport{
 		Scheme:      "http",
@@ -55,8 +53,7 @@ func TestProxyTransport(t *testing.T) {
 		Host:        "foo.com",
 		PathPrepend: "/proxy/node/node1:8080",
 	}
-	// Each transport variant exercises a different combination of explicit and
-	// inferred scheme/host.
+	//每种传输器变体测试显式值与推断 scheme/host 的不同组合。
 	emptyHostTransport := &Transport{
 		Scheme:      "https",
 		PathPrepend: "/proxy/node/node1:10250",
@@ -247,7 +244,7 @@ func TestProxyTransport(t *testing.T) {
 
 	testItem := func(name string, item *Item) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Check request headers.
+			//检查请求头。
 			if got, want := r.Header.Get("X-Forwarded-Uri"), item.forwardedURI; got != want {
 				t.Errorf("%v: X-Forwarded-Uri = %q, want %q", name, got, want)
 			}
@@ -272,7 +269,7 @@ func TestProxyTransport(t *testing.T) {
 				}
 			}
 
-			// Send response.
+			//发送响应。
 			if item.redirect != "" {
 				http.Redirect(w, r, item.redirect, http.StatusMovedPermanently)
 				return
@@ -282,9 +279,9 @@ func TestProxyTransport(t *testing.T) {
 		}))
 		defer server.Close()
 
-		// Replace source URL with our test server address.
-		// The fixtures hard-code "mynode.com"; retargeting them at the httptest
-		// server keeps redirects and same-host detection meaningful.
+		//将源 URL 替换为测试服务器地址。
+		//夹具硬编码了 "mynode.com"；改为 httptest 服务器地址后，
+		//重定向和同主机检测仍具有实际意义。
 		sourceURL := parseURLOrDie(item.sourceURL)
 		serverURL := parseURLOrDie(server.URL)
 		item.input = strings.Replace(item.input, sourceURL.Host, serverURL.Host, -1)
@@ -305,7 +302,7 @@ func TestProxyTransport(t *testing.T) {
 			return
 		}
 		if item.redirect != "" {
-			// Check that redirect URLs get rewritten properly.
+			//检查重定向 URL 被正确重写。
 			if got, want := resp.Header.Get("Location"), item.redirectWant; got != want {
 				t.Errorf("%v: Location header = %q, want %q", name, got, want)
 			}
@@ -326,9 +323,8 @@ func TestProxyTransport(t *testing.T) {
 	}
 }
 
-// TestRewriteResponse verifies that response bodies are decompressed and
-// recompressed transparently for both gzip and deflate, including bodies far
-// larger than the internal read buffer (the fix for truncation regressions).
+// TestRewriteResponse 验证 gzip 和 deflate 响应体能透明解压并重新压缩，
+// 包括远大于内部读缓冲区的响应体，以覆盖截断回归问题。
 func TestRewriteResponse(t *testing.T) {
 	gzipbuf := bytes.NewBuffer(nil)
 	flatebuf := bytes.NewBuffer(nil)
@@ -338,8 +334,7 @@ func TestRewriteResponse(t *testing.T) {
 		Host:        "foo.com",
 		PathPrepend: "/proxy/node/node1:10250",
 	}
-	// expected covers a short body and one large enough to require multiple
-	// reads through the rewriting pipeline.
+	//expected 覆盖短响应体以及需要多次读取重写管线的较大响应体。
 	expected := []string{
 		"short body test",
 		strings.Repeat("long body test", 4097),

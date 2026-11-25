@@ -27,8 +27,6 @@ import (
 const GroupName = "meta.k8s.io"
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
 	// SchemeBuilder 收集需要注册到 Scheme 的函数；AddToScheme 是对它的便捷封装，
 	// 让调用方无需关心内部是否使用局部变量。
 	SchemeBuilder      runtime.SchemeBuilder

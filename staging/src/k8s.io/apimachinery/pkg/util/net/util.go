@@ -24,11 +24,11 @@ import (
 	"syscall"
 )
 
-// IPNetEqual checks if the two input IPNets are representing the same subnet.
-// For example,
+// IPNetEqual 检查两个 IPNet 是否表示同一子网。
+// 例如，
 //
-//	10.0.0.1/24 and 10.0.0.0/24 are the same subnet.
-//	10.0.0.1/24 and 10.0.0.0/25 are not the same subnet.
+// 10.0.0.1/24 与 10.0.0.0/24 是同一子网。
+// 10.0.0.1/24 与 10.0.0.0/25 不是同一子网。
 //
 // 中文说明：不能只比较 IP 字段（主机位可能不同），也不能只比较 mask，必须
 // 互相 Contains 才能确认二者覆盖同一网段。
@@ -42,7 +42,7 @@ func IPNetEqual(ipnet1, ipnet2 *net.IPNet) bool {
 	return false
 }
 
-// Returns if the given err is "connection reset by peer" error.
+// 如果给定 err 是 "connection reset by peer" 错误则返回 true。
 // 中文说明：用 errors.As 而非字符串匹配，以兼容包装过的错误。
 func IsConnectionReset(err error) bool {
 	var errno syscall.Errno
@@ -52,13 +52,13 @@ func IsConnectionReset(err error) bool {
 	return false
 }
 
-// Returns if the given err is "http2: client connection lost" error.
+// 如果给定 err 是 "http2: client connection lost" 错误则返回 true。
 // 中文说明：HTTP/2 的这个错误没有导出类型/哨兵值，只能退化为字符串匹配。
 func IsHTTP2ConnectionLost(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "http2: client connection lost")
 }
 
-// Returns if the given err is "connection refused" error
+// 如果给定 err 是 "connection refused" 错误则返回 true。
 func IsConnectionRefused(err error) bool {
 	var errno syscall.Errno
 	if errors.As(err, &errno) {

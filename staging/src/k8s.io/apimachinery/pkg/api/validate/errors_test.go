@@ -131,7 +131,7 @@ func TestFilterEnforcedDeclarativeErrors(t *testing.T) {
 			declarativeErrs:        field.ErrorList{internalErr, alphaErr, betaErr, stdErr},
 			betaEnabled:            false,
 			allDeclarativeEnforced: false,
-			expectedLen:            2, // internal + std
+			expectedLen:            2, // 内部操作 + 标准操作。
 		},
 		{
 			// beta 开启时保留 beta，但 alpha 仍被排除。
@@ -139,7 +139,7 @@ func TestFilterEnforcedDeclarativeErrors(t *testing.T) {
 			declarativeErrs:        field.ErrorList{internalErr, alphaErr, betaErr, stdErr},
 			betaEnabled:            true,
 			allDeclarativeEnforced: false,
-			expectedLen:            3, // internal + beta + std
+			expectedLen:            3, // 内部操作 + beta 操作 + 标准操作。
 		},
 	}
 

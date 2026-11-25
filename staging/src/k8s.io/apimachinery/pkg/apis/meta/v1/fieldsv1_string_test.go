@@ -129,7 +129,7 @@ func TestFieldsV1_GetRawReader(t *testing.T) {
 }
 
 // TestFieldsV1_GetRawBytes 验证 GetRawBytes 的返回值：
-// nil 接收者与零值必须返回严格 nil（而非空切片），且返回值不得与内部存储共享内存。
+// nil（空指针）。 接收者与零值必须返回严格 nil（而非空切片），且返回值不得与内部存储共享内存。
 func TestFieldsV1_GetRawBytes(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -189,11 +189,11 @@ func TestFieldsV1_GetRawString(t *testing.T) {
 }
 
 // TestFieldsV1_SetRawBytes 验证 SetRawBytes 的边界行为：nil 接收者不 panic、
-// nil/空切片都归一化为空串，且内容相同的不同切片最终驻留到同一地址。
+// nil（空指针）。/空切片都归一化为空串，且内容相同的不同切片最终驻留到同一地址。
 func TestFieldsV1_SetRawBytes(t *testing.T) {
 	t.Run("nil receiver", func(t *testing.T) {
-		var f *metav1.FieldsV1        // nil
-		f.SetRawBytes([]byte("test")) // Should not panic
+		var f *metav1.FieldsV1        // nil（空指针）。
+		f.SetRawBytes([]byte("test")) // 不应 panic。
 	})
 
 	t.Run("empty slice input", func(t *testing.T) {
@@ -236,8 +236,8 @@ func TestFieldsV1_SetRawBytes(t *testing.T) {
 // TestFieldsV1_SetRawString 验证 SetRawString 对 nil 接收者的容错，以及相同内容的驻留行为。
 func TestFieldsV1_SetRawString(t *testing.T) {
 	t.Run("nil receiver", func(t *testing.T) {
-		var f *metav1.FieldsV1 // nil
-		f.SetRawString("test") // Should not panic
+		var f *metav1.FieldsV1 // nil（空指针）。
+		f.SetRawString("test") // 不应 panic。
 	})
 
 	t.Run("interning behavior", func(t *testing.T) {

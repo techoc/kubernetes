@@ -20,9 +20,6 @@ import (
 	"reflect"
 )
 
-// ValueFuzz recursively changes all basic type values in an object. Any kind of references will not
-// be touch, i.e. the addresses of slices, maps, pointers will stay unchanged.
-//
 // ValueFuzz 递归地修改对象中所有基本类型的值；切片、map、指针等引用本身
 // 不会被替换，其地址保持不变。这样 fuzz 可以就地扰动已有对象，同时不改变
 // 共享的底层引用结构，便于后续做语义比对。
@@ -42,7 +39,7 @@ func valueFuzz(obj reflect.Value) {
 		}
 	case reflect.Slice:
 		if obj.IsNil() {
-			// TODO: set non-nil value
+			// TODO: 设置为非 nil 值。
 			// nil 切片没有可写元素；保持 nil 以维持“nil 与空切片不同”的语义。
 		} else {
 			for i := 0; i < obj.Len(); i++ {
@@ -51,7 +48,7 @@ func valueFuzz(obj reflect.Value) {
 		}
 	case reflect.Interface, reflect.Pointer:
 		if obj.IsNil() {
-			// TODO: set non-nil value
+			// TODO: 设置为非 nil 值。
 			// nil 接口/指针没有可解引用的目标，直接跳过。
 		} else {
 			valueFuzz(obj.Elem())
@@ -63,21 +60,20 @@ func valueFuzz(obj reflect.Value) {
 		}
 	case reflect.Map:
 		if obj.IsNil() {
-			// TODO: set non-nil value
+			// TODO: 设置为非 nil 值。
 			// nil map 无法写入；保留 nil 以避免改变序列化结果。
 		} else {
 			for _, k := range obj.MapKeys() {
-				// map values are not addressable. We need a copy.
-				// map 的值不可寻址，必须先复制到临时变量，改完再写回。
+				// map 值不可寻址，须复制到临时变量，修改后写回。
 				v := obj.MapIndex(k)
 				copy := reflect.New(v.Type())
 				copy.Elem().Set(v)
 				valueFuzz(copy.Elem())
 				obj.SetMapIndex(k, copy.Elem())
 			}
-			// TODO: set some new value
+			// TODO: 添加新条目。
 		}
-	case reflect.Func: // ignore, we don't have function types in our API
+	case reflect.Func: // API 无函数类型，直接忽略
 		// API 中没有函数类型；函数值本身也无法被“修改”，直接忽略。
 	default:
 		if !obj.CanSet() {

@@ -30,23 +30,23 @@ import (
 // 路径元素是 FieldsV1 的序列化单元，格式为 "<type>:<content>"，
 // 其中 type 取值为 f/v/i/k，分别对应字段名、字段值、数组下标和 list-map 键。
 const (
-	// Field indicates that the content of this path element is a field's name
+	//Field 表示此路径元素的内容是字段名。
 	Field = "f"
 
-	// Value indicates that the content of this path element is a field's value
+	//Value 表示此路径元素的内容是字段值。
 	Value = "v"
 
-	// Index indicates that the content of this path element is an index in an array
+	//Index 表示此路径元素的内容是数组索引。
 	Index = "i"
 
-	// Key indicates that the content of this path element is a key value map
+	//Key 表示此路径元素的内容是键值映射。
 	Key = "k"
 
-	// Separator separates the type of a path element from the contents
+	//Separator 分隔路径元素的类型与内容。
 	Separator = ":"
 )
 
-// NewPathElement parses a serialized path element
+// NewPathElement 解析序列化后的路径元素。
 //
 // 只按第一个冒号切分，因为内容本身可能含冒号（如 "v:foo:bar" 的值是 "foo:bar"）。
 // 未知类型返回空元素而不报错，为未来扩展留出前向兼容空间。
@@ -103,12 +103,12 @@ func NewPathElement(s string) (fieldpath.PathElement, error) {
 			Key: &fields,
 		}, nil
 	default:
-		// Ignore unknown key types
+		//忽略未知的键类型。
 		return fieldpath.PathElement{}, nil
 	}
 }
 
-// PathElementString serializes a path element
+// PathElementString 序列化路径元素。
 //
 // 序列化是 NewPathElement 的逆操作，供 FieldsV1 输出使用；
 // 同时设置了多个字段的 PathElement 会被判定为非法。

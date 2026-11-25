@@ -288,9 +288,9 @@ func TestIsValidLabelValue(t *testing.T) {
 		"now-with-dashes",
 		"1-starts-with-num",
 		"end-with-num-1",
-		"1234",                  // only num
-		strings.Repeat("a", 63), // to the limit
-		"",                      // empty value
+		"1234",                  //仅数字
+		strings.Repeat("a", 63), //达到上限
+		"",                      //空值
 	}
 	for i := range successCases {
 		if errs := IsValidLabelValue(successCases[i]); len(errs) != 0 {
@@ -306,7 +306,7 @@ func TestIsValidLabelValue(t *testing.T) {
 		"ends-with-dash-",
 		".starts.with.dot",
 		"ends.with.dot.",
-		strings.Repeat("a", 64), // over the limit
+		strings.Repeat("a", 64), //超过上限
 	}
 	for i := range errorCases {
 		if errs := IsValidLabelValue(errorCases[i]); len(errs) == 0 {
@@ -318,9 +318,9 @@ func TestIsValidLabelValue(t *testing.T) {
 // TestIsHTTPHeaderName 覆盖 RFC 7230 token 形式的 HTTP 头名称校验。
 func TestIsHTTPHeaderName(t *testing.T) {
 	goodValues := []string{
-		// Common ones
+		//常见名称
 		"Accept-Encoding", "Host", "If-Modified-Since", "X-Forwarded-For",
-		// Weirdo, but still conforming names
+		//奇怪但符合规范的名称
 		"a", "ab", "abc", "a1", "-a", "a-", "a-b", "a-1", "a--1--2--b", "--abc-123",
 		"A", "AB", "AbC", "A1", "-A", "A-", "A-B", "A-1", "A--1--2--B", "--123-ABC",
 	}
@@ -454,7 +454,7 @@ func TestIsFullyQualifiedDomainName(t *testing.T) {
 		"foo.example.com",
 		"this.is.a.really.long.fqdn",
 		"bbc.co.uk",
-		"10.0.0.1", // DNS labels can start with numbers and there is no requirement for letters.
+		"10.0.0.1", //DNS 标签可以数字开头，不要求包含字母。
 		"hyphens-are-good.k8s.io",
 		strings.Repeat("a", 63) + ".k8s.io",
 		strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 54) + ".k8s.io",
@@ -497,7 +497,7 @@ func TestIsFullyQualifiedName(t *testing.T) {
 		"foo.example.com",
 		"this.is.a.really.long.fqdn",
 		"bbc.co.uk",
-		"10.0.0.1", // DNS labels can start with numbers and there is no requirement for letters.
+		"10.0.0.1", //DNS 标签可以数字开头，不要求包含字母。
 		"hyphens-are-good.k8s.io",
 		strings.Repeat("a", 246) + ".k8s.io",
 	}

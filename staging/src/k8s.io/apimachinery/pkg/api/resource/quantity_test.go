@@ -44,13 +44,13 @@ var (
 
 // dec 构造一个指数表示法的十进制量：Scale 是 exponent 的相反数。
 func dec(i int64, exponent int) infDecAmount {
-	// See the below test-- scale is the negative of an exponent.
+	// 参见下方测试：scale 与指数互为相反数。
 	return infDecAmount{inf.NewDec(i, inf.Scale(-exponent))}
 }
 
 // bigDec 与 dec 相同，但支持超出 int64 的大整数。
 func bigDec(i *big.Int, exponent int) infDecAmount {
-	// See the below test-- scale is the negative of an exponent.
+	// 参见下方测试：scale 与指数互为相反数。
 	return infDecAmount{inf.NewDecBig(i, inf.Scale(-exponent))}
 }
 
@@ -125,7 +125,6 @@ func TestBigDec(t *testing.T) {
 	}
 }
 
-// TestQuantityParseZero ensures that when a 0 quantity is passed, its string value is 0
 // 零值无论以何种后缀解析，序列化都应得到 "0"，而不带任何单位。
 func TestQuantityParseZero(t *testing.T) {
 	zero := MustParse("0")
@@ -134,8 +133,6 @@ func TestQuantityParseZero(t *testing.T) {
 	}
 }
 
-// TestQuantityParseNonNumericPanic ensures that when a non-numeric string is parsed
-// it panics
 // MustParse 在解析失败时会 panic，这里确认该约定没有被悄悄改掉。
 func TestQuantityParseNonNumericPanic(t *testing.T) {
 	defer func() {
@@ -146,8 +143,6 @@ func TestQuantityParseNonNumericPanic(t *testing.T) {
 	_ = MustParse("Non-Numeric")
 }
 
-// TestQuantityAddZeroPreservesSuffix verifies that a suffix is preserved
-// independent of the order of operations when adding a zero and non-zero val
 // 加零不应改变值的规范字符串形式，两个操作数顺序都要覆盖。
 func TestQuantityAddZeroPreservesSuffix(t *testing.T) {
 	testValues := []string{"100m", "1Gi"}
@@ -155,9 +150,9 @@ func TestQuantityAddZeroPreservesSuffix(t *testing.T) {
 	for _, testValue := range testValues {
 		value := MustParse(testValue)
 		v1 := value.DeepCopy()
-		// ensure non-zero + zero = non-zero (suffix preserved)
+		// 确保非零 + 零 = 非零（保留后缀）
 		v1.Add(zero)
-		// ensure zero + non-zero = non-zero (suffix preserved)
+		// 确保零 + 非零 = 非零（保留后缀）
 		v2 := zero.DeepCopy()
 		v2.Add(value)
 
@@ -171,8 +166,6 @@ func TestQuantityAddZeroPreservesSuffix(t *testing.T) {
 	}
 }
 
-// TestQuantitySubZeroPreservesSuffix verifies that a suffix is preserved
-// independent of the order of operations when subtracting a zero and non-zero val
 // 减零保持值不变，零减非零则得到相反数，两种情况都要保留后缀表示。
 func TestQuantitySubZeroPreservesSuffix(t *testing.T) {
 	testValues := []string{"100m", "1Gi"}
@@ -180,14 +173,14 @@ func TestQuantitySubZeroPreservesSuffix(t *testing.T) {
 	for _, testValue := range testValues {
 		value := MustParse(testValue)
 		v1 := value.DeepCopy()
-		// ensure non-zero - zero = non-zero (suffix preserved)
+		// 确保非零 - 零 = 非零（保留后缀）
 		v1.Sub(zero)
-		// ensure we preserved the input value
+		// 确保保留输入值。
 		if v1.String() != testValue {
 			t.Errorf("Expected %v, actual %v", testValue, v1.String())
 		}
 
-		// ensure zero - non-zero = -non-zero (suffix preserved)
+		// 确保零 - 非零 = -非零（保留后缀）
 		v2 := zero.DeepCopy()
 		v2.Sub(value)
 		negVal := value.DeepCopy()
@@ -198,7 +191,6 @@ func TestQuantitySubZeroPreservesSuffix(t *testing.T) {
 	}
 }
 
-// TestQuantityCanocicalizeZero verifies that you get 0 as canonical value if internal value is 0, and not 0<suffix>
 // 即 1000m 减去 1 之后内部为 0，规范字符串必须收敛为 "0" 而非 "0m"。
 func TestQuantityCanocicalizeZero(t *testing.T) {
 	val := MustParse("1000m")
@@ -212,7 +204,7 @@ func TestQuantityCanocicalizeZero(t *testing.T) {
 // TestQuantityCmp 覆盖 int64Amount 与 inf.Dec 两种内部表示下的比较语义，
 // 包括 nil 值（视为 0）与零值之间的边界。
 func TestQuantityCmp(t *testing.T) {
-	// Test when d is nil
+	// 测试 d 为 nil 的情况。
 	table := []struct {
 		x      string
 		y      string
@@ -230,7 +222,7 @@ func TestQuantityCmp(t *testing.T) {
 			t.Errorf("X: %v, Y: %v, Expected: %v, Actual: %v", testCase.x, testCase.y, testCase.expect, result)
 		}
 	}
-	// Test when i is {0,0}
+	// 测试 i 为 {0,0} 的情况。
 	table2 := []struct {
 		x      *inf.Dec
 		y      *inf.Dec
@@ -307,10 +299,10 @@ func TestQuantityParse(t *testing.T) {
 		{"0Ti", decQuantity(0, 0, BinarySI)},
 		{"0T", decQuantity(0, 0, DecimalSI)},
 
-		// Quantity less numbers are allowed
+		// 允许小于 1 的数量。
 		{"1", decQuantity(1, 0, DecimalSI)},
 
-		// Binary suffixes
+		// 二进制后缀。
 		{"1Ki", decQuantity(1024, 0, BinarySI)},
 		{"8Ki", decQuantity(8*1024, 0, BinarySI)},
 		{"7Mi", decQuantity(7*1024*1024, 0, BinarySI)},
@@ -322,7 +314,7 @@ func TestQuantityParse(t *testing.T) {
 		{"10Ti", decQuantity(10*1024*1024*1024*1024, 0, BinarySI)},
 		{"100Ti", decQuantity(100*1024*1024*1024*1024, 0, BinarySI)},
 
-		// Decimal suffixes
+		// 十进制后缀。
 		{"5n", decQuantity(5, -9, DecimalSI)},
 		{"4u", decQuantity(4, -6, DecimalSI)},
 		{"3m", decQuantity(3, -3, DecimalSI)},
@@ -337,7 +329,7 @@ func TestQuantityParse(t *testing.T) {
 		{"2P", decQuantity(2, 15, DecimalSI)},
 		{"1E", decQuantity(1, 18, DecimalSI)},
 
-		// Decimal exponents
+		// 十进制指数。
 		{"1E-3", decQuantity(1, -3, DecimalExponent)},
 		{"1e3", decQuantity(1, 3, DecimalExponent)},
 		{"1E6", decQuantity(1, 6, DecimalExponent)},
@@ -346,13 +338,13 @@ func TestQuantityParse(t *testing.T) {
 		{"1e15", decQuantity(1, 15, DecimalExponent)},
 		{"1E18", decQuantity(1, 18, DecimalExponent)},
 
-		// Nonstandard but still parsable
+		// 非标准但仍可解析。
 		{"1e14", decQuantity(1, 14, DecimalExponent)},
 		{"1e13", decQuantity(1, 13, DecimalExponent)},
 		{"1e3", decQuantity(1, 3, DecimalExponent)},
 		{"100.035k", decQuantity(100035, 0, DecimalSI)},
 
-		// Things that look like floating point
+		// 看似浮点数的输入。
 		{"0.001", decQuantity(1, -3, DecimalSI)},
 		{"0.0005k", decQuantity(5, -1, DecimalSI)},
 		{"0.005", decQuantity(5, -3, DecimalSI)},
@@ -385,7 +377,7 @@ func TestQuantityParse(t *testing.T) {
 		{"2.5P", decQuantity(25, 14, DecimalSI)},
 		{"1.01E", decQuantity(101, 16, DecimalSI)},
 
-		// Things that saturate/round
+		// 会饱和或舍入的输入。
 		{"3.001n", decQuantity(4, -9, DecimalSI)},
 		{"1.1E-9", decQuantity(2, -9, DecimalExponent)},
 		{"0.0000000001", decQuantity(1, -9, DecimalSI)},
@@ -399,14 +391,14 @@ func TestQuantityParse(t *testing.T) {
 		{"9223372036854775807Ki", Quantity{d: maxAllowed, Format: BinarySI}},
 		{"12E", decQuantity(12, 18, DecimalSI)},
 
-		// We'll accept fractional binary stuff, too.
+		// 也接受分数的二进制单位。
 		{"100.035Ki", decQuantity(10243584, -2, BinarySI)},
 		{"0.5Mi", decQuantity(.5*1024*1024, 0, BinarySI)},
 		{"0.05Gi", decQuantity(536870912, -1, BinarySI)},
 		{"0.025Ti", decQuantity(274877906944, -1, BinarySI)},
 
-		// Things written by trolls
-		{"0.000000000001Ki", decQuantity(2, -9, DecimalSI)}, // rounds up, changes format
+		// 恶意构造的输入。
+		{"0.000000000001Ki", decQuantity(2, -9, DecimalSI)}, // 向上取整并改变格式。
 		{".001", decQuantity(1, -3, DecimalSI)},
 		{".0001k", decQuantity(100, -3, DecimalSI)},
 		{"1.", decQuantity(1, 0, DecimalSI)},
@@ -468,7 +460,7 @@ func TestQuantityParse(t *testing.T) {
 			}
 
 			for _, format := range []Format{DecimalSI, BinarySI, DecimalExponent} {
-				// ensure we are not simply checking pointer equality by creating a new inf.Dec
+				// 创建新的 inf.Dec，确保并非只比较指针。
 				var copied inf.Dec
 				copied.Add(inf.NewDec(0, inf.Scale(0)), got.AsDec())
 				q := NewDecimalQuantity(copied, format)
@@ -510,7 +502,6 @@ func TestQuantityParse(t *testing.T) {
 			}
 		}
 
-		// Try the negative version of everything
 		// 取负后数值应为相反数、格式保持不变。
 		desired := &inf.Dec{}
 		expect := Quantity{d: infDecAmount{Dec: desired}}
@@ -535,7 +526,6 @@ func TestQuantityParse(t *testing.T) {
 			}
 		}
 
-		// Try everything with an explicit +
 		// 显式正号不应影响解析结果。
 		for _, item := range table {
 			got, err := ParseQuantity("+" + strings.TrimLeftFunc(item.input, unicode.IsSpace))
@@ -568,7 +558,7 @@ func TestQuantityParse(t *testing.T) {
 		"-3.01i",
 		"-3.01e-",
 
-		// trailing whitespace is forbidden
+		// 禁止尾随空白。
 		" 1",
 		"1 ",
 	}
@@ -806,10 +796,10 @@ func TestQuantityString(t *testing.T) {
 			t.Errorf("%#v: did not set canonical string on ToString: %s", item.expect, q.s)
 		}
 	}
-	desired := &inf.Dec{} // Avoid modifying the values in the table.
+	desired := &inf.Dec{} // 避免修改表中的值。
 	for _, item := range table {
 		if item.in.Cmp(Quantity{}) == 0 {
-			// Don't expect it to print "-0" ever
+			// 不应输出 "-0"。
 			continue
 		}
 		q := item.in
@@ -876,7 +866,7 @@ var fuzzer = randfill.New().Funcs(
 				dec.SetUnscaled(c.Int63())
 				return
 			}
-			// Be sure to test cases like 1Mi
+			// 确保覆盖 1Mi 等用例。
 			dec := &inf.Dec{}
 			q.d = infDecAmount{Dec: dec}
 			dec.SetScale(0)
@@ -895,7 +885,7 @@ var fuzzer = randfill.New().Funcs(
 			dec.SetUnscaled(c.Int63())
 			return
 		}
-		// Be sure to test cases like 1M
+		// 确保覆盖 1M 等用例。
 		dec := &inf.Dec{}
 		q.d = infDecAmount{Dec: dec}
 		dec.SetScale(inf.Scale(3 - c.Intn(15)))
@@ -905,7 +895,7 @@ var fuzzer = randfill.New().Funcs(
 
 // TestQuantityDeepCopy 验证深拷贝后修改副本不影响原值，覆盖 nil 与 inf.Dec 两种存储。
 func TestQuantityDeepCopy(t *testing.T) {
-	// Test when d is nil
+	// 测试 d 为 nil 的情况。
 	slice := []string{"0", "100m", "50m", "10000T"}
 	for _, testCase := range slice {
 		q := MustParse(testCase)
@@ -918,7 +908,7 @@ func TestQuantityDeepCopy(t *testing.T) {
 		dec(10, 0).Dec,
 		dec(-10, 0).Dec,
 	}
-	// Test when i is {0,0}
+	// 测试 i 为 {0,0} 的情况。
 	for _, testCase := range table {
 		q := Quantity{d: infDecAmount{testCase}, Format: DecimalSI}
 		result := q.DeepCopy()
@@ -993,9 +983,9 @@ func TestMilliNewSet(t *testing.T) {
 		{1, DecimalSI, "1m", true},
 		{1000, DecimalSI, "1", true},
 		{1234000, DecimalSI, "1234", true},
-		{1024, BinarySI, "1024m", false}, // Format changes
+		{1024, BinarySI, "1024m", false}, // 格式变化。
 		{1000000, "invalidFormatDefaultsToExponent", "1e3", true},
-		{1024 * 1024, BinarySI, "1048576m", false}, // Format changes
+		{1024 * 1024, BinarySI, "1048576m", false}, // 格式变化。
 	}
 
 	for _, item := range table {
@@ -1208,7 +1198,7 @@ func TestNeg(t *testing.T) {
 	for i, test := range tests {
 		a := test.a.DeepCopy()
 		a.Neg()
-		// ensure value is same
+		// 确保值相同。
 		if a.Cmp(test.expected) != 0 {
 			t.Errorf("[%d] Expected %q, got %q", i, test.expected.String(), a.String())
 		}
@@ -1351,7 +1341,6 @@ func TestNegateRoundTrip(t *testing.T) {
 }
 
 // TestQuantityAsApproximateFloat64 验证快速近似转换的正确性（含 float64 溢出为 Inf 的情形）。
-// NOTE: this table should be kept in sync with TestQuantityAsFloat64Slow
 func TestQuantityAsApproximateFloat64(t *testing.T) {
 	table := []struct {
 		in  Quantity
@@ -1365,14 +1354,14 @@ func TestQuantityAsApproximateFloat64(t *testing.T) {
 		{decQuantity(1, 0, DecimalExponent), 1},
 		{decQuantity(1, 0, BinarySI), 1},
 
-		// Binary suffixes
+		// 二进制后缀。
 		{decQuantity(1024, 0, BinarySI), 1024},
 		{decQuantity(8*1024, 0, BinarySI), 8 * 1024},
 		{decQuantity(7*1024*1024, 0, BinarySI), 7 * 1024 * 1024},
 		{decQuantity(7*1024*1024, 1, BinarySI), (7 * 1024 * 1024) * 10},
 		{decQuantity(7*1024*1024, 4, BinarySI), (7 * 1024 * 1024) * 10000},
 		{decQuantity(7*1024*1024, 8, BinarySI), (7 * 1024 * 1024) * 100000000},
-		{decQuantity(7*1024*1024, -1, BinarySI), (7 * 1024 * 1024) * math.Pow10(-1)}, // '* Pow10' and '/ float(10)' do not round the same way
+		{decQuantity(7*1024*1024, -1, BinarySI), (7 * 1024 * 1024) * math.Pow10(-1)}, // '* Pow10' 与 '/ float(10)' 的舍入方式不同。
 		{decQuantity(7*1024*1024, -8, BinarySI), (7 * 1024 * 1024) / float64(100000000)},
 
 		{decQuantity(1024, 0, DecimalSI), 1024},
@@ -1381,7 +1370,7 @@ func TestQuantityAsApproximateFloat64(t *testing.T) {
 		{decQuantity(7*1024*1024, 1, DecimalSI), (7 * 1024 * 1024) * 10},
 		{decQuantity(7*1024*1024, 4, DecimalSI), (7 * 1024 * 1024) * 10000},
 		{decQuantity(7*1024*1024, 8, DecimalSI), (7 * 1024 * 1024) * 100000000},
-		{decQuantity(7*1024*1024, -1, DecimalSI), (7 * 1024 * 1024) * math.Pow10(-1)}, // '* Pow10' and '/ float(10)' do not round the same way
+		{decQuantity(7*1024*1024, -1, DecimalSI), (7 * 1024 * 1024) * math.Pow10(-1)}, // '* Pow10' 与 '/ float(10)' 的舍入方式不同。
 		{decQuantity(7*1024*1024, -8, DecimalSI), (7 * 1024 * 1024) / float64(100000000)},
 
 		{decQuantity(1024, 0, DecimalExponent), 1024},
@@ -1390,15 +1379,15 @@ func TestQuantityAsApproximateFloat64(t *testing.T) {
 		{decQuantity(7*1024*1024, 1, DecimalExponent), (7 * 1024 * 1024) * 10},
 		{decQuantity(7*1024*1024, 4, DecimalExponent), (7 * 1024 * 1024) * 10000},
 		{decQuantity(7*1024*1024, 8, DecimalExponent), (7 * 1024 * 1024) * 100000000},
-		{decQuantity(7*1024*1024, -1, DecimalExponent), (7 * 1024 * 1024) * math.Pow10(-1)}, // '* Pow10' and '/ float(10)' do not round the same way
+		{decQuantity(7*1024*1024, -1, DecimalExponent), (7 * 1024 * 1024) * math.Pow10(-1)}, // '* Pow10' 与 '/ float(10)' 的舍入方式不同。
 		{decQuantity(7*1024*1024, -8, DecimalExponent), (7 * 1024 * 1024) / float64(100000000)},
 
-		// very large numbers
+		// 超大数字。
 		{Quantity{d: maxAllowed, Format: DecimalSI}, math.MaxInt64},
 		{Quantity{d: maxAllowed, Format: BinarySI}, math.MaxInt64},
 		{decQuantity(12, 18, DecimalSI), 1.2e19},
 
-		// infinities caused due to float64 overflow
+		// float64 溢出导致的无穷值。
 		{decQuantity(12, 500, DecimalSI), math.Inf(0)},
 		{decQuantity(-12, 500, DecimalSI), math.Inf(-1)},
 	}
@@ -1423,7 +1412,6 @@ func TestQuantityAsApproximateFloat64(t *testing.T) {
 }
 
 // TestQuantityAsFloat64Slow 验证慢速精确转换路径，与 TestQuantityAsApproximateFloat64 用同一张表对照。
-// NOTE: this table should be kept in sync with TestQuantityAsApproximateFloat64
 func TestQuantityAsFloat64Slow(t *testing.T) {
 	table := []struct {
 		in  Quantity
@@ -1437,7 +1425,7 @@ func TestQuantityAsFloat64Slow(t *testing.T) {
 		{decQuantity(1, 0, DecimalExponent), 1},
 		{decQuantity(1, 0, BinarySI), 1},
 
-		// Binary suffixes
+		// 二进制后缀。
 		{decQuantity(1024, 0, BinarySI), 1024},
 		{decQuantity(8*1024, 0, BinarySI), 8 * 1024},
 		{decQuantity(7*1024*1024, 0, BinarySI), 7 * 1024 * 1024},
@@ -1465,12 +1453,12 @@ func TestQuantityAsFloat64Slow(t *testing.T) {
 		{decQuantity(7*1024*1024, -1, DecimalExponent), (7 * 1024 * 1024) / float64(10)},
 		{decQuantity(7*1024*1024, -8, DecimalExponent), (7 * 1024 * 1024) / float64(100000000)},
 
-		// very large numbers
+		// 超大数字。
 		{Quantity{d: maxAllowed, Format: DecimalSI}, math.MaxInt64},
 		{Quantity{d: maxAllowed, Format: BinarySI}, math.MaxInt64},
 		{decQuantity(12, 18, DecimalSI), 1.2e19},
 
-		// infinities caused due to float64 overflow
+		// float64 溢出导致的无穷值。
 		{decQuantity(12, 500, DecimalSI), math.Inf(0)},
 		{decQuantity(-12, 500, DecimalSI), math.Inf(-1)},
 	}
@@ -1919,7 +1907,7 @@ func TestParseQuantity(t *testing.T) {
 		wantAsDec   *infDecAmount
 		canonical   string
 	}{
-		// min/max 18 digits
+		// 最小/最大 18 位整数。
 		{input: "-999999999999999999", wantAsInt64: ptr.To[int64](-999999999999999999), wantAsDec: ptrDec("-999999999999999999")},
 		{input: "999999999999999999", wantAsInt64: ptr.To[int64](999999999999999999), wantAsDec: ptrDec("999999999999999999")},
 		// .0
@@ -1929,21 +1917,21 @@ func TestParseQuantity(t *testing.T) {
 		{input: "-999999999999999999.1", wantAsInt64: nil, wantAsDec: ptrDec("-999999999999999999.1"), canonical: "-999999999999999999100m"},
 		{input: "999999999999999999.1", wantAsInt64: nil, wantAsDec: ptrDec("999999999999999999.1"), canonical: "999999999999999999100m"},
 
-		// min/max 19 digits
+		// 最小/最大 19 位整数。
 		{input: "-9999999999999999999", wantAsInt64: nil, wantAsDec: ptrDec("-9999999999999999999")},
 		{input: "9999999999999999999", wantAsInt64: nil, wantAsDec: ptrDec("9999999999999999999")},
 		{input: "-1E", wantAsInt64: ptr.To[int64](-1000000000000000000), wantAsDec: ptrDec("-1000000000000000000")},
 		{input: "1E", wantAsInt64: ptr.To[int64](1000000000000000000), wantAsDec: ptrDec("1000000000000000000")},
-		{input: "-1000000000000000000", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000000"), canonical: "-1E"}, // should be wantAsInt64: <value>
-		{input: "1000000000000000000", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000000"), canonical: "1E"},    // should be wantAsInt64: <value>
+		{input: "-1000000000000000000", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000000"), canonical: "-1E"}, // 应等于 wantAsInt64：<value>。
+		{input: "1000000000000000000", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000000"), canonical: "1E"},    // 应等于 wantAsInt64：<value>。
 		// .0
 		{input: "-9999999999999999999.0", wantAsInt64: nil, wantAsDec: ptrDec("-9999999999999999999"), canonical: "-9999999999999999999"},
 		{input: "9999999999999999999.0", wantAsInt64: nil, wantAsDec: ptrDec("9999999999999999999"), canonical: "9999999999999999999"},
 		{input: "-1.0E", wantAsInt64: ptr.To[int64](-1000000000000000000), wantAsDec: ptrDec("-1000000000000000000"), canonical: "-1E"},
 		{input: "1.0E", wantAsInt64: ptr.To[int64](1000000000000000000), wantAsDec: ptrDec("1000000000000000000"), canonical: "1E"},
-		{input: "-1000000000000000000.0", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000000"), canonical: "-1E"}, // should be wantAsInt64: <value>
-		{input: "1000000000000000000.0", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000000"), canonical: "1E"},    // should be wantAsInt64: <value>
-		// 000m
+		{input: "-1000000000000000000.0", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000000"), canonical: "-1E"}, // 应等于 wantAsInt64：<value>。
+		{input: "1000000000000000000.0", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000000"), canonical: "1E"},    // 应等于 wantAsInt64：<value>。
+		// 000m（零值）。
 		{input: "-9999999999999999999000m", wantAsInt64: nil, wantAsDec: ptrDec("-9999999999999999999"), canonical: "-9999999999999999999"},
 		{input: "9999999999999999999000m", wantAsInt64: nil, wantAsDec: ptrDec("9999999999999999999"), canonical: "9999999999999999999"},
 		// .1
@@ -1954,12 +1942,12 @@ func TestParseQuantity(t *testing.T) {
 		{input: "-1000000000000000000.1", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000000.1"), canonical: "-1000000000000000000100m"},
 		{input: "1000000000000000000.1", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000000.1"), canonical: "1000000000000000000100m"},
 		// +1
-		{input: "-1.000000000000000001E", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000001"), canonical: "-1000000000000000001"}, // should be wantAsInt64: <value>
-		{input: "1.000000000000000001E", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000001"), canonical: "1000000000000000001"},    // should be wantAsInt64: <value>
-		{input: "-1000000000000000001", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000001")},                                      // should be wantAsInt64: <value>
-		{input: "1000000000000000001", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000001")},                                        // should be wantAsInt64: <value>
+		{input: "-1.000000000000000001E", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000001"), canonical: "-1000000000000000001"}, // 应等于 wantAsInt64：<value>。
+		{input: "1.000000000000000001E", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000001"), canonical: "1000000000000000001"},    // 应等于 wantAsInt64：<value>。
+		{input: "-1000000000000000001", wantAsInt64: nil, wantAsDec: ptrDec("-1000000000000000001")},                                      // 应等于 wantAsInt64：<value>。
+		{input: "1000000000000000001", wantAsInt64: nil, wantAsDec: ptrDec("1000000000000000001")},                                        // 应等于 wantAsInt64：<value>。
 
-		// min/max 20 digits
+		// 最小/最大 20 位整数。
 		{input: "-10E", wantAsInt64: nil, wantAsDec: ptrDec("-10000000000000000000")},
 		{input: "10E", wantAsInt64: nil, wantAsDec: ptrDec("10000000000000000000")},
 		{input: "-10000000000000000000", wantAsInt64: nil, wantAsDec: ptrDec("-10000000000000000000"), canonical: "-10E"},
@@ -1969,7 +1957,7 @@ func TestParseQuantity(t *testing.T) {
 		{input: "10.0E", wantAsInt64: nil, wantAsDec: ptrDec("10000000000000000000"), canonical: "10E"},
 		{input: "-10000000000000000000.0", wantAsInt64: nil, wantAsDec: ptrDec("-10000000000000000000"), canonical: "-10E"},
 		{input: "10000000000000000000.0", wantAsInt64: nil, wantAsDec: ptrDec("10000000000000000000"), canonical: "10E"},
-		// 000m
+		// 000m（零值）。
 		{input: "-10000000000000000000000m", wantAsInt64: nil, wantAsDec: ptrDec("-10000000000000000000"), canonical: "-10E"},
 		{input: "10000000000000000000000m", wantAsInt64: nil, wantAsDec: ptrDec("10000000000000000000"), canonical: "10E"},
 		// .1
@@ -1983,40 +1971,40 @@ func TestParseQuantity(t *testing.T) {
 		{input: "-10000000000000000001", wantAsInt64: nil, wantAsDec: ptrDec("-10000000000000000001")},
 		{input: "10000000000000000001", wantAsInt64: nil, wantAsDec: ptrDec("10000000000000000001")},
 
-		// min/max int64 - 1
+		// 最小/最大 int64 减 1。
 		{input: "-9223372036854775809", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775809")},
-		{input: "9223372036854775806", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775806")}, // should be wantAsInt64: <value>
+		{input: "9223372036854775806", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775806")}, // 应等于 wantAsInt64：<value>。
 		// .0
 		{input: "-9223372036854775809.0", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775809"), canonical: "-9223372036854775809"},
-		{input: "9223372036854775806.0", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775806"), canonical: "9223372036854775806"}, // should be wantAsInt64: <value>
-		// 000m
+		{input: "9223372036854775806.0", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775806"), canonical: "9223372036854775806"}, // 应等于 wantAsInt64：<value>。
+		// 000m（零值）。
 		{input: "-9223372036854775809000m", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775809"), canonical: "-9223372036854775809"},
-		{input: "9223372036854775806000m", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775806"), canonical: "9223372036854775806"}, // should be wantAsInt64: <value>
+		{input: "9223372036854775806000m", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775806"), canonical: "9223372036854775806"}, // 应等于 wantAsInt64：<value>。
 		// .1
 		{input: "-9223372036854775809.1", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775809.1"), canonical: "-9223372036854775809100m"},
 		{input: "9223372036854775806.1", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775806.1"), canonical: "9223372036854775806100m"},
 
-		// min/max int64
-		{input: "-9223372036854775808", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775808")}, // should be wantAsInt64: <value>
-		{input: "9223372036854775807", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775807")},   // should be wantAsInt64: <value>
+		// 最小/最大 int64。
+		{input: "-9223372036854775808", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775808")}, // 应等于 wantAsInt64：<value>。
+		{input: "9223372036854775807", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775807")},   // 应等于 wantAsInt64：<value>。
 		// .0
-		{input: "-9223372036854775808.0", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775808"), canonical: "-9223372036854775808"}, // should be wantAsInt64: <value>
-		{input: "9223372036854775807.0", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775807"), canonical: "9223372036854775807"},    // should be wantAsInt64: <value>
-		// 000m
-		{input: "-9223372036854775808000m", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775808"), canonical: "-9223372036854775808"}, // should be wantAsInt64: <value>
-		{input: "9223372036854775807000m", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775807"), canonical: "9223372036854775807"},    // should be wantAsInt64: <value>
+		{input: "-9223372036854775808.0", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775808"), canonical: "-9223372036854775808"}, // 应等于 wantAsInt64：<value>。
+		{input: "9223372036854775807.0", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775807"), canonical: "9223372036854775807"},    // 应等于 wantAsInt64：<value>。
+		// 000m（零值）。
+		{input: "-9223372036854775808000m", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775808"), canonical: "-9223372036854775808"}, // 应等于 wantAsInt64：<value>。
+		{input: "9223372036854775807000m", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775807"), canonical: "9223372036854775807"},    // 应等于 wantAsInt64：<value>。
 		// .1
 		{input: "-9223372036854775808.1", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775808.1"), canonical: "-9223372036854775808100m"},
 		{input: "9223372036854775807.1", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775807.1"), canonical: "9223372036854775807100m"},
 
-		// min/max int64 + 1
-		{input: "-9223372036854775807", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775807")}, // should be wantAsInt64: <value>
+		// 最小/最大 int64 加 1。
+		{input: "-9223372036854775807", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775807")}, // 应等于 wantAsInt64：<value>。
 		{input: "9223372036854775808", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775808")},
 		// .0
-		{input: "-9223372036854775807.0", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775807"), canonical: "-9223372036854775807"}, // should be wantAsInt64: <value>
+		{input: "-9223372036854775807.0", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775807"), canonical: "-9223372036854775807"}, // 应等于 wantAsInt64：<value>。
 		{input: "9223372036854775808.0", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775808"), canonical: "9223372036854775808"},
-		// 000m
-		{input: "-9223372036854775807000m", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775807"), canonical: "-9223372036854775807"}, // should be wantAsInt64: <value>
+		// 000m（零值）。
+		{input: "-9223372036854775807000m", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775807"), canonical: "-9223372036854775807"}, // 应等于 wantAsInt64：<value>。
 		{input: "9223372036854775808000m", wantAsInt64: nil, wantAsDec: ptrDec("9223372036854775808"), canonical: "9223372036854775808"},
 		// .1
 		{input: "-9223372036854775807.1", wantAsInt64: nil, wantAsDec: ptrDec("-9223372036854775807.1"), canonical: "-9223372036854775807100m"},

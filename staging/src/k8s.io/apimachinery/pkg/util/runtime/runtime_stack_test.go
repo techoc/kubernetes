@@ -31,7 +31,7 @@ import (
 // 日志应带有 "UnhandledError" logger，并包含调用点与上下文中的结构化字段。
 // 该示例也是回归测试：若输出格式或调用点发生变化，示例输出比对会失败。
 //
-//nolint:logcheck // Several functions are normally not okay in a package.
+//nolint:logcheck // 其中若干函数通常不应出现在包中。
 func ExampleHandleErrorWithContext() {
 	// 捕获并随后恢复 klog 全局状态，避免污染其他测试。
 	state := klog.CaptureState()

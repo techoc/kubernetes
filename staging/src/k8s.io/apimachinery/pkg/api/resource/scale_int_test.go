@@ -32,27 +32,27 @@ func TestScaledValueInternal(t *testing.T) {
 
 		want int64
 	}{
-		// remain scale
+		// scale 不变。
 		{big.NewInt(1000), 0, 0, 1000},
 
-		// scale down
+		// 缩小 scale。
 		{big.NewInt(1000), 0, -3, 1},
 		{big.NewInt(1000), 3, 0, 1},
 		{big.NewInt(0), 3, 0, 0},
 
-		// always round up：任何非零小数余数都向正无穷舍入，
+		// 始终向上舍入：任何非零小数余数都向正无穷舍入，
 		// 因此 499 也会变成 1。
 		{big.NewInt(999), 3, 0, 1},
 		{big.NewInt(500), 3, 0, 1},
 		{big.NewInt(499), 3, 0, 1},
 		{big.NewInt(1), 3, 0, 1},
-		// large scaled value does not lose precision
+		// 大缩放值不损失精度。
 		{big.NewInt(0).Sub(maxInt64, bigOne), 1, 0, (math.MaxInt64-1)/10 + 1},
-		// large intermediate result：10^100 缩小 100 位仍是 1，
+		// 中间结果很大：10^100 缩小 100 位仍是 1，
 		// 中间结果不会发生 int64 溢出。
 		{big.NewInt(1).Exp(big.NewInt(10), big.NewInt(100), nil), 100, 0, 1},
 
-		// scale up
+		// 增大 scale。
 		{big.NewInt(0), 0, 3, 0},
 		{big.NewInt(1), 0, 3, 1000},
 		{big.NewInt(1), -3, 0, 1000},

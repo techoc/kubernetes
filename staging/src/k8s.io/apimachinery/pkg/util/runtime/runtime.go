@@ -42,12 +42,11 @@ var (
 	ReallyCrash = true
 )
 
-// PanicHandlers is a list of functions which will be invoked when a panic happens.
+// PanicHandlers 是发生 panic 时调用的函数列表。
 //
-// The code invoking these handlers prepares a contextual logger so that
-// klog.FromContext(ctx) already skips over the panic handler itself and
-// several other intermediate functions, ideally such that the log output
-// is attributed to the code which triggered the panic.
+// 调用这些处理器的代码会准备上下文 logger，
+// 使 klog.FromContext(ctx) 跳过 panic 处理器及若干中间函数，
+// 从而尽可能将日志归属到触发 panic 的代码。
 //
 // 中文说明：这是全局可替换的钩子，测试或组件可以追加/替换处理器；默认
 // 处理器 logPanic 会打印调用栈。
@@ -107,10 +106,9 @@ func HandleCrashWithLogger(logger klog.Logger, additionalHandlers ...func(contex
 // 中文说明：ReallyCrash 为 false 时仅记录不重新 panic，便于测试验证
 // 崩溃路径；生产环境默认继续 panic 以保留 fast-fail 语义。
 func handleCrash(ctx context.Context, r any, additionalHandlers ...func(context.Context, interface{})) {
-	// We don't really know how many call frames to skip because the Go
-	// panic handler is between us and the code where the panic occurred.
-	// If it's one function (as in Go 1.21), then skipping four levels
-	// gets us to the function which called the `defer HandleCrashWithontext(...)`.
+	//Go panic 处理器位于我们与触发 panic 的代码之间，因此无法准确知道要跳过的调用帧数。
+	//如果只有一个函数（如 Go 1.21），跳过四层
+	//可到达调用 `defer HandleCrashWithontext(...)` 的函数。
 	logger := klog.FromContext(ctx).WithCallDepth(4)
 	ctx = klog.NewContext(ctx, logger)
 
@@ -126,7 +124,7 @@ func handleCrash(ctx context.Context, r any, additionalHandlers ...func(context.
 	}
 }
 
-// logPanic logs the caller tree when a panic occurs (except in the special case of http.ErrAbortHandler).
+// logPanic 在发生 panic 时记录调用栈，但 http.ErrAbortHandler 特殊场景除外。
 func logPanic(ctx context.Context, r interface{}) {
 	if r == http.ErrAbortHandler {
 		// 遵循 http.ErrAbortHandler 哨兵值的约定：它用于主动中止 HTTP handler。
@@ -137,7 +135,7 @@ func logPanic(ctx context.Context, r interface{}) {
 	}
 
 	// 与标准库 net/http 服务端的做法一致，手动限制堆栈缓冲区大小，避免日志体积过大。
-	// to prevent excessively large logs
+	//避免日志过大
 	const size = 64 << 10
 	stacktrace := make([]byte, size)
 	stacktrace = stacktrace[:runtime.Stack(stacktrace, false)]
@@ -158,8 +156,8 @@ func logPanic(ctx context.Context, r interface{}) {
 var ErrorHandlers = []ErrorHandler{
 	logError,
 	// 全局限速间隔设为 1ms。若错误日志频率超过每秒 1000 次，通常应优先排查并修复错误源。
-	// If you need to log errors more than 1000 times a second, you
-	// should probably consider fixing your code instead. :)
+	//如果每秒需要记录超过 1000 个错误，
+	//或许更应该修正代码。
 	backoffError(1 * time.Millisecond),
 }
 
@@ -256,7 +254,7 @@ func handleError(ctx context.Context, err error, msg string, keysAndValues ...in
 func logError(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 	logger := klog.FromContext(ctx).WithCallDepth(3)
 	logger = klog.LoggerWithName(logger, "UnhandledError")
-	logger.Error(err, msg, keysAndValues...) //nolint:logcheck // logcheck complains about unknown key/value pairs.
+	logger.Error(err, msg, keysAndValues...) //nolint:logcheck // logcheck 会报告未知的键值对。
 }
 
 // backoffError 返回一个限速处理器；调用频率超过 minPeriod 时会阻塞当前 goroutine。
@@ -275,26 +273,26 @@ func backoffError(minPeriod time.Duration) ErrorHandler {
 // rudimentaryErrorBackoff 用“上次报错时间”实现全局最小间隔；锁只保护时间
 // 字段，不覆盖 sleep。
 type rudimentaryErrorBackoff struct {
-	minPeriod time.Duration // immutable
-	// TODO(lavalamp): use the clock for testability. Need to move that
-	// package for that to be accessible here.
+	minPeriod time.Duration //不可变
+	//TODO(lavalamp): 使用 clock 以便测试；需要先移动该包，
+	//使其在此处可访问。
 	lastErrorTimeLock sync.Mutex
 	lastErrorTime     time.Time
 }
 
 // OnError 在调用频率超过配置的最小间隔时阻塞当前 goroutine，防止错误热循环过于密集。
-// This will prevent overly tight hot error loops.
+// 这可避免错误日志形成过于紧密的热循环。
 func (r *rudimentaryErrorBackoff) OnError() {
-	now := time.Now() // start the timer before acquiring the lock
+	now := time.Now() //获取锁之前启动计时器。
 	r.lastErrorTimeLock.Lock()
 	d := now.Sub(r.lastErrorTime)
 	r.lastErrorTime = time.Now()
 	r.lastErrorTimeLock.Unlock()
 
-	// Do not sleep with the lock held because that causes all callers of HandleError to block.
-	// We only want the current goroutine to block.
-	// A negative or zero duration causes time.Sleep to return immediately.
-	// If the time moves backwards for any reason, do nothing.
+	//持锁时不要休眠，否则会阻塞 HandleError 的所有调用方。
+	//只应阻塞当前 goroutine。
+	//负时长或零时长会使 time.Sleep 立即返回。
+	//如果时间因任何原因倒退，则不执行操作。
 	time.Sleep(r.minPeriod - d)
 }
 
@@ -319,7 +317,7 @@ func GetCaller() string {
 func RecoverFromPanic(err *error) {
 	if r := recover(); r != nil {
 		// 与标准库 net/http 服务端的做法一致，手动限制堆栈缓冲区大小，避免日志体积过大。
-		// to prevent excessively large logs
+		//避免日志过大
 		const size = 64 << 10
 		stacktrace := make([]byte, size)
 		stacktrace = stacktrace[:runtime.Stack(stacktrace, false)]

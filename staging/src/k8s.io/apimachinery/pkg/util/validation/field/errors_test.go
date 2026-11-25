@@ -132,7 +132,7 @@ func TestErrListFilter(t *testing.T) {
 func TestErrorOrigin(t *testing.T) {
 	err := Invalid(NewPath("field"), "value", "detail")
 
-	// Test WithOrigin
+	//测试 WithOrigin
 	newErr := err.WithOrigin("origin1")
 	if newErr.Origin != "origin1" {
 		t.Errorf("Expected Origin to be 'origin1', got '%s'", newErr.Origin)
@@ -145,23 +145,23 @@ func TestErrorOrigin(t *testing.T) {
 // TestErrorListOrigin 验证 ErrorList.WithOrigin 对列表中每条错误生效，
 // 并且同样会修改原列表（共享底层 Error 指针）。
 func TestErrorListOrigin(t *testing.T) {
-	// Create an ErrorList with multiple errors
+	//创建包含多个错误的 ErrorList。
 	list := ErrorList{
 		Invalid(NewPath("field1"), "value1", "detail1"),
 		Invalid(NewPath("field2"), "value2", "detail2"),
 		Required(NewPath("field3"), "detail3"),
 	}
 
-	// Test WithOrigin
+	//测试 WithOrigin
 	newList := list.WithOrigin("origin1")
-	// Check that WithOrigin returns the modified list
+	//检查 WithOrigin 返回修改后的列表。
 	for i, err := range newList {
 		if err.Origin != "origin1" {
 			t.Errorf("Error %d: Expected Origin to be 'origin2', got '%s'", i, err.Origin)
 		}
 	}
 
-	// Check that the original list was also modified (WithOrigin modifies and returns the same list)
+	//检查原列表也被修改（WithOrigin 修改并返回同一列表）。
 	for i, err := range list {
 		if err.Origin != "origin1" {
 			t.Errorf("Error %d: Expected original list Origin to be 'origin2', got '%s'", i, err.Origin)
@@ -171,14 +171,14 @@ func TestErrorListOrigin(t *testing.T) {
 
 // TestErrorMarkDeclarative 验证单个 Error 的声明式覆盖标记。
 func TestErrorMarkDeclarative(t *testing.T) {
-	// Test for single Error
+	//测试单个 Error
 	err := Invalid(NewPath("field"), "value", "detail")
 	if err.CoveredByDeclarative {
 		t.Errorf("New error should not be declarative by default")
 	}
 
-	// Mark as declarative
-	err.MarkCoveredByDeclarative() //nolint:errcheck // The "error" here is not an unexpected error from the function.
+	//标记为声明式错误。
+	err.MarkCoveredByDeclarative() //nolint:errcheck // 此处的 "error" 不是函数意外返回的错误。
 	if !err.CoveredByDeclarative {
 		t.Errorf("Error should be declarative after marking")
 	}
@@ -186,23 +186,23 @@ func TestErrorMarkDeclarative(t *testing.T) {
 
 // TestErrorListMarkDeclarative 验证 ErrorList 批量标记声明式覆盖。
 func TestErrorListMarkDeclarative(t *testing.T) {
-	// Test for ErrorList
+	//测试 ErrorList
 	list := ErrorList{
 		Invalid(NewPath("field1"), "value1", "detail1"),
 		Invalid(NewPath("field2"), "value2", "detail2"),
 	}
 
-	// Verify none are declarative by default
+	//验证默认均不是声明式错误。
 	for i, err := range list {
 		if err.CoveredByDeclarative {
 			t.Errorf("Error %d should not be declarative by default", i)
 		}
 	}
 
-	// Mark list as declarative
+	//将列表标记为声明式。
 	list.MarkCoveredByDeclarative()
 
-	// Verify all errors in the list are now declarative
+	//验证列表中所有错误现在都是声明式错误。
 	for i, err := range list {
 		if !err.CoveredByDeclarative {
 			t.Errorf("Error %d should be declarative after marking the list", i)
@@ -212,14 +212,14 @@ func TestErrorListMarkDeclarative(t *testing.T) {
 
 // TestErrorMarkFromImperative 验证单个 Error 的命令式来源标记。
 func TestErrorMarkFromImperative(t *testing.T) {
-	// Test for single Error
+	//测试单个 Error
 	err := Invalid(NewPath("field"), "value", "detail")
 	if err.FromImperative {
 		t.Errorf("New error should not be from imperative by default")
 	}
 
-	// Mark as FromImperative
-	err.MarkFromImperative() //nolint:errcheck // The "error" here is not an unexpected error from the function.
+	//标记为来自命令式操作。
+	err.MarkFromImperative() //nolint:errcheck // 此处的 "error" 不是函数意外返回的错误。
 	if !err.FromImperative {
 		t.Errorf("Error should be from imperative after marking")
 	}
@@ -227,23 +227,23 @@ func TestErrorMarkFromImperative(t *testing.T) {
 
 // TestErrorListMarkFromImperative 验证 ErrorList 批量标记命令式来源。
 func TestErrorListMarkFromImperative(t *testing.T) {
-	// Test for ErrorList
+	//测试 ErrorList
 	list := ErrorList{
 		Invalid(NewPath("field1"), "value1", "detail1"),
 		Invalid(NewPath("field2"), "value2", "detail2"),
 	}
 
-	// Verify none are from imperative by default
+	//验证默认均不来自命令式操作。
 	for i, err := range list {
 		if err.FromImperative {
 			t.Errorf("Error %d should not be from imperative by default", i)
 		}
 	}
 
-	// Mark list as from imperative
+	//将列表标记为来自命令式操作。
 	list.MarkFromImperative()
 
-	// Verify all errors in the list are now from imperative
+	//验证列表中所有错误现在均来自命令式操作。
 	for i, err := range list {
 		if !err.FromImperative {
 			t.Errorf("Error %d should be from imperative after marking the list", i)

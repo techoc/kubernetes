@@ -80,14 +80,13 @@ func scaledValue(unscaled *big.Int, scale, newScale int) int64 {
 		intPool.Put(result)
 	}()
 
-	// divisor = 10^(dif)
-	// TODO: create loop up table if exp costs too much.
+	// TODO: 若 Exp 开销过大，改用查找表。
 	divisor.Exp(bigTen, exp.SetInt64(int64(dif)), nil)
 	// 复用 exp 作为余数
 	remainder := exp
 
-	// result = unscaled / divisor
-	// remainder = unscaled % divisor
+	// result = unscaled / divisor（结果）
+	// remainder = unscaled % divisor（余数）
 	result.DivMod(unscaled, divisor, remainder)
 	if remainder.Sign() != 0 {
 		// 有余数，向上取整

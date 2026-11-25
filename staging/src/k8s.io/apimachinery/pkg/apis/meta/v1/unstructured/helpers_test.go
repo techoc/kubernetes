@@ -29,9 +29,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestCodecOfUnstructuredList tests that there are no data races in Encode().
-// i.e. that it does not mutate the object being encoded.
-//
 // 测试方式：多个 goroutine 并发编码同一个 UnstructuredList。Encode 若在
 // 编码过程中修改对象内部 map，-race 检测会报数据竞争；正常实现应只读。
 func TestCodecOfUnstructuredList(t *testing.T) {
@@ -66,7 +63,7 @@ func TestRemoveNestedField(t *testing.T) {
 	assert.Empty(t, obj["x"])
 	RemoveNestedField(obj, "x")
 	assert.Empty(t, obj)
-	RemoveNestedField(obj, "x") // Remove of a non-existent field
+	RemoveNestedField(obj, "x") // 删除不存在的字段。
 	assert.Empty(t, obj)
 }
 
@@ -88,7 +85,7 @@ func TestNestedFieldNoCopy(t *testing.T) {
 		},
 	}
 
-	// case 1: field exists and is non-nil
+	// 情况 1：字段存在且非 nil。
 	res, exists, err := NestedFieldNoCopy(obj, "a", "b")
 	assert.True(t, exists)
 	assert.NoError(t, err)
@@ -96,39 +93,39 @@ func TestNestedFieldNoCopy(t *testing.T) {
 	target["foo"] = "baz"
 	assert.Equal(t, target["foo"], res.(map[string]interface{})["foo"], "result should be a reference to the expected item")
 
-	// case 2: field exists and is nil
+	// 情况 2：字段存在且为 nil。
 	res, exists, err = NestedFieldNoCopy(obj, "a", "c")
 	assert.True(t, exists)
 	assert.NoError(t, err)
 	assert.Nil(t, res)
 
-	// case 3: error traversing obj
+	// 情况 3：遍历对象时出错。
 	res, exists, err = NestedFieldNoCopy(obj, "a", "d", "foo")
 	assert.False(t, exists)
 	assert.Error(t, err)
 	assert.Nil(t, res)
 
-	// case 4: field does not exist
+	// 情况 4：字段不存在。
 	res, exists, err = NestedFieldNoCopy(obj, "a", "g")
 	assert.False(t, exists)
 	assert.NoError(t, err)
 	assert.Nil(t, res)
 
-	// case 5: intermediate field does not exist
+	// 情况 5：中间字段不存在。
 	res, exists, err = NestedFieldNoCopy(obj, "a", "g", "f")
 	assert.False(t, exists)
 	assert.NoError(t, err)
 	assert.Nil(t, res)
 
-	// case 6: intermediate field is null
-	//         (background: happens easily in YAML)
+	// 情况 6：中间字段为 null。
+	//         （背景：在 YAML 中很容易出现）
 	res, exists, err = NestedFieldNoCopy(obj, "a", "c", "f")
 	assert.False(t, exists)
 	assert.NoError(t, err)
 	assert.Nil(t, res)
 
-	// case 7: array/slice syntax is not supported
-	//         (background: users may expect this to be supported)
+	// 情况 7：不支持数组/切片语法。
+	//         （背景：用户可能期望支持此行为。）
 	res, exists, err = NestedFieldNoCopy(obj, "a", "e[0]")
 	assert.False(t, exists)
 	assert.NoError(t, err)
@@ -148,7 +145,7 @@ func TestNestedFieldCopy(t *testing.T) {
 		},
 	}
 
-	// case 1: field exists and is non-nil
+	// 情况 1：字段存在且非 nil。
 	res, exists, err := NestedFieldCopy(obj, "a", "b")
 	assert.True(t, exists)
 	assert.NoError(t, err)
@@ -156,19 +153,19 @@ func TestNestedFieldCopy(t *testing.T) {
 	target["foo"] = "baz"
 	assert.NotEqual(t, target["foo"], res.(map[string]interface{})["foo"], "result should be a copy of the expected item")
 
-	// case 2: field exists and is nil
+	// 情况 2：字段存在且为 nil。
 	res, exists, err = NestedFieldCopy(obj, "a", "c")
 	assert.True(t, exists)
 	assert.NoError(t, err)
 	assert.Nil(t, res)
 
-	// case 3: error traversing obj
+	// 情况 3：遍历对象时出错。
 	res, exists, err = NestedFieldCopy(obj, "a", "d", "foo")
 	assert.False(t, exists)
 	assert.Error(t, err)
 	assert.Nil(t, res)
 
-	// case 4: field does not exist
+	// 情况 4：字段不存在。
 	res, exists, err = NestedFieldCopy(obj, "a", "e")
 	assert.False(t, exists)
 	assert.NoError(t, err)

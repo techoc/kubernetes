@@ -72,7 +72,7 @@ func TestValidateObjectMetaCustomName(t *testing.T) {
 	}}
 
 	fn := func(s string, prefix bool) []string {
-		// Note: this is called on both name and generateName
+		// 注意：name 与 generateName 都会调用此校验。
 		if s == "test" {
 			return nil
 		}

@@ -29,8 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/managedfields/internal"
 )
 
-// FakeObjectCreater implements ObjectCreater, it can create empty
-// objects (unstructured) of the given GVK.
+// FakeObjectCreater 实现 ObjectCreater，可创建指定 GVK 的空非结构化对象。
 type FakeObjectCreater struct{}
 
 // New 创建一个只带 apiVersion/kind 的空 unstructured 对象，
@@ -42,14 +41,13 @@ func (f *FakeObjectCreater) New(gvk schema.GroupVersionKind) (runtime.Object, er
 	return &u, nil
 }
 
-// FakeObjectConvertor implements runtime.ObjectConvertor but it
-// actually does nothing but return its input.
+// FakeObjectConvertor 实现 runtime.ObjectConvertor，但仅返回输入，不执行转换。
 // 中文补充：测试里所有对象都是同一版本的 unstructured，因此转换可以退化为恒等操作。
 type FakeObjectConvertor struct{}
 
 // Convert 是空实现：仅给 out 赋一个会被丢弃的值以维持旧签名兼容。
 //
-//nolint:staticcheck,ineffassign // SA4009 backwards compatibility
+//nolint:staticcheck,ineffassign // SA4009：保持向后兼容。
 func (c *FakeObjectConvertor) Convert(in, out, context interface{}) error {
 	out = in
 	return nil
@@ -65,8 +63,7 @@ func (c *FakeObjectConvertor) ConvertFieldLabel(_ schema.GroupVersionKind, _, _ 
 	return "", "", errors.New("not implemented")
 }
 
-// FakeObjectDefaulter implements runtime.Defaulter, but it actually
-// does nothing.
+// FakeObjectDefaulter 实现 runtime.Defaulter，但不执行任何操作。
 type FakeObjectDefaulter struct{}
 
 // Default 空实现：测试对象不依赖默认值填充。
@@ -81,24 +78,23 @@ type TestFieldManagerImpl struct {
 	liveObj      runtime.Object
 }
 
-// APIVersion of the object that we're tracking.
+// 所跟踪对象的 APIVersion。
 func (f *TestFieldManagerImpl) APIVersion() string {
 	return f.apiVersion
 }
 
-// Reset resets the state of the liveObject by resetting it to an empty object.
+// Reset 将 liveObject 重置为空对象。
 func (f *TestFieldManagerImpl) Reset() {
 	f.liveObj = f.emptyObj.DeepCopyObject()
 }
 
-// Live returns a copy of the current liveObject.
+// Live 返回当前 liveObject 的副本。
 // 中文补充：返回深拷贝，避免调用方修改内部状态。
 func (f *TestFieldManagerImpl) Live() runtime.Object {
 	return f.liveObj.DeepCopyObject()
 }
 
-// Apply applies the given object on top of the current liveObj, for the
-// given manager and force flag.
+// Apply 为指定管理器将给定对象应用到当前 liveObj，force 标志控制是否强制。
 // 中文补充：只有成功时才提交新状态，失败时 liveObj 保持不变。
 func (f *TestFieldManagerImpl) Apply(obj runtime.Object, manager string, force bool) error {
 	out, err := f.fieldManager.Apply(f.liveObj, obj, manager, force)
@@ -108,8 +104,7 @@ func (f *TestFieldManagerImpl) Apply(obj runtime.Object, manager string, force b
 	return err
 }
 
-// Update will updates the managed fields in the liveObj based on the
-// changes performed by the update.
+// Update 根据更新内容修改 liveObj 中的托管字段。
 func (f *TestFieldManagerImpl) Update(obj runtime.Object, manager string) error {
 	out, err := f.fieldManager.Update(f.liveObj, obj, manager)
 	if err == nil {
@@ -118,14 +113,13 @@ func (f *TestFieldManagerImpl) Update(obj runtime.Object, manager string) error 
 	return err
 }
 
-// UpdateNoErrors is the same as Update, but it will not return errors.
+// UpdateNoErrors 与 Update 相同，但不返回错误。
 // 中文补充：用于构造“即使存在冲突也接受”的测试前置状态。
 func (f *TestFieldManagerImpl) UpdateNoErrors(obj runtime.Object, manager string) {
 	f.liveObj = f.fieldManager.UpdateNoErrors(f.liveObj, obj, manager)
 }
 
-// ManagedFields returns the list of existing managed fields for the
-// liveObj.
+// ManagedFields 返回 liveObj 现有的托管字段列表。
 func (f *TestFieldManagerImpl) ManagedFields() []metav1.ManagedFieldsEntry {
 	accessor, err := meta.Accessor(f.liveObj)
 	if err != nil {
@@ -135,7 +129,7 @@ func (f *TestFieldManagerImpl) ManagedFields() []metav1.ManagedFieldsEntry {
 	return accessor.GetManagedFields()
 }
 
-// NewTestFieldManager creates a new manager for the given GVK.
+// NewTestFieldManager 为指定 GVK 创建新管理器。
 // 中文补充：手工组装与 internal.NewDefaultFieldManager 相同的 manager 链，
 // 但省略 CapManager 与 FieldManager 外层，便于测试更细粒度的行为。
 func NewTestFieldManagerImpl(typeConverter managedfields.TypeConverter, gvk schema.GroupVersionKind, subresource string, chainFieldManager func(internal.Manager) internal.Manager) *TestFieldManagerImpl {
@@ -154,10 +148,9 @@ func NewTestFieldManagerImpl(typeConverter managedfields.TypeConverter, gvk sche
 	live := &unstructured.Unstructured{}
 	live.SetKind(gvk.Kind)
 	live.SetAPIVersion(gvk.GroupVersion().String())
-	// This is different from `internal.NewDefaultFieldManager` because:
-	// 1. We don't want to create a `internal.FieldManager`
-	// 2. We don't want to use the CapManager that is tested separately with
-	// a smaller than the default cap.
+	//这与 `internal.NewDefaultFieldManager` 的不同之处在于：
+	//1. 不创建 `internal.FieldManager`。
+	//2. 不使用已单独测试过的 CapManager，而是使用比默认值更小的上限。
 	f = internal.NewVersionCheckManager(
 		internal.NewLastAppliedUpdater(
 			internal.NewLastAppliedManager(

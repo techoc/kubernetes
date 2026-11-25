@@ -34,24 +34,21 @@ type lastAppliedUpdater struct {
 
 var _ Manager = &lastAppliedUpdater{}
 
-// NewLastAppliedUpdater sets the client-side apply annotation up to date with
-// server-side apply managed fields
+// NewLastAppliedUpdater 根据服务端应用托管字段更新客户端应用注解。
 func NewLastAppliedUpdater(fieldManager Manager) Manager {
 	return &lastAppliedUpdater{
 		fieldManager: fieldManager,
 	}
 }
 
-// Update implements Manager.
+// Update 实现 Manager 接口。
 //
 // Update 请求不涉及 last-applied 注解，直接委托给被包装的 Manager。
 func (f *lastAppliedUpdater) Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error) {
 	return f.fieldManager.Update(liveObj, newObj, managed, manager)
 }
 
-// Apply implements Manager.
-//
-// server-side apply managed fields
+// Apply 实现 Manager 接口。
 //
 // 先执行服务端 apply，成功后再按需刷新 last-applied 注解。
 // 注解只在以下条件同时满足时更新：manager 是 "kubectl"，且对象上已存在该注解。
@@ -62,11 +59,11 @@ func (f *lastAppliedUpdater) Apply(liveObj, newObj runtime.Object, managed Manag
 		return liveObj, managed, err
 	}
 
-	// Sync the client-side apply annotation only from kubectl server-side apply.
-	// To opt-out of this behavior, users may specify a different field manager.
+	//仅在使用 kubectl server-side-apply 时同步客户端应用注解。
+	//用户可指定其他字段管理器以退出此行为。
 	//
-	// If the client-side apply annotation doesn't exist,
-	// then continue because we have no annotation to update
+	//如果客户端应用注解不存在，
+	//则继续执行，因为没有需要更新的注解。
 	if manager == "kubectl" && hasLastApplied(liveObj) {
 		lastAppliedValue, err := buildLastApplied(newObj)
 		if err != nil {
@@ -104,7 +101,7 @@ func buildLastApplied(obj runtime.Object) (string, error) {
 		panic(fmt.Sprintf("couldn't get accessor: %v", err))
 	}
 
-	// Remove the annotation from the object before encoding the object
+	//编码对象前移除该注解。
 	// 注解本身不能包含自己，否则会无限膨胀。
 	var annotations = accessor.GetAnnotations()
 	delete(annotations, LastAppliedConfigAnnotation)

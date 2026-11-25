@@ -219,8 +219,6 @@ func TestMinProperties(t *testing.T) {
 		properties: 100000,
 		min:        100000,
 	}, {
-		// Note: While JSON Schema does not allow negative values for minProperties,
-		// we test that the validator handles it safely if it ever occurs at runtime.
 		// JSON Schema 不允许 minProperties 为负；这里只确认运行期若出现该值也不会出错。
 		name:       "0 properties, min -1",
 		properties: 0,
@@ -330,8 +328,6 @@ func TestMaxProperties(t *testing.T) {
 			field.TooMany(field.NewPath("fldpath"), 100001, 100000).WithOrigin("maxProperties"),
 		},
 	}, {
-		// Note: While JSON Schema does not allow negative values for maxProperties,
-		// we test that the validator handles it safely if it ever occurs at runtime.
 		// JSON Schema 不允许 maxProperties 为负；这里只确认运行期若出现该值也不会出错。
 		name:       "0 properties, max -1",
 		properties: 0,
@@ -614,7 +610,7 @@ func TestMinLength(t *testing.T) {
 		name     string
 		value    string
 		min      int
-		wantErrs field.ErrorList // regex
+		wantErrs field.ErrorList // 正则表达式。
 	}{{
 		name:     "empty string allowed",
 		value:    "",
@@ -675,7 +671,7 @@ func TestMinLength(t *testing.T) {
 		wantErrs: nil,
 	}, {
 		name:  "mixture of characters, maximum size in bytes of input is greater than min, rune count less than min",
-		value: "©®©®©®", // 12 bytes, but 6 characters
+		value: "©®©®©®", // 12 字节，但只有 6 个字符。
 		min:   10,
 		wantErrs: field.ErrorList{
 			field.TooShort(field.NewPath("fldpath"), "©®©®©®", 10).WithOrigin("minLength"),

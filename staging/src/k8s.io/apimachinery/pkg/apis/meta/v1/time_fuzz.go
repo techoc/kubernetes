@@ -25,19 +25,14 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
-// Fuzz satisfies randfill.SimpleSelfFiller.
 // RandFill 用 1000 年范围内的随机秒数填充 Time。
 func (t *Time) RandFill(r *rand.Rand) {
 	if t == nil {
 		return
 	}
-	// Allow for about 1000 years of randomness.  Leave off nanoseconds
-	// because JSON doesn't represent them so they can't round-trip
-	// properly.
 	// 保留纳秒会导致 JSON 往返丢失精度，因此随机值固定为整秒。
 	t.Time = time.Unix(r.Int63n(1000*365*24*60*60), 0)
 }
 
-// ensure Time implements randfill.SimpleSelfFiller
 // 编译期断言，防止 randfill 接口变更后这里悄悄失效。
 var _ randfill.SimpleSelfFiller = &Time{}

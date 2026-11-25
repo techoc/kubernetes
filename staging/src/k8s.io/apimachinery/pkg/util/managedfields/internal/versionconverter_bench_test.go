@@ -28,11 +28,10 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/merge"
 )
 
-// benchDeployment is a structured (reflect-backed) object whose JSON shape is a
-// subset of the apps Deployment schema. Built-in types reach the version
-// converter as reflect-backed typed values, so the pre-fast-path Convert had to
-// deep-copy the whole object via TypedToObject just to read its apiVersion;
-// this type reproduces that cost.
+// benchDeployment 是结构化（reflect 支持）对象，其 JSON 形状是 apps Deployment schema 的子集。
+// 内置类型以 reflect 支持的 typed value 到达版本转换器，因此在快速路径之前，
+// Convert 必须通过 TypedToObject 深拷贝整个对象才能读取 apiVersion；
+// 此类型用于复现该开销。
 type benchDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -45,8 +44,8 @@ func (d *benchDeployment) DeepCopyObject() runtime.Object {
 	return out
 }
 
-// structuredDeployment returns a reflect-backed Deployment with n labels and n
-// annotations, exercising the built-in-type code path.
+// structuredDeployment 返回带 n 个 label 和 n 个 annotation 的 reflect 支持 Deployment，
+// 用于覆盖内置类型代码路径。
 func structuredDeployment(apiVersion string, n int) runtime.Object {
 	labels, annotations := metaMaps(n)
 	return &benchDeployment{
@@ -60,8 +59,8 @@ func structuredDeployment(apiVersion string, n int) runtime.Object {
 	}
 }
 
-// unstructuredDeployment returns a value-backed Deployment, exercising the CRD
-// code path (the typed value already holds a map, so TypedToObject is cheap).
+// unstructuredDeployment 返回 value 支持的 Deployment，覆盖 CRD 代码路径；
+// typed value 已持有映射，因此 TypedToObject 开销很低。
 func unstructuredDeployment(apiVersion string, n int) runtime.Object {
 	labels, annotations := metaMaps(n)
 	return &unstructured.Unstructured{Object: map[string]interface{}{
@@ -126,9 +125,9 @@ var benchConversions = []struct {
 // benchSizes 控制对象字段数量，观察转换成本随规模的变化。
 var benchSizes = []int{0, 10, 100, 1000}
 
-// BenchmarkVersionConverter measures versionConverter.Convert across reflect-backed
-// (built-in) and value-backed (CRD) inputs, for the same-version (fast path) and
-// cross-version (fallback) cases, over a range of object sizes.
+// BenchmarkVersionConverter 在多种对象大小下测量 versionConverter.Convert，
+// 覆盖 reflect 支持（内置）和 value 支持（CRD）输入，
+// 以及同版本（快速路径）和跨版本（回退路径）场景。
 func BenchmarkVersionConverter(b *testing.B) {
 	vc := benchVersionConverter()
 	for _, backing := range benchBackings {
@@ -153,10 +152,9 @@ func BenchmarkVersionConverter(b *testing.B) {
 	}
 }
 
-// TestBenchmarkFastPathEngages guards the benchmark: it confirms the same-version
-// case takes the fast path (no TypedToObject / ConvertToVersion) for both
-// reflect-backed and value-backed inputs, and that the cross-version case does
-// not, so the before/after comparison measures the intended code paths.
+// TestBenchmarkFastPathEngages 防止基准测试偏离目标：确认同版本场景在两类输入上均走快速路径，
+// 不调用 TypedToObject 或 ConvertToVersion；
+// 跨版本场景则不走快速路径，确保前后比较针对预期代码路径。
 func TestBenchmarkFastPathEngages(t *testing.T) {
 	for _, backing := range benchBackings {
 		t.Run(backing.name, func(t *testing.T) {
@@ -165,7 +163,7 @@ func TestBenchmarkFastPathEngages(t *testing.T) {
 				t.Fatalf("ObjectToTyped: %v", err)
 			}
 
-			// Same version: fast path, no materialization or conversion.
+			//同版本：走快速路径，不物化对象或转换版本。
 			tc := &countingTypeConverter{TypeConverter: testTypeConverter}
 			oc := &countingObjectConvertor{ObjectConvertor: benchObjectConvertor()}
 			vc := newVersionConverter(tc, oc, schema.GroupVersion{Group: "apps", Version: runtime.APIVersionInternal})
@@ -183,7 +181,7 @@ func TestBenchmarkFastPathEngages(t *testing.T) {
 				t.Errorf("same-version Convert called ConvertToVersion %d times, want 0", oc.convertToVersionCalls)
 			}
 
-			// Cross version: fallback path materializes the object.
+			//跨版本：走回退路径并物化对象。
 			tc = &countingTypeConverter{TypeConverter: testTypeConverter}
 			oc = &countingObjectConvertor{ObjectConvertor: benchObjectConvertor()}
 			vc = newVersionConverter(tc, oc, schema.GroupVersion{Group: "apps", Version: runtime.APIVersionInternal})

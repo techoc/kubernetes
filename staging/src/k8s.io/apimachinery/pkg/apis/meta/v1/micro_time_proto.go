@@ -81,7 +81,7 @@ func (m *MicroTime) MarshalTo(data []byte) (int, error) {
 	return m.ProtoMicroTime().MarshalTo(data)
 }
 
-// MarshalToSizedBuffer implements the protobuf marshalling interface.
+// MarshalToSizedBuffer 实现 protobuf 序列化接口。
 func (m *MicroTime) MarshalToSizedBuffer(data []byte) (int, error) {
 	if m == nil || m.Time.IsZero() {
 		return 0, nil

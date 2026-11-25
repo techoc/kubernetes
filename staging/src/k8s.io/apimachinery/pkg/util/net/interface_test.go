@@ -487,7 +487,7 @@ func (_ linkLocalLoopbackNetworkInterface) Addrs(intf *net.Interface) ([]net.Add
 	ifat = []net.Addr{addrStruct{val: "169.254.162.166/16"}, addrStruct{val: "fe80::200/10"}}
 	if intf.Name == LoopbackInterfaceName {
 		ifat = []net.Addr{addrStruct{val: "::1/128"}, addrStruct{val: "127.0.0.1/8"},
-			// global addresses on loopback interface
+			//回环接口上的全局地址
 			addrStruct{val: "10.1.1.1/32"}, addrStruct{val: "fd00:1:1::1/128"}}
 	}
 	return ifat, nil
@@ -512,7 +512,7 @@ func (_ globalsNetworkInterface) Addrs(intf *net.Interface) ([]net.Addr, error) 
 		addrStruct{val: "192.168.1.1/31"}, addrStruct{val: "fd00::200/127"}}
 	if intf.Name == LoopbackInterfaceName {
 		ifat = []net.Addr{addrStruct{val: "::1/128"}, addrStruct{val: "127.0.0.1/8"},
-			// global addresses on loopback interface
+			//回环接口上的全局地址
 			addrStruct{val: "10.1.1.1/32"}, addrStruct{val: "fd00:1:1::1/128"}}
 	}
 	return ifat, nil
@@ -747,7 +747,7 @@ func makeRouteFile(content string, t *testing.T) (*os.File, error) {
 func TestFailGettingIPv4Routes(t *testing.T) {
 	defer func() { v4File.name = ipv4RouteFile }()
 
-	// Try failure to open file (should not occur, as caller ensures we have IPv4 route file, but being thorough)
+	//尝试模拟打开文件失败（调用方已确保 IPv4 路由文件存在，但仍覆盖此情况）
 	v4File.name = "no-such-file"
 	errStrFrag := "no such file"
 	_, err := v4File.extract()
@@ -763,7 +763,7 @@ func TestFailGettingIPv4Routes(t *testing.T) {
 func TestFailGettingIPv6Routes(t *testing.T) {
 	defer func() { v6File.name = ipv6RouteFile }()
 
-	// Try failure to open file (this would be ignored by caller)
+	//尝试模拟打开文件失败（调用方会忽略此错误）
 	v6File.name = "no-such-file"
 	errStrFrag := "no such file"
 	_, err := v6File.extract()
@@ -779,7 +779,7 @@ func TestFailGettingIPv6Routes(t *testing.T) {
 func TestGetAllDefaultRoutesFailNoV4RouteFile(t *testing.T) {
 	defer func() { v4File.name = ipv4RouteFile }()
 
-	// Should not occur, as caller ensures we have IPv4 route file, but being thorough
+	//调用方已确保 IPv4 路由文件存在，不应发生；仍覆盖此情况
 	v4File.name = "no-such-file"
 	errStrFrag := "no such file"
 	_, err := getAllDefaultRoutes()

@@ -101,7 +101,7 @@ func TestSplitSchemeNamePort(t *testing.T) {
 		}
 
 		// 合法输入必须能重新拼回并再次解析出相同字段。
-		// Make sure valid items round trip through JoinSchemeNamePort
+		//确保有效输入经 JoinSchemeNamePort 往返后保持一致。
 		if item.valid {
 			out := JoinSchemeNamePort(scheme, name, port)
 			if item.normalized && out != item.in {

@@ -37,7 +37,7 @@ import (
 const FieldImmutableErrorMsg string = `field is immutable`
 
 // TotalAnnotationSizeLimitB 是对象所有 annotation 的键值总长度上限（256 kB）。
-const TotalAnnotationSizeLimitB int = 256 * (1 << 10) // 256 kB
+const TotalAnnotationSizeLimitB int = 256 * (1 << 10) // 256 kB（千字节）。
 
 // BannedOwners 是不允许作为 owner 的对象黑名单。
 var BannedOwners = map[schema.GroupVersionKind]struct{}{
@@ -182,7 +182,7 @@ func ValidateObjectMeta(objMeta *metav1.ObjectMeta, requiresNamespace bool, name
 
 // objectMetaValidationOptions 定义校验 ObjectMeta 时的行为修改项。
 type objectMetaValidationOptions struct {
-	/* nothing here yet */
+	/* 暂未定义 */
 }
 
 // ObjectMetaValidationOption 指定 ValidateObjectMetaWithOpts 与
@@ -247,7 +247,6 @@ func ValidateObjectMetaAccessorWithOpts(meta metav1.Object, isNamespaced bool, n
 	// “追加 5 个随机字符”，但这并非必然。另外 nameFn 应始终考虑 name 最大长度，
 	// 而它并不了解 name 生成细节。若 generateName 非法，用户会同时收到
 	// generateName 与 name 两个字段的错误；把校验集中在 name 字段上整体体验更好。
-	// TODO(thockin): should we do a max-length check here? e.g. 1K or 4K?
 
 	if len(meta.GetGenerateName()) != 0 && len(meta.GetName()) == 0 {
 		allErrs = append(allErrs,
@@ -278,7 +277,7 @@ func validateObjectMetaAccessorWithOptsCommon(meta metav1.Object, isNamespaced b
 		}
 	} else {
 		if len(meta.GetNamespace()) != 0 {
-			// TODO(thockin): change to "may not be specified on this type" or something
+			// TODO(thockin): 改为 "may not be specified on this type" 或类似表述。
 			allErrs = append(allErrs, field.Forbidden(fldPath.Child("namespace"), "not allowed on this type"))
 		}
 	}

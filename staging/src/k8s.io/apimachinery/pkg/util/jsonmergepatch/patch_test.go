@@ -27,13 +27,13 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// FilterNullTestCases is the YAML shape of the null-handling fixtures.
+// FilterNullTestCases 是空值处理测试夹具的 YAML 结构。
 type FilterNullTestCases struct {
 	TestCases []FilterNullTestCase
 }
 
-// FilterNullTestCase describes one keep-or-delete-null scenario: the input plus
-// the expected output with nulls kept and with nulls removed.
+// FilterNullTestCase 描述一个保留或删除空值的场景，包含输入以及
+// 保留、删除空值后各自的预期输出。
 type FilterNullTestCase struct {
 	Description         string
 	OriginalObj         map[string]interface{}
@@ -181,9 +181,9 @@ testCases:
       - v3
 `)
 
-// TestKeepOrDeleteNullInObj verifies the recursive null filter: in "keep" mode
-// explicit nulls are retained, in "delete" mode they are dropped, and empty
-// maps/slices are preserved rather than confused with null.
+// TestKeepOrDeleteNullInObj 验证递归空值过滤："keep" 模式保留显式空值，
+// "delete" 模式删除空值；空映射和空切片不会被误判为空值，
+// 而会原样保留。
 func TestKeepOrDeleteNullInObj(t *testing.T) {
 	tc := FilterNullTestCases{}
 	err := yaml.Unmarshal(filterNullTestCaseData, &tc)
@@ -210,30 +210,30 @@ func TestKeepOrDeleteNullInObj(t *testing.T) {
 	}
 }
 
-// JSONMergePatchTestCases is the YAML shape of the three-way patch fixtures.
+// JSONMergePatchTestCases 是三方合并补丁测试夹具的 YAML 结构。
 type JSONMergePatchTestCases struct {
 	TestCases []JSONMergePatchTestCase
 }
 
-// JSONMergePatchTestCase is one named three-way merge scenario.
+// JSONMergePatchTestCase 描述一个具名的三方合并场景。
 type JSONMergePatchTestCase struct {
 	Description string
 	JSONMergePatchTestCaseData
 }
 
-// JSONMergePatchTestCaseData holds the four inputs/outputs of a three-way
-// merge: the original and modified configurations, the current live object,
-// the patch expected to be generated, and the result of applying it.
+// JSONMergePatchTestCaseData 保存三方合并的四个输入或输出：
+// 原始配置、修改后的配置、当前线上对象、
+// 预期生成的补丁，以及应用补丁后的结果。
 type JSONMergePatchTestCaseData struct {
-	// Original is the original object (last-applied config in annotation)
+	//Original 是原始对象（注解中的 last-applied 配置）。
 	Original map[string]interface{}
-	// Modified is the modified object (new config we want)
+	//Modified 是修改后的对象（目标新配置）。
 	Modified map[string]interface{}
-	// Current is the current object (live config in the server)
+	//Current 是当前对象（服务器上的实际配置）。
 	Current map[string]interface{}
-	// ThreeWay is the expected three-way merge patch
+	//ThreeWay 是预期的三方合并补丁。
 	ThreeWay map[string]interface{}
-	// Result is the expected object after applying the three-way patch on current object.
+	//Result 是在当前对象上应用三方合并补丁后的预期对象。
 	Result map[string]interface{}
 }
 
@@ -666,8 +666,7 @@ testCases:
       - a
 `)
 
-// TestCreateThreeWayJSONMergePatch runs every fixture through both the patch
-// generation and the patch application checks.
+// TestCreateThreeWayJSONMergePatch 对每个夹具分别执行补丁生成和应用检查。
 func TestCreateThreeWayJSONMergePatch(t *testing.T) {
 	tc := JSONMergePatchTestCases{}
 	err := yaml.Unmarshal(createJSONMergePatchTestCaseData, &tc)
@@ -681,8 +680,8 @@ func TestCreateThreeWayJSONMergePatch(t *testing.T) {
 	}
 }
 
-// testThreeWayPatch checks that the generated patch matches the fixture and
-// that applying it to the current object yields the expected result.
+// testThreeWayPatch 检查生成的补丁与夹具一致，
+// 并检查应用到当前对象后得到预期结果。
 func testThreeWayPatch(t *testing.T, c JSONMergePatchTestCase) {
 	original, modified, current, expected, result := threeWayTestCaseToJSONOrFail(t, c)
 	actual, err := CreateThreeWayJSONMergePatch(original, modified, current)
@@ -693,8 +692,8 @@ func testThreeWayPatch(t *testing.T, c JSONMergePatchTestCase) {
 	testPatchApplication(t, current, actual, result, c.Description)
 }
 
-// testPatchCreation compares the generated patch against the fixture, printing
-// both as YAML for readable diffs.
+// testPatchCreation 将生成的补丁与夹具比较，
+// 并以 YAML 输出两者以便阅读差异。
 func testPatchCreation(t *testing.T, expected, actual []byte, description string) {
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf("error in test case: %s\nexpected patch:\n%s\ngot:\n%s\n",
@@ -703,8 +702,8 @@ func testPatchCreation(t *testing.T, expected, actual []byte, description string
 	}
 }
 
-// testPatchApplication applies the patch with an independent RFC 7386
-// implementation so the test does not simply echo the code under test.
+// testPatchApplication 使用独立的 RFC 7386 实现应用补丁，
+// 避免测试只是重复被测代码的行为。
 func testPatchApplication(t *testing.T, original, patch, expected []byte, description string) {
 	result, err := jsonpatch.MergePatch(original, patch)
 	if err != nil {
@@ -722,8 +721,8 @@ func testPatchApplication(t *testing.T, original, patch, expected []byte, descri
 	}
 }
 
-// threeWayTestCaseToJSONOrFail serializes all five fixture maps, preserving nil
-// as a nil byte slice so "absent original" stays distinct from "{}".
+// threeWayTestCaseToJSONOrFail 序列化五个夹具映射，并将 nil 保留为 nil 字节切片，
+// 从而区分“原始对象不存在”和 "{}"。
 func threeWayTestCaseToJSONOrFail(t *testing.T, c JSONMergePatchTestCase) ([]byte, []byte, []byte, []byte, []byte) {
 	return testObjectToJSONOrFail(t, c.Original),
 		testObjectToJSONOrFail(t, c.Modified),
@@ -732,8 +731,7 @@ func threeWayTestCaseToJSONOrFail(t *testing.T, c JSONMergePatchTestCase) ([]byt
 		testObjectToJSONOrFail(t, c.Result)
 }
 
-// testObjectToJSONOrFail marshals a fixture map, or returns nil for an absent
-// original.
+// testObjectToJSONOrFail 序列化夹具映射；原始对象不存在时返回 nil。
 func testObjectToJSONOrFail(t *testing.T, o map[string]interface{}) []byte {
 	if o == nil {
 		return nil
@@ -745,8 +743,8 @@ func testObjectToJSONOrFail(t *testing.T, o map[string]interface{}) []byte {
 	return j
 }
 
-// jsonToYAMLOrError renders JSON as YAML for failure messages; a conversion
-// failure is returned inline so the test still reports something useful.
+// jsonToYAMLOrError 将 JSON 渲染为 YAML 用于失败信息；转换失败时内联返回错误，
+// 使测试仍能提供有用的诊断。
 func jsonToYAMLOrError(j []byte) string {
 	y, err := jsonToYAML(j)
 	if err != nil {
@@ -755,8 +753,8 @@ func jsonToYAMLOrError(j []byte) string {
 	return string(y)
 }
 
-// toJSON marshals a fixture, including a pretty-printed dump in the error to
-// make unexpected input easy to diagnose.
+// toJSON 序列化夹具，并在错误中包含格式化输出，
+// 便于诊断意外输入。
 func toJSON(v interface{}) ([]byte, error) {
 	j, err := json.Marshal(v)
 	if err != nil {
@@ -765,8 +763,7 @@ func toJSON(v interface{}) ([]byte, error) {
 	return j, nil
 }
 
-// jsonToYAML converts JSON to YAML, embedding the original bytes in the error
-// on failure.
+// jsonToYAML 将 JSON 转换为 YAML，失败时在错误中附带原始字节。
 func jsonToYAML(j []byte) ([]byte, error) {
 	y, err := yaml.JSONToYAML(j)
 	if err != nil {

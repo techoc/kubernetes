@@ -490,7 +490,7 @@ func TestRESTMapperResourceSingularizer(t *testing.T) {
 
 		{Kind: "lowercase", Plural: "lowercases", Singular: "lowercase"},
 		// TODO 这个测试本身就是坏的。下列期望值只是反映当前实际行为。Kind 本应是单数形式。
-		// 旧（错误）注释：Don't add extra s if the original object is already plural
+		// 旧（错误）注释：若原始对象本身已是复数，就不要再额外添加 s。
 		{Kind: "lowercases", Plural: "lowercaseses", Singular: "lowercases"},
 	}
 	for i, testCase := range testCases {
@@ -538,7 +538,7 @@ func TestRESTMapperRESTMapping(t *testing.T) {
 
 		{DefaultVersions: []schema.GroupVersion{testGroupVersion}, Kind: "InternalObject", APIGroupVersions: []schema.GroupVersion{{Group: testGroup, Version: "test"}}, Resource: testGroupVersion.WithResource("internalobjects")},
 
-		// TODO: add test for a resource that exists in one version but not another
+		// TODO: 增加资源仅存在于某个版本的测试。
 	}
 	for i, testCase := range testCases {
 		mapper := NewDefaultRESTMapper(testCase.DefaultVersions)

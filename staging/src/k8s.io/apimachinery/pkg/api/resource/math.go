@@ -46,7 +46,7 @@ var (
 	decOne  = inf.NewDec(1, 0)
 
 	// 允许的最大（按绝对值）数值，等价于 max int64。
-	maxAllowed = infDecAmount{inf.NewDec((1<<63)-1, 0)} // == max int64
+	maxAllowed = infDecAmount{inf.NewDec((1<<63)-1, 0)} // == max int64（最大 int64）（最大 int64）（最大 int64）（最大 int64）（最大 int64）
 
 	// MaxMilliValue 是能够安全以毫单位表示的数值上限。
 	// 可将其与 Quantity.Value() 的返回值比较，以判断调用 Quantity.MilliValue() 是否安全
@@ -97,7 +97,6 @@ func int64Multiply(a, b int64) (int64, bool) {
 
 // int64MultiplyScale 返回 a*b（假设 b 大于 1）；若结果会溢出或下溢 int64 则返回 false。
 // 当已知 b > 1 时使用，可省略 b == 0/1 的检查。
-// Use when b is known to be greater than one.
 func int64MultiplyScale(a int64, b int64) (int64, bool) {
 	if a == 0 || a == 1 {
 		return a * b, true

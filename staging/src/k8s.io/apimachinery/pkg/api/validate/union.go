@@ -26,31 +26,23 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// ExtractorFn extracts a value from a parent object. Depending on the context,
-// that could be the value of a field or just whether that field was set or
-// not.
-// Note: obj is not guaranteed to be non-nil, need to handle nil obj in the
-// extractor.
+// ExtractorFn 从父对象提取值，具体可取字段值或字段是否已设置。
+// 注意：obj 可能为 nil，提取器必须处理 nil 对象。
+// 并非如此。
+//
+// 提取器。
 type ExtractorFn[T, V any] func(obj T) V
 
-// UnionValidationOptions configures how union validation behaves
-//
 // 两个回调分别对应“一个成员都没设置”和“设置了多个成员”两种非法状态；
 // 传 nil 表示该情形不报错，调用方可借此只校验其中一个方向。
 type UnionValidationOptions struct {
-	// ErrorForEmpty returns error when no fields are set (nil means no error)
+	// ErrorForEmpty 在未设置任何字段时返回错误；nil 表示无错误。
 	ErrorForEmpty func(fldPath *field.Path, allFields []string) *field.Error
 
-	// ErrorForMultiple returns error when multiple fields are set (nil means no error)
+	// ErrorForMultiple 在设置多个字段时返回错误；nil 表示无错误。
 	ErrorForMultiple func(fldPath *field.Path, specifiedFields []string, allFields []string) *field.Error
 }
 
-// Union verifies that exactly one member of a union is specified.
-//
-// UnionMembership must define all the members of the union.
-//
-// For example:
-//
 //	var UnionMembershipForABC := validate.NewUnionMembership(
 //	 	validate.NewUnionMember("a"),
 //	 	validate.NewUnionMember("b"),
@@ -64,10 +56,6 @@ type UnionValidationOptions struct {
 //		)...)
 //		return errs
 //	}
-//
-// Note that T is "any", rather than "comparable", because union-members can be
-// slices, meaning T might be a struct with a slice, meaning it is not
-// comparable.
 //
 // op/oldObj 只用于更新时的 ratcheting：成员设置情况未变化就跳过重新校验，
 // 避免历史对象因新的校验规则而无法更新。isSetFns 的顺序必须与 union.members
@@ -89,12 +77,6 @@ func Union[T any](_ context.Context, op operation.Operation, fldPath *field.Path
 	return unionValidate(op, fldPath, obj, oldObj, union, options, isSetFns...).WithOrigin("union")
 }
 
-// DiscriminatedUnion verifies specified union member matches the discriminator.
-//
-// UnionMembership must define all the members of the union and the discriminator.
-//
-// For example:
-//
 //	var UnionMembershipForABC = validate.NewDiscriminatedUnionMembership("type",
 //	 	validate.NewDiscriminatedUnionMember("a", "A"),
 //	 	validate.NewDiscriminatedUnionMember("b", "B"),
@@ -110,13 +92,6 @@ func Union[T any](_ context.Context, op operation.Operation, fldPath *field.Path
 //		return errs
 //	}
 //
-// It is not an error for the discriminatorValue to be unknown.  That must be
-// validated on its own.
-//
-// Note that T is "any", rather than "comparable", because union-members can be
-// slices, meaning T might be a struct with a slice, meaning it is not
-// comparable.
-//
 // 与 Union 不同，这里校验的是“被设置的成员是否与判别器取值匹配”：
 // 判别器指向某成员时该成员必须存在，其余成员不得存在。判别器取值本身
 // 是否合法不在此处判断，需由调用方另行校验。
@@ -131,7 +106,7 @@ func DiscriminatedUnion[T any, D ~string](_ context.Context, op operation.Operat
 	}
 	// T 可能是不可比较的 struct，故用反射判断 oldObj 是否为零值；
 	// 零值意味着没有可 ratchet 的旧对象（如 Create 场景）。
-	hasOldValue := !reflect.ValueOf(oldObj).IsZero() // because T is any, rather than comparable
+	hasOldValue := !reflect.ValueOf(oldObj).IsZero() // 因为 T 是 any，而非 comparable。
 	var changed bool
 	discriminatorValue := discriminatorExtractor(obj)
 	if op.Type == operation.Update {
@@ -157,16 +132,14 @@ func DiscriminatedUnion[T any, D ~string](_ context.Context, op operation.Operat
 				fmt.Sprintf("must be specified when `%s` is %q", union.discriminatorName, discriminatorValue)))
 		}
 	}
-	// If the union discriminator and membership is unchanged, we don't need to
-	// re-validate.
+	// 联合判别器与成员关系未变时，无需重新校验。
+	// 重新校验。
 	if op.Type == operation.Update && hasOldValue && !changed {
 		return nil
 	}
 	return errs.WithOrigin("union")
 }
 
-// UnionMember represents a member of a union.
-//
 // 字段不导出：成员只能通过构造函数创建，以保证 fieldName 与
 // discriminatorValue 的组合在所有校验器中保持一致。
 type UnionMember struct {
@@ -174,19 +147,16 @@ type UnionMember struct {
 	discriminatorValue string // 仅判别器联合使用；普通联合为空串
 }
 
-// NewUnionMember returns a new UnionMember for the given field name.
+// NewUnionMember 为指定字段名创建 UnionMember。
 func NewUnionMember(fieldName string) UnionMember {
 	return UnionMember{fieldName: fieldName}
 }
 
-// NewDiscriminatedUnionMember returns a new UnionMember for the given field
-// name and discriminator value.
+// NewDiscriminatedUnionMember 为指定字段名与判别值创建 UnionMember。
 func NewDiscriminatedUnionMember(fieldName, discriminatorValue string) UnionMember {
 	return UnionMember{fieldName: fieldName, discriminatorValue: discriminatorValue}
 }
 
-// UnionMembership represents an ordered list of field union memberships.
-//
 // 顺序很重要：Union/DiscriminatedUnion 使用位置下标把 isSetFns 与
 // members 关联起来，因此两边的顺序必须严格一致。
 type UnionMembership struct {
@@ -194,16 +164,12 @@ type UnionMembership struct {
 	members           []UnionMember
 }
 
-// NewUnionMembership returns a new UnionMembership for the given list of members.
-// Member names must be unique.
-//
 // 唯一性由调用方保证；校验器不会去重，重复成员会导致重复校验与重复报错。
 func NewUnionMembership(member ...UnionMember) *UnionMembership {
 	return NewDiscriminatedUnionMembership("", member...)
 }
 
-// NewDiscriminatedUnionMembership returns a new UnionMembership for the given discriminator field and list of members.
-// members are provided in the same way as for NewUnionMembership.
+// NewDiscriminatedUnionMembership 为指定判别字段与成员列表创建 UnionMembership；成员提供方式同 NewUnionMembership。
 func NewDiscriminatedUnionMembership(discriminatorFieldName string, members ...UnionMember) *UnionMembership {
 	return &UnionMembership{
 		discriminatorName: discriminatorFieldName,
@@ -211,8 +177,6 @@ func NewDiscriminatedUnionMembership(discriminatorFieldName string, members ...U
 	}
 }
 
-// allFields returns a string listing all the field names of the member of a union for use in error reporting.
-//
 // 名称用反引号包裹，便于在错误信息中区分字段名与普通文字。
 func (u UnionMembership) allFields() []string {
 	memberNames := make([]string, 0, len(u.members))
@@ -222,8 +186,7 @@ func (u UnionMembership) allFields() []string {
 	return memberNames
 }
 
-// unionValidate is the shared implementation for Union and any other caller
-// that needs custom empty/multiple-member error messages.
+// unionValidate 是 Union 及需要自定义空/多成员错误信息的调用方的共享实现。
 func unionValidate[T any](op operation.Operation, fldPath *field.Path,
 	obj, oldObj T, union *UnionMembership, options UnionValidationOptions, isSetFns ...ExtractorFn[T, bool],
 ) field.ErrorList {
@@ -236,7 +199,7 @@ func unionValidate[T any](op operation.Operation, fldPath *field.Path,
 		}
 	}
 
-	hasOldValue := !reflect.ValueOf(oldObj).IsZero() // because T is any, rather than comparable
+	hasOldValue := !reflect.ValueOf(oldObj).IsZero() // 因为 T 是 any，而非 comparable。
 	var specifiedFields []string
 	var changed bool
 	for i, fieldIsSet := range isSetFns {
@@ -251,7 +214,7 @@ func unionValidate[T any](op operation.Operation, fldPath *field.Path,
 		}
 	}
 
-	// If the union membership is unchanged, we don't need to re-validate.
+	// 联合成员关系未变时，无需重新校验。
 	if op.Type == operation.Update && hasOldValue && !changed {
 		return nil
 	}

@@ -27,7 +27,7 @@ type Duration struct {
 	time.Duration `protobuf:"varint,1,opt,name=duration,casttype=time.Duration"`
 }
 
-// UnmarshalJSON implements the json.Unmarshaller interface.
+// UnmarshalJSON 实现 json.Unmarshaller 接口。
 func (d *Duration) UnmarshalJSON(b []byte) error {
 	// JSON 数字无法表达时间单位，因此只接受字符串形式的时长。
 	var str string
@@ -50,14 +50,12 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.Duration.String())
 }
 
-// ToUnstructured implements the value.UnstructuredConverter interface.
+// ToUnstructured 实现 value.UnstructuredConverter 接口。
 func (d Duration) ToUnstructured() interface{} {
 	return d.Duration.String()
 }
 
 // OpenAPISchemaType 供 kube-openapi 生成器构建该类型的 OpenAPI Schema 时调用。
-//
-// See: https://github.com/kubernetes/kube-openapi/tree/master/pkg/generators
 func (_ Duration) OpenAPISchemaType() []string { return []string{"string"} }
 
 // OpenAPISchemaFormat 供 kube-openapi 生成器构建该类型的 OpenAPI Schema 时调用。

@@ -34,8 +34,8 @@ type buildManagerInfoManager struct {
 
 var _ Manager = &buildManagerInfoManager{}
 
-// NewBuildManagerInfoManager creates a new Manager that converts the manager name into a unique identifier
-// combining operation and version for update requests, and just operation for apply requests.
+// NewBuildManagerInfoManager 创建 Manager，将管理器名称转换为唯一标识符：
+// update 请求组合 operation 和 version，apply 请求仅使用 operation。
 //
 // 唯一标识避免了不同 API 版本或子资源之间的字段所有权冲突：
 // 同一个客户端名称在不同 group/version 下应被视为不同的 manager。
@@ -47,7 +47,7 @@ func NewBuildManagerInfoManager(f Manager, gv schema.GroupVersion, subresource s
 	}
 }
 
-// Update implements Manager.
+// Update 实现 Manager 接口。
 func (f *buildManagerInfoManager) Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error) {
 	manager, err := f.buildManagerInfo(manager, metav1.ManagedFieldsOperationUpdate)
 	if err != nil {
@@ -56,7 +56,7 @@ func (f *buildManagerInfoManager) Update(liveObj, newObj runtime.Object, managed
 	return f.fieldManager.Update(liveObj, newObj, managed, manager)
 }
 
-// Apply implements Manager.
+// Apply 实现 Manager 接口。
 func (f *buildManagerInfoManager) Apply(liveObj, appliedObj runtime.Object, managed Managed, manager string, force bool) (runtime.Object, Managed, error) {
 	manager, err := f.buildManagerInfo(manager, metav1.ManagedFieldsOperationApply)
 	if err != nil {

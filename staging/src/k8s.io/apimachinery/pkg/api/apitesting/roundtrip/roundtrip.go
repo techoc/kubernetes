@@ -116,7 +116,7 @@ var globalNonRoundTrippableTypes = sets.NewString(
 //	        continue
 //	    }
 //	    t.Run(gvk.Group+"."+gvk.Version+"."+gvk.Kind, func(t *testing.T) {
-//	        // roundtrip test
+//	        // 往返测试。
 //	    })
 //	}
 func GlobalNonRoundTrippableTypes() sets.String {
@@ -254,7 +254,7 @@ func roundTripToAllExternalVersions(t *testing.T, scheme *runtime.Scheme, codecF
 	fuzzInternalObject(t, fuzzer, object)
 
 	// 找出 scheme 中所有可能的序列化版本。
-	// TODO fix this up to handle kinds that cross registered with different names.
+	// TODO: 支持以不同名称交叉注册的 Kind。
 	for externalGVK, externalGoType := range scheme.AllKnownTypes() {
 		if externalGVK.Version == runtime.APIVersionInternal {
 			continue
@@ -271,7 +271,7 @@ func roundTripToAllExternalVersions(t *testing.T, scheme *runtime.Scheme, codecF
 
 		roundTrip(t, scheme, apitesting.TestCodec(codecFactory, externalGVK.GroupVersion()), object)
 
-		// TODO remove this hack after we're past the intermediate steps
+		// TODO: 过渡期结束后移除此特例。
 		// kubeadm 的类型暂不支持 protobuf，作为过渡期特例排除。
 		if !skipProtobuf && externalGVK.Group != "kubeadm.k8s.io" {
 			s := protobuf.NewSerializer(scheme, scheme)
@@ -301,7 +301,7 @@ func roundTripOfExternalType(t *testing.T, scheme *runtime.Scheme, codecFactory 
 
 	roundTrip(t, scheme, json.NewSerializerWithOptions(json.DefaultMetaFactory, scheme, scheme, json.SerializerOptions{}), object)
 
-	// TODO remove this hack after we're past the intermediate steps
+	// TODO: 过渡期结束后移除此特例。
 	if !skipProtobuf {
 		roundTrip(t, scheme, protobuf.NewSerializer(scheme, scheme), object)
 	}
@@ -342,7 +342,7 @@ func roundTrip(t *testing.T, scheme *runtime.Scheme, codec runtime.Codec, object
 	}
 
 	// 确认深拷贝仍与原对象相等：编码（以及其中隐含的转换）都不应改写对象。
-	// TODO eliminate this global
+	// TODO: 消除此全局变量。
 	if !apiequality.Semantic.DeepEqual(original, object) {
 		t.Errorf("%v: encode altered the object, diff: %v", name, cmp.Diff(original, object))
 		return

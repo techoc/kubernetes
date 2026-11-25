@@ -35,7 +35,7 @@ type Scale int32
 //
 // inf.Dec 的 Scale 语义与本包相反（其 scale 表示小数点后的位数），故取负号。
 func (s Scale) infScale() inf.Scale {
-	return inf.Scale(-s) // inf.Scale is upside-down
+	return inf.Scale(-s) // inf.Scale 的缩放方向相反
 }
 
 // 常用的十进制 Scale 常量，对应十进制的 SI 后缀。
@@ -90,8 +90,6 @@ func (a int64Amount) AsInt64() (int64, bool) {
 		return a.value, true
 	}
 	if a.scale < 0 {
-		// TODO: attempt to reduce factors, although it is assumed that factors are reduced prior
-		// to the int64Amount being created.
 		// 负指数意味着值被放大了，无法无损转为整数，直接放弃。
 		return 0, false
 	}
@@ -275,7 +273,6 @@ func (a int64Amount) AsScale(scale Scale) (int64Amount, bool) {
 
 // AsCanonicalBytes 将数值编码为十进制规范形式，并返回结果字节及对应指数。
 // 函数会复用传入缓冲区；空间不足时分配更大的缓冲区。编码时会调整尾数与指数，
-// until the exponent is a multiple of 3 - i.e. 1.1e5 would return "110", 3.
 func (a int64Amount) AsCanonicalBytes(out []byte) (result []byte, exponent int32) {
 	mantissa := a.value
 	exponent = int32(a.scale)
@@ -325,8 +322,8 @@ type infDecAmount struct {
 	*inf.Dec
 }
 
-// AsScale adjusts this amount to set a minimum scale, rounding up, and returns true iff no precision
-// was lost. (1.1e5).AsScale(5) would return 1.1e5, but (1.1e5).AsScale(6) would return 1e6.
+// AsScale 将数值调整到指定的最小 scale 并向上取整；未损失精度时返回 true。
+// 例如 (1.1e5).AsScale(5) 返回 1.1e5，而 AsScale(6) 返回 1e6。
 func (a infDecAmount) AsScale(scale Scale) (infDecAmount, bool) {
 	tmp := &inf.Dec{}
 	// 向上取整后再与原值比较，相等即说明未损失精度。
@@ -334,9 +331,8 @@ func (a infDecAmount) AsScale(scale Scale) (infDecAmount, bool) {
 	return infDecAmount{tmp}, tmp.Cmp(a.Dec) == 0
 }
 
-// AsCanonicalBytes accepts a buffer to write the base-10 string value of this field to, and returns
-// either that buffer or a larger buffer and the current exponent of the value. The value is adjusted
-// until the exponent is a multiple of 3 - i.e. 1.1e5 would return "110", 3.
+// AsCanonicalBytes 将十进制尾数写入缓冲区，并返回该缓冲区（或扩容后的缓冲区）与指数。
+// 值会调整到指数为 3 的倍数；如 1.1e5 返回 "110" 和 3。
 func (a infDecAmount) AsCanonicalBytes(out []byte) (result []byte, exponent int32) {
 	mantissa := a.Dec.UnscaledBig()
 	exponent = int32(-a.Dec.Scale())
@@ -345,7 +341,6 @@ func (a infDecAmount) AsCanonicalBytes(out []byte) (result []byte, exponent int3
 	amount, times := removeBigIntFactors(amount, bigTen)
 	exponent += times
 
-	// make sure exponent is a multiple of 3
 	// 用乘法（而不是除法）对齐指数，保证不会截断尾数。
 	for exponent%3 != 0 {
 		amount.Mul(amount, bigTen)
@@ -355,9 +350,9 @@ func (a infDecAmount) AsCanonicalBytes(out []byte) (result []byte, exponent int3
 	return append(out, amount.String()...), exponent
 }
 
-// AsCanonicalBase1024Bytes accepts a buffer to write the base-1024 string value of this field to, and returns
-// either that buffer or a larger buffer and the current exponent of the value. 2048 is 2 * 1024 ^ 1 and would
-// return []byte("2048"), 1.
+// AsCanonicalBase1024Bytes 将以 1024 为底的尾数写入缓冲区，并返回缓冲区与指数。
+// 如 2048 = 2 * 1024^1，返回 "2" 和 1。
+// 返回 []byte("2048") 和 1。
 func (a infDecAmount) AsCanonicalBase1024Bytes(out []byte) (result []byte, exponent int32) {
 	// 先按 RoundUp 取整到整数，再剥离 1024 的因子。
 	tmp := &inf.Dec{}

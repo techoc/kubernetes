@@ -33,8 +33,6 @@ import (
 // 它不需要注册任何类型，因为 typer/creator 全部由 unstructured 实现承担。
 var scheme = runtime.NewScheme()
 
-// NewUnstructuredNegotiatedSerializer returns a simple, negotiated serializer
-//
 // 返回的序列化器只支持 JSON/YAML，且不做任何 defaulting。
 func NewUnstructuredNegotiatedSerializer() runtime.NegotiatedSerializer {
 	return unstructuredNegotiatedSerializer{
@@ -95,7 +93,7 @@ func (s unstructuredNegotiatedSerializer) DecoderToVersion(decoder runtime.Decod
 type unstructuredObjectTyper struct {
 }
 
-// NewUnstructuredObjectTyper returns an object typer that can deal with unstructured things
+// NewUnstructuredObjectTyper 返回可处理非结构化对象的对象类型判断器。
 func NewUnstructuredObjectTyper() runtime.ObjectTyper {
 	return unstructuredObjectTyper{}
 }
@@ -103,7 +101,7 @@ func NewUnstructuredObjectTyper() runtime.ObjectTyper {
 // ObjectKinds 只接受实现了 runtime.Unstructured 的对象；
 // 对普通 Go 类型返回错误，避免静默地产生错误类型信息。
 func (t unstructuredObjectTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
-	// Delegate for things other than Unstructured.
+	// 用于委托处理 Unstructured 之外的对象。
 	if _, ok := obj.(runtime.Unstructured); !ok {
 		return nil, false, fmt.Errorf("cannot type %T", obj)
 	}
@@ -127,7 +125,7 @@ func (t unstructuredObjectTyper) Recognizes(gvk schema.GroupVersionKind) bool {
 // unstructuredCreator 根据请求的 GVK 创建空 Unstructured。
 type unstructuredCreator struct{}
 
-// NewUnstructuredCreator returns a simple object creator that always returns an unstructured
+// NewUnstructuredCreator 返回始终创建非结构化对象的简单创建器。
 func NewUnstructuredCreator() runtime.ObjectCreater {
 	return unstructuredCreator{}
 }
@@ -143,7 +141,7 @@ func (c unstructuredCreator) New(kind schema.GroupVersionKind) (runtime.Object, 
 type unstructuredDefaulter struct {
 }
 
-// NewUnstructuredDefaulter returns defaulter suitable for unstructured types that doesn't default anything
+// NewUnstructuredDefaulter 返回适用于非结构化类型、不设置默认值的默认值处理器。
 func NewUnstructuredDefaulter() runtime.ObjectDefaulter {
 	return unstructuredDefaulter{}
 }

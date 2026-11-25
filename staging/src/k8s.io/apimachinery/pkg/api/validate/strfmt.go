@@ -32,7 +32,7 @@ import (
 const (
 	uuidErrorMessage              = "must be a lowercase UUID in 8-4-4-4-12 format"
 	defaultResourceRequestsPrefix = "requests."
-	// Default namespace prefix.
+	// 默认命名空间前缀。
 	resourceDefaultNamespacePrefix = "kubernetes.io/"
 	resourceDeviceMaxLength        = 32
 )
@@ -275,9 +275,6 @@ func resourcesQualifiedName[T ~string](ctx context.Context, op operation.Operati
 	var allErrs field.ErrorList
 	s := string(*value)
 	parts := strings.Split(s, "/")
-	// TODO: This validation and the corresponding handwritten validation validateQualifiedName in
-	// pkg/apis/resource/validation/validation.go are not validating whether there are more than 1
-	// slash. This should be fixed in both places.
 	// 仅接受"无前缀"或"一个前缀 + 名称"两种形式；多余斜杠会在下面通过长度分支被忽略，
 	// 这是已知缺陷（见上方待办注释）。
 	switch len(parts) {

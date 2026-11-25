@@ -43,7 +43,7 @@ func TestDependentRequired(t *testing.T) {
 		op     operation.Operation
 		obj    *obj
 		oldObj *obj
-		err    string // regex; empty means expect no error
+		err    string // 正则表达式；为空表示预期无错误。
 	}{{
 		// trigger 未设置时不施加任何约束，dependent 可自由设置。
 		name: "create: trigger unset, dependent set",
@@ -139,7 +139,7 @@ func TestDependentForbidden(t *testing.T) {
 		op     operation.Operation
 		obj    *obj
 		oldObj *obj
-		err    string // regex; empty means expect no error
+		err    string // 正则表达式；为空表示预期无错误。
 	}{{
 		// trigger 未设置时 dependent 允许存在。
 		name: "create: trigger unset, dependent set",

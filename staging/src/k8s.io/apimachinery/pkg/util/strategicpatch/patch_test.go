@@ -81,33 +81,22 @@ type StrategicMergePatchRawTestCase struct {
 // StrategicMergePatchTestCaseData 保存一条 patch 用例的输入与期望输出。
 // 三方合并场景下 Original/Modified/Current 分别对应 last-applied 注解、用户期望配置与服务端实时配置。
 type StrategicMergePatchTestCaseData struct {
-	// Original is the original object (last-applied config in annotation)
 	// Original 是原始对象（注解中的 last-applied 配置）。
 	Original map[string]interface{}
-	// Modified is the modified object (new config we want)
 	// Modified 是修改后的对象（用户期望的新配置）。
 	Modified map[string]interface{}
-	// Current is the current object (live config in the server)
 	// Current 是当前对象（服务端的实时配置）。
 	Current map[string]interface{}
-	// TwoWay is the expected two-way merge patch diff between original and modified
 	// TwoWay 是 Original 与 Modified 之间期望得到的双向合并补丁。
 	TwoWay map[string]interface{}
-	// ThreeWay is the expected three-way merge patch
 	// ThreeWay 是期望得到的三方合并补丁。
 	ThreeWay map[string]interface{}
-	// Result is the expected object after applying the three-way patch on current object.
 	// Result 是在 Current 上应用三方补丁后期望得到的对象。
 	Result map[string]interface{}
-	// TwoWayResult is the expected object after applying the two-way patch on current object.
-	// If nil, Modified is used.
 	// TwoWayResult 是在 Current 上应用双向补丁后期望得到的对象；为 nil 时使用 Modified。
 	TwoWayResult map[string]interface{}
 }
 
-// The meaning of each field is the same as StrategicMergePatchTestCaseData's.
-// The difference is that all the fields in StrategicMergePatchRawTestCaseData are json-encoded data.
-//
 // 各字段含义与 StrategicMergePatchTestCaseData 相同，区别在于全部字段都是 JSON 编码后的数据。
 // 之所以需要原始形式，是因为某些用例依赖 YAML 的重复键、null 与字段顺序等结构化对象无法保留的信息。
 type StrategicMergePatchRawTestCaseData struct {
@@ -157,9 +146,6 @@ var (
 	mergeItemStructSchema = PatchMetaFromStruct{T: GetTagStructTypeOrDie(mergeItem)}
 )
 
-// These are test cases for SortMergeList, used to assert that it (recursively)
-// sorts both merging and non merging lists correctly.
-//
 // 这些是 SortMergeList 的用例，用于断言它能（递归地）正确排序合并列表与非合并列表。
 var sortMergeListTestCaseData = []byte(`
 testCases:
@@ -355,12 +341,11 @@ func TestSortMergeLists(t *testing.T) {
 	}
 }
 
-// These are test cases for StrategicMergePatch that cannot be generated using
-// CreateTwoWayMergePatch because it may be one of the following cases:
-// - not use the replace directive.
-// - generate duplicate integers for a merging list patch.
-// - generate empty merging lists.
-// - use patch format from an old client.
+// 这些 StrategicMergePatch 用例无法由 CreateTwoWayMergePatch 生成，可能涉及：
+// - 不使用 replace 指令。
+// - 为合并列表补丁生成重复整数。
+// - 生成空合并列表。
+// - 使用旧客户端的补丁格式。
 //
 // 这些用例用于测试 CreateTwoWayMergePatch 无法生成的补丁，原因可能包括：
 // 未使用 replace 指令、为合并列表生成重复整数、生成空的合并列表，
@@ -857,11 +842,6 @@ func TestCustomStrategicMergePatch(t *testing.T) {
 	}
 }
 
-// These are test cases for StrategicMergePatch, to assert that applying  a patch
-// yields the correct outcome. They are also test cases for CreateTwoWayMergePatch
-// and CreateThreeWayMergePatch, to assert that they both generate the correct patch
-// for the given set of input documents.
-//
 // 这些是 StrategicMergePatch 的用例，断言应用补丁能得到正确结果；
 // 同时也是 CreateTwoWayMergePatch 与 CreateThreeWayMergePatch 的用例，
 // 断言二者能为给定输入生成正确的补丁。
@@ -3284,7 +3264,7 @@ mergingIntList:
 `),
 		},
 	},
-	// test case for setElementOrder
+	//setElementOrder 测试用例
 	{
 		Description: "add an item in a list of primitives and preserve order",
 		StrategicMergePatchRawTestCaseData: StrategicMergePatchRawTestCaseData{
@@ -4301,7 +4281,7 @@ mergingIntList:
 		},
 	},
 	{
-		// This test case is used just to demonstrate the behavior when dealing with a list with duplicate
+		//此用例仅演示列表含重复
 		Description: "behavior of set element order for a merging list with duplicate",
 		StrategicMergePatchRawTestCaseData: StrategicMergePatchRawTestCaseData{
 			Original: []byte(`
@@ -4373,7 +4353,7 @@ mergingList:
 		},
 	},
 	{
-		// This test case is used just to demonstrate the behavior when dealing with a list with duplicate
+		//此用例仅演示列表含重复
 		Description: "behavior of set element order for a merging int list with duplicate",
 		StrategicMergePatchRawTestCaseData: StrategicMergePatchRawTestCaseData{
 			Original: []byte(`
@@ -6280,7 +6260,7 @@ func TestStrategicMergePatch(t *testing.T) {
 			}
 		})
 
-		// run multiple times to exercise different map traversal orders
+		//多次运行以覆盖不同的映射遍历顺序。
 		// 多次重复运行，以覆盖 map 遍历顺序不同的情况；补丁算法必须与遍历顺序无关。
 		for i := 0; i < 10; i++ {
 			for _, c := range strategicMergePatchRawTestCases {
@@ -6299,7 +6279,7 @@ func TestStrategicMergePatch(t *testing.T) {
 // 若构建失败则直接比对错误，否则再用得到的 schema 执行补丁测试。
 func testStrategicMergePatchWithCustomArgumentsUsingStruct(t *testing.T, description, original, patch string, dataStruct interface{}, expected error) {
 	schema, actual := NewPatchMetaFromStruct(dataStruct)
-	// If actual is not nil, check error. If errors match, return.
+	//actual 非 nil 时检查错误；错误匹配则返回。
 	// 若实际返回了错误，检查其是否与预期一致后返回。
 	if actual != nil {
 		checkErrorsEqual(t, description, expected, actual, schema)
@@ -6950,7 +6930,7 @@ func TestUnknownField(t *testing.T) {
 		ExpectedThreeWayErr    string
 		ExpectedThreeWayResult string
 	}{
-		// cases we can successfully strategically merge
+		//可以成功执行战略合并的用例
 		"no diff": {
 			Original: `{"array":[1,2,3],"complex":{"nested":true},"name":"foo","scalar":true}`,
 			Current:  `{"array":[1,2,3],"complex":{"nested":true},"name":"foo","scalar":true}`,
@@ -7082,7 +7062,7 @@ func TestUnknownField(t *testing.T) {
 			ExpectedThreeWayResult: `{"array":[1,2,3],"name":"foo"}`,
 		},
 
-		// cases we cannot successfully strategically merge (expect errors)
+		//无法成功执行战略合并的用例（预期报错）
 		"diff": {
 			Original: `{"array":[1,2,3],"complex":{"nested":true},"name":"foo","scalar":true}`,
 			Current:  `{"array":[1,2,3],"complex":{"nested":true},"name":"foo","scalar":true}`,

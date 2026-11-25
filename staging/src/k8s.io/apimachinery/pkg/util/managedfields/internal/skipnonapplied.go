@@ -36,13 +36,13 @@ type skipNonAppliedManager struct {
 
 var _ Manager = &skipNonAppliedManager{}
 
-// NewSkipNonAppliedManager creates a new wrapped FieldManager that only starts tracking managers after the first apply.
+// NewSkipNonAppliedManager 创建包装的 FieldManager，仅在首次 apply 后开始跟踪管理器。
 func NewSkipNonAppliedManager(fieldManager Manager, objectCreater runtime.ObjectCreater) Manager {
 	return NewProbabilisticSkipNonAppliedManager(fieldManager, objectCreater, 0.0)
 }
 
-// NewProbabilisticSkipNonAppliedManager creates a new wrapped FieldManager that starts tracking managers after the first apply,
-// or starts tracking on create with p probability.
+// NewProbabilisticSkipNonAppliedManager 创建包装的 FieldManager，在首次 apply 后开始跟踪管理器，
+// 或以 p 的概率从创建时开始跟踪。
 //
 // 概率参数用于灰度：对新建对象以 p 的概率提前开始跟踪，便于逐步铺开而不必等下一次 apply。
 func NewProbabilisticSkipNonAppliedManager(fieldManager Manager, objectCreater runtime.ObjectCreater, p float32) Manager {
@@ -54,7 +54,7 @@ func NewProbabilisticSkipNonAppliedManager(fieldManager Manager, objectCreater r
 	}
 }
 
-// Update implements Manager.
+// Update 实现 Manager 接口。
 //
 // 三种情况：
 //   - 已有 managed fields：正常委托；
@@ -66,11 +66,11 @@ func (f *skipNonAppliedManager) Update(liveObj, newObj runtime.Object, managed M
 		return newObj, managed, nil
 	}
 
-	// If managed fields is empty, we need to determine whether to skip tracking managed fields.
+	//如果托管字段为空，需要判断是否跳过跟踪。
 	if len(managed.Fields()) == 0 {
-		// Check if the operation is a create, by checking whether lastObj's UID is empty.
-		// If the operation is create, P(tracking managed fields) = f.probability
-		// If the operation is update, skip tracking managed fields, since we already know managed fields is empty.
+		//通过检查 lastObj 的 UID 是否为空判断操作是否为 create。
+		//如果操作是 create，跟踪托管字段的概率为 f.probability；
+		//如果操作是 update，已知托管字段为空，因此跳过跟踪。
 		if len(accessor.GetUID()) == 0 {
 			if f.probability <= rand.Float32() {
 				return newObj, managed, nil
@@ -82,7 +82,7 @@ func (f *skipNonAppliedManager) Update(liveObj, newObj runtime.Object, managed M
 	return f.fieldManager.Update(liveObj, newObj, managed, manager)
 }
 
-// Apply implements Manager.
+// Apply 实现 Manager 接口。
 //
 // 首次 apply 时，先以 "before-first-apply" 的名义把现存字段登记给一个虚拟 manager，
 // 再从空对象出发执行真正的 apply，从而只把本次 apply 显式设置的字段算给用户。

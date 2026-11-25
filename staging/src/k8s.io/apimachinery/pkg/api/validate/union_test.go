@@ -74,8 +74,6 @@ func TestUnion(t *testing.T) {
 			}
 
 			t.Run("pointer", func(t *testing.T) {
-				// Create mock extractors that return predefined values instead of
-				// actually extracting from the object.
 				// 依赖 Go 1.22 起 range 变量按迭代创建，闭包各自捕获自己的 val。
 				extractors := make([]ExtractorFn[*testMember, bool], len(tc.fieldValues))
 				for i, val := range tc.fieldValues {
@@ -89,8 +87,8 @@ func TestUnion(t *testing.T) {
 				}
 			})
 			t.Run("value", func(t *testing.T) {
-				// Create mock extractors that return predefined values instead of
-				// actually extracting from the object.
+				// 创建返回预定义值的 mock 提取器，而非从对象实际提取。
+				//
 				extractors := make([]ExtractorFn[testMember, bool], len(tc.fieldValues))
 				for i, val := range tc.fieldValues {
 					extractors[i] = func(_ testMember) bool { return val }
@@ -167,8 +165,8 @@ func TestDiscriminatedUnion(t *testing.T) {
 			t.Run("pointer", func(t *testing.T) {
 				discriminatorExtractor := func(_ *testMember) string { return tc.discriminatorValue }
 
-				// Create mock extractors that return predefined values instead of
-				// actually extracting from the object.
+				// 创建返回预定义值的 mock 提取器，而非从对象实际提取。
+				//
 				extractors := make([]ExtractorFn[*testMember, bool], len(tc.fieldValues))
 				for i, val := range tc.fieldValues {
 					extractors[i] = func(_ *testMember) bool { return val }
@@ -183,8 +181,8 @@ func TestDiscriminatedUnion(t *testing.T) {
 			t.Run("value", func(t *testing.T) {
 				discriminatorExtractor := func(_ testMember) string { return tc.discriminatorValue }
 
-				// Create mock extractors that return predefined values instead of
-				// actually extracting from the object.
+				// 创建返回预定义值的 mock 提取器，而非从对象实际提取。
+				//
 				extractors := make([]ExtractorFn[testMember, bool], len(tc.fieldValues))
 				for i, val := range tc.fieldValues {
 					extractors[i] = func(_ testMember) bool { return val }

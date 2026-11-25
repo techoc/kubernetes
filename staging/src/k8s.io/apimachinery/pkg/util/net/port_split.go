@@ -25,15 +25,15 @@ import (
 // validSchemes 是 SplitSchemeNamePort 接受的前缀；空字符串表示省略 scheme。
 var validSchemes = sets.NewString("http", "https", "")
 
-// SplitSchemeNamePort takes a string of the following forms:
+// SplitSchemeNamePort 接受以下形式的字符串：
 //   - "<name>",                 returns "",        "<name>","",      true
 //   - "<name>:<port>",          returns "",        "<name>","<port>",true
 //   - "<scheme>:<name>:<port>", returns "<scheme>","<name>","<port>",true
 //
-// Name must be non-empty or valid will be returned false.
-// Scheme must be "http" or "https" if specified
-// Port is returned as a string, and it is not required to be numeric (could be
-// used for a named port, for example).
+// name 必须非空，否则返回 false。
+// 如果指定 scheme，则必须为 "http" 或 "https"。
+// port 以字符串返回，不要求为数字，
+// 例如可以是命名端口。
 //
 // 中文说明：段的个数多于 3 或 name 为空都返回 false；scheme 缺省时只允许
 // 两段/一段形式，从而避免与 IPv6 之类的冒号语法混淆。
@@ -60,26 +60,26 @@ func SplitSchemeNamePort(id string) (scheme, name, port string, valid bool) {
 	}
 }
 
-// JoinSchemeNamePort returns a string that specifies the scheme, name, and port:
+// JoinSchemeNamePort 返回指定 scheme、name 和 port 的字符串：
 //   - "<name>"
 //   - "<name>:<port>"
 //   - "<scheme>:<name>:<port>"
 //
-// None of the parameters may contain a ':' character
-// Name is required
-// Scheme must be "", "http", or "https"
+// 任何参数都不能包含 ':' 字符。
+// name 必填。
+// scheme 必须为 ""、"http" 或 "https"。
 //
 // 中文说明：段数由非空参数个数决定；空 port 与空 scheme 会被省略，因此
 // 拼接结果可以被 SplitSchemeNamePort 原样解析。
 func JoinSchemeNamePort(scheme, name, port string) string {
 	if len(scheme) > 0 {
-		// Must include three segments to specify scheme
+		//指定 scheme 时必须包含三段。
 		return scheme + ":" + name + ":" + port
 	}
 	if len(port) > 0 {
-		// Must include two segments to specify port
+		//指定 port 时必须包含两段。
 		return name + ":" + port
 	}
-	// Return name alone
+	//仅返回 name。
 	return name
 }

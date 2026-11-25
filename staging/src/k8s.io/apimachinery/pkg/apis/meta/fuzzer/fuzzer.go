@@ -64,11 +64,9 @@ func genericFuzzerFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			j.Kind = ""
 		},
 		func(j *runtime.Object, c randfill.Continue) {
-			// TODO: uncomment when round trip starts from a versioned object
 			// 目前总是生成 Unknown 对象，保证原始字节在往返中不被改写。
 			if true { // c.Bool() {
 				*j = &runtime.Unknown{
-					// We do not set TypeMeta here because it is not carried through a round trip
 					// 这里不设置 TypeMeta，因为往返过程不会保留它。
 					Raw:         []byte(`{"apiVersion":"unknown.group/unknown","kind":"Something","someKey":"someValue"}`),
 					ContentType: runtime.ContentTypeJSON,
@@ -81,38 +79,31 @@ func genericFuzzerFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(r *runtime.RawExtension, c randfill.Continue) {
-			// Pick an arbitrary type and fuzz it
 			// 任选一种类型填充，再编码为原始字节。
 			types := []runtime.Object{&metav1.Status{}, &metav1.APIGroup{}}
 			obj := types[c.Rand.Intn(len(types))]
 			c.Fill(obj)
 
-			// Find a codec for converting the object to raw bytes.  This is necessary for the
-			// api version and kind to be correctly set be serialization.
 			// 找到能把对象编码为原始字节的 codec，序列化时才能正确填入 apiVersion 与 kind。
 			var codec = apitesting.TestCodec(codecs, metav1.SchemeGroupVersion)
 
-			// Convert the object to raw bytes
 			// 把对象编码为原始字节。
 			bytes, err := runtime.Encode(codec, obj)
 			if err != nil {
 				panic(fmt.Sprintf("Failed to encode object: %v", err))
 			}
 
-			// strip trailing newlines which do not survive roundtrips
 			// 去掉末尾换行，它们在往返中不会被保留。
 			for len(bytes) >= 1 && bytes[len(bytes)-1] == 10 {
 				bytes = bytes[:len(bytes)-1]
 			}
 
-			// Set the bytes field on the RawExtension
 			// 写入 RawExtension 的字节字段。
 			r.Raw = bytes
 		},
 	}
 }
 
-// taken from randfill (nee gofuzz) internals for RandString
 // charRange 表示一个闭区间字符范围，用于从区间内随机选取 rune。
 type charRange struct {
 	first, last rune
@@ -177,7 +168,6 @@ func randomLabelKey(c randfill.Continue) string {
 
 	usePrefix := c.Bool()
 	if usePrefix {
-		// we can fit, with dots, at most 3 labels in the 253 allotted characters
 		// 在 253 字符的限额内，加上点号最多可容纳 3 个 label 段。
 		prefixPartsLen := c.Rand.Intn(2) + 1
 		prefixParts := make([]string, prefixPartsLen)
@@ -206,8 +196,6 @@ func v1FuzzerFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			j.ResourceVersion = strconv.FormatUint(c.Uint64(), 10)
 			j.UID = types.UID(c.String(0))
 
-			// Fuzzing sec and nsec in a smaller range (uint32 instead of int64),
-			// so that the result Unix time is a valid date and can be parsed into RFC3339 format.
 			// 用 uint32 范围生成秒/纳秒，保证结果时间能表示为合法 RFC3339 日期。
 			var sec, nsec uint32
 			c.Fill(&sec)
@@ -251,8 +239,6 @@ func v1FuzzerFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 		},
 		func(j *metav1.LabelSelector, c randfill.Continue) {
 			c.FillNoCustom(j)
-			// we can't have an entirely empty selector, so force
-			// use of MatchExpression if necessary
 			// 完全空的 selector 不合法，必要时强制生成 MatchExpression。
 			if len(j.MatchLabels) == 0 && len(j.MatchExpressions) == 0 {
 				j.MatchExpressions = make([]metav1.LabelSelectorRequirement, c.Rand.Intn(2)+1)
@@ -274,10 +260,6 @@ func v1FuzzerFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 
 			if j.MatchExpressions != nil {
-				// NB: the label selector parser code sorts match expressions by key, and
-				// sorts and deduplicates the values, so we need to make sure ours are
-				// sorted and deduplicated as well here to preserve round-trip comparison.
-				// In practice, not sorting doesn't hurt anything...
 				// 注意：选择器解析器会按 key 排序表达式，并对值排序去重；
 				// 为保持往返比较一致，这里也做同样的排序与去重。
 				for i := range j.MatchExpressions {
@@ -287,7 +269,6 @@ func v1FuzzerFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 					req.Operator = validOperators[c.Rand.Intn(len(validOperators))]
 					if req.Operator == metav1.LabelSelectorOpIn || req.Operator == metav1.LabelSelectorOpNotIn {
 						if len(req.Values) == 0 {
-							// we must have some values here, so randomly choose a short length
 							// In/NotIn 必须至少有一个值，随机取一个短长度。
 							req.Values = make([]string, c.Rand.Intn(2)+1)
 						}
@@ -318,8 +299,6 @@ func v1beta1FuzzerFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(r *metav1beta1.TableOptions, c randfill.Continue) {
 			c.FillNoCustom(r)
-			// NoHeaders is not serialized to the wire but is allowed within the versioned
-			// type because we don't use meta internal types in the client and API server.
 			// NoHeaders 不会序列化到线上，但允许存在于 versioned 类型中，
 			// 因为客户端与 API server 不使用 meta 内部类型。
 			r.NoHeaders = false

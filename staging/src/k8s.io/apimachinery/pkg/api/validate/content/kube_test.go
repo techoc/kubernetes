@@ -77,9 +77,9 @@ func TestIsLabelValue(t *testing.T) {
 		"now-with-dashes",
 		"1-starts-with-num",
 		"end-with-num-1",
-		"1234",                  // only num
-		strings.Repeat("a", 63), // to the limit
-		"",                      // empty value
+		"1234",                  // 仅数字。
+		strings.Repeat("a", 63), // 达到上限。
+		"",                      // 空值。
 	}
 	for i := range successCases {
 		if errs := IsLabelValue(successCases[i]); len(errs) != 0 {
@@ -95,7 +95,7 @@ func TestIsLabelValue(t *testing.T) {
 		"ends-with-dash-",
 		".starts.with.dot",
 		"ends.with.dot.",
-		strings.Repeat("a", 64), // over the limit
+		strings.Repeat("a", 64), // 超过上限。
 	}
 	for i := range errorCases {
 		if errs := IsLabelValue(errorCases[i]); len(errs) == 0 {

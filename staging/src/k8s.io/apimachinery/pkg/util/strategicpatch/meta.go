@@ -66,11 +66,11 @@ func (pm *PatchMeta) SetPatchMergeKey(pmk string) {
 // LookupPatchMeta 抽象"按字段名下钻 schema 并取出 patch 元数据"的能力，
 // 使 strategic merge patch 既能基于 Go 结构体 tag，也能基于 OpenAPI 文档工作。
 type LookupPatchMeta interface {
-	// LookupPatchMetadataForStruct gets subschema and the patch metadata (e.g. patch strategy and merge key) for map.
+	//LookupPatchMetadataForStruct 获取映射的子 schema 及补丁元数据（如 patch strategy 和 merge key）。
 	LookupPatchMetadataForStruct(key string) (LookupPatchMeta, PatchMeta, error)
-	// LookupPatchMetadataForSlice get subschema and the patch metadata for slice.
+	//LookupPatchMetadataForSlice 获取切片的子 schema 及补丁元数据。
 	LookupPatchMetadataForSlice(key string) (LookupPatchMeta, PatchMeta, error)
-	// Get the type name of the field
+	//获取字段的类型名。
 	Name() string
 }
 
@@ -113,18 +113,18 @@ func (s PatchMetaFromStruct) LookupPatchMetadataForSlice(key string) (LookupPatc
 
 	var elemType reflect.Type
 	switch t.Kind() {
-	// If t is an array or a slice, get the element type.
-	// If element is still an array or a slice, return an error.
-	// Otherwise, return element type.
+	//如果 t 是数组或切片，则获取元素类型。
+	//如果元素仍是数组或切片，则返回错误。
+	//否则返回元素类型。
 	case reflect.Array, reflect.Slice:
 		elemType = t.Elem()
 		if elemType.Kind() == reflect.Array || elemType.Kind() == reflect.Slice {
 			return nil, PatchMeta{}, errors.New("unexpected slice of slice")
 		}
-	// If t is an pointer, get the underlying element.
-	// If the underlying element is neither an array nor a slice, the pointer is pointing to a slice,
-	// e.g. https://github.com/kubernetes/kubernetes/blob/bc22e206c79282487ea0bf5696d5ccec7e839a76/staging/src/k8s.io/apimachinery/pkg/util/strategicpatch/patch_test.go#L2782-L2822
-	// If the underlying element is either an array or a slice, return its element type.
+	//如果 t 是指针，则获取其指向的元素。
+	//如果底层元素既不是数组也不是切片，说明指针指向切片，
+	//例如 https://github.com/kubernetes/kubernetes/blob/bc22e206c79282487ea0bf5696d5ccec7e839a76/staging/src/k8s.io/apimachinery/pkg/util/strategicpatch/patch_test.go#L2782-L2822
+	//如果底层元素是数组或切片，则返回其元素类型。
 	case reflect.Pointer:
 		t = t.Elem()
 		if t.Kind() == reflect.Array || t.Kind() == reflect.Slice {
@@ -150,7 +150,7 @@ func getTagStructType(dataStruct interface{}) (reflect.Type, error) {
 	}
 
 	t := reflect.TypeOf(dataStruct)
-	// Get the underlying type for pointers
+	//获取指针的底层类型。
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -174,7 +174,7 @@ func GetTagStructTypeOrDie(dataStruct interface{}) reflect.Type {
 
 // PatchMetaFromOpenAPIV3 从 OpenAPI v3 schema 中提取 patch 元数据。
 type PatchMetaFromOpenAPIV3 struct {
-	// SchemaList is required to resolve OpenAPI V3 references
+	//需要 SchemaList 来解析 OpenAPI v3 引用。
 	SchemaList map[string]*spec.Schema
 	Schema     *spec.Schema
 }

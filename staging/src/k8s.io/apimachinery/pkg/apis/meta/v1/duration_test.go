@@ -64,7 +64,7 @@ func TestDurationUnmarshalYAML(t *testing.T) {
 		{"d: 2m0s\n", Duration{2 * time.Minute}},
 		{"d: 1h0m0.003s\n", Duration{time.Hour + 3*time.Millisecond}},
 
-		// Units with zero values can optionally be dropped
+		// 可以省略值为零的单位。
 		{"d: 2m\n", Duration{2 * time.Minute}},
 		{"d: 1h0.003s\n", Duration{time.Hour + 3*time.Millisecond}},
 	}
@@ -117,7 +117,7 @@ func TestDurationUnmarshalJSON(t *testing.T) {
 		{`{"d":"2m0s"}`, Duration{2 * time.Minute}},
 		{`{"d":"1h0m0.003s"}`, Duration{time.Hour + 3*time.Millisecond}},
 
-		// Units with zero values can optionally be dropped
+		// 可以省略值为零的单位。
 		{`{"d":"2m"}`, Duration{2 * time.Minute}},
 		{`{"d":"1h0.003s"}`, Duration{time.Hour + 3*time.Millisecond}},
 	}

@@ -71,7 +71,6 @@ type RawExtensionList struct {
 
 func (l RawExtensionList) DeepCopyObject() runtime.Object { panic("unimplemented") }
 
-// NOTE: Foo struct itself is the implementer of runtime.Object.
 // Foo 以值类型实现 runtime.Object，与下面 Sample 的指针实现形成对照。
 type Foo struct {
 	metav1.TypeMeta
@@ -86,8 +85,6 @@ func (f Foo) GetObjectKind() schema.ObjectKind {
 
 func (f Foo) DeepCopyObject() runtime.Object { panic("unimplemented") }
 
-// NOTE: the pointer of Sample that is the implementer of runtime.Object.
-// the behavior is similar to our corev1.Pod. corev1.Node
 // Sample 由指针实现 runtime.Object，与真实 API 类型一致。
 type Sample struct {
 	metav1.TypeMeta

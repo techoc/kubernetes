@@ -33,77 +33,68 @@ const (
 	HeaderAcceptedProtocolVersions = "X-Accepted-Stream-Protocol-Versions"
 )
 
-// NewStreamHandler defines a function that is called when a new Stream is
-// received. If no error is returned, the Stream is accepted; otherwise,
-// the stream is rejected. After the reply frame has been sent, replySent is closed.
+// NewStreamHandler 定义收到新 Stream 时调用的函数。
+// 不返回错误时接受该 Stream，否则拒绝；
+// 发送回复帧后关闭 replySent。
 // 中文补充：replySent 关闭即表示服务端已把应答帧写出，handler 可据此做后续清理。
 type NewStreamHandler func(stream Stream, replySent <-chan struct{}) error
 
-// NoOpNewStreamHandler is a stream handler that accepts a new stream and
-// performs no other logic.
+// NoOpNewStreamHandler 是接受新流且不执行其他逻辑的处理器。
 func NoOpNewStreamHandler(stream Stream, replySent <-chan struct{}) error { return nil }
 
-// Dialer knows how to open a streaming connection to a server.
+// Dialer 知道如何与服务器建立流式连接。
 type Dialer interface {
 
-	// Dial opens a streaming connection to a server using one of the protocols
-	// specified (in order of most preferred to least preferred).
+	//Dial 按偏好从高到低选择一种协议与服务器建立流式连接。
 	// 中文补充：协议按偏好降序传入；返回实际选中的协议名供调用方记录。
 	Dial(protocols ...string) (Connection, string, error)
 }
 
-// UpgradeRoundTripper is a type of http.RoundTripper that is able to upgrade
-// HTTP requests to support multiplexed bidirectional streams. After RoundTrip()
-// is invoked, if the upgrade is successful, clients may retrieve the upgraded
-// connection by calling UpgradeRoundTripper.Connection().
+// UpgradeRoundTripper 是一种可将 HTTP 请求升级为多路复用双向流的 http.RoundTripper。
+// 调用 RoundTrip() 后，如果升级成功，
+// 客户端可通过 UpgradeRoundTripper.Connection() 获取升级后的连接。
 type UpgradeRoundTripper interface {
 	http.RoundTripper
-	// NewConnection validates the response and creates a new Connection.
+	//NewConnection 校验响应并创建新 Connection。
 	// 中文补充：升级失败时由该调用返回错误，而不是在 RoundTrip 中暴露。
 	NewConnection(resp *http.Response) (Connection, error)
 }
 
-// ResponseUpgrader knows how to upgrade HTTP requests and responses to
-// add streaming support to them.
+// ResponseUpgrader 知道如何升级 HTTP 请求和响应以支持流式传输。
 type ResponseUpgrader interface {
-	// UpgradeResponse upgrades an HTTP response to one that supports multiplexed
-	// streams. newStreamHandler will be called asynchronously whenever the
-	// other end of the upgraded connection creates a new stream.
+	//UpgradeResponse 将 HTTP 响应升级为支持多路复用流的响应。
+	//升级连接的对端创建新流时，异步调用 newStreamHandler。
 	// 中文补充：handler 在独立 goroutine 中调用，实现需自行保证并发安全。
 	UpgradeResponse(w http.ResponseWriter, req *http.Request, newStreamHandler NewStreamHandler) Connection
 }
 
-// Connection represents an upgraded HTTP connection.
+// Connection 表示升级后的 HTTP 连接。
 type Connection interface {
-	// CreateStream creates a new Stream with the supplied headers.
+	//CreateStream 使用指定的请求头创建新 Stream。
 	CreateStream(headers http.Header) (Stream, error)
-	// Close resets all streams and closes the connection.
+	//Close 重置所有流并关闭连接。
 	Close() error
-	// CloseChan returns a channel that is closed when the underlying connection is closed.
+	//CloseChan 返回一个在底层连接关闭时关闭的 channel。
 	CloseChan() <-chan bool
-	// SetIdleTimeout sets the amount of time the connection may remain idle before
-	// it is automatically closed.
+	//SetIdleTimeout 设置连接在自动关闭前允许空闲的时长。
 	SetIdleTimeout(timeout time.Duration)
-	// RemoveStreams can be used to remove a set of streams from the Connection.
+	//RemoveStreams 可从 Connection 中移除一组流。
 	RemoveStreams(streams ...Stream)
 }
 
-// Stream represents a bidirectional communications channel that is part of an
-// upgraded connection.
+// Stream 表示升级连接中的双向通信通道。
 type Stream interface {
 	io.ReadWriteCloser
-	// Reset closes both directions of the stream, indicating that neither client
-	// or server can use it any more.
+	//Reset 关闭流的两个方向，表示客户端和服务器都不再使用它。
 	// 中文补充：Reset 用于异常终止，与正常 Close 的区别是不保证数据完整传输。
 	Reset() error
-	// Headers returns the headers used to create the stream.
+	//Headers 返回创建流时使用的请求头。
 	Headers() http.Header
-	// Identifier returns the stream's ID.
+	//Identifier 返回流的 ID。
 	Identifier() uint32
 }
 
-// UpgradeFailureError encapsulates the cause for why the streaming
-// upgrade request failed. Implements error interface.
+// UpgradeFailureError 封装流升级请求失败的原因，并实现 error 接口。
 type UpgradeFailureError struct {
 	Cause error
 }
@@ -113,8 +104,7 @@ func (u *UpgradeFailureError) Error() string {
 	return fmt.Sprintf("unable to upgrade streaming request: %s", u.Cause)
 }
 
-// IsUpgradeFailure returns true if the passed error is (or wrapped error contains)
-// the UpgradeFailureError.
+// 如果传入的错误是 UpgradeFailureError（或其包装链中包含该错误），IsUpgradeFailure 返回 true。
 // 中文补充：用 errors.As 检查包装链，调用方无需自行 Unwrap。
 func IsUpgradeFailure(err error) bool {
 	if err == nil {
@@ -124,8 +114,8 @@ func IsUpgradeFailure(err error) bool {
 	return errors.As(err, &upgradeErr)
 }
 
-// isHTTPSProxyError returns true if error is Gorilla/Websockets HTTPS Proxy dial error;
-// false otherwise (see https://github.com/kubernetes/kubernetes/issues/126134).
+// 如果错误是 Gorilla/Websockets 的 HTTPS 代理拨号错误，isHTTPSProxyError 返回 true；
+// 否则返回 false（参见 https://github.com/kubernetes/kubernetes/issues/126134）。
 // 中文补充：Gorilla 的代理错误没有类型可断言，只能匹配其错误文本，因此该函数是启发式的。
 func IsHTTPSProxyError(err error) bool {
 	if err == nil {
@@ -134,7 +124,7 @@ func IsHTTPSProxyError(err error) bool {
 	return strings.Contains(err.Error(), "proxy: unknown scheme: https")
 }
 
-// IsUpgradeRequest returns true if the given request is a connection upgrade request
+// 如果给定请求是连接升级请求，IsUpgradeRequest 返回 true。
 // 中文补充：按 RFC 7230 逐个检查 Connection 头中的 token（大小写不敏感），
 // 而不是简单比较整串，以兼容 "keep-alive, Upgrade" 这类组合值。
 func IsUpgradeRequest(req *http.Request) bool {
@@ -173,12 +163,12 @@ func commaSeparatedHeaderValues(header []string) []string {
 	return parsedClientProtocols
 }
 
-// Handshake performs a subprotocol negotiation. If the client did request a
-// subprotocol, Handshake will select the first common value found in
-// serverProtocols, otherwise it will return an error and write an HTTP BadRequest to the response.
-// If a match is found, Handshake adds a response header indicating the chosen subprotocol.
-// If no match is found, HTTP forbidden is returned, along with a response header containing
-// the list of protocols the server can accept.
+// Handshake 协商子协议。如果客户端请求了子协议，
+// Handshake 会选择 serverProtocols 中的第一个共同值；
+// 否则返回错误并向响应写入 HTTP BadRequest。
+// 找到匹配项后，Handshake 添加响应头指明所选子协议。
+// 没有匹配项时返回 HTTP forbidden，并
+// 在响应头中列出服务器可接受的协议。
 //
 // 中文补充：各失败分支直接写 HTTP 响应，因此调用方不应再向 w 写入内容。
 func Handshake(req *http.Request, w http.ResponseWriter, serverProtocols []string) (string, error) {

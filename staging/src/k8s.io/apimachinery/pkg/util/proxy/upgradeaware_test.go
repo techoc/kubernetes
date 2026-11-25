@@ -73,7 +73,7 @@ func (r *fakeResponder) Error(w http.ResponseWriter, req *http.Request, err erro
 
 // fakeConn 是始终返回同一错误的 net.Conn，用于模拟拨号成功但读写失败。
 type fakeConn struct {
-	err error // The error to return when io is performed over the connection.
+	err error //通过连接执行 I/O 时要返回的错误。
 }
 
 func (f *fakeConn) Read([]byte) (int, error)        { return 0, f.err }
@@ -283,7 +283,7 @@ func TestServeHTTP(t *testing.T) {
 		func() {
 			backendResponse := "<html><head></head><body><a href=\"/test/path\">Hello</a></body></html>"
 			backendResponseHeader := test.responseHeader
-			// Test a simple header if not specified in the test
+			//测试未指定时使用的简单请求头
 			if backendResponseHeader == nil && test.expectedRespHeader == nil {
 				backendResponseHeader = map[string]string{"Content-Type": "text/html"}
 				test.expectedRespHeader = map[string]string{"Content-Type": "text/html"}
@@ -331,7 +331,7 @@ func TestServeHTTP(t *testing.T) {
 				t.Errorf("Error from proxy request: %v", err)
 			}
 
-			// Host
+			//主机
 			if test.useLocationHost && backendHandler.requestHost != backendURL.Host {
 				t.Errorf("Unexpected request host: %s", backendHandler.requestHost)
 			} else if !test.useLocationHost && backendHandler.requestHost == backendURL.Host {
@@ -349,36 +349,36 @@ func TestServeHTTP(t *testing.T) {
 				return
 			}
 
-			// Validate backend request
-			// Method
+			//校验后端请求
+			//方法
 			if backendHandler.requestMethod != test.method {
 				t.Errorf("Unexpected request method: %s. Expected: %s",
 					backendHandler.requestMethod, test.method)
 			}
 
-			// Body
+			//请求体
 			if string(backendHandler.requestBody) != test.requestBody {
 				t.Errorf("Unexpected request body: %s. Expected: %s",
 					string(backendHandler.requestBody), test.requestBody)
 			}
 
-			// Path
+			//路径
 			if backendHandler.requestURL.Path != test.expectedPath {
 				t.Errorf("Unexpected request path: %s", backendHandler.requestURL.Path)
 			}
-			// Parameters
+			//参数
 			validateParameters(t, test.name, backendHandler.requestURL.Query(), test.requestParams)
 
-			// Headers
+			//请求头
 			validateHeaders(t, test.name+" backend request", backendHandler.requestHeader,
 				test.requestHeader, nil)
 
-			// Validate proxy response
+			//校验代理响应
 
-			// Response Headers
+			//响应头
 			validateHeaders(t, test.name+" backend headers", res.Header, test.expectedRespHeader, test.notExpectedRespHeader)
 
-			// Validate Body
+			//校验响应体
 			responseBody, err := io.ReadAll(res.Body)
 			if err != nil {
 				t.Errorf("Unexpected error reading response body: %v", err)
@@ -387,7 +387,7 @@ func TestServeHTTP(t *testing.T) {
 				t.Errorf("Did not get expected response body: %s. Expected: %s", rb, backendResponse)
 			}
 
-			// Error
+			//错误
 			if responder.called {
 				t.Errorf("Unexpected proxy handler error: %v", responder.err)
 			}
@@ -516,7 +516,7 @@ func TestProxyUpgrade(t *testing.T) {
 	for k, tc := range testcases {
 		tcName := k
 		backendPath := "/hello"
-		func() { // Cleanup after each test case.
+		func() { //每个测试用例结束后清理。
 			backend := http.NewServeMux()
 			backend.Handle("/hello", websocket.Handler(func(ws *websocket.Conn) {
 				if ws.Request().Header.Get("Authorization") != tc.ExpectedAuth {
@@ -606,7 +606,7 @@ func TestProxyUpgradeConnectionErrorResponse(t *testing.T) {
 	}))
 	defer proxy.Close()
 
-	// Send request to proxy server.
+	//向代理服务器发送请求。
 	req, err := http.NewRequest(http.MethodPost, "http://"+proxy.Listener.Addr().String()+"/some/path", nil)
 	require.NoError(t, err)
 	req.Header.Set(httpstream.HeaderConnection, httpstream.HeaderUpgrade)
@@ -614,7 +614,7 @@ func TestProxyUpgradeConnectionErrorResponse(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Expect error response.
+	//预期收到错误响应。
 	assert.True(t, responder.called)
 	assert.Equal(t, fakeStatusCode, resp.StatusCode)
 	msg, err := io.ReadAll(resp.Body)
@@ -628,7 +628,7 @@ func TestProxyUpgradeConnectionErrorResponse(t *testing.T) {
 func TestProxyUpgradeErrorResponseTerminates(t *testing.T) {
 	for _, code := range []int{400, 500} {
 		t.Run(fmt.Sprintf("code=%v", code), func(t *testing.T) {
-			// Set up a backend server
+			//设置后端服务器
 			backend := http.NewServeMux()
 			backend.Handle("/hello", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(code)
@@ -642,7 +642,7 @@ func TestProxyUpgradeErrorResponseTerminates(t *testing.T) {
 			backendServerURL, _ := url.Parse(backendServer.URL)
 			backendServerURL.Path = "/hello"
 
-			// Set up a proxy pointing to a specific path on the backend
+			//设置指向后端特定路径的代理
 			proxyHandler := NewUpgradeAwareHandler(backendServerURL, nil, false, false, &noErrorsAllowed{t: t})
 			proxy := httptest.NewServer(proxyHandler)
 			defer proxy.Close()
@@ -652,11 +652,11 @@ func TestProxyUpgradeErrorResponseTerminates(t *testing.T) {
 			require.NoError(t, err)
 			bufferedReader := bufio.NewReader(conn)
 
-			// Send upgrade request resulting in a non-101 response from the backend
+			//发送升级请求，使后端返回非 101 响应
 			req, _ := http.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set(httpstream.HeaderConnection, httpstream.HeaderUpgrade)
 			require.NoError(t, req.Write(conn))
-			// Verify we get the correct response and full message body content
+			//验证收到正确响应和完整消息体
 			resp, err := http.ReadResponse(bufferedReader, nil)
 			require.NoError(t, err)
 			data, err := io.ReadAll(resp.Body)
@@ -665,20 +665,20 @@ func TestProxyUpgradeErrorResponseTerminates(t *testing.T) {
 			require.Equal(t, data, []byte(`some data`))
 			resp.Body.Close()
 
-			// try to read from the connection to verify it was closed
+			//尝试从连接读取，确认连接已关闭
 			b := make([]byte, 1)
 			conn.SetReadDeadline(time.Now().Add(time.Second))
 			if _, err := conn.Read(b); err != io.EOF {
 				t.Errorf("expected EOF, got %v", err)
 			}
 
-			// Send another request to another endpoint to verify it is not received
+			//向另一端点发送请求，确认后端未收到
 			req, _ = http.NewRequest(http.MethodGet, "/there", nil)
 			req.Write(conn)
-			// wait to ensure the handler does not receive the request
+			//等待并确认处理器未收到请求
 			time.Sleep(time.Second)
 
-			// clean up
+			//清理
 			conn.Close()
 		})
 	}
@@ -689,7 +689,7 @@ func TestProxyUpgradeErrorResponseTerminates(t *testing.T) {
 func TestProxyUpgradeErrorResponse(t *testing.T) {
 	for _, code := range []int{200, 300, 302, 307} {
 		t.Run(fmt.Sprintf("code=%v", code), func(t *testing.T) {
-			// Set up a backend server
+			//设置后端服务器
 			backend := http.NewServeMux()
 			backend.Handle("/hello", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "https://example.com/there", code)
@@ -699,7 +699,7 @@ func TestProxyUpgradeErrorResponse(t *testing.T) {
 			backendServerURL, _ := url.Parse(backendServer.URL)
 			backendServerURL.Path = "/hello"
 
-			// Set up a proxy pointing to a specific path on the backend
+			//设置指向后端特定路径的代理
 			proxyHandler := NewUpgradeAwareHandler(backendServerURL, nil, false, false, &fakeResponder{t: t})
 			proxy := httptest.NewServer(proxyHandler)
 			defer proxy.Close()
@@ -709,17 +709,17 @@ func TestProxyUpgradeErrorResponse(t *testing.T) {
 			require.NoError(t, err)
 			bufferedReader := bufio.NewReader(conn)
 
-			// Send upgrade request resulting in a non-101 response from the backend
+			//发送升级请求，使后端返回非 101 响应
 			req, _ := http.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set(httpstream.HeaderConnection, httpstream.HeaderUpgrade)
 			require.NoError(t, req.Write(conn))
-			// Verify we get the correct response and full message body content
+			//验证收到正确响应和完整消息体
 			resp, err := http.ReadResponse(bufferedReader, nil)
 			require.NoError(t, err)
 			assert.Equal(t, fakeStatusCode, resp.StatusCode)
 			resp.Body.Close()
 
-			// clean up
+			//清理
 			conn.Close()
 		})
 	}
@@ -765,7 +765,7 @@ func TestRejectForwardingRedirectsOption(t *testing.T) {
 			rejectForwardingRedirects: true,
 			serverStatusCode:          304,
 			expectStatusCode:          304,
-			expectBody:                []byte{}, // client doesn't read the body for 304 responses
+			expectBody:                []byte{}, //客户端不读取 304 响应的响应体
 		},
 		{
 			name:                      "reject redirection disabled in proxy, backend server sending 200 response",
@@ -785,7 +785,7 @@ func TestRejectForwardingRedirectsOption(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Set up a backend server
+			//设置后端服务器
 			backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if tc.redirect != "" {
 					w.Header().Set("Location", tc.redirect)
@@ -796,7 +796,7 @@ func TestRejectForwardingRedirectsOption(t *testing.T) {
 			defer backendServer.Close()
 			backendServerURL, _ := url.Parse(backendServer.URL)
 
-			// Set up a proxy pointing to the backend
+			//设置指向后端的代理
 			proxyHandler := NewUpgradeAwareHandler(backendServerURL, nil, false, false, &fakeResponder{t: t})
 			proxyHandler.RejectForwardingRedirects = tc.rejectForwardingRedirects
 			proxy := httptest.NewServer(proxyHandler)
@@ -809,7 +809,7 @@ func TestRejectForwardingRedirectsOption(t *testing.T) {
 
 			req, _ := http.NewRequest(http.MethodGet, proxyURL.String(), nil)
 			require.NoError(t, req.Write(conn))
-			// Verify we get the correct response and message body content
+			//验证收到正确响应和完整消息体。
 			resp, err := http.ReadResponse(bufferedReader, nil)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectStatusCode, resp.StatusCode)
@@ -819,7 +819,7 @@ func TestRejectForwardingRedirectsOption(t *testing.T) {
 			assert.Equal(t, int64(len(tc.expectBody)), resp.ContentLength)
 			resp.Body.Close()
 
-			// clean up
+			//清理
 			conn.Close()
 		})
 	}
@@ -924,8 +924,8 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 
 			expectedHeaders: http.Header{
 				"Content-Length":    []string{"5"},
-				"Content-Encoding":  nil, // none set
-				"Transfer-Encoding": nil, // none set
+				"Content-Encoding":  nil, //均未设置
+				"Transfer-Encoding": nil, //均未设置
 			},
 			expectedBody: sampleData,
 		},
@@ -940,7 +940,7 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 			expectedHeaders: http.Header{
 				"Content-Length":    []string{strconv.Itoa(len(zip(sampleData)))},
 				"Content-Encoding":  []string{"gzip"},
-				"Transfer-Encoding": nil, // none set
+				"Transfer-Encoding": nil, //均未设置
 			},
 			expectedBody: zip(sampleData),
 		},
@@ -952,11 +952,11 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 			reqBody: chunk(sampleData),
 
 			expectedHeaders: http.Header{
-				"Content-Length":    nil, // none set
-				"Content-Encoding":  nil, // none set
-				"Transfer-Encoding": nil, // Transfer-Encoding gets removed
+				"Content-Length":    nil, //均未设置
+				"Content-Encoding":  nil, //均未设置
+				"Transfer-Encoding": nil, //移除 Transfer-Encoding
 			},
-			expectedBody: sampleData, // sample data is unchunked
+			expectedBody: sampleData, //示例数据未分块
 		},
 
 		"chunked transfer-encoding + gzip content-encoding": {
@@ -967,16 +967,16 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 			reqBody: chunk(zip(sampleData)),
 
 			expectedHeaders: http.Header{
-				"Content-Length":    nil, // none set
+				"Content-Length":    nil, //均未设置
 				"Content-Encoding":  []string{"gzip"},
-				"Transfer-Encoding": nil, // gets removed
+				"Transfer-Encoding": nil, //将其移除
 			},
-			expectedBody: zip(sampleData), // sample data is unchunked, but content-encoding is preserved
+			expectedBody: zip(sampleData), //示例数据未分块，但保留 content-encoding
 		},
 
-		// "Transfer-Encoding: gzip" is not supported by go
-		// See http/transfer.go#fixTransferEncoding (https://golang.org/src/net/http/transfer.go#L427)
-		// Once it is supported, this test case should succeed
+		//Go 不支持 "Transfer-Encoding: gzip"
+		//参见 http/transfer.go#fixTransferEncoding (https://golang.org/src/net/http/transfer.go#L427)
+		//支持后此测试用例应成功
 		//
 		// "gzip+chunked transfer-encoding": {
 		// 	reqHeaders: http.Header{
@@ -985,8 +985,8 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 		// 	reqBody: chunk(zip(sampleData)),
 		//
 		// 	expectedHeaders: http.Header{
-		// 		"Content-Length":    nil, // no content-length headers
-		// 		"Transfer-Encoding": nil, // Transfer-Encoding gets removed
+		// "Content-Length":    nil, // 无 content-length 头
+		// "Transfer-Encoding": nil, // 移除 Transfer-Encoding
 		// 	},
 		// 	expectedBody: sampleData,
 		// },
@@ -994,33 +994,33 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 
 	successfulResponse := "backend passed tests"
 	for k, item := range table {
-		// Start the downstream server
+		//启动下游服务器
 		downstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			// Verify headers
+			//校验请求头
 			for header, v := range item.expectedHeaders {
 				if !reflect.DeepEqual(v, req.Header[header]) {
 					t.Errorf("%s: Expected headers for %s to be %v, got %v", k, header, v, req.Header[header])
 				}
 			}
 
-			// Read body
+			//读取响应体
 			body, err := io.ReadAll(req.Body)
 			if err != nil {
 				t.Errorf("%s: unexpected error %v", k, err)
 			}
 			req.Body.Close()
 
-			// Verify length
+			//校验长度
 			if req.ContentLength > 0 && req.ContentLength != int64(len(body)) {
 				t.Errorf("%s: ContentLength was %d, len(data) was %d", k, req.ContentLength, len(body))
 			}
 
-			// Verify content
+			//校验内容
 			if !bytes.Equal(item.expectedBody, body) {
 				t.Errorf("%s: Expected %q, got %q", k, string(item.expectedBody), string(body))
 			}
 
-			// Write successful response
+			//写入成功响应
 			w.Write([]byte(successfulResponse))
 		}))
 		defer downstreamServer.Close()
@@ -1031,7 +1031,7 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 		proxyServer := httptest.NewServer(proxyHandler)
 		defer proxyServer.Close()
 
-		// Dial the proxy server
+		//连接代理服务器
 		conn, err := net.Dial(proxyServer.Listener.Addr().Network(), proxyServer.Listener.Addr().String())
 		if err != nil {
 			t.Errorf("unexpected error %v", err)
@@ -1039,14 +1039,14 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 		}
 		defer conn.Close()
 
-		// Add standard http 1.1 headers
+		//添加标准 HTTP/1.1 请求头
 		if item.reqHeaders == nil {
 			item.reqHeaders = http.Header{}
 		}
 		item.reqHeaders.Add("Connection", "close")
 		item.reqHeaders.Add("Host", proxyServer.Listener.Addr().String())
 
-		// Write the request headers
+		//写入请求头
 		if _, err := fmt.Fprint(conn, "POST / HTTP/1.1\r\n"); err != nil {
 			t.Fatalf("%s unexpected error %v", k, err)
 		}
@@ -1057,16 +1057,16 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 				}
 			}
 		}
-		// Header separator
+		//请求头分隔符
 		if _, err := fmt.Fprint(conn, "\r\n"); err != nil {
 			t.Fatalf("%s: unexpected error %v", k, err)
 		}
-		// Body
+		//请求体
 		if _, err := conn.Write(item.reqBody); err != nil {
 			t.Fatalf("%s: unexpected error %v", k, err)
 		}
 
-		// Read response
+		//读取响应
 		response, err := io.ReadAll(conn)
 		if err != nil {
 			t.Errorf("%s: unexpected error %v", k, err)
@@ -1131,7 +1131,7 @@ func (frt *fakeRT) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, frt.err
 }
 
-// TestErrorPropagation checks if the default transport doesn't swallow the errors by providing a fakeResponder that intercepts and stores the error.
+// TestErrorPropagation 提供 fakeResponder 拦截并保存错误，检查默认传输器不会吞掉错误。
 //
 // 后端 handler 故意 panic，确保请求根本到不了后端：错误必须来自
 // 传输层并被 responder 捕获。
@@ -1246,7 +1246,7 @@ func TestProxyRedirectsforRootPath(t *testing.T) {
 	}
 }
 
-// exampleCert was generated from crypto/tls/generate_cert.go with the following command:
+// exampleCert 由 crypto/tls/generate_cert.go 使用以下命令生成：
 //
 //	go run generate_cert.go  --rsa-bits 1024 --host example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var exampleCert = []byte(`-----BEGIN CERTIFICATE-----

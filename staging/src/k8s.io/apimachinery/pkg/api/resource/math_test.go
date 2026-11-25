@@ -57,7 +57,6 @@ func TestDetectOverflowAdd(t *testing.T) {
 		if ok != test.ok {
 			t.Errorf("%v: unexpected overflow: %t", test, ok)
 		}
-		// addition is commutative
 		// 交换操作数后结果与溢出标志必须完全一致。
 		d, ok2 := int64Add(test.b, test.a)
 		if c != d || ok != ok2 {
@@ -105,7 +104,6 @@ func TestDetectOverflowMultiply(t *testing.T) {
 		if ok != test.ok {
 			t.Errorf("%v: unexpected overflow: %t", test, ok)
 		}
-		// multiplication is commutative
 		// 交换操作数后结果与溢出标志必须完全一致。
 		d, ok2 := int64Multiply(test.b, test.a)
 		if c != d || ok != ok2 {
@@ -210,7 +208,6 @@ func TestNegativeScaleInt64(t *testing.T) {
 		{0, 1, 0, true},
 		{0, 2, 0, true},
 
-		// negative scale is undefined behavior
 		// 负缩放未定义，这里仅确认实现不会因此 panic 或产生异常结果。
 		{1000, -1, 1000, true},
 	} {

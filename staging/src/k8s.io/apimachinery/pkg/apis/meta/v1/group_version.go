@@ -131,7 +131,7 @@ func (gv GroupVersion) String() string {
 	return gv.Version
 }
 
-// MarshalJSON implements the json.Marshaller interface.
+// MarshalJSON 实现 json.Marshaller 接口。
 func (gv GroupVersion) MarshalJSON() ([]byte, error) {
 	s := gv.String()
 	// GroupVersion 的格式最多包含一个斜杠；出现多个斜杠说明格式非法，
@@ -157,12 +157,12 @@ func (gv *GroupVersion) unmarshal(value []byte) error {
 	return nil
 }
 
-// UnmarshalJSON implements the json.Unmarshaller interface.
+// UnmarshalJSON 实现 json.Unmarshaller 接口。
 func (gv *GroupVersion) UnmarshalJSON(value []byte) error {
 	return gv.unmarshal(value)
 }
 
-// UnmarshalTEXT implements the Ugorji's encoding.TextUnmarshaler interface.
+// UnmarshalTEXT 实现 Ugorji 的 encoding.TextUnmarshaler 接口。
 func (gv *GroupVersion) UnmarshalText(value []byte) error {
 	return gv.unmarshal(value)
 }

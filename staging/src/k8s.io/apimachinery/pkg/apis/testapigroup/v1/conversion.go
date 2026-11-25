@@ -20,10 +20,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// addConversionFuncs is the hook for hand-written conversions between the
-// test API group's versions. All conversions for this fixture are currently
-// generated, so there is nothing to add.
+// addConversionFuncs 是测试 API 组各版本之间手写转换的入口。
+// 该 fixture 目前所有转换均由代码生成，因此无需添加。
 func addConversionFuncs(scheme *runtime.Scheme) error {
-	// Add non-generated conversion functions here. Currently there are none.
+	// 在此添加非生成的转换函数；目前没有。
 	return nil
 }

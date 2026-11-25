@@ -25,13 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// TestOnlyStaticRESTMapper returns a union RESTMapper of all known types with priorities chosen in the following order:
-//  1. legacy kube group preferred version, extensions preferred version, metrics preferred version, legacy
-//     kube any version, extensions any version, metrics any version, all other groups alphabetical preferred version,
-//     all other groups alphabetical.
-//
-// TODO callers of this method should be updated to build their own specific restmapper based on their scheme for their tests
-// TODO the things being tested are related to whether various cases are handled, not tied to the particular types being checked.
+//	kube、extensions、metrics 组接受任意版本；其他组按首选版本排序，组名按字母排序。
 //
 // 每个 group 只构造一次 mapper，避免同一 group 的多个版本生成重复的映射器。
 // 若调用方显式传入 versionPatterns，则优先级完全由这些模式决定，忽略默认的 legacy 优先顺序。
@@ -79,9 +73,6 @@ func TestOnlyStaticRESTMapper(scheme *runtime.Scheme, versionPatterns ...schema.
 	return meta.PriorityRESTMapper{Delegate: unionMapper, ResourcePriority: resourcePriority, KindPriority: kindPriority}
 }
 
-// prioritiesForGroups returns the resource and kind priorities for a PriorityRESTMapper, preferring the preferred version of each group first,
-// then any non-preferred version of the group second.
-//
 // 两轮遍历是刻意的：先让所有组的 preferred 版本整体排在前面，
 // 再放各组的通配版本，保证跨组解析时不会因为组顺序而误选非首选版本。
 func prioritiesForGroups(scheme *runtime.Scheme, groups ...string) ([]schema.GroupVersionResource, []schema.GroupVersionKind) {
@@ -124,7 +115,7 @@ func newRESTMapper(group string, scheme *runtime.Scheme) meta.RESTMapper {
 	return mapper
 }
 
-// hardcoded is good enough for the test we're running
+// 当前测试使用硬编码即可。
 var rootScopedKinds = map[schema.GroupKind]bool{
 	{Group: "admission.k8s.io", Kind: "AdmissionReview"}: true,
 
@@ -166,7 +157,7 @@ var rootScopedKinds = map[schema.GroupKind]bool{
 	{Group: "wardle.example.com", Kind: "Fischer"}: true,
 }
 
-// hardcoded is good enough for the test we're running
+// 当前测试使用硬编码即可。
 var ignoredKinds = sets.NewString(
 	"ListOptions",
 	"DeleteOptions",

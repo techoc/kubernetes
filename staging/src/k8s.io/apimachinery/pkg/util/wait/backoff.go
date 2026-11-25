@@ -280,7 +280,7 @@ type BackoffManager interface {
 	Backoff() clock.Timer
 }
 
-// Deprecated: Will be removed when the legacy polling functions are removed.
+// Deprecated: 移除旧轮询函数时将一并移除。
 type exponentialBackoffManagerImpl struct {
 	backoff              *Backoff
 	backoffTimer         clock.Timer
@@ -334,7 +334,7 @@ func (b *exponentialBackoffManagerImpl) Backoff() clock.Timer {
 	return b.backoffTimer
 }
 
-// Deprecated: Will be removed when the legacy polling functions are removed.
+// Deprecated: 移除旧轮询函数时将一并移除。
 type jitteredBackoffManagerImpl struct {
 	clock        clock.Clock
 	duration     time.Duration

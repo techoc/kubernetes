@@ -41,19 +41,19 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// JoinPreservingTrailingSlash does a path.Join of the specified elements,
-// preserving any trailing slash on the last non-empty segment
+// JoinPreservingTrailingSlash 对指定元素执行 path.Join，
+// 并保留最后一个非空片段末尾的斜杠。
 //
 // path.Join 会吞掉末尾斜杠，而 URL 语义中 "/foo/" 与 "/foo" 可能不同，
 // 因此这里在拼接后按需补回。
 func JoinPreservingTrailingSlash(elem ...string) string {
-	// do the basic path join
+	//先执行基本的路径拼接
 	result := path.Join(elem...)
 
-	// find the last non-empty segment
+	//查找最后一个非空片段
 	for i := len(elem) - 1; i >= 0; i-- {
 		if len(elem[i]) > 0 {
-			// if the last segment ended in a slash, ensure our result does as well
+			//如果最后一个片段以斜杠结尾，确保结果也如此
 			if strings.HasSuffix(elem[i], "/") && !strings.HasSuffix(result, "/") {
 				result += "/"
 			}
@@ -64,7 +64,7 @@ func JoinPreservingTrailingSlash(elem ...string) string {
 	return result
 }
 
-// IsTimeout returns true if the given error is a network timeout error
+// 如果给定错误是网络超时错误，IsTimeout 返回 true。
 //
 // 用 errors.As 而非类型断言，保证被包装的 net.Error 也能识别。
 func IsTimeout(err error) bool {
@@ -75,12 +75,11 @@ func IsTimeout(err error) bool {
 	return false
 }
 
-// IsProbableEOF returns true if the given error resembles a connection termination
-// scenario that would justify assuming that the watch is empty.
-// These errors are what the Go http stack returns back to us which are general
-// connection closure errors (strongly correlated) and callers that need to
-// differentiate probable errors in connection behavior between normal "this is
-// disconnected" should use the method.
+// 如果给定错误类似于连接终止，IsProbableEOF 返回 true，
+// 此时可以合理地认为 watch 已为空。
+// Go HTTP 栈返回这些一般性连接关闭错误；
+// 调用方需要区分正常断开与异常连接错误时，
+// 应使用此方法。
 //
 // 判定依赖错误字符串，这是有意为之：底层库没有导出可判定的错误类型。
 // 因此这里的匹配集合应保守，只收录已知的"对端正常关闭/连接被重置"文案。
@@ -113,18 +112,17 @@ func IsProbableEOF(err error) bool {
 // defaultTransport 是标准库默认 Transport，用于给自定义 Transport 补齐零值字段。
 var defaultTransport = http.DefaultTransport.(*http.Transport)
 
-// SetOldTransportDefaults applies the defaults from http.DefaultTransport
-// for the Proxy, Dial, and TLSHandshakeTimeout fields if unset
+// SetOldTransportDefaults 为未设置的 Proxy、Dial 和 TLSHandshakeTimeout 字段应用 http.DefaultTransport 的默认值。
 //
 // "Old" 指不涉及 HTTP/2 的旧默认值；SetTransportDefaults 在此基础上再配置 h2。
 func SetOldTransportDefaults(t *http.Transport) *http.Transport {
 	if t.Proxy == nil || isDefault(t.Proxy) {
-		// http.ProxyFromEnvironment doesn't respect CIDRs and that makes it impossible to exclude things like pod and service IPs from proxy settings
-		// ProxierWithNoProxyCIDR allows CIDR rules in NO_PROXY
+		//http.ProxyFromEnvironment 不尊重 CIDR，因此无法从代理设置中排除 Pod 和 Service IP 等地址。
+		//ProxierWithNoProxyCIDR 允许在 NO_PROXY 中使用 CIDR 规则。
 		t.Proxy = NewProxierWithNoProxyCIDR(http.ProxyFromEnvironment)
 	}
-	// If no custom dialer is set, use the default context dialer
-	//lint:file-ignore SA1019 Keep supporting deprecated Dial method of custom transports
+	//未设置自定义 dialer 时使用默认的 context dialer。
+	//lint:file-ignore SA1019 继续支持自定义传输器已弃用的 Dial 方法。
 	if t.DialContext == nil && t.Dial == nil {
 		t.DialContext = defaultTransport.DialContext
 	}
@@ -137,20 +135,19 @@ func SetOldTransportDefaults(t *http.Transport) *http.Transport {
 	return t
 }
 
-// SetTransportDefaults applies the defaults from http.DefaultTransport
-// for the Proxy, Dial, and TLSHandshakeTimeout fields if unset
+// SetTransportDefaults 为未设置的 Proxy、Dial 和 TLSHandshakeTimeout 字段应用 http.DefaultTransport 的默认值。
 //
 // 在旧默认值之上按需启用 HTTP/2；环境变量 DISABLE_HTTP2 提供全局逃生开关，
 // 用于排查 h2 相关问题。配置失败只告警不失败，保证客户端仍可用 HTTP/1.1。
 func SetTransportDefaults(t *http.Transport) *http.Transport {
 	t = SetOldTransportDefaults(t)
-	// Allow clients to disable http2 if needed.
+	//允许客户端按需禁用 HTTP/2。
 	if s := os.Getenv("DISABLE_HTTP2"); len(s) > 0 {
-		//nolint:logcheck // Should be rare, not worth converting.
+		//nolint:logcheck // 此情况应很少见，不值得转换。
 		klog.Info("HTTP2 has been explicitly disabled")
 	} else if allowsHTTP2(t) {
 		if err := configureHTTP2Transport(t); err != nil {
-			//nolint:logcheck // Should be rare, not worth converting.
+			//nolint:logcheck // 此情况应很少见，不值得转换。
 			klog.Warningf("Transport failed http2 configuration: %v", err)
 		}
 	}
@@ -161,12 +158,12 @@ func SetTransportDefaults(t *http.Transport) *http.Transport {
 // 设为 0 可关闭检查。非法值回退默认值并告警。
 func readIdleTimeoutSeconds() int {
 	ret := 30
-	// User can set the readIdleTimeout to 0 to disable the HTTP/2
-	// connection health check.
+	//用户可将 readIdleTimeout 设为 0 来禁用 HTTP/2
+	//连接健康检查。
 	if s := os.Getenv("HTTP2_READ_IDLE_TIMEOUT_SECONDS"); len(s) > 0 {
 		i, err := strconv.Atoi(s)
 		if err != nil {
-			//nolint:logcheck // Should be rare, not worth converting.
+			//nolint:logcheck // 此情况应很少见，不值得转换。
 			klog.Warningf("Illegal HTTP2_READ_IDLE_TIMEOUT_SECONDS(%q): %v."+
 				" Default value %d is used", s, err, ret)
 			return ret
@@ -182,7 +179,7 @@ func pingTimeoutSeconds() int {
 	if s := os.Getenv("HTTP2_PING_TIMEOUT_SECONDS"); len(s) > 0 {
 		i, err := strconv.Atoi(s)
 		if err != nil {
-			//nolint:logcheck // Should be rare, not worth converting.
+			//nolint:logcheck // 此情况应很少见，不值得转换。
 			klog.Warningf("Illegal HTTP2_PING_TIMEOUT_SECONDS(%q): %v."+
 				" Default value %d is used", s, err, ret)
 			return ret
@@ -198,12 +195,11 @@ func configureHTTP2Transport(t *http.Transport) error {
 	if err != nil {
 		return err
 	}
-	// The following enables the HTTP/2 connection health check added in
-	// https://github.com/golang/net/pull/55. The health check detects and
-	// closes broken transport layer connections. Without the health check,
-	// a broken connection can linger too long, e.g., a broken TCP
-	// connection will be closed by the Linux kernel after 13 to 30 minutes
-	// by default, which caused
+	//以下代码启用 golang/net/pull/55 新增的 HTTP/2 连接健康检查。
+	//https://github.com/golang/net/pull/55。健康检查会检测并
+	//关闭损坏的传输层连接。没有健康检查时，
+	//损坏的连接可能存活过久，例如损坏的 TCP 连接默认要等 Linux 内核
+	//经过 13 到 30 分钟才关闭，从而导致
 	// https://github.com/kubernetes/client-go/issues/374 and
 	// https://github.com/kubernetes/kubernetes/issues/87615.
 	t2.ReadIdleTimeout = time.Duration(readIdleTimeoutSeconds()) * time.Second
@@ -215,16 +211,16 @@ func configureHTTP2Transport(t *http.Transport) error {
 // 未显式设置 NextProtos 时允许（采用 Go 默认行为），显式设置时尊重调用方选择。
 func allowsHTTP2(t *http.Transport) bool {
 	if t.TLSClientConfig == nil || len(t.TLSClientConfig.NextProtos) == 0 {
-		// the transport expressed no NextProto preference, allow
+		//传输器未表达 NextProto 偏好时允许 HTTP/2
 		return true
 	}
 	for _, p := range t.TLSClientConfig.NextProtos {
 		if p == http2.NextProtoTLS {
-			// the transport explicitly allowed http/2
+			//传输器明确允许 HTTP/2
 			return true
 		}
 	}
-	// the transport explicitly set NextProtos and excluded http/2
+	//传输器明确设置 NextProtos 且排除了 HTTP/2
 	return false
 }
 
@@ -247,17 +243,17 @@ func DialerFor(transport http.RoundTripper) (DialFunc, error) {
 
 	switch transport := transport.(type) {
 	case *http.Transport:
-		// transport.DialContext takes precedence over transport.Dial
+		//transport.DialContext 优先于 transport.Dial。
 		if transport.DialContext != nil {
 			return transport.DialContext, nil
 		}
-		// adapt transport.Dial to the DialWithContext signature
+		//将 transport.Dial 适配为 DialWithContext 签名。
 		if transport.Dial != nil {
 			return func(ctx context.Context, net, addr string) (net.Conn, error) {
 				return transport.Dial(net, addr)
 			}, nil
 		}
-		// otherwise return nil
+		//否则返回 nil
 		return nil, nil
 	case RoundTripperWrapper:
 		return DialerFor(transport.WrappedRoundTripper())
@@ -266,11 +262,11 @@ func DialerFor(transport http.RoundTripper) (DialFunc, error) {
 	}
 }
 
-// CloseIdleConnectionsFor close idles connections for the Transport.
-// If the Transport is wrapped it iterates over the wrapped round trippers
-// until it finds one that implements the CloseIdleConnections method.
-// If the Transport does not have a CloseIdleConnections method
-// then this function does nothing.
+// CloseIdleConnectionsFor 关闭 Transport 的空闲连接。
+// 如果 Transport 被包装，则遍历包装的 RoundTripper，
+// 直到找到实现 CloseIdleConnections 方法的实例。
+// 如果 Transport 没有 CloseIdleConnections 方法，
+// 则此函数不执行任何操作。
 //
 // 先检查 closeIdler 再检查 wrapper：外层 wrapper 自己实现了该方法时优先用外层。
 func CloseIdleConnectionsFor(transport http.RoundTripper) {
@@ -287,7 +283,7 @@ func CloseIdleConnectionsFor(transport http.RoundTripper) {
 	case RoundTripperWrapper:
 		CloseIdleConnectionsFor(transport.WrappedRoundTripper())
 	default:
-		//nolint:logcheck // Should be rare, not worth converting.
+		//nolint:logcheck // 此情况应很少见，不值得转换。
 		klog.Warningf("unknown transport type: %T", transport)
 	}
 }
@@ -332,11 +328,10 @@ func GetHTTPClient(req *http.Request) string {
 	return "unknown"
 }
 
-// SourceIPs splits the comma separated X-Forwarded-For header and joins it with
-// the X-Real-Ip header and/or req.RemoteAddr, ignoring invalid IPs.
-// The X-Real-Ip is omitted if it's already present in the X-Forwarded-For chain.
-// The req.RemoteAddr is always the last IP in the returned list.
-// It returns nil if all of these are empty or invalid.
+// SourceIPs 拆分逗号分隔的 X-Forwarded-For 头，并与 X-Real-Ip 头和 req.RemoteAddr 合并，忽略无效 IP。
+// 如果 X-Real-Ip 已存在于 X-Forwarded-For 链中，则不再重复添加。
+// req.RemoteAddr 始终是返回列表中的最后一个 IP。
+// 如果这些值都为空或无效，则返回 nil。
 //
 // 返回顺序即"从最远到最近"的代理链；调用方通常关心第一个（GetClientIP），
 // 但审计日志需要完整链路。RemoteAddr 无法被客户端伪造，故始终追加在末尾。
@@ -344,11 +339,11 @@ func SourceIPs(req *http.Request) []net.IP {
 	var srcIPs []net.IP
 
 	hdr := req.Header
-	// First check the X-Forwarded-For header for requests via proxy.
+	//对于经过代理的请求，先检查 X-Forwarded-For 头。
 	hdrForwardedFor := hdr.Get("X-Forwarded-For")
 	if hdrForwardedFor != "" {
-		// X-Forwarded-For can be a csv of IPs in case of multiple proxies.
-		// Use the first valid one.
+		//经过多个代理时，X-Forwarded-For 可能是逗号分隔的 IP 列表。
+		//使用第一个有效值。
 		parts := strings.Split(hdrForwardedFor, ",")
 		for _, part := range parts {
 			// ParseIPSloppy 兼容旧数据中带前导零等非严格格式的 IPv4。
@@ -359,29 +354,29 @@ func SourceIPs(req *http.Request) []net.IP {
 		}
 	}
 
-	// Try the X-Real-Ip header.
+	//尝试使用 X-Real-Ip 头。
 	hdrRealIp := hdr.Get("X-Real-Ip")
 	if hdrRealIp != "" {
 		ip := netutils.ParseIPSloppy(hdrRealIp)
-		// Only append the X-Real-Ip if it's not already contained in the X-Forwarded-For chain.
+		//仅当 X-Real-Ip 不在 X-Forwarded-For 链中时才追加。
 		if ip != nil && !containsIP(srcIPs, ip) {
 			srcIPs = append(srcIPs, ip)
 		}
 	}
 
-	// Always include the request Remote Address as it cannot be easily spoofed.
+	//始终包含请求的 Remote Address，因为它不易被伪造。
 	var remoteIP net.IP
-	// Remote Address in Go's HTTP server is in the form host:port so we need to split that first.
+	//Go HTTP 服务器中的 Remote Address 格式为 host:port，因此需要先拆分。
 	host, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err == nil {
 		remoteIP = netutils.ParseIPSloppy(host)
 	}
-	// Fallback if Remote Address was just IP.
+	//如果 Remote Address 只是 IP，则直接使用。
 	if remoteIP == nil {
 		remoteIP = netutils.ParseIPSloppy(req.RemoteAddr)
 	}
 
-	// Don't duplicate remote IP if it's already the last address in the chain.
+	//如果远端 IP 已是链中最后一个地址，则不重复添加。
 	if remoteIP != nil && (len(srcIPs) == 0 || !remoteIP.Equal(srcIPs[len(srcIPs)-1])) {
 		srcIPs = append(srcIPs, remoteIP)
 	}
@@ -389,7 +384,7 @@ func SourceIPs(req *http.Request) []net.IP {
 	return srcIPs
 }
 
-// Checks whether the given IP address is contained in the list of IPs.
+// 检查给定 IP 是否包含在 IP 列表中。
 //
 // 使用 net.IP.Equal 而非字符串比较，正确处理 IPv4/IPv6 的不同表示形式。
 func containsIP(ips []net.IP, ip net.IP) bool {
@@ -401,9 +396,9 @@ func containsIP(ips []net.IP, ip net.IP) bool {
 	return false
 }
 
-// Extracts and returns the clients IP from the given request.
-// Looks at X-Forwarded-For header, X-Real-Ip header and request.RemoteAddr in that order.
-// Returns nil if none of them are set or is set to an invalid value.
+// 从给定请求中提取并返回客户端 IP。
+// 依次检查 X-Forwarded-For、X-Real-Ip 和 request.RemoteAddr。
+// 如果都未设置或值无效，则返回 nil。
 func GetClientIP(req *http.Request) net.IP {
 	ips := SourceIPs(req)
 	if len(ips) == 0 {
@@ -412,16 +407,16 @@ func GetClientIP(req *http.Request) net.IP {
 	return ips[0]
 }
 
-// Prepares the X-Forwarded-For header for another forwarding hop by appending the previous sender's
-// IP address to the X-Forwarded-For chain.
+// 为下一跳准备 X-Forwarded-For 头，将前一个发送方的
+// IP 追加到 X-Forwarded-For 链。
 //
 // 仅在 RemoteAddr 可解析时修改请求；已有多个 X-Forwarded-For 头会被折叠为一个。
 func AppendForwardedForHeader(req *http.Request) {
-	// Copied from net/http/httputil/reverseproxy.go:
+	//复制自 net/http/httputil/reverseproxy.go：
 	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
-		// If we aren't the first proxy retain prior
-		// X-Forwarded-For information as a comma+space
-		// separated list and fold multiple headers into one.
+		//如果不是第一个代理，则保留已有的
+		//X-Forwarded-For 信息，以逗号加空格分隔，
+		//并将多个请求头合并为一个。
 		if prior, ok := req.Header["X-Forwarded-For"]; ok {
 			clientIP = strings.Join(prior, ", ") + ", " + clientIP
 		}
@@ -433,19 +428,18 @@ func AppendForwardedForHeader(req *http.Request) {
 // 用于判断调用方是否只是沿用了默认值（函数无法直接比较）。
 var defaultProxyFuncPointer = fmt.Sprintf("%p", http.ProxyFromEnvironment)
 
-// isDefault checks to see if the transportProxierFunc is pointing to the default one
+// isDefault 检查 transportProxierFunc 是否指向默认实现。
 func isDefault(transportProxier func(*http.Request) (*url.URL, error)) bool {
 	transportProxierPointer := fmt.Sprintf("%p", transportProxier)
 	return transportProxierPointer == defaultProxyFuncPointer
 }
 
-// NewProxierWithNoProxyCIDR constructs a Proxier function that respects CIDRs in NO_PROXY and delegates if
-// no matching CIDRs are found
+// NewProxierWithNoProxyCIDR 创建尊重 NO_PROXY 中 CIDR 的 Proxier；未匹配 CIDR 时委托默认实现。
 //
 // 标准库只支持域名后缀匹配；这里补齐 CIDR，使集群内 Pod/Service 网段可被排除。
 // 若 NO_PROXY 中没有 CIDR，则直接返回 delegate，零开销。
 func NewProxierWithNoProxyCIDR(delegate func(req *http.Request) (*url.URL, error)) func(req *http.Request) (*url.URL, error) {
-	// we wrap the default method, so we only need to perform our check if the NO_PROXY (or no_proxy) envvar has a CIDR in it
+	//已包装默认方法，因此仅当 NO_PROXY（或 no_proxy）环境变量包含 CIDR 时才需要检查。
 	noProxyEnv := os.Getenv("NO_PROXY")
 	if noProxyEnv == "" {
 		noProxyEnv = os.Getenv("no_proxy")
@@ -482,37 +476,38 @@ func NewProxierWithNoProxyCIDR(delegate func(req *http.Request) (*url.URL, error
 	}
 }
 
-// DialerFunc implements Dialer for the provided function.
+// DialerFunc 为给定函数实现 Dialer。
 type DialerFunc func(req *http.Request) (net.Conn, error)
 
+// Dial 调用 fn 执行拨号并返回结果。
 func (fn DialerFunc) Dial(req *http.Request) (net.Conn, error) {
 	return fn(req)
 }
 
-// Dialer dials a host and writes a request to it.
+// Dialer 连接主机并写入请求。
 type Dialer interface {
-	// Dial connects to the host specified by req's URL, writes the request to the connection, and
-	// returns the opened net.Conn.
+	//Dial 连接 req URL 指定的主机，将请求写入连接，
+	//并返回建立的 net.Conn。
 	Dial(req *http.Request) (net.Conn, error)
 }
 
-// CloneRequest creates a shallow copy of the request along with a deep copy of the Headers.
+// CloneRequest 创建请求的浅拷贝，并深拷贝 Headers。
 //
 // 浅拷贝意味着 Body、URL 等指针字段仍与源请求共享；Headers 单独深拷贝，
 // 以便代理修改头而不影响原请求。
 func CloneRequest(req *http.Request) *http.Request {
 	r := new(http.Request)
 
-	// shallow clone
+	//浅拷贝
 	*r = *req
 
-	// deep copy headers
+	//深拷贝请求头
 	r.Header = CloneHeader(req.Header)
 
 	return r
 }
 
-// CloneHeader creates a deep copy of an http.Header.
+// CloneHeader 创建 http.Header 的深拷贝。
 //
 // 逐值复制切片，避免 append 时共享底层数组导致源 header 被意外修改。
 func CloneHeader(in http.Header) http.Header {
@@ -525,21 +520,21 @@ func CloneHeader(in http.Header) http.Header {
 	return out
 }
 
-// WarningHeader contains a single RFC2616 14.46 warnings header
+// WarningHeader 包含单个 RFC 2616 14.46 Warning 头。
 type WarningHeader struct {
-	// Codeindicates the type of warning. 299 is a miscellaneous persistent warning
+	//Code 表示警告类型；299 表示杂项持久警告。
 	Code int
-	// Agent contains the name or pseudonym of the server adding the Warning header.
-	// A single "-" is recommended when agent is unknown.
+	//Agent 包含添加 Warning 头的服务器名称或别名。
+	//代理未知时建议使用单个 "-"。
 	Agent string
-	// Warning text
+	//警告文本
 	Text string
 }
 
-// ParseWarningHeaders extract RFC2616 14.46 warnings headers from the specified set of header values.
-// Multiple comma-separated warnings per header are supported.
-// If errors are encountered on a header, the remainder of that header are skipped and subsequent headers are parsed.
-// Returns successfully parsed warnings and any errors encountered.
+// ParseWarningHeaders 从给定的一组头值中提取 RFC 2616 14.46 Warning 头。
+// 每个头支持多个以逗号分隔的警告。
+// 如果某个头解析出错，则跳过该头的剩余内容，继续解析后续头。
+// 返回成功解析的警告以及遇到的错误。
 //
 // 解析策略是"尽力而为"：单个 header 出错不影响后续 header，
 // 这样客户端不会因为一个损坏的 warning 丢掉全部诊断信息。
@@ -569,33 +564,32 @@ var (
 	wordDecoder = &mime.WordDecoder{}
 )
 
-// ParseWarningHeader extracts one RFC2616 14.46 warning from the specified header,
-// returning an error if the header does not contain a correctly formatted warning.
-// Any remaining content in the header is returned.
+// ParseWarningHeader 从指定头中提取一个 RFC 2616 14.46 警告，
+// 格式不正确时返回错误。
+// 头中剩余的内容也会返回。
 func ParseWarningHeader(header string) (result WarningHeader, remainder string, err error) {
 	// https://tools.ietf.org/html/rfc2616#section-14.46
-	//   updated by
+	// 更新者
 	// https://tools.ietf.org/html/rfc7234#section-5.5
 	//   https://tools.ietf.org/html/rfc7234#appendix-A
-	//     Some requirements regarding production and processing of the Warning
-	//     header fields have been relaxed, as it is not widely implemented.
-	//     Furthermore, the Warning header field no longer uses RFC 2047
-	//     encoding, nor does it allow multiple languages, as these aspects were
-	//     not implemented.
+	//   Warning 头字段的生产和处理要求已有所放宽，
+	//   因为该字段未被广泛实现。
+	//   此外，Warning 头不再使用 RFC 2047 编码，
+	//   也不允许多语言，因为这些方面未被实现。
 	//
-	// Format is one of:
+	//格式为以下之一：
 	// warn-code warn-agent "warn-text"
 	// warn-code warn-agent "warn-text" "warn-date"
 	//
-	// warn-code is a three digit number
-	// warn-agent is unquoted and contains no spaces
-	// warn-text is quoted with backslash escaping (RFC2047-encoded according to RFC2616, not encoded according to RFC7234)
-	// warn-date is optional, quoted, and in HTTP-date format (no embedded or escaped quotes)
+	//warn-code 是三位数字
+	//warn-agent 不加引号且不含空格
+	//warn-text 加引号并使用反斜杠转义（按 RFC 2616 使用 RFC 2047 编码，不按 RFC 7234 编码）
+	//warn-date 可选、加引号，使用 HTTP-date 格式（不能包含嵌入引号或转义引号）
 	//
-	// additional warnings can optionally be included in the same header by comma-separating them:
+	//同一头中可用逗号分隔并附加其他警告：
 	// warn-code warn-agent "warn-text" "warn-date"[, warn-code warn-agent "warn-text" "warn-date", ...]
 
-	// tolerate leading whitespace
+	//容忍前导空白
 	header = strings.TrimSpace(header)
 
 	// 只切出三段：code、agent 和剩余内容，剩余内容里再解析带引号的 text/date。
@@ -605,13 +599,13 @@ func ParseWarningHeader(header string) (result WarningHeader, remainder string, 
 	}
 	code, agent, textDateRemainder := parts[0], parts[1], parts[2]
 
-	// verify code format
+	//校验 code 格式
 	if !codeMatcher.Match([]byte(code)) {
 		return WarningHeader{}, "", errors.New("invalid warning header: code segment is not 3 digits between 100-299")
 	}
 	codeInt, _ := strconv.ParseInt(code, 10, 64)
 
-	// verify agent presence
+	//校验 agent 是否存在
 	if len(agent) == 0 {
 		return WarningHeader{}, "", errors.New("invalid warning header: empty agent segment")
 	}
@@ -619,17 +613,17 @@ func ParseWarningHeader(header string) (result WarningHeader, remainder string, 
 		return WarningHeader{}, "", errors.New("invalid warning header: invalid agent")
 	}
 
-	// verify textDateRemainder presence
+	//校验 textDateRemainder 是否存在
 	if len(textDateRemainder) == 0 {
 		return WarningHeader{}, "", errors.New("invalid warning header: empty text segment")
 	}
 
-	// extract text
+	//提取文本
 	text, dateAndRemainder, err := parseQuotedString(textDateRemainder)
 	if err != nil {
 		return WarningHeader{}, "", fmt.Errorf("invalid warning header: %v", err)
 	}
-	// tolerate RFC2047-encoded text from warnings produced according to RFC2616
+	//容忍按 RFC 2616 生成、使用 RFC 2047 编码的警告文本
 	if decodedText, err := wordDecoder.DecodeHeader(text); err == nil {
 		text = decodedText
 	}
@@ -641,7 +635,7 @@ func ParseWarningHeader(header string) (result WarningHeader, remainder string, 
 	// 可选的 warn-date：只做结构解析，不校验日期格式（宽松兼容）。
 	if len(dateAndRemainder) > 0 {
 		if dateAndRemainder[0] == '"' {
-			// consume date
+			//消费日期
 			foundEndQuote := false
 			for i := 1; i < len(dateAndRemainder); i++ {
 				if dateAndRemainder[i] == '"' {
@@ -660,7 +654,7 @@ func ParseWarningHeader(header string) (result WarningHeader, remainder string, 
 	// 多条 warning 以逗号分隔；其他残留 token 视为格式错误。
 	if len(remainder) > 0 {
 		if remainder[0] == ',' {
-			// consume comma if present
+			//如果存在逗号则消费
 			remainder = strings.TrimSpace(remainder[1:])
 		} else {
 			return WarningHeader{}, "", errors.New("invalid warning header: unexpected token after warn-date")
@@ -755,20 +749,20 @@ func hasAnyRunes(s string, runeCheckers ...func(rune) bool) bool {
 // 与 parseQuotedString 的解析规则严格对称。
 func makeQuotedString(s string) string {
 	result := &bytes.Buffer{}
-	// opening quote
+	//起始引号
 	result.WriteRune('"')
 	for _, c := range s {
 		switch c {
 		case '"', '\\':
-			// escape " and \
+			//转义 " 和 \
 			result.WriteRune('\\')
 			result.WriteRune(c)
 		default:
-			// write everything else as-is
+			//其他内容原样写入
 			result.WriteRune(c)
 		}
 	}
-	// closing quote
+	//结束引号
 	result.WriteRune('"')
 	return result.String()
 }

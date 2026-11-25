@@ -57,20 +57,15 @@ func NewRoundTripperWithProxy(tlsConfig *tls.Config, proxier func(*http.Request)
 
 // RoundTripperConfig 是 SpdyRoundTripper 的选项集合。
 type RoundTripperConfig struct {
-	// TLS configuration used by the round tripper if UpgradeTransport not present.
 	// UpgradeTransport 未设置时使用的 TLS 配置。
 	TLS *tls.Config
-	// Proxier is a proxy function invoked on each request. Optional.
-	// 每次请求时调用的代理函数，可选。
+	// Proxier 是每次请求时调用的代理函数，可选。
 	Proxier func(*http.Request) (*url.URL, error)
-	// PingPeriod is a period for sending SPDY Pings on the connection.
-	// Optional.
-	// 在连接上发送 SPDY Ping 的周期，可选。
+	// PingPeriod 是连接上发送 SPDY Ping 的周期，可选。
 	PingPeriod time.Duration
-	// UpgradeTransport is a subtitute transport used for dialing. If set,
-	// this field will be used instead of "TLS" and "Proxier" for connection creation.
-	// Optional.
-	// 用于拨号的替代 transport；设置后将取代 TLS 与 Proxier 建立连接。可选。
+	// UpgradeTransport 是用于拨号的替代传输器。设置后，
+	// 创建连接时将使用该字段，而不是 "TLS" 和 "Proxier"。
+	// 可选。
 	UpgradeTransport http.RoundTripper
 }
 

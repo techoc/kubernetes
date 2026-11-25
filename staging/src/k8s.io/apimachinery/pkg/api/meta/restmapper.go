@@ -83,18 +83,16 @@ var _ RESTMapper = &DefaultRESTMapper{}
 var _ RESTMapperWithContext = &DefaultRESTMapper{}
 var _ fmt.Stringer = &DefaultRESTMapper{}
 
-// NewDefaultRESTMapper initializes a mapping between Kind and APIVersion
-// to a resource name and back based on the objects in a runtime.Scheme
-// and the Kubernetes API conventions. Takes a group name, a priority list of the versions
-// to search when an object has no default version (set empty to return an error),
-// and a function that retrieves the correct metadata for a given version.
+// NewDefaultRESTMapper 根据 runtime.Scheme 中的对象和 Kubernetes API 约定，
+// 建立 Kind、APIVersion 与资源名之间的双向映射。defaultGroupVersions 是对象
+// 无默认版本时按优先级搜索的版本列表；为空则解析失败。
 func NewDefaultRESTMapper(defaultGroupVersions []schema.GroupVersion) *DefaultRESTMapper {
 	resourceToKind := make(map[schema.GroupVersionResource]schema.GroupVersionKind)
 	kindToPluralResource := make(map[schema.GroupVersionKind]schema.GroupVersionResource)
 	kindToScope := make(map[schema.GroupVersionKind]RESTScope)
 	singularToPlural := make(map[schema.GroupVersionResource]schema.GroupVersionResource)
 	pluralToSingular := make(map[schema.GroupVersionResource]schema.GroupVersionResource)
-	// TODO: verify name mappings work correctly when versions differ
+	// TODO: 验证版本不同时的名称映射是否正确。
 
 	return &DefaultRESTMapper{
 		resourceToKind:       resourceToKind,
@@ -127,18 +125,12 @@ func (m *DefaultRESTMapper) AddSpecific(kind schema.GroupVersionKind, plural, si
 	m.kindToScope[kind] = scope
 }
 
-// unpluralizedSuffixes is a list of resource suffixes that are the same plural and singular
 // 该辅助逻辑仅用于兼容部分尚未正确使用 RESTMapper 的延迟初始化调用方。
-// TODO eliminate this so that different callers can correctly map to resources.  This probably means updating all
-// callers to use the RESTMapper they mean.
 // 中文补充：这些后缀的单复数同形，额外加 "s" 会得到错误资源名，因此需要特判。
 var unpluralizedSuffixes = []string{
 	"endpoints",
 }
 
-// UnsafeGuessKindToResource converts Kind to a resource name.
-// Broken. This method only "sort of" works when used outside of this package.  It assumes that Kinds and Resources match
-// and they aren't guaranteed to do so.
 // 中文补充：仅按 Kind 小写加复数字尾，不能处理不规则复数或与 Kind 不一致的资源名；
 // 有精确资源名的场景应改用 AddSpecific。
 func UnsafeGuessKindToResource(kind schema.GroupVersionKind) ( /*plural*/ schema.GroupVersionResource /*singular*/, schema.GroupVersionResource) {

@@ -28,27 +28,21 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// ExtractInto extracts the applied configuration state from object for fieldManager
-// into applyConfiguration. If no managed fields are found for the given fieldManager,
-// no error is returned, but applyConfiguration is left unpopulated. It is possible
-// that no managed fields were found for the fieldManager because other field managers
-// have taken ownership of all the fields previously owned by the fieldManager. It is
-// also possible the fieldManager never owned fields.
+// ExtractInto 从 object 中提取 fieldManager 的应用配置状态并写入 applyConfiguration。
+// 如果找不到该 fieldManager 的托管字段，
+// 函数不返回错误，但 applyConfiguration 保持未填充。这可能是因为其他字段管理器
+// 接管了该 fieldManager 原先拥有的所有字段，
+// 也可能是因为该 fieldManager 从未拥有字段。
 //
-// The provided object MUST bo a root resource object since subresource objects
-// do not contain their own managed fields. For example, an autoscaling.Scale
-// object read from a "scale" subresource does not have any managed fields and so
-// cannot be used as the object.
-//
-// If the fields of a subresource are a subset of the fields of the root object,
-// and their field paths and types are exactly the same, then ExtractInto can be
-// called with the root resource as the object and the subresource as the
-// applyConfiguration. This works for "status", obviously, because status is
-// represented by the exact same object as the root resource. This does NOT
-// work, for example, with the "scale" subresources of Deployment, ReplicaSet and
-// StatefulSet. While the spec.replicas, status.replicas fields are in the same
-// exact field path locations as they are in autoscaling.Scale, the selector
-// fields are in different locations, and are a different type.
+// object 必须是根资源对象，因为子资源对象不包含自身的托管字段。
+// 例如，从 "scale" 子资源读取的 autoscaling.Scale
+// 没有托管字段，因此不能作为 object。
+// 如果子资源的字段是根资源字段的子集，
+// 且字段路径和类型完全相同，则可以将根资源作为 object、子资源作为 applyConfiguration
+// 调用 ExtractInto。"status" 显然满足条件，因为它与根资源使用同一对象表示；
+// 但 Deployment、ReplicaSet 和 StatefulSet 的 "scale" 子资源不满足条件。
+// 虽然 spec.replicas 和 status.replicas 与 autoscaling.Scale 中的字段路径相同，
+// 但 selector 字段的位置和类型不同。
 //
 // 实现路径：取该 manager 的 FieldsV1 叶子集合 -> 从对象中抽取对应子树 ->
 // 转回 unstructured -> 填充到调用方的 apply configuration。找不到条目时
@@ -81,8 +75,7 @@ func ExtractInto(object runtime.Object, objectType typed.ParseableType, fieldMan
 		return fmt.Errorf("unable to convert managed fields for %s to unstructured, expected map, got %T", fieldManager, u)
 	}
 
-	// set the type meta manually if it doesn't exist to avoid missing kind errors
-	// when decoding from unstructured JSON
+	//如果类型元数据不存在则手动设置，避免从非结构化 JSON 解码时因缺少 kind 而报错。
 	//
 	// managed fields 不记录 kind/apiVersion，但 FromUnstructured 需要它们才能
 	// 选择正确的解码路径，因此从源对象补上。

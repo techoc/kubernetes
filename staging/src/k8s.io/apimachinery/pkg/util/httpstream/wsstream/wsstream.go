@@ -34,6 +34,7 @@ const (
 	Base64ChannelWebSocketProtocol = streamws.Base64ChannelWebSocketProtocol
 )
 
+// ChannelType 是上游通道类型的别名。
 type ChannelType = streamws.ChannelType
 
 // 通道方向常量，与上游 ChannelType 定义一一对应。
@@ -69,6 +70,7 @@ func IgnoreReceivesWithLogger(logger klog.Logger, ws *websocket.Conn, timeout ti
 	streamws.IgnoreReceivesWithLogger(logger, ws, timeout)
 }
 
+// ChannelProtocolConfig 是上游通道协议配置的别名。
 type ChannelProtocolConfig = streamws.ChannelProtocolConfig
 
 // NewDefaultChannelProtocols 为给定通道列表构造默认的协议映射。
@@ -76,6 +78,7 @@ func NewDefaultChannelProtocols(channels []ChannelType) map[string]ChannelProtoc
 	return streamws.NewDefaultChannelProtocols(channels)
 }
 
+// Conn 是上游多路复用 WebSocket 连接的别名。
 type Conn = streamws.Conn
 
 // NewConn 基于协议映射创建一个多路复用的 WebSocket 连接。
@@ -83,6 +86,7 @@ func NewConn(protocols map[string]ChannelProtocolConfig) *Conn {
 	return streamws.NewConn(protocols)
 }
 
+// ReaderProtocolConfig 是上游读取端协议配置的别名。
 type ReaderProtocolConfig = streamws.ReaderProtocolConfig
 
 // NewDefaultReaderProtocols 返回默认的读取端协议映射。
@@ -90,11 +94,12 @@ func NewDefaultReaderProtocols() map[string]ReaderProtocolConfig {
 	return streamws.NewDefaultReaderProtocols()
 }
 
+// Reader 是上游 WebSocket 协议读取器的别名。
 type Reader = streamws.Reader
 
 // NewReader 从 io.Reader 构造协议读取器；ping 为 true 时响应 ping 帧。
 func NewReader(r io.Reader, ping bool, protocols map[string]ReaderProtocolConfig) *Reader {
-	//nolint:logcheck // Intentionally using the non-contextual variant here.
+	//nolint:logcheck // 此处有意使用不带 context 的变体。
 	return streamws.NewReader(r, ping, protocols)
 }
 

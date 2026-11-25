@@ -322,9 +322,8 @@ func (w *timerWrapper) Reset(d time.Duration) bool {
 // Test_loopConditionUntilContext_timings 验证 delay 函数返回的时长被正确传给
 // 定时器，并检查 sliding 模式下"实际间隔"与"请求间隔"的关系。
 func Test_loopConditionUntilContext_timings(t *testing.T) {
-	// Verify that timings returned by the delay func are passed to the timer, and that
-	// the timer advancing is enough to drive the state machine. Not a deep verification
-	// of the behavior of the loop, but tests that we drive the scenario to completion.
+	//验证 delay 函数返回的时间会传给 timer，且推进 timer 足以驱动状态机；
+	//这不是对循环行为的深度验证，只确认场景能执行完成。
 	tests := []struct {
 		name               string
 		delayFn            DelayFunc
@@ -456,19 +455,17 @@ func Test_loopConditionUntilContext_timings(t *testing.T) {
 	}
 }
 
-// Test_loopConditionUntilContext_timings runs actual timing loops and calculates the delta. This
-// test depends on high precision wakeups which depends on low CPU contention so it is not a
-// candidate to run during normal unit test execution (nor is it a benchmark or example). Instead,
-// it can be run manually if there is a scenario where we suspect the timings are off and other
-// tests haven't caught it. A final sanity test that would have to be run serially in isolation.
+// Test_loopConditionUntilContext_timings 运行真实计时循环并计算时间差。
+// 它依赖高精度唤醒和低 CPU 争用，因此不属于常规单元测试、基准测试或示例。
+// 仅在怀疑计时不正确且其他测试未发现时手动串行运行，作为最终合理性检查。
 //
 // 注意 fail 默认是 t.Logf 而不是 t.Fatalf：CI 环境抖动大，时长超标只记录，
 // 需要严格验证时再手动改为 Fatal。
 func Test_loopConditionUntilContext_Elapsed(t *testing.T) {
 	const maxAttempts = 10
-	// TODO: this may be too aggressive, but the overhead should be minor
+	//TODO: 这可能过于激进，但开销应该很小。
 	const estimatedLoopOverhead = time.Millisecond
-	// estimate how long this delay can be
+	//估算此延迟最长可能持续多久。
 	intervalMax := func(backoff Backoff) time.Duration {
 		d := backoff.Duration
 		if backoff.Jitter > 0 {
@@ -476,15 +473,14 @@ func Test_loopConditionUntilContext_Elapsed(t *testing.T) {
 		}
 		return d
 	}
-	// estimate how short this delay can be
+	//估算此延迟最短可能持续多久。
 	intervalMin := func(backoff Backoff) time.Duration {
 		d := backoff.Duration
 		return d
 	}
 
-	// Because timing is dependent other factors in test environments, such as
-	// whether the OS or go runtime scheduler wake the timers, excess duration
-	// is logged by default and can be converted to a fatal error for testing.
+	//计时受测试环境其他因素影响，例如操作系统或 Go 调度器何时唤醒 timer；
+	//超时默认只记录日志，也可转换为测试致命错误。
 	// fail := t.Fatalf
 	fail := t.Logf
 

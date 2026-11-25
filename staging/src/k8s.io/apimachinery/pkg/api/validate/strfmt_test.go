@@ -227,7 +227,7 @@ func TestLabelKey(t *testing.T) {
 		},
 	}, {
 		name:     "nil value",
-		input:    "", // This will be handled by setting value to nil in the test runner
+		input:    "", // 测试运行器会通过将 value 设为 nil 处理此情况。
 		wantErrs: nil,
 	}}
 
@@ -333,7 +333,7 @@ func TestPrefixedLabelKey(t *testing.T) {
 		},
 	}, {
 		name:     "nil value",
-		input:    "", // This will be handled by setting value to nil in the test runner
+		input:    "", // 测试运行器会通过将 value 设为 nil 处理此情况。
 		wantErrs: nil,
 	}}
 
@@ -503,13 +503,13 @@ func TestLabelValue(t *testing.T) {
 		},
 	}, {
 		name:  "invalid: too long",
-		input: "a" + strings.Repeat("b", 62) + "c", // 64 characters
+		input: "a" + strings.Repeat("b", 62) + "c", // 64 个字符。
 		wantErrs: field.ErrorList{
 			field.Invalid(fldPath, nil, "").WithOrigin("format=k8s-label-value"),
 		},
 	}, {
 		name:     "valid: max length",
-		input:    "a" + strings.Repeat("b", 61) + "c", // 63 characters
+		input:    "a" + strings.Repeat("b", 61) + "c", // 63 个字符。
 		wantErrs: nil,
 	}, {
 		name:     "valid: empty string",
@@ -534,9 +534,9 @@ func TestPathSegmentName(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
 
-	// This format validator does not check for empty strings or max length,
-	// only checks path-segment-unsafe characters. Those constraints are
-	// handled by separate validators (Required, maxLength) in the schema.
+	// 此格式校验器不检查空字符串或最大长度，只检查路径段不安全字符；
+	// 空值与长度约束由 schema 中的 Required、maxLength 等校验器负责。
+	//
 	testCases := []struct {
 		name     string
 		input    string
@@ -944,11 +944,11 @@ func TestResourceFullyQualifiedName(t *testing.T) {
 	}, {
 		name:     "invalid: name is not a valid RFC 1123 label",
 		input:    "prefix.com/Name",
-		wantErrs: nil, // no errors, C-identifiers can have uppercase letters
+		wantErrs: nil, // 无错误；C 标识符可包含大写字母。
 	}, {
 		name:     "invalid: more than one slash",
 		input:    "prefix.com/name/extra",
-		wantErrs: nil, // This is not validated, yet.
+		wantErrs: nil, // 目前尚未校验此项。
 	}, {
 		name:  "invalid: empty name",
 		input: "prefix.com/",

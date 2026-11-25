@@ -43,7 +43,7 @@ func TestExtractInto(t *testing.T) {
 		name          string
 		obj           runtime.Object
 		objType       typed.ParseableType
-		managedFields []metav1.ManagedFieldsEntry // written to object before test is run
+		managedFields []metav1.ManagedFieldsEntry //测试运行前写入 object
 		fieldManager  string
 		expectedOut   interface{}
 		subresource   string
@@ -187,7 +187,7 @@ func (o *fakeDeployment) DeepCopyObject() runtime.Object {
 	return o
 }
 
-// trimmed up schema for test purposes
+// 为测试精简的 schema
 // 中文补充：只保留测试路径上会用到的类型与字段，避免依赖完整 OpenAPI schema。
 const schemaYAML = typed.YAMLObject(`types:
 - name: io.k8s.api.apps.v1.Deployment

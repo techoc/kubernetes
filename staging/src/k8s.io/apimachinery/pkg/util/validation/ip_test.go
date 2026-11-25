@@ -40,7 +40,7 @@ func TestIsValidIP(t *testing.T) {
 		legacyErr       string
 		legacyStrictErr string
 	}{
-		// GOOD VALUES
+		// 有效值
 		{
 			name: "ipv4",
 			in:   "1.2.3.4",
@@ -66,7 +66,7 @@ func TestIsValidIP(t *testing.T) {
 			in:   "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
 		},
 
-		// NON-CANONICAL VALUES
+		// 非规范值
 		{
 			name: "ipv6, all zeros, expanded (non-canonical)",
 			in:   "0:0:0:0:0:0:0:0",
@@ -86,7 +86,7 @@ func TestIsValidIP(t *testing.T) {
 			err: `must be in canonical form ("1234::abcd")`,
 		},
 
-		// GOOD WITH LEGACY VALIDATION, BAD WITH STRICT VALIDATION
+		// 历史规则有效、严格规则无效的值
 		{
 			name: "ipv4 with leading 0s",
 			in:   "1.1.1.01",
@@ -104,7 +104,7 @@ func TestIsValidIP(t *testing.T) {
 			legacyStrictErr: "must not be an IPv4-mapped IPv6 address",
 		},
 
-		// BAD VALUES
+		// 无效值
 		{
 			name: "empty string",
 			in:   "",
@@ -337,7 +337,7 @@ func TestIsValidCIDR(t *testing.T) {
 		legacyErr       string
 		legacyStrictErr string
 	}{
-		// GOOD VALUES
+		// 有效值
 		{
 			name: "ipv4",
 			in:   "1.0.0.0/8",
@@ -363,7 +363,7 @@ func TestIsValidCIDR(t *testing.T) {
 			in:   "::1/128",
 		},
 
-		// NON-CANONICAL VALUES
+		// 非规范值
 		{
 			name: "ipv6, extra 0s (non-canonical)",
 			in:   "2a00:79e0:2:0::/64",
@@ -377,7 +377,7 @@ func TestIsValidCIDR(t *testing.T) {
 			err: `must be in canonical form ("2001:db8::/64")`,
 		},
 
-		// GOOD WITH LEGACY VALIDATION, BAD WITH STRICT VALIDATION
+		// 历史规则有效、严格规则无效的值
 		{
 			name: "ipv4 with leading 0s",
 			in:   "1.1.01.0/24",
@@ -427,7 +427,7 @@ func TestIsValidCIDR(t *testing.T) {
 			legacyStrictErr: "must not have leading 0s",
 		},
 
-		// BAD VALUES
+		// 无效值
 		{
 			name: "empty string",
 			in:   "",
@@ -633,7 +633,7 @@ func TestIsValidInterfaceAddress(t *testing.T) {
 		in   string
 		err  string
 	}{
-		// GOOD VALUES
+		// 有效值
 		{
 			name: "ipv4",
 			in:   "1.2.3.4/24",
@@ -651,7 +651,7 @@ func TestIsValidInterfaceAddress(t *testing.T) {
 			in:   "::1/128",
 		},
 
-		// BAD VALUES
+		// 无效值
 		{
 			name: "empty string",
 			in:   "",

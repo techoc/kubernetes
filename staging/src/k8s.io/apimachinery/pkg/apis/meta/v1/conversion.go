@@ -151,8 +151,6 @@ func Convert_bool_To_Pointer_bool(in *bool, out **bool, s conversion.Scope) erro
 // APIVersion/Kind 由序列化层决定，保留它们会让对象携带错误的类型信息。
 func Convert_v1_TypeMeta_To_v1_TypeMeta(in, out *TypeMeta, s conversion.Scope) error {
 	// 明确不复制这两个字段：内部对象的类型信息由 scheme/serializer 决定。
-	//out.APIVersion = in.APIVersion
-	//out.Kind = in.Kind
 	return nil
 }
 
@@ -185,16 +183,16 @@ func Convert_intstr_IntOrString_To_intstr_IntOrString(in, out *intstr.IntOrStrin
 // nil 折叠为零值（Type=0, IntVal=0）。
 func Convert_Pointer_intstr_IntOrString_To_intstr_IntOrString(in **intstr.IntOrString, out *intstr.IntOrString, s conversion.Scope) error {
 	if *in == nil {
-		*out = intstr.IntOrString{} // zero value
+		*out = intstr.IntOrString{} // 零值。
 		return nil
 	}
-	*out = **in // copy
+	*out = **in // 复制。
 	return nil
 }
 
 // Convert_intstr_IntOrString_To_Pointer_intstr_IntOrString 把值转为新分配的指针。
 func Convert_intstr_IntOrString_To_Pointer_intstr_IntOrString(in *intstr.IntOrString, out **intstr.IntOrString, s conversion.Scope) error {
-	temp := *in // copy
+	temp := *in // 复制。
 	*out = &temp
 	return nil
 }
@@ -220,10 +218,10 @@ func Convert_v1_MicroTime_To_v1_MicroTime(in *MicroTime, out *MicroTime, s conve
 // Convert_Pointer_v1_Duration_To_v1_Duration 把可选 Duration 转为值；nil 折叠为零时长。
 func Convert_Pointer_v1_Duration_To_v1_Duration(in **Duration, out *Duration, s conversion.Scope) error {
 	if *in == nil {
-		*out = Duration{} // zero duration
+		*out = Duration{} // 零时长。
 		return nil
 	}
-	*out = **in // copy
+	*out = **in // 复制。
 	return nil
 }
 
@@ -330,8 +328,6 @@ func Convert_v1_LabelSelector_To_Map_string_To_string(in *LabelSelector, out *ma
 	return err
 }
 
-// Convert_Slice_string_To_Slice_int32 converts multiple query parameters or
-// a single query parameter with a comma delimited value to multiple int32.
 // 该转换用于端口转发场景，目标端口类型为 int32。
 //
 // 端口号上限为 16 位（0-65535），因此用 ParseUint(..., 16) 而非 32；
@@ -349,8 +345,6 @@ func Convert_Slice_string_To_Slice_int32(in *[]string, out *[]int32, s conversio
 	return nil
 }
 
-// Convert_Slice_string_To_Pointer_v1_DeletionPropagation allows converting a URL query parameter propagationPolicy
-//
 // 即使参数缺失也返回非 nil 指针，保证调用方拿到明确的"空策略"而不是 nil。
 func Convert_Slice_string_To_Pointer_v1_DeletionPropagation(in *[]string, out **DeletionPropagation, s conversion.Scope) error {
 	var str string
@@ -364,8 +358,6 @@ func Convert_Slice_string_To_Pointer_v1_DeletionPropagation(in *[]string, out **
 	return nil
 }
 
-// Convert_Slice_string_To_v1_IncludeObjectPolicy allows converting a URL query parameter value
-//
 // 参数缺失时保持 out 的零值不变，避免覆盖调用方预设的默认策略。
 func Convert_Slice_string_To_v1_IncludeObjectPolicy(in *[]string, out *IncludeObjectPolicy, s conversion.Scope) error {
 	if len(*in) > 0 {
@@ -374,8 +366,6 @@ func Convert_Slice_string_To_v1_IncludeObjectPolicy(in *[]string, out *IncludeOb
 	return nil
 }
 
-// Convert_url_Values_To_v1_DeleteOptions allows converting a URL to DeleteOptions.
-//
 // 先让自动生成的转换处理通用字段，再单独拼装 Preconditions：
 // uid/resourceVersion 在 query 中是平铺的，而在结构体里嵌套于 Preconditions。
 func Convert_url_Values_To_v1_DeleteOptions(in *url.Values, out *DeleteOptions, s conversion.Scope) error {
@@ -408,8 +398,6 @@ func Convert_url_Values_To_v1_DeleteOptions(in *url.Values, out *DeleteOptions, 
 	return nil
 }
 
-// Convert_Slice_string_To_v1_ResourceVersionMatch allows converting a URL query parameter to ResourceVersionMatch
-//
 // 参数缺失时保持零值（即未设置），合法性交由 ValidateListOptions 判断。
 func Convert_Slice_string_To_v1_ResourceVersionMatch(in *[]string, out *ResourceVersionMatch, s conversion.Scope) error {
 	if len(*in) > 0 {

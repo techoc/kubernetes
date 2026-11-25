@@ -62,8 +62,6 @@ func NowMicro() MicroTime {
 	return MicroTime{time.Now()}
 }
 
-// IsZero returns true if the value is nil or time is zero.
-//
 // nil 接收者视为零值，便于在指针字段未设置时直接调用。
 func (t *MicroTime) IsZero() bool {
 	if t == nil {
@@ -119,8 +117,6 @@ func UnixMicro(sec int64, nsec int64) MicroTime {
 	return MicroTime{time.Unix(sec, nsec)}
 }
 
-// UnmarshalJSON implements the json.Unmarshaller interface.
-//
 // JSON null 被规范化为零值 time.Time，而不是保留 nil 指针语义。
 func (t *MicroTime) UnmarshalJSON(b []byte) error {
 	if len(b) == 4 && string(b) == "null" {
@@ -188,8 +184,6 @@ func (t *MicroTime) UnmarshalQueryParameter(str string) error {
 	return nil
 }
 
-// MarshalJSON implements the json.Marshaler interface.
-//
 // 零值输出 JSON null；非零值统一转为 UTC 后按固定微秒格式输出。
 func (t MicroTime) MarshalJSON() ([]byte, error) {
 	if t.IsZero() {
@@ -209,15 +203,11 @@ func (t MicroTime) MarshalCBOR() ([]byte, error) {
 }
 
 // OpenAPISchemaType 供 kube-openapi 生成器构建该类型的 OpenAPI Schema 时调用。
-//
-// See: https://github.com/kubernetes/kube-openapi/tree/master/pkg/generators
 func (_ MicroTime) OpenAPISchemaType() []string { return []string{"string"} }
 
 // OpenAPISchemaFormat 供 kube-openapi 生成器构建该类型的 OpenAPI Schema 时调用。
 func (_ MicroTime) OpenAPISchemaFormat() string { return "date-time" }
 
-// MarshalQueryParameter converts to a URL query parameter value
-//
 // 零值编码为空串（而不是 "null"），与 UnmarshalQueryParameter 的空串约定对称。
 func (t MicroTime) MarshalQueryParameter() (string, error) {
 	if t.IsZero() {

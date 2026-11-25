@@ -50,9 +50,9 @@ func ToPath(opts ...PathOption) *Path {
 
 // Path 表示从某个根到特定字段的路径。
 type Path struct {
-	name   string // the name of this field or "" if this is an index
-	index  string // if name == "", this is a subscript (index or map key) of the previous element
-	parent *Path  // nil if this is the root element
+	name   string //字段名；如果是索引则为 ""。
+	index  string //name 为 "" 时，表示前一个元素的下标（索引或映射 key）。
+	parent *Path  //根元素为 nil。
 }
 
 // NewPath 创建根 Path，后续名称通过链式挂到父节点上。
@@ -67,7 +67,7 @@ func NewPath(name string, moreNames ...string) *Path {
 // Root 沿 parent 链返回路径的根元素。
 func (p *Path) Root() *Path {
 	for ; p.parent != nil; p = p.parent {
-		// Do nothing.
+		//不处理。
 	}
 	return p
 }
@@ -96,19 +96,19 @@ func (p *Path) String() string {
 	if p == nil {
 		return "<nil>"
 	}
-	// make a slice to iterate
+	//创建用于遍历的切片。
 	// 先收集节点再反向输出：parent 链是从叶子指向根。
 	elems := []*Path{}
 	for ; p != nil; p = p.parent {
 		elems = append(elems, p)
 	}
 
-	// iterate, but it has to be backwards
+	//必须反向遍历。
 	buf := bytes.NewBuffer(nil)
 	for i := range elems {
 		p := elems[len(elems)-1-i]
 		if p.parent != nil && len(p.name) > 0 {
-			// This is either the root or it is a subscript.
+			//这是根元素或下标。
 			// 非根且带名字的节点前要加点号，形成 "a.b" 这样可读的路径。
 			buf.WriteString(".")
 		}

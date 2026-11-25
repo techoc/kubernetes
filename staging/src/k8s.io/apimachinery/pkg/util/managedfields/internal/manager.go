@@ -22,49 +22,26 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// Managed groups a fieldpath.ManagedFields together with the timestamps associated with each operation.
-//
-// Managed 把 fieldpath.ManagedFields 与各操作对应的时间戳组合在一起。
+// Managed 将 fieldpath.ManagedFields 与各操作的时间戳组合在一起。
 type Managed interface {
-	// Fields gets the fieldpath.ManagedFields.
-	//
-	// Fields 返回 fieldpath.ManagedFields。
+	// Fields 获取 fieldpath.ManagedFields。
 	Fields() fieldpath.ManagedFields
 
-	// Times gets the timestamps associated with each operation.
-	//
-	// Times 返回各操作对应的时间戳。
+	// Times 获取各操作关联的时间戳。
 	Times() map[string]*metav1.Time
 }
 
-// Manager updates the managed fields and merges applied configurations.
-//
-// Manager 负责更新 managed fields 并合并 apply 的配置。
+// Manager 更新托管字段并合并应用配置。
 type Manager interface {
-	// Update is used when the object has already been merged (non-apply
-	// use-case), and simply updates the managed fields in the output
-	// object.
-	//  * `liveObj` is not mutated by this function
-	//  * `newObj` may be mutated by this function
-	// Returns the new object with managedFields removed, and the object's new
-	// proposed managedFields separately.
-	//
-	// Update 用于对象已完成合并的场景（非 apply），只更新输出对象中的 managed fields。
-	//  * 不会修改 `liveObj`
-	//  * 可能修改 `newObj`
-	// 返回移除 managedFields 的新对象，以及对象新的建议 managedFields（分开返回）。
+	// Update 用于对象已完成合并的非 apply 场景。
+	// * `liveObj` 不会被此函数修改。
+	// * `newObj` 可能被此函数修改。
+	// 返回移除 managedFields 后的新对象，以及单独返回的对象新 proposed managedFields。
 	Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error)
 
-	// Apply is used when server-side apply is called, as it merges the
-	// object and updates the managed fields.
-	//  * `liveObj` is not mutated by this function
-	//  * `newObj` may be mutated by this function
-	// Returns the new object with managedFields removed, and the object's new
-	// proposed managedFields separately.
-	//
-	// Apply 用于 server-side apply：合并对象并更新 managed fields。
-	//  * 不会修改 `liveObj`
-	//  * 可能修改 `newObj`
-	// 返回移除 managedFields 的新对象，以及对象新的建议 managedFields（分开返回）。
+	// Apply 用于服务端应用，负责合并对象并更新托管字段。
+	// * `liveObj` 不会被此函数修改。
+	// * `newObj` 可能被此函数修改。
+	// 返回移除 managedFields 后的新对象，以及单独返回的对象新 proposed managedFields。
 	Apply(liveObj, appliedObj runtime.Object, managed Managed, fieldManager string, force bool) (runtime.Object, Managed, error)
 }

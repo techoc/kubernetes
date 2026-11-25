@@ -24,8 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// AmbiguousResourceError is returned if the RESTMapper finds multiple matches for a resource
-//
 // AmbiguousResourceError 表示 RESTMapper 根据资源信息（通常是 GVR 的部分字段）匹配到多个结果。
 // 调用方需要提供更完整的 GroupVersion 或 Kind 才能消除歧义。
 type AmbiguousResourceError struct {
@@ -57,8 +55,6 @@ func (*AmbiguousResourceError) Is(target error) bool {
 	return ok
 }
 
-// AmbiguousKindError is returned if the RESTMapper finds multiple matches for a kind
-//
 // AmbiguousKindError 表示 RESTMapper 根据 kind 信息匹配到多个结果。与
 // AmbiguousResourceError 对称，区别只在于查询入口是 kind 而不是 resource。
 type AmbiguousKindError struct {
@@ -101,8 +97,6 @@ func IsAmbiguousError(err error) bool {
 	return errors.Is(err, &AmbiguousResourceError{}) || errors.Is(err, &AmbiguousKindError{})
 }
 
-// NoResourceMatchError is returned if the RESTMapper can't find any match for a resource
-//
 // NoResourceMatchError 表示完全找不到与给定资源信息匹配的条目；调用方据此区分
 // "没有此资源" 与 "匹配到多个"。
 type NoResourceMatchError struct {
@@ -121,14 +115,12 @@ func (*NoResourceMatchError) Is(target error) bool {
 	return ok
 }
 
-// NoKindMatchError is returned if the RESTMapper can't find any match for a kind
-//
 // NoKindMatchError 表示找不到与给定 kind 匹配的条目。SearchedVersions 用于在
 // 错误信息中说明搜索范围，方便排查版本拼写问题。
 type NoKindMatchError struct {
-	// GroupKind is the API group and kind that was searched
+	// GroupKind 是被搜索的 API 组与 Kind。
 	GroupKind schema.GroupKind
-	// SearchedVersions is the optional list of versions the search was restricted to
+	// SearchedVersions 是可选限定版本列表。
 	SearchedVersions []string
 }
 

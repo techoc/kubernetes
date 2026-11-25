@@ -21,10 +21,9 @@ import (
 	"testing"
 )
 
-// TestIsDNS1123Label pins down the accepted grammar of a DNS label: lowercase
-// alphanumerics and '-', must start and end with an alphanumeric, and at most
-// 63 characters. Every boundary (length 63/64, leading/trailing '-', invalid
-// characters) is represented.
+// TestIsDNS1123Label 明确 DNS 标签语法：仅小写字母、数字和 '-'，首尾须为字母或数字，
+// 且长度受限。
+// 覆盖 63 字符及长度 63/64、首尾 '-'、非法字符等所有边界。
 func TestIsDNS1123Label(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",
@@ -52,9 +51,7 @@ func TestIsDNS1123Label(t *testing.T) {
 	}
 }
 
-// TestIsDNS1123Subdomain covers dot-separated labels with a total length limit
-// of 253 characters; each label must satisfy the label rules, so mixed-case or
-// uppercase segments anywhere in the name are rejected.
+// TestIsDNS1123Subdomain 覆盖点分标签、总长度上限及每段标签规则；名称中任何位置的大小写混用均拒绝。
 func TestIsDNS1123Subdomain(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",
@@ -93,9 +90,9 @@ func TestIsDNS1123Subdomain(t *testing.T) {
 	}
 }
 
-// TestIsDNS1123SubdomainCaseless is the same grammar as IsDNS1123Subdomain but
-// permits uppercase letters, used where case does not matter (for example some
-// annotation keys). Length and character-class rules still apply.
+// TestIsDNS1123SubdomainCaseless 语法与 IsDNS1123Subdomain 相同，但允许大写字母，
+// 适用于大小写无关的场景（如部分 DNS 实现）。
+// annotation 键。长度和字符类别规则仍然适用。
 func TestIsDNS1123SubdomainCaseless(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",

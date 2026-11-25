@@ -41,8 +41,7 @@ func expectNotEntry(t *testing.T, c *LRUExpireCache, key interface{}) {
 	}
 }
 
-// Note: Check keys before checking individual entries, because Get() changes
-// the eviction list.
+// 注意：Get() 会改变淘汰列表，因此应先检查 key，再检查具体条目。
 // assertKeys 在比较键序列前不进任何 Get 调用：Get 会改变 LRU 驱逐顺序，
 // 从而影响 Keys() 的返回顺序。
 func assertKeys(t *testing.T, gotKeys, wantKeys []interface{}) {
@@ -93,10 +92,10 @@ func TestExpiredGet(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	c := NewLRUExpireCacheWithClock(10, fakeClock)
 	c.Add("short-lived", "12345", 1*time.Millisecond)
-	// ensure the entry expired
+	//确保条目已过期
 	fakeClock.Step(2 * time.Millisecond)
 
-	// Keys() should not return expired keys.
+	//Keys() 不应返回已过期的 key。
 	assertKeys(t, c.Keys(), []interface{}{})
 
 	expectNotEntry(t, c, "short-lived")

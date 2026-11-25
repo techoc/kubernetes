@@ -299,7 +299,6 @@ func ResetObjectMetaForStatus(meta, existingMeta Object) {
 	meta.SetFinalizers(existingMeta.GetFinalizers())
 	meta.SetOwnerReferences(existingMeta.GetOwnerReferences())
 	// managedFields 必须保留，因为 status 更新期间它已经被修改，用于跟踪本次更新实际变更的字段。
-	//meta.SetManagedFields(existingMeta.GetManagedFields())
 }
 
 // MarshalJSON 实现 json.Marshaler。该方法可能通过值或指针调用，因此接收者使用值类型，

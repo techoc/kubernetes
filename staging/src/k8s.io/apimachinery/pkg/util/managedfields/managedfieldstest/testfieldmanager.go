@@ -26,62 +26,48 @@ import (
 	"k8s.io/apimachinery/pkg/util/managedfields/internal/testing"
 )
 
-// TestFieldManager is a FieldManager that can be used in test to
-// simulate the behavior of Server-Side Apply and field tracking. This
-// also has a few methods to get a sense of the state of the object.
+// TestFieldManager 是可在测试中模拟服务端应用和字段跟踪的 FieldManager，
+// 并提供查询对象状态的方法。
 //
-// This TestFieldManager uses a series of "fake" objects to simulate
-// some behavior which come with the limitation that you can only use
-// one version since there is no version conversion logic.
-//
-// You can use this rather than NewDefaultTestFieldManager if you want
-// to specify either a sub-resource, or a set of modified Manager to
-// test them specifically.
+// 此 TestFieldManager 使用一系列 "fake" 对象模拟部分行为；
+// 由于没有版本转换逻辑，只能使用一个版本。
+// 需要指定子资源或一组修改后的 Manager 进行针对性测试时，
+// 可使用此类型代替 NewDefaultTestFieldManager。
 //
 // 中文说明：接口刻意保持窄小，测试只需构造对象、执行 apply/update 并检查
 // 最终的 managedFields，无需关心 manager 链内部结构。
 type TestFieldManager interface {
-	// APIVersion of the object that we're tracking.
+	//所跟踪对象的 APIVersion。
 	APIVersion() string
-	// Reset resets the state of the liveObject by resetting it to an empty object.
+	//Reset 将 liveObject 重置为空对象。
 	Reset()
-	// Live returns a copy of the current liveObject.
+	//Live 返回当前 liveObject 的副本。
 	Live() runtime.Object
-	// Apply applies the given object on top of the current liveObj, for the
-	// given manager and force flag.
+	//Apply 为指定管理器将给定对象应用到当前 liveObj，force 标志控制是否强制。
 	Apply(obj runtime.Object, manager string, force bool) error
-	// Update will updates the managed fields in the liveObj based on the
-	// changes performed by the update.
+	//Update 根据更新内容修改 liveObj 中的托管字段。
 	Update(obj runtime.Object, manager string) error
-	// ManagedFields returns the list of existing managed fields for the
-	// liveObj.
+	//ManagedFields 返回 liveObj 现有的托管字段列表。
 	ManagedFields() []metav1.ManagedFieldsEntry
 }
 
-// NewTestFieldManager returns a new TestFieldManager built for the
-// given gvk, on the main resource.
+// NewTestFieldManager 为指定 GVK 创建作用于主资源的 TestFieldManager。
 func NewTestFieldManager(typeConverter managedfields.TypeConverter, gvk schema.GroupVersionKind) TestFieldManager {
 	return testing.NewTestFieldManagerImpl(typeConverter, gvk, "", nil)
 }
 
-// NewTestFieldManagerSubresource returns a new TestFieldManager built
-// for the given gvk, on the given sub-resource.
+// NewTestFieldManagerSubresource 为指定 GVK 创建作用于给定子资源的 TestFieldManager。
 func NewTestFieldManagerSubresource(typeConverter managedfields.TypeConverter, gvk schema.GroupVersionKind, subresource string) TestFieldManager {
 	return testing.NewTestFieldManagerImpl(typeConverter, gvk, subresource, nil)
 
 }
 
-// NewFakeFieldManager creates an actual FieldManager but that doesn't
-// perform any conversion. This is just a convenience for tests to
-// create an actual manager that they can use but in very restricted
-// ways.
+// NewFakeFieldManager 创建不执行转换的真实 FieldManager，
+// 仅为测试提供便利，但使用方式非常受限。
 //
-// This is different from the TestFieldManager because it's not meant to
-// assert values, or hold the state, this acts like a normal
-// FieldManager.
-//
-// Also, this only operates on the main-resource, and sub-resource can't
-// be configured.
+// 它与 TestFieldManager 不同，不用于断言值或保存状态，
+// 行为与普通 FieldManager 一致。
+// 此外，它只作用于主资源，不能配置子资源。
 func NewFakeFieldManager(typeConverter managedfields.TypeConverter, gvk schema.GroupVersionKind) *managedfields.FieldManager {
 	ffm, err := managedfields.NewDefaultFieldManager(
 		typeConverter,

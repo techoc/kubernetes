@@ -621,7 +621,7 @@ func TestIsErrorTypesByReasonAndCode(t *testing.T) {
 			t.Run("by code and unknown reason", func(t *testing.T) {
 				err := &StatusError{
 					metav1.Status{
-						Reason: metav1.StatusReasonUnknown, // this could be _any_ reason that isn't in knownReasons.
+						Reason: metav1.StatusReasonUnknown, // 原因可能是 knownReasons 之外的任意值。
 						Code:   tc.code,
 					},
 				}

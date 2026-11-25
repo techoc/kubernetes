@@ -33,7 +33,7 @@ import (
 func TestRequiredValue(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := "value"
@@ -41,7 +41,7 @@ func TestRequiredValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := "" // zero-value
+			value := "" // 零值。
 			return RequiredValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath: Required value",
@@ -52,7 +52,7 @@ func TestRequiredValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := 0 // zero-value
+			value := 0 // 零值。
 			return RequiredValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath: Required value",
@@ -63,7 +63,7 @@ func TestRequiredValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := false // zero-value
+			value := false // 零值。
 			return RequiredValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath: Required value",
@@ -74,7 +74,7 @@ func TestRequiredValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := struct{ S string }{} // zero-value
+			value := struct{ S string }{} // 零值。
 			return RequiredValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath: Required value",
@@ -85,7 +85,7 @@ func TestRequiredValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := (*string)(nil) // zero-value
+			value := (*string)(nil) // 零值。
 			return RequiredValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath: Required value",
@@ -118,7 +118,7 @@ func TestRequiredValue(t *testing.T) {
 func TestRequiredPointer(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := ""
@@ -202,7 +202,7 @@ func TestRequiredPointer(t *testing.T) {
 func TestRequiredSlice(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := []string{""}
@@ -275,7 +275,7 @@ func TestRequiredSlice(t *testing.T) {
 func TestRequiredMap(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := map[string]string{"": ""}
@@ -338,7 +338,7 @@ func TestRequiredMap(t *testing.T) {
 func TestOptionalValue(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := "value"
@@ -346,7 +346,7 @@ func TestOptionalValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := "" // zero-value
+			value := "" // 零值。
 			return OptionalValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath:.*optional value was not specified",
@@ -357,7 +357,7 @@ func TestOptionalValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := 0 // zero-value
+			value := 0 // 零值。
 			return OptionalValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath:.*optional value was not specified",
@@ -368,7 +368,7 @@ func TestOptionalValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := false // zero-value
+			value := false // 零值。
 			return OptionalValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath:.*optional value was not specified",
@@ -379,7 +379,7 @@ func TestOptionalValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := struct{ S string }{} // zero-value
+			value := struct{ S string }{} // 零值。
 			return OptionalValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath:.*optional value was not specified",
@@ -390,7 +390,7 @@ func TestOptionalValue(t *testing.T) {
 		},
 	}, {
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
-			value := (*string)(nil) // zero-value
+			value := (*string)(nil) // 零值。
 			return OptionalValue(context.Background(), op, fp, &value, nil)
 		},
 		err: "fldpath:.*optional value was not specified",
@@ -422,7 +422,7 @@ func TestOptionalValue(t *testing.T) {
 func TestOptionalPointer(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := ""
@@ -506,7 +506,7 @@ func TestOptionalPointer(t *testing.T) {
 func TestOptionalSlice(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := []string{""}
@@ -579,7 +579,7 @@ func TestOptionalSlice(t *testing.T) {
 func TestOptionalMap(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := map[string]string{"": ""}
@@ -641,7 +641,7 @@ func TestOptionalMap(t *testing.T) {
 func TestForbiddenValue(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := ""
@@ -725,7 +725,7 @@ func TestForbiddenValue(t *testing.T) {
 func TestForbiddenPointer(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			pointer := (*string)(nil)
@@ -809,7 +809,7 @@ func TestForbiddenPointer(t *testing.T) {
 func TestForbiddenSlice(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := []string{}
@@ -882,7 +882,7 @@ func TestForbiddenSlice(t *testing.T) {
 func TestForbiddenMap(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
-		err string // regex
+		err string // 正则表达式。
 	}{{
 		fn: func(op operation.Operation, fp *field.Path) field.ErrorList {
 			value := map[string]string{}

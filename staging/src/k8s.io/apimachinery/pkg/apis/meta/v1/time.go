@@ -193,8 +193,6 @@ func (t Time) ToUnstructured() interface{} {
 }
 
 // OpenAPISchemaType 供 kube-openapi 生成器在构造该类型的 OpenAPI spec 时使用。
-//
-// See: https://github.com/kubernetes/kube-openapi/tree/master/pkg/generators
 func (_ Time) OpenAPISchemaType() []string { return []string{"string"} }
 
 // OpenAPISchemaFormat 供 kube-openapi 生成器在构造该类型的 OpenAPI spec 时使用。

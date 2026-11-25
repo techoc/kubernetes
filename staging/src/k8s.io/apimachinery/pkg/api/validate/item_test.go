@@ -99,7 +99,6 @@ func TestValSliceItem(t *testing.T) {
 			expected: field.ErrorList{field.Invalid(field.NewPath("").Index(1).Child("v"), 20, "changed")},
 		},
 		{
-			// For completeness as listType=map && listKey=... required tags prevents dupes.
 			// 重复键在正常 API 中会被 listKey 唯一性校验拦截，这里验证即使出现也只处理首个命中。
 			name: "first match only - multiple items with same keys",
 			new: []multiKeyItem{

@@ -105,7 +105,7 @@ func FilterEnforcedDeclarativeErrors(ctx context.Context, declarativeErrs field.
 			}
 		// 标准错误不区分生命周期，始终暴露。
 		case !dvErr.IsAlpha():
-			enforcedDeclarativeErrs = append(enforcedDeclarativeErrs, dvErr) // Standard
+			enforcedDeclarativeErrs = append(enforcedDeclarativeErrs, dvErr) // 标准操作。
 		}
 	}
 	return enforcedDeclarativeErrs

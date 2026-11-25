@@ -56,7 +56,7 @@ var testTypeConverter = func() TypeConverter {
 	return typeConverter
 }()
 
-// TestVersionConverter tests the version converter
+// TestVersionConverter 测试版本转换器。
 //
 // 验证 v1beta1 的 TypedValue 经转换后与 v1 对象语义一致。
 func TestVersionConverter(t *testing.T) {

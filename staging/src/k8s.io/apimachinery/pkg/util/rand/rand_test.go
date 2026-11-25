@@ -49,7 +49,6 @@ func TestString(t *testing.T) {
 	}
 }
 
-// Confirm that panic occurs on invalid input.
 // 确认非法输入会触发 panic。
 func TestRangePanic(t *testing.T) {
 	defer func() {
@@ -57,14 +56,13 @@ func TestRangePanic(t *testing.T) {
 			t.Errorf("Panic didn't occur!")
 		}
 	}()
-	// Should result in an error...
 	// 0 不是合法的上界，应当 panic。
 	Intn(0)
 }
 
 // TestIntn 验证 Intn 的结果落在 [0, max) 区间内。
 func TestIntn(t *testing.T) {
-	// 0 is invalid.
+	//0 无效。
 	for _, max := range []int{1, 2, 10, 123} {
 		inrange := Intn(max)
 		// 对 max=1 而言只有 0 是合法结果，边界值必须覆盖。
@@ -94,7 +92,7 @@ func TestPerm(t *testing.T) {
 
 // TestIntnRange 反复采样，验证 IntnRange 的结果落在 [min, max) 区间内。
 func TestIntnRange(t *testing.T) {
-	// 0 is invalid.
+	//0 无效。
 	for min, max := range map[int]int{1: 2, 10: 123, 100: 500} {
 		for i := 0; i < maxRangeTestCount; i++ {
 			inrange := IntnRange(min, max)
@@ -108,7 +106,7 @@ func TestIntnRange(t *testing.T) {
 
 // TestInt63nRange 与 TestIntnRange 相同，但覆盖 int64 版本，验证大范围取值不会溢出。
 func TestInt63nRange(t *testing.T) {
-	// 0 is invalid.
+	//0 无效。
 	for min, max := range map[int64]int64{1: 2, 10: 123, 100: 500} {
 		for i := 0; i < maxRangeTestCount; i++ {
 			inrange := Int63nRange(min, max)

@@ -74,7 +74,6 @@ func TestEmptyCreationTimestampIsOmitted(t *testing.T) {
 	var u Unstructured
 	now := metav1.Now()
 
-	// set an initial creationTimestamp and ensure the field exists
 	// 先设置一个真实时间戳，确认字段存在。
 	u.SetCreationTimestamp(now)
 	metadata := u.Object["metadata"].(map[string]interface{})
@@ -83,7 +82,6 @@ func TestEmptyCreationTimestampIsOmitted(t *testing.T) {
 		t.Fatalf("unexpected missing creationTimestamp")
 	}
 
-	// set an empty timestamp and ensure the field no longer exists
 	// 设为零值时间戳后，字段应被移除而不是写入零值。
 	u.SetCreationTimestamp(metav1.Time{})
 	metadata = u.Object["metadata"].(map[string]interface{})

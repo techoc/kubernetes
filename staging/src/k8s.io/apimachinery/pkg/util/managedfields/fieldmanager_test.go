@@ -65,8 +65,7 @@ var fakeTypeConverter = func() managedfields.TypeConverter {
 	return typeConverter
 }()
 
-// TestUpdateApplyConflict tests that applying to an object, which
-// wasn't created by apply, will give conflicts
+// TestUpdateApplyConflict 验证对并非通过 apply 创建的对象执行 apply 会产生冲突。
 //
 // 先用 Update 写入 replicas=3，再用另一个 manager apply replicas=101，
 // 预期得到冲突而不是静默覆盖。
@@ -178,7 +177,7 @@ func TestVersionCheck(t *testing.T) {
 		t.Fatalf("error decoding YAML: %v", err)
 	}
 
-	// patch has 'apiVersion: apps/v1' and live version is apps/v1 -> no errors
+	//补丁的 'apiVersion: apps/v1' 与线上版本 apps/v1 一致 -> 无错误
 	err := f.Apply(appliedObj, "fieldmanager_test", false)
 	if err != nil {
 		t.Fatalf("failed to apply object: %v", err)
@@ -192,7 +191,7 @@ func TestVersionCheck(t *testing.T) {
 		t.Fatalf("error decoding YAML: %v", err)
 	}
 
-	// patch has 'apiVersion: apps/v1beta1' but live version is apps/v1 -> error
+	//补丁的 'apiVersion: apps/v1beta1' 与线上版本 apps/v1 不同 -> 报错
 	err = f.Apply(appliedObj, "fieldmanager_test", false)
 	if err == nil {
 		t.Fatalf("expected an error from mismatched patch and live versions")
@@ -221,7 +220,7 @@ func TestVersionCheckDoesNotPanic(t *testing.T) {
 		t.Fatalf("error decoding YAML: %v", err)
 	}
 
-	// patch has 'apiVersion: apps/v1' and live version is apps/v1 -> no errors
+	//补丁的 'apiVersion: apps/v1' 与线上版本 apps/v1 一致 -> 无错误
 	err := f.Apply(appliedObj, "fieldmanager_test", false)
 	if err != nil {
 		t.Fatalf("failed to apply object: %v", err)
@@ -233,7 +232,7 @@ func TestVersionCheckDoesNotPanic(t *testing.T) {
 		t.Fatalf("error decoding YAML: %v", err)
 	}
 
-	// patch has 'apiVersion: apps/v2' but live version is apps/v1 -> error
+	//补丁的 'apiVersion: apps/v2' 与线上版本 apps/v1 不同 -> 报错
 	err = f.Apply(appliedObj, "fieldmanager_test", false)
 	if err == nil {
 		t.Fatalf("expected an error from mismatched patch and live versions")
@@ -371,7 +370,7 @@ func TestApplySuccessWithNoManagedFields(t *testing.T) {
 	}
 }
 
-// Run an update and apply, and make sure that nothing has changed.
+// 执行一次 update 和 apply，确认没有任何变化。
 //
 // 换 manager apply 会新增 managedFields 条目，因此对象应变化；
 // 而相同 manager 的 no-op update/apply 不应改变对象（包括时间戳）。
@@ -395,9 +394,9 @@ func TestNoOpChanges(t *testing.T) {
 		t.Fatalf("failed to apply object: %v", err)
 	}
 	before := f.Live()
-	// Wait to make sure the timestamp is different
+	//等待以确保时间戳不同
 	time.Sleep(time.Second)
-	// Applying with a different fieldmanager will create an entry..
+	//使用不同的 fieldmanager 执行 apply 会创建新条目。
 	if err := f.Apply(obj.DeepCopyObject(), "fieldmanager_test_apply_other", false); err != nil {
 		t.Fatalf("failed to update object: %v", err)
 	}
@@ -405,7 +404,7 @@ func TestNoOpChanges(t *testing.T) {
 		t.Fatalf("Applying no-op apply with new manager didn't change object: \n%v", f.Live())
 	}
 	before = f.Live()
-	// Wait to make sure the timestamp is different
+	//等待以确保时间戳不同
 	time.Sleep(time.Second)
 	if err := f.Update(obj.DeepCopyObject(), "fieldmanager_test_update"); err != nil {
 		t.Fatalf("failed to update object: %v", err)
@@ -414,7 +413,7 @@ func TestNoOpChanges(t *testing.T) {
 		t.Fatalf("No-op update has changed the object:\n%v\n---\n%v", before, f.Live())
 	}
 	before = f.Live()
-	// Wait to make sure the timestamp is different
+	//等待以确保时间戳不同
 	time.Sleep(time.Second)
 	if err := f.Apply(obj.DeepCopyObject(), "fieldmanager_test_apply", true); err != nil {
 		t.Fatalf("failed to re-apply object: %v", err)
@@ -424,8 +423,7 @@ func TestNoOpChanges(t *testing.T) {
 	}
 }
 
-// Tests that one can reset the managedFields by sending either an empty
-// list
+// 验证发送空列表可以重置 managedFields。
 //
 // 发送 managedFields: [] 是"停止跟踪"的显式信号。
 func TestResetManagedFieldsEmptyList(t *testing.T) {
@@ -468,8 +466,7 @@ func TestResetManagedFieldsEmptyList(t *testing.T) {
 	}
 }
 
-// Tests that one can reset the managedFields by sending either a list with one empty item.
-// Tests that one can reset the managedFields by sending either a list with one empty item.
+// 验证发送仅含一个空条目的列表可以重置 managedFields。
 func TestResetManagedFieldsEmptyItem(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 
@@ -515,7 +512,7 @@ func TestResetManagedFieldsEmptyItem(t *testing.T) {
 func TestServerSideApplyWithInvalidLastApplied(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
-	// create object with client-side apply
+	//使用客户端应用创建对象
 	newObj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	deployment := []byte(`
 apiVersion: apps/v1
@@ -548,7 +545,7 @@ spec:
 		t.Errorf("expected last applied annotation to be set to %q, but got: %q", invalidLastApplied, lastApplied)
 	}
 
-	// upgrade management of the object from client-side apply to server-side apply
+	//将对象的管理方式从客户端应用升级为服务端应用
 	appliedObj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	appliedDeployment := []byte(`
 apiVersion: apps/v1
@@ -576,7 +573,7 @@ spec:
 		t.Errorf("expected last applied annotation to be NOT be updated, but got: %q", lastApplied)
 	}
 
-	// force server-side apply should work and fix the annotation
+	//强制服务端应用应成功并修正注解
 	if err := f.Apply(appliedObj, "kubectl", true); err != nil {
 		t.Errorf("failed to force server-side apply with: %v", err)
 	}
@@ -596,7 +593,7 @@ spec:
 func TestInteropForClientSideApplyAndServerSideApply(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
-	// create object with client-side apply
+	//使用客户端应用创建对象
 	newObj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	deployment := []byte(`
 apiVersion: apps/v1
@@ -637,7 +634,7 @@ spec:
 		t.Errorf("expected last applied annotation to be set properly, but got: %q", lastApplied)
 	}
 
-	// upgrade management of the object from client-side apply to server-side apply
+	//将对象的管理方式从客户端应用升级为服务端应用
 	appliedObj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	appliedDeployment := []byte(`
 apiVersion: apps/v1
@@ -682,7 +679,7 @@ spec:
 func TestNoTrackManagedFieldsForClientSideApply(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
-	// create object
+	//创建对象
 	newObj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	deployment := []byte(`
 apiVersion: apps/v1
@@ -704,7 +701,7 @@ spec:
 		t.Errorf("expected to have managed fields, but got: %v", m)
 	}
 
-	// stop tracking managed fields
+	//停止跟踪托管字段
 	newObj = &unstructured.Unstructured{Object: map[string]interface{}{}}
 	deployment = []byte(`
 apiVersion: apps/v1
@@ -728,7 +725,7 @@ spec:
 		t.Errorf("expected to have stop tracking managed fields, but got: %v", m)
 	}
 
-	// check that we still don't track managed fields
+	//确认仍未跟踪托管字段
 	newObj = &unstructured.Unstructured{Object: map[string]interface{}{}}
 	deployment = []byte(`
 apiVersion: apps/v1
@@ -760,7 +757,7 @@ spec:
 		t.Errorf("expected last applied annotation to be set properly, but got: %q", lastApplied)
 	}
 
-	// start tracking managed fields
+	//开始跟踪托管字段
 	newObj = &unstructured.Unstructured{Object: map[string]interface{}{}}
 	deployment = []byte(`
 apiVersion: apps/v1
@@ -788,7 +785,7 @@ spec:
 		t.Fatalf("exected second manager name to be %v, but got %v: %#v", e, a, f.ManagedFields())
 	}
 
-	// upgrade management of the object from client-side apply to server-side apply
+	//将对象的管理方式从客户端应用升级为服务端应用
 	newObj = &unstructured.Unstructured{Object: map[string]interface{}{}}
 	deployment = []byte(`
 apiVersion: apps/v1
@@ -890,7 +887,7 @@ func TestUpdateViaSubresources(t *testing.T) {
 		},
 	})
 
-	// Check that managed fields cannot be changed explicitly via subresources
+	//检查无法通过子资源显式修改托管字段
 	expectedManager := "fieldmanager_test_subresource"
 	if err := f.Update(obj, expectedManager); err != nil {
 		t.Fatalf("failed to apply object: %v", err)
@@ -904,7 +901,7 @@ func TestUpdateViaSubresources(t *testing.T) {
 		t.Fatalf("Expected first item to have manager set to: %s. Got: %s", expectedManager, managedFields[0].Manager)
 	}
 
-	// Check that managed fields cannot be reset via subresources
+	//检查无法通过子资源重置托管字段
 	newObj := obj.DeepCopy()
 	newObj.SetManagedFields([]metav1.ManagedFieldsEntry{})
 	if err := f.Update(newObj, expectedManager); err != nil {
@@ -916,7 +913,7 @@ func TestUpdateViaSubresources(t *testing.T) {
 	}
 }
 
-// Ensures that a no-op Apply does not mutate managed fields
+// 确保无操作的 Apply 不修改托管字段
 //
 // 两个 manager 先后 apply 后，第一个 manager 再次 apply 相同内容，
 // managedFields（含时间戳）必须完全不变。
@@ -931,7 +928,7 @@ func TestApplyDoesNotChangeManagedFields(t *testing.T) {
 		Object: map[string]interface{}{},
 	}
 
-	// Convert YAML string inputs to unstructured instances
+	//将 YAML 字符串输入转换为非结构化实例
 	if err := yaml.Unmarshal([]byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -976,45 +973,44 @@ func TestApplyDoesNotChangeManagedFields(t *testing.T) {
 		t.Fatalf("error decoding YAML: %v", err)
 	}
 
-	// Agent A applies initial configuration
+	//代理 A 应用初始配置
 	if err := f.Apply(newObj.DeepCopyObject(), "fieldmanager_z", false); err != nil {
 		t.Fatalf("failed to apply object: %v", err)
 	}
 
-	// Agent B applies additive configuration
+	//代理 B 应用增量配置
 	if err := f.Apply(appliedObj, "fieldmanager_b", false); err != nil {
 		t.Fatalf("failed to apply object %v", err)
 	}
 
-	// Next, agent A applies the initial configuration again, but we expect
-	// a no-op to managed fields.
+	//接着代理 A 再次应用初始配置，预期
+	//不修改托管字段。
 	//
-	// The following update is expected not to change the liveObj, save off
-	//	the fields
+	//接下来的 update 不应改变 liveObj，先保存
+	//这些字段
 	for _, field := range f.ManagedFields() {
 		originalManagedFields = append(originalManagedFields, *field.DeepCopy())
 	}
 
-	// Make sure timestamp change would be caught
+	//确保能够检测到时间戳变化
 	time.Sleep(2 * time.Second)
 
 	if err := f.Apply(newObj, "fieldmanager_z", false); err != nil {
 		t.Fatalf("failed to apply object: %v", err)
 	}
 
-	// ensure that the live object is unchanged
+	//确保线上对象未变化
 	if !reflect.DeepEqual(originalManagedFields, f.ManagedFields()) {
 		originalYAML, _ := yaml.Marshal(originalManagedFields)
 		current, _ := yaml.Marshal(f.ManagedFields())
 
-		// should have been a no-op w.r.t. managed fields
+		//就托管字段而言应为无操作
 		t.Fatalf("managed fields changed: ORIGINAL\n%v\nCURRENT\n%v",
 			string(originalYAML), string(current))
 	}
 }
 
-// Ensures that a no-op Update does not mutate managed fields
-// Ensures that a no-op Update does not mutate managed fields
+// 确保无操作的 Update 不修改托管字段。
 func TestUpdateDoesNotChangeManagedFields(t *testing.T) {
 	originalManagedFields := []metav1.ManagedFieldsEntry{}
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter,
@@ -1054,7 +1050,7 @@ func TestUpdateDoesNotChangeManagedFields(t *testing.T) {
 		t.Fatalf("error decoding YAML: %v", err)
 	}
 
-	// Agent A updates with initial configuration
+	//代理 A 使用初始配置执行 update
 	if err := f.Update(newObj.DeepCopyObject(), "fieldmanager_z"); err != nil {
 		t.Fatalf("failed to apply object: %v", err)
 	}
@@ -1063,33 +1059,30 @@ func TestUpdateDoesNotChangeManagedFields(t *testing.T) {
 		originalManagedFields = append(originalManagedFields, *field.DeepCopy())
 	}
 
-	// Make sure timestamp change would be caught
+	//确保能够检测到时间戳变化
 	time.Sleep(2 * time.Second)
 
-	// If the same exact configuration is updated once again, the
-	// managed fields are not expected to change
+	//如果再次更新完全相同的配置，
+	//预期托管字段不变。
 	//
-	// However, a change in field ownership WOULD be a semantic change which
-	// should cause managed fields to change.
+	//但字段所有权变化属于语义变化，
+	//应导致托管字段变化。
 	if err := f.Update(newObj, "fieldmanager_z"); err != nil {
 		t.Fatalf("failed to apply object: %v", err)
 	}
 
-	// ensure that the live object is unchanged
+	//确保线上对象未变化
 	if !reflect.DeepEqual(originalManagedFields, f.ManagedFields()) {
 		originalYAML, _ := yaml.Marshal(originalManagedFields)
 		current, _ := yaml.Marshal(f.ManagedFields())
 
-		// should have been a no-op w.r.t. managed fields
+		//就托管字段而言应为无操作
 		t.Fatalf("managed fields changed: ORIGINAL\n%v\nCURRENT\n%v",
 			string(originalYAML), string(current))
 	}
 }
 
-// This test makes sure that the liveObject during a patch does not mutate
-// its managed fields.
-// This test makes sure that the liveObject during a patch does not mutate
-// its managed fields.
+// 此测试确保 patch 过程中的 liveObject 不修改其托管字段。
 func TestLiveObjectManagedFieldsNotRemoved(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter,
 		schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
@@ -1099,7 +1092,7 @@ func TestLiveObjectManagedFieldsNotRemoved(t *testing.T) {
 	appliedObj := &unstructured.Unstructured{
 		Object: map[string]interface{}{},
 	}
-	// Convert YAML string inputs to unstructured instances
+	//将 YAML 字符串输入转换为非结构化实例
 	if err := yaml.Unmarshal([]byte(`{
 		"apiVersion": "apps/v1",
 		"kind": "Deployment",
@@ -1144,7 +1137,7 @@ func TestLiveObjectManagedFieldsNotRemoved(t *testing.T) {
 		t.Fatalf("error decoding YAML: %v", err)
 	}
 
-	// Agent A applies initial configuration
+	//代理 A 应用初始配置
 	if err := f.Apply(newObj.DeepCopyObject(), "fieldmanager_z", false); err != nil {
 		t.Fatalf("failed to apply object: %v", err)
 	}
@@ -1156,12 +1149,12 @@ func TestLiveObjectManagedFieldsNotRemoved(t *testing.T) {
 		panic(fmt.Errorf("couldn't get accessor: %v", err))
 	}
 
-	// Managed fields should not be stripped
+	//不应剥离托管字段
 	if len(accessor.GetManagedFields()) == 0 {
 		t.Fatalf("empty managed fields of object which expected nonzero fields")
 	}
 
-	// Agent A applies the exact same configuration
+	//代理 A 应用完全相同的配置
 	if err := f.Apply(appliedObj.DeepCopyObject(), "fieldmanager_z", false); err != nil {
 		t.Fatalf("failed to apply object: %v", err)
 	}
@@ -1171,7 +1164,7 @@ func TestLiveObjectManagedFieldsNotRemoved(t *testing.T) {
 		panic(fmt.Errorf("couldn't get accessor: %v", err))
 	}
 
-	// Managed fields should not be stripped
+	//不应剥离托管字段
 	if len(accessor.GetManagedFields()) == 0 {
 		t.Fatalf("empty managed fields of object which expected nonzero fields")
 	}

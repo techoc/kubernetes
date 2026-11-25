@@ -274,7 +274,7 @@ func TestCapUpdateManagers(t *testing.T) {
 	}
 }
 
-// expectIdempotence does a no-op update and ensures that managedFields doesn't change by calling capUpdateManagers.
+// expectIdempotence 执行无操作的 update，并调用 capUpdateManagers 确认 managedFields 不变。
 //
 // 合并逻辑必须是幂等的，否则每次 update 都会产生新的差异。
 func expectIdempotence(t *testing.T, f managedfieldstest.TestFieldManager) {
@@ -292,7 +292,7 @@ func expectIdempotence(t *testing.T, f managedfieldstest.TestFieldManager) {
 	}
 }
 
-// expectManagesField ensures that manager m currently manages field path p.
+// expectManagesField 确保管理器 m 当前管理字段路径 p。
 func expectManagesField(t *testing.T, f managedfieldstest.TestFieldManager, m string, p fieldpath.Path) {
 	for _, e := range f.ManagedFields() {
 		if e.Manager == m {

@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// TODO: move this, Object, List, and Type to a different package
 // ObjectMetaAccessor 由任何能提供 Object 元数据访问器的对象实现。
 type ObjectMetaAccessor interface {
 	GetObjectMeta() Object
@@ -70,7 +69,6 @@ type ListMetaAccessor interface {
 
 // Common 允许以统一方式操作任意版本化或内部 API 对象的通用元数据。
 // 对不支持某字段的对象，设置或读取该字段是空操作并返回默认值。
-// TODO: move this, and TypeMeta and ListMeta, to a different package
 type Common interface {
 	GetResourceVersion() string
 	SetResourceVersion(version string)
@@ -80,7 +78,6 @@ type Common interface {
 
 // ListInterface 允许以统一方式操作任意版本化或内部 API 对象的列表元数据。
 // 对不支持某字段的对象，设置或读取该字段是空操作并返回默认值。
-// TODO: move this, and TypeMeta and ListMeta, to a different package
 type ListInterface interface {
 	GetResourceVersion() string
 	SetResourceVersion(version string)
@@ -100,7 +97,6 @@ type ShardedListInterface interface {
 }
 
 // Type 暴露版本化或内部 API 对象的类型与 APIVersion。
-// TODO: move this, and TypeMeta and ListMeta, to a different package
 type Type interface {
 	GetAPIVersion() string
 	SetAPIVersion(version string)
@@ -126,13 +122,11 @@ func (meta *ListMeta) SetShardInfo(s *ShardInfo)         { meta.ShardInfo = s }
 // GetObjectKind 返回自身，使嵌入 TypeMeta 的对象自动满足 ObjectKind 接口。
 func (obj *TypeMeta) GetObjectKind() schema.ObjectKind { return obj }
 
-// SetGroupVersionKind satisfies the ObjectKind interface for all objects that embed TypeMeta
 // 将 GVK 拆成 APIVersion 与 Kind 两个字段写入，二者是同一信息的序列化形式。
 func (obj *TypeMeta) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind satisfies the ObjectKind interface for all objects that embed TypeMeta
 // 从 APIVersion 与 Kind 字段重建 GVK；字段缺失时返回零值 GVK。
 func (obj *TypeMeta) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
@@ -144,8 +138,6 @@ func (obj *ListMeta) GetListMeta() ListInterface { return obj }
 // GetObjectMeta 返回自身，使 ObjectMeta 满足 ObjectMetaAccessor。
 func (obj *ObjectMeta) GetObjectMeta() Object { return obj }
 
-// Namespace implements metav1.Object for any object with an ObjectMeta typed field. Allows
-// fast, direct access to metadata fields for API objects.
 // 以下方法组是 ObjectMeta 对 Object 接口的直接实现：全部是字段读写，无副作用。
 func (meta *ObjectMeta) GetNamespace() string                { return meta.Namespace }
 func (meta *ObjectMeta) SetNamespace(namespace string)       { meta.Namespace = namespace }

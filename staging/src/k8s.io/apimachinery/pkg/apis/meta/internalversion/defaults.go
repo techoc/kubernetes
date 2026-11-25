@@ -18,11 +18,6 @@ package internalversion
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-// SetListOptionsDefaults sets defaults on the provided ListOptions if applicable.
-//
-// TODO(#115478): once the watch-list fg is always on we register this function in the scheme (via AddTypeDefaultingFunc).
-// TODO(#115478): when the function is registered in the scheme remove all callers of this method.
-//
 // 中文补充：开启 watch-list 特性时，对使用 legacy resourceVersion（空或 "0"）的
 // watch 请求默认启用 SendInitialEvents 与 NotOlderThan，从而实现“先列后 watch”的语义。
 func SetListOptionsDefaults(obj *ListOptions, isWatchListFeatureEnabled bool) {

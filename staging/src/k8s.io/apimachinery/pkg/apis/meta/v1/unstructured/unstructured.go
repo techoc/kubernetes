@@ -28,20 +28,18 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// Unstructured allows objects that do not have Golang structs registered to be manipulated
-// generically. This can be used to deal with the API objects from a plug-in. Unstructured
-// objects still have functioning TypeMeta features-- kind, version, etc.
+// Unstructured 允许通用操作未注册 Go 结构体的对象，可用于处理插件的 API 对象。
+// 它仍提供有效的 TypeMeta 功能，例如 kind、version 等。
 //
-// WARNING: This object has accessors for the v1 standard metadata. You *MUST NOT* use this
-// type if you are dealing with objects that are not in the server meta v1 schema.
+// 警告：该对象提供 v1 标准元数据访问器。处理不属于服务端 meta v1 schema 的对象时，
+// 不得使用此类型。
 //
-// TODO: make the serialization part of this type distinct from the field accessors.
+// TODO: 将此类型的序列化部分与字段访问器分离。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:deepcopy-gen=true
 type Unstructured struct {
-	// Object is a JSON compatible map with string, float, int, bool, []interface{}, or
-	// map[string]interface{}
-	// children.
+	// Object 是 JSON 兼容的 map，可包含字符串、浮点数、整数、布尔值、
+	// []interface{} 或 map[string]interface{} 子节点。
 	Object map[string]interface{}
 }
 
@@ -51,8 +49,7 @@ var _ metav1.ListInterface = &Unstructured{}
 
 func (obj *Unstructured) GetObjectKind() schema.ObjectKind { return obj }
 
-// IsList reports whether the object carries an "items" array, which is the
-// only structural signal distinguishing a list from an ordinary object.
+// IsList 报告对象是否携带 "items" 数组，这是区分列表与普通对象的唯一结构信号。
 func (obj *Unstructured) IsList() bool {
 	field, ok := obj.Object["items"]
 	if !ok {
@@ -62,17 +59,15 @@ func (obj *Unstructured) IsList() bool {
 	return ok
 }
 
-// ToList converts the object into an UnstructuredList. If the object is not a
-// list it is wrapped as a list whose Object is the original map and whose Items
-// is empty; this preserves the original metadata instead of failing.
+// ToList 将对象转换为 UnstructuredList。若不是列表，则包装为 Object 使用原 map、
+// Items 为空的列表，以保留原元数据而不返回错误。
 func (obj *Unstructured) ToList() (*UnstructuredList, error) {
 	if !obj.IsList() {
-		// return an empty list back
+		// 返回空列表。
 		return &UnstructuredList{Object: obj.Object}, nil
 	}
 
-	// The list view shares the underlying map with the object; callers that
-	// mutate one will observe the change in the other.
+	// 列表视图与对象共享底层 map；修改其中一方会反映到另一方。
 	ret := &UnstructuredList{}
 	ret.Object = obj.Object
 
@@ -88,9 +83,8 @@ func (obj *Unstructured) ToList() (*UnstructuredList, error) {
 	return ret, nil
 }
 
-// EachListItem invokes fn for every element of the "items" array. Each element
-// must be a JSON object; the contract is lenient so that malformed data yields
-// a descriptive error instead of a panic.
+// EachListItem 对 "items" 数组中的每个元素调用 fn。元素必须是 JSON 对象；
+// 接口刻意宽容处理畸形数据，以返回描述性错误而非 panic。
 func (obj *Unstructured) EachListItem(fn func(runtime.Object) error) error {
 	field, ok := obj.Object["items"]
 	if !ok {
@@ -112,15 +106,14 @@ func (obj *Unstructured) EachListItem(fn func(runtime.Object) error) error {
 	return nil
 }
 
-// EachListItemWithAlloc is the allocating variant of EachListItem. Since
-// EachListItem already allocates an Unstructured per item, this simply delegates.
+// EachListItemWithAlloc 是 EachListItem 的分配变体。后者已为每项分配
+// Unstructured，因此前者直接委托即可。
 func (obj *Unstructured) EachListItemWithAlloc(fn func(runtime.Object) error) error {
-	// EachListItem has allocated a new Object for the user, we can use it directly.
+	// EachListItem 已为用户分配新 Object，可直接使用。
 	return obj.EachListItem(fn)
 }
 
-// UnstructuredContent returns the underlying map. A nil object is normalized to
-// an empty map so callers can mutate the result unconditionally.
+// UnstructuredContent 返回底层 map。nil 对象会规范化为空 map，调用方可直接修改结果。
 func (obj *Unstructured) UnstructuredContent() map[string]interface{} {
 	if obj.Object == nil {
 		return make(map[string]interface{})
@@ -128,29 +121,26 @@ func (obj *Unstructured) UnstructuredContent() map[string]interface{} {
 	return obj.Object
 }
 
-// SetUnstructuredContent replaces the whole payload. The map is adopted, not
-// copied, so the caller must not mutate it afterwards.
+// SetUnstructuredContent 替换整个载荷。该 map 直接采用而不复制，调用方之后不得修改它。
 func (obj *Unstructured) SetUnstructuredContent(content map[string]interface{}) {
 	obj.Object = content
 }
 
-// MarshalJSON ensures that the unstructured object produces proper
-// JSON when passed to Go's standard JSON library.
+// MarshalJSON 确保非结构化对象传给 Go 标准 JSON 库时生成正确的 JSON。
 func (u *Unstructured) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	err := UnstructuredJSONScheme.Encode(u, &buf)
 	return buf.Bytes(), err
 }
 
-// UnmarshalJSON ensures that the unstructured object properly decodes
-// JSON when passed to Go's standard JSON library.
+// UnmarshalJSON 确保非结构化对象正确解码 Go 标准 JSON 库传入的 JSON。
 func (u *Unstructured) UnmarshalJSON(b []byte) error {
 	_, _, err := UnstructuredJSONScheme.Decode(b, nil, u)
 	return err
 }
 
-// NewEmptyInstance returns a new instance of the concrete type containing only kind/apiVersion and no other data.
-// This should be called instead of reflect.New() for unstructured types because the go type alone does not preserve kind/apiVersion info.
+// NewEmptyInstance 返回仅含 kind/apiVersion、不含其他数据的新实例。
+// 非结构化类型应调用此方法而非 reflect.New()，因为 Go 类型本身不保留 kind/apiVersion。
 func (in *Unstructured) NewEmptyInstance() runtime.Unstructured {
 	out := new(Unstructured)
 	if in != nil {
@@ -159,9 +149,8 @@ func (in *Unstructured) NewEmptyInstance() runtime.Unstructured {
 	return out
 }
 
-// DeepCopy returns a fully independent copy, including all nested maps and
-// slices. It must not use the generated DeepCopyInto here because the payload
-// is not a typed struct.
+// DeepCopy 返回包括所有嵌套 map 和切片在内的完全独立副本。
+// 载荷不是有类型的结构体，因此此处不能使用生成的 DeepCopyInto。
 func (in *Unstructured) DeepCopy() *Unstructured {
 	if in == nil {
 		return nil
@@ -172,8 +161,7 @@ func (in *Unstructured) DeepCopy() *Unstructured {
 	return out
 }
 
-// setNestedField creates the object map lazily so accessors work on a zero
-// Unstructured without a separate initializer.
+// setNestedField 延迟创建对象 map，使访问器无需单独初始化即可用于零值 Unstructured。
 func (u *Unstructured) setNestedField(value interface{}, fields ...string) {
 	if u.Object == nil {
 		u.Object = make(map[string]interface{})
@@ -207,8 +195,7 @@ func (u *Unstructured) GetOwnerReferences() []metav1.OwnerReference {
 	if !found || err != nil {
 		return nil
 	}
-	// Malformed data yields nil rather than an error; metadata accessors are
-	// intentionally forgiving so that validation can report the problem.
+	// 畸形数据返回 nil 而非错误；元数据访问器刻意宽容，以便由校验逻辑报告问题。
 	original, ok := field.([]interface{})
 	if !ok {
 		return nil
@@ -217,7 +204,7 @@ func (u *Unstructured) GetOwnerReferences() []metav1.OwnerReference {
 	for _, obj := range original {
 		o, ok := obj.(map[string]interface{})
 		if !ok {
-			// expected map[string]interface{}, got something else
+			// 预期为 map[string]interface{}，实际为其他类型。
 			return nil
 		}
 		ret = append(ret, extractOwnerReference(o))
@@ -226,8 +213,7 @@ func (u *Unstructured) GetOwnerReferences() []metav1.OwnerReference {
 }
 
 func (u *Unstructured) SetOwnerReferences(references []metav1.OwnerReference) {
-	// A nil slice removes the field entirely so the serialized object has no
-	// empty array, matching Go struct omitempty behavior.
+	// nil 切片会删除整个字段，避免序列化出空数组，与 Go 结构体的 omitempty 行为一致。
 	if references == nil {
 		RemoveNestedField(u.Object, "metadata", "ownerReferences")
 		return
@@ -237,8 +223,7 @@ func (u *Unstructured) SetOwnerReferences(references []metav1.OwnerReference) {
 	for _, reference := range references {
 		out, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&reference)
 		if err != nil {
-			// Skip the bad entry but tell the user; the remaining references are
-			// still stored so metadata is not lost wholesale.
+			// 跳过坏条目但告知用户；其余引用仍会保存，避免元数据整体丢失。
 			utilruntime.HandleError(fmt.Errorf("unable to convert Owner Reference: %v", err))
 			continue
 		}
@@ -267,9 +252,8 @@ func (u *Unstructured) GetNamespace() string {
 	return getNestedString(u.Object, "metadata", "namespace")
 }
 
-// SetNamespace stores the namespace under metadata. An empty value removes the
-// key instead of writing "", which keeps serialized objects minimal and lets
-// omitempty-style comparisons work.
+// SetNamespace 将命名空间存入 metadata。空值会删除键而非写入 ""，
+// 以保持序列化对象精简，并使 omitempty 风格的比较生效。
 func (u *Unstructured) SetNamespace(namespace string) {
 	if len(namespace) == 0 {
 		RemoveNestedField(u.Object, "metadata", "namespace")
@@ -334,8 +318,7 @@ func (u *Unstructured) GetGeneration() int64 {
 	return val
 }
 
-// SetGeneration removes the field when the value is zero, mirroring the
-// omitempty behavior of the typed metadata structs.
+// SetGeneration 在值为零时删除字段，与有类型的元数据结构体的 omitempty 行为一致。
 func (u *Unstructured) SetGeneration(generation int64) {
 	if generation == 0 {
 		RemoveNestedField(u.Object, "metadata", "generation")
@@ -388,8 +371,7 @@ func (u *Unstructured) GetCreationTimestamp() metav1.Time {
 
 func (u *Unstructured) SetCreationTimestamp(timestamp metav1.Time) {
 	ts, _ := timestamp.MarshalQueryParameter()
-	// A zero timestamp must not be persisted; otherwise every object would
-	// carry a "0001-01-01T00:00:00Z" value.
+	// 不得持久化零时间戳，否则每个对象都会携带 "0001-01-01T00:00:00Z"。
 	if len(ts) == 0 || timestamp.Time.IsZero() {
 		RemoveNestedField(u.Object, "metadata", "creationTimestamp")
 		return
@@ -457,15 +439,14 @@ func (u *Unstructured) SetAnnotations(annotations map[string]string) {
 	u.setNestedMap(annotations, "metadata", "annotations")
 }
 
-// SetGroupVersionKind writes apiVersion and kind separately, since the
-// unstructured payload stores them as top-level string fields.
+// SetGroupVersionKind 分别写入 apiVersion 和 kind，因为非结构化载荷将它们存为顶层字符串字段。
 func (u *Unstructured) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	u.SetAPIVersion(gvk.GroupVersion().String())
 	u.SetKind(gvk.Kind)
 }
 
-// GroupVersionKind parses apiVersion back into a GVK. A malformed apiVersion
-// yields an empty GVK rather than an error, keeping this accessor panic-free.
+// GroupVersionKind 将 apiVersion 解析回 GVK。格式错误时返回空 GVK 而非错误，
+// 以确保访问器不会 panic。
 func (u *Unstructured) GroupVersionKind() schema.GroupVersionKind {
 	gv, err := schema.ParseGroupVersion(u.GetAPIVersion())
 	if err != nil {
@@ -514,9 +495,8 @@ func (u *Unstructured) GetManagedFields() []metav1.ManagedFieldsEntry {
 	return managedFields
 }
 
-// SetManagedFields converts each entry with the default converter, which can
-// fail if an entry holds a value the typed struct cannot represent; in that case
-// the update is aborted and an error is reported through utilruntime.
+// SetManagedFields 使用默认转换器转换每项；若某项含有类型结构体无法表示的值，
+// 转换会失败，更新中止，并通过 utilruntime 报告错误。
 func (u *Unstructured) SetManagedFields(managedFields []metav1.ManagedFieldsEntry) {
 	if managedFields == nil {
 		RemoveNestedField(u.Object, "metadata", "managedFields")

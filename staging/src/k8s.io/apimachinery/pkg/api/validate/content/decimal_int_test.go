@@ -55,8 +55,8 @@ func TestIsDecimalInteger(t *testing.T) {
 		{name: "negative multi-digit", input: "-456", shouldPass: true},
 		{name: "negative starting with 1", input: "-100", shouldPass: true},
 		{name: "negative starting with 9", input: "-987", shouldPass: true},
-		{name: "large positive number", input: "9223372036854775807", shouldPass: true},  // max int64
-		{name: "large negative number", input: "-9223372036854775808", shouldPass: true}, // min int64
+		{name: "large positive number", input: "9223372036854775807", shouldPass: true},  // int64 最大值
+		{name: "large negative number", input: "-9223372036854775808", shouldPass: true}, // int64 最小值
 		{name: "very long valid number", input: "12345678901234567890", shouldPass: true},
 		{name: "all nines", input: "999999999999", shouldPass: true},
 
@@ -154,9 +154,9 @@ func TestIsDecimalInteger(t *testing.T) {
 		{name: "single quote", input: "'123'", shouldPass: false},
 		{name: "double quote", input: "\"123\"", shouldPass: false},
 
-		{name: "unicode minus", input: "−123", shouldPass: false}, // U+2212 minus sign
-		{name: "unicode digit", input: "１２３", shouldPass: false},  // fullwidth digits
-		{name: "arabic digits", input: "١٢٣", shouldPass: false},  // Arabic-Indic digits
+		{name: "unicode minus", input: "−123", shouldPass: false}, // U+2212 减号
+		{name: "unicode digit", input: "１２３", shouldPass: false},  // 全角数字
+		{name: "arabic digits", input: "١٢٣", shouldPass: false},  // 阿拉伯-印度数字
 		{name: "chinese characters", input: "一二三", shouldPass: false},
 		{name: "superscript", input: "123⁴", shouldPass: false},
 		{name: "subscript", input: "123₄", shouldPass: false},

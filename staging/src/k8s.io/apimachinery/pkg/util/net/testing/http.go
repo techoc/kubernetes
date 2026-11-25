@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package nettesting contains utilities for testing networking functionality.
-// Don't use these utilities in production code. They have not been security
-// reviewed.
+// nettesting 包提供网络功能测试工具。
+// 不要在生产代码中使用这些工具，因为它们尚未经过安全审查。
 package nettesting
 
 import (
@@ -28,11 +27,9 @@ import (
 	"testing"
 )
 
-// NewHTTPProxyHandler returns a new HTTPProxyHandler. It accepts an optional
-// hook which is called early in the handler to export request state. If the
-// hook returns false, the handler returns immediately with a server error.
-// Ensure that this is only used in tests. This code has not been security
-// reviewed.
+// NewHTTPProxyHandler 创建 HTTPProxyHandler，并接受可选 hook；
+// hook 在处理器早期调用以导出请求状态，返回 false 时处理器立即以服务器错误返回。
+// 确保仅在测试中使用，此代码尚未经过安全审查。
 //
 // 中文补充：hook 在反向代理转发之前调用，可用于断言请求（如 HTTPS_PROXY 是否生效）；
 // 返回 false 会直接中断请求，便于模拟代理失败。
@@ -51,18 +48,17 @@ func NewHTTPProxyHandler(t testing.TB, hook func(req *http.Request) bool) *HTTPP
 	return h
 }
 
-// HTTPProxyHandler implements a simple handler for http_proxy and https_proxy
-// requests for use in testing.
+// HTTPProxyHandler 实现处理 http_proxy 和 https_proxy 请求的简单处理器，供测试使用。
 type HTTPProxyHandler struct {
 	// handlerDone 跟踪进行中的请求，Wait 用于避免测试结束时仍有 goroutine 运行。
 	handlerDone sync.WaitGroup
 	hook        func(r *http.Request) bool
-	// httpProxy is the reverse proxy we use for standard http proxy requests.
+	//httpProxy 是处理标准 HTTP 代理请求的反向代理。
 	httpProxy httputil.ReverseProxy
 	t         testing.TB
 }
 
-// ServeHTTP handles an HTTP proxy request.
+// ServeHTTP 处理 HTTP 代理请求。
 // 中文补充：普通 HTTP 请求走 ReverseProxy；HTTPS 通过 CONNECT 建立隧道后手动双向复制。
 func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	h.handlerDone.Add(1)
@@ -88,7 +84,7 @@ func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	// CONNECT proxy
+	//CONNECT 代理
 	// CONNECT 隧道：先连后端，再劫持客户端连接，然后双向拷贝字节流。
 
 	sconn, err := net.Dial("tcp", req.Host)

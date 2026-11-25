@@ -42,8 +42,7 @@ type structuredMergeManager struct {
 
 var _ Manager = &structuredMergeManager{}
 
-// NewStructuredMergeManager creates a new Manager that merges apply requests
-// and update managed fields for other types of requests.
+// NewStructuredMergeManager 创建 Manager，合并 apply 请求并为其他请求类型更新托管字段。
 func NewStructuredMergeManager(typeConverter TypeConverter, objectConverter runtime.ObjectConvertor, objectDefaulter runtime.ObjectDefaulter, gv schema.GroupVersion, hub schema.GroupVersion, resetFields map[fieldpath.APIVersion]fieldpath.Filter) (Manager, error) {
 	if typeConverter == nil {
 		return nil, fmt.Errorf("typeconverter must not be nil")
@@ -56,15 +55,14 @@ func NewStructuredMergeManager(typeConverter TypeConverter, objectConverter runt
 		hubVersion:      hub,
 		updater: merge.Updater{
 			// 转换器负责在 hub 版本与目标版本之间转换字段路径。
-			Converter:    newVersionConverter(typeConverter, objectConverter, hub), // This is the converter provided to SMD from k8s
+			Converter:    newVersionConverter(typeConverter, objectConverter, hub), //这是 k8s 提供给 SMD 的转换器。
 			IgnoreFilter: resetFields,
 		},
 	}, nil
 }
 
-// NewCRDStructuredMergeManager creates a new Manager specifically for
-// CRDs. This allows for the possibility of fields which are not defined
-// in models, as well as having no models defined at all.
+// NewCRDStructuredMergeManager 创建专用于 CRD 的 Manager，
+// 允许处理模型中未定义的字段，也允许完全没有模型。
 func NewCRDStructuredMergeManager(typeConverter TypeConverter, objectConverter runtime.ObjectConvertor, objectDefaulter runtime.ObjectDefaulter, gv schema.GroupVersion, hub schema.GroupVersion, resetFields map[fieldpath.APIVersion]fieldpath.Filter) (_ Manager, err error) {
 	return &structuredMergeManager{
 		typeConverter:   typeConverter,
@@ -93,7 +91,7 @@ func objectGVKNN(obj runtime.Object) string {
 	return fmt.Sprintf("%v/%v; %v", namespace, name, obj.GetObjectKind().GroupVersionKind())
 }
 
-// Update implements Manager.
+// Update 实现 Manager 接口。
 //
 // 更新请求不合并补丁，只重新计算 newObj 相对于 liveObj 的字段所有权：
 // 把两个对象都转成目标版本的 TypedValue，交给 SMD 的 Update。
@@ -118,7 +116,7 @@ func (f *structuredMergeManager) Update(liveObj, newObj runtime.Object, managed 
 	}
 	apiVersion := fieldpath.APIVersion(f.groupVersion.String())
 
-	// TODO(apelisse) use the first return value when unions are implemented
+	//TODO(apelisse): 实现 union 后使用第一个返回值。
 	_, managedFields, err := f.updater.Update(liveObjTyped, newObjTyped, apiVersion, managed.Fields(), manager)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to update ManagedFields (%v): %v", objectGVKNN(newObjVersioned), err)
@@ -129,12 +127,12 @@ func (f *structuredMergeManager) Update(liveObj, newObj runtime.Object, managed 
 	return newObj, managed, nil
 }
 
-// Apply implements Manager.
+// Apply 实现 Manager 接口。
 //
 // Apply 与服务端 apply 语义一致：以 patchObj 为唯一所有者计算冲突，
 // 再把结果转回对象。force=true 时覆盖冲突。
 func (f *structuredMergeManager) Apply(liveObj, patchObj runtime.Object, managed Managed, manager string, force bool) (runtime.Object, Managed, error) {
-	// Check that the patch object has the same version as the live object
+	//检查补丁对象与线上对象版本相同。
 	// 版本必须一致，否则字段路径无法直接比较，容易产生错误的冲突判断。
 	if patchVersion := patchObj.GetObjectKind().GroupVersionKind().GroupVersion(); patchVersion != f.groupVersion {
 		return nil, nil,
@@ -158,7 +156,7 @@ func (f *structuredMergeManager) Apply(liveObj, patchObj runtime.Object, managed
 		return nil, nil, fmt.Errorf("failed to convert live object (%v) to proper version: %v", objectGVKNN(liveObj), err)
 	}
 
-	// Don't allow duplicates in the applied object.
+	//不允许应用对象中出现重复项。
 	// 与 Update 不同，apply 的 patch 必须是规范的，重复字段直接报错。
 	patchObjTyped, err := f.typeConverter.ObjectToTyped(patchObj)
 	if err != nil {

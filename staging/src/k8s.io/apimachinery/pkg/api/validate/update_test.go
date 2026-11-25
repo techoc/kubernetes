@@ -578,9 +578,9 @@ func TestValSliceUpdate(t *testing.T) {
 		})
 	}
 
-	// Keyed-match case: matching by the Name field only. Modifying the Value
-	// of a keyed item should not trigger either NoAddItem or NoRemoveItem
-	// (that check belongs to eachVal + NoModify).
+	// 按键匹配：仅按 Name 匹配。修改键控条目的 Value 不应触发 NoAddItem 或 NoRemoveItem；
+	// 该检查属于 eachVal + NoModify。
+	//
 	t.Run("NoAddItem+NoRemoveItem keyed match allows item modification", func(t *testing.T) {
 		op := operation.Operation{Type: operation.Update}
 		newList := []keyed{{Name: "alpha", Value: "v2"}, {Name: "beta", Value: "v1"}}
@@ -753,7 +753,7 @@ func TestPtrSliceUpdate(t *testing.T) {
 			oldValue:    []*string{new("a"), new("c")},
 			match:       DirectEqual[string],
 			constraints: []UpdateConstraint{NoAddItem},
-			// Expect 0 errors because nil is ignored and non-nil elements match old values.
+			// nil 项被忽略，非 nil 项均匹配旧值，因此预期无错误。
 		},
 	}
 

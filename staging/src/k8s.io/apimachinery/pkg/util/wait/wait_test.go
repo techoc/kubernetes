@@ -151,8 +151,8 @@ func TestUntilReturnsImmediately(t *testing.T) {
 // TestJitterUntil 验证抖动循环在停止通道关闭后立即返回、在运行中关闭后正常退出。
 func TestJitterUntil(t *testing.T) {
 	ch := make(chan struct{})
-	// if a channel is closed JitterUntil never calls function f
-	// and returns immediately
+	//channel 关闭时 JitterUntil 不再调用函数 f，
+	//并立即返回。
 	// 停止通道已关闭时 JitterUntil 不调用回调并立即返回。
 	close(ch)
 	JitterUntil(func() {
@@ -216,7 +216,6 @@ func TestJitterUntilReturnsImmediately(t *testing.T) {
 // TestJitterUntilRecoversPanic 验证回调 panic 会被运行时 panic 处理器恢复，
 // 循环继续执行而不是让进程崩溃。测试临时替换全局 crash 配置并在结束后恢复。
 func TestJitterUntilRecoversPanic(t *testing.T) {
-	// Save and restore crash handlers
 	// 保存并恢复全局 crash 处理器，避免影响其他测试。
 	originalReallyCrash := runtime.ReallyCrash
 	originalHandlers := runtime.PanicHandlers
@@ -228,7 +227,6 @@ func TestJitterUntilRecoversPanic(t *testing.T) {
 	called := 0
 	handled := 0
 
-	// Hook up a custom crash handler to ensure it is called when a jitter function panics
 	// 挂载自定义 panic 处理器，确认回调 panic 时它会被调用。
 	runtime.ReallyCrash = false
 	runtime.PanicHandlers = []func(context.Context, interface{}){
@@ -267,15 +265,15 @@ func TestJitterUntilNegativeFactor(t *testing.T) {
 			<-received
 		}, time.Second, -30.0, true, ch)
 	}()
-	// first loop
+	//第一轮循环
 	<-called
 	received <- struct{}{}
-	// second loop
+	//第二轮循环
 	<-called
 	close(ch)
 	received <- struct{}{}
 
-	// it should take at most 2 seconds + some overhead, not 3
+	//耗时最多为 2 秒加少量开销，而不是 3 秒。
 	if now.Add(3 * time.Second).Before(time.Now()) {
 		t.Errorf("JitterUntil did not returned after predefined period with negative jitter factor when the stop chan was closed inside the func")
 	}
@@ -285,7 +283,7 @@ func TestJitterUntilNegativeFactor(t *testing.T) {
 // TestExponentialBackoff 验证指数退避的各终止路径：
 // 默认零步数立即超时、步数耗尽、条件成功、错误传播与多步后成功。
 func TestExponentialBackoff(t *testing.T) {
-	// exits immediately
+	//立即退出
 	// 零步数时直接返回超时。
 	i := 0
 	err := ExponentialBackoff(Backoff{Factor: 1.0}, func() (bool, error) {
@@ -298,7 +296,7 @@ func TestExponentialBackoff(t *testing.T) {
 
 	opts := Backoff{Factor: 1.0, Steps: 3}
 
-	// waits up to steps
+	//最多等待 steps 次
 	// 最多执行 Steps 次后以超时结束。
 	i = 0
 	err = ExponentialBackoff(opts, func() (bool, error) {
@@ -309,7 +307,7 @@ func TestExponentialBackoff(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// returns immediately
+	//立即返回
 	// 条件首次返回 true 时立即成功返回。
 	i = 0
 	err = ExponentialBackoff(opts, func() (bool, error) {
@@ -320,7 +318,7 @@ func TestExponentialBackoff(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// returns immediately on error
+	//出错时立即返回
 	// 条件返回错误时立即把该错误透传给调用方。
 	testErr := fmt.Errorf("some other error")
 	err = ExponentialBackoff(opts, func() (bool, error) {
@@ -330,7 +328,7 @@ func TestExponentialBackoff(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// invoked multiple times
+	//调用多次
 	// 多次调用后条件成功，验证步进计数正确。
 	i = 1
 	err = ExponentialBackoff(opts, func() (bool, error) {
@@ -373,7 +371,7 @@ DRAIN:
 // 测试可等待其 goroutine 结束。
 type fakePoller struct {
 	max  int
-	used int32 // accessed with atomics
+	used int32 //通过原子操作访问
 	wg   sync.WaitGroup
 }
 
@@ -464,7 +462,6 @@ func TestPollImmediate(t *testing.T) {
 	if err := poll(ctx, true, fp.GetwaitFunc().WithContext(), f.WithContext()); err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
-	// We don't need to wait for fp.wg, as pollImmediate shouldn't call waitFunc at all.
 	// immediate 模式不调用 waitFunc，因此无需等待 fp.wg。
 	if invocations != 1 {
 		t.Errorf("Expected exactly one invocation, got %d", invocations)
@@ -488,7 +485,6 @@ func TestPollImmediateError(t *testing.T) {
 	if err := poll(ctx, true, fp.GetwaitFunc().WithContext(), f.WithContext()); err == nil || err != expectedError {
 		t.Fatalf("Expected error %v, got none %v", expectedError, err)
 	}
-	// We don't need to wait for fp.wg, as pollImmediate shouldn't call waitFunc at all.
 	// immediate 模式不调用 waitFunc，因此无需等待 fp.wg。
 	used := atomic.LoadInt32(&fp.used)
 	if used != 0 {
@@ -525,11 +521,11 @@ func TestPollForever(t *testing.T) {
 		complete <- struct{}{}
 	}()
 
-	// ensure the condition is opened
+	//确保条件已打开。
 	// 确认条件已被首次调用（通道可读）。
 	<-ch
 
-	// ensure channel sends events
+	//确保 channel 发送事件。
 	// 至少在若干次轮询间隔内持续收到通知。
 	for i := 0; i < 10; i++ {
 		select {
@@ -545,7 +541,7 @@ func TestPollForever(t *testing.T) {
 		}
 	}
 
-	// at most one poll notification should be sent once we return from the condition
+	//从条件函数返回后最多发送一个轮询通知。
 	// 条件返回 true 后最多再收到一次通知，随后通道应关闭。
 	done <- struct{}{}
 	wg.Add(1)
@@ -592,7 +588,7 @@ func Test_waitFor(t *testing.T) {
 				return false, nil
 			}),
 			2,
-			3, // the contract of waitFor() says the func is called once more at the end of the wait
+			3, //waitFor() 的约定要求等待结束时再调用一次 func。
 			// waitFor 的约定：等待结束时条件会再被调用一次。
 			true,
 		},
@@ -629,8 +625,8 @@ func Test_waitFor(t *testing.T) {
 	}
 }
 
-// Test_waitForWithEarlyClosing_waitFunc tests WaitFor when the waitFunc closes its channel. The WaitFor should
-// always return ErrWaitTimeout.
+// Test_waitForWithEarlyClosing_waitFunc 测试 waitFunc 提前关闭 channel 时 WaitFor 的行为；
+// 应始终返回 ErrWaitTimeout。
 // 验证 waitFunc 提前关闭通道时，waitFor 仍立即返回 ErrWaitTimeout。
 func Test_waitForWithEarlyClosing_waitFunc(t *testing.T) {
 	stopCh := make(chan struct{})
@@ -647,7 +643,6 @@ func Test_waitForWithEarlyClosing_waitFunc(t *testing.T) {
 	})
 	duration := time.Since(start)
 
-	// The waitFor should return immediately, so the duration is close to 0s.
 	// waitFor 应立即返回，因此耗时接近 0。
 	if duration >= ForeverTestTimeout/2 {
 		t.Errorf("expected short timeout duration")
@@ -657,8 +652,6 @@ func Test_waitForWithEarlyClosing_waitFunc(t *testing.T) {
 	}
 }
 
-// Test_waitForWithClosedChannel tests waitFor when it receives a closed channel. The waitFor should
-// always return ErrWaitTimeout.
 // 验证 waitFor 收到已关闭的通道时也立即返回 ErrWaitTimeout。
 func Test_waitForWithClosedChannel(t *testing.T) {
 	stopCh := make(chan struct{})
@@ -674,20 +667,16 @@ func Test_waitForWithClosedChannel(t *testing.T) {
 		return false, nil
 	})
 	duration := time.Since(start)
-	// The waitFor should return immediately, so the duration is close to 0s.
 	// waitFor 应立即返回，耗时接近 0。
 	if duration >= ForeverTestTimeout/2 {
 		t.Errorf("expected short timeout duration")
 	}
-	// The interval of the poller is ForeverTestTimeout, so the waitFor should always return ErrWaitTimeout.
 	// 轮询间隔为 ForeverTestTimeout，因此最终应报 ErrWaitTimeout。
 	if err != ErrWaitTimeout {
 		t.Errorf("expected ErrWaitTimeout from WaitFunc")
 	}
 }
 
-// Test_waitForWithContextCancelsContext verifies that after the condition func returns true,
-// waitForWithContext cancels the context it supplies to the WaitWithContextFunc.
 // 验证条件返回 true 后，waitForWithContext 会取消它传给 waitFunc 的 context，
 // 使轮询 goroutine 得以退出。
 func Test_waitForWithContextCancelsContext(t *testing.T) {
@@ -703,7 +692,6 @@ func Test_waitForWithContextCancelsContext(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		return true, nil
 	})
-	// The polling goroutine should be closed after waitForWithContext returning.
 	// waitForWithContext 返回后，其创建的轮询 goroutine 应已退出（context 已被取消）。
 	if ctxPassedToWait.Err() != context.Canceled {
 		t.Errorf("expected the context passed to waitForWithContext to be closed with: %v, but got: %v", context.Canceled, ctxPassedToWait.Err())
@@ -727,21 +715,21 @@ func TestPollUntil(t *testing.T) {
 		close(pollDone)
 	}()
 
-	// make sure we're called once
+	//确保只调用一次。
 	// 确认条件至少被调用一次。
 	<-called
-	// this should trigger a "done"
+	//这应触发 "done"。
 	// 关闭 stopCh 触发退出。
 	close(stopCh)
 
 	go func() {
-		// release the condition func if needed
+		//必要时释放条件函数。
 		// 排空 called，避免条件函数因发送阻塞而无法退出。
 		for range called {
 		}
 	}()
 
-	// make sure we finished the poll
+	//确保轮询已结束。
 	// 等待轮询真正结束。
 	<-pollDone
 	close(called)
@@ -781,7 +769,7 @@ func TestBackoff_Step(t *testing.T) {
 					t.Logf("[%d]=%s", i, got)
 					if initial != nil && initial.Jitter > 0 {
 						if got == tt.want[i] {
-							// this is statistically unlikely to happen by chance
+							//随机情况下极不可能发生。
 							t.Errorf("Backoff.Step(%d) = %v, no jitter", i, got)
 							continue
 						}
@@ -822,7 +810,7 @@ func TestContextForChannel(t *testing.T) {
 		close(done)
 	}()
 
-	// Closing parent channel should cancel all children contexts
+	//关闭父 channel 应取消所有子 context。
 	close(parentCh)
 
 	select {
@@ -855,7 +843,6 @@ func TestExponentialBackoffManagerGetNextBackoff(t *testing.T) {
 // TestJitteredBackoffManagerGetNextBackoff 验证正抖动落在 [base, base+jitter] 区间，
 // 负抖动退化为固定退避值。
 func TestJitteredBackoffManagerGetNextBackoff(t *testing.T) {
-	// positive jitter
 	// 正抖动：结果在基础值与基础值加抖动之间。
 	backoffMgr := NewJitteredBackoffManager(1, 1, testingclock.NewFakeClock(time.Now()))
 	for i := 0; i < 5; i++ {
@@ -865,7 +852,6 @@ func TestJitteredBackoffManagerGetNextBackoff(t *testing.T) {
 		}
 	}
 
-	// negative jitter, shall be a fixed backoff
 	// 负抖动应退化为固定退避。
 	backoffMgr = NewJitteredBackoffManager(1, -1, testingclock.NewFakeClock(time.Now()))
 	backoff := backoffMgr.(*jitteredBackoffManagerImpl).getNextBackoff()
@@ -889,7 +875,7 @@ func TestJitterBackoffManagerWithRealClock(t *testing.T) {
 
 // TestExponentialBackoffManagerWithRealClock 用真实时钟验证指数退避的实际等待时间序列。
 func TestExponentialBackoffManagerWithRealClock(t *testing.T) {
-	// backoff at least 1ms, 2ms, 4ms, 8ms, 10ms, 10ms, 10ms
+	//退避至少为 1ms、2ms、4ms、8ms、10ms、10ms、10ms。
 	// 期望的退避序列（毫秒）：1, 2, 4, 8, 10, 10, 10。
 	durationFactors := []time.Duration{1, 2, 4, 8, 10, 10, 10}
 	backoffMgr := NewExponentialBackoffManager(1*time.Millisecond, 10*time.Millisecond, 1*time.Hour, 2.0, 0.0, &clock.RealClock{})
@@ -928,7 +914,7 @@ func TestBackoffDelayWithResetExponential(t *testing.T) {
 func TestBackoffDelayWithResetEmpty(t *testing.T) {
 	fc := testingclock.NewFakeClock(time.Now())
 	backoff := Backoff{Duration: 1, Cap: 10, Factor: 2.0, Jitter: 0.0, Steps: 10}.DelayWithReset(fc, 0)
-	// we reset to initial duration because the resetInterval is 0, immediate
+	//resetInterval 为 0，因此立即重置为初始时长。
 	durations := []time.Duration{1, 1, 1, 1, 1, 1, 1}
 	for i := 0; i < len(durations); i++ {
 		generatedBackoff := backoff()
@@ -947,7 +933,6 @@ func TestBackoffDelayWithResetEmpty(t *testing.T) {
 // TestBackoffDelayWithResetJitter 验证 DelayWithReset 的抖动行为：
 // 正抖动在区间内随机，负抖动退化为固定值。
 func TestBackoffDelayWithResetJitter(t *testing.T) {
-	// positive jitter
 	// 正抖动。
 	backoff := Backoff{Duration: 1, Jitter: 1}.DelayWithReset(testingclock.NewFakeClock(time.Now()), 0)
 	for i := 0; i < 5; i++ {
@@ -957,7 +942,6 @@ func TestBackoffDelayWithResetJitter(t *testing.T) {
 		}
 	}
 
-	// negative jitter, shall be a fixed backoff
 	// 负抖动应退化为固定退避。
 	backoff = Backoff{Duration: 1, Jitter: -1}.DelayWithReset(testingclock.NewFakeClock(time.Now()), 0)
 	value := backoff()
@@ -981,7 +965,7 @@ func TestBackoffDelayWithResetWithRealClockJitter(t *testing.T) {
 
 // TestBackoffDelayWithResetWithRealClockExponential 用真实时钟验证指数退避的等待时间序列。
 func TestBackoffDelayWithResetWithRealClockExponential(t *testing.T) {
-	// backoff at least 1ms, 2ms, 4ms, 8ms, 10ms, 10ms, 10ms
+	//退避至少为 1ms、2ms、4ms、8ms、10ms、10ms、10ms。
 	// 期望的退避序列（毫秒）：1, 2, 4, 8, 10, 10, 10。
 	durationFactors := []time.Duration{1, 2, 4, 8, 10, 10, 10}
 	backoff := Backoff{Duration: 1 * time.Millisecond, Cap: 10 * time.Millisecond, Factor: 2.0, Jitter: 0.0, Steps: 10}.DelayWithReset(&clock.RealClock{}, 1*time.Hour)
@@ -1275,14 +1259,14 @@ func TestPollImmediateUntilWithContext(t *testing.T) {
 				}
 			},
 			context:          cancelledContext,
-			errExpected:      ErrWaitTimeout, // this should be context.Canceled but that would break callers that assume all errors are ErrWaitTimeout
+			errExpected:      ErrWaitTimeout, //此处本应为 context.Canceled，但会破坏假定所有错误都是 ErrWaitTimeout 的调用方。
 			attemptsExpected: 1,
 		},
 		{
 			name: "condition returns done=false on immediate attempt, context is not cancelled, retry is attempted",
 			condition: func(attempts int) ConditionWithContextFunc {
 				return func(context.Context) (done bool, err error) {
-					// let first 3 attempts fail and the last one succeed
+					//让前三次尝试失败，最后一次成功。
 					if attempts <= 3 {
 						return false, nil
 					}
@@ -1300,7 +1284,7 @@ func TestPollImmediateUntilWithContext(t *testing.T) {
 				}
 			},
 			cancelContextAfterNthAttempt: 4,
-			errExpected:                  ErrWaitTimeout, // this should be context.Canceled, but this method cannot change
+			errExpected:                  ErrWaitTimeout, //此处本应为 context.Canceled，但此方法不能改变该行为。
 			attemptsExpected:             4,
 		},
 	}
@@ -1367,7 +1351,7 @@ func Test_waitForWithContext(t *testing.T) {
 				return false, nil
 			}),
 			waitFunc: func() waitFunc { return fakeTicker(2, nil, func() {}) },
-			// the contract of waitForWithContext() says the func is called once more at the end of the wait
+			//waitForWithContext() 的约定要求等待结束时再调用一次 func。
 			attemptsExpected: 3,
 			errExpected:      ErrWaitTimeout,
 		},
@@ -1390,7 +1374,7 @@ func Test_waitForWithContext(t *testing.T) {
 			waitFunc: func() waitFunc {
 				return func(done <-chan struct{}) <-chan struct{} {
 					ch := make(chan struct{})
-					// never tick on this channel
+					//此 channel 不产生 tick。
 					return ch
 				}
 			},
@@ -1559,7 +1543,7 @@ func Test_poll(t *testing.T) {
 				return false, nil
 			}),
 			waitFunc: func() waitFunc { return fakeTicker(2, nil, func() {}) },
-			// the contract of waitForWithContext() says the func is called once more at the end of the wait
+			//waitForWithContext() 的约定要求等待结束时再调用一次 func。
 			attemptsExpected: 3,
 			errExpected:      ErrWaitTimeout,
 		},
@@ -1572,7 +1556,7 @@ func Test_poll(t *testing.T) {
 			waitFunc: func() waitFunc {
 				return func(done <-chan struct{}) <-chan struct{} {
 					ch := make(chan struct{})
-					// just tick twice
+					//仅产生两次 tick。
 					go func() {
 						ch <- struct{}{}
 						ch <- struct{}{}
@@ -1593,7 +1577,7 @@ func Test_poll(t *testing.T) {
 			waitFunc: func() waitFunc {
 				return func(done <-chan struct{}) <-chan struct{} {
 					ch := make(chan struct{})
-					// just tick twice
+					//仅产生两次 tick。
 					go func() {
 						ch <- struct{}{}
 						ch <- struct{}{}

@@ -148,8 +148,8 @@ func TestValidateListOptions(t *testing.T) {
 		watchListFeatureEnabled: true,
 		expectErrors:            []string{"resourceVersionMatch: Forbidden: sendInitialEvents requires setting resourceVersionMatch to NotOlderThan", "resourceVersionMatch: Unsupported value: \"incorrect\": supported values: \"NotOlderThan\""},
 	}, {
-		// note that validating allowWatchBookmarks would break backward compatibility
-		// because it was possible to request initial events via resourceVersion=0 before this change
+		// 注意：校验 allowWatchBookmarks 会破坏向后兼容性，因为此前可通过
+		// resourceVersion=0 请求初始事件。
 		name: "watch-sendInitialEvents-no-allowWatchBookmark",
 		opts: internalversion.ListOptions{
 			Watch:                true,

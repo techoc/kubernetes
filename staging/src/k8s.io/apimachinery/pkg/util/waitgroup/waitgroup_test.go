@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package waitgroup test cases reference golang sync.WaitGroup https://golang.org/src/sync/waitgroup_test.go.
+// waitgroup 包测试用例参考 Go 标准库 sync.WaitGroup：https://golang.org/src/sync/waitgroup_test.go。
 package waitgroup
 
 import (
@@ -48,7 +48,7 @@ func TestWaitGroup(t *testing.T) {
 		wg2.Done()
 	}
 	for i := 0; i != n; i++ {
-		<-exited // Will block if barrier fails to unlock someone.
+		<-exited //如果 barrier 未能解锁某个等待者，测试将阻塞。
 	}
 }
 
