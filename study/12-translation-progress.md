@@ -15,7 +15,7 @@
 | 6 | `kubectl/pkg/cmd` | 196 | [x] |
 | 7 | `test/utils/`、`test/images/`（拆 2 批） | 134 | [x] |
 | 8 | `test/` 其他小目录 | 58 | [x] |
-| 9 | `test/integration/`（拆 3 批） | 290（已翻 190） | [ ] |
+| 9 | `test/integration/`（拆 3 批） | 290 | [x] |
 | 10 | `test/e2e/` | 537 | [ ] |
 | 11 | `test/e2e_node/`、`test/e2e_node_windows/` | 177 | [ ] |
 | 12 | `hack/`、`third_party/`、`cluster/`、`build/`、小 staging 模块 | ~155 | [ ] |
@@ -42,3 +42,4 @@
 | 2026-11-25 | `23cbe0c8ad4` | integration apimachinery 与 scheduler 注释 |
 | 2026-11-25 | `75690c6f8ea` | integration 补漏注释 |
 | 2026-11-25 | `d434e55a745` | integration scheduler 与 framework 注释 |
+| 2026-11-26 | `3b2aff5d47e` | integration apiserver 与 storage 注释 |
