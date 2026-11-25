@@ -27,18 +27,15 @@ import (
 )
 
 const (
-	// Finalizer is the finalizer that gets set for claims
-	// which were allocated through a builtin controller.
-	// Reserved for use by Kubernetes, DRA driver controllers must
-	// use their own finalizer.
+	// Finalizer 是针对通过内置控制器完成分配的 claim 所设置的 finalizer。
+	// 该名称保留给 Kubernetes 使用，DRA 驱动控制器必须使用自己的 finalizer。
 	Finalizer = "resource.kubernetes.io/delete-protection"
 	// ExtendedResourceClaimAnnotation 是加在生成的特殊 ResourceClaim 上的注解。
 	// 其唯一合法值为 "true"，且仅在调度器内部使用。
 	ExtendedResourceClaimAnnotation = "resource.kubernetes.io/extended-resource-claim"
-	// PodResourceClaimAnnotation is the annotation set on template-generated
-	// ResourceClaims by the ResourceClaim controller. Its value is the
-	// spec.resourceClaims[].name of the Pod or PodGroup for which the claim was
-	// generated. The Pod and its PodGroup are guaranteed to use the same name.
+	// PodResourceClaimAnnotation 是 ResourceClaim 控制器打在由模板生成的
+	// ResourceClaim 上的注解。其值为生成该 claim 所对应的 Pod 或 PodGroup 的
+	// spec.resourceClaims[].name。Pod 与其 PodGroup 保证使用相同名称。
 	PodResourceClaimAnnotation = "resource.kubernetes.io/pod-claim-name"
 	// 资源设备类前缀用于当设备类未指定 ExtendedResourceName 时，生成隐式的扩展资源名。
 	// 生成名为该前缀加上设备类名
@@ -171,13 +168,12 @@ type ResourceSliceSpec struct {
 	// +zeroOrOneOf=ResourceSliceType
 	SharedCounters []CounterSet
 
-	// PartitionTypeAttribute names a string device attribute (by fully
-	// qualified name, e.g. "gpu.example.com/profile") whose value labels
-	// each device with its partition type, such as "Full" or "Half" for a
-	// MIG-style GPU.
+	// PartitionTypeAttribute 指定一个字符串设备属性（以完全限定名，
+	// 例如 "gpu.example.com/profile"），其值用于标记每个设备的分区类型，
+	// 例如 MIG 风格 GPU 的 "Full" 或 "Half"。
 	//
-	// When set, every partitionable device in the slice must carry the attribute
-	// and devices sharing a value must share the same ConsumesCounters cost.
+	// 设置该字段后，分片中每个可分区设备都必须携带该属性，
+	// 且共享同一属性值的设备必须具有相同的 ConsumesCounters 消耗量。
 	//
 	// +optional
 	// +featureGate=DRAPartitionableDevicesType
@@ -211,14 +207,10 @@ const (
 	SkipNodeOperationAll SkipNodeOperation = "*"
 )
 
-// CounterSet defines a named set of counters
-// that are available to be used by devices defined in the
-// ResourcePool.
+// CounterSet 定义一组具名计数器，可供 ResourcePool 中定义的设备使用。
 //
-// The counters are not allocatable by themselves, but
-// can be referenced by devices. When a device is allocated,
-// the portion of counters it uses will no longer be available for use
-// by other devices.
+// 计数器本身不可被单独分配，但可以被设备引用。当某个设备被分配后，
+// 它使用的那部分计数器将不再可供其他设备使用。
 type CounterSet struct {
 	// Name 定义计数器集合的名称，必须是 DNS label。
 	// +required
@@ -244,27 +236,22 @@ type ResourcePool struct {
 	// +required
 	Name string
 
-	// Generation tracks the change in a pool over time. Whenever a driver
-	// changes something about one or more of the resources in a pool, it
-	// must change the generation in all ResourceSlices which are part of
-	// that pool. Consumers of ResourceSlices should only consider
-	// resources from the pool with the highest generation number. The
-	// generation may be reset by drivers, which should be fine for
-	// consumers, assuming that all ResourceSlices in a pool are updated to
-	// match or deleted.
+	// Generation 跟踪池随时间的变化。每当驱动改变池中一个或多个资源的
+	// 任何内容时，都必须修改该池所有 ResourceSlice 中的 generation。
+	// ResourceSlice 的使用者应当只考虑 generation 编号最高的池中的资源。
+	// 驱动可以重置 generation，这对使用者应当没有影响，前提是池中的
+	// 所有 ResourceSlice 都被更新为匹配或被删除。
 	//
-	// Combined with ResourceSliceCount, this mechanism enables consumers to
-	// detect pools which are comprised of multiple ResourceSlices and are
-	// in an incomplete state.
+	// 与 ResourceSliceCount 结合后，此机制使使用者能够检测由多个
+	// ResourceSlice 组成、尚处于不完整状态的池。
 	//
 	// +required
 	Generation int64
 
-	// ResourceSliceCount is the total number of ResourceSlices in the pool at this
-	// generation number. Must be greater than zero.
+	// ResourceSliceCount 是该 generation 编号下池中 ResourceSlice 的总数，
+	// 必须大于零。
 	//
-	// Consumers can use this to check whether they have seen all ResourceSlices
-	// belonging to the same pool.
+	// 使用者可以用它检查自己是否已看到属于同一池的所有 ResourceSlice。
 	//
 	// +required
 	ResourceSliceCount int64
@@ -302,8 +289,8 @@ const ResourceSliceMaxCountersPerDeviceCounterConsumption = 32
 // DeviceCompatibilityGroupsMaxSize 是单次计数器消费中兼容组的最大数量
 const DeviceCompatibilityGroupsMaxSize = 2
 
-// Device represents one individual hardware instance that can be selected based
-// on its attributes. Besides the name, exactly one field must be set.
+// Device 表示一个可以基于其属性进行选择的独立硬件实例。
+// 除名称外，必须且只能设置一个字段。
 type Device struct {
 	// Name 是池中该驱动管理的所有设备之间的唯一标识，必须是 DNS label。
 	// +required
@@ -416,70 +403,67 @@ type Device struct {
 	// +featureGate=DRADeviceBindingConditions,DRAResourceClaimDeviceStatus
 	BindingFailureConditions []string
 
-	// AllowMultipleAllocations marks whether the device is allowed to be allocated to multiple DeviceRequests.
+	// AllowMultipleAllocations 标记该设备是否允许被分配给多个 DeviceRequests。
 	//
-	// If AllowMultipleAllocations is set to true, the device can be allocated more than once,
-	// and all of its capacity is consumable, regardless of whether the requestPolicy is defined or not.
+	// 若将 AllowMultipleAllocations 设为 true，该设备可以被分配多次，
+	// 并且其全部容量均可被消费，无论是否定义了 requestPolicy。
 	//
 	// +optional
 	// +featureGate=DRAConsumableCapacity
 	AllowMultipleAllocations *bool
 
-	// NodeAllocatableResources defines the mapping of node resources
-	// that are managed by the DRA driver exposing this device. This includes resources currently
-	// reported in v1.Node `status.allocatable` that are not extended resources
-	// (see https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources).
-	// Examples include "cpu", "memory", "ephemeral-storage", and hugepages.
-	// In addition to standard requests made through the Pod `spec`, these resources
-	// can also be requested through claims and allocated by the DRA driver.
-	// For example, a CPU DRA driver might allocate exclusive CPUs or auxiliary node memory
-	// dependencies of an accelerator device.
-	// The keys of this map are the node-allocatable resource names (e.g., "cpu", "memory").
-	// Extended resource names are not permitted as keys.
+	// NodeAllocatableResources 定义由此设备暴露的 DRA 驱动所管理的节点资源映射。
+	// 这包括当前在 v1.Node `status.allocatable` 中报告、且不属于扩展资源的资源
+	// （参见 https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources）。
+	// 例如 "cpu"、"memory"、"ephemeral-storage" 和大页（hugepages）。
+	// 除了通过 Pod `spec` 发起的标准请求外，这些资源也可以通过 claim 请求
+	// 并由 DRA 驱动分配。
+	// 例如，CPU DRA 驱动可能分配独占式 CPU，或加速器设备的辅助节点内存依赖。
+	// 该映射的键是节点可分配资源名（例如 "cpu"、"memory"）。
+	// 不允许使用扩展资源名作为键。
 	// +optional
 	// +featureGate=DRANodeAllocatableResources
 	NodeAllocatableResources map[v1.ResourceName]NodeAllocatableResource
 }
 
-// NodeAllocatableResource defines the translation of the requested DRA device/capacity
-// units to the corresponding quantity of the node-allocatable resource.
-// At least one of Mapping or Overhead must be specified.
+// NodeAllocatableResource 定义如何将所请求的 DRA 设备/容量单位
+// 换算为对应数量的节点可分配资源。
+// Mapping 与 Overhead 中至少要指定一个。
 type NodeAllocatableResource struct {
-	// Mapping is used when the device directly models a node allocatable resource like standard CPU or memory
-	// (e.g., with a CPU DRA driver). The calculated quantity is accounted for exactly once per claim instance
-	// on the node. To prevent node cgroup isolation friction, the scheduler explicitly
-	// blocks sharing mapped device claims across multiple pods.
+	// Mapping 用于设备直接建模标准 CPU 或内存等节点可分配资源的场景
+	// （例如 CPU DRA 驱动）。计算出的数量在节点上每个 claim 实例只计入一次。
+	// 为避免节点 cgroup 隔离方面的冲突，调度器会显式禁止跨多个 Pod
+	// 共享带映射的设备 claim。
 	// +optional
 	Mapping *NodeAllocatableMapping
 
-	// Overhead contains fields for modeling auxiliary overhead incurred on node allocatable resources
-	// when allocating devices that are not themselves modeling a node allocatable resource (e.g., host memory overhead for GPUs).
-	// Sharing overhead-mapped claims across multiple pods is allowed. The node allocatable overhead is accounted
-	// for individually for each pod referencing the claim.
-	// Overhead is always subtracted from the node's allocatable capacity for the resource, even when mapping
-	// is specified for the same resource.
-	// Eg: If a device models memory capacity per socket as a consumable capacity pool via Mapping (with CapacityKey),
-	// any overhead specified for the same resource will be subtracted from the node's general allocatable capacity
-	// and not from the per-socket capacity pool in Mapping.
+	// Overhead 包含用于建模辅助开销的字段：当分配的设备本身并不建模节点
+	// 可分配资源时，会在节点可分配资源上产生该开销（例如 GPU 的主机内存开销）。
+	// 允许跨多个 Pod 共享带开销映射的 claim。节点可分配开销会为每个
+	// 引用该 claim 的 Pod 分别计入。
+	// 即使为同一资源指定了 mapping，Overhead 也总是从节点该资源的可分配容量中扣除。
+	// 例如：若设备通过 Mapping（带 CapacityKey）将每个 socket 的内存容量建模为
+	// 可消费容量池，则为同一资源指定的任何开销都将从节点的一般可分配容量中扣除，
+	// 而不是从 Mapping 中的每 socket 容量池中扣除。
 	// +optional
 	Overhead *NodeAllocatableOverhead
 }
 
-// NodeAllocatableMapping defines how a DRA allocation directly translates into a node allocatable resource quantity.
-// The mapping can be derived from either the count of allocated devices (via deviceMultiplier) or the specific capacity consumed (via capacityKey and capacityMultiplier). These options are mutually exclusive.
-// Kubelet adds this mapped resource quantity from claim to both requests and limits at the pod-level cgroup, and to limits at the container-level cgroup for each container referencing the claim.
+// NodeAllocatableMapping 定义 DRA 分配如何直接换算为节点可分配资源数量。
+// 映射可由已分配设备数（通过 deviceMultiplier）或具体消耗的容量
+// （通过 capacityKey 和 capacityMultiplier）推导，二者互斥。
+// Kubelet 会将该从 claim 映射出的资源数量同时加入 Pod 级 cgroup 的
+// requests 和 limits，并对每个引用该 claim 的容器将其加入容器级 cgroup 的 limits。
 type NodeAllocatableMapping struct {
-	// CapacityKey references a capacity name defined as a key in the
-	// `spec.devices[*].capacity` map. When this field is set, the value associated with
-	// this key in the `status.allocation.devices.results[*].consumedCapacity` map
-	// (for a specific claim allocation) determines the base quantity for
-	// the node allocatable resource. `capacityMultiplier` must also be set and is
-	// multiplied with the base quantity.
-	// For example, if `spec.devices[*].capacity` has an entry "dra.example.com/memory": "128Gi",
-	// and this field is set to "dra.example.com/memory", then for a claim allocation
-	// that consumes { "dra.example.com/memory": "4Gi" } the base quantity for the
-	// node allocatable resource mapping will be "4Gi".
-	// The final node allocatable resource amount is `consumedCapacity[capacityKey]` * `capacityMultiplier`.
+	// CapacityKey 引用在 `spec.devices[*].capacity` 映射中定义为键的容量名称。
+	// 设置该字段后，对于特定 claim 分配，`status.allocation.devices.results[*].consumedCapacity`
+	// 映射中与该键关联的值将决定节点可分配资源的基准数量。
+	// `capacityMultiplier` 也必须设置，并与基准数量相乘。
+	// 例如，若 `spec.devices[*].capacity` 中有条目 "dra.example.com/memory": "128Gi"，
+	// 且该字段设为 "dra.example.com/memory"，则消耗
+	// { "dra.example.com/memory": "4Gi" } 的 claim 分配，其节点可分配资源映射的
+	// 基准数量为 "4Gi"。
+	// 最终的节点可分配资源数量为 `consumedCapacity[capacityKey]` * `capacityMultiplier`。
 	// +optional
 	CapacityKey *QualifiedName
 
@@ -491,12 +475,12 @@ type NodeAllocatableMapping struct {
 	// +optional
 	CapacityMultiplier *resource.Quantity
 
-	// DeviceMultiplier is used as a multiplier for the allocated device count in the claim.
-	// The final node allocatable resource amount is `deviceCount` * `deviceMultiplier`.
-	// For example, a DRA driver representing each cache complex (CCX) as a device would have
-	// {ResourceName: "cpu", deviceMultiplier: "8"} in its `nodeAllocatableResources`.
-	// If 2 devices (CCX) are allocated to the claim, 2 * 8 = 16 CPUs would be considered as allocated.
-	// It is only valid when `capacityKey` and `capacityMultiplier` are not set.
+	// DeviceMultiplier 用作 claim 中已分配设备数量的乘数。
+	// 最终的节点可分配资源数量为 `deviceCount` * `deviceMultiplier`。
+	// 例如，将每个缓存复合体（CCX）表示为一个设备的 DRA 驱动，
+	// 其 `nodeAllocatableResources` 中会包含 {ResourceName: "cpu", deviceMultiplier: "8"}。
+	// 若为该 claim 分配了 2 个设备（CCX），则视为分配了 2 * 8 = 16 个 CPU。
+	// 仅当 `capacityKey` 和 `capacityMultiplier` 未设置时才有效。
 	// +optional
 	DeviceMultiplier *resource.Quantity
 }
@@ -510,21 +494,21 @@ type NodeAllocatableOverhead struct {
 	// +optional
 	PerPod *resource.Quantity
 
-	// PerContainer is applied per container reference to the claim.
-	// This models overhead scaling linearly with the number of containers actively using the device.
-	// When both PerPod and PerContainer are specified, the total overhead allocated for each pod referencing
-	// the claim is computed as:
+	// PerContainer 按每个引用该 claim 的容器施加。
+	// 这建模的是与正在使用该设备的容器数量呈线性关系的开销。
+	// 当同时指定 PerPod 和 PerContainer 时，每个引用该 claim 的 Pod
+	// 分配的总开销按如下方式计算：
 	// Quantity = PerPod + (PerContainer * NumReferences)
-	// Kubelet accounts for this overhead in cgroups:
-	// - Pod-level cgroup (requests and limits): Kubelet adds PerPod + (PerContainer * NumReferences).
-	// - Container-level cgroup (limits only): Kubelet adds PerPod + PerContainer for each referencing container.
-	// This allows any single container to access the pod-level overhead, while the parent cgroup caps the total usage to account for PerPod exactly once.
+	// Kubelet 在 cgroups 中计入此开销：
+	// - Pod 级 cgroup（requests 和 limits）：Kubelet 加入 PerPod + (PerContainer * NumReferences)。
+	// - 容器级 cgroup（仅 limits）：Kubelet 为每个引用该 claim 的容器加入 PerPod + PerContainer。
+	// 这样任意单个容器都可以访问 Pod 级的开销，同时父 cgroup 将总用量封顶，
+	// 使 PerPod 恰好只计入一次。
 	// +optional
 	PerContainer *resource.Quantity
 }
 
-// DeviceCounterConsumption defines a set of counters that
-// a device will consume from a CounterSet.
+// DeviceCounterConsumption 定义设备将从某个 CounterSet 中消费的计数器集合。
 type DeviceCounterConsumption struct {
 	// CounterSet 是要消耗的计数器所属集合的名称。
 	// +required
@@ -574,14 +558,14 @@ type DeviceCapacity struct {
 	RequestPolicy *CapacityRequestPolicy
 }
 
-// Counter describes a quantity associated with a device.
+// Counter 描述与设备关联的某个数量。
 type Counter struct {
 	// Value 定义某项设备计数器可用的数量。
 	// +required
 	Value resource.Quantity
 }
 
-// CapacityRequestPolicyDiscreteMaxOptions limits the number of discrete capacity values allowed in a requestPolicy.
+// CapacityRequestPolicyDiscreteMaxOptions 限定 requestPolicy 中允许的离散容量值数量上限。
 const CapacityRequestPolicyDiscreteMaxOptions = 10
 
 // CapacityRequestPolicy 定义请求如何消费设备容量。
@@ -668,7 +652,7 @@ const ResourceSliceMaxAttributeValuesPerDevice = 48
 // 为 32。
 type QualifiedName string
 
-// FullyQualifiedName is a QualifiedName where the domain is set.
+// FullyQualifiedName 是指已设置域的 QualifiedName。
 type FullyQualifiedName string
 
 // DeviceMaxDomainLength 是完全限定名中域前缀的最大长度
@@ -683,13 +667,13 @@ type DeviceAttribute struct {
 	// 该方法是必需的
 	// Kubernetes API 定义中不带该后缀，以保持自然
 
-	// IntValue is a number.
+	// IntValue 是数字。
 	//
 	// +optional
 	// +oneOf=ValueType
 	IntValue *int64
 
-	// BoolValue is a true/false value.
+	// BoolValue 是布尔值（true/false）。
 	//
 	// +optional
 	// +oneOf=ValueType
@@ -715,7 +699,7 @@ type DeviceAttribute struct {
 	// +featureGate=DRAListTypeAttributes
 	IntValues []int64
 
-	// BoolValues is a non-empty list of true/false values.
+	// BoolValues 是一组非空的布尔值（true/false）列表。
 	//
 	// +optional
 	// +listType=atomic
@@ -752,9 +736,8 @@ const DeviceAttributeMaxValueLength = 64
 // DeviceTaintsMaxLength 是每个设备污点的最大数量
 const DeviceTaintsMaxLength = 16
 
-// The device this taint is attached to has the "effect" on
-// any claim which does not tolerate the taint and, through the claim,
-// to pods using the claim.
+// 挂载该污点的设备，会对所有不容忍该污点的 claim 产生相应的 "effect"
+// 影响，并通过这些 claim 波及使用它们的 Pod。
 type DeviceTaint struct {
 	// 施加到设备上的污点键
 	// 必须是 label 名
@@ -781,15 +764,12 @@ type DeviceTaint struct {
 	// 目前尚未确定，也可能作为单独字段实现
 	//
 	// 校验必须允许已存储对象中出现未知枚举值，
-	// 这样才能在单个版本内新增枚举值，而无需
-	// ratcheting.
+	// 这样才能在单个版本内新增枚举值，而无需依赖 ratcheting。
 
-	// TimeAdded represents the time at which the taint was added or
-	// (only in a DeviceTaintRule) the effect was modified.
-	// Added automatically during create or update if not set.
-	// In addition, in a DeviceTaintRule a value provided during
-	// an update gets replaced with the current time if the provided
-	// value is the same as the old one and the new effect is different.
+	// TimeAdded 表示添加该污点的时间，或（仅在 DeviceTaintRule 中）
+	// 修改 effect 的时间。若未设置，会在创建或更新时自动添加。
+	// 此外，对于 DeviceTaintRule，更新时若提供的值与旧值相同而新
+	// effect 不同，则该值会被替换为当前时间。
 	//
 	// +optional
 	TimeAdded *metav1.Time
@@ -826,7 +806,7 @@ type ResourceSliceList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of resource ResourceSlices.
+	// Items 是 ResourceSlice 的列表。
 	Items []ResourceSlice
 }
 
@@ -904,10 +884,9 @@ const (
 	DRAAdminNamespaceLabelKey = "resource.kubernetes.io/admin-access"
 )
 
-// DeviceRequest is a request for devices required for a claim.
-// This is typically a request for a single resource like a device, but can
-// also ask for several identical devices. With FirstAvailable it is also
-// possible to provide a prioritized list of requests.
+// DeviceRequest 是对 claim 所需设备的请求。
+// 这通常是对单个资源（如某个设备）的请求，但也可以请求多个相同设备。
+// 借助 FirstAvailable，还可以提供按优先级排列的请求列表。
 type DeviceRequest struct {
 	// Name 可用于在 pod.spec.containers[].resources.claims 条目及 claim 的约束中引用本请求
 	// 设置 Exactly 时，通过 DeviceRequest 名称的引用能唯一标识一个请求；
@@ -1036,14 +1015,12 @@ type ExactDeviceRequest struct {
 	DerivedAttributes []DeviceDerivedAttribute
 }
 
-// DeviceSubRequest describes a request for device provided in the
-// claim.spec.devices.requests[].firstAvailable array. Each
-// is typically a request for a single resource like a device, but can
-// also ask for several identical devices.
+// DeviceSubRequest 描述在 claim.spec.devices.requests[].firstAvailable
+// 数组中提供的设备请求。每一项通常是对单个资源（如某个设备）的请求，
+// 但也可以请求多个相同设备。
 //
-// DeviceSubRequest is similar to ExactDeviceRequest, but doesn't expose the
-// AdminAccess field as that one is only supported when requesting a
-// specific device.
+// DeviceSubRequest 与 ExactDeviceRequest 类似，但不暴露 AdminAccess 字段，
+// 因为该字段仅在请求特定设备时受支持。
 type DeviceSubRequest struct {
 	// Name 可用于在 claim 的约束列表或配置列表中引用本子请求。
 	// 引用必须使用 <main request>/<subrequest> 格式
@@ -1136,28 +1113,25 @@ type DeviceSubRequest struct {
 
 // CapacityRequirements 定义特定设备请求的容量需求。
 type CapacityRequirements struct {
-	// Requests represent individual device resource requests for distinct resources,
-	// all of which must be provided by the device.
+	// Requests 表示针对不同资源的独立设备资源请求，设备必须满足全部请求。
 	//
-	// This value is used as an additional filtering condition against the available capacity on the device.
-	// This is semantically equivalent to a CEL selector with
-	// `device.capacity[<domain>].<name>.compareTo(quantity(<request quantity>)) >= 0`.
-	// For example, device.capacity['test-driver.cdi.k8s.io'].counters.compareTo(quantity('2')) >= 0.
+	// 该值用作针对设备可用容量的附加过滤条件。
+	// 其语义等价于如下 CEL selector：
+	// `device.capacity[<domain>].<name>.compareTo(quantity(<request quantity>)) >= 0`。
+	// 例如，device.capacity['test-driver.cdi.k8s.io'].counters.compareTo(quantity('2')) >= 0。
 	//
-	// When a requestPolicy is defined, the requested amount is adjusted upward
-	// to the nearest valid value based on the policy.
-	// If the requested amount cannot be adjusted to a valid value—because it exceeds what the requestPolicy allows—
-	// the device is considered ineligible for allocation.
+	// 若定义了 requestPolicy，请求量会依据该策略向上调整至最近的合法值。
+	// 如果请求量无法被调整为合法值——因为其超出了 requestPolicy 允许的范围——
+	// 则该设备被视为不可分配。
 	//
-	// For any capacity that is not explicitly requested:
-	// - If no requestPolicy is set, the default consumed capacity is equal to the full device capacity
-	//   (i.e., the whole device is claimed).
-	// - If a requestPolicy is set, the default consumed capacity is determined according to that policy.
+	// 对于任何未被显式请求的容量：
+	// - 若未设置 requestPolicy，默认消费的容量等于设备的全部容量
+	//   （即整台设备被占用）。
+	// - 若设置了 requestPolicy，默认消费的容量由该策略决定。
 	//
-	// If the device allows multiple allocation,
-	// the aggregated amount across all requests must not exceed the capacity value.
-	// The consumed capacity, which may be adjusted based on the requestPolicy if defined,
-	// is recorded in the resource claim’s status.devices[*].consumedCapacity field.
+	// 若设备允许多次分配，所有请求的累计消耗量不得超过该容量值。
+	// 实际消费的容量（若定义了 requestPolicy，可能已被调整）会记录在
+	// resource claim 的 status.devices[*].consumedCapacity 字段中。
 	//
 	// +optional
 	Requests map[QualifiedName]resource.Quantity
@@ -1171,7 +1145,7 @@ const (
 
 type DeviceAllocationMode string
 
-// Valid [DeviceRequest.CountMode] values.
+// [DeviceRequest.CountMode] 的合法取值。
 const (
 	DeviceAllocationModeExactCount = DeviceAllocationMode("ExactCount")
 	DeviceAllocationModeAll        = DeviceAllocationMode("All")
@@ -1187,66 +1161,53 @@ type DeviceSelector struct {
 
 // CELDeviceSelector 包含用于选择设备的 CEL 表达式。
 type CELDeviceSelector struct {
-	// Expression is a CEL expression which evaluates a single device. It
-	// must evaluate to true when the device under consideration satisfies
-	// the desired criteria, and false when it does not. Any other result
-	// is an error and causes allocation of devices to abort.
+	// Expression 是一个对单个设备求值的 CEL 表达式。当所考虑的设备
+	// 满足期望条件时它必须求值为 true，不满足时必须为 false。
+	// 任何其他结果都视为错误，并导致设备分配中止。
 	//
-	// The expression's input is an object named "device", which carries
-	// the following properties:
-	//  - driver (string): the name of the driver which defines this device.
-	//  - attributes (map[string]object): the device's attributes, grouped by prefix
-	//    (e.g. device.attributes["dra.example.com"] evaluates to an object with all
-	//    of the attributes which were prefixed by "dra.example.com".
-	//  - capacity (map[string]object): the device's capacities, grouped by prefix.
-	//  - allowMultipleAllocations (bool): the allowMultipleAllocations property of the device
-	//    (v1.34+ with the DRAConsumableCapacity feature enabled).
+	// 表达式的输入是一个名为 "device" 的对象，其携带以下属性：
+	//  - driver (string): 定义该设备的驱动名称。
+	//  - attributes (map[string]object): 设备的属性，按前缀分组
+	//    （例如 device.attributes["dra.example.com"] 求值为由所有以
+	//    "dra.example.com" 为前缀的属性组成的对象。
+	//  - capacity (map[string]object): 设备的容量，按前缀分组。
+	//  - allowMultipleAllocations (bool): 设备的 allowMultipleAllocations 属性
+	//    （v1.34+，且需启用 DRAConsumableCapacity 特性）。
 	//
-	// Example: Consider a device with driver="dra.example.com", which exposes
-	// two attributes named "model" and "ext.example.com/family" and which
-	// exposes one capacity named "modules". This input to this expression
-	// would have the following fields:
+	// 示例：考虑一个 driver="dra.example.com" 的设备，它暴露两个名为
+	// "model" 和 "ext.example.com/family" 的属性，以及一个名为 "modules"
+	// 的容量。该表达式的输入将包含以下字段：
 	//
 	//     device.driver
 	//     device.attributes["dra.example.com"].model
 	//     device.attributes["ext.example.com"].family
 	//     device.capacity["dra.example.com"].modules
 	//
-	// The device.driver field can be used to check for a specific driver,
-	// either as a high-level precondition (i.e. you only want to consider
-	// devices from this driver) or as part of a multi-clause expression
-	// that is meant to consider devices from different drivers.
+	// device.driver 字段可用于检查特定驱动，既可作为高层前置条件
+	// （即只考虑该驱动的设备），也可作为考虑不同驱动设备的多子句
+	// 表达式的一部分。
 	//
-	// The value type of each attribute is defined by the device
-	// definition, and users who write these expressions must consult the
-	// documentation for their specific drivers. The value type of each
-	// capacity is Quantity.
+	// 每个属性的值类型由设备定义决定，编写这些表达式的用户必须查阅
+	// 其特定驱动的文档。每个容量的值类型为 Quantity。
 	//
-	// If an unknown prefix is used as a lookup in either device.attributes
-	// or device.capacity, an empty map will be returned. Any reference to
-	// an unknown field will cause an evaluation error and allocation to
-	// abort.
+	// 如果在 device.attributes 或 device.capacity 中使用未知前缀进行查找，
+	// 将返回空映射。对未知字段的任何引用都会导致求值错误并使分配中止。
 	//
-	// A robust expression should check for the existence of attributes
-	// before referencing them.
+	// 健壮的表达式应当在引用属性之前先检查其是否存在。
 	//
-	// For ease of use, the cel.bind() function is enabled, and can be used
-	// to simplify expressions that access multiple attributes with the
-	// same domain. For example:
+	// 为方便使用，已启用 cel.bind() 函数，可用于简化访问同一域下多个
+	// 属性的表达式。例如：
 	//
 	//     cel.bind(dra, device.attributes["dra.example.com"], dra.someBool && dra.anotherBool)
 	//
-	// When the DRAListTypeAttributes feature gate is enabled,
-	// the includes() helper is available and it can work for both scalar
-	// and list-type attributes. It was introduced to support smooth migration
-	// from scalar attributes to list-type attributes while keeping
-	// CEL expressions simple. For example:
+	// 当启用 DRAListTypeAttributes 特性门控时，可使用 includes() 辅助函数，
+	// 它对标量属性和列表属性均适用。引入它是为了支持从标量属性平滑迁移到
+	// 列表属性，同时保持 CEL 表达式简洁。例如：
 	//
 	//     device.attributes["dra.example.com"].models.includes("some-model")
 	//
-	// The length of the expression must be smaller or equal to 10 Ki. The
-	// cost of evaluating it is also limited based on the estimated number
-	// of logical steps.
+	// 表达式的长度必须小于或等于 10 Ki。其求值成本也根据估算的逻辑
+	// 步骤数加以限制。
 	//
 	// +required
 	Expression string
@@ -1254,51 +1215,43 @@ type CELDeviceSelector struct {
 
 // DeviceDerivedAttribute 定义通过 CEL 计算出的派生属性。
 type DeviceDerivedAttribute struct {
-	// Name is the identifier for this derived attribute, used in constraints.
+	// Name 是该派生属性的标识符，用于约束（constraints）中。
 	//
-	// It must be a DNS subdomain followed by a slash ("/") followed by a C identifier
-	// (e.g. "example.com/numaNode" or "derived/numaNode").
+	// 它必须是一个 DNS 子域，后接斜杠（"/"），再接一个 C 标识符
+	// （例如 "example.com/numaNode" 或 "derived/numaNode"）。
 	//
-	// If the chosen name matches an existing physical attribute from a driver,
-	// the derived attribute's expression will shadow the physical attribute,
-	// and its evaluated value will be used in constraints instead. When the goal
-	// is to define a derived attribute that is only used within the ResourceClaim
-	// and not meant to shadow an existing attribute, use a domain prefix that
-	// no DRA driver should be using (e.g. "derived/myAttribute").
+	// 若所选名称与驱动已有的物理属性匹配，派生属性的表达式将遮蔽
+	// （shadow）该物理属性，约束中改用其求值结果。如果定义派生属性
+	// 仅是为了在 ResourceClaim 内部使用、并不想遮蔽已有属性，请使用
+	// 任何 DRA 驱动都不应使用的域前缀（例如 "derived/myAttribute"）。
 	//
-	// It is not valid to define a derived attribute that isn't used in at least
-	// one constraint.
+	// 定义的派生属性若未被至少一个约束引用，则不合法。
 	//
 	// +required
 	Name FullyQualifiedName
 
-	// Expression is a CEL expression evaluated against each candidate device.
-	// The expression must evaluate to a primitive scalar (string, integer,
-	// boolean, or semver) or a list of these scalars ([]string, []int64,
-	// []bool, []semver) to act as a virtual grouping key. Any other return type
-	// is an error and causes CEL evaluation for the device to fail.
+	// Expression 是针对每个候选设备求值的 CEL 表达式。
+	// 表达式必须求值为原始标量（字符串、整数、布尔或 semver），
+	// 或由这些标量组成的列表（[]string、[]int64、[]bool、[]semver），
+	// 以充当虚拟分组键。任何其他返回类型都是错误，并导致该设备的
+	// CEL 求值失败。
 	//
-	// The expression's input is an object named "device", which carries the
-	// same properties as in a CELDeviceSelector.
+	// 表达式的输入是一个名为 "device" 的对象，其携带的属性与
+	// CELDeviceSelector 中的完全相同。
 	//
-	// When pod scheduling encounters CEL runtime errors (such as looking
-	// up an attribute that isn't defined) for some devices, it will abort
-	// allocation and fail scheduling for the Pod. Surfacing evaluation
-	// errors immediately prevents silent topology matching failures that are
-	// extremely hard to detect. A robust expression should, for example, check
-	// for the existence of attributes before referencing them to avoid
-	// runtime evaluation errors.
+	// 当 Pod 调度过程中对某些设备的 CEL 求值遇到运行时错误
+	// （如查找未定义的属性）时，会中止分配并使该 Pod 调度失败。
+	// 立即暴露求值错误可以防止静默的拓扑匹配失败——这种失败极难察觉。
+	// 健壮的表达式应当在引用属性之前先检查其是否存在，以避免运行时
+	// 求值错误。
 	//
-	// The expression gets evaluated after a device has passed the other
-	// selector expressions for the request in which this expression is used.
-	// This allows writing expressions that are tailored towards the specific
-	// devices being requested (for example, by assuming the device is from a
-	// certain vendor and skipping those checks).
+	// 该表达式在设备通过本请求中其他 selector 表达式之后才会被求值。
+	// 这使得可以编写针对所请求设备特化的表达式（例如假定设备来自
+	// 某个特定厂商，从而跳过相关检查）。
 	//
-	// The length of the expression must be smaller or equal to 10 Ki. The
-	// cost of evaluating it is also limited based on the estimated number
-	// of logical steps; the combined cost of all derived attributes in a
-	// claim is capped by a shared CEL cost budget.
+	// 表达式的长度必须小于或等于 10 Ki。其求值成本也根据估算的逻辑
+	// 步骤数加以限制；claim 中所有派生属性的总成本受共享的 CEL 成本
+	// 预算约束。
 	//
 	// +required
 	Expression string
@@ -1355,53 +1308,45 @@ type DeviceConstraint struct {
 	// +listType=atomic
 	Requests []string
 
-	// MatchAttribute requires that all devices in question have this
-	// attribute and that its type and value are the same across those
-	// devices.
+	// MatchAttribute 要求所有相关设备都具有该属性，且其类型和值
+	// 在这些设备之间完全相同。
 	//
-	// For example, if you specified "dra.example.com/numa" (a hypothetical example!),
-	// then only devices in the same NUMA node will be chosen. A device which
-	// does not have that attribute will not be chosen. All devices should
-	// use a value of the same type for this attribute because that is part of
-	// its specification, but if one device doesn't, then it also will not be
-	// chosen.
+	// 例如，若指定 "dra.example.com/numa"（假设性示例！），则只会选择
+	// 同一 NUMA 节点上的设备。不具有该属性的设备不会被选择。按照规范，
+	// 所有设备对该属性都应当使用相同类型的值，但若某设备不满足，
+	// 它同样不会被选择。
 	//
-	// When the DRAListTypeAttributes feature gate is enabled, comparison uses
-	// set semantics(i.e., element order and duplicates are ignored): list-valued attributes
-	// match when the intersection across all devices is non-empty.
-	// Scalar values are treated as singleton sets for backward compatibility.
+	// 当启用 DRAListTypeAttributes 特性门控时，比较采用集合语义
+	// （即忽略元素顺序与重复项）：当所有设备上列表属性值的交集非空时视为匹配。
+	// 为向后兼容，标量值被视为单元素集合。
 	//
-	// Must include the domain qualifier.
+	// 必须包含域限定符。
 	//
 	// +optional
 	// +oneOf=ConstraintType
 	MatchAttribute *FullyQualifiedName
 
-	// Potential future extension, not part of the current design:
-	// A CEL expression which compares different devices and returns
-	// true if they match.
+	// 未来可能的扩展，不属于当前设计：
+	// 一个比较不同设备、匹配时返回 true 的 CEL 表达式。
 	//
-	// Because it would be part of a one-of, old schedulers will not
-	// accidentally ignore this additional, for them unknown match
-	// criteria.
+	// 由于它将是 one-of 的一部分，旧调度器不会意外忽略这一
+	// 对它们而言未知的额外匹配条件。
 	//
 	// MatchExpression string
 
-	// DistinctAttribute requires that all devices in question have this
-	// attribute and that its type and value are unique across those devices.
+	// DistinctAttribute 要求所有相关设备都具有该属性，且其类型和值
+	// 在这些设备之间互不相同。
 	//
-	// When the DRAListTypeAttributes feature gate is enabled, comparison uses
-	// set semantics (i.e., element order and duplicates are ignored):
-	// list-valued attributes must be pairwise disjoint across devices.
-	// Scalar values are treated as singleton sets for backward compatibility.
+	// 当启用 DRAListTypeAttributes 特性门控时，比较采用集合语义
+	// （即忽略元素顺序与重复项）：列表属性值在各设备之间必须两两不相交。
+	// 为向后兼容，标量值被视为单元素集合。
 	//
-	// This acts as the inverse of MatchAttribute.
+	// 它的作用与 MatchAttribute 相反。
 	//
-	// This constraint is used to avoid allocating multiple requests to the same device
-	// by ensuring attribute-level differentiation.
+	// 此约束通过确保属性级别的差异化，避免将多个请求分配到同一设备。
 	//
-	// This is useful for scenarios where resource requests must be fulfilled by separate physical devices.
-	// For example, a container requests two network interfaces that must be allocated from two different physical NICs.
+	// 这适用于资源请求必须由独立物理设备满足的场景。
+	// 例如：一个容器请求两个网卡，且必须从两块不同的物理 NIC 中分配。
 	//
 	// +optional
 	// +oneOf=ConstraintType
@@ -1425,9 +1370,8 @@ type DeviceClaimConfiguration struct {
 	DeviceConfiguration // inline
 }
 
-// DeviceConfiguration must have exactly one field set. It gets embedded
-// inline in some other structs which have other fields, so field names must
-// not conflict with those.
+// DeviceConfiguration 必须且只能设置一个字段。它以内联方式嵌入其他
+// 含有其他字段的结构体中，因此字段名不得与那些字段冲突。
 type DeviceConfiguration struct {
 	// Opaque 提供驱动特有的配置参数。
 	// +optional
@@ -1435,8 +1379,7 @@ type DeviceConfiguration struct {
 	Opaque *OpaqueDeviceConfiguration
 }
 
-// OpaqueDeviceConfiguration contains configuration parameters for a driver
-// in a format defined by the driver vendor.
+// OpaqueDeviceConfiguration 以驱动供应商定义的格式保存该驱动的配置参数。
 type OpaqueDeviceConfiguration struct {
 	// Driver 用于确定这些配置参数需要传给哪个 kubelet 插件。
 	//
@@ -1505,8 +1448,7 @@ const (
 	DeviceTolerationOpEqual  DeviceTolerationOperator = "Equal"
 )
 
-// ResourceClaimStatus tracks whether the resource has been allocated and what
-// the result of that was.
+// ResourceClaimStatus 跟踪资源是否已分配以及分配结果如何。
 type ResourceClaimStatus struct {
 	// 声明成功分配后会设置 Allocation。
 	// +optional
@@ -1548,9 +1490,8 @@ type ResourceClaimStatus struct {
 // ResourceClaimReservedForMaxSize 是 claim.status.reservedFor 中条目的最大数量。
 const ResourceClaimReservedForMaxSize = 256
 
-// ResourceClaimConsumerReference contains enough information to let you
-// locate the consumer of a ResourceClaim. The user must be a resource in the same
-// namespace as the ResourceClaim.
+// ResourceClaimConsumerReference 包含定位 ResourceClaim 消费者所需的
+// 信息。user 必须是与 ResourceClaim 处于同一命名空间的资源。
 type ResourceClaimConsumerReference struct {
 	// APIGroup 是被引用资源所属的组；核心 API 下为空。
 	// 它与创建资源时使用的 APIVersion 中的组名一致。
@@ -1627,11 +1568,10 @@ type DeviceRequestAllocationResult struct {
 	// +required
 	Driver string
 
-	// This name together with the driver name and the device name field
-	// identify which device was allocated (`<driver name>/<pool name>/<device name>`).
+	// 该名称与驱动名、设备名字段共同标识被分配的是哪个设备
+	// （`<driver name>/<pool name>/<device name>`）。
 	//
-	// Must not be longer than 253 characters and may contain one or more
-	// DNS sub-domains separated by slashes.
+	// 长度不得超过 253 个字符，可包含一个或多个以斜杠分隔的 DNS 子域。
 	//
 	// +required
 	Pool string
@@ -1730,7 +1670,7 @@ type DeviceAllocationConfiguration struct {
 
 type AllocationConfigSource string
 
-// Valid [DeviceAllocationConfiguration.Source] values.
+// [DeviceAllocationConfiguration.Source] 的合法取值。
 const (
 	AllocationConfigSourceClass AllocationConfigSource = "FromClass"
 	AllocationConfigSourceClaim AllocationConfigSource = "FromClaim"
@@ -1770,10 +1710,9 @@ type DeviceClass struct {
 	Spec DeviceClassSpec
 }
 
-// DeviceClassSpec is used in a [DeviceClass] to define what can be allocated
-// and how to configure it.
+// DeviceClassSpec 用于 [DeviceClass]，定义可以分配什么以及如何配置。
 type DeviceClassSpec struct {
-	// Each selector must be satisfied by a device which is claimed via this class.
+	// 通过本类声明的设备必须满足每个 selector。
 	//
 	// +optional
 	// +listType=atomic
@@ -1815,7 +1754,7 @@ type DeviceClassList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of resource classes.
+	// Items 是资源类的列表。
 	Items []DeviceClass
 }
 
@@ -1855,7 +1794,7 @@ type ResourceClaimTemplateList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of resource claim templates.
+	// Items 是资源 claim 模板的列表。
 	Items []ResourceClaimTemplate
 }
 
@@ -1864,8 +1803,7 @@ const (
 	AllocatedDeviceStatusMaxConditions int = 8
 	// AllocatedDeviceStatusDataMaxLength 表示设备状态中 Data 字段原始数据的最大长度
 	AllocatedDeviceStatusDataMaxLength int = 10 * 1024
-	// NetworkDeviceDataMaxIPs represents the maximum number of IPs in the networkData
-	// field in a device status.
+	// NetworkDeviceDataMaxIPs 表示设备状态中 networkData 字段里 IP 地址的最大数量。
 	NetworkDeviceDataMaxIPs int = 16
 	// NetworkDeviceDataInterfaceNameMaxLength 表示设备状态中 networkData.interfaceName
 	// 字段的最大字符数。
@@ -1874,11 +1812,11 @@ const (
 	NetworkDeviceDataHardwareAddressMaxLength int = 128
 )
 
-// AllocatedDeviceStatus contains the status of an allocated device, if the
-// driver chooses to report it. This may include driver-specific information.
+// AllocatedDeviceStatus 在驱动选择上报时包含已分配设备的状态，
+// 其中可能包括驱动特有的信息。
 //
-// The combination of Driver, Pool, Device, and ShareID must match the corresponding key
-// in Status.Allocation.Devices.
+// Driver、Pool、Device 和 ShareID 的组合必须与 Status.Allocation.Devices
+// 中的对应键匹配。
 type AllocatedDeviceStatus struct {
 	// Driver 指定当 claim 在节点上需要时，应调用哪个 DRA 驱动的
 	// kubelet 插件来处理分配。
@@ -1921,30 +1859,28 @@ type AllocatedDeviceStatus struct {
 	NetworkData *NetworkDeviceData
 }
 
-// NetworkDeviceData provides network-related details for the allocated device.
-// This information may be filled by drivers or other components to configure
-// or identify the device within a network context.
+// NetworkDeviceData 提供已分配设备的网络相关信息。驱动或其他组件
+// 可填写该信息，用于在网络上下文中配置或标识该设备。
 type NetworkDeviceData struct {
 	// InterfaceName 指定与已分配设备关联的网络接口名称。
 	// 它可能是正在 Pod 中配置的物理或虚拟网络接口的名称。
 	// +optional
 	InterfaceName string
 
-	// IPs lists the network addresses assigned to the device's network interface.
-	// This can include both IPv4 and IPv6 addresses.
-	// The IPs are in the CIDR notation, which includes both the address and the
-	// associated subnet mask.
-	// e.g.: "192.0.2.5/24" for IPv4 and "2001:db8::5/64" for IPv6.
+	// IPs 列出分配给该设备网络接口的网络地址。
+	// 可同时包含 IPv4 和 IPv6 地址。
+	// IP 采用 CIDR 表示法，同时包含地址和关联的子网掩码。
+	// 例如：IPv4 为 "192.0.2.5/24"，IPv6 为 "2001:db8::5/64"。
 	//
-	// Must not contain more than 16 entries.
+	// 条目数不得超过 16 个。
 	//
 	// +optional
 	// +listType=atomic
 	IPs []string
 
-	// HardwareAddress represents the hardware address (e.g. MAC Address) of the device's network interface.
+	// HardwareAddress 表示设备网络接口的硬件地址（例如 MAC 地址）。
 	//
-	// Must not be longer than 128 characters.
+	// 长度不得超过 128 个字符。
 	//
 	// +optional
 	HardwareAddress string
@@ -1952,9 +1888,8 @@ type NetworkDeviceData struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DeviceTaintRule adds one taint to all devices which match the selector.
-// This has the same effect as if the taint was specified directly
-// in the ResourceSlice by the DRA driver.
+// DeviceTaintRule 向所有匹配 selector 的设备添加一个污点。
+// 其效果等同于 DRA 驱动在 ResourceSlice 中直接指定该污点。
 type DeviceTaintRule struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
@@ -1984,9 +1919,8 @@ type DeviceTaintRuleSpec struct {
 	Taint DeviceTaint
 }
 
-// DeviceTaintSelector defines which device(s) a DeviceTaintRule applies to.
-// The empty selector matches all devices. Without a selector, no devices
-// are matched.
+// DeviceTaintSelector 定义 DeviceTaintRule 适用于哪些设备。
+// 空 selector 匹配所有设备；不提供 selector 时不匹配任何设备。
 type DeviceTaintSelector struct {
 	// 若设置 driver，只选择该驱动的设备
 	// 本字段对应 slice.spec.driver
@@ -2009,26 +1943,23 @@ type DeviceTaintSelector struct {
 
 // DeviceTaintRuleStatus 提供正在进行的 Pod 驱逐的相关信息。
 type DeviceTaintRuleStatus struct {
-	// Conditions provide information about the state of the DeviceTaintRule
-	// and the cluster at some point in time,
-	// in a machine-readable and human-readable format.
+	// Conditions 以机器可读和人类可读的格式，提供某个时间点上
+	// DeviceTaintRule 和集群的状态信息。
 	//
-	// The following condition is currently defined as part of this API, more may
-	// get added:
+	// 本 API 目前定义了以下 condition，未来可能添加更多：
 	// - Type: EvictionInProgress
-	// - Status: True if there are currently pods which need to be evicted, False otherwise
-	//   (includes the effects which don't cause eviction).
-	// - Reason: not specified, may change
-	// - Message: includes information about number of pending pods and already evicted pods
-	//   in a human-readable format, updated periodically, may change
+	// - Status: 若当前有需要驱逐的 Pod 则为 True，否则为 False
+	//   （包含不会导致驱逐的 effect）。
+	// - Reason: 未指定，可能变化
+	// - Message: 以人类可读格式包含待驱逐 Pod 与已驱逐 Pod 的数量信息，
+	//   定期更新，内容可能变化
 	//
-	// For `effect: None`, the condition above gets set once for each change to
-	// the spec, with the message containing information about what would happen
-	// if the effect was `NoExecute`. This feedback can be used to decide whether
-	// changing the effect to `NoExecute` will work as intended. It only gets
-	// set once to avoid having to constantly update the status.
+	// 对于 `effect: None`，上述 condition 会在每次 spec 变更时设置一次，
+	// message 中包含如果 effect 为 `NoExecute` 将会发生什么的信息。
+	// 可借助这一反馈来判断将 effect 改为 `NoExecute` 是否会按预期工作。
+	// 为避免不断更新 status，它只会被设置一次。
 	//
-	// Must have 8 or less entries.
+	// 条目数必须不超过 8 个。
 	//
 	// +optional
 	// +listType=map
@@ -2051,45 +1982,45 @@ type DeviceTaintRuleList struct {
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of DeviceTaintRules.
+	// Items 是 DeviceTaintRule 的列表。
 	Items []DeviceTaintRule
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ResourcePoolStatusRequest triggers a one-time calculation of resource pool status
-// based on the provided filters. Once status is set, the request is considered complete and will not be reprocessed.
-// Users should delete and recreate requests to get updated information.
+// ResourcePoolStatusRequest 基于所提供的过滤条件触发一次性的资源池状态计算。
+// 一旦设置了 status，该请求即视为完成，不会重新处理。
+// 用户应删除并重建请求以获取更新的信息。
 type ResourcePoolStatusRequest struct {
 	metav1.TypeMeta
 	// 标准的对象元数据。
 	// +required
 	metav1.ObjectMeta
 
-	// Spec defines the filters for which pools to include in the status.
+	// Spec 定义在 status 中包含哪些池的过滤条件。
 	// +required
 	Spec ResourcePoolStatusRequestSpec
 
-	// Status is populated by the controller with the calculated pool status.
+	// Status 由控制器填充为计算出的资源池状态。
 	// +optional
 	Status *ResourcePoolStatusRequestStatus
 }
 
 // ResourcePoolStatusRequestSpec 定义池状态请求的过滤条件。
 type ResourcePoolStatusRequestSpec struct {
-	// Driver specifies the DRA driver name to filter pools.
-	// Only pools from ResourceSlices with this driver will be included.
-	// This field is required to bound the scope of the request.
+	// Driver 指定用于过滤资源池的 DRA 驱动名。
+	// 只包含来自使用该驱动的 ResourceSlice 的池。
+	// 该字段为必填，用于限定请求的作用范围。
 	Driver string
 
-	// PoolName optionally filters to a specific pool name.
-	// If not specified, all pools from the specified driver are included.
-	// When specified, must be a valid resource pool name (DNS subdomains separated by "/").
+	// PoolName 可选地过滤到特定池名。
+	// 未指定时，包含指定驱动的所有池。
+	// 指定时，必须是合法的资源池名（以 "/" 分隔的 DNS 子域）。
 	// +optional
 	PoolName *string
 
-	// Limit optionally specifies the maximum number of pools to return in the status.
-	// If more pools match the filter criteria, the response will be truncated.
+	// Limit 可选地指定 status 中返回的池数量上限。
+	// 若匹配过滤条件的池更多，响应将被截断。
 	//
 	// Default: 100
 	// Maximum: 1000
@@ -2097,12 +2028,10 @@ type ResourcePoolStatusRequestSpec struct {
 	// +optional
 	Limit *int32
 
-	// DefaultPartitionTypeAttribute optionally names a device attribute (by its
-	// fully qualified name) to use as the default grouping attribute for
-	// partitionable devices whose slice has not declared one themselves. A
-	// slice's own PartitionTypeAttribute always takes precedence. When neither
-	// the slice nor this default names an attribute, a partitionable pool
-	// reports no partitionSummary.
+	// DefaultPartitionTypeAttribute 可选地指定一个设备属性（以其完全限定名），
+	// 作为自身未声明分组属性的可分区设备的默认分组属性。分片自身的
+	// PartitionTypeAttribute 始终优先。若分片与本默认值均未指定属性，
+	// 可分区池将不上报 partitionSummary。
 	// +optional
 	DefaultPartitionTypeAttribute *string
 }
@@ -2115,139 +2044,129 @@ const ResourcePoolStatusRequestLimitMax int32 = 1000
 
 // ResourcePoolStatusRequestStatus 包含计算得到的池状态信息。
 type ResourcePoolStatusRequestStatus struct {
-	// PoolCount is the total number of pools that matched the filter criteria,
-	// regardless of truncation.
+	// PoolCount 是匹配过滤条件的池总数，不受截断影响。
 	// +optional
 	PoolCount *int32
 
-	// Pools contains the first `spec.limit` matching pools, sorted by driver
-	// then pool name. If len(pools) < poolCount, the list was truncated.
+	// Pools 按驱动名、池名排序，包含前 `spec.limit` 个匹配的池。
+	// 若 len(pools) < poolCount，说明列表被截断。
 	// +optional
 	Pools []PoolStatus
 
-	// Conditions provide information about the state of the request.
-	// A condition with type=Complete or type=Failed will always be set
-	// when the status is populated.
+	// Conditions 提供该请求状态的信息。
+	// status 被填充时，总会设置一个 type=Complete 或 type=Failed 的条件。
 	// +optional
 	Conditions []metav1.Condition
 }
 
 // PoolStatus 包含单个资源池的状态信息。
 type PoolStatus struct {
-	// Driver is the DRA driver name for this pool.
+	// Driver 是该池对应的 DRA 驱动名。
 	Driver string
 
-	// PoolName is the name of the pool.
+	// PoolName 是该池的名称。
 	PoolName string
 
-	// Generation is the pool generation observed across all ResourceSlices
-	// in this pool.
+	// Generation 是在该池所有 ResourceSlice 中观察到的池 generation。
 	Generation int64
 
-	// ResourceSliceCount is the number of ResourceSlices that make up this pool.
+	// ResourceSliceCount 是构成该池的 ResourceSlice 数量。
 	// +optional
 	ResourceSliceCount *int32
 
-	// TotalDevices is the total number of devices in the pool across all slices.
+	// TotalDevices 是该池跨所有分片的设备总数。
 	// +optional
 	TotalDevices *int32
 
-	// AllocatedDevices is the number of devices currently allocated to claims.
+	// AllocatedDevices 是当前已分配给 claim 的设备数量。
 	// +optional
 	AllocatedDevices *int32
 
-	// AvailableDevices is the number of devices available for allocation.
-	// This equals TotalDevices - AllocatedDevices - UnavailableDevices.
+	// AvailableDevices 是可分配的设备数量。
+	// 其值等于 TotalDevices - AllocatedDevices - UnavailableDevices。
 	// +optional
 	AvailableDevices *int32
 
-	// UnavailableDevices is the number of devices that are not available
-	// due to taints or other conditions, but are not allocated.
+	// UnavailableDevices 是因污点或其他条件而不可用、但并未被分配的设备数量。
 	// +optional
 	UnavailableDevices *int32
 
-	// NodeName is the node this pool is associated with.
-	// When omitted, the pool is not associated with a specific node.
+	// NodeName 是该池关联的节点。
+	// 省略时表示该池不与特定节点关联。
 	// +optional
 	NodeName *string
 
-	// ValidationError is set when the pool's data could not be fully validated.
-	// When set, device count fields and ResourceSliceCount may be unset.
+	// ValidationError 在池的数据无法完全校验时设置。
+	// 设置后，设备计数字段与 ResourceSliceCount 可能未填充。
 	// +optional
 	ValidationError *string
 
-	// PartitionSummary reports allocatability per (attribute, partition type)
-	// for a partitionable pool. Each entry names the grouping attribute it was
-	// resolved from: the one declared by a device's own slice, or for devices
-	// whose slice declares none, the default named in the request.
+	// PartitionSummary 针对可分区池，按（属性，分区类型）报告可分配性。
+	// 每个条目命名其解析来源的分组属性：设备所在分片自身声明的属性；
+	// 若分片未声明，则为请求中指定的默认属性。
 	// +optional
 	PartitionSummary []PartitionTypeStatus
 
-	// ShareableSummary reports aggregate capacity for a pool that contains
-	// devices with AllowMultipleAllocations.
+	// ShareableSummary 针对包含带 AllowMultipleAllocations 设备的池，
+	// 报告聚合容量。
 	// +optional
 	ShareableSummary *ShareableSummaryStatus
 }
 
-// PartitionTypeStatus reports allocatability for a single partition type,
-// identified by the value of a grouping attribute.
+// PartitionTypeStatus 报告由分组属性值标识的单一分区类型的可分配性。
 type PartitionTypeStatus struct {
-	// Attribute is the fully qualified name of the device attribute whose value
-	// groups this entry. It is the PartitionTypeAttribute declared by the
-	// devices' own slice, or the default named in the request when their slice
-	// declares none.
+	// Attribute 是其值用于对本条目分组的设备属性的完全限定名。
+	// 它是设备所在分片自身声明的 PartitionTypeAttribute；若分片未声明，
+	// 则为请求中指定的默认属性。
 	// +required
 	Attribute string
 
-	// Type is the partition type value (e.g. "Full" or "Half").
+	// Type 是分区类型的值（例如 "Full" 或 "Half"）。
 	// +required
 	Type string
 
-	// Total is the number of devices of this partition type in the pool.
+	// Total 是该池中此分区类型的设备数量。
 	// +required
 	Total *int32
 
-	// Allocatable is the number of additional devices of this partition type
-	// that could still be allocated given current shared-counter consumption.
+	// Allocatable 是在当前共享计数器消耗情况下，仍可分配的该分区类型
+	// 的设备数量。
 	// +required
 	Allocatable *int32
 }
 
-// ShareableSummaryStatus reports aggregate capacity for a pool that contains
-// devices with AllowMultipleAllocations.
+// ShareableSummaryStatus 针对包含带 AllowMultipleAllocations 设备的池，
+// 报告聚合容量。
 type ShareableSummaryStatus struct {
-	// FullyAvailableDevices is the number of shareable devices with no
-	// capacity consumed.
+	// FullyAvailableDevices 是未消耗任何容量的可共享设备数量。
 	// +required
 	FullyAvailableDevices *int32
 
-	// PartiallyAvailableDevices is the number of shareable devices with some
-	// but not all capacity consumed.
+	// PartiallyAvailableDevices 是消耗了部分（但非全部）容量的
+	// 可共享设备数量。
 	// +required
 	PartiallyAvailableDevices *int32
 
-	// Capacity reports aggregate total, consumed, and available amounts per
-	// shareable capacity key across the pool.
+	// Capacity 报告整个池中每个可共享容量键的总量、已消耗量与可用量汇总。
 	// +optional
 	Capacity []ShareableCapacityStatus
 }
 
-// ShareableCapacityStatus reports aggregate amounts for a single shareable
-// capacity key.
+// ShareableCapacityStatus 报告单个可共享容量键的汇总数量。
 type ShareableCapacityStatus struct {
-	// Name is the capacity name.
+	// Name 是容量名称。
 	// +required
 	Name string
 
-	// Total is the sum of this capacity across shareable devices in the pool.
+	// Total 是该池中所有可共享设备上此容量的总和。
 	// +required
 	Total *resource.Quantity
 
-	// Consumed is the amount drawn by current allocations.
+	// Consumed 是当前分配所消耗的数量。
 	// +required
 	Consumed *resource.Quantity
 
-	// Available is Total minus Consumed, never negative.
+	// Available 是 Total 减去 Consumed，结果不会为负。
 	// +required
 	Available *resource.Quantity
 }
