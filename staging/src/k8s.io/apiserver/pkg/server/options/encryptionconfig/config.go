@@ -64,30 +64,22 @@ const (
 	kmsTransformerPrefixV1       = "k8s:enc:kms:v1:"
 	kmsTransformerPrefixV2       = "k8s:enc:kms:v2:"
 
-	// these constants relate to how the KMS v2 plugin status poll logic
-	// and the DEK/seed generation logic behave.  In particular, the positive
-	// interval and max TTL are closely related as the difference between
-	// these values defines the worst case window in which the write DEK/seed
-	// could expire due to the plugin going into an error state.  The
-	// worst case window divided by the negative interval defines the
-	// minimum amount of times the server will attempt to return to a
-	// healthy state before the DEK/seed expires and writes begin to fail.
+	// 这些常量与 KMS v2 插件状态轮询逻辑以及 DEK/seed 生成逻辑的行为方式相关。
+	// 特别是，positive interval 与 max TTL 密切相关：二者之差定义了最坏情况下的窗口，
+	// 即写入用的 DEK/seed 可能因插件进入错误状态而过期的时间窗口。
+	// 最坏情况窗口除以 negative interval，即定义了在 DEK/seed 过期、写入开始失败之前，
+	// 服务器尝试恢复到健康状态的最少次数。
 	//
-	// For now, these values are kept small and hardcoded to support being
-	// able to perform a "passive" storage migration while tolerating some
-	// amount of plugin downtime.
+	// 目前这些取值保持较小且硬编码，以支持在容忍一定插件停机时间的同时，
+	// 仍能执行"被动"存储迁移。
 	//
-	// With the current approach, a user can update the key ID their plugin
-	// is using and then can simply schedule a migration for 3 + N + M minutes
-	// later where N is how long it takes their plugin to pick up new config
-	// and M is extra buffer to allow the API server to process the config.
-	// At that point, they are guaranteed to either migrate to the new key
-	// or get errors during the migration.
+	// 在当前方案下，用户可以更新其插件使用的 key ID，然后把迁移调度到 3 + N + M 分钟之后，
+	// 其中 N 是插件加载新配置所需的时间，M 是留给 API server 处理配置的额外缓冲。
+	// 届时，要么迁移到新密钥，要么在迁移过程中收到错误，二者必居其一。
 	//
-	// If the API server coasted forever on the last DEK/seed, they would need
-	// to actively check if it had observed the new key ID before starting
-	// a migration - otherwise it could keep using the old DEK/seed and their
-	// storage migration would not do what they thought it did.
+	// 如果 API server 无限期地依赖最后一次 DEK/seed 运行，用户就需要在开始迁移前
+	// 主动检查它是否已观测到新的 key ID——否则它可能仍在使用旧的 DEK/seed，
+	// 存储迁移的结果就不会像他们以为的那样。
 	kmsv2PluginHealthzPositiveInterval = 1 * time.Minute
 	kmsv2PluginHealthzNegativeInterval = 10 * time.Second
 	kmsv2PluginWriteDEKSourceMaxTTL    = 3 * time.Minute
@@ -96,21 +88,20 @@ const (
 	kmsPluginHealthzPositiveTTL = 20 * time.Second
 	kmsAPIVersionV1             = "v1"
 	kmsAPIVersionV2             = "v2"
-	// this name is used for two different healthz endpoints:
-	// - when one or more KMS v2 plugins are in use and no KMS v1 plugins are in use
-	//   in this case, all v2 plugins are probed via this single endpoint
-	// - when automatic reload of encryption config is enabled
-	//   in this case, all KMS plugins are probed via this single endpoint
-	//   the endpoint is present even if there are no KMS plugins configured (it is a no-op then)
+	// 这个名称用于两个不同的 healthz 端点：
+	// - 当使用了一个或多个 KMS v2 插件且没有使用 KMS v1 插件时
+	//   此时，所有 v2 插件通过这一个端点探测
+	// - 当启用了加密配置自动重载时
+	//   此时，所有 KMS 插件通过这一个端点探测
+	//   即使没有配置任何 KMS 插件，该端点也会存在（此时它是空操作）
 	kmsReloadHealthCheckName = "kms-providers"
 )
 
 var codecs serializer.CodecFactory
 
-// this map allows us to swap enablement of the KMSv2KDF feature in tests
-// as the feature gate is now locked to true starting with v1.29
-// Note: it cannot be set by an end user
-// KDF enablement is tracked per KMS provider to allow tests to run in parallel.
+// 这个映射让我们可以在测试中切换 KMSv2KDF 特性的启用状态，因为从 v1.29 开始
+// 该特性开关已锁定为 true。注意：终端用户无法设置它。
+// KDF 启用状态按 KMS provider 分别跟踪，以便测试可以并行运行。
 //
 // 按 KMS 名称分键而非全局开关，是为了让并行集成测试互不干扰。
 var kdfEnabledPerKMS sync.Map // map[string]bool, KMS name -> KDF enabled
@@ -118,7 +109,7 @@ var kdfEnabledPerKMS sync.Map // map[string]bool, KMS name -> KDF enabled
 // SetKDFForTests 仅供测试中切换 KMSv2KDF 特性开关使用；调用方必须保证所有测试中的 KMS provider 名称互不相同。
 // 返回的函数用于恢复默认行为（删除该条目的记录）。
 func SetKDFForTests(kmsName string, b bool) func() {
-	if len(kmsName) == 0 { // guarantee that GetKDF("") returns the default value
+	if len(kmsName) == 0 { // 保证 GetKDF("") 返回默认值
 		panic("empty KMS name used in test")
 	}
 	if _, loaded := kdfEnabledPerKMS.LoadOrStore(kmsName, b); loaded {
@@ -127,17 +118,16 @@ func SetKDFForTests(kmsName string, b bool) func() {
 	return func() { kdfEnabledPerKMS.Delete(kmsName) }
 }
 
-// this function should be used to determine enablement of the KMSv2KDF feature
-// instead of getting it from DefaultFeatureGate as the feature gate is now locked
-// to true starting with v1.29
-// to allow integration tests to run in parallel, this "feature flag" can be set
-// per KMS provider as long as all providers use distinct names.
+// 应当使用本函数来判断 KMSv2KDF 特性是否启用，而不是从 DefaultFeatureGate 读取，
+// 因为从 v1.29 开始该特性开关已锁定为 true。
+// 为了让集成测试可以并行运行，只要所有 provider 使用互不相同的名称，
+// 这个"特性开关"就可以按 KMS provider 分别设置。
 func GetKDF(kmsName string) bool {
 	kdfEnabled, ok := kdfEnabledPerKMS.Load(kmsName)
 	if !ok {
-		return true // explicit config is missing, but KDF is enabled by default
+		return true // 显式配置缺失，但 KDF 默认启用
 	}
-	return kdfEnabled.(bool) // this will panic if a non-bool ever gets stored, which should never happen
+	return kdfEnabled.(bool) // 如果存入了非 bool 值，这里会 panic，而这种事绝不应发生
 }
 
 // init 初始化配置编解码器并注册所有加密相关指标；指标必须先注册，
@@ -216,26 +206,26 @@ func (h *kmsv2PluginProbe) toHealthzCheck(idx int) healthz.HealthChecker {
 	})
 }
 
-// EncryptionConfiguration represents the parsed and normalized encryption configuration for the apiserver.
+// EncryptionConfiguration 表示已解析并归一化的 apiserver 加密配置。
 type EncryptionConfiguration struct {
-	// Transformers is a list of value.Transformer that will be used to encrypt and decrypt data.
+	// Transformers 是用于加密和解密数据的 value.Transformer 列表。
 	Transformers map[schema.GroupResource]storagevalue.Transformer
 
-	// HealthChecks is a list of healthz.HealthChecker that will be used to check the health of the encryption providers.
+	// HealthChecks 是用于检查加密 provider 健康状况的 healthz.HealthChecker 列表。
 	HealthChecks []healthz.HealthChecker
 
 	// EncryptionFileContentHash 是加密配置文件内容的哈希；只保留哈希而不保留原文，避免明文密钥长期驻留内存。
 	EncryptionFileContentHash string
 
-	// KMSCloseGracePeriod is the duration we will wait before closing old transformers.
-	// We wait for any in-flight requests to finish by using the duration which is longer than their timeout.
+	// KMSCloseGracePeriod 是在关闭旧 transformer 之前等待的时长。
+	// 我们使用一个比请求超时时间更长的时长，等待所有在途请求完成。
 	KMSCloseGracePeriod time.Duration
 }
 
-// LoadEncryptionConfig parses and validates the encryption config specified by filepath.
-// It may launch multiple go routines whose lifecycle is controlled by ctx.
-// In case of an error, the caller is responsible for canceling ctx to clean up any go routines that may have been launched.
-// If reload is true, or KMS v2 plugins are used with no KMS v1 plugins, the returned slice of health checkers will always be of length 1.
+// LoadEncryptionConfig 解析并校验 filepath 指定的加密配置。
+// 它可能启动多个 goroutine，其生命周期由 ctx 控制。
+// 若返回错误，调用方负责取消 ctx，以清理可能已启动的 goroutine。
+// 如果 reload 为 true，或使用了 KMS v2 插件且没有 KMS v1 插件，返回的健康检查器切片长度始终为 1。
 func LoadEncryptionConfig(ctx context.Context, filepath string, reload bool, apiServerID string) (*EncryptionConfiguration, error) {
 	config, contentHash, err := loadConfig(filepath, reload)
 	if err != nil {
@@ -252,11 +242,11 @@ func LoadEncryptionConfig(ctx context.Context, filepath string, reload bool, api
 		kmsHealthChecks = []healthz.HealthChecker{kmsHealthChecker(kmsHealthChecks)}
 	}
 
-	// KMSCloseGracePeriod is the duration we will wait before closing old transformers.
-	// The way we calculate is as follows:
-	// 1. Sum all timeouts across all KMS plugins. (check kmsPrefixTransformer for differences between v1 and v2)
-	// 2. Multiply that by 2 (to allow for some buffer)
-	// The reason we sum all timeout is because kmsHealthChecker() will run all health checks serially
+	// KMSCloseGracePeriod 是在关闭旧 transformer 之前等待的时长。
+	// 计算方式如下：
+	// 1. 将所有 KMS 插件的 timeout 求和（v1 与 v2 的差异见 kmsPrefixTransformer）。
+	// 2. 将总和乘以 2（留出一些缓冲）。
+	// 之所以对所有 timeout 求和，是因为 kmsHealthChecker() 会串行执行全部健康检查。
 	return &EncryptionConfiguration{
 		Transformers:              transformers,
 		HealthChecks:              kmsHealthChecks,
@@ -265,9 +255,9 @@ func LoadEncryptionConfig(ctx context.Context, filepath string, reload bool, api
 	}, nil
 }
 
-// getTransformerOverridesAndKMSPluginHealthzCheckers creates the set of transformers and KMS healthz checks based on the given config.
-// It may launch multiple go routines whose lifecycle is controlled by ctx.
-// In case of an error, the caller is responsible for canceling ctx to clean up any go routines that may have been launched.
+// getTransformerOverridesAndKMSPluginHealthzCheckers 基于给定配置创建 transformer 集合和 KMS healthz 检查。
+// 它可能启动多个 goroutine，其生命周期由 ctx 控制。
+// 若返回错误，调用方负责取消 ctx，以清理可能已启动的 goroutine。
 func getTransformerOverridesAndKMSPluginHealthzCheckers(ctx context.Context, config *apiserver.EncryptionConfiguration, apiServerID string) (map[schema.GroupResource]storagevalue.Transformer, []healthz.HealthChecker, *kmsState, error) {
 	var kmsHealthChecks []healthz.HealthChecker
 	transformers, probes, kmsUsed, err := getTransformerOverridesAndKMSPluginProbes(ctx, config, apiServerID)
@@ -288,15 +278,15 @@ type healthChecker interface {
 	toHealthzCheck(idx int) healthz.HealthChecker
 }
 
-// getTransformerOverridesAndKMSPluginProbes creates the set of transformers and KMS probes based on the given config.
-// It may launch multiple go routines whose lifecycle is controlled by ctx.
-// In case of an error, the caller is responsible for canceling ctx to clean up any go routines that may have been launched.
+// getTransformerOverridesAndKMSPluginProbes 基于给定配置创建 transformer 集合和 KMS 探针。
+// 它可能启动多个 goroutine，其生命周期由 ctx 控制。
+// 若返回错误，调用方负责取消 ctx，以清理可能已启动的 goroutine。
 func getTransformerOverridesAndKMSPluginProbes(ctx context.Context, config *apiserver.EncryptionConfiguration, apiServerID string) (map[schema.GroupResource]storagevalue.Transformer, []healthChecker, *kmsState, error) {
 	resourceToPrefixTransformer := map[schema.GroupResource][]storagevalue.PrefixTransformer{}
 	var probes []healthChecker
 	var kmsUsed kmsState
 
-	// For each entry in the configuration
+	// 遍历配置中的每个条目
 	for _, resourceConfig := range config.Resources {
 		transformers, p, used, err := prefixTransformersAndProbes(ctx, resourceConfig, apiServerID)
 		if err != nil {
@@ -304,11 +294,11 @@ func getTransformerOverridesAndKMSPluginProbes(ctx context.Context, config *apis
 		}
 		kmsUsed.accumulate(used)
 
-		// For each resource, create a list of providers to use
+		// 对每个资源，创建要使用的 provider 列表
 		for _, resource := range resourceConfig.Resources {
 			gr := schema.ParseGroupResource(resource)
 
-			// check if resource is masked by *.group rule
+			// 检查该资源是否被 *.group 规则遮蔽
 			anyResourceInGroup := schema.GroupResource{Group: gr.Group, Resource: "*"}
 			if _, masked := resourceToPrefixTransformer[anyResourceInGroup]; masked {
 				// 较早的规则已为 *.group 配置了 transformer，遮蔽了本规则：后续更具体的规则将永不生效，这属于不允许的配置，必须报错。
@@ -316,8 +306,8 @@ func getTransformerOverridesAndKMSPluginProbes(ctx context.Context, config *apis
 			}
 
 			if _, masked := resourceToPrefixTransformer[anyGroupAnyResource]; masked {
-				// an earlier rule already configured a transformer for *.*, masking this rule
-				// return error since this is not allowed
+				// 较早的规则已为 *.* 配置了 transformer，遮蔽了本规则：
+				// 这属于不允许的配置，返回错误
 				return nil, nil, nil, fmt.Errorf("resource %q is masked by earlier rule %q", grYAMLString(gr), grYAMLString(anyGroupAnyResource))
 			}
 
@@ -336,7 +326,7 @@ func getTransformerOverridesAndKMSPluginProbes(ctx context.Context, config *apis
 	return transformers, probes, &kmsUsed, nil
 }
 
-// check encrypts and decrypts test data against KMS-Plugin's gRPC endpoint.
+// check 针对 KMS-Plugin 的 gRPC 端点对测试数据执行加密和解密。
 func (h *kmsPluginProbe) check() error {
 	h.l.Lock()
 	defer h.l.Unlock()
@@ -366,7 +356,7 @@ func (h *kmsPluginProbe) check() error {
 	return nil
 }
 
-// check gets the healthz status of the KMSv2-Plugin using the Status() method.
+// check 使用 Status() 方法获取 KMSv2-Plugin 的 healthz 状态。
 func (h *kmsv2PluginProbe) check(ctx context.Context) error {
 	h.l.Lock()
 	defer h.l.Unlock()
@@ -393,34 +383,32 @@ func (h *kmsv2PluginProbe) check(ctx context.Context) error {
 	return nil
 }
 
-// rotateDEKOnKeyIDChange tries to rotate to a new DEK/seed if the key ID returned by Status does not match the
-// current state.  If a successful rotation is performed, the new DEK/seed and keyID overwrite the existing state.
-// On any failure during rotation (including mismatch between status and encrypt calls), the current state is
-// preserved and will remain valid to use for encryption until its expiration (the system attempts to coast).
-// If the key ID returned by Status matches the current state, the expiration of the current state is extended
-// and no rotation is performed.
+// rotateDEKOnKeyIDChange 在 Status 返回的 key ID 与当前 state 不匹配时，尝试轮转到新的 DEK/seed。
+// 若轮转成功，新的 DEK/seed 和 keyID 会覆盖现有 state。
+// 轮转过程中一旦发生任何失败（包括 Status 与 Encrypt 调用返回的 key ID 不一致），
+// 现有 state 会被保留，并在其过期前继续可用于加密（系统会尝试"惯性滑行"）。
+// 若 Status 返回的 key ID 与当前 state 匹配，则延长当前 state 的过期时间，不执行轮转。
 func (h *kmsv2PluginProbe) rotateDEKOnKeyIDChange(ctx context.Context, statusKeyID, uid string) error {
-	// we do not check ValidateEncryptCapability here because it is fine to re-use an old key
-	// that was marked as expired during an unhealthy period.  As long as the key ID matches
-	// what we expect then there is no need to rotate here.
+	// 这里不检查 ValidateEncryptCapability，因为复用在不健康期间被标记为过期的旧密钥是可以的。
+	// 只要 key ID 与我们的预期一致，这里就不需要轮转。
 	state, errState := h.getCurrentState()
 
-	// allow reads indefinitely in all cases
-	// allow writes indefinitely as long as there is no error
-	// allow writes for only up to kmsv2PluginWriteDEKSourceMaxTTL from now when there are errors
-	// we start the timer before we make the network call because kmsv2PluginWriteDEKSourceMaxTTL is meant to be the upper bound
+	// 所有情况下都允许无限期读取
+	// 只要没有错误，就允许无限期写入
+	// 存在错误时，仅允许写入到从现在起 kmsv2PluginWriteDEKSourceMaxTTL 之后
+	// 我们在发起网络调用之前就开始计时，因为 kmsv2PluginWriteDEKSourceMaxTTL 是上限
 	expirationTimestamp := envelopekmsv2.GetNowFunc(h.name)().Add(kmsv2PluginWriteDEKSourceMaxTTL)
 
-	// dynamically check if we want to use KDF seed to derive DEKs or just a single DEK
-	// this gate can only change during tests, but the check is cheap enough to always make
-	// this allows us to easily exercise both modes without restarting the API server
-	// TODO integration test that this dynamically takes effect
+	// 动态检查是使用 KDF seed 派生 DEK，还是只用单个 DEK
+	// 这个开关只可能在测试中变化，但该检查开销足够低，可以每次都做
+	// 这样无需重启 API server 就能轻松覆盖两种模式
+	// TODO 集成测试验证该切换动态生效
 	useSeed := GetKDF(h.name)
 	stateUseSeed := state.EncryptedObjectEncryptedDEKSourceType == kmstypes.EncryptedDEKSourceType_HKDF_SHA256_XNONCE_AES_GCM_SEED
 
-	// state is valid and status keyID is unchanged from when we generated this DEK/seed so there is no need to rotate it
-	// just move the expiration of the current state forward by the reuse interval
-	// useSeed can only change at runtime during tests, so we check it here to allow us to easily exercise both modes
+	// state 有效，且 Status 的 keyID 与生成该 DEK/seed 时相比没有变化，因此无需轮转
+	// 只需把当前 state 的过期时间按复用间隔向后顺延
+	// useSeed 只可能在运行期的测试中变化，所以在这里检查它，以便轻松覆盖两种模式
 	if errState == nil && state.EncryptedObjectKeyID == statusKeyID && stateUseSeed == useSeed {
 		state.ExpirationTimestamp = expirationTimestamp
 		h.state.Store(&state)
@@ -430,11 +418,11 @@ func (h *kmsv2PluginProbe) rotateDEKOnKeyIDChange(ctx context.Context, statusKey
 	transformer, encObject, cacheKey, errGen := envelopekmsv2.GenerateTransformer(ctx, uid, h.service, useSeed)
 
 	if encObject == nil {
-		encObject = &kmstypes.EncryptedObject{} // avoid nil panics
+		encObject = &kmstypes.EncryptedObject{} // 避免 nil panic
 	}
 
-	// happy path, should be the common case
-	// TODO maybe add success metrics?
+	// 正常路径，应当是最常见的情况
+	// TODO 也许可以加上成功指标？
 	if errGen == nil && encObject.KeyID == statusKeyID {
 		// 只有 Status 与 Encrypt 返回同一 key ID 时才发布新状态，
 		// 否则视为轮换未完成，继续使用旧状态。
@@ -450,7 +438,7 @@ func (h *kmsv2PluginProbe) rotateDEKOnKeyIDChange(ctx context.Context, statusKey
 			KMSProviderName:                       h.name,
 		})
 
-		// it should be logically impossible for the new state to be invalid but check just in case
+		// 从逻辑上讲新 state 不可能无效，但为保险起见仍检查一次
 		_, errGen = h.getCurrentState()
 		if errGen == nil {
 			klogV6 := klog.V(6)
@@ -468,14 +456,14 @@ func (h *kmsv2PluginProbe) rotateDEKOnKeyIDChange(ctx context.Context, statusKey
 		}
 	}
 
-	//nolint:errorlint // printing the <nil> error is intentional
+	//nolint:errorlint // 打印 <nil> 错误是有意为之
 	return fmt.Errorf("failed to rotate DEK uid=%q, useSeed=%v, errState=%v, errGen=%v, statusKeyIDHash=%q, encryptKeyIDHash=%q, stateKeyIDHash=%q, expirationTimestamp=%s",
 		uid, useSeed, errState, errGen, envelopekmsv2.GetHashIfNotEmpty(statusKeyID), envelopekmsv2.GetHashIfNotEmpty(encObject.KeyID), envelopekmsv2.GetHashIfNotEmpty(state.EncryptedObjectKeyID), state.ExpirationTimestamp.Format(time.RFC3339))
 }
 
-// getCurrentState returns the latest state from the last status and encrypt calls.
-// If the returned error is nil, the state is considered valid indefinitely for read requests.
-// For write requests, the caller must also check that state.ValidateEncryptCapability does not error.
+// getCurrentState 返回最近一次 status 和 encrypt 调用产生的最新 state。
+// 若返回的 error 为 nil，该 state 对读请求而言永久有效。
+// 对于写请求，调用方还必须检查 state.ValidateEncryptCapability 不报错。
 func (h *kmsv2PluginProbe) getCurrentState() (envelopekmsv2.State, error) {
 	state := *h.state.Load()
 
@@ -489,7 +477,7 @@ func (h *kmsv2PluginProbe) getCurrentState() (envelopekmsv2.State, error) {
 		EncryptedDEKSource:     state.EncryptedObjectEncryptedDEKSource,
 		Annotations:            state.EncryptedObjectAnnotations,
 		EncryptedDEKSourceType: state.EncryptedObjectEncryptedDEKSourceType,
-		EncryptedData:          []byte{0}, // any non-empty value to pass validation
+		EncryptedData:          []byte{0}, // 任意非空值，用于通过校验
 	}
 	if err := envelopekmsv2.ValidateEncryptedObject(&encryptedObjectCopy); err != nil {
 		return envelopekmsv2.State{}, fmt.Errorf("got invalid EncryptedObject: %w", err)
@@ -515,7 +503,7 @@ func (h *kmsv2PluginProbe) isKMSv2ProviderHealthyAndMaybeRotateDEK(ctx context.C
 	if response.Version != envelopekmsv2.KMSAPIVersionv2 && response.Version != envelopekmsv2.KMSAPIVersionv2beta1 {
 		errs = append(errs, fmt.Errorf("expected KMSv2 API version %s, got %s", envelopekmsv2.KMSAPIVersionv2, response.Version))
 	} else {
-		// set version for the first status response
+		// 在首次收到 status 响应时记录版本号
 		if len(h.version) == 0 {
 			h.version = response.Version
 		}
@@ -531,7 +519,7 @@ func (h *kmsv2PluginProbe) isKMSv2ProviderHealthyAndMaybeRotateDEK(ctx context.C
 		errs = append(errs, fmt.Errorf("got invalid KMSv2 KeyID hash %q: %w", envelopekmsv2.GetHashIfNotEmpty(response.KeyID), err))
 	} else {
 		envelopemetrics.RecordKeyIDFromStatus(h.name, response.KeyID, h.apiServerID)
-		// unconditionally append as we filter out nil errors below
+		// 无条件追加，因为下面会过滤掉 nil 错误
 		errs = append(errs, h.rotateDEKOnKeyIDChange(ctx, response.KeyID, string(uuid.NewUUID())))
 	}
 
@@ -541,7 +529,7 @@ func (h *kmsv2PluginProbe) isKMSv2ProviderHealthyAndMaybeRotateDEK(ctx context.C
 	return nil
 }
 
-// loadConfig parses the encryption configuration file at filepath and returns the parsed config and hash of the file.
+// loadConfig 解析 filepath 处的加密配置文件，返回解析后的配置及文件哈希。
 func loadConfig(filepath string, reload bool) (*apiserver.EncryptionConfiguration, string, error) {
 	data, contentHash, err := loadDataAndHash(filepath)
 	if err != nil {
@@ -574,16 +562,16 @@ func loadDataAndHash(filepath string) ([]byte, string, error) {
 	return data, computeEncryptionConfigHash(data), nil
 }
 
-// GetEncryptionConfigHash reads the encryption configuration file at filepath and returns the hash of the file.
-// It does not attempt to decode or load the config, and serves as a cheap check to determine if the file has changed.
+// GetEncryptionConfigHash 读取 filepath 处的加密配置文件并返回文件哈希。
+// 它不会尝试解码或加载配置，可作为判断文件是否变更的廉价检查。
 func GetEncryptionConfigHash(filepath string) (string, error) {
 	_, contentHash, err := loadDataAndHash(filepath)
 	return contentHash, err
 }
 
-// prefixTransformersAndProbes creates the set of transformers and KMS probes based on the given resource config.
-// It may launch multiple go routines whose lifecycle is controlled by ctx.
-// In case of an error, the caller is responsible for canceling ctx to clean up any go routines that may have been launched.
+// prefixTransformersAndProbes 基于给定的资源配置创建 transformer 集合和 KMS 探针。
+// 它可能启动多个 goroutine，其生命周期由 ctx 控制。
+// 若返回错误，调用方负责取消 ctx，以清理可能已启动的 goroutine。
 func prefixTransformersAndProbes(ctx context.Context, config apiserver.ResourceConfiguration, apiServerID string) ([]storagevalue.PrefixTransformer, []healthChecker, *kmsState, error) {
 	var transformers []storagevalue.PrefixTransformer
 	var probes []healthChecker
@@ -684,11 +672,11 @@ func aesPrefixTransformer(config *apiserver.AESConfiguration, fn blockTransforme
 			})
 	}
 
-	// Create a prefixTransformer which can choose between these keys
+	// 创建可在这组密钥之间选择的 prefixTransformer
 	keyTransformer := storagevalue.NewPrefixTransformers(
 		fmt.Errorf("no matching key was found for the provided AES transformer"), keyTransformers...)
 
-	// Create a PrefixTransformer which shall later be put in a list with other providers
+	// 创建 PrefixTransformer，稍后它会与其他 provider 一起被放入列表
 	result = storagevalue.PrefixTransformer{
 		Transformer: keyTransformer,
 		Prefix:      []byte(prefix),
@@ -728,7 +716,7 @@ func secretboxPrefixTransformer(config *apiserver.SecretboxConfiguration) (stora
 		keyArray := [32]byte{}
 		copy(keyArray[:], key)
 
-		// Create a new PrefixTransformer for this key
+		// 为该密钥创建新的 PrefixTransformer
 		keyTransformers = append(keyTransformers,
 			storagevalue.PrefixTransformer{
 				Transformer: secretbox.NewSecretboxTransformer(keyArray),
@@ -736,11 +724,11 @@ func secretboxPrefixTransformer(config *apiserver.SecretboxConfiguration) (stora
 			})
 	}
 
-	// Create a prefixTransformer which can choose between these keys
+	// 创建可在这组密钥之间选择的 prefixTransformer
 	keyTransformer := storagevalue.NewPrefixTransformers(
 		fmt.Errorf("no matching key was found for the provided Secretbox transformer"), keyTransformers...)
 
-	// Create a PrefixTransformer which shall later be put in a list with other providers
+	// 创建 PrefixTransformer，稍后它会与其他 provider 一起被放入列表
 	result = storagevalue.PrefixTransformer{
 		Transformer: keyTransformer,
 		Prefix:      []byte(secretboxTransformerPrefixV1),
@@ -749,10 +737,10 @@ func secretboxPrefixTransformer(config *apiserver.SecretboxConfiguration) (stora
 }
 
 var (
-	// The factory to create kms service. This is to make writing test easier.
+	// 创建 kms service 的工厂，便于编写测试。
 	envelopeServiceFactory = envelope.NewGRPCService
 
-	// The factory to create kmsv2 service.  Exported for integration tests.
+	// 创建 kmsv2 service 的工厂。导出是为了集成测试使用。
 	EnvelopeKMSv2ServiceFactory = envelopekmsv2.NewGRPCService
 )
 
@@ -762,19 +750,19 @@ type kmsState struct {
 	kmsTimeoutSum  time.Duration
 }
 
-// accumulate computes the KMS state by:
-//   - determining which KMS plugin versions are in use
-//   - calculating kmsTimeoutSum which is used as transformTracker.kmsCloseGracePeriod
-//     DynamicTransformers.Set waits for this period before closing old transformers after a config reload
+// accumulate 通过以下方式汇总 KMS 状态：
+//   - 确定正在使用哪些 KMS 插件版本
+//   - 计算 kmsTimeoutSum，它被用作 transformTracker.kmsCloseGracePeriod
+//     DynamicTransformers.Set 会在配置重载后等待该时长，再关闭旧 transformer
 func (s *kmsState) accumulate(other *kmsState) {
 	s.v1Used = s.v1Used || other.v1Used
 	s.v2Used = s.v2Used || other.v2Used
 	s.kmsTimeoutSum += other.kmsTimeoutSum
 }
 
-// kmsPrefixTransformer creates a KMS transformer and probe based on the given KMS config.
-// It may launch multiple go routines whose lifecycle is controlled by ctx.
-// In case of an error, the caller is responsible for canceling ctx to clean up any go routines that may have been launched.
+// kmsPrefixTransformer 基于给定的 KMS 配置创建 KMS transformer 和探针。
+// 它可能启动多个 goroutine，其生命周期由 ctx 控制。
+// 若返回错误，调用方负责取消 ctx，以清理可能已启动的 goroutine。
 func kmsPrefixTransformer(ctx context.Context, config *apiserver.KMSConfiguration, apiServerID string) (storagevalue.PrefixTransformer, healthChecker, *kmsState, error) {
 	kmsName := config.Name
 	switch config.APIVersion {
@@ -802,7 +790,7 @@ func kmsPrefixTransformer(ctx context.Context, config *apiserver.KMSConfiguratio
 
 		return transformer, probe, &kmsState{
 			v1Used: true,
-			// for v1 we will do encrypt and decrypt for health check. Since these are serial operations, we will double the timeout.
+			// v1 的健康检查会执行加密和解密。由于二者是串行操作，超时时间按两倍计算。
 			kmsTimeoutSum: 2 * config.Timeout.Duration,
 		}, nil
 
@@ -862,20 +850,20 @@ func primeAndProbeKMSv2(ctx context.Context, probe *kmsv2PluginProbe, kmsName st
 		)
 	}
 
-	// on the happy path where the plugin is healthy and available on server start,
-	// prime keyID and DEK by running the check inline once (this also prevents unit tests from flaking)
+	// 在插件健康且服务器启动时即可用的正常路径下，
+	// 就地运行一次 check 来预热 keyID 和 DEK（这也能避免单元测试偶发失败）
 	errPrime := runProbeCheckAndLog(ctx, 0)
 
-	// if our initial attempt to prime failed, start trying to get to a valid state in the background ASAP
-	// this prevents a slow start when the external healthz checker is configured to ignore the KMS healthz endpoint
-	// since we want to support the plugin starting up async with the API server, this error is not fatal
+	// 如果首次预热尝试失败，立刻在后台开始尝试恢复到有效状态，
+	// 以避免外部 healthz 检查器被配置为忽略 KMS healthz 端点时出现启动缓慢。
+	// 由于我们需要支持插件与 API server 异步启动，此错误并非致命错误。
 	if errPrime != nil {
-		go blockAndProbeFastUntilSuccess(ctx) // separate go routine to avoid blocking
+		go blockAndProbeFastUntilSuccess(ctx) // 用独立 goroutine 以避免阻塞
 	}
 
-	// make sure that the plugin's key ID is reasonably up-to-date
-	// also, make sure that our DEK is up-to-date to with said key ID (if it expires the server will fail all writes)
-	// if this background loop ever stops running, the server will become unfunctional after kmsv2PluginWriteDEKSourceMaxTTL
+	// 确保插件的 key ID 处于 reasonably 新鲜的状态
+	// 同时确保我们的 DEK 与该 key ID 保持同步（一旦过期，服务器将拒绝所有写入）
+	// 如果这个后台循环停止运行，服务器将在 kmsv2PluginWriteDEKSourceMaxTTL 之后无法工作
 	go wait.PollUntilWithContext(
 		ctx,
 		kmsv2PluginHealthzPositiveInterval,
@@ -884,9 +872,9 @@ func primeAndProbeKMSv2(ctx context.Context, probe *kmsv2PluginProbe, kmsName st
 				return false, nil
 			}
 
-			// TODO add integration test for quicker error poll on failure
-			// if we fail, block the outer polling and start a new quicker poll inline
-			// this limits the chance that our DEK expires during a transient failure
+			// TODO 为"失败后更快轮询"补充集成测试
+			// 一旦失败，阻塞外层轮询，就地启动更快的新轮询
+			// 以此降低 DEK 在瞬时故障期间过期的概率
 			blockAndProbeFastUntilSuccess(ctx)
 
 			return false, nil
@@ -901,10 +889,10 @@ func envelopePrefixTransformer(config *apiserver.KMSConfiguration, envelopeServi
 			return nil, err
 		}
 
-		// v1.24: write using AES-CBC only but support reads via AES-CBC and AES-GCM (so we can move to AES-GCM)
-		// v1.25: write using AES-GCM only but support reads via AES-GCM and fallback to AES-CBC for backwards compatibility
-		// TODO(aramase): Post v1.25: We cannot drop CBC read support until we automate storage migration.
-		// We could have a release note that hard requires users to perform storage migration.
+		// v1.24：仅用 AES-CBC 写入，但读取支持 AES-CBC 和 AES-GCM（以便过渡到 AES-GCM）
+		// v1.25：仅用 AES-GCM 写入，但读取支持 AES-GCM，并为向后兼容回退到 AES-CBC
+		// TODO(aramase): v1.25 之后：在实现存储迁移自动化之前，不能移除 CBC 读取支持。
+		// 也可以在 release note 中硬性要求用户执行存储迁移。
 		// 第一个元素负责加密（GCM），CBC 仅用于读取历史数据。
 		return unionTransformers{gcm, aestransformer.NewCBCTransformer(block)}, nil
 	}
@@ -929,8 +917,8 @@ func (u unionTransformers) TransformFromStorage(ctx context.Context, data []byte
 			errs = append(errs, err)
 			continue
 		}
-		// when i != 0, we have transformed the data from storage using the new transformer,
-		// we want to issue a write to etcd even if the contents of the data haven't changed
+		// 当 i != 0 时，说明数据是用较新的 transformer 从存储中解出来的，
+		// 即使数据内容没有变化，我们也要向 etcd 发起一次写入
 		return result, stale || i != 0, nil
 	}
 	if err := utilerrors.Reduce(utilerrors.NewAggregate(errs)); err != nil {
@@ -944,8 +932,8 @@ func (u unionTransformers) TransformToStorage(ctx context.Context, data []byte, 
 	return u[0].TransformToStorage(ctx, data, dataCtx)
 }
 
-// computeEncryptionConfigHash returns the expected hash for an encryption config file that has been loaded as bytes.
-// We use a hash instead of the raw file contents when tracking changes to avoid holding any encryption keys in memory outside of their associated transformers.
+// computeEncryptionConfigHash 返回以字节读入的加密配置文件的预期哈希。
+// 跟踪文件变更时使用哈希而非原始文件内容，以避免在 transformer 之外于内存中持有任何加密密钥。
 func computeEncryptionConfigHash(data []byte) string {
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(data))
 }
@@ -969,7 +957,7 @@ type transformTracker struct {
 	kmsCloseGracePeriod   time.Duration
 }
 
-// NewDynamicTransformers returns transformers, health checks for kms providers and an ability to close transformers.
+// NewDynamicTransformers 返回 transformers、KMS provider 的健康检查，以及关闭 transformers 的能力。
 func NewDynamicTransformers(
 	transformerOverrides map[schema.GroupResource]storagevalue.Transformer,
 	kmsPluginHealthzCheck healthz.HealthChecker,
@@ -991,17 +979,17 @@ func NewDynamicTransformers(
 	return dynamicTransformers
 }
 
-// Check implements healthz.HealthChecker
+// Check 实现了 healthz.HealthChecker
 func (d *DynamicTransformers) Check(req *http.Request) error {
 	return d.transformTracker.Load().(*transformTracker).kmsPluginHealthzCheck.Check(req)
 }
 
-// Name implements healthz.HealthChecker
+// Name 实现了 healthz.HealthChecker
 func (d *DynamicTransformers) Name() string {
 	return kmsReloadHealthCheckName
 }
 
-// TransformerForResource returns the transformer for the given resource.
+// TransformerForResource 返回给定资源对应的 transformer。
 func (d *DynamicTransformers) TransformerForResource(resource schema.GroupResource) storagevalue.Transformer {
 	// 返回轻量代理而非当前 transformer：后续 Set 后仍能取到最新实现。
 	return &resourceTransformer{
@@ -1010,14 +998,14 @@ func (d *DynamicTransformers) TransformerForResource(resource schema.GroupResour
 	}
 }
 
-// Set sets the transformer overrides. This method is not go routine safe and must only be called by the same, single caller throughout the lifetime of this object.
+// Set 设置 transformer 覆盖项。本方法不是 goroutine 安全的，在整个对象的生命周期内，必须只能由同一个、单一的调用方调用。
 func (d *DynamicTransformers) Set(
 	transformerOverrides map[schema.GroupResource]storagevalue.Transformer,
 	closeTransformers context.CancelFunc,
 	kmsPluginHealthzCheck healthz.HealthChecker,
 	kmsCloseGracePeriod time.Duration,
 ) {
-	// store new values
+	// 存入新值
 	newTransformTracker := &transformTracker{
 		transformerOverrides:  transformerOverrides,
 		closeTransformers:     closeTransformers,
@@ -1025,12 +1013,12 @@ func (d *DynamicTransformers) Set(
 		kmsCloseGracePeriod:   kmsCloseGracePeriod,
 	}
 
-	// update new transformer overrides
+	// 更新 transformer 覆盖项
 	oldTransformTracker := d.transformTracker.Swap(newTransformTracker).(*transformTracker)
 
-	// close old transformers once we wait for grpc request to finish any in-flight requests.
-	// by the time we spawn this go routine, the new transformers have already been set and will be used for new requests.
-	// if the server starts shutting down during sleep duration then the transformers will correctly closed early because their lifetime is tied to the api-server drain notifier.
+	// 等待足够长的时间，让 grpc 请求处理完所有在途请求后，再关闭旧 transformer。
+	// 启动这个 goroutine 时，新 transformer 已经设置完毕，新请求将使用它们。
+	// 如果服务器在 sleep 期间开始关闭，transformer 也会被正确地提前关闭，因为它们的生命周期绑定在 api-server 的 drain 通知器上。
 	go func() {
 		// 延迟关闭是必要的：旧 transformer 可能仍被在读请求持有。
 		time.Sleep(oldTransformTracker.kmsCloseGracePeriod)

@@ -110,9 +110,9 @@ func newTestCacher(s storage.Interface) (*Cacher, storage.Versioner, error) {
 		return nil, versioner, err
 	}
 
-	// The tests assume that Get/GetList/Watch calls shouldn't fail.
-	// However, 429 error can now be returned if watchcache is under initialization.
-	// To avoid rewriting all tests, we wait for watcache to initialize.
+	// 这些测试假定 Get/GetList/Watch 调用不应失败。
+	// 然而，当 watchcache 处于初始化中时，现在可能返回 429 错误。
+	// 为避免重写全部测试，我们等待 watchcache 完成初始化。
 	if err := cacher.Wait(context.Background()); err != nil {
 		return nil, storage.APIObjectVersioner{}, err
 	}
@@ -165,7 +165,7 @@ func TestShouldDelegateList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	// Continue from different apiserver that is forward in RVs
+	// 来自 RV 更靠前的另一个 apiserver 的 continue token
 	continueOnEtcdRV, err := storage.EncodeContinue(keyPrefix+"foo", keyPrefix, int64(mustAtoi(etcdRV)))
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -182,14 +182,14 @@ func TestShouldDelegateList(t *testing.T) {
 	testCases[opts{ResourceVersion: "0", Limit: 100}] = false
 	testCases[opts{ResourceVersion: "0", ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan}] = false
 	testCases[opts{ResourceVersion: "0", ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan, Limit: 100}] = false
-	// Continue
+	// Continue 相关用例
 	for _, continueToken := range []string{continueOnOldRV, continueOnCacheRV, continueOnEtcdRV, continueOnNegativeRV} {
 		testCases[opts{Continue: continueToken}] = true
 		testCases[opts{Limit: 100, Continue: continueToken}] = true
 		testCases[opts{ResourceVersion: "0", Continue: continueToken}] = true
 		testCases[opts{ResourceVersion: "0", Limit: 100, Continue: continueToken}] = true
 	}
-	// With RV
+	// 带 RV 的用例
 	for _, rv := range []string{oldRV, cacheRV, etcdRV} {
 		testCases[opts{ResourceVersion: rv}] = false
 		testCases[opts{ResourceVersion: rv, Limit: 100}] = true
@@ -199,12 +199,12 @@ func TestShouldDelegateList(t *testing.T) {
 		testCases[opts{ResourceVersion: rv, ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan, Limit: 100}] = false
 	}
 
-	// Bypass for most requests doesn't depend on Recursive
+	// 对多数请求而言，是否 bypass 与 Recursive 无关
 	for opts, expectBypass := range testCases {
 		opts.Recursive = true
 		testCases[opts] = expectBypass
 	}
-	// Continue is ignored on non recursive LIST
+	// 非递归 LIST 上 Continue 会被忽略
 	for _, rv := range []string{oldRV, etcdRV} {
 		for _, continueToken := range []string{continueOnOldRV, continueOnCacheRV, continueOnEtcdRV, continueOnNegativeRV} {
 			testCases[opts{ResourceVersion: rv, Continue: continueToken}] = true
@@ -306,7 +306,7 @@ func TestShouldDelegateList(t *testing.T) {
 		}
 	}
 
-	// Exacts and continue on current cache RV.
+	// Exact 匹配及在当前 cache RV 上的 continue。
 	listFromSnapshotEnabledOverrides := map[opts]bool{}
 	listFromSnapshotEnabledOverrides[opts{Recursive: true, ResourceVersion: cacheRV, Limit: 100}] = false
 	listFromSnapshotEnabledOverrides[opts{Recursive: true, ResourceVersion: cacheRV, ResourceVersionMatch: metav1.ResourceVersionMatchExact}] = false
@@ -316,7 +316,7 @@ func TestShouldDelegateList(t *testing.T) {
 	listFromSnapshotEnabledOverrides[opts{Recursive: true, Limit: 100, Continue: continueOnCacheRV}] = false
 	listFromSnapshotEnabledOverrides[opts{Recursive: true, Continue: continueOnCacheRV}] = false
 
-	// Exacts and continue RV with a snapshot.
+	// Exact 匹配及带快照的 continue RV。
 	snapshotAvailableOverrides := map[opts]bool{}
 	snapshotAvailableOverrides[opts{Recursive: true, Continue: continueOnOldRV}] = false
 	snapshotAvailableOverrides[opts{Recursive: true, Limit: 100, Continue: continueOnOldRV}] = false
@@ -326,12 +326,12 @@ func TestShouldDelegateList(t *testing.T) {
 	snapshotAvailableOverrides[opts{Recursive: true, ResourceVersion: oldRV, ResourceVersionMatch: metav1.ResourceVersionMatchExact}] = false
 	snapshotAvailableOverrides[opts{Recursive: true, ResourceVersion: oldRV, ResourceVersionMatch: metav1.ResourceVersionMatchExact, Limit: 100}] = false
 
-	// TODO(p0lyn0mial): the following tests assume that etcdfeature.DefaultFeatureSupportChecker.Supports(storage.RequestWatchProgress)
-	// evaluates to true. Otherwise the cache will be bypassed and the test will fail.
+	// TODO(p0lyn0mial): 以下测试假定 etcdfeature.DefaultFeatureSupportChecker.Supports(storage.RequestWatchProgress)
+	// 求值为 true。否则缓存会被 bypass，测试将失败。
 	//
-	// If you were to run only TestGetListCacheBypass you would see that the test fail.
-	// However in CI all test are run and there must be a test(s) that properly
-	// initialize the storage layer so that the mentioned method evaluates to true
+	// 如果只运行 TestGetListCacheBypass，会看到该测试失败。
+	// 但在 CI 中所有测试一起运行，其中必有测试会正确地
+	// 初始化存储层，使上述方法求值为 true
 	forceRequestWatchProgressSupport(t)
 
 	consistentListFromCacheOverrides := map[opts]bool{}
@@ -348,12 +348,12 @@ func TestShouldDelegateList(t *testing.T) {
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ListFromCacheSnapshot, true)
 
 		consistentReadWithSnapshotOverrides := map[opts]bool{}
-		// Continues with negative RV are same as consistent read.
+		// 在负数 RV 上 continue 等同于一致性读取。
 		consistentReadWithSnapshotOverrides[opts{Recursive: true, Limit: 0, Continue: continueOnNegativeRV}] = false
 		consistentReadWithSnapshotOverrides[opts{Recursive: true, Limit: 100, Continue: continueOnNegativeRV}] = false
 		consistentReadWithSnapshotOverrides[opts{Recursive: true, ResourceVersion: "0", Limit: 0, Continue: continueOnNegativeRV}] = false
 		consistentReadWithSnapshotOverrides[opts{Recursive: true, ResourceVersion: "0", Limit: 100, Continue: continueOnNegativeRV}] = false
-		// Exact on RV not yet observed by cache
+		// Exact 匹配一个缓存尚未观测到的 RV
 		consistentReadWithSnapshotOverrides[opts{Recursive: true, ResourceVersion: etcdRV, Limit: 100}] = false
 		consistentReadWithSnapshotOverrides[opts{Recursive: true, ResourceVersion: etcdRV, ResourceVersionMatch: metav1.ResourceVersionMatchExact}] = false
 		consistentReadWithSnapshotOverrides[opts{Recursive: true, ResourceVersion: etcdRV, ResourceVersionMatch: metav1.ResourceVersionMatchExact, Limit: 100}] = false
@@ -622,7 +622,7 @@ func TestMatchExactResourceVersionFallback(t *testing.T) {
 // ListFromCacheSnapshot=false 时，RV 为空的递归 List 仍由缓存服务，并通过
 // GetCurrentResourceVersion 获取当前 RV。
 func TestGetListNonRecursiveCacheWithConsistentListFromCache(t *testing.T) {
-	// Set feature gates once at the beginning since we only care about ListFromCacheSnapshot=false
+	// 我们只关心 ListFromCacheSnapshot=false，所以在开头一次性设置特性开关
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.ListFromCacheSnapshot: false,
 	})
@@ -678,21 +678,21 @@ func TestGetListNonRecursiveCacheWithConsistentListFromCache(t *testing.T) {
 			}
 			defer cacher.Stop()
 
-			// Wait for cacher to be ready before injecting errors
+			// 在注入错误之前，等待 cacher 就绪
 			if err := cacher.ready.wait(context.Background()); err != nil {
 				t.Fatalf("unexpected error waiting for the cache to be ready: %v", err)
 			}
 			delegator := NewCacheDelegator(cacher, backingStorage)
 			defer delegator.Stop()
 
-			// Setup test object
+			// 准备测试对象
 			key := "/pods/ns"
 			input := &example.Pod{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "ns"}}
 			if err := v.UpdateObject(input, 100); err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			// Put object into the store
+			// 将对象放入存储
 			if err := cacher.watchCache.Add(input); err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -704,19 +704,19 @@ func TestGetListNonRecursiveCacheWithConsistentListFromCache(t *testing.T) {
 			}
 			result := &example.PodList{}
 
-			// Make the list call with empty RV - delegator will get current RV and use it
+			// 以空 RV 发起 list 调用——delegator 会获取当前 RV 并使用它
 			err = delegator.GetList(context.TODO(), key, storage.ListOptions{
 				ResourceVersion: "",
 				Predicate:       pred,
 				Recursive:       true,
 			}, result)
 
-			// Verify error matches expectation
+			// 校验错误是否符合预期
 			if !errors.Is(err, tc.expectedError) {
 				t.Errorf("Expected error %v, got: %v", tc.expectedError, err)
 			}
 
-			// Verify the correct storage method was called
+			// 校验调用的是正确的存储方法
 			if getListCount != tc.expectGetListCallCount {
 				t.Errorf("Expected GetList to be called %d times, but it was called %d times", tc.expectGetListCallCount, getListCount)
 			}
@@ -727,7 +727,7 @@ func TestGetListNonRecursiveCacheWithConsistentListFromCache(t *testing.T) {
 				t.Errorf("Expected GetCurrentResourceVersion not to be called, but it was called %d times", getCurrentRVCount)
 			}
 
-			// For successful cache reads, verify the resource version
+			// 对于成功的缓存读取，校验 resource version
 			if err == nil {
 				resultRV, err := cacher.versioner.ParseResourceVersion(result.ResourceVersion)
 				if err != nil {
@@ -756,7 +756,7 @@ func TestGetCacheBypass(t *testing.T) {
 
 	result := &example.Pod{}
 
-	// Inject error to underlying layer and check if cacher is not bypassed.
+	// 向底层注入错误，检查 cacher 是否被 bypass。
 	backingStorage.InjectGetListError(errDummy)
 	err = delegator.Get(context.TODO(), "/pods/ns/pod-0", storage.GetOptions{
 		IgnoreNotFound:  true,
@@ -864,7 +864,7 @@ func TestEmptyWatchEventCache(t *testing.T) {
 	server, etcdStorage := newEtcdTestStorage(t, etcd3testing.PathPrefix())
 	defer server.Terminate(t)
 
-	// add a few objects
+	// 添加若干对象
 	v := storage.APIObjectVersioner{}
 	lastRV := uint64(0)
 	for i := 0; i < 5; i++ {
@@ -886,9 +886,9 @@ func TestEmptyWatchEventCache(t *testing.T) {
 	}
 	defer cacher.Stop()
 
-	// Given that cacher is always initialized from the "current" version of etcd,
-	// we now have a cacher with an empty cache of watch events and a resourceVersion of rv.
-	// It should support establishing watches from rv and higher, but not older.
+	// 由于 cacher 总是从 etcd 的"当前"版本初始化，
+	// 现在我们得到一个 watch 事件缓存为空、resourceVersion 为 rv 的 cacher。
+	// 它应当支持从 rv 及更高版本建立 watch，但不支持更旧的版本。
 
 	expectedResourceExpiredError := apierrors.NewResourceExpired("").ErrStatus
 	tests := []struct {
@@ -935,17 +935,17 @@ func TestEmptyWatchEventCache(t *testing.T) {
 					t.Errorf("Expected: %#v, got: %#v", e, a)
 				}
 			case <-time.After(1 * time.Second):
-				// the watch was established otherwise
-				// we would be blocking on cache.Watch(...)
-				// in addition to that, the tests are serial in nature,
-				// meaning that there is no other actor
-				// that could add items to the database,
-				// which could result in receiving new items.
-				// given that waiting 1s seems okay
+				// watch 已经建立成功，
+				// 否则我们会阻塞在 cache.Watch(...) 上。
+				// 另外，这些测试本质上是串行的，
+				// 意味着没有其他参与者
+				// 会向数据库添加条目，
+				// 从而导致收到新条目。
+				// 因此等待 1s 是合理的。
 				if tt.expectedEvent != nil {
 					t.Errorf("Failed to get an event")
 				}
-				// watch remained established successfully
+				// watch 保持建立成功
 			}
 		})
 	}
@@ -954,8 +954,8 @@ func TestEmptyWatchEventCache(t *testing.T) {
 // TestWatchNotHangingOnStartupFailure 验证缓存无法初始化时，Watch 会阻塞等待
 // 就绪，但在请求上下文取消后能及时返回错误而不是永久挂起。
 func TestWatchNotHangingOnStartupFailure(t *testing.T) {
-	// Configure cacher so that it can't initialize, because of
-	// constantly failing lists to the underlying storage.
+	// 配置 cacher 使其无法初始化，因为
+	// 对底层存储的 list 持续失败。
 	dummyErr := fmt.Errorf("dummy")
 	backingStorage := &cachertesting.MockStorage{WatchErr: dummyErr}
 	cacher, _, err := newTestCacherWithoutSyncing(backingStorage, testingclock.NewFakeClock(time.Now()))
@@ -965,16 +965,16 @@ func TestWatchNotHangingOnStartupFailure(t *testing.T) {
 	defer cacher.Stop()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	// Cancel the watch after some time to check if it will properly
-	// terminate instead of hanging forever.
+	// 一段时间后取消 watch，检查它能正确终止，
+	// 而不是永久挂起。
 	go func() {
 		defer cancel()
 		cacher.clock.Sleep(1 * time.Second)
 	}()
 
-	// Watch hangs waiting on watchcache being initialized.
-	// Ensure that it terminates when its context is cancelled
-	// (e.g. the request is terminated for whatever reason).
+	// Watch 会阻塞等待 watchcache 初始化。
+	// 确保当其上下文被取消时（例如请求因任何原因被终止），
+	// 它能及时终止。
 	_, err = cacher.Watch(ctx, "/pods/ns", storage.ListOptions{ResourceVersion: "0"})
 	if err == nil || !strings.Contains(err.Error(), "storage is (re)initializing") {
 		t.Errorf("Unexpected error: %#v", err)
@@ -991,7 +991,7 @@ func TestWatcherNotGoingBackInTime(t *testing.T) {
 	}
 	defer cacher.Stop()
 
-	// Ensure there is some budget for slowing down processing.
+	// 确保留有一些用于放慢处理的预算。
 	cacher.dispatchTimeoutBudget.returnUnused(100 * time.Millisecond)
 
 	makePod := func(i int) *examplev1.Pod {
@@ -1009,7 +1009,7 @@ func TestWatcherNotGoingBackInTime(t *testing.T) {
 
 	totalPods := 100
 
-	// Create watcher that will be slowing down reading.
+	// 创建一个读取会逐渐变慢的 watcher。
 	w1, err := cacher.Watch(context.TODO(), "/pods/ns", storage.ListOptions{
 		ResourceVersion: "999",
 		Predicate:       storage.Everything,
@@ -1029,12 +1029,12 @@ func TestWatcherNotGoingBackInTime(t *testing.T) {
 		}
 	}()
 
-	// Now push a ton of object to cache.
+	// 现在向缓存推入大量对象。
 	for i := 1; i < totalPods; i++ {
 		cacher.watchCache.Add(makePod(i))
 	}
 
-	// Create fast watcher and ensure it will get each object exactly once.
+	// 创建快速 watcher，确保它每个对象恰好收到一次。
 	w2, err := cacher.Watch(context.TODO(), "/pods/ns", storage.ListOptions{ResourceVersion: "999", Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("Failed to create watch: %v", err)
@@ -1087,7 +1087,7 @@ func TestCacherDontAcceptRequestsStopped(t *testing.T) {
 		for event := range w.ResultChan() {
 			switch event.Type {
 			case watch.Added, watch.Modified, watch.Deleted:
-				// ok
+				// 符合预期
 			default:
 				t.Errorf("unexpected event %#v", event)
 			}
@@ -1168,7 +1168,7 @@ func TestCacherDontMissEventsOnReinitialization(t *testing.T) {
 				for i := 2; i < 8; i++ {
 					w.Add(makePod(i))
 				}
-				// Emit an error to force relisting.
+				// 发出一个错误以强制重新 list。
 				w.Error(nil)
 				w.Stop()
 			case 1:
@@ -1176,8 +1176,8 @@ func TestCacherDontMissEventsOnReinitialization(t *testing.T) {
 				for i := 12; i < 18; i++ {
 					w.Add(makePod(i))
 				}
-				// Keep the watch open to avoid another reinitialization,
-				// but register it for cleanup.
+				// 保持该 watch 打开以避免再次重新初始化，
+				// 但将其注册到清理回调。
 				t.Cleanup(func() { w.Stop() })
 			default:
 				t.Errorf("unexpected watch call: %d", watchCalls)
@@ -1197,8 +1197,8 @@ func TestCacherDontMissEventsOnReinitialization(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(concurrency)
 
-	// Ensure that test doesn't deadlock if cacher already processed everything
-	// and get back into Pending state before some watches get called.
+	// 确保当 cacher 已处理完所有内容、在某些 watch 建立之前就回到
+	// Pending 状态时，测试不会死锁。
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -1207,9 +1207,9 @@ func TestCacherDontMissEventsOnReinitialization(t *testing.T) {
 			defer wg.Done()
 			w, err := cacher.Watch(ctx, "/pods/", storage.ListOptions{ResourceVersion: "1", Predicate: storage.Everything})
 			if err != nil {
-				// Watch failed to initialize (this most probably means that cacher
-				// already moved back to Pending state before watch initialized.
-				// Ignore this case.
+				// Watch 初始化失败（这很可能是因为在 watch 初始化之前
+				// cacher 已回到 Pending 状态。
+				// 忽略这种情况。
 				return
 			}
 			defer w.Stop()
@@ -1253,7 +1253,7 @@ func TestCacherNoLeakWithMultipleWatchers(t *testing.T) {
 	pred := storage.Everything
 	pred.AllowWatchBookmarks = true
 
-	// run the collision test for 3 seconds to let ~2 buckets expire
+	// 运行碰撞测试 3 秒，让约 2 个时间桶过期
 	stopCh := make(chan struct{})
 	var watchErr error
 	time.AfterFunc(3*time.Second, func() { close(stopCh) })
@@ -1295,14 +1295,14 @@ func TestCacherNoLeakWithMultipleWatchers(t *testing.T) {
 		}
 	}()
 
-	// wait for adding/removing watchers to end
+	// 等待添加/移除 watcher 的 goroutine 结束
 	wg.Wait()
 
 	if watchErr != nil {
 		t.Fatal(watchErr)
 	}
 
-	// wait out the expiration period and pop expired watchers
+	// 等满过期周期后再弹出已过期的 watcher
 	time.Sleep(2 * time.Second)
 	cacher.Lock()
 	defer cacher.Unlock()
@@ -1523,9 +1523,8 @@ func TestCacherSendsMultipleWatchBookmarks(t *testing.T) {
 		t.Fatalf("Couldn't create cacher: %v", err)
 	}
 	defer cacher.Stop()
-	// Update bookmarkFrequency to speed up test.
-	// Note that the frequency lower than 1s doesn't change much due to
-	// resolution how frequency we recompute.
+	// 调整 bookmarkFrequency 以加快测试。
+	// 注意：由于重算频率的精度所限，低于 1s 的取值差别不大。
 	cacher.bookmarkWatchers.bookmarkFrequency = time.Second
 
 	pred := storage.Everything
@@ -1541,7 +1540,7 @@ func TestCacherSendsMultipleWatchBookmarks(t *testing.T) {
 		}
 	}
 
-	// Create pod to initialize watch cache.
+	// 创建 pod 以初始化 watch cache。
 	if err := cacher.watchCache.Add(makePod(0)); err != nil {
 		t.Fatalf("failed to add a pod: %v", err)
 	}
@@ -1553,16 +1552,16 @@ func TestCacherSendsMultipleWatchBookmarks(t *testing.T) {
 		t.Fatalf("Failed to create watch: %v", err)
 	}
 
-	// Create one more pod, to ensure that current RV is higher and thus
-	// bookmarks will be delievere (events are delivered for RV higher
-	// than the max from init events).
+	// 再创建一个 pod，确保当前 RV 更高，
+	// 从而 bookmark 会被投递（事件只在 RV 高于
+	// init 事件中的最大 RV 时才会投递）。
 	if err := cacher.watchCache.Add(makePod(1)); err != nil {
 		t.Fatalf("failed to add a pod: %v", err)
 	}
 
 	timeoutCh := time.After(5 * time.Second)
 	lastObservedRV := uint64(0)
-	// Ensure that a watcher gets two bookmarks.
+	// 确保 watcher 收到两个 bookmark。
 	for observedBookmarks := 0; observedBookmarks < 2; {
 		select {
 		case event, ok := <-w.ResultChan():
@@ -1596,7 +1595,7 @@ func TestDispatchingBookmarkEventsWithConcurrentStop(t *testing.T) {
 	}
 	defer cacher.Stop()
 
-	// Ensure there is some budget for slowing down processing.
+	// 确保留有一些用于放慢处理的预算。
 	cacher.dispatchTimeoutBudget.returnUnused(100 * time.Millisecond)
 
 	resourceVersion := uint64(1000)
@@ -1668,7 +1667,7 @@ func TestBookmarksOnResourceVersionUpdates(t *testing.T) {
 	}
 	defer cacher.Stop()
 
-	// Ensure that bookmarks are sent more frequently than every 1m.
+	// 确保 bookmark 的发送频率高于每 1 分钟一次。
 	cacher.bookmarkWatchers = newTimeBucketWatchers(clock.RealClock{}, 2*time.Second)
 
 	makePod := func(i int) *examplev1.Pod {
@@ -1719,7 +1718,7 @@ func TestBookmarksOnResourceVersionUpdates(t *testing.T) {
 		}
 	}()
 
-	// Simulate progress notify event.
+	// 模拟 progress notify 事件。
 	cacher.watchCache.UpdateResourceVersion(strconv.Itoa(expectedRV))
 
 	wg.Wait()
@@ -1747,22 +1746,19 @@ func TestStartingResourceVersion(t *testing.T) {
 	}
 	defer cacher.Stop()
 
-	// Ensure there is some budget for slowing down processing.
-	// We use the fakeTimeBudget to prevent this test from flaking under
-	// the following conditions:
-	// 1) in total we create 11 events that has to be processed by the watcher
-	// 2) the size of the channels are set to 10 for the watcher
-	// 3) if the test is cpu-starved and the internal goroutine is not picking
-	//    up these events from the channel, after consuming the whole time
-	//    budget (defaulted to 100ms) on waiting, we will simply close the watch,
-	//    which will cause the test failure
-	// Using fakeTimeBudget gives us always a budget to wait and have a test
-	// pick up something from ResultCh in the meantime.
+	// 确保留有一些用于放慢处理的预算。
+	// 使用 fakeTimeBudget 是为了避免本测试在以下情况下偶发失败：
+	// 1) 我们总共创建 11 个事件，需要由该 watcher 处理
+	// 2) watcher 的通道大小设为 10
+	// 3) 如果测试因 CPU 饥饿导致内部 goroutine 没有从通道中取走
+	//    这些事件，在把全部时间预算（默认为 100ms）消耗在等待上之后，
+	//    我们会直接关闭 watch，从而导致测试失败
+	// 使用 fakeTimeBudget 让我们始终有预算可等待，让测试
+	// 期间从 ResultCh 取走一些事件。
 	//
-	// The same can potentially happen in production, but in that case a watch
-	// can be resumed by the client. This doesn't work in the case of this test,
-	// because we explicitly want to test the behavior that object changes are
-	// happening after the watch was initiated.
+	// 生产中也可能出现同样的情况，但那种情形下客户端可以恢复 watch。
+	// 在本测试中则行不通，因为我们明确要测试的是：对象变更发生在
+	// watch 建立之后。
 	cacher.dispatchTimeoutBudget = &fakeTimeBudget{}
 
 	makePod := func(i int) *examplev1.Pod {
@@ -1779,7 +1775,7 @@ func TestStartingResourceVersion(t *testing.T) {
 	if err := cacher.watchCache.Add(makePod(1000)); err != nil {
 		t.Errorf("error: %v", err)
 	}
-	// Advance RV by 10.
+	// 将 RV 推进 10。
 	startVersion := uint64(1010)
 
 	watcher, err := cacher.Watch(context.TODO(), "/pods/ns/foo", storage.ListOptions{ResourceVersion: strconv.FormatUint(startVersion, 10), Predicate: storage.Everything})
@@ -1808,7 +1804,7 @@ func TestStartingResourceVersion(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// event should have at least rv + 1, since we're starting the watch at rv
+	// 事件的 RV 至少应为 rv + 1，因为我们从 rv 开始建立 watch
 	if podRV <= startVersion {
 		t.Errorf("expected event with resourceVersion of at least %d, got %d", startVersion+1, podRV)
 	}
@@ -1824,19 +1820,16 @@ func TestDispatchEventWillNotBeBlockedByTimedOutWatcher(t *testing.T) {
 	}
 	defer cacher.Stop()
 
-	// Ensure there is some budget for slowing down processing.
-	// We use the fakeTimeBudget to prevent this test from flaking under
-	// the following conditions:
-	// 1) the watch w1 is blocked, so we were consuming the whole budget once
-	//    its buffer was filled in (10 items)
-	// 2) the budget is refreshed once per second, so it basically wasn't
-	//    happening in the test at all
-	// 3) if the test was cpu-starved and we weren't able to consume events
-	//    from w2 ResultCh it could have happened that its buffer was also
-	//    filling in and given we no longer had timeBudget (consumed in (1))
-	//    trying to put next item was simply breaking the watch
-	// Using fakeTimeBudget gives us always a budget to wait and have a test
-	// pick up something from ResultCh in the meantime.
+	// 确保留有一些用于放慢处理的预算。
+	// 使用 fakeTimeBudget 是为了避免本测试在以下情况下偶发失败：
+	// 1) watch w1 处于阻塞状态，因此一旦它的缓冲区被填满
+	//    （10 个条目），我们就会耗尽整个预算
+	// 2) 预算每秒才刷新一次，所以在测试中基本不会发生刷新
+	// 3) 如果测试因 CPU 饥饿无法从 w2 的 ResultCh 消费事件，
+	//    它的缓冲区也可能被填满；而此时我们已没有时间预算
+	//    （已在第 1 点耗尽），放入下一个条目就会直接断开该 watch
+	// 使用 fakeTimeBudget 让我们始终有预算可等待，让测试
+	// 期间从 ResultCh 取走一些事件。
 	cacher.dispatchTimeoutBudget = &fakeTimeBudget{}
 
 	makePod := func(i int) *examplev1.Pod {
@@ -1854,21 +1847,21 @@ func TestDispatchEventWillNotBeBlockedByTimedOutWatcher(t *testing.T) {
 
 	totalPods := 50
 
-	// Create watcher that will be blocked.
+	// 创建一个会被阻塞的 watcher。
 	w1, err := cacher.Watch(context.TODO(), "/pods/ns", storage.ListOptions{ResourceVersion: "999", Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("Failed to create watch: %v", err)
 	}
 	defer w1.Stop()
 
-	// Create fast watcher and ensure it will get all objects.
+	// 创建快速 watcher，确保它收到全部对象。
 	w2, err := cacher.Watch(context.TODO(), "/pods/ns", storage.ListOptions{ResourceVersion: "999", Predicate: storage.Everything})
 	if err != nil {
 		t.Fatalf("Failed to create watch: %v", err)
 	}
 	defer w2.Stop()
 
-	// Now push a ton of object to cache.
+	// 现在向缓存推入大量对象。
 	for i := 1; i < totalPods; i++ {
 		cacher.watchCache.Add(makePod(i))
 	}
@@ -2077,7 +2070,7 @@ func testCachingObjects(t *testing.T, watchersCount int) {
 	cacher.watchCache.Update(pod2)
 	cacher.watchCache.Delete(pod3)
 
-	// At this point, we already have dispatchedEvents fully propagated.
+	// 此时，dispatchedEvents 已完全传播到位。
 
 	verifyEvents := func(w watch.Interface) {
 		var event watch.Event
@@ -2138,18 +2131,17 @@ func TestCacheIntervalInvalidationStopsWatch(t *testing.T) {
 	}
 	defer cacher.Stop()
 
-	// Ensure there is enough budget for slow processing since
-	// the entire watch cache is going to be served through the
-	// interval and events won't be popped from the cacheWatcher's
-	// input channel until much later.
+	// 确保留有足够预算应对慢速处理，因为
+	// 整个 watch cache 都将通过该区间对外服务，
+	// 而事件要到很晚才会从 cacheWatcher 的
+	// 输入通道中被取出。
 	cacher.dispatchTimeoutBudget.returnUnused(100 * time.Millisecond)
 
-	// We define a custom index validator such that the interval is
-	// able to serve the first bufferSize elements successfully, but
-	// on trying to fill it's buffer again, the indexValidator simulates
-	// an invalidation leading to the watch being closed and the number
-	// of events we actually process to be bufferSize, each event of
-	// type watch.Added.
+	// 我们自定义一个 index validator：该区间能够成功提供前
+	// bufferSize 个元素，但当尝试再次填充缓冲区时，indexValidator
+	// 模拟一次失效（invalidation），导致 watch 被关闭，最终我们
+	// 实际处理的事件数为 bufferSize，且每个事件类型均为
+	// watch.Added。
 	valid := true
 	invalidateCacheInterval := func() {
 		valid = false
@@ -2172,9 +2164,9 @@ func TestCacheIntervalInvalidationStopsWatch(t *testing.T) {
 		}
 	}
 
-	// 250 is arbitrary, point is to have enough elements such that
-	// it generates more than bufferSize number of events allowing
-	// us to simulate the invalidation of the cache interval.
+	// 250 是任意取值，关键是元素数量要足够多，
+	// 使产生的事件数超过 bufferSize，从而让我们
+	// 能够模拟缓存区间失效。
 	totalPods := 250
 	for i := 0; i < totalPods; i++ {
 		err := cacher.watchCache.Add(makePod(i))
@@ -2203,8 +2195,8 @@ func TestCacheIntervalInvalidationStopsWatch(t *testing.T) {
 			t.Errorf("unexpected event type, expected: %s, got: %s, event: %v", watch.Added, event.Type, event)
 		}
 	}
-	// Since the watch is stopped after the interval is invalidated,
-	// we should have processed exactly bufferSize number of elements.
+	// 由于区间失效后 watch 即被停止，
+	// 我们应当恰好处理了 bufferSize 个元素。
 	if received != bufferSize {
 		t.Errorf("unexpected number of events received, expected: %d, got: %d", bufferSize+1, received)
 	}
@@ -2259,8 +2251,8 @@ func TestWaitUntilWatchCacheFreshAndForceAllEvents(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					// the first call to this function
-					// primes the cacher
+					// 本函数的第一次调用
+					// 用于预热 cacher
 					if !hasBeenPrimed {
 						listAccessor.SetResourceVersion("100")
 						hasBeenPrimed = true
@@ -2270,8 +2262,8 @@ func TestWaitUntilWatchCacheFreshAndForceAllEvents(t *testing.T) {
 					return nil
 				}
 				s.GetRVFn = func(_ context.Context) (uint64, error) {
-					// the first call to this function
-					// primes the cacher
+					// 本函数的第一次调用
+					// 用于预热 cacher
 					if !hasBeenPrimed {
 						hasBeenPrimed = true
 						return 100, nil
@@ -2303,8 +2295,8 @@ func TestWaitUntilWatchCacheFreshAndForceAllEvents(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					// the first call to this function
-					// primes the cacher
+					// 本函数的第一次调用
+					// 用于预热 cacher
 					if !hasBeenPrimed {
 						listAccessor.SetResourceVersion("100")
 						hasBeenPrimed = true
@@ -2314,8 +2306,8 @@ func TestWaitUntilWatchCacheFreshAndForceAllEvents(t *testing.T) {
 					return nil
 				}
 				s.GetRVFn = func(_ context.Context) (uint64, error) {
-					// the first call to this function
-					// primes the cacher
+					// 本函数的第一次调用
+					// 用于预热 cacher
 					if !hasBeenPrimed {
 						hasBeenPrimed = true
 						return 100, nil
@@ -2445,7 +2437,7 @@ func BenchmarkCacher_GetList(b *testing.B) {
 		b.Run(
 			fmt.Sprintf("totalObjectNum=%d, expectObjectNum=%d", tc.totalObjectNum, tc.expectObjectNum),
 			func(b *testing.B) {
-				// create sample pods
+				// 创建示例 pod
 				fakePods := make([]example.Pod, tc.totalObjectNum, tc.totalObjectNum)
 				for i := range fakePods {
 					fakePods[i].Namespace = "default"
@@ -2454,14 +2446,14 @@ func BenchmarkCacher_GetList(b *testing.B) {
 					if i%(tc.totalObjectNum/tc.expectObjectNum) == 0 {
 						fakePods[i].Spec.NodeName = "node-0"
 					}
-					data := make([]byte, 1024*2, 1024*2) // 2k labels
+					data := make([]byte, 1024*2, 1024*2) // 2k 的标签数据
 					rand.Read(data)
 					fakePods[i].Spec.NodeSelector = map[string]string{
 						"key": string(data),
 					}
 				}
 
-				// build test cacher
+				// 构建测试用 cacher
 				store := newObjectStorage(fakePods)
 				cacher, _, err := newTestCacher(store)
 				if err != nil {
@@ -2471,7 +2463,7 @@ func BenchmarkCacher_GetList(b *testing.B) {
 				delegator := NewCacheDelegator(cacher, store)
 				defer delegator.Stop()
 
-				// prepare result and pred
+				// 准备 result 和 pred
 				parsedField, err := fields.ParseSelector("spec.nodeName=node-0")
 				if err != nil {
 					b.Fatalf("parse selector: %v", err)
@@ -2481,7 +2473,7 @@ func BenchmarkCacher_GetList(b *testing.B) {
 					Field: parsedField,
 				}
 
-				// now we start benchmarking
+				// 现在开始基准测试
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					result := &example.PodList{}
@@ -2508,8 +2500,8 @@ func benchmarkPods(n int) []example.Pod {
 		pods[i].Namespace = "default"
 		pods[i].Name = fmt.Sprintf("pod-%d", i)
 		pods[i].ResourceVersion = strconv.Itoa(i)
-		// Give each pod ~2KB of unique payload so the benchmark operates on
-		// realistically sized objects.
+		// 给每个 pod 约 2KB 的唯一负载，使 benchmark
+		// 处理的对象更接近真实大小。
 		data := make([]byte, 1024*2)
 		rand.Read(data)
 		pods[i].Spec.NodeSelector = map[string]string{
@@ -2562,8 +2554,8 @@ func BenchmarkCacher_GetList_AllPods(b *testing.B) {
 	}
 }
 
-// TestWatchListIsSynchronisedWhenNoEventsFromStoreReceived makes sure that
-// a bookmark event will be delivered even if the cacher has not received an event.
+// TestWatchListIsSynchronisedWhenNoEventsFromStoreReceived 确保即使 cacher
+// 没有收到任何事件，bookmark 事件也会被投递。
 func TestWatchListIsSynchronisedWhenNoEventsFromStoreReceived(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
 	backingStorage := &cachertesting.MockStorage{}
@@ -2646,7 +2638,7 @@ func TestForgetWatcher(t *testing.T) {
 	require.Equal(t, 2, forgetCounter)
 }
 
-// TestGetWatchCacheResourceVersion test the following cases:
+// TestGetWatchCacheResourceVersion 测试以下场景：
 //
 // +-----------------+---------------------+-----------------------+
 // | ResourceVersion | AllowWatchBookmarks | SendInitialEvents     |
@@ -2655,9 +2647,9 @@ func TestForgetWatcher(t *testing.T) {
 // | 0               | true/false          | nil/true/false        |
 // | 95             | true/false          | nil/true/false         |
 // +-----------------+---------------------+-----------------------+
-// where:
-// - false indicates the value of the param was set to "false" by a test case
-// - true  indicates the value of the param was set to "true" by a test case
+// 其中：
+// - false 表示某个测试用例把该参数设为 "false"
+// - true  表示某个测试用例把该参数设为 "true"
 func TestGetWatchCacheResourceVersion(t *testing.T) {
 	listOptions := func(allowBookmarks bool, sendInitialEvents *bool, rv string) storage.ListOptions {
 		p := storage.Everything
@@ -2684,8 +2676,8 @@ func TestGetWatchCacheResourceVersion(t *testing.T) {
 		{
 			name: "RV=unset, allowWatchBookmarks=true, sendInitialEvents=nil",
 			opts: listOptions(true, nil, ""),
-			// Expecting RV 0, due to https://github.com/kubernetes/kubernetes/pull/123935 reverted to serving those requests from watch cache.
-			// Set to 100, when WatchFromStorageWithoutResourceVersion is set to true.
+			// 预期 RV 为 0，因为 https://github.com/kubernetes/kubernetes/pull/123935 已将此类请求恢复为从 watch cache 服务。
+			// 当 WatchFromStorageWithoutResourceVersion 设为 true 时，此值应改为 100。
 			expectedWatchResourceVersion: 0,
 		},
 		{
@@ -2701,8 +2693,8 @@ func TestGetWatchCacheResourceVersion(t *testing.T) {
 		{
 			name: "RV=unset, allowWatchBookmarks=false, sendInitialEvents=nil",
 			opts: listOptions(false, nil, ""),
-			// Expecting RV 0, due to https://github.com/kubernetes/kubernetes/pull/123935 reverted to serving those requests from watch cache.
-			// Set to 100, when WatchFromStorageWithoutResourceVersion is set to true.
+			// 预期 RV 为 0，因为 https://github.com/kubernetes/kubernetes/pull/123935 已将此类请求恢复为从 watch cache 服务。
+			// 当 WatchFromStorageWithoutResourceVersion 设为 true 时，此值应改为 100。
 			expectedWatchResourceVersion: 0,
 		},
 		{
@@ -2807,7 +2799,7 @@ func TestGetWatchCacheResourceVersion(t *testing.T) {
 	}
 }
 
-// TestGetBookmarkAfterResourceVersionLockedFunc test the following cases:
+// TestGetBookmarkAfterResourceVersionLockedFunc 测试以下场景：
 //
 // +-----------------+---------------------+-----------------------+
 // | ResourceVersion | AllowWatchBookmarks | SendInitialEvents     |
@@ -2816,9 +2808,9 @@ func TestGetWatchCacheResourceVersion(t *testing.T) {
 // | 0               | true/false          | nil/true/false        |
 // | 95             | true/false          | nil/true/false         |
 // +-----------------+---------------------+-----------------------+
-// where:
-// - false indicates the value of the param was set to "false" by a test case
-// - true  indicates the value of the param was set to "true" by a test case
+// 其中：
+// - false 表示某个测试用例把该参数设为 "false"
+// - true  表示某个测试用例把该参数设为 "true"
 func TestGetBookmarkAfterResourceVersionLockedFunc(t *testing.T) {
 	listOptions := func(allowBookmarks bool, sendInitialEvents *bool, rv string) storage.ListOptions {
 		p := storage.Everything
@@ -3065,11 +3057,10 @@ func TestComputeListLimit(t *testing.T) {
 	}
 }
 
-// TODO(p0lyn0mial): forceRequestWatchProgressSupport inits the storage layer
-// so that tests that require storage.RequestWatchProgress pass
+// TODO(p0lyn0mial): forceRequestWatchProgressSupport 初始化存储层，
+// 使依赖 storage.RequestWatchProgress 的测试能够通过
 //
-// In the future we could have a function that would allow for setting the feature
-// only for duration of a test.
+// 将来我们可以提供一个只在该测试持续期间内设置该特性的函数
 //
 // 该辅助函数会启动一个真实的 etcd 并等待特性探测完成，因此只应在确实需要
 // watch progress 的测试中调用。
@@ -3282,8 +3273,8 @@ func TestWatchListSemanticsSimple(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WatchList, true)
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 
-	// The dummyStore doesn’t support WatchList semantics,
-	// so we don’t need to prepare a response.
+	// dummyStore 不支持 WatchList 语义，
+	// 因此无需准备响应。
 	backingStorage := &cachertesting.MockStorage{}
 	clock := testingclock.NewFakeClock(time.Now())
 	cacher, _, err := newTestCacherWithoutSyncing(backingStorage, clock)
@@ -3298,7 +3289,7 @@ func TestWatchListSemanticsSimple(t *testing.T) {
 	}
 }
 
-// selectorIncludingUID builds a shard selector whose range contains the hash of uid.
+// selectorIncludingUID 构造一个分片 selector，其范围包含 uid 的哈希值。
 func selectorIncludingUID(uid string) sharding.Selector {
 	hash := "0x" + sharding.HashField(uid)
 	return sharding.NewSelector(sharding.ShardRangeRequirement{
@@ -3308,7 +3299,7 @@ func selectorIncludingUID(uid string) sharding.Selector {
 	})
 }
 
-// selectorExcludingUID builds a shard selector whose range does NOT contain the hash of uid.
+// selectorExcludingUID 构造一个分片 selector，其范围不包含 uid 的哈希值。
 func selectorExcludingUID(uid string) sharding.Selector {
 	hash := "0x" + sharding.HashField(uid)
 	return sharding.NewSelector(sharding.ShardRangeRequirement{
@@ -3551,10 +3542,10 @@ func TestFilterWithAttrsAndPrefixFunction_NamespaceShardingMismatch(t *testing.T
 	}
 }
 
-// --- Sharding unit tests for Cacher.GetList ---
+// --- Cacher.GetList 的 sharding 单元测试 ---
 
-// selectorExcludingOnlyUID builds a shard selector covering the entire hash
-// space except the hash of uid, so it matches every object but that one.
+// selectorExcludingOnlyUID 构造一个分片 selector，覆盖除 uid 哈希之外的
+// 整个哈希空间，因此它匹配除该对象之外的所有对象。
 func selectorExcludingOnlyUID(uid string) sharding.Selector {
 	hash := "0x" + sharding.HashField(uid)
 	return sharding.NewSelector(
