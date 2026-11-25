@@ -29,7 +29,7 @@ func TestWithFS(t *testing.T) {
 	mc := machine{}
 	path := "dra.test"
 	content := "DRA deviceattribute"
-	mode := fs.FileMode(0o640) // any random mode pattern which is not the default
+	mode := fs.FileMode(0o640) // 任意非默认的随机模式
 	// 构造仅含一个文件的内存文件系统，内容与模式均作为校验基准。
 	fakefs := fstest.MapFS{
 		path: &fstest.MapFile{

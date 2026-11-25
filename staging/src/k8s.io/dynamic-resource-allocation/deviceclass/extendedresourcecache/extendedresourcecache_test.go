@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2/ktesting"
-	_ "k8s.io/klog/v2/ktesting/init" // Add command line flags.
+	_ "k8s.io/klog/v2/ktesting/init" // 添加命令行参数。
 	"k8s.io/utils/ptr"
 )
 
@@ -161,7 +161,6 @@ func TestExtendedResourceCache(t *testing.T) { synctest.Test(t, testExtendedReso
 func testExtendedResourceCache(t *testing.T) {
 	tCtx, client, cache := setup(t)
 
-	// Test with a device class that has an explicit extended resource name
 	now := time.Now()
 	deviceClass1 := &resourceapi.DeviceClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -175,14 +174,12 @@ func testExtendedResourceCache(t *testing.T) {
 		},
 	}
 
-	// Test with a device class that uses the default mapping
 	deviceClass2 := &resourceapi.DeviceClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "fpga-class",
 		},
-		Spec: resourceapi.DeviceClassSpec{
-			// No explicit extended resource name
-		},
+		// 未显式指定扩展资源名，使用默认映射。
+		Spec: resourceapi.DeviceClassSpec{},
 	}
 	deviceClass3 := &resourceapi.DeviceClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -218,7 +215,6 @@ func testExtendedResourceCache(t *testing.T) {
 		},
 	}
 
-	// Test adding device classes
 	_, err := client.ResourceV1().DeviceClasses().Create(tCtx, deviceClass1, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create device class: %v", err)
@@ -229,67 +225,55 @@ func testExtendedResourceCache(t *testing.T) {
 	}
 	synctest.Wait()
 
-	// Verify explicit mapping
 	deviceClass := cache.GetDeviceClass("example.com/gpu")
 	if deviceClass == nil || deviceClass.Name != "gpu-class" {
 		t.Errorf("Expected to find device class 'gpu-class' for 'example.com/gpu', got %v", deviceClass)
 	}
 
-	// Verify default mapping
 	defaultResourceName := v1.ResourceName("deviceclass.resource.kubernetes.io/fpga-class")
 	deviceClass = cache.GetDeviceClass(defaultResourceName)
 	if deviceClass == nil || deviceClass.Name != "fpga-class" {
 		t.Errorf("Expected to find device class 'fpga-class' for '%s', got %v", defaultResourceName, deviceClass)
 	}
 
-	// Verify both device classes have default mappings
 	deviceClass = cache.GetDeviceClass("deviceclass.resource.kubernetes.io/gpu-class")
 	if deviceClass == nil || deviceClass.Name != "gpu-class" {
 		t.Error("Expected default mapping for gpu-class")
 	}
 
-	// deviceClass3 is older than deviceClass1, hence it won't replace deviceClass1
 	_, err = client.ResourceV1().DeviceClasses().Create(tCtx, deviceClass3, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create device class: %v", err)
 	}
 	synctest.Wait()
 
-	// should keep deviceClass1, since it is newer than deviceClass3
 	deviceClass = cache.GetDeviceClass("example.com/gpu")
 	if deviceClass == nil || deviceClass.Name != "gpu-class" {
 		t.Errorf("Expected to find device class 'gpu-class' for 'example.com/gpu', got %v", deviceClass)
 	}
 
-	// deviceClass4 is newer than deviceClass1, hence it will replace deviceClass1
 	_, err = client.ResourceV1().DeviceClasses().Create(tCtx, deviceClass4, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create device class: %v", err)
 	}
 	synctest.Wait()
 
-	// deviceClass4 replaces deviceClass1, since it is newer with the same example.com/gpu extended resource name
 	deviceClass = cache.GetDeviceClass("example.com/gpu")
 	if deviceClass == nil || deviceClass.Name != "gpu-class-4" {
 		t.Errorf("Expected to find device class 'gpu-class' for 'example.com/gpu', got %v", deviceClass)
 	}
 
-	// deviceClass0 is created at the same time as deviceClass4, but its name is alphabetically ordered earlier,
-	//  hence it will replace deviceClass4
 	_, err = client.ResourceV1().DeviceClasses().Create(tCtx, deviceClass0, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create device class: %v", err)
 	}
 	synctest.Wait()
 
-	// deviceClass0 replaces deviceClass4, it is created at the same time as deviceClass4, but its name is
-	// alphabetically ordered earlier
 	deviceClass = cache.GetDeviceClass("example.com/gpu")
 	if deviceClass == nil || deviceClass.Name != "gpu-class-0" {
 		t.Errorf("Expected to find device class 'gpu-class' for 'example.com/gpu', got %v", deviceClass)
 	}
 
-	// Test modifying a device class
 	deviceClass0Modified := deviceClass0.DeepCopy()
 	deviceClass0Modified.Spec.ExtendedResourceName = ptr.To("test.com/gpu")
 	_, err = client.ResourceV1().DeviceClasses().Update(tCtx, deviceClass0Modified, metav1.UpdateOptions{})
@@ -298,17 +282,14 @@ func testExtendedResourceCache(t *testing.T) {
 	}
 	synctest.Wait()
 
-	// Should have the new mapping
 	deviceClass = cache.GetDeviceClass("test.com/gpu")
 	if deviceClass == nil || deviceClass.Name != "gpu-class-0" {
 		t.Errorf("Expected to find device class 'gpu-class-0' for 'test.com/gpu' after modification, got %v", deviceClass)
 	}
-	// Should not have the old mapping for example.com/gpu
 	if cache.GetDeviceClass("example.com/gpu") != nil {
 		t.Errorf("Expected 'example.com/gpu' to be removed after modification, got %s", cache.GetDeviceClass("example.com/gpu"))
 	}
 
-	// Test deleting a device class
 	err = client.ResourceV1().DeviceClasses().Delete(tCtx, deviceClass0.Name, metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Failed to delete device class: %v", err)
@@ -319,7 +300,6 @@ func testExtendedResourceCache(t *testing.T) {
 	if deviceClass != nil {
 		t.Errorf("Expected 'test.com/gpu' to be removed after deleting device class, got %s", deviceClass)
 	}
-	// Verify the default mapping is removed
 	if cache.GetDeviceClass("deviceclass.resource.kubernetes.io/gpu-class-0") != nil {
 		t.Errorf("Expected 'deviceclass.resource.kubernetes.io/gpu-class-0' to be removed after deleting device class, got %s", cache.GetDeviceClass("deviceclass.resource.kubernetes.io/gpu-class"))
 	}
@@ -348,7 +328,6 @@ func testDeviceClassMapping(t *testing.T) {
 		},
 	}
 
-	// Test adding device classes
 	_, err := client.ResourceV1().DeviceClasses().Create(tCtx, deviceClass1, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create device class: %v", err)
@@ -358,7 +337,6 @@ func testDeviceClassMapping(t *testing.T) {
 		t.Fatalf("Failed to create device class: %v", err)
 	}
 
-	// Wait for background goroutines to handle the new classes.
 	synctest.Wait()
 	name := cache.GetExtendedResource("gpu-class")
 	if name != "example.com/gpu" {
@@ -369,7 +347,6 @@ func testDeviceClassMapping(t *testing.T) {
 		t.Errorf("Expected device class 'tpu-class' not found")
 	}
 
-	// Test updating device classes
 	deviceClass1Modified := deviceClass1.DeepCopy()
 	deviceClass1Modified.Spec.ExtendedResourceName = ptr.To("my.com/gpu")
 	_, err = client.ResourceV1().DeviceClasses().Update(tCtx, deviceClass1Modified, metav1.UpdateOptions{})
@@ -383,7 +360,6 @@ func testDeviceClassMapping(t *testing.T) {
 		t.Errorf("Expected to find device class 'gpu-class' with  'my.com/gpu' after modification, got %s", name)
 	}
 
-	// Test deleting device classes
 	err = client.ResourceV1().DeviceClasses().Delete(tCtx, deviceClass1.Name, metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("Failed to delete device class: %v", err)
@@ -413,28 +389,16 @@ func setup(t *testing.T) (context.Context, *fake.Clientset, *ExtendedResourceCac
 	}
 	informerFactory.Start(ctx.Done())
 	t.Cleanup(func() {
-		// Need to cancel before waiting for the shutdown.
 		cancel()
-		// Now we can wait for all goroutines to stop.
 		informerFactory.Shutdown()
 	})
 	informerFactory.WaitForCacheSync(ctx.Done())
 	cache.WaitForNamedCacheSyncWithContext(ctx, handle.HasSynced)
 
-	// fake.Clientset suffers from a race condition related to informers:
-	// it does not implement resource version support in its Watch
-	// implementation and instead assumes that watches are set up
-	// before further changes are made.
-	//
-	// If a test waits for caches to be synced and then immediately
-	// adds an object, that new object will never be seen by event handlers
-	// if the race goes wrong and the Watch call hadn't completed yet
-	// (can be triggered by adding a sleep before https://github.com/kubernetes/kubernetes/blob/b53b9fb5573323484af9a19cf3f5bfe80760abba/staging/src/k8s.io/client-go/tools/cache/reflector.go#L431).
-	//
-	// To work around that, we wait here for the goroutines which
-	// are involved in setting up the watch *before* creating
-	// DeviceClasses.
-	// 等待 observe/watch 相关协程就绪，规避 fake 客户端的 watch 竞态，之后测试再创建对象。
+	// fake.Clientset 的 Watch 不支持 resourceVersion，并假定监听建立后才发生后续变更。
+	// 若缓存已同步但 Watch 尚未完成，测试立即创建的对象可能永远不会被事件处理器看到；
+	// 竞态位置参见 https://github.com/kubernetes/kubernetes/blob/b53b9fb5573323484af9a19cf3f5bfe80760abba/staging/src/k8s.io/client-go/tools/cache/reflector.go#L431。
+	// 因此先等待 observe/watch 相关协程就绪，再创建 DeviceClass。
 	synctest.Wait()
 
 	return ctx, client, ec

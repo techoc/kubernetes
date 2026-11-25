@@ -31,9 +31,8 @@ func Convert_v1beta1_DeviceRequest_To_v1_DeviceRequest(in *resourcev1beta1.Devic
 	if err := autoConvert_v1beta1_DeviceRequest_To_v1_DeviceRequest(in, out, s); err != nil {
 		return err
 	}
-	// If any fields on the main request is set, we create a ExactDeviceRequest
-	// and set the Exactly field. It might be invalid but that will be caught in validation.
-	// 只要任一主请求字段有设置就构造 Exactly；字段组合是否合法由后续校验负责。
+	// 只要任一主请求字段有设置，就构造 ExactDeviceRequest 并赋给 out.Exactly；
+	// 此处不校验字段组合，非法组合由后续校验负责。
 	if hasAnyMainRequestFieldsSet(in) {
 		var exactDeviceRequest resourceapi.ExactDeviceRequest
 		// DeviceClassName 是纯字符串字段，可直接赋值。

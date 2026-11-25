@@ -14,13 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resourceclaim provides code that supports the usual pattern
-// for accessing the ResourceClaim that is referenced by a PodResourceClaim:
-//
-// - determine the ResourceClaim name that corresponds to the PodResourceClaim
-// - retrieve the ResourceClaim
-// - verify that the ResourceClaim is owned by the pod if generated from a template
-// - use the ResourceClaim
 // Package resourceclaim 提供访问 PodResourceClaim 所引用 ResourceClaim 的常规流程支持：
 // 根据 PodResourceClaim 确定 ResourceClaim 名称、取回该对象、
 // 在由模板生成时校验其是否属于该 Pod，最后使用该 ResourceClaim。
@@ -44,37 +37,15 @@ import (
 const schedulingAPIGroupPrefix = schedulingapi.GroupName + "/"
 
 var (
-	// ErrAPIUnsupported is wrapped by the actual errors returned by Name and
-	// indicates that none of the required fields are set.
 	// ErrAPIUnsupported 表示所有受支持的字段都未设置（输入非法或 API 已扩展），
 	// 由 Name 与 NameFromPodGroup 包装进实际返回的错误中。
 	ErrAPIUnsupported = errors.New("none of the supported fields are set")
 
-	// ErrClaimNotFound is wrapped by the actual errors returned by Name and
-	// indicates that the claim has not been created yet.
 	// ErrClaimNotFound 表示模板对应的 claim 尚未创建，
 	// 由 Name 与 NameFromPodGroup 包装进实际返回的错误中。
 	ErrClaimNotFound = errors.New("ResourceClaim not created yet")
 )
 
-// Name returns the name of the ResourceClaim object that gets referenced by or
-// created for the PodResourceClaim. Three different results are possible:
-//
-//   - An error is returned when some field is not set as expected (either the
-//     input is invalid or the API got extended and the library and the client
-//     using it need to be updated) or the claim hasn't been created yet.
-//
-//     The error includes pod and pod claim name and the unexpected field and
-//     is derived from one of the pre-defined errors in this package.
-//
-//   - A nil string pointer and no error when the ResourceClaim intentionally
-//     didn't get created and the PodResourceClaim can be ignored.
-//
-//   - A pointer to the name and no error when the ResourceClaim got created.
-//     In this case the boolean determines whether IsForPod must be called
-//     after retrieving the ResourceClaim and before using it.
-//
-// Determining the name depends on Kubernetes >= 1.28.
 // Name 根据 PodResourceClaim 解析 ResourceClaim 名称，共有三种结果。
 // 一是返回错误：字段未按预期设置（输入非法，或 API 扩展后库与客户端需要更新），
 // 或模板对应的 claim 尚未创建；错误中包含 Pod 与 claim 名称以及异常字段，
@@ -105,24 +76,6 @@ func Name(pod *v1.Pod, podClaim *v1.PodResourceClaim) (name *string, mustCheckOw
 	}
 }
 
-// NameFromPodGroup returns the name of the ResourceClaim object that gets
-// referenced by or created for the PodGroupResourceClaim. Three different
-// results are possible:
-//
-//   - An error is returned when some field is not set as expected (either the
-//     input is invalid or the API got extended and the library and the client
-//     using it need to be updated) or the claim hasn't been created yet.
-//
-//     The error includes PodGroup and PodGroup claim name and the unexpected
-//     field and is derived from one of the pre-defined errors in this package.
-//
-//   - A nil string pointer and no error when the ResourceClaim intentionally
-//     didn't get created and the PodGroupResourceClaim can be ignored.
-//
-//   - A pointer to the name and no error when the ResourceClaim got created.
-//     In this case the boolean determines whether IsForPodGroup must be called
-//     after retrieving the ResourceClaim and before using it.
-//
 // NameFromPodGroup 根据 PodGroupResourceClaim 解析 ResourceClaim 名称，语义与 Name 一致。
 // 出错时错误信息中包含 PodGroup 与 claim 名称，并包装本包预定义错误；
 // 返回 nil 名称表示 claim 有意不创建；返回名称时布尔值指示是否需要调用 IsForPodGroup 校验归属。
@@ -149,19 +102,12 @@ func NameFromPodGroup(podGroup *schedulingapi.PodGroup, podGroupClaim *schedulin
 	}
 }
 
-// IsForPod checks that the ResourceClaim is the one that was created for the
-// Pod or, if acceptPodGroupOwner is true, its PodGroup. PodGroup owners should
-// only be considered when the DRAWorkloadResourceClaims feature gate is
-// enabled. It returns an error that is informative enough to be returned by the
-// caller without adding further details about the Pod or ResourceClaim.
 // IsForPod 校验 ResourceClaim 是否为该 Pod 创建；当 acceptPodGroupOwner 为 true 时，
 // 也接受由该 Pod 所属 PodGroup 创建的情况。acceptPodGroupOwner 仅在
 // DRAWorkloadResourceClaims 特性门控开启时才应设为 true。
+// 调用方不应传入其他命名空间的 claim；此处的命名空间检查仅作为防御性兜底。
 // 返回的错误信息足够完整，调用方可直接透传而无需补充 Pod 或 claim 细节。
 func IsForPod(pod *v1.Pod, claim *resourceapi.ResourceClaim, acceptPodGroupOwner bool) error {
-	// Checking the namespaces is just a precaution. The caller should
-	// never pass in a ResourceClaim that isn't from the same namespace as the
-	// Pod.
 	// 命名空间不一致时直接拒绝。
 	if claim.Namespace != pod.Namespace {
 		return fmt.Errorf("ResourceClaim %s/%s is not in the same namespace as Pod %s/%s", claim.Namespace, claim.Name, pod.Namespace, pod.Name)
@@ -185,16 +131,10 @@ func IsForPod(pod *v1.Pod, claim *resourceapi.ResourceClaim, acceptPodGroupOwner
 	return nil
 }
 
-// IsForPodGroup checks that the ResourceClaim is the one that
-// was created for the PodGroup. It returns an error that is informative
-// enough to be returned by the caller without adding further details
-// about the Pod or ResourceClaim.
 // IsForPodGroup 校验 ResourceClaim 是否为指定 PodGroup 创建。
+// 调用方不应传入其他命名空间的 claim；此处的命名空间检查仅作为防御性兜底。
 // 返回的错误信息足够完整，调用方可直接透传而无需补充细节。
 func IsForPodGroup(podGroup *schedulingapi.PodGroup, claim *resourceapi.ResourceClaim) error {
-	// Checking the namespaces is just a precaution. The caller should
-	// never pass in a ResourceClaim that isn't from the same namespace as the
-	// Pod.
 	// 命名空间不一致时直接拒绝。
 	if claim.Namespace != podGroup.Namespace {
 		return fmt.Errorf("ResourceClaim %s/%s is not in the same namespace as PodGroup %s/%s", claim.Namespace, claim.Name, podGroup.Namespace, podGroup.Name)
@@ -208,11 +148,9 @@ func IsForPodGroup(podGroup *schedulingapi.PodGroup, claim *resourceapi.Resource
 	return nil
 }
 
-// isForPodGroupByPod performs the same function as [IsForPodGroup] by checking
-// for the API group, kind, and name of the PodGroup in the claim's
-// Status.ReservedFor instead of its UID, which is not known to the Pod.
 // isForPodGroupByPod 的功能与 IsForPodGroup 类似，但它通过 claim 所有者引用中的
 // API 组、类型与名称来校验 PodGroup，而不是比较 UID——Pod 并不知道其 PodGroup 的 UID。
+// API 组只检查组名、忽略版本，因为版本可能随升级变化。
 func isForPodGroupByPod(pod *v1.Pod, claim *resourceapi.ResourceClaim) bool {
 	// Pod 未声明所属 PodGroup，无法匹配。
 	if pod.Spec.SchedulingGroup == nil || pod.Spec.SchedulingGroup.PodGroupName == nil {
@@ -224,17 +162,9 @@ func isForPodGroupByPod(pod *v1.Pod, claim *resourceapi.ResourceClaim) bool {
 	return controller != nil &&
 		controller.Name == *pod.Spec.SchedulingGroup.PodGroupName &&
 		controller.Kind == "PodGroup" &&
-		// The version component of the APIVersion is ignored because that
-		// may change. The group component is still checked.
 		strings.HasPrefix(controller.APIVersion, schedulingAPIGroupPrefix)
 }
 
-// IsReservedForPod checks whether a claim lists the Pod as one
-// of the objects that the claim was reserved for. When the
-// acceptPodGroupReservation parameter is true, it also returns true when the
-// claim lists the Pod's PodGroup as one of the objects that the claim was
-// reserved for. The acceptPodGroupReservation parameter should only be set when
-// the DRAWorkloadResourceClaims feature is enabled.
 // IsReservedForPod 判断 claim 是否把该 Pod 列为预留对象之一。
 // 当 acceptPodGroupReservation 为 true 时，若预留对象是 Pod 所属的 PodGroup 也返回 true。
 // 该参数仅在 DRAWorkloadResourceClaims 特性开启时才应设为 true。
@@ -245,8 +175,6 @@ func IsReservedForPod(pod *v1.Pod, claim *resourceapi.ResourceClaim, acceptPodGr
 		if reserved.UID == pod.UID {
 			return true
 		}
-		// Pods don't know the UID of their PodGroup, so we check all the
-		// other fields of the reservation that it does know.
 		// 允许 PodGroup 预留时，校验 API 组、资源类型以及 Pod 所声明的组名。
 		if acceptPodGroupReservation && reserved.APIGroup == schedulingapi.GroupName &&
 			reserved.Resource == "podgroups" &&
@@ -260,20 +188,12 @@ func IsReservedForPod(pod *v1.Pod, claim *resourceapi.ResourceClaim, acceptPodGr
 	return false
 }
 
-// CanBeReserved checks whether the claim could be reserved for another object.
 // CanBeReserved 判断 claim 是否还能被其他对象预留。
 // 当前对共享没有任何限制，始终返回 true。
 func CanBeReserved(claim *resourceapi.ResourceClaim) bool {
-	// Currently no restrictions on sharing...
 	return true
 }
 
-// BindTo constructs a consumer reference for the claim that refers to the
-// object to which the claim should be bound. When the PodResourceClaim Name,
-// ResourceClaimName, and ResourceClaimTemplateName match those of one of the
-// PodGroup's PodGroupResourceClaims, the claim is bound to the PodGroup.
-// Otherwise, the claim is bound to the Pod. The podGroup parameter should only
-// be non-nil when the DRAWorkloadResourceClaims feature gate is enabled.
 // BindTo 构造 claim 的消费者引用，指向应绑定 claim 的对象。
 // 当 PodResourceClaim 的名称、ResourceClaimName 和 ResourceClaimTemplateName
 // 与 PodGroup 的某条 PodGroupResourceClaim 完全一致时绑定到 PodGroup，否则绑定到 Pod。
@@ -320,8 +240,6 @@ func BindTo(pod *v1.Pod, podGroup *schedulingapi.PodGroup, podClaim *v1.PodResou
 	}, nil
 }
 
-// BaseRequestRef returns the request name if the reference is to a top-level
-// request and the name of the parent request if the reference is to a subrequest.
 // BaseRequestRef 返回请求引用的基础名称：顶级请求返回自身，子请求返回父请求名。
 func BaseRequestRef(requestRef string) string {
 	// 按 '/' 切分，第一段即为父请求名或请求自身。
@@ -329,15 +247,11 @@ func BaseRequestRef(requestRef string) string {
 	return segments[0]
 }
 
-// CreateSubRequestRef combines the names from a request and a subrequest into
-// a reference to the subrequest.
 // CreateSubRequestRef 将请求名与子请求名用 '/' 拼接成子请求引用。
 func CreateSubRequestRef(requestName, subRequestName string) string {
 	return fmt.Sprintf("%s/%s", requestName, subRequestName)
 }
 
-// IsSubRequestRef checks if the provided reference is to a subrequest and returns
-// true if it is. Otherwise it returns false.
 // IsSubRequestRef 判断引用是否指向子请求，即由 '/' 分隔的两段式名称。
 func IsSubRequestRef(requestRef string) bool {
 	// 切分后恰好为两段才是子请求引用。
@@ -345,8 +259,6 @@ func IsSubRequestRef(requestRef string) bool {
 	return len(segments) == 2
 }
 
-// ConfigForResult returns the configs that are applicable to device
-// allocated for the provided result.
 // ConfigForResult 返回适用于给定设备分配结果的设备分配配置。
 // 只保留带有 opaque 配置，且其 Requests 列表匹配结果请求或父请求的配置。
 func ConfigForResult(deviceConfigurations []resourceapi.DeviceAllocationConfiguration, result resourceapi.DeviceRequestAllocationResult) []resourceapi.DeviceAllocationConfiguration {

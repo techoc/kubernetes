@@ -28,11 +28,6 @@ import (
 	"k8s.io/dynamic-resource-allocation/devicemetadata"
 )
 
-// ExampleDecodeMetadataFromStream demonstrates reading a metadata file that
-// may contain multiple API versions as a JSON stream. Decoding into the
-// internal type (metadata.DeviceMetadata) is recommended because it can be
-// decoded with less conversions and source code does not need to be updated
-// when new API versions get added or (at some point) removed.
 // ExampleDecodeMetadataFromStream 演示把可能包含多个 API 版本的元数据文件当作 JSON 流来读取。
 // 推荐解码到内部类型 metadata.DeviceMetadata，因为它转换次数更少，
 // 且新增或移除 API 版本时无需改动源代码。
@@ -56,14 +51,9 @@ func ExampleDecodeMetadataFromStream() {
 	// device: gpu-0 (driver: gpu.example.com, pool: worker-0)
 }
 
-// ExampleDecodeMetadataFromStream_multiVersion demonstrates reading a
-// metadata file that contains the same data encoded in multiple API versions
-// (newest first). The function skips versions it cannot decode and resolves
-// the first compatible one into the internal type.
 // ExampleDecodeMetadataFromStream_multiVersion 演示读取用多个 API 版本编码同一份数据的元数据文件
 // （新版本在前）。函数会跳过无法解码的版本，并把第一个兼容版本解析为内部类型。
 func ExampleDecodeMetadataFromStream_multiVersion() {
-	// This fictional v1000 uses slightly different field names.
 	// 这里虚构的 v1000 使用了不同的字段名，应当被跳过。
 	stream := `
 {"apiVersion":"metadata.resource.k8s.io/v1000","kind":"DeviceMetadata","metadata":{"claimName":"my-claim","claimNamespace":"default","uid":"uid-1234","generation":1},"requests":[{"name":"gpu","devices":[{"driver":"gpu.example.com","pool":"worker-0","name":"gpu-0"}]}]}

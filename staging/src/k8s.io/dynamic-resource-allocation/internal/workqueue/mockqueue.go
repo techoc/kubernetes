@@ -27,29 +27,21 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
-// TODO (pohly): move this to k8s.io/client-go/util/workqueue/mockqueue.go
-// if it turns out to be generally useful. Doc comments are already written
-// as if the code was there.
+// TODO（pohly）：将此代码移至 k8s.io/client-go/util/workqueue/mockqueue.go。
 // TODO（pohly）：若证明具有通用价值，就把它移到 client-go 的 workqueue 包中；
 // 这里的文档注释已经按迁移后的位置来写了。
 
-// MockQueue is an implementation of [TypedRateLimitingInterface] which
-// can be used to test a function which pulls work items out of a queue
-// and processes them. It is thread-safe.
-//
-// A null instance is directly usable. The usual usage is:
+// Mock 是 [TypedRateLimitingInterface] 的一个实现，用于测试“从队列中取出工作项并处理”的函数。
+// 它是线程安全的。
+// 零值实例即可直接使用。典型用法如下：调用 SyncOne 触发同步，再用 State 检查队列状态。
 //
 //	var m workqueue.Mock[string]
-//	m.SyncOne("some-item", func(queue workqueue.TypedRateLimitingInterface[string]) { ... } )
+//	m.SyncOne("some-item", func(queue workqueue.TypedRateLimitingInterface[string]) { ... })
 //	if diff := cmp.Diff(workqueue.MockState[string]{}, m.State()); diff != "" {
 //	    t.Errorf("unexpected state of mock work queue after sync (-want, +got):\n%s", diff)
 //	}
 //
-// All slices get reset to nil when they become empty, so there are no spurious
-// differences because of nil vs. empty slice.
-// Mock 是 [TypedRateLimitingInterface] 的一个实现，用于测试“从队列中取出工作项并处理”的函数。
-// 它是线程安全的。
-// 零值实例即可直接使用。典型用法如上例所示：调用 SyncOne 触发同步，再用 State 检查队列状态。
+// 延迟队列的行为参考 https://github.com/kubernetes/client-go/blob/270e5ab1714527c455865953da8ceba2810dbb50/util/workqueue/delaying_queue.go#L340-L349。
 // 所有切片在变空时都会重置为 nil，因此不会出现 nil 与空切片导致的无意义差异。
 // Mock 内部字段：mutex 保护 state 的并发访问；state 记录队列的当前快照。
 type Mock[T comparable] struct {
@@ -59,43 +51,28 @@ type Mock[T comparable] struct {
 
 // MockState 是 Mock 队列状态的可导出快照，供测试断言使用。
 type MockState[T comparable] struct {
-	// Ready contains the items which are ready for processing.
 	// Ready 保存已就绪、等待被处理的工作项。
 	Ready []T
 
-	// InFlight contains the items which are currently being processed (= Get
-	// was called, Done not yet).
 	// InFlight 保存正在处理中的工作项，即已调用 Get 但尚未调用 Done 的项。
 	InFlight []T
 
-	// MismatchedDone contains the items for which Done was called without
-	// a matching Get.
 	// MismatchedDone 保存没有对应 Get 却被调用了 Done 的工作项。
 	MismatchedDone []T
 
-	// Later contains the items which are meant to be added to the queue after
-	// a certain delay (= AddAfter was called for them). They appear in the
-	// order in which AddAfter got called.
 	// Later 保存需要延迟入队的工作项，即调用过 AddAfter 的项，顺序与 AddAfter 调用顺序一致。
 	Later []MockDelayedItem[T]
 
-	// Failures contains the items and their retry count which failed to be
-	// processed (AddRateLimited called at least once, Forget not yet).
-	// The retry count is always larger than zero.
 	// Failures 保存处理失败的工作项及其重试次数，即调用过 AddRateLimited 但尚未 Forget 的项；重试次数始终大于零。
 	Failures map[T]int
 
-	// ShutDownCalled tracks how often ShutDown got called.
 	// ShutDownCalled 记录 ShutDown 被调用的次数。
 	ShutDownCalled int
 
-	// ShutDownWithDrainCalled tracks how often ShutDownWithDrain got called.
 	// ShutDownWithDrainCalled 记录 ShutDownWithDrain 被调用的次数。
 	ShutDownWithDrainCalled int
 }
 
-// DeepCopy takes a snapshot of all slices. It cannot do a deep copy of the items in those slices,
-// but typically those keys are immutable.
 // DeepCopy 对所有切片和 map 做一次浅拷贝快照；切片中的元素本身不会被深拷贝，
 // 但这些元素通常是不可变的键。
 func (m MockState[T]) DeepCopy() *MockState[T] {
@@ -108,7 +85,6 @@ func (m MockState[T]) DeepCopy() *MockState[T] {
 	return &m
 }
 
-// MockDelayedItem is an item which was queue for later processing.
 // MockDelayedItem 表示一个被安排延迟处理的工作项。
 // 其中 Item 是工作项本身，Duration 是要求的延迟时长。
 type MockDelayedItem[T comparable] struct {
@@ -116,17 +92,10 @@ type MockDelayedItem[T comparable] struct {
 	Duration time.Duration
 }
 
-// SyncOne adds the item to the work queue and calls sync.
-// That sync function can pull one or more items from the work
-// queue until the queue is empty. Then it is told that the queue
-// is shutting down, which must cause it to return.
-//
-// The test can then retrieve the state of the queue to check the result.
 // SyncOne 把 item 加入队列并调用 sync，用于驱动一次同步处理。
 // sync 可以不断从队列取任务直到队列为空；随后队列会表现为正在关闭，促使其返回。
 // 测试随后可通过 State 取得队列状态并检查结果。
 func (m *Mock[T]) SyncOne(item T, sync func(workqueue.TypedRateLimitingInterface[T])) {
-	// sync must run with the mutex not locked.
 	// 用 defer 在解锁之后调用 sync，因为 sync 内部会访问队列，持锁调用会死锁。
 	defer sync(m)
 	m.mutex.Lock()
@@ -136,7 +105,6 @@ func (m *Mock[T]) SyncOne(item T, sync func(workqueue.TypedRateLimitingInterface
 	m.state.Ready = append(m.state.Ready, item)
 }
 
-// State returns the current state of the queue.
 // State 返回队列当前状态的副本，供测试断言使用。
 func (m *Mock[T]) State() MockState[T] {
 	m.mutex.Lock()
@@ -146,7 +114,6 @@ func (m *Mock[T]) State() MockState[T] {
 	return *m.state.DeepCopy()
 }
 
-// Add implements [TypedInterface].
 // Add 把工作项加入就绪队列；已存在时不会重复添加。
 func (m *Mock[T]) Add(item T) {
 	m.mutex.Lock()
@@ -158,7 +125,6 @@ func (m *Mock[T]) Add(item T) {
 	}
 }
 
-// Len implements [TypedInterface].
 // Len 返回当前就绪队列中的工作项数量。
 func (m *Mock[T]) Len() int {
 	m.mutex.Lock()
@@ -167,7 +133,6 @@ func (m *Mock[T]) Len() int {
 	return len(m.state.Ready)
 }
 
-// Get implements [TypedInterface].
 // Get 取出就绪队列中的首个（最旧的）工作项。
 // 队列为空时返回 shutdown=true，以此通知调用方停止处理循环。
 func (m *Mock[T]) Get() (item T, shutdown bool) {
@@ -191,7 +156,6 @@ func (m *Mock[T]) Get() (item T, shutdown bool) {
 	return item, false
 }
 
-// Done implements [TypedInterface].
 // Done 标记一个工作项处理完毕，将其从处理中集合移除。
 // 若找不到对应项，则记录为一次不匹配的 Done。
 func (m *Mock[T]) Done(item T) {
@@ -211,7 +175,6 @@ func (m *Mock[T]) Done(item T) {
 	}
 }
 
-// ShutDown implements [TypedInterface].
 // ShutDown 记录一次关闭调用，而不实际停止任何 goroutine。
 func (m *Mock[T]) ShutDown() {
 	m.mutex.Lock()
@@ -221,7 +184,6 @@ func (m *Mock[T]) ShutDown() {
 	m.state.ShutDownCalled++
 }
 
-// ShutDownWithDrain implements [TypedInterface].
 // ShutDownWithDrain 记录一次“排空后关闭”的调用。
 func (m *Mock[T]) ShutDownWithDrain() {
 	m.mutex.Lock()
@@ -231,7 +193,6 @@ func (m *Mock[T]) ShutDownWithDrain() {
 	m.state.ShutDownWithDrainCalled++
 }
 
-// ShuttingDown implements [TypedInterface].
 // ShuttingDown 报告队列是否已被要求关闭（两种方式任一被调用过即为 true）。
 func (m *Mock[T]) ShuttingDown() bool {
 	m.mutex.Lock()
@@ -240,7 +201,6 @@ func (m *Mock[T]) ShuttingDown() bool {
 	return m.state.ShutDownCalled > 0 || m.state.ShutDownWithDrainCalled > 0
 }
 
-// AddAfter implements [TypedDelayingInterface.AddAfter]
 // AddAfter 把工作项安排为延迟入队。
 // 延迟为 0 时直接入队；已存在的延迟项只会被缩短延迟，不会被延长。
 func (m *Mock[T]) AddAfter(item T, duration time.Duration) {
@@ -256,8 +216,6 @@ func (m *Mock[T]) AddAfter(item T, duration time.Duration) {
 	// 查找是否已有同一工作项的延迟记录。
 	for i := range m.state.Later {
 		if m.state.Later[i].Item == item {
-			// https://github.com/kubernetes/client-go/blob/270e5ab1714527c455865953da8ceba2810dbb50/util/workqueue/delaying_queue.go#L340-L349
-			// only shortens the delay for an existing item. It does not make it longer.
 			// 与 client-go 行为一致：对已存在项只缩短延迟，不延长。
 			if m.state.Later[i].Duration > duration {
 				m.state.Later[i].Duration = duration
@@ -270,7 +228,6 @@ func (m *Mock[T]) AddAfter(item T, duration time.Duration) {
 	m.state.Later = append(m.state.Later, MockDelayedItem[T]{Item: item, Duration: duration})
 }
 
-// CancelAfter is an extension of the TypedDelayingInterface: it allows a test to remove an item that may or may not have been added before via AddAfter.
 // CancelAfter 是对 TypedDelayingInterface 的扩展，允许测试移除某个可能通过 AddAfter 加入、
 // 也可能从未加入过的延迟工作项。
 func (m *Mock[T]) CancelAfter(item T) {
@@ -283,7 +240,6 @@ func (m *Mock[T]) CancelAfter(item T) {
 	})
 }
 
-// AddRateLimited implements [TypedRateLimitingInterface.AddRateLimited].
 // AddRateLimited 记录一次限速重试：把工作项的重试次数加一。
 func (m *Mock[T]) AddRateLimited(item T) {
 	m.mutex.Lock()
@@ -296,7 +252,6 @@ func (m *Mock[T]) AddRateLimited(item T) {
 	m.state.Failures[item]++
 }
 
-// Forget implements [TypedRateLimitingInterface.Forget].
 // Forget 清除工作项的失败记录，表示其已被成功处理或不再重试。
 func (m *Mock[T]) Forget(item T) {
 	m.mutex.Lock()
@@ -309,7 +264,6 @@ func (m *Mock[T]) Forget(item T) {
 	delete(m.state.Failures, item)
 }
 
-// NumRequeues implements [TypedRateLimitingInterface.NumRequeues].
 // NumRequeues 返回某个工作项当前的重试次数，没有记录时为 0。
 func (m *Mock[T]) NumRequeues(item T) int {
 	m.mutex.Lock()

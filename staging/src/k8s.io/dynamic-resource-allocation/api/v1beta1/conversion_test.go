@@ -350,16 +350,10 @@ func TestConversion(t *testing.T) {
 
 }
 
-// v1beta1FillFuncs returns custom fill functions needed for v1beta1
-// types where the default random filling would create objects that
-// cannot round-trip due to structural differences between versions.
-//
 // v1beta1FillFuncs 返回随机填充所需的自定义函数：默认填充可能产生因版本结构差异
 // 而无法无损往返的对象，这里对这类字段做修正。
 func v1beta1FillFuncs(codecs serializer.CodecFactory) []interface{} {
 	return []interface{}{
-		// v1 -> v1beta1 conversion always creates a non-nil Basic,
-		// so we must ensure it is non-nil in the source object too.
 		// 针对 Device 的填充器：转换目标总是得到非 nil 的 Basic，源对象也必须如此。
 		func(d *resourcev1beta1.Device, c randfill.Continue) {
 			// 先用默认规则填充所有字段。
@@ -372,19 +366,10 @@ func v1beta1FillFuncs(codecs serializer.CodecFactory) []interface{} {
 	}
 }
 
-// TestConversionRoundTrip verifies that the automatically generated and
-// hand-written conversion code for the DRA API correctly round-trips
-// between v1beta1 and v1. For each non-list type registered in v1beta1,
-// a fuzzed object is converted to v1 and back, and the result must be
-// equal to the original.
-//
-// Note that this only covers conversion code which is called
-// while converting the top-level API types. Types embedded
-// inside those have their own conversion functions, but those
-// are not necessarily called.
-//
 // TestConversionRoundTrip 验证生成与手写的转换代码能在 v1beta1 与 v1 之间无损往返：
 // 借助自定义填充器生成随机对象，转换到 v1 后再转回，并断言与原对象语义相等。
+// 注意：这只覆盖转换顶层 API 类型时被调用的转换代码；内嵌类型虽然也有各自的转换函数，
+// 但不一定会在此测试中被调用。
 func TestConversionRoundTrip(t *testing.T) {
 	// 注册 v1、v1beta1 类型以及本包的转换函数。
 	scheme := runtime.NewScheme()

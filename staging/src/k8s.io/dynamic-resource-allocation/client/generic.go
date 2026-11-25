@@ -42,15 +42,6 @@ func init() {
 	utilruntime.Must(drav1beta2.AddToScheme(scheme))
 }
 
-// In all of the following generics:
-// - N: the native non-pointer type of the package
-// - O: the legacy non-pointer type that we need to convert to or from
-// - [NO]P: the corresponding pointer type
-// - [NO]L: the corresponding non-pointer list type
-// - [NO]AC: the corresponding non-pointer apply-configuration type
-//
-// More legacy types will get added when reaching GA.
-//
 // 上述泛型中：N 是最新版本的非指针类型，O/O2 是需要来回转换的旧版类型，
 // P 系列为对应指针类型，L 为列表类型，AC 为 apply 配置类型。
 // 随着 API 达到 GA，后续还会加入更多旧版类型参数。
@@ -69,7 +60,6 @@ func newConvertingClient[NP objectPtr[N], N, NL, NAC any, OP objectPtr[O], O, OL
 
 // convertingClient 是资源接口的通用包装：对外暴露最新版 API 类型，
 // 内部按当前 API 版本选择原生接口或旧版接口，并在必要时执行类型转换。
-//
 // 字段说明：c 提供并保存当前 API 版本；native 是最新版（v1）的接口方法集合；
 // v1beta1 与 v1beta2 分别是两个旧版 API 的接口方法集合。
 type convertingClient[NP objectPtr[N], N, NL, NAC any, OP objectPtr[O], O, OL, OAC any, O2P objectPtr[O2], O2, O2L, O2AC any] struct {
@@ -311,7 +301,6 @@ func newCall[N any](c *Client, call func(currentAPI int32) (N, error)) callSeque
 }
 
 // callSequence 描述一次会对各 API 版本依次尝试的调用。
-//
 // 字段说明：c 提供并保存当前 API 版本；call 是实际发起请求的函数，参数为要尝试的 API 编号。
 type callSequence[N any] struct {
 	c    *Client
@@ -328,16 +317,8 @@ func (s *callSequence[N]) run() (N, error) {
 	// 最多尝试 numAPIs 次，轮换一圈后回到起点。
 	for i := int32(0); i < numAPIs; i++ {
 		value, err = s.call(currentAPI)
-		// When encountering "not found", try with the next API version.
-		// We give up after having gone through all of them.
-		//
-		// This check has a false positive for genuine "not found" errors
-		// when accessing specific objects. The client will then try
-		// all API version until it arrives back at the original one - not
-		// nice because of the overhead, but not wrong semantically
-		// and shouldn't occur often.
-		// NotFound 可能意味着该资源在此版本不存在，因此换一个版本重试；
-		// 即使对象真的不存在也只是多试几轮，语义正确且开销可接受。
+		// NotFound 可能意味着该资源在此版本不存在，因此依次尝试其余所有 API 版本，直到回到起点。
+		// 即使对象真的不存在，额外尝试的转换与请求开销也可接受。
 		if apierrors.IsNotFound(err) {
 			// 取模保证轮换到末尾后回到第一个版本。
 			currentAPI = (currentAPI + 1) % numAPIs
@@ -406,13 +387,10 @@ func watchWithConversion[NP objectPtr[N], N any, OP runtime.Object](call func() 
 		stopChan:   make(chan struct{}),
 	}
 	// 后台持续消费上游事件并转换后转发。
-	go out.run() // TODO: ctx
+	go out.run() // TODO：接入 ctx
 	return out, nil
 }
 
-// objectPtr is a helper which tells Go that a pointer to T
-// implements the runtime.Object interface in watchWithConversion.
-//
 // objectPtr 约束 T 为指针类型且实现 runtime.Object，
 // 从而保证转换后的对象可以作为 watch 事件对外返回。
 type objectPtr[T any] interface {
@@ -422,7 +400,6 @@ type objectPtr[T any] interface {
 
 // watchSomething 实现 watch.Interface：从上游读取事件，将其中可识别的旧版对象
 // 转换为最新类型后投递给下游消费者。
-//
 // 字段说明：upstream 是旧版 API 返回的原始监听；resultChan 向消费者投递转换后的事件；
 // stopChan 在 Stop 时关闭以解除发送阻塞；stopOnce 保证停止通道只被关闭一次。
 type watchSomething[NP objectPtr[N], N any, OP runtime.Object] struct {
@@ -460,7 +437,6 @@ func (w *watchSomething[NP, N, OP]) run() {
 		// 阻塞读取下一个事件；通道关闭表示上游先停止。
 		e, ok := <-resultChan
 		if !ok {
-			// The producer stopped first.
 			// 上游已关闭，结束转发。
 			break
 		}
@@ -469,7 +445,7 @@ func (w *watchSomething[NP, N, OP]) run() {
 			// 创建最新版对象作为转换目标。
 			out := new(N)
 			if err := scheme.Convert(in, out, nil); err != nil {
-				//nolint:logcheck // Shouldn't happen.
+				//nolint:logcheck // 不应发生。
 				klog.Error(err, "convert ResourceSlice")
 			}
 			// 保留事件类型，把对象替换为最新版指针类型。
@@ -478,8 +454,6 @@ func (w *watchSomething[NP, N, OP]) run() {
 				Object: NP(out),
 			}
 		}
-		// This must not get blocked when the consumer stops reading,
-		// hence the stopChan.
 		// 发送时同时监听停止通道，避免消费者不再读取时 goroutine 永久阻塞。
 		select {
 		case w.resultChan <- e:

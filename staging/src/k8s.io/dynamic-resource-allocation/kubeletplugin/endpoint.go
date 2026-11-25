@@ -25,11 +25,6 @@ import (
 	"path"
 )
 
-// endpoint defines where and how to listen for incoming connections.
-// The listener always gets closed when shutting down.
-//
-// If the listen function is not set, a new listener for a Unix domain socket gets
-// created at the path.
 // endpoint 定义监听传入连接的地址与方式。
 // 无论何种方式，关停时监听器总会被关闭。
 // 如果未设置 listenFunc，则在 path 指定的路径上创建一个新的 Unix 域套接字监听器。
@@ -55,7 +50,6 @@ func (e endpoint) listen(ctx context.Context) (net.Listener, error) {
 		return e.listenFunc(ctx, socketpath)
 	}
 
-	// Remove stale sockets, listen would fail otherwise.
 	// 清理残留的旧套接字文件，否则监听会因路径已存在而失败。
 	if err := e.removeSocket(); err != nil {
 		return nil, err
@@ -83,7 +77,6 @@ func (e endpoint) removeSocket() error {
 	return nil
 }
 
-// unixListener adds removing of the Unix domain socket on Close.
 // unixListener 在标准 net.Listener 之上增加了 Close 时删除 Unix 域套接字的行为。
 type unixListener struct {
 	// net.Listener 是被包装的底层监听器。

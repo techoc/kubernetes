@@ -51,10 +51,8 @@ var (
 	pointTwo     = resource.MustParse("200m")
 	pointOne     = resource.MustParse("100m")
 
-	// tooBigForMilli is a value whose MilliValue() overflows int64 (> MaxInt64/1000).
-	// resource.MustParse uses DecimalSI by default for large integers.
 	// tooBigForMilli 的 MilliValue() 会溢出 int64，用于测试毫值转换失败的拒绝路径。
-	tooBigForMilli = resource.MustParse("9224372036854776E3") // ~9.22e21, well above MaxInt64 (9.22e18)
+	tooBigForMilli = resource.MustParse("9224372036854776E3") // 约 9.22e21，远高于 MaxInt64（9.22e18）
 )
 
 // deviceConsumedCapacity 为指定设备构造仅含 capacity0=1 的 DeviceConsumedCapacity，
@@ -108,7 +106,7 @@ func TestConsumableCapacity(t *testing.T) {
 			},
 		}
 		consumableCapacity := map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-			capacity0: { // with request and with default, expect requested value
+			capacity0: { // 有 request 且有默认值时，期望使用请求值
 				// 有请求且有 default：期望取请求值（此处请求值为 1）。
 				Value: two,
 				RequestPolicy: &resourceapi.CapacityRequestPolicy{
@@ -116,7 +114,7 @@ func TestConsumableCapacity(t *testing.T) {
 					ValidRange: &resourceapi.CapacityRequestPolicyRange{Min: &one},
 				},
 			},
-			capacity1: { // no request but with default, expect default
+			capacity1: { // 无 request 但有默认值时，期望使用默认值
 				// 无请求但有 default：期望取 default（此处为 1）。
 				Value: two,
 				RequestPolicy: &resourceapi.CapacityRequestPolicy{
@@ -126,7 +124,7 @@ func TestConsumableCapacity(t *testing.T) {
 			},
 			"dummy": {
 				// 无请求且无策略（无 default）：期望取容量值（此处为 1）。
-				Value: one, // no request and no policy (no default), expect capacity value
+				Value: one, // 无 request 且无策略（无默认值）时，期望使用容量值
 			},
 		}
 		g := NewWithT(t)
@@ -152,11 +150,6 @@ func TestConsumableCapacity(t *testing.T) {
 	t.Run("cmp-request-over-capacity-fatal-beats-soft", testCmpRequestOverCapacityFatalBeatsSoft)
 }
 
-// testCmpRequestOverCapacityFatalBeatsSoft pins that a representability error takes
-// precedence over a soft policy or capacity mismatch on the same device. The allocator
-// enforces that precedence by resolving representability for all capacities before it
-// runs the soft checks, so the outcome does not depend on Go's unspecified map order.
-//
 // testCmpRequestOverCapacityFatalBeatsSoft 验证“致命错误优先于软失败”：同一设备上既有违反策略/
 // 超容量的软不匹配，也有请求不可表示的致命错误时，应返回致命错误。输入中 capacity0 的请求 2
 // 超出容量值 1（软），capacity1 的请求 MaxInt64 按步长 2 向上取整会溢出（致命）。断言重复 64 次
@@ -164,7 +157,7 @@ func TestConsumableCapacity(t *testing.T) {
 func testCmpRequestOverCapacityFatalBeatsSoft(t *testing.T) {
 	g := NewWithT(t)
 	capacity := map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-		capacity0: {Value: one}, // no policy; the request of 2 over-fills the value of 1 (soft)
+		capacity0: {Value: one}, // 无策略；请求值 2 超过值 1（soft 模式）
 		capacity1: {
 			Value: maxInt64P1,
 			RequestPolicy: &resourceapi.CapacityRequestPolicy{
@@ -174,12 +167,10 @@ func testCmpRequestOverCapacityFatalBeatsSoft(t *testing.T) {
 	}
 	request := &resourceapi.CapacityRequirements{
 		Requests: map[resourceapi.QualifiedName]resource.Quantity{
-			capacity0: two,       // over capacity0's value of 1: soft, skip this device
-			capacity1: maxInt64Q, // rounding MaxInt64 up to the next step of 2 passes MaxInt64: fatal
+			capacity0: two,       // 超过 capacity0 的值 1：soft 模式，跳过该设备
+			capacity1: maxInt64Q, // 将 MaxInt64 向上取整到步长 2 会超过 MaxInt64：致命错误
 		},
 	}
-	// Go's map order is unspecified, so run the check repeatedly to make an
-	// order-dependent regression very likely to surface rather than to rely on one order.
 	// 重复 64 次，确保结果不依赖 map 遍历顺序。
 	for range 64 {
 		ok, err := CmpRequestOverCapacity(NewConsumedCapacity(), request, nil, capacity, NewConsumedCapacity(), false)
@@ -269,7 +260,6 @@ func testUseMilli(t *testing.T) {
 		},
 		// Step 小于 1m：即便 safeMilliValue 成功（可能舍入为 0），也不满足最小步长要求。
 		"step too small (sub-milli)": {
-			// 1u = 1 micro = 0.001m; safeMilliValue succeeds (rounds to 0) but step<1m
 			validRange: resourceapi.CapacityRequestPolicyRange{
 				Min:  &one,
 				Step: func() *resource.Quantity { q := resource.MustParse("0"); return &q }(),
@@ -337,7 +327,6 @@ func testViolateCapacityRequestPolicy(t *testing.T) {
 			},
 			expectResult: true,
 		},
-		// fractional step: min=0.2, step=0.1, max=1
 		// 小数步长对齐：0.3 = 0.2 + 1*0.1，不违反。
 		"fractional step aligned (0.3 = min+1*step)": {
 			requestedVal: pointThree,
@@ -366,9 +355,6 @@ func testViolateCapacityRequestPolicy(t *testing.T) {
 			fractionalCapacityRange: true,
 			expectResult:            true,
 		},
-		// requested value cannot be losslessly converted to milli, treated as violation.
-		// Range values are all milli-representable (no Max) so useMilli returns true; the
-		// oversized requested value then hits the safeMilliValue error path in violateValidRange.
 		// 请求值无法无损转成毫值：useMilli 判定使用毫值路径后，safeMilliValue 报错，判为违反。
 		"requested value overflows milli representation": {
 			requestedVal: tooBigForMilli,
@@ -408,9 +394,6 @@ func testCalculateConsumedCapacity(t *testing.T) {
 	}{
 		// 无请求且无 default：期望返回容量值。
 		"empty": {requestedVal: nil, capacityValue: one, requestPolicy: &resourceapi.CapacityRequestPolicy{}, expectResult: one},
-		// A request above MaxInt64 cannot be read with Value() without wrapping, so
-		// calculateConsumedCapacity returns a fatal error rather than acting on a
-		// wrapped read (#140441).
 		// 请求超过 MaxInt64：无法用整数算术安全读取，期望致命错误。
 		"request-above-maxint64-is-rejected": {
 			requestedVal:  &twoPow64P3,
@@ -418,8 +401,6 @@ func testCalculateConsumedCapacity(t *testing.T) {
 			requestPolicy: &resourceapi.CapacityRequestPolicy{Default: &zero, ValidRange: &resourceapi.CapacityRequestPolicyRange{Min: &zero, Step: &three}},
 			expectErr:     true,
 		},
-		// Rounding MaxInt64 up to the next step passes MaxInt64 and would wrap; return a
-		// fatal error instead of a wrapped value.
 		// 取整后超过 MaxInt64：期望致命错误而非回绕值。
 		"rounded-value-above-maxint64-is-rejected": {
 			requestedVal:  &maxInt64Q,
@@ -427,8 +408,6 @@ func testCalculateConsumedCapacity(t *testing.T) {
 			requestPolicy: &resourceapi.CapacityRequestPolicy{Default: &zero, ValidRange: &resourceapi.CapacityRequestPolicyRange{Min: &zero, Step: &two}},
 			expectErr:     true,
 		},
-		// Maximum safe boundary: MaxInt64-1 with min=1, step=2 rounds to exactly MaxInt64,
-		// which still fits, so it is accepted. Guards on > (not >=) so this is not rejected.
 		// 安全边界：取整结果恰好等于 MaxInt64，仍可表示，应被接受。
 		"max-safe-boundary-rounds-to-maxint64": {
 			requestedVal:  &maxInt64M1,
@@ -478,7 +457,6 @@ func testCalculateConsumedCapacity(t *testing.T) {
 			requestPolicy: &resourceapi.CapacityRequestPolicy{Default: &one, ValidRange: &resourceapi.CapacityRequestPolicyRange{Min: &one, Step: &one}},
 			expectResult:  two,
 		},
-		// fractional step: min=0.2, step=0.1, max=1; request=0.25; rounds up to 0.3
 		// 小数取整：0.25 向上取整到 0.3（300m）。
 		"fractional step round up (0.25 to 0.3)": {
 			requestedVal:  &pointTwoFive,
@@ -494,7 +472,6 @@ func testCalculateConsumedCapacity(t *testing.T) {
 			fractionalCapacityRange: true,
 			expectResult:            resource.MustParse("300m"),
 		},
-		// fractional step: request already aligned; no rounding
 		// 小数请求已对齐步长：原样返回 0.4（400m）。
 		"fractional step already aligned (0.4 = min+2*step)": {
 			requestedVal:  &pointFour,
@@ -531,8 +508,6 @@ func testCalculateConsumedCapacity(t *testing.T) {
 			requestPolicy: &resourceapi.CapacityRequestPolicy{Default: &one, ValidValues: []resource.Quantity{one, two}},
 			expectResult:  three,
 		},
-		// A request that cannot be converted to a milli value safely is rejected with a
-		// fatal error rather than passed through unrounded.
 		// 小数步长下请求无法转成毫值：期望致命错误。
 		"fractional-step-request-not-milli-representable-is-rejected": {
 			requestedVal:  &tooBigForMilli,
@@ -547,8 +522,6 @@ func testCalculateConsumedCapacity(t *testing.T) {
 			fractionalCapacityRange: true,
 			expectErr:               true,
 		},
-		// A milli-representable request whose rounded value passes the milli-value range is
-		// rejected with a fatal error rather than silently capped.
 		// 请求可表示为毫值，但取整结果溢出毫值范围：期望致命错误而非截断值。
 		"fractional-step-rounded-value-passes-milli-range-is-rejected": {
 			requestedVal: func() *resource.Quantity {

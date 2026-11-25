@@ -14,16 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// k8s:conversion-gen-external-types specifies the latest API version in k8s.io/api/resource.
-// k8s:conversion-gen specifies the older version.
-//
 // +k8s:conversion-gen=k8s.io/api/resource/v1beta1
 // +k8s:conversion-gen-external-types=k8s.io/api/resource/v1
 
-// Package v1beta1 provides conversion code between the v1beta1 version of the resource API
-// and the latest API version.
-//
 // v1beta1 包提供资源 API 的 v1beta1 版本与最新版本（v1）之间的转换代码，
 // 主要弥补两版本在 DeviceRequest、Device、ResourceSliceSpec 等结构上的差异：
 // 例如把 v1beta1 的顶层请求字段折叠进 v1 的 Exactly，以及把 BasicDevice 拆平。
+// k8s:conversion-gen-external-types 标记 k8s.io/api/resource 中的最新 API 版本，
+// k8s:conversion-gen 标记较旧的版本。
 package v1beta1

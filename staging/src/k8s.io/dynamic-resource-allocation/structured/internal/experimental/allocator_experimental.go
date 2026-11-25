@@ -90,10 +90,7 @@ func NewConsumedCapacityCollection() ConsumedCapacityCollection {
 	return internal.NewConsumedCapacityCollection()
 }
 
-// SupportedFeatures includes all additional features,
-// making this the variant that is used when any of those
-// are enabled.
-// SupportedFeatures 列出本实验变体支持的全部附加特性；只要其中任一特性被启用，就应使用此变体。
+// SupportedFeatures 列出 experimental 支持的附加特性；这些特性的任意组合都会选择本变体。
 // 字段：AdminAccess 允许管理访问；PrioritizedList 支持 firstAvailable 子请求；PartitionableDevices 支持计数器分区。
 // DeviceTaints 支持设备污点与容忍；DeviceBindingAndStatus 支持绑定条件；ConsumableCapacity 支持容量消耗。
 // FractionalCapacityRange 支持分数容量；ListTypeAttributes 支持列表类型属性；OptionalNodeOperations 支持可选节点操作。
@@ -125,30 +122,12 @@ type Allocator struct {
 	slicesShared   []*resourceapi.ResourceSlice
 	allSlices      []*resourceapi.ResourceSlice
 	celCache       *cel.Cache
-	// availableCounters contains the available counters for each
-	// resource pool. It acts as a cache that is updated the first time
-	// the available counters are needed for each pool. The information
-	// about each pool is never updated once set the first time.
-	// This is computed bsed on information on the Allocator, so it will
-	// be correct even for multiple usages of the Allocator.
-	// The keys in the map are resource pool IDs (driver name and pool name).
-	// The allocator might be accessed by different goroutines, so
-	// access to this map must be synchronized.
-	// availableCounters 按池 ID 缓存可用计数器，首次使用时计算且此后不再变化，访问需加锁。
+	// availableCounters 以 PoolID（驱动名+池名）为键，按池缓存可用计数器，首次使用时计算且此后不再变化。
+	// 缓存基于 Allocator 的静态输入，因此跨多次 Allocate 调用仍有效；mutex 保护其并发访问。
 	availableCounters map[PoolID]counterSets
-	// compatibilityGroupsBaseline caches, per resource pool, the
-	// compatibility-group intersection contributed by already-allocated devices
-	// (their groups read live from the source ResourceSlice). Like
-	// availableCounters it is computed lazily, never changes once set, and is
-	// guarded by mutex. The keys in the map are resource pool IDs (driver name
-	// and pool name), and the inner map keys are counter set names.
 	// compatibilityGroupsBaseline 按池缓存已分配设备对各计数器集的兼容性组交集基线，惰性计算且不再变化，受 mutex 保护。
 	compatibilityGroupsBaseline map[PoolID]map[string]compatibilityGroupIntersection
 	mutex                       sync.RWMutex
-	// numAllocateOneInvocations counts the number of times the allocateOne
-	// function is called for the allocator. This is a measurement of the
-	// amount of work the allocator had to do to allocate devices
-	// for the claims.
 	// numAllocateOneInvocations 统计 allocateOne 的调用次数，用于衡量分配所需工作量。
 	numAllocateOneInvocations atomic.Int64
 }
@@ -156,12 +135,8 @@ type Allocator struct {
 // 编译期断言：Allocator 实现了 internal.AllocatorExtended 接口。
 var _ internal.AllocatorExtended = &Allocator{}
 
-// NewAllocator returns an allocator for a certain set of claims or an error if
-// some problem was detected which makes it impossible to allocate claims.
-//
-// The returned Allocator can be used multiple times and is thread-safe.
-// NewAllocator 为给定的声明集构造分配器；若检测到导致无法分配的问题则返回错误。
-// 返回的分配器可被多次使用且并发安全。
+// NewAllocator 根据特性、已分配状态、设备类查询器、切片与 CEL 缓存构造分配器；
+// 若检测到导致无法分配的问题则返回错误。返回的分配器可被多次使用且并发安全。
 func NewAllocator(ctx context.Context,
 	features Features,
 	allocatedState AllocatedState,
@@ -208,7 +183,7 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 	// 构造单次分配使用的 allocator 状态，集中保存本次分配的可变数据（匹配缓存、约束、已消耗计数器、请求数据与结果等）。
 	alloc := &allocator{
 		Allocator:              a,
-		ctx:                    ctx, // all methods share the same a and thus ctx
+		ctx:                    ctx, // 所有方法共享同一个 a，因此也共享 ctx
 		logger:                 klog.FromContext(ctx),
 		node:                   node,
 		claimsToAllocate:       claims,
@@ -232,7 +207,6 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 	}()
 
 	// 第一步：收集所有合格的资源池；失败则直接返回错误。
-	// First determine all eligible pools.
 	pools, err := GatherPools(ctx, slicesForNode, node, a.features, alloc.allSlices)
 	if err != nil {
 		return nil, fmt.Errorf("gather pool information: %w", err)
@@ -240,39 +214,14 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 	alloc.pools = pools
 	alloc.logger.V(5).Info("Gathered pool information", "pools", logPools(alloc.logger, pools))
 
-	// We allocate one claim after the other and for each claim, all of
-	// its requests. For each individual device we pick one possible
-	// candidate after the other, checking constraints as we go.
-	// Each chosen candidate is marked as "in use" and the process
-	// continues, recursively. This way, all requests get matched against
-	// all candidates in all possible orders.
-	//
-	// The first full solution is chosen.
-	//
-	// In other words, this is an exhaustive search. This is okay because
-	// it aborts early. Once scoring gets added, more intelligence may be
-	// needed to avoid trying "equivalent" solutions (two identical
-	// requests, two identical devices, two solutions that are the same in
-	// practice).
-
 	// 整体策略：逐个声明、逐个请求、逐个设备地穷举候选，边选边校验约束；选中即标记占用并递归，找到第一个完整解即返回。
-	// This is where we sanity check that we can actually handle the claims
-	// and their requests. For each claim we determine how many devices
-	// need to be allocated. If not all can be stored in the result, the
-	// claim cannot be allocated.
+	// 当前无评分；未来引入评分后需比较等价解，并避免重复尝试实际相同的请求与设备组合。
 	// 第二步：校验所有声明与请求，并计算每个声明至少需要分配的设备数下限。
 	minDevicesTotal := 0
 	// 遍历每个声明。
 	for claimIndex, claim := range alloc.claimsToAllocate {
 		minDevicesPerClaim := 0
 
-		// If we have any any request that wants "all" devices, we need to
-		// figure out how much "all" is. If some pool is incomplete, we stop
-		// here because allocation cannot succeed. Once we do scoring, we should
-		// stop in all cases, not just when "all" devices are needed, because
-		// pulling from an incomplete might not pick the best solution and it's
-		// better to wait. This does not matter yet as long the incomplete pool
-		// has some matching device.
 		// 遍历声明中的请求；使用 firstAvailable 子请求时只能确定设备数下限。
 		for requestIndex := range claim.Spec.Devices.Requests {
 			request := &claim.Spec.Devices.Requests[requestIndex]
@@ -280,22 +229,17 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 			hasSubRequests := len(request.FirstAvailable) > 0
 
 			// 若特性未启用但请求包含子请求，直接报错以避免意外行为。
-			// Error out if the prioritizedList feature is not enabled and the request
-			// has subrequests. This is to avoid surprising behavior for users.
 			if !a.features.PrioritizedList && hasSubRequests {
 				return nil, fmt.Errorf("claim %s, request %s: has subrequests, but the DRAPrioritizedList feature is disabled", klog.KObj(claim), request.Name)
 			}
 
 			// 若特性未启用但请求（含子请求）携带容量需求，直接报错。
-			// Error out if the consumableCapacity feature is not enabled
-			// and the request contains capacity requests.
 			if !a.features.ConsumableCapacity {
 				if request.Exactly != nil && request.Exactly.Capacity != nil {
 					return nil, fmt.Errorf("claim %s, request %s: has capacity requests, but the DRAConsumableCapacity feature is disabled",
 						klog.KObj(claim), request.Name)
 				}
 				for _, subReq := range request.FirstAvailable {
-					// Error out if any subrequest contains capacity requests.
 					if subReq.Capacity != nil {
 						return nil, fmt.Errorf("claim %s, subrequest %s: has capacity requests, but the DRAConsumableCapacity feature is disabled",
 							klog.KObj(claim), subReq.Name)
@@ -306,11 +250,7 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 			// 计算该请求至少需要的设备数：有子请求时取各子请求最小值，否则取请求自身数量。
 			var minDevicesPerRequest int
 			if hasSubRequests {
-				// Seeded high so the loop below can take the minimum.
 				minDevicesPerRequest = math.MaxInt
-				// A request with subrequests gets one entry per subrequest in alloc.requestData.
-				// We can only predict a lower number of devices because it depends on which
-				// subrequest gets chosen.
 				// 对每个子请求执行校验并填充 requestData，取所需设备数的最小值。
 				for i, subReq := range request.FirstAvailable {
 					requestKey.subRequestIndex = i
@@ -332,7 +272,6 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 				minDevicesPerRequest = reqData.numDevices
 			}
 			// 先与剩余容量比较再累加，避免大数量导致总数溢出。
-			// Compare against the remaining capacity before adding, so a large count cannot overflow the total.
 			if minDevicesPerRequest > resourceapi.AllocationResultsMaxSize-minDevicesPerClaim {
 				return nil, fmt.Errorf("claim %s, request %s: adding %d devices exceeds the claim limit of %d, with %d already accounted for", klog.KObj(claim), request.Name, minDevicesPerRequest, resourceapi.AllocationResultsMaxSize, minDevicesPerClaim)
 			}
@@ -340,13 +279,9 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 		}
 		alloc.logger.V(6).Info("Checked claim", "claim", klog.KObj(claim), "minDevices", minDevicesPerClaim)
 
-		// Only a lower bound: a subrequest may pick more, so allocateOne checks the limit again.
 		// 以设备数下限预分配结果切片；子请求可能选用更多设备，allocateOne 中还会再次检查上限。
 		alloc.result[claimIndex].devices = make([]internalDeviceResult, 0, minDevicesPerClaim)
 
-		// Constraints are assumed to be monotonic: once a constraint returns
-		// false, adding more devices will not cause it to return true. This
-		// allows the search to stop early once a constraint returns false.
 		// 第三步：为每个声明构造约束对象；约束被假定为单调的——一旦失败，继续添加设备也不会成功，可提前终止搜索。
 		constraints := make([]constraint, len(claim.Spec.Devices.Constraints))
 		// 按约束字段的类型分别构造 matchAttribute 或 distinctAttribute 约束；未知类型直接报错。
@@ -387,7 +322,6 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 				constraints[i] = m
 			// 未识别的约束类型，视为错误。
 			default:
-				// Unknown constraint type!
 				return nil, fmt.Errorf("claim %s, constraint #%d: empty constraint (unsupported constraint type?)", klog.KObj(claim), i)
 			}
 		}
@@ -396,33 +330,14 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 		minDevicesTotal += minDevicesPerClaim
 	}
 
-	// Selecting a device for a request is independent of what has been
-	// allocated already. Therefore the result of checking a request against
-	// a device instance in the pool can be cached. The pointer to both
-	// can serve as key because they are static for the duration of
-	// the Allocate call and can be compared in Go.
 	// 第四步：初始化设备/请求匹配缓存以及“正在分配的设备”集合，容量按设备总数下限预估。
 	alloc.deviceMatchesRequest = make(map[matchKey]bool)
 
-	// We can estimate the size based on what we need to allocate.
 	// 预分配 allocatingDevices 映射，容量按设备总数下限估算。
 	alloc.allocatingDevices = make(map[DeviceID]sets.Set[int], minDevicesTotal)
 
 	alloc.logger.V(6).Info("Gathered information about devices", "numAllocatedDevices", len(alloc.allocatedState.AllocatedDevices), "minDevicesToBeAllocated", minDevicesTotal)
 
-	// In practice, there aren't going to be many different CEL
-	// expressions. Most likely, there is going to be handful of different
-	// device classes that get used repeatedly. Different requests may all
-	// use the same selector. Therefore compiling CEL expressions on demand
-	// could be a useful performance enhancement. It's not implemented yet
-	// because the key is more complex (just the string?) and the memory
-	// for both key and cached content is larger than for device matches.
-	//
-	// We may also want to cache this in the shared [Allocator] instance,
-	// which implies adding locking.
-
-	// All errors get created such that they can be returned by Allocate
-	// without further wrapping.
 	// 第五步：从首个请求开始递归分配；errStop 表示已确定无法分配，返回空结果。
 	done, err := alloc.allocateOne(deviceIndices{}, false, deviceLocation{})
 	// 收到 errStop 表示分配确定无法完成，返回空结果与空错误。
@@ -435,15 +350,9 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 	}
 	// 未找到解：若过程中遇到无效资源池则返回特定错误（其它节点仍可尝试），否则返回空结果。
 	if !done {
-		// If no devices could be allocated, but we found one or more
-		// invalid pools, return an error here. We didn't do it during
-		// allocation since there might be valid pools from which the
-		// claims could be satisfied.
 		// 仅在分配失败且存在无效池时，返回携带 ErrFailedAllocationOnNode 的错误。
 		for _, pool := range pools {
 			if pool.IsInvalid {
-				// Not a fatal error, allocation on other nodes may proceed.
-				// The error is only surfaced if allocation fails on all nodes.
 				return nil, fmt.Errorf("invalid resource pools were encountered%w", internal.ErrFailedAllocationOnNode)
 			}
 		}
@@ -475,13 +384,9 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 				Tolerations:      internal.lookupRequest(claim).tolerations(),
 				ShareID:          internal.shareID,
 				ConsumedCapacity: consumedCapacity,
-				// If OptionalNodeOperations feature is off, allocateDevice ensures
-				// selected devices have SkipNodeOperations == nil.
+				// 特性关闭时 allocateDevice 保证所选设备的 SkipNodeOperations 为 nil。
 				SkipNodeOperations: internal.slice.Spec.SkipNodeOperations,
 			}
-			// Performance optimization: skip the for loop if the feature is off.
-			// Not needed for correctness because if the feature is off, the selected
-			// device should not have binding conditions.
 			// 仅在设备绑定与状态特性启用时携带绑定条件。
 			if a.features.DeviceBindingAndStatus {
 				allocationResult.Devices.Results[i].BindingConditions = internal.BindingConditions
@@ -490,20 +395,16 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 		}
 
 		// 填充设备类配置：每个类的配置只添加一次，多个使用该类的请求共享同一份配置。
-		// Populate configs.
 
-		// Each class config gets added only once.
-		// We need to keep track of which class configs have already been added and at which position in the allocationResult.Devices.Config.
 		// 记录每个设备类配置在结果切片中的起止位置，避免重复添加。
 		type configRange struct{ start, end int }
-		configIndexesForClass := make(map[string]configRange) // Key: class name / Value: position of the configs for the class in allocationResult.Devices.Config.
+		configIndexesForClass := make(map[string]configRange) // Key 为类名，Value 为该类的配置在 allocationResult.Devices.Config 中的位置。
 		// 遍历请求，定位其最终选中的类（子请求需取被选中的子请求的类）。
 		for requestIndex := range claim.Spec.Devices.Requests {
 			requestKey := requestIndices{claimIndex: claimIndex, requestIndex: requestIndex}
 			requestData := alloc.requestData[requestKey]
 			// 若请求来自子请求，先定位被选中的子请求以获得正确的类。
 			if requestData.parentRequest != nil {
-				// We need the class of the selected subrequest.
 				requestKey.subRequestIndex = requestData.selectedSubRequestIndex
 				requestData = alloc.requestData[requestKey]
 			}
@@ -515,15 +416,12 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 			// 若该类的配置已添加，只需把当前请求名追加到已有配置中。
 			configIndexes, exists := configIndexesForClass[class.Name]
 			if exists {
-				// The configs for the class have already been added.
-				// Just append the request name for the request class.
 				for i := configIndexes.start; i < configIndexes.end; i++ {
 					allocationResult.Devices.Config[i].Requests = append(allocationResult.Devices.Config[i].Requests, requestData.requestName())
 				}
 				continue
 			}
 
-			// Add all configs for the class once.
 			// 首次遇到该类：把类的全部配置加入结果，并记录其位置区间。
 			initialConfigLen := len(allocationResult.Devices.Config)
 			for _, config := range class.Spec.Config {
@@ -537,7 +435,6 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 		}
 		// 处理声明级别的配置：Requests 为空表示应用于全部请求；非空则只对命中的请求生效。
 		for _, config := range claim.Spec.Devices.Config {
-			// If Requests are empty, it applies to all. So it can just be included.
 			// 配置未指定 Requests，表示应用于所有请求，直接加入。
 			if len(config.Requests) == 0 {
 				allocationResult.Devices.Config = append(allocationResult.Devices.Config, resourceapi.DeviceAllocationConfiguration{
@@ -556,7 +453,7 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 						Requests:            config.Requests,
 						DeviceConfiguration: config.DeviceConfiguration,
 					})
-					break // We can stop checking after the first match as all requests in the config should be added.
+					break // 首次匹配后即可停止检查，因为配置中的所有请求都应被加入。
 				}
 
 				requestKey := requestIndices{claimIndex: claimIndex, requestIndex: i}
@@ -574,14 +471,12 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 						Requests:            config.Requests,
 						DeviceConfiguration: config.DeviceConfiguration,
 					})
-					break // We can stop checking after the first match as all requests in the config should be added.
+					break // 首次匹配后即可停止检查，因为配置中的所有请求都应被加入。
 				}
 			}
 		}
 
 		// 若某配置实际应用于全部请求，清空其 Requests 以利用“空表示全部”的语义。
-		// If a config applies to all requests, clear its Requests
-		// field to take advantage of the "empty means all" semantic.
 		for i := range allocationResult.Devices.Config {
 			requests := allocationResult.Devices.Config[i].Requests
 			if len(requests) == 0 {
@@ -610,7 +505,6 @@ func (a *Allocator) Allocate(ctx context.Context, node *v1.Node, claims []*resou
 		}
 
 		// 第七步：根据所选设备的位置约束生成 NodeSelector。
-		// Determine node selector.
 		nodeSelector, err := alloc.createNodeSelector(internalResult.devices, node.Name)
 		if err != nil {
 			return nil, fmt.Errorf("create NodeSelector for claim %s: %w", claim.Name, err)
@@ -641,11 +535,6 @@ func (alloc *allocator) validateDeviceRequest(request requestAccessor, parentReq
 	// 处理派生属性：请求声明了带 CEL 表达式的派生属性时，特性未启用则直接报错。
 	derivedAttrs := request.derivedAttributes()
 	if len(derivedAttrs) > 0 {
-		// Explicitly reject if the feature gate is disabled to avoid silently
-		// ignoring constraints. This can happen during a cluster upgrade if
-		// the API server has the feature enabled but the scheduler does not.
-		// Scheduling can succeed later if the scheduler is restarted with a
-		// configuration that supports this feature.
 		// 特性未启用时显式拒绝，避免静默忽略约束（例如集群升级导致服务端与调度器版本不一致）。
 		if !alloc.features.DerivedAttributes {
 			return requestData, fmt.Errorf("claim %s, request %s: cannot handle request with derived attributes, the feature is disabled", klog.KObj(claim), request.name())
@@ -659,7 +548,6 @@ func (alloc *allocator) validateDeviceRequest(request requestAccessor, parentReq
 	// 校验所有选择器均包含 CEL 表达式；未知选择器类型直接报错。
 	for i, selector := range request.selectors() {
 		if selector.CEL == nil {
-			// Unknown future selector type!
 			return requestData, fmt.Errorf("claim %s, request %s, selector #%d: CEL expression empty (unsupported selector type?)", klog.KObj(claim), request.name(), i)
 		}
 	}
@@ -670,7 +558,6 @@ func (alloc *allocator) validateDeviceRequest(request requestAccessor, parentReq
 	}
 
 	// 请求必须指定设备类名，否则视为不支持的请求类型。
-	// Should be set. If it isn't, something changed and we should refuse to proceed.
 	if request.deviceClassName() == "" {
 		return requestData, fmt.Errorf("claim %s, request %s: missing device class name (unsupported request type?)", klog.KObj(claim), request.name())
 	}
@@ -680,8 +567,6 @@ func (alloc *allocator) validateDeviceRequest(request requestAccessor, parentReq
 		return requestData, fmt.Errorf("claim %s, request %s: could not retrieve device class %s: %w", klog.KObj(claim), request.name(), request.deviceClassName(), err)
 	}
 
-	// Start collecting information about the request.
-	// The class must be set and stored before calling isSelectable.
 	// 必须先设置并保存 class，之后才能调用 isSelectable。
 	requestData.class = class
 
@@ -691,25 +576,18 @@ func (alloc *allocator) validateDeviceRequest(request requestAccessor, parentReq
 	case resourceapi.DeviceAllocationModeExactCount:
 		numDevices := request.count()
 		if numDevices > math.MaxInt {
-			// Allowed by API validation, but doesn't make sense.
 			return requestData, fmt.Errorf("claim %s, request %s: exact count %d is too large", klog.KObj(claim), request.name(), numDevices)
 		}
 		requestData.numDevices = int(numDevices)
 	// “all”模式：遍历所有池中的 slice，收集所有可选且静态容量充足的设备。
 	case resourceapi.DeviceAllocationModeAll:
-		// If we have any any request that wants "all" devices, we need to
-		// figure out how much "all" is. If some pool is incomplete, we stop
-		// here because allocation cannot succeed. Once we do scoring, we should
-		// stop in all cases, not just when "all" devices are needed, because
-		// pulling from an incomplete might not pick the best solution and it's
-		// better to wait. This does not matter yet as long the incomplete pool
-		// has some matching device.
 		// 预分配 allDevices 切片，并复用一个空的已消耗容量对象用于静态容量检查。
 		requestData.allDevices = make([]deviceWithID, 0, resourceapi.AllocationResultsMaxSize)
-		emptyConsumedCapacity := NewConsumedCapacity() // reusable: CmpRequestOverCapacity clones/reads only
+		emptyConsumedCapacity := NewConsumedCapacity() // 可复用：CmpRequestOverCapacity 仅做克隆/读取
 		// 遍历每个资源池；池正在更新或无效时不能用于“all”请求。
 		for _, pool := range pools {
-			// 池不完整或无效时无法可靠确定“所有设备”，直接报错。
+			// 池不完整或无效时无法可靠确定“所有设备”，直接报错。当前普通模式仍可尝试不完整池；
+			// 未来引入评分后应一律停等，以免因可见设备有限而错过更优解。
 			if pool.IsIncomplete {
 				return requestData, fmt.Errorf("claim %s, request %s: asks for all devices, but resource pool %s is currently being updated", klog.KObj(claim), request.name(), pool.PoolID)
 			}
@@ -730,10 +608,9 @@ func (alloc *allocator) validateDeviceRequest(request requestAccessor, parentReq
 							slice:  slice,
 							pool:   pool,
 						}
-						// 若启用容量特性，先做静态容量检查；剩余容量在 allocateDevice 中还会复核。
+						// 若启用容量特性，先做静态容量检查；剩余容量在 allocateDevice 中复核，
+						// 因而被剩余容量阻塞的匹配设备仍留在 allDevices 中，使 all 模式最终失败而非只分配其余设备。
 						if alloc.features.ConsumableCapacity {
-							// Static capacity only: remaining capacity is checked in allocateDevice
-							// so capacity-blocked matching devices stay in allDevices and All fails.
 							apiDevice := slice.Spec.Devices[deviceIndex]
 							success, err := CmpRequestOverCapacity(emptyConsumedCapacity, requestData.request.capacities(),
 								apiDevice.AllowMultipleAllocations, apiDevice.Capacity, emptyConsumedCapacity, alloc.features.FractionalCapacityRange)
@@ -762,21 +639,12 @@ func (alloc *allocator) validateDeviceRequest(request requestAccessor, parentReq
 	return requestData, nil
 }
 
-// errStop is a special error that gets returned by allocateOne if it detects
-// that allocation cannot succeed.
 // errStop 是 allocateOne 在检测到分配无法成功时返回的特殊错误；Allocate 收到它时返回空结果。
 var errStop = errors.New("stop allocation")
 
-// errAllocationResultMaxSizeExceeded is a special error that gets return by
-// allocatedOne when the number of allocated devices exceeds the max number
-// allowed. This is checked by earlier invocations in the recursion and used
-// to do more aggressive backtracking and avoid attempting allocations that
-// we know can not succeed.
 // errAllocationResultMaxSizeExceeded 表示已分配设备数超过上限；调用方据此更积极地回溯，避免尝试注定失败的路径。
 var errAllocationResultMaxSizeExceeded = errors.New("allocation max size exceeded")
 
-// allocator is used while an [Allocator.Allocate] is running. Only a single
-// goroutine works with it, so there is no need for locking.
 // allocator 是单次 [Allocator.Allocate] 执行期间使用的状态容器；仅由单个 goroutine 访问，无需加锁。
 // 字段：ctx 为本次分配的上下文；logger 为日志器；node 为目标节点；claimsToAllocate 为待分配声明。
 // pools 为合格资源池；deviceMatchesRequest 缓存设备/请求匹配结果；derivedAttributesCache 缓存派生属性求值结果。
@@ -790,89 +658,52 @@ type allocator struct {
 	claimsToAllocate     []*resourceapi.ResourceClaim
 	pools                []*Pool
 	deviceMatchesRequest map[matchKey]bool
-	// derivedAttributesCache caches evaluated CEL derived attributes for a
-	// device. It is keyed by deviceExprKey (DeviceID + exact CEL expression)
-	// to avoid re-evaluating identical expressions on the same device,
-	// regardless of which derived attribute name or subrequest uses it.
 	// derivedAttributesCache 以（设备 ID + 精确 CEL 表达式）为键缓存派生属性求值结果，避免同一设备上重复求值。
 	derivedAttributesCache map[deviceExprKey]*resourceapi.DeviceAttribute
-	constraints            [][]constraint // one list of constraints per claim
-	// consumedCounters keeps track of the counters consumed by all devices
-	// that are in the process of being allocated.
-	// The keys in the map are resource pool IDs (driver name and pool name).
+	constraints            [][]constraint // 每个 claim 对应一个约束列表
 	// consumedCounters 记录当前正在分配过程中各资源池已被消耗的计数器，按池 ID 索引。
 	consumedCounters map[PoolID]counterSets
-	// consumedCompatibilityGroups tracks the rolling compatibility-group
-	// intersection per counter set for each pool across the devices being
-	// allocated in the current attempt. It is seeded from the already-allocated
-	// peers (compatibilityGroupsBaseline) the first time a counter set is touched.
-	// pool ID -> counter set name -> running intersection.
 	// consumedCompatibilityGroups 记录当前分配尝试中各池、各计数器集的兼容性组滚动交集；首次触及某计数器集时以已分配设备的基线为种子。格式为：池 ID -> 计数器集名 -> 交集。
 	consumedCompatibilityGroups map[PoolID]map[string]compatibilityGroupIntersection
-	requestData                 map[requestIndices]requestData // one entry per request with no subrequests and one entry per subrequest
-	// allocatingDevices tracks which devices will be newly allocated for a
-	// particular attempt to find a solution. The map is indexed by device
-	// and its values represent for which of a pod's claims the device will
-	// be allocated.
-	// Claims are identified by their index in claimsToAllocate.
+	requestData                 map[requestIndices]requestData // 无子请求的每个 request 一项，每个子请求一项
 	// allocatingDevices 记录本次求解尝试中哪些设备将被新分配；键为设备 ID，值为使用该设备的声明索引集合。
 	allocatingDevices map[DeviceID]sets.Set[int]
-	// allocatingCapacity tracks the amount of device capacity that will be newly allocated
-	// for a particular attempt to find a solution.
-	// The map is indexed by device ID, and each value represents the accumulated capacity
-	// requested by all allocations targeting that device.
 	// allocatingCapacity 记录本次求解尝试中各设备将新增的容量消耗。
 	allocatingCapacity ConsumedCapacityCollection
 	result             []internalAllocationResult
 }
 
-// counterSets is a map with the name of counter sets to the counters in
-// the set.
 // counterSets 描述计数器集合名到该集合内计数器（按计数器名索引）的映射。
 type counterSets map[draapi.UniqueString]map[string]resourceapi.Counter
 
-// matchKey identifies a device/request pair.
 // matchKey 由设备 ID 与请求索引组成，唯一标识一个待判定的设备/请求对。
 type matchKey struct {
 	DeviceID
 	requestIndices
 }
 
-// deviceExprKey identifies a specific CEL expression evaluated on a specific device.
-// This allows caching the evaluated derived attribute so that identical CEL expressions
-// are evaluated at most once per device, regardless of how many derived attributes or
-// constraints reference them.
 // deviceExprKey 由设备 ID 与 CEL 表达式字符串组成，用于缓存派生属性求值结果。
 type deviceExprKey struct {
 	DeviceID
 	expr string
 }
 
-// requestIndices identifies one specific request
-// or subrequest by three properties:
-//
-// - claimIndex: The index of the claim in the requestData map.
-// - requestIndex: The index of the request in the claim.
-// - subRequestIndex: The index of the subrequest in the parent request.
 // requestIndices 通过声明索引、请求索引、子请求索引三元组唯一定位一个请求或子请求。
 type requestIndices struct {
 	claimIndex, requestIndex int
 	subRequestIndex          int
 }
 
-// deviceIndices identifies one specific required device inside
-// a request or subrequest of a certain claim.
 // deviceIndices 在某个声明的请求（或子请求）内唯一定位所需的某一台设备。
 // 字段：claimIndex 为声明在分配器中的索引；requestIndex 为请求在声明中的索引。
 // subRequestIndex 为子请求在请求中的索引（非子请求时忽略）；deviceIndex 为该设备在该请求/子请求中的序号。
 type deviceIndices struct {
-	claimIndex      int // The index of the claim in the allocator.
-	requestIndex    int // The index of the request in the claim.
-	subRequestIndex int // The index of the subrequest within the request (ignored if subRequest is false).
-	deviceIndex     int // The index of a device within a request or subrequest.
+	claimIndex      int // claim 在分配器中的索引。
+	requestIndex    int // request 在 claim 中的索引。
+	subRequestIndex int // 子请求在 request 中的索引（subRequest 为 false 时忽略）。
+	deviceIndex     int // 设备在 request 或子请求中的索引。
 }
 
-// deviceLocation identifies a device by its position in the allocator's pools.
 // deviceLocation 用池、切片、设备三级下标定位设备在分配器池列表中的位置。
 // 字段：poolIndex 为池在 pools 中的下标；sliceIndex 为切片在池的 DeviceSlicesTargetingNode 中的下标；deviceIndex 为设备在切片 Spec.Devices 中的下标。
 type deviceLocation struct {
@@ -886,24 +717,16 @@ type deviceLocation struct {
 // class 为解析出的设备类；numDevices 为所需设备数（“all”模式为候选设备总数）；selectedSubRequestIndex 记录被选中的子请求下标。
 // allDevices 为“all”模式预先确定的候选设备集合；derivedAttributes 将派生属性名映射到其 CEL 表达式。
 type requestData struct {
-	// indices holds the requestIndices for this request
-	indices requestIndices
-	// The request or subrequest which needs to be allocated.
-	// Never nil.
-	request requestAccessor
-	// The parent of a subrequest, nil if not a subrequest.
+	indices       requestIndices
+	request       requestAccessor
 	parentRequest requestAccessor
 	class         *resourceapi.DeviceClass
 	numDevices    int
 
-	// selectedSubRequestIndex is set for the entry with requestIndices.subRequestIndex == 0.
-	// It is the index of the subrequest which got picked during allocation.
 	selectedSubRequestIndex int
 
-	// pre-determined set of devices for allocating "all" devices
 	allDevices []deviceWithID
 
-	// derivedAttributes maps derived attribute name to its CEL expression
 	derivedAttributes map[resourceapi.FullyQualifiedName]string
 }
 
@@ -934,8 +757,8 @@ type internalAllocationResult struct {
 // id 为设备标识；shareID 为共享份额 ID（非共享为 nil）；slice 为所属 ResourceSlice；consumedCapacity 为该份额消耗的容量；adminAccess 标记是否请求管理访问。
 type internalDeviceResult struct {
 	*draapi.Device
-	request          string // name of the request (if no subrequests) or the subrequest
-	parentRequest    string // name of the request which contains the subrequest, empty otherwise
+	request          string // request（无子请求时）或子请求的名称
+	parentRequest    string // 包含该子请求的 request 名称，否则为空
 	id               DeviceID
 	shareID          *types.UID
 	slice            *draapi.ResourceSlice
@@ -966,7 +789,6 @@ func (idr internalDeviceResult) lookupRequest(claim *resourceapi.ResourceClaim) 
 		}
 		// 无父请求时无需检查子请求，直接返回精确请求访问器。
 		if idr.parentRequest == "" {
-			// No need to check sub-requests.
 			return &exactDeviceRequestAccessor{request}
 		}
 		// 有父请求时继续在 FirstAvailable 中查找同名子请求。
@@ -984,20 +806,13 @@ func (idr internalDeviceResult) lookupRequest(claim *resourceapi.ResourceClaim) 
 
 // constraint 定义声明级约束的行为：add 在分配设备时校验并记录状态，remove 撤销对应状态。
 type constraint interface {
-	// add is called whenever a device is about to be allocated. It must
-	// check whether the device matches the constraint and if yes,
-	// track that it is allocated.
 	// add 在设备即将被分配时调用：检查设备是否满足约束，满足则记录该设备。
 	add(request *requestData, device *draapi.Device, deviceID DeviceID) (bool, error)
 
-	// For every successful add there is exactly one matching removed call
-	// with the exact same parameters.
 	// remove 撤销一次成功的 add；调用方保证参数与对应的 add 完全一致。
 	remove(request *requestData, device *draapi.Device, deviceID DeviceID)
 }
 
-// deviceAttributeListAsSet is set-based representation of DeviceAttributeListType.
-// This has the same structure as DeviceAttributeListType, but uses sets.Set instead of slices.
 // deviceAttributeListAsSet 是列表类型设备属性的集合表示，结构与列表属性相同但使用 sets.Set 存储。
 // 字段：intValue、boolValue、stringValue、versionValue 分别保存对应类型的取值集合。
 type deviceAttributeListAsSet struct {
@@ -1007,8 +822,6 @@ type deviceAttributeListAsSet struct {
 	versionValue sets.Set[string]
 }
 
-// intersection returns the new intersection set of two attribute sets as a new set.
-// Returns nil if there is no intersection or if the types do not match.
 // intersection 返回两个属性集合的交集；无交集或类型不匹配时返回 nil。
 func (s *deviceAttributeListAsSet) intersection(other *deviceAttributeListAsSet) *deviceAttributeListAsSet {
 	result := &deviceAttributeListAsSet{}
@@ -1045,16 +858,10 @@ func (s *deviceAttributeListAsSet) intersection(other *deviceAttributeListAsSet)
 		return result
 	// 其它情况（类型不匹配）返回 nil。
 	default:
-		// Type mismatch
 		return nil
 	}
 }
 
-// attributeAsSet creates deviceAttributeListAsSet from DeviceAttribute.
-// Both scalar and list attributes are converted to set representation.
-// For scalar values, creates a single-element set.
-// For list values, creates a set from all elements.
-// Returns nil if the attribute type is unknown or empty.
 // attributeAsSet 将设备属性转换为集合表示：列表属性取全部元素，标量属性转成单元素集合；类型未知或为空时返回 nil。
 func attributeAsSet(attribute *resourceapi.DeviceAttribute) *deviceAttributeListAsSet {
 	if attribute == nil {
@@ -1095,30 +902,19 @@ func attributeAsSet(attribute *resourceapi.DeviceAttribute) *deviceAttributeList
 	}
 }
 
-// matchAttributeConstraint compares an attribute value across devices.
-// All devices must share the same value. When the set of devices is
-// empty, any device that has the attribute can be added. After that,
-// only matching devices can be added.
-//
-// We don't need to track *which* devices are part of the set, only
-// how many.
 // matchAttributeConstraint 要求所有相关设备共享同一属性值；列表属性按集合交集非空判断，标量按精确相等判断。
 // 字段：logger 为预置日志器；requestNames 为受影响的请求名集合（空表示全部）；attributeName 为属性全名。
 // features 决定比较语义；attributeProvider 用于解析属性值；attribute 为标量模式的基准值。
 // intersectionStack 保存列表模式下逐步收窄的交集（add 入栈、remove 出栈，回溯自动恢复）；numDevices 为已接纳设备数。
 type matchAttributeConstraint struct {
-	logger            klog.Logger // Includes name and attribute name, so no need to repeat in log messages.
+	logger            klog.Logger // 已包含名称与属性名，日志消息中无需重复。
 	requestNames      sets.Set[string]
 	attributeName     resourceapi.FullyQualifiedName
 	features          Features
 	attributeProvider attributeProvider
 
-	// For scalar values (existing behavior)
 	attribute *resourceapi.DeviceAttribute
 
-	// For list values (when DRAListTypeAttributes feature gate is enabled).
-	// intersectionStack[len-1] is the current intersection; each add() pushes and each remove() pops,
-	// so backtracking always restores the intersection to its pre-add state.
 	intersectionStack []*deviceAttributeListAsSet
 
 	numDevices int
@@ -1128,7 +924,6 @@ type matchAttributeConstraint struct {
 func (m *matchAttributeConstraint) add(request *requestData, device *draapi.Device, deviceID DeviceID) (bool, error) {
 	// 不受约束影响的请求，直接接纳该设备。
 	if m.requestNames.Len() > 0 && !m.matches(request) {
-		// Device not affected by constraint.
 		m.logger.V(7).Info("Constraint does not apply to request", "request", request.requestName())
 		return true, nil
 	}
@@ -1140,18 +935,14 @@ func (m *matchAttributeConstraint) add(request *requestData, device *draapi.Devi
 	}
 	// 设备没有该属性，不满足约束。
 	if attribute == nil {
-		// Doesn't have the attribute.
 		m.logger.V(7).Info("Constraint not satisfied, attribute not set")
 		return false, nil
 	}
 
 	// 第一台设备可直接入选，并据此初始化标量基准或列表交集。
 	if m.numDevices == 0 {
-		// The first device can always get picked.
-		// Initialize either scalar attribute or list set based on the attribute type.
 		// 列表模式：把首个属性转成集合并压栈作为初始交集。
 		if m.features.ListTypeAttributes {
-			// Convert attribute to set representation (both scalar and list)
 			// 属性类型未知，无法转成集合，拒绝。
 			first := attributeAsSet(attribute)
 			if first == nil {
@@ -1160,7 +951,6 @@ func (m *matchAttributeConstraint) add(request *requestData, device *draapi.Devi
 			}
 			m.intersectionStack = append(m.intersectionStack, first)
 		} else {
-			// Scalar attribute: use existing behavior
 			// 标量模式：直接记录首个属性值作为基准。
 			m.attribute = attribute
 		}
@@ -1170,10 +960,8 @@ func (m *matchAttributeConstraint) add(request *requestData, device *draapi.Devi
 	}
 
 	// 后续设备按集合或标量语义与基准比较。
-	// Check if we are matching with set-based logic or scalar-based logic
 	// 列表模式：与当前交集求交，交集为空则拒绝，否则压入收窄后的交集。
 	if m.features.ListTypeAttributes {
-		// Set-based matching: check if there is non-empty intersection
 		// 属性类型未知，拒绝。
 		newSet := attributeAsSet(attribute)
 		if newSet == nil {
@@ -1188,11 +976,9 @@ func (m *matchAttributeConstraint) add(request *requestData, device *draapi.Devi
 			return false, nil
 		}
 		// 交集非空：压栈保存收窄结果，便于回溯恢复。
-		// Push a narrowed copy so remove() can pop back to the previous intersection.
 		m.intersectionStack = append(m.intersectionStack, narrowed)
 	} else {
 		// 标量模式：按属性值类型逐一比较，与基准不同则拒绝。
-		// Scalar matching: use existing behavior
 		switch {
 		case attribute.StringValue != nil:
 			if m.attribute.StringValue == nil || *attribute.StringValue != *m.attribute.StringValue {
@@ -1209,17 +995,14 @@ func (m *matchAttributeConstraint) add(request *requestData, device *draapi.Devi
 				m.logger.V(7).Info("Bool values different")
 				return false, nil
 			}
+		// semver 2.0.0 要求最小规范形式（尤其禁止前导零），因此版本值可直接做字符串相等比较。
 		case attribute.VersionValue != nil:
-			// semver 2.0.0 requires that version strings are in their
-			// minimal form (in particular, no leading zeros). Therefore a
-			// strict "exact equal" check can do a string comparison.
 			if m.attribute.VersionValue == nil || *attribute.VersionValue != *m.attribute.VersionValue {
 				m.logger.V(7).Info("Version values different")
 				return false, nil
 			}
 		// 未知属性类型，拒绝。
 		default:
-			// Unknown value type, cannot match.
 			m.logger.V(7).Info("Unknown attribute type")
 			return false, nil
 		}
@@ -1235,14 +1018,12 @@ func (m *matchAttributeConstraint) add(request *requestData, device *draapi.Devi
 func (m *matchAttributeConstraint) remove(request *requestData, device *draapi.Device, deviceID DeviceID) {
 	// 不受约束影响的请求无需回滚。
 	if m.requestNames.Len() > 0 && !m.matches(request) {
-		// Device not affected by constraint.
 		return
 	}
 
 	// 计数减一；列表模式下同步弹出栈顶交集以恢复上一状态。
 	m.numDevices--
 	if m.features.ListTypeAttributes {
-		// Pop the current intersection; the previous entry on the stack becomes current or the stack is empty.
 		m.intersectionStack = m.intersectionStack[:m.numDevices]
 	}
 	m.logger.V(7).Info("Device removed from constraint set", "device", deviceID, "numDevices", m.numDevices)
@@ -1260,33 +1041,24 @@ func (m *matchAttributeConstraint) matches(request *requestData) bool {
 	}
 }
 
-// lookupStaticAttribute performs a lookup of a static device attribute
-// published directly by the driver on the candidate Device object.
-// It handles fully-qualified domain name matching and fallback to
-// unqualified attribute names if the driver domain matches.
 // lookupStaticAttribute 从设备发布的静态属性中按全名查找；若属性域名与驱动名一致，也支持用非限定名查找。
 func lookupStaticAttribute(device *draapi.Device, deviceID DeviceID, attributeName resourceapi.FullyQualifiedName) *resourceapi.DeviceAttribute {
 	// 先按完全限定名精确匹配。
-	// Fully-qualified match?
 	if attr, ok := device.Attributes[resourceapi.QualifiedName(attributeName)]; ok {
 		return &attr
 	}
 	// 查找域名分隔符；合法全名不应缺失该分隔符。
 	index := strings.Index(string(attributeName), "/")
 	if index < 0 {
-		// Should not happen for a valid fully qualified name.
 		return nil
 	}
 
 	// 域名与驱动名不一致且未精确命中，则属性不可用。
 	if string(attributeName[0:index]) != deviceID.Driver.String() {
-		// Not an attribute of the driver and not found above,
-		// so it is not available.
 		return nil
 	}
 
 	// 域名与驱动一致，用去掉域名后的 ID 再查一次。
-	// Domain matches the driver, so let's check just the ID.
 	if attr, ok := device.Attributes[resourceapi.QualifiedName(attributeName[index+1:])]; ok {
 		return &attr
 	}
@@ -1295,14 +1067,6 @@ func lookupStaticAttribute(device *draapi.Device, deviceID DeviceID, attributeNa
 	return nil
 }
 
-// lookupAttribute is the unified entry point for attribute resolution
-// in the experimental allocator. It implements the lookup precedence:
-//  1. If the attribute is defined as a derived attribute on the request,
-//     it compiles/evaluates the CEL expression, caches it in the
-//     request scope, and returns the synthesized virtual attribute.
-//  2. Otherwise, it falls back to looking up the static attribute on
-//     the Device object.
-//
 // lookupAttribute 是属性解析的统一入口：优先解析请求声明的派生属性（编译并求值 CEL，结果按设备与表达式缓存），否则回退到静态属性查找。
 func (alloc *allocator) lookupAttribute(request *requestData, device *draapi.Device, deviceID DeviceID, attributeName resourceapi.FullyQualifiedName) (*resourceapi.DeviceAttribute, error) {
 	// 若该属性在请求中被声明为派生属性，走 CEL 求值路径。
@@ -1339,32 +1103,9 @@ func (alloc *allocator) lookupAttribute(request *requestData, device *draapi.Dev
 	return lookupStaticAttribute(device, deviceID, attributeName), nil
 }
 
-// allocateOne iterates over all eligible devices (not in use, match selector,
-// satisfy constraints) for a specific required device. It returns true if
-// everything got allocated, an error if allocation needs to stop.
-//
-// allocateSubRequest is true when trying to allocate one particular subrequest.
-// This allows the logic for subrequests to call allocateOne with the same
-// device index without causing infinite recursion.
-//
-// startLocation provides the starting point when searching for the next device to
-// allocate. Since we have a list of pools, each with a list of slices which again
-// contains a list of devices, we have defined an order in which the devices will
-// be attempted for allocation. Since the order of devices doesn't matter within a
-// single request, we want to make sure we only attempt all combinations of devices,
-// and not search through all permutations (since many of them will have the same set
-// of devices and therefore be identical allocations). Note that the order of devices
-// does matter across requests and claims. So by providing the startLocation, we
-// make sure that the allocator only attempts allocations that follows the order
-// of the available devices, thereby avoiding different permutations. For example,
-// this means that for the devices [1, 2, 3], we will only attempt the following
-// possible allocations [1], [2], [3], [1, 2], [1, 3], [2, 3], and [1, 2, 3].
-//
-// The null startLocation (= all indices zero) means that all devices are considered.
-// The only situation where a non-null startLocation is used is when looking for the
-// next device within the same request.
 // allocateOne 为某个待分配设备遍历所有合格候选（未被占用、匹配选择器、满足约束），并递归为后续设备与请求求解；全部完成返回 true，确定无法完成返回错误或 false。
 // startLocation 提供搜索起点，使同一请求内的设备按固定顺序枚举、避免重复排列；零值表示从所有设备开始。
+// 同一请求内顺序无关，但跨请求与声明的顺序有意义。
 func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, startLocation deviceLocation) (bool, error) {
 	// 统计 allocateOne 的调用次数。
 	alloc.numAllocateOneInvocations.Add(1)
@@ -1376,9 +1117,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 
 	// 所有声明均已处理完毕，找到完整解，成功返回。
 	if r.claimIndex >= len(alloc.claimsToAllocate) {
-		// Done! If we were doing scoring, we would compare the current allocation result
-		// against the previous one, keep the best, and continue. Without scoring, we stop
-		// and use the first solution.
 		alloc.logger.V(6).Info("Allocation result found")
 		return true, nil
 	}
@@ -1386,41 +1124,23 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 	// 取当前声明；若其请求已全部处理完，递归进入下一个声明。
 	claim := alloc.claimsToAllocate[r.claimIndex]
 	if r.requestIndex >= len(claim.Spec.Devices.Requests) {
-		// Done with the claim, continue with the next one.
 		success, err := alloc.allocateOne(deviceIndices{claimIndex: r.claimIndex + 1}, false, deviceLocation{})
 		// 超出数量上限不是致命错误：后续声明可能因选择不同的子请求而成功，故此处吞掉该错误。
 		if errors.Is(err, errAllocationResultMaxSizeExceeded) {
-			// We don't need to propagate this further because
-			// this is not a fatal error. Retrying the claim under
-			// different circumstances may succeed if it uses
-			// subrequests and changing the allocation of some
-			// prior claim enables allocating a subrequest here
-			// which needs fewer devices.
 			return false, nil
 		}
 		return success, err
 	}
 
 	// r.subRequestIndex 仅在递归链内非零；用当前索引取出 requestData。
-	// r.subRequestIndex is zero unless the for loop below is in the
-	// recursion chain.
 	requestKey := requestIndices{claimIndex: r.claimIndex, requestIndex: r.requestIndex, subRequestIndex: r.subRequestIndex}
 	requestData := alloc.requestData[requestKey]
 
 	// 子请求特殊处理：只需选中其中一个即可进入下一请求；首次遇到子请求时进入此分支。
-	// Subrequests are special: we only need to allocate one of them, then
-	// we can move on to the next request. We enter this for loop when
-	// hitting the first subrequest, but not if we are already working on a
-	// specific subrequest.
 	// 尚未锁定具体子请求时，依次尝试每个子请求。
 	if !allocateSubRequest && requestData.parentRequest != nil {
-		// Keep track of whether all attempts to do allocation with the
-		// subrequests results in the allocation result limit exceeded.
-		// If so, there is no need to make attempts with other devices
-		// in the previous request (if any), except when
-		// it is a firstAvailable request where some sub-requests
-		// need less devices than others.
-		// 记录所有子请求是否都因超出数量上限而失败，以决定是否向上传递该错误。
+		// 记录所有子请求是否都因超出数量上限而失败；此时通常可停止尝试上一请求的其他设备组合。
+		// 但 firstAvailable 的某些子请求可能需要更少设备，不能据此提前判定整个搜索无解。
 		allAllocationExceeded := true
 		// 按序尝试各子请求；索引超出范围说明全部尝试完毕。
 		for subRequestIndex := 0; ; subRequestIndex++ {
@@ -1428,12 +1148,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 			nextSubRequestKey.subRequestIndex = subRequestIndex
 			// 已无更多子请求：若全部因超限失败则向上传播该错误，否则返回失败。
 			if _, ok := alloc.requestData[nextSubRequestKey]; !ok {
-				// Past the end of the subrequests without finding a solution -> give up.
-				//
-				// Return errAllocationResultMaxSizeExceeded if all
-				// attempts for the subrequests failed to due to reaching
-				// the max size limit. This would mean that there are no
-				// solution that involves the previous request (if any).
 				if allAllocationExceeded {
 					return false, errAllocationResultMaxSizeExceeded
 				}
@@ -1442,71 +1156,47 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 
 			// 锁定当前子请求下标并递归分配（allocateSubRequest=true 防止无限递归）。
 			r.subRequestIndex = subRequestIndex
-			success, err := alloc.allocateOne(r, true /* prevent infinite recusion */, deviceLocation{})
-			// If we reached the allocation result limit, we can try
-			// with the next subrequest if there is one. It might request
-			// fewer devices, so it might succeed.
+			success, err := alloc.allocateOne(r, true /* 防止无限递归 */, deviceLocation{})
 			// 超限则尝试下一个子请求（它可能需要更少设备）。
 			if errors.Is(err, errAllocationResultMaxSizeExceeded) {
 				continue
 			}
 			// 非超限错误直接返回；同时标记并非全部子请求都因超限失败。
-			// If we get here, at least one of the subrequests failed for a
-			// different reason than errAllocationResultMaxSizeExceeded.
 			allAllocationExceeded = false
 			if err != nil {
 				return false, err
 			}
 			// 子请求分配成功：记录被选中的子请求下标并返回成功。
-			// If allocation with a subrequest succeeds, return without
-			// attempting the remaining subrequests.
 			if success {
-				// Store the index of the selected subrequest
 				requestData.selectedSubRequestIndex = subRequestIndex
 				alloc.requestData[requestKey] = requestData
 				return true, nil
 			}
 		}
-		// This is unreachable, so no need to have a return statement here.
 	}
 
 	// 取当前请求访问器，并判断是否为“all”模式。
-	// Look up the current request that we are attempting to satisfy. This can
-	// be either a request or a subrequest.
 	request := requestData.request
 	doAllDevices := request.allocationMode() == resourceapi.DeviceAllocationModeAll
 
 	// “all”模式但无候选设备，分配失败。
-	// At least one device is required for 'All' allocation mode.
 	if doAllDevices && len(requestData.allDevices) == 0 {
 		alloc.logger.V(6).Info("Allocation for 'all' devices didn't succeed: no devices found", "claim", klog.KObj(claim), "request", requestData.request.name())
 		return false, nil
 	}
 
 	// 当前请求所需设备已全部分配完，进入下一个请求；恢复 allocateSubRequest=false。
-	// We already know how many devices per request are needed.
 	if r.deviceIndex >= requestData.numDevices {
-		// Done with request, continue with next one. We have completed the work for
-		// the request or subrequest, so we can no longer be allocating devices for
-		// a subrequest.
 		success, err := alloc.allocateOne(deviceIndices{claimIndex: r.claimIndex, requestIndex: r.requestIndex + 1}, false, deviceLocation{})
 		// 向上传播超限错误：说明后续请求均无法在限制内分配，当前路径无解。
-		// We want to propagate any errAllocationResultMaxSizeExceeded to the caller. If
-		// that error is returned here, it means none of the requests/subrequests after this one
-		// could be allocated while staying within the limit on the number of devices, so there
-		// are no solution in the current request/subrequest that would work.
 		return success, err
 	}
 
 	// 比较剩余需求与结果剩余容量，用比较而非相加防止溢出；超出则触发更积极的回溯。
-	// Compare rather than add, so a large count cannot wrap the sum. deviceIndex
-	// is below numDevices here, checked above, so remaining stays positive.
 	remaining := requestData.numDevices - r.deviceIndex
 	available := resourceapi.AllocationResultsMaxSize - len(alloc.result[r.claimIndex].devices)
 	// 返回特殊错误，便于调用方识别并更积极地回溯。
 	if remaining > available {
-		// Return a special error so we can identify this situation in the
-		// callers and do more aggressive backtracking.
 		return false, errAllocationResultMaxSizeExceeded
 	}
 
@@ -1517,8 +1207,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 
 	// “all”模式：候选设备已预先确定，只需逐个尝试占用。
 	if doAllDevices {
-		// For "all" devices we already know which ones we need. We
-		// just need to check whether we can use them.
 		// 尝试占用下一个候选设备；失败则不尝试其它组合，直接返回无解。
 		deviceWithID := requestData.allDevices[r.deviceIndex]
 		success, deallocate, err := alloc.allocateDevice(r, deviceWithID, true)
@@ -1527,19 +1215,12 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 		}
 		// “all”模式的设备顺序无关，某台不可用即整体无解。
 		if !success {
-			// The order in which we allocate "all" devices doesn't matter,
-			// so we only try with the one which was up next. If we couldn't
-			// get all of them, then there is no solution and we have to stop.
 			return false, nil
 		}
 		// 递归分配下一台设备（只需一种组合，无需传递 startLocation）。
-		// No need to propagate the startLocation here since we only try one combination of devices.
 		done, err := alloc.allocateOne(deviceIndices{claimIndex: r.claimIndex, requestIndex: r.requestIndex, subRequestIndex: r.subRequestIndex, deviceIndex: r.deviceIndex + 1}, allocateSubRequest, deviceLocation{})
 		// 后续失败或出错时回滚当前设备再返回。
 		if err != nil || !done {
-			// If we get an error or didn't complete, we need to backtrack. Depending
-			// on the situation we might be able to retry, so we make sure we
-			// deallocate.
 			deallocate()
 			return false, err
 		}
@@ -1547,20 +1228,13 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 	}
 
 	// 普通模式：按池、切片、设备的顺序遍历候选设备。
-	// We need to find suitable devices.
 	for poolIndex := startLocation.poolIndex; poolIndex < len(alloc.pools); poolIndex++ {
 		pool := alloc.pools[poolIndex]
 		// 跳过无效或不完整的池，但其它池中可能有可用设备，故不直接报错。
-		// We don't allocate devices from invalid or incomplete pools, but
-		// don't error out here since there might be available devices in other
-		// pools.
 		if pool.IsIncomplete || pool.IsInvalid {
 			continue
 		}
 		// 仅当仍在起始池时才从 startLocation 指定的切片开始，否则从第一个切片开始。
-		// We should start at the slice provided by startLocation unless we searched through
-		// all devices in the previous pool and have started at the next pool. When this happens,
-		//  we should start at the first slice in the pool.
 		sliceStart := 0
 		if poolIndex == startLocation.poolIndex {
 			sliceStart = startLocation.sliceIndex
@@ -1569,9 +1243,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 			slice := pool.DeviceSlicesTargetingNode[sliceIndex]
 
 			// 仅当仍在起始池与起始切片时才从 startLocation 指定的设备开始。
-			// We should start at the device provided by startLocation unless we searched through
-			// all devices in the previous slice and have started at the next slice. When this happens,
-			//  we should start at the first device in the pool.
 			deviceStart := 0
 			if poolIndex == startLocation.poolIndex &&
 				sliceIndex == startLocation.sliceIndex {
@@ -1582,7 +1253,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 				deviceID := DeviceID{Driver: pool.Driver, Pool: pool.Pool, Device: slice.Spec.Devices[deviceIndex].Name}
 
 				// 先做开销最小的“占用”检查：管理访问看同一声明内是否占用，普通请求看全局是否占用。
-				// Checking for "in use" is cheap and thus gets done first.
 				if request.adminAccess() && alloc.allocatingDeviceForClaim(deviceID, r.claimIndex) {
 					alloc.logger.V(7).Info("Device in use in same claim", "device", deviceID)
 					continue
@@ -1593,7 +1263,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 				}
 
 				// 再检查选择器匹配，结果带缓存。
-				// Next check selectors.
 				requestKey := requestIndices{claimIndex: r.claimIndex, requestIndex: r.requestIndex, subRequestIndex: r.subRequestIndex}
 				selectable, err := alloc.isSelectable(requestKey, requestData, slice, deviceIndex)
 				if err != nil {
@@ -1605,7 +1274,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 				}
 				// 校验容量是否满足请求。
 				if alloc.features.ConsumableCapacity {
-					// Next validate whether resource request over capacity
 					device := slice.Spec.Devices[deviceIndex]
 					success, err := alloc.CmpRequestOverCapacity(requestData.request, slice, device)
 					if err != nil {
@@ -1619,7 +1287,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 				}
 
 				// 通过前述检查后，构造候选设备并尝试占用（含计数器、约束等检查）。
-				// Finally treat as allocated and move on to the next device.
 				device := deviceWithID{
 					id:     deviceID,
 					Device: &slice.Spec.Devices[deviceIndex],
@@ -1632,7 +1299,6 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 				}
 				// 被占用或违反约束，跳过。
 				if !allocated {
-					// In use or constraint violated...
 					alloc.logger.V(7).Info("Device not usable", "device", deviceID)
 					continue
 				}
@@ -1649,26 +1315,15 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 					deviceIndex: deviceIndex + 1,
 				}
 				// 递归分配同一请求的下一台设备；若找到解则立即返回。
-				// This is the allocation attempt for the next device in the same request.
-				// If allocateOne finds out that it is done with the request, it moves to
-				// the next without setting a start location, so each request is free to try
-				// all devices.
 				done, err := alloc.allocateOne(deviceKey, allocateSubRequest, nextLocation)
-				// If we found a solution, we can stop.
 				if err == nil && done {
 					return done, nil
 				}
 
 				// 未找到解：回滚临时占用，再继续尝试其它设备；若遇错误则向上返回。
-				// Otherwise we didn't find a solution, and we need to deallocate
-				// so the temporary allocation is correct for trying other devices.
 				deallocate()
 
 				if err != nil {
-					// If we hit an error, we return. This might be that we reached
-					// the allocation size limit, and if so, it will be caught further
-					// up the stack and other subrequests will be attempted if there
-					// are any.
 					return false, err
 				}
 			}
@@ -1676,18 +1331,15 @@ func (alloc *allocator) allocateOne(r deviceIndices, allocateSubRequest bool, st
 	}
 
 	// 遍历完所有候选仍无解，返回失败。
-	// If we get here without finding a solution, then there is none.
 	return false, nil
 }
 
-// isSelectable checks whether a device satisfies the request and class selectors.
 // isSelectable 检查设备是否满足请求的类选择器与请求选择器（含每设备节点选择），结果按（设备, 请求）缓存。
 func (alloc *allocator) isSelectable(r requestIndices, requestData requestData, slice *draapi.ResourceSlice, deviceIndex int) (bool, error) {
 	// 特性未启用时，带绑定条件的设备不可选。
 	device := &slice.Spec.Devices[deviceIndex]
 	if !alloc.features.DeviceBindingAndStatus &&
 		len(device.BindingConditions) > 0 {
-		// Devices with binding conditions are not supported, feature is off.
 		return false, nil
 	}
 
@@ -1695,7 +1347,6 @@ func (alloc *allocator) isSelectable(r requestIndices, requestData requestData, 
 	deviceID := DeviceID{Driver: slice.Spec.Driver, Pool: slice.Spec.Pool.Name, Device: slice.Spec.Devices[deviceIndex].Name}
 	matchKey := matchKey{DeviceID: deviceID, requestIndices: r}
 	if matches, ok := alloc.deviceMatchesRequest[matchKey]; ok {
-		// No need to check again.
 		return matches, nil
 	}
 
@@ -1740,9 +1391,6 @@ func (alloc *allocator) isSelectable(r requestIndices, requestData requestData, 
 
 }
 
-// CmpRequestOverCapacity checks if the given device has sufficient remaining capacity
-// to satisfy the resource request.
-// Return true if success.
 // CmpRequestOverCapacity 检查设备剩余容量（已考虑历史分配与本次正在分配的量）能否满足请求。
 func (alloc *allocator) CmpRequestOverCapacity(request requestAccessor, slice *draapi.ResourceSlice, device draapi.Device) (bool, error) {
 	// 取本次正在分配中该设备已累计消耗的容量，结合历史聚合容量进行比较。
@@ -1758,15 +1406,11 @@ func (alloc *allocator) CmpRequestOverCapacity(request requestAccessor, slice *d
 
 // selectorsMatch 逐个求值 CEL 选择器：全部匹配返回 true；编译或运行时错误被包装为带类/请求信息的错误。
 func (alloc *allocator) selectorsMatch(r requestIndices, device *draapi.Device, deviceID DeviceID, class *resourceapi.DeviceClass, selectors []resourceapi.DeviceSelector) (bool, error) {
-	// 按需编译选择器表达式；编译失败通常意味着调度器版本落后于集群。
+	// 按需编译选择器表达式；新版本 API server 接受表达式后若集群降级，旧代码可能无法编译。
+	// stored expression 通常可避免此情况，但运行代码仍可能比集群旧多个版本。
 	for i, selector := range selectors {
 		expr := alloc.celCache.GetOrCompile(selector.CEL.Expression)
 		if expr.Error != nil {
-			// Could happen if some future apiserver accepted some
-			// future expression and then got downgraded. Normally
-			// the "stored expression" mechanism prevents that, but
-			// this code here might be more than one release older
-			// than the cluster it runs in.
 			// 编译错误根据是否来自设备类分别包装。
 			if class != nil {
 				return false, fmt.Errorf("class %s: selector #%d: CEL compile error: %w", class.Name, i, expr.Error)
@@ -1775,8 +1419,6 @@ func (alloc *allocator) selectorsMatch(r requestIndices, device *draapi.Device, 
 		}
 
 		// 将内部 Device 转换为 v1.Device 供 CEL 使用。
-		// If this conversion turns out to be expensive, the CEL package could be converted
-		// to use unique strings.
 		var d resourceapi.Device
 		if err := draapi.Convert_api_Device_To_v1_Device(device, &d, nil); err != nil {
 			return false, fmt.Errorf("convert Device %s: %w", deviceID, err)
@@ -1804,26 +1446,11 @@ func (alloc *allocator) selectorsMatch(r requestIndices, device *draapi.Device, 
 	}
 
 	// 全部匹配，返回 true。
-	// All of them match.
 	return true, nil
 }
 
-// allocateDevice checks device availability and constraints for one
-// candidate. The device must be selectable.
-//
-// r identifies the request for which allocation is attempted.
-// The device is the candidate under consideration.
-// If "must" is true, then it is okay (but not required) to return an error which describes in more detail why allocation wasn't possible.
-// This is used when the caller wants exactly this device and will give up if it cannot allocate it.
-//
-// If that candidate works out okay, the shared state gets updated
-// as if that candidate had been allocated. If allocation cannot continue later
-// and must try something else, then the rollback function can be invoked to
-// restore the previous state.
-//
-// The rollback function is only provided in case of a successful allocation
-// (true and no error).
-// allocateDevice 检查单个候选设备的可用性与约束；成功时更新共享状态并返回回滚闭包，失败时返回 false（must 为 true 时可返回详细错误）。调用方需保证设备已通过 isSelectable。
+// allocateDevice 检查单个候选设备的可用性与约束；成功时更新共享状态并返回回滚闭包，失败时返回 false（must 为 true 时可返回详细错误）。
+// 仅分配成功且无错误时返回闭包，供后续回溯恢复状态。调用方需保证设备已通过 isSelectable。
 func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, must bool) (bool, func(), error) {
 	// 取当前请求与请求数据，解析是否允许多次分配（共享）。
 	claim := alloc.claimsToAllocate[r.claimIndex]
@@ -1857,16 +1484,12 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 	}
 
 	// 消耗计数器的设备需要 partitionable devices 特性支持。
-	// Devices that consume counters can not be allocated if the PartitionableDevices feature
-	// is not enabled.
 	if !alloc.features.PartitionableDevices && len(device.ConsumesCounters) > 0 {
 		alloc.logger.V(7).Info("Device consumes counters, but the partitionable devices feature is not enabled", "device", device.id)
 		return false, nil, nil
 	}
 
 	// 已在使用的可共享设备：其计数器已计入，不再重复计费。
-	// Skip the counter check for an allow-multiple device in use: its counters are already
-	// accounted for, so a further share must not charge them again.
 	skipCounterCheck := allowMultipleAllocations && alloc.deviceCapacityInUse(device.id)
 
 	// 记录父请求名，用于填充结果。
@@ -1875,26 +1498,12 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 		parentRequestName = requestData.parentRequest.name()
 	}
 
-	// state records the mutations this call makes so rollbackDevice can undo
-	// them. Every rejection path after the first mutation calls rollbackDevice
-	// synchronously, and the success path returns a closure that calls the same
-	// helper during backtracking, so both undo routes stay identical. Passing
-	// the state by value to rollbackDevice keeps it (and the flags) on the
-	// stack for the rejection paths; only the success closure escapes.
 	// state 记录本次调用所做的全部状态变更，供拒绝路径同步回滚或成功路径返回的闭包在回溯时回滚。
 	state := deviceRollbackState{
 		previousNumResults: len(alloc.result[r.claimIndex].devices),
 	}
 
 	// 检查兼容性组约束：设备只能与已占用同一计数器集且兼容性组有交集的设备共同分配。
-	// Enforce the DRADeviceCompatibilityGroups constraint: a device may only be
-	// co-allocated with the other devices already drawing from a counter set when
-	// their declared compatibility groups intersect. This is gated identically to
-	// the counter check below so that additional shares of an already-allocated
-	// device (skipCounterCheck) are not re-evaluated, and runs before it so that
-	// a rejection returns before any counters have been reserved. While the
-	// feature is disabled there is nothing to check: GatherPools already ignored
-	// all slices with compatibility groups.
 	// 启用特性且需要检查计数器时，先检查并消费兼容性组交集。
 	if alloc.features.CompatibilityGroups && !skipCounterCheck && len(device.ConsumesCounters) > 0 {
 		// 不兼容则直接拒绝（此时计数器尚未预留）。
@@ -1908,20 +1517,11 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 	}
 
 	// 校验计数器是否充足。
-	// The API validation logic has checked the ConsumesCounters referred should exist inside SharedCounters.
-	// state.countersReserved records whether checkAvailableCounters actually
-	// reserved this device's counters. It is not the same as
-	// len(device.ConsumesCounters) > 0, because skipCounterCheck can bypass the
-	// reservation.
 	// 需要检查时：验证计数器可用性，失败则回滚已消费的兼容性组并返回。
 	if !skipCounterCheck && len(device.ConsumesCounters) > 0 {
-		// If a device consumes counters from a counter set, verify that
-		// there is sufficient counters available.
 		ok, err := alloc.checkAvailableCounters(device)
 		// 计数器不足或出错：同步回滚后返回。
 		if err != nil || !ok {
-			// Unwind the compatibility-group intersection consumed above now
-			// that the device is rejected; nothing else has been mutated yet.
 			alloc.rollbackDevice(r, device, &requestData, state)
 			if err != nil {
 				return false, nil, err
@@ -1933,16 +1533,13 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 		state.countersReserved = true
 	}
 
-	// 检查设备污点是否被请求容忍；不被容忍则回滚并拒绝。
-	// Might be tainted, in which case the taint has to be tolerated.
-	// The check is skipped if the feature is disabled.
+	// 特性开启时检查设备污点，未被容忍则回滚并拒绝；特性关闭时跳过检查。
 	if alloc.features.DeviceTaints && taintPreventsAllocation(device.Device, request) {
 		alloc.rollbackDevice(r, device, &requestData, state)
 		return false, nil, nil
 	}
 
 	// 检查声明级约束；任一约束不满足则回滚并拒绝。
-	// It's available. Now check constraints.
 	// 依次应用该声明的所有约束。
 	for _, constraint := range alloc.constraints[r.claimIndex] {
 		added, err := constraint.add(&requestData, device.Device, device.id)
@@ -1955,8 +1552,6 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 		if !added {
 			alloc.rollbackDevice(r, device, &requestData, state)
 			if must {
-				// It does not make sense to declare a claim where a constraint prevents getting
-				// all devices. Treat this as an error.
 				return false, nil, fmt.Errorf("claim %s, request %s: cannot add device %s because a claim constraint would not be satisfied", klog.KObj(claim), request.name(), device.id)
 			}
 			return false, nil, nil
@@ -1966,8 +1561,6 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 	}
 
 	// 所有约束满足：将设备标记为占用（管理访问或共享分配除外）并记录。
-	// All constraints satisfied. Mark as in use (unless we do admin access or allow multiple allocations)
-	// and record the result.
 	alloc.logger.V(7).Info("Device allocated", "device", device.id)
 
 	// 非共享分配：把当前声明索引加入占用集合。
@@ -1984,11 +1577,8 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 	var shareID *types.UID
 	// 再次确认容量充足，失败则回滚。
 	if alloc.features.ConsumableCapacity {
-		// Validate whether resource request over capacity
 		success, err := alloc.CmpRequestOverCapacity(requestData.request, device.slice, *device.Device)
 		if err != nil {
-			// The overflow guard already ran during validation, so an error here is
-			// unexpected. Roll back and surface it rather than swallowing it.
 			alloc.rollbackDevice(r, device, &requestData, state)
 			return false, nil, fmt.Errorf("claim %s, request %s: rechecking capacity for device %s: %w", klog.KObj(claim), requestData.request.name(), device.id, err)
 		}
@@ -2009,10 +1599,6 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 			shareID = GenerateNewShareID()
 			alloc.logger.V(7).Info("Device capacity allocated", "device", device.id,
 				"consumed capacity", klog.Format(consumedCapacity))
-			// A prior share of this device may already hold the capacity entry.
-			// That entry doubles as the "already shared" marker that lets a later
-			// share skip the counter check, so record whether it predated this
-			// share; rollback must not delete it while another share still needs it.
 			// 记录该设备此前是否已有容量条目：该条目同时充当“已共享”标记，回滚时不能误删。
 			_, state.capacityEntryExisted = alloc.allocatingCapacity[device.id]
 			alloc.allocatingCapacity.Insert(NewDeviceConsumedCapacity(device.id, consumedCapacity))
@@ -2042,9 +1628,6 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 	alloc.result[r.claimIndex].devices = append(alloc.result[r.claimIndex].devices, result)
 	state.resultAdded = true
 
-	// Only this success path builds an escaping closure, so backtracking can undo
-	// a committed candidate. undo is a copy: capturing state directly would move it
-	// and its flags to the heap on the rejection paths too, which never escape.
 	// 仅成功路径创建逃逸的回滚闭包；拷贝 state 以避免拒绝路径也把它移到堆上。
 	undo := state
 	return true, func() {
@@ -2052,17 +1635,11 @@ func (alloc *allocator) allocateDevice(r deviceIndices, device deviceWithID, mus
 	}, nil
 }
 
-// deviceRollbackState records the mutations allocateDevice makes for a single
-// candidate so rollbackDevice can undo them, both when the candidate is rejected
-// and when the backtracking search abandons a previously successful candidate.
 // deviceRollbackState 记录 allocateDevice 对单个候选设备所做的状态变更，供 rollbackDevice 在拒绝或回溯时撤销。
 // 字段：restoreCompatibilityGroups 恢复兼容性组交集；countersReserved 标记计数器是否已预留；constraintsAdded 记录成功添加的约束数。
 // deviceMarked 标记是否加入占用集合；capacityInserted 与 capacityEntryExisted 记录容量条目的插入与原有状态。
 // resultAdded 标记是否追加结果；previousNumResults 为追加前的切片长度；consumedCapacity 为本次消耗的容量。
 type deviceRollbackState struct {
-	// restoreCompatibilityGroups, when non-nil, reverts the rolling
-	// compatibility-group intersection consumed for this device by
-	// checkAndConsumeCompatibilityGroups.
 	restoreCompatibilityGroups func()
 	countersReserved           bool
 	constraintsAdded           int
@@ -2074,9 +1651,6 @@ type deviceRollbackState struct {
 	consumedCapacity           map[resourceapi.QualifiedName]resource.Quantity
 }
 
-// rollbackDevice reverses the mutations recorded in state, in the opposite order
-// they were applied. It is called synchronously on the rejection paths and, via
-// the closure returned on success, during backtracking.
 // rollbackDevice 按与施加相反的顺序撤销 state 记录的所有变更；在拒绝路径同步调用，在成功路径通过返回的闭包于回溯时调用。
 func (alloc *allocator) rollbackDevice(r deviceIndices, device deviceWithID, requestData *requestData, state deviceRollbackState) {
 	// 截断结果切片，撤销结果追加。
@@ -2087,9 +1661,6 @@ func (alloc *allocator) rollbackDevice(r deviceIndices, device deviceWithID, req
 	if state.capacityInserted {
 		alloc.allocatingCapacity.Remove(NewDeviceConsumedCapacity(device.id, state.consumedCapacity))
 		if state.capacityEntryExisted {
-			// Remove drops the entry once it becomes empty, which also erases the
-			// shared marker that the earlier share still relies on. Restore an empty
-			// entry in that case so the earlier share stays accounted as shared.
 			// Remove 会在条目变空时删除它，抹掉先前份额依赖的共享标记，因此需补回空条目。
 			if _, found := alloc.allocatingCapacity[device.id]; !found {
 				alloc.allocatingCapacity[device.id] = NewConsumedCapacity()
@@ -2114,8 +1685,6 @@ func (alloc *allocator) rollbackDevice(r deviceIndices, device deviceWithID, req
 	}
 	// 仅完整分配过的候选才有结果，此处为真正的回溯释放。
 	if state.resultAdded {
-		// Only a fully allocated candidate recorded a result, so this is a real
-		// deallocation during backtracking, not a rejection rollback.
 		alloc.logger.V(7).Info("Device deallocated", "device", device.id)
 	}
 }
@@ -2125,7 +1694,6 @@ func taintPreventsAllocation(device *draapi.Device, request requestAccessor) boo
 	// 遍历污点，只处理已知生效类型。
 	for _, taint := range device.Taints {
 		switch taint.Effect {
-		// Only known effects prevent allocation, others (including None) are ignored.
 		case resourceapi.DeviceTaintEffectNoExecute, resourceapi.DeviceTaintEffectNoSchedule:
 			// 污点未被容忍则阻止分配。
 			if !taintTolerated(taint, request) {
@@ -2147,27 +1715,15 @@ func taintTolerated(taint resourceapi.DeviceTaint, request requestAccessor) bool
 	return false
 }
 
-// checkAvailableCounters checks if there are enough counters available to allocate
-// the specified device.
-//
-// Gets called only if the partitionable devices feature is enabled and the device
-// consumes counters.
 // checkAvailableCounters 检查池中是否有足够的计数器可供分配该设备；仅在 partitionable devices 特性启用且设备消耗计数器时调用。
 func (alloc *allocator) checkAvailableCounters(device deviceWithID) (bool, error) {
 	// 先读缓存：可用计数器按池惰性计算一次后不再变化。
 	pool := device.pool
 	poolID := pool.PoolID
 
-	// Check first if the available counters for this pool have already been
-	// calculated.
 	alloc.mutex.RLock()
 	availableCountersForPool, found := alloc.availableCounters[poolID]
 	alloc.mutex.RUnlock()
-	// If not, we need to do it now. But we store the result so it doesn't need
-	// to be calculated again.
-	// Since this is computed without holding the lock on the mutex, other goroutines
-	// might also do this work. But the input will be the same to all of them, so
-	// the result will also always be the same.
 	// 未命中时计算；因计算不持锁，多个 goroutine 可能重复计算，但输入相同故结果一致。
 	if !found {
 		// 从池定义拷贝计数器，作为可用量的起点。
@@ -2183,9 +1739,6 @@ func (alloc *allocator) checkAvailableCounters(device deviceWithID) (bool, error
 		}
 
 		// 扣减已完成分配的设备所消耗的计数器；正在分配的设备由 consumedCounters 单独跟踪。
-		// Update the data structure to reflect counters already consumed by allocated devices. This
-		// only includes devices where the allocation process has completed, so this will never
-		// change during the allocation process.
 		// 遍历 targeting 与非 targeting 本节点的 slice。
 		for _, resourceSlices := range [][]*draapi.ResourceSlice{pool.DeviceSlicesTargetingNode, pool.DeviceSlicesNotTargetingNode} {
 			for _, slice := range resourceSlices {
@@ -2196,8 +1749,6 @@ func (alloc *allocator) checkAvailableCounters(device deviceWithID) (bool, error
 						Device: device.Name,
 					}
 					// 未分配的设备不消耗计数器。
-					// Devices that aren't allocated doesn't consume any counters, so we don't
-					// need to consider them.
 					if !internal.IsDeviceAllocated(deviceID, &alloc.allocatedState) {
 						continue
 					}
@@ -2208,38 +1759,26 @@ func (alloc *allocator) checkAvailableCounters(device deviceWithID) (bool, error
 							existingCounter, ok := availableCountersForCounterSet[name]
 							if !ok {
 								// API 校验保证引用的计数器存在；此处防御性跳过。
-								// the API validation logic has been added to make sure the counters referred should exist in counter sets.
 								continue
 							}
 							// 可用量可为负，视为无可用计数器。
-							// This can potentially result in negative available counters. That is fine,
-							// we just treat it as no counters available.
 							existingCounter.Value.Sub(c.Value)
 							availableCountersForCounterSet[name] = existingCounter
 						}
 					}
-					// Note that we don't include devices in the alloc.allocatingDevices here since
-					// counters consumed by devices for the current claims are tracked in
-					// alloc.consumedCounters
 				}
 			}
 		}
 
 		// 写入缓存，避免重复计算。
-		// Set the available counters on the allocator so we don't have to
-		// compute this again.
 		alloc.mutex.Lock()
 		alloc.availableCounters[poolID] = availableCountersForPool
 		alloc.mutex.Unlock()
 	}
 
 	// 把当前设备消耗的计数器累加到本次分配的已消耗结构中。
-	// Update the consumedCounters data structure with the counters consumed
-	// by the current device.
 	// 若该池尚无已消耗记录则初始化。
 	consumedCountersForPool, found := alloc.consumedCounters[poolID]
-	// If no devices in the allocating state have consumed any counters from the current
-	// pool, initialize the data structure.
 	if !found {
 		consumedCountersForPool = make(counterSets)
 		alloc.consumedCounters[poolID] = consumedCountersForPool
@@ -2265,9 +1804,6 @@ func (alloc *allocator) checkAvailableCounters(device deviceWithID) (bool, error
 	}
 
 	// 比较可用量与已消耗量，超限则回滚当前设备的消耗并返回失败。
-	// Check that we didn't exceed the availability of any counters by allocating
-	// the current device. If we did, the current set of devices doesn't work, so we
-	// update the consumed counters to no longer reflect the current device.
 	// 逐个计数器集、逐个计数器比较。
 	for availableCounterSetName, availableCounters := range availableCountersForPool {
 		consumedCounters := consumedCountersForPool[availableCounterSetName]
@@ -2297,8 +1833,6 @@ func (alloc *allocator) deviceCapacityInUse(deviceID DeviceID) bool {
 		return true
 	}
 	// 无按份额容量的历史共享分配只记录在 AllocatedSharedDeviceIDs 中。
-	// A persisted allow-multiple allocation with no per-share capacity is recorded
-	// only in AllocatedSharedDeviceIDs (with no AggregatedCapacity entry).
 	for sharedDeviceID := range alloc.allocatedState.AllocatedSharedDeviceIDs {
 		if sharedDeviceID.GetDeviceID() == deviceID {
 			return true
@@ -2324,8 +1858,6 @@ func (alloc *allocator) allocatingCapacityForAnyClaim(deviceID DeviceID) bool {
 	return found
 }
 
-// deallocateCountersForDevice subtracts the consumed counters of the provided
-// device from the consumedCounters data structure.
 // deallocateCountersForDevice 从已消耗计数器结构中扣减该设备消耗的计数器。
 func (alloc *allocator) deallocateCountersForDevice(device deviceWithID) {
 	poolID := device.pool.PoolID
@@ -2343,16 +1875,8 @@ func (alloc *allocator) deallocateCountersForDevice(device deviceWithID) {
 	}
 }
 
-// compatibilityGroupsBaselineForPool returns, per counter set in the pool, the
-// compatibility-group intersection contributed by the devices that are already
-// allocated (i.e. recorded in allocatedState). Both counter set membership and
-// the declared group values are read live from the source ResourceSlice,
-// exactly like checkAvailableCounters does for counters: an allocated device's
-// consumption is assumed stable in the slice. A device that is allocated but no
-// longer present in the slice contributes nothing, just as its counters do not.
-//
-// The result is computed once per pool and cached, mirroring availableCounters.
 // compatibilityGroupsBaselineForPool 按池、按计数器集返回已分配设备贡献的兼容性组交集基线；与计数器一样从源 ResourceSlice 实时读取，按池惰性计算并缓存。
+// 已分配设备若已不在切片中，则不贡献组基线，其计数器同样不计入，以保持两种状态一致。
 func (alloc *allocator) compatibilityGroupsBaselineForPool(pool *Pool) map[string]compatibilityGroupIntersection {
 	// 先查缓存，命中即返回。
 	poolID := pool.PoolID
@@ -2396,13 +1920,6 @@ func (alloc *allocator) compatibilityGroupsBaselineForPool(pool *Pool) map[strin
 	return baseline
 }
 
-// checkAndConsumeCompatibilityGroups verifies that the candidate device can be
-// co-allocated, for every counter set it consumes, with the devices already
-// placed on that counter set (allocated peers plus in-flight allocations of the
-// current attempt). If so it folds the candidate's groups into the rolling
-// intersection and returns a rollback function that restores the previous state
-// when the allocator backtracks. If not, it leaves the running state unchanged
-// and returns false.
 // checkAndConsumeCompatibilityGroups 检查候选设备在其消耗的每个计数器集上，能否与已分配及本次正在分配的设备共存；能则将设备的兼容性组并入滚动交集并返回回滚函数，不能则恢复原状并返回 false。
 func (alloc *allocator) checkAndConsumeCompatibilityGroups(device deviceWithID) (bool, func()) {
 	// 取该池的滚动交集映射（不存在则初始化）与已分配设备基线。
@@ -2423,8 +1940,6 @@ func (alloc *allocator) checkAndConsumeCompatibilityGroups(device deviceWithID) 
 	var saved []savedEntry
 	// 回滚函数按逆序恢复，防止同一计数器集重复记录时回滚出错。
 	rollback := func() {
-		// Restore in reverse order so repeated entries for the same counter set
-		// (a device cannot have them, but be defensive) unwind correctly.
 		for idx := len(saved) - 1; idx >= 0; idx-- {
 			s := saved[idx]
 			if s.existed {
@@ -2441,7 +1956,6 @@ func (alloc *allocator) checkAndConsumeCompatibilityGroups(device deviceWithID) 
 		// 首次触及该计数器集时，以已分配设备的基线交集为种子。
 		cur, existed := running[counterSetName]
 		if !existed {
-			// Seed from the already-allocated peers for this counter set.
 			cur = baseline[counterSetName]
 		}
 		// 若当前交集不接受该设备的兼容性组，则回滚并返回不兼容。
@@ -2459,13 +1973,9 @@ func (alloc *allocator) checkAndConsumeCompatibilityGroups(device deviceWithID) 
 	return true, rollback
 }
 
-// createNodeSelector constructs a node selector for the allocation, if needed,
-// otherwise it returns nil.
 // createNodeSelector 根据所选设备的位置约束构造 NodeSelector；若设备可用于任意节点则返回 nil。
 func (alloc *allocator) createNodeSelector(result []internalDeviceResult, targetNodeName string) (*v1.NodeSelector, error) {
 	// 先准备一个只含一个 term 的 NodeSelector，后续追加各设备的节点要求。
-	// Selector with one term. That term gets extended with additional
-	// requirements from the different devices.
 	ns := &v1.NodeSelector{
 		NodeSelectorTerms: []v1.NodeSelectorTerm{{}},
 	}
@@ -2485,8 +1995,6 @@ func (alloc *allocator) createNodeSelector(result []internalDeviceResult, target
 		}
 		// 若任一设备绑定到具体节点，则整个分配必须限定到该节点。
 		if nodeName != nil || result[i].BindsToNode {
-			// At least one device is local to one node or binds to a node,
-			// so we need to restrict the allocation to that node.
 			return &v1.NodeSelector{
 				NodeSelectorTerms: []v1.NodeSelectorTerm{{
 					MatchFields: []v1.NodeSelectorRequirement{{
@@ -2502,14 +2010,11 @@ func (alloc *allocator) createNodeSelector(result []internalDeviceResult, target
 			// 仅支持零个或一个 term 的选择器，多个 term 视为非法。
 			switch len(nodeSelector.NodeSelectorTerms) {
 			case 0:
-				// Nothing?
 			case 1:
 				// 单个 term：把其 MatchFields 与 MatchExpressions 去重后加入。
-				// Add all terms if they are not present already.
 				addNewNodeSelectorRequirements(nodeSelector.NodeSelectorTerms[0].MatchFields, &ns.NodeSelectorTerms[0].MatchFields)
 				addNewNodeSelectorRequirements(nodeSelector.NodeSelectorTerms[0].MatchExpressions, &ns.NodeSelectorTerms[0].MatchExpressions)
 			default:
-				// This shouldn't occur, validation must prevent creation of such slices.
 				return nil, fmt.Errorf("unsupported ResourceSlice.NodeSelector with %d terms", len(nodeSelector.NodeSelectorTerms))
 			}
 		}
@@ -2517,19 +2022,13 @@ func (alloc *allocator) createNodeSelector(result []internalDeviceResult, target
 
 	// 若收集到任何要求，返回构造好的选择器。
 	if len(ns.NodeSelectorTerms[0].MatchFields) > 0 || len(ns.NodeSelectorTerms[0].MatchExpressions) > 0 {
-		// We have a valid node selector.
 		return ns, nil
 	}
 
 	// 无任何节点限制，返回 nil 表示可用于任意节点。
-	// Available everywhere.
 	return nil, nil
 }
 
-// requestAccessor is an interface for accessing either
-// DeviceRequests or DeviceSubRequests. It lets most
-// of the allocator code work with either DeviceRequests
-// or DeviceSubRequests.
 // requestAccessor 抽象 DeviceRequest 与 DeviceSubRequest 的公共访问接口，使分配器主体逻辑无需区分二者。
 type requestAccessor interface {
 	name() string
@@ -2544,8 +2043,6 @@ type requestAccessor interface {
 	derivedAttributes() []resourceapi.DeviceDerivedAttribute
 }
 
-// exactDeviceRequestAccessor is an implementation of the
-// requestAccessor interface for ExactDeviceRequests.
 // exactDeviceRequestAccessor 是 requestAccessor 针对精确设备请求（DeviceRequest）的实现。
 type exactDeviceRequestAccessor struct {
 	request *resourceapi.DeviceRequest
@@ -2604,8 +2101,6 @@ func (d *exactDeviceRequestAccessor) capacities() *resourceapi.CapacityRequireme
 	return d.request.Exactly.Capacity
 }
 
-// deviceSubRequestAccessor is an implementation of the
-// requestAccessor interface for DeviceSubRequests.
 // deviceSubRequestAccessor 是 requestAccessor 针对子请求（DeviceSubRequest）的实现。
 type deviceSubRequestAccessor struct {
 	subRequest *resourceapi.DeviceSubRequest

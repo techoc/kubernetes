@@ -24,7 +24,6 @@ import (
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
 
-// registrationServer implements the kubelet plugin registration gRPC interface.
 // registrationServer 实现 kubelet 插件注册 gRPC 接口。
 type registrationServer struct {
 	// driverName 是驱动名；draEndpointPath 是 DRA 服务套接字路径；
@@ -46,7 +45,6 @@ type registrationServer struct {
 // 编译期断言：确保本类型实现注册服务接口。
 var _ registerapi.RegistrationServer = &registrationServer{}
 
-// GetInfo is the RPC invoked by plugin watcher.
 // GetInfo 是 kubelet 插件监视器调用的 RPC，返回插件类型、名称、端点与支持的版本。
 func (e *registrationServer) GetInfo(ctx context.Context, req *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
 	// 若注入了错误则直接返回。
@@ -62,7 +60,6 @@ func (e *registrationServer) GetInfo(ctx context.Context, req *registerapi.InfoR
 	}, nil
 }
 
-// NotifyRegistrationStatus is the RPC invoked by plugin watcher.
 // NotifyRegistrationStatus 是插件监视器调用的 RPC，用于通知注册结果。
 func (e *registrationServer) NotifyRegistrationStatus(ctx context.Context, status *registerapi.RegistrationStatus) (*registerapi.RegistrationStatusResponse, error) {
 	// 若注入了错误则直接返回。
@@ -102,9 +99,6 @@ func (e *registrationServer) getNotifyRegistrationStatusError() error {
 	return *errPtr
 }
 
-// setGetInfoError sets the error to be returned by the GetInfo handler of the registration server.
-// If a non-nil error is provided, subsequent GetInfo calls will return this error.
-// Passing nil as the err argument will clear any previously set error, effectively disabling erroring.
 // setGetInfoError 设置 GetInfo 返回的错误；传入 nil 会清除此前设置的错误。
 func (e *registrationServer) setGetInfoError(err error) {
 	// nil 表示关闭错误注入。
@@ -116,10 +110,6 @@ func (e *registrationServer) setGetInfoError(err error) {
 	e.getInfoError.Store(&err)
 }
 
-// setNotifyRegistrationStatusError sets the error to be returned by the NotifyRegistrationStatus handler
-// of the registration server.
-// If a non-nil error is provided, subsequent NotifyRegistrationStatus calls will return this error.
-// Passing nil as the err argument will clear any previously set error, effectively disabling erroring.
 // setNotifyRegistrationStatusError 设置 NotifyRegistrationStatus 返回的错误；传入 nil 清除。
 func (e *registrationServer) setNotifyRegistrationStatusError(err error) {
 	// nil 表示关闭错误注入。

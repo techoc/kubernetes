@@ -848,7 +848,6 @@ func TestBindTo(t *testing.T) {
 			pod: pod,
 			podClaim: &v1.PodResourceClaim{
 				Name: claimName,
-				// Some future extension
 			},
 			expectedError: fmt.Errorf("Pod my-namespace/my-pod claim my-claim: %w", ErrAPIUnsupported),
 		},

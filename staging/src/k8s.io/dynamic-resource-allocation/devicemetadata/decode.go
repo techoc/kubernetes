@@ -14,10 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package devicemetadata provides consumer-side utilities for reading and decoding
-// DRA device metadata files. It is intended for any Go program that needs
-// to consume metadata written by a DRA kubelet plugin, including sidecars,
-// monitoring tools, and in-container agents.
 // Package devicemetadata 提供消费侧工具，用于读取并解码 DRA 设备元数据文件。
 // 适用于任何需要消费 DRA kubelet 插件所写元数据的 Go 程序，包括 sidecar、
 // 监控工具以及容器内代理。
@@ -49,28 +45,6 @@ var (
 	codecFactory = runtimeserializer.NewCodecFactory(scheme)
 )
 
-// DecodeMetadataFromStream reads the first compatible object from a DRA
-// device metadata stream. A metadata file may contain the same data encoded
-// in multiple API versions (see k8s.io/dynamic-resource-allocation/api/metadata
-// for the file format); this function tries each in order and populates dest
-// with the first one it can successfully decode and convert.
-//
-// Entries whose apiVersion is not registered in the scheme (e.g. a newer
-// version written by an upgraded driver) are skipped silently so that a
-// driver upgrade does not break older consumers. Any other failure is
-// fatal. dest is only populated on a nil return.
-//
-// dest must be a pointer to a type registered in the metadata scheme (e.g.,
-// *v1alpha1.DeviceMetadata or *metadata.DeviceMetadata). The internal type
-// is recommended because it can be decoded with less conversions and source
-// code does not need to be updated when new API versions get added or (at
-// some point) removed.
-//
-// By default, the input data does not get validated before converting it to the
-// desired type. Validation can be enabled with [DecodeMetadataWithValidationResult]
-// which will store a validation error separately, if there is any.
-// Callers which want to know what was decoded can request to get
-// the GVK stored via [DecodeMetadataStoreGVKResult].
 // DecodeMetadataFromStream 从 DRA 设备元数据 JSON 流中读取第一个兼容的对象。
 // 元数据文件可能用多个 API 版本编码同一份数据，本函数按出现顺序逐个尝试，
 // 将首个能成功解码并转换的对象写入 dest。
@@ -82,6 +56,7 @@ var (
 // 推荐使用内部类型，因为它转换次数更少，且新增或移除 API 版本时无需改动源代码。
 // 默认情况下，数据在转换为目标类型前不做校验；可通过
 // [DecodeMetadataWithValidationResult] 启用校验，校验错误会被单独存放。
+// 校验错误的包装留给调用方，以便补充 GVK 等上下文。
 // 想了解实际解码内容时，可用 [DecodeMetadataStoreGVKResult] 获取 GVK。
 func DecodeMetadataFromStream(decoder *json.Decoder, dest runtime.Object, opts ...DecodeMetadataOption) error {
 	// 初始化选项结构体并依次应用调用方传入的各个解码选项。
@@ -127,8 +102,6 @@ func DecodeMetadataFromStream(decoder *json.Decoder, dest runtime.Object, opts .
 
 		// 调用方要求校验时，按对象的具体版本执行对应的声明式校验。
 		if options.validationResult != nil {
-			// Error wrapping is left to the caller, they know that a validation error
-			// is because of a failed validation and can add the GKV if they want to.
 			switch obj := obj.(type) {
 			case *metadatav1alpha1.DeviceMetadata:
 				// 对 v1alpha1 对象按 Create 操作执行声明式校验并聚合成单个错误。
@@ -148,16 +121,10 @@ func DecodeMetadataFromStream(decoder *json.Decoder, dest runtime.Object, opts .
 
 		// 只向 dest 写入一次，采用最可能成功的转换方式。
 		// 因为不确定第二次尝试能否正确覆盖第一次可能产生的部分转换结果。
-		// Only write into dest once, using the method that is most likely to work.
-		// It's uncertain if partial conversion would be properly overwritten by
-		// a second attempt.
 		if reflect.TypeOf(dest) != reflect.TypeFor[*metadata.DeviceMetadata]() &&
 			reflect.TypeOf(dest) != reflect.TypeOf(obj) {
 			// 目标类型既不是内部版本，又与源对象类型不同，
 			// 因此尝试先转成内部版本，再间接转到目标类型。
-			// The destination type is not the internal version and
-			// the two objects have different types, so maybe we
-			// can convert indirectly.
 			var intermediate metadata.DeviceMetadata
 			if err := scheme.Convert(obj, &intermediate, nil); err != nil {
 				return fmt.Errorf("convert %s into internal version: %w", gvk, err)
@@ -174,9 +141,6 @@ func DecodeMetadataFromStream(decoder *json.Decoder, dest runtime.Object, opts .
 
 		// scheme.Convert 不会传播 TypeMeta。对版本化类型显式设置它，
 		// 让调用方看到期望的 apiVersion/kind；内部类型保留空的 TypeMeta。
-		// scheme.Convert does not propagate TypeMeta. Set it explicitly
-		// for versioned types so that callers see the expected
-		// apiVersion/kind. Internal types keep an empty TypeMeta.
 		if gvks[0].Version != runtime.APIVersionInternal {
 			dest.GetObjectKind().SetGroupVersionKind(gvks[0])
 		}
@@ -198,11 +162,6 @@ func DecodeMetadataFromStream(decoder *json.Decoder, dest runtime.Object, opts .
 // DecodeMetadataOption 是用于配置 DecodeMetadataFromStream 行为的函数选项类型。
 type DecodeMetadataOption func(*decodeMetadataOptions)
 
-// DecodeMetadataWithValidationResult enables or disables validation in [DecodeMetadataFromStream].
-// In case of a validation error, it'll be stored where requested here.
-// Providing a nil pointer disables validation.
-// The error comes straight from the underlying declarative validation with no wrapping
-// or explains why validation is not possible.
 // DecodeMetadataWithValidationResult 用于开启或关闭解码时的校验。
 // 发生校验错误时，错误会被写入 err 指向的位置；传入 nil 指针表示关闭校验。
 // 返回的错误直接来自底层声明式校验，不做任何包装，也不解释无法校验的原因。
@@ -213,8 +172,6 @@ func DecodeMetadataWithValidationResult(err *error) DecodeMetadataOption {
 	}
 }
 
-// DecodeMetadataStoreGVKResult tells [DecodeMetadataFromStream] where to store
-// the group/version/kind that was decoded from the input in case of success.
 // DecodeMetadataStoreGVKResult 用于告知 DecodeMetadataFromStream，
 // 解码成功时把输入对象对应的 GVK（组/版本/类别）存放到 gvk 指向的位置。
 func DecodeMetadataStoreGVKResult(gvk *schema.GroupVersionKind) DecodeMetadataOption {
@@ -232,10 +189,6 @@ type decodeMetadataOptions struct {
 	gvkResult        *schema.GroupVersionKind
 }
 
-// ReadResourceClaimMetadataWithDriverName reads and decodes the metadata file
-// for a directly referenced ResourceClaim from a specific driver.
-// driverName identifies which driver's metadata to read, since each driver
-// writes a separate file per request.
 // ReadResourceClaimMetadataWithDriverName 读取并解码指定驱动的、
 // 直接引用的 ResourceClaim 的元数据文件。
 // driverName 指明要读取哪个驱动的文件，因为每个驱动会为每个请求单独写一个文件。
@@ -243,11 +196,6 @@ func ReadResourceClaimMetadataWithDriverName(driverName, claimName, requestName 
 	return readMetadata(metadata.ResourceClaimFilePath(driverName, claimName, requestName))
 }
 
-// ReadResourceClaimTemplateMetadataWithDriverName reads and decodes the
-// metadata file for a template-generated claim from a specific driver.
-// podClaimName is the pod-local name (pod.spec.resourceClaims[].name).
-// driverName identifies which driver's metadata to read, since each driver
-// writes a separate file per request.
 // ReadResourceClaimTemplateMetadataWithDriverName 读取并解码指定驱动的、
 // 模板生成型 ResourceClaim 的元数据文件。
 // podClaimName 是 Pod 本地名称（pod.spec.resourceClaims[].name）。
@@ -256,10 +204,6 @@ func ReadResourceClaimTemplateMetadataWithDriverName(driverName, podClaimName, r
 	return readMetadata(metadata.ResourceClaimTemplateFilePath(driverName, podClaimName, requestName))
 }
 
-// ReadResourceClaimMetadata reads and decodes all metadata files for a
-// directly referenced ResourceClaim request, regardless of which driver(s)
-// wrote them. It globs the request directory for all *-metadata.json files
-// and merges the results into a single [metadata.DeviceMetadata].
 // ReadResourceClaimMetadata 读取并解码直接引用的 ResourceClaim 请求的所有元数据文件，
 // 不区分是哪个驱动写入的。它在请求目录下匹配所有 *-metadata.json 文件，
 // 并把结果合并成单个 [metadata.DeviceMetadata]。
@@ -268,10 +212,6 @@ func ReadResourceClaimMetadata(claimName, requestName string) (*metadata.DeviceM
 	return readRequestDir(dir)
 }
 
-// ReadResourceClaimTemplateMetadata reads and decodes all metadata files
-// for a template-generated claim request, regardless of which driver(s) wrote
-// them. It globs the request directory for all *-metadata.json files and
-// merges the results into a single [metadata.DeviceMetadata].
 // ReadResourceClaimTemplateMetadata 读取并解码模板生成型 ResourceClaim 请求的
 // 所有元数据文件，不区分是哪个驱动写入的。它在请求目录下匹配所有
 // *-metadata.json 文件，并把结果合并成单个 [metadata.DeviceMetadata]。

@@ -360,16 +360,6 @@ func TestConversion(t *testing.T) {
 
 }
 
-// TestConversionRoundTrip verifies that the automatically generated and
-// hand-written conversion code for the DRA API correctly round-trips
-// between v1beta2 and v1. For each non-list type registered in v1beta2,
-// a fuzzed object is converted to v1 and back, and the result must be
-// equal to the original.
-//
-// Note that this only covers conversion code which is called
-// while converting the top-level API types. Types embedded
-// inside those have their own conversion functions, but those
-// are not necessarily called.
 // TestConversionRoundTrip 验证自动生成的转换代码与手写转换代码能在 v1beta2 与 v1 之间正确往返：
 // 对 v1beta2 中注册的每个非列表类型，先用随机数据填充，再转换到 v1 并转回，
 // 结果必须与原始对象相等。

@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package leaderelection wraps k8s.io/client-go/tools/leaderelection with a
-// simpler API. It's derived from https://github.com/kubernetes-csi/csi-lib-utils/tree/v0.11.0/leaderelection
 // 本包以更简洁的 API 封装 k8s.io/client-go/tools/leaderelection，
 // 支持通过函数式选项配置租约、选举身份与健康检查，并派生自 csi-lib-utils 的 leaderelection 实现。
+// 来源：https://github.com/kubernetes-csi/csi-lib-utils/tree/v0.11.0/leaderelection。
 package leaderelection
 
 import (
@@ -49,37 +48,25 @@ const (
 	defaultRetryPeriod        = 5 * time.Second
 	defaultHealthCheckTimeout = 20 * time.Second
 
-	// HealthCheckerAddress is the address at which the leader election health
-	// checker reports status.
-	// The caller sidecar should document this address in appropriate flag
-	// descriptions.
 	// HealthCheckerAddress 是领导者选举健康检查端点注册的 HTTP 路径。
 	// 调用方的 sidecar 应在相应的命令行参数说明中记录该地址。
 	HealthCheckerAddress = "/healthz/leader-election"
 )
 
-// leaderElection is a convenience wrapper around client-go's leader election library.
 // leaderElection 是 client-go 领导者选举库的便捷封装，
 // 集中保存选举配置（锁、身份、租约时长等）、健康检查适配器以及当选后要执行的业务逻辑。
 type leaderElection struct {
 	// runFunc 是当前实例当选 leader 后要执行的业务逻辑，参数为选举上下文。
 	runFunc func(ctx context.Context)
 
-	// the lockName identifies the leader election config and should be shared across all members
 	// lockName 标识本次领导者选举的配置，所有参与选举的成员必须使用相同的值。
 	lockName string
-	// the identity is the unique identity of the currently running member
 	// identity 是当前运行成员的唯一身份标识。
 	identity string
-	// the namespace to store the lock resource
 	// namespace 是存放锁资源（Lease）的命名空间。
 	namespace string
-	// resourceLock defines the type of leaderelection that should be used
-	// Only resourcelock.LeasesResourceLock is valid at the moment.
 	// resourceLock 指定要使用的锁类型，目前只接受 LeasesResourceLock。
 	resourceLock string
-	// healthCheck reports unhealthy if leader election fails to renew leadership
-	// within a timeout period.
 	// healthCheck 是健康检查适配器：若在超时时间内未能续约领导权，则上报不健康。
 	healthCheck *leaderelection.HealthzAdaptor
 
@@ -96,11 +83,9 @@ type leaderElection struct {
 	clientset kubernetes.Interface
 }
 
-// Option implements functional options for New.
 // Option 是 New 使用的函数式选项类型，每个选项负责修改 leaderElection 的一个配置字段。
 type Option func(l *leaderElection)
 
-// New constructs a new leader election instance.
 // New 构造一个领导者选举实例：先填入锁类型、各项时序参数的默认值以及调用方传入的客户端、锁名和业务逻辑，
 // 再依次应用所有函数式选项，允许调用方覆盖这些默认值。
 func New(clientset kubernetes.Interface, lockName string, runFunc func(ctx context.Context), opts ...Option) *leaderElection {
@@ -177,21 +162,12 @@ func Context(ctx context.Context) Option {
 	}
 }
 
-// Server represents any type that could serve HTTP requests for the leader
-// election health check endpoint.
 // Server 抽象了能够注册 HTTP 处理器的服务（如 http.ServeMux），
 // 供 PrepareHealthCheck 在其上挂载领导者选举健康检查端点。
 type Server interface {
 	Handle(pattern string, handler http.Handler)
 }
 
-// PrepareHealthCheck creates a health check for this leader election object
-// with the given healthCheckTimeout and registers its HTTP handler to the given
-// server at the path specified by the constant "healthCheckerAddress".
-// healthCheckTimeout determines the max duration beyond lease expiration
-// allowed before reporting unhealthy.
-// The caller sidecar should document the handler address in appropriate flag
-// descriptions.
 // PrepareHealthCheck 为当前选举实例创建健康检查适配器，并把它的 HTTP 处理器注册到给定的 Server 上，
 // 注册路径为 HealthCheckerAddress。healthCheckTimeout 决定租约到期后多久判定为不健康；
 // 调用方的 sidecar 应在相应的参数说明中记录该处理器地址。
@@ -275,7 +251,7 @@ func (l *leaderElection) Run() error {
 	// 进入选举循环：RunOrDie 不会在正常返回路径上把控制权交还调用方。
 	leaderelection.RunOrDie(ctx, leaderConfig)
 	// 实际上不可达；保留 nil 返回值以匹配函数签名。
-	return nil // should never reach here
+	return nil // 不应执行到这里
 }
 
 // defaultLeaderElectionIdentity 返回当前主机的主机名，作为未配置身份时的默认选举身份。
@@ -283,7 +259,6 @@ func defaultLeaderElectionIdentity() (string, error) {
 	return os.Hostname()
 }
 
-// sanitizeName sanitizes the provided string so it can be consumed by leader election library
 // sanitizeName 对输入字符串做清洗，使其符合领导者选举库对资源名称的要求：
 // 只保留字母、数字和连字符，并保证名称不以连字符结尾。
 func sanitizeName(name string) string {
@@ -292,7 +267,6 @@ func sanitizeName(name string) string {
 	// 将这些非法字符统一替换为连字符。
 	name = re.ReplaceAllString(name, "-")
 	if name[len(name)-1] == '-' {
-		// name must not end with '-'
 		// 名称不允许以连字符结尾，追加一个 X 使其合法。
 		name = name + "X"
 	}
@@ -300,9 +274,6 @@ func sanitizeName(name string) string {
 	return name
 }
 
-// inClusterNamespace returns the namespace in which the pod is running in by checking
-// the env var POD_NAMESPACE, then the file /var/run/secrets/kubernetes.io/serviceaccount/namespace.
-// if neither returns a valid namespace, the "default" namespace is returned
 // inClusterNamespace 推断 Pod 所在的命名空间：先查环境变量 POD_NAMESPACE，
 // 再读 ServiceAccount 挂载的 namespace 文件；两者都拿不到有效值时回退到 "default"。
 func inClusterNamespace() string {
@@ -322,7 +293,6 @@ func inClusterNamespace() string {
 	return "default"
 }
 
-// adaptCheckToHandler returns an http.HandlerFunc that serves the provided checks.
 // adaptCheckToHandler 把返回 error 的检查函数包装为 HTTP 处理器：
 // 检查通过返回 "ok"，否则以 500 状态码返回错误信息，供健康检查探针使用。
 func adaptCheckToHandler(c func(r *http.Request) error) http.HandlerFunc {

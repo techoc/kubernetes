@@ -25,20 +25,11 @@ import (
 	"k8s.io/dynamic-resource-allocation/api/metadata"
 )
 
-// TestConversionRoundTrip verifies that the automatically generated
-// conversion code for the metadata API correctly round-trips between
-// v1beta1 and internal. For each non-list type registered in v1beta1,
-// a fuzzed object is converted to the internal version and back, and the
-// result must be equal to the original.
-//
-// Note that this only covers conversion code which is called
-// while converting the top-level API types. Types embedded
-// inside those have their own conversion functions, but those
-// are not necessarily called.
-//
 // TestConversionRoundTrip 验证元数据 API 的生成转换代码能在 v1beta1 与内部版本之间无损往返。
 // 测试向同一 scheme 注册两个版本，借助 apitest.ConversionRoundTrip 对每个非 List 类型
 // 随机填充对象、正向转换再反向转换，并断言往返结果与原对象语义相等。
+// 注意：这只覆盖转换顶层 API 类型时被调用的转换代码；内嵌类型虽然也有各自的转换函数，
+// 但不一定会在此测试中被调用。
 func TestConversionRoundTrip(t *testing.T) {
 	// 新建 scheme，并分别注册内部版本与 v1beta1 版本的类型。
 	scheme := runtime.NewScheme()

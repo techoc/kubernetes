@@ -25,17 +25,6 @@ import (
 	"k8s.io/dynamic-resource-allocation/api/metadata"
 )
 
-// TestConversionRoundTrip verifies that the automatically generated
-// conversion code for the metadata API correctly round-trips between
-// v1alpha1 and internal. For each non-list type registered in v1alpha1,
-// a fuzzed object is converted to the internal version and back, and the
-// result must be equal to the original.
-//
-// Note that this only covers conversion code which is called
-// while converting the top-level API types. Types embedded
-// inside those have their own conversion functions, but those
-// are not necessarily called.
-//
 // TestConversionRoundTrip 验证自动生成的元数据 API 转换代码能在 v1alpha1 与内部版本之间正确往返。
 // 测试意图：对每个在 v1alpha1 注册的非列表类型，把 fuzz 生成的对象转换到内部版本再转回来，
 // 结果必须与原始对象相等，从而保证转换不丢失信息。

@@ -100,7 +100,7 @@ func TestGetPCIeRootAttributePCIBusID(t *testing.T) {
 		},
 		"invalid symlink (invalid suffix)": {
 			testMachineSetup: func(t *testing.T, testRootPath string) {
-				relDevicePath := filepath.Join("devices", pcieRoot, intermediateBusID, "0000:00:13.1") // different PCI Bus ID
+				relDevicePath := filepath.Join("devices", pcieRoot, intermediateBusID, "0000:00:13.1") // 不同的 PCI 总线 ID
 				touchFile(t, filepath.Join(testRootPath, relDevicePath))
 				busDir := filepath.Join(testRootPath, "bus", "pci", "devices")
 				mkDirAll(t, busDir)
@@ -117,7 +117,6 @@ func TestGetPCIeRootAttributePCIBusID(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// per docs, the testing package ensures cleanup, so no need to do that ourselves
 			// 每个用例使用独立临时目录，由 setup 构造设备文件与 bus/pci/devices 下的符号链接。
 			testMachinePath := t.TempDir()
 			if test.testMachineSetup != nil {

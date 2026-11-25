@@ -16,8 +16,7 @@ limitations under the License.
 
 package cel
 
-// Define functions and global variables to set FeatureEnabled field in VersionedOptions
-// within this package (compile.go).
+// 本文件提供用于设置 compile.go 中 VersionedOptions.FeatureEnabled 的函数与全局变量。
 
 import "sync/atomic"
 

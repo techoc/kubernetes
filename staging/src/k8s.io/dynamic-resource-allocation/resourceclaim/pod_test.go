@@ -275,7 +275,6 @@ func TestPodClaims(t *testing.T) {
 	// 断言完整遍历的结果与期望一致。
 	assert.Equal(t, expected, collect(pod))
 
-	// Verify early break from iterator works properly.
 	// 首次迭代后立即 break，验证迭代器支持提前终止。
 	var firstOnly []claimEntry
 	for name, mustCheckOwner := range PodClaims(pod) {

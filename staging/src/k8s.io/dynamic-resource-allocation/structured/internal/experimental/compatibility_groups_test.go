@@ -22,9 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// TestCompatibilityGroupSet verifies that nil and empty lists both produce a nil
-// set, i.e. "[] is treated as nil".
-//
 // TestCompatibilityGroupSet 验证 nil 列表与空列表都生成 nil 集合，即“空切片等同于 nil”。
 // 输入分别为 nil、[] 和 ["mig"]，断言前两者返回 nil，后者返回只含 "mig" 的集合。
 func TestCompatibilityGroupSet(t *testing.T) {
@@ -42,10 +39,6 @@ func TestCompatibilityGroupSet(t *testing.T) {
 	}
 }
 
-// TestCompatibilityGroupIntersectionAdmits exercises the admission predicate for
-// a single device against an existing intersection state, covering the empty,
-// nil, single and multiple group cases and the strict nil-matching rule.
-//
 // TestCompatibilityGroupIntersectionAdmits 针对已有交集状态，测试单个设备的准入判定。
 // 表驱动用例覆盖空交集、无组（nil）、单组、多组以及严格的 nil 匹配规则：
 // intersection 为已有状态，candidate 为候选设备的组集合，want 为期望的准入结果。
@@ -128,11 +121,6 @@ func TestCompatibilityGroupIntersectionAdmits(t *testing.T) {
 	}
 }
 
-// TestCompatibilityGroupIntersectionRolling verifies the rolling-intersection
-// behaviour as successive devices are folded in, mirroring KEP example 4 (a
-// device may belong to multiple groups, and the intersection narrows as devices
-// are added).
-//
 // TestCompatibilityGroupIntersectionRolling 验证设备依次加入时的滚动交集行为，对应 KEP 示例 4：
 // 一个设备可属于多个组，且随着设备加入交集不断收窄。输入为依次加入的 {foo,foobar}、
 // {bar,foobar}，断言交集最终收窄为 {foobar}，随后无公共组的 {baz} 被拒绝，而仍共享 foobar
@@ -141,7 +129,6 @@ func TestCompatibilityGroupIntersectionRolling(t *testing.T) {
 	// 辅助函数：把组名可变参数转成集合。
 	set := func(groups ...string) sets.Set[string] { return sets.New[string](groups...) }
 
-	// Start empty: foo device {foo, foobar} is admitted and seeds the set.
 	// 从空交集开始：foo 设备 {foo, foobar} 被接纳并作为交集初值。
 	i := compatibilityGroupIntersection{}
 	if !i.admits(set("foo", "foobar")) {
@@ -149,7 +136,6 @@ func TestCompatibilityGroupIntersectionRolling(t *testing.T) {
 	}
 	i = i.add(set("foo", "foobar"))
 
-	// bar device {bar, foobar} shares foobar -> admitted, intersection narrows to {foobar}.
 	// bar 设备 {bar, foobar} 与初值共享 foobar，被接纳，交集收窄为 {foobar}。
 	if !i.admits(set("bar", "foobar")) {
 		t.Fatal("expected {foo, foobar} to admit {bar, foobar} via foobar")
@@ -160,22 +146,16 @@ func TestCompatibilityGroupIntersectionRolling(t *testing.T) {
 		t.Fatalf("expected rolling intersection {foobar}, got %v", i.groups)
 	}
 
-	// baz device {baz} no longer shares anything -> rejected.
 	// baz 设备 {baz} 与收窄后的交集无公共组，应被拒绝。
 	if i.admits(set("baz")) {
 		t.Error("expected narrowed intersection {foobar} to reject {baz}")
 	}
-	// A further foobar-sharing device is still admitted.
 	// 另一个共享 foobar 的设备仍被接纳。
 	if !i.admits(set("qux", "foobar")) {
 		t.Error("expected narrowed intersection {foobar} to admit {qux, foobar}")
 	}
 }
 
-// TestCompatibilityGroupIntersectionNoGroupsStacking verifies that any number of
-// no-group devices stack freely, but a grouped device is rejected once a
-// no-group device is present (and vice versa).
-//
 // TestCompatibilityGroupIntersectionNoGroupsStacking 验证任意数量的无组设备可以自由叠加，
 // 但一旦存在无组设备，有组设备就会被拒绝（反之亦然）。输入为连续加入 3 个 nil（无组）设备，
 // 断言每次都被接纳，随后声明 "mig" 组的有组设备被拒绝。

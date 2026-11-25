@@ -56,10 +56,9 @@ func TestGetNUMANodeAttributeByPCIBusID(t *testing.T) {
 		"list with equidistant nodes": {
 			setup: func(t *testing.T, root string) {
 				writeFile(t, filepath.Join(root, numaNodePath), "1\n")
-				// node1 SLIT row: node0=12, node1(self)=10, node2=12.
-				// Minimum non-self distance is 12 -> {0,2}; physical node first.
-				// No cpulist/topology files, so the socket filter is inactive and
-				// all minimum-distance nodes are kept.
+				// node1 的 SLIT 行：node0=12、node1（自身）=10、node2=12。
+				// 最小非自身距离为 12，因此选中 0、2，并把物理节点放在最前。
+				// 未提供 cpulist/topology 文件，插槽过滤不生效，保留全部最小距离节点。
 				writeFile(t, filepath.Join(root, "devices", "system", "node", "node1", "distance"), "12 10 12\n")
 			},
 			address:  pciBusID,
@@ -72,7 +71,6 @@ func TestGetNUMANodeAttributeByPCIBusID(t *testing.T) {
 		"list single NUMA node": {
 			setup: func(t *testing.T, root string) {
 				writeFile(t, filepath.Join(root, numaNodePath), "0\n")
-				// Only a self distance, so there are no equidistant peers.
 				writeFile(t, filepath.Join(root, "devices", "system", "node", "node0", "distance"), "10\n")
 			},
 			address:  pciBusID,
@@ -85,9 +83,9 @@ func TestGetNUMANodeAttributeByPCIBusID(t *testing.T) {
 		"list with same-socket filter": {
 			setup: func(t *testing.T, root string) {
 				writeFile(t, filepath.Join(root, numaNodePath), "0\n")
-				// node0 self=10; node1 and node2 both at minimum distance 12; node3 farther.
+				// node0 自身距离为 10；node1、node2 的最小距离均为 12，node3 更远。
+				// node0、node1 位于插槽 0，node2 位于插槽 1，因此 node2 被过滤。
 				writeFile(t, filepath.Join(root, "devices", "system", "node", "node0", "distance"), "10 12 12 20\n")
-				// node0 and node1 are on socket 0; node2 is on socket 1, so node2 is filtered out.
 				writeFile(t, filepath.Join(root, "devices", "system", "node", "node0", "cpulist"), "0\n")
 				writeFile(t, filepath.Join(root, "devices", "system", "node", "node1", "cpulist"), "1\n")
 				writeFile(t, filepath.Join(root, "devices", "system", "node", "node2", "cpulist"), "2\n")

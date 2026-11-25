@@ -21,19 +21,15 @@ import (
 	"os"
 )
 
-// machine is the bare minimum machine/host abstraction we need.
-// we use a wrapping struct to enable the functional option pattern
 // machine 是对主机/sysfs 的最小抽象；使用包装结构体是为了支持函数式选项模式。
 type machine struct {
 	// sysfs 是用于读取 sysfs 文件及符号链接的（只读）文件系统接口。
 	sysfs fs.ReadLinkFS
 }
 
-// MachineModifier is the type of functional options
 // MachineModifier 是用于配置 machine 的函数式选项类型。
 type MachineModifier func(*machine)
 
-// WithFS replaces the host sysfs with a custom FS
 // WithFS 返回一个把默认 sysfs 替换为调用方所提供文件系统的选项。
 func WithFS(sysfs fs.ReadLinkFS) MachineModifier {
 	return func(mc *machine) {
@@ -42,9 +38,6 @@ func WithFS(sysfs fs.ReadLinkFS) MachineModifier {
 	}
 }
 
-// WithFSFromRoot replaces the host sysfs with a FS whose root
-// is the provided path. Like chroot, this is for convenience
-// and testability and for usage within containers, not for security.
 // WithFSFromRoot 返回一个以 root 为根目录的文件系统选项；用途类似 chroot，
 // 仅为方便测试与容器内使用，并不提供安全隔离。
 func WithFSFromRoot(root string) MachineModifier {

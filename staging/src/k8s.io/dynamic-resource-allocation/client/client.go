@@ -26,7 +26,6 @@ import (
 	"k8s.io/client-go/util/watchlist"
 )
 
-// Enumerate all supported APIs, most preferred first.
 // 按优先级从高到低枚举受支持的 API 版本，useAPI 保存的就是这些编号之一。
 const (
 	// useLatestAPI 表示最新且最优先的 API 版本（当前为 v1）。
@@ -74,7 +73,6 @@ func New(clientSet kubernetes.Interface) *Client {
 
 // Client 对外实现资源 v1 客户端接口，内部记录当前可用的 API 版本，
 // 以便在当前版本不支持某类资源时自动回退到其他版本。
-//
 // 字段说明：clientSet 是底层 client-go 客户端集合；
 // useAPI 原子保存当前使用的 API 版本编号，可被并发读写。
 type Client struct {
@@ -112,8 +110,6 @@ func (c *Client) DeviceTaintRules() cgoresource.DeviceTaintRuleInterface {
 	// 把三个版本的接口交给 newConvertingClient。
 	return newConvertingClient(c,
 		c.clientSet.ResourceV1().DeviceTaintRules(),
-		// DeviceTaintRules isn't in v1beta1 but newConvertingClient expects this.
-		// We can simply treat it like v1beta2.
 		// v1beta1 中不存在该资源，用 v1beta2 的接口占位，避免传入空接口。
 		c.clientSet.ResourceV1beta2().DeviceTaintRules(),
 		c.clientSet.ResourceV1beta2().DeviceTaintRules(),
@@ -150,15 +146,7 @@ func (c *Client) ResourceSlices() cgoresource.ResourceSliceInterface {
 	)
 }
 
-// IsWatchListSemanticsUnSupported informs the reflector that this client
-// doesn't support WatchList semantics.
-//
-// This is a synthetic method whose sole purpose is to satisfy the optional
-// interface check performed by the reflector.
-// Returning true signals that WatchList can NOT be used.
-// No additional logic is implemented here.
-//
-// IsWatchListSemanticsUnSupported 告知 Reflector 本客户端是否不支持 WatchList 语义；
+// IsWatchListSemanticsUnSupported 告知 Reflector 本客户端是否不支持 WatchList 语义；返回 true 表示不能使用 WatchList。
 // 该方法只为满足 Reflector 的可选接口检查，实际判断委托给 client-go。
 func (c *Client) IsWatchListSemanticsUnSupported() bool {
 	// 直接复用工具函数判断底层客户端集合的能力。

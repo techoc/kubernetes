@@ -30,16 +30,10 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
-// v1FillFuncs returns custom fill functions needed for v1 types where
-// the default random filling would create objects that cannot round-trip
-// due to pointer-to-value conversions in the internal api types.
 // v1FillFuncs 返回 v1 类型所需的自定义填充函数：默认随机填充生成的指针字段
 // 在内部 api 类型中会经历指针到值的转换，导致往返转换无法还原。
 func v1FillFuncs(codecs serializer.CodecFactory) []interface{} {
 	return []interface{}{
-		// The internal api types use bool instead of *bool for AllNodes.
-		// Converting nil -> false -> &false means nil doesn't round-trip.
-		// Ensure AllNodes is always non-nil to avoid this.
 		// 内部 api 类型用 bool 表示 AllNodes；nil 经 false 再转回 &false 后无法还原，
 		// 因此填充后若为 nil 就分配一个非 nil 的指针。
 		func(s *resourceapi.ResourceSliceSpec, c randfill.Continue) {
@@ -50,9 +44,6 @@ func v1FillFuncs(codecs serializer.CodecFactory) []interface{} {
 				s.AllNodes = new(bool)
 			}
 		},
-		// The internal api types use bool instead of *bool for BindsToNode.
-		// Converting nil -> false -> &false means nil doesn't round-trip.
-		// Ensure BindsToNode is always non-nil to avoid this.
 		// 内部 api 类型用 bool 表示 BindsToNode；nil 经 false 再转回 &false 后无法还原，
 		// 因此填充后若为 nil 就分配一个非 nil 的指针。
 		func(d *resourceapi.Device, c randfill.Continue) {
@@ -66,16 +57,6 @@ func v1FillFuncs(codecs serializer.CodecFactory) []interface{} {
 	}
 }
 
-// TestConversionRoundTrip verifies that the conversion code for the internal
-// DRA API correctly round-trips between v1 and the internal api types.
-// For v1 -> api -> v1, the conversion should be lossless.
-//
-// api -> v1 -> api is not lossless because of
-// additional fields in the internal representation.
-// Those would get lost during conversion.
-// But this doesn't matter because in practice,
-// the internal representation is never converted back,
-// therefore this direction is not tested.
 // TestConversionRoundTrip 验证内部 DRA API 的转换代码能在 v1 与内部 api 类型之间正确往返。
 // 测试只覆盖 v1 -> api -> v1 方向，该方向应无损；
 // 反方向因内部表示含额外字段会丢失信息，且实际不会使用，故不测试。
@@ -110,26 +91,22 @@ func TestConversionRoundTrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// 每个类型执行固定次数的模糊测试。
 			for i := range apitest.FuzzIterations {
-				// Create and fuzz v1 object.
 				// 创建一个 v1 对象并随机填充作为输入。
 				v1Obj := tc.v1Type()
 				filler.Fill(v1Obj)
 
-				// Convert v1 -> api.
 				// 将 v1 对象转换为内部 api 对象。
 				apiObj := tc.apiNew()
 				if err := scheme.Convert(v1Obj, apiObj, nil); err != nil {
 					t.Fatalf("iteration %d: v1 -> api: %v", i, err)
 				}
 
-				// Convert api -> v1 (round-trip).
 				// 再转回 v1，完成往返。
 				roundTripped := tc.v1Type()
 				if err := scheme.Convert(apiObj, roundTripped, nil); err != nil {
 					t.Fatalf("iteration %d: api -> v1: %v", i, err)
 				}
 
-				// The round-tripped object must be equal to the original.
 				// 断言往返后的对象与原始对象语义相等，失败时输出差异。
 				if !apiequality.Semantic.DeepEqual(v1Obj, roundTripped) {
 					t.Errorf("iteration %d: round-trip v1 -> api -> v1 failed\ndiff (-want +got):\n%s",

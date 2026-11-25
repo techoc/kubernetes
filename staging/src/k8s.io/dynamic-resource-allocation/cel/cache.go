@@ -25,8 +25,6 @@ import (
 	"k8s.io/utils/lru"
 )
 
-// Cache is a thread-safe LRU cache for a compiled CEL expression.
-//
 // Cache 是已编译 CEL 表达式的线程安全 LRU 缓存。字段含义：
 // compileMutex 按缓存键加锁，保证同一表达式不会被并发重复编译；
 // cacheMutex 保护底层 LRU 容器的并发读写；
@@ -39,12 +37,6 @@ type Cache struct {
 	compiler     *compiler
 }
 
-// NewCache creates a cache. The maximum number of entries determines
-// how many entries are cached at most before dropping the oldest
-// entry.
-//
-// The features are used to get a suitable compiler.
-//
 // NewCache 创建一个缓存：maxCacheEntries 限定最多缓存的条目数，
 // 超过后最旧的条目会被淘汰；features 用于选择与之匹配的编译器。
 func NewCache(maxCacheEntries int, features Features) *Cache {
@@ -57,12 +49,6 @@ func NewCache(maxCacheEntries int, features Features) *Cache {
 	}
 }
 
-// GetOrCompile checks whether the cache already has a compilation result
-// and returns that if available. Otherwise it compiles, stores successful
-// results and returns the new result.
-//
-// Cost estimation is disabled.
-//
 // GetOrCompile 先查缓存，命中则直接返回；未命中则编译并只缓存成功的结果。
 // 该方法关闭成本估算，用于普通的选择器表达式。
 func (c *Cache) GetOrCompile(expression string) CompilationResult {
@@ -70,13 +56,8 @@ func (c *Cache) GetOrCompile(expression string) CompilationResult {
 	return c.getOrCompile(expression, "selector", Options{DisableCostEstimation: true})
 }
 
-// GetOrCompileDerivedAttribute checks whether the cache already has a
-// compilation result for a derived attribute expression and returns that
-// if available. Otherwise it compiles, stores successful results and returns
-// the new result with DerivedAttribute compilation option enabled.
-//
-// GetOrCompileDerivedAttribute 用于派生属性表达式：启用 DerivedAttribute 选项，
-// 并使用独立的 "derived" 缓存命名空间。
+// GetOrCompileDerivedAttribute 先查独立的 "derived" 缓存，命中则直接返回已有结果；
+// 未命中时启用 DerivedAttribute 选项进行编译，只缓存成功结果，并返回本次编译结果。
 func (c *Cache) GetOrCompileDerivedAttribute(expression string) CompilationResult {
 	// 派生属性允许返回非布尔结果，因此需要与选择器不同的编译选项。
 	return c.getOrCompile(expression, "derived", Options{
@@ -90,12 +71,10 @@ func (c *Cache) GetOrCompileDerivedAttribute(expression string) CompilationResul
 func (c *Cache) getOrCompile(expression string, cacheScope string, opts Options) CompilationResult {
 	cacheKey := cacheScope + ":" + expression
 	// 命名空间前缀使同一表达式在选择器与派生属性场景下使用不同的缓存键。
-	// Compiling a CEL expression is expensive enough that it is cheaper
-	// to lock a mutex than doing it several times in parallel.
 	// 编译 CEL 表达式开销较大，按缓存键加锁比并行重复编译更划算。
 	c.compileMutex.LockKey(cacheKey)
 	// 用 defer 保证任何返回路径都会释放对应键上的锁。
-	//nolint:errcheck // Only returns an error for unknown keys, which isn't the case here.
+	//nolint:errcheck // 仅对未知 key 返回错误，此处不属于该情况。
 	defer c.compileMutex.UnlockKey(cacheKey)
 
 	// 先读缓存；命中则直接返回已有的编译结果。

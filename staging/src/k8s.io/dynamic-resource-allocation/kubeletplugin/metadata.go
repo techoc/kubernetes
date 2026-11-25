@@ -38,10 +38,6 @@ import (
 	"k8s.io/dynamic-resource-allocation/resourceclaim"
 )
 
-// metadataScheme has both internal and versioned metadata types registered.
-// metadataCodecFactory provides serializers and deserializers derived from
-// the scheme. Per-version encoders are created in newMetadataWriter so
-// that each writer can target exactly the versions it was configured for.
 // metadataScheme 同时注册了内部版本与各外部版本的元数据类型；metadataCodecFactory 由它生成编解码器。
 // metadataSerializer 保存 JSON 序列化器；每个写入器再用 newMetadataWriter 按目标版本创建各自的编码器。
 var (
@@ -62,8 +58,6 @@ func init() {
 	metadataSerializer = info.PrettySerializer
 }
 
-// decodeFirstMetadata reads a metadata stream and decodes the first
-// compatible object into the internal DeviceMetadata type.
 // decodeFirstMetadata 从元数据 JSON 流中解码第一个兼容对象为内部 DeviceMetadata 类型。
 func decodeFirstMetadata(data []byte) (*metadata.DeviceMetadata, error) {
 	// 准备接收解码结果的内部对象。
@@ -77,12 +71,9 @@ func decodeFirstMetadata(data []byte) (*metadata.DeviceMetadata, error) {
 
 // 以下常量定义元数据文件在宿主机上的存放子目录、默认 CDI 目录及文件权限。
 const (
-	// metadataSubDir is the subdirectory under the plugin data directory
-	// where metadata files are stored on the host.
 	// metadataSubDir 是插件数据目录下存放元数据文件的子目录名。
 	metadataSubDir = "dra-device-metadata"
 
-	// DefaultCDIDir is the default directory for CDI spec files.
 	// DefaultCDIDir 是 CDI 规范文件的默认目录。
 	DefaultCDIDir = "/var/run/cdi"
 
@@ -91,9 +82,6 @@ const (
 	metadataDirPerms  = os.FileMode(0755)
 )
 
-// claimRef bundles the identity and pod-level reference for a ResourceClaim.
-// It is threaded through the write path so individual functions don't need
-// long parameter lists.
 // claimRef 把 ResourceClaim 的身份信息与 Pod 级别引用打包在一起，
 // 以便在写入路径中逐层传递，避免函数参数列表过长。
 type claimRef struct {
@@ -120,9 +108,6 @@ func newClaimRef(claim *resourceapi.ResourceClaim) claimRef {
 	return ref
 }
 
-// metadataWriter handles writing metadata files and CDI specs for the
-// device metadata feature. See k8s.io/dynamic-resource-allocation/api/metadata
-// for the file format and container path layout.
 // metadataWriter 负责为设备元数据特性写入元数据文件与 CDI 规范。
 // 文件格式与容器内路径布局见 k8s.io/dynamic-resource-allocation/api/metadata。
 type metadataWriter struct {
@@ -137,10 +122,6 @@ type metadataWriter struct {
 	fileOps       MetadataFileOperations
 }
 
-// newMetadataWriter creates a new metadataWriter that writes metadata files
-// for each of the specified API versions. Unsupported versions are silently
-// skipped, but an error is returned if none of the requested versions are
-// supported by the metadata scheme.
 // newMetadataWriter 创建写入器，为每个指定版本准备编码器；不支持的版本被静默跳过，
 // 但如果请求的版本全部不受支持则返回错误。
 func newMetadataWriter(driverName, pluginDataDir, cdiDir string, versions []schema.GroupVersion, fileOps MetadataFileOperations) (*metadataWriter, error) {
@@ -161,8 +142,7 @@ func newMetadataWriter(driverName, pluginDataDir, cdiDir string, versions []sche
 	}
 	// 一个版本都不支持时无法写入任何内容，直接报错。
 	if len(supported) == 0 {
-		// TODO(KEP#5304): Currently there are no defaults, drivers should explicitly use use `MetadataVersions`
-		// options to supply a version
+		// TODO(KEP#5304)：目前没有默认版本，驱动应通过 EnableDeviceMetadata 的 MetadataVersions 选项显式指定版本。
 		return nil, fmt.Errorf("none of the requested metadata API versions %v are supported", versions)
 	}
 	// 用筛选后的版本与编码器构造写入器。
@@ -176,9 +156,6 @@ func newMetadataWriter(driverName, pluginDataDir, cdiDir string, versions []sche
 	}, nil
 }
 
-// processPreparedClaim writes metadata files and CDI specs for all requests
-// in the prepared claim. It returns a map of base request name to CDI device
-// ID that the caller should inject into the gRPC response.
 // processPreparedClaim 为已准备的 ResourceClaim 中所有请求写入元数据文件与 CDI 规范。
 // 返回“基础请求名 -> 应注入 gRPC 响应的 CDI 设备 ID”的映射。
 func (w *metadataWriter) processPreparedClaim(
@@ -224,8 +201,6 @@ func (w *metadataWriter) processPreparedClaim(
 	return cdiDeviceIDs, nil
 }
 
-// cleanupClaim removes all metadata files and CDI specs for a claim.
-// It is a no-op if no files exist for the given claim.
 // cleanupClaim 删除某个 claim 的全部元数据文件与 CDI 规范；没有任何文件时视为无操作。
 func (w *metadataWriter) cleanupClaim(claimNamespace, claimName string, claimUID types.UID) error {
 	// 先定位该 claim 的元数据目录。
@@ -252,14 +227,6 @@ func (w *metadataWriter) cleanupClaim(claimNamespace, claimName string, claimUID
 	return nil
 }
 
-// updateRequestMetadata overwrites the metadata file for a specific request.
-// It reads the existing stream to obtain the current generation, increments
-// it, and writes back the updated metadata as a new stream. This is used by
-// drivers during NRI hooks when device details (e.g., network info) become
-// available after PrepareResourceClaims.
-//
-// requestName may include a subrequest name (e.g. "gpu/high-memory"); the
-// base request name is used for the file path.
 // updateRequestMetadata 覆写某个请求的元数据文件：读取现有流取得当前 generation，加一后写回。
 // 供驱动在 NRI 钩子中、于 PrepareResourceClaims 之后才拿到设备细节（例如网络信息）时使用。
 // requestName 可以带子请求名（如 "gpu/high-memory"），文件路径使用基础请求名。
@@ -311,11 +278,6 @@ func (w *metadataWriter) updateRequestMetadata(
 	return nil
 }
 
-// writeMetadataFile writes a single metadata file for one request in a claim.
-// The file is a JSON stream containing the metadata encoded once per
-// configured API version. baseRequestName is used for the file path;
-// requestRef (which may include a subrequest name) is recorded in the
-// metadata content.
 // writeMetadataFile 为一个请求写入单个元数据文件：内容是按每个配置版本编码后拼接的 JSON 流。
 // baseRequestName 决定文件路径；requestRef（可含子请求名）记录在元数据内容中。
 func (w *metadataWriter) writeMetadataFile(
@@ -348,9 +310,6 @@ func (w *metadataWriter) writeMetadataFile(
 	return nil
 }
 
-// buildDeviceMetadata constructs the internal DeviceMetadata from claim info
-// and device data. The internal type is version-agnostic; per-version
-// encoders handle conversion to the target API version during serialization.
 // buildDeviceMetadata 从 claim 信息与设备数据构造内部 DeviceMetadata。
 // 内部类型与版本无关，序列化时由各版本编码器负责转换到目标 API 版本。
 func (w *metadataWriter) buildDeviceMetadata(
@@ -405,8 +364,6 @@ func (w *metadataWriter) buildDeviceMetadata(
 	}
 }
 
-// encodeMetadataStream encodes the internal metadata object once per
-// configured version and concatenates the results into a JSON stream.
 // encodeMetadataStream 按每个配置版本各编码一次内部对象，并把结果拼接成一个 JSON 流。
 func (w *metadataWriter) encodeMetadataStream(dm *metadata.DeviceMetadata) ([]byte, error) {
 	// 用缓冲区拼接各版本的编码结果。
@@ -426,9 +383,6 @@ func (w *metadataWriter) encodeMetadataStream(dm *metadata.DeviceMetadata) ([]by
 	return buf.Bytes(), nil
 }
 
-// writeCDISpec writes a CDI spec that bind-mounts the metadata file into the
-// container. Returns the CDI device ID. See
-// k8s.io/dynamic-resource-allocation/api/metadata for the container path layout.
 // writeCDISpec 写入一份 CDI 规范，把元数据文件绑定挂载到容器中，并返回 CDI 设备 ID。
 // 容器内路径布局见 k8s.io/dynamic-resource-allocation/api/metadata。
 func (w *metadataWriter) writeCDISpec(
@@ -488,34 +442,25 @@ func (w *metadataWriter) writeCDISpec(
 	return w.driverName + "/metadata=" + deviceName, nil
 }
 
-// Path helpers.
-
 // 下面是路径计算辅助函数。
-// claimMetadataDir returns the host directory for a claim's metadata files.
-// Format: {pluginDataDir}/dra-device-metadata/{claimNs}_{claimName}/
 // claimMetadataDir 返回某个 claim 元数据文件在宿主机上的目录：
 // {pluginDataDir}/dra-device-metadata/{claimNs}_{claimName}/。
 func (w *metadataWriter) claimMetadataDir(claimNs, claimName string) string {
 	return filepath.Join(w.pluginDataDir, metadataSubDir, claimNs+"_"+claimName)
 }
 
-// metadataFilePath returns the host path for a request's metadata file.
-// Format: {pluginDataDir}/dra-device-metadata/{claimNs}_{claimName}/{requestName}/metadata.json
-// metadataFilePath 返回某个请求元数据文件在宿主机上的路径，文件名固定为 metadata.json。
+// metadataFilePath 返回某个请求元数据文件在宿主机上的路径：
+// {pluginDataDir}/dra-device-metadata/{claimNs}_{claimName}/{requestName}/metadata.json。
 func (w *metadataWriter) metadataFilePath(claimNs, claimName, requestName string) string {
 	return filepath.Join(w.claimMetadataDir(claimNs, claimName), requestName, "metadata.json")
 }
 
-// cdiSpecFilePath returns the path for the CDI spec file.
-// Format: {cdiDir}/{driverName}_metadata_{claimUID}_{requestName}.json
 // cdiSpecFilePath 返回 CDI 规范文件路径：
 // {cdiDir}/{driverName}_metadata_{claimUID}_{requestName}.json。
 func (w *metadataWriter) cdiSpecFilePath(claimUID types.UID, requestName string) string {
 	return filepath.Join(w.cdiDir, fmt.Sprintf("%s_metadata_%s_%s.json", w.driverName, string(claimUID), requestName))
 }
 
-// containerFilePath returns the in-container path for a metadata file.
-// See k8s.io/dynamic-resource-allocation/api/metadata for the full path layout.
 // containerFilePath 返回元数据文件在容器内的路径；
 // 来自资源声明模板的请求走 ResourceClaimTemplates 路径，普通请求走 ResourceClaims 路径。
 func (w *metadataWriter) containerFilePath(ref claimRef, requestName string) string {
@@ -526,16 +471,6 @@ func (w *metadataWriter) containerFilePath(ref claimRef, requestName string) str
 	return metadata.ResourceClaimFilePath(w.driverName, ref.name, requestName)
 }
 
-// UpdateRequestMetadata overwrites the metadata file for a specific
-// request in a prepared claim, incrementing the metadata generation number.
-//
-// This is intended for drivers whose device attributes (e.g. IP addresses,
-// interface names) only become known after pod sandbox creation. The driver
-// initially returns devices without Metadata during PrepareResourceClaims,
-// then calls UpdateRequestMetadata once the information is available.
-//
-// The devices slice should match the original PrepareResult for this request,
-// now with their Metadata field populated.
 // UpdateRequestMetadata 覆写已准备 claim 中某个请求的元数据文件，并递增 generation。
 // 适用于设备属性（如 IP 地址、接口名）只有在 Pod 沙箱创建后才可知的驱动：
 // PrepareResourceClaims 时先返回不带 Metadata 的设备，信息就绪后再调用本方法。

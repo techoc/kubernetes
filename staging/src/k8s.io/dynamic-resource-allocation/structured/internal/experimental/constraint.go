@@ -27,26 +27,18 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// attributeProvider defines how constraints retrieve device attributes.
 // attributeProvider 定义约束如何检索设备属性：给定请求、设备与属性名，返回属性值或错误。
 type attributeProvider interface {
 	// lookupAttribute 在给定请求与设备上按属性名查找属性值，失败时返回错误。
 	lookupAttribute(request *requestData, device *draapi.Device, deviceID DeviceID, attributeName resourceapi.FullyQualifiedName) (*resourceapi.DeviceAttribute, error)
 }
 
-// distinctAttributeConstraint compares an attribute value across devices.
-// All devices must share the same value. When the set of devices is
-// empty, any device that has the attribute can be added. After that,
-// only matching devices can be added.
 // distinctAttributeConstraint 要求所有相关设备的指定属性值互不相同：设备集合为空时任何拥有该属性的设备都可加入，此后只允许属性值不与已有设备重复的设备加入。
 // 无需记录具体是哪些设备，只记录已接纳设备的属性值（其数量）。
 // 字段：logger 为预置日志器；requestNames 为受影响的请求名集合（空表示全部）；attributeName 为属性全名。
 // features 决定使用列表还是标量比较语义；attributeProvider 用于解析属性值；attributes 为已接纳设备的属性值列表。
-//
-// We don't need to track *which* devices are part of the set, only
-// how many.
 type distinctAttributeConstraint struct {
-	logger            klog.Logger // Includes name and attribute name, so no need to repeat in log messages.
+	logger            klog.Logger // 已包含名称与属性名，日志消息中无需重复。
 	requestNames      sets.Set[string]
 	attributeName     resourceapi.FullyQualifiedName
 	features          Features
@@ -59,7 +51,6 @@ type distinctAttributeConstraint struct {
 func (m *distinctAttributeConstraint) add(request *requestData, device *draapi.Device, deviceID DeviceID) (bool, error) {
 	// 若约束仅针对特定请求而当前请求不在其中，则该设备不受约束影响，直接接纳。
 	if m.requestNames.Len() > 0 && !m.matches(request) {
-		// Device not affected by constraint.
 		return true, nil
 	}
 
@@ -70,7 +61,6 @@ func (m *distinctAttributeConstraint) add(request *requestData, device *draapi.D
 	}
 	// 设备没有该属性，视为不满足约束。
 	if attribute == nil {
-		// Doesn't have the attribute.
 		m.logger.V(7).Info("Constraint not satisfied, attribute not set")
 		return false, nil
 	}
@@ -90,7 +80,6 @@ func (m *distinctAttributeConstraint) add(request *requestData, device *draapi.D
 func (m *distinctAttributeConstraint) remove(request *requestData, device *draapi.Device, deviceID DeviceID) {
 	// 不受约束影响的请求无需回滚。
 	if m.requestNames.Len() > 0 && !m.matches(request) {
-		// Device not affected by constraint.
 		return
 	}
 
@@ -115,9 +104,6 @@ func (m *distinctAttributeConstraint) matches(request *requestData) bool {
 func (m *distinctAttributeConstraint) matchesAttribute(attribute resourceapi.DeviceAttribute) bool {
 	// 启用列表属性特性时，采用“两两不相交”的集合语义。
 	if m.features.ListTypeAttributes {
-		// Set-based comparison for ListAttributes feature:
-		// Check that the new device's attribute set is disjoint from all existing devices.
-		// This implements "Pairwise Disjoint" semantics for distinct attributes.
 		// 无法转换为集合（未知属性类型），拒绝。
 		newSet := attributeAsSet(&attribute)
 		if newSet == nil {
@@ -125,7 +111,6 @@ func (m *distinctAttributeConstraint) matchesAttribute(attribute resourceapi.Dev
 			return false
 		}
 
-		// Check that the new device is disjoint from each existing device
 		// 与每个已有设备的属性集合求交，出现交集即违反互异约束。
 		for _, attr := range m.attributes {
 			existingSet := attributeAsSet(attr)
@@ -134,21 +119,16 @@ func (m *distinctAttributeConstraint) matchesAttribute(attribute resourceapi.Dev
 			}
 			// 与某已有设备存在公共元素，违反互异约束。
 			if newSet.intersection(existingSet) != nil {
-				// New device has common elements with an existing device.
-				// This violates the distinct constraint.
 				m.logger.V(7).Info("Constraint not satisfied, devices have common elements")
 				return false
 			}
 		}
 
 		// 与所有已有设备均不相交，满足约束。
-		// New device is disjoint from all existing devices.
-		// The constraint is satisfied.
 		m.logger.V(7).Info("Constraint satisfied, new device is disjoint from all existing devices")
 		return true
 	}
 
-	// Scalar comparison (existing behavior)
 	// 未启用列表特性时，按标量精确相等逐一比较；重复则拒绝。
 	for _, attr := range m.attributes {
 		// 按属性值的具体类型分别比较。
@@ -168,23 +148,18 @@ func (m *distinctAttributeConstraint) matchesAttribute(attribute resourceapi.Dev
 				m.logger.V(7).Info("Bool values duplicated")
 				return false
 			}
+		// semver 2.0.0 要求最小规范形式（尤其禁止前导零），因此版本值可直接做字符串相等比较。
 		case attribute.VersionValue != nil:
-			// semver 2.0.0 requires that version strings are in their
-			// minimal form (in particular, no leading zeros). Therefore a
-			// strict "exact equal" check can do a string comparison.
 			if attr.VersionValue != nil && *attribute.VersionValue == *attr.VersionValue {
 				m.logger.V(7).Info("Version values duplicated")
 				return false
 			}
 		default:
-			// Unknown value type, cannot match.
-			// This condition should not be reached
-			// as the unknown value type should be failed on CEL compile (getAttributeValue).
+			// 未知值类型无法匹配；正常应在 CEL 编译阶段已被拒绝。
 			m.logger.V(7).Info("Distinct attribute type unknown")
 			return false
 		}
 	}
-	// All distinct
 	// 与所有已有属性值均不重复，满足约束。
 	return true
 }

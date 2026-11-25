@@ -26,32 +26,16 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// errCapacityRequestNotRepresentable signals that a capacity request, or the
-// value it rounds up to, cannot be represented by a device's range arithmetic
-// (it passes MaxInt64 on the integer path, or the milli-value range on the
-// fractional path). The allocator treats this as a fatal error that aborts the
-// allocation rather than a per-device mismatch to skip, so an unrepresentable
-// request is rejected outright instead of driving a device-by-device retry.
-//
 // errCapacityRequestNotRepresentable 表示容量请求（或其向上取整后的值）无法用设备的区间算术表示：
 // 整数路径上超过 MaxInt64，或小数路径上超出毫值范围。分配器将其视为中止分配的致命错误，
 // 而不是可跳过的单设备不匹配，因此不可表示的请求会被直接拒绝，而不会触发逐设备重试。
 var errCapacityRequestNotRepresentable = errors.New("capacity request cannot be represented in the device's range arithmetic")
 
-// errNegativeCapacity signals that a resolved consumed capacity is negative. A negative
-// value is not valid capacity and would under-count the device and over-allocate it. It
-// can reach the allocator from a stored ResourceSlice or ResourceClaim created before
-// stricter validation, which admission does not re-check, so the allocator rejects it
-// rather than recording it.
-//
 // errNegativeCapacity 表示解析出的已消费容量为负数。负值不是有效容量，会导致设备被少计而过度分配。
 // 它可能来自在更严格校验之前创建、且准入阶段不会重新校验的已存储 ResourceSlice 或 ResourceClaim，
 // 因此分配器拒绝它而不是记录它。
 var errNegativeCapacity = errors.New("capacity value is negative")
 
-// CmpRequestOverCapacity checks whether the new capacity request can be added within the given capacity,
-// and checks whether the requested value is against the capacity requestPolicy.
-//
 // CmpRequestOverCapacity 检查新的容量请求能否在给定容量之内被追加，并校验请求值是否符合容量的
 // requestPolicy。返回 (true, nil) 表示可分配；(false, nil) 表示跳过该设备（软失败）；
 // (false, err) 表示致命错误，应中止整个分配。
@@ -60,16 +44,8 @@ func CmpRequestOverCapacity(currentConsumedCapacity ConsumedCapacity, deviceRequ
 	// 请求中包含设备未定义的容量：其他设备可能支持，故按“不可满足”软失败处理，而非致命错误。
 	// false + nil error 表示“跳过该设备”，非 nil error 表示“中止分配”。
 	if requestsContainNonExistCapacity(deviceRequestCapacity, capacity) {
-		// This device does not define a requested capacity. A different device may,
-		// so report it as not satisfiable rather than a fatal error: false with a nil
-		// error means "skip this device", a non-nil error means "abort allocation".
 		return false, nil
 	}
-	// First resolve every requested capacity. A request that cannot be represented is a
-	// fatal error that must abort regardless of map iteration order, so representability
-	// is checked for all capacities before any soft "not satisfiable" return below.
-	// Interleaving the two in one loop would let the outcome, skip or abort, depend on
-	// which capacity the map happens to visit first.
 	// 第一遍：预先解析每种容量的实际消费量，并先完成可表示性检查。
 	consumed := make(map[resourceapi.QualifiedName]resource.Quantity, len(capacity))
 	for name, cap := range capacity {
@@ -83,22 +59,14 @@ func CmpRequestOverCapacity(currentConsumedCapacity ConsumedCapacity, deviceRequ
 		// 根据请求值与 requestPolicy 计算实际消费量，并在此处检测到不可表示的错误。
 		consumedCapacity, err := calculateConsumedCapacity(requestedValPtr, cap, fractionalCapacityRange)
 		if err != nil {
-			// The request is not representable in this capacity's range arithmetic.
-			// Surface a fatal error so the allocator aborts instead of retrying other
-			// devices, which a user-controlled out-of-range request could abuse.
 			return false, fmt.Errorf("capacity %q: %w", name, err)
 		}
 		if consumedCapacity.Sign() < 0 {
-			// A negative capacity cannot come from a request the allocator should honor;
-			// recording it would over-allocate the device. Abort rather than skip, since a
-			// stored object from before stricter validation is a data problem, not a
-			// per-device mismatch that another device could satisfy.
 			return false, fmt.Errorf("capacity %q: %w", name, errNegativeCapacity)
 		}
 		// 缓存解析结果，供第二遍策略与容量检查使用。
 		consumed[name] = consumedCapacity
 	}
-	// The policy and capacity checks are soft: they skip this device rather than abort.
 	// 第二遍：策略与容量检查属于软失败，只会跳过该设备而不会中止分配。先在克隆上累加，避免污染原状态。
 	clone := currentConsumedCapacity.Clone()
 	for name, cap := range capacity {
@@ -107,14 +75,11 @@ func CmpRequestOverCapacity(currentConsumedCapacity ConsumedCapacity, deviceRequ
 		if violatesPolicy(consumedCapacity, cap.RequestPolicy, fractionalCapacityRange) {
 			return false, nil
 		}
-		// If the current clone already contains an entry for this capacity, add the consumedCapacity to it.
-		// Otherwise, initialize it with calculated consumedCapacity.
 		if _, allocatedFound := clone[name]; allocatedFound {
 			clone[name].Add(consumedCapacity)
 		} else {
 			clone[name] = ptr.To(consumedCapacity.DeepCopy())
 		}
-		// If allocatingCapacity contains an entry for this capacity, add its value to clone as well.
 		if allocatingVal, allocatingFound := allocatingCapacity[name]; allocatingFound {
 			clone[name].Add(*allocatingVal)
 		}
@@ -127,8 +92,6 @@ func CmpRequestOverCapacity(currentConsumedCapacity ConsumedCapacity, deviceRequ
 	return true, nil
 }
 
-// requestsNonExistCapacity returns true if requests contain non-exist capacity.
-//
 // requestsContainNonExistCapacity 在请求包含设备未定义的容量名时返回 true。请求为空或 nil 时返回 false；
 // 只要有任一请求名在设备容量 map 中找不到，就立即返回 true。
 func requestsContainNonExistCapacity(deviceRequestCapacity *resourceapi.CapacityRequirements,
@@ -146,12 +109,6 @@ func requestsContainNonExistCapacity(deviceRequestCapacity *resourceapi.Capacity
 	return false
 }
 
-// calculateConsumedCapacity returns valid capacity to be consumed regarding the requested capacity and device capacity policy.
-//
-// If no requestPolicy, return capacity.Value.
-// If no requestVal, fill the quantity by fillEmptyRequest function
-// Otherwise, use requestPolicy to calculate the consumed capacity from request if applicable.
-//
 // calculateConsumedCapacity 根据请求值与设备容量策略返回有效的消费量：无请求值时由 fillEmptyRequest
 // 填充；无 requestPolicy 时原样返回请求值；否则按 ValidRange 或 ValidValues 策略计算消费量。
 func calculateConsumedCapacity(requestedVal *resource.Quantity, capacity resourceapi.DeviceCapacity, fractionalCapacityRange bool) (resource.Quantity, error) {
@@ -176,10 +133,6 @@ func calculateConsumedCapacity(requestedVal *resource.Quantity, capacity resourc
 	return *requestedVal, nil
 }
 
-// fillEmptyRequest
-// return requestPolicy.default if defined.
-// Otherwise, return capacity value.
-//
 // fillEmptyRequest 在请求值为空时使用策略中的 default（若定义），否则使用容量自身的值。
 // 返回深拷贝以避免调用方修改共享的 Quantity。
 func fillEmptyRequest(capacity resourceapi.DeviceCapacity) resource.Quantity {
@@ -191,21 +144,6 @@ func fillEmptyRequest(capacity resourceapi.DeviceCapacity) resource.Quantity {
 	return capacity.Value.DeepCopy()
 }
 
-// roundUpRange rounds the requestedVal up to fit within the specified validRange.
-//   - If requestedVal is less than Min, it returns Min.
-//   - If Step is specified, it rounds requestedVal up to the nearest multiple of Step
-//     starting from Min.
-//   - If no Step is specified and requestedVal >= Min, it returns requestedVal as is.
-//
-// When fractionalCapacityRange is true and any of min/max/step are fractional and all
-// fit within the milli-value int64 range and step >= 1m, milli-value arithmetic is used.
-// Otherwise Value() arithmetic is used.
-//
-// It returns errCapacityRequestNotRepresentable when the request, or the value it
-// rounds up to, cannot be represented: past MaxInt64 on the integer path, or past
-// the milli-value range on the fractional path. The caller aborts allocation with
-// that error rather than acting on a wrapped read or a silently capped value.
-//
 // roundUpRange 把请求值向上取整到 validRange 允许的取值：低于 Min 时返回 Min；指定了 Step 时
 // 向上取整到从 Min 起 Step 的最近倍数；无 Step 且请求 >= Min 时原样返回。当
 // fractionalCapacityRange 开启且 min/max/step 中存在小数、都能无损表示为毫值且 step >= 1m 时，
@@ -243,19 +181,12 @@ func roundUpRange(requestedVal *resource.Quantity, validRange *resourceapi.Capac
 		}
 		// 得到最终的毫值结果：min + step * n。
 		valMilli := minMilli + stepMilli*n
-		// Return in the same format as the step quantity. If the result is a
-		// whole number, use NewQuantity to keep the representation compact and
-		// compatible with quantities parsed from whole-number strings.
 		// 结果为整数时用 NewQuantity 保持紧凑表示，否则用毫值表示。
 		if valMilli%1000 == 0 {
 			return *resource.NewQuantity(valMilli/1000, format), nil
 		}
 		return *resource.NewMilliQuantity(valMilli, format), nil
 	}
-	// Integer arithmetic path.
-	// A request above MaxInt64 cannot be read with Value() without wrapping, so it
-	// cannot be rounded in int64. Report that it is not representable rather than
-	// acting on the wrapped read.
 	// 整数算术路径：使用 Value() 读取整数值；超过 MaxInt64 的请求无法安全读取。
 	if requestedVal.CmpInt64(math.MaxInt64) > 0 {
 		return resource.Quantity{}, fmt.Errorf("%w: request %s exceeds MaxInt64", errCapacityRequestNotRepresentable, requestedVal.String())
@@ -269,10 +200,6 @@ func roundUpRange(requestedVal *resource.Quantity, validRange *resourceapi.Capac
 	if added%stepInt != 0 {
 		n++
 	}
-	// minInt+stepInt*n overflows int64 once the rounded value passes MaxInt64. It cannot
-	// be represented or compared reliably, so report the request as not representable. The
-	// guard needs minInt >= 0 so that MaxInt64-minInt does not itself overflow; a negative
-	// min is out of the non-negative API contract and keeps the existing arithmetic here.
 	// 取整结果溢出 int64 时报致命错误；minInt >= 0 的前提保证 MaxInt64-minInt 本身不溢出。
 	if minInt >= 0 && n > (math.MaxInt64-minInt)/stepInt {
 		return resource.Quantity{}, fmt.Errorf("%w: rounding request %s up to the next step passes MaxInt64", errCapacityRequestNotRepresentable, requestedVal.String())
@@ -281,14 +208,8 @@ func roundUpRange(requestedVal *resource.Quantity, validRange *resourceapi.Capac
 	return *resource.NewQuantity(minInt+stepInt*n, validRange.Step.Format), nil
 }
 
-// roundUpValidValues returns the first value in validValues that is greater than or equal to requestedVal.
-// If no such value exists, it returns requestedVal itself.
-//
 // roundUpValidValues 返回合法值集合中第一个大于等于请求值的值；若不存在这样的值，则原样返回请求值。
 func roundUpValidValues(requestedVal *resource.Quantity, validValues []resource.Quantity) resource.Quantity {
-	// Simple sequential search is used as the maximum entry of validValues is finite and small (≤10),
-	// and the list must already be sorted in ascending order, ensured by API validation.
-	// Note: A binary search could alternatively be used for better efficiency if the list grows larger.
 	// 由于合法值集合由 API 校验保证升序且条目很少（≤10），使用简单顺序查找即可。
 	for _, validValue := range validValues {
 		// 第一个 >= 请求值的合法值即为向上取整结果。
@@ -300,9 +221,6 @@ func roundUpValidValues(requestedVal *resource.Quantity, validValues []resource.
 	return *requestedVal
 }
 
-// GetConsumedCapacityFromRequest returns valid consumed capacity,
-// according to claim request and defined capacity.
-//
 // GetConsumedCapacityFromRequest 根据 claim 请求与设备定义的容量，返回每种容量的有效消费量。
 // 不可表示的请求会作为致命错误返回，不会记录未经处理的原始请求值。
 func GetConsumedCapacityFromRequest(requestedCapacity *resourceapi.CapacityRequirements,
@@ -318,9 +236,6 @@ func GetConsumedCapacityFromRequest(requestedCapacity *resourceapi.CapacityRequi
 		}
 		capacity, err := calculateConsumedCapacity(requestedValPtr, cap, fractionalCapacityRange)
 		if err != nil {
-			// Feasibility already ran, so this should not happen. Return the error
-			// rather than a raw request so a future caller cannot record an
-			// unrepresentable value as consumed capacity.
 			return nil, fmt.Errorf("capacity %q: %w", name, err)
 		}
 		consumedCapacity[name] = capacity
@@ -328,13 +243,10 @@ func GetConsumedCapacityFromRequest(requestedCapacity *resourceapi.CapacityRequi
 	return consumedCapacity, nil
 }
 
-// violatesPolicy checks whether the request violate the requestPolicy.
-//
 // violatesPolicy 检查请求值是否违反 requestPolicy：策略为 nil、或请求值恰为 default 时均视为不违反；
 // 否则按 ValidRange 或 ValidValues 规则判断。返回 true 表示违反策略。
 func violatesPolicy(requestedVal resource.Quantity, policy *resourceapi.CapacityRequestPolicy, fractionalCapacityRange bool) bool {
 	if policy == nil {
-		// no policy to check
 		// 无策略可检查，自然不违反。
 		return false
 	}
@@ -349,7 +261,6 @@ func violatesPolicy(requestedVal resource.Quantity, policy *resourceapi.Capacity
 	case len(policy.ValidValues) > 0:
 		return violateValidValues(requestedVal, policy.ValidValues)
 	}
-	// no policy violated through to completion.
 	// 策略中没有任何可用约束，视为不违反。
 	return false
 }
@@ -379,7 +290,6 @@ func violateValidRange(requestedVal resource.Quantity, validRange resourceapi.Ca
 			step = validRange.Step.Value()
 			min = validRange.Min.Value()
 		}
-		// must be a multiple of step from min
 		// 必须是相对 Min 的 Step 整数倍，否则违反策略。
 		if (requested-min)%step != 0 {
 			return true
@@ -388,11 +298,6 @@ func violateValidRange(requestedVal resource.Quantity, validRange resourceapi.Ca
 	return false
 }
 
-// useMilli reports whether milli-value arithmetic should be used for the given range.
-// Conditions: fractionalCapacityRange enabled AND any of min/max/step is fractional
-// AND all non-nil fields fit within the milli-value int64 range AND step >= 1m (i.e.
-// non-zero after MilliValue()).
-//
 // useMilli 报告给定区间是否应使用毫值算术。需要 fractionalCapacityRange 开启、各字段均可无损
 // 表示成毫值，且 Step 至少为 1m（MilliValue 后非零）；特性关闭时直接返回 false。
 func useMilli(validRange *resourceapi.CapacityRequestPolicyRange, enableFractionalCapacityRange bool) bool {
@@ -410,7 +315,6 @@ func useMilli(validRange *resourceapi.CapacityRequestPolicyRange, enableFraction
 		}
 		// 第三个字段是 Step：必须至少 1m，否则取整无意义，退回整数路径。
 		if i == 2 {
-			// Step must be at least 1m.
 			if step, err := safeMilliValue(*validRange.Step); err == nil && step < 1 {
 				return false
 			}
@@ -433,8 +337,6 @@ func violateValidValues(requestedVal resource.Quantity, validValues []resource.Q
 	return true
 }
 
-// safeMilliValue returns q as a milli value if the conversion is lossless.
-//
 // safeMilliValue 在转换无损时返回 q 的毫值整数表示。它把 MilliValue() 的结果重新构造成
 // 毫值 Quantity 并与原值比较；不一致说明原值无法用毫单位精确表示，返回错误。
 func safeMilliValue(q resource.Quantity) (int64, error) {

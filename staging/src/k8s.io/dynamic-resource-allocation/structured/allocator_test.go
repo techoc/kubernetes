@@ -49,8 +49,6 @@ func TestAllocator(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			// Return the allocator with the internal interface so the tests can
-			// check the channel for the allocator.
 			// 以 internal.Allocator 接口返回实例，便于测试检查分配器的 channel（实现通道标识）。
 			// 断言：分配器必须实现 internal.Allocator 接口。
 			internalAllocator, ok := allocator.(internal.Allocator)

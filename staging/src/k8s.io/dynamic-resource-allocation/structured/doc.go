@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package structured contains code for working with structured parameters.
 // Package structured 提供处理结构化参数（structured parameters）的代码。
 // 本包对外暴露 Allocator：它依据节点状态、ResourceClaim、DeviceClass 与 ResourceSlice 计算分配方案；
 // 内部在 stable、incubating、experimental 三套实现中按特性集合挑选一套，返回的分配器可复用且线程安全。

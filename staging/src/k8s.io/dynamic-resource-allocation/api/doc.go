@@ -14,10 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package api contains a variant of the API where strings are unique. These
-// unique strings are faster to compare and more efficient when used as key in
-// a map.
 // Package api 提供 API 的一种变体，其中字符串是唯一的。这些唯一字符串比较更快，作为 map 键时更高效。
-//
 // +k8s:conversion-gen=k8s.io/api/resource/v1
 package api

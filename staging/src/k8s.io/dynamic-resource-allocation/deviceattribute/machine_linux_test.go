@@ -27,8 +27,6 @@ import (
 // 断言读取成功且内容非空。
 func TestWithFSFromRoot(t *testing.T) {
 	mc := machine{}
-	// we are using real files from sysfs pseudofs, but we are using files which
-	// are standard since pretty much the inception of sysfs
 	// 使用真实 /sys 作为根，仅读取长期稳定存在的标准文件以避免环境差异。
 	mod := WithFSFromRoot("/sys")
 	mod(&mc)

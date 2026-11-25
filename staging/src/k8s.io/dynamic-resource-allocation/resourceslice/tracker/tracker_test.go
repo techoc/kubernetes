@@ -78,7 +78,6 @@ func update[T any](oldObj, newObj *T) [2]*T {
 	return [2]*T{oldObj, newObj}
 }
 
-// removeRule(<name>) removes a DeviceTaintRule by name.
 // removeRule 表示按名称删除规则，用于模拟“删除时拿不到对象”的场景。
 type removeRule string
 
@@ -94,9 +93,6 @@ func runInputEvents(tCtx *testContext, events []any, permutation []int) {
 	}
 }
 
-// lookupEvent is the opposite of flatten: it takes an index
-// after flattening and maps it back to the event in the original
-// event hierarchy. To do so, it descends into the second level where necessary.
 // lookupEvent 将扁平化后的索引还原为原始事件及其层级路径名称，是 flatten 的逆操作。
 func lookupEvent(events []any, index int) (any, string) {
 	// numEvents 记录已跳过的事件数。
@@ -178,7 +174,6 @@ func applyEventPair(tCtx *testContext, event any) {
 		// 从 store 移除。
 		err = store.Delete(obj)
 		require.NoError(tCtx, err)
-		// Let's pretend we don't have it...
 		// 模拟 informer 只拿到删除 tombstone 的情形。
 		tCtx.deviceTaintDelete(tCtx.Context)(resourceinformers.DeletedDeviceTaintRule{FinalStateUnknown: &cache.DeletedFinalStateUnknown{Key: name}})
 	}
@@ -380,27 +375,11 @@ var (
 func TestListPatchedResourceSlices(t *testing.T) {
 	// test 描述单个测试用例的输入与期望。
 	type test struct {
-		// events contains pairs of old and new objects which will
-		// be passed to event handler methods.
-		// Objects can be slices and device taint rules.
-		// [add], [remove], and [update] can be used to produce
-		// such pairs.
-		//
-		// Alternatively, it can also contain a list of such pairs.
-		// Those will be applied in the order in which they appear
-		// in each event entry, but not necessarily in consecutive
-		// order. Other events may be placed in between as long as
-		// the order in those nested lists is preserved.
 		// events 是由“旧对象, 新对象”组成的输入序列，可嵌套以施加相对顺序约束。
 		// 嵌套列表内的事件保持相对顺序，但允许与其它事件交错。
 		// expectedPatchedSlices 为期望的最终补丁结果（比较前按名称排序）。
 		events                []any
 		expectedPatchedSlices []*resourceapi.ResourceSlice
-		// The exact events that are emitted for a sequence of events is
-		// highly dependent on the order in which those events are received.
-		// We punt on determining a set of validation criteria for every
-		// possible sequence and only check them against the first
-		// permutation: the order in which the events are defined.
 		// expectedHandlerEvents 只在未打乱顺序的第一种排列下断言，因为事件序列强依赖到达顺序。
 		// expectEvents 用于断言生成的 Event，默认要求为空。
 		// expectUnhandledErrors 用于断言未被处理的错误，默认要求为空。
@@ -751,7 +730,6 @@ func TestListPatchedResourceSlices(t *testing.T) {
 		}
 		expectUnhandledErrors(tCtx.T, unhandledErrors)
 
-		// Check ResourceSlices
 		// 断言最终缓存结果与期望一致。
 		patchedResourceSlices, err := tCtx.ListPatchedResourceSlices()
 		require.NoError(tCtx, err, "list patched resource slices")
@@ -770,8 +748,6 @@ func TestListPatchedResourceSlices(t *testing.T) {
 				assert.Empty(t, events.Items)
 			}
 		}
-		// Events are generated asynchronously. While shutting down the event recorder will flush all
-		// pending events, it is not possible to determine when exactly that flush is complete.
 		// 在 1 秒内每 10ms 检查一次 Event 列表。
 		assert.EventuallyWithT(
 			tCtx,
@@ -791,10 +767,6 @@ func TestListPatchedResourceSlices(t *testing.T) {
 	for name, tc := range tests {
 		// 每个场景作为子测试运行。
 		t.Run(name, func(t *testing.T) {
-			// flatten does one level of flattening of events, counting all events.
-			// It also returns a slice of pairs of indices representing ranges which were
-			// flattened (= came from the second level) and which therefore must
-			// remain in that order.
 			// flatten 统计事件总数，并记录嵌套列表的索引范围（这些范围内的事件必须保持相对顺序）。
 			flatten := func(events []any) (int, [][2]int) {
 				// 统计扁平化后的事件数。
@@ -818,7 +790,6 @@ func TestListPatchedResourceSlices(t *testing.T) {
 
 			// 只有一个事件列表时无需排列，直接按原序运行。
 			if len(tc.events) <= 1 {
-				// No permutations possible.
 				// 构造 0..numEvents-1 的自然顺序排列。
 				var permutation []int
 				for i := 0; i < numEvents; i++ {
@@ -838,12 +809,10 @@ func TestListPatchedResourceSlices(t *testing.T) {
 			permutate = func(depth int) {
 				// 排列完成，创建一个子测试运行它。
 				if depth >= numEvents {
-					// Define a sub-test which runs the current permutation of events.
 					// 用排列内容作为子测试名。
 					name := strings.Trim(fmt.Sprintf("%v", permutation), "[]")
 					t.Run(name, func(t *testing.T) {
 						tContext := setup(t)
-						// No need to clone the slice, we don't run in parallel.
 						// 排列不并行运行，无需克隆切片。
 						testHandlers(tContext, tc, permutation)
 					})
@@ -855,7 +824,6 @@ func TestListPatchedResourceSlices(t *testing.T) {
 				for i := range numEvents {
 					// 已使用则跳过。
 					if slices.Contains(permutation[0:depth], i) {
-						// Already taken.
 						continue
 					}
 					// 检查顺序约束。
@@ -867,16 +835,12 @@ func TestListPatchedResourceSlices(t *testing.T) {
 						// 若区间内还有未放置的事件，不能先放后面的，否则会打乱相对顺序。
 						for j := i + 1; j < constraint[1]; j++ {
 							if slices.Contains(permutation[0:depth], j) {
-								// Invalid permutation, would change order
-								// of sub-events.
 								// 该候选会破坏嵌套列表内事件的相对顺序，跳过。
 								continue nexti
 							}
 						}
 					}
 
-					// Pick it for the current position in permutation,
-					// continue with next position.
 					// 选定当前位置并递归处理下一位。
 					permutation[depth] = i
 					permutate(depth + 1)
@@ -943,7 +907,7 @@ func BenchmarkEventHandlers(b *testing.B) {
 						Name: "taintRule",
 					},
 					Spec: resourceapi.DeviceTaintRuleSpec{
-						DeviceSelector: &resourceapi.DeviceTaintSelector{}, // all slices
+						DeviceSelector: &resourceapi.DeviceTaintSelector{}, // 全部 slice
 						Taint: resourceapi.DeviceTaint{
 							Key:       "example.com/taint",
 							Value:     "tainted",
@@ -979,7 +943,7 @@ func BenchmarkEventHandlers(b *testing.B) {
 						Name: "taintRule",
 					},
 					Spec: resourceapi.DeviceTaintRuleSpec{
-						DeviceSelector: &resourceapi.DeviceTaintSelector{}, // all slices
+						DeviceSelector: &resourceapi.DeviceTaintSelector{}, // 全部 slice
 						Taint: resourceapi.DeviceTaint{
 							Key:       "example.com/taint",
 							Value:     "tainted",
@@ -1094,7 +1058,7 @@ func BenchmarkEventHandlers(b *testing.B) {
 			},
 			// 只新增受规则影响的那个 slice（索引 250）。
 			loop: func(ctx context.Context, b *testing.B, tracker *Tracker, resourceSlices []*resourceapi.ResourceSlice, patches []*resourceapi.DeviceTaintRule, i int) {
-				tracker.resourceSliceAdd(ctx)(resourceSlices[250]) // the slice affected by the patch
+				tracker.resourceSliceAdd(ctx)(resourceSlices[250]) // 受 patch 影响的 slice
 			},
 		},
 		// 基准6：500 个 slice 各有自己的规则，新增规则时需精确定位到单个 slice。

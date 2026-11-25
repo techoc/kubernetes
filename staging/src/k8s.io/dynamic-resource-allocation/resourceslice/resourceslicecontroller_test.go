@@ -55,9 +55,6 @@ func init() {
 	klog.InitFlags(nil)
 }
 
-// TestControllerSyncPool verifies that syncPool produces the right ResourceSlices.
-// Update vs. Create API calls are checked by bumping the ResourceVersion in
-// updates.
 // TestControllerSyncPool 是 syncPool 的主表驱动测试：
 // 给定一批初始 ResourceSlice 与驱动期望的 DriverResources，创建控制器并手动排空工作队列后，
 // 断言 apiserver 中最终存在的切片、创建/更新/删除统计以及错误回调内容完全匹配预期。
@@ -118,16 +115,11 @@ func TestControllerSyncPool(t *testing.T) {
 		// reconcilePoolWithName 非空时只协调指定 pool（issue #137011）且不设置 NodeName；
 		// initialObjects 与 initialOtherObjects 分别是初始切片和其他对象；inputDriverResources 是驱动上报的期望状态，nil 表示不调用 Update；
 		// expectedResourceSlices 与 expectedStats 分别是期望的最终切片和 API 调用统计；expectedErrors 是期望的错误信息集合。
-		features  features
-		syncDelay *time.Duration
-		// nodeUID is empty if not a node-local.
-		nodeUID types.UID
-		// noOwner completely disables setting an owner.
-		noOwner bool
-		// reconcilePoolWithName limits reconciliation to a single pool (issue #137011).
-		// When set, NodeName is not set on slices even for Node owner.
-		reconcilePoolWithName string
-		// initialObjects is a list of initial resource slices to be used in the test.
+		features               features
+		syncDelay              *time.Duration
+		nodeUID                types.UID
+		noOwner                bool
+		reconcilePoolWithName  string
 		initialObjects         []runtime.Object
 		initialOtherObjects    []runtime.Object
 		inputDriverResources   *DriverResources
@@ -234,7 +226,6 @@ func TestControllerSyncPool(t *testing.T) {
 								deviceName,
 								resourceapi.DeviceTaint{
 									Effect: resourceapi.DeviceTaintEffectNoExecute,
-									// No time added here! No need to update the slice.
 								},
 							),
 						}}},
@@ -285,17 +276,15 @@ func TestControllerSyncPool(t *testing.T) {
 								[]resourceapi.DeviceTaint{
 									{
 										Effect: resourceapi.DeviceTaintEffectNoExecute,
-										// No time added here! Time from existing slice must get copied during update.
 									},
 									{
 										Key:    "example.com/tainted",
 										Effect: resourceapi.DeviceTaintEffectNoSchedule,
-										// No time added, will be set to timeAddedLater by reactor.
 									},
 									{
 										Key:       "example.com/tainted2",
 										Effect:    resourceapi.DeviceTaintEffectNoExecute,
-										TimeAdded: &timeAddedEarlierSubSecond, // Gets rounded, both by controller and apiserver roundtripping.
+										TimeAdded: &timeAddedEarlierSubSecond, // 控制器与 apiserver 往返时都会取整。
 									},
 								},
 							),
@@ -537,7 +526,7 @@ func TestControllerSyncPool(t *testing.T) {
 		// 场景：驱动不再上报任何 pool，现有切片应被删除；syncDelay=0 确保初始对象立即触发协调。
 		"remove-pool": {
 			nodeUID:   nodeUID,
-			syncDelay: ptr.To(time.Duration(0)), // Ensure that the initial object causes an immediate sync of the pool.
+			syncDelay: ptr.To(time.Duration(0)), // 确保初始对象触发 pool 的立即同步。
 			initialObjects: []runtime.Object{
 				MakeResourceSlice().Name(resourceSlice1).UID(resourceSlice1).
 					NodeOwnerReferences(ownerName, string(nodeUID)).NodeName(ownerName).
@@ -554,7 +543,6 @@ func TestControllerSyncPool(t *testing.T) {
 		"one-existing-and-one-desired-slice-should-be-updated-inplace": {
 			nodeUID: nodeUID,
 			initialObjects: []runtime.Object{
-				// no devices
 				MakeResourceSlice().Name(resourceSlice1).UID(resourceSlice1).
 					NodeOwnerReferences(ownerName, string(nodeUID)).NodeName(ownerName).
 					Driver(driverName).Devices([]resourceapi.Device{}).
@@ -580,7 +568,6 @@ func TestControllerSyncPool(t *testing.T) {
 		"update-slice-when-more-than-one-existing-or-desired-slice": {
 			nodeUID: nodeUID,
 			initialObjects: []runtime.Object{
-				// No devices in first ResourceSlice.
 				MakeResourceSlice().Name(resourceSlice1).GenerateName(generateName1).UID(resourceSlice1).
 					NodeOwnerReferences(ownerName, string(nodeUID)).NodeName(ownerName).
 					Driver(driverName).Devices([]resourceapi.Device{}).
@@ -753,17 +740,14 @@ func TestControllerSyncPool(t *testing.T) {
 		"multiple-resourceslices-existing-with-different-resource-pool-generation": {
 			nodeUID: nodeUID,
 			initialObjects: []runtime.Object{
-				// no devices
 				MakeResourceSlice().Name(resourceSlice1).UID(resourceSlice1).
 					NodeOwnerReferences(ownerName, string(nodeUID)).NodeName(ownerName).
 					Driver(driverName).Devices([]resourceapi.Device{}).
 					Pool(resourceapi.ResourcePool{Name: poolName, Generation: 1, ResourceSliceCount: 1}).Obj(),
-				// matching device
 				MakeResourceSlice().Name(resourceSlice2).UID(resourceSlice2).
 					NodeOwnerReferences(ownerName, string(nodeUID)).NodeName(ownerName).
 					Driver(driverName).Devices([]resourceapi.Device{newDevice(deviceName)}).
 					Pool(resourceapi.ResourcePool{Name: poolName, Generation: 2, ResourceSliceCount: 1}).Obj(),
-				// no devices
 				MakeResourceSlice().Name(resourceSlice3).UID(resourceSlice3).
 					NodeOwnerReferences(ownerName, string(nodeUID)).NodeName(ownerName).
 					Driver(driverName).Devices([]resourceapi.Device{}).
@@ -822,7 +806,6 @@ func TestControllerSyncPool(t *testing.T) {
 					},
 				},
 			},
-			// Generation not bumped, only one update.
 			expectedStats: Stats{
 				NumUpdates: 1,
 			},
@@ -869,7 +852,6 @@ func TestControllerSyncPool(t *testing.T) {
 					},
 				},
 			},
-			// Generation bumped, all updated.
 			expectedStats: Stats{
 				NumUpdates: 3,
 			},
@@ -915,7 +897,6 @@ func TestControllerSyncPool(t *testing.T) {
 					},
 				},
 			},
-			// Generation bumped, two updated, one removed.
 			expectedStats: Stats{
 				NumUpdates: 2,
 				NumDeletes: 1,
@@ -1255,7 +1236,7 @@ func TestControllerSyncPool(t *testing.T) {
 					AllNodes(false).
 					NodeName("").
 					NodeSelector(nil).
-					PerDeviceNodeSelection(false). // Should be dropped.
+					PerDeviceNodeSelection(false). // 应当丢弃。
 					Driver(driverName).
 					Pool(resourceapi.ResourcePool{Name: poolName, Generation: 1, ResourceSliceCount: 2}).
 					Obj(),
@@ -1265,7 +1246,7 @@ func TestControllerSyncPool(t *testing.T) {
 					AllNodes(false).
 					NodeName("").
 					NodeSelector(nil).
-					PerDeviceNodeSelection(false). // Should be dropped.
+					PerDeviceNodeSelection(false). // 应当丢弃。
 					Driver(driverName).
 					Devices([]resourceapi.Device{newDevice(deviceName)}).
 					Pool(resourceapi.ResourcePool{Name: poolName, Generation: 1, ResourceSliceCount: 2}).
@@ -1564,9 +1545,9 @@ func TestControllerSyncPool(t *testing.T) {
 				},
 			},
 			expectedStats: Stats{
-				NumCreates: 2, // For index 0 and 2
-				NumDeletes: 2, // For random-name1 and random-name3
-				NumUpdates: 1, // resourceSlice2 is updated to Generation 2
+				NumCreates: 2, // 针对索引 0 和 2
+				NumDeletes: 2, // 针对 random-name1 和 random-name3
+				NumUpdates: 1, // resourceSlice2 更新到 Generation 2
 			},
 			expectedResourceSlices: []resourceapi.ResourceSlice{
 				*MakeResourceSlice().Name(generateName1+"0").GenerateName(generateName1).
@@ -1644,14 +1625,10 @@ func TestControllerSyncPool(t *testing.T) {
 			require.NoError(t, err, "unexpected controller creation error")
 
 			// 手动运行控制器，处理队列中的工作项直到队列清空。
-			// Process work items in the queue until the queue is empty.
-			// Processing races with informers adding new work items,
-			// but the desired state should already be reached in the
-			// first iteration, so all following iterations should be nops.
+			// 处理过程会与 informer 入队竞争；首轮应已达到期望状态，后续轮次都应为空操作。
 			ctrl.run(ctx)
 
 			// 列出 apiserver 中的全部切片，排序后与期望逐项比较，同时校验调用统计。
-			// Check ResourceSlices
 			resourceSlices, err := kubeClient.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{})
 			require.NoError(t, err, "list resource slices")
 
@@ -1661,15 +1638,10 @@ func TestControllerSyncPool(t *testing.T) {
 			assert.Equal(t, test.expectedResourceSlices, resourceSlices.Items)
 			assert.Equal(t, test.expectedStats, ctrl.GetStats())
 
-			// 队列状态断言：Later 与 Ready 字段受 informer 事件竞争影响，需按条件忽略。
-			// The informer might have added a work item before or after ctrl.run returned,
-			// therefore we cannot compare the `Later` field. It's either defaultMutationCacheTTL
-			// (last AddAfter call was after a create) or defaultSyncDelay (last AddAfter was
-			// from informer event handler).
+			// 队列状态断言：informer 可能在 ctrl.run 返回前后入队，Later 因而可能是 TTL 复核延迟或普通同步延迟，无法比较。
 			actualState := queue.State()
 			actualState.Later = nil
-			// If we let the event handler schedule syncs immediately, then that also races
-			// and then Ready cannot be compared either.
+			// syncDelay 为 0 时事件处理会立即入队，与 ctrl.run 竞争，因此 Ready 也无法比较。
 			if test.syncDelay != nil && *test.syncDelay == 0 {
 				actualState.Ready = nil
 			}
@@ -1678,7 +1650,6 @@ func TestControllerSyncPool(t *testing.T) {
 			assert.Equal(t, expectState, actualState)
 
 			// 二次协调：再次入队所有 pool，状态未变时统计不应增长，用于验证幂等性。
-			// Sync all pools again. Nothing changed, so the statistics should remain the same.
 			if test.inputDriverResources != nil {
 				for poolName := range test.inputDriverResources.Pools {
 					queue.Add(poolName)
@@ -1688,7 +1659,6 @@ func TestControllerSyncPool(t *testing.T) {
 			}
 
 			// 同步了两次可能导致错误重复，先按错误信息去重再比较。
-			// Dedup the list of errors since we synced the pool twice.
 			var dedupedControllerErrors []error
 			errorMsgs := sets.New[string]()
 			for _, err := range controllerErrors {
@@ -1721,18 +1691,11 @@ func TestControllerSyncPool(t *testing.T) {
 	}
 }
 
-// TestControllerUpdateDeleteRecreate reproduces the bug where a ResourceSlice
-// that was updated by the controller (leaving a mutation in the MutationCache)
-// and then deleted on the apiserver was not being recreated.
-//
-// The root cause was that the MutationCache kept the stale updated object, so
-// the controller believed the slice still existed and skipped the create.
-// The fix calls OnDelete in the informer's delete event handler, which clears
-// the mutation before the work queue item is processed.
 // TestControllerUpdateDeleteRecreate 回归“更新后被删除的切片无法重建”的 bug：
 // 控制器更新切片会在 MutationCache 中留下条目，若切片随后被 apiserver 删除，
 // 陈旧缓存会让控制器误以为切片仍存在而跳过创建。修复方式是 informer 删除回调调用
-// OnDelete 清除缓存。测试先等待一次更新，再删除切片，最后断言发生了重建。
+// OnDelete 在 informer 删除回调中、工作项处理前清除缓存，避免陈旧更新对象阻止重建。
+// 测试先等待一次更新，再删除切片，最后断言发生了重建。
 func TestControllerUpdateDeleteRecreate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -1780,19 +1743,11 @@ func TestControllerUpdateDeleteRecreate(t *testing.T) {
 	defer ctrl.Stop()
 
 	// 等待控制器完成第一次更新。
-	// Wait for the controller to update the initial slice to reflect the
-	// desired "new-device" state.
 	require.Eventually(t, func() bool {
 		return ctrl.GetStats().NumUpdates >= 1
 	}, 5*time.Second, 10*time.Millisecond, "controller should update the initial slice")
 
 	// 模拟驱动重启后 kubelet 删除切片，验证删除回调清除了陈旧缓存。
-	// Simulate what happens when the DRA driver restarts and kubelet deletes
-	// the slice before the driver can reclaim it.  The informer's delete
-	// handler calls OnDelete, which clears the stale mutation from the cache
-	// before the work-queue item is processed.  Without that call the
-	// MutationCache would serve the stale updated copy and syncPool would
-	// skip the necessary create.
 	require.NoError(t, kubeClient.ResourceV1().ResourceSlices().Delete(ctx, sliceName, metav1.DeleteOptions{}))
 
 	// 等待控制器重新创建被删除的切片。
@@ -1801,8 +1756,6 @@ func TestControllerUpdateDeleteRecreate(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond, "controller should recreate the deleted slice")
 }
 
-// TestControllerUpdateReconcilePoolWithNameValidation verifies that Update rejects
-// invalid pool sets when ReconcilePoolWithName is set
 // TestControllerUpdateReconcilePoolWithNameValidation 验证按 pool 名协调时的 Update 校验：
 // pool 集合必须为空或恰好包含指定名称的一个 pool，否则通过 ErrorHandler 报告错误。
 func TestControllerUpdateReconcilePoolWithNameValidation(t *testing.T) {
@@ -2094,9 +2047,6 @@ func createTestClient(features features, timeAdded metav1.Time, objects ...runti
 	return fakeClient
 }
 
-// createResourceSliceCreateReactor returns a function which
-// implements the logic required for the GenerateName field to work when using
-// the fake client. Add it with client.PrependReactor to your fake client.
 // 返回给 fake client 的 create reactor：用自增计数器把 GenerateName 变成真实 Name，
 // 统一设置 ResourceVersion，并模拟禁用字段丢弃与污点时间补全。
 // 通过 client.PrependReactor 挂载即可生效。
@@ -2111,8 +2061,6 @@ func createResourceSliceCreateReactor(features features, timeAdded metav1.Time) 
 		// 从 action 中取出待创建的切片对象。
 		resourceslice := action.(k8stesting.CreateAction).GetObject().(*resourceapi.ResourceSlice)
 		// ResourceVersion 从 1 开始，避免空字符串或 0 被 MutationCache 视为同一版本。
-		// Assign initial ResourceVersion "1" to newly created slices.
-		// Avoid using "0" because "0" and "" are treated the same by client-go's MutationCache.
 		resourceslice.ResourceVersion = "1"
 		// Name 为空时按 GenerateName 加自增序号生成实际名称。
 		if resourceslice.Name == "" && resourceslice.GenerateName != "" {
@@ -2127,7 +2075,6 @@ func createResourceSliceCreateReactor(features features, timeAdded metav1.Time) 
 	}
 }
 
-// resourceSliceUpdateReactor implements the ResourceVersion bump for a fake client.
 // createResourceSliceUpdateReactor 为 fake client 实现 update 时的 ResourceVersion 递增：
 // 空版本号按 0 处理，其余按整数解析后加一；同时模拟字段丢弃与污点时间补全。
 func createResourceSliceUpdateReactor(features features, timeAdded metav1.Time) func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
@@ -2135,8 +2082,6 @@ func createResourceSliceUpdateReactor(features features, timeAdded metav1.Time) 
 		// 取出待更新的切片对象。
 		resourceslice := action.(k8stesting.UpdateAction).GetObject().(*resourceapi.ResourceSlice)
 		// 初始对象可能没有版本号，此时按 0 处理。
-		// If ResourceVersion is not set, assume the object started with version "0".
-		// This can happen when initial test objects don't have ResourceVersion assigned.
 		rev := 0
 		if resourceslice.ResourceVersion != "" {
 			oldRev, err := strconv.Atoi(resourceslice.ResourceVersion)
@@ -2216,14 +2161,12 @@ func addTimeAdded(timeAdded metav1.Time, resourceslice *resourceapi.ResourceSlic
 	}
 }
 
-// ResourceSliceWrapper wraps a ResourceSlice.
 // 包装 ResourceSlice，提供链式 setter，方便在测试中以声明式方式构造对象。
 type ResourceSliceWrapper struct {
 	// 内嵌被包装的 ResourceSlice。
 	resourceapi.ResourceSlice
 }
 
-// MakeResourceSlice creates a wrapper for a ResourceSlice.
 // 返回一个空的切片包装器：空的 ObjectMeta 与空的 Spec.Pool。
 func MakeResourceSlice() *ResourceSliceWrapper {
 	// 初始化空的元数据与 Spec.Pool。
@@ -2237,42 +2180,35 @@ func MakeResourceSlice() *ResourceSliceWrapper {
 	}
 }
 
-// Obj returns the inner ResourceSlice.
 // 取出被包装的资源切片指针。
 func (r *ResourceSliceWrapper) Obj() *resourceapi.ResourceSlice {
 	return &r.ResourceSlice
 }
 
-// Name sets the value of ResourceSlice.ObjectMeta.Name
 // 设置 ObjectMeta.Name。
 func (r *ResourceSliceWrapper) Name(name string) *ResourceSliceWrapper {
 	r.ObjectMeta.Name = name
 	return r
 }
 
-// GenerateName sets the value of ResourceSlice.ObjectMeta.GenerateName
 // 设置 ObjectMeta.GenerateName。
 func (r *ResourceSliceWrapper) GenerateName(generateName string) *ResourceSliceWrapper {
 	r.ObjectMeta.GenerateName = generateName
 	return r
 }
 
-// UID sets the value of ResourceSlice.ObjectMeta.UID
 // 设置 ObjectMeta.UID。
 func (r *ResourceSliceWrapper) UID(uid string) *ResourceSliceWrapper {
 	r.ObjectMeta.UID = types.UID(uid)
 	return r
 }
 
-// ResourceVersion sets the value of ResourceSlice.ObjectMeta.ResourceVersion
 // 设置 ObjectMeta.ResourceVersion。
 func (r *ResourceSliceWrapper) ResourceVersion(rev string) *ResourceSliceWrapper {
 	r.ObjectMeta.ResourceVersion = rev
 	return r
 }
 
-// NodeOwnerReferences sets the value of ResourceSlice.ObjectMeta.NodeOwnerReferences
-// to a v1.Node
 // 设置指向 v1.Node 的 Controller 属主引用。
 func (r *ResourceSliceWrapper) NodeOwnerReferences(nodeName, nodeUID string) *ResourceSliceWrapper {
 	r.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
@@ -2287,8 +2223,6 @@ func (r *ResourceSliceWrapper) NodeOwnerReferences(nodeName, nodeUID string) *Re
 	return r
 }
 
-// AppOwnerReferences sets the value of ResourceSlice.ObjectMeta.NodeOwnerReferences
-// to some fictional app controller resource
 // 设置指向虚构应用控制器（apps/v1）的属主引用，用于非节点本地资源。
 func (r *ResourceSliceWrapper) AppOwnerReferences(appName string) *ResourceSliceWrapper {
 	r.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
@@ -2302,49 +2236,42 @@ func (r *ResourceSliceWrapper) AppOwnerReferences(appName string) *ResourceSlice
 	return r
 }
 
-// Driver sets the value of ResourceSlice.Spec.Driver
 // 设置 spec.driver。
 func (r *ResourceSliceWrapper) Driver(driver string) *ResourceSliceWrapper {
 	r.Spec.Driver = driver
 	return r
 }
 
-// Pool sets the value of ResourceSlice.Spec.Pool
 // 设置 spec.pool（包含池名、Generation 与切片计数）。
 func (r *ResourceSliceWrapper) Pool(pool resourceapi.ResourcePool) *ResourceSliceWrapper {
 	r.Spec.Pool = pool
 	return r
 }
 
-// NodeName sets the value of ResourceSlice.Spec.NodeName
 // 设置 spec.nodeName；空字符串会被 refIfNotZero 转成 nil。
 func (r *ResourceSliceWrapper) NodeName(nodeName string) *ResourceSliceWrapper {
 	r.Spec.NodeName = refIfNotZero(nodeName)
 	return r
 }
 
-// NodeSelector sets the value of ResourceSlice.Spec.NodeSelector
 // 设置 spec.nodeSelector。
 func (r *ResourceSliceWrapper) NodeSelector(nodeSelector *v1.NodeSelector) *ResourceSliceWrapper {
 	r.Spec.NodeSelector = nodeSelector
 	return r
 }
 
-// AllNodes sets the value of ResourceSlice.Spec.AllNodes
 // 设置 spec.allNodes；false 会被 refIfNotZero 转成 nil。
 func (r *ResourceSliceWrapper) AllNodes(allNodes bool) *ResourceSliceWrapper {
 	r.Spec.AllNodes = refIfNotZero(allNodes)
 	return r
 }
 
-// Devices sets the value of ResourceSlice.Spec.Devices
 // 设置 spec.devices。
 func (r *ResourceSliceWrapper) Devices(devices []resourceapi.Device) *ResourceSliceWrapper {
 	r.Spec.Devices = devices
 	return r
 }
 
-// PerDeviceNodeSelection sets ResourceSlice.Spec.PerDeviceNodeSelection.
 // 设置 spec.perDeviceNodeSelection；true 写入指针，false 置为 nil。
 func (r *ResourceSliceWrapper) PerDeviceNodeSelection(perDeviceNodeSelection bool) *ResourceSliceWrapper {
 	if perDeviceNodeSelection {
@@ -2355,14 +2282,12 @@ func (r *ResourceSliceWrapper) PerDeviceNodeSelection(perDeviceNodeSelection boo
 	return r
 }
 
-// SharedCounters sets ResourceSlice.Spec.SharedCounters.
 // 设置 spec.sharedCounters。
 func (r *ResourceSliceWrapper) SharedCounters(counters []resourceapi.CounterSet) *ResourceSliceWrapper {
 	r.Spec.SharedCounters = counters
 	return r
 }
 
-// SkipNodeOperations sets ResourceSlice.Spec.SkipNodeOperations.
 // 设置 spec.skipNodeOperations。
 func (r *ResourceSliceWrapper) SkipNodeOperations(skip ...resourceapi.SkipNodeOperation) *ResourceSliceWrapper {
 	r.Spec.SkipNodeOperations = skip
@@ -2490,7 +2415,6 @@ func TestDecodeIndex(t *testing.T) {
 		{name: "186a0-", expectedLength: 5, expected: 100000},
 		{name: "100000-", expectedLength: 6, expected: 1048576},
 		// 平台相关：超过 MaxInt32 但仍在 int64 范围内的值，在 32 位平台上可能无法转为 int。
-		// Large value that fits in int64 but might exceed int32
 		{
 			name:           "80000000-",
 			expectedLength: 8,
@@ -2499,19 +2423,15 @@ func TestDecodeIndex(t *testing.T) {
 			expectedError:  "failed to parse index",
 		},
 		// 溢出场景：超出 int64 的十六进制字符串应解析失败。
-		// Overflow Cases
-		{name: "8000000000000000-", expectedLength: 16, expectError: true, expectedError: "failed to parse index"}, // Absolute maximum possible string (overflows int64)
+		{name: "8000000000000000-", expectedLength: 16, expectError: true, expectedError: "failed to parse index"}, // 可能的最大字符串（超出 int64）
 		// 带后缀：名称中的 driver/owner/suffix 部分不应影响索引解析。
-		// With suffix (as created by GenerateName)
 		{name: "00000-driver-owner-suffix", expectedLength: 5, expected: 0},
 		{name: "00001-driver-owner-suffix", expectedLength: 5, expected: 1},
 		// 非法输入：缺少分隔符、非 base16 字符、负数形式以及长度不符。
-		// Invalid
-		{name: "00000", expectedLength: 5, expectError: true, expectedError: "invalid index length or missing separator"},  // Missing separator
+		{name: "00000", expectedLength: 5, expectError: true, expectedError: "invalid index length or missing separator"},  // 缺少分隔符
 		{name: "0000g-", expectedLength: 5, expectError: true, expectedError: "failed to parse index"},                     // 'g' is not base16
-		{name: "-0001-", expectedLength: 5, expectError: true, expectedError: "invalid index length or missing separator"}, // Negative hex (dash is separator, so strings.Index is 0)
+		{name: "-0001-", expectedLength: 5, expectError: true, expectedError: "invalid index length or missing separator"}, // 负十六进制（破折号是分隔符，故 strings.Index 为 0）
 		// 长度不符：索引部分长度与期望不一致时报错。
-		// Wrong length
 		{name: "00000-", expectedLength: 6, expectError: true, expectedError: "invalid index length or missing separator"},
 		{name: "100000-", expectedLength: 5, expectError: true, expectedError: "invalid index length or missing separator"},
 	}
@@ -2533,7 +2453,6 @@ func TestDecodeIndex(t *testing.T) {
 	}
 }
 
-// Helper to handle platform-dependent test expectations
 // 平台相关的期望值计算：超过当前平台 int 上限时返回 -1，用于构造“应报错”的预期。
 func getExpectedForLargeInt(val int64) int {
 	if val > int64(math.MaxInt) {

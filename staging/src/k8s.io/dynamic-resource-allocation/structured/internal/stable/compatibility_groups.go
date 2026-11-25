@@ -20,18 +20,11 @@ import (
 	resourceapi "k8s.io/api/resource/v1"
 )
 
-// sliceUsesCompatibilityGroups reports whether any device in the slice declares
-// compatibility groups on one of its counter consumptions.
-//
-// While the DRADeviceCompatibilityGroups feature is disabled, GatherPools
-// ignores such slices entirely: this allocator cannot validate co-allocation
-// against compatibility groups, so those devices must not be allocated, and
-// ignoring the slice makes the pool incomplete, which prevents allocating the
-// pool's other devices, too. Whether any of the devices are already allocated
-// is deliberately irrelevant, keeping the outcome independent of allocation
-// order. This lets the feature be enabled later without deleting pods.
 // sliceUsesCompatibilityGroups 判断切片中是否有设备在其计数器消费声明里携带兼容组。
 // 只要任一 ConsumesCounters 条目声明了兼容组即返回 true；否则返回 false。
+// 特性关闭时 GatherPools 会忽略这类切片：本分配器无法校验共同分配，忽略后池变为不完整，
+// 也会阻止该池其他设备被分配。无论设备是否已分配都采用相同处理，以保持结果与分配顺序无关，
+// 便于日后启用特性而无需删除 Pod。
 func sliceUsesCompatibilityGroups(slice *resourceapi.ResourceSlice) bool {
 	// 遍历切片中的所有设备。
 	for _, device := range slice.Spec.Devices {
@@ -47,8 +40,6 @@ func sliceUsesCompatibilityGroups(slice *resourceapi.ResourceSlice) bool {
 	return false
 }
 
-// slicesWithoutCompatibilityGroups returns the slices which do not match
-// sliceUsesCompatibilityGroups, preserving their order.
 // slicesWithoutCompatibilityGroups 过滤掉声明了兼容组的切片，并按原顺序保留其余切片。
 func slicesWithoutCompatibilityGroups(slices []*resourceapi.ResourceSlice) []*resourceapi.ResourceSlice {
 	// 预分配结果容量，最多与输入等长。

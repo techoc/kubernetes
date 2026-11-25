@@ -32,10 +32,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// We set MaxElements in AttributeType(cel.DeclType) to the larger of these two values
-// when DRAListTypeAttributes feature gate is enabled because we cannot
-// determine statically whether an attribute will be a scalar or a list at compile time.
-// See newCompiler() for more details.
 // maxElementsListTypeEnabled 取标量长度上限与列表长度上限中的较大者。
 // maxElementsListTypeEnabled 是启用列表属性时属性类型采用的元素数上限（标量长度与列表长度上限的较大者）。
 const maxElementsListTypeEnabled = uint64(max(resourceapi.DeviceAttributeMaxValueLength, resourceapi.ResourceSliceMaxAttributeValuesPerDevice))
@@ -43,13 +39,8 @@ const maxElementsListTypeEnabled = uint64(max(resourceapi.DeviceAttributeMaxValu
 // testcases 是选择器表达式的端到端表驱动用例集合，键为用例名。
 var testcases = map[string]struct {
 	// testcases 覆盖选择器表达式的编译、成本与求值行为。
-	// If nil, the testcase is executed with stored and new expressions.
-	// If non-nil, it must point to environment.StoredExpressions or environment.NewExpressions
-	// to select that kind of expression.
 	// envType 限定用例使用的环境类型；nil 表示存储表达式与新表达式都执行。
 	envType *environment.Type
-	// If nil, the testcase is executed with all combination of features,
-	// otherwise only with the given combination.
 	// features 限定用例运行的特性组合；nil 表示遍历全部组合。
 	features *Features
 
@@ -70,13 +61,8 @@ var testcases = map[string]struct {
 	expectMatchError         string
 	expectMatch              bool
 
-	// There's no good way to verify that the cost of an expression
-	// really is what it should be other than eye-balling it. The
-	// cost should not change in the future unless the expression
-	// gets changed, so this provides some protection against
-	// regressions.
 	// expectCost 用固定数值守护成本估算不发生回归。
-	// expectCost 是期望的最坏情况成本，同时防止成本估算回归。
+	// expectCost 用固定数值防止成本估算回归，也便于人工快速核对合理性。
 	expectCost uint64
 }{
 	// 常量表达式：恒真。
@@ -243,7 +229,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {StringValues: []string{"fish", "bird"}}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	// 多值属性通过 size() 读取长度：布尔列表。
 	"list-of-bool": {
@@ -319,7 +305,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"attr": {StringValue: new("fish")}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	// includes 成员判断的正例与反例：覆盖标量/列表以及布尔、整数、字符串、semver 四类元素。
 	"includes-function-on-bool-scalar-positive": {
@@ -328,7 +314,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {BoolValue: new(true)}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-bool-scalar-negative": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -337,7 +323,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {BoolValue: new(false)}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-bool-list-positive": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -345,7 +331,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {BoolValues: []bool{true, false}}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-bool-list-negative": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -353,7 +339,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {BoolValues: []bool{true, true}}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-int-scalar-positive": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -361,7 +347,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {IntValue: new(int64(1))}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-int-scalar-negative": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -369,7 +355,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {IntValue: new(int64(2))}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-int-list-positive": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -377,7 +363,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {IntValues: []int64{1, 2}}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-int-list-negative": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -385,7 +371,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {IntValues: []int64{1, 2}}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-string-scalar-positive": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -393,7 +379,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {StringValue: new("fish")}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-string-scalar-negative": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -401,7 +387,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {StringValue: new("fish")}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-string-list-positive": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -409,7 +395,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {StringValues: []string{"fish", "bird"}}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-string-list-negative": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -417,7 +403,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {StringValues: []string{"fish", "bird"}}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	"includes-function-on-semver-scalar-positive": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -425,7 +411,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {VersionValue: new("1.0.0")}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64 /* cost of "includes" on dynamic type */ + 1,
+		expectCost:  4 + 64 /* 动态类型上 includes 的代价 */ + 1,
 	},
 	"includes-function-on-semver-scalar-negative": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -433,7 +419,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {VersionValue: new("1.0.0")}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64 /* cost of "includes" on dynamic type */ + 1,
+		expectCost:  4 + 64 /* 动态类型上 includes 的代价 */ + 1,
 	},
 	"includes-function-on-semver-list-positive": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -441,7 +427,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {VersionValues: []string{"1.0.0", "2.0.0"}}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64 /* cost of "includes" on dynamic type */ + 1,
+		expectCost:  4 + 64 /* 动态类型上 includes 的代价 */ + 1,
 	},
 	"includes-function-on-semver-list-negative": {
 		features:    &Features{EnableListTypeAttributes: true},
@@ -449,7 +435,7 @@ var testcases = map[string]struct {
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {VersionValues: []string{"1.0.0", "2.0.0"}}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64 /* cost of "includes" on dynamic type */ + 1,
+		expectCost:  4 + 64 /* 动态类型上 includes 的代价 */ + 1,
 	},
 	// 超长列表上的 includes：验证边界规模下成本仍为动态类型调用成本。
 	"includes-function-on-very-long-list-positive": {
@@ -464,18 +450,15 @@ var testcases = map[string]struct {
 		}()}},
 		driver:      "dra.example.com",
 		expectMatch: false,
-		expectCost:  4 + 64, /* cost of "includes" on dynamic type */
+		expectCost:  4 + 64, /* 动态类型上 includes 的代价 */
 	},
 	// 文档用途：对比 in 操作符与 includes 函数的成本估算方式。
 	"in-operator-on-list": {
-		// This case is for documenting purpose to present the difference of call cost estimation
-		// between "in" operator and "includes" function.
-		// The cost estimation of both "in" operator and "includes" function is based on maxElementsListTypeEnabled.
 		expression:  `1 in device.attributes["dra.example.com"].names`,
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"names": {IntValues: []int64{1, 2, 3}}},
 		driver:      "dra.example.com",
 		expectMatch: true,
-		expectCost:  4 + 64, /* cost of "in" is maxElementsListTypeEnabled*/
+		expectCost:  4 + 64, /* 启用 maxElementsListTypeEnabled 时 in 的代价 */
 	},
 	// semver 属性的比较函数。
 	"version": {
@@ -487,7 +470,6 @@ var testcases = map[string]struct {
 	},
 	// semver 与 isSemver 的宽松解析，允许 v 前缀。
 	"version_v": {
-		// Relaxed parsing with v prefix.
 		expression:  `device.attributes["dra.example.com"].name.isGreaterThan(semver("v0.0.1", true)) && isSemver("v1.0.0", true)`,
 		attributes:  map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{"name": {VersionValue: ptr.To("1.0.0")}},
 		driver:      "dra.example.com",
@@ -615,10 +597,6 @@ device.attributes["dra.example.com"]["version"].isGreaterThan(semver("0.0.1"))
 	},
 	// 构造接近规模上限的属性集合与深层嵌套循环，期望超出实际成本上限。
 	"expensive": {
-		// The worst-case is based on the maximum number of
-		// attributes and the maximum attribute name length.
-		// To actually reach that expected cost at runtime, we must
-		// have many attributes.
 		attributes: func() map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 			attributes := make(map[resourceapi.QualifiedName]resourceapi.DeviceAttribute)
 			prefix := "dra.example.com/"
@@ -632,11 +610,11 @@ device.attributes["dra.example.com"]["version"].isGreaterThan(semver("0.0.1"))
 			}
 			return attributes
 		}(),
-		// From https://github.com/kubernetes/kubernetes/blob/50fc400f178d2078d0ca46aee955ee26375fc437/test/integration/apiserver/cel/validatingadmissionpolicy_test.go#L2150.
+		// 表达式改编自 https://github.com/kubernetes/kubernetes/blob/50fc400f178d2078d0ca46aee955ee26375fc437/test/integration/apiserver/cel/validatingadmissionpolicy_test.go#L2150
 		expression:       `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(x, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(y, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z2, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z3, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z4, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z5, int('1'.find('[0-9]*')) < 100)))))))`,
 		driver:           "dra.example.com",
 		expectMatchError: "actual cost limit exceeded",
-		expectCost:       85555551, // Exceed limit!
+		expectCost:       85555551, // 超出限制！
 	},
 	// allowMultipleAllocations 用例组：验证字段可见性与 nil/true/false 三态语义。
 	"allow_multiple_allocations": {
@@ -734,7 +712,6 @@ func TestCEL(t *testing.T) {
 			match, details, err := result.DeviceMatches(ctx, Device{
 				AllowMultipleAllocations: scenario.allowMultipleAllocations, Attributes: scenario.attributes, Capacity: scenario.capacity, Driver: scenario.driver,
 			})
-			// details.ActualCost can be called for nil details, no need to check.
 			// 读取实际成本，细节可能为 nil。
 			actualCost := ptr.Deref(details.ActualCost(), 0)
 			// 记录实际成本与最坏估算的对比。
@@ -814,7 +791,7 @@ func TestInterrupt(t *testing.T) {
 	for _, name := range []string{"timeout", "deadline", "cancel"} {
 		t.Run(name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
-			// Adapted from https://github.com/kubernetes/kubernetes/blob/e0859f91b7d269bb7e2f43e23d202ccccaf34c0c/staging/src/k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel/validation_test.go#L3006
+			// 表达式改编自 https://github.com/kubernetes/kubernetes/blob/e0859f91b7d269bb7e2f43e23d202ccccaf34c0c/staging/src/k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel/validation_test.go#L3006
 			// 使用 map/filter/exists 组合表达式保证求值足够耗时。
 			expression := `device.attributes["dra.example.com"].map(key, device.attributes["dra.example.com"][key] * 20).filter(e, e > 50).exists(e, e == 60)`
 			// 编译表达式。
@@ -885,11 +862,6 @@ func BenchmarkDeviceMatches(b *testing.B) {
 
 			// 重复求值 b.N 次。
 			for i := 0; i < b.N; i++ {
-				// It would be nice to measure
-				// time/actual_cost, but the time as observed
-				// here also includes additional preparations
-				// in result.DeviceMatches and thus cannot be
-				// used.
 				// 只测量求值本身，准备工作的耗时不在计时范围内。
 				match, _, err := result.DeviceMatches(ctx, Device{
 					AllowMultipleAllocations: scenario.allowMultipleAllocations, Attributes: scenario.attributes, Capacity: scenario.capacity, Driver: scenario.driver,
@@ -916,8 +888,7 @@ func BenchmarkDeviceMatches(b *testing.B) {
 
 		b.Run(name, func(b *testing.B) {
 			// 性能不依赖特性开关，固定使用存储表达式。
-			// Performance shouldn't depend on feature enablement, so don't bother testing all variants.
-			run(b, Features{ /* ignored because of stored expression */ }, environment.StoredExpressions)
+			run(b, Features{ /* 因使用已存储表达式而忽略 */ }, environment.StoredExpressions)
 		})
 	}
 }
@@ -935,7 +906,7 @@ func TestCompileDerivedAttributes(t *testing.T) {
 		name                      string
 		expression                string
 		listTypeAttributesEnabled bool
-		envType                   *environment.Type // defaults to environment.NewExpressions
+		envType                   *environment.Type // 默认使用 environment.NewExpressions
 		expectCompileError        string
 	}{
 		// 合法标量字面量及其列表形式；列表需要开启特性。
@@ -1097,7 +1068,6 @@ func TestEvaluateDerivedAttributes(t *testing.T) {
 		expectAttr      *resourceapi.DeviceAttribute
 		expectEvalError string
 	}{
-		// Scalar Literal cases
 		// 标量字面量用例组。
 		// 标量字面量：期望转换为对应的单值字段。
 		{
@@ -1121,7 +1091,6 @@ func TestEvaluateDerivedAttributes(t *testing.T) {
 			expectAttr: &resourceapi.DeviceAttribute{VersionValue: new("1.0.0")},
 		},
 
-		// Scalar Device Attribute cases
 		// 从设备读取标量的用例组。
 		// 从设备属性读取标量：验证域名/ID 查找与类型转换。
 		{
@@ -1149,7 +1118,6 @@ func TestEvaluateDerivedAttributes(t *testing.T) {
 			expectAttr: &resourceapi.DeviceAttribute{VersionValue: new("1.0.0")},
 		},
 
-		// List Literal cases
 		// 列表字面量用例组。
 		// 列表字面量：期望转换为对应的多值字段。
 		{
@@ -1173,7 +1141,6 @@ func TestEvaluateDerivedAttributes(t *testing.T) {
 			expectAttr: &resourceapi.DeviceAttribute{VersionValues: []string{"1.0.0", "2.0.0"}},
 		},
 
-		// List Device Attribute cases
 		// 从设备读取列表的用例组。
 		// 从设备属性读取列表。
 		{
@@ -1201,7 +1168,6 @@ func TestEvaluateDerivedAttributes(t *testing.T) {
 			expectAttr: &resourceapi.DeviceAttribute{VersionValues: []string{"1.0.0", "2.0.0"}},
 		},
 
-		// Error cases
 		// 运行时错误用例组。
 		// 运行时错误：异构列表、缺键、类型不匹配与 null。
 		{
@@ -1236,7 +1202,7 @@ func TestEvaluateDerivedAttributes(t *testing.T) {
 		},
 		{
 			name:            "runtime-error-type-mismatch-op",
-			expression:      `device.attributes["driver-a"]["int-attr"] + "hello"`, // attempt to add an int and string together should fail.
+			expression:      `device.attributes["driver-a"]["int-attr"] + "hello"`, // 尝试将 int 与 string 相加应当失败。
 			device:          mockDevice,
 			expectEvalError: "no such overload",
 		},

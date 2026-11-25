@@ -70,25 +70,19 @@ var (
 	lazyCompiler      *compiler
 	lazyFeatures      Features
 
-	// Other strings also have a known maximum size.
 	domainType = withMaxElements(apiservercel.StringType, resourceapi.DeviceMaxDomainLength)
 	idType     = withMaxElements(apiservercel.StringType, resourceapi.DeviceMaxIDLength)
 	driverType = withMaxElements(apiservercel.StringType, resourceapi.DriverNameMaxLength)
 
-	// A variant of BoolType with a known cost. Usage of apiservercel.BoolType
-	// is underestimated without this (found when comparing estimated against
-	// actual cost in compile_test.go).
 	// multiAllocType 是带已知上限的布尔类型，避免默认 BoolType 低估成本。
 	multiAllocType = withMaxElements(apiservercel.BoolType, 1)
 
-	// Same for capacity.
 	// 容量使用两层映射（域名 → ID → 数量），每层元素数上限均为单设备容量上限。
 	innerCapacityMapType = apiservercel.NewMapType(idType, apiservercel.QuantityDeclType, resourceapi.ResourceSliceMaxAttributesAndCapacitiesPerDevice)
 	// outerCapacityMapType 表示域名到内层容量映射的外层映射类型。
 	outerCapacityMapType = apiservercel.NewMapType(domainType, innerCapacityMapType, resourceapi.ResourceSliceMaxAttributesAndCapacitiesPerDevice)
 )
 
-// Features contains feature gates supported by the package.
 // Features 是特性开关的集合，决定表达式可见的字段与函数。
 // Features 汇总本包支持的特性开关，决定表达式可见的字段与函数。
 type Features struct {
@@ -104,8 +98,6 @@ func GetCompiler(features Features) *compiler {
 	layzCompilerMutex.Lock()
 	defer layzCompilerMutex.Unlock()
 
-	// In practice, features should not change back and forth between calls,
-	// so only one compiler gets cached.
 	// 特性组合变化时才重建；实践中特性不会来回切换，因此只缓存一个实例。
 	if lazyCompiler == nil || lazyFeatures != features {
 		lazyCompiler = newCompiler(features)
@@ -115,7 +107,6 @@ func GetCompiler(features Features) *compiler {
 	return lazyCompiler
 }
 
-// CompilationResult represents a compiled expression.
 // CompilationResult 是已编译表达式的封装，包含程序、类型、成本上限与错误。
 // CompilationResult 保存一次编译的产物：可执行程序、类型信息、成本上限与可能的错误。
 // Program 是编译得到的可执行 CEL 程序。
@@ -130,9 +121,8 @@ type CompilationResult struct {
 	OutputType  *cel.Type
 	Environment *cel.Env
 
-	// MaxCost represents the worst-case cost of the compiled MessageExpression in terms of CEL's cost units,
-	// as used by cel.EstimateCost.
-	// MaxCost 是表达式的最坏情况成本；估算被禁用或失败时取 math.MaxUint64。
+	// MaxCost 以 CEL 成本单位表示表达式的最坏情况成本，供 cel.EstimateCost 使用；
+	// 估算被禁用或失败时取 math.MaxUint64。
 	MaxCost uint64
 
 	// typesFromEnv 内嵌从环境解析出的属性类型信息，供尺寸估算与输出校验使用。
@@ -141,17 +131,13 @@ type CompilationResult struct {
 	emptyMapVal ref.Val
 }
 
-// Device defines the input values for a CEL selector expression.
 // Device 是一次 CEL 求值所需的设备输入。
 // Device 描述一次 CEL 求值所需的设备输入。
-// Driver 是设备所属驱动的域名，未限定域名的属性使用它作为默认域。
+// Driver 是设备所属驱动的域名，未限定域名的属性使用它作为默认域；非空时也会作为字符串属性暴露给表达式。
 // AllowMultipleAllocations 表示是否允许多次分配，nil 按 false 处理。
 // Attributes 是设备属性集合，键为限定名（域名/ID 或裸 ID）。
 // Capacity 是设备容量集合，值携带 Kubernetes quantity。
 type Device struct {
-	// Driver gets used as domain for any attribute which does not already
-	// have a domain prefix. If set, then it is also made available as a
-	// string attribute.
 	Driver                   string
 	AllowMultipleAllocations *bool
 	Attributes               map[resourceapi.QualifiedName]resourceapi.DeviceAttribute
@@ -168,33 +154,23 @@ type compiler struct {
 	features      Features
 }
 
-// Options contains several additional parameters
-// for [CompileCELExpression]. All of them have reasonable
-// defaults.
 // Options 是编译表达式时的可选参数集合。
 // Options 为 CompileCELExpression 提供可选参数，零值即获得合理默认值。
 type Options struct {
-	// EnvType allows to override the default environment type [environment.StoredExpressions].
 	// EnvType 指定使用存储表达式还是新表达式环境，默认 environment.StoredExpressions。
 	EnvType *environment.Type
 
-	// CostLimit allows overriding the default runtime cost limit [resourceapi.CELSelectorExpressionMaxCost].
 	// CostLimit 覆盖运行时成本上限，默认 resourceapi.CELSelectorExpressionMaxCost。
 	CostLimit *uint64
 
-	// DisableCostEstimation can be set to skip estimating the worst-case CEL cost.
-	// If disabled or after an error, [CompilationResult.MaxCost] will be set to [math.Uint64].
 	// DisableCostEstimation 为 true 时跳过高成本估算，MaxCost 置为 math.MaxUint64。
 	DisableCostEstimation bool
 
-	// DerivedAttribute indicates if the expression is for a derived attribute.
 	// DerivedAttribute 表示表达式用于派生属性，输出类型校验规则与选择器不同。
 	DerivedAttribute bool
 }
 
-// CompileCELExpression returns a compiled CEL expression. It evaluates to bool.
-//
-// TODO (https://github.com/kubernetes/kubernetes/issues/125826): validate AST to detect invalid attribute names.
+// TODO（https://github.com/kubernetes/kubernetes/issues/125826）：校验 AST，检测无效属性名。
 // CompileCELExpression 编译表达式并返回封装结果，错误通过结果中的 Error 分类表达。
 // CompileCELExpression 按 options 编译表达式并返回封装结果，错误通过结果中的 Error 分类表达。
 func (c compiler) CompileCELExpression(expression string, options Options) CompilationResult {
@@ -239,14 +215,10 @@ func (c compiler) CompileCELExpression(expression string, options Options) Compi
 	// AST 转 CheckedExpr 不应失败（编译阶段已无 issue）。
 	_, err = cel.AstToCheckedExpr(ast)
 	if err != nil {
-		// should be impossible since env.Compile returned no issues
 		return resultError("unexpected compilation error: "+err.Error(), apiservercel.ErrorTypeInternal)
 	}
 	// 实例化可执行程序，注入 DRA 自己的成本上限与中断检查频率。
 	prog, err := env.Program(ast,
-		// The Kubernetes CEL base environment sets the VAP limit as runtime cost limit.
-		// DRA has its own default cost limit and also allows the caller to change that
-		// limit.
 		cel.CostLimit(ptr.Deref(options.CostLimit, resourceapi.CELSelectorExpressionMaxCost)),
 		cel.InterruptCheckFrequency(celconfig.CheckFrequency),
 	)
@@ -268,8 +240,6 @@ func (c compiler) CompileCELExpression(expression string, options Options) Compi
 
 	// 除非调用方禁用，否则估算表达式的最坏情况成本。
 	if !options.DisableCostEstimation {
-		// We don't have a SizeEstimator. The potential size of the input (= a
-		// device) is already declared in the definition of the environment.
 		// 不需要额外的 SizeEstimator：输入设备的潜在大小已在环境类型中声明。
 		estimator := c.newCostEstimator(typesFromEnv)
 		// 使用带尺寸估算器的成本估算器进行估算。
@@ -304,16 +274,12 @@ type typesFromEnv struct {
 	attributeType       *apiservercel.DeclType // "device.attributes[foo].bar" = value
 }
 
-// getTypesFromEnv determines the actual type definitions based on
-// the environment, which reflects features and stored vs. new expression.
 // getTypesFromEnv 从环境解析属性各层类型，结果取决于特性与表达式版本。
 // getTypesFromEnv 从环境中逐层解析出属性相关类型，结果取决于特性开关与表达式版本。
 func (c *compiler) getTypesFromEnv(env *cel.Env) (typesFromEnv, error) {
 	// 解析顺序：device → attributes → 内层映射 → 属性值。
 	var result typesFromEnv
 
-	// Use the *latest* variable with the right name because that
-	// instance overwrites the ones before it.
 	// 同名变量可能被多次声明，反向遍历以取最后一个生效的声明。
 	for _, variable := range slices.Backward(env.Variables()) {
 		if variable.Name() == deviceVar {
@@ -362,7 +328,6 @@ func (c *compiler) getTypesFromEnv(env *cel.Env) (typesFromEnv, error) {
 	return result, nil
 }
 
-// getDeclType maps the cel.Type to the apiservercel.DeclType. Only works for types defined by newCompiler.
 // getDeclType 按 cel.Type 反查本编译器声明的 DeclType。
 // getDeclType 在编译器声明的类型中查找与给定 cel.Type 对应的 DeclType。
 func (c *compiler) getDeclType(t *cel.Type) *apiservercel.DeclType {
@@ -375,9 +340,6 @@ func (c *compiler) getDeclType(t *cel.Type) *apiservercel.DeclType {
 	return nil
 }
 
-// getAttributeValue returns the native representation of the one value that
-// should be stored in the attribute, otherwise an error. An error is
-// also returned when there is no supported value.
 // getAttributeValue 把设备属性转换为 CEL 可用的原生 Go 值。
 // getAttributeValue 把 DeviceAttribute 的取值转换为 CEL 可直接使用的原生 Go 值。
 func (c CompilationResult) getAttributeValue(attr resourceapi.DeviceAttribute) (any, error) {
@@ -425,8 +387,7 @@ var boolType = reflect.TypeOf(true)
 
 // DeviceMatches 以给定设备求值已编译的选择器表达式，返回是否匹配、求值细节与错误。
 func (c CompilationResult) DeviceMatches(ctx context.Context, input Device) (bool, *cel.EvalDetails, error) {
-	// TODO (future): avoid building these maps and instead use a proxy
-	// which wraps the underlying maps and directly looks up values.
+	// TODO（后续）：避免构建这些映射，改用代理。
 	attributes := make(map[string]any)
 	// 遍历设备属性，把 API 表示转换为 domain → id → 值 的两层映射。
 	for name, attr := range input.Attributes {
@@ -468,9 +429,8 @@ func (c CompilationResult) DeviceMatches(ctx context.Context, input Device) (boo
 	// 执行带上下文的求值，支持超时与取消中断。
 	result, details, err := c.Program.ContextEval(ctx, variables)
 	// CEL 不会包装上下文错误，需要自行推断中断原因。
+	// 参见 https://github.com/google/cel-go/issues/1195。
 	if err != nil {
-		// CEL does not wrap the context error. We have to deduce why it failed.
-		// See https://github.com/google/cel-go/issues/1195.
 		// 报错含 "operation interrupted" 且上下文已结束时，还原真实的上下文原因。
 		if strings.Contains(err.Error(), "operation interrupted") && ctx.Err() != nil {
 			return false, details, fmt.Errorf("%w: %w", err, context.Cause(ctx))
@@ -490,8 +450,6 @@ func (c CompilationResult) DeviceMatches(ctx context.Context, input Device) (boo
 	return resultBool, details, nil
 }
 
-// EvaluateDerivedAttribute evaluates the compiled CEL expression as a derived attribute against a device,
-// returning the evaluated DeviceAttribute or an error.
 // EvaluateDerivedAttribute 求值派生属性表达式并返回 DeviceAttribute。
 // EvaluateDerivedAttribute 以给定设备求值派生属性表达式，并把结果转换为 DeviceAttribute。
 func (c CompilationResult) EvaluateDerivedAttribute(ctx context.Context, input Device) (*resourceapi.DeviceAttribute, *cel.EvalDetails, error) {
@@ -570,11 +528,9 @@ func valToDeviceAttribute(val ref.Val) (*resourceapi.DeviceAttribute, error) {
 			return nil, fmt.Errorf("expected list size to be int64, got %T", lister.Size().Value())
 		}
 
-		// CEL list sizes are int64, but Go slice lengths and indices must be int.
-		// Casting to int is safe (CEL lists won't practically exceed 32-bit int max)
-		// and simplifies slice allocation and index-based iteration (e.g. vals[i]).
-		// The CEL types.Int(i) cast would be required for lister.Get() regardless.
-		// 转成 int 便于切片分配与按下标访问，实际不会超过 32 位上限。
+		// CEL 列表大小是 int64，而 Go 切片长度与索引必须是 int。
+		// 实际 CEL 列表不会超过 32 位 int 上限，转成 int 可简化切片分配与 vals[i] 访问；
+		// lister.Get() 仍需要使用 cel.Types.Int(i)。
 		length := int(sz)
 		// 空列表没有元素类型信息，约定返回空字符串列表。
 		if length == 0 {
@@ -661,7 +617,6 @@ func newCompiler(features Features) *compiler {
 		return result
 	}
 
-	// declaredTypes collects all types that we declare for the environment.
 	// declaredTypes 收集环境中声明的所有类型。
 	var declaredTypes []*apiservercel.DeclType
 	// declareType 在声明的同时记录类型，便于之后按 cel.Type 反查。
@@ -677,14 +632,10 @@ func newCompiler(features Features) *compiler {
 	))
 	// 启用列表属性后改用 DynType，使 exists/all 等迭代函数可用。
 	attributeTypeV136ListTypeAttributes := declareType(withMaxElements(
-		// Use DynType so that iterate functions can work (e.g. exists, all)
-		// for list type attributes.
 		apiservercel.DynType,
-		// At compile time we don't know whether an attribute will be a scalar or list.
 		// 编译时无法预知属性是标量还是列表，取两者上限作为元素数上限。
 		uint64(max(resourceapi.DeviceAttributeMaxValueLength, resourceapi.ResourceSliceMaxAttributeValuesPerDevice)),
 	))
-	// Each map is bound by the maximum number of different attributes.
 	// 每层映射的元素数上限为单设备允许的属性/容量总数。
 	innerAttributesMapTypeV131 := declareType(apiservercel.NewMapType(idType, attributeTypeV131, resourceapi.ResourceSliceMaxAttributesAndCapacitiesPerDevice))
 	outerAttributesMapTypeV131 := declareType(apiservercel.NewMapType(domainType, innerAttributesMapTypeV131, resourceapi.ResourceSliceMaxAttributesAndCapacitiesPerDevice))
@@ -704,7 +655,6 @@ func newCompiler(features Features) *compiler {
 	// 声明 1.31 的 device 对象类型。
 	deviceTypeV131 := declareType(apiservercel.NewObjectType("kubernetes.DRADevice", fields(fieldsV131...)))
 
-	// One additional field, feature-gated below.
 	// 1.34 起新增 allowMultipleAllocations 字段。
 	fieldsV134ConsumableCapacity := []*apiservercel.DeclField{field(multiAllocVar, multiAllocType, true)}
 	fieldsV134ConsumableCapacity = append(fieldsV134ConsumableCapacity, fieldsV131...)
@@ -732,20 +682,13 @@ func newCompiler(features Features) *compiler {
 		{
 			IntroducedVersion: version.MajorMinor(1, 31),
 			EnvOptions: []cel.EnvOption{
+				// 注册 Bindings 扩展；同一域的属性只需给出一次域名，便于连续访问。
 				// https://pkg.go.dev/github.com/google/cel-go/ext#Bindings
-				//
-				// This is useful to simplify attribute lookups because the
-				// domain only needs to be given once:
-				//
-				//    cel.bind(dra, device.attributes["dra.example.com"], dra.oneBool && dra.anotherBool)
-				// 注册 Bindings 扩展。
+				// 示例：cel.bind(dra, device.attributes["dra.example.com"], dra.oneBool && dra.anotherBool)
 				ext.Bindings(ext.BindingsVersion(0)),
 			},
 		},
 		// 按特性组合选择对应的 device 类型声明，顺序必须由旧到新。
-		// NewExpressions selects one of these device declarations with FeatureEnabled.
-		// StoredExpressions ignores FeatureEnabled; the DeclTypeProvider keeps the
-		// last declaration for a shared type name, so keep these ordered oldest to newest.
 		// 第 2 项：1.31 默认组合，两个特性均关闭。
 		{
 			IntroducedVersion: version.MajorMinor(1, 31),
@@ -774,8 +717,6 @@ func newCompiler(features Features) *compiler {
 		},
 		// 第 4 项：1.36 起仅启用列表属性（对应类型在 1.37 正式新增）。
 		{
-			// This type was added in 1.37, but 1.36 already behaved like this type
-			// when ListTypeAttributes was enabled and ConsumableCapacity was disabled.
 			IntroducedVersion: version.MajorMinor(1, 36),
 			FeatureEnabled: func() bool {
 				return !features.EnableConsumableCapacity && features.EnableListTypeAttributes
@@ -789,8 +730,6 @@ func newCompiler(features Features) *compiler {
 		},
 		// 第 5 项：1.36 起同时启用两个特性。
 		{
-			// This type was added in 1.37, but 1.36 already behaved like this type
-			// when both ListTypeAttributes and ConsumableCapacity was enabled.
 			IntroducedVersion: version.MajorMinor(1, 36),
 			FeatureEnabled: func() bool {
 				return features.EnableConsumableCapacity && features.EnableListTypeAttributes
@@ -809,7 +748,7 @@ func newCompiler(features Features) *compiler {
 				return features.EnableListTypeAttributes
 			},
 			EnvOptions: []cel.EnvOption{
-				// TODO(https://github.com/kubernetes/kubernetes/issues/140074): Remove in 1.38 when 1.36 support is dropped and includes is natively provided by Lists(ListsVersion(1)) starting in 1.37.
+				// TODO（https://github.com/kubernetes/kubernetes/issues/140074）：在 1.38 移除；届时已放弃 1.36 支持，且从 1.37 起 Lists(ListsVersion(1)) 已原生提供 includes。
 				library.IncludesOption(),
 			},
 		},
@@ -821,15 +760,6 @@ func newCompiler(features Features) *compiler {
 		panic(fmt.Errorf("internal error building CEL environment: %w", err))
 	}
 
-	// Features can be still be changed before using the compiler.
-	// The FeatureEnabled checks above ensure that the environment
-	// is set up as necessary.
-	//
-	// Also, the compiler supports both stored and new expressions.
-	//
-	// Code which needs to know the actual type of items in the current
-	// expression needs to look up the type from the active environment
-	// (see deviceFieldTypeFromEnv above).
 	// 特性仍可在使用前变更，FeatureEnabled 保证环境按需配置；编译器同时支持存储表达式与新表达式。
 	return &compiler{
 		// 需要知道属性实际类型的代码必须从当前生效的环境中查询。
@@ -847,10 +777,8 @@ func withMaxElements(in *apiservercel.DeclType, maxElements uint64) *apiserverce
 	return &out
 }
 
-// parseQualifiedName splits into domain and identified, using the default domain
 // parseQualifiedName 把限定名拆成域名与 ID，无域名时用默认域名。
 // parseQualifiedName 把限定名拆成域名与 ID，没有域名时使用默认域名。
-// if the name does not contain one.
 func parseQualifiedName(name resourceapi.QualifiedName, defaultDomain string) (string, string) {
 	// 以第一个 "/" 作为域名与 ID 的分隔符。
 	sep := strings.Index(string(name), "/")
@@ -861,10 +789,10 @@ func parseQualifiedName(name resourceapi.QualifiedName, defaultDomain string) (s
 	return string(name[0:sep]), string(name[sep+1:])
 }
 
-// newStringInterfaceMapWithDefault is like
-// https://pkg.go.dev/github.com/google/cel-go@v0.20.1/common/types#NewStringInterfaceMap,
-// except that looking up an unknown key returns a default value.
 // newStringInterfaceMapWithDefault 包装映射，使未知键查找返回默认值。
+// newStringInterfaceMapWithDefault 类似
+// https://pkg.go.dev/github.com/google/cel-go@v0.20.1/common/types#NewStringInterfaceMap，
+// 但查找未知键时返回默认值。
 // newStringInterfaceMapWithDefault 包装 CEL 字符串映射，使未知键查找返回默认值而非 "not found"。
 func newStringInterfaceMapWithDefault(adapter types.Adapter, value map[string]any, defaultValue ref.Val) traits.Mapper {
 	// 复用标准映射实现，只覆盖 Find 行为。
@@ -882,8 +810,6 @@ type mapper struct {
 	defaultValue ref.Val
 }
 
-// Find wraps the mapper's Find so that a default empty map is returned when
-// the lookup did not find the entry.
 // Find 在查找失败时返回默认空映射，并始终报告"找到"。
 // Find 在底层查找失败时返回默认空映射，并始终报告"找到"以避免表达式因缺键而报错。
 func (m mapper) Find(key ref.Val) (ref.Val, bool) {
@@ -897,10 +823,6 @@ func (m mapper) Find(key ref.Val) (ref.Val, bool) {
 	return m.defaultValue, true
 }
 
-// sizeEstimator tells the cost estimator the maximum size of maps, strings, or lists accessible through the `device` variable.
-// Without this, the maximum string size of e.g. `device.attributes["dra.example.com"].services` would be unknown.
-//
-// sizeEstimator is derived from the sizeEstimator in k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel.
 // sizeEstimator 根据环境类型声明提供 device 可达值的最大尺寸估计。
 // sizeEstimator 根据环境声明的类型，为成本估算器提供经 device 可见的映射/字符串/列表的最大尺寸。
 type sizeEstimator struct {
@@ -914,12 +836,9 @@ func (s *sizeEstimator) EstimateSize(element checker.AstNode) (res *checker.Size
 	path := element.Path()
 	// 空路径无法估算，直接放弃。
 	if len(path) == 0 {
-		// Path() can return an empty list, early exit if it does since we can't
-		// provide size estimates when that happens
 		return nil
 	}
 
-	// The estimator provides information about the environment's variable(s).
 	// 只识别 device 这一个根变量。
 	var currentNode *apiservercel.DeclType
 	// 按路径首段定位根类型。
@@ -927,11 +846,9 @@ func (s *sizeEstimator) EstimateSize(element checker.AstNode) (res *checker.Size
 	case deviceVar:
 		currentNode = s.deviceType
 	default:
-		// Unknown root, shouldn't happen.
 		return nil
 	}
 
-	// Cut off initial variable from path, it was checked above.
 	// 逐段沿类型声明向下走。
 	for _, name := range path[1:] {
 		switch name {
@@ -951,9 +868,6 @@ func (s *sizeEstimator) EstimateSize(element checker.AstNode) (res *checker.Size
 		default:
 			field, ok := currentNode.Fields[name]
 			if !ok {
-				// If this is an attribute map, then we know that all elements
-				// have the same maximum size as set in attributeType, regardless
-				// of their name.
 				// 属性映射中所有元素共享相同最大尺寸，与具体键名无关。
 				if currentNode.ElemType == s.attributeType {
 					currentNode = s.attributeType
@@ -978,24 +892,12 @@ func (s *sizeEstimator) EstimateCallCost(function, overloadID string, target *ch
 	return nil
 }
 
-// validateOutputType checks that the CEL expression output type t is valid.
-// For derived attributes, it must evaluate to a primitive scalar or a list
-// of those scalars. For device selector expressions, it must evaluate to a
-// boolean or match the attribute type. The types parameter should contain
-// the pre-calculated types from the CEL environment.
 // validateOutputType 校验表达式输出类型是否符合派生属性或选择器的约束。
 // validateOutputType 校验输出类型：派生属性必须是标量或标量列表，选择器必须是布尔或属性类型。
 func (c compiler) validateOutputType(types typesFromEnv, t *cel.Type, envType environment.Type, isDerivedAttribute bool) *apiservercel.Error {
 	// 派生属性需能被调度器用相等或不相交比较处理，因此限制为标量。
-	// Scenario: Derived attributes.
-	// They must evaluate to primitive scalars or lists of those scalars to
-	// ensure they can be matched by the scheduler using basic equality or
-	// disjointness comparisons.
 	// 存储表达式即使特性关闭也允许列表，避免升级后旧对象失效。
 	if isDerivedAttribute {
-		// For stored expressions, we always allow 'lists' to prevent breaking
-		// existing objects if the feature gate is disabled after previously
-		// being enabled.
 		allowListType := c.features.EnableListTypeAttributes || envType == environment.StoredExpressions
 		// 类型合法则通过。
 		if c.isAllowedDerivedAttributeType(t, allowListType) {
@@ -1012,8 +914,6 @@ func (c compiler) validateOutputType(types typesFromEnv, t *cel.Type, envType en
 			Detail: fmt.Sprintf(detail, t.String()),
 		}
 	}
-
-	// Scenario: Device selector expressions.
 
 	// 选择器表达式允许布尔或属性类型。
 	expectedReturnType := cel.BoolType
@@ -1034,9 +934,6 @@ func (c compiler) isAllowedDerivedAttributeType(t *cel.Type, allowListType bool)
 	if c.isAllowedDerivedAttributeElementType(t) {
 		return true
 	}
-	// A list in CEL is a unary generic type parameterized by exactly 1
-	// type parameter (the element type). We check that the length is 1
-	// to ensure it is a valid list and to safely access the element type.
 	// CEL list 是只带一个类型参数的泛型，确认形状后再检查元素类型。
 	if allowListType && t.TypeName() == "list" && len(t.Parameters()) == 1 {
 		// 递归检查列表元素类型是否合法。

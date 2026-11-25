@@ -147,8 +147,6 @@ func compatibilityTestMetadata(t *testing.T) *metadata.DeviceMetadata {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// setting the fields is not strictly necessary, but it helps to generate
-	// human readable test data that semantically makes sense.
 	// 以下赋值不是必须，但能让生成的数据更易读、语义合理。
 	// 类型断言为内部元数据对象。
 	dm := obj.(*metadata.DeviceMetadata)
@@ -286,7 +284,6 @@ func testMetadataFixture(t *testing.T, path string, expected *metadata.DeviceMet
 		t.Fatal(err)
 	}
 
-	// Decode without validation because metadata.managedFields[0].operation: "operationValue" is not valid.
 	// 不使用校验解码，因为固定数据中 managedFields[0].operation 是无效值 "operationValue"。
 	// 准备解码目标。
 	var decoded metadata.DeviceMetadata

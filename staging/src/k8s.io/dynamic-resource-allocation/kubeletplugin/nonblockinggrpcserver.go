@@ -42,11 +42,6 @@ type grpcServer struct {
 // registerService 是把具体服务注册到 gRPC 服务器的函数类型。
 type registerService func(s *grpc.Server)
 
-// startGRPCServer sets up the GRPC server on a Unix domain socket and spawns a goroutine
-// which handles requests for arbitrary services.
-//
-// errHandler gets invoked in the background when errors are encountered there.
-// They are fatal and should cause the process to exit.
 // startGRPCServer 在 Unix 域套接字上启动 gRPC 服务器，并在后台 goroutine 中处理任意服务的请求。
 // 后台遇到的错误会调用 errHandler（这类错误是致命的，应导致进程退出）。
 func startGRPCServer(logger klog.Logger, grpcVerbosity int, unaryInterceptors []grpc.UnaryServerInterceptor, streamInterceptors []grpc.StreamServerInterceptor, endpoint endpoint, errHandler func(ctx context.Context, err error), services ...registerService) (*grpcServer, error) {
@@ -66,10 +61,6 @@ func startGRPCServer(logger klog.Logger, grpcVerbosity int, unaryInterceptors []
 		return nil, fmt.Errorf("listen on %q: %w", s.endpoint.path(), err)
 	}
 
-	// Run a gRPC server. It will close the listening socket when
-	// shutting down, so we don't need to do that.
-	// The per-context logger always gets initialized because
-	// there might be log output inside the method implementations.
 	// gRPC 服务器关闭时会自动关闭监听套接字，因此无需在此重复关闭。
 	// 每个调用的上下文都要注入 logger，因为方法实现内部可能产生日志输出。
 	// 准备服务器选项。
@@ -119,8 +110,6 @@ func startGRPCServer(logger klog.Logger, grpcVerbosity int, unaryInterceptors []
 	return s, nil
 }
 
-// unaryContextInterceptor injects values from the context into the context
-// used by the call chain.
 // unaryContextInterceptor 把 valueCtx 中的值注入到一元调用的上下文中。
 func unaryContextInterceptor(valueCtx context.Context) grpc.UnaryServerInterceptor {
 	// 返回的拦截器先合并上下文，再交给实际处理函数。
@@ -131,7 +120,6 @@ func unaryContextInterceptor(valueCtx context.Context) grpc.UnaryServerIntercept
 	}
 }
 
-// streamContextInterceptor does the same as UnaryContextInterceptor for streams.
 // streamContextInterceptor 对流调用做与 unaryContextInterceptor 相同的上下文注入。
 func streamContextInterceptor(valueCtx context.Context) grpc.StreamServerInterceptor {
 	// 返回的拦截器合并流上下文，并用包装后的流调用 handler。
@@ -156,9 +144,6 @@ func (m mergeServerStream) Context() context.Context {
 	return m.ctx
 }
 
-// mergeContexts creates a new context where cancellation is handled by the
-// root context. The values stored by the value context are used as fallback if
-// the root context doesn't have a certain value.
 // mergeContexts 创建一个新上下文：取消信号由根上下文决定；
 // 当根上下文没有某个值时，回退到 valueCtx 中的值。
 func mergeContexts(rootCtx, valueCtx context.Context) context.Context {
@@ -187,9 +172,6 @@ func (m mergeCtx) Value(i interface{}) interface{} {
 	return m.valueCtx.Value(i)
 }
 
-// interceptor is called for each request. It creates a logger with a unique,
-// sequentially increasing request ID and adds that logger to the context. It
-// also logs request and response.
 // interceptor 处理每个一元请求：分配递增的请求 ID，把带 ID 与方法名的 logger 放入上下文，
 // 并记录请求与响应；发生 panic 时先记录再重新抛出。
 func (s *grpcServer) interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
@@ -283,8 +265,6 @@ func (l logStream) SendMsg(msg interface{}) error {
 	return err
 }
 
-// stop ensures that the server is not running anymore and cleans up all resources.
-// It is idempotent and may be called with a nil pointer.
 // stop 停止服务器并等待后台 goroutine 退出；方法幂等，可在 nil 指针上调用。
 func (s *grpcServer) stop() {
 	// nil 接收者直接返回。

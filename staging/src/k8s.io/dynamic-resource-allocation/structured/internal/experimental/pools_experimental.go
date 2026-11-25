@@ -58,13 +58,6 @@ func NodeMatches(node *v1.Node, nodeNameToMatch string, allNodesMatch bool, node
 	return false, nil
 }
 
-// GatherPools collects information about all resource pools which provide
-// devices that are accessible from the given node.
-//
-// Out-dated slices are silently ignored. Pools may be incomplete (not all
-// required slices available) or invalid (for example, device names not unique).
-// Both is recorded in the result.
-//
 // GatherPools 收集所有能从给定节点访问的资源池信息。过时的切片会被静默忽略；池可能不完整
 // （缺少部分所需切片）或无效（如设备名重复），这两种情况都会记录在返回的 Pool 结果中。
 // slicesForNode 是与节点相关的切片，allSlices 是全量切片，用于补全不完整的池。
@@ -78,25 +71,16 @@ func GatherPools(ctx context.Context, slicesForNode []*resourceapi.ResourceSlice
 			continue
 		}
 
-		// While the DRADeviceCompatibilityGroups feature is disabled, this
-		// allocator cannot validate co-allocation against compatibility
-		// groups, so slices with devices which declare them get ignored.
-		// This makes the pool incomplete (checked below), which prevents
-		// allocating the pool's other devices, too.
 		// 兼容组特性关闭时，忽略声明了兼容组的切片；这会使所在的池不完整，从而禁止分配该池设备。
 		if !features.CompatibilityGroups && sliceUsesCompatibilityGroups(slice) {
 			klog.FromContext(ctx).V(5).Info("Ignoring resource slice because it uses compatibility groups while the DRADeviceCompatibilityGroups feature is disabled; its pool will be treated as incomplete", "resourceslice", klog.KObj(slice))
 			continue
 		}
 
-		// Determine if the slice is relevant for the node.
 		// 判定该切片是否与当前节点相关。
 		relevant := false
-		// Slices containing SharedCounters might be excluded here if they do not target the current node.
-		// This is safe: if a device on this node references a shared counter from an excluded slice,
-		// the initial isComplete check below will fail due to the missing slice. Consequently,
-		// checkSlicesInPool will be called to fetch all slices in the pool, ensuring that the required
-		// shared counter slice is collected and included during pool construction.
+		// 含共享计数器的切片可能因不指向本节点而被排除；若本节点设备引用了其中的计数器，
+		// 后面的完整性检查会发现缺失，并通过 checkSlicesInPool 取回全池切片，确保补全所需计数器。
 		// 切片级节点选择：NodeName / AllNodes / NodeSelector 任一设置即按切片整体判定。
 		if nodeName, allNodes := ptr.Deref(slice.Spec.NodeName, ""), ptr.Deref(slice.Spec.AllNodes, false); nodeName != "" || allNodes || slice.Spec.NodeSelector != nil {
 			match, err := NodeMatches(node, nodeName, allNodes, slice.Spec.NodeSelector)
@@ -121,13 +105,7 @@ func GatherPools(ctx context.Context, slicesForNode []*resourceapi.ResourceSlice
 				}
 			}
 		} else {
-			// Nothing known was set. This must be some future, unknown extension,
-			// so we don't know how to handle it. We may still be able to allocated from
-			// other pools, so we continue.
-			//
-			// TODO (eventually): let caller decide how to report this to the user. Warning
-			// about it for every slice on each scheduling attempt would be too noisy, but
-			// perhaps once per run would be useful?
+			// TODO（后续）：由调用方决定如何向用户报告此警告。
 			continue
 		}
 
@@ -139,19 +117,11 @@ func GatherPools(ctx context.Context, slicesForNode []*resourceapi.ResourceSlice
 		}
 	}
 
-	// Find incomplete pools and flatten into a single slice.
 	// 找出不完整的池：此时只包含与节点相关的切片，且至少有一个。
 	// 注意：更高版本但与节点无关的切片可能已被跳过，因此完整性检查需谨慎处理。
-	//
-	// When we get here, we only have slices relevant for the node.
-	// There is at least one.
-	// We may have skipped slices with a higher generation
-	// if they are not relevant for the node, so we have to be
-	// careful with the "is incomplete" check.
 	result := make([]*Pool, 0, len(pools))
 	var resultWithBindingConditions []*Pool
 	for poolID, slicesForPool := range pools {
-		// If we have all slices, we are done.
 		// 切片数量达到声明的 ResourceSliceCount 即认为池完整，直接构建。
 		isComplete := int64(len(slicesForPool)) == slicesForPool[0].Spec.Pool.ResourceSliceCount
 		if isComplete {
@@ -167,39 +137,18 @@ func GatherPools(ctx context.Context, slicesForNode []*resourceapi.ResourceSlice
 			result = append(result, pool)
 			continue
 		}
-		// If not, then we need to start looking for slices
-		// which were filtered out above because their node selection made them look irrelevant
-		// for the current node. This is necessary for "allocate all" mode (it rejects incomplete
-		// pools).
 		// 在全量切片中重新查找该池：判断是否已过时，并取回该代的所有切片。
 		isObsolete, allSlicesForPool := checkSlicesInPool(allSlices, poolID, slicesForPool[0].Spec.Pool.Generation)
 		if isObsolete {
-			// A more thorough check determined that the DRA driver is in the process
-			// of replacing the current generation. The newer one didn't have any slice
-			// which devices for the node, or we would have noticed sooner.
-			//
-			// Let's ignore the old device information by ignoring the pool.
 			// 当前代已被驱动替换，忽略旧的池设备信息。
 			continue
 		}
 		// 与前面的过滤保持一致：特性关闭时，带兼容组的切片不计入完整性。
 		if !features.CompatibilityGroups {
-			// Stay consistent with the filtering above: ignored slices must
-			// not count towards pool completeness, otherwise a pool could be
-			// considered complete even though its devices with compatibility
-			// groups are not visible to the allocator.
 			allSlicesForPool = slicesWithoutCompatibilityGroups(allSlicesForPool)
 		}
-		// Use the more complete number of slices to check for "incomplete pool".
-		//
-		// The slices that we return to the caller still don't represent the whole
-		// pool, but that's okay: we *want* to limit the result to relevant devices
-		// so the caller doesn't need to check node selectors unnecessarily.
+		// 用全池切片数量判断完整性，但构建池时仍只返回节点相关设备，避免调用方重复检查节点选择器。
 		isComplete = int64(len(allSlicesForPool)) == slicesForPool[0].Spec.Pool.ResourceSliceCount
-		// If a pool is incomplete, we don't allow allocation so we don't need
-		// to do any validation. We need to keep track of the incomplete pools here
-		// to make sure allocationMode: All doesn't succeed without considering all
-		// devices.
 		// 池不完整：无需校验，记录一个 IsIncomplete 的 Pool，防止 allocate-all 遗漏设备。
 		if !isComplete {
 			result = append(result, &Pool{
@@ -213,7 +162,6 @@ func GatherPools(ctx context.Context, slicesForNode []*resourceapi.ResourceSlice
 		if err != nil {
 			return nil, err
 		}
-		// if pool has binding conditions, add the pool to the end of the result
 		if poolHasBindingConditions(*pool) {
 			resultWithBindingConditions = append(resultWithBindingConditions, pool)
 			continue
@@ -221,9 +169,6 @@ func GatherPools(ctx context.Context, slicesForNode []*resourceapi.ResourceSlice
 		result = append(result, pool)
 	}
 
-	// Sort pools by ID to ensure a deterministic allocation order.
-	// Because the allocator uses a first-fit search, this allows driver authors
-	// to influence prioritization through their naming conventions.
 	// 按 PoolID 排序保证分配顺序确定；first-fit 搜索让驱动可通过命名影响优先级。
 	sortPoolsByID(result)
 	sortPoolsByID(resultWithBindingConditions)
@@ -268,7 +213,6 @@ func addSlice(pools map[PoolID][]*draapi.ResourceSlice, s *resourceapi.ResourceS
 	id := PoolID{Driver: slice.Spec.Driver, Pool: slice.Spec.Pool.Name}
 	slicesForPool := pools[id]
 	if slicesForPool == nil {
-		// New pool.
 		// 首次见到该池：新建分组。
 		pools[id] = []*draapi.ResourceSlice{&slice}
 		return nil
@@ -276,18 +220,15 @@ func addSlice(pools map[PoolID][]*draapi.ResourceSlice, s *resourceapi.ResourceS
 
 	// 版本低于已有切片：过时，直接忽略。
 	if slice.Spec.Pool.Generation < slicesForPool[0].Spec.Pool.Generation {
-		// Out-dated.
 		return nil
 	}
 
 	// 版本更高：新代替换该池所有旧切片。
 	if slice.Spec.Pool.Generation > slicesForPool[0].Spec.Pool.Generation {
-		// Newer, replaces all old slices.
 		pools[id] = []*draapi.ResourceSlice{&slice}
 		return nil
 	}
 
-	// Add to pool.
 	// 同代：追加到该池切片列表。
 	slicesForPool = append(slicesForPool, &slice)
 	pools[id] = slicesForPool
@@ -298,9 +239,6 @@ func addSlice(pools map[PoolID][]*draapi.ResourceSlice, s *resourceapi.ResourceS
 // 补充不针对当前节点但被设备引用的切片，并依次校验设备名、计数器集合及计数器消费。校验失败时
 // 返回 IsInvalid 的 Pool 而非错误。allSlicesForPool 用于补全不针对当前节点的切片。
 func buildPool(id PoolID, slices []*draapi.ResourceSlice, features Features, allSlicesForPool []*resourceapi.ResourceSlice) (*Pool, error) {
-	// Sort slices by name to ensure a deterministic allocation order.
-	// Because the allocator uses a first-fit search, this allows driver authors
-	// to influence prioritization through their naming conventions.
 	// 按名称排序保证 first-fit 分配顺序确定。
 	sortSlicesByName(slices)
 
@@ -318,11 +256,8 @@ func buildPool(id PoolID, slices []*draapi.ResourceSlice, features Features, all
 		}
 	}
 
-	// Process and convert any slices that were excluded because they didn't target the current node.
 	// 存在未转换的切片时，补进去：这些切片虽不针对当前节点，但可能被本节点设备引用的计数器需要。
 	if len(slices) < len(allSlicesForPool) {
-		// We only want to convert the slices we haven't already converted, so make it easy to
-		// look up the names of converted slices.
 		// 用名称集合去重，避免重复转换已处理的切片。
 		slicesTargetingNodeNames := sets.New[string]()
 		for _, slice := range slices {
@@ -356,8 +291,6 @@ func buildPool(id PoolID, slices []*draapi.ResourceSlice, features Features, all
 		}, nil
 	}
 
-	// If the partitionable devices feature is not enabled, we don't need to
-	// validate counter sets and consumed counters, so we are done.
 	// 可分区设备特性关闭：无需校验计数器，直接返回仅含针对节点设备切片的 Pool。
 	if !features.PartitionableDevices {
 		return &Pool{
@@ -376,7 +309,6 @@ func buildPool(id PoolID, slices []*draapi.ResourceSlice, features Features, all
 		}, nil
 	}
 
-	// Validate device counter consumption for devices targeting the node.
 	// 校验针对当前节点的设备：其消费的计数器集合与计数器必须存在。
 	if err := validateDeviceCounterConsumption(counterSets, deviceSlices); err != nil {
 		return &Pool{
@@ -386,7 +318,6 @@ func buildPool(id PoolID, slices []*draapi.ResourceSlice, features Features, all
 		}, nil
 	}
 
-	// Validate device counter consumption for devices not targeting the node.
 	// 同样校验不针对当前节点的设备，保证其计数器引用有效。
 	if err := validateDeviceCounterConsumption(counterSets, slicesNotTargetingNode); err != nil {
 		return &Pool{
@@ -409,7 +340,6 @@ func buildPool(id PoolID, slices []*draapi.ResourceSlice, features Features, all
 // 发现重复的计数器集合名称时立即返回错误（只报告第一个错误）。
 func getAndValidateCounterSets(slices []*draapi.ResourceSlice) (map[draapi.UniqueString]*draapi.CounterSet, error) {
 	counterSets := make(map[draapi.UniqueString]*draapi.CounterSet)
-	// We only capture the first error we encounter.
 	// 遍历所有共享计数器；名称重复视为无效。
 	for _, slice := range slices {
 		for i := range slice.Spec.SharedCounters {
@@ -429,7 +359,6 @@ func validateDeviceNames(resourceSlices []*draapi.ResourceSlice) error {
 	deviceNames := sets.New[draapi.UniqueString]()
 	for _, slice := range resourceSlices {
 		for _, device := range slice.Spec.Devices {
-			// Make sure we don't have duplicate device names
 			// 设备名已出现：说明存在重复，报错。
 			if deviceNames.Has(device.Name) {
 				return fmt.Errorf("duplicate device name %s", device.Name)
@@ -446,8 +375,6 @@ func validateDeviceNames(resourceSlices []*draapi.ResourceSlice) error {
 func validateDeviceCounterConsumption(counterSets map[draapi.UniqueString]*draapi.CounterSet, resourceSlices []*draapi.ResourceSlice) error {
 	for _, slice := range resourceSlices {
 		for _, device := range slice.Spec.Devices {
-			// Make sure all consumed counters for the device references counter sets that exists and
-			// that they consume counters that exists within those counter sets.
 			// 逐条检查设备的计数器消费声明。
 			for _, deviceCounterConsumption := range device.ConsumesCounters {
 				// 引用的计数器集合不存在：报错。
@@ -483,17 +410,7 @@ func poolHasBindingConditions(pool Pool) bool {
 	return false
 }
 
-// checkSlicesInPool is an expensive check of all slices in the pool.
-// The generation is what the caller wants to move ahead with.
-//
-// It returns:
-// - current generation is obsolete -> no further checking
-// - all slices with the generation in the pool
-//
-// Future TODO: detect inconsistent ResourceSliceCount, also in poolIsInvalid.
 func checkSlicesInPool(slices []*resourceapi.ResourceSlice, poolID PoolID, generation int64) (bool, []*resourceapi.ResourceSlice) {
-	// A cached index by pool ID would make this more efficient.
-	// It may be needed long-term to support features which always have to consider all slices.
 	// 全量扫描开销较大，未来可考虑按 PoolID 建索引缓存。
 	var allSlicesForPool []*resourceapi.ResourceSlice
 	for i := range slices {
@@ -501,7 +418,6 @@ func checkSlicesInPool(slices []*resourceapi.ResourceSlice, poolID PoolID, gener
 		// 只关心属于指定池的切片。
 		if slice.Spec.Driver != poolID.Driver.String() ||
 			slice.Spec.Pool.Name != poolID.Pool.String() {
-			// Different pool.
 			continue
 		}
 		// 按代次处理：同代收集，更高代说明调用方遗漏了切片（当前代已过时），更老代忽略。
@@ -509,12 +425,9 @@ func checkSlicesInPool(slices []*resourceapi.ResourceSlice, poolID PoolID, gener
 		case slice.Spec.Pool.Generation == generation:
 			allSlicesForPool = append(allSlicesForPool, slice)
 		case slice.Spec.Pool.Generation > generation:
-			// The caller must have missed some other slice in the pool.
-			// Abort!
 			// 存在更新代切片：判定当前代过时，返回 true。
 			return true, nil
 		default:
-			// Older generation, ignore.
 		}
 	}
 	// 未过时，返回该代的全部切片。
@@ -545,27 +458,16 @@ func (p PoolID) String() string {
 	return p.Driver.String() + "/" + p.Pool.String()
 }
 
-// At V(6), log only a limited number of devices to avoid blowing up logs. For
-// many E2E tests, 10 devices is enough for all devices without having to
-// truncate, at least when running the tests sequentially.
 // maxDevicesLevel6 限制 V(6) 日志中最多输出 10 个设备，避免日志过大。
 const maxDevicesLevel6 = 10
 
-// logPools returns a handle for the value in a structured log call which
-// includes varying amounts of information about the pools, depending on
-// the verbosity of the logger.
-//
 // logPools 返回一个可用于结构化日志的值句柄，根据日志详细级别决定输出多少池信息：
 // V<=5 只输出数量，V=6 增加池元信息及有限数量的设备，V>=7 输出全部设备与池内容。
 func logPools(logger klog.Logger, pools []*Pool) any {
-	// We need to check verbosity here because our caller's source code
-	// location may be relevant (-vmodule !).
 	// 在此调整调用栈助手，保证日志中的源码位置指向调用方（-vmodule 需要）。
 	helper, logger := logger.WithCallStackHelper()
 	helper()
 
-	// We always produce the same output at V <= 5. 6 adds a summary and
-	// 7 is a complete dump.
 	// 从高到低探测启用的最大详细级别，决定输出内容。
 	verbosity := 5
 	for i := 7; i > verbosity; i-- {

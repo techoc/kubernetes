@@ -77,8 +77,6 @@ func TestEndpointListener(t *testing.T) {
 	assert.Nil(t, listener)
 }
 
-// closeErrorListener is a net.Listener whose Close returns a fixed error. Only
-// Close is called here, so the embedded Listener is left nil.
 // closeErrorListener 是一个 Close 固定返回指定错误的 net.Listener。
 type closeErrorListener struct {
 	// 内嵌监听器，测试中不使用，保持 nil。
@@ -90,9 +88,6 @@ type closeErrorListener struct {
 // Close 返回预设的错误。
 func (l closeErrorListener) Close() error { return l.closeErr }
 
-// unremovableSocket puts something at the socket path that os.Remove refuses to
-// delete. A directory that is not empty fails without depending on file
-// permissions or on which user runs the test.
 // unremovableSocket 在套接字路径上放置一个 os.Remove 无法删除的东西（非空目录）。
 // 使用非空目录可避免依赖文件权限或运行测试的用户身份。
 func unremovableSocket(t *testing.T, dir, file string) {

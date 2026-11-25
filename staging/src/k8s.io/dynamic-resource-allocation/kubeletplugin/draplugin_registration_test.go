@@ -101,7 +101,6 @@ func TestRollingUpdateRegistrarSocketFile_usesShortestFormForVeryLongDriverName(
 // 完整 UID 形式超限时必须回退，且最终路径仍在上限内。
 func TestRollingUpdateRegistrarSocketFile_respectsCustomRegistryDir(t *testing.T) {
 	// 更长的注册表目录留给驱动名的空间更小。
-	// A longer registry dir leaves less room for the driver name in the path.
 	// 构造带长中间路径的注册表目录。
 	registryDir := path.Join("/var/lib/kubelet", strings.Repeat("x", 20), "plugins_registry")
 	// 短驱动名。

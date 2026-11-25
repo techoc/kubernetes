@@ -23,12 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// validateDriverResources identifies problems that cannot be caught by
-// the server-side validation and that would prevent using the published
-// ResourceSlices, like incorrect cross-references. We do validation here
-// so any issues can be discovered as early as possible. This is also
-// checked in the allocator before allocating any devices.
 // validateDriverResources 校验服务端校验无法捕获、且会阻碍已发布 ResourceSlice 使用的交叉引用等问题，以便尽早发现。
+// 分配器在分配设备前也会执行同样的检查。
 func validateDriverResources(resources *DriverResources) error {
 	// 逐个 pool 进行校验，遇到第一个错误立即返回。
 	for poolName, pool := range resources.Pools {
@@ -39,13 +35,8 @@ func validateDriverResources(resources *DriverResources) error {
 	return nil
 }
 
-// validatePool checks that there aren't any pool-wide issues that
-// can't be caught in the API-server per-ResourceSlice validation.
-//
-// This logic is very similar to what we do in the allocator when we
-// gather the pools. We might want to see if there is a good way to
-// put this logic in one place.
 // validatePool 检查单个 pool 内无法由 API 服务器逐 ResourceSlice 校验发现的整体性问题。
+// 其逻辑与分配器汇总 pool 时相近，后续可考虑合并。
 func validatePool(name string, pool Pool) error {
 	// 收集 pool 内所有共享计数器集合，用于检测重复与引用有效性。
 	counterSets := make(map[string]resourceapi.CounterSet)

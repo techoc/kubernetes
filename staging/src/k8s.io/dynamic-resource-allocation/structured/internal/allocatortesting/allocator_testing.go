@@ -127,21 +127,15 @@ var (
 	pointOne     = resource.MustParse("100m")
 	pointTwo     = resource.MustParse("200m")
 	pointTwoFive = resource.MustParse("250m")
-	// pointThree uses NewMilliQuantity so its s field matches allocator output (s:"").
 	// pointThree 使用 NewMilliQuantity 构造，保证其内部 s 字段为空，与分配器输出的表示一致。
 	pointThree = *resource.NewMilliQuantity(300, resource.DecimalSI)
 )
 
 // init 提高 klog 的默认日志详细度（调度器逐节点过滤时 Allocate 使用极高阈值），并把配置注册到命令行 flag。
 func init() {
-	// Bump up the default verbosity for testing. Allocate uses very
-	// high thresholds because it is used in the scheduler's per-node
-	// filter operation.
 	ktesting.DefaultConfig = ktesting.NewConfig(ktesting.Verbosity(7))
 	ktesting.DefaultConfig.AddFlags(flag.CommandLine)
 }
-
-// Test objects generators
 
 // 本常量块定义节点标签键与地域相关的固定取值，供节点选择器和切片选择器复用。
 const (
@@ -151,7 +145,6 @@ const (
 	planetValueEarth = "earth"
 )
 
-// generate a node object given a name and a region
 // node 根据名称与地域构造一个测试用 Node 对象，并附带固定的 planet=earth 标签。参数 name 为节点名，region 为地域标签值。
 func node(name, region string) *v1.Node {
 	return &v1.Node{
@@ -165,8 +158,6 @@ func node(name, region string) *v1.Node {
 	}
 }
 
-// nodeWithDRAOptionalNodeOperations returns a node declaring DRAOptionalNodeOperations feature support
-// required by devices that define SkipNodeOperations.
 // nodeWithDRAOptionalNodeOperations 在 node 基础上声明 DRAOptionalNodeOperations 特性，用于测试定义了 SkipNodeOperations 的设备所依赖的节点能力。参数 name 为节点名，region 为地域标签值。
 func nodeWithDRAOptionalNodeOperations(name, region string) *v1.Node {
 	n := node(name, region)
@@ -174,8 +165,6 @@ func nodeWithDRAOptionalNodeOperations(name, region string) *v1.Node {
 	return n
 }
 
-// generate a DeviceClass object with the given name and a driver CEL selector.
-// driver name is assumed to be the same as the class name.
 // class 构造一个测试用 DeviceClass，其 CEL 选择器按 driver 名称匹配设备；按约定 driver 名与类名相同。参数 name 为类名，driver 为驱动名。
 func class(name, driver string) *resourceapi.DeviceClass {
 	return &resourceapi.DeviceClass{
@@ -194,9 +183,6 @@ func class(name, driver string) *resourceapi.DeviceClass {
 	}
 }
 
-// generate a DeviceClass object with the given name and a driver CEL selector.
-// driver name is assumed to be the same as the class name.
-// shared condition is explicitly set.
 // classWithAllowMultipleAllocations 构造一个 DeviceClass，其 CEL 选择器同时匹配 driver 名和 device.allowMultipleAllocations 的取值。参数 multialloc 指定期望的 allowMultipleAllocations 布尔值。
 func classWithAllowMultipleAllocations(name, driver string, multialloc bool) *resourceapi.DeviceClass {
 	return &resourceapi.DeviceClass{
@@ -215,7 +201,6 @@ func classWithAllowMultipleAllocations(name, driver string, multialloc bool) *re
 	}
 }
 
-// generate a DeviceConfiguration object with the given driver and attribute.
 // deviceConfiguration 构造一个 Opaque 类型的设备配置：driver 指定目标驱动，attribute 同时作为 JSON 参数键和值前缀（值为 attribute+"Value"）。
 func deviceConfiguration(driver, attribute string) resourceapi.DeviceConfiguration {
 	return resourceapi.DeviceConfiguration{
@@ -228,8 +213,6 @@ func deviceConfiguration(driver, attribute string) resourceapi.DeviceConfigurati
 	}
 }
 
-// generate a DeviceClass object with the given name and attribute.
-// attribute is used to generate device configuration parameters in a form of JSON {attribute: attributeValue}.
 // classWithConfig 在 class 基础上为设备类添加一条设备配置（Spec.Config），配置参数由 attribute 生成，形如 {"attribute": "attributeValue"}。
 func classWithConfig(name, driver, attribute string) *resourceapi.DeviceClass {
 	class := class(name, driver)
@@ -241,7 +224,6 @@ func classWithConfig(name, driver, attribute string) *resourceapi.DeviceClass {
 	return class
 }
 
-// generate a ResourceClaim object with the given name and device requests.
 // claimWithRequests 构造一个 ResourceClaim：包含给定的设备约束列表与若干设备请求。参数 name 为声明名，constraints 为约束列表，requests 为可变数量的请求；返回包装对象以便链式调用。
 func claimWithRequests(name string, constraints []resourceapi.DeviceConstraint, requests ...resourceapi.DeviceRequest) wrapResourceClaim {
 	return wrapResourceClaim{&resourceapi.ResourceClaim{
@@ -257,7 +239,6 @@ func claimWithRequests(name string, constraints []resourceapi.DeviceConstraint, 
 	}}
 }
 
-// generate a DeviceRequest object with the given name, class and selectors.
 // request 构造一个精确计数（ExactCount）模式的 DeviceRequest。参数 name 为请求名，class 为设备类名，count 为请求数量，selectors 为可选的 CEL 设备选择器。
 func request(name, class string, count int64, selectors ...resourceapi.DeviceSelector) resourceapi.DeviceRequest {
 	return resourceapi.DeviceRequest{
@@ -361,7 +342,6 @@ func (in wrapDeviceSubRequest) withCapacityRequest(quantity *resource.Quantity) 
 	return wrapDeviceSubRequest{*out}
 }
 
-// genereate a DeviceRequest with the given name and list of prioritized requests.
 // requestWithPrioritizedList 构造一个 FirstAvailable（优先级列表）模式的 DeviceRequest。参数 name 为请求名，prioritizedRequests 为按优先级排列的子请求，会解包为 DeviceSubRequest 列表。
 func requestWithPrioritizedList(name string, prioritizedRequests ...wrapDeviceSubRequest) wrapDeviceRequest {
 	var subreqs []resourceapi.DeviceSubRequest
@@ -374,14 +354,12 @@ func requestWithPrioritizedList(name string, prioritizedRequests ...wrapDeviceSu
 	}}
 }
 
-// generate a ResourceClaim object with the given name and with a single request with given class and constraints.
 // claimWithRequest 构造一个只含单个请求的 ResourceClaim：请求名为 req、数量固定为 1、设备类为 class，并可附带设备约束。
 func claimWithRequest(name, req, class string, constraints ...resourceapi.DeviceConstraint) wrapResourceClaim {
 	claim := claimWithRequests(name, constraints, request(req, class, 1))
 	return claim
 }
 
-// generate a ResourceClaim object with the given name.
 // claim 构造一个仅含名称元数据的空 ResourceClaim，便于随后用 withRequests/withConstraints 等方法填充。
 func claim(name string) wrapResourceClaim {
 	return wrapResourceClaim{&resourceapi.ResourceClaim{
@@ -432,8 +410,6 @@ func (in wrapResourceClaim) withConfigs(configs []resourceapi.DeviceClaimConfigu
 	return wrapResourceClaim{out}
 }
 
-// generate a ResourceClaim object with the given name, request, class, and attribute.
-// attribute is used to generate parameters in a form of JSON {attribute: attributeValue}.
 // claimWithDeviceConfig 构造一个单请求 ResourceClaim，并为其添加一条设备配置，配置参数由 attribute 生成，形如 {"attribute": "attributeValue"}。
 func claimWithDeviceConfig(name, request, class, driver, attribute string) wrapResourceClaim {
 	claim := claimWithRequest(name, request, class)
@@ -458,7 +434,6 @@ const (
 	fromCounters = "fromCounters"
 )
 
-// generate a Device object with the given name, capacity and attributes.
 // device 构造一个测试用 Device 并包装为 wrapDevice。参数 name 为设备名，attributes 为设备属性；capacity 可为容量映射、字符串标记 fromCounters 或 nil：容量映射会转为 DeviceCapacity，fromCounters 则在追加计数器消耗时从共享计数器推导容量。
 func device(name string, capacity any, attributes map[resourceapi.QualifiedName]resourceapi.DeviceAttribute) wrapDevice {
 	device := resourceapi.Device{
@@ -484,7 +459,6 @@ func device(name string, capacity any, attributes map[resourceapi.QualifiedName]
 		}
 	// 情形四：无容量。
 	case nil:
-		// nothing to do
 	default:
 		panic(fmt.Sprintf("unexpected capacity type %T: %+v", capacity, capacity))
 	}
@@ -581,7 +555,6 @@ func (in wrapDevice) withAllowMultipleAllocations() wrapDevice {
 	return wrapDevice{Device: *device}
 }
 
-// withCapacityRequestPolicyRange adds capacity with default requestPolicy (2,2,4)
 // withCapacityRequestPolicyRange 为给定容量添加默认请求策略范围（default=2，min=2，step=2，max=4）。参数 capacity 为容量名到容量值的映射。
 func (in wrapDevice) withCapacityRequestPolicyRange(capacity map[resourceapi.QualifiedName]resource.Quantity) wrapDevice {
 	inDevice := in.Device
@@ -605,8 +578,6 @@ func (in wrapDevice) withCapacityRequestPolicyRange(capacity map[resourceapi.Qua
 	return wrapDevice{Device: *device}
 }
 
-// withFractionalCapacityRequestPolicyRange adds capacity with a fractional requestPolicy
-// (min=200m, step=100m, max=1, default=200m).
 // withFractionalCapacityRequestPolicyRange 为给定容量添加小数请求策略范围（min=200m，step=100m，max=1，default=200m）。参数 capacity 为容量名到容量值的映射。
 func (in wrapDevice) withFractionalCapacityRequestPolicyRange(capacity map[resourceapi.QualifiedName]resource.Quantity) wrapDevice {
 	inDevice := in.Device
@@ -630,7 +601,6 @@ func (in wrapDevice) withFractionalCapacityRequestPolicyRange(capacity map[resou
 	return wrapDevice{Device: *device}
 }
 
-// withCapacityRequestPolicyValidValues adds capacity with default valid values (1)
 // withCapacityRequestPolicyValidValues 为给定容量添加离散合法值请求策略：defaultValue 作为默认值且为最小值，additionalValidValues 为额外合法值，capacity 为容量名到容量值的映射。
 func (in wrapDevice) withCapacityRequestPolicyValidValues(defaultValue resource.Quantity, capacity map[resourceapi.QualifiedName]resource.Quantity, additionalValidValues []resource.Quantity) wrapDevice {
 	inDevice := in.Device
@@ -639,8 +609,8 @@ func (in wrapDevice) withCapacityRequestPolicyValidValues(defaultValue resource.
 		device.Capacity = make(map[resourceapi.QualifiedName]resourceapi.DeviceCapacity, len(capacity))
 	}
 	for name, quantity := range capacity {
-		validValues := []resource.Quantity{defaultValue}            // default is minimum
-		validValues = append(validValues, additionalValidValues...) // append with additional valid values
+		validValues := []resource.Quantity{defaultValue}            // 默认取最小值
+		validValues = append(validValues, additionalValidValues...) // 追加额外有效值
 		device.Capacity[name] = resourceapi.DeviceCapacity{
 			Value: quantity,
 			RequestPolicy: &resourceapi.CapacityRequestPolicy{
@@ -675,12 +645,6 @@ const (
 	nodeSelectionPerDevice = "nodeSelectionPerDevice"
 )
 
-// generate a ResourceSlice object with the given name, node,
-// driver and pool names and generation.
-// The nodeSelection parameter may be a string with the value
-// nodeSelectionAll for all nodes, the value nodeSelectionPerDevice
-// for per device node selection, or any other value to set the
-// node name. Providing a node selectors sets the NodeSelector field.
 // slice 构造一个 ResourceSlice。参数 name 为切片名；pool 可为 ResourcePool 或池名字符串（后者生成默认 Generation=1、切片数=1 的池）；driver 为驱动名；nodeSelection 可为 *v1.NodeSelector、nodeSelectionAll、nodeSelectionPerDevice 或具体节点名字符串。
 func slice(name string, nodeSelection, pool any, driver string) *resourceapi.ResourceSlice {
 	var resourcePool resourceapi.ResourcePool
@@ -803,7 +767,6 @@ func deviceAllocationResultWithSkipNodeOperations(request, driver, pool, device 
 	return r
 }
 
-// deviceRequestAllocationResult can replace deviceAllocationResult
 // deviceRequestAllocationResult 构造一个可链式设置的 wrapDeviceRequestAllocationResult（用 withConsumedCapacity 追加已消耗容量信息），可替代 deviceAllocationResult 使用。
 func deviceRequestAllocationResult(request, driver, pool, device string) wrapDeviceRequestAllocationResult {
 	return wrapDeviceRequestAllocationResult{
@@ -860,7 +823,6 @@ func multipleDeviceAllocationResults(request, driver, pool string, count, startI
 	return results
 }
 
-// nodeLabelSelector creates a node selector with a label match for "key" in "values".
 // nodeLabelSelector 构造一个节点选择器，按标签 key 以 In 操作符匹配给定的 values。
 func nodeLabelSelector(key string, values ...string) *v1.NodeSelector {
 	requirements := []v1.NodeSelectorRequirement{{
@@ -872,22 +834,18 @@ func nodeLabelSelector(key string, values ...string) *v1.NodeSelector {
 	return selector
 }
 
-// localNodeSelector returns a node selector for a specific node.
 // localNodeSelector 构造选择特定节点的节点选择器：按 metadata.name 字段（fieldNameKey）精确选择 nodeName，通过交换 MatchExpressions 与 MatchFields 实现。
 func localNodeSelector(nodeName string) *v1.NodeSelector {
 	selector := nodeLabelSelector(fieldNameKey, nodeName)
-	// Swap the requirements: we need to select by field, not label.
 	selector.NodeSelectorTerms[0].MatchFields, selector.NodeSelectorTerms[0].MatchExpressions = selector.NodeSelectorTerms[0].MatchExpressions, selector.NodeSelectorTerms[0].MatchFields
 	return selector
 }
 
-// allocationResult returns a matcher for one AllocationResult pointer with a list of
-// embedded device allocation results. The order of those results doesn't matter.
 // allocationResult 返回一个 Gomega 匹配器，用于断言单个 AllocationResult：Results 与给定结果集合一致（顺序无关）、Config 为 nil、NodeSelector 匹配 selector、AllocationTimestamp 为 nil。
 func allocationResult(selector *v1.NodeSelector, results ...resourceapi.DeviceRequestAllocationResult) types.GomegaMatcher {
 	return gstruct.MatchFields(0, gstruct.Fields{
 		"Devices": gstruct.MatchFields(0, gstruct.Fields{
-			"Results": gomega.ConsistOf(results), // Order is irrelevant.
+			"Results": gomega.ConsistOf(results), // 顺序无关。
 			"Config":  gomega.BeNil(),
 		}),
 		"NodeSelector":        matchNodeSelector(selector),
@@ -895,8 +853,6 @@ func allocationResult(selector *v1.NodeSelector, results ...resourceapi.DeviceRe
 	})
 }
 
-// matchNodeSelector returns a matcher for a node selector. The order
-// of terms, requirements, and values is irrelevant.
 // matchNodeSelector 返回节点选择器的匹配器：selector 为 nil 时断言字段为 nil，否则递归匹配其 NodeSelectorTerms（顺序无关）。
 func matchNodeSelector(selector *v1.NodeSelector) types.GomegaMatcher {
 	if selector == nil {
@@ -967,15 +923,11 @@ func allocationResultWithConfigs(selector *v1.NodeSelector, results []resourceap
 	}
 }
 
-// Helpers
-
-// convert a list of objects to a slice
 // objects 把可变参数列表原样转换为切片，便于在测试用例中就地构造 []T。
 func objects[T any](objs ...T) []T {
 	return objs
 }
 
-// convert a list of wrapper objects to a slice
 // unwrap 把一组实现了 wrapper[T] 的包装对象解包为 []T。
 func unwrap[T any, O wrapper[T]](objs ...O) []T {
 	out := make([]T, len(objs))
@@ -990,7 +942,6 @@ type wrapper[T any] interface {
 	obj() T
 }
 
-// convert a list of wrapper objects to a slice
 // unwrapResourceSlices 把一组实现 resourceSliceWrapper 的切片包装对象解包为 []*resourceapi.ResourceSlice。
 func unwrapResourceSlices(objs ...resourceSliceWrapper) []*resourceapi.ResourceSlice {
 	out := make([]*resourceapi.ResourceSlice, len(objs))
@@ -1005,19 +956,16 @@ type resourceSliceWrapper interface {
 	obj() *resourceapi.ResourceSlice
 }
 
-// generate a ResourceSlice object with the given parameters and no devices
 // sliceWithNoDevices 构造一个不含任何设备的 ResourceSlice（用于测试空池场景）。
 func sliceWithNoDevices(name string, nodeSelection, pool any, driver string) wrapResourceSliceWithDevices {
 	return sliceWithDevices(name, nodeSelection, pool, driver)
 }
 
-// generate a ResourceSlice object with the given parameters and one device "device-1"
 // sliceWithOneDevice 构造一个仅含 device-1 一台设备的 ResourceSlice。
 func sliceWithOneDevice(name string, nodeSelection, pool any, driver string) wrapResourceSliceWithDevices {
 	return sliceWithDevices(name, nodeSelection, pool, driver, device(device1, nil, nil))
 }
 
-// generate a ResourceSclie object with the given parameters and the specified number of devices.
 // sliceWithMultipleDevices 构造一个含 count 台设备（device-0、device-1……）的 ResourceSlice。
 func sliceWithMultipleDevices(name string, nodeSelection, pool any, driver string, count int) wrapResourceSliceWithDevices {
 	var devices []wrapDevice
@@ -1053,9 +1001,6 @@ func toCounters(counters map[string]resource.Quantity) map[string]resourceapi.Co
 	return out
 }
 
-// deviceRequestAllocationResultWithBindingConditions returns an DeviceRequestAllocationResult object for testing purposes,
-// specifying the driver, pool, device, usage restriction, binding conditions,
-// binding failure conditions, and binding timeout.
 // deviceRequestAllocationResultWithBindingConditions 构造一个带绑定条件、绑定失败条件（及可选容忍列表）的分配结果，用于验证绑定条件相关的分配行为。
 func deviceRequestAllocationResultWithBindingConditions(request, driver, pool, device string, bindingConditions, bindingFailureConditions []string, tolerations ...resourceapi.DeviceToleration) resourceapi.DeviceRequestAllocationResult {
 	return resourceapi.DeviceRequestAllocationResult{
@@ -1088,20 +1033,11 @@ type AllocatorTestCase struct {
 
 	// expectResults 为期望的分配结果列表。
 	expectResults []any
-	expectError   types.GomegaMatcher // can be used to check for no error or match specific error
+	expectError   types.GomegaMatcher // 可用于检查无错误或匹配特定错误
 
-	// Expected allocateOne invocations, asserted for every variant. A variant
-	// that searches differently overrides this through the map below.
 	// expectNumAllocateOneInvocations 为每个变体都断言的 allocateOne 调用次数；搜索方式不同的变体可通过下方映射覆盖。
 	expectNumAllocateOneInvocations int64
 
-	// expectNumAllocateOneInvocationsByChannel overrides expectNumAllocateOneInvocations with
-	// different values for specific implementations (e.g. "experimental").
-	//
-	// Ignored unless expectNumAllocateOneInvocations is also set.
-	// expectNumAllocateOneInvocations should contain the "best" result, so
-	// expectNumAllocateOneInvocationsByChannel is only needed as long as we have "worse"
-	// implementations.
 	// expectNumAllocateOneInvocationsByChannel 按不同实现（如 experimental）分别覆盖调用次数，仅在 expectNumAllocateOneInvocations 已设置时生效。
 	expectNumAllocateOneInvocationsByChannel map[internal.AllocatorChannel]int64
 }
@@ -1113,8 +1049,6 @@ func requestWithDerivedAttributes(name, class string, count int64, derivedAttrs 
 	return req
 }
 
-// TestAllocator runs as many of the shared tests against a specific allocator implementation as possible.
-// Test cases which depend on features that are not supported by the implementation are silently skipped.
 // TestAllocator 针对某个具体的分配器实现运行尽可能多的共享测试用例；依赖该实现不支持的特性的用例会被静默跳过。参数 supportedFeatures 声明该实现支持的特性，newAllocator 是用于构造分配器实例的工厂函数。
 func TestAllocator(t *testing.T,
 	supportedFeatures Features,
@@ -1172,8 +1106,6 @@ func TestAllocator(t *testing.T,
 	testcases := map[string]AllocatorTestCase{
 		// "empty": 空输入用例：无声明、无类、无切片，验证无分配结果且无错误。
 		"empty": {},
-		// Two requests in one claim, both landing on the same counter set with the
-		// same compatibility group: they can be co-allocated.
 		// "compatibility-groups-compatible": 同一声明内两个请求落在同一计数器集且兼容组一致（均为 mig），验证二者可被共同分配。
 		"compatibility-groups-compatible": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true},
@@ -1202,8 +1134,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req1, driverA, pool1, device2, false),
 			)},
 		},
-		// Two requests in one claim, the only candidates are an incompatible pair on
-		// the same counter set (mig vs vgpu): no combination satisfies the claim.
 		// "compatibility-groups-incompatible": 唯一候选的两个设备在同一计数器集上分属互斥兼容组（mig 与 vgpu），验证无任何组合能满足声明、分配失败。
 		"compatibility-groups-incompatible": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true},
@@ -1228,11 +1158,6 @@ func TestAllocator(t *testing.T,
 			node:          node(node1, region1),
 			expectResults: nil,
 		},
-		// A single-device claim whose first candidate (device1) declares group "mig"
-		// and carries a NoSchedule taint, while the second (device2) declares the
-		// disjoint group "vgpu". device1 is rejected by its taint; the compatibility
-		// narrowing it consumed on counterSet1 must be rolled back so device2, which
-		// shares no group with it, can still be allocated.
 		// "compatibility-groups-taint-rollback": 首选设备 device1 带 NoSchedule 污点且属 mig 组、次选 device2 属 vgpu 组；device1 因污点被拒后其兼容组收窄须回滚，使不共享组的 device2 仍可分配。
 		"compatibility-groups-taint-rollback": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true, DeviceTaints: true},
@@ -1259,9 +1184,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req0, driverA, pool1, device2, false),
 			)},
 		},
-		// An incompatible device is already allocated on the counter set; its groups
-		// are read live from the slice. The only remaining candidate shares no
-		// group, so the claim is unschedulable.
 		// "compatibility-groups-incompatible-with-allocated-peer": 计数器集上已分配属 mig 组的设备，候选设备属 vgpu 组且组信息从切片实时读取，二者不共享组，声明不可调度。
 		"compatibility-groups-incompatible-with-allocated-peer": {
 			features:         Features{PartitionableDevices: true, CompatibilityGroups: true},
@@ -1284,8 +1206,6 @@ func TestAllocator(t *testing.T,
 			node:          node(node1, region1),
 			expectResults: nil,
 		},
-		// A compatible device is already allocated on the counter set; the candidate
-		// shares the group the peer declares in the slice and is admitted.
 		// "compatibility-groups-compatible-with-allocated-peer": 计数器集上已分配属 mig 组的设备，候选设备同样声明 mig 组，验证其被接纳并分配。
 		"compatibility-groups-compatible-with-allocated-peer": {
 			features:         Features{PartitionableDevices: true, CompatibilityGroups: true},
@@ -1311,19 +1231,8 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req0, driverA, pool1, device2, false),
 			)},
 		},
-		// With the feature disabled, a slice with a device declaring
-		// compatibility groups is ignored during pool gathering (the scheduler
-		// cannot validate it), which leaves its pool incomplete and blocks the
-		// pool as a whole. A separate pool without groups is still allocatable.
-		// This is the feature-off safety behavior and is verified across all
-		// allocator variants.
 		// "compatibility-groups-disabled-skips-grouped-pool": 特性关闭时声明兼容组的设备所在池在池收集阶段被忽略、导致该池不完整被阻断；无组的另一池仍可分配，验证特性关闭的安全行为。
 		"compatibility-groups-disabled-skips-grouped-pool": {
-			// CompatibilityGroups is set explicitly to false so this case keeps
-			// exercising the feature-disabled path unchanged after the feature
-			// graduates to on-by-default. The scope is the pool: device1's pool1
-			// is off-limits, but device2 in the group-free pool2 is still
-			// allocated.
 			features: Features{PartitionableDevices: true, CompatibilityGroups: false},
 			claimsToAllocate: objects(claim(claim0).withRequests(
 				deviceRequest(req0, classA, 1),
@@ -1353,13 +1262,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req0, driverA, pool2, device2, false),
 			)},
 		},
-		// With the feature disabled, a candidate that declares no groups is not
-		// allocatable either when another device of the same pool declares them:
-		// only the slice with the grouped device1 gets ignored during pool
-		// gathering, but that leaves the pool incomplete, which also blocks
-		// device2 in the remaining device slice - whether or not device1 is
-		// allocated, so that the outcome does not depend on allocation order.
-		// Verified across all allocator variants, including stable.
 		// "compatibility-groups-disabled-skips-ungrouped-device-in-grouped-pool": 特性关闭时同池若有设备声明兼容组，未声明组的候选设备也不可分配（池不完整），且结果与分配顺序无关。
 		"compatibility-groups-disabled-skips-ungrouped-device-in-grouped-pool": {
 			features:         Features{PartitionableDevices: true, CompatibilityGroups: false},
@@ -1383,9 +1285,6 @@ func TestAllocator(t *testing.T,
 			node:          node(node1, region1),
 			expectResults: nil,
 		},
-		// Groups are tracked per counter set: two devices whose groups are
-		// disjoint can still be co-allocated when they draw from different
-		// counter sets of the same pool.
 		// "compatibility-groups-multiple-counter-sets": 兼容组按计数器集分别跟踪：两个设备组名互斥但分属同一池的不同计数器集，仍可共同分配。
 		"compatibility-groups-multiple-counter-sets": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true},
@@ -1415,12 +1314,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req1, driverA, pool1, device2, false),
 			)},
 		},
-		// A device drawing from several counter sets must be admitted by every
-		// one of them. device2 is unopposed on counterSet2 (nothing else draws
-		// from that set) but shares no group with device1 on counterSet1, so
-		// no combination satisfies the claim - including the backtracked order
-		// where device2 goes first and its narrowing of both counter sets has
-		// to be rolled back.
 		// "compatibility-groups-multiple-counter-sets-spanning-device": 一个设备从多个计数器集消耗容量时必须被每个集合接纳；device2 在 counterSet1 与 device1 组互斥，验证无组合可满足（含回溯路径）。
 		"compatibility-groups-multiple-counter-sets-spanning-device": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true},
@@ -1447,10 +1340,6 @@ func TestAllocator(t *testing.T,
 			node:          node(node1, region1),
 			expectResults: nil,
 		},
-		// The first subrequest asks for two devices, but only one candidate is
-		// compatible with the "mig" device taken by req0 (device3 declares the
-		// disjoint "vgpu"), so it fails and its tentative narrowing is rolled
-		// back before the allocator falls back to the second subrequest.
 		// "compatibility-groups-with-prioritized-list": 优先级列表场景：首个子请求要两台设备，但仅一台与 req0 占用的 mig 组兼容（device3 属互斥 vgpu），验证首个子请求失败并回滚后回退到第二个子请求。
 		"compatibility-groups-with-prioritized-list": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true, PrioritizedList: true},
@@ -1485,10 +1374,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req1SubReq1, driverA, pool1, device2, false),
 			)},
 		},
-		// Compatibility groups steer allocation among shareable devices: req1
-		// does not fit on device1 (req0's share exhausted its capacity) and is
-		// rejected on device2, which declares the disjoint "vgpu" group on the
-		// same counter set, before landing on device3.
 		// "compatibility-groups-with-consumable-capacity": 可共享设备场景：req1 在 device1 上容量不足、在属互斥 vgpu 组的 device2 上被拒，最终分配到 device3，验证兼容组引导可消耗容量的分配。
 		"compatibility-groups-with-consumable-capacity": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true, ConsumableCapacity: true},
@@ -1520,9 +1405,6 @@ func TestAllocator(t *testing.T,
 				deviceRequestAllocationResult(req1, driverA, pool1, device3).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: one}),
 			)},
 		},
-		// Two claims allocated in a single call must satisfy the constraint
-		// jointly: the second claim's device is checked against the rolling
-		// intersection left by the first claim's device.
 		// "compatibility-groups-multiple-claims": 同一次调用中的两个声明须联合满足约束：第二个声明的设备依据第一个声明设备留下的组交集校验，验证两者均可分配。
 		"compatibility-groups-multiple-claims": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true},
@@ -1550,11 +1432,6 @@ func TestAllocator(t *testing.T,
 				allocationResult(localNodeSelector(node1), deviceAllocationResult(req0, driverA, pool1, device2, false)),
 			},
 		},
-		// Each claim could be satisfied on its own, but not both in one call:
-		// whichever device goes to the first claim, the other claim's only
-		// remaining candidate declares a disjoint group on the same counter
-		// set. The rolling intersection spans claims, so the joint allocation
-		// is correctly refused.
 		// "compatibility-groups-multiple-claims-incompatible": 两个声明单独均可满足，但同一次调用中因滚动组交集跨越声明而无法同时满足，验证联合分配被正确拒绝。
 		"compatibility-groups-multiple-claims-incompatible": {
 			features: Features{PartitionableDevices: true, CompatibilityGroups: true},
@@ -1675,9 +1552,6 @@ func TestAllocator(t *testing.T,
 					}}),
 			)),
 			classes: objects(class(classA, driverA)),
-			// Reversing the order in which the devices are listed causes the "large" device to
-			// be allocated for the "small" request, leaving the "large" request unsatisfied.
-			// The initial decision needs to be undone before a solution is found.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device2, map[resourceapi.QualifiedName]resource.Quantity{
 					"memory": resource.MustParse("2Gi"),
@@ -1713,9 +1587,6 @@ func TestAllocator(t *testing.T,
 						}}),
 				)),
 			classes: objects(class(classA, driverA)),
-			// Reversing the order in which the devices are listed causes the "large" device to
-			// be allocated for the "small" request, leaving the "large" request unsatisfied.
-			// The initial decision needs to be undone before a solution is found.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device2, map[resourceapi.QualifiedName]resource.Quantity{
 					"memory": resource.MustParse("2Gi"),
@@ -1766,7 +1637,6 @@ func TestAllocator(t *testing.T,
 					slice := sliceWithDevices("slice-1-obsolete", node1, resourcePool(pool1, 2), driverA,
 						device(device2, nil, nil),
 					)
-					// This makes the other slice obsolete.
 					slice.Spec.Pool.Generation++
 					return slice
 				}(),
@@ -1780,14 +1650,6 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequest(claim0, req0, classA)),
 			classes:          objects(class(classA, driverA)),
 			slices: func() []*resourceapi.ResourceSlice {
-				// This simulates the problem that can
-				// (theoretically) occur when the resource
-				// slice controller wants to publish a pool
-				// with two slices but ends up creating some
-				// identical slices under different names
-				// because its informer cache was out-dated on
-				// another sync (see
-				// resourceslicecontroller.go).
 				sliceA := sliceWithOneDevice(slice1, node1, pool1, driverA).obj()
 				sliceA.Spec.Pool.ResourceSliceCount = 2
 				sliceB := sliceA.DeepCopy()
@@ -1948,7 +1810,6 @@ func TestAllocator(t *testing.T,
 			slices: unwrapResourceSlices(
 				func() wrapResourceSliceWithDevices {
 					slice := sliceWithOneDevice(slice1, node1, pool1, driverA)
-					// This makes the pool incomplete, one other slice is missing.
 					slice.Spec.Pool.ResourceSliceCount++
 					return slice
 				}(),
@@ -2128,7 +1989,6 @@ func TestAllocator(t *testing.T,
 		},
 		// "all-devices-no-solution": 一台设备被两个声明（一个普通、一个 All 模式）争用，验证无解。
 		"all-devices-no-solution": {
-			// One device, two claims both trying to allocate it.
 			claimsToAllocate: objects(
 				claimWithRequests(claim1, nil, resourceapi.DeviceRequest{
 					Name: req0,
@@ -2156,7 +2016,6 @@ func TestAllocator(t *testing.T,
 		},
 		// "all-devices-no-solution-reversed": 上例声明顺序颠倒，验证仍无解。
 		"all-devices-no-solution-reversed": {
-			// One device, two claims both trying to allocate it.
 			claimsToAllocate: objects(
 				claimWithRequests(claim0, nil, resourceapi.DeviceRequest{
 					Name: req0,
@@ -2262,8 +2121,6 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: func() []wrapResourceClaim {
 				c := claimWithRequests(claim0, nil, request(req0, classA, 1), request(req1, classA, 1))
 				c.Spec.Devices.Requests[0].Exactly.AdminAccess = ptr.To(true)
-				// Second request for `All` cannot be fulfilled because
-				// the first request claims a device.
 				c.Spec.Devices.Requests[1].Exactly.AdminAccess = ptr.To(true)
 				c.Spec.Devices.Requests[1].Exactly.AllocationMode = resourceapi.DeviceAllocationModeAll
 				return []wrapResourceClaim{c}
@@ -2462,8 +2319,7 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequest(claim0, req0, classA)),
 			classes:          objects(class(classA, driverA)),
 			slices:           unwrapResourceSlices(sliceWithOneDevice(slice1, nodeLabelSelector(regionKey, region1), pool1, driverA)),
-			// Wrong region, no devices available.
-			node: node(node2, region2),
+			node:             node(node2, region2),
 
 			expectResults: nil,
 		},
@@ -2480,7 +2336,6 @@ func TestAllocator(t *testing.T,
 			node: node(node1, region1),
 
 			expectResults: []any{allocationResult(
-				// A union of the individual selectors.
 				&v1.NodeSelector{
 					NodeSelectorTerms: []v1.NodeSelectorTerm{{
 						MatchExpressions: []v1.NodeSelectorRequirement{
@@ -2509,7 +2364,6 @@ func TestAllocator(t *testing.T,
 			node: node(node1, region1),
 
 			expectResults: []any{allocationResult(
-				// Once there is any node-local device, the selector is for that node.
 				localNodeSelector(node1),
 				deviceAllocationResult(req0, driverA, pool1, device1, false),
 				deviceAllocationResult(req0, driverA, pool2, device1, false),
@@ -2681,14 +2535,6 @@ func TestAllocator(t *testing.T,
 		},
 		// "partitionable-all-mode-constraint-must-error-with-reserved-counter": 覆盖 allocateDevice 的 must 错误路径：设备先预留共享计数器再因约束失败，验证回滚分支被触发且返回约束不满足错误。
 		"partitionable-all-mode-constraint-must-error-with-reserved-counter": {
-			// Covers allocateDevice's must=true error path when the rejected device
-			// has already reserved a shared counter. An all-mode request over two
-			// devices with mismatched constraint attributes fails on the second
-			// device, which consumes the counter, so rollbackDevice runs with a
-			// reserved counter before the must-error is returned. The error aborts the
-			// whole allocation, so this asserts the error contract and exercises the
-			// counter-release branch; the released counter is not separately
-			// observable through the allocation result.
 			features: Features{
 				PartitionableDevices: true,
 			},
@@ -2709,9 +2555,6 @@ func TestAllocator(t *testing.T,
 					device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"numa": {IntValue: new(int64(1))},
 					}),
-					// device2 mismatches the constraint and consumes the single
-					// counter, so it reserves the counter first and then fails the
-					// constraint, reaching the must-error path with state to undo.
 					device(device2, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"numa": {IntValue: new(int64(2))},
 					}).withDeviceCounterConsumption(
@@ -2838,9 +2681,6 @@ func TestAllocator(t *testing.T,
 			)),
 			classes: objects(class(classA, driverA), class(classB, driverB)),
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
-				// This device does not satisfy the second
-				// match attribute, so the allocator must
-				// backtrack.
 				// device1 的 stringAttribute 为 a，不满足随后的全局约束，必须回溯跳过。
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"driverVersion":   {VersionValue: ptr.To("1.0.0")},
@@ -2997,7 +2837,7 @@ func TestAllocator(t *testing.T,
 					claim := claimWithRequest(claim0, req0, classA)
 					claim.Spec.Devices.Requests[0].Exactly.Selectors = []resourceapi.DeviceSelector{
 						// 空选择器模拟未来新增、当前尚不支持的选择器类型。
-						{ /* empty = unknown future selector */ },
+						{ /* 为空表示未来的选择器未知 */ },
 					}
 					return claim
 				}(),
@@ -3035,7 +2875,7 @@ func TestAllocator(t *testing.T,
 					claim := claimWithRequest(claim0, req0, classA)
 					claim.Spec.Devices.Constraints = []resourceapi.DeviceConstraint{
 						// 空约束模拟未来新增、当前尚不支持的约束类型。
-						{ /* empty = unknown */ },
+						{ /* 为空表示未知 */ },
 					}
 					return claim
 				}(),
@@ -3140,9 +2980,6 @@ func TestAllocator(t *testing.T,
 
 			expectError: gomega.MatchError(gomega.ContainSubstring("exceeds the claim limit")),
 		},
-		// Two counts that are each representable but together overflow the native
-		// int accumulator to a negative value, rejected before the sum is formed.
-		// The value comes from math.MaxInt so it also triggers on 32-bit builds.
 		// 本用例验证 sum 检查在整数溢出前就拦截请求。
 		// 构造条件：两个请求各取 math.MaxInt/2+1，相加会使原生 int 累加器溢出为负数；取值来自 math.MaxInt 以兼容 32 位平台。
 		// 期望错误：包含 exceeds the claim limit（在形成总和之前即被拒绝）。
@@ -3154,8 +2991,6 @@ func TestAllocator(t *testing.T,
 			classes:     objects(class(classA, driverA)),
 			expectError: gomega.MatchError(gomega.ContainSubstring("exceeds the claim limit")),
 		},
-		// Four counts that would wrap a naive int accumulator back to zero rather
-		// than negative; each is rejected against remaining capacity before summing.
 		// 本用例验证能够绕回零的溢出同样被拦截。
 		// 构造条件：四个请求各取 math.MaxInt/2+1，朴素 int 累加会绕回 0 而非负数；每个请求在求和前先与剩余容量比较。
 		// 期望错误：包含 exceeds the claim limit。
@@ -3169,8 +3004,6 @@ func TestAllocator(t *testing.T,
 			classes:     objects(class(classA, driverA)),
 			expectError: gomega.MatchError(gomega.ContainSubstring("exceeds the claim limit")),
 		},
-		// req0 fits on its own, so the rejection has to name req1 as the one
-		// that pushes the claim over.
 		// 本用例验证报错信息能定位到导致超限的具体请求。
 		// 构造条件：req0=20 单独可行，req1=20 使其超出上限。
 		// 期望错误：同时包含 request req-1 与 exceeds the claim limit。
@@ -3185,8 +3018,6 @@ func TestAllocator(t *testing.T,
 				gomega.ContainSubstring("exceeds the claim limit"),
 			)),
 		},
-		// Two counts whose sum exactly fills the per-claim limit both allocate;
-		// this pins the pre-flight comparison as > and not >=.
 		// 本用例验证上限比较使用严格大于（>）而非大于等于（>=）。
 		// 构造条件：两个请求各取上限的一半，池中设备数恰为上限；总和正好填满上限。
 		// 期望结果：分配成功，两段结果分别包含上限一半数量的设备。
@@ -3409,8 +3240,6 @@ func TestAllocator(t *testing.T,
 					deviceRequest(req1, classA, 1),
 				).withConfigs(
 					objects(
-						// Covers req0 (via its selected subrequest) and req1 (by name),
-						// i.e. every top-level request, so Requests must collapse to nil.
 						// 覆盖 req0（经被选子请求）与 req1，即所有顶层请求。
 						deviceClaimConfig([]string{req0SubReq0, req1}, deviceConfiguration(driverA, "all")),
 					),
@@ -3846,9 +3675,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req0SubReq1, driverA, pool1, device1, false),
 			)},
 		},
-		// A prioritized list is worth at least its smallest alternative, so the
-		// pre-flight check reads that. min(20, 24) leaves the claim over the
-		// limit before any device is looked at.
 		// 本用例验证优先列表的预检查取最小备选数量。
 		// 构造条件：req0=20；req1 的优先列表备选为 20 与 24，最小值为 20；合计 40 超过上限。
 		// 期望错误：同时包含 request req-1 与 exceeds the claim limit。
@@ -3867,9 +3693,6 @@ func TestAllocator(t *testing.T,
 				gomega.ContainSubstring("exceeds the claim limit"),
 			)),
 		},
-		// The oversized alternative sits behind a device already allocated for the
-		// claim, which is what overflowed the per-request check. Only the pinned
-		// invocation count separates pruning it from descending into it.
 		// 本用例验证溢出的子请求在搜索前被剪枝而非递归展开。
 		// 构造条件：req0=1；req1 的 subReq0 取 math.MaxInt（溢出），subReq1 取 1；两台可用设备。
 		// 期望结果：req0→device1、req1SubReq1→device2；同时固定 AllocateOne 调用次数为 8 以验证剪枝。
@@ -3979,7 +3802,6 @@ func TestAllocator(t *testing.T,
 			),
 			classes: objects(class(classA, driverA), class(classB, driverB)),
 			slices: unwrapResourceSlices(
-				// driverA / pool "pool-1": counterSet1 c:1, device1 consumes c:1.
 				sliceWithDevices(slice1, node1, resourcePool(pool1, 2), driverA,
 					device(device1, nil, nil).withDeviceCounterConsumption(
 						deviceCounterConsumption(counterSet1, map[string]resource.Quantity{"c": resource.MustParse("1")}),
@@ -3988,10 +3810,6 @@ func TestAllocator(t *testing.T,
 				sliceWithCounterSets(slice2, node1, resourcePool(pool1, 2), driverA,
 					counterSet(counterSet1, map[string]resource.Quantity{"c": resource.MustParse("1")}),
 				),
-				// driverB / pool "pool-1": same pool name, different driver. Its capacity and
-				// consumption differ (c:2) on purpose, so that leaving *either* cache keyed by
-				// pool name alone fails this case: device2 would be checked against driverA's
-				// cached c:1 and wrongly rejected.
 				sliceWithDevices(slice3, node1, resourcePool(pool1, 2), driverB,
 					device(device2, nil, nil).withDeviceCounterConsumption(
 						deviceCounterConsumption(counterSet1, map[string]resource.Quantity{"c": resource.MustParse("2")}),
@@ -4002,10 +3820,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// driver-a/pool-1 and driver-b/pool-1 are distinct pools with independent counter
-			// sets, so both devices allocate. The differing capacities make this guard both
-			// caches: keying availableCounters or consumedCounters by pool name alone lets
-			// driver A's cache leak into driver B's pool and fails the case.
 			expectResults: []any{
 				allocationResult(localNodeSelector(node1), deviceAllocationResult(req0, driverA, pool1, device1, false)),
 				allocationResult(localNodeSelector(node1), deviceAllocationResult(req1, driverB, pool1, device2, false)),
@@ -4024,7 +3838,6 @@ func TestAllocator(t *testing.T,
 			),
 			classes: objects(class(classA, driverA), class(classB, driverB)),
 			slices: unwrapResourceSlices(
-				// driverA / pool "pool-1": counterSet1 with c:1, device1 consumes c:1 (valid).
 				sliceWithDevices(slice1, node1, resourcePool(pool1, 2), driverA,
 					device(device1, nil, nil).withDeviceCounterConsumption(
 						deviceCounterConsumption(counterSet1, map[string]resource.Quantity{"c": resource.MustParse("1")}),
@@ -4033,8 +3846,6 @@ func TestAllocator(t *testing.T,
 				sliceWithCounterSets(slice2, node1, resourcePool(pool1, 2), driverA,
 					counterSet(counterSet1, map[string]resource.Quantity{"c": resource.MustParse("1")}),
 				),
-				// driverB / pool "pool-1": same pool name but a different counter set
-				// (counterSet2 with d:1). device2 over-consumes it (d:2) and must be rejected.
 				sliceWithDevices(slice3, node1, resourcePool(pool1, 2), driverB,
 					device(device2, nil, nil).withDeviceCounterConsumption(
 						deviceCounterConsumption(counterSet2, map[string]resource.Quantity{"d": resource.MustParse("2")}),
@@ -4045,10 +3856,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// device2 over-consumes its own counter (d:2 > d:1), so it must be rejected and
-			// the allocation cannot be satisfied. If the caches are keyed by pool name,
-			// device2 reuses driver A's cached counterSet1 and its own counterSet2 is never
-			// compared, so it is wrongly accepted (over-allocation).
 			// 期望无任何分配结果：超消费设备必须被拒绝。
 			expectResults: []any{},
 		},
@@ -4079,8 +3886,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// device1 is rejected by its NoSchedule taint after its counter is
-			// reserved. Releasing that reservation lets the clean device2 allocate.
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
 				deviceAllocationResult(req0, driverA, pool1, device2, false),
@@ -4123,9 +3928,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// device1 (red) is accepted first; the blue candidates are rejected by
-			// the match-attribute constraint after their counters are reserved.
-			// Releasing those reservations lets the two blue devices allocate.
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
 				deviceAllocationResult(req0, driverA, pool1, device2, false),
@@ -4155,21 +3957,14 @@ func TestAllocator(t *testing.T,
 			classes: objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
 				sliceWithDevices(slice1, node1, resourcePool(pool1, 2), driverA,
-					// device1 allows multiple allocations and consumes the single
-					// shared counter. It is listed first, so req0 reserves its counter
-					// on the first try.
 					device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"kind": {StringValue: new("shared")},
 					}).withAllowMultipleAllocations().withDeviceCounterConsumption(
 						deviceCounterConsumption(counterSet1, map[string]resource.Quantity{"c": resource.MustParse("1")}),
 					),
-					// device2 consumes no counter and is the correct choice for req0
-					// once device1 has been backtracked.
 					device(device2, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"kind": {StringValue: new("shared")},
 					}),
-					// device3 is the only device that satisfies req1 and needs the same
-					// counter device1 reserved.
 					device(device3, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"kind": {StringValue: new("counteronly")},
 					}).withDeviceCounterConsumption(
@@ -4181,11 +3976,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// device1 allows multiple allocations and reserves the single shared
-			// counter when req0 tries it first. req1 can only use device3, which needs
-			// that same counter, so the search must backtrack device1. The backtracking
-			// undo has to release device1's counter reservation; otherwise req0 cannot
-			// fall back to device2 and req1 cannot take device3.
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
 				deviceAllocationResult(req0, driverA, pool1, device2, false),
@@ -4201,8 +3991,6 @@ func TestAllocator(t *testing.T,
 				PrioritizedList:    true,
 			},
 			claimsToAllocate: objects(
-				// claim0 consumes all of device1's capacity first. Its request is not
-				// subject to claim1's constraint, so it does not set the reference value.
 				claim(claim0).withRequests(
 					deviceRequest(req0, classA, 1).
 						withCapacityRequest(new(two)).
@@ -4211,11 +3999,6 @@ func TestAllocator(t *testing.T,
 								Expression: fmt.Sprintf(`device.attributes["%s"].stringAttribute == "cap"`, driverA),
 							}}),
 				),
-				// claim1 has a match-attribute constraint. Its first (all-mode)
-				// subrequest includes device1, which was capacity-sufficient when the
-				// candidate list was built but is now full, so it is rejected on the
-				// in-function capacity check after being added to the constraint. The
-				// fallback subrequest then needs device2, whose attribute differs.
 				claim(claim1).
 					withConstraints(resourceapi.DeviceConstraint{MatchAttribute: &stringAttribute}).
 					withRequests(requestWithPrioritizedList(req0,
@@ -4245,10 +4028,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// claim1's all-mode subReq0 adds device1 to the match constraint and is then
-			// rejected because claim0 already consumed device1's capacity. Rolling back
-			// that rejected candidate's constraint entry is what lets the fallback
-			// subReq1 take device2; otherwise device1's leaked attribute value blocks it.
 			expectResults: []any{
 				allocationResult(localNodeSelector(node1),
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).
@@ -4266,18 +4045,12 @@ func TestAllocator(t *testing.T,
 				ConsumableCapacity:   true,
 			},
 			claimsToAllocate: objects(
-				// claim0 pins device1 as the first share and reserves its single
-				// shared counter.
 				claimWithRequests(claim0, nil,
 					request(req0, classA, 1, resourceapi.DeviceSelector{
 						CEL: &resourceapi.CELDeviceSelector{
 							Expression: fmt.Sprintf(`device.attributes["%s"].kind == "shared"`, driverA),
 						}}),
 				),
-				// claim1's req1 first tries device1 as a second share (skipping the
-				// counter, since claim0 already reserved it), but the match-attribute
-				// constraint with req2 forces it to backtrack onto device2. req3 then
-				// shares device1 again, after req1 has already left it.
 				claimWithRequests(claim1,
 					[]resourceapi.DeviceConstraint{
 						{MatchAttribute: &stringAttribute, Requests: []string{req1, req2}},
@@ -4299,20 +4072,16 @@ func TestAllocator(t *testing.T,
 			classes: objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
 				sliceWithDevices(slice1, node1, resourcePool(pool1, 2), driverA,
-					// device1: allow-multiple, no capacity, consumes the single counter.
-					// kind steers the selectors; stringAttribute steers the constraint.
 					device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"kind":            {StringValue: new("shared")},
 						"stringAttribute": {StringValue: new("red")},
 					}).withAllowMultipleAllocations().withDeviceCounterConsumption(
 						deviceCounterConsumption(counterSet1, map[string]resource.Quantity{"c": resource.MustParse("1")}),
 					),
-					// device2: the fallback for req1, matching req2's stringAttribute.
 					device(device2, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"kind":            {StringValue: new("fallback")},
 						"stringAttribute": {StringValue: new("blue")},
 					}),
-					// device3: the only device req2 can take.
 					device(device3, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"kind":            {StringValue: new("gate")},
 						"stringAttribute": {StringValue: new("blue")},
@@ -4323,11 +4092,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// claim0 reserves device1's counter as the first share. claim1's req1 tries
-			// device1 as a second share, skips the counter, then backtracks onto device2
-			// because of the constraint with req2. Rolling back that empty-capacity share
-			// must not drop device1's shared marker, because claim0's share still holds
-			// the counter. req3 then shares device1 again without recharging the counter.
 			expectResults: []any{
 				allocationResult(localNodeSelector(node1),
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, nil)),
@@ -5192,7 +4956,7 @@ func TestAllocator(t *testing.T,
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
 				// 容忍信息随分配结果一并返回。
-				deviceAllocationResult(req0, driverA, pool1, device2, false, tolerationNoExecute), // Only second device's taints are tolerated.
+				deviceAllocationResult(req0, driverA, pool1, device2, false, tolerationNoExecute), // 仅容忍第二个设备的污点。
 			)},
 		},
 		// 本用例验证优先列表中子请求级别的容忍。
@@ -5216,7 +4980,7 @@ func TestAllocator(t *testing.T,
 			node: node(node1, region1),
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
-				deviceAllocationResult(req0SubReq1, driverA, pool1, device2, false, tolerationNoExecute), // Only second device's taints are tolerated.
+				deviceAllocationResult(req0SubReq1, driverA, pool1, device2, false, tolerationNoExecute), // 仅容忍第二个设备的污点。
 			)},
 		},
 		// 本用例验证 NoEffect 污点不影响调度。
@@ -5450,8 +5214,6 @@ func TestAllocator(t *testing.T,
 		// 构造条件：两个 All 模式子请求分别按 generation v6、v5 选择；池中只有 v5 的 device1。
 		// 期望结果：subReq0（v6）无匹配设备，回退 subReq1（v5）分配 device1。
 		"prioritized-list-allocation-mode-all-with-selectors": {
-			// When using allocationMode:All, at least one device must be allocated, otherwise
-			// DRA will attempt the next subRequest.
 			features: Features{
 				PrioritizedList: true,
 			},
@@ -5490,8 +5252,6 @@ func TestAllocator(t *testing.T,
 		// 构造条件：subReq1（v5）在 pool1 与 pool2 各匹配一台 device1；两个子请求均为 All 模式。
 		// 期望结果：subReq1 同时分配 pool1 与 pool2 的两台设备。
 		"prioritized-list-allocation-mode-all-with-selectors-multiple-pools": {
-			// All devices selected by the DeviceClass will be allocated, even if they
-			// are spread across different resource pools.
 			features: Features{
 				PrioritizedList: true,
 			},
@@ -5538,9 +5298,6 @@ func TestAllocator(t *testing.T,
 		// 构造条件：v5 设备位于 node1/pool1 与 node2/pool2，v6 设备在 node2/pool2；调度节点为 node1。
 		// 期望结果：仅分配当前节点上的 pool1/device1，node2 上的设备被忽略。
 		"prioritized-list-allocation-mode-all-with-selectors-multiple-pools-across-nodes": {
-			// All devices selected by the DeviceClass will be allocated, even if they
-			// are spread across different resource pools, as long as they are available
-			// on the node.
 			features: Features{
 				PrioritizedList: true,
 			},
@@ -5589,7 +5346,6 @@ func TestAllocator(t *testing.T,
 		// 构造条件：DeviceClass 使用自定义选择器（driver==driverA 且 selected==true）；池中三台设备只有 device3 的 selected 为 true 且 generation 为 v5。
 		// 期望结果：subReq0（v6）无匹配，subReq1（v5）只分配被类选择器选中的 device3。
 		"prioritized-list-allocation-mode-all-with-selectors-deviceclass-subset": {
-			// Only devices selected by the deviceclass will be considered
 			features: Features{
 				PrioritizedList: true,
 			},
@@ -6263,7 +6019,7 @@ func TestAllocator(t *testing.T,
 		// 期望结果：expectError 匹配包含『DRAConsumableCapacity feature is disabled』的明确错误信息，expectResults 为 nil。
 		"consumable-capacity-disabled-feature": {
 			features: Features{
-				DeviceBindingAndStatus: true, // add to forcefully use experimenting allocator
+				DeviceBindingAndStatus: true, // 添加该项以强制使用实验版分配器
 			},
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(deviceRequest(req0, classA, 1).withCapacityRequest(ptr.To(one))),
@@ -6281,7 +6037,7 @@ func TestAllocator(t *testing.T,
 		"consumable-capacity-disabled-feature-with-prioritized-list": {
 			features: Features{
 				PrioritizedList:        true,
-				DeviceBindingAndStatus: true, // add to forcefully use experimenting allocator
+				DeviceBindingAndStatus: true, // 添加该项以强制使用实验版分配器
 			},
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(
@@ -6357,7 +6113,7 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			expectResults: []any{ // both share the same device; no capacity is consumed since none is defined.
+			expectResults: []any{ // 两者共享同一设备；由于未定义容量，不消耗容量。
 				allocationResult(
 					localNodeSelector(node1),
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, nil),
@@ -6388,7 +6144,7 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			expectResults: []any{ // both should get full capacity for different devices
+			expectResults: []any{ // 不同设备时两者都应获得完整容量
 				allocationResult(
 					localNodeSelector(node1),
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: one}),
@@ -6418,7 +6174,7 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node:          node(node1, region1),
-			expectResults: []any{}, // should not satisfy both
+			expectResults: []any{}, // 不应同时满足
 		},
 		// 本用例验证明确的小容量请求可以在同一台可多分配设备上共存。
 		// 特性开关：ConsumableCapacity 开启。
@@ -6470,7 +6226,7 @@ func TestAllocator(t *testing.T,
 			),
 			node: node(node1, region1),
 
-			expectResults: []any{ // both requests applied the default request (two)
+			expectResults: []any{ // 两个请求都应用了默认请求（两个）
 				allocationResult(
 					localNodeSelector(node1),
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: two}),
@@ -6552,15 +6308,13 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			expectResults: []any{ // both requests allocated to the same device
+			expectResults: []any{ // 两个请求分配到同一设备
 				allocationResult(
 					localNodeSelector(node1),
-					// capacity must be rounded up to default minimum (two)
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: two}),
 				),
 				allocationResult(
 					localNodeSelector(node1),
-					// capacity must be rounded up to default minimum (two)
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: two}),
 				),
 			},
@@ -6586,7 +6340,6 @@ func TestAllocator(t *testing.T,
 			expectResults: []any{
 				allocationResult(
 					localNodeSelector(node1),
-					// capacity must be rounded up with Step (3 to 2+2 = 4)
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: four}),
 				),
 			},
@@ -6599,9 +6352,6 @@ func TestAllocator(t *testing.T,
 			features: Features{
 				ConsumableCapacity: true,
 			},
-			// A capacity request above MaxInt64 cannot be rounded on the integer Step path
-			// without reading it through Quantity.Value(), which wraps. The request is not
-			// representable, so allocation aborts with a specific error instead of skipping.
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(deviceRequest(req0, classA, 1).withCapacityRequest(new(resource.MustParse("18446744073709551616")))),
 			),
@@ -6622,9 +6372,6 @@ func TestAllocator(t *testing.T,
 			features: Features{
 				ConsumableCapacity: true,
 			},
-			// Rounding a MaxInt64 request up to the next Step multiple passes MaxInt64 and
-			// would wrap to a negative value. The rounded value is not representable, so
-			// allocation aborts with a specific error instead of acting on the wrapped read.
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(deviceRequest(req0, classA, 1).withCapacityRequest(new(resource.MustParse("9223372036854775807")))),
 			),
@@ -6645,12 +6392,6 @@ func TestAllocator(t *testing.T,
 			features: Features{
 				ConsumableCapacity: true,
 			},
-			// device-1 has a Step range, so a request above MaxInt64 overflows its integer
-			// rounding. device-2 has no Step and could satisfy the same request by exact
-			// comparison, but a not-representable request is fail-closed: allocation aborts
-			// rather than skipping device-1 to allocate device-2. Aborting on the first
-			// overflowing device is what stops the backtracking a user-controlled
-			// out-of-range request would otherwise force.
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(deviceRequest(req0, classA, 1).withCapacityRequest(new(resource.MustParse("18446744073709551616")))),
 			),
@@ -6672,10 +6413,6 @@ func TestAllocator(t *testing.T,
 			features: Features{
 				ConsumableCapacity: true,
 			},
-			// The all-devices pre-scan in validateDeviceRequest validates capacity too. An
-			// out-of-range request must abort there, not silently drop the overflowing
-			// device from the set and allocate whatever remains. The count-mode cases above
-			// exercise allocateOne; this one exercises the AllocationModeAll pre-scan.
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(allDeviceRequest(req0, classA).withCapacityRequest(new(resource.MustParse("18446744073709551616")))),
 			),
@@ -6696,10 +6433,6 @@ func TestAllocator(t *testing.T,
 			features: Features{
 				ConsumableCapacity: true,
 			},
-			// A stored request or slice from before stricter validation could carry a
-			// negative capacity, which admission does not re-check on existing objects. A
-			// negative value must abort rather than record negative consumed capacity and
-			// over-allocate the device.
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(deviceRequest(req0, classA, 1).withCapacityRequest(new(resource.MustParse("-5")))),
 			),
@@ -6753,7 +6486,7 @@ func TestAllocator(t *testing.T,
 			slices: unwrapResourceSlices(
 				sliceWithDevices(slice1, node1, pool1, driverA,
 					device(device1, nil, nil).withAllowMultipleAllocations().withCapacityRequestPolicyValidValues(one, map[resourceapi.QualifiedName]resource.Quantity{capacity0: three},
-						[]resource.Quantity{three}), // capacity value must be explicitly added
+						[]resource.Quantity{three}), // 容量值必须显式添加
 				),
 			),
 			node: node(node1, region1),
@@ -6805,7 +6538,7 @@ func TestAllocator(t *testing.T,
 			),
 			node: node(node1, region1),
 
-			expectResults: []any{}, // default max requestPolicy is 4, should not allocate even though 6 < 10
+			expectResults: []any{}, // 默认最大 requestPolicy 为 4，即使 6 < 10 也不应分配
 		},
 		// 本用例验证设备已有分配容量时，新请求只消耗剩余可用容量。
 		// 特性开关：ConsumableCapacity 开启。
@@ -6879,7 +6612,6 @@ func TestAllocator(t *testing.T,
 				ConsumableCapacity: true,
 			},
 			claimsToAllocate: objects(
-				// 2 requests with two per each
 				claim(claim0).withConstraints(resourceapi.DeviceConstraint{MatchAttribute: &stringAttribute}).withRequests(
 					deviceRequest(req0, classA, 1).withCapacityRequest(ptr.To(two)),
 					deviceRequest(req1, classA, 1).withCapacityRequest(ptr.To(two)),
@@ -6969,7 +6701,7 @@ func TestAllocator(t *testing.T,
 		// 本用例验证 All 模式会过滤掉完全未声明所需容量的设备。
 		// 特性开关：ConsumableCapacity 开启。
 		// 构造条件：device1 声明 capacity0=two，device2 无容量声明，两者均 allowMultipleAllocations；请求以 All 模式要求 two。
-		// 期望结果：只有 device1 被分配并消耗 two（英文注释：only match device is allocated）。
+		// 期望结果：只有 device1 被分配并消耗 two。
 		"consumable-capacity-multi-allocatable-device-allocation-mode-all-filter-out-no-capacity": {
 			features: Features{
 				ConsumableCapacity: true,
@@ -6985,7 +6717,7 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			expectResults: []any{ // only match device is allocated
+			expectResults: []any{ // 仅分配匹配的设备
 				allocationResult(
 					localNodeSelector(node1),
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: two}),
@@ -7011,7 +6743,7 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			expectResults: []any{ // only match device is allocated
+			expectResults: []any{ // 仅分配匹配的设备
 				allocationResult(
 					localNodeSelector(node1),
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: two}),
@@ -7133,7 +6865,7 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node:          node(node1, region1),
-			expectResults: []any{}, // device-1 capacity-exhausted but still matches; All fails, not device-2 only
+			expectResults: []any{}, // device-1 容量耗尽但仍匹配；All 失败，而非仅 device-2
 		},
 		// 本用例验证独占设备（不允许多分配）也可以满足容量请求。
 		// 特性开关：ConsumableCapacity 开启。
@@ -7421,8 +7153,6 @@ func TestAllocator(t *testing.T,
 				PartitionableDevices: true,
 				ConsumableCapacity:   true,
 			},
-			// device1 already has a persisted shared allocation. It is represented
-			// only by a share ID, with no AggregatedCapacity entry.
 			allocatedSharedDeviceIDs: sets.New(
 				internal.MakeSharedDeviceID(MakeDeviceID(driverA, pool1, device1), &fixedShareID),
 			),
@@ -7457,15 +7187,11 @@ func TestAllocator(t *testing.T,
 		// 构造条件：req0 请求容量 one、req2 请求 two，req1 的优先列表偏好 capacity0 大于等于 4；三台设备消费两组 counterset，有效组合仅有 [device1,device3] 或 [device2]。
 		// 期望结果：req0 得 device1，req2 得 device3，req1 的次选子请求得 device1；各结果按请求量与策略消耗 capacity0/capacity1。
 		"consumable-capacity-with-partitionable-device-multiple-capacity-pools": {
-			// This test case combines integration of PrioritizedList, PartitionableDevices, and ConsumableCapacity features.
 			features: Features{
 				PrioritizedList:      true,
 				PartitionableDevices: true,
 				ConsumableCapacity:   true,
 			},
-			// There are two basic requests (req0 and req2), requesting 1 and 2 units of capacity0, respectively.
-			// In addition, there is one request (req1) with a prioritized list.
-			// The prioritized request prefers devices with capacity0 >= 4 over those with capacity0 >= 2.
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(
 					deviceRequest(req0, classA, 1).withCapacityRequest(ptr.To(one)),
@@ -7483,12 +7209,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			classes: objects(class(classA, driverA)),
-			// There three device option consuming counters from the PartitionableDevices's CounterSet.
-			// All devices can be allocated multiple times with `allowMultipleAllocations=true`.
-			// CounterSet (4, 8)
-			//   device1, device2, and device3 consume (2,4), (4,4), and (2,4) for (capacity0, capacity1) respectively.
-			//   i.e., only two options are valid those are [device1, device3] or [device2].
-			// Capacity.RequestPolicy of ConsumableCapacity forces the capacity1 consuming with range policy (min,step,max)=(2,2,4).
 			slices: unwrapResourceSlices(
 				sliceWithDevices(slice1, node1, resourcePool(pool1, 2), driverA,
 					device(device1, fromCounters, nil).withDeviceCounterConsumption(
@@ -7542,15 +7262,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// Expected results:
-			//   - [req0] The scheduler should be able to allocate device1 to req0.
-			//     1 unit of capacity0 is consumed according to the requested capacity, and 2 units of capacity1 are consumed according to the RequestPolicy.
-			//   - [req2] device1 does not have enough capacity0 remaining for req2, which requests 2 units (only 1 unit remains).
-			//     The scheduler must also skip device2 due to the CounterSet constraint.
-			//     Therefore, device3 is allocated to req2, providing 2 units of capacity0 and 2 units of capacity1.
-			//   - [req1] The first prioritized subrequest of req1 cannot find a device because device2 cannot be selected.
-			//     The second prioritized subrequest is then chosen and consumes the remaining 1 unit of capacity0 on device1.
-			//     Consequently, device1 is allocated to subreq1 of req1 with 1 unit of capacity0 and 2 units of capacity1.
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
 				deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{capacity0: one, capacity1: two}),
@@ -7627,9 +7338,6 @@ func TestAllocator(t *testing.T,
 				request(req0, classA, 3)),
 			),
 			classes: objects(class(classA, driverA)),
-			// req0 asks for 3 devices under a DistinctAttribute(stringAttribute)
-			// constraint. Three devices exist with stringAttribute values
-			// value1, value2, value1 -- only two distinct values.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"stringAttribute": {StringValue: new("value1")},
@@ -7641,11 +7349,7 @@ func TestAllocator(t *testing.T,
 					"stringAttribute": {StringValue: new("value1")},
 				}),
 			)),
-			node: node(node1, region1),
-			// Expected results:
-			//   - [req0] No allocation. Satisfying req0 requires 3 devices with
-			//     distinct stringAttribute values, but device1 and device3 both
-			//     have "value1", so no set of 3 distinct-valued devices exists.
+			node:          node(node1, region1),
 			expectResults: nil,
 		},
 		// 本用例验证三台设备的 distinct 属性值互异时全部可分配。
@@ -7662,9 +7366,6 @@ func TestAllocator(t *testing.T,
 				request(req0, classA, 3)),
 			),
 			classes: objects(class(classA, driverA)),
-			// req0 asks for 3 devices under a DistinctAttribute(stringAttribute)
-			// constraint. Three devices exist with distinct values
-			// value1, value2, value3.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"stringAttribute": {StringValue: new("value1")},
@@ -7677,10 +7378,6 @@ func TestAllocator(t *testing.T,
 				}),
 			)),
 			node: node(node1, region1),
-			// Expected results:
-			//   - [req0] All three devices are allocated: their stringAttribute
-			//     values (value1, value2, value3) are pairwise distinct, so the
-			//     constraint holds.
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
 				deviceAllocationResult(req0, driverA, pool1, device1, false),
@@ -7705,10 +7402,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			classes: objects(class(classA, driverA)),
-			// req0 asks for 2 devices and req1 for 1 device; a single
-			// DistinctAttribute(stringAttribute) constraint covers both requests,
-			// so all 3 allocated devices must be distinct. Three devices exist
-			// with values value1, value2, value1 -- only two distinct values.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"stringAttribute": {StringValue: new("value1")},
@@ -7720,12 +7413,7 @@ func TestAllocator(t *testing.T,
 					"stringAttribute": {StringValue: new("value1")},
 				}),
 			)),
-			node: node(node1, region1),
-			// Expected results:
-			//   - No allocation. The constraint spans req0 and req1, so the 3
-			//     devices across both requests must be pairwise distinct. Because
-			//     device1 and device3 share "value1", 3 distinct-valued devices
-			//     cannot be chosen.
+			node:          node(node1, region1),
 			expectResults: nil,
 		},
 		// 本用例验证设备未设置 distinct 属性时不参与分配。
@@ -7787,8 +7475,6 @@ func TestAllocator(t *testing.T,
 				ConsumableCapacity: true,
 				PrioritizedList:    true,
 			},
-			// There are three requests, all preferring the boolAttribute.
-			// However, the DeviceConstraint applies only to the first two requests.
 			claimsToAllocate: objects(
 				claim(claim0).withConstraints(
 					resourceapi.DeviceConstraint{DistinctAttribute: &boolAttribute, Requests: []string{req0, req1}}).
@@ -7828,9 +7514,6 @@ func TestAllocator(t *testing.T,
 				),
 			),
 			node: node(node1, region1),
-			// Because the constraint applies only to req0 and req1,
-			// subreq0 cannot satisfy req1, so device2 (subreq1) is allocated instead.
-			// However, req2 has no such constraint and can use device1 (subreq0).
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
 				deviceRequestAllocationResult(req0SubReq0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, nil),
@@ -7999,18 +7682,13 @@ func TestAllocator(t *testing.T,
 		},
 
 		// 以下为 DRAFractionalCapacityRange（小数容量范围）特性的测试用例。
-		// Test cases for DRAFractionalCapacityRange feature
 		// 本用例验证小数容量特性关闭时，取整走整数路径（Value() 对小数量向上取整到 1）。
 		// 特性开关：仅 ConsumableCapacity 开启，FractionalCapacityRange 刻意不设置。
 		// 构造条件：请求 200m，设备使用 withFractionalCapacityRequestPolicyRange（默认 one、min/step 为整数语义）。
 		// 期望结果：消耗 capacity0 为 NewQuantity(1, DecimalSI)，即整数路径结果而非 300m。
 		"consumable-capacity-fractional-range-gate-disabled": {
-			// FractionalCapacityRange is off: step arithmetic uses Value(), which rounds
-			// sub-integer quantities up to 1.  With min=1, step=1, request=1:
-			// added=0, n=0 → consumed = min + step*0 = 1 (DecimalSI, from step's format).
 			features: Features{
 				ConsumableCapacity: true,
-				// FractionalCapacityRange intentionally not set
 			},
 			claimsToAllocate: objects(
 				claim(claim0).withRequests(deviceRequest(req0, classA, 1).withCapacityRequest(&pointTwo)),
@@ -8027,8 +7705,6 @@ func TestAllocator(t *testing.T,
 			expectResults: []any{
 				allocationResult(
 					localNodeSelector(node1),
-					// Integer path: Value() of 200m and 100m both round up to 1,
-					// so min=1, step=1, added=0 → result = NewQuantity(1, DecimalSI).
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{
 						capacity0: *resource.NewQuantity(1, resource.DecimalSI),
 					}),
@@ -8040,8 +7716,6 @@ func TestAllocator(t *testing.T,
 		// 构造条件：请求 250m，范围策略 min=200m、step=100m；250m 位于 200m 与 300m 之间。
 		// 期望结果：按 (250-200)/100 向上取整一档，消耗 capacity0 为 300m（pointThree）。
 		"consumable-capacity-fractional-range-gate-enabled-round-up": {
-			// FractionalCapacityRange on: 250m is between min=200m and next step=300m,
-			// so it is rounded up to 300m (milli-arithmetic: (250-200)/100 rounds up to 1 step).
 			features: Features{
 				ConsumableCapacity:      true,
 				FractionalCapacityRange: true,
@@ -8061,7 +7735,6 @@ func TestAllocator(t *testing.T,
 			expectResults: []any{
 				allocationResult(
 					localNodeSelector(node1),
-					// Milli path: (250m - 200m) / 100m = 0.5 → ceil → 1 step → 200m + 100m = 300m.
 					deviceRequestAllocationResult(req0, driverA, pool1, device1).withConsumedCapacity(&fixedShareID, map[resourceapi.QualifiedName]resource.Quantity{
 						capacity0: pointThree,
 					}),
@@ -8070,7 +7743,6 @@ func TestAllocator(t *testing.T,
 		},
 
 		// 以下为 DRAListTypeAttributes（列表类型属性的 matchAttributes/distinctAttributes）特性的测试用例。
-		// Test cases for DRAListTypeAttributes features (matchAttributes/distinctAttributes)
 		// 本用例验证列表属性特性开启后，标量字符串属性仍可满足 matchAttribute 约束。
 		// 特性开关：ListTypeAttributes 开启。
 		// 构造条件：两台设备的 stringAttribute 都是标量值 value1；请求 2 台并带 MatchAttribute(stringAttribute)。
@@ -8339,9 +8011,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req0, driverA, pool1, device2, false),
 			)},
 		},
-		// KEP-6072: standardized numaNode attribute, list form. Two devices whose
-		// numaNode lists share an element (physical node + same-socket equidistant
-		// nodes) are co-placed by matchAttribute set intersection.
 		// 本用例验证 KEP-6072 标准 numaNode 列表属性的集合交集匹配。
 		// 特性开关：ListTypeAttributes 开启。
 		// 构造条件：MatchAttribute 指向 resource.kubernetes.io/numaNode，device1 列表为 [4]、device2 列表为 [4,5,6,7]，请求 2 台。
@@ -8372,8 +8041,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req0, driverA, pool1, device2, false),
 			)},
 		},
-		// KEP-6072: numaNode lists with no common element (different NUMA domains)
-		// cannot satisfy matchAttribute, so no allocation is made.
 		// 本用例验证 numaNode 列表无公共元素时无法满足 MatchAttribute 约束。
 		// 特性开关：ListTypeAttributes 开启。
 		// 构造条件：device1 列表为 [0]、device2 列表为 [4,5,6,7]，分属不同 NUMA 域，请求 2 台。
@@ -8585,10 +8252,6 @@ func TestAllocator(t *testing.T,
 				request(req0, classA, 3)),
 			),
 			classes: objects(class(classA, driverA)),
-			// Same scenario as distinct-constraint-single-request-count-3-not-distinct
-			// but with the ListTypeAttributes feature enabled: req0 asks for 3
-			// devices under a DistinctAttribute constraint, and the 3 devices carry
-			// values value1, value2, value1 -- only two distinct values.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"stringAttribute": {StringValue: new("value1")},
@@ -8600,10 +8263,7 @@ func TestAllocator(t *testing.T,
 					"stringAttribute": {StringValue: new("value1")},
 				}),
 			)),
-			node: node(node1, region1),
-			// Expected results:
-			//   - [req0] No allocation. device1 and device3 both have "value1",
-			//     so 3 devices with distinct stringAttribute values cannot be found.
+			node:          node(node1, region1),
 			expectResults: nil,
 		},
 		// 本用例验证 3 个互异标量值可全部分配。
@@ -8621,10 +8281,6 @@ func TestAllocator(t *testing.T,
 				request(req0, classA, 3)),
 			),
 			classes: objects(class(classA, driverA)),
-			// Same scenario as distinct-constraint-single-request-count-3-all-distinct
-			// but with the ListTypeAttributes feature enabled: req0 asks for 3
-			// devices under a DistinctAttribute constraint, and the 3 devices carry
-			// distinct values value1, value2, value3.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"stringAttribute": {StringValue: new("value1")},
@@ -8637,9 +8293,6 @@ func TestAllocator(t *testing.T,
 				}),
 			)),
 			node: node(node1, region1),
-			// Expected results:
-			//   - [req0] All three devices are allocated: their stringAttribute
-			//     values (value1, value2, value3) are pairwise distinct.
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
 				deviceAllocationResult(req0, driverA, pool1, device1, false),
@@ -9031,20 +8684,9 @@ func TestAllocator(t *testing.T,
 			node: node(node1, region1),
 		},
 
-		// update-from-node-1-to-node-2 and vice-versa is dangerous,
-		// DRA drivers should not do this: there is no guarantee that
-		// the scheduler sees the change and then might allocate a
-		// device for a node where it is no longer available.
-		//
-		// We do not have to support such a change exactly as expected
-		// by these test cases if it makes the implementation too
-		// expensive because of additional checks.
-		//
-		// The support for allocation from incomplete pools is also under
-		// debate. It's currently done because without scoring it makes
-		// no difference how many slices are available, as long as one
-		// device can be found.
-
+		// 资源池在节点间迁移很危险：调度器可能尚未看到变更，从而把设备分配到已不可用的节点，DRA 驱动不应这样做。
+		// 若精确处理迁移需要额外检查且代价过高，本用例不要求实现完全符合预期。
+		// 从不完整池分配仍有争议；当前无评分，只要能找到设备，可见 slice 数量多少并不影响结果，引入评分后需重新考虑。
 		// 本用例验证资源池从节点 1 整体迁移到节点 2 时的行为。
 		// 构造条件：旧 generation 1 的 node1 有两个 slice，新 generation 2 的 node2 有两个完整 slice，目标节点仍为 node1。
 		// 期望结果：当前实现忽略更新，仍从旧池分配 device1；DRA 驱动不应依赖更优处理。
@@ -9052,7 +8694,6 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequest(claim0, req0, classA)),
 			classes:          objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
-				// Node 1, generation 1.
 				func() wrapResourceSliceWithDevices {
 					s := sliceWithDevices(slice1, node1, pool1, driverA,
 						device(device1, nil, nil),
@@ -9069,7 +8710,6 @@ func TestAllocator(t *testing.T,
 					s.Spec.Pool.ResourceSliceCount = 2
 					return s
 				}(),
-				// Node 2, generation 2.
 				func() wrapResourceSliceWithDevices {
 					s := sliceWithDevices(slice2, node2, pool1, driverA,
 						device(device1, nil, nil),
@@ -9089,10 +8729,6 @@ func TestAllocator(t *testing.T,
 			),
 			node: node(node1, region1),
 
-			// We'd like this to *not* be allocated, but the current implementation ignores
-			// the updated slices. Allocating from the old pool is also what would happen
-			// if the scheduler hadn't received the update yet, so DRA drivers shouldn't
-			// depend on better handling of this situation.
 			expectResults: []any{
 				allocationResult(
 					localNodeSelector(node1),
@@ -9108,7 +8744,6 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequest(claim0, req0, classA)),
 			classes:          objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
-				// Node 2, generation 1.
 				func() wrapResourceSliceWithDevices {
 					s := sliceWithDevices(slice1, node2, pool1, driverA,
 						device(device1, nil, nil),
@@ -9125,7 +8760,6 @@ func TestAllocator(t *testing.T,
 					s.Spec.Pool.ResourceSliceCount = 2
 					return s
 				}(),
-				// Node 1, generation 2.
 				func() wrapResourceSliceWithDevices {
 					s := sliceWithDevices(slice2, node1, pool1, driverA,
 						device(device1, nil, nil),
@@ -9160,7 +8794,6 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequest(claim0, req0, classA)),
 			classes:          objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
-				// Node 1, generation 1.
 				func() wrapResourceSliceWithDevices {
 					s := sliceWithDevices(slice1, node1, pool1, driverA,
 						device(device1, nil, nil),
@@ -9177,7 +8810,6 @@ func TestAllocator(t *testing.T,
 					s.Spec.Pool.ResourceSliceCount = 2
 					return s
 				}(),
-				// Node 2, generation 2.
 				func() wrapResourceSliceWithDevices {
 					s := sliceWithDevices(slice2, node2, pool1, driverA,
 						device(device1, nil, nil),
@@ -9189,10 +8821,6 @@ func TestAllocator(t *testing.T,
 			),
 			node: node(node1, region1),
 
-			// We'd like this to *not* be allocated, but the current implementation ignores
-			// the updated slices. Allocating from the old pool is also what would happen
-			// if the scheduler hadn't received the update yet, so DRA drivers shouldn't
-			// depend on better handling of this situation.
 			expectResults: []any{
 				allocationResult(
 					localNodeSelector(node1),
@@ -9208,7 +8836,6 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequest(claim0, req0, classA)),
 			classes:          objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
-				// Node 2, generation 1.
 				func() wrapResourceSliceWithDevices {
 					s := sliceWithDevices(slice1, node2, pool1, driverA,
 						device(device1, nil, nil),
@@ -9225,7 +8852,6 @@ func TestAllocator(t *testing.T,
 					s.Spec.Pool.ResourceSliceCount = 2
 					return s
 				}(),
-				// Node 1, generation 2.
 				func() wrapResourceSliceWithDevices {
 					s := sliceWithDevices(slice2, node1, pool1, driverA,
 						device(device1, nil, nil),
@@ -9236,7 +8862,6 @@ func TestAllocator(t *testing.T,
 				}(),
 			),
 			node: node(node1, region1),
-			// This does not get allocated since slice2 is incomplete.
 		},
 		// 本用例验证同一资源池内不同 slice 使用相同 counterSet 名称会报错。
 		// 特性开关：PartitionableDevices 开启。
@@ -9708,9 +9333,7 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequests(
 				claim0,
 				nil,
-				// req-1 needs two generic devices.
 				request(req1, classA, 2),
-				// req-2 needs a specific device.
 				request(req2, classA, 1, resourceapi.DeviceSelector{
 					CEL: &resourceapi.CELDeviceSelector{
 						Expression: fmt.Sprintf(`device.attributes["%s"].type == "X"`, driverA),
@@ -9718,13 +9341,6 @@ func TestAllocator(t *testing.T,
 				}),
 			)),
 			classes: objects(class(classA, driverA)),
-			// The order of devices is chosen such that the allocator
-			// will initially pick {device1, device2} for req1. This will fail
-			// because req-2 needs device1. The allocator has to
-			// backtrack. The correct solution is {device2, device3} for req-1
-			// and {device1} for req-2. The optimized allocator avoids
-			// testing {device2, device1} for req-1 and thus finds the solution
-			// faster.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"type": {StringValue: ptr.To("X")},
@@ -9759,9 +9375,7 @@ func TestAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequests(
 				claim0,
 				nil,
-				// req-1 needs two generic devices.
 				request(req1, classA, 2),
-				// req-2 needs a specific device.
 				request(req2, classA, 1, resourceapi.DeviceSelector{
 					CEL: &resourceapi.CELDeviceSelector{
 						Expression: fmt.Sprintf(`device.attributes["%s"].type == "X"`, driverA),
@@ -9769,13 +9383,6 @@ func TestAllocator(t *testing.T,
 				}),
 			)),
 			classes: objects(class(classA, driverA)),
-			// The order of devices is chosen such that the allocator
-			// will initially pick {device1, device2} for req1. This will fail
-			// because req-2 needs device1. The allocator has to
-			// backtrack. The correct solution is {device2, device3} for req-1
-			// and {device1} for req-2. The optimized allocator avoids
-			// testing {device2, device1} for req-1 and thus finds the solution
-			// faster.
 			slices: unwrapResourceSlices(
 				sliceWithDevices(slice1, node1, resourcePool(pool1, 2), driverA,
 					device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
@@ -9787,8 +9394,6 @@ func TestAllocator(t *testing.T,
 						"type": {StringValue: ptr.To("Y")},
 					}),
 				),
-				// Use a binding condition here to make sure pool2 is searched after pool1 when
-				// trying to allocate devices. This makes sure we see the same results every time.
 				sliceWithDevices(slice3, node1, pool2, driverA,
 					device(device3, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 						"type": {StringValue: ptr.To("Y")},
@@ -9816,8 +9421,6 @@ func TestAllocator(t *testing.T,
 				PrioritizedList: true,
 			},
 			claimsToAllocate: objects(claim(claim0).withRequests(
-				// The first alternative can't be satisfied since there aren't enough devices
-				// of type Y, but the allocator will try all devices before finding out.
 				requestWithPrioritizedList(req1,
 					subRequest(subReq0, classA, 3, resourceapi.DeviceSelector{
 						CEL: &resourceapi.CELDeviceSelector{
@@ -9826,8 +9429,6 @@ func TestAllocator(t *testing.T,
 					}),
 					subRequest(subReq1, classA, 2),
 				),
-				// The first subrequest asks for too many devices, so the second
-				// have to be chosen.
 				requestWithPrioritizedList(req2,
 					subRequest(subReq0, classA, 2),
 					subRequest(subReq1, classA, 1, resourceapi.DeviceSelector{
@@ -9838,13 +9439,6 @@ func TestAllocator(t *testing.T,
 				),
 			)),
 			classes: objects(class(classA, driverA)),
-			// The order of devices is chosen such that the allocator
-			// will initially pick {device1, device2} for req1. This will fail
-			// because req-2 needs device1. The allocator has to
-			// backtrack. The correct solution is {device2, device3} for req-1
-			// and {device1} for req-2. The optimized allocator avoids
-			// testing {device2, device1} for req-1 and thus finds the solution
-			// faster.
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, driverA,
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"type": {StringValue: ptr.To("X")},
@@ -9869,12 +9463,6 @@ func TestAllocator(t *testing.T,
 			},
 		},
 
-		// "derived-attributes" is the primary test case. It mirrors the
-		// cross-request hardware alignment example from the KEP.
-		// It defines two requests and synthesizes a virtual grouping
-		// key ("sharedNumaNode") across their differing
-		// attribute names. The allocator must backtrack past the
-		// incompatible first device to successfully co-allocate.
 		// 本用例验证跨请求派生属性映射可实现硬件对齐（KEP 示例的简化版）。
 		// 特性开关：DerivedAttributes 开启。
 		// 构造条件：req0 从 driverA 的 numa、req1 从 driverB 的 numaNode 派生同名属性 derived/sharedNumaNode 并要求匹配，首台不兼容设备需回溯。
@@ -9943,13 +9531,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req1, driverB, pool2, device3, false),
 			)},
 		},
-		// "derived-attributes-with-prioritized-list" verifies that
-		// the allocator correctly evaluates derived attributes that are
-		// defined differently across alternatives in a prioritized list.
-		// It expects the allocator to skip the first alternative (because its
-		// derived attribute violates the cross-request match constraint)
-		// and successfully allocate using the second alternative which
-		// correctly satisfies the constraint with the other request.
 		// 本用例验证优先列表各备选可定义不同的派生属性。
 		// 特性开关：DerivedAttributes 与 PrioritizedList 开启。
 		// 构造条件：req0 第一备选派生 foo=A（与 req1 的 baz=B 不匹配），第二备选派生 bar=B；两请求要求匹配 derived/match。
@@ -9968,16 +9549,12 @@ func TestAllocator(t *testing.T,
 					},
 				},
 				requestWithPrioritizedList(req0,
-					// First alternative pulls physical attribute "foo" ("A").
-					// This won't match req1 which pulls "baz" ("B").
 					subRequest(subReq0, classA, 1, []resourceapi.DeviceDerivedAttribute{
 						{
 							Name:       resourceapi.FullyQualifiedName("derived/match"),
 							Expression: fmt.Sprintf(`device.attributes["%s"]["foo"]`, driverA),
 						},
 					}),
-					// Second alternative pulls physical attribute "bar" ("B").
-					// This matches req1.
 					subRequest(subReq1, classA, 1, []resourceapi.DeviceDerivedAttribute{
 						{
 							Name:       resourceapi.FullyQualifiedName("derived/match"),
@@ -9987,7 +9564,7 @@ func TestAllocator(t *testing.T,
 				).obj(),
 				requestWithDerivedAttributes(
 					req1,
-					classB, // Notice req1 uses classB (driverB)
+					classB, // 注意 req1 使用 classB（driverB）
 					1,
 					[]resourceapi.DeviceDerivedAttribute{
 						{
@@ -10021,11 +9598,6 @@ func TestAllocator(t *testing.T,
 				deviceAllocationResult(req1, driverB, pool2, device2, false),
 			)},
 		},
-		// "derived-attributes-override" verifies that derived
-		// attributes shadow/override physical attributes of the same
-		// name. It also proves that this shadowing is strictly
-		// request-scoped and does not leak or affect other requests
-		// (which continue to fall back to physical attributes).
 		// 本用例验证派生属性会遮蔽同名物理属性，且遮蔽仅对当前请求生效。
 		// 特性开关：DerivedAttributes 开启。
 		// 构造条件：req0 把 dra.example.com/myAttr 派生为常量 value-2，req1 未派生故使用物理值；两设备物理值为 value-1/value-2。
@@ -10038,7 +9610,6 @@ func TestAllocator(t *testing.T,
 				claim0,
 				[]resourceapi.DeviceConstraint{
 					{
-						// Require match on "myAttr".
 						Requests:       []string{req0, req1},
 						MatchAttribute: ptr.To(resourceapi.FullyQualifiedName("dra.example.com/myAttr")),
 					},
@@ -10049,18 +9620,15 @@ func TestAllocator(t *testing.T,
 					1,
 					[]resourceapi.DeviceDerivedAttribute{
 						{
-							// Overrides physical attribute to "value-2".
 							Name:       resourceapi.FullyQualifiedName("dra.example.com/myAttr"),
 							Expression: `"value-2"`,
 						},
 					},
 				),
-				// Falls back to physical attribute.
 				request(req1, classA, 1),
 			)),
 			classes: objects(class(classA, "dra.example.com")),
 			slices: unwrapResourceSlices(sliceWithDevices(slice1, node1, pool1, "dra.example.com",
-				// Mismatched physical attributes.
 				device(device1, nil, map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"myAttr": {StringValue: new("value-1")},
 				}),
@@ -10071,17 +9639,10 @@ func TestAllocator(t *testing.T,
 			node: node(node1, region1),
 			expectResults: []any{allocationResult(
 				localNodeSelector(node1),
-				// req0 overridden to "value-2" -> device1. req1 uses physical "value-2" -> device2.
 				deviceAllocationResult(req0, "dra.example.com", pool1, device1, false),
 				deviceAllocationResult(req1, "dra.example.com", pool1, device2, false),
 			)},
 		},
-		// "derived-attributes-cel-missing-attribute" verifies that
-		// CEL runtime evaluation errors (such as looking up a key
-		// that isn't defined on a candidate device) are caught
-		// immediately. The allocator aborts allocation and
-		// propagates the explicit CEL error, preventing silent
-		// topology matching failures.
 		// 本用例验证派生属性 CEL 表达式引用不存在的属性时立即报错。
 		// 特性开关：DerivedAttributes 开启。
 		// 构造条件：req0 的派生表达式读取 missingAttr，而设备上只有 existingAttr。
@@ -10119,11 +9680,6 @@ func TestAllocator(t *testing.T,
 			node:        node(node1, region1),
 			expectError: gomega.MatchError(gomega.ContainSubstring("no such key: missingAttr")),
 		},
-		// "derived-attributes-type-mismatch" verifies that when CEL
-		// dynamically evaluates to different value types for the same
-		// attribute across candidate devices (e.g., string vs int),
-		// the MatchAttribute constraint safely rejects the mismatch
-		// rather than panicking or throwing an unhandled error.
 		// 本用例验证同一派生属性在不同设备上求值类型不一致时被安全拒绝。
 		// 特性开关：DerivedAttributes 开启。
 		// 构造条件：req0 请求 2 台，派生 derived/myAttr 读取 static；device1 为字符串、device2 为整数。
@@ -10177,10 +9733,6 @@ func TestAllocator(t *testing.T,
 				_, ctx := ktesting.NewTestContext(t)
 				g := gomega.NewWithT(t)
 
-				// This testcase is a smaller variant of the one in https://github.com/kubernetes/kubernetes/issues/131730#issuecomment-2873598287.
-				// That one took over 30 seconds, this one here only 0.07 seconds.
-				// But even that is too long when we interrupt in the near future or
-				// even before starting...
 				classLister := informerLister[resourceapi.DeviceClass]{
 					objs: []*resourceapi.DeviceClass{class(classA, driverA)},
 				}
@@ -10259,14 +9811,9 @@ func RunTestAllocator(t *testing.T,
 			missing := required.Difference(supported)
 			// 缺少任一必需特性则跳过，否则断言必然失败。
 			if missing.Len() > 0 {
-				// Skip the test, at least one of its required features isn't supported
-				// and the test would fail.
 				t.Skipf("SKIP: required feature(s) %v not supported by allocator", sets.List(missing))
 			}
 
-			// Listing objects is deterministic and returns them in the same
-			// order as in the test case. That makes the allocation result
-			// also deterministic.
 			// 按用例声明的顺序填充类 Lister，保证分配结果可复现。
 			var classLister informerLister[resourceapi.DeviceClass]
 			for _, class := range tc.classes {
@@ -10313,7 +9860,6 @@ func RunTestAllocator(t *testing.T,
 			g.Expect(err).To(matchError)
 
 			t.Logf("name: %s", name)
-			// replace any share id with fixed value for testing
 			// 将不确定的 ShareID 规范化为固定值并记录消耗的容量，便于结果比对。
 			for ri, result := range results {
 				for ai, allocation := range result.Devices.Results {
@@ -10326,7 +9872,6 @@ func RunTestAllocator(t *testing.T,
 			// 分配结果与期望结果按顺序无关的方式比对。
 			g.Expect(results).To(gomega.ConsistOf(tc.expectResults...))
 
-			// Objects that the allocator had access to should not have been modified.
 			// 校验分配器没有修改输入对象。
 			g.Expect(claimsToAllocate).To(gomega.HaveExactElements(tc.claimsToAllocate))
 			g.Expect(allocatedDevices).To(gomega.HaveExactElements(tc.allocatedDevices))

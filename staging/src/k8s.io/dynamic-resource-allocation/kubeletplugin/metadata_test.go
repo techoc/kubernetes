@@ -44,8 +44,6 @@ const (
 	testDriverName = "example.com"
 	testClaimName  = "my-claim"
 	testClaimNS    = "default"
-	// Starts with a digit so CDI MinimumRequiredVersion yields 0.5.0,
-	// matching real claim UIDs (UUIDs) that may start with a digit.
 	// 以数字开头，使 CDI MinimumRequiredVersion 得到 0.5.0，匹配真实以数字开头的 claim UID。
 	testClaimUID              = types.UID("1234-claim-uid")
 	testRequest               = "gpu-request"
@@ -226,8 +224,6 @@ func expectedRequestMetadata(reqName string, devs []Device) *v1alpha1.DeviceMeta
 	}
 }
 
-// expectedCDISpec returns the expected CDI spec for a single request.
-// containerPath is the full expected path inside the container.
 // expectedCDISpec 构造单个请求期望的 CDI 规范，containerPath 是容器内的完整挂载路径。
 func expectedCDISpec(reqName, metadataHostPath, containerPath string) cdispec.Spec {
 	// 一个设备，带一个只读绑定挂载。

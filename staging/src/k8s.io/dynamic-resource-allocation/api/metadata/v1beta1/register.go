@@ -22,25 +22,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name for DRA device metadata.
-//
 // GroupName 是 DRA 设备元数据 API 的组名。
 const GroupName = "metadata.resource.k8s.io"
 
-// SchemeGroupVersion is the group version for v1beta1 metadata types.
-//
 // SchemeGroupVersion 是 v1beta1 元数据的组版本标识，供 scheme 注册和版本转换使用。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 var (
-	// localSchemeBuilder is used to add types and conversion functions to the scheme.
-	// The generated conversion code references this variable by name.
-	//
-	// localSchemeBuilder 把 addKnownTypes 累积进 scheme 构造器；生成的转换代码按变量名引用它。
+	// localSchemeBuilder 累积类型与转换函数的注册入口；生成的转换代码按变量名引用它，因此不要轻易重命名。
 	localSchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 
-	// AddToScheme applies all the stored functions to the scheme.
-	//
 	// AddToScheme 是构造器入口，调用后会把登记的函数全部应用到目标 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )

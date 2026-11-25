@@ -32,8 +32,6 @@ import (
 	drahealthv1 "k8s.io/kubelet/pkg/apis/dra-health/v1"
 )
 
-// stubPlugin implements the minimal [DRAPlugin] interface and opts out of
-// health reporting by returning ErrHealthNotSupported.
 // stubPlugin 实现最小化的 [DRAPlugin] 接口，并通过返回 ErrHealthNotSupported 退出健康上报。
 type stubPlugin struct{}
 
@@ -55,8 +53,6 @@ func (s *stubPlugin) WatchHealthStatus(ctx context.Context, reports chan<- Devic
 	return ErrHealthNotSupported
 }
 
-// healthPlugin is a [DRAPlugin] which supports health reporting by sending a
-// fixed list of reports and then returning.
 // healthPlugin 在 stubPlugin 的基础上支持健康上报：依次发完固定的报告列表后返回。
 type healthPlugin struct {
 	stubPlugin
@@ -81,8 +77,6 @@ func (p *healthPlugin) WatchHealthStatus(ctx context.Context, reports chan<- Dev
 	return nil
 }
 
-// TestStartWithoutHealth ensures that a driver which opts out of health
-// reporting starts cleanly.
 // TestStartWithoutHealth 验证不支持健康上报的驱动也能干净启动。
 // 输入：stubPlugin + fake client，并关闭注册与 DRA 服务；断言 Start 无错误且 Stop 正常。
 func TestStartWithoutHealth(t *testing.T) {
@@ -92,7 +86,6 @@ func TestStartWithoutHealth(t *testing.T) {
 	helper, err := Start(ctx, &stubPlugin{},
 		DriverName("test-driver"),
 		KubeClient(fake.NewClientset()),
-		// Don't start any sockets, this test only cares about the wiring.
 		RegistrationService(false),
 		DRAService(false),
 	)
@@ -102,9 +95,6 @@ func TestStartWithoutHealth(t *testing.T) {
 	helper.Stop()
 }
 
-// TestStartWithoutDRAAPI ensures that disabling all DRA gRPC API versions
-// fails fast at Start instead of registering a driver which only advertises
-// the health add-on and which the kubelet then cannot use.
 // TestStartWithoutDRAAPI 验证关闭全部 DRA gRPC API 版本时 Start 立即失败，
 // 而不是注册一个只提供健康附加服务、kubelet 无法使用的驱动。
 // 输入：NodeV1 与 NodeV1beta1 均为 false；断言错误包含 "no supported DRA gRPC API"。
@@ -124,7 +114,6 @@ func TestStartWithoutDRAAPI(t *testing.T) {
 	require.ErrorContains(t, err, "no supported DRA gRPC API")
 }
 
-// fakeHealthStream captures the responses sent by the helper's gRPC bridge.
 // fakeHealthStream 捕获辅助代码 gRPC 桥接器发送的响应，用于断言转换结果。
 type fakeHealthStream struct {
 	// 内嵌空流以满足接口；ctx 是流的上下文；sent 保存已发送的响应。
@@ -143,9 +132,6 @@ func (f *fakeHealthStream) Send(resp *drahealthv1.NodeWatchResourcesResponse) er
 	return nil
 }
 
-// TestHealthServerBridge verifies that the helper's gRPC bridge forwards the
-// version-neutral reports produced by [DRAPlugin.WatchHealthStatus] and converts
-// them to the v1 wire types.
 // TestHealthServerBridge 验证桥接器把版本无关的 WatchHealthStatus 报告转换为 v1 线路类型并发送。
 // 输入：一份包含健康与不健康两台设备的报告；
 // 断言发送恰好一份响应，且两台设备的标识、健康状态与消息正确。
@@ -189,8 +175,6 @@ func TestHealthServerBridge(t *testing.T) {
 	require.Equal(t, drahealthv1.HealthStatus_UNHEALTHY, devices[1].GetHealth())
 }
 
-// stalePlugin sends one report and then goes silent, simulating a driver
-// whose health monitoring wedged. HandleError calls are recorded.
 // stalePlugin 先发送一份报告然后保持沉默，模拟健康监控卡住的驱动；
 // 它把 HandleError 收到的错误记录到通道中供测试断言。
 type stalePlugin struct {
@@ -224,10 +208,6 @@ func (p *stalePlugin) WatchHealthStatus(ctx context.Context, reports chan<- Devi
 	return nil
 }
 
-// TestHealthServerBridgeStaleWatchdog verifies that the helper surfaces a
-// recoverable error through HandleError when the driver stops re-sending
-// health reports within the health check timeout, without re-sending on the
-// driver's behalf.
 // TestHealthServerBridgeStaleWatchdog 验证驱动未在健康检查超时内重发报告时，桥接器通过 HandleError
 // 上报可恢复错误（ErrRecoverable），且不会代驱动重发报告。
 // 输入：把检查间隔缩短到 10ms、设备超时设为 20ms；
@@ -275,8 +255,6 @@ func TestHealthServerBridgeStaleWatchdog(t *testing.T) {
 		t.Fatal("timed out waiting for the stale-health watchdog to fire")
 	}
 
-	// The helper must not have re-sent anything: only the driver's single
-	// report reached the kubelet.
 	// 断言桥接器没有代为重发：kubelet 只收到驱动的那一份报告。
 	// 取消上下文让驱动的 WatchHealthStatus 退出。
 	cancel()
@@ -286,9 +264,6 @@ func TestHealthServerBridgeStaleWatchdog(t *testing.T) {
 	require.Len(t, stream.sent, 1)
 }
 
-// TestHealthServerBridgeNotSupported verifies that a driver which does not
-// support health reporting fails the kubelet's health stream with
-// Unimplemented, which tells the kubelet to stop watching.
 // TestHealthServerBridgeNotSupported 验证不支持健康上报的驱动会让 kubelet 的健康流以 Unimplemented 失败，
 // 从而告知 kubelet 停止监听。
 // 输入：stubPlugin；断言错误码为 Unimplemented 且没有发送任何响应。
@@ -306,10 +281,6 @@ func TestHealthServerBridgeNotSupported(t *testing.T) {
 	require.Empty(t, stream.sent)
 }
 
-// TestMinHealthCheckTimeout verifies that the stale-health watchdog uses the
-// tightest lease the kubelet actually applies: per-device timeouts when set,
-// the kubelet's default otherwise. In particular, when all devices ask for a
-// lease longer than the default, the watchdog must not warn before it.
 // TestMinHealthCheckTimeout 验证过期看门狗使用 kubelet 实际适用的最紧租约：
 // 设备设置了超时则取其中最小值，否则用 kubelet 默认值；尤其当所有设备都要求更长租约时不应提前告警。
 // 输入：多组报告；断言 minHealthCheckTimeout 的返回值与预期一致。

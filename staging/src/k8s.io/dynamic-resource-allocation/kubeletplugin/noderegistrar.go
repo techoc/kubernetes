@@ -33,7 +33,6 @@ type nodeRegistrar struct {
 	server *grpcServer
 }
 
-// startRegistrar returns a running instance.
 // startRegistrar 创建并启动一个注册服务实例。
 func startRegistrar(logger klog.Logger, grpcVerbosity int, interceptors []grpc.UnaryServerInterceptor, streamInterceptors []grpc.StreamServerInterceptor, driverName string, supportedServices []string, draEndpointPath string, pluginRegistrationEndpoint endpoint, errHandler func(ctx context.Context, err error)) (*nodeRegistrar, error) {
 	// 构造注册服务器；DRA 用 supportedVersions 字段描述所提供的服务（如 "v1beta1.DRAPlugin"）。
@@ -41,7 +40,7 @@ func startRegistrar(logger klog.Logger, grpcVerbosity int, interceptors []grpc.U
 		registrationServer: registrationServer{
 			driverName:        driverName,
 			draEndpointPath:   draEndpointPath,
-			supportedVersions: supportedServices, // DRA uses this field to describe provided services (e.g. "v1beta1.DRAPlugin").
+			supportedVersions: supportedServices, // DRA 用该字段描述所提供的服务（如 "v1beta1.DRAPlugin"）。
 		},
 	}
 	// 在插件注册端点上启动 gRPC 服务器，并把注册服务注册进去。
@@ -57,8 +56,6 @@ func startRegistrar(logger klog.Logger, grpcVerbosity int, interceptors []grpc.U
 	return n, nil
 }
 
-// stop ensures that the registrar is not running anymore and cleans up all resources.
-// It is idempotent and may be called with a nil pointer.
 // stop 停止注册服务并清理资源；方法幂等，可在 nil 指针上调用。
 func (s *nodeRegistrar) stop() {
 	// nil 接收者直接返回。

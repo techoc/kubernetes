@@ -22,18 +22,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// JSON tags exist to make the output more readable (klog, diff.Diff).
-// They are intentionally not compatible with the normal encoding
-// of a ResourceSlice to avoid accidentally using them with an apiserver
-// request:
-// - TypeMeta does not get encoded.
-// - Fields from this package use upper case whereas types from the
-//   real API use lower case.
-
 // ResourceSlice 是 DRA 资源切片的内部表示，仅用于进程内的比较与日志打印。
-// 其中 TypeMeta 为不参与编码的内嵌类型元数据，ObjectMeta 为内嵌对象元数据，Spec 为资源切片的规格。
+// TypeMeta 为不参与编码的内嵌类型元数据，ObjectMeta 为内嵌对象元数据，Spec 为资源切片的规格。
+// 各字段的 JSON tag 用于生成可读的 klog 输出和 diff：内部字段使用大写名称，真实 API 字段使用小写名称。
+// 这些 tag 有意与正常 ResourceSlice 的编码方式不兼容，以免误把该内部类型用于 API Server 请求。
 type ResourceSlice struct {
-	metav1.TypeMeta `json:"-"` // Not needed, not set consistently.
+	metav1.TypeMeta `json:"-"` // 不需要，且设置不一致。
 	metav1.ObjectMeta
 
 	Spec ResourceSliceSpec

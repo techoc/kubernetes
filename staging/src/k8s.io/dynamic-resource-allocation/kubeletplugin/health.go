@@ -28,116 +28,63 @@ import (
 	drahealthv1 "k8s.io/kubelet/pkg/apis/dra-health/v1"
 )
 
-// This file defines the version-neutral device health reporting API that DRA
-// driver authors implement through [DRAPlugin.WatchHealthStatus]. The versioned
-// DRAResourceHealth gRPC API is deliberately kept out of the Go package API:
-// the helper translates between the hand-written types below and whatever gRPC
-// version a kubelet supports. This means driver authors do not have to adapt
-// their source code when the gRPC API is promoted to a newer version.
 // 本文件定义了与版本无关的设备健康上报 API，DRA 驱动通过 [DRAPlugin.WatchHealthStatus] 实现它。
 // 带版本的 DRAResourceHealth gRPC API 刻意不进入 Go 包 API：本辅助代码负责在下面的手写类型与
 // kubelet 支持的任意 gRPC 版本之间做转换，因此驱动作者无需在 gRPC API 升级为新版本时修改源码。
 
-// HealthStatus describes the health of a device as reported by a DRA driver.
 // HealthStatus 表示 DRA 驱动上报的设备健康状态，底层类型为 string。
 type HealthStatus string
 
 const (
-	// HealthStatusUnknown indicates that the health of the device cannot be
-	// determined. This is also the default when no status is set.
 	// HealthStatusUnknown 表示无法确定设备的健康状态；未设置状态时也按该值处理。
 	HealthStatusUnknown HealthStatus = "Unknown"
-	// HealthStatusHealthy indicates that the device is operating normally.
 	// HealthStatusHealthy 表示设备运行正常。
 	HealthStatusHealthy HealthStatus = "Healthy"
-	// HealthStatusUnhealthy indicates that the device has reported a problem.
 	// HealthStatusUnhealthy 表示设备报告了问题。
 	HealthStatusUnhealthy HealthStatus = "Unhealthy"
 )
 
-// DeviceHealth describes the health of a single device managed by a DRA driver.
 // DeviceHealth 描述由 DRA 驱动管理的一台设备的健康情况。
 type DeviceHealth struct {
-	// PoolName is the name of the pool which contains the device.
 	// PoolName 是包含该设备的设备池名称。
 	PoolName string
-	// DeviceName is the name of the device within the pool.
 	// DeviceName 是设备在该池内的名称。
 	DeviceName string
-	// Health is the current health status of the device. An empty value is
-	// treated as [HealthStatusUnknown].
 	// Health 是当前健康状态；空值按 [HealthStatusUnknown] 处理。
 	Health HealthStatus
-	// LastUpdated is when the driver last determined this status. The zero
-	// value indicates that the time is unknown.
 	// LastUpdated 是驱动最后一次判定该状态的时间；零值表示时间未知。
 	LastUpdated time.Time
-	// HealthCheckTimeout is the interval after which the kubelet should treat
-	// the device's health as unknown if it has not received a fresh report.
-	// If zero or negative, the kubelet uses a default. The value is truncated
-	// to whole seconds on the wire.
 	// HealthCheckTimeout 是 kubelet 在未收到新上报后将设备健康视为未知的间隔。
 	// 零值或负值表示使用 kubelet 默认值；在线路上会截断为整秒。
 	HealthCheckTimeout time.Duration
-	// Message is an optional human-readable detail about the device's health.
 	// Message 是关于设备健康的可选可读详情。
 	Message string
 }
 
-// DeviceHealthReport is a snapshot of the health of devices managed by a DRA
-// driver. It usually covers all of the driver's devices, but may cover a
-// subset: the kubelet reconciles each report with its internal cache, and a
-// device absent from a report keeps its previously reported health until that
-// goes stale (see [DeviceHealth.HealthCheckTimeout]), after which the kubelet
-// reports it as unknown.
-//
-// A driver with more than one health source (for example an event-driven
-// hardware monitor plus a polling prober for devices the monitor cannot see)
-// should send one report per source, each covering only that source's
-// devices. Then a resend only vouches for devices which were actually
-// verified, and the failure of one source decays exactly its devices to
-// unknown.
 // DeviceHealthReport 是驱动所管理设备健康状况的一份快照。
 // 它通常覆盖驱动的全部设备，但也可以只覆盖一部分：kubelet 会把每份报告与内部缓存对账，
 // 未出现在报告中的设备会保留此前上报的健康状态，直到该状态过期（见 [DeviceHealth.HealthCheckTimeout]），
 // 之后 kubelet 会把它报告为未知。
-//
 // 拥有多个健康来源的驱动（例如事件驱动的硬件监控器加上用于监控器看不到设备的轮询探针）
 // 应当每个来源发送一份报告，且每份只覆盖该来源的设备。这样重发只担保确实被核验过的设备，
 // 某个来源失效也只会让它的设备衰减为未知。
 type DeviceHealthReport struct {
-	// Devices is the list of devices covered by this report and their
-	// current health.
 	// Devices 是本报告覆盖的设备列表及其当前健康状态。
 	Devices []DeviceHealth
 }
 
-// ErrHealthNotSupported is returned by [DRAPlugin.WatchHealthStatus] to
-// indicate that a driver does not support device health reporting. The helper
-// then fails the kubelet's health stream with [codes.Unimplemented], which
-// tells the kubelet to stop watching.
 // ErrHealthNotSupported 由 [DRAPlugin.WatchHealthStatus] 返回，表示驱动不支持设备健康上报。
 // 辅助代码随后以 [codes.Unimplemented] 让 kubelet 的健康流失败，告知 kubelet 停止监听。
 var ErrHealthNotSupported = errors.New("device health reporting is not supported by this driver")
 
-// defaultKubeletHealthTimeout mirrors the kubelet's default lease for device
-// health data: entries which are not refreshed within this window are
-// reported as unknown.
 // defaultKubeletHealthTimeout 对应 kubelet 默认的设备健康数据租约：
 // 在此窗口内未刷新的条目会被报告为未知。
 const defaultKubeletHealthTimeout = 30 * time.Second
 
-// healthStaleCheckInterval is how often the helper checks whether the driver
-// has let its health reports go stale. A variable so tests can shorten it.
 // healthStaleCheckInterval 是辅助代码检查驱动上报是否过期的频率；
 // 设为变量以便测试缩短该间隔。
 var healthStaleCheckInterval = 10 * time.Second
 
-// healthServerBridge implements the versioned v1 DRAResourceHealth gRPC
-// server by calling the version-neutral [DRAPlugin.WatchHealthStatus]
-// implementation provided by the driver. The helper registers it (and, via a
-// conversion wrapper, the older v1alpha1 server) so that the gRPC API version
-// is fully hidden from driver authors.
 // healthServerBridge 通过调用驱动提供的版本无关 [DRAPlugin.WatchHealthStatus] 实现带版本的 v1
 // DRAResourceHealth gRPC 服务。辅助代码注册它（并通过转换包装注册更旧的 v1alpha1 服务），
 // 从而对驱动作者完全隐藏 gRPC API 的版本差异。
@@ -155,8 +102,6 @@ var _ drahealthv1.DRAResourceHealthServer = &healthServerBridge{}
 // 它在后台启动驱动的 WatchHealthStatus，把报告转换成 v1 线路类型后发送给 kubelet，
 // 同时监控驱动是否让报告过期。
 func (h *healthServerBridge) NodeWatchResources(_ *drahealthv1.NodeWatchResourcesRequest, stream drahealthv1.DRAResourceHealth_NodeWatchResourcesServer) error {
-	// A derived context lets us tell the driver to stop producing reports when
-	// sending to the kubelet fails or the stream is otherwise done.
 	// 派生一个可取消的上下文：发送失败或流结束时通知驱动停止产生报告。
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
@@ -171,12 +116,6 @@ func (h *healthServerBridge) NodeWatchResources(_ *drahealthv1.NodeWatchResource
 		errCh <- h.plugin.WatchHealthStatus(ctx, reports)
 	}()
 
-	// The kubelet reports device health as unknown when it is not refreshed
-	// within each device's health check timeout. Watch for drivers which let
-	// their reports go stale and surface it as a (recoverable) error instead
-	// of silently degrading. The helper deliberately does not re-send the
-	// last report itself: resending is the driver's job, so that a wedged
-	// monitor decays to unknown instead of being kept alive by the helper.
 	// 用定时器检测报告是否过期：过期时通过 HandleError 上报可恢复错误，而不是静默降级。
 	// 辅助代码刻意不代为重发上一份报告：重发是驱动的职责，否则卡住的监控器会被辅助代码续命。
 	staleCheck := time.NewTicker(healthStaleCheckInterval)
@@ -208,8 +147,6 @@ receive:
 			staleReported = false
 			// 转换为 v1 类型后发送给 kubelet。
 			if err := stream.Send(deviceHealthReportToV1(report)); err != nil {
-				// Stop the driver and drain remaining reports so that the
-				// producing goroutine can observe the cancellation and exit.
 				// 取消驱动，并把通道中剩余报告排空，让生产 goroutine 观察到取消后退出。
 				cancel()
 				// 排空剩余报告，避免驱动 goroutine 阻塞在发送上。
@@ -237,9 +174,6 @@ receive:
 	err := <-errCh
 	// 驱动不支持健康上报。
 	if errors.Is(err, ErrHealthNotSupported) {
-		// The health service is always advertised and served; a driver
-		// declines health reporting by returning ErrHealthNotSupported.
-		// Reporting it as Unimplemented tells the kubelet to stop watching.
 		// 健康服务始终注册；驱动以 ErrHealthNotSupported 拒绝上报时返回 Unimplemented，
 		// 从而让 kubelet 停止监听。
 		return status.Error(codes.Unimplemented, ErrHealthNotSupported.Error())
@@ -250,11 +184,6 @@ receive:
 // minHealthCheckTimeout 返回 kubelet 对该报告适用的最紧租约：所有设备中最小的有效健康检查超时，
 // 未显式设置正超时的设备按 kubelet 默认值计算。
 // 当所有设备都要求更长租约时，结果可以长于默认值；空报告使用默认值。
-// minHealthCheckTimeout returns the tightest lease the kubelet applies to the
-// report: the smallest effective per-device health check timeout, where a
-// device without an explicit positive timeout gets the kubelet's default.
-// This can be longer than the default when all devices ask for a longer
-// lease. Empty reports use the default.
 func minHealthCheckTimeout(report DeviceHealthReport) time.Duration {
 	// 空报告没有设备级超时，直接返回默认值。
 	if len(report.Devices) == 0 {

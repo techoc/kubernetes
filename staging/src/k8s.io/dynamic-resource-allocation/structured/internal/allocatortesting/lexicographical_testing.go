@@ -24,7 +24,6 @@ import (
 	"k8s.io/dynamic-resource-allocation/cel"
 )
 
-// TestLexicographicalAllocator runs tests which depend on lexicographical sorting.
 // TestLexicographicalAllocator 运行一组依赖"字典序排序"行为的分配测试。
 // 这些用例验证：当输入的 ResourceSlice / DevicePool / Device 顺序被打乱时，
 // 分配器仍按名称的字典序（而非输入顺序）选择设备，从而保证不同实现产生一致结果。
@@ -47,7 +46,6 @@ func TestLexicographicalAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequests(claim0, nil, request(req0, classA, 2))),
 			classes:          objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
-				// pool-3 before pool-2 before pool-1 in input.
 				sliceWithOneDevice(slice1, node1, resourcePool(pool3, 1), driverA),
 				sliceWithOneDevice(slice2, node1, resourcePool(pool2, 1), driverA),
 				sliceWithOneDevice(slice3, node1, resourcePool(pool1, 1), driverA),
@@ -70,7 +68,6 @@ func TestLexicographicalAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequests(claim0, nil, request(req0, classA, 2))),
 			classes:          objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
-				// pools with binding conditions will be considered after pools without binding conditions.
 				sliceWithDevices(slice1, node1, resourcePool(pool1, 1), driverA,
 					device(device1, nil, nil).withBindingConditions([]string{"IsPrepare"}, []string{"BindingFailed"}),
 				),
@@ -91,7 +88,6 @@ func TestLexicographicalAllocator(t *testing.T,
 			claimsToAllocate: objects(claimWithRequests(claim0, nil, request(req0, classA, 2))),
 			classes:          objects(class(classA, driverA)),
 			slices: unwrapResourceSlices(
-				// slice-3 before slice-2 before slice-1 in input.
 				sliceWithDevices(slice3, node1, resourcePool(pool1, 3), driverA, device(device3, nil, nil)),
 				sliceWithDevices(slice2, node1, resourcePool(pool1, 3), driverA, device(device2, nil, nil)),
 				sliceWithDevices(slice1, node1, resourcePool(pool1, 3), driverA, device(device1, nil, nil)),

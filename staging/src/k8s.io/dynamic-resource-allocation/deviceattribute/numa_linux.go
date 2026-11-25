@@ -28,50 +28,27 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// AttributeForm selects whether the numaNode attribute is published as a
-// scalar IntValue or a list IntValues.
 // AttributeForm 决定 numaNode 属性以标量 IntValue 还是列表 IntValues 形式发布。
 type AttributeForm int
 
 const (
-	// ScalarAttribute produces a scalar IntValue with the physical NUMA node.
-	// This form has no feature-gate dependency.
 	// ScalarAttribute 生成仅含物理 NUMA 节点的标量 IntValue，不依赖任何特性门控。
 	ScalarAttribute AttributeForm = iota
-	// ListAttribute produces an IntValues list. The first element is the
-	// physical NUMA node; additional elements are same-socket nodes at the
-	// minimum ACPI SLIT distance. Falls back to a single-element list when
-	// SLIT distances are unavailable. Requires DRAListTypeAttributes to be
-	// enabled in the cluster.
 	// ListAttribute 生成 IntValues 列表：首元素为物理 NUMA 节点，其余为最小 ACPI SLIT 距离的同插槽节点；
 	// 距离信息不可用时退化为单元素列表。使用该形式要求集群启用 DRAListTypeAttributes。
 	ListAttribute
 )
 
-// maxNUMANodes is the upper bound for valid NUMA node IDs.
-// Linux defines MAX_NUMNODES = (1 << CONFIG_NODES_SHIFT) in
-// include/linux/nodemask_types.h (as of v7.2), with CONFIG_NODES_SHIFT
-// capped at 10 across all architectures (x86, arm64, riscv).
-// maxNUMANodes 是合法 NUMA 节点 ID 的上界：Linux 中 MAX_NUMNODES = (1 << CONFIG_NODES_SHIFT)，
-// 而 CONFIG_NODES_SHIFT 在各架构上最大为 10，故上界为 1024。
+// maxNUMANodes 是合法 NUMA 节点 ID 的上界。Linux 在 include/linux/nodemask_types.h 中
+// 定义 MAX_NUMNODES = (1 << CONFIG_NODES_SHIFT)（截至 Linux v7.2）；各架构的
+// CONFIG_NODES_SHIFT 最大为 10，故上界为 1024。
 const maxNUMANodes = 1024
 
-// GetNUMANodeAttributeByPCIBusID returns the numaNode attribute for a PCI
-// device, reading the physical NUMA node from sysfs numa_node.
-//
-// attrForm selects the form of the attribute and MUST reflect the cluster's
-// DRAListTypeAttributes state. A driver cannot detect that state (feature gates
-// are per-process), so the operator configures it on the driver, consistent
-// with what the apiserver and scheduler have enabled. The helper renders
-// whichever form it is told; it does not detect anything.
-//
-// If ListAttribute is used but DRAListTypeAttributes is off in the cluster, the
-// apiserver drops the list value and rejects the resulting value-less
-// attribute; the driver should treat that publish failure as fatal rather than
-// adapting.
 // GetNUMANodeAttributeByPCIBusID 根据 PCI 设备的 BDF 地址从 sysfs 的 numa_node 读取物理 NUMA 节点，
-// 并按 attrForm 生成标量或列表形式的 numaNode 属性。attrForm 必须由调用方按集群门控状态传入，
-// 本函数只按传入形式渲染，不做任何探测；若列表形式与集群门控不符，发布会失败，调用方应视为致命错误。
+// 并按 attrForm 生成标量或列表形式的 numaNode 属性。attrForm 必须反映集群 DRAListTypeAttributes 状态。
+// 特性门控按进程生效，驱动无法探测；由运维在驱动上配置，并与 API Server、调度器的设置保持一致。
+// 本函数只按传入形式渲染，不做探测。若集群关闭门控时使用 ListAttribute，API Server 会丢弃列表值，
+// 并拒绝由此产生的无值属性；驱动必须把该发布失败视为致命错误，而不是自动适配。
 func GetNUMANodeAttributeByPCIBusID(pciBusID string, attrForm AttributeForm, mods ...MachineModifier) (DeviceAttribute, error) {
 	// 先初始化默认 sysfs（/sys），再依次应用调用方传入的选项，便于测试替换文件系统。
 	var mc machine
@@ -91,10 +68,6 @@ func GetNUMANodeAttributeByPCIBusID(pciBusID string, attrForm AttributeForm, mod
 		return DeviceAttribute{}, err
 	}
 
-	// sysfs reports numa_node = -1 for a device with no NUMA affinity. Such a
-	// device must not publish numaNode: a value of -1 would match every other
-	// NUMA-less device under matchAttribute set intersection. Return an error so
-	// the driver omits the attribute instead.
 	// numa_node = -1 表示无 NUMA 亲和性：此类设备不得发布该属性，否则 -1 会在属性匹配时
 	// 与所有其他无亲和性设备误匹配；返回错误使驱动选择省略该属性。
 	if physicalNode < 0 {
@@ -108,13 +81,6 @@ func GetNUMANodeAttributeByPCIBusID(pciBusID string, attrForm AttributeForm, mod
 	return makeNUMANodeScalarAttribute(physicalNode), nil
 }
 
-// GetNUMANodeAttribute returns the numaNode attribute for a device that already
-// knows its NUMA node (for example CPU and memory devices). See
-// GetNUMANodeAttributeByPCIBusID for the meaning of attrForm.
-//
-// numaNode must be a valid (non-negative) NUMA node. A negative value indicates
-// no NUMA affinity, for which the attribute must not be published (it would
-// match every other NUMA-less device), so an error is returned.
 // GetNUMANodeAttribute 为已知 NUMA 节点号的设备（如 CPU、内存设备）生成 numaNode 属性；
 // attrForm 的含义同 GetNUMANodeAttributeByPCIBusID。节点号必须非负且小于 maxNUMANodes，
 // 负值表示无 NUMA 亲和性，返回错误以避免错误发布。
@@ -153,8 +119,6 @@ func makeNUMANodeScalarAttribute(numaNode int) DeviceAttribute {
 	}
 }
 
-// GetNUMANodeForCPU returns the NUMA node ID for a given CPU core by reading
-// the /sys/devices/system/cpu/cpuX/nodeY symlink.
 // GetNUMANodeForCPU 通过匹配 /sys/devices/system/cpu/cpuX/nodeY 符号链接，返回指定 CPU 所属的 NUMA 节点号；
 // 找不到或节点号解析失败时返回 -1 与错误。
 func GetNUMANodeForCPU(cpuID int, mods ...MachineModifier) (int, error) {
@@ -185,9 +149,6 @@ func GetNUMANodeForCPU(cpuID int, mods ...MachineModifier) (int, error) {
 	return nodeNum, nil
 }
 
-// makeNUMANodeListAttribute builds the list-form numaNode attribute. The caller
-// must pass a non-negative physicalNode; negative nodes (no NUMA affinity) are
-// rejected by the exported helpers before reaching here.
 // makeNUMANodeListAttribute 生成列表形式的 numaNode 属性：物理节点始终位于首位，其后为同插槽等距节点；
 // 读取 SLIT 距离失败或没有对等节点时退化为仅含物理节点的单元素列表。调用方须保证 physicalNode 非负。
 func makeNUMANodeListAttribute(mc machine, physicalNode int) DeviceAttribute {
@@ -200,8 +161,6 @@ func makeNUMANodeListAttribute(mc machine, physicalNode int) DeviceAttribute {
 		}
 	}
 
-	// getEquidistantNUMANodes always includes the physical node itself in the
-	// returned set, so drop it here and prepend it to keep it first.
 	// 该函数结果总包含物理节点自身；这里先放入物理节点，再跳过它追加其余节点，保证物理节点排第一。
 	result := []int64{int64(physicalNode)}
 	for _, n := range equidistant {
@@ -235,9 +194,6 @@ func readNUMANode(mc machine, pciBusID string) (int, error) {
 	return node, nil
 }
 
-// getEquidistantNUMANodes reads the SLIT distance row for the given NUMA node
-// and returns all same-socket nodes at the minimum non-self distance, plus
-// the node itself.
 // getEquidistantNUMANodes 读取指定节点的 SLIT 距离行，返回与最小非自身距离相等、且同插槽的所有节点，
 // 结果中始终包含节点自身。若节点跨插槽信息无法确定，则采用包含候选节点的保守策略。
 func getEquidistantNUMANodes(mc machine, node int) ([]int, error) {
@@ -273,7 +229,6 @@ func getEquidistantNUMANodes(mc machine, node int) ([]int, error) {
 		distances[i] = d
 	}
 
-	// Find minimum non-self distance
 	// 求除自身以外的最小距离，作为“同插槽/等距”的判定阈值。
 	minDist := -1
 	for i, d := range distances {
@@ -305,12 +260,6 @@ func getEquidistantNUMANodes(mc machine, node int) ([]int, error) {
 			continue
 		}
 		if haveSocket {
-			// Exclude a candidate only when its socket is known and differs.
-			// If the candidate's socket cannot be determined (for example a
-			// CPU-less memory node with no cpulist), it is included rather than
-			// dropped. This is a deliberate over-approximation: it is safer to
-			// include a possibly-same-socket node than to drop a genuinely
-			// same-socket one.
 			// 仅当候选节点插槽已知且与本节点不同才剔除；若无法确定其插槽（例如没有 cpulist 的无 CPU 内存节点），
 			// 则予以保留。这是有意的过近似：宁可多收入可能的同插槽节点，也不误删真正的同插槽节点。
 			candidateSocket, ok := getSocketForNUMANode(mc, i)
