@@ -29,10 +29,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// streamProtocolV4 implements version 4 of the streaming protocol for attach
-// and exec. This version adds support for exit codes on the error stream through
-// the use of metav1.Status instead of plain text messages.
-//
+// streamProtocolV4 实现 attach 和 exec 流式协议的第 4 版。
+// 该版本通过在错误流上使用 metav1.Status 取代纯文本消息，
+// 支持返回退出码。
 // 它复用 v3 的流创建与 resize 逻辑，仅替换错误流解码器。
 type streamProtocolV4 struct {
 	*streamProtocolV3
@@ -66,12 +65,12 @@ func (p *streamProtocolV4) stream(logger klog.Logger, conn streamCreator, ready 
 		return err
 	}
 
-	// Signal that all streams have been created.
+	// 通知所有流均已创建。
 	if ready != nil {
 		close(ready)
 	}
 
-	// now that all the streams have been created, proceed with reading & copying
+	// 所有流创建完毕后，开始读取与拷贝
 
 	errorChan := watchErrorStream(logger, p.errorStream, &errorDecoderV4{})
 
@@ -83,15 +82,15 @@ func (p *streamProtocolV4) stream(logger klog.Logger, conn streamCreator, ready 
 	p.copyStdout(logger, &wg)
 	p.copyStderr(logger, &wg)
 
-	// we're waiting for stdout/stderr to finish copying
+	// 等待 stdout/stderr 拷贝完成
 	wg.Wait()
 
-	// waits for errorStream to finish reading with an error or nil
+	// 等待 errorStream 读取结束，返回错误或 nil
 	return <-errorChan
 }
 
-// errorDecoderV4 interprets the json-marshaled metav1.Status on the error channel
-// and creates an exec.ExitError from it.
+// errorDecoderV4 解读错误通道上以 json 序列化的 metav1.Status，
+// 并据此构造 exec.ExitError。
 type errorDecoderV4 struct{}
 
 // decode 解析错误流上的 metav1.Status，并映射为 Go 错误。

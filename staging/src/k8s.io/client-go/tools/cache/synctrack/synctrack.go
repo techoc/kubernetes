@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package synctrack contains utilities for helping controllers track whether
-// they are "synced" or not, that is, whether they have processed all items
-// from the informer's initial list.
+// Package synctrack 提供工具，帮助控制器跟踪自己是否已经“同步”，
+// 也就是是否已处理完 informer 初始列表中的全部条目。
 package synctrack
 
 import (
@@ -27,23 +26,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// AsyncTracker helps propagate HasSynced in the face of multiple worker threads.
-// The user has to monitor the upstream "has synced"
-// and notify the tracker when that changes from false to true.
+// AsyncTracker 在存在多个工作线程的情况下帮助传播 HasSynced。
+// 使用方需要自行监控上游的“已同步”状态，并在其从 false 变为 true 时通知跟踪器。
 type AsyncTracker[T comparable] struct {
-	// name describes the instance.
+	// name 描述该实例。
 	name string
 
-	// upstreamHasSynced is changed from false (initial value) to true
-	// when UpstreamHasSynced is called.
+	// upstreamHasSynced 在调用 UpstreamHasSynced 时从 false（初始值）变为 true。
 	upstreamHasSynced atomic.Bool
 
 	lock    sync.Mutex
 	waiting sets.Set[T]
 
-	// synced gets canceled once both the tracker and upstream are synced.
-	// A context is convenient for this because it gives us a channel
-	// and handles thread-safety.
+	// synced 会在跟踪器与上游都完成同步后被取消。
+	// 用 context 实现很方便：它自带 channel 并处理了线程安全。
 	synced context.Context
 	cancel func()
 }
@@ -57,8 +53,7 @@ func NewAsyncTracker[T comparable](name string) *AsyncTracker[T] {
 	return t
 }
 
-// Start should be called prior to processing each key which is part of the
-// initial list.
+// Start 应在开始处理某个属于初始列表的 key 之前调用。
 func (t *AsyncTracker[T]) Start(key T) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -69,11 +64,9 @@ func (t *AsyncTracker[T]) Start(key T) {
 	}
 }
 
-// Finished should be called when finished processing a key which was part of
-// the initial list. Since keys are tracked individually, nothing bad happens
-// if you call Finished without a corresponding call to Start. This makes it
-// easier to use this in combination with e.g. queues which don't make it easy
-// to plumb through the isInInitialList boolean.
+// Finished 应在处理完某个属于初始列表的 key 之后调用。由于 key 是逐个跟踪的，
+// 在没有配对的 Start 调用时直接调用 Finished 也不会造成问题。这让它可以方便地
+// 与不方便传递 isInInitialList 布尔值的队列等结构配合使用。
 func (t *AsyncTracker[T]) Finished(key T) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -81,41 +74,37 @@ func (t *AsyncTracker[T]) Finished(key T) {
 		t.waiting.Delete(key)
 	}
 
-	// Maybe synced now?
+	// 现在可能已经同步了？
 	if t.upstreamHasSynced.Load() && len(t.waiting) == 0 {
-		// Mark as synced.
+		// 标记为已同步。
 		t.cancel()
 	}
 }
 
-// UpstreamHasSynced needs to be called at least once as soon as
-// the upstream "has synced" becomes true. It tells AsyncTracker
-// that the source is synced.
+// 上游的“已同步”变为 true 后，需要尽快至少调用一次 UpstreamHasSynced，
+// 告知 AsyncTracker 数据源已经同步。
 //
-// Must be called after handing over the initial list to Start.
+// 必须在把初始列表逐个移交给 Start 之后调用。
 func (t *AsyncTracker[T]) UpstreamHasSynced() {
-	// Upstream is done, but we might not be yet.
+	// 上游已完成，但本端可能还没处理完。
 	t.upstreamHasSynced.Store(true)
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	if len(t.waiting) == 0 {
-		// Mark as synced.
+		// 标记为已同步。
 		t.cancel()
 	}
 }
 
-// HasSynced returns true if the source is synced and every key present in the
-// initial list has been processed. This relies on the source not considering
-// itself synced until *after* it has delivered the notification for the last
-// key, and that notification handler must have called Start.
+// HasSynced 在数据源已同步且初始列表中的每个 key 都已处理完毕时返回 true。
+// 这依赖数据源直到*投递完最后一个 key 的通知之后*才认为自身已同步，
+// 且该通知的处理函数必须已经调用过 Start。
 func (t *AsyncTracker[T]) HasSynced() bool {
 	return t.synced.Err() != nil
 }
 
-// Done returns a channel that is closed if the source is synced and every key present in the
-// initial list has been processed. This relies on the source not considering
-// itself synced until *after* it has delivered the notification for the last
-// key, and that notification handler must have called Start.
+// Done 返回一个 channel：当数据源已同步且初始列表中的每个 key 都已处理完毕时
+// 被关闭。依赖条件与 HasSynced 相同。
 func (t *AsyncTracker[T]) Done() <-chan struct{} {
 	return t.synced.Done()
 }
@@ -125,26 +114,22 @@ func (t *AsyncTracker[T]) Name() string {
 	return t.name
 }
 
-// SingleFileTracker helps propagate HasSynced when events are processed in
-// order (i.e. via a queue). The user has to monitor the upstream "has synced"
-// and notify the tracker when that changes from false to true.
+// SingleFileTracker 在事件按序处理（例如经由队列）时帮助传播 HasSynced。
+// 使用方需要自行监控上游的“已同步”状态，并在其从 false 变为 true 时通知跟踪器。
 type SingleFileTracker struct {
-	// name describes the instance.
+	// name 描述该实例。
 	name string
 
-	// Important: count is used with atomic operations so it must be 64-bit
-	// aligned, otherwise atomic operations will panic. Having it at the top of
-	// the struct will guarantee that, even on 32-bit arches.
-	// See https://pkg.go.dev/sync/atomic#pkg-note-BUG for more information.
+	// 重要：count 通过原子操作访问，必须保持 64 位对齐，否则原子操作会 panic。
+	// 把它放在结构体开头，即使在 32 位架构上也能保证对齐。
+	// 详见 https://pkg.go.dev/sync/atomic#pkg-note-BUG。
 	count int64
 
-	// upstreamHasSynced is changed from false (initial value) to true
-	// when UpstreamHasSynced is called.
+	// upstreamHasSynced 在调用 UpstreamHasSynced 时从 false（初始值）变为 true。
 	upstreamHasSynced atomic.Bool
 
-	// synced gets canceled once both the tracker and upstream are synced.
-	// A context is convenient for this because it gives us a channel
-	// and handles thread-safety.
+	// synced 会在跟踪器与上游都完成同步后被取消。
+	// 用 context 实现很方便：它自带 channel 并处理了线程安全。
 	synced context.Context
 	cancel func()
 }
@@ -158,56 +143,49 @@ func NewSingleFileTracker(name string) *SingleFileTracker {
 	return t
 }
 
-// Start should be called prior to processing each key which is part of the
-// initial list.
+// Start 应在开始处理某个属于初始列表的 key 之前调用。
 func (t *SingleFileTracker) Start() {
 	atomic.AddInt64(&t.count, 1)
 }
 
-// Finished should be called when finished processing a key which was part of
-// the initial list. You must never call Finished() before (or without) its
-// corresponding Start(), that is a logic error that could cause HasSynced to
-// return a wrong value. To help you notice this should it happen, Finished()
-// will panic if the internal counter goes negative.
+// Finished 应在处理完某个属于初始列表的 key 之后调用。绝不能在对应的 Start()
+// 之前（或脱离 Start()）调用 Finished()，那是可能导致 HasSynced 返回错误值的
+// 逻辑错误。为便于发现问题，内部计数器变为负数时 Finished() 会 panic。
 func (t *SingleFileTracker) Finished() {
 	result := atomic.AddInt64(&t.count, -1)
 	if result < 0 {
 		panic("synctrack: negative counter; this logic error means HasSynced may return incorrect value")
 	}
 
-	// Maybe synced now?
+	// 现在可能已经同步了？
 	if result == 0 && t.upstreamHasSynced.Load() {
-		// Mark as synced.
+		// 标记为已同步。
 		t.cancel()
 	}
 }
 
-// UpstreamHasSynced needs to be called at least once as soon as
-// the upstream "has synced" becomes true. It tells SingleFileTracker
-// that the source is synced.
+// 上游的“已同步”变为 true 后，需要尽快至少调用一次 UpstreamHasSynced，
+// 告知 SingleFileTracker 数据源已经同步。
 //
-// Must be called after handing over the initial list to Start.
+// 必须在把初始列表逐个移交给 Start 之后调用。
 func (t *SingleFileTracker) UpstreamHasSynced() {
-	// Upstream is done, but we might not be yet.
+	// 上游已完成，但本端可能还没处理完。
 	t.upstreamHasSynced.Store(true)
 	if atomic.LoadInt64(&t.count) == 0 {
-		// Mark as synced.
+		// 标记为已同步。
 		t.cancel()
 	}
 }
 
-// HasSynced returns true if the source is synced and every key present in the
-// initial list has been processed. This relies on the source not considering
-// itself synced until *after* it has delivered the notification for the last
-// key, and that notification handler must have called Start.
+// HasSynced 在数据源已同步且初始列表中的每个 key 都已处理完毕时返回 true。
+// 这依赖数据源直到*投递完最后一个 key 的通知之后*才认为自身已同步，
+// 且该通知的处理函数必须已经调用过 Start。
 func (t *SingleFileTracker) HasSynced() bool {
 	return t.synced.Err() != nil
 }
 
-// Done returns a channel that is closed if the source is synced and every key present in the
-// initial list has been processed. This relies on the source not considering
-// itself synced until *after* it has delivered the notification for the last
-// key, and that notification handler must have called Start.
+// Done 返回一个 channel：当数据源已同步且初始列表中的每个 key 都已处理完毕时
+// 被关闭。依赖条件与 HasSynced 相同。
 func (t *SingleFileTracker) Done() <-chan struct{} {
 	return t.synced.Done()
 }

@@ -41,7 +41,7 @@ import (
 )
 
 func init() {
-	// Enable klog which is used in dependencies
+	// 启用依赖包中使用的 klog
 	// 依赖链中会打日志；打开详细日志便于失败时定位。
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
@@ -89,9 +89,9 @@ func arrayToChannel(array []watch.Event) chan watch.Event {
 	return ch
 }
 
-// parseResourceVersionOrDie is test-only that code simulating the server and thus can interpret resourceVersion
+// parseResourceVersionOrDie 仅供测试：这是模拟服务端的代码，因此可以自行解析 resourceVersion
 func parseResourceVersionOrDie(resourceVersion string) uint64 {
-	// We can't use etcdstorage.Versioner.ParseResourceVersion() because of imports restrictions
+	// 由于导入限制，无法使用 etcdstorage.Versioner.ParseResourceVersion()
 
 	if resourceVersion == "" {
 		return 0
@@ -111,7 +111,7 @@ func fromRV(resourceVersion string, array []watch.Event) []watch.Event {
 	for _, event := range array {
 		if event.Type == watch.Error {
 			if len(result) == 0 {
-				// Skip error events until we find an object matching RV requirement
+				// 跳过错误事件，直到找到满足 RV 要求的对象
 				continue
 			}
 		} else {
@@ -146,7 +146,7 @@ func closeAfterN(n int, source chan watch.Event) chan watch.Event {
 // unexpectedError 模拟返回了非 Status 的未知错误对象，用于验证 RetryWatcher
 // 不会因类型断言失败而崩溃。
 type unexpectedError struct {
-	// Inheriting any struct fulfilling runtime.Object interface would do.
+	// 继承任意实现 runtime.Object 接口的结构体都可以。
 	metav1.Status
 }
 
@@ -613,10 +613,10 @@ func TestRetryWatcher(t *testing.T) {
 				got = append(got, event)
 			}
 
-			// (Sanity check, best effort) Make sure there are no more events to be received
-			// RetryWatcher proxies the source channel so we can't try reading it immediately
-			// but have to tolerate some delay. Given this is best effort detection we can use short duration.
-			// It also makes sure that for 0 events the watchFunc has time to be called.
+			// （合理性检查，尽力而为）确认没有多余事件可收。
+			// RetryWatcher 代理了源 channel，不能立即去读源，需要容忍一定延迟；
+			// 既然是尽力而为的检测，可以用较短的等待时长。
+			// 这同时确保在事件数为 0 时 watchFunc 有被调用的时间。
 			select {
 			case event, ok := <-watcher.ResultChan():
 				if ok {
@@ -627,8 +627,8 @@ func TestRetryWatcher(t *testing.T) {
 			}
 
 			var counter uint32
-			// We always count with the last watch reestablishing which is imminent but still a race.
-			// We will wait for the last watch to reestablish to avoid it.
+			// 最后一次 watch 重建几乎必然发生但仍存在竞争，我们总是把它计入预期。
+			// 等待最后一次 watch 重建完成以避免该竞争。
 			err = wait.PollImmediate(10*time.Millisecond, 10*time.Second, func() (done bool, err error) {
 				counter = atomic.LoadUint32(atomicCounter)
 				return counter == tc.watchCount, nil
@@ -660,11 +660,11 @@ func TestRetryWatcherToFinishWithUnreadEvents(t *testing.T) {
 		t.Fatalf("failed to create a RetryWatcher: %v", err)
 	}
 
-	// Give the watcher a chance to get to sending events (blocking)
+	// 给 watcher 机会进入发送事件（阻塞）状态
 	time.Sleep(10 * time.Millisecond)
 
 	watcher.Stop()
-	// Verify a second stop does not cause a panic
+	// 校验第二次 Stop 不会引发 panic
 	watcher.Stop()
 
 	maxTime := time.Second
@@ -675,7 +675,7 @@ func TestRetryWatcherToFinishWithUnreadEvents(t *testing.T) {
 		t.Errorf("The watcher failed to be closed in %s", maxTime)
 	}
 
-	// RetryWatcher result channel should be closed
+	// RetryWatcher 的结果 channel 应当已关闭
 	_, ok := <-watcher.ResultChan()
 	if ok {
 		t.Error("ResultChan is not closed")

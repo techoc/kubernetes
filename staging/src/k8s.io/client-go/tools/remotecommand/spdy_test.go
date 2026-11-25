@@ -90,7 +90,7 @@ func fakeMassiveDataAttacher(stdin io.Reader, stdout, stderr io.WriteCloser, tty
 	copyDone := make(chan struct{}, 3)
 
 	if stdin == nil {
-		return errors.New("stdin is requested") // we need stdin to notice the conn break
+		return errors.New("stdin is requested") // 需要 stdin 才能察觉连接断开
 	}
 
 	go func() {
@@ -120,7 +120,7 @@ func fakeMassiveDataAttacher(stdin io.Reader, stdout, stderr io.WriteCloser, tty
 }
 
 // writeMassiveData 反复写入固定内容，直到写入失败（连接关闭）。
-func writeMassiveData(stdStream io.Writer) struct{} { // write to stdin or stdout
+func writeMassiveData(stdStream io.Writer) struct{} { // 写入 stdin 或 stdout
 	for {
 		_, err := io.Copy(stdStream, strings.NewReader("something"))
 		if err != nil && err.Error() != "EOF" {
@@ -194,9 +194,6 @@ func TestSPDYExecutorStream(t *testing.T) {
 	}
 }
 
-// TestSPDYExecutorNonZeroExitCode verifies SPDY v4 status-stream non-zero exit
-// code handling remains compatible with CRI streaming servers.
-//
 // 服务端先写 stdout 再写 NonZeroExitCode 状态；客户端应把错误解析为
 // utilexec.ExitError(17)，同时保留已写入的 stdout 内容。
 func TestSPDYExecutorNonZeroExitCode(t *testing.T) {
@@ -273,7 +270,7 @@ func newTestHTTPServer(f AttachFunc, options *StreamOptions) *httptest.Server {
 		}
 		defer ctx.conn.Close()
 
-		// handle input output
+		// 处理输入输出
 		err = f(ctx.stdinStream, ctx.stdoutStream, ctx.stderrStream, false, nil)
 		if err != nil {
 			ctx.writeStatus(apierrors.NewInternalError(err))
@@ -307,8 +304,6 @@ func attach2Server(ctx context.Context, rawURL string, options StreamOptions) er
 	}
 }
 
-// simplify createHttpStreams , only support StreamProtocolV4Name
-//
 // 服务端只需按 StreamOptions 等待对应数量的流（error/stdout/stdin/stderr），
 // 超出的流类型直接报错，便于发现客户端协议实现偏差。
 func createHTTPStreams(w http.ResponseWriter, req *http.Request, opts *StreamOptions) (*streamContext, error) {
@@ -327,7 +322,7 @@ func createHTTPStreams(w http.ResponseWriter, req *http.Request, opts *StreamOpt
 		conn: conn,
 	}
 
-	// wait for stream
+	// 等待 stream
 	replyChan := make(chan struct{}, 4)
 	defer close(replyChan)
 	receivedStreams := 0
@@ -360,7 +355,7 @@ WaitForStreams:
 				replyChan <- struct{}{}
 				ctx.stderrStream = stream
 			default:
-				// add other stream ...
+				// 其他 stream 类型……
 				return nil, errors.New("unimplemented stream type")
 			}
 		case <-replyChan:
@@ -386,7 +381,7 @@ func v4WriteStatusFunc(stream io.Writer) func(status *apierrors.StatusError) err
 	}
 }
 
-// writeDetector provides a helper method to block until the underlying writer written.
+// writeDetector 提供辅助方法，阻塞直到底层 writer 被写入。
 type writeDetector struct {
 	written chan bool
 	closed  bool
@@ -414,9 +409,8 @@ func (w *writeDetector) Write(p []byte) (n int, err error) {
 	return w.Writer.Write(p)
 }
 
-// `Executor.StreamWithContext` starts a goroutine in the background to do the streaming
-// and expects the deferred close of the connection leads to the exit of the goroutine on cancellation.
-// This test verifies that works.
+// TestStreamExitsAfterConnectionIsClosed 验证 `Executor.StreamWithContext` 在后台
+// 启动 goroutine 做流式传输，且连接被关闭后该 goroutine 会随取消而退出。
 func TestStreamExitsAfterConnectionIsClosed(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	writeDetector := newWriterDetector(&fakeEmptyDataPty{})
@@ -446,10 +440,10 @@ func TestStreamExitsAfterConnectionIsClosed(t *testing.T) {
 		errorChan <- streamer.stream(logger, conn, nil)
 	}()
 
-	// Wait until stream goroutine starts.
+	// 等待 stream goroutine 启动。
 	writeDetector.BlockUntilWritten()
 
-	// Close the connection
+	// 关闭连接
 	conn.Close()
 
 	select {

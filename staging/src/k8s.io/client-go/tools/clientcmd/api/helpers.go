@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package api contains the in-memory representation of kubeconfig files
-// and helpers for manipulating them (merging, flattening, redacting).
-//
+// Package api 包含 kubeconfig 文件的内存表示，以及操作它们
+// （合并、内联 flatten、脱敏 redact）的辅助函数。
 // api 包定义 kubeconfig 的内存模型，以及合并、内联（flatten）、脱敏等辅助函数。
 // 其类型与 v1 外部版本通过 conversion 相互转换。
 package api
@@ -40,7 +39,7 @@ func init() {
 	dataOmittedBytes = []byte(string(sDec))
 }
 
-// IsConfigEmpty returns true if the config is empty.
+// IsConfigEmpty 在配置为空时返回 true。
 func IsConfigEmpty(config *Config) bool {
 	// 只有所有集合与当前上下文都为空才算空配置；Preferences 单独判断。
 	return len(config.AuthInfos) == 0 && len(config.Clusters) == 0 && len(config.Contexts) == 0 &&
@@ -49,9 +48,8 @@ func IsConfigEmpty(config *Config) bool {
 		len(config.Extensions) == 0
 }
 
-// MinifyConfig read the current context and uses that to keep only the relevant pieces of config
-// This is useful for making secrets based on kubeconfig files
-//
+// MinifyConfig 读取当前上下文，并据此只保留配置中相关的部分。
+// 这有利于基于 kubeconfig 文件制作 Secret。
 // MinifyConfig 裁剪配置，只保留 current-context 及其引用的 cluster/user，
 // 以便把 kubeconfig 打包成更小的 Secret。引用的对象缺失时返回错误。
 func MinifyConfig(config *Config) error {
@@ -100,14 +98,13 @@ var (
 	redactedBytes []byte
 )
 
-// ShortenConfig redacts raw data entries from the config object for a human-readable view.
-//
+// ShortenConfig 对配置对象中的原始数据条目做脱敏，便于以人类可读的方式查看。
 // ShortenConfig 就地脱敏配置，用于人读展示：证书/密钥数据替换为 DATA+OMITTED，
 // token 替换为 REDACTED。它直接修改传入对象，如需保留原始值请先深拷贝。
 func ShortenConfig(config *Config) {
-	// trick json encoder into printing a human-readable string in the raw data
-	// by base64 decoding what we want to print. Relies on implementation of
-	// http://golang.org/pkg/encoding/json/#Marshal using base64 to encode []byte
+	// 先对我们想打印的内容做 base64 解码，骗过 json 编码器，让它在原始数据中
+	// 打印出人类可读的字符串。这依赖于
+	// http://golang.org/pkg/encoding/json/#Marshal 用 base64 编码 []byte 的实现。
 	for key, authInfo := range config.AuthInfos {
 		if len(authInfo.ClientKeyData) > 0 {
 			authInfo.ClientKeyData = dataOmittedBytes
@@ -128,8 +125,7 @@ func ShortenConfig(config *Config) {
 	}
 }
 
-// FlattenConfig changes the config object into a self-contained config (useful for making secrets)
-//
+// FlattenConfig 把配置对象变为自包含的配置（有利于制作 Secret）。
 // FlattenConfig 把以文件路径引用的证书/密钥读取进内存，生成不依赖外部文件的配置，
 // 以便存入 Secret 后在任何机器上都能使用。路径先相对 LocationOfOrigin 解析。
 func FlattenConfig(config *Config) error {
@@ -185,12 +181,12 @@ func FlattenContent(path *string, contents *[]byte, baseDir string) error {
 	return nil
 }
 
-// ResolvePath returns the path as an absolute paths, relative to the given base directory
+// ResolvePath 返回相对给定基准目录的绝对路径。
 func ResolvePath(path string, base string) string {
-	// Don't resolve empty paths
+	// 不解析空路径
 	// 空路径与绝对路径都原样返回，避免改变已有语义。
 	if len(path) > 0 {
-		// Don't resolve absolute paths
+		// 不解析绝对路径
 		if !filepath.IsAbs(path) {
 			return filepath.Join(base, path)
 		}
@@ -214,8 +210,7 @@ func MakeAbs(path, base string) (string, error) {
 	return filepath.Join(base, path), nil
 }
 
-// RedactSecrets replaces any sensitive values with REDACTED
-//
+// RedactSecrets 把所有敏感值替换为 REDACTED。
 // RedactSecrets 依据结构体字段的 datapolicy 标签把敏感字段替换为 REDACTED，
 // 用于日志或错误信息中安全地输出配置。
 func RedactSecrets(config *Config) error {

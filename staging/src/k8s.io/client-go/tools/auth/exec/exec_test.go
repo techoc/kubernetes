@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// restInfo holds the rest.Client fields that we care about for test assertions.
+// restInfo 保存测试断言所关心的 rest.Client 字段。
 //
 // 仅抽取与 exec 插件相关信息相关的字段，避免比较整个 rest.Config。
 type restInfo struct {

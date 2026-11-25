@@ -34,18 +34,18 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// resourceVersionGetter is an interface used to get resource version from events.
-// We can't reuse an interface from meta otherwise it would be a cyclic dependency and we need just this one method
+// resourceVersionGetter 是用于从事件获取 resource version 的接口。
+// 不能复用 meta 中的接口，否则会造成循环依赖；这里只需要这一个方法。
 type resourceVersionGetter interface {
 	GetResourceVersion() string
 }
 
-// RetryWatcher will make sure that in case the underlying watcher is closed (e.g. due to API timeout or etcd timeout)
-// it will get restarted from the last point without the consumer even knowing about it.
-// RetryWatcher does that by inspecting events and keeping track of resourceVersion.
-// Especially useful when using watch.UntilWithoutRetry where premature termination is causing issues and flakes.
-// Please note that this is not resilient to etcd cache not having the resource version anymore - you would need to
-// use Informers for that.
+// RetryWatcher 确保底层 watcher 关闭时（如 API 超时或 etcd 超时），
+// 会从上一个位置无感重启，消费者甚至感知不到。
+// 它通过检查事件并跟踪 resourceVersion 来实现。
+// 特别适合配合 watch.UntilWithoutRetry 使用，避免其过早终止导致的问题和抖动。
+// 注意：它无法应对 etcd 缓存中 resource version 已不存在的情况——
+// 那种场景需要使用 Informer。
 type RetryWatcher struct {
 	cancel func(error)
 	// lastResourceVersion 是下一条 watch 的起点；每个事件（包括 bookmark）都会推进它。
@@ -57,19 +57,18 @@ type RetryWatcher struct {
 	minRestartDelay time.Duration
 }
 
-// NewRetryWatcher creates a new RetryWatcher.
-// It will make sure that watches gets restarted in case of recoverable errors.
-// The initialResourceVersion will be given to watch method when first called.
+// NewRetryWatcher 创建一个新的 RetryWatcher。
+// 它会确保 watch 在可恢复错误时自动重启。
+// initialResourceVersion 会在首次调用时传给 watch 方法。
 //
-// Deprecated: use NewRetryWatcherWithContext instead.
-// 旧构造函数没有 ctx，无法在启动前取消。
+// Deprecated: 请改用 NewRetryWatcherWithContext。旧构造函数没有 ctx，无法在启动前取消。
 func NewRetryWatcher(initialResourceVersion string, watcherClient cache.Watcher) (*RetryWatcher, error) {
 	return NewRetryWatcherWithContext(context.Background(), initialResourceVersion, cache.ToWatcherWithContext(watcherClient))
 }
 
-// NewRetryWatcherWithContext creates a new RetryWatcher.
-// It will make sure that watches gets restarted in case of recoverable errors.
-// The initialResourceVersion will be given to watch method when first called.
+// NewRetryWatcherWithContext 创建一个新的 RetryWatcher。
+// 它会确保 watch 在可恢复错误时自动重启。
+// initialResourceVersion 会在首次调用时传给 watch 方法。
 func NewRetryWatcherWithContext(ctx context.Context, initialResourceVersion string, watcherClient cache.WatcherWithContext) (*RetryWatcher, error) {
 	return newRetryWatcher(ctx, initialResourceVersion, watcherClient, 1*time.Second)
 }
@@ -79,8 +78,8 @@ func newRetryWatcher(ctx context.Context, initialResourceVersion string, watcher
 	// RetryWatcher 依赖严格从指定 RV 继续，因此拒绝这两种输入。
 	switch initialResourceVersion {
 	case "", "0":
-		// TODO: revisit this if we ever get WATCH v2 where it means start "now"
-		//       without doing the synthetic list of objects at the beginning (see #74022)
+		// TODO: 如果将来支持 WATCH v2（表示“从现在开始”，且开头
+		//       不再合成一次对象 list，见 #74022），需要重新审视这里的处理。
 		return nil, fmt.Errorf("initial RV %q is not supported due to issues with underlying WATCH", initialResourceVersion)
 	default:
 		break
@@ -103,8 +102,8 @@ func newRetryWatcher(ctx context.Context, initialResourceVersion string, watcher
 }
 
 func (rw *RetryWatcher) send(ctx context.Context, event watch.Event) bool {
-	// Writing to an unbuffered channel is blocking operation
-	// and we need to check if stop wasn't requested while doing so.
+	// 向无缓冲 channel 写入是阻塞操作，
+	// 期间需要检查是否已被要求停止。
 	// 返回 false 表示 ctx 已取消，调用方应终止接收循环。
 	select {
 	case rw.resultChan <- event:
@@ -114,8 +113,8 @@ func (rw *RetryWatcher) send(ctx context.Context, event watch.Event) bool {
 	}
 }
 
-// doReceive returns true when it is done, false otherwise.
-// If it is not done the second return value holds the time to wait before calling it again.
+// doReceive 完成时返回 true，否则返回 false。
+// 未完成时，第二个返回值表示再次调用前需要等待的时长。
 //
 // done=false 表示可恢复，调用方会用 lastResourceVersion 重建 watch；
 // done=true 表示不可继续（ctx 取消、权限错误或数据不一致）。
@@ -124,15 +123,14 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 		ResourceVersion:     rw.lastResourceVersion,
 		AllowWatchBookmarks: true,
 	})
-	// We are very unlikely to hit EOF here since we are just establishing the call,
-	// but it may happen that the apiserver is just shutting down (e.g. being restarted)
-	// This is consistent with how it is handled for informers
+	// 这里几乎不会遇到 EOF（调用刚建立），但也可能碰上 apiserver
+	// 正在关闭（如重启中）。处理方式与 informer 保持一致。
 	switch err {
 	case nil:
 		break
 
 	case io.EOF:
-		// watch closed normally
+		// watch 正常关闭
 		return false, 0
 
 	case io.ErrUnexpectedEOF:
@@ -143,14 +141,13 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 		msg := "Watch failed"
 		if net.IsProbableEOF(err) || net.IsTimeout(err) {
 			klog.FromContext(ctx).V(5).Info(msg, "err", err)
-			// Retry
+			// 重试
 			return false, 0
 		}
 
-		// Check if the watch failed due to the client not having permission to watch the resource or the credentials
-		// being invalid (e.g. expired token).
+		// 检查 watch 是否因客户端没有监听该资源的权限、或凭据无效（如 token 过期）而失败。
 		if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) {
-			// Add more detail since the forbidden message returned by the Kubernetes API is just "unknown".
+			// Kubernetes API 返回的 forbidden 信息只有 "unknown"，这里补充更多细节。
 			klog.FromContext(ctx).Error(err, msg+": ensure the client has valid credentials and watch permissions on the resource")
 
 			if apiStatus, ok := err.(apierrors.APIStatus); ok {
@@ -161,23 +158,23 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 					Object: &statusErr,
 				})
 				if !sent {
-					// This likely means the RetryWatcher is stopping but return false so the caller to doReceive can
-					// verify this and potentially retry.
+					// 这通常意味着 RetryWatcher 正在停止，但返回 false，
+					// 让 doReceive 的调用方可以确认并可能重试。
 					klog.FromContext(ctx).Error(nil, "Failed to send the Unauthorized or Forbidden watch event")
 
 					return false, 0
 				}
 			} else {
-				// This should never happen since apierrors only handles apierrors.APIStatus. Still, this is an
-				// unrecoverable error, so still allow it to return true below.
+				// apierrors 只处理 apierrors.APIStatus，本不该走到这里。
+				// 但这仍属于不可恢复错误，因此下面依旧返回 true。
 				klog.FromContext(ctx).Error(err, msg+": encountered an unexpected Unauthorized or Forbidden error type")
 			}
 
 			return true, 0
 		}
 
-		// Resource expired or 410 Gone errors (e.g. resource version too old)
-		// are expected and recoverable, so log at a lower verbosity instead of ERROR.
+		// Resource expired 或 410 Gone 错误（如 resource version 过旧）
+		// 是预期内且可恢复的，因此用更低的日志级别而非 ERROR。
 		// 这类错误可通过重新 list（informer）或调用方兜底恢复；本组件本身无法补数据。
 		if apierrors.IsResourceExpired(err) || apierrors.IsGone(err) {
 			klog.FromContext(ctx).V(4).Info(msg, "err", err)
@@ -185,13 +182,13 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 		}
 
 		klog.FromContext(ctx).Error(err, msg)
-		// Retry
+		// 重试
 		return false, 0
 	}
 
 	if watcher == nil {
 		klog.FromContext(ctx).Error(nil, "Watch returned nil watcher")
-		// Retry
+		// 重试
 		return false, 0
 	}
 
@@ -209,7 +206,7 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 				return false, 0
 			}
 
-			// We need to inspect the event and get ResourceVersion out of it
+			// 需要检查事件并从中取出 ResourceVersion
 			switch event.Type {
 			case watch.Added, watch.Modified, watch.Deleted, watch.Bookmark:
 				metaObject, ok := event.Object.(resourceVersionGetter)
@@ -218,7 +215,7 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 						Type:   watch.Error,
 						Object: &apierrors.NewInternalError(errors.New("retryWatcher: doesn't support resourceVersion")).ErrStatus,
 					})
-					// We have to abort here because this might cause lastResourceVersion inconsistency by skipping a potential RV with valid data!
+					// 必须在此中止：跳过可能带有有效数据的 RV 会导致 lastResourceVersion 不一致！
 					return true, 0
 				}
 
@@ -228,11 +225,11 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 						Type:   watch.Error,
 						Object: &apierrors.NewInternalError(fmt.Errorf("retryWatcher: object %#v doesn't support resourceVersion", event.Object)).ErrStatus,
 					})
-					// We have to abort here because this might cause lastResourceVersion inconsistency by skipping a potential RV with valid data!
+					// 必须在此中止：跳过可能带有有效数据的 RV 会导致 lastResourceVersion 不一致！
 					return true, 0
 				}
 
-				// All is fine; send the non-bookmark events and update resource version.
+				// 一切正常；发送非 bookmark 事件并更新 resource version。
 				// bookmark 只用于推进 RV，不向消费者投递，以免破坏既有事件语义。
 				if event.Type != watch.Bookmark {
 					ok = rw.send(ctx, event)
@@ -245,12 +242,12 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 				continue
 
 			case watch.Error:
-				// This round trip allows us to handle unstructured status
+				// 经过这一轮转换，我们可以处理非结构化的 status
 				errObject := apierrors.FromObject(event.Object)
 				statusErr, ok := errObject.(*apierrors.StatusError)
 				if !ok {
 					klog.FromContext(ctx).Error(nil, "Received an error which is not *metav1.Status", "errorObject", dump.Pretty(event.Object))
-					// Retry unknown errors
+					// 未知错误则重试
 					return false, 0
 				}
 
@@ -263,25 +260,24 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 
 				switch status.Code {
 				case http.StatusGone:
-					// Never retry RV too old errors
+					// RV too old 错误绝不重试
 					// 410 无法从当前位置续接，必须交给上层重新 list。
 					_ = rw.send(ctx, event)
 					return true, 0
 
 				case http.StatusGatewayTimeout, http.StatusInternalServerError:
-					// Retry
+					// 重试
 					return false, statusDelay
 
 				default:
-					// We retry by default. RetryWatcher is meant to proceed unless it is certain
-					// that it can't. If we are not certain, we proceed with retry and leave it
-					// up to the user to timeout if needed.
+					// 默认重试。除非 RetryWatcher 确定无法继续，否则应尽量前行；
+					// 不确定时继续重试，由使用者自行决定超时。
 
-					// Log here so we have a record of hitting the unexpected error
-					// and we can whitelist some error codes if we missed any that are expected.
+					// 在此记录日志，留下遇到意外错误的痕迹；
+					// 如果遗漏了某些预期内的错误码，可以据此加入白名单。
 					klog.FromContext(ctx).V(5).Info("Retrying after unexpected error", "errorObject", dump.Pretty(event.Object))
 
-					// Retry
+					// 重试
 					return false, statusDelay
 				}
 
@@ -291,14 +287,14 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 					Type:   watch.Error,
 					Object: &apierrors.NewInternalError(fmt.Errorf("retryWatcher failed to recognize Event type %q", event.Type)).ErrStatus,
 				})
-				// We are unable to restart the watch and have to stop the loop or this might cause lastResourceVersion inconsistency by skipping a potential RV with valid data!
+				// 无法重启 watch，必须停止循环，否则跳过可能带有有效数据的 RV 会导致 lastResourceVersion 不一致！
 				return true, 0
 			}
 		}
 	}
 }
 
-// receive reads the result from a watcher, restarting it if necessary.
+// receive 从 watcher 读取结果，必要时重启 watcher。
 func (rw *RetryWatcher) receive(ctx context.Context) {
 	// 退出时两个 channel 都会被关闭：消费者先观察到 resultChan 关闭，
 	// 再通过 Done 确认后台循环已结束。
@@ -312,8 +308,8 @@ func (rw *RetryWatcher) receive(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// We use non sliding until so we don't introduce delays on happy path when WATCH call
-	// timeouts or gets closed and we need to reestablish it while also avoiding hot loops.
+	// 使用非滑动的 until：WATCH 调用超时或被关闭后需要重建时，
+	// 正常路径不会引入额外延迟，同时也避免热循环。
 	// 非滑动间隔：正常路径不会被周期推迟，同时 minRestartDelay 防止忙等。
 	wait.NonSlidingUntilWithContext(ctx, func(ctx context.Context) {
 		done, retryAfter := rw.doReceive(ctx)
@@ -334,18 +330,18 @@ func (rw *RetryWatcher) receive(ctx context.Context) {
 	}, rw.minRestartDelay)
 }
 
-// ResultChan implements Interface.
+// ResultChan 实现 Interface 接口。
 // resultChan 在 receive 退出时关闭，消费者应处理 channel 关闭。
 func (rw *RetryWatcher) ResultChan() <-chan watch.Event {
 	return rw.resultChan
 }
 
-// Stop implements Interface.
+// Stop 实现 Interface 接口。
 func (rw *RetryWatcher) Stop() {
 	rw.cancel(errors.New("asked to stop"))
 }
 
-// Done allows the caller to be notified when Retry watcher stops.
+// Done 让调用方能够获知 RetryWatcher 何时停止。
 func (rw *RetryWatcher) Done() <-chan struct{} {
 	return rw.doneChan
 }

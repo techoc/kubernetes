@@ -54,10 +54,9 @@ var (
 	RecommendedSchemaFile = filepath.Join(RecommendedConfigDir, RecommendedSchemaName)
 )
 
-// currentMigrationRules returns a map that holds the history of recommended home directories used in previous versions.
-// Any future changes to RecommendedHomeFile and related are expected to add a migration rule here, in order to make
-// sure existing config files are migrated to their new locations properly.
-//
+// currentMigrationRules 返回一个映射，记录历史版本使用过的推荐配置目录。
+// 今后对 RecommendedHomeFile 及相关路径的任何改动，都应在此添加迁移规则，
+// 以确保已有配置文件被正确迁移到新位置。
 // 迁移只做“目标不存在时从源复制”，不删除源文件，避免破坏旧版本的并行使用。
 func currentMigrationRules() map[string]string {
 	var oldRecommendedHomeFileName string
@@ -75,9 +74,9 @@ func currentMigrationRules() map[string]string {
 // 便于用内存实现替换文件系统实现。
 type ClientConfigLoader interface {
 	ConfigAccess
-	// IsDefaultConfig returns true if the returned config matches the defaults.
+	// IsDefaultConfig 在返回的配置与默认配置一致时返回 true。
 	IsDefaultConfig(*restclient.Config) bool
-	// Load returns the latest config
+	// Load 返回最新的配置
 	Load() (*clientcmdapi.Config, error)
 }
 
@@ -89,7 +88,7 @@ type ClientConfigGetter struct {
 	kubeconfigGetter KubeconfigGetter
 }
 
-// ClientConfigGetter implements the ClientConfigLoader interface.
+// ClientConfigGetter 实现了 ClientConfigLoader 接口。
 var _ ClientConfigLoader = &ClientConfigGetter{}
 
 // Load 调用底层 getter 取得配置。
@@ -127,38 +126,37 @@ func (g *ClientConfigGetter) IsDefaultConfig(config *restclient.Config) bool {
 	return false
 }
 
-// ClientConfigLoadingRules is an ExplicitPath and string slice of specific locations that are used for merging together a Config
-// Callers can put the chain together however they want, but we'd recommend:
-// EnvVarPathFiles if set (a list of files if set) OR the HomeDirectoryPath
-// ExplicitPath is special, because if a user specifically requests a certain file be used and error is reported if this file is not present
-//
+// ClientConfigLoadingRules 由一个 ExplicitPath 和一组特定位置的切片组成，用于合并出 Config。
+// 调用方可以自行组织加载链，但我们推荐：
+// 若设置了 EnvVarPathFiles 则用它（一个文件列表），否则用 HomeDirectoryPath。
+// ExplicitPath 是特殊的：用户明确指定了某个文件，若该文件不存在就报错。
 // 合并优先级遵循“前面的文件优先”：map 条目先到先得，标量字段则由后到前合并，
 // 详见 Load。
 type ClientConfigLoadingRules struct {
 	ExplicitPath string
 	Precedence   []string
 
-	// MigrationRules is a map of destination files to source files.  If a destination file is not present, then the source file is checked.
-	// If the source file is present, then it is copied to the destination file BEFORE any further loading happens.
+	// MigrationRules 是目标文件到源文件的映射。若目标文件不存在，则检查源文件；
+	// 若源文件存在，则在任何后续加载发生之前把它复制到目标文件。
 	MigrationRules map[string]string
 
-	// DoNotResolvePaths indicates whether or not to resolve paths with respect to the originating files.  This is phrased as a negative so
-	// that a default object that doesn't set this will usually get the behavior it wants.
+	// DoNotResolvePaths 表示是否不相对于来源文件解析路径。特意用否定形式命名，
+	// 这样未设置该字段的默认对象通常就能得到期望的行为。
 	DoNotResolvePaths bool
 
-	// DefaultClientConfig is an optional field indicating what rules to use to calculate a default configuration.
-	// This should match the overrides passed in to ClientConfig loader.
+	// DefaultClientConfig 是可选字段，指示用哪些规则计算默认配置。
+	// 它应当与传给 ClientConfig 加载器的 overrides 一致。
 	DefaultClientConfig ClientConfig
 
-	// WarnIfAllMissing indicates whether the configuration files pointed by KUBECONFIG environment variable are present or not.
-	// In case of missing files, it warns the user about the missing files.
+	// WarnIfAllMissing 控制是否检查 KUBECONFIG 环境变量指向的配置文件是否存在，
+	// 若有缺失文件则向用户发出警告。
 	WarnIfAllMissing bool
 
-	// Warner is the warning log callback to use in case of missing files.
+	// Warner 是发生文件缺失时使用的警告日志回调。
 	Warner WarningHandler
 }
 
-// WarningHandler allows to set the logging function to use
+// WarningHandler 允许设置所使用的日志函数。
 type WarningHandler func(error)
 
 // Warn 在未设置回调时退化为 klog V(1) 日志，保证默认路径不会 panic。
@@ -180,12 +178,11 @@ func (c MissingConfigError) Error() string {
 	return fmt.Sprintf("Config not found: %s", strings.Join(c.Missing, ", "))
 }
 
-// ClientConfigLoadingRules implements the ClientConfigLoader interface.
+// ClientConfigLoadingRules 实现了 ClientConfigLoader 接口。
 var _ ClientConfigLoader = &ClientConfigLoadingRules{}
 
-// NewDefaultClientConfigLoadingRules returns a ClientConfigLoadingRules object with default fields filled in.  You are not required to
-// use this constructor
-//
+// NewDefaultClientConfigLoadingRules 返回填好默认字段的 ClientConfigLoadingRules 对象。
+// 并非必须使用该构造函数。
 // KUBECONFIG 支持用 filepath.SplitList 分隔的多个路径；重复路径会去重，
 // 避免同一文件被合并两次。未设置时退回 ~/.kube/config。
 func NewDefaultClientConfigLoadingRules() *ClientConfigLoadingRules {
@@ -195,7 +192,7 @@ func NewDefaultClientConfigLoadingRules() *ClientConfigLoadingRules {
 	envVarFiles := os.Getenv(RecommendedConfigPathEnvVar)
 	if len(envVarFiles) != 0 {
 		fileList := filepath.SplitList(envVarFiles)
-		// prevent the same path load multiple times
+		// 防止同一路径被加载多次
 		chain = append(chain, deduplicate(fileList)...)
 		warnIfAllMissing = true
 
@@ -210,21 +207,19 @@ func NewDefaultClientConfigLoadingRules() *ClientConfigLoadingRules {
 	}
 }
 
-// Load starts by running the MigrationRules and then
-// takes the loading rules and returns a Config object based on following rules.
+// Load 先执行 MigrationRules，然后根据以下规则按加载规则返回一个 Config 对象：
 //
-//	if the ExplicitPath, return the unmerged explicit file
-//	Otherwise, return a merged config based on the Precedence slice
+//	若有 ExplicitPath，返回未合并的显式文件；
+//	否则返回按 Precedence 切片合并出的配置。
 //
-// A missing ExplicitPath file produces an error. Empty filenames or other missing files are ignored.
-// Read errors or files with non-deserializable content produce errors.
-// The first file to set a particular map key wins and map key's value is never changed.
-// BUT, if you set a struct value that is NOT contained inside of map, the value WILL be changed.
-// This results in some odd looking logic to merge in one direction, merge in the other, and then merge the two.
-// It also means that if two files specify a "red-user", only values from the first file's red-user are used.  Even
-// non-conflicting entries from the second file's "red-user" are discarded.
-// Relative paths inside of the .kubeconfig files are resolved against the .kubeconfig file's parent folder
-// and only absolute file paths are returned.
+// ExplicitPath 文件缺失会产生错误；空文件名和其他缺失文件会被忽略。
+// 读取错误或内容无法反序列化的文件会产生错误。
+// 第一个设置某个 map 键的文件胜出，且该键的值不会再被改动。
+// 但是，若设置的是 map 之外的结构体值，该值会被后面的文件覆盖。
+// 这导致看起来有些奇怪的逻辑：向一个方向合并 map、向另一个方向合并其余部分，再把两者合并。
+// 这也意味着，若两个文件都指定了 "red-user"，只会使用第一个文件中 red-user 的值，
+// 甚至第二个文件 "red-user" 中不冲突的条目也会被丢弃。
+// .kubeconfig 文件内的相对路径会相对该文件的父目录解析，最终只返回绝对文件路径。
 func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
 	// 迁移必须在读取之前完成，否则新路径读不到旧数据。
 	if err := rules.Migrate(); err != nil {
@@ -236,7 +231,7 @@ func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
 
 	kubeConfigFiles := []string{}
 
-	// Make sure a file we were explicitly told to use exists
+	// 确保用户显式指定的文件存在
 	// ExplicitPath 由用户显式指定，缺失应报错而不是静默忽略。
 	if len(rules.ExplicitPath) > 0 {
 		if _, err := os.Stat(rules.ExplicitPath); os.IsNotExist(err) {
@@ -249,18 +244,18 @@ func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
 	}
 
 	kubeconfigs := []*clientcmdapi.Config{}
-	// read and cache the config files so that we only look at them once
+	// 读取并缓存配置文件，保证每个文件只被读取一次
 	for _, filename := range kubeConfigFiles {
 		if len(filename) == 0 {
-			// no work to do
+			// 无需处理
 			continue
 		}
 
 		config, err := LoadFromFile(filename)
 
 		if os.IsNotExist(err) {
-			// skip missing files
-			// Add to the missing list to produce a warning
+			// 跳过缺失的文件
+			// 加入缺失列表以便产生警告
 			missingList = append(missingList, filename)
 			continue
 		}
@@ -277,7 +272,7 @@ func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
 		rules.Warner.Warn(MissingConfigError{Missing: missingList})
 	}
 
-	// first merge all of our maps
+	// 先合并所有的 map：
 	// map 合并按优先级正序，使靠前的文件“先写入者胜出”。
 	mapConfig := clientcmdapi.NewConfig()
 
@@ -287,8 +282,8 @@ func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
 		}
 	}
 
-	// merge all of the struct values in the reverse order so that priority is given correctly
-	// errors are not added to the list the second time
+	// 以相反的顺序合并所有结构体值，从而正确处理优先级；
+	// 第二次合并时错误不再追加到列表。
 	// 标量/结构体字段用反向合并：后合并者覆盖，因此先合并低优先级文件。
 	nonMapConfig := clientcmdapi.NewConfig()
 	for i := len(kubeconfigs) - 1; i >= 0; i-- {
@@ -298,8 +293,8 @@ func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
 		}
 	}
 
-	// since values are overwritten, but maps values are not, we can merge the non-map config on top of the map config and
-	// get the values we expect.
+	// 由于（非 map 的）值会被覆盖而 map 的值不会，把非 map 配置合并到 map 配置之上，
+	// 就能得到期望的结果。
 	// 最后把非 map 结果覆盖到 map 结果上，得到“map 先到先得 + 标量高优先级覆盖”的组合语义。
 	config := clientcmdapi.NewConfig()
 	if err := merge(config, mapConfig); err != nil {
@@ -317,8 +312,8 @@ func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
 	return config, utilerrors.NewAggregate(errlist)
 }
 
-// Migrate uses the MigrationRules map.  If a destination file is not present, then the source file is checked.
-// If the source file is present, then it is copied to the destination file BEFORE any further loading happens.
+// Migrate 使用 MigrationRules 映射。若目标文件不存在，则检查源文件；
+// 若源文件存在，则在任何后续加载发生之前把它复制到目标文件。
 func (rules *ClientConfigLoadingRules) Migrate() error {
 	if rules.MigrationRules == nil {
 		return nil
@@ -326,24 +321,24 @@ func (rules *ClientConfigLoadingRules) Migrate() error {
 
 	for destination, source := range rules.MigrationRules {
 		if _, err := os.Stat(destination); err == nil {
-			// if the destination already exists, do nothing
+			// 目标已存在则什么都不做
 			continue
 		} else if os.IsPermission(err) {
-			// if we can't access the file, skip it
+			// 无法访问文件则跳过
 			continue
 		} else if !os.IsNotExist(err) {
-			// if we had an error other than non-existence, fail
+			// 若不是“不存在”错误，则直接失败
 			return err
 		}
 
 		sourceInfo, err := os.Stat(source)
 		if err != nil {
 			if os.IsNotExist(err) || os.IsPermission(err) {
-				// if the source file doesn't exist or we can't access it, there's no work to do.
+				// 源文件不存在或无法访问时，无需处理。
 				continue
 			}
 
-			// if we had an error other than non-existence, fail
+			// 若不是“不存在”错误，则直接失败
 			return err
 		} else if sourceInfo.IsDir() {
 			return fmt.Errorf("cannot migrate %v to %v because it is a directory", source, destination)
@@ -353,7 +348,7 @@ func (rules *ClientConfigLoadingRules) Migrate() error {
 		if err != nil {
 			return err
 		}
-		// destination created with source perm, but never executable, and subject to umask
+		// 目标文件按源文件权限创建，但永不含可执行位，且仍受 umask 影响。
 		// kubeconfig 可能含凭证，去掉可执行位，并仍受 umask 限制。
 		err = os.WriteFile(destination, data, sourceInfo.Mode().Perm()&0666)
 		if err != nil {
@@ -364,22 +359,20 @@ func (rules *ClientConfigLoadingRules) Migrate() error {
 	return nil
 }
 
-// GetLoadingPrecedence implements ConfigAccess
-//
+// GetLoadingPrecedence 实现 ConfigAccess 接口。
 // 返回副本，防止调用方排序等操作污染内部 Precedence。
 func (rules *ClientConfigLoadingRules) GetLoadingPrecedence() []string {
 	if len(rules.ExplicitPath) > 0 {
 		return []string{rules.ExplicitPath}
 	}
 
-	// Create a copy in case something tries to sort the returned slice.
+	// 创建副本，以防调用方对返回的切片排序。
 	precedence := make([]string, len(rules.Precedence))
 	copy(precedence, rules.Precedence)
 	return precedence
 }
 
-// GetStartingConfig implements ConfigAccess
-//
+// GetStartingConfig 实现 ConfigAccess 接口。
 // 文件不存在时返回空配置而不是错误，符合“首次使用时自动创建”的语义。
 func (rules *ClientConfigLoadingRules) GetStartingConfig() (*clientcmdapi.Config, error) {
 	clientConfig := NewNonInteractiveDeferredLoadingClientConfig(rules, &ConfigOverrides{})
@@ -394,36 +387,36 @@ func (rules *ClientConfigLoadingRules) GetStartingConfig() (*clientcmdapi.Config
 	return &rawConfig, nil
 }
 
-// GetDefaultFilename implements ConfigAccess
+// GetDefaultFilename 实现 ConfigAccess 接口。
 func (rules *ClientConfigLoadingRules) GetDefaultFilename() string {
-	// Explicit file if we have one.
+	// 有显式文件就用显式文件。
 	if rules.IsExplicitFile() {
 		return rules.GetExplicitFile()
 	}
-	// Otherwise, first existing file from precedence.
+	// 否则用优先级列表中第一个存在的文件。
 	for _, filename := range rules.GetLoadingPrecedence() {
 		if _, err := os.Stat(filename); err == nil {
 			return filename
 		}
 	}
-	// If none exists, use the first from precedence.
+	// 若都不存在，用优先级列表的第一项。
 	if len(rules.Precedence) > 0 {
 		return rules.Precedence[0]
 	}
 	return ""
 }
 
-// IsExplicitFile implements ConfigAccess
+// IsExplicitFile 实现 ConfigAccess 接口。
 func (rules *ClientConfigLoadingRules) IsExplicitFile() bool {
 	return len(rules.ExplicitPath) > 0
 }
 
-// GetExplicitFile implements ConfigAccess
+// GetExplicitFile 实现 ConfigAccess 接口。
 func (rules *ClientConfigLoadingRules) GetExplicitFile() string {
 	return rules.ExplicitPath
 }
 
-// IsDefaultConfig returns true if the provided configuration matches the default
+// IsDefaultConfig 在提供的配置与默认配置一致时返回 true。
 func (rules *ClientConfigLoadingRules) IsDefaultConfig(config *restclient.Config) bool {
 	if rules.DefaultClientConfig == nil {
 		return false
@@ -435,8 +428,7 @@ func (rules *ClientConfigLoadingRules) IsDefaultConfig(config *restclient.Config
 	return reflect.DeepEqual(config, defaultConfig)
 }
 
-// LoadFromFile takes a filename and deserializes the contents into Config object
-//
+// LoadFromFile 读取指定文件并把内容反序列化为 Config 对象。
 // 为每个条目记录 LocationOfOrigin，后续才能相对其所在文件解析相对路径。
 func LoadFromFile(filename string) (*clientcmdapi.Config, error) {
 	kubeconfigBytes, err := os.ReadFile(filename)
@@ -450,7 +442,7 @@ func LoadFromFile(filename string) (*clientcmdapi.Config, error) {
 	//nolint:logcheck // A helper function like this should not log. But this is probably part of the the established client-go API and not worth changing.
 	klog.V(6).Infoln("Config loaded from file: ", filename)
 
-	// set LocationOfOrigin on every Cluster, User, and Context
+	// 为每个 Cluster、User、Context 设置 LocationOfOrigin
 	for key, obj := range config.AuthInfos {
 		obj.LocationOfOrigin = filename
 		config.AuthInfos[key] = obj
@@ -478,11 +470,11 @@ func LoadFromFile(filename string) (*clientcmdapi.Config, error) {
 	return config, nil
 }
 
-// Load takes a byte slice and deserializes the contents into Config object.
-// Encapsulates deserialization without assuming the source is a file.
+// Load 接收字节切片并把内容反序列化为 Config 对象。
+// 把反序列化封装起来，不假设数据来源是文件。
 func Load(data []byte) (*clientcmdapi.Config, error) {
 	config := clientcmdapi.NewConfig()
-	// if there's no data in a file, return the default object instead of failing (DecodeInto reject empty input)
+	// 若文件无数据，返回默认对象而不是失败（DecodeInto 拒绝空输入）
 	if len(data) == 0 {
 		return config, nil
 	}
@@ -493,9 +485,8 @@ func Load(data []byte) (*clientcmdapi.Config, error) {
 	return decoded.(*clientcmdapi.Config), nil
 }
 
-// WriteToFile serializes the config to yaml and writes it out to a file.  If not present, it creates the file with the mode 0600.  If it is present
-// it stomps the contents
-//
+// WriteToFile 把配置序列化为 yaml 并写入文件。文件不存在时以 0600 权限创建；
+// 已存在则直接覆盖其内容。
 // 0600 权限防止其他用户读取文件中的凭证；目录用 0755 以便正常的目录遍历。
 func WriteToFile(config clientcmdapi.Config, filename string) error {
 	content, err := Write(config)
@@ -517,10 +508,10 @@ func WriteToFile(config clientcmdapi.Config, filename string) error {
 
 // lockFile 以独占方式创建 "<file>.lock" 作为跨进程锁。
 func lockFile(filename string) error {
-	// TODO: find a way to do this with actual file locks. Will
-	// probably need separate solution for windows and Linux.
+	// TODO：找到使用真正文件锁的办法。Windows 和 Linux
+	// 可能需要各自的方案。
 
-	// Make sure the dir exists before we try to create a lock file.
+	// 创建锁文件之前先确保目录存在。
 	dir := filepath.Dir(filename)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		if err = os.MkdirAll(dir, 0755); err != nil {
@@ -545,8 +536,8 @@ func lockName(filename string) string {
 	return filename + ".lock"
 }
 
-// Write serializes the config to yaml.
-// Encapsulates serialization without assuming the destination is a file.
+// Write 把配置序列化为 yaml。
+// 把序列化封装起来，不假设目标是文件。
 func Write(config clientcmdapi.Config) ([]byte, error) {
 	return runtime.Encode(clientcmdlatest.Codec, &config)
 }
@@ -556,9 +547,8 @@ func (rules ClientConfigLoadingRules) ResolvePaths() bool {
 	return !rules.DoNotResolvePaths
 }
 
-// ResolveLocalPaths resolves all relative paths in the config object with respect to the stanza's LocationOfOrigin
-// this cannot be done directly inside of LoadFromFile because doing so there would make it impossible to load a file without
-// modification of its contents.
+// ResolveLocalPaths 把配置对象中所有相对路径按其所属条目的 LocationOfOrigin 解析。
+// 不能直接在 LoadFromFile 里做这件事，因为那样会导致无法在不改动文件内容的前提下加载文件。
 func ResolveLocalPaths(config *clientcmdapi.Config) error {
 	for _, cluster := range config.Clusters {
 		if len(cluster.LocationOfOrigin) == 0 {
@@ -590,8 +580,8 @@ func ResolveLocalPaths(config *clientcmdapi.Config) error {
 	return nil
 }
 
-// RelativizeClusterLocalPaths first absolutizes the paths by calling ResolveLocalPaths.  This assumes that any NEW path is already
-// absolute, but any existing path will be resolved relative to LocationOfOrigin
+// RelativizeClusterLocalPaths 先调用 ResolveLocalPaths 把路径转为绝对路径。
+// 这假定任何新增路径已经是绝对路径，而已有路径会相对 LocationOfOrigin 解析。
 func RelativizeClusterLocalPaths(cluster *clientcmdapi.Cluster) error {
 	if len(cluster.LocationOfOrigin) == 0 {
 		return fmt.Errorf("no location of origin for %s", cluster.Server)
@@ -611,8 +601,8 @@ func RelativizeClusterLocalPaths(cluster *clientcmdapi.Cluster) error {
 	return nil
 }
 
-// RelativizeAuthInfoLocalPaths first absolutizes the paths by calling ResolveLocalPaths.  This assumes that any NEW path is already
-// absolute, but any existing path will be resolved relative to LocationOfOrigin
+// RelativizeAuthInfoLocalPaths 先调用 ResolveLocalPaths 把路径转为绝对路径。
+// 这假定任何新增路径已经是绝对路径，而已有路径会相对 LocationOfOrigin 解析。
 func RelativizeAuthInfoLocalPaths(authInfo *clientcmdapi.AuthInfo) error {
 	if len(authInfo.LocationOfOrigin) == 0 {
 		return fmt.Errorf("no location of origin for %v", authInfo)
@@ -664,7 +654,7 @@ func GetClusterFileReferences(cluster *clientcmdapi.Cluster) []*string {
 // GetAuthInfoFileReferences 返回用户配置中需要解析的路径字段。
 func GetAuthInfoFileReferences(authInfo *clientcmdapi.AuthInfo) []*string {
 	s := []*string{&authInfo.ClientCertificate, &authInfo.ClientKey, &authInfo.TokenFile}
-	// Only resolve exec command if it isn't PATH based.
+	// 仅当 exec 命令不是基于 PATH 查找时才解析。
 	// 不含路径分隔符的命令依赖 PATH 查找，不能被改写为绝对路径。
 	if authInfo.Exec != nil && strings.ContainsRune(authInfo.Exec.Command, filepath.Separator) {
 		s = append(s, &authInfo.Exec.Command)
@@ -672,12 +662,12 @@ func GetAuthInfoFileReferences(authInfo *clientcmdapi.AuthInfo) []*string {
 	return s
 }
 
-// ResolvePaths updates the given refs to be absolute paths, relative to the given base directory
+// ResolvePaths 把给定的引用更新为相对给定基准目录的绝对路径。
 func ResolvePaths(refs []*string, base string) error {
 	for _, ref := range refs {
-		// Don't resolve empty paths
+		// 不解析空路径
 		if len(*ref) > 0 {
-			// Don't resolve absolute paths
+			// 不解析绝对路径
 			if !filepath.IsAbs(*ref) {
 				*ref = filepath.Join(base, *ref)
 			}
@@ -686,20 +676,20 @@ func ResolvePaths(refs []*string, base string) error {
 	return nil
 }
 
-// RelativizePathWithNoBacksteps updates the given refs to be relative paths, relative to the given base directory as long as they do not require backsteps.
-// Any path requiring a backstep is left as-is as long it is absolute.  Any non-absolute path that can't be relativized produces an error
-//
+// RelativizePathWithNoBacksteps 在不需要回溯（backstep）的前提下，把给定引用更新为
+// 相对给定基准目录的相对路径。需要回溯的路径若已是绝对路径则保持不变；
+// 无法相对化的非绝对路径会产生错误。
 // 禁止 ".." 前缀是为了让配置文件在移动/分发时不意外指向父目录之外。
 func RelativizePathWithNoBacksteps(refs []*string, base string) error {
 	for _, ref := range refs {
-		// Don't relativize empty paths
+		// 不相对化空路径
 		if len(*ref) > 0 {
 			rel, err := MakeRelative(*ref, base)
 			if err != nil {
 				return err
 			}
 
-			// if we have a backstep, don't mess with the path
+			// 若出现回溯，就不改动该路径
 			if strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 				if filepath.IsAbs(*ref) {
 					continue
@@ -726,7 +716,7 @@ func MakeRelative(path, base string) (string, error) {
 	return path, nil
 }
 
-// deduplicate removes any duplicated values and returns a new slice, keeping the order unchanged
+// deduplicate 去除重复值并返回新切片，顺序保持不变。
 func deduplicate(s []string) []string {
 	encountered := map[string]bool{}
 	ret := make([]string, 0)

@@ -27,26 +27,24 @@ import (
 	"k8s.io/client-go/util/watchlist"
 )
 
-// Lister is any object that knows how to perform an initial list.
+// Lister 是任何知道如何执行初始 list 的对象。
 //
-// Ideally, all implementations of Lister should also implement ListerWithContext.
+// 理想情况下，Lister 的所有实现都应同时实现 ListerWithContext。
 type Lister interface {
-	// List should return a list type object; the Items field will be extracted, and the
-	// ResourceVersion field will be used to start the watch in the right place.
+	// List 应返回一个 list 类型对象；Items 字段会被提取出来，
+	// ResourceVersion 字段用于在正确的位置启动 watch。
 	//
-	// Deprecated: use ListerWithContext.ListWithContext instead.
-	//
-	// 已弃用：新代码应使用 ListerWithContext，以便传递取消信号与上下文日志。
+	// Deprecated: 请改用 ListerWithContext.ListWithContext，以便传递取消信号与上下文日志。
 	List(options metav1.ListOptions) (runtime.Object, error)
 }
 
-// ListerWithContext is any object that knows how to perform an initial list.
+// ListerWithContext 是任何知道如何执行初始 list 的对象。
 //
 // 返回列表对象的 ResourceVersion 是 Reflector 继续 watch 的起点，
 // 因此实现必须保留服务端返回的 RV，不能自行清零。
 type ListerWithContext interface {
-	// ListWithContext should return a list type object; the Items field will be extracted, and the
-	// ResourceVersion field will be used to start the watch in the right place.
+	// ListWithContext 应返回一个 list 类型对象；Items 字段会被提取出来，
+	// ResourceVersion 字段用于在正确的位置启动 watch。
 	ListWithContext(ctx context.Context, options metav1.ListOptions) (runtime.Object, error)
 }
 
@@ -70,29 +68,25 @@ func (l listerWrapper) ListWithContext(ctx context.Context, options metav1.ListO
 	return l.parent.List(options)
 }
 
-// Watcher is any object that knows how to start a watch on a resource.
+// Watcher 是任何知道如何在资源上启动 watch 的对象。
 //
-// Ideally, all implementations of Watcher should also implement WatcherWithContext.
+// 理想情况下，Watcher 的所有实现都应同时实现 WatcherWithContext。
 type Watcher interface {
-	// Watch should begin a watch at the specified version.
+	// Watch 应从指定版本开始建立 watch。
 	//
-	// If Watch returns an error, it should handle its own cleanup, including
-	// but not limited to calling Stop() on the watch, if one was constructed.
-	// This allows the caller to ignore the watch, if the error is non-nil.
+	// 如果 Watch 返回错误，它应自行完成清理，包括但不限于对已构造的
+	// watch 调用 Stop()。这样当错误非空时，调用方可以完全忽略 watch。
 	//
-	// Deprecated: use WatcherWithContext.WatchWithContext instead.
-	//
-	// 已弃用：新代码应使用 WatcherWithContext。
+	// Deprecated: 请改用 WatcherWithContext.WatchWithContext。
 	Watch(options metav1.ListOptions) (watch.Interface, error)
 }
 
-// WatcherWithContext is any object that knows how to start a watch on a resource.
+// WatcherWithContext 是任何知道如何在资源上启动 watch 的对象。
 type WatcherWithContext interface {
-	// WatchWithContext should begin a watch at the specified version.
+	// WatchWithContext 应从指定版本开始建立 watch。
 	//
-	// If Watch returns an error, it should handle its own cleanup, including
-	// but not limited to calling Stop() on the watch, if one was constructed.
-	// This allows the caller to ignore the watch, if the error is non-nil.
+	// 如果 WatchWithContext 返回错误，它应自行完成清理，包括但不限于对已构造的
+	// watch 调用 Stop()。这样当错误非空时，调用方可以完全忽略 watch。
 	WatchWithContext(ctx context.Context, options metav1.ListOptions) (watch.Interface, error)
 }
 
@@ -115,15 +109,15 @@ func (l watcherWrapper) WatchWithContext(ctx context.Context, options metav1.Lis
 	return l.parent.Watch(options)
 }
 
-// ListerWatcher is any object that knows how to perform an initial list and start a watch on a resource.
+// ListerWatcher 是任何知道如何执行初始 list 并在资源上启动 watch 的对象。
 //
-// Ideally, all implementations of ListerWatcher should also implement ListerWatcherWithContext.
+// 理想情况下，ListerWatcher 的所有实现都应同时实现 ListerWatcherWithContext。
 type ListerWatcher interface {
 	Lister
 	Watcher
 }
 
-// ListerWatcherWithContext is any object that knows how to perform an initial list and start a watch on a resource.
+// ListerWatcherWithContext 是任何知道如何执行初始 list 并在资源上启动 watch 的对象。
 type ListerWatcherWithContext interface {
 	ListerWithContext
 	WatcherWithContext
@@ -148,15 +142,13 @@ type listerWatcherWrapper struct {
 type listWatcherWithWatchListSemanticsWrapper struct {
 	*ListWatch
 
-	// unsupportedWatchListSemantics indicates whether a client explicitly does NOT support
-	// WatchList semantics.
+	// unsupportedWatchListSemantics 表示该客户端显式“不”支持 WatchList 语义。
 	//
-	// Over the years, unit tests in kube have been written in many different ways.
-	// After enabling the WatchListClient feature by default, existing tests started failing.
-	// To avoid breaking lots of existing client-go users after upgrade,
-	// we introduced this field as an opt-in.
+	// 多年来 kube 的单元测试写法各不相同。默认启用 WatchListClient 特性后，
+	// 已有测试开始失败。为了避免升级后破坏大量现有 client-go 用户，
+	// 我们把该字段设计为可选项。
 	//
-	// When true, the reflector disables WatchList even if the feature gate is enabled.
+	// 为 true 时，即使 feature gate 已开启，reflector 也会禁用 WatchList。
 	unsupportedWatchListSemantics bool
 }
 
@@ -165,10 +157,8 @@ func (lw *listWatcherWithWatchListSemanticsWrapper) IsWatchListSemanticsUnSuppor
 	return lw.unsupportedWatchListSemantics
 }
 
-// ToListWatcherWithWatchListSemantics returns a ListerWatcher
-// that knows whether the provided client explicitly
-// does NOT support the WatchList semantics. This allows Reflectors
-// to adapt their behavior based on client capabilities.
+// ToListWatcherWithWatchListSemantics 返回一个 ListerWatcher，它能感知所给客户端
+// 是否显式不支持 WatchList 语义，从而让 Reflector 依据客户端能力调整行为。
 func ToListWatcherWithWatchListSemantics(lw *ListWatch, client any) ListerWatcher {
 	return &listWatcherWithWatchListSemanticsWrapper{
 		lw,
@@ -176,53 +166,43 @@ func ToListWatcherWithWatchListSemantics(lw *ListWatch, client any) ListerWatche
 	}
 }
 
-// ListFunc knows how to list resources
+// ListFunc 表示知道如何 list 资源。
 //
-// Deprecated: use ListWithContextFunc instead.
-//
-// 已弃用：新代码应使用 ListWithContextFunc。
+// Deprecated: 请改用 ListWithContextFunc。
 type ListFunc func(options metav1.ListOptions) (runtime.Object, error)
 
-// ListWithContextFunc knows how to list resources
+// ListWithContextFunc 表示知道如何 list 资源。
 type ListWithContextFunc func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error)
 
-// WatchFunc knows how to watch resources
+// WatchFunc 表示知道如何 watch 资源。
 //
-// Deprecated: use WatchFuncWithContext instead.
-//
-// 已弃用：新代码应使用 WatchFuncWithContext。
+// Deprecated: 请改用 WatchFuncWithContext。
 type WatchFunc func(options metav1.ListOptions) (watch.Interface, error)
 
-// WatchFuncWithContext knows how to watch resources
+// WatchFuncWithContext 表示知道如何 watch 资源。
 type WatchFuncWithContext func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error)
 
-// ListWatch knows how to list and watch a set of apiserver resources.
-// It satisfies the ListerWatcher and ListerWatcherWithContext interfaces.
-// It is a convenience function for users of NewReflector, etc.
-// ListFunc or ListWithContextFunc must be set. Same for WatchFunc and WatchFuncWithContext.
-// ListWithContextFunc and WatchFuncWithContext are preferred if
-// a context is available, otherwise ListFunc and WatchFunc.
+// ListWatch 知道如何 list 和 watch 一组 apiserver 资源，同时满足
+// ListerWatcher 与 ListerWatcherWithContext 接口，是 NewReflector 等
+// 使用方的便捷封装。ListFunc 与 ListWithContextFunc 必须至少设置其一，
+// WatchFunc 与 WatchFuncWithContext 同理；若手头有 context，
+// 优先使用 ListWithContextFunc 和 WatchFuncWithContext。
 //
-// Beware of the inconsistent naming of the two WithContext methods.
-// This was unintentional, but fixing it now would force the ecosystem
-// to go through a breaking Go API change and was deemed not worth it.
+// 注意两个 WithContext 方法的命名并不一致。这属于无心之失，但修正它
+// 会迫使整个生态经历一次破坏性的 Go API 变更，被认为得不偿失。
 //
-// NewFilteredListWatchFromClient sets all of the functions to ensure that callers
-// which only know about ListFunc and WatchFunc continue to work.
+// NewFilteredListWatchFromClient 会同时设置所有函数字段，确保只认识
+// ListFunc 和 WatchFunc 的调用方继续可用。
 type ListWatch struct {
-	// Deprecated: use ListWithContext instead.
-	//
-	// 已弃用：新代码应使用 ListWithContext。
+	// Deprecated: 请改用 ListWithContextFunc。
 	ListFunc ListFunc
-	// Deprecated: use WatchWithContext instead.
-	//
-	// 已弃用：新代码应使用 WatchWithContext。
+	// Deprecated: 请改用 WatchFuncWithContext。
 	WatchFunc WatchFunc
 
 	ListWithContextFunc  ListWithContextFunc
 	WatchFuncWithContext WatchFuncWithContext
 
-	// DisableChunking requests no chunking for this list watcher.
+	// DisableChunking 请求该 list watcher 不做分块。
 	// 分块列表可降低单次响应大小，但某些服务端/代理不支持，故提供关闭开关。
 	DisableChunking bool
 }
@@ -232,13 +212,13 @@ var (
 	_ ListerWatcherWithContext = &ListWatch{}
 )
 
-// Getter interface knows how to access Get method from RESTClient.
+// Getter 是知道如何访问 RESTClient 的 Get 方法的接口。
 type Getter interface {
 	Get() *restclient.Request
 }
 
-// NewListWatchFromClient creates a new ListWatch from the specified client, resource, namespace and field selector.
-// For backward compatibility, all function fields are populated.
+// NewListWatchFromClient 基于指定的 client、resource、namespace 和字段选择器
+// 创建一个新的 ListWatch。为向后兼容，所有函数字段都会被填充。
 //
 // fieldSelector 通过字符串写入 ListOptions，与服务端字段选择器语法一致。
 func NewListWatchFromClient(c Getter, resource string, namespace string, fieldSelector fields.Selector) *ListWatch {
@@ -248,10 +228,10 @@ func NewListWatchFromClient(c Getter, resource string, namespace string, fieldSe
 	return NewFilteredListWatchFromClient(c, resource, namespace, optionsModifier)
 }
 
-// NewFilteredListWatchFromClient creates a new ListWatch from the specified client, resource, namespace, and option modifier.
-// Option modifier is a function takes a ListOptions and modifies the consumed ListOptions. Provide customized modifier function
-// to apply modification to ListOptions with a field selector, a label selector, or any other desired options.
-// For backward compatibility, all function fields are populated.
+// NewFilteredListWatchFromClient 基于指定的 client、resource、namespace 和选项修改函数
+// 创建一个新的 ListWatch。选项修改函数接收 ListOptions 并修改最终使用的值，
+// 可传入自定义 modifier 来设置字段选择器、标签选择器或其他所需选项。
+// 为向后兼容，所有函数字段都会被填充。
 //
 // 同时填充旧/新两组函数字段，使只认识 ListFunc/WatchFunc 的调用方无需修改。
 func NewFilteredListWatchFromClient(c Getter, resource string, namespace string, optionsModifier func(options *metav1.ListOptions)) *ListWatch {
@@ -299,22 +279,22 @@ func NewFilteredListWatchFromClient(c Getter, resource string, namespace string,
 	}
 }
 
-// List a set of apiserver resources
+// List 列举一组 apiserver 资源。
 //
-// Deprecated: use ListWatchWithContext.ListWithContext instead.
+// Deprecated: 请改用 ListWithContext。
 func (lw *ListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
-	// ListWatch is used in Reflector, which already supports pagination.
-	// Don't paginate here to avoid duplication.
+	// ListWatch 用在 Reflector 中，后者本身已支持分页。
+	// 这里不再分页，避免重复。
 	if lw.ListFunc != nil {
 		return lw.ListFunc(options)
 	}
 	return lw.ListWithContextFunc(context.Background(), options)
 }
 
-// List a set of apiserver resources
+// ListWithContext 列举一组 apiserver 资源。
 func (lw *ListWatch) ListWithContext(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-	// ListWatch is used in Reflector, which already supports pagination.
-	// Don't paginate here to avoid duplication.
+	// ListWatch 用在 Reflector 中，后者本身已支持分页。
+	// 这里不再分页，避免重复。
 	// 优先新接口；仅设置旧字段时回退，保证向后兼容。
 	if lw.ListWithContextFunc != nil {
 		return lw.ListWithContextFunc(ctx, options)
@@ -322,9 +302,9 @@ func (lw *ListWatch) ListWithContext(ctx context.Context, options metav1.ListOpt
 	return lw.ListFunc(options)
 }
 
-// Watch a set of apiserver resources
+// Watch 监听一组 apiserver 资源。
 //
-// Deprecated: use ListWatchWithContext.WatchWithContext instead.
+// Deprecated: 请改用 WatchWithContext。
 func (lw *ListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
 	if lw.WatchFunc != nil {
 		return lw.WatchFunc(options)
@@ -332,7 +312,7 @@ func (lw *ListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) 
 	return lw.WatchFuncWithContext(context.Background(), options)
 }
 
-// Watch a set of apiserver resources
+// WatchWithContext 监听一组 apiserver 资源。
 func (lw *ListWatch) WatchWithContext(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 	if lw.WatchFuncWithContext != nil {
 		return lw.WatchFuncWithContext(ctx, options)

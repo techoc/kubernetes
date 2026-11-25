@@ -34,12 +34,12 @@ var (
 	ErrNoContext = errors.New("no context chosen")
 	// ErrEmptyConfig 用 errEmptyConfig 类型承载，以便 IsEmptyConfig 能通过类型断言识别。
 	ErrEmptyConfig = NewEmptyConfigError("no configuration has been provided, try setting KUBERNETES_MASTER environment variable")
-	// message is for consistency with old behavior
+	// 错误文本沿用旧行为以保持一致
 	// ErrEmptyCluster 保留旧错误文本，调用方可能依赖它做字符串判断。
 	ErrEmptyCluster = errors.New("cluster has no server defined")
 )
 
-// NewEmptyConfigError returns an error wrapping the given message which IsEmptyConfig() will recognize as an empty config error
+// NewEmptyConfigError 返回包装了给定信息的错误，IsEmptyConfig() 会将其识别为空配置错误
 func NewEmptyConfigError(message string) error {
 	return &errEmptyConfig{message}
 }
@@ -61,8 +61,7 @@ func (e *errContextNotFound) Error() string {
 	return fmt.Sprintf("context was not found for specified context: %v", e.ContextName)
 }
 
-// IsContextNotFound returns a boolean indicating whether the error is known to
-// report that a context was not found
+// IsContextNotFound 返回一个布尔值，表示该错误是否表示未找到 context
 func IsContextNotFound(err error) bool {
 	if err == nil {
 		return false
@@ -74,8 +73,7 @@ func IsContextNotFound(err error) bool {
 	return strings.Contains(err.Error(), "context was not found for specified context")
 }
 
-// IsEmptyConfig returns true if the provided error indicates the provided configuration
-// is empty.
+// IsEmptyConfig 在给定错误表示所提供的配置为空时返回 true。
 // 空配置可能被包装在聚合错误中，因此两种形态都要识别；聚合里必须只有空配置错误，
 // 否则说明还存在其他真实问题，不能简单当作“没配”。
 func IsEmptyConfig(err error) bool {
@@ -91,12 +89,12 @@ func IsEmptyConfig(err error) bool {
 	return ok
 }
 
-// errConfigurationInvalid is a set of errors indicating the configuration is invalid.
+// errConfigurationInvalid 表示配置无效的一组错误。
 //
 // 它同时充当错误集合与 utilerrors.Aggregate，既保留全部校验错误，又能参与 errors.Is 判定。
 type errConfigurationInvalid []error
 
-// errConfigurationInvalid implements error and Aggregate
+// errConfigurationInvalid 实现 error 和 Aggregate 接口
 var _ error = errConfigurationInvalid{}
 var _ utilerrors.Aggregate = errConfigurationInvalid{}
 
@@ -109,17 +107,17 @@ func newErrConfigurationInvalid(errs []error) error {
 	}
 }
 
-// Error implements the error interface
+// Error 实现 error 接口
 func (e errConfigurationInvalid) Error() string {
 	return fmt.Sprintf("invalid configuration: %v", utilerrors.NewAggregate(e).Error())
 }
 
-// Errors implements the utilerrors.Aggregate interface
+// Errors 实现 utilerrors.Aggregate 接口
 func (e errConfigurationInvalid) Errors() []error {
 	return e
 }
 
-// Is implements the utilerrors.Aggregate interface
+// Is 实现 utilerrors.Aggregate 接口
 func (e errConfigurationInvalid) Is(target error) bool {
 	return e.visit(func(err error) bool {
 		return errors.Is(err, target)
@@ -150,7 +148,7 @@ func (e errConfigurationInvalid) visit(f func(err error) bool) bool {
 	return false
 }
 
-// IsConfigurationInvalid returns true if the provided error indicates the configuration is invalid.
+// IsConfigurationInvalid 在给定错误表示配置无效时返回 true。
 func IsConfigurationInvalid(err error) bool {
 	switch err.(type) {
 	case *errContextNotFound, errConfigurationInvalid:
@@ -159,7 +157,7 @@ func IsConfigurationInvalid(err error) bool {
 	return IsContextNotFound(err)
 }
 
-// Validate checks for errors in the Config.  It does not return early so that it can find as many errors as possible.
+// Validate 检查 Config 中的错误。它不会提前返回，以便尽可能多地发现问题。
 //
 // 校验覆盖 current-context 是否存在、每个 context 的引用关系、各用户与集群自身的一致性。
 func Validate(config clientcmdapi.Config) error {
@@ -190,8 +188,8 @@ func Validate(config clientcmdapi.Config) error {
 	return newErrConfigurationInvalid(validationErrors)
 }
 
-// ConfirmUsable looks a particular context and determines if that particular part of the config is useable.  There might still be errors in the config,
-// but no errors in the sections requested or referenced.  It does not return early so that it can find as many errors as possible.
+// ConfirmUsable 检查特定 context，判断配置中该部分是否可用。配置中可能仍有错误，
+// 但所请求或引用的部分没有错误。它不会提前返回，以便尽可能多地发现问题。
 //
 // 与 Validate 的差别在于只检查当前 context 及其引用，忽略其他未使用的配置项。
 func ConfirmUsable(config clientcmdapi.Config, passedContextName string) error {
@@ -220,7 +218,7 @@ func ConfirmUsable(config clientcmdapi.Config, passedContextName string) error {
 	if exists {
 		validationErrors = append(validationErrors, validateContext(contextName, *context, config)...)
 
-		// Default to empty users and clusters and let the validation function report an error.
+		// 用户与集群缺省为空对象，交由校验函数报告错误。
 		authInfo := config.AuthInfos[context.AuthInfo]
 		if authInfo == nil {
 			authInfo = &clientcmdapi.AuthInfo{}
@@ -237,7 +235,7 @@ func ConfirmUsable(config clientcmdapi.Config, passedContextName string) error {
 	return newErrConfigurationInvalid(validationErrors)
 }
 
-// validateClusterInfo looks for conflicts and errors in the cluster info
+// validateClusterInfo 检查 cluster info 中的冲突和错误
 //
 // 只做静态检查：server 非空、proxy-url 可解析、CA 的 file 与 data 不同时存在且文件可读。
 func validateClusterInfo(clusterName string, clusterInfo clientcmdapi.Cluster) []error {
@@ -260,7 +258,7 @@ func validateClusterInfo(clusterName string, clusterInfo clientcmdapi.Cluster) [
 			validationErrors = append(validationErrors, fmt.Errorf("invalid 'proxy-url' %q for cluster %q: %w", proxyURL, clusterName, err))
 		}
 	}
-	// Make sure CA data and CA file aren't both specified
+	// 确保 CA 数据与 CA 文件没有同时指定
 	if len(clusterInfo.CertificateAuthority) != 0 && len(clusterInfo.CertificateAuthorityData) != 0 {
 		validationErrors = append(validationErrors, fmt.Errorf("certificate-authority-data and certificate-authority are both specified for %v. certificate-authority-data will override.", clusterName))
 	}
@@ -276,7 +274,7 @@ func validateClusterInfo(clusterName string, clusterInfo clientcmdapi.Cluster) [
 	return validationErrors
 }
 
-// validateAuthInfo looks for conflicts and errors in the auth info
+// validateAuthInfo 检查 auth info 中的冲突和错误
 //
 // 重点检查互斥的认证方式、证书与私钥的配对，以及 exec 插件必填字段（命令、apiVersion、
 // interactiveMode、env 名与非空插件策略）。
@@ -293,15 +291,15 @@ func validateAuthInfo(authInfoName string, authInfo clientcmdapi.AuthInfo) []err
 	}
 
 	if len(authInfo.ClientCertificate) != 0 || len(authInfo.ClientCertificateData) != 0 {
-		// Make sure cert data and file aren't both specified
+		// 确保证书数据与证书文件没有同时指定
 		if len(authInfo.ClientCertificate) != 0 && len(authInfo.ClientCertificateData) != 0 {
 			validationErrors = append(validationErrors, fmt.Errorf("client-cert-data and client-cert are both specified for %v. client-cert-data will override.", authInfoName))
 		}
-		// Make sure key data and file aren't both specified
+		// 确保私钥数据与私钥文件没有同时指定
 		if len(authInfo.ClientKey) != 0 && len(authInfo.ClientKeyData) != 0 {
 			validationErrors = append(validationErrors, fmt.Errorf("client-key-data and client-key are both specified for %v; client-key-data will override", authInfoName))
 		}
-		// Make sure a key is specified
+		// 确保已指定私钥
 		if len(authInfo.ClientKey) == 0 && len(authInfo.ClientKeyData) == 0 {
 			validationErrors = append(validationErrors, fmt.Errorf("client-key-data or client-key must be specified for %v to use the clientCert authentication method.", authInfoName))
 		}
@@ -343,7 +341,7 @@ func validateAuthInfo(authInfoName string, authInfo clientcmdapi.AuthInfo) []err
 		case "":
 			validationErrors = append(validationErrors, fmt.Errorf("interactiveMode must be specified for %v to use exec authentication plugin", authInfoName))
 		case clientcmdapi.NeverExecInteractiveMode, clientcmdapi.IfAvailableExecInteractiveMode, clientcmdapi.AlwaysExecInteractiveMode:
-			// These are valid
+			// 这些都是合法取值
 		default:
 			validationErrors = append(validationErrors, fmt.Errorf("invalid interactiveMode for %v: %q", authInfoName, authInfo.Exec.InteractiveMode))
 		}
@@ -353,19 +351,19 @@ func validateAuthInfo(authInfoName string, authInfo clientcmdapi.AuthInfo) []err
 		}
 	}
 
-	// authPath also provides information for the client to identify the server, so allow multiple auth methods in that case
+	// authPath 同时提供了客户端识别服务端所需的信息，因此这种情况下允许多种认证方式并存
 	if (len(methods) > 1) && (!usingAuthPath) {
 		validationErrors = append(validationErrors, fmt.Errorf("more than one authentication method found for %v; found %v, only one is allowed", authInfoName, methods))
 	}
 
-	// ImpersonateUID, ImpersonateGroups or ImpersonateUserExtra should be requested with a user
+	// ImpersonateUID、ImpersonateGroups 或 ImpersonateUserExtra 必须与 Impersonate 用户一起使用
 	if (len(authInfo.ImpersonateUID) > 0 || len(authInfo.ImpersonateGroups) > 0 || len(authInfo.ImpersonateUserExtra) > 0) && (len(authInfo.Impersonate) == 0) {
 		validationErrors = append(validationErrors, fmt.Errorf("requesting uid, groups or user-extra for %v without impersonating a user", authInfoName))
 	}
 	return validationErrors
 }
 
-// validateContext looks for errors in the context.  It is not transitive, so errors in the reference authInfo or cluster configs are not included in this return
+// validateContext 检查 context 中的错误。它不具有传递性，因此所引用的 authInfo 或 cluster 配置中的错误不包含在返回值里
 //
 // “非传递”意味着这里只确认引用目标存在，目标内部的配置错误由各自校验函数负责。
 func validateContext(contextName string, context clientcmdapi.Context, config clientcmdapi.Config) []error {

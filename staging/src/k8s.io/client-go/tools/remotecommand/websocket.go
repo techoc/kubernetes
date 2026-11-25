@@ -36,9 +36,8 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
-// writeDeadline defines the time that a client-side write to the websocket
-// connection must complete before an i/o timeout occurs.
-//
+// writeDeadline 定义客户端向 WebSocket 连接写入必须在多长时间内完成，
+// 超时即产生 i/o 超时错误。
 // 写超时防止对端停止读取时写协程永久阻塞，进而让整个命令无法收尾。
 const writeDeadline = 60 * time.Second
 
@@ -59,17 +58,15 @@ var (
 )
 
 const (
-	// pingPeriod defines how often a heartbeat "ping" message is sent.
+	// pingPeriod 定义发送心跳 "ping" 消息的频率。
 	pingPeriod = 5 * time.Second
-	// pingReadDeadline defines the time waiting for a response heartbeat
-	// "pong" message before a timeout error occurs for websocket reading.
-	// This duration must always be greater than the "pingPeriod". By defining
-	// this deadline in terms of the ping period, we are essentially saying
-	// we can drop "X" (e.g. 12) pings before firing the timeout.
+	// pingReadDeadline 定义在 WebSocket 读取超时报错前，等待响应心跳 "pong"
+	// 消息的时间。该时长必须始终大于 "pingPeriod"。以 ping 周期来定义这个
+	// 截止时间，相当于允许在触发超时前丢弃 "X"（例如 12）个 ping。
 	pingReadDeadline = (pingPeriod * 12) + (1 * time.Second)
 )
 
-// wsStreamExecutor handles transporting standard shell streams over an httpstream connection.
+// wsStreamExecutor 负责通过 httpstream 连接传输标准 shell 流。
 //
 // 与 SPDY 不同，WebSocket 没有原生的多流复用，所有流共用一条连接，
 // 因此写入必须串行化，读端依靠每帧首字节的流 ID 解复用。
@@ -78,27 +75,25 @@ type wsStreamExecutor struct {
 	upgrader  websocket.ConnectionHolder
 	method    string
 	url       string
-	// requested protocols in priority order (e.g. v5.channel.k8s.io before v4.channel.k8s.io).
+	// 按优先级排列的请求协议（例如 v5.channel.k8s.io 优先于 v4.channel.k8s.io）。
 	protocols []string
-	// selected protocol from the handshake process; could be empty string if handshake fails.
+	// 握手过程中选定的协议；握手失败时可能为空字符串。
 	negotiated string
-	// period defines how often a "ping" heartbeat message is sent to the other endpoint.
+	// 向对端发送 "ping" 心跳消息的频率。
 	heartbeatPeriod time.Duration
-	// deadline defines the amount of time before "pong" response must be received.
+	// 接收 "pong" 响应允许的最长时间。
 	heartbeatDeadline time.Duration
 }
 
 // NewWebSocketExecutor 创建一个仅协商 V5 协议的 WebSocket 执行器。
-//
-// Only supports V5 protocol for correct version skew functionality.
-// Previous api servers will proxy upgrade requests to legacy websocket
-// servers on container runtimes which support V1-V4. These legacy
-// websocket servers will not handle the new CLOSE signal.
+// 之所以只支持 V5 协议，是为了保证版本偏斜（version skew）场景下的正确行为。
+// 旧版 API Server 会把 upgrade 请求代理到容器运行时中支持 V1-V4 的旧式
+// WebSocket 服务器，而这些旧式 WebSocket 服务器不会处理新的 CLOSE 信号。
 func NewWebSocketExecutor(config *restclient.Config, method, url string) (Executor, error) {
 	return NewWebSocketExecutorForProtocols(config, method, url, remotecommand.StreamProtocolV5Name)
 }
 
-// NewWebSocketExecutorForProtocols allows to execute commands via a WebSocket connection.
+// NewWebSocketExecutorForProtocols 允许通过 WebSocket 连接执行命令。
 //
 // protocols 按优先级排列，服务端选择第一个双方都支持的子协议；调用方通常
 // 只需使用 NewWebSocketExecutor。
@@ -118,18 +113,16 @@ func NewWebSocketExecutorForProtocols(config *restclient.Config, method, url str
 	}, nil
 }
 
-// Deprecated: use StreamWithContext instead to avoid possible resource leaks.
-// See https://github.com/kubernetes/kubernetes/pull/103177 for details.
-//
+// Deprecated: 请改用 StreamWithContext，以避免可能的资源泄漏。
+// 详见 https://github.com/kubernetes/kubernetes/pull/103177。
 // 旧方法没有 context，调用方无法取消，连接可能一直存活。
 func (e *wsStreamExecutor) Stream(options StreamOptions) error {
 	return e.StreamWithContext(context.Background(), options)
 }
 
-// StreamWithContext upgrades an HTTPRequest to a WebSocket connection, and starts the various
-// goroutines to implement the necessary streams over the connection. The "options" parameter
-// defines which streams are requested. Returns an error if one occurred. This method is NOT
-// safe to run concurrently with the same executor (because of the state stored in the upgrader).
+// StreamWithContext 将 HTTPRequest 升级为 WebSocket 连接，并启动若干 goroutine
+// 在连接上实现所需的流。"options" 参数决定请求哪些流，出错时返回 error。
+// 该方法不能与同一个 executor 并发运行（因为 upgrader 中保存了状态）。
 //
 // 握手完成后先等待 readyChan：只有所有流创建完毕，读解复用循环才能安全启动，
 // 否则可能收到指向尚未创建流的数据帧。
@@ -180,9 +173,8 @@ func (e *wsStreamExecutor) StreamWithContext(ctx context.Context, options Stream
 		creator := newWSStreamCreator(logger, conn)
 		go func() {
 			select {
-			// Wait until all streams have been created before starting the readDemuxLoop.
-			// This is to avoid a race condition where the readDemuxLoop receives a message
-			// for a stream that has not yet been created.
+			// 等到所有流都创建完毕后再启动 readDemuxLoop。
+			// 这是为了避免 readDemuxLoop 收到指向尚未创建的流的消息的竞态。
 			case <-readyChan:
 			case <-ctx.Done():
 				creator.closeAllStreamReaders(ctx.Err())
@@ -215,13 +207,13 @@ func (e *wsStreamExecutor) StreamWithContext(ctx context.Context, options Stream
 type wsStreamCreator struct {
 	logger klog.Logger
 	conn   *gwebsocket.Conn
-	// Protects writing to websocket connection; reading is lock-free
+	// 保护对 WebSocket 连接的写入；读取无锁
 	connWriteLock sync.Mutex
-	// map of stream id to stream; multiple streams read/write the connection
+	// 流 ID 到流的映射；多条流共同读写这一条连接
 	streams   map[byte]*stream
 	streamsMu sync.Mutex
-	// setStreamErr holds the error to return to anyone calling setStreams.
-	// this is populated in closeAllStreamReaders
+	// setStreamErr 保存要返回给 setStreams 调用方的错误。
+	// 它在 closeAllStreamReaders 中被填充
 	setStreamErr error
 }
 
@@ -252,8 +244,8 @@ func (c *wsStreamCreator) setStream(id byte, s *stream) error {
 	return nil
 }
 
-// CreateStream uses id from passed headers to create a stream over "c.conn" connection.
-// Returns a Stream structure or nil and an error if one occurred.
+// CreateStream 使用请求头中的 id 在 "c.conn" 连接上创建一条流。
+// 返回 Stream 结构（或 nil）以及可能发生的错误。
 //
 // 每个流用一对 io.Pipe 连接“解复用读”和调用方的 Read；写则直接写入共享
 // WebSocket 连接。同一类型只允许一条流，避免协议歧义。
@@ -284,56 +276,50 @@ func (c *wsStreamCreator) CreateStream(headers http.Header) (httpstream.Stream, 
 	return s, nil
 }
 
-// readDemuxLoop is the lock-free reading processor for this endpoint of the websocket
-// connection. This loop reads the connection, and demultiplexes the data
-// into one of the individual stream pipes (by checking the stream id). This
-// loop can *not* be run concurrently, because there can only be one websocket
-// connection reader at a time (a read mutex would provide no benefit).
+// readDemuxLoop 是本端对 WebSocket 连接的无锁读取处理器。
+// 该循环读取连接数据，并根据流 ID 将数据解复用到各条流的管道中。
+// 该循环*不能*并发运行，因为同一时刻只能有一个 WebSocket 连接读取者
+// （加读锁也没有好处）。
 //
 // 每帧格式为 [1 字节流 ID][负载]；未知流 ID 的帧被丢弃而不是报错，以便
 // 客户端与未来版本的服务端保持兼容。
 func (c *wsStreamCreator) readDemuxLoop(bufferSize int, period time.Duration, deadline time.Duration) {
-	// Initialize and start the ping/pong heartbeat.
+	// 初始化并启动 ping/pong 心跳。
 	h := newHeartbeat(c.logger, c.conn, period, deadline)
-	// Set initial timeout for websocket connection reading.
+	// 设置 WebSocket 读取的初始超时。
 	c.logger.V(5).Info("Websocket read starts", "deadline", deadline)
 	if err := c.conn.SetReadDeadline(time.Now().Add(deadline)); err != nil {
 		c.logger.Error(err, "Websocket initial setting read deadline failed")
 		return
 	}
 	go h.start()
-	// Buffer size must correspond to the same size allocated
-	// for the read buffer during websocket client creation. A
-	// difference can cause incomplete connection reads.
+	// 缓冲区大小必须与创建 WebSocket 客户端时读取缓冲区的分配大小一致。
+	// 不一致会导致连接读取不完整。
 	readBuffer := make([]byte, bufferSize)
 	for {
-		// NextReader() only returns data messages (BinaryMessage or Text
-		// Message). Even though this call will never return control frames
-		// such as ping, pong, or close, this call is necessary for these
-		// message types to be processed. There can only be one reader
-		// at a time, so this reader loop must *not* be run concurrently;
-		// there is no lock for reading. Calling "NextReader()" before the
-		// current reader has been processed will close the current reader.
-		// If the heartbeat read deadline times out, this "NextReader()" will
-		// return an i/o error, and error handling will clean up.
+		// NextReader() 只返回数据消息（BinaryMessage 或 Text Message）。
+		// 虽然这个调用永远不会返回 ping、pong、close 等控制帧，但必须调用它
+		// 才能处理这些消息类型。同一时刻只能有一个读取者，所以这个读取循环
+		// *不能*并发运行；读取不需要加锁。在当前读取者未被处理完之前调用
+		// "NextReader()" 会关闭当前读取者。若心跳读取截止时间超时，这个
+		// "NextReader()" 会返回 i/o 错误，由错误处理逻辑完成清理。
 		messageType, r, err := c.conn.NextReader()
 		if err != nil {
 			websocketErr, ok := err.(*gwebsocket.CloseError)
 			if ok && websocketErr.Code == gwebsocket.CloseNormalClosure {
-				err = nil // readers will get io.EOF as it's a normal closure
+				err = nil // 正常关闭，读取方会收到 io.EOF
 			} else {
 				err = fmt.Errorf("next reader: %w", err)
 			}
 			c.closeAllStreamReaders(err)
 			return
 		}
-		// All remote command protocols send/receive only binary data messages.
+		// 所有远程命令协议只收发二进制数据消息。
 		if messageType != gwebsocket.BinaryMessage {
 			c.closeAllStreamReaders(fmt.Errorf("unexpected message type: %d", messageType))
 			return
 		}
-		// It's ok to read just a single byte because the underlying library wraps the actual
-		// connection with a buffered reader anyway.
+		// 只读一个字节也没关系，因为底层库本来就把实际连接包装成了带缓冲的读取器。
 		_, err = io.ReadFull(r, readBuffer[:1])
 		if err != nil {
 			c.closeAllStreamReaders(fmt.Errorf("read stream id: %w", err))
@@ -348,11 +334,11 @@ func (c *wsStreamCreator) readDemuxLoop(bufferSize int, period time.Duration, de
 		for {
 			nr, errRead := r.Read(readBuffer)
 			if nr > 0 {
-				// Write the data to the stream's pipe. This can block.
+				// 将数据写入流的管道。这里可能阻塞。
 				_, errWrite := s.writePipe.Write(readBuffer[:nr])
 				if errWrite != nil {
-					// Pipe must have been closed by the stream user.
-					// Nothing to do, discard the message.
+					// 管道必定已被流的使用者关闭。
+					// 无需处理，丢弃该消息。
 					break
 				}
 			}
@@ -367,16 +353,16 @@ func (c *wsStreamCreator) readDemuxLoop(bufferSize int, period time.Duration, de
 	}
 }
 
-// closeAllStreamReaders closes readers in all streams.
-// This unblocks all stream.Read() calls, and keeps any future streams from being created.
+// closeAllStreamReaders 关闭所有流中的读取端。
+// 这会让所有 stream.Read() 调用解除阻塞，并阻止将来再创建新的流。
 func (c *wsStreamCreator) closeAllStreamReaders(err error) {
 	c.streamsMu.Lock()
 	defer c.streamsMu.Unlock()
 	for _, s := range c.streams {
-		// Closing writePipe unblocks all readPipe.Read() callers and prevents any future writes.
+		// 关闭 writePipe 会让所有 readPipe.Read() 调用方解除阻塞，并阻止后续写入。
 		_ = s.writePipe.CloseWithError(err)
 	}
-	// ensure callers to setStreams receive an error after this point
+	// 确保此后 setStreams 的调用方都能收到错误
 	if err != nil {
 		c.setStreamErr = err
 	} else {
@@ -393,11 +379,11 @@ type stream struct {
 	headers   http.Header
 	readPipe  *io.PipeReader
 	writePipe *io.PipeWriter
-	// conn is used for writing directly into the connection.
-	// Is nil after Close() / Reset() to prevent future writes.
+	// conn 用于直接向连接写入。
+	// Close() / Reset() 之后置为 nil，以防止后续写入。
 	conn *gwebsocket.Conn
-	// connWriteLock protects conn against concurrent write operations. There must be a single writer and a single reader only.
-	// The mutex is shared across all streams because the underlying connection is shared.
+	// connWriteLock 保护 conn 免受并发写入。同一时刻必须只有一个写者、一个读者。
+	// 由于底层连接是共享的，这把锁在所有流之间共享。
 	connWriteLock *sync.Mutex
 	id            byte
 }
@@ -407,7 +393,7 @@ func (s *stream) Read(p []byte) (n int, err error) {
 	return s.readPipe.Read(p)
 }
 
-// Write writes directly to the underlying WebSocket connection.
+// Write 直接向底层 WebSocket 连接写入。
 func (s *stream) Write(p []byte) (n int, err error) {
 	s.logger.V(8).Info("Write() on stream")
 	defer s.logger.V(8).Info("Write() done on stream")
@@ -421,8 +407,8 @@ func (s *stream) Write(p []byte) (n int, err error) {
 		s.logger.V(4).Info("Websocket setting write deadline failed", "err", err)
 		return 0, err
 	}
-	// Message writer buffers the message data, so we don't need to do that ourselves.
-	// Just write id and the data as two separate writes to avoid allocating an intermediate buffer.
+	// 消息写入器本身会缓冲消息数据，无需我们自己再做缓冲。
+	// 只需把 id 和数据分两次写入，避免分配中间缓冲区。
 	w, err := s.conn.NextWriter(gwebsocket.BinaryMessage)
 	if err != nil {
 		return 0, err
@@ -445,7 +431,7 @@ func (s *stream) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
-// Close half-closes the stream, indicating this side is finished with the stream.
+// Close 半关闭该流，表示本端已完成对该流的使用。
 func (s *stream) Close() error {
 	s.logger.V(6).Info("Close() on stream")
 	defer s.logger.V(6).Info("Close() done on stream")
@@ -454,7 +440,7 @@ func (s *stream) Close() error {
 	if s.conn == nil {
 		return fmt.Errorf("Close() on already closed stream %d", s.id)
 	}
-	// Communicate the CLOSE stream signal to the other websocket endpoint.
+	// 向 WebSocket 对端传达 CLOSE 流信号。
 	err := s.conn.WriteMessage(gwebsocket.BinaryMessage, []byte{remotecommand.StreamClose, s.id})
 	s.conn = nil
 	return err
@@ -478,28 +464,26 @@ func (s *stream) Identifier() uint32 {
 	return uint32(s.id)
 }
 
-// heartbeat encasulates data necessary for the websocket ping/pong heartbeat. This
-// heartbeat works by setting a read deadline on the websocket connection, then
-// pushing this deadline into the future for every successful heartbeat. If the
-// heartbeat "pong" fails to respond within the deadline, then the "NextReader()" call
-// inside the "readDemuxLoop" will return an i/o error prompting a connection close
-// and cleanup.
+// heartbeat 封装 WebSocket ping/pong 心跳所需的数据。
+// 心跳的工作方式是：先在 WebSocket 连接上设置读取截止时间，之后每次心跳
+// 成功就把这个截止时间向未来推。若心跳 "pong" 在截止时间前没有响应，
+// "readDemuxLoop" 中的 "NextReader()" 调用会返回 i/o 错误，从而触发
+// 连接关闭与清理。
 type heartbeat struct {
 	logger klog.Logger
 	conn   *gwebsocket.Conn
-	// period defines how often a "ping" heartbeat message is sent to the other endpoint
+	// period 定义向对端发送 "ping" 心跳消息的频率
 	period time.Duration
-	// closing the "closer" channel will clean up the heartbeat timers
+	// 关闭 "closer" 通道会清理心跳定时器
 	closer chan struct{}
-	// optional data to send with "ping" message
+	// 可选的、随 "ping" 消息一起发送的数据
 	message []byte
-	// optionally received data message with "pong" message, same as sent with ping
+	// 可选收到的随 "pong" 消息返回的数据，与 ping 发出的一致
 	pongMessage []byte
 }
 
-// newHeartbeat creates heartbeat structure encapsulating fields necessary to
-// run the websocket connection ping/pong mechanism and sets up handlers on
-// the websocket connection.
+// newHeartbeat 创建封装了运行 WebSocket 连接 ping/pong 机制所需字段的
+// heartbeat 结构，并在 WebSocket 连接上设置好处理函数。
 //
 // CloseHandler 被包装而不是替换，保留底层库默认的关闭帧处理。
 func newHeartbeat(logger klog.Logger, conn *gwebsocket.Conn, period time.Duration, deadline time.Duration) *heartbeat {
@@ -509,11 +493,10 @@ func newHeartbeat(logger klog.Logger, conn *gwebsocket.Conn, period time.Duratio
 		period: period,
 		closer: make(chan struct{}),
 	}
-	// Set up handler for receiving returned "pong" message from other endpoint
-	// by pushing the read deadline into the future. The "msg" received could
-	// be empty.
+	// 设置处理函数：收到对端返回的 "pong" 消息时，把读取截止时间向未来推。
+	// 收到的 "msg" 可能为空。
 	h.conn.SetPongHandler(func(msg string) error {
-		// Push the read deadline into the future.
+		// 把读取截止时间向未来推。
 		logger.V(6).Info("Pong message received -- resetting read deadline", "message", msg)
 		err := h.conn.SetReadDeadline(time.Now().Add(deadline))
 		if err != nil {
@@ -525,7 +508,7 @@ func newHeartbeat(logger klog.Logger, conn *gwebsocket.Conn, period time.Duratio
 		}
 		return nil
 	})
-	// Set up handler to cleanup timers when this endpoint receives "Close" message.
+	// 设置处理函数：本端收到 "Close" 消息时清理定时器。
 	closeHandler := h.conn.CloseHandler()
 	h.conn.SetCloseHandler(func(code int, text string) error {
 		close(h.closer)
@@ -534,8 +517,8 @@ func newHeartbeat(logger klog.Logger, conn *gwebsocket.Conn, period time.Duratio
 	return h
 }
 
-// setMessage is optional data sent with "ping" heartbeat. According to the websocket RFC
-// this data sent with "ping" message should be returned in "pong" message.
+// setMessage 是随 "ping" 心跳发送的可选数据。按照 WebSocket RFC，
+// 随 "ping" 消息发送的数据应当在 "pong" 消息中原样返回。
 //
 // setMessage 必须在 start 之前调用；heartbeat 启动后不再加锁，事后写入会有
 // 数据竞争。
@@ -543,10 +526,10 @@ func (h *heartbeat) setMessage(msg string) {
 	h.message = []byte(msg)
 }
 
-// start the heartbeat by setting up necesssary handlers and looping by sending "ping"
-// message every "period" until the "closer" channel is closed.
+// start 启动心跳：设置所需的处理函数，并循环每隔 "period" 发送一次 "ping"
+// 消息，直到 "closer" 通道被关闭。
 func (h *heartbeat) start() {
-	// Loop to continually send "ping" message through websocket connection every "period".
+	// 循环：每隔 "period" 持续通过 WebSocket 连接发送 "ping" 消息。
 	// 只有明确的致命错误才退出循环；超时与 ErrCloseSent 可能是暂时性的，
 	// 连接是否关闭由读取循环判定。
 	t := time.NewTicker(h.period)
@@ -557,22 +540,21 @@ func (h *heartbeat) start() {
 			h.logger.V(5).Info("Closed channel -- returning")
 			return
 		case <-t.C:
-			// "WriteControl" does not need to be protected by a mutex. According to
-			// gorilla/websockets library docs: "The Close and WriteControl methods can
+			// "WriteControl" 不需要用互斥锁保护。根据 gorilla/websockets
+			// 库的文档："The Close and WriteControl methods can
 			// be called concurrently with all other methods."
 			if err := h.conn.WriteControl(gwebsocket.PingMessage, h.message, time.Now().Add(pingReadDeadline)); err == nil {
 				h.logger.V(6).Info("Websocket Ping succeeeded")
 			} else {
 				h.logger.Error(err, "Websocket Ping failed")
 				if errors.Is(err, gwebsocket.ErrCloseSent) {
-					// we continue because c.conn.CloseChan will manage closing the connection already
+					// 继续循环，因为 c.conn.CloseChan 已经在管理连接的关闭
 					continue
 				} else if e, ok := err.(net.Error); ok && e.Timeout() {
-					// Continue, in case this is a transient failure.
-					// c.conn.CloseChan above will tell us when the connection is
-					// actually closed.
-					// If Temporary function hadn't been deprecated, we would have used it.
-					// But most of temporary errors are timeout errors anyway.
+					// 继续，因为这可能只是暂时性失败。
+					// 上面的 c.conn.CloseChan 会告诉我们连接是否真正关闭。
+					// 若 Temporary 函数没有被弃用，我们本会使用它。
+					// 不过大多数暂时性错误本来就是超时错误。
 					continue
 				}
 				return

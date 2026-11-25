@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file provides abstractions for setting the provider (e.g., prometheus)
-// of metrics.
+// 本文件为设置指标提供者（例如 prometheus）提供抽象层。
 //
 // 采集端（kubelet、kube-controller-manager 等）通过 SetReflectorMetricsProvider 注入
 // 具体实现；未注入时使用 no-op 实现，保证 client-go 本身不依赖任何指标库。
@@ -26,27 +25,24 @@ import (
 	"sync"
 )
 
-// GaugeMetric represents a single numerical value that can arbitrarily go up
-// and down.
+// GaugeMetric 表示一个可以任意升降的单一数值。
 //
 // 反射器用它记录最近一次观察到的 resourceVersion 之类的瞬时状态。
 type GaugeMetric interface {
 	Set(float64)
 }
 
-// CounterMetric represents a single numerical value that only ever
-// goes up.
+// CounterMetric 表示一个只会单调递增的单一数值。
 type CounterMetric interface {
 	Inc()
 }
 
-// SummaryMetric captures individual observations.
+// SummaryMetric 记录单次观测值。
 type SummaryMetric interface {
 	Observe(float64)
 }
 
-// HistogramMetric captures individual observations into configurable buckets.
-// It also provides a sum and count of observations.
+// HistogramMetric 把单次观测值记录到可配置的桶中，同时提供观测值的总和与计数。
 type HistogramMetric interface {
 	Observe(float64)
 }
@@ -59,7 +55,7 @@ func (noopMetric) Dec()            {}
 func (noopMetric) Observe(float64) {}
 func (noopMetric) Set(float64)     {}
 
-// MetricsProvider generates various metrics used by the reflector.
+// MetricsProvider 生成反射器使用的各类指标。
 //
 // 每个 New*Metric 方法都以指标名为参数，允许同一进程内为不同的 informer 创建
 // 独立的指标实例（名字通常包含资源类型等信息）。
@@ -97,7 +93,7 @@ var metricsFactory = struct {
 	metricsProvider: noopMetricsProvider{},
 }
 
-// SetReflectorMetricsProvider sets the metrics provider
+// SetReflectorMetricsProvider 设置指标提供者。
 //
 // 仅第一次调用生效：指标注册必须在进程初始化阶段完成，重复设置会导致指标重复注册，
 // 因此用 sync.Once 让后续调用静默失败。

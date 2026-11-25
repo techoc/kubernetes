@@ -28,32 +28,27 @@ import (
 	utiltrace "k8s.io/utils/trace"
 )
 
-// ThreadSafeStore is an interface that allows concurrent indexed
-// access to a storage backend.  It is like Indexer but does not
-// (necessarily) know how to extract the Store key from a given
-// object.
+// ThreadSafeStore 是允许并发地按索引访问存储后端的接口。它与 Indexer 类似，
+// 但（未必）知道如何从给定对象中提取 Store 的 key。
 //
-// TL;DR caveats: you must not modify anything returned by Get or List as it will break
-// the indexing feature in addition to not being thread safe.
+// 简言之的注意事项：不得修改 Get 或 List 返回的任何对象，否则不仅线程不安全，
+// 还会破坏索引功能。
 //
-// The guarantees of thread safety provided by List/Get are only valid if the caller
-// treats returned items as read-only. For example, a pointer inserted in the store
-// through `Add` will be returned as is by `Get`. Multiple clients might invoke `Get`
-// on the same key and modify the pointer in a non-thread-safe way. Also note that
-// modifying objects stored by the indexers (if any) will *not* automatically lead
-// to a re-index. So it's not a good idea to directly modify the objects returned by
-// Get/List, in general.
+// List/Get 提供的线程安全保证只有在调用方把返回的条目当作只读时才成立。例如，
+// 通过 `Add` 存入的指针会被 `Get` 原样返回。多个客户端可能对同一个 key 调用
+// `Get`，并以非线程安全的方式修改该指针。另请注意，修改 indexer 存储的对象
+// （如果存在）*不会*自动触发重新索引。因此一般而言，直接修改 Get/List 返回的
+// 对象并不是好主意。
 //
 // 所有方法都通过 RWMutex 保护内部 map；读操作返回的是对象指针本身，
-// 因此"线程安全"只覆盖容器操作，不覆盖对象内容。
+// 因此“线程安全”只覆盖容器操作，不覆盖对象内容。
 type ThreadSafeStore interface {
 	// Add 以 key 插入对象；key 已存在时等同于 Update。
 	Add(key string, obj interface{})
 	// Update 替换 key 对应的对象，并同步更新所有索引。
 	Update(key string, obj interface{})
-	// Delete is equivalent to calling DeleteWithObject(key, nil) however it is
-	// not recommended to use this function as it will not update the resource
-	// version of the store, possibly causing it to be out of date.
+	// Delete 等价于调用 DeleteWithObject(key, nil)，但不推荐使用：它不会更新
+	// store 的 resource version，可能导致其过期。
 	Delete(key string)
 	// DeleteWithObject 删除对象；提供 obj 时会用其 resourceVersion 更新 store 的 RV。
 	DeleteWithObject(key string, obj interface{})
@@ -71,21 +66,21 @@ type ThreadSafeStore interface {
 	ByIndex(indexName, indexedValue string) ([]interface{}, error)
 	GetIndexers() Indexers
 
-	// AddIndexers adds more indexers to this store. This supports adding indexes after the store already has items.
+	// AddIndexers 向该 store 追加索引器；支持在 store 已有对象之后再添加索引。
 	AddIndexers(newIndexers Indexers) error
-	// Resync is a no-op and is deprecated
+	// Resync 是空操作，且已废弃。
 	Resync() error
 }
 
-// ThreadSafeStoreWithTransaction is a store that can batch execute multiple transactions.
+// ThreadSafeStoreWithTransaction 是可以批量执行多个事务的 store。
 // 批量写入在同一把锁内完成，避免消费者看到中间状态，也减少锁开销。
 type ThreadSafeStoreWithTransaction interface {
 	ThreadSafeStore
-	// Transaction allows performing multiple writes in one call.
+	// Transaction 允许在一次调用中执行多个写操作。
 	Transaction(fns ...ThreadSafeStoreTransaction)
 }
 
-// ThreadSafeStoreTransaction embeds a Transaction and includes the specific Key identifying the affected object.
+// ThreadSafeStoreTransaction 内嵌一个 Transaction，并包含标识受影响对象的具体 Key。
 type ThreadSafeStoreTransaction struct {
 	Transaction
 	Key string
@@ -101,11 +96,11 @@ func WithThreadSafeStoreMetrics(identifier InformerNameAndResource, metricsProvi
 	}
 }
 
-// storeIndex implements the indexing functionality for Store interface
+// storeIndex 实现 Store 接口的索引功能。
 type storeIndex struct {
-	// indexers maps a name to an IndexFunc
+	// indexers 将名称映射到 IndexFunc。
 	indexers Indexers
-	// indices maps a name to an Index
+	// indices 将名称映射到 Index。
 	indices Indices
 }
 
@@ -129,12 +124,12 @@ func (i *storeIndex) getKeysFromIndex(indexName string, obj interface{}) (sets.S
 
 	var storeKeySet sets.Set[string]
 	if len(indexedValues) == 1 {
-		// In majority of cases, there is exactly one value matching.
-		// Optimize the most common path - deduping is not needed here.
+		// 多数情况下恰好只有一个匹配值。
+		// 对最常见的路径做优化——这里无需去重。
 		storeKeySet = index[indexedValues[0]]
 	} else {
-		// Need to de-dupe the return list.
-		// Since multiple keys are allowed, this can happen.
+		// 需要对返回列表去重。
+		// 由于允许多个 key，这种情况是可能发生的。
 		storeKeySet = sets.Set[string]{}
 		for _, indexedValue := range indexedValues {
 			for key := range index[indexedValue] {
@@ -182,17 +177,16 @@ func (i *storeIndex) addIndexers(newIndexers Indexers) error {
 	return nil
 }
 
-// updateSingleIndex modifies the objects location in the named index:
-// - for create you must provide only the newObj
-// - for update you must provide both the oldObj and the newObj
-// - for delete you must provide only the oldObj
-// updateSingleIndex must be called from a function that already has a lock on the cache
+// updateSingleIndex 修改对象在指定索引中的位置：
+// - 创建时只需提供 newObj
+// - 更新时必须同时提供 oldObj 和 newObj
+// - 删除时只需提供 oldObj
+// 必须在已持有缓存锁的函数中调用 updateSingleIndex。
 func (i *storeIndex) updateSingleIndex(name string, oldObj interface{}, newObj interface{}, key string) {
 	var oldIndexValues, indexValues []string
 	indexFunc, ok := i.indexers[name]
 	if !ok {
-		// Should never happen. Caller is responsible for ensuring this exists, and should call with lock
-		// held to avoid any races.
+		// 本不该发生。调用方负责确保其存在，并应在持锁时调用以避免竞态。
 		panic(fmt.Errorf("indexer %q does not exist", name))
 	}
 	if oldObj != nil {
@@ -222,7 +216,7 @@ func (i *storeIndex) updateSingleIndex(name string, oldObj interface{}, newObj i
 	}
 
 	if len(indexValues) == 1 && len(oldIndexValues) == 1 && indexValues[0] == oldIndexValues[0] {
-		// We optimize for the most common case where indexFunc returns a single value which has not been changed
+		// 针对最常见情况做优化：indexFunc 返回单个值且该值未变化。
 		// 绝大多数 Update 不改变索引值，此时无需触碰索引结构。
 		return
 	}
@@ -235,11 +229,11 @@ func (i *storeIndex) updateSingleIndex(name string, oldObj interface{}, newObj i
 	}
 }
 
-// updateIndices modifies the objects location in the managed indexes:
-// - for create you must provide only the newObj
-// - for update you must provide both the oldObj and the newObj
-// - for delete you must provide only the oldObj
-// updateIndices must be called from a function that already has a lock on the cache
+// updateIndices 修改对象在受管索引中的位置：
+// - 创建时只需提供 newObj
+// - 更新时必须同时提供 oldObj 和 newObj
+// - 删除时只需提供 oldObj
+// 必须在已持有缓存锁的函数中调用 updateIndices。
 func (i *storeIndex) updateIndices(oldObj interface{}, newObj interface{}, key string) {
 	for name := range i.indexers {
 		i.updateSingleIndex(name, oldObj, newObj, key)
@@ -263,26 +257,25 @@ func (i *storeIndex) deleteKeyFromIndex(key, indexValue string, index index) {
 		return
 	}
 	set.Delete(key)
-	// If we don't delete the set when zero, indices with high cardinality
-	// short lived resources can cause memory to increase over time from
-	// unused empty sets. See `kubernetes/kubernetes/issues/84959`.
+	// 若集合清空时不将其删除，高基数、短生命周期资源的索引会因
+	// 遗留的空集合而随时间增长内存占用。见 `kubernetes/kubernetes/issues/84959`。
 	if len(set) == 0 {
 		delete(index, indexValue)
 	}
 }
 
-// threadSafeMap implements ThreadSafeStore
+// threadSafeMap 实现 ThreadSafeStore。
 type threadSafeMap struct {
 	// lock 保护 items 与 index：所有 *_locked 方法都假定调用方已持锁。
 	lock  sync.RWMutex
 	items map[string]interface{}
 
-	// index implements the indexing functionality
+	// index 实现索引功能。
 	index *storeIndex
 	rv    string
 
-	// metrics is used to expose metrics about the store
-	// and must be non-nil. If not provided, a noop implementation will be used.
+	// metrics 用于暴露 store 的指标，必须非 nil。
+	// 未提供时会使用 no-op 实现。
 	metrics *storeMetrics
 }
 
@@ -404,8 +397,7 @@ func (c *threadSafeMap) List() []interface{} {
 	return list
 }
 
-// ListKeys returns a list of all the keys of the objects currently
-// in the threadSafeMap.
+// ListKeys 返回 threadSafeMap 中当前所有对象的 key 列表。
 func (c *threadSafeMap) ListKeys() []string {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -431,7 +423,7 @@ func (c *threadSafeMap) Replace(items map[string]interface{}, resourceVersion st
 	if parseErr == nil {
 		c.metrics.storeResourceVersion.Set(float64(rvInt))
 	}
-	// rebuild any index
+	// 重建所有索引
 	c.index.reset()
 	for key, item := range c.items {
 		c.index.updateIndices(nil, item, key)
@@ -448,8 +440,8 @@ func rvFromObject(obj interface{}) (rv string, err error) {
 	return rv, nil
 }
 
-// Index returns a list of items that match the given object on the index function.
-// Index is thread-safe so long as you treat all items as immutable.
+// Index 返回在索引函数上与给定对象匹配的条目列表。
+// 只要把所有条目视为不可变，Index 就是线程安全的。
 func (c *threadSafeMap) Index(indexName string, obj interface{}) ([]interface{}, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -466,9 +458,9 @@ func (c *threadSafeMap) Index(indexName string, obj interface{}) ([]interface{},
 	return list, nil
 }
 
-// LastStoreSyncResourceVersion returns the latest resource version that the store has seen.
+// LastStoreSyncResourceVersion 返回 store 所见过的最新 resource version。
 func (c *threadSafeMap) LastStoreSyncResourceVersion() string {
-	// We cannot return the resource version if the AtomicFIFO feature gate is not enabled.
+	// AtomicFIFO 特性门控未开启时无法返回 resource version。
 	// 关闭 AtomicFIFO 时 store 的 RV 更新路径不保证完整，返回空串以避免误用。
 	if !clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.AtomicFIFO) {
 		return ""
@@ -478,7 +470,7 @@ func (c *threadSafeMap) LastStoreSyncResourceVersion() string {
 	return c.rv
 }
 
-// Bookmark sets the latest resource version that the store has seen.
+// Bookmark 设置 store 所见过的最新 resource version。
 // 只记录 RV，不触发任何事件或索引变化。
 func (c *threadSafeMap) Bookmark(rv string) {
 	var rvInt int64
@@ -494,7 +486,7 @@ func (c *threadSafeMap) Bookmark(rv string) {
 	}
 }
 
-// ByIndex returns a list of the items whose indexed values in the given index include the given indexed value
+// ByIndex 返回在给定索引中其索引值包含指定索引值的条目列表。
 // 返回顺序由 map 迭代决定，不保证稳定。
 func (c *threadSafeMap) ByIndex(indexName, indexedValue string) ([]interface{}, error) {
 	c.lock.RLock()
@@ -512,8 +504,8 @@ func (c *threadSafeMap) ByIndex(indexName, indexedValue string) ([]interface{}, 
 	return list, nil
 }
 
-// IndexKeys returns a list of the Store keys of the objects whose indexed values in the given index include the given indexed value.
-// IndexKeys is thread-safe so long as you treat all items as immutable.
+// IndexKeys 返回在给定索引中其索引值包含指定索引值的对象的 Store key 列表。
+// 只要把所有条目视为不可变，IndexKeys 就是线程安全的。
 func (c *threadSafeMap) IndexKeys(indexName, indexedValue string) ([]string, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -548,7 +540,7 @@ func (c *threadSafeMap) AddIndexers(newIndexers Indexers) error {
 		return err
 	}
 
-	// If there are already items, index them
+	// 若已有对象，为它们补建索引
 	for key, item := range c.items {
 		for name := range newIndexers {
 			c.index.updateSingleIndex(name, nil, item, key)
@@ -560,7 +552,7 @@ func (c *threadSafeMap) AddIndexers(newIndexers Indexers) error {
 
 // Resync 是空操作：store 的内容已由 informer 维护，无需重新计算。
 func (c *threadSafeMap) Resync() error {
-	// Nothing to do
+	// 无需任何操作
 	return nil
 }
 
@@ -588,8 +580,8 @@ func parseRVForMetricsWithTruncation(rv string) (int64, error) {
 	if rv == "" {
 		return 0, nil
 	}
-	// Truncate to last 15 digits to ensure metrics are always less than 2^53-1
-	// and avoid imprecise float64 representation.
+	// 截断为末 15 位，确保指标值始终小于 2^53-1，
+	// 避免 float64 精度丢失。
 	if len(rv) > 15 {
 		rv = rv[len(rv)-15:]
 	}

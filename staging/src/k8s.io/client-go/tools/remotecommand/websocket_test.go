@@ -51,22 +51,17 @@ import (
 	"k8s.io/streaming/pkg/httpstream/wsstream"
 )
 
-// TestWebSocketClient_LoopbackStdinToStdout 验证 STDIN 写入的数据能完整从 STDOUT 读回：
-// 假服务端把 STDIN 流复制到 STDOUT，客户端比对 1MB 随机数据。
-// returns random data sent on the STDIN channel
-// back down the STDOUT channel. A subsequent comparison checks if the data
-// sent on the STDIN channel is the same as the data returned on the STDOUT
-// channel. This test can be run many times by the "stress" tool to check
-// if there is any data which would cause problems with the WebSocket streams.
+// 假服务端把 STDIN 流复制到 STDOUT，客户端比对发出的 1MB 随机数据与读回的数据是否一致。
+// 该测试可用 "stress" 工具反复运行，检查是否存在会导致 WebSocket 流出问题的数据。
 func TestWebSocketClient_LoopbackStdinToStdout(t *testing.T) {
-	// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
+	// 创建假 WebSocket 服务端：把收到的 STDIN 数据复制回 STDOUT 流。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
 			t.Fatalf("error on webSocketServerStreams: %v", err)
 		}
 		defer conns.conn.Close()
-		// Loopback the STDIN stream onto the STDOUT stream.
+		// 将 STDIN 流回环到 STDOUT 流。
 		_, err = io.Copy(conns.stdoutStream, conns.stdinStream)
 		if err != nil {
 			t.Fatalf("error copying STDIN to STDOUT: %v", err)
@@ -74,8 +69,8 @@ func TestWebSocketClient_LoopbackStdinToStdout(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Now create the WebSocket client (executor), and point it to the "websocketServer".
-	// Must add STDIN and STDOUT query params for the WebSocket client request.
+	// 创建 WebSocket 客户端（executor），指向 "websocketServer"。
+	// 客户端请求必须加上 STDIN 和 STDOUT 的 query 参数。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -85,8 +80,7 @@ func TestWebSocketClient_LoopbackStdinToStdout(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT buffer.
+	// 生成随机数据并设置为从 STDIN 流发送；数据将从 STDOUT 缓冲区返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -99,7 +93,7 @@ func TestWebSocketClient_LoopbackStdinToStdout(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -110,7 +104,7 @@ func TestWebSocketClient_LoopbackStdinToStdout(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error")
 		}
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
@@ -120,7 +114,7 @@ func TestWebSocketClient_LoopbackStdinToStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error reading the stream: %v", err)
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT.
+	// 检查 STDIN 发送的随机数据与 STDOUT 返回的数据一致。
 	if !bytes.Equal(randomData, data) {
 		t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 	}
@@ -129,18 +123,18 @@ func TestWebSocketClient_LoopbackStdinToStdout(t *testing.T) {
 // TestWebSocketClient_DifferentBufferSizes 用不同的服务端读缓冲区大小重复 STDIN->STDOUT 回环，
 // 覆盖跨缓冲区边界的分帧/重组逻辑。
 func TestWebSocketClient_DifferentBufferSizes(t *testing.T) {
-	// 1k, 4k, 64k, and 128k buffer sizes for reading STDIN at websocket server endpoint.
-	// The standard buffer size for io.Copy is 32k.
+	// websocket 服务端读取 STDIN 时使用 1k、4k、64k、128k 四种缓冲区大小；
+	// io.Copy 的标准缓冲区大小为 32k。
 	bufferSizes := []int{1 * 1024, 4 * 1024, 64 * 1024, 128 * 1024}
 	for _, bufferSize := range bufferSizes {
-		// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
+		// 创建假 WebSocket 服务端：把收到的 STDIN 数据复制回 STDOUT 流。
 		websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 			if err != nil {
 				t.Fatalf("error on webSocketServerStreams: %v", err)
 			}
 			defer conns.conn.Close()
-			// Loopback the STDIN stream onto the STDOUT stream, using buffer with size.
+			// 将 STDIN 流回环到 STDOUT 流，并使用指定大小的缓冲区。
 			buffer := make([]byte, bufferSize)
 			_, err = io.CopyBuffer(conns.stdoutStream, conns.stdinStream, buffer)
 			if err != nil {
@@ -149,8 +143,8 @@ func TestWebSocketClient_DifferentBufferSizes(t *testing.T) {
 		}))
 		defer websocketServer.Close()
 
-		// Now create the WebSocket client (executor), and point it to the "websocketServer".
-		// Must add STDIN and STDOUT query params for the WebSocket client request.
+		// 创建 WebSocket 客户端（executor），指向 "websocketServer"。
+		// 客户端请求必须加上 STDIN 和 STDOUT 的 query 参数。
 		websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stdout=true"
 		websocketLocation, err := url.Parse(websocketServer.URL)
 		if err != nil {
@@ -160,8 +154,7 @@ func TestWebSocketClient_DifferentBufferSizes(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error creating websocket executor: %v", err)
 		}
-		// Generate random data, and set it up to stream on STDIN. The data will be
-		// returned on the STDOUT buffer.
+		// 生成随机数据并设置为从 STDIN 流发送；数据将从 STDOUT 缓冲区返回。
 		randomSize := 1024 * 1024
 		randomData := make([]byte, randomSize)
 		if _, err := rand.Read(randomData); err != nil {
@@ -174,7 +167,7 @@ func TestWebSocketClient_DifferentBufferSizes(t *testing.T) {
 		}
 		errorChan := make(chan error)
 		go func() {
-			// Start the streaming on the WebSocket "exec" client.
+			// 启动 WebSocket "exec" 客户端上的流式传输。
 			errorChan <- exec.StreamWithContext(context.Background(), *options)
 		}()
 
@@ -185,7 +178,7 @@ func TestWebSocketClient_DifferentBufferSizes(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error")
 			}
-			// Validate remote command v5 protocol was negotiated.
+			// 校验协商到的是远程命令 v5 协议。
 			streamExec := exec.(*wsStreamExecutor)
 			if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 				t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
@@ -196,7 +189,7 @@ func TestWebSocketClient_DifferentBufferSizes(t *testing.T) {
 			t.Errorf("error reading the stream: %v", err)
 			return
 		}
-		// Check all the random data sent on STDIN was the same returned on STDOUT.
+		// 检查 STDIN 发送的全部随机数据与 STDOUT 返回的一致。
 		if !bytes.Equal(randomData, data) {
 			t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 		}
@@ -206,14 +199,14 @@ func TestWebSocketClient_DifferentBufferSizes(t *testing.T) {
 // TestWebSocketClient_LoopbackStdinAsPipe 通过 io.Pipe 提供 STDIN 并在写完后关闭，
 // 验证管道式输入（长度未知）也能被正确流式发送。
 func TestWebSocketClient_LoopbackStdinAsPipe(t *testing.T) {
-	// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
+	// 创建假 WebSocket 服务端：把收到的 STDIN 数据复制回 STDOUT 流。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
 			t.Fatalf("error on webSocketServerStreams: %v", err)
 		}
 		defer conns.conn.Close()
-		// Loopback the STDIN stream onto the STDOUT stream.
+		// 将 STDIN 流回环到 STDOUT 流。
 		_, err = io.Copy(conns.stdoutStream, conns.stdinStream)
 		if err != nil {
 			t.Fatalf("error copying STDIN to STDOUT: %v", err)
@@ -221,8 +214,8 @@ func TestWebSocketClient_LoopbackStdinAsPipe(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Now create the WebSocket client (executor), and point it to the "websocketServer".
-	// Must add STDIN and STDOUT query params for the WebSocket client request.
+	// 创建 WebSocket 客户端（executor），指向 "websocketServer"。
+	// 客户端请求必须加上 STDIN 和 STDOUT 的 query 参数。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -232,8 +225,7 @@ func TestWebSocketClient_LoopbackStdinAsPipe(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate random data, and it will be written on the STDIN pipe. The same
-	// data will be returned on the STDOUT channel.
+	// 生成随机数据并写入 STDIN 管道；相同数据将从 STDOUT 通道返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -247,10 +239,10 @@ func TestWebSocketClient_LoopbackStdinAsPipe(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
-	// Write the random data onto the pipe connected to STDIN, then close the pipe.
+	// 把随机数据写入连接 STDIN 的管道，然后关闭管道。
 	_, err = writer.Write(randomData)
 	if err != nil {
 		t.Fatalf("unable to write random data to STDIN pipe: %v", err)
@@ -264,7 +256,7 @@ func TestWebSocketClient_LoopbackStdinAsPipe(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error")
 		}
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
@@ -275,7 +267,7 @@ func TestWebSocketClient_LoopbackStdinAsPipe(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT.
+	// 检查 STDIN 发送的随机数据与 STDOUT 返回的数据一致。
 	if !bytes.Equal(randomData, data) {
 		t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 	}
@@ -283,14 +275,14 @@ func TestWebSocketClient_LoopbackStdinAsPipe(t *testing.T) {
 
 // TestWebSocketClient_LoopbackStdinToStderr 验证 STDIN 数据经 STDERR 通道回环后保持一致。
 func TestWebSocketClient_LoopbackStdinToStderr(t *testing.T) {
-	// Create fake WebSocket server. Copy received STDIN data back onto STDERR stream.
+	// 创建假 WebSocket 服务端：把收到的 STDIN 数据复制回 STDERR 流。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
 			t.Fatalf("error on webSocketServerStreams: %v", err)
 		}
 		defer conns.conn.Close()
-		// Loopback the STDIN stream onto the STDERR stream.
+		// 将 STDIN 流回环到 STDERR 流。
 		_, err = io.Copy(conns.stderrStream, conns.stdinStream)
 		if err != nil {
 			t.Fatalf("error copying STDIN to STDERR: %v", err)
@@ -298,8 +290,8 @@ func TestWebSocketClient_LoopbackStdinToStderr(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Now create the WebSocket client (executor), and point it to the "websocketServer".
-	// Must add STDIN and STDERR query params for the WebSocket client request.
+	// 创建 WebSocket 客户端（executor），指向 "websocketServer"。
+	// 客户端请求必须加上 STDIN 和 STDERR 的 query 参数。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stderr=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -309,8 +301,7 @@ func TestWebSocketClient_LoopbackStdinToStderr(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDERR buffer.
+	// 生成随机数据并设置为从 STDIN 流发送；数据将从 STDERR 缓冲区返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -323,7 +314,7 @@ func TestWebSocketClient_LoopbackStdinToStderr(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -334,7 +325,7 @@ func TestWebSocketClient_LoopbackStdinToStderr(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error")
 		}
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
@@ -345,7 +336,7 @@ func TestWebSocketClient_LoopbackStdinToStderr(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDERR.
+	// 检查 STDIN 发送的随机数据与 STDERR 返回的数据一致。
 	if !bytes.Equal(randomData, data) {
 		t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 	}
@@ -354,25 +345,24 @@ func TestWebSocketClient_LoopbackStdinToStderr(t *testing.T) {
 // TestWebSocketClient_MultipleReadChannels 同时从 STDOUT 与 STDERR 两个流读取，
 // 验证同一连接上的多路读取不会互相阻塞或丢数据。
 func TestWebSocketClient_MultipleReadChannels(t *testing.T) {
-	// Create fake WebSocket server, which uses a TeeReader to copy the same data
-	// onto the STDOUT stream onto the STDERR stream as well.
+	// 创建假 WebSocket 服务端，用 TeeReader 把 STDIN 数据同时复制到 STDOUT 与 STDERR 流。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
 			t.Fatalf("error on webSocketServerStreams: %v", err)
 		}
 		defer conns.conn.Close()
-		// TeeReader copies data read on STDIN onto STDERR.
+		// TeeReader 把从 STDIN 读到的数据复制一份到 STDERR。
 		stdinReader := io.TeeReader(conns.stdinStream, conns.stderrStream)
-		// Also copy STDIN to STDOUT.
+		// 同时把 STDIN 复制到 STDOUT。
 		_, err = io.Copy(conns.stdoutStream, stdinReader)
 		if err != nil {
 			t.Errorf("error copying STDIN to STDOUT: %v", err)
 		}
 	}))
 	defer websocketServer.Close()
-	// Now create the WebSocket client (executor), and point it to the "websocketServer".
-	// Must add stdin, stdout, and stderr query param for the WebSocket client request.
+	// 创建 WebSocket 客户端（executor），指向 "websocketServer"。
+	// 客户端请求必须加上 stdin、stdout 和 stderr 的 query 参数。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stdout=true" + "&" + "stderr=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -382,8 +372,7 @@ func TestWebSocketClient_MultipleReadChannels(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Generate 1MB of random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT and STDERR buffers.
+	// 生成 1MB 随机数据并设置为从 STDIN 流发送；数据将从 STDOUT 和 STDERR 缓冲区返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -407,13 +396,13 @@ func TestWebSocketClient_MultipleReadChannels(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
 		}
 	}
-	// Validate the data read from the STDOUT stream is the same as sent on the STDIN stream.
+	// 校验从 STDOUT 流读到的数据与 STDIN 流发送的一致。
 	stdoutBytes, err := io.ReadAll(bytes.NewReader(stdout.Bytes()))
 	if err != nil {
 		t.Fatalf("error reading the stream: %v", err)
@@ -421,7 +410,7 @@ func TestWebSocketClient_MultipleReadChannels(t *testing.T) {
 	if !bytes.Equal(stdoutBytes, randomData) {
 		t.Errorf("unexpected data received (%d) sent (%d)", len(stdoutBytes), len(randomData))
 	}
-	// Validate the data read from the STDERR stream is the same as sent on the STDIN stream.
+	// 校验从 STDERR 流读到的数据与 STDIN 流发送的一致。
 	stderrBytes, err := io.ReadAll(bytes.NewReader(stderr.Bytes()))
 	if err != nil {
 		t.Fatalf("error reading the stream: %v", err)
@@ -431,8 +420,6 @@ func TestWebSocketClient_MultipleReadChannels(t *testing.T) {
 	}
 }
 
-// Returns a random exit code in the range(1-127).
-//
 // randomExitCode 返回 1-127 的随机退出码，特意避开 0（0 表示成功）。
 func randomExitCode() int {
 	errorCode := mrand.Intn(128)
@@ -446,7 +433,7 @@ func randomExitCode() int {
 // 客户端能解析出形如 "command terminated with exit code N" 的错误。
 func TestWebSocketClient_ErrorStream(t *testing.T) {
 	expectedExitCode := randomExitCode()
-	// Create fake WebSocket server. Returns structured exit code error on error stream.
+	// 创建假 WebSocket 服务端：在 error 流上返回结构化的退出码错误。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
@@ -457,7 +444,7 @@ func TestWebSocketClient_ErrorStream(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error copying STDIN to STDERR: %v", err)
 		}
-		// Force an non-zero exit code error returned on the error stream.
+		// 强制在 error 流上返回非零退出码错误。
 		err = conns.writeStatus(&apierrors.StatusError{ErrStatus: metav1.Status{
 			Status: metav1.StatusFailure,
 			Reason: remotecommand.NonZeroExitCodeReason,
@@ -476,7 +463,7 @@ func TestWebSocketClient_ErrorStream(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Now create the WebSocket client (executor), and point it to the "websocketServer".
+	// 创建 WebSocket 客户端（executor），指向 "websocketServer"。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stderr=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -497,7 +484,7 @@ func TestWebSocketClient_ErrorStream(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -505,17 +492,17 @@ func TestWebSocketClient_ErrorStream(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expect stream to be closed after connection is closed.")
 	case err := <-errorChan:
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
 		}
-		// Expect exit code error on error stream.
+		// 预期在 error 流上得到退出码错误。
 		if err == nil {
 			t.Errorf("expected error, but received none")
 		}
 		expectedError := fmt.Sprintf("command terminated with exit code %d", expectedExitCode)
-		// Compare expected error with exit code to actual error.
+		// 比对带退出码的预期错误与实际错误。
 		if expectedError != err.Error() {
 			t.Errorf("expected error (%s), got (%s)", expectedError, err)
 		}
@@ -529,9 +516,6 @@ type fakeTerminalSizeQueue struct {
 	terminalSizes []TerminalSize
 }
 
-// newTerminalSizeQueue returns a pointer to a fakeTerminalSizeQueue passing
-// "max" number of random TerminalSizes created.
-//
 // newTerminalSizeQueue 创建最多返回 max 个窗口大小的队列。
 func newTerminalSizeQueue(max int) *fakeTerminalSizeQueue {
 	return &fakeTerminalSizeQueue{
@@ -540,10 +524,6 @@ func newTerminalSizeQueue(max int) *fakeTerminalSizeQueue {
 	}
 }
 
-// Next returns a pointer to the next random TerminalSize, or nil if we have
-// already returned "maxSizes" TerminalSizes already. Stores the randomly
-// created TerminalSize in "terminalSizes" field for later validation.
-//
 // Next 返回下一个随机窗口大小；达到上限后返回 nil 表示队列结束。
 func (f *fakeTerminalSizeQueue) Next() *TerminalSize {
 	if len(f.terminalSizes) >= f.maxSizes {
@@ -554,9 +534,6 @@ func (f *fakeTerminalSizeQueue) Next() *TerminalSize {
 	return &size
 }
 
-// randomTerminalSize returns a TerminalSize with random values in the
-// range (0-65535) for the fields Width and Height.
-//
 // randomTerminalSize 生成各字段在 uint16 范围内的随机窗口大小。
 func randomTerminalSize() TerminalSize {
 	randWidth := uint16(mrand.Intn(int(math.Pow(2, 16))))
@@ -567,10 +544,6 @@ func randomTerminalSize() TerminalSize {
 	}
 }
 
-// randReader implements the ReadCloser interface, and it continuously
-// returns random data until it is closed. Stores number of random
-// bytes generated and returned.
-//
 // randReader 持续产生随机数据，并记录所有已返回的字节用于比对；
 // lock 保护 closed 与 randBytes 以支持并发访问。
 type randReader struct {
@@ -579,9 +552,8 @@ type randReader struct {
 	lock      sync.Mutex
 }
 
-// Read implements the Reader interface filling the passed buffer with
-// random data, returning the number of bytes filled and an error
-// if one occurs. Return 0 and EOF if the randReader has been closed.
+// Read 实现 Reader 接口：用随机数据填充传入缓冲区，返回填充的字节数和错误；
+// randReader 关闭后返回 0 和 io.EOF。
 func (r *randReader) Read(b []byte) (int, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -594,9 +566,7 @@ func (r *randReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
-// Close implements the Closer interface, setting the close field true.
-// Further calls to Read() after Close() will return 0, EOF. Returns
-// nil error.
+// Close 实现 Closer 接口：将 closed 字段置为 true；此后调用 Read() 返回 0 和 EOF，返回 nil 错误。
 func (r *randReader) Close() (err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -607,16 +577,14 @@ func (r *randReader) Close() (err error) {
 // TestWebSocketClient_MultipleWriteChannels 同时向连接写入 STDIN 与 TTY resize，
 // 验证写锁能串行化两个写线程且不丢数据。
 func TestWebSocketClient_MultipleWriteChannels(t *testing.T) {
-	// Create the fake terminal size queue and the actualTerminalSizes which
-	// will be received at the opposite websocket endpoint.
+	// 构造假的终端窗口大小队列，并准备记录 websocket 另一端实际收到的 actualTerminalSizes。
 	numSizeQueue := 10000
 	sizeQueue := newTerminalSizeQueue(numSizeQueue)
 	actualTerminalSizes := make([]TerminalSize, 0, numSizeQueue)
-	// Create ReadCloser sending random data on STDIN stream over websocket connection.
+	// 构造 ReadCloser，通过 websocket 连接在 STDIN 流上持续发送随机数据。
 	stdinReader := randReader{randBytes: []byte{}, closed: false}
-	// Create fake WebSocket server, which will receive concurrently the STDIN stream as
-	// well as the resize stream (TerminalSizes). Store the TerminalSize data from the resize
-	// stream for subsequent validation.
+	// 创建假 WebSocket 服务端，并发接收 STDIN 流与 resize 流（TerminalSizes）；
+	// 保存 resize 流中的 TerminalSize 数据供后续校验。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var wg sync.WaitGroup
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
@@ -624,7 +592,7 @@ func TestWebSocketClient_MultipleWriteChannels(t *testing.T) {
 			t.Fatalf("error on webSocketServerStreams: %v", err)
 		}
 		defer conns.conn.Close()
-		// Create goroutine to loopback the STDIN stream onto the STDOUT stream.
+		// 启动协程将 STDIN 流回环到 STDOUT 流。
 		wg.Add(1)
 		go func() {
 			_, err := io.Copy(conns.stdoutStream, conns.stdinStream)
@@ -633,17 +601,17 @@ func TestWebSocketClient_MultipleWriteChannels(t *testing.T) {
 			}
 			wg.Done()
 		}()
-		// Read the terminal resize requests, storing them in actualTerminalSizes
+		// 读取终端 resize 请求，存入 actualTerminalSizes
 		for i := 0; i < numSizeQueue; i++ {
 			actualTerminalSize := <-conns.resizeChan
 			actualTerminalSizes = append(actualTerminalSizes, actualTerminalSize)
 		}
-		stdinReader.Close() // Stops the random STDIN stream generation
-		wg.Wait()           // Wait for all bytes copied from STDIN to STDOUT
+		stdinReader.Close() // 停止随机 STDIN 流的生成
+		wg.Wait()           // 等待 STDIN 到 STDOUT 的字节全部复制完成
 	}))
 	defer websocketServer.Close()
-	// Now create the WebSocket client (executor), and point it to the "websocketServer".
-	// Must add stdin, stdout, and TTY query param for the WebSocket client request.
+	// 创建 WebSocket 客户端（executor），指向 "websocketServer"。
+	// 客户端请求必须加上 stdin、stdout 和 TTY 的 query 参数。
 	websocketServer.URL = websocketServer.URL + "?" + "tty=true" + "&" + "stdin=true" + "&" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -672,14 +640,14 @@ func TestWebSocketClient_MultipleWriteChannels(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
 		}
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT *and*
-	// that a minimum amount of random data was sent and received, ensuring concurrency.
+	// 检查 STDIN 发送的随机数据与 STDOUT 返回的一致，*并且*确认发送与接收了
+	// 一定量的随机数据，以验证并发性。
 	stdoutBytes, err := io.ReadAll(bytes.NewReader(stdout.Bytes()))
 	if err != nil {
 		t.Fatalf("error reading the stream: %v", err)
@@ -690,8 +658,7 @@ func TestWebSocketClient_MultipleWriteChannels(t *testing.T) {
 	if !bytes.Equal(stdoutBytes, stdinReader.randBytes) {
 		t.Errorf("unexpected data received (%d) sent (%d)", len(stdoutBytes), len(stdinReader.randBytes))
 	}
-	// Validate the random TerminalSizes sent on the resize stream are the same
-	// as the actual TerminalSizes received at the websocket server.
+	// 校验 resize 流发送的随机 TerminalSizes 与 websocket 服务端实际收到的一致。
 	if len(actualTerminalSizes) != numSizeQueue {
 		t.Errorf("expected received terminal size window (%d), got (%d)",
 			numSizeQueue, len(actualTerminalSizes))
@@ -706,11 +673,10 @@ func TestWebSocketClient_MultipleWriteChannels(t *testing.T) {
 
 // TestWebSocketClient_ProtocolVersions 验证 V2-V4 子协议都能被协商成功。
 func TestWebSocketClient_ProtocolVersions(t *testing.T) {
-	// Create a raw websocket server that accepts V2-V4 versions of
-	// the remote command subprotocol.
+	// 创建一个接受远程命令子协议 V2-V4 版本的原始 websocket 服务端。
 	var upgrader = gwebsocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			return true // Accepting all requests
+			return true // 接受所有请求
 		},
 		Subprotocols: []string{
 			remotecommand.StreamProtocolV4Name,
@@ -718,7 +684,7 @@ func TestWebSocketClient_ProtocolVersions(t *testing.T) {
 			remotecommand.StreamProtocolV2Name,
 		},
 	}
-	// Upgrade a raw websocket server connection.
+	// 升级原始 websocket 服务端连接。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conn, err := upgrader.Upgrade(w, req, nil)
 		if err != nil {
@@ -728,7 +694,7 @@ func TestWebSocketClient_ProtocolVersions(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Set up the websocket client with the STDOUT stream.
+	// 配置带 STDOUT 流的 websocket 客户端。
 	websocketServer.URL = websocketServer.URL + "?" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -738,8 +704,7 @@ func TestWebSocketClient_ProtocolVersions(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
-	// Iterate through previous remote command protocol versions, validating the
-	// requested protocol version is the one that is negotiated.
+	// 依次尝试旧版远程命令协议，校验请求的协议版本正是被协商的版本。
 	versions := []string{
 		remotecommand.StreamProtocolV4Name,
 		remotecommand.StreamProtocolV3Name,
@@ -754,7 +719,7 @@ func TestWebSocketClient_ProtocolVersions(t *testing.T) {
 		}
 		errorChan := make(chan error)
 		go func() {
-			// Start the streaming on the WebSocket "exec" client.
+			// 启动 WebSocket "exec" 客户端上的流式传输。
 			errorChan <- exec.StreamWithContext(context.Background(), *options)
 		}()
 
@@ -762,7 +727,7 @@ func TestWebSocketClient_ProtocolVersions(t *testing.T) {
 		case <-time.After(wait.ForeverTestTimeout):
 			t.Fatalf("expect stream to be closed after connection is closed.")
 		case <-errorChan:
-			// Validate remote command protocol requestedVersion was negotiated.
+			// 校验协商到的是请求的远程命令协议版本。
 			streamExec := exec.(*wsStreamExecutor)
 			if requestedVersion != streamExec.negotiated {
 				t.Fatalf("expected protocol version (%s), got (%s)", requestedVersion, streamExec.negotiated)
@@ -774,9 +739,9 @@ func TestWebSocketClient_ProtocolVersions(t *testing.T) {
 // TestWebSocketClient_BadHandshake 验证客户端请求服务端不支持的子协议时，
 // 握手失败并返回 "bad handshake" 错误。
 func TestWebSocketClient_BadHandshake(t *testing.T) {
-	// Create fake WebSocket server (supports V5 subprotocol).
+	// 创建假 WebSocket 服务端（仅支持 V5 子协议）。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// Bad handshake means websocket server will not completely initialize.
+		// bad handshake 意味着 websocket 服务端不会完成初始化。
 		_, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err == nil {
 			t.Fatalf("expected error, but received none.")
@@ -797,7 +762,7 @@ func TestWebSocketClient_BadHandshake(t *testing.T) {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
 	streamExec := exec.(*wsStreamExecutor)
-	// Set the attempted subprotocol version to V4; websocket server only accepts V5.
+	// 将尝试的子协议版本设为 V4；websocket 服务端只接受 V5。
 	streamExec.protocols = []string{remotecommand.StreamProtocolV4Name}
 
 	var stdout bytes.Buffer
@@ -806,7 +771,7 @@ func TestWebSocketClient_BadHandshake(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- streamExec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -814,7 +779,7 @@ func TestWebSocketClient_BadHandshake(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expect stream to be closed after connection is closed.")
 	case err := <-errorChan:
-		// Expecting unable to upgrade connection -- "bad handshake" error.
+		// 预期升级连接失败 —— "bad handshake" 错误。
 		if err == nil {
 			t.Errorf("expected error but received none")
 		}
@@ -829,7 +794,7 @@ func TestWebSocketClient_BadHandshake(t *testing.T) {
 func TestWebSocketClient_HeartbeatTimeout(t *testing.T) {
 	blockRequestCtx, unblockRequest := context.WithCancel(context.Background())
 	defer unblockRequest()
-	// Create fake WebSocket server which blocks.
+	// 创建一个会阻塞的假 WebSocket 服务端。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
@@ -839,7 +804,7 @@ func TestWebSocketClient_HeartbeatTimeout(t *testing.T) {
 		<-blockRequestCtx.Done()
 	}))
 	defer websocketServer.Close()
-	// Create websocket client connecting to fake server.
+	// 创建连接到假服务端的 websocket 客户端。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -850,12 +815,12 @@ func TestWebSocketClient_HeartbeatTimeout(t *testing.T) {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
 	streamExec := exec.(*wsStreamExecutor)
-	// Ping period is greater than the ping deadline, forcing the timeout to fire.
-	pingPeriod := wait.ForeverTestTimeout // this lets the heartbeat deadline expire without renewing it
-	pingDeadline := time.Second           // this gives setup 1 second to establish streams
+	// ping 周期大于 ping 期限，强制触发超时。
+	pingPeriod := wait.ForeverTestTimeout // 让心跳期限在未续期的情况下过期
+	pingDeadline := time.Second           // 给建立流预留 1 秒准备时间
 	streamExec.heartbeatPeriod = pingPeriod
 	streamExec.heartbeatDeadline = pingDeadline
-	// Send some random data to the websocket server through STDIN.
+	// 通过 STDIN 向 websocket 服务端发送一些随机数据。
 	randomData := make([]byte, 128)
 	if _, err := rand.Read(randomData); err != nil {
 		t.Errorf("unexpected error reading random data: %v", err)
@@ -865,7 +830,7 @@ func TestWebSocketClient_HeartbeatTimeout(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- streamExec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -873,14 +838,14 @@ func TestWebSocketClient_HeartbeatTimeout(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expected heartbeat timeout, got none.")
 	case err := <-errorChan:
-		// Expecting heartbeat timeout error.
+		// 预期心跳超时错误。
 		if err == nil {
 			t.Fatalf("expected error but received none")
 		}
 		if !strings.Contains(err.Error(), "i/o timeout") {
 			t.Errorf("expected heartbeat timeout error, got (%s)", err)
 		}
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
@@ -893,11 +858,11 @@ func TestWebSocketClient_HeartbeatTimeout(t *testing.T) {
 func TestWebSocketClient_TextMessageTypeError(t *testing.T) {
 	var upgrader = gwebsocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			return true // Accepting all requests
+			return true // 接受所有请求
 		},
 		Subprotocols: []string{remotecommand.StreamProtocolV5Name},
 	}
-	// Upgrade a raw websocket server connection. Returns wrong message type "TextMessage".
+	// 升级原始 websocket 服务端连接，返回错误的消息类型 "TextMessage"。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conn, err := upgrader.Upgrade(w, req, nil)
 		if err != nil {
@@ -906,7 +871,7 @@ func TestWebSocketClient_TextMessageTypeError(t *testing.T) {
 		defer conn.Close()
 		msg := []byte("test message with wrong message type.")
 		stdOutMsg := append([]byte{remotecommand.StreamStdOut}, msg...)
-		// Wrong message type "TextMessage".
+		// 错误的消息类型 "TextMessage"。
 		err = conn.WriteMessage(gwebsocket.TextMessage, stdOutMsg)
 		if err != nil {
 			t.Fatalf("error writing text message to websocket: %v", err)
@@ -915,7 +880,7 @@ func TestWebSocketClient_TextMessageTypeError(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Set up the websocket client with the STDOUT stream.
+	// 配置带 STDOUT 流的 websocket 客户端。
 	websocketServer.URL = websocketServer.URL + "?" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -931,7 +896,7 @@ func TestWebSocketClient_TextMessageTypeError(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -939,14 +904,14 @@ func TestWebSocketClient_TextMessageTypeError(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expect stream to be closed after connection is closed.")
 	case err := <-errorChan:
-		// Expecting bad message type error.
+		// 预期消息类型错误。
 		if err == nil {
 			t.Fatalf("expected error but received none")
 		}
 		if !strings.Contains(err.Error(), "unexpected message type") {
 			t.Errorf("expected bad message type error, got (%s)", err)
 		}
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
@@ -959,23 +924,23 @@ func TestWebSocketClient_TextMessageTypeError(t *testing.T) {
 func TestWebSocketClient_EmptyMessageHandled(t *testing.T) {
 	var upgrader = gwebsocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			return true // Accepting all requests
+			return true // 接受所有请求
 		},
 		Subprotocols: []string{remotecommand.StreamProtocolV5Name},
 	}
-	// Upgrade a raw websocket server connection. Returns wrong message type "TextMessage".
+	// 升级原始 websocket 服务端连接，返回错误的消息类型 "TextMessage"。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conn, err := upgrader.Upgrade(w, req, nil)
 		if err != nil {
 			t.Fatalf("unable to upgrade to create websocket connection: %v", err)
 		}
 		defer conn.Close()
-		// Send completely empty message, including missing initial stream id.
+		// 发送完全空的消息，连最初的 stream id 也没有。
 		conn.WriteMessage(gwebsocket.BinaryMessage, []byte{}) //nolint:errcheck
 	}))
 	defer websocketServer.Close()
 
-	// Set up the websocket client with the STDOUT stream.
+	// 配置带 STDOUT 流的 websocket 客户端。
 	websocketServer.URL = websocketServer.URL + "?" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	if err != nil {
@@ -991,7 +956,7 @@ func TestWebSocketClient_EmptyMessageHandled(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -999,14 +964,14 @@ func TestWebSocketClient_EmptyMessageHandled(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expect stream to be closed after connection is closed.")
 	case err := <-errorChan:
-		// Expecting error reading initial stream id.
+		// 预期读取初始 stream id 时出错。
 		if err == nil {
 			t.Fatalf("expected error but received none")
 		}
 		if !strings.Contains(err.Error(), "read stream id") {
 			t.Errorf("expected error reading stream id, got (%s)", err)
 		}
-		// Validate remote command v5 protocol was negotiated.
+		// 校验协商到的是远程命令 v5 协议。
 		streamExec := exec.(*wsStreamExecutor)
 		if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 			t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
@@ -1017,7 +982,7 @@ func TestWebSocketClient_EmptyMessageHandled(t *testing.T) {
 // TestWebSocketClient_ExecutorErrors 验证构造/使用 executor 的错误路径：
 // 非法认证配置导致 transport 创建失败，nil context 导致 StreamWithContext 报错。
 func TestWebSocketClient_ExecutorErrors(t *testing.T) {
-	// Invalid config causes transport creation error in websocket executor constructor.
+	// 非法配置会导致 websocket executor 构造函数创建 transport 出错。
 	config := rest.Config{
 		ExecProvider: &clientcmdapi.ExecConfig{},
 		AuthProvider: &clientcmdapi.AuthProviderConfig{},
@@ -1028,14 +993,14 @@ func TestWebSocketClient_ExecutorErrors(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "error creating websocket transports") {
 		t.Errorf("expecting error creating transports, got (%s)", err.Error())
 	}
-	// Verify that a nil context will cause an error in StreamWithContext
+	// 验证 nil context 会让 StreamWithContext 报错
 	exec, err := NewWebSocketExecutor(&rest.Config{}, "GET", "http://localhost")
 	if err != nil {
 		t.Errorf("unexpected error creating websocket executor: %v", err)
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		var ctx context.Context
 		errorChan <- exec.StreamWithContext(ctx, StreamOptions{})
 	}()
@@ -1044,7 +1009,7 @@ func TestWebSocketClient_ExecutorErrors(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expect stream to be closed after connection is closed.")
 	case err := <-errorChan:
-		// Expecting error with nil context.
+		// 预期 nil context 错误。
 		if err == nil {
 			t.Fatalf("expected error but received none")
 		}
@@ -1060,10 +1025,10 @@ func TestWebSocketClient_HeartbeatSucceeds(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	var upgrader = gwebsocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			return true // Accepting all requests
+			return true // 接受所有请求
 		},
 	}
-	// Upgrade a raw websocket server connection, which automatically responds to Ping.
+	// 升级原始 websocket 服务端连接；它会自动回应 Ping。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conn, err := upgrader.Upgrade(w, req, nil)
 		if err != nil {
@@ -1078,21 +1043,20 @@ func TestWebSocketClient_HeartbeatSucceeds(t *testing.T) {
 		}
 	}))
 	defer websocketServer.Close()
-	// Create a raw websocket client, connecting to the websocket server.
+	// 创建原始 websocket 客户端，连接到 websocket 服务端。
 	url := strings.ReplaceAll(websocketServer.URL, "http", "ws")
 	client, _, err := gwebsocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
 	defer client.Close()
-	// Create a heartbeat using the client websocket connection, and start it.
-	// "period" is less than "deadline", so ping/pong heartbeat will succceed.
+	// 用客户端 websocket 连接创建心跳并启动；"period" 小于 "deadline"，ping/pong 心跳会成功。
 	var expectedMsg = "test heartbeat message"
 	var period = 100 * time.Millisecond
 	var deadline = 200 * time.Millisecond
 	heartbeat := newHeartbeat(logger, client, period, deadline)
 	heartbeat.setMessage(expectedMsg)
-	// Add a channel to the handler to retrieve the "pong" message.
+	// 给 handler 挂一个 channel 以取回 "pong" 消息。
 	pongMsgCh := make(chan string)
 	pongHandler := heartbeat.conn.PongHandler()
 	heartbeat.conn.SetPongHandler(func(msg string) error {
@@ -1117,12 +1081,12 @@ func TestWebSocketClient_HeartbeatSucceeds(t *testing.T) {
 	select {
 	case actualMsg := <-pongMsgCh:
 		close(heartbeat.closer)
-		// Validate the received pong message is the same as sent in ping.
+		// 校验收到的 pong 消息与 ping 发送的一致。
 		if expectedMsg != actualMsg {
 			t.Errorf("expected received pong message (%s), got (%s)", expectedMsg, actualMsg)
 		}
 	case <-time.After(period * 4):
-		// This case should not happen.
+		// 该分支不应发生。
 		close(heartbeat.closer)
 		t.Errorf("unexpected heartbeat timeout")
 	}
@@ -1145,7 +1109,7 @@ func TestLateStreamCreation(t *testing.T) {
 func TestWebSocketClient_StreamsAndExpectedErrors(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
-	// Validate Stream functions.
+	// 校验 Stream 相关函数。
 	c := newWSStreamCreator(logger, nil)
 	headers := http.Header{}
 	headers.Set(v1.StreamType, v1.StreamTypeStdin)
@@ -1162,12 +1126,12 @@ func TestWebSocketClient_StreamsAndExpectedErrors(t *testing.T) {
 	if !reflect.DeepEqual(headers, actualHeaders) {
 		t.Errorf("expecting stream headers (%v), got (%v)", headers, actualHeaders)
 	}
-	// Validate stream reset does not return error.
+	// 校验流 reset 不返回错误。
 	err = s.Reset()
 	if err != nil {
 		t.Errorf("unexpected error in stream reset: %v", err)
 	}
-	// Validate close with nil connection is an error.
+	// 校验连接为 nil 时 Close 会报错。
 	err = s.Close()
 	if err == nil {
 		t.Errorf("expecting stream Close error, but received none")
@@ -1175,7 +1139,7 @@ func TestWebSocketClient_StreamsAndExpectedErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "Close() on already closed stream") {
 		t.Errorf("expected stream close error, got (%s)", err)
 	}
-	// Validate write with nil connection is an error.
+	// 校验连接为 nil 时 Write 会报错。
 	n, err := s.Write([]byte("not written"))
 	if n != 0 {
 		t.Errorf("expected zero bytes written, wrote (%d) instead", n)
@@ -1186,7 +1150,7 @@ func TestWebSocketClient_StreamsAndExpectedErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "write on closed stream") {
 		t.Errorf("expected stream write error, got (%s)", err)
 	}
-	// Validate CreateStream errors -- unknown stream
+	// 校验 CreateStream 的错误 —— 未知流
 	headers = http.Header{}
 	headers.Set(v1.StreamType, "UNKNOWN")
 	_, err = c.CreateStream(headers)
@@ -1195,7 +1159,7 @@ func TestWebSocketClient_StreamsAndExpectedErrors(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "unknown stream type") {
 		t.Errorf("expecting unknown stream type error, got (%s)", err.Error())
 	}
-	// Validate CreateStream errors -- duplicate stream
+	// 校验 CreateStream 的错误 —— 重复流
 	headers.Set(v1.StreamType, v1.StreamTypeError)
 	c.streams[remotecommand.StreamErr] = &stream{}
 	_, err = c.CreateStream(headers)
@@ -1206,9 +1170,6 @@ func TestWebSocketClient_StreamsAndExpectedErrors(t *testing.T) {
 	}
 }
 
-// options contains details about which streams are required for
-// remote command execution.
-//
 // options 描述一次 exec/attach 需要哪些流。
 type options struct {
 	stdin  bool
@@ -1217,8 +1178,6 @@ type options struct {
 	tty    bool
 }
 
-// Translates query params in request into options struct.
-//
 // streamOptionsFromRequest 从请求 query 中解析出需要开启的流。
 func streamOptionsFromRequest(req *http.Request) *options {
 	query := req.URL.Query()
@@ -1234,8 +1193,6 @@ func streamOptionsFromRequest(req *http.Request) *options {
 	}
 }
 
-// websocketStreams contains the WebSocket connection and streams from a server.
-//
 // websocketStreams 汇总服务端一侧的连接与各数据流，便于测试中读写。
 type websocketStreams struct {
 	conn         io.Closer
@@ -1248,9 +1205,6 @@ type websocketStreams struct {
 	tty          bool
 }
 
-// Create WebSocket server streams to respond to a WebSocket client. Creates the streams passed
-// in the stream options.
-//
 // webSocketServerStreams 建立服务端流；若请求了 resize 流，额外启动协程解码窗口大小事件。
 func webSocketServerStreams(req *http.Request, w http.ResponseWriter, opts *options) (*websocketStreams, error) {
 	conn, err := createWebSocketStreams(req, w, opts)
@@ -1266,8 +1220,6 @@ func webSocketServerStreams(req *http.Request, w http.ResponseWriter, opts *opti
 	return conn, nil
 }
 
-// Read terminal resize events off of passed stream and queue into passed channel.
-//
 // handleResizeEvents 持续解码 resize 事件并发送到 channel；
 // 流结束或请求 context 结束时退出并关闭 channel。
 func handleResizeEvents(ctx context.Context, stream io.Reader, channel chan<- TerminalSize) {
@@ -1283,21 +1235,17 @@ func handleResizeEvents(ctx context.Context, stream io.Reader, channel chan<- Te
 		select {
 		case channel <- size:
 		case <-ctx.Done():
-			// To avoid leaking this routine, exit if the http request finishes. This path
-			// would generally be hit if starting the process fails and nothing is started to
-			// ingest these resize events.
+			// 为避免协程泄漏，http 请求结束后就退出；若进程启动失败、没有消费者
+			// 处理这些 resize 事件，通常会走到该分支。
 			return
 		}
 	}
 }
 
-// createChannels returns the standard channel types for a shell connection (STDIN 0, STDOUT 1, STDERR 2)
-// along with the approximate duplex value. It also creates the error (3) and resize (4) channels.
-//
 // createChannels 按 remotecommand 的固定通道编号构造通道类型表；
 // error 与 resize 通道始终开启。
 func createChannels(opts *options) []wsstream.ChannelType {
-	// open the requested channels, and always open the error channel
+	// 打开请求的通道，并始终打开 error 通道
 	channels := make([]wsstream.ChannelType, 5)
 	channels[remotecommand.StreamStdIn] = readChannel(opts.stdin)
 	channels[remotecommand.StreamStdOut] = writeChannel(opts.stdout)
@@ -1307,7 +1255,7 @@ func createChannels(opts *options) []wsstream.ChannelType {
 	return channels
 }
 
-// readChannel returns wsstream.ReadChannel if real is true, or wsstream.IgnoreChannel.
+// readChannel 在 real 为 true 时返回 wsstream.ReadChannel，否则返回 wsstream.IgnoreChannel。
 func readChannel(real bool) wsstream.ChannelType {
 	if real {
 		return wsstream.ReadChannel
@@ -1315,7 +1263,7 @@ func readChannel(real bool) wsstream.ChannelType {
 	return wsstream.IgnoreChannel
 }
 
-// writeChannel returns wsstream.WriteChannel if real is true, or wsstream.IgnoreChannel.
+// writeChannel 在 real 为 true 时返回 wsstream.WriteChannel，否则返回 wsstream.IgnoreChannel。
 func writeChannel(real bool) wsstream.ChannelType {
 	if real {
 		return wsstream.WriteChannel
@@ -1323,8 +1271,7 @@ func writeChannel(real bool) wsstream.ChannelType {
 	return wsstream.IgnoreChannel
 }
 
-// createWebSocketStreams returns a "channels" struct containing the websocket connection and
-// streams needed to perform an exec or an attach.
+// createWebSocketStreams 返回包含 websocket 连接及 exec/attach 所需流的 websocketStreams。
 func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *options) (*websocketStreams, error) {
 	channels := createChannels(opts)
 	conn := wsstream.NewConn(map[string]wsstream.ChannelProtocolConfig{
@@ -1334,15 +1281,13 @@ func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *opti
 		},
 	})
 	conn.SetIdleTimeout(4 * time.Hour)
-	// Opening the connection responds to WebSocket client, negotiating
-	// the WebSocket upgrade connection and the subprotocol.
+	// 打开连接即响应 WebSocket 客户端，协商 WebSocket 升级连接与子协议。
 	_, streams, err := conn.Open(w, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Send an empty message to the lowest writable channel to notify the client the connection is established
-	// 客户端以收到该空消息作为“连接已建立”的信号。
+	// 向最靠前的可写通道发送一个空消息；客户端以收到该空消息作为“连接已建立”的信号。
 	//nolint:errcheck
 	switch {
 	case opts.stdout:
@@ -1380,17 +1325,17 @@ func createWebSocketStreams(req *http.Request, w http.ResponseWriter, opts *opti
 // TestWebSocketClient_ProxySucceeds 验证配置了 HTTP/HTTPS 代理时，WebSocket exec 仍能
 // 通过代理建立连接并完成 STDIN->STDOUT 回环。
 func TestWebSocketClient_ProxySucceeds(t *testing.T) {
-	// Validate websocket proxy succeeds for each of the enumerated schemes.
+	// 校验对每种列举的协议方案 websocket 代理都能成功。
 	proxySchemes := []string{"http", "https"}
 	for _, proxyScheme := range proxySchemes {
-		// Create the proxy handler, keeping track of how many times it was called.
+		// 创建代理 handler，并统计其被调用的次数。
 		var proxyCalled atomic.Int64
 		proxyHandler := utilnettesting.NewHTTPProxyHandler(t, func(req *http.Request) bool {
 			proxyCalled.Add(1)
 			return true
 		})
 		defer proxyHandler.Wait()
-		// Create/Start the proxy server, adding TLS functionality depending on scheme.
+		// 创建并启动代理服务器，按 scheme 决定是否加入 TLS 功能。
 		proxyServer := httptest.NewUnstartedServer(proxyHandler)
 		if proxyScheme == "https" {
 			cert, err := tls.X509KeyPair(localhostCert, localhostKey)
@@ -1407,14 +1352,14 @@ func TestWebSocketClient_ProxySucceeds(t *testing.T) {
 		require.NoError(t, err)
 		t.Logf("Proxy URL: %s", proxyLocation.String())
 
-		// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
+		// 创建假 WebSocket 服务端：把收到的 STDIN 数据复制回 STDOUT 流。
 		websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 			if err != nil {
 				t.Fatalf("error on webSocketServerStreams: %v", err)
 			}
 			defer conns.conn.Close() //nolint:errcheck
-			// Loopback the STDIN stream onto the STDOUT stream.
+			// 将 STDIN 流回环到 STDOUT 流。
 			_, err = io.Copy(conns.stdoutStream, conns.stdinStream)
 			if err != nil {
 				t.Fatalf("error copying STDIN to STDOUT: %v", err)
@@ -1422,14 +1367,14 @@ func TestWebSocketClient_ProxySucceeds(t *testing.T) {
 		}))
 		defer websocketServer.Close() //nolint:errcheck
 
-		// Now create the WebSocket client (executor), and point it to the TLS proxy server.
-		// The proxy server should open a websocket connection to the fake websocket server.
+		// 创建 WebSocket 客户端（executor），指向 TLS 代理服务器；
+		// 代理服务器会向假 websocket 服务端打开 websocket 连接。
 		websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stdout=true"
 		websocketLocation, err := url.Parse(websocketServer.URL)
 		require.NoError(t, err)
 		clientConfig := &rest.Config{
 			Host: websocketLocation.Host,
-			// Unused if "http" scheme.
+			// "http" 方案时不会被使用。
 			TLSClientConfig: rest.TLSClientConfig{CAData: localhostCert},
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return proxyLocation, nil
@@ -1438,8 +1383,7 @@ func TestWebSocketClient_ProxySucceeds(t *testing.T) {
 		exec, err := NewWebSocketExecutor(clientConfig, "GET", websocketServer.URL)
 		require.NoError(t, err)
 
-		// Generate random data, and set it up to stream on STDIN. The data will be
-		// returned on the STDOUT buffer.
+		// 生成随机数据并设置为从 STDIN 流发送；数据将从 STDOUT 缓冲区返回。
 		randomSize := 1024 * 1024
 		randomData := make([]byte, randomSize)
 		if _, err := rand.Read(randomData); err != nil {
@@ -1452,7 +1396,7 @@ func TestWebSocketClient_ProxySucceeds(t *testing.T) {
 		}
 		errorChan := make(chan error)
 		go func() {
-			// Start the streaming on the WebSocket "exec" client.
+			// 启动 WebSocket "exec" 客户端上的流式传输。
 			errorChan <- exec.StreamWithContext(context.Background(), *options)
 		}()
 
@@ -1463,7 +1407,7 @@ func TestWebSocketClient_ProxySucceeds(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// Validate remote command v5 protocol was negotiated.
+			// 校验协商到的是远程命令 v5 协议。
 			streamExec := exec.(*wsStreamExecutor)
 			if remotecommand.StreamProtocolV5Name != streamExec.negotiated {
 				t.Fatalf("expected remote command v5 protocol, got (%s)", streamExec.negotiated)
@@ -1473,14 +1417,14 @@ func TestWebSocketClient_ProxySucceeds(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error reading the stream: %v", err)
 		}
-		// Check the random data sent on STDIN was the same returned on STDOUT.
+		// 检查 STDIN 发送的随机数据与 STDOUT 返回的数据一致。
 		t.Logf("comparing %d random bytes sent data versus received", len(randomData))
 		if !bytes.Equal(randomData, data) {
 			t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 		} else {
 			t.Log("success--random bytes are the same")
 		}
-		// Ensure the proxy was called once
+		// 确保代理只被调用了一次
 		if e, a := int64(1), proxyCalled.Load(); e != a {
 			t.Errorf("expected %d proxy call, got %d", e, a)
 		}

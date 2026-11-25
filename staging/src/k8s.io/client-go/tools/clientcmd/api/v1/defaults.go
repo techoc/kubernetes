@@ -35,10 +35,10 @@ func SetDefaults_ExecConfig(exec *ExecConfig) {
 	if len(exec.InteractiveMode) == 0 {
 		switch exec.APIVersion {
 		case "client.authentication.k8s.io/v1beta1", "client.authentication.k8s.io/v1alpha1":
-			// default to IfAvailableExecInteractiveMode for backwards compatibility
+			// 为向后兼容，默认使用 IfAvailableExecInteractiveMode
 			exec.InteractiveMode = IfAvailableExecInteractiveMode
 		default:
-			// require other versions to explicitly declare whether they want stdin or not
+			// 要求其他版本显式声明是否需要 stdin
 		}
 	}
 }

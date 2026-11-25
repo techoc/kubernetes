@@ -20,7 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// ObjectName is a reference to an object of some implicit kind
+// ObjectName 指向某个隐含类型对象的引用（namespace + name）。
 //
 // 与 types.NamespacedName 字段相同但方法不同，保留本类型是为了让缓存键的
 // 编码历史行为保持稳定（见 String 方法）。
@@ -29,19 +29,18 @@ type ObjectName struct {
 	Name      string
 }
 
-// NewObjectName constructs a new one
+// NewObjectName 构造一个新的 ObjectName。
 func NewObjectName(namespace, name string) ObjectName {
 	return ObjectName{Namespace: namespace, Name: name}
 }
 
-// Parts is the inverse of the constructor
+// Parts 是构造函数的逆操作，把 ObjectName 拆回 namespace 和 name。
 func (objName ObjectName) Parts() (namespace, name string) {
 	return objName.Namespace, objName.Name
 }
 
-// String returns the standard string encoding,
-// which is designed to match the historical behavior of MetaNamespaceKeyFunc.
-// Note this behavior is different from the String method of types.NamespacedName.
+// String 返回标准的字符串编码，与 MetaNamespaceKeyFunc 的历史行为保持一致；
+// 注意该行为与 types.NamespacedName 的 String 方法不同。
 //
 // 空 namespace 时只返回 name；非空时返回 "namespace/name"。
 // 这正是 informer 缓存键的格式，改动会破坏已有缓存与测试的兼容性。
@@ -52,7 +51,7 @@ func (objName ObjectName) String() string {
 	return objName.Name
 }
 
-// ParseObjectName tries to parse the standard encoding
+// ParseObjectName 尝试解析标准编码字符串。
 //
 // 解析规则与 SplitMetaNamespaceKey 一致，保证与 String 互逆。
 func ParseObjectName(str string) (ObjectName, error) {
@@ -62,12 +61,12 @@ func ParseObjectName(str string) (ObjectName, error) {
 	return objName, err
 }
 
-// NamespacedNameAsObjectName rebrands the given NamespacedName as an ObjectName
+// NamespacedNameAsObjectName 把给定的 NamespacedName 重新包装为 ObjectName。
 func NamespacedNameAsObjectName(nn types.NamespacedName) ObjectName {
 	return NewObjectName(nn.Namespace, nn.Name)
 }
 
-// AsNamespacedName rebrands as a NamespacedName
+// AsNamespacedName 把 ObjectName 重新包装为 NamespacedName。
 func (objName ObjectName) AsNamespacedName() types.NamespacedName {
 	return types.NamespacedName{Namespace: objName.Namespace, Name: objName.Name}
 }

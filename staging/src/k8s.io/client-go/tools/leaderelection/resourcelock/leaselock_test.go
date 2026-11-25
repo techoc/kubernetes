@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-// mockRecorder implements record.EventRecorder for testing
+// mockRecorder 实现 record.EventRecorder 用于测试：
 // 只记录消息文本，足以断言 RecordEvent 的格式与去重行为。
 type mockRecorder struct {
 	events []string
@@ -62,7 +62,7 @@ var (
 	testRecord LeaderElectionRecord
 )
 
-// setup initializes the test variables before each test
+// setup 在每个测试前初始化测试变量。
 func setup() {
 	client = fake.NewClientset()
 	recorder = &mockRecorder{}
@@ -92,7 +92,7 @@ func setup() {
 // TestGetError 校验读取不存在的 Lease 返回 NotFound，调用方可据此判断首次获取。
 func TestGetError(t *testing.T) {
 	setup()
-	// Test Get on non-existent lease
+	// 测试对不存在的 Lease 执行 Get
 	_, _, err := leaseLock.Get(context.Background())
 	if err == nil {
 		t.Error("Expected error getting non-existent lease, got nil")
@@ -106,18 +106,18 @@ func TestGetError(t *testing.T) {
 func TestGet(t *testing.T) {
 	setup()
 
-	// Create a lease first
+	// 先创建一个 Lease
 	if err := leaseLock.Create(context.Background(), testRecord); err != nil {
 		t.Fatalf("Failed to create lease: %v", err)
 	}
 
-	// Test Get
+	// 测试 Get
 	record, recordBytes, err := leaseLock.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to get lease: %v", err)
 	}
 
-	// Verify record matches what we created
+	// 校验读回的 record 与创建内容一致
 	if record.HolderIdentity != testRecord.HolderIdentity {
 		t.Errorf("HolderIdentity mismatch, got %q want %q", record.HolderIdentity, testRecord.HolderIdentity)
 	}
@@ -134,7 +134,7 @@ func TestGet(t *testing.T) {
 		t.Errorf("Strategy mismatch, got %q want %q", record.Strategy, testRecord.Strategy)
 	}
 
-	// Verify we got valid JSON bytes
+	// 校验拿到了合法的 JSON bytes
 	var unmarshalled LeaderElectionRecord
 	if err := json.Unmarshal(recordBytes, &unmarshalled); err != nil {
 		t.Errorf("Failed to unmarshal record bytes: %v", err)
@@ -147,15 +147,15 @@ func TestRecordEventSuccess(t *testing.T) {
 
 	leaseLock.LockConfig.EventRecorder = recorder
 
-	// Create a lease first
+	// 先创建一个 Lease
 	if err := leaseLock.Create(context.Background(), testRecord); err != nil {
 		t.Fatalf("Failed to create lease: %v", err)
 	}
 
-	// Test recording an event
+	// 测试记录事件
 	leaseLock.RecordEvent("test event")
 
-	// Verify event was recorded
+	// 校验事件已被记录
 	if len(recorder.events) != 1 {
 		t.Errorf("Expected 1 event, got %d", len(recorder.events))
 	}
@@ -169,12 +169,12 @@ func TestRecordEventSuccess(t *testing.T) {
 func TestRecordEventNilRecorder(t *testing.T) {
 	setup()
 
-	// Create a lease first
+	// 先创建一个 Lease
 	if err := leaseLock.Create(context.Background(), testRecord); err != nil {
 		t.Fatalf("Failed to create lease: %v", err)
 	}
 
-	// Verify nil recorder doesn't panic
+	// 校验 recorder 为 nil 时不会 panic
 	leaseLock.LockConfig.EventRecorder = nil
 	leaseLock.RecordEvent("should not panic")
 }
@@ -183,12 +183,12 @@ func TestRecordEventNilRecorder(t *testing.T) {
 func TestCreateError(t *testing.T) {
 	setup()
 
-	// Create initial lease
+	// 创建初始 Lease
 	if err := leaseLock.Create(context.Background(), testRecord); err != nil {
 		t.Fatalf("Failed to create lease: %v", err)
 	}
 
-	// Attempt to create same lease again
+	// 尝试再次创建同一个 Lease
 	err := leaseLock.Create(context.Background(), testRecord)
 	if err == nil {
 		t.Error("Expected error creating duplicate lease, got nil")
@@ -202,7 +202,7 @@ func TestCreateError(t *testing.T) {
 func TestUpdateError(t *testing.T) {
 	setup()
 
-	// Attempt to update without initializing lease
+	// 尝试在未初始化 Lease 的情况下 Update
 	err := leaseLock.Update(context.Background(), testRecord)
 	if err == nil {
 		t.Error("Expected error updating uninitialized lease, got nil")
@@ -223,10 +223,10 @@ func TestDescribe(t *testing.T) {
 func TestLeaseConversion(t *testing.T) {
 	setup()
 
-	// Convert LeaderElectionRecord to LeaseSpec
+	// 将 LeaderElectionRecord 转换为 LeaseSpec
 	leaseSpec := LeaderElectionRecordToLeaseSpec(&testRecord)
 
-	// Verify all fields were converted correctly
+	// 校验所有字段都被正确转换
 	if *leaseSpec.HolderIdentity != testRecord.HolderIdentity {
 		t.Errorf("HolderIdentity mismatch, got %q want %q", *leaseSpec.HolderIdentity, testRecord.HolderIdentity)
 	}
@@ -249,10 +249,10 @@ func TestLeaseConversion(t *testing.T) {
 		t.Errorf("Strategy mismatch, got %q want %q", *leaseSpec.Strategy, testRecord.Strategy)
 	}
 
-	// Convert back to LeaderElectionRecord
+	// 再转回 LeaderElectionRecord
 	convertedRecord := LeaseSpecToLeaderElectionRecord(&leaseSpec)
 
-	// Verify round-trip conversion preserved all fields
+	// 校验往返转换保留了所有字段
 	if convertedRecord.HolderIdentity != testRecord.HolderIdentity {
 		t.Errorf("HolderIdentity lost in conversion, got %q want %q", convertedRecord.HolderIdentity, testRecord.HolderIdentity)
 	}
@@ -280,11 +280,11 @@ func TestLeaseConversion(t *testing.T) {
 func TestUpdateWithNilLabelsOnLease(t *testing.T) {
 	setup()
 
-	// Create initial lease
+	// 创建初始 Lease
 	if err := leaseLock.Create(context.Background(), testRecord); err != nil {
 		t.Fatalf("Failed to create lease: %v", err)
 	}
-	// Get the lease to initialize leaseLock.lease
+	// Get 一次以初始化 leaseLock.lease
 	if _, _, err := leaseLock.Get(context.Background()); err != nil {
 		t.Fatalf("Failed to get lease: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestUpdateWithNilLabelsOnLease(t *testing.T) {
 
 	leaseLock.Labels = map[string]string{"custom-key": "custom-val"}
 
-	// Update should succeed even with nil Labels on the lease itself
+	// 即使 Lease 对象自身的 Labels 为 nil，Update 也应成功
 	if err := leaseLock.Update(context.Background(), testRecord); err != nil {
 		t.Errorf("Update failed with nil Labels: %v", err)
 	}
@@ -303,11 +303,11 @@ func TestUpdateWithNilLabelsOnLease(t *testing.T) {
 func TestUpdateWithNilLabelsOnLeaseLock(t *testing.T) {
 	setup()
 
-	// Create initial lease
+	// 创建初始 Lease
 	if err := leaseLock.Create(context.Background(), testRecord); err != nil {
 		t.Fatalf("Failed to create lease: %v", err)
 	}
-	// Get the lease to initialize leaseLock.lease
+	// Get 一次以初始化 leaseLock.lease
 	if _, _, err := leaseLock.Get(context.Background()); err != nil {
 		t.Fatalf("Failed to get lease: %v", err)
 	}
@@ -316,7 +316,7 @@ func TestUpdateWithNilLabelsOnLeaseLock(t *testing.T) {
 
 	leaseLock.lease.Labels = map[string]string{"custom-key": "custom-val"}
 
-	// Update should succeed even with nil Labels on the leaselock
+	// 即使 leaseLock 的 Labels 为 nil，Update 也应成功
 	if err := leaseLock.Update(context.Background(), testRecord); err != nil {
 		t.Errorf("Update failed with nil Labels: %v", err)
 	}
@@ -329,23 +329,23 @@ func TestLabelUpdate(t *testing.T) {
 	labels := map[string]string{"custom-key": "custom-val"}
 	leaseLock.Labels = labels
 
-	// Create initial lease
+	// 创建初始 Lease
 	if err := leaseLock.Create(context.Background(), testRecord); err != nil {
 		t.Fatalf("Failed to create lease: %v", err)
 	}
 
-	// Update label on actual lease with new value
+	// 在实际 Lease 上把标签改为新值
 	leaseLock.lease.Labels["custom-key"] = "new-custom-val"
 
-	// Update extra label on lease
+	// 在 Lease 上新增一个标签
 	leaseLock.lease.Labels["custom-key-2"] = "custom-val-2"
 
-	// Update labels
+	// 提交标签更新
 	lease, err := leaseLock.Client.Leases(testNamespace).Update(context.Background(), leaseLock.lease, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to update lease labels: %v", err)
 	}
-	// verify the labels were updated
+	// 校验标签已更新
 	val, exists := lease.Labels["custom-key"]
 	if !exists {
 		t.Error("Label was not set on the lease")
@@ -362,12 +362,12 @@ func TestLabelUpdate(t *testing.T) {
 		t.Errorf("Label value mismatch, got %q want %q", val, "custom-val")
 	}
 
-	// Update the lease
+	// 更新 Lease
 	if err := leaseLock.Update(context.Background(), testRecord); err != nil {
 		t.Fatalf("Failed to update lease: %v", err)
 	}
 
-	// Verify labels are preserved
+	// 校验标签被保留
 	lease, err = leaseLock.Client.Leases(testNamespace).Get(context.Background(), testName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Failed to update lease labels: %v", err)

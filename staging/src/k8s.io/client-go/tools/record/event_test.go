@@ -52,7 +52,7 @@ type testEventSink struct {
 	OnPatch  func(e *v1.Event, p []byte) (*v1.Event, error)
 }
 
-// CreateEvent records the event for testing.
+// CreateEvent 为测试目的记录事件。
 func (t *testEventSink) Create(e *v1.Event) (*v1.Event, error) {
 	if t.OnCreate != nil {
 		return t.OnCreate(e)
@@ -60,7 +60,7 @@ func (t *testEventSink) Create(e *v1.Event) (*v1.Event, error) {
 	return e, nil
 }
 
-// UpdateEvent records the event for testing.
+// UpdateEvent 为测试目的记录事件。
 func (t *testEventSink) Update(e *v1.Event) (*v1.Event, error) {
 	if t.OnUpdate != nil {
 		return t.OnUpdate(e)
@@ -68,7 +68,7 @@ func (t *testEventSink) Update(e *v1.Event) (*v1.Event, error) {
 	return e, nil
 }
 
-// PatchEvent records the event for testing.
+// PatchEvent 为测试目的记录事件。
 func (t *testEventSink) Patch(e *v1.Event, p []byte) (*v1.Event, error) {
 	if t.OnPatch != nil {
 		return t.OnPatch(e, p)
@@ -116,9 +116,8 @@ func OnPatchFactory(testCache map[string]*v1.Event, patchEvent chan<- *v1.Event)
 	}
 }
 
-// newBroadcasterForTests creates a new broadcaster which produces per-test log
-// output if StartStructuredLogging is used. Will be shut down automatically
-// after the test.
+// newBroadcasterForTests 创建一个新广播器：若使用 StartStructuredLogging，
+// 它会产出每个测试独立的日志输出，并在测试结束后自动关闭。
 //
 // 关闭 sleep 以便重试路径在测试中立即推进；ctx 让日志写入测试缓冲区。
 func newBroadcasterForTests(tb testing.TB) EventBroadcaster {
@@ -134,43 +133,42 @@ func TestBroadcasterShutdown(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
 
-	// Start a broadcaster with background activity.
+	// 启动一个带后台活动的 broadcaster。
 	caster := NewBroadcaster(WithContext(ctx))
 	caster.StartStructuredLogging(0)
 
-	// Stop it.
+	// 停止它。
 	cancel(stderrors.New("time to stop"))
 
-	// Ensure that the broadcaster goroutine is not left running.
+	// 确认 broadcaster 的 goroutine 没有残留运行。
 	goleak.VerifyNone(t)
 }
 
-// TestStartEventWatcherExitsOnDirectShutdown is a regression test for the
-// hot-loop that occurred when Broadcaster.Shutdown() closed the watcher's
-// result channel before the cancellation context was cancelled.
+// TestStartEventWatcherExitsOnDirectShutdown 是一个回归测试，用于防止如下
+// 热循环（hot-loop）：Broadcaster.Shutdown() 在取消 context 之前就关闭了
+// watcher 的结果 channel。
 //
-// When NewBroadcaster is called without a context, Shutdown() sequentially:
+// 当 NewBroadcaster 未传入 context 时，Shutdown() 依次：
 //
-//  1. Calls e.Broadcaster.Shutdown() → watcher result channels are closed via
-//     closeAll(); all queued events have already been delivered at this point.
-//  2. Calls e.cancel() → cancelationCtx is cancelled.
+//  1. 调用 e.Broadcaster.Shutdown() → 通过 closeAll() 关闭 watcher 的结果
+//     channel；此时所有排队事件均已投递完毕。
+//  2. 调用 e.cancel() → cancelationCtx 被取消。
 //
-// Between steps 1 and 2 there is a window where ResultChan() is closed but
-// cancelationCtx.Done() has not yet fired. The goroutine inside
-// StartEventWatcher must detect the closed channel (ok == false) and return
-// cleanly instead of spinning. goleak.VerifyTestMain (installed in
-// main_test.go) will report a leaked goroutine if the fix regresses.
+// 在步骤 1 和 2 之间存在一个窗口：ResultChan() 已关闭但 cancelationCtx.Done()
+// 尚未触发。StartEventWatcher 内部的 goroutine 必须检测到 channel 已关闭
+// （ok == false）并干净返回，而不是空转。若修复回退，goleak.VerifyTestMain
+// （在 main_test.go 中安装）会报告 goroutine 泄漏。
 func TestStartEventWatcherExitsOnDirectShutdown(t *testing.T) {
-	// No context → haveCtxCancelation is false, so no background Broadcaster
-	// shutdown goroutine; Shutdown() is fully synchronous here.
+	// 没有 context → haveCtxCancelation 为 false，因此不存在后台 Broadcaster
+	// 关闭 goroutine；这里的 Shutdown() 完全是同步执行的。
 	caster := NewBroadcaster(WithSleepDuration(0))
 	caster.StartStructuredLogging(0)
 
-	// Direct shutdown: closes watcher channels first, then cancels context.
+	// 直接关闭：先关 watcher channel，再取消 context。
 	caster.Shutdown()
 
-	// goleak.VerifyTestMain checks for leaks across the whole test binary, but
-	// explicitly verifying here surfaces any regression in this specific path.
+	// goleak.VerifyTestMain 会在整个测试二进制范围内检查泄漏，但在这里显式
+	// 验证可以在该特定路径出现回归时立即暴露问题。
 	goleak.VerifyNone(t)
 }
 
@@ -178,10 +176,9 @@ func TestStartEventWatcherExitsOnDirectShutdown(t *testing.T) {
 // 验证不会出现“写入已关闭 channel”的数据竞争；这也是不把 Action 放进
 // 另一个 goroutine 的原因。
 func TestNonRacyShutdown(t *testing.T) {
-	// Attempt to simulate previously racy conditions, and ensure that no race
-	// occurs: Nominally, calling "Eventf" *followed by* shutdown from the same
-	// thread should be a safe operation, but it's not if we launch recorder.Action
-	// in a goroutine.
+	// 尝试模拟此前存在竞争的场景，确保不再发生数据竞争：从同一线程先调用
+	// "Eventf"、*紧接着* 调用 shutdown 本应是安全操作，但如果把
+	// recorder.Action 放到 goroutine 里启动，就不安全了。
 
 	caster := newBroadcasterForTests(t)
 	clock := testclocks.NewFakeClock(time.Now())
@@ -479,7 +476,7 @@ func TestEventf(t *testing.T) {
 	recorder := recorderWithFakeClock(t, v1.EventSource{Component: "eventTest"}, eventBroadcaster, clock)
 	for index, item := range table {
 		clock.Step(1 * time.Second)
-		//nolint:logcheck // Intentionally testing StartLogging here.
+		//nolint:logcheck // 有意在此测试 StartLogging。
 		logWatcher := eventBroadcaster.StartLogging(func(formatter string, args ...interface{}) {
 			if e, a := item.expectLog, fmt.Sprintf(formatter, args...); e != a {
 				t.Errorf("Expected '%v', got '%v'", e, a)
@@ -492,13 +489,13 @@ func TestEventf(t *testing.T) {
 
 		<-logCalled
 
-		// We don't get notified by the structured test logger directly.
-		// Instead, we periodically check what new output it has produced.
+		// 结构化测试 logger 不会直接通知我们。
+		// 改为周期性检查它新产出了哪些输出。
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			assert.Equal(t, item.expectStructuredLog, logSink.GetBuffer().String()[oldEnd:], "new structured log output")
 		}, time.Minute, time.Millisecond)
 
-		// validate event
+		// 校验事件
 		if item.expectUpdate {
 			actualEvent := <-patchEvent
 			validateEvent(strconv.Itoa(index), actualEvent, item.expect, t)
@@ -639,7 +636,7 @@ func TestCancelEvent(t *testing.T) {
 
 	ev := &v1.Event{}
 
-	// Cancel before even calling recordToSink.
+	// 在调用 recordToSink 之前就先取消。
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	e := eventBroadcasterImpl{
@@ -658,7 +655,7 @@ func TestLotsOfEvents(t *testing.T) {
 	recorderCalled := make(chan struct{})
 	loggerCalled := make(chan struct{})
 
-	// Fail each event a few times to ensure there's some load on the tested code.
+	// 让每个事件失败几次，确保被测代码有一定负载。
 	var counts [1000]int
 	testEvents := testEventSink{
 		OnCreate: func(event *v1.Event) (*v1.Event, error) {
@@ -678,13 +675,13 @@ func TestLotsOfEvents(t *testing.T) {
 
 	eventBroadcaster := newBroadcasterForTests(t)
 	sinkWatcher := eventBroadcaster.StartRecordingToSink(&testEvents)
-	//nolint:logcheck // Intentionally using StartLogging here to get notified.
+	//nolint:logcheck // 有意在此使用 StartLogging 来获取通知。
 	logWatcher := eventBroadcaster.StartLogging(func(formatter string, args ...interface{}) {
 		loggerCalled <- struct{}{}
 	})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "eventTest"})
 	for i := 0; i < maxQueuedEvents; i++ {
-		// we want a unique object to stop spam filtering
+		// 使用唯一对象以避免触发刷屏过滤
 		ref := &v1.ObjectReference{
 			Kind:       "Pod",
 			Name:       fmt.Sprintf("foo-%v", i),
@@ -692,15 +689,15 @@ func TestLotsOfEvents(t *testing.T) {
 			UID:        "bar",
 			APIVersion: "version",
 		}
-		// we need to vary the reason to prevent aggregation
+		// 需要变换 reason 以避免触发聚合
 		go recorder.Eventf(ref, v1.EventTypeNormal, "Reason-"+strconv.Itoa(i), "%s", strconv.Itoa(i))
 	}
-	// Make sure no events were dropped by either of the listeners.
+	// 确认两个监听器都没有丢弃任何事件。
 	for i := 0; i < maxQueuedEvents; i++ {
 		<-recorderCalled
 		<-loggerCalled
 	}
-	// Make sure that every event was attempted 5 times
+	// 确认每个事件都尝试记录了 5 次
 	for i := 0; i < maxQueuedEvents; i++ {
 		if counts[i] < 5 {
 			t.Errorf("Only attempted to record event '%d' %d times.", i, counts[i])
@@ -794,7 +791,7 @@ func TestEventfNoNamespace(t *testing.T) {
 
 		<-logCalled
 
-		// validate event
+		// 校验事件
 		if item.expectUpdate {
 			actualEvent := <-patchEvent
 			validateEvent(strconv.Itoa(index), actualEvent, item.expect, t)
@@ -1082,7 +1079,7 @@ func TestMultiSinkCache(t *testing.T) {
 		clock.Step(1 * time.Second)
 		recorder.Eventf(item.obj, item.eventtype, item.reason, item.messageFmt, item.elements...)
 
-		// validate event
+		// 校验事件
 		if item.expectUpdate {
 			actualEvent := <-patchEvent
 			validateEvent(strconv.Itoa(index), actualEvent, item.expect, t)
@@ -1091,17 +1088,17 @@ func TestMultiSinkCache(t *testing.T) {
 			validateEvent(strconv.Itoa(index), actualEvent, item.expect, t)
 		}
 	}
-	// Stop before creating more events, otherwise the On* callbacks above
-	// get stuck writing to the channel that we don't read from anymore.
+	// 在创建更多事件前先停止，否则上面的 On* 回调会卡在向
+	// 不再被读取的 channel 写入上。
 	sinkWatcher.Stop()
 
-	// Another StartRecordingToSink call should start to record events with new clean cache.
+	// 再次调用 StartRecordingToSink 应以全新的干净缓存开始记录事件。
 	sinkWatcher2 := eventBroadcaster.StartRecordingToSink(&testEvents2)
 	for index, item := range table {
 		clock.Step(1 * time.Second)
 		recorder.Eventf(item.obj, item.eventtype, item.reason, item.messageFmt, item.elements...)
 
-		// validate event
+		// 校验事件
 		if item.expectUpdate {
 			actualEvent := <-patchEvent2
 			validateEvent(strconv.Itoa(index), actualEvent, item.expect, t)

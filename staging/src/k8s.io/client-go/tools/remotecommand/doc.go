@@ -14,11 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package remotecommand adds support for executing commands in containers,
-// with support for separate stdin, stdout, and stderr streams, as well as
-// TTY.
-//
-// 中文说明：该包通过 SPDY/WebSocket 连接 API Server 的 exec/attach/port-forward
+// Package remotecommand 支持在容器中执行命令，支持独立的 stdin、stdout、
+// stderr 流以及 TTY。
+// 该包通过 SPDY/WebSocket 连接 API Server 的 exec/attach/port-forward
 // 子资源。使用 TTY 时 stdout 与 stderr 在协议层合并为同一流，这是终端的固有
 // 行为，调用方不能再区分两者。
 package remotecommand

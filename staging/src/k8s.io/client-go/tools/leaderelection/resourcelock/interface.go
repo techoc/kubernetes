@@ -42,16 +42,13 @@ const (
 	configMapsLeasesResourceLock = "configmapsleases"
 )
 
-// LeaderElectionRecord is the record that is stored in the leader election annotation.
-// This information should be used for observational purposes only and could be replaced
-// with a random string (e.g. UUID) with only slight modification of this code.
-// TODO(mikedanese): this should potentially be versioned
+// LeaderElectionRecord 是存储在领导者选举注解中的记录。
+// 该信息只应用于观察目的，稍作改动本代码即可将其替换为随机字符串（如 UUID）。
+// TODO(mikedanese): 这个结构可能需要做版本化
 type LeaderElectionRecord struct {
-	// HolderIdentity is the ID that owns the lease. If empty, no one owns this lease and
-	// all callers may acquire. Versions of this library prior to Kubernetes 1.14 will not
-	// attempt to acquire leases with empty identities and will wait for the full lease
-	// interval to expire before attempting to reacquire. This value is set to empty when
-	// a client voluntarily steps down.
+	// HolderIdentity 是持有该租约的 ID。为空时表示无人持有此租约，所有调用者
+	// 均可获取。Kubernetes 1.14 之前的本库版本不会尝试获取 identity 为空的租约，
+	// 而是等待整个租约周期过期后再重新获取。客户端主动卸任时该值会被置空。
 	HolderIdentity       string      `json:"holderIdentity"`
 	LeaseDurationSeconds int         `json:"leaseDurationSeconds"`
 	AcquireTime          metav1.Time `json:"acquireTime"`
@@ -63,51 +60,45 @@ type LeaderElectionRecord struct {
 	PreferredHolder string                      `json:"preferredHolder"`
 }
 
-// EventRecorder records a change in the ResourceLock.
+// EventRecorder 记录 ResourceLock 中的变化。
 // 实现方通常传入 events 客户端；为 nil 时不应记录事件。
 type EventRecorder interface {
 	Eventf(obj runtime.Object, eventType, reason, message string, args ...interface{})
 }
 
-// ResourceLockConfig common data that exists across different
-// resource locks
+// ResourceLockConfig 是跨不同资源锁共用的公共数据
 type ResourceLockConfig struct {
-	// Identity is the unique string identifying a lease holder across
-	// all participants in an election.
+	// Identity 是在选举的所有参与者中唯一标识租约持有者的字符串。
 	Identity string
-	// EventRecorder is optional.
+	// EventRecorder 是可选的。
 	EventRecorder EventRecorder
 }
 
-// Interface offers a common interface for locking on arbitrary
-// resources used in leader election.  The Interface is used
-// to hide the details on specific implementations in order to allow
-// them to change over time.  This interface is strictly for use
-// by the leaderelection code.
-//
+// Interface 为领导者选举中任意资源的加锁提供统一接口，
+// 用它屏蔽具体实现细节，以便实现能随时间演进。
+// 该接口仅供 leaderelection 代码使用。
 // Get 同时返回原始字节，供调用方判断记录是否变化而无需深比较。
 type Interface interface {
-	// Get returns the LeaderElectionRecord
+	// Get 返回 LeaderElectionRecord
 	Get(ctx context.Context) (*LeaderElectionRecord, []byte, error)
 
-	// Create attempts to create a LeaderElectionRecord
+	// Create 尝试创建 LeaderElectionRecord
 	Create(ctx context.Context, ler LeaderElectionRecord) error
 
-	// Update will update and existing LeaderElectionRecord
+	// Update 更新已有的 LeaderElectionRecord
 	Update(ctx context.Context, ler LeaderElectionRecord) error
 
-	// RecordEvent is used to record events
+	// RecordEvent 用于记录事件
 	RecordEvent(string)
 
-	// Identity will return the locks Identity
+	// Identity 返回锁的 Identity
 	Identity() string
 
-	// Describe is used to convert details on current resource lock
-	// into a string
+	// Describe 把当前资源锁的细节转换为字符串
 	Describe() string
 }
 
-// new will create a lock of a given type according to the input parameters
+// new 根据输入参数创建指定类型的锁
 // 目前只支持 Lease 锁；旧类型返回错误以引导用户迁移。
 func new(lockType string, ns string, name string, coreClient corev1.CoreV1Interface, coordinationClient coordinationv1.CoordinationV1Interface, rlc ResourceLockConfig, labels map[string]string) (Interface, error) {
 	leaseLock := &LeaseLock{
@@ -135,23 +126,23 @@ func new(lockType string, ns string, name string, coreClient corev1.CoreV1Interf
 	}
 }
 
-// New will create a lock of a given type according to the input parameters
+// New 根据输入参数创建指定类型的锁
 func New(lockType string, ns string, name string, coreClient corev1.CoreV1Interface, coordinationClient coordinationv1.CoordinationV1Interface, rlc ResourceLockConfig) (Interface, error) {
 	return new(lockType, ns, name, coreClient, coordinationClient, rlc, nil)
 }
 
-// NewWithLabels will create a lock of a given type according to the input parameters
-// When the holder of the lock changes, that holder will apply their labels
+// NewWithLabels 根据输入参数创建指定类型的锁。
+// 当锁的持有者变更时，新持有者会应用自己的 labels。
 func NewWithLabels(lockType string, ns string, name string, coreClient corev1.CoreV1Interface, coordinationClient coordinationv1.CoordinationV1Interface, rlc ResourceLockConfig, labels map[string]string) (Interface, error) {
 	return new(lockType, ns, name, coreClient, coordinationClient, rlc, labels)
 }
 
-// NewFromKubeconfig will create a lock of a given type according to the input parameters.
-// Timeout set for a client used to contact to Kubernetes should be lower than
-// RenewDeadline to keep a single hung request from forcing a leader loss.
-// Setting it to max(time.Second, RenewDeadline/2) as a reasonable heuristic.
+// NewFromKubeconfig 根据输入参数创建指定类型的锁。
+// 连接 Kubernetes 的客户端超时应低于 RenewDeadline，
+// 避免单个挂起的请求导致 leader 丢失。
+// 这里取 max(time.Second, RenewDeadline/2) 作为合理的启发式值。
 func NewFromKubeconfig(lockType string, ns string, name string, rlc ResourceLockConfig, kubeconfig *restclient.Config, renewDeadline time.Duration) (Interface, error) {
-	// shallow copy, do not modify the kubeconfig
+	// 浅拷贝，不修改传入的 kubeconfig
 	// 仅复制结构体，不修改调用方传入的配置。
 	config := *kubeconfig
 	timeout := renewDeadline / 2

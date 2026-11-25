@@ -37,49 +37,45 @@ type EventRecorderLogger = internalevents.EventRecorderLogger
 // AnnotatedEventRecorder 支持在事件上附加注解，例如记录触发源的额外信息。
 type AnnotatedEventRecorder = internalevents.AnnotatedEventRecorder
 
-// EventBroadcaster knows how to receive events and send them to any EventSink, watcher, or log.
+// EventBroadcaster 知道如何接收事件并发送到任意 EventSink、watcher 或日志。
 type EventBroadcaster interface {
-	// StartRecordingToSink starts sending events received from the specified eventBroadcaster.
-	// Deprecated: use StartRecordingToSinkWithContext instead.
-	//
-	// 旧接口无法感知 context 取消，新代码应使用带 Context 的版本。
+	// StartRecordingToSink 开始把指定 eventBroadcaster 收到的事件发送出去。
+	// Deprecated: 请改用 StartRecordingToSinkWithContext。旧接口无法感知
+	// context 取消，新代码应使用带 Context 的版本。
 	StartRecordingToSink(stopCh <-chan struct{})
 
-	// StartRecordingToSink starts sending events received from the specified eventBroadcaster.
-	//
+	// StartRecordingToSinkWithContext 开始把指定 eventBroadcaster 收到的事件发送出去。
 	// 返回 error 而不是静默失败，便于调用方决定是否继续记录事件。
 	StartRecordingToSinkWithContext(ctx context.Context) error
 
-	// NewRecorder returns an EventRecorder that can be used to send events to this EventBroadcaster
-	// with the event source set to the given event source.
+	// NewRecorder 返回一个 EventRecorder，可把事件发送到该 EventBroadcaster，
+	// 并将事件上报组件（reportingController）设置为给定值。
 	NewRecorder(scheme *runtime.Scheme, reportingController string) EventRecorderLogger
 
-	// StartEventWatcher enables you to watch for emitted events without usage
-	// of StartRecordingToSink. This lets you also process events in a custom way (e.g. in tests).
-	// NOTE: events received on your eventHandler should be copied before being used.
-	// TODO: figure out if this can be removed.
+	// StartEventWatcher 让你在不使用 StartRecordingToSink 的情况下观察发出的事件，
+	// 从而以自定义方式处理事件（例如在测试中）。
+	// 注意：eventHandler 收到的事件在使用前应先复制。
+	// TODO: 弄清该接口是否可以移除。
 	StartEventWatcher(eventHandler func(event runtime.Object)) (func(), error)
 
-	// StartStructuredLogging starts sending events received from this EventBroadcaster to the structured
-	// logging function. The return value can be ignored or used to stop recording, if desired.
-	// Deprecated: use StartLogging instead.
+	// StartStructuredLogging 开始把该 EventBroadcaster 收到的事件发送给结构化日志函数。
+	// 返回值可以忽略，也可用于按需停止记录。
+	// Deprecated: 请改用 StartLogging。
 	StartStructuredLogging(verbosity klog.Level) func()
 
-	// StartLogging starts sending events received from this EventBroadcaster to the structured logger.
-	// To adjust verbosity, use the logger's V method (i.e. pass `logger.V(3)` instead of `logger`).
-	// The returned function can be ignored or used to stop recording, if desired.
+	// StartLogging 开始把该 EventBroadcaster 收到的事件发送给结构化 logger。
+	// 若要调整日志级别，请使用 logger 的 V 方法（即传入 `logger.V(3)` 而不是 `logger`）。
+	// 返回的函数可以忽略，也可用于按需停止记录。
 	StartLogging(logger klog.Logger) (func(), error)
 
-	// Shutdown shuts down the broadcaster
-	//
+	// Shutdown 关闭 broadcaster。
 	// 关闭后不再接收新事件；未 Start 的 broadcaster 调用应为幂等。
 	Shutdown()
 }
 
-// EventSink knows how to store events (client-go implements it.)
-// EventSink must respect the namespace that will be embedded in 'event'.
-// It is assumed that EventSink will return the same sorts of errors as
-// client-go's REST client.
+// EventSink 知道如何存储事件（client-go 实现了它）。
+// EventSink 必须遵守 'event' 中嵌入的 namespace；
+// 并假定 EventSink 会返回与 client-go REST 客户端同类的错误。
 type EventSink interface {
 	// Create 持久化一个新事件。
 	Create(ctx context.Context, event *eventsv1.Event) (*eventsv1.Event, error)
@@ -89,23 +85,21 @@ type EventSink interface {
 	Patch(ctx context.Context, oldEvent *eventsv1.Event, data []byte) (*eventsv1.Event, error)
 }
 
-// EventBroadcasterAdapter is a auxiliary interface to simplify migration to
-// the new events API. It is a wrapper around new and legacy broadcasters
-// that smartly chooses which one to use.
+// EventBroadcasterAdapter 是用于简化向新事件 API 迁移的辅助接口，
+// 它包装了新旧两个 broadcaster 并智能选择使用哪一个。
 //
-// Deprecated: This interface will be removed once migration is completed.
+// Deprecated: 迁移完成后该接口将被移除。
 type EventBroadcasterAdapter interface {
-	// StartRecordingToSink starts sending events received from the specified eventBroadcaster.
+	// StartRecordingToSink 开始把指定 eventBroadcaster 收到的事件发送出去。
 	StartRecordingToSink(stopCh <-chan struct{})
 
-	// NewRecorder creates a new Event Recorder with specified name.
+	// NewRecorder 创建一个使用指定名称的新事件记录器。
 	NewRecorder(name string) EventRecorderLogger
 
-	// DeprecatedNewLegacyRecorder creates a legacy Event Recorder with specific name.
-	//
+	// DeprecatedNewLegacyRecorder 创建一个使用指定名称的旧版事件记录器。
 	// 仅供尚未迁移到新 events API 的调用方使用，事件会走 core/v1 路径。
 	DeprecatedNewLegacyRecorder(name string) record.EventRecorderLogger
 
-	// Shutdown shuts down the broadcaster.
+	// Shutdown 关闭 broadcaster。
 	Shutdown()
 }

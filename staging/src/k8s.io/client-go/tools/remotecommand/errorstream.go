@@ -24,15 +24,14 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// errorStreamDecoder interprets the data on the error channel and creates a go error object from it.
+// errorStreamDecoder 解读错误通道上的数据，并据此构造一个 Go 错误对象。
 type errorStreamDecoder interface {
 	decode(message []byte) error
 }
 
-// watchErrorStream watches the errorStream for remote command error data,
-// decodes it with the given errorStreamDecoder, sends the decoded error (or nil if the remote
-// command exited successfully) to the returned error channel, and closes it.
-// This function returns immediately.
+// watchErrorStream 监听 errorStream 上的远端命令错误数据，用给定的
+// errorStreamDecoder 解码，把解码后的错误（远端命令成功退出时为 nil）
+// 发送到返回的 error 通道并关闭它。本函数立即返回。
 func watchErrorStream(logger klog.Logger, errorStream io.Reader, d errorStreamDecoder) chan error {
 	// 无缓冲：读取方负责消费一次结果，避免调用方遗漏时 goroutine 永久阻塞。
 	errorChan := make(chan error)

@@ -33,103 +33,92 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// This file implements a low-level controller that is used in
-// sharedIndexInformer, which is an implementation of
-// SharedIndexInformer.  Such informers, in turn, are key components
-// in the high level controllers that form the backbone of the
-// Kubernetes control plane.  Look at those for examples, or the
-// example in
+// 本文件实现一个低层控制器，供 sharedIndexInformer（SharedIndexInformer 的
+// 实现）使用。而这类 informer 又是构成 Kubernetes 控制平面主干的高层控制器
+// 的关键组件。可参考那些控制器中的示例，或
 // https://github.com/kubernetes/client-go/tree/master/examples/workqueue
-// .
+// 中的示例。
 
-// Config contains all the settings for one of these low-level controllers.
+// Config 包含这类低层控制器的全部设置。
 //
 // 控制器只做两件事：驱动 Reflector 把事件写入 Queue，以及循环 Pop 出来交给
 // Process/ProcessBatch。它不关心业务语义，因此 handler 的耗时直接决定队列
 // 积压程度。
 type Config struct {
-	// The queue for your objects - has to be a DeltaFIFO due to
-	// assumptions in the implementation. Your Process() function
-	// should accept the output of this Queue's Pop() method.
+	// 存放你的对象的队列——由于实现中的假设，必须是 DeltaFIFO。
+	// 你的 Process() 函数应接受该 Queue 的 Pop() 方法的输出。
 	//
 	// 必须是有序 FIFO；实现依赖它保证同一对象的同一时刻只有一次处理。
 	Queue
 
-	// Something that can list and watch your objects.
+	// 能够对你的对象执行 list 和 watch 的组件。
 	ListerWatcher
 
-	// Process can process a popped Deltas.
+	// Process 处理一个被 Pop 出的 Deltas。
 	Process ProcessFunc
 
-	// ProcessBatch can process a batch of popped Deltas, which should return `TransactionError` if not all items
-	// in the batch were successfully processed.
+	// ProcessBatch 批量处理多个被 Pop 出的 Deltas；若批次中并非所有条目都
+	// 处理成功，应返回 `TransactionError`。
 	//
-	// For batch processing to be used:
-	// * ProcessBatch must be non-nil
-	// * Queue must implement QueueWithBatch
-	// * The client InOrderInformersBatchProcess feature gate must be enabled
+	// 启用批量处理需满足：
+	// * ProcessBatch 非 nil
+	// * Queue 实现 QueueWithBatch
+	// * 客户端 InOrderInformersBatchProcess 特性门控已开启
 	//
-	// If any of those are false, Process is used and no batch processing is done.
+	// 任一条件不满足则使用 Process，不做批量处理。
 	//
 	// 批量模式的前提还包括 InOrderInformers：事件必须已按序到达，否则
 	// 批量应用 Delta 会破坏对象最终状态。
 	ProcessBatch ProcessBatchFunc
 
-	// ObjectType is an example object of the type this controller is
-	// expected to handle.
+	// ObjectType 是本控制器预期处理的类型的一个示例对象。
 	ObjectType runtime.Object
 
-	// ObjectDescription is the description to use when logging type-specific information about this controller.
+	// ObjectDescription 是在记录本控制器类型相关信息时使用的描述。
 	ObjectDescription string
 
-	// FullResyncPeriod is the period at which ShouldResync is considered.
+	// FullResyncPeriod 是考虑调用 ShouldResync 的周期。
 	//
 	// 只决定何时询问 ShouldResync，本身不会强制重放全部对象。
 	FullResyncPeriod time.Duration
 
-	// MinWatchTimeout, if set, will define the minimum timeout for watch requests send
-	// to kube-apiserver. However, values lower than 5m will not be honored to avoid
-	// negative performance impact on controlplane.
-	// Optional - if unset a default value of 5m will be used.
+	// MinWatchTimeout 若设置，则定义发往 kube-apiserver 的 watch 请求的最小
+	// 超时时间。低于 5m 的值不会被采纳，以免对控制平面造成负面影响。
+	// 可选——未设置时使用默认值 5m。
 	MinWatchTimeout time.Duration
 
-	// ShouldResync is periodically used by the reflector to determine
-	// whether to Resync the Queue. If ShouldResync is `nil` or
-	// returns true, it means the reflector should proceed with the
-	// resync.
+	// ShouldResync 被 reflector 周期性地用于判断是否要 Resync 队列。
+	// 若 ShouldResync 为 `nil` 或返回 true，表示 reflector 应当执行 resync。
 	ShouldResync ShouldResyncFunc
 
-	// Called whenever the ListAndWatch drops the connection with an error.
+	// 当 ListAndWatch 因错误断开连接时被调用。
 	//
-	// Contextual logging: WatchErrorHandlerWithContext should be used instead of WatchErrorHandler in code which supports contextual logging.
+	// 上下文日志：支持上下文日志的代码应使用 WatchErrorHandlerWithContext
+	// 而非 WatchErrorHandler。
 	WatchErrorHandler WatchErrorHandler
 
-	// Called whenever the ListAndWatch drops the connection with an error
-	// and WatchErrorHandler is not set.
+	// 当 ListAndWatch 因错误断开连接、且未设置 WatchErrorHandler 时被调用。
 	WatchErrorHandlerWithContext WatchErrorHandlerWithContext
 
-	// WatchListPageSize is the requested chunk size of initial and relist watch lists.
+	// WatchListPageSize 是初始列表和 relist 列表请求的分块大小。
 	//
 	// 设为 0 表示使用服务端默认值；分块过小会增加往返次数。
 	WatchListPageSize int64
 }
 
-// ShouldResyncFunc is a type of function that indicates if a reflector should perform a
-// resync or not. It can be used by a shared informer to support multiple event handlers with custom
-// resync periods.
+// ShouldResyncFunc 用于指示 reflector 是否应执行 resync。共享 informer 可用它
+// 支持带自定义周期的多个事件处理器。
 //
 // 共享 informer 的多个 handler 可能要求不同周期，因此返回 bool 而非固定周期。
 type ShouldResyncFunc func() bool
 
-// ProcessFunc processes a single object.
+// ProcessFunc 处理单个对象。
 //
 // obj 通常是 Deltas（同一个键的多次变更合并），isInInitialList 表示该对象是否
 // 来自 informer 的首次全量列表。
 type ProcessFunc func(obj interface{}, isInInitialList bool) error
 
-// ProcessBatchFunc processes multiple objects in batch.
-// The deltas must not contain multiple entries for the same object.
-//
+// ProcessBatchFunc 批量处理多个对象。同一对象不得在 deltas 中出现多条。
 // 同一批次内同一对象只出现一次，是保证批量事务语义的前提。
 type ProcessBatchFunc func(deltas []Delta, isInInitialList bool) error
 
@@ -138,7 +127,7 @@ type ProcessBatchFunc func(deltas []Delta, isInInitialList bool) error
 // reflector 在 RunWithContext 中创建，故用读写锁保护，允许其他 goroutine
 // 并发读取其同步进度。
 //
-// `*controller` implements Controller
+// `*controller` 实现 Controller。
 type controller struct {
 	config         Config
 	reflector      *Reflector
@@ -146,43 +135,37 @@ type controller struct {
 	clock          clock.Clock
 }
 
-// Controller is a low-level controller that is parameterized by a
-// Config and used in sharedIndexInformer.
+// Controller 是由 Config 参数化的低层控制器，用于 sharedIndexInformer。
 type Controller interface {
-	// RunWithContext does two things.  One is to construct and run a Reflector
-	// to pump objects/notifications from the Config's ListerWatcher
-	// to the Config's Queue and possibly invoke the occasional Resync
-	// on that Queue.  The other is to repeatedly Pop from the Queue
-	// and process with the Config's ProcessFunc.  Both of these
-	// continue until the context is canceled.
+	// RunWithContext 做两件事。其一是构造并运行一个 Reflector，把对象/通知
+	// 从 Config 的 ListerWatcher 泵入 Config 的 Queue，并可能偶尔对该 Queue
+	// 执行 Resync。其二是反复从 Queue 中 Pop，并用 Config 的 ProcessFunc
+	// 处理。两者都持续到上下文被取消。
 	//
-	// It's an error to call RunWithContext more than once.
-	// RunWithContext blocks; call via go.
+	// 多次调用 RunWithContext 是错误。
+	// RunWithContext 会阻塞；请用 go 调用。
 	RunWithContext(ctx context.Context)
 
-	// Run does the same as RunWithContext with a stop channel instead of
-	// a context.
+	// Run 与 RunWithContext 相同，只是用停止 channel 代替上下文。
 	//
-	// Contextual logging: RunWithcontext should be used instead of Run in code which supports contextual logging.
+	// 上下文日志：支持上下文日志的代码应使用 RunWithContext 而非 Run。
 	Run(stopCh <-chan struct{})
 
-	// HasSynced delegates to the Config's Queue
+	// HasSynced 委托给 Config 的 Queue。
 	HasSynced() bool
 
-	// HasSyncedChecker enables waiting for syncing without polling.
-	// The returned DoneChecker can be passed to WaitFor.
-	// It delegates to the Config's Queue.
+	// HasSyncedChecker 支持无需轮询地等待同步。返回的 DoneChecker 可传给
+	// WaitFor。它委托给 Config 的 Queue。
 	HasSyncedChecker() DoneChecker
 
-	// LastSyncResourceVersion delegates to the Reflector when there
-	// is one, otherwise returns the empty string
+	// LastSyncResourceVersion 在 Reflector 存在时委托给它，否则返回空字符串。
 	//
 	// Reflector 尚未创建（Run 之前）时返回空串，调用方不能把它当作有效的
 	// resourceVersion 使用。
 	LastSyncResourceVersion() string
 }
 
-// New makes a new Controller from the given Config.
+// New 根据给定的 Config 创建一个新 Controller。
 func New(c *Config) Controller {
 	// 复制 Config 值，避免调用方在 Run 之前修改配置导致数据竞争。
 	ctlr := &controller{
@@ -192,12 +175,12 @@ func New(c *Config) Controller {
 	return ctlr
 }
 
-// Run implements [Controller.Run].
+// Run 实现 [Controller.Run]。
 func (c *controller) Run(stopCh <-chan struct{}) {
 	c.RunWithContext(wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext implements [Controller.RunWithContext].
+// RunWithContext 实现 [Controller.RunWithContext]。
 func (c *controller) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	// 上下文结束时关闭 Queue，让阻塞在 Pop 上的消费者退出；
@@ -246,14 +229,13 @@ func (c *controller) RunWithContext(ctx context.Context) {
 	wg.Wait()
 }
 
-// Returns true once this controller has completed an initial resource listing
+// 当本控制器完成初始资源列表后返回 true。
 func (c *controller) HasSynced() bool {
 	return c.config.Queue.HasSynced()
 }
 
-// HasSyncedChecker enables waiting for syncing without polling.
-// The returned DoneChecker can be passed to [WaitFor].
-// It delegates to the Config's Queue.
+// HasSyncedChecker 支持无需轮询地等待同步。返回的 DoneChecker 可传给 [WaitFor]。
+// 它委托给 Config 的 Queue。
 func (c *controller) HasSyncedChecker() DoneChecker {
 	return c.config.Queue.HasSyncedChecker()
 }
@@ -268,10 +250,8 @@ func (c *controller) LastSyncResourceVersion() string {
 	return c.reflector.LastSyncResourceVersion()
 }
 
-// processLoop drains the work queue.
-// TODO: Consider doing the processing in parallel. This will require a little thought
-// to make sure that we don't end up processing the same object multiple times
-// concurrently.
+// processLoop 消费工作队列。
+// TODO：考虑并行处理。这需要一些设计，以确保同一对象不会被并发地多次处理。
 func (c *controller) processLoop(ctx context.Context) {
 	// 批量能力在进入循环前判定一次，避免每次 Pop 都做接口断言和门控查询；
 	// 三个条件缺一不可，否则退回逐条处理。
@@ -290,7 +270,7 @@ func (c *controller) processLoop(ctx context.Context) {
 				// PopBatch 在内部循环取队首连续批次，并保证同对象顺序。
 				err = batchQueue.PopBatch(c.config.ProcessBatch, PopProcessFunc(c.config.Process))
 			} else {
-				// otherwise fallback to non-batch process behavior
+				// 否则回退到非批量处理行为
 				_, err = c.config.Pop(PopProcessFunc(c.config.Process))
 			}
 			if err != nil {
@@ -303,22 +283,17 @@ func (c *controller) processLoop(ctx context.Context) {
 	}
 }
 
-// ResourceEventHandler can handle notifications for events that
-// happen to a resource. The events are informational only, so you
-// can't return an error.  The handlers MUST NOT modify the objects
-// received; this concerns not only the top level of structure but all
-// the data structures reachable from it.
-//   - OnAdd is called when an object is added.
-//   - OnUpdate is called when an object is modified. Note that oldObj is the
-//     last known state of the object-- it is possible that several changes
-//     were combined together, so you can't use this to see every single
-//     change. OnUpdate is also called when a re-list happens, and it will
-//     get called even if nothing changed. This is useful for periodically
-//     evaluating or syncing something.
-//   - OnDelete will get the final state of the item if it is known, otherwise
-//     it will get an object of type DeletedFinalStateUnknown. This can
-//     happen if the watch is closed and misses the delete event and we don't
-//     notice the deletion until the subsequent re-list.
+// ResourceEventHandler 可以处理发生在资源上的事件通知。事件仅具参考性，
+// 因此无法返回错误。处理器绝不可以修改收到的对象；这不仅指顶层结构，
+// 还包括从其可达的所有数据结构。
+//   - OnAdd 在对象被添加时调用。
+//   - OnUpdate 在对象被修改时调用。注意 oldObj 是该对象最后已知的状态——
+//     多个变更可能被合并，所以不能借此看到每一个单独的变化。re-list 发生时
+//     OnUpdate 也会被调用，即使什么都没变也会调用。这对周期性地评估或同步
+//     某些东西很有用。
+//   - OnDelete 在已知条目最终状态时会拿到它，否则会得到一个
+//     DeletedFinalStateUnknown 类型的对象。当 watch 关闭错过了删除事件、
+//     直到后续 re-list 才注意到删除时就可能出现这种情况。
 //
 // handler 在 informer 自己的协程中串行调用；任何阻塞都会拖慢整个缓存同步，
 // 耗时操作应转交工作队列。isInInitialList 仅对 OnAdd 有意义。
@@ -328,12 +303,11 @@ type ResourceEventHandler interface {
 	OnDelete(obj interface{})
 }
 
-// Object is the subset of metav1.Object that is needed to determine the
-// name and, if applicable, namespace of an object. All standard Kubernetes
-// API types satisfy this interface through their embedded ObjectMeta.
+// Object 是确定对象名称及（如有）命名空间所需的 metav1.Object 子集。
+// 所有标准 Kubernetes API 类型都通过内嵌的 ObjectMeta 满足该接口。
 //
-// comparable is required so that a zero T can be compared against
-// OptionalObj to detect a missing object (e.g. a nil pointer).
+// 要求 comparable 是为了能把零值 T 与 OptionalObj 比较，
+// 以检测对象缺失（如 nil 指针）。
 type Object interface {
 	comparable
 
@@ -341,7 +315,7 @@ type Object interface {
 	GetNamespace() string
 }
 
-// TypedResourceEventHandler is a type-safe variant of ResourceEventHandler.
+// TypedResourceEventHandler 是 ResourceEventHandler 的类型安全变体。
 //
 // T 必须是可比较的具名对象指针（见 Object），这样编译器能阻止把错误类型
 // 传入 handler，同时保留与未类型化版本相同的事件顺序语义。
@@ -351,54 +325,48 @@ type TypedResourceEventHandler[T Object] interface {
 	OnDelete(obj DeletedObject[T])
 }
 
-// DeletedObject provides information about a deleted object.
+// DeletedObject 提供被删除对象的信息。
 //
-// It implements GetObjectName and GetKey, which replace
-// [DeletionHandlingObjectToName] and [DeletionHandlingMetaNamespaceKeyFunc]
+// 它实现了 GetObjectName 和 GetKey，用于替代
+// [DeletionHandlingObjectToName] 和 [DeletionHandlingMetaNamespaceKeyFunc]。
 //
-// It implements the GetName and GetNamespace methods for use
-// with klog.KObj: an OnDelete event handler can log
-// it's parameter directly and is guaranteed to produce the same
-// log output as with klog.KObj applied to the actual object.
+// 它实现了 GetName 和 GetNamespace 方法以便与 klog.KObj 配合使用：
+// OnDelete 事件处理器可以直接记录其参数，并保证产生与对真实对象应用
+// klog.KObj 相同的日志输出。
 //
-// All of these methods work regardless whether DeletedObject actually has
-// the deleted object.
+// 无论 DeletedObject 是否真的持有被删除对象，上述方法都可用。
 type DeletedObject[T Object] struct {
-	// OptionalObj is the deleted object.
+	// OptionalObj 是被删除的对象。
 	//
-	// It can be:
-	// - stale: it is some *older* revision, not the one which got deleted
-	// - nil: the informer noticed a deletion without finding *any* copy of the deleted object
+	// 它可能是：
+	// - 过期的：某个*更旧*的版本，而不是被删除的那个版本
+	// - nil：informer 注意到删除，但没有找到被删除对象的*任何*副本
 	//
-	// The only guaranteed information is the key under which the deleted
-	// object was stored in the informer cache. Use [DeletedObject.GetObjectName]
-	// and [DeletedObject.GetKey] to extract the namespace and name resp.
-	// the key under which the deleted object was stored. They work in
-	// all cases.
+	// 唯一有保证的信息，是被删除对象在 informer 缓存中存储时使用的 key。
+	// 使用 [DeletedObject.GetObjectName] 和 [DeletedObject.GetKey] 分别提取
+	// 命名空间与名称、以及被删除对象存储时使用的 key。它们在各种情况下都可用。
 	OptionalObj T
 
-	// FinalStateUnknown is nil if the deleted object is available and up-to-date.
-	// Otherwise FinalStateUnknown is non-nil to provide the key.
-	// The untyped object inside it matches OptionalObj.
+	// 若被删除对象可用且是最新的，FinalStateUnknown 为 nil。
+	// 否则 FinalStateUnknown 非 nil，用于提供 key。
+	// 其中未类型化的对象与 OptionalObj 一致。
 	FinalStateUnknown *DeletedFinalStateUnknown
 }
 
-// GetObjectName returns the object name (= namespace if available and name)
-// for the deleted object. Note that this is slightly different from
-// GetName which returns just that name without the namespace.
+// GetObjectName 返回被删除对象的对象名（= 如有则含命名空间，加上名称）。
+// 注意这与 GetName 略有不同——后者只返回名称，不含命名空间。
 //
-// This is a type-safe variant of [DeletionHandlingObjectToName] which
-// cannot fail because T is guaranteed to have a name and namespace and
-// the key of FinalStateUnknown, if invalid, is simply treated as a
-// name without a namespace.
+// 这是 [DeletionHandlingObjectToName] 的类型安全变体，不会失败：T 保证有
+// 名称和命名空间，而 FinalStateUnknown 的 key 若非法，只是被当作无命名空间
+// 的名称处理。
 //
 // 优先信任 FinalStateUnknown.Key：它来自缓存索引，即使对象内容已过期也
 // 仍能唯一标识被删除的对象。
 func (d DeletedObject[T]) GetObjectName() ObjectName {
 	if d.FinalStateUnknown != nil {
-		// Same splitting as SplitMetaNamespaceKey and ParseObjectName,
-		// except that a key with more than one "/" is not treated as an error:
-		// the extra "/" become part of the name.
+		// 切分方式与 SplitMetaNamespaceKey 和 ParseObjectName 相同，
+		// 只是不将含多个 "/" 的 key 视为错误：
+		// 多余的 "/" 成为名称的一部分。
 		namespace, name, found := strings.Cut(d.FinalStateUnknown.Key, "/")
 		if !found {
 			return ObjectName{Name: namespace}
@@ -407,37 +375,34 @@ func (d DeletedObject[T]) GetObjectName() ObjectName {
 	}
 	var null T
 	if d.OptionalObj == null {
-		// Avoid calling GetName/GetNamespace on a zero OptionalObj (e.g. a
-		// nil pointer), which could panic. A nil pointer boxed behind a
-		// further layer of indirection is not detected here and is not
-		// handled.
+		// 避免在零值 OptionalObj（如 nil 指针）上调用 GetName/GetNamespace，
+		// 那可能导致 panic。多一层间接包装的 nil 指针在此不会被检测到，
+		// 也不做处理。
 		return ObjectName{}
 	}
-	// Same logic as MetaObjectToName, adapted to use T's own
-	// GetNamespace and GetName methods instead of going through
-	// meta.Accessor as ObjectToName does.
+	// 逻辑与 MetaObjectToName 相同，只是改用 T 自身的 GetNamespace 和
+	// GetName 方法，而不像 ObjectToName 那样经由 meta.Accessor。
 	if namespace := d.OptionalObj.GetNamespace(); len(namespace) > 0 {
 		return ObjectName{Namespace: namespace, Name: d.OptionalObj.GetName()}
 	}
 	return ObjectName{Name: d.OptionalObj.GetName()}
 }
 
-// GetName returns the name without the namespace. Note that this is slightly
-// different from GetObjectName which returns the combination of namespace and name in a
-// struct.
+// GetName 返回不含命名空间的名称。注意这与 GetObjectName 略有不同——
+// 后者在结构体中返回命名空间与名称的组合。
 func (d DeletedObject[T]) GetName() string {
 	return d.GetObjectName().Name
 }
 
-// GetNamespace returns the namespace if there is one, otherwise the empty string.
+// GetNamespace 返回命名空间（如有），否则返回空字符串。
 func (d DeletedObject[T]) GetNamespace() string {
 	return d.GetObjectName().Namespace
 }
 
-// GetKey returns the key under which the deleted object was stored.
+// GetKey 返回被删除对象存储时使用的 key。
 //
-// This is a type-safe variant of [DeletionHandlingMetaNamespaceKeyFunc]
-// which cannot fail because T is guaranteed to have a name and namespace.
+// 这是 [DeletionHandlingMetaNamespaceKeyFunc] 的类型安全变体，不会失败：
+// T 保证有名称和命名空间。
 //
 // 编码规则与 MetaNamespaceKeyFunc 一致：有命名空间时为 namespace/name，
 // 否则仅为 name。
@@ -449,42 +414,40 @@ func (d DeletedObject[T]) GetKey() string {
 	if d.OptionalObj == null {
 		return ""
 	}
-	// Same encoding as MetaNamespaceKeyFunc via ObjectName.String,
-	// adapted to use T's own GetNamespace and GetName methods.
+	// 经由 ObjectName.String 采用与 MetaNamespaceKeyFunc 相同的编码，
+	// 改用 T 自身的 GetNamespace 和 GetName 方法。
 	if namespace := d.OptionalObj.GetNamespace(); len(namespace) > 0 {
 		return namespace + "/" + d.OptionalObj.GetName()
 	}
 	return d.OptionalObj.GetName()
 }
 
-// ResourceEventHandlerFuncs is an adaptor to let you easily specify as many or
-// as few of the notification functions as you want while still implementing
-// ResourceEventHandler.  This adapter does not remove the prohibition against
-// modifying the objects.
+// ResourceEventHandlerFuncs 是一个适配器，让你轻松选择实现
+// ResourceEventHandler 时 desired 提供多少个通知函数。
+// 该适配器并不解除“禁止修改对象”的约束。
 //
-// See ResourceEventHandlerDetailedFuncs if your use needs to propagate
-// HasSynced.
+// 若你的用法需要传播 HasSynced，请使用 ResourceEventHandlerDetailedFuncs。
 type ResourceEventHandlerFuncs struct {
 	AddFunc    func(obj interface{})
 	UpdateFunc func(oldObj, newObj interface{})
 	DeleteFunc func(obj interface{})
 }
 
-// OnAdd calls AddFunc if it's not nil.
+// OnAdd 在 AddFunc 非 nil 时调用它。
 func (r ResourceEventHandlerFuncs) OnAdd(obj interface{}, isInInitialList bool) {
 	if r.AddFunc != nil {
 		r.AddFunc(obj)
 	}
 }
 
-// OnUpdate calls UpdateFunc if it's not nil.
+// OnUpdate 在 UpdateFunc 非 nil 时调用它。
 func (r ResourceEventHandlerFuncs) OnUpdate(oldObj, newObj interface{}) {
 	if r.UpdateFunc != nil {
 		r.UpdateFunc(oldObj, newObj)
 	}
 }
 
-// OnDelete calls DeleteFunc if it's not nil.
+// OnDelete 在 DeleteFunc 非 nil 时调用它。
 func (r ResourceEventHandlerFuncs) OnDelete(obj interface{}) {
 	if r.DeleteFunc != nil {
 		r.DeleteFunc(obj)
@@ -494,6 +457,7 @@ func (r ResourceEventHandlerFuncs) OnDelete(obj interface{}) {
 // TypedResourceEventHandlerFuncs 是 TypedResourceEventHandler 的函数适配器。
 //
 // 与未类型化版本相同：未设置的函数会被跳过，因此可以只关心部分事件。
+// 该适配器同样禁止修改收到的对象。
 type TypedResourceEventHandlerFuncs[T Object] struct {
 	AddFunc    func(obj T)
 	UpdateFunc func(oldObj, newObj T)
@@ -520,30 +484,29 @@ func (r TypedResourceEventHandlerFuncs[T]) OnDelete(obj DeletedObject[T]) {
 	}
 }
 
-// ResourceEventHandlerDetailedFuncs is exactly like ResourceEventHandlerFuncs
-// except its AddFunc accepts the isInInitialList parameter, for propagating
-// HasSynced.
+// ResourceEventHandlerDetailedFuncs 与 ResourceEventHandlerFuncs 完全相同，
+// 只是其 AddFunc 接受 isInInitialList 参数，用于传播 HasSynced。
 type ResourceEventHandlerDetailedFuncs struct {
 	AddFunc    func(obj interface{}, isInInitialList bool)
 	UpdateFunc func(oldObj, newObj interface{})
 	DeleteFunc func(obj interface{})
 }
 
-// OnAdd calls AddFunc if it's not nil.
+// OnAdd 在 AddFunc 非 nil 时调用它。
 func (r ResourceEventHandlerDetailedFuncs) OnAdd(obj interface{}, isInInitialList bool) {
 	if r.AddFunc != nil {
 		r.AddFunc(obj, isInInitialList)
 	}
 }
 
-// OnUpdate calls UpdateFunc if it's not nil.
+// OnUpdate 在 UpdateFunc 非 nil 时调用它。
 func (r ResourceEventHandlerDetailedFuncs) OnUpdate(oldObj, newObj interface{}) {
 	if r.UpdateFunc != nil {
 		r.UpdateFunc(oldObj, newObj)
 	}
 }
 
-// OnDelete calls DeleteFunc if it's not nil.
+// OnDelete 在 DeleteFunc 非 nil 时调用它。
 func (r ResourceEventHandlerDetailedFuncs) OnDelete(obj interface{}) {
 	if r.DeleteFunc != nil {
 		r.DeleteFunc(obj)
@@ -578,11 +541,9 @@ func (r TypedResourceEventHandlerDetailedFuncs[T]) OnDelete(obj DeletedObject[T]
 	}
 }
 
-// FilteringResourceEventHandler applies the provided filter to all events coming
-// in, ensuring the appropriate nested handler method is invoked. An object
-// that starts passing the filter after an update is considered an add, and an
-// object that stops passing the filter after an update is considered a delete.
-// Like the handlers, the filter MUST NOT modify the objects it is given.
+// FilteringResourceEventHandler 对进来的所有事件应用给定的过滤器，确保调用
+// 合适的嵌套 handler 方法。更新后开始通过过滤器的对象视为添加，更新后不再
+// 通过过滤器的对象视为删除。与 handler 一样，过滤器绝不可以修改收到的对象。
 //
 // 这种“过滤状态迁移”设计让下游 handler 只需处理自己关心的对象，
 // 不必自行维护成员集合。
@@ -591,7 +552,7 @@ type FilteringResourceEventHandler struct {
 	Handler    ResourceEventHandler
 }
 
-// OnAdd calls the nested handler only if the filter succeeds
+// OnAdd 仅在过滤器通过时调用嵌套 handler。
 func (r FilteringResourceEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 	if !r.FilterFunc(obj) {
 		return
@@ -599,7 +560,7 @@ func (r FilteringResourceEventHandler) OnAdd(obj interface{}, isInInitialList bo
 	r.Handler.OnAdd(obj, isInInitialList)
 }
 
-// OnUpdate ensures the proper handler is called depending on whether the filter matches
+// OnUpdate 根据过滤器是否匹配，确保调用正确的 handler。
 func (r FilteringResourceEventHandler) OnUpdate(oldObj, newObj interface{}) {
 	// 分别计算新旧对象的过滤结果，以识别进入/离开过滤集合的边界。
 	newer := r.FilterFunc(newObj)
@@ -612,11 +573,11 @@ func (r FilteringResourceEventHandler) OnUpdate(oldObj, newObj interface{}) {
 	case !newer && older:
 		r.Handler.OnDelete(oldObj)
 	default:
-		// do nothing
+		// 什么都不做
 	}
 }
 
-// OnDelete calls the nested handler only if the filter succeeds
+// OnDelete 仅在过滤器通过时调用嵌套 handler。
 func (r FilteringResourceEventHandler) OnDelete(obj interface{}) {
 	if !r.FilterFunc(obj) {
 		return
@@ -624,14 +585,14 @@ func (r FilteringResourceEventHandler) OnDelete(obj interface{}) {
 	r.Handler.OnDelete(obj)
 }
 
-// TypedFilteringResourceEventHandler is a type-safe variant of
-// [FilteringResourceEventHandler].
+// TypedFilteringResourceEventHandler 是 [FilteringResourceEventHandler]
+// 的类型安全变体。
 type TypedFilteringResourceEventHandler[T Object] struct {
 	FilterFunc func(obj T) bool
 	Handler    TypedResourceEventHandler[T]
 }
 
-// OnAdd calls the nested handler only if the filter succeeds
+// OnAdd 仅在过滤器通过时调用嵌套 handler。
 func (r TypedFilteringResourceEventHandler[T]) OnAdd(obj T, isInInitialList bool) {
 	if !r.FilterFunc(obj) {
 		return
@@ -639,7 +600,7 @@ func (r TypedFilteringResourceEventHandler[T]) OnAdd(obj T, isInInitialList bool
 	r.Handler.OnAdd(obj, isInInitialList)
 }
 
-// OnUpdate ensures the proper handler is called depending on whether the filter matches
+// OnUpdate 根据过滤器是否匹配，确保调用正确的 handler。
 func (r TypedFilteringResourceEventHandler[T]) OnUpdate(oldObj, newObj T) {
 	// 与未类型化版本一致，用新旧对象各自是否通过过滤器来决定事件类型。
 	newer := r.FilterFunc(newObj)
@@ -652,14 +613,13 @@ func (r TypedFilteringResourceEventHandler[T]) OnUpdate(oldObj, newObj T) {
 	case !newer && older:
 		r.Handler.OnDelete(DeletedObject[T]{OptionalObj: oldObj})
 	default:
-		// do nothing
+		// 什么都不做
 	}
 }
 
-// OnDelete calls the nested handler only if the filter succeeds. The filter
-// is applied to [DeletedObject.OptionalObj], which may be the zero value of T
-// if the deleted object could not be recovered; a FilterFunc that relies on T
-// having a valid state must handle that case itself.
+// OnDelete 仅在过滤器通过时调用嵌套 handler。过滤器作用于
+// [DeletedObject.OptionalObj]：若无法恢复被删除对象，它可能是 T 的零值；
+// 依赖 T 处于有效状态的 FilterFunc 必须自行处理该情况。
 func (r TypedFilteringResourceEventHandler[T]) OnDelete(obj DeletedObject[T]) {
 	if !r.FilterFunc(obj.OptionalObj) {
 		return
@@ -667,9 +627,8 @@ func (r TypedFilteringResourceEventHandler[T]) OnDelete(obj DeletedObject[T]) {
 	r.Handler.OnDelete(obj)
 }
 
-// DeletionHandlingMetaNamespaceKeyFunc checks for
-// DeletedFinalStateUnknown objects before calling
-// MetaNamespaceKeyFunc.
+// DeletionHandlingMetaNamespaceKeyFunc 在调用 MetaNamespaceKeyFunc 之前先检查
+// DeletedFinalStateUnknown 对象。
 //
 // DeletedFinalStateUnknown 携带的 Key 已经是计算好的索引键，直接复用可避免
 // 对可能已失效的对象再次取元数据。
@@ -680,9 +639,8 @@ func DeletionHandlingMetaNamespaceKeyFunc(obj interface{}) (string, error) {
 	return MetaNamespaceKeyFunc(obj)
 }
 
-// DeletionHandlingObjectToName checks for
-// DeletedFinalStateUnknown objects before calling
-// ObjectToName.
+// DeletionHandlingObjectToName 在调用 ObjectToName 之前先检查
+// DeletedFinalStateUnknown 对象。
 func DeletionHandlingObjectToName(obj interface{}) (ObjectName, error) {
 	if d, ok := obj.(DeletedFinalStateUnknown); ok {
 		return ParseObjectName(d.Key)
@@ -690,65 +648,56 @@ func DeletionHandlingObjectToName(obj interface{}) (ObjectName, error) {
 	return ObjectToName(obj)
 }
 
-// InformerOptions configure a Reflector.
+// InformerOptions 用于配置 Reflector。
 //
 // 这些选项最终被翻译成 Queue/Reflector 的配置；字符串化的 Identifier 用于
 // 指标标签，因此生产代码应尽量设置。
 type InformerOptions struct {
-	// Logger, if not nil, is used instead of klog.Background() for logging.
+	// Logger 若非 nil，则用于日志输出，取代 klog.Background()。
 	Logger *klog.Logger
 
-	// ListerWatcher implements List and Watch functions for the source of the resource
-	// the informer will be informing about.
+	// ListerWatcher 为 informer 所通知的资源来源实现 List 和 Watch 函数。
 	ListerWatcher ListerWatcher
 
-	// ObjectType is an object of the type that informer is expected to receive.
+	// ObjectType 是 informer 预期接收类型的一个对象。
 	ObjectType runtime.Object
 
-	// Handler defines functions that should called on object mutations.
+	// Handler 定义对象变更时应调用的函数。
 	Handler ResourceEventHandler
 
-	// ResyncPeriod is the underlying Reflector's resync period. If non-zero, the store
-	// is re-synced with that frequency - Modify events are delivered even if objects
-	// didn't change.
-	// This is useful for synchronizing objects that configure external resources
-	// (e.g. configure cloud provider functionalities).
-	// Optional - if unset, store resyncing is not happening periodically.
+	// ResyncPeriod 是底层 Reflector 的 resync 周期。若非零，将以该频率重新
+	// 同步 store——即使对象没有变化也会投递 Modify 事件。
+	// 这对同步那些配置外部资源的对象很有用（例如配置云服务商功能）。
+	// 可选——未设置时 store 不会周期性重同步。
 	//
 	// 注意这是“本地重放”而非重新 List：事件中的对象来自缓存，resourceVersion
 	// 未必变化，handler 必须幂等。
 	ResyncPeriod time.Duration
 
-	// MinWatchTimeout, if set, will define the minimum timeout for watch requests send
-	// to kube-apiserver. However, values lower than 5m will not be honored to avoid
-	// negative performance impact on controlplane.
-	// Optional - if unset a default value of 5m will be used.
+	// MinWatchTimeout 若设置，则定义发往 kube-apiserver 的 watch 请求的最小
+	// 超时时间。低于 5m 的值不会被采纳，以免对控制平面造成负面影响。
+	// 可选——未设置时使用默认值 5m。
 	MinWatchTimeout time.Duration
 
-	// Indexers, if set, are the indexers for the received objects to optimize
-	// certain queries.
-	// Optional - if unset no indexes are maintained.
+	// Indexers 若设置，则作为接收对象的索引器以优化某些查询。
+	// 可选——未设置时不维护任何索引。
 	Indexers Indexers
 
-	// Transform function, if set, will be called on all objects before they will be
-	// put into the Store and corresponding Add/Modify/Delete handlers will be invoked
-	// for them.
-	// Optional - if unset no additional transforming is happening.
+	// Transform 函数若设置，将在所有对象放入 Store 并触发相应
+	// Add/Modify/Delete handler 之前被调用。
+	// 可选——未设置时不做额外转换。
 	Transform TransformFunc
 
-	// Identifier is used to identify the FIFO for metrics and logging purposes.
-	// If not set, metrics will not be published.
+	// Identifier 用于在指标和日志中标识该 FIFO。未设置时不发布指标。
 	Identifier InformerNameAndResource
 
-	// InformerMetricsProvider is the metrics provider for the informer.
-	// If not set, metrics will be no-ops.
+	// InformerMetricsProvider 是该 informer 的指标提供者。未设置时指标为 no-op。
 	InformerMetricsProvider InformerMetricsProvider
 }
 
-// NewInformerWithOptions returns a Store and a controller for populating the store
-// while also providing event notifications. You should only used the returned
-// Store for Get/List operations; Add/Modify/Deletes will cause the event
-// notifications to be faulty.
+// NewInformerWithOptions 返回一个 Store 和一个用于填充该 store 的控制器，
+// 同时提供事件通知。你只应对返回的 Store 执行 Get/List 操作；
+// Add/Modify/Delete 会导致事件通知失真。
 //
 // 返回的 Store 与 controller 共享同一个底层缓存；若调用方直接写入 Store，
 // 会绕过 Queue 的事件合并逻辑，导致 handler 收到不一致的通知。
@@ -763,29 +712,26 @@ func NewInformerWithOptions(options InformerOptions) (Store, Controller) {
 	return clientState, newInformer(clientState, options, DeletionHandlingMetaNamespaceKeyFunc)
 }
 
-// NewInformer returns a Store and a controller for populating the store
-// while also providing event notifications. You should only used the returned
-// Store for Get/List operations; Add/Modify/Deletes will cause the event
-// notifications to be faulty.
+// NewInformer 返回一个 Store 和一个用于填充该 store 的控制器，同时提供事件
+// 通知。你只应对返回的 Store 执行 Get/List 操作；Add/Modify/Delete 会导致
+// 事件通知失真。
 //
-// Parameters:
-//   - lw is list and watch functions for the source of the resource you want to
-//     be informed of.
-//   - objType is an object of the type that you expect to receive.
-//   - resyncPeriod: if non-zero, will re-list this often (you will get OnUpdate
-//     calls, even if nothing changed). Otherwise, re-list will be delayed as
-//     long as possible (until the upstream source closes the watch or times out,
-//     or you stop the controller).
-//   - h is the object you want notifications sent to.
+// 参数：
+//   - lw：你所关心的资源来源的 list 和 watch 函数。
+//   - objType：你预期接收类型的一个对象。
+//   - resyncPeriod：若非零，将以该频率重新 list（即使没有变化也会收到 OnUpdate
+//     调用）。否则，re-list 会尽可能推迟（直到上游来源关闭 watch 或超时，
+//     或你停止控制器）。
+//   - h：接收通知的目标对象。
 //
-// Deprecated: Use NewInformerWithOptions instead.
+// Deprecated: 请改用 NewInformerWithOptions。
 func NewInformer(
 	lw ListerWatcher,
 	objType runtime.Object,
 	resyncPeriod time.Duration,
 	h ResourceEventHandler,
 ) (Store, Controller) {
-	// This will hold the client state, as we know it.
+	// 用于保存我们所知的客户端状态。
 	clientState := NewStore(DeletionHandlingMetaNamespaceKeyFunc)
 
 	options := InformerOptions{
@@ -797,23 +743,20 @@ func NewInformer(
 	return clientState, newInformer(clientState, options, DeletionHandlingMetaNamespaceKeyFunc)
 }
 
-// NewIndexerInformer returns an Indexer and a Controller for populating the index
-// while also providing event notifications. You should only used the returned
-// Index for Get/List operations; Add/Modify/Deletes will cause the event
-// notifications to be faulty.
+// NewIndexerInformer 返回一个 Indexer 和一个用于填充索引的 Controller，
+// 同时提供事件通知。你只应对返回的 Index 执行 Get/List 操作；
+// Add/Modify/Delete 会导致事件通知失真。
 //
-// Parameters:
-//   - lw is list and watch functions for the source of the resource you want to
-//     be informed of.
-//   - objType is an object of the type that you expect to receive.
-//   - resyncPeriod: if non-zero, will re-list this often (you will get OnUpdate
-//     calls, even if nothing changed). Otherwise, re-list will be delayed as
-//     long as possible (until the upstream source closes the watch or times out,
-//     or you stop the controller).
-//   - h is the object you want notifications sent to.
-//   - indexers is the indexer for the received object type.
+// 参数：
+//   - lw：你所关心的资源来源的 list 和 watch 函数。
+//   - objType：你预期接收类型的一个对象。
+//   - resyncPeriod：若非零，将以该频率重新 list（即使没有变化也会收到 OnUpdate
+//     调用）。否则，re-list 会尽可能推迟（直到上游来源关闭 watch 或超时，
+//     或你停止控制器）。
+//   - h：接收通知的目标对象。
+//   - indexers：针对接收对象类型的索引器。
 //
-// Deprecated: Use NewInformerWithOptions instead.
+// Deprecated: 请改用 NewInformerWithOptions。
 func NewIndexerInformer(
 	lw ListerWatcher,
 	objType runtime.Object,
@@ -821,7 +764,7 @@ func NewIndexerInformer(
 	h ResourceEventHandler,
 	indexers Indexers,
 ) (Indexer, Controller) {
-	// This will hold the client state, as we know it.
+	// 用于保存我们所知的客户端状态。
 	clientState := NewIndexer(DeletionHandlingMetaNamespaceKeyFunc, indexers)
 
 	options := InformerOptions{
@@ -834,15 +777,13 @@ func NewIndexerInformer(
 	return clientState, newInformer(clientState, options, DeletionHandlingMetaNamespaceKeyFunc)
 }
 
-// NewTransformingInformer returns a Store and a controller for populating
-// the store while also providing event notifications. You should only used
-// the returned Store for Get/List operations; Add/Modify/Deletes will cause
-// the event notifications to be faulty.
-// The given transform function will be called on all objects before they will
-// put into the Store and corresponding Add/Modify/Delete handlers will
-// be invoked for them.
+// NewTransformingInformer 返回一个 Store 和一个用于填充该 store 的控制器，
+// 同时提供事件通知。你只应对返回的 Store 执行 Get/List 操作；
+// Add/Modify/Delete 会导致事件通知失真。
+// 给定的 transform 函数会在所有对象放入 Store 并触发相应 Add/Modify/Delete
+// handler 之前被调用。
 //
-// Deprecated: Use NewInformerWithOptions instead.
+// Deprecated: 请改用 NewInformerWithOptions。
 func NewTransformingInformer(
 	lw ListerWatcher,
 	objType runtime.Object,
@@ -850,7 +791,7 @@ func NewTransformingInformer(
 	h ResourceEventHandler,
 	transformer TransformFunc,
 ) (Store, Controller) {
-	// This will hold the client state, as we know it.
+	// 用于保存我们所知的客户端状态。
 	clientState := NewStore(DeletionHandlingMetaNamespaceKeyFunc)
 
 	options := InformerOptions{
@@ -863,15 +804,13 @@ func NewTransformingInformer(
 	return clientState, newInformer(clientState, options, DeletionHandlingMetaNamespaceKeyFunc)
 }
 
-// NewTransformingIndexerInformer returns an Indexer and a controller for
-// populating the index while also providing event notifications. You should
-// only used the returned Index for Get/List operations; Add/Modify/Deletes
-// will cause the event notifications to be faulty.
-// The given transform function will be called on all objects before they will
-// be put into the Index and corresponding Add/Modify/Delete handlers will
-// be invoked for them.
+// NewTransformingIndexerInformer 返回一个 Indexer 和一个用于填充索引的
+// 控制器，同时提供事件通知。你只应对返回的 Index 执行 Get/List 操作；
+// Add/Modify/Delete 会导致事件通知失真。
+// 给定的 transform 函数会在所有对象放入索引并触发相应 Add/Modify/Delete
+// handler 之前被调用。
 //
-// Deprecated: Use NewInformerWithOptions instead.
+// Deprecated: 请改用 NewInformerWithOptions。
 func NewTransformingIndexerInformer(
 	lw ListerWatcher,
 	objType runtime.Object,
@@ -880,7 +819,7 @@ func NewTransformingIndexerInformer(
 	indexers Indexers,
 	transformer TransformFunc,
 ) (Indexer, Controller) {
-	// This will hold the client state, as we know it.
+	// 用于保存我们所知的客户端状态。
 	clientState := NewIndexer(DeletionHandlingMetaNamespaceKeyFunc, indexers)
 
 	options := InformerOptions{
@@ -894,21 +833,21 @@ func NewTransformingIndexerInformer(
 	return clientState, newInformer(clientState, options, DeletionHandlingMetaNamespaceKeyFunc)
 }
 
-// Multiplexes updates in the form of a list of Deltas into a Store, and informs
-// a given handler of events OnUpdate, OnAdd, OnDelete
+// 将以 Deltas 列表形式到来的更新多路复用到 Store 中，并把 OnUpdate、OnAdd、
+// OnDelete 事件通知给给定的 handler。
 //
 // Delta 中的对象可能来自本地重放，因此“更新”不保证内容变化；handler 需
 // 自行按 resourceVersion 或语义去重。
 func processDeltas(
 	logger klog.Logger,
-	// Object which receives event notifications from the given deltas
+	// 接收来自给定 deltas 的事件通知的对象
 	handler ResourceEventHandler,
 	clientState Store,
 	deltas Deltas,
 	isInInitialList bool,
 	keyFunc KeyFunc,
 ) error {
-	// from oldest to newest
+	// 从最旧到最新
 	for _, d := range deltas {
 		obj := d.Object
 
@@ -966,15 +905,14 @@ func processDeltas(
 	return nil
 }
 
-// processDeltasInBatch applies a batch of Delta objects to the given Store and
-// notifies the ResourceEventHandler of add, update, or delete events.
+// processDeltasInBatch 将一批 Delta 对象应用到给定 Store，并把新增、更新或
+// 删除事件通知给 ResourceEventHandler。
 //
-// If the Store supports transactions (TransactionStore), all Deltas are applied
-// atomically in a single transaction and corresponding handler callbacks are
-// executed afterward. Otherwise, each Delta is processed individually.
+// 若 Store 支持事务（TransactionStore），所有 Delta 会在单个事务中原子应用，
+// 随后再执行对应的 handler 回调。否则逐个处理每个 Delta。
 //
-// Returns an error if any Delta or transaction fails. For TransactionError,
-// only successful operations trigger callbacks.
+// 任何 Delta 或事务失败都会返回错误。对 TransactionError，只有成功操作会
+// 触发回调。
 func processDeltasInBatch(
 	logger klog.Logger,
 	handler ResourceEventHandler,
@@ -983,7 +921,7 @@ func processDeltasInBatch(
 	isInInitialList bool,
 	keyFunc KeyFunc,
 ) error {
-	// from oldest to newest
+	// 从最旧到最新
 	txns := make([]Transaction, 0)
 	callbacks := make([]func(), 0)
 	txnStore, txnSupported := clientState.(TransactionStore)
@@ -1001,14 +939,14 @@ func processDeltasInBatch(
 		}
 		return nil
 	}
-	// deltasList is a list of unique objects
+	// deltas 是去重对象列表
 	for _, d := range deltas {
 		obj := d.Object
 		switch d.Type {
 		case Sync, Replaced, Added, Updated:
 			// 事务内查询 Store 仍能看到提交前状态，因此 old 是该批次的“前像”；
 			// 回调延迟到事务提交后执行，避免 handler 看到未提交数据。
-			// it will only return one old object for each because items are unique
+			// 由于条目唯一，每个对象只会返回一个旧对象
 			if old, exists, err := clientState.Get(obj); err == nil && exists {
 				txn := Transaction{
 					Type:   TransactionTypeUpdate,
@@ -1045,13 +983,13 @@ func processDeltasInBatch(
 	err := txnStore.Transaction(txns...)
 	if err != nil {
 		// 部分成功时只对已提交的条目触发回调，保证回调与缓存状态一致。
-		// if txn had error, only execute the callbacks for the successful ones
+		// 若事务出错，只执行成功条目对应的回调
 		for _, i := range err.SuccessfulIndices {
 			if i < len(callbacks) {
 				callbacks[i]()
 			}
 		}
-		// formatting the error so txns doesn't escape and keeps allocated in the stack.
+		// 对错误做格式化，避免 txns 逃逸、保持在栈上分配。
 		return fmt.Errorf("not all items in the batch successfully processed: %s", err.Error())
 	}
 	for _, callback := range callbacks {
@@ -1078,7 +1016,7 @@ func processReplacedAllInfo(logger klog.Logger, handler ResourceEventHandler, in
 			return nil
 		},
 		func(obj interface{}) error {
-			// This behavior matches processDeltas handling of Replace deltas
+			// 该行为与 processDeltas 处理 Replace delta 的方式一致
 			if old, exists, err := clientState.Get(obj); err == nil && exists {
 				replacements = append(replacements, replacement{newObj: obj, oldObj: old})
 			} else {
@@ -1091,15 +1029,15 @@ func processReplacedAllInfo(logger klog.Logger, handler ResourceEventHandler, in
 		return err
 	}
 
-	// Replace the client state first so the store reflects the events handlers are given
+	// 先替换客户端状态，使 store 反映 handler 将收到的事件
 	if err := clientState.Replace(info.Objects, info.ResourceVersion); err != nil {
 		return err
 	}
-	// Processing all deletions first matches behavior of RealFIFO#Replace
+	// 先处理所有删除，与 RealFIFO#Replace 的行为一致
 	for _, objToDelete := range deletions {
 		handler.OnDelete(objToDelete)
 	}
-	// Processing adds/updates in order observed by reconcileReplacement matches behavior of RealFIFO#Replace
+	// 按 reconcileReplacement 观察到的顺序处理新增/更新，与 RealFIFO#Replace 的行为一致
 	for _, r := range replacements {
 		if r.oldObj != nil {
 			handler.OnUpdate(r.oldObj, r.newObj)
@@ -1110,16 +1048,14 @@ func processReplacedAllInfo(logger klog.Logger, handler ResourceEventHandler, in
 	return nil
 }
 
-// newInformer returns a controller for populating the store while also
-// providing event notifications.
+// newInformer 返回一个用于填充 store 的控制器，同时提供事件通知。
 //
-// Parameters
-//   - clientState is the store you want to populate
-//   - options contain the options to configure the controller
+// 参数
+//   - clientState：要填充的 store
+//   - options：配置该控制器的选项
 func newInformer(clientState Store, options InformerOptions, keyFunc KeyFunc) Controller {
-	// This will hold incoming changes. Note how we pass clientState in as a
-	// KeyLister, that way resync operations will result in the correct set
-	// of update/delete deltas.
+	// 用于保存到来的变更。注意我们把 clientState 作为 KeyLister 传入，
+	// 这样 resync 操作会产生正确的更新/删除 delta 集合。
 
 	logger := klog.Background()
 	if options.Logger != nil {
@@ -1137,25 +1073,24 @@ func newInformer(clientState Store, options InformerOptions, keyFunc KeyFunc) Co
 
 		Process: func(obj interface{}, isInInitialList bool) error {
 			if deltas, ok := obj.(Deltas); ok {
-				// This must be the logger *of the fifo*.
+				// 这里必须使用 *fifo 自己的* logger。
 				return processDeltas(logger, options.Handler, clientState, deltas, isInInitialList, keyFunc)
 			}
 			return errors.New("object given as Process argument is not Deltas")
 		},
 		ProcessBatch: func(deltaList []Delta, isInInitialList bool) error {
-			// Same here.
+			// 同理。
 			return processDeltasInBatch(logger, options.Handler, clientState, deltaList, isInInitialList, keyFunc)
 		},
 	}
 	return New(cfg)
 }
 
-// newQueueFIFO constructs a new FIFO, choosing between real and delta FIFO
-// depending on the InOrderInformers feature gate.
+// newQueueFIFO 构造新的 FIFO，依据 InOrderInformers 特性门控在 real 与 delta
+// FIFO 之间选择。
 //
-// It returns the FIFO and the logger used by the FIFO.
-// That logger includes the name used for the FIFO,
-// in contrast to the logger which was passed in.
+// 返回 FIFO 以及 FIFO 使用的 logger。该 logger 包含 FIFO 的名称，
+// 与传入时的 logger 不同。
 //
 // 新实现（RealFIFO）按序交付事件；旧 DeltaFIFO 为兼容保留，关闭门控时仍会
 // 使用，因此两条路径必须保持可观察行为一致。
@@ -1169,8 +1104,8 @@ func newQueueFIFO(logger klog.Logger, objectType any, clientState Store, transfo
 			Identifier:      identifier,
 			MetricsProvider: metricsProvider,
 		}
-		// If atomic events are enabled, unset clientState in the case of atomic events as we cannot pass a
-		// store to an atomic fifo.
+		// 若启用了原子事件，则不设置 clientState：
+		// 无法把 store 传给原子 fifo。
 		if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.AtomicFIFO) {
 			options.AtomicEvents = true
 			options.UnlockWhileProcessing = clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.UnlockWhileProcessingFIFO)

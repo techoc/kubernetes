@@ -27,8 +27,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// streamProtocolV3 implements version 3 of the streaming protocol for attach
-// and exec. This version adds support for resizing the container's terminal.
+// streamProtocolV3 实现 attach 和 exec 流式协议的第 3 版。
+// 该版本新增了对容器终端尺寸调整（resize）的支持。
 type streamProtocolV3 struct {
 	*streamProtocolV2
 
@@ -47,13 +47,12 @@ func newStreamProtocolV3(options StreamOptions) streamProtocolHandler {
 }
 
 func (p *streamProtocolV3) createStreams(conn streamCreator) error {
-	// set up the streams from v2
 	// v3 在 v2 的 stdin/stdout/stderr/error 之外只增加了 resize 流，先复用父实现。
 	if err := p.streamProtocolV2.createStreams(conn); err != nil {
 		return err
 	}
 
-	// set up resize stream
+	// 建立 resize 流
 	if p.Tty {
 		headers := http.Header{}
 		headers.Set(v1.StreamType, v1.StreamTypeResize)
@@ -95,12 +94,12 @@ func (p *streamProtocolV3) stream(logger klog.Logger, conn streamCreator, ready 
 		return err
 	}
 
-	// Signal that all streams have been created.
+	// 通知所有流均已创建。
 	if ready != nil {
 		close(ready)
 	}
 
-	// now that all the streams have been created, proceed with reading & copying
+	// 所有流创建完毕后，开始读取与拷贝
 
 	// 错误流异步读取，主协程随后并行拷贝 stdin/stdout/stderr。
 	errorChan := watchErrorStream(logger, p.errorStream, &errorDecoderV3{})
@@ -113,10 +112,10 @@ func (p *streamProtocolV3) stream(logger klog.Logger, conn streamCreator, ready 
 	p.copyStdout(logger, &wg)
 	p.copyStderr(logger, &wg)
 
-	// we're waiting for stdout/stderr to finish copying
+	// 等待 stdout/stderr 拷贝完成
 	wg.Wait()
 
-	// waits for errorStream to finish reading with an error or nil
+	// 等待 errorStream 读取结束，返回错误或 nil
 	// error 流的结果是最终的退出状态：stdout/stderr 拷贝完不代表命令成功。
 	return <-errorChan
 }

@@ -25,16 +25,15 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-// ConfigOverrides holds values that should override whatever information is pulled from the actual Config object.  You can't
-// simply use an actual Config object, because Configs hold maps, but overrides are restricted to "at most one"
-//
-// 中文说明：命令行只能指定单个 cluster/user/context，因此用扁平结构而非 Config 中的
-// map 表示覆盖值。非零字段会覆盖 kubeconfig 中加载出的对应信息。
+// ConfigOverrides 中的值会覆盖从实际 Config 对象读取到的信息。不能直接使用 Config 对象，
+// 因为 Config 内部是 map，而覆盖值被限制为“至多一个”：命令行只能指定单个
+// cluster/user/context，因此用扁平结构而非 map 表示覆盖值。非零字段会覆盖
+// kubeconfig 中加载出的对应信息。
 type ConfigOverrides struct {
 	// AuthInfo 覆盖认证信息（证书、token、身份伪装等）。
 	AuthInfo clientcmdapi.AuthInfo
-	// ClusterDefaults are applied before the configured cluster info is loaded.
-	// 中文：作为 cluster 的初始值，随后再被 kubeconfig 中的值覆盖，优先级最低。
+	// ClusterDefaults 会在加载所配置的 cluster 信息之前应用：作为 cluster 的初始值，
+	// 随后再被 kubeconfig 中的值覆盖，优先级最低。
 	ClusterDefaults clientcmdapi.Cluster
 	// ClusterInfo 覆盖集群连接信息（server、CA 等）。
 	ClusterInfo clientcmdapi.Cluster
@@ -46,10 +45,8 @@ type ConfigOverrides struct {
 	Timeout string
 }
 
-// ConfigOverrideFlags holds the flag names to be used for binding command line flags. Notice that this structure tightly
-// corresponds to ConfigOverrides
-//
-// 中文说明：字段与 ConfigOverrides 一一对应，便于扩展者自定义 flag 名称。
+// ConfigOverrideFlags 保存用于绑定命令行 flag 的 flag 名称。注意该结构与 ConfigOverrides
+// 严格对应，字段一一对应，便于扩展者自定义 flag 名称。
 type ConfigOverrideFlags struct {
 	AuthOverrideFlags    AuthOverrideFlags
 	ClusterOverrideFlags ClusterOverrideFlags
@@ -58,7 +55,7 @@ type ConfigOverrideFlags struct {
 	Timeout              FlagInfo
 }
 
-// AuthOverrideFlags holds the flag names to be used for binding command line flags for AuthInfo objects
+// AuthOverrideFlags 保存为 AuthInfo 对象绑定命令行 flag 时使用的 flag 名称
 type AuthOverrideFlags struct {
 	ClientCertificate FlagInfo
 	ClientKey         FlagInfo
@@ -70,16 +67,15 @@ type AuthOverrideFlags struct {
 	Password          FlagInfo
 }
 
-// ContextOverrideFlags holds the flag names to be used for binding command line flags for Cluster objects
-//
-// 中文：注意，尽管注释写的是 Cluster，实际绑定的是 Context 字段。
+// ContextOverrideFlags 保存为 Cluster 对象绑定命令行 flag 时使用的 flag 名称。
+// 注意，尽管注释写的是 Cluster，实际绑定的是 Context 字段。
 type ContextOverrideFlags struct {
 	ClusterName  FlagInfo
 	AuthInfoName FlagInfo
 	Namespace    FlagInfo
 }
 
-// ClusterOverride holds the flag names to be used for binding command line flags for Cluster objects
+// ClusterOverride 保存为 Cluster 对象绑定命令行 flag 时使用的 flag 名称
 type ClusterOverrideFlags struct {
 	APIServer             FlagInfo
 	APIVersion            FlagInfo
@@ -90,57 +86,52 @@ type ClusterOverrideFlags struct {
 	DisableCompression    FlagInfo
 }
 
-// FlagInfo contains information about how to register a flag.  This struct is useful if you want to provide a way for an extender to
-// get back a set of recommended flag names, descriptions, and defaults, but allow for customization by an extender.  This makes for
-// coherent extension, without full prescription
+// FlagInfo 包含如何注册 flag 的信息。如果想向扩展者提供一组推荐的 flag 名称、描述和默认值，
+// 同时又允许其自定义，这个结构体很有用：既能保证扩展的一致性，又不做硬性规定。
 type FlagInfo struct {
-	// LongName is the long string for a flag.  If this is empty, then the flag will not be bound
+	// LongName 是 flag 的长名称。为空时不会绑定该 flag
 	LongName string
-	// ShortName is the single character for a flag.  If this is empty, then there will be no short flag
+	// ShortName 是 flag 的单字符短名称。为空时不提供短 flag
 	ShortName string
-	// Default is the default value for the flag
+	// Default 是 flag 的默认值
 	Default string
-	// Description is the description for the flag
+	// Description 是 flag 的描述
 	Description string
 }
 
-// AddSecretAnnotation add secret flag to Annotation.
-//
-// 中文说明：标记该 flag 含敏感值（证书私钥、token、密码等），使日志或诊断输出时
+// AddSecretAnnotation 将敏感 flag 加入 Annotation。
+// 标记该 flag 含敏感值（证书私钥、token、密码等），使日志或诊断输出时
 // 能据此脱敏。返回自身以便链式调用。
 func (f FlagInfo) AddSecretAnnotation(flags *pflag.FlagSet) FlagInfo {
 	flags.SetAnnotation(f.LongName, "classified", []string{"true"})
 	return f
 }
 
-// BindStringFlag binds the flag based on the provided info.  If LongName == "", nothing is registered
+// BindStringFlag 根据提供的信息绑定 flag。若 LongName == ""，则不注册任何内容
 func (f FlagInfo) BindStringFlag(flags *pflag.FlagSet, target *string) FlagInfo {
-	// you can't register a flag without a long name
-	// 中文：没有长名称时无法注册，直接跳过，便于扩展者通过置空禁用某个 flag。
+	// 没有长名称就无法注册 flag，直接跳过，便于扩展者通过置空禁用某个 flag。
 	if len(f.LongName) > 0 {
 		flags.StringVarP(target, f.LongName, f.ShortName, f.Default, f.Description)
 	}
 	return f
 }
 
-// BindTransformingStringFlag binds the flag based on the provided info.  If LongName == "", nothing is registered
-//
-// 中文说明：绑定前对输入值应用 transformer，例如从 "ns/foo" 中去掉命名空间前缀。
+// BindTransformingStringFlag 根据提供的信息绑定 flag。若 LongName == ""，则不注册任何内容。
+// 绑定前对输入值应用 transformer，例如从 "ns/foo" 中去掉命名空间前缀。
 func (f FlagInfo) BindTransformingStringFlag(flags *pflag.FlagSet, target *string, transformer func(string) (string, error)) FlagInfo {
-	// you can't register a flag without a long name
+	// 没有长名称就无法注册 flag
 	if len(f.LongName) > 0 {
 		flags.VarP(newTransformingStringValue(f.Default, target, transformer), f.LongName, f.ShortName, f.Description)
 	}
 	return f
 }
 
-// BindStringSliceFlag binds the flag based on the provided info.  If LongName == "", nothing is registered
-//
-// 中文：实际使用 StringArray（重复 flag 累积），而非逗号分隔的 StringSlice。
+// BindStringSliceFlag 根据提供的信息绑定 flag。若 LongName == ""，则不注册任何内容。
+// 实际使用 StringArray（重复 flag 累积），而非逗号分隔的 StringSlice。
 func (f FlagInfo) BindStringArrayFlag(flags *pflag.FlagSet, target *[]string) FlagInfo {
-	// you can't register a flag without a long name
+	// 没有长名称就无法注册 flag
 	if len(f.LongName) > 0 {
-		// 中文：Default 是单个字符串，若有默认值则作为数组的唯一初始元素。
+		// Default 是单个字符串，若有默认值则作为数组的唯一初始元素。
 		sliceVal := []string{}
 		if len(f.Default) > 0 {
 			sliceVal = []string{f.Default}
@@ -150,12 +141,12 @@ func (f FlagInfo) BindStringArrayFlag(flags *pflag.FlagSet, target *[]string) Fl
 	return f
 }
 
-// BindBoolFlag binds the flag based on the provided info.  If LongName == "", nothing is registered
+// BindBoolFlag 根据提供的信息绑定 flag。若 LongName == ""，则不注册任何内容
 func (f FlagInfo) BindBoolFlag(flags *pflag.FlagSet, target *bool) FlagInfo {
-	// you can't register a flag without a long name
+	// 没有长名称就无法注册 flag
 	if len(f.LongName) > 0 {
-		// try to parse Default as a bool.  If it fails, assume false
-		// 中文：默认值以字符串存储，解析失败时退化为 false，而不是让程序启动失败。
+		// 尝试将 Default 解析为 bool，失败则视为 false：默认值以字符串存储，
+		// 解析失败时退化为 false，而不是让程序启动失败。
 		boolVal, err := strconv.ParseBool(f.Default)
 		if err != nil {
 			boolVal = false
@@ -190,9 +181,8 @@ const (
 	FlagDisableCompression = "disable-compression"
 )
 
-// RecommendedConfigOverrideFlags is a convenience method to return recommended flag names prefixed with a string of your choosing
-//
-// 中文说明：返回一套可直接使用的 flag 定义，全部带 prefix，方便与其它组件的 flag 共存。
+// RecommendedConfigOverrideFlags 是一个便捷方法，返回带有自定义前缀的推荐 flag 名称：
+// 即一套可直接使用的 flag 定义，全部带 prefix，方便与其它组件的 flag 共存。
 func RecommendedConfigOverrideFlags(prefix string) ConfigOverrideFlags {
 	return ConfigOverrideFlags{
 		AuthOverrideFlags:    RecommendedAuthOverrideFlags(prefix),
@@ -200,12 +190,12 @@ func RecommendedConfigOverrideFlags(prefix string) ConfigOverrideFlags {
 		ContextOverrideFlags: RecommendedContextOverrideFlags(prefix),
 
 		CurrentContext: FlagInfo{prefix + FlagContext, "", "", "The name of the kubeconfig context to use"},
-		// 中文：默认 "0" 表示不设超时；非零值必须带时间单位。
+		// 默认 "0" 表示不设超时；非零值必须带时间单位。
 		Timeout: FlagInfo{prefix + FlagTimeout, "", "0", "The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests."},
 	}
 }
 
-// RecommendedAuthOverrideFlags is a convenience method to return recommended flag names prefixed with a string of your choosing
+// RecommendedAuthOverrideFlags 是一个便捷方法，返回带有自定义前缀的推荐 flag 名称
 func RecommendedAuthOverrideFlags(prefix string) AuthOverrideFlags {
 	return AuthOverrideFlags{
 		ClientCertificate: FlagInfo{prefix + FlagCertFile, "", "", "Path to a client certificate file for TLS"},
@@ -219,7 +209,7 @@ func RecommendedAuthOverrideFlags(prefix string) AuthOverrideFlags {
 	}
 }
 
-// RecommendedClusterOverrideFlags is a convenience method to return recommended flag names prefixed with a string of your choosing
+// RecommendedClusterOverrideFlags 是一个便捷方法，返回带有自定义前缀的推荐 flag 名称
 func RecommendedClusterOverrideFlags(prefix string) ClusterOverrideFlags {
 	return ClusterOverrideFlags{
 		APIServer:             FlagInfo{prefix + FlagAPIServer, "", "", "The address and port of the Kubernetes API server"},
@@ -231,19 +221,18 @@ func RecommendedClusterOverrideFlags(prefix string) ClusterOverrideFlags {
 	}
 }
 
-// RecommendedContextOverrideFlags is a convenience method to return recommended flag names prefixed with a string of your choosing
+// RecommendedContextOverrideFlags 是一个便捷方法，返回带有自定义前缀的推荐 flag 名称
 func RecommendedContextOverrideFlags(prefix string) ContextOverrideFlags {
 	return ContextOverrideFlags{
 		ClusterName:  FlagInfo{prefix + FlagClusterName, "", "", "The name of the kubeconfig cluster to use"},
 		AuthInfoName: FlagInfo{prefix + FlagAuthInfoName, "", "", "The name of the kubeconfig user to use"},
-		// 中文：namespace 提供 -n 短选项，是 kubectl 风格命令行的惯例。
+		// namespace 提供 -n 短选项，是 kubectl 风格命令行的惯例。
 		Namespace: FlagInfo{prefix + FlagNamespace, "n", "", "If present, the namespace scope for this CLI request"},
 	}
 }
 
-// BindOverrideFlags is a convenience method to bind the specified flags to their associated variables
-//
-// 中文说明：一次性把认证、集群、context 及超时相关的 flag 绑定到 overrides 上。
+// BindOverrideFlags 是一个便捷方法，将指定的 flag 绑定到对应的变量上：
+// 一次性把认证、集群、context 及超时相关的 flag 绑定到 overrides 上。
 func BindOverrideFlags(overrides *ConfigOverrides, flags *pflag.FlagSet, flagNames ConfigOverrideFlags) {
 	BindAuthInfoFlags(&overrides.AuthInfo, flags, flagNames.AuthOverrideFlags)
 	BindClusterFlags(&overrides.ClusterInfo, flags, flagNames.ClusterOverrideFlags)
@@ -252,9 +241,8 @@ func BindOverrideFlags(overrides *ConfigOverrides, flags *pflag.FlagSet, flagNam
 	flagNames.Timeout.BindStringFlag(flags, &overrides.Timeout)
 }
 
-// BindAuthInfoFlags is a convenience method to bind the specified flags to their associated variables
-//
-// 中文：所有认证 flag 都标记为敏感信息，供后续日志脱敏使用。
+// BindAuthInfoFlags 是一个便捷方法，将指定的 flag 绑定到对应的变量上。
+// 所有认证 flag 都标记为敏感信息，供后续日志脱敏使用。
 func BindAuthInfoFlags(authInfo *clientcmdapi.AuthInfo, flags *pflag.FlagSet, flagNames AuthOverrideFlags) {
 	flagNames.ClientCertificate.BindStringFlag(flags, &authInfo.ClientCertificate).AddSecretAnnotation(flags)
 	flagNames.ClientKey.BindStringFlag(flags, &authInfo.ClientKey).AddSecretAnnotation(flags)
@@ -266,7 +254,7 @@ func BindAuthInfoFlags(authInfo *clientcmdapi.AuthInfo, flags *pflag.FlagSet, fl
 	flagNames.Password.BindStringFlag(flags, &authInfo.Password).AddSecretAnnotation(flags)
 }
 
-// BindClusterFlags is a convenience method to bind the specified flags to their associated variables
+// BindClusterFlags 是一个便捷方法，将指定的 flag 绑定到对应的变量上
 func BindClusterFlags(clusterInfo *clientcmdapi.Cluster, flags *pflag.FlagSet, flagNames ClusterOverrideFlags) {
 	flagNames.APIServer.BindStringFlag(flags, &clusterInfo.Server)
 	flagNames.CertificateAuthority.BindStringFlag(flags, &clusterInfo.CertificateAuthority)
@@ -276,9 +264,8 @@ func BindClusterFlags(clusterInfo *clientcmdapi.Cluster, flags *pflag.FlagSet, f
 	flagNames.DisableCompression.BindBoolFlag(flags, &clusterInfo.DisableCompression)
 }
 
-// BindFlags is a convenience method to bind the specified flags to their associated variables
-//
-// 中文：注释中的函数名已过时（实际为 BindContextFlags），保留原文以免丢失历史信息。
+// BindFlags 是一个便捷方法，将指定的 flag 绑定到对应的变量上。
+// 注释中的函数名已过时（实际为 BindContextFlags），保留原文以免丢失历史信息。
 // namespace flag 使用转换绑定，以兼容用户传入 "ns/foo" 这类写法。
 func BindContextFlags(contextInfo *clientcmdapi.Context, flags *pflag.FlagSet, flagNames ContextOverrideFlags) {
 	flagNames.ClusterName.BindStringFlag(flags, &contextInfo.Cluster)
@@ -286,9 +273,8 @@ func BindContextFlags(contextInfo *clientcmdapi.Context, flags *pflag.FlagSet, f
 	flagNames.Namespace.BindTransformingStringFlag(flags, &contextInfo.Namespace, RemoveNamespacesPrefix)
 }
 
-// RemoveNamespacesPrefix is a transformer that strips "ns/", "namespace/" and "namespaces/" prefixes case-insensitively
-//
-// 中文说明：兼容 kubectl 用户习惯——复制资源路径前缀后作为 namespace 参数。
+// RemoveNamespacesPrefix 是一个 transformer，不区分大小写地去除 "ns/"、"namespace/" 和 "namespaces/" 前缀。
+// 兼容 kubectl 用户习惯——复制资源路径前缀后作为 namespace 参数。
 // 只匹配“前缀后仍有内容”的情况，避免把单独的 "ns/" 变成空字符串。
 func RemoveNamespacesPrefix(value string) (string, error) {
 	for _, prefix := range []string{"namespaces/", "namespace/", "ns/"} {

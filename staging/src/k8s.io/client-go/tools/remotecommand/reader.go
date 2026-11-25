@@ -20,13 +20,13 @@ import (
 	"io"
 )
 
-// readerWrapper delegates to an io.Reader so that only the io.Reader interface is implemented,
-// to keep io.Copy from doing things we don't want when copying from the reader to the data stream.
+// readerWrapper 委托给一个 io.Reader，使自身只实现 io.Reader 接口，
+// 从而避免 io.Copy 在从该读取器向数据流拷贝时做出我们不希望的行为。
 //
-// If the Stdin io.Reader provided to remotecommand implements a WriteTo function (like bytes.Buffer does[1]),
-// io.Copy calls that method[2] to attempt to write the entire buffer to the stream in one call.
-// That results in an oversized call to spdystream.Stream#Write [3],
-// which results in a single oversized data frame[4] that is too large.
+// 如果传给 remotecommand 的 Stdin io.Reader 实现了 WriteTo 方法
+// （bytes.Buffer 就是如此[1]），io.Copy 会调用该方法[2]，试图一次性把
+// 整个缓冲区写入流。这会导致对 spdystream.Stream#Write 的超大调用[3]，
+// 进而产生一个过大的单帧数据帧[4]。
 //
 // [1] https://golang.org/pkg/bytes/#Buffer.WriteTo
 // [2] https://golang.org/pkg/io/#Copy

@@ -27,17 +27,17 @@ import (
 	clientauth "k8s.io/client-go/tools/auth"
 )
 
-// AuthLoaders are used to build clientauth.Info objects.
+// AuthLoader 用于构造 clientauth.Info 对象。
 // AuthLoader 把"从磁盘读取或交互式询问凭据"的差异抽象出来，供 kubeconfig 加载流程替换实现。
 type AuthLoader interface {
-	// LoadAuth takes a path to a config file and can then do anything it needs in order to return a valid clientauth.Info
+	// LoadAuth 接收配置文件路径，并可以做任何必要的事来返回有效的 clientauth.Info
 	LoadAuth(path string) (*clientauth.Info, error)
 }
 
-// default implementation of an AuthLoader
+// AuthLoader 的默认实现。
 type defaultAuthLoader struct{}
 
-// LoadAuth for defaultAuthLoader simply delegates to clientauth.LoadFromFile
+// defaultAuthLoader 的 LoadAuth 只是委托给 clientauth.LoadFromFile。
 func (*defaultAuthLoader) LoadAuth(path string) (*clientauth.Info, error) {
 	return clientauth.LoadFromFile(path)
 }
@@ -47,9 +47,9 @@ type PromptingAuthLoader struct {
 	reader io.Reader
 }
 
-// LoadAuth parses an AuthInfo object from a file path. It prompts user and creates file if it doesn't exist.
+// LoadAuth 从文件路径解析 AuthInfo 对象；文件不存在时提示用户并创建文件。
 func (a *PromptingAuthLoader) LoadAuth(path string) (*clientauth.Info, error) {
-	// Prompt for user/pass and write a file if none exists.
+	// 若无凭据文件，则提示输入用户名/密码并写入文件。
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		authPtr, err := a.Prompt()
 		if err != nil {
@@ -71,7 +71,7 @@ func (a *PromptingAuthLoader) LoadAuth(path string) (*clientauth.Info, error) {
 	return authPtr, nil
 }
 
-// Prompt pulls the user and password from a reader
+// Prompt 从 reader 读取用户名和密码。
 // 用户名从注入的 reader 读取（便于测试），密码则强制从终端读取且不回显。
 func (a *PromptingAuthLoader) Prompt() (*clientauth.Info, error) {
 	var err error
@@ -105,12 +105,13 @@ func promptForString(field string, r io.Reader, show bool) (result string, err e
 	return result, err
 }
 
-// NewPromptingAuthLoader is an AuthLoader that parses an AuthInfo object from a file path. It prompts user and creates file if it doesn't exist.
+// NewPromptingAuthLoader 返回一个 AuthLoader：从文件路径解析 AuthInfo 对象；
+// 文件不存在时提示用户并创建文件。
 func NewPromptingAuthLoader(reader io.Reader) *PromptingAuthLoader {
 	return &PromptingAuthLoader{reader}
 }
 
-// NewDefaultAuthLoader returns a default implementation of an AuthLoader that only reads from a config file
+// NewDefaultAuthLoader 返回 AuthLoader 的默认实现，只从配置文件读取。
 func NewDefaultAuthLoader() AuthLoader {
 	return &defaultAuthLoader{}
 }

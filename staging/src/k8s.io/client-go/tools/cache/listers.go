@@ -27,15 +27,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// AppendFunc is used to add a matching item to whatever list the caller is using
-//
 // AppendFunc 回调接收每个匹配项；调用方可用它把结果追加到任意目标容器。
 type AppendFunc func(interface{})
 
-// ListAll lists items in the store matching the given selector, calling appendFn on each one.
-//
-// ListAll 遍历 store 并回调匹配 selector 的对象。当 selector 匹配一切时跳过标签计算，
-// 这是列举全部对象时最常见的路径，可避免对每个对象做反射式取值。
+// ListAll 遍历 store，对每个匹配 selector 的对象调用 appendFn。
+// 当 selector 匹配一切时跳过标签计算，这是列举全部对象时最常见的路径，
+// 可避免对每个对象做反射式取值。
 func ListAll(store Store, selector labels.Selector, appendFn AppendFunc) error {
 	// 匹配不到任何对象的 selector 直接短路，省去遍历。
 	if labels.MatchesNothing(selector) {
@@ -45,8 +42,7 @@ func ListAll(store Store, selector labels.Selector, appendFn AppendFunc) error {
 	selectAll := selector.Empty()
 	for _, m := range store.List() {
 		if selectAll {
-			// Avoid computing labels of the objects to speed up common flows
-			// of listing all objects.
+			// 避免计算对象的标签，以加速“列举全部对象”这一常见路径。
 			appendFn(m)
 			continue
 		}
@@ -61,12 +57,10 @@ func ListAll(store Store, selector labels.Selector, appendFn AppendFunc) error {
 	return nil
 }
 
-// ListAllByNamespace lists items in the given namespace in the store matching the given selector,
-// calling appendFn on each one.
-// If a blank namespace (NamespaceAll) is specified, this delegates to ListAll().
+// ListAllByNamespace 遍历 store，对给定命名空间内每个匹配 selector 的对象调用 appendFn。
+// 若指定了空白命名空间（NamespaceAll），则直接委托给 ListAll()。
 //
-// ListAllByNamespace 优先通过 NamespaceIndex 索引缩小范围；
-// 若索引不可用则退化为全量遍历过滤。namespace 为空等价于所有命名空间。
+// 优先通过 NamespaceIndex 索引缩小范围；若索引不可用则退化为全量遍历过滤。
 func ListAllByNamespace(indexer Indexer, namespace string, selector labels.Selector, appendFn AppendFunc) error {
 	if labels.MatchesNothing(selector) {
 		return nil
@@ -78,12 +72,10 @@ func ListAllByNamespace(indexer Indexer, namespace string, selector labels.Selec
 
 	items, err := indexer.Index(NamespaceIndex, &metav1.ObjectMeta{Namespace: namespace})
 	if err != nil {
-		// Ignore error; do slow search without index.
+		// 忽略错误；改用无索引的慢速搜索。
 		//
-		// ListAllByNamespace is called by generated code
-		// (k8s.io/client-go/listers) and probably not worth converting
-		// to contextual logging, which would require changing all of
-		// those APIs.
+		// ListAllByNamespace 由生成代码（k8s.io/client-go/listers）调用，
+		// 为此改成上下文日志需要改动整个生成 API 体系，得不偿失。
 		//
 		// 索引查询失败不影响正确性，退回全量遍历；此处保持无损日志以兼容生成代码。
 		klog.TODO().Info("Warning: can not retrieve list of objects using index", "err", err)
@@ -103,8 +95,7 @@ func ListAllByNamespace(indexer Indexer, namespace string, selector labels.Selec
 	selectAll := selector.Empty()
 	for _, m := range items {
 		if selectAll {
-			// Avoid computing labels of the objects to speed up common flows
-			// of listing all objects.
+			// 避免计算对象的标签，以加速“列举全部对象”这一常见路径。
 			appendFn(m)
 			continue
 		}
@@ -120,28 +111,26 @@ func ListAllByNamespace(indexer Indexer, namespace string, selector labels.Selec
 	return nil
 }
 
-// GenericLister is a lister skin on a generic Indexer
-//
 // GenericLister 是建立在通用 Indexer 之上的 lister，只做类型擦除，
 // 供无法生成类型化 lister 的场景（如动态客户端）使用。
 type GenericLister interface {
-	// List will return all objects across namespaces
+	// List 返回跨所有命名空间中匹配 selector 的对象
 	List(selector labels.Selector) (ret []runtime.Object, err error)
-	// Get will attempt to retrieve assuming that name==key
+	// Get 假定 name 即存储 key，尝试直接获取对象
 	Get(name string) (runtime.Object, error)
-	// ByNamespace will give you a GenericNamespaceLister for one namespace
+	// ByNamespace 返回指定命名空间的 GenericNamespaceLister
 	ByNamespace(namespace string) GenericNamespaceLister
 }
 
-// GenericNamespaceLister is a lister skin on a generic Indexer
+// GenericNamespaceLister 是建立在通用 Indexer 之上的单命名空间 lister。
 type GenericNamespaceLister interface {
-	// List will return all objects in this namespace
+	// List 返回本命名空间内匹配 selector 的对象
 	List(selector labels.Selector) (ret []runtime.Object, err error)
-	// Get will attempt to retrieve by namespace and name
+	// Get 按命名空间和名称尝试获取对象
 	Get(name string) (runtime.Object, error)
 }
 
-// NewGenericLister creates a new instance for the genericLister.
+// NewGenericLister 创建一个 genericLister 实例。
 //
 // resource 仅用于生成 NotFound 错误中的资源描述，不影响读取逻辑。
 func NewGenericLister(indexer Indexer, resource schema.GroupResource) GenericLister {

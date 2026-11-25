@@ -31,8 +31,7 @@ import (
 
 var _ net.Conn = &TunnelingConnection{}
 
-// TunnelingConnection implements the "httpstream.Connection" interface, wrapping
-// a websocket connection that tunnels SPDY.
+// TunnelingConnection 实现 httpstream.Connection 接口，封装通过 WebSocket 隧道承载 SPDY 的连接。
 //
 // inProgressMessage 保存当前尚未读完的 WebSocket 消息。Read 不保证一次读满
 // 调用方缓冲区，因此必须跨调用保留该 reader，否则会丢消息边界。
@@ -44,9 +43,8 @@ type TunnelingConnection struct {
 	closeOnce         sync.Once
 }
 
-// NewTunnelingConnection wraps the passed gorilla/websockets connection
-// with the TunnelingConnection struct (implementing net.Conn).
-// The name is added to all log entries with [klog.LoggerWithName].
+// NewTunnelingConnection 将传入的 gorilla/websocket 连接封装为实现 net.Conn 的
+// TunnelingConnection，并通过 klog.LoggerWithName 为所有日志添加指定名称。
 //
 //logcheck:context // NewTunnelingConnectionWithLogger should be used instead of NewTunnelingConnection in code which supports contextual logging.
 func NewTunnelingConnection(name string, conn *gwebsocket.Conn) *TunnelingConnection {
@@ -54,9 +52,8 @@ func NewTunnelingConnection(name string, conn *gwebsocket.Conn) *TunnelingConnec
 	return NewTunnelingConnectionWithLogger(logger, conn)
 }
 
-// NewTunnelingConnectionWithLogger is a variant of NewTunnelingConnection where
-// the caller is in control of logging. For example, [klog.LoggerWithName] can be used
-// to add a common name for all log entries to identify the connection.
+// NewTunnelingConnectionWithLogger 是 NewTunnelingConnection 的变体，由调用方控制日志。
+// 例如可使用 klog.LoggerWithName 为所有日志添加统一名称，以标识该连接。
 func NewTunnelingConnectionWithLogger(logger klog.Logger, conn *gwebsocket.Conn) *TunnelingConnection {
 	return &TunnelingConnection{
 		logger: logger,
@@ -64,12 +61,9 @@ func NewTunnelingConnectionWithLogger(logger klog.Logger, conn *gwebsocket.Conn)
 	}
 }
 
-// Read implements "io.Reader" interface, reading from the stored connection
-// into the passed buffer "p". Returns the number of bytes read and an error.
-// Can keep track of the "inProgress" messsage from the tunneled connection.
-//
-// 读取可能跨多条 WebSocket 消息：当前消息读尽（n==0 且 EOF）后清理状态，
-// 循环进入下一条消息；其他情况直接返回，确保不丢失消息边界。
+// Read 实现 io.Reader 接口，从已保存的连接读取数据到缓冲区 p，返回读取字节数和错误。
+// 它会跟踪隧道连接中尚未读完的消息：当前消息读尽（n==0 且 EOF）后清理状态并进入下一条消息，
+// 其他情况直接返回，确保不丢失消息边界。
 func (c *TunnelingConnection) Read(p []byte) (len int, err error) {
 	c.logger.V(7).Info("Tunneling connection read...")
 	defer func() {
@@ -109,12 +103,9 @@ func (c *TunnelingConnection) Read(p []byte) (len int, err error) {
 	}
 }
 
-// Write implements "io.Writer" interface, copying the data in the passed
-// byte array "p" into the stored tunneled connection. Returns the number
-// of bytes written and an error.
-//
-// 每次 Write 对应一条独立的 WebSocket 二进制消息；必须 Close writer 才能
-// 真正发送（flush），因此错误处理要兼顾写入与关闭两个阶段。
+// Write 实现 io.Writer 接口，将字节数组 p 写入已保存的隧道连接，返回写入字节数和错误。
+// 每次 Write 对应一条独立的 WebSocket 二进制消息；必须 Close writer 才能真正发送（flush），
+// 因此错误处理要兼顾写入与关闭两个阶段。
 func (c *TunnelingConnection) Write(p []byte) (n int, err error) {
 	c.logger.V(7).Info("Tunneling connection write", "length", len(p), "data", p)
 	defer c.logger.V(7).Info("Tunneling connection write...complete")
@@ -123,10 +114,10 @@ func (c *TunnelingConnection) Write(p []byte) (n int, err error) {
 		return 0, err
 	}
 	defer func() {
-		// close, which flushes the message
+		// 关闭 writer 以刷新并发送消息
 		closeErr := w.Close()
 		if closeErr != nil && err == nil {
-			// if closing/flushing errored and we weren't already returning an error, return the close error
+			// 关闭或刷新出错且当前尚无其他错误时，返回关闭错误
 			err = closeErr
 		}
 	}()
@@ -135,16 +126,14 @@ func (c *TunnelingConnection) Write(p []byte) (n int, err error) {
 	return
 }
 
-// Close implements "io.Closer" interface, signaling the other tunneled connection
-// endpoint, and closing the tunneled connection only once.
-//
-// 先用带 1 秒超时的 close control frame 通知对端，再关闭底层连接；所有
-// 操作包在 sync.Once 中，重复调用不会重复发送关闭帧。
+// Close 实现 io.Closer 接口，通知隧道另一端并确保连接只关闭一次。
+// 先用带 1 秒超时的关闭控制帧通知对端，再关闭底层连接；所有操作包在 sync.Once 中，
+// 重复调用不会重复发送关闭帧。
 func (c *TunnelingConnection) Close() error {
 	var err error
 	c.closeOnce.Do(func() {
 		c.logger.V(7).Info("Tunneling connection Close()...")
-		// Signal other endpoint that websocket connection is closing; ignore error.
+		// 通知另一端 WebSocket 连接即将关闭；忽略通知错误。
 		normalCloseMsg := gwebsocket.FormatCloseMessage(gwebsocket.CloseNormalClosure, "")
 		writeControlErr := c.conn.WriteControl(gwebsocket.CloseMessage, normalCloseMsg, time.Now().Add(time.Second))
 		closeErr := c.conn.Close()
@@ -157,42 +146,29 @@ func (c *TunnelingConnection) Close() error {
 	return err
 }
 
-// LocalAddr implements part of the "net.Conn" interface, returning the local
-// endpoint network address of the tunneled connection.
+// LocalAddr 实现 net.Conn 接口的一部分，返回隧道连接的本地端点网络地址。
 func (c *TunnelingConnection) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
-// LocalAddr implements part of the "net.Conn" interface, returning the remote
-// endpoint network address of the tunneled connection.
-//
-// （方法名为 RemoteAddr；上面的英文注释沿用了 LocalAddr 的措辞。）
+// RemoteAddr 实现 net.Conn 接口的一部分，返回隧道连接的远端端点网络地址。
 func (c *TunnelingConnection) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
-// SetDeadline sets the *absolute* time in the future for both
-// read and write deadlines. Returns an error if one occurs.
-//
-// 同时设置读、写截止时间，并合并两个错误。
+// SetDeadline 将读、写截止时间都设置为未来的绝对时间，并合并两个操作产生的错误。
 func (c *TunnelingConnection) SetDeadline(t time.Time) error {
 	rerr := c.SetReadDeadline(t)
 	werr := c.SetWriteDeadline(t)
 	return errors.Join(rerr, werr)
 }
 
-// SetDeadline sets the *absolute* time in the future for the
-// read deadlines. Returns an error if one occurs.
-//
-// （方法名为 SetReadDeadline，只影响读截止时间。）
+// SetReadDeadline 将读截止时间设置为未来的绝对时间，出错时返回错误。
 func (c *TunnelingConnection) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }
 
-// SetDeadline sets the *absolute* time in the future for the
-// write deadlines. Returns an error if one occurs.
-//
-// （方法名为 SetWriteDeadline，只影响写截止时间。）
+// SetWriteDeadline 将写截止时间设置为未来的绝对时间，出错时返回错误。
 func (c *TunnelingConnection) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }

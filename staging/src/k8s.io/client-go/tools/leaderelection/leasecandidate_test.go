@@ -106,7 +106,7 @@ func TestLeaseCandidateAck(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Update PingTime and verify that the client renews
+	// 更新 PingTime 并校验客户端会续约
 	ensureAfter := &metav1.MicroTime{Time: time.Now()}
 	lc, err := client.CoordinationV1beta1().LeaseCandidates(tc.candidateNamespace).Get(ctx, tc.candidateName, metav1.GetOptions{})
 	if err == nil {
@@ -139,7 +139,7 @@ func pollForLease(ctx context.Context, tc testcase, client *fake.Clientset, t *m
 			lc.Spec.EmulationVersion == tc.emulationVersion &&
 			lc.Spec.LeaseName == tc.leaseName &&
 			lc.Spec.RenewTime != nil {
-			// Ensure that if a time is provided, the renewTime occurred after the provided time.
+			// 确保在提供了时间的情况下，renewTime 发生在所给时间之后。
 			if t != nil && t.After(lc.Spec.RenewTime.Time) {
 				return false, nil
 			}

@@ -16,11 +16,9 @@ limitations under the License.
 
 package cache
 
-// FakeCustomStore lets you define custom functions for store operations.
-//
 // FakeCustomStore 允许为 Store 的每个操作指定自定义函数。
 // 任何未设置的回调都会退化为安全的默认行为（读操作返回空值、写操作返回 nil），
-// 方便测试只关心部分操作。
+// 方便测试只 stub 部分操作。
 type FakeCustomStore struct {
 	AddFunc                          func(obj interface{}) error
 	UpdateFunc                       func(obj interface{}) error
@@ -37,7 +35,7 @@ type FakeCustomStore struct {
 
 var _ Store = &FakeCustomStore{}
 
-// Add calls the custom Add function if defined
+// Add 在定义了自定义 Add 函数时调用它。
 func (f *FakeCustomStore) Add(obj interface{}) error {
 	if f.AddFunc != nil {
 		return f.AddFunc(obj)
@@ -45,7 +43,7 @@ func (f *FakeCustomStore) Add(obj interface{}) error {
 	return nil
 }
 
-// Update calls the custom Update function if defined
+// Update 在定义了自定义 Update 函数时调用它。
 func (f *FakeCustomStore) Update(obj interface{}) error {
 	if f.UpdateFunc != nil {
 		return f.UpdateFunc(obj)
@@ -53,7 +51,7 @@ func (f *FakeCustomStore) Update(obj interface{}) error {
 	return nil
 }
 
-// Delete calls the custom Delete function if defined
+// Delete 在定义了自定义 Delete 函数时调用它。
 func (f *FakeCustomStore) Delete(obj interface{}) error {
 	if f.DeleteFunc != nil {
 		return f.DeleteFunc(obj)
@@ -61,7 +59,7 @@ func (f *FakeCustomStore) Delete(obj interface{}) error {
 	return nil
 }
 
-// List calls the custom List function if defined
+// List 在定义了自定义 List 函数时调用它。
 func (f *FakeCustomStore) List() []interface{} {
 	if f.ListFunc != nil {
 		return f.ListFunc()
@@ -69,7 +67,7 @@ func (f *FakeCustomStore) List() []interface{} {
 	return nil
 }
 
-// ListKeys calls the custom ListKeys function if defined
+// ListKeys 在定义了自定义 ListKeys 函数时调用它。
 func (f *FakeCustomStore) ListKeys() []string {
 	if f.ListKeysFunc != nil {
 		return f.ListKeysFunc()
@@ -77,7 +75,7 @@ func (f *FakeCustomStore) ListKeys() []string {
 	return nil
 }
 
-// Get calls the custom Get function if defined
+// Get 在定义了自定义 Get 函数时调用它。
 func (f *FakeCustomStore) Get(obj interface{}) (item interface{}, exists bool, err error) {
 	if f.GetFunc != nil {
 		return f.GetFunc(obj)
@@ -85,7 +83,7 @@ func (f *FakeCustomStore) Get(obj interface{}) (item interface{}, exists bool, e
 	return nil, false, nil
 }
 
-// GetByKey calls the custom GetByKey function if defined
+// GetByKey 在定义了自定义 GetByKey 函数时调用它。
 func (f *FakeCustomStore) GetByKey(key string) (item interface{}, exists bool, err error) {
 	if f.GetByKeyFunc != nil {
 		return f.GetByKeyFunc(key)
@@ -93,7 +91,7 @@ func (f *FakeCustomStore) GetByKey(key string) (item interface{}, exists bool, e
 	return nil, false, nil
 }
 
-// Replace calls the custom Replace function if defined
+// Replace 在定义了自定义 Replace 函数时调用它。
 func (f *FakeCustomStore) Replace(list []interface{}, resourceVersion string) error {
 	if f.ReplaceFunc != nil {
 		return f.ReplaceFunc(list, resourceVersion)
@@ -101,7 +99,7 @@ func (f *FakeCustomStore) Replace(list []interface{}, resourceVersion string) er
 	return nil
 }
 
-// Resync calls the custom Resync function if defined
+// Resync 在定义了自定义 Resync 函数时调用它。
 func (f *FakeCustomStore) Resync() error {
 	if f.ResyncFunc != nil {
 		return f.ResyncFunc()
@@ -109,14 +107,14 @@ func (f *FakeCustomStore) Resync() error {
 	return nil
 }
 
-// Bookmark calls the custom Bookmark function if defined
+// Bookmark 在定义了自定义 Bookmark 函数时调用它。
 func (f *FakeCustomStore) Bookmark(rv string) {
 	if f.BookmarkFunc != nil {
 		f.BookmarkFunc(rv)
 	}
 }
 
-// LastStoreSyncResourceVersion calls the custom LastStoreSyncResourceVersion function if defined
+// LastStoreSyncResourceVersion 在定义了自定义 LastStoreSyncResourceVersion 函数时调用它。
 func (f *FakeCustomStore) LastStoreSyncResourceVersion() string {
 	if f.LastStoreSyncResourceVersionFunc != nil {
 		return f.LastStoreSyncResourceVersionFunc()

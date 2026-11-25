@@ -14,14 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cache is a client-side caching mechanism. It is useful for
-// reducing the number of server calls you'd otherwise need to make.
-// Reflector watches a server and updates a Store. Two stores are provided;
-// one that simply caches objects (for example, to allow a scheduler to
-// list currently available nodes), and one that additionally acts as
-// a FIFO queue (for example, to allow a scheduler to process incoming
-// pods).
-//
 // Package cache 实现客户端缓存：Reflector 从服务器 watch 并把对象写入 Store，
 // 上层控制器从本地缓存读取，避免频繁访问 API Server。
 package cache
@@ -35,8 +27,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// informerNameRegistry tracks all registered InformerName instances to detect collisions.
-// Names must be globally unique across a process.
+// informerNameRegistry 跟踪所有已注册的 InformerName 实例以检测重名。
+// 名称在进程内必须全局唯一。
 var informerNameRegistry = struct {
 	sync.Mutex
 	names map[string]*InformerName
@@ -44,30 +36,27 @@ var informerNameRegistry = struct {
 	names: make(map[string]*InformerName),
 }
 
-// InformerName represents a named informer identity used for metrics.
-// It is created once at startup (e.g., in cmd/kube-controller-manager) and passed to
-// the SharedInformerFactory. The name must be globally unique within a process.
+// InformerName 表示用于指标的具名 informer 身份。它在启动时创建一次
+// （例如在 cmd/kube-controller-manager 中）并传给 SharedInformerFactory，
+// 名称在进程内必须全局唯一。
 //
-// InformerName tracks which GVRs have been registered under
-// this name. When an informer requests a name+GVR combination, the first one wins
-// and gets metrics enabled. Subsequent requests for the same GVR silently get
-// metrics disabled.
+// InformerName 记录该名称下注册过哪些 GVR：informer 申请某个 name+GVR 组合时，
+// 先到者获得指标发布资格，后续重复注册同一 GVR 会被静默关闭指标。
 type InformerName struct {
 	name string
-	// lock protects gvrs map modifications
+	// lock 保护 gvrs map 的修改
 	lock sync.Mutex
-	// reserved is flipped to false when Release() is called
+	// 调用 Release() 后 reserved 会被置为 false
 	reserved *atomic.Bool
-	// gvrs maps each registered GVR to its atomic bool for lock-free Reserved() checks
+	// gvrs 把每个已注册的 GVR 映射到其原子 bool，供 Reserved() 做无锁检查
 	gvrs map[schema.GroupVersionResource]*atomic.Bool
 }
 
-// NewInformerName creates a new InformerName with the given name.
-// The name must be globally unique within the process. If a name collision
-// is detected, an error is returned.
+// NewInformerName 用给定名称创建 InformerName。名称在进程内必须全局唯一，
+// 检测到重名时返回错误。
 //
-// The caller should call Release() when the informer name is no longer needed
-// (eg. at shutdown) to allow the name to be reused.
+// informer 名称不再需要时（例如进程退出时），调用方应调用 Release()
+// 以便该名称可以被复用。
 func NewInformerName(name string) (*InformerName, error) {
 	if name == "" {
 		return nil, fmt.Errorf("informer name cannot be empty")
@@ -77,12 +66,12 @@ func NewInformerName(name string) (*InformerName, error) {
 	defer informerNameRegistry.Unlock()
 
 	if existing, ok := informerNameRegistry.names[name]; ok {
-		// Check if the existing one is still reserved
+		// 检查已有条目是否仍被占用
 		// 仍被持有时拒绝重复注册；已 Release 的条目允许复用同名。
 		if existing.reserved.Load() {
 			return nil, fmt.Errorf("informer name %q is already registered", name)
 		}
-		// Previous one was released, we can reuse the name
+		// 前一个已释放，可以复用该名称
 		delete(informerNameRegistry.names, name)
 	}
 
@@ -99,13 +88,11 @@ func NewInformerName(name string) (*InformerName, error) {
 	return n, nil
 }
 
-// WithResource registers a GVR under this InformerName and returns an
-// InformerNameAndResource that can be passed to FIFO/SharedIndexInformer.
+// WithResource 在该 InformerName 下注册一个 GVR，并返回可传给
+// FIFO/SharedIndexInformer 的 InformerNameAndResource。
 //
-// If this is the first time this GVR is registered under this name, the
-// returned InformerNameAndResource will have Reserved() return true.
-// If the GVR was already registered, the returned InformerNameAndResource
-// will have Reserved() return false to prevent duplicate metrics.
+// 若该 GVR 是首次在此名称下注册，返回值的 Reserved() 为 true；
+// 若已注册过，返回值的 Reserved() 为 false，以避免重复发布指标。
 func (n *InformerName) WithResource(gvr schema.GroupVersionResource) InformerNameAndResource {
 	// nil 接收者表示调用方未配置名称，返回零值即可，Reserved() 恒为 false。
 	if n == nil {
@@ -122,19 +109,17 @@ func (n *InformerName) WithResource(gvr schema.GroupVersionResource) InformerNam
 			retval.reserved.Store(true)
 			n.gvrs[gvr] = retval.reserved
 		} else {
-			// WithResource is called by generated informer code and probably
-			// not worth converting to contextual logging, which would require
-			// changing all those generated APIs.
+			// WithResource 由生成的 informer 代码调用，改成上下文日志需要
+			// 改动全部生成 API，收益不大。
 			klog.TODO().Error(nil, "Duplicate informer registration - metrics will not be published", "informerName", n.name, "group", gvr.Group, "version", gvr.Version, "resource", gvr.Resource)
 		}
 	}
 	return retval
 }
 
-// Release marks this InformerName as no longer in use.
-// All InformerNameAndResource instances created from this InformerName
-// will have their Reserved() return false after this call.
-// The name can be reused by a subsequent NewInformerName call.
+// Release 将该 InformerName 标记为不再使用：此后由它创建的所有
+// InformerNameAndResource 的 Reserved() 都会返回 false，
+// 名称也可以被后续 NewInformerName 调用复用。
 func (n *InformerName) Release() {
 	if n == nil {
 		return
@@ -143,10 +128,9 @@ func (n *InformerName) Release() {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
-	// Flip all GVR-specific flags so that any InformerNameAndResource
-	// instances that were returned from WithResource() will have
-	// Reserved() return false. These instances hold pointers to the
-	// same atomic bools, so we must flip them before clearing the map.
+	// 逐个翻转 GVR 级别的标志，使 WithResource() 已返回的
+	// InformerNameAndResource 的 Reserved() 变为 false。
+	// 这些实例持有同一批原子 bool 的指针，必须在清空 map 之前翻转。
 	//
 	// 已发出的 InformerNameAndResource 持有这些 bool 的指针，
 	// 必须在清空 map 之前逐个置 false，否则它们仍会发布指标。
@@ -154,19 +138,19 @@ func (n *InformerName) Release() {
 		reserved.Store(false)
 	}
 
-	// Clear the map
+	// 清空 map
 	n.gvrs = make(map[schema.GroupVersionResource]*atomic.Bool)
 
-	// Flip the main reserved flag
+	// 翻转主 reserved 标志
 	n.reserved.Store(false)
 
-	// Remove from global registry
+	// 从全局注册表移除
 	informerNameRegistry.Lock()
 	defer informerNameRegistry.Unlock()
 	delete(informerNameRegistry.names, n.name)
 }
 
-// Name returns the name of this InformerName.
+// Name 返回该 InformerName 的名称。
 func (n *InformerName) Name() string {
 	// 容忍 nil，让未配置名称的调用方无需额外判空。
 	if n == nil {
@@ -175,25 +159,24 @@ func (n *InformerName) Name() string {
 	return n.name
 }
 
-// InformerNameAndResource represents a specific informer identity with both
-// a name and a GVR. This is passed to FIFO and SharedIndexInformer for metrics.
+// InformerNameAndResource 表示一个同时具有名称和 GVR 的具体 informer 身份，
+// 传给 FIFO 与 SharedIndexInformer 用于指标。
 //
-// The Reserved() method provides a lock-free check to determine
-// if metrics should be published. This is called on every queue operation
-// so it must be fast.
+// Reserved() 提供无锁检查，决定是否应发布指标；由于每次队列操作都会调用它，
+// 必须足够快。
 type InformerNameAndResource struct {
 	name     string
 	gvr      schema.GroupVersionResource
 	reserved *atomic.Bool
 }
 
-// Reserved returns true if this informer identity is reserved for metrics.
-// This is a lock-free atomic load, safe and fast for hot-path usage.
+// Reserved 在该 informer 身份获得指标发布资格时返回 true。
+// 内部是无锁原子读取，可安全用于热路径。
 //
-// Returns false if:
-// - The InformerNameAndResource is zero-valued (no name was configured)
-// - The parent InformerName was released
-// - This was a duplicate GVR registration
+// 以下情况返回 false：
+// - InformerNameAndResource 为零值（未配置名称）
+// - 父 InformerName 已被 Release
+// - 这是一次重复的 GVR 注册
 func (n InformerNameAndResource) Reserved() bool {
 	// 零值实例没有 reserved 指针，等价于“未配置名称”。
 	if n.reserved == nil {
@@ -202,18 +185,17 @@ func (n InformerNameAndResource) Reserved() bool {
 	return n.reserved.Load()
 }
 
-// Name returns the informer name.
+// Name 返回 informer 名称。
 func (n InformerNameAndResource) Name() string {
 	return n.name
 }
 
-// GroupVersionResource returns the GVR for this informer identity.
+// GroupVersionResource 返回该 informer 身份对应的 GVR。
 func (n InformerNameAndResource) GroupVersionResource() schema.GroupVersionResource {
 	return n.gvr
 }
 
-// ResetInformerNamesForTesting clears the informer name registry.
-// This is exported for testing purposes only.
+// ResetInformerNamesForTesting 清空 informer 名称注册表，仅出于测试目的导出。
 func ResetInformerNamesForTesting() {
 	// 先在锁内拷贝快照，再逐个 Release：Release 自身也需要获取全局注册表锁。
 	informerNameRegistry.Lock()

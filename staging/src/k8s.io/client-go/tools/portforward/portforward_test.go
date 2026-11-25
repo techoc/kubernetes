@@ -99,7 +99,7 @@ func (c *fakeConnection) RemoveStreams(streams ...httpstream.Stream) {
 }
 
 func (c *fakeConnection) SetIdleTimeout(timeout time.Duration) {
-	// no-op
+	// 空实现
 }
 
 // fakeListener 的 Accept 在 Close 之前一直阻塞，模拟没有新连接的监听器。
@@ -292,13 +292,13 @@ func TestParsePortsAndNew(t *testing.T) {
 			t.Fatalf("%d: parsePorts: error expected=%t, got %t: %s", i, e, a, err)
 		}
 
-		// default to localhost
+		// 默认使用 localhost
 		// 未显式指定地址时，默认仅监听 localhost 的 v4/v6 两个地址。
 		if len(test.addresses) == 0 && len(test.expectedAddresses) == 0 {
 			test.addresses = []string{"localhost"}
 			test.expectedAddresses = []listenAddress{{protocol: "tcp4", address: "127.0.0.1"}, {protocol: "tcp6", address: "::1"}}
 		}
-		// assert address parser
+		// 校验地址解析器
 		parsedAddresses, err := parseAddresses(test.addresses)
 		haveError = err != nil
 		if e, a := test.expectAddressParseError, haveError; e != a {
@@ -350,7 +350,7 @@ func TestParsePortsAndNew(t *testing.T) {
 			t.Fatalf("%d: GetPorts: error expected but got nil", i)
 		}
 
-		// mock-signal the Ready channel
+		// 模拟 Ready channel 被触发
 		close(readyChan)
 
 		if ports, portErr := pf.GetPorts(); portErr != nil {
@@ -505,13 +505,13 @@ func TestHandleConnection(t *testing.T) {
 		t.Fatalf("error while calling New: %s", err)
 	}
 
-	// Setup fake local connection
+	// 构造伪本地连接
 	localConnection := &fakeConn{
 		sendBuffer:    bytes.NewBufferString("test data from local"),
 		receiveBuffer: bytes.NewBufferString(""),
 	}
 
-	// Setup fake remote connection to send data on the data stream after it receives data from the local connection
+	// 构造伪远端连接：收到本地连接的数据后，再通过数据流回发数据
 	remoteDataToSend := bytes.NewBufferString("test data from remote")
 	remoteDataReceived := bytes.NewBufferString("")
 	remoteErrorToSend := bytes.NewBufferString("")
@@ -519,7 +519,7 @@ func TestHandleConnection(t *testing.T) {
 	remoteConnection := newFakeConnection()
 	remoteConnection.dataStream.readFunc = func(p []byte) (int, error) {
 		// 先等到本地数据写出后再响应，确保读路径确实拿到了转发后的数据。
-		<-blockRemoteSend // Wait for the expected data to be received before responding
+		<-blockRemoteSend // 等到收到预期数据后再响应
 		return remoteDataToSend.Read(p)
 	}
 	remoteConnection.dataStream.writeFunc = func(p []byte) (int, error) {
@@ -532,7 +532,7 @@ func TestHandleConnection(t *testing.T) {
 	remoteConnection.errorStream.readFunc = remoteErrorToSend.Read
 	pf.streamConn = remoteConnection
 
-	// Test handleConnection
+	// 测试 handleConnection
 	pf.handleConnection(localConnection, ForwardedPort{Local: 1111, Remote: 2222})
 	assert.Equal(t, 0, remoteConnection.streamCount, "stream count should be zero")
 	assert.Equal(t, "test data from local", remoteDataReceived.String())
@@ -550,13 +550,13 @@ func TestHandleConnectionSendsRemoteError(t *testing.T) {
 		t.Fatalf("error while calling New: %s", err)
 	}
 
-	// Setup fake local connection
+	// 构造伪本地连接
 	localConnection := &fakeConn{
 		sendBuffer:    bytes.NewBufferString(""),
 		receiveBuffer: bytes.NewBufferString(""),
 	}
 
-	// Setup fake remote connection to return an error message on the error stream
+	// 构造伪远端连接：在错误流上返回一条错误信息
 	remoteDataToSend := bytes.NewBufferString("")
 	remoteDataReceived := bytes.NewBufferString("")
 	remoteErrorToSend := bytes.NewBufferString("error")
@@ -566,7 +566,7 @@ func TestHandleConnectionSendsRemoteError(t *testing.T) {
 	remoteConnection.errorStream.readFunc = remoteErrorToSend.Read
 	pf.streamConn = remoteConnection
 
-	// Test handleConnection, using go-routine because it needs to be able to write to unbuffered pf.errorChan
+	// 测试 handleConnection；用 goroutine 是因为需要写入无缓冲的 pf.errorChan
 	pf.handleConnection(localConnection, ForwardedPort{Local: 1111, Remote: 2222})
 
 	assert.Equal(t, 0, remoteConnection.streamCount, "stream count should be zero")
@@ -618,7 +618,7 @@ func TestForwardPortsReturnsErrorWhenConnectionIsLost(t *testing.T) {
 
 	<-pf.Ready
 
-	// Simulate lost pod connection by closing streamConn, which should result in pf.ForwardPorts() returning an error.
+	// 关闭 streamConn 模拟与 pod 的连接丢失，此时 pf.ForwardPorts() 应返回错误。
 	pf.streamConn.Close()
 
 	err = <-errChan
@@ -652,8 +652,7 @@ func TestForwardPortsReturnsNilWhenStopChanIsClosed(t *testing.T) {
 
 	<-pf.Ready
 
-	// Closing (or sending to) stopChan indicates a stop request by the caller, which should result in pf.ForwardPorts()
-	// returning nil.
+	// 关闭（或向）stopChan 发送表示调用方请求停止，此时 pf.ForwardPorts() 应返回 nil。
 	close(stopChan)
 
 	err = <-errChan

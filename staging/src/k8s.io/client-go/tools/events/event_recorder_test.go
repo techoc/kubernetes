@@ -39,7 +39,7 @@ import (
 // TestEventf 验证 Eventf 构造 events/v1.Event 的正确性：
 // 对象引用、related 对象、格式化后的 note、上报者身份，以及事件名的生成规则。
 func TestEventf(t *testing.T) {
-	// use a fixed time for generated names that depend on the unix timestamp
+	// 对依赖 unix 时间戳生成的名称使用固定时间
 	fakeClock := testclocks.NewFakeClock(time.Date(2023, time.January, 1, 12, 0, 0, 0, time.UTC))
 
 	testCases := []struct {
@@ -235,7 +235,7 @@ func TestEventf(t *testing.T) {
 					t.Errorf("Event Name = %s; not a valid name: %v", actualEvent.Name, errs)
 				} // Overwrite fields that are not relevant for comparison
 				tc.expectedEvent.EventTime = actualEvent.EventTime
-				// invalid event names generate random names
+				// 非法的事件名会生成随机名称
 				// 无效事件名会改为随机名，因此比较前把期望名与结果名都清空。
 				if tc.expectedEvent.Name == "" {
 					actualEvent.Name = ""

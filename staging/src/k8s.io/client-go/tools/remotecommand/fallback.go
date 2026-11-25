@@ -35,9 +35,8 @@ type FallbackExecutor struct {
 	shouldFallback func(error) bool
 }
 
-// NewFallbackExecutor creates an Executor that first attempts to use the
-// WebSocketExecutor, falling back to the legacy SPDYExecutor if the initial
-// websocket "StreamWithContext" call fails.
+// NewFallbackExecutor 创建一个 Executor：先尝试使用 WebSocketExecutor，
+// 若最初的 websocket "StreamWithContext" 调用失败，则回退到旧版 SPDYExecutor。
 // func NewFallbackExecutor(config *restclient.Config, method string, url *url.URL) (Executor, error) {
 func NewFallbackExecutor(primary, secondary Executor, shouldFallback func(error) bool) (Executor, error) {
 	return &FallbackExecutor{
@@ -47,14 +46,13 @@ func NewFallbackExecutor(primary, secondary Executor, shouldFallback func(error)
 	}, nil
 }
 
-// Stream is deprecated. Please use "StreamWithContext".
+// Deprecated: 请改用 "StreamWithContext"。
 func (f *FallbackExecutor) Stream(options StreamOptions) error {
 	return f.StreamWithContext(context.Background(), options)
 }
 
-// StreamWithContext initially attempts to call "StreamWithContext" using the
-// primary executor, falling back to calling the secondary executor if the
-// initial primary call to upgrade to a websocket connection fails.
+// StreamWithContext 先尝试用主执行器调用 "StreamWithContext"；
+// 若主执行器升级到 websocket 连接的最初调用失败，则回退为调用备用执行器。
 func (f *FallbackExecutor) StreamWithContext(ctx context.Context, options StreamOptions) error {
 	err := f.primary.StreamWithContext(ctx, options)
 	// 只有 shouldFallback 判定为可回退的错误（通常是握手失败）才切换；

@@ -23,9 +23,7 @@ import (
 	"time"
 )
 
-// ParseTimeout returns a parsed duration from a string
-// A duration string value must be a positive integer, optionally followed by a corresponding time unit (s|m|h).
-//
+// ParseTimeout 从字符串解析出时长。时长字符串必须是正整数，可选地后跟时间单位（s|m|h）。
 // 先在无单位时按“秒”解释，再退回 Go 的 time.ParseDuration。
 // 这样既兼容 kubeconfig 中历史遗留的纯数字（如 "30"），也支持 "1s"、"2m" 等写法。
 func ParseTimeout(duration string) (time.Duration, error) {
@@ -39,7 +37,6 @@ func ParseTimeout(duration string) (time.Duration, error) {
 }
 
 // parseProxyURL 解析并校验 proxy-url。
-//
 // 只允许 http/https/socks5 三种 scheme：其他协议（如直接写 host:port）
 // 会在这里被拒绝，避免到传输层才以晦涩的错误失败。
 func parseProxyURL(proxyURL string) (*url.URL, error) {

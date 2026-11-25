@@ -27,61 +27,55 @@ import (
 	utiltrace "k8s.io/utils/trace"
 )
 
-// RealFIFOOptions is the configuration parameters for RealFIFO.
+// RealFIFOOptions 是 RealFIFO 的配置参数。
 //
 // 部分选项互斥：AtomicEvents 与 KnownObjects 不能同时设置，
 // UnlockWhileProcessing 和 EmitDeltaTypeBookmark 只能在 AtomicEvents 下启用。
 type RealFIFOOptions struct {
-	// If set, log output will go to this logger instead of klog.Background().
-	// The name of the fifo gets added automatically.
+	// 若设置，日志将输出到该 logger 而非 klog.Background()。
+	// fifo 的名称会自动附加。
 	Logger *klog.Logger
 
-	// Name can be used to override the default "RealFIFO" name for the new instance.
-	// Optional. Used only if Identifier.Name returns an empty string.
+	// Name 可用于覆盖新实例默认的 "RealFIFO" 名称。
+	// 可选。仅当 Identifier.Name 返回空字符串时生效。
 	Name string
 
-	// KeyFunction is used to figure out what key an object should have. (It's
-	// exposed in the returned RealFIFO's keyOf() method, with additional
-	// handling around deleted objects and queue state).
-	// Optional, the default is MetaNamespaceKeyFunc.
+	// KeyFunction 用于确定对象应有的 key。（它通过返回的 RealFIFO 的 keyOf()
+	// 方法暴露，并对已删除对象和队列状态做了额外处理。）
+	// 可选，默认为 MetaNamespaceKeyFunc。
 	KeyFunction KeyFunc
 
-	// KnownObjects is expected to return a list of keys that the consumer of
-	// this queue "knows about". It is used to decide which items are missing
-	// when Replace() is called; 'Deleted' deltas are produced for the missing items.
-	// KnownObjects is required if AtomicEvents is false since it is used to
-	// query the state of the internal store for Replace and Resync handling.
+	// KnownObjects 应返回该队列的消费者“已知”的 key 列表。Replace() 被调用时，
+	// 用它来判断哪些条目缺失；缺失的条目会产生 'Deleted' delta。
+	// 若 AtomicEvents 为 false，则必须提供 KnownObjects，因为它用于在 Replace
+	// 和 Resync 处理时查询内部存储的状态。
 	//
 	// 它通常指向 informer 的 indexer；与 AtomicEvents 互斥是为了避免在
 	// 释放锁处理事件时读到与队列不一致的存储状态。
 	KnownObjects KeyListerGetter
 
-	// If set, will be called for objects before enqueueing them. Please
-	// see the comment on TransformFunc for details.
+	// 若设置，会在对象入队前对其调用。详情请参见 TransformFunc 的注释。
 	Transformer TransformFunc
 
-	// AtomicEvents is used to specify whether the RealFIFO will emit events
-	// atomically or not. If it is set, a single event will be emitted
-	// atomically for Replace and Resync operations.
-	// If AtomicEvents is true, KnownObjects must be nil.
+	// AtomicEvents 指定 RealFIFO 是否以原子方式发出事件。若设置，Replace 和
+	// Resync 操作将原子地发出单个事件。
+	// 若 AtomicEvents 为 true，KnownObjects 必须为 nil。
 	AtomicEvents bool
 
-	// UnlockWhileProcessing is used to specify whether the RealFIFO can unlock
-	// the lock while processing events. If it is set, the lock can be unlocked
-	// while processing events to allow other goroutines to add items to the queue.
-	// If UnlockWhileProcessing is true, AtomicEvents must be true as well.
+	// UnlockWhileProcessing 指定 RealFIFO 能否在处理事件时释放锁。若设置，
+	// 处理事件期间会释放锁，以允许其他 goroutine 向队列添加条目。
+	// 若 UnlockWhileProcessing 为 true，AtomicEvents 也必须为 true。
 	UnlockWhileProcessing bool
 
-	// Identifier is used to identify this FIFO for metrics and logging purposes.
-	// Optional. If zero value, metrics will not be published and trace logs will not
-	// include Name or Resource fields.
+	// Identifier 用于在指标和日志中标识本 FIFO。
+	// 可选。若为零值，将不发布指标，且 trace 日志不包含 Name 或 Resource 字段。
 	Identifier InformerNameAndResource
 
-	// MetricsProvider is used to create metrics for the FIFO.
+	// MetricsProvider 用于为该 FIFO 创建指标。
 	MetricsProvider InformerMetricsProvider
 
-	// EmitDeltaTypeBookmark is used to specify whether the RealFIFO will emit
-	// bookmark deltas or not. This can only be set if AtomicEvents is true.
+	// EmitDeltaTypeBookmark 指定 RealFIFO 是否发出 bookmark delta。
+	// 仅当 AtomicEvents 为 true 时可设置。
 	//
 	// 在 AtomicEvents 下发出 bookmark 才能保证 Replace/Resync 期间事件不脱离 RV 顺序。
 	EmitDeltaTypeBookmark bool
@@ -93,20 +87,18 @@ const (
 
 var _ QueueWithBatch = &RealFIFO{}
 
-// RealFIFO is a Queue in which every notification from the Reflector is passed
-// in order to the Queue via Pop.
-// This means that it
-// 1. delivers notifications for items that have been deleted
-// 2. delivers multiple notifications per item instead of simply the most recent value
+// RealFIFO 是一个 Queue，Reflector 的每条通知都按顺序经 Pop 传递给队列消费者。
+// 这意味着它：
+// 1. 会投递已删除条目的通知；
+// 2. 每个条目可能投递多条通知，而不是仅投递最新值。
 //
 // 与只保留最新状态的缓存不同，RealFIFO 保序投递每一条 Delta，
 // 因此消费者必须自己处理重复事件和删除事件。
 type RealFIFO struct {
-	// logger is a per-instance logger. This gets chosen when constructing
-	// the instance, with klog.Background() as default.
+	// logger 是每个实例独立的 logger。构造实例时确定，默认为 klog.Background()。
 	logger klog.Logger
 
-	// name is the name of the fifo. It is included in the logger.
+	// name 是 fifo 的名称，会包含在 logger 中。
 	name string
 
 	lock sync.RWMutex
@@ -116,89 +108,86 @@ type RealFIFO struct {
 	// items 是待处理 Delta 的 FIFO；出队后会把槽位置零以避免引用泄漏。
 	items []Delta
 
-	// synced is initially an open channel. It gets closed (once!) by checkSynced_locked
-	// as soon as the initial sync is considered complete.
+	// synced 初始为未关闭的 channel。一旦初始同步被认为完成，
+	// checkSynced_locked 会将其关闭（仅一次！）。
 	synced       chan struct{}
 	syncedClosed bool
 
-	// populated is true if the first batch of items inserted by Replace() has been populated
-	// or Delete/Add/Update was called first.
+	// 若 Replace() 插入的第一批条目已全部填充，或首先调用了 Delete/Add/Update，
+	// 则 populated 为 true。
 	populated bool
-	// initialPopulationCount is the number of items inserted by the first call of Replace()
+	// initialPopulationCount 是首次调用 Replace() 插入的条目数量。
 	initialPopulationCount int
 
-	// keyFunc is used to make the key used for queued item insertion and retrieval, and
-	// should be deterministic.
+	// keyFunc 用于生成队列条目插入和检索所用的 key，必须具有确定性。
 	keyFunc KeyFunc
 
-	// knownObjects list keys that are "known" --- affecting Delete(),
-	// Replace(), and Resync().
-	// It is nil if emitAtomicEvents is true.
+	// knownObjects 列出“已知”的 key——影响 Delete()、Replace() 和 Resync()。
+	// 若 emitAtomicEvents 为 true，则为 nil。
 	knownObjects KeyListerGetter
 
-	// Indication the queue is closed.
-	// Used to indicate a queue is closed so a control loop can exit when a queue is empty.
-	// Currently, not used to gate any of CRUD operations.
+	// 标识队列已关闭。
+	// 用于在队列为空时让控制循环得以退出。
+	// 目前不用于限制任何 CRUD 操作。
 	closed bool
 
-	// Called with every object if non-nil.
+	// 若非 nil，会对每个对象调用。
 	transformer TransformFunc
 
-	// batchSize determines the maximum number of objects we can combine into a batch.
+	// batchSize 决定一个批次最多可合并的对象数量。
 	batchSize int
 
-	// emitAtomicEvents defines whether events like Replace and Resync should be emitted
-	// atomically rather than as a series of events. This means that any call to the FIFO
-	// will emit a single event.
-	// If it is set:
-	// * a single ReplacedAll event will be emitted instead of multiple Replace events
-	// * a single SyncAll event will be emitted instead of multiple Sync events
+	// emitAtomicEvents 决定 Replace、Resync 等事件是以原子方式发出，还是作为
+	// 一系列事件发出。设置后，对 FIFO 的任何调用都只发出单个事件。
+	// 若设置：
+	// * 发出单个 ReplacedAll 事件，而不是多个 Replace 事件
+	// * 发出单个 SyncAll 事件，而不是多个 Sync 事件
 	emitAtomicEvents bool
 
-	// unlockWhileProcessing defines whether we can unlock while processing events.
-	// This may only be set if emitAtomicEvents is true. If unlockWhileProcessing is true,
-	// Pop and PopBatch must be called from a single threaded consumer.
+	// unlockWhileProcessing 决定处理事件时能否释放锁。
+	// 仅当 emitAtomicEvents 为 true 时可设置。若 unlockWhileProcessing 为 true，
+	// Pop 和 PopBatch 必须由单线程消费者调用。
 	unlockWhileProcessing bool
 
-	// identifier is used to identify this FIFO for metrics and logging purposes.
+	// identifier 用于在指标和日志中标识本 FIFO。
 	identifier InformerNameAndResource
 
-	// metrics holds all metrics for this FIFO.
+	// metrics 保存本 FIFO 的全部指标。
 	metrics *fifoMetrics
 
-	// emitDeltaTypeBookmark defines whether bookmark deltas should be emitted.
-	// This may only be set if emitAtomicEvents is true, which avoids events
-	// propagating out of RV order during Replace and Resync.
+	// emitDeltaTypeBookmark 决定是否发出 bookmark delta。
+	// 仅当 emitAtomicEvents 为 true 时可设置，以避免 Replace 和 Resync 期间
+	// 事件脱离 RV 顺序传播。
 	emitDeltaTypeBookmark bool
 }
 
-// ReplacedAllInfo is the object associated with a Delta of type=ReplacedAll
+// ReplacedAllInfo 是与 type=ReplacedAll 的 Delta 关联的对象。
 // 表示 Replace 产生的一次原子事件，Objects 已完成 transformer 处理。
 type ReplacedAllInfo struct {
-	// ResourceVersion is the resource version passed to the Replace() call that created this Delta
+	// ResourceVersion 是创建该 Delta 的 Replace() 调用传入的 resource version。
 	ResourceVersion string
-	// Objects are the list of objects passed to the Replace() call that created this Delta,
-	// with any configured transformation already applied.
+	// Objects 是创建该 Delta 的 Replace() 调用传入的对象列表，
+	// 其中已应用配置好的 transformation。
 	Objects []interface{}
 }
 
-// BookmarkInfo is the object associated with a Delta of type=Bookmark
+// BookmarkInfo 是与 type=Bookmark 的 Delta 关联的对象。
 type BookmarkInfo struct {
-	// ResourceVersion is the resource version passed to the Bookmark() call that created this Delta
+	// ResourceVersion 是创建该 Delta 的 Bookmark() 调用传入的 resource version。
 	ResourceVersion string
 }
 
-// SyncAllInfo is the object associated with a Delta of type=SyncAll
-// It is used to trigger a resync of the entire queue.
+// SyncAllInfo 是与 type=SyncAll 的 Delta 关联的对象，
+// 用于触发整个队列的 resync。
 type SyncAllInfo struct{}
 
 var (
-	_ = Queue(&RealFIFO{})             // RealFIFO is a Queue
-	_ = TransformingStore(&RealFIFO{}) // RealFIFO implements TransformingStore to allow memory optimizations
-	_ = DoneChecker(&RealFIFO{})       // RealFIFO and implements DoneChecker.
+	_ = Queue(&RealFIFO{})             // RealFIFO 是一个 Queue。
+	_ = TransformingStore(&RealFIFO{}) // RealFIFO 实现 TransformingStore，以支持内存优化。
+	_ = DoneChecker(&RealFIFO{})       // RealFIFO 实现 DoneChecker。
 )
 
-// Close the queue.
+// Close 关闭队列。
 // 关闭后 Pop/PopBatch 在队列取空时返回 ErrFIFOClosed；已入队的条目仍会被处理。
 func (f *RealFIFO) Close() {
 	f.lock.Lock()
@@ -207,8 +196,8 @@ func (f *RealFIFO) Close() {
 	f.cond.Broadcast()
 }
 
-// KeyOf exposes f's keyFunc, but also detects the key of a Deltas object or
-// DeletedFinalStateUnknown objects.
+// keyOf 暴露 f 的 keyFunc，同时也能识别 Deltas 对象或 DeletedFinalStateUnknown
+// 对象的 key。
 func (f *RealFIFO) keyOf(obj interface{}) (string, error) {
 	// Deltas 取最新一条 Delta 的对象；空的 Deltas 属于非法输入。
 	if d, ok := obj.(Deltas); ok {
@@ -227,71 +216,68 @@ func (f *RealFIFO) keyOf(obj interface{}) (string, error) {
 	return f.keyFunc(obj)
 }
 
-// HasSynced returns true if an Add/Update/Delete are called first,
-// or the first batch of items inserted by Replace() has been popped.
+// 若首先调用了 Add/Update/Delete，或 Replace() 插入的第一批条目已被 Pop 完，
+// HasSynced 返回 true。
 //
-// 注意是"已处理"而非"已入队"：Replace 的首批对象全部 Pop 完成后才置为已同步。
+// 注意是“已处理”而非“已入队”：Replace 的首批对象全部 Pop 完成后才置为已同步。
 func (f *RealFIFO) HasSynced() bool {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	return f.hasSynced_locked()
 }
 
-// HasSyncedChecker is done if an Add/Update/Delete/AddIfNotPresent are called first,
-// or the first batch of items inserted by Replace() has been popped.
+// 若首先调用了 Add/Update/Delete/AddIfNotPresent，或 Replace() 插入的第一批
+// 条目已被 Pop 完，HasSyncedChecker 即为 done。
 func (f *RealFIFO) HasSyncedChecker() DoneChecker {
 	return f
 }
 
-// Name implements [DoneChecker.Name]
+// Name 实现 [DoneChecker.Name]。
 func (f *RealFIFO) Name() string {
 	return f.name
 }
 
-// Done implements [DoneChecker.Done]
+// Done 实现 [DoneChecker.Done]。
 // 返回的 channel 在首次同步完成时关闭，供 WaitForCacheSync 等待。
 func (f *RealFIFO) Done() <-chan struct{} {
 	return f.synced
 }
 
-// hasSynced_locked returns the result of a prior checkSynced_locked call.
+// hasSynced_locked 返回此前 checkSynced_locked 调用的结果。
 func (f *RealFIFO) hasSynced_locked() bool {
 	return f.syncedClosed
 }
 
-// checkSynced_locked checks whether the initial batch of items (set via Replace) has been delivered
-// and closes the synced channel as needed. It must be called after changing f.populated and/or
-// f.initialPopulationCount while the mutex is still locked.
+// checkSynced_locked 检查初始批次（经 Replace 设置）是否已投递完毕，并按需
+// 关闭 synced channel。在修改 f.populated 和/或 f.initialPopulationCount 之后、
+// 仍持有互斥锁时必须调用。
 func (f *RealFIFO) checkSynced_locked() {
 	// 同步条件：已经历过首次填充，且首批条目已全部出队处理。
 	synced := f.populated && f.initialPopulationCount == 0
 	if synced && !f.syncedClosed {
-		// Initial sync is complete.
+		// 初始同步完成。
 		f.syncedClosed = true
 		close(f.synced)
 	}
 }
 
-// addToItems_locked appends to the delta list.
+// addToItems_locked 向 delta 列表追加内容。
 // 调用方必须持有 f.lock；出错时不会追加任何条目。
 func (f *RealFIFO) addToItems_locked(deltaActionType DeltaType, skipTransform bool, obj interface{}) error {
-	// we must be able to read the keys in order to determine whether the knownObjcts and the items
-	// in this FIFO overlap
+	// 必须能读取 key，才能判断 knownObjects 与本 FIFO 中的条目是否重叠
 	_, err := f.keyOf(obj)
 	if err != nil {
 		return KeyError{obj, err}
 	}
 
-	// Every object comes through this code path once, so this is a good
-	// place to call the transform func.
+	// 每个对象只经过这条代码路径一次，所以这里是调用 transform func 的合适位置。
 	//
-	// If obj is a DeletedFinalStateUnknown tombstone or the action is a Sync,
-	// then the object have already gone through the transformer.
+	// 若 obj 是 DeletedFinalStateUnknown 墓碑，或动作是 Sync，
+	// 则该对象已经经过 transformer 处理。
 	//
-	// If the objects already present in the cache are passed to Replace(),
-	// the transformer must be idempotent to avoid re-mutating them,
-	// or coordinate with all readers from the cache to avoid data races.
-	// Default informers do not pass existing objects to Replace.
+	// 若把缓存中已存在的对象传入 Replace()，transformer 必须幂等以避免重复
+	// 修改它们，或者与所有从缓存读取的一方协调以避免数据竞态。
+	// 默认 informer 不会把已存在的对象传给 Replace。
 	if f.transformer != nil {
 		_, isTombstone := obj.(DeletedFinalStateUnknown)
 		if !isTombstone && !skipTransform {
@@ -313,11 +299,10 @@ func (f *RealFIFO) addToItems_locked(deltaActionType DeltaType, skipTransform bo
 	return nil
 }
 
-// addReplaceToItemsLocked appends to the delta list.
+// addReplaceToItemsLocked 向 delta 列表追加内容。
 // 在原子模式下，Replace 只入队一条 ReplacedAll，消费者一次性拿到整批对象。
 func (f *RealFIFO) addReplaceToItemsLocked(objs []interface{}, resourceVersion string) error {
-	// Replaced items must be transformed before being added to the queue. These objects must
-	// all be objects that have not been transformed yet.
+	// 被替换的条目必须在加入队列前完成转换。这些对象都应当是尚未转换过的。
 	if f.transformer != nil {
 		transformedObjs := make([]interface{}, len(objs))
 		for i, obj := range objs {
@@ -356,10 +341,9 @@ func (f *RealFIFO) addResyncToItemsLocked() error {
 	return nil
 }
 
-// Add inserts an item, and puts it in the queue. The item is only enqueued
-// if it doesn't already exist in the set.
+// Add 插入一个条目并放入队列。仅当该条目尚不存在时才入队。
 //
-// 注意：上面"仅在不存在时入队"的描述不适用于本实现，
+// 注意：上面“仅在不存在时入队”的描述不适用于本实现，
 // RealFIFO 会保留每一条通知，不做去重。
 func (f *RealFIFO) Add(obj interface{}) error {
 	f.lock.Lock()
@@ -372,7 +356,7 @@ func (f *RealFIFO) Add(obj interface{}) error {
 	return retErr
 }
 
-// Update is the same as Add in this implementation.
+// 在本实现中 Update 与 Add 相同。
 // 只有 Delta 的 Type 不同，用于让消费者区分新增与更新。
 func (f *RealFIFO) Update(obj interface{}) error {
 	f.lock.Lock()
@@ -385,12 +369,11 @@ func (f *RealFIFO) Update(obj interface{}) error {
 	return retErr
 }
 
-// Delete removes an item. It doesn't add it to the queue, because
-// this implementation assumes the consumer only cares about the objects,
-// not the order in which they were created/added.
+// Delete 移除一个条目。它不会把条目加入队列，因为本实现假定消费者只关心
+// 对象本身，而不关心它们被创建/添加的顺序。
 //
 // 注意：RealFIFO 仍会把 Deleted Delta 入队，消费者会收到删除通知，
-// 因此上面的"不加入队列"描述与实际实现不一致。
+// 因此上面“不加入队列”的描述与实际实现不一致。
 func (f *RealFIFO) Delete(obj interface{}) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -402,31 +385,27 @@ func (f *RealFIFO) Delete(obj interface{}) error {
 	return retErr
 }
 
-// IsClosed checks if the queue is closed
+// IsClosed 检查队列是否已关闭。
 func (f *RealFIFO) IsClosed() bool {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	return f.closed
 }
 
-// Pop waits until an item is ready and processes it. If multiple items are
-// ready, they are returned in the order in which they were added/updated. The
-// item is removed from the queue (and the store) before it is processed. The
-// process function is only guaranteed to be called under lock if
-// UnlockWhileProcessing is false. If the process function is updating data
-// structures that need to be in sync with the queue, ensure
-// UnlockWhileProcessing is false. It is expected that the caller of Pop will be
-// a single threaded consumer since otherwise it is possible for multiple
-// PopProcessFuncs to be running simultaneously.
+// Pop 等待直到有条目就绪并处理它。若有多个条目就绪，则按它们被添加/更新的
+// 顺序返回。条目在处理前会从队列（和存储）中移除。仅当 UnlockWhileProcessing
+// 为 false 时，才保证 process 函数在锁内被调用。若 process 函数要更新需要与
+// 队列保持同步的数据结构，请确保 UnlockWhileProcessing 为 false。Pop 的调用方
+// 应为单线程消费者，否则可能出现多个 PopProcessFunc 同时运行。
 func (f *RealFIFO) Pop(process PopProcessFunc) (interface{}, error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
 	// 队列为空时阻塞等待；Close 设置的 closed 标志配合 Broadcast 解除等待。
 	for len(f.items) == 0 {
-		// When the queue is empty, invocation of Pop() is blocked until new item is enqueued.
-		// When Close() is called, the f.closed is set and the condition is broadcasted.
-		// Which causes this loop to continue and return from the Pop().
+		// 队列为空时，Pop() 会阻塞直到新条目入队。
+		// 调用 Close() 后，f.closed 被置位并广播条件变量，
+		// 使本循环继续并从 Pop() 返回。
 		if f.closed {
 			return nil, ErrFIFOClosed
 		}
@@ -437,12 +416,12 @@ func (f *RealFIFO) Pop(process PopProcessFunc) (interface{}, error) {
 	isInInitialList := !f.hasSynced_locked()
 	// 先取出队首；随后的 defer 会在处理结束后递减首批计数，避免 hasSynced 提前为真。
 	item := f.items[0]
-	// The underlying array still exists and references this object, so the object will not be garbage collected unless we zero the reference.
+	// 底层数组仍存在并引用该对象，因此若不置零引用，该对象不会被 GC。
 	f.items[0] = Delta{}
 	f.items = f.items[1:]
-	// Decrement initialPopulationCount if needed.
-	// This is done in a defer so we only do this *after* processing is complete,
-	// so concurrent calls to hasSynced will not incorrectly return true while processing is still happening.
+	// 按需递减 initialPopulationCount。
+	// 放在 defer 中是为了只在处理完成*之后*递减，
+	// 从而避免处理尚未结束时并发的 hasSynced 调用错误地返回 true。
 	defer func() {
 		if f.initialPopulationCount > 0 {
 			f.initialPopulationCount--
@@ -450,10 +429,8 @@ func (f *RealFIFO) Pop(process PopProcessFunc) (interface{}, error) {
 		}
 	}()
 
-	// Only log traces if the queue depth is greater than 10 and it takes more than
-	// 100 milliseconds to process one item from the queue.
-	// Queue depth never goes high because processing an item is locking the queue,
-	// and new items can't be added until processing finish.
+	// 仅当队列深度大于 10 且处理一个条目耗时超过 100 毫秒时才记录 trace。
+	// 队列深度不会很高，因为处理条目时会锁住队列，处理完成前无法添加新条目。
 	// https://github.com/kubernetes/kubernetes/issues/103789
 	if len(f.items) > 10 {
 		id, _ := f.keyOf(item)
@@ -473,21 +450,22 @@ func (f *RealFIFO) Pop(process PopProcessFunc) (interface{}, error) {
 	}
 	f.metrics.numberOfQueuedItem.Set(float64(len(f.items)))
 
-	// Process the item, this may unlock the lock, and allow other goroutines to add items to the queue.
+	// 处理该条目；这一步可能释放锁，允许其他 goroutine 向队列添加条目。
 	err := f.whileProcessing_locked(func() error {
-		// we wrap in Deltas here to be compatible with preview Pop functions and those interpreting the return value.
+		// 这里包装成 Deltas 以兼容此前的 Pop 函数及解析返回值的调用方。
 		return process(Deltas{item}, isInInitialList)
 	})
 	return Deltas{item}, err
 }
 
-// whileProcessing_locked calls the `process` function and records processing latency.
-// The lock must be held before calling `whileProcessing_locked`, and is held when `whileProcessing_locked` returns.
-// whileProcessing_locked releases the lock during the call to `process` if f.unlockWhileProcessing is true and the f.items queue is not too long.
+// whileProcessing_locked 调用 `process` 函数并记录处理时延。
+// 调用 `whileProcessing_locked` 前必须持有锁，返回时仍持有锁。
+// 若 f.unlockWhileProcessing 为 true 且 f.items 队列不太长，whileProcessing_locked
+// 会在调用 `process` 期间释放锁。
 func (f *RealFIFO) whileProcessing_locked(process func() error) error {
-	// Unlock before calling `process` so new items can be enqueued during processing.
-	// Only do this if the queue contains less than 2 full batches of items,
-	// to prevent the queue from growing unboundedly.
+	// 在调用 `process` 前解锁，使处理期间可以入队新条目。
+	// 仅当队列中的条目少于 2 个满批次时才这样做，
+	// 以防止队列无限增长。
 	if f.unlockWhileProcessing && len(f.items) < f.batchSize*2 {
 		f.lock.Unlock()
 		defer f.lock.Lock()
@@ -498,7 +476,7 @@ func (f *RealFIFO) whileProcessing_locked(process func() error) error {
 	return err
 }
 
-// batchable stores the delta types that can be batched
+// batchable 记录可以批量处理的 delta 类型。
 var batchable = map[DeltaType]bool{
 	Sync:     true,
 	Replaced: true,
@@ -507,15 +485,13 @@ var batchable = map[DeltaType]bool{
 	Deleted:  true,
 }
 
-// PopBatch pops as many items as possible to be processed as a batch using processBatch,
-// or pop a single item using processSingle if multiple items cannot be batched.
+// PopBatch 尽量多地弹出条目，用 processBatch 作为一批处理；若无法批量多个条目，
+// 则用 processSingle 处理单个条目。
 //
-// The processBatch and processSingle functions are only guaranteed to be called
-// under lock if UnlockWhileProcessing is false. If the process functions are
-// updating data structures that need to be in sync with the queue, ensure
-// UnlockWhileProcessing is false. It is expected that the caller of PopBatch
-// will be a single threaded consumer, since otherwise it is possible for
-// multiple ProcessBatchFunc or PopProcessFunc's to be running simultaneously.
+// 仅当 UnlockWhileProcessing 为 false 时，才保证 processBatch 和 processSingle
+// 在锁内被调用。若处理函数要更新需要与队列保持同步的数据结构，请确保
+// UnlockWhileProcessing 为 false。PopBatch 的调用方应为单线程消费者，
+// 否则可能出现多个 ProcessBatchFunc 或 PopProcessFunc 同时运行。
 //
 // 批量仅限同一 key 不重复的可批处理 Delta 类型；遇到不可批处理类型或重复 key
 // 时立即收束批次，保证同一对象的相对顺序。
@@ -524,9 +500,9 @@ func (f *RealFIFO) PopBatch(processBatch ProcessBatchFunc, processSingle PopProc
 	defer f.lock.Unlock()
 
 	for len(f.items) == 0 {
-		// When the queue is empty, invocation of Pop() is blocked until new item is enqueued.
-		// When Close() is called, the f.closed is set and the condition is broadcasted.
-		// Which causes this loop to continue and return from the Pop().
+		// 队列为空时，Pop() 会阻塞直到新条目入队。
+		// 调用 Close() 后，f.closed 被置位并广播条件变量，
+		// 使本循环继续并从 Pop() 返回。
 		if f.closed {
 			return ErrFIFOClosed
 		}
@@ -539,10 +515,10 @@ func (f *RealFIFO) PopBatch(processBatch ProcessBatchFunc, processSingle PopProc
 	deltas := make([]Delta, 0, min(len(f.items), f.batchSize))
 	moveDeltaToProcessList := func(i int) {
 		deltas = append(deltas, f.items[i])
-		// The underlying array still exists and references this object, so the object will not be garbage collected unless we zero the reference.
+		// 底层数组仍存在并引用该对象，因此若不置零引用，该对象不会被 GC。
 		f.items[i] = Delta{}
 	}
-	// only bundle unique items into a batch
+	// 仅将不重复的条目打包成一个批次
 	for i := 0; i < f.batchSize && i < len(f.items); i++ {
 		if f.initialPopulationCount > 0 && i >= f.initialPopulationCount {
 			break
@@ -550,33 +526,33 @@ func (f *RealFIFO) PopBatch(processBatch ProcessBatchFunc, processSingle PopProc
 		item := f.items[i]
 		if !batchable[item.Type] {
 			if len(deltas) == 0 {
-				// if an unbatchable delta is first in the list, process just that one by itself
+				// 若不可批处理的 delta 位于列表首位，则单独处理它
 				moveDeltaToProcessList(i)
 			}
-			// close the batch when an unbatchable delta is encountered
+			// 遇到不可批处理的 delta 时收束批次
 			break
 		}
 		id, err := f.keyOf(item)
 		if err != nil {
-			// close the batch here if error happens
-			// TODO: log the error when RealFIFOOptions supports passing klog instance like deprecated DeltaFIFO
-			// still pop the broken item out of queue to be compatible with the non-batch behavior it should be safe
-			// when 1st element is broken, however for Nth broken element, there's possible risk that broken item
-			// still can be processed and broke the uniqueness of the batch unexpectedly.
+			// 出错时在此收束批次。
+			// TODO：当 RealFIFOOptions 像已弃用的 DeltaFIFO 一样支持传入 klog 实例后，记录该错误。
+			// 仍然把这个损坏的条目弹出队列以兼容非批量行为；当首个元素损坏时应该是安全的，
+			// 但对第 N 个损坏元素，存在这样一种风险：损坏条目仍可能被处理，
+			// 意外破坏批次的唯一性。
 			moveDeltaToProcessList(i)
 			break
 		}
 		if unique.Has(id) {
-			// close the batch if a duplicate item is encountered
+			// 遇到重复条目时收束批次
 			break
 		}
 		unique.Insert(id)
 		moveDeltaToProcessList(i)
 	}
 	f.items = f.items[len(deltas):]
-	// Decrement initialPopulationCount if needed.
-	// This is done in a defer so we only do this *after* processing is complete,
-	// so concurrent calls to hasSynced will not incorrectly return true while processing is still happening.
+	// 按需递减 initialPopulationCount。
+	// 放在 defer 中是为了只在处理完成*之后*递减，
+	// 从而避免处理尚未结束时并发的 hasSynced 调用错误地返回 true。
 	defer func() {
 		if f.initialPopulationCount > 0 {
 			f.initialPopulationCount -= len(deltas)
@@ -584,10 +560,9 @@ func (f *RealFIFO) PopBatch(processBatch ProcessBatchFunc, processSingle PopProc
 		}
 	}()
 
-	// Only log traces if the queue depth is greater than 10 and it takes more than
-	// 100 milliseconds to process one item from the queue (with a max of 1 second for the whole batch)
-	// Queue depth never goes high because processing an item is locking the queue,
-	// and new items can't be added until processing finish.
+	// 仅当队列深度大于 10 且处理一个条目耗时超过 100 毫秒时才记录 trace
+	// （整个批次最多 1 秒）。
+	// 队列深度不会很高，因为处理条目时会锁住队列，处理完成前无法添加新条目。
 	// https://github.com/kubernetes/kubernetes/issues/103789
 	if len(f.items) > 10 {
 		id, _ := f.keyOf(deltas[0])
@@ -636,9 +611,9 @@ func (f *RealFIFO) Bookmark(resourceVersion string) error {
 }
 
 // Replace
-// 1. finds those items in f.items that are not in newItems and creates synthetic deletes for them
-// 2. finds items in knownObjects that are not in newItems and creates synthetic deletes for them
-// 3. adds the newItems to the queue
+// 1. 找出 f.items 中不在 newItems 里的条目，为它们构造合成删除事件
+// 2. 找出 knownObjects 中不在 newItems 里的条目，为它们构造合成删除事件
+// 3. 将 newItems 加入队列
 func (f *RealFIFO) Replace(newItems []interface{}, resourceVersion string) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -670,9 +645,8 @@ func (f *RealFIFO) Replace(newItems []interface{}, resourceVersion string) error
 	return nil
 }
 
-// reconcileReplacement takes the items that are already in the queue and the set of new items
-// and based upon the state of the items in the queue and known objects will call onDelete and onReplace
-// depending upon whether the item is being deleted or replaced/added.
+// reconcileReplacement 结合队列中已有的条目与新一批条目，依据队列条目和已知
+// 对象的状态，按条目是被删除还是被替换/新增，分别调用 onDelete 和 onReplace。
 func reconcileReplacement(
 	logger klog.Logger,
 	queuedItems []Delta,
@@ -682,8 +656,8 @@ func reconcileReplacement(
 	onDelete func(obj DeletedFinalStateUnknown) error,
 	onReplace func(obj interface{}) error,
 ) error {
-	// determine the keys of everything we're adding.  We cannot add the items until after the synthetic deletes have been
-	// created for items that don't existing in newItems
+	// 先确定所有待添加条目的 key。在为不存在于 newItems 中的条目创建完合成删除
+	// 事件之前，不能把这些条目加入队列
 	newKeys := sets.Set[string]{}
 	for _, obj := range newItems {
 		key, err := keyOf(obj)
@@ -707,25 +681,26 @@ func reconcileReplacement(
 		lastQueuedItemForKey[queuedKey] = queuedItem
 	}
 
-	// all the deletes already in the queue are important. There are two cases
-	// 1. queuedItems has delete for key/X and newItems has replace for key/X.  This means the queued UID was deleted and a new one was created.
-	// 2. queuedItems has a delete for key/X and newItems does NOT have key/X.  This means the queued item was deleted.
-	// Do deletion detection against objects in the queue.
+	// 队列中已有的删除都很重要，有两种情况：
+	// 1. queuedItems 中有 key/X 的 delete 且 newItems 中有 key/X 的 replace。
+	//    说明排队的 UID 已被删除，又创建了一个新的。
+	// 2. queuedItems 中有 key/X 的 delete 且 newItems 中没有 key/X。
+	//    说明排队的条目已被删除。
+	// 针对队列中的对象做删除探测。
 	for _, queuedKey := range queuedKeys {
 		if newKeys.Has(queuedKey) {
 			continue
 		}
 
-		// Delete pre-existing items not in the new list.
-		// This could happen if watch deletion event was missed while
-		// disconnected from apiserver.
+		// 删除已存在但不在新列表中的条目。
+		// 若与 apiserver 断连期间错过了 watch 删除事件，就可能出现这种情况。
 		lastQueuedItem := lastQueuedItemForKey[queuedKey]
-		// if we've already got the item marked as deleted, no need to add another delete
+		// 若条目已标记为删除，无需再加一个删除事件
 		if lastQueuedItem.Type == Deleted {
 			continue
 		}
 
-		// if we got here, then the last entry we have for the queued item is *not* a deletion and we need to add a delete
+		// 走到这里说明排队条目的最后一条记录*不是*删除，需要我们补一个删除事件
 		deletedObj := lastQueuedItem.Object
 
 		retErr := onDelete(DeletedFinalStateUnknown{
@@ -737,13 +712,13 @@ func reconcileReplacement(
 		}
 	}
 
-	// Detect deletions for objects not present in the queue, but present in KnownObjects
+	// 探测不在队列中、但存在于 KnownObjects 中的对象的删除
 	knownKeys := knownObjects.ListKeys()
 	for _, knownKey := range knownKeys {
-		if newKeys.Has(knownKey) { // still present
+		if newKeys.Has(knownKey) { // 仍然存在
 			continue
 		}
-		if _, inQueuedItems := lastQueuedItemForKey[knownKey]; inQueuedItems { // already added delete for these
+		if _, inQueuedItems := lastQueuedItemForKey[knownKey]; inQueuedItems { // 这些已添加过删除
 			continue
 		}
 
@@ -764,7 +739,7 @@ func reconcileReplacement(
 		}
 	}
 
-	// now that we have the deletes we need for items, we can add the newItems to the items queue
+	// 条目所需的删除事件已就绪，现在可以把 newItems 加入 items 队列
 	for _, obj := range newItems {
 		if err := onReplace(obj); err != nil {
 			return fmt.Errorf("couldn't enqueue object: %w", err)
@@ -774,10 +749,10 @@ func reconcileReplacement(
 	return nil
 }
 
-// Resync will ensure that every object in the Store has its key in the queue.
-// This should be a no-op, because that property is maintained by all operations.
+// Resync 会确保 Store 中的每个对象的 key 都在队列里。这本应是空操作，
+// 因为所有操作都维持着这一性质。
 func (f *RealFIFO) Resync() error {
-	// TODO this cannot logically be done by the FIFO, it can only be done by the indexer
+	// TODO 从逻辑上讲这无法由 FIFO 完成，只能由 indexer 完成
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -801,10 +776,9 @@ func (f *RealFIFO) Resync() error {
 
 	knownKeys := f.knownObjects.ListKeys()
 	for _, knownKey := range knownKeys {
-		// If we are doing Resync() and there is already an event queued for that object,
-		// we ignore the Resync for it. This is to avoid the race, in which the resync
-		// comes with the previous value of object (since queueing an event for the object
-		// doesn't trigger changing the underlying store <knownObjects>.
+		// 若在做 Resync() 且该对象已有事件排队，则忽略对它的 Resync。
+		// 这是为了避免这样一种竞态：resync 携带的是对象的旧值（因为为该对象排队
+		// 事件并不会触发底层存储 <knownObjects> 的改变）。
 		if keysInQueue.Has(knownKey) {
 			continue
 		}
@@ -827,15 +801,14 @@ func (f *RealFIFO) Resync() error {
 	return nil
 }
 
-// Transformer implements the TransformingStore interface.
+// Transformer 实现 TransformingStore 接口。
 func (f *RealFIFO) Transformer() TransformFunc {
 	return f.transformer
 }
 
-// NewRealFIFO returns a Store which can be used to queue up items to
-// process.
+// NewRealFIFO 返回一个可用于对待处理条目排队的 Store。
 //
-// Deprecated: Use NewRealFIFOWithOptions instead.
+// Deprecated: 请改用 NewRealFIFOWithOptions。
 // 旧构造函数只能设置三个字段；新代码应使用 RealFIFOOptions 以启用原子事件与指标。
 func NewRealFIFO(keyFunc KeyFunc, knownObjects KeyListerGetter, transformer TransformFunc) *RealFIFO {
 	return NewRealFIFOWithOptions(RealFIFOOptions{
@@ -845,8 +818,8 @@ func NewRealFIFO(keyFunc KeyFunc, knownObjects KeyListerGetter, transformer Tran
 	})
 }
 
-// NewRealFIFOWithOptions returns a Queue which can be used to process changes to
-// items. See also the comment on RealFIFO.
+// NewRealFIFOWithOptions 返回一个可用于处理条目变更的 Queue。
+// 另见 RealFIFO 的注释。
 func NewRealFIFOWithOptions(opts RealFIFOOptions) *RealFIFO {
 	// 未指定 key 函数时默认使用 namespace/name。
 	if opts.KeyFunction == nil {
@@ -854,8 +827,8 @@ func NewRealFIFOWithOptions(opts RealFIFOOptions) *RealFIFO {
 	}
 
 	if opts.AtomicEvents {
-		// If we are emitting atomic events, we must not rely on the known objects store
-		// as it is a requirement to be able to release the lock while processing events.
+		// 若以原子方式发出事件，就不能依赖 known objects 存储，
+		// 因为原子事件要求在处理事件时可以释放锁。
 		if opts.KnownObjects != nil {
 			panic("coding error: knownObjects must not be provided when AtomicEvents is true")
 		}
@@ -866,7 +839,7 @@ func NewRealFIFOWithOptions(opts RealFIFOOptions) *RealFIFO {
 		if opts.KnownObjects == nil {
 			panic("coding error: knownObjects must be provided when AtomicEvents is false")
 		}
-		// If we are not emitting atomic events, we must not emit bookmark deltas.
+		// 若不以原子方式发出事件，就不能发出 bookmark delta。
 		if opts.EmitDeltaTypeBookmark {
 			panic("coding error: EmitDeltaTypeBookmark must be false when AtomicEvents is false")
 		}

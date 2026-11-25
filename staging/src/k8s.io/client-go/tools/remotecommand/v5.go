@@ -18,8 +18,8 @@ package remotecommand
 
 import "k8s.io/klog/v2"
 
-// streamProtocolV5 add support for V5 of the remote command subprotocol.
-// For the streamProtocolHandler, this version is the same as V4.
+// streamProtocolV5 支持远程命令子协议的 V5 版本。
+// 对 streamProtocolHandler 而言，该版本与 V4 相同。
 //
 // V5 在协议层与 V4 完全一致，引入新版本号只是为了表达语义变化
 // （例如对关闭/错误信道的约定），因此实现上直接复用 V4 的处理器。

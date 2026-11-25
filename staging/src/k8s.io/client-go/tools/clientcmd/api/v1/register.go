@@ -21,16 +21,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// SchemeGroupVersion is group version used to register these objects
-// TODO this should be in the "kubeconfig" group
-//
-// 中文：kubeconfig 使用核心组（空 group）+ v1，而非独立的 "kubeconfig" 组，属于历史遗留。
+// SchemeGroupVersion 是注册这些对象所使用的 group version。
+// TODO 它应当位于 "kubeconfig" 组下。
+// kubeconfig 实际使用核心组（空 group）+ v1，而非独立的 "kubeconfig" 组，属于历史遗留。
 var SchemeGroupVersion = schema.GroupVersion{Group: "", Version: "v1"}
 
 var (
-	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
-	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
-	// 中文：builder 目前留在 client-go；将来若迁往 k8s.io/api，仅 AddToScheme 保留在此。
+	// TODO：把 SchemeBuilder 连同 zz_generated.deepcopy.go 移到 k8s.io/api。
+	// localSchemeBuilder 和 AddToScheme 会留在 k8s.io/kubernetes。
+	// builder 目前留在 client-go；将来若迁往 k8s.io/api，仅 AddToScheme 保留在此。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	// AddToScheme 把 kubeconfig v1 类型与默认值函数注册到目标 scheme。
@@ -38,10 +37,8 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
-	// 中文：手写注册与生成注册分离，缺少生成文件时仍可编译。
+	// 这里只注册手写的函数。生成函数的注册在生成文件中完成。
+	// 手写注册与生成注册分离，缺少生成文件时仍可编译。
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
 }
 

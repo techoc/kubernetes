@@ -41,8 +41,7 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// TestEventProcessorExit is expected to timeout if the event processor fails
-// to exit when stopped.
+// TestEventProcessorExit：若事件处理器在 stop 后未能退出，本测试预期超时失败。
 //
 // 两种场景分别让 run 阻塞在“读输入”和“写输出”上，验证 stop 都能打断它；
 // 若不能，测试会因等待 exited 而超时失败。
@@ -162,7 +161,7 @@ func newTestSecret(name, key, value string) *corev1.Secret {
 // 关闭时由 reflector 为 list 结果合成 ADDED 事件；开启时服务端直接推送初始事件，且结束标记
 // bookmark 不会透传给客户端。
 func TestNewInformerWatcher(t *testing.T) {
-	// Make sure there are no 2 same types of events on a secret with the same name or that might be flaky.
+	// 确保不会在同一 secret 上出现两个同类型事件，否则测试可能不稳定。
 	tt := []struct {
 		name                    string
 		watchListFeatureEnabled bool
@@ -193,8 +192,8 @@ func TestNewInformerWatcher(t *testing.T) {
 				},
 			},
 			outputEvents: []watch.Event{
-				// When WatchListClient is disabled, ListAndWatch creates fake
-				// ADDED events for each object listed.
+				// WatchListClient 关闭时，ListAndWatch 会为每个列出的对象
+				// 合成假的 ADDED 事件。
 				{
 					Type:   watch.Added,
 					Object: newTestSecret("pod-1", "foo-1", "initial"),
@@ -207,7 +206,7 @@ func TestNewInformerWatcher(t *testing.T) {
 					Type:   watch.Added,
 					Object: newTestSecret("pod-3", "foo-3", "initial"),
 				},
-				// Normal events follow.
+				// 其后是常规事件。
 				{
 					Type:   watch.Added,
 					Object: newTestSecret("pod-4", "foo-4", "initial"),
@@ -243,7 +242,7 @@ func TestNewInformerWatcher(t *testing.T) {
 					Type:   watch.Added,
 					Object: newTestSecret("pod-3", "foo-3", "initial"),
 				},
-				// ListWatch bookmark indicates that initial listing is done
+				// ListWatch 的 bookmark 表示初始列举已完成
 				{
 					Type: watch.Bookmark,
 					Object: &corev1.Secret{
@@ -268,8 +267,8 @@ func TestNewInformerWatcher(t *testing.T) {
 				},
 			},
 			outputEvents: []watch.Event{
-				// When WatchListClient is enabled, WatchList receives
-				// ADDED events from the server for each existing object.
+				// WatchListClient 开启时，WatchList 直接从服务端接收
+				// 每个已存在对象的 ADDED 事件。
 				{
 					Type:   watch.Added,
 					Object: newTestSecret("pod-1", "foo-1", "initial"),
@@ -282,8 +281,8 @@ func TestNewInformerWatcher(t *testing.T) {
 					Type:   watch.Added,
 					Object: newTestSecret("pod-3", "foo-3", "initial"),
 				},
-				// Bookmark event at the end of listing is not sent to the client.
-				// Normal events follow.
+				// 列举结束时的 bookmark 事件不会发送给客户端。
+				// 其后是常规事件。
 				{
 					Type:   watch.Added,
 					Object: newTestSecret("pod-4", "foo-4", "initial"),
@@ -307,13 +306,13 @@ func TestNewInformerWatcher(t *testing.T) {
 			fake := fakeclientset.NewSimpleClientset(tc.objects...)
 			inputCh := make(chan watch.Event)
 			inputWatcher := watch.NewProxyWatcher(inputCh)
-			// Indexer should stop the input watcher when the output watcher is stopped.
-			// But stop it at the end of the test, just in case.
+			// 输出 watcher 停止时 Indexer 应当也会停止输入 watcher。
+			// 但为保险起见，测试结束时再显式停止一次。
 			defer inputWatcher.Stop()
 			inputStopCh := inputWatcher.StopChan()
 			// 用 watch reactor 替换真实 watch，把用例中的 inputEvents 原样注入 reflector。
 			fake.PrependWatchReactor("secrets", testcore.DefaultWatchReactor(inputWatcher, nil))
-			// Send events and then close the done channel
+			// 发送事件后关闭 done channel
 			inputDoneCh := make(chan struct{})
 			go func() {
 				defer close(inputDoneCh)
@@ -334,7 +333,7 @@ func TestNewInformerWatcher(t *testing.T) {
 					return fake.CoreV1().Secrets("").Watch(context.TODO(), options)
 				},
 			}
-			//nolint:logcheck // Intentionally uses the older API.
+			//nolint:logcheck // 有意使用较旧的 API。
 			_, _, outputWatcher, informerDoneCh := NewIndexerInformerWatcher(lw, &corev1.Secret{})
 			outputCh := outputWatcher.ResultChan()
 			timeoutCh := time.After(wait.ForeverTestTimeout)
@@ -358,7 +357,7 @@ func TestNewInformerWatcher(t *testing.T) {
 				}
 			}
 
-			// Informers don't guarantee event order so we need to sort these arrays to compare them.
+			// Informer 不保证事件顺序，需先排序再比较两个数组。
 			sort.Sort(byEventTypeAndName(tc.outputEvents))
 			sort.Sort(byEventTypeAndName(result))
 
@@ -367,8 +366,8 @@ func TestNewInformerWatcher(t *testing.T) {
 				return
 			}
 
-			// Send some more events, but don't read them.
-			// Stop producing events when the consumer stops the watcher.
+			// 再发送一些事件，但不再读取。
+			// 消费者停止 watcher 时应停止生产事件。
 			go func() {
 				defer close(inputCh)
 				for _, e := range tc.inputEvents {
@@ -380,7 +379,7 @@ func TestNewInformerWatcher(t *testing.T) {
 				}
 			}()
 
-			// Stop before reading all the data to make sure the informer can deal with closed channel
+			// 在读完所有数据前停止，确保 informer 能正确处理已关闭的 channel
 			outputWatcher.Stop()
 
 			select {
@@ -393,12 +392,12 @@ func TestNewInformerWatcher(t *testing.T) {
 
 }
 
-// TestInformerWatcherDeletedFinalStateUnknown tests the code path when `DeleteFunc`
-// in `NewIndexerInformerWatcher` receives a `cache.DeletedFinalStateUnknown`
-// object from the underlying `DeltaFIFO`. The triggering condition is described
-// at https://github.com/kubernetes/kubernetes/blob/dc39ab2417bfddcec37be4011131c59921fdbe98/staging/src/k8s.io/client-go/tools/cache/delta_fifo.go#L736-L739.
+// TestInformerWatcherDeletedFinalStateUnknown 测试 `NewIndexerInformerWatcher` 中
+// `DeleteFunc` 从底层 `DeltaFIFO` 收到 `cache.DeletedFinalStateUnknown` 对象的代码路径。
+// 触发条件见
+// https://github.com/kubernetes/kubernetes/blob/dc39ab2417bfddcec37be4011131c59921fdbe98/staging/src/k8s.io/client-go/tools/cache/delta_fifo.go#L736-L739。
 //
-// Code from @liggitt
+// 代码来自 @liggitt
 //
 // 场景：首次 list 得到一个 secret，随后 watch 立刻收到 Gone 错误并触发重新 list；
 // 第二次 list 为空，于是 DeltaFIFO 用 DeletedFinalStateUnknown 合成删除事件。
@@ -410,11 +409,11 @@ func TestInformerWatcherDeletedFinalStateUnknown(t *testing.T) {
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			retval := &corev1.SecretList{}
 			if listCalls == 0 {
-				// Return a list with items in it
+				// 返回一个非空列表
 				retval.ResourceVersion = "1"
 				retval.Items = []corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "ns1", ResourceVersion: "123"}}}
 			} else {
-				// Return empty lists after the first call
+				// 首次调用之后返回空列表
 				retval.ResourceVersion = "2"
 			}
 			listCalls++
@@ -424,7 +423,7 @@ func TestInformerWatcherDeletedFinalStateUnknown(t *testing.T) {
 			w := watch.NewRaceFreeFake()
 			if options.ResourceVersion == "1" {
 				go func() {
-					// Close with a "Gone" error when trying to start a watch from the first list
+					// 尝试从第一次 list 的 RV 启动 watch 时以 "Gone" 错误关闭
 					w.Error(&apierrors.NewGone("gone").ErrStatus)
 					w.Stop()
 				}()
@@ -433,11 +432,11 @@ func TestInformerWatcherDeletedFinalStateUnknown(t *testing.T) {
 			return w, nil
 		},
 	})
-	//nolint:logcheck // Intentionally uses the older API.
+	//nolint:logcheck // 有意使用较旧的 API。
 	_, _, w, done := NewIndexerInformerWatcher(lw, &corev1.Secret{})
 	defer w.Stop()
 
-	// Expect secret add
+	// 期望收到 secret 的 add 事件
 	select {
 	case event, ok := <-w.ResultChan():
 		if !ok {
@@ -453,7 +452,7 @@ func TestInformerWatcherDeletedFinalStateUnknown(t *testing.T) {
 		t.Fatal("timeout")
 	}
 
-	// Expect secret delete because the relist was missing the secret
+	// 期望收到 secret 的 delete 事件，因为重新 list 时已不含该 secret
 	select {
 	case event, ok := <-w.ResultChan():
 		if !ok {

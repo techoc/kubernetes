@@ -31,38 +31,37 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// PreconditionFunc returns true if the condition has been reached, false if it has not been reached yet,
-// or an error if the condition failed or detected an error state.
+// PreconditionFunc 在条件已达成时返回 true，尚未达成时返回 false，
+// 条件失败或检测到错误状态时返回错误。
 type PreconditionFunc func(store cache.Store) (bool, error)
 
-// ConditionFunc returns true if the condition has been reached, false if it has not been reached yet,
-// or an error if the condition cannot be checked and should terminate. In general, it is better to define
-// level driven conditions over edge driven conditions (pod has ready=true, vs pod modified and ready changed
-// from false to true).
+// ConditionFunc 在条件已达成时返回 true，尚未达成时返回 false；
+// 若条件无法检查且应终止则返回错误。通常应优先定义水平（level driven）条件
+// 而非边缘（edge driven）条件（Pod ready=true，而不是 Pod 被修改且 ready 由 false 变 true）。
 type ConditionFunc func(event watch.Event) (bool, error)
 
-// ErrWatchClosed is returned when the watch channel is closed before timeout in UntilWithoutRetry.
+// ErrWatchClosed 在 UntilWithoutRetry 超时之前 watch channel 已关闭时返回。
 var ErrWatchClosed = errors.New("watch closed before UntilWithoutRetry timeout")
 
-// UntilWithoutRetry reads items from the watch until each provided condition succeeds, and then returns the last watch
-// encountered. The first condition that returns an error terminates the watch (and the event is also returned).
-// If no event has been received, the returned event will be nil.
-// Conditions are satisfied sequentially so as to provide a useful primitive for higher level composition.
-// Waits until context deadline or until context is canceled.
+// UntilWithoutRetry 从 watch 中读取条目，直到每个给定的条件依次成功，然后返回
+// 最后遇到的事件。第一个返回错误的条件会终止 watch（同时返回该事件）。
+// 若未收到任何事件，返回的 event 为 nil。
+// 条件按顺序依次满足，以便作为上层组合的有用原语。
+// 会等待到 context 截止时间或 context 被取消。
 //
-// Warning: Unless you have a very specific use case (probably a special Watcher) don't use this function!!!
-// Warning: This will fail e.g. on API timeouts and/or 'too old resource version' error.
-// Warning: You are most probably looking for a function *Until* or *UntilWithSync* below,
-// Warning: solving such issues.
-// TODO: Consider making this function private to prevent misuse when the other occurrences in our codebase are gone.
+// 警告：除非有非常特定的用途（大概是一个特殊的 Watcher），否则不要使用本函数！
+// 警告：例如在 API 超时和/或 'too old resource version' 错误时它会失败。
+// 警告：你大概率想找的是下面的 Until 或 UntilWithSync 函数，
+// 警告：它们能解决这类问题。
+// TODO: 当代码库中其他使用点消失后，考虑把本函数改为私有以防误用。
 //
-// 中文：本函数不做重连；一旦 watch 关闭或 RV 过期就直接失败。
+// 本函数不做重连；一旦 watch 关闭或 RV 过期就直接失败。
 func UntilWithoutRetry(ctx context.Context, watcher watch.Interface, conditions ...ConditionFunc) (*watch.Event, error) {
 	ch := watcher.ResultChan()
 	defer watcher.Stop()
 	var lastEvent *watch.Event
 	for _, condition := range conditions {
-		// check the next condition against the previous event and short circuit waiting for the next watch
+		// 先用上一个事件检查下一个条件，命中则短路跳过等待新的 watch
 		// 同一事件可能同时满足多个条件，因此先复用 lastEvent，避免不必要的等待。
 		if lastEvent != nil {
 			done, err := condition(*lastEvent)
@@ -98,19 +97,19 @@ func UntilWithoutRetry(ctx context.Context, watcher watch.Interface, conditions 
 	return lastEvent, nil
 }
 
-// Until wraps the watcherClient's watch function with RetryWatcher making sure that watcher gets restarted in case of errors.
-// The initialResourceVersion will be given to watch method when first called. It shall not be "" or "0"
-// given the underlying WATCH call issues (#74022).
-// Remaining behaviour is identical to function UntilWithoutRetry. (See above.)
-// Until can deal with API timeouts and lost connections.
-// It guarantees you to see all events and in the order they happened.
-// Due to this guarantee there is no way it can deal with 'Resource version too old error'. It will fail in this case.
-// (See `UntilWithSync` if you'd prefer to recover from all the errors including RV too old by re-listing
-// those items. In normal code you should care about being level driven so you'd not care about not seeing all the edges.)
+// Until 用 RetryWatcher 包装 watcherClient 的 watch 函数，确保出错时 watcher 会被重启。
+// initialResourceVersion 会在首次调用时传给 watch 方法；受底层 WATCH 调用的
+// 问题影响（#74022），它不能是 "" 或 "0"。
+// 其余行为与 UntilWithoutRetry 完全相同（见上文）。
+// Until 能处理 API 超时和连接丢失。
+// 它保证你能看到所有事件，且顺序与发生顺序一致。
+// 正因为这一保证，它无法处理 'Resource version too old' 错误，此时会失败。
+// （若希望包括 RV too old 在内的所有错误都能通过重新 LIST 恢复，
+// 请参考 `UntilWithSync`。普通代码应关注水平驱动，不必在意漏看某些边缘事件。）
 //
-// The most frequent usage for Until would be a test where you want to verify exact order of events ("edges").
+// Until 最常见的用法是测试中需要验证事件的精确顺序（“边缘”）。
 //
-// 中文：通过 RetryWatcher 自动重连，但 RV 过期仍会失败，因为那需要重新 LIST。
+// 通过 RetryWatcher 自动重连，但 RV 过期仍会失败，因为那需要重新 LIST。
 func Until(ctx context.Context, initialResourceVersion string, watcherClient cache.Watcher, conditions ...ConditionFunc) (*watch.Event, error) {
 	w, err := NewRetryWatcherWithContext(ctx, initialResourceVersion, cache.ToWatcherWithContext(watcherClient))
 	if err != nil {
@@ -120,27 +119,26 @@ func Until(ctx context.Context, initialResourceVersion string, watcherClient cac
 	return UntilWithoutRetry(ctx, w, conditions...)
 }
 
-// UntilWithSync creates an informer from lw, optionally checks precondition when the store is synced,
-// and watches the output until each provided condition succeeds, in a way that is identical
-// to function UntilWithoutRetry. (See above.)
-// UntilWithSync can deal with all errors like API timeout, lost connections and 'Resource version too old'.
-// It is the only function that can recover from 'Resource version too old', Until and UntilWithoutRetry will
-// just fail in that case. On the other hand it can't provide you with guarantees as strong as using simple
-// Watch method with Until. It can skip some intermediate events in case of watch function failing but it will
-// re-list to recover and you always get an event, if there has been a change, after recovery.
-// Also with the current implementation based on DeltaFIFO, order of the events you receive is guaranteed only for
-// particular object, not between more of them even it's the same resource.
-// The most frequent usage would be a command that needs to watch the "state of the world" and should't fail, like:
-// waiting for object reaching a state, "small" controllers, ...
+// UntilWithSync 从 lw 创建 informer，可选地在 store 同步后检查前置条件，
+// 并监听输出直到每个给定条件成功，方式与 UntilWithoutRetry 相同（见上文）。
+// UntilWithSync 能处理所有错误，如 API 超时、连接丢失和 'Resource version too old'。
+// 它是唯一能从 'Resource version too old' 中恢复的函数；Until 和 UntilWithoutRetry
+// 在这种情况下只会失败。另一方面，它无法提供像 Until 配合简单 Watch 方法那样强的保证：
+// watch 失败时它可能跳过一些中间事件，但会通过重新 LIST 恢复，恢复后只要
+// 有过变化就一定能收到事件。
+// 此外，基于 DeltaFIFO 的当前实现只保证同一对象的接收顺序，
+// 即使是同一资源，不同对象之间的顺序也不保证。
+// 最常见的用法是需要观察“世界状态”且不应失败的命令，例如：
+// 等待对象达到某个状态、“小型”控制器等。
 //
-// 中文：借助 informer 与重新 LIST 从 RV 过期中恢复，代价是可能漏掉中间事件。
+// 借助 informer 与重新 LIST 从 RV 过期中恢复，代价是可能漏掉中间事件。
 func UntilWithSync(ctx context.Context, lw cache.ListerWatcher, objType runtime.Object, precondition PreconditionFunc, conditions ...ConditionFunc) (*watch.Event, error) {
 	indexer, informer, watcher, done := NewIndexerInformerWatcherWithLogger(klog.FromContext(ctx), lw, objType)
-	// We need to wait for the internal informers to fully stop so it's easier to reason about
-	// and it works with non-thread safe clients.
+	// 需要等待内部 informer 完全停止，这样更容易推理，
+	// 且对非线程安全的客户端也适用。
 	defer func() { <-done }()
-	// Proxy watcher can be stopped multiple times so it's fine to use defer here to cover alternative branches and
-	// let UntilWithoutRetry to stop it
+	// 代理 watcher 可以多次 Stop，因此这里用 defer 覆盖各个分支，
+	// 并让 UntilWithoutRetry 来停止它
 	defer watcher.Stop()
 
 	if precondition != nil {
@@ -161,11 +159,11 @@ func UntilWithSync(ctx context.Context, lw cache.ListerWatcher, objType runtime.
 	return UntilWithoutRetry(ctx, watcher, conditions...)
 }
 
-// ContextWithOptionalTimeout wraps context.WithTimeout and handles infinite timeouts expressed as 0 duration.
-// 中文：0 表示无限等待，因此退化为可取消的 WithCancel；负值视为非法配置并修正为 0。
+// ContextWithOptionalTimeout 包装 context.WithTimeout，并把 0 时长视为无限超时。
+// 0 表示无限等待，因此退化为可取消的 WithCancel；负值视为非法配置并修正为 0。
 func ContextWithOptionalTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout < 0 {
-		// This should be handled in validation
+		// 这种情况本应在参数校验阶段处理
 		klog.FromContext(parent).Error(nil, "Timeout for context shall not be negative")
 		timeout = 0
 	}

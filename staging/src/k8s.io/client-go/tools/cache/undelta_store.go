@@ -16,13 +16,12 @@ limitations under the License.
 
 package cache
 
-// UndeltaStore listens to incremental updates and sends complete state on every change.
-// It implements the Store interface so that it can receive a stream of mirrored objects
-// from Reflector.  Whenever it receives any complete (Store.Replace) or incremental change
-// (Store.Add, Store.Update, Store.Delete), it sends the complete state by calling PushFunc.
-// It is thread-safe.  It guarantees that every change (Add, Update, Replace, Delete) results
-// in one call to PushFunc, but sometimes PushFunc may be called twice with the same values.
-// PushFunc should be thread safe.
+// UndeltaStore 监听增量更新，并在每次变更后推送完整状态。
+// 它实现了 Store 接口，因此可以接收 Reflector 镜像出来的对象流。
+// 每当收到任何全量（Store.Replace）或增量（Store.Add、Store.Update、Store.Delete）
+// 变更，它就调用 PushFunc 发送完整状态。它是线程安全的：保证每个变更
+// （Add、Update、Replace、Delete）都会触发一次 PushFunc 调用，但 PushFunc
+// 有时也可能带着相同的值被调用两次。PushFunc 自身应当是线程安全的。
 //
 // 用途：把 Reflector 的增量事件转换为“每次变更后的完整快照”推送。内嵌 Store 负责
 // 存储，UndeltaStore 只在其上叠加快照回调。
@@ -33,13 +32,13 @@ type UndeltaStore struct {
 	PushFunc func([]interface{})
 }
 
-// Assert that it implements the Store interface.
+// 断言 UndeltaStore 实现了 Store 接口。
 var _ Store = &UndeltaStore{}
 
-// Add inserts an object into the store and sends complete state by calling PushFunc.
-// Note about thread safety.  The Store implementation (cache.cache) uses a lock for all methods.
-// In the functions below, the lock gets released and reacquired betweend the {Add,Delete,etc}
-// and the List.  So, the following can happen, resulting in two identical calls to PushFunc.
+// Add 把对象插入存储并调用 PushFunc 推送完整状态。
+// 关于线程安全：底层 Store 实现（cache.cache）的所有方法都持有锁。
+// 在下面这些函数里，锁会在 {Add,Delete,等} 与 List 之间被释放并重新获取，
+// 因此可能出现下面这种情况，导致两次完全相同的 PushFunc 调用。
 // time            thread 1                  thread 2
 // 0               UndeltaStore.Add(a)
 // 1                                         UndeltaStore.Add(b)
@@ -57,7 +56,7 @@ func (u *UndeltaStore) Add(obj interface{}) error {
 	return nil
 }
 
-// Update sets an item in the cache to its updated state and sends complete state by calling PushFunc.
+// Update 把缓存中条目的状态更新为最新值，并调用 PushFunc 推送完整状态。
 func (u *UndeltaStore) Update(obj interface{}) error {
 	if err := u.Store.Update(obj); err != nil {
 		return err
@@ -66,7 +65,7 @@ func (u *UndeltaStore) Update(obj interface{}) error {
 	return nil
 }
 
-// Delete removes an item from the cache and sends complete state by calling PushFunc.
+// Delete 从缓存中移除条目，并调用 PushFunc 推送完整状态。
 func (u *UndeltaStore) Delete(obj interface{}) error {
 	if err := u.Store.Delete(obj); err != nil {
 		return err
@@ -75,10 +74,9 @@ func (u *UndeltaStore) Delete(obj interface{}) error {
 	return nil
 }
 
-// Replace will delete the contents of current store, using instead the given list.
-// 'u' takes ownership of the list, you should not reference the list again
-// after calling this function.
-// The new contents complete state will be sent by calling PushFunc after replacement.
+// Replace 会删除当前存储的内容，改用给定的列表。
+// 调用此函数后 u 接管该列表的所有权，调用方不应再引用它。
+// 替换完成后会调用 PushFunc 推送新内容的完整状态。
 //
 // 典型调用方是 Reflector 的全量 List 阶段。
 func (u *UndeltaStore) Replace(list []interface{}, resourceVersion string) error {
@@ -89,7 +87,7 @@ func (u *UndeltaStore) Replace(list []interface{}, resourceVersion string) error
 	return nil
 }
 
-// NewUndeltaStore returns an UndeltaStore implemented with a Store.
+// NewUndeltaStore 返回一个基于 Store 实现的 UndeltaStore。
 func NewUndeltaStore(pushFunc func([]interface{}), keyFunc KeyFunc) *UndeltaStore {
 	return &UndeltaStore{
 		Store:    NewStore(keyFunc),

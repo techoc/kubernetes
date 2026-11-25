@@ -57,14 +57,14 @@ type LeaseCandidate struct {
 	informerFactory        informers.SharedInformerFactory
 	hasSynced              cache.InformerSynced
 
-	// At most there will be one item in this Queue (since we only watch one item)
-	// 队列中最多只有一项（key 恒为 0），复用限速重试语义。
+	// 该队列最多只有一项（因为只监听一个对象，key 恒为 0），
+	// 复用限速重试语义。
 	queue workqueue.TypedRateLimitingInterface[int]
 
 	name      string
 	namespace string
 
-	// controller lease
+	// 对应的 controller lease 名称
 	leaseName string
 
 	clock clock.Clock
@@ -73,11 +73,9 @@ type LeaseCandidate struct {
 	strategy                        v1.CoordinatedLeaseStrategy
 }
 
-// NewCandidate creates new LeaseCandidate controller that creates a
-// LeaseCandidate object if it does not exist and watches changes
-// to the corresponding object and renews if PingTime is set.
-// WARNING: This is an ALPHA feature. Ensure that the CoordinatedLeaderElection
-// feature gate is on.
+// NewCandidate 创建新的 LeaseCandidate 控制器：在 LeaseCandidate 对象
+// 不存在时创建它，并监听对应对象的变化，若设置了 PingTime 则续期。
+// 警告：这是 ALPHA 特性，需确保 CoordinatedLeaderElection 特性门控已开启。
 func NewCandidate(clientset kubernetes.Interface,
 	candidateNamespace string,
 	candidateName string,
@@ -87,9 +85,8 @@ func NewCandidate(clientset kubernetes.Interface,
 ) (*LeaseCandidate, CacheSyncWaiter, error) {
 	// 只监听自己这一个候选对象，用 fieldSelector 显著降低 watch 开销。
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", candidateName).String()
-	// A separate informer factory is required because this must start before informerFactories
-	// are started for leader elected components
-	// 独立的 informer factory 便于候选控制器先于其他组件启动并进行缓存同步。
+	// 需要独立的 informer factory：候选控制器必须先于其他领导者选举组件
+	// 的 informerFactory 启动并进行缓存同步。
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(
 		clientset, 5*time.Minute,
 		informers.WithNamespace(candidateNamespace),
@@ -191,14 +188,13 @@ func (c *LeaseCandidate) enqueueLease() {
 	c.queue.Add(0)
 }
 
-// ensureLease creates the lease if it does not exist and renew it if it exists. Returns the lease and
-// a bool (true if this call created the lease), or any error that occurs.
+// ensureLease 在租约不存在时创建、存在时续期；过程中发生的错误会被返回。
 func (c *LeaseCandidate) ensureLease(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	lease, err := c.leaseCandidateLister.LeaseCandidates(c.namespace).Get(c.name)
 	if apierrors.IsNotFound(err) {
 		logger.V(2).Info("Creating lease candidate")
-		// lease does not exist, create it.
+		// 租约不存在，创建它。
 		leaseToCreate := c.newLeaseCandidate()
 		if _, err := c.leaseClient.Create(ctx, leaseToCreate, metav1.CreateOptions{}); err != nil {
 			return err

@@ -23,10 +23,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// FakeRecorder is used as a fake during tests. It is thread safe. It is usable
-// when created manually and not by NewFakeRecorder, however all events may be
-// thrown away in this case.
-//
+// FakeRecorder 是测试期间使用的假实现，线程安全。
+// 也可以不用 NewFakeRecorder 而手工创建，但这种情况下事件可能全部被丢弃：
 // Events 为 nil 时写事件会被静默丢弃，因此手工构造零值时请确保测试不需要断言事件。
 type FakeRecorder struct {
 	Events chan string
@@ -86,8 +84,7 @@ func (f *FakeRecorder) WithLogger(logger klog.Logger) EventRecorderLogger {
 	return f
 }
 
-// NewFakeRecorder creates new fake event recorder with event channel with
-// buffer of given size.
+// NewFakeRecorder 创建新的事件记录器 fake，其事件 channel 具有指定缓冲大小。
 func NewFakeRecorder(bufferSize int) *FakeRecorder {
 	return &FakeRecorder{
 		Events: make(chan string, bufferSize),

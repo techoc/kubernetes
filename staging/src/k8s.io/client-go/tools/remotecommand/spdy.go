@@ -29,7 +29,7 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
-// spdyStreamExecutor handles transporting standard shell streams over an httpstream connection.
+// spdyStreamExecutor 负责通过 httpstream 连接传输标准 shell 流。
 type spdyStreamExecutor struct {
 	upgrader  spdy.Upgrader
 	transport http.RoundTripper
@@ -39,11 +39,10 @@ type spdyStreamExecutor struct {
 	protocols []string
 	// rejectRedirects 为 true 时把重定向视为错误；升级请求被重定向通常意味着
 	// 请求打到了错误的端点，继续跟随可能把命令发到非预期服务器。
-	rejectRedirects bool // if true, receiving redirect from upstream is an error
+	rejectRedirects bool // 为 true 时，收到来自上游的重定向即视为错误
 }
 
-// NewSPDYExecutor connects to the provided server and upgrades the connection to
-// multiplexed bidirectional streams.
+// NewSPDYExecutor 连接给定的服务端，并把连接升级为多路复用的双向流。
 func NewSPDYExecutor(config *restclient.Config, method string, url *url.URL) (Executor, error) {
 	wrapper, upgradeRoundTripper, err := spdy.RoundTripperFor(config)
 	if err != nil {
@@ -52,10 +51,10 @@ func NewSPDYExecutor(config *restclient.Config, method string, url *url.URL) (Ex
 	return NewSPDYExecutorForTransports(wrapper, upgradeRoundTripper, method, url)
 }
 
-// NewSPDYExecutorRejectRedirects returns an Executor that will upgrade the future
-// connection to a SPDY bi-directional streaming connection when calling "Stream" (deprecated)
-// or "StreamWithContext" (preferred). Additionally, if the upstream server returns a redirect
-// during the attempted upgrade in these "Stream" calls, an error is returned.
+// NewSPDYExecutorRejectRedirects 返回一个 Executor：在调用 "Stream"（已弃用）
+// 或 "StreamWithContext"（推荐）时，会把后续连接升级为 SPDY 双向流连接。
+// 此外，如果在这些 "Stream" 调用尝试升级的过程中上游服务端返回重定向，
+// 则返回错误。
 func NewSPDYExecutorRejectRedirects(transport http.RoundTripper, upgrader spdy.Upgrader, method string, url *url.URL) (Executor, error) {
 	executor, err := NewSPDYExecutorForTransports(transport, upgrader, method, url)
 	if err != nil {
@@ -66,8 +65,8 @@ func NewSPDYExecutorRejectRedirects(transport http.RoundTripper, upgrader spdy.U
 	return spdyExecutor, nil
 }
 
-// NewSPDYExecutorForTransports connects to the provided server using the given transport,
-// upgrades the response using the given upgrader to multiplexed bidirectional streams.
+// NewSPDYExecutorForTransports 使用给定 transport 连接服务端，
+// 并用给定 upgrader 把响应升级为多路复用的双向流。
 //
 // 按从新到旧的顺序声明协议，服务端选择第一个双方都支持的版本；
 // V5 引入 CLOSE 信号，V4 支持退出码，更旧的版本为兼容保留。
@@ -82,9 +81,9 @@ func NewSPDYExecutorForTransports(transport http.RoundTripper, upgrader spdy.Upg
 	)
 }
 
-// NewSPDYExecutorForProtocols connects to the provided server and upgrades the connection to
-// multiplexed bidirectional streams using only the provided protocols. Exposed for testing, most
-// callers should use NewSPDYExecutor or NewSPDYExecutorForTransports.
+// NewSPDYExecutorForProtocols 连接服务端，并仅使用给定的协议把连接升级为
+// 多路复用的双向流。该函数为测试而暴露，多数调用方应使用
+// NewSPDYExecutor 或 NewSPDYExecutorForTransports。
 func NewSPDYExecutorForProtocols(transport http.RoundTripper, upgrader spdy.Upgrader, method string, url *url.URL, protocols ...string) (Executor, error) {
 	return &spdyStreamExecutor{
 		upgrader:  upgrader,
@@ -95,8 +94,8 @@ func NewSPDYExecutorForProtocols(transport http.RoundTripper, upgrader spdy.Upgr
 	}, nil
 }
 
-// Stream opens a protocol streamer to the server and streams until a client closes
-// the connection or the server disconnects.
+// Stream 向服务端打开一个协议流处理器并开始传输，直到客户端关闭连接
+// 或服务端断开。
 //
 // 该版本没有 context，调用方无法取消；新代码应使用 StreamWithContext 以便
 // 在取消时释放连接。
@@ -104,7 +103,7 @@ func (e *spdyStreamExecutor) Stream(options StreamOptions) error {
 	return e.StreamWithContext(context.Background(), options)
 }
 
-// newConnectionAndStream creates a new SPDY connection and a stream protocol handler upon it.
+// newConnectionAndStream 新建一个 SPDY 连接，并在其上创建流协议处理器。
 //
 // 协议协商结果为空串时回退到 V1：旧服务端可能完全不返回协议头，
 // 此时只能按最早的流布局工作。
@@ -152,8 +151,8 @@ func (e *spdyStreamExecutor) newConnectionAndStream(ctx context.Context, options
 	return conn, streamer, nil
 }
 
-// StreamWithContext opens a protocol streamer to the server and streams until a client closes
-// the connection or the server disconnects or the context is done.
+// StreamWithContext 向服务端打开一个协议流处理器并开始传输，直到客户端关闭
+// 连接、服务端断开或 context 结束。
 func (e *spdyStreamExecutor) StreamWithContext(ctx context.Context, options StreamOptions) error {
 	conn, streamer, err := e.newConnectionAndStream(ctx, options)
 	if err != nil {
@@ -172,9 +171,8 @@ func (e *spdyStreamExecutor) StreamWithContext(ctx context.Context, options Stre
 			}
 		}()
 
-		// The SPDY executor does not need to synchronize stream creation, so we pass a nil
-		// ready channel. The underlying spdystream library handles stream multiplexing
-		// without a race condition.
+		// SPDY 执行器不需要同步流的创建，因此传入 nil 的 ready 通道。
+		// 底层的 spdystream 库能在没有竞态的情况下处理流的多路复用。
 		errorChan <- streamer.stream(klog.FromContext(ctx), conn, nil)
 	}()
 

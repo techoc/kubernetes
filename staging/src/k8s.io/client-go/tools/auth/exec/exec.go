@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package exec contains helper utilities for exec credential plugins.
-// 本包为 exec 凭据插件（kubeconfig 中 user.exec 指定的外部命令）提供辅助函数：
-// 插件通过环境变量 KUBERNETES_EXEC_INFO 拿到集群信息，再据此访问 API server。
+// exec 包为 exec 凭据插件提供辅助函数。
+// 插件是 kubeconfig 中 user.exec 指定的外部命令，通过环境变量 KUBERNETES_EXEC_INFO
+// 获取集群信息，再据此访问 API server。
 package exec
 
 import (
@@ -43,11 +43,9 @@ func init() {
 	install.Install(scheme)
 }
 
-// LoadExecCredentialFromEnv is a helper-wrapper around LoadExecCredential that loads from the
-// well-known KUBERNETES_EXEC_INFO environment variable.
-//
-// When the KUBERNETES_EXEC_INFO environment variable is not set or is empty, then this function
-// will immediately return an error.
+// LoadExecCredentialFromEnv 是 LoadExecCredential 的封装，从约定的
+// KUBERNETES_EXEC_INFO 环境变量读取数据。
+// 该环境变量未设置或为空时，函数立即返回错误。
 func LoadExecCredentialFromEnv() (runtime.Object, *rest.Config, error) {
 	env := os.Getenv(execInfoEnv)
 	if env == "" {
@@ -56,20 +54,13 @@ func LoadExecCredentialFromEnv() (runtime.Object, *rest.Config, error) {
 	return LoadExecCredential([]byte(env))
 }
 
-// LoadExecCredential loads the configuration needed for an exec plugin to communicate with a
-// cluster.
+// LoadExecCredential 加载 exec 插件与集群通信所需的配置。
 //
-// LoadExecCredential expects the provided data to be a serialized client.authentication.k8s.io
-// ExecCredential object (of any version). If the provided data is invalid (i.e., it cannot be
-// unmarshalled into any known client.authentication.k8s.io ExecCredential version), an error will
-// be returned. A successfully unmarshalled ExecCredential will be returned as the first return
-// value.
+// 输入数据应为已序列化的 client.authentication.k8s.io ExecCredential 对象，版本不限。
+// 若数据无法反序列化为任何已知版本，则返回错误；否则第一个返回值是反序列化后的
+// ExecCredential。若对象未包含集群信息（即 ExecCredential.Spec.Cluster == nil），也会返回错误。
 //
-// If the provided data is successfully unmarshalled, but it does not contain cluster information
-// (i.e., ExecCredential.Spec.Cluster == nil), then an error will be returned.
-//
-// Note that the returned rest.Config will use anonymous authentication, since the exec plugin has
-// not returned credentials for this cluster yet.
+// 返回的 rest.Config 使用匿名认证，因为 exec 插件尚未返回该集群的凭据。
 func LoadExecCredential(data []byte) (runtime.Object, *rest.Config, error) {
 	// 用 UniversalDeserializer 避免预先确定版本；之后再显式转换到内部类型。
 	obj, gvk, err := codecs.UniversalDeserializer().Decode(data, nil, nil)
@@ -90,8 +81,7 @@ func LoadExecCredential(data []byte) (runtime.Object, *rest.Config, error) {
 		)
 	}
 
-	// Explicitly convert object here so that we can return a nicer error message above for when the
-	// data represents an invalid type.
+	// 在此显式转换对象，以便前面已对类型不匹配给出更明确的错误信息。
 	var execCredential clientauthentication.ExecCredential
 	if err := scheme.Convert(obj, &execCredential, nil); err != nil {
 		return nil, nil, fmt.Errorf("cannot convert to ExecCredential: %w", err)

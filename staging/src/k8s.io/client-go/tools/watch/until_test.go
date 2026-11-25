@@ -201,7 +201,7 @@ func TestUntilErrorCondition(t *testing.T) {
 // 无 precondition 时不等缓存同步、precondition 在无法同步时阻塞、
 // precondition 可提前结束循环，以及 precondition 放行后转入常规条件判断。
 func TestUntilWithSync(t *testing.T) {
-	// FIXME: test preconditions
+	// FIXME: 测试前置条件
 	tt := []struct {
 		name             string
 		lw               cache.ListerWatcher
@@ -306,8 +306,8 @@ func TestUntilWithSync(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			// Informer waits for caches to sync by polling in 100ms intervals,
-			// timeout needs to be reasonably higher
+			// Informer 以 100ms 间隔轮询等待缓存同步，
+			// 因此超时要留足余量
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			defer cancel()
 

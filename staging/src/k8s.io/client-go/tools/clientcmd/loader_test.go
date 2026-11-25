@@ -631,17 +631,17 @@ func TestRelativizePathWithNoBacksteps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create pointers to the input strings
+			// 为输入字符串创建指针
 			refs := make([]*string, len(tt.inputPaths))
 			for i := range tt.inputPaths {
 				s := tt.inputPaths[i]
 				refs[i] = &s
 			}
 
-			// Call the function
+			// 调用被测函数
 			err := RelativizePathWithNoBacksteps(refs, tt.base)
 
-			// Check error expectation
+			// 检查是否符合预期的错误
 			if tt.expectError && err == nil {
 				t.Errorf("expected an error but got none")
 			}
@@ -649,7 +649,7 @@ func TestRelativizePathWithNoBacksteps(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			// If no error expected, check the results
+			// 若不期望报错，则检查结果
 			if !tt.expectError {
 				for i, ref := range refs {
 					if *ref != tt.expectedPaths[i] {
@@ -806,7 +806,7 @@ func TestMigratingFile(t *testing.T) {
 		t.Errorf("source and destination do not match")
 	}
 
-	// destination file permissions should be the same as the source file permissions
+	// 目标文件的权限应与源文件权限一致
 	sourceInfo, err := os.Stat(sourceFile)
 	if err != nil {
 		t.Errorf("unexpected error %v", err)
@@ -850,7 +850,7 @@ func TestMigratingFileLeaveExistingFileAlone(t *testing.T) {
 func TestMigratingFileSourceMissingSkip(t *testing.T) {
 	sourceFilename := "some-missing-file"
 	destinationFile, _ := os.CreateTemp("", "")
-	// delete the file so that we'll write to it
+	// 删除该文件，这样后续就会写入它
 	utiltesting.CloseAndRemove(t, destinationFile)
 
 	loadingRules := ClientConfigLoadingRules{
@@ -1106,9 +1106,9 @@ func TestLoadingGetLoadingPrecedence(t *testing.T) {
 		precedence []string
 	}{
 		"default": {
-			// Reconstruct the expected default path independently from the
-			// home directory so the assertion validates how RecommendedHomeFile
-			// is assembled rather than comparing it against itself.
+			// 独立于主目录重新构造期望的默认路径，
+			// 使断言校验的是 RecommendedHomeFile 的组装方式，
+			// 而不是拿它和自身比较。
 			precedence: []string{filepath.Join(homedir.HomeDir(), RecommendedHomeDir, RecommendedFileName)},
 		},
 		"explicit": {

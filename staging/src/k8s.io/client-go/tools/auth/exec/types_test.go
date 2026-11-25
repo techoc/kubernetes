@@ -44,15 +44,12 @@ func TestClientAuthenticationClusterTypesAreSynced(t *testing.T) {
 	}
 }
 
-// testClusterTypesAreSynced ensures that the provided cluster type stays in sync
-// with clientcmdv1.Cluster.
+// testClientAuthenticationClusterTypesAreSynced 确保给定 Cluster 类型与
+// clientcmdv1.Cluster 保持同步。
 //
-// We want clientauthentication*.Cluster types to offer the same knobs as clientcmdv1.Cluster to
-// allow someone to connect to the kubernetes API. This test should fail if a new field is added to
-// one of the structs without updating the other.
-//
-// 该测试双向比对字段名、类型与 tag，防止 executor 插件使用的 Cluster 与 kubeconfig 的
-// clientcmdv1.Cluster 出现漂移（两者必须能互相转换且语义等价）。
+// clientauthentication*.Cluster 需要提供与 clientcmdv1.Cluster 相同的配置项，以便连接
+// Kubernetes API。该测试双向比对字段名、类型与 tag；任一结构体新增字段而未同步另一个时，
+// 测试应失败，防止两者出现语义漂移。
 func testClientAuthenticationClusterTypesAreSynced(t *testing.T, cluster interface{}) {
 	execType := reflect.TypeOf(cluster)
 	clientcmdType := reflect.TypeOf(clientcmdv1.Cluster{})
@@ -60,9 +57,9 @@ func testClientAuthenticationClusterTypesAreSynced(t *testing.T, cluster interfa
 	t.Run("exec cluster fields match clientcmd cluster fields", func(t *testing.T) {
 		t.Parallel()
 
-		// These are fields that are specific to Cluster and shouldn't be in clientcmdv1.Cluster.
+		// 以下是 Cluster 特有、不应出现在 clientcmdv1.Cluster 中的字段。
 		execSkippedFieldNames := sets.NewString(
-			// Cluster uses Config to provide its cluster-specific configuration object.
+			// Cluster 使用 Config 提供集群专属的配置对象。
 			"Config",
 		)
 
@@ -101,12 +98,12 @@ func testClientAuthenticationClusterTypesAreSynced(t *testing.T, cluster interfa
 	t.Run("clientcmd cluster fields match exec cluster fields", func(t *testing.T) {
 		t.Parallel()
 
-		// These are the fields that we don't want to shadow from clientcmdv1.Cluster.
+		// 以下字段不应从 clientcmdv1.Cluster 复制到 exec 的 Cluster。
 		// 这两个字段有替代来源（CA 数据走 CertificateAuthorityData，扩展不经 exec 传递）。
 		clientcmdSkippedFieldNames := sets.NewString(
-			// CA data will be passed via CertificateAuthorityData, so we don't need this field.
+			// CA 数据通过 CertificateAuthorityData 传递，因此无需此字段。
 			"CertificateAuthority",
-			// Cluster uses Config to provide its cluster-specific configuration object.
+			// 扩展配置不经 exec 插件传递，因此无需复制 Extensions。
 			"Extensions",
 		)
 
@@ -143,20 +140,16 @@ func testClientAuthenticationClusterTypesAreSynced(t *testing.T, cluster interfa
 	})
 }
 
-// TestAllClusterTypesAreSynced is a TODO so that we remember to write a test similar to
-// TestClientAuthenticationClusterTypesAreSynced for any future ExecCredential version. It should start failing
-// when someone adds support for any other ExecCredential type to this package.
-//
-// 防漏测试：枚举所有已注册的 ExecCredential 版本，若新增了未覆盖的版本则失败，
-// 提醒补上对应的字段同步测试。
+// TestAllClusterTypesAreSynced 是防漏测试：枚举所有已注册的 ExecCredential 版本。
+// 若本包新增其他 ExecCredential 类型而遗漏测试，此测试应失败，提醒补充类似
+// TestClientAuthenticationClusterTypesAreSynced 的字段同步测试。
 func TestAllClusterTypesAreSynced(t *testing.T) {
 	versionsThatDontNeedTests := sets.NewString(
-		// The internal Cluster type should only be used...internally...and therefore doesn't
-		// necessarily need to be synced with clientcmdv1.
+		// 内部 Cluster 类型仅供包内使用，无需与 clientcmdv1 同步。
 		runtime.APIVersionInternal,
-		// We have a test for v1beta1 above.
+		// 上文已有 v1beta1 的测试。
 		clientauthenticationv1beta1.SchemeGroupVersion.Version,
-		// We have a test for v1 above.
+		// 上文已有 v1 的测试。
 		clientauthenticationv1.SchemeGroupVersion.Version,
 	)
 	for gvk := range scheme.AllKnownTypes() {

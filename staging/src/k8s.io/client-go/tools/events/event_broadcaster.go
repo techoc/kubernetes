@@ -58,7 +58,7 @@ const (
 
 var defaultSleepDuration = 10 * time.Second
 
-// TODO: validate impact of copying and investigate hashing
+// TODO: 验证复制开销的影响，并调研改用哈希的方案
 // eventKey 是事件聚合的等价键：同一键的事件被视为“同构”，只累加 Series 计数。
 // 刻意不包含 Note 与时间等字段，使重复上报的同一事件能够合并。
 type eventKey struct {
@@ -83,17 +83,16 @@ type eventBroadcasterImpl struct {
 	sink          EventSink
 }
 
-// EventSinkImpl wraps EventsV1Interface to implement EventSink.
-// TODO: this makes it easier for testing purpose and masks the logic of performing API calls.
-// Note that rollbacking to raw clientset should also be transparent.
-//
+// EventSinkImpl 包装 EventsV1Interface 以实现 EventSink。
+// TODO: 这样更便于测试，也隐藏了发起 API 调用的细节；
+// 注意即使回退到原始 clientset 也应对调用方透明。
 // EventSinkImpl 把 events/v1 类型化客户端适配为 EventSink。namespace 是
 // 事件归属的唯一路由依据，因此下面三个方法都拒绝空 namespace。
 type EventSinkImpl struct {
 	Interface typedeventsv1.EventsV1Interface
 }
 
-// Create takes the representation of a event and creates it. Returns the server's representation of the event, and an error, if there is any.
+// Create 接受事件的表示并创建它，返回服务端的表示，出错时返回错误。
 func (e *EventSinkImpl) Create(ctx context.Context, event *eventsv1.Event) (*eventsv1.Event, error) {
 	if event.Namespace == "" {
 		return nil, fmt.Errorf("can't create an event with empty namespace")
@@ -101,7 +100,7 @@ func (e *EventSinkImpl) Create(ctx context.Context, event *eventsv1.Event) (*eve
 	return e.Interface.Events(event.Namespace).Create(ctx, event, metav1.CreateOptions{})
 }
 
-// Update takes the representation of a event and updates it. Returns the server's representation of the event, and an error, if there is any.
+// Update 接受事件的表示并更新它，返回服务端的表示，出错时返回错误。
 func (e *EventSinkImpl) Update(ctx context.Context, event *eventsv1.Event) (*eventsv1.Event, error) {
 	if event.Namespace == "" {
 		return nil, fmt.Errorf("can't update an event with empty namespace")
@@ -109,7 +108,7 @@ func (e *EventSinkImpl) Update(ctx context.Context, event *eventsv1.Event) (*eve
 	return e.Interface.Events(event.Namespace).Update(ctx, event, metav1.UpdateOptions{})
 }
 
-// Patch applies the patch and returns the patched event, and an error, if there is any.
+// Patch 应用补丁并返回打补丁后的事件，出错时返回错误。
 //
 // 固定使用 strategic merge patch：Series 字段的计数合并依赖服务端的合并语义。
 func (e *EventSinkImpl) Patch(ctx context.Context, event *eventsv1.Event, data []byte) (*eventsv1.Event, error) {
@@ -119,12 +118,12 @@ func (e *EventSinkImpl) Patch(ctx context.Context, event *eventsv1.Event, data [
 	return e.Interface.Events(event.Namespace).Patch(ctx, event.Name, types.StrategicMergePatchType, data, metav1.PatchOptions{})
 }
 
-// NewBroadcaster Creates a new event broadcaster.
+// NewBroadcaster 创建一个新的 event broadcaster。
 func NewBroadcaster(sink EventSink) EventBroadcaster {
 	return newBroadcaster(sink, defaultSleepDuration, map[eventKey]*eventsv1.Event{})
 }
 
-// NewBroadcasterForTest Creates a new event broadcaster for test purposes.
+// newBroadcaster 创建一个新的 event broadcaster，供测试使用。
 //
 // 与 NewBroadcaster 的唯一区别是允许注入 sleepDuration 与初始缓存，
 // 便于测试控制重试节奏和预置聚合状态。
@@ -142,12 +141,12 @@ func (e *eventBroadcasterImpl) Shutdown() {
 	e.Broadcaster.Shutdown()
 }
 
-// refreshExistingEventSeries refresh events TTL
+// refreshExistingEventSeries 刷新事件的 TTL
 //
 // 服务端会清理长期未更新的事件；仍活跃的 Series 需要周期性 Patch 以刷新
 // TTL，否则连续事件的计数可能因对象被删除而丢失。
 func (e *eventBroadcasterImpl) refreshExistingEventSeries(ctx context.Context) {
-	// TODO: Investigate whether lock contention won't be a problem
+	// TODO: 调查锁竞争是否会成为问题
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for isomorphicKey, event := range e.eventCache {
@@ -161,13 +160,13 @@ func (e *eventBroadcasterImpl) refreshExistingEventSeries(ctx context.Context) {
 	}
 }
 
-// finishSeries checks if a series has ended and either:
-// - write final count to the apiserver
-// - delete a singleton event (i.e. series field is nil) from the cache
+// finishSeries 检查某个事件序列是否已结束，并：
+// - 把最终计数写入 apiserver
+// - 从缓存中删除单例事件（即 Series 字段为 nil）
 //
 // 只有写入成功（或不可重试地失败）才把条目移出缓存，否则保留到下一轮。
 func (e *eventBroadcasterImpl) finishSeries(ctx context.Context) {
-	// TODO: Investigate whether lock contention won't be a problem
+	// TODO: 调查锁竞争是否会成为问题
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for isomorphicKey, event := range e.eventCache {
@@ -184,7 +183,7 @@ func (e *eventBroadcasterImpl) finishSeries(ctx context.Context) {
 	}
 }
 
-// NewRecorder returns an EventRecorder that records events with the given event source.
+// NewRecorder 返回一个 EventRecorder，用给定的上报组件记录事件。
 //
 // reportingInstance 由 controller 名与主机名拼接，便于区分同一组件在不同
 // 节点上的实例。
@@ -203,7 +202,7 @@ func (e *eventBroadcasterImpl) NewRecorder(scheme *runtime.Scheme, reportingCont
 //
 // 返回 nil 表示本次无需写服务端。异步执行是为了不阻塞事件生产者。
 func (e *eventBroadcasterImpl) recordToSink(ctx context.Context, event *eventsv1.Event, clock clock.Clock) {
-	// Make a copy before modification, because there could be multiple listeners.
+	// 修改前先复制一份，因为可能有多个监听器。
 	eventCopy := event.DeepCopy()
 	go func() {
 		evToRecord := func() *eventsv1.Event {
@@ -221,21 +220,19 @@ func (e *eventBroadcasterImpl) recordToSink(ctx context.Context, event *eventsv1
 					Count:            2,
 					LastObservedTime: metav1.MicroTime{Time: clock.Now()},
 				}
-				// Make a copy of the Event to make sure that recording it
-				// doesn't mess with the object stored in cache.
+				// 复制一份 Event，确保记录事件不会影响
+				// 缓存中存放的对象。
 				return isomorphicEvent.DeepCopy()
 			}
 			e.eventCache[eventKey] = eventCopy
-			// Make a copy of the Event to make sure that recording it doesn't
-			// mess with the object stored in cache.
+			// 复制一份 Event，确保记录事件不会影响缓存中存放的对象。
 			return eventCopy.DeepCopy()
 		}()
 		if evToRecord != nil {
-			// TODO: Add a metric counting the number of recording attempts
+			// TODO: 增加一个统计记录尝试次数的指标
 			e.attemptRecording(ctx, evToRecord)
-			// We don't want the new recorded Event to be reflected in the
-			// client's cache because server-side mutations could mess with the
-			// aggregation mechanism used by the client.
+			// 不希望新记录的事件反映到客户端缓存中，
+			// 因为服务端的修改可能扰乱客户端的聚合机制。
 		}
 	}()
 }
@@ -252,9 +249,8 @@ func (e *eventBroadcasterImpl) attemptRecording(ctx context.Context, event *even
 			klog.FromContext(ctx).Error(nil, "Unable to write event (retry limit exceeded!)", "event", event)
 			return
 		}
-		// Randomize sleep so that various clients won't all be
-		// synced up if the master goes down. Give up when
-		// the context is canceled.
+		// 随机化休眠时长，避免 master 宕机时所有客户端节奏一致；
+		// context 取消时放弃。
 		select {
 		case <-ctx.Done():
 			return
@@ -280,29 +276,27 @@ func recordEvent(ctx context.Context, sink EventSink, event *eventsv1.Event) (*e
 		}
 		newEvent, err = sink.Patch(ctx, event, patch)
 	}
-	// Update can fail because the event may have been removed and it no longer exists.
+	// Update 可能失败，因为事件可能已被删除、不再存在。
 	if !isEventSeries || util.IsKeyNotFoundError(err) {
-		// Making sure that ResourceVersion is empty on creation
+		// 确保创建时 ResourceVersion 为空
 		event.ResourceVersion = ""
 		newEvent, err = sink.Create(ctx, event)
 	}
 	if err == nil {
 		return newEvent, false
 	}
-	// If we can't contact the server, then hold everything while we keep trying.
-	// Otherwise, something about the event is malformed and we should abandon it.
+	// 如果无法联系服务端，就保留一切并重试。
+	// 否则说明事件本身有问题，应当放弃它。
 	switch err.(type) {
 	case *restclient.RequestConstructionError:
-		// We will construct the request the same next time, so don't keep trying.
+		// 下次构造的请求也会一样，因此不再重试。
 		klog.FromContext(ctx).Error(err, "Unable to construct event (will not retry!)", "event", event)
 		return nil, false
 	case *errors.StatusError:
 		if errors.IsAlreadyExists(err) {
-			// If we tried to create an Event from an EventSerie, it means that
-			// the original Patch request failed because the Event we were
-			// trying to patch didn't exist. If the creation failed because the
-			// Event now exists, it is safe to retry.  This occurs when a new
-			// Event is emitted twice in a very short period of time.
+			// 如果是在从 EventSeries 创建 Event，说明原来的 Patch 请求
+			// 因为目标 Event 不存在而失败；若创建又因该 Event 已存在而失败，
+			// 重试是安全的。这种情况发生在一个新事件在极短时间内被发出两次时。
 			if isEventSeries {
 				return nil, true
 			}
@@ -312,10 +306,9 @@ func recordEvent(ctx context.Context, sink EventSink, event *eventsv1.Event) (*e
 		}
 		return nil, false
 	case *errors.UnexpectedObjectError:
-		// We don't expect this; it implies the server's response didn't match a
-		// known pattern. Go ahead and retry.
+		// 这种情况不常见：说明服务端的响应不符合已知模式。继续重试。
 	default:
-		// This case includes actual http transport errors. Go ahead and retry.
+		// 该分支包含实际的 HTTP 传输错误。继续重试。
 	}
 	klog.FromContext(ctx).Error(err, "Unable to write event (may retry after sleeping)")
 	return nil, true
@@ -353,12 +346,11 @@ func getKey(event *eventsv1.Event) eventKey {
 	return key
 }
 
-// StartStructuredLogging starts sending events received from this EventBroadcaster to the structured logging function.
-// The return value can be ignored or used to stop recording, if desired.
-// TODO: this function should also return an error.
+// StartStructuredLogging 开始把该 EventBroadcaster 收到的事件发送给结构化日志函数。
+// 返回值可以忽略，也可用于按需停止记录。
+// TODO: 该函数也应返回 error。
 //
-// Deprecated: use StartLogging instead.
-// 已弃用：请改用 StartLogging，它支持传入带上下文的 logger。
+// Deprecated: 请改用 StartLogging，它支持传入带上下文的 logger。
 func (e *eventBroadcasterImpl) StartStructuredLogging(verbosity klog.Level) func() {
 	logger := klog.Background().V(int(verbosity))
 	stopWatcher, err := e.StartLogging(logger)
@@ -369,9 +361,9 @@ func (e *eventBroadcasterImpl) StartStructuredLogging(verbosity klog.Level) func
 	return stopWatcher
 }
 
-// StartLogging starts sending events received from this EventBroadcaster to the structured logger.
-// To adjust verbosity, use the logger's V method (i.e. pass `logger.V(3)` instead of `logger`).
-// The returned function can be ignored or used to stop recording, if desired.
+// StartLogging 开始把该 EventBroadcaster 收到的事件发送给结构化 logger。
+// 若要调整日志级别，请使用 logger 的 V 方法（即传入 `logger.V(3)` 而不是 `logger`）。
+// 返回的函数可以忽略，也可用于按需停止记录。
 //
 // 日志输出不会阻塞事件处理；stop 函数用于显式停止监听。
 func (e *eventBroadcasterImpl) StartLogging(logger klog.Logger) (func(), error) {
@@ -386,8 +378,8 @@ func (e *eventBroadcasterImpl) StartLogging(logger klog.Logger) (func(), error) 
 		})
 }
 
-// StartEventWatcher starts sending events received from this EventBroadcaster to the given event handler function.
-// The return value is used to stop recording
+// StartEventWatcher 开始把该 EventBroadcaster 收到的事件发送给指定的事件处理函数。
+// 返回值用于停止记录
 func (e *eventBroadcasterImpl) StartEventWatcher(eventHandler func(event runtime.Object)) (func(), error) {
 	return e.startEventWatcher(klog.Background(), eventHandler)
 }
@@ -437,9 +429,8 @@ func (e *eventBroadcasterImpl) startRecordingEvents(ctx context.Context) error {
 	return nil
 }
 
-// StartRecordingToSink starts sending events received from the specified eventBroadcaster to the given sink.
-// Deprecated: use StartRecordingToSinkWithContext instead.
-// 已弃用：请改用 StartRecordingToSinkWithContext。
+// StartRecordingToSink 开始把指定 eventBroadcaster 收到的事件发送给给定的 sink。
+// Deprecated: 请改用 StartRecordingToSinkWithContext。
 func (e *eventBroadcasterImpl) StartRecordingToSink(stopCh <-chan struct{}) {
 	err := e.StartRecordingToSinkWithContext(wait.ContextForChannel(stopCh))
 	if err != nil {
@@ -447,7 +438,7 @@ func (e *eventBroadcasterImpl) StartRecordingToSink(stopCh <-chan struct{}) {
 	}
 }
 
-// StartRecordingToSinkWithContext starts sending events received from the specified eventBroadcaster to the given sink.
+// StartRecordingToSinkWithContext 开始把指定 eventBroadcaster 收到的事件发送给给定的 sink。
 //
 // 同时启动两个周期任务：刷新活跃 Series 的 TTL，以及结束过期的 Series；
 // 它们在 ctx 取消时自动停止。
@@ -466,16 +457,16 @@ type eventBroadcasterAdapterImpl struct {
 	eventsv1Broadcaster EventBroadcaster
 }
 
-// NewEventBroadcasterAdapter creates a wrapper around new and legacy broadcasters to simplify
-// migration of individual components to the new Event API.
+// NewEventBroadcasterAdapter 包装新旧两个广播器，
+// 简化各组件向新 Event API 的迁移。
 //
 //logcheck:context // NewEventBroadcasterAdapterWithContext should be used instead because record.NewBroadcaster is called and works better when a context is supplied (contextual logging, cancellation).
 func NewEventBroadcasterAdapter(client clientset.Interface) EventBroadcasterAdapter {
 	return NewEventBroadcasterAdapterWithContext(context.Background(), client)
 }
 
-// NewEventBroadcasterAdapterWithContext creates a wrapper around new and legacy broadcasters to simplify
-// migration of individual components to the new Event API.
+// NewEventBroadcasterAdapterWithContext 包装新旧两个广播器，
+// 简化各组件向新 Event API 的迁移。
 //
 // 通过发现接口探测 events/v1 是否可用：可用时同时启用新广播器；
 // legacy core/v1 广播器始终创建，以兼容尚未迁移的调用方。
@@ -485,15 +476,14 @@ func NewEventBroadcasterAdapterWithContext(ctx context.Context, client clientset
 		eventClient.eventsv1Client = client.EventsV1()
 		eventClient.eventsv1Broadcaster = NewBroadcaster(&EventSinkImpl{Interface: eventClient.eventsv1Client})
 	}
-	// Even though there can soon exist cases when coreBroadcaster won't really be needed,
-	// we create it unconditionally because its overhead is minor and will simplify using usage
-	// patterns of this library in all components.
+	// 尽管很快就会出现 coreBroadcaster 不再被需要的场景，
+	// 这里仍无条件创建它：开销很小，且能让各组件使用该库的常见模式更简单。
 	eventClient.coreClient = client.CoreV1()
 	eventClient.coreBroadcaster = record.NewBroadcaster(record.WithContext(ctx))
 	return eventClient
 }
 
-// StartRecordingToSink starts sending events received from the specified eventBroadcaster to the given sink.
+// StartRecordingToSink 开始把指定 eventBroadcaster 收到的事件发送给给定的 sink。
 //
 // 两套广播器都会启动，这样新 API 与 legacy API 的事件都能被记录。
 func (e *eventBroadcasterAdapterImpl) StartRecordingToSink(stopCh <-chan struct{}) {

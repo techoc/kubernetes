@@ -299,21 +299,21 @@ func TestListPager_EachListItem(t *testing.T) {
 		{
 			name:      "expires on second page",
 			fields:    fields{PageSize: 10, PageFn: (&testPager{t: t, expectPage: 10, remaining: 21, rv: "rv:20"}).ExpiresOnSecondPage},
-			want:      list(10, "rv:20"), // all items on the first page should have been visited
+			want:      list(10, "rv:20"), // 第一页的所有条目都应已被访问
 			wantErr:   true,
 			isExpired: true,
 		},
 		{
 			name:                 "error processing item",
 			fields:               fields{PageSize: 10, PageFn: (&testPager{t: t, expectPage: 10, remaining: 51, rv: "rv:20"}).PagedList},
-			want:                 list(3, "rv:20"), // all the items <= the one the processor returned an error on should have been visited
+			want:                 list(3, "rv:20"), // 处理函数报错的条目及其之前的所有条目都应已被访问
 			wantPanic:            true,
 			processorPanicOnItem: 3,
 		},
 		{
 			name:                "cancel context while processing",
 			fields:              fields{PageSize: 10, PageFn: (&testPager{t: t, expectPage: 10, remaining: 51, rv: "rv:20"}).PagedList},
-			want:                list(10, "rv:20"), // The whole PageSize worth of items got returned.
+			want:                list(10, "rv:20"), // 已返回整整一页的条目。
 			wantErr:             true,
 			cancelContextOnItem: 3,
 		},
@@ -395,7 +395,7 @@ func TestListPager_eachListPageBuffered(t *testing.T) {
 			name:           "no buffer, 1/5 pages processed",
 			totalPages:     5,
 			pagesProcessed: 1,
-			wantPageLists:  2, // 1 received for processing, 1 listed
+			wantPageLists:  2, // 一页正在处理，一页已发起 List
 			pageBufferSize: 0,
 		},
 		{
@@ -431,7 +431,7 @@ func TestListPager_eachListPageBuffered(t *testing.T) {
 			totalPages:     5,
 			pagesProcessed: 1,
 			wantPageLists:  5,
-			pageBufferSize: 10, // buffer is larger than list
+			pageBufferSize: 10, // 缓冲区大于整个列表
 		},
 	}
 	processorErr := fmt.Errorf("processor error")
@@ -458,7 +458,7 @@ func TestListPager_eachListPageBuffered(t *testing.T) {
 			fn := func(obj runtime.Object) error {
 				pagesProcessed++
 				if tt.pagesProcessed == pagesProcessed && tt.wantPageLists > 0 {
-					// wait for buffering to catch up
+					// 等待后台预取追上消费进度
 					select {
 					case <-time.After(time.Second):
 						return fmt.Errorf("Timed out waiting for %d page lists", tt.wantPageLists)
@@ -470,7 +470,7 @@ func TestListPager_eachListPageBuffered(t *testing.T) {
 			}
 			err := p.eachListChunkBuffered(context.Background(), metav1.ListOptions{}, fn)
 			if tt.pagesProcessed > 0 && err == processorErr {
-				// expected
+				// 预期返回处理函数错误
 			} else if err != nil {
 				t.Fatal(err)
 			}

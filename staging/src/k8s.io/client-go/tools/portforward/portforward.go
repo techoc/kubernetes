@@ -38,20 +38,19 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// PortForwardProtocolV1Name is the subprotocol used for port forwarding.
-// TODO move to API machinery and re-unify with kubelet/server/portfoward
+// PortForwardProtocolV1Name 是端口转发使用的子协议。
+// TODO：移至 API machinery，并与 kubelet/server/portforward 统一。
 const PortForwardProtocolV1Name = "portforward.k8s.io"
 
 var (
-	// error returned whenever we lost connection to a pod
+	// ErrLostConnectionToPod 表示与 Pod 的连接已丢失。
 	ErrLostConnectionToPod = errors.New("lost connection to pod")
 
-	// set of error we're expecting during port-forwarding
+	// 端口转发期间预期会遇到的错误集合。
 	networkClosedError = "use of closed network connection"
 )
 
-// PortForwarder knows how to listen for local connections and forward them to
-// a remote pod via an upgraded HTTP request.
+// PortForwarder 监听本地连接，并通过升级后的 HTTP 请求把它们转发到远端 Pod。
 //
 // 生命周期：ForwardPorts 建立一条到 pod 的复用连接，在其上按需创建数据流；
 // 本地监听器与处理协程都依附于该连接，连接断开即整体失效。
@@ -74,7 +73,7 @@ type PortForwarder struct {
 	errOut    io.Writer
 }
 
-// ForwardedPort contains a Local:Remote port pairing.
+// ForwardedPort 保存一组 Local:Remote 端口配对。
 type ForwardedPort struct {
 	// Local 是本地监听端口；请求端口 0 时会被替换为实际分配的端口。
 	Local uint16
@@ -83,18 +82,18 @@ type ForwardedPort struct {
 }
 
 /*
-valid port specifications:
+合法的端口规格：
 
 5000
-- forwards from localhost:5000 to pod:5000
+- 从 localhost:5000 转发到 pod:5000
 
 8888:5000
-- forwards from localhost:8888 to pod:5000
+- 从 localhost:8888 转发到 pod:5000
 
 0:5000
 :5000
-  - selects a random available local port,
-    forwards from localhost:<random port> to pod:5000
+  - 随机选择一个可用的本地端口，
+    从 localhost:<随机端口> 转发到 pod:5000
 */
 // parsePorts 解析 “local:remote” 形式的端口规格。
 //
@@ -111,7 +110,7 @@ func parsePorts(ports []string) ([]ForwardedPort, error) {
 		} else if len(parts) == 2 {
 			localString = parts[0]
 			if localString == "" {
-				// support :5000
+				// 支持 :5000 这种省略本地端口的写法
 				localString = "0"
 			}
 			remoteString = parts[1]
@@ -179,31 +178,31 @@ func parseAddresses(addressesToParse []string) ([]listenAddress, error) {
 		addresses[id] = v
 		id++
 	}
-	// Sort addresses before returning to get a stable order
+	// 返回前排序，保证地址顺序稳定。
 	sort.Slice(addresses, func(i, j int) bool { return addresses[i].address < addresses[j].address })
 
 	return addresses, nil
 }
 
-// New creates a new PortForwarder with localhost listen addresses.
+// New 创建一个使用 localhost 监听地址的 PortForwarder。
 func New(dialer httpstream.Dialer, ports []string, stopChan <-chan struct{}, readyChan chan struct{}, out, errOut io.Writer) (*PortForwarder, error) {
 	return NewOnAddresses(dialer, []string{"localhost"}, ports, stopChan, readyChan, out, errOut)
 }
 
-// NewForStreaming creates a new PortForwarder with localhost listen addresses
-// for in-tree callers that use k8s.io/streaming/pkg/httpstream types.
+// NewForStreaming 创建一个使用 localhost 监听地址的 PortForwarder，
+// 供使用 k8s.io/streaming/pkg/httpstream 类型的 in-tree 调用方使用。
 func NewForStreaming(dialer streamhttp.Dialer, ports []string, stopChan <-chan struct{}, readyChan chan struct{}, out, errOut io.Writer) (*PortForwarder, error) {
 	return NewOnAddressesForStreaming(dialer, []string{"localhost"}, ports, stopChan, readyChan, out, errOut)
 }
 
-// NewOnAddresses creates a new PortForwarder with custom listen addresses.
+// NewOnAddresses 创建一个使用自定义监听地址的 PortForwarder。
 //
 //logcheck:context // NewOnAddressesWithContext should be used instead of NewOnAddresses in code which supports contextual logging.
 func NewOnAddresses(dialer httpstream.Dialer, addresses []string, ports []string, stopChan <-chan struct{}, readyChan chan struct{}, out, errOut io.Writer) (*PortForwarder, error) {
 	return NewOnAddressesWithContext(wait.ContextForChannel(stopChan), dialer, addresses, ports, readyChan, out, errOut)
 }
 
-// NewOnAddressesWithContext creates a new PortForwarder with custom listen addresses.
+// NewOnAddressesWithContext 创建一个使用自定义监听地址的 PortForwarder。
 //
 // 只做参数校验与解析，不建立连接；真正拨号发生在 ForwardPorts。
 func NewOnAddressesWithContext(ctx context.Context, dialer httpstream.Dialer, addresses []string, ports []string, readyChan chan struct{}, out, errOut io.Writer) (*PortForwarder, error) {
@@ -233,16 +232,16 @@ func NewOnAddressesWithContext(ctx context.Context, dialer httpstream.Dialer, ad
 	}, nil
 }
 
-// NewOnAddressesForStreaming creates a new PortForwarder with custom listen
-// addresses for in-tree callers that use k8s.io/streaming/pkg/httpstream types.
+// NewOnAddressesForStreaming 创建一个使用自定义监听地址的 PortForwarder，
+// 供使用 k8s.io/streaming/pkg/httpstream 类型的 in-tree 调用方使用。
 //
 //logcheck:context // NewOnAddressesForStreamingWithContext should be used instead of NewOnAddressesForStreaming in code which supports contextual logging.
 func NewOnAddressesForStreaming(dialer streamhttp.Dialer, addresses []string, ports []string, stopChan <-chan struct{}, readyChan chan struct{}, out, errOut io.Writer) (*PortForwarder, error) {
 	return NewOnAddressesForStreamingWithContext(wait.ContextForChannel(stopChan), dialer, addresses, ports, readyChan, out, errOut)
 }
 
-// NewOnAddressesForStreamingWithContext creates a new PortForwarder with custom listen
-// addresses for in-tree callers that use k8s.io/streaming/pkg/httpstream types.
+// NewOnAddressesForStreamingWithContext 创建一个使用自定义监听地址的 PortForwarder，
+// 供使用 k8s.io/streaming/pkg/httpstream 类型的 in-tree 调用方使用。
 func NewOnAddressesForStreamingWithContext(ctx context.Context, dialer streamhttp.Dialer, addresses []string, ports []string, readyChan chan struct{}, out, errOut io.Writer) (*PortForwarder, error) {
 	return NewOnAddressesWithContext(ctx, &compatDialerAdapter{logger: klog.FromContext(ctx), delegate: dialer}, addresses, ports, readyChan, out, errOut)
 }
@@ -336,8 +335,7 @@ func (s *compatStreamAdapter) Identifier() uint32 {
 	return s.delegate.Identifier()
 }
 
-// ForwardPorts formats and executes a port forwarding request. The connection will remain
-// open until stopChan is closed.
+// ForwardPorts 构造并执行一次端口转发请求。连接会一直保持打开，直到 stopChan 关闭。
 //
 // 必须协商出 portforward.k8s.io 子协议，否则说明服务端不支持该功能；
 // 返回时无论成败都会关闭监听器与底层连接。
@@ -358,9 +356,8 @@ func (pf *PortForwarder) ForwardPorts() error {
 	return pf.forward()
 }
 
-// forward dials the remote host specific in req, upgrades the request, starts
-// listeners for each port specified in ports, and forwards local connections
-// to the remote host via streams.
+// forward 拨号远端 host、升级请求、为 ports 中的每个端口启动监听器，
+// 并通过数据流把本地连接转发到远端 host。
 func (pf *PortForwarder) forward() error {
 	var err error
 
@@ -390,7 +387,6 @@ func (pf *PortForwarder) forward() error {
 
 	// 等待调用方停止或远程连接断开。后者意味着 pod 已消失或 kubelet 关闭
 	// 了流，必须让调用方感知，而不是假装正常结束。
-	// wait for interrupt or conn closure
 	select {
 	case <-pf.stopChan:
 	case <-pf.streamConn.CloseChan():
@@ -400,8 +396,8 @@ func (pf *PortForwarder) forward() error {
 	return nil
 }
 
-// listenOnPort delegates listener creation and waits for connections on requested bind addresses.
-// An error is raised based on address groups (default and localhost) and their failure modes
+// listenOnPort 负责创建监听器，并在请求的绑定地址上等待连接。
+// 是否报错取决于地址分组（default 与 localhost）及其失败模式。
 //
 // 判定规则：failureMode=all 的地址组至少要有一个成功；failureMode=any 的
 // 地址组一旦有失败就整体失败，避免用户以为转发已覆盖所有地址。
@@ -427,8 +423,7 @@ func (pf *PortForwarder) listenOnPort(port *ForwardedPort) error {
 	return nil
 }
 
-// listenOnPortAndAddress delegates listener creation and waits for new connections
-// in the background f
+// listenOnPortAndAddress 创建监听器，并在后台等待新连接。
 //
 // 每个 listener 一个接收协程；listener 关闭时协程自然退出。
 func (pf *PortForwarder) listenOnPortAndAddress(port *ForwardedPort, protocol string, address string) error {
@@ -441,8 +436,8 @@ func (pf *PortForwarder) listenOnPortAndAddress(port *ForwardedPort, protocol st
 	return nil
 }
 
-// getListener creates a listener on the interface targeted by the given hostname on the given port with
-// the given protocol. protocol is in net.Listen style which basically admits values like tcp, tcp4, tcp6
+// getListener 用给定协议在给定端口上为 hostname 指向的网卡创建监听器。
+// protocol 采用 net.Listen 风格，基本接受 tcp、tcp4、tcp6 这类取值。
 //
 // 监听端口为 0 时由内核分配，并把实际端口写回 port.Local，以便 GetPorts 暴露给调用方。
 func (pf *PortForwarder) getListener(protocol string, hostname string, port *ForwardedPort) (net.Listener, error) {
@@ -466,8 +461,7 @@ func (pf *PortForwarder) getListener(protocol string, hostname string, port *For
 	return listener, nil
 }
 
-// waitForConnection waits for new connections to listener and handles them in
-// the background.
+// waitForConnection 等待 listener 上的新连接，并在后台处理它们。
 func (pf *PortForwarder) waitForConnection(listener net.Listener, port ForwardedPort) {
 	for {
 		select {
@@ -477,7 +471,7 @@ func (pf *PortForwarder) waitForConnection(listener net.Listener, port Forwarded
 		default:
 			conn, err := listener.Accept()
 			if err != nil {
-				// TODO consider using something like https://github.com/hydrogen18/stoppableListener?
+				// TODO: 考虑使用类似 https://github.com/hydrogen18/stoppableListener 的方案
 				if !strings.Contains(strings.ToLower(err.Error()), networkClosedError) {
 					runtime.HandleErrorWithLogger(pf.logger, err, "Error accepting connection", "localPort", port.Local)
 				}
@@ -497,8 +491,7 @@ func (pf *PortForwarder) nextRequestID() int {
 	return id
 }
 
-// handleConnection copies data between the local connection and the stream to
-// the remote server.
+// handleConnection 在本地连接与到远端 server 的数据流之间双向拷贝数据。
 //
 // 每个本地连接创建两条流：error 流承载服务端返回的错误文本，data 流承载
 // 字节。两者通过 requestID 关联，服务端据此把错误归到正确的连接。
@@ -511,7 +504,7 @@ func (pf *PortForwarder) handleConnection(conn net.Conn, port ForwardedPort) {
 
 	requestID := pf.nextRequestID()
 
-	// create error stream
+	// 创建错误流
 	headers := http.Header{}
 	headers.Set(v1.StreamType, v1.StreamTypeError)
 	headers.Set(v1.PortHeader, fmt.Sprintf("%d", port.Remote))
@@ -521,7 +514,7 @@ func (pf *PortForwarder) handleConnection(conn net.Conn, port ForwardedPort) {
 		runtime.HandleErrorWithLogger(pf.logger, err, "Error creating error stream", "localPort", port.Local, "remotePort", port.Remote)
 		return
 	}
-	// we're not writing to this stream
+	// 本端不向该流写入数据
 	errorStream.Close()
 	defer pf.streamConn.RemoveStreams(errorStream)
 
@@ -541,7 +534,7 @@ func (pf *PortForwarder) handleConnection(conn net.Conn, port ForwardedPort) {
 		close(errorChan)
 	}()
 
-	// create data stream
+	// 创建数据流
 	headers.Set(v1.StreamType, v1.StreamTypeData)
 	dataStream, err := pf.streamConn.CreateStream(headers)
 	if err != nil {
@@ -554,39 +547,39 @@ func (pf *PortForwarder) handleConnection(conn net.Conn, port ForwardedPort) {
 	remoteDone := make(chan struct{})
 
 	go func() {
-		// Copy from the remote side to the local port.
+		// 把远端数据拷贝回本地端口。
 		if _, err := io.Copy(conn, dataStream); err != nil && !strings.Contains(strings.ToLower(err.Error()), networkClosedError) {
 			runtime.HandleErrorWithLogger(pf.logger, err, "Error copying from remote stream to local connection", "localPort", port.Local, "remotePort", port.Remote)
 		}
 
-		// inform the select below that the remote copy is done
+		// 告知下面的 select：远端拷贝已完成
 		close(remoteDone)
 	}()
 
 	go func() {
-		// inform server we're not sending any more data after copy unblocks
+		// copy 解除阻塞后告知 server 不再发送数据
 		defer dataStream.Close()
 
-		// Copy from the local port to the remote side.
+		// 把本地端口的数据拷贝到远端。
 		if _, err := io.Copy(dataStream, conn); err != nil && !strings.Contains(strings.ToLower(err.Error()), networkClosedError) {
 			runtime.HandleErrorWithLogger(pf.logger, err, "Error copying from local connection to remote stream", "localPort", port.Local, "remotePort", port.Remote)
-			// break out of the select below without waiting for the other copy to finish
+			// 直接跳出下面的 select，不再等待另一路拷贝结束
 			close(localError)
 		}
 	}()
 
-	// wait for either a local->remote error or for copying from remote->local to finish
+	// 等待本地到远端出错，或远端到本地的拷贝完成
 	select {
 	case <-remoteDone:
 	case <-localError:
 	}
 
-	// reset dataStream to discard any unsent data, preventing port forwarding from being blocked.
-	// we must reset dataStream before waiting on errorChan, otherwise,
-	// the blocking data will affect errorStream and cause <-errorChan to block indefinitely.
+	// 重置 dataStream 以丢弃尚未发送的数据，避免端口转发被阻塞。
+	// 必须在等待 errorChan 之前重置 dataStream，否则阻塞中的数据会影响
+	// errorStream，导致 <-errorChan 永久阻塞。
 	_ = dataStream.Reset()
 
-	// always expect something on errorChan (it may be empty)
+	// errorChan 上总会有结果（可能为空）
 	errResult := <-errorChan
 	switch {
 	case errResult.err != nil:
@@ -598,11 +591,11 @@ func (pf *PortForwarder) handleConnection(conn net.Conn, port ForwardedPort) {
 	}
 }
 
-// Close stops all listeners of PortForwarder.
+// Close 停止 PortForwarder 的全部监听器。
 //
 // 只关闭本地监听器；远程连接由 ForwardPorts 的 defer 负责关闭。
 func (pf *PortForwarder) Close() {
-	// stop all listeners
+	// 停止所有监听器
 	for _, l := range pf.listeners {
 		if err := l.Close(); err != nil {
 			runtime.HandleErrorWithLogger(pf.logger, err, "Error closing listener")
@@ -610,11 +603,8 @@ func (pf *PortForwarder) Close() {
 	}
 }
 
-// GetPorts will return the ports that were forwarded; this can be used to
-// retrieve the locally-bound port in cases where the input was port 0. This
-// function will signal an error if the Ready channel is nil or if the
-// listeners are not ready yet; this function will succeed after the Ready
-// channel has been closed.
+// GetPorts 返回已被转发的端口；当输入端口为 0 时，可据此取得本地实际绑定的端口。
+// 若 Ready channel 为 nil 或监听器尚未就绪则返回错误；Ready 关闭后调用即可成功。
 //
 // 非阻塞：Ready 未关闭时立即返回错误，调用方应自行重试或先等待 Ready。
 func (pf *PortForwarder) GetPorts() ([]ForwardedPort, error) {

@@ -112,7 +112,7 @@ func validateEvent(messagePrefix string, actualEvent *v1.Event, expectedEvent *v
 	recvEvent := *actualEvent
 	expectCompression := expectedEvent.Count > 1
 	t.Logf("%v - expectedEvent.Count is %d\n", messagePrefix, expectedEvent.Count)
-	// Just check that the timestamp was set.
+	// 只需检查时间戳已设置。
 	if recvEvent.FirstTimestamp.IsZero() || recvEvent.LastTimestamp.IsZero() {
 		t.Errorf("%v - timestamp wasn't set: %#v", messagePrefix, recvEvent)
 	}
@@ -128,13 +128,13 @@ func validateEvent(messagePrefix string, actualEvent *v1.Event, expectedEvent *v
 			t.Errorf("%v - FirstTimestamp (%q) and LastTimestamp (%q) must be equal to indicate only one occurrence of the event, but were different. Actual Event: %#v", messagePrefix, actualFirstTimestamp, actualLastTimestamp, recvEvent)
 		}
 	}
-	// Temp clear time stamps for comparison because actual values don't matter for comparison
+	// 比较前先临时清空时间戳，因为具体值对比较无关紧要
 	recvEvent.FirstTimestamp = expectedEvent.FirstTimestamp
 	recvEvent.LastTimestamp = expectedEvent.LastTimestamp
 
 	recvEvent.ReportingController = expectedEvent.ReportingController
 
-	// Check that name has the right prefix.
+	// 检查 name 带有正确的前缀。
 	if n, en := recvEvent.Name, expectedEvent.Name; !strings.HasPrefix(n, en) {
 		t.Errorf("%v - Name '%v' does not contain prefix '%v'", messagePrefix, n, en)
 	}
@@ -147,7 +147,7 @@ func validateEvent(messagePrefix string, actualEvent *v1.Event, expectedEvent *v
 	return actualEvent, nil
 }
 
-// TestEventAggregatorByReasonFunc ensures that two events are aggregated if they vary only by event.message
+// TestEventAggregatorByReasonFunc 确保仅 event.message 不同的两个事件会被聚合
 //
 // 中文说明：聚合需要同时看两个键——aggKey 决定“哪些事件算同一类”，localKey 用于
 // 区分同类事件的具体内容。仅 message 不同时 aggKey 相同但 localKey 不同；reason
@@ -172,7 +172,7 @@ func TestEventAggregatorByReasonFunc(t *testing.T) {
 	}
 }
 
-// TestEventAggregatorByReasonMessageFunc validates the proper output for an aggregate message
+// TestEventAggregatorByReasonMessageFunc 校验聚合消息的输出是否正确
 //
 // 中文：聚合消息必须以固定前缀开头，便于用户识别这是合并后的事件。
 func TestEventAggregatorByReasonMessageFunc(t *testing.T) {
@@ -184,9 +184,9 @@ func TestEventAggregatorByReasonMessageFunc(t *testing.T) {
 	}
 }
 
-// TestEventCorrelator validates proper counting, aggregation of events
+// TestEventCorrelator 校验事件的计数与聚合行为。
 //
-// 中文说明：用 SimpleIntervalClock 精确推进测试时钟，覆盖事件关联器的核心规则：
+// 用 SimpleIntervalClock 精确推进测试时钟，覆盖事件关联器的核心规则：
 // 相同事件计数、超过聚合上限、突然爆发的刷屏过滤、相似事件聚合、跨容器不聚合、
 // 以及超过聚合窗口后不再聚合。
 func TestEventCorrelator(t *testing.T) {
@@ -284,13 +284,13 @@ func TestEventCorrelator(t *testing.T) {
 			if err != nil {
 				t.Errorf("scenario %v: unexpected error playing back prevEvents %v", testScenario, err)
 			}
-			// if we are skipping the event, we can avoid updating state
+			// 若该事件被跳过，就无需更新状态
 			if !result.Skip {
 				correlator.UpdateState(result.Event)
 			}
 		}
 
-		// update the input to current clock value
+		// 把输入更新为当前时钟值
 		now := metav1.NewTime(clock.Now())
 		testInput.newEvent.FirstTimestamp = now
 		testInput.newEvent.LastTimestamp = now
@@ -299,18 +299,18 @@ func TestEventCorrelator(t *testing.T) {
 			t.Errorf("scenario %v: unexpected error correlating input event %v", testScenario, err)
 		}
 
-		// verify we did not get skip from filter function unexpectedly...
+		// 校验没有意外地被过滤函数 skip……
 		if result.Skip != testInput.expectedSkip {
 			t.Errorf("scenario %v: expected skip %v, but got %v", testScenario, testInput.expectedSkip, result.Skip)
 			continue
 		}
 
-		// we wanted to actually skip, so no event is needed to validate
+		// 本就想跳过，因此没有事件可供校验
 		if testInput.expectedSkip {
 			continue
 		}
 
-		// validate event
+		// 校验事件
 		_, err = validateEvent(testScenario, result.Event, &testInput.expectedEvent, t)
 		if err != nil {
 			t.Errorf("scenario %v: unexpected error validating result %v", testScenario, err)
@@ -375,12 +375,12 @@ func TestEventSpamFilter(t *testing.T) {
 			SpamKeyFunc: testInput.spamKeyFunc,
 			BurstSize:   burstSize,
 		})
-		// emitting original event
+		// 发出原始事件
 		result, err := correlator.EventCorrelate(&originalEvent)
 		if err != nil {
 			t.Errorf("scenario %v: unexpected error correlating originalEvent %v", testDescription, err)
 		}
-		// if we are skipping the event, we can avoid updating state
+		// 若该事件被跳过，就无需更新状态
 		if !result.Skip {
 			correlator.UpdateState(result.Event)
 		}
@@ -390,18 +390,18 @@ func TestEventSpamFilter(t *testing.T) {
 			t.Errorf("scenario %v: unexpected error correlating input event %v", testDescription, err)
 		}
 
-		// verify we did not get skip from filter function unexpectedly...
+		// 校验没有意外地被过滤函数 skip……
 		if result.Skip != testInput.expectedSkip {
 			t.Errorf("scenario %v: expected skip %v, but got %v", testDescription, testInput.expectedSkip, result.Skip)
 			continue
 		}
 
-		// we wanted to actually skip, so no event is needed to validate
+		// 本就想跳过，因此没有事件可供校验
 		if testInput.expectedSkip {
 			continue
 		}
 
-		// validate event
+		// 校验事件
 		_, err = validateEvent(testDescription, result.Event, &testInput.expectedEvent, t)
 		if err != nil {
 			t.Errorf("scenario %v: unexpected error validating result %v", testDescription, err)

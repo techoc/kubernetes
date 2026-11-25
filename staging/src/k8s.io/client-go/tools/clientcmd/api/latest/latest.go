@@ -26,20 +26,18 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api/v1"
 )
 
-// Version is the string that represents the current external default version.
+// Version 是表示当前默认外部版本的字符串。
 const Version = "v1"
 
 // ExternalVersion 是当前对外版本的 GroupVersion（core 组，无 group 前缀）。
 var ExternalVersion = schema.GroupVersion{Group: "", Version: "v1"}
 
-// OldestVersion is the string that represents the oldest server version supported,
-// for client code that wants to hardcode the lowest common denominator.
+// OldestVersion 是所支持的最旧服务端版本的字符串，
+// 供希望硬编码最低公共版本的客户端代码使用。
 const OldestVersion = "v1"
 
-// Versions is the list of versions that are recognized in code. The order provided
-// may be assumed to be least feature rich to most feature rich, and clients may
-// choose to prefer the latter items in the list over the former items when presented
-// with a set of versions to choose.
+// Versions 是代码中识别的版本列表。列表顺序可视为从功能最少到功能最全，
+// 当需要在多个版本中选择时，客户端可能会偏好列表靠后的版本。
 var Versions = []string{"v1"}
 
 var (

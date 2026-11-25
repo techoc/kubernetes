@@ -21,8 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// SchemeGroupVersion is group version used to register these objects
-// TODO this should be in the "kubeconfig" group
+// SchemeGroupVersion 是注册这些对象所使用的 group version。
+// TODO 它应当位于 "kubeconfig" 组下。
 // 使用内部版本（APIVersionInternal）注册，表示该类型仅用于内部表示，不直接序列化到磁盘。
 var SchemeGroupVersion = schema.GroupVersion{Group: "", Version: runtime.APIVersionInternal}
 

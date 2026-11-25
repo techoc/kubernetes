@@ -45,7 +45,7 @@ import (
 // TestFallbackClient_WebSocketPrimarySucceeds 验证主执行器（WebSocket）成功时
 // 不会触发回退，数据经 STDIN 写入、STDOUT 读回后保持一致。
 func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
-	// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
+	// 创建假 WebSocket 服务端：把收到的 STDIN 数据复制回 STDOUT 流。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
@@ -53,7 +53,7 @@ func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
 			return
 		}
 		defer conns.conn.Close()
-		// Loopback the STDIN stream onto the STDOUT stream.
+		// 将 STDIN 流回环到 STDOUT 流。
 		_, err = io.Copy(conns.stdoutStream, conns.stdinStream)
 		if err != nil {
 			t.Errorf("unexpected error %v", err)
@@ -61,8 +61,8 @@ func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Now create the fallback client (executor), and point it to the "websocketServer".
-	// Must add STDIN and STDOUT query params for the client request.
+	// 创建回退客户端（executor），指向 "websocketServer"。
+	// 客户端请求必须加上 STDIN 和 STDOUT 的 query 参数。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	require.NoError(t, err)
@@ -70,11 +70,10 @@ func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
 	require.NoError(t, err)
 	spdyExecutor, err := NewSPDYExecutor(&rest.Config{Host: websocketLocation.Host}, "POST", websocketLocation)
 	require.NoError(t, err)
-	// Never fallback, so always use the websocketExecutor, which succeeds against websocket server.
+	// 永不回退，因此始终使用 websocketExecutor，它对接 websocket 服务端会成功。
 	exec, err := NewFallbackExecutor(websocketExecutor, spdyExecutor, func(error) bool { return false })
 	require.NoError(t, err)
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT buffer.
+	// 生成随机数据并设置为从 STDIN 流发送；数据将从 STDOUT 缓冲区返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -87,7 +86,7 @@ func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
 	}
 	errorChan := make(chan error)
 	go func() {
-		// Start the streaming on the WebSocket "exec" client.
+		// 启动 WebSocket "exec" 客户端上的流式传输。
 		errorChan <- exec.StreamWithContext(context.Background(), *options)
 	}()
 
@@ -105,7 +104,7 @@ func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT.
+	// 检查 STDIN 发送的随机数据与 STDOUT 返回的数据一致。
 	if !bytes.Equal(randomData, data) {
 		t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 	}
@@ -114,7 +113,7 @@ func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
 // TestFallbackClient_SPDYSecondarySucceeds 验证主执行器不可用时按回调判定
 // 回退到 SPDY，且数据完整性不受影响。
 func TestFallbackClient_SPDYSecondarySucceeds(t *testing.T) {
-	// Create fake SPDY server. Copy received STDIN data back onto STDOUT stream.
+	// 创建假 SPDY 服务端：把收到的 STDIN 数据复制回 STDOUT 流。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var stdin, stdout bytes.Buffer
 		ctx, err := createHTTPStreams(w, req, &StreamOptions{
@@ -139,11 +138,10 @@ func TestFallbackClient_SPDYSecondarySucceeds(t *testing.T) {
 	require.NoError(t, err)
 	spdyExecutor, err := NewSPDYExecutor(&rest.Config{Host: spdyLocation.Host}, "POST", spdyLocation)
 	require.NoError(t, err)
-	// Always fallback to spdyExecutor, and spdyExecutor succeeds against fake spdy server.
+	// 总是回退到 spdyExecutor，且 spdyExecutor 对接假 spdy 服务端会成功。
 	exec, err := NewFallbackExecutor(websocketExecutor, spdyExecutor, func(error) bool { return true })
 	require.NoError(t, err)
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT buffer.
+	// 生成随机数据并设置为从 STDIN 流发送；数据将从 STDOUT 缓冲区返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -173,7 +171,7 @@ func TestFallbackClient_SPDYSecondarySucceeds(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT.
+	// 检查 STDIN 发送的随机数据与 STDOUT 返回的数据一致。
 	if !bytes.Equal(randomData, data) {
 		t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 	}
@@ -182,7 +180,7 @@ func TestFallbackClient_SPDYSecondarySucceeds(t *testing.T) {
 // TestFallbackClient_PrimaryAndSecondaryFail 验证两个执行器都失败时向调用方
 // 返回错误，而不是静默成功。将主执行器协议改成 V4 以模拟服务端不支持的版本。
 func TestFallbackClient_PrimaryAndSecondaryFail(t *testing.T) {
-	// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
+	// 创建假 WebSocket 服务端：把收到的 STDIN 数据复制回 STDOUT 流。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
@@ -190,7 +188,7 @@ func TestFallbackClient_PrimaryAndSecondaryFail(t *testing.T) {
 			return
 		}
 		defer conns.conn.Close()
-		// Loopback the STDIN stream onto the STDOUT stream.
+		// 将 STDIN 流回环到 STDOUT 流。
 		_, err = io.Copy(conns.stdoutStream, conns.stdinStream)
 		if err != nil {
 			t.Errorf("unexpected error %v", err)
@@ -198,8 +196,8 @@ func TestFallbackClient_PrimaryAndSecondaryFail(t *testing.T) {
 	}))
 	defer websocketServer.Close()
 
-	// Now create the fallback client (executor), and point it to the "websocketServer".
-	// Must add STDIN and STDOUT query params for the client request.
+	// 创建回退客户端（executor），指向 "websocketServer"。
+	// 客户端请求必须加上 STDIN 和 STDOUT 的 query 参数。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	require.NoError(t, err)
@@ -207,19 +205,18 @@ func TestFallbackClient_PrimaryAndSecondaryFail(t *testing.T) {
 	require.NoError(t, err)
 	spdyExecutor, err := NewSPDYExecutor(&rest.Config{Host: websocketLocation.Host}, "POST", websocketLocation)
 	require.NoError(t, err)
-	// Always fallback to spdyExecutor, but spdyExecutor fails against websocket server.
+	// 总是回退到 spdyExecutor，但 spdyExecutor 对接 websocket 服务端会失败。
 	exec, err := NewFallbackExecutor(websocketExecutor, spdyExecutor, func(error) bool { return true })
 	require.NoError(t, err)
-	// Update the websocket executor to request remote command v4, which is unsupported.
+	// 将 websocket executor 改为请求不被支持的远程命令 v4。
 	fallbackExec, ok := exec.(*FallbackExecutor)
 	assert.True(t, ok, "error casting executor as FallbackExecutor")
 	websocketExec, ok := fallbackExec.primary.(*wsStreamExecutor)
 	assert.True(t, ok, "error casting executor as websocket executor")
-	// Set the attempted subprotocol version to V4; websocket server only accepts V5.
+	// 将尝试的子协议版本设为 V4；websocket 服务端只接受 V5。
 	websocketExec.protocols = []string{remotecommand.StreamProtocolV4Name}
 
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT buffer.
+	// 生成随机数据并设置为从 STDIN 流发送；数据将从 STDOUT 缓冲区返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -239,7 +236,7 @@ func TestFallbackClient_PrimaryAndSecondaryFail(t *testing.T) {
 	case <-time.After(wait.ForeverTestTimeout):
 		t.Fatalf("expect stream to be closed after connection is closed.")
 	case err := <-errorChan:
-		// Ensure secondary executor returned an error.
+		// 确保次执行器返回了错误。
 		require.Error(t, err)
 	}
 }
@@ -250,7 +247,7 @@ func TestFallbackClient_SPDYSecondaryNonZeroExitCode(t *testing.T) {
 	const expectedExitCode = 23
 	const expectedStdout = "stdout-before-exit"
 
-	// Create fake SPDY server that writes stdout followed by a v4 status error.
+	// 创建假 SPDY 服务端：先写 stdout，再写一个 v4 状态错误。
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx, err := createHTTPStreams(w, req, &StreamOptions{
 			Stdin:  strings.NewReader("input"),
@@ -287,7 +284,7 @@ func TestFallbackClient_SPDYSecondaryNonZeroExitCode(t *testing.T) {
 
 	spdyLocation, err := url.Parse(spdyServer.URL)
 	require.NoError(t, err)
-	// Primary websocket executor points at a SPDY-only endpoint and should fail.
+	// 主 websocket 执行器指向仅支持 SPDY 的端点，应当失败。
 	websocketExecutor, err := NewWebSocketExecutor(&rest.Config{Host: spdyLocation.Host}, "GET", spdyServer.URL+"?stdin=true&stdout=true")
 	require.NoError(t, err)
 	spdyExecutor, err := NewSPDYExecutor(&rest.Config{Host: spdyLocation.Host}, "POST", spdyLocation)
@@ -314,7 +311,7 @@ func TestFallbackClient_SPDYSecondaryNonZeroExitCode(t *testing.T) {
 	require.Equal(t, expectedStdout, stdout.String())
 }
 
-// localhostCert was generated from crypto/tls/generate_cert.go with the following command:
+// localhostCert 由 crypto/tls/generate_cert.go 通过以下命令生成（命令原样保留）：
 //
 //	go run generate_cert.go  --rsa-bits 2048 --host 127.0.0.1,::1,example.com --ca --start-date "Jan 1 00:00:00 1970" --duration=1000000h
 var localhostCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -337,7 +334,7 @@ MGYMzP0u4nw47aRz9shB8w+taPKHx2BVwE1m/yp3nHVioOjXqA1fwRQVGclCJSH1
 D2iq3hWVHRENgjTjANBPICLo9AZ4JfN6PH19mnU=
 -----END CERTIFICATE-----`)
 
-// localhostKey is the private key for localhostCert.
+// localhostKey 是 localhostCert 的私钥。
 var localhostKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEogIBAAKCAQEAtD8UdzJXB0UfEBFtsPYoG0NRPsSeL7yKg12O0Zya1eoG/jkQ
 LUIk6qoYlOugUYnpD2RAhn0WofkglHZ844kP2Q5O54bhW3UljWuPUpumN5+7xeV5
@@ -367,7 +364,7 @@ KR8NJEkK99Vh/tew6jAMll70xFrE7aF8VLXJVE7w4sQzuvHxl9Q=
 -----END RSA PRIVATE KEY-----
 `)
 
-// See (https://github.com/kubernetes/kubernetes/issues/126134).
+// 参见 (https://github.com/kubernetes/kubernetes/issues/126134)。
 //
 // TestFallbackClient_WebSocketHTTPSProxyNoFallback 验证经由 HTTPS 代理时
 // WebSocket 升级失败不会被误判为可回退错误，也不会重复调用代理。
@@ -392,7 +389,7 @@ func TestFallbackClient_WebSocketHTTPSProxyNoFallback(t *testing.T) {
 	proxyLocation, err := url.Parse(proxyServer.URL)
 	require.NoError(t, err)
 
-	// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
+	// 创建假 WebSocket 服务端：把收到的 STDIN 数据复制回 STDOUT 流。
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conns, err := webSocketServerStreams(req, w, streamOptionsFromRequest(req))
 		if err != nil {
@@ -400,7 +397,7 @@ func TestFallbackClient_WebSocketHTTPSProxyNoFallback(t *testing.T) {
 			return
 		}
 		defer conns.conn.Close() //nolint:errcheck
-		// Loopback the STDIN stream onto the STDOUT stream.
+		// 将 STDIN 流回环到 STDOUT 流。
 		_, err = io.Copy(conns.stdoutStream, conns.stdinStream)
 		if err != nil {
 			t.Fatalf("websocket copy error: %v", err)
@@ -408,8 +405,8 @@ func TestFallbackClient_WebSocketHTTPSProxyNoFallback(t *testing.T) {
 	}))
 	defer websocketServer.Close() //nolint:errcheck
 
-	// Now create the WebSocket client (executor), and point it to the TLS proxy server.
-	// The proxy server should open a websocket connection to the fake websocket server.
+	// 创建 WebSocket 客户端（executor），指向 TLS 代理服务器；
+	// 代理服务器会向假 websocket 服务端打开 websocket 连接。
 	websocketServer.URL = websocketServer.URL + "?" + "stdin=true" + "&" + "stdout=true"
 	websocketLocation, err := url.Parse(websocketServer.URL)
 	require.NoError(t, err)
@@ -425,7 +422,7 @@ func TestFallbackClient_WebSocketHTTPSProxyNoFallback(t *testing.T) {
 	emptyURL, _ := url.Parse("")
 	spdyExecutor, err := NewSPDYExecutor(clientConfig, "POST", emptyURL)
 	require.NoError(t, err)
-	// No fallback to spdyExecutor with websocket.
+	// 使用 websocket 时不回退到 spdyExecutor。
 	sawHTTPSProxyError := false
 	exec, err := NewFallbackExecutor(websocketExecutor, spdyExecutor, func(err error) bool {
 		if httpstream.IsUpgradeFailure(err) {
@@ -441,8 +438,7 @@ func TestFallbackClient_WebSocketHTTPSProxyNoFallback(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Generate random data, and set it up to stream on STDIN. The data will be
-	// returned on the STDOUT buffer.
+	// 生成随机数据并设置为从 STDIN 流发送；数据将从 STDOUT 缓冲区返回。
 	randomSize := 1024 * 1024
 	randomData := make([]byte, randomSize)
 	if _, err := rand.Read(randomData); err != nil {
@@ -472,16 +468,16 @@ func TestFallbackClient_WebSocketHTTPSProxyNoFallback(t *testing.T) {
 		t.Errorf("error reading the stream: %v", err)
 		return
 	}
-	// Check the random data sent on STDIN was the same returned on STDOUT.
+	// 检查 STDIN 发送的随机数据与 STDOUT 返回的数据一致。
 	if !bytes.Equal(randomData, data) {
 		t.Errorf("unexpected data received: %d sent: %d", len(data), len(randomData))
 	}
 
-	// Ensure the https proxy error was *not* observed
+	// 确保没有观察到 https 代理错误
 	if sawHTTPSProxyError {
 		t.Errorf("expected to *not* see https proxy error")
 	}
-	// Ensure the proxy was called once
+	// 确保代理只被调用了一次
 	if e, a := int64(1), proxyCalled.Load(); e != a {
 		t.Errorf("expected %d proxy call, got %d", e, a)
 	}

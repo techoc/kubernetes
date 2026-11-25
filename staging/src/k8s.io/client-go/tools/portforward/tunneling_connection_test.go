@@ -47,12 +47,12 @@ func init() {
 // TestTunnelingConnection_ReadWriteClose 验证端到端：客户端通过 WebSocket 隧道承载 SPDY，
 // 写入的数据能从服务端 SPDY 流中完整读出，且协商出的子协议正确。
 func TestTunnelingConnection_ReadWriteClose(t *testing.T) {
-	// Stream channel that will receive streams created on upstream SPDY server.
+	// streamChan 接收上游 SPDY 服务端创建的流。
 	streamChan := make(chan httpstream.Stream)
 	defer close(streamChan)
 	stopServerChan := make(chan struct{})
 	defer close(stopServerChan)
-	// Create tunneling connection server endpoint with fake upstream SPDY server.
+	// 创建隧道连接服务端，并接入模拟的上游 SPDY 服务端。
 	tunnelingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var upgrader = gwebsocket.Upgrader{
 			CheckOrigin:  func(r *http.Request) bool { return true },
@@ -78,7 +78,7 @@ func TestTunnelingConnection_ReadWriteClose(t *testing.T) {
 		<-stopServerChan
 	}))
 	defer tunnelingServer.Close()
-	// Dial the client tunneling connection to the tunneling server.
+	// 让客户端隧道连接拨号到隧道服务端。
 	url, err := url.Parse(tunnelingServer.URL)
 	require.NoError(t, err)
 	//nolint:logcheck // Intentionally uses the old API.
@@ -88,9 +88,8 @@ func TestTunnelingConnection_ReadWriteClose(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, constants.PortForwardV1Name, protocol)
 	defer spdyClient.Close() //nolint:errcheck
-	// Create a SPDY client stream, which will queue a SPDY server stream
-	// on the stream creation channel. Send data on the client stream
-	// reading off the SPDY server stream, and validating it was tunneled.
+	// 创建 SPDY 客户端流，服务端对应流会进入 streamChan。
+	// 从客户端流发送数据，再读取服务端流并验证数据是否经隧道完整传输。
 	expected := "This is a test tunneling SPDY data through websockets."
 	var actual []byte
 	go func() {
@@ -139,13 +138,13 @@ func TestTunnelingConnection_LocalRemoteAddress(t *testing.T) {
 		<-stopServerChan
 	}))
 	defer tunnelingServer.Close()
-	// Create the client side tunneling connection.
+	// 创建客户端隧道连接。
 	url, err := url.Parse(tunnelingServer.URL)
 	require.NoError(t, err)
 	tConn, err := dialForTunnelingConnection(url)
 	require.NoError(t, err, "error creating client tunneling connection")
 	defer tConn.Close() //nolint:errcheck
-	// Validate "LocalAddr()" and "RemoteAddr()"
+	// 验证 LocalAddr 和 RemoteAddr。
 	localAddr := tConn.LocalAddr()
 	remoteAddr := tConn.RemoteAddr()
 	assert.Equal(t, "tcp", localAddr.Network(), "tunneling connection must be TCP")
@@ -179,13 +178,13 @@ func TestTunnelingConnection_ReadWriteDeadlines(t *testing.T) {
 		<-stopServerChan
 	}))
 	defer tunnelingServer.Close()
-	// Create the client side tunneling connection.
+	// 创建客户端隧道连接。
 	url, err := url.Parse(tunnelingServer.URL)
 	require.NoError(t, err)
 	tConn, err := dialForTunnelingConnection(url)
 	require.NoError(t, err, "error creating client tunneling connection")
 	defer tConn.Close() //nolint:errcheck
-	// Validate the read and write deadlines.
+	// 验证读、写截止时间。
 	err = tConn.SetReadDeadline(time.Time{})
 	assert.NoError(t, err, "setting zero deadline should always succeed; turns off deadline")
 	err = tConn.SetWriteDeadline(time.Time{})
@@ -200,9 +199,8 @@ func TestTunnelingConnection_ReadWriteDeadlines(t *testing.T) {
 	assert.NoError(t, err, "setting deadline 10 year from now succeeds")
 }
 
-// dialForTunnelingConnection upgrades a request at the passed "url", creating
-// a websocket connection. Returns the TunnelingConnection injected with the
-// websocket connection or an error if one occurs.
+// dialForTunnelingConnection 对给定 URL 发起 WebSocket 升级请求，
+// 返回封装该 WebSocket 连接的 TunnelingConnection；出错时返回错误。
 //
 // 测试辅助：手动完成 WebSocket 升级并构造客户端 TunnelingConnection，绕过 Dialer 的 SPDY 封装。
 func dialForTunnelingConnection(url *url.URL) (*TunnelingConnection, error) {
@@ -210,7 +208,7 @@ func dialForTunnelingConnection(url *url.URL) (*TunnelingConnection, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Tunneling must initiate a websocket upgrade connection, using tunneling portforward protocol.
+	// 隧道连接必须使用端口转发隧道协议发起 WebSocket 升级。
 	tunnelingProtocols := []string{constants.WebsocketsSPDYTunnelingPortForwardV1}
 	transport, holder, err := websocket.RoundTripperFor(&rest.Config{Host: url.Host})
 	if err != nil {

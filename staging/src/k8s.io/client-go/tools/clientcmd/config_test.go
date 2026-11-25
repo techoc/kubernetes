@@ -36,7 +36,7 @@ func TestModifyConfigWritesToFirstKubeconfigFile(t *testing.T) {
 	configFile1 := filepath.Join(tempdir, "kubeconfig-a")
 	configFile2 := filepath.Join(tempdir, "kubeconfig-b")
 
-	// The first kubeconfig has everything.
+	// 第一份 kubeconfig 包含所有内容。
 	err := os.WriteFile(configFile1, []byte(`
 kind: Config
 apiVersion: v1
@@ -63,7 +63,7 @@ users:
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// The second kubeconfig declares a new context and activates it.
+	// 第二份 kubeconfig 声明并激活了一个新上下文。
 	err = os.WriteFile(configFile2, []byte(`
 kind: Config
 apiVersion: v1
@@ -80,13 +80,13 @@ current-context: `+contextNameB+`
 		t.Errorf("Unexpected error: %v", err)
 	}
 
-	// Set KUBECONFIG to the files, in descending alphabetical order.
-	// This will be used to check that they don't get sorted.
+	// 将 KUBECONFIG 设为这些文件，按字母降序排列。
+	// 用于检查它们不会被重新排序。
 	// 中文：显式让字母序与加载顺序相反，确保实现不会偷偷排序。
 	envVarValue := fmt.Sprintf("%s%c%s", configFile2, filepath.ListSeparator, configFile1)
 	t.Setenv(RecommendedConfigPathEnvVar, envVarValue)
 
-	// Load the kubeconfigs, change the active context, and call ModifyConfig.
+	// 加载这些 kubeconfig，更改激活的上下文，然后调用 ModifyConfig。
 	loadingRules := NewDefaultClientConfigLoadingRules()
 	config, err := loadingRules.Load()
 
@@ -101,8 +101,8 @@ current-context: `+contextNameB+`
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// Load the files again and check that only configFile2 was changed.
-	config1, err := LoadFromFile(configFile1) // file sorts first, but was specified last
+	// 再次加载这些文件，确认只有 configFile2 被改动。
+	config1, err := LoadFromFile(configFile1) // 该文件排序靠前，但被指定在最后
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -111,7 +111,7 @@ current-context: `+contextNameB+`
 		t.Errorf("Config should not be modified, but was. Expected %q, got %q", contextNameA, config1.CurrentContext)
 	}
 
-	config2, err := LoadFromFile(configFile2) // file sorts last, but was specified first
+	config2, err := LoadFromFile(configFile2) // 该文件排序靠后，但被指定在最前
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}

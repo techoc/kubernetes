@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resourcelock 提供主节点选举（leader election）所用的锁后端抽象，
+// Package resourcelock 提供领导者选举（leader election）所用的锁后端抽象，
 // 目前实际可用的是基于 coordination.k8s.io Lease 的 LeaseLock。
 package resourcelock
 
@@ -27,16 +27,15 @@ import (
 )
 
 const (
-	// Deprecated: UnknownLeader is only used by MultiLock, which is deprecated.
+	// Deprecated: UnknownLeader 仅被（同样已弃用的）MultiLock 使用。
 	//
 	// 已弃用：仅在 MultiLock 中作为“两个锁的持有者不一致”的占位值。
 	UnknownLeader = "leaderelection.k8s.io/unknown"
 )
 
-// Deprecated: MultiLock was used to facilitate migration from non-lease
-// based leader election to lease-based leader election. Support for
-// non-lease locks was removed in Kubernetes 1.28, making MultiLock
-// non-functional. Use LeaseLock directly instead.
+// Deprecated: MultiLock 曾用于从非 Lease 锁向 Lease 锁的迁移。
+// Kubernetes 1.28 移除了对非 Lease 锁的支持，MultiLock 已失去作用，
+// 请直接使用 LeaseLock。
 //
 // 已弃用：MultiLock 仅用于从非 Lease 锁迁移到 Lease 锁的过渡期。1.28 起非 Lease
 // 锁已被移除，MultiLock 实际上已不可用，请直接使用 LeaseLock。
@@ -45,7 +44,7 @@ type MultiLock struct {
 	Secondary Interface
 }
 
-// Get returns the older election record of the lock
+// Get 返回该锁中较旧的选举记录
 func (ml *MultiLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, error) {
 	primary, primaryRaw, err := ml.Primary.Get(ctx)
 	if err != nil {
@@ -54,7 +53,7 @@ func (ml *MultiLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, er
 
 	secondary, secondaryRaw, err := ml.Secondary.Get(ctx)
 	if err != nil {
-		// Lock is held by old client
+		// 锁被旧客户端持有
 		// Secondary 锁不存在且 Primary 由他人持有：说明是老客户端只写入了 Primary，
 		// 此时以 Primary 记录为准，避免误判为无主。
 		if apierrors.IsNotFound(err) && primary.HolderIdentity != ml.Identity() {
@@ -74,7 +73,7 @@ func (ml *MultiLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, er
 	return primary, ConcatRawRecord(primaryRaw, secondaryRaw), nil
 }
 
-// Create attempts to create both primary lock and secondary lock
+// Create 尝试同时创建主锁和次锁
 func (ml *MultiLock) Create(ctx context.Context, ler LeaderElectionRecord) error {
 	// Primary 已存在不算失败，继续创建 Secondary，以兼容迁移期间已存在的旧锁。
 	err := ml.Primary.Create(ctx, ler)
@@ -84,7 +83,7 @@ func (ml *MultiLock) Create(ctx context.Context, ler LeaderElectionRecord) error
 	return ml.Secondary.Create(ctx, ler)
 }
 
-// Update will update and existing annotation on both two resources.
+// Update 会更新两个资源上已有的注解。
 func (ml *MultiLock) Update(ctx context.Context, ler LeaderElectionRecord) error {
 	err := ml.Primary.Update(ctx, ler)
 	if err != nil {
@@ -98,24 +97,23 @@ func (ml *MultiLock) Update(ctx context.Context, ler LeaderElectionRecord) error
 	return ml.Secondary.Update(ctx, ler)
 }
 
-// RecordEvent in leader election while adding meta-data
+// RecordEvent 记录领导者选举事件，并附加元数据
 func (ml *MultiLock) RecordEvent(s string) {
 	ml.Primary.RecordEvent(s)
 	ml.Secondary.RecordEvent(s)
 }
 
-// Describe is used to convert details on current resource lock
-// into a string
+// Describe 把当前资源锁的细节转换为字符串
 func (ml *MultiLock) Describe() string {
 	return ml.Primary.Describe()
 }
 
-// Identity returns the Identity of the lock
+// Identity 返回锁的 Identity
 func (ml *MultiLock) Identity() string {
 	return ml.Primary.Identity()
 }
 
-// Deprecated: ConcatRawRecord is only used by MultiLock, which is deprecated.
+// Deprecated: ConcatRawRecord 仅被（同样已弃用的）MultiLock 使用。
 //
 // 已弃用：仅被 MultiLock 用来把两把锁的原始记录拼接成一个诊断用字节串。
 func ConcatRawRecord(primaryRaw, secondaryRaw []byte) []byte {

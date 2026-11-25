@@ -20,9 +20,7 @@ import (
 	"sync"
 )
 
-// This file provides abstractions for setting the provider (e.g., prometheus)
-// of metrics.
-//
+// 本文件为设置指标 provider（如 prometheus）提供抽象层：
 // 通过接口 + 全局工厂把指标实现解耦出来，避免 leaderelection 直接依赖
 // 具体指标库。默认实现是空操作，未注册 Provider 时没有额外开销。
 
@@ -33,8 +31,7 @@ type leaderMetricsAdapter interface {
 	slowpathExercised(name string)
 }
 
-// LeaderMetric instruments metrics used in leader election.
-//
+// LeaderMetric 对领导者选举中使用的指标进行埋点。
 // 实现方按 lease 名称区分多把锁的指标；name 通常是 LeaderElectionConfig.Name。
 type LeaderMetric interface {
 	// On 记录本进程成为租约持有者。
@@ -52,11 +49,10 @@ func (noopMetric) On(name string)                {}
 func (noopMetric) Off(name string)               {}
 func (noopMetric) SlowpathExercised(name string) {}
 
-// defaultLeaderMetrics expects the caller to lock before setting any metrics.
-//
+// defaultLeaderMetrics 要求调用方在设置任何指标前先自行加锁。
 // 调用方需自行保证并发安全：本结构自身不加锁。
 type defaultLeaderMetrics struct {
-	// leader's value indicates if the current process is the owner of name lease
+	// leader 表示当前进程是否为 name 租约的持有者
 	leader LeaderMetric
 }
 
@@ -91,7 +87,7 @@ func (noMetrics) leaderOn(name string)          {}
 func (noMetrics) leaderOff(name string)         {}
 func (noMetrics) slowpathExercised(name string) {}
 
-// MetricsProvider generates various metrics used by the leader election.
+// MetricsProvider 生成领导者选举使用的各类指标。
 type MetricsProvider interface {
 	NewLeaderMetric() LeaderMetric
 }
@@ -134,9 +130,7 @@ func (f *leaderMetricsFactory) newLeaderMetrics() leaderMetricsAdapter {
 	}
 }
 
-// SetProvider sets the metrics provider for all subsequently created work
-// queues. Only the first call has an effect.
-//
+// SetProvider 为后续创建的所有选举器设置指标 provider，只有第一次调用生效。
 // 已创建的选举器不会切换 Provider；应在程序初始化阶段调用。
 func SetProvider(metricsProvider MetricsProvider) {
 	globalMetricsFactory.setProvider(metricsProvider)

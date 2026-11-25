@@ -30,10 +30,8 @@ import (
 
 // LeaseLock 基于 coordination.k8s.io/v1 Lease 对象实现 LeaderElection 的资源锁。
 type LeaseLock struct {
-	// LeaseMeta should contain a Name and a Namespace of a
-	// LeaseMeta object that the LeaderElector will attempt to lead.
-	//
-	// LeaseMeta 指定 LeaderElector 尝试持有的 Lease 对象的 name 与 namespace。
+	// LeaseMeta 应包含 LeaderElector 尝试持有的 Lease 对象的
+	// Name 与 Namespace。
 	LeaseMeta  metav1.ObjectMeta
 	Client     coordinationv1client.LeasesGetter
 	LockConfig ResourceLockConfig
@@ -42,7 +40,7 @@ type LeaseLock struct {
 	Labels map[string]string
 }
 
-// Get returns the election record from a Lease spec
+// Get 从 Lease spec 中返回选举记录
 //
 // Get 读取 Lease 并转换为内部的 LeaderElectionRecord；
 // 同时把对象缓存到 ll.lease，供后续 Update 使用。
@@ -60,7 +58,7 @@ func (ll *LeaseLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, er
 	return record, recordByte, nil
 }
 
-// Create attempts to create a Lease
+// Create 尝试创建 Lease
 //
 // Create 用给定的选举记录创建 Lease；只有当前没有 holder 时才会成功。
 func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error {
@@ -78,7 +76,7 @@ func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error
 	return err
 }
 
-// Update will update an existing Lease spec.
+// Update 更新已有 Lease 的 spec。
 //
 // Update 更新已有 Lease；必须先前调用过 Get 或 Create，否则无法确定 resourceVersion。
 func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error {
@@ -91,7 +89,7 @@ func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error
 		if ll.lease.Labels == nil {
 			ll.lease.Labels = map[string]string{}
 		}
-		// Only overwrite the labels that are specifically set
+		// 只覆盖明确设置的标签
 		// 保留未在 ll.Labels 中声明的既有标签，避免覆盖其他控制器写入的元数据。
 		for k, v := range ll.Labels {
 			ll.lease.Labels[k] = v
@@ -107,7 +105,7 @@ func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error
 	return nil
 }
 
-// RecordEvent in leader election while adding meta-data
+// RecordEvent 记录领导者选举事件，并附加元数据
 //
 // RecordEvent 以 Lease 为 involved object 记录一条 LeaderElection 事件。
 func (ll *LeaseLock) RecordEvent(s string) {
@@ -116,21 +114,20 @@ func (ll *LeaseLock) RecordEvent(s string) {
 	}
 	events := fmt.Sprintf("%v %v", ll.LockConfig.Identity, s)
 	subject := &coordinationv1.Lease{ObjectMeta: ll.lease.ObjectMeta}
-	// Populate the type meta, so we don't have to get it from the schema
+	// 填充 type meta，这样就不必从 schema 中获取
 	subject.Kind = "Lease"
 	subject.APIVersion = coordinationv1.SchemeGroupVersion.String()
 	ll.LockConfig.EventRecorder.Eventf(subject, corev1.EventTypeNormal, "LeaderElection", "%s", events)
 }
 
-// Describe is used to convert details on current resource lock
-// into a string
+// Describe 把当前资源锁的细节转换为字符串
 //
 // Describe 返回 "namespace/name" 形式的锁描述，用于日志。
 func (ll *LeaseLock) Describe() string {
 	return fmt.Sprintf("%v/%v", ll.LeaseMeta.Namespace, ll.LeaseMeta.Name)
 }
 
-// Identity returns the Identity of the lock
+// Identity 返回锁的 Identity
 //
 // Identity 返回持有者标识。
 func (ll *LeaseLock) Identity() string {

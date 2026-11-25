@@ -32,7 +32,7 @@ func TestFallbackDialer(t *testing.T) {
 	primaryProtocol := "primary.fake.protocol"
 	secondaryProtocol := "secondary.fake.protocol"
 	protocols := []string{primaryProtocol, secondaryProtocol}
-	// If primary dialer error is nil, then no fallback and primary negotiated protocol returned.
+	// 主拨号器未返回错误时不回退，直接采用其协商结果。
 	primary := &fakeDialer{dialed: false, negotiatedProtocol: primaryProtocol}
 	secondary := &fakeDialer{dialed: false, negotiatedProtocol: secondaryProtocol}
 	fallbackDialer := NewFallbackDialer(primary, secondary, notCalled)
@@ -41,7 +41,7 @@ func TestFallbackDialer(t *testing.T) {
 	assert.False(t, secondary.dialed, "no fallback; secondary should *not* have dialed")
 	assert.Equal(t, primaryProtocol, negotiated, "primary negotiated protocol returned")
 	require.NoError(t, err, "error from primary dialer should be nil")
-	// If primary dialer error is upgrade error, then fallback returning secondary dial response.
+	// 主拨号器返回升级错误时，回退并返回备用拨号器的结果。
 	// 升级失败（例如服务端不支持 websocket 子协议）说明该传输方式不可用，应尝试备用拨号器。
 	primary = &fakeDialer{dialed: false, negotiatedProtocol: primaryProtocol, err: &httpstream.UpgradeFailureError{Cause: fmt.Errorf("fake error")}}
 	secondary = &fakeDialer{dialed: false, negotiatedProtocol: secondaryProtocol}
@@ -51,7 +51,7 @@ func TestFallbackDialer(t *testing.T) {
 	assert.True(t, secondary.dialed, "fallback; secondary should have dialed")
 	assert.Equal(t, secondaryProtocol, negotiated, "negotiated protocol is from secondary dialer")
 	require.NoError(t, err, "error from secondary dialer should be nil")
-	// If primary dialer error is https proxy dialing error, then fallback returning secondary dial response.
+	// 主拨号器返回 HTTPS 代理拨号错误时，回退并返回备用拨号器的结果。
 	// 某些代理不支持 CONNECT 到 https，这类错误同样值得回退到另一种拨号方式。
 	primary = &fakeDialer{negotiatedProtocol: primaryProtocol, err: errors.New("proxy: unknown scheme: https")}
 	secondary = &fakeDialer{negotiatedProtocol: secondaryProtocol}
@@ -63,7 +63,7 @@ func TestFallbackDialer(t *testing.T) {
 	assert.True(t, secondary.dialed, "fallback; secondary should have dialed")
 	assert.Equal(t, secondaryProtocol, negotiated, "negotiated protocol is from secondary dialer")
 	require.NoError(t, err, "error from secondary dialer should be nil")
-	// If primary dialer returns non-upgrade error, then primary error is returned.
+	// 主拨号器返回非升级错误时不回退，直接返回该错误。
 	// 普通错误（如认证失败、连接被拒）回退也不会成功，因此直接返回主拨号器的错误。
 	nonUpgradeErr := fmt.Errorf("This is a non-upgrade error")
 	primary = &fakeDialer{dialed: false, err: nonUpgradeErr}

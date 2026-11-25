@@ -34,35 +34,35 @@ type fakeLock struct {
 	identity string
 }
 
-// Get is a dummy to allow us to have a fakeLock for testing.
+// Get 是占位实现，以便构造测试用的 fakeLock。
 func (fl *fakeLock) Get(ctx context.Context) (ler *rl.LeaderElectionRecord, rawRecord []byte, err error) {
 	return nil, nil, nil
 }
 
-// Create is a dummy to allow us to have a fakeLock for testing.
+// Create 是占位实现，以便构造测试用的 fakeLock。
 func (fl *fakeLock) Create(ctx context.Context, ler rl.LeaderElectionRecord) error {
 	return nil
 }
 
-// Update is a dummy to allow us to have a fakeLock for testing.
+// Update 是占位实现，以便构造测试用的 fakeLock。
 func (fl *fakeLock) Update(ctx context.Context, ler rl.LeaderElectionRecord) error {
 	return nil
 }
 
-// RecordEvent is a dummy to allow us to have a fakeLock for testing.
+// RecordEvent 是占位实现，以便构造测试用的 fakeLock。
 func (fl *fakeLock) RecordEvent(string) {}
 
-// Identity is a dummy to allow us to have a fakeLock for testing.
+// Identity 是占位实现，以便构造测试用的 fakeLock。
 func (fl *fakeLock) Identity() string {
 	return fl.identity
 }
 
-// Describe is a dummy to allow us to have a fakeLock for testing.
+// Describe 是占位实现，以便构造测试用的 fakeLock。
 func (fl *fakeLock) Describe() string {
 	return "Dummy implementation of lock for testing"
 }
 
-// TestLeaderElectionHealthChecker tests that the healthcheck for leader election handles its edge cases.
+// TestLeaderElectionHealthChecker 测试 leader 选举的健康检查能正确处理各种边界情况。
 //
 // 健康检查的语义：只有“本实例仍认为自己是 leader，但租约已过期且超出 adaptorTimeout”
 // 时才报错；尚未参与选举、由他人持有租约、或仍在正常续约窗口内都应返回健康。

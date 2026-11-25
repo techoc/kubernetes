@@ -21,9 +21,8 @@ import (
 	"sync/atomic"
 )
 
-// Lazy defers the computation of `Evaluate` to when it is necessary. It is
-// possible that Evaluate will be called in parallel from multiple goroutines.
 // Lazy 把 Evaluate 的计算推迟到真正需要时；Notify 会使已缓存的结果失效。
+// 多个 goroutine 可能并发调用 Evaluate。
 // 并发语义：多个 goroutine 同时 Get 时共享同一次 Evaluate 的结果（单飞效果），
 // 但出错的结果不会被缓存，下一次 Get 可能重新调用 Evaluate。
 type Lazy[T any] struct {
@@ -70,22 +69,19 @@ func (z *Lazy[T]) newCacheEntry() *cacheEntry[T] {
 	return &cacheEntry[T]{eval: z.Evaluate}
 }
 
-// Notify should be called when something has changed necessitating a new call
-// to Evaluate.
+// Notify 在有变化发生、需要重新执行 Evaluate 时调用。
 func (z *Lazy[T]) Notify() { z.cache.Swap(z.newCacheEntry()) }
 
-// Get should be called to get the current result of a call to Evaluate. If the
-// current cached value is stale (due to a call to Notify), then Evaluate will
-// be called synchronously. If subsequent calls to Get happen (without another
-// Notify), they will all wait for the same return value.
+// Get 用于获取 Evaluate 的当前结果。如果当前缓存值已因 Notify 调用而过期，
+// 会同步执行 Evaluate；如果后续 Get 发生在下一次 Notify 之前，它们都会等待
+// 同一个返回值。
 //
-// Error returns are not cached and will cause multiple calls to evaluate!
+// 出错的结果不会被缓存，这会导致 Evaluate 被多次调用！
 func (z *Lazy[T]) Get() (T, error) {
 	e := z.cache.Load()
 	if e == nil {
-		// Since we don't force a constructor, nil is a possible value.
-		// If multiple Gets race to set this, the swap makes sure only
-		// one wins.
+		// 没有强制要求走构造函数，所以 cache 可能为 nil。
+		// 若多个 Get 竞争初始化，CompareAndSwap 保证只有一个胜出。
 		// 用 CAS 而非直接 Store，避免并发的首次 Get 覆盖掉别人已经建好的条目。
 		z.cache.CompareAndSwap(nil, z.newCacheEntry())
 		e = z.cache.Load()

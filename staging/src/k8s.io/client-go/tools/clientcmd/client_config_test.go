@@ -92,7 +92,7 @@ func TestMergeSemantics(t *testing.T) {
 			t.Errorf("error while merging: %s", err)
 		}
 		if !reflect.DeepEqual(data.dst, data.expected) {
-			// This test verifies that the semantics of the merge are what we expect.
+			// 该用例用于验证 merge 的合并语义符合预期。
 			t.Errorf("merge did not provide expected output:\ngot:  %s\nwant: %s\ndiff: %s", dump.OneLine(data.dst), dump.OneLine(data.expected), cmp.Diff(data.dst, data.expected))
 		}
 	}
@@ -114,7 +114,7 @@ func TestMergeSemantics(t *testing.T) {
 			t.Errorf("error while merging: %s", err)
 		}
 		if !reflect.DeepEqual(data.dst, data.expected) {
-			// This test verifies that the semantics of the merge are what we expect.
+			// 该用例用于验证 merge 的合并语义符合预期。
 			t.Errorf("merge did not provide expected output: %+v doesn't match %+v", data.dst, data.expected)
 		}
 	}
@@ -201,17 +201,17 @@ func TestMergeSemantics(t *testing.T) {
 				StructP: ptr.To(Struct{String: "b", StringP: ptr.To("b"), Int: 1, IntP: ptr.To(1), Bool: true, BoolP: ptr.To(true), Slice: []string{"b"}, SliceP: ptr.To([]string{"b"}), Map: map[string]string{"b": "1"}, MapP: ptr.To(map[string]string{"b": "1"})}),
 			},
 			expected: T2{
-				// overwritten
+				// 被覆盖
 				String: "b", StringP: ptr.To("b"), Int: 1, IntP: ptr.To(1), Bool: true, BoolP: ptr.To(true), Slice: []string{"b"}, SliceP: ptr.To([]string{"b"}), MapP: ptr.To(map[string]string{"b": "1"}),
-				// merged
+				// 已合并
 				Map: map[string]string{"a": "1", "b": "1"},
 				Struct: Struct{
-					// overwritten
+					// 被覆盖
 					String: "b", StringP: ptr.To("b"), Int: 1, IntP: ptr.To(1), Bool: true, BoolP: ptr.To(true), Slice: []string{"b"}, SliceP: ptr.To([]string{"b"}), MapP: ptr.To(map[string]string{"b": "1"}),
-					// merged
+					// 已合并
 					Map: map[string]string{"a": "1", "b": "1"},
 				},
-				// overwritten
+				// 被覆盖
 				StructP: ptr.To(Struct{String: "b", StringP: ptr.To("b"), Int: 1, IntP: ptr.To(1), Bool: true, BoolP: ptr.To(true), Slice: []string{"b"}, SliceP: ptr.To([]string{"b"}), Map: map[string]string{"b": "1"}, MapP: ptr.To(map[string]string{"b": "1"})}),
 			},
 		},
@@ -235,10 +235,10 @@ func TestMergeSemantics(t *testing.T) {
 			},
 			expected: T2{
 				Struct: Struct{
-					String: "b", Int: 1 /* preserved */, Map: map[string]string{"a": "1", "b": "1", "shared": "1"} /* merged */, MapP: ptr.To(map[string]string{"a": "1", "shared": "1"}), /* preserved */
+					String: "b", Int: 1 /* 保留 */, Map: map[string]string{"a": "1", "b": "1", "shared": "1"} /* 已合并 */, MapP: ptr.To(map[string]string{"a": "1", "shared": "1"}), /* 保留 */
 				},
 				StructP: ptr.To(Struct{
-					String: "b", Int: 0 /* overwritten */, Map: map[string]string{"b": "1"} /* unmerged */, MapP: nil, /* overwritten*/
+					String: "b", Int: 0 /* 被覆盖 */, Map: map[string]string{"b": "1"} /* 未合并 */, MapP: nil, /* 被覆盖 */
 				}),
 			},
 		},
@@ -250,7 +250,7 @@ func TestMergeSemantics(t *testing.T) {
 				t.Errorf("error while merging: %s", err)
 			}
 			if !reflect.DeepEqual(tc.dst, tc.expected) {
-				// This test verifies that the semantics of the merge are what we expect.
+				// 该用例用于验证 merge 的合并语义符合预期。
 				t.Errorf("merge did not provide expected output:\ngot:  %s\nwant: %s\ndiff: %s", dump.OneLine(tc.dst), dump.OneLine(tc.expected), cmp.Diff(tc.dst, tc.expected))
 			}
 		})
@@ -479,7 +479,7 @@ func TestModifyContext(t *testing.T) {
 
 	pathOptions.GlobalFile = tempPath.Name()
 
-	// define new context and assign it - our path options config
+	// 定义并指派一个新上下文——使用我们的路径 options 配置
 	config.Contexts["updated"] = &clientcmdapi.Context{
 		Cluster:  "updated",
 		AuthInfo: "updated",
@@ -495,10 +495,10 @@ func TestModifyContext(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// make sure the current context was updated
+	// 确认 current-context 已被更新
 	matchStringArg("updated", startingConfig.CurrentContext, t)
 
-	// there should now be two contexts
+	// 此时应当有两个上下文
 	if len(startingConfig.Contexts) != len(expectedCtx) {
 		t.Fatalf("unexpected number of contexts, expecting %v, but found %v", len(expectedCtx), len(startingConfig.Contexts))
 	}
@@ -538,7 +538,7 @@ func TestCertificateData(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// Make sure cert data gets into config (will override file paths)
+	// 确认证书数据进入了配置（会覆盖文件路径）
 	matchByteArg(caData, clientConfig.TLSClientConfig.CAData, t)
 	matchByteArg(certData, clientConfig.TLSClientConfig.CertData, t)
 	matchByteArg(keyData, clientConfig.TLSClientConfig.KeyData, t)
@@ -650,7 +650,7 @@ func TestBasicAuthData(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// Make sure basic auth data gets into config
+	// 确认基本认证数据进入了配置
 	matchStringArg(username, clientConfig.Username, t)
 	matchStringArg(password, clientConfig.Password, t)
 }
@@ -1211,7 +1211,7 @@ func TestMergeRawConfigDoOverride(t *testing.T) {
 	)
 	config := createValidTestConfig()
 
-	// add another context which to modify with overrides
+	// 再添加一个上下文，用于演示用 override 修改
 	config.Clusters["modify"] = &clientcmdapi.Cluster{
 		Server: server,
 	}
@@ -1224,7 +1224,7 @@ func TestMergeRawConfigDoOverride(t *testing.T) {
 		Namespace: "modify",
 	}
 
-	// create overrides for the modify context
+	// 为 modify 上下文创建 overrides
 	overrides := &ConfigOverrides{
 		ClusterInfo: clientcmdapi.Cluster{
 			Server: modifiedServer,
@@ -1246,7 +1246,7 @@ func TestMergeRawConfigDoOverride(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	// ensure overrides were applied to "modify"
+	// 确认 overrides 已作用于 "modify"
 	actContext := act.CurrentContext
 	if actContext != "modify" {
 		t.Errorf("Expected context %v, got %v", "modify", actContext)
@@ -1258,7 +1258,7 @@ func TestMergeRawConfigDoOverride(t *testing.T) {
 		t.Errorf("Expected namespace %v, got %v", "foobar", act.Contexts[actContext].Namespace)
 	}
 
-	// ensure context "clean" was not touched
+	// 确认上下文 "clean" 未被改动
 	if act.Clusters["clean"].Server != config.Clusters["clean"].Server {
 		t.Errorf("Expected server %v, got %v", config.Clusters["clean"].Server, act.Clusters["clean"].Server)
 	}
@@ -1270,11 +1270,11 @@ func TestMergeRawConfigDoOverride(t *testing.T) {
 // TestClientCertOverrideData 验证 client cert/key 的“文件路径”与“内联数据”两种
 // override 会互斥地清空另一侧字段，避免 getAuthInfo 的校验冲突。
 func TestClientCertOverrideData(t *testing.T) {
-	// Test that when overrides contain cert/key file paths or data fields,
-	// the corresponding fields are properly handled to avoid validation conflicts
-	// in particular code in DirectClientConfig::getAuthInfo.
-	// This covers both scenarios: overrides with file paths (which clear data fields)
-	// and overrides with data fields (which clear file paths).
+	// 验证当 overrides 包含 cert/key 文件路径或数据字段时，
+	// 相应字段会被正确处理，以避免 DirectClientConfig::getAuthInfo
+	// 中特定代码产生校验冲突。
+	// 这里覆盖两种场景：带文件路径的 override（会清空数据字段）
+	// 与带数据字段的 override（会清空文件路径）。
 
 	testCases := []struct {
 		name        string

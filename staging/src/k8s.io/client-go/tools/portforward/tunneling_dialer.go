@@ -37,10 +37,8 @@ import (
 // PingPeriod 是 SPDY 连接上发送 ping 的间隔，用于及时探测并清理失效的隧道连接。
 const PingPeriod = 10 * time.Second
 
-// tunnelingDialer implements "httpstream.Dial" interface
-//
-// tunnelingDialer 先用 WebSocket 建立外层隧道，再在其上承载 SPDY 多路复用，
-// 从而绕过某些代理对原生 SPDY 升级的限制。
+// tunnelingDialer 实现 httpstream.Dialer 接口：先用 WebSocket 建立外层隧道，
+// 再在其上承载 SPDY 多路复用，从而绕过某些代理对原生 SPDY 升级的限制。
 type tunnelingDialer struct {
 	logger    klog.Logger
 	url       *url.URL
@@ -49,11 +47,9 @@ type tunnelingDialer struct {
 	holder websocket.ConnectionHolder
 }
 
-// streamingTunnelingDialer implements "k8s.io/streaming/pkg/httpstream.Dialer"
-// for in-tree callers.
-//
-// 与 tunnelingDialer 行为一致，只是使用 k8s.io/streaming 中的类型，
-// 便于 in-tree 调用方逐步迁移到新接口。
+// streamingTunnelingDialer 为仓库内调用方实现
+// k8s.io/streaming/pkg/httpstream.Dialer 接口。
+// 行为与 tunnelingDialer 一致，但使用 k8s.io/streaming 中的类型，便于逐步迁移。
 type streamingTunnelingDialer struct {
 	logger    klog.Logger
 	url       *url.URL
@@ -61,18 +57,16 @@ type streamingTunnelingDialer struct {
 	holder    websocket.ConnectionHolder
 }
 
-// NewTunnelingDialer creates and returns the tunnelingDialer structure which implemements the "httpstream.Dialer"
-// interface. The dialer can upgrade a websocket request, creating a websocket connection. This function
-// returns an error if one occurs.
+// NewSPDYOverWebsocketDialer 创建通过 WebSocket 隧道承载 SPDY 的拨号器，实现
+// httpstream.Dialer 接口；创建过程中出错时返回错误。
 //
 //logcheck:context // NewSPDYOverWebsocketDialerWithLogger should be used instead of NewSPDYOverWebsocketDialer in code which supports contextual logging.
 func NewSPDYOverWebsocketDialer(url *url.URL, config *restclient.Config) (httpstream.Dialer, error) {
 	return NewSPDYOverWebsocketDialerWithLogger(klog.Background(), url, config)
 }
 
-// NewTunnelingDialer creates and returns the tunnelingDialer structure which implemements the "httpstream.Dialer"
-// interface. The dialer can upgrade a websocket request, creating a websocket connection. This function
-// returns an error if one occurs.
+// NewSPDYOverWebsocketDialer 创建通过 WebSocket 隧道承载 SPDY 的拨号器，实现
+// httpstream.Dialer 接口；创建过程中出错时返回错误。
 func NewSPDYOverWebsocketDialerWithLogger(logger klog.Logger, url *url.URL, config *restclient.Config) (httpstream.Dialer, error) {
 	// RoundTripperFor 根据 rest.Config 构造可执行 WebSocket 升级的 transport，
 	// 并返回 ConnectionHolder 以便统一管理连接生命周期。
@@ -88,16 +82,16 @@ func NewSPDYOverWebsocketDialerWithLogger(logger klog.Logger, url *url.URL, conf
 	}, nil
 }
 
-// NewSPDYOverWebsocketDialerForStreaming creates a SPDY-over-websocket dialer
-// for in-tree callers that use k8s.io/streaming/pkg/httpstream types.
+// NewSPDYOverWebsocketDialerForStreaming 为使用 k8s.io/streaming/pkg/httpstream
+// 类型的仓库内调用方创建通过 WebSocket 隧道承载 SPDY 的拨号器。
 //
 //logcheck:context // NewSPDYOverWebsocketDialerForStreamingWithLogger should be used instead of NewSPDYOverWebsocketDialerForStreaming in code which supports contextual logging.
 func NewSPDYOverWebsocketDialerForStreaming(url *url.URL, config *restclient.Config) (streamhttp.Dialer, error) {
 	return NewSPDYOverWebsocketDialerForStreamingWithLogger(klog.Background(), url, config)
 }
 
-// NewSPDYOverWebsocketDialerForStreamingWithLogger creates a SPDY-over-websocket dialer
-// for in-tree callers that use k8s.io/streaming/pkg/httpstream types.
+// NewSPDYOverWebsocketDialerForStreamingWithLogger 为使用
+// k8s.io/streaming/pkg/httpstream 类型的仓库内调用方创建带日志器的 SPDY-over-WebSocket 拨号器。
 func NewSPDYOverWebsocketDialerForStreamingWithLogger(logger klog.Logger, url *url.URL, config *restclient.Config) (streamhttp.Dialer, error) {
 	transport, holder, err := websocket.RoundTripperFor(config)
 	if err != nil {
@@ -114,17 +108,15 @@ func NewSPDYOverWebsocketDialerForStreamingWithLogger(logger klog.Logger, url *u
 // negotiateSPDYOverWebsocket 完成 WebSocket 握手并协商出隧道协议子协议。
 // 协议名会被加上 tunneling 前缀，以便服务端识别这是隧道式 SPDY 而非普通 SPDY。
 func negotiateSPDYOverWebsocket(logger klog.Logger, url *url.URL, transport http.RoundTripper, holder websocket.ConnectionHolder, protocols ...string) (*TunnelingConnection, string, error) {
-	// There is no passed context, so use the background context when creating request for now.
 	// 该层没有来自调用方的 ctx（Dial 接口未接收 context），只能使用 background 派生。
 	ctx := klog.NewContext(context.Background(), logger)
 
-	// Websockets requires "GET" method: RFC 6455 Sec. 4.1 (page 17).
+	// WebSocket 握手要求使用 GET 方法，见 RFC 6455 第 4.1 节（第 17 页）。
 	req, err := http.NewRequestWithContext(ctx, "GET", url.String(), nil)
 	if err != nil {
 		return nil, "", err
 	}
-	// Add the spdy tunneling prefix to the requested protocols. The tunneling
-	// handler will know how to negotiate these protocols.
+	// 给请求的协议加上 SPDY 隧道前缀，供隧道处理器识别并协商这些协议。
 	tunnelingProtocols := make([]string, 0, len(protocols))
 	for _, protocol := range protocols {
 		tunnelingProtocol := constants.WebsocketsSPDYTunnelingPrefix + protocol
@@ -146,29 +138,26 @@ func negotiateSPDYOverWebsocket(logger klog.Logger, url *url.URL, transport http
 	return NewTunnelingConnectionWithLogger(klog.LoggerWithName(logger, "client"), conn), protocol, nil
 }
 
-// Dial upgrades to a tunneling streaming connection, returning a SPDY connection
-// containing a WebSockets connection (which implements "net.Conn"). Also
-// returns the protocol negotiated, or an error.
+// Dial 升级为隧道式流连接，返回内含 WebSocket 连接（实现 net.Conn）的 SPDY 连接，
+// 同时返回协商通过的协议；出错时返回错误。
 func (d *tunnelingDialer) Dial(protocols ...string) (httpstream.Connection, string, error) {
 	tConn, protocol, err := negotiateSPDYOverWebsocket(d.logger, d.url, d.transport, d.holder, protocols...)
 	if err != nil {
 		return nil, "", err
 	}
-	// Create SPDY connection injecting the previously created tunneling connection.
-	// 以 PingPeriod 周期性发送 ping，用于快速发现半开连接。
+	// 注入已创建的隧道连接以建立 SPDY 连接，并按 PingPeriod 发送 ping 快速发现半开连接。
 	spdyConn, err := httpstreamspdy.NewClientConnectionWithPings(tConn, PingPeriod)
 
 	return spdyConn, protocol, err
 }
 
-// Dial upgrades to a tunneling streaming connection for callers using
-// k8s.io/streaming/pkg/httpstream types.
+// Dial 为使用 k8s.io/streaming/pkg/httpstream 类型的调用方升级隧道式流连接。
 func (d *streamingTunnelingDialer) Dial(protocols ...string) (streamhttp.Connection, string, error) {
 	tConn, protocol, err := negotiateSPDYOverWebsocket(d.logger, d.url, d.transport, d.holder, protocols...)
 	if err != nil {
 		return nil, "", err
 	}
-	// Create SPDY connection injecting the previously created tunneling connection.
+	// 注入已创建的隧道连接以建立 SPDY 连接，并按 PingPeriod 发送 ping 快速发现半开连接。
 	spdyConn, err := streamspdy.NewClientConnectionWithPings(tConn, PingPeriod)
 
 	return spdyConn, protocol, err

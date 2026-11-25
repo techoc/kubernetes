@@ -25,66 +25,57 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Store is a generic object storage and processing interface.  A
-// Store holds a map from string keys to accumulators, and has
-// operations to add, update, and delete a given object to/from the
-// accumulator currently associated with a given key.  A Store also
-// knows how to extract the key from a given object, so many operations
-// are given only the object.
+// Store 是通用的对象存储与处理接口。Store 维护从字符串 key 到累积对象的
+// map，并提供把给定对象添加/更新/删除到给定 key 当前关联累积对象的操作。
+// Store 还知道如何从给定对象提取 key，因此很多操作只需传入对象。
 //
-// In the simplest Store implementations each accumulator is simply
-// the last given object, or empty after Delete, and thus the Store's
-// behavior is simple storage.
+// 在最简单的 Store 实现中，每个累积对象就是最后传入的对象，Delete 之后为空，
+// 因此 Store 的行为就是简单存储。
 //
-// Reflector knows how to watch a server and update a Store.  This
-// package provides a variety of implementations of Store.
+// Reflector 知道如何 watch 服务端并更新 Store。本包提供了 Store 的多种实现。
 type Store interface {
 
-	// Add adds the given object to the accumulator associated with the given object's key
+	// Add 把给定对象加入其 key 关联的累积对象
 	Add(obj interface{}) error
 
-	// Update updates the given object in the accumulator associated with the given object's key
+	// Update 用给定对象更新其 key 关联的累积对象
 	Update(obj interface{}) error
 
-	// Delete deletes the given object from the accumulator associated with the given object's key
+	// Delete 从给定对象 key 关联的累积对象中删除该对象
 	Delete(obj interface{}) error
 
-	// List returns a list of all the currently non-empty accumulators
+	// List 返回当前所有非空累积对象的列表
 	List() []interface{}
 
-	// ListKeys returns a list of all the keys currently associated with non-empty accumulators
+	// ListKeys 返回当前所有关联非空累积对象的 key
 	ListKeys() []string
 
-	// LastStoreSyncResourceVersion returns the latest resource version that the store has seen.
-	// This is used to determine the latest resource version the store has seen from objects
-	// observed being written to the store.
+	// LastStoreSyncResourceVersion 返回 store 见过的最新 resource version，
+	// 即写入 store 的对象中被观察到的最大 resource version。
 	LastStoreSyncResourceVersion() string
 
-	// Bookmark observes a new resource version passed into it and
-	// will be used to get the latest resource version of the store.
+	// Bookmark 记录传入的新的 resource version，
+	// 用于获取 store 的最新 resource version。
 	//
 	// bookmark 事件不携带对象，仅推进 resourceVersion，用于无变更时维持 watch 进度。
 	Bookmark(rv string)
 
-	// Get returns the accumulator associated with the given object's key
+	// Get 返回给定对象 key 关联的累积对象
 	Get(obj interface{}) (item interface{}, exists bool, err error)
 
-	// GetByKey returns the accumulator associated with the given key
+	// GetByKey 返回给定 key 关联的累积对象
 	GetByKey(key string) (item interface{}, exists bool, err error)
 
-	// Replace will delete the contents of the store, using instead the
-	// given list. Store takes ownership of the list, you should not reference
-	// it after calling this function.
+	// Replace 会删除 store 的内容，改用给定的列表。Store 接管该列表的所有权，
+	// 调用此函数后不应再引用它。
 	Replace([]interface{}, string) error
 
-	// Resync is meaningless in the terms appearing here but has
-	// meaning in some implementations that have non-trivial
-	// additional behavior (e.g., DeltaFIFO).
+	// Resync 在本接口的语境下没有意义，但在一些有额外行为的实现中
+	// （如 DeltaFIFO）是有含义的。
 	Resync() error
 }
 
-// TransactionType defines the type of a transaction operation. It is used to indicate whether
-// an object is being added, updated, or deleted.
+// TransactionType 定义事务操作的类型，用于表示对象正在被添加、更新还是删除。
 type TransactionType string
 
 const (
@@ -93,8 +84,8 @@ const (
 	TransactionTypeDelete TransactionType = "Delete"
 )
 
-// Transaction represents a single operation or event in a process. It holds a generic Object
-// associated with the transaction and a Type indicating the kind of transaction being performed.
+// Transaction 表示流程中的单个操作或事件，携带与该事务关联的通用对象
+// Object，以及表示事务类型的 Type。
 type Transaction struct {
 	Object interface{}
 	Type   TransactionType
@@ -105,8 +96,7 @@ type Transaction struct {
 // 依赖它的调用方可在高竞争场景下把多次修改合并到一次加锁中，
 // 避免分批写入时被其他写者穿插而无法推进。
 type TransactionStore interface {
-	// Transaction allows multiple operations to occur within a single lock acquisition to
-	// ensure progress can be made when there is contention.
+	// Transaction 允许在一次加锁内完成多个操作，确保高竞争下仍能推进。
 	Transaction(txns ...Transaction) *TransactionError
 }
 
@@ -124,40 +114,36 @@ func (t *TransactionError) Error() string {
 		t.TotalTransactions-len(t.SuccessfulIndices), t.TotalTransactions, t.Errors)
 }
 
-// KeyFunc knows how to make a key from an object. Implementations should be deterministic.
+// KeyFunc 知道如何从对象生成 key，实现应当是确定性的。
 type KeyFunc func(obj interface{}) (string, error)
 
-// KeyError will be returned any time a KeyFunc gives an error; it includes the object
-// at fault.
+// KeyError 在 KeyFunc 出错时返回，其中包含出问题的对象。
 type KeyError struct {
 	Obj interface{}
 	Err error
 }
 
-// Error gives a human-readable description of the error.
+// Error 返回人类可读的错误描述。
 func (k KeyError) Error() string {
 	return fmt.Sprintf("couldn't create key for object %+v: %v", k.Obj, k.Err)
 }
 
-// Unwrap implements errors.Unwrap
+// Unwrap 实现 errors.Unwrap。
 func (k KeyError) Unwrap() error {
 	return k.Err
 }
 
-// ExplicitKey can be passed to MetaNamespaceKeyFunc if you have the key for
-// the object but not the object itself.
+// ExplicitKey：如果手头只有对象的 key 而没有对象本身，可以把它传给
+// MetaNamespaceKeyFunc。
 type ExplicitKey string
 
-// MetaNamespaceKeyFunc is a convenient default KeyFunc which knows how to make
-// keys for API objects which implement meta.Interface.
-// The key uses the format <namespace>/<name> unless <namespace> is empty, then
-// it's just <name>.
+// MetaNamespaceKeyFunc 是默认便捷 KeyFunc，能为实现 meta.Interface 的
+// API 对象生成 key。格式为 <namespace>/<name>；<namespace> 为空时只用 <name>。
 //
-// Clients that want a structured alternative can use ObjectToName or MetaObjectToName.
-// Note: this would not be a client that wants a key for a Store because those are
-// necessarily strings.
+// 需要结构化结果的调用方可以使用 ObjectToName 或 MetaObjectToName。
+// 注意：那不会是想给 Store 取 key 的调用方，因为 Store 的 key 必须是字符串。
 //
-// TODO maybe some day?: change Store to be keyed differently
+// TODO 也许哪天？：给 Store 换一种 key 方案
 func MetaNamespaceKeyFunc(obj interface{}) (string, error) {
 	// ExplicitKey 允许调用方在只有 key、没有对象时仍走统一入口。
 	if key, ok := obj.(ExplicitKey); ok {
@@ -170,8 +156,7 @@ func MetaNamespaceKeyFunc(obj interface{}) (string, error) {
 	return objName.String(), nil
 }
 
-// ObjectToName returns the structured name for the given object,
-// if indeed it can be viewed as a metav1.Object.
+// ObjectToName 返回给定对象的结构化名称，前提是该对象可以被视作 metav1.Object。
 func ObjectToName(obj interface{}) (ObjectName, error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
@@ -180,7 +165,7 @@ func ObjectToName(obj interface{}) (ObjectName, error) {
 	return MetaObjectToName(meta), nil
 }
 
-// MetaObjectToName returns the structured name for the given object
+// MetaObjectToName 返回给定对象的结构化名称。
 func MetaObjectToName(obj metav1.Object) ObjectName {
 	// 集群级对象没有命名空间，ObjectName.Namespace 留空以与命名空间对象区分。
 	if len(obj.GetNamespace()) > 0 {
@@ -189,19 +174,18 @@ func MetaObjectToName(obj metav1.Object) ObjectName {
 	return ObjectName{Namespace: "", Name: obj.GetName()}
 }
 
-// SplitMetaNamespaceKey returns the namespace and name that
-// MetaNamespaceKeyFunc encoded into key.
+// SplitMetaNamespaceKey 解析出 MetaNamespaceKeyFunc 编码进 key 的
+// namespace 和 name。
 //
-// TODO: replace key-as-string with a key-as-struct so that this
-// packing/unpacking won't be necessary.
+// TODO: 用 key 结构体取代字符串 key，从而免去这种打包/解包。
 func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
 	parts := strings.Split(key, "/")
 	switch len(parts) {
 	case 1:
-		// name only, no namespace
+		// 只有 name，没有 namespace
 		return "", parts[0], nil
 	case 2:
-		// namespace and name
+		// namespace 和 name
 		return parts[0], parts[1], nil
 	}
 
@@ -209,19 +193,17 @@ func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
 	return "", "", fmt.Errorf("unexpected key format: %q", key)
 }
 
-// `*cache` implements Indexer in terms of a ThreadSafeStore and an
-// associated KeyFunc.
+// `*cache` 基于 ThreadSafeStore 和关联的 KeyFunc 实现 Indexer。
 type cache struct {
-	// cacheStorage bears the burden of thread safety for the cache
+	// cacheStorage 承担缓存的线程安全责任
 	cacheStorage ThreadSafeStore
-	// keyFunc is used to make the key for objects stored in and retrieved from items, and
-	// should be deterministic.
+	// keyFunc 为存入和取出的对象生成 key，必须是确定性的。
 	keyFunc KeyFunc
-	// Called with every object put in the cache.
+	// 每个放入缓存的对象都会调用 transformer。
 	transformer TransformFunc
-	// identifier is used to identify the store for metrics.
+	// identifier 用于在指标中标识该 store。
 	identifier InformerNameAndResource
-	// metrics is the metrics provider for the store.
+	// metrics 是该 store 的指标提供者。
 	metrics InformerMetricsProvider
 }
 
@@ -265,7 +247,7 @@ func (c *cache) Transaction(txns ...Transaction) *TransactionError {
 	return nil
 }
 
-// Add inserts an item into the cache.
+// Add 把条目插入缓存。
 func (c *cache) Add(obj interface{}) error {
 	key, err := c.keyFunc(obj)
 	if err != nil {
@@ -282,7 +264,7 @@ func (c *cache) Add(obj interface{}) error {
 	return nil
 }
 
-// Update sets an item in the cache to its updated state.
+// Update 把缓存中的条目更新为最新状态。
 func (c *cache) Update(obj interface{}) error {
 	key, err := c.keyFunc(obj)
 	if err != nil {
@@ -298,7 +280,7 @@ func (c *cache) Update(obj interface{}) error {
 	return nil
 }
 
-// Delete removes an item from the cache.
+// Delete 从缓存中移除条目。
 func (c *cache) Delete(obj interface{}) error {
 	key, err := c.keyFunc(obj)
 	if err != nil {
@@ -309,14 +291,12 @@ func (c *cache) Delete(obj interface{}) error {
 	return nil
 }
 
-// List returns a list of all the items.
-// List is completely threadsafe as long as you treat all items as immutable.
+// List 返回全部条目的列表。只要把所有条目视为不可变对象，List 就完全线程安全。
 func (c *cache) List() []interface{} {
 	return c.cacheStorage.List()
 }
 
-// ListKeys returns a list of all the keys of the objects currently
-// in the cache.
+// ListKeys 返回当前缓存中所有对象的 key。
 func (c *cache) ListKeys() []string {
 	return c.cacheStorage.ListKeys()
 }
@@ -329,31 +309,28 @@ func (c *cache) Bookmark(rv string) {
 	c.cacheStorage.Bookmark(rv)
 }
 
-// GetIndexers returns the indexers of cache
+// GetIndexers 返回缓存的索引器表。
 func (c *cache) GetIndexers() Indexers {
 	return c.cacheStorage.GetIndexers()
 }
 
-// Index returns a list of items that match on the index function
-// Index is thread-safe so long as you treat all items as immutable
+// Index 返回匹配索引函数的条目列表。只要把所有条目视为不可变对象，Index 就是线程安全的。
 func (c *cache) Index(indexName string, obj interface{}) ([]interface{}, error) {
 	return c.cacheStorage.Index(indexName, obj)
 }
 
-// IndexKeys returns the storage keys of the stored objects whose set of
-// indexed values for the named index includes the given indexed value.
-// The returned keys are suitable to pass to GetByKey().
+// IndexKeys 返回在指定索引下包含给定索引值的已存储对象的存储键，
+// 返回的键可直接传给 GetByKey()。
 func (c *cache) IndexKeys(indexName, indexedValue string) ([]string, error) {
 	return c.cacheStorage.IndexKeys(indexName, indexedValue)
 }
 
-// ListIndexFuncValues returns the list of generated values of an Index func
+// ListIndexFuncValues 返回某个索引函数生成的全部索引值。
 func (c *cache) ListIndexFuncValues(indexName string) []string {
 	return c.cacheStorage.ListIndexFuncValues(indexName)
 }
 
-// ByIndex returns the stored objects whose set of indexed values
-// for the named index includes the given indexed value.
+// ByIndex 返回在指定索引下包含给定索引值的已存储对象。
 func (c *cache) ByIndex(indexName, indexedValue string) ([]interface{}, error) {
 	return c.cacheStorage.ByIndex(indexName, indexedValue)
 }
@@ -362,8 +339,8 @@ func (c *cache) AddIndexers(newIndexers Indexers) error {
 	return c.cacheStorage.AddIndexers(newIndexers)
 }
 
-// Get returns the requested item, or sets exists=false.
-// Get is completely threadsafe as long as you treat all items as immutable.
+// Get 返回请求的条目；不存在时 exists=false。只要把所有条目视为不可变对象，
+// Get 就完全线程安全。
 func (c *cache) Get(obj interface{}) (item interface{}, exists bool, err error) {
 	key, err := c.keyFunc(obj)
 	if err != nil {
@@ -372,16 +349,15 @@ func (c *cache) Get(obj interface{}) (item interface{}, exists bool, err error) 
 	return c.GetByKey(key)
 }
 
-// GetByKey returns the request item, or exists=false.
-// GetByKey is completely threadsafe as long as you treat all items as immutable.
+// GetByKey 返回请求的条目；不存在时 exists=false。只要把所有条目视为不可变对象，
+// GetByKey 就完全线程安全。
 func (c *cache) GetByKey(key string) (item interface{}, exists bool, err error) {
 	item, exists = c.cacheStorage.Get(key)
 	return item, exists, nil
 }
 
-// Replace will delete the contents of 'c', using instead the given list.
-// 'c' takes ownership of the list, you should not reference the list again
-// after calling this function.
+// Replace 会删除 'c' 的内容，改用给定的列表。'c' 接管该列表的所有权，
+// 调用此函数后不应再引用它。
 func (c *cache) Replace(list []interface{}, resourceVersion string) error {
 	items := make(map[string]interface{}, len(list))
 	for _, item := range list {
@@ -403,7 +379,7 @@ func (c *cache) Replace(list []interface{}, resourceVersion string) error {
 	return nil
 }
 
-// Resync is meaningless for one of these
+// Resync 对该类型没有意义
 func (c *cache) Resync() error {
 	return nil
 }
@@ -429,7 +405,7 @@ func WithStoreMetrics(identifier InformerNameAndResource, metrics InformerMetric
 	}
 }
 
-// NewStore returns a Store implemented simply with a map and a lock.
+// NewStore 返回一个仅用 map 和锁简单实现的 Store。
 func NewStore(keyFunc KeyFunc, opts ...StoreOption) Store {
 	c := &cache{
 		keyFunc: keyFunc,
@@ -445,7 +421,7 @@ func NewStore(keyFunc KeyFunc, opts ...StoreOption) Store {
 	return c
 }
 
-// NewIndexer returns an Indexer implemented simply with a map and a lock.
+// NewIndexer 返回一个仅用 map 和锁简单实现的 Indexer。
 func NewIndexer(keyFunc KeyFunc, indexers Indexers, opts ...StoreOption) Indexer {
 	c := &cache{
 		keyFunc: keyFunc,

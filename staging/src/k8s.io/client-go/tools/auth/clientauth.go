@@ -15,33 +15,23 @@ limitations under the License.
 */
 
 /*
-Package auth defines a file format for holding authentication
-information needed by clients of Kubernetes.  Typically,
-a Kubernetes cluster will put auth info for the admin in a known
-location when it is created, and will (soon) put it in a known
-location within a Container's file tree for Containers that
-need access to the Kubernetes API.
+auth 包定义保存 Kubernetes 客户端所需认证信息的文件格式。
+通常，Kubernetes 集群创建时会将该集群管理员的认证信息放在已知位置，
+也会（希望很快）在需要访问 Kubernetes API 的容器的文件树中放入已知位置的认证信息。
 
-Having a defined format allows:
-  - clients to be implemented in multiple languages
-  - applications which link clients to be portable across
-    clusters with different authentication styles (e.g.
-    some may use SSL Client certs, others may not, etc)
-  - when the format changes, applications only
-    need to update this code.
+统一格式便于：
+  - 使用多种语言实现客户端
+  - 链接客户端的应用在不同认证方式（例如有的使用 SSL 客户端证书，有的不用）的集群间保持可移植性
+  - 格式变化时，应用只需更新此代码
 
-The file format is json, marshalled from a struct authcfg.Info.
+该文件格式是由 authcfg.Info 结构体序列化得到的 JSON。
+其他语言的客户端库也应使用相同格式。
 
-Client libraries in other languages should use the same format.
+它不用于保存默认命名空间、输出选项等通用偏好。CLI（如 kubectl）和 UI
+应使用自己的格式，也可以选择内联 authcfg.Info 类型。
 
-It is not intended to store general preferences, such as default
-namespace, output options, etc.  CLIs (such as kubectl) and UIs should
-develop their own format and may wish to inline the authcfg.Info type.
-
-The authcfg.Info is just a file format.  It is distinct from
-client.Config which holds options for creating a client.Client.
-Helper functions are provided in this package to fill in a
-client.Client from an authcfg.Info.
+authcfg.Info 仅表示文件格式，不同于用于保存创建 client.Client 选项的
+client.Config。本包提供辅助函数，可根据 authcfg.Info 填充 client.Client。
 
 Example:
 
@@ -59,13 +49,10 @@ Example:
 	clientConfig = info.MergeWithConfig()
 	client := client.New(clientConfig)
 	client.Pods(ns).List()
-
-中文：该包定义 kubeconfig 之外的一种简单凭据文件格式，主要保留给历史用户和工具；
-新代码通常应直接使用 k8s.io/client-go/tools/clientcmd 或 rest.Config。
 */
 package auth
 
-// TODO: need a way to rotate Tokens.  Therefore, need a way for client object to be reset when the authcfg is updated.
+// TODO：需要轮换令牌的机制，因此在 authcfg 更新后还需要能够重置客户端对象。
 import (
 	"encoding/json"
 	"os"
@@ -73,8 +60,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
-// Info holds Kubernetes API authorization config.  It is intended
-// to be read/written from a file as a JSON object.
+// Info 保存 Kubernetes API 认证配置，可从文件读取或作为 JSON 对象写入文件。
 type Info struct {
 	User        string
 	Password    string `datapolicy:"password"`
@@ -86,8 +72,8 @@ type Info struct {
 	Insecure *bool
 }
 
-// LoadFromFile parses an Info object from a file path.
-// If the file does not exist, then os.IsNotExist(err) == true
+// LoadFromFile 从指定文件解析 Info 对象。
+// 文件不存在时，返回的错误满足 os.IsNotExist(err) == true。
 func LoadFromFile(path string) (*Info, error) {
 	var info Info
 	// 先 Stat 是为了让“文件不存在”保持 os.IsNotExist 语义，方便调用方区分可选配置。
@@ -105,10 +91,7 @@ func LoadFromFile(path string) (*Info, error) {
 	return &info, err
 }
 
-// MergeWithConfig returns a copy of a client.Config with values from the Info.
-// The fields of client.Config with a corresponding field in the Info are set
-// with the value from the Info.
-//
+// MergeWithConfig 返回以 Info 中对应字段的值更新的 client.Config 副本。
 // 返回副本而非原地修改，避免调用方共享的 Config 被意外覆盖。
 func (info Info) MergeWithConfig(c restclient.Config) (restclient.Config, error) {
 	var config = c
@@ -124,7 +107,7 @@ func (info Info) MergeWithConfig(c restclient.Config) (restclient.Config, error)
 	return config, nil
 }
 
-// Complete returns true if the Kubernetes API authorization info is complete.
+// Complete 判断 Kubernetes API 认证信息是否完整。
 // 只要有任一可用凭据（用户名、客户端证书或 bearer token）即视为完整。
 func (info Info) Complete() bool {
 	return len(info.User) > 0 ||

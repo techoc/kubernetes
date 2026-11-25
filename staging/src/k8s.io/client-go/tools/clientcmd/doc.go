@@ -15,28 +15,25 @@ limitations under the License.
 */
 
 /*
-Package clientcmd provides one stop shopping for building a working client from a fixed config,
-from a .kubeconfig file, from command line flags, or from any merged combination.
+Package clientcmd 提供从固定配置、.kubeconfig 文件、命令行参数或它们的任意
+合并结果构建可用客户端的统一入口。示例中的加载规则决定多份 kubeconfig
+的合并顺序（后者覆盖前者），而 ConfigOverrides 承载命令行覆盖值；两者都在
+真正构建 client 时才解析，因此可以安全地延迟到需要时再读取。
 
-Sample usage from merged .kubeconfig files (local directory, home directory)
+从合并的 .kubeconfig 文件（本地目录、主目录）加载的示例用法：
 
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	// if you want to change the loading rules (which files in which order), you can do so here
+	// 如果想更改加载规则（加载哪些文件、按什么顺序），可以在此处设置
 
 	configOverrides := &clientcmd.ConfigOverrides{}
-	// if you want to change override values or bind them to flags, there are methods to help you
+	// 如果想更改覆盖值或将它们绑定到命令行参数，有相应的方法可以帮你
 
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 	config, err := kubeConfig.ClientConfig()
 	if err != nil {
-		// Do something
+		// 自行处理错误
 	}
 	client, err := metav1.New(config)
 	// ...
 */
-
-// Package clientcmd 提供从固定配置、.kubeconfig 文件、命令行参数或它们的任意
-// 合并结果构建 REST 客户端的统一入口。示例中的加载规则决定多份 kubeconfig
-// 的合并顺序（后者覆盖前者），而 ConfigOverrides 承载命令行覆盖值；两者都在
-// 真正构建 client 时才解析，因此可以安全地延迟到需要时再读取。
 package clientcmd

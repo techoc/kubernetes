@@ -274,7 +274,7 @@ func testTryAcquireOrRenew(t *testing.T, objectType string) {
 		t.Run(test.name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 
-			// OnNewLeader is called async so we have to wait for it.
+			// OnNewLeader 是异步调用的，因此需要等待它。
 			var wg sync.WaitGroup
 			wg.Add(1)
 			var reportedLeader string
@@ -424,7 +424,7 @@ func TestTryCoordinatedRenew(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 
-			// OnNewLeader is called async so we have to wait for it.
+			// OnNewLeader 是异步调用的，因此需要等待它。
 			var wg sync.WaitGroup
 			wg.Add(1)
 			var reportedLeader string
@@ -506,9 +506,7 @@ func TestTryCoordinatedRenew(t *testing.T) {
 	}
 }
 
-// Will test leader election using lease as the resource
-//
-// 以 Lease 为资源运行 tryAcquireOrRenew 的全部用例。
+// 以 Lease 为资源运行 tryAcquireOrRenew 的全部用例，测试 leader 选举。
 func TestTryAcquireOrRenewLeases(t *testing.T) {
 	testTryAcquireOrRenew(t, "leases")
 }
@@ -611,7 +609,7 @@ func testReleaseLease(t *testing.T, objectType string) {
 		t.Run(test.name, func(t *testing.T) {
 			logger, ctx := ktesting.NewTestContext(t)
 
-			// OnNewLeader is called async so we have to wait for it.
+			// OnNewLeader 是异步调用的，因此需要等待它。
 			var wg sync.WaitGroup
 			wg.Add(1)
 			var reportedLeader string
@@ -668,7 +666,7 @@ func testReleaseLease(t *testing.T, objectType string) {
 
 			le.maybeReportTransition()
 
-			// Wait for a response to the leader transition, and add 1 so that we can track the final transition.
+			// 等待对 leader 切换的响应，并加 1 以便跟踪最后一次切换。
 			wg.Wait()
 			wg.Add(1)
 
@@ -700,15 +698,12 @@ func testReleaseLease(t *testing.T, objectType string) {
 	}
 }
 
-// Will test leader election using endpoints as the resource
-// （历史注释如此，实际现在只测试 Lease。）
+// 历史上以 endpoints 资源测试 leader 选举，实际现在只测试 Lease。
 func TestReleaseLeaseLeases(t *testing.T) {
 	testReleaseLease(t, "leases")
 }
 
-// TestReleaseMethodCallsGet test release method calls Get
-//
-// 验证 release 会先 Get 最新锁内容再 Update，避免用过期的 record 覆盖。
+// TestReleaseMethodCallsGet 验证 release 会先 Get 最新锁内容再 Update，避免用过期的 record 覆盖。
 func TestReleaseMethodCallsGet(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	objectType := "leases"
@@ -722,7 +717,7 @@ func TestReleaseMethodCallsGet(t *testing.T) {
 	}
 	c := &fake.Clientset{}
 	c.AddReactor("get", objectType, func(action fakeclient.Action) (bool, runtime.Object, error) {
-		// flag to check if Get is called
+		// 用于检查 Get 是否被调用的标志
 		getCalled = true
 		return true, createLockObject(t, objectType, action.GetNamespace(), action.(fakeclient.GetAction).GetName(), &rl.LeaderElectionRecord{
 			HolderIdentity:       "baz",
@@ -762,8 +757,8 @@ func TestReleaseMethodCallsGet(t *testing.T) {
 	}
 }
 
-// TestReleaseRetriesOnConflict verifies that release retries when the
-// Update call returns a conflict error (e.g. from an inflight renew).
+// TestReleaseRetriesOnConflict 验证当 Update 调用返回冲突错误
+// （例如来自进行中的 renew）时 release 会重试。
 //
 // 首次 Update 返回 Conflict，release 应重新 Get 并重试直至成功。
 func TestReleaseRetriesOnConflict(t *testing.T) {
@@ -858,8 +853,7 @@ func testReleaseOnCancellation(t *testing.T, objectType string) {
 		RenewDeadline: 2 * time.Second,
 		RetryPeriod:   1 * time.Second,
 
-		// This is what we're testing
-		// 关键配置：取消时主动释放锁。
+		// 关键配置（本用例的测试点）：取消时主动释放锁。
 		ReleaseOnCancel: true,
 
 		Callbacks: LeaderCallbacks{
@@ -903,20 +897,20 @@ func testReleaseOnCancellation(t *testing.T, objectType string) {
 					objectType: objectType,
 					reaction: func(action fakeclient.Action) (handled bool, ret runtime.Object, err error) {
 						updates++
-						// Skip initial two fast path renews
+						// 跳过最初两次 fast path 续约
 						if updates%2 == 1 && updates < 5 {
 							return true, nil, context.Canceled
 						}
 
-						// Second update (first renew) should return our canceled error
-						// FakeClient doesn't do anything with the context so we're doing this ourselves
+						// 第二次 update（首次续约）应返回我们构造的 canceled 错误
+						// FakeClient 不会处理 context，所以这里由我们自己模拟
 						if updates == 4 {
 							close(onRenewCalled)
 							<-onRenewResume
 							return true, nil, context.Canceled
 						} else if updates == 5 {
-							// We update the lock after the cancellation to release it
-							// This wg is to avoid the data race on lockObj
+							// 我们在取消之后再更新锁以释放它
+							// 这个 wg 用于避免 lockObj 上的数据竞争
 							defer wg.Done()
 							close(onRelease)
 						}
@@ -940,8 +934,8 @@ func testReleaseOnCancellation(t *testing.T, objectType string) {
 					reaction: func(action fakeclient.Action) (handled bool, ret runtime.Object, err error) {
 						gets++
 						if lockObj != nil {
-							// Third and more get (first create, second renew) should return our canceled error
-							// FakeClient doesn't do anything with the context so we're doing this ourselves
+							// 第三次及以后的 get（第一次 create、第二次 renew）应返回我们构造的 canceled 错误
+							// FakeClient 不会处理 context，所以这里由我们自己模拟
 							if gets >= 4 {
 								if gets == 4 {
 									close(onRenewCalled)
@@ -967,14 +961,14 @@ func testReleaseOnCancellation(t *testing.T, objectType string) {
 					objectType: objectType,
 					reaction: func(action fakeclient.Action) (handled bool, ret runtime.Object, err error) {
 						updates++
-						// Always skip fast path renew
+						// 总是跳过 fast path 续约
 						if updates%2 == 1 {
 							return true, nil, context.Canceled
 						}
-						// Second update (first renew) should release the lock
+						// 第二次 update（首次续约）应释放锁
 						if updates == 4 {
-							// We update the lock after the cancellation to release it
-							// This wg is to avoid the data race on lockObj
+							// 我们在取消之后再更新锁以释放它
+							// 这个 wg 用于避免 lockObj 上的数据竞争
 							defer wg.Done()
 							close(onRelease)
 						}
@@ -1027,26 +1021,25 @@ func testReleaseOnCancellation(t *testing.T, objectType string) {
 
 			go elector.Run(ctx)
 
-			// Wait for us to become the leader
+			// 等待本实例成为 leader
 			select {
 			case <-onNewLeader:
 			case <-time.After(10 * time.Second):
 				t.Fatal("failed to become the leader")
 			}
 
-			// Wait for renew (update) to be invoked
+			// 等待 renew（update）被调用
 			select {
 			case <-onRenewCalled:
 			case <-time.After(10 * time.Second):
 				t.Fatal("the elector failed to renew the lock")
 			}
 
-			// Cancel the context - stopping the elector while
-			// it's running
+			// 取消 context —— 在 elector 运行过程中将其停止
 			cancel()
 
-			// Resume the tryAcquireOrRenew call to return the cancellation
-			// which should trigger the release flow
+			// 恢复 tryAcquireOrRenew 调用使其返回取消错误，
+			// 从而触发 release 流程
 			close(onRenewResume)
 
 			select {
@@ -1089,7 +1082,7 @@ func TestLeaderElectionConfigValidation(t *testing.T) {
 	_, err := NewLeaderElector(lec)
 	assert.NoError(t, err)
 
-	// Invalid lock identity
+	// 非法的锁身份
 	resourceLockConfig.Identity = ""
 	lock.LockConfig = resourceLockConfig
 	lec.Lock = lock
@@ -1109,7 +1102,7 @@ func assertEqualEvents(t *testing.T, expected []string, actual <-chan string) {
 			}
 		case <-c:
 			t.Errorf("Expected event %q, got nothing", e)
-			// continue iterating to print all expected events
+			// 继续迭代以便打印所有期望的事件
 		}
 	}
 	for {
@@ -1324,7 +1317,7 @@ func TestCheckMethodRace(t *testing.T) {
 		Client:     c.CoordinationV1(),
 	}
 
-	// aggressive timing to provoke the race
+	// 激进的时序设置以诱发竞争：
 	// 极短 RetryPeriod 让续约与 Check 高频交错，放大竞争窗口。
 	lec := LeaderElectionConfig{
 		Lock:          lock,
@@ -1350,8 +1343,8 @@ func TestCheckMethodRace(t *testing.T) {
 
 	start := time.Now()
 	for time.Since(start) < 2*time.Second {
-		// If Check() does not lock observedRecordLock, this read will race with the
-		// write in le.Run()'s setObservedRecord.
+		// 如果 Check() 不加 observedRecordLock，这里的读取会与
+		// le.Run() 中 setObservedRecord 的写入发生竞争。
 		_ = le.Check(time.Second)
 
 		time.Sleep(10 * time.Millisecond)

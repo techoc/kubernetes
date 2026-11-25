@@ -27,7 +27,7 @@ import (
 // 指标标签。名称只依赖类型与函数位置，不依赖实例，因此可安全用作低基数标签。
 func nameForHandler(handler ResourceEventHandler) (name string) {
 	defer func() {
-		// Last resort: let Sprintf handle it.
+		// 最后兜底：交给 Sprintf 处理。
 		if name == "" {
 			name = fmt.Sprintf("%T", handler)
 		}
@@ -43,13 +43,11 @@ func nameForHandler(handler ResourceEventHandler) (name string) {
 	case ResourceEventHandlerFuncs:
 		return nameForHandlerFuncs(handler)
 	default:
-		// We can use the fully qualified name of whatever
-		// provides the interface. We don't care whether
-		// it contains fields or methods which provide
-		// the interface methods.
+		// 可以直接使用实现该接口的类型的完全限定名，
+		// 不必关心接口方法是由字段还是方法提供。
 		value := reflect.ValueOf(handler)
 		if value.Type().Kind() == reflect.Interface {
-			// Probably not needed, but let's play it safe.
+			// 可能用不上，但稳妥起见还是处理一下。
 			value = value.Elem()
 		}
 		// 解引用指针以获得底层类型名，避免同一类型因指针/值接收者得到不同名字。
@@ -77,12 +75,9 @@ func nameForHandlerFuncs(funcs ResourceEventHandlerFuncs) string {
 // nameForFunctions 尝试用一个公共限定符（如包名或接收者类型）概括一组函数；
 // 若函数来自不同位置，则退化为用 "+" 连接全部函数名，保证名称唯一且可诊断。
 func nameForFunctions(fs ...any) string {
-	// If all functions are defined in the same place, then we
-	// don't care about the actual function name in
-	// e.g. "main.FuncName" or "main.(*Foo).FuncName-fm", instead
-	// we use the common qualifier.
-	//
-	// But we don't know that yet, so we also collect all names.
+	// 如果所有函数都定义在同一处，我们不关心 "main.FuncName" 或
+	// "main.(*Foo).FuncName-fm" 这类实际函数名，而是取公共限定符。
+	// 但在收集完成前无法确定是否如此，所以顺便把全部名字都收集起来。
 	var qualifier string
 	singleQualifier := true
 	var names []string
@@ -106,9 +101,9 @@ func nameForFunctions(fs ...any) string {
 		case "":
 			qualifier = newQualifier
 		case newQualifier:
-			// So far, so good...
+			// 目前还一致……
 		default:
-			// Nope, different.
+			// 不一致，限定符不同。
 			singleQualifier = false
 		}
 	}

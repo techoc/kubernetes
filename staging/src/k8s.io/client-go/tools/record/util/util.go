@@ -27,7 +27,7 @@ import (
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
 )
 
-// ValidateEventType checks that eventtype is an expected type of event
+// ValidateEventType 检查 eventtype 是否为预期的事件类型。
 //
 // 仅 Normal 与 Warning 是合法的 Event 类型，其余一律拒绝，
 // 防止写入无法被 Event 消费者正确分类的记录。
@@ -39,7 +39,7 @@ func ValidateEventType(eventtype string) bool {
 	return false
 }
 
-// IsKeyNotFoundError is utility function that checks if an error is not found error
+// IsKeyNotFoundError 是检查错误是否为 not found 错误的工具函数。
 //
 // 只识别 *errors.StatusError 且 HTTP 码为 404 的情况；其他错误形态
 // （如普通 error 或非 Status 的包装错误）都视为非 NotFound。
@@ -49,10 +49,10 @@ func IsKeyNotFoundError(err error) bool {
 	return statusErr != nil && statusErr.Status().Code == http.StatusNotFound
 }
 
-// GenerateEventName generates a valid Event name from the referenced name and the passed UNIX timestamp.
-// The referenced Object name may not be a valid name for Events and cause the Event to fail
-// to be created, so we need to generate a new one in that case.
-// Ref: https://issues.k8s.io/127594
+// GenerateEventName 由引用对象名和传入的 UNIX 时间戳生成合法的 Event 名。
+// 引用对象的名称可能不是合法的 Event 名称、导致 Event 创建失败，
+// 这种情况下需要重新生成一个名字。
+// 参见：https://issues.k8s.io/127594
 //
 // GenerateEventName 用“引用对象名.十六进制纳秒时间戳”构造 Event 名；
 // Event 名同样是 DNS 子域名，若引用对象名含非法字符则退化为随机 UUID，
@@ -60,7 +60,7 @@ func IsKeyNotFoundError(err error) bool {
 func GenerateEventName(refName string, unixNano int64) string {
 	name := fmt.Sprintf("%s.%x", refName, unixNano)
 	if errs := apimachineryvalidation.NameIsDNSSubdomain(name, false); len(errs) > 0 {
-		// Using an uuid guarantees uniqueness and correctness
+		// 使用 UUID 可以同时保证唯一性和合法性
 		name = uuid.New().String()
 	}
 	return name

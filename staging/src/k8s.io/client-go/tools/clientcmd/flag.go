@@ -16,9 +16,7 @@ limitations under the License.
 
 package clientcmd
 
-// transformingStringValue implements pflag.Value to store string values,
-// allowing transforming them while being set
-//
+// transformingStringValue 实现 pflag.Value 来存储字符串值，并允许在设置时进行转换。
 // transformingStringValue 实现 pflag.Value：Set 时先经 transformer 规范化
 // （例如把 server URL 补全、校验），再写入 target。String 直接读取 target，
 // 因此命令行 help 中显示的始终是转换后的值。

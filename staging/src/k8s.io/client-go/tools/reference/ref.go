@@ -31,26 +31,25 @@ import (
 )
 
 var (
-	// Errors that could be returned by GetReference.
+	// GetReference 可能返回的错误。
 	ErrNilObject = errors.New("can't reference a nil object")
 )
 
-// GetReference returns an ObjectReference which refers to the given
-// object, or an error if the object doesn't follow the conventions
-// that would allow this.
-// TODO: should take a meta.Interface see https://issue.k8s.io/7127
+// GetReference 返回指向给定对象的 ObjectReference；若对象不符合
+// 允许这样做的约定则返回错误。
+// TODO: 应当接受 meta.Interface，见 https://issue.k8s.io/7127
 func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReference, error) {
 	if obj == nil {
 		return nil, ErrNilObject
 	}
 	if ref, ok := obj.(*v1.ObjectReference); ok {
-		// Don't make a reference to a reference.
+		// 不要对引用再做一层引用。
 		//
 		// 引用本身已经是引用，再包一层只会丢失语义，直接原样返回。
 		return ref, nil
 	}
 
-	// An object that implements only List has enough metadata to build a reference
+	// 只实现了 List 接口的对象也有足够的元数据来构建引用。
 	// 列表对象没有单个对象的元数据，退回 Common（ListMeta）取 resourceVersion。
 	var listMeta metav1.Common
 	objectMeta, err := meta.Accessor(obj)
@@ -65,10 +64,10 @@ func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReferen
 
 	gvk := obj.GetObjectKind().GroupVersionKind()
 
-	// If object meta doesn't contain data about kind and/or version,
-	// we are falling back to scheme.
+	// 如果 object meta 不包含 kind 和/或 version 的信息，
+	// 就退回使用 scheme。
 	//
-	// TODO: This doesn't work for CRDs, which are not registered in scheme.
+	// TODO: 这对未注册到 scheme 的 CRD 不起作用。
 	//
 	// 反序列化后的对象通常已带 GVK；而手工构造的对象往往没有，
 	// 此时只能借助 scheme 反查。
@@ -83,16 +82,16 @@ func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReferen
 		if len(gvks) == 0 || gvks[0].Empty() {
 			return nil, fmt.Errorf("unexpected gvks registered for object %T: %v", obj, gvks)
 		}
-		// TODO: The same object can be registered for multiple group versions
-		// (although in practise this doesn't seem to be used).
-		// In such case, the version set may not be correct.
+		// TODO: 同一对象可能注册在多个 group version 下
+		// （尽管实践中似乎没有这样用）。这种情况下，
+		// 所设置的 version 可能不正确。
 		gvk = gvks[0]
 	}
 
 	kind := gvk.Kind
 	version := gvk.GroupVersion().String()
 
-	// only has list metadata
+	// 只有列表元数据。
 	// 列表对象没有 name/namespace/uid，只能返回只带 resourceVersion 的引用。
 	if objectMeta == nil {
 		return &v1.ObjectReference{
@@ -112,7 +111,7 @@ func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReferen
 	}, nil
 }
 
-// GetPartialReference is exactly like GetReference, but allows you to set the FieldPath.
+// GetPartialReference 与 GetReference 完全相同，只是允许设置 FieldPath。
 //
 // FieldPath 用于指向对象内部的具体字段（如 spec.containers{foo}），
 // 事件记录等场景借此精确标注出问题的子字段。

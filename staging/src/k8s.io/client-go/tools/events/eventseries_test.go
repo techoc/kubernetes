@@ -45,7 +45,7 @@ type testEventSeriesSink struct {
 	OnPatch  func(e *eventsv1.Event, p []byte) (*eventsv1.Event, error)
 }
 
-// Create records the event for testing.
+// Create 为测试目的记录事件。
 func (t *testEventSeriesSink) Create(ctx context.Context, e *eventsv1.Event) (*eventsv1.Event, error) {
 	if t.OnCreate != nil {
 		return t.OnCreate(e)
@@ -53,7 +53,7 @@ func (t *testEventSeriesSink) Create(ctx context.Context, e *eventsv1.Event) (*e
 	return e, nil
 }
 
-// Update records the event for testing.
+// Update 为测试目的记录事件。
 func (t *testEventSeriesSink) Update(ctx context.Context, e *eventsv1.Event) (*eventsv1.Event, error) {
 	if t.OnUpdate != nil {
 		return t.OnUpdate(e)
@@ -61,7 +61,7 @@ func (t *testEventSeriesSink) Update(ctx context.Context, e *eventsv1.Event) (*e
 	return e, nil
 }
 
-// Patch records the event for testing.
+// Patch 为测试目的记录事件。
 func (t *testEventSeriesSink) Patch(ctx context.Context, e *eventsv1.Event, p []byte) (*eventsv1.Event, error) {
 	if t.OnPatch != nil {
 		return t.OnPatch(e, p)
@@ -162,8 +162,8 @@ func TestEventSeriesf(t *testing.T) {
 			return event, nil
 		},
 		OnPatch: func(event *eventsv1.Event, patch []byte) (*eventsv1.Event, error) {
-			// event we receive is already patched, usually the sink uses it only to retrieve the name and namespace, here
-			// we'll use it directly
+			// 收到的事件已被 patch 过；通常 sink 只用它取 name 和
+			// namespace，这里我们直接使用它
 			patchEvent <- event
 			return event, nil
 		},
@@ -171,21 +171,20 @@ func TestEventSeriesf(t *testing.T) {
 	eventBroadcaster := newBroadcaster(&testEvents, 0, map[eventKey]*eventsv1.Event{})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, "eventTest")
 	broadcaster := eventBroadcaster.(*eventBroadcasterImpl)
-	// Don't call StartRecordingToSink, as we don't need neither refreshing event
-	// series nor finishing them in this tests and additional events updated would
-	// race with our expected ones.
+	// 不要调用 StartRecordingToSink：本测试既不需要刷新也不需要结束
+	// event series，额外更新的事件会与我们期望的事件发生竞争。
 	err = broadcaster.startRecordingEvents(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// 先发一条事件填充聚合缓存，之后才能验证同键事件的 Patch 路径。
 	recorder.Eventf(regarding, related, isomorphicEvent.Type, isomorphicEvent.Reason, isomorphicEvent.Action, isomorphicEvent.Note, []interface{}{1})
-	// read from the chan as this was needed only to populate the cache
+	// 从 channel 读走，它只是为了填充缓存才发送
 	<-createEvent
 	for index, item := range table {
 		actual := item.actual
 		recorder.Eventf(item.regarding, item.related, actual.Type, actual.Reason, actual.Action, actual.Note, item.elements)
-		// validate event
+		// 校验事件
 		if item.expectUpdate {
 			actualEvent := <-patchEvent
 			t.Logf("%v - validating event affected by patch request", index)
@@ -198,9 +197,8 @@ func TestEventSeriesf(t *testing.T) {
 	}
 }
 
-// TestEventSeriesWithEventSinkImplRace verifies that when Events are emitted to
-// an EventSink consecutively there is no data race.  This test is meant to be
-// run with the `-race` option.
+// TestEventSeriesWithEventSinkImplRace 验证事件连续发送到 EventSink
+// 时不存在数据竞争。本测试应配合 -race 选项运行。
 //
 // 连续发出两条相同事件，最终应只留下一条带 Series 的记录；配合 -race 检测并发问题。
 func TestEventSeriesWithEventSinkImplRace(t *testing.T) {
@@ -244,7 +242,7 @@ func TestEventSeriesWithEventSinkImplRace(t *testing.T) {
 func validateEvent(messagePrefix string, expectedUpdate bool, actualEvent *eventsv1.Event, expectedEvent *eventsv1.Event, t *testing.T) {
 	recvEvent := *actualEvent
 
-	// Just check that the timestamp was set.
+	// 只需检查时间戳已设置。
 	if recvEvent.EventTime.IsZero() {
 		t.Errorf("%v - timestamp wasn't set: %#v", messagePrefix, recvEvent)
 	}
@@ -259,7 +257,7 @@ func validateEvent(messagePrefix string, expectedUpdate bool, actualEvent *event
 			}
 		}
 
-		// Check that name has the right prefix.
+		// 检查 name 带有正确的前缀。
 		if n, en := recvEvent.Name, expectedEvent.Name; !strings.HasPrefix(n, en) {
 			t.Errorf("%v - Name '%v' does not contain prefix '%v'", messagePrefix, n, en)
 		}
@@ -306,8 +304,8 @@ func TestFinishSeries(t *testing.T) {
 			return event, nil
 		},
 		OnPatch: func(event *eventsv1.Event, patch []byte) (*eventsv1.Event, error) {
-			// event we receive is already patched, usually the sink uses it
-			// only to retrieve the name and namespace, here we'll use it directly
+			// 收到的事件已被 patch 过；通常 sink 只用它取 name 和 namespace，
+			// 这里我们直接使用它
 			patchEvent <- event
 			return event, nil
 		},
@@ -336,7 +334,7 @@ func TestFinishSeries(t *testing.T) {
 		if !actualEvent.Series.LastObservedTime.Equal(&cachedEvent.Series.LastObservedTime) {
 			t.Errorf("series was expected be seen with LastObservedTime %v, but instead got %v ", cachedEvent.Series.LastObservedTime, actualEvent.Series.LastObservedTime)
 		}
-		// check that we emitted only one event
+		// 检查我们只发出了一个事件
 		if len(patchEvent) != 0 || len(createEvent) != 0 || len(updateEvent) != 0 {
 			t.Errorf("exactly one event should be emitted, but got %v", len(patchEvent))
 		}
@@ -375,15 +373,15 @@ func TestRefreshExistingEventSeries(t *testing.T) {
 	}{
 		{
 			patchFunc: func(event *eventsv1.Event, patch []byte) (*eventsv1.Event, error) {
-				// event we receive is already patched, usually the sink uses it
-				//only to retrieve the name and namespace, here we'll use it directly.
+				// 收到的事件已被 patch 过；通常 sink 只用它取 name 和 namespace，
+				// 这里我们直接使用它。
 				patchEvent <- event
 				return event, nil
 			},
 		},
 		{
 			patchFunc: func(event *eventsv1.Event, patch []byte) (*eventsv1.Event, error) {
-				// we simulate an apiserver error here
+				// 这里模拟一次 apiserver 错误
 				patchEvent <- nil
 				return nil, &restclient.RequestConstructionError{}
 			},
@@ -421,7 +419,7 @@ func TestRefreshExistingEventSeries(t *testing.T) {
 			if len(cache) != 1 {
 				t.Errorf("cache should be with same size, but instead got a size of %v", len(cache))
 			}
-			// check that we emitted only one event
+			// 检查我们只发出了一个事件
 			if len(patchEvent) != 0 || len(createEvent) != 0 || len(updateEvent) != 0 {
 				t.Errorf("exactly one event should be emitted, but got %v", len(patchEvent))
 			}

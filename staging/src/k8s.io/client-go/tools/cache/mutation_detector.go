@@ -39,16 +39,16 @@ func init() {
 	mutationDetectionEnabled, _ = strconv.ParseBool(os.Getenv("KUBE_CACHE_MUTATION_DETECTOR"))
 }
 
-// MutationDetector is able to monitor objects for mutation within a limited window of time
+// MutationDetector 能在有限的时间窗口内监控对象是否被篡改。
 type MutationDetector interface {
-	// AddObject adds the given object to the set being monitored for a while from now
+	// AddObject 把给定对象加入接下来一段时间的被监控集合。
 	AddObject(obj interface{})
 
-	// Run starts the monitoring and does not return until the monitoring is stopped.
+	// Run 启动监控，直到监控停止才返回。
 	Run(stopCh <-chan struct{})
 }
 
-// NewCacheMutationDetector creates a new instance for the defaultCacheMutationDetector.
+// NewCacheMutationDetector 创建一个缓存篡改检测器实例。
 // 未启用检测时返回无副作用的 dummy 实现，调用方无需分支判断。
 func NewCacheMutationDetector(name string) MutationDetector {
 	if !mutationDetectionEnabled {
@@ -70,9 +70,8 @@ func (dummyMutationDetector) Run(stopCh <-chan struct{}) {
 func (dummyMutationDetector) AddObject(obj interface{}) {
 }
 
-// defaultCacheMutationDetector gives a way to detect if a cached object has been mutated
-// It has a list of cached objects and their copies.  I haven't thought of a way
-// to see WHO is mutating it, just that it's getting mutated.
+// defaultCacheMutationDetector 用于检测缓存对象是否被篡改：
+// 它维护缓存对象及其副本的列表。目前无法定位是谁在篡改，只能发现对象被改了。
 //
 // 轮转策略：每 retainDuration 把当前批次转为"保留批次"，只比较最近两个窗口的对象，
 // 从而在持续运行时不无限增长内存。
@@ -80,10 +79,10 @@ type defaultCacheMutationDetector struct {
 	name   string
 	period time.Duration
 
-	// compareLock ensures only a single call to CompareObjects runs at a time
+	// compareLock 保证同一时刻只有一个 CompareObjects 在运行
 	compareObjectsLock sync.Mutex
 
-	// addLock guards addedObjs between AddObject and CompareObjects
+	// addLock 在 AddObject 与 CompareObjects 之间保护 addedObjs
 	addedObjsLock sync.Mutex
 	addedObjs     []cacheObj
 
@@ -95,14 +94,13 @@ type defaultCacheMutationDetector struct {
 	lastRotated        time.Time
 	retainedCachedObjs []cacheObj
 
-	// failureFunc is injectable for unit testing.  If you don't have it, the process will panic.
-	// This panic is intentional, since turning on this detection indicates you want a strong
-	// failure signal.  This failure is effectively a p0 bug and you can't trust process results
-	// after a mutation anyway.
+	// failureFunc 可在单元测试中注入。若未设置，进程会直接 panic。
+	// 这个 panic 是有意为之：开启该检测本身就意味着需要强失败信号。
+	// 这种问题实际等同于 p0 级缺陷，且对象被篡改后进程的任何结果都不可信。
 	failureFunc func(message string)
 }
 
-// cacheObj holds the actual object and a copy
+// cacheObj 保存真实对象及其副本：
 // cached 是 informer 缓存中的原对象，copied 是 DeepCopy，用于发现原地修改。
 type cacheObj struct {
 	cached interface{}
@@ -111,7 +109,7 @@ type cacheObj struct {
 
 // Run 周期性比较对象与其副本，直到 stopCh 关闭。
 func (d *defaultCacheMutationDetector) Run(stopCh <-chan struct{}) {
-	// we DON'T want protection from panics.  If we're running this code, we want to die
+	// 这里刻意不做 panic 保护：既然在跑这段代码，出了问题就希望进程直接死掉
 	for {
 		// 首次进入时只初始化时间戳；之后每个 retainDuration 轮转一次窗口。
 		if d.lastRotated.IsZero() {
@@ -132,8 +130,8 @@ func (d *defaultCacheMutationDetector) Run(stopCh <-chan struct{}) {
 	}
 }
 
-// AddObject makes a deep copy of the object for later comparison.  It only works on runtime.Object
-// but that covers the vast majority of our cached objects
+// AddObject 为对象做一次深拷贝以便后续比较。仅支持 runtime.Object，
+// 但这已覆盖绝大多数缓存对象
 func (d *defaultCacheMutationDetector) AddObject(obj interface{}) {
 	// tombstone 包装的不是缓存中的活对象，且可能被反复包装，跳过多余开销。
 	if _, ok := obj.(DeletedFinalStateUnknown); ok {
@@ -154,8 +152,8 @@ func (d *defaultCacheMutationDetector) CompareObjects() {
 	d.compareObjectsLock.Lock()
 	defer d.compareObjectsLock.Unlock()
 
-	// move addedObjs into cachedObjs under lock
-	// this keeps the critical section small to avoid blocking AddObject while we compare cachedObjs
+	// 在持锁状态下把 addedObjs 并入 cachedObjs，
+	// 以缩小临界区，避免比较 cachedObjs 时阻塞 AddObject
 	// 先交换再比较：比较可能很慢，不能长时间持有 addedObjsLock。
 	d.addedObjsLock.Lock()
 	d.cachedObjs = append(d.cachedObjs, d.addedObjs...)

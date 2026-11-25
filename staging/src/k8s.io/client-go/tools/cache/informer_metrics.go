@@ -14,13 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cache is a client-side caching mechanism. It is useful for
-// reducing the number of server calls you'd otherwise need to make.
-// Reflector watches a server and updates a Store. Two stores are provided;
-// one that simply caches objects (for example, to allow a scheduler to
-// list currently available nodes), and one that additionally acts as
-// a FIFO queue (for example, to allow a scheduler to process incoming
-// pods).
 package cache
 
 import (
@@ -36,45 +29,41 @@ var (
 // noopInformerMetricsProvider 是不做任何事的默认实现，避免未配置指标时各处判空。
 type noopInformerMetricsProvider struct{}
 
-// InformerMetricsProvider defines an interface for creating metrics that track informer operations.
+// InformerMetricsProvider 定义创建 informer 操作跟踪指标的接口。
 // 实现方（如 metrics 注册模块）按 informer 标识创建对应指标；返回的指标需在更新前检查
 // id.Reserved()，以支持运行期被销毁的动态 informer，防止向已注销的指标继续写入。
 type InformerMetricsProvider interface {
-	// NewQueuedItemMetric returns a gauge metric for tracking the total number of items
-	// currently queued and waiting to be processed.
-	// The returned metric should check id.Reserved() before updating to support
-	// dynamic informers that may shut down while the process is still running.
+	// NewQueuedItemMetric 返回一个 gauge 指标，跟踪当前排队待处理的对象总数。
+	// 返回的指标在更新前应检查 id.Reserved()，以支持在进程仍在运行时
+	// 可能被销毁的动态 informer。
 	//
-	// For DeltaFIFO: Represents len(f.items) - the number of unique keys with pending deltas
-	// For RealFIFO: Represents len(f.items) - the total number of individual delta events queued
+	// 对 DeltaFIFO：表示 len(f.items)，即存在待处理 delta 的唯一键数量；
+	// 对 RealFIFO：表示 len(f.items)，即队列中全部独立 delta 事件的总数。
 	NewQueuedItemMetric(id InformerNameAndResource) GaugeMetric
 
-	// NewProcessingLatencyMetric returns a histogram metric for tracking the time taken
-	// to process events (execute handlers) after they are popped from the queue.
-	// The latency is measured in seconds.
-	// The returned metric should check id.Reserved() before updating to support
-	// dynamic informers that may shut down while the process is still running.
+	// NewProcessingLatencyMetric 返回一个 histogram 指标，跟踪事件从队列弹出后
+	// 执行 handler 所耗费的时间，单位为秒。返回的指标在更新前应检查
+	// id.Reserved()，以支持在进程仍在运行时可能被销毁的动态 informer。
 	NewProcessingLatencyMetric(id InformerNameAndResource) HistogramMetric
 
-	// NewStoreResourceVersionMetric returns a gauge metric for tracking the resource version of the store.
-	// The returned metric should check id.Reserved() before updating to support
-	// dynamic informers that may shut down while the process is still running.
+	// NewStoreResourceVersionMetric 返回一个 gauge 指标，跟踪 store 当前的 resource version。
+	// 返回的指标在更新前应检查 id.Reserved()，以支持在进程仍在运行时
+	// 可能被销毁的动态 informer。
 	NewStoreResourceVersionMetric(id InformerNameAndResource) GaugeMetric
 }
 
-// fifoMetrics holds all metrics for a FIFO.
+// fifoMetrics 保存一个 FIFO 的全部指标。
 type fifoMetrics struct {
 	numberOfQueuedItem GaugeMetric
 	processingLatency  HistogramMetric
 }
 
-// storeMetrics holds all metrics for a store.
+// storeMetrics 保存一个 store 的全部指标。
 type storeMetrics struct {
 	storeResourceVersion GaugeMetric
 }
 
-// SetInformerMetricsProvider sets the metrics provider for all subsequently created
-// informers. Only the first call has an effect.
+// SetInformerMetricsProvider 为之后创建的所有 informer 设置指标提供者，仅第一次调用生效。
 // 之所以只允许首次调用生效，是因为指标注册通常幂等且全局唯一，重复覆盖会破坏已有指标。
 func SetInformerMetricsProvider(metricsProvider InformerMetricsProvider) {
 	setInformerMetricsProviderOnce.Do(func() {

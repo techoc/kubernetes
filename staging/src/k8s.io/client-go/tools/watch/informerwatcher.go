@@ -35,11 +35,9 @@ func newEventProcessor(out chan<- watch.Event) *eventProcessor {
 	}
 }
 
-// eventProcessor buffers events and writes them to an out chan when a reader
-// is waiting. Because of the requirement to buffer events, it synchronizes
-// input with a condition, and synchronizes output with a channels. It needs to
-// be able to yield while both waiting on an input condition and while blocked
-// on writing to the output channel.
+// eventProcessor 缓冲事件，并在有读者等待时写入 out channel。
+// 由于需要缓冲事件，输入侧用条件变量同步，输出侧用 channel 同步；
+// 它既要在等待输入条件时能yield，也要在阻塞写输出 channel 时能yield。
 //
 // 输入侧用 cond 唤醒（事件到达），输出侧用 channel + done 选择（可被停止打断），
 // 这样即使消费者暂时不读取也不会阻塞 Informer 的事件处理协程太久。
@@ -112,18 +110,18 @@ func (e *eventProcessor) stop() {
 	e.cond.Signal()
 }
 
-// NewIndexerInformerWatcher will create an IndexerInformer and wrap it into watch.Interface
-// so you can use it anywhere where you'd have used a regular Watcher returned from Watch method.
-// it also returns a channel you can use to wait for the informers to fully shutdown.
+// NewIndexerInformerWatcher 会创建 IndexerInformer 并包装成 watch.Interface，
+// 可以在任何使用 Watch 方法返回的普通 Watcher 的地方使用；
+// 同时返回一个 channel，用于等待 informer 完全停止。
 //
-// Contextual logging: NewIndexerInformerWatcherWithLogger should be used instead of NewIndexerInformerWatcher in code which supports contextual logging.
+// 上下文日志：支持上下文日志的代码应使用 NewIndexerInformerWatcherWithLogger 而非 NewIndexerInformerWatcher。
 func NewIndexerInformerWatcher(lw cache.ListerWatcher, objType runtime.Object) (cache.Indexer, cache.Controller, watch.Interface, <-chan struct{}) {
 	return NewIndexerInformerWatcherWithLogger(klog.Background(), lw, objType)
 }
 
-// NewIndexerInformerWatcherWithLogger will create an IndexerInformer and wrap it into watch.Interface
-// so you can use it anywhere where you'd have used a regular Watcher returned from Watch method.
-// it also returns a channel you can use to wait for the informers to fully shutdown.
+// NewIndexerInformerWatcherWithLogger 会创建 IndexerInformer 并包装成 watch.Interface，
+// 可以在任何使用 Watch 方法返回的普通 Watcher 的地方使用；
+// 同时返回一个 channel，用于等待 informer 完全停止。
 //
 // 返回的 watch.Interface 在首次 List 完成前不会产生事件；对调用方而言，
 // 它等价于一个从“当前状态”开始的 watch。doneCh 在 Informer 退出后关闭。
@@ -148,9 +146,9 @@ func NewIndexerInformerWatcherWithLogger(logger klog.Logger, lw cache.ListerWatc
 		DeleteFunc: func(obj interface{}) {
 			staleObj, stale := obj.(cache.DeletedFinalStateUnknown)
 			if stale {
-				// We have no means of passing the additional information down using
-				// watch API based on watch.Event but the caller can filter such
-				// objects by checking if metadata.deletionTimestamp is set
+				// 基于 watch.Event 的 watch API 无法把这些额外信息传递下去，
+				// 但调用方可以检查 metadata.deletionTimestamp 是否已设置
+				// 来过滤这类对象
 				// 用最后一次已知状态代替；调用方可通过 deletionTimestamp 判断是否为删除墓碑。
 				obj = staleObj.Obj
 			}
@@ -162,15 +160,15 @@ func NewIndexerInformerWatcherWithLogger(logger klog.Logger, lw cache.ListerWatc
 		},
 	}, cache.Indexers{})
 
-	// This will get stopped, but without waiting for it.
+	// 该协程会被停止，但不等待其退出。
 	go e.run()
 
 	doneCh := make(chan struct{})
 	go func() {
 		defer close(doneCh)
 		defer e.stop()
-		// Waiting for w.StopChan() is the traditional behavior which gets
-		// preserved here, with the logger added to support contextual logging.
+		// 等待 w.StopChan() 是传统行为，这里予以保留，
+		// 并额外加入 logger 以支持上下文日志。
 		ctx := wait.ContextForChannel(w.StopChan())
 		ctx = klog.NewContext(ctx, logger)
 		informer.RunWithContext(ctx)

@@ -35,16 +35,15 @@ func (c *fakeThreadSafeMap) Delete(key string) {
 	}
 }
 
-// FakeExpirationPolicy keeps the list for keys which never expires.
-//
-// 用作测试替身：通过 NeverExpire 显式控制哪些 key 会被判定为过期，
+// FakeExpirationPolicy 是测试替身，持有永不过期 key 的列表：
+// 通过 NeverExpire 显式控制哪些 key 会被判定为过期，
 // 从而摆脱对真实时钟的依赖。
 type FakeExpirationPolicy struct {
 	NeverExpire     sets.Set[string]
 	RetrieveKeyFunc KeyFunc
 }
 
-// IsExpired used to check if object is expired.
+// IsExpired 用于检查对象是否已过期。
 //
 // 语义与真实的 ExpirationPolicy 一致：不在 NeverExpire 集合中的 key 即视为过期。
 func (p *FakeExpirationPolicy) IsExpired(obj *TimestampedEntry) bool {
@@ -52,7 +51,7 @@ func (p *FakeExpirationPolicy) IsExpired(obj *TimestampedEntry) bool {
 	return !p.NeverExpire.Has(key)
 }
 
-// NewFakeExpirationStore creates a new instance for the ExpirationCache.
+// NewFakeExpirationStore 为 ExpirationCache 构造一个新的测试实例。
 //
 // 直接构造 ExpirationCache 而非走 NewExpirationCache，以便注入 fake 存储和外部时钟，
 // 让测试可以确定性地推进时间。

@@ -37,8 +37,8 @@ var mapping = map[schema.GroupVersion]string{
 	corev1.SchemeGroupVersion:        "involvedObject",
 }
 
-// GetFieldSelector returns the appropriate field selector based on the API version being used to communicate with the server.
-// The returned field selector can be used with List and Watch to filter desired events.
+// GetFieldSelector 根据与服务端通信所用的 API 版本返回合适的字段选择器。
+// 返回的字段选择器可用于 List 和 Watch 以过滤所需事件。
 //
 // 只填充调用方实际提供的维度：空值不写入 selector，避免把“未指定”误当成
 // “必须为空”。未知 eventsGroupVersion 直接报错，防止拼出错误的字段名。

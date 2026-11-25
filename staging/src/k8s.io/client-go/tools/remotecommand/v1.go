@@ -26,10 +26,9 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
-// streamProtocolV1 implements the first version of the streaming exec & attach
-// protocol. This version has some bugs, such as not being able to detect when
-// non-interactive stdin data has ended. See https://issues.k8s.io/13394 and
-// https://issues.k8s.io/13395 for more details.
+// streamProtocolV1 实现流式 exec & attach 协议的第一个版本。
+// 该版本存在一些缺陷，例如无法感知非交互式 stdin 数据何时结束。
+// 详见 https://issues.k8s.io/13394 和 https://issues.k8s.io/13395。
 // 该版本只被极旧的服务端使用；实现保留是为了兼容，而不是推荐路径。
 type streamProtocolV1 struct {
 	StreamOptions
@@ -69,7 +68,7 @@ func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready 
 		}
 	}
 
-	// set up all the streams first
+	// 先建立全部流
 	var err error
 	headers := http.Header{}
 	headers.Set(v1.StreamType, v1.StreamTypeError)
@@ -79,13 +78,12 @@ func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready 
 	}
 	defer p.errorStream.Reset()
 
-	// Create all the streams first, then start the copy goroutines. The server doesn't start its copy
-	// goroutines until it's received all of the streams. If the client creates the stdin stream and
-	// immediately begins copying stdin data to the server, it's possible to overwhelm and wedge the
-	// spdy frame handler in the server so that it is full of unprocessed frames. The frames aren't
-	// getting processed because the server hasn't started its copying, and it won't do that until it
-	// gets all the streams. By creating all the streams first, we ensure that the server is ready to
-	// process data before the client starts sending any. See https://issues.k8s.io/16373 for more info.
+	// 先创建所有流，再启动拷贝协程。服务端在收到所有流之前不会启动自己的
+	// 拷贝协程。如果客户端创建 stdin 流后立即开始向服务端拷贝 stdin 数据，
+	// 就可能压垮并卡死服务端的 spdy 帧处理器，使其积压大量未处理的帧。
+	// 这些帧得不到处理，是因为服务端还没开始拷贝，而在它拿到所有流之前不会
+	// 开始拷贝。先创建所有流，可以确保服务端在客户端开始发送数据前就已就绪。
+	// 详见 https://issues.k8s.io/16373。
 	if p.Stdin != nil {
 		headers.Set(v1.StreamType, v1.StreamTypeStdin)
 		p.remoteStdin, err = conn.CreateStream(headers)
@@ -114,14 +112,14 @@ func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready 
 		defer p.remoteStderr.Reset()
 	}
 
-	// Signal that all streams have been created.
+	// 通知所有流均已创建。
 	if ready != nil {
 		close(ready)
 	}
 
-	// now that all the streams have been created, proceed with reading & copying
+	// 所有流创建完毕后，开始读取与拷贝
 
-	// always read from errorStream
+	// 始终从 errorStream 读取
 	go func() {
 		// 错误流中的数据是命令失败的诊断信息；读到非空内容即视为执行失败。
 		message, err := io.ReadAll(p.errorStream)
@@ -136,10 +134,9 @@ func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready 
 	}()
 
 	if p.Stdin != nil {
-		// TODO this goroutine will never exit cleanly (the io.Copy never unblocks)
-		// because stdin is not closed until the process exits. If we try to call
-		// stdin.Close(), it returns no error but doesn't unblock the copy. It will
-		// exit when the process exits, instead.
+		// TODO 这个协程永远不会干净地退出（io.Copy 永远不解除阻塞），
+		// 因为进程退出前 stdin 不会关闭。若调用 stdin.Close()，
+		// 它不返回错误，但也不会解除拷贝的阻塞。它最终会随进程退出而结束。
 		go cp(v1.StreamTypeStdin, p.remoteStdin, readerWrapper{p.Stdin})
 	}
 

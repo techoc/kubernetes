@@ -27,10 +27,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// streamProtocolV2 implements version 2 of the streaming protocol for attach
-// and exec. The original streaming protocol was metav1. As a result, this
-// version is referred to as version 2, even though it is the first actual
-// numbered version.
+// streamProtocolV2 实现 attach 和 exec 流式协议的第 2 版。
+// 最初的流式协议是 metav1，因此这一版被称为 version 2，
+// 尽管它其实是第一个真正带版本号的协议。
 // 与 v1 的关键差异：流可以直接读写 io.Reader/io.ReadWriteCloser，stdin 关闭与错误解码
 // 都有明确语义，因而能正确处理非交互 stdin 和执行错误。
 type streamProtocolV2 struct {
@@ -57,14 +56,14 @@ func (p *streamProtocolV2) createStreams(conn streamCreator) error {
 	var err error
 	headers := http.Header{}
 
-	// set up error stream
+	// 建立错误流
 	headers.Set(v1.StreamType, v1.StreamTypeError)
 	p.errorStream, err = conn.CreateStream(headers)
 	if err != nil {
 		return err
 	}
 
-	// set up stdin stream
+	// 建立 stdin 流
 	if p.Stdin != nil {
 		headers.Set(v1.StreamType, v1.StreamTypeStdin)
 		p.remoteStdin, err = conn.CreateStream(headers)
@@ -73,7 +72,7 @@ func (p *streamProtocolV2) createStreams(conn streamCreator) error {
 		}
 	}
 
-	// set up stdout stream
+	// 建立 stdout 流
 	if p.Stdout != nil {
 		headers.Set(v1.StreamType, v1.StreamTypeStdout)
 		p.remoteStdout, err = conn.CreateStream(headers)
@@ -82,7 +81,7 @@ func (p *streamProtocolV2) createStreams(conn streamCreator) error {
 		}
 	}
 
-	// set up stderr stream
+	// 建立 stderr 流
 	if p.Stderr != nil && !p.Tty {
 		headers.Set(v1.StreamType, v1.StreamTypeStderr)
 		p.remoteStderr, err = conn.CreateStream(headers)
@@ -99,13 +98,13 @@ func (p *streamProtocolV2) copyStdin(logger klog.Logger) {
 	if p.Stdin != nil {
 		var once sync.Once
 
-		// copy from client's stdin to container's stdin
+		// 从客户端 stdin 拷贝到容器 stdin
 		go func() {
 			defer runtime.HandleCrashWithLogger(logger)
 
-			// if p.stdin is noninteractive, p.g. `echo abc | kubectl exec -i <pod> -- cat`, make sure
-			// we close remoteStdin as soon as the copy from p.stdin to remoteStdin finishes. Otherwise
-			// the executed command will remain running.
+			// 如果 p.Stdin 是非交互式的，例如 `echo abc | kubectl exec -i <pod> -- cat`，
+			// 要确保从 p.Stdin 到 remoteStdin 的拷贝一结束就立即关闭 remoteStdin。
+			// 否则被执行的命令会一直运行下去。
 			defer once.Do(func() { p.remoteStdin.Close() })
 
 			if _, err := io.Copy(p.remoteStdin, readerWrapper{p.Stdin}); err != nil {
@@ -113,26 +112,24 @@ func (p *streamProtocolV2) copyStdin(logger klog.Logger) {
 			}
 		}()
 
-		// read from remoteStdin until the stream is closed. this is essential to
-		// be able to exit interactive sessions cleanly and not leak goroutines or
-		// hang the client's terminal.
+		// 从 remoteStdin 持续读取直到流关闭。这对于干净地退出交互式会话、
+		// 不泄漏协程、不挂住客户端终端来说是必不可少的。
 		//
-		// TODO we aren't using go-dockerclient any more; revisit this to determine if it's still
-		// required by engine-api.
+		// TODO 我们已经不再使用 go-dockerclient；重新审视这段逻辑，确认
+		// engine-api 是否仍然需要它。
 		//
-		// go-dockerclient's current hijack implementation
+		// go-dockerclient 当前的 hijack 实现
 		// (https://github.com/fsouza/go-dockerclient/blob/89f3d56d93788dfe85f864a44f85d9738fca0670/client.go#L564)
-		// waits for all three streams (stdin/stdout/stderr) to finish copying
-		// before returning. When hijack finishes copying stdout/stderr, it calls
-		// Close() on its side of remoteStdin, which allows this copy to complete.
-		// When that happens, we must Close() on our side of remoteStdin, to
-		// allow the copy in hijack to complete, and hijack to return.
+		// 会等待三个流（stdin/stdout/stderr）全部拷贝完成才返回。当 hijack
+		// 完成 stdout/stderr 的拷贝后，会在它那一侧对 remoteStdin 调用 Close()，
+		// 从而使这里的拷贝得以完成。此时我们也必须在自己的这一侧对 remoteStdin
+		// 调用 Close()，让 hijack 中的拷贝完成、hijack 得以返回。
 		go func() {
 			defer runtime.HandleCrashWithLogger(logger)
 			defer once.Do(func() { p.remoteStdin.Close() })
 
-			// this "copy" doesn't actually read anything - it's just here to wait for
-			// the server to close remoteStdin.
+			// 这个"拷贝"并不真正读取任何内容——只是在这里等待
+			// 服务端关闭 remoteStdin。
 			if _, err := io.Copy(io.Discard, p.remoteStdin); err != nil {
 				runtime.HandleErrorWithLogger(logger, err, "Waiting for server to close stdin failed")
 			}
@@ -151,9 +148,9 @@ func (p *streamProtocolV2) copyStdout(logger klog.Logger, wg *sync.WaitGroup) {
 	go func() {
 		defer runtime.HandleCrashWithLogger(logger)
 		defer wg.Done()
-		// make sure, packet in queue can be consumed.
-		// block in queue may lead to deadlock in conn.server
-		// issue: https://github.com/kubernetes/kubernetes/issues/96339
+		// 确保队列中的数据包能被消费。
+		// 队列积压可能在 conn.server 中造成死锁
+		// 议题：https://github.com/kubernetes/kubernetes/issues/96339
 		defer io.Copy(io.Discard, p.remoteStdout)
 
 		if _, err := io.Copy(p.Stdout, p.remoteStdout); err != nil {
@@ -186,12 +183,12 @@ func (p *streamProtocolV2) stream(logger klog.Logger, conn streamCreator, ready 
 		return err
 	}
 
-	// Signal that all streams have been created.
+	// 通知所有流均已创建。
 	if ready != nil {
 		close(ready)
 	}
 
-	// now that all the streams have been created, proceed with reading & copying
+	// 所有流创建完毕后，开始读取与拷贝
 
 	errorChan := watchErrorStream(logger, p.errorStream, &errorDecoderV2{})
 
@@ -201,14 +198,14 @@ func (p *streamProtocolV2) stream(logger klog.Logger, conn streamCreator, ready 
 	p.copyStdout(logger, &wg)
 	p.copyStderr(logger, &wg)
 
-	// we're waiting for stdout/stderr to finish copying
+	// 等待 stdout/stderr 拷贝完成
 	wg.Wait()
 
-	// waits for errorStream to finish reading with an error or nil
+	// 等待 errorStream 读取结束，返回错误或 nil
 	return <-errorChan
 }
 
-// errorDecoderV2 interprets the error channel data as plain text.
+// errorDecoderV2 将错误通道的数据按纯文本解读。
 //
 // v2 的错误流是纯文本；v3/v4 才会使用带状态的结构化编码。
 type errorDecoderV2 struct{}

@@ -23,48 +23,41 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// Indexer extends Store with multiple indices and restricts each
-// accumulator to simply hold the current object (and be empty after
-// Delete).
+// Indexer 在 Store 之上支持多套索引，并限定每个索引桶只保存当前对象
+// （Delete 之后对应条目为空）。
 //
-// There are three kinds of strings here:
-//  1. a storage key, as defined in the Store interface,
-//  2. a name of an index, and
-//  3. an "indexed value", which is produced by an IndexFunc and
-//     can be a field value or any other string computed from the object.
+// 这里涉及三类字符串：
+//  1. 存储键，其定义见 Store 接口；
+//  2. 索引名；
+//  3. “索引值”，由 IndexFunc 产生，可以是字段值或从对象计算出的任意字符串。
 //
 // 索引与主存储保持同步：对象写入/删除时，对应的索引项也一并更新，
 // 因此 List/ByIndex 的结果总是反映同一时刻的缓存快照。
 type Indexer interface {
 	Store
-	// Index returns the stored objects whose set of indexed values
-	// intersects the set of indexed values of the given object, for
-	// the named index
+	// Index 在指定索引下，返回索引值集合与给定对象索引值集合有交集的已存储对象。
 	Index(indexName string, obj interface{}) ([]interface{}, error)
-	// IndexKeys returns the storage keys of the stored objects whose
-	// set of indexed values for the named index includes the given
-	// indexed value
+	// IndexKeys 在指定索引下，返回包含给定索引值的已存储对象的存储键。
 	IndexKeys(indexName, indexedValue string) ([]string, error)
-	// ListIndexFuncValues returns all the indexed values of the given index
+	// ListIndexFuncValues 返回给定索引的全部索引值。
 	ListIndexFuncValues(indexName string) []string
-	// ByIndex returns the stored objects whose set of indexed values
-	// for the named index includes the given indexed value
+	// ByIndex 在指定索引下，返回包含给定索引值的已存储对象。
 	ByIndex(indexName, indexedValue string) ([]interface{}, error)
-	// GetIndexers return the indexers
+	// GetIndexers 返回当前已注册的索引函数表。
 	GetIndexers() Indexers
 
-	// AddIndexers adds more indexers to this store. This supports adding indexes after the store already has items.
+	// AddIndexers 向该存储追加索引器。支持在存储已有对象之后再添加索引。
 	AddIndexers(newIndexers Indexers) error
 }
 
-// IndexFunc knows how to compute the set of indexed values for an object.
+// IndexFunc 负责计算一个对象对应的索引值集合。
 //
 // 一个对象可以对应多个索引值（例如多个标签），返回空切片表示不被索引。
 type IndexFunc func(obj interface{}) ([]string, error)
 
-// IndexFuncToKeyFuncAdapter adapts an indexFunc to a keyFunc.  This is only useful if your index function returns
-// unique values for every object.  This conversion can create errors when more than one key is found.  You
-// should prefer to make proper key and index functions.
+// IndexFuncToKeyFuncAdapter 把 indexFunc 适配成 keyFunc。仅当索引函数对每个对象
+// 返回唯一值时才有意义；若找出多个键，这个转换会报错。更推荐分别编写
+// 合适的键函数与索引函数。
 func IndexFuncToKeyFuncAdapter(indexFunc IndexFunc) KeyFunc {
 	return func(obj interface{}) (string, error) {
 		indexKeys, err := indexFunc(obj)
@@ -83,11 +76,11 @@ func IndexFuncToKeyFuncAdapter(indexFunc IndexFunc) KeyFunc {
 }
 
 const (
-	// NamespaceIndex is the lookup name for the most common index function, which is to index by the namespace field.
+	// NamespaceIndex 是最常用索引函数的查找名，即按 namespace 字段建索引。
 	NamespaceIndex string = "namespace"
 )
 
-// MetaNamespaceIndexFunc is a default index function that indexes based on an object's namespace
+// MetaNamespaceIndexFunc 是默认索引函数，按对象的 namespace 建立索引。
 //
 // 无法获取 ObjectMeta 时返回空 namespace 并附带错误信息，
 // 让调用方能够定位是哪个对象不满足索引前提。
@@ -99,13 +92,13 @@ func MetaNamespaceIndexFunc(obj interface{}) ([]string, error) {
 	return []string{meta.GetNamespace()}, nil
 }
 
-// Index maps the indexed value to a set of keys in the store that match on that value
+// index 把索引值映射到存储中匹配该值的键集合。
 type index map[string]sets.Set[string]
 
-// Indexers maps a name to an IndexFunc
+// Indexers 把索引名映射到 IndexFunc。
 type Indexers map[string]IndexFunc
 
-// Indices maps a name to an Index
+// Indices 把索引名映射到具体的索引内容。
 type Indices map[string]index
 
 // TypedIndexers 是类型安全的索引函数表，键为索引名。
@@ -124,11 +117,9 @@ type TypedIndexer[T any] interface {
 	AddTypedIndexers(newIndexers TypedIndexers[T]) error
 }
 
-// TypedIndexersToIndexers wraps several indexer functions which expect objects
-// of a certain type so that they can be used in an [Indexer].
-// This is needed primarily for setting up [SharedIndexInformerOptions.Indexers].
-// When using one of the typed APIs for installing an indexer function
-// the conversion is done automatically.
+// TypedIndexersToIndexers 把一组只接受特定类型对象的索引函数包装成可用于
+// [Indexer] 的普通 Indexers。主要用于配置 [SharedIndexInformerOptions.Indexers]。
+// 若使用类型安全的 API 注册索引函数，这层转换会自动完成。
 func TypedIndexersToIndexers[T any](indexers TypedIndexers[T]) Indexers {
 	untyped := make(Indexers, len(indexers))
 	for i, indexer := range indexers {
@@ -137,11 +128,9 @@ func TypedIndexersToIndexers[T any](indexers TypedIndexers[T]) Indexers {
 	return untyped
 }
 
-// TypedIndexersFuncToIndexerFunc wraps one indexer function which expect objects
-// of a certain type so that they can be used in an [Indexer].
-// This is needed primarily for setting up [SharedIndexInformerOptions.Indexers].
-// When using one of the typed APIs for installing an indexer function
-// the conversion is done automatically.
+// TypedIndexerFuncToIndexerFunc 把一个只接受特定类型对象的索引函数包装成可用于
+// [Indexer] 的普通 IndexFunc。主要用于配置 [SharedIndexInformerOptions.Indexers]。
+// 若使用类型安全的 API 注册索引函数，这层转换会自动完成。
 //
 // 这里的类型断言不做检查：调用方通过类型安全的 API 注册，
 // 传入的对象类型由 informer 保证与 T 一致；类型不符会直接 panic，属于编程错误。
