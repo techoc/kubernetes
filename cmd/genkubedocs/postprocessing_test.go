@@ -25,17 +25,17 @@ func TestCleanupForInclude(t *testing.T) {
 	var tests = []struct {
 		markdown, expectedMarkdown string
 	}{
-		{ // first line is removed
-			// Nb. first line is the title of the document, and by removing it you get
-			//     more flexibility for include, e.g. include in tabs
+		{ // 删除第一行
+			// 注意：第一行是文档的标题，删除它可获得
+			//     更大的 include 灵活性，例如 include 到标签页中
 			markdown: "line 1\n" +
 				"line 2\n" +
 				"line 3",
 			expectedMarkdown: "line 2\n" +
 				"line 3",
 		},
-		{ // everything after ###SEE ALSO is removed
-			// Nb.  see also, that assumes file will be used as a main page (does not apply to includes)
+		{ // 删除 ###SEE ALSO 之后的所有内容
+			// 注意：see also 假定文件将用作主页面（不适用于 include）
 			markdown: "line 1\n" +
 				"line 2\n" +
 				"### SEE ALSO\n" +

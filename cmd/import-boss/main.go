@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// import-boss enforces import restrictions in a given repository.
+// import-boss 在指定仓库中强制执行导入限制。
 package main
 
 import (
@@ -119,18 +119,18 @@ func massage(in []*packages.Package) []*packages.Package {
 	for _, pkg := range in {
 		klog.V(2).Infof("considering pkg: %q", pkg.PkgPath)
 
-		// Discard packages which represent the <pkg>.test result.  They don't seem
-		// to hold any interesting source info.
+		// 丢弃表示 <pkg>.test 结果的包。它们似乎
+		// 不包含任何有用的源码信息。
 		if strings.HasSuffix(pkg.PkgPath, ".test") {
 			klog.V(3).Infof("ignoring testbin pkg: %q", pkg.PkgPath)
 			continue
 		}
 
-		// Packages which end in "_test" have tests which use the special "_test"
-		// package suffix.  Packages which have test files must be tests.  Don't
-		// ask me, this is what packages.Load produces.
+		// 以 "_test" 结尾的包包含使用特殊 "_test" 后缀的测试。
+		// 含测试文件的包必然是测试包。别问我为什么，
+		// 这就是 packages.Load 的产物。
 		if strings.HasSuffix(pkg.PkgPath, "_test") || hasTestFiles(pkg.GoFiles) {
-			// NOTE: This syntax can be undone with unmassage().
+			// 注意：这种语法可以通过 unmassage() 撤销。
 			pkg.PkgPath = strings.TrimSuffix(pkg.PkgPath, "_test") + " ((tests:" + pkg.Name + "))"
 			klog.V(3).Infof("renamed to: %q", pkg.PkgPath)
 		}
@@ -149,11 +149,11 @@ func unmassage(str string) string {
 }
 
 type ImportBoss struct {
-	// incomingImports holds all the packages importing the key.
+	// incomingImports 保存所有导入该键的包。
 	incomingImports map[string][]string
 
-	// transitiveIncomingImports holds the transitive closure of
-	// incomingImports.
+	// transitiveIncomingImports 保存 incomingImports 的
+	// 传递闭包。
 	transitiveIncomingImports map[string][]string
 }
 
@@ -164,7 +164,7 @@ func newBoss(pkgs []*packages.Package) *ImportBoss {
 	}
 
 	for _, pkg := range pkgs {
-		// Accumulate imports
+		// 累积导入
 		for imp := range pkg.Imports {
 			boss.incomingImports[imp] = append(boss.incomingImports[imp], pkg.PkgPath)
 		}
@@ -187,8 +187,8 @@ func hasTestFiles(files []string) bool {
 func (boss *ImportBoss) Verify(pkg *packages.Package) []error {
 	pkgDir := packageDir(pkg)
 	if pkgDir == "" {
-		// This Package has no usable files, e.g. only tests, which are modelled in
-		// a distinct Package.
+		// 该 Package 没有可用文件，例如只有测试文件，而测试被建模为
+		// 另一个独立的 Package。
 		return nil
 	}
 
@@ -207,7 +207,7 @@ func (boss *ImportBoss) Verify(pkg *packages.Package) []error {
 	return errs
 }
 
-// packageDir tries to figure out the directory of the specified package.
+// packageDir 尝试确定指定包所在的目录。
 func packageDir(pkg *packages.Package) string {
 	if len(pkg.GoFiles) > 0 {
 		return filepath.Dir(pkg.GoFiles[0])
@@ -225,34 +225,34 @@ type FileFormat struct {
 	path string
 }
 
-// A single import restriction rule.
+// 单条导入限制规则。
 type Rule struct {
-	// All import paths that match this regexp...
+	// 所有匹配此正则的导入路径……
 	SelectorRegexp string
-	// ... must have one of these prefixes ...
+	// ……必须具有这些前缀之一……
 	AllowedPrefixes []string
-	// ... and must not have one of these prefixes.
+	// ……并且不得具有这些前缀。
 	ForbiddenPrefixes []string
-	// True if the rule is to be applied to transitive imports.
+	// 为 true 时该规则也适用于传递导入。
 	Transitive bool
 }
 
-// Disposition represents a decision or non-decision.
+// Disposition 表示判定结果或未判定。
 type Disposition int
 
 const (
-	// DepForbidden means the dependency was explicitly forbidden by a rule.
+	// DepForbidden 表示依赖被规则明确禁止。
 	DepForbidden Disposition = iota
-	// DepAllowed means the dependency was explicitly allowed by a rule.
+	// DepAllowed 表示依赖被规则明确允许。
 	DepAllowed
-	// DepAllowed means the dependency did not match any rule.
+	// DepAllowed 表示依赖未匹配任何规则。
 	DepUnknown
 )
 
-// Evaluate considers this rule and decides if this dependency is allowed.
+// Evaluate 根据该规则判定此依赖是否被允许。
 func (r Rule) Evaluate(imp string) Disposition {
-	// To pass, an import muct be allowed and not forbidden.
-	// Check forbidden first.
+	// 要通过检查，导入必须被允许且未被禁止。
+	// 先检查禁止项。
 	for _, forbidden := range r.ForbiddenPrefixes {
 		klog.V(5).Infof("checking %q against forbidden prefix %q", imp, forbidden)
 		if hasPathPrefix(imp, forbidden) {
@@ -270,8 +270,8 @@ func (r Rule) Evaluate(imp string) Disposition {
 	return DepUnknown
 }
 
-// recursiveRead collects all '.import-restriction' files, between the current directory,
-// and the module root.
+// recursiveRead 收集当前目录与模块根目录之间
+// 的所有 '.import-restriction' 文件。
 func recursiveRead(path string) ([]*FileFormat, error) {
 	restrictionFiles := make([]*FileFormat, 0)
 
@@ -311,15 +311,15 @@ func readFile(path string) (*FileFormat, error) {
 	return &current, nil
 }
 
-// isGoModRoot checks if a directory is the root directory for a package
-// by checking for the existence of a 'go.mod' file in that directory.
+// isGoModRoot 通过检查目录中是否存在 'go.mod' 文件，
+// 来判断该目录是否为包的根目录。
 func isGoModRoot(path string) bool {
 	_, err := os.Stat(filepath.Join(filepath.Dir(path), goModFile))
 	return err == nil
 }
 
-// removeLastDir removes the last directory, but leaves the file name
-// unchanged. It returns the new path and the removed directory. So:
+// removeLastDir 移除最后一级目录，但保留文件名
+// 不变。它返回新路径和被移除的目录。例如：
 // "a/b/c/file" -> ("a/b/file", "c")
 func removeLastDir(path string) (newPath, removedDir string) {
 	dir, file := filepath.Split(path)
@@ -330,7 +330,7 @@ func removeLastDir(path string) (newPath, removedDir string) {
 func (boss *ImportBoss) verifyRules(pkg *packages.Package, restrictionFiles []*FileFormat) []error {
 	klog.V(3).Infof("verifying pkg %q rules", pkg.PkgPath)
 
-	// compile all Selector regex in all restriction files
+	// 编译所有限制文件中的 Selector 正则
 	selectors := make([][]*regexp.Regexp, len(restrictionFiles))
 	for i, restrictionFile := range restrictionFiles {
 		for _, r := range restrictionFile.Rules {
@@ -362,8 +362,8 @@ func (boss *ImportBoss) verifyRules(pkg *packages.Package, restrictionFiles []*F
 	var errs []error
 	for _, imp := range uniq(direct, indirect) {
 		if unmassage(imp) == realPkgPath {
-			// Tests in package "foo_test" depend on the test package for
-			// "foo" (if both exist in a giver directory).
+			// 包 "foo_test" 中的测试依赖于 "foo" 的测试包
+			// （如果二者存在于同一目录）。
 			continue
 		}
 		klog.V(4).Infof("considering import %q %s %q", pkg.PkgPath, relate(imp), imp)
@@ -385,15 +385,15 @@ func (boss *ImportBoss) verifyRules(pkg *packages.Package, restrictionFiles []*F
 				disp := rule.Evaluate(imp)
 				if disp == DepAllowed {
 					decided = true
-					break // no further rules, next file
+					break // 无需检查更多规则，处理下一个文件
 				} else if disp == DepForbidden {
 					errs = append(errs, fmt.Errorf("%q %s %q is forbidden by %s", pkg.PkgPath, relate(imp), imp, file.path))
 					decided = true
-					break // no further rules, next file
+					break // 无需检查更多规则，处理下一个文件
 				}
 			}
 			if decided {
-				break // no further files, next import
+				break // 无需检查更多文件，处理下一个导入
 			}
 		}
 		if matched && !decided {
@@ -458,11 +458,11 @@ func dfsImports(dest *[]string, seen map[string]bool, p *packages.Package) {
 	}
 }
 
-// verifyInverseRules checks that all packages that import a package are allowed to import it.
+// verifyInverseRules 检查所有导入某包的包是否都被允许导入它。
 func (boss *ImportBoss) verifyInverseRules(pkg *packages.Package, restrictionFiles []*FileFormat) []error {
 	klog.V(3).Infof("verifying pkg %q inverse-rules", pkg.PkgPath)
 
-	// compile all Selector regex in all restriction files
+	// 编译所有限制文件中的 Selector 正则
 	selectors := make([][]*regexp.Regexp, len(restrictionFiles))
 	for i, restrictionFile := range restrictionFiles {
 		for _, r := range restrictionFile.InverseRules {
@@ -493,8 +493,8 @@ func (boss *ImportBoss) verifyInverseRules(pkg *packages.Package, restrictionFil
 	var errs []error
 	for _, imp := range boss.transitiveIncomingImports[pkg.PkgPath] {
 		if unmassage(imp) == realPkgPath {
-			// Tests in package "foo_test" depend on the test package for
-			// "foo" (if both exist in a giver directory).
+			// 包 "foo_test" 中的测试依赖于 "foo" 的测试包
+			// （如果二者存在于同一目录）。
 			continue
 		}
 		klog.V(4).Infof("considering import %q %s %q", pkg.PkgPath, relate(imp), imp)
@@ -516,15 +516,15 @@ func (boss *ImportBoss) verifyInverseRules(pkg *packages.Package, restrictionFil
 				disp := rule.Evaluate(imp)
 				if disp == DepAllowed {
 					decided = true
-					break // no further rules, next file
+					break // 无需检查更多规则，处理下一个文件
 				} else if disp == DepForbidden {
 					errs = append(errs, fmt.Errorf("%q %s %q is forbidden by %s", pkg.PkgPath, relate(imp), imp, file.path))
 					decided = true
-					break // no further rules, next file
+					break // 无需检查更多规则，处理下一个文件
 				}
 			}
 			if decided {
-				break // no further files, next import
+				break // 无需检查更多文件，处理下一个导入
 			}
 		}
 		if matched && !decided {
@@ -555,7 +555,7 @@ func transitiveClosure(in map[string][]string) map[string][]string {
 		}
 	}
 
-	// Warshal's algorithm
+	// Warshal 算法
 	for k := range in {
 		for i := range in {
 			if !adj[edge{i, k}] {

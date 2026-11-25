@@ -29,7 +29,7 @@ import (
 )
 
 func main() {
-	// use os.Args instead of "flags" because "flags" will mess up the man pages!
+	// 使用 os.Args 而非 "flags"，否则会破坏 man page！
 	path := "docs/"
 	if len(os.Args) == 2 {
 		path = os.Args[1]
@@ -44,8 +44,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set environment variables used by kubectl so the output is consistent,
-	// regardless of where we run.
+	// 设置 kubectl 使用的环境变量，使输出与运行位置无关，
+	// 始终保持一致。
 	os.Setenv("HOME", "/home/username")
 	kubectl := cmd.NewKubectlCommand(cmd.KubectlOptions{IOStreams: genericiooptions.IOStreams{In: bytes.NewReader(nil), Out: io.Discard, ErrOut: io.Discard}})
 	doc.GenMarkdownTree(kubectl, outDir)

@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Checks for restricted dependencies in go packages. Does not check transitive
-// dependencies implicitly, so they must be supplied in dependencies file if
-// they are to be evaluated.
+// 检查 go 包中的受限依赖。不会隐式检查传递依赖，
+// 因此若要评估传递依赖，必须在 dependencies 文件中
+// 显式提供它们。
 package main
 
 import (

@@ -28,14 +28,14 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd"
 )
 
-// Run creates and executes new kubeadm command
+// Run 创建并执行新的 kubeadm 命令
 func Run() error {
 	var allFlags flag.FlagSet
 	klog.InitFlags(&allFlags)
-	// only add the flags that are still supported for kubeadm
+	// 只添加 kubeadm 仍支持的 flag
 	allFlags.VisitAll(func(f *flag.Flag) {
 		switch f.Name {
-		// kubeadm only exposes the klog flags covered in https://features.k8s.io/2845
+		// kubeadm 只暴露 https://features.k8s.io/2845 涵盖的 klog flag
 		case "v", "vmodule":
 			flag.CommandLine.Var(f.Value, f.Name, f.Usage)
 		}

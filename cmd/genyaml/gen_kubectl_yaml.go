@@ -64,8 +64,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set environment variables used by kubectl so the output is consistent,
-	// regardless of where we run.
+	// 设置 kubectl 使用的环境变量，使输出保持一致，
+	// 不受运行位置影响。
 	os.Setenv("HOME", "/home/username")
 	kubectl := cmd.NewKubectlCommand(cmd.KubectlOptions{IOStreams: genericiooptions.IOStreams{In: bytes.NewReader(nil), Out: io.Discard, ErrOut: io.Discard}})
 	genYaml(kubectl, "", outDir)
@@ -74,8 +74,8 @@ func main() {
 	}
 }
 
-// Temporary workaround for yaml lib generating incorrect yaml with long strings
-// that do not contain \n.
+// 临时解决方法：yaml 库为不含 \n 的长字符串生成错误的 yaml，
+// 此处做特殊处理。
 func forceMultiLine(s string) string {
 	if len(s) > 60 && !strings.Contains(s, "\n") {
 		s = s + "\n"
@@ -87,9 +87,9 @@ func genFlagResult(flags *pflag.FlagSet) []cmdOption {
 	result := []cmdOption{}
 
 	flags.VisitAll(func(flag *pflag.Flag) {
-		// Todo, when we mark a shorthand is deprecated, but specify an empty message.
-		// The flag.ShorthandDeprecated is empty as the shorthand is deprecated.
-		// Using len(flag.ShorthandDeprecated) > 0 can't handle this, others are ok.
+		// 待办：标记某个缩写已弃用但未指定消息时，
+		// flag.ShorthandDeprecated 为空（因为该缩写已弃用）。
+		// 使用 len(flag.ShorthandDeprecated) > 0 无法处理这种情况，其他情况没问题。
 		if !(len(flag.ShorthandDeprecated) > 0) && len(flag.Shorthand) > 0 {
 			opt := cmdOption{
 				flag.Name,

@@ -48,18 +48,17 @@ users:
     username: config
 `
 
-// TestHollowNode is a naive test that attempts to start hollow node and checks if it's not crashing.
-// Such test is sufficient to detect e.g. missing kubelet dependencies that are not added in
-// pkg/kubemark/hollow_kubelet.go.
+// TestHollowNode 是一个简单粗暴的测试：尝试启动 hollow node，并检查其没有崩溃。
+// 这类测试足以发现诸如 pkg/kubemark/hollow_kubelet.go 中遗漏 kubelet 依赖的问题。
 func TestHollowNode(t *testing.T) {
-	// temp dir
+	// 临时目录
 	tmpDir, err := os.MkdirTemp("", "hollow-node")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// https server
+	// HTTPS 服务器
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte(`ok`))

@@ -83,7 +83,7 @@ func TestPrependAppendReactor(t *testing.T) {
 	d.PrependReactor(foo).PrependReactor(bar).
 		AppendReactor(baz).AppendReactor(qux)
 
-	// [ log, bar, foo, get, list, baz, qux, default ]
+	// [ log, bar, foo, get, list, baz, qux, default ]（反应链顺序）
 	//         1    2               5    6
 	expectedIdx := map[string]int{
 		foo.Verb: 2,

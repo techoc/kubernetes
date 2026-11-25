@@ -136,11 +136,11 @@ func TestPruneTESTS(t *testing.T) {
 	</testsuite>
 </testsuites>`
 
-	// This test uses the real OWNERS files from k/k because those exist.
-	// The downside it that OWNERS changes (not unlikely in the case of cluster/gce)
-	// imply changing this test data.
+	// 这个测试使用 k/k 中真实的 OWNERS 文件，因为它们确实存在。
+	// 缺点是 OWNERS 一旦变动（cluster/gce 下并不少见），
+	// 就需要同步修改这里的测试数据。
 	//
-	// Fake packages have no source and thus no OWNERS.
+	// 虚构的包没有源代码，因此也没有 OWNERS。
 	outputXML := `<?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
 	<testsuite tests="6" failures="0" time="5.50000" name="[sig-cloud-provider] k8s.io/kubernetes/cluster/gce" timestamp="">
@@ -190,8 +190,8 @@ func TestPruneTESTS(t *testing.T) {
 }
 
 func TestAddOwner(t *testing.T) {
-	// Use packages in k/k so we can validate addOwner() directory walking
-	// on both Linux and Windows for directories returned by "go list".
+	// 使用 k/k 中的包，以便针对 "go list" 返回的目录，
+	// 在 Linux 和 Windows 上都能验证 addOwner() 的目录遍历。
 	tests := []struct {
 		name       string
 		pkg        string
@@ -223,12 +223,12 @@ func TestAddOwnerUNCPath(t *testing.T) {
 		t.Skip("UNC paths are Windows-only")
 	}
 
-	// Validate the directory walking loop in addOwner terminates for Windows UNC paths.
+	// 验证 addOwner 中的目录遍历循环对 Windows UNC 路径也能终止。
 	pkgs := newPackageOwners(true)
 	pkgName := "k8s.iofake/pkg"
 	pkgs.pkgs[pkgName] = `\\server\share\some\path`
 
 	result := pkgs.addOwner(pkgName)
-	// No OWNERS file will be found, so name should be unchanged.
+	// 不会找到 OWNERS 文件，因此名称应保持不变。
 	assert.Equal(t, pkgName, result, "walk over UNC path should terminate and return name unchanged")
 }

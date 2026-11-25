@@ -30,37 +30,37 @@ import (
 	yaml "go.yaml.in/yaml/v2"
 )
 
-// Package is a subset of cmd/go.Package
+// Package 是 cmd/go.Package 的子集。
 type Package struct {
-	Dir          string   `yaml:",omitempty"` // directory containing package sources
-	ImportPath   string   `yaml:",omitempty"` // import path of package
-	Imports      []string `yaml:",omitempty"` // import paths used by this package
-	TestImports  []string `yaml:",omitempty"` // imports from TestGoFiles
-	XTestImports []string `yaml:",omitempty"` // imports from XTestGoFiles
+	Dir          string   `yaml:",omitempty"` // 包含包源码的目录
+	ImportPath   string   `yaml:",omitempty"` // 包的导入路径
+	Imports      []string `yaml:",omitempty"` // 此包使用的导入路径
+	TestImports  []string `yaml:",omitempty"` // 来自 TestGoFiles 的导入
+	XTestImports []string `yaml:",omitempty"` // 来自 XTestGoFiles 的导入
 }
 
-// ImportRestriction describes a set of allowable import
-// trees for a tree of source code
+// ImportRestriction 描述一棵源代码树所允许的
+// 一组导入树
 type ImportRestriction struct {
-	// BaseDir is the root of a package tree that is restricted by this
-	// configuration, given as a relative path from the root of the repository.
-	// This is a directory which `go list` might not consider a package (if it
-	// has not .go files)
+	// BaseDir 是受此配置约束的包树的根目录，
+	// 以相对于仓库根目录的路径表示。
+	// 这个目录可能不会被 `go list` 视为包（如果其中
+	// 没有 .go 文件）
 	BaseDir string `yaml:"baseImportPath"`
-	// IgnoredSubTrees are roots of sub-trees of the BaseDir for which we do
-	// not want to enforce any import restrictions whatsoever, given as
-	// relative paths from the root of the repository.
+	// IgnoredSubTrees 是 BaseDir 下不施加任何导入限制的
+	// 子树根，以相对于仓库根目录的路径
+	// 表示。
 	IgnoredSubTrees []string `yaml:"ignoredSubTrees,omitempty"`
-	// AllowedImports are roots of package trees that are allowed to be
-	// imported from the BaseDir, given as paths that would be used in a Go
-	// import statement.
+	// AllowedImports 是允许从 BaseDir 导入的包树的根，
+	// 以 Go 导入语句中使用的路径
+	// 表示。
 	AllowedImports []string `yaml:"allowedImports"`
-	// ExcludeTests will skip checking test dependencies.
+	// ExcludeTests 表示跳过对测试依赖的检查。
 	ExcludeTests bool `yaml:"excludeTests"`
 }
 
-// ForbiddenImportsFor determines all of the forbidden
-// imports for a package given the import restrictions
+// ForbiddenImportsFor 根据导入限制确定某个包的
+// 所有禁用导入
 func (i *ImportRestriction) ForbiddenImportsFor(pkg Package) ([]string, error) {
 	if restricted, err := i.isRestrictedDir(pkg.Dir); err != nil {
 		return []string{}, err
@@ -71,11 +71,11 @@ func (i *ImportRestriction) ForbiddenImportsFor(pkg Package) ([]string, error) {
 	return i.forbiddenImportsFor(pkg), nil
 }
 
-// isRestrictedDir determines if the source directory has
-// any restrictions placed on it by this configuration.
-// A path will be restricted if:
-//   - it falls under the base import path
-//   - it does not fall under any of the ignored sub-trees
+// isRestrictedDir 判断源码目录是否受到
+// 此配置的任何限制。
+// 满足以下条件的路径将受到限制：
+//   - 位于基础导入路径之下
+//   - 不位于任何忽略的子树之下
 func (i *ImportRestriction) isRestrictedDir(dir string) (bool, error) {
 	if under, err := isPathUnder(i.BaseDir, dir); err != nil {
 		return false, err
@@ -94,7 +94,7 @@ func (i *ImportRestriction) isRestrictedDir(dir string) (bool, error) {
 	return true, nil
 }
 
-// isPathUnder determines if path is under base
+// isPathUnder 判断 path 是否位于 base 之下
 func isPathUnder(base, path string) (bool, error) {
 	absBase, err := filepath.Abs(base)
 	if err != nil {
@@ -110,14 +110,14 @@ func isPathUnder(base, path string) (bool, error) {
 		return false, err
 	}
 
-	// if path is below base, the relative path
-	// from base to path will not start with `../`
+	// 如果 path 位于 base 之下，则从 base 到 path 的相对路径
+	// 不会以 `../` 开头
 	return !strings.HasPrefix(relPath, ".."), nil
 }
 
-// forbiddenImportsFor determines all of the forbidden
-// imports for a package given the import restrictions
-// and returns a deduplicated list of them
+// forbiddenImportsFor 根据导入限制确定某个包的
+// 所有禁用导入，并返回去重后的
+// 列表
 func (i *ImportRestriction) forbiddenImportsFor(pkg Package) []string {
 	forbiddenImportSet := map[string]struct{}{}
 	imports := pkg.Imports
@@ -137,11 +137,11 @@ func (i *ImportRestriction) forbiddenImportsFor(pkg Package) []string {
 	return forbiddenImports
 }
 
-// isForbidden determines if an import is forbidden,
-// which is true when the import is:
-//   - of a package under the rootPackage
-//   - is not of the base import path or a sub-package of it
-//   - is not of an allowed path or a sub-package of one
+// isForbidden 判断某个导入是否被禁用，
+// 满足以下条件时返回 true：
+//   - 导入的是 rootPackage 下的包
+//   - 不属于基础导入路径或其子包
+//   - 不属于允许的路径或其子包
 func (i *ImportRestriction) isForbidden(imp string) bool {
 	importsBelowRoot := strings.HasPrefix(imp, rootPackage)
 	importsBelowBase := strings.HasPrefix(imp, i.BaseDir)
@@ -249,11 +249,11 @@ func resolvePackageTree(treeBase string) ([]Package, error) {
 }
 
 func decodePackages(r io.Reader) ([]Package, error) {
-	// `go list -json` concatenates package definitions
-	// instead of emitting a single valid JSON, so we
-	// need to stream the output to decode it into the
-	// data we are looking for instead of just using a
-	// simple JSON decoder on stdout
+	// `go list -json` 会拼接多个包定义，
+	// 而不是输出单个合法 JSON，因此我们需要
+	// 流式解析输出，从中解码出所需数据，
+	// 而不能直接对标准输出使用简单的 JSON
+	// 解码器
 	var packages []Package
 	decoder := json.NewDecoder(r)
 	for decoder.More() {

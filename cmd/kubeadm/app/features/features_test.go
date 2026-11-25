@@ -38,17 +38,17 @@ func TestKnownFeatures(t *testing.T) {
 		t.Errorf("KnownFeatures returned %d values, expected 3", len(r))
 	}
 
-	// check the first value is feature1 (the list should be sorted); prerelease and default should be present
+	// 检查第一个值是 feature1（列表应已排序）；应显示 prerelease 和默认值
 	f1 := "feature1=true|false (BETA - default=false)"
 	if r[0] != f1 {
 		t.Errorf("KnownFeatures returned %s values, expected %s", r[0], f1)
 	}
-	// check the second value is feature2; prerelease and default should be present
+	// 检查第二个值是 feature2；应显示 prerelease 和默认值
 	f2 := "feature2=true|false (ALPHA - default=true)"
 	if r[1] != f2 {
 		t.Errorf("KnownFeatures returned %s values, expected %s", r[1], f2)
 	}
-	// check the second value is feature3; prerelease should not be shown for GA features; default should be present
+	// 检查第二个值是 feature3；GA 特性不显示 prerelease；应显示默认值
 	f3 := "feature3=true|false (default=false)"
 	if r[2] != f3 {
 		t.Errorf("KnownFeatures returned %s values, expected %s", r[2], f3)
@@ -67,41 +67,41 @@ func TestNewFeatureGate(t *testing.T) {
 		expectedError        bool
 		expectedFeaturesGate map[string]bool
 	}{
-		{ //invalid value (missing =)
+		{ //无效值（缺少 =）
 			value:         "invalidValue",
 			expectedError: true,
 		},
-		{ //invalid value (missing =)
+		{ //无效值（缺少 =）
 			value:         "feature1=true,invalidValue",
 			expectedError: true,
 		},
-		{ //invalid value (not a boolean)
+		{ //无效值（非布尔值）
 			value:         "feature1=notABoolean",
 			expectedError: true,
 		},
-		{ //invalid value (not a boolean)
+		{ //无效值（非布尔值）
 			value:         "feature1=true,feature2=notABoolean",
 			expectedError: true,
 		},
-		{ //unrecognized feature-gate key
+		{ //无法识别的 feature-gate 键
 			value:         "unknownFeature=false",
 			expectedError: true,
 		},
-		{ //unrecognized feature-gate key
+		{ //无法识别的 feature-gate 键
 			value:         "feature1=true,unknownFeature=false",
 			expectedError: true,
 		},
-		{ //deprecated feature-gate key
+		{ //已弃用的 feature-gate 键
 			value:                "deprecated=true",
 			expectedError:        false,
 			expectedFeaturesGate: map[string]bool{"deprecated": true},
 		},
-		{ //one feature
+		{ //一个特性
 			value:                "feature1=true",
 			expectedError:        false,
 			expectedFeaturesGate: map[string]bool{"feature1": true},
 		},
-		{ //two features
+		{ //两个特性
 			value:                "feature1=true,feature2=false",
 			expectedError:        false,
 			expectedFeaturesGate: map[string]bool{"feature1": true, "feature2": false},
@@ -172,8 +172,8 @@ func TestValidateVersion(t *testing.T) {
 	}
 }
 
-// TestEnabledDefaults tests that Enabled returns the default values for
-// each feature gate when no feature gates are specified.
+// TestEnabledDefaults 测试当未指定任何特性门控时，Enabled 会返回
+// 每个特性门控的默认值。
 func TestEnabledDefaults(t *testing.T) {
 	for featureName, feature := range InitFeatureGates {
 		featureList := make(map[string]bool)

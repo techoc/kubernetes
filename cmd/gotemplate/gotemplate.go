@@ -25,15 +25,15 @@ import (
 	"text/template"
 )
 
-// gotemplate is a simple CLI for text/template. It reads from stdin and writes to stdout.
-// Optional arguments are <key>=<value> pairs which can be used as {{.<key>}} to inject
-// the <value> for that key.
+// gotemplate 是一个简单的 text/template 命令行工具。它从标准输入读取并写入标准输出。
+// 可选参数是 <key>=<value> 对，可用 {{.<key>}} 形式注入
+// 该键对应的 <value>。
 //
-// Besides the default functions (https://pkg.go.dev/text/template#hdr-Functions),
-// gotemplate also implements:
-// - include <filename>: returns the content of that file as string
-// - indent <number of spaces> <string>: replace each newline with "newline + spaces", indent the newline at the end
-// - trim <string>: strip leading and trailing whitespace
+// 除了默认函数（https://pkg.go.dev/text/template#hdr-Functions）之外，
+// gotemplate 还实现了：
+// - include <filename>：以字符串形式返回该文件的内容
+// - indent <number of spaces> <string>：将每个换行符替换为 "newline + spaces"，并缩进末尾的换行
+// - trim <string>：去除首尾空白字符
 
 func main() {
 	kvs := make(map[string]string)

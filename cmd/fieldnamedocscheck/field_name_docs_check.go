@@ -34,7 +34,7 @@ var (
 	re      = regexp.MustCompile("`(\\b\\w+\\b)`")
 )
 
-// kubeTypesMap is a map from field name to its tag name and doc.
+// kubeTypesMap 是从字段名到其 tag 名和文档的映射。
 type kubeTypesMap map[string]kruntime.Pair
 
 func main() {
@@ -55,7 +55,7 @@ func main() {
 		typesMap := make(kubeTypesMap)
 
 		for _, p := range ks[1:] {
-			// skip the field with no tag name
+			// 跳过没有 tag 名的字段
 			if p.Name != "" {
 				typesMap[strings.ToLower(p.Name)] = p
 			}
@@ -78,15 +78,15 @@ func checkFieldNameAndDoc(structName, fieldName, doc string, typesMap kubeTypesM
 	rc := false
 	visited := sets.Set[string]{}
 
-	// The rule is:
-	// 1. Get all back-tick quoted names in the doc
-	// 2. Skip the name which is already found mismatched.
-	// 3. Skip the name whose lowercase is different from the lowercase of tag names,
-	//    because some docs use back-tick to quote field value or nil
-	// 4. Check if the name is different from its tag name
+	// 规则如下：
+	// 1. 取出文档中所有用反引号引用的名称
+	// 2. 跳过已经发现不匹配的名称。
+	// 3. 跳过小写形式与 tag 名小写形式不同的名称，
+	//    因为有些文档用反引号引用字段值或 nil
+	// 4. 检查名称是否与其 tag 名不同
 
-	// TODO: a manual pass adding back-ticks to the doc strings, then update the linter to
-	// check the existence of back-ticks
+	// TODO: 人工为文档字符串添加反引号，然后更新 linter
+	// 以检查反引号是否存在
 	nameGroups := re.FindAllStringSubmatch(doc, -1)
 	for _, nameGroup := range nameGroups {
 		name := nameGroup[1]

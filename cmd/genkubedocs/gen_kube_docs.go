@@ -35,7 +35,7 @@ import (
 )
 
 func main() {
-	// use os.Args instead of "flags" because "flags" will mess up the man pages!
+	// 使用 os.Args 而非 "flags"，否则会破坏 man page！
 	path := ""
 	module := ""
 	if len(os.Args) == 3 {
@@ -55,36 +55,36 @@ func main() {
 
 	switch module {
 	case "kube-apiserver":
-		// generate docs for kube-apiserver
+		// 为 kube-apiserver 生成文档
 		apiserver := apiservapp.NewAPIServerCommand()
 		doc.GenMarkdownTree(apiserver, outDir)
 	case "kube-controller-manager":
-		// generate docs for kube-controller-manager
+		// 为 kube-controller-manager 生成文档
 		controllermanager := cmapp.NewControllerManagerCommand()
 		doc.GenMarkdownTree(controllermanager, outDir)
 	case "kube-proxy":
-		// generate docs for kube-proxy
+		// 为 kube-proxy 生成文档
 		proxy := proxyapp.NewProxyCommand()
 		doc.GenMarkdownTree(proxy, outDir)
 	case "kube-scheduler":
-		// generate docs for kube-scheduler
+		// 为 kube-scheduler 生成文档
 		scheduler := schapp.NewSchedulerCommand()
 		doc.GenMarkdownTree(scheduler, outDir)
 	case "kubelet":
-		// generate docs for kubelet
+		// 为 kubelet 生成文档
 		kubelet := kubeletapp.NewKubeletCommand(ctx)
 		doc.GenMarkdownTree(kubelet, outDir)
 	case "kubeadm":
-		// resets global flags created by kubelet or other commands e.g.
-		// --azure-container-registry-config from pkg/credentialprovider/azure
-		// --version pkg/version/verflag
+		// 重置由 kubelet 或其他命令创建的全局 flag，例如
+		// pkg/credentialprovider/azure 中的 --azure-container-registry-config
+		// pkg/version/verflag 中的 --version
 		pflag.CommandLine = pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
 
-		// generate docs for kubeadm
+		// 为 kubeadm 生成文档
 		kubeadm := kubeadmapp.NewKubeadmCommand(bytes.NewReader(nil), io.Discard, io.Discard)
 		doc.GenMarkdownTree(kubeadm, outDir)
 
-		// cleanup generated code for usage as include in the website
+		// 清理生成的代码，以便作为网站 include 使用
 		MarkdownPostProcessing(kubeadm, outDir, cleanupForInclude)
 	default:
 		fmt.Fprintf(os.Stderr, "Module %s is not supported", module)

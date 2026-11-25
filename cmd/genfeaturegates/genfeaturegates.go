@@ -42,14 +42,14 @@ var (
 	format      = flag.String("format", "markdown", "Output format: markdown, json")
 )
 
-// FeatureGateJSON represents a feature gate in JSON output format
+// FeatureGateJSON 表示 JSON 输出格式中的特性门控
 type FeatureGateJSON struct {
 	Name         string      `json:"name"`
 	Stages       []StageJSON `json:"stages"`
 	Dependencies []string    `json:"dependencies,omitempty"`
 }
 
-// StageJSON represents a stage in the feature gate lifecycle
+// StageJSON 表示特性门控生命周期中的一个阶段
 type StageJSON struct {
 	Stage       string `json:"stage"`
 	FromVersion string `json:"fromVersion"`
@@ -58,17 +58,17 @@ type StageJSON struct {
 	Locked      bool   `json:"locked,omitempty"`
 }
 
-// stageInfo holds version range info for a single stage entry
+// stageInfo 保存单个阶段条目的版本范围信息
 type stageInfo struct {
 	fromVersion string
 	toVersion   string
 }
 
-// featureInfo holds processed information about a feature gate (for markdown)
+// featureInfo 保存特性门控经过处理的信息（用于 markdown）
 type featureInfo struct {
 	name               string
 	stage              string
-	stageOrder         int // for sorting: 1=Alpha, 2=Beta, 3=GA, 4=Deprecated
+	stageOrder         int // 用于排序：1=Alpha, 2=Beta, 3=GA, 4=Deprecated
 	enabledFromVersion string
 	lockedFromVersion  string
 	alphaStages        []stageInfo
@@ -123,29 +123,29 @@ func main() {
 	}
 }
 
-// skipFeatures are meta-features that should not appear in the feature list
+// skipFeatures 是不应出现在特性列表中的元特性
 var skipFeatures = map[string]bool{
 	"AllAlpha": true,
 	"AllBeta":  true,
 }
 
 func generateJSON(filterStage string) string {
-	// Get all versioned feature specs and dependencies using public methods
+	// 通过公开方法获取所有带版本信息的特性规格及其依赖
 	allFeatures := utilfeature.DefaultMutableFeatureGate.GetAllVersioned()
 	allDependencies := utilfeature.DefaultMutableFeatureGate.Dependencies()
 
-	// Build feature list
+	// 构建特性列表
 	features := make([]FeatureGateJSON, 0, len(allFeatures))
 
 	for featureName, specs := range allFeatures {
 		feature := string(featureName)
 
-		// Skip meta-features
+		// 跳过元特性
 		if skipFeatures[feature] {
 			continue
 		}
 
-		// Sort specs by version to process in order
+		// 按版本排序规格，以便依次处理
 		sort.Sort(featuregate.VersionedSpecs(specs))
 
 		fg := FeatureGateJSON{
@@ -153,7 +153,7 @@ func generateJSON(filterStage string) string {
 			Stages: make([]StageJSON, 0),
 		}
 
-		// Track versions for each stage to compute toVersion
+		// 记录每个阶段对应的版本，以便计算 toVersion
 		type stageEntry struct {
 			stage       string
 			fromVersion string
@@ -183,7 +183,7 @@ func generateJSON(filterStage string) string {
 			})
 		}
 
-		// Convert entries to stages with toVersion
+		// 将条目转换为带 toVersion 的阶段
 		for i, entry := range entries {
 			stage := StageJSON{
 				Stage:       entry.stage,
@@ -192,13 +192,13 @@ func generateJSON(filterStage string) string {
 				Locked:      entry.locked,
 			}
 
-			// Find toVersion: look for next entry that represents a change
-			// (different stage, different default, or different locked status)
+			// 查找 toVersion：寻找下一个发生变化的条目
+			// （阶段、默认值或锁定状态不同）
 			for j := i + 1; j < len(entries); j++ {
 				if entries[j].stage != entry.stage ||
 					entries[j].defaultVal != entry.defaultVal ||
 					entries[j].locked != entry.locked {
-					// toVersion is one minor version before the next entry's fromVersion
+					// toVersion 是下一条目 fromVersion 的前一个次版本
 					stage.ToVersion = getPreviousMinorVersion(entries[j].fromVersion)
 					break
 				}
@@ -207,10 +207,10 @@ func generateJSON(filterStage string) string {
 			fg.Stages = append(fg.Stages, stage)
 		}
 
-		// Deduplicate stages - keep first occurrence of each stage with merged version range
+		// 合并重复阶段：保留每个阶段首次出现的条目，并合并其版本范围
 		fg.Stages = deduplicateStages(fg.Stages)
 
-		// Apply stage filter
+		// 应用阶段过滤
 		if filterStage != "" {
 			hasStage := false
 			for _, s := range fg.Stages {
@@ -224,7 +224,7 @@ func generateJSON(filterStage string) string {
 			}
 		}
 
-		// Get dependencies
+		// 获取依赖项
 		deps := allDependencies[featuregate.Feature(feature)]
 		if len(deps) > 0 {
 			fg.Dependencies = make([]string, len(deps))
@@ -236,7 +236,7 @@ func generateJSON(filterStage string) string {
 		features = append(features, fg)
 	}
 
-	// Sort by name
+	// 按名称排序
 	sort.Slice(features, func(i, j int) bool {
 		return features[i].Name < features[j].Name
 	})
@@ -250,7 +250,7 @@ func generateJSON(filterStage string) string {
 	return string(jsonBytes) + "\n"
 }
 
-// getPreviousMinorVersion returns the previous minor version (e.g., "1.30" -> "1.29")
+// getPreviousMinorVersion 返回前一个次版本（例如 "1.30" -> "1.29"）
 func getPreviousMinorVersion(ver string) string {
 	v, err := version.Parse(ver)
 	if err != nil {
@@ -263,9 +263,9 @@ func getPreviousMinorVersion(ver string) string {
 	return ""
 }
 
-// deduplicateStages merges consecutive entries with the same stage, default, and locked values.
-// If defaultValue or locked changes within the same stage, we keep separate entries to preserve
-// the full lifecycle history (e.g., beta disabled in 1.23, beta enabled in 1.24).
+// deduplicateStages 合并阶段、默认值和锁定状态均相同的连续条目。
+// 如果同一阶段内 defaultValue 或 locked 发生变化，则保留独立条目，
+// 以完整体现生命周期历史（例如 1.23 中 beta 默认关闭，1.24 中 beta 默认开启）。
 func deduplicateStages(stages []StageJSON) []StageJSON {
 	if len(stages) == 0 {
 		return stages
@@ -275,14 +275,14 @@ func deduplicateStages(stages []StageJSON) []StageJSON {
 	current := stages[0]
 
 	for i := 1; i < len(stages); i++ {
-		// Only merge if stage, default, AND locked are all the same
+		// 仅当阶段、默认值和锁定状态全部相同时才合并
 		if stages[i].Stage == current.Stage &&
 			stages[i].Default == current.Default &&
 			stages[i].Locked == current.Locked {
-			// Same stage with same settings, extend the version range
+			// 阶段与设置均相同，扩展版本范围
 			current.ToVersion = stages[i].ToVersion
 		} else {
-			// Different stage or settings changed, save current and start new
+			// 阶段不同或设置发生变化，保存当前条目并开始新条目
 			result = append(result, current)
 			current = stages[i]
 		}
@@ -293,17 +293,17 @@ func deduplicateStages(stages []StageJSON) []StageJSON {
 }
 
 func generateMarkdown(sortBy string, reverseSort bool, filterStage string) string {
-	// Get all versioned feature specs and dependencies using public methods
+	// 通过公开方法获取所有带版本信息的特性规格及其依赖
 	allFeatures := utilfeature.DefaultMutableFeatureGate.GetAllVersioned()
 	allDependencies := utilfeature.DefaultMutableFeatureGate.Dependencies()
 
-	// Build feature info list
+	// 构建特性信息列表
 	features := make([]featureInfo, 0, len(allFeatures))
 
 	for featureName, specs := range allFeatures {
 		feature := string(featureName)
 
-		// Skip meta-features
+		// 跳过元特性
 		if skipFeatures[feature] {
 			continue
 		}
@@ -312,10 +312,10 @@ func generateMarkdown(sortBy string, reverseSort bool, filterStage string) strin
 			name: feature,
 		}
 
-		// Sort specs by version to process in order
+		// 按版本排序规格，以便依次处理
 		sort.Sort(featuregate.VersionedSpecs(specs))
 
-		// First pass: collect all entries with their stage info
+		// 第一轮：收集所有条目及其阶段信息
 		type rawEntry struct {
 			version      *version.Version
 			verStr       string
@@ -347,7 +347,7 @@ func generateMarkdown(sortBy string, reverseSort bool, filterStage string) strin
 			}
 			entries = append(entries, entry)
 
-			// Track first version for each stage and first enabled/locked versions
+			// 记录每个阶段的首个版本，以及首次启用/锁定的版本
 			switch spec.PreRelease {
 			case featuregate.Alpha:
 				if info.alphaVersion == nil {
@@ -375,26 +375,26 @@ func generateMarkdown(sortBy string, reverseSort bool, filterStage string) strin
 				info.stageOrder = 4
 			}
 
-			// Track when feature was first enabled by default
+			// 记录特性首次默认启用的时间
 			if spec.Default && info.enabledFromVersion == "" {
 				info.enabledFromVersion = spec.Version.String()
 			}
-			// Track when feature was first locked
+			// 记录特性首次被锁定的时间
 			if spec.LockToDefault && info.lockedFromVersion == "" {
 				info.lockedFromVersion = spec.Version.String()
 			}
 		}
 
-		// Second pass: build stage ranges with toVersion
-		// We only track stage transitions (alpha->beta->ga->deprecated), not enabled/locked changes.
-		// The Enabled and Locked columns show when those settings changed.
+		// 第二轮：构建带 toVersion 的阶段范围
+		// 这里只跟踪阶段变化（alpha->beta->ga->deprecated），不跟踪启用/锁定状态的变化。
+		// Enabled 和 Locked 列会展示这些设置何时发生变化。
 		for i := 0; i < len(entries); i++ {
 			entry := entries[i]
 			si := stageInfo{
 				fromVersion: entry.verStr,
 			}
 
-			// Find toVersion: look for the next entry with a different stage
+			// 查找 toVersion：寻找下一个阶段不同的条目
 			for j := i + 1; j < len(entries); j++ {
 				sameStage := (entry.isAlpha == entries[j].isAlpha &&
 					entry.isBeta == entries[j].isBeta &&
@@ -406,7 +406,7 @@ func generateMarkdown(sortBy string, reverseSort bool, filterStage string) strin
 				}
 			}
 
-			// Merge with previous entry if same stage, otherwise add new entry
+			// 阶段相同则与上一个条目合并，否则新增条目
 			if entry.isAlpha {
 				if len(info.alphaStages) > 0 {
 					last := &info.alphaStages[len(info.alphaStages)-1]
@@ -438,12 +438,12 @@ func generateMarkdown(sortBy string, reverseSort bool, filterStage string) strin
 			}
 		}
 
-		// Apply stage filter
+		// 应用阶段过滤
 		if filterStage != "" && !strings.EqualFold(info.stage, filterStage) {
 			continue
 		}
 
-		// Get dependencies for this feature as bullet list (one per line)
+		// 获取该特性的依赖项并转为列表（每行一个）
 		deps := allDependencies[featuregate.Feature(feature)]
 		if len(deps) > 0 {
 			depItems := make([]string, len(deps))
@@ -459,10 +459,10 @@ func generateMarkdown(sortBy string, reverseSort bool, filterStage string) strin
 		features = append(features, info)
 	}
 
-	// Sort features based on sortBy parameter
+	// 根据 sortBy 参数对特性排序
 	sortFeatures(features, sortBy, reverseSort)
 
-	// Build markdown output
+	// 构建 markdown 输出
 	var sb strings.Builder
 	sb.WriteString("# Kubernetes Feature Gates\n\n")
 	sb.WriteString("<!-- This file is auto-generated by hack/update-featuregates.sh. DO NOT EDIT. -->\n")
@@ -497,7 +497,7 @@ func generateMarkdown(sortBy string, reverseSort bool, filterStage string) strin
 	return sb.String()
 }
 
-// formatEnabledColumn formats the Enabled column showing when a feature was first enabled by default
+// formatEnabledColumn 格式化 Enabled 列，显示特性首次默认启用的时间
 func formatEnabledColumn(enabledFromVersion string) string {
 	if enabledFromVersion == "" {
 		return ""
@@ -505,7 +505,7 @@ func formatEnabledColumn(enabledFromVersion string) string {
 	return ":ballot_box_with_check:&nbsp;" + enabledFromVersion + "+"
 }
 
-// formatLockedColumn formats the Locked column showing when a feature was first locked
+// formatLockedColumn 格式化 Locked 列，显示特性首次被锁定的时间
 func formatLockedColumn(lockedFromVersion string) string {
 	if lockedFromVersion == "" {
 		return ""
@@ -513,8 +513,8 @@ func formatLockedColumn(lockedFromVersion string) string {
 	return ":closed_lock_with_key:&nbsp;" + lockedFromVersion + "+"
 }
 
-// formatStageRanges formats a list of stage ranges for markdown display
-// Each range shows "fromVersion–toVersion" (with en-dash) or "fromVersion–" for open-ended ranges
+// formatStageRanges 格式化阶段范围列表以便用 markdown 展示
+// 每个范围显示为 "fromVersion–toVersion"（使用 en-dash），开放范围显示为 "fromVersion–"
 func formatStageRanges(stages []stageInfo) string {
 	if len(stages) == 0 {
 		return ""
@@ -524,9 +524,9 @@ func formatStageRanges(stages []stageInfo) string {
 	for i, s := range stages {
 		var versionRange string
 		if s.toVersion != "" && s.toVersion != s.fromVersion {
-			versionRange = s.fromVersion + "–" + s.toVersion // en-dash for range
+			versionRange = s.fromVersion + "–" + s.toVersion // en-dash 表示范围
 		} else if s.toVersion == "" && i == len(stages)-1 {
-			// Last stage with no end version - trailing en-dash indicates open range
+			// 最后一个阶段没有结束版本，末尾的 en-dash 表示开放范围
 			versionRange = s.fromVersion + "–"
 		} else {
 			versionRange = s.fromVersion
@@ -580,16 +580,16 @@ func sortFeatures(features []featureInfo, sortBy string, reverseSort bool) {
 	}
 }
 
-// compareVersions compares two versions, putting nil versions last
+// compareVersions 比较两个版本，nil 版本排在最后
 func compareVersions(v1, v2 *version.Version, name1, name2 string) bool {
 	if v1 == nil && v2 == nil {
 		return name1 < name2
 	}
 	if v1 == nil {
-		return false // nil goes last
+		return false // nil 排在最后
 	}
 	if v2 == nil {
-		return true // nil goes last
+		return true // nil 排在最后
 	}
 	if v1.EqualTo(v2) {
 		return name1 < name2

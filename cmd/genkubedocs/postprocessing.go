@@ -24,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// MarkdownPostProcessing goes though the generated files
+// MarkdownPostProcessing 遍历生成的文件并执行后处理
 func MarkdownPostProcessing(cmd *cobra.Command, dir string, processor func(string) string) error {
 	for _, c := range cmd.Commands() {
 		if !c.IsAvailableCommand() || c.IsAdditionalHelpTopicCommand() {
@@ -48,9 +48,9 @@ func MarkdownPostProcessing(cmd *cobra.Command, dir string, processor func(strin
 	return os.WriteFile(filename, []byte(processedMarkDown), 0644)
 }
 
-// cleanupForInclude parts of markdown that will make difficult to use it as include in the website:
-// - The title of the document (this allow more flexibility for include, e.g. include in tabs)
-// - The sections see also, that assumes file will be used as a main page
+// cleanupForInclude 删除 markdown 中不利于作为网站 include 使用的部分：
+// - 文档标题（这样 include 时更灵活，例如放进标签页）
+// - see also 章节，它假设文件会作为主页面使用
 func cleanupForInclude(md string) string {
 	lines := strings.Split(md, "\n")
 

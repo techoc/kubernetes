@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// The external controller manager is responsible for running controller loops that
-// are cloud provider dependent. It uses the API to listen to new events on resources.
+// 外部 controller manager 负责运行依赖云提供商的 controller 循环。
+// 它通过 API 监听资源上的新事件。
 
-// This file should be written by each cloud provider.
-// For a minimal working example, please refer to k8s.io/cloud-provider/sample/basic_main.go
-// For more details, please refer to k8s.io/kubernetes/cmd/cloud-controller-manager/main.go
-// The current file demonstrate how other cloud provider should leverage CCM and it uses fake parameters. Please modify for your own use.
+// 此文件应由各云提供商自行编写。
+// 最小可运行示例请参考 k8s.io/cloud-provider/sample/basic_main.go
+// 更多细节请参考 k8s.io/kubernetes/cmd/cloud-controller-manager/main.go
+// 当前文件演示其他云提供商应如何利用 CCM，其中的参数是虚构的。请根据自身情况修改。
 
 package main
 
@@ -35,11 +35,11 @@ import (
 	"k8s.io/cloud-provider/options"
 	"k8s.io/component-base/cli"
 	cliflag "k8s.io/component-base/cli/flag"
-	_ "k8s.io/component-base/metrics/prometheus/clientgo" // load all the prometheus client-go plugins
-	_ "k8s.io/component-base/metrics/prometheus/version"  // for version metric registration
+	_ "k8s.io/component-base/metrics/prometheus/clientgo" // 加载所有 prometheus client-go 插件
+	_ "k8s.io/component-base/metrics/prometheus/version"  // 用于注册版本指标
 	"k8s.io/klog/v2"
 	kcmnames "k8s.io/kubernetes/cmd/kube-controller-manager/names"
-	// For existing cloud providers, the option to import legacy providers is still available.
+	// 对于已有的云提供商，仍可选择导入 legacy provider。
 	// e.g. _"k8s.io/legacy-cloud-providers/<provider>"
 )
 
@@ -51,13 +51,13 @@ func main() {
 
 	controllerInitializers := app.DefaultInitFuncConstructors
 	controllerAliases := names.CCMControllerAliases()
-	// Here is an example to remove the controller which is not needed.
-	// e.g. remove the cloud-node-lifecycle controller which current cloud provider does not need.
+	// 下面是移除不需要的 controller 的示例。
+	// 例如，移除当前云提供商不需要的 cloud-node-lifecycle controller。
 	//delete(controllerInitializers, "cloud-node-lifecycle")
 
-	// Here is an example to add an controller(NodeIpamController) which will be used by cloud provider
-	// generate nodeIPAMConfig. Here is an sample code.
-	// If you do not need additional controller, please ignore.
+	// 下面是添加一个供云提供商用于生成 nodeIPAMConfig 的 controller（NodeIpamController）的示例。
+	// 这是示例代码。
+	// 如果不需要额外的 controller，请忽略。
 
 	nodeIpamController := nodeIPAMController{}
 	nodeIpamController.nodeIPAMControllerOptions.NodeIPAMControllerConfiguration = &nodeIpamController.nodeIPAMControllerConfiguration
@@ -65,8 +65,8 @@ func main() {
 	nodeIpamController.nodeIPAMControllerOptions.AddFlags(fss.FlagSet(kcmnames.NodeIpamController))
 
 	controllerInitializers[kcmnames.NodeIpamController] = app.ControllerInitFuncConstructor{
-		// "node-controller" is the shared identity of all node controllers, including node, node lifecycle, and node ipam.
-		// See https://github.com/kubernetes/kubernetes/pull/72764#issuecomment-453300990 for more context.
+		// "node-controller" 是所有节点 controller 共用的身份标识，包括 node、node lifecycle 和 node ipam。
+		// 更多背景信息见 https://github.com/kubernetes/kubernetes/pull/72764#issuecomment-453300990 。
 		InitContext: app.ControllerInitContext{
 			ClientName: "node-controller",
 		},
@@ -81,7 +81,7 @@ func main() {
 
 func cloudInitializer(config *cloudcontrollerconfig.CompletedConfig) cloudprovider.Interface {
 	cloudConfig := config.ComponentConfig.KubeCloudShared.CloudProvider
-	// initialize cloud provider with the cloud provider name and config file provided
+	// 使用提供的云提供商名称和配置文件初始化 cloud provider
 	cloud, err := cloudprovider.InitCloudProvider(cloudConfig.Name, cloudConfig.CloudConfigFile)
 	if err != nil {
 		klog.Fatalf("Cloud provider could not be initialized: %v", err)

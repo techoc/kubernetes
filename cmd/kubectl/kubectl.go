@@ -24,21 +24,19 @@ import (
 	"k8s.io/kubectl/pkg/cmd"
 	"k8s.io/kubectl/pkg/cmd/util"
 
-	// Import to initialize client auth plugins.
+	// 导入以初始化客户端认证插件。
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
 func main() {
-	// We need to manually parse the arguments looking for verbosity flag and
-	// set appropriate level here, because in the normal flow the flag parsing,
-	// including the logging verbosity, happens inside cli.RunNoErrOutput.
-	// Doing it here ensures we can continue using klog during kubectl command
-	// construction, which includes handling plugins and parsing .kuberc file,
-	// for example.
+	// 我们需要在此手动解析参数、查找详细级别 flag 并设置相应级别，
+	// 因为正常流程中包括日志详细级别在内的 flag 解析发生在
+	// cli.RunNoErrOutput 内部。在此处理可确保在构造 kubectl 命令期间
+	// 仍能使用 klog，例如处理插件和解析 .kuberc 文件时。
 	logs.GlogSetter(cmd.GetLogVerbosity(os.Args)) // nolint:errcheck
 	command := cmd.NewDefaultKubectlCommand()
 	if err := cli.RunNoErrOutput(command); err != nil {
-		// Pretty-print the error and exit with an error.
+		// 友好地打印错误并以错误状态退出。
 		util.CheckErr(err)
 	}
 }

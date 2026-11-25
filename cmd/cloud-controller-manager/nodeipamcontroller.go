@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This file holds the code related with the sample nodeipamcontroller
-// which demonstrates how cloud providers add external controllers to cloud-controller-manager
+// 本文件包含示例 nodeipamcontroller 的相关代码，
+// 演示云提供商如何向 cloud-controller-manager 添加外部 controller。
 
 package main
 
@@ -40,9 +40,9 @@ import (
 )
 
 const (
-	// defaultNodeMaskCIDRIPv4 is default mask size for IPv4 node cidr
+	// defaultNodeMaskCIDRIPv4 是 IPv4 节点 CIDR 的默认掩码大小
 	defaultNodeMaskCIDRIPv4 = 24
-	// defaultNodeMaskCIDRIPv6 is default mask size for IPv6 node cidr
+	// defaultNodeMaskCIDRIPv6 是 IPv6 节点 CIDR 的默认掩码大小
 	defaultNodeMaskCIDRIPv6 = 64
 )
 
@@ -67,33 +67,33 @@ func startNodeIpamController(ctx context.Context, initContext app.ControllerInit
 	var serviceCIDR *net.IPNet
 	var secondaryServiceCIDR *net.IPNet
 
-	// should we start nodeIPAM
+	// 是否应启动 nodeIPAM
 	if !ccmConfig.ComponentConfig.KubeCloudShared.AllocateNodeCIDRs {
 		return nil, false, nil
 	}
 
-	// Cannot run cloud ipam controller if cloud provider is nil (--cloud-provider not set or set to 'external')
+	// cloud provider 为 nil 时无法运行 cloud ipam controller（--cloud-provider 未设置或设置为 'external'）
 	if cloud == nil && ccmConfig.ComponentConfig.KubeCloudShared.CIDRAllocatorType == string(ipam.CloudAllocatorType) {
 		return nil, false, errors.New("--cidr-allocator-type is set to 'CloudAllocator' but cloud provider is not configured")
 	}
 
-	// failure: bad cidrs in config
+	// 配置中的 CIDR 不合法则失败
 	clusterCIDRs, dualStack, err := processCIDRs(ccmConfig.ComponentConfig.KubeCloudShared.ClusterCIDR)
 	if err != nil {
 		return nil, false, err
 	}
 
-	// failure: more than one cidr but they are not configured as dual stack
+	// 有多个 CIDR 但未配置为双栈时失败
 	if len(clusterCIDRs) > 1 && !dualStack {
 		return nil, false, fmt.Errorf("len of ClusterCIDRs==%v and they are not configured as dual stack (at least one from each IPFamily", len(clusterCIDRs))
 	}
 
-	// failure: more than cidrs is not allowed even with dual stack
+	// 即使启用双栈，也不允许超过两个 CIDR
 	if len(clusterCIDRs) > 2 {
 		return nil, false, fmt.Errorf("len of clusters is:%v > more than max allowed of 2", len(clusterCIDRs))
 	}
 
-	// service cidr processing
+	// 处理 service CIDR
 	if len(strings.TrimSpace(nodeIPAMConfig.ServiceCIDR)) != 0 {
 		_, serviceCIDR, err = netutils.ParseCIDRSloppy(nodeIPAMConfig.ServiceCIDR)
 		if err != nil {
@@ -108,9 +108,9 @@ func startNodeIpamController(ctx context.Context, initContext app.ControllerInit
 		}
 	}
 
-	// the following checks are triggered if both serviceCIDR and secondaryServiceCIDR are provided
+	// 仅当同时提供 serviceCIDR 和 secondaryServiceCIDR 时才执行以下检查
 	if serviceCIDR != nil && secondaryServiceCIDR != nil {
-		// should be dual stack (from different IPFamilies)
+		// 必须构成双栈（来自不同的 IPFamilies）
 		dualstackServiceCIDR, err := netutils.IsDualStackCIDRs([]*net.IPNet{serviceCIDR, secondaryServiceCIDR})
 		if err != nil {
 			return nil, false, fmt.Errorf("failed to perform dualstack check on serviceCIDR and secondaryServiceCIDR error:%v", err)
@@ -143,10 +143,10 @@ func startNodeIpamController(ctx context.Context, initContext app.ControllerInit
 	return nil, true, nil
 }
 
-// processCIDRs is a helper function that works on a comma separated cidrs and returns
-// a list of typed cidrs
-// a flag if cidrs represents a dual stack
-// error if failed to parse any of the cidrs
+// processCIDRs 是处理逗号分隔 CIDR 的辅助函数，返回
+// 解析后的 CIDR 列表、
+// 一个表示是否为双栈的标志，
+// 以及任一 CIDR 解析失败时的错误。
 func processCIDRs(cidrsList string) ([]*net.IPNet, bool, error) {
 	cidrsSplit := strings.Split(strings.TrimSpace(cidrsList), ",")
 
@@ -155,16 +155,16 @@ func processCIDRs(cidrsList string) ([]*net.IPNet, bool, error) {
 		return nil, false, err
 	}
 
-	// if cidrs has an error then the previous call will fail
-	// safe to ignore error checking on next call
+	// 若 CIDR 有误，上一次调用就会失败，
+	// 因此此处可以忽略下一次调用的错误检查。
 	dualstack, _ := netutils.IsDualStackCIDRs(cidrs)
 
 	return cidrs, dualstack, nil
 }
 
-// setNodeCIDRMaskSizes returns the IPv4 and IPv6 node cidr mask sizes to the value provided
-// for --node-cidr-mask-size-ipv4 and --node-cidr-mask-size-ipv6 respectively. If value not provided,
-// then it will return default IPv4 and IPv6 cidr mask sizes.
+// setNodeCIDRMaskSizes 分别按 --node-cidr-mask-size-ipv4 和 --node-cidr-mask-size-ipv6
+// 的取值返回 IPv4 和 IPv6 节点 CIDR 掩码大小。若未提供这两个值，
+// 则返回默认的 IPv4 和 IPv6 CIDR 掩码大小。
 func setNodeCIDRMaskSizes(cfg nodeipamconfig.NodeIPAMControllerConfiguration, clusterCIDRs []*net.IPNet) ([]int, error) {
 
 	sortedSizes := func(maskSizeIPv4, maskSizeIPv6 int) []int {
@@ -180,13 +180,13 @@ func setNodeCIDRMaskSizes(cfg nodeipamconfig.NodeIPAMControllerConfiguration, cl
 		return nodeMaskCIDRs
 	}
 
-	// --node-cidr-mask-size flag is incompatible with dual stack clusters.
+	// --node-cidr-mask-size 标志与双栈集群不兼容。
 	ipv4Mask, ipv6Mask := defaultNodeMaskCIDRIPv4, defaultNodeMaskCIDRIPv6
 	isDualstack := len(clusterCIDRs) > 1
 
-	// case one: cluster is dualstack (i.e, more than one cidr)
+	// 情况一：集群为双栈（即有多个 CIDR）
 	if isDualstack {
-		// if --node-cidr-mask-size then fail, user must configure the correct dual-stack mask sizes (or use default)
+		// 若设置了 --node-cidr-mask-size 则失败，用户必须配置正确的双栈掩码大小（或使用默认值）
 		if cfg.NodeCIDRMaskSize != 0 {
 			return nil, errors.New("usage of --node-cidr-mask-size is not allowed with dual-stack clusters")
 		}
@@ -205,9 +205,9 @@ func setNodeCIDRMaskSizes(cfg nodeipamconfig.NodeIPAMControllerConfiguration, cl
 	maskV6Configured := cfg.NodeCIDRMaskSizeIPv6 != 0
 	isSingleStackIPv6 := netutils.IsIPv6CIDR(clusterCIDRs[0])
 
-	// original flag is set
+	// 设置了原有的标志
 	if maskConfigured {
-		// original mask flag is still the main reference.
+		// 原有的掩码标志仍是主要依据。
 		if maskV4Configured || maskV6Configured {
 			return nil, errors.New("usage of --node-cidr-mask-size-ipv4 and --node-cidr-mask-size-ipv6 is not allowed if --node-cidr-mask-size is set. For dual-stack clusters please unset it and use IPFamily specific flags")
 		}

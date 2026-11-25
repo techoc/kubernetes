@@ -58,7 +58,7 @@ func TestRetrieveValidatedConfigInfo(t *testing.T) {
 		expectedErrorString      string
 	}{
 		{
-			// This is the default behavior. The JWS signature is patched after the cluster-info ConfigMap is created
+			// 这是默认行为。JWS 签名在 cluster-info ConfigMap 创建之后再打补丁
 			name:        "valid: retrieve a valid kubeconfig with CA verification and delayed JWS signature",
 			tokenID:     "123456",
 			tokenSecret: "abcdef1234567890",
@@ -75,7 +75,7 @@ func TestRetrieveValidatedConfigInfo(t *testing.T) {
 			delayedJWSSignaturePatch: true,
 		},
 		{
-			// Same as above expect this test creates the ConfigMap with the JWS signature
+			// 与上面相同，只是本测试创建 ConfigMap 时就带有 JWS 签名
 			name:        "valid: retrieve a valid kubeconfig with CA verification",
 			tokenID:     "123456",
 			tokenSecret: "abcdef1234567890",
@@ -91,7 +91,7 @@ func TestRetrieveValidatedConfigInfo(t *testing.T) {
 			},
 		},
 		{
-			// Skipping CA verification is also supported
+			// 也支持跳过 CA 验证
 			name:        "valid: retrieve a valid kubeconfig without CA verification",
 			tokenID:     "123456",
 			tokenSecret: "abcdef1234567890",
@@ -221,36 +221,36 @@ func TestRetrieveValidatedConfigInfo(t *testing.T) {
 				t.Fatalf("cannot marshal kubeconfig %v", err)
 			}
 
-			// Generate signature of the insecure kubeconfig
+			// 生成不安全 kubeconfig 的签名
 			sig, err := tokenjws.ComputeDetachedSignature(string(kubeconfigBytes), test.tokenID, test.tokenSecret)
 			if err != nil {
 				t.Fatalf("cannot compute detached JWS signature: %v", err)
 			}
 
-			// If the JWS signature is delayed, only add the kubeconfig
+			// 如果延迟打 JWS 签名补丁，则只添加 kubeconfig
 			if test.delayedJWSSignaturePatch {
 				test.configMap.data = map[string]string{}
 				test.configMap.data[bootstrapapi.KubeConfigKey] = string(kubeconfigBytes)
 			}
 
-			// Populate the default cluster-info data
+			// 填充默认的 cluster-info 数据
 			if test.configMap.data == nil {
 				test.configMap.data = map[string]string{}
 				test.configMap.data[bootstrapapi.KubeConfigKey] = string(kubeconfigBytes)
 				test.configMap.data[bootstrapapi.JWSSignatureKeyPrefix+test.tokenID] = sig
 			}
 
-			// Create a fake client and create the cluster-info ConfigMap
+			// 创建 fake 客户端并创建 cluster-info ConfigMap
 			client := fakeclient.NewSimpleClientset()
 			if err = test.configMap.createOrUpdate(client); err != nil {
 				t.Fatalf("could not create ConfigMap: %v", err)
 			}
 
-			// Set arbitrary discovery timeout and retry interval
+			// 设置任意的发现超时时间和重试间隔
 			timeout := time.Millisecond * 500
 			interval := time.Millisecond * 20
 
-			// Patch the JWS signature after a short delay
+			// 短暂延迟后打上 JWS 签名补丁
 			if test.delayedJWSSignaturePatch {
 				test.configMap.data[bootstrapapi.JWSSignatureKeyPrefix+test.tokenID] = sig
 				go func() {
@@ -261,7 +261,7 @@ func TestRetrieveValidatedConfigInfo(t *testing.T) {
 				}()
 			}
 
-			// Retrieve validated configuration
+			// 检索已验证的配置
 			kubeconfig, err = retrieveValidatedConfigInfo(client, test.cfg, interval, timeout, false, true)
 			if (err != nil) != test.expectedError {
 				t.Errorf("expected error %v, got %v, error: %v", test.expectedError, err != nil, err)
@@ -273,11 +273,11 @@ func TestRetrieveValidatedConfigInfo(t *testing.T) {
 						test.expectedErrorString, err.Error())
 				}
 
-				// Return if an error is expected
+				// 如果预期会出现错误则返回
 				return
 			}
 
-			// Validate the resulted kubeconfig
+			// 校验生成的 kubeconfig
 			kubeconfigBytes, err = clientcmd.Write(*kubeconfig)
 			if err != nil {
 				t.Fatalf("cannot marshal resulted kubeconfig %v", err)

@@ -39,7 +39,7 @@ import (
 )
 
 func main() {
-	// use os.Args instead of "flags" because "flags" will mess up the man pages!
+	// 使用 os.Args 而非 "flags"，因为 "flags" 会把 man 页面弄乱！
 	path := "docs/man/man1"
 	module := ""
 	if len(os.Args) == 3 {
@@ -56,56 +56,56 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set environment variables used by command so the output is consistent,
-	// regardless of where we run.
+	// 设置命令使用的环境变量，使输出保持一致，
+	// 不受运行位置影响。
 	os.Setenv("HOME", "/home/username")
 	ctx := context.Background()
 
 	switch module {
 	case "kube-apiserver":
-		// generate manpage for kube-apiserver
+		// 为 kube-apiserver 生成 man 页面
 		apiserver := apiservapp.NewAPIServerCommand()
 		genMarkdown(apiserver, "", outDir)
 		for _, c := range apiserver.Commands() {
 			genMarkdown(c, "kube-apiserver", outDir)
 		}
 	case "kube-controller-manager":
-		// generate manpage for kube-controller-manager
+		// 为 kube-controller-manager 生成 man 页面
 		controllermanager := cmapp.NewControllerManagerCommand()
 		genMarkdown(controllermanager, "", outDir)
 		for _, c := range controllermanager.Commands() {
 			genMarkdown(c, "kube-controller-manager", outDir)
 		}
 	case "kube-proxy":
-		// generate manpage for kube-proxy
+		// 为 kube-proxy 生成 man 页面
 		proxy := proxyapp.NewProxyCommand()
 		genMarkdown(proxy, "", outDir)
 		for _, c := range proxy.Commands() {
 			genMarkdown(c, "kube-proxy", outDir)
 		}
 	case "kube-scheduler":
-		// generate manpage for kube-scheduler
+		// 为 kube-scheduler 生成 man 页面
 		scheduler := schapp.NewSchedulerCommand()
 		genMarkdown(scheduler, "", outDir)
 		for _, c := range scheduler.Commands() {
 			genMarkdown(c, "kube-scheduler", outDir)
 		}
 	case "kubelet":
-		// generate manpage for kubelet
+		// 为 kubelet 生成 man 页面
 		kubelet := kubeletapp.NewKubeletCommand(ctx)
 		genMarkdown(kubelet, "", outDir)
 		for _, c := range kubelet.Commands() {
 			genMarkdown(c, "kubelet", outDir)
 		}
 	case "kubectl":
-		// generate manpage for kubectl
+		// 为 kubectl 生成 man 页面
 		kubectl := kubectlcmd.NewKubectlCommand(kubectlcmd.KubectlOptions{IOStreams: genericiooptions.IOStreams{In: bytes.NewReader(nil), Out: io.Discard, ErrOut: io.Discard}})
 		genMarkdown(kubectl, "", outDir)
 		for _, c := range kubectl.Commands() {
 			genMarkdown(c, "kubectl", outDir)
 		}
 	case "kubeadm":
-		// generate manpage for kubeadm
+		// 为 kubeadm 生成 man 页面
 		kubeadm := kubeadmapp.NewKubeadmCommand(bytes.NewReader(nil), io.Discard, io.Discard)
 		genMarkdown(kubeadm, "", outDir)
 		for _, c := range kubeadm.Commands() {
@@ -134,13 +134,13 @@ func printFlags(out *bytes.Buffer, flags *pflag.FlagSet) {
 	flags.VisitAll(func(flag *pflag.Flag) {
 		format := "**--%s**=%s\n\t%s\n\n"
 		if flag.Value.Type() == "string" {
-			// put quotes on the value
+			// 给值加上引号
 			format = "**--%s**=%q\n\t%s\n\n"
 		}
 
-		// Todo, when we mark a shorthand is deprecated, but specify an empty message.
-		// The flag.ShorthandDeprecated is empty as the shorthand is deprecated.
-		// Using len(flag.ShorthandDeprecated) > 0 can't handle this, others are ok.
+		// 待办：标记某个缩写已弃用但未指定消息时，
+		// flag.ShorthandDeprecated 为空（因为该缩写已弃用）。
+		// 使用 len(flag.ShorthandDeprecated) > 0 无法处理这种情况，其他情况没问题。
 		if !(len(flag.ShorthandDeprecated) > 0) && len(flag.Shorthand) > 0 {
 			format = "**-%s**, " + format
 			fmt.Fprintf(out, format, flag.Shorthand, flag.Name, flag.DefValue, flag.Usage)

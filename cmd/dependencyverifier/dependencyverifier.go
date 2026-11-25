@@ -30,16 +30,16 @@ import (
 )
 
 type Unwanted struct {
-	// things we want to stop referencing
+	// 我们希望停止引用的内容
 	Spec UnwantedSpec `json:"spec"`
-	// status of our unwanted dependencies
+	// 不期望依赖项的当前状态
 	Status UnwantedStatus `json:"status"`
 }
 
 type UnwantedSpec struct {
-	// module names we don't want to depend on, mapped to an optional message about why
+	// 不希望依赖的模块名，映射到可选的原因说明
 	UnwantedModules map[string]string `json:"unwantedModules"`
-	// module names that should never be updated from their current version, mapped to a struct with version and reason
+	// 版本不应被更新的模块名，映射到包含版本和原因的结构体
 	PinnedModules map[string]PinnedModule `json:"pinnedModules"`
 }
 
@@ -49,15 +49,15 @@ type PinnedModule struct {
 }
 
 type UnwantedStatus struct {
-	// references to modules in the spec.unwantedModules list, based on `go mod graph` content.
-	// eliminating things from this list is good, and sometimes requires working with upstreams to do so.
+	// 根据 `go mod graph` 的内容记录对 spec.unwantedModules 列表中模块的引用。
+	// 减少该列表中的条目是好事，有时需要 upstream 配合才能做到。
 	UnwantedReferences map[string][]string `json:"unwantedReferences"`
-	// list of modules in the spec.unwantedModules list which are vendored
+	// spec.unwantedModules 列表中已被 vendor 的模块
 	UnwantedVendored []string `json:"unwantedVendored"`
 }
 
-// runCommand runs the cmd and returns the combined stdout and stderr, or an
-// error if the command failed.
+// runCommand 执行 cmd 并返回合并后的 stdout 和 stderr，
+// 命令失败时返回错误。
 func runCommand(cmd ...string) (string, error) {
 	return runCommandInDir("", cmd)
 }
@@ -74,7 +74,7 @@ func runCommandInDir(dir string, cmd []string) (string, error) {
 
 func readFile(path string) (string, error) {
 	content, err := os.ReadFile(path)
-	// Convert []byte to string and print to screen
+	// 将 []byte 转换为字符串并返回（供后续打印）
 	return string(content), err
 }
 
@@ -90,7 +90,7 @@ func moduleInSlice(a module, list []module, matchVersion bool) bool {
 	return false
 }
 
-// converts `go mod graph` output modStr into a map of from->[]to references and the main module
+// 将 `go mod graph` 的输出 modStr 转换为 from->[]to 引用映射和主模块列表
 func convertToMap(modStr string) ([]module, map[module][]module) {
 	var (
 		mainModulesList = []module{}
@@ -113,7 +113,7 @@ func convertToMap(modStr string) ([]module, map[module][]module) {
 			}
 			modMap[first] = append(modMap[first], second)
 		} else {
-			// skip invalid line
+			// 跳过无效行
 			log.Printf("!!!invalid line in mod.graph: %s", line)
 			continue
 		}
@@ -121,7 +121,7 @@ func convertToMap(modStr string) ([]module, map[module][]module) {
 	return mainModulesList, modMap
 }
 
-// difference returns a-b and b-a as sorted lists
+// difference 以排序后的列表形式返回 a-b 和 b-a
 func difference(a, b []string) ([]string, []string) {
 	aMinusB := map[string]bool{}
 	bMinusA := map[string]bool{}
@@ -169,12 +169,12 @@ func parseModule(s string) module {
 }
 
 // option1: dependencyverifier dependencies.json
-// it will run `go mod graph` and check it.
+// 它会运行 `go mod graph` 并进行检查。
 func main() {
 	var modeGraphStr string
 	var err error
 	if len(os.Args) == 2 {
-		// run `go mod graph`
+		// 运行 `go mod graph`
 		modeGraphStr, err = runCommand("go", "mod", "graph")
 		if err != nil {
 			log.Fatalf("Error running 'go mod graph': %s", err)
@@ -189,7 +189,7 @@ func main() {
 		log.Fatalf("Error reading dependencies file %s: %s", dependencies, err)
 	}
 
-	// load Unwanted from json
+	// 从 JSON 文件加载 Unwanted 配置
 	configFromFile := &Unwanted{}
 	decoder := json.NewDecoder(bytes.NewBuffer([]byte(dependencies)))
 	decoder.DisallowUnknownFields()
@@ -197,7 +197,7 @@ func main() {
 		log.Fatalf("Error reading dependencies file %s: %s", dependenciesJSONPath, err)
 	}
 
-	// convert from `go mod graph` to main module and map of from->[]to references
+	// 把 `go mod graph` 的结果转换为主模块及 from->[]to 引用映射
 	mainModules, moduleGraph := convertToMap(modeGraphStr)
 
 	directDependencies := map[string]map[string]bool{}
@@ -216,7 +216,7 @@ func main() {
 		}
 	}
 
-	// gather the effective versions by looking at the versions required by the main modules
+	// 通过主模块要求的版本收集实际生效的版本
 	effectiveVersions := map[string]module{}
 	for _, mainModule := range mainModules {
 		for _, override := range moduleGraph[mainModule] {
@@ -226,14 +226,14 @@ func main() {
 		}
 	}
 
-	// Check for pinned modules that have been updated
+	// 检查已被更新的固定版本模块
 	pinnedModuleViolations := map[string][]string{}
 	if len(configFromFile.Spec.PinnedModules) > 0 {
-		// Get the current versions of pinned modules
+		// 获取固定版本模块的当前版本
 		for pinnedModule, pinnedInfo := range configFromFile.Spec.PinnedModules {
-			// Check if the module is in effectiveVersions
+			// 检查该模块是否出现在 effectiveVersions 中
 			if effectiveModule, ok := effectiveVersions[pinnedModule]; ok {
-				// Compare with the pinned version from the JSON file
+				// 与 JSON 文件中固定的版本比较
 				if effectiveModule.version != pinnedInfo.Version {
 					pinnedModuleViolations[pinnedModule] = []string{
 						fmt.Sprintf("Pinned version: %s", pinnedInfo.Version),
@@ -247,10 +247,10 @@ func main() {
 
 	unwantedToReferencers := map[string][]module{}
 	for _, mainModule := range mainModules {
-		// visit to find unwanted modules still referenced from the main module
+		// 遍历依赖图，找出仍被主模块引用的不期望模块
 		visit(func(m module, via []module) {
 			if _, unwanted := configFromFile.Spec.UnwantedModules[m.name]; unwanted {
-				// this is unwanted, store what is referencing it
+				// 这是不期望的依赖，记录引用它的模块
 				referencer := via[len(via)-1]
 				if !moduleInSlice(referencer, unwantedToReferencers[m.name], false) {
 					// // uncomment to get a detailed tree of the path that referenced the unwanted dependency
@@ -287,11 +287,11 @@ func main() {
 			return ri.version < rj.version
 		})
 		for _, referencer := range unwantedToReferencers[unwanted] {
-			// make sure any reference at all shows up as a non-nil status
+			// 确保哪怕只有一条引用，也会体现在非 nil 的状态中
 			if config.Status.UnwantedReferences == nil {
 				config.Status.UnwantedReferences[unwanted] = []string{}
 			}
-			// record specific names of versioned referents
+			// 记录带版本号的引用方名称
 			if referencer.version != "" && referencer.version != "v0.0.0" {
 				config.Status.UnwantedReferences[unwanted] = append(config.Status.UnwantedReferences[unwanted], referencer.name)
 			} else if directDependencies[referencer.name][unwanted] {
@@ -321,7 +321,7 @@ func main() {
 
 	needUpdate := false
 
-	// Compare unwanted list from unwanted-dependencies.json with current status from `go mod graph`
+	// 将 unwanted-dependencies.json 中的不期望列表与 `go mod graph` 得到的当前状态比较
 	expected, err := json.MarshalIndent(configFromFile.Status, "", "  ")
 	if err != nil {
 		log.Fatal(err)
@@ -339,7 +339,7 @@ func main() {
 	for expectedRef, expectedFrom := range configFromFile.Status.UnwantedReferences {
 		actualFrom, ok := config.Status.UnwantedReferences[expectedRef]
 		if !ok {
-			// disappeared entirely
+			// 已完全消失
 			log.Printf("Good news! Unwanted dependency %q is no longer referenced. Remove status.unwantedReferences[%q] in %s to ensure it doesn't get reintroduced.", expectedRef, expectedRef, dependenciesJSONPath)
 			needUpdate = true
 			continue
@@ -364,7 +364,7 @@ func main() {
 	}
 	for actualRef, actualFrom := range config.Status.UnwantedReferences {
 		if _, expected := configFromFile.Status.UnwantedReferences[actualRef]; expected {
-			// expected, already ensured referencers were equal in the first loop
+			// 符合预期：上一轮循环已确认引用方一致
 			continue
 		}
 		log.Printf("Unwanted module %q marked in %s is referenced", actualRef, dependenciesJSONPath)
@@ -391,7 +391,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check if there are any pinned module violations
+	// 检查是否存在固定版本模块被违反的情况
 	if len(pinnedModuleViolations) > 0 {
 		log.Printf("ERROR: The following pinned modules have been updated:")
 		for module, details := range pinnedModuleViolations {
@@ -416,11 +416,11 @@ func doVisit(visitor func(m module, via []module), from module, via []module, vi
 		return
 	}
 	for _, to := range references[from] {
-		// switch to the effective version of this dependency
+		// 切换到该依赖实际生效的版本
 		if override, ok := effectiveVersions[to.name]; ok {
 			to = override
 		}
-		// recurse unless we've already visited this module in this traversal
+		// 若本次遍历中尚未访问过该模块，则继续递归
 		if !moduleInSlice(to, via, false) {
 			doVisit(visitor, to, via, visited, references, effectiveVersions)
 		}

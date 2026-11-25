@@ -36,8 +36,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/events"
 	cliflag "k8s.io/component-base/cli/flag"
-	_ "k8s.io/component-base/metrics/prometheus/restclient" // for client metric registration
-	_ "k8s.io/component-base/metrics/prometheus/version"    // for version metric registration
+	_ "k8s.io/component-base/metrics/prometheus/restclient" // 用于注册客户端指标
+	_ "k8s.io/component-base/metrics/prometheus/version"    // 用于注册版本指标
 	"k8s.io/component-base/version"
 	"k8s.io/component-base/version/verflag"
 	remote "k8s.io/cri-client/pkg"
@@ -70,7 +70,7 @@ type hollowNodeConfig struct {
 	ExtendedResources       map[string]string
 	UseHostImageService     bool
 
-	// Deprecated config; remove these with the corresponding flags
+	// 已废弃的配置；应与相应的 flag 一并移除
 	UseRealProxier       bool
 	ProxierSyncPeriod    time.Duration
 	ProxierMinSyncPeriod time.Duration
@@ -81,8 +81,8 @@ const (
 	podsPerCore = 0
 )
 
-// TODO(#45650): Refactor hollow-node into hollow-kubelet and hollow-proxy
-// and make the config driven.
+// TODO(#45650): 将 hollow-node 重构为 hollow-kubelet 和 hollow-proxy，
+// 并改为由配置驱动。
 var knownMorphs = sets.NewString("kubelet", "proxy")
 
 func (c *hollowNodeConfig) addFlags(fs *pflag.FlagSet) {
@@ -148,7 +148,7 @@ func (c *hollowNodeConfig) createHollowKubeletOptions() *kubemark.HollowKubeletO
 	}
 }
 
-// NewHollowNodeCommand creates a *cobra.Command object with default parameters
+// NewHollowNodeCommand 使用默认参数创建一个 *cobra.Command 对象
 func NewHollowNodeCommand() *cobra.Command {
 	s := &hollowNodeConfig{
 		NodeLabels:        make(map[string]string),
@@ -174,21 +174,21 @@ func NewHollowNodeCommand() *cobra.Command {
 	}
 
 	fs := cmd.Flags()
-	fs.AddGoFlagSet(goflag.CommandLine) // for flags like --docker-only
+	fs.AddGoFlagSet(goflag.CommandLine) // 用于支持 --docker-only 之类的 flag
 	s.addFlags(fs)
 
 	return cmd
 }
 
 func run(ctx context.Context, config *hollowNodeConfig) error {
-	// To help debugging, immediately log version and print flags.
+	// 为便于调试，立即记录版本并打印 flag。
 	klog.Infof("Version: %+v", version.Get())
 
 	if !knownMorphs.Has(config.Morph) {
 		return fmt.Errorf("Unknown morph: %v. allowed values: %v", config.Morph, knownMorphs.List())
 	}
 
-	// create a client to communicate with API server.
+	// 创建与 API server 通信的客户端。
 	err := config.bootstrapClientConfig()
 	if err != nil {
 		return fmt.Errorf("Failed to bootstrap, error: %w. Exiting", err)
@@ -209,7 +209,7 @@ func run(ctx context.Context, config *hollowNodeConfig) error {
 
 		heartbeatClientConfig := *clientConfig
 		heartbeatClientConfig.Timeout = c.NodeStatusUpdateFrequency.Duration
-		// The timeout is the minimum of the lease duration and status update frequency
+		// 超时取租约时长与状态更新频率中的较小值
 		leaseTimeout := time.Duration(c.NodeLeaseDurationSeconds) * time.Second
 		if heartbeatClientConfig.Timeout > leaseTimeout {
 			heartbeatClientConfig.Timeout = leaseTimeout

@@ -51,12 +51,12 @@ func main() {
 			panic(err)
 		}
 		defer xmlReader.Close()
-		suites, err := fetchXML(xmlReader) // convert MB into bytes (roughly!)
+		suites, err := fetchXML(xmlReader) // 大致把 MB 换算成字节
 		if err != nil {
 			panic(err)
 		}
 
-		pruneXML(suites, *maxTextSize*1e6) // convert MB into bytes (roughly!)
+		pruneXML(suites, *maxTextSize*1e6) // 大致把 MB 换算成字节
 		if *pruneTests {
 			pruneTESTS(suites, pkgs)
 		}
@@ -77,29 +77,26 @@ func main() {
 func pruneXML(suites *junitxml.JUnitTestSuites, maxBytes int) {
 	for _, suite := range suites.Suites {
 		for i := range suite.TestCases {
-			// Modify directly in the TestCases slice, if necessary.
+			// 必要时直接修改 TestCases 切片。
 			testcase := &suite.TestCases[i]
 			if testcase.SkipMessage != nil {
 				pruneStringIfNeeded(&testcase.SkipMessage.Message, maxBytes, "clipping skip message in test case : %s\n", testcase.Name)
 			}
 			if testcase.Failure != nil {
-				// In Go unit tests, the entire test output
-				// becomes the failure message because `go
-				// test` doesn't track why a test fails. This
-				// can make the failure message pretty large.
+				// 在 Go 单元测试中，由于 `go
+				// test` 不记录测试失败的具体原因，
+				// 整个测试输出都会成为失败消息，这会让
+				// 失败消息变得非常大。
 				//
-				// We cannot identify the real failure here
-				// either because Kubernetes has no convention
-				// for how to format test failures. What we can
-				// do is recognize log output added by klog.
+				// 由于 Kubernetes 对测试失败的格式没有约定，
+				// 我们在这里同样无法识别真正的失败信息；
+				// 能做的只是识别 klog 添加的日志输出。
 				//
-				// Therefore here we move the full text to
-				// to the test output and only keep those
-				// lines in the failure which are not from
-				// klog.
+				// 因此这里把完整文本移到测试输出中，
+				// 失败消息里只保留那些并非来自 klog 的行。
 				if testcase.SystemOut == "" {
 					var buf strings.Builder
-					// Iterate over all the log entries and decide what to keep as failure message.
+					// 遍历所有日志条目，决定哪些内容保留为失败消息。
 					for entry := range logparse.All(strings.NewReader(testcase.Failure.Contents)) {
 						if _, ok := entry.(*logparse.KlogEntry); ok {
 							continue
@@ -107,7 +104,7 @@ func pruneXML(suites *junitxml.JUnitTestSuites, maxBytes int) {
 						_, _ = buf.WriteString(entry.LogData())
 					}
 					if buf.Len() < len(testcase.Failure.Contents) {
-						// Update both strings because they became different.
+						// 两个字符串现在不同了，因此都要更新。
 						testcase.SystemOut = testcase.Failure.Contents
 						pruneStringIfNeeded(&testcase.SystemOut, maxBytes, "clipping log output in test case: %s\n", testcase.Name)
 						testcase.Failure.Contents = buf.String()
@@ -129,8 +126,8 @@ func pruneStringIfNeeded(str *string, maxBytes int, msg string, args ...any) {
 	*str = head + "[...clipped...]" + tail
 }
 
-// This function condenses the junit xml to have package name as top level identifier
-// and nesting under that.
+// 该函数压缩 junit xml，使包名成为顶层标识，
+// 其余内容嵌套在其下。
 func pruneTESTS(suites *junitxml.JUnitTestSuites, pkgs *packageOwners) {
 	var updatedTestsuites []junitxml.JUnitTestSuite
 
@@ -141,9 +138,8 @@ func pruneTESTS(suites *junitxml.JUnitTestSuites, pkgs *packageOwners) {
 		failflag := false
 		name := suite.Name
 
-		// Inject the owning SIG prefix, if possible.
-		// This has to be done while we still have what
-		// is likely to be the full package name.
+		// 如果可能，注入所属 SIG 前缀。
+		// 这一步必须在我们手上仍保有很可能是完整包名的时候完成。
 		name = pkgs.addOwner(name)
 
 		regex := regexp.MustCompile(`^(.*?)/([^/]+)/?$`)
@@ -151,9 +147,9 @@ func pruneTESTS(suites *junitxml.JUnitTestSuites, pkgs *packageOwners) {
 		baseName := match[1]
 		leafName := match[2]
 
-		// testgrid uses suite.Name.
-		// Spyglass/Prow use testcase.Classname.
-		// Therefore we need to update both.
+		// testgrid 使用 suite.Name。
+		// Spyglass/Prow 使用 testcase.Classname。
+		// 因此两者都需要更新。
 		suite.Name = baseName
 		updatedTestcase.Classname = baseName
 		updatedTestcase.Name = leafName
@@ -161,7 +157,7 @@ func pruneTESTS(suites *junitxml.JUnitTestSuites, pkgs *packageOwners) {
 		updatedSystemOut := ""
 		updatedSystemErr := ""
 		for _, testcase := range suite.TestCases {
-			// The top level testcase element in a JUnit xml file does not have the / character.
+			// JUnit xml 文件中顶层的 testcase 元素不含 / 字符。
 			if testcase.Failure != nil {
 				failflag = true
 				updatedTestcaseFailure.Message = joinTexts(updatedTestcaseFailure.Message, testcase.Failure.Message)
@@ -182,15 +178,14 @@ func pruneTESTS(suites *junitxml.JUnitTestSuites, pkgs *packageOwners) {
 	suites.Suites = updatedTestsuites
 }
 
-// joinTexts returns "<a><empty line><b>" if both are non-empty,
-// otherwise just the non-empty string, if there is one.
+// 当 a 和 b 都非空时，joinTexts 返回 "<a><empty line><b>"；
+// 否则返回其中非空的那个字符串（如果有的话）。
 //
-// If <b> is contained completely in <a>, <a> gets returned because repeating
-// exactly the same string again doesn't add any information. Typically
-// this occurs when joining the failure message because that is the fixed
-// string "Failed" for all tests, regardless of what the test logged.
-// The test log output is typically different because it cointains "=== RUN
-// <test name>" and thus doesn't get dropped.
+// 如果 <b> 完全包含在 <a> 中，则返回 <a>，因为重复完全相同的字符串
+// 不会带来任何新信息。这种情况通常出现在拼接失败消息时：无论测试
+// 记录了什么，失败消息都是固定的字符串 "Failed"。而测试日志输出
+// 通常各不相同，因为它们包含 "=== RUN
+// <test name>"，因此不会被丢弃。
 func joinTexts(a, b string) string {
 	if a == "" {
 		return b
@@ -233,7 +228,7 @@ func streamXML(writer io.Writer, in *junitxml.JUnitTestSuites) error {
 }
 
 type packageOwners struct {
-	// pkgs maps from import path to directory.
+	// pkgs 记录从 import 路径到目录的映射。
 	pkgs map[string]string
 }
 
@@ -247,13 +242,12 @@ func newPackageOwners(enabled bool) *packageOwners {
 	}
 }
 
-// addOwner takes a package name (= import path, like k8s.io/client-go),
-// tries to look up the source code of the package, and then
-// walks up until it finds an OWNERS file with some sig label.
-// The first sig label found this way is used.
+// addOwner 接受包名（即 import 路径，如 k8s.io/client-go），
+// 尝试查找该包的源代码，然后逐级向上查找，
+// 直到找到带有 sig 标签的 OWNERS 文件，并使用找到的第一个 sig 标签。
 //
-// If successful, that SIG gets added to the name.
-// If not, the name remains unchanged.
+// 如果成功，就把对应的 SIG 加到名称前面；
+// 否则名称保持不变。
 func (p *packageOwners) addOwner(name string) string {
 	if p == nil {
 		return name
@@ -261,13 +255,11 @@ func (p *packageOwners) addOwner(name string) string {
 
 	dir := p.pkgs[name]
 	if dir == "" {
-		// Look up via `go list`. To invoke it less often,
-		// we also ask for sub-packages and cache the results.
-		// We don't care about errors.
+		// 通过 `go list` 查找。为减少调用次数，
+		// 我们同时查询子包并缓存结果；错误可以忽略。
 		//
-		// This is roughly what golang.org/x/tools/go/packages does,
-		// which we can't use here because it would add a new
-		// dependency to k/k.
+		// 这与 golang.org/x/tools/go/packages 的做法大致相同，
+		// 但这里不能用它，因为会给 k/k 引入新的依赖。
 		cmd := exec.Command("go", "list", "-f", "{{.ImportPath}}:{{.Dir}}", name+"/...")
 		out, _ := cmd.Output()
 		scanner := bufio.NewScanner(bytes.NewReader(out))
@@ -282,9 +274,9 @@ func (p *packageOwners) addOwner(name string) string {
 		dir = p.pkgs[name]
 	}
 
-	// Walk up starting from an absolute path until we hit the filesystem root.
-	// filepath.Dir returns dir itself at any root (/, C:\, \\server\share),
-	// so checking filepath.Dir(dir) != dir handles all path styles uniformly.
+	// 从绝对路径开始逐级向上，直到到达文件系统根目录。
+	// 在任何根目录（/、C:\、\\server\share）下 filepath.Dir 都会返回 dir 本身，
+	// 因此用 filepath.Dir(dir) != dir 判断可统一处理所有路径风格。
 	for ; dir != "" && filepath.Dir(dir) != dir; dir = filepath.Dir(dir) {
 		data, err := os.ReadFile(filepath.Join(dir, "OWNERS"))
 		if err != nil {
@@ -296,7 +288,7 @@ func (p *packageOwners) addOwner(name string) string {
 		}
 		for _, label := range owners.Labels {
 			if strings.HasPrefix(label, "sig/") {
-				// Bingo!
+				// 找到了！
 				return fmt.Sprintf("[sig-%s] %s", label[4:], name)
 			}
 		}
@@ -305,7 +297,7 @@ func (p *packageOwners) addOwner(name string) string {
 	return name
 }
 
-// owners contains only fields from https://go.k8s.io/owners that we care about.
+// owners 只包含 https://go.k8s.io/owners 中我们关心的字段。
 type owners struct {
 	Labels []string `json:"labels"`
 }

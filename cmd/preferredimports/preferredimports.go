@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// verify that all the imports have our preferred alias(es).
+// 验证所有 import 都使用了我们偏好的别名。
 package main
 
 import (
@@ -47,7 +47,7 @@ var (
 )
 
 type analyzer struct {
-	fset      *token.FileSet // positions are relative to fset
+	fset      *token.FileSet // 位置相对于 fset
 	ctx       build.Context
 	failed    bool
 	donePaths map[string]interface{}
@@ -66,14 +66,14 @@ func newAnalyzer() *analyzer {
 	return a
 }
 
-// collect extracts test metadata from a file.
+// collect 从文件中提取测试元数据。
 func (a *analyzer) collect(dir string) {
 	if _, ok := a.donePaths[dir]; ok {
 		return
 	}
 	a.donePaths[dir] = nil
 
-	// Create the AST by parsing src.
+	// 通过解析 src 创建 AST。
 	fs, err := parser.ParseDir(a.fset, dir, nil, parser.AllErrors|parser.ParseComments)
 
 	if err != nil {
@@ -83,7 +83,7 @@ func (a *analyzer) collect(dir string) {
 	}
 
 	for _, p := range fs {
-		// returns first error, but a.handleError deals with it
+		// 返回第一个错误，但 a.handleError 会处理它
 		files := a.filterFiles(p.Files)
 		for _, file := range files {
 			replacements := make(map[string]string)
@@ -98,11 +98,11 @@ func (a *analyzer) collect(dir string) {
 				for re, template := range aliases {
 					match := re.FindStringSubmatchIndex(importPath)
 					if match == nil {
-						// No match.
+						// 没有匹配。
 						continue
 					}
 					if match[0] > 0 || match[1] < len(importPath) {
-						// Not a full match.
+						// 不是完全匹配。
 						continue
 					}
 					alias := string(re.ExpandString(nil, template, importPath, match))
@@ -150,14 +150,14 @@ func (a *analyzer) collect(dir string) {
 }
 
 func renameImportUsages(f *ast.File, old, new string) {
-	// use this to avoid renaming the package declaration, eg:
-	//   given: package foo; import foo "bar"; foo.Baz, rename foo->qux
-	//   yield: package foo; import qux "bar"; qux.Baz
+	// 用这个变量避免重命名包声明，例如：
+	//   给定：package foo; import foo "bar"; foo.Baz，将 foo 重命名为 qux
+	//   结果：package foo; import qux "bar"; qux.Baz
 	var pkg *ast.Ident
 
-	// Rename top-level old to new, both unresolved names
-	// (probably defined in another file) and names that resolve
-	// to a declaration we renamed.
+	// 将顶层的 old 重命名为 new，既包括未解析的名字
+	// （可能在其他文件中定义），也包括解析到
+	// 我们已重命名声明的名字。
 	ast.Inspect(f, func(node ast.Node) bool {
 		if node == nil {
 			return false
@@ -190,25 +190,24 @@ type collector struct {
 	regex *regexp.Regexp
 }
 
-// handlePath walks the filesystem recursively, collecting directories,
-// ignoring some unneeded directories (hidden/vendored) that are handled
-// specially later.
+// handlePath 递归遍历文件系统，收集目录，
+// 并忽略一些稍后会特殊处理的无用目录（隐藏目录/vendor 目录）。
 func (c *collector) handlePath(path string, info os.FileInfo, err error) error {
 	if err != nil {
 		return err
 	}
 	if info.IsDir() {
-		// Ignore hidden directories (.git, .cache, etc)
+		// 忽略隐藏目录（.git、.cache 等）
 		if len(path) > 1 && path[0] == '.' ||
-			// OS-specific vendor code tends to be imported by OS-specific
-			// packages. We recursively typecheck imported vendored packages for
-			// each OS, but don't typecheck everything for every OS.
+			// 特定 OS 的 vendor 代码通常由特定 OS 的包导入。
+			// 我们对每个 OS 递归类型检查其导入的 vendored 包，
+			// 而不是对每个 OS 检查所有内容。
 			path == "vendor" ||
 			path == "_output" ||
-			// This is a weird one. /testdata/ is *mostly* ignored by Go,
-			// and this translates to kubernetes/vendor not working.
-			// edit/record.go doesn't compile without gopkg.in/yaml.v2
-			// in $GOSRC/$GOROOT (both typecheck and the shell script).
+			// 这是个怪例：Go 会（大体上）忽略 /testdata/，
+			// 这导致 kubernetes/vendor 无法工作。
+			// 若 $GOSRC/$GOROOT 中没有 gopkg.in/yaml.v2，
+			// edit/record.go 无法编译（类型检查和 shell 脚本都是如此）。
 			path == "pkg/kubectl/cmd/testdata/edit" {
 			return filepath.SkipDir
 		}
@@ -259,7 +258,7 @@ func main() {
 		}
 	}
 	if isTerminal {
-		logPrefix = "\r" // clear status bar when printing
+		logPrefix = "\r" // 打印时清除状态栏
 	}
 	fmt.Println("checking-imports: ")
 
